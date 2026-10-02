@@ -18,8 +18,8 @@
 
 /* ---------- 卡片 ---------- */
 .uc-card {
-  background: var(--surface, #fff);
-  border: 1px solid var(--line, #e3e9f4);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--wf-radius-card);
   /* 批次 D（2026-10-02）：投影删除。
      规范：「卡片 0 阴影 + 1px 发丝线」「面永远是平的」。
@@ -47,19 +47,19 @@
   margin: 0;
   font-size: 16px;
   font-weight: 800;
-  color: var(--ink, #172033);
+  color: var(--ink);
 }
 
 .uc-card__head p {
   margin: 4px 0 0;
   font-size: 13px;
-  color: var(--muted, #5b6577);
+  color: var(--muted);
   line-height: 1.6;
 }
 
 .uc-card__meta {
   font-size: 12px;
-  color: var(--faint, #67758f);
+  color: var(--faint);
   white-space: nowrap;
 }
 
@@ -71,9 +71,9 @@
   gap: 6px;
   padding: 10px 18px;
   border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line, #e3e9f4);
-  background: var(--surface, #fff);
-  color: var(--muted, #5b6577);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
   font: inherit;
   font-size: 13.5px;
   font-weight: 700;
@@ -85,7 +85,7 @@
 /* 原型 .wf-btn：hover 不做抬升（仅 :active scale(.98)），保留边框/文字变色反馈 */
 .uc-btn:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--blue) 35%, transparent);
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
 }
 
 .uc-btn:active:not(:disabled) {
@@ -103,13 +103,13 @@
      规范：「主操作为纯色友好蓝 #2f6ae0，不再使用渐变」「禁止彩色光晕」。
      白字对 #2f6ae0 的对比度 4.93:1，达 WCAG AA，故去掉深蓝端不损可读性。 */
   background: var(--wf-color-primary);
-  color: #fff;
+  color: var(--wf-text-on-primary);
 }
 
 /* hover 只换底色为规范钦定的 primary-dark 档；投影不再加深
    （原来 22%→34% 的蓝色晕递增正是被判死的「彩色光晕」）。 */
 .uc-btn--primary:hover:not(:disabled) {
-  color: #fff;
+  color: var(--wf-text-on-primary);
   border-color: transparent;
   background: var(--wf-color-primary-dark);
 }
@@ -117,7 +117,7 @@
 .uc-btn--danger {
   border-color: color-mix(in srgb, var(--red) 40%, transparent);
   color: var(--red-ink);
-  background: var(--surface, #fff);
+  background: var(--surface);
 }
 
 .uc-btn--danger:hover:not(:disabled) {
@@ -135,7 +135,7 @@
 .uc-btn--link {
   border: 0;
   background: transparent;
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
   padding: 4px 8px;
   border-radius: var(--mk-radius-md);
   font-size: 12.5px;
@@ -143,7 +143,7 @@
 
 .uc-btn--link:hover:not(:disabled) {
   background: color-mix(in srgb, var(--blue) 8%, transparent);
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
 }
 
 /* ---------- 输入框 / 表单 ---------- */
@@ -156,18 +156,18 @@
 .uc-field__label {
   font-size: 12.5px;
   font-weight: 700;
-  color: var(--muted, #5b6577);
+  color: var(--muted);
 }
 
 .uc-field__input {
   width: 100%;
-  border: 1px solid var(--line, #e3e9f4);
+  border: 1px solid var(--line);
   border-radius: var(--mk-radius-xl);
   padding: 10px 14px;
   font: inherit;
   font-size: 14px;
-  color: var(--ink, #172033);
-  background: var(--surface, #fff);
+  color: var(--ink);
+  background: var(--surface);
   outline: none;
   box-sizing: border-box;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -188,7 +188,8 @@
 }
 
 .uc-field--error .uc-field__input:focus {
-  box-shadow: 0 0 0 3px rgba(239, 117, 120, 0.12);
+  /* 错误态语义环：形状同焦点环，色走 danger token（登记：语义状态环例外） */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-color-danger) 12%, transparent);
 }
 
 .uc-field__error {
@@ -199,7 +200,7 @@
 
 .uc-field__hint {
   font-size: 12px;
-  color: var(--faint, #67758f);
+  color: var(--faint);
 }
 
 .uc-field textarea.uc-field__input {
@@ -224,8 +225,8 @@ select.uc-field__input {
   gap: 8px;
   padding: 12px 16px;
   border-radius: var(--mk-radius-xl);
-  background: rgba(239, 117, 120, 0.08);
-  border: 1px solid rgba(239, 117, 120, 0.3);
+  background: color-mix(in srgb, var(--wf-color-danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wf-color-danger) 30%, transparent);
   color: var(--red-ink);
   font-size: 13px;
   font-weight: 600;
@@ -246,10 +247,10 @@ select.uc-field__input {
 .uc-empty {
   padding: 32px 20px;
   text-align: center;
-  border: 1px dashed var(--line, #e3e9f4);
+  border: 1px dashed var(--line);
   border-radius: var(--mk-radius-xl);
-  background: var(--canvas, #f3f6fb);
-  color: var(--faint, #67758f);
+  background: var(--canvas);
+  color: var(--faint);
   font-size: 13px;
   display: grid;
   gap: 6px;
@@ -257,7 +258,7 @@ select.uc-field__input {
 }
 
 .uc-empty strong {
-  color: var(--muted, #5b6577);
+  color: var(--muted);
   font-size: 14px;
 }
 
@@ -276,11 +277,11 @@ select.uc-field__input {
 
 /* 墨色走 v2.css :root 的 *-ink token（color-mix 派生，暗色自动反向提亮）：
    此前 ok/warn 写死浅色主题墨值，暗色下对比度掉档（--bad 已是同法） */
-.uc-badge--ok { color: var(--green-ink, #1d7a4c); background: rgba(30, 158, 88, 0.1); }
-.uc-badge--warn { color: var(--amber-ink, #b3540a); background: rgba(244, 170, 70, 0.14); }
-.uc-badge--bad { color: var(--red-ink); background: rgba(239, 117, 120, 0.1); }
-.uc-badge--info { color: var(--blue-deep, #1f57cc); background: color-mix(in srgb, var(--blue) 10%, transparent); }
-.uc-badge--muted { color: var(--faint, #67758f); background: rgba(103, 117, 143, 0.1); }
+.uc-badge--ok { color: var(--green-ink); background: color-mix(in srgb, var(--green) 10%, transparent); }
+.uc-badge--warn { color: var(--amber-ink); background: color-mix(in srgb, var(--amber) 14%, transparent); }
+.uc-badge--bad { color: var(--red-ink); background: var(--wf-color-danger-bg); }
+.uc-badge--info { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
+.uc-badge--muted { color: var(--faint); background: color-mix(in srgb, var(--faint) 10%, transparent); }
 
 /* ---------- 手作开关 ---------- */
 .uc-switch {
@@ -304,8 +305,8 @@ select.uc-field__input {
   width: 40px;
   height: 22px;
   border-radius: var(--mk-radius-pill);
-  background: color-mix(in srgb, var(--line, #e3e9f4) 70%, transparent);
-  border: 1px solid var(--line, #e3e9f4);
+  background: color-mix(in srgb, var(--line) 70%, transparent);
+  border: 1px solid var(--line);
   position: relative;
   transition: background 0.18s ease;
   flex: none;
@@ -319,7 +320,8 @@ select.uc-field__input {
   width: 16px;
   height: 16px;
   border-radius: var(--mk-radius-pill);
-  background: #fff;
+  background: var(--mk-on-fill);
+  /* 旋钮微投影 0 1px 3px rgba(23,32,51,.25)：四档外的小元件 affordance，无对应档，保留登记 */ 
   box-shadow: 0 1px 3px rgba(23, 32, 51, 0.25);
   transition: transform 0.18s ease;
 }
@@ -336,8 +338,8 @@ select.uc-field__input {
 }
 
 .uc-switch input:focus-visible + .uc-switch__track {
-  outline: 2px solid var(--blue, var(--mk-blue));
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--mk-focus-ring);
 }
 
 .uc-switch:has(input:disabled) {
@@ -364,16 +366,16 @@ table.uc-table {
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--faint, #67758f);
-  background: var(--canvas, #f3f6fb);
-  border-bottom: 1px solid var(--line, #e3e9f4);
+  color: var(--faint);
+  background: var(--canvas);
+  border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
 
 .uc-table td {
   padding: 11px 14px;
-  border-bottom: 1px solid var(--line, #e3e9f4);
-  color: var(--ink, #172033);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
   vertical-align: middle;
 }
 
@@ -392,7 +394,7 @@ table.uc-table {
 .uc-table .uc-table__sub {
   display: block;
   font-size: 12px;
-  color: var(--faint, #67758f);
+  color: var(--faint);
   font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
   margin-top: 1px;
 }
@@ -409,7 +411,7 @@ table.uc-table {
 }
 
 .uc-table .uc-table__muted {
-  color: var(--faint, #67758f);
+  color: var(--faint);
 }
 
 /* ---------- 弹窗 ---------- */
@@ -428,8 +430,8 @@ table.uc-table {
 
 .uc-dialog {
   width: min(480px, 100%);
-  background: var(--surface, #fff);
-  border: 1px solid var(--line, #e3e9f4);
+  background: var(--surface);
+  border: 1px solid var(--line);
   /* 批次 D：20px 圆角（档外）→ --wf-radius-overlay(16px)；
      投影 rgba(23,32,51,.14) 是规范外档（规范浮层档为 0 16px 40px rgba(15,23,42,.16)，
      色相与 alpha 都不同）→ 改用 --wf-shadow-modal。这是对话框，属模态层。 */
@@ -457,13 +459,13 @@ table.uc-table {
   margin: 0;
   font-size: 17px;
   font-weight: 800;
-  color: var(--ink, #172033);
+  color: var(--ink);
 }
 
 .uc-dialog__close {
   border: 0;
   background: transparent;
-  color: var(--faint, #67758f);
+  color: var(--faint);
   font-size: 16px;
   cursor: pointer;
   width: 28px;
@@ -475,8 +477,8 @@ table.uc-table {
 }
 
 .uc-dialog__close:hover {
-  background: var(--canvas, #f3f6fb);
-  color: var(--ink, #172033);
+  background: var(--canvas);
+  color: var(--ink);
 }
 
 .uc-dialog__body {
@@ -491,7 +493,7 @@ table.uc-table {
   justify-content: flex-end;
   gap: 10px;
   padding: 14px 22px 18px;
-  border-top: 1px solid var(--line, #e3e9f4);
+  border-top: 1px solid var(--line);
   margin-top: 4px;
 }
 
@@ -534,7 +536,7 @@ table.uc-table {
   justify-content: center;
   gap: 10px;
   padding: 28px 0;
-  color: var(--faint, #67758f);
+  color: var(--faint);
   font-size: 13px;
 }
 
@@ -543,7 +545,7 @@ table.uc-table {
   height: 22px;
   border-radius: var(--mk-radius-pill);
   border: 3px solid color-mix(in srgb, var(--blue) 15%, transparent);
-  border-top-color: var(--blue, var(--mk-blue));
+  border-top-color: var(--blue);
   animation: uc-spin 0.9s linear infinite;
   flex: none;
 }

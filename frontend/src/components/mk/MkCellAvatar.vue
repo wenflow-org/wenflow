@@ -39,7 +39,7 @@ const initial = computed(() => (props.name || '用').trim().charAt(0) || '用')
 }
 .mk-ava--virtual { background: color-mix(in srgb, var(--mk-purple) 14%, transparent); color: var(--mk-purple); }
 .mk-ava--test { background: color-mix(in srgb, var(--mk-amber) 14%, transparent); color: var(--mk-amber); }
-.mk-ava--muted { background: var(--mk-surface-2, rgba(15, 23, 42, 0.06)); color: var(--mk-faint); }
+.mk-ava--muted { background: var(--mk-surface-2); color: var(--mk-faint); }
 html[data-theme='dark'] .mk-ava { color: var(--mk-ink); }
 html[data-theme='dark'] .mk-ava--muted { color: var(--mk-faint); }
 </style>

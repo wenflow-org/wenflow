@@ -19,8 +19,6 @@
 :root {
   /* 背景（--bg-body 统一到 --mk-bg，消除 #f6f8fc/#f7f8fa 双值） */
   --bg-surface: var(--mk-surface);
-  --bg-surface-soft: #fafbfc;
-  --bg-surface-elevated: var(--mk-surface);
   --bg-body: var(--mk-bg);
   --bg-hover: #f6f9ff;
 
@@ -31,11 +29,12 @@
   --text-tertiary: #64748b;
 
   /* 边框 / 品牌 */
-  --border-subtle: #e1e8f2;
-  --border-light: #e1e8f2;
   --border-default: var(--mk-line);
-  --brand-primary: var(--mk-blue);
   --brand-soft: #eef5ff;
+
+  /* 已删除（死别名清理，2026-10-01）：--bg-surface-soft / --bg-surface-elevated /
+     --border-subtle / --border-light / --brand-primary —— 全仓 grep 零 var() 引用。
+     暗色块里曾为前四枚补写的覆写随它们一并删除。 */
 
   /* 圆角 / 动效：本块原有的两处越权覆盖已删（batch C，2026-10-02）
 
@@ -81,10 +80,7 @@
 .dark {
   /* 背景：--bg-hover 取暗色悬停面常规档 #2a2b2d（同 --mk-modal-close-bg /
      --mk-drawer-close-bg / --mk-graph-line），比暗色面 #202124 高一档、比 --mk-line 弱。
-     --bg-surface-soft 是「比卡片面低半档的内嵌面」：亮色 #fafbfc 落在页底 #f7f8fa 与
-     面 #ffffff 之间，暗色沿用同一坡道关系取 #19191a（同 --mk-input-disabled-bg /
-     --mk-alert-info-bg），面下凹一级。 */
-  --bg-surface-soft: #19191a;
+     （--bg-surface-soft 暗色档已随该令牌的删除一并移除——全仓零 var() 引用。） */
   --bg-hover: #2a2b2d;
 
   /* 文字：暗色下 --mk-muted = #afb1b6 是「弱化文字」档，垫在次级正文上偏灰；
@@ -95,10 +91,7 @@
   --text-secondary: var(--neutral-700);
   --text-tertiary: #7a7e85;
 
-  /* 边框：亮色下这两个是同一个值 #e1e8f2（成对使用），暗色继续成对，同取项目暗色
-     发丝线 #2a2b2d——比 --mk-line(#36373c) 弱一档，正好是「subtle / light」这层。 */
-  --border-subtle: #2a2b2d;
-  --border-light: #2a2b2d;
+  /* （--border-subtle / --border-light 暗色档已随该令牌的删除一并移除——全仓零 var() 引用。） */
 
   /* 品牌：亮色 #eef5ff 是品牌蓝的极浅实底；深底上放不透明浅蓝会糊成一块白斑，
      故改用项目既有的蓝色半透明底 rgba(91,141,239,.16)（= 暗色 --mk-blue-bg /

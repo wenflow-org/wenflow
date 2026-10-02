@@ -37,24 +37,15 @@
   /* 主色系 - 友好蓝。唯一交互色。 */
   --color-primary: var(--wf-color-primary);
   --color-primary-light: var(--wf-color-primary-light);
-  --color-primary-lighter: var(--wf-color-primary-lighter);
   --color-primary-dark: var(--wf-color-primary-dark);
-  --color-primary-darker: var(--wf-color-primary-darker);
-
-  /* 辅色系 - 清新青 */
-  --color-secondary: var(--wf-color-secondary);
-  --color-secondary-light: var(--wf-color-secondary-light);
-  --color-secondary-dark: var(--wf-color-secondary-dark);
-
-  /* 强调色系 - 薰衣草紫 */
-  --color-accent: var(--wf-color-accent);
-  --color-accent-light: var(--wf-color-accent-light);
-  --color-accent-dark: var(--wf-color-accent-dark);
 
   /* 警示色系 - 柔和红 */
   --color-danger: var(--wf-color-danger);
-  --color-danger-light: var(--wf-color-danger-light);
   --color-danger-dark: var(--wf-color-danger-dark);
+
+  /* 已删除（死别名清理）：--color-primary-lighter / -darker、--color-secondary 全族、
+     --color-accent 全族、--color-danger-light —— 全仓 grep 零 var() 引用。
+     需要时直接引用 tokens.css 的 --wf-color-* 同名令牌。 */
   
   /* ==========================================
      中性色系（→ tokens.css 别名层）
@@ -65,55 +56,50 @@
      半个成因。但 --neutral-150 在旧文件里缺失，补不回：tokens.css 已定义，无需在此重复。
      ========================================== */
   --neutral-50: var(--wf-neutral-50);
-  --neutral-100: var(--wf-neutral-100);
   --neutral-200: var(--wf-neutral-200);
-  --neutral-300: var(--wf-neutral-300);
   --neutral-400: var(--wf-neutral-400);
   --neutral-500: var(--wf-neutral-500);
-  --neutral-600: var(--wf-neutral-600);
   --neutral-700: var(--wf-neutral-700);
-  --neutral-800: var(--wf-neutral-800);
-  --neutral-900: var(--wf-neutral-900);
   --neutral-950: var(--wf-neutral-950);
+  /* 已删除（死别名清理）：--neutral-100 / -300 / -600 / -800 / -900 —— 唯一消费方
+     （--bg-subtle / --bg-active / --border-light）本身零消费随之删除，本组遂零引用。
+     需要时直接引用 tokens.css 的 --wf-neutral-* 同名令牌。 */
   
   /* ==========================================
-     语义化状态色
+     语义化状态色（→ tokens.css 别名层）
+     原为五组字面量（与 --wf-color-* 同值双写）；现改指令牌，改值只改 tokens.css 一处。
+     --color-{success,progress,warning,efficient}-light 与 --color-pending / -light
+     零消费已删（需要时引用 --wf-color-*-light 同名令牌）。
      ========================================== */
-  
+
   /* 成功/完成 */
-  --color-success: #31b16f;
-  --color-success-light: #5cc98b;
-  --color-success-dark: #28965a;
-  --color-success-bg: rgba(49, 177, 111, 0.1);
-  --color-success-border: rgba(49, 177, 111, 0.2);
-  
+  --color-success: var(--wf-color-success);
+  --color-success-dark: var(--wf-color-success-dark);
+  --color-success-bg: var(--wf-color-success-bg);
+  --color-success-border: var(--wf-color-success-border);
+
   /* 进行中 */
-  --color-progress: #3498DB;
-  --color-progress-light: #5DADE2;
-  --color-progress-dark: #2980B9;
-  --color-progress-bg: rgba(52, 152, 219, 0.1);
-  --color-progress-border: rgba(52, 152, 219, 0.2);
-  
+  --color-progress: var(--wf-color-progress);
+  --color-progress-dark: var(--wf-color-progress-dark);
+  --color-progress-bg: var(--wf-color-progress-bg);
+  --color-progress-border: var(--wf-color-progress-border);
+
   /* 待开始/禁用 */
-  --color-pending: #95A5A6;
-  --color-pending-light: #B2BFC0;
-  --color-pending-dark: #7F8C8D;
-  --color-pending-bg: rgba(149, 165, 166, 0.1);
-  --color-pending-border: rgba(149, 165, 166, 0.2);
-  
+  --color-pending-dark: var(--wf-color-pending-dark);
+  --color-pending-bg: var(--wf-color-pending-bg);
+  --color-pending-border: var(--wf-color-pending-border);
+
   /* 疲劳预警（LSB < 0） */
-  --color-warning: #f4aa46;
-  --color-warning-light: #f7c07a;
-  --color-warning-dark: #d9932e;
-  --color-warning-bg: rgba(244, 170, 70, 0.1);
-  --color-warning-border: rgba(244, 170, 70, 0.2);
-  
+  --color-warning: var(--wf-color-warning);
+  --color-warning-dark: var(--wf-color-warning-dark);
+  --color-warning-bg: var(--wf-color-warning-bg);
+  --color-warning-border: var(--wf-color-warning-border);
+
   /* 高效状态（LSB ≥ 4） */
-  --color-efficient: #F39C12;
-  --color-efficient-light: #F5B041;
-  --color-efficient-dark: #D68910;
-  --color-efficient-bg: rgba(243, 156, 18, 0.1);
-  --color-efficient-border: rgba(243, 156, 18, 0.2);
+  --color-efficient: var(--wf-color-efficient);
+  --color-efficient-dark: var(--wf-color-efficient-dark);
+  --color-efficient-bg: var(--wf-color-efficient-bg);
+  --color-efficient-border: var(--wf-color-efficient-border);
   
   /* ==========================================
      ZPD 技能等级徽章 —— 已整体删除（2026-10-02，批次 D）
@@ -142,10 +128,10 @@
   --bg-surface: var(--neutral-50);
   --bg-elevated: var(--neutral-50);
   --bg-muted: var(--neutral-200);
-  --bg-subtle: var(--neutral-100);
   --bg-hover: var(--neutral-200);
-  --bg-active: var(--neutral-300);
-  
+  /* 已删除（死别名清理）：--bg-subtle / --bg-active（零 var() 引用）。
+     暗色档语义面请直接引用 --wf-bg-subtle / --wf-bg-active。 */
+
   /* 文字 */
   --text-primary: var(--mk-ink);
   --text-secondary: var(--neutral-700);
@@ -153,104 +139,83 @@
   --text-disabled: var(--neutral-500);
   --text-inverse: var(--neutral-50);
   --text-on-primary: #FFFFFF;
-  --text-on-success: #1A252F;
-  --text-on-warning: #1A252F;
-  --text-on-danger: #FFFFFF;
-  --text-on-success-light: #1A252F;
-  --text-on-warning-light: #1A252F;
-  --text-on-info-light: #1A252F;
-  --text-on-danger-light: #1A252F;
-  
+  /* 已删除（死别名清理）：--text-on-success / -warning / -danger 及 *-light / -info-light
+     七枚（零 var() 引用；#1A252F 系 --wf-neutral-950 的字面复写）。 */
+
   /* 边框 */
   --border-default: var(--mk-line);
-  --border-light: var(--neutral-300);
   --border-dark: var(--neutral-400);
-  --border-focus: var(--color-primary);
+  /* 已删除（死别名清理）：--border-light / --border-focus（零 var() 引用）。 */
   
   /* 阴影（→ tokens.css 别名层，batch C 收口）
-     原为六档且映射混乱：xs 指向 sm、md 与 lg 同指 pop、xl 指向 modal ——
-     规范只有三档（面/悬浮/弹层）。现按量级折叠，多余档位作为兼容别名保留
-     （零消费，但删掉会让仍写 --shadow-xl 的老代码突然无阴影）。
-     --shadow-xs 现在是 none：规范的语义是「面永远是平的」，卡片不该有投影，
-     只靠 1px 发丝线分层。 */
-  --shadow-xs: var(--wf-shadow-xs);
+     规范只有三档（面/悬浮/弹层）。原 xs/lg/xl/2xl 四枚多余档已删（2026-10-01 死别名清理：
+     --shadow-lg 唯一消费方 .hover-lift 同批删除，其余全仓零 var() 引用）。
+     现存两档均为 --mk-shadow-sm（悬浮档）的转发：sm 是正名，md 是历史调用名。 */
   --shadow-sm: var(--mk-shadow-sm);
   --shadow-md: var(--mk-shadow-sm);
-  --shadow-lg: var(--mk-shadow-pop);
-  --shadow-xl: var(--mk-shadow-pop);
-  --shadow-2xl: var(--mk-shadow-modal);
   
   /* ==========================================
-     排版系统
+     排版系统（→ tokens.css 别名层）
+     原为与 --wf-* 同值的字面量双写；现改指令牌，改值只改 tokens.css 一处。
+     --text-5xl / --leading-{tight,relaxed,loose} 零消费已删。
      ========================================== */
-  
+
   /* 字体族 */
-  --font-sans: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Inter', 'Helvetica Neue', '微软雅黑', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  
+  --font-sans: var(--wf-font-sans);
+  --font-mono: var(--wf-font-mono);
+
   /* 字号 */
-  --text-xs: 0.75rem;     /* 12px */
-  --text-sm: 0.875rem;    /* 14px */
-  --text-base: 1rem;      /* 16px */
-  --text-lg: 1.125rem;    /* 18px */
-  --text-xl: 1.25rem;     /* 20px */
-  --text-2xl: 1.5rem;     /* 24px */
-  --text-3xl: 1.875rem;   /* 30px */
-  --text-4xl: 2.25rem;    /* 36px */
-  --text-5xl: 3rem;       /* 48px */
-  
+  --text-xs: var(--wf-text-xs);       /* 12px */
+  --text-sm: var(--wf-text-sm);       /* 14px */
+  --text-base: var(--wf-text-base);   /* 16px */
+  --text-lg: var(--wf-text-lg);       /* 18px */
+  --text-xl: var(--wf-text-xl);       /* 20px */
+  --text-2xl: var(--wf-text-2xl);     /* 24px */
+  --text-3xl: var(--wf-text-3xl);     /* 30px */
+  --text-4xl: var(--wf-text-4xl);     /* 36px */
+
   /* 行高 */
-  --leading-tight: 1.25;
-  --leading-normal: 1.5;
-  --leading-relaxed: 1.625;
-  --leading-loose: 2;
-  
+  --leading-normal: var(--wf-leading-normal);
+
   /* 字重 */
-  --font-normal: 400;
-  --font-medium: 500;
-  --font-semibold: 600;
-  --font-bold: 700;
+  --font-normal: var(--wf-font-normal);
+  --font-medium: var(--wf-font-medium);
+  --font-semibold: var(--wf-font-semibold);
+  --font-bold: var(--wf-font-bold);
   
   /* ==========================================
-     间距系统
+     间距系统（→ tokens.css 别名层）
+     --spacing-N 与 --wf-space-N 同值双写，现改指令牌；
+     --spacing-{0,5,10,12,16,20} 零消费已删（需要时引用 --wf-space-* 同名令牌）。
      ========================================== */
-  --spacing-0: 0;
-  --spacing-1: 0.25rem;   /* 4px */
-  --spacing-2: 0.5rem;    /* 8px */
-  --spacing-3: 0.75rem;   /* 12px */
-  --spacing-4: 1rem;      /* 16px */
-  --spacing-5: 1.25rem;   /* 20px */
-  --spacing-6: 1.5rem;    /* 24px */
-  --spacing-8: 2rem;      /* 32px */
-  --spacing-10: 2.5rem;   /* 40px */
-  --spacing-12: 3rem;     /* 48px */
-  --spacing-16: 4rem;     /* 64px */
-  --spacing-20: 5rem;     /* 80px */
+  --spacing-1: var(--wf-space-1);   /* 4px */
+  --spacing-2: var(--wf-space-2);   /* 8px */
+  --spacing-3: var(--wf-space-3);   /* 12px */
+  --spacing-4: var(--wf-space-4);   /* 16px */
+  --spacing-6: var(--wf-space-6);   /* 24px */
+  --spacing-8: var(--wf-space-8);   /* 32px */
   
   /* ==========================================
      圆角系统（间接引用 --mk-radius-*，再间接指向 tokens.css 的 --wf-radius-*）
      刻意保持 --mk-* 间接而非直连 --wf-*：--mk-radius-lg/xl 的档位调整属批次 C，
      走别名链可以只改 main.css 一处，不必同时动本文件。
      ========================================== */
-  --radius-none: 0;
   --radius-sm: var(--mk-radius-sm);
   --radius-md: var(--mk-radius-md);
   --radius-lg: var(--mk-radius-lg);     /* batch C：10 → 12 */
-  --radius-xl: var(--mk-radius-xl);     /* batch C：12 → 16 */
-  --radius-2xl: var(--mk-radius-modal); /* → 16 */
   --radius-full: var(--mk-radius-pill);
+  /* 已删除（死别名清理）：--radius-none / --radius-xl / --radius-2xl（零 var() 引用）。 */
 
   /* ==========================================
      过渡动画（→ tokens.css 别名层）
      原为 Fluent 曲线 cubic-bezier(.4,0,.2,1) + 150/280/400ms，
      与规范 120/200/320ms + cubic-bezier(.16,1,.3,1) 双重不符。
-     注意 --transition-normal 被 admin-surface.css 的 :root 覆盖为 0.22s ease
-     （该文件后加载、同为 (0,1,0)）——这是第二个越权覆盖点，已登记待批次 C 处理。
+     （admin-surface.css 曾把 --transition-normal 越权覆盖为 0.22s ease，
+     该覆盖已随 batch C 删除。）
+     --transition-slow / --transition-bounce 零消费已删（bounce 并入 normal）。
      ========================================== */
   --transition-fast: var(--wf-transition-fast);
   --transition-normal: var(--wf-transition-normal);
-  --transition-slow: var(--wf-transition-slow);
-  --transition-bounce: var(--wf-transition-normal);  /* 规范只有三档；bounce 并入 normal */
 
   /* ==========================================
      已退役：Fluent 亚克力材质 / UI Lab 大圆角与彩色光晕 / Fluent 第二套阶梯
@@ -270,42 +235,16 @@
      兼容落点（新值指向阶梯），与这里的旧值（未归一的 Fluent 数值）不是一回事。
      ========================================== */
 
-  /* 移动端安全区 */
-  --safe-area-top: env(safe-area-inset-top, 0px);
+  /* 移动端安全区（--safe-area-top / -bottom 零消费已删，main.css 只消费 left/right） */
   --safe-area-right: env(safe-area-inset-right, 0px);
-  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
 
-  /* ==========================================
-     Admin 布局系统
-     ========================================== */
-  
-  /* 侧边栏 */
-  --sidebar-width: 240px;
-  --sidebar-collapsed-width: 64px;
-  --sidebar-active-bg: color-mix(in srgb, var(--color-primary) 12%, transparent);
-  --sidebar-active-indicator: var(--color-primary);
-  
-  /* 面包屑 */
-  --breadcrumb-color: var(--text-muted);
-  --breadcrumb-active: var(--text-primary);
-  --breadcrumb-separator: var(--text-disabled);
-  
-  /* 页面标题 */
-  --page-title-size: 1.5rem;
-  --page-subtitle-color: var(--text-secondary);
-  
-  /* ==========================================
-     层级系统
-     ========================================== */
-  --z-dropdown: 100;
-  --z-sticky: 200;
-  --z-fixed: 300;
-  --z-modal-backdrop: 400;
-  --z-modal: 500;
-  --z-popover: 600;
-  --z-tooltip: 700;
-  --z-toast: 800;
+  /* 已删除（死别名清理，2026-10-01）：
+     · 「Admin 布局系统」整段（--sidebar-* 四枚 / --breadcrumb-* 三枚 /
+       --page-title-size / --page-subtitle-color）—— 全仓零 var() 引用；
+     · 「层级系统」整段（--z-dropdown … --z-toast 八枚）—— 全仓零 var() 引用，
+       实际层级词汇走 main.css 的 --mk-z-*（业务层）与 tokens.css 的 --wf-z-*（规范层）。
+     需要时直接引用 tokens.css 的 --wf-z-* 同名令牌。 */
 }
 
 /* ==========================================
@@ -343,10 +282,9 @@
   --bg-surface: var(--wf-bg-surface);
   --bg-elevated: var(--wf-bg-elevated);
   --bg-muted: var(--wf-bg-muted);
-  --bg-subtle: var(--wf-bg-subtle);
   --bg-hover: var(--wf-bg-hover);
-  --bg-active: var(--wf-bg-active);
-  
+  /* 已删除（死别名清理）：--bg-subtle / --bg-active 暗色档（随亮色档同删）。 */
+
   /* 暗色模式文字 */
   --text-primary: var(--mk-ink);
   --text-secondary: var(--neutral-700);
@@ -354,32 +292,20 @@
   --text-disabled: var(--neutral-500);
   --text-inverse: var(--neutral-950);
   --text-on-primary: #141415;
-  --text-on-success: #141415;
-  --text-on-warning: #141415;
-  --text-on-danger: #141415;
-  --text-on-success-light: #f2f2f3;
-  --text-on-warning-light: #f2f2f3;
-  --text-on-info-light: #f2f2f3;
-  --text-on-danger-light: #f2f2f3;
-  
+  /* 已删除（死别名清理）：--text-on-success / -warning / -danger 及 *-light / -info-light
+     七枚暗色档（随亮色档同删）。 */
+
   /* 暗色模式边框 */
   --border-default: var(--mk-line);
-  --border-light: var(--neutral-200);
   --border-dark: var(--neutral-400);
-  --border-focus: var(--color-primary-light);
-  
-  /* 阴影（→ tokens.css 别名层，batch C 收口）
-     原为六档且映射混乱：xs 指向 sm、md 与 lg 同指 pop、xl 指向 modal ——
-     规范只有三档（面/悬浮/弹层）。现在按量级折叠到三档，多余档位作为
-     兼容别名保留（零消费，但删掉会让仍写 --shadow-xl 的老代码突然无阴影）。
-     注意 --shadow-xs 现在是 none：规范的语义是「面永远是平的」，
-     卡片不该有任何投影，只靠 1px 发丝线分层。 */
-  --shadow-xs: var(--wf-shadow-xs);
+  /* 已删除（死别名清理）：--border-light / --border-focus 暗色档（随亮色档同删）。 */
+
+  /* 阴影（→ tokens.css 别名层）
+     与亮色档同批收口：--shadow-xs / -lg / -xl / -2xl 四枚多余档已删
+     （--shadow-lg 唯一消费方 .hover-lift 同批删除，其余零 var() 引用）。
+     现存两档均为 --mk-shadow-sm（悬浮档）的转发。 */
   --shadow-sm: var(--mk-shadow-sm);
   --shadow-md: var(--mk-shadow-sm);
-  --shadow-lg: var(--mk-shadow-pop);
-  --shadow-xl: var(--mk-shadow-pop);
-  --shadow-2xl: var(--mk-shadow-modal);
   
   /* ---- 已退役的 Fluent 材质暗色覆写（--acrylic-* / --glass-*）整体删除 ----
      这三行是「亚克力材质在暗色下长什么样」的唯一记录，而材质本身已在亮色档
@@ -467,8 +393,9 @@ a:hover {
 }
 
 a:focus-visible {
-  outline: 2px solid var(--color-primary-light);
-  outline-offset: 2px;
+  /* 焦点环统一（SPEC §0「全站一圈」）：原为自写 outline 2px，改用唯一一圈 --mk-focus-ring */
+  outline: none;
+  box-shadow: var(--mk-focus-ring);
   border-radius: var(--radius-sm);
 }
 

@@ -115,37 +115,37 @@ watch(
   padding: 10px 20px;
   font-size: 13px;
   border-bottom: 1px solid;
-  box-shadow: 0 4px 14px rgba(23, 32, 51, 0.06);
+  /* 吸顶横幅 → 悬浮阴影档（0 4px 14px 自写档退役） */
+  box-shadow: var(--mk-shadow-sm);
 }
 .anb--info {
-  background: #eef5ff;
-  border-color: rgba(52, 120, 246, 0.25);
-  color: #1f57cc;
+  background: var(--brand-soft);
+  border-color: color-mix(in srgb, var(--mk-blue) 25%, transparent);
+  color: var(--wf-color-primary-dark);
 }
 .anb--warning {
-  background: #fffbeb;
-  border-color: rgba(180, 83, 9, 0.28);
+  background: var(--mk-amber-bg);
+  border-color: color-mix(in srgb, var(--mk-amber) 28%, transparent);
   color: #92610a;
 }
 .anb--critical {
-  background: #fef2f2;
-  border-color: rgba(220, 38, 38, 0.28);
-  color: #b91c1c;
+  background: var(--mk-red-bg);
+  border-color: color-mix(in srgb, var(--mk-red-fill) 28%, transparent);
+  color: var(--mk-red-strong);
 }
 /* 暗色模式：公告语义条（在用户端学习应用顶部展示，随主题翻转） */
 [data-theme='dark'] .anb--info {
-  background: rgba(91, 141, 239, 0.16);
-  border-color: rgba(91, 141, 239, 0.3);
-  color: #9db8f5;
+  border-color: color-mix(in srgb, var(--mk-blue) 30%, transparent);
+  color: var(--mk-ghost-fg);
 }
 [data-theme='dark'] .anb--warning {
-  background: rgba(251, 191, 36, 0.12);
-  border-color: rgba(251, 191, 36, 0.3);
+  background: color-mix(in srgb, var(--mk-amber) 12%, transparent);
+  border-color: color-mix(in srgb, var(--mk-amber) 30%, transparent);
   color: #f6bb63;
 }
 [data-theme='dark'] .anb--critical {
-  background: rgba(248, 113, 113, 0.12);
-  border-color: rgba(248, 113, 113, 0.3);
+  background: color-mix(in srgb, var(--mk-red) 12%, transparent);
+  border-color: color-mix(in srgb, var(--mk-red) 30%, transparent);
   color: #fca5a5;
 }
 .anb__dot {

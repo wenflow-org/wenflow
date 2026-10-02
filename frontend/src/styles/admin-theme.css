@@ -41,9 +41,14 @@ body.admin-session-concealed > #admin-session-validation-shell {
   width: min(100%, 440px);
   padding: 32px;
   border: 1px solid var(--mk-overlay-card-line);
-  border-radius: 14px;
+  /* 2026-10-02：14px → --mk-radius-xl（16）。本块是**卡**，与 .mk-card 同族，
+     14px 落在阶梯（4/6/8/12/16/999）之外——同批次 C 在 .mk-card 上做过的收口。 */
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
-  box-shadow: 0 18px 48px rgba(22, 34, 55, 0.1);
+  /* 同批：`0 18px 48px rgba(22,34,55,.1)` 是三档之外的第四档（18/48 @10%，
+     夹在 raised 与 overlay 之间）。它浮在整层遮罩之上，取 overlay 档。
+     顺带把 rgba(22,34,55,…) 这个不在调色板里的色值换成规范中性色。 */
+  box-shadow: var(--mk-shadow-pop);
 }
 
 .admin-session-validation-eyebrow {
@@ -80,7 +85,8 @@ body.admin-session-concealed > #admin-session-validation-shell {
   min-height: 40px;
   padding: 0 16px;
   border: 1px solid var(--mk-overlay-btn-line);
-  border-radius: 8px;
+  /* 8px = 控件档（--mk-radius-md），原为同值字面量，token 化 */
+  border-radius: var(--mk-radius-md);
   background: var(--mk-overlay-btn-bg);
   color: var(--mk-overlay-btn-fg);
   font: inherit;
@@ -106,8 +112,9 @@ body.admin-session-concealed > #admin-session-validation-shell {
 }
 
 .admin-session-validation-button:focus-visible {
-  outline: 3px solid rgba(47, 106, 224, 0.24);
-  outline-offset: 2px;
+  /* 焦点环统一（SPEC §0「全站一圈」）：原为自写 outline 3px rgba(47,106,224,.24)，改用唯一一圈 */
+  outline: none;
+  box-shadow: var(--mk-focus-ring);
 }
 
 .admin-session-validation-button:disabled {
@@ -165,7 +172,11 @@ body.admin-session-concealed[data-theme='dark'] > #admin-session-validation-shel
 html[data-theme='dark'] .admin-session-validation-card {
   background: var(--mk-surface, #1b1c1d);
   border-color: var(--mk-line, #313235);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  /* 2026-10-02：原为 `0 18px 48px rgba(0,0,0,.5)` —— 第四档（18/48），与浅色版
+     那句 18/48 是同一个手写投影的暗色副本。上一处已把浅色版换成 --mk-shadow-pop，
+     这里的手写副本随之**整个删除**：--mk-shadow-pop 转发 --wf-shadow-overlay，
+     而 tokens.css 的暗色块把 --wf-shadow-overlay 定成 0 16px 40px rgba(0,0,0,.6)，
+     按主题自动翻转，无需双写。 */
 }
 
 html[data-theme='dark'] .admin-session-validation-card h1 { color: var(--mk-ink, #efeff0); }

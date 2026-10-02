@@ -49,7 +49,7 @@ defineEmits<{ (e: 'click', ev: MouseEvent): void }>()
   gap: 10px;
   padding: 10px 16px;
   border: none;
-  border-bottom: 1px solid var(--mk-line, #e6ebf4);
+  border-bottom: 1px solid var(--mk-line);
   background: transparent;
   width: 100%;
   text-align: left;
@@ -59,9 +59,9 @@ defineEmits<{ (e: 'click', ev: MouseEvent): void }>()
 }
 .mk-row:last-child { border-bottom: none; }
 .mk-row--static { cursor: default; }
-.mk-row:hover { background: var(--mk-surface-2, rgba(15, 23, 42, 0.03)); }
+.mk-row:hover { background: var(--mk-surface-2); }
 .mk-row--static:hover { background: transparent; }
-.mk-row:focus-visible { outline: none; box-shadow: var(--mk-focus-ring, inset 0 0 0 2px var(--mk-blue)); }
+.mk-row:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
 
 .mk-row__main { display: grid; gap: 2px; min-width: 0; flex: 1; }
 .mk-row__title {

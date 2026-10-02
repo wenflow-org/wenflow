@@ -67,8 +67,8 @@ const onCapabilityTab = computed(() => tabs.some(isActive))
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--canvas, #f3f6fb);
-  color: var(--ink, #172033);
+  background: var(--canvas);
+  color: var(--ink);
 }
 
 .uc.v2-page > main.uc__main {
@@ -94,8 +94,8 @@ const onCapabilityTab = computed(() => tabs.some(isActive))
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
-  background: color-mix(in srgb, var(--line, #e3e9f4) 45%, transparent);
-  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 45%, transparent);
+  border-radius: var(--mk-radius-pill);
 }
 
 .uc__seg__btn {
@@ -103,21 +103,21 @@ const onCapabilityTab = computed(() => tabs.some(isActive))
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   font-size: 13.5px;
   font-weight: 700;
-  color: var(--muted, #5b6577);
+  color: var(--muted);
   text-decoration: none;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
-.uc__seg__btn:hover { color: var(--ink, #172033); }
+.uc__seg__btn:hover { color: var(--ink); }
 .uc__seg__btn--on {
-  background: var(--surface, #fff);
-  color: var(--blue-deep, #1f57cc);
-  box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06));
+  background: var(--surface);
+  color: var(--blue-deep);
+  box-shadow: var(--shadow-sm);
 }
-.uc__seg__btn:focus-visible { outline: 2px solid var(--blue, #2f6ae0); outline-offset: 2px; }
+.uc__seg__btn:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
 
 /* 深页（设置/调用日志）标题行：分段器不覆盖时保留可见 h1 */
 .uc__deeptitle h1 {
@@ -131,7 +131,7 @@ const onCapabilityTab = computed(() => tabs.some(isActive))
   max-width: 48em;
   font-size: 14px;
   line-height: 1.7;
-  color: var(--muted, #5b6577);
+  color: var(--muted);
 }
 .uc__head-actions {
   display: flex;
@@ -166,10 +166,11 @@ const onCapabilityTab = computed(() => tabs.some(isActive))
 .uc__body :deep(.agent-table-panel),
 .uc__body :deep(.skills-table-panel),
 .uc__body :deep(.logs-list) {
-  background: var(--surface, #fff);
-  border: 1px solid var(--line, #e3e9f4);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal);
-  box-shadow: var(--shadow-sm);
+  /* 批次 D「卡片 0 阴影」：.uc-card 本体已删投影，这层 raised 残留同步退役（显式平档） */
+  box-shadow: var(--wf-shadow-xs);
   backdrop-filter: none;
 }
 

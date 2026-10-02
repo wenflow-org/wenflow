@@ -528,7 +528,7 @@ function onPractice() {
   min-height: 38px;
   padding: 8px 14px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   background: var(--surface);
   color: var(--muted);
   font: inherit;
@@ -547,8 +547,8 @@ function onPractice() {
   color: var(--blue-deep);
 }
 .mk-ge__chip:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--mk-focus-ring);
 }
 /* 图卡内层：壳（border / radius / 10px 10px 4px padding）由宿主出，这里只排版 */
 .mk-ge__card {
@@ -594,7 +594,7 @@ function onPractice() {
   align-items: center;
   gap: var(--mk-space-3);
 }
-input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue, #2f6ae0); }
+input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 .mk-ge__seg {
   display: inline-flex;
   overflow: hidden;

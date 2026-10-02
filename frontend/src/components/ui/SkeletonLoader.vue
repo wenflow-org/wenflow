@@ -73,14 +73,14 @@ const widths = ['100%', '85%', '70%', '90%', '60%']
 /* ---- 基础 shimmer（原型 .wf-skel__bar：100deg / 1.4s linear / 220% 位移） ---- */
 .skeleton-loader {
   /* 原型 --soft 口径：surface 向 ink 压 8%；mk token 自带暗色翻转，双主题通用 */
-  --soft: color-mix(in srgb, var(--mk-surface, #ffffff) 92%, var(--mk-ink, #1a2a44));
+  --soft: color-mix(in srgb, var(--mk-surface) 92%, var(--mk-ink));
 }
 .skel {
-  border-radius: 8px;
+  border-radius: var(--mk-radius-md);
   background: linear-gradient(
     100deg,
     var(--soft) 30%,
-    color-mix(in srgb, var(--soft) 45%, var(--mk-surface, #ffffff)) 50%,
+    color-mix(in srgb, var(--soft) 45%, var(--mk-surface)) 50%,
     var(--soft) 70%
   );
   background-size: 220% 100%;
@@ -117,25 +117,25 @@ const widths = ['100%', '85%', '70%', '90%', '60%']
 }
 .skel--badge {
   height: 24px; width: 80px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   flex: 0 0 auto;
 }
 .skel--pill {
   height: 36px; width: 120px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   flex: 0 0 auto;
 }
 .skel--card-hero {
   height: 200px;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-lg);
 }
 .skel--card-side {
   height: 160px;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-lg);
 }
 .skel--card-sm {
   height: 120px;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-lg);
 }
 
 /* ---- rows（默认 lines 变体） ---- */
@@ -154,9 +154,9 @@ const widths = ['100%', '85%', '70%', '90%', '60%']
   display: grid;
   gap: 10px;
   padding: 16px;
-  border-radius: 16px;
-  background: var(--surface, var(--mk-surface, #ffffff));
-  border: 1px solid var(--line, var(--mk-line, #e6ebf4));
+  border-radius: var(--mk-radius-xl);
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-line);
 }
 .skel-card__header {
   display: flex;
@@ -172,7 +172,7 @@ const widths = ['100%', '85%', '70%', '90%', '60%']
   padding: 12px 0;
 }
 .skel-list-item + .skel-list-item {
-  border-top: 1px solid var(--line, var(--mk-line, #e6ebf4));
+  border-top: 1px solid var(--mk-line);
 }
 .skel-list-item__text {
   display: grid;

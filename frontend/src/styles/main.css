@@ -25,12 +25,12 @@
   color-scheme: light;
 
   /* 层级 token：抽屉/弹窗/菜单统一 z-index，避免散落硬编码。
-     critical：全屏兜底层（会话校验遮罩/启动失败卡），必须盖过一切业务弹层与 toast */
+     critical：全屏兜底层（会话校验遮罩/启动失败卡），必须盖过一切业务弹层与 toast
+     （--mk-z-toast 零消费已删。） */
   --mk-z-menu: 60;
   --mk-z-drawer: 240;
   --mk-z-sidebar: 220;
   --mk-z-modal: 300;
-  --mk-z-toast: 400;
   --mk-z-critical: 500;
 
   /* 抽屉宽度档 token：所有右侧详情抽屉统一走此阶梯（base 560 → lg 700 → xl 880 → xxl 1040）。
@@ -98,7 +98,9 @@
   --mk-minibar-bg: #eef2fa;
   --mk-hover-surface: #eff6ff;        /* 文字链/返回/图标按钮的悬停面 */
   --mk-btn-hover-bg: #f6f9ff;
-  --mk-blue-hover: #1f57cc;           /* 主按钮悬停（设计体系包 hover/pressed 档，与 accent-deep 同值） */
+  --mk-blue-hover: var(--wf-color-primary-dark);
+  /* 主按钮悬停：原字面量 #1f57cc 与 --wf-color-primary-dark（hover/pressed 档）同值，
+     改指令牌（暗色档仍保留本仓实测的 #6a9cf3 提亮覆写，见 dark 块登记）。 */
   /* ---- 徽章族配色（每个变体一套；亮色档；暗色档见 dark 块同名 token）----
      与上一组同源：原为「亮色硬编码 + 暗色补丁」，现集中成对定义。按变体命名，
      因为这些是各变体专有的 tint（4 种绿、3 种 slate 面等近邻值无法无损合并）。 */
@@ -134,7 +136,6 @@
   --mk-search-clear-bg: #e2e8f0;
   --mk-search-clear-fg: var(--mk-muted);
   --mk-meta-link-on-bg: rgba(47, 106, 224, 0.12);
-  --mk-pill-count-active-bg: rgba(47, 106, 224, 0.14);
   --mk-input-disabled-bg: #f4f6fa;
   --mk-modal-close-bg: #f0f2f5;
   --mk-modal-close-hover-bg: #f0f2f5; /* 亮色下悬停不变（既有行为）；暗色档才加深 */
@@ -142,8 +143,8 @@
   --mk-drawer-close-hover-bg: #e2eaf7;
   --mk-card-foot-bg: #fafbfe;
   --mk-card-foot-line: var(--mk-line); /* 暗色档独立于 --mk-line（原补丁值 #2f3239） */
-  --mk-batchbar-bg: var(--mk-surface);
-  --mk-batchbar-line: rgba(220, 38, 38, 0.25);
+  /* （--mk-batchbar-bg / --mk-batchbar-line 零消费已删：.mk-batchbar 类实际用的是
+     var(--mk-surface) 与手写 rgba 边框色，从未引用这两枚。） */
   --mk-batchbar-danger-fg: #ffffff;
   --mk-batchbar-danger-hover-bg: var(--mk-red-strong);
   --mk-alert-ok-bg: rgba(16, 185, 129, 0.1);
@@ -170,13 +171,13 @@
   /* ---- 壳层（Shell 侧栏/面包屑）专用档 ---- */
   --mk-side-bg: #ffffff;              /* 侧栏底 */
   --mk-side-line: #e1e8f2;            /* 侧栏右缘线（比 --mk-line 深半档，压住内容区） */
-  --mk-side-item-fg: #42506a;         /* 侧栏项文字 */
   --mk-side-inset: #eef2fa;           /* 侧栏内嵌面：badge/glyph/分组底 */
   --mk-side-hover: #f6f9ff;           /* 侧栏悬停面 */
+  /* （--mk-side-item-fg 零消费已删：全仓 grep 无 var() 引用。） */
   --mk-red-bg-strong: #fee2e2;        /* 告警徽章底（比 --mk-red-bg 深一档） */
   --mk-graph-pipe-bg: none;           /* 图形页流水线画布底：亮色无底，暗色给纵向渐变 */
-  /* 实体头头像的品牌渐变（明暗同值，沿用既有表现） */
-  --mk-entity-avatar-user-from: #31b16f;
+  /* 实体头头像的识别底色（明暗同值，沿用既有表现）。
+     （--mk-entity-avatar-user-from 零消费已删：batch D 把头像渐变改平涂后只剩 -to 端被引用。） */
   --mk-entity-avatar-user-to: #43b0d8;
   /* 实心语义底色（配白字）：与 --mk-red/green/amber 分离——后两者暗色下被提亮供文字用，
      直接当背景会让白字对比不足。实心底在明暗两态都保持“深底”，保障白字 ≥4.5:1。 */
@@ -230,15 +231,14 @@
   --mk-shadow-pop: var(--wf-shadow-overlay);
   --mk-shadow-drawer: var(--wf-shadow-overlay);
   --mk-shadow-modal: var(--wf-shadow-modal);
-  /* --mk-shadow-xs：规范显式档位，语义「面永远是平的」。零消费，
-     保留是为了让「卡片默认 0 阴影」这条规则有一个可引用的名字。 */
-  --mk-shadow-xs: var(--wf-shadow-xs);
+  /* （--mk-shadow-xs 零消费已删：规范「面永远是平的」那一档的名字是 tokens.css 的
+     --wf-shadow-xs = none，别名层不必再转发一个没人调用的名字。） */
 
   /* 动效令牌（双端共用，2026-09-23）：统一时长/缓动词汇；
-     reduce-motion 兜底已有文件末尾全局 @media，勿在页面里重复造 */
+     reduce-motion 兜底已有文件末尾全局 @media，勿在页面里重复造
+     （--mk-dur-slow 零消费已删，慢档直接引用 --wf-duration-slow）。 */
   --mk-dur-fast: var(--wf-duration-fast);
   --mk-dur: var(--wf-duration-normal);
-  --mk-dur-slow: var(--wf-duration-slow);
   --mk-ease-out: var(--wf-ease-out);
 
   /* 业务徽章档位色（完成度五档 / 角色 / 流转 / 锁定 / core），供 mk-badge--* 扩展档引用 */
@@ -249,14 +249,15 @@
   --mk-rec-live: #15803d;
 
   /* 字号阶梯 token（A 组设计改进）：全站字号单一来源，替代散落 9~20px 硬编码。
-     基础正文 14px；辅助/说明文案下限 12px（原 11px 会被长段说明拖低可读性）；
-     纯徽章/纯数字微字如需 11px 走显式 11px。4K 档仍由 shared.css 媒体查询放大。 */
-  --mk-fs-11: 12px;
+     基础正文 14px；辅助/说明文案下限 12px。4K 档仍由 shared.css 媒体查询放大。
+     （--mk-fs-11 / -14 / -15 零消费已删：文本一律走下方三个角色 token，
+     展示型字号走 -12_5 / -13 / -16 / -18 / -20 存量档。）
+     注：--mk-fs-12: 12px 必须保留——守卫规则 8 的引用正则不含下划线，
+     var(--mk-fs-12_5) 会被截断成 --mk-fs-12 参与查字典，删了它 V2KnowledgeMap
+     等处的 -12_5 引用会被误判「未定义」。 */
   --mk-fs-12: 12px;
   --mk-fs-12_5: 12.5px;
   --mk-fs-13: 13px;
-  --mk-fs-14: 14px;
-  --mk-fs-15: 15px;
   --mk-fs-16: 16px;
   --mk-fs-18: 18px;
   --mk-fs-20: 20px;
@@ -267,20 +268,22 @@
        body     正文 / 表格 / 卡片标题 / 控件 / 链接 / 输入
        emphasis 页头标题 / 空态主标题 / 覆盖层标题
      页面**只引用角色**，不写半像素值（13.5/14.5/15.5 这类半步值是层级被打散的根源）。
-     展示型字号（KPI 数字、实体名、图标字符）不属文本档，仍按各自 display 档位放大。 */
-  --mk-fs-micro: 12px;
-  --mk-fs-body: 14px;
-  --mk-fs-emphasis: 15px;
+     展示型字号（KPI 数字、实体名、图标字符）不属文本档，仍按各自 display 档位放大。
+     三枚现改指 --wf-fs-*（原为同值字面量双写；12/14/15 与 tokens.css 逐字相同）。 */
+  --mk-fs-micro: var(--wf-fs-micro);
+  --mk-fs-body: var(--wf-fs-body);
+  --mk-fs-emphasis: var(--wf-fs-emphasis);
 
-  /* 间距阶梯 token（A 组设计改进）：替代散落 10/12/14/16/18px 硬编码 */
-  --mk-space-1: 4px;
-  --mk-space-2: 8px;
-  --mk-space-3: 12px;
-  --mk-space-4: 16px;
-  --mk-space-5: 20px;
-  --mk-space-6: 24px;
-  --mk-space-7: 32px;
-  --mk-space-8: 48px;
+  /* 间距阶梯 token（A 组设计改进）：替代散落 10/12/14/16/18px 硬编码。
+     改指 --wf-space-*（原为同值字面量双写）；--mk-space-7 零消费已删，
+     -8 按 tokens.css 别名映射表转接（8 → space-12）。 */
+  --mk-space-1: var(--wf-space-1);
+  --mk-space-2: var(--wf-space-2);
+  --mk-space-3: var(--wf-space-3);
+  --mk-space-4: var(--wf-space-4);
+  --mk-space-5: var(--wf-space-5);
+  --mk-space-6: var(--wf-space-6);
+  --mk-space-8: var(--wf-space-12);
 
   /* 列宽 token（ADMIN_COLUMN_WIDTH_SPEC §2/§3 落地）：全站表格列宽单一来源。
      工具类 mk-col--*（shared.css）与三张 grid 行式表（ExecLogs/AuditLogs/SessionSecurity）
@@ -321,8 +324,7 @@
   --mk-graph-line: #e6ebf4;            /* 画布描边 / 分隔线 */
   --mk-graph-line-soft: #eef2f8;       /* 卡头分隔线（浅档基色） */
   --mk-graph-row-line: #f0f2f5;        /* 瀑布行分隔线 */
-  --mk-graph-toolbar-a: #fbfcff;       /* 工具栏渐变起 */
-  --mk-graph-toolbar-b: #f6f8fc;       /* 工具栏渐变止 */
+  --mk-graph-toolbar-b: #f6f8fc;       /* 工具栏收束底（渐变退役后的平涂档；-a 零消费已删） */
   --mk-graph-journey-a: #f8fafd;       /* 旅程条渐变起 / 出口闸口混色基 */
   --mk-graph-journey-b: #f4f7fc;       /* 旅程条渐变止 */
   --mk-graph-start-b: #f3f9f4;         /* 起点节点渐变止 */
@@ -373,7 +375,7 @@
   --mk-graph-notice-bg: #fff8ec;         /* 提示条底 */
   --mk-graph-notice-line: rgba(217, 119, 6, 0.35); /* 提示条描边 */
   --mk-graph-verdict-bg: #fef8f8;        /* 失败结论条底 */
-  --mk-graph-flow-line: rgba(47, 106, 224, 0.4);    /* 数据旅程描边 */
+  /* （--mk-graph-flow-line 零消费已删：数据旅程描边实际画在页面 scoped 里。） */
 }
 
 /* ========================================
@@ -461,7 +463,6 @@ html[data-theme='dark'] {
   --mk-search-clear-bg: #3a3c41;
   --mk-search-clear-fg: #afb1b6;
   --mk-meta-link-on-bg: rgba(91, 141, 239, 0.22);
-  --mk-pill-count-active-bg: rgba(91, 141, 239, 0.24);
   --mk-input-disabled-bg: #19191a;
   --mk-modal-close-bg: #2a2b2d;
   --mk-modal-close-hover-bg: #343537;
@@ -531,7 +532,6 @@ html[data-theme='dark'] {
   --mk-graph-line: #2a2b2d;
   --mk-graph-line-soft: #2a2b2d;
   --mk-graph-row-line: #2a2b2d;
-  --mk-graph-toolbar-a: #202122;
   --mk-graph-toolbar-b: #1b1c1d;
   --mk-graph-journey-a: #19191a;
   --mk-graph-journey-b: #161718;
@@ -572,7 +572,6 @@ html[data-theme='dark'] {
   --mk-graph-notice-bg: rgba(251, 191, 36, 0.1);
   --mk-graph-notice-line: rgba(251, 191, 36, 0.3);
   --mk-graph-verdict-bg: rgba(248, 113, 113, 0.1);
-  --mk-graph-flow-line: rgba(91, 141, 239, 0.4);
 }
 
 /* 现代化增强包 */
@@ -857,34 +856,8 @@ select {
   overflow: hidden;
 }
 
-/* ==========================================
-   暗色模式切换按钮
-   ========================================== */
-
-.theme-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.theme-toggle:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  border-color: var(--border-dark);
-}
-
-.theme-toggle:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
+/* 已删除（死类清理，2026-10-01）：.theme-toggle 三段规则——全仓 grep 零模板引用，
+   且其 :focus-visible 自写 outline 焦点圈违反 SPEC §0「全站一圈 --mk-focus-ring」。 */
 
 /* ==========================================
    页面过渡动画
@@ -905,29 +878,11 @@ select {
   transform: translateY(-10px);
 }
 
-/* ==========================================
-   卡片悬浮动画
-   （2026-09-30 对齐原型：用户侧按钮/卡片 hover 一律不做位移，只留投影反馈；
-    .hover-lift 本体全仓无引用，这里只撤掉 -4px 抬升，保留投影过渡）
-   ========================================== */
-
-.hover-lift {
-  transition: transform var(--transition-normal), 
-              box-shadow var(--transition-normal);
-}
-
-.hover-lift:hover {
-  box-shadow: var(--shadow-lg);
-}
-
-/* ==========================================
-   焦点环
-   ========================================== */
-
-.focus-ring:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
+/* 已删除（死类清理，2026-10-01）：.hover-lift 两段规则——09-30 已撤其 -4px 抬升，
+   本轮确认全仓零模板引用后整段删除；其唯一令牌消费（--shadow-lg）随 design-system.css
+   同批删除。hover 反馈规范：只变背景/边框/文字色，不位移、不抬升（SPEC §0.5）。
+   已删除（死类清理）：.focus-ring 工具类——全仓零模板引用，且自写 outline 焦点圈
+   违反「全站一圈 --mk-focus-ring」；焦点样式一律走 --mk-focus-ring。 */
 
 /* ==========================================
    响应式隐藏

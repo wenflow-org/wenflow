@@ -169,10 +169,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
   position: relative;
   margin: 10px 0 0;
   padding: 12px 12px 8px;
-  /* 结构图给浅色画布：mermaid neutral 主题在白底上最清晰（课堂暗色主题下的"教具纸"效果） */
+  /* 结构图给浅色画布：mermaid neutral 主题在白底上最清晰（课堂暗色主题下的"教具纸"效果）。
+     #ffffff 为有意的固定纸面（暗色下不翻转，否则 mermaid 浅色主题不可读）——无对应令牌，保留登记。 */
   background: #ffffff;
-  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  border-radius: 10px;
+  border: 1px solid var(--mk-line);
+  /* 嵌入式图面 = 次级面板档 12 */
+  border-radius: var(--mk-radius-lg);
   overflow-x: auto;
 }
 .teaching-diagram__canvas {
@@ -199,8 +201,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 .teaching-diagram__fallback {
   margin: 0;
   padding: 8px 10px;
-  background: var(--mk-surface-2, #f6f8fa);
-  border-radius: 8px;
+  background: var(--mk-surface-2);
+  border-radius: var(--mk-radius-md);
   font-size: 12px;
   line-height: 1.5;
   overflow-x: auto;
@@ -210,7 +212,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 .teaching-diagram figcaption {
   margin-top: 6px;
   font-size: 12px;
-  color: var(--text-secondary, #666);
+  color: var(--text-secondary);
   text-align: center;
 }
 .teaching-diagram__hint {
@@ -218,10 +220,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
   top: 8px;
   right: 10px;
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   background: rgba(15, 23, 42, 0.06);
   color: #6b7280;
-  font-size: var(--mk-fs-micro, 12px);
+  font-size: var(--mk-fs-micro);
   pointer-events: none;
 }
 /* 放大层（Teleport 到 body，不受 scoped 限制但保留前缀便于识别） */
@@ -241,8 +243,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
   max-height: 88vh;
   padding: 16px;
   overflow: auto;
+  /* 放大层 = 模态弹层 → 卡片·弹层档 16；纸面 #ffffff 同上（教具纸，保留登记） */
   background: #ffffff;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   cursor: default;
 }
 .diagram-zoom__canvas :deep(svg) {
@@ -267,7 +270,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 .diagram-zoom__btn {
   padding: 6px 14px;
   border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   background: rgba(15, 23, 42, 0.6);
   color: #fff;
   font-size: 13px;

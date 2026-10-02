@@ -99,7 +99,7 @@ defineExpose({ scrollEl, scrollDown, jumpToBottom, nearBottom });
 /* 发送失败重试：真按钮（父页 scoped 样式够不到本组件，这里自带 reset 兜底） */
 .msg__retry {
   margin-left: 8px;
-  color: var(--mk-red, #c81e1e);
+  color: var(--mk-red);
   font-weight: 700;
   text-decoration: underline;
   cursor: pointer;

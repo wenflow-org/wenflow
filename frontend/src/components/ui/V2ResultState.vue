@@ -45,10 +45,11 @@ defineEmits<{ (e: 'action'): void }>();
   width: 66px;
   height: 66px;
   margin: 0 auto 14px;
-  border-radius: 20px;
+  /* 空态图标底 → 卡片·弹层档 16（§0.5 圆角阶梯点名「空态图标底」） */
+  border-radius: var(--mk-radius-xl);
   display: grid;
   place-items: center;
-  background: var(--mk-surface-2, #eef2fa);
+  background: var(--mk-surface-2);
   color: var(--blue);
 }
 .v2result--error .v2result__art {
@@ -77,7 +78,7 @@ defineEmits<{ (e: 'action'): void }>();
   border: 0;
   border-radius: var(--mk-radius-pill);
   background: var(--blue);   /* 批次 D：135deg 渐变 → 纯色友好蓝（规范禁渐变） */
-  color: #fff;
+  color: var(--wf-text-on-primary);
   font: inherit;
   font-size: 13px;
   font-weight: 800;

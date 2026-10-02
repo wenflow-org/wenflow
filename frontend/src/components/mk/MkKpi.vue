@@ -31,7 +31,8 @@ withDefaults(
   display: grid;
   gap: 6px;
   padding: 16px;
-  border-radius: 12px;
+  /* KPI 瓦片 = 卡片·弹层档 16（§0.5；批次 C 抬 xl 时此字面量漏改） */
+  border-radius: var(--mk-radius-xl);
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
 }

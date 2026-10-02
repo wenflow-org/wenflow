@@ -237,10 +237,10 @@ onMounted(load)
 <style scoped>
 .session-feedback {
   padding: 24px 28px;
-  border: 1px solid var(--border-default, rgba(23, 32, 51, 0.08));
-  border-radius: 16px;
-  background: var(--bg-surface, #fff);
-  color: var(--text-primary, #172033);
+  border: 1px solid var(--border-default);
+  border-radius: var(--mk-radius-xl);
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .session-feedback__head,
@@ -253,7 +253,7 @@ onMounted(load)
 
 .session-feedback__kicker {
   margin: 0 0 6px;
-  color: var(--color-primary, #2f6ae0);
+  color: var(--color-primary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -265,16 +265,16 @@ onMounted(load)
 
 .session-feedback__saved {
   padding: 5px 10px;
-  border-radius: 999px;
-  background: var(--color-success-bg, rgba(49, 177, 111, 0.1));
-  color: var(--color-success, #238657);
+  border-radius: var(--mk-radius-pill);
+  background: var(--color-success-bg);
+  color: var(--color-success);
   font-size: 12px;
   font-weight: 700;
 }
 
 .session-feedback__loading {
   padding: 24px 0 4px;
-  color: var(--text-secondary, #607086);
+  color: var(--text-secondary);
 }
 
 .session-feedback__field {
@@ -289,7 +289,7 @@ onMounted(load)
   margin-bottom: 10px;
   padding: 0;
   text-align: left;
-  color: var(--text-secondary, #52657c);
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 700;
 }
@@ -311,19 +311,19 @@ onMounted(load)
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: var(--mk-radius-md, 10px);
+  border-radius: var(--mk-radius-md);
   background: none;
-  color: var(--border-default, #dce4ef);
+  color: var(--border-default);
   cursor: pointer;
   transition: color 140ms ease, transform 140ms ease, background 140ms ease;
 }
 
 .rating-star:hover {
-  background: color-mix(in srgb, var(--color-primary, #2f6ae0) 6%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
 }
 
 .rating-star.is-on {
-  color: var(--color-warning, #f4aa46);
+  color: var(--color-warning);
 }
 
 .rating-star:active {
@@ -331,8 +331,8 @@ onMounted(load)
 }
 
 .rating-star:focus-visible {
-  outline: 2px solid var(--color-primary, #2f6ae0);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: var(--mk-focus-ring);
 }
 
 .rating-stars__label {
@@ -349,7 +349,7 @@ onMounted(load)
 }
 
 .rating-stars__label.is-placeholder {
-  color: var(--text-tertiary, #7a8599);
+  color: var(--text-tertiary);
   font-weight: 600;
 }
 
@@ -367,10 +367,10 @@ onMounted(load)
      选项的字号交回继承值，于是「难度感受」跟着正文 16px 走，而「总体评分」的数字/标签
      是 15/12px，同一组选项两个字号。显式声明后两组都落在 13px（与 legend 13px 同级） */
   font-size: 13px;
-  border: 1px solid var(--border-default, #dce4ef);
-  border-radius: var(--mk-radius-lg, 999px);
+  border: 1px solid var(--border-default);
+  border-radius: var(--mk-radius-lg);
   background: transparent;
-  color: var(--text-secondary, #52657c);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: border-color 180ms ease, background 180ms ease, color 180ms ease, transform 180ms ease;
 }
@@ -379,14 +379,15 @@ onMounted(load)
 .reason-option:hover,
 .fit-option.is-active,
 .reason-option.is-active {
-  border-color: var(--color-primary, #2f6ae0);
-  background: color-mix(in srgb, var(--color-primary, #2f6ae0) 9%, transparent);
-  color: var(--color-primary-dark, #1f57cc);
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 9%, transparent);
+  color: var(--color-primary-dark);
 }
 
 .fit-option:active,
 .reason-option:active {
-  transform: translateY(1px);
+  /* §0.5：按压反馈只允许 scale 类，位移退役 */
+  transform: scale(0.98);
 }
 
 /* 多选标签（主要问题）：与 fit-option 同底盘，3 列等宽 */
@@ -395,10 +396,10 @@ onMounted(load)
   padding: 6px 10px;
   font-size: 12.5px;
   font-weight: 600;
-  border: 1px solid var(--border-default, #dce4ef);
-  border-radius: var(--mk-radius-lg, 999px);
+  border: 1px solid var(--border-default);
+  border-radius: var(--mk-radius-lg);
   background: transparent;
-  color: var(--text-secondary, #52657c);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: border-color 180ms ease, background 180ms ease, color 180ms ease, transform 180ms ease;
 }
@@ -406,7 +407,7 @@ onMounted(load)
 .session-feedback__details {
   margin-top: 20px;
   padding-top: 2px;
-  border-top: 1px solid var(--border-default, #e5eaf1);
+  border-top: 1px solid var(--border-default);
 }
 
 .session-feedback__comment {
@@ -420,20 +421,20 @@ onMounted(load)
   gap: 12px;
   margin-top: 18px;
   padding: 10px 12px;
-  border-left: 3px solid var(--color-danger, #ef7578);
+  border-left: 3px solid var(--color-danger);
   /* 2026-10-02：--color-danger-bg 不存在（全仓零定义，规则 8 扩面查出；此前靠
      兜底 rgba(239,117,120,.08) 静默渲染）。规范令牌层有 --wf-color-danger-bg，
      语义相同（危险态 10% 淡底），且自带明暗两档 —— 这里必须用规范名而不是
      把字面量搬进本地变量：本地变量不会有暗色适配，会在暗色主题下留一块浅粉底。 */
   background: var(--wf-color-danger-bg);
-  color: var(--text-primary, #172033);
+  color: var(--text-primary);
   font-size: 13px;
 }
 
 .session-feedback__error button {
   border: 0;
   background: transparent;
-  color: var(--color-primary, #2f6ae0);
+  color: var(--color-primary);
   cursor: pointer;
   font-weight: 700;
 }
@@ -447,7 +448,7 @@ onMounted(load)
 
 .session-feedback__actions p {
   margin: 0;
-  color: var(--text-secondary, #607086);
+  color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -466,36 +467,36 @@ onMounted(load)
   box-sizing: border-box;
   padding: 5px 11px;
   border: none;
-  border-radius: 4px;
-  background: var(--bg-surface, #fff);
-  color: var(--text-primary, #172033);
-  box-shadow: 0 0 0 1px var(--border-default, #dce4ef) inset;
+  border-radius: var(--mk-radius-xs);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 1px var(--border-default) inset;
   font-family: inherit;
-  font-size: var(--text-sm, 14px);
+  font-size: var(--text-sm);
   line-height: 1.5;
   resize: vertical;
-  transition: box-shadow var(--transition-fast, 150ms ease);
+  transition: box-shadow var(--transition-fast);
 }
 
 .feedback-textarea__inner::placeholder {
-  color: var(--text-muted, #607086);
+  color: var(--text-muted);
 }
 
 .feedback-textarea__inner:hover {
-  box-shadow: 0 0 0 1px var(--border-dark, #ced4da) inset;
+  box-shadow: 0 0 0 1px var(--border-dark) inset;
 }
 
 .feedback-textarea__inner:focus {
   outline: none;
-  box-shadow: 0 0 0 1px var(--color-primary, #2f6ae0) inset;
+  box-shadow: 0 0 0 1px var(--color-primary) inset;
 }
 
 .feedback-textarea__count {
   position: absolute;
   right: 10px;
   bottom: 5px;
-  background: var(--bg-surface, #fff);
-  color: var(--text-muted, #909399);
+  background: var(--bg-surface);
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 14px;
 }
@@ -515,24 +516,24 @@ onMounted(load)
   padding: 8px 15px;
   font-size: 14px;
   border: 1px solid transparent;
-  border-radius: 999px;
-  transition: all var(--transition-fast, 150ms ease);
+  border-radius: var(--mk-radius-pill);
+  transition: all var(--transition-fast);
 }
 
 /* 平面化：主按钮保持实心 --color-primary，去掉配套的蓝色发光投影 */
 .feedback-btn--primary {
-  background: var(--color-primary, #2f6ae0);
-  border-color: var(--color-primary, #2f6ae0);
-  color: var(--text-on-primary, #fff);
-  font-weight: var(--font-medium, 500);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--text-on-primary);
+  font-weight: var(--font-medium);
 }
 
 /* 「友好而平」：取消 hover 上浮（translateY(-1px)）与 hover 投影，
    悬停只换 darker 蓝档背景；按压反馈移到 :active 的 scale(0.98)。 */
 .feedback-btn--primary:hover:not(:disabled) {
-  background: var(--color-primary-dark, #1f57cc);
-  border-color: var(--color-primary-dark, #1f57cc);
-  color: var(--text-on-primary, #fff);
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+  color: var(--text-on-primary);
 }
 
 .feedback-btn--primary:active:not(:disabled) {

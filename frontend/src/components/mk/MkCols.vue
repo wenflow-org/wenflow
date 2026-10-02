@@ -80,7 +80,7 @@ function toggle(key: string) {
   padding: 6px;
   display: grid;
   gap: 2px;
-  background: var(--mk-surface, #fff);
+  background: var(--mk-surface);
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
   box-shadow: var(--mk-shadow-pop);
@@ -97,9 +97,8 @@ function toggle(key: string) {
   white-space: nowrap;
   user-select: none;
 }
-.mk-cols__item:hover { background: #f0f5ff; }
-html[data-theme='dark'] .mk-cols__item:hover { background: #252627; }
-.mk-cols__item input { accent-color: var(--mk-blue, #2f6ae0); }
+.mk-cols__item:hover { background: var(--mk-graph-flow-bg); } /* #f0f5ff/暗#252627 的成对令牌，字面量+暗色覆写退役 */
+.mk-cols__item input { accent-color: var(--mk-blue); }
 .mk-cols__reset {
   margin-top: 4px;
   border: 0;
@@ -114,6 +113,5 @@ html[data-theme='dark'] .mk-cols__item:hover { background: #252627; }
   cursor: pointer;
   text-align: left;
 }
-.mk-cols__reset:hover { background: #eff6ff; }
-html[data-theme='dark'] .mk-cols__reset:hover { background: #252627; }
+.mk-cols__reset:hover { background: var(--mk-graph-hover-bg); } /* #eff6ff/暗#252627 的成对令牌，字面量+暗色覆写退役 */
 </style>

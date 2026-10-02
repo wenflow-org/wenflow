@@ -186,19 +186,21 @@ defineExpose({ refresh, openPicker, addFiles, items, dragging });
   max-width: 260px;
   padding: 3px 4px 3px 6px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   background: var(--surface);
-  font-size: 11.5px;
+  /* 字号下限 12px（§9 偏离 1） */
+  font-size: var(--mk-fs-micro);
   color: var(--muted);
 }
 
 .mat-upload__chip-ext {
   flex: 0 0 auto;
   padding: 1px 5px;
-  border-radius: 5px;
+  /* 行内小 tag → 芯片档 6（5px 中间档退役） */
+  border-radius: var(--mk-radius-sm);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
   color: var(--blue-deep);
-  font-size: 9.5px;
+  font-size: var(--mk-fs-micro);
   font-style: normal;
   font-weight: 800;
 }
@@ -217,9 +219,9 @@ defineExpose({ refresh, openPicker, addFiles, items, dragging });
   border: 0;
   background: none;
   padding: 0 3px;
-  border-radius: 4px;
+  border-radius: var(--mk-radius-xs);
   color: var(--faint);
-  font-size: 10px;
+  font-size: var(--mk-fs-micro);
   cursor: pointer;
 }
 
@@ -237,7 +239,7 @@ defineExpose({ refresh, openPicker, addFiles, items, dragging });
 .mat-upload__error {
   margin: 2px 0 0;
   color: var(--red);
-  font-size: 11.5px;
+  font-size: var(--mk-fs-micro);
   line-height: 1.5;
 }
 </style>

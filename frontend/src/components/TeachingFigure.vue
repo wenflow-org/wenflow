@@ -211,10 +211,12 @@ const ariaLabel = computed(() => {
   position: relative;
   margin: 10px 0 0;
   padding: 12px 12px 8px;
-  /* 与结构图同一张"教具纸"：白底、细边、圆角（课堂暗色主题下也按纸呈现） */
+  /* 与结构图同一张"教具纸"：白底、细边、圆角（课堂暗色主题下也按纸呈现）。
+     #ffffff 为有意的固定纸面（暗色下不翻转）——无对应令牌，保留登记。 */
   background: #ffffff;
-  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  border-radius: 10px;
+  border: 1px solid var(--mk-line);
+  /* 嵌入式图面 = 次级面板档 12 */
+  border-radius: var(--mk-radius-lg);
   overflow-x: auto;
 }
 .teaching-figure__canvas {
@@ -231,16 +233,16 @@ const ariaLabel = computed(() => {
   top: 8px;
   right: 10px;
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   background: rgba(15, 23, 42, 0.06);
   color: #6b7280;
-  font-size: var(--mk-fs-micro, 12px);
+  font-size: var(--mk-fs-micro);
   pointer-events: none;
 }
 .teaching-figure figcaption {
   margin-top: 6px;
-  font-size: var(--mk-fs-micro, 12px);
-  color: var(--text-secondary, #666);
+  font-size: var(--mk-fs-micro);
+  color: var(--text-secondary);
   text-align: center;
 }
 .teaching-figure__canvas svg {
@@ -320,8 +322,9 @@ const ariaLabel = computed(() => {
   max-height: 86vh;
   padding: 16px;
   overflow: auto;
+  /* 放大层 = 模态弹层 → 卡片·弹层档 16；纸面 #ffffff 同上（教具纸，保留登记） */
   background: #ffffff;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-xl);
   cursor: default;
 }
 .figure-zoom__canvas svg {
@@ -334,7 +337,7 @@ const ariaLabel = computed(() => {
   right: 20px;
   padding: 6px 14px;
   border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   background: rgba(15, 23, 42, 0.6);
   color: #fff;
   font-size: 13px;

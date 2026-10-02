@@ -351,62 +351,62 @@ const tagClass = (type: string) => ({
    差异小到读不出来，却让「卡片默认平面」这条规则有了例外。改为单一平涂
    color-mix(green 8%)：保留「完成=绿」的语义编码，去掉无意义的渐变。
    描边的 30% 绿边是状态识别的主要载体，保留不动。 */
-.completion-card { margin-top: 16px; padding: 20px; background: color-mix(in srgb, var(--green, #1e9e58) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--green, #1e9e58) 30%, var(--line)); border-radius: var(--mk-radius-xl); }
+.completion-card { margin-top: 16px; padding: 20px; background: color-mix(in srgb, var(--green) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--green) 30%, var(--line)); border-radius: var(--mk-radius-xl); }
 .completion-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-.completion-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--green, #2e7d32); }
+.completion-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--green); }
 .completion-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; padding: 12px; background-color: color-mix(in srgb, var(--surface) 82%, transparent); border-radius: 8px; }
 .summary-item { display: flex; flex-direction: column; gap: 2px; }
-.summary-label { font-size: 12px; color: var(--muted, #78909c); }
-.summary-value { font-size: 13px; font-weight: 600; color: var(--green, #2e7d32); }
+.summary-label { font-size: 12px; color: var(--muted); }
+.summary-value { font-size: 13px; font-weight: 600; color: var(--green); }
 .completion-section { margin-bottom: 16px; padding: 12px; background-color: color-mix(in srgb, var(--surface) 82%, transparent); border-radius: 8px; }
-.advisory-section { border: 1px solid var(--line, #dfe7d6); }
-.section-attribution { margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: var(--ink-2, #475569); }
+.advisory-section { border: 1px solid var(--line); }
+.section-attribution { margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: var(--ink-2, var(--wf-text-secondary)); }
 .attribution-tag {
   margin-right: 6px;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-pill);
   font-size: 12px;
-  color: var(--amber-deep, #b45309);
+  color: var(--amber-deep, var(--mk-amber));
   background: rgba(217, 119, 6, 0.12);
   border: 1px solid rgba(217, 119, 6, 0.3);
 }
-.advisory-section--high { border-color: color-mix(in srgb, var(--red, #ef7578) 45%, var(--line, #dfe7d6)); background: color-mix(in srgb, var(--red, #ef7578) 8%, var(--surface)); }
-.advisory-section--medium { border-color: color-mix(in srgb, var(--amber, #f4aa46) 45%, var(--line, #dfe7d6)); background: color-mix(in srgb, var(--amber, #f4aa46) 10%, var(--surface)); }
-.advisory-section--low { border-color: color-mix(in srgb, var(--green, #1e9e58) 40%, var(--line, #dfe7d6)); background: color-mix(in srgb, var(--green, #1e9e58) 8%, var(--surface)); }
-.section-title { margin: 0 0 10px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--green, #1b5e20); }
+.advisory-section--high { border-color: color-mix(in srgb, var(--red) 45%, var(--line)); background: color-mix(in srgb, var(--red) 8%, var(--surface)); }
+.advisory-section--medium { border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); background: color-mix(in srgb, var(--amber) 10%, var(--surface)); }
+.advisory-section--low { border-color: color-mix(in srgb, var(--green) 40%, var(--line)); background: color-mix(in srgb, var(--green) 8%, var(--surface)); }
+.section-title { margin: 0 0 10px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--green); }
 /* 图标容器：等价 el-icon（1em、居中、继承字色/字号），移除 EP 依赖 */
 .completion-icon { display: inline-flex; align-items: center; justify-content: center; width: 1em; height: 1em; line-height: 1; font-size: inherit; flex: none; }
 .completion-icon svg { width: 1em; height: 1em; }
-.completion-icon--header { width: 24px; height: 24px; font-size: 24px; color: var(--green, #2e7d32); }
+.completion-icon--header { width: 24px; height: 24px; font-size: 24px; color: var(--green); }
 .section-title .completion-icon { color: var(--accent, var(--mk-blue)); }
-.section-hint { margin: 0 0 10px; font-size: 12px; color: var(--muted, #607d8b); }
-.review-link { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--red, #b3261e); text-decoration: none; }
+.section-hint { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+.review-link { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--red); text-decoration: none; }
 .review-link:hover { text-decoration: underline; }
-.section-content { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink, #37474f); }
+.section-content { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink); }
 .advisory-options { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
 .metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .metrics-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.metric-card { padding: 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--green, #1e9e58) 20%, var(--line)); background: var(--surface); }
+.metric-card { padding: 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--green) 20%, var(--line)); background: var(--surface); }
 .metric-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-.metric-label { font-size: 12px; color: var(--muted, #546e7a); }
-.metric-badge { font-size: 12px; padding: 2px 6px; border-radius: 999px; background: color-mix(in srgb, var(--green, #1e9e58) 10%, var(--surface)); color: var(--green, #33691e); }
-.metric-value { margin-top: 6px; font-size: 22px; font-weight: 700; color: var(--green, #2e7d32); }
-.metric-desc { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted, #607d8b); }
-.metric-card--good { border-color: color-mix(in srgb, var(--green, #1e9e58) 30%, var(--line)); }
-.metric-card--normal { border-color: color-mix(in srgb, var(--green, #1e9e58) 30%, var(--line, #dfe7d6)); }
-.metric-card--warn { border-color: color-mix(in srgb, var(--red, #ef7578) 45%, var(--line, #dfe7d6)); }
+.metric-label { font-size: 12px; color: var(--muted); }
+.metric-badge { font-size: 12px; padding: 2px 6px; border-radius: var(--mk-radius-pill); background: color-mix(in srgb, var(--green) 10%, var(--surface)); color: var(--green); }
+.metric-value { margin-top: 6px; font-size: 22px; font-weight: 700; color: var(--green); }
+.metric-desc { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.metric-card--good { border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
+.metric-card--normal { border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
+.metric-card--warn { border-color: color-mix(in srgb, var(--red) 45%, var(--line)); }
 .knowledge-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
-.knowledge-item { padding: 10px; border: 1px solid color-mix(in srgb, var(--green, #1e9e58) 18%, var(--line)); border-radius: 8px; background: var(--surface); }
+.knowledge-item { padding: 10px; border: 1px solid color-mix(in srgb, var(--green) 18%, var(--line)); border-radius: 8px; background: var(--surface); }
 .knowledge-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.knowledge-name { font-size: 13px; font-weight: 600; color: var(--ink, #2f4f4f); }
-.knowledge-evidence { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted, #546e7a); }
-.ordered-list { margin: 0; padding-left: 0; list-style-position: inside; list-style-type: decimal; font-size: 13px; line-height: 1.6; color: var(--ink, #37474f); }
+.knowledge-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+.knowledge-evidence { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.ordered-list { margin: 0; padding-left: 0; list-style-position: inside; list-style-type: decimal; font-size: 13px; line-height: 1.6; color: var(--ink); }
 .ordered-list li { margin: 0 0 6px; overflow-wrap: anywhere; }
 .ordered-list li:last-child { margin-bottom: 0; }
 .evaluation-block { display: grid; gap: 8px; }
-.evaluation-line { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink, #37474f); }
+.evaluation-line { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink); }
 .completion-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-.completion-actions__hint { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted, #7a8599); text-align: right; }
+.completion-actions__hint { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); text-align: right; }
 .completion-actions__row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 
 /* 状态标签：以 .status-tag 原语为基，尺寸对齐旧 el-tag small（色 token 不变）。
@@ -417,18 +417,18 @@ const tagClass = (type: string) => ({
 .status-tag--efficient { background: var(--color-efficient-bg); color: var(--color-efficient-dark); border: 1px solid var(--color-efficient-border); }
 
 /* 第一方按钮：视觉对齐原 el-button 及其全局 EP 覆写（tremor-theme / design-system） */
-.completion-btn { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; white-space: nowrap; vertical-align: middle; cursor: pointer; font-family: inherit; line-height: 1; border: 1px solid transparent; border-radius: 999px; transition: all 180ms ease; }
-.completion-btn--action { height: 44px; padding: 0 18px; font-size: 13px; border-radius: 10px; font-weight: 600; }
+.completion-btn { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; white-space: nowrap; vertical-align: middle; cursor: pointer; font-family: inherit; line-height: 1; border: 1px solid transparent; border-radius: var(--mk-radius-pill); transition: all 180ms ease; }
+.completion-btn--action { height: 44px; padding: 0 18px; font-size: 13px; border-radius: var(--mk-radius-md); font-weight: 600; }
 /* 2026-09-25 移动框架：这是「保持原计划/查看调整建议/确认调整」一类主决策钮，
    桌面 24→36、≤640 44（原 34 仍低于 HIG 触控下限） */
 .completion-btn--small { height: 36px; padding: 5px 13px; font-size: 12px; }
 .completion-btn--default { background: var(--bg-surface); border-color: var(--border-default); color: var(--text-primary); font-weight: 600; }
 /* 底部动作按钮此前走 el-button 默认型（灰色文字），非 --default 型；对齐其视觉 */
-.completion-btn--action.completion-btn--default { color: var(--muted, #5b6577); }
+.completion-btn--action.completion-btn--default { color: var(--muted); }
 .completion-btn--default:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--mk-blue); color: var(--mk-blue); }
 /* 第三级动作（返回）：与「完成任务」同域但不同权重，做成无描边文字钮，
    避免三个按钮一样重、用户分不清主次（2026-09-25 反馈「又是继续又是返回又是完成」） */
-.completion-btn--link { background: none; border-color: transparent; color: var(--muted, #5b6577); }
+.completion-btn--link { background: none; border-color: transparent; color: var(--muted); }
 .completion-btn--link:hover:not(:disabled) { background: var(--bg-hover); border-color: transparent; color: var(--mk-blue); }
 /* 平面化：主按钮保持实心 --mk-blue，去掉配套的蓝色发光投影 */
 .completion-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: var(--text-on-primary); font-weight: var(--font-medium); }

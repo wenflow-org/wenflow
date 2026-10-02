@@ -208,9 +208,9 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--mk-radius-lg);
   background: transparent;
-  color: var(--muted, #5b6577);
+  color: var(--muted);
   cursor: pointer;
   transition: background 0.14s ease, color 0.14s ease;
 }
@@ -219,8 +219,8 @@ onUnmounted(() => {
   color: var(--blue-deep);
 }
 .mknav__icon:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--mk-focus-ring);
 }
 .mknav__btn {
   display: inline-flex;
@@ -243,13 +243,13 @@ onUnmounted(() => {
   transform: scale(0.98);
 }
 .mknav__btn:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--mk-focus-ring);
 }
 /* 主按钮：实心品牌蓝，不再用 linear-gradient(135deg, …)；
    原先的 0 14px 30px 蓝色投影属于彩色光晕，一并退休。 */
 .mknav__btn--primary {
-  color: #fff;
+  color: var(--wf-text-on-primary);
   background: var(--blue);
   transition: transform 0.18s var(--ease), background 0.18s var(--ease);
 }
@@ -267,7 +267,7 @@ onUnmounted(() => {
   width: 42px;
   height: 42px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--mk-radius-md);
   background: var(--burger-bg);
   cursor: pointer;
 }
@@ -277,7 +277,7 @@ onUnmounted(() => {
   height: 2px;
   margin: 4px auto;
   background: var(--ink);
-  border-radius: 99px;
+  border-radius: var(--mk-radius-pill);
   transition: transform 0.28s var(--ease), opacity 0.2s var(--ease);
 }
 .mknav__burger--open span:nth-child(1) {
@@ -344,7 +344,7 @@ onUnmounted(() => {
     gap: 8px;
     margin: 0 auto 14px;
     padding: 16px;
-    border-radius: 20px;
+    border-radius: var(--mk-radius-xl);
     background: var(--drawer-bg);
     border: 1px solid var(--line);
     /* 悬浮抽屉：投影对齐中性 overlay 档（--wf-shadow-overlay），去掉原先自定的 4 档阴影值 */

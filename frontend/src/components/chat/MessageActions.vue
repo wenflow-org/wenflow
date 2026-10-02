@@ -133,17 +133,18 @@ function handleFeedback(thumbsUp: boolean) {
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 11px;
+  border-radius: var(--mk-radius-sm);
+  /* 字号下限 12px（§9 偏离 1） */
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
-  color: var(--muted, #5b6577);
+  color: var(--muted);
   white-space: nowrap;
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
 }
 .msg-actions__btn:hover {
   background: color-mix(in srgb, var(--blue) 8%, transparent);
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
 }
 .msg-actions__btn:active {
   background: color-mix(in srgb, var(--blue) 14%, transparent);
@@ -152,12 +153,13 @@ function handleFeedback(thumbsUp: boolean) {
   cursor: default;
 }
 .msg-actions__btn--sent-up {
-  color: var(--green, #1e9e58);
-  background: rgba(49, 177, 111, 0.1);
+  color: var(--green);
+  background: var(--color-success-bg);
 }
 .msg-actions__btn--sent-down {
+  /* #c0454a 无对应令牌（--mk-red/#c81e1e 更深），保留登记 */
   color: #c0454a;
-  background: rgba(239, 117, 120, 0.1);
+  background: var(--wf-color-danger-bg);
 }
 
 /* 触屏设备（无 hover）：操作按钮常显，避免「看不到操作」；

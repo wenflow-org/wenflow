@@ -50,9 +50,9 @@ const dismissToast = (item: ToastItem) => {
 
 <style scoped>
 /* 原型 .wf-toasts（newui/用户侧/index.html）：底部居中浮层，深底白字胶囊。
-   注意：本组件 Teleport 到 body，脱离 .v2-page 作用域，所以只引 --mk-* 全局 token
+   注意：本组件 Teleport 到 body，脱离 .v2-page 作用域，所以只引 --mk-* / --wf-* 全局 token
    （勿用 v2 的 --surface/--line/--ink 别名层：别名层一旦按需加载/移除，暗色下会白底 toast）；
-   focus 环同理显式写 var(--blue, var(--mk-blue))。 */
+   focus 环用全站唯一一圈 --mk-focus-ring。 */
 .toast-host {
   position: fixed;
   left: 50%;
@@ -75,24 +75,23 @@ const dismissToast = (item: ToastItem) => {
   gap: 10px;
   width: 100%;
   padding: 12px 14px;
-  border-radius: 14px;
-  background: var(--mk-ink, #1a2a44);
-  color: #fff;
+  /* toast = 弹层 → 卡片·弹层档 16（§0.5） */
+  border-radius: var(--mk-radius-xl);
+  background: var(--mk-ink);
+  color: var(--wf-text-inverse);
   font-size: 13.5px;
   line-height: 1.5;
-  box-shadow: 0 14px 34px rgba(16, 26, 48, 0.28);
+  /* toast → 模态阴影档（§0.5 阴影表：模态/抽屉/toast/登录壳） */
+  box-shadow: var(--mk-shadow-modal);
   pointer-events: auto;
-  transition: box-shadow 0.2s ease;
 }
 
 .toast-item--error {
-  /* 原型字面值（.wf-toast--err）：固定深红，暗色下同样成立 */
+  /* 原型字面值（.wf-toast--err）：固定深红，暗色下同样成立（无对应令牌，保留登记） */
   background: #8f2233;
 }
 
-.toast-item:hover {
-  box-shadow: 0 18px 40px rgba(16, 26, 48, 0.34);
-}
+/* 「友好而平」：hover 不抬升不加投影，悬停反馈只走背景/文字（§0.5 阴影） */
 
 .toast-icon {
   flex-shrink: 0;
@@ -106,7 +105,7 @@ const dismissToast = (item: ToastItem) => {
   font-weight: 700;
 }
 
-/* 深底上的图标：原型只着色不铺底（成功 #5fe0a0 / 错误 #ffc2cb） */
+/* 深底上的图标：原型只着色不铺底（成功 #5fe0a0 / 错误 #ffc2cb —— 原型字面值，无对应令牌，保留登记） */
 .toast-icon--success {
   color: #5fe0a0;
 }
@@ -116,11 +115,11 @@ const dismissToast = (item: ToastItem) => {
 }
 
 .toast-icon--warning {
-  color: color-mix(in srgb, var(--mk-amber, #b45309) 45%, #ffffff);
+  color: color-mix(in srgb, var(--mk-amber) 45%, #ffffff);
 }
 
 .toast-icon--info {
-  color: color-mix(in srgb, var(--mk-blue, #2f6ae0) 55%, #ffffff);
+  color: color-mix(in srgb, var(--mk-blue) 55%, #ffffff);
 }
 
 .toast-message {
@@ -129,7 +128,7 @@ const dismissToast = (item: ToastItem) => {
   font-size: 13.5px;
   font-weight: 500;
   line-height: 1.5;
-  color: #fff;
+  color: var(--wf-text-inverse);
   word-break: break-word;
 }
 
@@ -142,22 +141,22 @@ const dismissToast = (item: ToastItem) => {
   justify-content: center;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.72);
+  color: color-mix(in srgb, var(--wf-text-inverse) 72%, transparent);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--mk-radius-xs);
   transition: color 0.15s ease, background 0.15s ease;
 }
 
 .toast-close:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+  color: var(--wf-text-inverse);
+  background: color-mix(in srgb, var(--wf-text-inverse) 12%, transparent);
 }
 
 .toast-close:focus-visible {
-  outline: 2px solid var(--blue, var(--mk-blue, #2f6ae0));
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--mk-focus-ring);
 }
 
 /* 底部浮层：入场上推、离场下沉（原型 wf-toast-in/out，.22s --mk-ease-out） */

@@ -85,7 +85,7 @@ defineEmits<{ select: [key: string | undefined] }>()
 }
 .mk-stat--ok .mk-stat__value { color: var(--mk-green); }
 .mk-stat--warn .mk-stat__value { color: var(--mk-amber); }
-.mk-stat--bad .mk-stat__value { color: var(--mk-red, #dc2626); }
+.mk-stat--bad .mk-stat__value { color: var(--mk-red); }
 
 /* 可点击项（页头计数筛选锚点）：默认与普通格子同构，hover/激活高亮 */
 .mk-stat--clickable {
@@ -96,7 +96,7 @@ defineEmits<{ select: [key: string | undefined] }>()
   font: inherit;
   text-align: left;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--mk-radius-sm);
   transition: color 0.12s ease, background 0.12s ease;
 }
 .mk-stat--clickable:hover { background: color-mix(in srgb, var(--mk-blue) 8%, transparent); }

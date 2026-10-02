@@ -62,17 +62,17 @@ onBeforeUnmount(() => {
 .imm-menu__btn {
   width: 44px; height: 44px;
   display: grid; place-items: center;
-  border: 1px solid var(--line, #e3e9f4);
-  border-radius: var(--mk-radius-md, 10px);
-  background: var(--surface, #fff);
-  color: var(--muted, #5b6577);
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-md);
+  background: var(--surface);
+  color: var(--muted);
   font-size: 17px;
   line-height: 1;
   padding: 0 0 2px;
   cursor: pointer;
   font-family: inherit;
 }
-.imm-menu__btn:hover { color: var(--blue-deep, #1f57cc); border-color: color-mix(in srgb, var(--blue, #2f6ae0) 40%, transparent); }
+.imm-menu__btn:hover { color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
 .imm-menu__pop {
   position: absolute;
   right: 0;
@@ -82,10 +82,11 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 2px;
   padding: 6px;
-  background: var(--surface, #fff);
-  border: 1px solid var(--line, #e3e9f4);
-  border-radius: 12px;
-  box-shadow: 0 14px 34px rgba(23, 32, 51, 0.14);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  /* 菜单弹层 → 卡片·弹层档 16（§0.5 圆角阶梯）；阴影 → 浮层档 token（0 14px 34px 自写档退役） */
+  border-radius: var(--mk-radius-xl);
+  box-shadow: var(--mk-shadow-pop);
 }
 .imm-pop-enter-active,
 .imm-pop-leave-active { transition: opacity var(--mk-dur-fast, 120ms) var(--mk-ease-out, ease), transform var(--mk-dur-fast, 120ms) var(--mk-ease-out, ease); }

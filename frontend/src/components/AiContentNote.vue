@@ -24,7 +24,7 @@ withDefaults(defineProps<{ text?: string }>(), {
   gap: 4px;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--faint, #8492ab);
+  color: var(--faint);
   font-weight: 500;
 }
 .ai-note svg {
