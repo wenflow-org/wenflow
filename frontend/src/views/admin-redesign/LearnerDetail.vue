@@ -358,7 +358,7 @@
                   </span>
                   <span v-else class="ld-none">未初始化</span>
                 </td>
-                <td>{{ t.dueAt ? timeAgo(t.dueAt) : '—' }}</td>
+                <td :title="t.dueAt ? new Date(t.dueAt).toLocaleString() : undefined">{{ t.dueAt ? dueText(t.dueAt) : '—' }}</td>
               </tr>
             </tbody>
           </table>
@@ -663,10 +663,22 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">教学会话</h3>
-          <span class="mk-card__meta">
+          <span class="mk-card__meta" title="口径：该学习者最近 20 条教学会话窗口；阶段=后端按里程碑归因">
             <MkLoading v-if="ldSessLoading" inline min text="加载中…" />
-            <template v-else>{{ ldSessError ? '加载失败' : `${ldSessionRows.length} 条` }}</template>
+            <template v-else>{{ ldSessError ? '加载失败' : (ldStageFilter === 'all' ? `${ldSessionRows.length} 条` : `${ldSessionRowsFiltered.length} / ${ldSessionRows.length} 条`) }}</template>
           </span>
+        </div>
+        <!-- 阶段切换器：档位与计数从会话窗口派生（见 ldStageChips）；单阶段不渲染 -->
+        <div v-if="!ldSessLoading && !ldSessError && ldStageChips.length > 1" class="ld-stagechips" role="group" aria-label="按阶段筛选会话">
+          <button
+            type="button" class="mk-pill" :class="{ 'mk-pill--active': ldStageFilter === 'all' }"
+            :aria-pressed="ldStageFilter === 'all'" @click="ldStageFilter = 'all'"
+          >全部 · {{ ldSessionRows.length }}</button>
+          <button
+            v-for="c in ldStageChips" :key="c.key" type="button" class="mk-pill"
+            :class="{ 'mk-pill--active': ldStageFilter === c.key }" :aria-pressed="ldStageFilter === c.key"
+            @click="ldStageFilter = c.key"
+          >{{ c.label }} · {{ c.count }}</button>
         </div>
         <div v-if="ldSessionRows.length" class="mk-table-scroll">
           <table class="mk-table">
@@ -674,7 +686,7 @@
               <tr><th>会话 ID</th><th>Skill</th><th>阶段</th><th>回合</th><th>时长</th><th>状态</th><th>时间</th></tr>
             </thead>
             <tbody>
-              <tr v-for="s in ldSessionRows" :key="s.id" class="ld-pane-row" @click="openSessionCockpit(s.id)">
+              <tr v-for="s in ldSessionRowsFiltered" :key="s.id" class="ld-pane-row" @click="openSessionCockpit(s.id)">
                 <td class="ld-mono" :title="s.id">{{ s.id }}</td>
                 <td>{{ s.skill }}</td>
                 <td><span class="mk-badge mk-badge--info">{{ s.stage }}</span></td>
@@ -714,7 +726,7 @@
                   </span>
                   <span v-else class="ld-none">未初始化</span>
                 </td>
-                <td class="ld-sub">{{ r.due }}</td>
+                <td class="ld-sub" :title="r.dueAbs || undefined">{{ r.due }}</td>
                 <td class="ld-sub" title="后端无出处字段，以提取次数/最近提取时间近似标注">{{ r.source }}</td>
                 <td><span class="mk-badge" :class="`mk-badge--${r.tone}`">{{ r.stateText }}</span></td>
                 <td>
@@ -976,6 +988,8 @@ interface LdSessionRow {
   skill: string
   /** 教学会话 pane：阶段列（后端 progress 里程碑序号，deriveTeachingSessionProgress 推导） */
   stage: string
+  /** 阶段切换器用数值序号（stage 展示串之外的原始 milestoneIndex；缺省 null 不入档） */
+  msIndex: number | null
   /** 教学会话 pane：回合列（口径=用户消息条数，后端无独立回合计数） */
   turns: string
   /** 教学会话 pane：时长列（后端 duration，秒） */
@@ -984,6 +998,21 @@ interface LdSessionRow {
 const ldSessionRows = ref<LdSessionRow[]>([])
 /** 概览左栏「最近会话」卡只取前 5 条；教学会话 pane 用全量（同源） */
 const recentSessionRows = computed(() => ldSessionRows.value.slice(0, 5))
+
+/* ---------- 阶段切换器（用户诉求「切换学习者不同阶段」）----------
+   档位从会话行的 milestoneIndex 派生（后端 deriveTeachingSessionProgress 已归因，零新契约）；
+   只有一个阶段时不渲染切换器（单档即全部，无筛选价值）。 */
+const ldStageFilter = ref<string>('all')
+const ldStageChips = computed(() => {
+  const counts = new Map<number, number>()
+  for (const r of ldSessionRows.value) if (r.msIndex != null) counts.set(r.msIndex, (counts.get(r.msIndex) || 0) + 1)
+  return [...counts.keys()].sort((a, b) => a - b).map((i) => ({ key: String(i), label: `里程碑 ${i}`, count: counts.get(i) as number }))
+})
+const ldSessionRowsFiltered = computed(() => {
+  if (ldStageFilter.value === 'all') return ldSessionRows.value
+  const idx = Number(ldStageFilter.value)
+  return ldSessionRows.value.filter((r) => r.msIndex === idx)
+})
 const ldSessLoading = ref(false)
 const ldSessError = ref(false)
 /** 状态徽章降噪（对齐 TeachingSessions.statusBadge）：仅异常态上色，正常态灰 */
@@ -1042,10 +1071,13 @@ async function loadLdSessions(id: string) {
         startAgo: timeAgo(String(s.startTime || '')),
         skill: String(s.subject || s.taskType || '—'),
         stage: progress && progress.totalMilestones ? `里程碑 ${progress.milestoneIndex || 0}/${progress.totalMilestones}` : '—',
+        msIndex: progress && typeof progress.milestoneIndex === 'number' && progress.milestoneIndex > 0 ? progress.milestoneIndex : null,
         turns: String(Number(s.messageCount || 0)),
         duration: formatDuration(Number(s.duration || 0))
       }
     })
+    // 换人/重载后旧筛选档可能已不存在（阶段集合随会话窗口变化）→ 回到「全部」
+    if (!ldStageChips.value.some((c) => c.key === ldStageFilter.value)) ldStageFilter.value = 'all'
   } catch {
     if (!stale()) ldSessError.value = true
   } finally {
@@ -1839,6 +1871,16 @@ const pathStatus = computed<{ text: string; tone: 'ok' | 'info' | 'muted' }>(() 
 /* ---------- 记忆与复习 pane（原型 2178-2183）：复用画像 tab 的 FSRS 单源 memoryTraces ----------
    状态/色调由 retrievability + dueAt 派生（原型 weak/due/stable/learning 四态）；
    「来源」列：后端无出处字段，用 extractionCount/lastSeenAt 近似标注（口径见 title）。 */
+/* FSRS 到期三态：timeAgo 对未来时间返回「刚刚」，会把未到期复习项全部渲染成「到期：刚刚」——
+   到期语义必须是 逾期/今天/N 天后；绝对时刻走 title。 */
+function dueText(dueAt: string): string {
+  const diffMs = new Date(dueAt).getTime() - Date.now()
+  if (!Number.isFinite(diffMs)) return '—'
+  const days = Math.floor(Math.abs(diffMs) / 86400000)
+  if (diffMs <= 0) return days >= 1 ? `已逾期 ${days} 天` : '今天到期'
+  return days >= 1 ? `${days} 天后` : '今天到期'
+}
+
 const memoryPaneRows = computed(() =>
   memoryTraces.value.map((t) => {
     const strength = t.retrievability != null ? Math.round(t.retrievability * 100) : null
@@ -1850,7 +1892,16 @@ const memoryPaneRows = computed(() =>
     else if (strength < 80) state = { text: '学习中', tone: 'info' }
     else state = { text: '稳固', tone: 'ok' }
     const source = t.extractionCount > 0 ? `累计提取 ${t.extractionCount} 次` : t.lastSeenAt ? `最近提取 ${timeAgo(t.lastSeenAt)}` : '—'
-    return { key: t.conceptKey, label: t.label || t.conceptKey, strength, tone: state.tone, stateText: state.text, due: t.dueAt ? timeAgo(t.dueAt) : '—', source }
+    return {
+      key: t.conceptKey,
+      label: t.label || t.conceptKey,
+      strength,
+      tone: state.tone,
+      stateText: state.text,
+      due: t.dueAt ? dueText(t.dueAt) : '—',
+      dueAbs: t.dueAt ? new Date(t.dueAt).toLocaleString() : '',
+      source
+    }
   })
 )
 
@@ -2090,6 +2141,8 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 /* 表格 pane（教学会话 / 记忆与复习）：行可点击 + 等宽列 */
 .ld-pane-row { cursor: pointer; }
+/* 阶段切换器：chips 行夹在卡头与表格之间（mk-pill 描边胶囊原语，激活态见原语层） */
+.ld-stagechips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 16px 0; }
 .ld-mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); }
 .ld-sub { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .ld-strong { font-weight: 600; }
