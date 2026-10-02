@@ -1,9 +1,10 @@
 <template>
   <div :class="embedded ? 'mk-page--fill ts-embedded' : 'mk-page mk-page--fill'">
     <!-- 教学会话页头（newui/admin pagehead：页名 + 刷新上移；embedded 由宿主承载，本组件不渲染页头）。
-         状态条 = 原型 .statusbar 结构（结论粗体 + 分隔线 + meta + 右侧快捷筛选钮）；
-         数字分工：结论取「需关注」——进行中/已完成/失败已由分布卡图例与 KPI 卡承载，
-         同一数字不在两处复读；meta 只留别处没有的「缺总结」与截断提示 -->
+         状态条 = 原型 .statusbar 结构（结论粗体 + 分隔线 + meta 串 + 右侧快捷筛选钮），
+         也是本页唯一统计带（2026-10-02 用户拍板「新UI没有第二个kpi区」撤 KPI 栅格）：
+         meta 只放别处没有的计数——总数=后端全量口径（分布卡/列表都是加载窗口）、
+         有建议=全页唯一出口；已完成/失败/进行中由分布卡图例单源承载，不在两处复读 -->
     <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 状态分布与需关注识别">
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshNow">
@@ -15,9 +16,11 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">{{ attentionCount }} 个会话需关注</strong>
       <span class="mk-status__sep"></span>
+      <span class="mk-status__meta" title="后端全量口径；下方分布卡与列表按最近加载窗口展示">共 {{ listTotal || rows.length }}</span>
+      <span class="mk-status__meta" title="含教学建议（完课调整 / 复习建议）的会话数">有建议 {{ advisoryCount }}</span>
       <span class="mk-status__meta" title="终态（已完成 / 失败 / 超时 / 废弃 / 收尾失败）会话缺课后总结数；非终态缺失是过程态不计">缺总结 {{ missingWrapupCount }}</span>
-      <!-- 达 LIST_LIMIT 上限才提示截断（后端真实总量在页头「会话总数」KPI，此处不复读该数字） -->
-      <span v-if="truncated" class="mk-status__meta" :title="`列表仅加载最近 ${LIST_LIMIT} 条；后端全量总数见页头「会话总数」KPI`">仅显示最近 {{ LIST_LIMIT }} 条</span>
+      <!-- 达 LIST_LIMIT 上限才提示截断（会话总数已是后端全量口径，此处不复读该数字） -->
+      <span v-if="truncated" class="mk-status__meta" :title="`列表仅加载最近 ${LIST_LIMIT} 条`">仅显示最近 {{ LIST_LIMIT }} 条</span>
       <!-- 右侧快捷钮（原型 .statusbar__act「只看需关注」）：接页面既有「待关注」筛选，
            再点取消；纯导航，不新增数据口径 -->
       <span class="mk-status__actions">
@@ -32,20 +35,6 @@
       </span>
     </div>
 
-    <!-- 页头 KPI 区（2026-09-29 拆回独立页）：总数 / 已完成 / 失败 / 有建议。
-         刻意不重说状态条结论与卡头 chips 的筛选计数（需关注 / 进行中 / 缺总结）。 -->
-    <section v-if="!embedded" class="mk-kpi-grid">
-      <MkKpi
-        v-for="card in teachingKpiCards"
-        :key="card.label"
-        :label="card.label"
-        :value="card.value"
-        :hint="card.hint"
-        :tone="card.tone"
-        :title="card.title"
-      />
-    </section>
-
     <!-- 状态分布条（newui 原型 renderSessions「闭环阶段分布」卡同位移植）：distBand 结构 =
          OpsContent 状态分布卡判例（stageband 五段条 + stageband__legend/sbl 逐行同构）。
          原型五段按回合状态机 stage（开场澄清/教学回合/介入补强/检查点/收尾·产出）聚合，
@@ -54,7 +43,7 @@
          卡头右组 pill 位（原型 card__tools「N 个介入中」）= 现有「异常」warn 徽章（失败 /
          收尾失败 / 超时合计，需排查）；介入中需 stage 字段，同样不硬造。
          数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口），非后端全量口径。
-         embedded 时随 KPI 区一并隐藏（宿主状态条承载域计数）；无数据/加载失败不留空卡 -->
+         embedded 时整卡隐藏（宿主状态条承载域计数）；无数据/加载失败不留空卡 -->
     <section v-if="!embedded && rows.length" class="mk-card">
       <div class="mk-card__head">
         <span class="mk-card__title">会话状态分布</span>
@@ -333,25 +322,12 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
-    count 事件：列表加载完成后上报总条数（宿主「教学 N」徽章）
-    stats 事件：宿主 KPI 区用的会话健康档（同样只在 embedded 被消费） */
+    （原 count/stats 上报链随合并宿主退役，2026-10-02 撤页头 KPI 区时一并清除） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
-export interface TeachingStats {
-  /** 会话总数（后端全量口径；达列表上限时仍给真实总量） */
-  total: number
-  /** 已完成 */
-  completed: number
-  /** 失败 + 收尾失败 */
-  failed: number
-  /** 含教学建议的会话数 */
-  advisory: number
-}
-const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'stats', stats: TeachingStats): void }>()
 
 interface WrapupSummary {
   topicSummary?: string
@@ -427,8 +403,6 @@ async function fetchRows(force = false): Promise<boolean> {
     listTotal.value = Number.isFinite(total) && total > 0 ? total : rows.value.length
     loadFailed.value = false
     markPageFetched('teaching-sessions')
-    /* 宿主域计数徽章（embedded 才消费；独立场景 emit 无监听者无副作用） */
-    emit('count', rows.value.length)
     return true
   } catch {
     loadFailed.value = true
@@ -725,35 +699,6 @@ const tsDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   if (missingWrapupCount.value > 0) return 'warn'
   if (attentionCount.value > 0) return 'warn'
   return 'ok'
-})
-
-/* 宿主 KPI 区：会话总数 + 三个终态/建议档。总数之外刻意不取「进行中/待关注/缺总结」——
-   那三档已是卡头 pills 的筛选口径，宿主页头再给一遍就是同一数字两处渲染。
-   失败口径含收尾失败（与「失败」状态筛选项同源：两者都是运营要排查的失败终态） */
-const teachingStats = computed<TeachingStats>(() => ({
-  total: listTotal.value || rows.value.length,
-  completed: rows.value.filter((r) => r.status === 'completed').length,
-  failed: rows.value.filter((r) => r.status === 'failed' || r.status === 'finalization_failed').length,
-  advisory: advisoryCount.value
-}))
-watch(teachingStats, (s) => emit('stats', s), { immediate: true })
-
-/* 独立模式页头 KPI 卡（embedded 时由合并宿主渲染——2026-09-29 拆页后本页常态独立） */
-interface TeachingKpiCard {
-  label: string
-  value: string | number
-  hint: string
-  title: string
-  tone?: 'ok' | 'warn' | 'bad' | ''
-}
-const teachingKpiCards = computed<TeachingKpiCard[]>(() => {
-  const s = teachingStats.value
-  return [
-    { label: '会话总数', value: s ? s.total : '—', hint: '最近窗口', title: '教学会话总数（后端全量口径）；列表按最近加载，达上限时仍显示真实总量' },
-    { label: '已完成', value: s ? s.completed : '—', hint: '正常收尾', tone: s && s.completed > 0 ? 'ok' : '', title: '状态已完成的会话数' },
-    { label: '失败', value: s ? s.failed : '—', hint: '含收尾失败', tone: s && s.failed > 0 ? 'bad' : '', title: '状态失败或收尾失败的会话数——这两档都要排查' },
-    { label: '有建议', value: s ? s.advisory : '—', hint: '含教学建议', title: '带教学建议的会话数（建议来自收尾评估）' }
-  ]
 })
 
 const route = useRoute()

@@ -1,9 +1,10 @@
 /**
- * 页头 KPI 区统一形态（2026-09-28）
+ * 页头 KPI 区形态契约（2026-09-28 立，2026-10-01/02 收紧）
  *
- * 契约：三个教学页的页头都是「状态条 → .mk-kpi-grid（MkKpi 卡）→ [视图 pills] → 内容卡」，
- * 且 KPI 卡不兼做视图切换、不重说卡头筛选 pills 的计数。
- * 这些数字只存在于模板里，改动极易静默丢失（卡片数量/文案没有类型约束），故按视图逐档锁住标签。
+ * 契约：**页面统计带服从原型该页自己的形态，同屏只许一带、数字不重复**——
+ * - People / 教学会话：原型无 KPI 板块，页头 KPI 带退役（计数住状态条 meta 或 pills）
+ * - 目标对话：唯一统计带 = 原型 renderGoals 的 buckets 四桶（kpi 栅格 + 构成卡双带已撤）
+ * - 记忆与复习：保留 .mk-kpi-grid（页级绝对值只住 KPI 卡）
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -12,6 +13,7 @@ import { nextTick } from 'vue';
 import People from '../People.vue';
 import GoalConversations from '../GoalConversations.vue';
 import MemoryReview from '../MemoryReview.vue';
+import TeachingSessions from '../TeachingSessions.vue';
 
 const overview = vi.hoisted(() => vi.fn());
 const detail = vi.hoisted(() => vi.fn());
@@ -99,14 +101,34 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     w.unmount();
   });
 
-  it('目标对话独立页：KPI 三卡（总数 / 完成率 / 已取消），宿主 pills 已随拆页退役', async () => {
+  it('目标对话独立页：统计带 = 原型 buckets 四桶单带（kpi 栅格已撤），pills 不带计数', async () => {
     const { router, ready } = mockRouter('/admin/goal-conversations');
     await ready;
     const w = mount(GoalConversations, { global: { plugins: [router] } });
     await settle();
-    expect(kpiLabels(w)).toEqual(['目标对话', '完成率', '已取消']);
+    // 反向断言：KPI 栅格不再渲染（2026-10-02 用户拍板撤双带：kpi 栅格 + 构成卡复读同批数字）
+    expect(kpiLabels(w)).toEqual([]);
+    expect(w.find('.mk-kpi-grid').exists()).toBe(false);
+    expect(w.find('.mk-card .buckets').exists()).toBe(false);
+    // buckets 是页面级统计带（原型直接落页面，无卡壳）；mock 空数据（stats=null）下整组隐藏
+    expect(w.find('.buckets').exists()).toBe(false);
     // 2026-09-29 拆回独立页：学习会话合并宿主的视图切换 pills 不应再出现
     expect(w.find('.gc-tabs').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('教学会话独立页：页头 KPI 带已退役（2026-10-02 用户拍板原型无第二统计带），计数住状态条 meta', async () => {
+    const { router, ready } = mockRouter('/admin/teaching-sessions');
+    await ready;
+    const w = mount(TeachingSessions, { global: { plugins: [router] } });
+    await settle();
+    expect(kpiLabels(w)).toEqual([]);
+    expect(w.find('.mk-kpi-grid').exists()).toBe(false);
+    // 状态条 = 原型 .statusbar 形态：结论粗体 + meta 计数串（总数=后端全量 / 有建议 / 缺总结）
+    const status = w.find('.mk-status').text();
+    expect(status).toContain('共 0');
+    expect(status).toContain('有建议 0');
+    expect(status).toContain('缺总结 0');
     w.unmount();
   });
 
