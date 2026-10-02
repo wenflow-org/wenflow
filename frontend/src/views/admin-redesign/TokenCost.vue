@@ -11,6 +11,10 @@
       :hint="`近 ${days} 天 · ${includeTest ? '含测试流量' : '仅真实用户'}`"
     >
       <template #actions>
+        <!-- 导出报表（原型 pagehead 动作位真实化）：当前窗口三张明细表合一个 CSV，客户端生成 -->
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="!summary || summaryEmpty" title="导出当前窗口的 Skill 明细 / 用户排行 / 模型排行（CSV）" @click="exportCsv">
+          导出报表
+        </button>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="() => load(true)">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
@@ -88,19 +92,23 @@
            ③ 总 Token＝用量基线（成本卡的分母，保留）；
            ④ 缓存命中率＝接口无此口径，显式留空「—」并在 hint 说明。 -->
       <section class="mk-kpi-grid">
+        <!-- hint = 原型 metricCard 的一短句口径；长解释收进卡 title 悬停（复刻调整 2026-10-02：
+             此前 28px 数字下拖整句「待补单价模型 3 个：deepseek-v4-flash、…」小字，非原型节奏） -->
         <MkKpi
           label="调用成本"
           :value="costLoading ? '…' : costFailed ? '加载失败' : costUsd !== null ? `≈ $${fmtCostUsd(costUsd)}` : (costPricedCalls === 0 && costMissingCalls === 0) ? '无调用' : '单价未配置'"
           :tone="costFailed ? 'warn' : ''"
-          :hint="costHint"
+          :hint="costHintShort"
+          :title="costHint"
         />
         <MkKpi
           label="单次调用均值"
           :value="costLoading ? '…' : costFailed ? '—' : costPerCall !== null ? `≈ $${fmtCostUsd(costPerCall)}` : '—'"
-          :hint="perCallHint"
+          :hint="perCallHintShort"
+          :title="perCallHint"
         />
         <MkKpi label="总 Token" :value="summary ? fmtTokens(summary.totals.tokens) : '—'" :hint="`prompt ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · completion ${summary ? fmtTokens(summary.totals.completionTokens) : '—'} · ${summary ? summary.totals.calls : '—'} 次调用`" />
-        <MkKpi label="缓存命中率" value="—" hint="接口未提供缓存命中明细（agent_call_logs 无 cachedTokens 列），暂不可算" />
+        <MkKpi label="缓存命中率" value="—" hint="接口未提供，暂不可算" title="接口未提供缓存命中明细（agent_call_logs 无 cachedTokens 列）" />
       </section>
 
       <!-- 趋势图（原型 renderCost 1773-1777：近 7 天成本趋势 · barchart + sub「单位：元」）。
@@ -109,12 +117,12 @@
            系列（失败数移入卡尾 note 与柱 title，不再与用量混读）。 -->
       <section class="mk-card">
         <div class="mk-card__head">
-          <div class="tc-card-head__main">
+          <!-- 卡头 = 原型形态（title + 单位 sub）；口径细节收 title 悬停，右侧只留跨页跳转 -->
+          <div class="tc-card-head__main" title="本页为 token-cost 端点精确聚合（含重试后终态失败）· 口径：本地自然日；总览「LLM 用量」卡为近 7 天汇总 hero">
             <h3 class="mk-card__title">近 {{ days }} 天用量趋势</h3>
             <span class="mk-card__meta">单位：Token（接口未提供金额）</span>
           </div>
           <div class="tc-head-links">
-            <span class="mk-card__meta" title="本页为 token-cost 端点精确聚合（含重试后终态失败）；总览「LLM 用量」卡为近 7 天汇总 hero">口径：本地自然日 · 精确聚合</span>
             <button type="button" class="mk-link" @click="goOverview">总览趋势 →</button>
             <button type="button" class="mk-link" @click="goExecLogs">逐调用明细 →</button>
           </div>
@@ -311,7 +319,7 @@ function skillRowTitle(r: SkillCostRow): string {
   return `${r.display || r.key} · ${r.calls} 次调用 · Token ${fmtTokens(r.tokens)} · 成本 ${skillRowCost(r)}`
 }
 
-/* 成本卡副行：数值本身只给结论，口径/待补模型明细收在 hint（title 可悬停展开）。
+/* 成本卡副行（长版，收进 KPI 卡 title 悬停）：数值本身只给结论。
    原型此位为「今日成本·预算」——接口无分日金额也无预算配置，故如实给当前窗口口径。 */
 const costHint = computed(() => {
   if (costLoading.value) return '金额统计中'
@@ -327,6 +335,60 @@ const costHint = computed(() => {
     ? `${window} · 暂不展示金额 · 待补单价模型 ${missing.length} 个：${missing.join('、')}`
     : `${window} · models.config.ts 的 pricing 尚未填权威单价，暂不展示金额`
 })
+
+/* KPI hint 短口径（原型 metricCard 的 hint 是一短句）：长解释走卡 title 悬停 */
+const costHintShort = computed(() => {
+  if (costLoading.value) return '金额统计中'
+  if (costFailed.value) return '金额统计失败'
+  if (costUsd.value !== null) return `近 ${days.value} 天 · 已定价 ${costPricedCalls.value} 次`
+  if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `近 ${days.value} 天无调用`
+  const n = missingPricingModels.value.length
+  return `近 ${days.value} 天 · 单价未配置${n > 0 ? ` · 待补 ${n} 个模型单价` : ''}`
+})
+const perCallHintShort = computed(() => {
+  if (costLoading.value) return '金额统计中'
+  if (costFailed.value || costPerCall.value === null) return '无已定价调用'
+  return `按 ${costPricedCalls.value} 次已定价调用折算`
+})
+
+/* 导出报表（原型 pagehead 动作位真实化）：当前窗口三张明细表合一个 CSV，客户端从
+   已加载数据生成；BOM 头保证 Excel 打开中文不乱码；未定价成本如实写「单价未配置」 */
+function exportCsv() {
+  if (!bySkill.value.length) return
+  const esc = (v: unknown) => {
+    const s = String(v ?? '')
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const sharePct = (tokens: number) =>
+    totalTokens.value > 0 ? ((tokens / totalTokens.value) * 100).toFixed(1) : '0.0'
+  const lines: string[] = [
+    `成本分析 · 近 ${days.value} 天 · ${includeTest.value ? '含测试流量' : '仅真实用户'} · 导出于 ${new Date().toLocaleString('zh-CN', { hour12: false })}`,
+    '',
+    '[按 Skill 成本明细]',
+    'Skill,调用,Token,prompt,completion,成本USD,占比%',
+    ...bySkill.value.map((r) =>
+      [esc(r.display || r.key), r.calls, r.tokens, r.promptTokens ?? '', r.completionTokens ?? '',
+        typeof r.usd === 'number' ? r.usd.toFixed(4) : '单价未配置', sharePct(r.tokens)].join(',')),
+    '',
+    '[用户用量排行]',
+    '用户,邮箱,调用,失败,Token,占比%',
+    ...byUser.value.map((r) =>
+      [esc(r.display), esc(r.email || ''), r.calls, r.failed, r.tokens, sharePct(r.tokens)].join(',')),
+    '',
+    '[模型用量排行]',
+    '模型,调用,失败,Token,占比%',
+    ...byModel.value.map((r) =>
+      [esc(r.display), r.calls, r.failed, r.tokens, sharePct(r.tokens)].join(',')),
+  ]
+  const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `token-cost-${days.value}d-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+  toast.success(`报表已导出（${bySkill.value.length} 个 Skill · 近 ${days.value} 天）`)
+}
 
 /* 跨页互跳：成本聚合页 ⇄ 明细页（执行日志行级 token）/ 总览趋势
    口径说明：本页为 token-cost 端点精确聚合（含重试终态失败）；执行日志展示逐调用行级 token 明细；
