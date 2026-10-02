@@ -20,9 +20,9 @@
           "maxOutputTokens": 131072,
           "defaultMaxTokens": 32768,
           "reasoningReserveTokens": 8192,
-          "maxParallelRequests": 18,
+          "maxParallelRequests": 30,
           "fallbacks": [],
-          "description": "V4.1 Flash：标准运行模型（字面 id，2026-09-28 起全链统一）。显式空链：同通道无同 tier 候选，兜底用 skill 级 fallbackChain 声明。maxParallelRequests=18：本地并发突发闸门（超限抛 rate_limit 进统一退避），正常批量并发 14 不受影响"
+          "description": "V4.1 Flash：标准运行模型（字面 id，2026-09-28 起全链统一）。显式空链：同通道无同 tier 候选，兜底用 skill 级 fallbackChain 声明。maxParallelRequests=30：本地并发突发闸门（超限抛 rate_limit 进统一退避），A/B 双桶跑批档（2026-10-02 用户拍板 ds24 不够、好池+次池合计 rpm 60）"
         },
         "deepseek-v4-flash": {
           "label": "DeepSeek V4 Flash",
@@ -53,7 +53,7 @@
           "supportsReasoningEffort": false,
           "maxOutputTokens": 65536,
           "defaultMaxTokens": 32768,
-          "maxParallelRequests": 10,
+          "maxParallelRequests": 14,
           "description": "轻量快速模型，TPS 高，适合 skill 高频调用。maxParallelRequests=10：渠道单 key 突发桶限流实测持续安全档 8、A/B 分桶后摸高档（2026-10-02）；与 ds 各自独立并发闸门"
         }
       }
