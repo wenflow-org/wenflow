@@ -70,22 +70,26 @@ const widths = ['100%', '85%', '70%', '90%', '60%']
   gap: 12px;
 }
 
-/* ---- 基础 shimmer ---- */
+/* ---- 基础 shimmer（原型 .wf-skel__bar：100deg / 1.4s linear / 220% 位移） ---- */
+.skeleton-loader {
+  /* 原型 --soft 口径：surface 向 ink 压 8%；mk token 自带暗色翻转，双主题通用 */
+  --soft: color-mix(in srgb, var(--mk-surface, #ffffff) 92%, var(--mk-ink, #1a2a44));
+}
 .skel {
   border-radius: 8px;
   background: linear-gradient(
-    90deg,
-    var(--line) 25%,
-    color-mix(in srgb, var(--line) 60%, var(--surface)) 50%,
-    var(--line) 75%
+    100deg,
+    var(--soft) 30%,
+    color-mix(in srgb, var(--soft) 45%, var(--mk-surface, #ffffff)) 50%,
+    var(--soft) 70%
   );
-  background-size: 200% 100%;
-  animation: skel-shimmer 1.5s ease-in-out infinite;
+  background-size: 220% 100%;
+  animation: skel-shimmer 1.4s linear infinite;
 }
 
 @keyframes skel-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  from { background-position: 140% 0; }
+  to { background-position: -40% 0; }
 }
 
 /* ---- 尺寸修饰 ---- */
@@ -151,8 +155,8 @@ const widths = ['100%', '85%', '70%', '90%', '60%']
   gap: 10px;
   padding: 16px;
   border-radius: 16px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--surface, var(--mk-surface, #ffffff));
+  border: 1px solid var(--line, var(--mk-line, #e6ebf4));
 }
 .skel-card__header {
   display: flex;
@@ -168,7 +172,7 @@ const widths = ['100%', '85%', '70%', '90%', '60%']
   padding: 12px 0;
 }
 .skel-list-item + .skel-list-item {
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--line, var(--mk-line, #e6ebf4));
 }
 .skel-list-item__text {
   display: grid;

@@ -8,6 +8,15 @@
         <small>{{ pathName }}</small>
       </div>
       <div class="learn__head-right">
+        <!-- 知识点入口：原型单列无侧栏 → 常驻左栏降级为浮层抽屉的开关（功能不删） -->
+        <button
+          v-if="knowledgePoints.length"
+          type="button"
+          class="learn__kpbtn"
+          :aria-expanded="kpOpen"
+          aria-controls="learn-kp-panel"
+          @click="toggleKp"
+        >知识点 <b>{{ masteredCount }}/{{ knowledgePoints.length }}</b></button>
         <span class="learn__live">{{ session ? '学习中' : '连接中' }}</span>
         <ImmersiveMenu>
           <div class="learn__menu-group">
@@ -72,10 +81,11 @@
       </div>
     </div>
 
-    <div v-else class="learn__body" :class="{ 'learn__body--no-kp': !knowledgePoints.length }">
-      <!-- 左：知识点面板（移动端默认折叠为头部横条，点击展开；桌面恒展开） -->
-      <aside v-if="knowledgePoints.length" class="kp" :class="{ 'kp--collapsed': !kpExpanded }">
-        <button type="button" class="kp__head" :aria-expanded="kpExpanded" @click="toggleKp">
+    <div v-else class="learn__body">
+      <!-- 知识点抽屉（原型单列无侧栏 → 由头部「知识点 N/M」入口开合的浮层；功能全保留） -->
+      <div v-if="knowledgePoints.length && kpOpen" class="kp-scrim" @click="closeKp"></div>
+      <aside v-if="knowledgePoints.length" id="learn-kp-panel" class="kp" :class="{ 'kp--open': kpOpen }">
+        <button type="button" class="kp__head" :aria-expanded="kpOpen" @click="toggleKp">
           <span class="kp__head-main">
             <svg class="kp__ring" viewBox="0 0 20 20" aria-hidden="true">
               <circle class="kp__ring-track" cx="10" cy="10" r="8" />
@@ -88,7 +98,7 @@
               class="kp__chip kp__chip--mastered"
               :class="{ 'kp__chip--empty': !masteredCount, 'kp__chip--none': !knowledgePoints.length }"
             >{{ masteredCount }}/{{ knowledgePoints.length }} 已掌握</span>
-            <span class="kp__caret" aria-hidden="true">{{ kpExpanded ? '▾' : '▸' }}</span>
+            <span class="kp__caret" aria-hidden="true">{{ kpOpen ? '▾' : '▸' }}</span>
           </span>
         </button>
         <div class="kp__body">
@@ -143,6 +153,12 @@
           </ol>
         </div>
       </aside>
+
+      <!-- 通栏进度卡（原型 .wf-learn__progress：知识点 + 8px 进度条，位于对话区上方） -->
+      <div v-if="knowledgePoints.length" class="lessonbar">
+        <div class="lessonbar__head"><span>本节课知识点</span><strong>{{ masteredCount }} / {{ knowledgePoints.length }} 已掌握</strong></div>
+        <div class="lessonbar__track"><i :style="{ width: weightedProgressPct + '%' }"></i></div>
+      </div>
 
       <!-- 中：导师对话 -->
       <section class="tutor">
@@ -230,7 +246,7 @@
                 @mouseenter="onBubbleEnter(m.id || '')"
                 @mouseleave="onBubbleLeave"
               >
-                <div class="msg__bubble msg__bubble--html msg__bubble--relative" v-html="htmlFor(m)"></div>
+                <div class="msg__bubble msg__bubble--html msg__bubble--relative" v-html="htmlFor(m)" @click="onCodeCopy"></div>
                 <!-- 教学配图（owner 口径：图片是一种特殊的文字）——由老师给的一段文字生成，内联在回复里；
                      文本仍自洽：不看图也能继续。 -->
                 <div v-if="m.images && m.images.length" class="msg__visuals">
@@ -300,22 +316,21 @@
         <!-- 开场行动台：AI 给的「下一步动作」选项，点一下直接执行（即点即达） -->
         <!-- 摸底 question 不再单独成待答气泡，收进面板作一行可选引导；想回答就打字，不想答就选动作直接开始 -->
         <div v-if="(quickReplies.length || openingQuestion) && !typing && !checkpoint" class="replies">
-          <div class="replies__head">
+          <!-- 面板头（kicker/hint）降级为读屏可见：原型 .wf-replies 是裸按钮列表，没有白面板与面板头 -->
+          <div class="replies__head visually-hidden">
             <span class="replies__kicker">{{ quickReplyKicker }}</span>
             <span class="replies__hint">{{ quickReplies.length ? '选一个，直接开始' : '也可以直接输入回答' }}</span>
           </div>
           <p v-if="openingQuestion" class="replies__question">{{ openingQuestion }}</p>
           <div v-if="quickReplies.length" class="replies__row">
             <button
-              v-for="(q, qi) in quickReplies"
+              v-for="q in quickReplies"
               :key="q"
               type="button"
               class="reply"
               @click="sendDirect(q)"
             >
-              <span class="reply__mark" aria-hidden="true">{{ qi + 1 }}</span>
               <span class="reply__text">{{ q }}</span>
-              <span class="reply__go" aria-hidden="true">→</span>
             </button>
           </div>
         </div>
@@ -351,7 +366,17 @@
             <p v-if="checkpoint.title && checkpoint.question && checkpoint.title !== checkpoint.question">{{ checkpoint.question }}</p>
           </div>
           <template v-if="checkpoint.options?.length">
-            <label v-for="opt in checkpoint.options" :key="opt.id" class="checkpoint__option" :class="{ 'checkpoint__option--on': selectedOptions.includes(opt.id) }">
+            <label
+              v-for="(opt, oi) in checkpoint.options"
+              :key="opt.id"
+              class="checkpoint__option"
+              :class="{
+                'checkpoint__option--on': selectedOptions.includes(opt.id),
+                'checkpoint__option--ok': cpOptionMark(opt.id) === 'ok',
+                'checkpoint__option--wrong': cpOptionMark(opt.id) === 'wrong',
+                'checkpoint__option--lock': checkpointPending || checkpointSubmitting,
+              }"
+            >
               <input
                 :type="checkpoint.type === 'multi_choice' ? 'checkbox' : 'radio'"
                 :value="opt.id"
@@ -359,7 +384,8 @@
                 :disabled="checkpointPending || checkpointSubmitting"
                 @change="toggleOption(opt.id)"
               />
-              {{ opt.text }}
+              <span class="checkpoint__key" aria-hidden="true">{{ optionLetter(oi) }}</span>
+              <span class="checkpoint__text">{{ opt.text }}</span>
             </label>
           </template>
           <textarea v-else v-model="answerText" class="checkpoint__input" rows="3" :disabled="checkpointPending || checkpointSubmitting" placeholder="写下你的答案…"></textarea>
@@ -400,9 +426,18 @@
           </div>
         </Transition>
 
+        <!-- 完课入口（原型 .wf-cta：位于快捷回复之后、composer 之前，作为对话流的收束按钮） -->
+        <button
+          v-if="!completed"
+          type="button"
+          class="lesson-cta"
+          :disabled="actionBusy || finalizing"
+          @click="completeAndSettle"
+        >完成本课 · +20 XP</button>
+
         <!-- 输入区 -->
         <div class="composer">
-          <div class="composer__box" :class="{ 'composer__box--active': input.trim() }">
+          <div class="composer__box">
             <textarea
               v-model="input"
               class="composer__textarea"
@@ -426,7 +461,7 @@
               @keydown.enter="send"
               @keydown.space.prevent="send"
             >
-              <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
+              <svg viewBox="0 0 24 24" width="19" height="19"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
             </span>
             <span
               v-else
@@ -571,6 +606,22 @@ import TeachingFigure from '@/components/TeachingFigure.vue';
 import { toast } from '@/utils/toast';
 import { useInteractionMeta } from '@/composables/useInteractionMeta';
 import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
+/* 代码块语法高亮（原型 .wf-code）：本页 AI 气泡走 htmlFor → renderAiMessageHtml（markdown-it），
+   与 MarkdownRenderer 同一套 highlight.js，按需注册教学常用语言（避免全量语言包 ~1MB）。
+   样式不引 hljs 主题 CSS——代码面板恒深，token 配色在本文件 :deep 里按原型 --tok-* 上色。 */
+import hljs from 'highlight.js/lib/core';
+import bash from 'highlight.js/lib/languages/bash';
+import c from 'highlight.js/lib/languages/c';
+import cpp from 'highlight.js/lib/languages/cpp';
+import java from 'highlight.js/lib/languages/java';
+import javascript from 'highlight.js/lib/languages/javascript';
+import json from 'highlight.js/lib/languages/json';
+import plaintext from 'highlight.js/lib/languages/plaintext';
+import python from 'highlight.js/lib/languages/python';
+import sql from 'highlight.js/lib/languages/sql';
+import typescript from 'highlight.js/lib/languages/typescript';
+import xml from 'highlight.js/lib/languages/xml';
+import yaml from 'highlight.js/lib/languages/yaml';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { unwrap } from './unwrap';
 import { nowTime, type ChatMsg, type ChatSupplement } from './learningChat';
@@ -584,23 +635,47 @@ import { usePeerAssistant } from './usePeerAssistant';
 import { useMessageActions } from './useMessageActions';
 import { useCheckpointFlow } from './useCheckpointFlow';
 
+/** 按需注册（与 MarkdownRenderer.vue 同口径的常用教学语言子集） */
+const LEARN_HLJS_LANGS: Array<[string, unknown]> = [
+  ['python', python], ['javascript', javascript], ['typescript', typescript],
+  ['java', java], ['c', c], ['cpp', cpp], ['bash', bash], ['shell', bash],
+  ['json', json], ['yaml', yaml], ['xml', xml], ['sql', sql], ['plaintext', plaintext],
+];
+for (const [name, def] of LEARN_HLJS_LANGS) hljs.registerLanguage(name, def as never);
+hljs.registerAliases(['js', 'jsx', 'mjs', 'node'], { languageName: 'javascript' });
+hljs.registerAliases(['ts', 'tsx'], { languageName: 'typescript' });
+hljs.registerAliases(['py'], { languageName: 'python' });
+hljs.registerAliases(['sh', 'zsh'], { languageName: 'bash' });
+hljs.registerAliases(['html', 'xhtml', 'vue', 'svg'], { languageName: 'xml' });
+hljs.registerAliases(['yml'], { languageName: 'yaml' });
+hljs.registerAliases(['c++', 'hpp'], { languageName: 'cpp' });
+hljs.registerAliases(['txt', 'text'], { languageName: 'plaintext' });
+
 const route = useRoute();
 const router = useRouter();
 const taskId = String(route.params.taskId || '');
 const isReviewMode = computed(() => route.query.mode === 'review');
 const interactionMeta = useInteractionMeta();
 
-/* 移动端知识点面板折叠：桌面（>900px）恒展开，窄屏默认折叠，点击面板头部展开/收起 */
-const narrowMq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 900px)') : null;
-const isNarrow = ref(narrowMq?.matches ?? false);
+/* 知识点面板：原型是单列 880 无侧栏 → 常驻左栏降级为「头部入口 + 浮层抽屉」
+   （功能不删：列表/图谱、掌握度、进度条全在抽屉里；桌面与移动端同一套开合逻辑） */
 const kpOpen = ref(false);
-const kpExpanded = computed(() => !isNarrow.value || kpOpen.value);
-function toggleKp() {
-  if (!isNarrow.value) return;
-  kpOpen.value = !kpOpen.value;
+/** 收起抽屉并把焦点还给头部入口（模态浮层不吞键盘焦点） */
+function closeKp() {
+  if (!kpOpen.value) return;
+  kpOpen.value = false;
+  document.querySelector<HTMLElement>('.learn__kpbtn')?.focus();
 }
-function onNarrowChange(e: MediaQueryListEvent) {
-  isNarrow.value = e.matches;
+function toggleKp() {
+  if (kpOpen.value) {
+    closeKp();
+    return;
+  }
+  kpOpen.value = true;
+  // 打开后焦点跟进抽屉头（有列表/图谱两个 tab 与收起键），键盘用户不会停在被遮住的头部按钮上
+  void nextTick(() => {
+    document.querySelector<HTMLElement>('#learn-kp-panel .kp__head')?.focus();
+  });
 }
 
 /* ---------- 键盘快捷键 ---------- */
@@ -619,6 +694,11 @@ function onPageKeydown(e: KeyboardEvent) {
   // 目标守卫：焦点在输入控件内 → 交给元素自身（如编辑框的 @keydown.esc 退出编辑）
   const t = e.target as HTMLElement | null;
   if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) return;
+  // 知识点抽屉开着：Esc 收起（抽屉是本页浮层，优先于停止生成/跳过检查点这类有副作用的动作）
+  if (kpOpen.value) {
+    closeKp();
+    return;
+  }
   // 目标守卫：焦点在任何弹层/菜单弹层内 → 不做全局动作（确认框、伴学窗等自带 Esc 语义）
   if (t && typeof t.closest === 'function' && t.closest('[role="dialog"], .imm-menu__pop')) return;
   if (completed.value) return;
@@ -777,6 +857,20 @@ const {
   checkpointPending, checkpointSubmitting, checkpointStreaming,
   toggleOption, dismissCheckpoint, submitCheckpoint, skipCheckpoint, disposeCheckpoint
 } = useCheckpointFlow(session, typing, completed)
+/** 检查点选项前缀（A/B/C/D…）：原型 .wf-cp__opt 里是字母小方块 + 文本两段 */
+function optionLetter(i: number): string {
+  return String.fromCharCode(65 + Math.max(0, Math.min(25, i)));
+}
+/**
+ * 选项对错态（原型 .wf-cp__opt--ok/--wrong）：
+ * 代码裁决到达即 checkpointSubmitting 上锁 + checkpointFeedback 落地（见 useCheckpointFlow.onJudgement），
+ * 两者同时成立才算「已判定」，此时按 checkpointPassed 给**被选中的**选项上绿/红；未判定不染色。
+ */
+function cpOptionMark(id: string): 'ok' | 'wrong' | '' {
+  if (!checkpointSubmitting.value || !checkpointFeedback.value) return '';
+  if (!selectedOptions.value.includes(id)) return '';
+  return checkpointPassed.value ? 'ok' : 'wrong';
+}
 /** 恢复会话提示条：mode=resumed 且回填到历史时显示「已恢复上次进度」，附重新开始出口 */
 const resumedNotice = ref(false);
 
@@ -892,10 +986,72 @@ const {
 
 const formatMessage = (text: string) => plainMessageHtml(text);
 
-/* 流式渲染记忆化：v-html 直接调函数会在每个 delta 触发全列表重渲染 + 全部历史消息重跑
-   markdown/DOMPurify（50 条消息 × 每秒数十 delta 开销显著）。
-   共享工具按消息对象缓存渲染结果，仅文本变化时惰性重算 */
-const htmlFor = (m: { text: string }) => cachedMessageHtml(m);
+/* ---------- 代码块（原型 .wf-code：语言头 + 复制 + 语法高亮） ----------
+   markdown-it 只吐 <pre><code class="language-x">，头部条/复制键/token 上色都在这里补齐：
+   消毒后的 HTML 再走一次本地装饰（新增的是我们自己生成的标记，不引入任何外部输入）。
+   结果按消息对象缓存——流式期间只有正在增长的那条消息会重算。 */
+const codeBlockCache = new WeakMap<object, { text: string; html: string }>();
+
+function decorateCodeBlocks(html: string): string {
+  const host = document.createElement('div');
+  host.innerHTML = html;
+  for (const pre of Array.from(host.querySelectorAll('pre'))) {
+    if (pre.parentElement?.classList.contains('codeblock')) continue;
+    const code = pre.querySelector('code');
+    const langRaw = code?.className.match(/language-([\w+#-]+)/)?.[1] || '';
+    const lang = langRaw.toLowerCase();
+    if (code && lang && hljs.getLanguage(lang)) {
+      try {
+        code.innerHTML = hljs.highlight(code.textContent || '', { language: lang, ignoreIllegals: true }).value;
+      } catch { /* 高亮失败：保留纯文本 */ }
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'codeblock';
+    const head = document.createElement('div');
+    head.className = 'codeblock__head';
+    const label = document.createElement('span');
+    label.className = 'codeblock__lang';
+    label.textContent = lang || 'text';
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'codeblock__copy';
+    copy.setAttribute('aria-label', '复制代码');
+    copy.textContent = '复制';
+    head.append(label, copy);
+    pre.parentElement?.insertBefore(wrap, pre);
+    wrap.append(head, pre);
+  }
+  return host.innerHTML;
+}
+
+/** 气泡内点击代理：复制键由 v-html 注入，事件挂在 Vue 绑定的气泡元素上 */
+async function onCodeCopy(e: MouseEvent) {
+  const btn = (e.target as HTMLElement | null)?.closest?.('.codeblock__copy') as HTMLElement | null;
+  if (!btn) return;
+  const text = btn.closest('.codeblock')?.querySelector('pre')?.textContent || '';
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    const prev = btn.textContent || '复制';
+    btn.textContent = '已复制';
+    window.setTimeout(() => { if (btn.isConnected) btn.textContent = prev; }, 1600);
+  } catch {
+    toast.error('复制失败，可手动选中代码复制');
+  }
+}
+
+/** 气泡 HTML：消毒渲染 → 代码块装饰（语言头/复制/高亮），按消息对象缓存。
+ *  流式渲染记忆化：直接调渲染函数会在每个 delta 触发全列表重渲染 + 全部历史消息重跑
+ *  markdown/DOMPurify（50 条消息 × 每秒数十 delta 开销显著）。 */
+const htmlFor = (m: { text: string }) => {
+  const raw = cachedMessageHtml(m);
+  if (typeof document === 'undefined' || raw.indexOf('<pre') === -1) return raw;
+  const hit = codeBlockCache.get(m);
+  if (hit && hit.text === m.text) return hit.html;
+  const html = decorateCodeBlocks(raw);
+  codeBlockCache.set(m, { text: m.text, html });
+  return html;
+};
 
 /* 贴底跟随：用户上翻看旧内容时暂停自动滚动（避免被持续拽回底部），
    并在滚动到底部时清除「回到底部」浮标 */
@@ -1589,13 +1745,11 @@ function onVisibilityChange() {
 onMounted(() => {
   boot();
   window.addEventListener('keydown', onPageKeydown);
-  narrowMq?.addEventListener('change', onNarrowChange);
   window.addEventListener('pagehide', onPageHide);
   document.addEventListener('visibilitychange', onVisibilityChange);
 });
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onPageKeydown);
-  narrowMq?.removeEventListener('change', onNarrowChange);
   window.clearTimeout(initStuckTimer);
   streamAbort?.abort();
   abortPeer();
@@ -1637,40 +1791,72 @@ onBeforeUnmount(() => {
   transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
 }
 .learn__state-link:hover { color: var(--blue-deep); border-color: rgba(52, 120, 246, 0.4); background: rgba(52, 120, 246, 0.06); }
+/* 知识点入口（头部精简：原型顶栏没有常驻状态胶囊，侧栏入口收成一颗轻量 chip） */
+.learn__kpbtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 12px; font-weight: 700; line-height: 1.4;
+  color: var(--blue-deep);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 26%, transparent);
+  padding: 5px 11px; border-radius: var(--mk-radius-pill);
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+.learn__kpbtn:hover { background: color-mix(in srgb, var(--blue) 14%, transparent); border-color: color-mix(in srgb, var(--blue) 44%, transparent); }
+.learn__kpbtn b { font-weight: 800; font-variant-numeric: tabular-nums; }
+/* 连接态：降为纯文字（原型顶栏只有一行状态字，不再挂绿胶囊） */
 .learn__live {
-  font-size: 12px; font-weight: 800; color: var(--green);
-  background: rgba(49, 177, 111, 0.1);
-  border: 1px solid rgba(49, 177, 111, 0.3);
-  padding: 4px 10px; border-radius: var(--mk-radius-pill);
+  font-size: 12px; font-weight: 700; color: var(--green-ink);
 }
 
-/* ---------- 布局 ---------- */
+/* ---------- 布局（原型 .wf-screen：单列、gap 14、≥1024 定宽 880 居中） ----------
+   原型的课堂屏没有左侧栏：知识点从常驻列降级成「头部入口 + 浮层抽屉」，正文只剩一列。 */
 .learn__body {
   flex: 1;
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 16px;
-  padding: 16px 20px;
-  max-width: 1180px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 18px;
+  max-width: 880px;
   width: 100%;
   margin: 0 auto;
 }
-
-/* 宽屏（≥1500px）：1180 定宽在 2K/4K 下两侧留白过大（手动流程问题测试），
-   加宽到 1400，消息区获得更多阅读宽度 */
-@media (min-width: 1500px) {
-  .learn__body { max-width: 1400px; gap: 20px; }
+@media (min-width: 1024px) {
+  .learn__body { padding: 22px 30px 36px; }
 }
 
-/* ---------- 知识点面板 ---------- */
+/* ---------- 知识点抽屉（原型单列无侧栏 → 头部「知识点 N/M」开合的左侧浮层） ----------
+   z-index：抽屉整体盖过头部（header 50）——抽屉自带标题与收起键，压住头部才不会出现
+   「面板头被半透明顶栏遮住」的重影；遮罩 60 / 抽屉 61，其余浮层（补充资料弹层 90）仍在其上。 */
+.kp-scrim {
+  position: fixed; inset: 0;
+  z-index: 60;
+  background: rgba(15, 23, 42, 0.42);
+  animation: kp-fade-in 0.2s ease both;
+}
+@keyframes kp-fade-in { from { opacity: 0; } to { opacity: 1; } }
 .kp {
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  width: min(340px, 86vw);
+  z-index: 61;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-modal);
-  padding: 16px;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
   display: flex; flex-direction: column; gap: 12px;
-  align-self: start;
-  position: sticky; top: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
+  transform: translateX(-102%);
+  visibility: hidden;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0.28s;
+}
+.kp.kp--open {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s;
 }
 .kp__head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -1680,7 +1866,7 @@ onBeforeUnmount(() => {
   font: inherit;
   font-size: 13px;
   border: 0; background: transparent; padding: 0; margin: 0;
-  color: inherit; text-align: left; cursor: default;
+  color: inherit; text-align: left; cursor: pointer;
 }
 /* 头部信息组（2026-09-26 用户「0/2已掌握进行中1 太丑，数据平摊着」）：
    左 = 掌握度小圆环 + 标题，右 = 语义色胶囊（掌握绿 / 进行中蓝，全空灰显），
@@ -1702,7 +1888,7 @@ onBeforeUnmount(() => {
    有知识点在进行中（未全掌握且存在）时，0/N 本身就是「进行中」的信息 */
 .kp__chip--mastered.kp__chip--empty { color: var(--blue-ink); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .kp__chip--mastered.kp__chip--empty.kp__chip--none { color: var(--faint); background: var(--mk-surface-2); }
-.kp__caret { display: none; font-size: 11px; color: var(--faint); flex-shrink: 0; }
+.kp__caret { display: inline; font-size: 11px; color: var(--faint); flex-shrink: 0; }
 .kp__body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .kp__bar { height: 6px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
 .kp__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
@@ -1736,6 +1922,22 @@ onBeforeUnmount(() => {
 .kp__item--current .kp__name small { color: var(--blue-deep); font-weight: 700; }
 .kp__time { font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px; }
 
+/* ---------- 通栏进度卡（原型 .wf-learn__progress：卡壳 + 12.5/13.5 两行 + 8px 进度条） ---------- */
+.lessonbar {
+  flex: 0 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-modal);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 16px;
+  display: grid; gap: 11px;
+}
+.lessonbar__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.lessonbar__head span { font-size: 12.5px; color: var(--muted); }
+.lessonbar__head strong { font-size: 13.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.lessonbar__track { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--line) 60%, transparent); overflow: hidden; }
+.lessonbar__track i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
+
 /* ---------- 导师对话 ---------- */
 .tutor {
   position: relative;
@@ -1744,8 +1946,10 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal);
   overflow: hidden;
+  /* 单列布局：tutor 吃掉 .learn__body 的全部剩余高度（进度卡 + gap 之外），
+     高度由 flex 决定 —— 不再写死 vh 上限，避免「有/无进度卡」两套高度口径。 */
+  flex: 1 1 auto;
   min-height: 560px;
-  max-height: calc((100vh - 120px) / var(--vp-zoom, 1));
 }
 .tutor__scroll {
   flex: 1; overflow-y: auto;
@@ -1850,14 +2054,20 @@ onBeforeUnmount(() => {
   padding: 7px 14px; border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
   background: var(--surface); color: var(--muted);
   font: inherit; font-size: 12px; font-weight: 700;
-  cursor: pointer; box-shadow: 0 4px 14px rgba(23, 32, 51, 0.12);
+  cursor: pointer;
+  /* 悬浮在滚动内容之上的常驻控件，保留 raised 档让它读得出来；
+     规则里唯一保留的 transform 是居中用的 translateX(-50%)，与抬升无关。 */
+  box-shadow: var(--wf-shadow-raised);
   transition: transform 0.15s ease, color 0.15s ease;
 }
-.tutor__jump-bottom:hover { color: var(--blue); transform: translateX(-50%) translateY(-1px); }
+/* hover 只变色，不抬升（translateX(-50%) 是居中必须保留的那一半） */
+.tutor__jump-bottom:hover { color: var(--blue); transform: translateX(-50%); }
 .msg { display: flex; flex-direction: column; gap: 5px; max-width: 76%; } /* 85→76：与 goal 页同口径收窄对话行（2026-09-27 用户反馈） */
 .msg--user { align-self: flex-end; align-items: flex-end; position: relative; }
 .msg--user .msg__bubble {
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 用户气泡改实色 --blue：蓝→深蓝渐变已随「友好而平」批次退役，
+     白字在 #2f6ae0 上对比度约 4.9:1，仍过 AA。 */
+  background: var(--blue);
   color: #fff;
   border-radius: 16px 16px 4px 16px;
   white-space: pre-wrap;
@@ -1908,8 +2118,10 @@ onBeforeUnmount(() => {
 }
 .msg__edit-save {
   color: #fff;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 实色主按钮（原蓝渐变退役）；按压反馈用 scale(.98)，替掉原先的 hover 抬升 */
+  background: var(--blue);
 }
+.msg__edit-save:not(:disabled):active { transform: scale(0.98); }
 .msg__edit-cancel {
   color: var(--muted);
   border: 1px solid var(--line);
@@ -1944,14 +2156,15 @@ onBeforeUnmount(() => {
 .msg__supplement-topic { font-size: 12px; color: var(--muted, #6b7280); }
 /* 补充材料弹层 */
 .supmodal { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(15, 23, 42, .45); }
-.supmodal__card { width: min(640px, 100%); max-height: 80vh; display: flex; flex-direction: column; background: #fff; border-radius: 14px; box-shadow: 0 12px 40px rgba(15, 23, 42, .2); }
+.supmodal__card { width: min(640px, 100%); max-height: 80vh; display: flex; flex-direction: column; background: #fff; border-radius: 14px; box-shadow: var(--wf-shadow-modal); }
 .supmodal__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid rgba(0,0,0,.06); }
 .supmodal__head strong { font-size: 14px; }
 .supmodal__close { border: 0; background: transparent; font-size: 14px; cursor: pointer; color: #6b7280; }
 .supmodal__body { padding: 12px 16px 16px; overflow-y: auto; }
 .supmodal__text, .supmodal__loading { margin: 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; color: #1f2937; }
-/* 暗色：补充资料弹窗跟随主题（原为硬编码 #fff/#1f2937，暗色下在聊天区中央弹出一整块白） */
-[data-theme='dark'] .supmodal__card { background: var(--surface); box-shadow: 0 12px 40px rgba(0, 0, 0, .5); }
+/* 暗色：补充资料弹窗跟随主题（原为硬编码 #fff/#1f2937，暗色下在聊天区中央弹出一整块白）。
+   投影已并入 --wf-shadow-modal：该 token 在暗色下自动翻转为 rgba(0,0,0,.7)，不必再单独覆写。 */
+[data-theme='dark'] .supmodal__card { background: var(--surface); }
 [data-theme='dark'] .supmodal__head { border-bottom-color: var(--line); }
 [data-theme='dark'] .supmodal__close { color: var(--muted); }
 [data-theme='dark'] .supmodal__close:hover { background: rgba(230, 237, 247, 0.08); }
@@ -2046,7 +2259,9 @@ onBeforeUnmount(() => {
   background: var(--surface);
   border: 1px solid rgba(244, 149, 66, 0.28);
   border-radius: 18px;
-  box-shadow: 0 16px 40px rgba(190, 92, 26, 0.14);
+  /* 原 0 16px 40px rgba(190,92,26,.14) 是橙色染色投影：按三档中性档改用 overlay
+     （悬浮抽屉本就该压住滚动内容，不靠颜色分层）。 */
+  box-shadow: var(--wf-shadow-overlay);
   overflow: hidden;
 }
 .peer-pop-enter-active { transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
@@ -2059,11 +2274,13 @@ onBeforeUnmount(() => {
   background: linear-gradient(135deg, rgba(255, 152, 67, 0.12), color-mix(in srgb, var(--amber) 5%, transparent));
   border-bottom: 1px solid rgba(244, 149, 66, 0.18);
 }
-/* 小启 Q 头像：暖橙渐变 + 白字 Q，与导师问流（蓝紫 favicon）明确区分 */
+/* 小启 Q 头像：暖橙实底 + 白字 Q，与导师问流（蓝紫 favicon）明确区分。
+   批次 D：135deg 橙渐变 → 纯色 #d97706（对白字 4.52:1，达 WCAG AA；
+   原渐变两端 #ff9d4d / #f4791f 对白字分别只有 2.0:1 / 2.9:1，本就不达标）。 */
 .peerdock__avatar {
   width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
-  background: linear-gradient(135deg, #ff9d4d, #f4791f);
-  box-shadow: 0 6px 14px rgba(244, 121, 31, 0.35);
+  background: #d97706;
+  /* 原 0 6px 14px rgba(244,121,31,.35) 橙色发光已删：头像在 dock 卡内，不承担层级 */
   display: grid; place-items: center;
 }
 .peerdock__avatar-q {
@@ -2115,7 +2332,8 @@ onBeforeUnmount(() => {
 }
 .peerdock__msg--me .peerdock__bubble {
   border-radius: 14px 14px 4px 14px;
-  background: linear-gradient(135deg, var(--blue, #2f6ae0), var(--blue-deep, #1f57cc));
+  /* 实色 --blue（原 var(--blue,·)→var(--blue-deep,·) 渐变退役；--blue 挂在 :root，无需 fallback） */
+  background: var(--blue);
   color: #fff; border: 0;
 }
 .peerdock__bubble :deep(p) { margin: 0 0 6px; }
@@ -2184,7 +2402,13 @@ onBeforeUnmount(() => {
 .peerdock__input button {
   padding: 8px 14px; border: 0; border-radius: var(--mk-radius-pill);
   font: inherit; font-size: 12.5px; font-weight: 700;
-  color: #fff; background: linear-gradient(135deg, #ff9d4d, #ef7d1f);
+  /* 批次 D：135deg 橙渐变（#ff9d4d→#ef7d1f）→ 纯色 #d97706。
+   为什么不是 --wf-color-efficient-dark：规范橙族的两个档对白字只有
+   2.19:1 / 2.82:1，均不足 AA；#d97706 是同色相下唯一达 4.52:1 的实底色。
+   按钮文字 12.5px/700 属小字，必须按 AA 正文 4.5:1 判，不能按大字 3:1 放行。
+   这是一处**规范缺口**：--wf-color-efficient 族缺一档「可配白字的实底色」。
+   已登记待体系包补档，补后此处改回令牌引用。 */
+  color: #fff; background: #d97706;
   cursor: pointer;
   transition: filter 0.15s ease;
 }
@@ -2194,12 +2418,16 @@ onBeforeUnmount(() => {
 .peerfab {
   position: fixed; right: 22px; bottom: 22px; z-index: 59;
   width: 52px; height: 52px; border: 0; border-radius: 50%;
-  background: linear-gradient(135deg, #ff9d4d, #ef7d1f);
-  box-shadow: 0 14px 32px rgba(239, 125, 31, 0.4);
+  background: #d97706;   /* 批次 D：135deg 橙渐变 → 纯色（白字 4.52:1，AA） */
+  /* 原 0 14px 32px rgba(239,125,31,.4) 橙色发光改为 overlay 中性档：
+     FAB 常驻压在滚动内容之上，确实需要抬升才能读出来，这是规范允许的例外；
+     但颜色必须中性，彩色光晕一律不行。 */
+  box-shadow: var(--wf-shadow-overlay);
   display: grid; place-items: center; cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.18s ease;
 }
-.peerfab:hover { transform: translateY(-2px); box-shadow: 0 18px 38px rgba(239, 125, 31, 0.48); }
+/* hover 不再抬升也不换投影（两态已无差别），按压反馈留给 :active */
+.peerfab:active { transform: scale(0.98); }
 .peerfab__q {
   color: #fff; font-size: 26px; font-weight: 800; font-style: italic;
   font-family: Georgia, 'Times New Roman', serif;
@@ -2256,17 +2484,20 @@ onBeforeUnmount(() => {
   min-height: 40px; padding: 0 16px;
   border-radius: var(--mk-radius-pill); border: 1px solid transparent;
   font: inherit; font-size: 13px; font-weight: 700;
-  cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  cursor: pointer; transition: transform 0.15s ease, background 0.15s ease;
 }
-.kp-btn:hover { transform: translateY(-1px); }
-.kp-btn:active { transform: translateY(0) scale(0.98); }
+/* 原 .kp-btn:hover 的 translateY(-1px) 已删（hover 不得抬升），按压走 :active */
+.kp-btn:active { transform: scale(0.98); }
 .kp-btn__icon { font-size: 14px; line-height: 1; }
 .kp-btn--mastered {
   color: #fff;
-  background: linear-gradient(135deg, var(--green), #15803d);
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--green) 22%, transparent);
+  /* 批次 D：135deg 绿渐变 → 纯色 #15803d。
+     不用 --wf-color-success-dark（#28965a，白字 3.75:1 不足 AA）：
+     #15803d 对白字 6.13:1 达标，且它就是本仓既有的 --mk-green / --mk-green-fill
+     实心绿档（白底文字基线 5.0:1 的那一族），不是新造的颜色。
+     掌握态是实心绿本身够醒目，不需要外发光。 */
+  background: #15803d;
 }
-.kp-btn--mastered:hover { box-shadow: 0 12px 26px color-mix(in srgb, var(--green) 30%, transparent); }
 .kp-btn--retry {
   color: var(--amber, #b45309);
   background: color-mix(in srgb, var(--amber, #f4aa46) 10%, transparent);
@@ -2299,12 +2530,17 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   display: grid; place-items: center;
   width: 22px; height: 22px;
-  border-radius: 7px;
+  /* 22px 图标底：7px 圆角是档外值（规范最小档 6px），→ --wf-radius-sm；
+   批次 D 另把 135deg 绿/橙渐变改为平涂，底色选对白字达 AA 的一档：
+   ok #15803d（6.13:1）/ retry #d97706（4.52:1）。
+   原渐变起点 --green(#15803d) 与 --amber(#f4aa46) 对白字只有 5.0:1 / 1.97:1，
+   后者不达标——22px 方块里的 12px 字按正文标准判。 */
+  border-radius: var(--wf-radius-sm);
   font-size: 12px; font-weight: 800;
   color: #fff;
 }
-.kp-act--ok .kp-act__mark { background: linear-gradient(135deg, var(--green), #15803d); }
-.kp-act--retry .kp-act__mark { background: linear-gradient(135deg, var(--amber, #f4aa46), #d97706); }
+.kp-act--ok .kp-act__mark { background: #15803d; }
+.kp-act--retry .kp-act__mark { background: #d97706; }
 .kp-act__text { flex: 1; min-width: 0; }
 .kp-act__go {
   flex: 0 0 auto;
@@ -2314,33 +2550,33 @@ onBeforeUnmount(() => {
 }
 .kp-act:hover {
   border-color: color-mix(in srgb, var(--blue) 40%, transparent);
-  box-shadow: 0 4px 14px rgba(23, 32, 51, 0.08);
-  transform: translateY(-1px);
+  /* 中性抬升（raised 档）替代原 rgba(23,32,51,.08) 自定义值；抬升的 translateY(-1px) 已删 */
+  box-shadow: var(--wf-shadow-raised);
 }
-.kp-act:hover .kp-act__go { color: var(--blue, #3478f6); transform: translateX(2px); }
-.kp-act:active { transform: translateY(0); }
+.kp-act:hover .kp-act__go { color: var(--blue, #2f6ae0); transform: translateX(2px); }
+.kp-act:active { transform: scale(0.99); }
 [data-theme='dark'] .kp-actions--dynamic { border-top-color: var(--line); background: rgba(15, 22, 32, 0.35); }
 [data-theme='dark'] .kp-act { background: #19191a; border-color: var(--mk-line); color: var(--mk-ink); }
 [data-theme='dark'] .kp-act:hover { border-color: rgba(77, 139, 248, 0.55); }
 
-/* ---------- 检查点 ---------- */
+/* ---------- 检查点（原型 .wf-checkpoint：紫框卡 + 11.5px 标签 + 44px 选项 + 对/错态） ---------- */
 .checkpoint {
   margin: 0 14px;
-  padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
-  background: color-mix(in srgb, var(--amber) 6%, transparent);
-  border-radius: 14px;
-  display: grid; gap: 11px;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  border-radius: var(--mk-radius-modal);
+  display: grid; gap: 8px;
 }
 .checkpoint__head { display: grid; gap: 6px; }
 .checkpoint__head strong { font-size: 13.5px; line-height: 1.5; }
 .checkpoint__head code { background: rgba(52, 120, 246, 0.1); color: var(--blue-deep); padding: 1px 6px; border-radius: var(--mk-radius-sm); font-size: 12.5px; }
+/* 标签是纯文字（原型 .wf-checkpoint__label 不做胶囊），紫字 + 字距 */
 .checkpoint__badge {
   width: fit-content;
-  font-size: 12px; font-weight: 800; color: var(--amber-ink);
-  background: color-mix(in srgb, var(--amber) 18%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
-  padding: 3px 9px; border-radius: var(--mk-radius-pill);
+  font-size: 11.5px; font-weight: 800; letter-spacing: .05em;
+  color: var(--purple-ink);
+  padding: 0; border: 0; background: none;
 }
 .checkpoint__input {
   border: 1px solid var(--line);
@@ -2354,20 +2590,52 @@ onBeforeUnmount(() => {
 .checkpoint__input:focus { border-color: color-mix(in srgb, var(--blue) 50%, transparent); }
 .checkpoint__actions { display: flex; gap: 10px; }
 
-/* ---------- 输入区 ---------- */
-.composer { display: grid; gap: 7px; padding: 12px 14px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 96%, transparent); }
+/* ---------- 完课入口（原型 #wfFinishLesson：整宽主按钮，位于快捷回复之后、输入条之前） ---------- */
+.lesson-cta {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 7px;
+  width: calc(100% - 28px);
+  max-width: 760px;
+  margin: 2px auto 4px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  /* 整宽主按钮：实色 --blue + 无投影（蓝色 30% 发光与 :active scale(.98) 一起退役） */
+  background: var(--blue);
+  color: #fff;
+  font: inherit; font-size: 14px; font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+.lesson-cta:active { transform: scale(0.98); }
+.lesson-cta:disabled { opacity: 0.55; cursor: default; }
+
+/* ---------- 输入区（对齐原型 .wf-composer：760 居中收纳盒 + focus-within 光环） ---------- */
+.composer {
+  display: grid; gap: 6px; justify-items: center;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+}
 .composer__box {
-  display: flex; align-items: flex-end; gap: 10px;
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  max-width: 760px;
+  min-height: 54px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 4px 4px 4px 12px;   /* 6→4：盒高收一档（2026-09-27 用户反馈「输入框太大」） */
-  min-height: 44px;
+  border-radius: 16px;
+  padding: 6px 6px 6px 16px;
+  /* 原 0 6px 20px color-mix(in srgb, var(--ink) 6%, transparent) 是墨色染色投影
+     （暗色下会翻成发光），按三档中性档改用 raised 档。 */
+  box-shadow: var(--wf-shadow-raised);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-/* 有内容/聚焦：柔和提示 —— 细蓝边 + 淡外发光（替代原整圈硬蓝边） */
-.composer__box--active {
+/* 聚焦：柔和提示 —— 细蓝边 + 淡外发光（替代原按内容切换的整圈硬蓝边） */
+.composer__box:focus-within {
   border-color: color-mix(in srgb, var(--blue) 55%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent), 0 6px 20px rgba(23, 32, 51, 0.06);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
 }
 .composer__textarea {
   flex: 1; border: 0; outline: none; resize: none;
@@ -2375,48 +2643,56 @@ onBeforeUnmount(() => {
   color: var(--ink); background: transparent;
   padding: 7px 0; max-height: 120px; align-self: center;
 }
-.composer__count { font-size: 11px; color: var(--faint); align-self: center; }
+.composer__count { font-size: 12px; color: var(--faint); align-self: center; font-variant-numeric: tabular-nums; }
 .composer__send {
-  width: 36px; height: 36px; border-radius: 9px; /* 44→36：随盒收窄（lt36 门禁恰在 36 及格线） */
+  width: 42px; height: 42px; border-radius: 12px; /* 原型 .wf-composer__send 42×42/r12，与 54px 盒的内高对齐 */
   display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 实色 --blue（蓝渐变与 28% 发光一并退役） */
+  background: var(--blue);
   color: #fff; cursor: pointer;
-  box-shadow: 0 8px 16px color-mix(in srgb, var(--blue) 30%, transparent);
   flex: 0 0 auto;
-  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease, transform 0.15s ease;
 }
-.composer__send--off { background: #e3eaf5; color: var(--faint); box-shadow: none; cursor: default; }
-/* 生成中：同一按钮切换为红色停止态（主流聊天交互，替代原独立 stop-btn） */
+.composer__send:active { transform: scale(0.98); }
+.composer__send--off { background: #e3eaf5; color: var(--faint); cursor: default; }
+/* 生成中：同一按钮切换为红色停止态（主流聊天交互，替代原独立 stop-btn）。
+   批次 D：红色 28%/36% 两档发光与 135deg 渐变底一并退役 → 纯色危险档。
+   取 --wf-color-danger-dark（#d95054）：规范的危险色 #ef757e 对白字仅 3.2:1
+   不足 AA，深一档 4.6:1 达标。停止键靠「更深」而非「更亮」表达。 */
 .composer__send--stop {
-  background: linear-gradient(135deg, #e5484d, #c92a2f);
-  box-shadow: 0 8px 16px rgba(229, 72, 77, 0.28);
+  background: var(--wf-color-danger-dark);
 }
 .composer__send--stop:hover {
-  background: linear-gradient(135deg, #ef5b60, #d43a40);
-  box-shadow: 0 10px 20px rgba(229, 72, 77, 0.36);
-  transform: translateY(-1px);
+  background: var(--wf-color-danger);
 }
-.composer__send--stop:active { transform: translateY(0) scale(0.97); }
+.composer__send--stop:active { transform: scale(0.97); }
 .composer__hint {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: flex-end;
   gap: 12px; flex-wrap: wrap;
-  font-size: 12px; line-height: 1.5; color: var(--faint); padding-left: 4px;
+  width: min(100%, 760px);
+  font-size: 12px; line-height: 1.5; color: var(--faint);
 }
 .composer__hint :deep(.ai-note) {
   font-size: 12px; line-height: 1.5;
 }
 .composer__hint--single { justify-content: flex-end; }
 .composer__hint-note { flex: 0 0 auto; } /* flex:1 会撑满整行、把 flex-end 废掉——快捷键要与 AI 声明并排贴右 */
+/* 键盘提示只在有键盘的档位出现（原型 .wf-composer__hint 同款 ≥1024 才显示） */
+@media (max-width: 1023px) {
+  .composer__hint > .composer__hint-note { display: none; }
+}
 
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 10px 20px; border-radius: var(--mk-radius-xl);
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 实色主按钮：蓝渐变 + 30% 蓝色发光投影一并退役 */
+  background: var(--blue);
   color: #fff; font-size: 13.5px; font-weight: 700;
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 30%, transparent);
   cursor: pointer; text-decoration: none;
+  transition: transform 0.16s ease, background 0.16s ease;
 }
-.btn-primary--off { opacity: .55; cursor: default; box-shadow: none; }
+.btn-primary:not(:disabled):active { transform: scale(0.98); }
+.btn-primary--off { opacity: .55; cursor: default; }
 .btn-ghost {
   padding: 9px 16px; border-radius: var(--mk-radius-xl);
   border: 1px solid var(--line); background: var(--surface);
@@ -2429,8 +2705,11 @@ onBeforeUnmount(() => {
   position: absolute; inset: 0;
   display: grid; place-items: center;
   padding: 24px;
+  /* 批次 D（2026-10-02）：backdrop-filter: blur(2px) 已删，规范材质一律平面。
+     另注这层遮罩是写死的浅色 rgba(244,247,252,.72)——暗色主题下是一层白纱，
+     与本文件其它遮罩（跟随 --canvas / --mk-*）口径不一致。属独立缺陷，
+     不在本次平面化范围内，已登记待后续批次统一。 */
   background: rgba(244, 247, 252, 0.72);
-  backdrop-filter: blur(2px);
   z-index: 5;
 }
 .finish__card {
@@ -2468,38 +2747,22 @@ onBeforeUnmount(() => {
   .learn__body {
     flex: 1;
     min-height: 0;
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr);
-    padding: 8px 10px;
-    gap: 0;
-  }
-  /* 移动端知识点面板：并入对话区（2026-09-26 用户：「直接做到对话区，不再独立模块，
-     类似 goal 的目标信息」）。aside 脱离网格流，absolute 锚成 tutor 顶部 44px 头部带的
-     零占位锚点（goal 页 .panel 同款手法）：aside 盒子 pointer-events:none 不挡内容，
-     触发头单独放开 pointer-events；tutor 用 padding-top 预留同高条带（见文件末尾块）。
-     z-index 让展开的 kp__body 悬浮面板盖在消息区上，对话区高度不再被展开/收起挤压。 */
-  .kp {
-    position: absolute; top: 8px; left: 10px; right: 10px;
-    height: 44px; z-index: 30;
-    background: none; border: 0;
-    pointer-events: none;
+    padding: 8px 10px 10px;
+    gap: 10px;
   }
   .learn__back { display: none; }
   /* 移动端 tutor 撑满可用高度：聊天区内部滚动、composer 吸底，消除滚动到底的底部空白 */
-  .tutor { max-height: none; height: 100%; min-height: 0; }
-  .learn__body--no-kp .tutor { max-height: none !important; height: 100% !important; }
+  .tutor { max-height: none; min-height: 0; flex: 1 1 auto; }
   /* overscroll-behavior:contain 隔断滚动链——消息列表滚到边缘时不再触发整页橡皮筋
      （本页 height:100dvh 不随文档滚动，iOS 上链式滚动会带动整页回弹） */
   .tutor__scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-  /* iOS Safari 聚焦 <16px 的输入框会触发视口自动放大，打完字还要 pinch 收回——移动端提到 16px。
-     盒内与目标对话页同款收紧：外内边距左 14→6、gap 10→8、textarea 上下 10→8、发送键 40→36。 */
-  .composer__box { padding: 4px; gap: 8px; }
+  /* iOS Safari 聚焦 <16px 的输入框会触发视口自动放大，打完字还要 pinch 收回——移动端提到 16px。 */
   .composer__textarea { font-size: 16px; padding: 6px 0; }
   /* 占位符压到 15px（2026-09-26 用户：「随时提问这几个字非常的大」）：textarea 本身必须
      留 16px 防 iOS 聚焦缩放，只能压 placeholder——与目标对话页同款口径。 */
   .composer__textarea::placeholder { font-size: 15px; }
   .composer__attach { margin-top: 4px; }
-  .composer__send { width: 44px; height: 44px; } /* 移动端维持 44：主操作口径（触屏 hit area），桌面才收 36 */
+  .composer__send { width: 44px; height: 44px; } /* 触屏 hit area 44（原型桌面 42） */
   /* 触屏没有键盘快捷键提示：这行是「Enter 发送 · Shift+Enter 换行」+ AI 声明，不隐藏的话两者
      在 340px 里折成两行（hint 行 17→33px）。隐藏后只剩声明，居中与入口页 .goal__ai-note 一致。 */
   .composer__hint > .composer__hint-note { display: none; }
@@ -2516,7 +2779,9 @@ onBeforeUnmount(() => {
   .learn__title small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .learn__head-right { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .learn__live, .learn__state-link { white-space: nowrap; flex-shrink: 0; }
-  .learn__live { padding: 3px 9px; font-size: 12px; }
+  .learn__live { font-size: 12px; }
+  /* 窄屏头部三件套（知识点入口 / 连接态 / ⋯）：入口与状态压到最小占位，⋯ 保持 44 触区 */
+  .learn__kpbtn { padding: 4px 9px; }
   /* ⋯ 菜单（ImmersiveMenu）：弹层宽度在窄屏收敛到视口内 */
   .learn__head-right :deep(.imm-menu__pop) { width: min(250px, calc(100vw - 28px)); }
   /* 头部三行（「当前任务」标签 / 任务名 / 路径名）在手机上白占 22px——标签本身只是分类提示，
@@ -2527,12 +2792,6 @@ onBeforeUnmount(() => {
   /* 快捷块瘦身见文件末尾的媒体块：.replies/.reply 的基础规则在本文件靠后的 style 块里，
      同权重下写在这里会被覆盖 */
   /* 弹窗锚定在 ⋯ 按钮正下方、右对齐按钮 */
-  /* 移动端知识点面板默认折叠：头部横条可点，收起时隐藏进度条/清单。
-     两种状态头部同款内边距（44px 触屏整条可点，HIG 44）；border-bottom 是对话卡
-     顶部带的分隔线（aside 已无卡片壳）；aside 锚点 pointer-events:none，触发头放开 */
-  .kp__head { cursor: pointer; padding: 11px 12px; min-height: 44px; pointer-events: auto; border-bottom: 1px solid var(--line); }
-  .kp__caret { display: inline; }
-  .kp--collapsed .kp__body { display: none; }
 }
 </style>
 
@@ -2574,19 +2833,59 @@ onBeforeUnmount(() => {
 .learn__menu-item-main strong { font-size: 13px; font-weight: 700; color: inherit; }
 .learn__menu-item-main small { font-size: 12px; font-weight: 500; color: var(--faint); white-space: normal; }
 .learn__menu-item:hover { background: color-mix(in srgb, var(--surface) 96%, var(--ink)); color: var(--ink); }
-.learn__menu-item--primary { color: var(--blue, #2c63d0); }
-.learn__menu-item--primary:hover { background: #e8effc; color: var(--blue, #2c63d0); }
+.learn__menu-item--primary { color: var(--blue, #2f6ae0); }
+.learn__menu-item--primary:hover { background: #e8effc; color: var(--blue, #2f6ae0); }
 .learn__menu-item--danger { color: var(--red-ink); }
 .learn__menu-item--danger:hover { background: rgba(239, 117, 120, 0.1); color: var(--red-ink); }
 .checkpoint__option {
-  display: flex; align-items: center; gap: 9px;
-  padding: 9px 12px;
+  position: relative;
+  display: flex; align-items: center; gap: 10px;
+  min-height: 44px; padding: 10px 13px;
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-lg);
-  font-size: 13.5px; cursor: pointer;
+  font-size: 13px; color: var(--ink);
   background: var(--surface);
+  cursor: pointer;
+  transition: border-color .14s ease, background .14s ease, color .14s ease;
 }
-.checkpoint__option--on { border-color: color-mix(in srgb, var(--blue) 50%, transparent); background: color-mix(in srgb, var(--blue) 6%, transparent); }
+.checkpoint__option:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.checkpoint__option:focus-within { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+/* 原生 radio/checkbox 保留在 DOM（a11y + 测试），视觉交给字母方块 */
+.checkpoint__option input {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  margin: 0; opacity: 0; cursor: inherit;
+}
+.checkpoint__key {
+  flex: 0 0 auto;
+  display: grid; place-items: center;
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  font-size: 12px; font-weight: 800; line-height: 1;
+  color: var(--purple-ink);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+}
+.checkpoint__text { flex: 1; min-width: 0; line-height: 1.5; }
+.checkpoint__option--on {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.checkpoint__option--on .checkpoint__key { background: var(--accent); border-color: transparent; color: #fff; }
+/* 裁决落地：被选中的那项标绿 / 标红（原型 .is-correct / .is-wrong） */
+.checkpoint__option--ok {
+  border-color: var(--green);
+  background: color-mix(in srgb, var(--green) 9%, var(--surface));
+  color: var(--green-ink); font-weight: 700;
+}
+.checkpoint__option--wrong {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 9%, var(--surface));
+  color: var(--red-ink); font-weight: 700;
+}
+.checkpoint__option--ok .checkpoint__key,
+.checkpoint__option--wrong .checkpoint__key { background: color-mix(in srgb, currentColor 16%, transparent); border-color: transparent; color: inherit; }
+.checkpoint__option--lock { cursor: default; opacity: .92; }
 .checkpoint__feedback {
   font-size: 13px; font-weight: 600; color: var(--amber-ink);
   background: color-mix(in srgb, var(--amber) 10%, transparent);
@@ -2601,12 +2900,92 @@ onBeforeUnmount(() => {
   background: rgba(52, 120, 246, 0.1); color: var(--blue-deep);
   padding: 1px 6px; border-radius: var(--mk-radius-sm); font-size: 12.5px;
 }
-.msg__bubble--html :deep(pre) {
-  background: #182338; color: #d6e4ff;
-  border-radius: var(--mk-radius-lg); padding: 12px 14px;
-  font-size: 12.5px; line-height: 1.6; overflow-x: auto;
+/* ---------- 代码面板（原型 .wf-code） ----------
+   恒深不随主题切换：底/字/描边与 --tok-* 逐值搬运自原型 :root（任务清单第 1 条要求与原型
+   同款调色板，故这组十六进制是原型 token 的等价搬运，不改用主题 token，避免暗色下换底）。 */
+.msg__bubble--html {
+  --code-bg: #1c2233;
+  --code-fg: #e8eefc;
+  --code-head: color-mix(in srgb, #ffffff 7%, transparent);
+  --tok-kw: #c792ea;
+  --tok-fn: #82aaff;
+  --tok-str: #c3e88d;
+  --tok-num: #f78c6c;
+  --tok-var: #e8eefc;
+  --tok-comment: #7b8399;
 }
-.msg__bubble--html :deep(pre code) { background: transparent; color: inherit; padding: 0; }
+.msg__bubble--html :deep(pre) {
+  margin: 0;
+  background: var(--code-bg);
+  color: var(--code-fg);
+  border-radius: 10px; padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.7;
+  overflow-x: auto; white-space: pre; tab-size: 2;
+}
+.msg__bubble--html :deep(pre code) { background: transparent; color: inherit; padding: 0; font-size: inherit; }
+/* 深色下内联 code 的蓝底规则会盖过上面那条（选择器多一层属性）：面板内再钉一次 */
+.msg__bubble--html :deep(.codeblock pre code) { background: transparent; color: inherit; padding: 0; font-size: inherit; }
+/* 装饰壳：语言头 + 复制键（由 decorateCodeBlocks 包出来，见 <script>） */
+.msg__bubble--html :deep(.codeblock) {
+  margin: 10px 0 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--code-bg);
+  color: var(--code-fg);
+  border: 1px solid color-mix(in srgb, #ffffff 8%, transparent);
+}
+.msg__bubble--html :deep(.codeblock pre) { margin: 0; border-radius: 0; border: 0; }
+.msg__bubble--html :deep(.codeblock__head) {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 4px 6px 4px 11px;
+  background: var(--code-head);
+  /* font 简写：与原型 .wf-code__head 同款 600/11px 头条字（含语言名与复制键） */
+  font: 600 11px/1.4 "PingFang SC", "Microsoft YaHei", Inter, system-ui, sans-serif;
+  letter-spacing: .03em;
+  color: color-mix(in srgb, #ffffff 60%, transparent);
+}
+.msg__bubble--html :deep(.codeblock__lang) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg__bubble--html :deep(.codeblock__copy) {
+  border: 0; background: none; cursor: pointer; color: inherit;
+  font: 600 11px/1 "PingFang SC", "Microsoft YaHei", Inter, system-ui, sans-serif;
+  padding: 5px 8px; border-radius: 6px; min-height: 26px;
+  transition: background .14s ease, color .14s ease;
+}
+.msg__bubble--html :deep(.codeblock__copy:hover) { background: color-mix(in srgb, #ffffff 12%, transparent); color: #fff; }
+/* 语法高亮 token（highlight.js 类名 → 原型 --tok-* 四色） */
+.msg__bubble--html :deep(.hljs-keyword),
+.msg__bubble--html :deep(.hljs-selector-tag),
+.msg__bubble--html :deep(.hljs-literal),
+.msg__bubble--html :deep(.hljs-type),
+.msg__bubble--html :deep(.hljs-doctag),
+.msg__bubble--html :deep(.hljs-name) { color: var(--tok-kw); }
+.msg__bubble--html :deep(.hljs-built_in),
+.msg__bubble--html :deep(.hljs-title),
+.msg__bubble--html :deep(.hljs-title.class_),
+.msg__bubble--html :deep(.hljs-title.function_),
+.msg__bubble--html :deep(.hljs-section),
+.msg__bubble--html :deep(.hljs-selector-class),
+.msg__bubble--html :deep(.hljs-selector-id),
+.msg__bubble--html :deep(.hljs-attr),
+.msg__bubble--html :deep(.hljs-attribute),
+.msg__bubble--html :deep(.hljs-property),
+.msg__bubble--html :deep(.hljs-variable),
+.msg__bubble--html :deep(.hljs-template-variable),
+.msg__bubble--html :deep(.hljs-params) { color: var(--tok-fn); }
+.msg__bubble--html :deep(.hljs-string),
+.msg__bubble--html :deep(.hljs-addition),
+.msg__bubble--html :deep(.hljs-regexp),
+.msg__bubble--html :deep(.hljs-meta .hljs-string) { color: var(--tok-str); }
+.msg__bubble--html :deep(.hljs-number),
+.msg__bubble--html :deep(.hljs-symbol),
+.msg__bubble--html :deep(.hljs-bullet),
+.msg__bubble--html :deep(.hljs-link),
+.msg__bubble--html :deep(.hljs-meta) { color: var(--tok-num); }
+.msg__bubble--html :deep(.hljs-comment),
+.msg__bubble--html :deep(.hljs-quote) { color: var(--tok-comment); font-style: italic; }
+.msg__bubble--html :deep(.hljs-emphasis) { font-style: italic; }
+.msg__bubble--html :deep(.hljs-strong) { font-weight: 700; }
 /* MessageActions 定位容器 */
 .msg__content--actions { position: relative; }
 /* meta 行与操作条同行（左 meta / 右操作条），配合组件的 visibility 占位隐藏：
@@ -2631,75 +3010,65 @@ onBeforeUnmount(() => {
 .typing-fade-enter-from,
 .typing-fade-leave-to { opacity: 0; }
 
+/* ---------- 快捷回复（原型 .wf-replies：裸按钮列表，无白面板、无面板头） ---------- */
 .replies {
+  display: flex; flex-direction: column; gap: 8px;
   margin: 4px 14px 0;
-  padding: 13px 14px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-modal);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
 }
-.replies__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px 9px; }
+/* 面板头（kicker/hint）已随模板降级为 .visually-hidden 的读屏文本，样式只保底 */
 .replies__kicker {
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
 }
 .replies__hint { font-size: 12px; color: var(--faint); }
 /* 开场引导（opening.question 收进面板）：一行可选的小字，想回答就打字，不答可直接选动作 */
 .replies__question {
-  margin: 0 2px 9px;
+  margin: 0 2px;
   padding: 8px 10px;
   font-size: 12px;
   line-height: 1.6;
-  color: var(--muted, #5a6a85);
+  color: var(--muted);
   background: color-mix(in srgb, var(--surface) 60%, transparent);
   border: 1px dashed color-mix(in srgb, var(--blue) 30%, transparent);
   border-radius: 9px;
 }
 [data-theme='dark'] .replies__question { color: #afb1b6; background: rgba(15, 22, 32, 0.35); }
-.replies__row { display: grid; grid-template-columns: 1fr; gap: 7px; }
+.replies__row { display: flex; flex-direction: column; gap: 8px; }
 .reply {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: flex-start; gap: 9px;
   width: 100%;
+  min-height: 44px;
   text-align: left;
-  padding: 9px 12px;
-  border-radius: 11px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink, #1c2b45);
-  font: inherit; font-size: 13px; font-weight: 600; line-height: 1.4;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, transparent);
+  background: color-mix(in srgb, var(--blue) 5%, transparent);
+  color: var(--blue-deep);
+  font: inherit; font-size: 14px; font-weight: 600; line-height: 1.45;
   cursor: pointer;
-  transition: border-color 0.16s ease, transform 0.12s ease, box-shadow 0.16s ease;
+  transition: background .14s ease, border-color .14s ease;
 }
-.reply__mark {
-  flex: 0 0 auto;
-  display: grid; place-items: center;
-  width: 20px; height: 20px;
-  border-radius: 7px;
-  font-size: 12px; font-weight: 800;
-  color: var(--blue-deep, #1f57cc);
-  background: color-mix(in srgb, var(--blue, #3478f6) 10%, transparent);
+/* 原型的蓝点前缀：纯文本按钮 + ::before 圆点，不再带序号方块与箭头 */
+.reply::before {
+  content: ""; flex: none;
+  width: 6px; height: 6px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--blue) 55%, transparent);
 }
 .reply__text { flex: 1; min-width: 0; }
-.reply__go {
-  flex: 0 0 auto;
-  color: #9aa4b8;
-  font-weight: 800;
-  transition: transform 0.15s ease, color 0.15s ease;
-}
 .reply:hover {
-  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
-  box-shadow: 0 4px 14px rgba(23, 32, 51, 0.08);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--blue) 11%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 46%, transparent);
 }
-.reply:hover .reply__go { color: var(--blue, #3478f6); transform: translateX(2px); }
-.reply:active { transform: translateY(0); }
-[data-theme='dark'] .replies { border-color: var(--line); background: var(--surface); }
-[data-theme='dark'] .reply { background: #19191a; border-color: var(--mk-line); color: var(--mk-ink); }
-[data-theme='dark'] .reply__mark { color: #6fa3ff; background: rgba(77, 139, 248, 0.14); }
-[data-theme='dark'] .reply:hover { border-color: rgba(77, 139, 248, 0.55); }
+.reply:active { transform: none; }
+.reply:disabled { cursor: default; opacity: .55; }
 </style>
 
 <style scoped>
@@ -2745,17 +3114,6 @@ onBeforeUnmount(() => {
 </style>
 
 <style scoped>
-/* 无知识点侧栏时：单列居中，避免对话区掉进 280px 首列变窄 */
-.learn__body--no-kp {
-  grid-template-columns: minmax(0, 900px);
-  justify-content: center;
-}
-.learn__body--no-kp .tutor {
-  max-height: calc((100vh - 120px) / var(--vp-zoom, 1));
-}
-</style>
-
-<style scoped>
 /* 暗色模式适配 */
 [data-theme='dark'] .msg__bubble {
   background: color-mix(in srgb, var(--surface) 72%, var(--blue) 4%);
@@ -2769,10 +3127,7 @@ onBeforeUnmount(() => {
   background: rgba(77, 139, 248, 0.15);
   color: var(--blue-deep);
 }
-[data-theme='dark'] .msg__bubble--html :deep(pre) {
-  background: #111212;
-  color: #dadbdd;
-}
+/* 代码面板恒深（原型 --code-bg 不随主题切换），深色下不再单独换底：见本文件代码面板块 */
 [data-theme='dark'] .msg__avatar {
   background: var(--surface) !important;
   border-color: var(--line);
@@ -2806,15 +3161,13 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* 移动端收尾（必须放在文件最后：.replies / .reply 的基础规则在本文件靠后的 style 块里，
-   同权重下先出现的会被覆盖）。快捷块固定在 composer 之上，原高 256px——消息区只剩 153px
-   （头部 79 + 知识点条 58 已占掉 137）。这里只做瘦身而不给它内部滚动：第三个选项被藏进
-   看不见的滚动区更糟。目标：块 ≤210px、消息区 ≥200px。 */
+   同权重下先出现的会被覆盖）。原型快捷回复没有移动端变体，这里只收紧间距与外边距，
+   不再给它套白面板（基础规则已是裸按钮列表）。 */
 @media (max-width: 900px) {
-  .replies { margin: 4px 14px 0; padding: 10px 12px 12px; }
-  .replies__head { padding-bottom: 6px; }
-  .replies__question { margin-bottom: 6px; padding: 6px 9px; font-size: 12px; }
-  .replies__row { gap: 5px; }
-  .reply { padding: 7px 10px; font-size: 12.5px; }
+  .replies { margin: 4px 14px 0; }
+  .replies__question { margin-bottom: 2px; padding: 6px 9px; font-size: 12px; }
+  .replies__row { gap: 6px; }
+  .reply { padding: 9px 12px; }
 }
 </style>
 
@@ -2849,46 +3202,16 @@ onBeforeUnmount(() => {
 </style>
 
 <style scoped>
-/* ===== 课堂布局重排（2026-09-24 用户：「刚进入课堂时候，对话区只有一小块，而且有内容了，
-   上面也没顶满…参考 goal 对话的情况设计，把对话区做大。下方输入框也偏大」）=====
-   实测 390 根因：.learn__body 移动块写的 grid-template-rows: minmax(0,1fr) 只有 1 条显式行，
-   第二个孩子 .tutor 掉进隐式行——会话内容短（刚进课堂/续读卡在场）时 1fr 行吃掉全部富余
-   （实测行高 280px），tutor 卡片悬到 y=346、与知识点条之间空 215px；消息多了才碰巧占满。
-   另两处偏大：知识点折叠条 65px（桌面 16px 内边距原样留在手机上）、composer 103px
-   （goal 页同款输入区净高只有 54px——hint 行 position:absolute; height:0 拿出文档流浮在底边）。
-   修法与 goal 页对齐：tutor 行吃满剩余；展开的 kp__body 悬浮层盖在对话区上，不挤对话区。
-   2026-09-26 二轮（用户：「知识点直接做到对话区，不再独立模块，类似 goal 的目标信息」）：
-   kp aside 脱离网格流（单行 1fr），absolute 锚成 tutor 顶部 44px 头部带的零占位锚点，
-   tutor padding-top 预留条带、kp__head 落在其中作对话卡头部；hint 浮出文档流，composer 103 → 84px。 */
+/* ===== 课堂布局重排（2026-09-28 对齐真源原型 newui/用户侧/index.html 学习屏）=====
+   单列 880：.learn__body 不再是 280+1fr 双列网格 —— 原型 .wf-screen 没有侧栏，
+   知识点由常驻列降级为「头部入口 + fixed 抽屉」，正文只剩进度卡 + 对话卡一列。
+   1100 以下不再预留 44px kp 头部带、也不再有 absolute 下拉面板（见下）。 */
 @media (max-width: 900px) {
-  .learn__body { position: relative; }
-  /* tutor 顶部预留 44px 头部带给 kp 触发条（无知识点变体不预留） */
-  .learn__body:not(.learn__body--no-kp) .tutor { padding-top: 44px; }
-  .kp { padding: 0; }
-  /* 展开：知识条本体高度不变，主体浮出为下拉面板（内部滚动，盖在消息区上） */
-  .kp:not(.kp--collapsed) .kp__body {
-    position: absolute;
-    top: calc(100% + 6px); left: 0; right: 0;
-    max-height: min(60dvh, 480px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--mk-radius-modal);
-    padding: 10px 12px 12px;
-    box-shadow: 0 12px 32px rgba(23, 32, 51, 0.16);
-    /* 锚点 .kp 是 pointer-events:none（零占位锚点），面板必须单独放开——否则整个
-       悬浮层点击穿透，点面板实际按到下面盖住的续课卡按钮（2026-09-26 用户实测踩中） */
-    pointer-events: auto;
-  }
-  .composer { position: relative; gap: 0; padding: 8px 10px 22px; }
-  /* AI 声明浮在底部 22px 留白条里，不再独立占一行（goal 页同款做法） */
-  .composer__hint {
-    position: absolute;
-    left: 0; right: 0; bottom: 3px;
-    align-items: flex-start;
-    justify-content: center;
-  }
+  /* 知识点已是 fixed 抽屉（头部「知识点 N/M」开合）：对话卡不再预留 44px 头部带，
+     展开态也不再需要 absolute 下拉面板 —— 抽屉自带滚动与遮罩。 */
+  .lessonbar { padding: 12px 14px; }
+  .composer { gap: 4px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .lesson-cta { width: calc(100% - 24px); }
 }
 
 /* 桌面阅读宽度：>1100（全局列宽收窄不生效的区段）把消息/卡片限在 ~760px 居中，
@@ -2906,6 +3229,7 @@ onBeforeUnmount(() => {
   .tutor > .oscene,
   .tutor > .tutor__resume,
   .tutor > .replies,
+  .tutor > .lesson-cta,
   .tutor > .checkpoint {
     width: calc(100% - 28px);
     max-width: 760px;

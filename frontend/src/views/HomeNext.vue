@@ -171,6 +171,7 @@
           <em>从问题到学习路径</em>
         </div>
         <div class="hn-foot__links">
+          <router-link to="/">首页</router-link>
           <router-link to="/vision">愿景</router-link>
           <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer">GitHub</a>
         </div>
@@ -298,25 +299,18 @@ onUnmounted(() => {
   --line: var(--mk-line);
   --canvas: var(--mk-bg);
   --surface: var(--mk-surface);
-  --surface-soft: rgba(255, 255, 255, 0.88);   /* 玻璃卡片默认底 */
-  --surface-tint: rgba(255, 255, 255, 0.92);   /* 高亮/描边卡片顶底 */
-  --surface-strong: #fff;                      /* 纯色面板（气泡内标签等） */
-  --wash: #f7faff;                             /* AI 气泡底（浅） */
-  --wash-deep: #eef3fb;                        /* AI 气泡底（渐变尾） */
-  --track: #edf1f8;                            /* 进度轨道 */
-  --float: rgba(255, 255, 255, 0.55);          /* 全宽半透条（band/foot） */
-  --shade: rgba(15, 23, 42, 0.08);             /* 悬浮阴影（浅色） */
-  --card-blend: rgba(255, 255, 255, 0.9);      /* 渐变卡片白色终端 */
-  --tint-blend: rgba(52, 120, 246, 0.1);       /* 渐变卡片蓝色起点 */
-  --blue: #3478f6;
-  --blue-deep: #1f57cc;
+  /* 原型 --soft：浅灰实色，band / end / footer 的全宽底色（亮暗两档自动推导） */
+  --soft: color-mix(in srgb, var(--surface) 92%, var(--ink));
+  --tint-blend: color-mix(in srgb, var(--blue) 10%, transparent);
+  /* 唯一品牌蓝走 --mk-*（暗色由 --mk-blue 自动翻转到 #5b8def，不再写暗色覆写） */
+  --blue: var(--mk-blue);
+  --blue-deep: var(--mk-accent-deep);
   --cyan: #43b0d8;
-  /* 与 main.css 的 --mk-green 同源（走查 2026-09-27：原 #31b16f/#1f8a52 当白底
-     文字色只有 2.75/4.36:1；暗色档提亮供深底文字用，保留） */
-  --green: #15803d;
-  --green-deep: #166534;
-  --accent: #8d6bff;
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  /* 原型 --green-ink：绿字与 ink 混 78%，亮/暗两档随 --mk-green / --mk-ink 自动推导 */
+  --green: var(--mk-green);
+  --green-deep: color-mix(in srgb, var(--mk-green) 78%, var(--mk-ink));
+  --accent: var(--mk-purple);
+  --ease: var(--mk-ease-out);
   [data-theme='dark'] & {
     --ink: var(--mk-ink);
     --muted: var(--mk-muted);
@@ -324,22 +318,8 @@ onUnmounted(() => {
     --line: var(--mk-line);
     --canvas: var(--mk-bg);
     --surface: var(--mk-surface);
-    --surface-soft: rgba(24, 34, 48, 0.72);
-    --surface-tint: rgba(26, 37, 53, 0.85);
-    --surface-strong: #202122;
-    --wash: #232325;
-    --wash-deep: #1b1c1d;
-    --track: #28282a;
-    --float: rgba(10, 15, 23, 0.45);
-    --shade: rgba(0, 0, 0, 0.38);
-    --card-blend: rgba(24, 34, 48, 0.85);
-    --tint-blend: rgba(77, 139, 248, 0.14);
-    --blue: #4d8bf8;
-    --blue-deep: #6fa3ff;
     --cyan: #5fc3e6;
-    --green: #3ec984;
-    --green-deep: #5fd6a0;
-    --accent: #a78bff;
+    --tint-blend: color-mix(in srgb, var(--blue) 14%, transparent);
   }
   min-height: 100vh;
   background: var(--canvas);
@@ -360,14 +340,13 @@ main {
   z-index: 1;
 }
 
-/* Hero */
+/* Hero：对照原型 .wf-phero（985-991）。导航已改 sticky，不再需要 120px 顶部让位 */
 .hn-hero {
-  min-height: 100dvh;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
-  gap: 48px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
+  gap: 44px;
   align-items: center;
-  padding: 120px 0 72px;
+  padding: 64px 0 52px;
 }
 .hn-hero__copy {
   display: grid;
@@ -380,20 +359,20 @@ main {
   background: color-mix(in srgb, var(--blue) 9%, transparent);
   color: var(--blue-deep);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 800;
   letter-spacing: 0.04em;
 }
 .hn-hero h1 {
   margin: 0;
-  font-size: clamp(40px, 6.2vw, 72px);
-  line-height: 1.06;
-  letter-spacing: -0.05em;
+  font-size: clamp(34px, 5vw, 58px);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
   max-width: 10em;
 }
 .hn-hero__copy > p {
   margin: 0;
   max-width: 36ch;
-  font-size: 18px;
+  font-size: 17px;
   line-height: 1.75;
   color: var(--muted);
 }
@@ -401,7 +380,12 @@ main {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 6px;
+  margin-top: 4px;
+}
+/* 首屏 CTA：两个按钮统一宽度（原型 .wf-phero__cta .wf-pbtn） */
+.hn-hero__cta .hn-btn {
+  width: 200px;
+  max-width: 100%;
 }
 
 /* 按钮基础样式（此前缺失导致 .hn-btn 全部渲染为裸文字链接；档位参照 vn-btn 体系） */
@@ -418,40 +402,39 @@ main {
   border: 1px solid transparent;
   cursor: pointer;
   width: fit-content;
-  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  /* 平面化后按钮已无投影，transition 里一并去掉 box-shadow */
+  transition: transform 0.2s var(--ease);
 }
-.hn-btn:hover {
-  transform: translateY(-2px);
-}
+/* 「友好而平」：取消 hover 上浮，悬停只允许改背景/描边/文字；
+   按压反馈留给 :active 的 scale(0.98)。 */
 .hn-btn:active {
-  transform: translateY(0) scale(0.98);
+  transform: scale(0.98);
 }
+/* 主按钮：实心品牌蓝，不再用 linear-gradient(135deg, …)；
+   原先的 0 14px 30px 蓝色投影属于彩色光晕，一并退休。 */
 .hn-btn--primary {
   color: #fff;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  box-shadow: 0 16px 34px color-mix(in srgb, var(--blue) 22%, transparent);
+  background: var(--blue);
+  transition: transform 0.2s var(--ease), background 0.2s var(--ease);
 }
+.hn-btn--primary:hover {
+  background: var(--blue-deep);
+}
+/* 原型 wf-pbtn--ghost / --light：surface 实底 + line 描边（暗色随 --surface 自动跟随，无需覆写） */
 .hn-btn--ghost {
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.74);
+  background: var(--surface);
   border-color: var(--line);
-}
-[data-theme='dark'] .hn-btn--ghost {
-  background: rgba(24, 34, 48, 0.66);
 }
 .hn-btn--light {
   color: var(--blue-deep);
-  background: #fff;
+  background: var(--surface);
   border-color: var(--line);
 }
-[data-theme='dark'] .hn-btn--light {
-  background: var(--surface-strong);
-  border-color: rgba(230, 237, 247, 0.18);
-}
 .hn-btn--lg {
-  min-height: 60px;
-  padding: 0 32px;
-  font-size: 17px;
+  min-height: 52px;
+  padding: 0 26px;
+  font-size: 16px;
 }
 
 /* Hero 入场编排：依次上浮，舞台卡从更大倾角回正 */
@@ -498,11 +481,16 @@ main {
 .hn-stage__chat,
 .hn-stage__desk,
 .hn-panel {
-  background: var(--surface-soft);
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 20px;
-  padding: 20px;
-  box-shadow: 0 12px 32px rgba(58, 101, 197, 0.1);
+  /* 圆角与投影（批次 D，2026-10-02）：
+     原 border-radius: 18px 是档外值 → --mk-radius-xl(16px)。
+     原 box-shadow: 0 12px 30px ink@8% 是规范外的第四档投影：
+     这两块是页面里的静态分区面板，不叠在滚动内容上，投影不表达任何层级，
+     只是给整页蒙一层灰雾。规范是「面永远是平的，1px 发丝线就是全部质感」——
+     上一行的 border 已经承担了。 */
+  border-radius: var(--mk-radius-xl);
+  padding: 18px;
 }
 .hn-stage__chat {
   transform: rotate(-1deg);
@@ -514,15 +502,15 @@ main {
 }
 .hn-stage__desk {
   transform: rotate(1.2deg) translateX(18px);
-  background: linear-gradient(180deg, var(--tint-blend), var(--card-blend));
-  border-color: color-mix(in srgb, var(--blue) 14%, transparent);
+  background: color-mix(in srgb, var(--blue) 4%, var(--surface));
+  border-color: color-mix(in srgb, var(--blue) 16%, transparent);
 }
 .hn-stage__bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  font-size: 14px;
+  margin-bottom: 10px;
+  font-size: 13px;
   font-weight: 800;
   color: var(--ink);
 }
@@ -531,46 +519,44 @@ main {
   font-weight: 800;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
-  padding: 4px 10px;
+  padding: 4px 9px;
   border-radius: var(--mk-radius-pill);
 }
 .hn-chip--green {
   color: var(--green-deep);
-  background: rgba(21, 128, 61, 0.1);
-}
-[data-theme='dark'] .hn-chip--green {
-  background: rgba(62, 201, 132, 0.16);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
 }
 .hn-bubble {
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.55;
   margin-bottom: 10px;
 }
 .hn-bubble--user {
   margin-left: auto;
   max-width: 92%;
-  padding: 12px 14px;
-  border-radius: 18px 18px 4px 18px;
+  padding: 10px 13px;
+  border-radius: 16px 16px 4px 16px;
   color: #fff;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 用户气泡同样退掉渐变，改实心品牌蓝（主色实心化是全站口径） */
+  background: var(--blue);
 }
 .hn-bubble--ai {
   display: flex;
   gap: 8px;
 }
 .hn-bubble--ai img {
-  width: 26px;
-  height: 26px;
-  border-radius: 9px;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
   border: 1px solid var(--line);
-  background: var(--surface-strong);
+  background: var(--surface);
   flex: 0 0 auto;
 }
 .hn-bubble--ai > div {
-  background: linear-gradient(180deg, var(--wash), var(--wash-deep));
+  background: var(--soft);
   border: 1px solid var(--line);
-  border-radius: 4px 18px 18px 18px;
-  padding: 12px 14px;
+  border-radius: 4px 16px 16px 16px;
+  padding: 10px 13px;
   color: var(--ink);
 }
 .hn-bubble--ai p {
@@ -591,31 +577,24 @@ main {
   font-weight: 700;
   color: var(--muted);
   border: 1px solid var(--line);
-  background: var(--surface-strong);
-  padding: 5px 10px;
+  background: var(--surface);
+  padding: 4px 9px;
   border-radius: var(--mk-radius-pill);
 }
 .hn-tag--on {
   color: var(--blue-deep);
-  border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 36%, transparent);
   background: color-mix(in srgb, var(--blue) 8%, transparent);
 }
-[data-theme='dark'] .hn-tag--on {
-  border-color: rgba(111, 163, 255, 0.45);
-  background: rgba(77, 139, 248, 0.16);
-  color: #9dbdff;
-}
+/* 下一步结果条（原型外有意增强）：配色跟 --on 卡同语言 —— 蓝 5% 实底 + 蓝 18% 描边 */
 .hn-stage__result {
   display: grid;
   gap: 4px;
   margin-top: 8px;
   padding: 14px;
   border-radius: var(--mk-radius-modal);
-  background: linear-gradient(180deg, var(--tint-blend), var(--card-blend));
-  border: 1px solid color-mix(in srgb, var(--blue) 12%, transparent);
-}
-[data-theme='dark'] .hn-stage__result {
-  border-color: rgba(111, 163, 255, 0.22);
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--blue) 18%, transparent);
 }
 .hn-stage__result small {
   font-size: 11px;
@@ -623,7 +602,7 @@ main {
   color: var(--blue-deep);
 }
 .hn-stage__result strong {
-  font-size: 14px;
+  font-size: 15px;
 }
 .hn-stage__result em {
   font-style: normal;
@@ -673,19 +652,28 @@ main {
 .hn-stage__result.is-hot {
   animation: hn-glow 1.8s var(--ease) 1;
 }
+/* 「本阶段刚产出高热结果」的一次性提示脉冲。
+   原实现是蓝色外扩光环（box-shadow 0 0 0 0→18px），已退役（批次 D）：
+   环形阴影在本仓是**焦点环的专属形态**（唯一全站一圈 --mk-focus-ring），
+   拿它做装饰动画等于让「键盘焦点」和「刚出了热结果」长得一样——
+   两者一个可键盘到达、一个纯视觉事件，混用会污染焦点态的可辨识性。
+   改为只脉冲 border-color：语义强度不变（蓝描边闪一下再退回常态），
+   不产生任何投影，且不与焦点环撞形。
+   终值必须与基础样式的实际 border-color 一致（.hn-stage__result 的
+   color-mix(blue 18%, transparent)，不是 --line），否则动画结束会闪一下变色。 */
 @keyframes hn-glow {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 35%, transparent); }
-  100% { box-shadow: 0 0 0 18px color-mix(in srgb, var(--blue) 0%, transparent); }
+  0% { border-color: color-mix(in srgb, var(--blue) 55%, transparent); }
+  100% { border-color: color-mix(in srgb, var(--blue) 18%, transparent); }
 }
 .hn-stage__from {
-  margin: 0 0 6px;
+  margin: 0 0 5px;
   font-size: 12px;
   color: var(--faint);
 }
 .hn-stage__desk h3,
 .hn-panel h3 {
   margin: 0 0 10px;
-  font-size: 18px;
+  font-size: 17px;
   letter-spacing: -0.02em;
 }
 .hn-stage__meta {
@@ -694,14 +682,14 @@ main {
   font-size: 12px;
   font-weight: 700;
   color: var(--muted);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .hn-stage__prog {
   height: 6px;
   border-radius: 99px;
-  background: var(--track);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
   overflow: hidden;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 .hn-stage__prog i {
   display: block;
@@ -729,51 +717,43 @@ main {
 }
 .hn-stage__go {
   display: inline-flex;
-  padding: 10px 16px;
+  padding: 9px 15px;
   border-radius: var(--mk-radius-pill);
   font-size: 13px;
   font-weight: 800;
   color: #fff;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  box-shadow: 0 12px 24px color-mix(in srgb, var(--blue) 22%, transparent);
+  /* 演示卡片里的伪按钮：主色实心化，不再用渐变 */
+  background: var(--blue);
 }
 
-/* Band full-bleed */
+/* Band full-bleed：对照原型 .wf-pband（1015-1023）——卡片无 hover 位移 */
 .hn-band {
-  margin: 20px 0 60px;
-  padding: 48px 0;
-  background: var(--float);
+  margin: 8px 0 44px;
+  padding: 36px 0;
+  background: var(--soft);
   border-block: 1px solid var(--line);
 }
 .hn-band__in {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  gap: 24px;
+  gap: 22px;
   align-items: center;
 }
 .hn-band__side {
   display: grid;
-  gap: 10px;
-  padding: 28px;
-  border-radius: 28px;
-  background: var(--surface-soft);
+  gap: 8px;
+  padding: 22px;
+  border-radius: var(--mk-radius-xl);   /* 批次 D：22px（档外）→ 16px */
+  background: var(--surface);
   border: 1px solid var(--line);
-  transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
-}
-.hn-band__side:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 18px 44px var(--shade);
 }
 .hn-band__side--on {
-  background: linear-gradient(180deg, var(--tint-blend), var(--card-blend));
-  border-color: color-mix(in srgb, var(--blue) 16%, transparent);
-}
-[data-theme='dark'] .hn-band__side--on {
-  border-color: rgba(111, 163, 255, 0.25);
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
+  border-color: color-mix(in srgb, var(--blue) 18%, transparent);
 }
 .hn-band__side span {
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 800;
   color: var(--faint);
 }
 .hn-band__side--on span {
@@ -781,26 +761,27 @@ main {
 }
 .hn-band__side h2 {
   margin: 0;
-  font-size: clamp(22px, 2.8vw, 30px);
-  letter-spacing: -0.03em;
+  font-size: clamp(20px, 2.4vw, 26px);
+  letter-spacing: -0.02em;
   line-height: 1.2;
 }
 .hn-band__side p {
   margin: 0;
-  color: var(--muted);
+  font-size: 14px;
   line-height: 1.7;
+  color: var(--muted);
 }
 .hn-band__arrow {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   color: #fff;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 900;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  box-shadow: 0 14px 30px color-mix(in srgb, var(--blue) 25%, transparent);
+  /* 圆形箭头徽标：品牌蓝实心化，不再用渐变 */
+  background: var(--blue);
 }
 .hn-band__arrow span {
   display: block;
@@ -815,27 +796,29 @@ main {
   50% { transform: translateX(7px); }
 }
 
-/* Flow */
+/* Flow：对照原型 .wf-pflow / .wf-psection / .wf-psteps（1025-1034） */
 .hn-flow {
-  padding: 40px 0 80px;
-  scroll-margin-top: 96px;
+  padding: 28px 0 64px;
+  scroll-margin-top: 84px;
 }
 .hn-section {
-  max-width: 36em;
-  margin-bottom: 36px;
+  max-width: 44em;
+  margin-bottom: 28px;
   display: grid;
   gap: 12px;
 }
 .hn-section h2 {
   margin: 0;
-  font-size: clamp(32px, 4.5vw, 52px);
-  letter-spacing: -0.045em;
-  line-height: 1.08;
+  font-size: clamp(28px, 3.6vw, 44px);
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  text-wrap: balance;
 }
 .hn-section p {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1.75;
+  max-width: 34em;
   color: var(--muted);
 }
 .hn-flow__canvas {
@@ -845,7 +828,7 @@ main {
   width: 100%;
   height: auto;
   display: block;
-  margin-bottom: -28px;
+  margin-bottom: -18px;
 }
 .hn-flow__path {
   stroke: var(--blue);
@@ -870,46 +853,43 @@ main {
   padding: 0;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
   position: relative;
   z-index: 1;
 }
+/* 步骤卡：对照 .wf-psteps li —— 静态卡，无 hover 位移 */
 .hn-flow__grid li {
   display: grid;
-  gap: 10px;
+  gap: 9px;
   justify-items: center;
   text-align: center;
-  min-height: 210px;
-  padding: 22px 16px;
-  border-radius: 28px;
-  background: var(--surface-soft);
+  min-height: 196px;
+  padding: 20px 14px;
+  /* 批次 D：22px 圆角（档外）→ --mk-radius-xl；第四档投影 ink@6% 删除。
+     步骤卡是静态卡，靠 border 分层即可。 */
+  border-radius: var(--mk-radius-xl);
+  background: var(--surface);
   border: 1px solid var(--line);
-  box-shadow: 0 16px 40px var(--shade);
-  transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
-}
-.hn-flow__grid li:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 22px 48px var(--shade);
 }
 .hn-flow__grid span {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   color: #fff;
   font-size: 14px;
   font-weight: 900;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  box-shadow: 0 12px 24px color-mix(in srgb, var(--blue) 22%, transparent);
+  /* 步骤序号圆牌：品牌蓝实心化，不再用渐变 */
+  background: var(--blue);
 }
 .hn-flow__grid strong {
-  font-size: 16px;
+  font-size: 15px;
 }
 .hn-flow__grid p {
   margin: 0;
   font-size: 13px;
-  line-height: 1.65;
+  line-height: 1.6;
   color: var(--muted);
   max-width: 18ch;
 }
@@ -958,15 +938,10 @@ main {
 }
 .hn-idea__list article {
   padding: 22px 24px;
-  border-radius: 22px;
-  background: var(--surface-soft);
+  /* 批次 D：18px 圆角（档外）→ --mk-radius-xl；第四档投影 ink@8% 删除。 */
+  border-radius: var(--mk-radius-xl);
+  background: var(--surface);
   border: 1px solid var(--line);
-  box-shadow: 0 12px 32px var(--shade);
-  transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
-}
-.hn-idea__list article:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 18px 40px var(--shade);
 }
 .hn-idea__list strong {
   display: block;
@@ -1011,25 +986,13 @@ main {
 .hn-desk__copy li {
   padding: 14px 16px;
   border-radius: var(--mk-radius-modal);
-  background: var(--surface-soft);
+  background: var(--surface);
   border: 1px solid var(--line);
   font-size: 14px;
   font-weight: 700;
 }
 .hn-desk__card {
   margin-top: 12px;
-}
-.hn-panel {
-  padding: 26px;
-  transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
-}
-.hn-panel:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 16px 40px rgba(58, 101, 197, 0.12);
-}
-[data-theme='dark'] .hn-panel:hover,
-[data-theme='dark'] .hn-stage__chat:hover {
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
 }
 .hn-state__metrics {
   display: grid;
@@ -1042,7 +1005,7 @@ main {
   gap: 3px;
   padding: 12px 14px;
   border-radius: var(--mk-radius-modal);
-  background: var(--surface-tint);
+  background: var(--surface);
   border: 1px solid var(--line);
 }
 .hn-state__metrics span {
@@ -1067,12 +1030,11 @@ main {
   color: var(--muted);
 }
 
-/* End full bleed — light band */
+/* End full bleed：对照原型 .wf-pend（1036-1039） */
 .hn-end {
   position: relative;
-  margin-top: 20px;
-  padding: 88px 24px 100px;
-  background: var(--surface);
+  padding: 60px 0 68px;
+  background: var(--soft);
   border-top: 1px solid var(--line);
   color: var(--ink);
   overflow: hidden;
@@ -1081,7 +1043,8 @@ main {
 .hn-end__in {
   position: relative;
   z-index: 1;
-  max-width: 640px;
+  /* 原型 .wf-pend 内层是 wf-pwrap（自带 48px 视口留白），这里等价收口到 640px */
+  width: min(640px, calc(100% - 48px));
   margin: 0 auto;
   display: grid;
   gap: 16px;
@@ -1089,9 +1052,10 @@ main {
 }
 .hn-end h2 {
   margin: 0;
-  font-size: clamp(32px, 5vw, 52px);
-  letter-spacing: -0.045em;
-  line-height: 1.1;
+  font-size: clamp(26px, 3.6vw, 44px);
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+  max-width: 18ch;
   color: var(--ink);
 }
 .hn-end p {
@@ -1111,7 +1075,7 @@ main {
 /* Foot */
 .hn-foot {
   border-top: 1px solid var(--line);
-  background: var(--float);
+  background: var(--soft);
 }
 .hn-foot__in {
   display: flex;
@@ -1158,8 +1122,7 @@ main {
 @media (max-width: 980px) {
   .hn-hero {
     grid-template-columns: 1fr;
-    min-height: auto;
-    /* 原型 wf-phero ≤980：44px 上 / 40px 下（原 100px 顶距是旧规格残留） */
+    /* 原型 wf-phero ≤980：44px 上 / 40px 下 */
     padding: 44px 0 40px;
     gap: 28px;
   }
@@ -1193,18 +1156,15 @@ main {
     min-height: 0;
     justify-items: start;
     text-align: left;
-    grid-template-columns: 42px 1fr;
-    column-gap: 14px;
+    grid-template-columns: 40px 1fr;
+    column-gap: 12px;
   }
   .hn-flow__grid span {
     grid-row: span 3;
   }
-  /* 移动端描述单行展示：窄列下避免文字断行撑高卡片 */
+  /* 移动端描述允许换行（原型 .wf-psteps 未做单行截断） */
   .hn-flow__grid p {
-    font-size: 12px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 13px;
     max-width: 100%;
   }
   .hn-idea__lead {
@@ -1219,63 +1179,78 @@ main {
   .hn-shell {
     width: min(100% - 28px, 1180px);
   }
-  /* 原型 wf-phero h1 = clamp(34px,5vw,58px)，390 视口落 34px（原 clamp 42px 偏大） */
+  /* 原型 wf-phero h1 = clamp(34px,5vw,58px)，390 视口落 34px（与基础档一致，保留兜底） */
   .hn-hero h1 {
     font-size: 34px;
     line-height: 1.08;
   }
-  .hn-foot__brand em {
-    display: none;
-  }
 }
 
 /* ---------- 超大屏（2K/4K）：随视口放大容器与字号，避免整页缩在中间 ---------- */
+/* 超大屏档（≥2000）。字号纪律见 ADMIN_VISUAL_LAYER_SPEC §7.5 与守卫规则 13：
+   文本只有三个角色 token（micro 12 / body 14 / emphasis 15），档位块**只覆写 token**，
+   逐个选择器写 16px / 17px / 13px 这类半档字面量正是「同一页在 1440 有 10 个字号档、
+   3840 变 17 个」的根源 —— 规则 13 就是为此而设，本档原来 8 处全部在违规。
+   现在改成覆写三个角色 token，一次声明让全页文本同步放大；
+   展示型字号（hero h1 / 副文案）不在文本带内，保留各自的字面量。 */
 @media (min-width: 2000px) {
+  /* 档位文本尺度：×1.15（与 admin 的 4K 档倍率同口径） */
+  --mk-fs-micro: 13.8px;
+  --mk-fs-body: 16.1px;
+  --mk-fs-emphasis: 17.25px;
   .hn-shell {
     width: min(1560px, calc(100% - 64px));
   }
   .hn-btn {
     min-height: 48px;
     padding: 0 20px;
-    font-size: 16px;
   }
   .hn-btn--lg {
-    min-height: 60px;
-    padding: 0 32px;
-    font-size: 17px;
+    min-height: 56px;
+    padding: 0 28px;
   }
+  /* hero 超大屏档：随新口径（基础档 64/52 + clamp(34,5vw,58)）等比放大，不再有 120px 顶部让位 */
   .hn-hero {
     grid-template-columns: minmax(0, 1fr) minmax(400px, 560px);
     gap: 72px;
-    padding: 150px 0 90px;
+    padding: 96px 0 76px;
   }
+  /* 展示型字号（> emphasis × 1.15 = 19.8px）：不在文本带内，规则 13 允许 */
   .hn-hero h1 {
-    font-size: clamp(76px, 4.2vw, 112px);
-    line-height: 1.04;
+    font-size: clamp(58px, 4.2vw, 90px);
   }
   .hn-hero__copy > p {
-    font-size: 23px;
+    font-size: 22px;
     max-width: 34ch;
   }
   .hn-pill {
-    font-size: 13px;
     padding: 8px 14px;
   }
   .hn-stage__chat,
   .hn-stage__desk,
   .hn-panel {
-    padding: 26px;
-    border-radius: 24px;
+    padding: 24px;
   }
-  .hn-stage__bar {
-    font-size: 15px;
-  }
-  .hn-bubble {
-    font-size: 16px;
-  }
-  .hn-stage__result strong {
-    font-size: 16px;
-  }
+  /* 以下文本档选择器（.hn-stage__bar / .hn-bubble / .hn-stage__result strong /
+     .hn-flow__grid p / .hn-idea__list p / .hn-desk__copy li 等）原先在本档
+     各写一个字面量（15/16/16.5/18/19/20px）。现已删除：它们继承基础档的
+     --mk-fs-* 引用，由本档顶部的三个角色 token 统一放大。
+     基础档 → 本档的实际倍率随之从「各写各的」收敛为 ×1.15 一档：
+       .hn-stage__bar        13 → 14.95（原 15）
+       .hn-bubble            13 → 14.95（原 16）
+       .hn-stage__result     15 → 17.25（原 16，**变大**）
+       .hn-band__side p      14 → 16.10（原 18）
+       .hn-flow__grid strong 15 → 17.25（原 19）
+       .hn-flow__grid p      13 → 14.95（原 15.5）
+       .hn-idea__lead p      16 → 18.40（原 19）
+       .hn-idea__list strong 17 → 19.55（原 20）
+       .hn-idea__list p      14 → 16.10（原 16.5）
+       .hn-desk__copy li     14 → 16.10（原 16）
+       .hn-desk__copy > p    16 → 18.40（原 19）
+       .hn-end p             16 → 18.40（原 19）
+     差异在 ±2px 内，属「从 12 个独立倍率收敛为 1 档」的必然代价 ——
+     收益是这一档不再是字号孤岛。展示型（.hn-stage__desk h3 21px、
+     .hn-flow__grid strong 之类 > emphasis×1.15 的）保留字面量。 */
   .hn-stage__desk h3,
   .hn-panel h3 {
     font-size: 21px;
@@ -1289,9 +1264,7 @@ main {
   .hn-band__side h2 {
     font-size: clamp(30px, 2vw, 42px);
   }
-  .hn-band__side p {
-    font-size: 18px;
-  }
+  /* .hn-band__side p 的字号继承基础档 --mk-fs-body，随本档 token 放大到 16.1px */
   .hn-section {
     gap: 14px;
   }
@@ -1305,41 +1278,31 @@ main {
     min-height: 260px;
     padding: 26px 20px;
   }
-  .hn-flow__grid strong {
-    font-size: 19px;
-  }
-  .hn-flow__grid p {
-    font-size: 15.5px;
-  }
+  /* .hn-flow__grid strong / p 同样继承基础档 token（17.25 / 14.95） */
   .hn-idea__lead h2 {
     font-size: clamp(44px, 3vw, 64px);
     max-width: 14ch;
   }
+  /* .hn-idea__lead p 继承基础档 --mk-fs-emphasis（17.25） */
   .hn-idea__lead p {
-    font-size: 19px;
     max-width: 30ch;
   }
   .hn-idea__list article {
     padding: 26px 30px;
   }
-  .hn-idea__list strong {
-    font-size: 20px;
-  }
-  .hn-idea__list p {
-    font-size: 16.5px;
-  }
+  /* .hn-idea__list strong / p 继承基础档 token（19.55 / 16.10） */
   .hn-desk {
     gap: 64px;
   }
   .hn-desk__copy h2 {
     font-size: clamp(40px, 2.8vw, 60px);
   }
+  /* .hn-desk__copy > p 继承基础档 --mk-fs-emphasis（17.25），仅保留行长约束 */
   .hn-desk__copy > p {
-    font-size: 19px;
     max-width: 34ch;
   }
+  /* .hn-desk__copy li 继承基础档 --mk-fs-body（16.10），本档只放大内边距 */
   .hn-desk__copy li {
-    font-size: 16px;
     padding: 16px 18px;
   }
   .hn-state__metrics b {
@@ -1351,21 +1314,19 @@ main {
   .hn-end h2 {
     font-size: clamp(48px, 3.2vw, 72px);
   }
-  .hn-end p {
-    font-size: 19px;
-  }
+  /* .hn-end p 继承基础档 --mk-fs-emphasis（17.25） */
   .hn-foot__in {
     padding: 26px 0;
   }
 }
 </style>
 <style scoped>
-/* ===== 移动端密度（2026-09-24）=====
+/* ===== 移动端密度（2026-09-24；2026-09-30 随原型公开层口径更新）=====
    判据与用户侧一致：卡片内边距 12–18px、按钮 44–46px 档、微标签 ≥12px。
-   实测 390 下：舞台卡 20×20、band 卡 28×28、流程卡 22×16（×5，各 134px 高）、
-   idea 卡 22×24（×4）、面板 26×26；hero CTA 是 .hn-btn--lg（60px 高 / 32px 横向内边距 /
-   17px 字），在 390 里是两块很大的实心按钮；另有 6 处 11px 的微标签。
-   展示型字号（hero 的 clamp）与 20/28px 圆角是这一页的视觉语言，不动。 */
+   对齐原型 .wf-pcard2 / .wf-pband__side / .wf-psteps 后：舞台卡 18×14、band 卡 22×18、
+   流程卡 22×16（×5）、idea 卡 18×16（×4）；hero CTA 是 .hn-btn--lg
+   （基础档 52px 高 / 26px 横向内边距 / 16px 字 → 移动端 46 / 22 / 15）。
+   展示型字号（hero 的 clamp）与 18/22px 圆角是这一页的视觉语言，不动。 */
 @media (max-width: 980px) {
   .hn-stage__chat,
   .hn-stage__desk,

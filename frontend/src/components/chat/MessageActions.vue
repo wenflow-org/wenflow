@@ -142,11 +142,11 @@ function handleFeedback(thumbsUp: boolean) {
   transition: background 0.12s ease, color 0.12s ease;
 }
 .msg-actions__btn:hover {
-  background: rgba(52, 120, 246, 0.08);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
   color: var(--blue-deep, #1f57cc);
 }
 .msg-actions__btn:active {
-  background: rgba(52, 120, 246, 0.14);
+  background: color-mix(in srgb, var(--blue) 14%, transparent);
 }
 .msg-actions__btn:disabled {
   cursor: default;

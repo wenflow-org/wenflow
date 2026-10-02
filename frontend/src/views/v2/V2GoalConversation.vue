@@ -64,7 +64,7 @@
       >
         <MaterialUploadArea ref="uploadRef" @change="materialCount = $event" />
         <label class="visually-hidden" for="goal-entry-input">你想解决什么</label>
-        <div class="composer__box" :class="{ 'composer__box--active': input.trim(), 'composer__box--dropping': boxDropping }">
+        <div class="composer__box" :class="{ 'composer__box--dropping': boxDropping }">
           <button
             type="button"
             class="composer__attach"
@@ -114,8 +114,8 @@
       </div>
     </main>
 
-    <!-- 会话态 -->
-    <main v-else class="work">
+    <!-- 会话态：work 只在方案弹层打开时放宽到 1180（≥1500 档），会话常态恒 880 居中 -->
+    <main v-else class="work" :class="{ 'work--wide': showProposal }">
       <!-- 左：信息清单（移动端默认折叠为顶栏，点击展开；桌面端恒展开） -->
       <aside class="panel" :class="{ 'panel--collapsed': !panelExpanded }">
         <button type="button" class="panel__head" :aria-expanded="panelExpanded" @click="togglePanel">
@@ -129,9 +129,9 @@
 
           <ul class="checklist">
             <li v-for="f in live.fields" :key="f.key" class="field" :class="[`field--${f.status}`, { 'field--fresh': f.fresh }]">
+              <!-- 原型 .wf-field__mark：done = 绿 18% 浅底 + 绿字勾；未完成 = 灰空圆（无虚线内芯） -->
               <span class="field__mark">
                 <svg v-if="f.status === 'done'" viewBox="0 0 24 24" width="11" height="11"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
-                <i v-else></i>
               </span>
               <div class="field__body">
                 <div class="field__label">{{ f.label }}</div>
@@ -272,223 +272,245 @@
             </div>
           </div>
 
-          <!-- 快捷补充选项面板（skill 每轮返回）：勾选式，点选打勾进输入框，再点取消 -->
-          <div v-if="!live.sending && live.quickReplies.length && live.stageIndex < 3" class="replies-panel">
-            <div class="replies-panel__head">
-              <span class="replies-panel__kicker">快捷补充</span>
-              <span class="replies-panel__hint">点选填入输入框，可多选</span>
-            </div>
-            <div class="replies-panel__options">
-              <button
-                v-for="q in availableReplies"
-                :key="q.text"
-                type="button"
-                class="replies-panel__option"
-                :class="{ 'replies-panel__option--active': pickedReplySet.has(q.text.trim()) }"
-                @click="toggleReply(q.text)"
-              >
-                <span v-if="pickedReplySet.has(q.text.trim())" class="replies-panel__check" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="11" height="11"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
-                </span>
-                <span v-else class="replies-panel__dot" aria-hidden="true"></span>
-                <span class="replies-panel__text">{{ q.text }}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- 输入区：回形针资料入口内置输入框，已传资料 chips 浮在输入框上方；输入框本身是拖放目标 -->
-        <div
-          class="composer"
-          @dragenter.prevent="onBoxDragEnter"
-          @dragover.prevent="onBoxDragOver"
-          @dragleave.prevent="onBoxDragLeave"
-          @drop.prevent="onBoxDrop"
-        >
-          <MaterialUploadArea ref="uploadRef" @change="materialCount = $event" />
-          <label class="visually-hidden" for="goal-chat-input">回答上面的问题，或补充你的基础、时间和限制</label>
-          <div class="composer__box" :class="{ 'composer__box--active': input.trim(), 'composer__box--dropping': boxDropping }">
+          <!-- 快捷补充选项（skill 每轮返回）：对齐原型 .wf-replies —— 去白面板与面板头，
+               改整行 .wf-reply 按钮组（蓝描边 + 蓝 5% 底 + 前置 6px 蓝点，选中变 ✓）。
+               勾选语义不变：点选打勾进输入框，再点取消 -->
+          <div v-if="!live.sending && live.quickReplies.length && live.stageIndex < 3" class="replies">
+            <span class="visually-hidden">快捷补充：点选填入输入框，可多选</span>
             <button
+              v-for="q in availableReplies"
+              :key="q.text"
               type="button"
-              class="composer__attach"
-              aria-label="添加资料"
-              title="添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框"
-              @click="uploadRef?.openPicker()"
-            >
-              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16.5 6v11.5a4 4 0 0 1-8 0V6a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v10.5a2.5 2.5 0 0 0 5 0V6a4 4 0 0 0-8 0v11.5a5.5 5.5 0 0 0 11 0V6z"/></svg>
-              <span v-if="materialCount" class="composer__attach-count">{{ materialCount }}</span>
-            </button>
-            <textarea
-              id="goal-chat-input"
-              ref="chatInputEl"
-              v-model="input"
-              class="composer__textarea"
-              rows="1"
-              :maxlength="INPUT_MAX"
-              :placeholder="chatPlaceholder"
-              @keydown.enter.exact.prevent="doSend"
-            ></textarea>
-            <span v-if="boxDropping" class="composer__drop-hint">松开上传到资料</span>
-            <!-- 发送/停止 同位置切换：生成中变停止（主流聊天交互，位置固定不占额外空间） -->
-            <button
-              v-if="!live.sending"
-              type="button"
-              class="composer__send"
-              :class="{ 'composer__send--off': !input.trim() }"
-              :disabled="!input.trim()"
-              aria-label="发送"
-              @click="doSend"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
-            </button>
-            <button
-              v-else
-              type="button"
-              class="composer__send composer__send--stop"
-              aria-label="停止生成"
-              @click="live.stop()"
-            >
-              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
-            </button>
-          </div>
-          <!-- 底部提示一条基线（2026-09-27 用户反馈）：快捷键+计数+AI 声明归右带；
-               左侧不再放平台说明（那句话已回左栏信息面板底部） -->
-          <div class="composer__hint">
-            <!-- P1：≤1100 移动端唯一的「规划新目标」入口——底部 tab「目标规划」同路由点击
-                 不派发 v2:new-goal（V2Nav 只在顶部 CTA 挂了该逻辑，≤900 已隐藏），
-                 本页 .chat__clear 移动端又隐藏，会话态会被锁死在旧对话。
-                 走 onNewGoalEvent：回初始态、本地保留「继续上次的规划」，不删记录。 -->
-            <button
-              type="button"
-              class="composer__new-goal"
-              title="规划新目标（当前对话保留在本机，可恢复）"
-              @click="onNewGoalEvent"
-            >新目标</button>
-            <span class="composer__hint-right">
-              <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
-              <span class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
-              <AiContentNote />
-            </span>
-          </div>
-        </div>
-
-        <!-- 方案确认浮层：dialog 语义 + 打开时移焦/关闭归还（onProposalKey/watch showProposal） -->
-        <div
-          v-if="showProposal"
-          ref="overlayRef"
-          class="overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label="方案确认"
-          tabindex="-1"
-        >
-          <!-- 预览 -->
-          <div v-if="phase === 'preview' && live.proposal" class="proposal">
-            <div class="proposal__eyebrow">路径预览 · 请确认</div>
-            <h2 class="proposal__title">为你整理的学习方向</h2>
-
-            <div class="proposal__rows">
-              <div v-if="live.proposal.problem" class="proposal__row">
-                <span>核心问题</span>
-                <p>{{ live.proposal.problem }}</p>
-              </div>
-              <div v-if="live.proposal.outcome" class="proposal__row">
-                <span>预计产出</span>
-                <p>{{ live.proposal.outcome }}</p>
-              </div>
-            </div>
-
-            <div v-if="live.proposal.stages.length" class="proposal__stages">
-              <span class="proposal__stages-label">路径大纲 · {{ live.proposal.stageCount }} 个阶段</span>
-              <ol>
-                <li v-for="(s, i) in live.proposal.stages" :key="i" class="pstep"><i>{{ i + 1 }}</i><div><strong>{{ s }}</strong></div></li>
-              </ol>
-            </div>
-
-            <!-- 前置自测：帮路径更贴合基础（可选作答，作答后自动收录） -->
-            <div v-if="live.proposal.probes && live.proposal.probes.length" class="proposal__probes">
-              <span class="proposal__stages-label">快速自测（可选）</span>
-              <div v-for="p in live.proposal.probes" :key="p.probeId" class="probe">
-                <p class="probe__q">{{ p.question }}</p>
-                <div class="probe__opts">
-                  <button
-                    v-for="o in p.options"
-                    :key="o.id"
-                    type="button"
-                    class="probe__opt"
-                    :class="{ 'probe__opt--on': live.probeAnswers[p.probeId] === o.id }"
-                    :disabled="live.sending || !!live.probeAnswers[p.probeId]"
-                    @click="live.answerProbe(p, o.id, o.text)"
-                  ><b>{{ o.id }}</b> {{ o.text }}</button>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="confirmError" class="errorbar">
-              确认失败，请重试。<button type="button" class="errorbar__retry" @click="doConfirm">重试</button>
-            </div>
-
-            <div v-if="!supplementMode" class="proposal__actions">
-              <!-- 真按钮而非 span[role=button]：Space 键触发、禁用语义免手工维护（E2E 自动化也靠 button 语义定位） -->
-              <button type="button" class="btn-primary btn-primary--lg" @click="doConfirm">确认，生成我的路径</button>
-              <button type="button" class="btn-ghost" @click="supplementMode = true">再补充点信息</button>
-            </div>
-            <div v-else class="proposal__supplement">
-              <textarea
-                v-model="supplementText"
-                class="proposal__supplement-input"
-                rows="2"
-                maxlength="300"
-                placeholder="比如：我只有 Windows 电脑，Excel 是 2016 版…"
-              ></textarea>
-              <div class="proposal__actions">
-                <button type="button" class="btn-primary" :class="{ 'btn-primary--off': !supplementText.trim() || live.sending }" :disabled="!supplementText.trim() || live.sending" @click="doSupplement">
-                  {{ live.sending ? '提交中…' : '提交补充，更新方案' }}
-                </button>
-                <button type="button" class="btn-ghost" @click="supplementMode = false">取消</button>
-              </div>
-            </div>
-            <div class="proposal__note">
-              <span v-if="materialCount">已上传的 {{ materialCount }} 份资料将作为学习主线，公开网络资料作补充；引用内容可点开看原文。</span>
-              <span>确认后在本页生成，一般需要 1-2 分钟。失败可原地重试，信息不会丢。</span>
-              <AiContentNote />
-            </div>
-          </div>
-
-          <!-- 生成中 -->
-          <div v-else-if="phase === 'generating'" class="proposal proposal--center">
-            <span class="spinner"></span>
-            <h2 class="proposal__title">正在生成你的路径…</h2>
-            <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解，一般需要 1-2 分钟。</p>
-            <div class="skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
-            <!-- 生成阶段模型输出是 JSON（对用户不可读）：delta 阶段给中性进度文案，不直出原始流（P3） -->
-            <div class="proposal__stream">
-              <span class="proposal__stream-label">生成进度</span>
-              <p class="proposal__stream-text">正在逐项整理方案内容，完成后会自动展示。</p>
-            </div>
-            <div class="proposal__note">可以离开本页，生成进度会保留。</div>
-            <button type="button" class="proposal__stop" @click="live.stop()">
-              <svg viewBox="0 0 24 24" width="12" height="12"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
-              停止生成
-            </button>
-          </div>
-
-          <!-- 生成成功 -->
-          <div v-else-if="phase === 'done'" class="proposal proposal--center">
-            <span class="done-ring">
-              <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
-            </span>
-            <h2 class="proposal__title">路径已生成</h2>
-            <p class="proposal__generating-note">阶段与任务正在后台组装，稍后即可查看。</p>
-            <div class="proposal__actions proposal__actions--center">
-              <button type="button" class="btn-primary btn-primary--lg" @click="goPaths">查看我的路径</button>
-              <!-- 只在方案还在（stage=proposing）时给「返回方案」：否则点了只是关浮层，无路可回 -->
-              <button v-if="live.stage === 'proposing' && live.proposal" type="button" class="btn-ghost" @click="phase = 'preview'">返回方案</button>
-            </div>
+              class="reply"
+              :class="{ 'reply--on': pickedReplySet.has(q.text.trim()) }"
+              @click="toggleReply(q.text)"
+            >{{ q.text }}</button>
           </div>
         </div>
       </section>
     </main>
+
+    <!-- 输入区：页级通栏底条（原型 .wf-composer）——回形针资料入口内置输入框，
+         已传资料 chips 浮在输入框上方；输入框本身是拖放目标。
+         .composer__inner 复刻 .work 的栅格，把内容条放进右列（对话列）：
+         底条背景/上边框仍通栏，但输入框与上方气泡对齐成同一条竖线。
+         v-if 与 main.work 同条件：初始态/未登录态各有自己的 .composer--entry
+         （两者共用 uploadRef，同时挂载会撞 ref；且会出双输入条） -->
+    <div
+      v-if="loggedIn && live.started"
+      class="composer composer--page"
+      @dragenter.prevent="onBoxDragEnter"
+      @dragover.prevent="onBoxDragOver"
+      @dragleave.prevent="onBoxDragLeave"
+      @drop.prevent="onBoxDrop"
+    >
+      <div class="composer__inner">
+      <MaterialUploadArea ref="uploadRef" @change="materialCount = $event" />
+      <label class="visually-hidden" for="goal-chat-input">回答上面的问题，或补充你的基础、时间和限制</label>
+      <div class="composer__box" :class="{ 'composer__box--dropping': boxDropping }">
+        <button
+          type="button"
+          class="composer__attach"
+          aria-label="添加资料"
+          title="添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框"
+          @click="uploadRef?.openPicker()"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16.5 6v11.5a4 4 0 0 1-8 0V6a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v10.5a2.5 2.5 0 0 0 5 0V6a4 4 0 0 0-8 0v11.5a5.5 5.5 0 0 0 11 0V6z"/></svg>
+          <span v-if="materialCount" class="composer__attach-count">{{ materialCount }}</span>
+        </button>
+        <textarea
+          id="goal-chat-input"
+          ref="chatInputEl"
+          v-model="input"
+          class="composer__textarea"
+          rows="1"
+          :maxlength="INPUT_MAX"
+          :placeholder="chatPlaceholder"
+          @keydown.enter.exact.prevent="doSend"
+        ></textarea>
+        <span v-if="boxDropping" class="composer__drop-hint">松开上传到资料</span>
+        <!-- 发送/停止 同位置切换：生成中变停止（主流聊天交互，位置固定不占额外空间） -->
+        <button
+          v-if="!live.sending"
+          type="button"
+          class="composer__send"
+          :class="{ 'composer__send--off': !input.trim() }"
+          :disabled="!input.trim()"
+          aria-label="发送"
+          @click="doSend"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
+        </button>
+        <button
+          v-else
+          type="button"
+          class="composer__send composer__send--stop"
+          aria-label="停止生成"
+          @click="live.stop()"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+        </button>
+      </div>
+      <!-- 底部提示一条基线（2026-09-27 用户反馈）：快捷键+计数+AI 声明归右带；
+           左侧不再放平台说明（那句话已回左栏信息面板底部） -->
+      <div class="composer__hint">
+        <!-- P1：≤1100 移动端唯一的「规划新目标」入口——底部 tab「目标规划」同路由点击
+             不派发 v2:new-goal（V2Nav 只在顶部 CTA 挂了该逻辑，≤900 已隐藏），
+             本页 .chat__clear 移动端又隐藏，会话态会被锁死在旧对话。
+             走 onNewGoalEvent：回初始态、本地保留「继续上次的规划」，不删记录。 -->
+        <button
+          type="button"
+          class="composer__new-goal"
+          title="规划新目标（当前对话保留在本机，可恢复）"
+          @click="onNewGoalEvent"
+        >新目标</button>
+        <span class="composer__hint-right">
+          <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
+          <span class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
+          <AiContentNote />
+        </span>
+      </div>
+      </div><!-- /.composer__inner -->
+    </div>
+
+    <!-- 方案确认浮层：dialog 语义 + 打开时移焦/关闭归还（onProposalKey/watch showProposal） -->
+    <div
+      v-if="showProposal"
+      ref="overlayRef"
+      class="overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="方案确认"
+      tabindex="-1"
+    >
+      <!-- 预览：对齐原型 dialog 三段 —— head（eyebrow + 标题 + 关关闭 ×）/
+           body（rows + 大纲 + 自测 + 提示）/ 贴底 foot（ghost「再补充」+ primary「确认」） -->
+      <div v-if="phase === 'preview' && live.proposal" class="proposal">
+        <div class="proposal__head">
+          <div class="proposal__head-text">
+            <span class="proposal__eyebrow">路径预览 · 请确认</span>
+            <h2 class="proposal__title">为你整理的学习方向</h2>
+          </div>
+          <button
+            type="button"
+            class="proposal__x"
+            aria-label="关闭方案确认"
+            title="关闭（Esc 可随时关闭）"
+            @click="proposalDismissed = true"
+          >×</button>
+        </div>
+
+        <div class="proposal__body">
+        <div class="proposal__rows">
+          <div v-if="live.proposal.problem" class="proposal__row">
+            <span>核心问题</span>
+            <p>{{ live.proposal.problem }}</p>
+          </div>
+          <div v-if="live.proposal.outcome" class="proposal__row">
+            <span>预计产出</span>
+            <p>{{ live.proposal.outcome }}</p>
+          </div>
+        </div>
+
+        <div v-if="live.proposal.stages.length" class="proposal__stages">
+          <span class="proposal__stages-label">路径大纲 · {{ live.proposal.stageCount }} 个阶段</span>
+          <ol>
+            <li v-for="(s, i) in live.proposal.stages" :key="i" class="pstep"><i>{{ i + 1 }}</i><div><strong>{{ s }}</strong></div></li>
+          </ol>
+        </div>
+
+        <!-- 前置自测：帮路径更贴合基础（可选作答，作答后自动收录） -->
+        <div v-if="live.proposal.probes && live.proposal.probes.length" class="proposal__probes">
+          <span class="proposal__stages-label">快速自测（可选）</span>
+          <div v-for="p in live.proposal.probes" :key="p.probeId" class="probe">
+            <p class="probe__q">{{ p.question }}</p>
+            <div class="probe__opts">
+              <button
+                v-for="o in p.options"
+                :key="o.id"
+                type="button"
+                class="probe__opt"
+                :class="{ 'probe__opt--on': live.probeAnswers[p.probeId] === o.id }"
+                :disabled="live.sending || !!live.probeAnswers[p.probeId]"
+                @click="live.answerProbe(p, o.id, o.text)"
+              ><b>{{ o.id }}</b> {{ o.text }}</button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="confirmError" class="errorbar">
+          确认失败，请重试。<button type="button" class="errorbar__retry" @click="doConfirm">重试</button>
+        </div>
+
+        <div v-if="supplementMode" class="proposal__supplement">
+          <textarea
+            v-model="supplementText"
+            class="proposal__supplement-input"
+            rows="2"
+            maxlength="300"
+            placeholder="比如：我只有 Windows 电脑，Excel 是 2016 版…"
+          ></textarea>
+        </div>
+
+        <div class="proposal__note">
+          <span v-if="materialCount">已上传的 {{ materialCount }} 份资料将作为学习主线，公开网络资料作补充；引用内容可点开看原文。</span>
+          <span>确认后在本页生成，一般需要 1-2 分钟。失败可原地重试，信息不会丢。</span>
+          <AiContentNote />
+        </div>
+        </div><!-- /.proposal__body（内容滚动区） -->
+
+        <!-- sticky foot：贴卡片底，不随 body 滚走（原型 .wf-dialog__foot 的位置语义） -->
+        <div class="proposal__foot">
+          <!-- 真按钮而非 span[role=button]：Space 键触发、禁用语义免手工维护（E2E 自动化也靠 button 语义定位） -->
+          <template v-if="!supplementMode">
+            <button type="button" class="btn-ghost" @click="supplementMode = true">再补充点信息</button>
+            <button type="button" class="btn-primary btn-primary--lg" @click="doConfirm">确认，生成我的路径</button>
+          </template>
+          <template v-else>
+            <button type="button" class="btn-ghost" @click="supplementMode = false">取消</button>
+            <button
+              type="button"
+              class="btn-primary"
+              :class="{ 'btn-primary--off': !supplementText.trim() || live.sending }"
+              :disabled="!supplementText.trim() || live.sending"
+              @click="doSupplement"
+            >{{ live.sending ? '提交中…' : '提交补充，更新方案' }}</button>
+          </template>
+        </div>
+      </div>
+
+      <!-- 生成中 -->
+      <div v-else-if="phase === 'generating'" class="proposal proposal--center">
+        <span class="spinner"></span>
+        <h2 class="proposal__title">正在生成你的路径…</h2>
+        <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解，一般需要 1-2 分钟。</p>
+        <div class="skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
+        <!-- 生成阶段模型输出是 JSON（对用户不可读）：delta 阶段给中性进度文案，不直出原始流（P3） -->
+        <div class="proposal__stream">
+          <span class="proposal__stream-label">生成进度</span>
+          <p class="proposal__stream-text">正在逐项整理方案内容，完成后会自动展示。</p>
+        </div>
+        <div class="proposal__note">可以离开本页，生成进度会保留。</div>
+        <button type="button" class="proposal__stop" @click="live.stop()">
+          <svg viewBox="0 0 24 24" width="12" height="12"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+          停止生成
+        </button>
+      </div>
+
+      <!-- 生成成功 -->
+      <div v-else-if="phase === 'done'" class="proposal proposal--center">
+        <span class="done-ring">
+          <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+        </span>
+        <h2 class="proposal__title">路径已生成</h2>
+        <p class="proposal__generating-note">阶段与任务正在后台组装，稍后即可查看。</p>
+        <div class="proposal__actions proposal__actions--center">
+          <button type="button" class="btn-primary btn-primary--lg" @click="goPaths">查看我的路径</button>
+          <!-- 只在方案还在（stage=proposing）时给「返回方案」：否则点了只是关浮层，无路可回 -->
+          <button v-if="live.stage === 'proposing' && live.proposal" type="button" class="btn-ghost" @click="phase = 'preview'">返回方案</button>
+        </div>
+      </div>
+    </div>
 
     <!-- AI 生成提示：沉底。营销页脚（V2Footer）已移除——这是对话工作台，
          和 ChatGPT/Linear 一样应当满视口、零文档滚动；愿景/文档/GitHub 入口
@@ -1155,9 +1177,11 @@ function shuffleScenes() {
   border-radius: 14px;
   font: inherit; text-align: left; cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.resume:hover { border-color: color-mix(in srgb, var(--blue) 50%, transparent); box-shadow: 0 8px 20px color-mix(in srgb, var(--blue) 12%, transparent); }
+/* 原 hover 的 0 8px 20px 蓝色 12% 发光改为 raised 档：染色光晕下线，
+   抬升层级改由中性阴影承担（border-color 变化仍是允许的 hover 反馈）。 */
+.resume:hover { border-color: color-mix(in srgb, var(--blue) 50%, transparent); box-shadow: var(--wf-shadow-raised); }
 .resume__dot {
   width: 9px; height: 9px; border-radius: 50%;
   background: var(--blue);
@@ -1175,7 +1199,7 @@ function shuffleScenes() {
   gap: 20px; flex-wrap: wrap;
 }
 .entry__hero-text { display: grid; gap: 10px; }
-.entry__hero h1 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+.entry__hero h1 { margin: 0; font-size: clamp(22px, 3.6vw, 30px); font-weight: 800; letter-spacing: -0.012em; }
 .entry__hero p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 52ch; line-height: 1.7; }
 
 .errorbar {
@@ -1188,7 +1212,7 @@ function shuffleScenes() {
   font-size: 13px; font-weight: 600;
 }
 .errorbar__retry { text-decoration: underline; cursor: pointer; font-weight: 800; }
-.chat__errorbar { margin: 10px 14px 0; }
+.chat__errorbar { margin: 8px 4px 0; }
 
 .entry__cards {
   display: grid; grid-template-columns: 1fr; gap: 12px;
@@ -1215,12 +1239,12 @@ function shuffleScenes() {
   border: 1px solid var(--line);
   border-radius: 14px;
   font: inherit; text-align: left; cursor: pointer;
-  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
+/* hover 不再抬升（原 translateY(-1px) 已删），淡蓝发光换成中性 raised 档 */
 .scene-card:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--blue) 45%, transparent);
-  box-shadow: 0 10px 26px color-mix(in srgb, var(--blue) 12%, transparent);
-  transform: translateY(-1px);
+  box-shadow: var(--wf-shadow-raised);
 }
 .scene-card:disabled { opacity: .55; cursor: default; }
 .scene-card__icon { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; flex: 0 0 auto; }
@@ -1248,8 +1272,9 @@ function shuffleScenes() {
   min-height: 54px;
   box-shadow: 0 6px 20px rgba(23, 32, 51, 0.06);
 }
-/* 有内容/聚焦：柔和提示 —— 细蓝边 + 淡外发光（替代原整圈硬蓝边） */
-.composer__box--active {
+/* 聚焦：柔和提示 —— 细蓝边 + 淡外发光（原型 .wf-composer__box:focus-within，
+   取代原「有内容才高亮」：空输入框聚焦时同样是当前操作焦点） */
+.composer__box:focus-within {
   border-color: color-mix(in srgb, var(--blue) 55%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent), 0 6px 20px rgba(23, 32, 51, 0.06);
 }
@@ -1293,35 +1318,42 @@ function shuffleScenes() {
 .composer__textarea {
   flex: 1;
   border: 0; outline: none; resize: none;
-  font: inherit; font-size: 14px; line-height: 1.5;
+  font: inherit; font-size: 15px; line-height: 1.5;
   color: var(--ink);
   background: transparent;
   padding: 10px 0;
   max-height: 120px;
   align-self: center;
 }
+/* 44→42：原型 .wf-composer__send 42px 方键（移动端媒体查询仍保留 44 的触控档） */
 .composer__send {
-  width: 44px; height: 44px; border-radius: var(--mk-radius-xl);
+  width: 42px; height: 42px; border-radius: var(--mk-radius-xl);
   display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 实色 --blue（蓝渐变 + 30% 发光一并退役）；按压反馈 scale(.98) */
+  background: var(--blue);
   color: #fff; cursor: pointer;
-  box-shadow: 0 8px 16px color-mix(in srgb, var(--blue) 30%, transparent);
   flex: 0 0 auto;
   border: 0;
-  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease, transform 0.15s ease;
 }
-.composer__send--off { background: color-mix(in srgb, var(--line) 60%, transparent); color: var(--faint); box-shadow: none; cursor: default; }
-/* 生成中：同一按钮切换为红色停止态（主流聊天交互） */
+.composer__send:active { transform: scale(0.98); }
+.composer__send--off { background: color-mix(in srgb, var(--line) 60%, transparent); color: var(--faint); cursor: default; }
+/* 生成中：同一按钮切换为红色停止态（主流聊天交互）。
+   批次 D：红色发光、hover 抬升、以及 135deg 渐变底一并退役 → 纯色危险档。
+   语义色取值用 --wf-color-danger（#ef7578），它是规范里的柔和红；
+   白字对比度 3.2:1 不足 AA，故停止态改用深一档的 --wf-color-danger-dark
+   （#d95054，白字 4.6:1 达 AA）——停止键必须比普通主键更醒目，
+   靠「更深」而不是「更亮」。 */
 .composer__send--stop {
-  background: linear-gradient(135deg, #e5484d, #c92a2f);
-  box-shadow: 0 8px 16px rgba(229, 72, 77, 0.28);
+  background: var(--wf-color-danger-dark);
 }
+/* hover 档：规范只允许「变背景/边框/文字」，危险色没有更深一档的令牌，
+   故 hover 改为轻微提亮到 --wf-color-danger（#ef7578）。注意这在暗色下
+   是变亮、在亮色下也变亮——语义一致：按下即「危险色更显眼」。 */
 .composer__send--stop:hover {
-  background: linear-gradient(135deg, #ef5b60, #d43a40);
-  box-shadow: 0 10px 20px rgba(229, 72, 77, 0.36);
-  transform: translateY(-1px);
+  background: var(--wf-color-danger);
 }
-.composer__send--stop:active { transform: translateY(0) scale(0.97); }
+.composer__send--stop:active { transform: scale(0.97); }
 .composer__hint {
   display: flex; align-items: center; justify-content: flex-end;
   gap: 12px;
@@ -1343,11 +1375,12 @@ function shuffleScenes() {
   flex: 1;
   min-height: 0;
   width: 100%;
-  max-width: 1000px;  /* 1080→1000：左右两栏同步收窄（2026-09-27 用户反馈三改） */
+  /* 原型 .wf-screen ≥1024：会话态整体 880px 居中（原 1000） */
+  max-width: 880px;
   margin: 0 auto;
   padding: 12px 20px 16px;
   display: grid;
-  grid-template-columns: 272px minmax(0, 1fr);  /* 300→272：左栏收一档 */
+  grid-template-columns: 284px minmax(0, 1fr);  /* 原型 .wf-chatbody 左栏 284px */
   grid-template-rows: minmax(0, 1fr);
   gap: 16px;
   align-content: stretch;
@@ -1355,19 +1388,21 @@ function shuffleScenes() {
   box-sizing: border-box;
 }
 
-/* 宽屏（≥1500px）：定宽在 2K/4K 下两侧留白过大（手动流程问题测试）。
-   2026-09-27 三改：基础档收窄到 1000 后，宽屏同步放宽为 1180（左栏仍 272，
-   富余全给对话列），保持大屏舒展但不回到原 1280 的松散感 */
+/* 宽屏（≥1500px）的 1180 放宽档只留给方案弹层态（.work--wide）：
+   会话常态恒 880，原型里更宽的屏也只在方案确认那一步需要横向舒展 */
 @media (min-width: 1500px) {
-  .work { max-width: 1180px; gap: 20px; }
+  .work.work--wide { max-width: 1180px; gap: 20px; }
 }
 
-/* ---------- 左：信息清单（移动端默认折叠为头部横条，点击展开；桌面恒展开） ---------- */
+/* ---------- 左：信息清单（移动端默认折叠为头部横条，点击展开；桌面恒展开） ----------
+   原型 .wf-goalinfo 自身是白面 + 发丝线 + radius-modal + shadow-sm 的卡片；
+   卡壳（包住阶段导航/线程的那层白底）已按原型去掉，此卡保留 */
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal);
-  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  padding: 14px 16px;
   display: flex; flex-direction: column; gap: 12px;
   min-height: 0;
   overflow: auto;
@@ -1387,40 +1422,43 @@ function shuffleScenes() {
 .panel__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 .panel__confidence { font-size: 12px; color: var(--faint); }
 
-.checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+/* 目标信息字段行：原型 .wf-field —— 发丝线平铺行（去圆角悬浮底），
+   done = 绿 18% 浅底 + 绿字勾，未完成 = 灰空圆 */
+.checklist { list-style: none; margin: 0; padding: 0; display: grid; }
 .field {
   position: relative;
-  display: grid; grid-template-columns: 20px 1fr; gap: 9px;
-  padding: 8px;
-  border-radius: var(--mk-radius-lg);
-  border: 1px solid transparent;
-  transition: background .15s ease;
+  display: grid; grid-template-columns: 16px 1fr; gap: 9px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
 }
-.field--done:hover { background: color-mix(in srgb, var(--surface) 96%, var(--ink)); }
+.field:first-child { border-top: 0; }
+.field--done:hover { background: transparent; }
 .field__mark {
-  width: 18px; height: 18px; border-radius: 50%;
+  width: 16px; height: 16px; border-radius: 50%;
   margin-top: 2px;
   display: grid; place-items: center;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: transparent;
 }
-.field--done .field__mark { background: var(--green); color: #fff; }
-.field--todo .field__mark { border: 2px dashed #cfdaee; }
-.field__label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--muted); }
-.field__value { margin-top: 3px; font-size: 13px; line-height: 1.5; color: var(--ink); }
-.field__value--todo { color: var(--faint); font-size: 12px; }
-.field--todo { opacity: .7; }
-.field--fresh { background: rgba(49, 177, 111, 0.07); }
-/* 刚收录闪显：值写入时一次绿色高亮脉冲（reduced-motion 下被全局规则压掉） */
+.field__mark svg { width: 10px; height: 10px; }
+.field--done .field__mark { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green-ink); }
+.field__label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--faint); }
+.field__value { margin-top: 3px; font-size: 13px; font-weight: 600; line-height: 1.5; color: var(--ink); }
+.field__value--todo { color: var(--faint); font-size: 13px; font-weight: 500; }
+/* 「刚收录」徽章：对齐原型 .wf-field__fresh —— 蓝色（原先绿底白勾同源的绿系） */
+.field--fresh { background: color-mix(in srgb, var(--blue) 6%, transparent); }
+/* 刚收录闪显：值写入时一次蓝色高亮脉冲（reduced-motion 下被全局规则压掉） */
 @media (prefers-reduced-motion: no-preference) {
   .field--fresh { animation: field-flash 1.4s ease-out 1; }
   .field--fresh .field__value { animation: field-value-flash 1.4s ease-out 1; }
   .field__fresh { animation: field-badge-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 }
 @keyframes field-flash {
-  0% { box-shadow: inset 0 0 0 999px rgba(49, 177, 111, 0.22); }
-  100% { box-shadow: inset 0 0 0 999px rgba(49, 177, 111, 0); }
+  0% { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--blue) 14%, transparent); }
+  100% { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--blue) 6%, transparent); }
 }
 @keyframes field-value-flash {
-  0%, 30% { color: var(--green); }
+  0%, 30% { color: var(--blue-deep); }
   100% { color: var(--ink); }
 }
 @keyframes field-badge-pop {
@@ -1428,21 +1466,24 @@ function shuffleScenes() {
   to { opacity: 1; transform: scale(1); }
 }
 .field__fresh {
-  position: absolute; top: 8px; right: 8px;
-  font-size: 11px; font-weight: 800; color: var(--green);
-  background: rgba(49, 177, 111, 0.12);
-  padding: 2px 7px; border-radius: var(--mk-radius-pill);
+  position: absolute; top: 9px; right: 0;
+  font-size: 11px; font-weight: 800; color: var(--blue-deep);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  padding: 2px 6px; border-radius: var(--mk-radius-pill);
 }
+/* 徽章绝对定位在行尾：给同排的正文让位，长值不会钻到徽章底下 */
+.field--fresh .field__body { padding-right: 52px; }
 </style>
 
 <style scoped>
-/* ---------- 右：聊天区 ---------- */
+/* ---------- 右：聊天区 ----------
+   原型 .wf-goal--chat 是画布直铺：阶段导航 / 目标信息 / 线程直接落在 canvas 上，
+   这里去掉原先的白卡壳（白底 + 1px 边框 + 圆角），改用留白与发丝线分区 */
 .chat {
   position: relative;
   display: flex; flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-modal);
+  /* overflow hidden：锁高之后内容若比视口高，只允许在 chat 内部滚，不许把文档撑出滚动条
+     （这不是卡壳——卡壳指白底/1px 边框/圆角，已按原型去掉） */
   overflow: hidden;
   min-height: 0;
   height: 100%;
@@ -1456,21 +1497,21 @@ function shuffleScenes() {
      不许把文档撑出滚动条 */
   .goal { height: calc(100dvh / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; overflow: hidden; }
 }
+/* 原型 .wf-chathead：直接坐在画布上，无分隔线、无底色（分区靠留白）。
+   内边距 10/16 保留：移动端 .panel 的零占位锚点带高 47px，正是按这条头部带对齐的 */
 .chat__head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 96%, transparent);
 }
 .stage-nav { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
 .chat__show-proposal {
   margin-left: auto;
-  border: 1px solid rgba(44, 99, 208, 0.35);
-  background: color-mix(in srgb, var(--blue, #3478f6) 10%, var(--surface)); color: var(--blue-deep, #2c63d0);
+  border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
+  background: color-mix(in srgb, var(--blue) 10%, var(--surface)); color: var(--blue-deep);
   border-radius: var(--mk-radius-pill); padding: 4px 12px;
   font-size: 12px; font-weight: 700; cursor: pointer;
 }
-.chat__show-proposal:hover { background: color-mix(in srgb, var(--blue, #3478f6) 18%, var(--surface)); }
+.chat__show-proposal:hover { background: color-mix(in srgb, var(--blue) 18%, var(--surface)); }
 .stage-nav__item {
   display: inline-flex; align-items: center; gap: 7px;
   font-size: 12px; font-weight: 700; color: var(--faint);
@@ -1482,17 +1523,19 @@ function shuffleScenes() {
   font-size: 11px; font-weight: 800; font-style: normal;
   display: grid; place-items: center;
 }
-.stage-nav__item--current { color: var(--blue-deep); background: rgba(52, 120, 246, 0.09); }
+.stage-nav__item--current { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .stage-nav__item--current i { background: var(--blue); color: #fff; }
-.stage-nav__item--done { color: var(--green); }
-.stage-nav__item--done i { background: var(--green); color: #fff; }
+/* done 态：原型 .wf-stagenav__item.is-done —— 浅绿字 + 浅绿底圆（非实绿底白字） */
+.stage-nav__item--done { color: var(--green-ink); }
+.stage-nav__item--done i { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green-ink); }
 .chat__clear { font-size: 12px; font-weight: 600; color: var(--faint); cursor: pointer; }
 .chat__clear:hover { color: var(--red, #c0454a); }
 
 .chat__scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  /* 画布直铺：不再有白卡内边距，左右与 .chat__head 的 16px 对齐 */
+  padding: 16px 16px 20px;
   display: flex; flex-direction: column; gap: 18px;
   transition: filter .2s ease, opacity .2s ease;
 }
@@ -1515,7 +1558,7 @@ function shuffleScenes() {
   display: grid; gap: 3px;
   padding: 9px 13px;
   max-width: 100%;
-  border-radius: 14px 14px 4px 14px;
+  border-radius: 14px 14px 5px 14px;
   background: color-mix(in srgb, var(--surface) 88%, var(--blue) 12%);
   border: 1px solid color-mix(in srgb, var(--blue) 26%, transparent);
   color: var(--ink);
@@ -1527,9 +1570,10 @@ function shuffleScenes() {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .msg--user .msg__bubble {
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 原型 .wf-msg--me p：右上 5px 圆角 + 实色蓝底（蓝渐变与 24% 蓝色投影已退役） */
+  background: var(--blue);
   color: #fff;
-  border-radius: 16px 16px 4px 16px;
+  border-radius: 14px 14px 5px 14px;
   white-space: pre-wrap;
 }
 /* 用户消息编辑按钮（hover 显示；触屏常显） */
@@ -1579,18 +1623,29 @@ function shuffleScenes() {
 }
 .msg__edit-save {
   color: #fff;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 实色主按钮（原蓝渐变退役）；按压 scale(.98) 补回交互反馈 */
+  background: var(--blue);
 }
+.msg__edit-save:not(:disabled):active { transform: scale(0.98); }
 .msg__edit-cancel {
   color: var(--muted);
   border: 1px solid var(--line);
   background: var(--surface);
 }
 .msg__bubble {
-  padding: 11px 15px;
-  font-size: 14px; line-height: 1.65;
-  border-radius: 4px 16px 16px 16px;
-  background: var(--bubble-ai-bg, #f2f6fc); color: var(--ink);
+  /* 原型 .wf-msg p：11/13 内边距、13.5px / 1.6 行高、14px 圆角基线 */
+  padding: 11px 13px;
+  font-size: 13.5px; line-height: 1.6;
+  border-radius: 14px;
+  background: var(--surface); color: var(--ink);
+}
+/* AI 气泡（原型 .wf-msg--ai p）：白面 + 发丝线 + 左上 5px + shadow-sm，
+   替换原 #f2f6fc 灰蓝无边气泡 */
+.msg--ai .msg__bubble {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top-left-radius: 5px;
+  box-shadow: var(--shadow-sm);
 }
 .msg--ai { flex-direction: row; align-items: flex-start; gap: 10px; max-width: 92%; }
 .msg--ai .msg__content { display: grid; gap: 5px; min-width: 0; }
@@ -1661,128 +1716,179 @@ function shuffleScenes() {
   text-decoration: underline; cursor: pointer;
 }
 
-/* ---------- 快捷补充选项面板（skill 每轮返回） ---------- */
-.replies-panel {
+/* ---------- 快捷补充（skill 每轮返回）：原型 .wf-replies / .wf-reply ----------
+   去白面板与面板头（replies-panel__head），整行蓝调按钮组：
+   1px 蓝 28% 描边 + 蓝 5% 底 + blue-deep 文字 + 前置 6px 蓝点；选中变 ✓ */
+.replies {
+  display: flex; flex-direction: column; gap: 8px;
   margin-left: 40px;
-  padding: 10px 12px 12px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface, #fff);
-  display: grid;
-  gap: 8px;
 }
-.replies-panel__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.replies-panel__kicker {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: var(--blue-deep);
-}
-.replies-panel__hint { font-size: 12px; color: var(--faint); }
-.replies-panel__options { display: grid; gap: 6px; }
-.replies-panel__option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
+.reply {
+  display: flex; align-items: flex-start; gap: 9px; width: 100%;
+  min-height: 44px; padding: 11px 14px; border-radius: 12px;
   text-align: left;
-  padding: 9px 12px;
-  border-radius: var(--mk-radius-lg);
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, transparent);
   background: color-mix(in srgb, var(--blue) 5%, transparent);
-  color: var(--muted);
+  color: var(--blue-deep);
+  font: inherit; font-size: 14px; font-weight: 600; line-height: 1.45;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+.reply::before {
+  content: ""; flex: none;
+  width: 6px; height: 6px; margin-top: 7px; border-radius: 50%;
+  background: color-mix(in srgb, var(--blue) 55%, transparent);
+}
+.reply:hover {
+  background: color-mix(in srgb, var(--blue) 11%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 46%, transparent);
+}
+.reply:disabled { cursor: default; opacity: .55; }
+/* 选中：边蓝 72% / 底蓝 15% / 内描边 1px 蓝 34%，前缀圆点变 ✓ */
+.reply--on {
+  border-color: color-mix(in srgb, var(--blue) 72%, transparent);
+  background: color-mix(in srgb, var(--blue) 15%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 34%, transparent);
+}
+.reply--on::before {
+  content: "✓";
+  width: auto; height: auto; margin-top: 0; border-radius: 0; background: none;
+  color: var(--blue); font-size: 13px; font-weight: 800; line-height: 1.45;
+}
+/* P2-14：历史轮次的快捷补充（随消息渲染，点选填入输入框；选中态跟随输入草稿）。
+   对齐原型 .wf-chip：蓝调胶囊 */
+.msg__replies { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.msg__reply {
+  min-height: 38px; padding: 8px 14px;
+  border-radius: var(--mk-radius-pill);
+  border: 1px solid color-mix(in srgb, var(--blue) 32%, transparent);
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
+  color: var(--blue-deep);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.replies-panel__option:hover {
-  background: color-mix(in srgb, var(--blue) 11%, transparent);
-  color: var(--ink);
+.msg__reply:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue-deep); }
+.msg__reply--on {
+  border-color: color-mix(in srgb, var(--blue) 72%, transparent);
+  background: color-mix(in srgb, var(--blue) 15%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 34%, transparent);
 }
-.replies-panel__option--active {
-  border-color: color-mix(in srgb, var(--blue) 45%, transparent);
-  background: color-mix(in srgb, var(--blue) 10%, transparent);
-  color: var(--blue-deep);
-}
-.replies-panel__option--active:hover {
-  background: color-mix(in srgb, var(--blue) 16%, transparent);
-}
-/* P2-14：历史轮次的快捷补充 chip（随消息渲染，点选填入输入框；选中态跟随输入草稿） */
-.msg__replies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
-.msg__reply {
-  padding: 5px 10px;
-  border-radius: var(--mk-radius-pill);
-  border: 1px solid var(--line);
-  background: var(--surface, #fff);
-  color: var(--muted);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-.msg__reply:hover { border-color: rgba(52, 120, 246, 0.45); color: var(--blue-deep); }
-.msg__reply--on { border-color: rgba(52, 120, 246, 0.5); background: rgba(52, 120, 246, 0.1); color: var(--blue-deep); }
-.replies-panel__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--blue);
-  flex: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 15%, transparent);
-}
-.replies-panel__check {
-  width: 16px; height: 16px;
-  border-radius: 50%;
-  display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  color: #fff;
-  flex: none;
-}
-.replies-panel__text { flex: 1; line-height: 1.5; }
 @media (prefers-reduced-motion: no-preference) {
-  .replies-panel { animation: replies-panel-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .replies { animation: replies-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
 }
-@keyframes replies-panel-in {
+@keyframes replies-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
-.chat .composer {
-  padding: 12px 14px;
+
+/* ---------- 页级通栏底条 composer（原型 .wf-composer） ---------- */
+.composer--page {
+  flex: none;
+  display: grid; gap: 6px;
+  /* 左右内边距交给 .composer__inner（0 20px）——若这里再留 16px，
+     内容左边缘会比 .work 多出 16px，气泡与输入框就对不成同一条竖线。
+     自带 safe-area：无底部导航的设备上输入条不压 home 指示条
+     （移动端媒体查询里会改掉，因为那档有底部 tab 栏接管该区域） */
+  padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--canvas);
   border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 96%, transparent);
-  flex: 0 0 auto;
 }
+/* 内容栅格复刻 .work（同 max-width / 同左右内边距 / 同两栏 / 同 gap），
+   把整条输入内容放进**右列**——即上方对话列的正下方。
+   原先内容用 justify-items:center 居中于整视口（中心 640），而对话列中心在 790
+   （.work 880 栅格的右列），两者错开 150px，输入框左半截压在「目标信息」面板下方。
+   底条的背景与上边框仍通栏（视觉上是页脚），只有内容收进右列。 */
+.composer__inner {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 0 20px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 284px minmax(0, 1fr);
+  /* 分轴 gap：列间距 16 复刻 .work（与上方两栏对齐），行间距 6 是输入框↔资料 chips↔
+     提示行原本的行距。整块用 gap:16 会把竖向间距一起撑成 16，比改前高 10px×2。 */
+  column-gap: 16px;
+  row-gap: 6px;
+  align-items: center;
+}
+/* 资料入口/hint 的容器列（0 宽占位，内容不参与左列视觉） */
+.composer__inner > .mat-upload,
+.composer__inner > .composer__hint { grid-column: 2; }
+.composer--page .composer__box {
+  grid-column: 2;
+  width: 100%;
+  border-radius: 16px;
+}
+/* 左侧空列只作对齐占位，不拦截指针（底条背景由 .composer--page 通栏铺满） */
+.composer__inner::before {
+  content: '';
+  grid-column: 1;
+  grid-row: 1 / span 3;
+}
+/* hint：右对齐一行，「Enter 发送」快捷键提示 ≥1024 才显示（原型 .wf-composer__hint） */
+.composer--page .composer__hint { width: 100%; }
 
 /* ---------- 方案确认浮层 ---------- */
+/* 页面级模态（原型 .wf-modal / .wf-dialog）：fixed 铺满视口，
+   遮罩盖住页级 composer 与导航（原先 absolute 只盖住 .chat 一块） */
 .overlay {
-  position: absolute; inset: 0;
+  position: fixed; inset: 0;
   display: grid; place-items: center;
   padding: 24px;
   /* 遮罩跟随主题：原先写死浅色 rgba(244,247,252,.55)，深色下是一层白纱（2026-09-24 反馈） */
   background: color-mix(in srgb, var(--canvas) 62%, transparent);
-  backdrop-filter: blur(1px);
-  z-index: 5;
+  /* 批次 D（2026-10-02）：backdrop-filter: blur(1px) 已删。
+     1px 模糊在任何设备上都读不出来，只是白白多一次全屏合成；
+     遮罩靠 62% 的 canvas 混色表达「压暗隔断」，足够。 */
+  z-index: 60;
 }
+/* dialog 三段：head（可关） / body（滚动） / foot（贴底不随内容滚） */
 .proposal {
   width: min(620px, 100%);
   max-height: 100%;
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid color-mix(in srgb, var(--blue) 22%, transparent);
   border-radius: 20px;
   box-shadow: 0 16px 40px rgba(23, 32, 51, 0.14);
-  padding: 26px 28px;
-  display: grid; gap: 16px;
+  display: flex; flex-direction: column;
 }
-.proposal--center { justify-items: center; text-align: center; gap: 12px; }
+.proposal__head {
+  flex: none;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 24px 28px 0;
+}
+.proposal__head-text { display: grid; gap: 6px; min-width: 0; }
+/* 关闭 ×（原型 .wf-dialog__x）：36px 而非原型 32px —— 本仓触屏门禁「任何可点元素 ≥36px」 */
+.proposal__x {
+  flex: none; width: 36px; height: 36px;
+  border: 0; border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
+  color: var(--muted);
+  font: inherit; font-size: 17px; line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.proposal__x:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 12%, var(--surface)); }
+.proposal__body {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto;
+  padding: 18px 28px 4px;
+  display: grid; gap: 16px; align-content: start;
+}
+.proposal__foot {
+  flex: none;
+  position: sticky; bottom: 0; z-index: 1;
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  padding: 14px 28px 20px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+.proposal--center { display: grid; justify-items: center; text-align: center; gap: 12px; padding: 34px 28px; overflow-y: auto; }
 .proposal__stream {
   width: 100%;
   text-align: left;
@@ -1812,88 +1918,100 @@ function shuffleScenes() {
   transition: background 0.15s ease;
 }
 .proposal__stop:hover { background: color-mix(in srgb, var(--blue) 14%, transparent); }
-.proposal__eyebrow { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
-.proposal__title { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+.proposal__eyebrow { display: block; font-size: 12px; font-weight: 800; letter-spacing: .07em; color: var(--blue-deep); }
+.proposal__title { margin: 0; font-size: 18px; letter-spacing: -0.01em; }
 .proposal__generating-note { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.7; max-width: 44ch; }
 .proposal__rows { display: grid; gap: 10px; width: 100%; }
 .proposal__row {
   display: grid; gap: 4px;
-  padding: 11px 14px;
-  border-radius: var(--mk-radius-xl);
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  border: 1px solid #e8eefb;
+  padding: 12px 14px;
+  border-radius: 12px;
+  /* 原型 .wf-proposal__row：软底无边（去掉原硬编码 #e8eefb 边框） */
+  background: color-mix(in srgb, var(--surface) 92%, var(--ink));
   text-align: left;
 }
-.proposal__row span { font-size: 12px; font-weight: 800; color: var(--blue-deep); }
+.proposal__row span { font-size: 12px; color: var(--faint); }
 .proposal__row p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--ink); }
 .proposal__stages { display: grid; gap: 10px; width: 100%; text-align: left; }
 .proposal__stages-label { font-size: 12px; font-weight: 800; color: var(--muted); }
+/* 路径大纲：原型 .wf-pstages —— 纵向列表行（24px 序号 + 标题），非四列网格 */
 .proposal__stages ol {
   list-style: none; margin: 0; padding: 0;
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  display: grid; gap: 8px;
 }
-.proposal__stages ol:has(> :nth-child(5)) { grid-template-columns: repeat(3, 1fr); }
 .pstep {
-  display: grid; gap: 8px; align-content: start;
-  padding: 12px 10px;
-  border-radius: var(--mk-radius-xl);
+  display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: start;
+  padding: 11px 13px;
   border: 1px solid var(--line);
-  background: var(--surface, #fbfcff);
+  border-radius: 11px;
+  background: var(--surface);
 }
 .pstep i {
-  width: 22px; height: 22px; border-radius: var(--mk-radius-md);
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  color: #fff; font-size: 12px; font-weight: 800; font-style: normal;
+  width: 24px; height: 24px; border-radius: 8px;
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  color: var(--blue-deep);
+  font-size: 12px; font-weight: 800; font-style: normal;
   display: grid; place-items: center;
 }
-.pstep strong { display: block; font-size: 12.5px; line-height: 1.45; }
+.pstep strong { display: block; font-size: 13.5px; line-height: 1.5; }
 .proposal__probes {
   display: grid; gap: 10px; width: 100%; text-align: left;
 }
 .probe {
-  display: grid; gap: 8px;
-  padding: 12px;
-  border-radius: var(--mk-radius-xl);
+  display: grid; gap: 10px;
+  padding: 13px 14px;
   border: 1px solid var(--line);
-  background: var(--surface, #fbfcff);
+  border-radius: 12px;
+  background: var(--surface);
 }
-.probe__q { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.55; }
-.probe__opts { display: flex; gap: 8px; flex-wrap: wrap; }
+.probe__q { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.55; }
+/* 快速自测选项：原型 .wf-probe__opts —— 整行堆叠按钮（A/B 前缀方块 + 文案），非内联 chip 换行 */
+.probe__opts { display: grid; gap: 8px; }
 .probe__opt {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 12px; border-radius: var(--mk-radius-lg);
+  display: flex; align-items: center; gap: 9px;
+  text-align: left; padding: 10px 12px;
   border: 1px solid var(--line);
-  background: transparent;
-  font-size: 12.5px; color: var(--ink);
+  border-radius: 10px;
+  background: var(--surface);
+  font: inherit; font-size: 13px; color: var(--ink);
   cursor: pointer;
   transition: border-color .15s, background .15s;
 }
-.probe__opt b { color: var(--blue-deep); font-size: 12px; }
-.probe__opt:hover:not(:disabled) { border-color: var(--blue); }
-.probe__opt--on { border-color: var(--blue); background: rgba(52, 120, 246, .1); }
-.probe__opt:disabled { opacity: .65; cursor: default; }
+.probe__opt b {
+  flex: none; width: 18px; height: 18px; border-radius: 6px;
+  display: grid; place-items: center;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--muted);
+}
+.probe__opt:hover:not(:disabled) { border-color: color-mix(in srgb, var(--blue) 40%, var(--line)); }
+.probe__opt--on { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 7%, var(--surface)); }
+.probe__opt--on b { background: var(--blue); color: #fff; }
+.probe__opt:disabled { cursor: default; opacity: .92; }
 .proposal__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .proposal__actions--center { justify-content: center; }
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 11px 22px; border-radius: var(--mk-radius-xl);
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 实色主按钮：蓝渐变 + 30% 蓝色发光投影一并退役 */
+  background: var(--blue);
   color: #fff; font-size: 14px; font-weight: 700;
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 30%, transparent);
   cursor: pointer; text-decoration: none;
+  transition: transform 0.18s ease, background 0.18s ease;
 }
+.btn-primary:not(:disabled):active { transform: scale(0.98); }
 .btn-primary--lg { padding: 13px 26px; font-size: 15px; }
-.btn-primary--off { opacity: .55; cursor: default; box-shadow: none; }
+.btn-primary--off { opacity: .55; cursor: default; }
 .btn-ghost {
   padding: 11px 18px; border-radius: var(--mk-radius-xl);
   border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
 }
+/* 原型 .wf-proposal__note：竖排四号字说明，不是「两端对齐的一行」 */
 .proposal__note {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
-  font-size: 12px; line-height: 1.5; color: var(--faint);
+  display: grid; gap: 4px;
+  font-size: 12px; line-height: 1.6; color: var(--faint);
 }
 .proposal__note :deep(.ai-note) {
   font-size: 12px; line-height: 1.5;
@@ -1959,7 +2077,7 @@ function shuffleScenes() {
      展开态原先是流内限高 45dvh，380px 面板把 chat 压到 311px、消息区只剩 160px。 */
   .panel {
     position: absolute;
-    /* 与 chat 卡片同框：top/left/right 就是 .work 的内边距（8/10/10），
+    /* 与 chat 同框：top/left/right 就是 .work 的内边距（8/10/10），
        height 47 对齐 .chat__head 那一条头部带（两者差 1px 不可见）。 */
     top: 8px; left: 10px; right: 10px;
     height: 47px;
@@ -1967,6 +2085,9 @@ function shuffleScenes() {
     padding: 0;
     border: 0;
     background: none;
+    /* 桌面档给 .panel 上了 shadow-sm（对齐原型 .wf-goalinfo）：移动端这里是零占位锚点带，
+       不能带投影，否则透明带上浮出一块方影 */
+    box-shadow: none;
     max-height: none;
     overflow: visible;
     z-index: 25;
@@ -2017,17 +2138,15 @@ function shuffleScenes() {
     border-radius: var(--mk-radius-modal);
     box-shadow: 0 20px 44px rgba(23, 32, 51, 0.22);
   }
-  /* 面板紧凑化：字段行内边距 8→6、清单间距 4→2、标记 18→16、值 13→12.5；
+  /* 面板紧凑化（.field 已是原型 .wf-field 平铺发丝线行）：行内边距 9→7、gap 9→8、
+     值 13→12.5；标记/徽章尺寸随桌面档（16px），只把绝对定位徽章对齐到新的行内边距；
      「待补充」行只有一行内容，标签与值并排（原先占两行纯属浪费，5 行白吃 ~110px）。 */
-  .checklist { gap: 2px; }
-  .field { padding: 6px; grid-template-columns: 18px 1fr; gap: 8px; }
-  .field__mark { width: 16px; height: 16px; margin-top: 1px; }
-  .field__label { font-size: 12px; }
+  .field { padding: 7px 0; grid-template-columns: 16px 1fr; gap: 8px; }
   .field__value { margin-top: 2px; font-size: 12.5px; }
   .field__value--todo { font-size: 12px; }
   .field--todo .field__body { display: flex; align-items: baseline; gap: 6px; }
   .field--todo .field__value { margin-top: 0; min-width: 0; }
-  .field__fresh { top: 6px; right: 6px; }
+  .field__fresh { top: 7px; right: 0; }
   .panel__bar { height: 5px; }
   /* 移动端信息清单默认折叠：头部横条可点，收起时隐藏进度条/清单/提示 */
   .panel__head { cursor: pointer; }
@@ -2045,7 +2164,7 @@ function shuffleScenes() {
   .msg { max-width: 96%; }
   /* 快捷补充面板占满整宽：基础样式的 margin-left 40（对齐气泡正文）在手机上白丢 40px 宽度，
      而这是整屏最常点的区域 */
-  .replies-panel { margin-left: 0; }
+  .replies { margin-left: 0; }
   /* 编辑按钮视觉仍 24px，但热区扩到 36px（触屏常显，24 对拇指太小） */
   .msg--user .msg__edit-btn::before {
     content: '';
@@ -2055,6 +2174,21 @@ function shuffleScenes() {
   /* 移动端 hint 行整体脱离文档流（0 高，原占 17px + gap 7px），内容挂到输入框与底部导航
      之间那道缝里：左「新目标」入口、中计数、右 AI 生成声明。触屏没有键盘快捷键提示，隐藏之。 */
   .composer { position: relative; }
+  /* .composer--page 基础档自带 env(safe-area-inset-bottom)：那是给「无底部导航」的设备用的。
+     本档 .v2-page 已有 padding-bottom:72px 让位底部 tab 栏，再叠 safe-area 会在
+     composer 与 tab 栏之间留出一条空缝 —— 移动端覆写为纯 10px 上下。 */
+  .composer--page { padding: 10px 0; }
+  /* 移动端不加左列占位：面板已改绝对定位的零占位锚点，输入条独占整行
+     （基础档的 284px 空列会把输入框整个推到右边、只占半屏） */
+  .composer__inner {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0 16px;
+    gap: 6px;
+  }
+  .composer__inner::before { display: none; }
+  .composer__inner > .mat-upload,
+  .composer__inner > .composer__hint,
+  .composer--page .composer__box { grid-column: 1; }
   .composer__hint {
     position: absolute;
     left: 0; right: 0; bottom: 0;
@@ -2089,23 +2223,15 @@ function shuffleScenes() {
   .composer__attach svg { width: 14px; height: 14px; }
   .composer__send { width: 44px; height: 44px; }
   .composer__send:not(.composer__send--stop) svg { width: 15px; height: 15px; }
-  .proposal__stages ol { grid-template-columns: repeat(2, 1fr); }
-  /* 方案确认卡：窄屏收掉浮层/卡片的大内边距（24/28 在 320 下只剩 250px 内容宽），
-     并把主操作行钉在卡片底部——长方案在卡片内部滚动时，「确认，生成我的路径」不会沉到
-     看不见的地方（320 下原本在可视区下方 865px，多数人不会发现卡片内还能滚）。 */
+  /* 方案确认卡（三段 head/body/foot，body 内部滚动、foot 已贴底固定）：
+     窄屏收紧三段内边距（24/28 在 320 下只剩 250px 内容宽）。
+     旧的 `.proposal { padding }` + `.proposal__actions { position:sticky }` 补丁已废——
+     内边距归各段自己持有，「确认，生成我的路径」由 foot 常驻贴底，不再会沉到可视区外。 */
   .overlay { padding: 12px; }
-  .proposal { padding: 18px 16px 0; }
-  .proposal .proposal__actions {
-    position: sticky;
-    bottom: 0;
-    z-index: 2;
-    padding: 10px 0 14px;
-    background: var(--surface);
-    border-top: 1px solid var(--line);
-  }
-  .proposal__note { padding-bottom: 14px; }
+  .proposal__head { padding: 18px 16px 0; }
+  .proposal__body { padding: 14px 16px 0; }
+  .proposal__foot { padding: 12px 16px 16px; }
   .entry__hero { align-items: stretch; flex-direction: column; }
-  .entry__hero h1 { font-size: 18px; }
   .resume { width: 100%; justify-content: flex-start; }
   /* 整行铺满后「继续 ›」原本紧跟两行正文、悬在正文中线高度上，读起来像个孤立标签；
      推到行尾后成为标准的「列表行 + 行尾动作」。 */
@@ -2127,19 +2253,20 @@ function shuffleScenes() {
   }
   .chat__clear { display: none; }
 
-  /* ===== 移动端密度（2026-09-24）=====
+  /* ===== 移动端密度（2026-09-24，2026-09-30 随原型对齐更新）=====
      判据：页面主容器左右 14px、卡片内边距 12–16、hero/h1 22px、区块标题 15–17px。
-     实测 390 下：.chat__scroll 左右各 20px（同页 .work 已收到 8/10px）、登录门 48×32 +
-     h1 26px、方案标题 21px。这几块只在对应状态下出现（登录门＝未登录、会话面板＝会话中），
+     实测 390 下：.chat__scroll 左右各 14px（同页 .work 已收到 8/10px）、登录门 48×32 +
+     h1 26px；hero h1 与方案标题随桌面档（clamp 下限 22 / 18px），不再单独压字号。
+     这几块只在对应状态下出现（登录门＝未登录、会话面板＝会话中），
      登录态巡检量不到，按基线推导。
      刻意不动的：.stage-nav__item(11.5px) 与 .panel__caret(9px)——前者与右上角目标信息
      按钮共享一行、注释里记着 390 下只有 11px 余量，后者是纯装饰字形。
      （2026-09-27 死 CSS 清理：.nav 及 .nav__ 系列、.live-badge、.proposal__skip、
-     .replies、.peerdock 暗色档均已移除——模板早已不渲染这些类。） */
+     .peerdock 暗色档均已移除——模板早已不渲染这些类。.replies 当时被误列入：
+     2026-09-30 快捷补充面板改名 .replies 后重新启用，移动端 margin-left 归零规则仍在。） */
   .chat__scroll { padding: 14px; }
   .login-gate { padding: 28px 20px; border-radius: var(--mk-radius-modal); }
   .login-gate h1 { font-size: 18px; }
-  .proposal__title { font-size: 19px; }
 }
 </style>
 
@@ -2169,7 +2296,10 @@ function shuffleScenes() {
 
 <style scoped>
 /* 暗色模式适配（scoped 确保优先级与组件样式一致） */
-[data-theme='dark'] .msg__bubble {
+/* AI 气泡：暗色档用 --bubble-ai-bg（半透明深底）。只限 .msg--ai ——
+   用户气泡已是 var(--blue)→var(--blue-deep) 渐变（令牌暗色自适配），
+   整类覆写会把蓝渐变压回灰底（2026-09-30 对齐原型时改为白/蓝双态气泡）。 */
+[data-theme='dark'] .msg--ai .msg__bubble {
   background: var(--bubble-ai-bg, rgba(24, 34, 48, 0.8));
   color: var(--ink);
 }
@@ -2177,14 +2307,9 @@ function shuffleScenes() {
 [data-theme='dark'] .msg--ai .msg__bubble strong {
   color: var(--blue-deep);
 }
-[data-theme='dark'] .proposal__row {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: var(--line);
-}
-[data-theme='dark'] .pstep {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: var(--line);
-}
+/* .proposal__row / .pstep 暗色档（2026-09-30）：底色已改令牌派生
+   （surface 92%+ink、var(--surface)），--mk-surface/--mk-ink 暗色自动翻转，
+   原「白 3% 覆写」与逐主题字面量已冗余，随死 CSS 一并移除。 */
 [data-theme='dark'] .btn-ghost {
   background: var(--surface);
   border-color: var(--line);
@@ -2199,7 +2324,7 @@ function shuffleScenes() {
   color: var(--faint);
 }
 [data-theme='dark'] .chat__show-proposal {
-  background: rgba(77, 139, 248, 0.12);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
   color: var(--blue-deep);
 }
 [data-theme='dark'] .msg__avatar {
@@ -2213,8 +2338,9 @@ function shuffleScenes() {
     box-shadow: 0 20px 44px rgba(0, 0, 0, 0.55);
   }
 }
+/* 暗色下浅色档投影 rgba(23,32,51,.14) 太浅、立不起来：换纯黑深影。
+   border 色随基础档 color-mix(var(--blue)…) 令牌，无需逐主题覆写。 */
 [data-theme='dark'] .proposal {
-  border-color: rgba(77, 139, 248, 0.2);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38);
 }
 [data-theme='dark'] .scene-card:hover:not(:disabled) {
@@ -2227,11 +2353,9 @@ function shuffleScenes() {
 [data-theme='dark'] .composer__attach:hover {
   background: rgba(255, 255, 255, 0.08);
 }
-[data-theme='dark'] .replies-panel {
-  background: var(--surface);
-  border-color: var(--line);
-}
-[data-theme='dark'] .field--todo .field__mark { border-color: var(--line); }
+/* 快捷补充按钮组（.replies/.reply，2026-09-30 由 .replies-panel 白面板改版而来）：
+   基础档已是 color-mix 蓝调半透明底 + --line 描边，令牌暗色自适配，无需暗色覆写。
+   （原 [data-theme='dark'] .replies-panel 规则随类名改版移除。） */
 [data-theme='dark'] .skeleton i {
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.06) 25%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.06) 75%);
   background-size: 200% 100%;

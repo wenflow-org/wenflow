@@ -123,6 +123,56 @@
         </aside>
       </div>
 
+      <!-- 账号安全（2026-09-30 自 Profile.vue 账户段整体迁入）：
+           原型账户段（index.html 2038-2069）只有 资料卡 + 3 KPI + 快捷入口，
+           「修改密码 / 注销账号」两张双栏卡属设置页职责，迁到这里与 API 接入、MCP 并列成区。
+           双栏沿用 .settings-cols 的栅格与断点，仅覆写 align-items 让两卡等高（改密按钮贴底）。 -->
+      <div class="settings-cols settings-cols--security">
+        <article class="uc-card uc-card--pwd">
+          <div class="uc-card__head">
+            <div>
+              <h3>修改密码</h3>
+              <!-- 原「定期更换密码，保障账号安全」是无信息量泛化提示（走查 2026-09-27），删 -->
+            </div>
+          </div>
+          <div class="pwd-grid">
+            <label class="uc-field pwd-field pwd-field--wide">
+              <span class="uc-field__label">当前密码</span>
+              <input v-model="pwdForm.oldPassword" type="password" class="uc-field__input" />
+            </label>
+            <label class="uc-field pwd-field">
+              <span class="uc-field__label">新密码</span>
+              <input v-model="pwdForm.newPassword" type="password" class="uc-field__input" placeholder="至少 8 位，含字母和数字" />
+            </label>
+            <label class="uc-field pwd-field">
+              <span class="uc-field__label">确认新密码</span>
+              <input v-model="pwdForm.confirmPassword" type="password" class="uc-field__input" placeholder="再输入一次" />
+            </label>
+          </div>
+          <div class="uc-card__foot">
+            <button type="button" class="uc-btn uc-btn--primary" :disabled="!pwdCanSubmit || pwdSubmitting" @click="handleChangePassword">
+              {{ pwdSubmitting ? '更新中…' : '更新密码' }}
+            </button>
+          </div>
+        </article>
+
+        <!-- 危险操作：注销 -->
+        <article class="uc-card uc-card--danger">
+          <div class="uc-card__head">
+            <div>
+              <h3>注销账号</h3>
+              <p>注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销（可联系管理员恢复）。</p>
+            </div>
+          </div>
+          <div class="danger-form">
+            <input v-model="deactivatePassword" type="password" class="uc-field__input" placeholder="输入当前密码确认注销" aria-label="当前密码（确认注销）" @keyup.enter="handleDeactivate" />
+            <button type="button" class="uc-btn uc-btn--danger" :disabled="deactivating" @click="handleDeactivate">
+              {{ deactivating ? '注销中…' : '注销账号' }}
+            </button>
+          </div>
+        </article>
+      </div>
+
       <!-- 我的 MCP 工具（独立于自定义 API 的加载状态） -->
       <article class="uc-card">
         <div class="uc-card__head">
@@ -236,9 +286,12 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { askConfirm, doneConfirm, failConfirm } from '@/views/admin-redesign/useConfirm';
 import { toast } from '../../utils/toast';
+import request from '@/utils/api';
+import { useUserStore } from '@/stores/user';
 import {
   disableUserApiConfig,
   executeMcpTool,
@@ -615,6 +668,81 @@ const testMcpTool = async (tool: UserMcpToolConfig) => {
     mcpTestingId.value = '';
   }
 };
+/* ==================== 账号安全（2026-09-30 自 Profile.vue 账户段迁入） ====================
+   「修改密码」「注销账号」原是个人中心账户段的两张双栏卡；原型账户段只有
+   资料卡 + 3 KPI + 快捷入口（index.html 2038-2069），故整体迁到本页作分区，
+   表单校验、确认弹窗与文案保持原样（功能不删只移位）。 */
+const router = useRouter();
+
+/** 与原 Profile.vue 的 getErrorMessage 同口径（保留各自的兜底文案） */
+const secErrorText = (e: any, fallback: string) =>
+  e?.response?.data?.error?.message || e?.response?.data?.error || e?.message || fallback;
+
+const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
+const pwdSubmitting = ref(false);
+const pwdCanSubmit = computed(
+  () => pwdForm.oldPassword.length > 0 && pwdForm.newPassword.length >= 8 && pwdForm.confirmPassword.length > 0
+);
+
+const handleChangePassword = async () => {
+  if (pwdSubmitting.value) return;
+  if (pwdForm.newPassword !== pwdForm.confirmPassword) {
+    toast.error('两次输入的新密码不一致');
+    return;
+  }
+  if (!/[a-zA-Z]/.test(pwdForm.newPassword) || !/[0-9]/.test(pwdForm.newPassword)) {
+    toast.error('新密码需同时包含字母和数字');
+    return;
+  }
+  pwdSubmitting.value = true;
+  try {
+    await request.post('/auth/change-password', {
+      oldPassword: pwdForm.oldPassword,
+      newPassword: pwdForm.newPassword,
+    });
+    toast.success('密码已更新，下次登录请使用新密码');
+    pwdForm.oldPassword = '';
+    pwdForm.newPassword = '';
+    pwdForm.confirmPassword = '';
+  } catch (error: any) {
+    toast.error(secErrorText(error, '修改失败，请稍后再试'));
+  } finally {
+    pwdSubmitting.value = false;
+  }
+};
+
+const deactivatePassword = ref('');
+const deactivating = ref(false);
+
+const handleDeactivate = async () => {
+  if (!deactivatePassword.value) {
+    toast.error('请输入当前密码以确认注销');
+    return;
+  }
+  const ok = await askConfirm({
+    title: '注销账号',
+    message: '注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销。确定注销吗？',
+    confirmText: '确认注销',
+    danger: true,
+    busy: true,
+  });
+  if (!ok) return;
+  deactivating.value = true;
+  try {
+    await request.post('/users/me/deactivate', { password: deactivatePassword.value });
+    // store 在 handler 里取（不在 setup 取）：本页有挂载回归测试且未装 pinia
+    await useUserStore().logout();
+    toast.success('账号已注销');
+    await router.replace('/login');
+    doneConfirm();
+  } catch (error: any) {
+    toast.error(secErrorText(error, '注销失败，请稍后重试'));
+    failConfirm();
+  } finally {
+    deactivating.value = false;
+    deactivatePassword.value = '';
+  }
+};
 </script>
 
 <style scoped>
@@ -669,6 +797,85 @@ const testMcpTool = async (tool: UserMcpToolConfig) => {
   .settings-cols {
     grid-template-columns: 1fr;
   }
+
+  /* 账号安全双栏的移动端密度（随两张卡一起从 Profile.vue 迁来） */
+  .pwd-grid {
+    gap: 10px;
+  }
+
+  .uc-card__foot {
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+
+  .uc-card--pwd .uc-card__foot {
+    padding-top: 12px;
+  }
+
+  .danger-form {
+    gap: 8px;
+  }
+}
+
+/* ===== 账号安全（自 Profile.vue 账户段迁入的两张双栏卡） ===== */
+/* 双栏沿用 .settings-cols 的栅格与断点，仅把对齐从 start 改回 stretch：
+   两卡等高，改密按钮由 foot 的 margin-top:auto 压到与注销卡同一底线 */
+.settings-cols--security {
+  align-items: stretch;
+}
+
+.uc-card--pwd {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.uc-card--pwd .uc-card__foot {
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.uc-card--pwd .pwd-grid {
+  flex: 0 0 auto;
+  align-content: start;
+}
+
+.pwd-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pwd-field--wide {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 560px) {
+  .pwd-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.uc-card__foot {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.uc-card--danger {
+  border-color: color-mix(in srgb, var(--red) 35%, transparent);
+}
+
+.danger-form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.danger-form .uc-field__input {
+  max-width: 320px;
 }
 
 .settings-side {

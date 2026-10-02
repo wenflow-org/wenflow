@@ -7,8 +7,64 @@
       <div v-if="statsOk" class="history__stats">
         <span class="history__stat">学习 <strong>{{ totalSessions }}</strong> 次</span>
         <span class="history__stat">累计 <strong>{{ totalMinutes }}</strong> 分钟</span>
-        <span class="history__stat">共 <strong>{{ activeDays }}</strong> 天有学习</span>
+        <span class="history__stat"><strong>{{ activeDays }}</strong> 天有学习</span>
       </div>
+
+      <!-- 整月日历（原型 wf-week/wf-day 382-405 的整月版；月导航/7 列格/图例归本页，
+           看板侧只留 month-summary 一行）：点选格子筛当天，再点取消 -->
+      <section v-if="!loading && !loadError && sessions.length" class="card history__month" aria-label="整月学习日历">
+        <div class="month__head">
+          <strong class="month__title">整月节奏</strong>
+          <div class="month__nav">
+            <button type="button" class="month__arrow" aria-label="上一月" @click="shiftMonth(-1)">‹</button>
+            <span class="month__label">{{ monthLabel }}</span>
+            <button
+              type="button"
+              class="month__arrow"
+              :class="{ 'month__arrow--off': isCurrentMonth }"
+              :disabled="isCurrentMonth"
+              aria-label="下一月"
+              @click="shiftMonth(1)"
+            >›</button>
+          </div>
+          <button
+            v-if="selectedDate"
+            type="button"
+            class="month__clear"
+            @click="selectedDate = ''"
+          >查看全部</button>
+        </div>
+
+        <div class="month__meta">
+          <span>本月 <b>{{ monthTotals.minutes }}</b> 分钟</span>
+          <span><b>{{ monthTotals.days }}</b> 天有学习</span>
+          <span><b>{{ monthTotals.sessions }}</b> 次</span>
+          <span class="month__legend">
+            <i class="lg lg--0"></i>无
+            <i class="lg lg--1"></i>&lt;30分
+            <i class="lg lg--2"></i>30–60分
+            <i class="lg lg--3"></i>&gt;60分
+          </span>
+        </div>
+
+        <div class="month__grid">
+          <span v-for="w in weekdayLabels" :key="w" class="month__wd">{{ w }}</span>
+          <button
+            v-for="(c, i) in monthCells"
+            :key="i"
+            type="button"
+            class="mday"
+            :class="[
+              { 'mday--outside': c.outside, 'mday--future': c.future, 'mday--today': c.isToday, 'mday--selected': selectedDate === c.date && !c.outside },
+              !c.outside && !c.future ? `mday--h${c.level}` : ''
+            ]"
+            :disabled="c.outside || c.future"
+            :title="c.outside || c.future ? undefined : `${c.dayNum}日${c.minutes ? ` · ${c.minutes} 分钟` : ' · 无学习记录'}`"
+            @click="toggleDay(c)"
+          >{{ c.dayNum }}</button>
+        </div>
+        <p v-if="selectedDate" class="month__filter">只看 {{ dayDate(selectedDate) }} 的记录，再点一次格子或「查看全部」恢复。</p>
+      </section>
 
       <!-- 错误 -->
       <div v-if="loadError" class="errorbar" role="alert">
@@ -39,11 +95,14 @@
           {{ pageError }}
           <button type="button" class="errorbar__retry" @click="loadMore">重试本页</button>
         </div>
-        <section v-for="group in groupedSessions" :key="group.date" class="card history__day">
+        <section v-for="group in visibleGroups" :key="group.date" class="card history__day">
           <div class="history__day-head">
-            <strong>{{ group.label }}</strong>
+            <!-- 日期为主（原型 wf-hist__day-head 873-875：9月29日 周二），今昨为辅。
+                 测试锁 `.history__day-head strong === ['今天']`，故日期走 <b>、今昨走 <strong> -->
+            <b class="history__day-date">{{ dayDate(group.date) }}</b>
+            <strong v-if="dayRel(group.date)" class="history__day-rel">{{ dayRel(group.date) }}</strong>
             <span class="muted">
-              {{ group.items.length }} 次<template v-if="group.minutes"> · {{ group.minutes }} 分钟</template>
+              {{ group.tasks.length }} 项<template v-if="group.minutes"> · {{ group.minutes }} 分钟</template>
             </span>
           </div>
           <ul class="history__items">
@@ -52,9 +111,9 @@
               <span class="history__dot" :class="`history__dot--${t.state}`" aria-hidden="true"></span>
               <div class="history__item-main">
                 <strong>{{ t.title }}</strong>
-                <span v-if="t.sessions.length > 1" class="history__item-meta">
-                  {{ t.sessions.length }} 次会话<template v-if="t.minutes"> · 共 {{ t.minutes }} 分钟</template>
-                </span>
+                <!-- 副行（原型 wf-hist__item-main span 882）：时长并入这一行，
+                     聚合行多带一段「N 次会话」（类名被回归测试锁定） -->
+                <span class="history__item-meta">{{ metaLine(t) }}</span>
                 <span v-if="summaryOf(t)" class="history__item-sub">{{ summaryOf(t) }}</span>
                 <!-- 明细：同日同任务的每次会话（时长/状态各自成行）。
                      动作只给「查看反馈」（每次会话各自的反馈页，目标不同）；
@@ -75,26 +134,28 @@
                   </ul>
                 </details>
               </div>
-              <span class="uc-badge" :class="t.sessions.length > 1 ? stateBadgeClsForState(t.state) : stateBadgeCls(t.lead)">
-                {{ t.sessions.length > 1 ? stateLabelForState(t.state) : stateLabel(t.lead) }}
-              </span>
-              <span class="history__item-time">{{ t.minutes ? `${t.minutes} 分钟` : '—' }}</span>
-              <!-- 动作与状态匹配（2026-09-27）：可继续 → 继续；中断未完成 → 重新开始；已完成且有小结 → 查看反馈 -->
-              <router-link
-                v-if="t.state === 'resumable' && t.lead.taskId"
-                :to="`/learn/${t.lead.taskId}`"
-                class="history__resume"
-              >继续 ›</router-link>
-              <router-link
-                v-else-if="t.state === 'ended' && t.lead.taskId"
-                :to="`/learn/${t.lead.taskId}`"
-                class="history__restart"
-              >重新开始 ›</router-link>
-              <router-link
-                v-else-if="feedbackLinkFor(t)"
-                :to="feedbackLinkFor(t)"
-                class="history__feedback"
-              >查看反馈 ›</router-link>
+              <!-- 右侧（原型 wf-hist__badge 883）：状态纯文字 + 动作文字链，同列右对齐 -->
+              <div class="history__aside">
+                <span class="uc-badge" :class="t.sessions.length > 1 ? stateBadgeClsForState(t.state) : stateBadgeCls(t.lead)">
+                  {{ t.sessions.length > 1 ? stateLabelForState(t.state) : stateLabel(t.lead) }}
+                </span>
+                <!-- 动作与状态匹配（2026-09-27）：可继续 → 继续；中断未完成 → 重新开始；已完成且有小结 → 查看反馈 -->
+                <router-link
+                  v-if="t.state === 'resumable' && t.lead.taskId"
+                  :to="`/learn/${t.lead.taskId}`"
+                  class="history__resume"
+                >继续 ›</router-link>
+                <router-link
+                  v-else-if="t.state === 'ended' && t.lead.taskId"
+                  :to="`/learn/${t.lead.taskId}`"
+                  class="history__restart"
+                >重新开始 ›</router-link>
+                <router-link
+                  v-else-if="feedbackLinkFor(t)"
+                  :to="feedbackLinkFor(t)"
+                  class="history__feedback"
+                >查看反馈 ›</router-link>
+              </div>
             </li>
           </ul>
         </section>
@@ -122,7 +183,7 @@ import request from '@/utils/api';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
-import { localDateKeyFromIso } from '@/utils/date';
+import { localDateKey, localDateKeyFromIso } from '@/utils/date';
 import { unwrap } from './unwrap';
 
 interface SessionRecord {
@@ -262,7 +323,6 @@ async function loadStats() {
 
 interface DayGroup {
   date: string;
-  label: string;
   minutes: number;
   items: SessionRecord[];
   /** 同日同任务聚合后的行（2026-09-27）：同一天同一个任务的多条会话合并成一条 */
@@ -287,7 +347,8 @@ interface TaskGroup {
  */
 const dayKey = (iso?: string | null) => localDateKeyFromIso(iso);
 
-const dayLabel = (dateKey: string) => {
+/** 副标：今天/昨天（其余日期不给副标，日期本身已是主标签） */
+const dayRel = (dateKey: string) => {
   const today = new Date();
   const y = today.getFullYear();
   const m = String(today.getMonth() + 1).padStart(2, '0');
@@ -298,8 +359,15 @@ const dayLabel = (dateKey: string) => {
 
   if (dateKey === `${y}-${m}-${d}`) return '今天';
   if (dateKey === `${yest.getFullYear()}-${ym}-${yd}`) return '昨天';
-  const [yy, mm, dd] = dateKey.split('-');
-  return `${yy}年${Number(mm)}月${Number(dd)}日`;
+  return '';
+};
+
+/** 主标签（原型 wf-hist__day-head 874：「9月29日 周二」） */
+const dayDate = (dateKey: string) => {
+  const [yy, mm, dd] = dateKey.split('-').map(Number);
+  const date = new Date(yy, (mm || 1) - 1, dd || 1);
+  const week = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()] || '';
+  return `${mm}月${dd}日 ${week}`;
 };
 
 /** 聚合行的状态：能继续 > 完成过 > 都没完成 */
@@ -335,14 +403,24 @@ function sessionClock(s: SessionRecord): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-const groupedSessions = computed<DayGroup[]>(() => {
+/** 聚合行的副行文案：聚合行带「N 次会话 · 共 X 分钟」，单会话行直接给时长（原型副行） */
+function metaLine(t: TaskGroup): string {
+  const mins = t.minutes ? `共 ${t.minutes} 分钟` : '';
+  if (t.sessions.length > 1) {
+    return `${t.sessions.length} 次会话${mins ? ` · ${mins}` : ''}`;
+  }
+  return t.minutes ? `${t.minutes} 分钟` : '—';
+}
+
+/** 按本地日期把会话聚成「日 → 任务行」（列表与当日筛选共用） */
+function groupSessions(list: SessionRecord[]): DayGroup[] {
   const map = new Map<string, DayGroup>();
-  for (const s of sessions.value) {
+  for (const s of list) {
     const key = dayKey(s.startTime || s.endTime);
     if (!key) continue;
     let group = map.get(key);
     if (!group) {
-      group = { date: key, label: dayLabel(key), minutes: 0, items: [], tasks: [] };
+      group = { date: key, minutes: 0, items: [], tasks: [] };
       map.set(key, group);
     }
     group.items.push(s);
@@ -365,7 +443,129 @@ const groupedSessions = computed<DayGroup[]>(() => {
     }
   }
   return [...map.values()];
+}
+
+const groupedSessions = computed<DayGroup[]>(() => groupSessions(sessions.value));
+
+/** 日历点选的当天筛选：命中即只渲染这一天（数据取自整月请求，不受列表分页限制） */
+const selectedDate = ref('');
+const visibleGroups = computed<DayGroup[]>(() => {
+  if (!selectedDate.value) return groupedSessions.value;
+  return groupSessions(monthSessions.value.filter((s) => dayKey(s.startTime || s.endTime) === selectedDate.value));
 });
+
+/* ---------- 整月日历（原型 wf-day 384-399 的整月版；月导航/7 列格/图例归本页） ----------
+   数据独立于列表分页：/users/me/sessions 带 startDate/endDate + limit=500 拉整月。
+   请求必须排在列表分页请求之后（回归测试锁 listCalls[0] = {page:1, limit:30}）。 */
+const monthSessions = ref<SessionRecord[]>([]);
+const monthCursor = ref({ year: new Date().getFullYear(), month: new Date().getMonth() });
+const todayStr = localDateKey(new Date());
+
+const monthLabel = computed(() => `${monthCursor.value.year}年${monthCursor.value.month + 1}月`);
+const isCurrentMonth = computed(() => {
+  const now = new Date();
+  return monthCursor.value.year === now.getFullYear() && monthCursor.value.month === now.getMonth();
+});
+
+/** 热力等级 0-3：<0 / <30 / ≤60 / >60 分钟（与原型图例四档一致） */
+function heatLevel(m: number): 0 | 1 | 2 | 3 {
+  if (m <= 0) return 0;
+  if (m < 30) return 1;
+  if (m <= 60) return 2;
+  return 3;
+}
+
+/* 翻月竞态：快速连点时慢的旧请求后到会覆盖新月份，只接受最后一次发起的结果 */
+let monthSeq = 0;
+
+async function fetchMonthSessions(cursor: { year: number; month: number }) {
+  const ym = `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}`;
+  const lastDate = new Date(cursor.year, cursor.month + 1, 0).getDate();
+  const res = await request.get('/users/me/sessions', {
+    params: { startDate: `${ym}-01`, endDate: `${ym}-${String(lastDate).padStart(2, '0')}`, limit: 500 }
+  });
+  const data = unwrap<{ sessions?: SessionRecord[] }>(res);
+  return Array.isArray(data) ? (data as unknown as SessionRecord[]) : data?.sessions || [];
+}
+
+async function loadMonth() {
+  const seq = ++monthSeq;
+  try {
+    const list = await fetchMonthSessions(monthCursor.value);
+    if (seq === monthSeq) monthSessions.value = list;
+  } catch {
+    /* 月历失败不影响列表：清空即全部格子无色 */
+    if (seq === monthSeq) monthSessions.value = [];
+  }
+}
+
+function shiftMonth(dir: number) {
+  if (dir > 0 && isCurrentMonth.value) return;
+  const d = new Date(monthCursor.value.year, monthCursor.value.month + dir, 1);
+  monthCursor.value = { year: d.getFullYear(), month: d.getMonth() };
+  void loadMonth();
+}
+
+interface MonthCell {
+  date: string;
+  dayNum: number;
+  minutes: number;
+  outside: boolean;
+  future: boolean;
+  isToday: boolean;
+  level: 0 | 1 | 2 | 3;
+}
+
+const minutesByDate = computed(() => {
+  const map = new Map<string, number>();
+  for (const s of monthSessions.value) {
+    const key = dayKey(s.startTime || s.endTime);
+    if (!key) continue;
+    map.set(key, (map.get(key) ?? 0) + (s.durationMinutes || 0));
+  }
+  return map;
+});
+
+/** 月格：周一为一周之始（与日历图例口径一致），前后补满整周 */
+const monthCells = computed<MonthCell[]>(() => {
+  const { year, month } = monthCursor.value;
+  const first = new Date(year, month, 1);
+  const startOffset = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const prevDays = new Date(year, month, 0).getDate();
+  const cells: MonthCell[] = [];
+  for (let i = startOffset - 1; i >= 0; i--) {
+    cells.push({ date: '', dayNum: prevDays - i, minutes: 0, outside: true, future: false, isToday: false, level: 0 });
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const future = date > todayStr;
+    const minutes = future ? 0 : minutesByDate.value.get(date) ?? 0;
+    cells.push({ date, dayNum: d, minutes, outside: false, future, isToday: date === todayStr, level: heatLevel(minutes) });
+  }
+  const tail = (7 - (cells.length % 7)) % 7;
+  for (let d = 1; d <= tail; d++) {
+    cells.push({ date: '', dayNum: d, minutes: 0, outside: true, future: false, isToday: false, level: 0 });
+  }
+  return cells;
+});
+
+const monthTotals = computed(() => {
+  let minutes = 0;
+  let days = 0;
+  for (const [, m] of minutesByDate.value) {
+    if (m > 0) { minutes += m; days += 1; }
+  }
+  return { minutes, days, sessions: monthSessions.value.length };
+});
+
+const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日'];
+
+/** 点选当天筛选列表（再点同一天取消）；选中的格子必须落在已加载的整月数据里 */
+function toggleDay(cell: MonthCell) {
+  if (cell.outside || cell.future) return;
+  selectedDate.value = selectedDate.value === cell.date ? '' : cell.date;
+}
 
 async function load(reset = false) {
   // 首屏（sessions 空且 loading=true 初始）允许进入；后续加载中拦截（防并发翻页）
@@ -410,8 +610,10 @@ function loadMore() {
 }
 
 onMounted(() => {
+  // 顺序即契约：列表分页请求必须先发（回归测试锁 listCalls[0] = {page:1,limit:30}），整月日历随后
   void load(true);
   void loadStats();
+  void loadMonth();
 });
 </script>
 
@@ -475,29 +677,41 @@ onMounted(() => {
 
 .history__day-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: baseline;
+  gap: 8px;
   margin-bottom: 10px;
 }
 
-.history__day-head strong {
+/* 主标签（原型 wf-hist__day-head strong 874）：「9月29日 周二」 */
+.history__day-date {
   font-size: 15px;
+  font-weight: 700;
   color: var(--ink, #172033);
 }
+/* 副标：今天/昨天（原型没有，但列表里昨夜/前天的相对时间比年月日更好读） */
+.history__day-rel {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--blue-deep, #1f57cc);
+}
+.history__day-head .muted { margin-left: auto; }
 
 /* 日分组右侧的计数/时长是次级信息：12px + faint。
    原来这里只有 V2LearningState 有 `.muted`，本页照抄了同一份 markup 却没带样式，
    于是继承壳的 16px 基座——和左边的日期标题一样大，一眼看不出主次（2026-09-24 指出）。 */
 .muted { font-size: 12px; color: var(--faint, #67758f); font-weight: 600; }
 
-/* 状态徽章贴着行右缘，和左边标题同尺寸（16px）会显得这一行很满；
-   收到 12px + 2×8 内边距（业界移动端最小可读字号），并沿用 uc.css .uc-badge 的配色。 */
+/* 状态徽章改纯文字（原型 wf-hist__badge 883：11.5px 纯字重，无底无框）；
+   uc-badge 类名被回归测试锁定（`.history__item .uc-badge` ×5），故保留类、清掉底/内边距。
+   字号走 12px 下限（规则 16）。 */
 .history__item .uc-badge {
   font-size: 12px;
-  padding: 2px 8px;
-  line-height: 1.4;
+  font-weight: 700;
+  padding: 0;
+  line-height: 1.5;
+  background: none;
 }
+.history__item .uc-badge--warn { background: none; }
 
 .history__items {
   margin: 0;
@@ -506,11 +720,12 @@ onMounted(() => {
   display: grid;
 }
 
+/* 行内元素顶对齐（原型 wf-hist__item 876-877）：色点带 6px 上边距贴首行 */
 .history__item {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 2px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
   border-top: 1px solid var(--line, #e3e9f4);
 }
 
@@ -520,10 +735,11 @@ onMounted(() => {
   border-radius: var(--mk-radius-pill);
   background: var(--faint, #67758f);
   flex: none;
+  margin-top: 6px;
 }
 
 .history__dot--completed { background: var(--green, #1e9e58); }
-.history__dot--resumable { background: var(--blue, #3478f6); }
+.history__dot--resumable { background: var(--blue, #2f6ae0); }
 .history__dot--ended { background: var(--faint, #67758f); }
 
 .history__item-main {
@@ -541,7 +757,8 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 
-/* 聚合行元信息（N 次会话 · 共 X 分钟） */
+/* 聚合行/单行副行（原型 wf-hist__item-main span 882：12px muted）：
+   聚合行带「N 次会话 · 共 X 分钟」，单会话行直接是时长（时长并入副行） */
 .history__item-meta {
   font-size: 12px;
   font-weight: 700;
@@ -568,6 +785,7 @@ onMounted(() => {
 .history__sub-time { font-size: 12px; color: var(--muted, #5b6577); font-variant-numeric: tabular-nums; }
 .history__sub-min { font-size: 12px; color: var(--faint, #67758f); font-variant-numeric: tabular-nums; }
 
+/* 摘要（原型没有，Vue 侧保留）：12px faint，单行省略 */
 .history__item-sub {
   font-size: 12px;
   color: var(--faint, #67758f);
@@ -576,46 +794,40 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 
-.history__item-time {
-  font-size: 12.5px;
-  color: var(--muted, #5b6577);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+/* 右侧列：状态纯文字 + 动作文字链，右对齐同列 */
+.history__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex: none;
+  margin-left: auto;
 }
-.history__resume {
-  font-size: 12px; font-weight: 800;
-  color: var(--blue-deep, #1f57cc);
-  text-decoration: none;
-  /* 30px → 36px（mobile:spec 的 lt36 门禁）：行里就靠这两个按钮操作，
-     拇指目标不能只有 30；横向 padding 不动，标题列宽度预算不变。 */
-  padding: 5px 12px;
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
-  background: color-mix(in srgb, var(--blue) 6%, transparent);
-  border-radius: var(--mk-radius-pill);
-  white-space: nowrap;
-  transition: background 0.15s ease;
-}
-.history__resume:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
 
+/* 动作改文字链（原型无动作行，但「继续/查看反馈」是本页主要出口，保留）：
+   13px/700 蓝链 + 36px 触控高（mobile:spec 的 lt36 门禁） */
+.history__resume,
 .history__feedback,
 .history__restart {
-  font-size: 12px; font-weight: 800;
-  color: var(--muted, #5b6577);
-  text-decoration: none;
-  padding: 5px 12px;
-  min-height: 36px;
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--line, #e3e9f4);
-  border-radius: var(--mk-radius-pill);
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--blue-deep, #1f57cc);
+  text-decoration: none;
   white-space: nowrap;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition: color 0.15s ease;
 }
+.history__resume:hover,
 .history__feedback:hover,
-.history__restart:hover { color: var(--blue-deep, #1f57cc); border-color: rgba(52, 120, 246, 0.4); }
+.history__restart:hover {
+  color: var(--blue, #2f6ae0);
+  text-decoration: underline;
+}
 
 .history__more {
   display: flex;
@@ -628,6 +840,118 @@ onMounted(() => {
   font-size: 12px;
   color: var(--faint, #67758f);
   padding: 4px 0;
+}
+
+/* ── 整月日历（原型 wf-week/wf-day 382-405 的整月版） ── */
+.history__month {
+  padding: 14px 18px;
+  display: grid;
+  gap: 12px;
+}
+.month__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.month__title { font-size: 14px; font-weight: 700; color: var(--ink, #172033); }
+.month__nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted, #5b6577);
+}
+.month__arrow {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--mk-radius-md);
+  border: 1px solid var(--line, #e3e9f4);
+  background: var(--surface, #fff);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--muted, #5b6577);
+  font-size: 16px;
+  line-height: 1;
+}
+.month__arrow--off { opacity: 0.35; cursor: default; }
+.month__clear {
+  min-height: 36px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--blue-deep, #1f57cc);
+  cursor: pointer;
+}
+.month__meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted, #5b6577);
+}
+.month__meta b { color: var(--ink, #172033); font-weight: 800; }
+.month__legend {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--faint, #67758f);
+}
+.lg {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--mk-radius-xs);
+  display: inline-block;
+}
+/* 热力四档：只走 token 派生（h3 用 --mk-on-fill = 饱和深底上的白字） */
+.lg--0, .mday--h0 { background: var(--canvas, #eef2f8); color: var(--muted, #5b6577); }
+.lg--1, .mday--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep, #1f57cc); }
+.lg--2, .mday--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep, #1f57cc); }
+.lg--3, .mday--h3 { background: color-mix(in srgb, var(--blue) 85%, transparent); color: var(--mk-on-fill); }
+
+.month__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+.month__wd {
+  text-align: center;
+  font-size: 12px;
+  color: var(--faint, #67758f);
+}
+.mday {
+  min-height: 36px;
+  border-radius: var(--mk-radius-lg);
+  border: 1px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+.mday--outside, .mday--future {
+  background: none;
+  color: var(--faint, #67758f);
+  font-weight: 500;
+  cursor: default;
+}
+.mday--today { border-color: var(--blue, #2f6ae0); }
+.mday--selected { border-color: var(--blue-deep, #1f57cc); box-shadow: inset 0 0 0 1px var(--blue-deep, #1f57cc); }
+.month__filter {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted, #5b6577);
 }
 
 @media (max-width: 1100px) {
@@ -662,14 +986,18 @@ onMounted(() => {
     gap: 10px;
   }
 
-  .history__day-head strong {
+  .history__day-head {
+    gap: 6px;
+  }
+
+  .history__day-date {
     font-size: 14px;
   }
 
-  /* 行内边距 11→9、间距 12→8：一行省 16px，24 条就是 380px；顺带把标题的可用宽度
+  /* 行内边距 10→9、间距 10→8：一行省 16px，24 条就是 380px；顺带把标题的可用宽度
      从 104px 提到 ~160px（比例问题：标题才是这一行里最该看清的东西） */
   .history__item {
-    padding: 9px 2px;
+    padding: 9px 0;
     gap: 8px;
   }
 
@@ -681,13 +1009,30 @@ onMounted(() => {
     font-size: 12px;
   }
 
-  .history__item-time {
-    display: none;
+  /* 右侧列在窄屏改成横排：状态文字与动作链一行放得下，列堆叠会把标题挤成两行 */
+  .history__aside {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
   }
 
-  .history__feedback,
-  .history__resume {
-    padding: 5px 10px;
+  .history__month {
+    padding: 12px;
+  }
+
+  .month__nav {
+    margin-left: auto;
+  }
+
+  .month__legend {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .mday {
+    /* 触控目标不低于 36（mobile:spec 的 lt36 门禁）：窄屏 7 列仍放得下 */
+    min-height: 36px;
+    font-size: 12.5px;
   }
 
   .history__end {

@@ -142,13 +142,14 @@ const isDark = useIsDark();
 .demo__msg { font-size: 13px; line-height: 1.6; }
 .demo__msg--user {
   justify-self: end;
-  /* 渐变浅端混 20% 深蓝：原纯 --blue 偏浅，白字对比度不足（走查 2026-09-27 P3，选加深而非文字投影——投影在浅色主题下发灰） */
-  background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 80%, var(--blue-deep)), var(--blue-deep));
+  /* 原注释（走查 2026-09-27 P3）：渐变浅端混 20% 深蓝是因为纯 --blue 偏浅、白字对比度不足。
+     现在改回纯色 --blue 仍达标——#2f6ae0 上白字对比度约 4.9:1（AA 需 4.5:1），
+     渐变随之退役；下方 22% 蓝色发光投影也一并删掉。 */
+  background: var(--blue);
   color: #fff;
   padding: 9px 13px;
   border-radius: 14px 14px 4px 14px;
   max-width: 88%;
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--blue) 22%, transparent);
 }
 .demo__msg--ai { display: flex; gap: 9px; align-items: flex-start; }
 .demo__msg--ai > div {

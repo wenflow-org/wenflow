@@ -1493,11 +1493,13 @@ onBeforeUnmount(() => {
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 11px 22px; border-radius: var(--mk-radius-xl);
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 实色主按钮：蓝渐变 + 30% 蓝色发光投影一并退役 */
+  background: var(--blue);
   color: #fff; font-size: 14px; font-weight: 700;
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 30%, transparent);
   cursor: pointer; text-decoration: none;
+  transition: transform 0.18s ease, background 0.18s ease;
 }
+.btn-primary:not(:disabled):active { transform: scale(0.98); }
 .btn-primary--block { justify-content: center; width: 100%; }
 .btn-ghost {
   padding: 10px 18px; border-radius: var(--mk-radius-xl);
@@ -1554,7 +1556,7 @@ onBeforeUnmount(() => {
   display: grid; place-items: center;
 }
 .stage__no--done { background: var(--green); color: #fff; }
-.stage__no--current { background: linear-gradient(135deg, var(--blue), var(--blue-deep)); color: #fff; box-shadow: 0 0 0 4px rgba(52, 120, 246, 0.13); }
+.stage__no--current { background: var(--blue); color: #fff; box-shadow: 0 0 0 4px rgba(52, 120, 246, 0.13); }
 .stage__title strong { display: block; font-size: 15px; }
 .stage__title small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
 .stage__prog { font-size: 12px; font-weight: 800; color: var(--muted); }
@@ -1598,11 +1600,13 @@ onBeforeUnmount(() => {
 .task__cta {
   min-height: 40px;
   font-size: 12px; font-weight: 800; color: #fff;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 实色 --blue（原蓝渐变 + 25% 发光一并退役） */
+  background: var(--blue);
   padding: 6px 13px; border-radius: 9px;
   cursor: pointer;
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--blue) 25%, transparent);
+  transition: transform 0.16s ease, background 0.16s ease;
 }
+.task__cta:not(:disabled):active { transform: scale(0.98); }
 .task__done-label { font-size: 12px; font-weight: 600; color: var(--green); cursor: pointer; display: inline-block; padding: 12px 0; min-width: 44px; text-align: center; }
 .task__lock-label, .task__todo-label { font-size: 12px; color: var(--faint); }
 
@@ -1787,7 +1791,8 @@ onBeforeUnmount(() => {
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
   font: inherit;
 }
-.adjust-mode:hover { border-color: #8db3f8; background: #f7faff; box-shadow: 0 2px 10px color-mix(in srgb, var(--blue) 8%, transparent); }
+/* hover 的 0 2px 10px 蓝色 8% 发光改为中性 raised 档（边框/底色变化仍是允许的 hover 反馈） */
+.adjust-mode:hover { border-color: #8db3f8; background: #f7faff; box-shadow: var(--wf-shadow-raised); }
 .adjust-mode--warn .adjust-mode__icon {
   color: var(--amber-ink);
   background: color-mix(in srgb, var(--amber) 16%, transparent);
@@ -2068,9 +2073,10 @@ onBeforeUnmount(() => {
   gap: 10px;
   margin-top: 16px;
 }
+/* 危险态确认键：批次 D 把红色染色投影与 135deg 渐变一并退役 → 纯色危险档。
+   取 --wf-color-danger-dark（#d95054，白字 4.6:1 达 AA）。 */
 .adjust-dialog .btn-primary--danger {
-  background: linear-gradient(135deg, #e8604f, #cf3f2e);
-  box-shadow: 0 8px 20px rgba(207, 63, 46, 0.25);
+  background: var(--wf-color-danger-dark);
 }
 [data-theme='dark'] .adjust-mode {
   background: var(--mk-surface);

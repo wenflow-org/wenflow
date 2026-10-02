@@ -37,7 +37,12 @@
   --cyan: #43b0d8;
   --bubble-ai-bg: color-mix(in srgb, var(--mk-blue) 5%, var(--mk-surface));
   --supplement-bg: color-mix(in srgb, var(--mk-blue) 3%, var(--mk-surface));
-  --v2nav-bg: color-mix(in srgb, var(--mk-surface) 86%, transparent);
+  /* 顶部/吸底浮条底色。批次 D（2026-10-02）由半透明 86% 改为不透明面：
+     这层原本配 backdrop-filter: blur(10px) 使用，模糊已随平面化一并退役；
+     半透明却不模糊会让下滚内容「透出来但糊」，比纯平面更难读。
+     暗色档不需要覆写（--mk-surface 由 tokens.css 自动翻转），
+     原先的 rgba(15,22,32,.88) 是一层暗色半透明，现已多余。 */
+  --v2nav-bg: var(--mk-surface);
   /* 状态文字墨色：基色提饱和、ink 压深（暗色下自动反向提亮），替代旧双份字面量 */
   --green-ink: color-mix(in srgb, var(--mk-green) 75%, var(--mk-ink));
   --cyan-ink: color-mix(in srgb, var(--cyan) 75%, var(--mk-ink));
@@ -45,13 +50,16 @@
   --purple-ink: color-mix(in srgb, var(--mk-purple) 75%, var(--mk-ink));
   --amber-ink: color-mix(in srgb, var(--mk-amber) 75%, var(--mk-ink));
   --red-ink: color-mix(in srgb, var(--mk-red) 75%, var(--mk-ink));
+  /* 进度条轨道（原型 --bar-track）：此前 V2Achievements 有 var(--bar-track) 悬空引用 */
+  --bar-track: color-mix(in srgb, var(--line) 60%, transparent);
 }
 [data-theme='dark'] {
-  /* 语义色随 --mk-* 自动翻转；仅补 mk 没有的 v2 独有档 */
+  /* 语义色随 --mk-* 自动翻转；仅补 mk 没有的 v2 独有档。
+     --v2nav-bg 原先在这里有一份 rgba(15,22,32,.88) 覆写，现已删除——
+     平面化后它是 var(--mk-surface)，由 tokens.css 的暗色块自动翻转。 */
   --cyan: #5fc3e6;
   --bubble-ai-bg: rgba(24, 34, 48, 0.8);
   --supplement-bg: rgba(246, 187, 99, 0.06);
-  --v2nav-bg: rgba(15, 22, 32, 0.88);
 }
 
 /* ====== 全局背景兜底：路由切换过渡期间防止白闪 ====== */
@@ -107,13 +115,9 @@ html, body {
   border-top-color: #fff;
 }
 
-[data-theme='dark'] .v2-page .btn-primary {
-  box-shadow: 0 10px 22px rgba(77, 139, 248, 0.2);
-}
-
-[data-theme='dark'] .v2-page .btn-primary:not(:disabled):hover {
-  box-shadow: 0 14px 28px rgba(77, 139, 248, 0.25);
-}
+/* [data-theme='dark'] .v2-page .btn-primary 与其 :hover 的两条蓝色发光投影已退役
+   （2026-10-02「友好而平」批次）：投影只剩 --wf-shadow-raised/overlay/modal 三档中性档，
+   主按钮一律无投影；暗色下三档由 tokens.css 自行翻转为深色 rgba(0,0,0,·)，不必再单独覆写。 */
 
 [data-theme='dark'] .v2-page .btn-ghost {
   background: var(--surface);
@@ -140,20 +144,15 @@ html, body {
   background-size: 200% 100%;
 }
 
-/* SkeletonLoader 组件：暗色模式适配（使用 CSS custom property，组件内通过 var 引用） */
-[data-theme='dark'] .v2-page .skeleton-loader .skel {
-  background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.06) 75%);
-  background-size: 200% 100%;
-}
-[data-theme='dark'] .v2-page .skeleton-loader .skel-card {
-  background: var(--surface);
-  border-color: var(--line);
-}
+/* SkeletonLoader 组件：改由组件内 --soft（color-mix(--mk-surface, --mk-ink)）随主题翻转，
+   此处原两条 [data-theme='dark'] .skeleton-loader 覆写（旧 90deg/200% shimmer）已随之退役 */
 
-/* ================= 暗色模式：V2Nav 覆写 ================= */
-[data-theme='dark'] .v2-page {
-  --v2nav-bg: rgba(15, 22, 32, 0.88);
-}
+/* ================= 暗色模式：V2Nav 覆写 =================
+   原先此处有一条 [data-theme='dark'] .v2-page { --v2nav-bg: rgba(15,22,32,.88) }，
+   批次 D（2026-10-02）平面化后 --v2nav-bg = var(--mk-surface)，由 tokens.css
+   的暗色块自动翻转，这条覆写与上面 :root 那条一样成了多余的半透明档，删。
+   同族的 rgba(15,22,32,.88) 是第三份「暗色顶栏底色」写法（另两份见本文件
+   顶部与 V2Nav.vue 注释），三份终归一处。 */
 [data-theme='dark'] .v2nav__avatar:hover {
   background: rgba(255, 255, 255, 0.06);
 }
@@ -195,15 +194,13 @@ html, body {
   background: rgba(77, 139, 248, 0.12);
   color: var(--blue-deep);
 }
-[data-theme='dark'] .scene-card:hover:not(:disabled) {
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.25);
-}
+/* .scene-card:hover 的暗色深投影已删：基线改用 --wf-shadow-raised 后由 token 自翻，
+   留着这条会因同权重后加载而把暗色 hover 重新压回旧的 26px 厚投影。 */
 
-/* 伴学浮动窗暗色适配 */
+/* 伴学浮动窗暗色适配（投影已并入基线 .peerdock 的 --wf-shadow-overlay，token 自翻） */
 [data-theme='dark'] .peerdock {
   background: var(--surface);
   border-color: rgba(167, 139, 255, 0.18);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38);
 }
 [data-theme='dark'] .peerdock__scroll {
   background: rgba(255, 255, 255, 0.02);
@@ -221,17 +218,9 @@ html, body {
   opacity: 0.3;
 }
 
-/* 快捷补充面板暗色适配 */
-[data-theme='dark'] .replies-panel {
-  background: var(--surface);
-  border-color: var(--line);
-}
-[data-theme='dark'] .replies-panel__option {
-  background: rgba(77, 139, 248, 0.06);
-}
-[data-theme='dark'] .replies-panel__option:hover {
-  background: rgba(77, 139, 248, 0.12);
-}
+/* 快捷补充面板暗色适配：三条 .replies-panel 规则随 2026-09-30 类名改版
+   （.replies/.reply）作废——暗色已由 --surface/--line token 自动翻转，
+   新类的投影覆写见本文件末尾 html[data-theme='dark'] .replies / .reply:hover。 */
 
 /* ================= 暗色模式：V2LearningPage 覆写 ================= */
 [data-theme='dark'] .learn__head {
@@ -257,7 +246,7 @@ html, body {
 [data-theme='dark'] .tutor__jump-bottom {
   background: var(--surface);
   border-color: var(--line);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  /* 投影沿用基线的 --wf-shadow-raised（token 暗色自动翻转为 rgba(0,0,0,.4/.5)） */
 }
 [data-theme='dark'] .tutor__resume {
   background: linear-gradient(135deg, rgba(77, 139, 248, 0.14), color-mix(in srgb, var(--accent) 8%, transparent));
@@ -292,8 +281,10 @@ html, body {
   color: var(--ink);
 }
 
-/* 焦点可见性（可访问性基线）：用户侧统一 focus 样式 */
-.v2-page :is(button, a, input, textarea, select, [tabindex]):focus-visible {
+/* 焦点可见性（可访问性基线）：用户侧统一 focus 样式
+   [role="button"] 必须在列：div/span + role=button 的控件不是 <button>，
+   漏了它这类控件就没有焦点环（原型显式包含） */
+.v2-page :is(button, a, input, textarea, select, [tabindex], [role="button"]):focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
@@ -342,6 +333,23 @@ html, body {
   box-shadow: var(--shadow-sm);
 }
 
+/* 进度条原语（原型 .wf-bar：6px 轨 / 蓝→青渐变填充 / --lg 8px）——页面共用 */
+.v2-bar {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--bar-track, color-mix(in srgb, var(--line) 60%, transparent));
+  overflow: hidden;
+}
+.v2-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--blue), var(--cyan));
+}
+.v2-bar--lg {
+  height: 8px;
+}
+
 .v2-page .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -349,28 +357,30 @@ html, body {
   padding: 11px 22px;
   border: 0;
   border-radius: var(--mk-radius-xl);
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 主按钮纯色 --blue（原 135deg 蓝→深蓝渐变已退役）：
+     「友好而平」规定主操作是实色，渐变制造的高光感与暖平基调相冲。 */
+  background: var(--blue);
   color: #fff;
   font-size: 14px;
   font-family: inherit;
   font-weight: 700;
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 30%, transparent);
+  /* 无投影：发光边框式光晕已全量下线（按钮不需要抬升层级，层级由字号/留白表达） */
   cursor: pointer;
   text-decoration: none;
   /* 原型 wf-btn 悬停无抬升（仅 :active scale(.98)）——去掉旧的 -2px 悬浮 */
-  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  transition: transform 0.2s ease, background 0.2s ease;
 }
 .v2-page .btn-primary:not(:disabled):hover {
-  filter: brightness(1.04);
+  background: var(--wf-color-primary-dark);
 }
 .v2-page .btn-primary:not(:disabled):active {
-  transform: translateY(0) scale(0.98);
+  transform: scale(0.98);
 }
 
 .v2-page .btn-primary--off {
   opacity: 0.55;
   cursor: default;
-  box-shadow: none;
+  /* 原 .btn-primary--off { box-shadow: none } 已退役：主按钮不再有投影，无需再压暗光晕 */
 }
 
 .v2-page .btn-ghost {
@@ -383,7 +393,7 @@ html, body {
   font-weight: 700;
   color: var(--muted);
   cursor: pointer;
-  transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.2s ease, color 0.2s ease;
 }
 .v2-page .btn-ghost:not(:disabled):hover {
   /* 原型 wf-btn--ghost:hover：边框/文字变色即可，无抬升 */
@@ -391,7 +401,7 @@ html, body {
   color: var(--blue-deep);
 }
 .v2-page .btn-ghost:not(:disabled):active {
-  transform: translateY(0) scale(0.98);
+  transform: scale(0.98);
 }
 
 .v2-page .errorbar {
@@ -682,26 +692,15 @@ html, body {
   /* 移动端按钮：2026-09-24 曾为「按钮偏大」收到 38px；2026-09-25 外部移动框架复核，
      主/次 CTA 是全页核心动作，按 HIG 触控下限抬回 44px（内边距不动、用 min-height 抬，
      字号维持 13px，视觉增量只有上下 3px），文字链/芯片类不在此列仍走 36-40 档。
-     表单全宽提交键（.btn-primary--block，46px）是另一类角色，不跟着动。
-     :not(.btn-primary--off) 是必需的：--off 的 box-shadow:none 特异性更低，
-     不排除的话「生成中/重试中」的禁用按钮会在移动端被重新点亮投影。 */
+     表单全宽提交键（.btn-primary--block，46px）是另一类角色，不跟着动。 */
   .v2-page .btn-primary:not(.btn-primary--block) {
     padding: 9px 17px;
     font-size: 13px;
     min-height: 44px;
   }
-  .v2-page .btn-primary:not(.btn-primary--block):not(.btn-primary--off) {
-    box-shadow: 0 5px 12px color-mix(in srgb, var(--blue) 20%, transparent);
-  }
-  .v2-page .btn-primary:not(.btn-primary--block):not(.btn-primary--off):not(:disabled):hover {
-    box-shadow: 0 8px 18px color-mix(in srgb, var(--blue) 26%, transparent);
-  }
-  [data-theme='dark'] .v2-page .btn-primary:not(.btn-primary--block):not(.btn-primary--off) {
-    box-shadow: 0 5px 12px rgba(77, 139, 248, 0.16);
-  }
-  [data-theme='dark'] .v2-page .btn-primary:not(.btn-primary--block):not(.btn-primary--off):not(:disabled):hover {
-    box-shadow: 0 8px 18px rgba(77, 139, 248, 0.2);
-  }
+  /* 原先此处还有四条移动端专用蓝色发光投影（浅色 20%/26% + 暗色 rgba(77,139,248,·)，
+     挂在 :not(.btn-primary--off) 上专门避开禁用态），连同 :not(.btn-primary--off) 的
+     特异性理由一并退役（2026-10-02）：主按钮全局无投影，移动端不再补光。 */
   /* 次级按钮同样抬到 44。选择器必须带 :not() 才能压过各页自己那份 .btn-ghost 副本
      （.btn-ghost[data-v-x] 与 .v2-page .btn-ghost 同特异性，靠加载顺序赢）——
      这些副本是历史遗留的复制粘贴（7 个页面、3 种尺寸），删掉它们才是正解，见提交说明。
@@ -742,15 +741,15 @@ html[data-theme='dark'] .auth__card { box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25),
 html[data-theme='dark'] .tip__icon { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
 html[data-theme='dark'] .quick__item { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }
 html[data-theme='dark'] .sheet { box-shadow: -16px 0 40px rgba(0, 0, 0, 0.42); }
-html[data-theme='dark'] .composer__box { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28); }
-html[data-theme='dark'] .composer__box--active { box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent), 0 6px 20px rgba(0, 0, 0, 0.28); }
+/* 基线投影已改为引用 --wf-shadow-raised 的两条（.composer__box / .tutor__jump-bottom /
+   .kp-act:hover）在此退役：token 在暗色下自动翻转为 rgba(0,0,0,·)，
+   不再需要手写一份深色投影压过组件 scoped 样式。 */
+html[data-theme='dark'] .composer__box--active { box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent), var(--wf-shadow-raised); }
 html[data-theme='dark'] .proposal { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42); }
 html[data-theme='dark'] .msg__avatar { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
 html[data-theme='dark'] .login-gate__logo { box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4); }
 html[data-theme='dark'] .history__stat { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.22); }
 html[data-theme='dark'] .oscene { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.22); }
-html[data-theme='dark'] .tutor__jump-bottom { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4); }
-html[data-theme='dark'] .kp-act:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); }
 html[data-theme='dark'] .finish__card { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42); }
 html[data-theme='dark'] .learn__menu-pop { box-shadow: 0 12px 30px rgba(0, 0, 0, 0.42); }
 html[data-theme='dark'] .replies { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.22); }

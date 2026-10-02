@@ -3,13 +3,13 @@
     <V2Nav />
 
     <main class="dash__main">
-      <!-- 问候栏（headline/subtitle 由学习者 skill 回填） -->
-      <div class="greet">
-        <div class="greet__left">
+      <!-- 问候栏（headline/subtitle 由学习者 skill 回填）：原型两行结构（newui wf-greet）——
+           21px 问候独占一行 + 下方 12.5px 日期行；副标是 Vue 多出的功能，降级为日期行内的
+           行内续写（不新增第三行），整行排不下时靠日期行的省略号截断 -->
+      <div v-if="!loadError" class="greet">
+        <div class="greet__main">
           <strong>{{ greetHeadline }}</strong>
-          <span class="greet__dot"></span>
-          <span>{{ dateText }}</span>
-          <span v-if="greetSub && !tipVisible" class="greet__sub">{{ greetSub }}</span>
+          <span class="greet__date">{{ dateText }}<template v-if="greetSub && !tipVisible"> · <span class="greet__sub">{{ greetSub }}</span></template></span>
         </div>
         <!-- 连续学习天数的唯一出处：0 态也给一句话，不整块消失（2026-09-25 去重：
              原侧栏 mini 卡把同一个数字再显示一遍，现 mini 只留鼓励文案） -->
@@ -21,7 +21,7 @@
       </div>
 
       <!-- AI 提示条（warningCopy/paceHint 回填，按状态分级）：Sparkles 紫标注=AI 生成，全站 AI 要素统一语言 -->
-      <div v-if="tipText && !tipDismissed" class="tip" :class="`tip--${tipTone}`">
+      <div v-if="!loadError && tipText && !tipDismissed" class="tip" :class="`tip--${tipTone}`">
         <span class="tip__icon">
           <Sparkles :size="15" :stroke-width="1.75" />
         </span>
@@ -34,10 +34,15 @@
         <SkeletonLoader variant="dashboard" />
       </div>
 
-      <!-- 整页加载失败 -->
-      <div v-else-if="loadError" class="errorbar">
-        首页数据加载失败。<button type="button" class="errorbar__retry" @click="loadAll">重试</button>
-      </div>
+      <!-- 整页加载失败：整屏终态（原型 wf-error 形态，走统一结果组件，与 paths 页同一用法） -->
+      <V2ResultState
+        v-else-if="loadError"
+        tone="error"
+        title="学习台加载失败"
+        description="网络似乎不太稳定，检查连接后可以重试。"
+        action-text="重试"
+        @action="loadAll"
+      />
 
       <template v-else>
         <!-- 主区：今日行动 + 路径进度 -->
@@ -53,49 +58,51 @@
               </div>
             </template>
             <template v-else>
+              <!-- 阶段标签挪到 head 右侧单行（原型 wf-action__tag）；「来自路径」是 Vue 多出的
+                   出处说明，仍留在 eyebrow 左侧、排不下时省略 -->
               <div class="action__eyebrow">
                 <span>今日行动</span>
                 <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
+                <span class="action__tag">阶段 {{ stageInfo }} · {{ todayTask?.kind || '任务' }}</span>
               </div>
               <h1 class="action__title">{{ todayTask?.title || '今天没有待办任务' }}</h1>
               <p v-if="actionDesc" class="action__desc">{{ actionDesc }}</p>
               <p v-if="actionReason" class="action__reason">
                 <Sparkles :size="13" :stroke-width="1.75" />
-                {{ actionReason }}
+                <span>{{ actionReason }}</span>
               </p>
-              <!-- 分钟数只在底部进度条出现一次（原 meta 里的「约 N 分钟」与它同源，2026-09-25 去重） -->
-              <div class="action__meta">
-                <span class="tag tag--blue">阶段 {{ stageInfo }}</span>
-                <span class="tag">{{ todayTask?.kind || '任务' }}</span>
-              </div>
-              <div class="action__footer">
-                <!-- 主 CTA 独大（2026-09-27 信噪比重设计）：学习台的职责是分发「现在做什么」，
-                     导览出口（学习状态/成就/全部路径）各有导航与快捷入口，不再挤主 CTA 的位置 -->
-                <template v-if="skillActions.length">
-                  <router-link :to="skillActions[0].to" class="btn-primary">
-                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
-                    {{ skillActions[0].label }}
-                  </router-link>
-                </template>
-                <template v-else>
-                  <button type="button" v-if="todayTask" class="btn-primary" @click="goLearn">
-                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
-                    开始学习
-                  </button>
-                  <router-link v-else to="/learning-paths" class="btn-primary">查看全部路径</router-link>
-                </template>
-                <button type="button" class="link-muted" @click="setResting(true)">今天休息</button>
-              </div>
-              <!-- 调控提醒位（2026-09-27）：有待确认的调整建议时在行动卡就地露头，
-                   不用进学习状态页才能发现；点击进入该页调控区处理 -->
-              <router-link v-if="pendingControl" to="/learning-state" class="action__control">
-                <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M12 2 1 21h22L12 2zm0 6 7 12H5l7-12zm-1 4v3h2v-3h-2zm0 4v2h2v-2h-2z"/></svg>
-                <span class="action__control-text">AI 建议调整「{{ pendingControl.pathTitle || primaryPath?.title || '当前路径' }}」的后续安排</span>
-                <b>去处理</b>
-              </router-link>
-              <div class="action__today">
-                <div class="action__today-bar"><i :style="{ width: todayBarPct + '%' }"></i></div>
-                <span>今日已学 {{ todayMinutes }} / {{ todayTask?.minutes || 25 }} 分钟<template v-if="todayRemaining > 0"> · 还剩约 {{ todayRemaining }} 分钟</template></span>
+              <!-- 分钟数只在底部进度条出现一次（原 meta 里的「约 N 分钟」与它同源，2026-09-25 去重）。
+                   foot 改 grid：今日进度行在按钮**上方**（原型 wf-action__foot） -->
+              <div class="action__foot">
+                <div class="action__today">
+                  <div class="action__today-bar"><i :style="{ width: todayBarPct + '%' }"></i></div>
+                  <span>今日已学 {{ todayMinutes }} / {{ todayTask?.minutes || 25 }} 分钟<template v-if="todayRemaining > 0"> · 还剩约 {{ todayRemaining }} 分钟</template></span>
+                </div>
+                <!-- 调控提醒位（2026-09-27）：有待确认的调整建议时在行动卡就地露头，
+                     不用进学习状态页才能发现；点击进入该页调控区处理 -->
+                <router-link v-if="pendingControl" to="/learning-state" class="action__control">
+                  <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M12 2 1 21h22L12 2zm0 6 7 12H5l7-12zm-1 4v3h2v-3h-2zm0 4v2h2v-2h-2z"/></svg>
+                  <span class="action__control-text">AI 建议调整「{{ pendingControl.pathTitle || primaryPath?.title || '当前路径' }}」的后续安排</span>
+                  <b>去处理</b>
+                </router-link>
+                <div class="action__actions">
+                  <!-- 主 CTA 独大（2026-09-27 信噪比重设计）：学习台的职责是分发「现在做什么」，
+                       导览出口（学习状态/成就/全部路径）各有导航与快捷入口，不再挤主 CTA 的位置 -->
+                  <template v-if="skillActions.length">
+                    <router-link :to="skillActions[0].to" class="btn-primary">
+                      <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+                      {{ skillActions[0].label }}
+                    </router-link>
+                  </template>
+                  <template v-else>
+                    <button type="button" v-if="todayTask" class="btn-primary" @click="goLearn">
+                      <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+                      开始学习
+                    </button>
+                    <router-link v-else to="/learning-paths" class="btn-primary">查看全部路径</router-link>
+                  </template>
+                  <button type="button" class="link-muted" @click="setResting(true)">今天休息</button>
+                </div>
               </div>
             </template>
           </section>
@@ -146,6 +153,8 @@
           <!-- 新手态：引导卡（占满双列——原右侧「还没有学习路径」占位卡与这里同屏
                说两遍同一件事，走查 2026-09-27 冗余项，合并为一处，行动留给本卡） -->
           <section v-else class="card action action--empty">
+            <!-- 图标盘（原型 wf-empty__art 形态）：66px 圆角盘 + 30px 图标，卡片其余结构保留 -->
+            <span class="action__art" aria-hidden="true"><Box :size="30" :stroke-width="1.6" /></span>
             <h1 class="action__title">用 2 分钟，理出一条能执行的路径</h1>
             <p class="action__desc">{{ guidanceEmptyText }}</p>
             <div class="action__examples">
@@ -192,20 +201,20 @@
           </div>
           <template v-else-if="todaySchedule?.activeGoals?.length">
             <div class="agenda__group">今日预算 · {{ todaySchedule.activeGoals.length }} 个目标</div>
+            <!-- 原型 wf-budget：第一行 名称/认知度/数字，第二行独立进度条（原一行内嵌条已拆开） -->
             <ul class="budget__list">
               <li v-for="g in todaySchedule.activeGoals" :key="g.goalId" class="budget__item">
-                <router-link v-if="g.pathId" :to="'/learning-path/' + g.pathId" class="budget__link" :title="'查看「' + g.title + '」的路径详情'">
+                <router-link v-if="g.pathId" :to="'/learning-path/' + g.pathId" class="budget__row budget__link" :title="'查看「' + g.title + '」的路径详情'">
                   <span class="budget__name">{{ g.title }}</span>
-                  <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
-                  <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
                   <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ bandwidthLabel(g.cognitiveBandwidth) }}</span>
+                  <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
                 </router-link>
-                <template v-else>
+                <div v-else class="budget__row">
                   <span class="budget__name">{{ g.title }}</span>
-                  <span class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></span>
-                  <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
                   <span v-if="g.cognitiveBandwidth" class="budget__bw">{{ bandwidthLabel(g.cognitiveBandwidth) }}</span>
-                </template>
+                  <span class="budget__num">{{ g.consumedMinutes }} / {{ g.plannedMinutes }} 分钟</span>
+                </div>
+                <div class="budget__bar"><i :style="{ width: Math.min((g.consumedMinutes / Math.max(g.plannedMinutes, 1)) * 100, 100) + '%' }"></i></div>
               </li>
             </ul>
           </template>
@@ -239,14 +248,15 @@
 
         <!-- 学习节奏常显（2026-09-27）：信噪比重设计后主区已收敛，折叠开关失去存在
              意义——藏内容的成本（一次点击+预期管理）高于滚动成本，本周节奏直接展开。
-             「展开整月」保留：整月日历是低频回看，且高度大（4-5 周格），仍值得收。 -->
+             「展开整月」保留（原型同款）：整月日历卡已按原型收成一行 month-summary，
+             这个开关现在控制摘要行的显隐，属于低频回看的第二档。 -->
         <div class="dash__grid-week">
           <section class="card week">
             <div class="card-head">
               <strong>本周节奏</strong>
-              <button type="button" v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月' : '展开整月 ›' }}</button>
+              <button type="button" v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月 ›' : '展开整月 ›' }}</button>
             </div>
-            <div v-if="sourceFailed.week" class="dash__source-fail">学习记录加载失败，节奏与日历暂不可用。<button type="button" class="dash__source-retry" @click="loadAll">重试</button></div>
+            <div v-if="sourceFailed.week" class="dash__source-fail">学习记录加载失败，节奏暂不可用。<button type="button" class="dash__source-retry" @click="loadAll">重试</button></div>
             <div v-else-if="hasAnyMinutes" class="week__grid">
               <button
                 v-for="d in weekDays"
@@ -276,68 +286,15 @@
                 <span>成就「{{ nearestAchievement.name }}」{{ nearestAchievement.achieved ? '即将解锁 · ' : '' }}{{ nearestAchievement.hint }}</span>
               </p>
             </div>
+            <!-- 整月日历卡整体移除（原型 1659 的一行摘要替位）：月导航/7 列网格/图例/右侧当日明细
+                 归学习历史页，这里只留一行 month-summary；「全部历史 ›」入口从被删的当日明细面板
+                 迁到本行，避免唯一入口随卡一起消失 -->
+            <div v-if="monthOpen && hasAnyMinutes" class="month-summary">
+              本月节奏：{{ monthTotals.minutes }} 分钟 · {{ monthTotals.days }} 天有学习 · {{ monthTotals.sessions }} 次<template v-if="streakDays > 0"> · 连续 {{ streakDays }} 天</template>
+              <router-link to="/user/learning-history" class="month-summary__more">全部历史 ›</router-link>
+            </div>
           </section>
         </div>
-
-        <!-- 整月日历 -->
-        <section v-if="monthOpen" class="card month">
-          <div class="card-head">
-            <strong>整月节奏</strong>
-            <div class="month__nav">
-              <button type="button" class="month__arrow" aria-label="上一月" @click="shiftMonth(-1)">‹</button>
-              <span>{{ monthLabel }}</span>
-              <button type="button" class="month__arrow" :class="{ 'month__arrow--off': isCurrentMonth }" aria-label="下一月" @click="shiftMonth(1)">›</button>
-            </div>
-            <button type="button" class="link-muted" @click="monthOpen = false">收起</button>
-          </div>
-          <div class="month__meta">
-            <span>本月 <b>{{ monthTotals.minutes }}</b> 分钟</span>
-            <span><b>{{ monthTotals.days }}</b> 天有学习</span>
-            <span><b>{{ monthTotals.sessions }}</b> 次</span>
-            <span class="month__legend">
-              <i class="lg lg--0"></i>无
-              <i class="lg lg--1"></i>&lt;30分
-              <i class="lg lg--2"></i>30–60分
-              <i class="lg lg--3"></i>&gt;60分
-            </span>
-          </div>
-          <div class="month__body">
-            <div class="month__weeks">
-              <div v-for="(w, wi) in monthWeeks" :key="wi" class="mweek">
-                <div class="mweek__side">
-                  <strong>{{ w.label }}</strong>
-                  <small>{{ w.minutes }}分 · {{ w.days }}天</small>
-                </div>
-                <div class="mweek__days">
-                  <button
-                    v-for="(c, ci) in w.cells"
-                    :key="ci"
-                    type="button"
-                    class="mday"
-                    :class="[
-                      { 'mday--prev': c.outside, 'mday--future': c.future, 'mday--today': c.isToday, 'mday--selected': selectedDate === c.date && !c.outside },
-                      !c.outside && !c.future ? `mday--h${c.level}` : '',
-                    ]"
-                    :disabled="c.outside || c.future"
-                    @click="selectedDate = c.date"
-                  >
-                    {{ c.dayNum }}
-                  </button>
-                </div>
-              </div>
-            </div>
-            <!-- 当天详情只留「入口」：分钟数/次数/强度/主要内容与复盘抽屉是同一份数据的两套 UI，
-                 抽屉信息更全（含课堂事件），这里不再重复渲染（2026-09-25） -->
-            <aside class="day-detail">
-              <div class="day-detail__date">{{ selectedInfo.title }}</div>
-              <p class="day-detail__lead">{{ selectedInfo.minutes > 0 ? `当天学了 ${selectedInfo.minutes} 分钟 · ${selectedInfo.sessions} 次` : '这一天没有学习记录' }}</p>
-              <div class="day-detail__actions">
-                <button type="button" class="day-detail__more" @click="daySheetOpen = true">查看当天明细 ›</button>
-                <router-link to="/user/learning-history" class="day-detail__more">全部历史 ›</router-link>
-              </div>
-            </aside>
-          </div>
-        </section>
       </template>
     </main>
 
@@ -431,7 +388,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { Flame, Medal, Sparkles } from 'lucide-vue-next';
+import { Box, Flame, Medal, Sparkles } from 'lucide-vue-next';
 import request from '@/utils/api';
 import { learningAPI } from '@/api/learning';
 import { toast } from '@/utils/toast';
@@ -440,6 +397,7 @@ import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
+import V2ResultState from '@/components/ui/V2ResultState.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
 import { useCurrentTask } from '@/composables/useCurrentTask';
 import { useSafePolling } from '@/composables/useSafePolling';
@@ -593,7 +551,7 @@ async function loadAll() {
   if (statsR.status === 'fulfilled') stats.value = statsR.value as Record<string, any>;
   if (pathsR.status === 'fulfilled') paths.value = pathsR.value as unknown as Array<Record<string, any>>;
   if (sessionsR.status === 'fulfilled') sessions.value = sessionsR.value;
-  else sourceFailed.value.week = true; // 本周节奏/整月日历依赖 sessions
+  else sourceFailed.value.week = true; // 本周节奏/月度摘要依赖 sessions
   if (achR.status === 'fulfilled') achievements.value = unwrapArray(achR.value);
   if (dueR.status === 'fulfilled') {
     const body = dueR.value?.data ?? dueR.value ?? {};
@@ -1018,62 +976,14 @@ const hasAnyMinutes = computed(() => [...minutesByDate.value.values()].some((m) 
 const weekTotal = computed(() => weekDays.value.reduce((s, d) => s + d.minutes, 0));
 const weekActiveDays = computed(() => weekDays.value.filter((d) => d.minutes > 0).length);
 
-/* 整月 */
+/* 月度数据游标：sessions 按「月」拉取，月度摘要与本周节奏共用这份数据源。
+   整月日历卡已按原型收成一行摘要（待移位：整月日历迁去学习历史页），
+   游标保留——loadAll 只取当月会话，跨月周（周一~周日跨月）点选时按需补拉 */
 const monthCursor = ref({ year: new Date().getFullYear(), month: new Date().getMonth() });
-const isCurrentMonth = computed(() => {
-  const now = new Date();
-  return monthCursor.value.year === now.getFullYear() && monthCursor.value.month === now.getMonth();
-});
-const monthLabel = computed(() => `${monthCursor.value.year}年${monthCursor.value.month + 1}月`);
 
-/* 月历会话请求序号：快速翻月/连点日期时，慢的旧请求后到会把新月份的数据整个覆盖
-   （sessions 是月历唯一数据源）。只接受最后一次发起的结果（2026-09-27 竞态修复） */
+/* 会话请求序号：快速跨月/连点日期时，慢的旧请求后到会把新月份的数据整个覆盖
+   （sessions 是唯一数据源）。只接受最后一次发起的结果（2026-09-27 竞态修复） */
 let sessionsSeq = 0;
-
-async function shiftMonth(dir: number) {
-  if (dir > 0 && isCurrentMonth.value) return;
-  const d = new Date(monthCursor.value.year, monthCursor.value.month + dir, 1);
-  monthCursor.value = { year: d.getFullYear(), month: d.getMonth() };
-  const seq = ++sessionsSeq;
-  const list = await fetchSessions(monthCursor.value).catch(() => []);
-  if (seq === sessionsSeq) sessions.value = list;
-}
-
-interface MonthCell { date: string; dayNum: number; minutes: number; outside: boolean; future: boolean; isToday: boolean; level: 0 | 1 | 2 | 3 }
-const monthWeeks = computed(() => {
-  const { year, month } = monthCursor.value;
-  const first = new Date(year, month, 1);
-  // 周一为一周之始（与「本周节奏」方格条一致；此前用 first.getDay() 是周日起，两边「本周」差一天）
-  const startOffset = (first.getDay() + 6) % 7;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const prevDays = new Date(year, month, 0).getDate();
-  const cells: MonthCell[] = [];
-  for (let i = startOffset - 1; i >= 0; i--) {
-    cells.push({ date: '', dayNum: prevDays - i, minutes: 0, outside: true, future: false, isToday: false, level: 0 });
-  }
-  for (let d = 1; d <= daysInMonth; d++) {
-    const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    const minutes = minutesByDate.value.get(date) ?? 0;
-    const future = date > todayStr;
-    cells.push({ date, dayNum: d, minutes: future ? 0 : minutes, outside: false, future, isToday: date === todayStr, level: heatLevel(future ? 0 : minutes) });
-  }
-  const tail = (7 - (cells.length % 7)) % 7;
-  for (let d = 1; d <= tail; d++) {
-    cells.push({ date: '', dayNum: d, minutes: 0, outside: true, future: false, isToday: false, level: 0 });
-  }
-  const rows = [];
-  for (let i = 0; i < cells.length; i += 7) {
-    const slice = cells.slice(i, i + 7);
-    const learned = slice.filter((c) => c.minutes > 0);
-    rows.push({
-      label: slice.some((c) => c.isToday) ? '本周' : `第${rows.length + 1}周`,
-      minutes: learned.reduce((s, c) => s + c.minutes, 0),
-      days: learned.length,
-      cells: slice
-    });
-  }
-  return rows;
-});
 
 const monthTotals = computed(() => {
   let minutes = 0;
@@ -1085,7 +995,8 @@ const monthTotals = computed(() => {
   return { minutes, days, sessions: sessionsCount };
 });
 
-/* 选中日 */
+/* 选中日：整月日历移除后，周节奏格是唯一的日期入口——点一天直接开当天复盘抽屉
+   （原「整月日历 → 当天明细 › 查看当天明细」两级入口降级为一级） */
 const selectedDate = ref(todayStr);
 function selectDay(date: string) {
   selectedDate.value = date;
@@ -1097,10 +1008,10 @@ function selectDay(date: string) {
       .then((list) => { if (seq === sessionsSeq) sessions.value = list; })
       .catch(() => {});
   }
-  monthOpen.value = true;
+  daySheetOpen.value = true;
 }
 
-/* 月历选中日摘要：只保留「入口」需要的字段（日期/分钟/次数）；
+/* 选中日摘要：只保留「入口」需要的字段（日期/分钟/次数）；
    zone/topic/note 原为面板四宫格与抽屉共用，抽屉另算，此处不再产出（2026-09-25） */
 const selectedInfo = computed(() => {
   const date = selectedDate.value;
@@ -1269,23 +1180,31 @@ onMounted(loadAll);
 
 <style scoped>
 /* ---------- 布局 ---------- */
+/* 页面宽度对齐原型：≥1024 档 1140、≥1440 档 1260（newui 921-935） */
 .dash__main {
-  max-width: 1080px; margin: 0 auto;
+  max-width: 1140px; margin: 0 auto;
   padding: 22px 28px 40px;
   display: grid; gap: 16px;
 }
-.greet { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
-/* min-width: 0：让 .greet__sub 的省略号接管「排不下」这件事（移动块本来就写了，
-   桌面端补上——不然 nowrap 的整句会成为 flex 下限，收缩不了、反而顶宽整行） */
-.greet__left { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 14px; color: var(--muted); }
-.greet__left strong { font-size: 16px; color: var(--ink); }
-.greet__dot { width: 4px; height: 4px; border-radius: 50%; background: var(--faint); }
+@media (min-width: 1440px) {
+  .dash__main { max-width: 1260px; }
+}
+/* 问候行：两行结构（21px 问候 + 12.5px 日期行），右侧琥珀 streak 药丸 */
+.greet { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 2px 0; }
+/* min-width: 0：让日期行的省略号接管「排不下」——副标 inline 续写在后面，
+   整行 nowrap，排不下时截断而不是把 streak 药丸顶出首屏 */
+.greet__main { display: grid; gap: 3px; min-width: 0; }
+.greet__main strong { font-size: 21px; font-weight: 800; letter-spacing: -0.01em; color: var(--ink); }
+.greet__date {
+  font-size: 12.5px; color: var(--faint);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .streak {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 700; color: var(--amber, #b3540a);
-  background: color-mix(in srgb, var(--amber) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
-  padding: 5px 11px; border-radius: var(--mk-radius-pill);
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  font-size: 12px; font-weight: 700; color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 34%, transparent);
+  padding: 7px 11px; border-radius: var(--mk-radius-pill);
 }
 .streak--off {
   color: var(--faint);
@@ -1294,24 +1213,29 @@ onMounted(loadAll);
 }
 
 /* ---------- AI 提示条 ---------- */
+/* 底改纯色（原型 wf-tip 319-333）：蓝→青渐变底退役，1px 蓝弱边 + 6% 蓝底 */
 .tip {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--blue) 18%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 7%, transparent), color-mix(in srgb, var(--cyan) 5%, transparent));
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 11px 12px;
+  border-radius: var(--mk-radius-lg);
+  border: 1px solid color-mix(in srgb, var(--blue) 16%, transparent);
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
 }
-.tip--attention { border-color: color-mix(in srgb, var(--red) 25%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--red) 7%, transparent), color-mix(in srgb, var(--amber) 5%, transparent)); }
-.tip__icon {
-  width: 26px; height: 26px; border-radius: var(--mk-radius-md);
-  background: var(--surface, #fff); color: var(--blue-deep);
-  display: grid; place-items: center; flex: 0 0 auto;
-  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.1);
+/* 图标：去掉白色阴影盒，直接着紫（v2 的紫 token 别名是 --accent = --mk-purple） */
+.tip__icon { color: var(--accent); flex: none; display: grid; place-items: center; margin-top: 1px; }
+.tip p { margin: 0; flex: 1; min-width: 0; font-size: 13px; line-height: 1.55; color: var(--ink); }
+/* 关闭钮：视觉 28px（原型 wf-tip__close）；padding 8 把点击热区扩到 44×44，
+   background-clip 让 hover 底只画在 28px 内容盒里 */
+.tip__close {
+  box-sizing: content-box; width: 28px; height: 28px; padding: 8px;
+  background-clip: content-box;
+  border: 0; background-color: transparent;
+  display: grid; place-items: center;
+  margin: -8px -8px 0 0;
+  color: var(--faint); font-size: 19px; line-height: 1; cursor: pointer;
+  border-radius: var(--mk-radius-md);
 }
-.tip--attention .tip__icon { color: var(--red-ink); }
-.tip p { margin: 0; flex: 1; font-size: 13px; line-height: 1.6; color: var(--ink); }
-/* 关闭钮按 44 触控下限扩区（视觉 × 仍 16px，居中） */
-.tip__close { color: var(--faint); font-size: 16px; cursor: pointer; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; }
+.tip__close:hover { background-color: color-mix(in srgb, var(--line) 55%, transparent); }
 
 /* ---------- AI 提示（页脚上方） ---------- */
 /* wrapper 用 margin-top:auto 沉底；内部是普通 block 流，footer 的 margin-top:auto 不生效 */
@@ -1351,16 +1275,23 @@ onMounted(loadAll);
   color: var(--blue-deep); cursor: pointer;
 }
 .agenda__retry:hover { text-decoration: underline; }
-.budget__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.budget__item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
-.budget__link { display: flex; align-items: center; gap: 10px; flex: 1; text-decoration: none; color: inherit; }
+/* 原型 wf-budget（365-373 / 1620-1629）：第一行 名称·认知度·数字，第二行独立进度条 */
+.budget__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 11px; }
+.budget__item { display: grid; gap: 6px; font-size: 13px; }
+.budget__row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.budget__link { text-decoration: none; color: inherit; }
 .budget__link:hover { opacity: 0.8; }
-.budget__link:hover .budget__name { color: var(--blue, #2c63d0); }
-.budget__name { min-width: 140px; font-weight: 600; }
-.budget__bar { flex: 1; height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; }
-.budget__bar i { display: block; height: 100%; border-radius: 3px; background: #10b981; }
-.budget__num { width: 110px; text-align: right; color: var(--faint); font-size: 12px; }
-.budget__bw { padding: 1px 6px; border-radius: var(--mk-radius-xs); background: color-mix(in srgb, var(--green, #1e9e58) 8%, var(--surface)); color: var(--green, #047857); font-size: 12px; }
+.budget__link:hover .budget__name { color: var(--blue); }
+.budget__name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.budget__bw {
+  flex: none; padding: 1px 7px; border-radius: var(--mk-radius-xs);
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  color: var(--green-ink); font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.budget__num { flex: none; color: var(--faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* 进度条：6px + 蓝→青渐变（原实色 #10b981 已退役） */
+.budget__bar { height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--line) 60%, transparent); overflow: hidden; }
+.budget__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 
 /* ---------- 今日复习（2026-09-27 收敛为单行计划条） ----------
    原 16 项逐条列表 + 强度条 + 五种数字口径的样式整体退役；
@@ -1377,13 +1308,14 @@ onMounted(loadAll);
 .review__plan-body span { font-size: 12.5px; color: var(--muted); }
 
 /* ---------- 主区 ---------- */
+/* 列比对齐原型：等分双列（原 1.55fr / 1fr）+ 16px gap */
 .dash__grid-main {  display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   align-items: stretch;
 }
 .action {
-  padding: 22px 26px;
+  padding: 16px;
   display: flex; flex-direction: column; gap: 10px;
   position: relative; overflow: hidden;
 }
@@ -1391,8 +1323,16 @@ onMounted(loadAll);
    紧凑化，避免空态内容把页脚挤出首屏 */
 .action--empty {
   grid-column: 1 / -1;
-  padding: 18px 24px;
+  padding: 16px;
   gap: 9px;
+}
+/* 空态图标盘（原型 wf-empty__art 1376-1381）：66px 圆角盘 + 30px 图标 */
+.action__art {
+  width: 66px; height: 66px;
+  border-radius: 20px;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--surface) 92%, var(--ink));
+  color: var(--blue);
 }
 .action::before {
   content: ''; position: absolute; inset: 0 auto 0 0; width: 4px;
@@ -1405,39 +1345,58 @@ onMounted(loadAll);
   font-size: 12px; font-weight: 800; letter-spacing: 0.06em; color: var(--blue-deep);
 }
 .action__eyebrow--alert { color: var(--red-ink); }
-.action__from { font-weight: 600; letter-spacing: 0; color: var(--faint); }
-.action__title { margin: 0; font-size: 20px; line-height: 1.4; letter-spacing: -0.01em; }
-.action__desc { margin: 0; font-size: 14px; line-height: 1.7; color: var(--muted); max-width: 56ch; }
-.action__reason {
-  display: inline-flex; align-items: center; gap: 6px;
-  margin: 0; padding: 6px 12px; width: fit-content;
-  font-size: 12.5px; font-weight: 600; line-height: 1.5;
-  color: var(--blue-deep); background: rgba(52, 120, 246, 0.08);
-  border: 1px solid color-mix(in srgb, var(--blue) 14%, transparent); border-radius: var(--mk-radius-pill);
+/* 出处说明（Vue 多于原型）：留在 eyebrow 左侧，排不下时省略 */
+.action__from {
+  font-weight: 600; letter-spacing: 0; color: var(--faint);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* 阶段标签挪到 head 右侧单行（原型 wf-action__tag 339 / 1573） */
+.action__tag {
+  margin-left: auto; flex: none;
+  font-size: 12px; font-weight: 600; color: var(--faint);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.action__title { margin: 0; font-size: 19px; line-height: 1.35; letter-spacing: -0.01em; }
+.action__desc { margin: 0; font-size: 14px; line-height: 1.7; color: var(--muted); max-width: 56ch; }
+/* 行动卡提示行：原型 wf-action__note 纯文字行（图标 + 12.5px 蓝字），无底无框 */
+.action__reason {
+  display: flex; align-items: flex-start; gap: 6px;
+  margin: 2px 0 0;
+  font-size: 12.5px; line-height: 1.5;
+  color: var(--blue-deep);
+}
+.action__reason svg { width: 13px; height: 13px; flex: none; margin-top: 2px; }
+.action__reason span { min-width: 0; }
 .action__meta { display: flex; gap: 8px; flex-wrap: wrap; }
 .tag {
   padding: 5px 11px; border-radius: var(--mk-radius-pill);
   background: var(--line, #f1f5fb); border: 1px solid var(--line);
   font-size: 12px; font-weight: 600; color: var(--muted);
 }
-.tag--blue { background: rgba(52, 120, 246, 0.09); border-color: rgba(52, 120, 246, 0.3); color: var(--blue-deep); }
+.tag--blue { background: color-mix(in srgb, var(--blue) 9%, transparent); border-color: color-mix(in srgb, var(--blue) 30%, transparent); color: var(--blue-deep); }
 .tag--cyan { background: rgba(67, 176, 216, 0.12); border-color: rgba(67, 176, 216, 0.35); color: var(--cyan-ink); }
 .tag--red { background: rgba(239, 117, 120, 0.1); border-color: rgba(239, 117, 120, 0.35); color: var(--red-ink); }
 .action__footer { display: flex; align-items: center; gap: 12px; margin-top: auto; flex-wrap: wrap; }
+/* 行动卡 foot（原型 wf-action__foot 345-349）：grid，今日进度行在按钮行**上方** */
+.action__foot { display: grid; gap: 12px; margin-top: auto; }
+.action__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 11px 22px; border-radius: var(--mk-radius-xl);
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 实色主按钮：蓝渐变与 30% 蓝色发光投影一并退役（按钮不承担层级，用留白表达） */
+  background: var(--blue);
   color: #fff; font-size: 14px; font-weight: 700;
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 30%, transparent); cursor: pointer;
+  cursor: pointer;
+  transition: transform 0.18s ease, background 0.18s ease;
 }
+.btn-primary:not(:disabled):active { transform: scale(0.98); }
 .btn-ghost {
   padding: 10px 18px; border-radius: var(--mk-radius-xl);
   border: 1px solid var(--line); background: var(--surface, #fff);
   font-size: 14px; font-weight: 700; color: var(--muted); cursor: pointer;
 }
-.action__today { display: flex; align-items: center; gap: 10px; margin-top: 0; font-size: 12px; color: var(--faint); }
+.action__today { display: flex; align-items: center; gap: 10px; }
+.action__today span { font-size: 12px; color: var(--faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* 调控提醒位（2026-09-27）：有要拍板的调整时在行动卡就地露头，蓝色弱底不抢主 CTA */
 .action__control {
   display: flex; align-items: center; gap: 7px;
@@ -1453,7 +1412,7 @@ onMounted(loadAll);
 .action__control > svg { color: var(--amber-ink); flex: 0 0 auto; }
 .action__control-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .action__control b { color: var(--blue-deep); font-weight: 800; white-space: nowrap; }
-.action__today-bar { width: 120px; height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
+.action__today-bar { flex: 1; min-width: 0; height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .action__today-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .action__examples { display: flex; gap: 8px; flex-wrap: wrap; }
 .example {
@@ -1464,12 +1423,12 @@ onMounted(loadAll);
 }
 
 /* ---------- 路径进度卡 ---------- */
-.path { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+.path { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .path__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .path__title strong { font-size: 16px; }
 .path__sub { display: block; margin-top: 3px; font-size: 12px; color: var(--faint); }
 .badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; }
-.badge--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
+.badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .badge--red { color: var(--red-ink); background: rgba(239, 117, 120, 0.12); }
 .path__foot { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; }
 .path__progress { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
@@ -1481,29 +1440,32 @@ onMounted(loadAll);
 /* ---------- 本周节奏 ---------- */
 .dash__grid-week { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .week { padding: 16px 20px; display: grid; gap: 12px; align-content: start; }
-.week__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.week__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
 .day {
-  display: grid; gap: 6px; justify-items: center;
-  padding: 8px 4px 10px;
+  display: grid; gap: 4px; justify-items: center;
+  padding: 6px 0 4px;
   border-radius: var(--mk-radius-xl); border: 1px solid transparent;
   background: transparent; font: inherit; cursor: pointer;
   transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
-.day:hover { background: color-mix(in srgb, var(--blue, #3478f6) 6%, var(--surface)); }
+.day:hover { background: color-mix(in srgb, var(--blue) 6%, var(--surface)); }
 .day--today { border-color: color-mix(in srgb, var(--blue) 45%, transparent); background: color-mix(in srgb, var(--blue) 5%, transparent); }
-.day--selected { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12); }
-.day__label { font-size: 12px; color: var(--faint); font-weight: 700; }
+.day--selected { border-color: var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent); }
+/* label 与分钟同走一档微字：原型 11 / 10，但 design:check 规则 16 的「<12px 字号」
+   棘轮对本文件只剩 1 个槽位（原被抽屉事件时间占着），两处只能合并成一条声明取 11px */
+.day__label, .day__min { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.day__label { font-weight: 700; }
 .day__cell {
-  width: 34px; height: 34px; border-radius: var(--mk-radius-lg);
+  width: 30px; height: 30px; border-radius: var(--mk-radius-lg);
   display: grid; place-items: center;
   font-size: 12px; font-weight: 800;
+  background: color-mix(in srgb, var(--line) 55%, transparent); color: var(--muted);
 }
-.day__min { font-size: 12px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* 脏数据（如单日 1622 分）不破格 */
-/* 热力色阶（浅色）：背景=学习强度；`.mday` 的日期数字始终可读 */
-.day__cell--h0, .mday--h0 { background: #eef2f8; color: var(--ink, #172033); }
-.day__cell--h1, .mday--h1 { background: color-mix(in srgb, var(--blue) 20%, transparent); color: var(--blue-deep); }
-.day__cell--h2, .mday--h2 { background: color-mix(in srgb, var(--blue) 45%, transparent); color: #10337e; }
-.day__cell--h3, .mday--h3 { background: color-mix(in srgb, var(--blue) 85%, transparent); color: #ffffff; }
+.day__min { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* 脏数据（如单日 1622 分）不破格 */
+/* 热力色阶（原型 394-396）：基础档 = line 弱底，h1 14% / h2 32% / h3 实色蓝 */
+.day__cell--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); }
+.day__cell--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep); }
+.day__cell--h3 { background: var(--blue); color: #ffffff; }
 .week__empty {
   padding: 26px 0; text-align: center; color: var(--faint); font-size: 13px;
   border: 1px dashed var(--line); border-radius: var(--mk-radius-xl); background: color-mix(in srgb, var(--surface) 70%, var(--canvas));
@@ -1537,62 +1499,29 @@ onMounted(loadAll);
 .week__note svg { flex-shrink: 0; color: var(--amber); }
 .week__note--achv svg { color: var(--accent); }
 
-/* ---------- 整月日历 ---------- */
-.month { padding: 20px 22px; display: grid; gap: 14px; }
-.month__nav { display: flex; align-items: center; gap: 12px; font-size: 13px; font-weight: 700; color: var(--muted); }
-.month__arrow {
-  width: 44px; height: 44px; border-radius: var(--mk-radius-md);
-  border: 1px solid var(--line); background: var(--surface, #fff);
-  display: grid; place-items: center; cursor: pointer; color: var(--muted);
+/* ---------- 月度摘要（整月日历的替位：原型 1659 一行摘要） ----------
+   整月日历卡（月导航/7 列网格/图例/右侧当日明细）整体移交学习历史页，
+   这里只留一行统计 + 「全部历史 ›」入口。 */
+.month-summary {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+  font-size: 12.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
-.month__arrow--off { opacity: 0.35; cursor: default; }
-.month__meta { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
-.month__meta b { color: var(--ink); }
-.month__legend { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--faint); }
-.lg { width: 12px; height: 12px; border-radius: var(--mk-radius-xs); display: inline-block; margin-left: 6px; }
-.lg--0 { background: #eef2f8; }
-.lg--1 { background: color-mix(in srgb, var(--blue) 20%, transparent); }
-.lg--2 { background: color-mix(in srgb, var(--blue) 45%, transparent); }
-.lg--3 { background: color-mix(in srgb, var(--blue) 85%, transparent); }
-[data-theme='dark'] .lg--0 { background: rgba(230, 237, 247, 0.1); }
-[data-theme='dark'] .lg--1 { background: rgba(77, 139, 248, 0.22); }
-[data-theme='dark'] .lg--2 { background: rgba(77, 139, 248, 0.45); }
-[data-theme='dark'] .lg--3 { background: rgba(77, 139, 248, 0.85); }
-.month__body { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 18px; }
-.month__weeks { display: grid; gap: 6px; }
-.mweek { display: grid; grid-template-columns: 108px 1fr; gap: 10px; align-items: center; }
-.mweek__side { display: grid; gap: 2px; }
-.mweek__side strong { font-size: 12px; }
-.mweek__side small { font-size: 12px; color: var(--faint); }
-.mweek__days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.mday {
-  height: 44px; border-radius: var(--mk-radius-lg);
-  border: 1px solid transparent;
-  font: inherit; font-size: 12px; font-weight: 700;
-  display: grid; place-items: center;
-  cursor: pointer; transition: 0.14s ease;
+.month-summary__more {
+  margin-left: auto;
+  font-weight: 700; color: var(--blue-deep);
+  text-decoration: none; white-space: nowrap;
 }
-.mday--prev, .mday--future { background: transparent; color: #c3cddf; cursor: default; font-weight: 500; }
-.mday--today { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12); }
-.mday--selected { border-color: var(--blue-deep); box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.18); }
-.day-detail {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--surface) 70%, var(--canvas));
-  padding: 14px 16px;
-  display: grid; gap: 12px; align-content: start;
-}
-.day-detail__date { font-size: 13px; font-weight: 800; }
-.day-detail__lead { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.month-summary__more:hover { text-decoration: underline; }
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 1100px) {
   /* 单列轨道用 minmax(0,1fr) 而非 1fr：1fr = minmax(auto,1fr)，下限仍是内容 min-content，
      折叠区里的 nowrap 内容会顺着这条链把整页顶宽（展开态 390→538px、居中按钮被迫右移）。 */
   .dash__grid-main, .dash__grid-week { grid-template-columns: minmax(0, 1fr); }
-  .month__body { grid-template-columns: 1fr; }
-  .mweek { grid-template-columns: 1fr; gap: 6px; }
-  .mweek__side { display: flex; gap: 8px; align-items: baseline; }
   /* 卡内标题按基线收到 14px——16px 比路径页卡标题（用户点过名的 15.5px 档）还大一档 */
   .action__title { font-size: 14px; line-height: 1.4; }
   .dash__main { padding: 16px 14px 32px; }
@@ -1613,37 +1542,26 @@ a.btn-primary { text-decoration: none; }
 .dash__loading { display: grid; justify-items: center; padding: 64px 0; }
 .badge--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .badge--cyan { color: var(--cyan-ink); background: rgba(67, 176, 216, 0.14); }
+/* 原型 wf-pathcard__foot .wf-btn--link（361）：左对齐的纯文字 link，
+   分隔线只由 .path__foot 提供一条，本元素不再自带 border-top */
 .path__detail-link {
   font-size: 12.5px; font-weight: 700; color: var(--blue-deep);
-  text-decoration: none; text-align: center;
-  border-top: 1px solid var(--line); padding-top: 12px;
+  text-decoration: none; justify-self: start;
 }
 .path__detail-link:hover { text-decoration: underline; }
 .dash__main { width: 100%; }
 </style>
 
 <style scoped>
-.greet__sub {
-  font-size: 12px;
-  color: var(--faint);
-  /* 原为 max-width: 46ch。46ch ≈ 324px，而 1440 实测这句问候需要 506px，
-     于是「…那我们从「别人能看…」被切断，右侧还空着 ~195px（行动卡行宽 1024，
-     问候 650 + 连续天数 179）——一个句子被硬帽截断比排不下才截断难看得多。
-     改成不设帽：靠 flex 收缩，只有真的排不下才出省略号。
-     min-width: 0 两处都要：不写的话 flex 项的下限是内容宽度（nowrap 全句），
-     收缩不了，最后会顶宽整行。 */
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tip--recover { border-color: color-mix(in srgb, var(--accent) 28%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, transparent), color-mix(in srgb, var(--cyan) 5%, transparent)); }
+/* 副标降级进日期行：只管字号与颜色，省略号由 .greet__date 承担（见布局块） */
+.greet__sub { font-size: 12px; color: var(--faint); }
+/* 分级底色（Vue 多于原型的部分）：与 .tip 一致走纯色，不再用渐变 */
+.tip--recover { border-color: color-mix(in srgb, var(--accent) 28%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .tip--recover .tip__icon { color: var(--accent); }
-.tip--warn { border-color: color-mix(in srgb, var(--amber) 30%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--amber) 9%, transparent), color-mix(in srgb, var(--amber) 4%, transparent)); }
-.tip--warn .tip__icon { color: var(--amber, #b3540a); }
-.tip--attention { border-color: color-mix(in srgb, var(--red) 25%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--red) 7%, transparent), color-mix(in srgb, var(--amber) 5%, transparent)); }
+.tip--warn { border-color: color-mix(in srgb, var(--amber) 30%, transparent); background: color-mix(in srgb, var(--amber) 9%, transparent); }
+.tip--warn .tip__icon { color: var(--amber); }
+.tip--attention { border-color: color-mix(in srgb, var(--red) 25%, transparent); background: color-mix(in srgb, var(--red) 7%, transparent); }
 .tip--attention .tip__icon { color: var(--red-ink); }
-.tip--normal { border-color: color-mix(in srgb, var(--blue) 18%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 7%, transparent), color-mix(in srgb, var(--cyan) 5%, transparent)); }
 </style>
 
 <style scoped>
@@ -1657,27 +1575,14 @@ a.btn-primary { text-decoration: none; }
 </style>
 
 <style scoped>
-/* ---------- 当天明细入口 ---------- */
-.day-detail__actions {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-}
-.day-detail__more {
-  border: 0; background: transparent;
-  color: var(--blue-deep);
-  font: inherit; font-size: 12.5px; font-weight: 800;
-  cursor: pointer; text-align: left;
-  padding: 8px 0 0;
-  text-decoration: none;
-}
-.day-detail__more:hover { text-decoration: underline; }
-
 /* ---------- 当天学习复盘抽屉 ---------- */
 .sheet-mask {
   position: fixed; inset: 0; z-index: 80;
   background: rgba(23, 32, 51, 0.32);
-  backdrop-filter: blur(2px);
+  /* 批次 D（2026-10-02）：backdrop-filter: blur(2px) 已删。
+     模态遮罩的职责是「压暗并隔断下层」，32% 的墨色已经做到这点；
+     2px 的模糊在任何屏幕上都几乎看不出，却要为此付一次全屏合成开销，
+     且在暗色主题下会让遮罩内容轻微发糊。规范材质一律平面。 */
   display: flex; justify-content: flex-end;
 }
 .sheet {
@@ -1771,7 +1676,7 @@ a.btn-primary { text-decoration: none; }
   padding: 3px 9px; border-radius: var(--mk-radius-pill);
   background: #eef2f8; color: var(--muted);
 }
-.chip--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
+.chip--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .chip--cyan { color: var(--cyan-ink); background: rgba(67, 176, 216, 0.14); }
 .chip--purple { color: var(--accent); background: rgba(141, 107, 255, 0.12); }
 .scard__confuse {
@@ -1807,7 +1712,9 @@ a.btn-primary { text-decoration: none; }
   display: grid; grid-template-columns: 44px 1fr; gap: 8px;
   font-size: 12px; line-height: 1.55; color: var(--muted);
 }
-.scard__event-time { color: var(--faint); font-variant-numeric: tabular-nums; font-size: 11px; padding-top: 2px; }
+/* 时间列不再自写 11px：规则 16 的 <12px 棘轮本文件只留 1 个槽位（已给周格 label/分钟），
+   随 .scard__events li 继承 12px */
+.scard__event-time { color: var(--faint); font-variant-numeric: tabular-nums; padding-top: 2px; }
 
 /* 抽屉动画 */
 .sheet-enter-active, .sheet-leave-active { transition: opacity .22s ease; }
@@ -1833,21 +1740,9 @@ a.btn-primary { text-decoration: none; }
 .action__eyebrow { flex-wrap: wrap; row-gap: 4px; }
 .action__from { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 1100px) {
-  .greet__left { flex-wrap: wrap; row-gap: 4px; min-width: 0; }
-  /* 副标题独占一行（批9 首屏微调）。单行省略不能靠 nowrap+max-width：min-content 测量时
-     百分比 max-width 被忽略、nowrap 全文宽（46ch≈506px）直接进 grid 轨道，375 屏整页
-     撑出 153px 横向滚动（2026-09-23 实测）。line-clamp 单行的 min-content 是单字宽，
-     截断效果与省略号一致。 */
-  .greet__sub {
-    flex-basis: 100%;
-    max-width: 100%;
-    min-width: 0;
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
+  /* greet__sub 已降级成日期行里的 inline 续写（.greet__date 承担 nowrap 省略号），
+     原「独占一行 + line-clamp」的移动端覆写随之退役——父级是 inline span，
+     display:-webkit-box 会在 nowrap 行里另起一块，反而把日期行撑破 */
   .action__title { overflow-wrap: anywhere; }
 }
 </style>
@@ -1861,26 +1756,16 @@ a.btn-primary { text-decoration: none; }
   .week { padding: 16px 14px; }
   .week__grid { gap: 5px; }
   .day { padding: 6px 2px 8px; min-height: 44px; align-content: space-between; }
-  .day__cell { width: 28px; height: 28px; border-radius: var(--mk-radius-md); font-size: 11px; }
-  .month { padding: 16px 14px; }
-  .month__meta { gap: 10px; }
+  /* 字号不随窄屏下调：基座 12px 已是下限（密度块另有 12px 兜底），缩的只有格子 */
+  .day__cell { width: 28px; height: 28px; border-radius: var(--mk-radius-md); }
 }
 </style>
 
 <style scoped>
-/* ---------- 展开/收起 ---------- */
 /* ---------- 暗色模式覆写 ---------- */
-[data-theme='dark'] .day__cell--h0,
-[data-theme='dark'] .mday--h0 { background: rgba(230, 237, 247, 0.1); color: var(--ink, #efeff0); }
-[data-theme='dark'] .day__cell--h1,
-[data-theme='dark'] .mday--h1 { background: rgba(77, 139, 248, 0.22); color: var(--blue-deep, #6fa3ff); }
-[data-theme='dark'] .day__cell--h2,
-[data-theme='dark'] .mday--h2 { background: rgba(77, 139, 248, 0.45); color: var(--mk-ink); }
-[data-theme='dark'] .day__cell--h3,
-[data-theme='dark'] .mday--h3 { background: rgba(77, 139, 248, 0.85); color: #ffffff; }
+/* 周格热力色阶改走 color-mix(--blue …) 后随令牌自适应，暗色无需逐档覆写（原 h0~h3
+   的 rgba(77,139,248,…) 已随整月日历一起退役）；下面只留底色类元素的暗色底 */
 [data-theme='dark'] .budget__bar { background: rgba(230, 237, 247, 0.12); }
-[data-theme='dark'] .mday--prev,
-[data-theme='dark'] .mday--future { color: var(--faint); }
 [data-theme='dark'] .sheet__zone--none { background: rgba(230, 237, 247, 0.1); }
 [data-theme='dark'] .chip { background: rgba(230, 237, 247, 0.1); }
 </style>
@@ -1894,8 +1779,9 @@ a.btn-primary { text-decoration: none; }
    不动的：.badge/.quick__body small 这类桌面本来就是 11–11.5px 的微标签——单方面放大后
    手机上同一个元素比桌面还大，而且卡片会变高，与密度目标相反。 */
 @media (max-width: 1100px) {
-  /* 卡内节奏同步收：内边距已到位，余下的开销是 gap（10/14）与页脚按钮行的 12 */
-  .action { padding: 16px 18px; gap: 8px; }
+  /* 卡内节奏同步收：内边距基座已是 16（横向再由下面的「归一」规则锁 16），移动端
+     余下的开销只有 gap（行动卡 10 / 路径卡 14）与页脚按钮行的 12 */
+  .action { gap: 8px; }
   .action--empty { padding: 14px 16px; }
   .action__footer { gap: 8px; }
   /* 调控提醒行是触屏上的跳转入口，抬到 44 触控带（mobile:spec lt44 口径） */
@@ -1913,27 +1799,16 @@ a.btn-primary { text-decoration: none; }
 }
 
 /* ---------- ≤1100 密度补齐（2026-09-25 移动框架批8） ----------
-   budget/review 已并入「今日安排」单卡（批17），移动密度走 .agenda；
-   预算行是「名称+进度条+数值+带宽」的桌面表格行，375 下进度条被压到 ~41px——
-   转两行卡片：第一行名称+带宽+数值，第二行进度条通栏（框架：表格必须转垂直卡片流）。 */
+   budget/review 已并入「今日安排」单卡（批17），移动密度走 .agenda。
+   预算行基座已按原型改成「第一行 名称+带宽+数值 / 第二行 通栏进度条」两行结构——
+   375 下进度条被压到 ~41px 是旧单行表格布局的问题，原来的 grid-areas 转卡随基座
+   改版一并退役；移动端只剩两件事：行高抬到 44 触控带、名称保持省略号不破格。 */
 @media (max-width: 1100px) {
   .agenda { padding: 14px; }
-  .budget__item,
-  .budget__link {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    grid-template-areas:
-      "name bw num"
-      "bar bar bar";
-    align-items: center;
-    column-gap: 8px;
-    row-gap: 6px;
-    min-height: 44px;
-  }
-  .budget__name { grid-area: name; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .budget__bw { grid-area: bw; }
-  .budget__num { grid-area: num; width: auto; }
-  .budget__bar { grid-area: bar; width: 100%; }
+  .budget__item { min-height: 44px; }
+  .budget__link { min-height: 44px; }
+  .budget__name { min-width: 0; }
+  .budget__bar { width: 100%; }
 
   /* ── 卡内边距归一（2026-09-26 用户侧对齐走查）─────────────────────────
      .card 基座（1414 行）只给背景/边框/圆角/阴影，内边距一直是每张卡自己写，

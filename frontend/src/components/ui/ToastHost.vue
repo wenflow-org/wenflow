@@ -49,16 +49,23 @@ const dismissToast = (item: ToastItem) => {
 </script>
 
 <style scoped>
+/* 原型 .wf-toasts（newui/用户侧/index.html）：底部居中浮层，深底白字胶囊。
+   注意：本组件 Teleport 到 body，脱离 .v2-page 作用域，所以只引 --mk-* 全局 token
+   （勿用 v2 的 --surface/--line/--ink 别名层：别名层一旦按需加载/移除，暗色下会白底 toast）；
+   focus 环同理显式写 var(--blue, var(--mk-blue))。 */
 .toast-host {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
   z-index: 9999;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* 原型：width: min(92vw, 430px)（原为右上 340px 定宽） */
+  width: min(92vw, 430px);
   pointer-events: none;
-  max-height: calc(100vh - 40px);
+  max-height: calc(100vh - 52px);
   overflow: hidden;
 }
 
@@ -66,68 +73,63 @@ const dismissToast = (item: ToastItem) => {
   display: flex;
   align-items: center;
   gap: 10px;
-  /* 宿主 fixed 右上 right:20px：100vw-40px 保证 ≤360px 窄屏不被裁切（原固定 340 会溢出） */
-  width: min(340px, calc(100vw - 40px));
+  width: 100%;
   padding: 12px 14px;
-  border-radius: 6px;
-  /* 直接引 --mk-* token（勿用 v2 的 --surface/--line/--ink 别名层）：
-     ToastHost teleport 到 body，admin 页面只有 --mk-* 保证有定义（含暗色翻转），
-     旧变量依赖 v2.css 的 :root 别名，别名层一旦按需加载/移除，暗色下会出现白底 toast */
-  background: var(--mk-surface, #ffffff);
-  border: 1px solid var(--mk-line, rgba(0, 0, 0, 0.06));
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  background: var(--mk-ink, #1a2a44);
+  color: #fff;
+  font-size: 13.5px;
+  line-height: 1.5;
+  box-shadow: 0 14px 34px rgba(16, 26, 48, 0.28);
   pointer-events: auto;
   transition: box-shadow 0.2s ease;
 }
 
 .toast-item--error {
-  border-color: rgba(220, 38, 38, 0.22);
+  /* 原型字面值（.wf-toast--err）：固定深红，暗色下同样成立 */
+  background: #8f2233;
 }
 
 .toast-item:hover {
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 18px 40px rgba(16, 26, 48, 0.34);
 }
 
 .toast-icon {
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
-  border-radius: 50%;
   font-weight: 700;
 }
 
+/* 深底上的图标：原型只着色不铺底（成功 #5fe0a0 / 错误 #ffc2cb） */
 .toast-icon--success {
-  color: var(--mk-green, #166534);
-  background: rgba(22, 163, 74, 0.1);
+  color: #5fe0a0;
 }
 
 .toast-icon--error {
-  color: var(--mk-red, #991b1b);
-  background: rgba(220, 38, 38, 0.1);
+  color: #ffc2cb;
 }
 
 .toast-icon--warning {
-  color: var(--mk-amber, #92400e);
-  background: rgba(217, 119, 6, 0.1);
+  color: color-mix(in srgb, var(--mk-amber, #b45309) 45%, #ffffff);
 }
 
 .toast-icon--info {
-  color: var(--mk-blue, #1e40af);
-  background: rgba(37, 99, 235, 0.1);
+  color: color-mix(in srgb, var(--mk-blue, #2f6ae0) 55%, #ffffff);
 }
 
 .toast-message {
   flex: 1;
   margin: 0;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 500;
-  line-height: 1.55;
-  color: var(--mk-ink, #333333);
+  line-height: 1.5;
+  color: #fff;
   word-break: break-word;
 }
 
@@ -140,7 +142,7 @@ const dismissToast = (item: ToastItem) => {
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--mk-faint, #999999);
+  color: rgba(255, 255, 255, 0.72);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
@@ -149,36 +151,46 @@ const dismissToast = (item: ToastItem) => {
 }
 
 .toast-close:hover {
-  color: var(--mk-muted, #555555);
-  background: rgba(0, 0, 0, 0.04);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .toast-close:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--blue, var(--mk-blue, #2f6ae0));
   outline-offset: 2px;
 }
 
-/* Transition */
+/* 底部浮层：入场上推、离场下沉（原型 wf-toast-in/out，.22s --mk-ease-out） */
 .toast-slide-enter-active {
-  transition: all 220ms ease-out;
+  transition: opacity 0.22s var(--mk-ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+    transform 0.22s var(--mk-ease-out, cubic-bezier(0.16, 1, 0.3, 1));
 }
 
 .toast-slide-leave-active {
-  transition: all 220ms ease-in;
+  transition: opacity 0.2s var(--mk-ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+    transform 0.2s var(--mk-ease-out, cubic-bezier(0.16, 1, 0.3, 1));
 }
 
 .toast-slide-enter-from {
   opacity: 0;
-  transform: translateY(-12px) translateX(8px);
+  transform: translateY(10px);
 }
 
 .toast-slide-leave-to {
   opacity: 0;
-  transform: translateY(-8px);
+  transform: translateY(8px);
 }
 
 .toast-slide-move {
-  transition: transform 200ms ease;
+  transition: transform 0.2s var(--mk-ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+/* ≤1023（底部 dock 出现的档位）：抬到 84px 让开底部导航（原型同款断点） */
+@media (max-width: 1023.98px) {
+  .toast-host {
+    bottom: 84px;
+    max-height: calc(100vh - 110px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -76,18 +76,23 @@ defineEmits<{ (e: 'action'): void }>();
   padding: 0 18px;
   border: 0;
   border-radius: var(--mk-radius-pill);
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  background: var(--blue);   /* 批次 D：135deg 渐变 → 纯色友好蓝（规范禁渐变） */
   color: #fff;
   font: inherit;
   font-size: 13px;
   font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--blue) 26%, transparent);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.15s ease;
+  /* 批次 D（2026-10-02）：蓝色外发光（静态 26% + hover 32%）已删。
+     规范「禁止彩色光晕」；按钮不叠滚动内容，投影不表达层级。
+     悬停反馈改为背景色变化（规范允许 hover 变背景，且这是规范钦定的
+     hover 档 primary-dark），不再靠加深投影——那正是被判死的光晕递增。 */
+  transition: transform 0.18s ease, background 0.18s ease, opacity 0.15s ease;
 }
 .v2result__action:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 9px 18px color-mix(in srgb, var(--blue) 32%, transparent);
+  background: var(--blue-deep);
+}
+.v2result__action:active:not(:disabled) {
+  transform: scale(0.98);
 }
 .v2result__action:disabled { opacity: 0.6; cursor: default; }
 </style>

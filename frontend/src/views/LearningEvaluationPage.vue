@@ -725,7 +725,7 @@ onUnmounted(() => {
   border: 1px solid var(--line, rgba(23, 32, 51, 0.06));
   border-radius: 16px;
   background: var(--surface);
-  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.04);
+  box-shadow: var(--wf-shadow-raised);
 }
 
 .evaluation-head__actions {
@@ -855,7 +855,7 @@ onUnmounted(() => {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 16px;
-  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.04);
+  box-shadow: var(--wf-shadow-raised);
   background-image: none;
 }
 
@@ -1029,7 +1029,7 @@ onUnmounted(() => {
   border: 1px solid var(--line, rgba(23, 32, 51, 0.06));
   border-radius: 16px;
   background: var(--surface);
-  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.04);
+  box-shadow: var(--wf-shadow-raised);
   display: grid;
   gap: 18px;
 }
@@ -1317,11 +1317,12 @@ onUnmounted(() => {
   }
 }
 
-/* ---- 暗色模式：浅色投影在深底上不可见，改用深色投影（对齐 v2.css .card） ---- */
+/* ---- 暗色模式：投影档位随主题自动翻转（--wf-shadow-raised 在暗色下即深色投影），
+   不再需要这里手写一份 rgba(0,0,0,…) 覆写（对齐 v2.css .card） ---- */
 [data-theme='dark'] .evaluation-head,
 [data-theme='dark'] .evaluation-transcript-card,
 [data-theme='dark'] .evaluation-shell :deep(.completion-card) {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--wf-shadow-raised);
 }
 </style>
 
@@ -1599,11 +1600,13 @@ onUnmounted(() => {
     align-items: center;
     gap: 8px;
     padding: 8px;
-    background: color-mix(in srgb, var(--surface, #fff) 94%, transparent);
-    backdrop-filter: blur(10px);
+    /* 「友好而平」：吸底浮条原先是 94% 半透明 + backdrop-filter: blur(10px) 的磨砂玻璃。
+       玻璃在滚动的长报告上会拖出残影；改为实底 --wf-bg-elevated，
+       靠 overlay 档中性投影 + 1px 描边表达「浮在正文之上」，不再依赖模糊。 */
+    background: var(--wf-bg-elevated);
     border: 1px solid var(--line);
     border-radius: 16px;
-    box-shadow: 0 14px 36px rgba(23, 32, 51, 0.2);
+    box-shadow: var(--wf-shadow-overlay);
   }
 }
 
@@ -1627,9 +1630,10 @@ onUnmounted(() => {
 .evaluation-ctabar__btn--link { border-color: transparent; background: none; }
 .evaluation-ctabar__btn--primary {
   border-color: transparent;
-  background: linear-gradient(135deg, var(--blue, #2f6ae0), var(--blue-deep, #1f57cc));
+  /* 主按钮实心化：去掉 linear-gradient 与配套的蓝色发光投影，
+     层级由浮条自身的 overlay 投影承担，按钮不再自己发光。 */
+  background: var(--blue, #2f6ae0);
   color: #fff;
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--blue, #2f6ae0) 30%, transparent);
 }
 
 /* ---------- 页内目录（批10：≥1440 宽屏独占报告右侧空地；窄屏不渲染占位） ---------- */

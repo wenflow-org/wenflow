@@ -187,15 +187,18 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* ===== 顶栏（品牌 · 胶囊导航 · 操作）：毛玻璃条，sticky 于页面滚动 ===== */
+/* ===== 顶栏（品牌 · 胶囊导航 · 操作）：不透明平面条，sticky 于页面滚动 =====
+   批次 D（2026-10-02）平面化：原为 rgba(255,255,255,.94) + blur(10px) 毛玻璃。
+   粘性顶栏下滚时内容从其下穿过，半透明无模糊会让文字「糊在一起」；
+   规范的材质语言是「平面 + 1px 发丝线」，分层靠线不靠模糊。
+   底色改引 --mk-surface（暗色档由 tokens.css 自动翻转，不再需要 --v2nav-bg
+   这个半透明兜底——它在暗色下曾是一层白纱）。 */
 .v2nav-bar {
   position: sticky; top: 0; z-index: 30;
   display: flex; align-items: center; gap: 8px;
   padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
-  background: var(--v2nav-bg, rgba(255, 255, 255, 0.94));
-  border-bottom: 1px solid var(--line, #e3e9f4);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: var(--mk-surface);
+  border-bottom: 1px solid var(--mk-line);
 }
 .v2nav-bar__left { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* 返回钮：44px 圆形触控（HIG 下限），仅非 tab 屏渲染 */

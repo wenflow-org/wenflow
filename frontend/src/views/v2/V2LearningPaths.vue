@@ -12,12 +12,14 @@
         </div>
       </transition>
 
-      <!-- 页头（失败态隐藏：「还没有学习路径」与失败原因同屏会互相矛盾） -->
-      <div v-if="!loadError" class="paths__hero">
-        <div>
-          <h1>{{ cards.length ? '继续你的学习计划' : '还没有学习路径' }}</h1>
-          <p>{{ cards.length ? '查看当前任务、路径进度和需要处理的问题。' : '规划第一个目标，问流会为你生成可执行的学习路径。' }}</p>
-        </div>
+      <!-- 页头按原型 wf-paths__head（index.html 1786-1792）：左 16px 标题 + 右 ghost「新目标」，
+           无 hero 大标题与说明文字；失败态仍隐藏（与失败原因同屏会互相矛盾） -->
+      <div v-if="!loadError" class="paths__head">
+        <h2>我的学习路径</h2>
+        <button type="button" class="paths__new-goal" @click="router.push('/goal-conversation')">
+          <Plus :size="15" :stroke-width="2" aria-hidden="true" />
+          新目标
+        </button>
       </div>
 
       <!-- 加载 -->
@@ -110,20 +112,21 @@
             v-for="card in visibleCards"
             :key="card.id"
             class="pcard"
-            :class="[`pcard--${card.kind}`, { 'pcard--menu-open': menuFor === card.id }]"
+            :class="`pcard--${card.kind}`"
             @click="openPath(card)"
           >
             <div class="pcard__head">
-              <span class="pcard__thumb" aria-hidden="true">{{ thumbLetter(card) }}</span>
-              <div class="pcard__body">
+              <div class="pcard__head-main">
                 <h3 class="pcard__title">
                   <!-- 标题是真链接：键盘 Tab/读屏由此进入详情（整卡点击只是鼠标便利，批18） -->
                   <router-link :to="'/learning-path/' + card.id" @click.stop>{{ card.title }}</router-link>
                 </h3>
-                <p class="pcard__desc">{{ card.desc }}</p>
+                <!-- 副行按原型 wf-pathitem__sub（12px faint）：课时 · 时长；后端没有目标日期字段，不编造 -->
+                <p v-if="card.sub" class="pcard__sub">{{ card.sub }}</p>
               </div>
               <div class="pcard__head-right">
-                <span v-if="card.kind === 'generating' || card.kind === 'failed'" class="pcard__badge" :class="badgeCls(card)">{{ statusLabel(card) }}</span>
+                <!-- 状态徽章常驻（原型每张卡都有，1797/1808/1817）：进行中/已完成同样渲染 -->
+                <span class="pcard__badge" :class="badgeCls(card)">{{ statusLabel(card) }}</span>
                 <span class="pcard__more-wrap">
                   <button
                     type="button"
@@ -138,8 +141,7 @@
                     <MoreHorizontal :size="17" aria-hidden="true" />
                   </button>
                   <!-- 防误触（2026-09-27）：菜单开着时全屏透明遮罩把「关菜单的那一tap」吃掉，
-                       不让它落到「删除路径」或卡片导航上；开菜单的卡片钉住不抬升，
-                       否则 transform 会把 fixed 遮罩的包含块改成卡片自身 -->
+                       不让它落到「删除路径」或卡片导航上（卡片已无 hover transform，fixed 遮罩直接铺满视口） -->
                   <div v-if="menuFor === card.id" class="pcard__menu-scrim" @click.stop="menuFor = ''"></div>
                   <div v-if="menuFor === card.id" class="pcard__menu" role="menu" @click.stop>
                     <button type="button" v-if="card.kind === 'failed'" class="pcard__menu-item" role="menuitem" @click="doRetry(card)">
@@ -154,22 +156,15 @@
               </div>
             </div>
 
-            <!-- ready：进度行 + 底部信息栏 -->
+            <!-- ready/completed：原型 wf-pathcard__foot 两段式——分隔线 + 8px 进度条 + 两端数字 -->
             <template v-if="card.kind === 'ready' || card.kind === 'completed'">
-              <div class="pcard__progress-row">
-                <div class="pcard__progress"><i :style="{ width: card.percent + '%' }"></i></div>
-                <span class="pcard__percent">{{ card.percent }}%</span>
-              </div>
               <div class="pcard__foot">
-                <!-- stages=0（后端未给阶段数）时不渲染「阶段 1 / 0」这种破数 -->
-                <span v-if="card.stages || card.hours" class="pcard__meta">
-                  <template v-if="card.stages">阶段 {{ Math.max(1, Math.min(card.stageDone + 1, card.stages)) }} / {{ card.stages }}</template>
-                  <template v-if="card.hours">{{ card.stages ? ' · ' : '' }}已备好 {{ card.lessons }} 节课 · 约 {{ card.hours }} 小时</template>
-                </span>
-                <span class="pcard__cta">
-                  {{ card.kind === 'completed' ? '查看学习成果' : '继续学习' }}
-                  <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M13 5v6H5v2h8v6l7-7z"/></svg>
-                </span>
+                <div class="pcard__bar"><i :style="{ width: card.percent + '%' }"></i></div>
+                <div class="pcard__nums">
+                  <span>整体 {{ card.percent }}%</span>
+                  <!-- stages=0（后端未给阶段数）时不渲染「第 1 / 0」这种破数 -->
+                  <span v-if="card.stages">第 {{ Math.max(1, Math.min(card.stageDone + 1, card.stages)) }} / {{ card.stages }} 阶段</span>
+                </div>
               </div>
               <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
                 <span>确认删除这条路径？删除后不可自行恢复。</span>
@@ -205,6 +200,12 @@
               </div>
             </template>
           </article>
+
+          <!-- 原型 wf-newpath（1823-1826 / 725-731）：列表末尾的虚线蓝底新目标入口 -->
+          <button type="button" class="cards__newpath" @click="router.push('/goal-conversation')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            用 2 分钟规划一个新目标
+          </button>
         </div>
 
         <!-- 筛选/搜索空态 -->
@@ -230,7 +231,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { MoreHorizontal, RotateCcw, Search, Trash2 } from 'lucide-vue-next';
+import { MoreHorizontal, Plus, RotateCcw, Search, Trash2 } from 'lucide-vue-next';
 import request, { AI_REQUEST_TIMEOUT } from '@/utils/api';
 import { toast } from '@/utils/toast';
 import { learningAPI } from '@/api/learning';
@@ -245,6 +246,8 @@ interface PathCard {
   id: string;
   title: string;
   desc: string;
+  /** 副行（原型 wf-pathitem__sub）：课时 · 时长；只存展示文案，desc 仍供搜索 */
+  sub: string;
   kind: CardKind;
   stages: number;
   stageDone: number;
@@ -285,6 +288,16 @@ const pollFailCount = ref(0);
 
 const deleteBusy = ref(false);
 
+/** 原型副行（wf-pathitem__sub）：「已备好 24 节课 · 约 24 小时」；
+    数据不全回退「共 N 阶段」，一个字段都没有就留空（不编造「目标日期」——后端无此字段） */
+function buildSub(stages: number, lessons?: number, hours?: number) {
+  const parts: string[] = [];
+  if (lessons) parts.push(`已备好 ${lessons} 节课`);
+  if (hours) parts.push(`约 ${hours} 小时`);
+  if (!parts.length && stages) parts.push(`共 ${stages} 阶段`);
+  return parts.join(' · ');
+}
+
 function normalize(p: Record<string, any>): PathCard {
   const lc = p.generationLifecycle;
   const title = p.title || p.name || '未命名路径';
@@ -296,7 +309,7 @@ function normalize(p: Record<string, any>): PathCard {
   if (lc && lc.phase !== 'ready') {
     if (lc.status === 'failed' || lc.status === 'stale') {
       return {
-        id: p.id, title, desc, kind: 'failed', stages, stageDone: lc.completedStages ?? 0,
+        id: p.id, title, desc, sub: buildSub(stages), kind: 'failed', stages, stageDone: lc.completedStages ?? 0,
         percent: 0, hours, retryType: lc.retryType,
         retryLabel: lc.retryType === 'stage_design' ? '重新准备阶段任务' : '重新生成主结构',
         phaseText: '', errorText: lc.errorMessage || ''
@@ -306,7 +319,7 @@ function normalize(p: Record<string, any>): PathCard {
       ? '主结构生成中，一般 1-2 分钟内完成…'
       : `阶段任务准备中（${lc.completedStages ?? 0}/${lc.totalStages ?? '?'}）…`;
     return {
-      id: p.id, title, desc, kind: 'generating', stages, stageDone: lc.completedStages ?? 0,
+      id: p.id, title, desc, sub: buildSub(stages), kind: 'generating', stages, stageDone: lc.completedStages ?? 0,
       percent: 0, hours, retryType: null, retryLabel: '', phaseText, errorText: ''
     };
   }
@@ -328,8 +341,9 @@ function normalize(p: Record<string, any>): PathCard {
   }
   const percent = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0;
   const kind: CardKind = p.status === 'completed' || percent >= 100 ? 'completed' : 'ready';
+  const totalStages = stages || weeks.length;
   return {
-    id: p.id, title, desc, kind, stages: stages || weeks.length, stageDone,
+    id: p.id, title, desc, sub: buildSub(totalStages, totalTasks, hours), kind, stages: totalStages, stageDone,
     percent, hours, lessons: totalTasks, retryType: null, retryLabel: '', phaseText: '', errorText: '', status: p.status
   };
 }
@@ -463,12 +477,6 @@ async function doDelete(card: PathCard) {
 
 const countOf = (k: CardKind) => cards.value.filter((c) => c.kind === k).length;
 
-/** 图标锚点：取路径标题首字符（视觉识别） */
-function thumbLetter(card: PathCard) {
-  const t = (card.title || '').trim();
-  return t ? t.charAt(0).toUpperCase() : '路';
-}
-
 /** 整卡可点击：进入路径详情页 */
 function openPath(card: PathCard) {
   router.push(`/learning-path/${card.id}`);
@@ -592,13 +600,30 @@ onBeforeUnmount(() => {
   padding: 24px 28px 48px;
   display: grid; gap: 18px;
 }
-.paths__hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-/* 搜索+排序工具行（批18）：全尺寸常显（移动端芯片行收弹层后，这里是唯一检索入口） */
+/* 页头按原型 wf-paths__head（718-719）：左标题、右 ghost 按钮 */
+.paths__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.paths__head h2 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+/* ghost「新目标」＝原型 wf-btn--ghost（surface 底 + line 描边 + muted 字） */
+.paths__new-goal {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 38px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: var(--mk-radius-xl);
+  background: var(--surface); color: var(--muted);
+  font-family: inherit; font-size: 13px; font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.paths__new-goal:hover {
+  border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+  color: var(--blue-deep);
+}
+/* 搜索+排序工具行（批18）：全尺寸常显（移动端芯片行收弹层后，这里是唯一检索入口），
+   视觉压到原型 chip 语言（1px line / surface 底 / muted 字 / 胶囊） */
 .paths__tools { display: flex; align-items: center; gap: 10px; margin: 14px 0 2px; flex-wrap: wrap; }
 .paths__search {
   flex: 1 1 220px; max-width: 420px;
   display: flex; align-items: center; gap: 8px;
-  padding: 0 12px; min-height: 38px;
+  padding: 0 14px; min-height: 36px;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
   color: var(--faint);
   transition: border-color var(--mk-dur-fast, 120ms) ease, box-shadow var(--mk-dur-fast, 120ms) ease;
@@ -608,16 +633,16 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 14%, transparent);
 }
 .paths__search input {
-  flex: 1; min-width: 0; min-height: 44px; border: 0; background: none; font: inherit; font-size: 13.5px;
+  flex: 1; min-width: 0; min-height: 36px; border: 0; background: none; font: inherit; font-size: 13px;
   color: var(--ink); outline: none;
 }
 .paths__search input::placeholder { color: var(--faint); }
 .paths__search-clear { border: 0; background: none; padding: 4px; font-size: 15px; color: var(--faint); cursor: pointer; line-height: 1; }
 .paths__search-clear:hover { color: var(--ink); }
-.paths__sort { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.paths__sort { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
 .paths__sort select {
-  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink);
-  padding: 7px 8px; border-radius: var(--mk-radius-md);
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
+  min-height: 36px; padding: 7px 14px; border-radius: var(--mk-radius-pill);
   border: 1px solid var(--line); background: var(--surface); cursor: pointer;
 }
 /* wrapper 沉底：AI 提示与页脚一起贴近底部 */
@@ -631,79 +656,69 @@ onBeforeUnmount(() => {
   font-size: 12px; font-weight: 800; letter-spacing: .06em;
   color: var(--blue-deep);
 }
-.paths__hero h1 { margin: 6px 0 4px; font-size: 20px; letter-spacing: -0.01em; }
-.paths__hero p { margin: 0; font-size: 13.5px; color: var(--muted); }
 
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 11px 22px; border-radius: var(--mk-radius-xl);
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 实色主按钮：蓝渐变 + 30% 蓝色发光投影一并退役 */
+  background: var(--blue);
   color: #fff; font-size: 14px; font-weight: 700;
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 30%, transparent);
   cursor: pointer; text-decoration: none;
+  transition: transform 0.18s ease, background 0.18s ease;
 }
+.btn-primary:not(:disabled):active { transform: scale(0.98); }
 .btn-ghost {
   padding: 10px 18px; border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line); background: var(--surface, #fff);
+  border: 1px solid var(--line); background: var(--surface);
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
 }
 
+/* 状态筛选 chip 行（Vue 侧新增功能）：视觉压到原型 chip 语言——
+   1px line 描边 + surface 底 + muted 字；选中态 border 透明 + blue 12% 底 + blue-deep 字 */
 .filters { display: flex; gap: 8px; flex-wrap: wrap; }
 .filter {
-  border: 1px solid var(--line); background: var(--surface, #fff);
-  border-radius: var(--mk-radius-pill); padding: 8px 15px;
+  min-height: 36px; padding: 7px 14px;
+  border: 1px solid var(--line); background: var(--surface);
+  border-radius: var(--mk-radius-pill);
   font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
   cursor: pointer; transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
 .filter b { margin-left: 4px; color: var(--faint); }
-.filter--active { border-color: rgba(52, 120, 246, 0.45); background: rgba(52, 120, 246, 0.07); color: var(--blue-deep); }
-.filter--active b { color: var(--blue); }
+.filter:hover { background: color-mix(in srgb, var(--blue) 6%, transparent); color: var(--blue-deep); }
+.filter--active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  color: var(--blue-deep);
+}
+.filter--active b { color: var(--blue-deep); }
 
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+/* 卡片＝原型两段式窄列表卡（wf-pathcard / wf-pathitem）：16px 内边距、16 圆角、无缩略图方块、
+   无描述段落、无 hover 抬升（原型 wf-card 只靠光标示意可点，状态由常驻徽章承担） */
 .pcard {
   position: relative;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal);
-  padding: 18px 20px;
+  padding: 16px;
   display: flex; flex-direction: column; gap: 12px;
   box-shadow: var(--shadow-sm);
-  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
   cursor: pointer;
 }
-.pcard:hover { border-color: color-mix(in srgb, var(--blue) 30%, transparent); box-shadow: 0 14px 34px rgba(23, 32, 51, 0.09); transform: translateY(-1px); }
-/* 状态色侧条 */
-.pcard::before {
-  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
-  border-radius: 16px 0 0 16px; background: transparent;
-}
-.pcard--ready::before { background: linear-gradient(180deg, var(--blue), var(--cyan)); }
-.pcard--completed::before { background: var(--green); }
-.pcard--generating::before { background: var(--cyan); }
-.pcard--failed::before { background: linear-gradient(180deg, var(--red), var(--amber)); }
-.pcard--generating { background: linear-gradient(180deg, rgba(67, 176, 216, 0.04), var(--surface) 55%); }
+/* 生成中/失败是原型没有的两种状态：只留极淡底色与描边提示，颜色全部走 token */
+.pcard--generating { background: linear-gradient(180deg, color-mix(in srgb, var(--cyan) 4%, transparent), var(--surface) 55%); }
 .pcard--failed { border-color: color-mix(in srgb, var(--red) 30%, transparent); }
-/* 2026-09-27 二次重排：head 顶对齐——⋯ 随之落到右上角（原来垂直居中悬在卡片中腰），
-   标题/描述恢复自然高度（固定两行盒在单行标题时撑出一行空白，是卡片中间的「鸿沟」） */
+/* head 顶对齐：标题+副行在左，状态徽章与「⋯」在右（原型 wf-pathcard__head / wf-pathitem__row） */
 .pcard__head { display: flex; align-items: flex-start; gap: 12px; }
-.pcard__thumb {
-  width: 36px; height: 36px; border-radius: 11px;
-  display: grid; place-items: center;
-  color: #fff; font-size: 15px; font-weight: 800;
-  flex: 0 0 auto;
-}
-.pcard--ready .pcard__thumb { background: linear-gradient(135deg, var(--blue), var(--cyan)); }
-.pcard--completed .pcard__thumb { background: linear-gradient(135deg, var(--green), #58c98f); }
-.pcard--generating .pcard__thumb { background: linear-gradient(135deg, var(--cyan), #7cc7e2); }
-.pcard--failed .pcard__thumb { background: linear-gradient(135deg, var(--red), var(--amber)); }
-.pcard__body { flex: 1; min-width: 0; }
+.pcard__head-main { flex: 1; min-width: 0; }
 .pcard__head-right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
-.pcard__badge { padding: 3px 9px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; flex: 0 0 auto; }
-.pcard__badge--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
-.pcard__badge--blue { color: var(--blue-deep); background: rgba(52, 120, 246, 0.1); }
-.pcard__badge--cyan { color: var(--blue-deep, #2b7a99); background: rgba(67, 176, 216, 0.14); }
-.pcard__badge--red { color: var(--red, #c0454a); background: rgba(239, 117, 120, 0.12); }
+/* 状态徽章＝原型 wf-badge（216-238 / 301-304）：4×10 内边距、999 圆角、12px/800 */
+.pcard__badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; flex: 0 0 auto; }
+.pcard__badge--green { color: var(--green-ink); background: color-mix(in srgb, var(--green) 12%, transparent); }
+.pcard__badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 11%, transparent); }
+.pcard__badge--cyan { color: var(--cyan-ink); background: color-mix(in srgb, var(--cyan) 14%, transparent); }
+.pcard__badge--red { color: var(--red-ink); background: color-mix(in srgb, var(--red) 12%, transparent); }
 /* 2026-09-27 防误触：⋯ 从裸文本字形升级成实体幽灵按钮——有边界、有 hover/open 态，
    32×32（移动 36 + 伪元素热区 52+），误触概率与「看起来能不能按」同时收敛 */
 .pcard__more {
@@ -716,7 +731,7 @@ onBeforeUnmount(() => {
 .pcard__more:hover,
 .pcard__more.is-open { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
 .pcard__title {
-  margin: 0; font-size: 15px; line-height: 1.4;
+  margin: 0; font-size: 15px; font-weight: 700; line-height: 1.4;
   min-width: 0;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
@@ -727,39 +742,56 @@ onBeforeUnmount(() => {
   display: block; padding: 8px 10px; margin: -8px -10px;
 }
 .pcard__title a:hover { color: var(--blue-deep); }
-.pcard__desc {
-  margin: 4px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+/* 副行＝原型 wf-pathitem__sub（12px faint）：单行省略，窄卡不换行 */
+.pcard__sub {
+  margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: var(--faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-.pcard__progress-row { display: flex; align-items: center; gap: 10px; flex: 1; }
-/* 轨道/空态插画用主题线色：#edf1f8/#e7edf7 是亮底硬编码，暗色下整页唯一的亮块 */
-.pcard__progress { flex: 1; height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
-.pcard__progress i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
-.pcard__percent {
-  font-size: 12px; font-weight: 800; color: var(--blue-deep);
-  font-variant-numeric: tabular-nums; flex: 0 0 auto;
+/* foot＝原型 wf-pathcard__foot（359-360）：分隔线 + 7px 间隔 + 进度条 + 两端数字；
+   进度条按 wf-bar--lg（267-269）：8px 高、99px 胶囊、轨道 color-mix(line 60%)、填充 blue→cyan */
+.pcard__foot {
+  margin-top: auto;
+  border-top: 1px solid var(--line);
+  padding-top: 11px;
+  display: grid; gap: 7px;
 }
-.pcard__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; }
-.pcard__meta { font-size: 12px; color: var(--faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pcard__cta {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 13px; font-weight: 800; color: var(--blue-deep);
-  white-space: nowrap; flex: 0 0 auto;
-  transition: color 0.15s ease, transform 0.15s ease;
+.pcard__bar { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--line) 60%, transparent); overflow: hidden; }
+.pcard__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
+.pcard__nums {
+  display: flex; justify-content: space-between; gap: 10px;
+  font-size: 12px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
-.pcard__cta svg { transition: transform 0.15s ease; }
-.pcard:hover .pcard__cta { transform: translateX(2px); }
 .pcard__actions { display: flex; justify-content: flex-end; margin-top: auto; }
+
+/* 原型 wf-newpath（725-731）：82px 高虚线蓝底块，列表末尾的「规划新目标」入口 */
+.cards__newpath {
+  grid-column: 1 / -1;
+  min-height: 82px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1.5px dashed color-mix(in srgb, var(--blue) 40%, transparent);
+  border-radius: var(--mk-radius-modal);
+  background: color-mix(in srgb, var(--blue) 4%, transparent);
+  color: var(--blue-deep);
+  font-family: inherit; font-size: 14px; font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.cards__newpath:hover {
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 60%, transparent);
+}
+.cards__newpath svg { width: 17px; height: 17px; }
 
 .pcard__generating {
   display: flex; align-items: center; gap: 9px;
-  font-size: 13px; color: var(--blue-deep, #2b7a99); font-weight: 600;
+  font-size: 13px; color: var(--blue-deep); font-weight: 600;
 }
 /* 生成中不再用假骨架填高（批18）：真实信息只有 phaseText 与刷新动作 */
 
 .pcard__fail-reason {
-  font-size: 12.5px; line-height: 1.6; color: var(--red, #c0454a);
+  font-size: 12.5px; line-height: 1.6; color: var(--red);
   background: color-mix(in srgb, var(--red) 7%, transparent);
   border: 1px dashed color-mix(in srgb, var(--red) 35%, transparent);
   border-radius: var(--mk-radius-lg); padding: 9px 12px;
@@ -784,13 +816,11 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1100px) {
   .paths__main { padding: 16px 14px 32px; }
-  /* 移动端页标题 22→20：390 下「继续你的学习计划」占掉 270/362px 宽，
-     比页内正文（13.5px）重得多。全站移动端页标题同步收一档（2026-09-24 反馈）。 */
-  .paths__hero h1 { font-size: 18px; }
-  /* 副标题单行省略（批9 首屏微调）：窄屏不给它第二行 */
-  .paths__hero p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  /* 页头按原型常驻 16px：窄屏给按钮留行，整行可换行不挤压 */
+  .paths__head { flex-wrap: wrap; }
   /* 触诊下限（mobile:spec lt44 只紧不松）：搜索框/排序在 375 抬到 44px */
   .paths__search { min-height: 44px; }
+  .paths__search input { min-height: 44px; }
   .paths__sort select { min-height: 44px; }
   .cards { grid-template-columns: 1fr; }
   /* ⋯ 触发器 36×36（mobile:spec lt36=0 预算），伪元素把热区再外扩到 50+：
@@ -801,12 +831,7 @@ onBeforeUnmount(() => {
 </style>
 
 <style scoped>
-.pcard__badge--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
 .pcard__more-wrap { position: relative; }
-/* 菜单开着时钉住卡片：hover 抬升的 transform 会把 fixed 遮罩的包含块改成卡片，
-   遮罩就只剩卡片那么大；钉住后遮罩真正铺满视口 */
-.pcard.pcard--menu-open,
-.pcard.pcard--menu-open:hover { transform: none; }
 .pcard__menu-scrim {
   position: fixed; inset: 0; z-index: 9;
   background: transparent;
@@ -816,9 +841,9 @@ onBeforeUnmount(() => {
   /* 与触发器隔开 6px 空隙：指尖停在 ⋯ 上时不在任何菜单项里；
      原来贴着（top 40 = 触发器下沿）是误触的另一来源 */
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 10;
-  background: var(--surface, #fff); border: 1px solid var(--line);
+  background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--mk-radius-xl); padding: 6px;
-  box-shadow: 0 12px 30px rgba(23, 32, 51, 0.14);
+  box-shadow: var(--shadow-md);
   display: grid; min-width: 152px;
 }
 .pcard__menu-item {
@@ -832,14 +857,14 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; gap: 8px;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.pcard__menu-sep { height: 1px; background: var(--line, #e3e9f4); margin: 5px 4px; }
+.pcard__menu-sep { height: 1px; background: var(--line); margin: 5px 4px; }
 .pcard__menu-item:hover { background: color-mix(in srgb, var(--surface) 96%, var(--ink)); color: var(--ink); }
-.pcard__menu-item--danger { color: var(--red, #c0454a); }
-.pcard__menu-item--danger:hover { background: rgba(239, 117, 120, 0.08); color: var(--red, #c0454a); }
+.pcard__menu-item--danger { color: var(--red); }
+.pcard__menu-item--danger:hover { background: color-mix(in srgb, var(--red) 8%, transparent); color: var(--red); }
 .pcard__confirm {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   font-size: 12.5px; color: var(--muted);
-  background: var(--canvas, #fafcff); border: 1px dashed var(--line);
+  background: var(--canvas); border: 1px dashed var(--line);
   border-radius: var(--mk-radius-lg); padding: 9px 11px;
 }
 .pcard__confirm > span:first-child { flex: 1; min-width: 0; }
@@ -849,15 +874,15 @@ onBeforeUnmount(() => {
 .pcard__confirm-yes {
   min-height: 36px; padding: 0 14px;
   border: 0; border-radius: var(--mk-radius-pill);
-  background: var(--red, #c0454a); color: #fff;
+  background: var(--red); color: #fff;
   font-size: 12.5px; font-weight: 800; cursor: pointer;
   transition: filter 0.15s ease;
 }
 .pcard__confirm-yes:hover { filter: brightness(1.06); }
 .pcard__confirm-no {
   min-height: 36px; padding: 0 12px;
-  border: 1px solid var(--line, #e3e9f4); border-radius: var(--mk-radius-pill);
-  background: var(--surface, #fff); color: var(--muted, #5b6577);
+  border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+  background: var(--surface); color: var(--muted);
   font-size: 12.5px; font-weight: 700; cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease;
 }
@@ -866,7 +891,7 @@ onBeforeUnmount(() => {
 .goal-banner {
   display: flex; align-items: center; gap: 10px;
   padding: 11px 15px;
-  border-radius: 13px;
+  border-radius: var(--mk-radius-xl);
   background: color-mix(in srgb, var(--blue) 7%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 25%, transparent);
   color: var(--blue-deep);
@@ -897,36 +922,43 @@ onBeforeUnmount(() => {
 <style scoped>
 /* ===== 移动端密度（2026-09-24）=====
    判据：卡片内边距 12–16px、空态/加载留白 ≤32px。
-   实测 390 下 .pcard 18×20、.empty 56px + min-height 52vh、加载态 64px。
+   实测 390 下 .pcard 16px（原型 wf-card 同档）、.empty 56px + min-height 52vh、加载态 64px。
    放在文件末尾：同权重下后出现者胜。 */
 @media (max-width: 1100px) {
-  /* 筛选药丸：390 下 5 个占两行 83px（13px 字 + 8×15 内边距 + 38px 高），
-     收到 6×12（34px，仍在 34–38 的控件档）＋ 间距 8→6；页内节奏 18→14。 */
+  /* 筛选 chip：390 下 5 个收进两行——字 12.5 + 内边距 6×12，
+     高度由基座 min-height:36px 兜底（chip 语言下沿）＋ 间距 8→6；页内节奏 18→14。 */
   .filters { gap: 6px; }
-  .filter { padding: 6px 12px; }
+  .filter { font-size: 12.5px; padding: 6px 12px; }
   .paths__main { gap: 14px; }
-  /* 卡标题 15.5 → 14：用户指着 15.5px 的路径卡标题说「这些就是大了」 */
+  /* 卡标题 15 → 14：用户指着 15.5px 的路径卡标题说「这些就是大了」 */
   .pcard__title { font-size: 14px; }
-  /* 筛选药丸 13 → 12.5（同一条反馈里的元素） */
-  .filter { font-size: 12.5px; padding: 6px 11px; }
   .pcard { padding: 14px 16px; gap: 10px; }
   .empty { min-height: 40vh; padding: 32px 0; }
   .paths__loading { padding: 32px 0; }
 }
 
-/* ---------- 移动端筛选弹层（批13）：≤1100 芯片行收进按钮 + 底部弹层 ---------- */
-.paths__filter-btn { display: none; }
+/* ---------- 移动端筛选弹层（批13）：≤1100 芯片行收进按钮 + 底部弹层 ----------
+   视觉统一压到原型 chip 语言：1px line 描边 + surface 底 + muted 字 + 胶囊圆角；
+   选中态 border 透明 + blue 12% 底 + blue-deep 字（与桌面 .filter--active 同一口径） */
+.paths__filter-btn {
+  display: none;
+  align-items: center; gap: 6px;
+  min-height: 36px; padding: 7px 14px;
+  align-self: flex-start;
+  border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+  background: var(--surface); color: var(--muted);
+  font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.paths__filter-btn:hover {
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+  color: var(--blue-deep);
+}
 @media (max-width: 1100px) {
   .filters { display: none; }
-  .paths__filter-btn {
-    display: inline-flex; align-items: center; gap: 6px;
-    min-height: 44px; padding: 0 14px;
-    align-self: flex-start;
-    border: 1px solid var(--line); border-radius: var(--mk-radius-xl, 12px);
-    background: var(--surface); color: var(--muted, #5b6577);
-    font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer;
-  }
-  .paths__filter-btn:hover { color: var(--blue-deep, #1f57cc); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+  /* 移动端触诊下限 44（mobile:spec 只紧不松）：外观仍是 chip，只高一档 */
+  .paths__filter-btn { display: inline-flex; min-height: 44px; }
   /* 菜单项进 44 触控带：弹出层是悬浮的，点偏了没有 hover 兜底 */
   .pcard__menu { min-width: 168px; }
   .pcard__menu-item { min-height: 44px; }
@@ -935,16 +967,16 @@ onBeforeUnmount(() => {
 }
 .paths__filter-mask {
   position: fixed; inset: 0; z-index: 60;
-  background: rgba(15, 22, 32, 0.45);
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
   display: flex; align-items: flex-end;
 }
 .paths__filter-sheet {
   width: 100%;
   background: var(--surface);
-  border-radius: 18px 18px 0 0;
+  border-radius: var(--mk-radius-modal) var(--mk-radius-modal) 0 0;
   padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px));
   display: grid; gap: 8px;
-  box-shadow: 0 -14px 40px rgba(15, 22, 32, 0.25);
+  box-shadow: 0 -14px 40px color-mix(in srgb, var(--ink) 25%, transparent);
 }
 .paths__filter-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -955,26 +987,27 @@ onBeforeUnmount(() => {
   width: 44px; height: 44px;
   display: grid; place-items: center;
   border: 0; background: none;
-  color: var(--muted, #5b6577); font-size: 22px;
-  cursor: pointer; border-radius: var(--mk-radius-md, 10px); font-family: inherit;
+  color: var(--muted); font-size: 22px;
+  cursor: pointer; border-radius: var(--mk-radius-md); font-family: inherit;
 }
 .paths__filter-opt {
   min-height: 44px;
   display: flex; align-items: center; gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid var(--line); border-radius: var(--mk-radius-lg, 12px);
-  background: transparent;
+  padding: 7px 14px;
+  border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+  background: var(--surface);
   font-size: 13.5px; font-weight: 600; font-family: inherit;
-  color: var(--ink, #172033);
+  color: var(--muted);
   cursor: pointer; text-align: left;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
-.paths__filter-opt b { margin-left: auto; color: var(--faint, #8492ab); font-size: 12px; }
+.paths__filter-opt b { margin-left: auto; color: var(--faint); font-size: 12px; }
 .paths__filter-opt.is-active {
-  border-color: var(--blue, #3478f6);
-  background: color-mix(in srgb, var(--blue, #3478f6) 8%, transparent);
-  color: var(--blue-deep, #1f57cc);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  color: var(--blue-deep);
 }
-.paths__filter-tick { margin-left: auto; font-style: normal; color: var(--blue, #3478f6); font-weight: 800; }
-.paths__filter-opt.is-active b { margin-left: 0; }
+.paths__filter-tick { margin-left: auto; font-style: normal; color: var(--blue); font-weight: 800; }
+.paths__filter-opt.is-active b { margin-left: 0; color: var(--blue-deep); }
 </style>
 

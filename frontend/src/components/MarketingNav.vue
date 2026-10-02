@@ -1,5 +1,5 @@
 <template>
-  <header class="mknav" :class="{ 'mknav--on': scrolled || menuOpen }">
+  <header class="mknav">
     <div class="mknav__shell mknav__in">
       <router-link to="/" class="mknav__logo" @click="closeMenu">
         <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" />
@@ -33,17 +33,17 @@
         </button>
         <router-link :to="secondaryPath" class="mknav__btn mknav__btn--ghost">{{ secondaryLabel }}</router-link>
         <router-link :to="primaryPath" class="mknav__btn mknav__btn--primary">{{ primaryLabel }}</router-link>
+        <button
+          type="button"
+          class="mknav__burger"
+          :class="{ 'mknav__burger--open': menuOpen }"
+          :aria-label="menuOpen ? '关闭菜单' : '打开菜单'"
+          :aria-expanded="menuOpen"
+          @click="menuOpen = !menuOpen"
+        >
+          <span /><span /><span />
+        </button>
       </div>
-      <button
-        type="button"
-        class="mknav__burger"
-        :class="{ 'mknav__burger--open': menuOpen }"
-        :aria-label="menuOpen ? '关闭菜单' : '打开菜单'"
-        :aria-expanded="menuOpen"
-        @click="menuOpen = !menuOpen"
-      >
-        <span /><span /><span />
-      </button>
     </div>
     <Transition name="mknav-drawer">
       <div v-if="menuOpen" class="mknav__drawer mknav__shell">
@@ -68,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { Moon, Sun } from 'lucide-vue-next'
 import { useIsDark } from '@/composables/useIsDark';
 import { applyDocumentTheme, writeTheme } from '@/utils/theme';
@@ -79,7 +79,6 @@ import { useRoute } from 'vue-router'
 const props = defineProps<{ loggedIn: boolean }>()
 
 const route = useRoute()
-const scrolled = ref(false)
 const menuOpen = ref(false)
 
 /* 主题切换：与用户侧唯一事实源同一套读写（v2_theme + 兼容 key），
@@ -111,17 +110,7 @@ watch(menuOpen, (open) => {
   document.body.style.overflow = open ? 'hidden' : ''
 })
 
-function onScroll() {
-  scrolled.value = window.scrollY > 20
-}
-
-onMounted(() => {
-  window.addEventListener('scroll', onScroll, { passive: true })
-  onScroll()
-})
-
 onUnmounted(() => {
-  window.removeEventListener('scroll', onScroll)
   document.body.style.overflow = ''
 })
 </script>
@@ -129,41 +118,30 @@ onUnmounted(() => {
 <style scoped>
 .mknav {
   --ink: var(--mk-ink);
+  --muted: var(--mk-muted);
   --line: var(--mk-line);
-  --blue: #3478f6;
-  --blue-deep: #1f57cc;
-  --nav-bg: rgba(255, 255, 255, 0.88);
-  --nav-shadow: rgba(15, 23, 42, 0.1);
-  --btn-ghost-bg: rgba(255, 255, 255, 0.74);
-  --burger-bg: rgba(255, 255, 255, 0.8);
-  --drawer-bg: rgba(255, 255, 255, 0.96);
-  --link-row-bg: #f7faff;
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --surface: var(--mk-surface);
+  /* 品牌蓝全站同一事实源（原型 --blue / --blue-deep 与 --mk-* 同值，暗色随主题自动翻转） */
+  --blue: var(--mk-blue);
+  --blue-deep: var(--mk-accent-deep);
+  --nav-bg: var(--surface);
+  --nav-shadow: var(--wf-shadow-overlay);
+  --btn-ghost-bg: var(--surface);
+  --burger-bg: var(--surface);
+  --drawer-bg: var(--surface);
+  --link-row-bg: color-mix(in srgb, var(--blue) 6%, transparent);
+  --ease: var(--mk-ease-out);
   [data-theme='dark'] & {
-    --ink: var(--mk-ink);
-    --line: var(--mk-line);
-    --blue: #4d8bf8;
-    --blue-deep: #6fa3ff;
-    --nav-bg: rgba(15, 22, 32, 0.88);
-    --nav-shadow: rgba(0, 0, 0, 0.45);
-    --btn-ghost-bg: rgba(24, 34, 48, 0.66);
-    --burger-bg: rgba(24, 34, 48, 0.72);
-    --drawer-bg: rgba(17, 25, 36, 0.97);
-    --link-row-bg: rgba(230, 237, 247, 0.05);
+    --link-row-bg: color-mix(in srgb, var(--blue) 8%, transparent);
   }
-  position: fixed;
-  inset: 0 0 auto;
-  z-index: 40;
-  border-bottom: 1px solid transparent;
-  transition: 0.24s ease;
-}
-.mknav--on {
+  /* 原型 wf-pnav：sticky 常显底色 + 下边框（不再等滚动才上底色），三区居中栅格 */
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  /* 「友好而平」：材质一律平面化。顶栏原先是 86% 半透明 + backdrop-filter: blur(10px) 的磨砂玻璃，
+     玻璃会随滚动内容变色、且在低性能设备上掉帧；改为 --surface 实底，只保留下边框发丝线来分隔层次。 */
   background: var(--nav-bg);
-  border-color: var(--line);
-  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.06);
-}
-[data-theme='dark'] .mknav--on {
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.38);
+  border-bottom: 1px solid var(--line);
 }
 .mknav__shell {
   width: min(1180px, calc(100% - 48px));
@@ -171,26 +149,39 @@ onUnmounted(() => {
 }
 .mknav__in {
   min-height: 72px;
-  display: flex;
+  /* 三区栅格：品牌居左 · 导航居中 · 操作居右（原型 wf-pnav__in） */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas: 'brand links acts';
   align-items: center;
-  gap: 20px;
+  column-gap: 20px;
+}
+.mknav__logo {
+  grid-area: brand;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--mk-radius-xl);
 }
 .mknav__logo img {
-  height: 48px;
+  height: 44px;
   display: block;
 }
 .mknav__links {
+  grid-area: links;
+  justify-self: center;
   display: flex;
-  gap: 2px;
-  flex: 1;
-  margin-left: 28px;
+  gap: 4px;
 }
 .mknav__link {
-  padding: 8px 14px;
-  border-radius: var(--mk-radius-pill);
+  padding: 9px 14px;
+  /* 圆角 12px = 抽屉里同一批导航行（.mknav__drawer a）与同栏 logo/主题钮的档位。
+     原型 .wf-pnav__link 是直角，用户拍板「还是做成圆角的」——悬停/选中都是整块浅蓝底，
+     直角在顶栏里读成「一块被裁切的色块」，圆角才读成「一个可点的项」。 */
+  border-radius: var(--mk-radius-xl);
   font-size: 14px;
   font-weight: 700;
-  color: color-mix(in srgb, var(--ink) 72%, #fff);
+  color: var(--muted);
   text-decoration: none;
   transition: background 0.2s var(--ease), color 0.2s var(--ease);
 }
@@ -203,10 +194,11 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--blue) 10%, transparent);
 }
 .mknav__acts {
+  grid-area: acts;
+  justify-self: end;
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-left: auto;
 }
 /* 主题切换：降噪图标钮（原型 wf-pnav .wf-piconbtn：44px、12px 圆角、无描边底，
    仅 hover/焦点反馈）——公开页此前无任何主题入口 */
@@ -224,36 +216,46 @@ onUnmounted(() => {
 }
 .mknav__icon:hover {
   background: color-mix(in srgb, var(--blue) 10%, transparent);
-  color: var(--ink, #172033);
+  color: var(--blue-deep);
 }
 .mknav__icon:focus-visible {
-  outline: 2px solid var(--blue, #2c63d0);
+  outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
 .mknav__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 42px;
-  padding: 0 16px;
+  min-height: 44px;
+  padding: 0 18px;
   border-radius: var(--mk-radius-pill);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 800;
   text-decoration: none;
   border: 1px solid transparent;
-  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  /* 平面化后按钮已无彩色投影，transition 里一并去掉 box-shadow，只留 :active 用到的 transform */
+  transition: transform 0.18s var(--ease);
   width: fit-content;
 }
-.mknav__btn:hover {
-  transform: translateY(-2px);
-}
+/* 「友好而平」：取消 hover 上浮。悬停只允许改背景/描边/文字，位移一律不做，
+   按压反馈留给 :active 的 scale(0.98)。 */
 .mknav__btn:active {
-  transform: translateY(0) scale(0.98);
+  transform: scale(0.98);
 }
+.mknav__btn:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+/* 主按钮：实心品牌蓝，不再用 linear-gradient(135deg, …)；
+   原先的 0 14px 30px 蓝色投影属于彩色光晕，一并退休。 */
 .mknav__btn--primary {
   color: #fff;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
-  box-shadow: 0 16px 34px color-mix(in srgb, var(--blue) 22%, transparent);
+  background: var(--blue);
+  transition: transform 0.18s var(--ease), background 0.18s var(--ease);
+}
+/* 悬停改用 darker 蓝档（--blue-deep 即 --wf-color-primary-dark），不给投影 */
+.mknav__btn--primary:hover {
+  background: var(--blue-deep);
 }
 .mknav__btn--ghost {
   color: var(--ink);
@@ -300,33 +302,42 @@ onUnmounted(() => {
   transform: translateY(-10px);
 }
 
+/* 原型 wf-rise 入场编排：顶栏 0.6s 上浮（reduced-motion 由 main.css 全局压到瞬时） */
+@media (prefers-reduced-motion: no-preference) {
+  .mknav {
+    animation: mknav-rise 0.6s var(--ease) both;
+  }
+}
+@keyframes mknav-rise {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media (max-width: 980px) {
-  /* 移动端只留三件：品牌 · 主题钮 · 汉堡（原型 wf-pnav ≤980：links 与两个
-     文字钮全隐，图标钮保留 42px）。汉堡是比原型多带的移动端导航能力。 */
+  /* 原型 wf-pnav ≤980：两区栅格（品牌 · 操作），主导航折叠；64px 条高 + 36px logo。
+     汉堡是比原型多带的移动端导航能力（原型窄屏不提供页间跳转）。 */
+  .mknav__in {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'brand acts';
+    min-height: 64px;
+  }
   .mknav__links {
     display: none;
   }
   .mknav__acts {
     display: flex;
-    margin-left: auto;
-  }
-  .mknav__acts .mknav__btn {
-    display: none;
-  }
-  /* 原型 wf-pnav ≤980：64px 条高 + 36px logo（移动首屏被导航吃掉过多高度） */
-  .mknav__in {
-    min-height: 64px;
   }
   .mknav__logo img {
     height: 36px;
   }
-  .mknav__icon {
-    width: 42px;
-    height: 42px;
-  }
   .mknav__burger {
     display: block;
-    margin-left: 10px;
   }
   .mknav__drawer {
     display: grid;
@@ -336,7 +347,8 @@ onUnmounted(() => {
     border-radius: 20px;
     background: var(--drawer-bg);
     border: 1px solid var(--line);
-    box-shadow: 0 18px 48px var(--nav-shadow, rgba(15, 23, 42, 0.1));
+    /* 悬浮抽屉：投影对齐中性 overlay 档（--wf-shadow-overlay），去掉原先自定的 4 档阴影值 */
+    box-shadow: var(--nav-shadow);
   }
   .mknav__drawer a:not(.mknav__btn) {
     padding: 12px;
@@ -350,8 +362,37 @@ onUnmounted(() => {
     color: var(--blue-deep);
     background: color-mix(in srgb, var(--blue) 10%, transparent);
   }
-  [data-theme='dark'] .mknav__drawer .mknav__link.is-on {
-    background: rgba(77, 139, 248, 0.18);
+}
+
+/* 原型 wf-pub ≤760：容器收窄 + 按钮降档（40/14/14） */
+@media (max-width: 760px) {
+  .mknav__shell {
+    width: min(100% - 28px, 1180px);
+  }
+  .mknav__acts {
+    gap: 8px;
+  }
+  .mknav__btn {
+    min-height: 40px;
+    padding: 0 14px;
+    font-size: 14px;
+  }
+}
+
+/* 原型 wf-pnav ≤600：操作区只留主题图标（两个文字钮移入页面/抽屉），logo 放大到 40px */
+@media (max-width: 600px) {
+  .mknav__in {
+    column-gap: 12px;
+  }
+  .mknav__logo img {
+    height: 40px;
+  }
+  .mknav__acts .mknav__btn {
+    display: none;
+  }
+  .mknav__icon {
+    width: 42px;
+    height: 42px;
   }
 }
 

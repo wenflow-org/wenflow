@@ -339,7 +339,12 @@ onMounted(load)
   margin-left: 8px;
   font-size: 13px;
   font-weight: 700;
-  color: var(--color-warning-deep, #b45309);
+  /* 2026-10-02：--color-warning-deep 是**不存在的令牌**（守卫规则 8 扩面后查出，
+     此前靠兜底 #b45309 静默渲染，CI 全绿）。体系里的正确名是
+     --wf-color-warning-dark(#d9932e)，且同文件 --color-warning 已在用，
+     两者是同族同义，只是深浅不同。此处取 -dark 是因为它要压在白底上充当文字色
+     （兜底值 #b45309 正是「深琥珀当文字色」的用法），语义对得上。 */
+  color: var(--wf-color-warning-dark);
   min-width: 60px;
 }
 
@@ -416,7 +421,11 @@ onMounted(load)
   margin-top: 18px;
   padding: 10px 12px;
   border-left: 3px solid var(--color-danger, #ef7578);
-  background: var(--color-danger-bg, rgba(239, 117, 120, 0.08));
+  /* 2026-10-02：--color-danger-bg 不存在（全仓零定义，规则 8 扩面查出；此前靠
+     兜底 rgba(239,117,120,.08) 静默渲染）。规范令牌层有 --wf-color-danger-bg，
+     语义相同（危险态 10% 淡底），且自带明暗两档 —— 这里必须用规范名而不是
+     把字面量搬进本地变量：本地变量不会有暗色适配，会在暗色主题下留一块浅粉底。 */
+  background: var(--wf-color-danger-bg);
   color: var(--text-primary, #172033);
   font-size: 13px;
 }
@@ -510,24 +519,24 @@ onMounted(load)
   transition: all var(--transition-fast, 150ms ease);
 }
 
+/* 平面化：主按钮保持实心 --color-primary，去掉配套的蓝色发光投影 */
 .feedback-btn--primary {
   background: var(--color-primary, #2f6ae0);
   border-color: var(--color-primary, #2f6ae0);
   color: var(--text-on-primary, #fff);
   font-weight: var(--font-medium, 500);
-  box-shadow: 0 14px 28px color-mix(in srgb, var(--color-primary, #2f6ae0) 24%, transparent);
 }
 
+/* 「友好而平」：取消 hover 上浮（translateY(-1px)）与 hover 投影，
+   悬停只换 darker 蓝档背景；按压反馈移到 :active 的 scale(0.98)。 */
 .feedback-btn--primary:hover:not(:disabled) {
   background: var(--color-primary-dark, #1f57cc);
   border-color: var(--color-primary-dark, #1f57cc);
   color: var(--text-on-primary, #fff);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm, 0 2px 4px rgba(44, 62, 80, 0.06));
 }
 
 .feedback-btn--primary:active:not(:disabled) {
-  transform: translateY(0);
+  transform: scale(0.98);
 }
 
 .feedback-btn:disabled {

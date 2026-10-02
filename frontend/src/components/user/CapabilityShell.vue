@@ -175,9 +175,13 @@ const onCapabilityTab = computed(() => tabs.some(isActive))
 
 .uc__body :deep(.btn-primary) {
   border: 0 !important;
-  border-radius: 12px !important;
-  background: linear-gradient(135deg, var(--blue, #2f6ae0), var(--blue-deep, #1f57cc)) !important;
-  box-shadow: 0 10px 22px rgba(52, 120, 246, 0.22);
+  /* 批次 D（2026-10-02）：12px 圆角（档外）→ --wf-radius-control(8px)；
+     135deg 渐变底 + rgba(52,120,246,.22) 彩色光晕 → 纯色友好蓝、无投影。
+     规范：「主操作为纯色友好蓝 #2f6ae0，不再使用渐变」「禁止彩色光晕」。
+     这层用 :deep + !important 覆写外部 .btn-primary（来自 uc.css），
+     两侧现在指向同一套规范值，不再各写一套。 */
+  border-radius: var(--wf-radius-control) !important;
+  background: var(--wf-color-primary) !important;
   font-weight: 700;
 }
 

@@ -138,7 +138,7 @@
                 <span>学习台</span>
                 <span class="ob__chip ob__chip--green">今日行动</span>
               </div>
-              <div class="ob__demo-action ob__demo-action--main">
+              <div class="ob__demo-action">
                 <span class="ob__demo-action__tag">今日行动</span>
                 <span class="ob__demo-action__body"><b>跑通第一版数据读取</b><small>来自「Excel 周报自动化」· 约 25 分钟</small></span>
               </div>
@@ -264,6 +264,10 @@ async function goDashboard() {
 
 .ob__logo { display: inline-flex; }
 .ob__logo img { height: 44px; width: auto; display: block; }
+/* 原型 wf-pob__logo：rise 0.6s（newui 1235 行），复用全局 v2-rise 关键帧 */
+@media (prefers-reduced-motion: no-preference) {
+  .ob__logo { animation: v2-rise 0.6s var(--mk-ease-out) both; }
+}
 
 .ob__card {
   width: min(520px, 100%);
@@ -280,10 +284,11 @@ async function goDashboard() {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* 大屏（2K/4K 桌面）：520px 定宽卡在 3840px 视口下视觉过小，按断点放大卡片与主字号 */
+/* 大屏（2K/4K 桌面）：520px 定宽卡在 3840px 视口下视觉过小，按断点放大卡片与主字号
+   （1600 档必须 ≥ 基准 21px：曾写 20px 造成「越大屏字越小」的反向跳变） */
 @media (min-width: 1600px) {
   .ob__card { width: min(660px, 100%); padding: 34px 44px 32px; border-radius: 24px; }
-  .ob__title { font-size: 20px; }
+  .ob__title { font-size: 22px; }
   .ob__sub { font-size: 15px; }
   .ob__logo img { height: 52px; }
 }
@@ -309,18 +314,18 @@ async function goDashboard() {
 }
 .ob__progress span.is-on { background: linear-gradient(90deg, var(--blue), var(--blue-deep)); }
 
-/* 步骤切换动画 */
+/* 步骤切换动画：原型 wf-screen-in = 纵向 8px 上浮（原 translateX(±14px) 是横向推移） */
 .ob-swap-enter-active,
 .ob-swap-leave-active {
   transition: opacity 0.24s ease, transform 0.24s ease;
 }
 .ob-swap-enter-from {
   opacity: 0;
-  transform: translateX(14px);
+  transform: translateY(8px);
 }
 .ob-swap-leave-to {
   opacity: 0;
-  transform: translateX(-14px);
+  transform: translateY(-8px);
 }
 
 .ob__page { display: grid; gap: 0; }
@@ -368,7 +373,7 @@ async function goDashboard() {
   padding: 12px 10px 10px;
   flex: 1;
   border: 1px solid var(--line);
-  border-radius: var(--mk-radius-xl);
+  border-radius: 14px;
   background: color-mix(in srgb, var(--surface) 96%, var(--canvas));
 }
 .ob__flow-item i {
@@ -416,7 +421,7 @@ async function goDashboard() {
 }
 .ob__chip--green {
   color: var(--green-ink);
-  background: rgba(22,163,94,0.12);
+  background: color-mix(in srgb, var(--mk-green) 12%, transparent);
 }
 
 /* 聊天演示（第 2 步） */
@@ -440,9 +445,19 @@ async function goDashboard() {
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--line);
-  box-shadow: 0 2px 8px rgba(23,32,51,0.05);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 5%, transparent);
 }
-.ob__bubble--ai img { width: 20px; height: 20px; flex: none; margin-top: 1px; }
+/* 原型 wf-pavatar：24px / radius 8 / 白底 + line 描边 */
+.ob__bubble--ai img {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  margin-top: 1px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  object-fit: cover;
+}
 .ob__bubble-body p { margin: 0 0 7px; }
 .ob__demo-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .ob__demo-tags span {
@@ -467,7 +482,7 @@ async function goDashboard() {
   gap: 2px;
   padding: 9px 10px;
   border: 1px solid var(--line);
-  border-radius: var(--mk-radius-lg);
+  border-radius: var(--mk-radius-xl);
   background: var(--surface);
   opacity: 0.72;
 }
@@ -485,8 +500,8 @@ async function goDashboard() {
 .ob__stage small { font-size: 10.5px; color: var(--faint); }
 .ob__stage.is-done i {
   color: var(--green-ink);
-  border-color: rgba(22,163,94,0.4);
-  background: rgba(22,163,94,0.1);
+  border-color: color-mix(in srgb, var(--mk-green) 40%, transparent);
+  background: color-mix(in srgb, var(--mk-green) 10%, transparent);
 }
 .ob__stage.is-on {
   opacity: 1;
@@ -520,7 +535,7 @@ async function goDashboard() {
   gap: 8px 10px;
   padding: 11px 12px;
   border: 1px solid color-mix(in srgb, var(--blue) 22%, transparent);
-  border-radius: var(--mk-radius-lg);
+  border-radius: var(--mk-radius-xl);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
 }
 /* 第 3 步：竖向堆叠（chip 在上、标题在下，与真实学习台「今日行动」样式一致，避免任何横向重叠） */
@@ -555,7 +570,7 @@ async function goDashboard() {
   gap: 2px;
   padding: 9px 10px;
   border: 1px solid var(--line);
-  border-radius: var(--mk-radius-lg);
+  border-radius: var(--mk-radius-xl);
   background: var(--surface);
 }
 .ob__demo-metrics small { font-size: 10.5px; color: var(--faint); }
@@ -596,7 +611,7 @@ async function goDashboard() {
   cursor: pointer;
   border-radius: var(--mk-radius-md);
 }
-.ob__back:hover { color: var(--blue-deep); background: rgba(52,120,246,0.06); }
+.ob__back:hover { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 6%, transparent); }
 
 .ob__cta {
   display: inline-flex;
@@ -606,19 +621,20 @@ async function goDashboard() {
   font-size: 14.5px;
   font-weight: 700;
   color: #fff;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 实色 --blue（原蓝渐变 + 25% 发光一并退役） */
+  background: var(--blue);
   border: 0;
   border-radius: var(--mk-radius-xl);
   cursor: pointer;
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--blue) 25%, transparent);
-  transition: transform 0.18s, box-shadow 0.18s;
+  transition: transform 0.18s, background 0.18s;
 }
+/* 原型 wf-pob__cta:hover 的 translateY(-1px) + 投影加深已删（2026-10-02「友好而平」）：
+   hover 只允许改底色；按压反馈移交给 :active。 */
 .ob__cta:hover {
-  /* 原型按钮悬停无位移，只留投影微升 */
-  box-shadow: 0 12px 28px color-mix(in srgb, var(--blue) 30%, transparent);
+  background: var(--wf-color-primary-dark);
 }
 .ob__cta:active {
-  transform: translateY(0) scale(0.97);
+  transform: scale(0.98);
 }
 
 /* 第 4 步：次要入口（不抢 goal 的活，只给入口） */
@@ -671,9 +687,7 @@ async function goDashboard() {
 [data-theme='dark'] .ob__card {
   box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 12px 32px rgba(0,0,0,0.28);
 }
-[data-theme='dark'] .ob__cta {
-  box-shadow: 0 8px 20px rgba(77,139,248,0.2);
-}
+/* 暗色 CTA 投影不再单列：--blue 在暗档已翻转，color-mix 随之变亮（原型也只有一条） */
 
 /* ===== 移动端收敛（2026-09-24 反馈） ===== */
 @media (max-width: 720px) {
@@ -692,9 +706,8 @@ async function goDashboard() {
     padding: 9px 18px;
     font-size: 14px;
     border-radius: 11px;
-    box-shadow: 0 5px 14px color-mix(in srgb, var(--blue) 22%, transparent);
+    /* 原此处还有一档移动端专用蓝色发光（0 5px 14px / 22%），随主 CTA 一并退役 */
   }
-  [data-theme='dark'] .ob__cta { box-shadow: 0 5px 14px rgba(77, 139, 248, 0.18); }
   /* 第 1 步只有 CTA 一个动作，原来的「空 span + space-between」把它顶到右下角，
      左侧留白比按钮还宽；卡片自身是居中排版，移动端让 CTA 居中、上一步贴左。
      空 span 是第 1 步的占位，居中时它仍占一个 10px gap，会让按钮偏右 5px，故隐藏。 */

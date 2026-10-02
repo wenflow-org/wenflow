@@ -346,7 +346,12 @@ const tagClass = (type: string) => ({
 </script>
 
 <style scoped>
-.completion-card { margin-top: 16px; padding: 20px; background: linear-gradient(135deg, color-mix(in srgb, var(--green, #1e9e58) 10%, var(--surface)) 0%, color-mix(in srgb, var(--green, #1e9e58) 6%, var(--surface)) 100%); border: 1px solid color-mix(in srgb, var(--green, #1e9e58) 30%, var(--line)); border-radius: 12px; }
+/* 完成卡：绿色极浅底（批次 D，2026-10-02）。
+   原为 linear-gradient(135deg, green 10% → green 6%)——同一色相的两档混面，
+   差异小到读不出来，却让「卡片默认平面」这条规则有了例外。改为单一平涂
+   color-mix(green 8%)：保留「完成=绿」的语义编码，去掉无意义的渐变。
+   描边的 30% 绿边是状态识别的主要载体，保留不动。 */
+.completion-card { margin-top: 16px; padding: 20px; background: color-mix(in srgb, var(--green, #1e9e58) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--green, #1e9e58) 30%, var(--line)); border-radius: var(--mk-radius-xl); }
 .completion-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
 .completion-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--green, #2e7d32); }
 .completion-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; padding: 12px; background-color: color-mix(in srgb, var(--surface) 82%, transparent); border-radius: 8px; }
@@ -373,7 +378,7 @@ const tagClass = (type: string) => ({
 .completion-icon { display: inline-flex; align-items: center; justify-content: center; width: 1em; height: 1em; line-height: 1; font-size: inherit; flex: none; }
 .completion-icon svg { width: 1em; height: 1em; }
 .completion-icon--header { width: 24px; height: 24px; font-size: 24px; color: var(--green, #2e7d32); }
-.section-title .completion-icon { color: var(--accent, #3478f6); }
+.section-title .completion-icon { color: var(--accent, var(--mk-blue)); }
 .section-hint { margin: 0 0 10px; font-size: 12px; color: var(--muted, #607d8b); }
 .review-link { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--red, #b3261e); text-decoration: none; }
 .review-link:hover { text-decoration: underline; }
@@ -420,14 +425,15 @@ const tagClass = (type: string) => ({
 .completion-btn--default { background: var(--bg-surface); border-color: var(--border-default); color: var(--text-primary); font-weight: 600; }
 /* 底部动作按钮此前走 el-button 默认型（灰色文字），非 --default 型；对齐其视觉 */
 .completion-btn--action.completion-btn--default { color: var(--muted, #5b6577); }
-.completion-btn--default:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--color-primary); color: var(--color-primary); }
+.completion-btn--default:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--mk-blue); color: var(--mk-blue); }
 /* 第三级动作（返回）：与「完成任务」同域但不同权重，做成无描边文字钮，
    避免三个按钮一样重、用户分不清主次（2026-09-25 反馈「又是继续又是返回又是完成」） */
 .completion-btn--link { background: none; border-color: transparent; color: var(--muted, #5b6577); }
-.completion-btn--link:hover:not(:disabled) { background: var(--bg-hover); border-color: transparent; color: var(--color-primary); }
-.completion-btn--primary { background: var(--color-primary); border-color: var(--color-primary); color: var(--text-on-primary); font-weight: var(--font-medium); box-shadow: 0 14px 28px color-mix(in srgb, var(--color-primary) 24%, transparent); }
-.completion-btn--primary:hover:not(:disabled) { background: var(--color-primary-dark); border-color: var(--color-primary-dark); color: var(--text-on-primary); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
-.completion-btn--primary:active:not(:disabled) { transform: translateY(0); }
+.completion-btn--link:hover:not(:disabled) { background: var(--bg-hover); border-color: transparent; color: var(--mk-blue); }
+/* 平面化：主按钮保持实心 --mk-blue，去掉配套的蓝色发光投影 */
+.completion-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: var(--text-on-primary); font-weight: var(--font-medium); }
+.completion-btn--primary:hover:not(:disabled) { background: var(--mk-accent-deep); border-color: var(--mk-accent-deep); color: var(--text-on-primary); box-shadow: var(--wf-shadow-raised); }
+.completion-btn--primary:active:not(:disabled) { transform: scale(0.98); }
 .completion-btn:disabled { cursor: not-allowed; }
 .completion-btn + .completion-btn { margin-left: 12px; }
 .completion-spinner { margin-right: 6px; }

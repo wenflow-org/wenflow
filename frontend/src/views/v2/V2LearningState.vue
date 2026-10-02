@@ -3,41 +3,30 @@
     <V2Nav />
 
     <main class="state__main">
-      <!-- 页头 -->
-      <div class="state__hero">
-        <div>
-          <h1>{{ heroTitle }}</h1>
-          <p>基于你的学习记录实时评估。</p>
-        </div>
-        <!-- 2026-09-27：本页不再放「学习路径」入口（导航已有），hero 按钮改跳学习历史（原侧栏学习记录卡删除） -->
-        <router-link to="/user/learning-history" class="btn-ghost">查看学习历史</router-link>
-      </div>
-
-      <!-- 体检卡（批19）：整体状态为主指标突出，学习压力/掌握趋势/疲劳程度降为行内状态条
-           （原 4 张等权 KPI 卡墙）；读取失败/加载中各自有形态。
-           （原 vitals--fail 空类已删：失败已由每个指标的红色「读取失败」note 表达，
-           卡片级 class 既无样式也无额外信息量——2026-09-27 a11y 走查二选一，选删绑定） -->
-      <section class="card vitals">
-        <div v-if="vitalsLoading" class="vitals__loading">
-          <SkeletonLoader variant="lines" :count="2" />
-        </div>
-        <template v-else>
-          <div class="vitals__main">
-            <small>{{ vitalMain.label }}</small>
-            <div class="vitals__value" :style="{ color: vitalMain.color }">
-              {{ vitalMain.value }}<i v-if="vitalMain.unit"> {{ vitalMain.unit }}</i>
+      <!-- 页头（原型 1948-1953）：学习状态屏直接以 KPI 三卡开头，无 hero 大标题——
+           原 h1 + 说明句撤掉，「查看学习历史」ghost 降为 KPI 行右侧的小入口 -->
+      <div class="kpis">
+        <div class="kpis__grid" role="list" aria-label="学习状态概览">
+          <div v-if="kpiLoading" class="kpis__loading" role="listitem">
+            <SkeletonLoader variant="lines" :count="2" />
+          </div>
+          <template v-else>
+            <div class="kpi" role="listitem">
+              <strong>{{ kpiStreak ?? '—' }}</strong>
+              <span>连续天数</span>
             </div>
-            <span class="metric__note" :class="`metric__note--${vitalMain.tone}`">{{ vitalMain.note }}</span>
-          </div>
-          <div class="vitals__subs">
-            <span v-for="m in vitalSubs" :key="m.key" class="vitals__sub">
-              <small>{{ m.label }}</small>
-              <b :style="{ color: m.color }">{{ m.value }}<i v-if="m.unit"> {{ m.unit }}</i></b>
-              <span class="metric__note" :class="`metric__note--${m.tone}`">{{ m.note }}</span>
-            </span>
-          </div>
-        </template>
-      </section>
+            <div class="kpi" role="listitem">
+              <strong>{{ kpiWeekMinutes ?? '—' }}</strong>
+              <span>本周分钟</span>
+            </div>
+            <div class="kpi" role="listitem">
+              <strong>{{ kpiMastered ?? '—' }}</strong>
+              <span>已掌握知识点</span>
+            </div>
+          </template>
+        </div>
+        <router-link to="/user/learning-history" class="btn-ghost kpis__link">查看学习历史</router-link>
+      </div>
 
       <div class="state__grid">
         <div class="state__col" :class="{ 'state__col--empty': !hasAnyLoad }">
@@ -60,7 +49,28 @@
             </div>
 
             <div class="band__body">
-            <!-- 图例（批19 术语自然化；2026-09-27 删状态 chip：与体检卡主指标重复） -->
+            <!-- 当前状态四项（原体检卡 vitals：整体状态主指标 + 学习压力/掌握趋势/疲劳程度）：
+                 原型该屏只认三张 KPI 卡（连续天数/本周分钟/已掌握知识点），这四项不删、
+                 降级为趋势卡内的状态 meta 行——图里画的就是这四个指标，放这里口径自洽 -->
+            <div class="vitals vitals--meta">
+              <div v-if="vitalsLoading" class="vitals__loading">
+                <SkeletonLoader variant="lines" :count="1" />
+              </div>
+              <template v-else>
+                <span class="vitals__main">
+                  <small>{{ vitalMain.label }}</small>
+                  <b :style="{ color: vitalMain.color }">{{ vitalMain.value }}<i v-if="vitalMain.unit"> {{ vitalMain.unit }}</i></b>
+                  <span class="metric__note" :class="`metric__note--${vitalMain.tone}`">{{ vitalMain.note }}</span>
+                </span>
+                <span v-for="m in vitalSubs" :key="m.key" class="vitals__sub">
+                  <small>{{ m.label }}</small>
+                  <b :style="{ color: m.color }">{{ m.value }}<i v-if="m.unit"> {{ m.unit }}</i></b>
+                  <span class="metric__note" :class="`metric__note--${m.tone}`">{{ m.note }}</span>
+                </span>
+              </template>
+            </div>
+
+            <!-- 图例（批19 术语自然化；2026-09-27 删状态 chip：与上方状态 meta 行重复） -->
             <div class="ff-legend">
               <span><i class="ff-dot ff-dot--fitness"></i>掌握趋势</span>
               <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度</span>
@@ -80,17 +90,37 @@
             <template v-else>
               <!-- 触屏补 touchstart/touchmove（2026-09-27 a11y）：历史值此前只认 mousemove，
                    手机上永远看不到。不 preventDefault，手势仍归页面滚动 -->
-              <div class="ff-chart" @mousemove="onChartHover" @touchstart="onChartHover" @touchmove="onChartHover" @mouseleave="hoverDay = null">
+              <div
+                class="ff-chart"
+                role="img"
+                :aria-label="trendAriaLabel"
+                @mousemove="onChartHover" @touchstart="onChartHover" @touchmove="onChartHover" @mouseleave="hoverDay = null"
+              >
+                <!-- y 轴刻度（原型 wf-trend__yaxis）：贴左留白的绝对定位标签，与 5 条网格线同位 -->
+                <div class="ff-yaxis" aria-hidden="true">
+                  <span v-for="t in yTicks" :key="t.top" :style="{ top: t.top + '%' }">{{ t.text }}</span>
+                </div>
+                <!-- 阈值区间标签（原型 wf-trend__zonetag）：40 精力充沛 / 20 最优训练区 -->
+                <div class="ff-zones" aria-hidden="true">
+                  <span v-for="z in zoneLines" :key="z.v" class="ff-zonetag" :style="{ top: z.top + '%' }">{{ z.v }} {{ z.label }}</span>
+                </div>
                 <svg :viewBox="`0 0 ${chartW} ${chartH}`" preserveAspectRatio="none" aria-hidden="true">
                   <!-- 横向网格线（2026-09-27 外部评审：原来没有任何坐标参照，曲线悬空感） -->
                   <g class="ff-grid">
                     <line
                       v-for="i in 5" :key="i"
-                      :x1="0" :x2="chartW"
+                      :x1="plotX0" :x2="plotX1"
                       :y1="(chartH / 4) * (i - 1)" :y2="(chartH / 4) * (i - 1)"
                       vector-effect="non-scaling-stroke"
                     />
                   </g>
+                  <!-- 状态阈值参考线（原型 wf-trend__zone）：40 精力充沛 / 20 最优训练区 -->
+                  <line
+                    v-for="z in zoneLines" :key="`zone-${z.v}`"
+                    class="ff-zone"
+                    :x1="plotX0" :x2="plotX1" :y1="z.y" :y2="z.y"
+                    vector-effect="non-scaling-stroke"
+                  />
                   <rect
                     v-for="p in points" :key="p.date"
                     class="ff-bar"
@@ -123,26 +153,25 @@
             </div><!-- /band__body -->
           </section>
 
-          <!-- AI 建议（skill: adaptive-guidance-copy 生成，静态规则兜底）
-               band--suggest：新用户空态时靠 order:-1 提到首屏（原挂在已删的 .suggest 卡上） -->
-          <section class="card band band--suggest">
-            <div class="band__head">
-              <div class="band__title">
-                <strong>AI 建议</strong>
-                <span class="band__meta">{{ suggestSource }}</span>
-              </div>
+          <!-- AI 调控建议（原型 wf-advisory，788-793 / 1971-1982）：
+               4px 琥珀左边条 + 琥珀星标 head + 正文（guide 结论 / 建议列表 / 预警列表全保留）
+               + 主次双按钮 + 成功回执行。skill 生成块走 adaptive-guidance-copy，静态规则兜底。
+               新用户空态时靠 order:-1 提到首屏（原 .state__col--empty 选择器改挂本卡） -->
+          <section class="card advisory">
+            <div class="advisory__head">
+              <svg class="advisory__star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z"/></svg>
+              <strong>AI 调控建议</strong>
+              <span class="band__meta">{{ suggestSource }}</span>
             </div>
-            <!-- 加载失败常显（收起也不许吞掉错误，P1 口径） -->
-
-            <!-- skill 生成块 -->
-            <!-- P1 修复：guidance 加载失败可见提示（可原地重试，不再冒充"没有数据"） -->
+            <!-- 加载失败常显（收起也不许吞掉错误，P1 口径）：guidance 失败可见提示、可原地重试，
+                 不再冒充"没有数据" -->
             <div v-if="guidanceLoadFailed" class="chart__empty" role="alert">
               AI 建议暂时取不到（生成较慢或失败）。
               <button type="button" class="guide-retry" :disabled="guidanceLoading" @click="loadGuidance">
                 {{ guidanceLoading ? '重试中…' : '重试' }}
               </button>
             </div>
-            <div class="band__body">
+            <div class="advisory__body">
             <template v-if="skillCopy">
               <!-- 2026-09-27 重排：一段结论（标题 + 一句说明）+ 一个动作 + 一行脚注。
                    原来四层文本处理（副标 / 琥珀警告框 / 依据行 / 带标签的下一步·节奏两行）堆在一起，
@@ -195,7 +224,7 @@
               </div>
             </template>
 
-            </div><!-- /band__body：预警常显，不随折叠消失 -->
+            </div><!-- /advisory__body：预警常显，与正文同层 -->
 
             <!-- 预警（数据告警，两种模式都展示） -->
             <div v-if="warningsLoadFailed" class="chart__empty" role="alert">
@@ -210,19 +239,23 @@
                 </div>
               </article>
             </div>
-          </section>
 
-          <!-- 学习调控（2026-09-27 重构）：待你确认 / 已自动处理 / 已执行的调整。
-               原「AI 决策记录」是纯日志；现在待确认卡带 pathId + advisory 摘要，
-               本页成为完课卡之外的第二确认入口。 -->
-          <section class="card band">
-            <div class="band__head">
-              <div class="band__title">
+            <!-- 主次双按钮（原型 wf-advisory__actions）：采用建议 = primary 蓝渐变，保持原计划 = ghost -->
+            <div class="advisory__actions">
+              <button type="button" class="adv-btn adv-btn--primary" :disabled="replanBusy" @click="adoptSuggestion">采用建议</button>
+              <button type="button" class="adv-btn adv-btn--ghost" :disabled="replanBusy" @click="keepSuggestion">保持原计划</button>
+            </div>
+            <!-- 回执行（原型 wf-advisory__done）：采用 / 保持成功后就地播报，不靠 toast 一次性带过 -->
+            <p v-if="advisoryDone" class="advisory__done" role="status">{{ advisoryDone }}</p>
+
+            <!-- 次级区块：学习调控（原型外整块 → 降级进建议卡，功能与按钮原样保留，不删）：
+                 待你确认 / 已自动处理 / 已执行的调整。原「AI 决策记录」是纯日志；
+                 现在待确认卡带 pathId + advisory 摘要，本页成为完课卡之外的第二确认入口。 -->
+            <div class="advisory__sub">
+              <div class="advisory__subhead">
                 <strong>学习调控</strong>
                 <span class="band__meta">{{ pendingAdjust.length ? `${pendingAdjust.length} 条待确认` : '暂无待确认' }}</span>
               </div>
-            </div>
-            <div class="band__body">
               <!-- 待你确认：课后 advisory，确认走与完课卡同一个 replan 接口 -->
               <section class="ctl">
                 <p class="ctl__label">待你确认<b v-if="pendingAdjust.length">{{ pendingAdjust.length }}</b></p>
@@ -292,11 +325,73 @@
                   </ul>
                 </div>
               </section>
-            </div><!-- /band__body -->
+            </div><!-- /advisory__sub -->
+          </section><!-- /AI 调控建议 -->
+
+          <!-- 复习台账（原型 1984-1991 wf-reviewlist）：head = 标题 + 右侧 meta，
+               行 = 名称 + 84px 进度条 + 百分比。数据全部来自既有接口：
+               /ai-teaching/review/due（retention 0-1 → %）+ /ai-teaching/review/plan（课上带几条） -->
+          <section class="card band rlist">
+            <div class="band__head">
+              <div class="band__title">
+                <strong>复习台账</strong>
+                <span class="band__meta">{{ reviewMeta }}</span>
+              </div>
+            </div>
+            <div class="band__body">
+              <div v-if="reviewLoading" class="chart__loading"><SkeletonLoader variant="lines" :count="3" /></div>
+              <div v-else-if="reviewLoadFailed" class="chart__empty" role="alert">
+                <strong>复习台账暂时取不到</strong>
+                <p>网络或服务暂时不可用，稍后再试。</p>
+                <button type="button" class="chart__retry" @click="loadReviews">重试</button>
+              </div>
+              <div v-else-if="!reviewRows.length" class="chart__empty">
+                <strong>暂无到期复习</strong>
+                <p>学过的知识点进入复习窗口后，会按记忆强度排在这里。</p>
+              </div>
+              <ul v-else class="rlist__rows">
+                <li v-for="r in reviewRows" :key="r.key" class="rlist__row">
+                  <span class="rlist__name">{{ r.name }}</span>
+                  <span class="wf-bar"><i :style="{ width: r.pct + '%' }"></i></span>
+                  <span class="rlist__pct">{{ r.pct }}%</span>
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <!-- 掌握分布（原型 1993-2000 wf-reviewlist）：数据 = 既有 /learning/concept-graph 节点按
+               stability 分档（stable=已掌握 / developing·fragile=进行中 / 未测=待学习），
+               与首页「已掌握知识点」同一数据源 -->
+          <section class="card band rlist">
+            <div class="band__head">
+              <div class="band__title">
+                <strong>掌握分布</strong>
+                <span class="band__meta">{{ masteryMeta }}</span>
+              </div>
+            </div>
+            <div class="band__body">
+              <div v-if="!masteryLoaded" class="chart__loading"><SkeletonLoader variant="lines" :count="3" /></div>
+              <div v-else-if="!masteryOk" class="chart__empty" role="alert">
+                <strong>掌握分布暂时取不到</strong>
+                <p>网络或服务暂时不可用，稍后再试。</p>
+                <button type="button" class="chart__retry" @click="loadMastery">重试</button>
+              </div>
+              <div v-else-if="!masteryBuckets.total" class="chart__empty">
+                <strong>还没有知识点数据</strong>
+                <p>开始学习路径后，这里会按已掌握 / 进行中 / 待学习分档统计。</p>
+              </div>
+              <ul v-else class="rlist__rows">
+                <li v-for="row in masteryBuckets.rows" :key="row.key" class="rlist__row">
+                  <span class="rlist__name">{{ row.name }}</span>
+                  <span class="wf-bar"><i :style="{ width: row.pct + '%' }"></i></span>
+                  <span class="rlist__pct">{{ row.count }}</span>
+                </li>
+              </ul>
+            </div>
           </section>
         </div>
 
-        <!-- 侧栏 -->
+        <!-- 原侧栏（原型该屏是单列流，无 300px 侧栏）：并入主列，卡片内容与顺序原样保留 -->
         <aside class="side">
           <!-- P1 修复：learnerCenter 失败提示 -->
           <section v-if="learnerCenterLoadFailed" class="card sidecard" role="alert">
@@ -356,7 +451,7 @@ import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
-import { localDateKeyFromIso } from '@/utils/date';
+import { localDateKey, localDateKeyFromIso } from '@/utils/date';
 import { unwrap, unwrapArray } from './unwrap';
 
 type MetricKey = 'lsb' | 'lss' | 'ktl' | 'lf';
@@ -382,7 +477,7 @@ const metricOptions: Array<{ key: MetricKey; label: string }> = [
 function toneOf(key: MetricKey, v: number): { tone: string; color: string; note: string } {
   if (v === null || v === undefined || Number.isNaN(v)) return { tone: 'blue', color: 'var(--muted)', note: '积累中' };
   if (key === 'lsb') {
-    // LSB = KTL - LF（-100 ~ +100），分档对齐后端 <0/<20/<40/≥40 与 heroTitle 文案
+    // LSB = KTL - LF（-100 ~ +100），分档对齐后端 <0/<20/<40/≥40 与状态分档文案
     if (v < 0) return { tone: 'red', color: 'var(--red-ink)', note: '严重疲劳，优先休息' };
     if (v >= 40) return { tone: 'green', color: 'var(--green-ink)', note: '精力充沛' };
     if (v >= 20) return { tone: 'blue', color: 'var(--blue-deep)', note: '最优训练区' };
@@ -423,13 +518,8 @@ const vitalsLoading = computed(() => current.value === null && !currentLoadFaile
 const vitalMain = computed(() => metricCards.value[0]);
 const vitalSubs = computed(() => metricCards.value.slice(1));
 
-const heroTitle = computed(() => {
-  const lsb = current.value?.lsb;
-  if (lsb == null) return '先来看看你的状态';
-  if (lsb >= 70) return '状态不错，继续保持';
-  if (lsb >= 40) return '状态平稳，循序渐进';
-  return '需要调整一下节奏';
-});
+/* 页头 hero 已撤（原型 1948-1953：该屏直接以 KPI 开头，无 h1 + 说明句），
+   原 heroTitle 动态问候随大标题一起移除（去向：无——原型该位不留文案） */
 
 /* ---------- 状态趋势（权威口径：后端 /state/trends，LSS/KTL/LF/LSB，与指标卡同源） ----------
    此前趋势图在前端用「纯时长 EWMA（42/7 天）」自算 fitness/fatigue/form，与指标卡的
@@ -517,6 +607,10 @@ const hasAnyLoad = computed(() => stateTrends.value.some((t) => t.lsb !== null))
 const chartW = 760;
 const chartH = 240;
 const chartPad = 8;
+/* 左侧 y 轴留白（原型 AXIS=52/812 ≈ 6.4%）：刻度标签贴这块留白，网格与阈值线从 plotX0 起画 */
+const AXIS_W = 46;
+const plotX0 = AXIS_W;
+const plotX1 = chartW - chartPad;
 
 /* 2026-09-27 外部视觉评审修复：
    ① 裁掉开头无数据日（原来 42 天窗口里曲线只占右侧 40%，左侧空旷悬空）；
@@ -542,7 +636,16 @@ const valueDomain = computed(() => {
   }
   if (!Number.isFinite(lo)) return { lo: 0, hi: 100 };
   const pad = Math.max(5, (hi - lo) * 0.18);
-  return { lo: Math.max(0, lo - pad), hi: hi + pad };
+  const loPad = lo - pad;
+  const hiPad = hi + pad;
+  return {
+    // ① 数据含负值（LSB 可 <0）时不把下界 clamp 到 0——否则那几天的点画到画布外被裁掉、刻度也对不上。
+    // ② 量程必须包住语义锚点 40「精力充沛」/ 20「最优训练区」：阈值参考线与区间标签按原型口径
+    //    只在量程内绘制，锚点一出图，整张图就没有参照系了。上下各留 4 的余量（16/44），
+    //    免得 20 线正好压在画布底边、标签被裁掉一半。
+    lo: lo < 0 ? loPad : Math.max(0, Math.min(loPad, 16)),
+    hi: Math.max(hiPad, 44)
+  };
 });
 
 const maxMinutes = computed(() => Math.max(10, ...activeSeries.value.map((d) => d.minutes)));
@@ -565,14 +668,14 @@ const showRangeSeg = computed(() => historyDays.value > 42);
 
 const points = computed<TrendPoint[]>(() => {
   const n = activeSeries.value.length;
-  const usableW = chartW - chartPad * 2;
+  const usableW = plotX1 - plotX0;
   const step = n > 1 ? usableW / (n - 1) : 0;
   const { lo, hi } = valueDomain.value;
   const span = hi - lo || 1;
   const yOf = (v: number) => chartH - ((v - lo) / span) * chartH;
   const barCap = chartH * 0.28;
   return activeSeries.value.map((d, i) => {
-    const x = chartPad + step * i;
+    const x = plotX0 + step * i;
     const bh = Math.min(barCap, (d.minutes / maxMinutes.value) * barCap);
     return {
       ...d,
@@ -589,8 +692,41 @@ const points = computed<TrendPoint[]>(() => {
 
 const barW = computed(() => {
   const n = activeSeries.value.length || 1;
-  return Math.max(2, Math.min(10, ((chartW - chartPad * 2) / n) * 0.55));
+  return Math.max(2, Math.min(10, ((plotX1 - plotX0) / n) * 0.55));
 });
+
+/* ---------- y 轴刻度（原型 4137-4145）：标签与 5 条网格线同位，值 = 量程按四等分取整 ---------- */
+const yTicks = computed(() => {
+  const { lo, hi } = valueDomain.value;
+  const span = hi - lo || 1;
+  return [0, 1, 2, 3, 4].map((i) => ({
+    top: (i / 4) * 100,
+    text: String(Math.round(hi - span * (i / 4)))
+  }));
+});
+
+/* ---------- 状态阈值参考线 + 区间标签（原型 766-772 / 4147-4157） ----------
+   量程已在 valueDomain 里保证包住 40/20，所以两条线恒可见；标签写成「40 精力充沛」的合并样式 */
+const ZONE_LINES: Array<{ v: number; label: string }> = [
+  { v: 40, label: '精力充沛' },
+  { v: 20, label: '最优训练区' }
+];
+
+const zoneLines = computed(() => {
+  const { lo, hi } = valueDomain.value;
+  const span = hi - lo || 1;
+  const yOf = (v: number) => chartH - ((v - lo) / span) * chartH;
+  return ZONE_LINES.map((z) => {
+    const y = yOf(z.v);
+    return { ...z, y, top: (y / chartH) * 100 };
+  });
+});
+
+/** 读屏出口：SVG 本体 aria-hidden，纵轴口径写进容器的 aria-label（原型 1965） */
+const trendAriaLabel = computed(
+  () =>
+    `近 ${activeSeries.value.length} 天的掌握趋势、疲劳度与整体状态曲线，柱为当日学习时长，纵轴标注状态阈值 40 精力充沛 / 20 最优训练区`
+);
 
 /** 单线路径：跳过 null 断点（无数据日不连线） */
 function linePath(key: 'ktl' | 'lf' | 'lsb') {
@@ -655,6 +791,9 @@ function onChartHover(e: MouseEvent | TouchEvent) {
  *  切窗口只重拉 trends，省一次 500 条全量请求（2026-09-27 从 loadTrends 拆出） */
 const SESSIONS_LIMIT = 500;
 const sessionsTruncated = ref(false);
+/* KPI 依赖会话汇总：成功与失败都要把 loading 收掉——失败显示「—」，不拿 0 冒充「没学过」 */
+const sessionsLoaded = ref(false);
+const sessionsOk = ref(false);
 async function loadSessions() {
   try {
     const sessionRes = await request.get('/users/me/sessions', { params: { limit: SESSIONS_LIMIT } });
@@ -669,10 +808,161 @@ async function loadSessions() {
       map.set(key, (map.get(key) ?? 0) + duration);
     }
     dailyLoad.value = [...map.entries()].map(([date, minutes]) => ({ date, minutes }));
+    sessionsOk.value = true;
   } catch {
     // 背景柱是装饰层：失败就少画柱，不值得把整张趋势图打成错误态
+  } finally {
+    sessionsLoaded.value = true;
   }
 }
+
+/* ---------- 顶部三张 KPI（原型 wf-kpis 三等权卡：连续天数 / 本周分钟 / 已掌握知识点） ----------
+   三张卡全部由本页已有数据推导，不新增后端接口：
+   · 连续天数 = /users/me/sessions 按天汇总的客户端连击推算（与学习台的本地回退同口径，
+     今天没学则从昨天起数）；
+   · 本周分钟 = 同一份按天汇总里「本周一 ~ 今天」的分钟和（与学习台「本周条」同口径）；
+   · 已掌握知识点 = /learning/concept-graph 里 stability=stable 的节点数（与个人中心 KPI 同源）。 */
+const minutesByDate = computed(() => {
+  const map = new Map<string, number>();
+  for (const d of dailyLoad.value) map.set(d.date, d.minutes);
+  return map;
+});
+
+const kpiStreak = computed<number | null>(() => {
+  if (!sessionsOk.value) return null;
+  let streak = 0;
+  const d = new Date();
+  if ((minutesByDate.value.get(localDateKey(d)) ?? 0) === 0) d.setDate(d.getDate() - 1);
+  // guard：dailyLoad 只有有限天，往前数到第一个空档必然终止；上限只是防呆
+  for (let i = 0; i < 3650; i++) {
+    if ((minutesByDate.value.get(localDateKey(d)) ?? 0) <= 0) break;
+    streak += 1;
+    d.setDate(d.getDate() - 1);
+  }
+  return streak;
+});
+
+const kpiWeekMinutes = computed<number | null>(() => {
+  if (!sessionsOk.value) return null;
+  const now = new Date();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  const start = localDateKey(monday);
+  const end = localDateKey(now);
+  let sum = 0;
+  for (const d of dailyLoad.value) {
+    if (d.date >= start && d.date <= end) sum += d.minutes;
+  }
+  return sum;
+});
+
+/* ---------- 掌握分布 +「已掌握知识点」（既有 GET /learning/concept-graph，个人中心同源） ---------- */
+interface GraphNode {
+  stability?: string | null;
+}
+
+const masteryNodes = ref<GraphNode[]>([]);
+const masteryLoaded = ref(false);
+const masteryOk = ref(false);
+
+async function loadMastery() {
+  try {
+    const res = await request.get('/learning/concept-graph');
+    const graph = unwrap<{ nodes?: GraphNode[] }>(res);
+    masteryNodes.value = Array.isArray(graph?.nodes) ? graph.nodes : [];
+    masteryOk.value = true;
+  } catch {
+    masteryOk.value = false;
+  } finally {
+    masteryLoaded.value = true;
+  }
+}
+
+/* 三档分账（原型 1996-1998）：stable=已掌握、developing/fragile=进行中、未测(null/unknown)=待学习。
+   条宽按各档占总数的百分比，右侧数字是「个数」——与原型一致（原型也是 18 / 8 / 8 的计数） */
+const masteryBuckets = computed(() => {
+  const nodes = masteryNodes.value;
+  const total = nodes.length;
+  const mastered = nodes.filter((n) => n.stability === 'stable').length;
+  const learning = nodes.filter((n) => n.stability === 'developing' || n.stability === 'fragile').length;
+  const pending = Math.max(total - mastered - learning, 0);
+  const widthOf = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+  return {
+    total,
+    mastered,
+    rows: [
+      { key: 'mastered', name: '已掌握', count: mastered, pct: widthOf(mastered) },
+      { key: 'learning', name: '进行中', count: learning, pct: widthOf(learning) },
+      { key: 'pending', name: '待学习', count: pending, pct: widthOf(pending) }
+    ]
+  };
+});
+
+const kpiMastered = computed<number | null>(() => (masteryOk.value ? masteryBuckets.value.mastered : null));
+/** 三张 KPI 全部到齐才出数：任一数据源还在飞就走骨架，避免「0」冒充「没学过」 */
+const kpiLoading = computed(() => !sessionsLoaded.value || !masteryLoaded.value);
+
+/* ---------- 复习台账（既有 GET /ai-teaching/review/due + /review/plan，学习台同源） ----------
+   due = 全部到期清单（上限 20），retention 0-1 就是条宽与百分比；
+   plan = 课内温故计划条数，对应原型卡头 meta 的「课上带 N」 */
+const reviewDue = ref<Array<{ conceptKey: string; label: string; retention: number }>>([]);
+const reviewPlanned = ref<number | null>(null);
+const reviewLoading = ref(true);
+const reviewLoadFailed = ref(false);
+
+async function loadReviews() {
+  reviewLoading.value = true;
+  reviewLoadFailed.value = false;
+  const [dueR, planR] = await Promise.allSettled([
+    request.get('/ai-teaching/review/due'),
+    request.get('/ai-teaching/review/plan')
+  ]);
+  if (dueR.status === 'fulfilled') {
+    const body = unwrap<{ items?: Array<{ conceptKey: string; label?: string; retention?: number }> }>(dueR.value);
+    reviewDue.value = (Array.isArray(body?.items) ? body.items : []).map((it) => ({
+      conceptKey: String(it.conceptKey ?? ''),
+      label: String(it.label || it.conceptKey || ''),
+      retention: typeof it.retention === 'number' ? it.retention : 0
+    }));
+  } else {
+    reviewDue.value = [];
+    reviewLoadFailed.value = true;
+  }
+  if (planR.status === 'fulfilled') {
+    const body = unwrap<{ items?: unknown[] }>(planR.value);
+    reviewPlanned.value = Array.isArray(body?.items) ? body.items.length : null;
+  } else {
+    reviewPlanned.value = null;
+  }
+  reviewLoading.value = false;
+}
+
+/** 记忆强度最低的排前面（最该复习的先看），最多 5 行——原型卡也是短列表 */
+const reviewRows = computed(() =>
+  reviewDue.value
+    .slice()
+    .sort((a, b) => a.retention - b.retention)
+    .slice(0, 5)
+    .map((r) => ({
+      key: r.conceptKey || r.label,
+      name: r.label || r.conceptKey,
+      pct: Math.min(100, Math.max(0, Math.round(r.retention * 100)))
+    }))
+);
+
+const reviewMeta = computed(() => {
+  const due = reviewDue.value.length;
+  if (!due) return '暂无到期';
+  const planned = reviewPlanned.value;
+  return planned != null && planned > 0 ? `到期 ${due} · 课上带 ${planned}` : `到期 ${due}`;
+});
+
+const masteryMeta = computed(() => {
+  if (!masteryLoaded.value) return '读取中';
+  if (!masteryOk.value) return '读取失败';
+  const { mastered, total } = masteryBuckets.value;
+  return total ? `${mastered} / ${total} 个知识点` : '暂无知识点';
+});
 
 let trendSeq = 0;
 async function loadTrends() {
@@ -817,6 +1107,8 @@ async function confirmAdjust(card: DecisionCard) {
       evidence: { advisoryAction: card.recommendation || 'reinforce', advisory: card.advisory || null }
     });
     toast.success(`已调整「${card.pathTitle || '当前路径'}」的后续阶段`);
+    // 卡头双按钮的回执行（原型 wf-advisory__done）：确认成功后就地留一行，不只靠 toast 一闪而过
+    advisoryDone.value = `已采用建议：「${card.pathTitle || '当前路径'}」的后续阶段已调整，已完成内容保留不变。`;
     dismissDecision(card);
   } catch (e: any) {
     toast.error(e?.message || '调整失败，请稍后再试');
@@ -828,6 +1120,37 @@ async function confirmAdjust(card: DecisionCard) {
 function jumpToAdjust(card: DecisionCard) {
   if (!card.pathId) return;
   router.push({ path: `/learning-path/${card.pathId}`, query: { adjust: 'ai' } });
+}
+
+/* ---------- 建议卡主次双按钮（原型 wf-advisory__actions + __done） ----------
+   采用建议 = 落到「待你确认」里的第一条调整（与调控区同一 replan 接口）；
+              没有待确认时转去今日动作（guideActions 第一条），再没有就明确回一行「保持节奏」。
+   保持原计划 = 消掉那条待确认（本地忽略，不发请求），与调控区的同名按钮同一语义。
+   两条路径的全部动作在下方「学习调控」次级区块里仍然逐条可操作，这里只是把主路径提到卡头。 */
+const advisoryDone = ref('');
+
+function adoptSuggestion() {
+  const card = pendingAdjust.value[0];
+  if (card) {
+    void confirmAdjust(card);
+    return;
+  }
+  const action = guideActions.value[0];
+  if (action) {
+    void router.push(action.resolved);
+    return;
+  }
+  advisoryDone.value = '当前没有需要采用的调整，保持现在的节奏就好。';
+}
+
+function keepSuggestion() {
+  const card = pendingAdjust.value[0];
+  if (card) {
+    dismissDecision(card);
+    advisoryDone.value = '已保持原计划，这条调整不会再出现在待确认里。';
+    return;
+  }
+  advisoryDone.value = '好的，保持原计划，后续阶段不做改动。';
 }
 
 const suggestSource = computed(() => {
@@ -966,6 +1289,9 @@ onMounted(() => {
   // 各数据源独立并发，互不阻塞（skill 引导最慢，不应拖住其他区块）
   void loadTrends();
   void loadSessions();
+  // 复习台账 / 掌握分布 / 顶部「已掌握知识点」共用这两个既有接口
+  void loadReviews();
+  void loadMastery();
 
   metricsAPI.getCurrentState()
     .then((v) => { current.value = v as Record<string, any> | null; })
@@ -1010,15 +1336,40 @@ function loadGuidance() {
 }
 .state__ai-note :deep(.ai-note) { font-size: 12px; opacity: 0.75; }
 
+/* 原型 924：非学习台屏幕统一 880px 居中。原 1080px + `1fr + 300px` 侧栏栅格已撤——
+   原型该屏是单列流，侧栏卡并入主列（见模板 .side 注释） */
 .state__main {
-  max-width: 1080px; margin: 0 auto;
+  max-width: 880px; margin: 0 auto;
   padding: 24px 28px 48px;
   display: grid; gap: 16px;
 }
-.state__hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+/* hero 已撤（原型 1948-1953：该屏直接以 KPI 开头，无 h1 + 说明句）；
+   .kicker 保留——侧栏两张卡（学习偏好 / 指标说明）还在用 */
 .kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
-.state__hero h1 { margin: 6px 0 4px; font-size: 20px; letter-spacing: -0.01em; }
-.state__hero p { margin: 0; font-size: 13.5px; color: var(--muted); }
+
+/* ---------- 顶部三张 KPI（原型 wf-kpis/wf-kpi，748-755）：等权 3 卡、gap 9px、居中排版 ---------- */
+.kpis {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px 12px; flex-wrap: wrap;
+}
+.kpis__grid {
+  flex: 1 1 460px; min-width: 0;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px;
+}
+.kpis__loading { grid-column: 1 / -1; padding: 2px 0; }
+.kpi {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--mk-radius-modal); box-shadow: var(--shadow-sm);
+  padding: 13px 8px; display: grid; justify-items: center; gap: 2px; text-align: center;
+}
+.kpi strong {
+  font-size: 22px; font-weight: 800; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+/* 原型为 11px → 12px：本仓门禁基础作用域字号下限 12px（同个人中心 KPI 的取舍） */
+.kpi span { font-size: 12px; color: var(--faint); }
+/* 原 hero 的 ghost 按钮降为本行小入口，贴右（放不下时折到第二行右对齐） */
+.kpis__link { flex: 0 0 auto; margin-left: auto; }
 
 .card {
   background: var(--surface);
@@ -1034,22 +1385,23 @@ function loadGuidance() {
   cursor: pointer;
 }
 
-/* 体检卡（批19）：主指标大数值 + 三项行内状态条，替代 4 张等权 KPI 卡 */
-/* 体检卡（2026-09-27 重排）：四段等位网格（主指标稍宽）+ 发丝线分隔，
-   替代原来「左一大块 + 右挤三根」的 flex 布局——1300px 宽下中间是死空白。
-   subs 用 display:contents 直接成为卡片网格的格子。 */
-.vitals { padding: 16px 20px; display: grid; grid-template-columns: 1.25fr 1fr 1fr 1fr; align-items: center; }
-.vitals__loading { grid-column: 1 / -1; }
-.vitals__main { display: grid; grid-template-columns: auto auto; gap: 4px 10px; justify-items: start; align-items: center; min-width: 0; padding-right: 18px; }
-.vitals__main small { grid-column: 1 / -1; font-size: 12px; color: var(--faint); font-weight: 700; }
-/* 34 → 24（2026-09-27 桌面刻度统一：KPI 大数字档 24，原值在令牌体系之外） */
-.vitals__value { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.vitals__value i { font-size: 13px; font-style: normal; font-weight: 600; color: var(--faint); }
-.vitals__subs { display: contents; }
-.vitals__sub { display: grid; grid-template-columns: auto auto; gap: 4px 8px; justify-items: start; align-items: center; min-width: 0; padding: 2px 0 2px 20px; border-left: 1px solid var(--line); }
-.vitals__sub small { grid-column: 1 / -1; font-size: 12px; color: var(--faint); font-weight: 700; }
-.vitals__sub b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.vitals__sub b i { font-size: 12px; font-style: normal; font-weight: 600; color: var(--faint); }
+/* ---------- 状态四项 meta（原体检卡 vitals 的去向） ----------
+   原型该屏只认三张 KPI 卡（连续天数 / 本周分钟 / 已掌握知识点），原 1.25fr+3×1fr 的体检卡撤掉：
+   整体状态 / 学习压力 / 掌握趋势 / 疲劳程度不删，降级成趋势卡内的单行状态条（卡内 meta）——
+   图里画的就是这四个指标，放这张卡里口径自洽；分档胶囊与失败态沿用原 .metric__note 语言。 */
+.vitals--meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px;
+  padding: 0 0 12px; margin-bottom: 12px;
+  border-bottom: 1px dashed var(--line);
+}
+.vitals__loading { flex: 1 1 100%; }
+.vitals--meta .vitals__main,
+.vitals--meta .vitals__sub {
+  display: inline-flex; align-items: center; gap: 7px; min-width: 0;
+}
+.vitals--meta small { font-size: 12px; color: var(--faint); font-weight: 700; }
+.vitals--meta b { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.vitals--meta b i { font-size: 12px; font-style: normal; font-weight: 600; color: var(--faint); }
 .metric__note { width: fit-content; font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: var(--mk-radius-pill); }
 /* 胶囊底色用「前景 ink × 表面」混色：暗色主题自动降饱和（外部评审：原 rgba 撞色在暗底上刺眼） */
 .metric__note--green { color: var(--green-ink); background: color-mix(in srgb, var(--green-ink) 13%, var(--surface)); }
@@ -1058,27 +1410,31 @@ function loadGuidance() {
 .metric__note--amber { color: var(--amber-ink); background: color-mix(in srgb, var(--amber-ink) 14%, var(--surface)); }
 .metric__note--red { color: var(--red-ink); background: color-mix(in srgb, var(--red-ink) 13%, var(--surface)); }
 
-@media (max-width: 720px) {
-  /* 窄屏：主指标整行 + 三个子指标 2 列环绕（第三格落下一行时无边框起头） */
-  .vitals { grid-template-columns: 1fr 1fr; row-gap: 14px; }
-  .vitals__main { grid-column: 1 / -1; padding: 0 0 12px; border-bottom: 1px solid var(--line); }
-  .vitals__sub:nth-child(odd) { border-left: 0; padding-left: 0; }
-}
-
-.state__grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+/* ---------- 单列流（原型 924 + wf-screen）：主列 880px 居中，原 1fr + 300px 侧栏栅格撤掉 ---------- */
+.state__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .state__col { display: grid; gap: 16px; }
-/* P2-11：新用户（指标为空）时把「AI 建议」提到最前，作为首屏主内容；图表空态降级为「积累中」说明
-   （原选择器 .suggest 随旧卡结构删除，2026-09-27 改挂到现役的 AI 建议 band 卡） */
-.state__col--empty .band--suggest { order: -1; }
+/* P2-11：新用户（指标为空）时把「AI 调控建议」提到最前，作为首屏主内容；图表空态降级为「积累中」说明
+   （原选择器 .band--suggest 随旧卡结构改名，2026-09-30 挂到现役的 wf-advisory 卡） */
+.state__col--empty .advisory { order: -1; }
 
 /* ---------- 趋势图 ----------
    2026-09-27 死 CSS 清理：.chart / .suggest 卡级容器模板已无（现役卡是 band），删除 */
-.seg { display: inline-flex; padding: 3px; background: var(--line, #eef2fa); border-radius: var(--mk-radius-lg); gap: 2px; }
+/* 42/90 天窗口切换 → 原型 wf-filter 胶囊语言（841-846）：白底 + 1px line 描边，
+   选中态去描边 + 蓝 12% 底，不再用灰底轨道 + 内嵌投影（那是分段控件的老语法） */
+.seg { display: inline-flex; gap: 6px; }
 .seg__item {
-  border: 0; background: transparent; padding: 5px 11px; border-radius: var(--mk-radius-md);
-  font: inherit; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer;
+  min-height: 36px; padding: 7px 14px;
+  border: 1px solid var(--line); background: var(--surface);
+  border-radius: 999px;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
-.seg__item--on { background: var(--surface, #fff); color: var(--ink); box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12); }
+.seg__item:hover { color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 35%, transparent); }
+.seg__item--on {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  color: var(--blue-deep);
+}
 
 /* ---------- AI 建议 ---------- */
 .suggest__list { display: grid; gap: 10px; }
@@ -1103,8 +1459,71 @@ function loadGuidance() {
 .sug__cta:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
 /* 2026-09-27 死 CSS 清理：.sug--done / .sug__done 的「已完成」形态模板已无（level 只剩 info/warning/critical） */
 
-/* ---------- 侧栏 ---------- */
-.side { display: grid; gap: 12px; position: sticky; top: 16px; }
+/* ---------- AI 调控建议卡（原型 wf-advisory，788-793 / 1971-1982） ----------
+   4px 琥珀左边条 + 琥珀星标 head + 正文 + 主次双按钮 + 成功回执行 + 次级区块（学习调控）。
+   pad 走 16（同 .card band 的内边距节奏），左边条由 border-left 提供，故右侧/下方补 16。 */
+.advisory {
+  display: grid; gap: 11px;
+  padding: 14px 16px 16px;
+  border-left: 4px solid var(--amber);
+}
+.advisory__head {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; font-weight: 800; color: var(--amber-ink);
+}
+.advisory__head strong { font-size: 14px; }
+.advisory__star { width: 15px; height: 15px; flex: 0 0 auto; }
+/* 卡头右侧的来源标注（AI 生成 / 系统建议）：跟 head 同色会抢星标语义，压回 meta 灰 */
+.advisory__head .band__meta { margin-left: auto; font-weight: 600; color: var(--faint); }
+.advisory__body { display: grid; gap: 11px; }
+.advisory__actions { display: flex; gap: 9px; flex-wrap: wrap; }
+.advisory__done { margin: 0; font-size: 12.5px; font-weight: 700; color: var(--green-ink); }
+/* 次级区块（学习调控）：与正文之间用分隔线分层，卡内再分一层，避免与建议正文糊在一起 */
+.advisory__sub {
+  display: grid; gap: 12px;
+  margin-top: 2px; padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.advisory__subhead { display: flex; align-items: baseline; gap: 10px; }
+.advisory__subhead strong { font-size: 14px; }
+.advisory__subhead .band__meta { margin-left: auto; }
+
+/* 主次双按钮（原型 wf-btn 279-286）：primary 蓝渐变 + 44 触控带，ghost 白底 line 描边 */
+.adv-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 0 18px;
+  border: 1px solid transparent; border-radius: var(--mk-radius-xl);
+  font: inherit; font-size: 14px; font-weight: 700;
+  cursor: pointer; white-space: nowrap;
+  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+}
+.adv-btn:disabled { cursor: default; opacity: 0.7; }
+.adv-btn--primary {
+  /* 实色 --blue（原蓝渐变退役）；30% 蓝色发光投影一并删除 */
+  background: var(--blue);
+  /* on-primary token（非硬编码 hex）：亮色下白字压深蓝，暗色下反向取深字压亮蓝 --mk-blue #5b8def */
+  color: var(--text-on-primary);
+}
+.adv-btn--primary:not(:disabled):active { transform: scale(0.98); }
+.adv-btn--ghost { background: var(--surface); border-color: var(--line); color: var(--muted); }
+.adv-btn--ghost:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--blue) 35%, transparent); color: var(--blue-deep);
+}
+
+/* ---------- 两行清单卡（原型 wf-reviewlist，794-799）：名称 + 84px 进度条 + 右对齐数值 ---------- */
+.rlist__rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.rlist__row { display: grid; grid-template-columns: 1fr 84px 40px; align-items: center; gap: 10px; font-size: 13px; }
+.rlist__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.rlist__pct {
+  text-align: right; color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums;
+}
+/* 进度条原语（原型 wf-bar 267-268）：6px 轨（--bar-track）+ 蓝→青渐变填充 */
+.wf-bar { height: 6px; border-radius: 99px; background: var(--bar-track, color-mix(in srgb, var(--line) 60%, transparent)); overflow: hidden; }
+.wf-bar > i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+
+/* ---------- 原侧栏（原型该屏单列流，无 300px 侧栏）：并入主列后不再吸顶——
+   单列里 sticky 只会在滚动时把两张说明卡悬在内容上，压住下方的复习/掌握卡 ---------- */
+.side { display: grid; gap: 12px; }
 .sidecard { padding: 16px 18px; display: grid; gap: 10px; }
 .pref, .legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .pref li { display: grid; gap: 2px; }
@@ -1119,10 +1538,7 @@ function loadGuidance() {
 
 @media (max-width: 1100px) {
   .state__main { padding: 16px 14px 32px; }
-  .state__hero h1 { font-size: 18px; }
-  .state__grid { grid-template-columns: 1fr; }
-  .side { position: static; }
-  /* 42/90 天分段控件是触屏主入口之一，28px 高对拇指偏小 → 34px */
+  /* 42/90 天分段控件是触屏主入口之一：药丸高度抬到触控口径（容器本身已 36px 基线） */
   .seg__item { padding: 8px 12px; }
 }
 </style>
@@ -1221,15 +1637,17 @@ function loadGuidance() {
   border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
   background: var(--surface, #fff); color: var(--muted);
   font-size: 12.5px; font-weight: 700; cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 .ctl-btn:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
 .ctl-btn--primary {
   border-color: transparent;
-  background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+  /* 实色 --blue（原蓝渐变退役），hover 改为加深底色而非 brightness 滤镜 */
+  background: var(--blue);
   color: #fff; font-weight: 800;
 }
-.ctl-btn--primary:hover { color: #fff; filter: brightness(1.06); border-color: transparent; }
+.ctl-btn--primary:not(:disabled):hover { color: #fff; background: var(--wf-color-primary-dark); border-color: transparent; }
+.ctl-btn--primary:not(:disabled):active { transform: scale(0.98); }
 .ctl-btn--primary:disabled { filter: saturate(0.4); cursor: default; }
 .ctl-btn--ghost { border-color: transparent; background: transparent; }
 .ctl__rows { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
@@ -1273,12 +1691,34 @@ function loadGuidance() {
 .ff-dot--fatigue { background: var(--accent); }
 .ff-dot--lsb { background: #31b16f; }
 
-.ff-chart { width: 100%; }
+/* ff-chart 现在承载 y 轴刻度与阈值标签的绝对定位层（原型 wf-trend__chart 757-762）→ 必须是定位上下文 */
+.ff-chart { position: relative; width: 100%; }
 .ff-chart svg { display: block; width: 100%; height: auto; }
+/* y 轴刻度（原型 wf-trend__yaxis）：贴左侧 AXIS_W 留白（46/760 ≈ 6.05%），
+   与 5 条网格线同位、右对齐，正好落在 grid 的 x1=plotX0 之外的空白里 */
+.ff-yaxis { position: absolute; left: 0; top: 0; bottom: 0; width: 6.05%; pointer-events: none; }
+.ff-yaxis span {
+  position: absolute; right: 6px; transform: translateY(-50%);
+  font-size: 12px; line-height: 1; color: var(--faint); font-variant-numeric: tabular-nums;
+}
+/* 阈值区间标签（原型 wf-trend__zones / __zonetag）：贴右缘、自带 surface 底压住曲线 */
+.ff-zones { position: absolute; inset: 0; pointer-events: none; }
+.ff-zonetag {
+  position: absolute; right: 2px; transform: translateY(-50%);
+  font-size: 12px; font-weight: 700; line-height: 1.1;
+  color: var(--green-ink); background: var(--surface);
+  padding: 0 4px; border-radius: 4px;
+}
 /* 背景柱 500 条上限的口径说明（见模板 ff-trunc） */
 .ff-trunc { margin: 8px 0 0; font-size: 12px; color: var(--faint); }
 .ff-bar { fill: color-mix(in srgb, var(--blue) 14%, transparent); }
 .ff-grid line { stroke: var(--line); stroke-width: 1; opacity: 0.6; }
+/* 状态阈值参考线（原型 wf-trend__zone 766）：绿 55% 透明 + 4/4 虚线，与实线曲线分层 */
+.ff-zone {
+  stroke: color-mix(in srgb, var(--green) 55%, transparent);
+  stroke-width: 1; stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
 .ff-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .ff-line--fitness { stroke: var(--blue); }
 .ff-line--fatigue { stroke: var(--accent); }
@@ -1306,10 +1746,10 @@ function loadGuidance() {
    实测 390 下整页 3359px（最长的一页）。批19 起 KPI 卡墙改为体检卡（vitals），
    主数值桌面 34px、移动 24px 仍受密度口径约束。放在文件末尾：同权重下后出现者胜。 */
 @media (max-width: 1100px) {
-  .vitals__value { font-size: 24px; }
-  .vitals { padding: 14px 16px; }
+  /* 体检卡随原卡结构退役：.vitals__value / .vitals{padding} 两条移动规则已无对应元素（死 CSS 清理），
+     现役的 .vitals--meta 是趋势卡内的单行状态条，不做卡级内边距 */
   /* 移动端单列堆叠，同宽卡片必须共用一条内容轨道：sidecard 原来横向 14 而
-     vitals / band 都是 16，内容左缘落在 29/31 两条线上（2026-09-26 对齐走查）。
+     band 都是 16，内容左缘落在 29/31 两条线上（2026-09-26 对齐走查）。
      只动横向，竖向 12 是它自己的紧凑节奏。（原 .chart / .suggest 死选择器已清） */
   .sidecard { padding: 12px 16px; }
   .chart__loading { padding: 28px 0; }

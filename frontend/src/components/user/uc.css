@@ -1,18 +1,32 @@
 /* ============================================================
  * 用户中心 v2 组件库（uc.css）
- * 全手作组件，完全对齐 v2 学习侧视觉语言：
- *   16px 实色卡 + 12px 控件圆角 + 999px 药丸 + 渐变主按钮 + 双层微阴影
- * 所有颜色走 v2 token（--ink/--muted/--faint/--line/--canvas/--surface/--blue/--blue-deep）
+ * 全手作组件，对齐 v2 学习侧视觉语言。
+
+ * 2026-10-02（批次 D）随 SPEC v4「友好而平」修订上方的设计口径描述：
+ *   原写「16px 实色卡 + 12px 控件圆角 + 999px 药丸 + **渐变主按钮 + 双层微阴影**」
+ *   —— 其中「渐变主按钮」与「双层微阴影」两项已被规范判死，本文件已改：
+ *     · 主按钮：135deg 渐变 → 纯色 --wf-color-primary；彩色外发光全部删除，
+ *       hover 改用规范钦定的 primary-dark 底色。
+ *     · 卡片：规范是「面永远是平的，1px 发丝线就是全部质感」，双层微阴影已删。
+ *   现口径：16px 实色卡 + 8px 控件圆角 + 16px 弹层圆角 + 999px 药丸
+ *          + 纯色主按钮 + 中性三档投影。
+ *
+ * 颜色一律走令牌层（--wf-* 为唯一事实源，--mk-* 为别名）；
+ * 仅少量 v2 独有档沿用 --ink/--muted/--faint/--line/--canvas/--surface 别名，
+ * 它们在 v2.css 里已全部指向 --mk-*。
  * ============================================================ */
 
 /* ---------- 卡片 ---------- */
 .uc-card {
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e3e9f4);
-  border-radius: var(--mk-radius-modal);
-  /* 归一到统一层级刻度（原为写死的双层阴影） */
-  box-shadow: var(--shadow-sm);
-  padding: 20px 22px;
+  border-radius: var(--wf-radius-card);
+  /* 批次 D（2026-10-02）：投影删除。
+     规范：「卡片 0 阴影 + 1px 发丝线」「面永远是平的」。
+     上面那行 border 就是全部的分层手段；卡片不叠滚动内容时，
+     投影不表达任何层级关系，只是让整页蒙一层灰雾。 */
+  /* 原型 .wf-card 基座密度：padding 16（原 20/22） */
+  padding: 16px;
   min-width: 0;
 }
 
@@ -68,10 +82,10 @@
   white-space: nowrap;
 }
 
+/* 原型 .wf-btn：hover 不做抬升（仅 :active scale(.98)），保留边框/文字变色反馈 */
 .uc-btn:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--blue) 35%, transparent);
   color: var(--blue-deep, #1f57cc);
-  transform: translateY(-1px);
 }
 
 .uc-btn:active:not(:disabled) {
@@ -85,15 +99,19 @@
 
 .uc-btn--primary {
   border: 0;
-  background: linear-gradient(135deg, var(--blue, var(--mk-blue)), var(--blue-deep, #1f57cc));
+  /* 批次 D（2026-10-02）：135deg 渐变底 + 22% 蓝色外发光 → 纯色友好蓝、无投影。
+     规范：「主操作为纯色友好蓝 #2f6ae0，不再使用渐变」「禁止彩色光晕」。
+     白字对 #2f6ae0 的对比度 4.93:1，达 WCAG AA，故去掉深蓝端不损可读性。 */
+  background: var(--wf-color-primary);
   color: #fff;
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 22%, transparent);
 }
 
+/* hover 只换底色为规范钦定的 primary-dark 档；投影不再加深
+   （原来 22%→34% 的蓝色晕递增正是被判死的「彩色光晕」）。 */
 .uc-btn--primary:hover:not(:disabled) {
   color: #fff;
   border-color: transparent;
-  box-shadow: 0 14px 28px color-mix(in srgb, var(--blue) 34%, transparent);
+  background: var(--wf-color-primary-dark);
 }
 
 .uc-btn--danger {
@@ -126,7 +144,6 @@
 .uc-btn--link:hover:not(:disabled) {
   background: color-mix(in srgb, var(--blue) 8%, transparent);
   color: var(--blue-deep, #1f57cc);
-  transform: none;
 }
 
 /* ---------- 输入框 / 表单 ---------- */
@@ -157,8 +174,8 @@
 }
 
 .uc-field__input:focus {
-  border-color: rgba(52, 120, 246, 0.55);
-  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12);
+  border-color: color-mix(in srgb, var(--blue) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
 }
 
 .uc-field__input:disabled {
@@ -308,7 +325,9 @@ select.uc-field__input {
 }
 
 .uc-switch input:checked + .uc-switch__track {
-  background: linear-gradient(135deg, var(--blue, var(--mk-blue)), var(--blue-deep, #1f57cc));
+  /* 批次 D：135deg 渐变 → 纯色友好蓝。开关是「选中态」的载体，
+     蓝只用于交互与选中，正是规范给蓝的唯一定义。 */
+  background: var(--wf-color-primary);
   border-color: transparent;
 }
 
@@ -317,7 +336,7 @@ select.uc-field__input {
 }
 
 .uc-switch input:focus-visible + .uc-switch__track {
-  outline: 2px solid var(--blue, #3478f6);
+  outline: 2px solid var(--blue, var(--mk-blue));
   outline-offset: 2px;
 }
 
@@ -367,7 +386,7 @@ table.uc-table {
 }
 
 .uc-table tbody tr:hover {
-  background: rgba(52, 120, 246, 0.045);
+  background: color-mix(in srgb, var(--blue) 4.5%, transparent);
 }
 
 .uc-table .uc-table__sub {
@@ -398,7 +417,8 @@ table.uc-table {
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.36);
-  backdrop-filter: blur(2px);
+  /* 批次 D（2026-10-02）：backdrop-filter: blur(2px) 已删，规范材质一律平面。
+     36% 的墨色遮罩已足够表达「压暗隔断」。 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -410,8 +430,11 @@ table.uc-table {
   width: min(480px, 100%);
   background: var(--surface, #fff);
   border: 1px solid var(--line, #e3e9f4);
-  border-radius: 20px;
-  box-shadow: 0 16px 40px rgba(23, 32, 51, 0.14);
+  /* 批次 D：20px 圆角（档外）→ --wf-radius-overlay(16px)；
+     投影 rgba(23,32,51,.14) 是规范外档（规范浮层档为 0 16px 40px rgba(15,23,42,.16)，
+     色相与 alpha 都不同）→ 改用 --wf-shadow-modal。这是对话框，属模态层。 */
+  border-radius: var(--wf-radius-overlay);
+  box-shadow: var(--wf-shadow-modal);
   max-height: 85vh;
   display: flex;
   flex-direction: column;
@@ -473,19 +496,25 @@ table.uc-table {
 }
 
 /* ---------- 骨架屏 ---------- */
+/* 与 SkeletonLoader / 原型 .wf-skel 同参：100deg·1.4s·linear·220% 位移。
+   --soft 走原型口径（surface 向 ink 压 8%）：mk token 自带暗色翻转，
+   浅/暗双主题由一条声明覆盖，不再需要 [data-theme='dark'] 的硬编码补丁。 */
 .uc-skeleton {
-  background: linear-gradient(90deg, #edf1f8 25%, #f7faff 50%, #edf1f8 75%);
-  background-size: 200% 100%;
-  animation: uc-shimmer 1.4s infinite;
+  --soft: color-mix(in srgb, var(--mk-surface) 92%, var(--mk-ink));
+  background: linear-gradient(
+    100deg,
+    var(--soft) 30%,
+    color-mix(in srgb, var(--soft) 45%, var(--mk-surface)) 50%,
+    var(--soft) 70%
+  );
+  background-size: 220% 100%;
+  animation: uc-shimmer 1.4s linear infinite;
   border-radius: var(--mk-radius-sm);
-}
-[data-theme='dark'] .uc-skeleton {
-  background: linear-gradient(90deg, #232325 25%, #2d2d2f 50%, #232325 75%);
 }
 
 @keyframes uc-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  from { background-position: 140% 0; }
+  to { background-position: -40% 0; }
 }
 
 .uc-skeleton-table th,
@@ -513,8 +542,8 @@ table.uc-table {
   width: 22px;
   height: 22px;
   border-radius: var(--mk-radius-pill);
-  border: 3px solid rgba(52, 120, 246, 0.15);
-  border-top-color: var(--blue, #3478f6);
+  border: 3px solid color-mix(in srgb, var(--blue) 15%, transparent);
+  border-top-color: var(--blue, var(--mk-blue));
   animation: uc-spin 0.9s linear infinite;
   flex: none;
 }
@@ -600,16 +629,13 @@ table.uc-table {
   .uc-dialog__body { padding: 12px 16px; gap: 10px; }
   .uc-dialog__foot { padding: 12px 16px 14px; gap: 8px; }
 
-  /* 主按钮的"浮板感"：尺寸上一轮已和学习侧 .btn-primary 对齐（38px 高 / 13.5px 字），
-     但这里留着桌面的 10px·22px·22% 蓝晕——39 高的小按钮配这个投影，在 390 宽下
-     就是一块浮起来的板（2026-09-24 用户指「授权 24 小时还挺大的」）。
-     学习侧同款按钮的移动端投影是 5px·12px·20%，这里收到同一档。 */
-  .uc-btn--primary {
-    box-shadow: 0 5px 12px color-mix(in srgb, var(--blue, #3478f6) 20%, transparent);
-  }
-  .uc-btn--primary:hover:not(:disabled) {
-    box-shadow: 0 8px 18px color-mix(in srgb, var(--blue, #3478f6) 26%, transparent);
-  }
+  /* 移动端主按钮：整块「浮板感」规则已随批次 D 退役。
+     它原本是把桌面投影（10px·22px·22% 蓝晕）调到移动端档（5px·12px·20%），
+     目的只是让 39px 高的小按钮在 390 宽下别显得像一块浮起来的板
+     （2026-09-24 用户反馈「授权 24 小时还挺大的」）。
+     现在主按钮无投影（规范：禁止彩色光晕、按钮不叠滚动内容时不做浮板），
+     该问题从根上消失，无需再分桌面/移动两档。 */
+  /* 原规则删除，无替代。 */
 
   /* 弹窗与表单控件（2026-09-24 密度轮）：圆角 20px 不在 token 刻度上（…10/12/16/pill），
      收到 --mk-radius-modal；遮罩 20→14（390 下 20px 遮罩边距让弹窗内容过窄）；

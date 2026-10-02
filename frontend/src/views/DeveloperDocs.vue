@@ -403,8 +403,10 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: blur(12px);
+  /* 「友好而平」：材质平面化。顶栏原先是 rgba(255,255,255,.88) 半透明 + backdrop-filter: blur(12px)
+     的磨砂玻璃（半透明还导致暗色模式下顶栏发白）；改为 --mk-surface 实底 + 1px 下边框发丝线，
+     不再靠模糊把它和正文分开。 */
+  background: var(--mk-surface);
   border-bottom: 1px solid var(--line);
 }
 .docs-nav__inner {

@@ -73,43 +73,46 @@ describe('V2Dashboard 日历口径（本地日期）', () => {
     expect(today.find('.day__min').text()).toBe('25分');
   });
 
-  it('选中当天：学习次数按本地日期归组（含当天凌晨会话）', async () => {
+  it('选中当天：学习次数按本地日期归组（含当天凌晨会话），明细在复盘抽屉', async () => {
     const w = await mountDash(todaySessions());
     await w.find('.day--today').trigger('click');
     await flushPromises();
-    // 月历下的当日入口只呈现摘要（完整明细在抽屉）：分钟与次数按本地日期归组
-    const detail = w.find('.day-detail');
-    expect(detail.text()).toContain('当天学了 25 分钟');
-    expect(detail.text()).toContain('1 次');
+    // 月历撤除后（整月收成 month-summary 一行），当日明细在复盘抽屉：分钟与次数按本地日期归组
+    const sheet = w.find('.sheet');
+    expect(sheet.exists()).toBe(true);
+    expect(sheet.text()).toContain('25 分钟');
+    expect(sheet.text()).toContain('1 次');
   });
 
   it('热力色阶走 CSS class（无内联颜色，暗色由主题样式接管）', async () => {
     const w = await mountDash(todaySessions());
+
+    // 无学习日子 → day__cell--h0（暗色样式里是可读的浅字深底），不再内联 transparent / 浅底深字
+    const zeroCells = w.findAll('.day__cell--h0');
+    expect(zeroCells.length).toBeGreaterThan(0);
+    for (const cell of zeroCells) expect(cell.attributes('style') || '').toBe('');
+    // 今天 25 分 → h1
+    expect(w.findAll('.day__cell--h1').length).toBeGreaterThan(0);
+  });
+
+  it('周行按周一~周日（与本地当天对齐）；展开整月收成一行摘要', async () => {
+    const w = await mountDash(todaySessions());
+
+    const days = w.findAll('.week__grid .day');
+    expect(days.length).toBe(7);
+    const expectedIndex = (new Date().getDay() + 6) % 7; // 周一 = 第 0 列
+    expect(days[expectedIndex].classes()).toContain('day--today');
+    expect(days[expectedIndex].find('.day__cell').text()).toBe(String(new Date().getDate()));
+
+    // 整月日历卡已按原型撤成一行摘要（月导航/7 列网格归学习历史页）
     const toggle = w.findAll('button').find((b) => b.text().includes('展开整月'));
     expect(toggle).toBeTruthy();
     await toggle!.trigger('click');
     await flushPromises();
-
-    // 无学习日子 → mday--h0（暗色样式里是可读的浅字深底），不再内联 transparent / 浅底深字
-    const zeroCells = w.findAll('.mday--h0');
-    expect(zeroCells.length).toBeGreaterThan(0);
-    for (const cell of zeroCells) expect(cell.attributes('style') || '').toBe('');
-    // 今天 25 分 → h1
-    expect(w.findAll('.mday--h1').length).toBeGreaterThan(0);
-  });
-
-  it('整月节奏的周行也按周一~周日（与「本周节奏」对齐）', async () => {
-    const w = await mountDash(todaySessions());
-    const toggle = w.findAll('button').find((b) => b.text().includes('展开整月'));
-    await toggle!.trigger('click');
-    await flushPromises();
-
-    const thisWeek = w.findAll('.mweek').find(
-      (row) => row.find('.mweek__side strong').exists() && row.find('.mweek__side strong').text() === '本周',
-    );
-    expect(thisWeek).toBeTruthy();
-    const cells = thisWeek!.findAll('.mday');
-    const expectedIndex = (new Date().getDay() + 6) % 7; // 周一 = 第 0 列
-    expect(cells[expectedIndex].text()).toBe(String(new Date().getDate()));
+    const summary = w.find('.month-summary');
+    expect(summary.exists()).toBe(true);
+    expect(summary.text()).toContain('25 分钟');
+    expect(summary.text()).toContain('1 天有学习');
+    expect(summary.text()).toContain('1 次');
   });
 });

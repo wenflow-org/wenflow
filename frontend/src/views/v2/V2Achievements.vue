@@ -13,19 +13,22 @@
       </div>
 
       <template v-else>
-        <!-- 概览（批19）：四张等权 KPI 卡合并为一行摘要 + 进度条 -->
+        <!-- 概览（原型 wf-ovline 835-839 / 2072-2076）：三行——大数字 → 进度条 → 蓝色 XP 行 -->
         <section class="card ov-line" aria-label="成就概览">
-          <div class="ov-line__text">
-            已解锁 <strong>{{ unlockedCount }}</strong> / {{ items.length }} 个成就
-            <template v-if="items.length - unlockedCount > 0">，还剩 {{ items.length - unlockedCount }} 个</template>
-            <span class="ov-line__xp">已获得 {{ totalXpAll }} XP{{ achXpHint }}</span>
+          <div class="ov-line__top">
+            <strong>{{ unlockedCount }} / {{ items.length }}</strong>
+            <span>个成就已解锁<template v-if="items.length - unlockedCount > 0">，还剩 {{ items.length - unlockedCount }} 个</template></span>
           </div>
-          <div class="ov-line__bar" role="img" :aria-label="`解锁进度 ${items.length ? Math.round((unlockedCount / items.length) * 100) : 0}%`">
-            <i :style="{ width: (items.length ? Math.round((unlockedCount / items.length) * 100) : 0) + '%' }"></i>
+          <div class="ov-line__bar" role="img" :aria-label="`解锁进度 ${unlockPct}%`">
+            <i :style="{ width: unlockPct + '%' }"></i>
+          </div>
+          <div class="ov-line__xp">
+            {{ totalXpAll }} XP<span v-if="totalXpAll !== totalXp"> · 其中成就 {{ totalXp }}</span>
           </div>
         </section>
 
-        <!-- 筛选 -->
+        <!-- 筛选（原型 wf-filters 2078-2082）：全部/已解锁/未解锁 三枚状态 chip 与
+             类型 chip 同走 .wf-filter 胶囊语言，行内不再放竖分隔线（类型筛选降级保留） -->
         <div class="filters">
           <button
             v-for="f in statusFilters"
@@ -35,61 +38,42 @@
             :class="{ 'filter--active': statusFilter === f.key }"
             @click="statusFilter = f.key"
           >{{ f.label }}</button>
-          <span class="filters__sep"></span>
           <button
             v-for="t in typeFilters"
             :key="t.key"
             type="button"
-            class="filter filter--type"
+            class="filter"
             :class="{ 'filter--active': typeFilter === t.key }"
             @click="typeFilter = typeFilter === t.key ? '' : t.key"
           >{{ t.label }}</button>
         </div>
 
-        <!-- 成就网格 -->
+        <!-- 成就网格（原型 wf-ach 2085-2129）：icon → 标题 → 描述 → 一行状态，四行无分隔线 -->
         <div v-if="visible.length" class="grid">
           <article
             v-for="a in visible"
             :key="a.id"
             class="card ach-card"
-            :class="{
-              'ach-card--locked': !a.unlocked,
-              'ach-card--unlocked': a.unlocked
-            }"
+            :class="{ 'ach-card--locked': !a.unlocked, 'ach-card--unlocked': a.unlocked }"
           >
-            <!-- share button -->
-            <button v-if="a.unlocked" type="button" class="ach-share" @click.stop="shareAchievement(a)" title="分享成就">
-              <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
+            <!-- 分享（原型无此入口，功能保留但降为卡角轻量图标钮，不占行也不抢状态行） -->
+            <button
+              v-if="a.unlocked"
+              type="button"
+              class="ach-share"
+              title="分享成就"
+              aria-label="分享成就"
+              @click.stop="shareAchievement(a)"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
             </button>
 
-            <div class="ach-card__head">
-              <span class="ach-card__icon-wrap" :class="`ach-card__icon--${a.unlocked ? 'on' : 'off'}`">
-                <span class="ach-card__icon-mark">{{ achMark(a) }}</span>
-              </span>
-              <div class="ach-card__head-right">
-                <span v-if="a.unlocked" class="ach-rarity" :class="rarityOf(a.xpReward).cls">
-                  {{ rarityOf(a.xpReward).label }}
-                </span>
-                <span class="ach-card__badge" :class="a.unlocked ? 'ach-card__badge--on' : 'ach-card__badge--off'">
-                  {{ a.unlocked ? '已解锁' : '未解锁' }}
-                </span>
-              </div>
-            </div>
+            <span class="ach-card__icon" :class="iconCls(a)" aria-hidden="true">{{ achMark(a) }}</span>
             <strong class="ach-card__name">{{ a.name }}</strong>
             <p class="ach-card__desc">{{ descText(a) }}</p>
-            <div class="ach-card__foot">
-              <template v-if="a.unlocked">
-                <span class="ach-card__xp">+{{ a.xpReward }} XP</span>
-                <span class="ach-card__date">{{ formatDate(a.earnedAt) }}</span>
-              </template>
-              <template v-else>
-                <div class="ach-card__prog">
-                  <div class="ach-card__prog-bar"><i :style="{ width: progressPct(a) + '%' }"></i></div>
-                  <span>{{ fmtNum(progressOf(a).current) }} / {{ fmtNum(progressOf(a).total) }}</span>
-                </div>
-                <span class="ach-card__xp ach-card__xp--off">{{ a.xpReward }} XP</span>
-              </template>
-            </div>
+            <span class="ach-card__state" :class="{ 'ach-card__state--on': a.unlocked }">
+              {{ stateText(a) }}<span v-if="a.unlocked && formatDate(a.earnedAt)" class="ach-card__date"> · {{ formatDate(a.earnedAt) }}</span>
+            </span>
           </article>
         </div>
         <div v-else class="empty">
@@ -140,7 +124,7 @@ const loading = ref(true);
 const loadError = ref(false);
 
 /** 成就图标：按类型给「色块 + 字标」（里/连/完/掌/社），与管理端 AchIcon.vue 同一套映射，
-    色块本身由 .ach-card__icon-wrap::before 按解锁状态给色。
+    色块由 .ach-card__icon--* 系列 token 色给底（未解锁一律中性灰）。
     替代原来的 emoji——各系统渲染不一致，且与全站的线性图标 + 色块徽标语言不搭。 */
 const ACH_TYPE_MARK: Record<string, string> = {
   milestone: '里',
@@ -151,6 +135,19 @@ const ACH_TYPE_MARK: Record<string, string> = {
 };
 function achMark(a: Achievement): string {
   return ACH_TYPE_MARK[a.type] || '成';
+}
+
+/** 图标 42×42 的类型色块（原型 wf-ach__icon--streak/complete/mastery/milestone/social 858-862）；
+    未解锁一律落到中性灰块（原型锁定卡只给 wf-ach__icon 本体），并由卡整体 opacity 表态。 */
+const ACH_TYPE_TONE: Record<string, string> = {
+  milestone: 'milestone',
+  streak: 'streak',
+  completion: 'complete',
+  mastery: 'mastery',
+  social: 'social',
+};
+function iconCls(a: Achievement): string {
+  return a.unlocked ? `ach-card__icon--${ACH_TYPE_TONE[a.type] || 'neutral'}` : 'ach-card__icon--neutral';
 }
 const statusFilter = ref<'all' | 'unlocked' | 'locked'>('all');
 const typeFilter = ref('');
@@ -184,11 +181,23 @@ const unlockedCount = computed(() => items.value.filter((a) => a.unlocked).lengt
 const totalXp = computed(() => items.value.filter((a) => a.unlocked).reduce((s, a) => s + (a.xpReward ?? 0), 0));
 
 /* XP 口径：user.xp 是账号权威经验值（成就奖励 + 任务完成奖励，addXp 唯一写入口），
-   账号页与等级都用它。本页 KPI 与账号页同源显示总数，成就贡献作子注——
+   账号页与等级都用它。本页概览条与账号页同源显示总数，成就贡献作子注——
    此前本页只累加成就奖励（如 10），与账号页的 60 对不上，像两个体系。 */
 const userStore = useUserStore();
 const totalXpAll = computed(() => userStore.user?.xp || 0);
-const achXpHint = computed(() => (totalXpAll.value !== totalXp.value ? ` · 其中成就 ${totalXp.value}` : ''));
+
+/* 解锁进度（原型 wf-bar--lg 的 i 宽度） */
+const unlockPct = computed(() =>
+  items.value.length ? Math.round((unlockedCount.value / items.value.length) * 100) : 0
+);
+
+/* 卡片第四行：已解锁 → 「已解锁 · +10 XP」绿字；未解锁 → 「未解锁 · 6 / 10」faint
+   （原型 wf-ach__state 865-867；状态药丸与虚线 foot 随卡头徽章一起撤掉） */
+function stateText(a: Achievement): string {
+  if (a.unlocked) return `已解锁 · +${a.xpReward} XP`;
+  const p = progressOf(a);
+  return `未解锁 · ${fmtNum(p.current)} / ${fmtNum(p.total)}`;
+}
 
 function progressOf(a: Achievement) {
   return a.progress ?? { current: 0, total: 1, percentage: 0 };
@@ -223,13 +232,6 @@ function formatDate(d?: string | Date) {
   const date = new Date(d);
   if (Number.isNaN(date.getTime())) return '';
   return `${date.getMonth() + 1}月${date.getDate()}日`;
-}
-
-function rarityOf(xp: number): { label: string; cls: string } {
-  if (xp >= 200) return { label: '史诗', cls: 'rarity--epic' }
-  if (xp >= 100) return { label: '稀有', cls: 'rarity--rare' }
-  if (xp >= 50) return { label: '精良', cls: 'rarity--uncommon' }
-  return { label: '普通', cls: 'rarity--common' }
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -295,46 +297,70 @@ onMounted(() => {
   box-shadow: var(--shadow-sm);
 }
 
-/* 概览一行摘要（批19）：替代四张等权 KPI 卡 */
-.ov-line { padding: 14px 18px; display: grid; gap: 8px; }
-.ov-line__text { font-size: 13.5px; color: var(--muted); }
-.ov-line__text strong { font-size: 16px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
-.ov-line__xp { margin-left: 10px; font-size: 12px; color: var(--faint); }
-.ov-line__bar { height: 6px; border-radius: 99px; background: var(--bar-track, color-mix(in srgb, var(--line, #eef0f4) 60%, transparent)); overflow: hidden; }
+/* 概览条（原型 wf-ovline 835-839 / 2072-2076）：三行——大数字 → 进度条 → 蓝色 XP 行 */
+.ov-line { padding: 14px 18px; display: grid; gap: 10px; }
+.ov-line__top { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.ov-line__top strong { font-size: 20px; font-weight: 800; color: var(--ink); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ov-line__xp { font-size: 12.5px; font-weight: 700; color: var(--blue-deep); }
+.ov-line__xp span { font-weight: 500; color: var(--faint); }
+.ov-line__bar { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--line, #eef0f4) 60%, transparent); overflow: hidden; }
 /* 原为纯紫 --accent（旧强调色语言）→ 原型 wf-bar 填充：蓝→青 */
 .ov-line__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width 0.4s ease; }
 
+/* 筛选（原型 wf-filters / wf-filter 840-846）：状态 chip 与类型 chip 同一套胶囊语言 */
 .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .filter {
-  border: 1px solid var(--line); background: var(--surface, #fff);
-  border-radius: var(--mk-radius-pill); padding: 7px 15px;
-  font: inherit; font-size: 13px; font-weight: 600; color: var(--muted);
-  cursor: pointer; transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+  min-height: 36px;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  background: var(--surface, #fff);
+  border-radius: var(--mk-radius-pill);
+  color: var(--muted);
+  font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
-.filter--active { border-color: rgba(52, 120, 246, 0.45); background: rgba(52, 120, 246, 0.07); color: var(--blue-deep); }
-.filter--type { padding: 6px 12px; font-size: 12px; }
-.filters__sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+.filter--active { border-color: transparent; background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue-deep); }
 
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+/* 网格（原型 wf-ach__grid 847 / 931）：2 列，≥1024 放 3 列。
+   撤掉本页自造的 auto-fill minmax(230px,1fr)——1080 宽下会铺成 4 列。 */
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 
-/* ── Achievement Card ── */
+/* ── Achievement Card（原型 wf-ach 848-867）：icon → 标题 → 描述 → 一行状态，四行无分隔线 ── */
 .ach-card {
-  padding: 16px; display: flex; flex-direction: column; gap: 8px;
-  transition: transform 0.16s ease, box-shadow 0.16s ease;
   position: relative;
+  padding: 14px;
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  align-content: start;
+  transition: none;
 }
-.ach-card:hover { transform: translateY(-2px); box-shadow: 0 14px 34px rgba(23, 32, 51, 0.09); }
 
-/* Locked treatment */
-.ach-card--locked {
-  background: var(--canvas, #fafcff);
-  opacity: 0.6;
-  filter: grayscale(0.3);
+/* ── 42×42 类型色块（原型 wf-ach__icon 853-862） ── */
+.ach-card__icon {
+  width: 42px; height: 42px;
+  border-radius: 12px;
+  margin-bottom: 4px;
+  display: grid; place-items: center;
+  font-size: 19px; font-weight: 800;
+  letter-spacing: 0.02em;
 }
-.ach-card--locked:hover {
-  opacity: 0.8;
-  filter: grayscale(0);
-}
+.ach-card__icon--neutral { background: color-mix(in srgb, var(--line) 60%, transparent); color: var(--faint); }
+.ach-card__icon--streak { background: color-mix(in srgb, var(--amber) 15%, transparent); color: var(--amber-ink); }
+.ach-card__icon--complete { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green-ink); }
+.ach-card__icon--mastery { background: color-mix(in srgb, var(--blue) 13%, transparent); color: var(--blue-deep); }
+.ach-card__icon--milestone { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.ach-card__icon--social { background: color-mix(in srgb, var(--cyan) 16%, transparent); color: var(--cyan-ink); }
+
+.ach-card__name { font-size: 14px; font-weight: 700; color: var(--ink); }
+.ach-card__desc { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.55; }
+/* 第四行状态：原型 wf-ach__state 11.5px，本仓字号下限 12px（规则 16） */
+.ach-card__state { margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--faint); }
+.ach-card__state--on { color: var(--green-ink); }
+.ach-card__date { font-weight: 500; color: var(--faint); }
+/* 锁定卡：只降透明度（原型 867 opacity .78）；撤掉原 grayscale(0.3) + hover 复原 */
+.ach-card--locked { opacity: 0.78; }
 
 /* ── Unlock stagger animation ── */
 .ach-card--unlocked {
@@ -354,67 +380,7 @@ onMounted(() => {
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-.ach-card__head { display: flex; align-items: center; justify-content: space-between; }
-.ach-card__head-right { display: flex; align-items: center; gap: 6px; }
-
-/* ── Icon wrapper with pseudo-element treatment ── */
-.ach-card__icon-wrap {
-  width: 48px; height: 48px;
-  border-radius: 14px;
-  display: grid; place-items: center;
-  position: relative;
-  overflow: hidden;
-}
-.ach-card__icon-wrap::before {
-  content: '';
-  position: absolute; inset: 0;
-  border-radius: inherit;
-  opacity: 0.12;
-}
-.ach-card__icon--on { color: var(--blue-deep); }
-.ach-card__icon--on .ach-card__icon-wrap::before {
-  /* 原为蓝→紫渐变（旧强调色语言）→ 原型 wf-ach__icon：蓝扁平淡彩底 */
-  background: var(--blue);
-}
-.ach-card__icon--off { color: var(--faint); }
-.ach-card__icon--off .ach-card__icon-wrap::before {
-  background: var(--line);
-}
-.ach-card__icon-mark {
-  position: relative;
-  z-index: 1;
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-
-/* ── Rarity tag ──（微字下限 12px，走查 2026-09-27 原为 10px） */
-.ach-rarity {
-  font-size: 12px; font-weight: 800;
-  padding: 2px 9px; border-radius: var(--mk-radius-pill);
-  letter-spacing: 0.3px;
-}
-.rarity--common { color: var(--mk-faint); background: rgba(103,117,143,0.1); }
-.rarity--uncommon { color: var(--green-ink); background: rgba(30,158,88,0.1); }
-.rarity--rare { color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, transparent); }
-.rarity--epic { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-
-/* ── Badge ── */
-.ach-card__badge { font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: var(--mk-radius-pill); }
-.ach-card__badge--on { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
-.ach-card__badge--off { color: var(--muted); background: var(--line, #e8edf5); }
-.ach-card__name { font-size: 15px; }
-.ach-card__desc { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.55; flex: 1; }
-.ach-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
-.ach-card__xp { font-size: 12px; font-weight: 800; color: var(--accent, #6a4de0); }
-.ach-card__xp--off { color: var(--faint); }
-.ach-card__date { font-size: 12px; color: var(--faint); }
-.ach-card__prog { display: flex; align-items: center; gap: 8px; flex: 1; }
-.ach-card__prog-bar { flex: 1; height: 6px; border-radius: 99px; background: var(--line, #edf1f8); overflow: hidden; }
-.ach-card__prog-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
-.ach-card__prog span { font-size: 12px; color: var(--faint); white-space: nowrap; }
-
-/* ── Share button ── */
+/* ── Share button（原型无此入口，保留为卡角常显轻量图标钮） ── */
 .ach-share {
   position: absolute; top: 8px; right: 8px;
   width: 28px; height: 28px;
@@ -424,14 +390,9 @@ onMounted(() => {
   color: var(--faint);
   display: grid; place-items: center;
   cursor: pointer;
-  opacity: 0; transition: opacity 0.15s, background 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
-.ach-card:hover .ach-share { opacity: 1; }
 .ach-share:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); }
-/* 触屏没有 hover：不常显这个分享入口就永远点不到（此前只有 .ach-card:hover 一条路径） */
-@media (hover: none) {
-  .ach-share { opacity: 1; }
-}
 
 @media (max-width: 1100px) {
   /* 收进个人中心后的移动端压缩（2026-09-24 反馈「内容都偏大」）：
@@ -444,8 +405,6 @@ onMounted(() => {
      同宽卡堆在一列里，内容左缘落在 33/29 两条线上（2026-09-26 对齐走查）。 */
   .ov-line { padding-left: 14px; padding-right: 14px; }
   .ach-card { padding: 12px 14px; }
-  .ach-card__name { font-size: 14px; }
-  .ach-card__icon-mark { font-size: 15px; }
   .filters { gap: 6px; }
   /* 筛选药丸 33px → 36（lt36 门禁）。这类紧凑芯片的横向内边距不动，只补高度：
      一行 7 颗在 390 下的总宽预算不变。 */
@@ -453,6 +412,11 @@ onMounted(() => {
 }
 @media (max-width: 560px) {
   .grid { grid-template-columns: 1fr; }
+}
+/* ≥1024 放 3 列（原型 wf-ach__grid 931）。放在 max-width:1100 之后：
+   1024–1100 区间两组同时命中，同权重下后声明者胜 → 3 列。 */
+@media (min-width: 1024px) {
+  .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 </style>
 
@@ -479,7 +443,7 @@ onMounted(() => {
 /* ── Toast ── */
 .ach-toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-  background: #1e293b; color: #fff;
+  background: var(--ink); color: var(--surface);
   padding: 10px 20px; border-radius: var(--mk-radius-xl);
   font-size: 13px; font-weight: 600;
   box-shadow: 0 8px 24px rgba(0,0,0,0.18);
@@ -495,13 +459,12 @@ onMounted(() => {
 <style scoped>
 /* ===== 移动端密度（2026-09-24）=====
    判据：卡片内边距 12–16px、空态/加载留白 ≤32px。
-   实测 390 下：成就卡图标块 48×48（卡片两列、每列仅 ~165px 宽，emoji 已压到 20px、
-   块本身还是桌面尺寸）、加载态 64px、空态 48px。
+   实测 390 下：成就卡图标块原为 48×48（卡片两列、每列仅 ~165px 宽）、
+   加载态 64px、空态 48px。
    放在文件末尾：同权重下后出现者胜（中间那个移动块在 .ach__loading/.empty 之前）。
-   不动的：.ach-rarity(10px)/.ach-card__badge(10.5px)/.ach-card__date(11.5px) 这些
-   桌面就是 10–11.5px 的微标签——移动端单方面放大会让卡片变高，与密度目标相反。 */
+   状态行/日期微标签桌面就是 12px 下限，移动端不再单方面放大（与密度目标相反）。 */
 @media (max-width: 1100px) {
-  .ach-card__icon-wrap { width: 40px; height: 40px; }
+  .ach-card__icon { width: 38px; height: 38px; font-size: 17px; }
   .ach__loading { padding: 32px 0; }
   .empty { padding: 32px 0; }
 }

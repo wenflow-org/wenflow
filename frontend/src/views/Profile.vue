@@ -66,21 +66,21 @@
           <ul class="profile-menu">
             <li>
               <router-link to="/user/achievements" class="profile-menu__item">
-                <Trophy :size="17" :stroke-width="1.75" aria-hidden="true" />
+                <Trophy :size="18" :stroke-width="1.75" aria-hidden="true" />
                 <span>我的成就</span>
                 <span class="profile-menu__chev" aria-hidden="true">›</span>
               </router-link>
             </li>
             <li>
               <router-link to="/user/learning-history" class="profile-menu__item">
-                <History :size="17" :stroke-width="1.75" aria-hidden="true" />
+                <History :size="18" :stroke-width="1.75" aria-hidden="true" />
                 <span>学习历史</span>
                 <span class="profile-menu__chev" aria-hidden="true">›</span>
               </router-link>
             </li>
             <li>
               <router-link to="/user/settings" class="profile-menu__item">
-                <Settings :size="17" :stroke-width="1.75" aria-hidden="true" />
+                <Settings :size="18" :stroke-width="1.75" aria-hidden="true" />
                 <span>设置</span>
                 <span class="profile-menu__chev" aria-hidden="true">›</span>
               </router-link>
@@ -88,64 +88,17 @@
           </ul>
         </section>
 
-        <!-- 账号安全双栏（2026-09-27 区域利用率重排）：改密主栏 + 注销危区右栏。
-             此前两张卡各自整行、内容只占左半屏，右侧一半全是死空白。 -->
-        <div class="profile-cols">
-          <article class="uc-card uc-card--pwd">
-            <div class="uc-card__head">
-              <div>
-                <h3>修改密码</h3>
-                <!-- 原「定期更换密码，保障账号安全」是无信息量泛化提示（走查 2026-09-27），删 -->
-              </div>
-            </div>
-            <div class="pwd-grid">
-              <label class="uc-field pwd-field pwd-field--wide">
-                <span class="uc-field__label">当前密码</span>
-                <input v-model="pwdForm.oldPassword" type="password" class="uc-field__input" />
-              </label>
-              <label class="uc-field pwd-field">
-                <span class="uc-field__label">新密码</span>
-                <input v-model="pwdForm.newPassword" type="password" class="uc-field__input" placeholder="至少 8 位，含字母和数字" />
-              </label>
-              <label class="uc-field pwd-field">
-                <span class="uc-field__label">确认新密码</span>
-                <input v-model="pwdForm.confirmPassword" type="password" class="uc-field__input" placeholder="再输入一次" />
-              </label>
-            </div>
-            <div class="uc-card__foot">
-              <button type="button" class="uc-btn uc-btn--primary" :disabled="!pwdCanSubmit || pwdSubmitting" @click="handleChangePassword">
-                {{ pwdSubmitting ? '更新中…' : '更新密码' }}
-              </button>
-            </div>
-          </article>
-
-          <!-- 危险操作：注销 -->
-          <article class="uc-card uc-card--danger">
-            <div class="uc-card__head">
-              <div>
-                <h3>注销账号</h3>
-                <p>注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销（可联系管理员恢复）。</p>
-              </div>
-            </div>
-            <div class="danger-form">
-              <input v-model="deactivatePassword" type="password" class="uc-field__input" placeholder="输入当前密码确认注销" aria-label="当前密码（确认注销）" @keyup.enter="handleDeactivate" />
-              <button type="button" class="uc-btn uc-btn--danger" :disabled="deactivating" @click="handleDeactivate">
-                {{ deactivating ? '注销中…' : '注销账号' }}
-              </button>
-            </div>
-          </article>
-        </div>
+        <!-- 「修改密码」「注销账号」两张卡已整体迁到 views/user/Settings.vue（设置页的
+             「账号安全」分区）：原型账户段只有 资料卡 + 3 KPI + 快捷入口三块（2038-2069）。 -->
         </template>
     </div>
   </CapabilityShell>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, ref } from 'vue'
 import { History, Settings, Trophy } from 'lucide-vue-next'
 import CapabilityShell from '@/components/user/CapabilityShell.vue'
-import { askConfirm, doneConfirm, failConfirm } from '@/views/admin-redesign/useConfirm'
 import { toast } from '@/utils/toast'
 import request from '@/utils/api'
 import { learningAPI } from '@/api/learning'
@@ -153,9 +106,7 @@ import { unwrapArray } from '@/views/v2/unwrap'
 import { useUserStore } from '../stores/user'
 import '@/components/user/uc.css'
 
-const router = useRouter()
 const userStore = useUserStore()
-const api = request
 
 /* ---------- 学习概览 KPI（原型 wf-kpis 三卡） ----------
    连续天数随 /users/me 免费带回；成就与概念掌握各发一个轻请求，
@@ -177,39 +128,9 @@ async function loadKpis() {
   } catch { /* 静默 */ }
 }
 
-/* ---------- 修改密码 ---------- */
-const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
-const pwdSubmitting = ref(false)
-const pwdCanSubmit = computed(() =>
-  pwdForm.oldPassword.length > 0 && pwdForm.newPassword.length >= 8 && pwdForm.confirmPassword.length > 0
-)
-
-async function handleChangePassword() {
-  if (pwdSubmitting.value) return
-  if (pwdForm.newPassword !== pwdForm.confirmPassword) {
-    toast.error('两次输入的新密码不一致')
-    return
-  }
-  if (!/[a-zA-Z]/.test(pwdForm.newPassword) || !/[0-9]/.test(pwdForm.newPassword)) {
-    toast.error('新密码需同时包含字母和数字')
-    return
-  }
-  pwdSubmitting.value = true
-  try {
-    await request.post('/auth/change-password', {
-      oldPassword: pwdForm.oldPassword,
-      newPassword: pwdForm.newPassword
-    })
-    toast.success('密码已更新，下次登录请使用新密码')
-    pwdForm.oldPassword = ''
-    pwdForm.newPassword = ''
-    pwdForm.confirmPassword = ''
-  } catch (e: any) {
-    toast.error(e?.message || e?.response?.data?.error?.message || '修改失败，请稍后再试')
-  } finally {
-    pwdSubmitting.value = false
-  }
-}
+/* ---------- 修改密码 / 注销账号 ----------
+   两张卡（含本文件原「账号安全双栏」布局）已整体迁到 views/user/Settings.vue：
+   原型账户段（index.html 2038-2069）只保留资料卡 + 3 KPI + 快捷入口。 */
 
 const user = ref({
   name: '',
@@ -226,9 +147,6 @@ const profileLoadError = ref('')
 const editingName = ref(false)
 const nameDraft = ref('')
 const nameSubmitting = ref(false)
-// 注销
-const deactivatePassword = ref('')
-const deactivating = ref(false)
 onMounted(async () => {
   await loadUserProfile()
   void loadKpis()
@@ -300,36 +218,6 @@ async function handleSaveName() {
     nameSubmitting.value = false
   }
 }
-
-// ---- 注销 ----
-async function handleDeactivate() {
-  if (!deactivatePassword.value) {
-    toast.error('请输入当前密码以确认注销')
-    return
-  }
-  const ok = await askConfirm({
-    title: '注销账号',
-    message: '注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销。确定注销吗？',
-    confirmText: '确认注销',
-    danger: true,
-    busy: true
-  })
-  if (!ok) return
-  deactivating.value = true
-  try {
-    await api.post('/users/me/deactivate', { password: deactivatePassword.value })
-    await userStore.logout()
-    toast.success('账号已注销')
-    await router.replace('/login')
-    doneConfirm()
-  } catch (error: any) {
-    toast.error(getErrorMessage(error, '注销失败，请稍后重试'))
-    failConfirm()
-  } finally {
-    deactivating.value = false
-    deactivatePassword.value = ''
-  }
-}
 </script>
 
 <style scoped>
@@ -397,6 +285,8 @@ async function handleDeactivate() {
   color: var(--faint, #67758f);
 }
 
+/* 邮箱/注册时间/最近登录：原型账户段没有这一行（2044 只有身份行），
+   属本仓多出的信息——降级为 12px faint 弱化小字，压在身份行下方不抢层级。 */
 .profile-meta {
   margin: 0;
   color: var(--faint, #67758f);
@@ -406,11 +296,12 @@ async function handleDeactivate() {
   white-space: nowrap;
 }
 
-/* 学习概览 KPI（原型 wf-kpis/wf-kpi 三卡） */
+/* 学习概览 KPI（原型 wf-kpis/wf-kpi 三卡）：
+   gap 12 → 9 对齐原型 .wf-kpis 的 gap（原型 748 行） */
 .profile-kpis {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 9px;
 }
 
 .profile-kpi {
@@ -479,40 +370,6 @@ async function handleDeactivate() {
   color: var(--faint, #8492ab);
 }
 
-/* 账号安全双栏（2026-09-27）：改密主栏 1.7fr + 注销危区 1fr，
-   两张卡等高（默认 stretch），改密按钮由 foot margin-top:auto 压到同一底线 */
-.profile-cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
-  gap: 16px;
-  min-width: 0;
-}
-
-@media (max-width: 1100px) {
-  .profile-cols {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* 修改密码卡：列内与注销卡等高，按钮贴底 */
-.uc-card--pwd {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-/* 卡脚上留白：桌面 16px；移动端收到 12px（见本文件移动块里的覆盖——这里不能直接改，
-   否则 1440 也吃到了）。 */
-.uc-card--pwd .uc-card__foot {
-  margin-top: auto;
-  padding-top: 16px;
-}
-
-.uc-card--pwd .pwd-grid {
-  flex: 0 0 auto;
-  align-content: start;
-}
-
 @media (max-width: 1100px) {
   .profile-identity {
     flex-direction: column;
@@ -522,44 +379,6 @@ async function handleDeactivate() {
   .profile-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-}
-
-.pwd-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.pwd-field--wide {
-  grid-column: 1 / -1;
-}
-
-@media (max-width: 560px) {
-  .pwd-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.uc-card__foot {
-  display: flex;
-  gap: 10px;
-  margin-top: 16px;
-  flex-wrap: wrap;
-}
-
-.uc-card--danger {
-  border-color: rgba(239, 117, 120, 0.35);
-}
-
-.danger-form {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.danger-form .uc-field__input {
-  max-width: 320px;
 }
 </style>
 
@@ -611,25 +430,6 @@ async function handleDeactivate() {
     font-size: 17px;
   }
 
-  .pwd-grid {
-    gap: 10px;
-  }
-
-  .uc-card__foot {
-    margin-top: 12px;
-    padding-top: 12px;
-  }
-
-  /* 卡脚上留白 16 → 12（按钮与上方字段之间，390 下偏松）。
-     权重 (0,2,0) 压住基础规则里的同权重版本。 */
-  .uc-card--pwd .uc-card__foot {
-    padding-top: 12px;
-  }
-
-  .danger-form {
-    gap: 8px;
-  }
-
   /* 资料卡再收一档（2026-09-24 反馈「个人中心五个选项里的内容都偏大」）：
      390 下 hero 卡主要开销是内边距与数字。横向跟 .uc-card 的 14px 对齐
      （2026-09-26 对齐走查）：原来是 12px，同页堆叠时内容左缘比下面几张卡左 2px，
@@ -637,6 +437,5 @@ async function handleDeactivate() {
   .profile-hero { padding: 12px 14px; }
   .profile-kpi { padding: 8px 6px; }
   .profile-kpi strong { font-size: 16px; }
-  .uc-card__foot { margin-top: 10px; padding-top: 10px; }
 }
 </style>

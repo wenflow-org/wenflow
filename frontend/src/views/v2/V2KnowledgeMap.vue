@@ -9,12 +9,15 @@
           <p>把你所有学习路径里的概念汇成一张图，颜色是掌握程度。</p>
           <!-- 「怎么看这张图」折叠图例已删（2026-09-27）：图谱卡底部的 mk-ge__legend
                常驻覆盖同一套语义（线型/颜色/形状），顶部那份是重复教学 -->
+          <!-- hero 里的「查看学习状态」文字链已下移（2026-09-30 对齐原型）：改图卡下方通栏 ghost -->
         </div>
-        <router-link to="/learning-state" class="km__link">查看学习状态</router-link>
       </div>
 
       <p v-if="narrowedNote" class="km__note">{{ narrowedNote }}</p>
 
+      <!-- 卡壳（border / radius / padding 10px 10px 4px）落在内部 .mk-ge__card 上：
+           原型里 wf-rail 与 .wf-graph 是兄弟，路径 chip 要露在图卡**外面**，
+           所以本节点只当 :deep 锚点，不再自己套一层卡（否则会卡中卡） -->
       <section class="km__card">
         <MkGraphExplorer
           :nodes="nodes"
@@ -26,13 +29,21 @@
           :error="error"
           height="560px"
           empty-hint="还没有可展示的概念图。学完一节课、或生成一条学习路径后，概念与关系会自动出现在这里。"
+          error-action-text="重试"
+          empty-action-text="开始学习"
+          practice-action-text="去练习这个知识点"
           @update:path-id="onPathChange"
+          @retry="onRetry"
+          @empty-action="onEmptyAction"
+          @practice="onPractice"
         />
       </section>
-      <!-- 组件内错误只渲染文字没有重试（批19 补）：原地重拉，不必整页刷新 -->
-      <div v-if="error && !loading" class="km__error-row">
-        <button type="button" class="btn-ghost" @click="load()">重试加载</button>
-      </div>
+      <!-- 查看学习状态：图卡下方通栏 ghost（原型态）。图在加载/出错/为空时不占位 -->
+      <router-link
+        v-if="!loading && !error && nodes.length"
+        to="/learning-state"
+        class="btn-ghost km__state-link"
+      >查看学习状态</router-link>
     </main>
   </div>
 </template>
@@ -46,12 +57,14 @@
  * 并可按路径筛选。接口是 self-scoped：只读自己的数据，不接 userId 参数（防越权）。
  */
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import V2Nav from './V2Nav.vue'
 import MkGraphExplorer from '@/components/mk/MkGraphExplorer.vue'
 import type { MkGraphEdge, MkGraphNode } from '@/components/mk/MkGraph.vue'
 import { learningAPI } from '@/api/learning'
 import { useIsDark } from '@/composables/useIsDark'
 
+const router = useRouter()
 const isDark = useIsDark()
 const theme = computed<'light' | 'dark'>(() => (isDark.value ? 'dark' : 'light'))
 
@@ -114,6 +127,25 @@ function onPathChange(value: string | null) {
   void applyPath(value)
 }
 
+/* ---------- 三态主动作（原型 data-retry / data-new-goal） ----------
+   错误与空态现在由 MkGraphExplorer 整屏渲染（见其 V2ResultState 用法），
+   动作文案从这里传入、事件在这里落地，组件保持「宿主未接线就不渲染按钮」的只读能力。 */
+
+/** 整屏错误态「重试」：原地重拉当前路径，不必整页刷新 */
+function onRetry() {
+  void load()
+}
+
+/** 整屏空态「开始学习」→ 原型 data-new-goal：去发起/继续目标对话 */
+function onEmptyAction() {
+  void router.push('/goal-conversation')
+}
+
+/** 节点详情「去练习这个知识点」→ 没有按概念直达的练习路由，落到主链路下一步动作页 */
+function onPractice() {
+  void router.push('/dashboard')
+}
+
 onMounted(async () => {
   await load(null)
   // 首次进来若「全部路径」过大，先落到最近一条路径并说明原因（用户可切回全部）
@@ -142,28 +174,16 @@ onMounted(async () => {
 }
 .km__hero h1 {
   margin: 0 0 var(--mk-space-2);
-  font-size: var(--mk-fs-20);
+  /* 原型 .wf-km__hero h1 = 21px（全站 h1 档随原型走；移动端仍落 18px 全站约定） */
+  font-size: 21px;
 }
 .km__hero p {
-  max-width: 640px;
+  /* 原型 .wf-km__hero p：12.5px + max-width 32ch（一行不超过 32 字，说明不再铺满 640px） */
+  max-width: 32ch;
   margin: 0;
-  font-size: var(--mk-fs-13);
+  font-size: var(--mk-fs-12_5);
   line-height: 1.7;
   color: var(--mk-muted);
-}
-.km__link {
-  flex: none;
-  font-size: var(--mk-fs-13);
-  color: var(--mk-muted);
-  text-decoration: none;
-}
-.km__link:hover {
-  color: var(--mk-blue);
-}
-.km__error-row { display: flex; justify-content: center; margin-top: var(--mk-space-3); }
-/* 触屏：「查看学习状态」这类文字链接只有 20px 高，加纵向内边距抬到 34px（配色不变） */
-@media (max-width: 1100px) {
-  .km__link { padding: 7px 0; }
 }
 .km__note {
   margin: 0 0 var(--mk-space-4);
@@ -177,32 +197,41 @@ onMounted(async () => {
   color: var(--mk-muted);
 }
 .km__card {
-  padding: var(--mk-space-5);
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-lg);
-  background: var(--mk-surface);
+  min-width: 0;
+}
+/* 图卡外壳落在组件的结构层 .mk-ge__card 上（原型 .wf-graph：surface 底 + 1px 线 +
+   radius-modal + shadow-sm + padding 10px 10px 4px）。本节点只当 :deep 锚点：
+   路径 chip 轨要露在图卡外面（原型 wf-rail 与 .wf-graph 是兄弟），所以卡壳不能套在最外层。 */
+.km__card :deep(.mk-ge__card) {
+  padding: 10px 10px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-modal);
+  box-shadow: var(--mk-shadow-sm);
+  background: var(--surface);
+}
+/* 「查看学习状态」：hero 右上文字链 → 图卡下方通栏 ghost（原型 .wf-btn--ghost 通栏）。
+   高度靠 .btn-ghost 自带档（移动端 v2.css 抬到 44px），这里只补齐通栏与链接去下划线。 */
+.km__state-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  margin-top: var(--mk-space-3);
+  text-decoration: none;
 }
 
-/* ===== 移动端密度（2026-09-24）=====
-   判据：卡片内边距 12–16px、整页上下留白 ≤40px。本页通篇用 --mk-space-* token，这里继续用 token。
-   实测 390 下：.km__main 24/20/48（叠加 v2.css 给底部导航留的 72px 后，页尾合计 120px）、
-   .km__card 20px。放在文件末尾：同权重下后出现者胜（中间那个移动块在 .km__card 之前）。 */
+/* ===== 移动端密度（2026-09-24 / 2026-09-30 对齐原型后复核）=====
+   判据：整页上下留白 ≤40px。本页通篇用 --mk-space-* token，这里继续用 token。
+   实测 390 下：.km__main 24/20/48（叠加 v2.css 给底部导航留的 72px 后，页尾合计 120px）。
+   图卡内边距不再按断点改：卡壳已移到 .mk-ge__card，两端统一吃原型固定档 10px 10px 4px。 */
 @media (max-width: 1100px) {
   .km__main {
     padding: var(--mk-space-4) var(--mk-space-3) var(--mk-space-6);
   }
-  .km__card {
-    padding: var(--mk-space-4);
-  }
-  /* 页面 h1 移动端全站 18px，只有这页漏了（桌面 20px 一直漏到手机上） */
+  /* 页面 h1 移动端全站 18px，只有这页漏了（桌面 21px 一直漏到手机上） */
   .km__hero h1 {
     font-size: var(--mk-fs-18);
-  }
-  /* 「查看学习状态」文字链实测 34px，抬到 36（mobile:spec lt36 门禁） */
-  .km__link {
-    min-height: 36px;
-    display: inline-flex;
-    align-items: center;
   }
 }
 </style>
