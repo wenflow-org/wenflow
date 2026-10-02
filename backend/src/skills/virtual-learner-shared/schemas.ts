@@ -254,6 +254,80 @@ export function decideFrictionTrigger(
   };
 }
 
+/* ============ 受控错误注入（2026-10-02 小陈案例 P1-3） ============ */
+
+/**
+ * 首答错误概率表（按摩擦预算档位复用档位阶梯，起步值可经跑批 TIR 闭环调参）。
+ * 实证根因：判决概率此前完全交给 LLM 自由把握（temperature 0.3 + 「大概率判 false」的软规则）
+ * ⇒ 19 连对零失手，扮演器测不出教师应对薄弱生的能力，共同卡点完课判据永不触发。
+ * 概率必须像 friction 一样在编排层采样（代码裁决、LLM 只演）。
+ */
+export const CONTROLLED_ERROR_TABLE: Record<FrictionBudget, {
+  /** 本轮首答判错的基准概率 */
+  wrongProbability: number;
+  /** 任务概念命中 struggleConcepts 时的加权倍数 */
+  struggleBoost: number;
+}> = {
+  none: { wrongProbability: 0, struggleBoost: 1 },
+  low: { wrongProbability: 0.06, struggleBoost: 1.5 },
+  normal: { wrongProbability: 0.12, struggleBoost: 2 },
+  high: { wrongProbability: 0.18, struggleBoost: 2.5 },
+  stress_test: { wrongProbability: 0.25, struggleBoost: 3 },
+};
+
+/** 受控环境变量开关（默认开）：关闭后行为回到「判决概率全交 LLM」的旧形态 */
+export function isControlledErrorEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return !(env.VIRTUAL_CONTROLLED_ERROR_ENABLED || '').trim().match(/^(0|false|off)$/i);
+}
+
+export interface ControlledErrorDecision {
+  /** true = 本轮注入首答错误（编排层已采样命中） */
+  forced: boolean;
+  /** 卡点概念（优先画像 struggleConcepts，轮转取用避免每轮同一概念） */
+  targetConcept: string | null;
+  /** 给判决器/叙事器的硬约束提示（说清「先错、被纠正后接受」的演出要求） */
+  hint: string | null;
+}
+
+/**
+ * 编排层采样本轮是否注入受控错误。设计原则与 decideFrictionTrigger 相同：
+ * 概率采样发生在代码里（可测量、可复现统计），LLM 只负责演出。
+ * - 开课头两轮不注入（冷启动保持合作，让开场定位顺利）
+ * - 任务概念命中 struggleConcepts 时按 struggleBoost 加权
+ */
+export function decideControlledError(params: {
+  frictionBudget?: FrictionBudget | string | null;
+  struggleConcepts?: unknown;
+  turnIndex?: number;
+  enabled?: boolean;
+  random?: () => number;
+}): ControlledErrorDecision {
+  const notForced: ControlledErrorDecision = { forced: false, targetConcept: null, hint: null };
+  const enabled = params.enabled ?? isControlledErrorEnabled();
+  if (!enabled) return notForced;
+  const turnIndex = Number.isFinite(Number(params.turnIndex)) ? Number(params.turnIndex) : 0;
+  if (turnIndex < 2) return notForced;
+  const budget = normalizeFrictionBudget(params.frictionBudget);
+  const table = CONTROLLED_ERROR_TABLE[budget];
+  if (table.wrongProbability <= 0) return notForced;
+  const struggleConcepts = Array.isArray(params.struggleConcepts)
+    ? params.struggleConcepts.filter((item): item is string => typeof item === 'string' && !!item.trim())
+    : [];
+  const targetConcept = struggleConcepts.length > 0
+    ? struggleConcepts[turnIndex % struggleConcepts.length].trim()
+    : null;
+  const probability = Math.min(0.6, table.wrongProbability * (targetConcept ? table.struggleBoost : 1));
+  const random = params.random ?? Math.random;
+  if (random() >= probability) return notForced;
+  return {
+    forced: true,
+    targetConcept,
+    hint: targetConcept
+      ? `编排层指令（必须服从）：本轮学习者首答判错，卡点围绕「${targetConcept}」——给出与该卡点一致的具体错误或说不出为什么，被教师纠正后自然接受，不要秒懂`
+      : '编排层指令（必须服从）：本轮学习者首答判错——给出一个与当前任务相关、符合其水平的具体错误或卡壳，被教师纠正后自然接受，不要秒懂',
+  };
+}
+
 /**
  * 抽出 prompt 里关键的 persona 字段引用提示
  * 用于让 LLM 显式按字段决定行为而不是平均化

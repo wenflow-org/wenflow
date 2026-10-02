@@ -26,6 +26,8 @@ export interface EpistemicGroundingInput {
   currentTask?: { title?: string | null; description?: string | null } | null;
   knowledgeSnapshot?: Array<{ name: string; status?: string; progress?: number }>;
   previousLearnerState?: Record<string, any> | null;
+  /** 编排层受控错误指令（decideControlledError 采样命中时传入，判决必须服从） */
+  forcedCorrectness?: { forced: boolean; targetConcept: string | null; hint: string | null } | null;
 }
 
 function clamp01(value: any, fallback: number): number {
@@ -71,6 +73,8 @@ function buildUserPayload(input: EpistemicGroundingInput) {
     struggleConcepts: Array.isArray(struggleConcepts) ? struggleConcepts : [],
     knowledgeSnapshot: Array.isArray(input.knowledgeSnapshot) ? input.knowledgeSnapshot.slice(0, 5) : [],
     previousLearnerState: input.previousLearnerState || null,
+    // 编排层硬指令放 payload 尾部（与逐轮变化的概念数组同区，保住稳定画像的前缀缓存）
+    ...(input.forcedCorrectness?.forced ? { forcedCorrectness: input.forcedCorrectness } : {}),
   };
 }
 

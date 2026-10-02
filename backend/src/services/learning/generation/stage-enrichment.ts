@@ -11,6 +11,7 @@ import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
 import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
+import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/context';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
 import { buildStageFillNote } from './stage-fill-note';
@@ -92,6 +93,29 @@ export async function pruneSupersededStageItems(
 }
 
 export async function enrichLearningPathWithAnderson(
+  pathId: string,
+  runId: string,
+  data: GeneratePathData,
+  analysis: any,
+  options: {
+    appendOnly?: boolean;
+    /** 渐进式（批次 D）：restrict 到指定阶段（stage N 完成后只设计 N+1）；
+     * true 时 designer 输入带学习者信号、kc 走增量合并、template 记 _generation.progressive。
+     */
+    progressive?: boolean;
+    restrictMilestoneIds?: string[];
+    previousStageOutcome?: PreviousStageOutcome | null;
+  } = {}
+): Promise<void> {
+  // 【A/B 归因修复 2026-10-01】后台生成链路原本没有 userId 请求上下文 → callPrompt 的
+  // 变体分流键缺失（恒走基线，实测 44% stage-designer 调用如此）且 prompt_call_logs.userId
+  // 空缺。此处用路径属主补齐上下文（保留既有字段），stage-designer/kc-mapper/补课全部继承。
+  return runWithContext({ ...getRequestContext(), userId: data.userId }, () =>
+    enrichLearningPathWithAndersonInner(pathId, runId, data, analysis, options)
+  );
+}
+
+async function enrichLearningPathWithAndersonInner(
   pathId: string,
   runId: string,
   data: GeneratePathData,
@@ -779,6 +803,16 @@ export async function enrichLearningPathWithAnderson(
           ...capacityOverload,
         });
       }
+      // 超载对外声明（2026-10-02 小陈案例 P0-2）：60h 预算排出 101h 只留在内部日志，
+      // 学习者看到的是一份排不完的计划且无任何提示。追加到 description（前端路径详情直接读），
+      // 事实口径、不擅自裁剪——裁剪策略（缩范围 vs 摊长期限）是产品拍板项。
+      const overloadDeclaration = capacityOverload
+        ? `【时间预算提示】按你当前的学习节奏，这份路径全部学完约需 ${Math.round(pathTotalMinutes / 60)} 小时，超出你可用时间的约 ${Math.round((capacityOverload.ratio - 1) * 100)}%。目标本身不受影响，但按原节奏会超出期限：可以先专注前几个阶段，学完再续后面的，或适当增加每周学习时间。`
+        : null;
+      const existingDescription = String(learningPath.description || '');
+      const descriptionWithOverload = overloadDeclaration && !existingDescription.includes('【时间预算提示】')
+        ? `${existingDescription}${existingDescription ? '\n\n' : ''}${overloadDeclaration}`
+        : null;
       if (pathSchoolAnchor && anchorGoalNotes > 0) {
         logger.info('[school-anchor] 阶段目标缺锚，已按确定性括注补齐', {
           runId,
@@ -793,6 +827,7 @@ export async function enrichLearningPathWithAnderson(
         where: { id: learningPath.id },
         data: {
           ...(pathHoursToWrite !== undefined ? { estimatedHours: pathHoursToWrite } : {}),
+          ...(descriptionWithOverload ? { description: descriptionWithOverload } : {}),
           aiPromptTemplate: JSON.stringify({
             ...parsedTemplate,
             stageDesigns: stageDesignRawOutputs,

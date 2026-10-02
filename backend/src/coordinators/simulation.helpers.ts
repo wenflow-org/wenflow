@@ -280,6 +280,61 @@ export function resolveLearnerLoadProfile(profileData: Record<string, unknown> |
   return { availableTime, loadTolerance };
 }
 
+/** 场景卡预算（数值型，非法/缺失字段为 null） */
+export interface ScenarioBudgetShape {
+  dailyMinutes: number | null;
+  horizonDays: number | null;
+  expectedHours: number | null;
+}
+
+/**
+ * 学习者场景卡的预算锚（2026-10-02 小陈案例 P0-2）。
+ * budget 只存在于 profile JSON（personaSeed.scenarioCard.budget / 顶层 scenarioCard.budget），
+ * 此前从不进 path 生成链 ⇒ 锚链塌光、path 学时自由发挥（60h 预算排出 101h 且无声明）。
+ * 顶层与 personaSeed 两处都读，与 resolveLearnerLoadProfile 同一套层级容错。
+ */
+export function resolveScenarioBudget(profileData: Record<string, unknown> | null | undefined): ScenarioBudgetShape | null {
+  const top = profileData && typeof profileData === 'object' ? profileData : {};
+  const nested = (top.personaSeed && typeof top.personaSeed === 'object' ? top.personaSeed : {}) as Record<string, unknown>;
+  const card = ((top.scenarioCard && typeof top.scenarioCard === 'object' ? top.scenarioCard : null)
+    || (nested.scenarioCard && typeof nested.scenarioCard === 'object' ? nested.scenarioCard : null)) as Record<string, unknown> | null;
+  const raw = (card?.budget && typeof card.budget === 'object' ? card.budget : null) as Record<string, unknown> | null;
+  if (!raw) return null;
+  const num = (value: unknown): number | null => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
+  const dailyMinutes = num(raw.dailyMinutes);
+  const horizonDays = num(raw.horizonDays);
+  const expectedHours = num(raw.expectedHours);
+  if (dailyMinutes === null && horizonDays === null && expectedHours === null) return null;
+  return { dailyMinutes, horizonDays, expectedHours };
+}
+
+/**
+ * 把场景卡预算映射成 goal 层 time_dimensions 形状（path 生成链的结构化学时锚入口：
+ * derivePlanningHints 用 totalSessions × sessionsLengthMin 推 targetTotalHours，
+ * stage-enrichment 容量对表用同两字段）。字段缺一的组合按可算的算，全缺返回 null。
+ */
+export function buildTimeDimensionsFromBudget(budget: ScenarioBudgetShape): {
+  totalSessions: number;
+  sessionsLengthMin: number;
+  totalWeeks: number | null;
+  estimatedHours: number | null;
+} | null {
+  const dailyMinutes = budget.dailyMinutes;
+  const sessionsFromHours = budget.expectedHours !== null && dailyMinutes !== null
+    ? Math.max(1, Math.ceil((budget.expectedHours * 60) / dailyMinutes))
+    : null;
+  if (dailyMinutes === null || sessionsFromHours === null) return null;
+  return {
+    totalSessions: sessionsFromHours,
+    sessionsLengthMin: dailyMinutes,
+    totalWeeks: budget.horizonDays !== null ? Math.max(1, Math.ceil(budget.horizonDays / 7)) : null,
+    estimatedHours: budget.expectedHours,
+  };
+}
+
 export function resolveOverloadBehaviorText(
   profile: { overloadReaction?: unknown; cognitiveLoadTolerance?: unknown } | null | undefined
 ): string {

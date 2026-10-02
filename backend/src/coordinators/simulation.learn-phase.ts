@@ -40,6 +40,7 @@ import {
   parseStoryContextFromStageResults,
   mergeLearnerState,
 } from './simulation.helpers';
+import { decideControlledError } from '../skills/virtual-learner-shared/schemas';
 import {
   locateLearningTask,
   buildTeachingTurnContext,
@@ -636,6 +637,14 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
       currentMilestone
     );
     // 阶段1：认知判决（BEAGLE 物理两阶段第一段；失败降级 null，不阻断叙事）
+    // 受控错误（2026-10-02 小陈案例 P1-3）：概率在编排层采样（与 friction 同范式），
+    // 命中时把硬指令传给判决器 + 判决器失败时直接合成判错判决——
+    // 修复「判决概率交 LLM 自由把握 ⇒ 19 连对零失手」的扮演失真。
+    const controlledError = decideControlledError({
+      frictionBudget: getSessionFrictionBudget(session),
+      struggleConcepts: profile.struggleConcepts,
+      turnIndex: Number(taskRuntime.turns) || 0,
+    });
     let epistemicGrounding: any = null;
     try {
       const groundingRaw: any = await executeSkill(virtualLearnerEpistemicGroundingDefinition, {
@@ -654,13 +663,33 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         },
         knowledgeSnapshot,
         previousLearnerState: mergedLearnerState,
+        ...(controlledError.forced ? { forcedCorrectness: controlledError } : {}),
       });
       epistemicGrounding = groundingRaw?.output?.epistemicGrounding || groundingRaw?.epistemicGrounding || null;
+      // 判决器忽略编排层指令（比如旧版本 prompt 未同步）时兜底覆写，保证采样语义可测量
+      if (controlledError.forced && epistemicGrounding?.sampledCorrectness !== false) {
+        epistemicGrounding = {
+          ...(epistemicGrounding || {}),
+          sampledCorrectness: false,
+          blockedConcept: controlledError.targetConcept,
+          errorPattern: controlledError.targetConcept ? `卡在「${controlledError.targetConcept}」` : null,
+          masteryProb: 0.15,
+        };
+      }
     } catch (groundingError) {
       logger.warn('[simulation-coordinator] 认知判决失败（降级为无硬约束叙事）', {
         sessionId,
         error: groundingError instanceof Error ? groundingError.message : String(groundingError),
       });
+      // 降级路径同样执行编排层采样指令：否则「判决失败」会退化成无约束流畅答对
+      if (controlledError.forced) {
+        epistemicGrounding = {
+          sampledCorrectness: false,
+          blockedConcept: controlledError.targetConcept,
+          errorPattern: controlledError.targetConcept ? `卡在「${controlledError.targetConcept}」` : null,
+          masteryProb: 0.15,
+        };
+      }
     }
 
     // 日期模拟：把"第几天/已过几天"作为可选输入注入（未开启则为 null，输入里省略 = 现网不变）

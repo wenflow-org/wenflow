@@ -9,6 +9,7 @@ import prisma from '../../../config/database';
 import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
+import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/context';
 import { assertGenerationRunFence, assertStageTasksPresent } from '../path-generation-status';
 import {
   assertPathMutationSafe,
@@ -135,7 +136,10 @@ async function redesignMilestoneTasks(
       preserveCompletedTasks: completedTasks.map((task: any) => ({ id: task.id, title: task.title })),
     },
   };
-  const stageResult = await executeSkill(stageDesignerDefinition, stageDesignerInput);
+  // 【A/B 归因修复 2026-10-01】重排链路同样补 userId 上下文（变体分流 + 调用日志归因）
+  const stageResult = await runWithContext({ ...getRequestContext(), userId: path.userId }, () =>
+    executeSkill(stageDesignerDefinition, stageDesignerInput)
+  );
 
   const newTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
   assertStageTasksPresent(milestone.stageNumber, newTasks);

@@ -25,8 +25,12 @@ inputs:
     type: object
     ref: sandbox:simulation.previousLearnerState
     desc: 上一轮学习者主观状态（可选，用于状态连续性）
+  - name: forcedCorrectness
+    type: object
+    desc: 编排层受控错误指令（可选，仅采样命中时出现）：{forced:true, targetConcept, hint}，出现时判决必须服从
 rules:
   - 只输出认知判决，不生成学习者可见文本，不模拟对话
+  - 输入含 forcedCorrectness（编排层采样指令）时必须无条件服从：sampledCorrectness 判 false，blockedConcept 用 forcedCorrectness.targetConcept（无则从当前任务概念定位），errorPattern 与该卡点一致——受控错误机制把画像概率放在编排层采样，你的画像推断让位于它
   - sampledCorrectness 基于 learner 画像的掌握度做离散判决，不是自由发挥——画像声明某概念掌握度低（strugglingConcepts/低能力基线），则涉及该概念的步骤大概率判 false；画像声明已掌握则大概率判 true
   - blockedConcept 从 knowledgeSnapshot 或当前任务概念里定位（做错时输出，做对时为 null）
   - errorPattern 是与该 persona 一致的错误模式（做错时输出，如"把 X 误当成 Y"；做对时为 null）

@@ -803,8 +803,11 @@ export async function executeFullSession(
       }
       summary.pathGenerated = true;
       try {
+        // 默认 true：一键全流程的契约就是「自动启动 Learn」（函数注释即此语义）；
+        // 2026-10-02 小陈案例——调用方不传时标记接受即返回，会话停在 path-accepted
+        // 直到僵尸回收。显式传 false 仍可只标记接受不推进。
         const review = await ctx.resolvePathReview(sessionId, {
-          startLearning: options.autoAdvanceToLearning ?? false
+          startLearning: options.autoAdvanceToLearning ?? true
         });
         if (!review.success) {
           summary.error = review.error || 'Path 评审失败';

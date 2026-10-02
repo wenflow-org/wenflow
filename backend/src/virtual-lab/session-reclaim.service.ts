@@ -88,17 +88,26 @@ export function resolveReclaimIntervalMs(value: string | undefined): number {
 
 type ReclaimDatabase = Pick<
   PrismaClient,
-  'virtual_sessions' | 'virtual_experiment_leases' | 'admin_audit_logs'
+  'virtual_sessions' | 'virtual_experiment_leases' | 'admin_audit_logs' | 'learning_paths'
 >;
 
 interface SessionRow {
   id: string;
   status: string;
   currentStage: string | null;
+  learningPathId: string | null;
   updatedAt: Date;
   stageResults: string | null;
   logs: string | null;
 }
+
+/**
+ * 卡在「path-accepted」的会话自愈尝试（返回 true = 已复活，跳过回收）。
+ * 会话停在 path-accepted = 路径已生成并接受、但驱动器没有触发 startLearning
+ * （2026-10-02 小陈案例：path 68 任务全部生成成功却卡死 2h 被回收）。
+ * 回收前先试一次推进，救活优先于判死。
+ */
+export type ReviveStuckSession = (sessionId: string) => Promise<boolean>;
 
 export class VirtualSessionReclaimService {
   private timer: NodeJS.Timeout | null = null;
@@ -107,13 +116,22 @@ export class VirtualSessionReclaimService {
   private readonly thresholdMs: number;
   private readonly fastThresholdMs: number;
   private readonly intervalMs: number;
+  private readonly reviveStuckSession: ReviveStuckSession | null;
   private lifecycle: Pick<ApplicationLifecycle, 'isDraining'> | null;
 
-  constructor(options: { database?: ReclaimDatabase; thresholdMs?: number; fastThresholdMs?: number; intervalMs?: number; lifecycle?: Pick<ApplicationLifecycle, 'isDraining'> | null } = {}) {
+  constructor(options: {
+    database?: ReclaimDatabase;
+    thresholdMs?: number;
+    fastThresholdMs?: number;
+    intervalMs?: number;
+    reviveStuckSession?: ReviveStuckSession | null;
+    lifecycle?: Pick<ApplicationLifecycle, 'isDraining'> | null
+  } = {}) {
     this.database = options.database ?? prisma;
     this.thresholdMs = options.thresholdMs ?? resolveStaleSessionThresholdMs(process.env.VLAB_STALE_SESSION_HOURS);
     this.fastThresholdMs = options.fastThresholdMs ?? resolveFastStaleThresholdMs(process.env.VLAB_STALE_SESSION_FAST_MINUTES);
     this.intervalMs = options.intervalMs ?? resolveReclaimIntervalMs(process.env.VLAB_RECLAIM_INTERVAL_MINUTES);
+    this.reviveStuckSession = options.reviveStuckSession ?? null;
     this.lifecycle = options.lifecycle ?? null;
   }
 
@@ -191,7 +209,7 @@ export class VirtualSessionReclaimService {
       },
       orderBy: { updatedAt: 'asc' },
       take: RECLAIM_BATCH_SIZE,
-      select: { id: true, status: true, currentStage: true, updatedAt: true, stageResults: true, logs: true }
+      select: { id: true, status: true, currentStage: true, learningPathId: true, updatedAt: true, stageResults: true, logs: true }
     }) as unknown as SessionRow[];
 
     const result: StaleSessionReclaimResult = {
@@ -246,6 +264,25 @@ export class VirtualSessionReclaimService {
       if (autopilotActive) {
         result.skippedActiveAutopilot += 1;
         continue;
+      }
+      // path-accepted 卡死自愈：路径已接受但没人触发 startLearning —— 回收前先推进一次，
+      // 救活优先于判死（复活成功则本轮跳过；仍在下一轮扫描时按正常保护链判定）
+      if ((session.currentStage || '') === 'path-accepted' && !dryRun && this.reviveStuckSession) {
+        try {
+          const revived = await this.reviveStuckSession(session.id);
+          if (revived) {
+            logger.info('[session-reclaim] path-accepted 卡死会话已自愈复活，跳过回收', {
+              sessionId: session.id,
+              staleMs
+            });
+            continue;
+          }
+        } catch (error) {
+          logger.warn('[session-reclaim] path-accepted 自愈尝试失败，继续回收', {
+            sessionId: session.id,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
       }
       result.sessions.push(entry);
       if (!dryRun) {
@@ -324,6 +361,23 @@ export class VirtualSessionReclaimService {
         updatedAt: now
       }
     });
+    // 级联归档该会话的路径（2026-10-02 小陈案例 P1-2）：会话废弃后 path 若保持 active，
+    // 会与重开会话新生成的 path 并存，学习者侧出现两条可用路径且投影取哪条未定义。
+    // 只归档仍在 active 的（completed/archived 等终态不动）。
+    if (session.learningPathId) {
+      try {
+        await this.database.learning_paths.updateMany({
+          where: { id: session.learningPathId, status: 'active' },
+          data: { status: 'archived', updatedAt: now }
+        });
+      } catch (error) {
+        logger.warn('[session-reclaim] 级联归档路径失败（不影响回收）', {
+          sessionId: session.id,
+          learningPathId: session.learningPathId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
     await this.database.admin_audit_logs.create({
       data: {
         adminId: null,
@@ -350,4 +404,11 @@ export class VirtualSessionReclaimService {
   }
 }
 
-export const virtualSessionReclaimService = new VirtualSessionReclaimService();
+export const virtualSessionReclaimService = new VirtualSessionReclaimService({
+  reviveStuckSession: async (sessionId) => {
+    // 懒加载避免模块加载期拉起 coordinator 全链；startLearning:true 与 autopilot/一键全流程同口径
+    const { default: simulationCoordinator } = await import('../coordinators/simulation.coordinator');
+    const review = await simulationCoordinator.resolvePathReview(sessionId, { startLearning: true });
+    return review.success === true;
+  }
+});

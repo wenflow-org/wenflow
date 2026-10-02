@@ -90,6 +90,39 @@ import {
  * 轻量任务（单知识点）常停在 70，硬门禁永远够不着，课就永远收不了。
  */
 const SOFT_COMPLETION_PROGRESS_FLOOR = 60;
+/**
+ * scope-out 最小轮数：开课种子注入的范围外点（后续章节概念）要在这个轮数之后
+ * 仍「pending+零进度+从未申报」才允许摘出收束判定。太松会误摘教师计划后置教的点，
+ * 太紧则单点轻量任务等不到排除。4 轮 = 教师有充足机会触碰范围内任一点。
+ */
+export const COMPLETION_SCOPE_OUT_MIN_TURNS = 4;
+
+/**
+ * 收束判定的「本课范围」视图（纯函数，供单测）。
+ * 开课种子会把画像 struggleConcepts（往往是后续章节的概念）注入目标集，单任务课堂
+ * 可能整节都教不到——这些点把 noPendingPoints/平均进度永久压死，三条收束路径全部失效
+ * （实测：西瓜书绪论课被第 2-3 章种子点卡到 40 轮 timebox 硬跳，XIAOCHEN-REVIEW-20261002 P0-1）。
+ * 排除判据：本轮教师申报里没有它（本轮在教=在范围内），且已过 COMPLETION_SCOPE_OUT_MIN_TURNS 轮。
+ */
+export function resolveCompletionScope<T extends { name: string; status?: string; progress?: number }>(
+  mergedKnowledge: T[],
+  declaredThisTurnNames: Iterable<string>,
+  teachingTurns: number
+): { inScope: T[]; outOfScopeNames: Set<string> } {
+  const declared = new Set(
+    Array.from(declaredThisTurnNames).map((name) => String(name || '').trim().toLowerCase()).filter(Boolean)
+  );
+  const isOutOfScope = (point: { name: string; status?: string; progress?: number }): boolean => {
+    if (teachingTurns < COMPLETION_SCOPE_OUT_MIN_TURNS) return false;
+    if (declared.has(point.name.trim().toLowerCase())) return false;
+    return point.status === 'pending' && (Number(point.progress) || 0) === 0;
+  };
+  const inScope = mergedKnowledge.filter((point) => !isOutOfScope(point));
+  const outOfScopeNames = new Set(
+    mergedKnowledge.filter((point) => isOutOfScope(point)).map((point) => point.name.trim().toLowerCase())
+  );
+  return { inScope, outOfScopeNames };
+}
 /** 老师"今天就到这儿 / 这一节就齐了"式收课话术（reply 里出现即视为收课信号） */
 const CLOSING_REPLY_PATTERNS: RegExp[] = [
   /今天(就)?(到这儿|到这里|收到这儿|就到这)/,
@@ -364,27 +397,35 @@ export async function processStudentMessage(
   // 目标点达到 mastered 或进度≥阈值即视为可收束。envelope phase 仍仅作观测 soft 信号。
   const frozenTargetsBefore = parseSessionArtifacts(previousTeachingState).completionTargets;
   const targetsFrozenBefore = Array.isArray(frozenTargetsBefore) && frozenTargetsBefore.length > 0;
+  const teachingTurns = session.messages.filter((message) => message.role === 'assistant').length;
+  // 范围外点排除（scope-out，实现与判据见 resolveCompletionScope 注释）
+  const declaredThisTurn = (teachingOutput.knowledge?.points || [])
+    .map((point) => String(point?.name || ''));
+  const { inScope: knowledgeInScope, outOfScopeNames } = resolveCompletionScope(
+    mergedKnowledge,
+    declaredThisTurn,
+    teachingTurns
+  );
   const completionTargets = knowledgeStateService.resolveCompletionTargets(
     frozenTargetsBefore,
     effectiveInitialKnowledgeState,
     mergedKnowledge,
-  );
+  ).filter((name) => !outOfScopeNames.has(name.trim().toLowerCase()));
   // 首回合只冻结目标集、不判完成：避免开课注入的到期复习点（retention≥阈值）
   // 在学员尚未参与任何交互时就把课判成「可收束」。
   const targetsConsolidated = targetsFrozenBefore
-    && knowledgeStateService.areTargetsConsolidated(completionTargets, mergedKnowledge);
+    && knowledgeStateService.areTargetsConsolidated(completionTargets, knowledgeInScope);
   // 兜底：回合足够多、无 pending、目标集均分达标 → 放行，保证课堂不会「永不收敛」
-  const teachingTurns = session.messages.filter((message) => message.role === 'assistant').length;
+  const noPendingPoints = knowledgeInScope.every((point) => point.status !== 'pending');
+  const avgTargetProgress = knowledgeStateService.averageTargetProgress(completionTargets, knowledgeInScope);
   const backstopReady = targetsFrozenBefore
     && teachingTurns >= COMPLETION_TURNS_BACKSTOP
-    && mergedKnowledge.every((point) => point.status !== 'pending')
-    && knowledgeStateService.averageTargetProgress(completionTargets, mergedKnowledge) >= COMPLETION_TARGET_PROGRESS_FLOOR;
+    && noPendingPoints
+    && avgTargetProgress >= COMPLETION_TARGET_PROGRESS_FLOOR;
   // 软收口（2026-09-25 训练局 P1）：老师**语义上明确收课**（"今天就到这儿/这一节就齐了"）且
   // 知识进度已过软地板（≥60、无 pending）时，尊重老师的判断放行——
   // 此前这里用 completionReady 无条件覆盖模型请求，轻量任务（单知识点、进度停在 70%）的课
   // 永远弹不出完成面板，任务悬挂 active 只能手动收尾（真课实测：路径2 两节共 24 轮无一触发）。
-  const noPendingPoints = mergedKnowledge.every((point) => point.status !== 'pending');
-  const avgTargetProgress = knowledgeStateService.averageTargetProgress(completionTargets, mergedKnowledge);
   const modelRequestedCompletion = teachingOutput.control?.isCompletionCandidate === true;
   const replySignalsClosing = CLOSING_REPLY_PATTERNS.some((pattern) => pattern.test(teachingOutput.reply || ''));
   const softCompletionReady = targetsFrozenBefore

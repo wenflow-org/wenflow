@@ -25,11 +25,13 @@ import {
   getSessionFrictionBudget,
   getSessionPromptOverrides,
   isPathReviewAlreadyAcceptedForCurrentPath,
+  buildTimeDimensionsFromBudget,
   mergeLearnerState,
   parseProfileData,
   parseStageResultsPayload,
   parseStoryContextFromStageResults,
   resolveLearnerLoadProfile,
+  resolveScenarioBudget,
 } from './simulation.helpers';
 import { buildAssistedLearnerMemory } from './simulation.memory';
 import type { SimulationOrchestrator } from './simulation.coordinator';
@@ -134,6 +136,27 @@ export function buildGoalPathRequest(
   // （learnerLoadProfile=null ⇒ 收紧分支从不执行）。此处两处都读，顶层优先。
   const personaData = safeJsonParse<Record<string, unknown>>(session.virtual_learner_profiles.profile, {});
   const learnerLoadProfile = resolveLearnerLoadProfile(personaData);
+  // 预算锚（2026-10-02 小陈案例 P0-2）：场景卡 budget（如 每天60分钟×60天=60h）此前从不进
+  // path 生成链 ⇒ 学时锚塌光、101h 超载无声明。此处把预算映射成 time_dimensions 前置注入
+  // understanding——与 goal 层 LLM 自己推断的字段同形、同入口，下游（锚推导/守恒/容量对表）
+  // 零改动生效。对话里 LLM 已推断出估时（用户原话说了时间安排）时以对话为准，不覆盖。
+  const understandingForSummary = (collectedData.understanding && typeof collectedData.understanding === 'object'
+    ? collectedData.understanding
+    : {}) as Record<string, unknown>;
+  {
+    const scenarioBudget = resolveScenarioBudget(personaData);
+    const timeDimensionsFromBudget = scenarioBudget ? buildTimeDimensionsFromBudget(scenarioBudget) : null;
+    const existingTimeDimensions = (understandingForSummary.time_dimensions && typeof understandingForSummary.time_dimensions === 'object'
+      ? understandingForSummary.time_dimensions
+      : null) as Record<string, unknown> | null;
+    const llmAlreadyEstimated = existingTimeDimensions && Number(existingTimeDimensions.estimatedHours) > 0;
+    if (timeDimensionsFromBudget && !llmAlreadyEstimated) {
+      understandingForSummary.time_dimensions = {
+        ...(existingTimeDimensions || {}),
+        ...timeDimensionsFromBudget,
+      };
+    }
+  }
   const request: GoalPathRequest = {
     userId: session.userId,
     sourceConversationId: session.goalConversationId as string,
@@ -141,7 +164,7 @@ export function buildGoalPathRequest(
     rawGoal: pathRawGoal.rawGoal,
     learnerLoadProfile: learnerLoadProfile.availableTime || learnerLoadProfile.loadTolerance ? learnerLoadProfile : null,
     visibleSummary: buildGoalPathVisibleSummary({
-      understanding: collectedData.understanding || {},
+      understanding: understandingForSummary,
       confirmedProposal: collectedData.confirmedProposal || null,
       collected: collectedData.collected || {},
     }),
@@ -591,6 +614,59 @@ export async function replanPathFromReview(ctx: SimulationOrchestrator, sessionI
  * 一键全流程专用：评审后自动推进（accept→可选启动 Learn；否则自动重规划）。
  * 手动操作请用 reviewPathProposal / acceptPathReview / replanPathFromReview。
  */
+/**
+ * 一键全流程入口（原「评审后自动推进」）。
+ * 【2026-10-01 用户拍板：移除 Path 评审门禁】评审（虚拟学习者对路径的 accept/modify/reject 审计）
+ * 不应成为阻塞阶段——Path 生成即视为接受。本函数退化为：补一条幂等的接受记录 + 可选直接进入 Learn。
+ * 历史的评审收敛环（reviewPathProposal ↔ replanPathFromReview → acceptPathReview）保留为**手动工具**，
+ * 管理台按钮仍可用，但不再被任何自动流程调用。存量卡在 awaiting-review 的会话会在下次推进时被本函数解锁。
+ */
+/** 偶发「学习者对路径不满」的摩擦档位概率（真实用户偶尔主观要求重新设计；none 档关闭）。
+ *  【2026-10-02 用户拍板】暂时关闭：总开关置 false 即全档位不触发；重新启用改 true 即可。 */
+const PATH_DISLIKE_ENABLED = false;
+const PATH_DISLIKE_PROBABILITY: Record<string, number> = { none: 0, low: 0.03, normal: 0.08, high: 0.15, stress_test: 0.25 };
+
+/**
+ * 偶发情绪行为（2026-10-01 用户拍板）：评审不再是门禁，但「真实用户偶尔对路径不满意、
+ * 主观要求重新设计」是真实学习行为——按摩擦档位概率触发，每条路径至多一次，且不阻塞：
+ * 触发后复用手动评审工具让学习者真实表达一次意见（可能仍 accept——情绪不保证不满意），
+ * modify/reject 则重规划一次；成败都继续走下方的自动接受 + 进 Learn。
+ */
+async function maybeSimulatePathDislike(ctx: SimulationOrchestrator, sessionId: string): Promise<void> {
+  try {
+    const session = await ctx.getVirtualSession(sessionId);
+    const pathId = session.learningPathId;
+    if (!pathId) return;
+    const stageResults = parseStageResultsPayload(session.stageResults);
+    const pre = (stageResults.path_review || {}) as Record<string, any>;
+    // 每条路径至多闹一次：该路径已因不满重规划过 → 情绪已释放
+    if (pre?.replan?.resultPathId === pathId) return;
+    const replanCount = await ctx.countSessionLogsByPhase(sessionId, 'path-replan');
+    if (replanCount >= MAX_PATH_REPLANS) return;
+    if (!PATH_DISLIKE_ENABLED) return;
+    const probability = PATH_DISLIKE_PROBABILITY[getSessionFrictionBudget(session)] ?? 0;
+    if (probability <= 0 || Math.random() >= probability) return;
+    const review = await ctx.reviewPathProposal(sessionId);
+    if (!review.success || !review.decision || review.decision === 'accept') return;
+    const replanned = await ctx.replanPathFromReview(sessionId);
+    await ctx.addSessionLog(sessionId, {
+      timestamp: new Date().toISOString(),
+      phase: replanned.success ? 'path-replan' : 'path-replan-guard',
+      details: { output: { reason: 'episodic-learner-dislike', decision: review.decision, replanned: replanned.success, error: replanned.error || null, learningPathId: pathId } }
+    });
+    logger.info('[simulation-coordinator] 偶发路径不满已模拟', { sessionId, decision: review.decision, replanned: replanned.success });
+  } catch (error) {
+    // 装饰性行为：任何失败都不阻塞主流程
+    logger.warn('[simulation-coordinator] 偶发路径不满模拟失败（不阻塞）', { sessionId, error: asErrorLike(error).message });
+  }
+}
+
+/**
+ * 一键全流程入口。
+ * 【2026-10-01 用户拍板】Path 评审门禁已移除：Path 生成即视为接受，本函数 =
+ * 「偶发情绪模拟（可能重规划一次）→ 幂等标记接受 → 可选直接进入 Learn」。
+ * 评审收敛环保留为管理台手动工具，自动流程不再把它当阶段。
+ */
 export async function resolvePathReview(ctx: SimulationOrchestrator, sessionId: string, options: { startLearning?: boolean } = {}): Promise<{
   success: boolean;
   decision?: 'accept' | 'modify' | 'reject';
@@ -598,149 +674,43 @@ export async function resolvePathReview(ctx: SimulationOrchestrator, sessionId: 
   learningPathId?: string;
   error?: string;
 }> {
-  // 护栏谱系必须在 reviewPathProposal 之前快照：该调用会整块重写 path_review（status→pending），
-  // 把 replan.resultPathId 冲掉，导致「已对当前 Path 重规划过」永远判不出来（本次修复的根因）。
-  const preSession = await ctx.getVirtualSession(sessionId);
-  const preReviewState: any = parseStageResultsPayload(preSession.stageResults).path_review || {};
-  const replanCount = await ctx.countSessionLogsByPhase(sessionId, 'path-replan');
-
-  // 幂等短路（虚拟学习者跑数观察 #1）：当前 Path 已（含 force）接受过评审 → **不重跑评审 LLM**，
-  // 只重试"进入 Learn"。否则每次 advance-day 都要白跑一次评审并反复触顶 replan 上限。
-  const alreadyAcceptedForCurrentPath = isPathReviewAlreadyAcceptedForCurrentPath(
-    parseStageResultsPayload(preSession.stageResults),
-    preSession.learningPathId
-  );
-  if (alreadyAcceptedForCurrentPath) {
-    if (!options.startLearning) {
-      return { success: true, decision: 'accept', currentStage: 'path', learningPathId: preSession.learningPathId };
-    }
-    const learning = await ctx.startLearningPhase(sessionId);
-    return {
-      success: learning.success,
-      decision: 'accept',
-      currentStage: learning.success ? 'teaching' : 'path',
-      learningPathId: preSession.learningPathId,
-      error: learning.error
-    };
-  }
-
-  const review = await ctx.reviewPathProposal(sessionId);
-  // 评审是**独立旁路**，不做关节守卫：评审失败不阻断 Learn——视为"接受当前 Path"并继续。
-  const reviewFailed = !review.success || !review.decision;
-  const decision: 'accept' | 'modify' | 'reject' = reviewFailed
-    ? 'accept'
-    : (review.decision as 'accept' | 'modify' | 'reject');
-
   const session = await ctx.getVirtualSession(sessionId);
-
-  // 收敛护栏：见 MAX_PATH_REPLANS 注释
-  const pathReviewState: any = parseStageResultsPayload(session.stageResults).path_review || {};
-  const forceAccept = reviewFailed || shouldForceAcceptPathReview({
-    decision,
-    learningPathId: session.learningPathId,
-    replanResultPathId: preReviewState?.replan?.resultPathId ?? null,
-    replanCount
-  });
-
-  if (forceAccept) {
-    await ctx.addSessionLog(sessionId, {
-      timestamp: new Date().toISOString(),
-      phase: 'path-replan-guard',
-      details: {
-        output: {
-          reason: reviewFailed
-            ? 'review-failed-non-blocking'
-            : (Boolean(preReviewState?.replan?.resultPathId) && preReviewState.replan.resultPathId === session.learningPathId)
-              ? 'path-unchanged-after-replan'
-              : 'replan-limit-reached',
-          decision,
-          replanCount,
-          limit: MAX_PATH_REPLANS,
-          learningPathId: session.learningPathId,
-          // 保留学生原始质疑，便于人工复核（护栏不删证据）
-          learnerReaction: pathReviewState?.reaction || null,
-          visibleRequestedChanges: Array.isArray(pathReviewState?.visibleRequestedChanges)
-            ? pathReviewState.visibleRequestedChanges
-            : []
-        }
-      }
-    });
-    logger.warn('[simulation-coordinator] 评审按旁路处理（不阻断 Learn）', {
-      sessionId,
-      reviewFailed,
-      replanCount,
-      limit: MAX_PATH_REPLANS,
-      alreadyReplannedThisPath: Boolean(preReviewState?.replan?.resultPathId) && preReviewState.replan.resultPathId === session.learningPathId,
-      decision
-    });
+  if (!session.learningPathId) {
+    return { success: false, currentStage: 'path', error: '学习路径不存在，请先生成 Path' };
   }
 
-  if (decision === 'accept' || forceAccept) {
-    const accepted = await ctx.acceptPathReview(sessionId, { force: forceAccept });
-    if (!accepted.success) return { success: false, decision, error: accepted.error };
-    if (!options.startLearning) {
-      return { success: true, decision: forceAccept ? 'accept' : decision, currentStage: 'path', learningPathId: session.learningPathId };
-    }
+  // 偶发情绪：可能触发一次「不满 → 重规划」（不阻塞；新路径 id 在下方重读）
+  await maybeSimulatePathDislike(ctx, sessionId);
+
+  const latest = await ctx.getVirtualSession(sessionId);
+  const learningPathId = latest.learningPathId || session.learningPathId;
+  const stageResults = parseStageResultsPayload(latest.stageResults);
+  const alreadyAccepted = isPathReviewAlreadyAcceptedForCurrentPath(stageResults, learningPathId);
+  if (!alreadyAccepted) {
+    const pathReview = (stageResults.path_review || {}) as Record<string, unknown>;
+    await ctx.updateStageResults(sessionId, 'path_review', {
+      ...pathReview,
+      status: 'accepted',
+      decision: pathReview.decision ?? 'accept',
+      reviewedPathId: learningPathId,
+      acceptedBy: 'auto-review-gate-removed',
+      acceptedAt: new Date().toISOString()
+    });
     await ctx.addSessionLog(sessionId, {
       timestamp: new Date().toISOString(),
       phase: 'stage-transition',
-      details: { output: { from: 'path', to: 'teaching', reason: forceAccept ? 'path-review-force-accepted' : 'path-review-accepted', learningPathId: session.learningPathId } }
+      details: { output: { from: 'path', to: 'path-accepted', reason: 'review-gate-removed-auto-accept', learningPathId } }
     });
-    const learning = await ctx.startLearningPhase(sessionId);
-    return {
-      success: learning.success,
-      decision: forceAccept ? 'accept' : decision,
-      currentStage: learning.success ? 'teaching' : 'path',
-      learningPathId: session.learningPathId,
-      error: learning.error
-    };
   }
-
-  const replanned = await ctx.replanPathFromReview(sessionId);
-  if (replanned.success) {
-    return {
-      success: true,
-      decision,
-      currentStage: 'path',
-      learningPathId: replanned.learningPathId
-    };
-  }
-
-  // 重规划失败不能把学习堵死：评审是独立质量旁路（见 startLearningPhase 注释），
-  // Path 存在即可进入 Learn。强制接受当前 Path，并在请求了 startLearning 时继续启动。
-  await ctx.addSessionLog(sessionId, {
-    timestamp: new Date().toISOString(),
-    phase: 'path-replan-guard',
-    details: {
-      output: {
-        reason: 'replan-failed-force-accept',
-        decision,
-        error: replanned.error || null,
-        learningPathId: session.learningPathId
-      }
-    }
-  });
-  logger.warn('[simulation-coordinator] 重规划失败，强制接受当前 Path 以解除学习阻塞', {
-    sessionId,
-    decision,
-    error: replanned.error || null
-  });
-  const fallbackAccepted = await ctx.acceptPathReview(sessionId, { force: true });
-  if (!fallbackAccepted.success) return { success: false, decision, error: fallbackAccepted.error };
   if (!options.startLearning) {
-    return { success: true, decision: 'accept', currentStage: 'path', learningPathId: session.learningPathId };
+    return { success: true, decision: 'accept', currentStage: 'path', learningPathId };
   }
-  await ctx.addSessionLog(sessionId, {
-    timestamp: new Date().toISOString(),
-    phase: 'stage-transition',
-    details: { output: { from: 'path', to: 'teaching', reason: 'path-replan-failed-force-accepted', learningPathId: session.learningPathId } }
-  });
   const learning = await ctx.startLearningPhase(sessionId);
   return {
     success: learning.success,
     decision: 'accept',
     currentStage: learning.success ? 'teaching' : 'path',
-    learningPathId: session.learningPathId,
+    learningPathId,
     error: learning.error
   };
 }
