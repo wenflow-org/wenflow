@@ -1080,7 +1080,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   position: fixed;
   inset: 0;
   z-index: var(--mk-z-modal);
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--wf-overlay);
   display: grid;
   place-items: center;
   padding: 20px;
@@ -1350,7 +1350,7 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-drawer__mask {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--wf-overlay);
 }
 .mk-drawer__panel {
   position: relative;
@@ -1453,7 +1453,7 @@ html[data-theme='dark'] {
   .mk-btn--danger:active { background: var(--mk-red-fill-strong, #b91c1c); }
   .mk-icon-btn svg { color: var(--mk-faint); }
   /* 暗色遮罩加深：浅色遮罩 rgba(15,23,42,.36) 在深底上分离度不足 */
-  .mk-modal, .mk-drawer__mask { background: rgba(3, 7, 14, 0.62); }
+  .mk-modal, .mk-drawer__mask { background: var(--wf-overlay); }
 }
 
 /* 4K 超大屏适配（2000/2800/3600 三档）

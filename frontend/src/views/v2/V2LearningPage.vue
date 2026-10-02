@@ -1832,7 +1832,7 @@ onBeforeUnmount(() => {
 .kp-scrim {
   position: fixed; inset: 0;
   z-index: 60;
-  background: rgba(15, 23, 42, 0.42);
+  background: var(--wf-overlay);
   animation: kp-fade-in 0.2s ease both;
 }
 @keyframes kp-fade-in { from { opacity: 0; } to { opacity: 1; } }

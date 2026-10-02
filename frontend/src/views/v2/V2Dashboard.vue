@@ -1577,7 +1577,7 @@ a.btn-primary { text-decoration: none; }
 /* ---------- 当天学习复盘抽屉 ---------- */
 .sheet-mask {
   position: fixed; inset: 0; z-index: 80;
-  background: rgba(23, 32, 51, 0.32);
+  background: var(--wf-overlay);
   /* 批次 D（2026-10-02）：backdrop-filter: blur(2px) 已删。
      模态遮罩的职责是「压暗并隔断下层」，32% 的墨色已经做到这点；
      2px 的模糊在任何屏幕上都几乎看不出，却要为此付一次全屏合成开销，

@@ -1741,7 +1741,7 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 1200;
-  background: rgba(10, 20, 40, 0.45);
+  background: var(--wf-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
