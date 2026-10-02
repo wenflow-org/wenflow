@@ -1708,6 +1708,12 @@ async function loadDetail(id?: string, quiet = false) {
   }
 }
 
+/* ===== 记忆池（状态声明必须先于下方 immediate watch：回调在 setup 期同步首跑，
+ *  引用后置 ref 会踩 TDZ，异常被 async 回调吞掉后 loadDetail 永不执行 → 画像页永挂加载） ===== */
+const memoryData = ref<MemoryData | null>(null)
+const memoryLoading = ref(false)
+const memoryLoadFailed = ref(false)
+
 watch(
   () => subPage.value?.id,
   async (id) => {
@@ -1722,7 +1728,6 @@ watch(
   { immediate: true }
 )
 
-/* ===== 记忆池 ===== */
 /** 单条概念的遗忘曲线（后端 retention-series 派生） */
 interface MemoryConceptCurve {
   days: number[]
@@ -1761,10 +1766,6 @@ interface MemoryData {
   concepts?: MemoryConcept[]
   asOf?: string
 }
-const memoryData = ref<MemoryData | null>(null)
-const memoryLoading = ref(false)
-const memoryLoadFailed = ref(false)
-
 const memoryMastered = computed(() => memoryData.value?.mastered || [])
 const memoryDueReview = computed(() => memoryData.value?.dueReview || [])
 const memoryStruggling = computed(() => memoryData.value?.struggling || [])
