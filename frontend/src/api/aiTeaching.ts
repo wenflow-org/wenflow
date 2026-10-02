@@ -660,7 +660,12 @@ export const aiTeachingAPI = {
       result = recovered;
     }
 
-    const deadline = Date.now() + 60_000;
+    /* 轮询窗口对齐后端收尾预算（2026-10-02 完课 7 分钟假失败修复）：
+       收尾链在服务端同步执行——wrapup LLM 实测单次可达 6.8 分钟（后端已加 8 分钟硬帽，
+       归因另有 90s 硬帽）；而首次 POST 受 AI_REQUEST_TIMEOUT(5min) 约束必然先断，
+       走到这里时窗口只剩 60s 旧值，于是「服务端 6 分钟后成功、前端 1 分钟就报尚未完成」。
+       窗口放到 11 分钟（8min wrapup + 90s 归因 + 落库余量）。 */
+    const deadline = Date.now() + 660_000;
     const pollUntilSettled = async (initial: FinalizationResult): Promise<FinalizationResult> => {
       let current = initial;
       while (current.status === 'processing' && Date.now() < deadline) {
