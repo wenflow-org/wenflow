@@ -175,7 +175,10 @@ onMounted(load)
 <style scoped>
 .sd-settings { border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); padding: 10px 12px; margin-top: 8px; }
 /* 折叠头是 role=button 的整行开关，高度原来等于 13px 文字行高（~19px），低于 24px 可点下限 */
-.sd-settings__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; cursor: pointer; }
+/* 头部禁用 space-between：三子元素会把中位箭头孤立在行中（裸评审 2026-10-03 实测 x=839 悬空）；
+   改标题 flex:1 吃余量，▸ 与开关成组靠右（同 .mk-card__head 成组判例） */
+.sd-settings__head { display: flex; align-items: center; gap: 12px; min-height: 24px; cursor: pointer; }
+.sd-settings__title { flex: 1 1 auto; }
 .sd-settings__arrow { color: var(--mk-faint, #6b7c96); font-size: var(--mk-fs-micro); transition: transform 0.15s ease; }
 .sd-settings__arrow[data-open='true'] { transform: rotate(90deg); }
 /* 折叠头标题字重对齐卡头/折叠头词汇（mk-card__title、mk-section__summary 均 700） */
