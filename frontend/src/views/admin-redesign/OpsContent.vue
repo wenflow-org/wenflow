@@ -23,7 +23,16 @@
         title="点击筛选「已完成」路径"
         @click="statusFilter = statusFilter === 'completed' ? '' : 'completed'"
       >已完成 {{ byStatus('completed') }}</button>
-      <span v-if="byStatus('failed') > 0" class="mk-status__meta mk-status__meta--warn" title="目标对话产出路径失败，需排查">生成失败 {{ byStatus('failed') }}</span>
+      <!-- 生成失败（P1#9/#10 顺手）：口径 = 服务端全量计数（stats），与下方 pill 的窗口计数不同源；
+           「可重规划」文案对齐 OpsHub 待办（详情页有重规划动作），点击就地筛出失败行——
+           重规划端点在后端不做（登记），详情页已有动作，入口前置到这里不再断链 -->
+      <button
+        v-if="byStatus('failed') > 0"
+        type="button"
+        class="mk-status__meta mk-status__meta-link mk-status__meta--bad"
+        title="点击只看生成失败的路径；失败可在路径详情页重规划（该计数为服务端全量口径）"
+        @click="statusFilter = statusFilter === 'failed' ? '' : 'failed'"
+      >生成失败 {{ byStatus('failed') }}（可重规划）</button>
       <span v-if="byStatus('archived') > 0" class="mk-status__meta">已下线 {{ byStatus('archived') }}</span>
       <span class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ stats?.total ?? '—' }} 条 · 里程碑 {{ stats?.totalMilestones ?? '—' }} · 任务 {{ stats?.totalTasks ?? '—' }}</span>
       <span class="mk-status__actions">
@@ -72,7 +81,13 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <div class="mk-pills">
+          <!-- P1#9 口径标注：pill 计数 = 当前列表窗口（最近 1000 条，随「含模拟」切换），
+               与状态条/分布卡的 stats 全量口径不同源——此前两组「学习中 N」同屏无标注，
+               切含模拟后 pill 变、stats 不变，读作数据丢失。选择就地标注而非「切含模拟时重拉
+               stats」：getStats 端点不接受 includeTest 参数（adminApi.ts），重拉拿回的还是
+               同一份全量计数，同步是无效请求；pill 是本地筛选控件，计数本来就该与所筛列表
+               （窗口）一致，口径讲清楚即可。 -->
+          <div class="mk-pills" title="pill 计数 = 当前列表窗口内计数（最近 1000 条，随「含模拟」切换），非全量；全量口径见状态条与「路径状态分布」卡">
             <button
               v-for="p in statusPills"
               :key="p.id"
@@ -80,6 +95,7 @@
               class="mk-pill"
               :class="{ 'mk-pill--active': statusFilter === p.id }"
               :aria-pressed="statusFilter === p.id"
+              :title="p.id === 'failed' ? '生成失败的路径；行内「去详情」进详情页可重规划' : undefined"
               @click="statusFilter = statusFilter === p.id ? '' : p.id"
             >
               {{ p.label }}<span class="mk-pill__count">{{ p.count }}</span>
@@ -221,7 +237,14 @@
                 <!-- 操作列文字钮（原型 renderPaths 操作列 btn--sm「详情/下线」+ ⋯ 菜单）；
                      右对齐与 mk-th--right 表头对齐（同 GoalConversations/Users 判例） -->
                 <div class="mk-actions">
-                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="openPath(p)">详情</button>
+                  <!-- 失败行（P2 顺手）：「去详情」替代「详情」——重规划端点在后端不做（登记），
+                       详情页已有重规划动作，按钮就地改名+title 指路，不再让失败行与普通行同貌 -->
+                  <button
+                    type="button"
+                    class="mk-btn mk-btn--sm"
+                    :title="p.status === 'failed' ? '该路径生成失败：详情页可重规划' : undefined"
+                    @click.stop="openPath(p)"
+                  >{{ p.status === 'failed' ? '去详情' : '详情' }}</button>
                   <button v-if="p.status !== 'archived'" type="button" class="mk-btn mk-btn--sm" :disabled="p.busy" @click.stop="archive(p)">下线</button>
                   <button v-else type="button" class="mk-btn mk-btn--sm" :disabled="p.busy" @click.stop="restore(p)">恢复</button>
                   <div class="mk-menu">
@@ -322,9 +345,11 @@ const hiddenCols = ref<Set<string>>(new Set())
 /* 状态条四态计数 + 基调（与目标对话/教学会话同形态：失败>0 警示琥珀，空库静默） */
 const byStatus = (s: string) => stats.value?.byStatus?.[s] || 0
 
+/* 生成失败抬红（bad，P2）：与 OpsHub 待办的 failed=红对齐（此前本页只 warn 琥珀，
+   同一「生成失败」跨页两级着色）；空库静默 */
 const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   if (!stats.value || stats.value.total === 0) return 'muted'
-  if ((stats.value.byStatus?.failed || 0) > 0) return 'warn'
+  if ((stats.value.byStatus?.failed || 0) > 0) return 'bad'
   return 'ok'
 })
 
@@ -407,9 +432,11 @@ const progressPct = (p: PathRow) => {
   if (!p.totalMilestones) return 0
   return Math.min(100, Math.round((p.completedMilestones / p.totalMilestones) * 100))
 }
+/* 进度条三态（P2）：100% = 绿（ok）/ 失败 = 红（bad）/ 其余（含进行中）= 默认中性蓝——
+   此前进行中一律琥珀（warn），满屏琥珀稀释真异常，也读不出「快好了」。 */
 const progressTone = (p: PathRow) => {
-  const pct = progressPct(p)
-  return pct >= 100 ? 'ok' : p.status === 'failed' ? 'bad' : 'warn'
+  if (p.status === 'failed') return 'bad'
+  return progressPct(p) >= 100 ? 'ok' : ''
 }
 /* 难度口径：后端 normalizePathDifficulty 产出 beginner/intermediate/advanced/unknown 四值，
    但存量里还混着 normalize 之前写进去的短词（零基础/入门级…）与自述整句，共约 35%。

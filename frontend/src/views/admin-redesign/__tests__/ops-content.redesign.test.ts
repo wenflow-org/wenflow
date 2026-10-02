@@ -225,4 +225,41 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     closeSubPage();
     w.unmount();
   });
+
+  /** P1#9 + P2 顺手（2026-10-02）：口径标注 / 进度条三态 / 失败行入口 / 失败严重度对齐 OpsHub */
+  it('口径标注 + 三态 + 失败行入口：pill 窗口 title；进度条失败红/100% 绿/进行中中性；失败行「去详情」；状态条失败抬红带「可重规划」', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        data: {
+          paths: [
+            mkPath('lp_ok', { status: 'completed', completedMilestones: 4 }),
+            mkPath('lp_run', { status: 'active' }),
+            mkPath('lp_fail', { status: 'failed' }),
+          ],
+          pagination: { total: 3, page: 1, limit: 100 },
+        },
+      },
+    });
+    const w = mount(OpsContent);
+    await flushPromises();
+    await nextTick();
+
+    // P1#9：pill 组带窗口口径标注（stats 端点无 includeTest 参数，选就地标注而非同步重拉）
+    expect(w.find('.mk-pills').attributes('title')).toContain('窗口');
+
+    // 进度条三态：100% = 绿（ok）/ 进行中 = 默认中性（无 warn 琥珀）/ 失败 = 红（bad）
+    const tones = w.findAll('tbody .mk-minibar__fill').map((el) => el.attributes('data-tone') || '');
+    expect(tones).toEqual(['ok', '', 'bad']);
+
+    // 失败行：动作钮改「去详情」并在 title 指路详情页重规划（重规划端点在后端不做）
+    const failRow = w.findAll('tbody tr').find((r) => r.text().includes('路径lp_fail'))!;
+    expect(failRow.find('.mk-actions .mk-btn').text()).toBe('去详情');
+    expect(failRow.find('.mk-actions .mk-btn').attributes('title')).toContain('重规划');
+
+    // 状态条：生成失败抬红（与 OpsHub 待办 failed=bad 对齐）+「可重规划」文案
+    expect(w.find('.mk-status--bad').exists()).toBe(true);
+    expect(w.find('.mk-status').text()).toContain('生成失败 1（可重规划）');
+
+    w.unmount();
+  });
 });

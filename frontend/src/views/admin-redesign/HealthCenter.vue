@@ -10,7 +10,9 @@
     <div class="mk-status" :class="`mk-status--${barTone}`">
       <span class="mk-status__dot"></span>
       <span class="mk-status__meta" v-if="displayReport" :title="skillCountTitle">
-        技能 {{ global.total }}<template v-if="extraCapabilityCount">（含 {{ extraCapabilityCount }} 个外挂能力）</template> · 上线 {{ completionLive }}/{{ reconciliation.total }} · {{ displayReport.generatedAt ? '更新于 ' + timeAgo(displayReport.generatedAt) : '' }}
+        <!-- 「上线 N/M」2026-10-02 撤出状态条：与完成度卡「已上线 N/M」同屏双写同一数字，
+             且「上线/已上线」用词不一。单源下沉到概要 KPI 第 4 卡 hint（统一用词「已上线」） -->
+        技能 {{ global.total }}<template v-if="extraCapabilityCount">（含 {{ extraCapabilityCount }} 个外挂能力）</template> · {{ displayReport.generatedAt ? '更新于 ' + timeAgo(displayReport.generatedAt) : '' }}
       </span>
       <span class="mk-badge" :class="topAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'" v-if="displayReport" :title="badgeTitle">{{ topAbnormal > 0 ? `异常 ${topAbnormal}` : '全部健康' }}</span>
     </div>
@@ -50,42 +52,45 @@
            有更细的词条，口径留在各段标题与卡片的 title 上，不必再占 48px 首屏。
            下面删掉 kpi 前的引导卡后，概要 KPI 上移到首屏。 -->
 
-      <!-- 概要 KPI（共享 MkKpi 统一形态：标签 + 数字 + 副行，可点击跳转锚点） -->
+      <!-- 概要 KPI（共享 MkKpi 统一形态：标签 + 数字 + 副行，可点击跳转锚点）
+           2026-10-02 语义统一（P1#30）：四卡 value 全部对齐「需处理数」（0 = 好，绿色），
+           总数 / 达成数下沉 hint——修复此前「对账卡 value=登记总数 8 也被着成警示琥珀」的
+           语义倒挂（MkKpi tone 只挂真正异常卡）。 -->
       <div class="hc-summary">
         <MkKpi
-          label="健康检查"
-          :value="displayReport.health.summary.total"
-          :hint="healthAbnormal > 0 ? `${healthAbnormal} 异常` : '全部正常'"
+          label="检查异常"
+          :value="healthAbnormal"
+          :hint="`健康检查共 ${displayReport.health.summary.total} 项`"
           :tone="healthAbnormal > 0 ? 'warn' : 'ok'"
           clickable
-          :title="`${displayReport.health.summary.total} 项健康检查，${healthAbnormal} 项异常`"
+          :title="`${displayReport.health.summary.total} 项健康检查，${healthAbnormal} 项异常（0 = 全部正常）`"
           @click="kpiGo('health')"
         />
         <MkKpi
           :label="TERMS.driftContract"
           :value="driftActionable"
-          :hint="driftActionable > 0 ? '需处理' : drift.runtime > 0 ? `另 ${drift.runtime} 条只读遥测` : '正常'"
+          :hint="driftActionable > 0 ? `契约 ${drift.contract} + 哈希 ${drift.hash}` : drift.runtime > 0 ? `另 ${drift.runtime} 条只读遥测` : '正常'"
           :tone="driftActionable > 0 ? 'warn' : 'ok'"
           clickable
           :title="driftCardTitle"
           @click="kpiGo('drift')"
         />
         <MkKpi
-          :label="TERMS.reconcile"
-          :value="reconciliation.total"
-          :hint="reconAbnormal > 0 ? `${reconAbnormal} 异常` : '一致'"
+          :label="TERMS.reconcile + '异常'"
+          :value="reconAbnormal"
+          :hint="`登记 ${reconciliation.total} 项`"
           :tone="reconAbnormal > 0 ? 'warn' : 'ok'"
           clickable
           :title="reconCardTitle"
           @click="kpiGo('recon')"
         />
         <MkKpi
-          label="已上线"
-          :value="completionLive"
-          :hint="completionHint"
-          tone="ok"
+          label="完成度未达标"
+          :value="global.abnormalSkills"
+          :hint="`已上线 ${completionLive}/${reconciliation.total}`"
+          :tone="global.abnormalSkills > 0 ? 'warn' : 'ok'"
           clickable
-          :title="`完成度已达 live 档的技能数：${completionLive} / ${reconciliation.total} 个登记`"
+          :title="completionCardTitle"
           @click="kpiGo('completion')"
         />
       </div>
@@ -114,6 +119,24 @@
           </div>
         </section>
       </div>
+
+      <!-- 最近修复（P1#29）：修复成功的证据（时间/检查项/备份目录/审计 id）此前只活在 toast 一闪，
+           页内零留存。落一张会话内列表卡（标题注明「本次会话」：刷新即清，权威记录在审计日志
+           与后端备份目录，页内这份是「刚修过什么」的就地证据）。修复成功即插入最新一条，最多留 5 条。 -->
+      <section v-if="recentFixes.length" class="mk-card" id="hc-fixlog">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">最近修复</h3>
+          <span class="mk-card__meta">本次会话 · 权威记录见审计日志</span>
+        </div>
+        <div class="hc-fixlog">
+          <div v-for="f in recentFixes" :key="f.key" class="hc-fixlog__row">
+            <span class="hc-fixlog__time">{{ f.time }}</span>
+            <span class="hc-fixlog__item">{{ f.label }}</span>
+            <span class="hc-fixlog__meta" :title="f.backupDir ? `备份目录：${f.backupDir}` : '本次修复没有产生备份目录'">备份 {{ f.backupShort }}</span>
+            <span v-if="f.auditId" class="hc-fixlog__meta" :title="`审计日志 ID：${f.auditId}`">审计 #{{ f.auditId }}</span>
+          </div>
+        </div>
+      </section>
 
       <!-- 告警与事件流（复刻 newui 原型 .feed/.feedrow「告警与事件」）：只收 severity=warn/error 的
            检查项（info 只读观测不入流），与概要 KPI「健康检查 · N 异常」同一数据源同一口径。
@@ -179,7 +202,11 @@
                 <span v-if="item.detail.length" class="hc-check__caret">{{ detailOpen(item.id) ? '▾' : '▸' }}</span>
               </button>
               <span class="hc-check__actions">
-                <button v-if="item.action === 'fixable' && item.severity !== 'ok'" type="button" class="mk-btn mk-btn--sm" :disabled="fixingId === item.id" @click="fix(item.id)">{{ fixingId === item.id ? '修复中…' : '修复' }}</button>
+                <!-- fixHint 常驻（P1#28）：后端逐项下发的修复说明此前只在 409 错误 toast 里透出，
+                     修复钮旁零展示。现常驻在动作钮旁（悬停看全文）——点修复前就能知道会动什么；
+                     「执行前自动备份、结果写入审计日志」的保障说明也从 confirm 弹窗上移到按钮 title。 -->
+                <span v-if="item.severity !== 'ok' && item.fixHint" class="hc-check__fixhint" :title="item.fixHint">{{ item.fixHint }}</span>
+                <button v-if="item.action === 'fixable' && item.severity !== 'ok'" type="button" class="mk-btn mk-btn--sm" title="执行前自动备份，结果写入审计日志可回溯" :disabled="fixingId === item.id" @click="fix(item.id)">{{ fixingId === item.id ? '修复中…' : '修复' }}</button>
                 <button v-else-if="item.action === 'manual' && item.severity !== 'ok'" type="button" class="mk-btn mk-btn--sm" @click="jump(item.id)">查看 →</button>
               </span>
               <div v-if="detailOpen(item.id) && item.detail.length" class="hc-check__detail">
@@ -328,11 +355,11 @@ const reconAbnormal = computed(() => {
   return (r?.missingRegistration || 0) + (r?.zombieRegistration || 0) + (r?.missingActive || 0) + (r?.zombieActive || 0) + (r?.unwired || 0)
 })
 const completionLive = computed(() => displayReport.value?.completion?.live || 0)
-/** 概要卡副行统一成「状态词」：原来这张是裸 `/ 37`，与「1 异常 / 一致 / 另 50 条只读遥测」不成句。
-    总数仍可从卡头「已上线 37/37」与 title 读到，不必在副行重复。 */
-const completionHint = computed(() => {
-  const pending = reconciliation.value.total - completionLive.value
-  return pending > 0 ? `待上线 ${pending} 个` : '全部上线'
+/** 第 4 卡（完成度未达标）title：value=未达标数（需处理语义，0=好），达成数（已上线 N/M）下沉 hint；
+    阈值/口径在 title 披露——live 为完成度最高档，登记总数含外挂能力 */
+const completionCardTitle = computed(() => {
+  const total = reconciliation.value.total
+  return `完成度未达 live 档的技能 ${global.value.abnormalSkills} 个（0 = 全部达标）；已上线 ${completionLive.value}/${total}（登记总数含外挂能力，live 为完成度最高档）`
 })
 
 /** 概要卡 tooltip：解释口径，避免红色数字误读 */
@@ -480,7 +507,9 @@ function serviceBadge(tone: string): { cls: string; label: string } {
   if (tone === 'error') return { cls: 'mk-badge--bad', label: '异常' }
   return { cls: 'mk-badge--ok', label: '正常' }
 }
-/** 13 项检查 → 每基准域一张服务卡：状态点取域内最高严重度，计数为域内检查项的真实分布 */
+/** 13 项检查 → 每基准域一张服务卡：状态点取域内最高严重度，计数为域内检查项的真实分布。
+    卡序按 tone 严重度降序（error → warn → ok，P2）：异常域排前，10 秒内先看到哪里出事 */
+const SERVICE_TONE_ORDER: Record<string, number> = { error: 0, warn: 1, ok: 2 }
 const serviceCards = computed(() => {
   const byBase = new Map<HealthCenterItem['base'], HealthCenterItem[]>()
   for (const item of displayReport.value?.health.items ?? []) {
@@ -488,20 +517,22 @@ const serviceCards = computed(() => {
     if (list) list.push(item)
     else byBase.set(item.base, [item])
   }
-  return [...byBase.entries()].map(([base, list]) => {
-    const severityCount = (s: HealthCenterItem['severity']): number => list.filter((i) => i.severity === s).length
-    const error = severityCount('error')
-    const warn = severityCount('warn')
-    return {
-      base,
-      name: SERVICE_GROUP_NAMES[base] || base,
-      total: list.length,
-      ok: severityCount('ok'),
-      info: severityCount('info'),
-      attention: error + warn,
-      tone: error > 0 ? 'error' : warn > 0 ? 'warn' : 'ok',
-    }
-  })
+  return [...byBase.entries()]
+    .map(([base, list]) => {
+      const severityCount = (s: HealthCenterItem['severity']): number => list.filter((i) => i.severity === s).length
+      const error = severityCount('error')
+      const warn = severityCount('warn')
+      return {
+        base,
+        name: SERVICE_GROUP_NAMES[base] || base,
+        total: list.length,
+        ok: severityCount('ok'),
+        info: severityCount('info'),
+        attention: error + warn,
+        tone: error > 0 ? 'error' : warn > 0 ? 'warn' : 'ok',
+      }
+    })
+    .sort((a, b) => (SERVICE_TONE_ORDER[a.tone] ?? 9) - (SERVICE_TONE_ORDER[b.tone] ?? 9))
 })
 /** 告警事件流 = severity 为 warn/error 的检查项（口径同后端 health.abnormal 与概要 KPI；info 观测项不入流，
     全部正常时模板渲染一条 ok 行不空卡）。按严重度降序排（error 在前）。 */
@@ -660,12 +691,27 @@ function jump(id: HealthCenterItemId) {
   }
 }
 
+/* ---------- 最近修复（会话内证据，P1#29）----------
+   修复成功结果（时间/检查项/backupDir/审计 id）落页内列表，修复动作的证据不再只活在 toast。
+   仅会话内存（刷新即清）：权威记录在审计日志与后端备份目录，卡头 meta 已注明。 */
+interface SessionFixRecord {
+  key: number
+  label: string
+  time: string
+  backupDir: string | null
+  backupShort: string
+  auditId?: string
+}
+const recentFixes = ref<SessionFixRecord[]>([])
+
 async function fix(id: HealthCenterItemId) {
   const item = displayReport.value?.health.items.find((i) => i.id === id)
-  // 安全审计 K-M1：一键修复（编译 core + DB 对账 + 重写 snapshots）执行前二次确认，注明检查项与影响范围
+  // 安全审计 K-M1：一键修复执行前二次确认，注明检查项。修复会做什么（影响范围）由 fixHint
+  // 常驻在修复钮旁（P1#28 上移到列表层），confirm 只保留检查项与保障口径，不再复述动作细节
+  // （原弹窗写死的「编译 core + DB 对账 + 重写 snapshots」与逐项 fixHint 并不一致）。
   const ok = await askConfirm({
     title: '一键修复',
-    message: `将执行「${item?.label || id}」的自动修复：编译相关 core 文件、执行 DB 对账并重写 agent-snapshots。执行前自动备份、结果写入审计日志。`,
+    message: `将执行「${item?.label || id}」的自动修复（会做什么见列表内该行的说明）。执行前自动备份，结果写入审计日志可回溯。`,
     confirmText: '执行修复',
     danger: false,
   })
@@ -675,6 +721,19 @@ async function fix(id: HealthCenterItemId) {
     const res = await adminHealthCenterApi.fix(id)
     const data = res.data?.data
     if (!data) throw new Error('修复响应为空')
+    // 证据留页内（P1#29）：toast 之外，时间/检查项/备份目录/审计 id 落「最近修复」卡
+    const backupShort = data.backupDir
+      ? (data.backupDir.split(/[\\/]/).filter(Boolean).pop() || data.backupDir)
+      : '—'
+    recentFixes.value.unshift({
+      key: Date.now(),
+      label: item?.label || id,
+      time: hhmm(new Date().toISOString()),
+      backupDir: data.backupDir,
+      backupShort,
+      auditId: data.auditId,
+    })
+    if (recentFixes.value.length > 5) recentFixes.value.length = 5
     toast.success(data.gitCommitHint)
     // 修复后强制复检并刷新（后端已写审计，缓存已失效）
     await refresh(true)
@@ -772,7 +831,17 @@ defineExpose({ refresh })
 .hc-check__num { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); min-width: 30px; text-align: right; }
 .hc-check__sem { font-size: var(--mk-fs-micro); color: var(--mk-muted); background: var(--mk-line); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
 .hc-check__caret { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.hc-check__actions { display: flex; align-items: center; }
+.hc-check__actions { display: flex; align-items: center; gap: 8px; }
+/* fixHint 常驻（P1#28）：修复钮旁的一句话说明，超长省略、悬停看全文 */
+.hc-check__fixhint { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+
+/* 最近修复（P1#29）：会话内修复证据列表 */
+.hc-fixlog { display: grid; padding: 4px 16px 10px; }
+.hc-fixlog__row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--mk-line); font-size: var(--mk-fs-micro); }
+.hc-fixlog__row:last-child { border-bottom: none; }
+.hc-fixlog__time { flex: none; color: var(--mk-faint); font-family: var(--mk-mono); font-variant-numeric: tabular-nums; }
+.hc-fixlog__item { flex: none; font-weight: 700; color: var(--mk-ink); }
+.hc-fixlog__meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted); }
 .hc-check__detail { grid-column: 1 / -1; padding: 0 0 10px 18px; display: grid; gap: 4px; }
 .hc-check__detail p { margin: 0; font-family: var(--mk-mono); font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); overflow-wrap: anywhere; }
 .hc-check__detail-more { color: var(--mk-amber) !important; }

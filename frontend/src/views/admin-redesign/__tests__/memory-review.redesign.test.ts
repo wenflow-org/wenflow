@@ -23,6 +23,8 @@ vi.mock('@/api/adminApi', () => ({
 }));
 vi.mock('../store', () => ({ openSubPage }));
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// P1#12：明细态动作失败测试需要 askConfirm 直接放行（真实实现要人工点确认）
+vi.mock('../useConfirm', () => ({ askConfirm: vi.fn(async () => true) }));
 const routerReplace = vi.hoisted(() => vi.fn());
 const routeQuery = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 vi.mock('vue-router', () => ({
@@ -31,6 +33,7 @@ vi.mock('vue-router', () => ({
 }));
 
 import MemoryReview from '../MemoryReview.vue';
+import { toast } from '@/utils/toast';
 
 // 到期日以「测试运行当天 0 点」为锚：页面用真实 new Date() 分桶，同一运行日内口径一致
 const midnight = (() => {
@@ -65,11 +68,11 @@ const ROWS = [
   row({ id: 't7', extractionCount: 0, dueAt: null, retrievability: null }),   // 从未提取 → 不进队列
 ];
 
-async function mountWithRows(rows: unknown[]) {
+async function mountWithRows(rows: unknown[], totalsOver: Record<string, unknown> = {}) {
   overview.mockResolvedValue({
     data: {
       data: {
-        totals: { users: 1, traces: rows.length, due: 1, usersWithAudit: 0, proposed: 0, autoApplicable: 0, ambiguous: 0, applied: 0, deleted: 0 },
+        totals: { users: 1, traces: rows.length, due: 1, usersWithAudit: 0, proposed: 0, autoApplicable: 0, ambiguous: 0, applied: 0, deleted: 0, ...totalsOver },
         users: [{ userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: rows.length, due: 1, audit: null, weak: 1, avgStrength: 0.52, lastReviewedAt: new Date().toISOString() }],
       },
     },
@@ -78,6 +81,33 @@ async function mountWithRows(rows: unknown[]) {
   const w = mount(MemoryReview);
   await flushPromises();
   return w;
+}
+
+/** 明细响应夹具（P1#12/#13）：audit 带 1 条可自动 proposal（默认勾选）+ 1 条可回滚归并 */
+const makeDetail = (over: Record<string, unknown> = {}) => ({
+  user: { name: '小明' },
+  summary: { traces: 7, due: 2, duplicatedFamilies: 0, duplicatedTraces: 0, neverExtracted: 0, withFsrsState: 5 },
+  reviewPlan: null,
+  audit: {
+    mode: 'observe',
+    generatedAt: new Date().toISOString(),
+    stats: { candidates: 2, proposed: 1, autoApplicable: 1, ambiguous: 0, applied: 0, deleted: 0 },
+    proposals: [{ canonical: 'k1', aliases: ['k1a'], confidence: 0.9, lexicalSimilarity: 0.9, autoApplicable: true, rationale: '同义' }],
+    ambiguous: [],
+  },
+  appliedMerges: {
+    rollbackable: [{ mergeId: 'm1', canonical: 'k1', aliases: ['k1a'], appliedAt: new Date().toISOString(), rolledBackAt: null, deletedRows: 1 }],
+    rolledBack: [],
+    legacyWindowOnly: [],
+  },
+  duplicatedFamilies: [],
+  duePreview: [],
+  ...over,
+});
+
+async function openDetailOf(w: ReturnType<typeof mount>) {
+  await w.findAll('button').find((b) => b.text() === '明细')!.trigger('click');
+  await flushPromises();
 }
 
 describe('MemoryReview redesign：到期时间轴 + 记忆强度分布', () => {
@@ -135,5 +165,69 @@ describe('MemoryReview redesign：到期时间轴 + 记忆强度分布', () => {
     const w = await mountWithRows(ROWS);
     await w.find('tbody tr').trigger('click');
     expect(openSubPage).toHaveBeenCalledWith('learner', 'u1');
+  });
+
+  /** P1#13（2026-10-02）：「当前到期」due>0 即琥珀 → 阈值化（占痕迹 ≥20% 或人均 ≥5），阈值写进 title */
+  it('KPI「当前到期」阈值化：占比 <20% 且人均 <5 保持中性；达阈值才抬琥珀且 title 披露阈值', async () => {
+    // due 1 / traces 7 ≈ 14%，人均 1 → 常态积压，不着警示色
+    const w = await mountWithRows(ROWS);
+    const dueCard = w.findAll('.mk-kpi')[2];
+    expect(dueCard.classes()).not.toContain('mk-kpi--warn');
+
+    // due 2 / traces 7 ≈ 28.6% ≥ 20% → 抬琥珀，title 披露阈值
+    const w2 = await mountWithRows(ROWS, { due: 2 });
+    const dueCard2 = w2.findAll('.mk-kpi')[2];
+    expect(dueCard2.classes()).toContain('mk-kpi--warn');
+    expect(dueCard2.attributes('title')).toContain('示警阈值');
+    expect(dueCard2.attributes('title')).toContain('≥20%');
+  });
+
+  /** P1#13：到期清单预览的到期列改相对表达 + 逾期着色（绝对时刻进 title） */
+  it('到期清单预览：到期列「已逾期 N 天 / N 天后」相对表达，逾期着色，绝对时刻进 title', async () => {
+    detail.mockResolvedValue({ data: { data: makeDetail({
+      duePreview: [
+        { conceptKey: 'k1', label: '逾期点', retention: 0.5, masteryScore: 0.6, extractionCount: 2, source: null, dueAt: at(-3) },
+        { conceptKey: 'k2', label: '未来点', retention: 0.5, masteryScore: 0.6, extractionCount: 2, source: null, dueAt: at(4) },
+        { conceptKey: 'k3', label: '无到期', retention: 0.5, masteryScore: 0.6, extractionCount: 2, source: null, dueAt: null },
+      ],
+    }) } });
+    const w = await mountWithRows(ROWS);
+    await openDetailOf(w);
+
+    const detailRoot = w.find('.mr__detail');
+    expect(detailRoot.text()).toContain('已逾期 3 天');
+    expect(detailRoot.text()).toContain('4 天后');
+    const overdue = w.find('.mr__overdue');
+    expect(overdue.exists()).toBe(true);
+    expect(overdue.text()).toBe('已逾期 3 天');
+    expect(overdue.attributes('title')).toContain('到期时刻');
+  });
+
+  /** P1#12：明细态 apply / rollback / recompute 失败不再静默——toast + 明细区 error 双出口 */
+  it('明细态动作失败：apply / rollback / recompute 失败弹 toast 且 error 渲染到明细区', async () => {
+    detail.mockResolvedValue({ data: { data: makeDetail() } });
+    const w = await mountWithRows(ROWS);
+    await openDetailOf(w);
+    expect(w.find('.mr__detail').exists()).toBe(true);
+
+    // apply 失败（proposal 默认勾选，直接点「执行选中」）
+    apply.mockRejectedValueOnce(new Error('归并冲突'));
+    await w.findAll('button').find((b) => b.text().startsWith('执行选中'))!.trigger('click');
+    await flushPromises();
+    expect(toast.error).toHaveBeenCalledWith('执行归并失败：归并冲突');
+    expect(w.find('.mr__error').exists()).toBe(true);
+    expect(w.find('.mr__error').text()).toContain('归并冲突');
+
+    // rollback 失败
+    rollback.mockRejectedValueOnce(new Error('快照缺失'));
+    await w.findAll('button').find((b) => b.text() === '回滚')!.trigger('click');
+    await flushPromises();
+    expect(toast.error).toHaveBeenCalledWith('回滚失败：快照缺失');
+
+    // recompute 失败（明细页头「重新观察」）
+    recompute.mockRejectedValueOnce(new Error('复盘引擎超时'));
+    await w.findAll('button').find((b) => b.text() === '重新观察')!.trigger('click');
+    await flushPromises();
+    expect(toast.error).toHaveBeenCalledWith('重新观察失败：复盘引擎超时');
   });
 });

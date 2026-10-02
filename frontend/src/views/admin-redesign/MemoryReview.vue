@@ -183,13 +183,18 @@
         <strong class="mk-status__title">记忆复盘 · {{ detail.user.name || '未命名' }}</strong>
         <span
           class="mk-status__meta"
-          title="该用户名下记忆痕迹总览：到期 = 到该复习而未复习；同族重复 = 归一化键相同、措辞不同的痕迹（组 / 条）；从未提取 = 一直没被当作复习点接住过"
+          title="该用户名下记忆痕迹总览：到期 = 到该复习而未复习；同族重复 = 归一化键相同、措辞不同的痕迹（组 / 条）；从未提取 = 一直没被当作复习点接住过。状态点示警阈值：占该用户痕迹 ≥20% 或到期 ≥5 条（阈值内为间隔复习的常态积压，不亮警示）"
         >痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} · 同族重复 {{ detail.summary.duplicatedFamilies }} 组/{{ detail.summary.duplicatedTraces }} 条 · 从未提取 {{ detail.summary.neverExtracted }} · FSRS {{ detail.summary.withFsrsState }}</span>
         <span class="mk-status__actions">
           <button type="button" class="mk-status__action" title="复制该用户记忆复盘的深链（可分享 / 收藏，打开即落位）" @click="copyDeepLink">复制深链</button>
           <button type="button" class="mk-status__action" :disabled="recomputingId === selectedId" title="对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹" @click="recompute(selectedId)">{{ recomputingId === selectedId ? '观察中…' : '重新观察' }}</button>
         </span>
       </header>
+
+      <!-- 明细态 error 出口（P1#12）：此前 error 渲染点只在列表态分支内，apply / rollback /
+           recompute 在明细态失败时人类完全无感知（只写 error.value 无人渲染）。除页内红字外
+           同步 toast.error（三处动作的 catch 内补），两层出口。 -->
+      <p v-if="error" class="mr__error" role="alert">{{ error }}</p>
 
       <div class="mr__detail">
       <!-- 1. 课内温故计划：本节该接几个 + 每个记忆点的负担与来源 -->
@@ -245,7 +250,7 @@
         </div>
         <div v-if="detail.duePreview.length" class="mk-table-scroll">
           <table class="mk-table">
-          <thead><tr><th>概念</th><th class="mk-num">记忆强度</th><th class="mk-num">掌握</th><th class="mk-num">提取次数</th><th>来源</th><th>到期时间</th></tr></thead>
+          <thead><tr><th>概念</th><th class="mk-num">记忆强度</th><th class="mk-num">掌握</th><th class="mk-num">提取次数</th><th>来源</th><th title="相对表达：已逾期 N 天 / 今天 / 明天 / N 天后；绝对到期时刻进悬停">到期</th></tr></thead>
           <tbody>
             <tr v-for="trace in detail.duePreview" :key="trace.conceptKey">
               <!-- 原型记忆明细表首列 = 知识点 strong；同族重复/归并建议首列是裸 key（无人类可读
@@ -265,7 +270,16 @@
               </td>
               <td class="mk-num">{{ trace.extractionCount }}</td>
               <td class="mr__sub">{{ trace.source }}</td>
-              <td>{{ trace.dueAt ? new Date(trace.dueAt).toLocaleString() : '—' }}</td>
+              <!-- 到期列（P1#13）：裸绝对时刻读不出「急不急」，改相对表达（已逾期 N 天 / N 天后）
+                   并给逾期着色；绝对时刻进 title（P2 到期带判例同源） -->
+              <td>
+                <span
+                  v-if="dueCell(trace).text !== '—'"
+                  :class="{ 'mr__overdue': dueCell(trace).overdue }"
+                  :title="dueCell(trace).title"
+                >{{ dueCell(trace).text }}</span>
+                <span v-else class="mk-na" title="该痕迹没有到期时间">—</span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -557,8 +571,15 @@ const busy = ref(false)
 const error = ref('')
 const includeVirtual = ref(false)
 const rows = ref<OverviewRow[]>([])
-/** 明细态状态点：该用户有到期积压 = 需关注（与列表态同一语义，不猜） */
-const detailTone = computed<'ok' | 'warn' | 'muted'>(() => (!detail.value ? 'muted' : detail.value.summary.due > 0 ? 'warn' : 'ok'))
+/** 明细态状态点：与页头 KPI 同一阈值语义（P1#13）——占该用户痕迹 ≥20% 或到期 ≥5 条才亮
+ *  需关注；阈值内是间隔复习的常态积压，不着琥珀（否则告警常亮、琥珀失去语义）。 */
+const detailTone = computed<'ok' | 'warn' | 'muted'>(() => {
+  if (!detail.value) return 'muted'
+  const s = detail.value.summary
+  if (!s.due) return 'ok'
+  const pct = s.traces ? (s.due / s.traces) * 100 : 100
+  return pct >= DUE_WARN_PCT || s.due >= DUE_WARN_PER_USER ? 'warn' : 'ok'
+})
 const totals = ref({
   users: 0,
   traces: 0,
@@ -573,6 +594,23 @@ const totals = ref({
 
 /* ---- 页头 KPI 区（2026-09-28 收口后的派生） ---- */
 const duePct = computed(() => (totals.value.traces ? Math.round((totals.value.due / totals.value.traces) * 100) : 0));
+
+/* 到期示警阈值（P1#13，2026-10-02）：此前「due>0 即琥珀」→ 间隔复习系统里告警永远亮着，
+   琥珀失去语义。收敛为：占全部痕迹 ≥20% 或人均 ≥5 条才抬警示；阈值写入 KPI title 披露。
+   （列表行内的到期压力档仍用行级阈值 ≥50%/≥12 条，那是单用户刻度，两处不共用一个数是刻度不同。） */
+const DUE_WARN_PCT = 20
+const DUE_WARN_PER_USER = 5
+const dueWarn = computed(() => {
+  const t = totals.value
+  if (!t.due) return false
+  const pct = t.traces ? (t.due / t.traces) * 100 : 100
+  const perUser = t.users ? t.due / t.users : t.due
+  return pct >= DUE_WARN_PCT || perUser >= DUE_WARN_PER_USER
+})
+const dueCardTitle = computed(() => {
+  const t = totals.value
+  return `到该复习而未复习 ${t.due} 条，占全部痕迹 ${duePct.value}%；示警阈值：占痕迹 ≥${DUE_WARN_PCT}% 或人均 ≥${DUE_WARN_PER_USER} 条（阈值内为间隔复习的常态积压，不着警示色）`
+})
 
 /* ===== 到期时间轴 + 记忆强度分布（newui 原型 renderMemory dueBand/distBand + sBuckets/histo 移植）=====
    数据窗口 = adminMemoryTracesApi.list（GET /admin/memory-traces，后端上限 200 条、updatedAt 倒序）。
@@ -629,6 +667,20 @@ function dayIndexFromToday(dueAt: string, epoch: Date): number {
   const a = Date.UTC(due.getFullYear(), due.getMonth(), due.getDate())
   const b = Date.UTC(epoch.getFullYear(), epoch.getMonth(), epoch.getDate())
   return Math.round((a - b) / 86400000)
+}
+
+/** 到期清单预览 · 到期格（P1#13）：相对表达（已逾期 N 天 / 今天 / 明天 / N 天后）+ 逾期着色，
+ *  绝对时刻进 title——裸 toLocaleString 读不出「急不急」，未来时刻还会被读成「已经到期」。 */
+function dueCell(trace: { dueAt?: string | null }): { text: string; overdue: boolean; title: string } {
+  if (!trace.dueAt) return { text: '—', overdue: false, title: '' }
+  const ts = new Date(trace.dueAt).getTime()
+  if (!Number.isFinite(ts)) return { text: '—', overdue: false, title: '' }
+  const abs = new Date(ts).toLocaleString('zh-CN', { hour12: false })
+  const days = dayIndexFromToday(trace.dueAt, new Date())
+  if (days < 0) return { text: `已逾期 ${-days} 天`, overdue: true, title: `到期时刻 ${abs}（已逾期 ${-days} 天）` }
+  if (days === 0) return { text: '今天到期', overdue: false, title: `到期时刻 ${abs}（今天内到期）` }
+  if (days === 1) return { text: '明天到期', overdue: false, title: `到期时刻 ${abs}（明天到期）` }
+  return { text: `${days} 天后`, overdue: false, title: `到期时刻 ${abs}（${days} 天后到期）` }
 }
 
 const mrDueBand = computed(() => {
@@ -721,8 +773,8 @@ const overviewCards = computed<OverviewCard[]>(() => {
       label: '当前到期',
       value: t.due,
       hint: t.traces ? `占痕迹 ${duePct.value}%` : '暂无痕迹',
-      tone: t.due > 0 ? 'warn' : '',
-      title: `到该复习而未复习 ${t.due} 条，占全部痕迹 ${duePct.value}%`
+      tone: dueWarn.value ? 'warn' : '',
+      title: dueCardTitle.value
     },
     {
       label: '需人工看',
@@ -834,6 +886,8 @@ async function applySelected() {
     await loadOverview()
   } catch (e) {
     error.value = errMsg(e)
+    // 明细态失败必须有感知（P1#12）：error 渲染点在明细区之外还可能在滚动视野外，toast 兜底
+    toast.error(`执行归并失败：${errMsg(e)}`)
   } finally {
     busy.value = false
   }
@@ -857,6 +911,7 @@ async function rollbackOne(canonical: string) {
     await loadOverview()
   } catch (e) {
     error.value = errMsg(e)
+    toast.error(`回滚失败：${errMsg(e)}`)
   } finally {
     busy.value = false
   }
@@ -961,6 +1016,7 @@ async function recompute(userId: string) {
     toast.success('已完成一次记忆复盘')
   } catch (e) {
     error.value = errMsg(e)
+    toast.error(`重新观察失败：${errMsg(e)}`)
   } finally {
     busy.value = false
     recomputingId.value = ''
@@ -1049,6 +1105,10 @@ onMounted(async () => {
 .mr__row--active { background: var(--mk-blue-bg); }
 /* 列表卡内的错误行同样要内边距（与卡头对齐） */
 .mr__error { margin: 6px 16px; color: var(--mk-red-strong); font-size: var(--mk-fs-micro); }
+
+/* 到期清单预览 · 逾期格（P1#13）：逾期红、未来时刻中性墨色——此前未来时刻裸 toLocaleString
+   与逾期时刻同貌，「急不急」要人肉换算 */
+.mr__overdue { color: var(--mk-red-strong); font-weight: 600; }
 
 .mr__warn { margin: 8px 16px 14px; padding: 8px 10px; border-radius: var(--mk-radius-xl); border: 1px solid color-mix(in srgb, var(--mk-amber) 30%, transparent); background: color-mix(in srgb, var(--mk-amber) 6%, transparent); font-size: var(--mk-fs-micro); }
 .mr__chip { display: inline-block; margin-left: 8px; }

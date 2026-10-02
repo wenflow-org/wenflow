@@ -81,6 +81,15 @@ function makeReport(overrides: Partial<HealthCenterSummaryReport> = {}): HealthC
     },
     global: { total: 8, aux: 3, mainline: 5, handlerOnly: 0, abnormalSkills: 2 },
   };
+  // P1#28/#30 夹具：不同 base（观察服务卡按 tone 排序）+ fixHint（常驻展示在检查行动作区）。
+  // base 分配 = manifest(error items0/1) → core.yaml(warn item2) → 双向 ok（items3 起）→
+  // runtime(warn item12 runtime-prompt)：ok 卡插入序先于 warn 卡，排序后必须反超。
+  base.health.items[0].base = 'file:manifest';
+  base.health.items[0].fixHint = '点此一键修复：自动重新编译产物并同步数据库；若产物是代码库跟踪文件，完成后需提交代码';
+  base.health.items[1].base = 'file:manifest';
+  base.health.items[2].base = 'file:core.yaml';
+  base.health.items[2].fixHint = '需开发处理：定位差异后执行契约同步';
+  base.health.items[12].base = 'runtime';
   return { ...base, ...overrides };
 }
 
@@ -111,23 +120,25 @@ describe('健康中心（G1）', () => {
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
     expect(getSummaryMock).toHaveBeenCalledWith(false);
 
-    // 全局状态条：技能数 / 上线 / 异常（含异常技能）
+    // 全局状态条：技能数 / 异常（含异常技能）；「上线 N/M」2026-10-02 下沉概要 KPI hint（用词统一「已上线」）
     const bar = wrapper.find('.mk-status').text();
     expect(bar).toContain('技能 8');
-    expect(bar).toContain('上线 2/8');
     expect(bar).toContain('异常 6');
+    expect(bar).not.toContain('上线');
 
-    // 概要 KPI 四张（共享 MkKpi 组件：标签 + 数字 + 副行，点击跳转锚点）
+    // 概要 KPI 四张（P1#30 语义统一：value = 需处理数（0=好），总数/达成数下沉 hint，
+    // tone 只挂真正异常卡——修复「登记总数 8 被着成警示琥珀」）
     const cards = wrapper.findAll('.mk-kpi');
     expect(cards.length).toBe(4);
-    expect(cards[0].text()).toContain('13');      // 健康检查
-    expect(cards[0].text()).toContain('4 异常');
-    expect(cards[1].text()).toContain('3');       // 漂移：只计契约 1 + W4 2，运行时遥测不计
-    expect(cards[1].text()).toContain('需处理');
-    expect(cards[2].text()).toContain('8');       // 对账
-    expect(cards[2].text()).toContain('5 异常');  // 1+0+2+1+0+1，zombieSkillActive 3 与健康检查同源不计
-    expect(cards[3].text()).toContain('2');           // 已上线
-    expect(cards[3].text()).toContain('待上线 6 个');  // 副行与其余三张统一为状态词（原为裸 `/ 8`）
+    expect(cards[0].text()).toContain('4');                    // 检查异常（value=异常数）
+    expect(cards[0].text()).toContain('健康检查共 13 项');       // 总数下沉 hint
+    expect(cards[1].text()).toContain('3');                    // 漂移需处理：契约 1 + W4 2
+    expect(cards[1].text()).toContain('契约 1 + 哈希 2');
+    expect(cards[2].text()).toContain('5');                    // 对账异常（value=异常数，非登记总数）
+    expect(cards[2].text()).toContain('登记 8 项');
+    expect(cards[3].text()).toContain('2');                    // 完成度未达标
+    expect(cards[3].text()).toContain('已上线 2/8');            // 达成数下沉 hint + 用词统一「已上线」
+    expect(cards[3].attributes('title')).toContain('未达 live');
 
     // 健康检查 13 行全部渲染；异常/关注项默认展开，正常项收进折叠组
     const rows = wrapper.findAll('.hc-check__row');
@@ -143,6 +154,23 @@ describe('健康中心（G1）', () => {
 
     // 对账卡 tooltip 说明同源不重复计数
     expect(cards[2].attributes('title')).toContain('同源');
+  });
+
+  it('P2 顺手 + P1#28：服务卡按 tone 排序（error→warn→ok）；fixHint 常驻在检查行动作区', async () => {
+    getSummaryMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
+    const wrapper = await mountWorkbench();
+
+    // 夹具插入序里 ok 卡（双向对账，items[3]）先于 warn 卡（运行时遥测，items[11]）；
+    // 排序后 warn 卡必须排在 ok 卡之前（修复前服务卡按 base 首次出现序渲染）
+    const names = wrapper.findAll('.hc-services .service__name').map((el) => el.text());
+    expect(names[0]).toBe('契约清单（manifest）');
+    expect(names.indexOf('运行时遥测')).toBeLessThan(names.indexOf('双向对账'));
+
+    // fixHint 常驻（P1#28）：修复说明渲染在检查行动作区（此前只在 409 错误 toast 里透出）
+    const hints = wrapper.findAll('.hc-check__fixhint');
+    expect(hints.length).toBe(2);
+    expect(hints[0].text()).toContain('一键修复');
+    expect(hints[0].attributes('title')).toContain('一键修复');
   });
 
   it('行内明细展开：异常项默认展开，点击收起；明细截断提示', async () => {

@@ -60,7 +60,9 @@
         <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">连接与验证</h3>
-        <span class="mk-badge" :class="connBadge.cls">{{ connBadge.text }}</span>
+        <!-- connBadge 附「N 前」（P1#32 子集）：连接状态是上次拉取/探测落库的结果，
+             无时间的「连接正常」会把陈旧快照读成实时健康，误导熔断判断 -->
+        <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
         <button v-if="dirty.has('conn')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['conn'])">{{ saving ? '保存中…' : '保存连接' }}</button>
       </div>
       <!-- 接入域（live 层）读取失败：表单全空不得伪装成「未配置」，显式失败 + 重试 -->
@@ -108,7 +110,9 @@
             </template>
             <div v-else class="ac-models__empty">
               <span class="ac-models__empty-icon" aria-hidden="true">﹢</span>
-              <span v-if="fetchError">拉取失败：{{ fetchError }}。请检查服务地址 / 密钥后重试。</span>
+              <!-- fetchError 人话化（P2）：裸 errMsg（HTTP 枚举/堆栈词）对运营不可读——
+                   人话一句给动作，错误原文进 title 供排查贴单 -->
+              <span v-if="fetchError" :title="`错误原文：${fetchError}`">模型清单拉取失败：请检查服务地址与密钥是否正确、服务商是否可访问，然后点右上角「重新拉取」。</span>
               <span v-else>模型清单尚未拉取（连接状态：{{ connBadge.text }}）。平台实际在用模型见「模型总览」tab 的解析结果；点击右上角「连接并拉取」获取服务商列表。</span>
             </div>
           </div>
@@ -780,6 +784,8 @@ const fetchedModels = ref<string[]>([])
 const keySet = ref(false)
 const keyVisible = ref(false)
 const connectionStatus = ref('unknown')
+/** 本次会话内「连接并拉取」成功的时刻（connBadge「N 前」的时间源优先级高于 DB 落库值） */
+const connCheckedAt = ref('')
 /** 最近一次「连接并拉取」的失败原因：展示在模型清单空态，避免错误上下文丢失（刷新即消失） */
 const fetchError = ref('')
 /** 曾成功拉取过模型列表（含从已保存配置载入）：此后提交才携带 availableModels，避免空数组清空后端列表 */
@@ -1087,9 +1093,20 @@ const statusTone = computed(() => {
   return 'mk-status--warn'
 })
 const connBadge = computed(() => {
-  if (connectionStatus.value === 'connected') return { cls: 'mk-badge--ok', text: '连接正常' }
-  if (connectionStatus.value === 'failed') return { cls: 'mk-badge--bad', text: '上次连接失败' }
+  // 附「N 前」时间戳（P1#32 子集）：连接状态是上次连通性验证的结果，无时间的「连接正常」
+  // 会把陈旧快照读成实时健康。时间源 = 本次会话刚拉取成功的时刻，否则退回 DB lastCheckedAt
+  // （与 connectionStatus 同源；不用健康快照 checkedAt——那是能力探测时间，语义不同）
+  const at = connCheckedAt.value || cfg.value?.lastCheckedAt || ''
+  const suffix = at ? ` · ${timeAgo(at)}` : ''
+  if (connectionStatus.value === 'connected') return { cls: 'mk-badge--ok', text: `连接正常${suffix}` }
+  if (connectionStatus.value === 'failed') return { cls: 'mk-badge--bad', text: '上次拉取失败' }
   return { cls: 'mk-badge--muted', text: '连接未探测' }
+})
+/** connBadge 悬停口径：说明「正常/失败」是什么时候、什么动作留下的，不冒充实时探活 */
+const connBadgeTitle = computed(() => {
+  const at = connCheckedAt.value || cfg.value?.lastCheckedAt || ''
+  const when = at ? `上次验证：${new Date(at).toLocaleString('zh-CN', { hour12: false })}` : '尚无验证记录'
+  return `${when}（「连接并拉取」成功/失败时更新）。连接状态为上次拉取的结果，非实时探活`
 })
 
 /** 已配置密钥但改了服务地址且 Key 留空：密钥不会随地址迁移，需提示重新输入 */
@@ -1129,6 +1146,7 @@ async function fetchModels() {
     fetchedModelsEndpoint.value = form.apiUrl.trim()
     modelsFetchedOnce.value = true
     connectionStatus.value = 'connected'
+    connCheckedAt.value = new Date().toISOString()
     fetchError.value = ''
     markDirty('conn')
     toast.info(list.length ? `已获取 ${list.length} 个模型，记得保存` : '连接成功，但服务未返回模型列表')
