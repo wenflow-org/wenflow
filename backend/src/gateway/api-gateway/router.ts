@@ -389,15 +389,20 @@ export class APIRouter {
         return null;
       }
 
-      // user-provider 与平台同渠道时继承其结构化输出默认（渠道开关对两条路由来源同等生效）
+      // user-provider 与平台同渠道时继承其思考模式/强度/结构化输出默认
+      // （此前硬编码 'default' → 上游预思考开启，path-gen 类长任务被烧慢超时）
       let responseFormat: 'none' | 'json_object' = 'none';
+      let thinkingMode: 'default' | 'enabled' | 'disabled' = 'default';
+      let reasoningEffort: 'default' | 'low' | 'high' | 'max' = 'default';
       try {
         const plat = await systemPrisma.platform_api_configs.findUnique({
           where: { id: 'platform' },
-          select: { defaultResponseFormat: true }
+          select: { defaultResponseFormat: true, defaultThinkingMode: true, defaultReasoningEffort: true }
         });
         responseFormat = this.normalizeResponseFormat(plat?.defaultResponseFormat);
-      } catch { /* 读不到按 none */ }
+        thinkingMode = this.normalizeThinkingMode(plat?.defaultThinkingMode || 'default');
+        reasoningEffort = this.normalizeReasoningEffort(plat?.defaultReasoningEffort || 'default');
+      } catch { /* 读不到按默认 */ }
 
       return {
         providerId: `user-provider:${userId}`,
@@ -406,8 +411,8 @@ export class APIRouter {
         // 用户自有 provider:模型身份是用户自己的供应商空间,不套平台别名覆盖(有意豁免)
         model: this.resolveModel(config.chatModel),
         reasoningModel: config.reasoningModel ? this.resolveModel(config.reasoningModel) : undefined,
-        thinkingMode: 'default',
-        reasoningEffort: 'default',
+        thinkingMode,
+        reasoningEffort,
         temperature: 0.7,
         maxTokens: 2000,
         responseFormat,
