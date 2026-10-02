@@ -65,6 +65,12 @@ model agent_prompts {
   /// 历史 seed 写入的副本已废弃，运行时仅作最后兜底；见 doc/MODEL_GATEWAY_DESIGN.md §4.9。
   model        String?
   status       String    @default("draft")
+  /// A/B 实验变体标签（NULL=基线版本；非空=实验臂，可与基线同时 ACTIVE，按权重分流）。
+  /// 不变量更新（2026-10-01）：原「DB 内永远只有一个 ACTIVE」细化为「唯一基线（variant=NULL）+
+  /// 若干实验臂」——发布/同步只归档基线，变体行不受影响。
+  variant      String?
+  /// 变体流量权重（1-99，百分比）；基线恒为剩余流量，基线行该列为 NULL
+  trafficWeight Int?
   createdBy    String
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @default(now())

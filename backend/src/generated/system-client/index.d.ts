@@ -3990,6 +3990,7 @@ export namespace Prisma {
     coreVersion: number | null
     temperature: number | null
     maxTokens: number | null
+    trafficWeight: number | null
     useCount: number | null
     avgLatency: number | null
     successRate: number | null
@@ -4000,6 +4001,7 @@ export namespace Prisma {
     coreVersion: number | null
     temperature: number | null
     maxTokens: number | null
+    trafficWeight: number | null
     useCount: number | null
     avgLatency: number | null
     successRate: number | null
@@ -4024,6 +4026,8 @@ export namespace Prisma {
     maxTokens: number | null
     model: string | null
     status: string | null
+    variant: string | null
+    trafficWeight: number | null
     createdBy: string | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -4053,6 +4057,8 @@ export namespace Prisma {
     maxTokens: number | null
     model: string | null
     status: string | null
+    variant: string | null
+    trafficWeight: number | null
     createdBy: string | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -4082,6 +4088,8 @@ export namespace Prisma {
     maxTokens: number
     model: number
     status: number
+    variant: number
+    trafficWeight: number
     createdBy: number
     createdAt: number
     updatedAt: number
@@ -4099,6 +4107,7 @@ export namespace Prisma {
     coreVersion?: true
     temperature?: true
     maxTokens?: true
+    trafficWeight?: true
     useCount?: true
     avgLatency?: true
     successRate?: true
@@ -4109,6 +4118,7 @@ export namespace Prisma {
     coreVersion?: true
     temperature?: true
     maxTokens?: true
+    trafficWeight?: true
     useCount?: true
     avgLatency?: true
     successRate?: true
@@ -4133,6 +4143,8 @@ export namespace Prisma {
     maxTokens?: true
     model?: true
     status?: true
+    variant?: true
+    trafficWeight?: true
     createdBy?: true
     createdAt?: true
     updatedAt?: true
@@ -4162,6 +4174,8 @@ export namespace Prisma {
     maxTokens?: true
     model?: true
     status?: true
+    variant?: true
+    trafficWeight?: true
     createdBy?: true
     createdAt?: true
     updatedAt?: true
@@ -4191,6 +4205,8 @@ export namespace Prisma {
     maxTokens?: true
     model?: true
     status?: true
+    variant?: true
+    trafficWeight?: true
     createdBy?: true
     createdAt?: true
     updatedAt?: true
@@ -4307,6 +4323,8 @@ export namespace Prisma {
     maxTokens: number | null
     model: string | null
     status: string
+    variant: string | null
+    trafficWeight: number | null
     createdBy: string
     createdAt: Date
     updatedAt: Date
@@ -4355,6 +4373,8 @@ export namespace Prisma {
     maxTokens?: boolean
     model?: boolean
     status?: boolean
+    variant?: boolean
+    trafficWeight?: boolean
     createdBy?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -4384,6 +4404,8 @@ export namespace Prisma {
     maxTokens?: boolean
     model?: boolean
     status?: boolean
+    variant?: boolean
+    trafficWeight?: boolean
     createdBy?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -4413,6 +4435,8 @@ export namespace Prisma {
     maxTokens?: boolean
     model?: boolean
     status?: boolean
+    variant?: boolean
+    trafficWeight?: boolean
     createdBy?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -4434,6 +4458,11 @@ export namespace Prisma {
       name: string
       description: string | null
       systemPrompt: string
+      /**
+       * @deprecated（2026-09-26）二级编译（prompt-compiler 服务）已退役：prompt 调整统一走
+       * v4 确定性编译链（core.yaml → skill.*.md → 本表 systemPrompt 镜像）。以下 6 列为历史
+       * 编译产物残留，已无任何读写方；列保留防历史数据丢失，摘除待后续迁移批次统一处理。
+       */
       compiledSystemPrompt: string | null
       compileStatus: string | null
       compileError: string | null
@@ -4456,6 +4485,16 @@ export namespace Prisma {
        */
       model: string | null
       status: string
+      /**
+       * A/B 实验变体标签（NULL=基线版本；非空=实验臂，可与基线同时 ACTIVE，按权重分流）。
+       * 不变量更新（2026-10-01）：原「DB 内永远只有一个 ACTIVE」细化为「唯一基线（variant=NULL）+
+       * 若干实验臂」——发布/同步只归档基线，变体行不受影响。
+       */
+      variant: string | null
+      /**
+       * 变体流量权重（1-99，百分比）；基线恒为剩余流量，基线行该列为 NULL
+       */
+      trafficWeight: number | null
       createdBy: string
       createdAt: Date
       updatedAt: Date
@@ -4875,6 +4914,8 @@ export namespace Prisma {
     readonly maxTokens: FieldRef<"agent_prompts", 'Int'>
     readonly model: FieldRef<"agent_prompts", 'String'>
     readonly status: FieldRef<"agent_prompts", 'String'>
+    readonly variant: FieldRef<"agent_prompts", 'String'>
+    readonly trafficWeight: FieldRef<"agent_prompts", 'Int'>
     readonly createdBy: FieldRef<"agent_prompts", 'String'>
     readonly createdAt: FieldRef<"agent_prompts", 'DateTime'>
     readonly updatedAt: FieldRef<"agent_prompts", 'DateTime'>
@@ -8273,6 +8314,8 @@ export namespace Prisma {
     requestTimeoutMs: number | null
     maxLogicalRetries: number | null
     enabled: boolean | null
+    paramOverrides: string | null
+    fallbackChain: string | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -8291,6 +8334,8 @@ export namespace Prisma {
     requestTimeoutMs: number | null
     maxLogicalRetries: number | null
     enabled: boolean | null
+    paramOverrides: string | null
+    fallbackChain: string | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -8309,6 +8354,8 @@ export namespace Prisma {
     requestTimeoutMs: number
     maxLogicalRetries: number
     enabled: number
+    paramOverrides: number
+    fallbackChain: number
     createdAt: number
     updatedAt: number
     _all: number
@@ -8343,6 +8390,8 @@ export namespace Prisma {
     requestTimeoutMs?: true
     maxLogicalRetries?: true
     enabled?: true
+    paramOverrides?: true
+    fallbackChain?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -8361,6 +8410,8 @@ export namespace Prisma {
     requestTimeoutMs?: true
     maxLogicalRetries?: true
     enabled?: true
+    paramOverrides?: true
+    fallbackChain?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -8379,6 +8430,8 @@ export namespace Prisma {
     requestTimeoutMs?: true
     maxLogicalRetries?: true
     enabled?: true
+    paramOverrides?: true
+    fallbackChain?: true
     createdAt?: true
     updatedAt?: true
     _all?: true
@@ -8484,6 +8537,8 @@ export namespace Prisma {
     requestTimeoutMs: number | null
     maxLogicalRetries: number | null
     enabled: boolean
+    paramOverrides: string | null
+    fallbackChain: string | null
     createdAt: Date
     updatedAt: Date
     _count: Skill_model_configsCountAggregateOutputType | null
@@ -8521,6 +8576,8 @@ export namespace Prisma {
     requestTimeoutMs?: boolean
     maxLogicalRetries?: boolean
     enabled?: boolean
+    paramOverrides?: boolean
+    fallbackChain?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["skill_model_configs"]>
@@ -8539,6 +8596,8 @@ export namespace Prisma {
     requestTimeoutMs?: boolean
     maxLogicalRetries?: boolean
     enabled?: boolean
+    paramOverrides?: boolean
+    fallbackChain?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["skill_model_configs"]>
@@ -8557,6 +8616,8 @@ export namespace Prisma {
     requestTimeoutMs?: boolean
     maxLogicalRetries?: boolean
     enabled?: boolean
+    paramOverrides?: boolean
+    fallbackChain?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
@@ -8583,6 +8644,16 @@ export namespace Prisma {
       requestTimeoutMs: number | null
       maxLogicalRetries: number | null
       enabled: boolean
+      /**
+       * 参数覆盖（JSON：{"temperature":0.6,"topP":0.9,"maxTokens":32000}，null=继承 ACTIVE prompt）。
+       * 字段级跳过（缺哪个字段不覆盖哪个）；写入经路由 PUT 校验范围。
+       */
+      paramOverrides: string | null
+      /**
+       * 兜底模型链（JSON string[]，最多 2 跳；null=模型 registry 默认链；[]=显式无链）。
+       * 保存时校验：候选须在 registry、与主模型同 tier、且该 skill 通道可服务。
+       */
+      fallbackChain: string | null
       createdAt: Date
       updatedAt: Date
     }, ExtArgs["result"]["skill_model_configs"]>
@@ -8991,6 +9062,8 @@ export namespace Prisma {
     readonly requestTimeoutMs: FieldRef<"skill_model_configs", 'Int'>
     readonly maxLogicalRetries: FieldRef<"skill_model_configs", 'Int'>
     readonly enabled: FieldRef<"skill_model_configs", 'Boolean'>
+    readonly paramOverrides: FieldRef<"skill_model_configs", 'String'>
+    readonly fallbackChain: FieldRef<"skill_model_configs", 'String'>
     readonly createdAt: FieldRef<"skill_model_configs", 'DateTime'>
     readonly updatedAt: FieldRef<"skill_model_configs", 'DateTime'>
   }
@@ -16328,6 +16401,8 @@ export namespace Prisma {
     maxTokens: 'maxTokens',
     model: 'model',
     status: 'status',
+    variant: 'variant',
+    trafficWeight: 'trafficWeight',
     createdBy: 'createdBy',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt',
@@ -16418,6 +16493,8 @@ export namespace Prisma {
     requestTimeoutMs: 'requestTimeoutMs',
     maxLogicalRetries: 'maxLogicalRetries',
     enabled: 'enabled',
+    paramOverrides: 'paramOverrides',
+    fallbackChain: 'fallbackChain',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   };
@@ -16827,6 +16904,8 @@ export namespace Prisma {
     maxTokens?: IntNullableFilter<"agent_prompts"> | number | null
     model?: StringNullableFilter<"agent_prompts"> | string | null
     status?: StringFilter<"agent_prompts"> | string
+    variant?: StringNullableFilter<"agent_prompts"> | string | null
+    trafficWeight?: IntNullableFilter<"agent_prompts"> | number | null
     createdBy?: StringFilter<"agent_prompts"> | string
     createdAt?: DateTimeFilter<"agent_prompts"> | Date | string
     updatedAt?: DateTimeFilter<"agent_prompts"> | Date | string
@@ -16856,6 +16935,8 @@ export namespace Prisma {
     maxTokens?: SortOrderInput | SortOrder
     model?: SortOrderInput | SortOrder
     status?: SortOrder
+    variant?: SortOrderInput | SortOrder
+    trafficWeight?: SortOrderInput | SortOrder
     createdBy?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -16889,6 +16970,8 @@ export namespace Prisma {
     maxTokens?: IntNullableFilter<"agent_prompts"> | number | null
     model?: StringNullableFilter<"agent_prompts"> | string | null
     status?: StringFilter<"agent_prompts"> | string
+    variant?: StringNullableFilter<"agent_prompts"> | string | null
+    trafficWeight?: IntNullableFilter<"agent_prompts"> | number | null
     createdBy?: StringFilter<"agent_prompts"> | string
     createdAt?: DateTimeFilter<"agent_prompts"> | Date | string
     updatedAt?: DateTimeFilter<"agent_prompts"> | Date | string
@@ -16918,6 +17001,8 @@ export namespace Prisma {
     maxTokens?: SortOrderInput | SortOrder
     model?: SortOrderInput | SortOrder
     status?: SortOrder
+    variant?: SortOrderInput | SortOrder
+    trafficWeight?: SortOrderInput | SortOrder
     createdBy?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -16955,6 +17040,8 @@ export namespace Prisma {
     maxTokens?: IntNullableWithAggregatesFilter<"agent_prompts"> | number | null
     model?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
     status?: StringWithAggregatesFilter<"agent_prompts"> | string
+    variant?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
+    trafficWeight?: IntNullableWithAggregatesFilter<"agent_prompts"> | number | null
     createdBy?: StringWithAggregatesFilter<"agent_prompts"> | string
     createdAt?: DateTimeWithAggregatesFilter<"agent_prompts"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"agent_prompts"> | Date | string
@@ -17292,6 +17379,8 @@ export namespace Prisma {
     requestTimeoutMs?: IntNullableFilter<"skill_model_configs"> | number | null
     maxLogicalRetries?: IntNullableFilter<"skill_model_configs"> | number | null
     enabled?: BoolFilter<"skill_model_configs"> | boolean
+    paramOverrides?: StringNullableFilter<"skill_model_configs"> | string | null
+    fallbackChain?: StringNullableFilter<"skill_model_configs"> | string | null
     createdAt?: DateTimeFilter<"skill_model_configs"> | Date | string
     updatedAt?: DateTimeFilter<"skill_model_configs"> | Date | string
   }
@@ -17310,6 +17399,8 @@ export namespace Prisma {
     requestTimeoutMs?: SortOrderInput | SortOrder
     maxLogicalRetries?: SortOrderInput | SortOrder
     enabled?: SortOrder
+    paramOverrides?: SortOrderInput | SortOrder
+    fallbackChain?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -17331,6 +17422,8 @@ export namespace Prisma {
     requestTimeoutMs?: IntNullableFilter<"skill_model_configs"> | number | null
     maxLogicalRetries?: IntNullableFilter<"skill_model_configs"> | number | null
     enabled?: BoolFilter<"skill_model_configs"> | boolean
+    paramOverrides?: StringNullableFilter<"skill_model_configs"> | string | null
+    fallbackChain?: StringNullableFilter<"skill_model_configs"> | string | null
     createdAt?: DateTimeFilter<"skill_model_configs"> | Date | string
     updatedAt?: DateTimeFilter<"skill_model_configs"> | Date | string
   }, "id" | "skillId">
@@ -17349,6 +17442,8 @@ export namespace Prisma {
     requestTimeoutMs?: SortOrderInput | SortOrder
     maxLogicalRetries?: SortOrderInput | SortOrder
     enabled?: SortOrder
+    paramOverrides?: SortOrderInput | SortOrder
+    fallbackChain?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: skill_model_configsCountOrderByAggregateInput
@@ -17375,6 +17470,8 @@ export namespace Prisma {
     requestTimeoutMs?: IntNullableWithAggregatesFilter<"skill_model_configs"> | number | null
     maxLogicalRetries?: IntNullableWithAggregatesFilter<"skill_model_configs"> | number | null
     enabled?: BoolWithAggregatesFilter<"skill_model_configs"> | boolean
+    paramOverrides?: StringNullableWithAggregatesFilter<"skill_model_configs"> | string | null
+    fallbackChain?: StringNullableWithAggregatesFilter<"skill_model_configs"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"skill_model_configs"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"skill_model_configs"> | Date | string
   }
@@ -18293,6 +18390,8 @@ export namespace Prisma {
     maxTokens?: number | null
     model?: string | null
     status?: string
+    variant?: string | null
+    trafficWeight?: number | null
     createdBy: string
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -18322,6 +18421,8 @@ export namespace Prisma {
     maxTokens?: number | null
     model?: string | null
     status?: string
+    variant?: string | null
+    trafficWeight?: number | null
     createdBy: string
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -18351,6 +18452,8 @@ export namespace Prisma {
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
     status?: StringFieldUpdateOperationsInput | string
+    variant?: NullableStringFieldUpdateOperationsInput | string | null
+    trafficWeight?: NullableIntFieldUpdateOperationsInput | number | null
     createdBy?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -18380,6 +18483,8 @@ export namespace Prisma {
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
     status?: StringFieldUpdateOperationsInput | string
+    variant?: NullableStringFieldUpdateOperationsInput | string | null
+    trafficWeight?: NullableIntFieldUpdateOperationsInput | number | null
     createdBy?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -18409,6 +18514,8 @@ export namespace Prisma {
     maxTokens?: number | null
     model?: string | null
     status?: string
+    variant?: string | null
+    trafficWeight?: number | null
     createdBy: string
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -18438,6 +18545,8 @@ export namespace Prisma {
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
     status?: StringFieldUpdateOperationsInput | string
+    variant?: NullableStringFieldUpdateOperationsInput | string | null
+    trafficWeight?: NullableIntFieldUpdateOperationsInput | number | null
     createdBy?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -18467,6 +18576,8 @@ export namespace Prisma {
     maxTokens?: NullableIntFieldUpdateOperationsInput | number | null
     model?: NullableStringFieldUpdateOperationsInput | string | null
     status?: StringFieldUpdateOperationsInput | string
+    variant?: NullableStringFieldUpdateOperationsInput | string | null
+    trafficWeight?: NullableIntFieldUpdateOperationsInput | number | null
     createdBy?: StringFieldUpdateOperationsInput | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -18869,6 +18980,8 @@ export namespace Prisma {
     requestTimeoutMs?: number | null
     maxLogicalRetries?: number | null
     enabled?: boolean
+    paramOverrides?: string | null
+    fallbackChain?: string | null
     createdAt?: Date | string
     updatedAt: Date | string
   }
@@ -18887,6 +19000,8 @@ export namespace Prisma {
     requestTimeoutMs?: number | null
     maxLogicalRetries?: number | null
     enabled?: boolean
+    paramOverrides?: string | null
+    fallbackChain?: string | null
     createdAt?: Date | string
     updatedAt: Date | string
   }
@@ -18905,6 +19020,8 @@ export namespace Prisma {
     requestTimeoutMs?: NullableIntFieldUpdateOperationsInput | number | null
     maxLogicalRetries?: NullableIntFieldUpdateOperationsInput | number | null
     enabled?: BoolFieldUpdateOperationsInput | boolean
+    paramOverrides?: NullableStringFieldUpdateOperationsInput | string | null
+    fallbackChain?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -18923,6 +19040,8 @@ export namespace Prisma {
     requestTimeoutMs?: NullableIntFieldUpdateOperationsInput | number | null
     maxLogicalRetries?: NullableIntFieldUpdateOperationsInput | number | null
     enabled?: BoolFieldUpdateOperationsInput | boolean
+    paramOverrides?: NullableStringFieldUpdateOperationsInput | string | null
+    fallbackChain?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -18941,6 +19060,8 @@ export namespace Prisma {
     requestTimeoutMs?: number | null
     maxLogicalRetries?: number | null
     enabled?: boolean
+    paramOverrides?: string | null
+    fallbackChain?: string | null
     createdAt?: Date | string
     updatedAt: Date | string
   }
@@ -18959,6 +19080,8 @@ export namespace Prisma {
     requestTimeoutMs?: NullableIntFieldUpdateOperationsInput | number | null
     maxLogicalRetries?: NullableIntFieldUpdateOperationsInput | number | null
     enabled?: BoolFieldUpdateOperationsInput | boolean
+    paramOverrides?: NullableStringFieldUpdateOperationsInput | string | null
+    fallbackChain?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -18977,6 +19100,8 @@ export namespace Prisma {
     requestTimeoutMs?: NullableIntFieldUpdateOperationsInput | number | null
     maxLogicalRetries?: NullableIntFieldUpdateOperationsInput | number | null
     enabled?: BoolFieldUpdateOperationsInput | boolean
+    paramOverrides?: NullableStringFieldUpdateOperationsInput | string | null
+    fallbackChain?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -20163,6 +20288,8 @@ export namespace Prisma {
     maxTokens?: SortOrder
     model?: SortOrder
     status?: SortOrder
+    variant?: SortOrder
+    trafficWeight?: SortOrder
     createdBy?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -20178,6 +20305,7 @@ export namespace Prisma {
     coreVersion?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
+    trafficWeight?: SortOrder
     useCount?: SortOrder
     avgLatency?: SortOrder
     successRate?: SortOrder
@@ -20202,6 +20330,8 @@ export namespace Prisma {
     maxTokens?: SortOrder
     model?: SortOrder
     status?: SortOrder
+    variant?: SortOrder
+    trafficWeight?: SortOrder
     createdBy?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -20231,6 +20361,8 @@ export namespace Prisma {
     maxTokens?: SortOrder
     model?: SortOrder
     status?: SortOrder
+    variant?: SortOrder
+    trafficWeight?: SortOrder
     createdBy?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -20246,6 +20378,7 @@ export namespace Prisma {
     coreVersion?: SortOrder
     temperature?: SortOrder
     maxTokens?: SortOrder
+    trafficWeight?: SortOrder
     useCount?: SortOrder
     avgLatency?: SortOrder
     successRate?: SortOrder
@@ -20474,6 +20607,8 @@ export namespace Prisma {
     requestTimeoutMs?: SortOrder
     maxLogicalRetries?: SortOrder
     enabled?: SortOrder
+    paramOverrides?: SortOrder
+    fallbackChain?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -20499,6 +20634,8 @@ export namespace Prisma {
     requestTimeoutMs?: SortOrder
     maxLogicalRetries?: SortOrder
     enabled?: SortOrder
+    paramOverrides?: SortOrder
+    fallbackChain?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -20517,6 +20654,8 @@ export namespace Prisma {
     requestTimeoutMs?: SortOrder
     maxLogicalRetries?: SortOrder
     enabled?: SortOrder
+    paramOverrides?: SortOrder
+    fallbackChain?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }

@@ -402,6 +402,8 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
       where: {
         agentId: { in: acceptableIds },
         status: 'ACTIVE',
+        // A/B 变体（variant 非空）与文件不构成同一不变量：同步只比对/维护**基线**行
+        variant: null,
       },
       orderBy: [
         { publishedAt: 'desc' },
@@ -449,6 +451,8 @@ async function syncCoreAgentPrompts(prisma: PrismaClient): Promise<{
         where: {
           agentId: { in: acceptableIds },
           status: 'ACTIVE',
+          // 只归档旧基线；A/B 变体行由 prompt-lab 管理，不被启动同步清掉
+          variant: null,
         },
         data: {
           status: 'ARCHIVED',
@@ -494,6 +498,7 @@ export async function findMissingCorePromptSeeds(prisma: PrismaClient): Promise<
     where: {
       agentId: { in: acceptableIds },
       status: 'ACTIVE',
+      variant: null,
     },
     select: { agentId: true },
   });

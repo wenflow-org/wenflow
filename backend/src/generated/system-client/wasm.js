@@ -169,6 +169,8 @@ exports.Prisma.Agent_promptsScalarFieldEnum = {
   maxTokens: 'maxTokens',
   model: 'model',
   status: 'status',
+  variant: 'variant',
+  trafficWeight: 'trafficWeight',
   createdBy: 'createdBy',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
@@ -247,6 +249,8 @@ exports.Prisma.Skill_model_configsScalarFieldEnum = {
   requestTimeoutMs: 'requestTimeoutMs',
   maxLogicalRetries: 'maxLogicalRetries',
   enabled: 'enabled',
+  paramOverrides: 'paramOverrides',
+  fallbackChain: 'fallbackChain',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };

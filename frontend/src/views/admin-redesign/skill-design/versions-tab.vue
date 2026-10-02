@@ -1,6 +1,108 @@
 <template>
   <!-- 版本：核心文件版本（协议发布） + Prompt 版本（单一入口，原协议 pill 已并入） -->
   <div class="sdp-versions">
+    <!-- A/B 实验变体（2026-10-01）：活着的版本；分流按 userId 分桶，指标近 7 天 -->
+    <section class="sdp-eng">
+      <header class="mk-section__head">
+        <h4>在线变体（A/B 实验）</h4>
+        <span class="sdp-sec-meta">
+          分流按 userId 稳定分桶（同人恒定）· 指标近 7 天 · 变体内容=克隆既有版本
+        </span>
+      </header>
+      <p v-if="variantMsg" class="sdp-versions-msg" :class="{ 'is-err': variantErr }">{{ variantMsg }}</p>
+      <div class="sdp-table-wrap">
+        <table class="mk-table">
+          <thead>
+            <tr>
+              <th>变体</th>
+              <th>版本</th>
+              <th title="占在线流量百分比；基线=剩余流量">权重</th>
+              <th class="mk-num" title="近 7 天按版本归因（prompt_call_logs）">近7天调用</th>
+              <th class="mk-num">成功率</th>
+              <th class="mk-num">均耗时</th>
+              <th class="mk-th--right mk-col--actions-wide">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="variantBaseline">
+              <td><span class="mk-badge mk-badge--ok">基线</span></td>
+              <td><span class="sdp-vtag mono">v{{ variantBaseline.version }}</span></td>
+              <td class="mk-na">剩余 {{ baselineRemainder }}%</td>
+              <td class="mk-num">{{ variantBaseline.metrics.calls }}</td>
+              <td class="mk-num">{{ fmtRate(variantBaseline.metrics.successRate) }}</td>
+              <td class="mk-num">{{ fmtDur(variantBaseline.metrics.avgDurationMs) }}</td>
+              <td><span class="mk-na">当前生效</span></td>
+            </tr>
+            <tr v-for="v in variantArms" :key="v.id">
+              <td><span class="mk-badge">{{ v.variant }}</span></td>
+              <td><span class="sdp-vtag mono">v{{ v.version }}</span></td>
+              <td>
+                <input
+                  v-model.number="variantWeightEdit[v.id]"
+                  class="sdp-var__w"
+                  type="number"
+                  min="1"
+                  max="99"
+                  :disabled="variantBusy === v.id"
+                  @keydown.enter.prevent="saveVariantWeight(v)"
+                />
+                <button
+                  type="button"
+                  class="mk-link"
+                  :disabled="variantBusy === v.id || variantWeightEdit[v.id] === v.trafficWeight"
+                  @click="saveVariantWeight(v)"
+                >保存</button>
+              </td>
+              <td class="mk-num">{{ v.metrics.calls }}</td>
+              <td class="mk-num">{{ fmtRate(v.metrics.successRate) }}</td>
+              <td class="mk-num">{{ fmtDur(v.metrics.avgDurationMs) }}</td>
+              <td>
+                <div class="mk-actions">
+                  <button type="button" class="mk-link" :disabled="variantBusy === v.id" @click="promoteVariant(v)">晋级为基线</button>
+                  <button type="button" class="mk-link" :disabled="variantBusy === v.id" @click="stopVariant(v)">停止</button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!variantBaseline && !variantArms.length && !variantsLoading">
+              <td colspan="7"><span class="mk-na">加载中或该 skill 暂无 ACTIVE 版本</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 建变体：源版本默认为当前基线；新内容必须先经协议发布成为版本 -->
+      <div v-if="variantBaseline" class="sdp-var__create">
+        <span class="sdp-sec-meta">建对照臂：</span>
+        <label class="sdp-var__field">
+          变体键
+          <input v-model.trim="variantNewKey" class="sdp-var__key" placeholder="B" maxlength="8" />
+        </label>
+        <label class="sdp-var__field">
+          权重%
+          <input v-model.number="variantNewWeight" class="sdp-var__w" type="number" min="1" max="99" />
+        </label>
+        <label class="sdp-var__field">
+          源版本
+          <select v-model.number="variantNewSource" class="sdp-var__sel">
+            <option :value="variantBaseline.version">当前基线 v{{ variantBaseline.version }}</option>
+            <option v-for="v in variantSourceOptions" :key="v.version" :value="Number(v.version)">v{{ v.version }}</option>
+          </select>
+        </label>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="variantCreating" @click="createVariant">
+          {{ variantCreating ? '创建中…' : '创建变体' }}
+        </button>
+        <button
+          type="button"
+          class="mk-btn mk-btn--sm"
+          :disabled="variantCorePublishing || !variantNewKey"
+          title="需先在协议页签保存 core.yaml；发布守门检查照常执行，但不替换基线、不写 skill.md"
+          @click="publishCoreAsVariant"
+        >
+          {{ variantCorePublishing ? '发布中…' : '把当前 core.yaml 改动发布为变体' }}
+        </button>
+        <span class="mk-na">评测钉变体：调用侧带 promptRuntimeOverride.variantOverride（虚拟学习者试跑）</span>
+      </div>
+    </section>
     <section class="sdp-eng">
       <header class="mk-section__head">
         <h4>核心文件版本（协议发布）</h4>
@@ -109,7 +211,7 @@
  * 版本 tab（单一版本入口）：顶层版本 tab 吸收原「协议·版本历史」pill，
  * 双份版本数据按「核心文件版本（协议发布） / Prompt 版本」分区展示。
  */
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { adminAgentPromptsApi, adminPromptWorkbenchApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
 import { toast } from '@/utils/toast'
@@ -118,6 +220,179 @@ import { versionStatusText } from '../statusText'
 
 const props = defineProps<{ skillId: string; refreshTick: number }>()
 const emit = defineEmits<{ (e: 'core-rolled-back'): void }>()
+
+/* ---------- A/B 实验变体（2026-10-01） ---------- */
+interface VariantMetrics { calls: number; successRate: number | null; avgDurationMs: number | null }
+interface VariantRow {
+  id: string; version: number; name?: string; variant: string | null; trafficWeight: number | null
+  coreHash?: string | null; coreVersion?: number | null; publishedAt?: string | null; metrics: VariantMetrics
+}
+const variantsLoading = ref(false)
+const variantBaseline = ref<VariantRow | null>(null)
+const variantArms = ref<VariantRow[]>([])
+const variantBusy = ref('')
+const variantCreating = ref(false)
+const variantMsg = ref('')
+const variantErr = ref(false)
+const variantWeightEdit = ref<Record<string, number>>({})
+const variantNewKey = ref('B')
+const variantNewWeight = ref(10)
+const variantNewSource = ref<number | null>(null)
+
+const baselineRemainder = computed(() => Math.max(0, 100 - variantArms.value.reduce((a, v) => a + (Number(v.trafficWeight) || 0), 0)))
+const variantSourceOptions = computed(() => promptVersions.value.filter((v) => Number(v.version) !== variantBaseline.value?.version))
+
+function fmtRate(rate: number | null) {
+  return rate == null ? '—' : `${Math.round(rate * 100)}%`
+}
+function fmtDur(ms: number | null) {
+  if (ms == null) return '—'
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
+}
+
+async function loadVariants() {
+  const id = props.skillId
+  variantsLoading.value = true
+  try {
+    const res = await adminPromptWorkbenchApi.getPromptVariants(id)
+    if (id !== props.skillId) return
+    const d = res.data ?? {}
+    variantBaseline.value = (d.baseline as VariantRow) ?? null
+    variantArms.value = (d.variants as VariantRow[]) || []
+    const edits: Record<string, number> = {}
+    for (const v of variantArms.value) edits[v.id] = Number(v.trafficWeight) || 0
+    variantWeightEdit.value = edits
+    if (variantBaseline.value && variantNewSource.value == null) variantNewSource.value = variantBaseline.value.version
+    // 下一个可用变体键：A→B→C→D 里挑未占用的
+    const used = new Set(variantArms.value.map((v) => v.variant))
+    variantNewKey.value = ['A', 'B', 'C', 'D'].find((k) => !used.has(k)) || 'E'
+  } catch (e) {
+    if (id !== props.skillId) return
+    variantMsg.value = `变体加载失败：${errText(e)}`
+    variantErr.value = true
+  } finally {
+    if (id === props.skillId) variantsLoading.value = false
+  }
+}
+
+const variantCorePublishing = ref(false)
+
+/** A/B：把协议页签保存的 core.yaml 未发布改动，直接编译发布为实验臂（基线不动、md 不写） */
+async function publishCoreAsVariant() {
+  if (variantCorePublishing.value) return
+  const ok = await askConfirm({
+    title: '发布为变体',
+    message: [
+      '把当前 core.yaml 的未发布改动编译发布为变体 ' + variantNewKey.value + '（' + variantNewWeight.value + '% 流量）？',
+      '基线与线上文件保持不变；发布守门检查照常执行。'
+    ].join('\n'),
+    confirmText: '发布'
+  })
+  if (!ok) return
+  variantCorePublishing.value = true
+  variantMsg.value = ''
+  variantErr.value = false
+  try {
+    await adminPromptWorkbenchApi.publishCore({
+      skillId: props.skillId,
+      asVariant: { variant: variantNewKey.value, weight: Number(variantNewWeight.value) }
+    })
+    toast.success('变体 ' + variantNewKey.value + ' 已发布（' + variantNewWeight.value + '% 流量）')
+    await loadVariants()
+  } catch (e) {
+    const data = (e as { response?: { data?: { error?: string } } })?.response?.data
+    variantMsg.value = data?.error || `发布失败：${errText(e)}`
+    variantErr.value = true
+  } finally {
+    variantCorePublishing.value = false
+  }
+}
+async function createVariant() {
+  if (variantCreating.value) return
+  variantCreating.value = true
+  variantMsg.value = ''
+  variantErr.value = false
+  try {
+    await adminPromptWorkbenchApi.createPromptVariant(props.skillId, {
+      variant: variantNewKey.value,
+      weight: Number(variantNewWeight.value),
+      ...(variantNewSource.value != null ? { sourceVersion: Number(variantNewSource.value) } : {})
+    })
+    toast.success(`变体 ${variantNewKey.value} 已创建（${variantNewWeight.value}% 流量）`)
+    await loadVariants()
+  } catch (e) {
+    const data = (e as { response?: { data?: { error?: string } } })?.response?.data
+    variantMsg.value = data?.error || `创建失败：${errText(e)}`
+    variantErr.value = true
+  } finally {
+    variantCreating.value = false
+  }
+}
+
+async function saveVariantWeight(v: VariantRow) {
+  if (variantBusy.value) return
+  variantBusy.value = v.id
+  variantMsg.value = ''
+  variantErr.value = false
+  try {
+    await adminPromptWorkbenchApi.updatePromptVariantWeight(v.id, Number(variantWeightEdit.value[v.id]))
+    toast.success(`变体 ${v.variant} 权重已改为 ${variantWeightEdit.value[v.id]}%`)
+    await loadVariants()
+  } catch (e) {
+    variantMsg.value = `调权重失败：${errText(e)}`
+    variantErr.value = true
+  } finally {
+    variantBusy.value = ''
+  }
+}
+
+async function stopVariant(v: VariantRow) {
+  if (variantBusy.value) return
+  const ok = await askConfirm({
+    title: '停止变体',
+    message: `确认停止变体 ${v.variant}（v${v.version}）？\n其流量将全部回到基线；该版本行保留为历史，可再克隆。`,
+    confirmText: '停止'
+  })
+  if (!ok) return
+  variantBusy.value = v.id
+  variantMsg.value = ''
+  variantErr.value = false
+  try {
+    await adminPromptWorkbenchApi.stopPromptVariant(v.id)
+    toast.success(`变体 ${v.variant} 已停止`)
+    await loadVariants()
+  } catch (e) {
+    variantMsg.value = `停止失败：${errText(e)}`
+    variantErr.value = true
+  } finally {
+    variantBusy.value = ''
+  }
+}
+
+async function promoteVariant(v: VariantRow) {
+  if (variantBusy.value) return
+  const ok = await askConfirm({
+    title: '晋级为基线',
+    message: `确认把变体 ${v.variant}（v${v.version}）晋级为基线？\n该内容将写回 core.yaml 与 skill.md（文件 SSOT），旧基线转为历史。`,
+    confirmText: '晋级'
+  })
+  if (!ok) return
+  variantBusy.value = v.id
+  variantMsg.value = ''
+  variantErr.value = false
+  try {
+    await adminPromptWorkbenchApi.promotePromptVariant(v.id)
+    toast.success(`变体 ${v.variant} 已晋级为基线`)
+    emit('core-rolled-back')
+    await loadVariants()
+  } catch (e) {
+    const data = (e as { response?: { data?: { error?: string } } })?.response?.data
+    variantMsg.value = data?.error || `晋级失败：${errText(e)}`
+    variantErr.value = true
+  } finally {
+    variantBusy.value = ''
+  }
+}
 
 /* ---------- Prompt 版本 ---------- */
 interface VersionItem { id: string; version: string | number; status: string; name: string }
@@ -254,7 +529,7 @@ watch(
   [() => props.skillId, () => props.refreshTick],
   () => {
     compareResult.value = null
-    void Promise.all([loadVersions(), loadCoreVersions()])
+    void Promise.all([loadVersions(), loadCoreVersions(), loadVariants()])
   },
   { immediate: true }
 )
@@ -341,6 +616,13 @@ watch(
 }
 .sdp-pw__table-active { background: var(--mk-green-bg); }
 .sdp-pw__audit { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+
+/* A/B 变体区：行内权重输入 + 建变体表单 */
+.sdp-var__w { width: 56px; padding: 2px 6px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); }
+.sdp-var__key { width: 56px; padding: 2px 6px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); }
+.sdp-var__sel { max-width: 180px; padding: 2px 6px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); }
+.sdp-var__create { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 10px; border: 1px dashed var(--mk-line); border-radius: 12px; background: var(--mk-surface); }
+.sdp-var__field { display: inline-flex; gap: 6px; align-items: center; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 
 /* 分区头 */
 .sdp-eng { display: grid; gap: 8px; }

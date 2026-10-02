@@ -1772,6 +1772,8 @@ export const adminPromptWorkbenchApi = {
     skillId: string;
     confirmUncertain?: boolean;
     developerApproval?: { reference: string };
+    /** A/B：把本次 core.yaml 新内容直接发布为实验臂（不替换基线、不写 skill.md） */
+    asVariant?: { variant: string; weight: number };
   }) => {
     return adminAxios.post('/admin/prompt-lab/publish-core', payload);
   },

@@ -128,7 +128,15 @@ export async function callPrompt<TInput, TOutput>(
     ...(callOverride.maxTokens !== undefined ? { maxTokensOverride: callOverride.maxTokens } : {}),
   };
   const systemPromptOverride = runtimeOverride.systemPromptOverride || context.systemPromptOverride;
-  const promptConfig = await agentConfigService.getActivePrompt(spec.agentId);
+  // A/B 变体分流键（2026-10-01）：优先 userId（同人稳定命中），评测/无用户上下文时退化到
+  // conversationId/pathId；全缺 → 不传（取基线）。variantOverride 供评测钉住变体（对照波次/试跑）。
+  const variantSelectionKey = context.userId || requestContext.userId
+    || context.conversationId || requestContext.conversationId
+    || context.pathId || requestContext.pathId || null;
+  const promptConfig = await agentConfigService.getActivePrompt(spec.agentId, {
+    selectionKey: variantSelectionKey,
+    variantOverride: runtimeOverride.variantOverride ?? null,
+  });
   const { contract: runtimeContract } = await resolveEffectiveRuntimeContract(spec.agentId, promptConfig);
   const { contract: promptContract } = await resolveEffectivePromptContract(
     spec.agentId,
@@ -144,6 +152,7 @@ export async function callPrompt<TInput, TOutput>(
       id: promptCallId,
       agentId: spec.agentId,
       systemPromptVersion: null,
+      systemPromptVariant: null,
       systemPromptHash: hashPrompt(''),
       userPayload: '',
       rawModelOutput: null,
@@ -236,6 +245,7 @@ export async function callPrompt<TInput, TOutput>(
       id: promptCallId,
       agentId: spec.agentId,
       systemPromptVersion: null,
+      systemPromptVariant: null,
       systemPromptHash: hashPrompt(''),
       userPayload,
       rawModelOutput: null,
@@ -428,6 +438,8 @@ export async function callPrompt<TInput, TOutput>(
         id: promptCallId,
         agentId: spec.agentId,
         systemPromptVersion: systemPromptOverride ? null : promptConfig?.version || null,
+        systemPromptVariant: systemPromptOverride ? null : (promptConfig?.variant ?? null),
+
         systemPromptHash,
         userPayload,
         rawModelOutput: lastRaw || null,
@@ -546,6 +558,8 @@ export async function callPrompt<TInput, TOutput>(
       id: promptCallId,
       agentId: spec.agentId,
       systemPromptVersion: systemPromptOverride ? null : promptConfig?.version || null,
+      systemPromptVariant: systemPromptOverride ? null : (promptConfig?.variant ?? null),
+
       systemPromptHash,
       userPayload,
       rawModelOutput,
@@ -579,6 +593,7 @@ export async function callPrompt<TInput, TOutput>(
       debug: {
         promptCallId, agentId: spec.agentId, systemPrompt,
         systemPromptVersion: systemPromptOverride ? null : promptConfig?.version || null,
+
         userPayload, rawModelOutput, extractedJson: extracted.extractedJson,
         normalizedOutput, promptDrift, attempts, durationMs, tokenUsage,
         finalLlmRequestId: lastLlmRequestId, providerId: lastProviderId, model: lastModel,
@@ -592,6 +607,8 @@ export async function callPrompt<TInput, TOutput>(
     id: promptCallId,
     agentId: spec.agentId,
     systemPromptVersion: systemPromptOverride ? null : promptConfig?.version || null,
+    systemPromptVariant: systemPromptOverride ? null : (promptConfig?.variant ?? null),
+
     systemPromptHash,
     userPayload,
     rawModelOutput: lastRaw || null,
@@ -625,6 +642,7 @@ export async function callPrompt<TInput, TOutput>(
       debug: {
         promptCallId, agentId: spec.agentId, systemPrompt,
       systemPromptVersion: systemPromptOverride ? null : promptConfig?.version || null,
+
       userPayload, rawModelOutput: lastRaw, extractedJson: lastExtractedJson,
         normalizedOutput: null, promptDrift, attempts, durationMs, tokenUsage: null,
         finalLlmRequestId: lastLlmRequestId, providerId: lastProviderId, model: lastModel,

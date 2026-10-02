@@ -92,6 +92,8 @@ model prompt_call_logs {
   id                  String   @id
   agentId             String
   systemPromptVersion Int?
+  /// A/B 实验：本次调用实际命中的变体标签（NULL=基线；归因口径=variant+version）
+  systemPromptVariant String?
   systemPromptHash    String
   userPayload         String
   rawModelOutput      String?

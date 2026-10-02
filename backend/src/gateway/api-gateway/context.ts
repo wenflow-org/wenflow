@@ -58,6 +58,8 @@ export interface RequestContext {
     modelOverride?: string;
     temperatureOverride?: number;
     maxTokensOverride?: number;
+    /** A/B 实验：钉住某个 prompt 变体（评测/试跑用；未设置则按 selectionKey 分桶） */
+    variantOverride?: string;
     routeOverride?: RouteExecutionOverride;
   };
   /** 请求级流式意向（SSE 出口路由注入，callPrompt 读取） */
