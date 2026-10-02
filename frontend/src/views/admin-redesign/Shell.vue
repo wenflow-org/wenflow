@@ -1,5 +1,5 @@
 <template>
-  <div class="mshell" :data-collapsed="collapsed || forcedCollapse ? 'true' : 'false'">
+  <div class="mshell" :data-collapsed="collapsed || forcedCollapse ? 'true' : 'false'" :data-navopen="mobileNavOpen ? 'true' : 'false'">
     <!-- 迷你侧边栏（导航 + 侧栏再设计展示） -->
     <aside class="mshell__side">
       <div class="mshell__brand">
@@ -90,9 +90,28 @@
       </footer>
     </aside>
 
+    <!-- 移动端抽屉遮罩（原型 .navscrim 判例：点遮罩收抽屉；≤768 渲染） -->
+    <button
+      v-if="mobileNavOpen"
+      type="button"
+      class="mshell__navscrim"
+      aria-label="关闭导航"
+      @click="mobileNavOpen = false"
+    ></button>
+
     <!-- 主区：顶栏（面包屑 / 搜索 / 主题 / 账户，newui/admin 原型壳）+ 内容 -->
     <div class="mshell__main">
       <header class="mshell__top">
+        <!-- 移动端菜单钮（原型 ≤768 判例：抽屉开合；桌面 display:none） -->
+        <button
+          type="button"
+          class="mshell__menu-btn"
+          aria-label="打开导航"
+          :aria-expanded="mobileNavOpen ? 'true' : 'false'"
+          @click="mobileNavOpen = !mobileNavOpen"
+        >
+          <Menu :size="18" :stroke-width="1.75" aria-hidden="true" />
+        </button>
         <button
           v-if="crumb"
           type="button"
@@ -232,7 +251,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ChevronLeft, CircleHelp, LogOut, Moon, PanelLeftClose, PanelLeftOpen, RotateCw, Search, Shield, Sun, Users } from 'lucide-vue-next'
+import { ChevronLeft, CircleHelp, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, RotateCw, Search, Shield, Sun, Users } from 'lucide-vue-next'
 import { MOCK_SCENES, type MockSceneDef } from './manifest'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live'
 import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
@@ -272,12 +291,16 @@ onMounted(() => {
   collapseMq = window.matchMedia('(max-width: 1024px)')
   syncForcedCollapse()
   collapseMq.addEventListener('change', syncForcedCollapse)
+  mobileMq = window.matchMedia('(max-width: 768px)')
+  syncMobileNavViewport()
+  mobileMq.addEventListener('change', syncMobileNavViewport)
 })
 onBeforeUnmount(() => {
   contentEl.value?.removeEventListener('scroll', onScroll, true)
   document.removeEventListener('click', onDocDown)
   document.removeEventListener('keydown', onGlobalKey)
   collapseMq?.removeEventListener('change', syncForcedCollapse)
+  mobileMq?.removeEventListener('change', syncMobileNavViewport)
 })
 
 /* —— 顶栏（newui/admin 原型壳）：面包屑 / 页面搜索 / 主题 / 账户菜单 —— */
@@ -332,6 +355,7 @@ function closeSearch() {
 function onGlobalKey(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     userMenuOpen.value = false
+    mobileNavOpen.value = false
     return
   }
   if (e.key !== '/') return
@@ -351,6 +375,15 @@ let collapseMq: MediaQueryList | null = null
 function syncForcedCollapse() {
   forcedCollapse.value = !!collapseMq?.matches
 }
+
+/* 移动端抽屉（原型 ≤768 判例：菜单钮 + 滑入侧栏 + 遮罩；桌面无此态）。
+   关闭时机：点遮罩 / Esc / 切导航（current 变化）/ 放大回桌面宽度。 */
+const mobileNavOpen = ref(false)
+let mobileMq: MediaQueryList | null = null
+function syncMobileNavViewport() {
+  if (mobileMq && !mobileMq.matches) mobileNavOpen.value = false
+}
+watch(() => props.current, () => { mobileNavOpen.value = false })
 
 /* D1 暗色模式：统一走 utils/theme.ts SSOT（readTheme/writeTheme）。
    背景：主题 key 已收敛到 v2_theme（用户侧 ThemeToggle 原 key）+ wenflow-theme 兼容 key，
@@ -1119,5 +1152,60 @@ html[data-theme='dark'] {
   .mshell__collapse:hover { background: var(--mk-side-hover); color: var(--mk-accent-deep); }
   .mshell__user-avatar { background: var(--mk-side-inset); color: var(--mk-accent-deep); }
   .mshell__user-name { color: #efeff0; }
+}
+
+/* ===== 移动端抽屉（原型 ≤768 判例：menu-btn + 滑入侧栏 + navscrim）=====
+   ≤1024 的强制图标轨与手动折叠在抽屉态下全部失效：抽屉永远呈现完整标签导航。
+   放在折叠规则之后，靠源序覆盖同特异性选择器。 */
+.mshell__menu-btn { display: none; }
+@media (max-width: 768px) {
+  .mshell { grid-template-columns: minmax(0, 1fr); }
+  /* 原型 ≤1100 即隐藏顶栏搜索（.search{display:none}）：390 视口下搜索框挤压面包屑 */
+  .mshell__search { display: none; }
+  .mshell__menu-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    flex: none;
+    border: 1px solid var(--mk-line, #e6ebf4);
+    border-radius: var(--mk-radius-md);
+    background: var(--mk-surface, #fff);
+    color: var(--mk-ink);
+    cursor: pointer;
+  }
+  .mshell__menu-btn:hover { border-color: color-mix(in srgb, var(--mk-blue, #2c63d0) 40%, transparent); color: var(--mk-blue, #2c63d0); }
+  .mshell__side {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(280px, 82vw);
+    transform: translateX(-100%);
+    transition: transform 0.24s ease;
+    z-index: 210;
+  }
+  .mshell[data-navopen='true'] .mshell__side { transform: none; box-shadow: 0 18px 48px rgba(22, 34, 55, 0.25); }
+  /* 抽屉态下折叠（强制/手动）不生效：恢复完整标签导航 */
+  .mshell[data-collapsed='true'] { grid-template-columns: minmax(0, 1fr); }
+  .mshell[data-collapsed='true'] .mshell__item-label,
+  .mshell[data-collapsed='true'] .mshell__item-badge,
+  .mshell[data-collapsed='true'] .mshell__caption { display: block; }
+  .mshell[data-collapsed='true'] .mshell__item { justify-content: flex-start; padding: 8px 10px; }
+  .mshell[data-collapsed='true'] .mshell__group-body .mshell__item { padding-left: 10px; }
+  .mshell[data-collapsed='true'] .mshell__logo-full { display: block; }
+  .mshell[data-collapsed='true'] .mshell__logo-mark { display: none; }
+  .mshell[data-collapsed='true'] .mshell__collapse-label { display: inline; }
+  .mshell[data-collapsed='true'] .mshell__collapse { justify-content: flex-start; padding: 8px 10px; }
+  .mshell[data-collapsed='true'] .mshell__foot { padding: 8px 0 0; }
+  .mshell__navscrim {
+    position: fixed;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    background: rgba(16, 24, 40, 0.42);
+    z-index: 200;
+    cursor: pointer;
+  }
 }
 </style>

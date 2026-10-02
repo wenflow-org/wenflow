@@ -231,6 +231,14 @@ watch(
       if (!cur || cur.view !== next.view || cur.id !== next.id || !!cur.includeTest !== it) {
         subPage.value = next
       }
+    } else if (!sid) {
+      // 浏览器后退：?view=&id= 从 URL 消失但 subPage 仍开着 → 关闭二级页（此前缺这条
+      // else 分支，后退只改 query、详情残留，URL 与渲染脱节）。场景切换中（scene watch
+      // 已自行清空 subPage 并 push 新路径）不抢动作，判据与下方 subPage→URL watch 同款。
+      const curPage = typeof route.params.page === 'string' ? route.params.page : ''
+      if (subPage.value && curPage === scene.value) {
+        closeSubPage()
+      }
     }
   },
   { immediate: true }
