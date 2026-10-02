@@ -113,11 +113,14 @@
       />
       <div v-else-if="logs.length" class="mk-table-scroll">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
-             单元格 nowrap、列按内容自然分宽；长内容列（节点/调用/模型）设 max-width 截断兜底，
-             勿让单列独吃宽度（9 列全开时容器横向滚动，见 .mk-table-scroll .exec-table min-width） -->
+             单元格 nowrap、列按内容自然分宽；长内容列（Skill/消息/模型）设 max-width 截断兜底，
+             勿让单列独吃宽度（列全开时容器横向滚动，见 .mk-table-scroll .exec-table min-width） -->
         <table class="mk-table mk-table--click exec-table">
           <thead>
             <tr>
+              <!-- 列序 = 原型 renderObserve 日志表：时间 | 级别 | Skill | Trace | 消息 | 耗时
+                   （2026-10-02 用户拍板「表格的列按新UI调整」）；类型/模型/输入输出为
+                   真实数据扩展列，收进列设置 -->
               <th
                 v-if="!hiddenCols.has('time')"
                 scope="col"
@@ -125,9 +128,11 @@
                 :aria-sort="logSortState('calledAt')"
                 @click="toggleLogSort('calledAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleLogSort('calledAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th v-if="!hiddenCols.has('status')">级别</th>
               <th v-if="!hiddenCols.has('kind')">类型</th>
-              <th v-if="!hiddenCols.has('agent')">节点</th>
-              <th v-if="!hiddenCols.has('msg')">调用</th>
+              <th v-if="!hiddenCols.has('agent')">Skill</th>
+              <th v-if="!hiddenCols.has('trace')">Trace</th>
+              <th v-if="!hiddenCols.has('msg')">消息</th>
               <th v-if="!hiddenCols.has('model')">模型</th>
               <th v-if="!hiddenCols.has('tokens')">输入 / 输出</th>
               <th
@@ -137,44 +142,44 @@
                 :aria-sort="logSortState('durationMs')"
                 @click="toggleLogSort('durationMs')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleLogSort('durationMs')">耗时<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!hiddenCols.has('status')">状态</th>
-              <th v-if="!hiddenCols.has('trace')" class="right">Trace</th>
             </tr>
           </thead>
           <tbody>
             <template v-for="log in shown" :key="log.id">
               <tr class="exec-row" :class="[`exec-row--${log.status}`, { 'exec-row--test': isTestLog(log), 'exec-row--open': openId === log.id }]" tabindex="0" role="button" :aria-expanded="openId === log.id" @click="toggleRowOpen(log.id)" @keydown.enter="toggleRowOpen(log.id, $event)">
                 <td v-if="!hiddenCols.has('time')"><span class="mono exec-time" :title="fmtFull(log.ts)">{{ fmtTime(log.ts) }}</span></td>
+                <td v-if="!hiddenCols.has('status')"><span class="exec-status" :class="`exec-status--${log.status}`">{{ statusText[log.status] }}</span></td>
                 <td v-if="!hiddenCols.has('kind')">
                   <span class="exec-kind-group">
                     <span class="mk-badge" :class="`mk-badge--${kindTone(log)}`">{{ kindText(log) }}</span>
                     <span v-if="isTestLog(log)" class="exec-test-tag" title="模型接入页的连通性/探活测试调用（system-canary）">测试</span>
                   </span>
                 </td>
-                <td v-if="!hiddenCols.has('agent')"><span class="mono exec-stage" :title="log.agent" role="button" tabindex="0" :aria-label="`查看 ${log.agent} 详情`" @click.stop="openSkillDrawer(log.agent)" @keydown.enter.stop.prevent="openSkillDrawer(log.agent)">{{ log.stage }}</span></td>
+                <!-- Skill 格显完整名（原型 Skill 列=真实名；此前只给短标签、全名藏在 title 提示里） -->
+                <td v-if="!hiddenCols.has('agent')"><span class="mono exec-stage" :title="log.agent" role="button" tabindex="0" :aria-label="`查看 ${log.agent} 详情`" @click.stop="openSkillDrawer(log.agent)" @keydown.enter.stop.prevent="openSkillDrawer(log.agent)">{{ log.agent }}</span></td>
+                <td v-if="!hiddenCols.has('trace')">
+                  <span class="exec-tracecell">
+                    <span class="mono exec-trace" :title="`${log.traceId} · 点击查看完整链路`" role="button" tabindex="0" :aria-label="`查看链路 ${shortTrace(log.traceId)}`" @click.stop="showTrace(log.traceId)" @keydown.enter.stop.prevent="showTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
+                    <button
+                      type="button"
+                      class="exec-copy-btn"
+                      :title="`复制 Trace ID：${log.traceId}`"
+                      :aria-label="`复制 Trace ID ${log.traceId}`"
+                      @click.stop="copyTrace(log.traceId)"
+                    >
+                      <Copy :size="14" :stroke-width="1.75" />
+                    </button>
+                  </span>
+                </td>
                 <td v-if="!hiddenCols.has('msg')">
                   <div class="exec-cell">
                     <div class="exec-cell__line">
                       <!-- 主行：错误行显示错误摘要（红）；成功行显示调用内容预览（prompt 提取），
-                           无内容时弱化「执行完成」——避免与状态列"成功"重复占位（原恒显"执行完成"零信息量） -->
+                           无内容时弱化「执行完成」——避免与级别列"成功"重复占位（原恒显"执行完成"零信息量）。
+                           链路入口/复制已前移到 Trace 列（原型 renderObserve 的列位），本格只留消息 -->
                       <strong v-if="log.status === 'err'" class="exec-title exec-title--err" :title="log.title || log.detail">{{ log.title || log.detail }}</strong>
                       <strong v-else-if="contentPreview(log)" class="exec-title exec-title--preview" :title="log.title">{{ contentPreview(log) }}</strong>
                       <strong v-else class="exec-title exec-title--ok" :title="log.title">{{ log.title }}</strong>
-                      <!-- 链路入口：图标按钮,一眼可见点击直达 Trace(替代隐藏的 Trace 列) -->
-                      <button type="button" class="exec-trace-btn" title="查看完整调用链路（Trace）：这条调用从进入到出结果的全部阶段" @click.stop="showTrace(log.traceId)">
-                        <Waypoints :size="15" :stroke-width="1.75" />
-                      </button>
-                      <!-- 复制 trace（原型契约 renderObserve：行内复制 trace + toast 反馈）：
-                           与链路图标并排常显，点击复制 Trace ID；stop 冒泡不触发行展开 -->
-                      <button
-                        type="button"
-                        class="exec-copy-btn"
-                        :title="`复制 Trace ID：${log.traceId}`"
-                        :aria-label="`复制 Trace ID ${log.traceId}`"
-                        @click.stop="copyTrace(log.traceId)"
-                      >
-                        <Copy :size="14" :stroke-width="1.75" />
-                      </button>
                     </div>
                     <div class="exec-cell__line exec-cell__sub">
                       <span v-if="log.errorCode" class="tline__errcode mono" :title="log.errorCode">{{ errorCodeLabel(log.errorCode) ?? `[${log.errorCategory || 'err'}] ${log.errorCode}` }}</span>
@@ -194,8 +199,6 @@
                   </div>
                 </td>
                 <td v-if="!hiddenCols.has('dur')" class="right"><span class="mk-latency exec-dur" :class="latencyTone(log.durationMs)" :title="`${fmtMs(log.durationMs)}（P50 ${latencyP50} · P99 ${latencyP99}）`">{{ fmtMs(log.durationMs) }}</span></td>
-                <td v-if="!hiddenCols.has('status')"><span class="exec-status" :class="`exec-status--${log.status}`">{{ statusText[log.status] }}</span></td>
-                <td v-if="!hiddenCols.has('trace')" class="right"><span class="mono exec-trace" :title="`${log.traceId} · 在链路中查看完整 Trace`" role="button" tabindex="0" :aria-label="`查看链路 ${shortTrace(log.traceId)}`" @click.stop="showTrace(log.traceId)" @keydown.enter.stop.prevent="showTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span></td>
               </tr>
               <tr v-if="openId === log.id" class="exec-detail">
                 <td :colspan="visibleColCount">
@@ -441,22 +444,23 @@ async function copyTrace(traceId: string) {
   else toast.error(`复制失败，请手动复制：${traceId}`)
 }
 
-/* D3 表格增强：列显隐（localStorage 持久化；9 列 → 勾选隐藏） */
-const COLS_KEY = 'wf_exec_hidden_cols'
+/* D3 表格增强：列显隐（localStorage 持久化）。列集/列序 2026-10-02 对齐原型 renderObserve
+   （时间|级别|Skill|Trace|消息|耗时），key 升 v2：旧存储按旧列集持久化，不清会盖掉新默认 */
+const COLS_KEY = 'wf_exec_hidden_cols_v2'
 const colDefs = [
-  { key: 'time', label: '时间', title: '记录时间（HH:mm:ss）' },
+  { key: 'time', label: '时间', title: '记录时间（MM-DD HH:mm:ss）' },
+  { key: 'status', label: '级别', title: '执行级别（成功/失败/超时）——原型第二列' },
   { key: 'kind', label: '类型', title: '日志类型（执行/重试/告警）' },
-  { key: 'agent', label: '节点', title: 'Skill 节点' },
-  { key: 'msg', label: '调用', title: '调用内容与错误信息' },
+  { key: 'agent', label: 'Skill', title: 'Skill 完整名；点击直达 Skill 详情' },
+  { key: 'trace', label: 'Trace', title: '调用链路 ID：点击看完整链路，按钮复制' },
+  { key: 'msg', label: '消息', title: '调用消息（输出摘要 / 错误信息）' },
   { key: 'model', label: '模型', title: '使用的 LLM 模型' },
   { key: 'tokens', label: '输入 / 输出', title: 'Token 用量（输入 / 输出）' },
   { key: 'dur', label: '耗时', title: '执行耗时' },
-  { key: 'status', label: '状态', title: '执行状态' },
-  { key: 'trace', label: 'Trace', title: '链路 ID（点击直达）' },
 ] as const
-/* 次要列默认隐藏（收进展开区）：表格只留高频辨识列(时间/节点/调用/耗时/状态),
-   窄屏无需滚动、信息不丢（点击行看全）。列设置可手动开启。 */
-const DEFAULT_HIDDEN = ['kind', 'model', 'tokens', 'trace']
+/* 默认可见列 = 原型六列（时间/级别/Skill/Trace/消息/耗时）+ Skill 全名直出（不再短标签+提示）；
+   类型/模型/输入输出为真实数据扩展列，收进列设置（窄屏不横滚，信息点击行看全）。 */
+const DEFAULT_HIDDEN = ['kind', 'model', 'tokens']
 const hiddenCols = ref<Set<string>>(new Set())
 const visibleColCount = computed(() => colDefs.length - hiddenCols.value.size)
 
@@ -1145,26 +1149,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
 .exec-title--err:hover { text-decoration: underline; }
 .exec-title--preview { color: var(--mk-muted, #5b6577); font-weight: 550; }
 .exec-title--ok { color: var(--mk-faint, #5f6f8c); font-weight: 500; }
-/* 链路入口图标按钮：主行右侧,常显弱化/hover 高亮,点击直达 Trace(替代隐藏的 Trace 列)
-   2026-09-24 桌面端验收：22px 低于鼠标可点下限，抬到 24px */
-.exec-trace-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--mk-faint);
-  cursor: pointer;
-  padding: 0;
-  transition: background 0.12s, color 0.12s;
-}
-.exec-trace-btn svg { width: 15px; height: 15px; }
-.exec-trace-btn:hover { background: var(--mk-blue-bg, #eff6ff); color: var(--mk-blue, #2c63d0); }
-/* 复制 trace 图标按钮：与链路入口同形（28px 可点），失败/非安全上下文由 copyTrace 走兜底 + toast */
+/* 复制 trace 图标按钮：Trace 列内与短 ID 并排（28px 可点），失败/非安全上下文由 copyTrace 走兜底 + toast */
 .exec-copy-btn {
   display: inline-flex;
   align-items: center;
@@ -1245,6 +1230,8 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
   cursor: pointer;
 }
 .exec-trace:hover { color: var(--mk-amber); text-decoration: underline; }
+/* Trace 独立列（原型 renderObserve 列位）：短 ID（点击看链路）+ 复制钮同格 */
+.exec-tracecell { display: inline-flex; align-items: center; gap: 5px; }
 
 /* 展开详情行（colspan=动态列数）：浅底 + 内容盒内聚，干扰最小化；
    文本可换行（列表行的 nowrap 不下探进详情区） */
