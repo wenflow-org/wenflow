@@ -1,31 +1,9 @@
 <template>
   <div :class="embedded ? 'mk-page--fill lc-embedded' : 'mk-page mk-page--fill'">
-    <div v-if="!embedded" class="mk-status" :class="statusTone">
-      <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">学习者中心</strong>
-      <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">{{ rows.length }} 位学习者</span>
-      <button
-        type="button"
-        class="mk-status__meta-link"
-        :class="{ 'mk-status__meta-link--on': pill === 'risk' }"
-        :title="'点击筛选「需关注」学习者（趋势下降 / 疲劳中高 / 有风险）'"
-        @click="pill = pill === 'risk' ? 'all' : 'risk'"
-      >需关注 {{ riskCount }}</button>
-      <button
-        type="button"
-        class="mk-status__meta-link"
-        :class="{ 'mk-status__meta-link--on': pill === 'stale' }"
-        :title="'点击筛选「低置信」学习者（快照置信度低于 50%）'"
-        @click="pill = pill === 'stale' ? 'all' : 'stale'"
-      >低置信 {{ lowConfCount }}</button>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="recomputingAll || !rows.length" @click="recomputeAll">
-          {{ recomputingAll ? `重算中 ${recomputeProgress}/${rows.length}…` : '全部重算' }}
-        </button>
-      </span>
-    </div>
-
+    <!-- （原非嵌入模式状态条已删，2026-10-02 死代码确认：/admin/learner-center 路由已重定向
+         /admin/people?tab=state（router/index.ts），本组件全仓仅 People 以 embedded 挂载
+         （merged-tabs.smoke.test.ts 同）——v-if="!embedded" 分支永不渲染，且其「需关注」计数
+         已被下方 pills/KPI 承接。计数入口收敛到卡头 pills，同屏不再四处重复。 -->
 
     <div class="mk-card mk-card--fill">
       <!-- 视图切换（原型 card > .tabs 下划线页签）：tab 状态由宿主 People 持有 -->
@@ -65,8 +43,9 @@
             storage-key="wf_learner_hidden_cols"
             v-model:hidden="lcHiddenCols"
           />
-          <!-- 后端学习者域 limit=50 截断无提示（live.ts 不动）：列表满 50 时给出静态口径说明 -->
-          <span v-if="rows.length >= 50" class="mk-card__meta" title="学习者快照单次最多加载 50 条">仅加载前 50 位，可按筛选缩小范围</span>
+          <!-- 后端学习者域 limit=50 截断无提示（live.ts 不动）：列表满 50 时给出静态口径说明。
+               P2 措辞纠偏：筛选器筛不动后端窗口，原文案「可按筛选缩小范围」超卖——搜索只在已加载的 50 人内命中 -->
+          <span v-if="rows.length >= 50" class="mk-card__meta" title="学习者快照单次最多加载 50 条，搜索/筛选只在已加载范围内命中">仅加载前 50 位，搜索限已加载 50 人</span>
           <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 人</span>
         </div>
       </div>
@@ -88,10 +67,18 @@
              不随下方 pill / 搜索筛选变化（与原型从全体学习者聚合一致） -->
         <div v-if="rows.length" class="lc-analytics">
           <section class="mk-kpi-grid" aria-label="学习状态概览">
-            <MkKpi label="学习者" :value="rows.length" :hint="includeTest ? '当前口径：含测试账号' : '当前口径：不含测试账号'" />
-            <MkKpi label="需关注" :value="riskCount" :tone="riskCount ? 'warn' : ''" hint="趋势下降 / 疲劳中高 / 有风险摘要" />
+            <!-- P1#16：「学习者」曾是已加载行数冒充总数——live.ts fetchLiveLearners 只拉 50 条且
+                 未透出后端 total（live.ts:1219，登记待数据层接线），故 KPI 如实显「已加载 N」 -->
+            <MkKpi
+              label="学习者"
+              :value="`已加载 ${rows.length}`"
+              :hint="`快照单次最多加载 50 条${rows.length >= 50 ? '（已到上限，可能还有更多）' : ''} · 口径：${includeTest ? '含测试账号' : '不含测试账号'}；全量总数待数据层透出`"
+            />
+            <!-- P1#17：需关注收窄为真异常（趋势降 ∨ 疲劳高 ∨ 有风险摘要）；
+                 常态档「疲劳=中」拆到 pills 的「观察」，不再把需关注撑爆 -->
+            <MkKpi label="需关注" :value="riskCount" :tone="riskCount ? 'warn' : ''" hint="趋势下降 / 疲劳高 / 有风险摘要" />
             <MkKpi label="低置信" :value="lowConfCount" :tone="lowConfCount ? 'warn' : ''" hint="快照置信度低于 50%" />
-            <MkKpi label="平均置信度" :value="avgConfText" hint="有学习任务的快照 · 全体口径" />
+            <MkKpi label="平均置信度" :value="avgConfText" :hint="avgConfHint" />
           </section>
 
           <template v-if="confRows.length">
@@ -308,7 +295,7 @@ interface Row {
   ts?: number
 }
 
-const pill = ref<'all' | 'risk' | 'stale'>('all')
+const pill = ref<'all' | 'risk' | 'watch' | 'stale'>('all')
 const keyword = ref('')
 const includeTest = ref(false)
 watch(includeTest, (v) => {
@@ -407,11 +394,11 @@ const rows = computed<Row[]>(() =>
     trend: m.trend,
     fatigue: m.fatigue as Row['fatigue'],
     risk: m.struggling.length
-      ? `概念「${m.struggling[0]}」挣扎`
+      ? `「${m.struggling[0]}」等 ${m.struggling.length} 个概念挣扎`
       : m.fatigue === '高'
         ? '疲劳风险高'
         : m.fragile.length
-          ? `概念「${m.fragile[0]}」记忆待巩固`
+          ? `「${m.fragile[0]}」等 ${m.fragile.length} 个概念待巩固`
           : '',
     updated: timeAgo(m.generatedAt),
     confidence: m.confidence,
@@ -422,11 +409,16 @@ const rows = computed<Row[]>(() =>
 const pills = computed(() => [
   { id: 'all' as const, label: '全部', count: rows.value.length },
   { id: 'risk' as const, label: '需关注', count: riskCount.value },
+  { id: 'watch' as const, label: '观察', count: watchCount.value },
   { id: 'stale' as const, label: '低置信', count: lowConfCount.value }
 ])
 
-const isRisk = (r: Row) => r.trend === 'down' || r.fatigue !== '低' || !!r.risk
+/* P1#17 告警拆档：原 isRisk 把「疲劳=中」（常见常态档）也计入需关注 → 计数虚高、告警疲劳。
+   收窄：趋势降 ∨ 疲劳高 ∨ 有风险摘要 = 需关注；疲劳=中 且非需关注 = 「观察」（单独 pill 计数） */
+const isRisk = (r: Row) => r.trend === 'down' || r.fatigue === '高' || !!r.risk
+const isWatch = (r: Row) => !isRisk(r) && r.fatigue === '中'
 const riskCount = computed(() => rows.value.filter(isRisk).length)
+const watchCount = computed(() => rows.value.filter(isWatch).length)
 const lowConfCount = computed(() => rows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1)).length)
 
 /* —— 学习状态分析层（原型 renderPeople state 分支：①统计四卡 ②分布直方图 ③排行）——
@@ -440,6 +432,12 @@ const avgConfText = computed(() => {
   const avg = confRows.value.reduce((s, r) => s + (r.confidence ?? 0), 0) / confRows.value.length
   return Math.round(avg * 100) + '%'
 })
+/** 平均值必须带基数：n= 之外的行（无任务/无快照）不进均值，读数才知道它代表谁 */
+const avgConfHint = computed(() =>
+  confRows.value.length
+    ? `有学习任务的快照 · n=${confRows.value.length}（其余无任务/无快照不入均值） · 全体口径`
+    : '暂无有学习任务的快照'
+)
 /** 直方图五档（原型 .histo bad→ok 自左向右）：阈值锚定产品既定的 50% 低置信线，
     <50 区按严重度再分 <25（红）/ 25–49（琥珀）两档；柱高 = n / maxBin（6px 下限，原型同款） */
 const HISTO_BINS = [
@@ -475,6 +473,7 @@ const rankRows = computed(() =>
 const filtered = computed(() => {
   let list = rows.value
   if (pill.value === 'risk') list = rows.value.filter(isRisk)
+  if (pill.value === 'watch') list = rows.value.filter(isWatch)
   if (pill.value === 'stale') list = rows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1))
   // 关键词搜索
   const kw = keyword.value.trim().toLowerCase()
@@ -492,8 +491,6 @@ const filtered = computed(() => {
     return (b.ts ?? 0) - (a.ts ?? 0)
   })
 })
-
-const statusTone = computed(() => (!rows.value.length ? 'mk-status--muted' : riskCount.value > 0 ? 'mk-status--warn' : 'mk-status--ok'))
 
 const isFiltered = computed(() => pill.value !== 'all' || !!keyword.value.trim())
 function clearFilters() {
@@ -658,9 +655,8 @@ async function recomputeAll() {
 .lc-task .mk-cell-sub { max-width: 240px; }
 /* 原型 .tbl td：nowrap（表自动布局判例见 Users.vue；长内容由上方 max-width 截断兜底） */
 .mk-table td { white-space: nowrap; }
-/* 页头计数锚点改用全局 .mk-status__meta-link（见 shared.css:136）。
-   注意：本页原先是 6 份副本里唯一补了暗色覆盖的，该暗色规则已提升为全局，
-   因此其余页面的计数锚点在暗色下也不再几乎不可见。 */
+/* （原页头计数锚点 .mk-status__meta-link 的暗色覆盖随死状态条删除；
+   该暗色规则早已提升为 shared.css 全局，其余页面的计数锚点不受影响） */
 /* 趋势列（P0-1 信号可视化）：箭头 + 迷你条 + 文字（无历史序列时的三态可视化；
    lssHistory 暴露后可升级真 sparkline） */
 .trend { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -699,8 +695,6 @@ async function recomputeAll() {
 /* ================= C2 干预动线 ================= */
 .lc-intervene--hot { color: var(--mk-amber); }
 html[data-theme='dark'] .lc-intervene--hot { color: #fbbf24; }
-/* 暗色：页头计数锚点激活态转暗色蓝 */
-/* 计数锚点的暗色覆盖已提升到 shared.css 全局（原为本页私有） */
 .lc-iv__risk {
   display: grid;
   gap: 4px;

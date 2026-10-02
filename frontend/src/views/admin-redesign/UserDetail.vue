@@ -26,6 +26,12 @@
           <span class="statstrip__label">{{ s.label }}</span>
           <span class="statstrip__value">{{ s.value }}</span>
         </div>
+        <!-- P1#15 学习状态格：liveLearners join 读数（趋势 · 疲劳 · 置信），join 不到显「—」；
+             完整画像入口已有（hero 右上「查看学习者画像 →」），不重复 -->
+        <div class="statstrip__stat" role="listitem" :title="stateCell.hint">
+          <span class="statstrip__label">学习状态</span>
+          <span class="statstrip__value" :class="{ 'mk-na': !stateCell.line }">{{ stateCell.line || '—' }}</span>
+        </div>
       </div>
     </section>
 
@@ -44,7 +50,7 @@
             <dt>邮箱</dt><dd :title="d.email">{{ d.email }}</dd>
             <dt>角色</dt><dd>{{ d.role }}</dd>
             <dt>加入时间</dt><dd :title="d.joinedAbs || undefined">{{ d.joined || '—' }}</dd>
-            <dt>最后登录</dt><dd :title="d.lastLoginAbs || undefined">{{ d.lastLogin || '从未' }}</dd>
+            <dt>最后登录</dt><dd :title="d.lastLoginAbs || undefined">{{ d.lastLogin || '—' }}</dd>
           </dl>
         </section>
         <section class="mk-card">
@@ -165,9 +171,10 @@ import MkRowList from '@/components/mk/MkRowList.vue'
 import MkRow from '@/components/mk/MkRow.vue'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
-import { liveUsers, timeAgo, errMsg } from './live'
+import { liveUsers, liveLearners, timeAgo, errMsg } from './live'
 import { adminUsersApi, adminTeachingSessionsApi, adminGoalConversationsApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { statusText, stageText, stageBadgeCls } from './statusText'
+import { levelBadgeZh } from './learner-profile'
 import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { toast } from '@/utils/toast'
@@ -187,18 +194,15 @@ interface Detail {
 }
 
 const liveDetail = ref<Detail | null>(null)
-/** 等级英→中映射 */
+/** 会话总数（P1#14 角标口径）：从列表兜底 _count（live.ts fetchLiveUsers 的 sessions）或详情接口
+ *  user._count.teaching_sessions 取；null = 无总数来源，角标退化为「最近 N」 */
+const tsTotal = ref<number | null>(null)
 
 /** XP 项的升级语境（批E，公式与后端 level.util.ts 同源） */
 function xpHintOf(xp: number): string {
   const n = Math.floor(Math.sqrt(Math.max(0, xp) / 100)) + 1
   const toNext = Math.max(100 * n * n - xp, 0)
   return toNext > 0 ? `距 L${n + 1} 还需 ${toNext} XP` : '已达最高档'
-}
-function levelLabel(level: string | null | undefined): string {
-  if (!level) return '—'
-  const map: Record<string, string> = { beginner: '初学', intermediate: '进阶', advanced: '高级' }
-  return map[level] || level
 }
 /** 绝对时间（概览 kv 的 title；timeAgo 的相对文案不带完整时刻） */
 function fmtAbs(iso?: string | null): string {
@@ -497,6 +501,7 @@ watch(
     grantMessage.value = ''
     detailError.value = false
     isDeleted.value = false
+    tsTotal.value = null
     const id = subPage.value?.id
     if (!id) return
     void loadDetail()
@@ -590,6 +595,14 @@ async function loadDetail() {
     // 后端不返回 learning_paths 明细：路径计数用 _count 兜底，与统计条口径一致
     const counts = (user._count as Record<string, number>) || {}
     const pathCount = Number(counts.learningPaths ?? counts.learning_paths ?? base?.paths ?? 0)
+    // P1#14：会话总数优先详情 _count，其次列表兜底（live.ts fetchLiveUsers 的 sessions 即 _count.teaching_sessions）
+    const detailSessions = counts.teaching_sessions ?? counts.teachingSessions
+    tsTotal.value =
+      detailSessions != null
+        ? Number(detailSessions)
+        : base?.sessions != null
+          ? base.sessions
+          : null
     liveDetail.value = {
       name: String(user.name || base?.name || id),
       email: String(user.email || base?.email || ''),
@@ -603,13 +616,15 @@ async function loadDetail() {
         // 列表兜底缺失时不臆造 0：无数据显示 '—'
         { label: '会话', value: base?.sessions != null ? String(base.sessions) : '—' },
         { label: 'XP', value: String(user.xp ?? 0), hint: xpHintOf(Number(user.xp ?? 0)) },
-        { label: '等级', value: levelLabel(String(user.currentLevel)), hint: '按 XP 推导' }
+        // 等级词汇单点（learner-profile.ts levelBadgeZh）：统一「L2 · 进阶」格式
+        { label: '等级', value: levelBadgeZh(Number(user.xp ?? 0), user.currentLevel ? String(user.currentLevel) : base?.currentLevel || ''), hint: '按 XP 推导 · 词汇=模型评估层级' }
       ]
     }
   } catch (e) {
     if (seq !== detailLoadSeq || subPage.value?.id !== id) return
     // 详情接口失败：用列表数据兜底；无兜底 → 明确错误态
     if (base) {
+      tsTotal.value = base.sessions
       liveDetail.value = {
         name: base.name,
         email: base.email,
@@ -622,7 +637,7 @@ async function loadDetail() {
           { label: '路径', value: String(base.paths) },
           { label: '会话', value: String(base.sessions) },
           { label: 'XP', value: String(base.xp), hint: xpHintOf(Number(base.xp)) },
-          { label: '等级', value: levelLabel(base.currentLevel), hint: '按 XP 推导' }
+          { label: '等级', value: levelBadgeZh(Number(base.xp), base.currentLevel), hint: '按 XP 推导 · 词汇=模型评估层级' }
         ]
       }
     } else {
@@ -638,14 +653,42 @@ async function loadDetail() {
 const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
 /* —— 分区二级页签（newui/admin subtabs，卡顶形态）：默认页签=概览（原型 detail 默认落概览）；
-   会话/目标页签带条数角标（MkSubTabs count，加载中不给 0 误导） —— */
+   会话/目标页签带条数角标（MkSubTabs count，加载中不给 0 误导）。
+   P1#14：会话角标曾是 limit=5 的加载条数冒充总数（与统计条「会话 40」同屏矛盾）——
+   有总数时角标=「最近 N / 共 M」（M 见 tsTotal）；无总数来源时退化为「最近 N」，杜绝裸数字被读成总量 */
+const sessionsTabCount = computed<string | number | undefined>(() => {
+  if (tsLoading.value) return undefined
+  const n = tsRows.value.length
+  const m = tsTotal.value
+  if (m == null) return n > 0 ? `最近 ${n}` : n
+  // 全量恰好在窗口内（n===m）时「最近 N / 共 N」是同义反复，只出总数
+  return n === m ? m : `最近 ${n} / 共 ${m}`
+})
 const tabDefs = computed(() => [
   { key: 'overview', label: '概览' },
-  { key: 'sessions', label: '教学会话', count: tsLoading.value ? undefined : tsRows.value.length },
+  { key: 'sessions', label: '教学会话', count: sessionsTabCount.value },
   { key: 'goals', label: '目标对话', count: gcLoading.value ? undefined : gcRows.value.length },
   { key: 'grant', label: '许可与接入' }
 ])
 const activeTab = ref('overview')
+
+/* P1#15 判断真空层：统计条四格此前与下方列表完全同源（路径/会话/XP/等级），
+   「他学得怎么样」要再跳一页才知道——从 liveLearners（boot 即拉）按 userId join 出一行读数，
+   把学习者轴入口从 2 跳压到 0 跳；join 不到显「—」并在 title 说明原因 */
+const stateCell = computed<{ line: string; hint: string }>(() => {
+  const l = liveLearners.value.find((x) => x.userId === subPage.value?.id)
+  if (!l) {
+    return {
+      line: '',
+      hint: '暂无学习者快照：该用户可能尚未产生学习行为，或不在已加载的快照范围内（快照单次最多 50 人）。完整画像见右上「查看学习者画像」。'
+    }
+  }
+  const trend = l.trend === 'up' ? '↗ 上升' : l.trend === 'down' ? '↘ 下降' : '→ 稳定'
+  return {
+    line: `${trend} · 疲劳${l.fatigue} · 置信 ${Math.round((l.confidence ?? 0) * 100)}%`,
+    hint: `来自学习者快照${l.generatedAt ? `（更新于 ${timeAgo(l.generatedAt)}）` : ''}：趋势=近期表现方向、疲劳=学习负荷、置信=快照把握度（<50% 证据不足）。完整画像见右上「查看学习者画像」。`
+  }
+})
 /** hero 副文：邮箱 · 角色 · 加入时间（· 最后登录，仅列表兜底数据有） */
 const subLine = computed(() => {
   const v = d.value

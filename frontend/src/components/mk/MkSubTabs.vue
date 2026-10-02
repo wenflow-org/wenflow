@@ -19,8 +19,10 @@
  * 详情页二级页签（newui/admin 原型 subtabs 形态）：下划线式，置于详情 hero 之下，
  * 把详情页的并列分区（会话/目标/许可…）收成分区页签。内容区用 v-show 保持已加载状态。
  * count：可选角标（如 VirtualProfile「数量即 tab 角标」决策），faint 微字不抢层级。
+ * 类型 number | string（2026-10-02）：UserDetail 会话角标需「最近 5 / 共 40」口径文案——
+ * 裸数字角标曾把 limit 窗口条数冒充总数（P1#14）；既有数字调用方不受影响。
  */
-defineProps<{ tabs: Array<{ key: string; label: string; count?: number }>; modelValue: string }>();
+defineProps<{ tabs: Array<{ key: string; label: string; count?: number | string }>; modelValue: string }>();
 defineEmits<{ (e: 'update:modelValue', key: string): void }>();
 </script>
 

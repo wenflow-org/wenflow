@@ -30,6 +30,27 @@ export function levelLabel(xp: number): string {
   return `L${levelFromXp(xp)}`
 }
 
+/**
+ * 等级词汇单点（2026-10-02 人类可读性评审：等级词汇四页三貌「初学/入门/L2·进阶」收敛）。
+ * 定稿以 LearnerDetail 现用词为准：入门 / 进阶 / 高级。
+ * 注意：OpsContent 的「入门/进阶/高阶」是路径难度枚举、VirtualProfile 的四级枚举是
+ * 虚拟学习者知识水平（零基础/入门/中级/进阶）——均为别的域，不归本词表管。
+ */
+const LEVEL_WORDS: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高级' }
+
+/** currentLevel 英文枚举 → 中文等级词汇（唯一出处）；空值出空串、未知值原样透传（存量库里有 'L1' 等历史值） */
+export function levelWordZh(level?: string | null): string {
+  if (!level) return ''
+  return LEVEL_WORDS[String(level).trim().toLowerCase()] || String(level)
+}
+
+/** XP 等级「L2」与词汇并存的统一格式单点：「L2 · 进阶」；词汇缺失或与 Ln 同名（历史脏值 'L2'）时只出 L2 */
+export function levelBadgeZh(xp: number, level?: string | null): string {
+  const l = `L${levelFromXp(xp)}`
+  const word = levelWordZh(level)
+  return !word || word === l ? l : `${l} · ${word}`
+}
+
 export type ConceptBarTone = 'ok' | 'warn' | 'bad' | 'muted'
 
 /** conceptLedger 单条：transferReadiness low/medium/high + misconceptionRisk low/medium/high */

@@ -68,6 +68,14 @@ vi.mock('../learner-profile', () => ({
   misconceptionRiskZh: () => '—',
   normalizeLearnerTab: (t: string) => t,
   levelFromXp: () => 1,
+  // 等级词汇单点（LearnerDetail EN_ZH/画像卡引用，2026-10-02 起）
+  levelWordZh: (v?: string | null) =>
+    (({ beginner: '入门', intermediate: '进阶', advanced: '高级' } as Record<string, string>)[String(v || '').toLowerCase()] || String(v || '')),
+  levelBadgeZh: (xp: number, level?: string | null) => {
+    const l = `L${Math.floor(Math.sqrt(Math.max(0, xp) / 100)) + 1}`
+    const word = (({ beginner: '入门', intermediate: '进阶', advanced: '高级' } as Record<string, string>)[String(level || '').toLowerCase()] || String(level || ''))
+    return !word || word === l ? l : `${l} · ${word}`
+  },
 }));
 vi.mock('@/api/adminApi', () => ({
   adminTeachingSessionsApi: { list: listSessions },

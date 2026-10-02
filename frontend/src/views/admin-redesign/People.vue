@@ -3,7 +3,7 @@
     <!-- 页头（newui pageTitle 复刻）：页名 + 副题（随视图切换，原型 renderPeople 同款文案）+ 主操作 -->
     <MkPageHead
       title="用户与学习者"
-      :sub="tab === 'state' ? '学习者学习状态分布与风险跟踪' : '管理学习者档案、学习状态与路径进度'"
+      :sub="tab === 'state' ? '学习者学习状态分布与风险跟踪' : '管理用户账号、角色与登录状态'"
     >
       <template #actions>
         <button v-if="tab === 'account'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="usersRef?.openCreate?.()">新建用户</button>
@@ -12,7 +12,8 @@
     </MkPageHead>
     <div v-if="tab === 'state' && learnerCount >= 50" class="mk-status mk-status--muted">
       <span class="mk-status__dot"></span>
-      <span class="mk-status__meta" title="学习者快照单次最多加载 50 条">仅加载前 50 位，可按筛选缩小范围</span>
+      <!-- P2 措辞纠偏：搜索/筛选只在已加载的 50 人内命中，原「可按筛选缩小范围」超卖 -->
+      <span class="mk-status__meta" title="学习者快照单次最多加载 50 条，搜索/筛选只在已加载范围内命中">仅加载前 50 位，搜索限已加载 50 人</span>
     </div>
 
     <!-- 账号管理：Users / 学习状态：LearnerCenter（页签按原型渲染在各自卡内顶部，状态在宿主） -->

@@ -2,11 +2,12 @@
  * 学习者域共享派生逻辑测试（ADMIN_DEEP_LEARNER_AUDIT P1 批）：
  * - isTestAccountUser 命名约定（与后端 utils/test-account.ts 同源）
  * - levelFromXp 等级公式（与后端 level.util.ts 一致）
+ * - levelWordZh / levelBadgeZh 等级词汇单点（2026-10-02 人类可读性评审：四页三貌收敛）
  * - conceptLedger 概念条 tone/width 映射
  * - LearnerDetail tab 归一化（6 → 3 旧名重定向）
  */
 import { describe, expect, it } from 'vitest';
-import { isTestAccountUser, levelFromXp, levelLabel, conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, memoryReviewUrl } from '../learner-profile';
+import { isTestAccountUser, levelFromXp, levelLabel, levelWordZh, levelBadgeZh, conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, memoryReviewUrl } from '../learner-profile';
 
 describe('isTestAccountUser（测试/虚拟账号识别，与后端同源）', () => {
   it('虚拟学习者：id 以 virtual_ 开头或邮箱 @test.local / virtual_ 前缀', () => {
@@ -55,6 +56,33 @@ describe('levelFromXp / levelLabel（等级公式与后端 level.util.ts 一致�
     expect(levelLabel(0)).toBe('L1');
     expect(levelLabel(860)).toBe('L3');
     expect(levelLabel(2100)).toBe('L5');
+  });
+});
+
+describe('levelWordZh / levelBadgeZh（等级词汇单点，2026-10-02 收敛）', () => {
+  it('三档中文名唯一出处：入门 / 进阶 / 高级（以 LearnerDetail 现用词定稿）', () => {
+    expect(levelWordZh('beginner')).toBe('入门');
+    expect(levelWordZh('intermediate')).toBe('进阶');
+    expect(levelWordZh('advanced')).toBe('高级');
+    expect(levelWordZh('BEGINNER')).toBe('入门');
+  });
+
+  it('空值出空串；未知值原样透传（存量库里有 L1/L2 等历史值，不臆造词汇）', () => {
+    expect(levelWordZh(null)).toBe('');
+    expect(levelWordZh('')).toBe('');
+    expect(levelWordZh('L2')).toBe('L2');
+    expect(levelWordZh('expert')).toBe('expert');
+  });
+
+  it('并存格式统一「L2 · 进阶」', () => {
+    expect(levelBadgeZh(100, 'intermediate')).toBe('L2 · 进阶');
+    expect(levelBadgeZh(5, 'beginner')).toBe('L1 · 入门');
+  });
+
+  it('词汇缺失或与 Ln 同名（历史脏值）时只出 L2，不出「L2 · L2」', () => {
+    expect(levelBadgeZh(100, '')).toBe('L2');
+    expect(levelBadgeZh(100, null)).toBe('L2');
+    expect(levelBadgeZh(100, 'L2')).toBe('L2');
   });
 });
 

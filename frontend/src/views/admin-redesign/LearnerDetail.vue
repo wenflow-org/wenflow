@@ -35,7 +35,8 @@
       <div class="statstrip" role="list" aria-label="学习者概览">
         <div class="statstrip__stat" role="listitem">
           <span class="statstrip__label">路径进度</span>
-          <span class="statstrip__value">{{ d.pct }}%</span>
+          <!-- P2 双分母标注：本格按路径全部任务折算，「当前里程碑」行另有里程碑内分母，title 写明口径 -->
+          <span class="statstrip__value" :title="pctTitle">{{ d.pct }}%</span>
         </div>
         <div class="statstrip__stat" role="listitem">
           <span class="statstrip__label">当前阶段</span>
@@ -47,7 +48,8 @@
         </div>
         <div class="statstrip__stat" role="listitem">
           <span class="statstrip__label">最近会话</span>
-          <span class="statstrip__value">{{ d.sessions.length }} 条<span class="statstrip__unit">（加载窗口）</span></span>
+          <!-- P2：「（加载窗口）」角标改 title 口径；「最近」语义上移进读数 -->
+          <span class="statstrip__value" :title="recentSessionsHint">最近 {{ d.sessions.length }} 条</span>
         </div>
       </div>
     </section>
@@ -66,7 +68,7 @@
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">当前进度</h3>
-            <span class="mk-badge mk-badge--info">{{ d.pct }}%</span>
+            <span class="mk-badge mk-badge--info" :title="pctTitle">{{ d.pct }}%</span>
             <!-- 路径下钻：进路径详情二级页（原型「学习者详情 → 路径」同款；无真实 pathId 时隐藏） -->
             <button v-if="currentPathId" type="button" class="mk-link" @click="openPathDetail">查看路径结构 →</button>
           </div>
@@ -123,7 +125,8 @@
             <span class="mk-card__meta">
               <MkLoading v-if="ldSessLoading" inline min text="加载中…" />
               <template v-else-if="ldSessError">加载失败</template>
-              <template v-else>{{ ldSessionRows.length > recentSessionRows.length ? `最近 ${recentSessionRows.length} 条 · 共 ${ldSessionRows.length}` : `${recentSessionRows.length} 条` }}</template>
+              <!-- 「最近」语义恒在：左栏只取窗口前 5 条，裸「N 条」会被读成总量 -->
+              <template v-else>{{ ldSessionRows.length > recentSessionRows.length ? `最近 ${recentSessionRows.length} 条 · 共 ${ldSessionRows.length}` : `最近 ${recentSessionRows.length} 条` }}</template>
             </span>
           </div>
           <MkRowList :empty="!recentSessionRows.length" :loading="ldSessLoading" empty-text="暂无教学会话" empty-hint="该学习者上课后，这里会出现会话列表。">
@@ -426,17 +429,29 @@
             <span class="mk-card__meta">{{ evidence.length }} 条学习事件（仅最近 20 条）· 点色=信号，条=置信</span>
           </div>
           <!-- T2 硬约束 2「结论与细节分层」：结论行常驻可见，明细折叠。
-               结论文字完全取自本卡已有数据（条数 + 卡片里本来就标的「证据不足」），未新增判断。 -->
+               结论文字完全取自本卡已有数据（条数 + 卡片里本来就标的「证据不足」），未新增判断。
+               P2 口径：「共 N 条」改「最近 N 条」——接口侧 limit=20，列表不是全量 -->
           <p v-if="evidence.length" class="mk-section__conclusion">
-            共 {{ evidence.length }} 条学习事件，其中
+            最近 {{ evidence.length }} 条学习事件（接口窗口上限 20），其中
             {{ evidence.filter((e) => evidenceLowConfidence(e.score) && !isDomainEvidence(e.title)).length }} 条置信度低于 50%（仅供参照）。
           </p>
           <!-- T2「结论与细节分层」：结论行常驻，明细可折叠；默认展开——
-               折着的时间线让左栏只剩一行结论、主视区大面积空白（实测 19 条事件全收在折叠里）。 -->
+               折着的时间线让左栏只剩一行结论、主视区大面积空白（实测 19 条事件全收在折叠里）。
+               P2：带 sessionId 的行可点下钻只读座舱（与教学会话 pane 同一 openSessionCockpit） -->
           <details v-if="evidence.length" class="ld-ev-details" open>
             <summary class="mk-section__summary">逐条明细</summary>
             <div class="ld-evidence">
-            <div v-for="(e, i) in evidence" :key="i" class="ld-ev">
+            <div
+              v-for="(e, i) in evidence"
+              :key="i"
+              class="ld-ev"
+              :class="{ 'ld-ev--link': !!e.sessionId }"
+              :role="e.sessionId ? 'button' : undefined"
+              :tabindex="e.sessionId ? 0 : undefined"
+              :title="e.sessionId ? '点击打开该事件的会话座舱' : undefined"
+              @click="e.sessionId && openSessionCockpit(e.sessionId)"
+              @keydown.enter="e.sessionId && openSessionCockpit(e.sessionId)"
+            >
               <span class="ld-ev__rail" aria-hidden="true"></span>
               <span
                 class="ld-ev__dot"
@@ -683,17 +698,20 @@
         <div v-if="ldSessionRows.length" class="mk-table-scroll">
           <table class="mk-table">
             <thead>
-              <tr><th>会话 ID</th><th>Skill</th><th>阶段</th><th>回合</th><th>时长</th><th>状态</th><th>时间</th></tr>
+              <!-- P2 列序纠偏：主题是人读的行身份，裸 UUID 首列没有判读价值——主题置首，
+                   会话 ID 缩短为末列（title 保留全 ID） -->
+              <tr><th>主题</th><th>Skill</th><th>阶段</th><th>回合</th><th>时长</th><th>状态</th><th>时间</th><th>会话 ID</th></tr>
             </thead>
             <tbody>
               <tr v-for="s in ldSessionRowsFiltered" :key="s.id" class="ld-pane-row" @click="openSessionCockpit(s.id)">
-                <td class="ld-mono" :title="s.id">{{ s.id }}</td>
+                <td class="ld-strong" :title="s.topic">{{ s.topic }}</td>
                 <td>{{ s.skill }}</td>
                 <td><span class="mk-badge mk-badge--info">{{ s.stage }}</span></td>
                 <td class="ld-mono" title="口径：用户消息条数（后端无独立回合计数）">{{ s.turns }}</td>
                 <td class="ld-mono">{{ s.duration }}</td>
                 <td><span class="mk-badge" :class="sessPaneBadgeCls(s.status)">{{ statusText(s.status) || '—' }}</span></td>
                 <td class="ld-mono ld-sub">{{ s.startAgo }}</td>
+                <td class="ld-mono ld-sub" :title="s.id">{{ shortId(s.id) }}</td>
               </tr>
             </tbody>
           </table>
@@ -773,7 +791,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { subPage, openSubPage, setSubPageLabel } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
-import { conceptBarTone, conceptBarWidth, memoryReviewUrl, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelFromXp } from './learner-profile'
+import { conceptBarTone, conceptBarWidth, memoryReviewUrl, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh, levelBadgeZh } from './learner-profile'
 import { adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
 import { statusText } from './statusText'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
@@ -804,6 +822,9 @@ interface Detail {
   stage: string
   task: string
   pct: number
+  /** 进度分母口径（P2 双分母标注）：pct 按路径全部任务折算，与「当前里程碑」行的里程碑内分母区分 */
+  taskDone: number
+  taskTotal: number
   concepts: { mastered: string[]; struggling: string[]; fragile: string[] }
   sessions: { time: string; title: string; result: string; tone: 'ok' | 'warn' | 'bad' | 'muted'; concepts?: string[] }[]
   snapshot: { version: string; generatedAt: string }
@@ -1182,6 +1203,8 @@ async function loadDetail(id: string | undefined) {
       stage: base?.currentMilestone || String(progress.totalMilestones ? `已完成 ${progress.completedMilestones ?? 0}/${progress.totalMilestones} 个里程碑` : ''),
       task: base?.currentTask || '未开始',
       pct,
+      taskDone: completedTasks,
+      taskTotal: totalTasks,
       concepts: {
         mastered: (globalSignals.masteredConcepts as string[]) || [],
         struggling: base?.struggling || conceptStates.filter((c) => c.status === 'struggling').map((c) => String(c.label)),
@@ -1237,6 +1260,8 @@ async function loadDetail(id: string | undefined) {
         stage: base.currentMilestone || '',
         task: base.currentTask || '未开始',
         pct: 0,
+        taskDone: 0,
+        taskTotal: 0,
         concepts: { mastered: [], struggling: base.struggling, fragile: base.fragile },
         sessions: [],
         snapshot: {
@@ -1310,6 +1335,17 @@ async function recompute() {
 
 const loading = computed(() => !liveDetail.value && !detailError.value)
 
+/** 进度口径（P2 双分母标注）：statstrip % 按路径全部任务折算；「当前里程碑」行是里程碑内任务分母 */
+const pctTitle = computed(() => {
+  const v = d.value
+  if (!v) return ''
+  return v.taskTotal > 0
+    ? `路径进度 ${v.pct}%：按路径全部任务折算（任务 ${v.taskDone}/${v.taskTotal}）；下方「当前里程碑」行用的是里程碑内分母`
+    : `路径进度 ${v.pct}%：按路径全部任务折算（暂无任务分母）`
+})
+/** statstrip「最近会话」口径：d.sessions 是最近学习事件前 6 条，非会话全量 */
+const recentSessionsHint = '口径：最近学习事件前 6 条（非会话全量）；完整教学会话列表见「教学会话」页签'
+
 const d = computed<Detail | null>(() => {
   if (detailError.value) return null
   return liveDetail.value || null
@@ -1352,8 +1388,8 @@ const EN_ZH: Record<string, string> = {
   immediate: '即时', delayed: '延迟', 'on-request': '按需',
   small: '小步', large: '大步',
   true: '是', false: '否',
-  /* 用户详情 currentLevel（学习者画像 kv 卡层级） */
-  beginner: '入门', intermediate: '进阶', advanced: '高级'
+  /* 用户详情 currentLevel（学习者画像 kv 卡层级）——等级词汇单点在 learner-profile.ts levelWordZh */
+  beginner: levelWordZh('beginner'), intermediate: levelWordZh('intermediate'), advanced: levelWordZh('advanced')
 }
 const zh = (v: unknown): string => {
   const s = String(v ?? '')
@@ -1842,15 +1878,15 @@ const learningStateRows = computed(() => {
 
 /* ---------- 概览：学习者画像 kv（原型 2190） ----------
    后端用户详情无「注册来源」字段 → 不渲染该行（不硬造）；路径数取 _count.learning_paths，
-   层级取 levelFromXp(xp)（后端 level.util 同公式）。 */
+   层级取 levelBadgeZh(xp, currentLevel)（等级词汇单点，L 公式与后端 level.util 同源）。 */
 const portraitRows = computed(() => {
   const rows: { label: string; value: string }[] = []
   if (d.value?.email) rows.push({ label: '邮箱', value: d.value.email })
   const u = userRecord.value
   if (u) {
-    const lvl = u.xp > 0 ? `L${levelFromXp(u.xp)}` : ''
-    const lvlZh = zh(u.currentLevel)
-    if (lvl || u.currentLevel) rows.push({ label: '学习层级', value: [lvl, lvlZh].filter(Boolean).join(' · ') })
+    // 等级词汇单点（learner-profile.ts）：统一「L2 · 进阶」并存格式
+    const lvlBadge = levelBadgeZh(u.xp, u.currentLevel)
+    if (lvlBadge) rows.push({ label: '学习层级', value: lvlBadge })
     rows.push({ label: '路径数', value: `${u.pathCount} 条` })
     if (u.createdAt) rows.push({ label: '注册时间', value: timeAgo(u.createdAt) })
   }
@@ -1951,7 +1987,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   font-variant-numeric: tabular-nums; color: var(--mk-ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.statstrip__unit { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); letter-spacing: 0; }
 
 /* 页头身份区走 .mk-entity（shared.css） */
 
@@ -2179,6 +2214,10 @@ function barToneBadge(tone: ConceptBarTone): string {
   border-bottom: 1px solid var(--mk-line);
 }
 .ld-ev:last-child { border-bottom: none; }
+/* P2 可点下钻（带 sessionId 的行 → 会话座舱）：悬停只换背景/光标，不做位移 */
+.ld-ev--link { cursor: pointer; }
+.ld-ev--link:hover { background: var(--mk-surface-2); }
+.ld-ev--link:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }
 /* 竖线时间轴：贯穿每行左侧；单条时不显示（避免断裂） */
 .ld-ev__rail {
   position: absolute;

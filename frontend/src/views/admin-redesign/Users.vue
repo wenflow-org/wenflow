@@ -127,11 +127,12 @@
                 <MkCellAvatar :name="u.name" :tone="avaTone(u)" />
                 <div class="mk-cell-main">
                   <strong>{{ u.name }}</strong>
-                  <!-- 原型 celluser meta 模式：等级 · N 条路径（XP 细节进悬停） -->
+                  <!-- 原型 celluser meta 模式：等级 · N 条路径（XP 细节进悬停）。
+                       等级词汇单点（learner-profile.ts）：统一「L2 · 进阶」并存格式 -->
                   <span
                     class="mk-cell-sub"
                     :title="u.xp === 0 ? '尚无经验值' : `${u.xp} XP · 距 L${levelFromXp(u.xp) + 1} 还需 ${xpToNext(u.xp)}`"
-                  >{{ levelLabel(u.xp) }} · {{ u.paths }} 条路径</span>
+                  >{{ levelBadgeZh(u.xp, u.currentLevel) }} · {{ u.paths }} 条路径</span>
                 </div>
                 <div class="ul-tags">
                   <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
@@ -146,8 +147,9 @@
             </td>
             <td v-if="showCol('role')"><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
             <td v-if="showCol('paths')">
-              <!-- 原型列语言：数字列就是 mono 文本，不加自造可视化（双段条退役，计数进悬停） -->
-              <span class="ul-ps" :title="`路径 ${u.paths} 条 · 会话 ${u.sessions} 次`"><b>{{ u.paths }}</b><i>/</i><b :class="{ 'mk-na': !u.sessions }">{{ u.sessions }}</b></span>
+              <!-- 原型列语言：数字列就是 mono 文本，不加自造可视化（双段条退役，计数进悬停）。
+                   P2：0 值统一 mk-na 弱化（此前只有会话 0 弱化，路径 0 却实心黑，双标） -->
+              <span class="ul-ps" :title="`路径 ${u.paths} 条 · 会话 ${u.sessions} 次`"><b :class="{ 'mk-na': !u.paths }">{{ u.paths }}</b><i>/</i><b :class="{ 'mk-na': !u.sessions }">{{ u.sessions }}</b></span>
             </td>
             <td v-if="showCol('created')"><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
             <td v-if="showCol('lastlogin')"><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
@@ -281,7 +283,7 @@ import { Filter } from 'lucide-vue-next';
 import { useEscape } from './useEscape'
 import { useIsNarrow } from './useIsNarrow'
 import { toast } from '@/utils/toast'
-import { isTestAccountUser, levelFromXp, levelLabel } from './learner-profile'
+import { isTestAccountUser, levelFromXp, levelBadgeZh } from './learner-profile'
 
 /* ---- 行级设计派生（2026-09-26）：身份 chip 色 / 升级进度 / 登录新鲜度 ---- */
 type UlUserLite = { deleted?: boolean; isVirtualLearner?: boolean; name?: string; email?: string; id?: string; xp?: number }
@@ -473,7 +475,7 @@ const pills = computed(() => {
     { id: 'all', label: '全部', count: active.length },
     { id: 'admin', label: '管理员', count: active.filter((u) => u.isAdmin).length },
     { id: 'user', label: '普通用户', count: active.filter((u) => !u.isAdmin).length },
-    { id: 'online', label: '近期在线', count: active.filter(isOnline).length },
+    { id: 'online', label: '30 分钟在线', count: active.filter(isOnline).length },
     { id: 'deleted', label: '已删除', count: deletedUsers.value.length || null }
   ]
 })
@@ -651,7 +653,7 @@ function exportSelected() {
       esc(u.name),
       esc(u.email),
       u.admin ? '管理员' : '用户',
-      `${levelLabel(u.xp)} / ${u.xp}`,
+      `${levelBadgeZh(u.xp, u.currentLevel)} / ${u.xp}`,
       `${u.paths} / ${u.sessions}`,
       esc(u.createdAt || ''),
       esc(u.lastLogin || ''),
