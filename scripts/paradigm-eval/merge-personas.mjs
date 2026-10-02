@@ -3,7 +3,7 @@
  * 合并 4 份挖掘产物 → real-goals-cases.json，并做驱动/留出分层切分。
  *
  * 用法：node merge-personas.mjs [--holdout=24]
- * - 读 doc/local/overnight-20260928/personas-{school,career,exam,life}.json
+ * - 读 doc/local/runs/20260929/inputs/persona_{school,career,exam,life}_w1_20260929.json
  * - schema 校验（personaId 唯一、opening 非空、budget 三件套），坏条目剔除并报告
  * - 留出集按 域组×意图×预算档 分层随机抽取并**冻结**：写 holdout-freeze.json（含抽取种子），
  *   后续修复轮禁止引用留出集内容作为修复依据
@@ -15,11 +15,11 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SRC = path.resolve(HERE, '../../doc/local/overnight-20260928');
+const SRC = path.resolve(HERE, '../../doc/local/runs/20260929/inputs');
 const RESULTS = path.join(HERE, 'results');
 const HOLDOUT_N = Number((process.argv.find((a) => a.startsWith('--holdout=')) || '').split('=')[1]) || 24;
 
-const FILES = ['personas-school.json', 'personas-career.json', 'personas-exam.json', 'personas-life.json'];
+const FILES = ['persona_school_w1_20260929.json', 'persona_career_w1_20260929.json', 'persona_exam_w1_20260929.json', 'persona_life_w1_20260929.json'];
 const groupOf = (id) => id.startsWith('rw-school') ? 'school' : (id.startsWith('rw-career') || id.startsWith('rw-acad')) ? 'career' : id.startsWith('rw-exam') ? 'exam' : 'life';
 
 function tierOf(b) {

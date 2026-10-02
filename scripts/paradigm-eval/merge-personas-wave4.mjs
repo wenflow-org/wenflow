@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-/** 第四波人设合并： personas-{school3,hard}.json → real-goals-cases.json（追加+去重+校验）→ wave4 ids */
+/** 第四波人设合并： personas-{school3,hard}.json → runs/20260929/inputs/ → real-goals-cases.json（追加+去重+校验）→ wave4 ids */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SRC = path.resolve(HERE, '../../doc/local/overnight-20260928');
-const FILES = ['personas-school3.json', 'personas-hard.json'];
+const SRC = path.resolve(HERE, '../../doc/local/runs/20260929/inputs');
+const FILES = ['persona_school_w3_20260929.json', 'persona_hard_w1_20260929.json'];
 
 const main = JSON.parse(fs.readFileSync(path.join(HERE, 'real-goals-cases.json'), 'utf8'));
 const existing = new Set(main.cases.map((c) => c.personaId));

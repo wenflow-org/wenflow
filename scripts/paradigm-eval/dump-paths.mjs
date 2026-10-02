@@ -15,7 +15,10 @@ const arg = (name, fallback) => {
   return hit ? hit.split('=').slice(1).join('=') : fallback;
 };
 const since = Number(arg('since', '0'));
-const outDir = path.resolve(arg('out', path.join(ROOT, 'doc/local/overnight-20260928/review-dump')));
+// 输出落 runs/<当日>/reviews/（NAMING.md）；文件名补 review_ 前缀与日期
+// （2026-09-30 修：toTimeString 是时刻带冒号，Windows 文件名非法——learn-drive/learn-run 同病第 4 处）
+const RUN_DATE = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`; })();
+const outDir = path.resolve(arg('out', path.join(ROOT, 'doc/local/runs', RUN_DATE, 'reviews')));
 const limit = Number(arg('limit', '0'));
 
 fs.mkdirSync(outDir, { recursive: true });
@@ -38,7 +41,7 @@ for (const p of rows) {
     if (m.goal) md += `阶段目标: ${m.goal}\n`;
     subs.forEach((s, k) => { md += `${k + 1}. [${s.taskType || '?'} ${s.estimatedMinutes}min] ${s.title}\n`; });
   }
-  const file = path.join(outDir, `${p.userName.replace('pe-', '')}.md`);
+  const file = path.join(outDir, `review_path-${p.userName.replace('pe-', '')}_${RUN_DATE}.md`);
   fs.writeFileSync(file, md);
 }
 db.close();

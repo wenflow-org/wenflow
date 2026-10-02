@@ -7,40 +7,71 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BASE = 'http://127.0.0.1:3001';
+const BASE = process.env.API_BASE || 'http://127.0.0.1:3001';
 const PASSWORD = 'ParadigmEval2026';
 const RESULTS = path.join(__dirname, 'results');
+// 课堂工件按 doc/local/runs/NAMING.md 落 runs/<当日>/lessons/lesson_<persona>_<tag>_<date>.json
+// （2026-09-30 修：toTimeString() 是时刻不是日期，slice 出来带冒号，Windows 落盘 ENOENT——
+// 整节课跑完在最后写文件时崩、课录全丢。learn-run.mjs 同行同病，两处一起修）
+const RUN_DATE = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`; })();
+const LESSON_DIR = path.resolve(__dirname, '../../doc/local/runs', RUN_DATE, 'lessons');
+const lessonOut = (base) => path.join(LESSON_DIR, `lesson_${base.replace(/^learn-/, '')}_${process.env.LEARN_TAG || 'run'}_${RUN_DATE}.json`);
 
 const personaId = process.argv[2] || '';
 const maxTurns = Number(process.argv[3] || 6);
 if (!personaId) { console.error('usage: learn-drive.mjs <personaId> [maxTurns]'); process.exit(1); }
-// 产物文件名标签（A/B 会话分开落盘，避免夜跑时同案例互相覆盖）
-const outName = (base) => `${base}${process.env.LEARN_TAG ? '-' + process.env.LEARN_TAG : ''}.json`;
 
 let cookie = '';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const log = m => console.log('[' + new Date().toISOString().slice(11, 19) + '] ' + m);
 
-async function api(method, urlPath, bodyObj, { timeout = 300000 } = {}) {
+async function api(method, urlPath, bodyObj, { timeout = 300000, retries = 2 } = {}) {
   const headers = { Cookie: cookie, Origin: 'http://localhost:5173' };
   if (bodyObj !== undefined) headers['Content-Type'] = 'application/json';
-  const res = await fetch(BASE + urlPath, { method, headers, body: bodyObj !== undefined ? JSON.stringify(bodyObj) : undefined, signal: AbortSignal.timeout(timeout) });
-  const text = await res.text();
-  let json; try { json = JSON.parse(text); } catch { json = { raw: text.slice(0, 200) }; }
-  if (!res.ok || json?.success === false) throw new Error(method + ' ' + urlPath + ' -> ' + res.status + ' ' + (json?.error?.message || json?.error || '').slice(0, 160));
-  return json;
+  let last = null;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await fetch(BASE + urlPath, { method, headers, body: bodyObj !== undefined ? JSON.stringify(bodyObj) : undefined, signal: AbortSignal.timeout(timeout) });
+      const text = await res.text();
+      let json; try { json = JSON.parse(text); } catch { json = { raw: text.slice(0, 200) }; }
+      if (!res.ok || json?.success === false) {
+        last = method + ' ' + urlPath + ' -> ' + res.status + ' ' + (json?.error?.message || json?.error || '').slice(0, 160);
+        // 瞬时类（429/5xx）退避重试——病池期一次透传 502 就把整节课截断成假失败（2026-09-30，path 侧同病同治）
+        if (res.status === 429 || res.status >= 500) { await sleep(8000 * (i + 1)); continue; }
+        throw new Error(last);
+      }
+      return json;
+    } catch (e) {
+      if (e?.name === 'TimeoutError' || e?.name === 'AbortError') { last = `${method} ${urlPath} timeout ${timeout}ms`; await sleep(8000 * (i + 1)); continue; }
+      throw e;
+    }
+  }
+  throw new Error(last || (method + ' ' + urlPath + ' failed'));
 }
 
 async function login() {
-  try {
-    const res = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' }, body: JSON.stringify({ name: 'pe-' + personaId, password: PASSWORD, remember: true }) });
-    cookie = (res.headers.get('set-cookie') || '').split(';')[0];
-    const j = await res.json();
-    if (!j.success) throw new Error('login failed');
-  } catch {
-    await fetch(BASE + '/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' }, body: JSON.stringify({ name: 'pe-' + personaId, password: PASSWORD, remember: true }) });
-    const res = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' }, body: JSON.stringify({ name: 'pe-' + personaId, password: PASSWORD, remember: true }) });
-    cookie = (res.headers.get('set-cookie') || '').split(';')[0];
+  // 登录限流退避（后端 30/IP/窗口；批次并发登录会顶满——2026-10-01 实证两课 2s 秒死于此）
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const res = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' }, body: JSON.stringify({ name: 'pe-' + personaId, password: PASSWORD, remember: true }) });
+      cookie = (res.headers.get('set-cookie') || '').split(';')[0];
+      const j = await res.json();
+      if (!j.success) throw new Error('login failed: ' + JSON.stringify(j).slice(0, 100));
+      return;
+    } catch (e) {
+      if (attempt === 4) {
+        try {
+          await fetch(BASE + '/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' }, body: JSON.stringify({ name: 'pe-' + personaId, password: PASSWORD, remember: true }) });
+          const res = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' }, body: JSON.stringify({ name: 'pe-' + personaId, password: PASSWORD, remember: true }) });
+          cookie = (res.headers.get('set-cookie') || '').split(';')[0];
+          const j = await res.json();
+          if (!j.success) throw new Error('login failed after register');
+          return;
+        } catch (e2) { throw new Error('login failed x5: ' + String(e2.message || e2).slice(0, 100)); }
+      }
+      console.log('[' + new Date().toISOString().slice(11, 19) + '] login retry ' + (attempt + 1) + ': ' + String(e.message || e).slice(0, 80));
+      await sleep(15000 * (attempt + 1));
+    }
   }
 }
 
@@ -139,8 +170,15 @@ async function main() {
   if (!firstTask) throw new Error('no tasks');
   log(`path=${pathId} | ${pathData.name || pathData.title} | task=S${firstTask.stageNumber}T1 ${String(firstTask.title).slice(0, 30)} (${firstTask.id})`);
 
-  // 开课
-  const start = await api('POST', `/api/ai-teaching/tasks/${firstTask.id}/session`, {});
+  // 开课（渐进式备课可能未完成：409 生成中 → 等待重试，给足 3 次 ×60s）
+  let start = null;
+  for (let i = 0; i < 4; i++) {
+    try { start = await api('POST', `/api/ai-teaching/tasks/${firstTask.id}/session`, {}); break; }
+    catch (e) {
+      if (String(e.message).includes('409') && i < 3) { log('409 备课生成中，60s 后重试 ' + (i + 1) + '/3'); await sleep(60000); continue; }
+      throw e;
+    }
+  }
   const d = start.data || {};
   const sessionId = d.sessionId;
   let revision = d.revision;
@@ -151,7 +189,7 @@ async function main() {
     welcome: String(d.welcomeMessage || '').slice(0, 500),
     turns: [], checkpoints: [], completion: null, endSummary: null, startedAt: Date.now(),
   };
-  if (d.mode === 'completed') { record.note = 'task already completed'; fs.writeFileSync(path.join(RESULTS, outName(`learn-${personaId}`)), JSON.stringify(record, null, 1)); return; }
+  if (d.mode === 'completed') { record.note = 'task already completed'; fs.mkdirSync(LESSON_DIR, { recursive: true }); fs.writeFileSync(lessonOut(`learn-${personaId}`), JSON.stringify(record, null, 1)); return; }
 
   let turns = pickPreset();
   // 教学质量评审：案例专属回合脚本（含误区 trap 措辞）可整体覆盖预设
@@ -313,8 +351,9 @@ async function main() {
 
   record.images = images;
   record.imageTiming = images.map(i => `turn${i.turn}`);
-  fs.writeFileSync(path.join(RESULTS, outName(`learn-${personaId}`)), JSON.stringify(record, null, 1));
-  log(`DONE learn-${personaId}.json | turns=${record.turns.length} images=${images.length} checkpoints=${record.checkpoints.length}`);
+  fs.mkdirSync(LESSON_DIR, { recursive: true });
+  fs.writeFileSync(lessonOut(`learn-${personaId}`), JSON.stringify(record, null, 1));
+  log(`DONE lesson_${personaId} | turns=${record.turns.length} images=${images.length} checkpoints=${record.checkpoints.length}`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

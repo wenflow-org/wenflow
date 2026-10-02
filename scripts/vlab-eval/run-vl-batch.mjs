@@ -72,6 +72,7 @@ function httpJson(method, urlPath, body, timeoutMs) {
 async function api(method, urlPath, body, { retries = 8, timeout = 600000, netBudgetMs = 600000 } = {}) {
   let last = null;
   let respRetries = 0;
+  let retries409 = 0;
   let netStart = 0;
   let netRetries = 0;
   for (;;) {
@@ -80,7 +81,14 @@ async function api(method, urlPath, body, { retries = 8, timeout = 600000, netBu
       if (resStatus === 401) { await adminLogin(); continue; }
       if (!resStatus || resStatus >= 400 || json?.success === false) {
         last = `${resStatus} ${String(json?.error?.message || json?.error || json?.raw || '').slice(0, 140)}`;
-        if (resStatus === 409 || resStatus === 429 || resStatus >= 500) {
+        if (resStatus === 409) {
+          // 409=会话写锁被占（孤儿轮/相邻驱动）。与限流不同，这是「等就完事」的错：
+          // 独立预算 20 次、退避封顶 48s（累计可容忍 ~13 分钟锁占用），别占用 429/5xx 的快速失败预算
+          if (++retries409 > 20) throw new Error(last);
+          await sleep(8000 * Math.min(retries409, 6));
+          continue;
+        }
+        if (resStatus === 429 || resStatus >= 500) {
           if (++respRetries > retries) throw new Error(last);
           await sleep(8000 * respRetries);
           continue;

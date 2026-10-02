@@ -16,7 +16,12 @@ const BASE = process.env.API_BASE || 'http://127.0.0.1:3001';
 const DB_PATH = path.join(ROOT, 'backend', 'prisma', 'dev.db');
 const RESULTS = path.join(__dirname, 'results');
 const PASSWORD = 'ParadigmEval2026';
-const GEN_TIMEOUT_MS = 8 * 60 * 1000;
+// 生成就绪等待窗。2026-09-30 13:45 从 8 分钟提到 20 分钟：8 分钟是网关顺畅期的值，
+// 而 stage 设计是 5 次串行 LLM 调用，网关一慢（病池/高并发排队）整链就超过 8 分钟——
+// drive 到期停止等待会把**后端其实已成功**的格判成 failed-gen（实证：多条超时格的 path
+// 在库里 status=active、stageDesign=succeeded）。高并发实测前必须先放宽这个窗，
+// 否则测到的"失败潮"是驱动器不耐烦、不是网关不行。
+const GEN_TIMEOUT_MS = 40 * 60 * 1000;
 
 const personas = JSON.parse(fs.readFileSync(path.join(__dirname, 'golden-personas.json'), 'utf8')).personas;
 // 教学质量案例库（tq-*）：与人设 schema 同构，合并进 lookup 使 goal→path→learn 全链可直接驱动
@@ -25,6 +30,8 @@ const realGoalCases = JSON.parse(fs.readFileSync(path.join(__dirname, 'real-goal
 const byId = id => personas.concat(tqCases, realGoalCases).find(p => p.personaId === id);
 
 let cookie = '';
+let currentPersona = null; // api() 401 重登用（driveCell 入口设置）
+let cookieSaver = null;   // 401 重登成功后回写状态文件（防下次 spawn 再 401 风暴）
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const log = m => console.log('[' + new Date().toISOString().slice(11, 19) + '] ' + m);
 
@@ -51,8 +58,12 @@ async function api(method, urlPath, bodyObj, { retries = 4, timeout = 600000 } =
           await sleep(15000 * (attempt + 1));
           continue;
         }
-        // 401：重新登录一次再试
-        if (res.status === 401 && attempt === 0) { await loginAs(cookie.split('=')[0] ? undefined : null); continue; }
+        // 401：cookie 失效——用当前 persona 正经重登再重试，成功后回写状态文件（token 30 分钟 TTL 实测）
+        if (res.status === 401 && attempt === 0 && currentPersona) {
+          await loginAsWithRetry(currentPersona);
+          if (cookieSaver) cookieSaver();
+          continue;
+        }
         throw new Error(method + ' ' + urlPath + ': ' + lastErr);
       }
       return { status: res.status, json };
@@ -74,6 +85,18 @@ async function loginAs(name, password) {
   const j = await res.json();
   if (!j.success) throw new Error('probe login failed: ' + JSON.stringify(j).slice(0, 150));
   cookie = (res.headers.get('set-cookie') || '').split(';')[0];
+}
+
+// 登录限流退避（后端 30 次/IP/窗口，批量 spawn 同秒登录必顶满——2026-10-01 phase B 实证 51 格死于登录）
+async function loginAsWithRetry(name, attempts = 5) {
+  for (let i = 0; i < attempts; i++) {
+    try { await loginAs(name, PASSWORD); return; }
+    catch (e) {
+      if (i === attempts - 1) throw e;
+      log(name + ' login retry ' + (i + 1) + ': ' + String(e.message || e).slice(0, 80));
+      await sleep(15000 * (i + 1));
+    }
+  }
 }
 
 async function ensureProbeUser(personaId) {
@@ -114,6 +137,7 @@ function loadState(p) { return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 
 function saveState(p, st) { fs.writeFileSync(p, JSON.stringify(st, null, 1)); }
 
 async function driveCell(personaId, runIndex) {
+  currentPersona = 'pe-' + personaId;
   const persona = byId(personaId);
   if (!persona) throw new Error('unknown persona ' + personaId);
   fs.mkdirSync(RESULTS, { recursive: true });
@@ -124,8 +148,18 @@ async function driveCell(personaId, runIndex) {
     pathId: null, transcript: [], proposal: null, keyStages: null,
     path: null, generationLifecycle: null, errors: [],
   };
-
-  await ensureProbeUser(personaId);
+  // 停车模式恢复：ready-to-confirm 是 wave-run --split-gen 的中途态，回到 driving 续走循环
+  if (st.status === 'ready-to-confirm') st.status = 'driving';
+  // 登录：状态文件存有 cookie 且未临期（token 实测 30 分钟 TTL）直接复用；
+  // 过期/临期走限流退避重登并记录签发时间；401 兜底由 api() 的重登+回写接管。
+  cookieSaver = () => { try { st.cookie = cookie; st.cookieAt = Date.now(); saveState(sp, st); } catch { } };
+  if (st.cookie && st.cookieAt && Date.now() - st.cookieAt < 25 * 60 * 1000) {
+    cookie = st.cookie;
+  } else {
+    await ensureProbeUser(personaId);
+    await loginAsWithRetry('pe-' + personaId);
+    cookieSaver();
+  }
 
   // ---- 带文件格：先上传 fixtures（幂等：只在会话首次驱动时传一次） ----
   if ((persona.uploads || []).length && !st.uploadedMaterialIds) {
@@ -154,12 +188,30 @@ async function driveCell(personaId, runIndex) {
     const core = snap.json?.data?.internal?.core || {};
     if (core.stage === 'completed' || (core.learningPath && core.learningPath.id)) {
       st.pathId = core.learningPath?.id || st.pathId;
+      // 幽灵管道守卫（2026-09-30）：会话 completed 却无 pathId ⇒ 路径已丢。原地 break 会把格子
+      // 永远卡在 driving、wave A 永不收口（rw-life5-11 实证：重发车 1s 即 FAIL 死循环）。
+      // 改标 failed-gen，wave-run 见此状态会清状态文件，下一轮全新重试。
+      if (!st.pathId) {
+        st.status = 'failed-gen';
+        st.errors.push({ at: Date.now(), note: 'conversation completed without pathId (ghost pipeline)' });
+        saveState(sp, st);
+        log(`${personaId}#${runIndex} ghost pipeline: completed, no pathId -> failed-gen`);
+      }
       break;
     }
     if (core.stage === 'proposing') {
       // 有异议脚本的人设（不限 mastery）：首次 proposing 注入一次异议，其后确认。
       // resistanceAtProposal / objectionAtProposal 等价（v1.2 起 change-sql 用后者表"砍阶段"异议）
       const objectionText = persona.resistanceAtProposal || persona.objectionAtProposal;
+      const wouldConfirm = !(st.resistances < 1 && objectionText);
+      // 停车模式（--split-gen）：下一步就是确认时先停车——确认/生成位由 wave-run 过闸，
+      // worker 立即释放去聊下一格（2026-09-30 用户设计：goal 异步于生成，别让 15 个人干等 path）
+      if (STOP === 'talk' && wouldConfirm) {
+        st.status = 'ready-to-confirm';
+        saveState(sp, st);
+        log(`${personaId}#${runIndex} parked: ready-to-confirm`);
+        return st;
+      }
       if (st.resistances < 1 && objectionText) {
         st.resistances = 1;
         const text = objectionText;
@@ -184,6 +236,8 @@ async function driveCell(personaId, runIndex) {
       st.status = st.pathId ? 'awaiting-path' : 'driving';
       saveState(sp, st);
       log(`${personaId}#${runIndex} confirmed, pathId=${st.pathId || 'MISSING'}`);
+      // confirm 停车：生成已在服务端 fire，等待交给 wave-run 的生成位 waiter（cell 全模式 resume 即等）
+      if (STOP !== 'full') return st;
       continue;
     }
     // understanding（或其他）：按脚本续答
@@ -207,15 +261,26 @@ async function driveCell(personaId, runIndex) {
     log(`${personaId}#${runIndex} round ${st.rounds} (${isResistance ? 'resist' : 'followup'}) sent`);
   }
 
-  // ---- 生成等待阶段 ----
-  if (st.status === 'awaiting-path' && st.pathId) {
+  // ---- 生成等待阶段（仅 cell 全模式；talk/confirm 停车模式到此即返） ----
+  if (STOP === 'full' && st.status === 'awaiting-path' && st.pathId) {
     const deadline = Date.now() + GEN_TIMEOUT_MS;
     let failGrace = 0; // 2026-09-27：生成器有自动重试（attempt1 failed → attempt2 succeeded），
     // 首次 failed 只记账，连续约 1min 仍 failed 才判死——避免把重试中的运行误判为 failed-gen
     // （轮询间隔 5s × 12 次 ≈ 60s；间隔从 15s 收紧以缩短单格空等）
     let sawReady = false;
+    let pollFails = 0;
     while (Date.now() < deadline) {
-      const g = await api('GET', `/api/learning/paths/${st.pathId}/generation-status`);
+      let g = null;
+      try {
+        g = await api('GET', `/api/learning/paths/${st.pathId}/generation-status`);
+      } catch (e) {
+        // 轮询限流/暂态（240 次/IP/窗口，28 waiter×5s 必超）——退避续等，不致命；总窗仍兜底
+        pollFails++;
+        if (pollFails % 6 === 1) log(`${personaId}#${runIndex} poll backoff x${pollFails}: ${String(e.message || e).slice(0, 60)}`);
+        await sleep(Math.min(30000, 6000 * pollFails));
+        continue;
+      }
+      pollFails = 0;
       const lc = g.json?.data?.lifecycle || '';
       st.generationLifecycle = lc;
       if (lc === 'ready') { sawReady = true; break; }
@@ -223,7 +288,8 @@ async function driveCell(personaId, runIndex) {
         failGrace += 1;
         if (failGrace >= 12) { st.status = 'failed-gen'; break; }
       } else failGrace = 0;
-      await sleep(5000);
+      // 10-14s 抖动：28 waiter 并发时 ~170 次/分，贴着轮询限流（240/分）留出余量
+      await sleep(10000 + Math.floor(Math.random() * 4000));
     }
     // 2026-09-29 修正：此前 deadline 耗尽而未 ready 时，下方分支仍把它标成 done——
     // 实测 wave4 有 4/30 条实际零内容（3 条 core 上游失败 + 1 条 stageDesign 重试耗尽）
@@ -288,13 +354,10 @@ function status() {
 // ---- 入口 ----
 const env = readEnv();
 const cmd = process.argv[2] || 'status';
-if (cmd === 'cell') {
-  await loginAs('pe-' + process.argv[3], PASSWORD).catch(async () => {
-    // 账号可能不存在：注册后重登
-    const name = 'pe-' + process.argv[3];
-    await fetch(BASE + '/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' }, body: JSON.stringify({ name, password: PASSWORD, remember: true }) });
-    await loginAs(name, PASSWORD);
-  });
+// 停车模式（wave-run --split-gen 用）：talk=聊到待确认即停；confirm=确认拿到 pathId 即停（不等生成）
+const STOP = cmd === 'cell-talk' ? 'talk' : cmd === 'cell-confirm' ? 'confirm' : 'full';
+if (cmd === 'cell' || cmd === 'cell-talk' || cmd === 'cell-confirm') {
+  // 登录移交 driveCell：有 st.cookie 复用、无则限流退避登录（入口每进程必登录会顶满 30/IP/窗口）
   await driveCell(process.argv[3], Number(process.argv[4] || 1));
 } else if (cmd === 'all') {
   await runAll();
