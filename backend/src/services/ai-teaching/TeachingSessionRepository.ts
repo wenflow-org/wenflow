@@ -620,6 +620,29 @@ export class TeachingSessionRepository {
     return null;
   }
 
+  /**
+   * 卡死在 finalizing 的会话（2026-10-02 完课死锁自愈）：finalization op 仍标 processing
+   * 但租约已过期——持有者（首个 finalize 请求）已死且无人认领，重进课堂时由开课路由
+   * 补跑结算（claimFinalization 对过期租约放行 supersede）。租约仍有效 = 持有者还在
+   * 推进，不算死局，返回 null。
+   */
+  async findStuckFinalizingSession(
+    userId: string,
+    taskId: string
+  ): Promise<TeachingSessionRecord | null> {
+    const record = await prisma.teaching_sessions.findFirst({
+      where: { userId, taskId, status: 'finalizing' },
+      orderBy: { updatedAt: 'desc' }
+    });
+    if (!record) return null;
+    const op = await prisma.session_finalization_operations.findFirst({
+      where: { sessionId: record.id, status: 'processing' },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (!op?.leaseExpiresAt || op.leaseExpiresAt > new Date()) return null;
+    return mapRecordHydrated(record, { lazy: true });
+  }
+
   /** 最近一次指定状态的会话（默认不限状态）；用于已完成任务重定向到学习反馈。 */
   async findLatestSession(
     userId: string,

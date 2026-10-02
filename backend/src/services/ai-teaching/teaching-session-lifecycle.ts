@@ -628,7 +628,11 @@ export async function endSession(
 
   let wrapupOutput: any = null;
   try {
-    wrapupOutput = await executeSkill(sessionWrapupAgentDefinition, {
+    // wrapup LLM 硬帽 8 分钟（2026-10-02 完课死锁修复）：调用方断开后流式请求可能永不
+    // settle、await 悬空且 catch 无法 rescue（实测 wrapup 跑了 6.5 分钟后整链冻结）。
+    // 超时按失败处理，走下方 summary-only 兜底继续收束。
+    wrapupOutput = await Promise.race([
+      executeSkill(sessionWrapupAgentDefinition, {
     input: {
       messages: session.messages.map((message) => ({
         role: message.role,
@@ -677,7 +681,12 @@ export async function endSession(
       principal: { userId: session.userId },
       session: { sessionId: session.id, taskId: session.taskId },
     },
-  });
+      }),
+      new Promise<never>((_, reject) => {
+        const timer = setTimeout(() => reject(new Error('SESSION_WRAPUP_TIMEOUT_480S')), 480_000);
+        if (timer && typeof timer === 'object' && 'unref' in timer) timer.unref();
+      }),
+    ]);
   } catch (error) {
     logger.warn('[AITeaching] 课后产出生成异常，改用 summary-only 兜底继续收束', {
       sessionId,
@@ -797,11 +806,15 @@ export async function endSession(
         totalTasks: nextMilestone.totalTasks,
       } : null,
     });
-    // 归因层（阈值召回 + LLM 归因）：只在建议已成立时补"为什么"，失败/超时保留阈值版
+    // 归因层（阈值召回 + LLM 归因）：只在建议已成立时补"为什么"，失败/超时保留阈值版。
+    // 硬边界（2026-10-02 完课死锁修复）：归因 LLM 此前内联阻塞在 wrapup 落库之前，且流式请求
+    // 在调用方断开（用户刷新/关页）后可能永不 settle（CALLER_ABORTED 只记日志、await 悬空），
+    // 整条收束随之冻结——op 卡 processing、租约过期、会话卡 finalizing、wrapup 永不落库
+    // （实测样本 traceId 1790901531990-zbr7hrfnc）。因此这里给归因加 90s 硬超时 + 兜底捕获，
+    // 超时/失败一律降级为阈值版建议，绝不让"为什么"阻塞"是什么"的落库。
     let advisory = thresholdAdvisory;
     if (thresholdAdvisory.shouldSuggest) {
-      // 会话作用域：让 aux skill 的 LLM 调用带上 sessionId（成本可归到这节课，审计 §5.2 P2）
-      const attribution = await runWithTeachingSession(session.id, () => replanAttributionService.attribute({
+      const attributeWithScope = () => runWithTeachingSession(session.id, () => replanAttributionService.attribute({
         // 召回与动作**同源**（都来自最终 advisory）：此前取信号层 signal，与 allowedRecommendations
         // 属两套阈值，会导致"允许的动作没有对应原因码"（§3.19 P1⑦）
         recall: toAttributionRecall(thresholdAdvisory),
@@ -818,7 +831,22 @@ export async function endSession(
           stageNumber: currentStageNumber,
         },
       }));
-      advisory = replanAdvisoryService.applyAttribution(thresholdAdvisory, attribution);
+      const attribution = await Promise.race([
+        attributeWithScope(),
+        new Promise<null>((resolve) => {
+          const timer = setTimeout(() => resolve(null), 90_000);
+          if (typeof timer === 'object' && timer && 'unref' in timer) timer.unref();
+        }),
+      ]).catch((error) => {
+        logger.warn('[AITeaching] 归因失败（best-effort，保留阈值版建议）', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      });
+      advisory = attribution
+        ? replanAdvisoryService.applyAttribution(thresholdAdvisory, attribution)
+        : thresholdAdvisory;
       if (advisory.attribution?.claim && isCalibratableDirection(advisory.recommendation)) {
         // 可证伪断言单独成列（insightType=replan_attribution），不与状态评审的可靠性混算
         await insightCalibrationService.recordInsights(session.userId, session.learningPathId || null, [{

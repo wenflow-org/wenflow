@@ -462,6 +462,43 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
       });
     }
 
+    // 完课死锁自愈（2026-10-02）：会话卡在 finalizing 且 finalization op 租约已过期
+    // （收尾链侧技能挂起/调用方断开导致回写永不落地，用户重进课堂原本永久卡「正在准备」）。
+    // 此处重驱结算：claimFinalization 对过期租约放行 supersede，wrapup 与任务完成由此落地。
+    const stuckFinalizing = await teachingSessionRepository.findStuckFinalizingSession(userId, taskId);
+    if (stuckFinalizing) {
+      try {
+        const healed = await sessionFinalizationService.finalize({
+          sessionId: stuckFinalizing.id,
+          userId,
+          action: 'complete_task',
+          revision: stuckFinalizing.revision,
+          endReason: 'task-completed'
+        });
+        return res.json({
+          success: true,
+          data: {
+            sessionId: stuckFinalizing.id,
+            subject: stuckFinalizing.subject,
+            topic: stuckFinalizing.topic,
+            startTime: stuckFinalizing.startTime,
+            welcomeMessage: stuckFinalizing.messages?.[0]?.content || '',
+            mode: 'completed',
+            revision: healed.revision ?? stuckFinalizing.revision,
+            knowledgePoints: [],
+            scene: null,
+            ...(req.user?.projection?.grantSource === 'synthetic' ? { schemaVersion: 'synthetic-user-v1' } : {}),
+          },
+        });
+      } catch (error) {
+        logger.warn('卡死 finalizing 补结算未完成，回退为正常开课', {
+          sessionId: stuckFinalizing.id,
+          taskId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+
     // P3：该任务上次是「完成结算」自动关课、但 complete_task 没落地（endReason=task-completed
     // 且 taskCompletion≠completed）时，先补结算，避免重进又新建一节课、任务永远卡在 in_progress。
     // 仅对明确标记生效，用户主动「结束学习（不计入完成）」不受影响。
