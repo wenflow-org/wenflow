@@ -7,8 +7,11 @@
   <div v-if="view" class="mk-page skd">
     <MkDetailHero avatar="S" :title="view.name" :sub="heroSub">
       <template #pills>
-        <span class="mk-badge" :class="healthBadge.cls" :title="healthBadge.title">{{ healthBadge.text }}</span>
-        <span class="mk-badge mk-badge--muted" :title="`类别：${view.category}`">{{ view.category }}</span>
+        <!-- 健康徽标：带窗口词（「N 次失败」不带窗口会被读成全量，评审「窗口冒充全量」）且可点
+             → 运行时页签（健康+证据先于配置，评审「结论埋深」） -->
+        <button type="button" class="mk-badge skd-badge-btn" :class="healthBadge.cls" :title="healthBadge.title" @click="goRuntimeTab">{{ healthBadge.text }}</button>
+        <!-- 类别人话（Skills.vue:194 同字段判例）：裸枚举 teaching → 「教学」，title 保留原值备查 -->
+        <span class="mk-badge mk-badge--muted" :title="`类别：${view.category}`">{{ categoryText(view.category) }}</span>
         <span v-if="modelLabel" class="mk-badge mk-badge--muted mono" :title="'生效模型（skill_model_configs 覆盖或 ACTIVE Prompt 声明）'">{{ modelLabel }}</span>
         <span v-if="promptVersionText" class="mk-badge mk-badge--info">ACTIVE {{ promptVersionText }}</span>
       </template>
@@ -156,7 +159,7 @@
                   <span class="skd-vrow__desc skd-vrow__desc--strong" :title="s.label">{{ s.label }}</span>
                   <span class="mono skd-vrow__type">{{ s.ms != null ? `${s.ms} ms` : '—' }}</span>
                 </div>
-                <p v-if="!trialSteps.length" class="skd-none">{{ trialResult ? '本次试跑仅返回最终输出（无逐步链路数据）。' : '试跑后展示执行链路。' }}</p>
+                <p v-if="!trialSteps.length" class="skd-none">{{ trialResult ? '本次试跑仅返回最终输出；逐步执行链路等待后端下发（testSkill 暂只回最终输出）。' : '试跑后展示执行链路。' }}</p>
               </div>
             </section>
           </div>
@@ -542,7 +545,8 @@
  * 技能详情二级页（newui 原型 renderSkillDetail 的落点，2026-10-01 新建）。
  *
  * 原型口径：hero（S 头像 + 技能名 + 归属副文 + 状态/版本/路由 pills + 动作）
- * → 单张卡内 6 个 subtab（协议 / 试跑 / 版本 / 运行时 / 工程 / 字段路由，dtab 组 skill）
+ * → 单张卡内 6 个 subtab（运行时 / 协议 / 试跑 / 版本 / 工程 / 字段路由；2026-10 可读性批把运行时置首：
+ *   健康+证据先于配置；页签写/读 ?tab=，深链/刷新可寻址）
  * → Prompt 编辑是弹层（openPromptModal：modal modal--wide），不是页签。
  * 数据口径：全部来自现有接口的真实字段——live 注册表档案 + workbench meta +
  * effective-prompt + skill_model_configs + model-probe + 字段路由 + Prompt 版本 + core YAML；
@@ -558,9 +562,11 @@
  * 本页用原型动作钮的形态显式跳转，能力一个不丢。
  */
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { subPage, closeSubPage, setSubPageLabel, skillStatOf, recentSpansOf, openTrace } from './store'
-import { liveSkillProfiles, liveExtraProfiles, errMsg } from './live'
+import { liveSkillProfiles, liveExtraProfiles, errMsg, liveSkillStatsRange } from './live'
+import { categoryText } from './statusText'
+import { successRateText, successRateTone } from './rate-utils'
 import {
   adminSkillsApi,
   adminSkillWorkbenchApi,
@@ -577,16 +583,51 @@ import MkLoading from '@/components/mk/MkLoading.vue'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
 
-/* ===== 6 页签（原型 tabs 数组：key 与设计页 ?tab= 深链键对齐，便于互跳） ===== */
+/* ===== 6 页签（运行时置首：健康+证据先于配置，评审「结论埋深」；key 与设计页 ?tab= 深链键对齐，便于互跳） ===== */
 const TABS: Array<{ key: string; label: string }> = [
+  { key: 'runtime', label: '运行时' },
   { key: 'protocol', label: '协议' },
   { key: 'trial', label: '试跑' },
   { key: 'versions', label: '版本' },
-  { key: 'runtime', label: '运行时' },
   { key: 'engineering', label: '工程' },
   { key: 'fields', label: '字段路由' }
 ]
-const tab = ref('protocol')
+const DEFAULT_TAB = 'runtime'
+const tab = ref(DEFAULT_TAB)
+
+/* ?tab= 写/读（tab 路由化，判例 LearnerDetail P0-2 / Orchestrator ?stage=&tab=）：
+   深链/刷新/前进后退保持所在页签——此前页签不写 URL，刷新即回协议页 */
+const tabRoute = useRoute()
+const TAB_KEYS = new Set(TABS.map((t) => t.key))
+function normalizeSkdTab(t: unknown): string {
+  return typeof t === 'string' && TAB_KEYS.has(t) ? t : DEFAULT_TAB
+}
+// URL → tab（深链/刷新/前进后退；route 可能缺位——二级页可被无路由宿主挂载，防御式读取）
+watch(
+  () => tabRoute?.query?.tab,
+  (t) => {
+    const v = normalizeSkdTab(t)
+    if (v !== tab.value) tab.value = v
+  },
+  { immediate: true }
+)
+// tab → URL（replace 不污染历史栈；缺省档不占 URL，与 Orchestrator overview 缺省不写同约定）
+watch(tab, (t) => {
+  if (!router) return
+  const cur = typeof tabRoute?.query?.tab === 'string' ? tabRoute.query.tab : ''
+  // 无匹配路由的宿主（测试/嵌入场景）不做 URL 回写，避免 vue-router「No match」噪声
+  if (!router.currentRoute.value.matched.length) return
+  if (t === DEFAULT_TAB) {
+    if (cur) void router.replace({ query: { ...tabRoute.query, tab: undefined } }).catch(() => {})
+  } else if (cur !== t) {
+    void router.replace({ query: { ...tabRoute.query, tab: t } }).catch(() => {})
+  }
+})
+
+/** hero 健康徽标点击：跳运行时页签（健康+证据先于配置） */
+function goRuntimeTab() {
+  tab.value = 'runtime'
+}
 
 const router = useRouter()
 const skillId = computed(() => (subPage.value?.view === 'skill' ? subPage.value.id || '' : ''))
@@ -640,28 +681,35 @@ const heroSub = computed(() => {
   const v = view.value
   if (!v) return ''
   const who = v.agentName || v.agentId || '—'
-  return `${who} · ${v.category}`
+  // 类别走人话（Skills.vue 同字段判例）：裸枚举 teaching → 「教学」
+  return `${who} · ${categoryText(v.category)}`
 })
 
 /* ===== hero pills ===== */
 const stat = computed(() =>
   skillId.value ? skillStatOf(skillId.value) : { calls: 0, errors: 0, avgMs: 0, lastAt: '从未' }
 )
-/** 头部健康徽章三分态（与 Skills.vue / SkillDrawer 同口径）：异常 / 空闲（0 调用）/ 健康 */
+/** 统计窗口词（liveSkillStatsRange 与 Skill 列表「统计窗口」同源）：「N 次失败」不带窗口会被读成全量 */
+const STAT_RANGE_LABELS: Record<string, string> = { '7d': '近 7 天', '24h': '近 24 小时', '30d': '近 30 天', all: '全量' }
+const statsRangeLabel = computed(() => STAT_RANGE_LABELS[liveSkillStatsRange.value] || '近 7 天')
+/** 头部健康徽章三分态（与 Skills.vue 同口径）：异常 / 空闲（0 调用）/ 健康；
+    文案带窗口词，且徽标可点 → 运行时页签（健康+证据先于配置） */
 const healthBadge = computed<{ cls: string; text: string; title: string }>(() => {
   if (stat.value.errors > 0) {
-    return { cls: 'mk-badge--bad', text: `${stat.value.errors} 次失败`, title: '窗口内存在失败调用' }
+    return { cls: 'mk-badge--bad', text: `${statsRangeLabel.value} · ${stat.value.errors} 次失败`, title: `${statsRangeLabel.value}窗口内存在失败调用；点击查看运行时指标与最近调用` }
   }
   if (stat.value.calls === 0) {
-    return { cls: 'mk-badge--muted', text: '空闲', title: '窗口内无调用（从未调用不等于健康）' }
+    return { cls: 'mk-badge--muted', text: '空闲', title: `${statsRangeLabel.value}窗口内无调用（从未调用不等于健康）` }
   }
-  return { cls: 'mk-badge--ok', text: '健康', title: '窗口内调用全部成功' }
+  return { cls: 'mk-badge--ok', text: '健康', title: `${statsRangeLabel.value}窗口内调用全部成功；点击查看运行时指标` }
 })
 
 /* ===== 生效 Prompt（协议页签 System Prompt 卡 + hero 版本 pill + 弹层预填） ===== */
 interface EffectivePrompt { prompt?: { version?: number | string; name?: string; systemPrompt?: string } }
 const prompt = ref<EffectivePrompt | null>(null)
 const promptFailed = ref(false)
+/** 请求是否已返回（区分「加载中」与「成功但无生效版本」——此前空数据永久停留「加载中…」） */
+const promptLoaded = ref(false)
 const promptVersionText = computed(() => {
   const p = prompt.value?.prompt
   if (!p) return ''
@@ -669,6 +717,7 @@ const promptVersionText = computed(() => {
 })
 const promptStateText = computed(() => {
   if (promptFailed.value) return '加载失败'
+  if (promptLoaded.value && !promptVersionText.value) return '暂无生效版本'
   return promptVersionText.value ? `生效版本 ${promptVersionText.value}` : '生效版本加载中…'
 })
 const systemPromptText = computed(() => String(prompt.value?.prompt?.systemPrompt || ''))
@@ -685,32 +734,26 @@ const modelLabel = computed(() => {
   return String(llm.model || cfg.model || (cfg.tier ? `档位 ${String(cfg.tier)}` : '')) || ''
 })
 
-/* ===== 统计口径（运行时页签说明行；SkillDrawer statsSourceNote 同源） ===== */
+/* ===== 统计口径（运行时页签说明行）：指标数值来自 liveSkillStatsMap（随 Skill 列表「统计窗口」切换），
+   此前照抄 meta.stats.range 造成「口径写全量、数字是 7 天窗口」的失真 → 说明对齐真实窗口 ===== */
 const statsNote = computed(() => {
   const s = meta.value?.stats || {}
-  if (!s.source) return ''
-  const src =
-    s.source === 'prompt_call_logs'
+  const src = !s.source
+    ? 'Skill 执行日志'
+    : s.source === 'prompt_call_logs'
       ? 'Prompt 调用日志'
       : s.source === 'agent_call_logs'
         ? 'Skill 执行日志'
         : String(s.source)
-  const range = s.range === 'all' ? '全量' : String(s.range || '全量')
-  return `${src} · ${range}（与列表 / 拓扑统一）`
+  return `${src} · ${statsRangeLabel.value}窗口（与 Skill 列表「统计窗口」同源，随其切换）`
 })
 
-/* ===== 指标（运行时页签 metric 格；0 与未知分开） ===== */
+/* ===== 指标（运行时页签 metric 格；0 与未知分开；阈值/精度走 rate-utils 单点） ===== */
 const rateTone = computed(() => {
-  if (!stat.value.calls) return 'na'
-  if (stat.value.errors === 0) return 'ok'
-  const r = ((stat.value.calls - stat.value.errors) / stat.value.calls) * 100
-  return r >= 95 ? 'warn' : 'bad'
+  const tone = successRateTone(stat.value.calls, stat.value.errors)
+  return tone === 'muted' ? 'na' : tone
 })
-const successRate = computed(() => {
-  if (!stat.value.calls) return '—'
-  const r = ((stat.value.calls - stat.value.errors) / stat.value.calls) * 100
-  return `${r.toFixed(1)}%`
-})
+const successRate = computed(() => successRateText(stat.value.calls, stat.value.errors) ?? '—')
 
 const fmtMs = (ms: number | null | undefined) => (ms == null || ms === undefined ? '—' : ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
 
@@ -794,7 +837,8 @@ const versionsFailed = ref(false)
 const versionsStateText = computed(() => {
   if (versionsLoading.value) return '加载中…'
   if (versionsFailed.value) return '加载失败'
-  return `共 ${versions.value.length} 个`
+  // 列表是「最近 12 条」截断窗口（下方 slice(0, 12)）：「共 N 个」冒充全量 → 改窗口词
+  return `最近 ${versions.value.length} 个`
 })
 const versionStatusText = (s: string) => (s === 'ACTIVE' ? '生效' : s === 'DRAFT' ? '草稿' : s || '—')
 /** 原型 versions 表含 日期/作者/变更说明（index.html 2344-2346）；三项均空则省略列 */
@@ -895,12 +939,14 @@ async function load(force = false) {
     // 生效 Prompt（协议页签 + hero 版本 pill）
     (async () => {
       promptFailed.value = false
+      promptLoaded.value = false
       try {
         const res = await adminSkillsApi.getEffectiveSkillPrompt(id)
         if (!guard(true)) return
         prompt.value = (res.data?.data ?? res.data ?? null) as EffectivePrompt | null
+        promptLoaded.value = true
       } catch {
-        if (guard(true)) { prompt.value = null; promptFailed.value = true }
+        if (guard(true)) { prompt.value = null; promptFailed.value = true; promptLoaded.value = true }
       }
     })(),
     // 模型配置表单（运行时页签）
@@ -1160,7 +1206,7 @@ async function saveRuntimeConfig() {
       requestTimeoutMs: rtForm.value.enabled ? (rtForm.value.requestTimeoutMs ?? null) : null,
       enabled: rtForm.value.enabled,
     })
-    rtMsg.value = '已保存（endpoint / 超时 / 思考档生效；model 以 ACTIVE Prompt 为准）'
+    rtMsg.value = '已保存（接入地址 / 超时 / 思考档生效；model 以 ACTIVE Prompt 为准）'
     await loadRuntimeConfig(id, (ok) => ok)
   } catch (e) {
     rtErr.value = true
@@ -1258,6 +1304,7 @@ watch(
     meta.value = null
     prompt.value = null
     promptFailed.value = false
+    promptLoaded.value = false
     routings.value = null
     routingsLoading.value = false
     routingsFailed.value = false
@@ -1267,7 +1314,8 @@ watch(
     coreFilePath.value = ''
     coreSnap.value = null
     notFound.value = false
-    tab.value = 'protocol'
+    // 深链保持：URL 明确带合法 ?tab= 时尊重它，否则回落运行时（健康+证据先于配置）
+    tab.value = normalizeSkdTab(tabRoute?.query?.tab)
     resetTrial()
     resetProbe()
     rtMsg.value = ''
@@ -1309,6 +1357,8 @@ useEscape(
 
 /* ===== 页签卡（原型：单张卡 subtabs + subpane） ===== */
 .skd-body { overflow: clip; }
+/* hero 健康徽标可点（button 复用 .mk-badge 皮）：只重置按钮默认 chrome，视觉与相邻 badge 同语言 */
+.skd-badge-btn { border: 0; cursor: pointer; font: inherit; }
 .skd-pane { display: grid; gap: 12px; padding: 16px; border-top: 1px solid var(--mk-line); }
 .skd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .skd-grid > .mk-card { box-shadow: none; }

@@ -7,14 +7,18 @@
       <span class="mk-status__dot"></span>
       <template v-if="tab === 'run'">
         <MkLoading v-if="liveLoading && !cards.length" inline text="Skill 加载中…" /><span v-else class="mk-status__meta" :title="skillCountHint">共 {{ cards.length }} 个 Skill</span>
-        <!-- 「N 个 live」（原型 statusbar meta）：完成度对账 status=live 的 Skill 数；
-             对账未就绪/失败时计数为 0 不显示，避免把「读不到」伪装成「0 个 live」 -->
-        <span v-if="liveCount > 0" class="mk-status__meta" title="完成度对账 status=live（ACTIVE prompt 生效）的 Skill 数">{{ liveCount }} 个 live</span>
+        <!-- 「N 个 live」（原型 statusbar meta）：完成度对账 status=live 的 Skill 数。
+             三态（评审「状态三态缺失」）：对账加载中 → 「live …」；加载失败 → 灰「live ?」（读不到 ≠ 0）；
+             就绪且为 0 → 红字「0 个 live」（全 draft 是真异常，必须显性报警而非整条 meta 静默消失） -->
+        <span v-if="recLoading" class="mk-status__meta" title="完成度对账加载中，live 计数暂不可用">live …</span>
+        <span v-else-if="recError" class="mk-status__meta" :title="`完成度对账加载失败：${recError}；读不到对账 ≠ 0 个 live`">live ?</span>
+        <span v-else-if="liveCount === 0" class="mk-status__meta mk-status__meta--bad" title="对账已就绪且 status=live 的 Skill 数为 0：所有 Skill 均未走完上线门槛（draft → live），属真异常">0 个 live</span>
+        <span v-else class="mk-status__meta" title="完成度对账 status=live（ACTIVE prompt 生效）的 Skill 数">{{ liveCount }} 个 live</span>
         <!-- 窗口切换刷新中：先摘掉旧窗口的统计数字，避免新口径加载完成前旧 KPI 滞留误导（live.ts 侧 boot 窗口静默 no-op 属 live.ts，这里只兜 UI 观感） -->
         <MkLoading v-if="rangeRefreshing" inline text="统计刷新中…" />
         <template v-else>
-          <span v-if="overallRate != null" class="mk-status__meta" :class="rateNumTone === 'bad' ? 'mk-status__meta--bad' : rateNumTone === 'warn' ? 'mk-status__meta--warn' : ''" :title="'窗口内成功率 = 成功调用 / 总调用'">
-            成功率 {{ overallRate }}%<template v-if="totalCalls">（{{ okCalls }}/{{ totalCalls }}）</template>
+          <span v-if="overallRateText" class="mk-status__meta" :class="overallRateCls" :title="`窗口内成功率 = 成功调用 / 总调用；${RATE_THRESHOLD_NOTE}`">
+            成功率 {{ overallRateText }}<template v-if="totalCalls">（{{ okCalls }}/{{ totalCalls }}）</template>
           </span>
           <button
             v-if="errorCount > 0"
@@ -78,6 +82,7 @@
             :col-defs="skColDefs"
             :storage-key="SK_COLS_KEY"
             v-model:hidden="hiddenCols"
+            :default-hidden="SK_COLS_DEFAULT_HIDDEN"
           />
           <!-- 原型右侧「筛选后 N 个」；总数在状态条「共 N 个 Skill」仍在 -->
           <span class="mk-card__meta">筛选后 {{ filtered.length }} 个</span>
@@ -93,8 +98,8 @@
              防长名单列独吃宽度（上限引用 --mk-cell-main-max token） -->
         <table v-if="filtered.length" class="mk-table sk-table">
           <!-- P1① 列结构对齐原型 renderSkillHub 1662-1706 的 8 列：
-               Skill / 归属 Agent / 版本 / 路由模型 / 24h 调用 / P95 / 通过率 / 状态。
-               数据来源核查见脚本「路由 · 版本元数据」小节；P95 接口缺失 → 占位「—」。
+               Skill / 归属 Agent / 版本 / 路由模型 / 24h 调用 / P95 / 通过率 / 完成度。
+               数据来源核查见脚本「路由 · 版本元数据」小节；P95 接口缺失 → 恒「—」且默认隐藏。
                原型没有、但本页有的真实信息（类别 / 最近调用）排在原型列之后，操作列收尾。 -->
           <thead>
             <tr>
@@ -123,23 +128,24 @@
                 :aria-sort="sortState('calls')"
                 @click="toggleSort('calls')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('calls')" title="统计窗口内调用次数（随「统计窗口」下拉切换，默认近 7 天）">调用<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <!-- P95 占位：后端仅日志聚合提供 p50/p99，无技能级 P95；不编造数字 -->
-              <th v-if="showCol('p95')" scope="col" class="mk-th--right" title="接口未提供技能级 P95（后端仅日志聚合 p50/p99）→ 占位 —">P95</th>
+              <!-- P95 占位：后端仅日志聚合提供 p50/p99，无技能级 P95；不编造数字。
+                   整列恒「—」无信息量（评审 P3）→ 默认隐藏，「列」菜单可手动开启 -->
+              <th v-if="showCol('p95')" scope="col" class="mk-th--right" title="接口未提供技能级 P95（后端仅日志聚合 p50/p99）→ 恒「—」；默认隐藏，可在「列」菜单开启">P95</th>
               <th
                 v-if="showCol('rate')"
                 scope="col"
                 class="mk-th--right mk-th--sortable"
                 :aria-sort="sortState('rate')"
                 @click="toggleSort('rate')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')" title="窗口内成功率（= 原始 stats.successRate）">通过率<span class="visually-hidden">成功率</span><span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <!-- 状态 = 对账完成度 status（draft → live），原型「状态」pill 的真实落点 -->
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')" :title="`窗口内成功率（= 成功调用 / 总调用）；${RATE_THRESHOLD_NOTE}`">通过率<span class="visually-hidden">成功率</span><span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <!-- 完成度 = 对账 completion status（draft → live）；原列名「状态」与行首健康点双语义 → 更名 -->
               <th
                 v-if="showCol('status')"
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="sortState('status')"
                 @click="toggleSort('status')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('status')" title="完成度对账 status（draft → live）">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('status')" title="完成度对账 status（draft → live）">完成度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('cat')"
                 scope="col"
@@ -172,10 +178,11 @@
               <td v-if="showCol('calls')"><span class="mono">{{ s.calls }}</span></td>
               <td v-if="showCol('p95')"><span class="mk-na" title="接口未提供技能级 P95（后端仅日志聚合 p50/p99）">—</span></td>
               <td v-if="showCol('rate')">
-                <!-- 行级设计（批C）：数字+比例条（与网格卡 sk-card__rate 同语言，消灭同页双形态） -->
-                <div class="sk-rate" :class="rateTone(s)" :title="s.calls ? `成功率 ${s.calls - s.errors}/${s.calls}` : '窗口内无调用'">
-                  <b>{{ successRate(s) }}</b>
-                  <span v-if="s.calls" class="sk-rate__bar" aria-hidden="true"><i :style="{ width: rateNum(s) + '%' }"></i></span>
+                <!-- 行级设计（批C）：数字+比例条（与网格卡 sk-card__rate 同语言，消灭同页双形态）；
+                     精度/阈值/兜底走 rate-utils 单点（99.9% 不再显示 100%，无调用显「—」不显 0%） -->
+                <div class="sk-rate" :class="rateTone(s)" :title="rowRateTitle(s)">
+                  <b>{{ successRateText(s.calls, s.errors) || '—' }}</b>
+                  <span v-if="s.calls" class="sk-rate__bar" aria-hidden="true"><i :style="{ width: (successRateOf(s.calls, s.errors) ?? 0) + '%' }"></i></span>
                 </div>
               </td>
               <td v-if="showCol('status')">
@@ -198,6 +205,10 @@
                   <!-- 轻运营直达：跳过抽屉一跳，直接进设计页「协议」页签改提示词
                        （原型操作列：文字小钮 .btn--sm 形态，对齐 Users 判例） -->
                   <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDesign(s.id)">设计</button>
+                  <!-- 失败行直达证据（评审「异常→动作→证据断链」：排障从 4 跳压到 1 跳）：
+                       复用 store.investigateAgent（agent+status=err intent 深链执行日志）；
+                       行级拿不到错误类别，errorCategory 置空交日志页自筛 -->
+                  <button v-if="s.errors > 0" type="button" class="mk-btn mk-btn--sm" title="跳转执行日志：已过滤该 Skill 的失败调用" @click.stop="investigateAgent(s.id)">查失败</button>
                 </div>
               </td>
             </tr>
@@ -215,7 +226,7 @@
       <MkEmptyState
         v-else-if="!filtered.length"
         :title="onlyAttention ? '没有需关注的 Skill' : keyword ? '当前筛选无 Skill' : '暂无运行数据'"
-        :description="onlyAttention ? '一切健康。' : keyword ? '换个关键词试试。' : ''"
+        :description="onlyAttention ? '窗口内没有出现失败调用的节点。' : keyword ? '换个关键词试试。' : ''"
         :action-text="isFiltered ? '清除筛选' : ''"
         @action="clearFilters"
       />
@@ -258,11 +269,11 @@
             :hint="primaryModelLabel"
             :title="primaryCoverageTitle"
           />
+          <!-- 降级策略（原硬编码 value="自动" 删）：真实口径 = 自定义兜底链计数，未加载显 — 不伪装 -->
           <MkKpi
             label="降级策略"
-            value="自动"
-            :hint="fallbackHint"
-            title="模型重试耗尽后按兜底链切换；无自定义兜底链 = registry 默认"
+            :value="fallbackPolicyText"
+            :title="fallbackPolicyTitle"
           />
         </div>
         <div class="sk-routing__head">
@@ -279,7 +290,7 @@
               <th scope="col">归属 Agent</th>
               <th scope="col">路由模型</th>
               <th scope="col">备用模型</th>
-              <th scope="col">状态</th>
+              <th scope="col">完成度</th>
             </tr>
           </thead>
           <tbody>
@@ -311,11 +322,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { skillStatOf, openSubPage, isLive, intent } from './store'
+import { skillStatOf, openSubPage, isLive, intent, investigateAgent } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
 import { COMPLETION_META, completionMetaOf } from './glossaryMeta'
 import { EXTRA_CAPABILITY_SKILLS } from './capabilityCatalog'
+import { RATE_THRESHOLD_NOTE, successRateOf, successRateText, successRateTone, rateToneClass } from './rate-utils'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
@@ -412,14 +424,16 @@ const agentFilter = ref('')
    列序对齐原型 8 列（Skill/归属 Agent/版本/路由模型/调用/P95/通过率/状态），
    随后是本页独有的真实列（类别/最近调用），操作列固定收尾。 */
 const SK_COLS_KEY = 'wf_skills_hidden_cols'
+/** P95 整列恒「—」（后端无技能级 P95）→ 默认隐藏（MkCols defaultHidden：仅首访生效，已存配置尊重用户） */
+const SK_COLS_DEFAULT_HIDDEN = ['p95'] as const
 const skColDefs = [
   { key: 'agent', label: '归属 Agent', title: '所属顶层 Agent' },
   { key: 'version', label: '版本', title: 'registry definition.version' },
   { key: 'routing', label: '路由模型', title: '生效模型；未配置=平台默认；无覆盖行=—' },
   { key: 'calls', label: '调用', title: '统计窗口内调用次数（随窗口筛选）' },
-  { key: 'p95', label: 'P95', title: '接口未提供技能级 P95，占位 —' },
+  { key: 'p95', label: 'P95', title: '接口未提供技能级 P95，恒「—」；默认隐藏' },
   { key: 'rate', label: '通过率', title: '窗口内成功率' },
-  { key: 'status', label: '状态', title: '完成度对账 status（draft→live）' },
+  { key: 'status', label: '完成度', title: '完成度对账 status（draft→live）' },
   { key: 'cat', label: '类别', title: 'Skill 类别' },
   { key: 'last', label: '最近调用', title: '最近调用时间' },
 ] as const
@@ -455,13 +469,21 @@ const agentOptions = computed<AgentOption[]>(() => {
   return [...m.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh'))
 })
 
-/** 成功率阈值着色：<70% 红、<90% 琥珀 */
-function rateTone(s: { calls: number; errors: number }) {
-  if (!s.calls) return ''
-  const rate = ((s.calls - s.errors) / s.calls) * 100
-  if (rate < 70) return 'sk-rate--bad'
-  if (rate < 90) return 'sk-rate--warn'
-  return ''
+/** 通过率单元格 title：比例 + 全站统一阈值披露；无分母说明兜底口径（不按 0% 计） */
+function rowRateTitle(s: { calls: number; errors: number }): string {
+  if (!s.calls) return '窗口内无调用：无分母不显示成功率（不按 0% 计）'
+  return `成功率 ${s.calls - s.errors}/${s.calls}；${RATE_THRESHOLD_NOTE}`
+}
+
+/** tone → 本页 sk-rate 类名（显式映射，rate-utils 只产语义 tone；ok/muted 不着色） */
+const SK_RATE_TONE_CLS: Record<string, string> = {
+  ok: '',
+  muted: '',
+  warn: 'sk-rate--warn',
+  bad: 'sk-rate--bad',
+}
+function rateTone(s: { calls: number; errors: number }): string {
+  return SK_RATE_TONE_CLS[successRateTone(s.calls, s.errors)]
 }
 // 时间窗口切换 → 按新窗口重新拉取统计；期间状态条展示局部 loading，摘掉旧窗口数字
 const rangeRefreshing = ref(false)
@@ -521,7 +543,7 @@ const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir } = useTableSo
     calls: (s) => s.calls,
     /** 状态列排序 = 完成度五档序号（0=draft … 4=live，无对账行排末尾） */
     status: (s) => completionRank(s.id),
-    rate: (s) => (s.calls > 0 ? (s.calls - s.errors) / s.calls : null),
+    rate: (s) => successRateOf(s.calls, s.errors),
     cat: (s) => s.category || ''
   },
   defaultKey: 'errors',
@@ -548,14 +570,15 @@ const errorCount = computed(() => cards.value.filter((c) => c.errors > 0).length
 const totalCalls = computed(() => cards.value.reduce((a, c) => a + c.calls, 0))
 const totalErrors = computed(() => cards.value.reduce((a, c) => a + c.errors, 0))
 const okCalls = computed(() => Math.max(0, totalCalls.value - totalErrors.value))
-const overallRate = computed(() => (totalCalls.value > 0 ? Math.round((okCalls.value / totalCalls.value) * 100) : null))
 /** 口径提示：Skill 运行页不含外挂能力（MCP + 能力 Skill），而健康中心/对账的登记总数含它们——避免「31/28/3」三处数字无从解释 */
 const skillCountHint = computed(
   () => (EXTRA_CAPABILITY_SKILLS.length
     ? `不含 ${EXTRA_CAPABILITY_SKILLS.length} 个外挂能力（见「外挂能力」页）；健康中心 / 对账的登记总数含它们`
     : ''),
 )
-const rateNumTone = computed<'' | 'bad' | 'warn'>(() => (overallRate.value == null ? '' : overallRate.value < 70 ? 'bad' : overallRate.value < 90 ? 'warn' : ''))
+/** 状态条成功率：精度/阈值/兜底走 rate-utils 单点（P1#26：1 位小数，99.9% 不再显示 100%） */
+const overallRateText = computed(() => successRateText(totalCalls.value, totalErrors.value))
+const overallRateCls = computed(() => rateToneClass(successRateTone(totalCalls.value, totalErrors.value), 'mk-status__meta'))
 const idleCount = computed(() => cards.value.filter((c) => c.calls === 0).length)
 const avgLatencyMs = computed(() => {
   const called = cards.value.filter((c) => c.calls > 0 && c.avgMs > 0)
@@ -598,10 +621,7 @@ const statusTone = computed(() => (errorCount.value ? 'mk-status--bad' : activeC
 /** 状态条基调：只剩运行视图三态（健康/漂移/对账已独立成 /admin/health-center） */
 const hostTone = computed(() => statusTone.value)
 
-const successRate = (s: { calls: number; errors: number }) =>
-  s.calls ? `${(((s.calls - s.errors) / s.calls) * 100).toFixed(0)}%` : '—'
-const rateNum = (s: { calls: number; errors: number }) =>
-  s.calls ? ((s.calls - s.errors) / s.calls) * 100 : 0
+/* 行级成功率显示/着色直接用 rate-utils 的 successRateText / successRateTone（单点口径，见上方 import） */
 
 /* ================= 对账数据（目录表完成度列投影） =================
    本页只用它渲染「完成度」列与排序（对账明细面板自 2026-09-29 起在独立页
@@ -819,10 +839,16 @@ const primaryCoverageTitle = computed(() =>
 const fallbackConfigured = computed(() =>
   cards.value.filter((c) => (coverageById.value.get(c.id)?.fallbackChain?.length ?? 0) > 0).length
 )
-const fallbackHint = computed(() => {
-  if (!coverageReady.value) return '兜底配置未加载'
+/** 降级策略卡（原硬编码「自动」）：真实口径 = 自定义兜底链计数；覆盖数据未加载显 — */
+const fallbackPolicyText = computed(() => {
+  if (!coverageReady.value) return '—'
   return fallbackConfigured.value > 0 ? `${fallbackConfigured.value} 个自定义兜底链` : 'registry 默认'
 })
+const fallbackPolicyTitle = computed(() =>
+  coverageReady.value
+    ? `模型重试耗尽后按兜底链自动切换；${fallbackConfigured.value > 0 ? `当前 ${fallbackConfigured.value} 个 Skill 配了自定义兜底链` : '无自定义兜底链：走 registry 默认'}`
+    : '兜底配置未加载（skill-model-configs/coverage 拉取失败或未就绪）'
+)
 </script>
 
 <style scoped>

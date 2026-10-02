@@ -11,14 +11,15 @@
     </MkPageHead>
     <div class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
-      <!-- 原型 statusbar 主句（b 最近评测 · 92.4% 通过）：最近一次评估的通过率提为主句；
-           无评估历史时保持下方纯 meta 空态，不虚构 0% -->
+      <!-- 原型 statusbar 主句（b 最近评测 · 92.4% 通过）：补基数（23/25）+ 全站阈值着色（rate-utils 单点）；
+           passRate 缺失显「—」+ title「暂无评测数据」，不再 `?? 0` 把缺数据伪装成「0% 通过」；
+           agent 筛选生效时句面带限定词（筛选口径进句面，数字不再无口径裸奔） -->
       <template v-if="runs.length">
-        <strong class="mk-status__title">最近评测 · {{ lastPassRate }}% 通过</strong>
+        <strong class="mk-status__title" :class="lastRateCls" :title="lastRateTitle">最近评测<template v-if="agentFilter">（仅 {{ agentLabel(agentFilter) }}）</template> · {{ lastPassRateText }}{{ lastRateBase }} 通过</strong>
         <span class="mk-status__sep" aria-hidden="true"></span>
       </template>
       <span class="mk-status__meta">用例 {{ cases.length }}</span>
-      <span class="mk-status__meta">评估历史 {{ runs.length }}</span>
+      <span class="mk-status__meta" :title="`评估历史按最近 ${RUNS_LIMIT} 次窗口加载（上限非总数）`">最近 {{ runs.length }} 次</span>
       <span class="mk-status__meta" :title="lastRunHint">{{ lastRunText }}</span>
     </div>
 
@@ -159,17 +160,18 @@
                      这次评估结果如何。主行改为「通过率% · N 例 × M 次」，副行「agent · 时间」，
                      run id 连同 prompt 版本来源降为第三行（mono，title 给全量 id 便于反馈排查） -->
                 <div class="mk-cell-main">
-                  <strong>{{ r.summary.passRate ?? 0 }}% · {{ r.caseCount }} 例 × {{ r.summary.repeatCount ?? 1 }} 次</strong>
+                  <strong>{{ runRateText(r) }} · {{ r.caseCount }} 例 × {{ r.summary.repeatCount ?? 1 }} 次</strong>
                   <span class="mk-cell-sub">{{ agentLabel(r.agentId) }} · {{ timeAgo(r.createdAt) }}</span>
-                  <span class="mk-cell-sub" :title="`run id ${r.id}`">#{{ shortId(r.id, 8, 4) }} · {{ r.mode }} · {{ promptSourceText(r.promptSource) }} v{{ r.promptVersion ?? '—' }}</span>
+                  <span class="mk-cell-sub" :title="`run id ${r.id}`">#{{ shortId(r.id, 8, 4) }} · {{ modeText(r.mode) }} · {{ promptSourceText(r.promptSource) }} v{{ r.promptVersion ?? '—' }}</span>
                 </div>
               </td>
               <td><span class="mk-badge mk-badge--info">{{ agentLabel(r.agentId) }}</span></td>
               <td>
-                <div class="pe-result" :class="resultTone(r)">
-                  <strong>{{ r.summary.passRate ?? 0 }}%</strong>
-                  <span class="mk-minibar pe-result__bar" aria-hidden="true"><i :style="{ width: (r.summary.passRate ?? 0) + '%' }"></i></span>
-                  <span>{{ r.summary.passedCount ?? 0 }}/{{ r.summary.totalRuns ?? 0 }} 通过</span>
+                <!-- 通过率缺失显「—」（不按 0% 渲染）：缺数据 ≠ 全挂；着色阈值走 rate-utils 单点 -->
+                <div class="pe-result" :class="resultTone(r)" :title="RATE_THRESHOLD_NOTE">
+                  <strong>{{ runRateText(r) }}</strong>
+                  <span class="mk-minibar pe-result__bar" aria-hidden="true"><i :style="{ width: `${typeof r.summary.passRate === 'number' ? Math.max(0, Math.min(100, r.summary.passRate)) : 0}%` }"></i></span>
+                  <span>{{ r.summary.passedCount ?? '—' }}/{{ r.summary.totalRuns ?? '—' }} 通过</span>
                 </div>
               </td>
               <td class="mk-num">{{ r.caseCount }} 例 × {{ r.summary.repeatCount ?? 1 }} 次</td>
@@ -388,14 +390,15 @@
           <div class="mk-drawer__body pe-detail__body">
             <MkLoading v-if="runDetailLoading" inline />
             <template v-else-if="runDetail">
-              <!-- 首段徽章行（原型 .ovl__body 首段 pills）：通过率 / 通过数为 summary 行上已有字段 -->
+              <!-- 首段徽章行（原型 .ovl__body 首段 pills）：通过率 / 通过数为 summary 行上已有字段；
+                   passRate 缺失显「—」+ title「暂无评测数据」（不 `?? 0` 伪装全挂）；阈值披露于 title -->
               <div class="pe-detail__pills">
-                <span class="mk-badge" :class="passTone(runDetail.summary)">通过率 {{ runDetail.summary.passRate ?? 0 }}%</span>
-                <span class="mk-badge mk-badge--muted">通过 {{ runDetail.summary.passedCount ?? 0 }} / {{ runDetail.summary.totalRuns ?? 0 }}</span>
+                <span class="mk-badge" :class="passTone(runDetail.summary)" :title="detailPassRateText === '—' ? '暂无评测数据：该运行未回传通过率' : RATE_THRESHOLD_NOTE">通过率 {{ detailPassRateText }}</span>
+                <span class="mk-badge mk-badge--muted">通过 {{ runDetail.summary.passedCount ?? '—' }} / {{ runDetail.summary.totalRuns ?? '—' }}</span>
               </div>
               <!-- 事实清单（原型 dl.kv → 共享 mk-facts 栅格）：summary 数值不再用页面级 MkKpi 卡 -->
               <div class="mk-facts">
-                <div><span>结构化输出</span><strong class="mono">{{ runDetail.summary.structuredSuccessRate ?? 0 }}%</strong></div>
+                <div><span>结构化输出</span><strong class="mono">{{ formatRate(runDetail.summary.structuredSuccessRate) || '—' }}</strong></div>
                 <div><span>总耗时</span><strong class="mono">{{ fmtMs(runDetail.durationMs) }}</strong></div>
                 <div><span>用例数</span><strong class="mono">{{ runDetail.results.length }}</strong></div>
               </div>
@@ -410,6 +413,8 @@
                     <div class="pe-result-row__head">
                       <strong>{{ res.caseName }} <span class="mk-na">({{ res.caseId }})</span></strong>
                       <span class="mk-badge" :class="res.passed ? 'mk-badge--ok' : 'mk-badge--bad'">{{ res.passed ? '通过' : '未通过' }}</span>
+                      <!-- 失败用例就近跳转（评审「失败用例无『去改 Prompt』链路」）：openCaseSkill 同口径剥 skill: 前缀进 Skill 详情 -->
+                      <button v-if="!res.passed && runDetail?.agentId" type="button" class="mk-link" title="打开该用例对应的 Skill 详情（改 Prompt 前先看上下文）" @click="goCaseSkill(runDetail.agentId)">查看该 Skill</button>
                       <span class="pe-result-row__meta mono">#{{ res.runIndex }} · {{ fmtMs(res.durationMs) }} · 阶段：{{ stageText(res.output?.stage) }}</span>
                     </div>
                     <div v-if="!res.passed" class="pe-result-row__checks">
@@ -465,6 +470,7 @@ import { PenLine, Users } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { timeAgo, errMsg, shortId } from './live'
 import { adminPromptOpsApi, adminVirtualLearnersApi, type CreateEvalCasePayload } from '@/api/adminApi'
+import { formatRate, rateToneOf, rateToneClass, RATE_THRESHOLD_NOTE } from './rate-utils'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
@@ -589,10 +595,30 @@ function onAgentFilterChange() {
 const statusTone = computed(() =>
   (casesFailed.value || runsFailed.value) ? 'mk-status--bad' : 'mk-status--ok'
 )
-/* 原型 statusbar 主句口径：最近一次评估的通过率（runs[0] 即最新一次，reloadRuns 保持接口倒序） */
-const lastPassRate = computed(() => runs.value[0]?.summary.passRate ?? 0)
+/* 评估历史加载窗口（getEvalRuns 上限 30）：状态条「最近 N 次」句面与 title 共用此常量 */
+const RUNS_LIMIT = 30
+/* 原型 statusbar 主句口径：最近一次评估的通过率（runs[0] 即最新一次，reloadRuns 保持接口倒序）。
+   精度/阈值/兜底走 rate-utils 单点：passRate 缺失显「—」+ title「暂无评测数据」（不 ?? 0 伪装 0%） */
+const lastPassRateText = computed(() => formatRate(runs.value[0]?.summary?.passRate) ?? '—')
+/** 基数（23/25）：summary 带通过数/总次数才拼接，缺一项就不硬凑 */
+const lastRateBase = computed(() => {
+  const s = runs.value[0]?.summary
+  if (!s || typeof s.passedCount !== 'number' || typeof s.totalRuns !== 'number') return ''
+  return `（${s.passedCount}/${s.totalRuns}）`
+})
+const lastRateCls = computed(() => rateToneClass(rateToneOf(runs.value[0]?.summary?.passRate), 'mk-status__meta'))
+const lastRateTitle = computed(() =>
+  lastPassRateText.value === '—'
+    ? '暂无评测数据：该运行未回传通过率'
+    : `最近一次评估通过率；${RATE_THRESHOLD_NOTE}`
+)
 const lastRunText = computed(() => (runs.value.length ? `最近 ${timeAgo(runs.value[0]?.createdAt)}` : '暂无评估记录'))
-const lastRunHint = computed(() => (runs.value[0] ? `通过率 ${runs.value[0].summary.passRate ?? 0}%` : ''))
+const lastRunHint = computed(() => {
+  const s = runs.value[0]?.summary
+  if (!s) return ''
+  const rate = formatRate(s.passRate)
+  return `${rate ? `通过率 ${rate}` : '通过率暂无数据'}；${RATE_THRESHOLD_NOTE}`
+})
 
 function fmtDate(iso: string): string {
   if (!iso) return '—'
@@ -606,6 +632,10 @@ function fmtMs(ms: number | undefined | null): string {
   return `${(ms / 1000).toFixed(1)}s`
 }
 const promptSourceText = (s: string) => ({ active: 'ACTIVE', version: '版本', custom: '自定义', draft: '草稿' }[s] || s)
+/** mode 枚举 → 中文（后端 prompt_eval_runs.mode 现仅 eval-set；未知值回退原文） */
+const modeText = (m: string) => ({ 'eval-set': '用例集' }[m] || m || '—')
+/** 运行行通过率文案：缺失显「—」（不 ?? 0 把缺数据伪装成 0%） */
+const runRateText = (r: EvalRun) => formatRate(r.summary?.passRate) ?? '—'
 /** 把校验 key 翻译成人话，例如 mustContain:先问目标 → 「必须出现"先问目标"」 */
 const checkLabel = (rawKey: string): string => {
   const [kind, ...rest] = rawKey.split(':')
@@ -631,9 +661,10 @@ const checkLabel = (rawKey: string): string => {
   }
   return map[rawKey] || rawKey
 }
+/** 结果格基调：阈值走 rate-utils 单点（原私有 90/60 两档）；passRate 缺失不着色（muted） */
 const resultTone = (r: EvalRun) => {
-  const p = r.summary.passRate ?? 0
-  return p >= 90 ? 'pe-result--ok' : p >= 60 ? 'pe-result--warn' : 'pe-result--bad'
+  const tone = rateToneOf(typeof r.summary?.passRate === 'number' ? r.summary.passRate : null)
+  return tone === 'muted' ? '' : `pe-result--${tone}`
 }
 /** stage 英文枚举 → 白话（结果明细不再直接甩原始字段；未知值原样兜底） */
 const stageText = (v: unknown): string => {
@@ -688,7 +719,7 @@ async function reloadRuns() {
   runsLoading.value = true
   runsFailed.value = false
   try {
-    const res = await adminPromptOpsApi.getEvalRuns(agentFilter.value || undefined, 30)
+    const res = await adminPromptOpsApi.getEvalRuns(agentFilter.value || undefined, RUNS_LIMIT)
     const items = (res.data?.data ?? res.data) || []
     runs.value = items.map((r: Record<string, unknown>) => ({
       id: String(r.id),
@@ -1124,7 +1155,7 @@ async function runSingle(c: EvalCase) {
     const data = res.data?.data ?? res.data
     const summary = data?.summary || {}
     toast.close(busy)
-    toast.success(`试跑完成：通过率 ${summary.passRate ?? 0}%`)
+    toast.success(`试跑完成：通过率 ${formatRate(summary.passRate) ?? '—'}`)
     void reloadRuns()
   } catch (e) {
     toast.close(busy)
@@ -1147,11 +1178,20 @@ const runDetail = ref<any>(null)
 /* 当前抽屉对应的运行行：失败空态的「重试」需要拿到它（openRunDetail 入参在抽屉打开后即丢失） */
 const runDetailTarget = ref<EvalRun | null>(null)
 
-/* 通过率徽章基调（原型 pills 只分「达成/未达成」两档，不发明阈值）：全通过 = ok，有未通过 = warn */
+/* 通过率徽章基调收敛到 rate-utils 三档 + 无数据档（原「全过=ok 否则 warn」两档：90 分与 0 分同色）；
+   阈值在徽章 title 披露（调用处）。passRate 缺失 → muted 徽章（缺数据 ≠ 未达成） */
 function passTone(summary: { passRate?: number; passedCount?: number; totalRuns?: number } | null | undefined): string {
-  const total = Number(summary?.totalRuns ?? 0)
-  const passed = Number(summary?.passedCount ?? 0)
-  return total > 0 && passed >= total ? 'mk-badge--ok' : 'mk-badge--warn'
+  const tone = rateToneOf(typeof summary?.passRate === 'number' ? summary.passRate : null)
+  return tone === 'ok' ? 'mk-badge--ok' : tone === 'bad' ? 'mk-badge--bad' : tone === 'warn' ? 'mk-badge--warn' : 'mk-badge--muted'
+}
+
+/** 抽屉通过率文案：缺失显「—」（不 ?? 0） */
+const detailPassRateText = computed(() => formatRate(runDetail.value?.summary?.passRate) ?? '—')
+
+/** 失败用例 → 对应 Skill 详情（openCaseSkill 同口径剥 skill: 前缀；评审「失败用例无去改 Prompt 链路」） */
+function goCaseSkill(agentId: unknown) {
+  const skillId = String(agentId || '').replace(/^skill:/, '')
+  if (skillId) openSkillDrawer(skillId)
 }
 
 async function openRunDetail(r: EvalRun) {

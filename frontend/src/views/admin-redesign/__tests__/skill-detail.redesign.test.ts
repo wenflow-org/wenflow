@@ -5,7 +5,8 @@
  *  - 接线：AdminConsole DETAIL_COMPONENTS 含 skill；Skills.vue 行点击 openSubPage('skill')；
  *    Orchestrator.vue 编排图节点点击 openSubPage('skill')；两者均不再引用 SkillDrawer
  *  - hero：S 头像 / 技能名 / 归属 Agent · 类别副文 / 健康+类别+模型+版本 pills / 真实动作
- *  - 6 页签（协议 / 试跑 / 版本 / 运行时 / 工程 / 字段路由，原型 dtab 组 skill）
+ *  - 6 页签（运行时 / 协议 / 试跑 / 版本 / 工程 / 字段路由；2026-10 运行时置首：健康+证据先于配置；
+ *    页签写/读 ?tab=，深链/刷新可寻址）
  *  - 协议：输入/输出契约 vrow（真实字段路由 fields 拆分）+ 回合状态机/终止条件空态 + System Prompt 代码卡
  *  - Prompt 编辑是弹层（原型 openPromptModal：modal modal--wide），Esc/关闭可收
  *  - 原型有而后端没有数据源的展示块一律空态/省略（回合状态机 / 终止条件 / 执行链路 /
@@ -229,11 +230,12 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
 
     expect(w.find('.mk-hero__avatar').text()).toBe('S')
     expect(w.find('.mk-hero__title').text()).toBe('教学回合')
-    expect(w.find('.mk-hero__sub').text()).toBe('教学 Agent · teaching')
+    // 类别人话（categoryText）：裸枚举 teaching → 「教学」
+    expect(w.find('.mk-hero__sub').text()).toBe('教学 Agent · 教学')
 
     const pills = w.findAll('.mk-hero__pills .mk-badge').map((b) => b.text())
     expect(pills[0]).toBe('健康') // 窗口内 100 调用 0 失败
-    expect(pills[1]).toBe('teaching')
+    expect(pills[1]).toBe('教学')
     expect(pills.join('|')).toContain('gpt-5.2')
     expect(pills.join('|')).toContain('ACTIVE v2')
 
@@ -244,19 +246,42 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  it('6 页签：协议 / 试跑 / 版本 / 运行时 / 工程 / 字段路由（原型 dtab 组 skill）', async () => {
+  it('6 页签：运行时 / 协议 / 试跑 / 版本 / 工程 / 字段路由（运行时置首，默认选中）', async () => {
     const w = mountDetail()
     await settle()
 
     const tabs = w.findAll('.mk-subtab')
-    expect(tabs.map((t) => t.text())).toEqual(['协议', '试跑', '版本', '运行时', '工程', '字段路由'])
+    expect(tabs.map((t) => t.text())).toEqual(['运行时', '协议', '试跑', '版本', '工程', '字段路由'])
     expect(tabs[0].attributes('aria-selected')).toBe('true')
+    w.unmount()
+  })
+
+  it('?tab= 写/读：深链带合法 tab 直达该页签；点击页签回写 URL（刷新/分享可寻址）', async () => {
+    subPage.value = { view: 'skill', id: 'skill-a' }
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }]
+    })
+    await router.push('/admin/people?view=skill&id=skill-a&tab=versions')
+    await router.isReady()
+    const w = mount(SkillDetail, { global: { plugins: [router] } })
+    await settle()
+
+    // 深链读：versions（第 4 个页签）选中
+    expect(w.findAll('.mk-subtab')[3].attributes('aria-selected')).toBe('true')
+    // 点击写：切「工程」→ URL ?tab=engineering（router.replace 为异步导航，需 flushPromises）
+    await w.findAll('.mk-subtab')[4].trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.tab).toBe('engineering')
     w.unmount()
   })
 
   it('协议页签：输入/输出契约 vrow（真实字段拆分）+ 回合状态机/终止条件空态 + System Prompt 代码卡', async () => {
     const w = mountDetail()
     await settle()
+    // 运行时已置首：协议页签需显式切入（第 2 个）
+    await w.findAll('.mk-subtab')[1].trigger('click')
+    await nextTick()
 
     const cards = w.findAll('.skd-pane .mk-card__title').map((t) => t.text())
     expect(cards).toEqual(['输入契约', '输出契约', '回合状态机', '终止条件', 'System Prompt'])
@@ -287,6 +312,8 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
   it('Prompt 编辑弹层（原型 openPromptModal：modal--wide）：预填生效内容，关闭/Esc 可收', async () => {
     const w = mountDetail()
     await settle()
+    await w.findAll('.mk-subtab')[1].trigger('click') // 协议页签（运行时置首后非默认）
+    await nextTick()
 
     await w.findAll('.mk-card__head .mk-btn--sm')[0].trigger('click')
     await nextTick()
@@ -321,7 +348,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     })
     const w = mountDetail()
     await settle()
-    await w.findAll('.mk-subtab')[1].trigger('click')
+    await w.findAll('.mk-subtab')[2].trigger('click') // 试跑（第 3 个）
     await nextTick()
 
     expect(w.text()).toContain('样例输入')
@@ -348,7 +375,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
   it('版本页签：版本表格（版本/名称/状态），对比回滚投设计页；日期/作者无源不渲染', async () => {
     const w = mountDetail()
     await settle()
-    await w.findAll('.mk-subtab')[2].trigger('click')
+    await w.findAll('.mk-subtab')[3].trigger('click') // 版本（第 4 个）
     await nextTick()
 
     const rows = w.findAll('.mk-table tbody tr')
@@ -365,16 +392,18 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  it('运行时页签：指标格（真实统计）+ 模型配置表单 + 模型测试 + 最近调用空态', async () => {
+  it('运行时页签（置首默认）：指标格（真实统计）+ 模型配置表单 + 模型测试 + 最近调用空态', async () => {
     const w = mountDetail()
     await settle()
-    await w.findAll('.mk-subtab')[3].trigger('click')
+    await w.findAll('.mk-subtab')[0].trigger('click')
     await nextTick()
 
-    // 指标格：100 调用 / 0 失败（calls>0 显真实失败数，0 调用才显 —）/ 100.0% / 2.2s
+    // 指标格：100 调用 / 0 失败（calls>0 显真实失败数，0 调用才显 —）/ 100%（rate-utils 1 位小数、整值省 .0）/ 2.2s
     const values = w.findAll('.skd-metric__value').map((v) => v.text())
-    expect(values).toEqual(['100', '0', '100.0%', '2.2s'])
+    expect(values).toEqual(['100', '0', '100%', '2.2s'])
     expect(w.text()).toContain('统计口径')
+    // 统计口径对齐真实窗口（liveSkillStatsMap 默认近 7 天）：不再照抄 meta.stats 的「全量」
+    expect(w.text()).toContain('近 7 天')
 
     // 模型配置（SkillDrawer 迁入）：独立配置开着 + 保存/恢复默认在位
     expect(w.text()).toContain('模型配置')
@@ -396,7 +425,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
   it('工程页签：工程信息事实区（真实 meta/overview 字段），仓库/值班/SLO 无源不渲染', async () => {
     const w = mountDetail()
     await settle()
-    await w.findAll('.mk-subtab')[4].trigger('click')
+    await w.findAll('.mk-subtab')[4].trigger('click') // 工程（第 5 个）
     await nextTick()
 
     expect(w.text()).toContain('工程信息')
@@ -416,7 +445,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
   it('字段路由页签：字段流转表格（角色人话/流向/渲染/属性）+ 编辑投设计页；脱敏列无源不渲染', async () => {
     const w = mountDetail()
     await settle()
-    await w.findAll('.mk-subtab')[5].trigger('click')
+    await w.findAll('.mk-subtab')[5].trigger('click') // 字段路由（第 6 个）
     await nextTick()
 
     const rows = w.findAll('.mk-table tbody tr')

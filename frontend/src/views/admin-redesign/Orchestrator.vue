@@ -12,8 +12,23 @@
       <span class="mk-status__meta">{{ pageLoading ? '—' : stages.length }} 阶段 · {{ pageLoading ? '—' : totalSkills }} 个 Skill</span>
       <!-- 原型 statusbar meta「N 处阶段交接」：线性拓扑下 = 阶段数 - 1 -->
       <span class="mk-status__meta">{{ pageLoading ? '—' : handoffCount }} 处阶段交接</span>
-      <span v-if="unresolvedCount > 0" class="mk-status__meta mk-status__meta--bad">未解析 {{ unresolvedCount }}</span>
-      <span v-if="w4Drifted.length" class="mk-status__meta mk-status__meta--bad">{{ TERMS.driftHashQualified }} {{ w4Drifted.length }}</span>
+      <!-- 红字必须可点（评审「异常→动作→证据断链」+ P1#27）：
+           未解析 → 页内切「字段旅程」面板并定位首个含未解析步骤的阶段（DataFlowGraph 的「未解析」徽章即名单）；
+           哈希漂移 → 跳健康中心（W4 coreHash 检查的归属页；本页治理面板的 DriftAuditPanel 只覆盖契约漂移） -->
+      <button
+        v-if="unresolvedCount > 0"
+        type="button"
+        class="mk-status__meta mk-status__meta--bad mk-status__meta-link"
+        title="点击切到「字段旅程」面板：红「未解析」徽章即名单（定位到首个含未解析步骤的阶段）"
+        @click="goUnresolved"
+      >未解析 {{ unresolvedCount }}</button>
+      <button
+        v-if="w4Drifted.length"
+        type="button"
+        class="mk-status__meta mk-status__meta--bad mk-status__meta-link"
+        title="W4 core 哈希漂移名单在健康中心的健康检查（w4-corehash）；点击跳转"
+        @click="goHashDrift"
+      >{{ TERMS.driftHashQualified }} {{ w4Drifted.length }}</button>
     </div>
 
     <!-- 阶段导航：五个 tab = 五个阶段（浏览 + 编辑 + 治理都在阶段工作区内）——chrome 固定 -->
@@ -80,8 +95,10 @@
               </button>
             </div>
             <footer class="orch-odg-foot">
-              <span class="orch-odg-chip orch-odg-chip--in">入 {{ contractOf(s.id).ins.length }}</span>
-              <span class="orch-odg-chip orch-odg-chip--out">出 {{ contractOf(s.id).outs.length }}</span>
+              <!-- 字段契约三态：未加载显「…」（不按 0 渲染——加载完成前「入 0」与「真无必填」不可分辨；
+                   部分阶段确无必填入参，加载后「入 0」属实） -->
+              <span class="orch-odg-chip orch-odg-chip--in" :title="contractOf(s.id).loaded ? `必填入参 ${contractOf(s.id).ins.length} 个` : '字段契约加载中…'">入 {{ contractOf(s.id).loaded ? contractOf(s.id).ins.length : '…' }}</span>
+              <span class="orch-odg-chip orch-odg-chip--out" :title="contractOf(s.id).loaded ? `产出字段 ${contractOf(s.id).outs.length} 个` : '字段契约加载中…'">出 {{ contractOf(s.id).loaded ? contractOf(s.id).outs.length : '…' }}</span>
               <span class="orch-odg-fields" :title="contractOf(s.id).outs.join(' · ')">{{ contractOf(s.id).outs.slice(0, 4).join(' · ') }}<template v-if="contractOf(s.id).outs.length > 4">…</template></span>
             </footer>
           </div>
@@ -462,6 +479,8 @@ const odgSvgEl = ref<SVGSVGElement | null>(null)
 interface StageFieldContract {
   ins: string[]
   outs: string[]
+  /** 字段契约是否已加载（此前加载完成前按 0 渲染：「入 0」与「真无必填」不可分辨，评审「状态三态缺失」） */
+  loaded?: boolean
 }
 const OUT_ROLES = ['proposal-output', 'public-reply', 'derived-presentation']
 const stageFieldContract = ref<Record<string, StageFieldContract>>({})
@@ -476,6 +495,7 @@ async function loadStageFieldContracts(ids: string[]) {
     map[ids[i]] = {
       ins: fields.filter((f) => f.promptRole === 'hard-required').map((f) => f.camelName || f.fieldId),
       outs: fields.filter((f) => OUT_ROLES.includes(f.promptRole || '')).map((f) => f.camelName || f.fieldId),
+      loaded: true,
     }
   })
   stageFieldContract.value = map
@@ -488,7 +508,20 @@ watch(
   { immediate: true },
 )
 function contractOf(id: string): StageFieldContract {
-  return stageFieldContract.value[id] ?? { ins: [], outs: [] }
+  return stageFieldContract.value[id] ?? { ins: [], outs: [], loaded: false }
+}
+
+/** 状态条「未解析 N」红字落地（可点）：切 journey 面板 + 定位首个含未解析步骤的阶段；
+    ?stage=&tab= 回写由下方既有 watch 承接（:369-377 先例），刷新/分享可还原 */
+function goUnresolved() {
+  const hit = stages.value.find((s) => (s.defSteps || []).some((d) => d.resolved?.unresolved))
+  if (hit) active.value = hit.id
+  pane.value = 'journey'
+}
+/** 状态条「哈希漂移 N」红字落地（可点）：W4 coreHash 检查归属健康中心
+    （本页治理面板 DriftAuditPanel 只覆盖契约漂移，hash 名单在那边） */
+function goHashDrift() {
+  void router.push('/admin/health-center')
 }
 
 /** 相邻阶段交接（原型 1624-1629 五列）：交接列用阶段 id（原型 s.id，本页 id 本就小写 mono）；
@@ -590,6 +623,8 @@ const pageLoading = computed(() => liveLoading.value && !stages.value.length)
 // 概览卡结论点色/标题（唯一动态状态载体；状态条只剩身份 + 数量）
 const statusTone = computed(() => {
   if (!stages.value.length) return 'muted'
+  // P1#27：哈希漂移计入状态点（此前正文红字「哈希漂移 N」、状态点仍绿——告警语义自相矛盾）
+  if (w4Drifted.value.length) return 'bad'
   const unresolved = stages.value.some((s) => s.defSteps?.some((d) => d.resolved?.unresolved))
   return unresolved ? 'warn' : 'ok'
 })
