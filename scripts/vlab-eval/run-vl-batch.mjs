@@ -188,8 +188,12 @@ async function runPhase(pid, vl, st, t0) {
         // autoAdvanceToLearning:false 时 run-full 必然以「未能进入教学阶段（当前阶段：path）」收尾——
         // 那是"诚实停在 path"的状态标记（run-vl-one.js 同款处理），不是失败；其余错误照抛。
         const msg = String(e.message || e);
-        if (!/未能进入教学阶段/.test(msg)) throw e;
-        log(`${pid} run-full 止于 path 阶段（预期行为）`);
+        // 「等待路径生成超时」= 服务端内部等待放弃，但路径生成任务仍在跑/稍后会就绪——
+        // 转入 poll-path 慢轮询收尾（50 分钟耐心），不丢格（2026-10-02：60 格并发下该形态占比最高）
+        if (/等待路径生成超时/.test(msg)) {
+          log(`${pid} run-full 服务端等待超时 → 转 poll-path 慢轮询`);
+        } else if (!/未能进入教学阶段/.test(msg)) throw e;
+        else log(`${pid} run-full 止于 path 阶段（预期行为）`);
       }
       st.phase = 'poll-path'; saveState(pid, st);
     }
@@ -242,8 +246,23 @@ async function runPhase(pid, vl, st, t0) {
       // 75 分钟：实测带检查点门的首课 30 分钟不够（69 条消息仍在共同卡点攻坚）
       const deadline = Date.now() + 75 * 60 * 1000;
       let doneTurn = 0;
+      let learnRestarted = 0;
       while (Date.now() < deadline) {
-        const r = await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-step`, {}, { timeout: 300000 });
+        let r;
+        try {
+          r = await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-step`, {}, { timeout: 300000 });
+        } catch (e) {
+          // 「学习已停止（failed）」= 此前爆发期把学习会话判死。自愈：restart-learning 复活后
+          // 继续走轮（≤2 次）；不死丢格（2026-10-02 爆发期掉格主形态之一）
+          if (/学习已停止/.test(String(e.message || e)) && learnRestarted < 2) {
+            learnRestarted++;
+            log(`${pid} 学习会话已停止 → restart-learning 自愈 ${learnRestarted}/2`);
+            await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/restart-learning`, {}, { timeout: 120000 });
+            await sleep(5000);
+            continue;
+          }
+          throw e;
+        }
         const d = r.data || {};
         doneTurn++;
         const s = d.status || d.sessionStatus || d.phase || '';
