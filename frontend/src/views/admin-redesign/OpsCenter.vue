@@ -21,7 +21,9 @@
 
     <!-- ===== Tab1: 运维工具 ===== -->
     <template v-if="tab === 'tools'">
-    <div class="oc-tab-body mk-narrow">
+    <!-- 全宽页签体（原型 renderOpsCenter tools/export/security 三 pane 均通栏；2026-10-02
+         撤 mk-narrow 限宽——此前仅本页签被 1200px 居中收窄，宽屏下两翼留白、三个页签不一致） -->
+    <div class="oc-tab-body">
     <!-- 时间推进模拟 -->
     <section class="mk-card">
       <div class="mk-card__head">
@@ -457,7 +459,7 @@ watch(tab, (t) => {
 .oc-card__body > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
 /* 工具/导出页签体：卡体内边距 + 栅格（滚动上移到 oc-card__body） */
 .oc-tab-body {
-  padding: 14px;
+  padding: 16px; /* 原型页签体 --sp-4（此前 14px） */
   display: grid;
   gap: 12px;
   align-content: start;
