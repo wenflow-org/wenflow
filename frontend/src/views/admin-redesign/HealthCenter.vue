@@ -190,7 +190,7 @@
           </summary>
           <div class="hc-checks">
             <!-- 异常/关注项：默认展开 -->
-            <div v-for="item in healthHighlight" :key="item.id" class="hc-check" :class="`hc-check--${item.severity}`">
+            <div v-for="item in healthHighlight" :id="`hc-check-${item.id}`" :key="item.id" class="hc-check" :class="`hc-check--${item.severity}`">
               <button type="button" class="hc-check__row" :aria-expanded="detailOpen(item.id)" @click="toggleDetail(item.id)">
                 <span class="hc-check__dot" :class="`hc-check__dot--${item.severity}`"></span>
                 <span class="hc-check__main">
@@ -219,7 +219,7 @@
             <details v-if="healthRemaining.length" class="hc-ok">
               <summary class="hc-ok__summary"><span class="hc-ok__label">其余 {{ healthRemaining.length }} 项正常</span><span class="mk-card__meta">点击展开</span></summary>
               <div class="hc-checks">
-                <div v-for="item in healthRemaining" :key="item.id" class="hc-check" :class="`hc-check--${item.severity}`">
+                <div v-for="item in healthRemaining" :id="`hc-check-${item.id}`" :key="item.id" class="hc-check" :class="`hc-check--${item.severity}`">
                   <button type="button" class="hc-check__row" :aria-expanded="detailOpen(item.id)" @click="toggleDetail(item.id)">
                     <span class="hc-check__dot" :class="`hc-check__dot--${item.severity}`"></span>
                     <span class="hc-check__main">
@@ -302,7 +302,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { errMsg, timeAgo } from './live'
@@ -565,6 +565,22 @@ function seedDetailOpen(items: HealthCenterItem[]) {
   detailOpenIds.value = s
 }
 watch(() => displayReport.value?.health.items, (items) => { if (items) seedDetailOpen(items) }, { immediate: true })
+
+/** ?check=<id> 深链（Orchestrator「哈希漂移 N」等入口）：展开目标行并滚动定位。
+    注意在 seed 之后执行（同源 watcher 按注册顺序，上面先播种默认展开集）。 */
+const deepCheckId = computed(() => (typeof route.query.check === 'string' ? route.query.check.trim() : ''))
+watch([deepCheckId, () => displayReport.value?.health.items], async ([cid, items]) => {
+  if (!cid || !items?.length || !items.some((i) => i.id === cid)) return
+  const s = new Set(detailOpenIds.value)
+  s.add(cid)
+  detailOpenIds.value = s
+  // 目标若在「其余 N 项正常」折叠组内，先展开该组
+  const okGroup = document.querySelector<HTMLDetailsElement>('details.hc-ok')
+  if (okGroup) okGroup.open = true
+  await nextTick()
+  const el = document.getElementById(`hc-check-${cid}`)
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}, { immediate: true })
 function detailOpen(id: string): boolean { return detailOpenIds.value.has(id) }
 function toggleDetail(id: string) {
   const s = new Set(detailOpenIds.value)

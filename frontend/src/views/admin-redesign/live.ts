@@ -1224,13 +1224,16 @@ export interface LiveLearner {
   currentMilestone: string | null
   trend: 'up' | 'down' | 'flat'
   fatigue: string
-  confidence: number
+  /** 快照置信度；缺省为 undefined（「无快照/证据不足」）而非 0——0 是「真测得 0 分」，两者必须可区分 */
+  confidence: number | undefined
   generatedAt: string
   struggling: string[]
   fragile: string[]
 }
 
 export const liveLearners = ref<LiveLearner[]>([])
+/** 学习者域总数（后端分页 total；前端拉取窗口 limit 50——P1#16 的数据层根修） */
+export const liveLearnersTotal = ref<number | null>(null)
 
 function mapTrend(t?: string): 'up' | 'down' | 'flat' {
   if (t === 'improving' || t === 'up') return 'up'
@@ -1246,6 +1249,9 @@ async function fetchLiveLearners(includeTest = false): Promise<void> {
   const res = await adminLearnerModelsApi.list({ limit: 50, ...(includeTest ? { includeTest: true } : { excludeTest: true }) })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.items || []
+  // P1#16 数据层：接住分页 total（此前被丢弃，KPI 只能显示「已加载 N」）
+  const total = Number((body.pagination as Record<string, unknown> | undefined)?.total ?? body.total)
+  liveLearnersTotal.value = Number.isFinite(total) && total > 0 ? total : null
   liveLearners.value = items.map((m: Record<string, unknown>) => ({
     userId: String(m.userId),
     name: String(m.userName || m.userId),
@@ -1257,7 +1263,7 @@ async function fetchLiveLearners(includeTest = false): Promise<void> {
     currentMilestone: (m.currentMilestone as string) || null,
     trend: mapTrend(m.recentTrend as string),
     fatigue: mapFatigue(m.fatigueRisk as string),
-    confidence: Number(m.confidence || 0),
+    confidence: m.confidence == null ? undefined : Number(m.confidence),
     generatedAt: String(m.generatedAt || ''),
     struggling: (m.strugglingConcepts as string[]) || [],
     fragile: (m.fragileConcepts as string[]) || []

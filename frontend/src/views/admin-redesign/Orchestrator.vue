@@ -521,7 +521,8 @@ function goUnresolved() {
 /** 状态条「哈希漂移 N」红字落地（可点）：W4 coreHash 检查归属健康中心
     （本页治理面板 DriftAuditPanel 只覆盖契约漂移，hash 名单在那边） */
 function goHashDrift() {
-  void router.push('/admin/health-center')
+  // ?check= 定位到 w4-corehash 检查行（健康中心深链展开+滚动）
+  void router.push({ path: '/admin/health-center', query: { check: 'w4-corehash' } })
 }
 
 /** 相邻阶段交接（原型 1624-1629 五列）：交接列用阶段 id（原型 s.id，本页 id 本就小写 mono）；

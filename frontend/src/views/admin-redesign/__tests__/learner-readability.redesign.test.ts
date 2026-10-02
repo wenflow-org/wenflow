@@ -123,6 +123,12 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     };
     expect(kpi('学习者')).toContain('已加载 4');
     expect(kpi('学习者')).toContain('50 条');
+
+    // 数据层接线后：liveLearnersTotal 有值且 ≠ 窗口数 → 显「N · 已载 M」
+    const { liveLearnersTotal } = await import('../live');
+    (liveLearnersTotal as unknown as { value: number | null }).value = 137;
+    await nextTick();
+    expect(kpi('学习者')).toContain('137 · 已载 4');
     expect(kpi('需关注')).toContain('疲劳高');
     w.unmount();
   });

@@ -1218,7 +1218,11 @@ async function loadDetail(id: string | undefined) {
         concepts: e.concepts
       })),
       snapshot: {
-        version: base ? `置信 ${(base.confidence * 100).toFixed(0)}%${evidenceLowConfidence(base.confidence) ? ' · 证据不足' : ''}` : '—',
+        version: base
+          ? base.confidence == null
+            ? '置信未知'
+            : `置信 ${(base.confidence * 100).toFixed(0)}%${evidenceLowConfidence(base.confidence) ? ' · 证据不足' : ''}`
+          : '—',
         generatedAt: timeAgo(base?.generatedAt)
       }
     }
@@ -1265,7 +1269,9 @@ async function loadDetail(id: string | undefined) {
         concepts: { mastered: [], struggling: base.struggling, fragile: base.fragile },
         sessions: [],
         snapshot: {
-          version: `置信 ${(base.confidence * 100).toFixed(0)}%${evidenceLowConfidence(base.confidence) ? ' · 证据不足' : ''}`,
+          version: base.confidence == null
+            ? '置信未知'
+            : `置信 ${(base.confidence * 100).toFixed(0)}%${evidenceLowConfidence(base.confidence) ? ' · 证据不足' : ''}`,
           generatedAt: timeAgo(base.generatedAt)
         }
       }

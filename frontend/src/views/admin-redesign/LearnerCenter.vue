@@ -67,12 +67,11 @@
              不随下方 pill / 搜索筛选变化（与原型从全体学习者聚合一致） -->
         <div v-if="rows.length" class="lc-analytics">
           <section class="mk-kpi-grid" aria-label="学习状态概览">
-            <!-- P1#16：「学习者」曾是已加载行数冒充总数——live.ts fetchLiveLearners 只拉 50 条且
-                 未透出后端 total（live.ts:1219，登记待数据层接线），故 KPI 如实显「已加载 N」 -->
+            <!-- P1#16 数据层已接线（live.ts liveLearnersTotal）：有 total 显「N · 已载 M」，仅窗口时显「已加载 N」 -->
             <MkKpi
               label="学习者"
-              :value="`已加载 ${rows.length}`"
-              :hint="`快照单次最多加载 50 条${rows.length >= 50 ? '（已到上限，可能还有更多）' : ''} · 口径：${includeTest ? '含测试账号' : '不含测试账号'}；全量总数待数据层透出`"
+              :value="learnerTotalText"
+              :hint="`快照单次最多加载 50 条${rows.length >= 50 ? '（已到上限，可能还有更多）' : ''} · 口径：${includeTest ? '含测试账号' : '不含测试账号'}${learnerTotal == null ? '；全量总数接口未返回' : ''}`"
             />
             <!-- P1#17：需关注收窄为真异常（趋势降 ∨ 疲劳高 ∨ 有风险摘要）；
                  常态档「疲劳=中」拆到 pills 的「观察」，不再把需关注撑爆 -->
@@ -256,7 +255,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { openSubPage, isLive } from './store'
-import { liveLearners, liveRecomputeLearner, liveSetLearnersIncludeTest, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg } from './live'
+import { liveLearners, liveLearnersTotal, liveRecomputeLearner, liveSetLearnersIncludeTest, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg } from './live'
 import { evidenceLowConfidence } from './evidence'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -383,6 +382,13 @@ async function sendIntervene() {
   }
 }
 
+/** P1#16 数据层接线：liveLearnersTotal=后端分页 total；仅窗口时如实「已加载 N」 */
+const learnerTotal = computed(() => liveLearnersTotal.value)
+const learnerTotalText = computed(() => {
+  const t = learnerTotal.value
+  if (t != null && t !== rows.value.length) return `${t} · 已载 ${rows.value.length}`
+  return rows.value.length ? `已加载 ${rows.value.length}` : '0'
+})
 const rows = computed<Row[]>(() =>
   liveLearners.value.map((m) => ({
     id: m.userId,

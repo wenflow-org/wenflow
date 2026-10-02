@@ -685,7 +685,7 @@ const stateCell = computed<{ line: string; hint: string }>(() => {
   }
   const trend = l.trend === 'up' ? '↗ 上升' : l.trend === 'down' ? '↘ 下降' : '→ 稳定'
   return {
-    line: `${trend} · 疲劳${l.fatigue} · 置信 ${Math.round((l.confidence ?? 0) * 100)}%`,
+    line: `${trend} · 疲劳${l.fatigue} · ${l.confidence == null ? '置信未知' : `置信 ${Math.round(l.confidence * 100)}%`}`,
     hint: `来自学习者快照${l.generatedAt ? `（更新于 ${timeAgo(l.generatedAt)}）` : ''}：趋势=近期表现方向、疲劳=学习负荷、置信=快照把握度（<50% 证据不足）。完整画像见右上「查看学习者画像」。`
   }
 })
