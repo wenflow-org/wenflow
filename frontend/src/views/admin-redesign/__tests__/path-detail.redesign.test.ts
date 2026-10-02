@@ -105,6 +105,8 @@ describe('PathDetail 路径详情二级页（renderPathDetail 落点）', () => 
     expect(pills[0]).toBe('学习中')
     // 当前阶段 = 优先进行中（里程碑 status=in_progress）
     expect(pills[1]).toBe('当前：搭建最小系统')
+    // 预计时长原在 statstrip，撤带后收进 pills（fixture estimatedHours=12）
+    expect(pills[2]).toBe('预计 ~12h')
 
     // hero actions：真实能力（下线路径 / 刷新 / 查看学习者），不搬导出/重规划假按钮
     const actions = w.findAll('.mk-hero__actions button').map((b) => b.text())
@@ -113,18 +115,18 @@ describe('PathDetail 路径详情二级页（renderPathDetail 落点）', () => 
     w.unmount()
   })
 
-  it('statstrip + 总体进度：阶段/任务/时长/更新四读数 + 33% meter（真实里程碑派生）', async () => {
+  it('总体进度卡：任务完成数 + 33% meter（真实里程碑派生）；statstrip 已撤（2026-10-02 用户拍板，原型路径详情无此带）', async () => {
     const w = mountPage()
     await flushPromises()
     await nextTick()
 
-    const labels = w.findAll('.statstrip__label').map((e) => e.text())
-    const values = w.findAll('.statstrip__value').map((e) => e.text())
-    expect(labels).toEqual(['阶段完成', '任务完成', '预计时长', '最近更新'])
-    expect(values).toEqual(['1 / 3', '2 / 4', '~12h', '3 天前'])
+    // 反向断言：第二统计带不再渲染（阶段完成/最近更新已在 hero 副文，不再复读）
+    expect(w.find('.statstrip').exists()).toBe(false)
+    expect(w.findAll('.statstrip__label').length).toBe(0)
 
-    // 总体进度卡：meterrow「总体进度」+ mono % + 8px meter 条
+    // 总体进度卡：meterrow「总体进度」+ 任务完成数（原 statstrip 唯一不重复读数）+ 33% meter
     expect(w.find('.pd-meterrow').text()).toContain('总体进度')
+    expect(w.find('.pd-meterrow__tasks').text()).toBe('任务 2 / 4')
     expect(w.find('.pd-meterrow__num').text()).toBe('33%')
     expect((w.find('.pd-meter .mk-minibar__fill').element as HTMLElement).style.width).toBe('33%')
 

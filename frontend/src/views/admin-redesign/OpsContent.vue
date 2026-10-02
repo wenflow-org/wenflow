@@ -33,24 +33,12 @@
       </span>
     </div>
 
-    <!-- 页头 KPI 区（2026-09-29 拆回独立页）：路径规模四档——学习中/已完成/生成失败已是
-         卡头 pills 的筛选口径，这里只给「总数 + 规模 + 已下线」。 -->
-    <section v-if="!embedded" class="mk-kpi-grid">
-      <MkKpi
-        v-for="card in pathsKpiCards"
-        :key="card.label"
-        :label="card.label"
-        :value="card.value"
-        :hint="card.hint"
-        :tone="card.tone"
-        :title="card.title"
-      />
-    </section>
-
     <!-- 路径状态分布（newui 原型 renderPaths「路径状态分布」移植）。数据源 = loadStats 已拉的
          adminLearningContentApi.getStats() 的 byStatus（服务端按状态 group-by 的全平台计数，
          服务端 60s 缓存）——响应自带逐状态计数，无需 dashboard 兜底推导，零新增请求。
-         embedded 时随 KPI 区一并隐藏（宿主状态条已承载四态计数）；stats 拉取失败或全零时
+         本页唯一统计带 = 顶部状态条（2026-10-02 用户拍板「也是kpi问题」撤 KPI 栅格：
+         原型 renderPaths 无 KPI 板块，总数/里程碑/任务/已下线已单源住在状态条 meta）。
+         embedded 时整卡隐藏（宿主状态条已承载四态计数）；stats 拉取失败或全零时
          整卡 v-if 静默隐藏，不留空卡 -->
     <section v-if="!embedded && pathBandReady" class="mk-card">
       <div class="mk-card__head">
@@ -278,7 +266,6 @@ import { intent, openSubPage } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import MkKpi from '@/components/mk/MkKpi.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { useTableSort } from './useTableSort'
 import { useRowMenu } from './useRowMenu'
@@ -293,20 +280,8 @@ import { statusText, statusBadge } from './opsShared'
 
 /** 嵌入模式：作为「目标对话」页内「学习路径」tab 渲染（隐藏页面壳与状态条，筛选/表格/抽屉保留）；
     initialStatus：宿主深链预筛（如工作台「生成失败路径」→ 'failed'），挂载时应用。
-    count 事件：stats 加载完成后上报路径总数（宿主「路径 N」徽章）
-    stats 事件：宿主 KPI 区用的路径域规模（同样只在 embedded 被消费） */
+    （原 count/stats 上报链随合并宿主退役，2026-10-02 撤页头 KPI 区时一并清除） */
 const props = withDefaults(defineProps<{ embedded?: boolean; initialStatus?: string }>(), { embedded: false, initialStatus: '' })
-export interface PathsStats {
-  /** 路径总数（含各状态） */
-  total: number
-  /** 里程碑总数（全平台） */
-  milestones: number
-  /** 任务总数（全平台） */
-  tasks: number
-  /** 已下线（archived）路径数 */
-  archived: number
-}
-const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'stats', stats: PathsStats): void }>()
 
 type PathRow = LearningPathRow & { busy?: boolean; isTestAccount?: boolean }
 
@@ -346,23 +321,6 @@ const hiddenCols = ref<Set<string>>(new Set())
 
 /* 状态条四态计数 + 基调（与目标对话/教学会话同形态：失败>0 警示琥珀，空库静默） */
 const byStatus = (s: string) => stats.value?.byStatus?.[s] || 0
-/* 独立模式页头 KPI 卡（embedded 时由宿主渲染——2026-09-29 拆页后本页常态独立） */
-interface PathsKpiCard {
-  label: string
-  value: string | number
-  hint: string
-  title: string
-  tone?: 'ok' | 'warn' | 'bad' | ''
-}
-const pathsKpiCards = computed<PathsKpiCard[]>(() => {
-  const s = stats.value
-  return [
-    { label: '学习路径', value: s ? s.total : '—', hint: '含各状态', title: '平台学习路径总数（含学习中 / 已完成 / 生成失败 / 已下线）' },
-    { label: '里程碑', value: s ? s.totalMilestones : '—', hint: '全平台合计', title: '全部路径的里程碑总数' },
-    { label: '任务', value: s ? s.totalTasks : '—', hint: '全平台合计', title: '全部路径下的任务总数' },
-    { label: '已下线', value: s ? byStatus('archived') : '—', hint: '归档不再分发', title: '已下线（archived）路径数——仍在库中，可回溯' }
-  ]
-})
 
 const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
   if (!stats.value || stats.value.total === 0) return 'muted'
@@ -517,16 +475,6 @@ async function loadStats() {
   try {
     const res = await adminLearningContentApi.getStats()
     stats.value = res.data?.data ?? res.data
-    /* 宿主域计数徽章（embedded 才消费） */
-    emit('count', Number(stats.value?.total || 0))
-    /* 宿主 KPI 区：路径域规模（总数/里程碑/任务/已下线）。取「规模」而非状态分档——
-       学习中/已完成/生成失败已是卡头 pills 的筛选口径，宿主页头不重说一遍 */
-    emit('stats', {
-      total: Number(stats.value?.total || 0),
-      milestones: Number(stats.value?.totalMilestones || 0),
-      tasks: Number(stats.value?.totalTasks || 0),
-      archived: Number(stats.value?.byStatus?.archived || 0)
-    })
   } catch {
     stats.value = null
   }

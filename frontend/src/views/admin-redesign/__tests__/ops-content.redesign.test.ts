@@ -82,17 +82,18 @@ afterEach(() => {
 });
 
 describe('OpsContent 学习路径 tab 重设计骨架', () => {
-  it('embedded：无状态条（宿主承载）；count 事件上报总数；卡头含 pill+搜索+口径+列显隐；表头无学科列', async () => {
+  it('embedded：无状态条（宿主承载）；上报链已退役不发射；卡头含 pill+搜索+口径+列显隐；表头无学科列', async () => {
     const w = mount(OpsContent, { props: { embedded: true } });
     await flushPromises();
     await nextTick();
 
     // embedded 不渲染自己的状态条（合并宿主「学习会话」状态条承载域计数）
     expect(w.find('.mk-status').exists()).toBe(false);
-    // 加载完成上报「路径 N」徽章计数（stats.total）
-    expect(w.emitted('count')?.at(-1)).toEqual([3]);
+    // count/stats 上报链已随合并宿主退役（2026-10-02 撤 KPI 栅格时一并清除），不再发射
+    expect(w.emitted('count')).toBeUndefined();
+    expect(w.emitted('stats')).toBeUndefined();
 
-    // 无 KPI 卡（MkKpi 已被移除）
+    // 独立页同样无 KPI 卡（2026-10-02 用户拍板：状态条已单源承载 总数/里程碑/任务/已下线）
     expect(w.find('.mk-kpi').exists()).toBe(false);
 
     // 头部 pill（状态）

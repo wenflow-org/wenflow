@@ -1,14 +1,16 @@
 <template>
   <!-- ===== 加载完成：原型 renderPathDetail 的完整版式 =====
-       hero（头像「路」+ 标题 + 学习者/阶段/更新副文 + 状态与当前阶段 pills + 动作）
-       → 状态条 statstrip（判例 UserDetail/LearnerDetail：一张卡通栏分格 label12/值22）
-       → 总体进度卡（meterrow「总体进度」+ mono % + 8px meter）
-       → stagecard 手风琴（阶段头点击展开 → taskrow 列表） -->
+       hero（头像「路」+ 标题 + 学习者/阶段/更新副文 + 状态/当前阶段/预计 pills + 动作）
+       → 总体进度卡（meterrow「总体进度」+ mono % + 任务完成数 + 8px meter）
+       → stagecard 手风琴（阶段头点击展开 → taskrow 列表）。
+       （2026-10-02 用户拍板「也是kpi问题」：撤 statstrip——原型路径详情无此带，
+       阶段完成/最近更新已在 hero 副文，任务完成/预计时长收进进度卡与 pills） -->
   <div v-if="d" class="mk-page pd">
     <MkDetailHero avatar="路" :title="d.title" :sub="heroSub">
       <template #pills>
         <span class="mk-badge" :class="statusBadge(d.status)">{{ statusText(d.status) }}</span>
         <span v-if="currentStageLabel" class="mk-badge mk-badge--muted" :title="currentStageHint">当前：{{ currentStageLabel }}</span>
+        <span v-if="d.estimatedHours" class="mk-badge mk-badge--muted" title="后端 estimatedHours 估算值，带 ~ 表示近似">预计 ~{{ d.estimatedHours }}h</span>
       </template>
       <template #actions>
         <button type="button" class="mk-btn" :disabled="busy" @click="toggleArchive">
@@ -22,21 +24,15 @@
       </template>
     </MkDetailHero>
 
-    <!-- 状态条（判例 UserDetail/LearnerDetail 的 statstrip：一张卡通栏分格，label 12 / 数值 22） -->
-    <section class="mk-card">
-      <div class="statstrip" role="list" aria-label="路径概览">
-        <div v-for="s in statItems" :key="s.label" class="statstrip__stat" role="listitem" :title="s.hint">
-          <span class="statstrip__label">{{ s.label }}</span>
-          <span class="statstrip__value">{{ s.value }}</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- 总体进度（原型 renderPathDetail 的 meterrow：label + mono % + 8px meter 条） -->
+    <!-- 总体进度（原型 renderPathDetail 的 meterrow：label + mono % + 8px meter 条）；
+         右侧补任务完成数——原 statstrip 唯一不与 hero 重复的读数，收进本卡不再另设统计带 -->
     <section class="mk-card pd-progress">
       <div class="pd-meterrow">
         <span class="pd-meterrow__label">总体进度</span>
-        <span class="pd-meterrow__num mono">{{ overallPct }}%</span>
+        <span class="pd-meterrow__right">
+          <span v-if="taskTotals.total" class="pd-meterrow__tasks" title="已完成子任务数 / 子任务总数（按详情接口 subtasks 统计）">任务 {{ taskTotals.done }} / {{ taskTotals.total }}</span>
+          <span class="pd-meterrow__num mono">{{ overallPct }}%</span>
+        </span>
       </div>
       <span class="mk-minibar pd-meter"><i class="mk-minibar__fill" :style="{ width: overallPct + '%' }"></i></span>
     </section>
@@ -322,17 +318,6 @@ const heroSub = computed(() => {
 })
 
 /** 状态条：四个真实读数（阶段/任务/预计时长/最近更新） */
-const statItems = computed(() => {
-  const v = d.value
-  const { done, total } = taskTotals.value
-  return [
-    { label: '阶段完成', value: `${stageDone.value} / ${stageTotal.value}`, hint: '已完成里程碑数 / 里程碑总数（按详情接口 milestones 统计）' },
-    { label: '任务完成', value: total ? `${done} / ${total}` : '—', hint: '已完成子任务数 / 子任务总数（按详情接口 subtasks 统计）' },
-    { label: '预计时长', value: v?.estimatedHours ? `~${v.estimatedHours}h` : '—', hint: '后端 estimatedHours 估算值，带 ~ 表示近似' },
-    { label: '最近更新', value: v?.updatedAt ? timeAgo(v.updatedAt) : '—', hint: '路径记录最近更新时间' }
-  ]
-})
-
 /* ===== 状态映射（与列表页 opsShared 同一套；子任务/里程碑为详情域映射） ===== */
 const milestoneText = (s: string) => ({ completed: '已完成', in_progress: '进行中', locked: '未解锁' }[s] || s)
 const milestoneBadge = (s: string) =>
@@ -397,27 +382,13 @@ function goLearner() {
 /* 骨架版式（形状）走 MkSkeleton；本类只管外层堆叠 */
 .pd-skel { display: grid; gap: 14px; padding-top: 8px; }
 
-/* 状态条（原型 statstrip：一张卡通栏分格，label 12 / 数值 22，右分隔线；
-   判例 UserDetail/LearnerDetail 同款页本地复刻） */
-.statstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-.statstrip__stat {
-  display: grid; gap: 6px; align-content: start;
-  padding: 12px 16px;
-  border-right: 1px solid var(--mk-line);
-}
-.statstrip__stat:last-child { border-right: 0; }
-.statstrip__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.statstrip__value {
-  font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums; color: var(--mk-ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-
-/* 总体进度卡（原型 meterrow + height:8px meter） */
+/* 总体进度卡（原型 meterrow + height:8px meter；右侧 = 任务完成数 + 百分比） */
 .pd-progress { padding: 12px 16px; display: grid; gap: 6px; }
 .pd-meterrow { display: flex; align-items: center; gap: 8px; }
 .pd-meterrow__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.pd-meterrow__num { margin-left: auto; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.pd-meterrow__right { margin-left: auto; display: flex; align-items: baseline; gap: 12px; }
+.pd-meterrow__tasks { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-family: var(--mk-mono); }
+.pd-meterrow__num { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .pd-meter { height: 8px; }
 
 /* stagecard 手风琴（原型 .stagecard：整卡描边、头浅底、体下沉任务行） */
@@ -507,8 +478,7 @@ function goLearner() {
 .pd-tk__grow { flex: 1; }
 .pd-tk__note { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
-/* ===== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3）。
-   statstrip 值不逐档覆写：基数 22px 由全局 zoom 放大（判例 UserDetail/LearnerDetail）。 ===== */
+/* ===== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ===== */
 @media (min-width: 2000px) {
   .pd-stage__title { font-size: var(--mk-fs-emphasis); }
   .pd-task__title { font-size: var(--mk-fs-emphasis); }
