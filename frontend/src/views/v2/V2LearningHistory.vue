@@ -623,7 +623,7 @@ onMounted(() => {
   display: flex; justify-content: center;
   padding: 4px 0 0;
 }
-.history__ai-note :deep(.ai-note) { font-size: 11px; opacity: 0.75; }
+.history__ai-note :deep(.ai-note) { font-size: 12px; opacity: 0.75; }
 
 /* 内容容器：宽度/内边距交给 CapabilityShell 的 .uc__main，这里只管卡间距 */
 .history__body {
@@ -643,7 +643,7 @@ onMounted(() => {
 
 .history__stat {
   font-size: 13px;
-  color: var(--muted, #5b6577);
+  color: var(--muted);
 }
 
 .history__stat strong {
@@ -651,7 +651,7 @@ onMounted(() => {
   font-size: 16px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  color: var(--ink, #172033);
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
   margin: 0 2px;
 }
@@ -662,7 +662,7 @@ onMounted(() => {
   justify-content: center;
   gap: 10px;
   padding: 40px 0;
-  color: var(--faint, #67758f);
+  color: var(--faint);
   font-size: 13px;
 }
 
@@ -686,20 +686,20 @@ onMounted(() => {
 .history__day-date {
   font-size: 15px;
   font-weight: 700;
-  color: var(--ink, #172033);
+  color: var(--ink);
 }
 /* 副标：今天/昨天（原型没有，但列表里昨夜/前天的相对时间比年月日更好读） */
 .history__day-rel {
   font-size: 12px;
   font-weight: 700;
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
 }
 .history__day-head .muted { margin-left: auto; }
 
 /* 日分组右侧的计数/时长是次级信息：12px + faint。
    原来这里只有 V2LearningState 有 `.muted`，本页照抄了同一份 markup 却没带样式，
    于是继承壳的 16px 基座——和左边的日期标题一样大，一眼看不出主次（2026-09-24 指出）。 */
-.muted { font-size: 12px; color: var(--faint, #67758f); font-weight: 600; }
+.muted { font-size: 12px; color: var(--faint); font-weight: 600; }
 
 /* 状态徽章改纯文字（原型 wf-hist__badge 883：11.5px 纯字重，无底无框）；
    uc-badge 类名被回归测试锁定（`.history__item .uc-badge` ×5），故保留类、清掉底/内边距。
@@ -726,21 +726,21 @@ onMounted(() => {
   align-items: flex-start;
   gap: 10px;
   padding: 10px 0;
-  border-top: 1px solid var(--line, #e3e9f4);
+  border-top: 1px solid var(--line);
 }
 
 .history__dot {
   width: 8px;
   height: 8px;
   border-radius: var(--mk-radius-pill);
-  background: var(--faint, #67758f);
+  background: var(--faint);
   flex: none;
   margin-top: 6px;
 }
 
-.history__dot--completed { background: var(--green, #1e9e58); }
-.history__dot--resumable { background: var(--blue, #2f6ae0); }
-.history__dot--ended { background: var(--faint, #67758f); }
+.history__dot--completed { background: var(--green); }
+.history__dot--resumable { background: var(--blue); }
+.history__dot--ended { background: var(--faint); }
 
 .history__item-main {
   flex: 1;
@@ -751,7 +751,7 @@ onMounted(() => {
 
 .history__item-main strong {
   font-size: 14px;
-  color: var(--ink, #172033);
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -762,7 +762,7 @@ onMounted(() => {
 .history__item-meta {
   font-size: 12px;
   font-weight: 700;
-  color: var(--muted, #5b6577);
+  color: var(--muted);
 }
 
 /* 明细展开（同日同任务的每次会话） */
@@ -771,7 +771,7 @@ onMounted(() => {
   cursor: pointer;
   width: fit-content;
   font-size: 12px;
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
 }
 .history__sublist {
   list-style: none;
@@ -779,16 +779,16 @@ onMounted(() => {
   padding: 0 0 0 10px;
   display: grid;
   gap: 6px;
-  border-left: 2px solid var(--line, #e3e9f4);
+  border-left: 2px solid var(--line);
 }
 .history__sublist li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.history__sub-time { font-size: 12px; color: var(--muted, #5b6577); font-variant-numeric: tabular-nums; }
-.history__sub-min { font-size: 12px; color: var(--faint, #67758f); font-variant-numeric: tabular-nums; }
+.history__sub-time { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.history__sub-min { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
 
 /* 摘要（原型没有，Vue 侧保留）：12px faint，单行省略 */
 .history__item-sub {
   font-size: 12px;
-  color: var(--faint, #67758f);
+  color: var(--faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -817,7 +817,7 @@ onMounted(() => {
   background: none;
   font-size: 13px;
   font-weight: 700;
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
   text-decoration: none;
   white-space: nowrap;
   transition: color 0.15s ease;
@@ -825,7 +825,7 @@ onMounted(() => {
 .history__resume:hover,
 .history__feedback:hover,
 .history__restart:hover {
-  color: var(--blue, #2f6ae0);
+  color: var(--blue);
   text-decoration: underline;
 }
 
@@ -838,7 +838,7 @@ onMounted(() => {
 .history__end {
   text-align: center;
   font-size: 12px;
-  color: var(--faint, #67758f);
+  color: var(--faint);
   padding: 4px 0;
 }
 
@@ -854,7 +854,7 @@ onMounted(() => {
   gap: 12px;
   flex-wrap: wrap;
 }
-.month__title { font-size: 14px; font-weight: 700; color: var(--ink, #172033); }
+.month__title { font-size: 14px; font-weight: 700; color: var(--ink); }
 .month__nav {
   display: flex;
   align-items: center;
@@ -862,18 +862,18 @@ onMounted(() => {
   margin-left: auto;
   font-size: 13px;
   font-weight: 700;
-  color: var(--muted, #5b6577);
+  color: var(--muted);
 }
 .month__arrow {
   width: 36px;
   height: 36px;
   border-radius: var(--mk-radius-md);
-  border: 1px solid var(--line, #e3e9f4);
-  background: var(--surface, #fff);
+  border: 1px solid var(--line);
+  background: var(--surface);
   display: grid;
   place-items: center;
   cursor: pointer;
-  color: var(--muted, #5b6577);
+  color: var(--muted);
   font-size: 16px;
   line-height: 1;
 }
@@ -886,7 +886,7 @@ onMounted(() => {
   font: inherit;
   font-size: 13px;
   font-weight: 700;
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
   cursor: pointer;
 }
 .month__meta {
@@ -895,15 +895,15 @@ onMounted(() => {
   gap: 14px;
   flex-wrap: wrap;
   font-size: 12px;
-  color: var(--muted, #5b6577);
+  color: var(--muted);
 }
-.month__meta b { color: var(--ink, #172033); font-weight: 800; }
+.month__meta b { color: var(--ink); font-weight: 800; }
 .month__legend {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--faint, #67758f);
+  color: var(--faint);
 }
 .lg {
   width: 12px;
@@ -912,9 +912,9 @@ onMounted(() => {
   display: inline-block;
 }
 /* 热力四档：只走 token 派生（h3 用 --mk-on-fill = 饱和深底上的白字） */
-.lg--0, .mday--h0 { background: var(--canvas, #eef2f8); color: var(--muted, #5b6577); }
-.lg--1, .mday--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep, #1f57cc); }
-.lg--2, .mday--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep, #1f57cc); }
+.lg--0, .mday--h0 { background: var(--canvas); color: var(--muted); }
+.lg--1, .mday--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); }
+.lg--2, .mday--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep); }
 .lg--3, .mday--h3 { background: color-mix(in srgb, var(--blue) 85%, transparent); color: var(--mk-on-fill); }
 
 .month__grid {
@@ -925,7 +925,7 @@ onMounted(() => {
 .month__wd {
   text-align: center;
   font-size: 12px;
-  color: var(--faint, #67758f);
+  color: var(--faint);
 }
 .mday {
   min-height: 36px;
@@ -942,16 +942,16 @@ onMounted(() => {
 }
 .mday--outside, .mday--future {
   background: none;
-  color: var(--faint, #67758f);
+  color: var(--faint);
   font-weight: 500;
   cursor: default;
 }
-.mday--today { border-color: var(--blue, #2f6ae0); }
-.mday--selected { border-color: var(--blue-deep, #1f57cc); box-shadow: inset 0 0 0 1px var(--blue-deep, #1f57cc); }
+.mday--today { border-color: var(--blue); }
+.mday--selected { border-color: var(--blue-deep); box-shadow: inset 0 0 0 1px var(--blue-deep); }
 .month__filter {
   margin: 0;
   font-size: 12px;
-  color: var(--muted, #5b6577);
+  color: var(--muted);
 }
 
 @media (max-width: 1100px) {

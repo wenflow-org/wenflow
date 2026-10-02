@@ -206,7 +206,7 @@ onUnmounted(() => {
   display: grid; place-items: center;
   width: 44px; height: 44px; flex: none;
   border: 0; border-radius: 50%;
-  background: transparent; color: var(--ink, #172033);
+  background: transparent; color: var(--ink);
   cursor: pointer; transition: background 0.14s ease;
 }
 .v2nav-back:hover { background: color-mix(in srgb, var(--blue) 8%, transparent); }
@@ -215,7 +215,7 @@ onUnmounted(() => {
 .v2nav-bar__title {
   margin: 0;
   font-size: 17px; font-weight: 800; letter-spacing: -0.01em;
-  color: var(--ink, #172033);
+  color: var(--ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .v2nav-bar__right { display: flex; align-items: center; gap: 2px; margin-left: auto; }
@@ -234,14 +234,14 @@ onUnmounted(() => {
     display: flex; align-items: center; gap: 7px;
     min-height: 40px; padding: 0 12px;
     border-radius: 999px;
-    color: var(--muted, #5b6577);
+    color: var(--muted);
     font-size: 13.5px; font-weight: 600; text-decoration: none;
     white-space: nowrap;
     transition: background 0.14s ease, color 0.14s ease;
   }
   .v2nav-topnav__link svg { flex: none; opacity: 0.82; }
-  .v2nav-topnav__link:hover { background: var(--mk-surface-2, #eef2fa); color: var(--ink, #172033); }
-  .v2nav-topnav__link--active { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue-deep, #1f57cc); }
+  .v2nav-topnav__link:hover { background: var(--mk-surface-2); color: var(--ink); }
+  .v2nav-topnav__link--active { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue-deep); }
   .v2nav-topnav__link--active svg { opacity: 1; }
   .v2nav-topnav__link:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 }
@@ -277,7 +277,7 @@ onUnmounted(() => {
   width: 34px; height: 34px; border-radius: 50%;
   /* 扁平强调色底 + 同色系首字母（2026-09-24 去炫彩口径），与导航活跃态同一语言 */
   background: color-mix(in srgb, var(--blue) 12%, transparent);
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
   font-style: normal; font-size: 14px; font-weight: 800;
   display: grid; place-items: center;
 }
@@ -288,9 +288,9 @@ onUnmounted(() => {
   min-width: 180px;
   padding: 6px;
   border-radius: var(--mk-radius-xl);
-  background: var(--surface, #fff);
-  border: 1px solid var(--line, #e3e9f4);
-  box-shadow: 0 16px 40px rgba(23, 32, 51, 0.12);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--mk-shadow-pop); /* 弹层档 */
   display: grid;
   gap: 2px;
   z-index: 50;
@@ -310,15 +310,15 @@ onUnmounted(() => {
 .v2nav__menu-head {
   padding: 8px 10px 6px;
   display: flex; align-items: baseline; gap: 6px;
-  border-bottom: 1px solid var(--line, #e3e9f4);
+  border-bottom: 1px solid var(--line);
   margin-bottom: 4px;
 }
 .v2nav__name {
   font-size: 13px; font-weight: 800;
-  color: var(--ink, #172033);
+  color: var(--ink);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.v2nav__menu-role { font-size: 12px; color: var(--faint, #8492ab); flex: none; }
+.v2nav__menu-role { font-size: 12px; color: var(--faint); flex: none; }
 .v2nav__menu a,
 .v2nav__menu button {
   display: flex;
@@ -333,13 +333,13 @@ onUnmounted(() => {
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink, #172033);
+  color: var(--ink);
   text-decoration: none;
   cursor: pointer;
 }
 .v2nav__menu a svg,
 .v2nav__menu button svg {
-  color: var(--muted, #5b6577);
+  color: var(--muted);
   flex-shrink: 0;
 }
 .v2nav__menu button.v2nav__menu-danger svg {
@@ -358,14 +358,14 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   width: 22px; height: 22px;
-  border-radius: 7px;
+  border-radius: 6px; /* 圆角阶梯：芯片档 */
   background: color-mix(in srgb, var(--blue) 10%, transparent);
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
   flex-shrink: 0;
 }
 .v2nav__menu-danger {
   color: var(--red-ink) !important;
-  border-top: 1px solid var(--line, #e3e9f4) !important;
+  border-top: 1px solid var(--line) !important;
   margin-top: 2px;
   border-radius: 0 0 8px 8px !important;
 }
@@ -391,8 +391,8 @@ onUnmounted(() => {
     position: fixed;
     left: 0; right: 0; bottom: 0;
     z-index: 40;
-    background: color-mix(in srgb, var(--surface, #ffffff) 96%, transparent);
-    border-top: 1px solid var(--line, #e3e9f4);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    border-top: 1px solid var(--line);
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
   }
   .v2nav__dock-item {
@@ -402,12 +402,12 @@ onUnmounted(() => {
     min-height: 48px;
     padding: 6px 2px 4px;
     border-radius: var(--mk-radius-xl);
-    color: var(--muted, #5b6577);
+    color: var(--muted);
     text-decoration: none;
   }
   .v2nav__dock-icon { display: grid; place-items: center; opacity: 0.75; }
-  .v2nav__dock-label { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-  .v2nav__dock-item--active { color: var(--blue-deep, #1f57cc); }
+  .v2nav__dock-label { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .v2nav__dock-item--active { color: var(--blue-deep); }
   .v2nav__dock-item--active .v2nav__dock-icon { opacity: 1; }
   .v2nav__dock-item:active { background: color-mix(in srgb, var(--blue) 8%, transparent); }
   /* ≤360px 窄屏：5 列每列仍有 ~72px，4 字标签放得下，只去左右内边距 */

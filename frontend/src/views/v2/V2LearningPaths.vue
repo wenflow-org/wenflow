@@ -630,7 +630,7 @@ onBeforeUnmount(() => {
 }
 .paths__search:focus-within {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 14%, transparent);
+  box-shadow: var(--mk-focus-ring); /* 全站唯一一圈 */
 }
 .paths__search input {
   flex: 1; min-width: 0; min-height: 36px; border: 0; background: none; font: inherit; font-size: 13px;
@@ -662,7 +662,7 @@ onBeforeUnmount(() => {
   padding: 11px 22px; border-radius: var(--mk-radius-xl);
   /* 实色主按钮：蓝渐变 + 30% 蓝色发光投影一并退役 */
   background: var(--blue);
-  color: #fff; font-size: 14px; font-weight: 700;
+  color: var(--text-on-primary); font-size: 14px; font-weight: 700;
   cursor: pointer; text-decoration: none;
   transition: transform 0.18s ease, background 0.18s ease;
 }
@@ -756,8 +756,8 @@ onBeforeUnmount(() => {
   padding-top: 11px;
   display: grid; gap: 7px;
 }
-.pcard__bar { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--line) 60%, transparent); overflow: hidden; }
-.pcard__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
+.pcard__bar { height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--line) 60%, transparent); overflow: hidden; }
+.pcard__bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 .pcard__nums {
   display: flex; justify-content: space-between; gap: 10px;
   font-size: 12px; color: var(--muted);
@@ -806,7 +806,7 @@ onBeforeUnmount(() => {
   padding: 56px 0; color: var(--faint); font-size: 14px;
 }
 .empty__illus { display: flex; gap: 6px; }
-.empty__illus span { width: 26px; height: 8px; border-radius: 99px; background: var(--line); }
+.empty__illus span { width: 26px; height: 8px; border-radius: 999px; background: var(--line); }
 .empty__illus span:nth-child(2) { background: color-mix(in srgb, var(--blue) 30%, transparent); }
 
 /* .toast/.toast__icon 本体是死 CSS 已删：全局 toast 由 utils/toast 独立渲染，不落在本组件；
@@ -874,7 +874,7 @@ onBeforeUnmount(() => {
 .pcard__confirm-yes {
   min-height: 36px; padding: 0 14px;
   border: 0; border-radius: var(--mk-radius-pill);
-  background: var(--red); color: #fff;
+  background: var(--red); color: var(--text-on-primary);
   font-size: 12.5px; font-weight: 800; cursor: pointer;
   transition: filter 0.15s ease;
 }
@@ -976,7 +976,7 @@ onBeforeUnmount(() => {
   border-radius: var(--mk-radius-modal) var(--mk-radius-modal) 0 0;
   padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px));
   display: grid; gap: 8px;
-  box-shadow: 0 -14px 40px color-mix(in srgb, var(--ink) 25%, transparent);
+  box-shadow: var(--mk-shadow-pop); /* 弹层档（上抛第四档已并入 pop，规范 §0.5） */
 }
 .paths__filter-head {
   display: flex; align-items: center; justify-content: space-between;

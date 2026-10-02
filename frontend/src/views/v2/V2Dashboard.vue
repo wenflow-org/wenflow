@@ -1290,8 +1290,8 @@ onMounted(loadAll);
 }
 .budget__num { flex: none; color: var(--faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* 进度条：6px + 蓝→青渐变（原实色 #10b981 已退役） */
-.budget__bar { height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--line) 60%, transparent); overflow: hidden; }
-.budget__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+.budget__bar { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--line) 60%, transparent); overflow: hidden; }
+.budget__bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 
 /* ---------- 今日复习（2026-09-27 收敛为单行计划条） ----------
    原 16 项逐条列表 + 强度条 + 五种数字口径的样式整体退役；
@@ -1329,7 +1329,7 @@ onMounted(loadAll);
 /* 空态图标盘（原型 wf-empty__art 1376-1381）：66px 圆角盘 + 30px 图标 */
 .action__art {
   width: 66px; height: 66px;
-  border-radius: 20px;
+  border-radius: 16px; /* 圆角阶梯：空态图标底 */
   display: grid; place-items: center;
   background: color-mix(in srgb, var(--surface) 92%, var(--ink));
   color: var(--blue);
@@ -1370,12 +1370,12 @@ onMounted(loadAll);
 .action__meta { display: flex; gap: 8px; flex-wrap: wrap; }
 .tag {
   padding: 5px 11px; border-radius: var(--mk-radius-pill);
-  background: var(--line, #f1f5fb); border: 1px solid var(--line);
+  background: var(--line); border: 1px solid var(--line);
   font-size: 12px; font-weight: 600; color: var(--muted);
 }
 .tag--blue { background: color-mix(in srgb, var(--blue) 9%, transparent); border-color: color-mix(in srgb, var(--blue) 30%, transparent); color: var(--blue-deep); }
-.tag--cyan { background: rgba(67, 176, 216, 0.12); border-color: rgba(67, 176, 216, 0.35); color: var(--cyan-ink); }
-.tag--red { background: rgba(239, 117, 120, 0.1); border-color: rgba(239, 117, 120, 0.35); color: var(--red-ink); }
+.tag--cyan { background: color-mix(in srgb, var(--cyan) 12%, transparent); border-color: color-mix(in srgb, var(--cyan) 35%, transparent); color: var(--cyan-ink); }
+.tag--red { background: color-mix(in srgb, var(--wf-color-danger) 10%, transparent); border-color: color-mix(in srgb, var(--wf-color-danger) 35%, transparent); color: var(--red-ink); }
 .action__footer { display: flex; align-items: center; gap: 12px; margin-top: auto; flex-wrap: wrap; }
 /* 行动卡 foot（原型 wf-action__foot 345-349）：grid，今日进度行在按钮行**上方** */
 .action__foot { display: grid; gap: 12px; margin-top: auto; }
@@ -1385,14 +1385,14 @@ onMounted(loadAll);
   padding: 11px 22px; border-radius: var(--mk-radius-xl);
   /* 实色主按钮：蓝渐变与 30% 蓝色发光投影一并退役（按钮不承担层级，用留白表达） */
   background: var(--blue);
-  color: #fff; font-size: 14px; font-weight: 700;
+  color: var(--text-on-primary); font-size: 14px; font-weight: 700;
   cursor: pointer;
   transition: transform 0.18s ease, background 0.18s ease;
 }
 .btn-primary:not(:disabled):active { transform: scale(0.98); }
 .btn-ghost {
   padding: 10px 18px; border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line); background: var(--surface, #fff);
+  border: 1px solid var(--line); background: var(--surface);
   font-size: 14px; font-weight: 700; color: var(--muted); cursor: pointer;
 }
 .action__today { display: flex; align-items: center; gap: 10px; }
@@ -1412,8 +1412,8 @@ onMounted(loadAll);
 .action__control > svg { color: var(--amber-ink); flex: 0 0 auto; }
 .action__control-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .action__control b { color: var(--blue-deep); font-weight: 800; white-space: nowrap; }
-.action__today-bar { flex: 1; min-width: 0; height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
-.action__today-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+.action__today-bar { flex: 1; min-width: 0; height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
+.action__today-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .action__examples { display: flex; gap: 8px; flex-wrap: wrap; }
 .example {
   padding: 9px 14px; border-radius: var(--mk-radius-xl);
@@ -1429,10 +1429,10 @@ onMounted(loadAll);
 .path__sub { display: block; margin-top: 3px; font-size: 12px; color: var(--faint); }
 .badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; }
 .badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
-.badge--red { color: var(--red-ink); background: rgba(239, 117, 120, 0.12); }
+.badge--red { color: var(--red-ink); background: color-mix(in srgb, var(--wf-color-danger) 12%, transparent); }
 .path__foot { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; }
-.path__progress { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
-.path__progress i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+.path__progress { height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
+.path__progress i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .path__nums { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
 </style>
 
@@ -1451,9 +1451,8 @@ onMounted(loadAll);
 .day:hover { background: color-mix(in srgb, var(--blue) 6%, var(--surface)); }
 .day--today { border-color: color-mix(in srgb, var(--blue) 45%, transparent); background: color-mix(in srgb, var(--blue) 5%, transparent); }
 .day--selected { border-color: var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent); }
-/* label 与分钟同走一档微字：原型 11 / 10，但 design:check 规则 16 的「<12px 字号」
-   棘轮对本文件只剩 1 个槽位（原被抽屉事件时间占着），两处只能合并成一条声明取 11px */
-.day__label, .day__min { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+/* label 与分钟同走一档微字：原为 11px，规则 16 收口到 12px 下限（原棘轮槽位释放） */
+.day__label, .day__min { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .day__label { font-weight: 700; }
 .day__cell {
   width: 30px; height: 30px; border-radius: var(--mk-radius-lg);
@@ -1465,7 +1464,7 @@ onMounted(loadAll);
 /* 热力色阶（原型 394-396）：基础档 = line 弱底，h1 14% / h2 32% / h3 实色蓝 */
 .day__cell--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); }
 .day__cell--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep); }
-.day__cell--h3 { background: var(--blue); color: #ffffff; }
+.day__cell--h3 { background: var(--blue); color: var(--text-on-primary); }
 .week__empty {
   padding: 26px 0; text-align: center; color: var(--faint); font-size: 13px;
   border: 1px dashed var(--line); border-radius: var(--mk-radius-xl); background: color-mix(in srgb, var(--surface) 70%, var(--canvas));
@@ -1540,8 +1539,8 @@ a.btn-primary { text-decoration: none; }
 
 <style scoped>
 .dash__loading { display: grid; justify-items: center; padding: 64px 0; }
-.badge--green { color: var(--green-ink); background: rgba(49, 177, 111, 0.12); }
-.badge--cyan { color: var(--cyan-ink); background: rgba(67, 176, 216, 0.14); }
+.badge--green { color: var(--green-ink); background: color-mix(in srgb, var(--wf-color-success) 12%, transparent); }
+.badge--cyan { color: var(--cyan-ink); background: color-mix(in srgb, var(--cyan) 14%, transparent); }
 /* 原型 wf-pathcard__foot .wf-btn--link（361）：左对齐的纯文字 link，
    分隔线只由 .path__foot 提供一条，本元素不再自带 border-top */
 .path__detail-link {
@@ -1590,7 +1589,7 @@ a.btn-primary { text-decoration: none; }
   height: 100%;
   background: var(--canvas);
   border-left: 1px solid var(--line);
-  box-shadow: -16px 0 40px rgba(23, 32, 51, 0.16);
+  box-shadow: var(--mk-shadow-pop); /* 抽屉并入弹层档（规范 §0.5：X 向偏移第四档退役） */
   display: flex; flex-direction: column;
 }
 .sheet__head {
@@ -1603,15 +1602,15 @@ a.btn-primary { text-decoration: none; }
 .sheet__headline { margin: 4px 0 0; font-size: 18px; letter-spacing: -0.01em; }
 .sheet__head-right { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .sheet__zone { font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: var(--mk-radius-pill); white-space: nowrap; }
-.sheet__zone--low { color: var(--cyan-ink); background: rgba(67, 176, 216, 0.14); }
-.sheet__zone--mid { color: var(--amber, #b3540a); background: rgba(244, 170, 70, 0.15); }
-.sheet__zone--high { color: var(--purple-ink); background: rgba(141, 107, 255, 0.14); }
-.sheet__zone--none { color: var(--faint); background: #eef2f8; }
+.sheet__zone--low { color: var(--cyan-ink); background: color-mix(in srgb, var(--cyan) 14%, transparent); }
+.sheet__zone--mid { color: var(--amber); background: color-mix(in srgb, var(--amber) 15%, transparent); }
+.sheet__zone--high { color: var(--purple-ink); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.sheet__zone--none { color: var(--faint); background: var(--canvas); }
 .sheet__close {
-  width: 30px; height: 30px; border-radius: 9px;
+  width: 30px; height: 30px; border-radius: 8px; /* 圆角阶梯：控件 */
   display: grid; place-items: center;
   color: var(--faint); font-size: 16px; cursor: pointer;
-  border: 1px solid var(--line); background: var(--surface, #fff);
+  border: 1px solid var(--line); background: var(--surface);
 }
 .sheet__close:hover { color: var(--ink); }
 
@@ -1627,7 +1626,7 @@ a.btn-primary { text-decoration: none; }
 .sheet__summary > div {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: 12px; /* 圆角阶梯：面板 */
   padding: 11px 13px;
   display: grid; gap: 3px;
 }
@@ -1637,7 +1636,7 @@ a.btn-primary { text-decoration: none; }
 .sheet__block {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px; /* 圆角阶梯：面板 */
   padding: 14px 16px;
   display: grid; gap: 10px;
 }
@@ -1653,7 +1652,7 @@ a.btn-primary { text-decoration: none; }
 /* ---------- 会话卡 ---------- */
 .scard {
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: 12px; /* 圆角阶梯：面板 */
   padding: 13px 14px;
   display: grid; gap: 9px;
   background: color-mix(in srgb, var(--surface) 80%, var(--canvas));
@@ -1674,16 +1673,16 @@ a.btn-primary { text-decoration: none; }
 .chip {
   font-size: 12px; font-weight: 700;
   padding: 3px 9px; border-radius: var(--mk-radius-pill);
-  background: #eef2f8; color: var(--muted);
+  background: var(--canvas); color: var(--muted);
 }
 .chip--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
-.chip--cyan { color: var(--cyan-ink); background: rgba(67, 176, 216, 0.14); }
-.chip--purple { color: var(--accent); background: rgba(141, 107, 255, 0.12); }
+.chip--cyan { color: var(--cyan-ink); background: color-mix(in srgb, var(--cyan) 14%, transparent); }
+.chip--purple { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .scard__confuse {
-  font-size: 12px; color: var(--amber, #b3540a); font-weight: 600;
+  font-size: 12px; color: var(--amber); font-weight: 600;
   background: color-mix(in srgb, var(--amber) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--amber) 28%, transparent);
-  border-radius: 9px;
+  border-radius: 8px; /* 圆角阶梯：控件 */
   padding: 7px 10px;
   line-height: 1.55;
 }
@@ -1729,7 +1728,7 @@ a.btn-primary { text-decoration: none; }
     width: 100%; height: auto; max-height: 86vh;
     border-left: 0;
     border-top: 1px solid var(--line);
-    border-radius: 20px 20px 0 0;
+    border-radius: 16px 16px 0 0; /* 圆角阶梯：弹层 */
   }
   .sheet-enter-from .sheet, .sheet-leave-to .sheet { transform: translateY(60px); }
 }
@@ -1762,12 +1761,9 @@ a.btn-primary { text-decoration: none; }
 </style>
 
 <style scoped>
-/* ---------- 暗色模式覆写 ---------- */
-/* 周格热力色阶改走 color-mix(--blue …) 后随令牌自适应，暗色无需逐档覆写（原 h0~h3
-   的 rgba(77,139,248,…) 已随整月日历一起退役）；下面只留底色类元素的暗色底 */
-[data-theme='dark'] .budget__bar { background: rgba(230, 237, 247, 0.12); }
-[data-theme='dark'] .sheet__zone--none { background: rgba(230, 237, 247, 0.1); }
-[data-theme='dark'] .chip { background: rgba(230, 237, 247, 0.1); }
+/* ---------- 暗色模式覆写 ----------
+   底色类元素（进度条轨道 / zone 空档 / chip）已直引 var(--line)/var(--canvas) 等令牌，
+   随主题自动翻转，原 rgba(230,237,247,…) 暗色覆写整块退役。 */
 </style>
 
 <style scoped>

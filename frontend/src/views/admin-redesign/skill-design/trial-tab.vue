@@ -383,7 +383,7 @@ watch(
 .sdp-block, .sdp-prompt {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
-  background: #fff;
+  background: var(--mk-surface);
   padding: 12px 14px;
   display: grid;
   gap: 10px;
@@ -515,9 +515,9 @@ watch(
 .sdp-log {
   display: grid;
   grid-template-columns: 1fr auto;
-  border: 1px solid #e6ecf6;
+  border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
-  background: #fff;
+  background: var(--mk-surface);
   overflow: hidden;
 }
 .sdp-log.is-open { border-color: rgba(47, 106, 224, 0.35); }
@@ -573,7 +573,7 @@ watch(
   margin: 0;
   padding: 8px 10px;
   border-radius: var(--mk-radius-sm);
-  background: #fff;
+  background: var(--mk-surface);
   border: 1px solid #eef2f8;
   font-size: var(--mk-fs-micro);
   line-height: 1.6;

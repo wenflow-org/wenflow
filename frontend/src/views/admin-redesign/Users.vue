@@ -866,7 +866,7 @@ html[data-theme='dark'] {
     top: 1px;
     width: 4px;
     height: 8px;
-    border: solid #fff;
+    border: solid var(--mk-on-fill);
     border-width: 0 2px 2px 0;
     transform: rotate(45deg);
   }

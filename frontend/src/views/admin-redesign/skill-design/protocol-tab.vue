@@ -727,7 +727,7 @@ watch(
 .sdp-block {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
-  background: #fff;
+  background: var(--mk-surface);
   padding: 12px 14px;
   display: grid;
   gap: 10px;
@@ -764,7 +764,7 @@ watch(
   padding: 12px;
   font-size: var(--mk-fs-micro);
   line-height: 1.6;
-  background: #fff;
+  background: var(--mk-surface);
   color: var(--mk-ink);
   outline: none;
   margin: 0 0 12px;
@@ -867,7 +867,7 @@ watch(
 .sdp-pw__viewswitch {
   display: inline-flex;
   gap: 4px;
-  background: #eef2fa;
+  background: var(--mk-surface-2);
   border-radius: var(--mk-radius-xl);
   padding: 3px;
   margin: 0 18px 12px;
@@ -884,7 +884,7 @@ watch(
   color: var(--mk-muted);
   cursor: pointer;
 }
-.sdp-pw__viewbtn--active { background: #fff; color: var(--mk-ink); box-shadow: inset 0 0 0 1px var(--mk-blue); }
+.sdp-pw__viewbtn--active { background: var(--mk-surface); color: var(--mk-ink); box-shadow: inset 0 0 0 1px var(--mk-blue); }
 .sdp-pwform {
   display: grid;
   gap: 16px;
@@ -896,7 +896,7 @@ watch(
   padding: 14px 18px;
   display: grid;
   gap: 12px;
-  background: #fff;
+  background: var(--mk-surface);
 }
 .sdp-pwform__cardhead {
   display: flex;
@@ -1055,8 +1055,8 @@ watch(
 
 /* 暗色模式 */
 [data-theme='dark'] .sdp-pw__viewswitch { background: #202122; }
-[data-theme='dark'] .sdp-block { background: #1b1c1d; }
-[data-theme='dark'] .sdp-pwform__card { background: #1b1c1d; }
+[data-theme='dark'] .sdp-block { background: var(--wf-bg-subtle); }
+[data-theme='dark'] .sdp-pwform__card { background: var(--wf-bg-subtle); }
 [data-theme='dark'] .sdp-pw__textarea { background: #19191a; color: #e6edf7; }
 [data-theme='dark'] .sdp-pw__textarea:disabled { background: #202122; }
 [data-theme='dark'] .sdp-pw__viewbtn--active { background: #252627; box-shadow: inset 0 0 0 1px var(--mk-blue-hover); }

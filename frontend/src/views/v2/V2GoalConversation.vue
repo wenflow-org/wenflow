@@ -1052,7 +1052,7 @@ const scenePool = [
     title: '用 AI 做自媒体副业',
     desc: '围绕你的账号定位，搭一条内容生产流程',
     seed: '我想做自媒体副业，用 AI 工具提高内容创作效率',
-    bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: '#3593b5',
+    bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: 'var(--wf-color-secondary-dark)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h4a2 2 0 0 1 2 2v1.28c.6.35 1 .98 1 1.72a2 2 0 0 1-1 1.73V17a2 2 0 0 1-2 2h-4v1.27c.6.34 1 .99 1 1.73a2 2 0 1 1-4 0c0-.74.4-1.39 1-1.73V19H7a2 2 0 0 1-2-2v-3.27A2 2 0 0 1 4 12c0-.74.4-1.38 1-1.72V9a2 2 0 0 1 2-2h4V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/></svg>'
   },
   {
@@ -1066,21 +1066,21 @@ const scenePool = [
     title: '用 SQL 做数据分析',
     desc: '能从数据库里查数、会看数、会讲数',
     seed: '我想学会 SQL 数据分析，能自己从数据库里查数据',
-    bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: '#2a8fb3',
+    bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: 'var(--wf-color-secondary-dark)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2C7.6 2 4 3.8 4 6v12c0 2.2 3.6 4 8 4s8-1.8 8-4V6c0-2.2-3.6-4-8-4zm0 2c3.9 0 6 1.5 6 2s-2.1 2-6 2-6-1.5-6-2 2.1-2 6-2zm6 14c0 .5-2.1 2-6 2s-6-1.5-6-2v-3.2C7.7 17.5 9.8 18 12 18s4.3-.5 6-1.2V18zm0-5.5c0 .5-2.1 2-6 2s-6-1.5-6-2V9.3C7.7 10.5 9.8 11 12 11s4.3-.5 6-1.2V12.5z"/></svg>'
   },
   {
     title: '掌握 Git 版本控制',
     desc: '提交、分支、回滚，代码管理不再手忙脚乱',
     seed: '我想掌握 Git 版本控制，工作中代码管理不再混乱',
-    bg: 'color-mix(in srgb, var(--amber) 14%, transparent)', ink: '#c97f1e',
+    bg: 'color-mix(in srgb, var(--amber) 14%, transparent)', ink: 'var(--amber-ink)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 2a3 3 0 0 0-1 5.83v8.34A3.001 3.001 0 1 0 9 16.17V12h4a3 3 0 0 0 3-3V7.83A3 3 0 1 0 14 8v1a1 1 0 0 1-1 1H8V7.83A3 3 0 0 0 7 2zm0 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm10 8a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM7 16a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>'
   },
   {
     title: '学会写工作总结汇报',
     desc: '把做的事说清楚，让成果被看见',
     seed: '我想学会写工作总结和汇报，让领导看到我的成果',
-    bg: 'rgba(49,177,111,.12)', ink: '#218a56',
+    bg: 'rgba(49,177,111,.12)' /* 场景卡专用绿基色：等价 var(--wf-color-success-bg) 家族 */, ink: 'var(--green-ink)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm9 1.5V8h4.5L15 3.5zM8 13h8v-1.5H8V13zm0 4h8v-1.5H8V17z"/></svg>'
   },
   {
@@ -1094,21 +1094,21 @@ const scenePool = [
     title: '掌握 Linux 命令行',
     desc: '文件、权限、进程，命令行操作行云流水',
     seed: '我想掌握 Linux 命令行操作，能熟练处理文件和权限管理',
-    bg: 'rgba(49,177,111,.12)', ink: '#218a56',
+    bg: 'rgba(49,177,111,.12)' /* 场景卡专用绿基色：等价 var(--wf-color-success-bg) 家族 */, ink: 'var(--green-ink)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM7.8 15.6 6.4 14.2 9.6 11l-3.2-3.2 1.4-1.4L12.4 11l-4.6 4.6zM12 17h6v-2h-6v2z"/></svg>'
   },
   {
     title: '学习时间管理',
     desc: '一天的事排得明明白白，告别忙乱',
     seed: '我想学习时间管理，把每天的工作安排得有条不紊',
-    bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: '#3593b5',
+    bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: 'var(--wf-color-secondary-dark)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm1-12h-2v6l5 3 1-1.6-4-2.4V8z"/></svg>'
   },
   {
     title: '学会基础理财规划',
     desc: '工资存得住、钱能生钱，从记账开始',
     seed: '我想学会基础理财规划，工资能存得住、钱能生钱',
-    bg: 'color-mix(in srgb, var(--amber) 14%, transparent)', ink: '#c97f1e',
+    bg: 'color-mix(in srgb, var(--amber) 14%, transparent)', ink: 'var(--amber-ink)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M21 7H6a1 1 0 0 1 0-2h13V3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zm-6 7.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>'
   },
   {
@@ -1162,7 +1162,7 @@ function shuffleScenes() {
 .login-gate {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 16px; /* 圆角阶梯：卡片 */
   padding: 48px 32px;
   display: grid; gap: 14px; justify-items: center; text-align: center;
 }
@@ -1174,7 +1174,7 @@ function shuffleScenes() {
   padding: 11px 16px;
   background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 7%, transparent), color-mix(in srgb, var(--accent) 5%, transparent));
   border: 1px solid color-mix(in srgb, var(--blue) 25%, transparent);
-  border-radius: 14px;
+  border-radius: 16px; /* 圆角阶梯：卡片 */
   font: inherit; text-align: left; cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -1208,7 +1208,7 @@ function shuffleScenes() {
   border-radius: var(--mk-radius-xl);
   background: color-mix(in srgb, var(--red) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
-  color: var(--red, #c0454a);
+  color: var(--red-ink);
   font-size: 13px; font-weight: 600;
 }
 .errorbar__retry { text-decoration: underline; cursor: pointer; font-weight: 800; }
@@ -1229,7 +1229,7 @@ function shuffleScenes() {
   transition: color .15s ease, background .15s ease;
 }
 .cards-nav__btn:hover:not(:disabled) {
-  color: var(--muted); background: rgba(23, 32, 51, 0.05);
+  color: var(--muted); background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 .cards-nav__btn:disabled { opacity: .4; cursor: default; }
 .scene-card {
@@ -1237,7 +1237,7 @@ function shuffleScenes() {
   padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 16px; /* 圆角阶梯：卡片 */
   font: inherit; text-align: left; cursor: pointer;
   transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
@@ -1247,7 +1247,7 @@ function shuffleScenes() {
   box-shadow: var(--wf-shadow-raised);
 }
 .scene-card:disabled { opacity: .55; cursor: default; }
-.scene-card__icon { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; flex: 0 0 auto; }
+.scene-card__icon { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; flex: 0 0 auto; }
 .scene-card__body { flex: 1; min-width: 0; }
 .scene-card__body strong {
   display: block; font-size: 14px;
@@ -1270,13 +1270,13 @@ function shuffleScenes() {
   border-radius: var(--mk-radius-modal);
   padding: 8px 8px 8px 16px;
   min-height: 54px;
-  box-shadow: 0 6px 20px rgba(23, 32, 51, 0.06);
+  box-shadow: var(--wf-shadow-raised); /* 悬浮档 */
 }
-/* 聚焦：柔和提示 —— 细蓝边 + 淡外发光（原型 .wf-composer__box:focus-within，
+/* 聚焦：柔和提示 —— 细蓝边 + 全站唯一一圈（原型 .wf-composer__box:focus-within，
    取代原「有内容才高亮」：空输入框聚焦时同样是当前操作焦点） */
 .composer__box:focus-within {
   border-color: color-mix(in srgb, var(--blue) 55%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent), 0 6px 20px rgba(23, 32, 51, 0.06);
+  box-shadow: var(--mk-focus-ring);
 }
 /* 资料附件：输入框左下回形针入口（主流附件模式），角标显示已传份数。
    与右侧首行文字中线对齐：首行中心 = textarea 上内边距 10 + 行高一半 10.5 = 20.5，
@@ -1288,19 +1288,19 @@ function shuffleScenes() {
   flex: 0 0 auto;
   display: inline-flex; align-items: center; justify-content: center;
   width: 44px; height: 44px;
-  border: 0; border-radius: 9px;
+  border: 0; border-radius: 8px; /* 圆角阶梯：控件 */
   background: transparent;
   color: var(--faint);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.composer__attach:hover { background: rgba(23, 32, 51, 0.06); color: var(--ink); }
+.composer__attach:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); }
 .composer__attach-count {
   position: absolute; top: -1px; right: -3px;
   min-width: 14px; height: 14px; padding: 0 3px;
   border-radius: 999px;
-  background: var(--blue); color: #fff;
-  font-size: 11px; font-weight: 800; line-height: 14px;
+  background: var(--blue); color: var(--text-on-primary);
+  font-size: 12px; font-weight: 800; line-height: 14px;
   pointer-events: none;
 }
 /* 拖文件到输入框：整盒高亮 + 居中提示 */
@@ -1331,7 +1331,7 @@ function shuffleScenes() {
   display: grid; place-items: center;
   /* 实色 --blue（蓝渐变 + 30% 发光一并退役）；按压反馈 scale(.98) */
   background: var(--blue);
-  color: #fff; cursor: pointer;
+  color: var(--text-on-primary); cursor: pointer;
   flex: 0 0 auto;
   border: 0;
   transition: background 0.15s ease, transform 0.15s ease;
@@ -1364,7 +1364,7 @@ function shuffleScenes() {
   font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px;
   margin-top: auto;
 }
-.composer__count { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.composer__count { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* 「新目标」入口：桌面隐藏（chat 头部「清空重聊」+ 导航「规划新目标」CTA 已覆盖）；
    ≤1100 移动端它是唯一入口（见模板注释），在移动端媒体查询内放开 */
 .composer__new-goal { display: none; }
@@ -1418,8 +1418,8 @@ function shuffleScenes() {
 /* 折叠指示箭头：仅移动端显示 */
 .panel__caret { display: none; font-size: 12px; color: var(--faint); flex-shrink: 0; }
 .panel__body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-.panel__bar { height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
-.panel__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
+.panel__bar { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
+.panel__bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 .panel__confidence { font-size: 12px; color: var(--faint); }
 
 /* 目标信息字段行：原型 .wf-field —— 发丝线平铺行（去圆角悬浮底），
@@ -1467,7 +1467,7 @@ function shuffleScenes() {
 }
 .field__fresh {
   position: absolute; top: 9px; right: 0;
-  font-size: 11px; font-weight: 800; color: var(--blue-deep);
+  font-size: 12px; font-weight: 800; color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 12%, transparent);
   padding: 2px 6px; border-radius: var(--mk-radius-pill);
 }
@@ -1520,16 +1520,16 @@ function shuffleScenes() {
 .stage-nav__item i {
   width: 17px; height: 17px; border-radius: 50%;
   background: color-mix(in srgb, var(--line) 60%, transparent); color: var(--faint);
-  font-size: 11px; font-weight: 800; font-style: normal;
+  font-size: 12px; font-weight: 800; font-style: normal;
   display: grid; place-items: center;
 }
 .stage-nav__item--current { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
-.stage-nav__item--current i { background: var(--blue); color: #fff; }
+.stage-nav__item--current i { background: var(--blue); color: var(--text-on-primary); }
 /* done 态：原型 .wf-stagenav__item.is-done —— 浅绿字 + 浅绿底圆（非实绿底白字） */
 .stage-nav__item--done { color: var(--green-ink); }
 .stage-nav__item--done i { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green-ink); }
 .chat__clear { font-size: 12px; font-weight: 600; color: var(--faint); cursor: pointer; }
-.chat__clear:hover { color: var(--red, #c0454a); }
+.chat__clear:hover { color: var(--red-ink); }
 
 .chat__scroll {
   flex: 1;
@@ -1558,7 +1558,7 @@ function shuffleScenes() {
   display: grid; gap: 3px;
   padding: 9px 13px;
   max-width: 100%;
-  border-radius: 14px 14px 5px 14px;
+  border-radius: 16px 16px 4px 16px; /* 圆角阶梯：卡片/弹层 + 内芯尾角 */
   background: color-mix(in srgb, var(--surface) 88%, var(--blue) 12%);
   border: 1px solid color-mix(in srgb, var(--blue) 26%, transparent);
   color: var(--ink);
@@ -1570,10 +1570,10 @@ function shuffleScenes() {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .msg--user .msg__bubble {
-  /* 原型 .wf-msg--me p：右上 5px 圆角 + 实色蓝底（蓝渐变与 24% 蓝色投影已退役） */
+  /* 原型 .wf-msg--me p：右上 4px 圆角 + 实色蓝底（蓝渐变与 24% 蓝色投影已退役） */
   background: var(--blue);
-  color: #fff;
-  border-radius: 14px 14px 5px 14px;
+  color: var(--text-on-primary);
+  border-radius: 16px 16px 4px 16px;
   white-space: pre-wrap;
 }
 /* 用户消息编辑按钮（hover 显示；触屏常显） */
@@ -1622,7 +1622,7 @@ function shuffleScenes() {
   cursor: pointer;
 }
 .msg__edit-save {
-  color: #fff;
+  color: var(--text-on-primary);
   /* 实色主按钮（原蓝渐变退役）；按压 scale(.98) 补回交互反馈 */
   background: var(--blue);
 }
@@ -1633,10 +1633,10 @@ function shuffleScenes() {
   background: var(--surface);
 }
 .msg__bubble {
-  /* 原型 .wf-msg p：11/13 内边距、13.5px / 1.6 行高、14px 圆角基线 */
+  /* 原型 .wf-msg p：11/13 内边距、13.5px / 1.6 行高、16px 圆角基线 */
   padding: 11px 13px;
   font-size: 13.5px; line-height: 1.6;
-  border-radius: 14px;
+  border-radius: 16px; /* 圆角阶梯：卡片/弹层 */
   background: var(--surface); color: var(--ink);
 }
 /* AI 气泡（原型 .wf-msg--ai p）：白面 + 发丝线 + 左上 5px + shadow-sm，
@@ -1644,7 +1644,7 @@ function shuffleScenes() {
 .msg--ai .msg__bubble {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-top-left-radius: 5px;
+  border-top-left-radius: 4px; /* 圆角阶梯：内芯尾角 */
   box-shadow: var(--shadow-sm);
 }
 .msg--ai { flex-direction: row; align-items: flex-start; gap: 10px; max-width: 92%; }
@@ -1712,7 +1712,7 @@ function shuffleScenes() {
 .msg__meta { font-size: 12px; color: var(--faint); }
 .msg__retry {
   margin-left: 8px;
-  color: var(--red, #c0454a); font-weight: 800;
+  color: var(--red-ink); font-weight: 800;
   text-decoration: underline; cursor: pointer;
 }
 
@@ -1853,8 +1853,8 @@ function shuffleScenes() {
   overflow: hidden;
   background: var(--surface);
   border: 1px solid color-mix(in srgb, var(--blue) 22%, transparent);
-  border-radius: 20px;
-  box-shadow: 0 16px 40px rgba(23, 32, 51, 0.14);
+  border-radius: 16px; /* 圆角阶梯：弹层 */
+  box-shadow: var(--mk-shadow-pop); /* 弹层档 */
   display: flex; flex-direction: column;
 }
 .proposal__head {
@@ -1866,7 +1866,7 @@ function shuffleScenes() {
 /* 关闭 ×（原型 .wf-dialog__x）：36px 而非原型 32px —— 本仓触屏门禁「任何可点元素 ≥36px」 */
 .proposal__x {
   flex: none; width: 36px; height: 36px;
-  border: 0; border-radius: 10px;
+  border: 0; border-radius: 8px; /* 圆角阶梯：控件 */
   background: color-mix(in srgb, var(--ink) 8%, var(--surface));
   color: var(--muted);
   font: inherit; font-size: 17px; line-height: 1;
@@ -1943,7 +1943,7 @@ function shuffleScenes() {
   display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: start;
   padding: 11px 13px;
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: 12px; /* 圆角阶梯：面板 */
   background: var(--surface);
 }
 .pstep i {
@@ -1961,7 +1961,7 @@ function shuffleScenes() {
   display: grid; gap: 10px;
   padding: 13px 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 12px; /* 圆角阶梯：面板 */
   background: var(--surface);
 }
 .probe__q { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.55; }
@@ -1971,7 +1971,7 @@ function shuffleScenes() {
   display: flex; align-items: center; gap: 9px;
   text-align: left; padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 8px; /* 圆角阶梯：控件 */
   background: var(--surface);
   font: inherit; font-size: 13px; color: var(--ink);
   cursor: pointer;
@@ -1986,7 +1986,7 @@ function shuffleScenes() {
 }
 .probe__opt:hover:not(:disabled) { border-color: color-mix(in srgb, var(--blue) 40%, var(--line)); }
 .probe__opt--on { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 7%, var(--surface)); }
-.probe__opt--on b { background: var(--blue); color: #fff; }
+.probe__opt--on b { background: var(--blue); color: var(--text-on-primary); }
 .probe__opt:disabled { cursor: default; opacity: .92; }
 .proposal__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .proposal__actions--center { justify-content: center; }
@@ -1995,7 +1995,7 @@ function shuffleScenes() {
   padding: 11px 22px; border-radius: var(--mk-radius-xl);
   /* 实色主按钮：蓝渐变 + 30% 蓝色发光投影一并退役 */
   background: var(--blue);
-  color: #fff; font-size: 14px; font-weight: 700;
+  color: var(--text-on-primary); font-size: 14px; font-weight: 700;
   cursor: pointer; text-decoration: none;
   transition: transform 0.18s ease, background 0.18s ease;
 }
@@ -2004,7 +2004,7 @@ function shuffleScenes() {
 .btn-primary--off { opacity: .55; cursor: default; }
 .btn-ghost {
   padding: 11px 18px; border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line); background: var(--surface, #fff);
+  border: 1px solid var(--line); background: var(--surface);
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
 }
@@ -2038,7 +2038,8 @@ function shuffleScenes() {
 .skeleton { display: grid; gap: 8px; width: 100%; }
 .skeleton i {
   height: 12px; border-radius: var(--mk-radius-sm);
-  background: linear-gradient(90deg, #edf1f8 25%, #f7faff 50%, #edf1f8 75%);
+  /* 骨架 shimmer：规范的豁免渐变（加载动效）；底色走令牌派生 */
+  background: linear-gradient(90deg, var(--mk-surface-2) 25%, var(--surface) 50%, var(--mk-surface-2) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease infinite;
 }
@@ -2047,10 +2048,10 @@ function shuffleScenes() {
 /* 成功 */
 .done-ring {
   width: 52px; height: 52px; border-radius: 50%;
-  background: rgba(49, 177, 111, 0.12);
+  background: var(--wf-color-success-bg);
   color: var(--green);
   display: grid; place-items: center;
-  box-shadow: 0 0 0 8px rgba(49, 177, 111, 0.07);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--wf-color-success) 7%, transparent);
 }
 
 /* ---------- 响应式 ---------- */
@@ -2105,10 +2106,10 @@ function shuffleScenes() {
     background: var(--surface);
     color: var(--muted);
     font-size: 12px;
-    box-shadow: 0 2px 8px rgba(23, 32, 51, 0.06);
+    box-shadow: var(--wf-shadow-raised); /* 悬浮档 */
   }
   .panel__head strong { font-size: 12px; }
-  .panel__caret { display: inline; font-size: 9px; }
+  .panel__caret { display: inline; font-size: 12px; }
   /* 计数改角标：绝对定位不吃宽度（右上角那一条带要和阶段导航挤在同一行），
      「已收集」三字省掉只留「3 / 7」 */
   .panel__count-k { display: none; }
@@ -2117,7 +2118,7 @@ function shuffleScenes() {
     min-width: 18px; padding: 0 4px;
     border-radius: 999px;
     background: var(--blue);
-    color: #fff;
+    color: var(--text-on-primary);
     font-size: 12px; font-weight: 800; line-height: 16px;
     text-align: center;
   }
@@ -2136,7 +2137,7 @@ function shuffleScenes() {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--mk-radius-modal);
-    box-shadow: 0 20px 44px rgba(23, 32, 51, 0.22);
+    box-shadow: var(--mk-shadow-modal); /* 模态档 */
   }
   /* 面板紧凑化（.field 已是原型 .wf-field 平铺发丝线行）：行内边距 9→7、gap 9→8、
      值 13→12.5；标记/徽章尺寸随桌面档（16px），只把绝对定位徽章对齐到新的行内边距；
@@ -2245,11 +2246,11 @@ function shuffleScenes() {
      合计 ~325px ≤ 头部带内容宽 336px） */
   .stage-nav { gap: 3px; }
   .stage-nav__item { padding: 4px 5px; font-size: 12px; gap: 4px; min-height: 40px; }
-  .stage-nav__item i { width: 14px; height: 14px; font-size: 11px; }
+  .stage-nav__item i { width: 14px; height: 14px; font-size: 12px; }
   /* ≤360：非当前阶段只留序号（那三个字的宽度换 4 字标签+计数角标的位置） */
   @media (max-width: 360px) {
     .stage-nav__item:not(.stage-nav__item--current) { font-size: 0; gap: 0; padding: 4px 3px; }
-    .stage-nav__item i { font-size: 11px; }
+    .stage-nav__item i { font-size: 12px; }
   }
   .chat__clear { display: none; }
 
@@ -2273,9 +2274,9 @@ function shuffleScenes() {
 <style scoped>
 /* logo 头像 */
 .msg__avatar {
-  background: var(--surface, #fff) !important;
+  background: var(--surface) !important;
   border: 1px solid var(--line);
-  box-shadow: 0 2px 6px rgba(23, 32, 51, 0.08);
+  box-shadow: var(--wf-shadow-raised); /* 悬浮档 */
 }
 .msg__avatar img {
   width: 28px;  /* 24→28：34px 框内留 3px 呼吸边即可，logo 更凸显（2026-09-27 用户反馈） */
@@ -2290,7 +2291,7 @@ function shuffleScenes() {
   height: 56px;
   object-fit: contain;
   border-radius: var(--mk-radius-modal);
-  box-shadow: 0 10px 24px rgba(23, 32, 51, 0.12);
+  box-shadow: var(--mk-shadow-pop); /* 弹层档 */
 }
 </style>
 
@@ -2300,7 +2301,7 @@ function shuffleScenes() {
    用户气泡已是 var(--blue)→var(--blue-deep) 渐变（令牌暗色自适配），
    整类覆写会把蓝渐变压回灰底（2026-09-30 对齐原型时改为白/蓝双态气泡）。 */
 [data-theme='dark'] .msg--ai .msg__bubble {
-  background: var(--bubble-ai-bg, rgba(24, 34, 48, 0.8));
+  background: var(--bubble-ai-bg);
   color: var(--ink);
 }
 [data-theme='dark'] .msg--ai .msg__bubble b,
@@ -2315,51 +2316,10 @@ function shuffleScenes() {
   border-color: var(--line);
   color: var(--muted);
 }
-[data-theme='dark'] .proposal__supplement-input {
-  background: rgba(246, 187, 99, 0.06);
-  border-color: rgba(246, 187, 99, 0.35);
-  color: var(--ink);
-}
-[data-theme='dark'] .proposal__supplement-input::placeholder {
-  color: var(--faint);
-}
-[data-theme='dark'] .chat__show-proposal {
-  background: color-mix(in srgb, var(--blue) 12%, transparent);
-  color: var(--blue-deep);
-}
-[data-theme='dark'] .msg__avatar {
-  background: var(--surface) !important;
-  border-color: var(--line);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-}
-/* 移动端悬浮信息面板：暗色下要更实的投影才立得起来（浅色档是 rgba(23,32,51,.22)） */
-@media (max-width: 1100px) {
-  [data-theme='dark'] .panel:not(.panel--collapsed) .panel__body {
-    box-shadow: 0 20px 44px rgba(0, 0, 0, 0.55);
-  }
-}
-/* 暗色下浅色档投影 rgba(23,32,51,.14) 太浅、立不起来：换纯黑深影。
-   border 色随基础档 color-mix(var(--blue)…) 令牌，无需逐主题覆写。 */
-[data-theme='dark'] .proposal {
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38);
-}
-[data-theme='dark'] .scene-card:hover:not(:disabled) {
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.25);
-}
-/* 亮色 hover 用近黑叠加 rgba(23,32,51,.05/.06)，在暗色画布上完全不可见：补暗色档（P3） */
-[data-theme='dark'] .cards-nav__btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-}
-[data-theme='dark'] .composer__attach:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-/* 快捷补充按钮组（.replies/.reply，2026-09-30 由 .replies-panel 白面板改版而来）：
-   基础档已是 color-mix 蓝调半透明底 + --line 描边，令牌暗色自适配，无需暗色覆写。
-   （原 [data-theme='dark'] .replies-panel 规则随类名改版移除。） */
-[data-theme='dark'] .skeleton i {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06) 25%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.06) 75%);
-  background-size: 200% 100%;
-}
+/* 暗色适配（scoped 确保优先级与组件样式一致）
+   底色/描边/阴影已全部令牌化（--surface/--line/--bubble-ai-bg/--mk-shadow-* 与
+   color-mix(--ink/--amber/--blue) 派生），随 [data-theme='dark'] 自动翻转——
+   原逐条暗色字面量覆写（rgba 纯黑/纯白影、琥珀底、shimmer 白纱）整块退役。 */
 
 /* 桌面阅读宽度：>1100 对话内容限 ~760px 居中（同课堂页批10） */
 @media (min-width: 1101px) {

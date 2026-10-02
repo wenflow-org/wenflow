@@ -303,9 +303,9 @@ onMounted(() => {
 .ov-line__top strong { font-size: 20px; font-weight: 800; color: var(--ink); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .ov-line__xp { font-size: 12.5px; font-weight: 700; color: var(--blue-deep); }
 .ov-line__xp span { font-weight: 500; color: var(--faint); }
-.ov-line__bar { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--line, #eef0f4) 60%, transparent); overflow: hidden; }
+.ov-line__bar { height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--line, #eef0f4) 60%, transparent); overflow: hidden; }
 /* 原为纯紫 --accent（旧强调色语言）→ 原型 wf-bar 填充：蓝→青 */
-.ov-line__bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width 0.4s ease; }
+.ov-line__bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width 0.4s ease; }
 
 /* 筛选（原型 wf-filters / wf-filter 840-846）：状态 chip 与类型 chip 同一套胶囊语言 */
 .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -313,7 +313,7 @@ onMounted(() => {
   min-height: 36px;
   padding: 7px 14px;
   border: 1px solid var(--line);
-  background: var(--surface, #fff);
+  background: var(--surface);
   border-radius: var(--mk-radius-pill);
   color: var(--muted);
   font: inherit; font-size: 13px; font-weight: 600;
@@ -428,13 +428,13 @@ onMounted(() => {
   border-radius: var(--mk-radius-xl);
   background: color-mix(in srgb, var(--red) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
-  color: var(--red, #c0454a);
+  color: var(--red-ink);
   font-size: 13px; font-weight: 600;
 }
 .errorbar__retry { text-decoration: underline; cursor: pointer; font-weight: 800; }
 .btn-ghost {
   padding: 9px 16px; border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line); background: var(--surface, #fff);
+  border: 1px solid var(--line); background: var(--surface);
   font-size: 13px; font-weight: 700; color: var(--muted);
   cursor: pointer;
 }
@@ -446,7 +446,7 @@ onMounted(() => {
   background: var(--ink); color: var(--surface);
   padding: 10px 20px; border-radius: var(--mk-radius-xl);
   font-size: 13px; font-weight: 600;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  box-shadow: var(--mk-shadow-modal); /* toast = 规范模态档 */
   z-index: 9999;
   pointer-events: none;
 }

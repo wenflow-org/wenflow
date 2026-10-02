@@ -39,7 +39,7 @@ const meta = computed(
   height: 20px;
   border-radius: 6px;
   flex: none;
-  color: #fff;
+  color: var(--mk-on-fill);
   font-size: var(--mk-fs-micro);
   font-weight: 800;
   line-height: 1;

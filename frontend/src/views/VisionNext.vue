@@ -235,7 +235,7 @@ onUnmounted(() => {
 /* 主按钮：实心品牌蓝，不再用 linear-gradient(135deg, …)；
    原先的 0 16px 34px 蓝色投影属于彩色光晕，一并退休。 */
 .vn-btn--primary {
-  color: #fff;
+  color: var(--text-on-primary);
   background: var(--blue);
   transition: transform 0.2s var(--ease), background 0.2s var(--ease);
 }
@@ -359,7 +359,7 @@ main {
 .vn-hero__seal em {
   font-style: normal;
   margin-left: 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
   color: var(--faint);

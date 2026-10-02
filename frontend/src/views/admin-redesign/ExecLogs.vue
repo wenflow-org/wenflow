@@ -1101,7 +1101,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 .exec-table th { padding: 8px 13px; }
 .exec-table td { padding: 8px 13px; white-space: nowrap; }
 
-.exec-row--open { background: #f6f9ff; }
+.exec-row--open { background: var(--mk-table-row-hover-bg); }
 /* 连通性/探活测试行：弱化（降饱和降透明度），保留可读但不再与业务日志抢眼 */
 .exec-row--test { opacity: 0.62; }
 .exec-row--test:hover { opacity: 0.85; }
@@ -1109,13 +1109,13 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 .exec-kind-group { display: inline-flex; align-items: center; gap: 5px; }
 /* 类型徽章（流程/Skill/网关/调用）：中性浅灰 pill，与审计动作 chip 同风格——低调可读不抢色 */
 .exec-kind-group .mk-badge {
-  background: #f0f2f5;
+  background: var(--mk-surface-3);
   color: var(--mk-muted, #5b6577);
   font-size: var(--mk-fs-micro);
   font-weight: 600;
   padding: 1px 7px;
 }
-html[data-theme='dark'] .exec-kind-group .mk-badge { background: #2d2d2f; color: #a2a5a9; }
+html[data-theme='dark'] .exec-kind-group .mk-badge { background: #2d2d2f; color: var(--mk-muted); }
 /* 测试标签：灰底小徽章（与类型徽章并排，业务日志不出现） */
 .exec-test-tag {
   font-size: var(--mk-fs-micro);
@@ -1127,7 +1127,7 @@ html[data-theme='dark'] .exec-kind-group .mk-badge { background: #2d2d2f; color:
   color: var(--mk-muted, #5b6577);
   white-space: nowrap;
 }
-html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
+html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-muted); }
 /* 消息列：自动布局下由 max-width 兜底（长调用文本不独吃列宽），主行标题在列内 ellipsis */
 .exec-cell { min-width: 0; max-width: 460px; }
 .exec-cell__line { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -1257,13 +1257,13 @@ html[data-theme='dark'] .exec-detail td { background: #161718; }
   font-size: var(--mk-fs-micro);
 }
 .exec-detail__meta .mk-badge {
-  background: #f0f2f5;
+  background: var(--mk-surface-3);
   color: var(--mk-muted, #5b6577);
   font-size: var(--mk-fs-micro);
   font-weight: 600;
   padding: 1px 7px;
 }
-html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; color: #a2a5a9; }
+html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; color: var(--mk-muted); }
 .exec-detail__meta > span { white-space: nowrap; }
 
 /* 窄屏自适应：min-width 只保证默认 5 列(时间/节点/调用/耗时/状态)在窄容器内不塌陷 ≈620px;
@@ -1425,10 +1425,10 @@ html[data-theme='dark'] {
 
   .exec-row--open { background: #252627; }
   .exec-detail td { background: #19191a; }
-  .exec-detail__box { background: #141415; border-color: #2a2b2d; }
+  .exec-detail__box { background: var(--wf-bg-body); border-color: var(--wf-border-light); }
   .exec-detail__box pre { color: var(--mk-pre-fg); }
-  .tline { background: #19191a; border-color: #2a2b2d; }
-  .tline-attempt { background: #1b1c1d; border-color: #2a2b2d; }
+  .tline { background: #19191a; border-color: var(--wf-border-light); }
+  .tline-attempt { background: var(--wf-bg-subtle); border-color: var(--wf-border-light); }
   .tline-attempt--fail { background: #241a1a; border-left-color: var(--mk-red); }
 
 

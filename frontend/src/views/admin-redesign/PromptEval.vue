@@ -1223,8 +1223,8 @@ function retryRunDetail() {
   align-items: baseline;
   gap: 10px;
   flex-wrap: wrap;
-  background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(14, 165, 233, 0.06));
-  border: 1px solid rgba(99, 102, 241, 0.25);
+  background: color-mix(in srgb, var(--mk-purple) 7%, transparent); /* 原 135deg 靛蓝渐变已退役（材质一律平面），取最近语义色 --mk-purple 平铺 */
+  border: 1px solid color-mix(in srgb, var(--mk-purple) 25%, transparent);
   border-radius: var(--mk-radius-xl);
   padding: 8px 12px;
   margin-bottom: 4px;

@@ -567,7 +567,7 @@ onMounted(() => {
 
 /* 暗色模式（D1 补完）：fb- 内容区细节（面板底色/头/体已由 mk-drawer 全局接管） */
 html[data-theme='dark'] {
-  .fb-note { background: #19191a; border-color: #2a2b2d; color: var(--mk-ink); }
+  .fb-note { background: #19191a; border-color: var(--wf-border-light); color: var(--mk-ink); }
   .fb-note:focus { border-color: var(--mk-blue); }
 }
 </style>

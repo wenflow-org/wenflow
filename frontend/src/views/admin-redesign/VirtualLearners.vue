@@ -717,7 +717,7 @@ function openRunningSession(s: Sample) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--mk-on-fill);
   font-size: var(--mk-fs-micro);
   font-weight: 800;
   flex-shrink: 0;
@@ -738,8 +738,8 @@ function openRunningSession(s: Sample) {
 }
 /* 名称列可点击进二级（整行不再监听点击，避免多选勾选时误触） */
 .vl-cell--click { cursor: pointer; border-radius: 6px; transition: background 0.12s ease; }
-.vl-cell--click:hover { background: rgba(47, 106, 224, 0.06); }
-.vl-cell--click:focus-visible { outline: 2px solid rgba(47, 106, 224, 0.4); outline-offset: 1px; }
+.vl-cell--click:hover { background: color-mix(in srgb, var(--mk-blue) 6%, transparent); }
+.vl-cell--click:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .vl-name__text {
   overflow: hidden;
   text-overflow: ellipsis;

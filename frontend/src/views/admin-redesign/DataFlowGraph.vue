@@ -1182,7 +1182,7 @@ function stepHue(step: FlowStep): string {
   gap: 14px;
   flex-wrap: wrap;
   padding: 8px 14px;
-  background: linear-gradient(180deg, var(--mk-graph-toolbar-a), var(--mk-graph-toolbar-b));
+  background: var(--mk-graph-toolbar-b); /* 渐变退役（材质一律平面），取原纵向洗底的收束色 */
   border-bottom: 1px solid var(--mk-line);
 }
 .dfg-toolbar__status { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
@@ -1202,7 +1202,7 @@ function stepHue(step: FlowStep): string {
   outline: none;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
-.dfg-search__input:focus { border-color: var(--mk-blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue) 12%, transparent); }
+.dfg-search__input:focus { border-color: var(--mk-blue); box-shadow: var(--mk-focus-ring); }
 .dfg-search__clear {
   position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
   width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; /* 16→24：WCAG 2.5.8 */
@@ -1226,7 +1226,7 @@ function stepHue(step: FlowStep): string {
 .dfg-journey {
   display: flex; align-items: stretch; gap: 10px;
   padding: 10px 14px;
-  background: linear-gradient(180deg, var(--mk-graph-journey-a), var(--mk-graph-journey-b));
+  background: var(--mk-graph-journey-b); /* 渐变退役（材质一律平面） */
   border-bottom: 1px solid var(--mk-line);
 }
 .dfg-journey__node {
@@ -1242,7 +1242,7 @@ function stepHue(step: FlowStep): string {
 .dfg-journey__node.is-empty { cursor: default; background: var(--mk-graph-canvas-2); }
 .dfg-journey__node.is-start {
   cursor: default;
-  background: linear-gradient(180deg, var(--mk-graph-node-top), var(--mk-graph-start-b));
+  background: var(--mk-graph-start-b); /* 渐变退役（材质一律平面） */
   border-color: color-mix(in srgb, var(--fam-path) 36%, var(--mk-line));
   border-style: dashed;
 }
@@ -1251,7 +1251,7 @@ function stepHue(step: FlowStep): string {
 .dfg-journey__node.is-start .dfg-journey__dir { color: var(--mk-green); }
 .dfg-journey__node.is-end {
   cursor: default;
-  background: linear-gradient(180deg, var(--mk-graph-node-top), var(--mk-graph-end-b));
+  background: var(--mk-graph-end-b); /* 渐变退役（材质一律平面） */
   border-color: color-mix(in srgb, var(--fam-classroom) 32%, var(--mk-line));
   border-style: dashed;
 }
@@ -1365,20 +1365,20 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 }
 .dfg-step--gate {
   border-style: dashed;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--hz) 6%, var(--mk-graph-node-top)), var(--mk-graph-canvas) 55%);
+  background: var(--mk-graph-canvas); /* 渐变退役（材质一律平面） */
 }
 .dfg-step--bare { border-style: dashed; background: var(--mk-graph-canvas-2); }
 .dfg-step--bare.is-unresolved { border-color: color-mix(in srgb, var(--mk-amber) 45%, var(--mk-line)); }
 /* orphan：已注册但无字段契约的 Skill（调用统计是真实健康信号，红色警示） */
 .dfg-step--bare.is-orphan {
   border-color: color-mix(in srgb, var(--mk-red) 40%, var(--mk-line));
-  background: linear-gradient(180deg, color-mix(in srgb, var(--mk-red) 4%, var(--mk-graph-inset)), var(--mk-graph-inset) 55%);
+  background: var(--mk-graph-inset); /* 渐变退役（材质一律平面） */
 }
 .dfg-step--bare.is-orphan .dfg-step__badge--warn { background: color-mix(in srgb, var(--mk-red) 12%, var(--mk-graph-node-top)); }
 .dfg-step__head {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 8px 12px 6px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--hz) 7%, var(--mk-graph-node-bg)), var(--mk-graph-canvas) 70%);
+  background: var(--mk-graph-canvas); /* 渐变退役（材质一律平面） */
   border-bottom: 1px solid color-mix(in srgb, var(--hz) 10%, var(--mk-graph-line-soft));
 }
 .dfg-step--bare .dfg-step__head { border-bottom: 0; padding-bottom: 5px; }
@@ -1553,18 +1553,18 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 /* ================= 暗色模式 ================= */
 html[data-theme='dark'] {
   .dfg-frame { background: var(--mk-graph-canvas); border-color: var(--mk-graph-line); }
-  .dfg-toolbar { background: linear-gradient(180deg, var(--mk-graph-toolbar-a), var(--mk-graph-toolbar-b)); border-bottom-color: var(--mk-graph-line); }
+  .dfg-toolbar { background: var(--mk-graph-toolbar-b); border-bottom-color: var(--mk-graph-line); }
   .dfg-search__input { background: var(--mk-graph-field); border-color: var(--mk-line); color: var(--mk-ink); }
-  .dfg-search__input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue) 16%, transparent); }
+  .dfg-search__input:focus { box-shadow: var(--mk-focus-ring); }
   .dfg-search__clear { background: var(--mk-line); color: var(--mk-muted); }
   .dfg-search__clear:hover { background: var(--mk-graph-clear-bg-hover); color: var(--mk-ink); }
-  .dfg-journey { background: linear-gradient(180deg, var(--mk-graph-journey-a), var(--mk-graph-journey-b)); border-bottom-color: var(--mk-graph-line); }
+  .dfg-journey { background: var(--mk-graph-journey-b); border-bottom-color: var(--mk-graph-line); }
   .dfg-journey__node { background: var(--mk-surface); border-color: var(--mk-line); }
   
   .dfg-journey__node.is-empty { background: var(--mk-graph-canvas-2); }
-  .dfg-journey__node.is-start { background: linear-gradient(180deg, var(--mk-graph-node-top), var(--mk-graph-start-b)); border-color: color-mix(in srgb, var(--fam-path) 36%, var(--mk-line)); }
+  .dfg-journey__node.is-start { background: var(--mk-graph-start-b); border-color: color-mix(in srgb, var(--fam-path) 36%, var(--mk-line)); }
   .dfg-journey__node.is-start .dfg-journey__dir { color: var(--mk-green); }
-  .dfg-journey__node.is-end { background: linear-gradient(180deg, var(--mk-graph-node-top), var(--mk-graph-end-b)); border-color: color-mix(in srgb, var(--fam-classroom) 32%, var(--mk-line)); }
+  .dfg-journey__node.is-end { background: var(--mk-graph-end-b); border-color: color-mix(in srgb, var(--fam-classroom) 32%, var(--mk-line)); }
   .dfg-journey__node.is-end .dfg-journey__dir { color: var(--mk-graph-accent-purple-ink); }
   .dfg-journey__dir { color: var(--mk-faint); }
   .dfg-journey__node strong { color: var(--mk-graph-node-ink); }
@@ -1580,12 +1580,12 @@ html[data-theme='dark'] {
   .dfg-gate__title strong { color: var(--mk-graph-node-ink); }
   .dfg-gate__count { background: var(--mk-graph-badge-bg); color: var(--mk-muted); }
   .dfg-step { background: var(--mk-graph-canvas); border-color: color-mix(in srgb, var(--hz) 20%, var(--mk-line)); }
-  .dfg-step--gate { background: linear-gradient(180deg, color-mix(in srgb, var(--hz) 9%, var(--mk-graph-node-top)), var(--mk-graph-canvas) 60%); }
+  .dfg-step--gate { background: var(--mk-graph-canvas); }
   .dfg-step--bare { background: var(--mk-graph-canvas-2); }
   .dfg-step--bare.is-unresolved { border-color: color-mix(in srgb, var(--mk-amber) 45%, var(--mk-line)); }
-  .dfg-step--bare.is-orphan { border-color: color-mix(in srgb, var(--mk-red) 40%, var(--mk-line)); background: linear-gradient(180deg, color-mix(in srgb, var(--mk-red) 6%, var(--mk-graph-inset)), var(--mk-graph-inset) 60%); }
+  .dfg-step--bare.is-orphan { border-color: color-mix(in srgb, var(--mk-red) 40%, var(--mk-line)); background: var(--mk-graph-inset); }
   .dfg-step--bare.is-orphan .dfg-step__badge--warn { background: var(--mk-red-bg); }
-  .dfg-step__head { background: linear-gradient(180deg, color-mix(in srgb, var(--hz) 10%, var(--mk-surface)), var(--mk-graph-canvas) 70%); border-bottom-color: color-mix(in srgb, var(--hz) 12%, var(--mk-graph-line)); }
+  .dfg-step__head { background: var(--mk-graph-canvas); border-bottom-color: color-mix(in srgb, var(--hz) 12%, var(--mk-graph-line)); }
   .dfg-step__name { color: var(--mk-graph-node-ink); }
   .dfg-step__badge { background: var(--mk-graph-badge-bg); color: var(--mk-muted); }
   .dfg-step__badge--gate { background: color-mix(in srgb, var(--hz) 22%, var(--mk-surface)); color: var(--mk-graph-blue-ink); }

@@ -589,7 +589,7 @@ function goConfig() {
 }
 .ac-mcp__row:last-child { border-bottom: none; }
 .ac-mcp__dot { width: 8px; height: 8px; border-radius: 50%; }
-.ac-mcp__dot.is-on { background: var(--mk-green); box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12); }
+.ac-mcp__dot.is-on { background: var(--mk-green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-green) 12%, transparent); }
 .ac-mcp__dot.is-off { background: var(--mk-faint); }
 .ac-mcp__main { display: grid; gap: 1px; min-width: 0; }
 .ac-mcp__main strong { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

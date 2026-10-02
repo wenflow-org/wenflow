@@ -571,8 +571,8 @@ onMounted(() => {
   cursor: pointer;
   width: 100%;
 }
-.ac-candidate:hover { border-color: rgba(47, 106, 224, 0.4); }
-.ac-candidate--on { border-color: var(--mk-blue); box-shadow: 0 0 0 2px rgba(47, 106, 224, 0.12); }
+.ac-candidate:hover { border-color: color-mix(in srgb, var(--mk-blue) 40%, transparent); }
+.ac-candidate--on { border-color: var(--mk-blue); box-shadow: 0 0 0 2px color-mix(in srgb, var(--mk-blue) 12%, transparent); }
 .ac-candidate strong { font-size: var(--mk-fs-micro); }
 .ac-none { color: var(--mk-faint); font-size: var(--mk-fs-micro); text-align: center; padding: 10px 0; }
 

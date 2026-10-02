@@ -3266,42 +3266,42 @@ html[data-theme='dark'] {
   .cp-sidebar__toggle:hover { background: #252627; }
   .cp-learn-tree__lesson:hover:not(:disabled) { background: #252627; }
   /* 原型骨架补漏：闭环 active 环 / stepper active 步点在暗色下的底色 */
-  .cp-loop__step--active { background: rgba(91, 141, 239, 0.16); border-color: rgba(91, 141, 239, 0.4); }
-  .cp-stp--active .cp-stp__dot { background: rgba(91, 141, 239, 0.16); color: var(--mk-accent-deep); }
+  .cp-loop__step--active { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); border-color: color-mix(in srgb, var(--wf-color-primary) 40%, transparent); }
+  .cp-stp--active .cp-stp__dot { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--mk-accent-deep); }
   .cp-stp__dot { background: #19191a; }  .cp-run__autopilot-result { background: #19191a; }
   .cp-transcript__message { background: #19191a; border-left-color: #313235; }
-  .cp-transcript__message.is-teacher { background: rgba(91, 141, 239, 0.12); border-left-color: var(--mk-blue); }
+  .cp-transcript__message.is-teacher { background: color-mix(in srgb, var(--wf-color-primary) 12%, transparent); border-left-color: var(--mk-blue); }
   .cp-transcript__message.is-learner { background: rgba(45, 212, 191, 0.1); border-left-color: var(--mk-teal); }
   .cp-review { background: #19191a; }
   .cp-review__badge, .cp-lesson-head__state { background: var(--mk-close-bg); }
-  .cp-lesson-head__state[data-state='active'] { background: rgba(91, 141, 239, 0.18); color: var(--mk-accent-deep); }
-  .cp-learn-tree__lesson.is-active { background: rgba(91, 141, 239, 0.16); color: var(--mk-accent-deep); border-left-color: var(--mk-blue); }
+  .cp-lesson-head__state[data-state='active'] { background: color-mix(in srgb, var(--wf-color-primary) 18%, transparent); color: var(--mk-accent-deep); }
+  .cp-learn-tree__lesson.is-active { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--mk-accent-deep); border-left-color: var(--mk-blue); }
   .cp-learn-tree__lesson.is-pending:hover { background: rgba(251, 191, 36, 0.12); color: #fcd34d; }
-  .cp-lesson-wrapup__kp-status.is-learning { background: rgba(91, 141, 239, 0.16); color: var(--mk-accent-deep); }
+  .cp-lesson-wrapup__kp-status.is-learning { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--mk-accent-deep); }
 
 
 
 
 
-  .cp-log__phase { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
+  .cp-log__phase { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--wf-color-primary-light); }
   /* 补漏：wrapup 分数/卡片/小节/trace 面板/时间线标签 */
-  .cp-lesson-wrapup__score { background: #232325; color: #afb1b6; }
-  .cp-lesson-wrapup__score--primary { background: rgba(91, 141, 239, 0.16); color: var(--mk-ghost-fg); }
+  .cp-lesson-wrapup__score { background: #232325; color: var(--mk-muted); }
+  .cp-lesson-wrapup__score--primary { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--mk-ghost-fg); }
   .cp-wrapup-card,
   .cp-wrapup-section,
-  .cp-trace-panel { background: #19191a; border-color: #2a2b2d; }
+  .cp-trace-panel { background: #19191a; border-color: var(--wf-border-light); }
   .cp-trace-list__body { background: #202122; }
   .cp-run__stages { background: #19191a; }
-  .cp-wrapup-lesson.is-active { background: rgba(91, 141, 239, 0.16); color: var(--mk-ghost-fg); }
+  .cp-wrapup-lesson.is-active { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--mk-ghost-fg); }
   .cp-wrapup-lesson.is-done:hover { background: rgba(74, 222, 128, 0.1); }
-  .cp-timeline__kind[data-kind='referee'] { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
-  .cp-timeline__kind[data-kind='private'] { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
+  .cp-timeline__kind[data-kind='referee'] { background: color-mix(in srgb, var(--wf-color-danger) 14%, transparent); color: var(--wf-color-danger); }
+  .cp-timeline__kind[data-kind='private'] { background: color-mix(in srgb, var(--mk-purple) 16%, transparent); color: var(--wf-color-accent-light); }
   .cp-timeline__kind[data-kind='log'] { background: rgba(129, 140, 248, 0.14); color: #a5b4fc; }
-  .cp-timeline__kind[data-kind='goal'] { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
+  .cp-timeline__kind[data-kind='goal'] { background: color-mix(in srgb, var(--mk-purple) 16%, transparent); color: var(--wf-color-accent-light); }
   .cp-timeline__kind[data-kind='path'] { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
   .cp-timeline__kind[data-kind='teaching'] { background: rgba(74, 222, 128, 0.14); color: var(--mk-btn-ok-fg); }
-  .cp-timeline__kind[data-kind='evidence'] { background: rgba(45, 212, 191, 0.14); color: #5eead4; }
-  .cp-timeline__stage[data-stage='goal'] { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
+  .cp-timeline__kind[data-kind='evidence'] { background: color-mix(in srgb, var(--mk-teal) 14%, transparent); color: var(--mk-teal); }
+  .cp-timeline__stage[data-stage='goal'] { background: color-mix(in srgb, var(--mk-purple) 16%, transparent); color: var(--wf-color-accent-light); }
   .cp-timeline__stage[data-stage='path'] { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
 
   .cp-learn-tree__ms { background: #19191a; }
@@ -3311,16 +3311,16 @@ html[data-theme='dark'] {
   /* 补漏 2：课时总结渐变底/stats/骨架屏/eval/trace 徽章/预算条文字 */
   .cp-trace-list > li { background: #19191a; }
   .cp-timeline__kind { background: var(--mk-close-bg); }
-  .cp-timeline__stage { background: rgba(91, 141, 239, 0.16); color: var(--mk-ghost-fg); }
+  .cp-timeline__stage { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--mk-ghost-fg); }
   .cp-timeline__stage[data-stage='learning'],
   .cp-timeline__stage[data-stage='teaching'] { background: rgba(74, 222, 128, 0.14); color: var(--mk-btn-ok-fg); }
-  .cp-trace-list__stage { background: rgba(91, 141, 239, 0.16); color: var(--mk-ghost-fg); }
+  .cp-trace-list__stage { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--mk-ghost-fg); }
   .cp-trace-list__stage[data-stage='learning'] { background: rgba(74, 222, 128, 0.14); color: var(--mk-btn-ok-fg); }
   .cp-trace-list__emotion,
   .cp-trace-list__transition { background: var(--mk-close-bg); color: var(--mk-ghost-fg); }
   .cp-trace-list__metrics > span,
   .cp-trace-list__kv > span { background: #232325; }
   .cp-trace-list__flags > span { background: var(--mk-close-bg); }
-  .cp-trace-list__flags > span.active { background: rgba(91, 141, 239, 0.16); color: var(--mk-ghost-fg); border-color: rgba(91, 141, 239, 0.45); }
+  .cp-trace-list__flags > span.active { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--mk-ghost-fg); border-color: color-mix(in srgb, var(--wf-color-primary) 45%, transparent); }
 }
 </style>

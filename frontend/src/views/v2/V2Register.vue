@@ -201,7 +201,7 @@ onMounted(loadStatus);
 .state p { margin: 0; }
 .state__actions { display: flex; gap: 10px; margin-top: 8px; }
 .state .btn-primary, .state .btn-ghost { padding: 9px 16px; font-size: 13px; }
-.spinner--blue { border-color: rgba(52, 120, 246, 0.2); border-top-color: var(--blue); width: 26px; height: 26px; border-width: 3px; }
+.spinner--blue { border-color: color-mix(in srgb, var(--blue) 20%, transparent); border-top-color: var(--blue); width: 26px; height: 26px; border-width: 3px; }
 
 .form { display: grid; gap: 14px; }
 .field { display: grid; gap: 6px; }
@@ -220,7 +220,7 @@ onMounted(loadStatus);
 }
 .field__input:focus {
   border-color: color-mix(in srgb, var(--blue) 55%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
+  box-shadow: var(--mk-focus-ring); /* 全站唯一一圈 */
 }
 .field--error .field__input { border-color: color-mix(in srgb, var(--red) 60%, transparent); }
 .field--error .field__input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 12%, transparent); }
@@ -262,5 +262,5 @@ onMounted(loadStatus);
   cursor: pointer;
   display: grid; place-items: center;
 }
-.field__eye:hover { color: var(--blue-deep); background: rgba(52, 120, 246, 0.07); }
+.field__eye:hover { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 7%, transparent); }
 </style>

@@ -639,7 +639,7 @@ html[data-theme='dark'] .ow-state__dot--muted { background: #404244; }
   width: 100%;
   padding: 9px 4px;
   border: 0;
-  border-bottom: 1px solid #eef1f7;
+  border-bottom: 1px solid var(--mk-table-row-line);
   background: transparent;
   font: inherit;
   text-align: left;
@@ -647,7 +647,7 @@ html[data-theme='dark'] .ow-state__dot--muted { background: #404244; }
   transition: background 0.12s;
 }
 .ow-ann:last-child { border-bottom: none; }
-.ow-ann:hover { background: #f6f9ff; }
+.ow-ann:hover { background: var(--mk-table-row-hover-bg); }
 html[data-theme='dark'] .ow-ann { border-bottom-color: #252627; }
 html[data-theme='dark'] .ow-ann:hover { background: #202122; }
 .ow-ann__title {

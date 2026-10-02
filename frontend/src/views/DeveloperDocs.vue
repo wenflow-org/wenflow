@@ -424,9 +424,9 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
 .docs-brand__tag {
   padding: 2px 8px;
   border-radius: 999px;
-  background: #eef2fa;
+  background: var(--mk-surface-2);
   color: var(--faint);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
@@ -442,13 +442,13 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
 .docs-nav__back {
   padding: 7px 14px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 8px; /* 圆角阶梯：控件 */
   color: var(--muted);
   font-size: 12.5px;
   font-weight: 700;
   text-decoration: none;
 }
-.docs-nav__back:hover { color: var(--blue); border-color: rgba(52, 120, 246, 0.4); }
+.docs-nav__back:hover { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
 @media (max-width: 860px) {
   .docs-nav__links { display: none; }
 }
@@ -470,7 +470,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
 .hero-chip {
   padding: 5px 12px;
   border-radius: 999px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   color: var(--muted);
   font-size: 12px;
@@ -504,7 +504,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
 .docs-side__group { display: grid; gap: 2px; }
 .docs-side__title {
   padding: 0 10px 6px;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.07em;
   color: var(--faint);
@@ -519,10 +519,10 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   font-weight: 600;
   border-left: 2px solid transparent;
 }
-.docs-side__group a:hover { background: #eef2fa; color: var(--ink); }
+.docs-side__group a:hover { background: var(--mk-surface-2); color: var(--ink); }
 .docs-side__group a.on {
   color: var(--blue-deep);
-  background: #eef5ff;
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
   border-left-color: var(--blue);
 }
 
@@ -545,9 +545,9 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
 .docs-lead { margin: 0 0 16px; font-size: 14px; line-height: 1.8; color: var(--muted); }
 .docs-main p { font-size: 13.5px; line-height: 1.8; color: var(--muted); }
 .docs-main code:not(.mono) {
-  background: #eef2fa;
+  background: var(--mk-surface-2);
   padding: 1px 6px;
-  border-radius: 5px;
+  border-radius: 4px; /* 圆角阶梯：内芯 */
   font-size: 12px;
   color: var(--blue-deep);
   font-family: 'JetBrains Mono', Consolas, monospace;
@@ -566,14 +566,14 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
 .mini {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 16px; /* 圆角阶梯：卡片 */
   padding: 14px 16px;
   display: grid;
   gap: 5px;
   align-content: start;
 }
 .mini__k {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--blue-deep);
   letter-spacing: 0.04em;
@@ -586,16 +586,16 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   margin: 16px 0;
   padding: 12px 16px;
   border-radius: 12px;
-  background: #eff6ff;
-  border: 1px solid #dbe7f6;
-  color: #41516e;
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--blue) 18%, transparent);
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.7;
 }
 .callout--warn {
-  background: #fffbeb;
-  border-color: rgba(180, 83, 9, 0.25);
-  color: #7c5a1e;
+  background: color-mix(in srgb, var(--amber) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--amber) 30%, transparent);
+  color: var(--amber-ink);
 }
 
 /* 链路图 */
@@ -609,7 +609,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
 .flow__node {
   padding: 12px 16px;
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   font-size: 12.5px;
   font-weight: 700;
@@ -619,11 +619,12 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   align-content: center;
   gap: 3px;
 }
-.flow__node--hot { border-color: rgba(52, 120, 246, 0.45); background: #eef5ff; color: var(--blue-deep); }
-.flow__sub { font-size: 10.5px; font-weight: 600; color: var(--faint); }
+.flow__node--hot { border-color: color-mix(in srgb, var(--blue) 45%, transparent); background: color-mix(in srgb, var(--blue) 8%, var(--surface)); color: var(--blue-deep); }
+.flow__sub { font-size: 12px; font-weight: 600; color: var(--faint); }
 .flow__arrow { align-self: center; color: var(--faint); font-weight: 700; }
 
-/* 代码块 */
+/* 代码块（恒深复刻件：与 V2LearningPage 代码面板同一口径，双主题同一套深底，
+   不随主题换色——整块深底/描边/文字为登记保留的原型等价色，非设计令牌）。 */
 .code {
   margin: 16px 0;
   border-radius: 12px;
@@ -638,7 +639,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   padding: 8px 14px;
   border-bottom: 1px solid #1c2a40;
 }
-.code__head span { font-size: 11px; color: #7d93b8; font-weight: 600; }
+.code__head span { font-size: 12px; color: #7d93b8; font-weight: 600; }
 .code__head button {
   border: 1px solid #2a3c58;
   background: transparent;
@@ -646,7 +647,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   padding: 4px 10px;
   min-height: 24px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
 }
 .code__head button:hover { border-color: #3f5a82; color: #cfe1f7; }
@@ -665,21 +666,21 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
-  background: #fff;
+  background: var(--surface);
 }
 .table__row {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) 2fr;
   gap: 14px;
   padding: 10px 14px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--line);
   font-size: 12.5px;
   align-items: baseline;
 }
 .table__row:last-child { border-bottom: none; }
 .table__row--head {
-  background: #fafbfc;
-  font-size: 11px;
+  background: var(--canvas);
+  font-size: 12px;
   font-weight: 700;
   color: var(--faint);
   letter-spacing: 0.05em;
@@ -692,7 +693,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   display: flex;
   gap: 12px;
   padding: 12px 14px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
 }
@@ -700,7 +701,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   width: 24px;
   height: 24px;
   border-radius: 8px;
-  background: #eef5ff;
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
   color: var(--blue-deep);
   font-size: 12px;
   font-weight: 700;
@@ -720,24 +721,24 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   gap: 12px;
   align-items: center;
   padding: 9px 14px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 8px; /* 圆角阶梯：控件 */
   font-size: 12px;
 }
-.api__row code { font-size: 11.5px; color: var(--ink); }
+.api__row code { font-size: 12px; color: var(--ink); }
 .api__row span:last-child { color: var(--muted); }
 .api__m {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   padding: 2px 0;
   text-align: center;
-  border-radius: 5px;
+  border-radius: 4px; /* 圆角阶梯：内芯 */
   letter-spacing: 0.04em;
 }
-.api__m--get { background: #ecfdf5; color: #15803d; }
-.api__m--post { background: #eff6ff; color: var(--blue-deep); }
-.api__m--patch { background: #fffbeb; color: #b45309; }
+.api__m--get { background: color-mix(in srgb, var(--green) 8%, var(--surface)); color: var(--green); }
+.api__m--post { background: color-mix(in srgb, var(--blue) 8%, var(--surface)); color: var(--blue-deep); }
+.api__m--patch { background: color-mix(in srgb, var(--amber) 8%, var(--surface)); color: var(--amber); }
 
 /* 页脚 */
 .docs-foot {
@@ -752,115 +753,8 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
 .docs-foot a { color: var(--muted); text-decoration: none; padding: 5px 0; }
 .docs-foot a:hover { color: var(--blue); }
 
-/* ===== 暗色模式（data-theme=dark）：覆写固定浅色样式 ===== */
-[data-theme='dark'] .docs {
-  background: #141415;
-  color: #efeff0;
-}
-[data-theme='dark'] .docs-nav {
-  background: rgba(15, 22, 32, 0.88);
-  border-bottom-color: #313235;
-}
-[data-theme='dark'] .docs-brand__tag {
-  background: rgba(230, 237, 247, 0.08);
-  color: #aaacb1;
-}
-[data-theme='dark'] .docs-hero h1 {
-  color: #efeff0;
-}
-[data-theme='dark'] .docs-hero p {
-  color: #aaacb1;
-}
-[data-theme='dark'] .hero-chip {
-  background: #1e1e20;
-  border-color: #313235;
-  color: #aaacb1;
-}
-[data-theme='dark'] .docs-side__group a:hover {
-  background: rgba(230, 237, 247, 0.06);
-  color: #efeff0;
-}
-[data-theme='dark'] .docs-side__group a.on {
-  background: rgba(77, 139, 248, 0.15);
-  color: #6fa3ff;
-}
-[data-theme='dark'] .docs-sec h3 {
-  color: #efeff0;
-}
-[data-theme='dark'] .docs-lead {
-  color: #aaacb1;
-}
-[data-theme='dark'] .docs-main p {
-  color: #aaacb1;
-}
-[data-theme='dark'] .docs-main code:not(.mono) {
-  background: rgba(230, 237, 247, 0.08);
-  color: #6fa3ff;
-}
-[data-theme='dark'] .mini {
-  background: #1e1e20;
-  border-color: #313235;
-}
-[data-theme='dark'] .mini strong {
-  color: #efeff0;
-}
-[data-theme='dark'] .callout {
-  background: rgba(77, 139, 248, 0.15);
-  border-color: rgba(77, 139, 248, 0.3);
-  color: #c4d8fb;
-}
-[data-theme='dark'] .callout--warn {
-  background: rgba(251, 191, 36, 0.1);
-  border-color: rgba(251, 191, 36, 0.3);
-  color: #f3cf87;
-}
-[data-theme='dark'] .flow__node {
-  background: #1e1e20;
-  border-color: #313235;
-  color: #efeff0;
-}
-[data-theme='dark'] .flow__node--hot {
-  background: rgba(77, 139, 248, 0.15);
-  color: #6fa3ff;
-}
-[data-theme='dark'] .table {
-  background: #1e1e20;
-  border-color: #313235;
-}
-[data-theme='dark'] .table__row {
-  border-bottom-color: rgba(230, 237, 247, 0.08);
-}
-[data-theme='dark'] .table__row--head {
-  background: rgba(230, 237, 247, 0.05);
-}
-[data-theme='dark'] .steps li {
-  background: #1e1e20;
-  border-color: #313235;
-}
-[data-theme='dark'] .steps__no {
-  background: rgba(77, 139, 248, 0.15);
-  color: #6fa3ff;
-}
-[data-theme='dark'] .steps strong {
-  color: #efeff0;
-}
-[data-theme='dark'] .api__row {
-  background: #1e1e20;
-  border-color: #313235;
-}
-[data-theme='dark'] .api__row code {
-  color: #efeff0;
-}
-[data-theme='dark'] .api__m--get {
-  background: rgba(62, 201, 132, 0.12);
-  color: #4dd28e;
-}
-[data-theme='dark'] .api__m--post {
-  background: rgba(77, 139, 248, 0.15);
-  color: #6fa3ff;
-}
-[data-theme='dark'] .api__m--patch {
-  background: rgba(251, 191, 36, 0.12);
-  color: #f6bb63;
-}
+/* ===== 暗色模式 =====
+   基础规则已全部令牌化（--surface/--line/--canvas/--ink/--muted/--faint 与 color-mix(--blue/--green/--amber) 派生），
+   随 [data-theme=dark] 自动翻转，原逐条暗色字面量覆写整块退役。
+   代码面板（.code）为「恒深」复刻件，双主题同一套深底，见上。 */
 </style>

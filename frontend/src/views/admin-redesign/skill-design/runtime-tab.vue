@@ -417,7 +417,7 @@ watch(
 .sdp-notice {
   padding: 9px 14px;
   border-radius: var(--mk-radius-xl);
-  background: #eff6ff;
+  background: var(--mk-blue-bg);
   border: 1px solid #dbe7f6;
   color: #41516e;
   font-size: var(--mk-fs-micro);
@@ -434,7 +434,7 @@ watch(
   padding: 10px 12px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
-  background: #fff;
+  background: var(--mk-surface);
 }
 .sdp-chiprow__label { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); margin-right: 4px; }
 .sdp-chip {
@@ -443,7 +443,7 @@ watch(
   gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: #eef2fa;
+  background: var(--mk-surface-2);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
   font-weight: 600;
@@ -518,6 +518,6 @@ watch(
 }
 
 /* 暗色模式 */
-[data-theme='dark'] .sdp-chiprow { background: #1b1c1d; }
+[data-theme='dark'] .sdp-chiprow { background: var(--wf-bg-subtle); }
 
 </style>

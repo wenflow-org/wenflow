@@ -310,7 +310,7 @@ onMounted(() => {
   font-size: var(--mk-fs-micro);
   font-weight: 800;
   color: var(--blue-deep);
-  background: rgba(52, 120, 246, 0.09);
+  background: color-mix(in srgb, var(--mk-blue) 9%, transparent);
   padding: 5px 12px;
   border-radius: 999px;
 }
@@ -376,16 +376,16 @@ onMounted(() => {
 }
 
 .field__input:focus {
-  border-color: rgba(52, 120, 246, 0.55);
-  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.12);
+  border-color: var(--mk-blue);
+  box-shadow: var(--mk-focus-ring);
 }
 
 .field--error .field__input {
-  border-color: rgba(239, 117, 120, 0.6);
+  border-color: color-mix(in srgb, var(--wf-color-danger) 60%, transparent);
 }
 
 .field--error .field__input:focus {
-  box-shadow: 0 0 0 3px rgba(239, 117, 120, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wf-color-danger) 12%, transparent);
 }
 
 .field__error {
@@ -421,7 +421,7 @@ onMounted(() => {
 
 .field__eye:hover {
   color: var(--blue-deep);
-  background: rgba(52, 120, 246, 0.07);
+  background: color-mix(in srgb, var(--mk-blue) 7%, transparent);
 }
 
 .remember {

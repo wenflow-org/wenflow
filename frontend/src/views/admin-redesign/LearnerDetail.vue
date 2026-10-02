@@ -2058,7 +2058,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-related__icon {
   width: 30px; height: 30px; border-radius: var(--mk-radius-sm); flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  background: rgba(47, 106, 224, 0.1); color: var(--mk-blue); font-size: var(--mk-fs-body);
+  background: color-mix(in srgb, var(--mk-blue) 10%, transparent); color: var(--mk-blue); font-size: var(--mk-fs-body);
 }
 .ld-related__main { display: grid; gap: 1px; flex: 1; min-width: 0; }
 .ld-related__main strong { font-size: var(--mk-fs-micro); color: var(--mk-ink); }
@@ -2131,7 +2131,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   background: var(--mk-surface); font: inherit; color: inherit; text-align: left; cursor: pointer;
   transition: border-color 0.12s ease;
 }
-.ld-pathcard:hover { border-color: rgba(47, 106, 224, 0.5); }
+.ld-pathcard:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
 .ld-pathcard__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ld-pathcard__top strong { font-size: var(--mk-fs-emphasis); }
 .ld-pathcard__mid { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
@@ -2179,14 +2179,14 @@ function barToneBadge(tone: ConceptBarTone): string {
   border-bottom: 1px solid var(--mk-line);
 }
 .ld-ev:last-child { border-bottom: none; }
-/* 竖线时间轴：贯穿每行左侧，末端渐隐；单条时不显示（避免断裂） */
+/* 竖线时间轴：贯穿每行左侧；单条时不显示（避免断裂） */
 .ld-ev__rail {
   position: absolute;
   left: 15px;
   top: 0;
   bottom: 0;
   width: 2px;
-  background: linear-gradient(180deg, var(--mk-line), transparent);
+  background: var(--mk-line); /* 原渐隐渐变已退役（材质一律平面），改 1px 发丝线同源实色 */
 }
 .ld-ev:first-child .ld-ev__rail { top: 50%; }
 .ld-ev:last-child .ld-ev__rail { bottom: 50%; }
@@ -2460,13 +2460,13 @@ html[data-theme='dark'] {
   .ld-cal__bar,
   .ld-cal__outcome.is-pending,
   .ld-ev__signal.is-muted,
-  .ld-bar__ev { border-bottom-color: #2a2b2d; }
-  .ld-bar__ev { background: #2a2b2d; }
+  .ld-bar__ev { border-bottom-color: var(--wf-border-light); }
+  .ld-bar__ev { background: var(--wf-bg-hover); }
   /* 滚动条 thumb 与行分隔线是两种语义：此前误共用一条规则，
      把 .ld-kv__row 整行背景也涂成了 thumb 灰（#393a3c），已拆开 */
   .ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #393a3c; }
   /* 补漏：操作提示标签/置信条/加载分段（chip/kv 已 token 化） */
-  .ld-actions__k { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
-  .ld-ev__confbar { background: #2a2b2d; }
+  .ld-actions__k { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--wf-color-primary-light); }
+  .ld-ev__confbar { background: var(--wf-bg-hover); }
 }
 </style>

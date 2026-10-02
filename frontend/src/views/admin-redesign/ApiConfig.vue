@@ -1393,7 +1393,7 @@ async function saveQuota(enabled: boolean, quota: number) {
   justify-content: center;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
-.ac-key-toggle:hover { background: #eef5ff; border-color: var(--mk-blue, #2f6ae0); }
+.ac-key-toggle:hover { background: var(--mk-hover-surface); border-color: var(--mk-blue, #2f6ae0); }
 .ac-keyhint {
   font-size: var(--mk-fs-micro);
   color: var(--mk-amber);
@@ -1427,7 +1427,7 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-model {
   padding: 4px 10px;
   border-radius: var(--mk-radius-sm);
-  background: #eef2fa;
+  background: var(--mk-surface-2);
   color: var(--mk-muted);
   font-family: var(--mk-mono);
   font-size: var(--mk-fs-micro);
@@ -1465,9 +1465,9 @@ async function saveQuota(enabled: boolean, quota: number) {
 /* 安全与访问卡：2×2 宫格（左列 ~700px 宽），虚线分隔按行划分——
    第 1、2 项无上分隔；第 3、4 项加顶部虚线换行分隔 */
 .ac-policy { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 0; padding: 6px 16px 16px; }
-.ac-policy__item { display: grid; gap: 10px; align-content: start; min-width: 0; padding-left: 18px; border-left: 1px dashed #e6eaf0; }
+.ac-policy__item { display: grid; gap: 10px; align-content: start; min-width: 0; padding-left: 18px; border-left: 1px dashed var(--mk-line); }
 .ac-policy__item:nth-child(odd) { padding-left: 0; border-left: none; }
-.ac-policy__item:nth-child(n + 3) { padding-top: 14px; border-top: 1px dashed #e6eaf0; }
+.ac-policy__item:nth-child(n + 3) { padding-top: 14px; border-top: 1px dashed var(--mk-line); }
 html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 .ac-policy__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
 .ac-policy__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
@@ -1531,15 +1531,15 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   margin-left: auto;
   padding: 2px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(47, 106, 224, 0.3);
-  background: rgba(47, 106, 224, 0.08);
+  border: 1px solid color-mix(in srgb, var(--mk-blue) 30%, transparent);
+  background: color-mix(in srgb, var(--mk-blue) 8%, transparent);
   color: var(--mk-blue);
   font: inherit;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   cursor: pointer;
 }
-.ac-sec__save:hover { background: rgba(47, 106, 224, 0.16); }
+.ac-sec__save:hover { background: color-mix(in srgb, var(--mk-blue) 16%, transparent); }
 .ac-sec__save:disabled { opacity: 0.6; cursor: not-allowed; }
 /* 分段控件走 .mk-seg（shared.css） */
 
@@ -1554,7 +1554,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   gap: 10px;
   align-items: center;
   padding: 4px 0 2px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--mk-surface-3);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -1567,7 +1567,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   gap: 10px;
   align-items: center;
   padding: 7px 0;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--mk-surface-3);
   font-size: var(--mk-fs-micro);
 }
 .ac-health__row:last-child { border-bottom: none; }
@@ -1617,7 +1617,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   justify-content: flex-end;
   gap: 10px;
   padding: 10px 0 14px;
-  border-top: 1px solid #f0f2f5;
+  border-top: 1px solid var(--mk-surface-3);
   margin-top: 4px;
 }
 /* stale 时「立即探测」红色脉冲（A3：承认探活默认关闭的机制性状态，引导手动探测） */
@@ -1627,7 +1627,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   animation: ac-probe-pulse 1.6s ease infinite;
 }
 @keyframes ac-probe-pulse {
-  50% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.18); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-red-fill) 18%, transparent); }
 }
 
 /* 探针行：AI 能力定期探测总开关（右卡第一段，开启后显示间隔；由 ac-body 统一间距，无独立边框） */
@@ -1712,7 +1712,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   margin: 4px auto 0;
   padding: 9px 12px 9px 16px;
   border-radius: 999px;
-  border: 1px solid rgba(47, 106, 224, 0.24);
+  border: 1px solid color-mix(in srgb, var(--mk-blue) 24%, transparent);
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-pop);
   font-weight: 600;
@@ -1723,7 +1723,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   border-radius: 999px;
   border: 0;
   background: var(--mk-blue);
-  color: #fff;
+  color: var(--mk-on-fill);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -1750,7 +1750,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   .ac-health__head span:nth-child(3) { display: none; }
 
   .ac-policy { grid-template-columns: 1fr; }
-  .ac-policy__item { padding-left: 0; border-left: none; padding-top: 12px; border-top: 1px dashed #e6eaf0; }
+  .ac-policy__item { padding-left: 0; border-left: none; padding-top: 12px; border-top: 1px dashed var(--mk-line); }
   .ac-policy__item:first-child { padding-top: 0; border-top: none; }
   html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 }
@@ -1843,17 +1843,17 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 
 /* ================= 暗色模式（D1 补完）：模型与接入 ================= */
 html[data-theme='dark'] {
-  .ac-key-toggle:hover { background: rgba(91, 141, 239, 0.14); }
+  .ac-key-toggle:hover { background: color-mix(in srgb, var(--wf-color-primary) 14%, transparent); }
   .mk-seg { background: #232325; }
-  .mk-seg__item--active { background: rgba(91, 141, 239, 0.22); color: #9db8f5; box-shadow: none; }
-  .ac-save { background: #19191a; border-color: #2a2b2d; }
+  .mk-seg__item--active { background: color-mix(in srgb, var(--wf-color-primary) 22%, transparent); color: var(--wf-color-primary-light); box-shadow: none; }
+  .ac-save { background: #19191a; border-color: var(--wf-border-light); }
   /* 补漏：密钥切换钮/模型胶囊浅底 */
   .ac-key-toggle,
-  .ac-model { background: #232325; color: #afb1b6; }
+  .ac-model { background: #232325; color: var(--mk-muted); }
   /* 硬编码浅色分隔线（卡内分区/健康表行）暗色适配 */
   .ac-health__head,
   .ac-health__row,
-  .ac-health__foot { border-color: #2a2b2d; }
+  .ac-health__foot { border-color: var(--wf-border-light); }
   .ac-models__empty { background: #19191a; border-color: #313235; }
 }
 </style>

@@ -196,7 +196,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   width: 100%;
   border-collapse: collapse;
   font-size: var(--mk-fs-micro);
-  background: #fff;
+  background: var(--mk-surface);
   border: 1px solid var(--mk-line);
   border-radius: 12px;
   overflow: hidden;
@@ -209,13 +209,13 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   padding: 7px 12px;
   width: 180px;
   background: #f8fafc;
-  border-right: 1px solid #f0f2f5;
+  border-right: 1px solid var(--mk-surface-3);
   vertical-align: top;
 }
 .sdp-kv td {
   padding: 7px 12px;
   color: #334155;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--mk-surface-3);
   word-break: break-all;
 }
 .sdp-kv tr:last-child th, .sdp-kv tr:last-child td { border-bottom: none; }
@@ -227,7 +227,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   padding: 10px 12px;
   display: grid;
   gap: 4px;
-  background: #fff;
+  background: var(--mk-surface);
 }
 .sdp-protocol header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sdp-protocol strong { font-size: var(--mk-fs-micro); font-weight: 600; color: #223252; }
@@ -253,7 +253,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   border-radius: 0 var(--mk-radius-sm) var(--mk-radius-sm) 0;
   font-size: var(--mk-fs-micro);
 }
-.sdp-rule__id { color: #8d6bff; font-size: var(--mk-fs-micro); font-weight: 700; }
+.sdp-rule__id { color: var(--wf-color-accent); font-size: var(--mk-fs-micro); font-weight: 700; }
 .sdp-rule__text { color: #263950; line-height: 1.55; }
 
 /* 4K：字号跟随壳层放大 */
@@ -274,11 +274,11 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
 }
 
 /* 暗色模式：sdp 面板/表格浅色硬编码收敛 */
-[data-theme='dark'] .sdp-kv { background: #1b1c1d; }
-[data-theme='dark'] .sdp-kv th { background: #202122; color: #afb1b6; }
+[data-theme='dark'] .sdp-kv { background: var(--wf-bg-subtle); }
+[data-theme='dark'] .sdp-kv th { background: #202122; color: var(--mk-muted); }
 [data-theme='dark'] .sdp-kv td { color: #e6edf7; }
 [data-theme='dark'] .sdp-kv th, [data-theme='dark'] .sdp-kv td { border-color: #313235; }
-[data-theme='dark'] .sdp-protocol { background: #1b1c1d; border-color: #313235; }
+[data-theme='dark'] .sdp-protocol { background: var(--wf-bg-subtle); border-color: #313235; }
 [data-theme='dark'] .sdp-protocol strong { color: #e6edf7; }
 [data-theme='dark'] .sdp-rule { background: rgba(141, 107, 255, 0.08); }
 [data-theme='dark'] .sdp-rule__text { color: #dbdbdd; }

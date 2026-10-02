@@ -1197,9 +1197,9 @@ const guideActions = computed(() => {
   const iconFor = (to?: string) => {
     if (to === 'path-detail') return { icon: svgLayers, bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)' };
     if (to === 'achievements') return { icon: svgMedal2, bg: 'color-mix(in srgb, var(--accent) 13%, transparent)', ink: 'var(--purple-ink)' };
-    if (to === 'create-goal') return { icon: svgPlus, bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: '#3593b5' };
+    if (to === 'create-goal') return { icon: svgPlus, bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: 'var(--wf-color-secondary-dark)' };
     if (to === 'learning-state') return { icon: svgBulb, bg: 'color-mix(in srgb, var(--amber) 16%, transparent)', ink: 'var(--amber-ink)' };
-    if (to === 'continue-learning') return { icon: svgPlay, bg: 'rgba(49,177,111,.12)', ink: 'var(--green-ink)' };
+    if (to === 'continue-learning') return { icon: svgPlay, bg: 'var(--wf-color-success-bg)', ink: 'var(--green-ink)' };
     return { icon: svgHome, bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)' };
   };
   const seen = new Set<string>();
@@ -1380,7 +1380,7 @@ function loadGuidance() {
 /* 2026-09-27 死 CSS 清理：.card-head / .muted 模板已无对应元素（卡头统一走 band__head） */
 .btn-ghost {
   padding: 10px 18px; border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line); background: var(--surface, #fff);
+  border: 1px solid var(--line); background: var(--surface);
   font-size: 14px; font-weight: 700; color: var(--muted);
   cursor: pointer;
 }
@@ -1443,10 +1443,10 @@ function loadGuidance() {
   align-items: center; gap: 12px;
   padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: 12px; /* 圆角阶梯：面板 */
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.sug__icon { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; }
+.sug__icon { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; }
 .sug__body strong { font-size: 13.5px; }
 .sug__body p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 .sug__cta {
@@ -1518,8 +1518,8 @@ function loadGuidance() {
   text-align: right; color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums;
 }
 /* 进度条原语（原型 wf-bar 267-268）：6px 轨（--bar-track）+ 蓝→青渐变填充 */
-.wf-bar { height: 6px; border-radius: 99px; background: var(--bar-track, color-mix(in srgb, var(--line) 60%, transparent)); overflow: hidden; }
-.wf-bar > i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+.wf-bar { height: 6px; border-radius: 999px; background: var(--bar-track, color-mix(in srgb, var(--line) 60%, transparent)); overflow: hidden; }
+.wf-bar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 
 /* ---------- 原侧栏（原型该屏单列流，无 300px 侧栏）：并入主列后不再吸顶——
    单列里 sticky 只会在滚动时把两张说明卡悬在内容上，压住下方的复习/掌握卡 ---------- */
@@ -1531,7 +1531,7 @@ function loadGuidance() {
 .pref span { font-size: 12.5px; color: color-mix(in srgb, var(--ink) 72%, var(--muted)); }
 .legend li { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: color-mix(in srgb, var(--ink) 72%, var(--muted)); line-height: 1.65; }
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
-.dot--green { background: #31b16f; }
+.dot--green { background: var(--wf-color-success); }
 .dot--blue { background: var(--blue); }
 .dot--purple { background: var(--accent); }
 .dot--amber { background: var(--amber); }
@@ -1557,7 +1557,7 @@ function loadGuidance() {
 .chart__retry:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
 .chart__empty {
   padding: 30px 0; text-align: center; color: var(--faint); font-size: 13px;
-  border: 1px dashed var(--line); border-radius: var(--mk-radius-xl); background: var(--canvas, #fafcff);
+  border: 1px dashed var(--line); border-radius: var(--mk-radius-xl); background: var(--canvas);
 }
 .sug--critical { border-color: color-mix(in srgb, var(--red) 35%, transparent); }
 .sug--warning { border-color: color-mix(in srgb, var(--amber) 35%, transparent); }
@@ -1600,11 +1600,11 @@ function loadGuidance() {
 .review__toggle .band__chev { margin-left: auto; }
 .review__body { margin-top: 10px; }
 .review__title { margin: 0; font-size: 15px; }
-.review__src { font-size: 12px; color: var(--faint, #6b7280); }
+.review__src { font-size: 12px; color: var(--faint); }
 .review__narrative { margin: 8px 0 0; font-size: 13px; line-height: 1.6; }
 .review__list { margin: 10px 0 0; padding-left: 16px; display: grid; gap: 8px; }
 .review__item strong { display: block; font-size: 13px; }
-.review__action { display: block; margin-top: 2px; font-size: 12px; color: var(--faint, #6b7280); }
+.review__action { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
 /* ---------- 学习调控（2026-09-27）：待确认 / 已自动处理 / 已执行的调整 ---------- */
 .ctl { display: grid; gap: 8px; }
 .ctl + .ctl { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
@@ -1615,7 +1615,7 @@ function loadGuidance() {
   display: grid; gap: 8px;
   padding: 13px 15px;
   border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
-  border-radius: 14px;
+  border-radius: 12px; /* 圆角阶梯：次级面板 */
   background: color-mix(in srgb, var(--blue) 4%, var(--surface));
 }
 .ctl-card__head { display: flex; align-items: center; gap: 8px; }
@@ -1629,13 +1629,13 @@ function loadGuidance() {
   font-size: 12.5px; color: var(--muted);
   padding: 9px 11px;
   border: 1px dashed var(--line); border-radius: var(--mk-radius-lg);
-  background: var(--canvas, #fafcff);
+  background: var(--canvas);
 }
 .ctl-card__confirm > span { flex: 1; min-width: 0; }
 .ctl-btn {
   min-height: 36px; padding: 0 14px;
   border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
-  background: var(--surface, #fff); color: var(--muted);
+  background: var(--surface); color: var(--muted);
   font-size: 12.5px; font-weight: 700; cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
@@ -1644,9 +1644,9 @@ function loadGuidance() {
   border-color: transparent;
   /* 实色 --blue（原蓝渐变退役），hover 改为加深底色而非 brightness 滤镜 */
   background: var(--blue);
-  color: #fff; font-weight: 800;
+  color: var(--text-on-primary); font-weight: 800;
 }
-.ctl-btn--primary:not(:disabled):hover { color: #fff; background: var(--wf-color-primary-dark); border-color: transparent; }
+.ctl-btn--primary:not(:disabled):hover { color: var(--text-on-primary); background: var(--wf-color-primary-dark); border-color: transparent; }
 .ctl-btn--primary:not(:disabled):active { transform: scale(0.98); }
 .ctl-btn--primary:disabled { filter: saturate(0.4); cursor: default; }
 .ctl-btn--ghost { border-color: transparent; background: transparent; }
@@ -1657,7 +1657,7 @@ function loadGuidance() {
 .dec__tag { font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: var(--mk-radius-pill); white-space: nowrap; }
 .dec__tag--blue { color: var(--blue-ink); background: color-mix(in srgb, var(--blue-deep) 12%, var(--surface)); }
 .dec__tag--purple { color: var(--purple-ink); background: color-mix(in srgb, var(--purple-ink) 12%, var(--surface)); }
-.dec__tag--cyan { color: #3593b5; background: color-mix(in srgb, var(--cyan) 12%, var(--surface)); }
+.dec__tag--cyan { color: var(--wf-color-secondary-dark); background: color-mix(in srgb, var(--cyan) 12%, var(--surface)); }
 .dec__tag--amber { color: var(--amber-ink); background: color-mix(in srgb, var(--amber-ink) 13%, var(--surface)); }
 .dec__tag--green { color: var(--green-ink); background: color-mix(in srgb, var(--green-ink) 12%, var(--surface)); }
 @media (max-width: 640px) {
@@ -1673,9 +1673,9 @@ function loadGuidance() {
 .chart__empty p { margin: 0; font-size: 12.5px; color: var(--faint); }
 /* 引导文案加载失败时的原地重试按钮 */
 .guide-retry {
-  margin-left: 8px; padding: 10px 12px; border-radius: var(--mk-radius-xl, 999px);
-  border: 1px solid var(--line); background: var(--surface, #fff);
-  font-size: 12.5px; font-weight: 700; color: var(--blue-deep, #1f57cc); cursor: pointer;
+  margin-left: 8px; padding: 10px 12px; border-radius: var(--mk-radius-xl);
+  border: 1px solid var(--line); background: var(--surface);
+  font-size: 12.5px; font-weight: 700; color: var(--blue-deep); cursor: pointer;
 }
 .guide-retry:disabled { opacity: .6; cursor: default; }
 </style>
@@ -1689,7 +1689,7 @@ function loadGuidance() {
 .ff-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
 .ff-dot--fitness { background: var(--blue); }
 .ff-dot--fatigue { background: var(--accent); }
-.ff-dot--lsb { background: #31b16f; }
+.ff-dot--lsb { background: var(--wf-color-success); }
 
 /* ff-chart 现在承载 y 轴刻度与阈值标签的绝对定位层（原型 wf-trend__chart 757-762）→ 必须是定位上下文 */
 .ff-chart { position: relative; width: 100%; }
@@ -1722,12 +1722,12 @@ function loadGuidance() {
 .ff-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .ff-line--fitness { stroke: var(--blue); }
 .ff-line--fatigue { stroke: var(--accent); }
-.ff-line--lsb { stroke: #31b16f; }
+.ff-line--lsb { stroke: var(--wf-color-success); }
 .ff-cursor { stroke: color-mix(in srgb, var(--ink) 20%, transparent); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-.ff-pt { stroke: #fff; stroke-width: 2; }
+.ff-pt { stroke: #fff; stroke-width: 2; /* 负荷图数据点白描边：钉在语义色点上，双主题恒白（无对应令牌，登记保留） */ }
 .ff-pt--fitness { fill: var(--blue); }
 .ff-pt--fatigue { fill: var(--accent); }
-.ff-pt--lsb { fill: #31b16f; }
+.ff-pt--lsb { fill: var(--wf-color-success); }
 
 .ff-info {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px;

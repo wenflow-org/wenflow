@@ -75,7 +75,7 @@ const labelShown = computed(() => (i: number) => i % props.labelEvery === 0 || i
   min-width: 0;
   border-radius: var(--mk-radius-sm);
 }
-.ovbars__col--today { background: color-mix(in srgb, var(--mk-blue) 6%, var(--mk-surface)); box-shadow: inset 0 0 0 1px rgba(47, 106, 224, 0.25); }
+.ovbars__col--today { background: color-mix(in srgb, var(--mk-blue) 6%, var(--mk-surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mk-blue) 25%, transparent); }
 .ovbars__num,
 .ovbars__label {
   height: 18px;

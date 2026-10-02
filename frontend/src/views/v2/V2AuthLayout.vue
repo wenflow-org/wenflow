@@ -100,8 +100,8 @@ const isDark = useIsDark();
   grid-template-columns: 1fr 1fr;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 20px;
-  box-shadow: 0 2px 4px rgba(23, 32, 51, 0.04), 0 12px 32px rgba(23, 32, 51, 0.07);
+  border-radius: var(--mk-radius-modal); /* 圆角阶梯：卡片/弹层 16 */
+  box-shadow: var(--mk-shadow-modal); /* 登录壳 = 规范模态档 */
   overflow: hidden;
 }
 
@@ -146,29 +146,29 @@ const isDark = useIsDark();
      现在改回纯色 --blue 仍达标——#2f6ae0 上白字对比度约 4.9:1（AA 需 4.5:1），
      渐变随之退役；下方 22% 蓝色发光投影也一并删掉。 */
   background: var(--blue);
-  color: #fff;
+  color: var(--wf-text-on-primary);
   padding: 9px 13px;
-  border-radius: 14px 14px 4px 14px;
+  border-radius: 16px 16px 4px 16px;
   max-width: 88%;
 }
 .demo__msg--ai { display: flex; gap: 9px; align-items: flex-start; }
 .demo__msg--ai > div {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 4px 14px 14px 14px;
+  border-radius: 4px 16px 16px 16px;
   padding: 9px 12px;
 }
 .demo__msg--ai p { margin: 0; color: var(--ink); }
 .demo__avatar {
   width: 24px; height: 24px; border-radius: var(--mk-radius-md);
-  background: #fff; border: 1px solid var(--line);
+  background: var(--surface); border: 1px solid var(--line);
   display: grid; place-items: center; flex: 0 0 auto;
 }
 .demo__avatar img { width: 16px; height: 16px; object-fit: contain; }
 .demo__chips { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .demo__chip {
-  font-size: 11px; font-weight: 600; color: var(--muted);
-  border: 1px solid var(--line); background: #fff;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  border: 1px solid var(--line); background: var(--surface);
   padding: 4px 10px; border-radius: var(--mk-radius-pill);
 }
 .demo__chip--on {
@@ -180,25 +180,25 @@ const isDark = useIsDark();
 .demo__panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px; /* 圆角阶梯：面板 */
   padding: 13px 15px;
   display: grid; gap: 9px;
 }
 .demo__panel-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
-.demo__panel-head span { font-size: 11px; font-weight: 800; color: var(--blue-deep); }
-.demo__panel-bar { height: 5px; border-radius: 99px; background: #edf1f8; overflow: hidden; }
-.demo__panel-bar i { display: block; width: 25%; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }.demo__panel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.demo__panel-head span { font-size: 12px; font-weight: 800; color: var(--blue-deep); }
+.demo__panel-bar { height: 5px; border-radius: 999px; background: var(--bar-track); overflow: hidden; }
+.demo__panel-bar i { display: block; width: 25%; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }.demo__panel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
 .demo__field { display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: start; }
-.demo__field small { display: block; font-size: 10.5px; color: var(--faint); font-weight: 700; }
+.demo__field small { display: block; font-size: 12px; color: var(--faint); font-weight: 700; }
 .demo__field strong { display: block; font-size: 12px; font-weight: 600; }
 .demo__field strong.dim { color: var(--faint); font-weight: 500; }
 .mark {
   width: 16px; height: 16px; border-radius: 50%;
-  border: 2px dashed #cfdaee;
+  border: 2px dashed color-mix(in srgb, var(--blue) 15%, var(--line));
   display: grid; place-items: center;
-  font-size: 9px; font-style: normal;
+  font-size: 12px; font-style: normal;
 }
-.mark--done { background: var(--mk-green-fill, #15803d); border: 0; color: #fff; }
+.mark--done { background: var(--mk-green-fill); border: 0; color: #fff; }
 .mark--asking { border: 2px solid var(--blue); }
 .demo__field--asking {
   background: color-mix(in srgb, var(--blue) 6%, transparent);
@@ -314,7 +314,7 @@ const isDark = useIsDark();
   .demo__panel-head span { font-size: 12px; }
   .demo__field small { font-size: 12px; }
   .demo__field strong { font-size: 13.5px; }
-  .mark { font-size: 11px; }
+  .mark { font-size: 12px; }
 }
 
 /* ---------- 超大屏（2K）：卡片与演示放大；2800+ 交由 v2.css zoom 机制，避免叠加 ---------- */
@@ -323,7 +323,7 @@ const isDark = useIsDark();
   .auth__main { gap: 36px; }
   .auth__card {
     width: min(1080px, 100%);
-    border-radius: 26px;
+    border-radius: var(--mk-radius-modal); /* 与基档同阶 16（4K 缩放交给 v2.css zoom 机制） */
   }
   .auth__form-side { padding: 36px 40px 28px; gap: 22px; }
   .auth__demo-side { padding: 36px 36px 38px; }
@@ -338,10 +338,9 @@ const isDark = useIsDark();
   .auth__back { font-size: 14px; }
 }
 
-/* ---------- 暗色模式：演示面板覆写 ---------- */
-[data-theme='dark'] .demo__avatar { background: var(--surface); }
-[data-theme='dark'] .demo__chip { background: var(--surface); }
-[data-theme='dark'] .demo__panel-bar { background: rgba(230, 237, 247, 0.12); }
+/* ---------- 暗色模式：演示面板覆写 ----------
+   底色/芯片已直引 var(--surface)、进度条轨道已引 var(--bar-track)，随主题自动翻转，
+   不再需要暗色覆写（原 rgba(230,237,247,.12) 字面量随之退役）。 */
 [data-theme='dark'] .mark { border-color: var(--line); }
 [data-theme='dark'] .auth__demo-side {
   background: color-mix(in srgb, var(--blue) 9%, var(--surface));

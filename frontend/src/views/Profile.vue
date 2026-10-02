@@ -243,7 +243,7 @@ async function handleSaveName() {
   height: 54px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--blue, #2f6ae0) 12%, transparent);
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
   font-size: 21px;
   font-weight: 800;
   display: flex;
@@ -282,14 +282,14 @@ async function handleSaveName() {
 /* 身份行（原型：学习者 · Lv.4 · 240 XP） */
 .profile-identity__role {
   font-size: 12.5px;
-  color: var(--faint, #67758f);
+  color: var(--faint);
 }
 
 /* 邮箱/注册时间/最近登录：原型账户段没有这一行（2044 只有身份行），
    属本仓多出的信息——降级为 12px faint 弱化小字，压在身份行下方不抢层级。 */
 .profile-meta {
   margin: 0;
-  color: var(--faint, #67758f);
+  color: var(--faint);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -305,10 +305,10 @@ async function handleSaveName() {
 }
 
 .profile-kpi {
-  background: var(--surface, #fff);
-  border: 1px solid var(--line, #e3e9f4);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal, 16px);
-  box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
+  box-shadow: var(--shadow-sm);
   padding: 13px 8px;
   display: grid;
   justify-items: center;
@@ -321,13 +321,13 @@ async function handleSaveName() {
   font-weight: 800;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-  color: var(--ink, #172033);
+  color: var(--ink);
 }
 
 .profile-kpi span {
   /* 原型为 11px，本仓门禁下限 12px（--mk-fs-micro 档即 12px 起） */
   font-size: 12px;
-  color: var(--faint, #67758f);
+  color: var(--faint);
 }
 
 /* 快捷入口列表（原型 wf-list：行 52px + 行顶分割线 + 尾部 chevron） */
@@ -343,10 +343,10 @@ async function handleSaveName() {
   gap: 11px;
   min-height: 52px;
   padding: 4px 2px;
-  border-top: 1px solid var(--line, #e3e9f4);
+  border-top: 1px solid var(--line);
   font-size: 14px;
   font-weight: 600;
-  color: var(--ink, #172033);
+  color: var(--ink);
   text-decoration: none;
   transition: color 0.14s ease;
 }
@@ -356,18 +356,18 @@ async function handleSaveName() {
 }
 
 .profile-menu__item svg {
-  color: var(--muted, #5b6577);
+  color: var(--muted);
   flex: none;
 }
 
 .profile-menu__item:hover {
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
 }
 
 .profile-menu__chev {
   margin-left: auto;
   font-size: 18px;
-  color: var(--faint, #8492ab);
+  color: var(--faint);
 }
 
 @media (max-width: 1100px) {

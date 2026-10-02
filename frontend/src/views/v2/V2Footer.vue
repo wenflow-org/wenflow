@@ -41,8 +41,8 @@ const version = appVersion;
 .v2footer {
   margin-top: auto;
   /* 顶部柔和渐变分隔线：白底向浅灰过渡 */
-  border-top: 1px solid var(--line, rgba(227, 233, 244, 0.55));
-  background: linear-gradient(180deg, color-mix(in srgb, var(--surface, #fff) 50%, transparent), color-mix(in srgb, var(--surface, #fff) 75%, transparent));
+  border-top: 1px solid var(--line);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 50%, transparent), color-mix(in srgb, var(--surface) 75%, transparent));
 }
 .v2footer__inner {
   max-width: 1180px;
@@ -64,33 +64,33 @@ const version = appVersion;
 .v2footer__logo {
   /* 与右侧两行品牌文字齐高：name 13×1.2 + tag 11×1.3 ≈ 30px */
   width: 30px; height: 30px; object-fit: contain;
-  border-radius: 9px; flex-shrink: 0;
+  border-radius: 8px; flex-shrink: 0; /* 圆角阶梯：控件档 8 */
 }
 .v2footer__brand-text { display: grid; gap: 0; min-width: 0; }
-.v2footer__name { font-size: 13px; font-weight: 700; color: var(--ink, #172033); line-height: 1.2; }
+.v2footer__name { font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.2; }
 .v2footer__tag {
-  font-size: 12px; color: var(--faint, #8492ab);
+  font-size: 12px; color: var(--faint);
   line-height: 1.3;
 }
 .v2footer__links { display: inline-flex; align-items: center; gap: 12px; }
 .v2footer__link {
   position: relative;
-  font-size: 12.5px; color: var(--muted, #5b6577);
+  font-size: 12.5px; color: var(--muted);
   text-decoration: none;
   padding: 8px 3px;
   transition: color 0.15s ease;
 }
 .v2footer__link::after {
   content: ''; position: absolute; left: 0; right: 100%; bottom: 4px;
-  height: 2px; border-radius: 2px;
-  background: var(--blue-deep, #1f57cc);
+  height: 2px; border-radius: 4px; /* 圆角阶梯下限：内芯 4 */
+  background: var(--blue-deep);
   transition: right 0.18s ease;
 }
-.v2footer__link:hover { color: var(--blue-deep, #1f57cc); }
+.v2footer__link:hover { color: var(--blue-deep); }
 .v2footer__link:hover::after { right: 0; }
 .v2footer__meta {
   display: inline-flex; align-items: center; gap: 8px;
-  font-size: 12px; color: var(--faint, #8492ab);
+  font-size: 12px; color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
 .v2footer__divider { opacity: 0.5; }

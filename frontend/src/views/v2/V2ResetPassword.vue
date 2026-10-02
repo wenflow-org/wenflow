@@ -187,7 +187,7 @@ function goLogin() {
 }
 .field__input:focus {
   border-color: color-mix(in srgb, var(--blue) 55%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent);
+  box-shadow: var(--mk-focus-ring); /* 全站唯一一圈 */
 }
 .field__error { font-size: 12px; color: var(--red-ink); font-weight: 600; }
 
@@ -256,5 +256,5 @@ function goLogin() {
   cursor: pointer;
   display: grid; place-items: center;
 }
-.field__eye:hover { color: var(--blue-deep); background: rgba(52, 120, 246, 0.07); }
+.field__eye:hover { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 7%, transparent); }
 </style>

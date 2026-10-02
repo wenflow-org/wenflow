@@ -413,7 +413,7 @@ main {
 /* 主按钮：实心品牌蓝，不再用 linear-gradient(135deg, …)；
    原先的 0 14px 30px 蓝色投影属于彩色光晕，一并退休。 */
 .hn-btn--primary {
-  color: #fff;
+  color: var(--text-on-primary);
   background: var(--blue);
   transition: transform 0.2s var(--ease), background 0.2s var(--ease);
 }
@@ -515,7 +515,7 @@ main {
   color: var(--ink);
 }
 .hn-chip {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
@@ -536,7 +536,7 @@ main {
   max-width: 92%;
   padding: 10px 13px;
   border-radius: 16px 16px 4px 16px;
-  color: #fff;
+  color: var(--text-on-primary);
   /* 用户气泡同样退掉渐变，改实心品牌蓝（主色实心化是全站口径） */
   background: var(--blue);
 }
@@ -573,7 +573,7 @@ main {
   margin-top: 8px;
 }
 .hn-tag {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--muted);
   border: 1px solid var(--line);
@@ -597,7 +597,7 @@ main {
   border: 1px solid color-mix(in srgb, var(--blue) 18%, transparent);
 }
 .hn-stage__result small {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   color: var(--blue-deep);
 }
@@ -686,7 +686,7 @@ main {
 }
 .hn-stage__prog {
   height: 6px;
-  border-radius: 99px;
+  border-radius: 999px;
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   overflow: hidden;
   margin-bottom: 12px;
@@ -695,7 +695,7 @@ main {
   display: block;
   height: 100%;
   width: var(--w, 0);
-  border-radius: 99px;
+  border-radius: 999px;
   background: linear-gradient(90deg, var(--blue), var(--cyan));
 }
 /* hero 进度条随入场充能；desk 卡片的进度条随 v-reveal 充能 */
@@ -721,7 +721,7 @@ main {
   border-radius: var(--mk-radius-pill);
   font-size: 13px;
   font-weight: 800;
-  color: #fff;
+  color: var(--text-on-primary);
   /* 演示卡片里的伪按钮：主色实心化，不再用渐变 */
   background: var(--blue);
 }
@@ -777,7 +777,7 @@ main {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--text-on-primary);
   font-size: 20px;
   font-weight: 900;
   /* 圆形箭头徽标：品牌蓝实心化，不再用渐变 */
@@ -877,7 +877,7 @@ main {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--text-on-primary);
   font-size: 14px;
   font-weight: 900;
   /* 步骤序号圆牌：品牌蓝实心化，不再用渐变 */
@@ -895,7 +895,7 @@ main {
 }
 .hn-flow__grid em {
   font-style: normal;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 8%, transparent);
@@ -1009,7 +1009,7 @@ main {
   border: 1px solid var(--line);
 }
 .hn-state__metrics span {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   color: var(--faint);
 }

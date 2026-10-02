@@ -698,7 +698,7 @@ const govMetaTitle = computed(() =>
 .orch-stage-tab:hover { border-color: color-mix(in srgb, var(--mk-blue) 45%, var(--mk-line)); }
 .orch-stage-tab.is-active {
   border-color: var(--mk-blue);
-  background: rgba(47, 106, 224, 0.08);
+  background: color-mix(in srgb, var(--mk-blue) 8%, transparent);
   box-shadow: inset 0 0 0 1px var(--mk-blue);
 }
 .orch-stage-tab__name { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); }
@@ -731,10 +731,10 @@ const govMetaTitle = computed(() =>
 html[data-theme='dark'] {
 
   /* 阶段 tab 大分段卡 */
-  .orch-stage-tab { background: #19191a; border-color: #2a2b2d; }
+  .orch-stage-tab { background: #19191a; border-color: var(--wf-border-light); }
   .orch-stage-tab:hover { border-color: color-mix(in srgb, var(--mk-blue) 45%, #313235); }
   .orch-stage-tab.is-active {
-    background: rgba(91, 141, 239, 0.16);
+    background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent);
     border-color: var(--mk-blue);
     
   }

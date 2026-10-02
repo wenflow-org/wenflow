@@ -168,7 +168,7 @@ onMounted(() => void loadSandboxView());
 }
 .sbx__groupname { font-size: var(--mk-fs-body); color: var(--mk-ink, #1a2a44); }
 .sbx__groupcount { font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); }
-.sbx__agent { margin-bottom: 10px; border: 1px solid var(--mk-line, #e6ebf4); border-radius: 12px; overflow: hidden; background: var(--mk-surface, #fff); box-shadow: var(--mk-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06)); }
+.sbx__agent { margin-bottom: 10px; border: 1px solid var(--mk-line, #e6ebf4); border-radius: 12px; overflow: hidden; background: var(--mk-surface, #fff); box-shadow: var(--mk-shadow-sm); }
 .sbx__agenthead { padding: 10px 14px; background: #fafbfd; border-bottom: 1px solid var(--mk-line, #e6ebf4); display: flex; align-items: baseline; gap: 10px; cursor: pointer; user-select: none; list-style: none; }
 .sbx__agenthead::-webkit-details-marker { display: none; }
 .sbx__agenthead::before {
@@ -195,8 +195,8 @@ onMounted(() => void loadSandboxView());
 .sbx__type { color: var(--mk-faint, var(--mk-faint-soft)); flex-shrink: 0; }
 .sbx__src { margin-left: auto; flex-shrink: 0; padding: 0 8px; border-radius: 999px; font-size: var(--mk-fs-micro); font-weight: 700; }
 .sbx__src--routing-output { background: #e5f0ff; color: var(--mk-blue, #2f6ae0); }
-.sbx__src--routing-channel { background: #e8f7ef; color: #15803d; }
-.sbx__handoff { min-width: 0; padding: 0 8px; border-radius: 999px; background: #eef5ff; color: var(--mk-blue, #2f6ae0); font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sbx__src--routing-channel { background: var(--mk-badge-visible-bg); color: var(--mk-green); }
+.sbx__handoff { min-width: 0; padding: 0 8px; border-radius: 999px; background: var(--mk-hover-surface); color: var(--mk-blue, #2f6ae0); font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sbx__empty { padding: 20px; color: var(--mk-faint, var(--mk-faint-soft)); text-align: center; }
 
 @media (min-width: 2000px) {
@@ -224,8 +224,8 @@ onMounted(() => void loadSandboxView());
 /* 暗色模式（D1 补完）：沙盘契约（语义色块转暗色系） */
 html[data-theme='dark'] {
   .sbx__agenthead { background: #19191a; }
-  .sbx__src--routing-output { background: rgba(91, 141, 239, 0.18); color: #9db8f5; }
+  .sbx__src--routing-output { background: color-mix(in srgb, var(--wf-color-primary) 18%, transparent); color: var(--wf-color-primary-light); }
   .sbx__src--routing-channel { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
-  .sbx__handoff { background: rgba(91, 141, 239, 0.16); color: #9db8f5; }
+  .sbx__handoff { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--wf-color-primary-light); }
 }
 </style>

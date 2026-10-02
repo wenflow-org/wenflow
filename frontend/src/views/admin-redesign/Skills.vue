@@ -951,7 +951,7 @@ const fallbackHint = computed(() => {
 
 /* ================= 暗色模式（D1 补完）：Skill 运行 ================= */
 html[data-theme='dark'] {
-  .sk-agent-tag { background: #2a2b2d; color: #afb1b6; }
+  .sk-agent-tag { background: var(--wf-bg-hover); color: var(--mk-muted); }
 }
 
 </style>

@@ -727,8 +727,8 @@ watch(
   animation: mshell-alarm-pulse 1.6s ease-in-out infinite;
 }
 @keyframes mshell-alarm-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.32); }
-  50% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-red-fill) 32%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-red-fill) 0%, transparent); }
 }
 
 /* 左侧底部：收起/展开导航一行（原型 .side__foot = 单个 nav__item）。
@@ -901,7 +901,7 @@ watch(
 .mshell__search-input::placeholder { color: var(--mk-faint); }
 .mshell__search-input:focus {
   border-color: color-mix(in srgb, var(--mk-blue, #2f6ae0) 45%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue, #2f6ae0) 12%, transparent);
+  box-shadow: var(--mk-focus-ring);
 }
 .mshell__search-kbd {
   position: absolute;
@@ -926,7 +926,7 @@ watch(
   border: 1px solid var(--mk-line, #e6ebf4);
   border-radius: var(--mk-radius-lg);
   background: var(--mk-surface, #fff);
-  box-shadow: 0 16px 40px rgba(22, 34, 55, 0.14);
+  box-shadow: var(--mk-shadow-pop);
   display: grid;
   gap: 2px;
   z-index: 60;
@@ -981,7 +981,7 @@ watch(
   border: 1px solid var(--mk-line, #e6ebf4);
   border-radius: var(--mk-radius-lg);
   background: var(--mk-surface, #fff);
-  box-shadow: 0 16px 40px rgba(22, 34, 55, 0.14);
+  box-shadow: var(--mk-shadow-pop);
   display: grid;
   gap: 2px;
   z-index: 60;
@@ -1146,22 +1146,22 @@ html[data-theme='dark'] {
   /* 侧栏夹在 bg 与 surface 之间（bg < side < card < 表头条带）。原 #19191a 距 bg 仅 5 级，
      卡片抬到 #202124 后侧栏反而比内容更"浅"，主次颠倒。 */
   .mshell__side { background: var(--mk-side-bg); border-right-color: var(--mk-side-line); }
-  .mshell__pinned { border-bottom-color: #36373c; }
+  .mshell__pinned { border-bottom-color: var(--mk-line); }
   /* 分组标签（次级文字）：走查实测 #808389 在侧栏底 --mk-side-bg(#1b1c1f) 上对比度 4.43:1，
      未达 WCAG 4.5:1。同色相等量提亮为 #898d94（WCAG 公式复算 5.11:1），达标且不明显破坏次级层级。 */
   .mshell__caption { color: #898d94; }
   .mshell__caption--active { color: var(--mk-accent-deep); }
-  .mshell__item-badge--alarm { background: rgba(220, 38, 38, 0.18); color: #fca5a5; }
+  .mshell__item-badge--alarm { background: color-mix(in srgb, var(--mk-red-fill) 18%, transparent); color: var(--wf-color-danger); }
   .mshell__item:hover { background: var(--mk-side-hover); color: var(--mk-ink); }
   /* 选中态与亮色同构：整行浅蓝胶囊 + 主色字（左条/图标芯片已随扁平导航撤除） */
-  .mshell__item--active { background: rgba(91, 141, 239, 0.1); color: var(--mk-accent-deep); }
+  .mshell__item--active { background: color-mix(in srgb, var(--wf-color-primary) 10%, transparent); color: var(--mk-accent-deep); }
   .mshell__item-badge { background: var(--mk-side-inset); color: var(--mk-faint); }
-  .mshell__item--active .mshell__item-badge { background: rgba(91, 141, 239, 0.22); color: var(--mk-accent-deep); }
+  .mshell__item--active .mshell__item-badge { background: color-mix(in srgb, var(--wf-color-primary) 22%, transparent); color: var(--mk-accent-deep); }
   .mshell__foot { border-top-color: var(--mk-side-hover); }
   .mshell__collapse { color: var(--mk-muted); }
   .mshell__collapse:hover { background: var(--mk-side-hover); color: var(--mk-accent-deep); }
   .mshell__user-avatar { background: var(--mk-side-inset); color: var(--mk-accent-deep); }
-  .mshell__user-name { color: #efeff0; }
+  .mshell__user-name { color: var(--mk-ink); }
 }
 
 /* ===== 移动端抽屉（原型 ≤768 判例：menu-btn + 滑入侧栏 + navscrim）=====
@@ -1195,7 +1195,7 @@ html[data-theme='dark'] {
     transition: transform 0.24s ease;
     z-index: 210;
   }
-  .mshell[data-navopen='true'] .mshell__side { transform: none; box-shadow: 0 18px 48px rgba(22, 34, 55, 0.25); }
+  .mshell[data-navopen='true'] .mshell__side { transform: none; box-shadow: var(--mk-shadow-pop); }
   /* 抽屉态下折叠（强制/手动）不生效：恢复完整标签导航 */
   .mshell[data-collapsed='true'] { grid-template-columns: minmax(0, 1fr); }
   .mshell[data-collapsed='true'] .mshell__item-label,

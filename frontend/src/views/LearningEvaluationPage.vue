@@ -571,8 +571,8 @@ const exportImage = async () => {
     const canvas = await html2canvas(reportRef.value, {
       scale: 2,
       useCORS: true,
-      // 取当前主题画布色（暗色下导出也跟随暗色）
-      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--canvas').trim() || '#f3f6fb',
+      // 取当前主题画布色（暗色下导出也跟随暗色）；--canvas 全局必有值，去掉了旧 hex 死兜底
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--canvas').trim(),
       logging: false,
     });
     const link = document.createElement('a');
@@ -693,11 +693,11 @@ onUnmounted(() => {
 .evaluation-degraded {
   padding: 14px 18px;
   /* ≤1100 密度在下方媒体块覆写 */
-  border: 1px solid var(--color-warning-border, rgba(244, 170, 70, 0.24));
-  border-left: 4px solid var(--color-warning, #f4aa46);
+  border: 1px solid var(--color-warning-border);
+  border-left: 4px solid var(--color-warning);
   border-radius: 12px;
-  background: var(--color-warning-bg, rgba(244, 170, 70, 0.08));
-  color: var(--text-primary, #172033);
+  background: var(--color-warning-bg);
+  color: var(--text-primary);
 }
 
 .evaluation-degraded strong {
@@ -708,7 +708,7 @@ onUnmounted(() => {
 
 .evaluation-degraded p {
   margin: 0;
-  color: var(--text-secondary, #607086);
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
@@ -722,7 +722,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 16px;
   padding: 20px 28px;
-  border: 1px solid var(--line, rgba(23, 32, 51, 0.06));
+  border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
   box-shadow: var(--wf-shadow-raised);
@@ -776,7 +776,7 @@ onUnmounted(() => {
   margin: 0;
   font-size: clamp(22px, 2.8vw, 32px);
   font-weight: 700;
-  color: var(--ink, #172033);
+  color: var(--ink);
   letter-spacing: -0.02em;
 }
 
@@ -790,7 +790,7 @@ onUnmounted(() => {
   justify-items: center;
   gap: 12px;
   font-size: 15px;
-  color: var(--muted, #7a8599);
+  color: var(--muted);
 }
 
 .evaluation-error__actions {
@@ -801,7 +801,7 @@ onUnmounted(() => {
 .spin {
   animation: spin 1s linear infinite;
   font-size: 36px;
-  color: var(--accent, #3478f6);
+  color: var(--accent);
 }
 
 /* 加载骨架：仿报告版式（头部 + 指标卡 + 内容卡），避免加载期白板 */
@@ -814,8 +814,8 @@ onUnmounted(() => {
 .evaluation-spinner {
   width: 14px; height: 14px;
   border-radius: 50%;
-  border: 2px solid rgba(52, 120, 246, 0.2);
-  border-top-color: var(--blue, #2f6ae0);
+  border: 2px solid color-mix(in srgb, var(--blue) 20%, transparent);
+  border-top-color: var(--blue);
   animation: evaluation-spin 0.8s linear infinite;
   flex: none;
 }
@@ -832,7 +832,7 @@ onUnmounted(() => {
   animation: eval-shimmer 1.4s ease infinite;
 }
 .evaluation-loading .sk-bar { display: block; height: 14px; }
-.evaluation-loading__head .sk-bar--btn { width: 84px; height: 34px; border-radius: 10px; }
+.evaluation-loading__head .sk-bar--btn { width: 84px; height: 34px; border-radius: 8px; }
 .evaluation-loading__summary i { height: 64px; border-radius: 12px; }
 @keyframes eval-shimmer {
   0% { background-position: 200% 0; }
@@ -868,7 +868,7 @@ onUnmounted(() => {
 .evaluation-shell :deep(.completion-title) {
   font-size: 20px;
   font-weight: 700;
-  color: var(--ink, #172033);
+  color: var(--ink);
 }
 
 .evaluation-shell :deep(.completion-summary) {
@@ -883,7 +883,7 @@ onUnmounted(() => {
 .evaluation-shell :deep(.summary-label) {
   font-size: 12px;
   font-weight: 600;
-  color: var(--muted, #7a8599);
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 4px;
@@ -892,13 +892,13 @@ onUnmounted(() => {
 .evaluation-shell :deep(.summary-value) {
   font-size: 15px;
   font-weight: 700;
-  color: var(--ink, #172033);
+  color: var(--ink);
 }
 
 .evaluation-shell :deep(.completion-section) {
   padding: 18px 20px;
   background: var(--surface);
-  border: 1px solid var(--line, rgba(23, 32, 51, 0.06));
+  border: 1px solid var(--line);
   border-radius: 12px;
   margin-bottom: 14px;
 }
@@ -906,19 +906,19 @@ onUnmounted(() => {
 .evaluation-shell :deep(.section-title) {
   font-size: 15px;
   font-weight: 700;
-  color: var(--ink, #172033);
+  color: var(--ink);
   margin-bottom: 12px;
 }
 
 .evaluation-shell :deep(.section-content) {
   font-size: 14px;
   line-height: 1.8;
-  color: var(--muted, #3d4a5c);
+  color: var(--muted);
 }
 
 .evaluation-shell :deep(.section-hint) {
   font-size: 13px;
-  color: var(--muted, #7a8599);
+  color: var(--muted);
 }
 
 .evaluation-shell :deep(.metrics-grid) {
@@ -939,7 +939,7 @@ onUnmounted(() => {
 .evaluation-shell :deep(.metric-label) {
   font-size: 12px;
   font-weight: 600;
-  color: var(--muted, #7a8599);
+  color: var(--muted);
 }
 
 .evaluation-shell :deep(.metric-badge) {
@@ -950,30 +950,30 @@ onUnmounted(() => {
 }
 
 .evaluation-shell :deep(.metric-card--good .metric-badge) {
-  background: rgba(49, 177, 111, 0.1);
-  color: var(--green, #1a7a42);
+  background: var(--wf-color-success-bg);
+  color: var(--green);
 }
 
 .evaluation-shell :deep(.metric-card--normal .metric-badge) {
-  background: rgba(52, 120, 246, 0.08);
-  color: var(--blue-deep, #1f57cc);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  color: var(--blue-deep);
 }
 
 .evaluation-shell :deep(.metric-card--warn .metric-badge) {
-  background: rgba(232, 100, 80, 0.08);
-  color: var(--red, #b44020);
+  background: color-mix(in srgb, var(--wf-color-danger) 8%, transparent);
+  color: var(--red);
 }
 
 .evaluation-shell :deep(.metric-value) {
   font-size: 26px;
   font-weight: 800;
-  color: var(--ink, #172033);
+  color: var(--ink);
   margin-top: 8px;
 }
 
 .evaluation-shell :deep(.metric-desc) {
   font-size: 12px;
-  color: var(--muted, #7a8599);
+  color: var(--muted);
   line-height: 1.5;
   margin-top: 6px;
 }
@@ -992,25 +992,25 @@ onUnmounted(() => {
 .evaluation-shell :deep(.knowledge-name) {
   font-size: 14px;
   font-weight: 700;
-  color: var(--ink, #172033);
+  color: var(--ink);
 }
 
 .evaluation-shell :deep(.knowledge-evidence) {
   font-size: 13px;
-  color: var(--muted, #7a8599);
+  color: var(--muted);
   line-height: 1.6;
 }
 
 .evaluation-shell :deep(.ordered-list) {
   font-size: 14px;
   line-height: 1.75;
-  color: var(--muted, #3d4a5c);
+  color: var(--muted);
 }
 
 .evaluation-shell :deep(.evaluation-line) {
   font-size: 14px;
   line-height: 1.75;
-  color: var(--muted, #3d4a5c);
+  color: var(--muted);
 }
 
 .evaluation-shell :deep(.advisory-section) {
@@ -1026,7 +1026,7 @@ onUnmounted(() => {
 
 .evaluation-transcript-card {
   padding: 24px 28px;
-  border: 1px solid var(--line, rgba(23, 32, 51, 0.06));
+  border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface);
   box-shadow: var(--wf-shadow-raised);
@@ -1045,7 +1045,7 @@ onUnmounted(() => {
   margin: 0 0 6px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1054,7 +1054,7 @@ onUnmounted(() => {
   margin: 0;
   font-size: 22px;
   font-weight: 700;
-  color: var(--ink, #172033);
+  color: var(--ink);
 }
 
 .evaluation-transcript-card__meta {
@@ -1064,7 +1064,7 @@ onUnmounted(() => {
   padding: 0 12px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
-  color: var(--muted, #57657a);
+  color: var(--muted);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -1074,7 +1074,7 @@ onUnmounted(() => {
   margin: 0;
   font-size: 13px;
   line-height: 1.7;
-  color: var(--muted, #7a8599);
+  color: var(--muted);
 }
 
 .evaluation-transcript-list {
@@ -1095,7 +1095,7 @@ onUnmounted(() => {
   border: 1px dashed var(--line);
   border-radius: 12px;
   background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
-  color: var(--blue-deep, #1f57cc);
+  color: var(--blue-deep);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -1139,8 +1139,8 @@ onUnmounted(() => {
 
 .evaluation-transcript-item--user {
   justify-self: end;
-  background: color-mix(in srgb, var(--accent, #3478f6) 8%, var(--surface));
-  border-color: color-mix(in srgb, var(--blue, #2f6ae0) 22%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--blue) 22%, transparent);
 }
 
 .evaluation-transcript-item__meta {
@@ -1153,25 +1153,25 @@ onUnmounted(() => {
 .evaluation-transcript-item__meta strong {
   font-size: 13px;
   font-weight: 700;
-  color: var(--ink, #172033);
+  color: var(--ink);
 }
 
 .evaluation-transcript-item__meta span {
   font-size: 12px;
-  color: var(--muted, #7a8599);
+  color: var(--muted);
 }
 
 .evaluation-transcript-item__body {
   font-size: 14px;
   line-height: 1.8;
-  color: var(--muted, #3d4a5c);
+  color: var(--muted);
 }
 
 .evaluation-transcript-empty {
   padding: 20px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
-  color: var(--muted, #7a8599);
+  color: var(--muted);
   font-size: 14px;
   text-align: center;
 }
@@ -1212,7 +1212,7 @@ onUnmounted(() => {
   .evaluation-head {
     padding: 12px 16px;
     gap: 10px;
-    border-radius: 14px;
+    border-radius: 16px;
   }
 
   .evaluation-head h1 {
@@ -1619,7 +1619,7 @@ onUnmounted(() => {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
-  color: var(--muted, #5b6577);
+  color: var(--muted);
   font-size: 12.5px;
   font-weight: 700;
   font-family: inherit;
@@ -1632,8 +1632,8 @@ onUnmounted(() => {
   border-color: transparent;
   /* 主按钮实心化：去掉 linear-gradient 与配套的蓝色发光投影，
      层级由浮条自身的 overlay 投影承担，按钮不再自己发光。 */
-  background: var(--blue, #2f6ae0);
-  color: #fff;
+  background: var(--blue);
+  color: var(--text-on-primary);
 }
 
 /* ---------- 页内目录（批10：≥1440 宽屏独占报告右侧空地；窄屏不渲染占位） ---------- */
@@ -1654,19 +1654,19 @@ onUnmounted(() => {
   padding: 7px 10px;
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--muted, #5b6577);
+  color: var(--muted);
   background: none;
   border: 0;
-  border-left: 2px solid var(--line, #e3e9f4);
-  border-radius: 0 var(--mk-radius-sm, 6px) var(--mk-radius-sm, 6px) 0;
+  border-left: 2px solid var(--line);
+  border-radius: 0 var(--mk-radius-sm) var(--mk-radius-sm) 0;
   cursor: pointer;
   font-family: inherit;
 }
-.eval-toc__link:hover { color: var(--blue-deep, #1f57cc); }
+.eval-toc__link:hover { color: var(--blue-deep); }
 .eval-toc__link.is-active {
-  color: var(--blue-deep, #1f57cc);
-  border-left-color: var(--blue, #2f6ae0);
-  background: color-mix(in srgb, var(--blue, #2f6ae0) 7%, transparent);
+  color: var(--blue-deep);
+  border-left-color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 7%, transparent);
 }
 /* 锚点落点留出呼吸空间 */
 #sec-topic, #sec-progress, #sec-perf, #sec-longterm, #sec-knowledge,

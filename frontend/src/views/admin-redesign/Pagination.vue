@@ -151,7 +151,7 @@ watch(
   cursor: pointer;
   transition: border-color 0.12s;
 }
-.mk-pagination__size:hover { border-color: rgba(47, 106, 224, 0.4); }
+.mk-pagination__size:hover { border-color: color-mix(in srgb, var(--mk-blue) 40%, transparent); }
 .mk-pagination__nav {
   display: flex;
   align-items: center;

@@ -492,8 +492,8 @@ void reload()
   cursor: pointer;
   width: 100%;
 }
-.nt-candidate:hover { border-color: rgba(47, 106, 224, 0.4); }
-.nt-candidate--on { border-color: var(--mk-blue); box-shadow: 0 0 0 2px rgba(47, 106, 224, 0.12); }
+.nt-candidate:hover { border-color: color-mix(in srgb, var(--mk-blue) 40%, transparent); }
+.nt-candidate--on { border-color: var(--mk-blue); box-shadow: 0 0 0 2px color-mix(in srgb, var(--mk-blue) 12%, transparent); }
 .nt-candidate strong { font-size: var(--mk-fs-micro); }
 .nt-none { color: var(--mk-faint); font-size: var(--mk-fs-micro); text-align: center; padding: 10px 0; }
 
@@ -519,7 +519,7 @@ void reload()
 
 /* ================= 暗色模式（D1 补完）：站内通知 ================= */
 html[data-theme='dark'] {
-  .nt-row--unread { background: rgba(91, 141, 239, 0.08); }
-  .nt-boundary { background: #202122; border-color: #313235; color: #a2a5a9; }
+  .nt-row--unread { background: color-mix(in srgb, var(--wf-color-primary) 8%, transparent); }
+  .nt-boundary { background: #202122; border-color: #313235; color: var(--mk-muted); }
 }
 </style>

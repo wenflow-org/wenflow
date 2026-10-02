@@ -538,7 +538,7 @@ async function submit() {
 .faw__preview-meta { font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); }
 /* 代码块走全局 --mk-code-* token（原 #0f172a/#dbeafe 硬编码已归 token，明暗两档自动切换） */
 .faw__preview-code { margin: 0; padding: 12px; background: var(--mk-code-bg); color: var(--mk-code-fg); font-size: var(--mk-fs-micro); line-height: 1.55; overflow: auto; max-height: 240px; }
-.faw__msg { margin: 0; padding: 9px 12px; border: 1px solid rgba(47, 106, 224, 0.35); border-radius: var(--mk-radius-xl); background: var(--mk-blue-bg); color: var(--mk-blue, #2f6ae0); font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1.5; white-space: pre-wrap; }
+.faw__msg { margin: 0; padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--mk-blue) 35%, transparent); border-radius: var(--mk-radius-xl); background: var(--mk-blue-bg); color: var(--mk-blue, #2f6ae0); font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1.5; white-space: pre-wrap; }
 .faw__msg.is-err { border-color: rgba(220, 38, 38, 0.4); background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .faw__result { border: 1px solid rgba(21, 128, 61, 0.3); border-radius: var(--mk-radius-xl); padding: 12px 14px; background: var(--mk-green-bg, #ecfdf5); }
 .faw__result-title { color: var(--mk-green, #15803d); font-size: var(--mk-fs-body); }
@@ -575,7 +575,7 @@ async function submit() {
 /* 暗色模式：半透明蓝的边/字提亮（背景已由 --mk-blue-bg / --mk-bg token 自动翻转；
    Teleport 覆盖层不继承页面暗色，但 html[data-theme] 选择器仍命中） */
 html[data-theme='dark'] .faw__msg {
-  border-color: rgba(91, 141, 239, 0.4);
+  border-color: color-mix(in srgb, var(--wf-color-primary) 40%, transparent);
   color: var(--mk-accent-deep);
 }
 </style>

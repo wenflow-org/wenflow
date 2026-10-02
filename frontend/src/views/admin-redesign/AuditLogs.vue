@@ -765,13 +765,13 @@ function exportCurrentPage() {
   margin-right: 7px;
   vertical-align: middle;
 }
-.log-method--get { background: #eff6ff; color: #1d4ed8; }
-.log-method--post { background: #ecfdf5; color: #047857; }
-.log-method--put { background: #fffbeb; color: #b45309; }
+.log-method--get { background: var(--mk-blue-bg); color: #1d4ed8; }
+.log-method--post { background: var(--mk-green-bg); color: #047857; }
+.log-method--put { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .log-method--patch { background: #f5f3ff; color: #6d28d9; }
-.log-method--delete { background: #fef2f2; color: #b91c1c; }
+.log-method--delete { background: var(--mk-red-bg); color: var(--mk-red-strong); }
 .log-method--options,
-.log-method--head { background: #f1f5f9; color: #475569; }
+.log-method--head { background: var(--mk-badge-virtual-bg); color: #475569; }
 /* 动作名与方法之间的分隔符：避免「POST探测模型能力」这类无分隔粘连（复制文本也不再黏在一起） */
 .log-action-sep {
   display: inline-block;
@@ -838,7 +838,7 @@ function exportCurrentPage() {
   font-family: inherit;
 }
 .al-fails__chip--on { border-color: var(--mk-red, #dc2626); color: var(--mk-red, #dc2626); }
-.al-fails__chip b { color: #b91c1c; font-variant-numeric: tabular-nums; }
+.al-fails__chip b { color: var(--mk-red-strong); font-variant-numeric: tabular-nums; }
 .log-tt {
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
@@ -976,13 +976,13 @@ function exportCurrentPage() {
 /* ================= 暗色模式：仅方法徽标需单独配色。行底/嵌套面已随
    --mk-blue-bg / --mk-surface-2 / --mk-line 变量自动适配，
    原嵌套块与扁平规则两组重复覆盖一并删除 ================= */
-html[data-theme='dark'] .log-method--get { background: rgba(91, 141, 239, 0.16); color: #93b4f5; }
+html[data-theme='dark'] .log-method--get { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--wf-color-primary-light); }
 html[data-theme='dark'] .log-method--post { background: rgba(74, 222, 128, 0.14); color: #6ee7a0; }
 html[data-theme='dark'] .log-method--put { background: rgba(251, 191, 36, 0.14); color: #fcd34d; }
-html[data-theme='dark'] .log-method--patch { background: rgba(167, 139, 250, 0.16); color: #c4b5fd; }
-html[data-theme='dark'] .log-method--delete { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
+html[data-theme='dark'] .log-method--patch { background: color-mix(in srgb, var(--mk-purple) 16%, transparent); color: var(--wf-color-accent-light); }
+html[data-theme='dark'] .log-method--delete { background: color-mix(in srgb, var(--wf-color-danger) 14%, transparent); color: var(--wf-color-danger); }
 html[data-theme='dark'] .log-method--options,
-html[data-theme='dark'] .log-method--head { background: #2d2d2f; color: #afb1b6; }
+html[data-theme='dark'] .log-method--head { background: #2d2d2f; color: var(--mk-muted); }
 
 /* ================= 空态撑满主区剩余高度（P1-1，2026-09-27 走查「空态利用」）=================
    本页是 .mk-page--fill + .mk-card--fill 应用式布局：空态带 mk-empty--min 后若不按本页壳层

@@ -273,8 +273,8 @@ async function goDashboard() {
   width: min(520px, 100%);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 20px;
-  box-shadow: 0 2px 4px rgba(23,32,51,0.04), 0 12px 32px rgba(23,32,51,0.07);
+  border-radius: 16px; /* 圆角阶梯：卡片 */
+  box-shadow: var(--wf-shadow-raised); /* 悬浮档 */
   padding: 26px 30px 24px;
   text-align: center;
   animation: ob-card-in 0.65s cubic-bezier(0.16,1,0.3,1) both;
@@ -287,7 +287,7 @@ async function goDashboard() {
 /* 大屏（2K/4K 桌面）：520px 定宽卡在 3840px 视口下视觉过小，按断点放大卡片与主字号
    （1600 档必须 ≥ 基准 21px：曾写 20px 造成「越大屏字越小」的反向跳变） */
 @media (min-width: 1600px) {
-  .ob__card { width: min(660px, 100%); padding: 34px 44px 32px; border-radius: 24px; }
+  .ob__card { width: min(660px, 100%); padding: 34px 44px 32px; border-radius: var(--mk-radius-modal); /* 大屏放大交给 zoom/宽度，圆角保持 16 阶 */ }
   .ob__title { font-size: 22px; }
   .ob__sub { font-size: 15px; }
   .ob__logo img { height: 52px; }
@@ -308,7 +308,7 @@ async function goDashboard() {
 }
 .ob__progress span {
   width: 34px; height: 4px;
-  border-radius: 99px;
+  border-radius: 999px;
   background: color-mix(in srgb, var(--line) 70%, transparent);
   transition: background 0.35s;
 }
@@ -373,12 +373,12 @@ async function goDashboard() {
   padding: 12px 10px 10px;
   flex: 1;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 16px; /* 圆角阶梯：卡片 */
   background: color-mix(in srgb, var(--surface) 96%, var(--canvas));
 }
 .ob__flow-item i {
   font-style: normal;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
@@ -388,14 +388,14 @@ async function goDashboard() {
   margin-bottom: 3px;
 }
 .ob__flow-item strong { font-size: 13px; color: var(--ink); }
-.ob__flow-item small { font-size: 11px; color: var(--faint); }
+.ob__flow-item small { font-size: 12px; color: var(--faint); }
 .ob__flow-arrow { color: var(--blue); opacity: 0.7; flex: none; }
 
 /* ===== 第 2-4 步：产品演示卡 ===== */
 .ob__demo {
   text-align: left;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 16px; /* 圆角阶梯：卡片 */
   background: color-mix(in srgb, var(--surface) 97%, var(--canvas));
   padding: 14px;
   display: grid;
@@ -412,7 +412,7 @@ async function goDashboard() {
 }
 .ob__demo-bar span:first-child { flex: 1; }
 .ob__chip {
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
@@ -429,14 +429,14 @@ async function goDashboard() {
   display: flex;
   gap: 8px;
   padding: 9px 12px;
-  border-radius: 10px 10px 10px 3px;
+  border-radius: 12px 12px 12px 4px; /* 圆角阶梯：面板 + 内芯尾角 */
   font-size: 12.5px;
   line-height: 1.55;
   max-width: 86%;
 }
 .ob__bubble--user {
   justify-self: end;
-  border-radius: 10px 10px 3px 10px;
+  border-radius: 12px 12px 4px 12px;
   color: var(--ink);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 16%, transparent);
@@ -445,7 +445,7 @@ async function goDashboard() {
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--line);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 5%, transparent);
+  box-shadow: var(--mk-shadow-sm);
 }
 /* 原型 wf-pavatar：24px / radius 8 / 白底 + line 描边 */
 .ob__bubble--ai img {
@@ -461,7 +461,7 @@ async function goDashboard() {
 .ob__bubble-body p { margin: 0 0 7px; }
 .ob__demo-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .ob__demo-tags span {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--muted);
   border: 1px solid var(--line);
@@ -488,7 +488,7 @@ async function goDashboard() {
 }
 .ob__stage i {
   font-style: normal;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 800;
   color: var(--faint);
   width: 18px; height: 18px;
@@ -497,7 +497,7 @@ async function goDashboard() {
   border-radius: 50%;
 }
 .ob__stage b { font-size: 12px; color: var(--ink); }
-.ob__stage small { font-size: 10.5px; color: var(--faint); }
+.ob__stage small { font-size: 12px; color: var(--faint); }
 .ob__stage.is-done i {
   color: var(--green-ink);
   border-color: color-mix(in srgb, var(--mk-green) 40%, transparent);
@@ -509,13 +509,13 @@ async function goDashboard() {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 8%, transparent);
 }
 .ob__stage.is-on i {
-  color: #fff;
+  color: var(--text-on-primary);
   border-color: var(--blue);
   background: var(--blue);
 }
 .ob__demo-prog {
   height: 5px;
-  border-radius: 99px;
+  border-radius: 999px;
   background: color-mix(in srgb, var(--line) 60%, transparent);
   overflow: hidden;
 }
@@ -524,7 +524,7 @@ async function goDashboard() {
   height: 100%;
   width: var(--w);
   background: linear-gradient(90deg, var(--blue), var(--blue-deep));
-  border-radius: 99px;
+  border-radius: 999px;
 }
 
 /* 今日行动行（第 3/4 步共用） */
@@ -546,7 +546,7 @@ async function goDashboard() {
 }
 .ob__demo-action__tag {
   flex: none;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 800;
   line-height: 1;
   color: var(--blue-deep);
@@ -557,7 +557,7 @@ async function goDashboard() {
 }
 .ob__demo-action__body { display: grid; gap: 3px; min-width: 0; }
 .ob__demo-action b { font-size: 13px; color: var(--ink); }
-.ob__demo-action small { font-size: 11px; color: var(--faint); }
+.ob__demo-action small { font-size: 12px; color: var(--faint); }
 
 /* 学习状态指标（第 4 步） */
 .ob__demo-metrics {
@@ -573,11 +573,11 @@ async function goDashboard() {
   border-radius: var(--mk-radius-xl);
   background: var(--surface);
 }
-.ob__demo-metrics small { font-size: 10.5px; color: var(--faint); }
+.ob__demo-metrics small { font-size: 12px; color: var(--faint); }
 .ob__demo-metrics b { font-size: 15px; color: var(--ink); }
-.ob__demo-metrics b.is-good { font-size: 11.5px; color: var(--green-ink); }
+.ob__demo-metrics b.is-good { font-size: 12px; color: var(--green-ink); }
 .ob__demo-tip {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   text-align: center;
   padding-top: 2px;
@@ -592,7 +592,7 @@ async function goDashboard() {
   margin-bottom: 18px;
 }
 .ob__notes span {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--muted);
   border: 1px solid var(--line);
@@ -620,7 +620,7 @@ async function goDashboard() {
   padding: 11px 26px;
   font-size: 14.5px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-on-primary);
   /* 实色 --blue（原蓝渐变 + 25% 发光一并退役） */
   background: var(--blue);
   border: 0;
@@ -684,9 +684,7 @@ async function goDashboard() {
   .ob__stage small { display: none; }
 }
 
-[data-theme='dark'] .ob__card {
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 12px 32px rgba(0,0,0,0.28);
-}
+/* 暗色卡片阴影：--wf-shadow-raised 暗档自动翻转，原字面量覆写退役 */
 /* 暗色 CTA 投影不再单列：--blue 在暗档已翻转，color-mix 随之变亮（原型也只有一条） */
 
 /* ===== 移动端收敛（2026-09-24 反馈） ===== */
@@ -705,7 +703,7 @@ async function goDashboard() {
   .ob__cta {
     padding: 9px 18px;
     font-size: 14px;
-    border-radius: 11px;
+    border-radius: var(--mk-radius-md); /* 圆角阶梯：控件 */
     /* 原此处还有一档移动端专用蓝色发光（0 5px 14px / 22%），随主 CTA 一并退役 */
   }
   /* 第 1 步只有 CTA 一个动作，原来的「空 span + space-between」把它顶到右下角，

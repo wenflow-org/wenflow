@@ -78,7 +78,7 @@ watch(
 .sdp-routing__lineage {
   border: 1px solid var(--mk-line);
   border-radius: 12px;
-  background: #fff;
+  background: var(--mk-surface);
   padding: 10px 14px;
 }
 .sdp-routing__lineage summary {
@@ -98,13 +98,13 @@ watch(
 .sdp-routing__table th, .sdp-routing__table td {
   text-align: left;
   padding: 6px 8px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--mk-surface-3);
 }
 .sdp-routing__table th { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
 .sdp-routing__consumer { font-size: var(--mk-fs-micro); color: var(--mk-muted); padding: 1px 0; }
 .sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 暗色模式 */
-[data-theme='dark'] .sdp-routing__lineage { background: #1b1c1d; }
+[data-theme='dark'] .sdp-routing__lineage { background: var(--wf-bg-subtle); }
 
 </style>

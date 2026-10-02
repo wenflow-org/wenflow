@@ -64,7 +64,7 @@ export const spans = computed<TraceSpan[]>(() => {
 export const AGENT_TONES: Record<string, { hue: string; soft: string }> = {
   'goal-agent': { hue: '#4f46e5', soft: 'rgba(79, 70, 229, 0.1)' },
   'path-agent': { hue: '#0d9488', soft: 'rgba(13, 148, 136, 0.1)' },
-  'teaching-agent': { hue: '#3478f6', soft: 'rgba(52, 120, 246, 0.1)' },
+  'teaching-agent': { hue: '#2f6ae0', soft: 'rgba(47, 106, 224, 0.1)' },
   'profile-agent': { hue: '#d97706', soft: 'rgba(217, 119, 6, 0.1)' },
   'simulation-agent': { hue: '#7c3aed', soft: 'rgba(124, 58, 237, 0.1)' }
 }

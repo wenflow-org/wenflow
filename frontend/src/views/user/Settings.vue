@@ -1006,7 +1006,7 @@ const handleDeactivate = async () => {
 .model-chip {
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(52, 120, 246, 0.08);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
   color: var(--blue-deep, #1f57cc);
   font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
   font-size: 12px;
@@ -1061,7 +1061,7 @@ const handleDeactivate = async () => {
 }
 
 .mcp-item__kind.is-mcp {
-  background: rgba(52, 120, 246, 0.1);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
   color: var(--blue-deep, #1f57cc);
 }
 
@@ -1120,9 +1120,9 @@ const handleDeactivate = async () => {
 .mcp-hint code {
   font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
   font-size: 12px;
-  background: rgba(52, 120, 246, 0.08);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
   color: var(--blue-deep, #1f57cc);
   padding: 1px 5px;
-  border-radius: 5px;
+  border-radius: 4px;
 }
 </style>
