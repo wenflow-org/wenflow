@@ -3348,6 +3348,68 @@ router.post('/sessions/:sessionId/resume', async (req: Request, res) => {
 });
 
 /**
+ * 声明 hold（外部驱动/运维的「故意停留」申报）
+ * 与 pause 的区别：pause 是 teaching 阶段的教学暂停（自动循环识别）；
+ * hold 是阶段无关的回收豁免申报——僵尸回收器跳过带 hold 的会话，防「故意停留」被误判真死。
+ * body: { reason?: string, until?: string（ISO 时间，缺省=无限期） }
+ * POST /api/admin/virtual-learners/sessions/:sessionId/hold
+ */
+router.post('/sessions/:sessionId/hold', async (req: Request, res) => {
+  try {
+    const { sessionId } = req.params;
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 200) : 'external-driver-hold';
+    const until = typeof req.body?.until === 'string' && !Number.isNaN(new Date(req.body.until).getTime())
+      ? new Date(req.body.until).toISOString()
+      : undefined;
+    const session = await findSessionById(sessionId);
+    if (!session) {
+      return res.status(404).json({ success: false, error: { message: '会话不存在' } });
+    }
+    if (session.status !== 'running' && session.status !== 'created') {
+      return res.status(409).json({ success: false, error: { message: `会话状态为 ${session.status}，仅运行中/创建中可 hold` } });
+    }
+    const stageResults = typeof session.stageResults === 'string'
+      ? JSON.parse(session.stageResults || '{}')
+      : (session.stageResults || {});
+    stageResults.hold = { by: 'admin', reason, ...(until ? { until } : {}), at: new Date().toISOString() };
+
+    await updateSessionStageResults(sessionId, JSON.stringify(stageResults));
+
+    logger.info('[admin] 会话已声明 hold', { sessionId, reason, until: until || null });
+    res.json({ success: true, data: { sessionId, status: session.status, hold: stageResults.hold } });
+  } catch (error) {
+    logger.error('声明 hold 失败:', error);
+    sendVirtualSessionError(res, error, '声明 hold 失败');
+  }
+});
+
+/**
+ * 解除 hold
+ * POST /api/admin/virtual-learners/sessions/:sessionId/unhold
+ */
+router.post('/sessions/:sessionId/unhold', async (req: Request, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = await findSessionById(sessionId);
+    if (!session) {
+      return res.status(404).json({ success: false, error: { message: '会话不存在' } });
+    }
+    const stageResults = typeof session.stageResults === 'string'
+      ? JSON.parse(session.stageResults || '{}')
+      : (session.stageResults || {});
+    delete stageResults.hold;
+
+    await updateSessionStageResults(sessionId, JSON.stringify(stageResults));
+
+    logger.info('[admin] 会话已解除 hold', { sessionId });
+    res.json({ success: true, data: { sessionId, hold: null } });
+  } catch (error) {
+    logger.error('解除 hold 失败:', error);
+    sendVirtualSessionError(res, error, '解除 hold 失败');
+  }
+});
+
+/**
  * 获取模拟会话日志
  * GET /api/admin/virtual-sessions/:sessionId/logs
  */

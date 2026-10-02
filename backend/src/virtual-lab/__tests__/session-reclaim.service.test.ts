@@ -235,4 +235,77 @@ describe('VirtualSessionReclaimService', () => {
     expect(result2.reclaimed).toBe(0)
     expect(mockUpdate).not.toHaveBeenCalled()
   })
+
+  // ---- 2026-10-02 三分类语义：申报暂停（hold）与确证孤儿（进程代际 floor）----
+
+  it('显式 hold 的会话跳过回收（外部驱动的「故意停留」申报）', async () => {
+    mockFindMany.mockResolvedValue([
+      staleSession({ id: 'vs-held', stageResults: JSON.stringify({ hold: { by: 'batch-sprint', reason: 'path-only' } }) })
+    ])
+    mockFindFirst.mockResolvedValue(null)
+    const service = new VirtualSessionReclaimService({ database: mockDatabase, thresholdMs: 24 * 60 * 60 * 1000 })
+
+    const result = await service.runReclaimOnce({ now: NOW })
+
+    expect(result).toMatchObject({ scanned: 1, reclaimed: 0, skippedHeld: 1 })
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('带 until 的 hold 到期后不再豁免（自动失效，防遗忘的永久 hold）', async () => {
+    const expired = new Date(NOW.getTime() - 60 * 1000).toISOString()
+    mockFindMany.mockResolvedValue([
+      staleSession({ id: 'vs-held-expired', stageResults: JSON.stringify({ hold: { by: 'x', until: expired } }) })
+    ])
+    mockFindFirst.mockResolvedValue(null)
+    mockUpdate.mockResolvedValue({})
+    mockAuditCreate.mockResolvedValue({})
+    const service = new VirtualSessionReclaimService({ database: mockDatabase, thresholdMs: 24 * 60 * 60 * 1000 })
+
+    const result = await service.runReclaimOnce({ now: NOW })
+
+    expect(result).toMatchObject({ scanned: 1, reclaimed: 1, skippedHeld: 0 })
+    expect(mockUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('快档确证孤儿：写入早于所有存活代际的最早启动时间才回收', async () => {
+    // NOW=2026-08-15T10:00；floor=09:00（所有存活进程最早 09:00 启动）
+    const floor = new Date('2026-08-15T09:00:00.000Z')
+    mockFindMany.mockResolvedValue([
+      // 写于 08:30（floor 之前）→ 上一代孤儿 → 回收
+      staleSession({ id: 'vs-pre-floor', updatedAt: new Date('2026-08-15T08:30:00.000Z') }),
+      // 写于 09:30（floor 之后）→ 存活代际可能是作者 → 保护
+      staleSession({ id: 'vs-post-floor', updatedAt: new Date('2026-08-15T09:30:00.000Z') })
+    ])
+    mockFindFirst.mockResolvedValue(null)
+    mockUpdate.mockResolvedValue({})
+    mockAuditCreate.mockResolvedValue({})
+    const service = new VirtualSessionReclaimService({
+      database: mockDatabase,
+      thresholdMs: 24 * 60 * 60 * 1000,
+      fastThresholdMs: 30 * 60 * 1000,
+      resolveActiveBootFloor: async () => floor
+    })
+
+    const result = await service.runFastReclaimOnce({ now: NOW })
+
+    expect(result).toMatchObject({ scanned: 2, reclaimed: 1, skippedLiveGeneration: 1 })
+    expect(mockUpdate).toHaveBeenCalledTimes(1)
+    expect(mockUpdate.mock.calls[0][0].where).toEqual({ id: 'vs-pre-floor' })
+  })
+
+  it('快档无存活代际登记（floor=null）时本轮全跳过：宁可漏收不可误收', async () => {
+    mockFindMany.mockResolvedValue([staleSession()])
+    const service = new VirtualSessionReclaimService({
+      database: mockDatabase,
+      thresholdMs: 24 * 60 * 60 * 1000,
+      fastThresholdMs: 30 * 60 * 1000,
+      resolveActiveBootFloor: async () => null
+    })
+
+    const result = await service.runFastReclaimOnce({ now: NOW })
+
+    expect(result).toMatchObject({ scanned: 0, reclaimed: 0 })
+    expect(mockUpdate).not.toHaveBeenCalled()
+    expect(mockFindMany).not.toHaveBeenCalled()
+  })
 })

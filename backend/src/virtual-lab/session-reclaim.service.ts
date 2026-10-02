@@ -13,6 +13,7 @@ import type { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 import type { ApplicationLifecycle } from '../services/application-lifecycle.service';
 import { appendSessionLogs, type VirtualSessionLogStoreClient } from '../services/virtual-lab/virtual-session-log-store';
+import { backendBootRegistry, heartbeatSafely } from './boot-registry';
 
 export const DEFAULT_STALE_SESSION_HOURS = 24;
 /**
@@ -24,6 +25,9 @@ export const DEFAULT_STALE_SESSION_HOURS = 24;
 export const DEFAULT_FAST_STALE_MINUTES = 30;
 export const DEFAULT_RECLAIM_INTERVAL_MS = 15 * 60 * 1000;
 export const RECLAIM_BATCH_SIZE = 50;
+/** 进程代际心跳的存活窗口：3 个扫描周期（下限 5 分钟）。进程死亡后其登记至多滞后一个窗口失效——
+ *  失效前 floor 偏早（保守少收），失效后恢复正常，方向安全。 */
+const RECLAIM_LIVENESS_MS = Math.max(3 * resolveReclaimIntervalMs(process.env.VLAB_RECLAIM_INTERVAL_MINUTES), 5 * 60 * 1000);
 
 const MILLIS_PER_HOUR = 60 * 60 * 1000;
 const MILLIS_PER_MINUTE = 60 * 1000;
@@ -51,8 +55,12 @@ export interface StaleSessionReclaimResult {
   skippedActiveLease: number;
   /** 管理员主动暂停（teaching.paused=true）的会话：无写入是预期行为，跳过回收 */
   skippedPaused: number;
+  /** 显式 hold（stageResults.hold）的会话：外部驱动申报的「故意停留」，跳过回收 */
+  skippedHeld: number;
   /** 仍有在途自动化（autopilot running/queued）的会话：有驱动，跳过 */
   skippedActiveAutopilot: number;
+  /** 本进程代际启动后仍有写入的会话：写入时存在活着的进程代际，非孤儿 */
+  skippedLiveGeneration: number;
   sessions: StaleSessionReclaimEntry[];
 }
 
@@ -117,6 +125,8 @@ export class VirtualSessionReclaimService {
   private readonly fastThresholdMs: number;
   private readonly intervalMs: number;
   private readonly reviveStuckSession: ReviveStuckSession | null;
+  private readonly resolveActiveBootFloor: ((now: Date) => Promise<Date | null>) | null;
+  private readonly bootHeartbeat: ((now: Date) => Promise<boolean>) | null;
   private lifecycle: Pick<ApplicationLifecycle, 'isDraining'> | null;
 
   constructor(options: {
@@ -125,13 +135,19 @@ export class VirtualSessionReclaimService {
     fastThresholdMs?: number;
     intervalMs?: number;
     reviveStuckSession?: ReviveStuckSession | null;
-    lifecycle?: Pick<ApplicationLifecycle, 'isDraining'> | null
+    lifecycle?: Pick<ApplicationLifecycle, 'isDraining'> | null;
+    /** 快档「确证孤儿」判据：返回所有存活后端进程中最早的启动时间；null=无存活登记（快档本轮跳过）。
+     *  未注入（测试/旧调用方）时快档退化为纯阈值语义，保持向后兼容。 */
+    resolveActiveBootFloor?: ((now: Date) => Promise<Date | null>) | null;
+    bootHeartbeat?: ((now: Date) => Promise<boolean>) | null;
   } = {}) {
     this.database = options.database ?? prisma;
     this.thresholdMs = options.thresholdMs ?? resolveStaleSessionThresholdMs(process.env.VLAB_STALE_SESSION_HOURS);
     this.fastThresholdMs = options.fastThresholdMs ?? resolveFastStaleThresholdMs(process.env.VLAB_STALE_SESSION_FAST_MINUTES);
     this.intervalMs = options.intervalMs ?? resolveReclaimIntervalMs(process.env.VLAB_RECLAIM_INTERVAL_MINUTES);
     this.reviveStuckSession = options.reviveStuckSession ?? null;
+    this.resolveActiveBootFloor = options.resolveActiveBootFloor ?? null;
+    this.bootHeartbeat = options.bootHeartbeat ?? null;
     this.lifecycle = options.lifecycle ?? null;
   }
 
@@ -150,14 +166,18 @@ export class VirtualSessionReclaimService {
   start(lifecycle?: Pick<ApplicationLifecycle, 'isDraining'>): void {
     if (this.lifecycle) this.lifecycle = lifecycle ?? this.lifecycle;
     if (this.timer) return;
+    // 启动即登记（不等首个 tick）：让本进程代际尽快进入 floor 计算，也压缩「重启→首轮扫描」的误收窗口
+    void this.bootHeartbeat?.(new Date());
     this.timer = setInterval(() => {
       if (this.inFlight) return;
       this.inFlight = true;
       void (async () => {
+        // ⓪ 进程代际心跳：登记表失败只降级（本轮快档跳过），不阻断硬档
+        const heartbeatOk = this.bootHeartbeat ? await this.bootHeartbeat(new Date()) : true;
         // ① 硬阈值（默认 24h）：保留原语义与审计 reason
         await this.runReclaimOnce();
-        // ② 短周期收敛（默认 30min）：把「重启后无驱动却仍显示运行中」的窗口从 24h 缩到分钟级
-        await this.runFastReclaimOnce();
+        // ② 短周期收敛：确证孤儿 = 超快阈值 且 最后写入早于所有存活后端的最早启动时间
+        await this.runFastReclaimOnce({ activeBootFloor: heartbeatOk ? undefined : null });
       })().catch((error) => {
         logger.warn('[session-reclaim] 周期回收失败', {
           error: error instanceof Error ? error.message : String(error)
@@ -185,7 +205,9 @@ export class VirtualSessionReclaimService {
   }
 
   /** 执行一轮回收：running/created 超阈值且无活跃租约 → 标记 failed + 审计。dryRun 只报告不改状态。
-   *  options.profileIds 提供时只扫描指定虚拟人的会话（管理面「批量清理卡死」按选中行过滤）。 */
+   *  options.profileIds 提供时只扫描指定虚拟人的会话（管理面「批量清理卡死」按选中行过滤）。
+   *  options.enforceBootFloor：快档专用。Date=「早于它的写入视为上一代孤儿」；null=无存活代际信息（本轮全跳过）；
+   *  undefined=不启用代际判据（硬档与旧调用方，纯阈值语义）。 */
   async runReclaimOnce(options: {
     dryRun?: boolean;
     now?: Date;
@@ -194,13 +216,25 @@ export class VirtualSessionReclaimService {
     thresholdMs?: number;
     /** 留痕用的原因码；缺省 = 'stale-session-timeout' */
     reason?: string;
+    enforceBootFloor?: Date | null;
   } = {}): Promise<StaleSessionReclaimResult> {
     const dryRun = options.dryRun ?? false;
     const now = options.now ?? new Date();
     const thresholdMs = options.thresholdMs ?? this.thresholdMs;
     const reason = options.reason ?? 'stale-session-timeout';
+    const bootFloor = options.enforceBootFloor;
     const threshold = new Date(now.getTime() - thresholdMs);
     const profileIds = Array.isArray(options.profileIds) && options.profileIds.length ? options.profileIds : null;
+    const emptySessions: StaleSessionReclaimEntry[] = [];
+    // 无存活进程代际登记：无法区分「上一代孤儿」和「别处的活工作」→ 本轮全跳过（硬档 24h 仍会兜底）
+    if (bootFloor === null) {
+      logger.info('[session-reclaim] 无存活进程代际登记，快档本轮跳过', { thresholdMs });
+      return {
+        dryRun, thresholdMs, scanned: 0, reclaimed: 0,
+        skippedActiveLease: 0, skippedPaused: 0, skippedHeld: 0, skippedActiveAutopilot: 0, skippedLiveGeneration: 0,
+        sessions: emptySessions
+      };
+    }
     const sessions = await this.database.virtual_sessions.findMany({
       where: {
         status: { in: ['running', 'created'] },
@@ -219,8 +253,10 @@ export class VirtualSessionReclaimService {
       reclaimed: 0,
       skippedActiveLease: 0,
       skippedPaused: 0,
+      skippedHeld: 0,
       skippedActiveAutopilot: 0,
-      sessions: []
+      skippedLiveGeneration: 0,
+      sessions: emptySessions
     };
 
     for (const session of sessions) {
@@ -233,12 +269,33 @@ export class VirtualSessionReclaimService {
         staleMs,
         updatedAt: session.updatedAt.toISOString()
       };
+      // 确证孤儿判据（快档）：写入发生在「所有存活后端代际启动」之后 → 有活代际可能是它的作者，非孤儿
+      if (bootFloor instanceof Date && session.updatedAt.getTime() >= bootFloor.getTime()) {
+        result.skippedLiveGeneration += 1;
+        continue;
+      }
       const activeLease = await this.database.virtual_experiment_leases.findFirst({
         where: { sessionId: session.id, expiresAt: { gt: now } },
         select: { sessionId: true }
       });
       if (activeLease) {
         result.skippedActiveLease += 1;
+        continue;
+      }
+      // 显式 hold（外部驱动申报的「故意停留」）：与暂停同等豁免；带 until 且已到期则不再豁免
+      let holdActive = false;
+      try {
+        const hold = JSON.parse(session.stageResults || '{}')?.hold;
+        if (hold && typeof hold === 'object') {
+          holdActive = !(typeof hold.until === 'string' && new Date(hold.until).getTime() <= now.getTime());
+        } else {
+          holdActive = hold != null; // 兼容裸 true / 字符串等简写
+        }
+      } catch {
+        holdActive = false;
+      }
+      if (holdActive) {
+        result.skippedHeld += 1;
         continue;
       }
       // 管理员主动暂停的会话没有写入是预期行为，不应被当作僵尸回收
@@ -303,15 +360,29 @@ export class VirtualSessionReclaimService {
   }
 
   /**
-   * 短周期收敛一轮：阈值取 `fastThresholdMs`（默认 30 分钟），其余保护（活跃租约 /
-   * teaching.paused / 在途 autopilot）与硬阈值一致。用于把「进程重启后无驱动却仍显示运行中」
-   * 的窗口从 24h 缩到分钟级；硬阈值回收仍继续兜底。
+   * 短周期收敛一轮：确证孤儿 = 超 fastThreshold 且 最后写入早于所有存活后端代际的最早启动时间
+   * （bootFloor）。租约 / hold / teaching.paused / 在途 autopilot 保护与硬阈值一致。
+   * 注入 resolveActiveBootFloor 时启用代际判据；未注入（旧调用方/测试）退化为纯阈值语义。
    */
-  async runFastReclaimOnce(options: { dryRun?: boolean; now?: Date; profileIds?: string[] } = {}): Promise<StaleSessionReclaimResult> {
+  async runFastReclaimOnce(options: { dryRun?: boolean; now?: Date; profileIds?: string[]; activeBootFloor?: Date | null } = {}): Promise<StaleSessionReclaimResult> {
+    let bootFloor: Date | null | undefined;
+    if (options.activeBootFloor !== undefined) {
+      bootFloor = options.activeBootFloor;
+    } else if (this.resolveActiveBootFloor) {
+      bootFloor = await this.resolveActiveBootFloor(options.now ?? new Date()).catch((error) => {
+        logger.warn('[session-reclaim] 代际 floor 解析失败，本轮快档跳过', {
+          error: error instanceof Error ? error.message : String(error)
+        });
+        return null;
+      });
+    } else {
+      bootFloor = undefined;
+    }
     return this.runReclaimOnce({
       ...options,
       thresholdMs: this.fastThresholdMs,
-      reason: 'stale-session-short'
+      reason: 'stale-session-short',
+      enforceBootFloor: bootFloor
     });
   }
 
@@ -410,5 +481,8 @@ export const virtualSessionReclaimService = new VirtualSessionReclaimService({
     const { default: simulationCoordinator } = await import('../coordinators/simulation.coordinator');
     const review = await simulationCoordinator.resolvePathReview(sessionId, { startLearning: true });
     return review.success === true;
-  }
+  },
+  // 进程代际活性：登记表是「确证孤儿」判据的底座。登记失败 → floor=null → 快档本轮跳过（宁可漏收）
+  resolveActiveBootFloor: (now) => backendBootRegistry.oldestLiveBoot(now, RECLAIM_LIVENESS_MS),
+  bootHeartbeat: (now) => heartbeatSafely(now)
 });
