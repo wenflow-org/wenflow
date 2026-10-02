@@ -369,6 +369,19 @@ async function enrichLearningPathWithAndersonInner(
         } : {}),
         ...stageDesignerBaseInput,
         normalizedInput: stageNormalizedInput,
+        // 全路径阶段地图（2026-10-03 A/B 审计实证：stage-designer 逐阶段调用只见当前阶段，
+        // 「真实动作前两个阶段」「跨阶段去重」类规则因看不见全局而无法执行——
+        // 前置真实动作任务占比 A/B 实测 0.3%→1.4% 几乎未动）。注入全部阶段标题与当前位次，
+        // 让单阶段调用具备全局视野；数据来自内存中的 milestones，无额外查询。
+        pathStageMap: {
+          stageCount: learningPath.milestones.length,
+          currentStageNumber: milestone.stageNumber,
+          stages: learningPath.milestones.map((m) => ({
+            stageNumber: m.stageNumber,
+            title: m.title,
+            estimatedHours: m.estimatedHours || null,
+          })),
+        },
         // 渐进式（批次 D）：上一阶段的学习者账本信号——脆弱/挣扎概念、先修缺口、
         // wrapup 里仍未掌握的点。stage-designer 据此调整下一阶段的坡度与回补任务。
         ...(progressive && options.previousStageOutcome
