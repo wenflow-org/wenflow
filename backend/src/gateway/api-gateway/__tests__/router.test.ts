@@ -117,9 +117,11 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
       skillId: 'path-planning'
     }, 'user-1')
 
+    // 用户自有 provider 上「用户的 chatModel 即权威」：skill 模型绑定是平台通道概念，
+    // 不得把用户供应商空间的模型身份抢回平台默认（2026-10-02）；端点与公网策略保留
     expect(resolved).toEqual(expect.objectContaining({
       endpoint: 'https://user-provider.example/v1',
-      model: 'skill-model',
+      model: 'user-model',
       privateNetworkPolicy: 'public-only'
     }))
   })

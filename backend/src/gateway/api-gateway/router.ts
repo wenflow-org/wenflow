@@ -260,13 +260,18 @@ export class APIRouter {
         : inheritedRoute.source;
 
       // 平台别名覆盖是全局的模型身份重映射:skill 显式模型同样生效(此前仅平台默认路由生效)
+      // 例外：用户自有 provider（user-provider/public-only）上「用户的 chatModel 即权威」——
+      // skill 模型绑定是平台通道概念，不得把用户自己供应商空间的模型身份抢回平台默认
+      // （2026-10-02：VL 分组 A/B 中 28 个 skill 行钉死 dsv4.1，把 agnes 组模型覆盖回 ds 的实锤）。
       const platformRecord = await this.getPlatformConfigRecord();
       const overrides = platformRecord ? this.platformAliasOverrides(platformRecord) : null;
-      const model = config.model
-        ? (isReasoning
-          ? this.resolveReasoningModel(config.model, overrides)
-          : this.resolveModel(config.model, overrides))
-        : inheritedRoute.model;
+      const model = inheritedUserEndpoint
+        ? inheritedRoute.model
+        : config.model
+          ? (isReasoning
+            ? this.resolveReasoningModel(config.model, overrides)
+            : this.resolveModel(config.model, overrides))
+          : inheritedRoute.model;
 
       return {
         ...inheritedRoute,
@@ -274,8 +279,9 @@ export class APIRouter {
         endpoint,
         apiKey,
         model,
-        // 标记 skill 级是否显式指定了模型（供 resolve-llm-call-params 决定优先级）
-        modelExplicit: Boolean(config.model),
+        // 标记 skill 级是否显式指定了模型（供 resolve-llm-call-params 决定优先级）；
+        // 用户自有端点上模型由用户的 chatModel 决定，skill 绑定未生效 → 不标 explicit
+        modelExplicit: Boolean(config.model) && !inheritedUserEndpoint,
         thinkingMode: this.normalizeThinkingMode(config.thinkingMode || inheritedRoute.thinkingMode),
         reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort || inheritedRoute.reasoningEffort),
         // 2026-09-28 配置体系优化：skill 级参数覆盖（paramOverrides JSON）与兜底链

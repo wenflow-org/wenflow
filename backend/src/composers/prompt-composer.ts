@@ -326,6 +326,9 @@ export async function callPrompt<TInput, TOutput>(
   const generationResolution = await resolveLlmCallParams({
     skillId: spec.caller?.skillId,
     agentId: spec.caller?.agentId,
+    // 与网关主链路同源的用户维度：user-provider（用户自有模型）路由身份才能进 route 回退，
+    // 否则 request.model 会带平台默认模型覆盖掉用户路由（2026-10-02 VL 分组 A/B 实测）
+    userId: context.userId || requestContext.userId,
     promptConfig,
     runtimeOverride: {
       model: runtimeOverride.modelOverride,

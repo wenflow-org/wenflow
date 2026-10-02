@@ -262,6 +262,9 @@ export function resolveLlmGenerationParams(
 export interface ResolveLlmCallParamsInput {
   skillId?: string | null;
   agentId?: string | null;
+  /** 调用所属用户：传入后 route 回退解析与网关主链路同源（user-provider 模型身份才会生效——
+   *  否则 skill 绑定模型会经 request.model 抢回平台默认，覆盖用户自有 provider 的模型） */
+  userId?: string | null;
   /** 已加载的 ACTIVE prompt；不传则按 skillId/agentId 自动加载 */
   promptConfig?: ResolveLlmGenerationParamsInput['promptConfig'];
   runtimeOverride?: ResolveLlmGenerationParamsInput['runtimeOverride'];
@@ -320,6 +323,7 @@ export async function resolveLlmCallParams(
       const route = await getAPIGateway().resolveRoute({
         agentId: input.agentId || undefined,
         skillId: shortSkill || undefined,
+        userId: input.userId || undefined,
       });
       routeResolved = true;
       routeFallback = {
