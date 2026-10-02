@@ -251,6 +251,33 @@ export function categoryText(s: string | null | undefined): string {
   return CATEGORY_TEXT[key] || String(s || '')
 }
 
+/**
+ * 执行失败错误类别 → 人话（评审 Overview P2：provider_timeout 等原始枚举不得进首层）。
+ * 枚举单源 = 后端 gateway failure-classification.ts（GatewayFailureCategory）。
+ * 未知枚举回退原文（不丢排障信息），与 statusText 同策略。
+ */
+export const ERROR_CATEGORY_TEXT: Record<string, string> = {
+  provider_timeout: '上游超时',
+  provider_http: '上游返回错误',
+  rate_limit: '触发限流',
+  quota: '配额不足',
+  authentication: '鉴权失败',
+  configuration: '配置错误',
+  network: '网络错误',
+  security: '安全拦截',
+  protocol: '响应格式异常',
+  caller_abort: '调用方中止',
+  internal: '系统内部错误',
+  // live.ts 兜底类别（无更细归因时落 'error'）
+  error: '失败'
+}
+
+/** 错误类别枚举 → 中文短语；未知枚举回退原文 */
+export function errorCategoryText(s: string | null | undefined): string {
+  const key = String(s || '').toLowerCase()
+  return ERROR_CATEGORY_TEXT[key] || String(s || '')
+}
+
 /** 操作审计 action → 中文；未知值回退原文 */
 const ACTION_TEXT: Record<string, string> = {
   'user-create': '创建用户',

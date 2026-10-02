@@ -3,7 +3,7 @@
  * （数据拉取链路已被 AdminConsole 冒烟覆盖，此处只测纯函数与可推导 computed）
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { timeAgo, errMsg, shortId, liveNavBadges, alarmNavBadges, liveVirtuals, liveSkillProfiles, liveExtraProfiles, liveAnnouncements, totalPagesOf, mapLogsToSpans, gatewayPairWindowMs, mergeSpanPages } from '../live';
+import { timeAgo, errMsg, shortId, liveNavBadges, alarmNavBadges, liveVirtuals, liveSkillProfiles, liveExtraProfiles, liveAnnouncements, totalPagesOf, mapLogsToSpans, gatewayPairWindowMs, mergeSpanPages, recentActivityText } from '../live';
 import { liveSpans } from '../store';
 import type { TraceSpan } from '../store';
 
@@ -236,8 +236,7 @@ describe('live.mapLogsToSpans（P1 消息列语义 + 网关配对 + 状态映射
   });
 });
 
-describe('live.mergeSpanPages（W1 瀑布服务端分页追加：去重 + 跨页同 trace 重算 startMs）', () => {
-  const span = (id: string, traceId: string, ts: number, startMs: number, durationMs: number, extra: Partial<TraceSpan> = {}): TraceSpan => ({
+describe('live.mergeSpanPages（W1 瀑布服务端分页追加：去重 + 跨页同 trace 重算 startMs）', () => {  const span = (id: string, traceId: string, ts: number, startMs: number, durationMs: number, extra: Partial<TraceSpan> = {}): TraceSpan => ({
     id, traceId, ts, startMs, durationMs, status: 'ok' as const,
     kind: 'call' as const, agent: 'a', stage: 's', title: 't', detail: '', ...extra
   });
@@ -266,5 +265,38 @@ describe('live.mergeSpanPages（W1 瀑布服务端分页追加：去重 + 跨页
     const merged = mergeSpanPages(existing, incoming);
     expect(merged.find((x) => x.id === 'a1')?.startMs).toBe(0);
     expect(merged.find((x) => x.id === 'd1')?.startMs).toBe(400);
+  });
+});
+
+describe('live.recentActivityText（P2 recency：由 24h 逐小时脉搏推「最近真实活动」一句话）', () => {
+  const empty24 = (): Array<{ label?: string; calls: number }> => Array.from({ length: 24 }, () => ({ calls: 0 }));
+
+  it('取最后一个有调用的桶：label + 约 N 小时前（滚动窗口末位=当前小时）', () => {
+    const pulse = empty24();
+    pulse[20] = { label: '09:00', calls: 5 };
+    expect(recentActivityText(pulse)).toBe('最近真实活动 09:00（约 3 小时前）');
+  });
+
+  it('当前小时有调用 → 「1 小时内」', () => {
+    const pulse = empty24();
+    pulse[23] = { label: '14:00', calls: 2 };
+    expect(recentActivityText(pulse)).toBe('最近真实活动 14:00（1 小时内）');
+  });
+
+  it('前一小时有调用 → 「约 1 小时前」', () => {
+    const pulse = empty24();
+    pulse[22] = { label: '13:00', calls: 1 };
+    expect(recentActivityText(pulse)).toBe('最近真实活动 13:00（约 1 小时前）');
+  });
+
+  it('无 label 桶回退下标小时（与 peak 兜底同规则）', () => {
+    const pulse = empty24();
+    pulse[10] = { calls: 1 };
+    expect(recentActivityText(pulse)).toBe('最近真实活动 10:00（约 13 小时前）');
+  });
+
+  it('24h 全空 / 空数组 → null（调用方不渲染，不拿「—」冒充时间）', () => {
+    expect(recentActivityText(empty24())).toBeNull();
+    expect(recentActivityText([])).toBeNull();
   });
 });

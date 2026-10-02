@@ -31,6 +31,7 @@ import {
 } from './store'
 import { EXTRA_COMPONENT_VISIBLE_SKILLS } from './capabilityCatalog'
 import { TERMS, humanizeHttpError } from './terms'
+import { errorCategoryText } from './statusText'
 
 /** 与生产 Skill 目录同口径：外挂能力 Skill 不在主目录展示（归外挂组件页） */
 const isExtraSkill = (id: string) => EXTRA_COMPONENT_VISIBLE_SKILLS.has(id.replace(/^skill:/, ''))
@@ -492,9 +493,14 @@ export async function loadPromptIndex(): Promise<void> {
   }
 }
 
+/** 执行日志 boot 样本上限：总览「采样窗口失败数」等派生口径的文案必须与此同源（P1#1 诚实化） */
+const LIVE_SPANS_SAMPLE_LIMIT = 200
+
 async function fetchLiveSpans(): Promise<TraceSpan[]> {
-  // 放宽样本到 200 条：待办失败统计基于该样本，60 条截断会让"近 7 天 N 次失败"严重低估
-  const res = await adminAgentsApi.getLogs({ timeRange: 'week', limit: 200 })
+  // 样本上限 200 条：待办失败统计基于该样本，60 条截断会严重低估。
+  // P1#1：后端暂无全量 by-agent 失败口径，该计数只是「近 7 天 · 200 条采样」的窗口值——
+  // 消费方（总览待办 actions.text）必须带采样口径标注，不得冒充全量。
+  const res = await adminAgentsApi.getLogs({ timeRange: 'week', limit: LIVE_SPANS_SAMPLE_LIMIT })
   const body = res.data?.data ?? res.data ?? {}
   const items: RawLog[] = Array.isArray(body) ? body : body.items || body.logs || []
   const stats = body.stats as LiveLogStats | undefined
@@ -824,6 +830,24 @@ export interface OverviewHead {
 }
 
 /**
+ * 近 24h 逐小时脉搏 → 「最近真实活动 HH:00（约 N 小时前）」一句话（评审 P2 recency）。
+ * pulse 为后端滚动窗口（index 0 = 23h 前，末位 = 当前小时；label 为 'HH:00'），
+ * 取最后一个 calls > 0 的桶；全空（24h 无调用）→ null，调用方不渲染（不拿「—」冒充时间）。
+ * 无 label 的桶回退下标小时（与 peak 兜底同规则）。
+ */
+export function recentActivityText(pulse: { label?: string; calls: number }[]): string | null {
+  for (let i = pulse.length - 1; i >= 0; i--) {
+    const b = pulse[i]
+    if (!b || !(b.calls > 0)) continue
+    const label = b.label || `${String(i).padStart(2, '0')}:00`
+    const hoursAgo = pulse.length - 1 - i
+    const when = hoursAgo <= 0 ? '1 小时内' : hoursAgo === 1 ? '约 1 小时前' : `约 ${hoursAgo} 小时前`
+    return `最近真实活动 ${label}（${when}）`
+  }
+  return null
+}
+
+/**
  * 头部结论（P0-2：健康环口径修复）。
  * - score = 今日真实成功率，无下限钳制（5.3% 就显示 5.3%）；
  * - 今日 0 调用 → score null（环显示「—」，与 KPI 卡一致），不再显示 100；
@@ -939,7 +963,8 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     const cat = String(f.errorCategory || f.errorCode || 'error')
     const agent = String(f.agentId || '未知节点').replace(/^skill:/, '')
     feed.push({
-      text: `执行失败：${agent}（${cat}）`,
+      // 首层不裸透英文枚举（Overview P2）：provider_timeout → 「上游超时」；未知枚举回退原文
+      text: `执行失败：${agent}（${errorCategoryText(cat)}）`,
       time: timeAgo(f.calledAt),
       ts: new Date(f.calledAt).getTime(),
       tone: 'bad',
@@ -972,7 +997,8 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     if (!feedDeduped.has(f.text)) feedDeduped.set(f.text, f)
   }
 
-  /* 待办：失败最多的节点（近 7 天日志，放宽样本到 200 条减少截断偏差） */
+  /* 待办：失败最多的节点。P1#1 口径诚实化：liveSpans 是「近 7 天 · 200 条采样」窗口
+     （后端暂无全量 by-agent 失败聚合），文案必须带采样口径，不得写成「近 7 天 N 次失败」暗示全量 */
   const byAgent = new Map<string, number>()
   for (const s of liveSpans.value || []) {
     if (s.status === 'err') byAgent.set(s.agent, (byAgent.get(s.agent) || 0) + 1)
@@ -981,7 +1007,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
     .map(([agentId, count]) => ({
-      text: `${agentId} 近 7 天 ${count} 次失败`,
+      text: `${agentId} 采样窗口 ${count} 次失败（近 7 天 · ${LIVE_SPANS_SAMPLE_LIMIT} 条采样）`,
       link: '排查执行日志',
       tone: 'bad' as const,
       agentId
@@ -1028,7 +1054,8 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       hint: `今日有学习会话的用户 · 总用户 ${users.total ?? 0}（真实口径）`,
     },
     {
-      label: '系统活跃',
+      // P2 文案纠偏：原「系统活跃」与值错位（值=进行中目标对话数快照），名实相符改为「进行中对话」
+      label: '进行中对话',
       value: fmt(Number(conv.active || 0)),
       foot: `${fmt(Number(agents.activeAgents24h || 0))} Skill 近 24h 有调用`,
       hint: '进行中目标对话（快照口径，无同时刻对照）',
@@ -1475,6 +1502,36 @@ async function fetchLiveVirtualStats(): Promise<void> {
   }
 }
 
+/* ---------- 虚拟统计加载三态（P1#19：失败曾被 .catch(() => {}) 静默吞掉 → KPI 恒 0% 假绿） ----------
+ * 契约（VirtualLearners.vue 展示层与 Overview 仿真 chip 消费，只增不改既有导出）：
+ * - liveVirtualStatsLoading = true         → 渲染「…/骨架」，不得把 0 当真实空闲
+ * - liveVirtualStatsError 非空             → 渲染「加载失败 + 重试」，重试调 retryLiveVirtualStats()
+ * - 两者皆否（liveVirtualStatsLoaded=true）→ liveVirtualRunStats 为真实数据，0 即真 0
+ */
+export const liveVirtualStatsLoading = ref(false)
+export const liveVirtualStatsError = ref('')
+export const liveVirtualStatsLoaded = ref(false)
+
+/** 拉取虚拟学习者统计：自管状态位、不向调用方抛错；首次加载与手动重试共用同一路径（并发安全） */
+export async function loadLiveVirtualStats(): Promise<void> {
+  if (liveVirtualStatsLoading.value) return
+  liveVirtualStatsLoading.value = true
+  liveVirtualStatsError.value = ''
+  try {
+    await fetchLiveVirtualStats()
+    liveVirtualStatsLoaded.value = true
+  } catch (e) {
+    liveVirtualStatsError.value = errMsg(e) || '虚拟学习者统计加载失败'
+  } finally {
+    liveVirtualStatsLoading.value = false
+  }
+}
+
+/** 手动重试入口（导出名即契约）：与首次加载完全同路径，成功后清 error、置 loaded */
+export function retryLiveVirtualStats(): Promise<void> {
+  return loadLiveVirtualStats()
+}
+
 async function fetchLiveVirtuals(): Promise<void> {
   const res = await adminVirtualLearnersApi.getVirtualLearners({ limit: LIVE_LIST_FULL_LIMIT })
   const body = res.data?.data ?? res.data ?? {}
@@ -1497,8 +1554,9 @@ async function fetchLiveVirtuals(): Promise<void> {
     limit: Number(apc?.limit ?? 10),
     queued: Number(apc?.queued ?? 0)
   }
-  // 运行统计（完成率/失败率/平均时长/卡死最长分钟）独立并行拉取，失败不影响列表
-  void fetchLiveVirtualStats().catch(() => {})
+  // 运行统计（完成率/失败率/平均时长/卡死最长分钟）独立并行拉取，失败不影响列表。
+  // P1#19：不再静默吞错——失败写入 liveVirtualStatsError 供展示层渲染「加载失败+重试」。
+  void loadLiveVirtualStats()
   liveVirtuals.value = items.map((p: Record<string, unknown>) => {
     const profile = (p.profile as Record<string, unknown>) || {}
     const pool = Array.isArray(profile.storyPool) ? profile.storyPool : []

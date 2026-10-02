@@ -58,8 +58,8 @@
         type="button"
         class="mk-status__meta-link"
         :class="healthTone === 'bad' ? 'mk-status__meta--bad' : healthTone === 'warn' ? 'mk-status__meta--warn' : ''"
-        title="查看健康中心完整检查清单"
-        @click="jump('health-center')"
+        :title="healthTitle"
+        @click="healthChipClick"
       >健康 · {{ healthText }}</button>
       <button
         type="button"
@@ -89,14 +89,29 @@
         <span class="card__title">教学闭环</span>
         <span class="card__sub">目标对话 → 路径规划 → 教学回合 → 课后评估 → 记忆复习</span>
         <span class="card__tools">
-          <span v-if="loopFailedPaths" class="pill pill--warn" title="进行中路径里的失败数"><span class="pill__dot"></span>路径失败 {{ loopFailedPaths }}</span>
+          <button
+            v-if="loopFailedPaths"
+            type="button"
+            class="pill pill--warn pill--link"
+            title="进行中路径里的失败数 · 点击查看失败路径"
+            @click="jumpToFailedPaths"
+          ><span class="pill__dot"></span>路径失败 {{ loopFailedPaths }}</button>
         </span>
       </div>
       <div class="card__body">
         <div class="loop">
           <template v-for="(s, i) in loopStages" :key="s.name">
             <span v-if="i" class="loop__arrow" aria-hidden="true">→</span>
-            <div class="loop__step" :class="`loop__step--${s.tone}`" :title="s.title">
+            <div
+              class="loop__step"
+              :class="`loop__step--${s.tone}`"
+              role="button"
+              tabindex="0"
+              :title="s.title"
+              @click="jump(s.scene)"
+              @keydown.enter.prevent="jump(s.scene)"
+              @keydown.space.prevent="jump(s.scene)"
+            >
               <span class="loop__no">阶段 {{ i + 1 }}</span>
               <span class="loop__name">{{ s.name }}</span>
               <span class="loop__meta">{{ s.meta }}</span>
@@ -118,13 +133,9 @@
           </span>
         </div>
         <div class="card__body">
-          <div class="barchart">
-            <div v-for="c in barchartCols" :key="c.key" class="col" :title="c.title">
-              <span class="val">{{ c.num }}</span>
-              <span class="bar" :style="{ height: c.h + 'px' }"></span>
-              <span class="cap">{{ c.cap }}</span>
-            </div>
-          </div>
+          <!-- P1#2：手写 .barchart 无「今日进行中」语义（清晨当日累计尚小 → 柱高塌陷读成活跃崩塌），
+               换全站统一 OvBars：零值「·」+ 今日列高亮内建；今日列 title 补「截至现在」防误读。 -->
+          <OvBars :cols="barchartCols" :bar-width="40" :min-bars-height="120" />
         </div>
       </div>
       <div class="card">
@@ -153,7 +164,7 @@
               </div>
             </div>
           </div>
-          <p v-if="!feedRows.length && data.feed.length" class="note">近期动态均为模拟账号（默认隐藏）。</p>
+          <p v-if="!feedRows.length && data.feed.length" class="note">近期动态均为测试/模拟/探针账号（默认隐藏）。</p>
           <p v-else-if="!feedRows.length" class="note">近 24h 暂无动态。</p>
         </div>
       </div>
@@ -218,7 +229,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { overviewHealth, investigateAgent, intent, dataSource, openSubPage } from './store';
-import { liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing, liveVirtualRunStats, type LiveOverviewFull } from './live';
+import {
+  liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing,
+  liveVirtualRunStats, liveVirtualStatsError, liveVirtualStatsLoaded,
+  recentActivityText, type LiveOverviewFull
+} from './live';
+import { errorCategoryText } from './statusText';
+import OvBars from './OvBars.vue';
 import { adminHealthCenterApi, adminMemoryReviewApi, adminTeachingSessionsApi } from '@/api/adminApi';
 import MkPageHead from '@/components/mk/MkPageHead.vue';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
@@ -251,40 +268,59 @@ const data = computed<BriefData | null>(() => liveOverviewFull.value);
    教学回合（会话累计）与记忆复习（到期待办）进页拉一次——低频口径不进轮询。 */
 const teachTotal = ref<number | null>(null);
 const memDue = ref<number | null>(null);
-interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title: string }
+/** P2 异常→动作闭环：五环各接深链（跳目标页 scene），点击行为与 title 同步披露 */
+interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title: string; scene: string }
 const loopStages = computed<LoopStage[]>(() => {
   const d = data.value;
   const evalOk = (d?.wrapup.evaluationModel ?? 0) + (d?.wrapup.evaluationAiFallback ?? 0);
+  const pathsFailed = d?.loop.pathsFailed ?? 0;
   return [
     {
       name: '目标对话', meta: '澄清真实目标与约束',
       val: `${d?.loop.conversationsActive ?? 0} 进行中`, tone: 'active',
-      title: '进行中的目标对话（overview/stats · 随轮询刷新）',
+      title: '进行中的目标对话（overview/stats · 随轮询刷新）· 点击查看目标对话',
+      scene: 'goal-conversations',
     },
     {
+      // P2：失败环不再恒 done——有失败路径时转 alert（着色条件与计数随 title 披露）
       name: '路径规划', meta: '生成阶段化学习路径',
-      val: `${d?.loop.pathsActive ?? 0} 进行中`, tone: 'done',
-      title: `进行中路径 ${d?.loop.pathsActive ?? 0} · 失败 ${d?.loop.pathsFailed ?? 0}（overview/stats · 随轮询刷新）`,
+      val: `${d?.loop.pathsActive ?? 0} 进行中`, tone: pathsFailed > 0 ? 'alert' : 'done',
+      title: `进行中路径 ${d?.loop.pathsActive ?? 0} · 失败 ${pathsFailed}（overview/stats · 随轮询刷新）· 点击查看学习路径`,
+      scene: 'learning-paths',
     },
     {
       name: '教学回合', meta: '回合式讲解与追问',
       val: teachTotal.value == null ? '—' : `${teachTotal.value.toLocaleString()} 累计`, tone: 'done',
-      title: '教学会话累计数（教学会话列表 total · 进页时拉取）',
+      title: '教学会话累计数（教学会话列表 total · 进页时拉取）· 点击查看教学会话',
+      scene: 'teaching-sessions',
     },
     {
       name: '课后评估', meta: '产出与掌握度评估',
       val: `${evalOk} 份`, tone: 'done',
-      title: `评估产出 ${evalOk} 份 · 失败 ${d?.wrapup.evaluationFailed ?? 0}（wrapup 样本口径 · 随轮询刷新）`,
+      title: `评估产出 ${evalOk} 份 · 失败 ${d?.wrapup.evaluationFailed ?? 0}（wrapup 样本口径 · 随轮询刷新）· 点击查看教学会话`,
+      scene: 'teaching-sessions',
     },
     {
       name: '记忆复习', meta: '遗忘曲线调度复习',
       val: memDue.value == null ? '—' : `${memDue.value} 待办`,
       tone: (memDue.value ?? 0) > 0 ? 'alert' : 'done',
-      title: '到期未复习的记忆条数（记忆与复盘 totals.due · 进页时拉取）',
+      title: '到期未复习的记忆条数（记忆与复盘 totals.due · 进页时拉取）· 点击查看记忆与复盘',
+      scene: 'memory-review',
     },
   ];
 });
 const loopFailedPaths = computed(() => data.value?.loop.pathsFailed ?? 0);
+/* P2 异常→动作闭环：路径失败 pill → 学习路径列表并落「失败」筛选（OpsContent 消费 intent.statusFilter） */
+function jumpToFailedPaths() {
+  intent.agentFilter = '';
+  intent.traceId = '';
+  intent.sessionId = '';
+  intent.errorCategory = '';
+  intent.timeRange = '';
+  intent.tab = '';
+  intent.statusFilter = 'failed';
+  intent.scene = 'learning-paths';
+}
 async function loadLoopExtras() {
   try {
     const r = await adminMemoryReviewApi.overview({ limit: 1 });
@@ -296,12 +332,37 @@ async function loadLoopExtras() {
   } catch { /* 同上 */ }
 }
 
-/* 页头副文（原型 pageTitle p）：数据截至 + 刷新语义 */
+/* 页头副文（原型 pageTitle p）：数据截至 + 刷新语义（P2 文案纠偏）。
+   - 「数据截至」只绑定真实拉到数据的时刻（不再拿挂载时刻冒充；未拉到前不渲染该段）；
+   - 「每 10s 自动刷新」改如实：失败指数退避至 60s，连续失败熔断后停止、需手动「刷新」恢复；
+   - recency：由 live.ts 已映射的 24h 逐小时脉搏推「最近真实活动 HH:00（约 N 小时前）」。 */
 const headSub = computed(() => {
-  const stale = overviewStale.value ? ' · 刷新失败，展示上次数据' : ' · 每 10s 自动刷新';
-  return `WenFlow 运行全景 · 数据截至 ${lastUpdated.value || '—'}${stale}`;
+  const parts: string[] = ['WenFlow 运行全景'];
+  if (lastUpdated.value) parts.push(`数据截至 ${lastUpdated.value}`);
+  const recency = recentActivityText(data.value?.pulse || []);
+  if (recency) parts.push(recency);
+  parts.push(
+    autoRefreshStopped.value
+      ? '自动刷新已停止（连续失败），点「刷新」恢复'
+      : overviewStale.value
+        ? '最近一次刷新失败，展示上次成功数据'
+        : '10s 自动刷新（失败自动退避）'
+  );
+  return parts.join(' · ');
 });
-function refreshNow() { void refreshOverviewTracked(true); }
+/* 手动刷新：成功即打点真实数据时刻；若此前已熔断停止轮询，一并如实恢复 */
+function refreshNow() {
+  void refreshOverviewTracked(true).then((ok) => {
+    if (!ok) return;
+    lastUpdated.value = nowHm();
+    if (autoRefreshStopped.value) {
+      autoRefreshStopped.value = false;
+      // stop+start（useSafePolling.reset 在 isActive 时不重排定时器，需显式重启）
+      stopAutoRefresh();
+      startAutoRefresh();
+    }
+  });
+}
 
 /* ===== KPI（原型 .kpi）=====
    ▲▼趋势已恢复（2026-10-01）：基线改「昨日同时刻」等长窗口（后端 todayCallsBaseline/
@@ -313,49 +374,90 @@ const kpiCards = computed<KpiCard[]>(() =>
   (data.value?.kpis ?? []).map((k) => ({ label: k.label, value: k.value, foot: k.foot, hint: k.hint, trend: k.trend }))
 );
 
-/* ===== 近 7 天活跃学习者（原型 .barchart：顶部数值 + 渐变柱 + 星期帽）===== */
+/* ===== 近 7 天活跃学习者（OvBars 全站统一柱图语言，2026-10-02 P1#2）=====
+   原手写 .barchart 无「今日进行中」语义：清晨当日累计尚小时柱高塌陷，读成「活跃崩塌」。
+   OvBars 内建零值「·」与今日列高亮；今日列 label 改「今日」、title 补「截至现在（非全日）」。
+   柱顶数值 = 活跃人数（主序列），新增人数保留在 title（口径与原手写版一致）。 */
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+const todayKey = computed(() => {
+  const n = new Date();
+  const p = (x: number) => String(x).padStart(2, '0');
+  return `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())}`;
+});
 const activeMax = computed(() => Math.max(1, ...(data.value?.growth7d.map((g) => g.activeUsers) || [])));
+/** 与 TokenCost.trendCols 同规则：零值不画残影柱（0%），微值保底 6% 可见 */
+const barPct = (v: number, max: number) => (v > 0 ? `${Math.max(Math.round((v / max) * 100), 6)}%` : '0%');
 const barchartCols = computed(() => (data.value?.growth7d || []).map((g) => {
   const d = new Date(`${g.date}T00:00:00`);
   const active = g.activeUsers || 0;
+  const isToday = g.date === todayKey.value;
+  const cap = Number.isNaN(d.getTime()) ? g.date.slice(5) : WEEKDAYS[d.getDay()];
   return {
     key: g.date,
+    label: isToday ? '今日' : cap,
+    today: isToday,
     num: String(active),
-    cap: Number.isNaN(d.getTime()) ? g.date.slice(5) : WEEKDAYS[d.getDay()],
-    h: Math.max(4, Math.round((active / activeMax.value) * 132)),
-    title: `${g.date}：活跃 ${active} 人 · 新增 ${g.newUsers}`,
+    title: `${g.date}：活跃 ${active} 人 · 新增 ${g.newUsers}${isToday ? ' · 今日数据截至现在（非全日）' : ''}`,
+    bars: [{ pct: barPct(active, activeMax.value), tone: 'blue' as const }],
   };
 }));
 
-/* 系统健康摘要：拉统一健康清单（60s 缓存），只取 warn/error 计数 */
+/* 系统健康摘要：拉统一健康清单（60s 缓存），只取 warn/error 计数。
+   P1#3 三态纪律：加载中 / 加载失败 / 空清单 / 有数据是四种不同事实，
+   不得全部坍缩成「加载中」，更不能让「拉不到」冒充正常——失败态着弱琥珀并给重试出口。 */
 const healthCheck = ref<{ total: number; warn: number; error: number } | null>(null);
-const healthTone = computed<Tone>(() =>
-  !healthCheck.value ? 'muted' : healthCheck.value.error > 0 ? 'bad' : healthCheck.value.warn > 0 ? 'warn' : 'ok'
-);
-const healthText = computed(() => {
-  if (!healthCheck.value) return '健康检查加载中'
-  if (healthCheck.value.error > 0) return `${healthCheck.value.error} 项异常`
-  if (healthCheck.value.warn > 0) return `${healthCheck.value.warn} 项需关注`
-  return `${healthCheck.value.total} 项检查全部正常`
+const healthState = ref<'loading' | 'ready' | 'error' | 'empty'>('loading');
+const healthTone = computed<Tone>(() => {
+  if (healthState.value === 'error') return 'warn';
+  if (healthState.value === 'empty') return 'muted';
+  if (healthState.value !== 'ready' || !healthCheck.value) return 'muted';
+  return healthCheck.value.error > 0 ? 'bad' : healthCheck.value.warn > 0 ? 'warn' : 'ok';
 });
+const healthText = computed(() => {
+  if (healthState.value === 'error') return '加载失败（可重试）';
+  if (healthState.value === 'empty') return '无检查项';
+  if (healthState.value !== 'ready' || !healthCheck.value) return '健康检查加载中';
+  if (healthCheck.value.error > 0) return `${healthCheck.value.error} 项异常`;
+  if (healthCheck.value.warn > 0) return `${healthCheck.value.warn} 项需关注`;
+  return `${healthCheck.value.total} 项检查全部正常`;
+});
+const healthTitle = computed(() => {
+  if (healthState.value === 'error') return '健康检查清单加载失败 · 点击就地重试（完整清单走右侧「查看健康中心」）';
+  if (healthState.value === 'empty') return '健康中心暂无检查项 · 点击查看健康中心';
+  if (healthState.value === 'loading') return '健康检查加载中 · 点击查看健康中心';
+  return '查看健康中心完整检查清单';
+});
+function healthChipClick() {
+  // 失败态点击 = 就地重试（健康中心仍可从状态条右侧动作进入），兑现「可重试」承诺
+  if (healthState.value === 'error') { void loadHealth(); return; }
+  jump('health-center');
+}
 async function loadHealth() {
   try {
     const res = await adminHealthCenterApi.get()
     const items = res.data?.data?.items ?? []
-    if (!items.length) return
+    if (!items.length) {
+      healthState.value = 'empty'
+      return
+    }
     healthCheck.value = {
       total: items.length,
       warn: items.filter((i) => i.severity === 'warn').length,
       error: items.filter((i) => i.severity === 'error').length,
     }
+    healthState.value = 'ready'
   } catch {
-    healthCheck.value = null
+    // 失败保留上次成功计数（不回置 null），状态转 error 如实呈现
+    healthState.value = 'error'
   }
 }
-/* 仿真通道摘要：失败率用「系统失败率」；阈值 ≥50% 红、≥20% 或存在失败 黄、无会话灰 */
+/* 仿真通道摘要：失败率用「系统失败率」；阈值 ≥50% 红、≥20% 或存在失败 黄、无会话灰。
+   P1#3 同律：「未加载 / 加载失败」≠「空闲」——消费 live.ts P1#19 暴露的三态状态位，
+   统计未落地前不渲染「仿真空闲」，失败态如实降级为需关注。 */
 const runStats = liveVirtualRunStats
 const simTone = computed<Tone>(() => {
+  if (liveVirtualStatsError.value) return 'warn'
+  if (!liveVirtualStatsLoaded.value) return 'muted'
   const r = runStats.value
   if (!r.totalSessions && !r.todayCalls) return 'muted'
   if (r.systemFailureRate >= 50) return 'bad'
@@ -363,22 +465,31 @@ const simTone = computed<Tone>(() => {
   return 'ok'
 })
 const simHeadline = computed(() => {
+  if (liveVirtualStatsError.value) return '统计加载失败'
+  if (!liveVirtualStatsLoaded.value) return '统计加载中'
   const r = runStats.value
   if (!r.totalSessions && !r.todayCalls) return '仿真空闲'
   if (r.systemFailureRate >= 20) return `需要关注：系统失败率 ${r.systemFailureRate}%`
   return '仿真运行平稳'
 })
 const simTitle = computed(() => {
-  const r = runStats.value
-  return [
-    '虚拟学习者 / 仿真通道健康度（仅虚拟/测试账号，与真实用户口径互斥）',
-    `总会话 ${r.totalSessions}`,
-    `已完成 ${r.completed}`,
-    `系统失败 ${r.failed}`,
-    `人为终止 ${r.abandoned}`,
-    `进行中 ${r.running}`,
-    '点击进入「虚拟学习者」',
-  ].join(' · ')
+  const parts: string[] = ['虚拟学习者 / 仿真通道健康度（仅虚拟/测试账号，与真实用户口径互斥）']
+  if (liveVirtualStatsError.value) {
+    parts.push(`统计加载失败：${liveVirtualStatsError.value}`, '进入「虚拟学习者」页可重试')
+  } else if (!liveVirtualStatsLoaded.value) {
+    parts.push('统计加载中…')
+  } else {
+    const r = runStats.value
+    parts.push(
+      `总会话 ${r.totalSessions}`,
+      `已完成 ${r.completed}`,
+      `系统失败 ${r.failed}`,
+      `人为终止 ${r.abandoned}`,
+      `进行中 ${r.running}`
+    )
+  }
+  parts.push('点击进入「虚拟学习者」')
+  return parts.join(' · ')
 })
 
 const hasWrapupStats = computed(() => {
@@ -404,12 +515,12 @@ const wrapupIssue = computed(() => {
 // 重试按钮：force 跳过 liveLoading 守卫保证点击必重拉
 async function retryOverview() {
   const ok = await refreshOverviewTracked(true)
-  if (ok) lastUpdated.value = new Date().toTimeString().slice(0, 5)
+  if (ok) lastUpdated.value = nowHm()
 }
 
 // 动态筛选：默认隐藏虚拟学习者与测试/审计账号（后端 excludeTest 已按此过滤）
 const hideTestAccounts = overviewHideTest
-// KPI 目标：今日调用 / 今日成功率 / 用户活跃 / 系统活跃（纯真实口径 4 卡）
+// KPI 目标：今日调用 / 今日成功率 / 用户活跃 / 进行中对话（纯真实口径 4 卡）
 const kpiTargets: Array<{ scene: string; tab?: string }> = [
   { scene: 'execution-logs' },
   { scene: 'execution-logs' },
@@ -461,7 +572,8 @@ const testFilteredFeed = computed(() => {
 const feedRows = computed(() => testFilteredFeed.value.slice(0, 12));
 function feedDesc(f: BriefData['feed'][number]): string {
   if (f.agentId) return `Skill · ${f.agentId}`
-  if (f.errorCategory) return `失败类别 · ${f.errorCategory}`
+  // 首层不裸透英文枚举（P2）：provider_timeout → 「上游超时」；未知枚举回退原文
+  if (f.errorCategory) return `失败类别 · ${errorCategoryText(f.errorCategory)}`
   return f.tone === 'bad' || f.tone === 'warn' ? '点击查看日志' : ''
 }
 function feedJump(f: { tone: string; errorCategory?: string }) {
@@ -489,10 +601,13 @@ const todoItems = computed<TodoItem[]>(() => {
   return items;
 });
 
-/* R6：10s 自动刷新（setTimeout 链 + 并发守卫 + 指数退避）。
-   P2「更新于」假新鲜修复：只有确认拉到新数据才更新时间戳。 */
+/* R6：10s 自动刷新（setTimeout 链 + 并发守卫 + 指数退避 10s→60s + 熔断停止）。
+   P2「更新于」假新鲜修复：只有确认拉到新数据才更新时间戳（数据截至 = 真实数据时刻）。 */
 const lastUpdated = ref('')
 const overviewStale = ref(false)
+/** 熔断标记：连续失败停止轮询后必须如实告知（headSub 不再宣称「自动刷新中」） */
+const autoRefreshStopped = ref(false)
+const nowHm = () => new Date().toTimeString().slice(0, 5)
 async function refreshOverviewTracked(force = false): Promise<boolean> {
   const before = liveOverviewFull.value
   try {
@@ -508,10 +623,10 @@ async function refreshOverviewTracked(force = false): Promise<boolean> {
   overviewStale.value = true
   return false
 }
-const { start: startAutoRefresh } = useSafePolling(
+const { start: startAutoRefresh, stop: stopAutoRefresh } = useSafePolling(
   async () => {
     const ok = await refreshOverviewTracked()
-    if (ok) lastUpdated.value = new Date().toTimeString().slice(0, 5)
+    if (ok) lastUpdated.value = nowHm()
   },
   {
     interval: 10000,
@@ -522,6 +637,7 @@ const { start: startAutoRefresh } = useSafePolling(
       console.warn(`[Overview] auto-refresh failed (${n}/5 consecutive)`)
     },
     onCircuitBroken: (n) => {
+      autoRefreshStopped.value = true
       console.error(`[Overview] auto-refresh stopped after ${n} consecutive failures — backend may be down`)
     },
   }
@@ -529,11 +645,11 @@ const { start: startAutoRefresh } = useSafePolling(
 onMounted(() => {
   void loadHealth()
   void loadLoopExtras()
-  lastUpdated.value = new Date().toTimeString().slice(0, 5)
+  // 数据截至不预设挂载时刻：轮询首轮（immediate）成功拉到数据后由回调打点
   startAutoRefresh()
 })
 watch(dataSource, () => {
-  lastUpdated.value = new Date().toTimeString().slice(0, 5)
+  lastUpdated.value = nowHm()
   startAutoRefresh()
 })
 </script>
@@ -541,7 +657,8 @@ watch(dataSource, () => {
 <style scoped>
 /* =====================================================================
    总览页 = newui「UI-分支优化设计」renderOverview 的逐类复刻。
-   类名与原型一一对应（card/kpi/barchart/feed/ranklist/loop）；
+   类名与原型一一对应（card/kpi/feed/ranklist/loop）；柱图已收敛到全站统一
+   OvBars 组件（2026-10-02 P1#2，手写 .barchart 退役）。
    色与圆角全走 --mk-* token（数值与原型 --brand/--r-* 同源）。
    全局原语已覆盖的：页头（MkPageHead=pagehead）、状态条（mk-status=statusbar）、
    按钮（mk-btn=btn）。原型 row3 第三卡「学习状态分布」不落（后端暂无
@@ -591,6 +708,8 @@ watch(dataSource, () => {
 }
 .pill--warn { color: var(--mk-amber); background: var(--mk-amber-bg); }
 .pill__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+/* 可点 pill（路径失败 → 学习路径「失败」筛选）：按钮元素需补字体继承与手型 */
+.pill--link { cursor: pointer; font-family: inherit; }
 
 /* ---- 闭环条（原型 .loop）---- */
 .loop { display: flex; align-items: stretch; gap: 8px; overflow-x: auto; padding: 4px 0; }
@@ -599,7 +718,10 @@ watch(dataSource, () => {
   flex: 1 1 0; min-width: 138px; display: grid; gap: 5px;
   padding: 12px 14px; border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-lg); background: var(--mk-surface);
+  /* P2：五环可点穿（携 intent 深链跳目标页），交互 affordance 与 .card--kpi 同语言 */
+  cursor: pointer;
 }
+.loop__step:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }
 .loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
 .loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
 .loop__step--alert { border-color: color-mix(in srgb, var(--mk-amber) 42%, var(--mk-line)); background: var(--mk-amber-bg); }
@@ -610,15 +732,6 @@ watch(dataSource, () => {
 
 /* ---- Row A：图（1.6fr）+ 事件（1fr）---- */
 .row2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-.barchart { display: flex; align-items: flex-end; gap: 10px; height: 168px; padding-top: 8px; }
-.barchart .col { flex: 1; display: grid; align-content: end; justify-items: center; gap: 6px; min-width: 0; }
-.barchart .bar {
-  width: 100%; max-width: 40px; min-height: 4px;
-  border-radius: 6px 6px 4px 4px;
-  background: linear-gradient(180deg, var(--mk-blue), color-mix(in srgb, var(--mk-blue) 62%, var(--mk-surface)));
-}
-.barchart .val { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-family: var(--mk-mono); }
-.barchart .cap { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 最近事件（原型 .feed--capped：时间列 + 标题/描述，限高滚动） */
 .feed--capped { display: grid; gap: 2px; max-height: 236px; overflow-y: auto; overscroll-behavior: contain; }
@@ -669,7 +782,6 @@ watch(dataSource, () => {
   .row2 { grid-template-columns: 1fr; }
 }
 @media (max-width: 768px) {
-  .barchart { height: 132px; }
   .feed--capped { max-height: 132px; }
 }
 </style>
