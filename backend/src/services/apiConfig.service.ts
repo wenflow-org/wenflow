@@ -63,15 +63,6 @@ class APIConfigService {
         const configuredEndpoint = (dbConfig.apiUrl || '').trim();
         const apiUrl = configuredEndpoint || defaultConfig.apiUrl;
         const configuredApiKey = decryptSecret(dbConfig.apiKey, 'system.platform_api_configs.apiKey') || '';
-        // defaultResponseFormat 直读（generated client 尚未含该列，同 router 的 $queryRaw 方案）
-        let defaultResponseFormat = 'none';
-        try {
-          const rfRows = await prisma.$queryRawUnsafe<Array<{ defaultResponseFormat: string | null }>>(
-            "SELECT defaultResponseFormat FROM platform_api_configs WHERE id='platform'"
-          );
-          defaultResponseFormat = (rfRows?.[0]?.defaultResponseFormat || 'none').trim().toLowerCase();
-          if (defaultResponseFormat !== 'json_object') defaultResponseFormat = 'none';
-        } catch { /* 列缺失按 none */ }
         return {
           apiUrl,
           apiKey: configuredEndpoint
@@ -88,7 +79,7 @@ class APIConfigService {
           defaultMaxTokens: dbConfig.defaultMaxTokens ?? defaultConfig.defaultMaxTokens,
           defaultThinkingMode: dbConfig.defaultThinkingMode || defaultConfig.defaultThinkingMode,
           defaultReasoningEffort: dbConfig.defaultReasoningEffort || defaultConfig.defaultReasoningEffort,
-          defaultResponseFormat,
+          defaultResponseFormat: dbConfig.defaultResponseFormat === 'json_object' ? 'json_object' : 'none',
           reasoningEndpoint: dbConfig.reasoningEndpoint || undefined,
           lightEndpoint: dbConfig.lightEndpoint || undefined,
           chatModels: dbConfig.chatModels ? JSON.parse(dbConfig.chatModels) : [],
@@ -129,6 +120,7 @@ class APIConfigService {
           defaultMaxTokens: mergedConfig.defaultMaxTokens,
           defaultThinkingMode: mergedConfig.defaultThinkingMode || 'default',
           defaultReasoningEffort: mergedConfig.defaultReasoningEffort || 'default',
+          defaultResponseFormat: (mergedConfig.defaultResponseFormat || 'none').trim().toLowerCase() === 'json_object' ? 'json_object' : 'none',
           reasoningEndpoint: mergedConfig.reasoningEndpoint || null,
           lightEndpoint: mergedConfig.lightEndpoint || null,
           chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,
@@ -148,6 +140,7 @@ class APIConfigService {
           defaultMaxTokens: mergedConfig.defaultMaxTokens,
           defaultThinkingMode: mergedConfig.defaultThinkingMode || 'default',
           defaultReasoningEffort: mergedConfig.defaultReasoningEffort || 'default',
+          defaultResponseFormat: (mergedConfig.defaultResponseFormat || 'none').trim().toLowerCase() === 'json_object' ? 'json_object' : 'none',
           reasoningEndpoint: mergedConfig.reasoningEndpoint || null,
           lightEndpoint: mergedConfig.lightEndpoint || null,
           chatModels: mergedConfig.chatModels ? JSON.stringify(mergedConfig.chatModels) : null,
@@ -155,15 +148,6 @@ class APIConfigService {
           lightModels: mergedConfig.lightModels ? JSON.stringify(mergedConfig.lightModels) : null,
         },
       });
-
-      // defaultResponseFormat 走 raw 写（typed client 未含该列；upsert 后行必存在）
-      const rfNormalized = (mergedConfig.defaultResponseFormat || 'none').trim().toLowerCase() === 'json_object'
-        ? 'json_object'
-        : 'none';
-      await prisma.$executeRawUnsafe(
-        "UPDATE platform_api_configs SET defaultResponseFormat = ? WHERE id='platform'",
-        rfNormalized
-      );
 
       logger.info('API 配置已保存到数据库:', {
         apiUrl: mergedConfig.apiUrl,
