@@ -99,7 +99,7 @@ function toggle(key: string) {
 }
 .mk-cols__item:hover { background: #f0f5ff; }
 html[data-theme='dark'] .mk-cols__item:hover { background: #252627; }
-.mk-cols__item input { accent-color: var(--mk-blue, #2c63d0); }
+.mk-cols__item input { accent-color: var(--mk-blue, #2f6ae0); }
 .mk-cols__reset {
   margin-top: 4px;
   border: 0;

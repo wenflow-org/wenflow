@@ -1474,7 +1474,7 @@ onBeforeUnmount(() => {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--blue-deep, #3478f6);
+  color: var(--blue-deep, #1f57cc);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -2076,7 +2076,7 @@ onBeforeUnmount(() => {
   background: var(--mk-surface);
   border-color: var(--mk-line);
 }
-[data-theme='dark'] .adjust-mode:hover { border-color: #4d8bf8; background: #232325; }
+[data-theme='dark'] .adjust-mode:hover { border-color: var(--blue); background: #232325; }
 [data-theme='dark'] .adjust-mode__body strong { color: var(--mk-ink); }
 [data-theme='dark'] .adjust-mode__body small { color: var(--mk-muted); }
 [data-theme='dark'] .adjust-dialog__desc { color: var(--mk-muted); }

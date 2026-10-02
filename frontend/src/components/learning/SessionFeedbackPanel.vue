@@ -253,7 +253,7 @@ onMounted(load)
 
 .session-feedback__kicker {
   margin: 0 0 6px;
-  color: var(--color-primary, #3478f6);
+  color: var(--color-primary, #2f6ae0);
   font-size: 12px;
   font-weight: 700;
 }
@@ -319,7 +319,7 @@ onMounted(load)
 }
 
 .rating-star:hover {
-  background: color-mix(in srgb, var(--color-primary, #3478f6) 6%, transparent);
+  background: color-mix(in srgb, var(--color-primary, #2f6ae0) 6%, transparent);
 }
 
 .rating-star.is-on {
@@ -331,7 +331,7 @@ onMounted(load)
 }
 
 .rating-star:focus-visible {
-  outline: 2px solid var(--color-primary, #3478f6);
+  outline: 2px solid var(--color-primary, #2f6ae0);
   outline-offset: 1px;
 }
 
@@ -374,8 +374,8 @@ onMounted(load)
 .reason-option:hover,
 .fit-option.is-active,
 .reason-option.is-active {
-  border-color: var(--color-primary, #3478f6);
-  background: color-mix(in srgb, var(--color-primary, #3478f6) 9%, transparent);
+  border-color: var(--color-primary, #2f6ae0);
+  background: color-mix(in srgb, var(--color-primary, #2f6ae0) 9%, transparent);
   color: var(--color-primary-dark, #1f57cc);
 }
 
@@ -424,7 +424,7 @@ onMounted(load)
 .session-feedback__error button {
   border: 0;
   background: transparent;
-  color: var(--color-primary, #3478f6);
+  color: var(--color-primary, #2f6ae0);
   cursor: pointer;
   font-weight: 700;
 }
@@ -478,7 +478,7 @@ onMounted(load)
 
 .feedback-textarea__inner:focus {
   outline: none;
-  box-shadow: 0 0 0 1px var(--color-primary, #3478f6) inset;
+  box-shadow: 0 0 0 1px var(--color-primary, #2f6ae0) inset;
 }
 
 .feedback-textarea__count {
@@ -511,11 +511,11 @@ onMounted(load)
 }
 
 .feedback-btn--primary {
-  background: var(--color-primary, #3478f6);
-  border-color: var(--color-primary, #3478f6);
+  background: var(--color-primary, #2f6ae0);
+  border-color: var(--color-primary, #2f6ae0);
   color: var(--text-on-primary, #fff);
   font-weight: var(--font-medium, 500);
-  box-shadow: 0 14px 28px color-mix(in srgb, var(--color-primary, #3478f6) 24%, transparent);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--color-primary, #2f6ae0) 24%, transparent);
 }
 
 .feedback-btn--primary:hover:not(:disabled) {

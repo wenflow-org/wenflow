@@ -1393,7 +1393,7 @@ async function saveQuota(enabled: boolean, quota: number) {
   justify-content: center;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
-.ac-key-toggle:hover { background: #eef5ff; border-color: var(--mk-blue, #2c63d0); }
+.ac-key-toggle:hover { background: #eef5ff; border-color: var(--mk-blue, #2f6ae0); }
 .ac-keyhint {
   font-size: var(--mk-fs-micro);
   color: var(--mk-amber);
@@ -1531,15 +1531,15 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   margin-left: auto;
   padding: 2px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(44, 99, 208, 0.3);
-  background: rgba(44, 99, 208, 0.08);
+  border: 1px solid rgba(47, 106, 224, 0.3);
+  background: rgba(47, 106, 224, 0.08);
   color: var(--mk-blue);
   font: inherit;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   cursor: pointer;
 }
-.ac-sec__save:hover { background: rgba(44, 99, 208, 0.16); }
+.ac-sec__save:hover { background: rgba(47, 106, 224, 0.16); }
 .ac-sec__save:disabled { opacity: 0.6; cursor: not-allowed; }
 /* 分段控件走 .mk-seg（shared.css） */
 
@@ -1682,7 +1682,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 /* 开关控件：统一走全站 mk-field--switch（原生 checkbox + label + accent-color 蓝），
    不再使用自定义 iOS 滑块（2026-09 与全站 admin 视觉对齐） */
 .mk-field--switch { align-content: start; }
-.mk-field--switch input[type='checkbox'] { accent-color: var(--mk-blue, #2c63d0); cursor: pointer; }
+.mk-field--switch input[type='checkbox'] { accent-color: var(--mk-blue, #2f6ae0); cursor: pointer; }
 
 .ac-rel__note {
   margin: 0;
@@ -1712,7 +1712,7 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   margin: 4px auto 0;
   padding: 9px 12px 9px 16px;
   border-radius: 999px;
-  border: 1px solid rgba(44, 99, 208, 0.24);
+  border: 1px solid rgba(47, 106, 224, 0.24);
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-pop);
   font-weight: 600;

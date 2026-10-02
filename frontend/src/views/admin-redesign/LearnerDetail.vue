@@ -1999,11 +1999,11 @@ function barToneBadge(tone: ConceptBarTone): string {
   font: inherit; text-align: left; cursor: pointer;
   transition: border-color 0.12s ease, transform 0.12s ease;
 }
-.ld-related__item:hover { border-color: rgba(44, 99, 208, 0.5); transform: translateY(-1px); }
+.ld-related__item:hover { border-color: rgba(47, 106, 224, 0.5); transform: translateY(-1px); }
 .ld-related__icon {
   width: 30px; height: 30px; border-radius: var(--mk-radius-sm); flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  background: rgba(44, 99, 208, 0.1); color: var(--mk-blue); font-size: var(--mk-fs-body);
+  background: rgba(47, 106, 224, 0.1); color: var(--mk-blue); font-size: var(--mk-fs-body);
 }
 .ld-related__main { display: grid; gap: 1px; flex: 1; min-width: 0; }
 .ld-related__main strong { font-size: var(--mk-fs-micro); color: var(--mk-ink); }
@@ -2076,7 +2076,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   background: var(--mk-surface); font: inherit; color: inherit; text-align: left; cursor: pointer;
   transition: border-color 0.12s ease;
 }
-.ld-pathcard:hover { border-color: rgba(44, 99, 208, 0.5); }
+.ld-pathcard:hover { border-color: rgba(47, 106, 224, 0.5); }
 .ld-pathcard__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ld-pathcard__top strong { font-size: var(--mk-fs-emphasis); }
 .ld-pathcard__mid { display: flex; align-items: baseline; gap: 10px; min-width: 0; }

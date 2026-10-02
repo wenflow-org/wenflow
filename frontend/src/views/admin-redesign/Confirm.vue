@@ -191,8 +191,8 @@ function confirm() {
 .mk-btn:hover { background: #f6f9ff; }
 .mk-btn:disabled { opacity: 0.6; cursor: default; }
 .mk-btn--primary {
-  background: var(--mk-blue, #2c63d0);
-  border-color: var(--mk-blue, #2c63d0);
+  background: var(--mk-blue, #2f6ae0);
+  border-color: var(--mk-blue, #2f6ae0);
   color: #fff;
 }
 .mk-btn--primary:hover { background: #2b64d8; }

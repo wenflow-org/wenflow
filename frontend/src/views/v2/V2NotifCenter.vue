@@ -456,7 +456,7 @@ onBeforeUnmount(() => {
 }
 .nc__bell:hover { background: var(--mk-surface-2, #eef2fa); color: var(--ink, #172033); }
 .nc__bell--open { background: var(--mk-surface-2, #eef2fa); color: var(--ink, #172033); }
-.nc__bell--busy { color: var(--blue, #3478f6); }
+.nc__bell--busy { color: var(--blue, #2f6ae0); }
 
 /* 通知未读徽标：原型红点形态（8px 圆 + 表面描边圈，钉在铃铛右上角） */
 .nc__dot {
@@ -476,7 +476,7 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: -2px;
   border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--blue, #3478f6) 60%, transparent);
+  border: 2px solid color-mix(in srgb, var(--blue, #2f6ae0) 60%, transparent);
   animation: nc-pulse 1.6s ease-out infinite;
   pointer-events: none;
 }
@@ -529,7 +529,7 @@ onBeforeUnmount(() => {
   left: 20%; right: 20%; bottom: 0;
   height: 2px;
   border-radius: 2px;
-  background: var(--blue, #3478f6);
+  background: var(--blue, #2f6ae0);
 }
 
 .nc__body { max-height: min(420px, 60vh); overflow-y: auto; }
@@ -559,8 +559,8 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid color-mix(in srgb, var(--line, #e3e9f4) 60%, transparent);
   transition: background 0.13s ease;
 }
-.nc__item:hover { background: color-mix(in srgb, var(--blue, #3478f6) 5%, transparent); }
-.nc__item--unread { background: color-mix(in srgb, var(--blue, #3478f6) 4%, transparent); }
+.nc__item:hover { background: color-mix(in srgb, var(--blue, #2f6ae0) 5%, transparent); }
+.nc__item--unread { background: color-mix(in srgb, var(--blue, #2f6ae0) 4%, transparent); }
 .nc__item-main { display: grid; gap: 2px; min-width: 0; flex: 1; }
 .nc__item-main strong { font-size: 13.5px; font-weight: 700; color: var(--ink, #172033); }
 .nc__item-body {
@@ -576,7 +576,7 @@ onBeforeUnmount(() => {
 .nc__item-dot {
   width: 7px; height: 7px; margin-top: 6px;
   border-radius: 50%;
-  background: var(--blue, #3478f6);
+  background: var(--blue, #2f6ae0);
   flex-shrink: 0;
 }
 .nc__item-dot--off { background: color-mix(in srgb, var(--line, #e3e9f4) 70%, transparent); }
@@ -615,7 +615,7 @@ onBeforeUnmount(() => {
   color: var(--faint, #8492ab);
 }
 .nc__section-label-icon { display: grid; place-items: center; }
-.nc__section-label-icon--running { color: var(--blue, #3478f6); }
+.nc__section-label-icon--running { color: var(--blue, #2f6ae0); }
 .nc__section-label-icon--done { color: var(--green-ink); }
 .nc__task {
   display: flex;
@@ -624,10 +624,10 @@ onBeforeUnmount(() => {
   border-radius: var(--mk-radius-lg);
   align-items: center;
 }
-.nc__task--running { background: color-mix(in srgb, var(--blue, #3478f6) 5%, transparent); }
+.nc__task--running { background: color-mix(in srgb, var(--blue, #2f6ae0) 5%, transparent); }
 .nc__task--done { background: transparent; }
 .nc__task:hover { background: color-mix(in srgb, var(--ink, #172033) 5%, transparent); }
-.nc__task-bar { width: 3px; align-self: stretch; border-radius: 3px; background: var(--blue, #3478f6); }
+.nc__task-bar { width: 3px; align-self: stretch; border-radius: 3px; background: var(--blue, #2f6ae0); }
 .nc__task-bar--done { background: color-mix(in srgb, var(--ink, #172033) 22%, transparent); }
 .nc__task-bar--ok { background: #2ea36b; }
 .nc__task-bar--err { background: #e5484d; }
@@ -648,7 +648,7 @@ onBeforeUnmount(() => {
   font-size: 12.5px;
   font-weight: 700;
   color: var(--blue-deep, #1f57cc);
-  background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
+  background: color-mix(in srgb, var(--blue, #2f6ae0) 12%, transparent);
   border-radius: var(--mk-radius-pill);
   padding: 1px 7px;
   flex-shrink: 0;
@@ -696,8 +696,8 @@ onBeforeUnmount(() => {
 .nc__task-status {
   /* 原为 11px.5px（非法值回落 16px）——「运行中」徽章因此比任务名还大 */
   font-size: 12px; font-weight: 700;
-  color: var(--blue, #3478f6);
-  background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
+  color: var(--blue, #2f6ae0);
+  background: color-mix(in srgb, var(--blue, #2f6ae0) 12%, transparent);
   padding: 2px 7px;
   border-radius: var(--mk-radius-pill);
   flex-shrink: 0;
@@ -706,14 +706,14 @@ onBeforeUnmount(() => {
 .nc__task-progress {
   height: 3px;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--blue, #3478f6) 14%, transparent);
+  background: color-mix(in srgb, var(--blue, #2f6ae0) 14%, transparent);
   overflow: hidden;
 }
 .nc__task-progress i {
   display: block; height: 100%; width: 38%;
   border-radius: 3px;
   /* 原「蓝→#8d6bff 紫」为旧强调色残余 → 收敛到全站进度条同款蓝→青 */
-  background: linear-gradient(90deg, var(--blue, #3478f6), var(--cyan, #43b0d8));
+  background: linear-gradient(90deg, var(--blue, #2f6ae0), var(--cyan, #43b0d8));
   animation: nc-slide 1.3s ease-in-out infinite;
 }
 @keyframes nc-slide {
@@ -758,22 +758,22 @@ onBeforeUnmount(() => {
 
 /* ================= 暗色模式 ================= */
 [data-theme='dark'] .nc__bell { color: var(--muted, #aaacb1); }
-[data-theme='dark'] .nc__bell:hover { background: rgba(77, 139, 248, 0.12); color: var(--blue-deep, #4d8bf8); }
-[data-theme='dark'] .nc__bell--open { background: rgba(77, 139, 248, 0.16); color: var(--blue-deep, #4d8bf8); }
-[data-theme='dark'] .nc__bell--busy { color: var(--blue, #4d8bf8); }
+[data-theme='dark'] .nc__bell:hover { background: rgba(77, 139, 248, 0.12); color: var(--blue-deep, #1f57cc); }
+[data-theme='dark'] .nc__bell--open { background: rgba(77, 139, 248, 0.16); color: var(--blue-deep, #1f57cc); }
+[data-theme='dark'] .nc__bell--busy { color: var(--blue, #2f6ae0); }
 [data-theme='dark'] .nc__panel {
   background: var(--surface, #1e1e20);
   border-color: var(--line, #2d2d2f);
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 [data-theme='dark'] .nc__item:hover { background: color-mix(in srgb, var(--ink, #efeff0) 5%, transparent); }
-[data-theme='dark'] .nc__item--unread { background: color-mix(in srgb, var(--blue, #4d8bf8) 8%, transparent); }
-[data-theme='dark'] .nc__task--running { background: color-mix(in srgb, var(--blue, #4d8bf8) 10%, transparent); }
+[data-theme='dark'] .nc__item--unread { background: color-mix(in srgb, var(--blue, #2f6ae0) 8%, transparent); }
+[data-theme='dark'] .nc__task--running { background: color-mix(in srgb, var(--blue, #2f6ae0) 10%, transparent); }
 [data-theme='dark'] .nc__task:hover { background: color-mix(in srgb, var(--ink, #efeff0) 6%, transparent); }
 [data-theme='dark'] .nc__more:hover, [data-theme='dark'] .nc__readall:hover { background: rgba(77, 139, 248, 0.14); }
-[data-theme='dark'] .nc__retry { color: var(--blue-deep, #4d8bf8); background: rgba(77, 139, 248, 0.12); border-color: rgba(77, 139, 248, 0.4); }
+[data-theme='dark'] .nc__retry { color: var(--blue-deep, #1f57cc); background: rgba(77, 139, 248, 0.12); border-color: rgba(77, 139, 248, 0.4); }
 [data-theme='dark'] .nc__tab { color: var(--muted, #aaacb1); }
-[data-theme='dark'] .nc__tab:hover, [data-theme='dark'] .nc__tab--on { color: var(--blue-deep, #4d8bf8); }
+[data-theme='dark'] .nc__tab:hover, [data-theme='dark'] .nc__tab--on { color: var(--blue-deep, #1f57cc); }
 [data-theme='dark'] .nc__dot { border-color: var(--surface, #1e1e20); }
 </style>
 

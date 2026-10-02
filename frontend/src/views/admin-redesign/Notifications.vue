@@ -492,8 +492,8 @@ void reload()
   cursor: pointer;
   width: 100%;
 }
-.nt-candidate:hover { border-color: rgba(44, 99, 208, 0.4); }
-.nt-candidate--on { border-color: var(--mk-blue); box-shadow: 0 0 0 2px rgba(44, 99, 208, 0.12); }
+.nt-candidate:hover { border-color: rgba(47, 106, 224, 0.4); }
+.nt-candidate--on { border-color: var(--mk-blue); box-shadow: 0 0 0 2px rgba(47, 106, 224, 0.12); }
 .nt-candidate strong { font-size: var(--mk-fs-micro); }
 .nt-none { color: var(--mk-faint); font-size: var(--mk-fs-micro); text-align: center; padding: 10px 0; }
 

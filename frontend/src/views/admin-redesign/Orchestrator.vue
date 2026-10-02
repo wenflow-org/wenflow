@@ -698,7 +698,7 @@ const govMetaTitle = computed(() =>
 .orch-stage-tab:hover { border-color: color-mix(in srgb, var(--mk-blue) 45%, var(--mk-line)); }
 .orch-stage-tab.is-active {
   border-color: var(--mk-blue);
-  background: rgba(44, 99, 208, 0.08);
+  background: rgba(47, 106, 224, 0.08);
   box-shadow: inset 0 0 0 1px var(--mk-blue);
 }
 .orch-stage-tab__name { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); }
@@ -752,8 +752,8 @@ html[data-theme='dark'] {
 .orch-odg-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 12px 16px; }
 .orch-odg-canvas { position: relative; display: flex; align-items: flex-start; gap: 120px; min-width: max-content; }
 .orch-odg-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
-.orch-odg-edge { fill: none; stroke: var(--mk-blue, #2c63d0); stroke-width: 1.6; opacity: 0.85; }
-.orch-odg-svg marker path { fill: var(--mk-blue, #2c63d0); }
+.orch-odg-edge { fill: none; stroke: var(--mk-blue, #2f6ae0); stroke-width: 1.6; opacity: 0.85; }
+.orch-odg-svg marker path { fill: var(--mk-blue, #2f6ae0); }
 .orch-odg-edge-label {
   fill: var(--mk-muted, #5b6577);
   font-family: var(--mk-mono, Consolas, monospace);
@@ -773,7 +773,7 @@ html[data-theme='dark'] {
 .orch-odg-no {
   width: 20px; height: 20px; flex: none; display: grid; place-items: center;
   border-radius: var(--mk-radius-sm, 6px);
-  background: color-mix(in srgb, var(--mk-blue, #2c63d0) 10%, transparent);
+  background: color-mix(in srgb, var(--mk-blue, #2f6ae0) 10%, transparent);
   color: var(--mk-accent-deep, #1f57cc);
   font-size: var(--mk-fs-micro, 12px); font-weight: 700;
 }
@@ -786,7 +786,7 @@ html[data-theme='dark'] {
   background: var(--mk-surface, #fff); cursor: pointer;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
-.orch-odg-node:hover { border-color: var(--mk-blue, #2c63d0); box-shadow: var(--mk-shadow-sm, 0 1px 3px rgba(15, 23, 42, 0.1)); }
+.orch-odg-node:hover { border-color: var(--mk-blue, #2f6ae0); box-shadow: var(--mk-shadow-sm, 0 1px 3px rgba(15, 23, 42, 0.1)); }
 .orch-odg-idx { font-family: var(--mk-mono, Consolas, monospace); font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
 .orch-odg-nodename { font-size: var(--mk-fs-13, 13px); font-weight: 600; color: var(--mk-ink); }
 .orch-odg-nodemeta { font-family: var(--mk-mono, Consolas, monospace); font-size: var(--mk-fs-micro, 12px); color: var(--mk-muted); }
@@ -796,7 +796,7 @@ html[data-theme='dark'] {
   border-radius: var(--mk-radius-sm, 6px);
   background: var(--mk-surface-2, #eef2fa); color: var(--mk-muted); white-space: nowrap;
 }
-.orch-odg-chip--in { background: color-mix(in srgb, var(--mk-blue, #2c63d0) 10%, transparent); color: var(--mk-accent-deep, #1f57cc); }
+.orch-odg-chip--in { background: color-mix(in srgb, var(--mk-blue, #2f6ae0) 10%, transparent); color: var(--mk-accent-deep, #1f57cc); }
 .orch-odg-chip--out { background: color-mix(in srgb, var(--mk-green, #15803d) 12%, transparent); color: var(--mk-accent-deep, #1f57cc); }
 .orch-odg-fields {
   flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

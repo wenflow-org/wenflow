@@ -1166,7 +1166,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: #a2a5a9; }
   transition: background 0.12s, color 0.12s;
 }
 .exec-copy-btn svg { width: 14px; height: 14px; }
-.exec-copy-btn:hover { background: var(--mk-blue-bg, #eff6ff); color: var(--mk-blue, #2c63d0); }
+.exec-copy-btn:hover { background: var(--mk-blue-bg, #eff6ff); color: var(--mk-blue, #2f6ae0); }
 .exec-cell__sub { flex-wrap: wrap; gap: 5px; }
 /* 节点列：等宽短名，长名 ellipsis（title 全值，点击开 Skill 抽屉）。
    display:inline-block 必须显式声明——span 为 inline 元素时 max-width/overflow/ellipsis 全部失效；
@@ -1301,7 +1301,7 @@ html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; colo
   color: var(--mk-amber);
   white-space: nowrap;
 }
-.tline__session { font-size: var(--mk-fs-micro); color: var(--mk-blue, #2c63d0); cursor: pointer; }
+.tline__session { font-size: var(--mk-fs-micro); color: var(--mk-blue, #2f6ae0); cursor: pointer; }
 .tline__session:hover { text-decoration: underline; }
 /* Prompt 契约展开区 */
 .tline__prompt { border-left: 3px solid rgba(217, 119, 6, 0.4); padding-left: 10px; }

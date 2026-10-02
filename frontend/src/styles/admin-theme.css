@@ -48,7 +48,7 @@ body.admin-session-concealed > #admin-session-validation-shell {
 
 .admin-session-validation-eyebrow {
   margin: 0 0 12px;
-  color: var(--mk-blue, #2c63d0);
+  color: var(--mk-blue, #2f6ae0);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -95,8 +95,8 @@ body.admin-session-concealed > #admin-session-validation-shell {
 }
 
 .admin-session-validation-button--primary {
-  border-color: var(--mk-blue, #2c63d0);
-  background: var(--mk-blue, #2c63d0);
+  border-color: var(--mk-blue, #2f6ae0);
+  background: var(--mk-blue, #2f6ae0);
   color: var(--mk-on-fill);
 }
 
@@ -106,7 +106,7 @@ body.admin-session-concealed > #admin-session-validation-shell {
 }
 
 .admin-session-validation-button:focus-visible {
-  outline: 3px solid rgba(44, 99, 208, 0.24);
+  outline: 3px solid rgba(47, 106, 224, 0.24);
   outline-offset: 2px;
 }
 
@@ -185,6 +185,6 @@ html[data-theme='dark'] .admin-session-validation-button:hover:not(:disabled) {
 
 html[data-theme='dark'] .admin-session-validation-button--primary,
 html[data-theme='dark'] .admin-session-validation-button--primary:hover:not(:disabled) {
-  background: var(--mk-blue-fill, #2c63d0);
-  border-color: var(--mk-blue-fill, #2c63d0);
+  background: var(--mk-blue-fill, #2f6ae0);
+  border-color: var(--mk-blue-fill, #2f6ae0);
 }

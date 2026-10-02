@@ -72,7 +72,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   font-family: inherit;
 }
-.imm-menu__btn:hover { color: var(--blue-deep, #1f57cc); border-color: color-mix(in srgb, var(--blue, #3478f6) 40%, transparent); }
+.imm-menu__btn:hover { color: var(--blue-deep, #1f57cc); border-color: color-mix(in srgb, var(--blue, #2f6ae0) 40%, transparent); }
 .imm-menu__pop {
   position: absolute;
   right: 0;

@@ -815,7 +815,7 @@ onUnmounted(() => {
   width: 14px; height: 14px;
   border-radius: 50%;
   border: 2px solid rgba(52, 120, 246, 0.2);
-  border-top-color: var(--blue, #3478f6);
+  border-top-color: var(--blue, #2f6ae0);
   animation: evaluation-spin 0.8s linear infinite;
   flex: none;
 }
@@ -1140,7 +1140,7 @@ onUnmounted(() => {
 .evaluation-transcript-item--user {
   justify-self: end;
   background: color-mix(in srgb, var(--accent, #3478f6) 8%, var(--surface));
-  border-color: color-mix(in srgb, var(--blue, #3478f6) 22%, transparent);
+  border-color: color-mix(in srgb, var(--blue, #2f6ae0) 22%, transparent);
 }
 
 .evaluation-transcript-item__meta {
@@ -1627,9 +1627,9 @@ onUnmounted(() => {
 .evaluation-ctabar__btn--link { border-color: transparent; background: none; }
 .evaluation-ctabar__btn--primary {
   border-color: transparent;
-  background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
+  background: linear-gradient(135deg, var(--blue, #2f6ae0), var(--blue-deep, #1f57cc));
   color: #fff;
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--blue, #3478f6) 30%, transparent);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--blue, #2f6ae0) 30%, transparent);
 }
 
 /* ---------- 页内目录（批10：≥1440 宽屏独占报告右侧空地；窄屏不渲染占位） ---------- */
@@ -1661,8 +1661,8 @@ onUnmounted(() => {
 .eval-toc__link:hover { color: var(--blue-deep, #1f57cc); }
 .eval-toc__link.is-active {
   color: var(--blue-deep, #1f57cc);
-  border-left-color: var(--blue, #3478f6);
-  background: color-mix(in srgb, var(--blue, #3478f6) 7%, transparent);
+  border-left-color: var(--blue, #2f6ae0);
+  background: color-mix(in srgb, var(--blue, #2f6ae0) 7%, transparent);
 }
 /* 锚点落点留出呼吸空间 */
 #sec-topic, #sec-progress, #sec-perf, #sec-longterm, #sec-knowledge,

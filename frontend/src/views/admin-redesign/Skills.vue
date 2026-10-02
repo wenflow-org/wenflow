@@ -909,7 +909,7 @@ const fallbackHint = computed(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--mk-blue, #2c63d0);
+  background: var(--mk-blue, #2f6ae0);
   margin-right: 6px;
   flex-shrink: 0;
 }

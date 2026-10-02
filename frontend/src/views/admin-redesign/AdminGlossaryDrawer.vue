@@ -325,7 +325,7 @@ function close() { emit('close') }
   background: var(--mk-surface-2); color: var(--mk-muted); font: inherit; font-size: var(--mk-fs-micro); font-weight: 700; cursor: pointer;
 }
 .agd__nav-item:hover { color: var(--mk-blue); }
-.agd__nav-item.is-active { background: color-mix(in srgb, var(--mk-blue) 22%, transparent); color: var(--mk-accent-deep); border-color: rgba(44, 99, 208, 0.35); }
+.agd__nav-item.is-active { background: color-mix(in srgb, var(--mk-blue) 22%, transparent); color: var(--mk-accent-deep); border-color: rgba(47, 106, 224, 0.35); }
 .agd__body { padding-top: 6px; }
 .agd__section { margin-top: 14px; }
 /* 滚动修复 #10：分类标题吸顶（抽屉内部滚动时分区标题常驻顶部） */

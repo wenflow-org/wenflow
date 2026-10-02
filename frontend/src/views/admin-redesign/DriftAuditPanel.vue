@@ -168,11 +168,11 @@ watch(() => props.stage, () => {
   border: 1px solid color-mix(in srgb, var(--mk-blue) 35%, var(--mk-line));
   border-radius: var(--mk-radius-xl);
   background: var(--mk-blue-bg, #eff6ff);
-  color: var(--mk-blue, #2c63d0);
+  color: var(--mk-blue, #2f6ae0);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
 }
-.fdp__guide-file .mono { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue, #2c63d0); }
+.fdp__guide-file .mono { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue, #2f6ae0); }
 .fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: var(--mk-fs-micro); background: var(--mk-surface-3); padding: 1px 6px; border-radius: var(--mk-radius-sm); }
 .fdp__drift-list { margin: 0; padding: 6px 14px 12px; list-style: none; }
 /* 漂移条目：原型 .note--warn 语义（soft 琥珀底 + 圆角，不再自搓描边盒）——原型 .note 438-439 */
@@ -194,7 +194,7 @@ watch(() => props.stage, () => {
 .fdp__drift-field { color: var(--mk-faint, var(--mk-faint-soft)); }
 .fdp__drift-val { font-size: var(--mk-fs-micro); }
 .fdp__drift-val--seed { color: var(--mk-muted, #5b6577); }
-.fdp__drift-val--db { color: var(--mk-blue, #2c63d0); font-weight: 600; }
+.fdp__drift-val--db { color: var(--mk-blue, #2f6ae0); font-weight: 600; }
 .fdp__changes-list { margin: 0; padding: 2px 14px 8px; list-style: none; }
 /* 审计行：原型 .rankrow/.vrow 分隔线列表（行间 1px 底线、末行不画，不再逐条描边盒）297-302 */
 .fdp__change {

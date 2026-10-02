@@ -21,7 +21,7 @@ export const STAGE_LABELS: Record<string, string> = {
 
 /** 数据族（fieldId 首段）→ 身份色；未收录的按稳定哈希落入调色板 */
 const FAMILY_COLORS: Record<string, string> = {
-  understanding: '#2c63d0',     // 目标理解 · 蓝
+  understanding: '#2f6ae0',     // 目标理解 · 蓝
   confirmedProposal: '#0ea5e9', // 确认提案 · 天蓝
   confidenceScores: '#0891b2',  // 置信 · 青
   structuredData: '#2563eb',
@@ -72,7 +72,7 @@ const FAMILY_COLORS: Record<string, string> = {
 
 /** 兜底调色板（未收录数据族按稳定哈希取色，同一族恒同色） */
 const PALETTE = [
-  '#2c63d0', '#0d9488', '#d97706', '#7c3aed', '#e11d48',
+  '#2f6ae0', '#0d9488', '#d97706', '#7c3aed', '#e11d48',
   '#0ea5e9', '#65a30d', '#9333ea', '#b45309', '#0891b2',
   '#c026d3', '#16a34a', '#dc2626', '#2563eb',
 ]

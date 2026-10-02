@@ -520,7 +520,7 @@ watch(
   background: #fff;
   overflow: hidden;
 }
-.sdp-log.is-open { border-color: rgba(44, 99, 208, 0.35); }
+.sdp-log.is-open { border-color: rgba(47, 106, 224, 0.35); }
 .sdp-log__main {
   display: grid;
   grid-template-columns: 8px 64px 46px 1fr;

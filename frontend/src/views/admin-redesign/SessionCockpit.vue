@@ -2511,7 +2511,7 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
   transition: all 0.12s ease;
 }
 .cp-btn--sm { padding: 5px 10px; font-size: var(--mk-fs-micro); border-radius: 6px; }
-.cp-btn:hover:not(:disabled) { border-color: rgba(44, 99, 208, 0.4); color: var(--mk-blue); }
+.cp-btn:hover:not(:disabled) { border-color: rgba(47, 106, 224, 0.4); color: var(--mk-blue); }
 .cp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .cp-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: var(--mk-on-fill); }
 .cp-btn--primary:hover:not(:disabled) { color: var(--mk-on-fill); opacity: 0.9; }
@@ -2768,7 +2768,7 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 }
 .cp-lesson-wrapup__score--primary {
   color: var(--mk-blue);
-  border-color: rgba(44, 99, 208, 0.3);
+  border-color: rgba(47, 106, 224, 0.3);
   background: var(--mk-blue-bg);
 }
 .cp-lesson-wrapup__body {
@@ -3026,7 +3026,7 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
   background: var(--mk-surface-2);
   transition: border-color 0.12s ease;
 }
-.cp-wrapup-card:hover { border-color: rgba(44, 99, 208, 0.25); }
+.cp-wrapup-card:hover { border-color: rgba(47, 106, 224, 0.25); }
 .cp-wrapup-card__icon {
   font-size: var(--mk-fs-20);
   width: 36px;

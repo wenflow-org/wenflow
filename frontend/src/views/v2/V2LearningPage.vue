@@ -1781,7 +1781,7 @@ onBeforeUnmount(() => {
 }
 .tutor__resume-text { flex: 1; font-weight: 600; }
 .tutor__resume-restart {
-  border: 1px solid rgba(44, 99, 208, 0.35);
+  border: 1px solid rgba(47, 106, 224, 0.35);
   background: var(--surface);
   color: var(--blue-deep);
   font: inherit; font-size: 12px; font-weight: 700;
@@ -1813,7 +1813,7 @@ onBeforeUnmount(() => {
   font-size: 12px; font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--blue-deep, #1f57cc);
-  background: color-mix(in srgb, var(--blue, #3478f6) 10%, transparent);
+  background: color-mix(in srgb, var(--blue, #2f6ae0) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
   padding: 2px 9px; border-radius: var(--mk-radius-pill);
 }
@@ -1935,10 +1935,10 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line, rgba(0,0,0,.08)); border-radius: 10px;
   background: var(--surface, rgba(0,0,0,.02)); color: inherit;
 }
-.msg__supplement:hover { border-color: var(--blue, #3b82f6); }
+.msg__supplement:hover { border-color: var(--blue, #2f6ae0); }
 .msg__supplement-tag {
   justify-self: start; padding: 1px 6px; border-radius: 999px;
-  background: var(--blue, #3b82f6); color: #fff; font-size: 12px; font-weight: 700;
+  background: var(--blue, #2f6ae0); color: #fff; font-size: 12px; font-weight: 700;
 }
 .msg__supplement-title { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .msg__supplement-topic { font-size: 12px; color: var(--muted, #6b7280); }
@@ -2115,7 +2115,7 @@ onBeforeUnmount(() => {
 }
 .peerdock__msg--me .peerdock__bubble {
   border-radius: 14px 14px 4px 14px;
-  background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
+  background: linear-gradient(135deg, var(--blue, #2f6ae0), var(--blue-deep, #1f57cc));
   color: #fff; border: 0;
 }
 .peerdock__bubble :deep(p) { margin: 0 0 6px; }

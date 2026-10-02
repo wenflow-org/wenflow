@@ -85,7 +85,7 @@
 
 .uc-btn--primary {
   border: 0;
-  background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
+  background: linear-gradient(135deg, var(--blue, var(--mk-blue)), var(--blue-deep, #1f57cc));
   color: #fff;
   box-shadow: 0 10px 22px color-mix(in srgb, var(--blue) 22%, transparent);
 }
@@ -262,7 +262,7 @@ select.uc-field__input {
 .uc-badge--ok { color: var(--green-ink, #1d7a4c); background: rgba(30, 158, 88, 0.1); }
 .uc-badge--warn { color: var(--amber-ink, #b3540a); background: rgba(244, 170, 70, 0.14); }
 .uc-badge--bad { color: var(--red-ink); background: rgba(239, 117, 120, 0.1); }
-.uc-badge--info { color: var(--blue-deep, #1f57cc); background: rgba(52, 120, 246, 0.1); }
+.uc-badge--info { color: var(--blue-deep, #1f57cc); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .uc-badge--muted { color: var(--faint, #67758f); background: rgba(103, 117, 143, 0.1); }
 
 /* ---------- 手作开关 ---------- */
@@ -308,7 +308,7 @@ select.uc-field__input {
 }
 
 .uc-switch input:checked + .uc-switch__track {
-  background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc));
+  background: linear-gradient(135deg, var(--blue, var(--mk-blue)), var(--blue-deep, #1f57cc));
   border-color: transparent;
 }
 

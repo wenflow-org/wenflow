@@ -50,10 +50,10 @@ defineEmits<{ (e: 'update:modelValue', key: string): void }>();
 }
 .mk-subtab:hover { color: var(--mk-ink); }
 .mk-subtab[aria-selected='true'] {
-  color: var(--mk-blue, #2c63d0);
-  border-bottom-color: var(--mk-blue, #2c63d0);
+  color: var(--mk-blue, #2f6ae0);
+  border-bottom-color: var(--mk-blue, #2f6ae0);
 }
-.mk-subtab:focus-visible { outline: 2px solid color-mix(in srgb, var(--mk-blue, #2c63d0) 85%, transparent); outline-offset: -2px; }
+.mk-subtab:focus-visible { outline: 2px solid color-mix(in srgb, var(--mk-blue, #2f6ae0) 85%, transparent); outline-offset: -2px; }
 .mk-subtab__count { margin-left: 5px; color: var(--mk-faint, #8a93a6); font-weight: 600; }
 .mk-subtab[aria-selected='true'] .mk-subtab__count { color: inherit; opacity: 0.72; }
 </style>

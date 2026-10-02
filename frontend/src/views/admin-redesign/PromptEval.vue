@@ -1254,7 +1254,7 @@ function retryRunDetail() {
 }
 .pe-tab__icon { width: 14px; height: 14px; flex: 0 0 auto; }
 .pe-tab:hover { color: var(--mk-ink); }
-.pe-tab[aria-selected='true'] { color: var(--mk-blue, #2c63d0); border-bottom-color: var(--mk-blue, #2c63d0); }
+.pe-tab[aria-selected='true'] { color: var(--mk-blue, #2f6ae0); border-bottom-color: var(--mk-blue, #2f6ae0); }
 .pe-tab-body {
   border: 1px solid var(--mk-line);
   border-top: 0;

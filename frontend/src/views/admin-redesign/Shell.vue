@@ -690,7 +690,7 @@ watch(
 .mshell__item:hover { background: var(--mk-side-hover); color: var(--mk-ink); }
 /* 点击导航后不残留聚焦描边环（选中态由 --active 底色表达）；键盘 Tab 仍有可见环 */
 .mshell__item:focus { outline: none; }
-.mshell__item:focus-visible { outline: 2px solid var(--mk-blue, #2c63d0); outline-offset: -2px; }
+.mshell__item:focus-visible { outline: 2px solid var(--mk-blue, #2f6ae0); outline-offset: -2px; }
 .mshell__item--active {
   background: var(--mk-blue-bg);
   color: var(--mk-blue);
@@ -761,7 +761,7 @@ watch(
 .mshell__collapse:hover { background: var(--mk-side-hover); color: var(--mk-ink); }
 .mshell__collapse:disabled { cursor: default; opacity: 0.5; }
 .mshell__collapse:focus { outline: none; }
-.mshell__collapse:focus-visible { outline: 2px solid var(--mk-blue, #2c63d0); outline-offset: -2px; }
+.mshell__collapse:focus-visible { outline: 2px solid var(--mk-blue, #2f6ae0); outline-offset: -2px; }
 .mshell__collapse-icon { display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; flex-shrink: 0; }
 .mshell__collapse-icon svg { display: block; }
 .mshell__collapse-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -833,7 +833,7 @@ watch(
   cursor: pointer;
   transition: border-color 0.14s ease, color 0.14s ease;
 }
-.mshell__top-back:hover { border-color: color-mix(in srgb, var(--mk-blue, #2c63d0) 40%, transparent); color: var(--mk-blue, #2c63d0); }
+.mshell__top-back:hover { border-color: color-mix(in srgb, var(--mk-blue, #2f6ae0) 40%, transparent); color: var(--mk-blue, #2f6ae0); }
 .mshell__top-crumb { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .mshell__top-title {
   font-size: var(--mk-fs-emphasis, 15px);
@@ -890,8 +890,8 @@ watch(
 }
 .mshell__search-input::placeholder { color: var(--mk-faint); }
 .mshell__search-input:focus {
-  border-color: color-mix(in srgb, var(--mk-blue, #2c63d0) 45%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue, #2c63d0) 12%, transparent);
+  border-color: color-mix(in srgb, var(--mk-blue, #2f6ae0) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue, #2f6ae0) 12%, transparent);
 }
 .mshell__search-kbd {
   position: absolute;
@@ -1174,7 +1174,7 @@ html[data-theme='dark'] {
     color: var(--mk-ink);
     cursor: pointer;
   }
-  .mshell__menu-btn:hover { border-color: color-mix(in srgb, var(--mk-blue, #2c63d0) 40%, transparent); color: var(--mk-blue, #2c63d0); }
+  .mshell__menu-btn:hover { border-color: color-mix(in srgb, var(--mk-blue, #2f6ae0) 40%, transparent); color: var(--mk-blue, #2f6ae0); }
   .mshell__side {
     position: fixed;
     top: 0;

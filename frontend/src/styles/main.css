@@ -46,7 +46,9 @@
   --mk-modal-w-wide-xl: 1000px;
   --mk-modal-w-wide-xxl: 1160px;
 
-  /* 颜色/字体 token：唯一品牌蓝 --mk-blue（全站禁用其它品牌蓝硬编码） */
+  /* 颜色/字体 token：唯一品牌蓝 --mk-blue（全站禁用其它品牌蓝硬编码）。
+     2026-10-02 归一（WenFlow-Design-System 设计体系包）：Admin/用户侧统一 #2f6ae0，
+     暗色档 #5b8def 不变；hover/pressed 收敛 #1f57cc（与 --mk-accent-deep/--mk-ghost-fg 同档）。 */
   --mk-ink: #1a2a44;
   --mk-muted: #5b6577;
   --mk-faint: #5f6f8c;
@@ -55,7 +57,7 @@
   --mk-bg: #f7f8fa;
   --mk-surface: #ffffff;
   --mk-surface-2: #eef2fa;       /* 次级表面：空态图标底、嵌套面、表格头等的浅底 */
-  --mk-blue: #2c63d0;
+  --mk-blue: #2f6ae0;
   /* 绿色文字基线：白底 5.0:1。文字级要更深用 v2.css 的 --green-ink；
      不要自造更亮的绿当文字色（如 #31b16f 仅 2.75:1，走查 2026-09-27）。
      填充底色（配白字）另有 --mk-green-fill，见下方「实心语义底色」。 */
@@ -82,7 +84,7 @@
   --mk-minibar-bg: #eef2fa;
   --mk-hover-surface: #eff6ff;        /* 文字链/返回/图标按钮的悬停面 */
   --mk-btn-hover-bg: #f6f9ff;
-  --mk-blue-hover: #2b64d8;           /* 主按钮悬停 */
+  --mk-blue-hover: #1f57cc;           /* 主按钮悬停（设计体系包 hover/pressed 档，与 accent-deep 同值） */
   /* ---- 徽章族配色（每个变体一套；亮色档；暗色档见 dark 块同名 token）----
      与上一组同源：原为「亮色硬编码 + 暗色补丁」，现集中成对定义。按变体命名，
      因为这些是各变体专有的 tint（4 种绿、3 种 slate 面等近邻值无法无损合并）。 */
@@ -117,8 +119,8 @@
   --mk-meta-link-on-fg: var(--mk-blue);
   --mk-search-clear-bg: #e2e8f0;
   --mk-search-clear-fg: var(--mk-muted);
-  --mk-meta-link-on-bg: rgba(44, 99, 208, 0.12);
-  --mk-pill-count-active-bg: rgba(44, 99, 208, 0.14);
+  --mk-meta-link-on-bg: rgba(47, 106, 224, 0.12);
+  --mk-pill-count-active-bg: rgba(47, 106, 224, 0.14);
   --mk-input-disabled-bg: #f4f6fa;
   --mk-modal-close-bg: #f0f2f5;
   --mk-modal-close-hover-bg: #f0f2f5; /* 亮色下悬停不变（既有行为）；暗色档才加深 */
@@ -169,12 +171,12 @@
   --mk-red-fill-strong: #b91c1c;
   --mk-green-fill: #15803d;
   --mk-amber-fill: #b45309;
-  --mk-blue-fill: #2c63d0;
+  --mk-blue-fill: #2f6ae0;
   --mk-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
   --mk-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
   /* 唯一的键盘焦点环（focus-visible）：全站控件同一圈。此前按钮/输入/胶囊各写各的
      ring（0 0 0 2px / 3px、不同透明度），焦点态也是"语言"的一部分。 */
-  --mk-focus-ring: 0 0 0 3px rgba(44, 99, 208, 0.18);
+  --mk-focus-ring: 0 0 0 3px rgba(47, 106, 224, 0.18);
 
   /* 设计 token：字体栈 / 强调色 / 代码块 / 圆角 / 阴影 */
   --mk-sans: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", Inter, sans-serif;
@@ -292,10 +294,10 @@
   --mk-graph-end-b: #f7f4fe;           /* 终点节点渐变止 */
   --mk-graph-node-ink: #1a2a44;        /* 卡内主文字 */
   --mk-graph-on-accent: #ffffff;       /* 实心强调底上的白字（图标/序号/移交芯片） */
-  --mk-graph-blue-ink: #2c63d0;        /* 蓝色强调文字 */
-  --mk-graph-blue-ink-hover: #2c63d0;  /* 蓝色强调文字（悬停） */
+  --mk-graph-blue-ink: #2f6ae0;        /* 蓝色强调文字 */
+  --mk-graph-blue-ink-hover: #2f6ae0;  /* 蓝色强调文字（悬停） */
   --mk-graph-flow-soft-ink: #1f57cc;   /* 淡蓝芯片文字 */
-  --mk-graph-blue-kind-ink: #2c63d0;   /* 瀑布「流程」类型文字 */
+  --mk-graph-blue-kind-ink: #2f6ae0;   /* 瀑布「流程」类型文字 */
   --mk-graph-accent-purple-ink: #7c3aed; /* 紫色强调文字（跨阶段 / 终点） */
   --mk-graph-flag-purple-ink: #7c3aed;   /* 内部信令旗标文字 */
   --mk-graph-warn-ink: #b45309;          /* 警示文字（条件 / 累积 / 警告徽章） */
@@ -304,7 +306,7 @@
   --mk-graph-notice-ink: #b45309;        /* 提示条文字 */
   --mk-graph-down: #8aa6d8;              /* 下游节点描边强调色 */
   --mk-graph-flow-out: #8aa6d8;          /* 数据旅程「移交」芯片底 */
-  --mk-graph-port-ink: #2c63d0;          /* 长程端口徽标文字 */
+  --mk-graph-port-ink: #2f6ae0;          /* 长程端口徽标文字 */
   --mk-graph-bar-ok-a: #6aa0ff;          /* 瀑布成功条渐变起 */
   --mk-graph-bar-ok-b: #3d7cff;          /* 瀑布成功条渐变止 */
   --mk-graph-bar-warn-a: #fcd34d;        /* 瀑布警告条渐变起 */
@@ -336,7 +338,7 @@
   --mk-graph-notice-bg: #fff8ec;         /* 提示条底 */
   --mk-graph-notice-line: rgba(217, 119, 6, 0.35); /* 提示条描边 */
   --mk-graph-verdict-bg: #fef8f8;        /* 失败结论条底 */
-  --mk-graph-flow-line: rgba(44, 99, 208, 0.4);    /* 数据旅程描边 */
+  --mk-graph-flow-line: rgba(47, 106, 224, 0.4);    /* 数据旅程描边 */
 }
 
 /* ========================================

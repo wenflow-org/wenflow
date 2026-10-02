@@ -29,7 +29,7 @@ export interface MkChartPalette {
 
 export const MK_CHART_PALETTES: Record<'light' | 'dark', MkChartPalette> = {
   light: {
-    primary: '#2c63d0',
+    primary: '#2f6ae0',
     primaryBright: '#3d7cff',
     neutral: '#8492ab',
     axisLine: 'rgba(23, 32, 51, 0.15)',
@@ -55,7 +55,7 @@ export const MK_CHART_THEME = { light: 'mk-light', dark: 'mk-dark' } as const
 
 /** 记忆保持曲线分类色板（多折线按概念序取模循环；自 VirtualProfile.vue 私有板上移共享，
  *  单测仍从 VirtualProfile.vue 导入——该文件 re-export 这两个名字） */
-export const MEMORY_CURVE_COLORS = ['#2c63d0', '#dc2626', '#15803d', '#b7791f', '#7c3aed', '#0891b2'] as const
+export const MEMORY_CURVE_COLORS = ['#2f6ae0', '#dc2626', '#15803d', '#b7791f', '#7c3aed', '#0891b2'] as const
 
 export function memoryCurveColor(index: number): string {
   return MEMORY_CURVE_COLORS[index % MEMORY_CURVE_COLORS.length]

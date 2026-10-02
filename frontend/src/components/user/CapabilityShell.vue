@@ -117,7 +117,7 @@ const onCapabilityTab = computed(() => tabs.some(isActive))
   color: var(--blue-deep, #1f57cc);
   box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06));
 }
-.uc__seg__btn:focus-visible { outline: 2px solid var(--blue, #3478f6); outline-offset: 2px; }
+.uc__seg__btn:focus-visible { outline: 2px solid var(--blue, #2f6ae0); outline-offset: 2px; }
 
 /* 深页（设置/调用日志）标题行：分段器不覆盖时保留可见 h1 */
 .uc__deeptitle h1 {
@@ -176,7 +176,7 @@ const onCapabilityTab = computed(() => tabs.some(isActive))
 .uc__body :deep(.btn-primary) {
   border: 0 !important;
   border-radius: 12px !important;
-  background: linear-gradient(135deg, var(--blue, #3478f6), var(--blue-deep, #1f57cc)) !important;
+  background: linear-gradient(135deg, var(--blue, #2f6ae0), var(--blue-deep, #1f57cc)) !important;
   box-shadow: 0 10px 22px rgba(52, 120, 246, 0.22);
   font-weight: 700;
 }

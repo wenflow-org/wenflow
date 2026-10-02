@@ -154,7 +154,7 @@ function goDryRun() {
 /* ---------- 阶段色（与拓扑/抽屉同套，单源 store.AGENT_TONES） ---------- */
 const tone = computed(() => {
   const pid = workbenchMeta.value?.parentAgent?.id || ''
-  return AGENT_TONES[pid] || { hue: '#2c63d0', soft: 'rgba(44, 99, 208, 0.1)' }
+  return AGENT_TONES[pid] || { hue: '#2f6ae0', soft: 'rgba(47, 106, 224, 0.1)' }
 })
 
 /* ---------- 总览与元数据 ---------- */

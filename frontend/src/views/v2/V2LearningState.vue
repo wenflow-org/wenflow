@@ -1257,7 +1257,7 @@ function loadGuidance() {
 .guide-retry {
   margin-left: 8px; padding: 10px 12px; border-radius: var(--mk-radius-xl, 999px);
   border: 1px solid var(--line); background: var(--surface, #fff);
-  font-size: 12.5px; font-weight: 700; color: var(--blue-deep, #1e5fa8); cursor: pointer;
+  font-size: 12.5px; font-weight: 700; color: var(--blue-deep, #1f57cc); cursor: pointer;
 }
 .guide-retry:disabled { opacity: .6; cursor: default; }
 </style>

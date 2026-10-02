@@ -354,7 +354,7 @@ async function handleDeactivate() {
   width: 54px;
   height: 54px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--blue, #3478f6) 12%, transparent);
+  background: color-mix(in srgb, var(--blue, #2f6ae0) 12%, transparent);
   color: var(--blue-deep, #1f57cc);
   font-size: 21px;
   font-weight: 800;

@@ -2757,8 +2757,8 @@ async function quietReload(id: string) {
   overflow: hidden;
   transition: border-color 0.14s ease;
 }
-.vp-story:hover { border-color: rgba(44, 99, 208, 0.35); }
-.vp-story.is-selected { border-color: rgba(44, 99, 208, 0.5); }
+.vp-story:hover { border-color: rgba(47, 106, 224, 0.35); }
+.vp-story.is-selected { border-color: rgba(47, 106, 224, 0.5); }
 
 /* 列表行：radio + 主区（标题/状态 + 简述 + 统计）+ 操作 + 展开 */
 .vp-story__row {
@@ -2926,7 +2926,7 @@ async function quietReload(id: string) {
   background: var(--mk-surface);
   transition: border-color 0.12s ease;
 }
-.vp-run-row:hover { border-color: rgba(44, 99, 208, 0.35); }
+.vp-run-row:hover { border-color: rgba(47, 106, 224, 0.35); }
 .vp-run-row__time { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 .vp-run-row__story {
   font-size: var(--mk-fs-micro);

@@ -37,7 +37,7 @@
 
 /* 键盘焦点可见环（无障碍底线）：覆盖按钮/输入/选择/链接；:root 级使 Teleport 到 body 的抽屉/弹窗同样生效 */
 :root :focus-visible {
-  outline: 2px solid rgba(44, 99, 208, 0.85);
+  outline: 2px solid rgba(47, 106, 224, 0.85);
   outline-offset: 2px;
   border-radius: var(--mk-radius-xs);
 }
@@ -154,7 +154,7 @@
   align-items: center;
   box-sizing: border-box;
 }
-.mk-status__action:hover { border-color: rgba(44, 99, 208, 0.4); }
+.mk-status__action:hover { border-color: rgba(47, 106, 224, 0.4); }
 .mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: var(--mk-on-fill); }
 .mk-status__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .mk-status__actions .mk-status__action { margin-left: 0; }
@@ -170,10 +170,10 @@
   border-radius: var(--mk-radius-sm);
   transition: color 0.12s ease, background 0.12s ease;
 }
-.mk-status__meta-link:hover { color: var(--mk-blue); background: rgba(44, 99, 208, 0.08); }
+.mk-status__meta-link:hover { color: var(--mk-blue); background: rgba(47, 106, 224, 0.08); }
 .mk-status__meta-link--on { color: var(--mk-meta-link-on-fg); background: var(--mk-meta-link-on-bg); }
 /* 暗色等价色：原为 LearnerCenter 页面私有补丁，收敛为全局。
-   其余 5 处计数锚点此前无暗色覆盖 → rgba(44,99,208,.08) 落在深底上几乎不可见。 */
+   其余 5 处计数锚点此前无暗色覆盖 → rgba(47,106,224,.08) 落在深底上几乎不可见。 */
 html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 239, 0.14); }
 /* 状态条 meta 语义着色（成功率红/琥珀等；Orchestrator 曾页面私有，全局化） */
 .mk-status__meta--bad { color: var(--mk-red, #dc2626); font-weight: 700; }
@@ -288,7 +288,7 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
 }
 /* 头像品牌渐变（沿用两种既有形态；明暗同值） */
 .mk-entity__avatar--user { background: linear-gradient(135deg, var(--mk-entity-avatar-user-from), var(--mk-entity-avatar-user-to)); }
-.mk-entity__avatar--learner { background: linear-gradient(135deg, var(--mk-blue, #2c63d0), var(--mk-purple)); }
+.mk-entity__avatar--learner { background: linear-gradient(135deg, var(--mk-blue, #2f6ae0), var(--mk-purple)); }
 /* 圆形头像（虚拟学习者：具体颜色由页面按名称哈希给，原语只管形状） */
 .mk-entity__avatar--round { border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); }
 
@@ -902,7 +902,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   border-radius: var(--mk-radius-sm);
   transition: background 0.12s, color 0.12s;
 }
-.mk-icon-btn:hover { background: var(--mk-hover-surface); color: var(--mk-blue, #2c63d0); }
+.mk-icon-btn:hover { background: var(--mk-hover-surface); color: var(--mk-blue, #2f6ae0); }
 .mk-icon-btn--danger:hover { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .mk-icon-btn svg { width: 15px; height: 15px; }
 
@@ -939,7 +939,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   margin-top: 8px;
   padding: 7px 16px;
   border-radius: var(--mk-radius-sm);
-  border: 1px solid rgba(44, 99, 208, 0.3);
+  border: 1px solid rgba(47, 106, 224, 0.3);
   background: var(--mk-blue-bg);
   color: var(--mk-blue);
   font: inherit;
@@ -1164,7 +1164,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 }
 .mk-field__input:focus,
 .mk-field__select:focus,
-.mk-field__textarea:focus { border-color: var(--mk-blue, #2c63d0); box-shadow: var(--mk-focus-ring); }
+.mk-field__textarea:focus { border-color: var(--mk-blue, #2f6ae0); box-shadow: var(--mk-focus-ring); }
 .mk-field__textarea { min-height: 96px; resize: vertical; line-height: 1.6; }
 .mk-field--error .mk-field__input,
 .mk-field--error .mk-field__textarea { border-color: var(--mk-red, #dc2626); }
@@ -1184,7 +1184,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   outline: none;
   box-sizing: border-box;
 }
-.mk-input:focus { border-color: var(--mk-blue, #2c63d0); box-shadow: var(--mk-focus-ring); }
+.mk-input:focus { border-color: var(--mk-blue, #2f6ae0); box-shadow: var(--mk-focus-ring); }
 .mk-input:disabled { background: var(--mk-input-disabled-bg); color: var(--mk-faint, #5f6f8c); cursor: not-allowed; }
 /* 字段输入禁用态与 .mk-input:disabled 同基调（原只给了暗色值，亮色下无底色） */
 .mk-field__input:disabled { background: var(--mk-input-disabled-bg); }
@@ -1211,8 +1211,8 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-btn:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
 .mk-btn:hover { background: var(--mk-btn-hover-bg); }
 .mk-btn--primary {
-  background: var(--mk-blue, #2c63d0);
-  border-color: var(--mk-blue, #2c63d0);
+  background: var(--mk-blue, #2f6ae0);
+  border-color: var(--mk-blue, #2f6ae0);
   color: var(--mk-on-fill);
 }
 .mk-btn--primary:hover { background: var(--mk-blue-hover); }
@@ -1315,8 +1315,8 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(44, 99, 208, 0.25);
-  border-top-color: var(--mk-blue, #2c63d0);
+  border: 2px solid rgba(47, 106, 224, 0.25);
+  border-top-color: var(--mk-blue, #2f6ae0);
   border-radius: 50%;
   animation: mk-spin 0.7s linear infinite;
   vertical-align: -2px;
@@ -1674,7 +1674,7 @@ body.admin-route code { font-size: inherit; }
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
 .mk-backtop--show { opacity: 1; pointer-events: auto; transform: none; }
-.mk-backtop:hover { color: var(--mk-blue, #2c63d0); border-color: rgba(44, 99, 208, 0.4); }
+.mk-backtop:hover { color: var(--mk-blue, #2f6ae0); border-color: rgba(47, 106, 224, 0.4); }
 .mk-backtop__icon { font-size: var(--mk-fs-micro); line-height: 1; }
 @media (min-width: 2000px) {
   .mk-backtop { padding: 10px 16px; right: 28px; bottom: 32px; }

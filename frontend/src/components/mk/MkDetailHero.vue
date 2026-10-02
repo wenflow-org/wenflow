@@ -42,7 +42,7 @@ defineProps<{ avatar?: string; title: string; sub?: string }>();
   font-weight: 700;
   /* 饱和实心底上的文字，全主题同值（main.css --mk-on-fill 语义） */
   color: var(--mk-on-fill, #ffffff);
-  background: var(--mk-blue, #2c63d0);
+  background: var(--mk-blue, #2f6ae0);
   flex: none;
 }
 .mk-hero__meta {

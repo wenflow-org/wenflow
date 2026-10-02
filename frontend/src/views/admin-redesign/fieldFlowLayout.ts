@@ -308,7 +308,7 @@ export function computeFocusEdges(
       const midX = (from.x + to.x) / 2
       out.push({
         d: `M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`,
-        stroke: '#2c63d0', width: 1.3, dashed: false,
+        stroke: '#2f6ae0', width: 1.3, dashed: false,
         from: item.id, to: t,
       })
     }
@@ -430,7 +430,7 @@ export function computeEdges(layouts: StageLayout[]): EdgeGeom[] {
                 const to = { x: lane.x + FIELD_X + FIELD_W / 2, y: first.y - 6 }
                 out.push({
                   d: `M ${from.cx} ${from.cy} C ${from.cx} ${from.cy + 26}, ${to.x} ${to.y - 26}, ${to.x} ${to.y}`,
-                  stroke: '#2c63d0',
+                  stroke: '#2f6ae0',
                   width: 1.4,
                   dashed: fs.field.render === 'hidden',
                   from: fs.field.fieldId,
@@ -447,7 +447,7 @@ export function computeEdges(layouts: StageLayout[]): EdgeGeom[] {
           const midX = (from.cx + to.x) / 2
           out.push({
             d: `M ${from.cx} ${from.cy} C ${midX} ${from.cy}, ${midX} ${to.y}, ${to.x} ${to.y}`,
-            stroke: '#2c63d0',
+            stroke: '#2f6ae0',
             width: 1.5,
             dashed: fs.field.render === 'hidden',
             from: fs.field.fieldId,

@@ -42,7 +42,7 @@ const adminSession = hasAdminSession();
   font-weight: 800;
   line-height: 1;
   margin: 0 0 12px;
-  color: var(--color-primary, #3478f6);
+  color: var(--color-primary, #2f6ae0);
   letter-spacing: 2px;
 }
 
@@ -82,7 +82,7 @@ const adminSession = hasAdminSession();
 }
 
 .nf-btn--primary {
-  background: var(--color-primary, #3478f6);
+  background: var(--color-primary, #2f6ae0);
   color: #fff;
 }
 
