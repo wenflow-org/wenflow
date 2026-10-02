@@ -115,7 +115,7 @@
           label="失败调用"
           :value="failedCallsText"
           :tone="failedCalls > 0 ? 'bad' : ''"
-          :hint="failedCalls > 0 ? `占总调用 ${failedPct}%（重试后终态失败）` : '无失败调用'"
+          :hint="failedCalls > 0 ? `占总调用 ${failedPct}（重试后终态失败）` : '无失败调用'"
           :title="failedHint"
         />
       </section>

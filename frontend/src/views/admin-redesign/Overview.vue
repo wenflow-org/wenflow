@@ -3,6 +3,13 @@
     <!-- 页头（原型 pageTitle）：面包屑管「我在哪」，页头管「这页是什么 + 主操作」 -->
     <MkPageHead title="平台总览" :sub="headSub">
       <template #actions>
+        <!-- 刷新状态独立于副文：副文只放事实段（运行全景/数据截至/最近活动），
+             避免长句在页头副文盒内断词换行（视觉走查 2026-10-03） -->
+        <span
+          class="ov-refresh-note"
+          :class="{ 'ov-refresh-note--warn': autoRefreshStopped || overviewStale }"
+          role="status"
+        >{{ refreshNote }}</span>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="liveRefreshing" @click="refreshNow">
           {{ liveRefreshing ? '刷新中…' : '刷新' }}
         </button>
@@ -341,15 +348,16 @@ const headSub = computed(() => {
   if (lastUpdated.value) parts.push(`数据截至 ${lastUpdated.value}`);
   const recency = recentActivityText(data.value?.pulse || []);
   if (recency) parts.push(recency);
-  parts.push(
-    autoRefreshStopped.value
-      ? '自动刷新已停止（连续失败），点「刷新」恢复'
-      : overviewStale.value
-        ? '最近一次刷新失败，展示上次成功数据'
-        : '10s 自动刷新（失败自动退避）'
-  );
   return parts.join(' · ');
 });
+/** 刷新状态贴「刷新」钮显示（熔断/展示旧数据=琥珀告警；正常=faint 一句） */
+const refreshNote = computed(() =>
+  autoRefreshStopped.value
+    ? '自动刷新已停止，点「刷新」恢复'
+    : overviewStale.value
+      ? '展示上次成功数据'
+      : '10s 自动刷新'
+);
 /* 手动刷新：成功即打点真实数据时刻；若此前已熔断停止轮询，一并如实恢复 */
 function refreshNow() {
   void refreshOverviewTracked(true).then((ok) => {
@@ -664,6 +672,10 @@ watch(dataSource, () => {
    按钮（mk-btn=btn）。原型 row3 第三卡「学习状态分布」不落（后端暂无
    学习状态聚合口径，用户拍板不做顶替卡，row3 两卡排布，2026-10-01）。
    ===================================================================== */
+
+/* ---- 页头刷新注记（贴「刷新」钮；熔断/旧数据=琥珀，正常=faint）---- */
+.ov-refresh-note { flex: none; align-self: center; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.ov-refresh-note--warn { color: var(--mk-amber); font-weight: 600; }
 
 /* ---- KPI（.grid auto-fit 210 + .card.kpi）---- */
 .kpigrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }

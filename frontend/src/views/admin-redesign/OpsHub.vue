@@ -320,28 +320,38 @@ const hostTone = computed(() => {
   return n > 0 ? 'mk-status--ok' : 'mk-status--muted'
 })
 
-/* 待办清单：按严重度排序（坏>警告>中性），零值弱化为「已清零」；
+const TODO_SEV_RANK = { bad: 0, warn: 1, muted: 2 } as const
+/* 待办清单：按严重度排序（坏>警告>中性，同档按计数降序），零值弱化为「已清零」；
    域加载失败时该行显示「—」+「加载失败」，不再伪装成 0；
    actionable = 有计数且未失败——「已清零 / 加载失败」行不给 pointer 样式也不挂跳转
    （原实现 cursor 已是 default，点击却仍跳转，是「看起来不可点其实可点」的误导） */
-const todoItems = computed(() => [
-  { key: 'feedback', label: '待处理反馈', category: '反馈', hint: '学习者低分反馈等待分流', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback, actionable: !wbErrors.value.feedback && wbPendingFeedback.value > 0 },
-  { key: 'paths', label: '生成失败路径', category: '路径', hint: '目标对话产出路径失败，需排查', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths, actionable: !wbErrors.value.paths && wbFailedPaths.value > 0 },
-  { key: 'dead', label: 'Outbox 死信', category: '通知', hint: '领域事件投递失败，影响画像/成就', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead, actionable: !wbErrors.value.dead && wbDeadLetters.value > 0 },
-  { key: 'draft', label: '草稿公告', category: '公告', hint: '已创建未发布的公告', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value, actionable: !annFailed.value && ann.value.draft > 0 },
-])
+const todoItems = computed(() => {
+  const items = [
+    { key: 'feedback', label: '待处理反馈', category: '反馈', hint: '学习者低分反馈等待分流', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback, actionable: !wbErrors.value.feedback && wbPendingFeedback.value > 0 },
+    { key: 'paths', label: '生成失败路径', category: '路径', hint: '目标对话产出路径失败，需排查', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths, actionable: !wbErrors.value.paths && wbFailedPaths.value > 0 },
+    { key: 'dead', label: 'Outbox 死信', category: '通知', hint: '领域事件投递失败，影响画像/成就', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead, actionable: !wbErrors.value.dead && wbDeadLetters.value > 0 },
+    { key: 'draft', label: '草稿公告', category: '公告', hint: '已创建未发布的公告', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value, actionable: !annFailed.value && ann.value.draft > 0 },
+  ]
+  return items.slice().sort((a, b) => TODO_SEV_RANK[a.severity] - TODO_SEV_RANK[b.severity] || b.count - a.count)
+})
 
 /**
  * 运营待办 metricCard 数值（原型 1906-1910 四张卡：待处理反馈 / 生成失败路径 /
  * Outbox 死信 / 草稿公告）。数值全部取现有统计，foot 用真实口径——
  * 不硬造「其中新增 N」这类后端未提供的子计数，只作简短定性说明。
+ * 顺序直接映射排序后的 todoItems（卡带承诺「按优先级排序」，卡与行单源同序）。
  */
-const todoMetrics = computed(() => [
-  { key: 'feedback', label: '待处理反馈', value: wbPendingFeedback.value, bad: wbPendingFeedback.value > 0, failed: !!wbErrors.value.feedback, foot: wbErrors.value.feedback ? '加载失败，计数不可信' : '等待分流' },
-  { key: 'paths', label: '生成失败路径', value: wbFailedPaths.value, bad: wbFailedPaths.value > 0, failed: !!wbErrors.value.paths, foot: wbErrors.value.paths ? '加载失败，计数不可信' : '需排查重规划' },
-  { key: 'dead', label: 'Outbox 死信', value: wbDeadLetters.value, bad: wbDeadLetters.value > 0, failed: !!wbErrors.value.dead, foot: wbErrors.value.dead ? '加载失败，计数不可信' : '投递失败待重投' },
-  { key: 'draft', label: '草稿公告', value: ann.value.draft, bad: false, failed: annFailed.value, foot: annFailed.value ? '加载失败，计数不可信' : '待发布' },
-])
+const TODO_METRIC_FOOT: Record<string, string> = { feedback: '等待分流', paths: '需排查重规划', dead: '投递失败待重投', draft: '待发布' }
+const todoMetrics = computed(() =>
+  todoItems.value.map((t) => ({
+    key: t.key,
+    label: t.label,
+    value: t.count,
+    bad: t.severity !== 'muted' && t.count > 0,
+    failed: t.failed,
+    foot: t.failed ? '加载失败，计数不可信' : TODO_METRIC_FOOT[t.key] ?? '',
+  }))
+)
 
 /* 公告三态计数（live 层共享，与侧栏徽章同源） */
 const ann = announcementCounts

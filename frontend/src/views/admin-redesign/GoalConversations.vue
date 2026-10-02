@@ -197,15 +197,17 @@
               </td>
               <td v-if="!gcHiddenCols.has('created')"><span class="mk-cell-sub mono" :title="r.createdAt">{{ r.createdAt }}</span></td>
               <td>
-                <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）；
-                     删除属危险低频操作，仍收 ⋯ 菜单。右对齐与 mk-th--right 表头对齐（同 Users.vue 判例） -->
+                <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）。
+                     行内只留高频项（链路/详情）；重建路径与删除同属低频矫正操作，收 ⋯ 菜单——
+                     四钮并排自然宽 238px 会把整表推出容器 66px，1440 下操作列被裁（走查 2026-10-03 实测）。
+                     右对齐与 mk-th--right 表头对齐（同 Users.vue 判例） -->
                 <div class="mk-actions">
                   <button type="button" class="mk-btn mk-btn--sm" @click.stop="goTrace(r)">链路</button>
                   <button type="button" class="mk-btn mk-btn--sm" title="打开会话座舱（只读监控）" @click.stop="goConsole(r)">详情</button>
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '重建路径'" @click.stop="regenerate(r)">{{ r.regenerating ? '生成中…' : '重建路径' }}</button>
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(r.id)">⋯</button>
                     <div v-if="openMenu === r.id" class="mk-menu__pop" :style="popStyle" @click.stop>
+                      <button type="button" class="mk-menu__item" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '对该会话重新生成学习路径'" @click="regenerate(r)">{{ r.regenerating ? '生成中…' : '重建路径' }}</button>
                       <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuRemove(r)">删除会话</button>
                     </div>
                   </div>
