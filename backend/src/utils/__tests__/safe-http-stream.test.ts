@@ -107,6 +107,29 @@ describe('safeHttpStreamRequest', () => {
     await assertion
   }, 5000)
 
+  it('流总时长看门狗：trickle 坏流（数据不断、速率极低）超过 totalTimeoutMs 即中断（idle 骗不过它）', async () => {
+    const response = streamResponse(200)
+    requestMock.mockResolvedValue(response)
+
+    const promise = safeHttpStreamRequest('https://example.com/v1/chat/completions', {
+      method: 'POST',
+      timeoutMs: 10_000,
+      idleTimeoutMs: 80,
+      totalTimeoutMs: 150,
+      onChunk: () => {}
+    })
+    const assertion = expect(promise).rejects.toBeInstanceOf(SafeHttpTimeoutError)
+
+    // 每 30ms 滴一小口：永不触发 80ms idle（间隙<80ms），但累计远超 150ms 总时长
+    const trickle = setInterval(() => response.data.write('data: x\n\n'), 30)
+    try {
+      await assertion
+    } finally {
+      clearInterval(trickle)
+      response.data.end()
+    }
+  }, 5000)
+
   it('调用方 abort 中断流并抛 SafeHttpAbortError', async () => {
     const response = streamResponse(200)
     requestMock.mockResolvedValue(response)

@@ -29,6 +29,14 @@ import { SseParser } from '../../utils/sse-parser';
 const MAX_SINGLE_ATTEMPT_TIMEOUT_MS = RETRY_BUDGET_HARD_LIMITS.maxRequestTimeoutMs;
 /** 流式响应的空闲超时：两次数据块间隔超过该值即判定超时（数据流动时重置） */
 const STREAM_IDLE_TIMEOUT_MS = 60_000;
+// 流总时长看门狗（2026-10-03）：ttft 只管首字节、idle 只管无数据间隙，3 t/s 的细水长流
+// 两者都骗过，单槽位被钉 10 分钟以上（网关实测 12m18s/$0.70）。超限中断 → SafeHttpTimeoutError
+// → 分类为可重试超时 → 既有重试链立即冲跑。默认 5 分钟：健康流 20-80 t/s 下 5 分钟够 6k-24k token
+// 输出（skill 调用极少超过），坏流最多占用 5 分钟即让位。LLM_STREAM_TOTAL_TIMEOUT_MS 可调。
+const STREAM_TOTAL_TIMEOUT_MS = Math.min(
+  Number(process.env.LLM_STREAM_TOTAL_TIMEOUT_MS || 300_000),
+  MAX_SINGLE_ATTEMPT_TIMEOUT_MS
+);
 /** 流式响应累计字节上限 */
 const STREAM_MAX_RESPONSE_BYTES = 20 * 1024 * 1024;
 
@@ -582,6 +590,7 @@ export class APIExecutor {
           body: requestBody,
           timeoutMs: effectiveTimeoutMs,
           idleTimeoutMs: STREAM_IDLE_TIMEOUT_MS,
+          totalTimeoutMs: STREAM_TOTAL_TIMEOUT_MS,
           maxResponseBytes: STREAM_MAX_RESPONSE_BYTES,
           privateNetworkPolicy,
           signal: context.abortSignal,

@@ -97,6 +97,10 @@ export type SafeHttpStreamRequestOptions = {
   timeoutMs?: number
   /** 空闲超时：两次响应体数据块的最大间隔，收到数据即重置 */
   idleTimeoutMs?: number
+  /** 流总时长上限：响应头到达后开始计时，涵盖整个响应体。缺省=不设上限（旧行为）。
+   *  防御「细水长流」坏流——每几百毫秒一滴数据让 idle 永不触发、timeoutMs 又只管首字节，
+   *  单个槽位可被钉住 10 分钟以上（2026-10-03 网关实测 3 t/s 拖 12m18s）。 */
+  totalTimeoutMs?: number
   /** 累计响应体字节上限，超过则中断并抛 SafeHttpBodyLimitError */
   maxResponseBytes?: number
   privateNetworkPolicy?: 'runtime' | 'public-only'
@@ -604,6 +608,9 @@ export async function safeHttpStreamRequest(
   const idleTimeoutMs = Number.isFinite(options.idleTimeoutMs) && Number(options.idleTimeoutMs) > 0
     ? Math.min(Math.floor(Number(options.idleTimeoutMs)), SAFE_HTTP_MAX_TIMEOUT_MS)
     : 60_000
+  const totalTimeoutMs = Number.isFinite(options.totalTimeoutMs) && Number(options.totalTimeoutMs) > 0
+    ? Math.min(Math.floor(Number(options.totalTimeoutMs)), SAFE_HTTP_MAX_TIMEOUT_MS)
+    : null
   const maxResponseBytes = Number.isFinite(options.maxResponseBytes) && Number(options.maxResponseBytes) > 0
     ? Math.floor(Number(options.maxResponseBytes))
     : 20 * 1024 * 1024
@@ -612,6 +619,7 @@ export async function safeHttpStreamRequest(
   let timedOut = false
   let abortedByCaller = Boolean(options.signal?.aborted)
   let bodyLimitExceeded = false
+  let totalTimer: NodeJS.Timeout | null = null
   const abortFromCaller = () => {
     abortedByCaller = true
     abortController.abort()
@@ -651,6 +659,16 @@ export async function safeHttpStreamRequest(
     const headers = normalizeHeaders(response.headers)
     options.onHeaders?.(response.status, headers)
 
+    // 流总时长看门狗：响应头到达后才开始计全程。trickle 坏流（持续有数据、速率极低）
+    // 骗得过 idle（无间隙）与 ttft（只管首字节），唯有总时长能拦住
+    if (totalTimeoutMs != null) {
+      totalTimer = setTimeout(() => {
+        timedOut = true
+        abortController.abort()
+      }, totalTimeoutMs)
+      totalTimer.unref?.()
+    }
+
     const stream: NodeJS.ReadableStream = response.data
     return await new Promise<SafeHttpStreamResult>((resolve, reject) => {
       let idleTimer: NodeJS.Timeout | null = null
@@ -659,6 +677,7 @@ export async function safeHttpStreamRequest(
 
       const cleanup = () => {
         if (idleTimer) clearTimeout(idleTimer)
+        if (totalTimer) clearTimeout(totalTimer)
         abortController.signal.removeEventListener('abort', onAbort)
       }
       const settle = (action: () => void) => {
@@ -716,6 +735,7 @@ export async function safeHttpStreamRequest(
     throw error
   } finally {
     clearTimeout(ttftTimer)
+    if (totalTimer) clearTimeout(totalTimer)
     options.signal?.removeEventListener('abort', abortFromCaller)
   }
 }
