@@ -31,6 +31,21 @@ const MAX_SINGLE_ATTEMPT_TIMEOUT_MS = RETRY_BUDGET_HARD_LIMITS.maxRequestTimeout
 const STREAM_IDLE_TIMEOUT_MS = 60_000;
 /** 流式响应累计字节上限 */
 const STREAM_MAX_RESPONSE_BYTES = 20 * 1024 * 1024;
+
+/**
+ * 前缀缓存会话亲和键（与 executeRequest 注入的 AI_CACHE_SESSION_HEADER 头一致）。
+ * 虚拟学习者（simulation）用虚拟会话 id（跨任务稳定）——2026-10-02 起；其余形态
+ * conversationId → agentId → 'wenflow-global'。遥测 metadata 落 cacheAffinityKey，
+ * 供「会话首轮 vs 后续轮」命中率分析（此前均值口径把结构性冷启动误读成缓存缺陷）。
+ */
+export function resolveCacheSessionKey(context: ExecutionContext): string {
+  if (!process.env.AI_CACHE_SESSION_HEADER) return '';
+  let key = context.conversationId || context.agentId || '';
+  if (context.sourceEntry === 'simulation' && context.sessionId) {
+    key = `vlsess:${context.sessionId}`;
+  }
+  return key || 'wenflow-global';
+}
 /** 降级链最多候选数（主模型 + N 个 fallback），用于限制质量漂移与成本（见 §4.5） */
 /** 运行时模型候选上限（含主模型）：fallback 链超过部分静默截断，registry 据此展示有效链 */
 export const MAX_MODEL_CANDIDATES = 2;
@@ -525,9 +540,12 @@ export class APIExecutor {
     // 设置 AI_CACHE_SESSION_HEADER=<头名> 即注入。会话键取 conversationId（同会话轮次
     // 稳定→轮次间共享前缀命中；不同会话散开不挤占），无会话的调用回落 agentId（同 skill
     // 批跑共享暖前缀）。未设置该 env 时零行为变化。
+    // 虚拟学习者（simulation，2026-10-02）：改用虚拟会话 id（跨任务稳定）。一条路径的
+    // goal+全部任务共用一个暖实例——此前键随每任务的授课会话变化，任务 2..N 首轮全价
+    // （实测 teaching-turn 0% 冷启动占 35%）。
     const cacheSessionHeader = process.env.AI_CACHE_SESSION_HEADER;
     if (cacheSessionHeader) {
-      headers[cacheSessionHeader] = context.conversationId || context.agentId || 'wenflow-global';
+      headers[cacheSessionHeader] = resolveCacheSessionKey(context);
     }
     const privateNetworkPolicy = route.privateNetworkPolicy
       || (route.source === 'user-provider' || route.source === 'user-agent-override'
@@ -935,6 +953,9 @@ export class APIExecutor {
         thinkingMode: route.thinkingMode ?? null,
         reasoningEffort: route.reasoningEffort ?? null,
         executionMode: attempt.executionMode ?? null,
+        // 缓存亲和键（2026-10-02）：与 AI_CACHE_SESSION_HEADER 头一致；
+        // 按 key+createdAt 分组即可离线区分「会话首轮冷启动」与「轮间前缀质量」
+        cacheAffinityKey: resolveCacheSessionKey(context) || null,
         // 可观测增量（2026-08）：TTFT 与缓存命中（列已落、此处保留 JSON 冗余）
         ttftMs: (response as any)?.ttftMs ?? null,
         promptCacheHitTokens: (response as any)?.usage?.prompt_tokens_details?.cached_tokens
