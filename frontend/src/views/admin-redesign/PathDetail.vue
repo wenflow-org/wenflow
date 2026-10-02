@@ -28,10 +28,10 @@
          右侧补任务完成数——原 statstrip 唯一不与 hero 重复的读数，收进本卡不再另设统计带 -->
     <section class="mk-card pd-progress">
       <div class="pd-meterrow">
-        <span class="pd-meterrow__label">总体进度</span>
+        <span class="pd-meterrow__label" title="口径：按阶段（已完成阶段数 / 总阶段数）；右侧「任务 X / Y」按子任务口径，两者分母不同">总体进度（按阶段）</span>
         <span class="pd-meterrow__right">
-          <span v-if="taskTotals.total" class="pd-meterrow__tasks" title="已完成子任务数 / 子任务总数（按详情接口 subtasks 统计）">任务 {{ taskTotals.done }} / {{ taskTotals.total }}</span>
-          <span class="pd-meterrow__num mono">{{ overallPct }}%</span>
+          <span v-if="taskTotals.total" class="pd-meterrow__tasks" title="已完成子任务数 / 子任务总数（按详情接口 subtasks 统计；与本条 % 的阶段口径分母不同）">任务 {{ taskTotals.done }} / {{ taskTotals.total }}</span>
+          <span class="pd-meterrow__num mono" title="口径：已完成阶段 {{ stageDone }} / {{ stageTotal }} 阶段">{{ overallPct }}%</span>
         </span>
       </div>
       <span class="mk-minibar pd-meter"><i class="mk-minibar__fill" :style="{ width: overallPct + '%' }"></i></span>

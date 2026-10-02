@@ -210,9 +210,17 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     w.unmount();
   });
 
-  it('教学闭环定位：.loop 五环同构，教学回合 active「本会话进行中」，其余 done「已完成」', async () => {
+  it('教学闭环定位：P1#8 真实模式隐藏静态卡（防伪造进度）；虚拟模式五环同构（教学回合 active，其余 done）', async () => {
+    // 真实会话：静态「已完成/本会话进行中」与真实进度无关，监控页上是负信息 → 整卡隐藏
     stableVirtualApi.getRealSessionConsole.mockResolvedValue(realTeachingPayload());
-    const w = await mountCockpit('session-real', 'ts_re_1');
+    const real = await mountCockpit('session-real', 'ts_re_1');
+    expect(real.findAll('.cp-loop__step')).toHaveLength(0);
+    expect(real.text()).not.toContain('教学闭环定位');
+    real.unmount();
+
+    // 虚拟会话：原型同构保留
+    stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
+    const w = await mountCockpit('session', 'vs_1');
 
     const steps = w.findAll('.cp-loop__step');
     expect(steps.map((s) => s.find('.cp-loop__name').text())).toEqual(

@@ -83,6 +83,13 @@
       <span class="cp-advisory__text"><template v-if="realAdvisory.title">{{ realAdvisory.title }}<template v-if="realAdvisory.text"> · </template></template>{{ realAdvisory.text }}</span>
     </div>
 
+    <!-- ===== 课时健康读数（P1#7）：单课总结读数上提首屏，不再埋 Learn 页签深处；
+         口径诚实：当前查看课时单课读数，会话级聚合待后端 ===== -->
+    <div v-if="healthStrip" class="cp-healthstrip" role="note" :title="healthStripTitle">
+      <span class="cp-healthstrip__label">课时读数<template v-if="viewedLesson"> · {{ viewedLesson.title }}</template></span>
+      <span class="cp-healthstrip__text mono">{{ healthStrip.text }}</span>
+    </div>
+
     <!-- ===== 统一控制台：该阶段操作（原阶段 tab 导航已收敛进「阶段推进」stepper，操作能力原样保留） ===== -->
     <div class="cp-console">
       <div class="cp-console__actions">
@@ -136,8 +143,10 @@
       </div>
     </div>
 
-    <!-- ===== 教学闭环定位（原型 .loop 五环，静态同构：教学回合为本会话环节，无数据依赖） ===== -->
-    <section class="mk-card cp-loopcard">
+    <!-- ===== 教学闭环定位（原型 .loop 五环，静态同构：教学回合为本会话环节，无数据依赖）。
+         P1#8：真实模式隐藏——静态「已完成」在监控页是负信息（goal 阶段的会话也会读到
+         「路径规划/课后评估已完成」）；虚拟/黑盒模式保留原型同构。 ===== -->
+    <section v-if="!isRealMode" class="mk-card cp-loopcard">
       <div class="mk-card__head">
         <h3 class="mk-card__title">教学闭环定位</h3>
         <span class="mk-card__meta">该会话在整体闭环中的位置</span>
@@ -882,6 +891,25 @@ const teachingDetailFailed = ref(false)
 const teachingDetailLoading = ref(false)
 /** 当前查看课时的 wrapup 总结数据 */
 const lessonWrapup = computed(() => buildLessonWrapup(teachingDetail.value))
+
+/** P1#7 课时健康读数：真实模式且有总结时上提首屏（理解/参与/LSS/KTL/困惑点）。
+    口径=当前查看课时单课读数（前端唯一可得），会话级聚合需后端，title 如实说明。 */
+const healthStrip = computed(() => {
+  const w = lessonWrapup.value
+  if (!isRealMode.value || !w) return null
+  const parts: string[] = []
+  if (w.avgUnderstanding != null) parts.push(`理解 ${Math.round(w.avgUnderstanding * 100)}%`)
+  if (w.avgEngagement != null) parts.push(`参与 ${Math.round(w.avgEngagement * 100)}%`)
+  if (w.lss != null) parts.push(`LSS ${Math.round(w.lss * 100)}%`)
+  if (w.ktl != null) parts.push(`KTL ${Math.round(w.ktl * 100)}%`)
+  if (w.confusionPoints?.length) parts.push(`困惑点 ${w.confusionPoints.length}`)
+  if (!parts.length) return null
+  return { text: parts.join(' · '), degraded: !!w.degraded }
+})
+const healthStripTitle = computed(() => {
+  const w = lessonWrapup.value
+  return `口径：当前查看课时的总结读数（单课，非全会话聚合——会话级口径待后端）；理解/参与/LSS=学习压力评分/KTL=知识训练负荷；困惑点=本课 top 混淆点${w?.degraded ? '；本课为降级总结（未完整结束）' : ''}`
+})
 const hasLessonWrapup = computed(() => !!lessonWrapup.value && (!!lessonWrapup.value.topicSummary || !!lessonWrapup.value.knowledgeSummary))
 const selectedTeachingSessionId = ref('')
 
@@ -2221,6 +2249,10 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
   font-size: var(--mk-fs-micro); line-height: 1.65;
 }
 .cp-advisory__text { min-width: 0; }
+/* 课时健康读数条（P1#7）：发丝线分隔、label faint、读数 mono 等宽 */
+.cp-healthstrip { display: flex; align-items: baseline; gap: 10px; padding: 8px 16px; border-bottom: 1px solid var(--mk-line); background: var(--mk-surface); }
+.cp-healthstrip__label { flex: none; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.cp-healthstrip__text { min-width: 0; color: var(--mk-ink); font-size: var(--mk-fs-micro); }
 .cp-advisory .mk-badge { flex: none; }
 
 .cp-console {
