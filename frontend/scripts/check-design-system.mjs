@@ -2,7 +2,7 @@
 /**
  * 设计系统守卫（ADMIN_PAGE_TEMPLATES.md 阶段 0 门禁）
  *
- * 八条规则：
+ * 十八条规则（下列 1–8 逐条展开；9 起为后续增补，其约定集中记在文末段落里）：
  *  1) mk- 前缀类禁止在页面 scoped 内定义
  *     —— mk- 前缀 = 全局原语，只有 src/styles/*.css（含 mk-primitives.css）与原语组件可以定义。
  *        在页面里定义会让"全局原语"事实上分裂成每页一套（审计 §附 A #13）。
@@ -18,20 +18,52 @@
  *  7) 页面 scoped 里定义了、但全 src 都没用到的类（死 CSS）——棘轮：不超过基线
  *     —— 规则 1/2 只覆盖 mk- 前缀，.ud-* 这类页面前缀的死类无人管（⑮ 的 18 条死 4K
  *        规则是手工 grep 出来的）。清单在基线里，**只降不升**。
- *  8) var(--mk-*) 引用的 token 必须已定义（且 admin 侧不得引用 EP 桥变量 --el-*）
+ *  8) var(--*) 引用的自定义属性必须已定义（且 admin 侧不得引用 EP 桥变量 --el-*）
  *     —— 防「静默降级」：引用一个不存在的 token 时，浏览器会采用 var() 的兜底值
  *        （通常是没有暗色适配的硬编码色），页面照常渲染、CI 全绿，问题极难发现。
  *        本仓一度有 16 处（DayTimeline 用了 --mk-text-muted / --mk-danger / --mk-border
  *        这类不存在的名字，且整个文件没有暗色适配）。有意留白的「可覆盖钩子」
  *        （--mk-empty-min-h 等）登记在 TOKEN_HOOK_WHITELIST。
+ *     2026-10-02 补两处漏网（规则本身的漏洞，不是页面问题）：
+ *       ① 引用正则只看 `--mk-*`。前缀只是命名约定，不是"已定义"的证明 —— 于是
+ *          --mk-ep-primary-bg 这种前缀完全正确的坏 token 反而躲过了检查。
+ *       ② 引用面用 walk()，而 walk() 只收 .vue，src/styles/*.css 从来没进过引用面；
+ *          两处真实 bug（--mk-ep-primary-bg / --transition-base）恰好都在 CSS 里。
+ *       放宽后已定位、已排期的欠账登记在 KNOWN_UNDEFINED（照常报告、不阻断 CI），
+ *       没登记过的一律「✖ 阻断」。欠账要逐条可核销，不许静默 baseline、也不许增长。
  *
  * 用法：
  *   node scripts/check-design-system.mjs            # 检查（CI / npm run design:check）
  *   node scripts/check-design-system.mjs --update   # 重写基线（hex/死CSS/圆角/阴影，棘轮只降不升）
  *
- * 规则 14/15（2026-09-25 增，棘轮）：页面 scoped 的 border-radius 只允许语言四档
- * （4/6/12/16 + 999/50%/0 或 var(--mk-radius-*)），box-shadow 只允许
- * none / var(--mk-shadow-*) / inset 描边 / 0 0 0 Npx 环（ADMIN_VISUAL_LAYER_SPEC v3 §0.5）。
+ * 规则 14/15（2026-09-25 增，棘轮）：页面 scoped 的 border-radius 只允许语言六档
+ * （xs4 / sm6 / md8 / lg12 / xl16 / 胶囊999，加圆形 50% + 0，或 var(--mk-radius-*)），
+ * box-shadow 只允许 none / var(--mk-shadow-*) / inset 描边 / 0 0 0 Npx 环
+ * （ADMIN_VISUAL_LAYER_SPEC v4 §0.5）。2026-10-02 补 8px（= --mk-radius-md）：
+ * 它是控件 / 按钮 / 输入框的标准档，此前白名单漏了它，写规范内最常见的字面量反被判违规。
+ *
+ * 规则 17/18（2026-10-02 增，硬失败、无基线）：退役材质不得复辟。
+ *  17) 主按钮底不得用「交互蓝 → 深蓝」的 135° 渐变
+ *      —— 被清掉的原形是 background: linear-gradient(135deg, var(--blue), var(--blue-deep))。
+ *         本设计系统的按钮材质是**平面实心**（background: var(--blue) + 白字）：渐变那 1px 深浅差
+ *         在同屏同角色的按钮之间制造了两档"品牌蓝"，而"这是一枚可点的东西"本该由
+ *         颜色 + 字重 + 圆角三件事说清，不需要第四种材质来加强。
+ *      角度只认 125/135deg 这一族：90deg 编码的是"完成度"（进度条 / 仪表，属有意保留），
+ *      100deg 是骨架 shimmer 的位移方向；两者都不是按钮材质。停用色标不是蓝的渐变（装饰洗色、
+ *      柱状图填充）本规则不碰 —— 那是一条单独的、尚未定论的问题。
+ *  18) 任何 backdrop-filter / -webkit-backdrop-filter 声明一律禁止（唯一豁免是字面量 none）
+ *      —— tokens.css 三节「材质：平面」已写明"亚克力 / 毛玻璃整体退役，1px 发丝线就是全部质感"。
+ *         毛玻璃的代价是可度量的：backdrop-filter 让元素变成一个独立的合成层，滚动时每帧都要
+ *         重采样它背后的内容；长列表 / 数据表 / 聊天流（views/v2 那一侧）因此直接掉帧。
+ *         而它换来的"层次"，平面语言里 1px 发丝线 + --wf-shadow-raised 已经说完了。
+ *      这两条之所以是硬失败而不是棘轮：规则 3/7/14/15/16 的基线是**还款计划表**（存量太大，
+ *      要跨批次逐条退场，记着"还剩多少"有意义）；而 17/18 的存量已经是 0，一份空基线不设防，
+ *      反而会在 --update 时给后来人留一个"往里写点东西"的错觉。新写一处即断，不给"下批再还"的余地。
+ *      扫描面刻意**不挂 isGoverned**：材质是全产品级决策，用户侧（views/v2、components、
+ *      v2.css / uc.css）同样会写渐变与毛玻璃；只看治理面的话，材质能从用户侧长回来而门禁全绿。
+ *      规则 18 只豁免字面量 `none`：那是"这里不挂材质"的显式声明（与干脆不写等价，
+ *      tokens.css 三节注释就是这么要求的），不是一种材质；blur()/saturate()/opacity() 乃至
+ *      var(--x) 都是把退役材质改个名字请回来，按名字放行等于给复辟留后门。
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs'
@@ -44,6 +76,21 @@ const BASELINE_PATH = join(ROOT, 'scripts', 'design-system-baseline.json')
 
 const ADMIN_PREFIX = 'src/views/admin-redesign/'
 const MK_PREFIX = 'src/components/mk/'
+/**
+ * 用户侧治理面（2026-10-02 纳入棘轮）。
+ * 为什么要补：批次 C/D 把 admin 收敛到 0 之后，**全部剩余漂移**都在这些从未被扫过的目录里
+ * —— 治理面只覆盖 admin 时，"棘轮只降不升"对用户侧完全失效，欠账永远不会被记进基线，
+ * 也就永远不会被提醒。现在它们与 admin 同等纳入棘轮（存量一次 --update 记账，之后只降不升）。
+ */
+const USER_PREFIXES = [
+  'src/views/v2/',
+  'src/components/user/',
+  'src/components/chat/',
+  'src/components/learning/',
+  'src/components/ui/',
+]
+/** 用户侧根级页面（v2 体系之外的两枚壳页）—— 单文件，按路径精确匹配 */
+const USER_ROOT_VIEWS = ['src/views/HomeNext.vue', 'src/views/VisionNext.vue']
 /** 中立原语层 CSS（由 admin-redesign/shared.css 迁出，仍由 admin 入口懒加载） */
 const MK_PRIMITIVES_CSS = posix.join('src', 'styles', 'mk-primitives.css')
 
@@ -71,19 +118,58 @@ const isPrimitiveLayer = (relPath) => {
   const base = relPath.split('/').pop()
   return PRIMITIVE_VUE.has(base) || /^Mk[A-Z]/.test(base)
 }
-/** 本守卫治理的目录：admin-redesign 页面 + 中立原语层组件（Mk*.vue 迁出后仍在治理面内） */
-const isGoverned = (relPath) => relPath.startsWith(ADMIN_PREFIX) || relPath.startsWith(MK_PREFIX)
+/**
+ * 本守卫治理的目录：admin-redesign 页面 + 中立原语层组件（Mk*.vue 迁出后仍在治理面内）
+ * + 用户侧界面（views/v2 + components/{user,chat,learning,ui} + HomeNext / VisionNext）。
+ *
+ * 边界不变式（放宽后仍然成立）：isGoverned 只放行**棘轮**类计数（3/6/7/9/10/11/13/14/15/16）
+ * 与规则 8 的引用面，**不放宽**原语边界 —— 用户侧组件定义自己的页面前缀类（.uc-* / .ms-* 等）
+ * 与 .mk-* 无关，PRIMITIVE_FILES 与 isPrimitiveLayer 一律不动；仓库里没有改名就能冒充
+ * Mk* 原语的路径（用户侧无 Shell.vue / Pagination.vue 等同名文件）。
+ */
+const isGoverned = (relPath) =>
+  relPath.startsWith(ADMIN_PREFIX) ||
+  relPath.startsWith(MK_PREFIX) ||
+  USER_PREFIXES.some((p) => relPath.startsWith(p)) ||
+  USER_ROOT_VIEWS.includes(relPath)
+
+/**
+ * 「指令在目标面上可执行」的治理面 —— 棘轮规则的**子集**，不是全部。
+ *
+ * 为什么需要第二个谓词：规则 5 / 6 的整改建议是「改用 <MkLoading> / .mk-skeleton」，
+ * 而这些原语定义在 `mk-primitives.css`，该文件只被 AdminConsole.vue 与
+ * SkillDesignPage.vue **懒加载**。用户侧路由（`/v2/*` 等）从不加载它，于是
+ * 用户侧页面照着报错改，会得到一段同样没有定义、同样不渲染的类名。
+ *
+ * 已实证的坏指令：V2LearningPage.vue:123 已经在用 `<MkLoading>`，但在 `/v2/*`
+ * 下 `.mk-spinner` 与 `.mk-loading` 零命中 —— 转圈根本不显示。这是**既有缺陷**，
+ * 不是守卫报出来的假问题；但它说明「用户侧也该用 MkLoading」这个建议当前是错的。
+ *
+ * 待产品决策（不在守卫职责内，故只登记）：
+ *   (a) 把 mk-primitives.css 提为全局加载（原语层本就不专属 admin，
+ *       且 ADMIN_VISUAL_LAYER_SPEC v4 §7.5 要求用户侧复用同一套原语）；
+ *   (b) 用户侧自建 loading/skeleton 原语，规则 5/6 对用户侧永久关闭。
+ * 决策落定前，规则 5/6 的闸门收窄到 admin，避免把坏指令扩散到 30+ 个文件。
+ */
+const isAdminGoverned = (relPath) =>
+  relPath.startsWith(ADMIN_PREFIX) || relPath.startsWith(MK_PREFIX)
 
 const rel = (p) => posix.join(...relative(ROOT, p).split(/[\\/]/))
 
-function walk(dir, out = []) {
+/**
+ * 递归收集指定后缀的文件（默认 .vue，即"页面 / 组件"这一层）。
+ * node_modules 与 dist 跳过 —— 第三方 CSS（KaTeX / highlight.js 等）随之落在扫描面之外。
+ * 规则 8 的**定义面**还要收 .css：自研样式表同样是 token 的定义处（tokens.css 的 --wf-*、
+ * main.css 的 --mk-*、v2.css 的别名），只看 .vue 会把一整层令牌判成"未定义"。
+ */
+function walk(dir, out = [], ext = '.vue') {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name)
     const st = statSync(p)
     if (st.isDirectory()) {
       if (name === 'node_modules' || name === 'dist') continue
-      walk(p, out)
-    } else if (name.endsWith('.vue')) out.push(p)
+      walk(p, out, ext)
+    } else if (name.endsWith(ext)) out.push(p)
   }
   return out
 }
@@ -113,24 +199,77 @@ function collectDefinedPrimitives() {
 }
 
 
-const vueFiles = [...walk(join(SRC, 'views')), ...walk(join(SRC, 'components', 'mk'))]
+/**
+ * 扫描面（规则 1/2/3/4/5/6/7/14/15 的文件来源）：全部视图 + **受治理的组件目录**。
+ * components/ 此前只收 mk/，于是 user/chat/learning/ui 下的组件**从来没进过**本守卫 ——
+ * 治理面再宽，文件不进扫描面等于没纳入。这行跟着 USER_PREFIXES 走，新增目录请只改常量。
+ */
+const vueFiles = [
+  ...new Set([
+    ...walk(join(SRC, 'views')),
+    ...[MK_PREFIX, ...USER_PREFIXES]
+      .map((p) => join(ROOT, p))
+      .filter((dir) => existsSync(dir))
+      .flatMap((dir) => walk(dir)),
+  ]),
+]
 
 /**
- * 规则 8 的 token 字典：全 src 里声明的 `--mk-*`（定义面取全量，引用面再收窄）。
+ * 规则 8 的 token 字典：**任意前缀**的自定义属性（定义面取全量，引用面再收窄）。
  * 引用面收窄到 admin-redesign + 原语层 mk/ + src/styles，与规则 3 一致。
+ *
+ * 定义面必须与引用面同步放宽（2026-10-02）：此前字典只收 `--mk-*`，于是 tokens.css 的
+ * `--wf-*`、design-system.css 的 `--color-*`、learning-components.css 的 `--transition-*`
+ * 这些同样是 token 的变量在字典里**根本不存在**。只放宽引用面会把每一个 --wf-* 引用
+ * 都报成未定义 —— 误报几百条的门禁没人会看，它的输出也就失去意义了。
  */
 const definedTokens = new Set()
-// 定义面 = 原语 CSS（mk-primitives.css + src/styles/*.css）+ 全部 .vue（页面可定义局部自定义属性）
-for (const p of [...PRIMITIVE_FILES.map((r) => join(ROOT, r)), ...walk(SRC)]) {
+// 定义面 = src 下自研的全部 .css + 全部 .vue。
+//   .vue 之所以必须扫：页面用 :style="{ '--skl-cols': cols }" 定义局部钩子，这是本仓主流写法。
+//   .css 之所以必须扫：v2.css 定义了 --bubble-ai-bg / --v2nav-bg，而 Login.vue 直接消费它们
+//   （main.ts 全局 import 了 v2.css，运行时确有定义）—— 只扫 src/styles 会把这两处误报成
+//   "未定义"，把真 bug 淹在假 bug 里。
+//   .ts 不扫：JS/TS 里只经 setProperty 写自定义属性，不会声明 token 主体；若将来真有
+//   token 定义搬进 .ts，这里要同步放行，否则会误报。
+for (const p of [...walk(SRC, [], '.css'), ...walk(SRC)]) {
   if (!existsSync(p)) continue
-  for (const m of readFileSync(p, 'utf8').matchAll(/--(mk-[a-zA-Z0-9-]+)\s*:/g)) definedTokens.add(m[1])
+  // 先剥注释：注释里的 `--wf-*:` 只是说明文字，不构成定义
+  const text = readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+  // 引号必须可选：局部钩子的定义落在带引号的 JS 对象键上（':style="{ '--skl-cols': cols }"'），
+  //   漏掉引号会把这些**定义**当成引用，规则 8 立刻误报。
+  // 捕获组不含 '--'（正则里 `--` 在括号外），所以入库时补回来：引用侧的捕获组是带 `--` 的，
+  //   两边不归一化就永远对不上，会把全仓 token 一次性判成未定义。
+  for (const m of text.matchAll(/['"`]?--([a-zA-Z0-9-]+)['"`]?\s*:/g)) definedTokens.add('--' + m[1])
 }
 
 /**
  * 有意留白的「可覆盖钩子」：文档明确写了"页面可覆盖 … 调整"，未定义是设计而非 bug。
  * （若将来新增同类钩子，请在此登记，否则规则 8 会把它当 bug 报出来。）
+ * 键统一带 `--`：与 definedTokens / 引用侧同一形式，查表才成立（2026-10-02）。
  */
-const TOKEN_HOOK_WHITELIST = new Set(['mk-empty-min-h', 'mk-skel-card-min', 'mk-skel-cols'])
+const TOKEN_HOOK_WHITELIST = new Set(['--mk-empty-min-h', '--mk-skel-card-min', '--mk-skel-cols'])
+
+/**
+ * 【已定位、已排期】的未定义 token —— 报告但不阻断（token → 一句话原因）。
+ *
+ * 为什么不直接消音：规则 8 的全部价值就是"未定义必须挡住 CI"，把它们悄悄写进基线，
+ * 门禁就退化成永远绿的摆设，新洞也就一起放过去了。
+ * 为什么还要单列一集：登记在册的几处此刻**确实是坏的**，但属独立的 CSS 修复
+ * 工作流，不应让 CI 因存量长期红，真新增的问题反而被淹没。
+ *
+ * 所以输出分两桶：在册的「🔧 待修复」照常列出、醒目但不设 failed；不在册的「✖ 阻断」。
+ * 两桶的差别就是"已登记的欠账" vs "刚冒出来的洞"——欠账逐条可核销（修掉一个少一个，
+ * 修完请从本集合摘除，否则它会一直挂在报告里），新洞立刻挡住 CI。数量不许增长。
+ *
+ * 2026-10-02：本集合**已清空**。两笔欠账都在批次 A/B/C 期间用
+ * scripts/fix-bad-tokens.mjs 修掉了（--mk-ep-primary-bg → --mk-blue、
+ * --transition-base → --transition-fast）。集合保留为空而非删掉整个机制：
+ * 下次出现同类问题时，登记位和「不许增长」的约束要立刻可用。
+ */
+const KNOWN_UNDEFINED = new Map([
+  // 留空。修完的欠账请从本集合摘除——把已修好的条目留着会让报告长期挂着一盏
+  // 「待修复」的灯，久而久之没人再看它。下方 stale 检查也会主动提示摘除。
+])
 
 /**
  * 规则 7 的"用过"语料：**整个 src** 下 .vue 的模板 + 脚本（去掉 style 块）拼接而成。
@@ -155,6 +294,28 @@ const dynamicClassPrefixes = [
   ...[...usageCorpus.matchAll(/'([^']*-)'\s*\+/g)].map((m) => m[1]),
 ].filter((p) => /^[a-zA-Z][a-zA-Z0-9_-]*--?$/.test(p))
 
+/**
+ * Vue <Transition> 的 name 集合（全语料扫描，含 `<Transition name="x">`、
+ * `<transition name="x">`、以及 `:name="expr"` 里无法静态求值的动态写法）。
+ *
+ * Vue 3 的过渡钩子类由框架在过渡期间**动态挂到元素上**：写
+ * `<Transition name="fade"><div/></Transition>` 时，`.fade-enter-active`、
+ * `.fade-leave-from`、`.fade-move` 这些类在模板源码里一个都不会出现。
+ * 规则 7「模板/脚本语料里没出现即死 CSS」对它们是结构性误报。
+ */
+const transitionNames = new Set(
+  [...usageCorpus.matchAll(/<[Tt]ransition\b[^>]*?\bname\s*=\s*"([^"$]+)"/g)].map((m) => m[1])
+)
+/** Vue 约定的过渡钩子后缀段 */
+const TRANSITION_HOOK_SUFFIXES =
+  /-(enter|leave|appear)-(from|to|active|cancel)|-(enter|leave|appear)$|-(move|start|end)$/
+const isTransitionHook = (cls) => {
+  for (const n of transitionNames) {
+    if (cls.startsWith(n + '-') && TRANSITION_HOOK_SUFFIXES.test(cls.slice(n.length))) return true
+  }
+  return false
+}
+
 const defined = collectDefinedPrimitives()
 // 非 scoped 的 <style> 全局生效；原语层组件的 scoped 定义也算已定义（它就是原语本身）
 for (const abs of vueFiles) {
@@ -170,19 +331,22 @@ const definedPrefixes = [...defined]
 const HEX = /#[0-9a-fA-F]{3,8}\b/g
 
 /**
- * 规则 3 的治理面：页面 scoped 块 + **admin 原语层 CSS**。
+ * 规则 3 的治理面：页面 scoped 块 + **应用级全局样式表**。
  *
- * 为什么必须带上 CSS：`walk()` 只收 .vue，于是 mk-primitives.css / main.css / admin-*.css 里的
- * 硬编码色值**完全不在计数内** —— 原语层可以无声堆积颜色（#eef2fa / #eef5ff / #dbeafe
- * 以及一串暗色补丁就是这么来的）。原语层恰恰是设计系统的最后一道防线。
+ * 为什么必须带上 CSS：`walk()` 只收 .vue，于是任何 .css 里的硬编码色值**完全不在计数内** ——
+ * 原语层可以无声堆积颜色（#eef2fa / #eef5ff / #dbeafe 以及一串暗色补丁就是这么来的）。
+ * 原语层恰恰是设计系统的最后一道防线。
  *
- * 为什么不含应用级全局样式（design-system / tremor-theme / modern-enhancements /
- * learning-components）：它们服务整个应用（含用户侧 views/v2），纳入会计到用户侧改动，
- * 与本守卫"只管 admin-redesign、不与并行开发打架"的既有边界不符。
+ * 2026-10-02 纳入 design-system.css / learning-components.css：这两张表服务整个应用
+ * （含用户侧 views/v2），此前被排除在治理面之外 —— **排除正是硬编码色在它们身上堆积的原因**。
+ * 未纳入的还有 tremor-theme / modern-enhancements（同为应用级全局样式）。若将来某张表只服务
+ * admin，加进来前请先确认它不会被用户侧改动波及，否则棘轮会与并行开发互相打架。
  */
 const HEX_CSS_TARGETS = [
   MK_PRIMITIVES_CSS,
   posix.join('src', 'styles', 'main.css'),
+  posix.join('src', 'styles', 'design-system.css'),
+  posix.join('src', 'styles', 'learning-components.css'),
   ...readdirSync(join(SRC, 'styles'))
     .filter((f) => f.startsWith('admin-') && f.endsWith('.css'))
     .map((f) => posix.join('src', 'styles', f)),
@@ -217,11 +381,14 @@ const hexCounts = {} // 规则 3
 const radiusCounts = {} // 规则 14：页面 scoped 圆角档外值（棘轮）
 const shadowCounts = {} // 规则 15：页面 scoped 非法 box-shadow（棘轮）
 
-/* 规则 14/15 的白名单（ADMIN_VISUAL_LAYER_SPEC v3 §0.5）：
-   圆角四档 xs4/sm6/xl12/modal16 + 胶囊 999 + 圆形 50% + 0（或 var(--mk-radius-*)）。
+/* 规则 14/15 的白名单（ADMIN_VISUAL_LAYER_SPEC v4 §0.5）：
+   圆角六档 xs4/sm6/md8/lg12/xl16 + 胶囊 999 + 圆形 50% + 0（或 var(--mk-radius-*)）。
+   2026-10-02 补 8px：它就是 --mk-radius-md，控件/按钮/输入框的标准档。此前白名单漏了它，
+   页面写 `border-radius: 8px`（完全合规的写法）反被记成档外值。棘轮只降不升，补档只会让
+   存量计数下降，不会造出新的失败 —— 补档只有单向好处，所以该补就补。
    阴影三档：面=none、悬浮/弹层=var(--mk-shadow-*)、描边=inset 或 0 0 0 Npx 环
    （含焦点环与脉冲初始态；@keyframes 里的脉冲帧在扫描前剥离）。 */
-const RADIUS_OK = new Set(['0', '4px', '6px', '12px', '16px', '999px', '50%'])
+const RADIUS_OK = new Set(['0', '4px', '6px', '8px', '12px', '16px', '999px', '50%'])
 const isRadiusOk = (v) =>
   v.split(/\s+/).every((t) => RADIUS_OK.has(t) || /^var\(--mk-radius-/.test(t))
 const isShadowOk = (v) =>
@@ -231,24 +398,41 @@ const isShadowOk = (v) =>
   /\binset\b/.test(v)
 const stripKeyframes = (css) => css.replace(/@keyframes[^{]*\{(?:[^{}]|\{[^{}]*\})*\}/g, '')
 
-/* 规则 8：var(--mk-*) 引用的 token 必须已定义（引用面 = admin-redesign + 原语层 mk/ + src/styles） */
-const tokenRefTargets = walk(SRC).filter((abs) => {
-  const r = rel(abs)
-  return isGoverned(r) || r.startsWith(posix.join('src', 'styles') + '/')
-})
+/* 规则 8：var(--*) 引用的自定义属性必须已定义（引用面 = admin-redesign + 原语层 mk/ + src/styles）
+   2026-10-02 放宽到任意前缀：前缀只是命名约定，不能当作"已定义"的证明 —— --mk-ep-primary-bg
+   这类前缀完全正确的坏 token 正是靠这个漏洞躲过了检查。
+   引用面补上 PRIMITIVE_FILES：walk() 只收 .vue，src/styles/*.css 从来没进过规则 8，
+   两处真实 bug 都住在 CSS 里。（自定义属性在 :root 与组件样式里一视同仁，CSS 同样是引用面。）*/
+const tokenRefTargets = [
+  ...walk(SRC).filter((abs) => {
+    const r = rel(abs)
+    return isGoverned(r) || r.startsWith(posix.join('src', 'styles') + '/')
+  }),
+  ...PRIMITIVE_FILES.map((r) => join(ROOT, r)).filter((p) => existsSync(p)),
+]
 for (const abs of tokenRefTargets) {
   const relPath = rel(abs)
-  const text = readFileSync(abs, 'utf8')
+  const raw = readFileSync(abs, 'utf8')
+  // 剥注释后再匹配引用：注释里的 var(--mk-fs-*)、var(--fam-*) 是说明文字，不参与解析。
+  //   （不剥的话会凭空多出 `--mk-` / `--fam-` 这种"截断名"，噪声比真 bug 还多。）
+  const text = raw.replace(/\/\*[\s\S]*?\*\//g, '')
   const seen = new Set()
-  for (const m of text.matchAll(/var\(\s*--(mk-[a-zA-Z0-9-]+)/g)) {
+  for (const m of text.matchAll(/var\(\s*(--[a-zA-Z0-9-]+)/g)) {
     const tk = m[1]
+    // --el-* 交给下面那段 EP 桥检查独占：那里已是硬失败，重复报只会稀释信号
+    if (tk.startsWith('--el-')) continue
+    // 以 `-` 结尾 = 名字是拼出来的（`var(--wf-fs-${role})` 这类插值），不是可静态判定的
+    //   token：当前仓库里剥完注释没有这种写法（唯一的 `var(--mk-fs-*)` 在注释里），
+    //   留着是防御 —— 模板字符串拼 token 名是迟早会出现的写法，放行比误报划算。
+    if (tk.endsWith('-')) continue
     if (definedTokens.has(tk) || TOKEN_HOOK_WHITELIST.has(tk) || seen.has(tk)) continue
     seen.add(tk)
     badTokens.push({ file: relPath, token: tk })
   }
-  // admin 侧不得引用 EP 桥变量（--el-*）：那套变量随 EP 桥一起删除，引用会静默降级到兜底值
+  // admin 侧不得引用 EP 桥变量（--el-*）：那套变量随 EP 桥一起删除，引用会静默降级到兜底值。
+  //   仍读原文 raw：EP 桥是硬失败，宁可多报也不放过，行为与放宽前完全一致。
   const seenEl = new Set()
-  for (const m of text.matchAll(/var\(\s*--(el-[a-zA-Z0-9-]+)/g)) {
+  for (const m of raw.matchAll(/var\(\s*(--el-[a-zA-Z0-9-]+)/g)) {
     if (seenEl.has(m[1])) continue
     seenEl.add(m[1])
     badTokens.push({ file: relPath, token: m[1] + '（EP 桥变量）' })
@@ -294,7 +478,11 @@ for (const abs of vueFiles) {
       }
       // 规则 6：页面不得自搓骨架 shimmer（统一走 .mk-skeleton）
       //   特征：background-size 200%/220%（shimmer 位移）或 自定义 shimmer/skel keyframes
-      if (!primitiveLayer && (/background-size:\s*2[02]0%/.test(css) || /@keyframes\s+[a-zA-Z-]*(shimmer|skel)/i.test(css))) {
+      //   **同样仅限 admin 侧**：.mk-skeleton 定义在只对 admin 懒加载的
+      //   mk-primitives.css，用户侧照本规则改会加上一段同样没有定义的类名，
+      //   与规则 5 是同一个「坏指令」问题（见上文规则 5 的长注释）。
+      if (!primitiveLayer && isAdminGoverned(relPath)
+        && (/background-size:\s*2[02]0%/.test(css) || /@keyframes\s+[a-zA-Z-]*(shimmer|skel)/i.test(css))) {
         handRolledSkeleton.push({ file: relPath })
       }
     }
@@ -322,10 +510,26 @@ for (const abs of vueFiles) {
     // 规则 5：页面模板不得手写加载态（自建 spinner 容器，或元素内的「加载中…」文案）
     //   文案检测要求前面出现过 '>' 且中间无 '<' → 只认元素文本，不会误伤
     //   :title="loading ? '加载中…' : …" 这类属性值（转换后 text="加载中…" 也不该被误判）。
-    const hasSpinner = /class="[^"]*\bmk-spinner\b/.test(tpl)
-    const hasText = />[^<>]*加载中…|>[^<>]*正在加载/.test(tpl)
-    if (hasSpinner || hasText) {
-      handRolledLoading.push({ file: relPath, spinner: hasSpinner, text: hasText })
+    //
+    //   **仅限 admin 侧（isAdminGoverned，不是 isGoverned）**：
+    //   .mk-spinner / .mk-loading 的定义在 mk-primitives.css，而该文件只被
+    //   AdminConsole.vue 与 SkillDesignPage.vue 懒加载 —— 用户侧路由（/v2/*）
+    //   从未加载过它。在这里对用户侧报「请改用 <MkLoading>」是给出**坏指令**：
+    //   V2LearningPage.vue:123 已经用了 <MkLoading>，但在 /v2/* 下 .mk-spinner
+    //   与 .mk-loading 两个类无样式命中，转圈根本不显示。照着报错改只会把
+    //   同一个坏组件换一个地方用。
+    //
+    //   用户侧的正确解法不是照规则改页面，而是二选一的产品决策：
+    //     (a) 把 mk-primitives.css 提为全局加载（原语层本就与 admin 无绑定，
+    //         且 §7.5 要求用户侧复用同一套原语）；或
+    //     (b) 用户侧自建 loading 原语，规则 5 对用户侧永久关闭。
+    //   这个决策不在守卫职责内，故此处只把闸门收窄到 admin 并留登记。
+    if (isAdminGoverned(relPath)) {
+      const hasSpinner = /class="[^"]*\bmk-spinner\b/.test(tpl)
+      const hasText = />[^<>]*加载中…|>[^<>]*正在加载/.test(tpl)
+      if (hasSpinner || hasText) {
+        handRolledLoading.push({ file: relPath, spinner: hasSpinner, text: hasText })
+      }
     }
   }
 
@@ -348,6 +552,14 @@ for (const abs of vueFiles) {
         if (usageCorpus.includes(cls)) continue
         // 动态拼出来的类（`x--${v}`）：按字面量前缀判定
         if (dynamicClassPrefixes.some((p) => cls.startsWith(p))) continue
+        // Vue <Transition name="x"> 的运行时钩子类（x-enter-active / x-leave-from /
+        //   x-move / x-enter-to …）由框架在过渡期间**动态挂到元素上**，模板里
+        //   永远不会字面出现这些名字。按「语料里没出现」判死是结构性误报。
+        //   治理面扩到用户侧后这条一次性冒出 53 条，占基线 80 条里的三分之二——
+        //   把它们写进棘轮就等于把 53 个假阳性永久合法化，正是棘轮要防的失败模式。
+        //   判据：名字以本文件里某个 <Transition name> 的 name 为前缀，
+        //   且后缀是 Vue 约定的过渡钩子段。
+        if (isTransitionHook(cls)) continue
         if (seenDead.has(cls)) continue
         seenDead.add(cls)
         deadClasses.push({ file: relPath, cls })
@@ -628,7 +840,116 @@ for (const abs of walk(SRC).filter((p) => p.endsWith('.vue') || p.endsWith('.css
   if (hits.length) elResidues.push({ file: relPath, sels: hits })
 }
 
-/* ---------- 规则 3（续）：admin 原语层 CSS 的硬编码色值 ---------- */for (const relPath of HEX_CSS_TARGETS) {
+/* ---------- 规则 17 / 18：退役材质不得复辟（硬失败，无基线、无棘轮） ----------
+   背景：2026-10-02 的四个批次把两类材质清成了全仓零 —— 主按钮的「交互蓝 → 深蓝」135° 渐变
+   （原形 background: linear-gradient(135deg, var(--blue), var(--blue-deep))）与一切
+   backdrop-filter 毛玻璃（tokens.css 三节已登记"亚克力 / 毛玻璃整体退役，1px 发丝线就是全部质感"）。
+
+   为什么不棘轮：规则 3/7/14/15/16 的基线是**还款计划表** —— 存量太大，要跨批次逐条退场，
+   记着"还剩多少"有意义。而这两条存量已经是 0，一份空基线不设防，只会在 --update 时给后来人
+   留一个"往里写点东西"的错觉。于是直接硬失败：新写一处即断，不给"下批再还"的余地。
+
+   为什么扫描面不挂 isGoverned：材质是**全产品级**决策，本守卫的治理面（ADMIN_PREFIX + MK_PREFIX）
+   只是 admin-redesign 与原语层，用户侧 views/v2、共享 components、v2.css / uc.css 同样会写渐变与
+   毛玻璃。只看治理面的话，材质能从用户侧长回来而门禁全绿 —— 那才是这条规则最容易被绕过的地方。
+
+   为什么先剥注释：清理批次把"原来是什么"写进了注释（批次 D 涉及的 12 个文件里就有 15 处
+   `backdrop-filter: blur(…) 已删` 这类说明）。注释记录历史正是我们要的，剥掉再匹配，
+   与 countHardcodedHex 同一手法；否则这 15 条"已删"会被自己报成违规，门禁当天就得被关掉。 */
+
+/** 一个文件的可扫描 CSS 面：.vue 只取 <style> 块（scoped 与否都算数，材质写在哪块里都是材质），
+    .css 全文。与规则 12 的取面方式一致，不另立一套。 */
+function cssSurfaceOf(abs) {
+  const text = readFileSync(abs, 'utf8')
+  return abs.endsWith('.vue') ? styleBlocks(text).map((b) => b.css).join('\n') : text
+}
+
+/** rgb()/rgba() → #rrggbb。不归一化的话"蓝色 hex"白名单只管得住 hex 写法，同一个按钮渐变换成
+    rgba(47, 106, 224, 1) 就整个绕过去了 —— 门禁的强度不该取决于作者手滑写了哪种记法。 */
+function normalizeRgbToHex(css) {
+  return css.replace(/\brgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,[^)]*)?\)/gi,
+    (whole, r, g, b) => {
+      const ch = [r, g, b].map((x) => +x)
+      if (ch.some((v) => v > 255)) return whole // 不是合法色值，原样留着
+      return '#' + ch.map((v) => v.toString(16).padStart(2, '0')).join('')
+    })
+}
+
+/* 规则 17 的三个判据。
+   角度：只认 125/135deg 这一族（1[23]5deg）。90deg 是进度条/仪表（在语义上编码"完成度"，属有意保留），
+         100deg 是骨架 shimmer 的位移方向（`linear-gradient(\n 100deg, …)` 跨行写也拦得住，因为
+         参数取的是整个函数体）；180deg 是上下方向的浅色叠层。都不是按钮材质。
+         已知边界：105/115/145deg 同样能画出这盏高光，但不在本判据内 —— 换角度是刻意的手笔，
+         而本仓存量里没有这类写法，先按"误报零容忍"的口径收窄。
+   蓝色 token：--blue / --blue-deep / --color-primary / --mk-blue / --wf-color-primary
+         （`\b` 收尾，避免 --blueprint 这类同前缀名字被算进来；var(--blue, #2f6ae0) 这种带兜底的
+         写法天然命中，因为只看名字）。
+   蓝色 hex：退役批次用过的七枚蓝（#2f6ae0 / #1f57cc / #3478f6 / #2c63d0 / #4d8bf8 / #5b8def /
+         #5a94f8），尾部允许两位的 alpha 位。
+   已知边界：--mk-graph-blue-ink 这类图谱专用蓝不在名单里，它本来也不是"交互蓝"，不算漏网。
+
+   两条 blue 正则必须带 g 标志：`.match()` 只在 /g/ 时返回**全部**命中，否则只给第一处 ——
+   不带 g 时 (token 1 + hex 1) 恒 ≤ 2，"两枚蓝"的判据就退化成"token 与 hex 各碰巧各来一处"，
+   而 --blue → --blue-deep 这种两个都是 token 的原形反被判为 0 处。写法同上面的 HEX。 */
+const GRADIENT_BUTTON_ANGLE_RE = /^\s*1[23]5deg\b/
+const BLUE_TOKEN_RE = /--(?:blue|blue-deep|color-primary|mk-blue|wf-color-primary)\b/g
+const BLUE_HEX_RE = /#(?:2f6ae0|1f57cc|3478f6|2c63d0|4d8bf8|5b8def|5a94f8)(?:[0-9a-fA-F]{2})?\b/g
+
+/** 取一段声明值里的每个 linear-gradient(...) 的实参（括号配对，color-mix 的嵌套括号不会截断） */
+function gradientArgsList(value) {
+  const out = []
+  const re = /linear-gradient\(/gi
+  let m
+  while ((m = re.exec(value)) !== null) {
+    let depth = 1
+    let k = re.lastIndex
+    while (k < value.length && depth > 0) {
+      if (value[k] === '(') depth += 1
+      else if (value[k] === ')') depth -= 1
+      k += 1
+    }
+    out.push(value.slice(re.lastIndex, k - 1))
+    re.lastIndex = k
+  }
+  return out
+}
+
+const gradientButtons = [] // 规则 17
+const backdropFilters = [] // 规则 18
+for (const abs of [...walk(SRC), ...walk(SRC, [], '.css')]) {
+  const relPath = rel(abs)
+  const css = normalizeRgbToHex(cssSurfaceOf(abs).replace(/\/\*[\s\S]*?\*\//g, ''))
+
+  // 规则 17：background / background-image 上的蓝→深蓝 135° 渐变
+  //   值用 [^;{}]* 取，因此 `background:\n  linear-gradient(…)` 这类换行写法也收得到。
+  for (const d of css.matchAll(/(?:^|[;{])\s*(?:background-image|background)\s*:\s*([^;{}]*)/g)) {
+    for (const args of gradientArgsList(d[1])) {
+      if (!GRADIENT_BUTTON_ANGLE_RE.test(args)) continue
+      // 判据是「≥2 枚蓝色色标」，不是「≥1 枚」。原形有两个色标（--blue → --blue-deep），也就是一盏高光；
+      //   清理之后仓库里仍存活的 135° 渐变全是**单侧带蓝**的洗色（blue 7% → accent 5% /
+      //   rgba(77,139,248,.14) → accent 8%），一枚蓝，它们是暗色态下的悬浮底色、不是按钮材质。
+      //   按"一枚蓝就算"的宽松判据会把这三处全报成违规 —— 门禁一旦有假阳性，就没人再看它的输出。
+      //   取"两枚蓝"的代价是三色标里只有一枚蓝的情况会漏（现实中不存在），可接受。
+      const blueStops = (args.match(BLUE_TOKEN_RE) || []).length + (args.match(BLUE_HEX_RE) || []).length
+      if (blueStops < 2) continue
+      gradientButtons.push({ file: relPath, at: `linear-gradient(${args.replace(/\s+/g, ' ').trim()})` })
+    }
+  }
+
+  // 规则 18：backdrop-filter / -webkit-backdrop-filter 一律禁止，唯一个字面量 none 放行。
+  //   none 是"这里不挂材质"的显式声明，与干脆不写等价（tokens.css 三节注释就是这么要求的）；
+  //   `!important` 也放过 —— 它改的是层叠优先级，不是材质本身。
+  for (const d of css.matchAll(/(?:^|[;{])\s*(-webkit-)?backdrop-filter\s*:\s*([^;{}]*)/g)) {
+    if (d[2].trim().replace(/\s*!important\s*$/i, '') === 'none') continue
+    backdropFilters.push({
+      file: relPath,
+      at: `${d[1] || ''}backdrop-filter: ${d[2].replace(/\s+/g, ' ').trim()}`,
+    })
+  }
+}
+
+/* ---------- 规则 3（续）：admin 原语层 CSS 的硬编码色值 ---------- */
+for (const relPath of HEX_CSS_TARGETS) {
   const abs = join(ROOT, relPath)
   if (!existsSync(abs)) continue
   const n = countHardcodedHex(readFileSync(abs, 'utf8'), {
@@ -711,7 +1032,7 @@ if (radiusRegressions.length) {
   failed = true
   console.log(`
 ✖ 规则 14：页面 scoped 圆角档外值不得超过基线（只降不升）`)
-  console.log('  圆角只有四档（xs4/sm6/xl12/modal16）+ 胶囊/圆形，写法见 ADMIN_VISUAL_LAYER_SPEC v3 §0.5；用 var(--mk-radius-*) 引用。')
+  console.log('  圆角只有六档（xs4 / sm6 / md8 / lg12 / xl16 / 胶囊999）+ 圆形/0，写法见 ADMIN_VISUAL_LAYER_SPEC v4 §0.5；用 var(--mk-radius-*) 引用。')
   for (const v of radiusRegressions) console.log(`    ${v.file}: ${v.base} → ${v.now}`)
 }
 
@@ -776,6 +1097,34 @@ if (elResidues.length) {
   for (const v of elResidues) console.log(`    ${v.file}  ${v.sels.join(' ')}`)
 }
 
+if (gradientButtons.length) {
+  failed = true
+  console.log(`
+✖ 规则 17：主按钮底不得用「交互蓝 → 深蓝」的 135° 渐变（${gradientButtons.length} 处）`)
+  console.log('  按钮材质是平面实心：background: var(--blue) + 白字（焦点/悬浮用 var(--mk-blue-hover) 一类色阶）。')
+  console.log('  渐变那 1px 深浅差会让同屏同角色的按钮出现两档品牌蓝；这条不设基线，新写一处即断。')
+  console.log('  90deg 进度条、100deg 骨架 shimmer、以及停用色标不是蓝的装饰洗色都不在判据内 —— 那些不是按钮材质。')
+  const byFile = {}
+  for (const v of gradientButtons) (byFile[v.file] ||= []).push(v.at)
+  for (const [f, ats] of Object.entries(byFile).sort((a, b) => b[1].length - a[1].length)) {
+    console.log(`    ${f}  ×${ats.length}  ${ats[0]}`)
+  }
+}
+
+if (backdropFilters.length) {
+  failed = true
+  console.log(`
+✖ 规则 18：backdrop-filter 毛玻璃已整体退役（${backdropFilters.length} 处）`)
+  console.log('  tokens.css 三节「材质：平面」：亚克力 / 毛玻璃已退役，1px 发丝线就是全部质感；')
+  console.log('  它还会让元素变成独立合成层、滚动时每帧重采样，长列表与聊天流直接掉帧。')
+  console.log('  唯一豁免是字面量 none（"这里不挂材质"的显式声明）；需要层次请用 --wf-shadow-raised / 1px 发丝线。')
+  const byFile = {}
+  for (const v of backdropFilters) (byFile[v.file] ||= []).push(v.at)
+  for (const [f, ats] of Object.entries(byFile).sort((a, b) => b[1].length - a[1].length)) {
+    console.log(`    ${f}  ×${ats.length}  ${ats[0]}`)
+  }
+}
+
 if (badDefinitions.length) {
   failed = true
   console.log(`\n✖ 规则 1：mk- 前缀类禁止在页面 scoped 内定义（${badDefinitions.length} 处）`)
@@ -826,14 +1175,41 @@ const deadBaseline = new Set(
 const deadRegressions = deadClasses.filter((v) => !deadBaseline.has(`${v.file}|${v.cls}`))
 
 if (badTokens.length) {
-  failed = true
-  console.log(`\n✖ 规则 8：var(--mk-*) 引用了未定义的 token（${badTokens.length} 处）`)
-  console.log('  这类引用会**静默降级**到 var() 的兜底值（通常是没有暗色适配的硬编码色），而 CI 全绿。')
-  console.log('  确属"可覆盖钩子"的请登记进 TOKEN_HOOK_WHITELIST。')
-  const byFile = {}
-  for (const v of badTokens) (byFile[v.file] ||= []).push(v.token)
-  for (const [f, ts] of Object.entries(byFile).sort((a, b) => b[1].length - a[1].length)) {
-    console.log(`    ${f}  ×${ts.length}  ${ts.join(' ')}`)
+  // 两桶分流：在册的欠账只报告、不阻断；没登记过的一律阻断（见 KNOWN_UNDEFINED 注释）。
+  const known = badTokens.filter((v) => KNOWN_UNDEFINED.has(v.token))
+  const unknown = badTokens.filter((v) => !KNOWN_UNDEFINED.has(v.token))
+
+  if (known.length) {
+    console.log(`
+🔧 规则 8 待修复：引用了已定位的未定义 token（${known.length} 处，登记在 KNOWN_UNDEFINED）`)
+    console.log('  已知欠账、不阻断 CI，但每一条都要修掉并从 KNOWN_UNDEFINED 摘除；修完这个桶就空。')
+    for (const v of known) {
+      console.log(`    ${v.token}\n        ${KNOWN_UNDEFINED.get(v.token)}\n        ← ${v.file}`)
+    }
+  }
+  if (unknown.length) {
+    failed = true
+    console.log(`
+✖ 规则 8：var(--*) 引用了未定义的 token（${unknown.length} 处）`)
+    console.log('  这类引用会**静默降级**到 var() 的兜底值（通常是没有暗色适配的硬编码色），而 CI 全绿。')
+    console.log('  确属"可覆盖钩子"的请登记进 TOKEN_HOOK_WHITELIST；确属 bug 的修 CSS，别登记进 KNOWN_UNDEFINED 蒙混过关。')
+    const byFile = {}
+    for (const v of unknown) (byFile[v.file] ||= []).push(v.token)
+    for (const [f, ts] of Object.entries(byFile).sort((a, b) => b[1].length - a[1].length)) {
+      console.log(`    ${f}  ×${ts.length}  ${ts.join(' ')}`)
+    }
+  }
+}
+
+/* 已修完却还留在册的 token：主动提示摘除。
+   不放在上面的 if 里 —— 欠账全部还清时 badTokens 为空，那正是最该提示"可以销账"的时刻。
+   没有这条提示，KNOWN_UNDEFINED 只会变成永久豁免名单，也就失去了"不许增长"的约束力。 */
+{
+  const stillReferenced = new Set(badTokens.map((v) => v.token))
+  const stale = [...KNOWN_UNDEFINED.keys()].filter((tk) => !stillReferenced.has(tk))
+  if (stale.length) {
+    console.log(`
+🧹 KNOWN_UNDEFINED 有条目已不再被引用（${stale.length}），请删掉以免变成永久豁免：${stale.join(' ')}`)
   }
 }
 

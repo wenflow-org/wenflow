@@ -101,8 +101,8 @@ body.admin-session-concealed > #admin-session-validation-shell {
 }
 
 .admin-session-validation-button--primary:hover:not(:disabled) {
-  border-color: var(--mk-ep-primary-bg);
-  background: var(--mk-ep-primary-bg);
+  border-color: var(--mk-blue, #2f6ae0);
+  background: var(--mk-blue, #2f6ae0);
 }
 
 .admin-session-validation-button:focus-visible {

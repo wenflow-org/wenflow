@@ -813,10 +813,20 @@ watch(
   height: 56px;
   /* 左右 20px = 原型 .top（--sp-5），与页面容器的 20px 内边距对齐成同一条竖线 */
   padding: 0 20px;
-  background: color-mix(in srgb, var(--mk-bg, #f7f8fa) 86%, transparent);
+  /* 顶栏材质：86% 半透明 + backdrop-filter: blur(8px) 的毛玻璃已退役
+     （批次 D，2026-10-02）。改为不透明平面，靠 1px 发丝线与页面分层。
+
+     为什么必须改而不是「保留毛玻璃作为例外」：SPEC v4 的 Posture rules 写死
+     「材质一律平面、不使用亚克力/毛玻璃浮层」，而本条毛玻璃是 v3 文档里
+     「顶栏 56px 毛玻璃」的遗留明文规则。文档已在本批次同步改写
+     （ADMIN_VISUAL_LAYER_SPEC.md），代码与规范现在指向同一件事。
+
+     视觉代价是真实的：顶栏不再透出下滚内容。补偿手段是发丝线保持原样——
+     规范认为「1px 发丝线就是全部质感」，分层靠线不靠模糊。
+     86% 的不透明度也一并去掉：半透明底在无模糊时会让下滚内容「透出来但糊」，
+     比纯平面更脏。 */
+  background: var(--mk-surface);
   border-bottom: 1px solid var(--mk-line, #e6ebf4);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   position: relative;
   z-index: 20;
 }

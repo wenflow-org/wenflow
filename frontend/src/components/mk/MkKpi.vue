@@ -48,8 +48,14 @@ withDefaults(
 .mk-kpi--bad .mk-kpi__num { color: var(--mk-red); }
 .mk-kpi--warn .mk-kpi__num { color: var(--mk-amber); }
 .mk-kpi--ok .mk-kpi__num { color: var(--mk-green); }
-.mk-kpi--clickable { cursor: pointer; transition: border-color 0.12s ease, transform 0.12s ease; }
-.mk-kpi--clickable:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); transform: translateY(-1px); }
+/* 可点击态的悬停反馈：只换描边色，不做位移（批次 D，2026-10-02）。
+   原为 translateY(-1px) + transition 里带 transform。KPI 卡是网格排布的，
+   抬 1px 会让相邻卡片在鼠标经过时保持原位、只有当前卡浮起，读作「错位」
+   而不是「可点」。规范：悬停只允许变背景/边框/文字色，位移只留给
+   :active 的 scale(0.98)。transform 已从 transition 移除——无变化可过渡。 */
+.mk-kpi--clickable { cursor: pointer; transition: border-color 0.12s var(--mk-ease-out); }
+.mk-kpi--clickable:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
+.mk-kpi--clickable:active { transform: scale(0.98); }
 /* 已删除死样式 .mk-kpi--linked-on（P3）：组件模板从未输出该类，全仓也无调用方传入，
    「筛选联动激活态」需求未接线——如需启用应加 prop（如 linkedOn）而不是保留不可达样式 */
 

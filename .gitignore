@@ -290,6 +290,8 @@ backend/vlab-runs/
 .zcodeignore
 agent/
 skills-lock.json
+.mimosa/
+.v2c/
 
 # 版权语料（含版权书；仅供本地跑批/演示，不入库）
 text/

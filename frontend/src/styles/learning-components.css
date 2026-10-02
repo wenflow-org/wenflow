@@ -13,12 +13,18 @@
   border-radius: var(--radius-lg);
   padding: var(--spacing-6);
   text-align: center;
-  transition: transform var(--transition-normal), 
-              box-shadow var(--transition-normal);
+  transition: box-shadow var(--transition-normal);
 }
 
+/* 悬停只留投影反馈，不做位移（批次 D，2026-10-02）。
+   原为 transform: translateY(-2px) + box-shadow: var(--shadow-md)：
+   「禁止 hover 抬升」——抬升会让整块卡片在页面里位移，旁边的卡片不动，
+   于是列表在鼠标经过时「活了一下」，读作跳动而非状态反馈。
+   规范允许 hover 只改变背景/边框/文字，投影属于唯一的一档中性反馈；
+   --shadow-md 现在指向 --wf-shadow-raised（悬浮档），不再是原来的浮层档。
+   transform 已从 transition 列表中移除：没有 transform 变化可过渡，
+   留着会让浏览器多建一个合成层。 */
 .metric-card:hover {
-  transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
 
@@ -106,129 +112,6 @@
 }
 
 /* ==========================================
-   进度条
-   ========================================== */
-
-.progress-bar {
-  height: 8px;
-  background: var(--bg-muted);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-
-.progress-bar__fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
-  border-radius: var(--radius-full);
-  transition: width var(--transition-slow);
-}
-
-.progress-bar__fill--success {
-  background: linear-gradient(90deg, var(--color-success) 0%, var(--color-success-light) 100%);
-}
-
-.progress-bar__fill--warning {
-  background: linear-gradient(90deg, var(--color-warning) 0%, var(--color-warning-light) 100%);
-}
-
-.progress-bar__fill--accent {
-  background: linear-gradient(90deg, var(--color-accent) 0%, var(--color-accent-light) 100%);
-}
-
-/* 圆形进度 */
-.progress-circle {
-  position: relative;
-  width: 120px;
-  height: 120px;
-}
-
-.progress-circle__ring {
-  transform: rotate(-90deg);
-}
-
-.progress-circle__bg {
-  fill: none;
-  stroke: var(--bg-muted);
-  stroke-width: 8;
-}
-
-.progress-circle__fill {
-  fill: none;
-  stroke: var(--color-primary);
-  stroke-width: 8;
-  stroke-linecap: round;
-  transition: stroke-dashoffset var(--transition-slow);
-}
-
-.progress-circle__text {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.progress-circle__value {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-}
-
-.progress-circle__label {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-/* ==========================================
-   学习状态指示器
-   ========================================== */
-
-.state-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-4);
-  border-radius: var(--radius-full);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-}
-
-.state-indicator--efficient {
-  background: var(--color-efficient-bg);
-  color: var(--color-efficient-dark);
-}
-
-.state-indicator--balanced {
-  background: var(--color-success-bg);
-  color: var(--color-success-dark);
-}
-
-.state-indicator--fatigued {
-  background: var(--color-warning-bg);
-  color: var(--color-warning-dark);
-}
-
-.state-indicator__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  animation: pulse 2s infinite;
-}
-
-.state-indicator--efficient .state-indicator__dot {
-  background: var(--color-efficient);
-}
-
-.state-indicator--balanced .state-indicator__dot {
-  background: var(--color-success);
-}
-
-.state-indicator--fatigued .state-indicator__dot {
-  background: var(--color-warning);
-}
-
-/* ==========================================
    状态标签
    ========================================== */
 
@@ -269,111 +152,37 @@
 }
 
 /* ==========================================
-   ZPD技能等级徽章
-   ========================================== */
-
-.zpd-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-4);
-  border-radius: var(--radius-full);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  transition: background var(--transition-base), box-shadow var(--transition-base);
-}
-
-.zpd-badge--novice {
-  background: linear-gradient(135deg, var(--color-novice-start) 0%, var(--color-novice-end) 100%);
-  color: var(--text-inverse);
-  box-shadow: 0 2px 8px var(--shadow-novice);
-}
-
-.zpd-badge--beginner {
-  background: linear-gradient(135deg, var(--color-beginner-start) 0%, var(--color-beginner-end) 100%);
-  color: var(--text-inverse);
-  box-shadow: 0 2px 8px var(--shadow-beginner);
-}
-
-.zpd-badge--competent {
-  background: linear-gradient(135deg, var(--color-competent-start) 0%, var(--color-competent-end) 100%);
-  color: var(--text-inverse);
-  box-shadow: 0 2px 8px var(--shadow-competent);
-}
-
-.zpd-badge--proficient {
-  background: linear-gradient(135deg, var(--color-proficient-start) 0%, var(--color-proficient-end) 100%);
-  color: var(--text-inverse);
-  box-shadow: 0 2px 8px var(--shadow-proficient);
-}
-
-.zpd-badge--expert {
-  background: linear-gradient(135deg, var(--color-expert-start) 0%, var(--color-expert-end) 100%);
-  color: var(--text-inverse);
-  box-shadow: 0 2px 8px var(--shadow-expert);
-}
-
-/* 暗色主题下的ZPD徽章 */
-[data-theme="dark"] .zpd-badge--novice {
-  background: linear-gradient(135deg, var(--color-novice-start) 0%, var(--color-novice-end) 100%);
-  box-shadow: 0 2px 12px var(--shadow-novice-dark);
-}
-
-[data-theme="dark"] .zpd-badge--beginner {
-  background: linear-gradient(135deg, var(--color-beginner-start) 0%, var(--color-beginner-end) 100%);
-  box-shadow: 0 2px 12px var(--shadow-beginner-dark);
-}
-
-[data-theme="dark"] .zpd-badge--competent {
-  background: linear-gradient(135deg, var(--color-competent-start) 0%, var(--color-competent-end) 100%);
-  box-shadow: 0 2px 12px var(--shadow-competent-dark);
-}
-
-[data-theme="dark"] .zpd-badge--proficient {
-  background: linear-gradient(135deg, var(--color-proficient-start) 0%, var(--color-proficient-end) 100%);
-  box-shadow: 0 2px 12px var(--shadow-proficient-dark);
-}
-
-[data-theme="dark"] .zpd-badge--expert {
-  background: linear-gradient(135deg, var(--color-expert-start) 0%, var(--color-expert-end) 100%);
-  box-shadow: 0 2px 12px var(--shadow-expert-dark);
-}
-
 /* ==========================================
-   空状态
+   已删除（2026-10-02，批次 D「退役材质」）
+   ==========================================
+   本文件原 379 行 / 46 个类选择器。用 scripts/dead-class-scan.mjs 按**类名词边界**
+   全仓扫描后，只剩 5 个类在用：.metric-card、.status-tag 及其
+   --completed / --pending / --warning 三个变体（均被 CompletionCard.vue 使用）。
+
+   删除的四段及其原因：
+     · 进度条（.progress-bar* / .progress-circle*，75 行）—— 零消费。
+       附带说明：这里原是全仓「蓝→青」渐变进度条的一处来源
+       （linear-gradient(90deg, blue→cyan)）。它随死代码一起消失，
+       剩下的渐变进度条都是组件 scoped 内自绘的，归守卫扩面批次处理。
+     · 学习状态指示器（.state-indicator*，48 行）—— 零消费。
+       注意：LSS/KTL/LF/LSB 这些学习状态指标在界面上**确实存在**，
+       但走的是 CompletionCard.vue 里自己的 .metric-card，
+       不是这一套 .state-indicator。别把「界面没有状态指标」误读成
+       「产品缺这个指标」。
+     · ZPD 技能等级徽章（.zpd-badge*，71 行）—— 零消费，且是**双重违规**：
+       既用了 135deg 渐变底，又是彩色光晕投影（0 2px 8px var(--shadow-novice)
+       这一族五枚）。规范两样都判死。与其把违规样式改成合规样式继续留着，
+       不如连同它唯一消费的 10 枚 ZPD 令牌一起删掉。
+     · 空状态（.empty-state*，37 行）—— 零消费。会话台的空态用的是
+       cp-empty-state（前缀不同，本文件另有定义），与这里无关。
+
+   连带删除的令牌（在 design-system.css，已于批次 A 登记为「待批次 D 重定向」）：
+     · --color-{novice,beginner,competent,proficient,expert}-{start,end}（10 枚）
+       —— 只被这 71 行死代码消费。
+     · --shadow-{novice,beginner,competent,proficient,expert}[-dark]（10 枚）
+       —— 同上，且本身就是被规范判死的「彩色光晕」。
+   两组共 20 枚令牌至此全部清零，不需要「重定向到中性档」这种过渡处理：
+   规范里本来就没有 ZPD 专用的阴影档，徽章要投影就用 --wf-shadow-raised。
+
+   保留 .metric-card 时顺手修了一处 hover 抬升（见上）。
    ========================================== */
-
-.empty-state {
-  text-align: center;
-  padding: var(--spacing-12) var(--spacing-6);
-}
-
-.empty-state__icon {
-  font-size: 64px;
-  color: var(--text-muted);
-  margin-bottom: var(--spacing-4);
-  opacity: 0.5;
-}
-
-.empty-state__title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  margin-bottom: var(--spacing-2);
-}
-
-.empty-state__description {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  max-width: 320px;
-  margin: 0 auto var(--spacing-6);
-}
-
-.loading-spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid var(--bg-muted);
-  border-top-color: var(--color-primary);
-  border-radius: var(--radius-full);
-  animation: spin 0.8s linear infinite;
-}

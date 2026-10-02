@@ -35,7 +35,7 @@
 | NON_FUNCTIONAL_GOVERNANCE_PLAN.md | 治理计划 | ⚠️ 状态基线 2026-07-17 |
 | EDUCATIONAL_THEORY_MAP.md | 参考资料 | 理论地图（文献已核实） |
 | ADMIN_TERMINOLOGY_AUDIT.md | 活规范 | 术语 SSOT（不可归档） |
-| ADMIN_VISUAL_LAYER_SPEC.md | 活规范 | ⛔ 禁归档（守卫硬引用）；并行整改中 |
+| ADMIN_VISUAL_LAYER_SPEC.md | 活规范 | ⛔ 禁归档（守卫硬引用）｜v4 已接设计体系包，令牌层/圆角/阴影/材质收口完毕 |
 | ADMIN_COLUMN_WIDTH_SPEC.md | 活规范 | 48/48 全中 |
 | ADMIN_PAGE_TEMPLATES.md | 活规范（待拆分） | 1569 行 → ≤330 方案已定 |
 | ADMIN_TABS_BUSINESS_AUDIT.md | 历史审计 | 未核验 |

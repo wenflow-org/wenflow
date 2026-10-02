@@ -785,8 +785,12 @@ watch(() => props.stage, () => void loadStage());
   z-index: 25;
   margin: -14px -16px 14px;
   padding: 10px 16px 8px;
-  background: color-mix(in srgb, var(--mk-surface) 94%, transparent);
-  backdrop-filter: blur(8px);
+  /* 粘性表头：94% 半透明 + backdrop-filter: blur(8px) 的毛玻璃已退役
+     （批次 D，2026-10-02），改为不透明面 + 1px 下缘线。
+     粘性表头下滚时内容会从其下穿过，半透明无模糊会让文字「糊在一起」，
+     比纯平面更难读；规范的做法是给足不透明面 + 发丝线，靠线表达「这层在上面」。
+     box-shadow: var(--mk-shadow-sm) 保留——那是规范内的悬浮档，不是彩色光晕。 */
+  background: var(--mk-surface);
   border-bottom: 1px solid var(--mk-line);
   box-shadow: var(--mk-shadow-sm);
 }

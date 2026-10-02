@@ -6,6 +6,10 @@
 
 /* ---- @import 集中置于文件顶部（CSS 规范要求先于其他规则） ---- */
 
+/* 设计令牌唯一事实源（--wf-* 唯一层）。
+   必须排在最前：下面几层的别名要指向已定义的 --wf-* 令牌。 */
+@import './tokens.css';
+
 /* 核心设计系统 */
 @import './design-system.css';
 
@@ -46,20 +50,30 @@
   --mk-modal-w-wide-xl: 1000px;
   --mk-modal-w-wide-xxl: 1160px;
 
-  /* 颜色/字体 token：唯一品牌蓝 --mk-blue（全站禁用其它品牌蓝硬编码）。
-     2026-10-02 归一（WenFlow-Design-System 设计体系包）：Admin/用户侧统一 #2f6ae0，
-     暗色档 #5b8def 不变；hover/pressed 收敛 #1f57cc（与 --mk-accent-deep/--mk-ghost-fg 同档）。 */
-  --mk-ink: #1a2a44;
-  --mk-muted: #5b6577;
-  --mk-faint: #5f6f8c;
-  --mk-faint-soft: #5b6572;      /* 弱化文字更浅档（详情页元信息/表格说明等零星硬编码收敛） */
-  --mk-line: #e6ebf4;
-  --mk-bg: #f7f8fa;
-  --mk-surface: #ffffff;
-  --mk-surface-2: #eef2fa;       /* 次级表面：空态图标底、嵌套面、表格头等的浅底 */
-  --mk-blue: #2f6ae0;
+  /* 颜色/字体 token（2026-10-02 归一）：Admin 与用户侧统一交互蓝 #2f6ae0，
+     暗色档 #5b8def 不变；hover/pressed 收敛 #1f57cc。
+     ---- 别名层，非第二套语言 ----
+     本块不再是设计语言的定义处。设计语言全部落 tokens.css 的 --wf-* 唯一层，
+     这里只保留两类：
+       · 调用别名：--mk-* → var(--wf-*)，供全仓既有调用名继续工作（含 admin-redesign /
+         Teleport 组件 / 大量 scoped 块）。改设计值时只改 tokens.css 一处。
+       · 例外字面量：与规范值**有意不同**或规范无对应物的（如语义文字色的对比度取舍、
+         业务徽章 tint、图形页档位）。每条都在注释里登记了原因与归属批次。
+     映射全表见 tokens.css 末尾「别名层映射表」。 */
+  --mk-ink: var(--wf-text-primary);
+  --mk-muted: var(--wf-text-muted);
+  --mk-faint: #5f6f8c;              /* 弱化文字：规范无对应物（--wf-text-disabled #adb5bd
+                                       对比度过低），保留待规范补「弱化文字」档 */
+  --mk-faint-soft: #5b6572;         /* 弱化文字更浅档（详情页元信息/表格说明等零星硬编码收敛） */
+  --mk-line: var(--wf-border-default);
+  --mk-bg: var(--wf-bg-body);
+  --mk-surface: var(--wf-bg-surface);
+  --mk-surface-2: #eef2fa;          /* 次级表面。规范 --wf-bg-subtle 为 #f1f4f9，
+                                       值不同故暂不转接 → 批次 D 收口 */
+  --mk-blue: var(--wf-color-primary);
   /* 绿色文字基线：白底 5.0:1。文字级要更深用 v2.css 的 --green-ink；
-     不要自造更亮的绿当文字色（如 #31b16f 仅 2.75:1，走查 2026-09-27）。
+     不要自造更亮的绿当文字色（如规范 --wf-color-success #31b16f 仅 2.75:1，走查 2026-09-27）。
+     规范缺「语义文字色」这一档，故 --mk-green/amber/red 保留字面量。
      填充底色（配白字）另有 --mk-green-fill，见下方「实心语义底色」。 */
   --mk-green: #15803d;
   --mk-green-bg: #ecfdf5;
@@ -67,15 +81,15 @@
   --mk-amber-bg: #fffbeb;
   --mk-red: #c81e1e;
   --mk-red-bg: #fef2f2;
-  --mk-blue-bg: #eff6ff;         /* 胶囊底（浅）：徽章/幽灵按钮/空态动作 */
+  --mk-blue-bg: #eff6ff;         /* 胶囊底（浅）：徽章/幽灵按钮/空态动作。规范用
+                                    color-mix(primary 10%)，与本值非同一表达式 → 批次 D */
   --mk-blue-bg-strong: #dbeafe;  /* 胶囊底（深）：上述元素的悬停档 */
   /* ---- 组件级表面/悬停对（亮色档；暗色档见 html[data-theme='dark'] 同名 token）----
      这批取代 shared.css 里「亮色硬编码 + html[data-theme='dark'] 补丁段」的双份维护：
      原来一个颜色写在两处、且补丁块靠选择器权重生效（曾把错误态图标底压成灰色）。
      全部按「现有值原样提升」生成，零色差。 */
   --mk-surface-3: #f0f2f5;            /* 中性徽章底（muted / control-signal / render-hidden） */
-  --mk-table-head-bg: #fafbfc;
-  --mk-table-head-hover-bg: #f2f6fb;
+  --mk-table-head-bg: #ffffff;        /* 原型 .tbl thead th：白面（=surface），表头只靠底线分层 */
   --mk-table-row-line: #eef1f7;
   --mk-table-row-hover-bg: #f6f9ff;
   --mk-menu-btn-hover-bg: #eef2fa;
@@ -140,7 +154,6 @@
   --mk-skeleton-to: #f7f9fc;
   /* 排序表头悬停 / 搜索清除悬停 / 激活链悬停（原 shared.css 里仅亮色、无暗色档的 3 处；
      暗色档按本文件既有惯例取值：蓝调叠加 / 深一档表面） */
-  --mk-table-sort-hover-bg: #e9f1fd;
   --mk-search-clear-hover-bg: #cbd5e1;
   --mk-link-active-hover-bg: #e2ecff;
   /* ---- 会话校验遮罩 + EP 覆写调色板（原 admin-theme.css 的硬编码；亮暗成对或同值）---- */
@@ -173,38 +186,60 @@
   --mk-amber-fill: #b45309;
   --mk-blue-fill: #2f6ae0;
   --mk-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-  --mk-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  /* 回退字体用 Cascadia Code 而非规范的 Fira Code：本机实测栈更完整，保留。
+     规范值见 tokens.css --wf-font-mono。 */
   /* 唯一的键盘焦点环（focus-visible）：全站控件同一圈。此前按钮/输入/胶囊各写各的
-     ring（0 0 0 2px / 3px、不同透明度），焦点态也是"语言"的一部分。 */
+     ring（0 0 0 2px / 3px、不同透明度），焦点态也是"语言"的一部分。
+     注意与 tokens.css --wf-focus-ring 的区别：规范那枚是**纯颜色**令牌（亮 20% / 暗 32%），
+     本仓这枚是**合成环**（3px 宽度 + 亮 18% / 暗 32%），形状不同故不合并。
+     透明度 18% vs 规范的 20% 待 batch D 统一确认。 */
   --mk-focus-ring: 0 0 0 3px rgba(47, 106, 224, 0.18);
 
   /* 设计 token：字体栈 / 强调色 / 代码块 / 圆角 / 阴影 */
-  --mk-sans: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", Inter, sans-serif;
-  --mk-accent-deep: #1f57cc;
-  --mk-purple: #8d6bff;
-  --mk-teal: #0f766e;
+  --mk-sans: var(--wf-font-sans);
+  --mk-accent-deep: var(--wf-color-primary-dark);
+  --mk-purple: var(--wf-color-accent);
+  --mk-teal: #0f766e;            /* 规范无对应物（辅色是清新青 #43b0d8，此处是深青文字色） */
   --mk-red-strong: #b91c1c;
   --mk-code-bg: #0d1420;
   --mk-code-fg: #8ba3c7;
   --mk-code-border: #1c2a40;
   --mk-pre-fg: #d3d7dd;           /* 代码井前景（prompt/JSON/预 文本块硬编码收敛） */
-  --mk-radius-xs: 4px;
-  --mk-radius-sm: 6px;
-  --mk-radius-md: 8px;
-  --mk-radius-lg: 10px;
-  --mk-radius-xl: 12px;
-  --mk-radius-modal: 16px;
-  --mk-radius-pill: 999px;
-  --mk-shadow-pop: 0 12px 32px rgba(15, 23, 42, 0.16);
-  --mk-shadow-drawer: -16px 0 48px rgba(15, 23, 42, 0.18);
-  --mk-shadow-modal: 0 24px 64px rgba(15, 23, 42, 0.22);
+  /* 圆角：唯一阶梯 4 / 6 / 8 / 12 / 16 / 999（tokens.css）。
+     batch C（2026-10-02）收口完毕，7 档全部转为别名：
+       lg 10 → 12、xl 12 → 16 —— 关闭 SPEC §0.5 登记的「暂留档」。
+     砍掉 10px 的连带影响（全部自动生效，无需逐处改）：
+       · .mk-card / .mk-entity / .mk-menu__pop / .mk-empty__icon / .mk-seg /
+         .mk-status 走 --mk-radius-xl → 12px 抬到 16px（即规范的「卡片 16」）
+       · 走 --mk-radius-lg 的原型复刻件（loop__step/bucket）10px → 12px
+     这是一次**有意的观感变更**：全站卡片圆角 +4px。
+     验收需覆盖 admin 列表/详情/弹层三态 × 明暗两色。 */
+  --mk-radius-xs: var(--wf-radius-xs);
+  --mk-radius-sm: var(--wf-radius-sm);
+  --mk-radius-md: var(--wf-radius-md);
+  --mk-radius-lg: var(--wf-radius-lg);
+  --mk-radius-xl: var(--wf-radius-xl);
+  --mk-radius-modal: var(--wf-radius-overlay);
+  --mk-radius-pill: var(--wf-radius-pill);
+  /* 阴影：三档，全部中性（batch C 收口完毕）。
+     原为四档：sm / pop / drawer / modal。drawer 带 X 方向偏移
+     （-16px 0 48px），是规范外的一档，且与 overlay 语义重复（都是弹层），
+     现并入 overlay。pop 的扩散半径也一并对齐规范值 16px 40px。
+     连带影响：抽屉投影从「向左投影 + 更深」变为标准浮层投影。 */
+  --mk-shadow-sm: var(--wf-shadow-raised);
+  --mk-shadow-pop: var(--wf-shadow-overlay);
+  --mk-shadow-drawer: var(--wf-shadow-overlay);
+  --mk-shadow-modal: var(--wf-shadow-modal);
+  /* --mk-shadow-xs：规范显式档位，语义「面永远是平的」。零消费，
+     保留是为了让「卡片默认 0 阴影」这条规则有一个可引用的名字。 */
+  --mk-shadow-xs: var(--wf-shadow-xs);
 
   /* 动效令牌（双端共用，2026-09-23）：统一时长/缓动词汇；
      reduce-motion 兜底已有文件末尾全局 @media，勿在页面里重复造 */
-  --mk-dur-fast: 120ms;
-  --mk-dur: 200ms;
-  --mk-dur-slow: 320ms;
-  --mk-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --mk-dur-fast: var(--wf-duration-fast);
+  --mk-dur: var(--wf-duration-normal);
+  --mk-dur-slow: var(--wf-duration-slow);
+  --mk-ease-out: var(--wf-ease-out);
 
   /* 业务徽章档位色（完成度五档 / 角色 / 流转 / 锁定 / core），供 mk-badge--* 扩展档引用 */
   --mk-rec-draft: #6b7280;
@@ -352,21 +387,27 @@ html.dark { color-scheme: dark; }
    暗色模式（D1 设计改进）
    机制：html[data-theme='dark'] 覆写 --mk-* 语义 token；组件尽量引用 token，
    少量硬编码色由 shared.css 暗色段兜底覆写。切换开关见 Shell.vue。
+
+   ---- 别名层带来的简化（2026-10-02）----
+   凡 :root 里写成 var(--wf-*) 的别名，暗色值由 tokens.css 的暗色块自动翻转，
+   **本块不再重复声明**。下面只保留两类：
+     · --wf-* 无对应物、或值有意不同的档位（注释登记原因与归属批次）；
+     · 业务 tint（badge- / graph- / overlay- / side- 前缀族）——它们不是设计语言的一部分。
+   因此从本批起，以下档位的暗色覆写已删除且行为不变（值由 --wf-* 暗色档给出）：
+     --mk-ink(#efeff0) --mk-muted(#afb1b6) --mk-line(#36373c) --mk-bg(#141415)
+     --mk-surface(#202124) --mk-blue(#5b8def) --mk-shadow-sm --mk-shadow-modal
    ======================================== */
 html[data-theme='dark'] {
   color-scheme: dark;
-  --mk-ink: #efeff0;            /* 主文字：深底浅字 */
-  --mk-muted: #afb1b6;          /* 次级文字 */
-  --mk-faint: #7a7e85;          /* 弱化文字 */
+  /* ---- 弱化文字：规范无对应物，保留字面量（待规范补「弱化文字」档） ---- */
+  --mk-faint: #7a7e85;
   --mk-faint-soft: #a2a5a9;     /* 弱化文字亮档（暗色下可读性补足） */
-  --mk-line: #36373c;           /* 边框/分隔线 */
-  --mk-bg: #141415;             /* 页面背景（暗色下最深一档：面只能往上抬，往下就贴到视口黑） */
-  --mk-surface: #202124;        /* 卡片/面板表面：距 bg 12 级。原为 7 级（#1b1c1d），
-                                   亮色档 page→card 是 8 级且另有白底 + 阴影，暗色两样都没有，
-                                   于是卡片读不出"浮起"，全页糊成一块（审计：暗色层级） */
-  --mk-surface-2: #27282c;      /* 次级表面（亮色 #eef2fa 的暗色等价物） */
-  --mk-blue: #5b8def;           /* 品牌蓝提亮（深底可读性） */
+  --mk-surface-2: #27282c;      /* 次级表面（亮色 #eef2fa 的暗色等价物）。与规范的
+                                   --wf-bg-subtle(#1b1c1f) 值不同 → batch D 收口 */
+  /* ---- 交互蓝派生：规范暗色 primary-dark 为 #3f74d6，本仓 hover 实测为更亮的 #6a9cf3。
+         值不同故保留字面量，待规范确认「暗色 hover 提亮」是否为一档 → batch D ---- */
   --mk-accent-deep: #7aa2ff;
+  --mk-blue-hover: #6a9cf3;
   --mk-green: #4ade80;
   --mk-green-bg: rgba(74, 222, 128, 0.14);
   --mk-amber: #fbbf24;
@@ -380,8 +421,7 @@ html[data-theme='dark'] {
   /* 表头条带在暗色下"比卡片更亮"（亮色档是"比卡片更暗"）。
      暗色里比卡片更暗就贴近页面底色，读成"卡片上破了个洞"而不是"表头条带"；
      同一 ΔL* 在暗端也不如亮端看得出来，故条带取 6 级台阶。 */
-  --mk-table-head-bg: #282a2e;
-  --mk-table-head-hover-bg: #303237;
+  --mk-table-head-bg: #282a2e;        /* 暗色：亮卡面 6 级台阶（审计口径不变，仅去 hover 档） */
   --mk-table-row-line: #2c2d31;
   --mk-table-row-hover-bg: #292a2e;
   --mk-menu-btn-hover-bg: #2e3035;
@@ -440,7 +480,6 @@ html[data-theme='dark'] {
   --mk-skeleton-from: #27282c;
   --mk-skeleton-to: #36373c;
   /* 会话校验遮罩 + EP 覆写调色板的暗色档（与 :root 同名） */
-  --mk-table-sort-hover-bg: rgba(91, 141, 239, 0.12);
   --mk-search-clear-hover-bg: #45474c;
   --mk-link-active-hover-bg: rgba(91, 141, 239, 0.26);
   --mk-overlay-bg: #141415;
@@ -460,7 +499,7 @@ html[data-theme='dark'] {
   --mk-side-hover: #252627;
   --mk-red-bg-strong: rgba(220, 38, 38, 0.28);
   --mk-graph-pipe-bg: linear-gradient(180deg, var(--mk-graph-canvas), #161718);
-  --mk-purple: #a78bfa;
+  --mk-purple: #a78bfa;          /* 规范暗色 accent 为 #a98fff，值不同 → batch D */
   --mk-teal: #2dd4bf;
   --mk-red-strong: #ef4444;
   --mk-code-bg: #0f0f10;
@@ -468,11 +507,11 @@ html[data-theme='dark'] {
   --mk-code-border: #2d2d2f;
   --mk-pre-fg: #d7d8da;         /* 暗色代码井前景：中性灰白 */
   --mk-close-bg: #2d2d2f;
-  --mk-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.5);
+  /* --mk-shadow-sm / --mk-shadow-modal 的暗色覆写已删：:root 里是 var(--wf-shadow-raised)
+     / var(--wf-shadow-modal)，由 tokens.css 暗色块自动翻转，值与原先字面量逐字相同。 */
   --mk-focus-ring: 0 0 0 3px rgba(91, 141, 239, 0.32);
-  --mk-shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55);
-  --mk-shadow-drawer: -16px 0 48px rgba(0, 0, 0, 0.6);
-  --mk-shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.7);
+  /* 暗色档的 pop / drawer 覆写已删：:root 里是 var(--wf-shadow-overlay)，
+     由 tokens.css 暗色块自动翻转（0 16px 40px rgba(0,0,0,.6)）。 */
   --mk-rec-draft: #45474a;
   --mk-rec-handler: #b45309;
   --mk-rec-core: #5b8def;
@@ -868,6 +907,8 @@ select {
 
 /* ==========================================
    卡片悬浮动画
+   （2026-09-30 对齐原型：用户侧按钮/卡片 hover 一律不做位移，只留投影反馈；
+    .hover-lift 本体全仓无引用，这里只撤掉 -4px 抬升，保留投影过渡）
    ========================================== */
 
 .hover-lift {
@@ -876,7 +917,6 @@ select {
 }
 
 .hover-lift:hover {
-  transform: translateY(-4px);
   box-shadow: var(--shadow-lg);
 }
 

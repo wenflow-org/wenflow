@@ -1,0 +1,410 @@
+/* ========================================
+   WenFlow 设计令牌唯一事实源（--wf-* 唯一层）
+   ========================================
+
+   规范：doc/ADMIN_VISUAL_LAYER_SPEC.md v4 · D:\wenflow\WenFlow-Design-System\DESIGN.md
+   本文件是 WenFlow **唯一**允许声明设计令牌的地方。
+
+   为什么有这一层
+   --------------
+   2026-10-02 之前，全仓并存四套并行令牌语言：
+     ① styles/design-system.css  --color-* / --neutral-* / --radius-* / --shadow-*（Fluent 2.0 亚克力系）
+     ② styles/main.css           --mk-*（admin-redesign 唯一 token 源，约 300 个）
+     ③ styles/admin-surface.css  --bg-* / --text-* / --border-*（兼容映射层）
+     ④ views/v2/v2.css           --ink / --muted / --blue（用户侧别名）
+   四套语言各自演进，导致同一个"次级表面"在四处有四个值。本层把**设计语言本身**
+   （色 / 圆角 / 阴影 / 字体 / 间距 / 控件高度 / 动效 / 层级）收敛成一套 --wf-* 令牌，
+   ①②③④ 全部降级为指向 --wf-* 的别名——别名不是第二套语言，只是历史调用名的转接。
+
+   加载顺序
+   --------
+   本文件由 main.css 第一行 @import 引入，必须早于 design-system.css / admin-surface.css /
+   main.css 自身块：别名要指向已定义的令牌。CSS 变量在同层级按源码顺序覆盖，
+   所以「先定义令牌层、后声明别名」是唯一正确顺序。
+
+   本文件**只声明令牌，不含任何组件样式**
+   --------------------------------------
+   体系包的 colors_and_type.css 同时带了 body/链接/滚动条基础样式、.wf-btn/.wf-card/.wf-pill
+   原语与 prefers-reduced-motion 兜底。本仓已各自有等价实现（design-system.css 的基础样式、
+   mk-primitives.css 的原语、main.css 末尾的 reduce-motion 段），照搬会变成两套组件。
+   因此这里只取令牌，样式层保持单一来源。
+
+   不含 --wf-mk-* 兼容别名
+   -----------------------
+   体系包定义了 --wf-mk-* → --wf-* 的映射表。它作为**映射的权威声明**在本文件注释里保留，
+   但不再声明为变量：各调用方直接引用 --wf-*（少一跳），也避免出现一批零消费的过渡令牌。
+
+   维护规则
+   --------
+   1. 改设计值只改本文件。改别处 = 制造第二套语言。
+   2. 新令牌先落 --wf-*，再在别名层按需转接；不允许在别名层凭空发明值。
+   3. 圆角只允许 4 / 6 / 8 / 12 / 16 / 999；阴影只允许三档且必须中性；
+      材质一律平面（亚克力 / 毛玻璃已退役，见「材质」段）。
+   4. 令牌层不做业务判断：业务徽章 tint、图形页档位等仍留在 main.css 的 --mk-* 里，
+      因为它们不是设计语言的一部分。
+   ======================================== */
+
+:root {
+  color-scheme: light;
+
+  /* ==========================================
+     一、品牌 / 交互色（唯一一组）
+     「蓝只用于交互」：主操作、链接、选中、焦点、进行中。
+     ========================================== */
+  --wf-color-primary: #2f6ae0;                          /* 唯一交互色·友好蓝 */
+  --wf-color-primary-light: #5a94f8;
+  --wf-color-primary-lighter: #8db3fa;
+  --wf-color-primary-dark: #1f57cc;                    /* hover / pressed */
+  --wf-color-primary-darker: #1843a3;
+  --wf-color-primary-soft: color-mix(in srgb, var(--wf-color-primary) 10%, transparent);
+  --wf-color-primary-soft-strong: color-mix(in srgb, var(--wf-color-primary) 16%, transparent);
+  --wf-color-primary-border: color-mix(in srgb, var(--wf-color-primary) 44%, var(--wf-border-default));
+
+  --wf-color-secondary: #43b0d8;                       /* 清新青 */
+  --wf-color-secondary-light: #6ec5e3;
+  --wf-color-secondary-dark: #3593b5;
+
+  --wf-color-accent: #8d6bff;                          /* 薰衣草紫 */
+  --wf-color-accent-light: #a98fff;
+  --wf-color-accent-dark: #6b4ae0;
+
+  --wf-color-danger: #ef7578;                          /* 柔和红 */
+  --wf-color-danger-light: #f49a9c;
+  --wf-color-danger-dark: #d95054;
+  /* danger 的底色/描边两档。补录原因：规范包的 colors_and_type.css 为
+     success/progress/pending/warning/efficient 五族都给了 -bg / -border，唯独
+     danger 一族只给了三个字面色，没有底色档——而「危险态提示条」正是最需要
+     淡底的场景。守卫规则 8 扩面后在 SessionFeedbackPanel.vue 查出一处引用了
+     并不存在的 --color-danger-bg（此前靠兜底 rgba 静默渲染）。
+     取值沿用同族的 10% / 20% 口径，与上游五族一致。 */
+  --wf-color-danger-bg: rgba(239, 117, 120, 0.1);
+  --wf-color-danger-border: rgba(239, 117, 120, 0.2);
+
+  /* ---- 语义状态色（绿/琥珀/红只表状态，禁止当装饰） ---- */
+  --wf-color-success: #31b16f;
+  --wf-color-success-light: #5cc98b;
+  --wf-color-success-dark: #28965a;
+  --wf-color-progress: #3498db;
+  --wf-color-progress-light: #5dade2;
+  --wf-color-progress-dark: #2980b9;
+  --wf-color-pending: #95a5a6;
+  --wf-color-pending-light: #b2bfc0;
+  --wf-color-pending-dark: #7f8c8d;
+  --wf-color-warning: #f4aa46;
+  --wf-color-warning-light: #f7c07a;
+  --wf-color-warning-dark: #d9932e;
+  --wf-color-efficient: #f39c12;
+  --wf-color-efficient-light: #f5b041;
+  --wf-color-efficient-dark: #d68910;
+
+  /* 状态底色 / 描边（源码实测 10% / 20%） */
+  --wf-color-success-bg: rgba(49, 177, 111, 0.1);
+  --wf-color-success-border: rgba(49, 177, 111, 0.2);
+  --wf-color-progress-bg: rgba(52, 152, 219, 0.1);
+  --wf-color-progress-border: rgba(52, 152, 219, 0.2);
+  --wf-color-pending-bg: rgba(149, 165, 166, 0.1);
+  --wf-color-pending-border: rgba(149, 165, 166, 0.2);
+  --wf-color-warning-bg: rgba(244, 170, 70, 0.1);
+  --wf-color-warning-border: rgba(244, 170, 70, 0.2);
+  --wf-color-efficient-bg: rgba(243, 156, 18, 0.1);
+  --wf-color-efficient-border: rgba(243, 156, 18, 0.2);
+
+  /* ---- ZPD 技能等级徽章（五级） ---- */
+  --wf-zpd-novice-start: #95a5a6;
+  --wf-zpd-novice-end: #7f8c8d;
+  --wf-zpd-beginner-start: #3498db;
+  --wf-zpd-beginner-end: #2980b9;
+  --wf-zpd-competent-start: #2ecc71;
+  --wf-zpd-competent-end: #27ae60;
+  --wf-zpd-proficient-start: #f4a261;
+  --wf-zpd-proficient-end: #e08b3a;
+  --wf-zpd-expert-start: #9b59b6;
+  --wf-zpd-expert-end: #8e44ad;
+
+  /* ==========================================
+     二、中性阶（唯一一组 · 亮色）
+     台阶语义：100 画布 → 150 沉底 → 200 发丝线 → 600 次要文本 → 900 正文
+     ========================================== */
+  --wf-neutral-50: #ffffff;
+  --wf-neutral-100: #f7f8fa;
+  --wf-neutral-150: #f1f4f9;
+  --wf-neutral-200: #e6ebf4;
+  --wf-neutral-300: #dee2e6;
+  --wf-neutral-400: #ced4da;
+  --wf-neutral-500: #adb5bd;
+  --wf-neutral-600: #5b6577;
+  --wf-neutral-700: #5f6b7c;
+  --wf-neutral-800: #495057;
+  --wf-neutral-900: #1a2a44;
+  --wf-neutral-950: #1a252f;
+
+  /* ---- 语义角色 ---- */
+  --wf-bg-body: var(--wf-neutral-100);          /* 页面画布（护眼浅灰） */
+  --wf-bg-surface: var(--wf-neutral-50);         /* 卡片 / 面板：最亮纸面 */
+  --wf-bg-elevated: var(--wf-neutral-50);
+  --wf-bg-subtle: var(--wf-neutral-150);         /* 沉底 / 次级表面 */
+  --wf-bg-muted: var(--wf-neutral-200);
+  --wf-bg-hover: var(--wf-neutral-150);
+  --wf-bg-active: var(--wf-neutral-200);
+
+  --wf-text-primary: var(--wf-neutral-900);
+  --wf-text-secondary: var(--wf-neutral-700);
+  --wf-text-muted: var(--wf-neutral-600);
+  --wf-text-disabled: var(--wf-neutral-500);
+  --wf-text-inverse: var(--wf-neutral-50);
+  --wf-text-on-primary: #ffffff;
+
+  --wf-border-default: var(--wf-neutral-200);    /* 1px 发丝线就是全部质感 */
+  --wf-border-light: var(--wf-neutral-150);
+  --wf-border-dark: var(--wf-neutral-400);
+  --wf-border-focus: var(--wf-color-primary);
+
+  /* ---- 焦点环（全站唯一一圈） ---- */
+  --wf-focus-ring: color-mix(in srgb, var(--wf-color-primary) 20%, transparent);
+
+  /* ==========================================
+     三、材质：平面
+     亚克力 / 毛玻璃已整体退役——1px 发丝线就是全部质感。
+
+     这里**不保留** --wf-acrylic-* / --wf-glass-* 兼容令牌。
+     2026-10-02 曾在这一段留过五枚「退役落点」（blur 置 none、bg 指向平面），
+     但全仓零消费：既没有代码引用旧材质名，也没有代码引用这些落点。
+     一枚零消费的令牌不构成「迁移帮助」，只构成一条「旧材质仍在体系内」的
+     误导——读到它的人会以为亚克力还是体系的一部分。
+     真要表达「这里是平面」，直接不写 backdrop-filter；需要显式关闭时写
+     `backdrop-filter: none` 就够了，不需要一枚令牌。
+
+     全仓 16 处 backdrop-filter 的实际清理归批次 D（涉及 12 个文件的观感变更），
+     本批不动，只在此登记欠账。
+     ========================================== */
+
+  /* ==========================================
+     四、圆角：唯一阶梯 4 / 6 / 8 / 12 / 16 / 999
+     禁止 5/7/9/10/13/14/18/20/22/26/34 等中间档。
+     ========================================== */
+  --wf-radius-none: 0;
+  --wf-radius-xs: 4px;       /* 徽章 / 代码块 / 图例色块 */
+  --wf-radius-sm: 6px;       /* 行内小芯片 */
+  --wf-radius-md: 8px;       /* 按钮 / 输入 / 菜单项（= 控件圆角） */
+  --wf-radius-lg: 12px;      /* 次级面板 / 复刻件 */
+  --wf-radius-xl: 16px;      /* 卡片 / 面板 / 弹层（= 卡片圆角） */
+  --wf-radius-pill: 999px;   /* 真·胶囊 / 头像 / 进度条 */
+
+  /* 语义角色（用角色而非裸数值） */
+  --wf-radius-control: var(--wf-radius-md);
+  --wf-radius-chip: var(--wf-radius-sm);
+  --wf-radius-card: var(--wf-radius-xl);
+  --wf-radius-overlay: var(--wf-radius-xl);
+
+  /* ---- 旧 UI Lab 大圆角（--lab-radius-card 34 / nav 28 / button-sm 14 / nav-item 18）
+     已于 2026-10-02 随 design-system.css 的死规则整块删除，此处不再保留兼容落点：
+     原先在这里留过 --wf-lab-radius-* 五个「退役落点」，但全仓零消费——
+     没有任何代码在引用旧 UI Lab 圆角名，留着只是又一批零消费令牌。
+     真要迁移时直接改用上面的 --wf-radius-* 语义角色。 ---- */
+
+  /* ==========================================
+     五、阴影：只有三档，且必须中性
+     平（无）/ 悬浮（raised）/ 弹层（overlay、modal）。
+     禁止彩色光晕、禁止 hover 抬升。卡片默认 0 阴影。
+     ========================================== */
+  --wf-shadow-raised: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --wf-shadow-overlay: 0 16px 40px rgba(15, 23, 42, 0.16);
+  --wf-shadow-modal: 0 24px 64px rgba(15, 23, 42, 0.22);
+
+  /* ---- 旧「彩色光晕」投影（--lab-shadow-lg/md/sm）已随 design-system.css 的死规则
+     整块删除，此处不留兼容落点（零消费）。 ---- */
+
+  /* --wf-shadow-xs = none 是规范里的显式档位，不是死令牌：
+     语义是「面永远是平的」，让调用方能显式写「这里不要阴影」而不是省略。
+     与 --shadow-md/-lg/-xl 的区别见下段兼容说明。 */
+  --wf-shadow-xs: none;
+
+  /* ==========================================
+     六、排版
+     ========================================== */
+  --wf-font-sans: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB',
+    'Inter', 'Helvetica Neue', '微软雅黑', sans-serif;
+  --wf-font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+  /* 文本角色（同一视口 ≤3 档） */
+  --wf-fs-micro: 12px;
+  --wf-fs-body: 14px;
+  --wf-fs-emphasis: 15px;
+  --wf-fs-title: 16px;
+  --wf-fs-display: 24px;
+  --wf-fs-kpi: 28px;
+
+  --wf-text-xs: 0.75rem;
+  --wf-text-sm: 0.875rem;
+  --wf-text-base: 1rem;
+  --wf-text-lg: 1.125rem;
+  --wf-text-xl: 1.25rem;
+  --wf-text-2xl: 1.5rem;
+  --wf-text-3xl: 1.875rem;
+  --wf-text-4xl: 2.25rem;
+  --wf-text-5xl: 3rem;
+
+  --wf-leading-tight: 1.25;
+  --wf-leading-normal: 1.5;
+  --wf-leading-relaxed: 1.625;
+  --wf-leading-loose: 2;
+
+  --wf-font-normal: 400;
+  --wf-font-medium: 500;
+  --wf-font-semibold: 600;
+  --wf-font-bold: 700;
+
+  /* ==========================================
+     七、间距：4px 基数 / 8px 基线
+     ========================================== */
+  --wf-space-0: 0;
+  --wf-space-1: 0.25rem;   /* 4 */
+  --wf-space-2: 0.5rem;    /* 8 */
+  --wf-space-3: 0.75rem;   /* 12 */
+  --wf-space-4: 1rem;      /* 16 */
+  --wf-space-5: 1.25rem;   /* 20 */
+  --wf-space-6: 1.5rem;    /* 24 */
+  --wf-space-8: 2rem;      /* 32 */
+  --wf-space-10: 2.5rem;   /* 40 */
+  --wf-space-12: 3rem;     /* 48 */
+  --wf-space-16: 4rem;     /* 64 */
+  --wf-space-20: 5rem;     /* 80 */
+
+  /* ==========================================
+     八、控件高度：一套阶梯 + 触屏档
+     ========================================== */
+  --wf-control-sm: 28px;     /* 表格行内按钮 / 小按钮 */
+  --wf-control-md: 34px;     /* 工具栏 / 页头默认按钮 */
+  --wf-control-lg: 40px;     /* 页头主操作 */
+  --wf-control-touch: 44px;  /* 触屏优先表面（对话输入 / 主 CTA） */
+
+  /* ==========================================
+     九、动效：唯一一组
+     ========================================== */
+  --wf-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --wf-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --wf-duration-fast: 120ms;
+  --wf-duration-normal: 200ms;
+  --wf-duration-slow: 320ms;
+  --wf-transition-fast: 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  --wf-transition-normal: 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  --wf-transition-slow: 320ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ==========================================
+     十、层级
+     ========================================== */
+  --wf-z-dropdown: 100;
+  --wf-z-sticky: 200;
+  --wf-z-fixed: 300;
+  --wf-z-modal-backdrop: 400;
+  --wf-z-modal: 500;
+  --wf-z-popover: 600;
+  --wf-z-tooltip: 700;
+  --wf-z-toast: 800;
+
+  /* ==========================================
+     十一、别名层映射表（不在此声明为变量，仅作权威对照）
+     ------------------------------------------------------------
+     main.css 的 --mk-* 与 design-system.css 的 --color-* / --radius-* / --shadow-*
+     按下表转接（--wf-mk-* 这一层被有意省略：调用方直接引 --wf-*，少一跳、
+     且不留零消费的过渡令牌）：
+
+       --mk-ink            → --wf-text-primary
+       --mk-muted          → --wf-text-muted
+       --mk-line           → --wf-border-default
+       --mk-bg             → --wf-bg-body
+       --mk-surface        → --wf-bg-surface
+       --mk-blue           → --wf-color-primary
+       --mk-blue-hover     → --wf-color-primary-dark
+       --mk-accent-deep    → --wf-color-primary-dark
+       --mk-purple         → --wf-color-accent
+       --mk-radius-xs/sm/md/lg/xl/modal/pill → --wf-radius-* 同名
+       --mk-shadow-sm      → --wf-shadow-raised
+       --mk-shadow-pop     → --wf-shadow-overlay
+       --mk-shadow-modal   → --wf-shadow-modal
+       --mk-fs-micro/body/emphasis → --wf-fs-* 同名
+       --mk-space-1..8     → --wf-space-*（7→space-8、8→space-12）
+       --mk-dur-fast/dur/dur-slow → --wf-duration-* 同名
+       --mk-ease-out       → --wf-ease-out
+
+     尚未转接（有意的例外，逐条登记）：
+       --mk-surface-2/3    值不同（#eef2fa/#f0f2f5 vs #f1f4f9/#e6ebf4）→ 批次 D
+       --mk-blue-bg(-strong) 蓝底用色混而非纯色 → 批次 D
+       --mk-shadow-drawer  规范只有三档，抽屉并入 overlay → 批次 C
+       --mk-green/amber/red 深色文字基线（白底对比 ≥4.5:1 的取舍）→ 保留，待规范补「语义文字色」档
+       --mk-mono           回退字体为 Cascadia Code 而非 Fira Code → 保留（本机栈实测更优）
+       --mk-faint(-soft)   弱化文字无规范等价物 → 保留
+       --mk-* 业务 tint（badge- / graph- / col- / rec- 前缀族）→ 保留，非设计语言的一部分
+     ========================================== */
+}
+
+/* ==========================================
+   暗色模式
+   与 utils/theme.ts 的双开关一致：data-theme="dark" 与 .dark 两个选择器都生效
+   （theme.ts 会同时写两者）。
+   ========================================== */
+[data-theme='dark'],
+.dark {
+  color-scheme: dark;
+
+  /* ---- 品牌 / 交互色（暗色降饱和提亮） ---- */
+  --wf-color-primary: #5b8def;
+  --wf-color-primary-light: #8db3fa;
+  --wf-color-primary-lighter: #a8c5fc;
+  --wf-color-primary-dark: #3f74d6;
+  --wf-color-primary-darker: #2f6ae0;
+
+  --wf-color-secondary: #6ec5e3;
+  --wf-color-secondary-light: #96d5ec;
+  --wf-color-secondary-dark: #43b0d8;
+
+  --wf-color-accent: #a98fff;
+  --wf-color-accent-light: #c0aaff;
+  --wf-color-accent-dark: #8d6bff;
+
+  --wf-color-danger: #f49a9c;
+  --wf-color-danger-light: #f7b8b9;
+  --wf-color-danger-dark: #ef7578;
+
+  /* ---- 中性阶（暗色：炭灰阶梯，反转 50/100/900/950） ---- */
+  --wf-neutral-50: #202124;
+  --wf-neutral-100: #141415;
+  --wf-neutral-150: #1b1c1f;
+  --wf-neutral-200: #36373c;
+  --wf-neutral-300: #3e3f42;
+  --wf-neutral-400: #4a4c4f;
+  --wf-neutral-500: #7a7e85;
+  --wf-neutral-600: #afb1b6;
+  --wf-neutral-700: #bfc1c4;
+  --wf-neutral-800: #dddddf;
+  --wf-neutral-900: #efeff0;
+  --wf-neutral-950: #ffffff;
+
+  /* ---- 语义角色（暗色档） ---- */
+  --wf-bg-body: #141415;
+  --wf-bg-surface: #202124;
+  --wf-bg-elevated: #25262a;
+  --wf-bg-subtle: #1b1c1f;
+  --wf-bg-muted: #2a2b2d;
+  --wf-bg-hover: #2a2b2d;
+  --wf-bg-active: #36373c;
+
+  --wf-text-primary: #efeff0;
+  --wf-text-secondary: #bfc1c4;
+  --wf-text-muted: #afb1b6;
+  --wf-text-disabled: #7a7e85;
+  --wf-text-inverse: #141415;
+  --wf-text-on-primary: #10131a;
+
+  --wf-border-default: #36373c;
+  --wf-border-light: #2a2b2d;
+  --wf-border-dark: #4a4c4f;
+  --wf-border-focus: #8db3fa;
+
+  --wf-focus-ring: color-mix(in srgb, var(--wf-color-primary) 32%, transparent);
+
+  /* ---- 阴影（暗色：同样只有三档） ---- */
+  --wf-shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.5);
+  --wf-shadow-overlay: 0 16px 40px rgba(0, 0, 0, 0.6);
+  --wf-shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.7);
+}

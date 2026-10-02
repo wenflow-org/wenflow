@@ -1,28 +1,22 @@
 {
   "hex": {
     "src/views/admin-redesign/AchIcon.vue": 5,
-    "src/views/admin-redesign/AdminGlossaryDrawer.vue": 10,
     "src/views/admin-redesign/ApiConfig.vue": 22,
     "src/views/admin-redesign/AuditLogs.vue": 22,
-    "src/views/admin-redesign/DriftAuditPanel.vue": 9,
     "src/views/admin-redesign/ExecLogs.vue": 20,
-    "src/views/admin-redesign/Feedback.vue": 4,
-    "src/views/admin-redesign/FieldAddWizard.vue": 6,
-    "src/views/admin-redesign/FieldRoutingTable.vue": 15,
-    "src/views/admin-redesign/GoalConversations.vue": 14,
+    "src/views/admin-redesign/Feedback.vue": 2,
+    "src/views/admin-redesign/GoalConversations.vue": 2,
     "src/views/admin-redesign/LearnerCenter.vue": 1,
-    "src/views/admin-redesign/LearnerDetail.vue": 12,
+    "src/views/admin-redesign/LearnerDetail.vue": 6,
     "src/views/admin-redesign/Notifications.vue": 3,
-    "src/views/admin-redesign/OpsHub.vue": 12,
+    "src/views/admin-redesign/OpsHub.vue": 8,
     "src/views/admin-redesign/Orchestrator.vue": 3,
-    "src/views/admin-redesign/Overview.vue": 39,
-    "src/views/admin-redesign/Pagination.vue": 1,
-    "src/views/admin-redesign/PromptEval.vue": 4,
+    "src/views/admin-redesign/PromptEval.vue": 2,
     "src/views/admin-redesign/RunStateBadge.vue": 22,
     "src/views/admin-redesign/SandboxView.vue": 9,
-    "src/views/admin-redesign/SessionCockpit.vue": 47,
-    "src/views/admin-redesign/SessionSecurity.vue": 16,
-    "src/views/admin-redesign/Shell.vue": 7,
+    "src/views/admin-redesign/SessionCockpit.vue": 44,
+    "src/views/admin-redesign/SessionSecurity.vue": 6,
+    "src/views/admin-redesign/Shell.vue": 4,
     "src/views/admin-redesign/SkeletonTable.vue": 1,
     "src/views/admin-redesign/skill-design/engineering-tab.vue": 20,
     "src/views/admin-redesign/skill-design/protocol-tab.vue": 14,
@@ -30,19 +24,26 @@
     "src/views/admin-redesign/skill-design/runtime-tab.vue": 6,
     "src/views/admin-redesign/skill-design/trial-tab.vue": 25,
     "src/views/admin-redesign/skill-design/versions-tab.vue": 12,
-    "src/views/admin-redesign/SkillDrawer.vue": 22,
-    "src/views/admin-redesign/SkillFieldRouting.vue": 2,
-    "src/views/admin-redesign/SkillReconciliation.vue": 17,
-    "src/views/admin-redesign/Skills.vue": 13,
-    "src/views/admin-redesign/TcRankTable.vue": 11,
-    "src/views/admin-redesign/TeachingSessions.vue": 3,
+    "src/views/admin-redesign/Skills.vue": 3,
     "src/views/admin-redesign/Users.vue": 2,
-    "src/views/admin-redesign/VirtualLearnerCreate.vue": 7,
-    "src/views/admin-redesign/VirtualLearnerPromptTest.vue": 4,
-    "src/views/admin-redesign/VirtualLearnerReclaim.vue": 4,
-    "src/views/admin-redesign/VirtualLearners.vue": 11,
-    "src/views/admin-redesign/VirtualProfile.vue": 40,
-    "src/components/mk/MkCols.vue": 4
+    "src/views/admin-redesign/VirtualLearners.vue": 9,
+    "src/views/admin-redesign/VirtualProfile.vue": 8,
+    "src/views/HomeNext.vue": 7,
+    "src/views/v2/V2AuthLayout.vue": 6,
+    "src/views/v2/V2Dashboard.vue": 4,
+    "src/views/v2/V2GoalConversation.vue": 11,
+    "src/views/v2/V2LearningPage.vue": 52,
+    "src/views/v2/V2LearningPathDetail.vue": 51,
+    "src/views/v2/V2LearningPaths.vue": 2,
+    "src/views/v2/V2LearningState.vue": 8,
+    "src/views/v2/V2Login.vue": 1,
+    "src/views/v2/V2NotifCenter.vue": 4,
+    "src/views/v2/V2Onboarding.vue": 2,
+    "src/views/VisionNext.vue": 1,
+    "src/components/mk/MkCols.vue": 4,
+    "src/components/chat/MessageActions.vue": 1,
+    "src/components/ui/ToastHost.vue": 8,
+    "src/components/ui/V2ResultState.vue": 1
   },
   "mediaSpacing": {
     "src/styles/mk-primitives.css": 34,
@@ -52,7 +53,6 @@
     "src/styles/mk-primitives.css": 11
   },
   "baseSmallFont": {
-    "src/views/admin-redesign/MemoryReview.vue": 1,
     "src/views/DeveloperDocs.vue": 9,
     "src/views/HomeNext.vue": 5,
     "src/views/user/AgentLogs.vue": 1,
@@ -62,20 +62,91 @@
     "src/views/v2/V2LearningHistory.vue": 1,
     "src/views/v2/V2LearningPage.vue": 4,
     "src/views/v2/V2LearningPathDetail.vue": 3,
-    "src/views/v2/V2Nav.vue": 1,
-    "src/views/v2/V2NotifCenter.vue": 1,
     "src/views/v2/V2Onboarding.vue": 12,
     "src/views/VisionNext.vue": 1,
     "src/components/chat/MessageActions.vue": 1,
     "src/components/learning/MaterialUploadArea.vue": 4,
     "src/styles/mk-primitives.css": 5
   },
-  "radius": {},
-  "boxShadow": {},
+  "radius": {
+    "src/views/HomeNext.vue": 2,
+    "src/views/v2/V2Achievements.vue": 2,
+    "src/views/v2/V2AuthLayout.vue": 7,
+    "src/views/v2/V2Dashboard.vue": 14,
+    "src/views/v2/V2Footer.vue": 2,
+    "src/views/v2/V2GoalConversation.vue": 14,
+    "src/views/v2/V2LearningPage.vue": 18,
+    "src/views/v2/V2LearningPathDetail.vue": 2,
+    "src/views/v2/V2LearningPaths.vue": 4,
+    "src/views/v2/V2LearningState.vue": 6,
+    "src/views/v2/V2Login.vue": 1,
+    "src/views/v2/V2Nav.vue": 2,
+    "src/views/v2/V2NotifCenter.vue": 5,
+    "src/views/v2/V2Onboarding.vue": 10,
+    "src/components/user/CapabilityShell.vue": 2,
+    "src/components/learning/MaterialUploadArea.vue": 1,
+    "src/components/learning/SessionFeedbackPanel.vue": 3,
+    "src/components/ui/ToastHost.vue": 1,
+    "src/components/ui/V2ResultState.vue": 1
+  },
+  "boxShadow": {
+    "src/views/v2/V2Achievements.vue": 2,
+    "src/views/v2/V2AuthLayout.vue": 1,
+    "src/views/v2/V2Dashboard.vue": 2,
+    "src/views/v2/V2GoalConversation.vue": 14,
+    "src/views/v2/V2LearningPage.vue": 16,
+    "src/views/v2/V2LearningPathDetail.vue": 2,
+    "src/views/v2/V2LearningPaths.vue": 3,
+    "src/views/v2/V2LearningState.vue": 2,
+    "src/views/v2/V2Nav.vue": 1,
+    "src/views/v2/V2NotifCenter.vue": 2,
+    "src/views/v2/V2Onboarding.vue": 3,
+    "src/components/user/CapabilityShell.vue": 2,
+    "src/components/ui/ToastHost.vue": 2
+  },
   "deadClasses": {
-    "src/views/admin-redesign/SessionCockpit.vue": [
-      "cp-stage--active",
-      "cp-stage--done"
+    "src/views/HomeNext.vue": [
+      "rv-in"
+    ],
+    "src/views/v2/V2Dashboard.vue": [
+      "day__cell--h1",
+      "day__cell--h2",
+      "day__cell--h3"
+    ],
+    "src/views/v2/V2LearningHistory.vue": [
+      "mday--h0",
+      "mday--h1",
+      "mday--h2",
+      "mday--h3"
+    ],
+    "src/views/v2/V2LearningPage.vue": [
+      "learn__state-link",
+      "kp__item--current",
+      "kp__item--done",
+      "kp__time",
+      "msg__code",
+      "kp-actions__label",
+      "kp-btn",
+      "kp-btn__icon",
+      "kp-btn--mastered",
+      "kp-btn--retry",
+      "learn__init",
+      "learn__init-error"
+    ],
+    "src/views/v2/V2LearningPathDetail.vue": [
+      "crumbs__toggle",
+      "sidecard__sum",
+      "sidecard__text"
+    ],
+    "src/views/v2/V2Nav.vue": [
+      "v2nav__right"
+    ],
+    "src/components/user/CapabilityShell.vue": [
+      "uc__kicker",
+      "uc__tab"
+    ],
+    "src/components/learning/SessionFeedbackPanel.vue": [
+      "rating-option"
     ]
   },
   "note": "硬编码 hex 色值 + 死 CSS 类 + 圆角/阴影档外值基线（棘轮：只降不升）。收敛后请用 --update 下调。"

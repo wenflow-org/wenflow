@@ -1,57 +1,80 @@
 /* ========================================
-   AI学习平台 - 统一视觉设计系统
-   配色方案：友好陪伴风 × Fluent Design 2.0
-   
-   设计原则：
-   1. 护眼优先 - 长时间学习友好
-   2. 专注导向 - 清晰内容层次
-   3. 正向激励 - 亮色强调成就
-   4. 专业可信 - 教育/科技感
-   5. 暗色模式支持
-   6. Fluent Design 2.0 亚克力材质
+   用户侧语义别名层（原「AI学习平台 - 统一视觉设计系统」）
+   ========================================
+
+   2026-10-02 起本文件**不再是设计语言的定义处**。
+   设计语言全部落 tokens.css 的 --wf-* 唯一层；这里只保留两样东西：
+     1. 别名：--color-* / --neutral-* / --radius-* / --shadow-* / --transition-* 等
+        → var(--wf-*)。全仓既有调用名继续工作（含 learning-components.css、
+        marketing 系视图、v2.css），改设计值时只改 tokens.css 一处。
+     2. 例外字面量：与规范值有意不同、或规范无对应物的，逐条注释登记。
+
+   已退役（2026-10-02，SPEC v4）
+   --------------------------
+   本文件头部原自述「配色方案：友好陪伴风 × Fluent Design 2.0 / 6. Fluent Design 2.0
+   亚克力材质」。那套语言与现行规范「友好而平」冲突，已整体退役：
+
+     · 亚克力 / 毛玻璃材质（--acrylic-* / --glass-*，全仓 0 消费者）→ 删除
+     · UI Lab 大圆角（--lab-radius-card 34 / nav 28 / button-sm 14 / nav-item 18，
+       全仓 0 消费者）→ 删除
+     · UI Lab 彩色光晕投影（--lab-shadow-*，全仓 0 消费者）→ 删除
+     · Fluent 第二套圆角/动效阶梯（--fluent-*，全仓 0 消费者）→ 删除
+     · ZPD 五级彩色投影（--shadow-{novice,beginner,competent,proficient,expert}[-dark]）
+       → **有 10 个活消费点**（learning-components.css 的 .zpd-badge--*），
+         不能删也不能留：「禁止彩色光晕」要求它们落到中性档。
+         重定向属批次 D（改视觉），本批只登记，见下方 ZPD 段。
+
+   仍然存活的部分：ZPD 五级徽章的**颜色**（--color-novice-start 等），
+   learning-components.css 的渐变徽章在用；徽章底色与字色仍属业务语义，
+   与「彩色光晕投影」是两件事——批 D 只拆投影与渐变，不动徽章配色。
    ======================================== */
 
 :root {
   /* ==========================================
-     核心色彩系统（对齐 UI Lab 友好陪伴风）
+     核心色彩（→ tokens.css 别名层）
      ========================================== */
-  
-  /* 主色系 - 友好蓝 */
-  --color-primary: #2f6ae0;
-  --color-primary-light: #5a94f8;
-  --color-primary-lighter: #8db3fa;
-  --color-primary-dark: #1f57cc;
-  --color-primary-darker: #1843a3;
-  
+
+  /* 主色系 - 友好蓝。唯一交互色。 */
+  --color-primary: var(--wf-color-primary);
+  --color-primary-light: var(--wf-color-primary-light);
+  --color-primary-lighter: var(--wf-color-primary-lighter);
+  --color-primary-dark: var(--wf-color-primary-dark);
+  --color-primary-darker: var(--wf-color-primary-darker);
+
   /* 辅色系 - 清新青 */
-  --color-secondary: #43b0d8;
-  --color-secondary-light: #6ec5e3;
-  --color-secondary-dark: #3593b5;
-  
+  --color-secondary: var(--wf-color-secondary);
+  --color-secondary-light: var(--wf-color-secondary-light);
+  --color-secondary-dark: var(--wf-color-secondary-dark);
+
   /* 强调色系 - 薰衣草紫 */
-  --color-accent: #8d6bff;
-  --color-accent-light: #a98fff;
-  --color-accent-dark: #6b4ae0;
-  
+  --color-accent: var(--wf-color-accent);
+  --color-accent-light: var(--wf-color-accent-light);
+  --color-accent-dark: var(--wf-color-accent-dark);
+
   /* 警示色系 - 柔和红 */
-  --color-danger: #ef7578;
-  --color-danger-light: #f49a9c;
-  --color-danger-dark: #d95054;
+  --color-danger: var(--wf-color-danger);
+  --color-danger-light: var(--wf-color-danger-light);
+  --color-danger-dark: var(--wf-color-danger-dark);
   
   /* ==========================================
-     中性色系（亮色模式）
+     中性色系（→ tokens.css 别名层）
+     注意暗色档：tokens.css 的暗色中性阶是实测收敛值（--wf-neutral-100 #141415 /
+     --wf-neutral-50 #202124 / --wf-neutral-600 #afb1b6 …）。本文件原先的暗色
+     --neutral-50 #1e1e20 / -100 #232325 / -200 #2f3032 是 Fluent 时代的旧坡道，
+     已整体删除——它们比亮暗两档实际在用的值都偏浅，是「暗色下卡片糊成一块」的
+     半个成因。但 --neutral-150 在旧文件里缺失，补不回：tokens.css 已定义，无需在此重复。
      ========================================== */
-  --neutral-50: #FFFFFF;
-  --neutral-100: var(--mk-bg);
-  --neutral-200: var(--mk-line);
-  --neutral-300: #DEE2E6;
-  --neutral-400: #CED4DA;
-  --neutral-500: #ADB5BD;
-  --neutral-600: var(--mk-muted);
-  --neutral-700: #5F6B7C;
-  --neutral-800: #495057;
-  --neutral-900: var(--mk-ink);
-  --neutral-950: #1A252F;
+  --neutral-50: var(--wf-neutral-50);
+  --neutral-100: var(--wf-neutral-100);
+  --neutral-200: var(--wf-neutral-200);
+  --neutral-300: var(--wf-neutral-300);
+  --neutral-400: var(--wf-neutral-400);
+  --neutral-500: var(--wf-neutral-500);
+  --neutral-600: var(--wf-neutral-600);
+  --neutral-700: var(--wf-neutral-700);
+  --neutral-800: var(--wf-neutral-800);
+  --neutral-900: var(--wf-neutral-900);
+  --neutral-950: var(--wf-neutral-950);
   
   /* ==========================================
      语义化状态色
@@ -93,38 +116,22 @@
   --color-efficient-border: rgba(243, 156, 18, 0.2);
   
   /* ==========================================
-     ZPD技能等级徽章色系
+     ZPD 技能等级徽章 —— 已整体删除（2026-10-02，批次 D）
+
+     原有 20 枚：--color-{novice,beginner,competent,proficient,expert}-{start,end}
+     与 --shadow-{同上}[-dark]。三月底以来唯一的消费方是
+     learning-components.css 的 .zpd-badge--*（71 行），而那一整块本身
+     零消费，已随死代码删除。于是这 20 枚令牌在本批一并清零。
+
+     为什么不「重定向到中性档」而直接删：规范里从来没有「ZPD 专用阴影档」，
+     徽章真需要投影就用通用的 --wf-shadow-raised。为一个不存在的组件保留
+     一组「过渡用」令牌，等于给退役的实现留一条复活路径。
+
+     如果日后要把 ZPD 技能等级重新做进界面，正确的起点是：
+       · 徽章底色用 --wf-zpd-* 五级（tokens.css 已定义，规范内的语义编码色）
+       徽章投影用 --wf-shadow-raised 或不给投影
+       不要恢复 --shadow-novice 这一族——它是规范判死的彩色光晕。
      ========================================== */
-  
-  /* Novice (新手) - 灰色系 */
-  --color-novice-start: #95A5A6;
-  --color-novice-end: #7F8C8D;
-  --shadow-novice: rgba(149, 165, 166, 0.3);
-  --shadow-novice-dark: rgba(149, 165, 166, 0.5);
-  
-  /* Beginner (高级初学者) - 蓝色系 */
-  --color-beginner-start: #3498DB;
-  --color-beginner-end: #2980B9;
-  --shadow-beginner: rgba(52, 152, 219, 0.3);
-  --shadow-beginner-dark: rgba(52, 152, 219, 0.5);
-  
-  /* Competent (胜任) - 绿色系 */
-  --color-competent-start: #2ECC71;
-  --color-competent-end: #27AE60;
-  --shadow-competent: rgba(46, 204, 113, 0.3);
-  --shadow-competent-dark: rgba(46, 204, 113, 0.5);
-  
-  /* Proficient (精通) - 橙色系 */
-  --color-proficient-start: #F4A261;
-  --color-proficient-end: #E08B3A;
-  --shadow-proficient: rgba(244, 162, 97, 0.3);
-  --shadow-proficient-dark: rgba(244, 162, 97, 0.5);
-  
-  /* Expert (专家) - 紫色系 */
-  --color-expert-start: #9B59B6;
-  --color-expert-end: #8E44AD;
-  --shadow-expert: rgba(155, 89, 182, 0.3);
-  --shadow-expert-dark: rgba(155, 89, 182, 0.5);
   
   /* ==========================================
      亮色模式变量
@@ -160,12 +167,17 @@
   --border-dark: var(--neutral-400);
   --border-focus: var(--color-primary);
   
-  /* 阴影 */
-  --shadow-xs: var(--mk-shadow-sm);
+  /* 阴影（→ tokens.css 别名层，batch C 收口）
+     原为六档且映射混乱：xs 指向 sm、md 与 lg 同指 pop、xl 指向 modal ——
+     规范只有三档（面/悬浮/弹层）。现按量级折叠，多余档位作为兼容别名保留
+     （零消费，但删掉会让仍写 --shadow-xl 的老代码突然无阴影）。
+     --shadow-xs 现在是 none：规范的语义是「面永远是平的」，卡片不该有投影，
+     只靠 1px 发丝线分层。 */
+  --shadow-xs: var(--wf-shadow-xs);
   --shadow-sm: var(--mk-shadow-sm);
-  --shadow-md: var(--mk-shadow-pop);
+  --shadow-md: var(--mk-shadow-sm);
   --shadow-lg: var(--mk-shadow-pop);
-  --shadow-xl: var(--mk-shadow-modal);
+  --shadow-xl: var(--mk-shadow-pop);
   --shadow-2xl: var(--mk-shadow-modal);
   
   /* ==========================================
@@ -216,96 +228,54 @@
   --spacing-20: 5rem;     /* 80px */
   
   /* ==========================================
-     圆角系统
+     圆角系统（间接引用 --mk-radius-*，再间接指向 tokens.css 的 --wf-radius-*）
+     刻意保持 --mk-* 间接而非直连 --wf-*：--mk-radius-lg/xl 的档位调整属批次 C，
+     走别名链可以只改 main.css 一处，不必同时动本文件。
      ========================================== */
-  /* 刻度类归一口径（2026-09-19）：以 --mk-* 为准，旧名保留为别名（调用方无需改动）。
-     radius 按同名档换算（lg 12→10、xl 16→12、2xl 24→16）；shadow 按量级折叠到 mk 的三档。 */
   --radius-none: 0;
-  --radius-sm: var(--mk-radius-sm);    /* → mk sm(6)  */
-  --radius-md: var(--mk-radius-md);    /* → mk md(8)  */
-  --radius-lg: var(--mk-radius-lg);    /* → mk lg(10) */
-  --radius-xl: var(--mk-radius-xl);    /* → mk xl(12) */
-  --radius-2xl: var(--mk-radius-modal); /* → mk modal(16) */
+  --radius-sm: var(--mk-radius-sm);
+  --radius-md: var(--mk-radius-md);
+  --radius-lg: var(--mk-radius-lg);     /* batch C：10 → 12 */
+  --radius-xl: var(--mk-radius-xl);     /* batch C：12 → 16 */
+  --radius-2xl: var(--mk-radius-modal); /* → 16 */
   --radius-full: var(--mk-radius-pill);
-  
+
   /* ==========================================
-     过渡动画（Fluent Design 曲线）
+     过渡动画（→ tokens.css 别名层）
+     原为 Fluent 曲线 cubic-bezier(.4,0,.2,1) + 150/280/400ms，
+     与规范 120/200/320ms + cubic-bezier(.16,1,.3,1) 双重不符。
+     注意 --transition-normal 被 admin-surface.css 的 :root 覆盖为 0.22s ease
+     （该文件后加载、同为 (0,1,0)）——这是第二个越权覆盖点，已登记待批次 C 处理。
      ========================================== */
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 280ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-bounce: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-  
+  --transition-fast: var(--wf-transition-fast);
+  --transition-normal: var(--wf-transition-normal);
+  --transition-slow: var(--wf-transition-slow);
+  --transition-bounce: var(--wf-transition-normal);  /* 规范只有三档；bounce 并入 normal */
+
   /* ==========================================
-     Fluent Design 2.0 材质系统
+     已退役：Fluent 亚克力材质 / UI Lab 大圆角与彩色光晕 / Fluent 第二套阶梯
+     ------------------------------------------------------------
+     下面原本有 38 枚令牌（--acrylic-* 4、--glass-* 5、--lab-radius-* 6、
+     --lab-shadow-* 3、--lab-blur-* 2、--lab-orb-opacity 1、--lab-color-* 9、
+     --fluent-radius-* 4、--fluent-easing 1、--fluent-duration-* 3）。
+     全仓 var() 消费点为 0（2026-10-02 grep 验证），是纯死令牌。
+
+     为什么留着是隐患：它们承载的是**被退役的设计语言**（亚克力模糊、
+     34px 大圆角、彩色光晕）。留着就有后来者照着它们实现新界面，
+     于是「友好而平」会在没人注意的情况下长出「友好陪伴 × Fluent」的第二套脸。
+     死令牌的价值是零，误导成本是全站视觉一致性——删掉。
+
+     材质/大圆角/彩色光晕的规范落点在 tokens.css 的 --wf-acrylic-* /
+     --wf-glass-* / --wf-lab-radius-* / --wf-lab-shadow-*：那些是**已归一**的
+     兼容落点（新值指向阶梯），与这里的旧值（未归一的 Fluent 数值）不是一回事。
      ========================================== */
-  
-  /* 亚克力材质 */
-  --acrylic-bg-light: rgba(243, 243, 243, 0.72);
-  --acrylic-bg-dark: rgba(30, 45, 58, 0.74);
-  --acrylic-blur: blur(30px);
-  --acrylic-saturate: saturate(180%);
-  
-  /* 统一玻璃态 */
-  --glass-bg-light: rgba(255, 255, 255, 0.72);
-  --glass-bg-dark: rgba(30, 45, 58, 0.74);
-  --glass-border-light: rgba(255, 255, 255, 0.35);
-  --glass-border-dark: rgba(255, 255, 255, 0.1);
-  --glass-blur: blur(12px);
 
   /* 移动端安全区 */
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
-  
-  /* ==========================================
-     UI Lab 设计系统变量
-     ========================================== */
-  
-  /* UI Lab 圆角系统 */
-  --lab-radius-card: 34px;
-  --lab-radius-nav: 28px;
-  --lab-radius-button: 16px;
-  --lab-radius-button-small: 14px;
-  --lab-radius-nav-item: 18px;
-  --lab-radius-pill: 999px;
-  
-  /* UI Lab 阴影系统 */
-  --lab-shadow-lg: 0 30px 90px rgba(58, 101, 197, 0.16);
-  --lab-shadow-md: 0 10px 22px rgba(52, 120, 246, 0.3);
-  --lab-shadow-sm: 0 8px 18px rgba(52, 120, 246, 0.24);
-  
-  /* UI Lab 背景模糊 */
-  --lab-blur-card: blur(20px);
-  --lab-blur-orb: blur(52px);
-  
-  /* UI Lab 光晕透明度 */
-  --lab-orb-opacity: 0.42;
-  
-  /* UI Lab 颜色系统 */
-  --lab-color-canvas: #edf4ff;
-  --lab-color-surface: #ffffff;
-  --lab-color-surface-alt: #f7f9ff;
-  --lab-color-border: #d2dbf3;
-  --lab-color-border-strong: #b7c7ea;
-  --lab-color-text: #1d3150;
-  --lab-color-muted: #7085a6;
-  --lab-color-nav-bg: rgba(255, 255, 255, 0.9);
-  --lab-color-chip: rgba(141, 107, 255, 0.12);
-  
-  /* Fluent 圆角（Admin 专用，比全局更紧凑） */
-  --fluent-radius-sm: 4px;
-  --fluent-radius-md: 6px;
-  --fluent-radius-lg: 8px;
-  --fluent-radius-xl: 12px;
-  
-  /* Fluent 动效时长 */
-  --fluent-easing: cubic-bezier(0.4, 0, 0.2, 1);
-  --fluent-duration-fast: 150ms;
-  --fluent-duration-normal: 280ms;
-  --fluent-duration-slow: 400ms;
-  
+
   /* ==========================================
      Admin 布局系统
      ========================================== */
@@ -340,53 +310,42 @@
 
 /* ==========================================
    暗色模式
+   ========================================
+
+   2026-10-02：本块原先**自带一整套暗色覆写**（--color-* 五组、--neutral-* 十一档），
+   与 tokens.css 的暗色块构成两套并行的暗色调色板 —— 这正是「同一个界面在
+   用户侧偏紫、Admin 侧偏蓝」的来源（--color-primary 暗色 #5a94f8 vs
+   --mk-blue 暗色 #5b8def；--neutral-50 #1e1e20 vs #202124）。
+
+   现在 :root 里 --color-* / --neutral-* 都是 var(--wf-*) 别名，暗色值由
+   tokens.css 的暗色块统一给出，**本块的这两组覆写整体删除**，不再维护两份。
+
+   这是本批唯一一处有意的视觉变化，且是修复而非回归：
+     · --color-primary 暗色 #5a94f8 → #5b8def（与 --mk-blue 暗色对齐，
+       即 18f09fd3 交互蓝归一当时漏掉的用户侧一半）
+     · --color-primary-dark #3478f6 → #3f74d6、-darker #1f57cc → #2f6ae0
+     · --neutral-* 十一档改用实测收敛的暗色坡道（-50 #202124、-100 #141415、
+       -200 #36373c、-600 #afb1b6、-900 #efeff0 …）
+   其余 --bg-* / --text-* / --border-* / --shadow-* 覆写保留（它们是语义角色层，
+   不在 --wf-* 别名链上），但其中被 admin-surface.css 越权覆盖的部分已在该文件登记。
+   --shadow-* 的三档收敛已于 batch C 在亮/暗两块同步完成（见各自注释）。
    ========================================== */
 
 [data-theme="dark"],
 .dark {
-  /* 主色系调整 - 暗色模式下降低饱和度 */
-  --color-primary: #5a94f8;
-  --color-primary-light: #8db3fa;
-  --color-primary-lighter: #a8c5fc;
-  --color-primary-dark: #3478f6;
-  --color-primary-darker: #1f57cc;
-  
-  /* 辅色系 */
-  --color-secondary: #6ec5e3;
-  --color-secondary-light: #96d5ec;
-  --color-secondary-dark: #43b0d8;
-  
-  /* 强调色 - 暗色模式下稍亮 */
-  --color-accent: #a98fff;
-  --color-accent-light: #c0aaff;
-  --color-accent-dark: #8d6bff;
-  
-  /* 警示色 */
-  --color-danger: #f49a9c;
-  --color-danger-light: #f7b8b9;
-  --color-danger-dark: #ef7578;
-  
-  /* 中性色系反转 */
-  --neutral-50: #1e1e20;
-  --neutral-100: #232325;
-  --neutral-200: #2f3032;
-  --neutral-300: #3e3f42;
-  --neutral-400: #4a4c4f;
-  --neutral-500: #7a7e85;
-  --neutral-600: #9d9fa4;
-  --neutral-700: #bfc1c4;
-  --neutral-800: #dddddf;
-  --neutral-900: #f2f2f3;
-  --neutral-950: #FFFFFF;
-  
-  /* 暗色模式背景 */
+  /* 暗色模式背景
+     ---- 语义表面档必须直连 --wf-bg-*，不能走 --neutral-* ----
+     本块原先写 --bg-elevated: var(--neutral-100)、--bg-subtle: var(--neutral-100)，
+     而暗色 --neutral-100 = #141415 恰是页面底色：删除中性阶暗色覆写后，
+     「浮起面」会与画布同值，浮层直接隐形。语义角色要与 --wf-bg-* 对齐——
+     规范给的是 elevated #25262a / subtle #1b1c1f / muted #2a2b2d，三者互不相同。 */
   --bg-body: var(--mk-bg);
-  --bg-surface: var(--neutral-50);
-  --bg-elevated: var(--neutral-100);
-  --bg-muted: var(--neutral-200);
-  --bg-subtle: var(--neutral-100);
-  --bg-hover: var(--neutral-300);
-  --bg-active: var(--neutral-400);
+  --bg-surface: var(--wf-bg-surface);
+  --bg-elevated: var(--wf-bg-elevated);
+  --bg-muted: var(--wf-bg-muted);
+  --bg-subtle: var(--wf-bg-subtle);
+  --bg-hover: var(--wf-bg-hover);
+  --bg-active: var(--wf-bg-active);
   
   /* 暗色模式文字 */
   --text-primary: var(--mk-ink);
@@ -409,19 +368,24 @@
   --border-dark: var(--neutral-400);
   --border-focus: var(--color-primary-light);
   
-  /* 暗色模式阴影 */
-  --shadow-xs: var(--mk-shadow-sm);
+  /* 阴影（→ tokens.css 别名层，batch C 收口）
+     原为六档且映射混乱：xs 指向 sm、md 与 lg 同指 pop、xl 指向 modal ——
+     规范只有三档（面/悬浮/弹层）。现在按量级折叠到三档，多余档位作为
+     兼容别名保留（零消费，但删掉会让仍写 --shadow-xl 的老代码突然无阴影）。
+     注意 --shadow-xs 现在是 none：规范的语义是「面永远是平的」，
+     卡片不该有任何投影，只靠 1px 发丝线分层。 */
+  --shadow-xs: var(--wf-shadow-xs);
   --shadow-sm: var(--mk-shadow-sm);
-  --shadow-md: var(--mk-shadow-pop);
+  --shadow-md: var(--mk-shadow-sm);
   --shadow-lg: var(--mk-shadow-pop);
-  --shadow-xl: var(--mk-shadow-modal);
+  --shadow-xl: var(--mk-shadow-pop);
   --shadow-2xl: var(--mk-shadow-modal);
   
-  /* 暗色模式 Fluent 材质 */
-  --acrylic-bg-light: rgba(30, 45, 58, 0.74);
-  --glass-bg-light: rgba(30, 45, 58, 0.74);
-  --glass-border-light: rgba(255, 255, 255, 0.1);
-  
+  /* ---- 已退役的 Fluent 材质暗色覆写（--acrylic-* / --glass-*）整体删除 ----
+     这三行是「亚克力材质在暗色下长什么样」的唯一记录，而材质本身已在亮色档
+     连同 :root 的 9 枚令牌一起退役（全仓 0 消费者）。留着它等于在一份
+     「平面化」的规范里藏着一个亚克力的实现说明。 */
+
   /* 状态色透明度调整 */
   --color-success-bg: rgba(49, 177, 111, 0.15);
   --color-success-border: rgba(49, 177, 111, 0.3);
@@ -539,115 +503,25 @@ pre code {
 }
 
 /* ==========================================
-   工具类
+   已删除：工具类 + Admin 组件规范（原 524-636 行，共 113 行）
+   ==========================================
+   这一段曾定义 20 个类选择器 + 6 枚 :root 尺寸令牌。2026-10-02 用
+   scripts/dead-class-scan.mjs 按**类名词边界**全仓扫描（不能用子串匹配——
+   本仓大量 mk- 前缀会让 `mk-btn--primary` 命中 `btn--primary`），结论是
+   20 个类选择器全部零消费、6 枚尺寸令牌也零消费。逐条复核的假阳性只有三处，
+   都已排除：
+     · `.btn`      → HTML 注释「原型 .btn 191-206」与 JS 局部变量 `const btn`
+     · `.btn--sm`  → HTML 注释「原型 .btn--sm 形态」
+     · `.transition` → Vue 的 <transition> 组件标签与数据字段 item.transition
+
+   为什么必须删而不是「留着修」：这一段是本仓**最严重的一处规范违反**集中地——
+     · .btn--primary  渐变主按钮 + 彩色光晕 + hover translateY(-1px) 抬升
+     · .btn--danger   渐变 + 彩色光晕 + hover 抬升
+     · .btn--lg 50px / .btn--sm 32px —— 控件高度阶梯（28/34/40/44）之外
+   留着它等于在一份「平面、无渐变、无彩色光晕、无 hover 抬升」的规范里，
+   完整保存着一份反例实现。后来者（包括自动化生成）照着它写新界面，
+   规范就形同虚设。零消费 + 违反规范 + 反例可读性低 = 直接删除，不做兼容保留。
+
+   真正在用的原语层是 mk-primitives.css（.mk-btn/.mk-card/.mk-modal/.mk-drawer…），
+   它才是 admin 与用户侧的组件来源，且已合规（design:check 圆角/阴影基线为 0）。
    ========================================== */
-
-/* 文本颜色 */
-.text-primary { color: var(--text-primary); }
-.text-secondary { color: var(--text-secondary); }
-.text-muted { color: var(--text-muted); }
-.text-success { color: var(--color-success); }
-.text-progress { color: var(--color-progress); }
-.text-warning { color: var(--color-warning); }
-.text-accent { color: var(--color-accent); }
-
-/* 背景色 */
-.bg-body { background: var(--bg-body); }
-.bg-surface { background: var(--bg-surface); }
-
-/* 阴影 */
-.shadow-sm { box-shadow: var(--shadow-sm); }
-
-/* 过渡 */
-.transition { transition: all var(--transition-normal); }
-.transition-fast { transition: all var(--transition-fast); }
-.transition-slow { transition: all var(--transition-slow); }
-
-/* ==========================================
-   Admin 管理页面组件规范
-   ========================================== */
-
-/* Dialog/Drawer 尺寸规范 */
-:root {
-  --admin-dialog-sm: 400px;
-  --admin-dialog-md: 720px;
-  --admin-dialog-lg: min(90vw, 960px);
-
-  --admin-drawer-sm: min(50%, 600px);
-  --admin-drawer-md: min(60%, 800px);
-  --admin-drawer-lg: min(68%, 980px);
-}
-
-.btn:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-
-.btn:disabled,
-.btn[aria-disabled='true'] {
-  opacity: 0.55;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-.btn--lg { min-height: 50px; padding: 0 24px; font-size: 15px; }
-.btn--sm { min-height: 32px; padding: 0 12px; font-size: 13px; gap: 4px; }
-
-.btn--primary {
-  color: #fff;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-  border-color: transparent;
-  box-shadow: 0 14px 28px rgba(52, 120, 246, 0.22);
-}
-.btn--primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 18px 36px rgba(52, 120, 246, 0.28);
-}
-.btn--primary:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: 0 8px 18px rgba(52, 120, 246, 0.22);
-}
-
-.btn--ghost {
-  color: var(--text-primary, #172033);
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(23, 32, 51, 0.1);
-}
-.btn--ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.95);
-  border-color: rgba(52, 120, 246, 0.25);
-  color: var(--color-primary-dark);
-}
-
-.btn--text {
-  min-height: auto;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-primary-dark);
-  font-weight: 600;
-}
-.btn--text:hover:not(:disabled) {
-  background: rgba(52, 120, 246, 0.08);
-}
-
-.btn--danger {
-  color: #fff;
-  background: linear-gradient(135deg, var(--color-danger), var(--color-danger-dark));
-  box-shadow: 0 12px 24px rgba(239, 117, 120, 0.22);
-}
-.btn--danger:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 16px 32px rgba(239, 117, 120, 0.3);
-}
-
-[data-theme='dark'] .btn--ghost {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: var(--text-primary);
-}
-[data-theme='dark'] .btn--ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: var(--color-primary-light);
-}

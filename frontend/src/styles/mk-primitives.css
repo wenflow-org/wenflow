@@ -286,9 +286,15 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
   font-weight: 700;
   flex-shrink: 0;
 }
-/* 头像品牌渐变（沿用两种既有形态；明暗同值） */
-.mk-entity__avatar--user { background: linear-gradient(135deg, var(--mk-entity-avatar-user-from), var(--mk-entity-avatar-user-to)); }
-.mk-entity__avatar--learner { background: linear-gradient(135deg, var(--mk-blue, #2f6ae0), var(--mk-purple)); }
+/* 头像底色（批次 D，2026-10-02：由 135deg 渐变改为平涂）
+   两者都是**语义识别色**，不是装饰：
+     user    = 原绿→青渐变（--mk-entity-avatar-user-from/to 两枚端色）
+     learner = 原蓝→紫渐变
+   渐变在 28px 的圆头像上两端色几乎混不出来，却让「这里的颜色有含义」
+   读起来像「这里的颜色好看」。改为平涂后仍一眼可辨。
+   注：--mk-entity-avatar-user-from 现已零消费，待守卫扩面批次统一清理死令牌。 */
+.mk-entity__avatar--user { background: var(--mk-entity-avatar-user-to); }
+.mk-entity__avatar--learner { background: var(--mk-purple); }
 /* 圆形头像（虚拟学习者：具体颜色由页面按名称哈希给，原语只管形状） */
 .mk-entity__avatar--round { border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); }
 
@@ -679,14 +685,18 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   display: block;
   width: 100%;
   height: 6px;
-  border-radius: 99px;
+  /* 2026-10-02：99 → 999。语义是「胶囊」，阶梯唯一值是 999px（守卫 RADIUS_OK 不含 99px）。
+     6px 高的条上 99px 与 999px 都被 clamp 到 3px，**渲染零差别**，改的是记法不是观感。
+     此处此前在守卫规则 14 的视野外——规则 14 只扫 .vue 的 scoped 块，
+     src/styles/*.css 整片没进过圆角检查（见 ADMIN_VISUAL_LAYER_SPEC §7.5.6）。 */
+  border-radius: 999px;
   background: var(--mk-minibar-bg);
   overflow: hidden;
 }
 .mk-minibar__fill {
   display: block;
   height: 100%;
-  border-radius: 99px;
+  border-radius: 999px;
   background: var(--mk-blue);
   transition: width 0.15s ease;
 }

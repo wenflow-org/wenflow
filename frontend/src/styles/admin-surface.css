@@ -7,7 +7,13 @@
    - 本文件仅保留「体系 B 全局变量」的兼容映射（--bg-* / --text-* / --border-* / --radius-md 等），
      供用户侧（非 admin）页面与 tremor/learning-components 样式取值；值尽可能引用 --mk-*，
      无 mk 等价项处保留原字面量以保证用户侧零视觉回归；
-   - 暗色模式由 design-system.css 自带的 [data-theme=dark] 覆写接管，本文件不再重复。
+   - 暗色模式由本文件末尾的 [data-theme="dark"], .dark 块负责。原先写的「由 design-system.css
+     自带的 [data-theme=dark] 覆写接管，本文件不再重复」已作废：两条规则权重都是 (0,1,0)，
+     而 main.css 顶部 @import 顺序为 design-system.css → admin-surface.css，本文件在后，
+     :root 的浅色字面量反而把对方的暗色值整片盖掉（浅色悬停面/发丝线泄漏进暗色）。
+     故凡是本文件自己给了字面量、又不随 --mk-* 翻转的档位，都必须在本文件里补暗色值。
+   - 暗色值一律取自 main.css 的 html[data-theme='dark'] 既有暗色坡道，不新造色；
+     能命中既有 token 的（如 --text-secondary → --neutral-700）引用而不复制字面量。
    ========================================== */
 
 :root {
@@ -31,9 +37,71 @@
   --brand-primary: var(--mk-blue);
   --brand-soft: #eef5ff;
 
-  /* 圆角 / 动效（保持原 admin 覆盖值，用户侧视觉不变） */
-  --radius-md: 12px;
-  --glass-blur: blur(20px);
-  --glass-bg-light: rgba(255, 255, 255, 0.72);
-  --transition-normal: 0.22s ease;
+  /* 圆角 / 动效：本块原有的两处越权覆盖已删（batch C，2026-10-02）
+
+     --radius-md: 12px
+       原值：为了让用户侧控件维持 12px 而硬写的覆盖。但它和本文件的 import 位置
+       一起构成一个越权点：本文件在 design-system.css **之后**加载，两者的 :root
+       同为 (0,1,0)，于是这一行把 design-system 的
+       `--radius-md: var(--mk-radius-md)`（= 8px，规范的控件圆角）在**明暗两态**
+       整片盖掉。「用户侧控件 12px / Admin 控件 8px」这个分叉就是这么来的。
+       现在删除该覆盖，--radius-md 自动回落到 --mk-radius-md = 8px，全站统一。
+
+     --transition-normal: 0.22s ease
+       同类越权：把 design-system 的 var(--wf-transition-normal)
+       （200ms cubic-bezier(.16,1,.3,1)）覆盖成另一条曲线，于是全站出现两套
+       缓动词汇——而 --mk-dur-* 早就是规范的 200ms/.16 档了。删除后统一。
+
+     这两行是本文件历史上唯一两处「非 --mk-* / 非语义」的硬覆盖；删完之后
+     本文件只剩 --mk-* 的别名与语义角色，不再有能力改写令牌层的值。
+
+     同批删除（2026-10-02，SPEC v4「平面化」）：--glass-blur: blur(20px)
+     与 --glass-bg-light: rgba(255,255,255,.72)。两点理由：
+     ① 全仓 var() 消费点为 0（grep 验证），是死令牌；
+     ② --glass-bg-light 还是上面那个级联缺陷的**同族未爆实例**：它在亮色档给
+        rgba(255,255,255,.72)，暗色档却没有对应覆写，于是即便有人后来接上它，
+        暗色下也会渲染成近白玻璃面板。只因没人消费才没炸。
+     毛玻璃材质本身已整体退役（见 tokens.css「三、材质」段），此处不留占位。 */
+}
+
+/* ==========================================
+   暗色模式
+   为什么必须在这里再写一份：上面 :root 的别名与 design-system.css 的
+   [data-theme="dark"], .dark 同为 (0,1,0)，只差源顺序——main.css 顶部先 import
+   design-system.css 再 import 本文件，本文件在后，于是上面的浅色字面量赢下暗色档：
+   --bg-hover 停在近白 #f6f9ff、--border-light/--border-subtle 停在 #e1e8f2 的浅发丝线、
+   --text-secondary 回落成 --mk-muted 的弱墨（暗色 #afb1b6）。同一个 bug 家族，
+   凡是本文件 :root 里给了字面量、且不随 --mk-* 自动翻转的档位，都要在这里补。
+   选择器与 design-system.css 保持一字不差的双写法：theme.ts 对 <html> 同时打
+   data-theme="dark" 与 .dark class，两条触发路径都是活的，少写一个就漏一种。
+   引用 --mk-* 的档位（--bg-surface/--bg-body/--text-primary/--border-default 等）
+   由 main.css 的暗色块自动翻转，此处不重复声明。
+   ========================================== */
+[data-theme="dark"],
+.dark {
+  /* 背景：--bg-hover 取暗色悬停面常规档 #2a2b2d（同 --mk-modal-close-bg /
+     --mk-drawer-close-bg / --mk-graph-line），比暗色面 #202124 高一档、比 --mk-line 弱。
+     --bg-surface-soft 是「比卡片面低半档的内嵌面」：亮色 #fafbfc 落在页底 #f7f8fa 与
+     面 #ffffff 之间，暗色沿用同一坡道关系取 #19191a（同 --mk-input-disabled-bg /
+     --mk-alert-info-bg），面下凹一级。 */
+  --bg-surface-soft: #19191a;
+  --bg-hover: #2a2b2d;
+
+  /* 文字：暗色下 --mk-muted = #afb1b6 是「弱化文字」档，垫在次级正文上偏灰；
+     设计体系定的次级是 #bfc1c4，恰是 design-system 暗色块 --neutral-700 的值，
+     故引用该 token（暗色下正好解析为 #bfc1c4），不复制字面量，将来不会与它漂移。
+     第三级 --text-tertiary 取暗色 --mk-faint / --neutral-500 的 #7a7e85：对页底 #141415
+     约 4.5:1，与亮色 #64748b 对 #f7f8fa 的对比度基本等价，弱化层级关系不变。 */
+  --text-secondary: var(--neutral-700);
+  --text-tertiary: #7a7e85;
+
+  /* 边框：亮色下这两个是同一个值 #e1e8f2（成对使用），暗色继续成对，同取项目暗色
+     发丝线 #2a2b2d——比 --mk-line(#36373c) 弱一档，正好是「subtle / light」这层。 */
+  --border-subtle: #2a2b2d;
+  --border-light: #2a2b2d;
+
+  /* 品牌：亮色 #eef5ff 是品牌蓝的极浅实底；深底上放不透明浅蓝会糊成一块白斑，
+     故改用项目既有的蓝色半透明底 rgba(91,141,239,.16)（= 暗色 --mk-blue-bg /
+     --mk-badge-info-bg 同档），与暗色 --mk-blue(#5b8def) 同源。 */
+  --brand-soft: rgba(91, 141, 239, 0.16);
 }

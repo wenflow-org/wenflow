@@ -15,6 +15,10 @@
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
     "design:check": "node scripts/check-design-system.mjs",
     "design:baseline": "node scripts/check-design-system.mjs --update",
+    "design:tokens": "node scripts/wf-token-probe.mjs",
+    "design:tokens:diff": "node scripts/wf-token-probe.mjs --diff",
+    "design:dead-class": "node scripts/dead-class-scan.mjs",
+    "design:fix-tokens": "node scripts/fix-bad-tokens.mjs",
     "mobile:spec": "node scripts/check-mobile-spec.mjs",
     "format": "prettier --write src/"
   },

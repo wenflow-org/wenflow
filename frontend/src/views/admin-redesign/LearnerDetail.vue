@@ -1997,9 +1997,13 @@ function barToneBadge(tone: ConceptBarTone): string {
   border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl);
   background: var(--mk-surface); padding: 9px 12px;
   font: inherit; text-align: left; cursor: pointer;
-  transition: border-color 0.12s ease, transform 0.12s ease;
+  transition: border-color 0.12s var(--mk-ease-out);
 }
-.ld-related__item:hover { border-color: rgba(47, 106, 224, 0.5); transform: translateY(-1px); }
+/* 悬停只换描边，不位移（批次 D，2026-10-02）：相关学习是竖排列表，
+   抬 1px 会让整列在鼠标经过时「跳一下」。同批把硬编码 rgba(47,106,224,.5)
+   改成 var(--mk-blue) 的 color-mix —— 交互蓝只有一个来源。 */
+.ld-related__item:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
+.ld-related__item:active { transform: scale(0.98); }
 .ld-related__icon {
   width: 30px; height: 30px; border-radius: var(--mk-radius-sm); flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
