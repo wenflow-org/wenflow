@@ -49,11 +49,16 @@ function parseSkillParamOverrides(raw: unknown): ResolvedRoute['skillParamOverri
   const temperature = num(b.temperature);
   const topP = num(b.topP);
   const maxTokens = num(b.maxTokens);
-  if (temperature === undefined && topP === undefined && maxTokens === undefined) return null;
+  // 'json_object' = 强制 JSON；'none' = 显式关掉通道默认（null 语义不适用，字符串枚举）
+  const responseFormat = typeof b.responseFormat === 'string' && ['json_object', 'none'].includes(b.responseFormat.trim().toLowerCase())
+    ? b.responseFormat.trim().toLowerCase()
+    : undefined;
+  if (temperature === undefined && topP === undefined && maxTokens === undefined && responseFormat === undefined) return null;
   return {
     ...(temperature !== undefined ? { temperature } : {}),
     ...(topP !== undefined ? { topP } : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
+    ...(responseFormat !== undefined ? { responseFormat } : {}),
   };
 }
 
@@ -531,6 +536,9 @@ export class APIRouter {
         model: this.resolveModel(config.defaultModel, this.platformAliasOverrides(config)),
         thinkingMode: this.normalizeThinkingMode(config.defaultThinkingMode || 'default'),
         reasoningEffort: this.normalizeReasoningEffort(config.defaultReasoningEffort || 'default'),
+        // 新列在 generated system-client 重新生成前不可经类型化访问读取（生成被运行中后端的
+        // engine DLL 锁挡住），用 $queryRaw 直读；列缺失/未读到的兜底 = 'none'（行为不变）
+        responseFormat: await this.readPlatformResponseFormat(),
         temperature: config.defaultTemperature ?? 0.7,
         maxTokens: config.defaultMaxTokens ?? 2000,
         privateNetworkPolicy: 'runtime',
@@ -554,11 +562,32 @@ export class APIRouter {
       model: this.resolveModel(),
       thinkingMode: 'default',
       reasoningEffort: 'default',
+      responseFormat: 'none',
       temperature: 0.7,
       maxTokens: 2000,
       privateNetworkPolicy: 'runtime',
       providerType: 'openai-compatible',
       source: 'env-fallback'
     };
+  }
+
+  /**
+   * 平台通道「结构化输出」默认：读 platform_api_configs.defaultResponseFormat。
+   * 走 $queryRaw 而非类型化字段（generated client 尚未含该列，见 getPlatformDefault 注释）；
+   * 任何失败回退 'none'（永不因该特性阻塞路由解析）。
+   */
+  private async readPlatformResponseFormat(): Promise<'none' | 'json_object'> {
+    try {
+      const rows = await systemPrisma.$queryRawUnsafe<Array<{ defaultResponseFormat: string | null }>>(
+        "SELECT defaultResponseFormat FROM platform_api_configs WHERE id='platform'"
+      );
+      return this.normalizeResponseFormat(rows?.[0]?.defaultResponseFormat);
+    } catch {
+      return 'none';
+    }
+  }
+
+  private normalizeResponseFormat(value?: string | null): 'none' | 'json_object' {
+    return (value || '').trim().toLowerCase() === 'json_object' ? 'json_object' : 'none';
   }
 }

@@ -395,9 +395,16 @@ export async function callPrompt<TInput, TOutput>(
           max_tokens: currentMaxTokens ?? generationResolution.maxTokens,
         },
       };
+      // 结构化输出（2026-10-02）：仅 json 媒介技能附 response_format（解码层强制 JSON）。
+      // markdown/text 媒介绝不附（会把自由文本技能摁成 JSON）；'none' 不附，行为不变。
+      const responseFormat = generationResolution.responseFormat === 'json_object'
+        && promptContract?.output?.media === 'json'
+        ? { type: 'json_object' as const }
+        : undefined;
       response = await gateway.execute({
         messages,
         ...llmParams.request,
+        ...(responseFormat ? { response_format: responseFormat } : {}),
         stream: streamRequested,
       }, spec.caller, {
         userId: runtimeOverride.routingUserIdOverride || context.userId,

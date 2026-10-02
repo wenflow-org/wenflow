@@ -35,6 +35,7 @@ router.get('/', async (req, res) => {
         defaultMaxTokens: config.defaultMaxTokens ?? 2048,
         defaultThinkingMode: config.defaultThinkingMode || 'default',
         defaultReasoningEffort: config.defaultReasoningEffort || 'default',
+        defaultResponseFormat: config.defaultResponseFormat || 'none',
         reasoningEndpoint: config.reasoningEndpoint,
         lightEndpoint: config.lightEndpoint,
         chatModels: config.chatModels || [],
@@ -117,6 +118,7 @@ router.put('/', async (req, res) => {
       defaultMaxTokens,
       defaultThinkingMode,
       defaultReasoningEffort,
+      defaultResponseFormat,
       reasoningEndpoint,
       lightEndpoint,
       chatModels,
@@ -188,6 +190,13 @@ router.put('/', async (req, res) => {
       defaultMaxTokens: defaultMaxTokens ?? currentConfig.defaultMaxTokens,
       defaultThinkingMode: defaultThinkingMode || currentConfig.defaultThinkingMode || 'default',
       defaultReasoningEffort: defaultReasoningEffort || currentConfig.defaultReasoningEffort || 'default',
+      // 白名单归一：仅收 'json_object' / 'none'；body 未带该字段时保持现值（与兄弟字段口径一致）
+      defaultResponseFormat: ((() => {
+        const raw = typeof defaultResponseFormat === 'string'
+          ? defaultResponseFormat.trim().toLowerCase()
+          : (currentConfig.defaultResponseFormat || 'none');
+        return raw === 'json_object' ? 'json_object' : 'none';
+      })()),
       reasoningEndpoint: finalReasoningEndpoint,
       lightEndpoint: finalLightEndpoint,
       chatModels: chatModels || currentConfig.chatModels,

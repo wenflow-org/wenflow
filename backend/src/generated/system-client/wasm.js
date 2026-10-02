@@ -217,6 +217,7 @@ exports.Prisma.Platform_api_configsScalarFieldEnum = {
   defaultMaxTokens: 'defaultMaxTokens',
   defaultThinkingMode: 'defaultThinkingMode',
   defaultReasoningEffort: 'defaultReasoningEffort',
+  defaultResponseFormat: 'defaultResponseFormat',
   reasoningEndpoint: 'reasoningEndpoint',
   lightEndpoint: 'lightEndpoint',
   chatModels: 'chatModels',

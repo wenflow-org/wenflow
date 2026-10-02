@@ -33,6 +33,10 @@ export interface ResolvedRoute {
   modelExplicit?: boolean;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
   reasoningEffort?: 'default' | 'low' | 'high' | 'max';
+  /** 平台通道级「结构化输出」默认（platform_api_configs.defaultResponseFormat）：
+   *  json_object = 对 json 媒介技能的请求附 response_format（解码层强制 JSON）。
+   *  技能级 paramOverrides.responseFormat 可覆盖；'none' = 行为不变。 */
+  responseFormat?: 'none' | 'json_object';
   temperature: number;
   maxTokens: number;
   /** skill 级参数覆盖（skill_model_configs.paramOverrides 解析值；null=未覆盖）。
@@ -41,6 +45,8 @@ export interface ResolvedRoute {
     temperature?: number | null;
     topP?: number | null;
     maxTokens?: number | null;
+    /** 'json_object'=强制 JSON；'none'=显式关闭通道默认（解析时白名单校验） */
+    responseFormat?: string;
   } | null;
   /** skill 级兜底链（skill_model_configs.fallbackChain 解析值；null=用 registry 默认链）。 */
   skillFallbackChain?: string[] | null;

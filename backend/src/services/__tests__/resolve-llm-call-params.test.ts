@@ -161,3 +161,54 @@ describe('hoistLlmParamsFromContext', () => {
     })
   })
 })
+
+describe('responseFormat（结构化输出）参数链', () => {
+  it('通道默认 json_object → 附 response_format（route-fallback 来源）', () => {
+    const r = resolveLlmGenerationParams({
+      routeFallback: { responseFormat: 'json_object' }
+    });
+    expect(r.responseFormat).toBe('json_object');
+    expect(r.request.response_format).toEqual({ type: 'json_object' });
+    expect(r.sources.responseFormat).toBe('route-fallback');
+  });
+
+  it('skill-override 优先于通道默认', () => {
+    const r = resolveLlmGenerationParams({
+      skillOverrides: { responseFormat: 'json_object' },
+      routeFallback: { responseFormat: 'json_object' }
+    });
+    expect(r.responseFormat).toBe('json_object');
+    expect(r.sources.responseFormat).toBe('skill-override');
+  });
+
+  it('skill-override 显式 none 可关掉通道默认', () => {
+    const r = resolveLlmGenerationParams({
+      skillOverrides: { responseFormat: 'none' },
+      routeFallback: { responseFormat: 'json_object' }
+    });
+    expect(r.responseFormat).toBe('none');
+    expect(r.request.response_format).toBeUndefined();
+  });
+
+  it('非法值按未声明处理（none，不发 response_format）', () => {
+    for (const bad of ['json_schema', 'bogus', 'JSON_OBJECT' as string]) {
+      const r = resolveLlmGenerationParams({
+        skillOverrides: { responseFormat: bad }
+      });
+      // 'JSON_OBJECT' 大小写不敏感应命中；其余非法值 → none
+      if (bad === 'JSON_OBJECT') {
+        expect(r.responseFormat).toBe('json_object');
+      } else {
+        expect(r.responseFormat).toBe('none');
+        expect(r.request.response_format).toBeUndefined();
+      }
+    }
+  });
+
+  it('两层都未声明 → none（默认行为不变）', () => {
+    const r = resolveLlmGenerationParams({});
+    expect(r.responseFormat).toBe('none');
+    expect(r.request.response_format).toBeUndefined();
+    expect(r.sources.responseFormat).toBe('none');
+  });
+});

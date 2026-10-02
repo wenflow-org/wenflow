@@ -209,8 +209,7 @@
         </datalist>
 
         <!-- 默认思考：平台级开关 + 强度（未单独配置的 Skill 继承此默认；skill 级可在设计页运行时 tab 覆盖） -->
-        <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖<span v-if="dirty.has('route')"> · 保存见卡头「保存路由」</span></span></div>
-        <div class="ac-row ac-row--3 ac-think">
+        <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖<span v-if="dirty.has('route')"> · 保存见卡头「保存路由」</span></span></div>        <div class="ac-row ac-row--3 ac-think">
           <label class="mk-field mk-field--switch">
             <input
               type="checkbox"
@@ -243,6 +242,23 @@
               <option value="default">跟随模型默认</option>
               <option value="enabled">强制开启</option>
               <option value="disabled">关闭</option>
+            </select>
+          </label>
+        </div>
+
+        <!-- 结构化输出：平台级默认（json 媒介 Skill 的请求附 response_format，上游解码层强制 JSON；
+             需渠道支持——2026-10-02 对本渠道直连实测为真强制；skill 级 paramOverrides.responseFormat 可覆盖/显式关闭） -->
+        <div class="ac-sec__title">结构化输出<span class="ac-sec__hint">对输出 JSON 的 Skill 由上游强制 JSON（防「自然停止但吐散文」类失败）；仅支持 OpenAI 风格 response_format 的渠道可开<span v-if="dirty.has('route')"> · 保存见卡头「保存路由」</span></span></div>
+        <div class="ac-row">
+          <label class="mk-field">
+            <span class="mk-field__label">输出格式</span>
+            <select
+              class="mk-filter__select"
+              :value="form.defaultResponseFormat"
+              @change="form.defaultResponseFormat = ($event.target as HTMLSelectElement).value as 'none' | 'json_object'; markDirty('route')"
+            >
+              <option value="none">关闭（默认行为）</option>
+              <option value="json_object">JSON 对象（json_object）</option>
             </select>
           </label>
         </div>
@@ -751,7 +767,8 @@ const form = reactive({
   defaultReasoningModel: '',
   defaultEvaluationModel: '',
   defaultThinkingMode: 'default' as 'default' | 'enabled' | 'disabled',
-  defaultReasoningEffort: 'default' as 'default' | 'low' | 'high' | 'max'
+  defaultReasoningEffort: 'default' as 'default' | 'low' | 'high' | 'max',
+  defaultResponseFormat: 'none' as 'none' | 'json_object'
 })
 const policy = reactive({
   adminAccessMode: 'private' as 'loopback' | 'private' | 'any',
@@ -946,6 +963,7 @@ function applyLiveConfig() {
   form.defaultEvaluationModel = cfg.value.defaultEvaluationModel
   form.defaultThinkingMode = cfg.value.defaultThinkingMode || 'default'
   form.defaultReasoningEffort = cfg.value.defaultReasoningEffort || 'default'
+  form.defaultResponseFormat = cfg.value.defaultResponseFormat === 'json_object' ? 'json_object' : 'none'
   fetchedModels.value = [...cfg.value.availableModels]
   fetchedModelsEndpoint.value = cfg.value.apiUrl
   keySet.value = cfg.value.apiKeyConfigured
@@ -1183,7 +1201,8 @@ async function saveGroups(groups: string[]) {
         defaultReasoningModel: form.defaultReasoningModel,
         defaultEvaluationModel: form.defaultEvaluationModel,
         defaultThinkingMode: form.defaultThinkingMode,
-        defaultReasoningEffort: form.defaultReasoningEffort
+        defaultReasoningEffort: form.defaultReasoningEffort,
+        defaultResponseFormat: form.defaultResponseFormat
       } as Parameters<typeof liveSaveApiConfig>[0])
     }
     if (set.has('policy')) {

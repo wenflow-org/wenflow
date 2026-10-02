@@ -1595,6 +1595,8 @@ export interface LiveApiConfig {
   defaultEvaluationModel: string
   defaultThinkingMode: 'default' | 'enabled' | 'disabled'
   defaultReasoningEffort: 'default' | 'low' | 'high' | 'max'
+  /** none=关闭（行为不变）；json_object=json 媒介 Skill 解码层强制 JSON */
+  defaultResponseFormat: 'none' | 'json_object'
   connectionStatus: string
   lastCheckedAt: string
   networkPolicy: {
@@ -1619,6 +1621,7 @@ async function fetchLiveApiConfig(): Promise<void> {
     defaultEvaluationModel: d.defaultEvaluationModel || '',
     defaultThinkingMode: d.defaultThinkingMode || 'default',
     defaultReasoningEffort: d.defaultReasoningEffort || 'default',
+    defaultResponseFormat: d.defaultResponseFormat === 'json_object' ? 'json_object' : 'none',
     connectionStatus: d.connectionStatus || 'unknown',
     lastCheckedAt: d.lastCheckedAt || '',
     networkPolicy: {
@@ -1646,6 +1649,7 @@ export async function liveSaveApiConfig(data: {
   defaultEvaluationModel: string
   defaultThinkingMode?: 'default' | 'enabled' | 'disabled'
   defaultReasoningEffort?: 'default' | 'low' | 'high' | 'max'
+  defaultResponseFormat?: 'none' | 'json_object'
 }): Promise<void> {
   await adminApiConfigApi.updateConfig(data)
   await fetchLiveApiConfig()

@@ -6306,6 +6306,7 @@ export namespace Prisma {
     defaultMaxTokens: number | null
     defaultThinkingMode: string | null
     defaultReasoningEffort: string | null
+    defaultResponseFormat: string | null
     reasoningEndpoint: string | null
     lightEndpoint: string | null
     chatModels: string | null
@@ -6333,6 +6334,7 @@ export namespace Prisma {
     defaultMaxTokens: number | null
     defaultThinkingMode: string | null
     defaultReasoningEffort: string | null
+    defaultResponseFormat: string | null
     reasoningEndpoint: string | null
     lightEndpoint: string | null
     chatModels: string | null
@@ -6360,6 +6362,7 @@ export namespace Prisma {
     defaultMaxTokens: number
     defaultThinkingMode: number
     defaultReasoningEffort: number
+    defaultResponseFormat: number
     reasoningEndpoint: number
     lightEndpoint: number
     chatModels: number
@@ -6399,6 +6402,7 @@ export namespace Prisma {
     defaultMaxTokens?: true
     defaultThinkingMode?: true
     defaultReasoningEffort?: true
+    defaultResponseFormat?: true
     reasoningEndpoint?: true
     lightEndpoint?: true
     chatModels?: true
@@ -6426,6 +6430,7 @@ export namespace Prisma {
     defaultMaxTokens?: true
     defaultThinkingMode?: true
     defaultReasoningEffort?: true
+    defaultResponseFormat?: true
     reasoningEndpoint?: true
     lightEndpoint?: true
     chatModels?: true
@@ -6453,6 +6458,7 @@ export namespace Prisma {
     defaultMaxTokens?: true
     defaultThinkingMode?: true
     defaultReasoningEffort?: true
+    defaultResponseFormat?: true
     reasoningEndpoint?: true
     lightEndpoint?: true
     chatModels?: true
@@ -6567,6 +6573,7 @@ export namespace Prisma {
     defaultMaxTokens: number
     defaultThinkingMode: string | null
     defaultReasoningEffort: string | null
+    defaultResponseFormat: string | null
     reasoningEndpoint: string | null
     lightEndpoint: string | null
     chatModels: string | null
@@ -6613,6 +6620,7 @@ export namespace Prisma {
     defaultMaxTokens?: boolean
     defaultThinkingMode?: boolean
     defaultReasoningEffort?: boolean
+    defaultResponseFormat?: boolean
     reasoningEndpoint?: boolean
     lightEndpoint?: boolean
     chatModels?: boolean
@@ -6640,6 +6648,7 @@ export namespace Prisma {
     defaultMaxTokens?: boolean
     defaultThinkingMode?: boolean
     defaultReasoningEffort?: boolean
+    defaultResponseFormat?: boolean
     reasoningEndpoint?: boolean
     lightEndpoint?: boolean
     chatModels?: boolean
@@ -6667,6 +6676,7 @@ export namespace Prisma {
     defaultMaxTokens?: boolean
     defaultThinkingMode?: boolean
     defaultReasoningEffort?: boolean
+    defaultResponseFormat?: boolean
     reasoningEndpoint?: boolean
     lightEndpoint?: boolean
     chatModels?: boolean
@@ -6698,6 +6708,7 @@ export namespace Prisma {
       defaultMaxTokens: number
       defaultThinkingMode: string | null
       defaultReasoningEffort: string | null
+      defaultResponseFormat: string | null
       reasoningEndpoint: string | null
       lightEndpoint: string | null
       chatModels: string | null
@@ -7115,6 +7126,7 @@ export namespace Prisma {
     readonly defaultMaxTokens: FieldRef<"platform_api_configs", 'Int'>
     readonly defaultThinkingMode: FieldRef<"platform_api_configs", 'String'>
     readonly defaultReasoningEffort: FieldRef<"platform_api_configs", 'String'>
+    readonly defaultResponseFormat: FieldRef<"platform_api_configs", 'String'>
     readonly reasoningEndpoint: FieldRef<"platform_api_configs", 'String'>
     readonly lightEndpoint: FieldRef<"platform_api_configs", 'String'>
     readonly chatModels: FieldRef<"platform_api_configs", 'String'>
@@ -16455,6 +16467,7 @@ export namespace Prisma {
     defaultMaxTokens: 'defaultMaxTokens',
     defaultThinkingMode: 'defaultThinkingMode',
     defaultReasoningEffort: 'defaultReasoningEffort',
+    defaultResponseFormat: 'defaultResponseFormat',
     reasoningEndpoint: 'reasoningEndpoint',
     lightEndpoint: 'lightEndpoint',
     chatModels: 'chatModels',
@@ -17185,6 +17198,7 @@ export namespace Prisma {
     defaultMaxTokens?: IntFilter<"platform_api_configs"> | number
     defaultThinkingMode?: StringNullableFilter<"platform_api_configs"> | string | null
     defaultReasoningEffort?: StringNullableFilter<"platform_api_configs"> | string | null
+    defaultResponseFormat?: StringNullableFilter<"platform_api_configs"> | string | null
     reasoningEndpoint?: StringNullableFilter<"platform_api_configs"> | string | null
     lightEndpoint?: StringNullableFilter<"platform_api_configs"> | string | null
     chatModels?: StringNullableFilter<"platform_api_configs"> | string | null
@@ -17212,6 +17226,7 @@ export namespace Prisma {
     defaultMaxTokens?: SortOrder
     defaultThinkingMode?: SortOrderInput | SortOrder
     defaultReasoningEffort?: SortOrderInput | SortOrder
+    defaultResponseFormat?: SortOrderInput | SortOrder
     reasoningEndpoint?: SortOrderInput | SortOrder
     lightEndpoint?: SortOrderInput | SortOrder
     chatModels?: SortOrderInput | SortOrder
@@ -17242,6 +17257,7 @@ export namespace Prisma {
     defaultMaxTokens?: IntFilter<"platform_api_configs"> | number
     defaultThinkingMode?: StringNullableFilter<"platform_api_configs"> | string | null
     defaultReasoningEffort?: StringNullableFilter<"platform_api_configs"> | string | null
+    defaultResponseFormat?: StringNullableFilter<"platform_api_configs"> | string | null
     reasoningEndpoint?: StringNullableFilter<"platform_api_configs"> | string | null
     lightEndpoint?: StringNullableFilter<"platform_api_configs"> | string | null
     chatModels?: StringNullableFilter<"platform_api_configs"> | string | null
@@ -17269,6 +17285,7 @@ export namespace Prisma {
     defaultMaxTokens?: SortOrder
     defaultThinkingMode?: SortOrderInput | SortOrder
     defaultReasoningEffort?: SortOrderInput | SortOrder
+    defaultResponseFormat?: SortOrderInput | SortOrder
     reasoningEndpoint?: SortOrderInput | SortOrder
     lightEndpoint?: SortOrderInput | SortOrder
     chatModels?: SortOrderInput | SortOrder
@@ -17304,6 +17321,7 @@ export namespace Prisma {
     defaultMaxTokens?: IntWithAggregatesFilter<"platform_api_configs"> | number
     defaultThinkingMode?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
     defaultReasoningEffort?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
+    defaultResponseFormat?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
     reasoningEndpoint?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
     lightEndpoint?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
     chatModels?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
@@ -18744,6 +18762,7 @@ export namespace Prisma {
     defaultMaxTokens?: number
     defaultThinkingMode?: string | null
     defaultReasoningEffort?: string | null
+    defaultResponseFormat?: string | null
     reasoningEndpoint?: string | null
     lightEndpoint?: string | null
     chatModels?: string | null
@@ -18771,6 +18790,7 @@ export namespace Prisma {
     defaultMaxTokens?: number
     defaultThinkingMode?: string | null
     defaultReasoningEffort?: string | null
+    defaultResponseFormat?: string | null
     reasoningEndpoint?: string | null
     lightEndpoint?: string | null
     chatModels?: string | null
@@ -18798,6 +18818,7 @@ export namespace Prisma {
     defaultMaxTokens?: IntFieldUpdateOperationsInput | number
     defaultThinkingMode?: NullableStringFieldUpdateOperationsInput | string | null
     defaultReasoningEffort?: NullableStringFieldUpdateOperationsInput | string | null
+    defaultResponseFormat?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     lightEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
@@ -18825,6 +18846,7 @@ export namespace Prisma {
     defaultMaxTokens?: IntFieldUpdateOperationsInput | number
     defaultThinkingMode?: NullableStringFieldUpdateOperationsInput | string | null
     defaultReasoningEffort?: NullableStringFieldUpdateOperationsInput | string | null
+    defaultResponseFormat?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     lightEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
@@ -18852,6 +18874,7 @@ export namespace Prisma {
     defaultMaxTokens?: number
     defaultThinkingMode?: string | null
     defaultReasoningEffort?: string | null
+    defaultResponseFormat?: string | null
     reasoningEndpoint?: string | null
     lightEndpoint?: string | null
     chatModels?: string | null
@@ -18879,6 +18902,7 @@ export namespace Prisma {
     defaultMaxTokens?: IntFieldUpdateOperationsInput | number
     defaultThinkingMode?: NullableStringFieldUpdateOperationsInput | string | null
     defaultReasoningEffort?: NullableStringFieldUpdateOperationsInput | string | null
+    defaultResponseFormat?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     lightEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
@@ -18906,6 +18930,7 @@ export namespace Prisma {
     defaultMaxTokens?: IntFieldUpdateOperationsInput | number
     defaultThinkingMode?: NullableStringFieldUpdateOperationsInput | string | null
     defaultReasoningEffort?: NullableStringFieldUpdateOperationsInput | string | null
+    defaultResponseFormat?: NullableStringFieldUpdateOperationsInput | string | null
     reasoningEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     lightEndpoint?: NullableStringFieldUpdateOperationsInput | string | null
     chatModels?: NullableStringFieldUpdateOperationsInput | string | null
@@ -20489,6 +20514,7 @@ export namespace Prisma {
     defaultMaxTokens?: SortOrder
     defaultThinkingMode?: SortOrder
     defaultReasoningEffort?: SortOrder
+    defaultResponseFormat?: SortOrder
     reasoningEndpoint?: SortOrder
     lightEndpoint?: SortOrder
     chatModels?: SortOrder
@@ -20521,6 +20547,7 @@ export namespace Prisma {
     defaultMaxTokens?: SortOrder
     defaultThinkingMode?: SortOrder
     defaultReasoningEffort?: SortOrder
+    defaultResponseFormat?: SortOrder
     reasoningEndpoint?: SortOrder
     lightEndpoint?: SortOrder
     chatModels?: SortOrder
@@ -20548,6 +20575,7 @@ export namespace Prisma {
     defaultMaxTokens?: SortOrder
     defaultThinkingMode?: SortOrder
     defaultReasoningEffort?: SortOrder
+    defaultResponseFormat?: SortOrder
     reasoningEndpoint?: SortOrder
     lightEndpoint?: SortOrder
     chatModels?: SortOrder

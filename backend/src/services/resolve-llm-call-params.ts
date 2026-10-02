@@ -32,6 +32,8 @@ export interface LlmGenerationParams {
   temperature?: number;
   topP?: number;
   maxTokens?: number;
+  /** 'json_object' = 请求附 response_format（解码层强制 JSON；仅 json 媒介技能生效，composer 把关） */
+  responseFormat?: 'none' | 'json_object';
 }
 
 export interface LlmCallParamsResolution extends LlmGenerationParams {
@@ -40,6 +42,7 @@ export interface LlmCallParamsResolution extends LlmGenerationParams {
     temperature: LlmParamSource;
     topP: LlmParamSource;
     maxTokens: LlmParamSource;
+    responseFormat: LlmParamSource;
   };
   /** 与 ChatRequest 对齐的字段名 */
   request: {
@@ -47,6 +50,7 @@ export interface LlmCallParamsResolution extends LlmGenerationParams {
     temperature?: number;
     top_p?: number;
     max_tokens?: number;
+    response_format?: { type: 'json_object' };
   };
 }
 
@@ -62,6 +66,8 @@ export interface ResolveLlmGenerationParamsInput {
     temperature?: number | null;
     topP?: number | null;
     maxTokens?: number | null;
+    /** 'json_object' = 强制 JSON；'none'/缺省 = 用通道默认 */
+    responseFormat?: string | null;
   } | null;
   /** ACTIVE agent_prompts 行（或等价结构；topP 该表暂无列，恒空） */
   promptConfig?: {
@@ -84,11 +90,14 @@ export interface ResolveLlmGenerationParamsInput {
     temperature?: number | null;
     topP?: number | null;
     maxTokens?: number | null;
+    /** 通道级默认（platform_api_configs.defaultResponseFormat 经路由透传） */
+    responseFormat?: string | null;
     /** 经 ResolvedRoute 透传的 skill 级覆盖（不走 pickNumber 链，单独作 skill-override 层） */
     skillParamOverrides?: {
       temperature?: number | null;
       topP?: number | null;
       maxTokens?: number | null;
+      responseFormat?: string | null;
     } | null;
   } | null;
 }
@@ -213,22 +222,39 @@ export function resolveLlmGenerationParams(
     }
   }
 
+  // 结构化输出（2026-10-02）：skill-override（paramOverrides.responseFormat）> 通道默认
+  // （route = platform_api_configs.defaultResponseFormat）。层内「显式声明即停」：skill 填 'none'
+  // 是有意关闭通道默认，不能落空到 route。仅 'json_object' 生效，其余值按关闭处理。
+  let responseFormat: { value?: 'json_object'; source: LlmParamSource } = { source: 'none' };
+  for (const layer of [
+    { value: skillOverride?.responseFormat, source: 'skill-override' as const },
+    { value: route?.responseFormat, source: 'route-fallback' as const },
+  ]) {
+    const normalized = typeof layer.value === 'string' ? layer.value.trim().toLowerCase() : '';
+    if (!normalized) continue;
+    if (normalized === 'json_object') responseFormat = { value: 'json_object', source: layer.source };
+    break;
+  }
+
   return {
     model: model.value,
     temperature: temperature.value,
     topP: topP.value,
     maxTokens: maxTokens.value,
+    responseFormat: responseFormat.value ?? 'none',
     sources: {
       model: model.source,
       temperature: temperature.source,
       topP: topP.source,
       maxTokens: maxTokens.source,
+      responseFormat: responseFormat.source,
     },
     request: {
       model: model.value,
       temperature: temperature.value,
       top_p: topP.value,
       max_tokens: maxTokens.value,
+      ...(responseFormat.value ? { response_format: { type: 'json_object' as const } } : {}),
     },
   };
 }
@@ -300,6 +326,8 @@ export async function resolveLlmCallParams(
         model: route.model,
         temperature: route.temperature,
         maxTokens: route.maxTokens,
+        // 通道级结构化输出默认（platform_api_configs.defaultResponseFormat）
+        responseFormat: (route as any).responseFormat ?? null,
         // skill 级覆盖（paramOverrides JSON）经 ResolvedRoute 透传，供 skill-override 层
         skillParamOverrides: (route as any).skillParamOverrides ?? null,
       };

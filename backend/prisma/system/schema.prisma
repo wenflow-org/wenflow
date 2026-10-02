@@ -121,6 +121,7 @@ model platform_api_configs {
   defaultMaxTokens       Int       @default(2000)
   defaultThinkingMode    String?   @default("default")
   defaultReasoningEffort String?   @default("default")
+  defaultResponseFormat  String?   @default("none")
   reasoningEndpoint      String?
   lightEndpoint          String?
   chatModels             String?
