@@ -20,6 +20,7 @@ import {
   findAllProfilesForCardIndex,
   findCustomCardsForExport,
   findProfileUserIdById,
+  findProfileJsonById,
 } from './virtual-learner-profile.repo';
 import { writeMaterial, listMaterials, readMaterial, type MaterialRecord } from '../materials/material-store';
 import type { DocumentAnchor } from '../materials/document-parser.types';
@@ -286,6 +287,45 @@ function writeCardMaterials(cardKey: string, userId: string, materials: LearnerC
       logger.warn('[card-import] 随卡资料写入失败（不影响卡本身）', { cardKey, title, error: error instanceof Error ? error.message : String(error) });
     }
   }
+  return written;
+}
+
+/**
+ * 给已有虚拟学习者挂资料（2026-10-02「筛一批配上资料」）：
+ * 资料写库（同卡导入口径）+ profile 外科手术式锚定。**不整包覆盖 profile**——
+ * 存量 VL 的 enriched 人设（persona-designer 富化产物）必须原样保留，
+ * 只注入 scenarioCard.materials 与 storyPool[0].goalSeed.materials 两个锚点。
+ * @returns 实际写入的资料份数
+ */
+export async function attachMaterialsToLearner(profileId: string, materials: LearnerCardMaterial[]): Promise<number> {
+  if (!materials.length) return 0;
+  for (const m of materials) {
+    if (!m || !String(m.title || '').trim()) throw new Error('materials[].title 必填');
+    const hasBody = String(m.content || '').trim().length > 0 || (Array.isArray(m.outline) && m.outline.some((s) => String(s || '').trim()));
+    if (!hasBody) throw new Error(`资料「${String(m.title).slice(0, 24)}」缺正文：content 与 outline 至少给一个`);
+  }
+  const userId = await findProfileUserIdById(profileId);
+  if (!userId) throw new Error('虚拟学习者不存在');
+
+  // 1) 资料本体落库（路径主线消费的实体）
+  const cardKey = `vl-${profileId.slice(0, 8)}`;
+  const written = writeCardMaterials(cardKey, userId, materials);
+
+  // 2) profile 锚定：读-改-写，只动两个锚点位
+  const row = await findProfileJsonById(profileId);
+  if (!row) throw new Error('虚拟学习者不存在');
+  let profile: Record<string, unknown> = {};
+  try { profile = JSON.parse(row.profile || '{}'); } catch { /* 空 profile 视为全新 */ }
+  const anchorList = materials.map((m) => ({ kind: m.kind || 'note', title: String(m.title).trim() }));
+  const seed = (profile.personaSeed || {}) as Record<string, unknown>;
+  const scenario = { ...(seed.scenarioCard as Record<string, unknown> | undefined), materials: anchorList };
+  profile.personaSeed = { ...seed, scenarioCard: scenario };
+  const pool = Array.isArray(profile.storyPool) ? [...(profile.storyPool as Array<Record<string, unknown>>)] : [];
+  if (pool[0]) {
+    pool[0] = { ...pool[0], goalSeed: { ...((pool[0].goalSeed as Record<string, unknown>) || {}), materials: anchorList } };
+    profile.storyPool = pool;
+  }
+  await updateProfileFields(profileId, { profile: JSON.stringify(profile) });
   return written;
 }
 

@@ -79,6 +79,7 @@ import {
   validateCards as validateCardDocument,
   importCards as importCardDocument,
   exportCards as exportCardLibrary,
+  attachMaterialsToLearner,
 } from '../../services/virtual-lab/card-import.service';
 import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
 import { safeJsonParse } from '../../utils/safe-json';
@@ -1077,6 +1078,29 @@ router.post('/generate-persona', async (req: Request, res) => {
       success: false,
       error: error.message || 'AI生成虚拟学习者身份失败',
     });
+  }
+});
+
+/**
+ * 给已有虚拟学习者挂资料（2026-10-02「筛一批配上资料」）。
+ * POST /api/admin/virtual-learners/:id/materials
+ * body: { materials: [{ kind?, title, sourceRef?, content? | outline? }] }
+ * 资料写进该 VL 的用户资料库（origin='upload'，路径生成「附件主线」自动消费），
+ * 并锚定 scenarioCard/goalSeed（外科手术式，不覆盖 enriched 人设）。幂等：同名覆盖。
+ * 必须定义在 `/:id/draft-profile` 等 `/:id/*` 之前与否不影响（段更具体），但放在卡库路由旁好找。
+ */
+router.post('/:id/materials', async (req: Request, res) => {
+  try {
+    const { id } = req.params;
+    const materials = Array.isArray(req.body?.materials) ? req.body.materials : [];
+    if (!materials.length) {
+      return res.status(400).json({ success: false, error: 'materials 不能为空' });
+    }
+    const written = await attachMaterialsToLearner(id, materials);
+    res.json({ success: true, data: { profileId: id, written, titles: materials.map((m: { title?: string }) => String(m?.title || '').trim()).filter(Boolean) } });
+  } catch (error) {
+    logger.error('虚拟学习者挂资料失败:', error);
+    res.status(400).json({ success: false, error: (error as Error).message || '挂资料失败' });
   }
 });
 
