@@ -126,7 +126,14 @@
                 <td class="mono orch-handoff__pair">{{ h.from }} → {{ h.to }}</td>
                 <td class="mono">{{ h.fromAgent }}</td>
                 <td class="mono">{{ h.toAgent }}</td>
-                <td class="orch-handoff__fields">{{ h.fields.join(' · ') || '—' }}</td>
+                <td class="orch-handoff__fields">
+                  <!-- 点号长串 → 徽章列表（2026-10-03 反馈「字段密集堆叠」）：7 个键名连成
+                       一句独吞 65% 列宽，键名边界只能靠 · 猜；逐枚徽章可数可扫，列宽随之收回 -->
+                  <template v-if="h.fields.length">
+                    <span v-for="f in h.fields" :key="f" class="mk-badge mk-badge--sm mono">{{ f }}</span>
+                  </template>
+                  <span v-else class="mk-na">—</span>
+                </td>
                 <td class="mk-num">{{ h.fields.length }}</td>
               </tr>
             </tbody>
@@ -710,7 +717,8 @@ const govMetaTitle = computed(() =>
 .orch-overview { gap: 12px; }
 /* 阶段交接明细（原型 .tbl 的 mono/sub/wrap 形态）：交接列 id 对弱化 mono；传递字段可换行 */
 .orch-handoff__pair { color: var(--mk-muted); white-space: nowrap; }
-.orch-handoff__fields { color: var(--mk-muted); white-space: normal; word-break: break-word; }
+/* 传递字段 = 逐枚徽章（mk-badge--sm），格内 flex 换行；不再用点号长串（独吞 65% 列宽） */
+.orch-handoff__fields { white-space: normal; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 /* 字段路由：卡头 + 工具条吸顶，仅表格区内滚（.frt__scroll 自带 .mk-table-scroll 横向滚动） */
 .orch-routing .frt { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
 .orch-routing .frt__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
