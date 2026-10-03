@@ -88,35 +88,10 @@
         </section>
       </div>
 
-      <!-- 教学会话 / 目标对话（原型 sessions pane：列表贴卡边，不再包卡；行可下钻） -->
-      <div v-show="activeTab === 'sessions'" class="ud-pane ud-pane--flush">
-        <MkRowList :empty="!tsRows.length" :loading="tsLoading" empty-text="暂无教学会话">
-          <MkRow
-            v-for="s in tsRows"
-            :key="s.id"
-            clickable
-            :title="s.topic"
-            :sub="s.subText"
-            :time="s.startAgo"
-            @click="openSession(s.id)"
-          >
-            <template #lead>
-              <span class="mk-badge" :class="sessBadge(s.status)">{{ statusText(s.status) || '—' }}</span>
-            </template>
-          </MkRow>
-        </MkRowList>
-      </div>
-
-      <div v-show="activeTab === 'goals'" class="ud-pane ud-pane--flush">
-        <MkRowList :empty="!gcRows.length" :loading="gcLoading" empty-text="暂无目标对话">
-          <MkRow v-for="g in gcRows" :key="g.id" clickable :title="g.summary" :sub="g.subText" :time="g.createdAgo" @click="openSession(g.id)">
-            <template #lead>
-              <span class="mk-badge" :class="stageBadgeCls(g.stage)">{{ stageText(g.stage) || '—' }}</span>
-            </template>
-          </MkRow>
-        </MkRowList>
-      </div>
-
+      <!-- 列表去重（2026-10-03 用户拍板「收到一起」）：教学会话/目标对话独立 tab 退役——
+           两 tab 的数据本就是 limit 5 的切片（比概览 feed 的 8 条还少），与 feed 纯重复；
+           每人全量列表的所有权归 LearnerDetail（学习轴 8 tab）与三个主列表页（支持 userId 过滤）。
+           feed 行点击仍直达只读座舱，排查路径不变 -->
       <!-- 开发视角许可：一行条（原型 .statusbar 词汇：徽章 + 说明 + 右侧动作；按钮走 mk-btn 层级） -->
       <div v-show="activeTab === 'grant'" class="ud-pane">
         <div class="ud-grant__bar">
@@ -174,13 +149,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { subPage, openSubPage } from './store'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
-import MkRowList from '@/components/mk/MkRowList.vue'
-import MkRow from '@/components/mk/MkRow.vue'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import { liveUsers, liveLearners, timeAgo, errMsg } from './live'
 import { adminUsersApi, adminTeachingSessionsApi, adminGoalConversationsApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
-import { statusText, stageText, stageBadgeCls } from './statusText'
+import { statusText } from './statusText'
 import { levelBadgeZh } from './learner-profile'
 import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
@@ -262,14 +235,6 @@ const feedRows = computed<FeedItem[]>(() => {
   ]
   return items.sort((a, b) => b.ts - a.ts).slice(0, 8)
 })
-
-/** 状态徽章降噪（对齐 TeachingSessions.statusBadge）：仅异常态上色，正常态灰 */
-const sessBadge = (s: string) =>
-  s === 'failed' || s === 'timeout' || s === 'discarded' || s === 'finalization_failed'
-    ? 'mk-badge--bad'
-    : s === 'superseded'
-      ? 'mk-badge--warn'
-      : 'mk-badge--muted'
 
 /** goal 摘要（对齐 GoalConversations.summaryOf：description 优先，兜底解析 collectedData） */
 function goalSummaryOf(c: Record<string, unknown>): string {
@@ -666,22 +631,11 @@ async function loadDetail() {
 
 const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
-/* —— 分区二级页签（newui/admin subtabs，卡顶形态）：默认页签=概览（原型 detail 默认落概览）；
-   会话/目标页签带条数角标（MkSubTabs count，加载中不给 0 误导）。
-   P1#14：会话角标曾是 limit=5 的加载条数冒充总数（与统计条「会话 40」同屏矛盾）——
-   有总数时角标=「最近 N / 共 M」（M 见 tsTotal）；无总数来源时退化为「最近 N」，杜绝裸数字被读成总量 */
-const sessionsTabCount = computed<string | number | undefined>(() => {
-  if (tsLoading.value) return undefined
-  const n = tsRows.value.length
-  const m = tsTotal.value
-  if (m == null) return n > 0 ? `最近 ${n}` : n
-  // 全量恰好在窗口内（n===m）时「最近 N / 共 N」是同义反复，只出总数
-  return n === m ? m : `最近 ${n} / 共 ${m}`
-})
+/* 账号轴 tab 收敛为两页签（2026-10-03 列表去重）：会话/目标对话 tab 的数据本就是
+   limit 5 切片，与概览 feed（合并最近 8 条、行点击直达座舱）纯重复；全量列表
+   所有权归 LearnerDetail 与三个主列表页。sessionsTabCount/gcRows 计数随之退役 */
 const tabDefs = computed(() => [
   { key: 'overview', label: '概览' },
-  { key: 'sessions', label: '教学会话', count: sessionsTabCount.value },
-  { key: 'goals', label: '目标对话', count: gcLoading.value ? undefined : gcRows.value.length },
   { key: 'grant', label: '许可与接入' }
 ])
 const activeTab = ref('overview')
@@ -737,7 +691,6 @@ const subLine = computed(() => {
 /* 主卡（原型详情页主区结构）：subtabs 在卡顶，pane 在卡内。
    pane 内边距 = 原型 .subpane（--sp-4 → 16px）；列表 pane 贴卡边（原型 sessions pane 表格同款） */
 .ud-pane { display: grid; gap: 16px; padding: 16px; }
-.ud-pane--flush { padding: 0; }
 /* 概览 pane（原型 overview）：卡网格；嵌套卡沿 mk-card 描边形态 */
 .ud-ov { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 

@@ -3,7 +3,7 @@
  * - LearnerCenter isRisk 拆档：需关注=趋势降 ∨ 疲劳高 ∨ 有风险摘要；疲劳=中 单列「观察」pill
  * - LearnerCenter KPI 学习者=「已加载 N」（live.ts 未透出后端 total 前的诚实口径）
  * - LearnerCenter 风险摘要带量级 + 平均置信度 hint 带 n=
- * - UserDetail 会话角标「最近 N / 共 M」（limit 窗口条数不再冒充总数）+ 统计条「学习状态」格（liveLearners join）
+ * - UserDetail 列表去重（概览/许可两页签，feed 承载最近活动）+ 统计条「学习状态」格（liveLearners join）
  * - UserDetail 最后登录无兜底显「—」不显「从未」
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -159,11 +159,14 @@ describe('UserDetail 角标口径与学习状态格（P1#14/15 + P2）', () => {
     return w;
   }
 
-  it('会话角标=「最近 5 / 共 40」（详情 _count 教学口径），不再拿 limit=5 冒充总数', async () => {
+  it('列表去重（2026-10-03）：账号轴只剩 概览/许可与接入 两页签，会话/目标对话 tab 退役', async () => {
+    // 两 tab 的数据本就是 limit=5 切片（比概览 feed 的 8 条还少），纯重复；
+    // 全量列表所有权归 LearnerDetail（学习轴）与三个主列表页（userId 过滤）
     const w = await mountUserDetail();
-    const tab = w.findAll('.mk-subtab').find((t) => t.text().includes('教学会话'));
-    expect(tab).toBeTruthy();
-    expect(tab!.text()).toContain('最近 5 / 共 40');
+    const tabs = w.findAll('.mk-subtab').map((t) => t.text());
+    expect(tabs).toEqual(['概览', '许可与接入']);
+    // feed 仍在：合并会话+目标对话最近活动，行点击直达只读座舱
+    expect(w.find('.ud-feed').exists()).toBe(true);
     w.unmount();
   });
 
