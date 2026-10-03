@@ -626,8 +626,18 @@ export async function endSession(
   const context = await buildTeachingScenarioContext(session.userId, session.taskId, session);
   const reviewHints = await loadRetrievabilityHints(session.userId);
 
+  const userMessageCount = session.messages.filter((message) => message.role === 'user').length;
   let wrapupOutput: any = null;
-  try {
+  if (userMessageCount < 2) {
+    // 零证据门（2026-10-03 完结课堂裸审计）：学员消息 0-1 条的会话禁止调 LLM 写总结——
+    // 实测 0 学员消息的会话被写成带主题词与量化结论的完整总结（编造），提示词零证据分支压不住，
+    // 改为代码确定性兜底（summary-only），并保持收束流程照常继续。
+    logger.info('[AITeaching] 学员消息不足 2 条，跳过 wrapup LLM，直接走 summary-only 兜底', {
+      sessionId,
+      userMessageCount,
+    });
+  } else {
+    try {
     // wrapup LLM 硬帽 8 分钟（2026-10-02 完课死锁修复）：调用方断开后流式请求可能永不
     // settle、await 悬空且 catch 无法 rescue（实测 wrapup 跑了 6.5 分钟后整链冻结）。
     // 超时按失败处理，走下方 summary-only 兜底继续收束。
@@ -692,6 +702,7 @@ export async function endSession(
       sessionId,
       error: error instanceof Error ? error.message : String(error),
     });
+  }
   }
 
   // M1 兜底：executeSkill 抛错或返回 success:false（internal.ext.sessionWrapup 缺失）时，
