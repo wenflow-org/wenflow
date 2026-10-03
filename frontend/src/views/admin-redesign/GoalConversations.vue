@@ -106,13 +106,13 @@
         <table class="mk-table mk-table--click">
           <thead>
             <tr>
+              <th v-if="!gcHiddenCols.has('summary')">目标摘要</th>
               <th
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="gcSortState('user')"
                 @click="toggleGcSort('user')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!gcHiddenCols.has('summary')">目标摘要</th>
               <th
                 v-if="!gcHiddenCols.has('status')"
                 scope="col"
@@ -142,6 +142,14 @@
           </thead>
           <tbody>
             <tr v-for="r in paged" :key="r.id" tabindex="0" @click="goConsole(r)" @keydown.enter.prevent="goConsole(r)">
+              <td v-if="!gcHiddenCols.has('summary')">
+                <!-- 原型目标摘要格 = wrap 两行：strong 摘要 + sub mono 会话 ID。
+                     列序统一（2026-10-03）：主体列恒在首（同 TS 会话/OC 路径/MR 学习者），用户列随后 -->
+                <div class="mk-cell-main">
+                  <strong class="mk-cell-text" :title="r.summary">{{ r.summary }}</strong>
+                  <span class="mk-cell-sub mono" :title="`会话 ID ${r.id}`">{{ r.id }}</span>
+                </div>
+              </td>
               <td>
                 <div class="gc-user">
                   <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
@@ -153,13 +161,6 @@
                     <MkVariantBadge v-if="r.isVirtualLearner" kind="virtual" />
                     <MkVariantBadge v-else-if="r.isTestAccount" kind="test" />
                   </div>
-                </div>
-              </td>
-              <td v-if="!gcHiddenCols.has('summary')">
-                <!-- 原型目标摘要格 = wrap 两行：strong 摘要 + sub mono 会话 ID -->
-                <div class="mk-cell-main">
-                  <strong class="mk-cell-text" :title="r.summary">{{ r.summary }}</strong>
-                  <span class="mk-cell-sub mono" :title="`会话 ID ${r.id}`">{{ r.id }}</span>
                 </div>
               </td>
               <td v-if="!gcHiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(r.status)" :title="statusHint(r.status)">{{ statusLabel(r.status) }}</span></td>
