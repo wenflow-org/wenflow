@@ -650,8 +650,11 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-col--flex { min-width: var(--mk-col-flex-min); max-width: var(--mk-col-flex-max); }
 /* 截断三件套：全站截断上限统一引用 token（消灭散落 260/340/460/180/220px 五处硬编码） */
 .mk-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 表格长文本单元格：max-width 约束 + 截断 + title tooltip 配合使用 */
-.mk-cell-text { max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 表格长文本单元格：max-width 约束 + 截断 + title tooltip 配合使用。
+   display 必须显式给 inline-block：裸 inline 元素上 max-width/overflow 不生效
+   （截断契约空转，2026-10-03 实测 OpsContent 主题列即此形态）；
+   .mk-cell-main strong 用法由 .mk-cell-main strong 的 display:block 高特异性接管，不受影响 */
+.mk-cell-text { display: inline-block; vertical-align: middle; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mk-cell-text--lg { max-width: 480px; }
 
 /* ----- 徽标 ----- */

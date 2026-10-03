@@ -108,6 +108,10 @@
       @dismiss="batchCreateRef?.dismiss()"
     />
 
+    <!-- 日期模拟：VL 域级实验控制（模拟日期推进影响全部虚拟学习者），不是列表筛选——
+         移出列表卡单列一行（列表卡只装 筛选+表格+分页，同运行指标条出卡逻辑） -->
+    <SimulatedDaySettings />
+
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
@@ -117,13 +121,13 @@
         <span class="mk-card__meta" title="当前筛选后的行数 / 总数">{{ filtered.length }} / {{ samples.length }} 人</span>
       </div>
 
-      <SimulatedDaySettings />
-
       <MockSkeletonTable v-if="liveLoading && !samples.length" :cols="6" />
       <div v-else-if="filtered.length" class="mk-table-scroll vl-table-scroll">
       <!-- 原型 .tbl 词汇：自动布局（无 colgroup），td 靠 nowrap 撑列、长内容列给 px 截断上限；
-           超宽由 .mk-table-scroll 横向滚动兜底（此前 fixed+colgroup 是本页私造的另一种表格语言） -->
-      <table class="mk-table mk-table--click">
+           超宽由 .mk-table-scroll 横向滚动兜底（此前 fixed+colgroup 是本页私造的另一种表格语言）。
+           不用 mk-table--click：整行点击已刻意退役（避免勾选误触），入口=名称格 vl-cell--click，
+           整行 pointer 光标是对「点了没反应」的假承诺 -->
+      <table class="mk-table">
         <thead>
           <tr>
             <th v-if="isLive && !isNarrow" scope="col">
@@ -139,10 +143,18 @@
             <th
               v-if="!isNarrow"
               scope="col"
-              class="mk-th--sortable"
+              class="mk-th--right mk-th--sortable"
+              title="已生成故事条数（0 = 未生成，需先生成才能运行）"
               :aria-sort="vlSortState('story')"
               @click="toggleVlSort('story')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('story')">故事池<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              scope="col"
+              class="mk-th--sortable"
+              title="当前进行中/创建中的会话数及最近阶段；点击进入会话座舱"
+              :aria-sort="vlSortState('running')"
+              @click="toggleVlSort('running')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('running')">进行中<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
               v-if="!isNarrow"
               scope="col"
@@ -151,13 +163,6 @@
               :aria-sort="vlSortState('sessions')"
               @click="toggleVlSort('sessions')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('sessions')">会话<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th
-              scope="col"
-              class="mk-th--sortable"
-              title="当前进行中/创建中的会话数及最近阶段；点击进入会话座舱"
-              :aria-sort="vlSortState('running')"
-              @click="toggleVlSort('running')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('running')">进行中<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
               v-if="!isNarrow"
               scope="col"
@@ -185,26 +190,26 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="s in paged" :key="s.id" class="vl-row">
+          <tr v-for="s in paged" :key="s.id">
             <td v-if="isLive && !isNarrow"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
             <td>
-              <div class="mk-cell-main vl-cell vl-cell--click" role="button" tabindex="0" :title="`查看 ${s.name} 的画像：故事池 / 运行记录 / 会话控制`" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)" @keydown.space.prevent="openSubPage('virtual', s.id)">
-                <strong class="vl-name">
-                  <span class="vl-avatar" :class="avatarClass(s)" aria-hidden="true">{{ s.name.slice(0, 1) }}</span>
-                  <span class="vl-name__text">{{ s.name }}</span>
-                </strong>
-                <span class="mk-cell-sub">{{ shortId(s.id) }}</span>
+              <div class="vl-cell vl-cell--click" role="button" tabindex="0" :title="`查看 ${s.name} 的画像：故事池 / 运行记录 / 会话控制`" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)" @keydown.space.prevent="openSubPage('virtual', s.id)">
+                <!-- 头像在 .mk-cell-main 外（同 Skills 名称格结构）：mk-cell-main strong 的
+                     display:block 高特异性会压过 strong 上的 flex，头像留格内会跌回块流 -->
+                <span class="vl-avatar" :class="avatarClass(s)" aria-hidden="true">{{ s.name.slice(0, 1) }}</span>
+                <div class="mk-cell-main">
+                  <strong :title="s.name">{{ s.name }}</strong>
+                  <span class="mk-cell-sub" :title="`ID ${s.id}`">{{ shortId(s.id) }}</span>
+                </div>
               </div>
             </td>
             <td v-if="!isNarrow">
-              <span class="vl-goal" :class="{ 'vl-goal--empty': !s.goal || s.goal === '—' }" :title="s.goal || undefined">{{ s.goal || '未设置' }}</span>
+              <span class="mk-cell-text" :class="{ 'mk-na': !s.goal || s.goal === '—' }" :title="s.goal || undefined">{{ s.goal || '未设置' }}</span>
             </td>
-            <td v-if="!isNarrow">
-              <span class="mk-badge" :class="s.storyCount > 0 ? 'mk-badge--ok' : 'mk-badge--muted'">
-                {{ s.storyCount > 0 ? `${s.storyCount} 条` : '未生成' }}
-              </span>
+            <td v-if="!isNarrow" class="mk-num" :title="s.storyCount > 0 ? `故事池 ${s.storyCount} 条` : '尚未生成故事，需先生成才能运行'">
+              <span v-if="s.storyCount > 0">{{ s.storyCount }}</span>
+              <span v-else class="mk-na">—</span>
             </td>
-            <td v-if="!isNarrow" class="mk-num">{{ s.sessions }}</td>
             <td>
               <div class="vl-state-cell">
                 <template v-if="s.runningCount > 0 || (s.pausedCount ?? 0) > 0">
@@ -220,9 +225,10 @@
                     :show-task-text="false"
                   />
                 </template>
-                <span v-else class="vl-run vl-run--idle" title="当前没有进行中的会话">空闲</span>
+                <span v-else class="mk-na" title="当前没有进行中的会话">空闲</span>
               </div>
             </td>
+            <td v-if="!isNarrow" class="mk-num">{{ s.sessions }}</td>
             <td v-if="!isNarrow" class="mk-num">
               <button
                 type="button"
@@ -233,13 +239,13 @@
               >{{ s.failedCount }}</button>
             </td>
             <td v-if="!isNarrow" class="mk-num">
-              <span v-if="s.stalledCount > 0" class="mk-badge mk-badge--sm mk-badge--bad" :title="`${s.stalledCount} 个进行中会话已卡死（超过回收阈值无写入），可在状态条一键回收`">卡死 {{ s.stalledCount }}</span>
+              <span v-if="s.stalledCount > 0" class="vl-num--bad" :title="`${s.stalledCount} 个进行中会话已卡死（超过回收阈值无写入），可在状态条一键回收`">{{ s.stalledCount }}</span>
               <span v-else class="mk-na" title="无卡死会话">—</span>
             </td>
-            <td v-if="!isNarrow" class="mk-na" :title="s.createdAt ? `创建于 ${fmtDateTime(s.createdAt)}` : undefined">{{ s.created }}</td>
+            <td v-if="!isNarrow"><span class="mk-cell-sub" :title="s.createdAt ? `创建于 ${fmtDateTime(s.createdAt)}` : undefined">{{ s.created }}</span></td>
             <td>
               <div class="mk-actions mk-actions--left">
-                <!-- live：整行点击即进入画像详情，此处只留真正的行内操作（运行 / 测试 / 更多）
+                <!-- live：入口在名称格（画像页），此处只留真正的行内操作（运行 / 测试 / 更多）
                      —— 原型 .btn--sm 文字钮词汇（原 mk-icon-btn--text 是图标钮套文字的混搭） -->
                 <button
                   v-if="isLive"
@@ -699,29 +705,10 @@ function openRunningSession(s: Sample) {
 @media (max-width: 720px) {
   .mk-table-scroll .mk-table { min-width: 0; }
 }
-.vl-row { cursor: pointer; }
-/* 长期倾向列：自动布局下给 px 截断上限（原 max-width:100% 依赖 fixed 列宽才成立）；
-   空值统一「未设置」降噪（ADMIN_COLUMN_WIDTH_AUDIT ⑤） */
-.vl-goal {
-  display: inline-block;
-  max-width: 240px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: middle;
-}
-.vl-goal--empty { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+/* 名称格 flex 基座：头像 + mk-cell-main（强/副行截断由原语承担，2026-10-03 方言收敛） */
+.vl-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* 状态列：进行中胶囊 / 失败数 / 卡死徽章 分列展示（一列一语义）；gap+wrap 归并为一处定义 */
 .vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 26px; }
-.vl-run {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  color: var(--mk-faint);
-  white-space: nowrap;
-}
 /* 失败列：全量聚合数字（>0 标红，可点击直达画像页的重试入口）；hover 环走 token（原 #eff6ff 硬编码无暗色适配） */
 .vl-num--bad { color: var(--mk-red, #dc2626); font-weight: 800; }
 .vl-faillink {
@@ -768,7 +755,7 @@ function openRunningSession(s: Sample) {
   white-space: nowrap;
 }
 /* 表格已换自动布局（原型 .tbl 词汇），fixed/colgroup 的列宽变量覆写随之删除；
-   长内容截断上限收敛到各内容类（.vl-goal / .mk-cell-main strong） */
+   长内容截断上限收敛到共享原语（.mk-cell-text / .mk-cell-main strong） */
 .vl-truncated { color: var(--mk-amber); font-weight: 700; }
 
 /* 走查 2026-09-27：「正在运行」条胶囊按钮由子组件 VirtualLearnerRunningBar 渲染，
@@ -799,22 +786,10 @@ function openRunningSession(s: Sample) {
 .vl-avatar--5 { background: #0e7490; } /* 青 2.43→5.36 */
 .vl-avatar--6 { background: #db2777; } /* 粉 3.53→4.60 */
 .vl-avatar--7 { background: #64748b; } /* 灰 4.76 原值已达标 */
-.vl-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
 /* 名称列可点击进二级（整行不再监听点击，避免多选勾选时误触） */
 .vl-cell--click { cursor: pointer; border-radius: 6px; transition: background 0.12s ease; }
 .vl-cell--click:hover { background: color-mix(in srgb, var(--mk-blue) 6%, transparent); }
 .vl-cell--click:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
-.vl-name__text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
 
 /* 暗色模式：全量走 var(--mk-*) token（faillink hover 也已 token 化），不再需要页面补丁 */
 </style>

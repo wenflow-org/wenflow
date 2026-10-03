@@ -222,9 +222,10 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
   it('P1#20 创建列：相对时间配绝对时间 title', async () => {
     liveVirtuals.value = [makeVirtual(1, { createdAt: '2026-08-10T10:00:00' })];
     const w = await mountPage();
-    const td = w.findAll('td').find((c) => c.attributes('title')?.startsWith('创建于 '));
-    expect(td).toBeTruthy();
-    expect(td!.attributes('title')).toContain('2026-08-10 10:00');
+    // 2026-10-03 方言收敛：title 随 mk-cell-sub 内层 span（时间列词汇），不再挂 td
+    const sub = w.findAll('tbody .mk-cell-sub').find((c) => c.attributes('title')?.startsWith('创建于 '));
+    expect(sub).toBeTruthy();
+    expect(sub!.attributes('title')).toContain('2026-08-10 10:00');
   });
 
   it('运行统计展示（A5）：今日调用/完成率/失败率（状态条）', async () => {
@@ -413,12 +414,14 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(openSubPageMock).toHaveBeenCalledWith('session', 'run-1');
   });
 
-  it('卡死/失败会话分列标注（卡死 N 徽章 / 失败列数字）', async () => {
+  it('卡死/失败会话分列标注（卡死/失败列红数字）', async () => {
     liveVirtuals.value = [makeVirtual(1, { stalledCount: 1, failedCount: 2 })];
     const w = await mountPage();
-    // 卡死列：徽章文案
-    expect(w.text()).toContain('卡死 1');
-    // 失败列：纯数字（新列布局）
+    // 卡死列：数字直出（2026-10-03 方言收敛，徽章「卡死 N」复读列头已退役），>0 标红
+    const stalled = w.findAll('tbody .vl-num--bad').filter((el) => !el.classes().includes('vl-faillink'));
+    expect(stalled.length).toBe(1);
+    expect(stalled[0].text()).toBe('1');
+    // 失败列：纯数字（可点击进画像页）
     const failCell = w.findAll('tbody tr td').find((td) => (td.text() || '').trim() === '2');
     expect(failCell).toBeTruthy();
     expect(w.find('.vl-faillink.vl-num--bad').exists()).toBe(true);

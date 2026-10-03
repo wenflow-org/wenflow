@@ -103,7 +103,9 @@ const saving = ref(false)
    服务端已配好的值整体覆盖成默认值 → loadFailed 禁用保存并提示 */
 const loadFailed = ref(false)
 /** 设置体默认收起（虚拟学习者页首屏让位给列表；用户反馈：常开占 400px 高）。
-    开启「日期模拟」开关或已有开启配置时自动展开，避免开关与表单分离找不到 */
+    仅用户手动开启开关时自动展开（表单紧随动作）；加载时不展开——已开启配置靠折叠头
+    课表摘要承载状态，自动展开会在 fill 布局里吃掉列表卡 ~280px（表格区被挤到 0，
+    裸评审 2026-10-03 实测） */
 const expanded = ref(false)
 function onToggleEnabled() {
   dirty.value = true
@@ -119,7 +121,6 @@ const collapsedSummary = computed(() => {
 
 function apply(raw: Partial<typeof DEFAULT> | null | undefined) {
   form.enabled = raw?.enabled === true
-  if (form.enabled) expanded.value = true
   form.defaultDailyMinutesCap = Number(raw?.defaultDailyMinutesCap ?? DEFAULT.defaultDailyMinutesCap)
   form.defaultDaysPerWeek = Number(raw?.defaultDaysPerWeek ?? DEFAULT.defaultDaysPerWeek)
   form.defaultPaceDaysPerAdvance = Number(raw?.defaultPaceDaysPerAdvance ?? DEFAULT.defaultPaceDaysPerAdvance)
@@ -173,7 +174,9 @@ onMounted(load)
 </script>
 
 <style scoped>
-.sd-settings { border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); padding: 10px 12px; margin-top: 8px; }
+/* 外边距已撤：消费方（VirtualLearners）把本组件当页级控制条用，间距交给 .mk-page 的
+   --mk-stack-gap 栅格（卡内嵌套时代的 margin-top: 8px 是另一套口径） */
+.sd-settings { border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); padding: 10px 12px; }
 /* 折叠头是 role=button 的整行开关，高度原来等于 13px 文字行高（~19px），低于 24px 可点下限 */
 /* 头部禁用 space-between：三子元素会把中位箭头孤立在行中（裸评审 2026-10-03 实测 x=839 悬空）；
    改标题 flex:1 吃余量，▸ 与开关成组靠右（同 .mk-card__head 成组判例） */

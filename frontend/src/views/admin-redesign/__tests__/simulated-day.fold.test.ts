@@ -15,6 +15,7 @@ vi.mock('@/api/adminApi', () => ({
 }));
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+import { adminVirtualLearnersApi } from '@/api/adminApi';
 import SimulatedDaySettings from '../SimulatedDaySettings.vue';
 
 const mountSettings = async () => {
@@ -50,6 +51,18 @@ describe('SimulatedDaySettings 折叠', () => {
     await w.find('.sd-settings__head').trigger('click');
     expect((w.find('.sd-settings__body').element as HTMLElement).style.display).not.toBe('none');
     expect(w.find('.sd-settings__sum').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('服务端已开启配置：加载后保持收起（摘要承载状态），不再自动展开抢列表首屏', async () => {
+    (adminVirtualLearnersApi.getVirtualLabSettings as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: { data: { settings: { dateSimulation: { enabled: true, defaultDailyMinutesCap: 45, defaultDaysPerWeek: 5, lessonsPerDay: 2, courseWeekdays: [1, 2, 3, 4, 5] } } } }
+    });
+    const w = await mountSettings();
+    // fill 布局契约：展开体 280px 会把列表卡表格区挤到 0（裸评审 2026-10-03），已开启态靠摘要
+    expect((w.find('.sd-settings__body').element as HTMLElement).style.display).toBe('none');
+    expect(w.find('.sd-settings__sum').text()).toContain('45 分钟');
+    expect(w.find('.sd-settings__sum').text()).toContain('每天 2 节');
     w.unmount();
   });
 });
