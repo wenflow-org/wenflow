@@ -90,7 +90,8 @@
     <div class="card">
       <div class="card__head">
         <span class="card__title">教学闭环</span>
-        <span class="card__sub">目标对话 → 路径规划 → 教学回合 → 课后评估 → 记忆复习</span>
+        <!-- 原型副文「目标对话 → … → 记忆复习」撤（2026-10-03 用户反馈文案重复）：
+             五张阶段卡本身就是这条链，副文是逐字预告 -->
 
       </div>
       <div class="card__body">
@@ -201,7 +202,7 @@
       <div class="card">
         <div class="card__head">
           <span class="card__title">最近事件</span>
-          <span class="card__sub">近 24h · 实时</span>
+          <span class="card__sub">近 24h</span>
         </div>
         <div class="card__body">
           <div class="feed feed--capped">
@@ -353,7 +354,7 @@ async function loadLoopExtras() {
    - 「每 10s 自动刷新」改如实：失败指数退避至 60s，连续失败熔断后停止、需手动「刷新」恢复；
    - recency：由 live.ts 已映射的 24h 逐小时脉搏推「最近真实活动 HH:00（约 N 小时前）」。 */
 const headSub = computed(() => {
-  const parts: string[] = ['WenFlow 运行全景'];
+  const parts: string[] = [];
   if (lastUpdated.value) parts.push(`数据截至 ${lastUpdated.value}`);
   const recency = recentActivityText(data.value?.pulse || []);
   if (recency) parts.push(recency);

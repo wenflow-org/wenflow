@@ -884,12 +884,23 @@ export function buildOverviewHead(input: {
       subline: `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
     }
   }
-  if (warnByRate || warnByFailures) {
+  if (warnByRate && !warnByFailures) {
+    // 低成功率是唯一异常：成功率即元凶，headline 带真实值（bad 同款口径）
     return {
       tone: 'warn',
       score: todaySuccessRate,
       headline: `需要关注：今日成功率 ${todaySuccessRate}%`,
       subline: `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
+    }
+  }
+  if (warnByFailures) {
+    // 失败量触发（成功率可能仍健康）：headline 指认真实触发因，不复述 KPI 卡里
+    // 健康的成功率——文案归因错误 + 逐字重复（2026-10-03 用户反馈「文案重复」）
+    return {
+      tone: 'warn',
+      score: todaySuccessRate,
+      headline: `需要关注：今日失败 ${todayFailed} 次`,
+      subline: `今日 ${todayCalls} 次调用 · 成功率 ${todaySuccessRate}%。`
     }
   }
   return { tone: 'ok', score: todaySuccessRate, headline: '运行平稳', subline: `今日 ${todayCalls} 次调用 · ${activeUsers} 人活跃。` }
