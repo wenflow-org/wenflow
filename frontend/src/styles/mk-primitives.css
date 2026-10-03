@@ -24,7 +24,9 @@
   /* 左右 20px 与顶栏左右 20px 成同一条竖线；底部 48px 是滚动到底的呼吸位 */
   padding: var(--mk-page-pad-t) var(--mk-page-pad-x) var(--mk-page-pad-b);
   display: grid;
-  gap: var(--mk-space-4);
+  /* 区块堆叠节拍统一走 --mk-stack-gap（12px；紧凑密度 10 / 宽屏 16 两档覆盖见下），
+     原 --mk-space-4(16) 与列表页私有栈的 12px 两套口径并存（布局细查 2026-10-03） */
+  gap: var(--mk-stack-gap);
   align-content: start;
   min-height: 100%;
   /* 窄屏防横向溢出：grid 子项默认 min-width:auto 会被 nowrap 内容撑破，
@@ -225,9 +227,14 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
    （.mk-status 同样原因显式 flex: none）。 */
 .mk-kpi-grid {
   display: grid;
+  /* gap 16 归一（2026-10-03）：原 10px 与 Overview .kpigrid 16px 两套口径并存 */
   grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
-  gap: 10px;
+  gap: var(--mk-space-4);
   flex: none;
+}
+/* 宽屏封顶 6 列：auto-fit 在 1920（内容 ~1644px）会排出 7 列窄卡（布局量测证据） */
+@media (min-width: 1800px) {
+  .mk-kpi-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
 
 /* ----- 卡片 -----
@@ -530,8 +537,7 @@ html[data-density='compact'] {
   --mk-page-pad-b: 32px;
   --mk-page-pad-b-fill: 16px;
 }
-html[data-density='compact'] .mk-page { gap: 10px; }
-html[data-density='compact'] .mk-kpi { padding: 9px 12px; }
+html[data-density='compact'] .mk-page { gap: 10px; }html[data-density='compact'] .mk-kpi { padding: 9px 12px; }
 html[data-density='compact'] .mk-kpi__num { font-size: 18px; }
 html[data-density='compact'] .mk-kpi__label { font-size: 11.5px; }
 html[data-density='compact'] .mk-kpi__hint { font-size: 11.5px; }

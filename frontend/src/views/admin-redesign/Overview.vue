@@ -678,7 +678,9 @@ watch(dataSource, () => {
 .ov-refresh-note--warn { color: var(--mk-amber); font-weight: 600; }
 
 /* ---- KPI（.grid auto-fit 210 + .card.kpi）---- */
-.kpigrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+.kpigrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: var(--mk-space-4); }
+/* 宽屏封顶 6 列（同 .mk-kpi-grid）：1920 auto-fit 出 7 列窄卡 */
+@media (min-width: 1800px) { .kpigrid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 .card--kpi { cursor: pointer; transition: border-color 0.12s ease; }
 .card--kpi:hover { border-color: color-mix(in srgb, var(--mk-blue) 45%, var(--mk-line)); }
 .card--kpi:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }

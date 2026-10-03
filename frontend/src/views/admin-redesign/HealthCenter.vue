@@ -787,8 +787,10 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
-/* 概要 KPI（共享 MkKpi 组件：标签 + 数字 + 副行，点击跳转锚点） */
-.hc-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+/* 概要 KPI（共享 MkKpi 组件：标签 + 数字 + 副行，点击跳转锚点）。
+   gap 归 16（与 .mk-kpi-grid 同口径）；margin-bottom 撤除（2026-10-03）：块间距归
+   .mk-page 的 --mk-stack-gap——原先 14px margin 叠加页 gap 16 产生 30px 双重间距 */
+.hc-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--mk-space-4); }
 /* 首载骨架（R3）：形状由 MkSkeleton 提供，本类只补占位布局与间距 */
 .hc-skel__kpi { display: grid; gap: 8px; align-content: start; }
 .hc-skel__rows { padding: 12px 16px 14px; }
@@ -797,7 +799,7 @@ defineExpose({ refresh })
 
 /* 服务卡组（复刻 newui .service/.tile：卡壳用本页统一的 mk-card，.service 只管内容网格与内边距；
    原型 token 映射：--sp-*→间距字面量与 hc-summary 同节奏、--muted→--mk-muted、--ink→--mk-ink） */
-.hc-services { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.hc-services { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
 .service { display: grid; gap: 10px; padding: 14px 16px; }
 .service__top { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .service__dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }

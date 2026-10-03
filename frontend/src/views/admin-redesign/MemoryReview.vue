@@ -1064,11 +1064,11 @@ onMounted(async () => {
 .mr-dist__body { padding: 12px 16px 16px; }
 .stageband { display: flex; gap: 2px; height: 12px; border-radius: 999px; overflow: hidden; background: var(--mk-surface-3); }
 .stageband > span { display: block; height: 100%; }
-.stageband__legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px 18px; margin-top: 14px; }
+.stageband__legend { /* 左聚（2026-10-03）：auto-fit 1fr 在宽屏把图例拉散满行，改 flex 固定列距 */ display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 14px; }
 .sbl { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); }
 .sbl__sw { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); flex: none; }
 .sbl__name { color: var(--mk-muted); }
-.sbl__n { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sbl__n { font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* 到期带 + 强度直方图两卡 grid（原型 renderMemory 2029 行 grid-template-columns:
    minmax(0,1.5fr) minmax(0,1fr) + align-items:start 原样移植；窄屏收单列） */

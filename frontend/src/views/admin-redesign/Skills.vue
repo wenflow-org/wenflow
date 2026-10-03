@@ -79,7 +79,7 @@
         </div>
         <div class="mk-card__head-right">
           <MkCols
-            :col-defs="skColDefs"
+            :col-defs="menuColDefs"
             :storage-key="SK_COLS_KEY"
             v-model:hidden="hiddenCols"
             :default-hidden="SK_COLS_DEFAULT_HIDDEN"
@@ -164,8 +164,12 @@
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
                   <div class="mk-cell-main">
                     <strong class="sk-name-main mk-ellipsis" :title="s.name">{{ s.name }}</strong>
-                    <!-- 原型副行 = desc：/admin/skills 的 description；缺失时回落显示 skill id -->
-                    <span class="sk-sub mk-ellipsis" :class="{ 'sk-sub--id': !descOf(s.id) }" :title="descOf(s.id) || s.id">{{ descOf(s.id) || s.id }}</span>
+                    <!-- 原型副行 = desc：/admin/skills 的 description；缺失时回落显示 skill id。
+                         <1600 时「最近调用」列收进副行（showCol 同源），消掉中宽档表格横滚 -->
+                    <span class="sk-subline">
+                      <span class="sk-sub" :class="{ 'sk-sub--id': !descOf(s.id) }" :title="descOf(s.id) || s.id">{{ descOf(s.id) || s.id }}</span>
+                      <span v-if="!showCol('last')" class="sk-recent" :title="'最近调用 ' + (s.lastAt || '—')">{{ s.lastAt }}</span>
+                    </span>
                   </div>
                 </div>
               </td>
@@ -174,7 +178,7 @@
                 <span v-else class="mk-na">工具类</span>
               </td>
               <td v-if="showCol('version')"><span class="mono">{{ versionOf(s.id) }}</span></td>
-              <td v-if="showCol('routing')"><span class="mono" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
+              <td v-if="showCol('routing')"><span class="mono sk-model" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
               <td v-if="showCol('calls')"><span class="mono">{{ s.calls }}</span></td>
               <td v-if="showCol('p95')"><span class="mk-na" title="接口未提供技能级 P95（后端仅日志聚合 p50/p99）">—</span></td>
               <td v-if="showCol('rate')">
@@ -441,8 +445,12 @@ const hiddenCols = ref<Set<string>>(new Set())
 
 /* 移动端仅保留核心列：隐藏版本/路由/调用/P95/类别/最近调用，减少横向滚动 */
 const isNarrow = useIsNarrow()
+/* 中宽档（<1600）：「最近调用」列收进 Skill 名副行——本表 1440 自然宽超容器 136px（布局量测），裁掉最次要列即收回 */
+const isMid = useIsNarrow(1600)
 const MOBILE_HIDDEN_COLS = new Set(['version', 'routing', 'calls', 'p95', 'cat', 'last'])
-const showCol = (key: string) => !hiddenCols.value.has(key) && !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key))
+const showCol = (key: string) => !hiddenCols.value.has(key) && !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key)) && !(isMid.value && key === 'last')
+/* 列菜单同源：<1600 不提供「最近调用」开关（列已强制收进副行，菜单可勾却不见=说谎） */
+const menuColDefs = computed(() => (isMid.value ? skColDefs.filter((c) => c.key !== 'last') : skColDefs))
 const statsRange = liveSkillStatsRange
 
 /** 类别下拉动态化：取当前档案实际出现的类别（覆盖 standard/teaching/simulation/tool） */
@@ -893,13 +901,26 @@ const fallbackPolicyTitle = computed(() =>
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   line-height: 1.5;
-  max-width: var(--mk-cell-main-max);
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 副行容器：<1600 最近调用列收进来（.sk-recent），消掉 1440 的表格横向滚动 */
+.sk-subline { display: flex; align-items: baseline; gap: 8px; min-width: 0; max-width: var(--mk-cell-main-max); }
+.sk-subline .sk-sub { flex: 0 1 auto; max-width: none; }
+.sk-recent { flex: none; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 /* 回落显示 skill id 时保留等宽语义 */
 .sk-sub--id { font-family: var(--mk-mono); }
+/* 路由模型名较长（deepseek-v4.1-flash ~180px）：中宽档封顶省略，全名走 title
+   （1440 收掉「最近调用」列后仍差 ~40px 横滚，此处补齐） */
+.sk-model { display: inline-block; max-width: 148px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+/* 中宽档单元格水平 padding 16→12（9 列回收 72px）：收掉「最近调用」列后仍余 ~20px
+   min-content 赤本、操作列被裁；削列宽是打地鼠，padding 档一次收净 */
+@media (max-width: 1599px) {
+  .sk-cell .mk-cell-main { max-width: 200px; }
+  .mk-table th, .mk-table td { padding-inline: 12px; }
+}
 .sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .sk-dot--ok { background: var(--mk-green); }
 .sk-dot--idle { background: #c3cede; }
@@ -922,6 +943,10 @@ const fallbackPolicyTitle = computed(() =>
 .sk-agent-tag {
   display: inline-flex;
   align-items: center;
+  max-width: 128px; /* 中宽档省略（全名走 title）：1440 收净横滚的最后一档 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 2px 9px;
   border-radius: 999px;
   background: var(--mk-line);

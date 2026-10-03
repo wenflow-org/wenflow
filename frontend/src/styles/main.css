@@ -285,6 +285,11 @@
   --mk-space-6: var(--wf-space-6);
   --mk-space-8: var(--wf-space-12);
 
+  /* 区块堆叠节拍（2026-10-03 布局细查收敛）：.mk-page 的纵向 gap 单一来源。
+     12px = 既有大多数列表页的私有栈 gap 事实值；宽屏（≥2000）保留 16 档、
+     紧凑密度 10 档，见 mk-primitives .mk-page 三处。 */
+  --mk-stack-gap: var(--mk-space-3);
+
   /* 列宽 token（ADMIN_COLUMN_WIDTH_SPEC §2/§3 落地）：全站表格列宽单一来源。
      工具类 mk-col--*（shared.css）与三张 grid 行式表（ExecLogs/AuditLogs/SessionSecurity）
      共同引用；4K 三档覆盖值集中在 shared.css 4K 段（一处变量、全站同步）。 */
