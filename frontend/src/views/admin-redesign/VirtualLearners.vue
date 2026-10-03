@@ -204,7 +204,7 @@
               </div>
             </td>
             <td v-if="!isNarrow">
-              <span class="mk-cell-text" :class="{ 'mk-na': !s.goal || s.goal === '—' }" :title="s.goal || undefined">{{ s.goal || '未设置' }}</span>
+              <span class="mk-cell-text--wrap" :class="{ 'mk-na': !s.goal || s.goal === '—' }" :title="s.goal || undefined">{{ s.goal || '未设置' }}</span>
             </td>
             <td v-if="!isNarrow" class="mk-num" :title="s.storyCount > 0 ? `故事池 ${s.storyCount} 条` : '尚未生成故事，需先生成才能运行'">
               <span v-if="s.storyCount > 0">{{ s.storyCount }}</span>
@@ -703,6 +703,12 @@ function openRunningSession(s: Sample) {
 .vl-op--muted { color: var(--mk-muted); }
 /* 窄屏表格：8 列在 704px 内容区会被压扁操作列，设 min-width 触发 .mk-table-scroll 横向滚动（对齐 AuditLogs 模式） */
 .mk-table-scroll .mk-table { min-width: 860px; }
+/* ≤1599 档：10 列在 1138px 内容区超出（改前 1185 / 现 1167 vs 容器 1138），
+   操作列被挤出可视区——收单元格左右内边距 16→12 把整表塞回容器
+   （同 Skills.vue 先例，2026-10-03 浏览器巡检） */
+@media (max-width: 1599px) {
+  .mk-table th, .mk-table td { padding-inline: 12px; }
+}
 /* 窄屏（≤720）次要列已随 useIsNarrow 隐藏，仅剩 3 列可完整放下，不再强制最小宽 */
 @media (max-width: 720px) {
   .mk-table-scroll .mk-table { min-width: 0; }

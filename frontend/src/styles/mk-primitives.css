@@ -656,6 +656,22 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
    .mk-cell-main strong 用法由 .mk-cell-main strong 的 display:block 高特异性接管，不受影响 */
 .mk-cell-text { display: inline-block; vertical-align: middle; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mk-cell-text--lg { max-width: 480px; }
+/* 换行格（原型 `.tbl td.wrap { white-space: normal; min-width: 220px }`）：
+   单行 nowrap 会把长句切到读不出意思（虚拟学习者「长期倾向」46 字被切成 ~19 字）；
+   两行截断保留语义骨架。同时把该列的 min-content 从「整句宽」降为「最长词宽」，
+   该列不再独吞宽度（虚拟学习者「长期倾向」列 352 → 252px）。
+   min/max 都要给：只给 max 会被 auto 布局压到比 nowrap 时更窄（实测 154px）。
+   沿用原型：min 220px；max 320px = 与 .mk-cell-text 同档。 */
+.mk-cell-text--wrap {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+  line-height: 1.45;
+  min-width: 220px;
+  max-width: 320px;
+}
 
 /* ----- 徽标 ----- */
 .mk-badge {

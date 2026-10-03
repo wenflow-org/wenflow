@@ -8,7 +8,7 @@
  * 统一批次收敛到共享原语后，本测试锁死退役方言（对齐 teaching-tables.dialect 同款）。
  *
  * 退役清单（→ 应使用的共享原语/结构）：
- *  - vl-goal → .mk-cell-text（+ mk-na 空值档）
+ *  - vl-goal → .mk-cell-text--wrap（长句两行截断，见下；空值档仍用 .mk-na）
  *  - vl-run → .mk-na（空闲态单通道）
  *  - vl-name / vl-name__text → 头像外置 + .mk-cell-main（strong 截断由原语承担）
  *  - mk-cell-main vl-cell（合一写法）→ .vl-cell 外层 flex + 内层 .mk-cell-main
@@ -24,7 +24,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const RETIRED: Array<{ cls: string; instead: string }> = [
-  { cls: 'vl-goal', instead: '.mk-cell-text（+ .mk-na 空值档）' },
+  { cls: 'vl-goal', instead: '.mk-cell-text--wrap（两行截断；空值档 .mk-na）' },
   { cls: 'vl-run--idle', instead: '.mk-na（空闲态）' },
   { cls: 'class="vl-run"', instead: '.mk-na（空闲态）' },
   { cls: 'vl-name', instead: '头像外置 + .mk-cell-main（strong 截断由原语承担）' },
@@ -58,5 +58,21 @@ describe('虚拟学习者列表方言回归门禁', () => {
     expect(rule, '.mk-cell-text 规则缺失').not.toBe('')
     expect(rule).toContain('display: inline-block')
     expect(rule).toContain('text-overflow: ellipsis')
+  })
+
+  it('长句列用两行档 .mk-cell-text--wrap，且 min/max 成对给出', () => {
+    // 单行 nowrap 会把 46 字倾向切成读不出意思的 19 字（2026-10-03 用户报障）；
+    // 只给 max-width 时 auto 布局会把这列压到比 nowrap 更窄（实测 154px），
+    // 故 min-width 必须显式给出（原型 .tbl td.wrap 同款 min 220px）。
+    const css = readFileSync(join(dir, '../../styles/mk-primitives.css'), 'utf8')
+    const rule = css.match(/\.mk-cell-text--wrap \{[^}]*\}/)?.[0] ?? ''
+    expect(rule, '.mk-cell-text--wrap 规则缺失').not.toBe('')
+    expect(rule).toContain('-webkit-line-clamp: 2')
+    expect(rule).toContain('white-space: normal')
+    expect(rule).toMatch(/min-width:\s*\d/)
+    expect(rule).toMatch(/max-width:\s*\d/)
+    // 长句列必须消费两行档，而不是退回单行 nowrap
+    const src = readFileSync(join(dir, 'VirtualLearners.vue'), 'utf8')
+    expect(src).toContain('mk-cell-text--wrap')
   })
 })
