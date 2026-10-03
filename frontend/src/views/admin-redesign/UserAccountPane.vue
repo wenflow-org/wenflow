@@ -1,30 +1,22 @@
 <template>
-  <div v-if="d" class="mk-page ud">
-    <!-- 详情页头（newui/admin hero 形态，MkDetailHero）：头像盘 + 页名 + 副文 + pills + 右侧动作。
-         返回钮在壳层顶栏（面包屑 back），页内不再重复。 -->
-    <MkDetailHero :avatar="d.name.charAt(0)" :title="d.name" :sub="subLine">
-      <template #pills>
-        <!-- 账户状态徽章（原型 hero pills 行：状态 pill 常驻，不留空行） -->
-        <span class="mk-badge" :class="isDeleted ? 'mk-badge--deleted' : 'mk-badge--ok'">
-          {{ isDeleted ? '已删除' : '正常' }}
-        </span>
-      </template>
-      <template #actions>
-        <button v-if="isDeleted" type="button" class="mk-btn" :disabled="restoring" @click="doRestore">
-          {{ restoring ? '恢复中…' : '恢复用户' }}
-        </button>
-        <!-- 危险动作收进 ⋯ 菜单（2026-10-03 用户拍板）：删除与高频动作并排，误触成本不对称。
-             产品语义是软删（可在用户列表恢复），菜单项 title 带口径。
-             交互契约复用列表行内 ⋯ 菜单原语 useRowMenu（Esc/点外关闭、键盘循环、fixed 定位防裁切） -->
-        <div v-if="canDelete" class="mk-menu">
-          <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click="toggleMenu('hero')">⋯</button>
-          <div v-if="openMenu === 'hero'" class="mk-menu__pop" :style="popStyle" @click.stop>
-            <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留，可在用户列表恢复" @click="menuDelete">删除账户…</button>
-          </div>
+  <div v-if="d" class="ud-root">
+    <!-- 账号头（pane 内联）：状态徽章 + 危险/恢复动作。合并进 LearnerDetail 后
+         本组件不再是整页（hero 归宿主），账号轴的状态与危险操作就地承载 -->
+    <div class="ud-head">
+      <span class="mk-badge" :class="isDeleted ? 'mk-badge--deleted' : 'mk-badge--ok'">
+        {{ isDeleted ? '已删除' : '正常' }}
+      </span>
+      <span class="ud-head__sp"></span>
+      <button v-if="isDeleted" type="button" class="mk-btn" :disabled="restoring" @click="doRestore">
+        {{ restoring ? '恢复中…' : '恢复用户' }}
+      </button>
+      <div v-if="canDelete" class="mk-menu">
+        <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click="toggleMenu('hero')">⋯</button>
+        <div v-if="openMenu === 'hero'" class="mk-menu__pop" :style="popStyle" @click.stop>
+          <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留，可在用户列表恢复" @click="menuDelete">删除账户…</button>
         </div>
-        <button type="button" class="mk-btn mk-btn--primary" @click="toLearner">查看学习者画像 →</button>
-      </template>
-    </MkDetailHero>
+      </div>
+    </div>
     <!-- 状态条（原型 renderLearnerDetail 的 statstrip：hero 与 subtabs 之间的一行四格读数，
          一张卡通栏分格，非 KPI 卡栅格——LearnerDetail 同款模板） -->
     <section class="mk-card">
@@ -45,12 +37,9 @@
     <!-- 主卡（原型 renderLearnerDetail 主区结构）：subtabs 置卡顶、pane 在同一张卡内，
          默认页签=概览。此前页签裸置页 + 每页签独立卡，与原型「一张卡承载全部分区」的
          详情页设计不一致（2026-10-02 用户指正「和新UI的详情页设计不一样」）。 -->
-    <section class="mk-card ud-main">
-      <MkSubTabs v-model="activeTab" :tabs="tabDefs" />
-
       <!-- 概览（默认页签，原型 overview 卡网格）：账户信息 kv（hero 副文会截断，这里给全量字段）
            + 最近活动 feed（教学会话与目标对话按时间合并，行可下钻只读座舱） -->
-      <div v-show="activeTab === 'overview'" class="ud-pane ud-ov">
+      <div class="ud-pane ud-ov">
         <section class="mk-card">
           <div class="mk-card__head"><h3 class="mk-card__title">账户信息</h3></div>
           <dl class="ud-kv">
@@ -93,7 +82,10 @@
            每人全量列表的所有权归 LearnerDetail（学习轴 8 tab）与三个主列表页（支持 userId 过滤）。
            feed 行点击仍直达只读座舱，排查路径不变 -->
       <!-- 开发视角许可：一行条（原型 .statusbar 词汇：徽章 + 说明 + 右侧动作；按钮走 mk-btn 层级） -->
-      <div v-show="activeTab === 'grant'" class="ud-pane">
+      <!-- 许可与接入（开发视角许可一行条 + 投影 token 生命周期） -->
+      <section class="mk-card">
+        <div class="mk-card__head"><h3 class="mk-card__title">许可与接入</h3></div>
+        <div class="ud-pane">
         <div class="ud-grant__bar">
           <span class="mk-badge" :class="grantBadgeCls">开发视角许可 · {{ grantStatusLabel }}</span>
           <span class="ud-grant__meta" :title="grantStatus === 'active' ? grantNoteLabel : undefined">
@@ -119,11 +111,11 @@
         </div>
         <!-- 区块级提示：走全局 .mk-alert（原型 .alert 词汇），仅错误态展示 -->
         <div v-if="grantMsgTone === 'error'" class="mk-alert ud-grant__notice">{{ grantMessage }}</div>
-      </div>
-    </section>
+        </div>
+      </section>
   </div>
 
-  <div v-else-if="detailError" class="mk-page ud">
+  <div v-else-if="detailError" class="ud-root">
     <MkEmptyState
       icon="◌"
       tone="error"
@@ -134,7 +126,7 @@
     />
   </div>
 
-  <div v-else class="mk-page ud">
+  <div v-else class="ud-root">
     <!-- 骨架屏（P0-2：替代纯文字 loading，避免布局跳动）。形状走 MkSkeleton 版式。 -->
     <div class="ud-skel" aria-hidden="true">
       <MkSkeleton variant="identity" :avatar="48" />
@@ -149,8 +141,6 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { subPage, openSubPage } from './store'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
-import MkDetailHero from '@/components/mk/MkDetailHero.vue'
-import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import { liveUsers, liveLearners, timeAgo, errMsg } from './live'
 import { adminUsersApi, adminTeachingSessionsApi, adminGoalConversationsApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { statusText } from './statusText'
@@ -160,6 +150,13 @@ import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { toast } from '@/utils/toast'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { useRowMenu } from './useRowMenu'
+
+/* 本组件 = LearnerDetail「账号与许可」tab 的 pane（2026-10-03 人员详情合并）：
+   由整页降为嵌入 pane，userId 走 props；hero/页签归宿主，账号轴内容原地保留。
+   props/uid 必须声明在 script 顶部：下方 watch(immediate) 深链挂载时同步调
+   loadDetail，声明在后会撞 TDZ（原 UserDetail 同款教训，P1#14 注记） */
+const props = defineProps<{ userId: string }>()
+const uid = computed(() => props.userId)
 
 interface Detail {
   name: string
@@ -255,7 +252,7 @@ async function loadActivity(id: string) {
   const ts = adminTeachingSessionsApi
     .list({ userId: id, limit: 5, includeTest: true })
     .then((res) => {
-      if (subPage.value?.id !== id) return
+      if (uid.value !== id) return
       const body = res.data?.data ?? res.data ?? {}
       tsRows.value = ((body.items as Record<string, unknown>[]) || []).map((s) => {
         const dur = Number(s.duration || 0)
@@ -271,15 +268,15 @@ async function loadActivity(id: string) {
       })
     })
     .catch(() => {
-      if (subPage.value?.id === id) tsError.value = true
+      if (uid.value === id) tsError.value = true
     })
     .finally(() => {
-      if (subPage.value?.id === id) tsLoading.value = false
+      if (uid.value === id) tsLoading.value = false
     })
   const gc = adminGoalConversationsApi
     .list({ userId: id, limit: 4, includeTest: true })
     .then((res) => {
-      if (subPage.value?.id !== id) return
+      if (uid.value !== id) return
       const body = res.data?.data ?? res.data ?? {}
       gcRows.value = ((body.conversations as Record<string, unknown>[]) || []).map((c) => ({
         id: String(c.id),
@@ -291,10 +288,10 @@ async function loadActivity(id: string) {
       }))
     })
     .catch(() => {
-      if (subPage.value?.id === id) gcError.value = true
+      if (uid.value === id) gcError.value = true
     })
     .finally(() => {
-      if (subPage.value?.id === id) gcLoading.value = false
+      if (uid.value === id) gcLoading.value = false
     })
   await Promise.all([ts, gc])
 }
@@ -312,12 +309,6 @@ const detailErrorMsg = ref('')
 /** Phase 2：目标为已软删账号（详情走 includeDeleted=1 放行）→ 头部展示恢复入口 */
 const isDeleted = ref(false)
 const restoring = ref(false)
-
-function toLearner() {
-  const id = subPage.value?.id
-  // 显式包含虚拟/测试：用户详情 → 学习者画像为逐用户显式导航，不受 learner-models 默认排除影响
-  if (id) openSubPage('learner', id, { includeTest: true })
-}
 
 const projectionGrant = ref<ProjectionGrant | null>(null)
 const grantLoading = ref(false)
@@ -380,7 +371,7 @@ function purgeExpiredProjectionToken() {
   localStorage.removeItem(PROJECTION_TOKEN_EXPIRES_KEY)
   projectionTokenExpiresAt.value = null
   // 刚跨过过期线：重拉许可，卡片与按钮态（grantStatus）回到真实状态
-  if (subPage.value?.id) void loadGrant()
+  if (uid.value) void loadGrant()
 }
 
 /** 挂载即清一次 + 每 60s 轮询：其他页签的残留也要在回到本页时被清掉 */
@@ -394,14 +385,14 @@ onBeforeUnmount(() => {
 })
 
 async function loadGrant() {
-  const id = subPage.value?.id
+  const id = uid.value
   if (!id) return
   grantLoading.value = true
   grantMessage.value = ''
   try {
     const res = await adminUsersApi.getProjectionGrant(id)
     // 竞态守卫：await 期间用户已切到别的用户，丢弃本响应
-    if (subPage.value?.id !== id) return
+    if (uid.value !== id) return
     const body = res.data?.data ?? res.data
     const list = Array.isArray(body) ? body : body?.items || body?.grants || (body ? [body] : [])
     const first = list[0] || null
@@ -413,18 +404,18 @@ async function loadGrant() {
   } catch (e) {
     // 竞态守卫（回归 R2）：catch 侧同样要比对 id——await 期间已切到别的用户时，
     // 旧用户的失败结果不能写到新用户页面（try 侧守卫只覆盖成功路径）
-    if (subPage.value?.id !== id) return
+    if (uid.value !== id) return
     projectionGrant.value = null
     grantMessage.value = `许可读取失败：${errMsg(e)}`
     grantMsgTone.value = 'error'
   } finally {
     // loading 复位也要带守卫：新用户请求已在途时，旧请求的 finally 不能提前关掉它的 loading
-    if (subPage.value?.id === id) grantLoading.value = false
+    if (uid.value === id) grantLoading.value = false
   }
 }
 
 async function openDebugStation() {
-  const id = subPage.value?.id
+  const id = uid.value
   if (!id || grantStatus.value !== 'active' || !projectionGrant.value?.id) return
   // 打开前先校验并清掉过期残留：本地不留已被服务端拒收的旧 token（本次会重新签发）
   purgeExpiredProjectionToken()
@@ -467,7 +458,7 @@ async function openDebugStation() {
 let detailLoadSeq = 0
 
 watch(
-  () => subPage.value?.id,
+  () => uid.value,
   () => {
     liveDetail.value = null
     projectionGrant.value = null
@@ -475,7 +466,7 @@ watch(
     detailError.value = false
     isDeleted.value = false
     tsTotal.value = null
-    const id = subPage.value?.id
+    const id = uid.value
     if (!id) return
     void loadDetail()
   },
@@ -494,7 +485,7 @@ const currentAdminId = computed(() => {
   }
 })
 const canDelete = computed(
-  () => !isDeleted.value && !!subPage.value?.id && subPage.value.id !== currentAdminId.value
+  () => !isDeleted.value && !!uid.value && uid.value !== currentAdminId.value
 )
 /* 危险动作收进 hero ⋯ 菜单：先关菜单再走确认弹层（避免菜单残留在确认层之上） */
 const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
@@ -503,7 +494,7 @@ async function menuDelete() {
   await doDelete()
 }
 async function doDelete() {
-  const id = subPage.value?.id
+  const id = uid.value
   const name = liveDetail.value?.name || id
   if (!id || !canDelete.value) return
   const ok = await askConfirm({
@@ -527,7 +518,7 @@ async function doDelete() {
 
 /** Phase 2：恢复已软删用户（身份保留策略下无需查重；成功后重拉详情，恢复入口自动消失） */
 async function doRestore() {
-  const id = subPage.value?.id
+  const id = uid.value
   if (!id || restoring.value) return
   const ok = await askConfirm({
     title: '恢复用户',
@@ -540,7 +531,7 @@ async function doRestore() {
   try {
     await restoreUser(id)
     // 竞态守卫：恢复期间用户已切到别的用户，不再改写当前详情状态
-    if (subPage.value?.id !== id) return
+    if (uid.value !== id) return
     toast.success('用户已恢复，可重新登录')
     isDeleted.value = false
     void loadDetail()
@@ -552,7 +543,7 @@ async function doRestore() {
 }
 
 async function loadDetail() {
-  const id = subPage.value?.id
+  const id = uid.value
   if (!id) return
   const seq = ++detailLoadSeq
   liveDetail.value = null
@@ -567,7 +558,7 @@ async function loadDetail() {
     // 已软删账号默认被详情接口隐藏（404 语义），Phase 2 用 includeDeleted=1 放行恢复入口
     const res = await getUserIncludingDeleted(id)
     // 竞态守卫：await 期间用户已切走或触发了更新的加载，丢弃本响应
-    if (seq !== detailLoadSeq || subPage.value?.id !== id) return
+    if (seq !== detailLoadSeq || uid.value !== id) return
     const raw = (res.data?.data ?? res.data ?? {}) as Record<string, unknown>
     isDeleted.value = !!raw.deletedAt
     const user = (raw.user as Record<string, unknown>) || raw
@@ -600,7 +591,7 @@ async function loadDetail() {
       ]
     }
   } catch (e) {
-    if (seq !== detailLoadSeq || subPage.value?.id !== id) return
+    if (seq !== detailLoadSeq || uid.value !== id) return
     // 详情接口失败：用列表数据兜底；无兜底 → 明确错误态
     if (base) {
       tsTotal.value = base.sessions
@@ -631,24 +622,15 @@ async function loadDetail() {
 
 const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
-/* 账号轴 tab 收敛为两页签（2026-10-03 列表去重）：会话/目标对话 tab 的数据本就是
-   limit 5 切片，与概览 feed（合并最近 8 条、行点击直达座舱）纯重复；全量列表
-   所有权归 LearnerDetail 与三个主列表页。sessionsTabCount/gcRows 计数随之退役 */
-const tabDefs = computed(() => [
-  { key: 'overview', label: '概览' },
-  { key: 'grant', label: '许可与接入' }
-])
-const activeTab = ref('overview')
-
 /* P1#15 判断真空层：统计条四格此前与下方列表完全同源（路径/会话/XP/等级），
    「他学得怎么样」要再跳一页才知道——从 liveLearners（boot 即拉）按 userId join 出一行读数，
    把学习者轴入口从 2 跳压到 0 跳；join 不到显「—」并在 title 说明原因 */
 const stateCell = computed<{ line: string; hint: string }>(() => {
-  const l = liveLearners.value.find((x) => x.userId === subPage.value?.id)
+  const l = liveLearners.value.find((x) => x.userId === uid.value)
   if (!l) {
     return {
       line: '',
-      hint: '暂无学习者快照：该用户可能尚未产生学习行为，或不在已加载的快照范围内（快照单次最多 50 人）。完整画像见右上「查看学习者画像」。'
+      hint: '暂无学习者快照：该用户可能尚未产生学习行为，或不在已加载的快照范围内（快照单次最多 50 人）。完整画像见「画像」页签。'
     }
   }
   const trend = l.trend === 'up' ? '↗ 上升' : l.trend === 'down' ? '↘ 下降' : '→ 稳定'
@@ -656,12 +638,6 @@ const stateCell = computed<{ line: string; hint: string }>(() => {
     line: `${trend} · 疲劳${l.fatigue} · ${l.confidence == null ? '置信未知' : `置信 ${Math.round(l.confidence * 100)}%`}`,
     hint: `来自学习者快照${l.generatedAt ? `（更新于 ${timeAgo(l.generatedAt)}）` : ''}：趋势=近期表现方向、疲劳=学习负荷、置信=快照把握度（<50% 证据不足）。完整画像见右上「查看学习者画像」。`
   }
-})
-/** hero 副文：邮箱 · 角色 · 加入时间（· 最后登录，仅列表兜底数据有） */
-const subLine = computed(() => {
-  const v = d.value
-  if (!v) return ''
-  return `${v.email} · ${v.role} · 加入 ${v.joined}${v.lastLogin ? ` · 最后登录 ${v.lastLogin}` : ''}`
 })
 </script>
 

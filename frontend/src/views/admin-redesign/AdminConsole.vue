@@ -103,7 +103,6 @@ const OpsHub = asyncPage(() => import('./OpsHub.vue'));
 const OpsCenter = asyncPage(() => import('./OpsCenter.vue'));
 const LearnerDetail = asyncPage(() => import('./LearnerDetail.vue'));
 const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
-const UserDetail = asyncPage(() => import('./UserDetail.vue'));
 const PathDetail = asyncPage(() => import('./PathDetail.vue'));
 // 技能详情二级页（原型 renderSkillDetail 落点；Skill 目录行 / 编排图节点下钻）
 const SkillDetail = asyncPage(() => import('./SkillDetail.vue'));
@@ -147,7 +146,8 @@ const components: Record<string, unknown> = {
 const detailComponents: Record<string, unknown> = {
   learner: LearnerDetail,
   virtual: VirtualProfile,
-  user: UserDetail,
+  // 人员详情合并（2026-10-03）：?view=user 深链别名 = LearnerDetail（默认落「账号与许可」页签）
+  user: LearnerDetail,
   session: SessionCockpit,
   'session-real': SessionCockpit,
   // 路径详情二级页（原型 renderPathDetail 落点；列表行/学习者进度卡下钻）

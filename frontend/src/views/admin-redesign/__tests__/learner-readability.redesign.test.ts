@@ -3,14 +3,13 @@
  * - LearnerCenter isRisk 拆档：需关注=趋势降 ∨ 疲劳高 ∨ 有风险摘要；疲劳=中 单列「观察」pill
  * - LearnerCenter KPI 学习者=「已加载 N」（live.ts 未透出后端 total 前的诚实口径）
  * - LearnerCenter 风险摘要带量级 + 平均置信度 hint 带 n=
- * - UserDetail 列表去重（概览/许可两页签，feed 承载最近活动）+ 统计条「学习状态」格（liveLearners join）
- * - UserDetail 最后登录无兜底显「—」不显「从未」
+ * - UserAccountPane（人员详情合并后 LearnerDetail 的「账号与许可」pane）：统计条「学习状态」格 + 最后登录无兜底显「—」
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import LearnerCenter from '../LearnerCenter.vue';
-import UserDetail from '../UserDetail.vue';
+import UserAccountPane from '../UserAccountPane.vue';
 import { liveLearners } from '../live';
 import { subPage } from '../store';
 
@@ -145,33 +144,31 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
   });
 });
 
-describe('UserDetail 角标口径与学习状态格（P1#14/15 + P2）', () => {
+describe('UserAccountPane 账号轴口径（人员详情合并后）', () => {
   beforeEach(() => {
-    subPage.value = { view: 'user', id: 'u1', label: '' };
     liveLearners.value = [
       learner({ userId: 'u1', name: '测试用户', trend: 'down', fatigue: '中', confidence: 0.72 })
     ];
   });
 
-  async function mountUserDetail() {
-    const w = mount(UserDetail);
+  async function mountPane() {
+    const w = mount(UserAccountPane, { props: { userId: 'u1' } });
     await settle();
     return w;
   }
 
-  it('列表去重（2026-10-03）：账号轴只剩 概览/许可与接入 两页签，会话/目标对话 tab 退役', async () => {
-    // 两 tab 的数据本就是 limit=5 切片（比概览 feed 的 8 条还少），纯重复；
-    // 全量列表所有权归 LearnerDetail（学习轴）与三个主列表页（userId 过滤）
-    const w = await mountUserDetail();
-    const tabs = w.findAll('.mk-subtab').map((t) => t.text());
-    expect(tabs).toEqual(['概览', '许可与接入']);
-    // feed 仍在：合并会话+目标对话最近活动，行点击直达只读座舱
+  it('tab 收敛守卫已随合并迁移：pane 含 账户信息/最近活动/许可与接入 三块且 feed 仍在', async () => {
+    const w = await mountPane();
+    const titles = w.findAll('.mk-card__title').map((t) => t.text());
+    expect(titles).toContain('账户信息');
+    expect(titles).toContain('最近活动');
+    expect(titles).toContain('许可与接入');
     expect(w.find('.ud-feed').exists()).toBe(true);
     w.unmount();
   });
 
   it('统计条「学习状态」格：liveLearners join 出「趋势 · 疲劳 · 置信」一行读数', async () => {
-    const w = await mountUserDetail();
+    const w = await mountPane();
     const cell = w.findAll('.statstrip__stat').find((s) => s.text().includes('学习状态'));
     expect(cell).toBeTruthy();
     expect(cell!.text()).toContain('↘ 下降');
@@ -181,7 +178,7 @@ describe('UserDetail 角标口径与学习状态格（P1#14/15 + P2）', () => {
   });
 
   it('等级读数用单点词汇「L2 · 进阶」；最后登录无兜底显「—」不显「从未」', async () => {
-    const w = await mountUserDetail();
+    const w = await mountPane();
     expect(w.find('.statstrip').text()).toContain('L2 · 进阶');
     const kv = w.find('.ud-kv').text();
     expect(kv).not.toContain('从未');

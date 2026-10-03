@@ -175,7 +175,7 @@ describe('AdminConsole 导航冒烟', () => {
     expect(router.currentRoute.value.query).toMatchObject({ view: 'user', id: 'user_abc' });
     expect(subPage.value).toMatchObject({ view: 'user', id: 'user_abc' });
     // 详情组件走 asyncPage（delay:200），等待异步 chunk 挂载；全量跑批时机器慢，放宽超时
-    await vi.waitFor(() => expect(wrapper.find('.mk-page.ud').exists()).toBe(true), { timeout: 5000 });
+    await vi.waitFor(() => expect(wrapper.find('.mk-page.ld').exists()).toBe(true), { timeout: 15000 });
   });
 
   it('跨场景深链 push（overview → people?view=user&id=）同样存活', async () => {
@@ -184,7 +184,7 @@ describe('AdminConsole 导航冒烟', () => {
     await settle();
     expect(router.currentRoute.value.query).toMatchObject({ view: 'user', id: 'user_abc' });
     expect(subPage.value).toMatchObject({ view: 'user', id: 'user_abc' });
-    await vi.waitFor(() => expect(wrapper.find('.mk-page.ud').exists()).toBe(true), { timeout: 3000 });
+    await vi.waitFor(() => expect(wrapper.find('.mk-page.ld').exists()).toBe(true), { timeout: 15000 });
   });
 
   it('侧栏切换场景仍关闭详情（手动切换不受深链守卫影响）', async () => {

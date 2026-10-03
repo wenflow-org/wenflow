@@ -759,6 +759,11 @@
       <MkEmptyState v-else icon="◌" title="暂无记忆数据" description="该学习者还没有 FSRS 记忆痕迹；完成教学回合后自动生成。" />
     </div>
 
+    <!-- ============ 账号与许可（人员详情合并）：整块由原 UserDetail 抽为 UserAccountPane ============ -->
+    <div v-else-if="tab === 'account'" class="ld-tabpage">
+      <UserAccountPane :user-id="subPage?.id || ''" />
+    </div>
+
     <!-- ============ 操作记录（原型 2184-2187）：feed/feedrow；口径见注释 ============ -->
     <div v-else-if="tab === 'audit'" class="ld-tabpage">
       <section class="mk-card">
@@ -806,6 +811,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
+import UserAccountPane from './UserAccountPane.vue'
 import MkRowList from '@/components/mk/MkRowList.vue'
 import MkRow from '@/components/mk/MkRow.vue'
 import { useIsDark } from '@/composables/useIsDark'
@@ -858,7 +864,7 @@ const recomputing = ref(false)
  * 新增 id 只在本页扩展——共享的 learner-profile.ts `LearnerTab` 仍是 4 项联合（未改动），
  * 本地 normalizeLdTab 先识别 8 项，再回落共享 normalizeLearnerTab 处理旧 6-tab 深链重定向。
  */
-const LD_TAB_IDS = ['overview', 'profile', 'evidence', 'graph', 'paths', 'sessions', 'memory', 'audit'] as const
+const LD_TAB_IDS = ['overview', 'profile', 'evidence', 'graph', 'paths', 'sessions', 'memory', 'audit', 'account'] as const
 type LdTab = (typeof LD_TAB_IDS)[number] | LearnerTab
 function isLdTab(v: unknown): v is (typeof LD_TAB_IDS)[number] {
   return typeof v === 'string' && (LD_TAB_IDS as readonly string[]).includes(v)
@@ -868,6 +874,8 @@ function normalizeLdTab(v: unknown): LdTab {
   return isLdTab(s) ? s : normalizeLearnerTab(s)
 }
 
+// ?view=user 深链别名（原 UserDetail 入口：用户列表行点击等）默认落「账号与许可」；
+// ?view=learner（学习轴入口）维持概览落点
 const tab = ref<LdTab>('overview')
 
 const tabs = [
@@ -878,7 +886,9 @@ const tabs = [
   { id: 'paths' as const, label: '学习路径' },
   { id: 'sessions' as const, label: '教学会话' },
   { id: 'memory' as const, label: '记忆与复习' },
-  { id: 'audit' as const, label: '操作记录' }
+  { id: 'audit' as const, label: '操作记录' },
+  // 人员详情合并（2026-10-03 用户拍板）：账号轴并入本页，?view=user 深链别名默认落本页签
+  { id: 'account' as const, label: '账号与许可' }
 ]
 
 /* ── 知识图谱（概念图画布）：进入 tab 才加载，避免给总览页拖一个额外请求 ── */
@@ -1116,7 +1126,14 @@ async function loadDetail(id: string | undefined) {
   // （此前无条件置 'overview'，会把 ?tab=profile/evidence/graph 的深链与刷新全部冲掉——
   //  与上方「P0-2 tab 路由化：?tab= 深链/刷新保持」的约定相矛盾，实测发现。）
   const urlTab = typeof tabRoute.query.tab === 'string' ? tabRoute.query.tab.trim() : ''
-  tab.value = urlTab ? normalizeLdTab(urlTab) : 'overview'
+  // 无 ?tab= 时的默认落点：?view=user 深链别名（原 UserDetail 入口）落「账号与许可」，
+  // 学习轴入口（?view=learner）维持概览——loadDetail 是挂载即跑的 sync watch，
+  // 初始 ref 在这里会被覆盖，别名落点必须放在本处（实测 ?view=user 曾落回概览）
+  tab.value = urlTab
+    ? normalizeLdTab(urlTab)
+    : subPage.value?.view === 'user'
+      ? 'account'
+      : 'overview'
   const base = liveLearners.value.find((l) => l.userId === id)
   const pathId = base?.pathId
   // 从用户详情显式进入学习者画像时携带 includeTest（虚拟/测试账号可查，默认视图仍排除）
