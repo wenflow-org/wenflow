@@ -719,12 +719,10 @@ function exportCurrentPage() {
    卡内内容区（原 .log-body 自绘边框随 mk-card 统一收敛，不再重复描边）。 */
 .log-body .mk-table th { white-space: nowrap; }
 
-/* 行状态：左侧 3px 色条（成功绿 / 失败红）+ 失败行淡红底 + 展开行高亮 */
+/* 行状态：失败行淡红底 + 展开行高亮（行首 3px 色条已撤，2026-10-03 用户拍板：
+   与级别列同源冗余、语义不可发现；失败语义由级别徽章 + 淡红底承载） */
 .log-tr { cursor: pointer; }
-.log-tr td:first-child { border-left: 3px solid transparent; }
-.log-tr--ok td:first-child { border-left-color: var(--mk-green, #16a34a); }
 .log-tr--err { background: rgba(220, 38, 38, 0.04); }
-.log-tr--err td:first-child { border-left-color: var(--mk-red, #dc2626); }
 .log-tr--open td { background: var(--mk-blue-bg); }
 .log-tr--open .log-arrow { transform: rotate(90deg); }
 

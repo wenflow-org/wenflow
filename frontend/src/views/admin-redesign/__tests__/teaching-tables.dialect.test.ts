@@ -39,6 +39,9 @@ const RETIRED: Array<{ cls: string; instead: string }> = [
   { cls: 'oc-hours', instead: 'td.mk-num 直出' },
   { cls: 'class="gc-row"', instead: 'table.mk-table--click' },
   { cls: 'class="oc-row"', instead: 'table.mk-table--click' },
+  // 行首色条（2026-10-03 用户拍板全站撤销：与状态/关注列同源冗余、语义不可发现）
+  { cls: 'ts-row--att-', instead: '「关注」列色字单源承载' },
+  { cls: 'border-left: 3px solid transparent', instead: '行首色条已全站撤销（AuditLogs 同批）' },
 ]
 
 const dir = join(__dirname, '..')

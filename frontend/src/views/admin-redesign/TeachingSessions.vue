@@ -232,7 +232,6 @@
               v-for="(r, i) in paged"
               :key="r.id || `row-${i}`"
               class="ts-row"
-              :class="`ts-row--att-${r.attention}`"
               tabindex="0"
               @click="goConsole(r)"
               @keydown.enter.prevent="goConsole(r)"
@@ -850,7 +849,8 @@ defineExpose({ refreshNow })
 .ts-embedded { flex: 1; min-height: 0; overflow: hidden; }/* 总结预览行（P1-2）：副行语义走 .mk-cell-sub（截断/灰阶原语承担）；页私有只留 help 悬停 + emoji 前缀 */
 .ts-summary { cursor: help; }
 .ts-summary::before { content: '📝 '; opacity: 0.7; }
-.ts-row--att-high { box-shadow: inset 3px 0 0 var(--mk-red); }.ts-row--att-medium { box-shadow: inset 3px 0 0 var(--mk-amber); }/* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
+/* 行首关注度色条已撤（2026-10-03 用户拍板：与「关注」列同源冗余、语义不可发现）；
+   关注度由「关注」列（高/中/低 色字 + title）单源承载 *//* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
 .ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
 .ts-tags { display: flex; gap: 6px; margin-top: 2px; }/* 卡内工具条（原型 .toolbar：左右 chips + grow，底边框分隔表头）：两组筛选 chips 同行 */
 .ts-toolbar {
