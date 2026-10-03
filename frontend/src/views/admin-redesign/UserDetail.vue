@@ -13,8 +13,15 @@
         <button v-if="isDeleted" type="button" class="mk-btn" :disabled="restoring" @click="doRestore">
           {{ restoring ? '恢复中…' : '恢复用户' }}
         </button>
-        <!-- 危险动作（原型详情页 hero 右侧 停用账户 同位）：产品语义是软删，可在列表恢复 -->
-        <button v-if="canDelete" type="button" class="mk-btn mk-btn--danger" @click="doDelete">删除账户</button>
+        <!-- 危险动作收进 ⋯ 菜单（2026-10-03 用户拍板）：删除与高频动作并排，误触成本不对称。
+             产品语义是软删（可在用户列表恢复），菜单项 title 带口径。
+             交互契约复用列表行内 ⋯ 菜单原语 useRowMenu（Esc/点外关闭、键盘循环、fixed 定位防裁切） -->
+        <div v-if="canDelete" class="mk-menu">
+          <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click="toggleMenu('hero')">⋯</button>
+          <div v-if="openMenu === 'hero'" class="mk-menu__pop" :style="popStyle" @click.stop>
+            <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留，可在用户列表恢复" @click="menuDelete">删除账户…</button>
+          </div>
+        </div>
         <button type="button" class="mk-btn mk-btn--primary" @click="toLearner">查看学习者画像 →</button>
       </template>
     </MkDetailHero>
@@ -179,6 +186,7 @@ import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGran
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { toast } from '@/utils/toast'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
+import { useRowMenu } from './useRowMenu'
 
 interface Detail {
   name: string
@@ -523,6 +531,12 @@ const currentAdminId = computed(() => {
 const canDelete = computed(
   () => !isDeleted.value && !!subPage.value?.id && subPage.value.id !== currentAdminId.value
 )
+/* 危险动作收进 hero ⋯ 菜单：先关菜单再走确认弹层（避免菜单残留在确认层之上） */
+const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
+async function menuDelete() {
+  closeMenu()
+  await doDelete()
+}
 async function doDelete() {
   const id = subPage.value?.id
   const name = liveDetail.value?.name || id
