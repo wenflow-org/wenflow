@@ -3,12 +3,17 @@
     <!-- 学习路径页头（单行状态条：页面名 + 口径副文 + 四态可点计数 + 里程碑/任务总量 + 刷新）
          embedded（学习会话合并宿主）时由宿主状态条承载域计数，本组件不再渲染状态条
          副文 = 原型 renderPaths pageTitle 的 sub：「由目标澄清生成的阶段式路径与推进状态」 -->
+    <!-- 页头（mk-pagehead 标准形态，2026-10-03 用户拍板全站统一）：标题+口径副文+刷新。
+         原状态条顶替页头的「页面名/副文」上收，状态条只留 点色 + 可点计数 + 总量口径 -->
+    <MkPageHead v-if="!embedded" title="学习路径" sub="由目标澄清生成的阶段式路径与推进状态">
+      <template #actions>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="reload(true)">
+          {{ loading ? '刷新中…' : '刷新' }}
+        </button>
+      </template>
+    </MkPageHead>
     <div v-if="!embedded" class="mk-status" :class="`mk-status--${dashTone}`">
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">学习路径</strong>
-      <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">由目标澄清生成的阶段式路径与推进状态</span>
-      <span class="mk-status__sep"></span>
       <button
         type="button"
         class="mk-status__meta-link"
@@ -35,11 +40,6 @@
       >生成失败 {{ byStatus('failed') }}（可重规划）</button>
       <span v-if="byStatus('archived') > 0" class="mk-status__meta">已下线 {{ byStatus('archived') }}</span>
       <span class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ stats?.total ?? '—' }} 条 · 里程碑 {{ stats?.totalMilestones ?? '—' }} · 任务 {{ stats?.totalTasks ?? '—' }}</span>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="loading" @click="reload(true)">
-          {{ loading ? '刷新中…' : '刷新' }}
-        </button>
-      </span>
     </div>
 
     <!-- 路径状态分布（newui 原型 renderPaths「路径状态分布」移植）。数据源 = loadStats 已拉的
@@ -284,6 +284,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { timeAgo, errMsg, shortId, isPageCacheFresh, markPageFetched } from './live'
 import { intent, openSubPage } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'

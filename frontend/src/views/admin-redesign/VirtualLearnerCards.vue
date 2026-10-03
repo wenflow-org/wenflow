@@ -1,18 +1,17 @@
 <template>
   <div :class="embedded ? 'vlc-embedded' : 'mk-page'">
-    <div v-if="!embedded" class="mk-status">
-      <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">学习者卡库</strong>
-      <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">
-        结构化卡：账号 + 档案 + 故事池，导入即用（不经编译链）
-        <template v-if="libraryCount !== null"> · 当前自建卡 {{ libraryCount }} 张</template>
-      </span>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action" :disabled="exporting" @click="doExport">
+    <!-- 页头（mk-pagehead 标准形态，2026-10-03 用户拍板全站统一）：标题+口径副文+导出；
+         原状态条顶替页头的「页面名/副文/动作」上收，状态条只留 自建卡计数 -->
+    <MkPageHead v-if="!embedded" title="学习者卡库" sub="结构化卡：账号 + 档案 + 故事池，导入即用（不经编译链）">
+      <template #actions>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="exporting" @click="doExport">
           {{ exporting ? '导出中…' : '导出卡库' }}
         </button>
-      </span>
+      </template>
+    </MkPageHead>
+    <div v-if="!embedded" class="mk-status">
+      <span class="mk-status__dot"></span>
+      <span v-if="libraryCount !== null" class="mk-status__meta">当前自建卡 {{ libraryCount }} 张</span>
     </div>
 
     <section class="mk-card">
@@ -132,6 +131,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
