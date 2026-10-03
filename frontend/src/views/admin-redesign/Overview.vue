@@ -128,55 +128,8 @@
       </div>
     </div>
 
-    <!-- Row A（原型 1.6fr/1fr）：近 7 天活跃学习者 + 最近事件 -->
-    <div class="row2">
-      <div class="card card--chart">
-        <div class="card__head">
-          <span class="card__title">近 7 天活跃学习者</span>
-          <span class="card__sub">单位：人 · 每日活跃</span>
-          <span class="card__tools">
-            <button type="button" class="mk-btn mk-btn--sm" @click="jump('people')">用户与学习者 →</button>
-          </span>
-        </div>
-        <div class="card__body">
-          <!-- P1#2：手写 .barchart 无「今日进行中」语义（清晨当日累计尚小 → 柱高塌陷读成活跃崩塌），
-               换全站统一 OvBars：零值「·」+ 今日列高亮内建；今日列 title 补「截至现在」防误读。 -->
-          <OvBars :cols="barchartCols" :bar-width="40" :min-bars-height="120" />
-        </div>
-      </div>
-      <div class="card">
-        <div class="card__head">
-          <span class="card__title">最近事件</span>
-          <span class="card__sub">近 24h · 实时</span>
-        </div>
-        <div class="card__body">
-          <div class="feed feed--capped">
-            <div
-              v-for="(f, i) in feedRows"
-              :key="`f${i}`"
-              class="feedrow"
-              :class="{ 'feedrow--bad': f.tone === 'bad', 'feedrow--link': f.tone === 'bad' || f.tone === 'warn' }"
-              :title="(f.tone === 'bad' || f.tone === 'warn') ? '点击查看日志' : undefined"
-              :role="(f.tone === 'bad' || f.tone === 'warn') ? 'button' : undefined"
-              :tabindex="(f.tone === 'bad' || f.tone === 'warn') ? 0 : undefined"
-              @click="feedJump(f)"
-              @keydown.enter.prevent="feedJump(f)"
-              @keydown.space.prevent="feedJump(f)"
-            >
-              <span class="feedrow__time">{{ f.time }}</span>
-              <div class="feedrow__grow">
-                <span class="t">{{ f.text }}</span>
-                <span class="d">{{ feedDesc(f) }}</span>
-              </div>
-            </div>
-          </div>
-          <p v-if="!feedRows.length && data.feed.length" class="note">近期动态均为测试/模拟/探针账号（默认隐藏）。</p>
-          <p v-else-if="!feedRows.length" class="note">近 24h 暂无动态。</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Row B（原型 auto-fit 280 三小卡） -->
+    <!-- 动作队列带（原 Row B，2026-10-03 上移进首屏）：待处理事项是全页唯一
+         要求操作的板块，不能落在折叠线下；Top 5 作参考位同行 -->
     <div class="row3">
       <div class="card">
         <div class="card__head">
@@ -228,6 +181,56 @@
         </div>
       </div>
     </div>
+    <!-- 趋势带（原 Row A，2026-10-03 下移）：图表/事件流是二阶信息，退居动作队列之后；
+         构图叙事 = 出什么事(状态条) → 哪个阶段(闭环) → 要做什么(动作带) → 趋势如何 -->
+    <div class="row2">
+      <div class="card card--chart">
+        <div class="card__head">
+          <span class="card__title">近 7 天活跃学习者</span>
+          <span class="card__sub">单位：人 · 每日活跃</span>
+          <span class="card__tools">
+            <button type="button" class="mk-btn mk-btn--sm" @click="jump('people')">用户与学习者 →</button>
+          </span>
+        </div>
+        <div class="card__body">
+          <!-- P1#2：手写 .barchart 无「今日进行中」语义（清晨当日累计尚小 → 柱高塌陷读成活跃崩塌），
+               换全站统一 OvBars：零值「·」+ 今日列高亮内建；今日列 title 补「截至现在」防误读。 -->
+          <OvBars :cols="barchartCols" :bar-width="40" :min-bars-height="120" />
+        </div>
+      </div>
+      <div class="card">
+        <div class="card__head">
+          <span class="card__title">最近事件</span>
+          <span class="card__sub">近 24h · 实时</span>
+        </div>
+        <div class="card__body">
+          <div class="feed feed--capped">
+            <div
+              v-for="(f, i) in feedRows"
+              :key="`f${i}`"
+              class="feedrow"
+              :class="{ 'feedrow--bad': f.tone === 'bad', 'feedrow--link': f.tone === 'bad' || f.tone === 'warn' }"
+              :title="(f.tone === 'bad' || f.tone === 'warn') ? '点击查看日志' : undefined"
+              :role="(f.tone === 'bad' || f.tone === 'warn') ? 'button' : undefined"
+              :tabindex="(f.tone === 'bad' || f.tone === 'warn') ? 0 : undefined"
+              @click="feedJump(f)"
+              @keydown.enter.prevent="feedJump(f)"
+              @keydown.space.prevent="feedJump(f)"
+            >
+              <span class="feedrow__time">{{ f.time }}</span>
+              <div class="feedrow__grow">
+                <span class="t">{{ f.text }}</span>
+                <span class="d">{{ feedDesc(f) }}</span>
+              </div>
+            </div>
+          </div>
+          <p v-if="!feedRows.length && data.feed.length" class="note">近期动态均为测试/模拟/探针账号（默认隐藏）。</p>
+          <p v-else-if="!feedRows.length" class="note">近 24h 暂无动态。</p>
+        </div>
+      </div>
+    </div>
+
+
   </div>
   <MkLoading v-else-if="liveLoading" min text="正在加载真实数据…" />
   <MkEmptyState
