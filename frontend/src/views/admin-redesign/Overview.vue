@@ -51,7 +51,7 @@
           百分比 basis 对不确定宽度解析失败，行高按单行 48px 定死、第二行溢出被裁
           （2026-10-03 实测 gridTemplateRows 该行 48px / scrollHeight 87px）。
           块序对齐原型 1353-1398：pagehead → KPI 栅格 → statusbar → 教学闭环卡。 -->
-    <div class="mk-status ov-status--stack" :class="`mk-status--${data.tone}`">
+    <div class="mk-status ov-status--stack" :class="[`mk-status--${data.tone}`, `ov-status--${data.tone}`]">
       <div class="ov-row">
         <span class="mk-status__dot"></span>
         <span class="mk-status__title">{{ health.headline }}</span>
@@ -721,6 +721,19 @@ watch(dataSource, () => {
 /* 复原 .mk-status__meta-link 的负外边距（-6px 热区补偿会把本行 gap 吃成字墙）；
    本行间隙改由 .ov-subs 的 gap 真实给出 */
 .ov-status--stack .ov-subs .mk-status__meta-link { margin: 0; }
+/* 结论为 warn/bad 时给整条一层极淡同色底 + 同色描边（2026-10-03 用户反馈
+   「重点预警不突出」）：白面状态条落在满页白卡之间，与「一切正常」无从区分，
+   预警被读成背景。底色用既有 token（亮 #fffbeb/#fef2f2 · 暗 rgba 14%），
+   与 .pill--warn / 闭环 alert 同一套语义色。
+   只在本页生效——不写进共享 .mk-status，避免 20 个列表页的状态条一起换底色。 */
+.ov-status--warn {
+  background: var(--mk-amber-bg);
+  border-color: color-mix(in srgb, var(--mk-amber) 30%, var(--mk-line));
+}
+.ov-status--bad {
+  background: var(--mk-red-bg);
+  border-color: color-mix(in srgb, var(--mk-red) 30%, var(--mk-line));
+}
 
 /* ---- KPI（.grid auto-fit 210 + .card.kpi）---- */
 .kpigrid {
