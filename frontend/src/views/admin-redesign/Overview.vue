@@ -63,20 +63,10 @@
           <button type="button" class="mk-status__action" @click="jump('health-center')">查看健康中心</button>
         </div>
       </div>
-      <!-- 明细行：关注项（agent 失败）+ 子系统状态（健康/仿真/总结），各带真实间隙 -->
+      <!-- 明细行 = 纯「通道状态」（健康/仿真），不带动作项——去冗余（2026-10-03 用户反馈
+           「同一批异常出现 3 次」）：agent 失败/总结事项是「要做的事」，全数归底部待处理卡
+           （那有按钮），事件流保有原始逐条；横幅只回答「各通道现在什么状态」 -->
       <div class="ov-row ov-subs">
-        <template v-if="effectiveActions.length">
-          <button
-            v-for="(a, i) in effectiveActions"
-            :key="'agent-' + i"
-            type="button"
-            class="mk-status__meta-link"
-            :class="a.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
-            title="去执行日志排查该 Skill 的失败"
-            @click="investigateAgent(a.agentId)"
-          >{{ a.text }}</button>
-        </template>
-        <span v-else class="mk-status__meta">没有需要立即处理的事项</span>
         <button
           type="button"
           class="mk-status__meta-link"
@@ -91,14 +81,6 @@
           :title="simTitle"
           @click="jump('virtual-learners')"
         >仿真 · {{ simHeadline }}</button>
-        <button
-          v-if="wrapupIssue"
-          type="button"
-          class="mk-status__meta-link"
-          :class="wrapupIssue.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
-          :title="wrapupIssue.text"
-          @click="jump('teaching-sessions')"
-        >{{ wrapupIssue.text }}</button>
       </div>
     </div>
 
@@ -109,15 +91,7 @@
       <div class="card__head">
         <span class="card__title">教学闭环</span>
         <span class="card__sub">目标对话 → 路径规划 → 教学回合 → 课后评估 → 记忆复习</span>
-        <span class="card__tools">
-          <button
-            v-if="loopFailedPaths"
-            type="button"
-            class="pill pill--warn pill--link"
-            title="进行中路径里的失败数 · 点击查看失败路径"
-            @click="jumpToFailedPaths"
-          ><span class="pill__dot"></span>路径失败 {{ loopFailedPaths }}</button>
-        </span>
+
       </div>
       <div class="card__body">
         <div class="loop">
@@ -136,7 +110,18 @@
               <span class="loop__no">阶段 {{ i + 1 }}</span>
               <span class="loop__name">{{ s.name }}</span>
               <span class="loop__meta">{{ s.meta }}</span>
-              <span class="loop__val">{{ s.val }}</span>
+              <!-- 错误内联（2026-10-03 反馈「失败标记与责任阶段割裂」）：失败数贴在
+                   责任阶段的指标行，amber 底色由此自证；点击即筛失败路径 -->
+              <span class="loop__valrow">
+                <span class="loop__val">{{ s.val }}</span>
+                <button
+                  v-if="s.failN"
+                  type="button"
+                  class="mk-badge mk-badge--sm mk-badge--bad loop__fail"
+                  title="该阶段生成失败的路径数（服务端全量口径）· 点击只看失败路径"
+                  @click.stop="jumpToFailedPaths"
+                >失败 {{ s.failN }}</button>
+              </span>
             </div>
           </template>
         </div>
@@ -213,6 +198,9 @@
             >
               <span class="rankrow__idx">{{ i + 1 }}</span>
               <span class="rankrow__grow mono">{{ s.agentId }}</span>
+              <!-- 占比条（mk-minibar 共享原语）：名次数字只给序，条给「梯队差距」一眼可读；
+                   无金银铜——排序徽章是装饰不编码信息 -->
+              <span class="mk-minibar rankrow__bar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: topBarPct(Number(s.calls)) }"></i></span>
               <span class="rankrow__val mono">{{ s.calls }}<template v-if="s.failed"> · {{ s.failed }}</template></span>
             </div>
           </div>
@@ -294,7 +282,7 @@ const data = computed<BriefData | null>(() => liveOverviewFull.value);
 const teachTotal = ref<number | null>(null);
 const memDue = ref<number | null>(null);
 /** P2 异常→动作闭环：五环各接深链（跳目标页 scene），点击行为与 title 同步披露 */
-interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title: string; scene: string }
+interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title: string; scene: string; failN?: number }
 const loopStages = computed<LoopStage[]>(() => {
   const d = data.value;
   const evalOk = (d?.wrapup.evaluationModel ?? 0) + (d?.wrapup.evaluationAiFallback ?? 0);
@@ -310,6 +298,7 @@ const loopStages = computed<LoopStage[]>(() => {
       // P2：失败环不再恒 done——有失败路径时转 alert（着色条件与计数随 title 披露）
       name: '路径规划', meta: '生成阶段化学习路径',
       val: `${d?.loop.pathsActive ?? 0} 进行中`, tone: pathsFailed > 0 ? 'alert' : 'done',
+      failN: pathsFailed > 0 ? pathsFailed : undefined,
       title: `进行中路径 ${d?.loop.pathsActive ?? 0} · 失败 ${pathsFailed}（overview/stats · 随轮询刷新）· 点击查看学习路径`,
       scene: 'learning-paths',
     },
@@ -334,7 +323,6 @@ const loopStages = computed<LoopStage[]>(() => {
     },
   ];
 });
-const loopFailedPaths = computed(() => data.value?.loop.pathsFailed ?? 0);
 /* P2 异常→动作闭环：路径失败 pill → 学习路径列表并落「失败」筛选（OpsContent 消费 intent.statusFilter） */
 function jumpToFailedPaths() {
   intent.agentFilter = '';
@@ -595,7 +583,26 @@ const testFilteredFeed = computed(() => {
   const feed = data.value?.feed || [];
   return hideTestAccounts.value ? feed.filter((f) => !isTestAccount(f.text)) : feed;
 });
-const feedRows = computed(() => testFilteredFeed.value.slice(0, 12));
+/** 事件流视图：相邻同类失败折叠（2026-10-03 反馈「同类日志刷爆列表」）——
+    同一分钟批量中止的 N 个 Skill 合并为「执行失败 ×N（同因）」，desc 列出来源；
+    点击仍按首条失败类别跳日志。非坏消息/非同构文案原样透传（feedDesc 口径不变） */
+interface FeedView { time: string; text: string; desc: string; tone: BriefData['feed'][number]['tone']; errorCategory?: string; count: number }
+const feedRows = computed<FeedView[]>(() => {
+  const out: FeedView[] = [];
+  for (const f of testFilteredFeed.value) {
+    const last = out[out.length - 1];
+    const m = /^执行失败：.+（(.+)）$/.exec(f.text);
+    if (f.tone === 'bad' && m && last && last.tone === 'bad' && last.count > 0 && last.text.startsWith('执行失败：') && last.desc.startsWith('Skill · ')) {
+      // 同构坏消息追加来源（desc 形如「Skill · a、b」）；首条 desc 的单名改组名
+      last.count += 1;
+      const name = f.agentId || m[2];
+      if (!last.desc.includes(name)) last.desc = `${last.desc}、${name}`;
+      continue;
+    }
+    out.push({ time: f.time, text: f.text, desc: feedDesc(f), tone: f.tone, errorCategory: f.errorCategory, count: 1 });
+  }
+  return out.slice(0, 12);
+});
 function feedDesc(f: BriefData['feed'][number]): string {
   if (f.agentId) return `Skill · ${f.agentId}`
   // 首层不裸透英文枚举（P2）：provider_timeout → 「上游超时」；未知枚举回退原文
@@ -611,6 +618,10 @@ function feedJump(f: { tone: string; errorCategory?: string }) {
    密度优化（2026-10-03）：text 里末尾括号是口径标注（「近 7 天 · 200 条采样」），
    与主句挤一行读着冗长 → 拆成主行 + 口径副行（副行弱化为 faint 小字）。
    只做展示层拆分，文案单一事实源仍在 live.ts。 */
+const topMaxCalls = computed(() => Math.max(1, ...(data.value?.topSkills || []).map((s) => Number(s.calls) || 0)));
+/** Top5 占比条：以榜首调用量为分母，下限 4% 保证末名可见（数字仍为唯一精确口径） */
+const topBarPct = (calls: number) => `${Math.max(Math.round((calls / topMaxCalls.value) * 100), 4)}%`;
+
 interface TodoItem { key: string; text: string; main: string; note: string; tone: Tone; actLabel: string; action: () => void }
 /** 拆末尾括号口径：「甲 采样窗口 1 次失败（近 7 天 · 200 条采样）」→ main/note */
 function splitTodoNote(text: string): { main: string; note: string } {
@@ -789,8 +800,6 @@ watch(dataSource, () => {
 }
 .pill--warn { color: var(--mk-amber); background: var(--mk-amber-bg); }
 .pill__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-/* 可点 pill（路径失败 → 学习路径「失败」筛选）：按钮元素需补字体继承与手型 */
-.pill--link { cursor: pointer; font-family: inherit; }
 
 /* ---- 闭环条（原型 .loop）---- */
 .loop { display: flex; align-items: stretch; gap: 8px; overflow-x: auto; padding: 4px 0; }
@@ -810,6 +819,9 @@ watch(dataSource, () => {
 .loop__name { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
 .loop__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .loop__val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-ink); }
+/* 指标行 = 数值 + 失败徽章（错误内联，2026-10-03）：徽章可点，需手型与文字对齐 */
+.loop__valrow { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.loop__fail { cursor: pointer; font-family: inherit; }
 
 /* ---- Row A：图（1.6fr）+ 事件（1fr）---- */
 .row2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -854,6 +866,7 @@ watch(dataSource, () => {
 }
 .rankrow--link { cursor: pointer; }
 .rankrow--link:hover .rankrow__grow { color: var(--mk-blue); }
+.rankrow__bar { width: 64px; flex: none; }
 .rankrow__val { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--mk-fs-micro); color: var(--mk-ink); }
 /* 待处理事项行（密度优化 2026-10-03）：主句 + 口径副行两行堆叠，动作钮跨两行右对齐 */
 .rankrow--todo { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 12px; }
