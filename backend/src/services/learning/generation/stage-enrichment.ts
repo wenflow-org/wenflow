@@ -253,6 +253,12 @@ async function enrichLearningPathWithAndersonInner(
     const stageDesignerBaseInput = {
       cognitiveCore: pathCognitiveDesign,
       normalizedInput,
+      // 终点交付物与验收口径（2026-10-03 审计模式1 实证：真实交付任务占比 0.5-8.3%，
+      // 「每阶段 1-2 个真实交付物」规则因模型看不见终点而执行率低）：把 goal 确认提案的
+      // firstDeliverable 与 successCriteria 注入每个阶段的调用——不是只有首阶段规则 52 用它，
+      // 后续阶段做中间产出/验收演练时同样需要对着终点校准。
+      firstDeliverable: (normalizedInput as any)?.confirmedProposal?.firstDeliverable || null,
+      successCriteria: (normalizedInput as any)?.successCriteria || null,
       // 资料 → 任务（下游 learn 的第一段）：把附件/联网资料**投影后**交给 stage-designer，
       // 让任务长在资料的具体章节/条目上，而不是只长在里程碑标题上。
       ...(extractPromptMaterials(normalizedInput, STAGE_MATERIAL_LIMITS)
