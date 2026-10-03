@@ -123,7 +123,12 @@
             </thead>
             <tbody>
               <tr v-for="(h, i) in stageHandoffs" :key="i">
-                <td class="mono orch-handoff__pair">{{ h.from }} → {{ h.to }}</td>
+                <td class="mono orch-handoff__pair">
+                  {{ h.from }} → {{ h.to }}
+                  <!-- 治理信号随行（口径与页头两枚红字同源）；点跳转复用页头按钮的落点 -->
+                  <span v-if="h.unresolvedN" class="mk-badge mk-badge--sm mk-badge--warn" title="该交接两端阶段存在未解析步骤 · 点击切「字段旅程」定位" @click="goUnresolved()">未解析 {{ h.unresolvedN }}</span>
+                  <span v-if="h.driftN" class="mk-badge mk-badge--sm mk-badge--bad" title="该交接两端 Agent 命中 W4 core 哈希漂移名单 · 点击跳健康中心" @click="goHashDrift()">哈希漂移 {{ h.driftN }}</span>
+                </td>
                 <td class="mono">{{ h.fromAgent }}</td>
                 <td class="mono">{{ h.toAgent }}</td>
                 <td class="orch-handoff__fields">
@@ -538,16 +543,24 @@ function goHashDrift() {
  *  画布连线标签（layoutOrch）仍标上游产出（outs）：连线沿边流动的是上游产出，
  *  交接表登记的是下游准入契约，两处口径差是有意的 */
 const stageHandoffs = computed(() => {
-  const out: Array<{ from: string; to: string; fromAgent: string; toAgent: string; fields: string[] }> = []
+  const out: Array<{ from: string; to: string; fromAgent: string; toAgent: string; fields: string[]; unresolvedN: number; driftN: number }> = []
   for (let i = 0; i < stages.value.length - 1; i++) {
     const up = stages.value[i]
     const down = stages.value[i + 1]
+    // 治理信号落到行（2026-10-03 反馈：页头「未解析/哈希漂移」计数与具体交接脱钩）：
+    // 未解析 = 两端阶段 defSteps 里 resolved.unresolved 的步骤数；哈希漂移 = 两端 Agent 命中 W4 coreHash 漂移名单
+    const unresolvedOf = (s: typeof up) => (s.defSteps || []).filter((d) => d.resolved?.unresolved).length
+    const driftOf = (agentId: string) => (w4Drifted.value || []).filter((id) => id === agentId).length
     out.push({
       from: up.id,
       to: down.id,
       fromAgent: up.agentId,
       toAgent: down.agentId,
       fields: contractOf(down.id).ins,
+      // 阶段归属不重复计：上游阶段记进本交接，末阶段（无下游交接）回记到最后一段——
+      // 四行合计 === 页头 unresolvedCount（每阶段恰计一次）
+      unresolvedN: unresolvedOf(up) + (i === stages.value.length - 2 ? unresolvedOf(down) : 0),
+      driftN: driftOf(up.agentId) + driftOf(down.agentId),
     })
   }
   return out
@@ -717,6 +730,8 @@ const govMetaTitle = computed(() =>
 .orch-overview { gap: 12px; }
 /* 阶段交接明细（原型 .tbl 的 mono/sub/wrap 形态）：交接列 id 对弱化 mono；传递字段可换行 */
 .orch-handoff__pair { color: var(--mk-muted); white-space: nowrap; }
+/* 治理徽章随行：span 需补手型，与阶段 id 对之间留 6px（点击落点复用页头两枚红字） */
+.orch-handoff__pair .mk-badge { margin-left: 6px; cursor: pointer; }
 /* 传递字段 = 逐枚徽章（mk-badge--sm），格内 flex 换行；不再用点号长串（独吞 65% 列宽） */
 .orch-handoff__fields { white-space: normal; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 /* 字段路由：卡头 + 工具条吸顶，仅表格区内滚（.frt__scroll 自带 .mk-table-scroll 横向滚动） */
