@@ -34,57 +34,71 @@
           <span class="kpi__value">{{ k.value }}</span>
           <span class="kpi__foot">
             <span v-if="k.trend" class="trend" :class="k.trend.up ? 'trend--up' : 'trend--down'">{{ k.trend.up ? '▲' : '▼' }} {{ k.trend.pct }}</span>
-            <span>{{ k.foot }}</span>
+            <span class="kpi-note">{{ k.foot }}</span>
           </span>
         </div>
       </div>
     </div>
 
     <!-- 系统状态（原型 .statusbar）：点色=结论、粗体=标题、meta=子项、右端=动作。
-          排查/健康/仿真各是一个可点 meta（悬停有完整口径）。
+          密度优化（2026-10-03）：原来「结论 + 异常项（长句） + 健康/仿真/总结 + 动作」全挤一条，
+          且 .mk-status__meta-link 的负外边距把 gap 吃光 → 读成一堵字墙。
+          按「结论 / 明细」两层重组：
+            行 1 = 结论（点 + 粗体标题）+ 右端动作出口；
+            行 2 = 全部明细项（关注项 + 子系统状态），各带 22px 真实间隙、从属层。
+          关注项文案较长（agentId + 采样窗口口径），与结论同行必然折行，故移入明细行。
+          用显式列布局（--stack）而非 flex-basis:100% 换行：后者在 grid 行固有高度里
+          百分比 basis 对不确定宽度解析失败，行高按单行 48px 定死、第二行溢出被裁
+          （2026-10-03 实测 gridTemplateRows 该行 48px / scrollHeight 87px）。
           块序对齐原型 1353-1398：pagehead → KPI 栅格 → statusbar → 教学闭环卡。 -->
-    <div class="mk-status" :class="`mk-status--${data.tone}`">
-      <span class="mk-status__dot"></span>
-      <span class="mk-status__title">{{ health.headline }}</span>
-      <span class="mk-status__sep"></span>
-      <!-- subline（今日调用/失败）与 KPI 前两卡完全重复，不进状态条——
-           1280 实测它会把「查看健康中心」动作挤换行（2026-10-01 视觉回顾） -->
-      <template v-if="effectiveActions.length">
+    <div class="mk-status ov-status--stack" :class="`mk-status--${data.tone}`">
+      <div class="ov-row">
+        <span class="mk-status__dot"></span>
+        <span class="mk-status__title">{{ health.headline }}</span>
+        <!-- 结论行的 __sep 已撤（明细项搬到第二行后，分隔线右侧无内容可分隔——
+             裸评审 2026-10-03 实测为悬空 1×13px 竖线残留） -->
+        <!-- subline（今日调用/失败）与 KPI 前两卡完全重复，不进状态条——
+             1280 实测它会把「查看健康中心」动作挤换行（2026-10-01 视觉回顾） -->
+        <div class="mk-status__actions">
+          <button type="button" class="mk-status__action" @click="jump('health-center')">查看健康中心</button>
+        </div>
+      </div>
+      <!-- 明细行：关注项（agent 失败）+ 子系统状态（健康/仿真/总结），各带真实间隙 -->
+      <div class="ov-row ov-subs">
+        <template v-if="effectiveActions.length">
+          <button
+            v-for="(a, i) in effectiveActions"
+            :key="'agent-' + i"
+            type="button"
+            class="mk-status__meta-link"
+            :class="a.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
+            title="去执行日志排查该 Skill 的失败"
+            @click="investigateAgent(a.agentId)"
+          >{{ a.text }}</button>
+        </template>
+        <span v-else class="mk-status__meta">没有需要立即处理的事项</span>
         <button
-          v-for="(a, i) in effectiveActions"
-          :key="'agent-' + i"
           type="button"
           class="mk-status__meta-link"
-          :class="a.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
-          title="去执行日志排查该 Skill 的失败"
-          @click="investigateAgent(a.agentId)"
-        >{{ a.text }}</button>
-      </template>
-      <span v-else class="mk-status__meta">没有需要立即处理的事项</span>
-      <button
-        type="button"
-        class="mk-status__meta-link"
-        :class="healthTone === 'bad' ? 'mk-status__meta--bad' : healthTone === 'warn' ? 'mk-status__meta--warn' : ''"
-        :title="healthTitle"
-        @click="healthChipClick"
-      >健康 · {{ healthText }}</button>
-      <button
-        type="button"
-        class="mk-status__meta-link"
-        :class="simTone === 'bad' ? 'mk-status__meta--bad' : simTone === 'warn' ? 'mk-status__meta--warn' : ''"
-        :title="simTitle"
-        @click="jump('virtual-learners')"
-      >仿真 · {{ simHeadline }}</button>
-      <button
-        v-if="wrapupIssue"
-        type="button"
-        class="mk-status__meta-link"
-        :class="wrapupIssue.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
-        :title="wrapupIssue.text"
-        @click="jump('teaching-sessions')"
-      >{{ wrapupIssue.text }}</button>
-      <div class="mk-status__actions">
-        <button type="button" class="mk-status__action" @click="jump('health-center')">查看健康中心</button>
+          :class="healthTone === 'bad' ? 'mk-status__meta--bad' : healthTone === 'warn' ? 'mk-status__meta--warn' : ''"
+          :title="healthTitle"
+          @click="healthChipClick"
+        >健康 · {{ healthText }}</button>
+        <button
+          type="button"
+          class="mk-status__meta-link"
+          :class="simTone === 'bad' ? 'mk-status__meta--bad' : simTone === 'warn' ? 'mk-status__meta--warn' : ''"
+          :title="simTitle"
+          @click="jump('virtual-learners')"
+        >仿真 · {{ simHeadline }}</button>
+        <button
+          v-if="wrapupIssue"
+          type="button"
+          class="mk-status__meta-link"
+          :class="wrapupIssue.tone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
+          :title="wrapupIssue.text"
+          @click="jump('teaching-sessions')"
+        >{{ wrapupIssue.text }}</button>
       </div>
     </div>
 
@@ -213,8 +227,12 @@
         </div>
         <div class="card__body">
           <div class="ranklist">
-            <div v-for="t in todoItems" :key="t.key" class="rankrow">
-              <span class="rankrow__grow" :title="t.text">{{ t.text }}</span>
+            <div v-for="t in todoItems" :key="t.key" class="rankrow rankrow--todo">
+              <!-- 主行 + 口径副行（拆分见 todoItems）：长句不再一行堆满 -->
+              <div class="todo-main">
+                <span class="todo-text" :title="t.text">{{ t.main }}</span>
+                <span v-if="t.note" class="todo-note">{{ t.note }}</span>
+              </div>
               <button type="button" class="mk-btn mk-btn--sm" @click="t.action()">{{ t.actLabel }} →</button>
             </div>
           </div>
@@ -589,14 +607,23 @@ function feedJump(f: { tone: string; errorCategory?: string }) {
   jumpToFailures(f.errorCategory || '')
 }
 
-/* 待处理事项（原型 Row B 第二卡）：与状态条同源，不另起口径 */
-interface TodoItem { key: string; text: string; tone: Tone; actLabel: string; action: () => void }
+/* 待处理事项（原型 Row B 第二卡）：与状态条同源，不另起口径。
+   密度优化（2026-10-03）：text 里末尾括号是口径标注（「近 7 天 · 200 条采样」），
+   与主句挤一行读着冗长 → 拆成主行 + 口径副行（副行弱化为 faint 小字）。
+   只做展示层拆分，文案单一事实源仍在 live.ts。 */
+interface TodoItem { key: string; text: string; main: string; note: string; tone: Tone; actLabel: string; action: () => void }
+/** 拆末尾括号口径：「甲 采样窗口 1 次失败（近 7 天 · 200 条采样）」→ main/note */
+function splitTodoNote(text: string): { main: string; note: string } {
+  const m = text.match(/^(.*?)\s*[（(]([^（）()]+)[）)]\s*$/)
+  return m ? { main: m[1], note: m[2] } : { main: text, note: '' }
+}
 const todoItems = computed<TodoItem[]>(() => {
   const items: TodoItem[] = [];
   for (const a of effectiveActions.value) {
     items.push({
       key: `a-${a.agentId}-${a.text}`,
       text: a.text,
+      ...splitTodoNote(a.text),
       tone: a.tone,
       actLabel: '去排查',
       action: () => investigateAgent(a.agentId),
@@ -604,7 +631,7 @@ const todoItems = computed<TodoItem[]>(() => {
   }
   const w = wrapupIssue.value;
   if (w) {
-    items.push({ key: 'wrapup', text: w.text, tone: w.tone as Tone, actLabel: '教学会话', action: () => jump('teaching-sessions') });
+    items.push({ key: 'wrapup', text: w.text, ...splitTodoNote(w.text), tone: w.tone as Tone, actLabel: '教学会话', action: () => jump('teaching-sessions') });
   }
   return items;
 });
@@ -677,6 +704,24 @@ watch(dataSource, () => {
 .ov-refresh-note { flex: none; align-self: center; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .ov-refresh-note--warn { color: var(--mk-amber); font-weight: 600; }
 
+/* ---- 页根 grid 行轨按内容定尺（密度优化 2026-10-03）----
+   .mk-page 的 auto 行轨在本页会把状态条压到 min-height（两行内容实为 89.6px，行轨只给
+   48px，第二行溢出被裁；实测 gridTemplateRows 该行 48px / scrollHeight 79px）。
+   归因：auto 行轨按「最小贡献」定尺，嵌套 flex 内容的 max-content 未参与。
+   内容型行轨一律 max-content（同编排图步骤卡判例）。仅本页生效，不动共享 .mk-page。 */
+.mk-page { grid-auto-rows: max-content; }
+
+/* ---- 状态条两行布局（密度优化 2026-10-03）----
+   .ov-status--stack 覆盖基类的单行 flex：改纵向堆叠两行（结论行 / 子系统行），
+   高度随内容自动（auto），不再被 grid 行固有高度按单行 48px 定死（见模板注释）。
+   行 1 沿用基类的横排间距；行 2 与行 1 之间给 1px 分隔线 + 7px 起距。 */
+.ov-status--stack { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 0; }
+.ov-status--stack .ov-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-height: 30px; }
+.ov-status--stack .ov-subs { gap: 8px 22px; margin-top: 3px; padding-top: 7px; border-top: 1px solid var(--mk-line); }
+/* 复原 .mk-status__meta-link 的负外边距（-6px 热区补偿会把本行 gap 吃成字墙）；
+   本行间隙改由 .ov-subs 的 gap 真实给出 */
+.ov-status--stack .ov-subs .mk-status__meta-link { margin: 0; }
+
 /* ---- KPI（.grid auto-fit 210 + .card.kpi）---- */
 .kpigrid {
   /* flex 填满（2026-10-03 用户拍板「内容区随视口流式」）：同 .mk-kpi-grid，N 卡铺满整行不留空轨 */
@@ -695,7 +740,12 @@ watch(dataSource, () => {
   font-variant-numeric: tabular-nums; color: var(--mk-ink); line-height: 1.2;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.kpi__foot { display: flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.kpi__foot {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted);
+}
+/* 注记整句不拆（1280 实测「…较昨日同」后「时刻」孤行、balance 又断在「·」前更碎）：
+   空间不够时让 trend 与注记各自成行，注记保持完整；极端窄幅才截断 */
+.kpi__foot .kpi-note { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* 趋势（原型 .trend：粗体 tabular；涨绿跌红） */
 .trend { font-weight: 700; font-variant-numeric: tabular-nums; flex: none; }
 .trend--up { color: var(--mk-green); }
@@ -751,8 +801,14 @@ watch(dataSource, () => {
 /* ---- Row A：图（1.6fr）+ 事件（1fr）---- */
 .row2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 
-/* 最近事件（原型 .feed--capped：时间列 + 标题/描述，限高滚动） */
-.feed--capped { display: grid; gap: 2px; max-height: 236px; overflow-y: auto; overscroll-behavior: contain; }
+/* 最近事件（原型 .feed--capped：时间列 + 标题/描述，限高滚动）。
+   底部 22px 渐隐（mask）提示「下面还有」：内滚区边界落在条目中间时会把最后可见条的
+   副标题切半行，不加暗示会被读成「内容坏了」（裸评审 2026-10-03）。浅/深色均走 alpha 遮罩。 */
+.feed--capped {
+  display: grid; gap: 2px; max-height: 236px; overflow-y: auto; overscroll-behavior: contain;
+  -webkit-mask-image: linear-gradient(180deg, black calc(100% - 22px), transparent);
+  mask-image: linear-gradient(180deg, black calc(100% - 22px), transparent);
+}
 .feedrow { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--mk-line); }
 .feedrow:last-child { border-bottom: 0; }
 .feedrow--bad .t { color: var(--mk-red); }
@@ -786,6 +842,14 @@ watch(dataSource, () => {
 .rankrow--link { cursor: pointer; }
 .rankrow--link:hover .rankrow__grow { color: var(--mk-blue); }
 .rankrow__val { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--mk-fs-micro); color: var(--mk-ink); }
+/* 待处理事项行（密度优化 2026-10-03）：主句 + 口径副行两行堆叠，动作钮跨两行右对齐 */
+.rankrow--todo { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 12px; }
+.todo-main { display: grid; gap: 1px; min-width: 0; }
+.todo-text {
+  font-size: var(--mk-fs-micro); color: var(--mk-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.todo-note { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 空态/说明行（原型 .note） */
 .note {
