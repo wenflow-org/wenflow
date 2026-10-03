@@ -130,7 +130,7 @@
 
     <!-- Row A（原型 1.6fr/1fr）：近 7 天活跃学习者 + 最近事件 -->
     <div class="row2">
-      <div class="card">
+      <div class="card card--chart">
         <div class="card__head">
           <span class="card__title">近 7 天活跃学习者</span>
           <span class="card__sub">单位：人 · 每日活跃</span>
@@ -823,8 +823,12 @@ watch(dataSource, () => {
 .loop__valrow { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
 .loop__fail { cursor: pointer; font-family: inherit; }
 
-/* ---- Row A：图（1.6fr）+ 事件（1fr）---- */
-.row2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+/* ---- Row A：图（1.6fr）+ 事件（1fr）----
+   等高（2026-10-03 用户指出左右卡底边错位 69px）：撤 align-items:start，
+   两卡由 grid 拉齐到同一行高；差值给柱图消化（.card--chart body 转 flex 列，
+   OvBars 自带 flex:1 自适应长高），不再留中空 */
+.row2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.card--chart .card__body { display: flex; flex-direction: column; min-height: 0; }
 
 /* 最近事件（原型 .feed--capped：时间列 + 标题/描述，限高滚动）。
    底部 22px 渐隐（mask）提示「下面还有」：内滚区边界落在条目中间时会把最后可见条的
