@@ -211,12 +211,14 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(card.classes()).toContain('mk-kpi--warn');
   });
 
-  it('P1#20 速率卡：并列「在途 N · 上限 X/分」，分母用已保存回执值（不吃输入框脏值）', async () => {
+  it('P1#20 速率卡：值「在途 / 上限」+ hint 口径，分母用已保存回执值（不吃输入框脏值）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
     const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '速率')!;
     // getVirtualLabSettings 回执：limit=200 / inFlight=3
-    expect(card.find('.mk-kpi__num').text()).toBe('在途 3 · 上限 200/分');
+    // 2026-10-03：值与口径分栏——整串「在途 3 · 上限 200/分」在卡宽内必换行，把整排 KPI 拉伸到 180px
+    expect(card.find('.mk-kpi__num').text()).toBe('3 / 200/分');
+    expect(card.find('.mk-kpi__hint').text()).toContain('在途 / 上限');
   });
 
   it('P1#20 创建列：相对时间配绝对时间 title', async () => {

@@ -82,8 +82,8 @@
         />
         <MkKpi
           label="速率"
-          :value="rateText"
-          hint="出站上限（已保存值），与下方 VL RPM 对应"
+          :value="rateValue"
+          :hint="rateHint"
           title="在途 = 正在出站的调用数；上限 = 已保存的 VL RPM 配置（不含输入框未保存的改动）"
         />
       </section>
@@ -647,13 +647,15 @@ const concurrencyText = computed(() => {
   return `${c.used}/${c.limit}`
 })
 
-/** 速率文案（P1#20）：并列结构「在途 N · 上限 X/分」，个与「个/分钟」不再用斜杠混排；
+/** 速率文案（P1#20）：值与口径分栏——比值「在途 / 上限」进 value、单位与「已保存值」口径进 hint。
+    原写法把「在途 N · 上限 X/分」整串塞进 value，183px 卡宽下必换行成两行，把整排 KPI
+    拉伸到 180px（连带 220px 的 KPI 带吃掉列表卡高度，裸评审 2026-10-03）；拆开后各占一行。
     上限读已保存值（vlRpmSavedLimit），不用输入框脏值 */
-const rateText = computed(() => {
+const rateValue = computed(() => {
   const cap = vlRpmSavedLimit.value > 0 ? `${vlRpmSavedLimit.value}/分` : '不限'
-  const q = vlRpm.queued > 0 ? ` · 排队 ${vlRpm.queued}` : ''
-  return `在途 ${vlRpm.inFlight} · 上限 ${cap}${q}`
+  return `${vlRpm.inFlight} / ${cap}`
 })
+const rateHint = computed(() => (vlRpm.queued > 0 ? `在途 / 上限（已保存值）· 排队 ${vlRpm.queued}` : '在途 / 上限（已保存值）'))
 
 /** 「今日调用」卡的 hint：有调用给平均耗时（派生口径，数字不复述），没有就点明计数口径 */
 const todayCallsHint = computed(() => {
