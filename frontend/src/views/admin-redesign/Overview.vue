@@ -4,15 +4,22 @@
     <MkPageHead title="平台总览" :sub="headSub">
       <template #actions>
         <!-- 刷新状态独立于副文：副文只放事实段（运行全景/数据截至/最近活动），
-             避免长句在页头副文盒内断词换行（视觉走查 2026-10-03） -->
+             避免长句在页头副文盒内断词换行（视觉走查 2026-10-03）。
+             本页 10s 轮询，手动「刷新」钮与之重复（对齐执行日志/健康中心先例：轮询页不放刷新钮）
+             ——正常态只留节奏注记，熔断停止时注记本身变可点恢复钮（一键恢复不丢）。 -->
+        <button
+          v-if="autoRefreshStopped"
+          type="button"
+          class="ov-refresh-note ov-refresh-note--warn ov-refresh-note--action"
+          :disabled="liveRefreshing"
+          @click="refreshNow"
+        >{{ liveRefreshing ? '恢复中…' : '自动刷新已停止，点击恢复' }}</button>
         <span
+          v-else
           class="ov-refresh-note"
-          :class="{ 'ov-refresh-note--warn': autoRefreshStopped || overviewStale }"
+          :class="{ 'ov-refresh-note--warn': overviewStale }"
           role="status"
         >{{ refreshNote }}</span>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="liveRefreshing" @click="refreshNow">
-          {{ liveRefreshing ? '刷新中…' : '刷新' }}
-        </button>
       </template>
     </MkPageHead>
 
@@ -351,7 +358,7 @@ async function loadLoopExtras() {
 
 /* 页头副文（原型 pageTitle p）：数据截至 + 刷新语义（P2 文案纠偏）。
    - 「数据截至」只绑定真实拉到数据的时刻（不再拿挂载时刻冒充；未拉到前不渲染该段）；
-   - 「每 10s 自动刷新」改如实：失败指数退避至 60s，连续失败熔断后停止、需手动「刷新」恢复；
+   - 失败指数退避至 60s，连续失败熔断后停止——页头注记变为「点击恢复」钮（手动刷新不再单设按钮）；
    - recency：由 live.ts 已映射的 24h 逐小时脉搏推「最近真实活动 HH:00（约 N 小时前）」。 */
 const headSub = computed(() => {
   const parts: string[] = [];
@@ -360,15 +367,11 @@ const headSub = computed(() => {
   if (recency) parts.push(recency);
   return parts.join(' · ');
 });
-/** 刷新状态贴「刷新」钮显示（熔断/展示旧数据=琥珀告警；正常=faint 一句） */
+/** 刷新注记（熔断=可点恢复钮见模板；拉取失败展示旧数据=琥珀告警；正常=faint 一句） */
 const refreshNote = computed(() =>
-  autoRefreshStopped.value
-    ? '自动刷新已停止，点「刷新」恢复'
-    : overviewStale.value
-      ? '展示上次成功数据'
-      : '10s 自动刷新'
+  overviewStale.value ? '展示上次成功数据' : '10s 自动刷新'
 );
-/* 手动刷新：成功即打点真实数据时刻；若此前已熔断停止轮询，一并如实恢复 */
+/* 恢复刷新（熔断注记点击）：成功即打点真实数据时刻并重启轮询 */
 function refreshNow() {
   void refreshOverviewTracked(true).then((ok) => {
     if (!ok) return;
@@ -715,9 +718,21 @@ watch(dataSource, () => {
    学习状态聚合口径，用户拍板不做顶替卡，row3 两卡排布，2026-10-01）。
    ===================================================================== */
 
-/* ---- 页头刷新注记（贴「刷新」钮；熔断/旧数据=琥珀，正常=faint）---- */
+/* ---- 页头刷新注记（熔断态=可点恢复钮，旧数据=琥珀告警，正常=faint）---- */
 .ov-refresh-note { flex: none; align-self: center; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .ov-refresh-note--warn { color: var(--mk-amber); font-weight: 600; }
+/* 熔断恢复钮：复用注记形态（文字钮），下划线点出可点性 */
+.ov-refresh-note--action {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ov-refresh-note--action:disabled { cursor: default; opacity: 0.6; }
 
 /* ---- 页根 grid 行轨按内容定尺（密度优化 2026-10-03）----
    .mk-page 的 auto 行轨在本页会把状态条压到 min-height（两行内容实为 89.6px，行轨只给

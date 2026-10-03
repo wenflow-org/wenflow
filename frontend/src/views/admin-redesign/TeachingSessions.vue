@@ -1,17 +1,13 @@
 <template>
   <div :class="embedded ? 'mk-page--fill ts-embedded' : 'mk-page mk-page--fill'">
-    <!-- 教学会话页头（newui/admin pagehead：页名 + 刷新上移；embedded 由宿主承载，本组件不渲染页头）。
+    <!-- 教学会话页头（newui/admin pagehead；embedded 由宿主承载，本组件不渲染页头）。
+         本页 20s 静默轮询，手动「刷新」钮与之重复已撤（对齐执行日志/健康中心先例：
+         轮询页不放刷新钮）；拉取失败走状态条重试钮（refreshNow 仍被错误态与宿主联动使用）。
          状态条 = 原型 .statusbar 结构（结论粗体 + 分隔线 + meta 串 + 右侧快捷筛选钮），
          也是本页唯一统计带（2026-10-02 用户拍板「新UI没有第二个kpi区」撤 KPI 栅格）：
          meta 只放别处没有的计数——总数=后端全量口径（分布卡/列表都是加载窗口）、
          有建议=全页唯一出口；已完成/失败/进行中由分布卡图例单源承载，不在两处复读 -->
-    <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 状态分布与需关注识别">
-      <template #actions>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshNow">
-          {{ refreshing ? '刷新中…' : '刷新' }}
-        </button>
-      </template>
-    </MkPageHead>
+    <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 状态分布与需关注识别" />
     <!-- 口径标注（P1#4）：状态带里只有「共 N」可能是后端全量口径（后端未回 total 时退化为
          窗口行数，title 如实降级、不得再声称全量）；需关注 / 有建议 / 缺总结三个计数全部来自
          最近 LIST_LIMIT 条加载窗口，就地括注「（最近 1000 条）」防窗口冒充全量。
