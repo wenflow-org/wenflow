@@ -402,7 +402,9 @@ html.dark { color-scheme: dark; }
 html[data-theme='dark'] {
   color-scheme: dark;
   /* ---- 弱化文字：规范无对应物，保留字面量（待规范补「弱化文字」档） ---- */
-  --mk-faint: #7a7e85;
+  /* #7a7e85→#90949b（2026-10-03）：旧值对卡面 #202124 仅 3.95:1（<4.5 AA，11-12px 微字）；
+     新值 card 5.29 / surface-2 4.83 全过，且仍低于 --mk-muted 7.5 一档保持层级 */
+  --mk-faint: #90949b;
   --mk-faint-soft: #a2a5a9;     /* 弱化文字亮档（暗色下可读性补足） */
   --mk-surface-2: #27282c;      /* 次级表面（亮色 #eef2fa 的暗色等价物）。与规范的
                                    --wf-bg-subtle(#1b1c1f) 值不同 → batch D 收口 */

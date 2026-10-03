@@ -975,6 +975,10 @@ const handleDeactivate = async () => {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  /* 触控契约下沿 36（mobile-spec lt36 硬门）：原 6px 上下 padding 只有 30px 高 */
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
   padding: 6px 8px;
   border-radius: 8px;
 }

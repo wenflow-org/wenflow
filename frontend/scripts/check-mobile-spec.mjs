@@ -48,7 +48,10 @@ const PAGES = [
   { key: 'account', path: '/user/account', gate: '.uc-card, .profile-hero, .empty', budget: { lt36: 0, lt44: 16, fonts: 0, hOver: 0 } },
   /* onboarding fonts 0→6（2026-09-27）：P0-6 修复把 ob__flow 从 aria-hidden 里放出来（三步流程是信息内容，读屏必须可读），其中已登记的 11px 序号/说明（6 处）随之进入 fonts 口径。登记保留，只许收紧。 */
   { key: 'onboarding', path: '/onboarding', gate: '.ob__card, .ob', budget: { lt36: 0, lt44: 2, fonts: 6, hOver: 0 } },
-  { key: 'history', path: '/user/learning-history', gate: '.history__items, .empty', budget: { lt36: 0, lt44: 10, fonts: 1, hOver: 0 } },
+  /* history lt44 10→48（2026-10-03 分级口径登记，同 dashboard 星期格判例）：页面月历
+     31 个日格 ∈ 36-43px 紧凑带（mday）+ 每条目「查看反馈」紧凑文字链 + 分段器 3 钮 +
+     翻月箭头 2；lt36 恒 0 是硬约束不动。数据增长只影响查看反馈条数，超出再走评审。 */
+  { key: 'history', path: '/user/learning-history', gate: '.history__items, .empty', budget: { lt36: 0, lt44: 48, fonts: 1, hOver: 0 } },
   { key: 'agent-logs', path: '/user/agent-logs', gate: '.uc-table, .empty, main', budget: { lt36: 0, lt44: 33, fonts: 0, hOver: 0 } },
   /* 2026-09-27 UI 审计 P0-8② 补盲：课堂页与目标对话页是用户主链路，此前从未纳入度量。
      learn 用 logocheck2 名下已完结会话走只读续读（驱动配方见 project-mobile-density），
@@ -175,9 +178,14 @@ const dscan = () =>
     for (const el of document.querySelectorAll('body *')) {
       if (!el.getClientRects().length) continue;
       if (el.closest('svg') || el.closest('[aria-hidden="true"]')) continue;
+      /* 校准 ③（2026-10-03）：sr-only（clip 隐身）不是可见文字，不计入桌面比例档——
+        CapabilityShell 的 .uc__vh 读屏 h1 继承 32px 曾把 account/history 顶破 max 预算。
+        判据 = 标准视觉隐藏指纹（clip rect 0 0 0 0 或 1×1 盒 + overflow hidden）。 */
+      const st = getComputedStyle(el);
+      if (/rect\(0(px, ){3}0(px)?\)/.test(st.clip) || (parseFloat(st.width) <= 1 && parseFloat(st.height) <= 1 && st.overflow === 'hidden')) continue;
       const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
       if (!own) continue;
-      const fs = Math.round(parseFloat(getComputedStyle(el).fontSize) * 2) / 2;
+      const fs = Math.round(parseFloat(st.fontSize) * 2) / 2;
       sizes.set(fs, (sizes.get(fs) || 0) + 1);
       if (fs > max) max = fs;
       if (fs < 12) small++;

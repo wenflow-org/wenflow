@@ -1199,7 +1199,7 @@ function shuffleScenes() {
   gap: 20px; flex-wrap: wrap;
 }
 .entry__hero-text { display: grid; gap: 10px; }
-.entry__hero h1 { margin: 0; font-size: clamp(22px, 3.6vw, 30px); font-weight: 800; letter-spacing: -0.012em; }
+.entry__hero h1 { margin: 0; /* 桌面档 goal 页登记上限 20（check-mobile-spec）：原 clamp(22,3.6vw,30) 越阈 */ font-size: clamp(18px, 2vw, 20px); font-weight: 800; letter-spacing: -0.012em; }
 .entry__hero p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 52ch; line-height: 1.7; }
 
 .errorbar {
