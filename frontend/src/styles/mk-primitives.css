@@ -661,8 +661,12 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
    两行截断保留语义骨架。同时把该列的 min-content 从「整句宽」降为「最长词宽」，
    该列不再独吞宽度（虚拟学习者「长期倾向」列 352 → 252px）。
    min/max 都要给：只给 max 会被 auto 布局压到比 nowrap 时更窄（实测 154px）。
-   沿用原型：min 220px；max 320px = 与 .mk-cell-text 同档。 */
-.mk-cell-text--wrap {
+   沿用原型：min 220px；max 320px = 与 .mk-cell-text 同档。
+   复合选择器必备：用在主体列（.mk-cell-main > strong）时，.mk-cell-main strong（0,1,1）
+   的 display:block + nowrap + max-width 会压过单类 .mk-cell-text--wrap（0,1,0），
+   两行契约整个空转——复合档 (0,2,0) 抬回来（目标对话摘要格判例，2026-10-03）。 */
+.mk-cell-text--wrap,
+.mk-cell-main .mk-cell-text--wrap {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;

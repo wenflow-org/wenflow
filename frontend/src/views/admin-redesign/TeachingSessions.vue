@@ -117,6 +117,10 @@
       <div class="mk-card__head">
         <div class="mk-filter">
           <MkFilterSearch v-model="keyword" placeholder="搜索主题 / 用户 / 邮箱 / ID" />
+          <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
+            <option value="">全部状态</option>
+            <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
+          </select>
           <select v-model="dateFilter" class="mk-filter__select" aria-label="按开始时间筛选">
             <option value="">全部时间</option>
             <option value="7d">近 7 天</option>
@@ -135,11 +139,13 @@
         </div>
       </div>
 
-      <!-- 卡内工具条（原型 .toolbar：左 chips + grow + 右 chips；原状态下拉 select 已按原型
-           改为右组 chips，枚举严格取现有 statusOptions，不另造取值）。
+      <!-- 卡内工具条（原型 .toolbar：左 chips + grow + 右 chips）。
+           右组 11 枚状态 chips 退役（2026-10-03 用户反馈「胶囊过于琐碎」）：收进卡头
+           「按状态筛选」select——原状态下拉本就是 select 形态，本页枚举 10 档远超原型
+           右组的 5 枚，硬塞 chips 把工具条顶成第二行、表格首屏被挤到 436px。
+           长尾状态仍可从「会话状态分布」legend 点选（含计数、覆盖全部枚举）。
            左组 = 页面既有「焦点」筛选（全部 / 进行中 / 待关注 / 缺总结）——
-           原型左组为阶段筛选，但列表无 stage 字段（字段没有的不硬造），
-           故左组沿用既有筛选轴；两组均 aria-pressed 与 .mk-pill--active 同源 -->
+           原型左组为阶段筛选，但列表无 stage 字段（字段没有的不硬造），沿用既有轴 -->
       <div class="ts-toolbar">
         <div class="mk-pills" role="group" aria-label="焦点筛选">
           <button
@@ -153,25 +159,6 @@
           >
             {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
           </button>
-        </div>
-        <span class="ts-toolbar__grow"></span>
-        <div class="mk-pills" role="group" aria-label="按状态筛选">
-          <button
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': !statusFilter }"
-            :aria-pressed="!statusFilter"
-            @click="statusFilter = ''"
-          >全部状态</button>
-          <button
-            v-for="s in statusOptions"
-            :key="s.value"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': statusFilter === s.value }"
-            :aria-pressed="statusFilter === s.value"
-            @click="statusFilter = statusFilter === s.value ? '' : s.value"
-          >{{ s.label }}</button>
         </div>
       </div>
 
@@ -852,7 +839,8 @@ defineExpose({ refreshNow })
 /* 行首关注度色条已撤（2026-10-03 用户拍板：与「关注」列同源冗余、语义不可发现）；
    关注度由「关注」列（高/中/低 色字 + title）单源承载 *//* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
 .ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
-.ts-tags { display: flex; gap: 6px; margin-top: 2px; }/* 卡内工具条（原型 .toolbar：左右 chips + grow，底边框分隔表头）：两组筛选 chips 同行 */
+.ts-tags { display: flex; gap: 6px; margin-top: 2px; }/* 卡内工具条（原型 .toolbar：底边框分隔表头）：右组状态 chips 已退役收进卡头 select，
+   只剩左组焦点 chips（__grow 随之删除——无右组可推） */
 .ts-toolbar {
   display: flex;
   align-items: center;
@@ -860,7 +848,7 @@ defineExpose({ refreshNow })
   flex-wrap: wrap;
   padding: 10px 16px;
   border-bottom: 1px solid var(--mk-line);
-}.ts-toolbar__grow { flex: 1 1 auto; }/* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
+}/* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
    长内容由 .ts-summary-preview / .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底）。
    本组件仅列表一张 mk-table（抽屉内无表格），裸选择器即可 */

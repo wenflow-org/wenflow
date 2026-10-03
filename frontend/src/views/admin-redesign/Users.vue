@@ -821,9 +821,11 @@ function clearFilters() {
 
 /* 邮箱列（原型独立邮箱列，sub 字级弱于姓名）。
    原型 .tbl 是自动布局：列宽随内容，超长邮箱用 max-width 截断兜底
-   （生产昵称/邮箱是 40+ 字符的机名形态，不设上限会独吃列宽） */
+   （生产昵称/邮箱是 40+ 字符的机名形态，不设上限会独吃列宽）。
+   上限 230→320（2026-10-03）：列实际分到 392px，而 36 字邮箱自然宽 248px——
+   230 的旧上限比内容还窄 18px，宽列里照样出省略号（浏览器巡检实锤）。 */
 .ul-email {
-  display: block; min-width: 0; max-width: 230px;
+  display: block; min-width: 0; max-width: 320px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: var(--mk-fs-micro); color: var(--mk-muted);
 }

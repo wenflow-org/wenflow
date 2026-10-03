@@ -144,9 +144,11 @@
             <tr v-for="r in paged" :key="r.id" tabindex="0" @click="goConsole(r)" @keydown.enter.prevent="goConsole(r)">
               <td v-if="!gcHiddenCols.has('summary')">
                 <!-- 原型目标摘要格 = wrap 两行：strong 摘要 + sub mono 会话 ID。
-                     列序统一（2026-10-03）：主体列恒在首（同 TS 会话/OC 路径/MR 学习者），用户列随后 -->
+                     列序统一（2026-10-03）：主体列恒在首（同 TS 会话/OC 路径/MR 学习者），用户列随后。
+                     摘要改两行档 .mk-cell-text--wrap（2026-10-03 用户反馈「截断到看不清含义」）：
+                     单行 320px 只露出 ~24 字，两行档保留语义骨架（同虚拟学习者倾向列判例） -->
                 <div class="mk-cell-main">
-                  <strong class="mk-cell-text" :title="r.summary">{{ r.summary }}</strong>
+                  <strong class="mk-cell-text--wrap" :title="r.summary">{{ r.summary }}</strong>
                   <span class="mk-cell-sub mono" :title="`会话 ID ${r.id}`">{{ r.id }}</span>
                 </div>
               </td>

@@ -299,7 +299,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('筛选：状态 select 退役，改工具条右组 chips（aria-pressed）；左组为既有焦点 chips', async () => {
+  it('筛选：状态收进卡头 select（2026-10-03 退役右组 11 枚 chips）；左组为既有焦点 chips', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -307,19 +307,19 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    expect(wrapper.find('select[aria-label="按状态筛选"]').exists()).toBe(false);
+    // 状态筛选 = 卡头 select（枚举 = 全部状态 + statusOptions 10 档）
+    const sel = wrapper.find('select[aria-label="按状态筛选"]');
+    expect(sel.exists()).toBe(true);
+    expect(sel.findAll('option').map((o) => o.text())).toEqual([
+      '全部状态', '初始化中', '进行中', '已暂停', '超时', '已被替代', '失败', '收尾中', '收尾失败', '已完成', '已废弃'
+    ]);
+    // 工具条只剩左组焦点 chips（右组 chips 退役 → 无第二组）
     const groups = wrapper.findAll('.ts-toolbar .mk-pills');
-    expect(groups).toHaveLength(2);
+    expect(groups).toHaveLength(1);
     expect(groups[0].findAll('.mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
       '全部', '进行中', '待关注', '缺总结'
     ]);
-    // 右组枚举严格取现有 statusOptions（全部状态 + 10 档）
-    const statusChips = groups[1].findAll('.mk-pill');
-    expect(statusChips).toHaveLength(11);
-    const failedChip = statusChips.find((c) => c.text() === '失败');
-    expect(failedChip?.attributes('aria-pressed')).toBe('false');
-    await failedChip?.trigger('click');
-    expect(failedChip?.attributes('aria-pressed')).toBe('true');
+    await sel.setValue('failed');
     const rows = wrapper.findAll('tbody tr');
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain('用户a');
