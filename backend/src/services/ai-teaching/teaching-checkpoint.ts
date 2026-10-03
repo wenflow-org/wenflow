@@ -18,6 +18,7 @@ import {
 } from './anchor-probe-emit';
 import { simulatedNowOr } from '../../services/virtual-lab/simulation-clock-context';
 import {
+  CHECKPOINT_MAX_ATTEMPTS,
   CHECKPOINT_MIN_TURNS,
   CHECKPOINT_TRIGGER_MIN_UNDERSTANDING,
   parseSessionArtifacts,
@@ -97,6 +98,23 @@ export function getPendingCheckpoint(teachingState: Record<string, any> | null |
   return teachingState?.pendingCheckpoint
     || parseSessionArtifacts(teachingState).pendingCheckpoint
     || null;
+}
+
+/**
+ * 检查点消费决策（纯函数，供单测）：
+ * - 答对 → 消费（清 pendingCheckpoint）。
+ * - 答错且同一 cpId 累计作答已达 CHECKPOINT_MAX_ATTEMPTS → 强制消费（exhausted=true），
+ *   打破「同一题逐轮原样重发」的循环（2026-10-03 完结课堂裸审计 P1：实测最极端 36 次/节、
+ *   50/60 节课中招）。到顶后清 pendingCheckpoint，老师可换表征出新题/推进。
+ * - 其余（答错且未到顶）→ 保留 pendingCheckpoint，允许重答。
+ */
+export function resolveCheckpointConsumption(
+  passed: boolean,
+  sameCheckpointAttempts: number,
+): { consume: boolean; exhausted: boolean } {
+  if (passed) return { consume: true, exhausted: false };
+  const exhausted = sameCheckpointAttempts >= CHECKPOINT_MAX_ATTEMPTS;
+  return { consume: exhausted, exhausted };
 }
 
 export function summarizeCheckpointHistory(raw: unknown): {

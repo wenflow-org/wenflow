@@ -20,7 +20,7 @@ import { fenceLearnerMessagesForModel } from './input-fence';
 import { memoryTraceService } from '../memory/memory-trace.service';
 import { recordMisconceptions } from '../learner/misconception-ledger.service';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
-import { parseSessionArtifacts } from './checkpoint-shared';
+import { CHECKPOINT_MAX_ATTEMPTS, parseSessionArtifacts } from './checkpoint-shared';
 import {
   promoteSupplementSlot,
   fetchSupplementMaterial,
@@ -34,6 +34,7 @@ import {
   recordAnchorProbeResult,
   recordCheckpointResultEvidence,
   resolveAnchorProbeTarget,
+  resolveCheckpointConsumption,
   shouldEmitCheckpoint,
   } from './teaching-checkpoint';
 import {
@@ -931,12 +932,27 @@ export async function processStudentMessage(
       }
 
       // 仅答对时消费检查点；答错保留 pendingCheckpoint（同一 cpId 可重答，
-      // 前端答错反馈后再次提交不会落入「理解检查不存在或已处理」）
-      if (passed) {
+      // 前端答错反馈后再次提交不会落入「理解检查不存在或已处理」）。
+      // 重答上限（2026-10-03 完结课堂裸审计 P1）：同一 cpId 累计答错达到 CHECKPOINT_MAX_ATTEMPTS
+      // 即强制消费——否则同一道题被逐轮原样重发（实测最极端 36 次/节），课堂在同一个确认点上
+      // 空转直到 LEARN_AUTO_TURN_CAP 才停。到顶后清掉 pendingCheckpoint，老师可换表征出新题/推进。
+      const sameCheckpointAttempts = checkpointHistory.filter(
+        (row) => row?.checkpointId === submittedCheckpoint.id
+      ).length;
+      const { consume: consumeCheckpoint, exhausted: attemptsExhausted } =
+        resolveCheckpointConsumption(passed, sameCheckpointAttempts);
+      if (consumeCheckpoint) {
         delete teachingState.pendingCheckpoint;
         const nextSessionArtifacts = { ...parseSessionArtifacts(teachingState) };
         delete nextSessionArtifacts.pendingCheckpoint;
         teachingState.sessionArtifacts = nextSessionArtifacts;
+      }
+      if (attemptsExhausted) {
+        logger.info('[teaching-turn] 检查点重答到顶，强制消费 pendingCheckpoint（打破同一题循环）', {
+          sessionId,
+          checkpointId: submittedCheckpoint.id,
+          attempts: sameCheckpointAttempts,
+        });
       }
       teachingState.checkpointHistory = checkpointHistory.slice(-20);
       checkpointResolution = { passed, understanding, judgedBy };
