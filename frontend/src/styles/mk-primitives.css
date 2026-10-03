@@ -538,6 +538,14 @@ html[data-density='compact'] {
   --mk-page-pad-b-fill: 16px;
 }
 html[data-density='compact'] .mk-page { gap: 10px; }html[data-density='compact'] .mk-kpi { padding: 9px 12px; }
+
+/* 内容列上限（2026-10-03 布局细查 #7，用户拍板「继续改」）：≥1600 收到 1480 居中，
+   阅读密度与 1440 对齐；≥2000/≥2800 密度档字号放大，上限同步放宽保持同等容字量。
+   width:100% 必须显式——.mshell__content 是 flex 列，auto margin 会吞掉默认 stretch，
+   fill 页（ops-hub 等）会塌成 fit-content 细条（实测 402px）。 */
+@media (min-width: 1600px) {
+  .mk-page { max-width: 1480px; width: 100%; margin-inline: auto; }
+}
 html[data-density='compact'] .mk-kpi__num { font-size: 18px; }
 html[data-density='compact'] .mk-kpi__label { font-size: 11.5px; }
 html[data-density='compact'] .mk-kpi__hint { font-size: 11.5px; }
@@ -1415,6 +1423,20 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-drawer__body pre { max-width: 100%; overflow-x: auto; }
 .mk-drawer__body pre code { word-break: normal; white-space: pre; }
 .mk-drawer__body table { max-width: 100%; }
+/* 底栏（原型 .ovl__foot：上边框、右对齐、常驻滚动区外）——此前 4 页各写一份
+   私有类（fb-detail__foot/be-detail__foot/pe-detail__foot/dfg-drawer__foot 同款拷贝） */
+.mk-drawer__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--mk-line, #e6ebf4);
+  background: var(--mk-surface, #fff);
+}
+/* 头部 title+sub 包裹块（此前 4 页各一套私有命名 be-detail__title/dfg-drawer__title/…） */
+.mk-drawer__heading { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
 /* 窄屏：抽屉变成全宽面板（浮层语义下比留一条缝更可用） */
 @media (max-width: 720px) {
   .mk-drawer__panel { width: 100vw; }
@@ -1445,6 +1467,25 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 }
 @media (max-width: 560px) {
   .mk-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* 横排 kv variant（原型 dl.kv：96px 标签列、单列行、标签不描字重，值可嵌徽标/色块；
+   编排图字段抽屉判例）。结构同 .mk-facts（div > span + strong），只是行内横向铺开 */
+.mk-facts--rows { grid-template-columns: none; gap: 8px 14px; }
+.mk-facts--rows > div {
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px 14px;
+  align-items: baseline;
+}
+.mk-facts--rows > div > span { color: var(--mk-muted); font-weight: 400; }
+.mk-facts--rows > div > strong {
+  font-size: var(--mk-fs-body);
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 /* ================= 暗色模式（D1）：shared.css 硬编码浅色兜底覆写 =================
@@ -1565,6 +1606,7 @@ html[data-theme='dark'] {
     --mk-fs-body: 17px;
     --mk-fs-emphasis: 19.5px;
   }
+  .mk-page { max-width: 1920px; }
   /* —— display：实体头 / 图标字符（不占文本档位） —— */
   .mk-entity__avatar { width: 62px; height: 62px; font-size: 24px; }
   .mk-entity__name { font-size: 24.5px; }
@@ -1574,7 +1616,7 @@ html[data-theme='dark'] {
   /* —— 间距 / 尺寸（本档的另一半职责） —— */
   /* 页面留白：只覆写 token（档内不再出现 padding 字面量） */
   :root { --mk-page-pad-t: 26px; --mk-page-pad-x: 32px; --mk-page-pad-b: 56px; --mk-page-pad-b-fill: 26px; }
-  .mk-page { gap: 16px; }
+  .mk-page { gap: 16px; max-width: 1680px; }
   /* 本档原写 `border-radius: 14px`，2026-10-02 删除：基础档 .mk-status 已是
      var(--mk-radius-xl)=16px（批次 C 把 xl 从 12 抬到 16）。那句 14px 当年是
      「12 → 14 的超大屏放大」，xl 抬档后它既落在阶梯外（4/6/8/12/16/999），又比

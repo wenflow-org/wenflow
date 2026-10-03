@@ -190,7 +190,7 @@
         <div ref="detailPanelRef" class="mk-drawer__panel mk-drawer__panel--wide" role="dialog" aria-label="实验详情">
           <!-- 头部（原型 .ovl__head：标题 + grow + 关闭钮，下边框）：状态/学习者数下沉到正文首段徽章行 -->
           <header class="mk-drawer__head">
-            <div class="be-detail__title">
+            <div class="mk-drawer__heading">
               <h3 class="mk-drawer__title">{{ detail?.name }}</h3>
               <span v-if="detail?.description" class="mk-drawer__sub be-detail__desc" :title="detail.description">{{ detail.description }}</span>
             </div>
@@ -280,7 +280,7 @@
             />
           </div>
           <!-- 底部动作（原型 .ovl__foot：上边框、右对齐、常驻滚动区外；同 gc-detail__foot 判例） -->
-          <footer v-if="detail" class="be-detail__foot">
+          <footer v-if="detail" class="mk-drawer__foot">
             <button type="button" class="mk-btn" @click="detailOpen = false">关闭</button>
           </footer>
         </div>
@@ -783,7 +783,6 @@ watch(shouldPoll, (on) => (on ? poll.start() : poll.stop()), { immediate: true }
 
 
 /* 详情抽屉（原型 openLearner 三段式）：头部标题 + 正文首段 pills/事实栅格 + 嵌套卡 + 常驻 foot */
-.be-detail__title { display: grid; gap: 6px; min-width: 0; }
 .be-detail__desc { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .be-detail__body { display: grid; gap: 16px; align-content: start; }
 /* 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 学习者数 */
@@ -793,14 +792,6 @@ watch(shouldPoll, (on) => (on ? poll.start() : poll.stop()), { immediate: true }
 .be-fact-progress__num { font-family: var(--mk-mono); font-variant-numeric: tabular-nums; }
 .be-fact-progress__bar { width: 72px; }
 /* 底部动作条（原型 .ovl__foot：上边框、右对齐、常驻滚动区外；同 gc-detail__foot 判例） */
-.be-detail__foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--mk-line);
-}
 /* 运行记录：嵌套无边框卡内的 feed 行（原型 .card box-shadow:none 内 ranklist，行间发丝线分隔） */
 .be-runs { display: grid; }
 .be-run { padding: 12px 16px; display: grid; gap: 8px; }

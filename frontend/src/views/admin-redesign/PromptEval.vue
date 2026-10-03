@@ -379,13 +379,13 @@
       <div v-if="runDetailOpen" ref="runMaskRef" class="mk-drawer">
         <div class="mk-drawer__mask" @click="runDetailOpen = false"></div>
         <div ref="runPanelRef" class="mk-drawer__panel" role="dialog" aria-label="评估运行详情">
-          <div class="mk-drawer__head">
-            <div class="pe-detail__title">
+          <header class="mk-drawer__head">
+            <div class="mk-drawer__heading">
               <h3 class="mk-drawer__title">评估运行详情</h3>
               <span class="mk-drawer__sub">{{ agentLabel(runDetail?.agentId || '') }} · {{ fmtDate(runDetail?.createdAt || '') }}</span>
             </div>
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="runDetailOpen = false">✕</button>
-          </div>
+          </header>
           <!-- 内容层对齐原型三段式：首段 pills → 事实栅格 → 嵌套卡（用例结果 feed）；仅视觉词汇对齐 -->
           <div class="mk-drawer__body pe-detail__body">
             <MkLoading v-if="runDetailLoading" inline />
@@ -455,7 +455,7 @@
             />
           </div>
           <!-- 底部动作（原型 .ovl__foot：上边框、右对齐、常驻滚动区外；同 gc-detail__foot 判例） -->
-          <footer class="pe-detail__foot">
+          <footer class="mk-drawer__foot">
             <button type="button" class="mk-btn" @click="runDetailOpen = false">关闭</button>
           </footer>
         </div>
@@ -1380,19 +1380,10 @@ function retryRunDetail() {
 
 
 /* 运行详情抽屉（原型 openTurnDetail/openLearner 三段式）：头部标题 + 正文 pills/事实栅格/嵌套卡 + 常驻 foot */
-.pe-detail__title { display: grid; gap: 6px; min-width: 0; }
 .pe-detail__body { display: grid; gap: 16px; align-content: start; }
 /* 首段徽章行（原型 .ovl__body 首段 pills）：通过率 / 通过数 */
 .pe-detail__pills { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 /* 底部动作条（原型 .ovl__foot：上边框、右对齐、常驻滚动区外；同 gc-detail__foot 判例） */
-.pe-detail__foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--mk-line);
-}
 /* 用例结果：嵌套无边框卡内的 feed 行（原型 .card box-shadow:none 内 feed，行间发丝线分隔） */
 .pe-results { display: grid; }
 .pe-result-row { padding: 12px 16px; display: grid; gap: 8px; }

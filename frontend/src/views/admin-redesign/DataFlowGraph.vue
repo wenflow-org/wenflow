@@ -373,13 +373,13 @@
         <!-- 遮罩关闭走 useMaskClose（按下-松开守卫）：防在抽屉内选中文本/拖动画布到遮罩松手误关 -->
         <div ref="maskRef" class="mk-drawer__mask" @click="selected = null"></div>
         <aside class="mk-drawer__panel dfg-drawer" role="dialog" aria-label="字段详情" :style="semanticVars">
-          <div class="mk-drawer__head">
-            <div class="dfg-drawer__title">
+          <header class="mk-drawer__head">
+            <div class="mk-drawer__heading">
               <h3 class="mk-drawer__title mono">{{ selected.fieldId }}</h3>
               <p class="mk-drawer__sub">{{ selected.description || '—' }}</p>
             </div>
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="selected = null">✕</button>
-          </div>
+          </header>
 
           <div class="dfg-drawer__body">
             <!-- 首段徽章行（原型 .ovl__body 首段 pills）：角色 / 可见性 / 锁定 / 内部信令 / 累积，均为字段既有属性 -->
@@ -392,34 +392,34 @@
             </div>
 
             <!-- 事实清单（原型 dl.kv：96px 标签列不画线，值可嵌徽标；dfg- 保留字段着色块） -->
-            <dl class="dfg-dl">
-              <div class="dfg-dl__row">
-                <dt>产出方</dt>
-                <dd class="mono">{{ selected.agentId }}</dd>
+            <div class="mk-facts mk-facts--rows">
+              <div>
+                <span>产出方</span>
+                <strong class="mono">{{ selected.agentId }}</strong>
               </div>
-              <div class="dfg-dl__row">
-                <dt>数据族</dt>
-                <dd>
+              <div>
+                <span>数据族</span>
+                <strong>
                   <span class="dfg-dl__family" :style="{ background: selected.hue }"></span>{{ selected.family }}
-                </dd>
+                </strong>
               </div>
-              <div class="dfg-dl__row">
-                <dt>类型</dt>
+              <div>
+                <span>类型</span>
                 <dd class="mono">{{ selected.valueType || '—' }}</dd>
               </div>
-              <div class="dfg-dl__row">
-                <dt>落库键</dt>
-                <dd class="mono">{{ selected.persistKey || selected.fieldId }}</dd>
+              <div>
+                <span>落库键</span>
+                <strong class="mono">{{ selected.persistKey || selected.fieldId }}</strong>
               </div>
-              <div class="dfg-dl__row" v-if="selected.pathInRawOutput">
-                <dt>抽取路径</dt>
-                <dd class="mono">{{ selected.pathInRawOutput }}</dd>
+              <div v-if="selected.pathInRawOutput">
+                <span>抽取路径</span>
+                <strong class="mono">{{ selected.pathInRawOutput }}</strong>
               </div>
-              <div class="dfg-dl__row" v-if="selected.notes">
-                <dt>备注</dt>
-                <dd>{{ selected.notes }}</dd>
+              <div v-if="selected.notes">
+                <span>备注</span>
+                <strong>{{ selected.notes }}</strong>
               </div>
-            </dl>
+            </div>
 
             <!-- 数据旅程：裸分组改走区块文法（原型 section = 区块头 + 内容，不再自绘虚线框） -->
             <section class="dfg-section">
@@ -476,7 +476,7 @@
 
           <!-- 底部动作（原型 .ovl__foot：取消在左、主钮右、常驻滚动区外）：编辑动作自表单尾部上提，
                正文只滚内容、保存/还原不随长 kv 滚走 -->
-          <footer class="dfg-drawer__foot">
+          <footer class="mk-drawer__foot">
             <button type="button" class="mk-btn" @click="selected = null">关闭</button>
             <template v-if="!selected.locked">
               <button type="button" class="mk-btn" :disabled="saving" @click="resetDraft">还原</button>
@@ -1500,29 +1500,14 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 
 /* ========== 抽屉（原型 openLearner 三段式：头部标题 + 正文 pills/事实/嵌套卡 + 常驻 foot） ========== */
 .dfg-drawer { background: var(--mk-graph-canvas); }
-.dfg-drawer__title { display: grid; gap: 6px; min-width: 0; }
 .dfg-drawer__body { display: grid; gap: 16px; align-content: start; }
 /* 首段徽章行（原型 .ovl__body 首段 pills）：角色 / 可见性 / 锁定 / 内部信令 / 累积 */
 .dfg-drawer__pills { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 /* 内部/累积沿用画布 chip 的色彩编码（内=紫、累=琥珀），形状走共享 mk-badge 胶囊 */
 .dfg-badge--internal { background: var(--mk-graph-flag-purple-bg); color: var(--fam-classroom); }
 .dfg-badge--accum { background: var(--mk-amber-bg); color: var(--fam-knowledge); }
-/* 底部动作条（原型 .ovl__foot：上边框、右对齐、常驻滚动区外；同 gc-detail__foot 判例） */
-.dfg-drawer__foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--mk-line);
-}
 
 /* 事实清单（原型 dl.kv：96px 标签列、不画线、标签不描字重，值可嵌徽标/色块） */
-.dfg-dl { margin: 0; display: grid; gap: 8px 14px; }
-.dfg-dl__row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px 14px; align-items: baseline; }
-.dfg-dl__row dt { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.dfg-dl__row dd { margin: 0; font-size: var(--mk-fs-body); color: var(--mk-ink); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .dfg-dl__family { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); display: inline-block; }
 
 /* 区块（原型 section = 区块头 + 内容；原 .dfg-flow 虚线自绘框并入此文法） */
@@ -1621,7 +1606,6 @@ html[data-theme='dark'] {
   .dfg-badge--internal { background: var(--mk-graph-flag-purple-bg); color: var(--mk-graph-flag-purple-ink); }
   .dfg-badge--accum { background: var(--mk-amber-bg); color: var(--mk-graph-warn-ink); }
   .dfg-drawer { color: var(--mk-ink); }
-  .dfg-dl__row { color: var(--mk-ink); }
 }
 
 /* 响应式（此前本组件 0 个 @media，窄屏靠 .dfg-frame overflow:hidden 静默裁切）：

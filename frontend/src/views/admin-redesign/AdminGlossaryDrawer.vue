@@ -4,7 +4,7 @@
       <div ref="maskRef" class="mk-drawer__mask"></div>
       <aside ref="panelRef" class="mk-drawer__panel mk-drawer__panel--wide agd__panel" role="dialog" aria-label="运营术语表">
         <div class="mk-drawer__head">
-          <div>
+          <div class="mk-drawer__heading">
             <h3 class="mk-drawer__title">这是什么 · 运营术语表</h3>
             <span class="mk-drawer__sub">不懂的词在这里查一句话人话</span>
           </div>

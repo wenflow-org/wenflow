@@ -160,9 +160,9 @@
         <aside ref="panelRef" class="mk-drawer__panel fb-panel" role="dialog" aria-label="反馈详情">
           <!-- 头部（原型 .ovl__head：标题 + grow + 关闭钮，下边框）：状态徽章下沉到正文首段徽章行 -->
           <header class="mk-drawer__head">
-            <div class="fb-panel__title">
+            <div class="mk-drawer__heading">
               <h3 class="mk-drawer__title">{{ detail.userName }} 的反馈</h3>
-              <span class="fb-panel__id mono">{{ detail.id }}</span>
+              <span class="mk-drawer__sub mono">{{ detail.id }}</span>
             </div>
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="detail = null">✕</button>
           </header>
@@ -211,7 +211,7 @@
             </section>
           </div>
           <!-- 底部动作（原型 .ovl__foot：取消/忽略在左、主钮最右、常驻滚动区外；同 gc-detail__foot 判例） -->
-          <footer class="fb-detail__foot">
+          <footer class="mk-drawer__foot">
             <button type="button" class="mk-btn mk-btn--ghost" :disabled="saving" @click="save('dismissed')">忽略</button>
             <button type="button" class="mk-btn mk-btn--ok" :disabled="saving" @click="save('resolved')">标记已解决</button>
             <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="save('triaged')">
@@ -507,22 +507,10 @@ onMounted(() => {
 
 /* 处理面板：mk-drawer 体系（遮罩/面板/头/体/关闭按钮由全局类提供；
    fb- 仅保留内容区布局与覆盖层内细节样式） */
-.fb-panel__title { display: grid; gap: 6px; justify-items: start; }
-.fb-panel__id { font-size: var(--mk-fs-micro); color: var(--mk-faint); word-break: break-all; }
 /* 抽屉内容区：mk-drawer__body 提供滚动/内边距，此处补纵向排布（原型 .ovl__body grid gap16） */
 .fb-body { display: grid; gap: 16px; align-content: start; }
 /* 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 难度适配 / UI 类型 / 轮次 */
 .fb-pills { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-/* 底部动作条（原型 .ovl__foot：上边框、右对齐、常驻滚动区外；同 gc-detail__foot 判例） */
-.fb-detail__foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--mk-line);
-}
 
 /* 事实栅格走共享原语 .mk-facts（原 .fb-facts 私有三列栅格 + 4K 阶梯已并进原语层） */
 
@@ -546,21 +534,15 @@ onMounted(() => {
 
 /* 4K：内容区字号跟随壳层放大（面板宽度/头/体由 mk-drawer 全局档接管） */
 @media (min-width: 2000px) {
-  .fb-panel__title h3 { font-size: var(--mk-fs-emphasis); }
-  .fb-panel__id { font-size: var(--mk-fs-micro); }
   .fb-text { font-size: var(--mk-fs-body); }
   .fb-note { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
-  .fb-panel__title h3 { font-size: var(--mk-fs-emphasis); }
-  .fb-panel__id { font-size: var(--mk-fs-micro); }
   .fb-text { font-size: var(--mk-fs-body); }
   .fb-note { font-size: var(--mk-fs-body); }
 }
 /* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
-  .fb-panel__title h3 { font-size: 23px; }
-  .fb-panel__id { font-size: var(--mk-fs-body); }
   .fb-text { font-size: var(--mk-fs-emphasis); }
   .fb-note { font-size: var(--mk-fs-emphasis); }
 }
