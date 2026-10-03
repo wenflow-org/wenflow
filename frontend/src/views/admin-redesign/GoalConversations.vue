@@ -172,7 +172,9 @@
                       <i v-for="d in GOAL_STAGE_TOTAL" :key="d" class="gc-stage-cell__dot" :class="{ 'is-on': d <= r.stageIndex + 1 }"></i>
                     </span>
                   </div>
-                  <span v-if="r.timeline" class="mk-cell-sub" :title="r.timeline">{{ r.timeline }}</span>
+                  <!-- 副行只留日期：阶段词由徽章单源承载（时间线末条恒复读徽章词，2026-10-03 去重）；
+                       完整时间线进 title 悬停 -->
+                  <span v-if="r.timelineDate" class="mk-cell-sub" :title="`阶段时间线 ${r.timeline}`">{{ r.timelineDate }}</span>
                   <span v-else class="mk-na">—</span>
                 </div>
               </td>
@@ -247,7 +249,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { isLive, openSubPage } from './store'
 import { useSessionDrill } from './useSessionDrill'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
-import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS, statusText } from './statusText'
+import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, stageTimeline, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS, statusText } from './statusText'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -293,6 +295,8 @@ interface Row {
   stageIndex: number
   /** 轻量阶段时间线文本（如「创建 08-12 → 澄清中 08-13」；无数据为空串） */
   timeline: string
+  /** 时间线末条日期（副行只显日期，阶段词由徽章单源；全串进 title） */
+  timelineDate: string
   regenerating?: boolean
 }
 
@@ -470,7 +474,14 @@ function mapRow(c: Record<string, unknown>): Row {
       createdAt: String(c.createdAt || ''),
       updatedAt: String(c.updatedAt || ''),
       completedAt: String(c.completedAt || '')
-    })
+    }),
+    timelineDate: stageTimeline({
+      stage,
+      status: String(c.status || ''),
+      createdAt: String(c.createdAt || ''),
+      updatedAt: String(c.updatedAt || ''),
+      completedAt: String(c.completedAt || '')
+    }).at(-1)?.date || '',
   }
 }
 

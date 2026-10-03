@@ -78,7 +78,10 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     const wrapper = await mountLive();
     const cell = wrapper.find('.gc-stage-cell');
     expect(cell.text()).toContain('澄清中');
-    expect(cell.text()).toContain('创建 08-12 → 澄清中 08-13');
+    // 2026-10-03 去重：副行只显日期（阶段词由徽章单源），完整时间线退 title
+    expect(cell.text()).toContain('08-13');
+    expect(cell.text()).not.toContain('澄清中 08-13');
+    expect(cell.find('.mk-cell-sub').attributes('title')).toContain('创建 08-12 → 澄清中 08-13');
     const dots = cell.findAll('.gc-stage-cell__dot');
     expect(dots).toHaveLength(4);
     expect(dots.filter((d) => d.classes().includes('is-on'))).toHaveLength(2);
@@ -104,7 +107,8 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     const wrapper = await mountLive();
     const cell = wrapper.find('.gc-stage-cell');
     expect(cell.text()).toContain('已完成');
-    expect(cell.text()).toContain('创建 08-12 → 已完成 08-14');
+    expect(cell.text()).toContain('08-14');
+    expect(cell.find('.mk-cell-sub').attributes('title')).toContain('创建 08-12 → 已完成 08-14');
     expect(cell.findAll('.gc-stage-cell__dot.is-on')).toHaveLength(4);
     wrapper.unmount();
   });
@@ -126,8 +130,12 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     });
     const wrapper = await mountLive();
     const cell = wrapper.find('.gc-stage-cell');
-    expect(cell.text()).toContain('已取消');
-    expect(cell.text()).toContain('创建 08-12 → 已取消 08-13');
+    // 2026-10-03 去重：阶段格三通道各司其职——阶段词=徽章、进度=点条、日期=副行；
+    // 「已取消」语义由独立的「状态」列徽章承载（旧实现时间线复读，同词出现两遍）
+    const row = wrapper.find('tbody tr');
+    expect(row.find('td .mk-badge').text()).toBe('已取消');
+    expect(cell.text()).toContain('08-13');
+    expect(cell.find('.mk-cell-sub').attributes('title')).toContain('创建 08-12 → 已取消 08-13');
     wrapper.unmount();
   });
 
