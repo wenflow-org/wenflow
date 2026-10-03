@@ -2331,7 +2331,7 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-detail-grid--single { grid-template-columns: minmax(0, 1fr); }
 .cp-turns td { vertical-align: top; }
 .cp-turns__num { width: 48px; white-space: nowrap; }
-.cp-turns__wrap { white-space: normal; min-width: 220px; word-break: break-word; }
+.cp-turns__wrap { white-space: pre-wrap; min-width: 220px; word-break: break-word; }
 .cp-turns__time { white-space: nowrap; color: var(--mk-faint); }
 .cp-turns-empty { padding: 14px 16px; }
 
