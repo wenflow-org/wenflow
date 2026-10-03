@@ -124,9 +124,9 @@
       </div>
       <div v-else-if="filtered.length" class="mk-table-scroll oc-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-             列按内容自然分宽；长标题/长主题由 .mk-cell-main/.oc-subject 的 max-width 截断兜底
+             列按内容自然分宽；长标题/长主题由 .mk-cell-main/.mk-cell-text 的 max-width 截断兜底
              （同 GoalConversations 判例）。此前 fixed+colgroup 是为压制超长主题列，截断类已兜住 -->
-        <table class="mk-table">
+        <table class="mk-table mk-table--click">
           <thead>
             <tr>
               <th
@@ -187,7 +187,6 @@
             <tr
               v-for="p in paged"
               :key="p.id"
-              class="oc-row"
               tabindex="0"
               @click="openPath(p)"
               @keydown.enter.prevent="openPath(p)"
@@ -198,15 +197,13 @@
                   <span class="mk-cell-sub" :title="p.id">{{ shortId(p.id, 10, 4) }}</span>
                 </div>
               </td>
-              <td v-if="!hiddenCols.has('subject')"><span class="oc-subject" :title="p.subject || ''">{{ p.subject || '—' }}</span></td>
+              <td v-if="!hiddenCols.has('subject')"><span class="mk-cell-text" :title="p.subject || ''">{{ p.subject || '—' }}</span></td>
               <td v-if="!hiddenCols.has('difficulty')">
                 <!-- 难度：只有三个枚举值可判；老数据里混着 unknown 与自述整句（~35%），
                      一律显示「未知」，原文进 title，不把半句话当难度展示 -->
                 <span class="oc-diff" :title="difficultyTitle(p.difficulty)">{{ difficultyText(p.difficulty) }}</span>
               </td>
-              <td v-if="!hiddenCols.has('hours')" class="mk-num">
-                <span class="oc-hours">{{ p.estimatedHours ? `~${p.estimatedHours}h` : '—' }}</span>
-              </td>
+              <td v-if="!hiddenCols.has('hours')" class="mk-num">{{ p.estimatedHours ? `~${p.estimatedHours}h` : '—' }}</td>
               <td v-if="!hiddenCols.has('user')">
                 <!-- 原型学习者格 .celluser = 首字母头像 + 姓名；tone 与行内虚拟/测试标记同语义
                      （MkCellAvatar 共享原语，同 GoalConversations 用户格） -->
@@ -221,8 +218,8 @@
                   </div>
                 </div>
                 <div class="oc-tags">
-                  <span v-if="p.user?.isVirtualLearner" class="mk-badge mk-badge--sm mk-badge--virtual" title="虚拟学习者（仿真数据，可再生成）">虚拟</span>
-                  <span v-else-if="p.isTestAccount" class="mk-badge mk-badge--sm mk-badge--warn" title="测试/审计账号">测试</span>
+                  <MkVariantBadge v-if="p.user?.isVirtualLearner" kind="virtual" />
+                  <MkVariantBadge v-else-if="p.isTestAccount" kind="test" />
                 </div>
               </td>
               <td v-if="!hiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(p.status)">{{ statusText(p.status) }}</span></td>
@@ -232,7 +229,7 @@
                   <span class="oc-progress__num">{{ progressPct(p) }}%</span>
                 </div>
               </td>
-              <td v-if="!hiddenCols.has('updated')" :title="fmtDate(p.updatedAt)">{{ timeAgo(p.updatedAt) }}</td>
+              <td v-if="!hiddenCols.has('updated')" :title="fmtDate(p.updatedAt)"><span class="mk-cell-sub mono">{{ timeAgo(p.updatedAt) }}</span></td>
               <td>
                 <!-- 操作列文字钮（原型 renderPaths 操作列 btn--sm「详情/下线」+ ⋯ 菜单）；
                      右对齐与 mk-th--right 表头对齐（同 GoalConversations/Users 判例） -->
@@ -298,6 +295,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import { statusText, statusBadge } from './opsShared'
 
@@ -636,39 +634,20 @@ defineExpose({ reload: () => void reload(true) })
 /* 用户格（原型 .celluser = 头像 + 姓名；同 GoalConversations .gc-user 组合） */
 .oc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .oc-user .mk-cell-main { min-width: 0; flex: 1; }
-/* 行点击进详情页（原型 .tbl tbody tr { cursor:pointer } + tr data-action="open-path"） */
-.oc-row { cursor: pointer; }
+/* 行点击已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） */
 /* 主题列：subject 字段或为学科或为生成路径时写入的目标文本（可能很长），单行省略 + hover 全文。
-   自动布局下列宽随内容，必须给显式截断上限（同 GoalConversations .gc-summary 的 320px） */
-.oc-subject {
-  display: inline-block;
-  max-width: 320px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: bottom;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-}
+   自动布局下列宽随内容，必须给显式截断上限（截断上限由共享 .mk-cell-text 承担） */
+/* 主题列截断走共享 .mk-cell-text（oc-subject 私有复制退役，2026-10-03） */
 
 /* 难度：三个语义值 + 未知；未知降一档灰，不抢视觉 */
 .oc-diff { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
 /* 时长：右对齐等宽数字（与表头 mk-th--right 对齐） */
-.oc-hours { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; color: var(--mk-muted); white-space: nowrap; }
+/* 时长格直出 .mk-num（oc-hours 双层叠写退役，2026-10-03）；右对齐由 .mk-num 承担 */
 
 /* 结构详情抽屉已退役（2026-10-01 行点击改走 PathDetail 二级页）；本页只保留列表自身样式 */
 
-/* ===== 状态分布条（newui 原型 stageband/sbl 原样移植；token 映射：
-   --surface-3→--mk-surface-3、--dur/--ease→--mk-dur/--mk-ease-out、
-   --fs-micro→--mk-fs-micro、--muted→--mk-muted、sbl__sw 3px→--mk-radius-xs）===== */
+/* 状态分布条已升全局原语（mk-primitives .stageband/.sbl）；.oc-bandcard__body 保留页私有卡体 padding */
 .oc-bandcard__body { padding: 12px 16px 16px; }
-.stageband { display: flex; gap: 2px; height: 12px; border-radius: 999px; overflow: hidden; background: var(--mk-surface-3); }
-.stageband > span { display: block; height: 100%; transition: width var(--mk-dur) var(--mk-ease-out); }
-.stageband__legend { /* 左聚（2026-10-03）：auto-fit 1fr 在宽屏把图例拉散满行，改 flex 固定列距 */ display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 14px; }
-.sbl { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); }
-.sbl__sw { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); flex: none; }
-.sbl__name { color: var(--mk-muted); }
-.sbl__n { font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* 4K：进度数字跟随全站节奏 */
 @media (min-width: 2000px) {

@@ -114,7 +114,7 @@
               <th class="mk-num" title="到该复习而未复习的痕迹数；条内小条 = 占该用户痕迹比例；本表按此列倒序">待复习</th>
               <th class="mk-num" title="像但不确定的归并候选，需人工确认，不会自动执行">需人工看</th>
               <th class="mk-num" title="记忆强度（FSRS 可提取率）< 40% 的痕迹数——临近遗忘，复习优先级最高">薄弱项</th>
-              <th title="该用户全部有强度痕迹的 FSRS 可提取率均值；无强度数据时显示 —">平均记忆强度</th>
+              <th class="mk-num" title="该用户全部有强度痕迹的 FSRS 可提取率均值；无强度数据时显示 —">平均记忆强度</th>
               <th title="该用户最近一次有强度痕迹的看到时间（lastSeenAt 最大值）">最近复习</th>
               <th class="mk-th--right">操作</th>
             </tr>
@@ -143,30 +143,32 @@
               <td class="mk-num">
                 <span class="mr__due" :class="`mr__due--${dueTone(row)}`" :title="`到该复习而未复习 ${row.due} 条，占该用户痕迹 ${duePctOf(row)}%`">
                   <b>{{ row.due }}</b>
-                  <span class="mr__due-bar" aria-hidden="true"><i :style="{ width: duePctOf(row) + '%' }"></i></span>
+                  <span class="mk-minibar mr__bar" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="dueTone(row) === 'high' ? 'bad' : dueTone(row) === 'warn' ? 'warn' : undefined" :style="{ width: duePctOf(row) + '%' }"></i></span>
                 </span>
               </td>
               <td class="mk-num">
-                <span v-if="row.audit?.ambiguous" class="mr__need" :title="`${row.audit.ambiguous} 条归并候选需人工确认，不会自动执行`">{{ row.audit.ambiguous }}</span>
+                <span v-if="row.audit?.ambiguous" class="mk-badge mk-badge--sm mk-badge--warn mr__need" :title="`${row.audit.ambiguous} 条归并候选需人工确认，不会自动执行`">{{ row.audit.ambiguous }}</span>
                 <span v-else class="mk-na" title="没有待人工确认的归并候选">—</span>
               </td>
               <td class="mk-num">
-                <span v-if="row.weak > 0" class="mr__need" :title="`${row.weak} 条痕迹强度已跌破 40%，临近遗忘`">{{ row.weak }}</span>
+                <span v-if="row.weak > 0" class="mk-badge mk-badge--sm mk-badge--warn mr__need" :title="`${row.weak} 条痕迹强度已跌破 40%，临近遗忘`">{{ row.weak }}</span>
                 <span v-else class="mk-na" title="没有跌破 40% 的痕迹">—</span>
               </td>
               <td>
                 <span v-if="row.avgStrength != null" class="mr__strength" :title="`全部有强度痕迹的 FSRS 可提取率均值 ${Math.round(row.avgStrength * 100)}%`">
-                  <span class="mk-minibar mr__strength-bar"><i class="mk-minibar__fill" :style="{ width: Math.round(row.avgStrength * 100) + '%' }"></i></span>
+                  <span class="mk-minibar mr__bar"><i class="mk-minibar__fill" :style="{ width: Math.round(row.avgStrength * 100) + '%' }"></i></span>
                   <span class="mono">{{ Math.round(row.avgStrength * 100) }}%</span>
                 </span>
                 <span v-else class="mk-na" title="该用户的痕迹都还没有 FSRS 强度数据">—</span>
               </td>
-              <td class="mk-cell-sub" :title="row.lastReviewedAt ? new Date(row.lastReviewedAt).toLocaleString('zh-CN', { hour12: false }) : undefined">
-                {{ row.lastReviewedAt ? timeAgo(row.lastReviewedAt) : '—' }}
+              <td :title="row.lastReviewedAt ? new Date(row.lastReviewedAt).toLocaleString('zh-CN', { hour12: false }) : undefined">
+                <span class="mk-cell-sub mono">{{ row.lastReviewedAt ? timeAgo(row.lastReviewedAt) : '—' }}</span>
               </td>
-              <td class="mk-actions">
+              <td>
+                <div class="mk-actions">
                 <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(row.userId)">明细</button>
                 <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingId === row.userId" title="对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹" @click.stop="recompute(row.userId)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -219,7 +221,7 @@
                 <td class="mk-num">
                   <span class="mr-pct" :class="{ 'mr-pct--warn': item.retention < 0.7 }" :title="`记忆强度 ${Math.round(item.retention * 100)}%，低于 70% 优先安排`">
                     <b>{{ Math.round(item.retention * 100) }}%</b>
-                    <span class="mr-pct__bar" aria-hidden="true"><i :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
+                    <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="item.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
                   </span>
                 </td>
                 <td>{{ item.reason }}</td>
@@ -259,13 +261,13 @@
               <td class="mk-num">
                 <span class="mr-pct" :class="{ 'mr-pct--warn': trace.retention < 0.7 }" :title="`记忆强度 ${Math.round(trace.retention * 100)}%`">
                   <b>{{ Math.round(trace.retention * 100) }}%</b>
-                  <span class="mr-pct__bar" aria-hidden="true"><i :style="{ width: Math.round(trace.retention * 100) + '%' }"></i></span>
+                  <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="trace.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(trace.retention * 100) + '%' }"></i></span>
                 </span>
               </td>
               <td class="mk-num">
                 <span class="mr-pct" :title="`掌握 ${Math.round(trace.masteryScore * 100)}%`">
                   <b>{{ Math.round(trace.masteryScore * 100) }}%</b>
-                  <span class="mr-pct__bar mr-pct__bar--blue" aria-hidden="true"><i :style="{ width: Math.round(trace.masteryScore * 100) + '%' }"></i></span>
+                  <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: Math.round(trace.masteryScore * 100) + '%' }"></i></span>
                 </span>
               </td>
               <td class="mk-num">{{ trace.extractionCount }}</td>
@@ -386,13 +388,13 @@
                 <td class="mk-num">
                   <span class="mr-pct" :title="`把握度 ${Math.round(proposal.confidence * 100)}%`">
                     <b>{{ Math.round(proposal.confidence * 100) }}%</b>
-                    <span class="mr-pct__bar mr-pct__bar--blue" aria-hidden="true"><i :style="{ width: Math.round(proposal.confidence * 100) + '%' }"></i></span>
+                    <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: Math.round(proposal.confidence * 100) + '%' }"></i></span>
                   </span>
                 </td>
                 <td class="mk-num">
                   <span class="mr-pct" :class="{ 'mr-pct--warn': !proposal.autoApplicable }" :title="`词面相似 ${Math.round(proposal.lexicalSimilarity * 100)}%${proposal.autoApplicable ? '' : '（未过词面闸门）'}`">
                     <b>{{ Math.round(proposal.lexicalSimilarity * 100) }}%</b>
-                    <span class="mr-pct__bar" aria-hidden="true"><i :style="{ width: Math.round(proposal.lexicalSimilarity * 100) + '%' }"></i></span>
+                    <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="proposal.autoApplicable ? undefined : 'warn'" :style="{ width: Math.round(proposal.lexicalSimilarity * 100) + '%' }"></i></span>
                   </span>
                 </td>
                 <td>
@@ -434,7 +436,7 @@
                 <td class="mr__sub">{{ merge.canonical }}</td>
                 <td class="mr__sub">{{ merge.aliases.join(' / ') }}</td>
                 <td class="mk-num">{{ merge.deletedRows }}</td>
-                <td>{{ new Date(merge.appliedAt).toLocaleString() }}</td>
+                <td><span class="mk-cell-sub mono">{{ new Date(merge.appliedAt).toLocaleString() }}</span></td>
                 <td>
                   <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" @click="rollbackOne(merge.canonical)">回滚</button>
                 </td>
@@ -1047,28 +1049,21 @@ onMounted(async () => {
 .mr__due--none b { color: var(--mk-faint); font-weight: 400; }
 .mr__due--warn b { color: var(--mk-amber); }
 .mr__due--high b { color: var(--mk-red-strong); }
-.mr__due-bar { display: block; width: 64px; height: 4px; border-radius: var(--mk-radius-pill); background: var(--mk-surface-2); overflow: hidden; }
-.mr__due-bar i { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-amber); }
-.mr__due--none .mr__due-bar i { background: var(--mk-faint); opacity: 0.35; }
-.mr__due--high .mr__due-bar i { background: var(--mk-red-fill); }
+/* 比例条已换共享 mk-minibar（tone=warn/bad 由模板 data-tone 驱动；due=0 时宽度为 0 不可见）；页私有只留列内宽度 */
+.mr__bar { width: 64px; }
+.mr__bar--sm { width: 52px; }
 
 /* 平均记忆强度格（原型 meterrow：小条 + mono %；mk-minibar 全局原语管形状，这里只管排布） */
 .mr__strength { display: inline-flex; align-items: center; gap: 8px; }
 .mr__strength .mono { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.mr__strength-bar { width: 64px; height: 4px; }
+
 
 /* 记忆分布（newui「教学分组」stageband 原型移植；token 映射：--surface-3→--mk-surface-3、
    --muted→--mk-muted、--fs-micro→--mk-fs-micro、sbl__sw 3px 圆角→--mk-radius-xs）。
    mk-card 没有 body padding 原语 → 本地 .mr-dist__body（非 mk- 前缀）。
    12/16 = 原型 .card__body（--sp-3/--sp-4），与 TeachingSessions 分布卡同一档。 */
 .mr-dist__body { padding: 12px 16px 16px; }
-.stageband { display: flex; gap: 2px; height: 12px; border-radius: 999px; overflow: hidden; background: var(--mk-surface-3); }
-.stageband > span { display: block; height: 100%; }
-.stageband__legend { /* 左聚（2026-10-03）：auto-fit 1fr 在宽屏把图例拉散满行，改 flex 固定列距 */ display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 14px; }
-.sbl { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); }
-.sbl__sw { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); flex: none; }
-.sbl__name { color: var(--mk-muted); }
-.sbl__n { font-weight: 700; font-variant-numeric: tabular-nums; }
+/* stageband/sbl 已升全局原语（mk-primitives，2026-10-03 三页拷贝收敛）。 */
 
 /* 到期带 + 强度直方图两卡 grid（原型 renderMemory 2029 行 grid-template-columns:
    minmax(0,1.5fr) minmax(0,1fr) + align-items:start 原样移植；窄屏收单列） */
@@ -1087,18 +1082,14 @@ onMounted(async () => {
 @media (max-width: 768px) { .histo { height: 108px; gap: 6px; } }
 
 /* 需人工看：>0 抬成琥珀胶囊；0 压成安静破折号 */
-.mr__need {
-  display: inline-block; min-width: 22px; text-align: center;
-  padding: 1px 8px; border-radius: var(--mk-radius-pill);
-  background: color-mix(in srgb, var(--mk-amber) 14%, transparent);
-  color: var(--mk-amber); font-weight: 700; font-variant-numeric: tabular-nums;
-}
+/* 数字胶囊已换共享 mk-badge--sm--warn（私有 color-mix 复刻退役，2026-10-03）；页私有只留数字对齐 */
+.mr__need { min-width: 22px; font-variant-numeric: tabular-nums; justify-content: center; }
 
 /* 卡内小节标题（归并审计卡里的三段子列表）：左右 16px 与卡头对齐 */
 .mr__h4 { margin: 14px 16px 6px; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 /* 归并表勾选列表头：收窄，别把「选择」撑成正文列宽 */
 .mr__th-check { width: 40px; }
-.mr__sub { display: block; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
+.mr__sub { display: block; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 /* 卡内说明段（非表格单元格里的 sub 文本）：补 16px 内边距与卡头文字对齐 —— 原来贴着卡左缘，
    看起来像漏排；表格仍按设计通边（单元格自带 padding） */
 .mr p.mr__sub { margin: 0; padding: 10px 16px 14px; }
@@ -1120,10 +1111,7 @@ onMounted(async () => {
 /* 明细区百分比列（批E）：数字+色阶条，与概览带/用户表同一语言 */
 .mr-pct { display: grid; gap: 2px; justify-items: start; }
 .mr-pct b { font-variant-numeric: tabular-nums; font-weight: 700; }
-.mr-pct__bar { display: block; width: 52px; height: 4px; border-radius: var(--mk-radius-pill); background: var(--mk-surface-2); overflow: hidden; }
-.mr-pct__bar i { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-green); }
-.mr-pct__bar--blue i { background: var(--mk-blue); }
-.mr-pct--warn .mr-pct__bar i { background: var(--mk-amber); }
+/* 比例条已换共享 mk-minibar（默认蓝承接原绿档；warn 琥珀由模板 data-tone 驱动，2026-10-03） */
 .mr-pct--warn b { color: var(--mk-amber); }
 /* 审计处理队列（批E）：复用概览带队列格语言 */
 /* auto-fit：窄屏不挤成 5 等份，宽屏不浪费（原固定 repeat(5) 在窄屏下每格 <100px） */

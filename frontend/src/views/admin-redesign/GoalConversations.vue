@@ -102,8 +102,8 @@
         </div>
         <div v-else-if="filtered.length" class="mk-table-scroll">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-             列按内容自然分宽；长摘要/长邮箱由 .gc-summary / .mk-cell-main 的 max-width 截断兜底 -->
-        <table class="mk-table">
+             列按内容自然分宽；长摘要/长邮箱由 .mk-cell-text / .mk-cell-main 的 max-width 截断兜底 -->
+        <table class="mk-table mk-table--click">
           <thead>
             <tr>
               <th
@@ -130,7 +130,7 @@
               <th
                 v-if="!gcHiddenCols.has('turns')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable mk-th--right"
                 :aria-sort="gcSortState('turns')"
                 @click="toggleGcSort('turns')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清进度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -141,7 +141,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in paged" :key="r.id" class="gc-row" tabindex="0" @click="goConsole(r)" @keydown.enter.prevent="goConsole(r)">
+            <tr v-for="r in paged" :key="r.id" tabindex="0" @click="goConsole(r)" @keydown.enter.prevent="goConsole(r)">
               <td>
                 <div class="gc-user">
                   <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
@@ -158,8 +158,8 @@
               <td v-if="!gcHiddenCols.has('summary')">
                 <!-- 原型目标摘要格 = wrap 两行：strong 摘要 + sub mono 会话 ID -->
                 <div class="mk-cell-main">
-                  <strong class="gc-summary" :title="r.summary">{{ r.summary }}</strong>
-                  <span class="mk-cell-sub mono">{{ r.id }}</span>
+                  <strong class="mk-cell-text" :title="r.summary">{{ r.summary }}</strong>
+                  <span class="mk-cell-sub mono" :title="`会话 ID ${r.id}`">{{ r.id }}</span>
                 </div>
               </td>
               <td v-if="!gcHiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(r.status)" :title="statusHint(r.status)">{{ statusLabel(r.status) }}</span></td>
@@ -171,14 +171,14 @@
                       <i v-for="d in GOAL_STAGE_TOTAL" :key="d" class="gc-stage-cell__dot" :class="{ 'is-on': d <= r.stageIndex + 1 }"></i>
                     </span>
                   </div>
-                  <span v-if="r.timeline" class="gc-stage-cell__tl" :title="r.timeline">{{ r.timeline }}</span>
+                  <span v-if="r.timeline" class="mk-cell-sub" :title="r.timeline">{{ r.timeline }}</span>
                   <span v-else class="mk-na">—</span>
                 </div>
               </td>
               <td v-if="!gcHiddenCols.has('turns')">
                 <!-- 原型「澄清进度」列 = meter turns/targetTurns；本系统无目标轮次分母，
                      只呈现「N 轮」诚实读数（学习者发言条数），不造 meter -->
-                <span v-if="r.turns != null" class="mono" :title="`学习者发言 ${r.turns} 轮`">{{ r.turns }} 轮</span>
+                <span v-if="r.turns != null" class="mk-num" :title="`学习者发言 ${r.turns} 轮`">{{ r.turns }} 轮</span>
                 <span v-else class="mk-na">—</span>
               </td>
               <td v-if="!gcHiddenCols.has('constraints')">
@@ -195,7 +195,7 @@
                 <span v-else-if="r.hasPath" class="mk-badge mk-badge--info">已生成</span>
                 <span v-else class="mk-na">—</span>
               </td>
-              <td v-if="!gcHiddenCols.has('created')"><span class="mk-cell-sub mono" :title="r.createdAt">{{ r.createdAt }}</span></td>
+              <td v-if="!gcHiddenCols.has('created')"><span class="mk-cell-sub mono" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
               <td>
                 <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）。
                      行内只留高频项（链路/详情）；重建路径与删除同属低频矫正操作，收 ⋯ 菜单——
@@ -284,6 +284,8 @@ interface Row {
   /** 生成的路径 id（原型路径格 open-path 的跳转目标；未生成/旧响应为 null） */
   pathId?: string | null
   createdAt: string
+  /** 绝对时间（时间列 title 悬停；createdAt 已被 timeAgo 覆写为相对串） */
+  createdAtAbs: string
   /** 最近更新时间（停滞信号推导用：active 且超 7 天未更新） */
   updatedAt: string
   /** 阶段过程步序号（0=创建 1=澄清 2=方案 3=完成，statusText 单源） */
@@ -456,7 +458,9 @@ function mapRow(c: Record<string, unknown>): Row {
     constraints: Array.isArray(c.constraints) ? (c.constraints as unknown[]).map(String) : [],
     hasPath: !!c.learningPathId,
     pathId: c.learningPathId ? String(c.learningPathId) : null,
+    // 格内相对时间 + createdAtAbs 绝对时间（title 悬停用；2026-10-03 修复 title=相对串自身的契约违约）
     createdAt: timeAgo(String(c.createdAt || '')),
+    createdAtAbs: String(c.createdAt || ''),
     updatedAt: String(c.updatedAt || ''),
     stageIndex: stageProgressIndex(stage),
     timeline: stageTimelineText({
@@ -652,8 +656,7 @@ onMounted(() => {
   min-height: 0;
 }/* 目标对话内联内容（状态条 + 卡片）：同为 fill 列的直接子级，卡片弹性填满 */
 .gc-host > .mk-status { flex: none; }/* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
-.gc-row { cursor: pointer; }/* 键盘可达（对齐 TeachingSessions 行写法）：行可聚焦，焦点态描边提示当前位置 */
-.gc-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
+/* 行点击/焦点态已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） *//* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
 /* 用户格 min-width：本表为自动布局（无 colgroup），补「澄清进度/约束条件」两列后
    该列会被内容多的列挤到 ~90px（2026-10-02 视觉核对实测），名字/邮箱全截断——
    给内容格兜底宽度，压缩由可换行的摘要/约束列吸收 */
@@ -667,22 +670,9 @@ onMounted(() => {
   height: 6px;
   border-radius: var(--mk-radius-pill);
   background: #e2e8f2;
-}.gc-stage-cell__dot.is-on { background: var(--mk-blue); }.gc-stage-cell__dot.is-on:last-child { background: var(--mk-green); }.gc-stage-cell__tl {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}.gc-summary {
-  display: inline-block;
-  max-width: 320px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: bottom;
-}/* 约束条件列：mute 徽章多枚 wrap（原型 .wrap 格内 pill--mute 判例） */
+}.gc-stage-cell__dot.is-on { background: var(--mk-blue); }.gc-stage-cell__dot.is-on:last-child { background: var(--mk-green); }/* gc-stage-cell__tl→.mk-cell-sub、gc-summary→.mk-cell-text（2026-10-03 方言收敛，截断/灰阶由原语承担） *//* 约束条件列：mute 徽章多枚 wrap（原型 .wrap 格内 pill--mute 判例） */
 .gc-constraints { display: flex; flex-wrap: wrap; gap: 5px; max-width: 220px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
-   长摘要 .gc-summary 与 .mk-cell-main/.mk-cell-sub 的 max-width 截断兜底） */
+   长摘要 .mk-cell-text 与 .mk-cell-main/.mk-cell-sub 的 max-width 截断兜底） */
 .mk-table td { white-space: nowrap; }.gc-error {
   display: flex;
   align-items: center;

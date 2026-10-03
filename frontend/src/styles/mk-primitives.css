@@ -504,6 +504,9 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
 .mk-table tbody tr { transition: background 0.12s; }
 .mk-table tbody tr:hover { background: var(--mk-table-row-hover-bg); }
 .mk-table--click tbody tr { cursor: pointer; }
+/* 行点击契约的键盘半边（此前 GC 页私有 focus-visible 拷贝，2026-10-03 并入）：
+   tr[tabindex] 聚焦时描边提示当前位置 */
+.mk-table--click tbody tr:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }
 /* fixed 档：列宽由 <colgroup> 决定，且**每列都给宽度**（文本列用 --mk-col-text），
    使表格铺满容器时余量按各列宽度权重摊到所有列，而不是全堆进某一列（避免出现超宽空列）。
    内容确实很宽时由各列截断上限兜底。 */
@@ -709,6 +712,20 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-minibar__fill[data-tone='ok'] { background: var(--mk-green); }
 .mk-minibar__fill[data-tone='warn'] { background: var(--mk-amber); }
 .mk-minibar__fill[data-tone='bad'] { background: var(--mk-red); }
+
+/* ---- 状态分布条（newui 原型 stageband/sbl；此前 TS/OC/MR 三页逐字 scoped 拷贝，
+   2026-10-03 收敛为全局原语。段条 = 胶囊分色带 + 左聚图例（色块+名+计数）；
+   可点档 .sbl--link / 选中档 .sbl--on 由列表页按需挂。 ---- */
+.stageband { display: flex; gap: 2px; height: 12px; border-radius: 999px; overflow: hidden; background: var(--mk-surface-3); }
+.stageband > span { display: block; height: 100%; transition: width var(--mk-dur) var(--mk-ease-out); }
+.stageband__legend { display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 14px; }
+.sbl { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); }
+.sbl__sw { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); flex: none; }
+.sbl__name { color: var(--mk-muted); }
+.sbl__n { font-weight: 700; font-variant-numeric: tabular-nums; }
+.sbl--link { border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; }
+.sbl--link:hover .sbl__name { color: var(--mk-ink); }
+.sbl--on .sbl__name { color: var(--mk-ink); font-weight: 700; }
 
 /* ----- 业务徽章档位（mk-badge 扩展：字段路由角色 / render / 流转 / 锁定 / core / 完成度五档） -----
    SkillFieldRouting / FieldRoutingTable / Skills 三处收敛共用；色值全部走 token */

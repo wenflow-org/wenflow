@@ -134,8 +134,8 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(w.findAll('tbody tr').length).toBe(1);
     expect(w.find('tbody').text()).toContain('完成的目标摘要');
 
-    // 摘要列带省略样式
-    expect(w.find('.oc-subject').exists()).toBe(true);
+    // 摘要列带省略样式（2026-10-03 方言收敛：oc-subject 私有类退役 → 共享 mk-cell-text）
+    expect(w.find('.mk-cell-text').exists()).toBe(true);
 
     w.unmount();
   });
@@ -187,7 +187,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(diffTitles[2]).toContain('原始记录');
 
     // 时长：有值带 ~，无值给 —
-    expect(w.findAll('.oc-hours').map((e) => e.text())).toEqual(['~21h', '—', '~9h']);
+    expect(w.findAll('td.mk-num').map((e) => e.text())).toEqual(['~21h', '—', '~9h']);
     // 数字列右对齐（表头 mk-th--right + 单元格 mk-num）
     expect(w.findAll('thead th').some((t) => t.text().includes('时长') && t.classes().includes('mk-th--right'))).toBe(true);
 
@@ -204,7 +204,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await nextTick();
 
     // 行点击（原型 tr data-action="open-path" → renderPathDetail）
-    await w.find('tbody tr.oc-row').trigger('click');
+    await w.find('tbody tr').trigger('click');
     await nextTick();
     expect(subPage.value).toMatchObject({ view: 'path', id: 'lp_a' });
     // 不再渲染抽屉（结构详情整体退役）
@@ -212,13 +212,13 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
 
     // 操作列「详情」文字钮 = 同一下钻目标
     closeSubPage();
-    await w.find('tbody tr.oc-row .mk-actions .mk-btn').trigger('click');
+    await w.find('tbody tr .mk-actions .mk-btn').trigger('click');
     await nextTick();
     expect(subPage.value).toMatchObject({ view: 'path', id: 'lp_a' });
 
     // Enter 键盘可达（同 gc-row/ts-row 判例）
     closeSubPage();
-    await w.find('tbody tr.oc-row').trigger('keydown.enter');
+    await w.find('tbody tr').trigger('keydown.enter');
     await nextTick();
     expect(subPage.value).toMatchObject({ view: 'path', id: 'lp_a' });
 

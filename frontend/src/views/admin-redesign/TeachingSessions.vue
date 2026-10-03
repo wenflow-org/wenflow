@@ -183,8 +183,8 @@
       <MockSkeletonTable v-if="refreshing && !rows.length" :cols="9" />
       <div v-else class="mk-table-scroll">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
-             列按内容自然分宽；长内容由 .ts-summary-preview / .mk-cell-main 的 max-width 截断兜底 -->
-        <table v-if="filtered.length" class="mk-table">
+             列按内容自然分宽；长内容由 .ts-summary(.mk-cell-sub) / .mk-cell-main 的 max-width 截断兜底 -->
+        <table v-if="filtered.length" class="mk-table mk-table--click">
           <thead>
             <tr>
               <th
@@ -243,7 +243,7 @@
                   <span class="mk-cell-sub" :title="taskTypeTitle(r.taskType)">{{ r.subject }} · {{ taskTypeText(r.taskType) }}</span>
                   <span
                     v-if="r.wrapup?.topicSummary"
-                    class="ts-summary-preview"
+                    class="mk-cell-sub ts-summary"
                     :title="r.wrapup.topicSummary"
                   >{{ r.wrapup.topicSummary }}</span>
                 </div>
@@ -847,18 +847,9 @@ defineExpose({ refreshNow })
 </script>
 
 <style scoped>/* 嵌入模式（宿主学习会话页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
-.ts-embedded { flex: 1; min-height: 0; overflow: hidden; }/* 总结预览行（P1-2）：单行 ellipsis + hover 全文，对齐 Intercom 最后消息预览 */
-.ts-summary-preview {
-  display: block;
-  max-width: 320px;
-  margin-top: 3px;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: help;
-}.ts-summary-preview::before { content: '📝 '; opacity: 0.7; }.ts-row { cursor: pointer; position: relative; }/* 关注度行首色条（P0-5）：高关注红 / 中关注琥珀 / 低关注透明——扫视被红色拉住 */
+.ts-embedded { flex: 1; min-height: 0; overflow: hidden; }/* 总结预览行（P1-2）：副行语义走 .mk-cell-sub（截断/灰阶原语承担）；页私有只留 help 悬停 + emoji 前缀 */
+.ts-summary { cursor: help; }
+.ts-summary::before { content: '📝 '; opacity: 0.7; }
 .ts-row--att-high { box-shadow: inset 3px 0 0 var(--mk-red); }.ts-row--att-medium { box-shadow: inset 3px 0 0 var(--mk-amber); }/* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
 .ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
 .ts-tags { display: flex; gap: 6px; margin-top: 2px; }/* 卡内工具条（原型 .toolbar：左右 chips + grow，底边框分隔表头）：两组筛选 chips 同行 */
@@ -905,11 +896,8 @@ defineExpose({ refreshNow })
   color: var(--mk-red);
   font-size: var(--mk-fs-micro);
   font-weight: 600;
-}/* ===== 状态分布条（newui 原型 stageband/sbl 原样移植；token 映射：
-   --surface-3→--mk-surface-3、--dur/--ease→--mk-dur/--mk-ease-out、
-   --fs-micro→--mk-fs-micro、--muted→--mk-muted、sbl__sw 3px→--mk-radius-xs）===== */
-.ts-bandcard__body { padding: 12px 16px 16px; }.stageband { display: flex; gap: 2px; height: 12px; border-radius: 999px; overflow: hidden; background: var(--mk-surface-3); }.stageband > span { display: block; height: 100%; transition: width var(--mk-dur) var(--mk-ease-out); }.stageband__legend { /* 左聚（2026-10-03）：auto-fit 1fr 在宽屏把图例拉散满行，改 flex 固定列距 */ display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 14px; }.sbl { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); }.sbl__sw { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); flex: none; }.sbl__name { color: var(--mk-muted); }.sbl__n { font-weight: 700; font-variant-numeric: tabular-nums; }/* legend 可点档（button 形态的 .sbl）：reset 原生按钮外观，选中档高亮 */
-.sbl--link { border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; }.sbl--link:hover .sbl__name { color: var(--mk-ink); }.sbl--on .sbl__name { color: var(--mk-ink); font-weight: 700; }/* 4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
+}/* 状态分布条样式已升全局原语（mk-primitives .stageband/.sbl，2026-10-03 三页拷贝收敛）。
+   .ts-bandcard__body 保留页私有（卡体 padding）。4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {
 }/* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {
