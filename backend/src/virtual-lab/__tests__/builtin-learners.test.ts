@@ -14,10 +14,10 @@ describe('builtin-learners 预制虚拟学习者', () => {
   const loaded = loadBuiltinLearnerPresets();
 
   it('预制文件加载成功且无校验诊断', () => {
-    // v4 语料（2026-09-27）：退役 retiree-phone-photography；新增 retiree-xiangqi-openings、
-    // backend-eng-distributed、civil-service-onsite、fatty-liver-turnaround、mom-restart-job、
-    // fund-loss-rebalance ⇒ 14 → 19
-    expect(loaded.presets.length).toBe(19);
+    // 2026-10-02「预设收编」（1b24e5a1）把语料收敛为 9 条在役角色（study/work 两类目标），
+    // 此前 v4 的 19 条扩测语料整体退役。这里按现役文件断言条数；
+    // 新增/退役角色时同步该数字（文件仍是真源，diagnostics 必须为空）。
+    expect(loaded.presets.length).toBe(9);
     expect(loaded.diagnostics).toEqual([]);
   });
 
@@ -32,13 +32,13 @@ describe('builtin-learners 预制虚拟学习者', () => {
     }
   });
 
-  it('覆盖四类 sourceType 与五个 goalType', () => {
+  it('sourceType / goalType 都在枚举契约内（不再断言四类全覆盖，收编后为 study/work）', () => {
+    const SOURCE_TYPES = new Set(['work', 'life', 'study', 'self_management']);
+    const GOAL_TYPES = new Set(['problem_driven', 'foundation_building', 'project_based', 'exam_prep', 'interest_exploration']);
     const sourceTypes = new Set(loaded.presets.map((p) => p.sourceType));
     const goalTypes = new Set(loaded.presets.map((p) => p.goalType));
-    expect(sourceTypes).toEqual(new Set(['work', 'life', 'study', 'self_management']));
-    expect(goalTypes).toEqual(
-      new Set(['problem_driven', 'foundation_building', 'project_based', 'exam_prep', 'interest_exploration'])
-    );
+    for (const value of sourceTypes) expect(SOURCE_TYPES.has(value)).toBe(true);
+    for (const value of goalTypes) expect(GOAL_TYPES.has(value)).toBe(true);
   });
 
   it('内容哈希稳定，且随内容变化', () => {

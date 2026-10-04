@@ -59,9 +59,12 @@ describe('模拟时钟接线审计（防退化）', () => {
     expect(schedulers).toMatch(/simulated-day-scheduler/);
   });
 
-  it('评审为独立旁路：评审失败按 accept 处理，不阻断 Learn', () => {
+  it('评审不再是 Learn 的门禁：resolvePathReview 自动接受并直进课堂（2026-10-01 拍板）', () => {
+    // 原断言钉的是「评审失败按 accept 兜底（review-failed-non-blocking）」；2026-10-01
+    // 移除 Path 评审门禁后该分支整体消失，语义升级为「Path 生成即视为接受」。断言随之改钉
+    // 新语义的代码标记，保持「评审不阻断 Learn」这一守卫意图不变。
     const text = read('coordinators/simulation.path-phase.ts');
-    expect(text).toMatch(/review-failed-non-blocking/);
+    expect(text).toMatch(/review-gate-removed-auto-accept/);
   });
 
   it('任务结算的业务时间戳走模拟时钟（不再落真墙钟）', () => {

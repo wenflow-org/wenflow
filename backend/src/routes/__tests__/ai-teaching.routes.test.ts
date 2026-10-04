@@ -14,6 +14,9 @@ const mockTeachingSessionRepository = {
   assertOwnership: jest.fn(),
   findLatestSession: jest.fn(),
   findCompletionPendingSession: jest.fn(),
+  // 路由 2026-10-02 起在开课前先做「完课死锁自愈」探测（findStuckFinalizingSession）；
+  // 默认 null = 无卡住会话，测试沿用正常开课路径。
+  findStuckFinalizingSession: jest.fn(),
 };
 
 const mockLearningService = {
