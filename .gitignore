@@ -295,3 +295,6 @@ skills-lock.json
 
 # 版权语料（含版权书；仅供本地跑批/演示，不入库）
 text/
+
+# v4 渲染层审计原始结果（可重跑：node scripts/v4-ui-audit.mjs）
+scripts/v4-ui-audit-results/
