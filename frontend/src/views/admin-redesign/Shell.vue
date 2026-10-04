@@ -213,17 +213,10 @@
             <span class="mshell__user-name">{{ adminName }}</span>
           </button>
           <div v-if="userMenuOpen" class="mshell__user-menu" role="menu">
-            <!-- 账户菜单（原型 2772-2776：登录页预览 / 账户设置 / 退出登录）。
-                 登录页预览与账户设置是导航项（.mshell__user-nav），退出登录是动作项
-                 （.mshell__user-item，销毁当前会话）——语义分组不同故类名区分。 -->
-            <button type="button" role="menuitem" class="mshell__user-nav" @click="openLoginPreview">
-              <Shield :size="15" :stroke-width="1.75" aria-hidden="true" />
-              <span>登录页预览</span>
-            </button>
-            <button type="button" role="menuitem" class="mshell__user-nav" @click="openAccountSettings">
-              <Users :size="15" :stroke-width="1.75" aria-hidden="true" />
-              <span>账户设置</span>
-            </button>
+            <!-- 账户菜单只剩动作项：退出登录（销毁当前会话）。
+                 原型的「登录页预览 / 账户设置」2026-10-05 用户拍板删除——前者是原型残留
+                 （已登录守卫会把新标签页弹回总览，永远看不到登录页），后者开到用户侧
+                 /user/account（管理端无独立账户页，跨侧跳转语义错误，且暗示了不存在的功能） -->
             <button type="button" role="menuitem" class="mshell__user-item" @click="logout">
               <LogOut :size="15" :stroke-width="1.75" aria-hidden="true" />
               <span>退出登录</span>
@@ -251,7 +244,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ChevronLeft, CircleHelp, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, RotateCw, Search, Shield, Sun, Users } from 'lucide-vue-next'
+import { ChevronLeft, CircleHelp, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, RotateCw, Search, Sun } from 'lucide-vue-next'
 import { MOCK_SCENES, type MockSceneDef } from './manifest'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live'
 import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
@@ -526,18 +519,9 @@ async function logout() {
   window.location.replace(`/admin/login?redirect=${back}`)
 }
 
-/* 账户菜单导航项（原型 2772-2776）。
-   两项目标均为真实路由，故以新标签页打开，保留当前管理会话上下文：
-   - /admin/login 为管理端登录页；已登录时守卫会弹回总览（未「记住我」的新标签页则是真实登录页）。
-   - 管理端无独立账户页，账户设置落到用户侧个人中心 /user/account。 */
-function openLoginPreview() {
-  userMenuOpen.value = false
-  window.open('/admin/login', '_blank', 'noopener,noreferrer')
-}
-function openAccountSettings() {
-  userMenuOpen.value = false
-  window.open('/user/account', '_blank', 'noopener,noreferrer')
-}
+/* 账户菜单导航项（原型 2772-2776）已于 2026-10-05 整体删除：登录页预览是原型残留
+   （已登录时守卫弹回总览，功能不可达）；账户设置开到用户侧 /user/account 是跨侧跳转，
+   管理端无对应功能页。菜单只保留「退出登录」动作。 */
 
 /** 置顶独立入口（D5）：pinned 项渲染在分组上方（无组标题） */
 const pinnedScenes = computed(() => MOCK_SCENES.filter((s) => s.pinned))
@@ -996,8 +980,7 @@ watch(
 @media (prefers-reduced-motion: reduce) {
   .mshell__user-menu { animation: none; }
 }
-.mshell__user-item,
-.mshell__user-nav {
+.mshell__user-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1013,10 +996,8 @@ watch(
   cursor: pointer;
   text-align: left;
 }
-.mshell__user-item svg,
-.mshell__user-nav svg { color: var(--mk-muted); flex: none; }
-.mshell__user-item:hover,
-.mshell__user-nav:hover { background: var(--mk-hover-surface); }
+.mshell__user-item svg { color: var(--mk-muted); flex: none; }
+.mshell__user-item:hover { background: var(--mk-hover-surface); }
 
 /* 内容区：应用式布局的唯一滚动容器（顶栏/侧栏固定，内容区内滚；
    列表页用 .mk-page--fill 让表格区内滚、分页器吸底。
