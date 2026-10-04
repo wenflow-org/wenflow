@@ -560,10 +560,14 @@ export async function applyTimeoutWrapupFallback(sessionId: string): Promise<voi
       },
     };
 
+    const hasLearnerEvidence = messages.some((m) => m.role === 'user');
     const guarded = await prisma.teaching_sessions.updateMany({
       where: { id: sessionId, status: 'timeout', wrapup: null },
       data: {
-        wrapup: JSON.stringify(wrapup),
+        // 零证据抑制（全量测试报告 #6）：0 条学员消息的会话（实测 T4/T5 msgs=1/users=0）不写
+        // 「学习记录」——这类记录纯占学员评估页展示位、无任何学习证据；终态清理照常做，
+        // 状态机行为（timeout + 清 pending 检查点）不变。
+        ...(hasLearnerEvidence ? { wrapup: JSON.stringify(wrapup) } : {}),
         ...(() => {
           // 终态清理：移除待处理检查点，避免详情接口残留
           const state = session.teachingState && typeof session.teachingState === 'object'
@@ -581,6 +585,10 @@ export async function applyTimeoutWrapupFallback(sessionId: string): Promise<voi
     });
     if (guarded.count !== 1) {
       logger.info('[AITeaching] 兜底 wrapup 被跳过（会话已离开 timeout 或已有正式总结）', { sessionId });
+      return;
+    }
+    if (!hasLearnerEvidence) {
+      logger.info('[AITeaching] 零证据超时会话跳过兜底学习记录（仅终态清理）', { sessionId });
       return;
     }
     logger.info('[AITeaching] 超时会话已写入兜底学习记录', { sessionId, durationMinutes });
