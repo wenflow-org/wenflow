@@ -20,26 +20,30 @@
          总数与窗口截断口径并进卡头 meta（真触上限才算限定，未触限时窗口=全量）。 -->
 
     <!-- 会话 KPI（2026-10-05 用户拍板「像学习路径页面 kpi 面板，统一面板设计」）：
-         三个运维关注量升 MkKpi 卡带，与下方分布卡（状态比例）分属两个维度不重叠；
-         窗口口径在卡 title 披露。同源 chips（待关注 / 缺总结 / 有建议）随之去计数
-         （学习状态判例：KPI 孪生 pill 不再显数，pill 退为纯筛选开关） -->
+         三个运维关注量升 MkKpi 卡带，与下方分布卡（状态比例）分属两个维度不重叠。
+         用法守全站家法（TokenCost 判例：hint = 一短句可见口径，长解释收 title 悬停；
+         2026-10-05 用户再纠「自己造了一套」——裸瓦片是离群方言）。同源 chips
+         （待关注 / 缺总结 / 有建议）随之去计数（学习状态判例：KPI 孪生 pill 不再显数） -->
     <section v-if="!embedded && rows.length" class="mk-kpi-grid" aria-label="会话运维关注量">
       <MkKpi
         label="需关注"
         :value="attentionCount"
         :tone="attentionCount ? 'warn' : ''"
-        title="关注度高 / 中的会话数（关注度低不计）；最近加载窗口计数，非全量。同源筛选 = 列表卡「待关注」chip"
+        hint="关注度 高 / 中"
+        title="关注度低不计；最近加载窗口计数，非全量。同源筛选 = 列表卡「待关注」chip"
       />
       <MkKpi
         label="缺总结"
         :value="missingWrapupCount"
         :tone="missingWrapupCount ? 'warn' : ''"
-        title="终态（已完成 / 失败 / 超时 / 废弃 / 收尾失败）会话缺课后总结数；非终态缺失是过程态不计。同源筛选 = 列表卡「缺总结」chip"
+        hint="终态会话缺课后总结"
+        title="终态 = 已完成 / 失败 / 超时 / 废弃 / 收尾失败，非终态缺失是过程态不计；最近加载窗口计数，非全量。同源筛选 = 列表卡「缺总结」chip"
       />
       <MkKpi
         label="有建议"
         :value="advisoryCount"
-        title="含教学建议（完课调整 / 复习建议）的会话数；最近加载窗口计数。同源筛选 = 列表卡「有建议」chip（服务端过滤）"
+        hint="含完课调整 / 复习建议"
+        title="最近加载窗口计数，非全量。同源筛选 = 列表卡「有建议」chip（服务端过滤）"
       />
     </section>
 

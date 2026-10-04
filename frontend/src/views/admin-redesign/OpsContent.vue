@@ -11,14 +11,15 @@
     <!-- 路径总量 KPI（2026-10-04 状态条退役：原状态条「共 N 条 · 里程碑 · 任务」读数迁入 MkKpi 卡带；
          生成失败抬红由卡内贴表分布条红段单源承载，不再重复着色） -->
     <section v-if="!embedded" class="mk-kpi-grid" aria-label="路径总量">
+      <!-- hint = 一短句可见口径（全站家法，TokenCost 判例）；长解释收 title 悬停 -->
       <MkKpi
         label="路径总数"
         :value="stats?.total ?? '—'"
         :hint="includeTest ? '含虚拟学习者与测试账号' : '仅真实用户口径'"
         :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户（不含测试账号）；切换页头「含测试」后显示全量并灰标模拟行'"
       />
-      <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" title="已生成路径的里程碑总数（口径随页头「含测试」开关）" />
-      <MkKpi label="任务" :value="stats?.totalTasks ?? '—'" title="已生成路径的任务总数（口径随页头「含测试」开关）" />
+      <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" hint="跨全部已生成路径" title="已生成路径的里程碑总数（口径随页头「含测试」开关）" />
+      <MkKpi label="任务" :value="stats?.totalTasks ?? '—'" hint="挂在里程碑下" title="已生成路径的任务总数（口径随页头「含测试」开关）" />
     </section>
 
     <!-- 路径状态分布：教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」——回到卡上方
