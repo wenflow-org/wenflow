@@ -95,13 +95,19 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     subPage.value = null;
   });
 
-  it('需关注收窄（不含疲劳=中）；「观察」pill 单列疲劳中且可筛选', async () => {
+  it('需关注收窄（不含疲劳=中）；「观察」pill 单列疲劳中且可筛选；pill 计数只留无 KPI 孪生的「观察」', async () => {
     const w = mount(LearnerCenter, { props: { embedded: true, tab: 'state' } });
     await settle();
-    const pillCount = (label: string) =>
-      w.findAll('.mk-pill').find((p) => p.text().includes(label))?.find('.mk-pill__count')?.text();
-    expect(pillCount('需关注')).toBe('3'); // 乙（趋势降）/ 丙（疲劳高）/ 丁（风险摘要）；甲（疲劳中）不再计入
-    expect(pillCount('观察')).toBe('1');
+    const pillCount = (label: string) => {
+      const pill = w.findAll('.mk-pill').find((p) => p.text().includes(label));
+      const c = pill?.find('.mk-pill__count');
+      return c && c.exists() ? c.text() : undefined;
+    };
+    // P2（2026-10-04 全站评审）：pill 计数只留在「观察」上（无 KPI 孪生）；需关注/低置信数字由 KPI 卡单源
+    expect(pillCount('观察')).toBe('1'); // 甲（疲劳中）
+    expect(pillCount('需关注')).toBeUndefined();
+    const riskKpi = w.findAll('.mk-kpi').find((c) => c.text().includes('需关注'));
+    expect(riskKpi!.text()).toContain('3'); // 乙（趋势降）/ 丙（疲劳高）/ 丁（风险摘要）；甲（疲劳中）不再计入
 
     // 点「观察」pill → 只剩甲
     await w.findAll('.mk-pill').find((p) => p.text().includes('观察'))!.trigger('click');
@@ -112,7 +118,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     w.unmount();
   });
 
-  it('KPI「学习者」显「已加载 N」+ 50 上限口径；需关注 hint 收窄为疲劳高', async () => {
+  it('KPI「学习者」显「已加载 N」+ 口径 hint（截断句单源=页状态条）；需关注 hint 收窄为疲劳高', async () => {
     const w = mount(LearnerCenter, { props: { embedded: true, tab: 'state' } });
     await settle();
     const kpi = (label: string) => {
@@ -121,7 +127,9 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
       return card!.text();
     };
     expect(kpi('学习者')).toContain('已加载 4');
-    expect(kpi('学习者')).toContain('50 条');
+    // P2（2026-10-04 全站评审）：「快照单次最多加载 50 条」不再进 hint（单源=People 页状态条）
+    expect(kpi('学习者')).toContain('口径：不含测试账号');
+    expect(kpi('学习者')).not.toContain('50 条');
 
     // 数据层接线后：liveLearnersTotal 有值且 ≠ 窗口数 → 显「N · 已载 M」
     const { liveLearnersTotal } = await import('../live');
@@ -167,13 +175,10 @@ describe('UserAccountPane 账号轴口径（人员详情合并后）', () => {
     w.unmount();
   });
 
-  it('统计条「学习状态」格：liveLearners join 出「趋势 · 疲劳 · 置信」一行读数', async () => {
+  it('统计条「学习状态」格已撤（P2 2026-10-04 全站评审）：趋势/疲劳/置信与同屏 hero pills 逐项复读', async () => {
     const w = await mountPane();
     const cell = w.findAll('.statstrip__stat').find((s) => s.text().includes('学习状态'));
-    expect(cell).toBeTruthy();
-    expect(cell!.text()).toContain('↘ 下降');
-    expect(cell!.text()).toContain('疲劳中');
-    expect(cell!.text()).toContain('置信 72%');
+    expect(cell).toBeUndefined();
     w.unmount();
   });
 

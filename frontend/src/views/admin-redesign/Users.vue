@@ -38,7 +38,9 @@
               :aria-pressed="pill === p.id"
               @click="pill = p.id"
             >
-              {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
+              <!-- P3（2026-10-04 全站评审）：「全部」不显计数——分页器「共 N 条」是总数单源；
+                   下方注释的「计数唯一住在 pills 上」判例指筛选命中数（管理员/在线等 pills 独有事实） -->
+              {{ p.label }}<span v-if="p.count != null && p.id !== 'all'" class="mk-pill__count">{{ p.count }}</span>
             </button>
           </div>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>

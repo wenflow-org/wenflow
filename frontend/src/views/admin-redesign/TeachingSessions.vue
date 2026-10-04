@@ -19,9 +19,12 @@
       :title="tsDashTone === 'bad' ? `异常堆积：失败 / 收尾失败 / 超时合计 ${abnormalSessionCount} ≥ ${TS_BAD_THRESHOLD}（最近 ${LIST_LIMIT} 条窗口），页头转红` : undefined"
     >
       <span class="mk-status__dot"></span>
-      <strong class="mk-status__title" title="需关注 = 关注度高 / 中的会话数（失败 / 超时 / 终态缺总结 / 高优建议）；最近加载窗口计数，非全量">{{ attentionCount }} 个会话需关注（最近 {{ LIST_LIMIT }} 条）</strong>
+      <strong class="mk-status__title" title="需关注 = 关注度高 / 中的会话数（失败 / 超时 / 终态缺总结 / 高优建议）；最近加载窗口计数，非全量">{{ attentionCount }} 个会话需关注</strong>
       <span class="mk-status__sep"></span>
       <span class="mk-status__meta" :title="totalTitle">共 {{ listTotal || rows.length }}</span>
+      <!-- P3（2026-10-04 全站评审）：窗口口径全条只说一次（此前 title/有建议/缺总结各括注一遍）；
+           仅在真触到加载上限时出现——未触限时窗口=全量，无需限定 -->
+      <span v-if="truncated" class="mk-status__meta" :title="`列表仅加载最近 ${LIST_LIMIT} 条，以下窗口计数非全量`">最近 {{ LIST_LIMIT }} 条窗口</span>
       <button
         type="button"
         class="mk-status__meta-link"
@@ -29,10 +32,8 @@
         :aria-pressed="onlyAdvisory"
         title="含教学建议（完课调整 / 复习建议）的会话数；最近加载窗口计数。点击 = 服务端过滤只看有建议（再点取消）"
         @click="toggleOnlyAdvisory"
-      >有建议 {{ advisoryCount }}（最近 {{ LIST_LIMIT }} 条）</button>
-      <span class="mk-status__meta" :title="`终态（已完成 / 失败 / 超时 / 废弃 / 收尾失败）会话缺课后总结数；非终态缺失是过程态不计；最近 ${LIST_LIMIT} 条窗口计数`">缺总结 {{ missingWrapupCount }}（最近 {{ LIST_LIMIT }} 条）</span>
-      <!-- 达 LIST_LIMIT 上限才提示截断（「共 N」的口径见上：后端回 total 才是全量，否则窗口行数） -->
-      <span v-if="truncated" class="mk-status__meta" :title="`列表仅加载最近 ${LIST_LIMIT} 条`">仅显示最近 {{ LIST_LIMIT }} 条</span>
+      >有建议 {{ advisoryCount }}</button>
+      <span class="mk-status__meta" :title="`终态（已完成 / 失败 / 超时 / 废弃 / 收尾失败）会话缺课后总结数；非终态缺失是过程态不计；最近 ${LIST_LIMIT} 条窗口计数`">缺总结 {{ missingWrapupCount }}</span>
       <!-- 右侧快捷钮（原型 .statusbar__act「只看需关注」）：接页面既有「待关注」筛选，
            再点取消；纯导航，不新增数据口径 -->
       <span class="mk-status__actions">

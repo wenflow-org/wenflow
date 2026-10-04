@@ -53,7 +53,9 @@
       <div class="mk-card">
         <div class="mk-card__head">
           <span class="mk-card__title">到期时间轴</span>
-          <span class="mk-card__meta" :title="`复习队列 = 已被提取过的记忆痕迹（extractionCount>0）；窗口为最近 ${traceRows.length} 条痕迹（updatedAt 倒序），非全量`">按到期日聚合的复习点分布 · 共 {{ queueRows.length }} 个 · 最近 {{ traceRows.length }} 条窗口</span>
+          <!-- P3（2026-10-04 全站评审）：「共」字让给全量数（页头 KPI「当前到期」），本卡是
+               窗口口径——与 KPI 同屏两个到期数时不再互相冒充 -->
+          <span class="mk-card__meta" :title="`复习队列 = 已被提取过的记忆痕迹（extractionCount>0）；窗口为最近 ${traceRows.length} 条痕迹（updatedAt 倒序），非全量——全量到期数见页头 KPI「当前到期」`">按到期日聚合的复习点分布 · 窗口内 {{ queueRows.length }} 个 · 最近 {{ traceRows.length }} 条痕迹</span>
         </div>
         <div class="mr-dist__body">
           <div class="stageband" role="img" :aria-label="mrBandAria">

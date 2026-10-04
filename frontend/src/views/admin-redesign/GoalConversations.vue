@@ -50,7 +50,7 @@
         <span class="bucket__v">{{ stats.completionRate }}%</span>
         <span class="bucket__l">完成率</span>
         <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCompletedPct + '%', background: 'var(--mk-blue)' }"></i></span>
-        <span class="bucket__l bucket__foot">已完成 {{ stats.completed }} / 总数 {{ stats.total }}</span>
+        <span class="bucket__l bucket__foot" title="完成率 = 已完成 ÷ 总数；已完成分子见左桶，不在两处复读">口径：已完成 ÷ 总数 {{ stats.total }}</span>
       </div>
     </section>
 
@@ -169,7 +169,9 @@
               <td v-if="!gcHiddenCols.has('stage')">
                 <div class="gc-stage-cell">
                   <div class="gc-stage-cell__head">
-                    <span class="mk-badge" :class="stageBadgeCls(r.stage)" :title="`阶段：${stageText(r.stage) || '—'}`">{{ stageText(r.stage) || '—' }}</span>
+                    <!-- P3（2026-10-04 全站评审）：阶段词与状态词相同（完成态「已完成」/失败态「失败」）
+                         时徽章不重复出词——状态列已承载该词，本列只留进度点 + 日期 -->
+                    <span v-if="statusLabel(r.status) !== stageText(r.stage)" class="mk-badge" :class="stageBadgeCls(r.stage)" :title="`阶段：${stageText(r.stage) || '—'}`">{{ stageText(r.stage) || '—' }}</span>
                     <span v-if="r.timeline" class="gc-stage-cell__dots" :title="stageDotsTitle(r)" aria-label="阶段进度">
                       <i v-for="d in GOAL_STAGE_TOTAL" :key="d" class="gc-stage-cell__dot" :class="{ 'is-on': d <= r.stageIndex + 1 }"></i>
                     </span>

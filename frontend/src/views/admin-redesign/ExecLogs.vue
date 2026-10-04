@@ -1,7 +1,7 @@
 <template>
   <div class="mk-page mk-page--fill">
     <!-- 页头（newui/admin pagehead）：页名 + 导出上移；状态条退位为纯状态摘要
-         （总数/失败/成功率/耗时分位/测试入口/筛选标记都是活状态，留状态条） -->
+         （成功率/耗时分位/测试入口/筛选标记留状态条；总数=分页器单源、失败=告警条+pill，2026-10-04 撤） -->
     <MkPageHead title="执行日志" sub="Skill 执行日志、调用 Trace 与失败定位">
       <template #actions>
         <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注；无数据时禁用 -->
@@ -10,8 +10,10 @@
     </MkPageHead>
     <div class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
-      <span class="mk-status__meta">共 {{ liveLogsTotal }} 条</span>
-      <span v-if="logs.length" class="mk-status__meta">失败 {{ errCount }} · 成功率 {{ successRate }}%</span>
+      <!-- P2（2026-10-04 全站评审）：撤「共 N 条」（分页器单源，判例=AuditLogs「总数在分页 foot
+           单源可见」）与「失败 N」（错误告警条 + 失败 pill 已各念一遍，失败 pill 且可点筛选）；
+           状态条保留成功率/耗时分位/测试入口/筛选徽章 -->
+      <span v-if="logs.length" class="mk-status__meta">成功率 {{ successRate }}%</span>
       <span v-if="logs.length" class="mk-status__meta mono" :title="'延迟分位（仅成功日志）：P50 = 中位耗时 · P99 = 99% 请求耗时'">耗时 P50 {{ latencyP50 }} · P99 {{ latencyP99 }}<template v-if="latencySampled">（样本估算）</template></span>
       <!-- 测试入口常驻：即使计数为 0（或「仅看测试」态查空）也保持可点，否则切过去后失去切回入口 -->
       <button

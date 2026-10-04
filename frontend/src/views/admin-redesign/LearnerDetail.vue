@@ -31,7 +31,9 @@
 
     <!-- 状态条（原型 renderLearnerDetail 的 statstrip：hero 与 subtabs 之间的一行四格读数）。
          全部来自已加载的 Detail：进度/阶段/任务/最近动态窗口。 -->
-    <section class="mk-card">
+    <!-- P2（2026-10-04 全站评审）：页级学习轴 statstrip 在「账号与许可」页签下不渲染——
+         路径进度/阶段/任务是学习轴词汇，与账号轴无关；且该页签下它与账号条同屏叠两条同形统计条 -->
+    <section v-if="tab !== 'account'" class="mk-card">
       <div class="statstrip" role="list" aria-label="学习者概览">
         <div class="statstrip__stat" role="listitem">
           <span class="statstrip__label">路径进度</span>
@@ -70,15 +72,13 @@
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">当前进度</h3>
-            <span class="mk-badge mk-badge--info" :title="pctTitle">{{ d.pct }}%</span>
-            <!-- 路径下钻：进路径详情二级页（原型「学习者详情 → 路径」同款；无真实 pathId 时隐藏） -->
+            <!-- P2（2026-10-04 全站评审）：卡头 0% badge 与阶段/「正在做」两行撤——正上方 statstrip
+                 已逐项承载同三个事实（0% / 阶段 / 任务），卡内只留增量：路径名 + 里程碑分母 + 进度条 -->
             <button v-if="currentPathId" type="button" class="mk-link" @click="openPathDetail">查看路径结构 →</button>
           </div>
           <div class="ld-progress">
             <strong>{{ d.path }}</strong>
-            <span class="ld-progress__stage">{{ d.stage }}</span>
             <span class="mk-minibar ld-progress__bar"><i class="mk-minibar__fill" :style="{ width: d.pct + '%' }"></i></span>
-            <p class="ld-progress__task">正在做：{{ d.task || '—' }}</p>
             <p v-if="milestoneTasks" class="ld-progress__task">当前里程碑：已完成 {{ milestoneTasks.done }}/{{ milestoneTasks.total }} 个任务</p>
           </div>
         </section>
@@ -2031,7 +2031,7 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 .ld-progress { padding: 16px; display: grid; gap: 8px; }
 .ld-progress strong { font-size: var(--mk-fs-emphasis); }
-.ld-progress__stage { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+
 /* 进度条统一走 .mk-minibar（shared.css）；本类只保留外边距 */
 .ld-progress__bar { margin: 4px 0; }
 .ld-progress__task { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
@@ -2401,7 +2401,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-none { font-size: var(--mk-fs-body); }
   .mk-row__sub { font-size: var(--mk-fs-body); }
   .ld-progress strong { font-size: var(--mk-fs-emphasis); }
-  .ld-progress__stage, .ld-progress__task { font-size: var(--mk-fs-body); }
+  .ld-progress__task { font-size: var(--mk-fs-body); }
   .ld-concept-label { font-size: var(--mk-fs-micro); }
   .ld-concept { font-size: var(--mk-fs-body); }
   .ld-bar__head strong { font-size: var(--mk-fs-body); }
@@ -2440,7 +2440,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   /* zoom 1.15 档：字号沿用 2000 档的基础上再升一档，对齐 mk 体系 2800（17px 级） */
   .ld-none { font-size: var(--mk-fs-body); }
   .ld-progress strong { font-size: var(--mk-fs-emphasis); }
-  .ld-progress__stage, .ld-progress__task { font-size: var(--mk-fs-body); }
+  .ld-progress__task { font-size: var(--mk-fs-body); }
   .ld-concept-label { font-size: var(--mk-fs-micro); }
   .ld-concept { font-size: var(--mk-fs-body); }
   .ld-bar__head strong { font-size: var(--mk-fs-body); }
@@ -2479,7 +2479,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
   .ld-none { font-size: var(--mk-fs-emphasis); }
   .ld-progress strong { font-size: 24px; }
-  .ld-progress__stage, .ld-progress__task { font-size: var(--mk-fs-emphasis); }
+  .ld-progress__task { font-size: var(--mk-fs-emphasis); }
   .ld-concept-label { font-size: var(--mk-fs-body); }
   .ld-concept { font-size: var(--mk-fs-emphasis); }
   .ld-bar__head strong { font-size: var(--mk-fs-emphasis); }

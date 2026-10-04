@@ -130,8 +130,10 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     expect(status.text()).toContain('共 0');
     expect(status.text()).toContain('有建议 0');
     expect(status.text()).toContain('缺总结 0');
-    // P1#4 口径括注：需关注 / 有建议 / 缺总结三个窗口计数就地标注「（最近 1000 条）」
-    expect(status.text()).toContain('（最近 1000 条）');
+    // P1#4 口径括注 → P3（2026-10-04 全站评审）收敛：逐项括注撤除，窗口口径只在触上限时
+    // 以一枚「最近 1000 条窗口」meta 出现（本用例 0 行未触限，不出现）
+    expect(status.text()).not.toContain('（最近 1000 条）');
+    expect(status.text()).not.toContain('条窗口');
     // P1#4 兜底诚实化：后端未回 total（mock 空响应）时「共 N」退化为窗口行数，title 不得声称全量
     const totalMeta = status.findAll('.mk-status__meta').find((el) => el.text().startsWith('共 '))!;
     expect(totalMeta).toBeTruthy();

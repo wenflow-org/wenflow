@@ -111,7 +111,7 @@
             <!-- 原型 .sub 行：一句话说明该服务域是什么（口径同后端 base 分组语义）+ 真实检查项数 -->
             <span class="service__sub">{{ serviceDesc(card) }}</span>
             <div class="service__metrics">
-              <span>检查 <b>{{ card.total }}</b></span>
+              <!-- P3（2026-10-04 全站评审）：总检查数撤——sub 行「检查项 N 个」已承载（同卡双写） -->
               <span>正常 <b>{{ card.ok }}</b></span>
               <span>需关注 <b>{{ card.attention }}</b></span>
               <span v-if="card.info">观测 <b>{{ card.info }}</b></span>
@@ -149,6 +149,8 @@
           <span class="mk-card__meta">{{ feedWindow }}</span>
         </div>
         <div class="feed">
+          <!-- P3（2026-10-04 全站评审）：行内时间列撤——后端检查项无逐项时间，每行都渲染同一
+               generatedAt（与卡头「截至 HH:mm」N+1 复读）；时间窗唯一住在卡头 meta -->
           <button
             v-for="item in feedItems"
             :key="item.id"
@@ -157,7 +159,6 @@
             :title="`${feedDesc(item)}（点击查看该检查详情）`"
             @click="jump(item.id)"
           >
-            <span class="feedrow__time">{{ feedTime }}</span>
             <span class="feedrow__grow">
               <span class="feedrow__title">
                 <!-- 原型 feedrow：标题前是 statusPill（.pill→mk-badge 词汇映射），不再裸圆点 -->
@@ -168,7 +169,6 @@
             </span>
           </button>
           <div v-if="!feedItems.length" class="feedrow feedrow--ok">
-            <span class="feedrow__time">{{ feedTime }}</span>
             <span class="feedrow__grow">
               <span class="feedrow__title">
                 <i class="feedrow__dot feedrow__dot--ok"></i>
@@ -545,7 +545,6 @@ function hhmm(iso: string | undefined): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${p(d.getHours())}:${p(d.getMinutes())}`
 }
-const feedTime = computed(() => hhmm(displayReport.value?.generatedAt))
 /** 卡头时间窗：报告生成时刻 + 相对时间（timeAgo 与顶栏同源） */
 const feedWindow = computed(() => {
   const iso = displayReport.value?.generatedAt
@@ -822,7 +821,6 @@ defineExpose({ refresh })
 .feedrow--link { width: 100%; background: none; border: 0; border-bottom: 1px solid var(--mk-line); font: inherit; cursor: pointer; border-radius: var(--mk-radius-sm); }
 .feedrow--link:hover { background: var(--mk-btn-hover-bg); }
 .feedrow--ok .t { color: var(--mk-green); }
-.feedrow__time { width: 62px; flex: none; color: var(--mk-faint); font-size: var(--mk-fs-micro); font-family: var(--mk-mono); font-variant-numeric: tabular-nums; }
 .feedrow__grow { min-width: 0; flex: 1; display: grid; gap: 2px; }
 .feedrow__title { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .feedrow__title .t { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -23,7 +23,10 @@
               :aria-pressed="pill === p.id"
               @click="pill = p.id"
             >
-              {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
+              {{ p.label }}<span v-if="p.id === 'watch'" class="mk-pill__count">{{ p.count }}</span>
+              <!-- P2（2026-10-04 全站评审）：pill 计数只留在没有 KPI 孪生的「观察」上（判例=Users：
+                   筛选命中数是 pills 独有事实才保留）；需关注/低置信/全部的数字已由分析层 KPI 卡
+                   与「学习者」卡承载，pill 退为纯筛选开关，同组数字不再同屏念两遍 -->
             </button>
           </div>
           <MkFilterSearch v-model="keyword" style="width: 200px;" placeholder="搜索名称 / 邮箱 / ID" />
@@ -43,10 +46,9 @@
             storage-key="wf_learner_hidden_cols"
             v-model:hidden="lcHiddenCols"
           />
-          <!-- 后端学习者域 limit=50 截断无提示（live.ts 不动）：列表满 50 时给出静态口径说明。
-               P2 措辞纠偏：筛选器筛不动后端窗口，原文案「可按筛选缩小范围」超卖——搜索只在已加载的 50 人内命中 -->
-          <span v-if="rows.length >= 50" class="mk-card__meta" title="学习者快照单次最多加载 50 条，搜索/筛选只在已加载范围内命中">仅加载前 50 位，搜索限已加载 50 人</span>
-          <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 人</span>
+          <!-- 后端学习者域 limit=50 截断口径单源住在 People 页状态条（P2 2026-10-04 全站评审：
+               此处卡头同句与「50 / 50 人」撤——截断说明不在同屏念三遍） -->
+          <span v-if="filtered.length !== rows.length" class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 人</span>
         </div>
       </div>
 
@@ -67,11 +69,12 @@
              不随下方 pill / 搜索筛选变化（与原型从全体学习者聚合一致） -->
         <div v-if="rows.length" class="lc-analytics">
           <section class="mk-kpi-grid" aria-label="学习状态概览">
-            <!-- P1#16 数据层已接线（live.ts liveLearnersTotal）：有 total 显「N · 已载 M」，仅窗口时显「已加载 N」 -->
+            <!-- P1#16 数据层已接线（live.ts liveLearnersTotal）：有 total 显「N · 已载 M」，仅窗口时显「已加载 N」。
+                 P2（2026-10-04 全站评审）：hint 撤截断句（单源=页状态条），只留口径差异 -->
             <MkKpi
               label="学习者"
               :value="learnerTotalText"
-              :hint="`快照单次最多加载 50 条${rows.length >= 50 ? '（已到上限，可能还有更多）' : ''} · 口径：${includeTest ? '含测试账号' : '不含测试账号'}${learnerTotal == null ? '；全量总数接口未返回' : ''}`"
+              :hint="`口径：${includeTest ? '含测试账号' : '不含测试账号'}${learnerTotal == null ? '；全量总数接口未返回' : ''}`"
             />
             <!-- P1#17：需关注收窄为真异常（趋势降 ∨ 疲劳高 ∨ 有风险摘要）；
                  常态档「疲劳=中」拆到 pills 的「观察」，不再把需关注撑爆 -->

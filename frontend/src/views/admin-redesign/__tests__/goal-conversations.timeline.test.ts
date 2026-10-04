@@ -106,7 +106,8 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     });
     const wrapper = await mountLive();
     const cell = wrapper.find('.gc-stage-cell');
-    expect(cell.text()).toContain('已完成');
+    // P3（2026-10-04 全站评审）：完成态阶段词与状态列同词，徽章不再出词——点条 + 日期承载
+    expect(cell.text()).not.toContain('已完成');
     expect(cell.text()).toContain('08-14');
     expect(cell.find('.mk-cell-sub').attributes('title')).toContain('创建 08-12 → 已完成 08-14');
     expect(cell.findAll('.gc-stage-cell__dot.is-on')).toHaveLength(4);

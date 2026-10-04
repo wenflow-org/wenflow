@@ -156,9 +156,9 @@ describe('Users 客户端分页（mk-pagination）', () => {
 
   it('筛选强化：pill 计数 + 搜索清空 × + 过滤态「清除筛选」', async () => {
     const w = await mountUsers();
-    // pill 计数：全部 37、管理员 1（makeUser 仅 i=1 为 admin）
+    // pill 计数：「全部」不显计数（P3 2026-10-04 全站评审：总数单源=分页器）、管理员 1（makeUser 仅 i=1 为 admin）
     const pills = w.findAll('.mk-pill');
-    expect(pills.find((p) => p.text().includes('全部'))?.find('.mk-pill__count').text()).toBe('37');
+    expect(pills.find((p) => p.text().includes('全部'))?.find('.mk-pill__count').exists()).toBe(false);
     expect(pills.find((p) => p.text().includes('管理员'))?.find('.mk-pill__count').text()).toBe('1');
     // 无筛选态：不显示清空 × 与「清除筛选」
     expect(w.find('.mk-search__clear').exists()).toBe(false);

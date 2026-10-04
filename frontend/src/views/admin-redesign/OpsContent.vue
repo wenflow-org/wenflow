@@ -14,23 +14,8 @@
     </MkPageHead>
     <div v-if="!embedded" class="mk-status" :class="`mk-status--${dashTone}`">
       <span class="mk-status__dot"></span>
-      <button
-        type="button"
-        class="mk-status__meta-link"
-        :class="{ 'mk-status__meta-link--on': statusFilter === 'active' }"
-        title="点击筛选「学习中」路径"
-        @click="statusFilter = statusFilter === 'active' ? '' : 'active'"
-      >学习中 {{ byStatus('active') }}</button>
-      <button
-        type="button"
-        class="mk-status__meta-link"
-        :class="{ 'mk-status__meta-link--on': statusFilter === 'completed' }"
-        title="点击筛选「已完成」路径"
-        @click="statusFilter = statusFilter === 'completed' ? '' : 'completed'"
-      >已完成 {{ byStatus('completed') }}</button>
-      <!-- 生成失败（P1#9/#10 顺手）：口径 = 服务端全量计数（stats），与下方 pill 的窗口计数不同源；
-           「可重规划」文案对齐 OpsHub 待办（详情页有重规划动作），点击就地筛出失败行——
-           重规划端点在后端不做（登记），详情页已有动作，入口前置到这里不再断链 -->
+      <!-- P2（2026-10-04 全站评审）：四态计数撤除——与下方 pills（窗口口径）/分布卡比例条（全量）
+           同屏三层复读；筛选唯一入口=pills，状态条回归纯口径句 + 「生成失败」红链（需关注结论位） -->
       <button
         v-if="byStatus('failed') > 0"
         type="button"
@@ -38,7 +23,6 @@
         title="点击只看生成失败的路径；失败可在路径详情页重规划（该计数为服务端全量口径）"
         @click="statusFilter = statusFilter === 'failed' ? '' : 'failed'"
       >生成失败 {{ byStatus('failed') }}（可重规划）</button>
-      <span v-if="byStatus('archived') > 0" class="mk-status__meta">已下线 {{ byStatus('archived') }}</span>
       <span class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ stats?.total ?? '—' }} 条 · 里程碑 {{ stats?.totalMilestones ?? '—' }} · 任务 {{ stats?.totalTasks ?? '—' }}</span>
     </div>
 
@@ -52,11 +36,9 @@
     <section v-if="!embedded && pathBandReady" class="mk-card">
       <div class="mk-card__head">
         <span class="mk-card__title">路径状态分布</span>
-        <span class="mk-card__meta">按状态聚合 · 共 {{ stats?.total ?? 0 }} 条</span>
-        <div class="mk-card__head-right">
-          <!-- 原型 renderPaths 卡头 card__tools = pill--ok「N 条已完成」（nDone 口径） -->
-          <span class="mk-badge mk-badge--ok" title="状态 completed 的路径数（服务端全量口径）">{{ byStatus('completed') }} 条已完成</span>
-        </div>
+        <!-- P2（2026-10-04 全站评审）：卡头「共 N 条」与「N 条已完成」badge 撤——总数住状态条、
+             分态数字住比例条悬停（title），本卡只做形态呈现不做第二处计数 -->
+        <span class="mk-card__meta">按状态聚合 · 悬停分段看各状态条数</span>
       </div>
       <div class="oc-bandcard__body">
         <div class="stageband">
@@ -71,7 +53,6 @@
           <div v-for="seg in pathBand" :key="seg.key" class="sbl">
             <span class="sbl__sw" :style="{ background: seg.tone }"></span>
             <span class="sbl__name">{{ seg.name }}</span>
-            <span class="sbl__n">{{ seg.n }}</span>
           </div>
         </div>
       </div>
@@ -81,13 +62,12 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <!-- P1#9 口径标注：pill 计数 = 当前列表窗口（最近 1000 条，随「含模拟」切换），
-               与状态条/分布卡的 stats 全量口径不同源——此前两组「学习中 N」同屏无标注，
-               切含模拟后 pill 变、stats 不变，读作数据丢失。选择就地标注而非「切含模拟时重拉
-               stats」：getStats 端点不接受 includeTest 参数（adminApi.ts），重拉拿回的还是
-               同一份全量计数，同步是无效请求；pill 是本地筛选控件，计数本来就该与所筛列表
-               （窗口）一致，口径讲清楚即可。 -->
-          <div class="mk-pills" title="pill 计数 = 当前列表窗口内计数（最近 1000 条，随「含模拟」切换），非全量；全量口径见状态条与「路径状态分布」卡">
+          <!-- P1#9 口径标注 / P2（2026-10-04 全站评审）：pills 是全页唯一筛选面与分态计数位——
+               pill 计数 = 当前列表窗口（最近 1000 条，随「含模拟」切换），与 stats 全量口径不同源
+               （getStats 端点不接受 includeTest 参数，重拉拿回的还是同一份全量计数，同步是无效
+               请求；pill 是本地筛选控件，计数本就该与所筛列表一致）。此前状态条/分布卡与 pills
+               同屏三层复读同组数字，已收敛：状态条只留口径句+生成失败红链，分布卡只留比例条。 -->
+          <div class="mk-pills" title="pill 计数 = 当前列表窗口内计数（最近 1000 条，随「含模拟」切换），非全量；全量分布见「路径状态分布」卡（悬停分段看条数）">
             <button
               v-for="p in statusPills"
               :key="p.id"

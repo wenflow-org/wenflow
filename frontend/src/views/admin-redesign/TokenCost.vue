@@ -153,7 +153,7 @@
         <div class="mk-card__head">
           <h3 class="mk-card__title">按 Skill 成本明细</h3>
           <div class="mk-card__head-right">
-            <span class="mk-card__meta">{{ bySkill.length }} 个<template v-if="!skillAll && bySkill.length > skillLimit"> · 显示前 {{ skillLimit }}</template></span>
+            <span class="mk-card__meta">{{ bySkill.length }} 个<template v-if="skillAllUnpriced"> · 均未配置单价（成本列以 — 表示）</template><template v-else-if="!skillAll && bySkill.length > skillLimit"> · 显示前 {{ skillLimit }}</template></span>
             <button
               v-if="bySkill.length > skillLimit"
               type="button"
@@ -176,7 +176,7 @@
             <span class="tc-st__name" role="cell"><strong :title="r.display || r.key">{{ r.display || r.key }}</strong></span>
             <span class="tc-st__num" role="cell">{{ r.calls }}</span>
             <span class="tc-st__num" role="cell">{{ fmtTokens(r.tokens) }}</span>
-            <span class="tc-st__cost" role="cell">{{ skillRowCost(r) }}</span>
+            <span class="tc-st__cost" role="cell">{{ skillAllUnpriced ? '—' : skillRowCost(r) }}</span>
             <span class="tc-st__share" role="cell">
               <span class="mk-minibar"><span class="mk-minibar__fill" :style="{ width: skillShareW(r) }"></span></span>
               <span class="tc-st__pct">{{ skillSharePct(r) }}</span>
@@ -312,6 +312,11 @@ function skillRowCost(r: SkillCostRow): string {
   if ((r.callsMissingPricing ?? 0) > 0) return '单价未配置'
   return '—'
 }
+/** P2（2026-10-04 全站评审）：全部 Skill 均未定价时，成本列整列同词「单价未配置」收敛为
+    卡头 meta 一句状态（行内显「—」，表尾 note 已有解释不丢信息）；混合定价时恢复逐行显示。 */
+const skillAllUnpriced = computed(() =>
+  bySkill.value.length > 0 && bySkill.value.every((r) => typeof r.usd !== 'number')
+)
 function skillShareNum(r: SkillCostRow): number {
   const total = skillCostTotal.value
   if (total > 0) return typeof r.usd === 'number' ? (r.usd / total) * 100 : 0
@@ -353,7 +358,8 @@ const costHintShort = computed(() => {
   if (costUsd.value !== null) return `近 ${days.value} 天 · 已定价 ${costPricedCalls.value} 次`
   if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `近 ${days.value} 天无调用`
   const n = missingPricingModels.value.length
-  return `近 ${days.value} 天 · 单价未配置${n > 0 ? ` · 待补 ${n} 个模型单价` : ''} · 点击去模型接入`
+  // P2（2026-10-04 全站评审）：「单价未配置」已在卡值位出现，hint 不再复读同一状态词
+  return `近 ${days.value} 天${n > 0 ? ` · 待补 ${n} 个模型单价` : ''} · 点击去模型接入`
 })
 const perCallHintShort = computed(() => {
   if (costLoading.value) return '金额统计中'
@@ -440,8 +446,9 @@ const totalCalls = computed(() => summary.value?.totals.calls ?? 0)
 const failedPct = computed(() =>
   totalCalls.value > 0 ? `${Math.round((failedCalls.value / totalCalls.value) * 100)}%` : '—'
 )
+// P2（2026-10-04 全站评审）：值只给次数，占比单源留在 hint（此前「4%」卡内念两遍）
 const failedCallsText = computed(() =>
-  failedCalls.value > 0 ? `${failedCalls.value} 次（${failedPct.value}）` : '0 次'
+  failedCalls.value > 0 ? `${failedCalls.value} 次` : '0 次'
 )
 const failedHint = computed(() => {
   const win = `近 ${days.value} 天${includeTest.value ? '（含测试流量）' : ''}`

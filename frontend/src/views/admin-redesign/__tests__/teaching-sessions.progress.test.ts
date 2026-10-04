@@ -161,7 +161,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
 });
 
 describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对照）', () => {
-  it('状态条：粗体结论（带窗口括注）+ 缺总结 meta + 「只看需关注」快捷钮（点选接既有待关注筛选）', async () => {
+  it('状态条：粗体结论（窗口口径单源化）+ 缺总结 meta + 「只看需关注」快捷钮（点选接既有待关注筛选）', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -170,8 +170,10 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     });
     const wrapper = await mountLive();
     const status = wrapper.find('.mk-status');
-    // P1#4 口径括注：需关注为窗口计数，就地标注「（最近 1000 条）」
-    expect(status.find('.mk-status__title').text()).toBe('1 个会话需关注（最近 1000 条）');
+    // P3（2026-10-04 全站评审）：逐项窗口括注撤除；未触上限时不显示窗口 meta
+    expect(status.find('.mk-status__title').text()).toBe('1 个会话需关注');
+    expect(status.text()).not.toContain('（最近 1000 条）');
+    expect(status.text()).not.toContain('条窗口');
     expect(status.text()).toContain('缺总结 1');
     const quick = status.find('.mk-status__actions button');
     expect(quick.text()).toBe('只看需关注');

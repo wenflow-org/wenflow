@@ -281,10 +281,10 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('状态条与能力行时间同源：均为「上次探测」且来自快照 checkedAt', async () => {
+  it('探测时间单源：状态条不再带「上次探测」（P3 2026-10-04 复读收敛，卡角 badge 承载）；能力行同源快照 checkedAt', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    expect(wrapper.find('.mk-status').text()).toContain('上次探测');
+    expect(wrapper.find('.mk-status').text()).not.toContain('上次探测');
     await gotoTab(wrapper, '调用与健康');
     expect(wrapper.find('.ac-sec__sub').text()).toContain('最近探测');
     wrapper.unmount();

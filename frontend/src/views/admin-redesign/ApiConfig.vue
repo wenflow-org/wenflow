@@ -17,7 +17,8 @@
         <span class="mk-status__meta" title="服务商 API Key 是否已配置">密钥：{{ apiConfigFailed ? '—' : (keySet ? '已配置' : '未配置') }}</span>
         <span class="mk-status__meta" :title="modelListTitle">模型清单：{{ apiConfigFailed ? '—' : (models.length ? `${models.length} 个` : '未拉取') }}</span>
         <span class="mk-status__meta" :title="routeTitle">默认路由：{{ apiConfigFailed ? '—' : `${routeCount}/3` }}</span>
-        <span v-if="isLive && lastCheckedText" class="mk-status__meta" title="连通性 / 能力探测时间">上次探测：{{ lastCheckedText }}</span>
+        <!-- P3（2026-10-04 全站评审）：「上次探测」撤——连接卡的卡角 badge 已带同一时间
+             （「连接正常 · N 前」），同屏同值念两遍；探测时间语义由卡角单源承载 -->
       </template>
       <template v-else-if="tab === 'overview'">
         <span class="mk-status__meta" title="后端能力注册表（唯一写源）中的模型数">模型：{{ registryCount.models }} 个</span>
@@ -113,7 +114,9 @@
               <!-- fetchError 人话化（P2）：裸 errMsg（HTTP 枚举/堆栈词）对运营不可读——
                    人话一句给动作，错误原文进 title 供排查贴单 -->
               <span v-if="fetchError" :title="`错误原文：${fetchError}`">模型清单拉取失败：请检查服务地址与密钥是否正确、服务商是否可访问，然后点右上角「重新拉取」。</span>
-              <span v-else>模型清单尚未拉取（连接状态：{{ connBadge.text }}）。平台实际在用模型见「模型总览」tab 的解析结果；点击右上角「连接并拉取」获取服务商列表。</span>
+              <!-- P3（2026-10-04 全站评审）：括号内连接状态复读撤——同一张卡头 40px 上方 badge
+                   已承载「连接正常 · N 前」，空态句只说自己没拉清单 -->
+              <span v-else>模型清单尚未拉取。平台实际在用模型见「模型总览」tab 的解析结果；点击右上角「连接并拉取」获取服务商列表。</span>
             </div>
           </div>
         </label>
@@ -691,13 +694,9 @@ const healthSummaryBadge = computed(() => {
   return 'mk-badge--ok'
 })
 
-/** 同页时间源统一：状态条「上次探测」与能力行「最近探测」同源（健康快照 checkedAt），
-    DB lastCheckedAt 仅在快照不可用时兜底——消除「8 分钟前 vs 9 小时前」双写分叉 */
-const lastCheckedText = computed(() => {
-  if (health.value?.checkedAt) return timeAgo(health.value.checkedAt)
-  if (cfg.value?.lastCheckedAt) return timeAgo(cfg.value.lastCheckedAt)
-  return ''
-})
+/* 探测时间单源 = 连接卡卡角 badge（connBadge「N 前」，P3 2026-10-04 撤状态条「上次探测」复读）。
+   同页时间源统一纪律保留：badge 与能力行「最近探测」同源（健康快照 checkedAt），
+   DB lastCheckedAt 仅在快照不可用时兜底——消除「8 分钟前 vs 9 小时前」双写分叉 */
 
 const healthLabel = computed(
   () =>

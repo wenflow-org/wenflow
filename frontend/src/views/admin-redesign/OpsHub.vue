@@ -11,11 +11,12 @@
     <div class="mk-status" :class="hostTone">
       <span class="mk-status__dot"></span>
       <template v-if="tab === 'todo'">
-        <span class="mk-status__meta">待处理反馈 {{ wbLoading ? '…' : (wbErrors.feedback ? '—' : wbPendingFeedback) }}</span>
-        <span class="mk-status__meta" :class="wbFailedPaths > 0 ? 'mk-status__meta--bad' : ''">失败路径 {{ wbLoading ? '…' : (wbErrors.paths ? '—' : wbFailedPaths) }}</span>
-        <span class="mk-status__meta" :class="wbDeadLetters > 0 ? 'mk-status__meta--bad' : ''">死信 {{ wbLoading ? '…' : (wbErrors.dead ? '—' : wbDeadLetters) }}</span>
-        <span class="mk-status__meta">公告 {{ annFailed ? '—' : ann.rows }} 条</span>
-        <span v-if="wbHasError" class="mk-status__meta mk-status__meta--bad" :title="wbErrorText">待办数据加载失败</span>
+        <!-- P2-1（2026-10-04 全站评审）：状态条回归结论句。四组裸计数撤除——同一组数字曾与
+             下方指标卡/行动行/页签角标同屏念 3-4 遍；计数单一来源=指标卡，行动行与页签角标保留。
+             公告口径分家：总条数只住页签角标（announcePillCount），草稿数只住指标卡「草稿公告」。 -->
+        <strong v-if="wbLoading" class="mk-status__title">待办统计更新中…</strong>
+        <strong v-else-if="wbHasError" class="mk-status__title mk-status__meta--bad" :title="wbErrorText">待办数据加载失败</strong>
+        <strong v-else class="mk-status__title">{{ todoConclusion }}</strong>
       </template>
       <template v-else-if="tab === 'feedback'">
         <span class="mk-status__meta">共 {{ domainCount.feedback }} 条反馈</span>
@@ -94,7 +95,8 @@
             <i v-for="s in pathSegments" :key="s.key" :class="`ow-seg--${s.tone}`" :style="{ width: s.pct }" :title="`${s.label} ${s.count}`"></i>
           </div>
           <div v-else-if="pathTotal === 0" class="ow-state__empty">暂无学习路径</div>
-          <div class="ow-state__rows">
+          <!-- P3（2026-10-04 全站评审）：空态时三行 0 计数不再与「暂无…」并存（零信息复读） -->
+          <div v-if="pathTotal > 0" class="ow-state__rows">
             <div v-for="c in pathCards" :key="c.label" class="ow-state__row">
               <span><i class="ow-state__dot" :class="`ow-state__dot--${c.tone || 'muted'}`"></i>{{ c.label }}</span>
               <b :class="{ 'ow-state__bad': c.tone === 'bad' && Number(c.value) > 0 }">{{ c.value }}</b>
@@ -112,7 +114,8 @@
             <i v-for="s in annSegments" :key="s.key" :class="`ow-seg--${s.tone}`" :style="{ width: s.pct }" :title="`${s.label} ${s.count}`"></i>
           </div>
           <div v-else-if="annTotal === 0" class="ow-state__empty">暂无公告</div>
-          <div class="ow-state__rows">
+          <!-- P3：同上，空态只留占位行 -->
+          <div v-if="annTotal > 0" class="ow-state__rows">
             <div v-for="s in annSegments" :key="s.key" class="ow-state__row">
               <span><i class="ow-state__dot" :class="`ow-state__dot--${s.tone}`"></i>{{ s.label }}</span>
               <b>{{ s.count }}</b>
@@ -313,6 +316,16 @@ const statusTone = computed(() =>
       ? 'mk-status--warn'
       : 'mk-status--ok'
 )
+/** P2-1（2026-10-04 全站评审）：待办结论句——只点名非零事项，全零给清零句；
+    数字细节唯一住在下方指标卡（「已清零」逐行状态由行动行承载）。 */
+const todoConclusion = computed(() => {
+  const parts: string[] = []
+  if (wbPendingFeedback.value > 0) parts.push(`待处理反馈 ${wbPendingFeedback.value}`)
+  if (wbFailedPaths.value > 0) parts.push(`失败路径 ${wbFailedPaths.value} 条需重规划`)
+  if (wbDeadLetters.value > 0) parts.push(`死信 ${wbDeadLetters.value} 条待重投`)
+  if (!parts.length) return '运营待办全部已清零'
+  return `${parts.join('、')}，其余已清零`
+})
 /** 宿主状态条基调：待办 tab 沿用三域聚合；其余 tab 按域计数 ok/muted */
 const hostTone = computed(() => {
   if (tab.value === 'todo') return statusTone.value
@@ -505,7 +518,8 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  align-items: start;
+  /* P2-2（2026-10-04 全站评审）：撤 align-items:start——空态分支让右卡天然矮一截时
+     底边悬空 28.9px（先例 42107f8e 同判）；stretch 拉齐，增量由 .ow-state 行距消化 */
 }
 
 /* 运营待办 · 4 张 metricCard（原型 1704-1706 metricCard：label + 24px value + foot）

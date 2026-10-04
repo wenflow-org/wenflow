@@ -25,12 +25,9 @@
           <span class="statstrip__label">{{ s.label }}</span>
           <span class="statstrip__value">{{ s.value }}</span>
         </div>
-        <!-- P1#15 学习状态格：liveLearners join 读数（趋势 · 疲劳 · 置信），join 不到显「—」；
-             完整画像入口已有（hero 右上「查看学习者画像 →」），不重复 -->
-        <div class="statstrip__stat" role="listitem" :title="stateCell.hint">
-          <span class="statstrip__label">学习状态</span>
-          <span class="statstrip__value" :class="{ 'mk-na': !stateCell.line }">{{ stateCell.line || '—' }}</span>
-        </div>
+        <!-- P2（2026-10-04 全站评审）：原 P1#15「学习状态」格撤——趋势/疲劳/置信三事实同屏
+             已由 hero pills 逐项承载，格内是原样复读；学习轴读数也已随页级 statstrip
+             在本页签下不渲染（LearnerDetail）而归位各页签 -->
       </div>
     </section>
 
@@ -141,7 +138,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { subPage, openSubPage } from './store'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
-import { liveUsers, liveLearners, timeAgo, errMsg } from './live'
+import { liveUsers, timeAgo, errMsg } from './live'
 import { adminUsersApi, adminTeachingSessionsApi, adminGoalConversationsApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { statusText } from './statusText'
 import { levelBadgeZh } from './learner-profile'
@@ -622,23 +619,8 @@ async function loadDetail() {
 
 const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
-/* P1#15 判断真空层：统计条四格此前与下方列表完全同源（路径/会话/XP/等级），
-   「他学得怎么样」要再跳一页才知道——从 liveLearners（boot 即拉）按 userId join 出一行读数，
-   把学习者轴入口从 2 跳压到 0 跳；join 不到显「—」并在 title 说明原因 */
-const stateCell = computed<{ line: string; hint: string }>(() => {
-  const l = liveLearners.value.find((x) => x.userId === uid.value)
-  if (!l) {
-    return {
-      line: '',
-      hint: '暂无学习者快照：该用户可能尚未产生学习行为，或不在已加载的快照范围内（快照单次最多 50 人）。完整画像见「画像」页签。'
-    }
-  }
-  const trend = l.trend === 'up' ? '↗ 上升' : l.trend === 'down' ? '↘ 下降' : '→ 稳定'
-  return {
-    line: `${trend} · 疲劳${l.fatigue} · ${l.confidence == null ? '置信未知' : `置信 ${Math.round(l.confidence * 100)}%`}`,
-    hint: `来自学习者快照${l.generatedAt ? `（更新于 ${timeAgo(l.generatedAt)}）` : ''}：趋势=近期表现方向、疲劳=学习负荷、置信=快照把握度（<50% 证据不足）。完整画像见右上「查看学习者画像」。`
-  }
-})
+/* P1#15 的「学习状态」格已撤（P2 2026-10-04 全站评审）：趋势/疲劳/置信与同屏 hero pills
+   逐项复读；学习者轴读数归位 LearnerDetail 页级 statstrip（仅学习轴页签渲染）。 */
 </script>
 
 <style scoped>
