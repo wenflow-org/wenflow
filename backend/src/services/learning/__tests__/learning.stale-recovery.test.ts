@@ -1,6 +1,7 @@
 const mockPrisma: any = {
   path_generation_runs: {
     findMany: jest.fn(),
+    findFirst: jest.fn(),
     updateMany: jest.fn()
   },
   learning_paths: {
@@ -224,6 +225,44 @@ describe('LearningService stale core recovery', () => {
 
     expect(queue).not.toHaveBeenCalled()
     expect((learningService as any).updatePathGenerationStatus).not.toHaveBeenCalled()
+  })
+
+  it('报告 #52：排队撞瞬时 DB 故障（P1008）→ 预算与退避档位不消耗，参照时间保持原值', async () => {
+    const candidate = stageDesignCandidate()
+    mockPrisma.learning_paths.findMany.mockResolvedValue([candidate])
+    jest.spyOn(learningService as any, 'getEnrichmentRetryReferenceTime').mockReturnValue(0)
+    jest.spyOn(learningService as any, 'queuePathEnrichmentRetry').mockRejectedValue(
+      Object.assign(
+        new Error('Operations timed out after `N/A`. The database failed to respond to a query'),
+        { code: 'P1008' }
+      )
+    )
+
+    await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(0)
+
+    const patch = (learningService as any).updatePathGenerationStatus.mock.calls[0][1]
+    // 一次从未真正发出的重试不得消费预算/推进退避
+    expect(patch).not.toHaveProperty('stageDesignRetryCount')
+    expect(patch).not.toHaveProperty('lastStageDesignRetryAt')
+    // 时间门参照点保持原失败时间 → 下一轮轮询按原档位立即重试
+    const originalUpdatedAt = JSON.parse(String(candidate.aiPromptTemplate))._generation.updatedAt
+    expect(patch.updatedAt).toBe(originalUpdatedAt)
+  })
+
+  it('报告 #52：单路径处理失败（DB 查询超时）不再拖垮整轮——其余路径照常重试', async () => {
+    const broken = { ...stageDesignCandidate(), id: 'path-broken', activeGenerationRunId: 'run-broken' }
+    mockPrisma.learning_paths.findMany.mockResolvedValue([broken, stageDesignCandidate()])
+    mockPrisma.path_generation_runs.findFirst
+      .mockRejectedValueOnce(Object.assign(new Error('Operations timed out'), { code: 'P1008' }))
+      .mockResolvedValue(null)
+    jest.spyOn(learningService as any, 'getEnrichmentRetryReferenceTime').mockReturnValue(0)
+    const queue = jest.spyOn(learningService as any, 'queuePathEnrichmentRetry')
+      .mockResolvedValue({ retryCount: 1, runId: 'run-2' })
+
+    await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(1)
+
+    expect(queue).toHaveBeenCalledTimes(1)
+    expect(queue.mock.calls[0][0]).toMatchObject({ id: 'path-1' })
   })
 
   it('追加式自愈：replace 不可用（课堂证据永久冲突）但存在空白阶段 → 走追加通道', async () => {

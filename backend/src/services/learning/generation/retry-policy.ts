@@ -19,6 +19,25 @@ export function getNextEnrichmentRetryDelayMinutes(retryCount: number): number {
   ];
 }
 
+/**
+ * 自动重试「排队」失败的瞬时基础设施故障判别（全量测试报告 #52）。
+ *
+ * 背景：真实卡点 07:48:38 的自动重试**已按档触发**，但排队时撞上 SQLite 查询超时（P1008），
+ * 旧实现把它当作「一次用掉的重试」计数 +1 并把退避推进到 15 分钟档——一次从未真正发出的重试
+ * 白吃预算与退避档位，课堂被多卡 15 分钟以上。此类错误应保持预算与退避档位不变，
+ * 由下一次轮询（60s 后）原地重试。
+ */
+export function isTransientAutoRetryInfrastructureError(error: unknown): boolean {
+  const code = typeof (error as { code?: unknown })?.code === 'string'
+    ? String((error as { code: string }).code)
+    : '';
+  if (code === 'P1008' || code === 'P2024' || code === 'SQLITE_BUSY' || code === 'SQLITE_BUSY_SNAPSHOT') {
+    return true;
+  }
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /database failed to respond|Operations timed out|SQLITE_BUSY|database is locked|write conflict|socket hang up|ECONNRESET|ETIMEDOUT/i.test(message);
+}
+
 export function getEnrichmentRetryReferenceTime(
   path: { updatedAt: Date },
   generationStatus: ParsedPathGenerationStatus | null

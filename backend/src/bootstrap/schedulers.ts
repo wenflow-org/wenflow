@@ -95,9 +95,20 @@ export function startEnrichmentRetryLoop(): () => void {
   let enrichmentRetryInFlight: Promise<void> | null = null;
   const timer = setInterval(() => {
     if (enrichmentRetryInFlight) return;
-    const run = backgroundTaskTracker.track('learning.path.recovery-poll', () => learningService.recoverStaleGeneratingPaths()
-      .then(() => learningService.retryEligibleFailedPathPreparations())
-      .then(() => undefined))
+    const run = backgroundTaskTracker.track('learning.path.recovery-poll', async () => {
+      // 两阶段互相隔离（全量测试报告 #52）：实测租约恢复的 P1008（SQLite 查询超时）会把
+      // .then 链整段打断，同一 tick 的自动重试因此一次都没跑——而 DB 一忙正是最需要自愈时。
+      await learningService.recoverStaleGeneratingPaths().catch((error) => {
+        logger.warn('路径生成租约恢复失败（不阻断自动重试轮询）', {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+      await learningService.retryEligibleFailedPathPreparations().catch((error) => {
+        logger.warn('路径阶段任务自动重试轮询失败', {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+    })
       .catch((error) => {
         logger.warn('路径生成租约恢复与自动重试轮询失败', {
           error: error instanceof Error ? error.message : String(error)

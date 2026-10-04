@@ -42,6 +42,7 @@ import {
   getEnrichmentRetryReferenceTime as getEnrichmentRetryReferenceTimeImpl,
   listEmptyMilestoneIds as listEmptyMilestoneIdsImpl,
   isAppendBlockedByInFlightGeneration,
+  isTransientAutoRetryInfrastructureError,
 } from './generation/retry-policy';
 import { requestPathReplan, listPathReplanSnapshots, rollbackPathReplan } from './replan/path-replan.service';
 import {
@@ -418,6 +419,108 @@ class LearningService {
     return recoveredRuns + result.count;
   }
 
+  /**
+   * 单路径自动重试判定与排队（全量测试报告 #52：逐路径独立执行——单条路径的瞬时 DB 故障
+   * 不再拖垮整轮轮询；瞬时故障不消耗重试预算、不推进退避档位）。
+   * 返回 true=本轮确实发起了重试。
+   */
+  private async retryOnePreparedPath(path: {
+    id: string;
+    status: string;
+    userId: string;
+    title?: string | null;
+    name?: string | null;
+    description?: string | null;
+    subject?: string | null;
+    deadline?: Date | null;
+    deadlineText?: string | null;
+    aiPromptTemplate?: string | null;
+    activeGenerationRunId?: string | null;
+    updatedAt: Date;
+  }): Promise<boolean> {
+    const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
+    const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
+    const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
+    const canReplace = retry.allowed && retry.retryType === 'stageDesign';
+    const replaceBudgetLeft = (generationStatus?.stageDesignRetryCount || 0) < ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length;
+    const useReplace = canReplace && replaceBudgetLeft;
+
+    // 追加式自愈（两个入口）：
+    //  ① replace 不可用（既非 failed 也非 stale）；或
+    //  ② replace 预算已被耗尽（典型：被课堂证据永久冲突反复顶满）
+    // 只要仍有"空白阶段"就改走追加通道（只创建、不删除，不会与证据冲突）。
+    // 生成在途时一律不追加（resolveAppendMilestoneIds 内已判，避免与在途生成重复）。
+    let appendMilestoneIds: string[] = [];
+    if (!useReplace) {
+      appendMilestoneIds = await this.resolveAppendMilestoneIds(path.id, generationStatus, activeRun, path.updatedAt);
+      if (appendMilestoneIds.length === 0) return false;
+    }
+
+    const retryCount = useReplace
+      ? (generationStatus?.stageDesignRetryCount || 0)
+      : (generationStatus?.stageDesignAppendCount || 0);
+    if (retryCount >= ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length) {
+      return false;
+    }
+
+    const retryReferenceTime = this.getEnrichmentRetryReferenceTime(path, generationStatus);
+    const requiredDelayMs = getNextEnrichmentRetryDelayMinutes(retryCount) * 60 * 1000;
+    if (Date.now() - retryReferenceTime < requiredDelayMs) {
+      return false;
+    }
+
+    try {
+      if (useReplace) {
+        await this.queuePathEnrichmentRetry(path, generationStatus);
+      } else {
+        await this.queuePathEnrichmentAppend(path, generationStatus, appendMilestoneIds);
+      }
+      return true;
+    } catch (error) {
+      const rawCode = (error as { code?: unknown })?.code;
+      const errorCode = typeof rawCode === 'string' ? rawCode : '';
+      // P4：失败也必须把重试计数落库。原实现只在 queuePathEnrichmentRetry 成功、
+      // 且预检通过之后才自增计数（createAndClaimGenerationRun 的 guard 在计数写入之前），
+      // 预检一抛错计数就停在 0，于是每分钟按「第 1 次、延迟 1 分钟」无限重试。
+      // 对不可自愈的路径变更冲突直接把次数顶到上限，终止自动重试
+      //（replace 顶满后，下一次轮询会自动改用追加通道，见上）。
+      // 瞬时基础设施故障（P1008 SQLite 查询超时 / busy 等，报告 #52 实测 07:48:38 卡点）：
+      // 排队压根没成功，重试没真正发出——不消费预算、不推进退避档位，参照时间保持原值，
+      // 下一轮轮询（60s）按原档位原地重试。
+      const transient = isTransientAutoRetryInfrastructureError(error);
+      const terminal = TERMINAL_STAGE_DESIGN_RETRY_CODES.has(errorCode);
+      const nextRetryCount = transient
+        ? retryCount
+        : terminal
+          ? ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length
+          : retryCount + 1;
+      await this.updatePathGenerationStatus(path.id, {
+        ...(transient
+          ? {}
+          : {
+              ...(useReplace
+                ? { stageDesignRetryCount: nextRetryCount }
+                : { stageDesignAppendCount: nextRetryCount }),
+              lastStageDesignRetryAt: new Date().toISOString()
+            }),
+        lastError: error instanceof Error ? error.message : String(error),
+        updatedAt: transient
+          ? (generationStatus?.updatedAt || new Date().toISOString())
+          : new Date().toISOString()
+      });
+      logger.warn(transient ? '自动继续生成阶段任务失败（瞬时 DB 故障，预算与退避档位不消耗）' : '自动继续生成阶段任务失败', {
+        pathId: path.id,
+        retryCount: nextRetryCount,
+        appendMode: !useReplace,
+        terminal,
+        transient,
+        ...(errorCode ? { errorCode } : {}),
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return false;
+    }
+  }
+
   async retryEligibleFailedPathPreparations(): Promise<number> {
     const candidatePaths = await prisma.learning_paths.findMany({
       where: {
@@ -444,70 +547,14 @@ class LearningService {
     let retriedCount = 0;
 
     for (const path of candidatePaths) {
-      const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
-      const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
-      const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
-      const canReplace = retry.allowed && retry.retryType === 'stageDesign';
-      const replaceBudgetLeft = (generationStatus?.stageDesignRetryCount || 0) < ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length;
-      const useReplace = canReplace && replaceBudgetLeft;
-
-      // 追加式自愈（两个入口）：
-      //  ① replace 不可用（既非 failed 也非 stale）；或
-      //  ② replace 预算已被耗尽（典型：被课堂证据永久冲突反复顶满）
-      // 只要仍有"空白阶段"就改走追加通道（只创建、不删除，不会与证据冲突）。
-      // 生成在途时一律不追加（resolveAppendMilestoneIds 内已判，避免与在途生成重复）。
-      let appendMilestoneIds: string[] = [];
-      if (!useReplace) {
-        appendMilestoneIds = await this.resolveAppendMilestoneIds(path.id, generationStatus, activeRun, path.updatedAt);
-        if (appendMilestoneIds.length === 0) continue;
-      }
-
-      const retryCount = useReplace
-        ? (generationStatus?.stageDesignRetryCount || 0)
-        : (generationStatus?.stageDesignAppendCount || 0);
-      if (retryCount >= ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length) {
-        continue;
-      }
-
-      const retryReferenceTime = this.getEnrichmentRetryReferenceTime(path, generationStatus);
-      const requiredDelayMs = getNextEnrichmentRetryDelayMinutes(retryCount) * 60 * 1000;
-      if (Date.now() - retryReferenceTime < requiredDelayMs) {
-        continue;
-      }
-
       try {
-        if (useReplace) {
-          await this.queuePathEnrichmentRetry(path, generationStatus);
-        } else {
-          await this.queuePathEnrichmentAppend(path, generationStatus, appendMilestoneIds);
+        if (await this.retryOnePreparedPath(path)) {
+          retriedCount += 1;
         }
-        retriedCount += 1;
       } catch (error) {
-        const rawCode = (error as { code?: unknown })?.code;
-        const errorCode = typeof rawCode === 'string' ? rawCode : '';
-        // P4：失败也必须把重试计数落库。原实现只在 queuePathEnrichmentRetry 成功、
-        // 且预检通过之后才自增计数（createAndClaimGenerationRun 的 guard 在计数写入之前），
-        // 预检一抛错计数就停在 0，于是每分钟按「第 1 次、延迟 1 分钟」无限重试。
-        // 对不可自愈的路径变更冲突直接把次数顶到上限，终止自动重试
-        //（replace 顶满后，下一次轮询会自动改用追加通道，见上）。
-        const terminal = TERMINAL_STAGE_DESIGN_RETRY_CODES.has(errorCode);
-        const nextRetryCount = terminal
-          ? ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length
-          : retryCount + 1;
-        await this.updatePathGenerationStatus(path.id, {
-          ...(useReplace
-            ? { stageDesignRetryCount: nextRetryCount }
-            : { stageDesignAppendCount: nextRetryCount }),
-          lastStageDesignRetryAt: new Date().toISOString(),
-          lastError: error instanceof Error ? error.message : String(error),
-          updatedAt: new Date().toISOString()
-        });
-        logger.warn('自动继续生成阶段任务失败', {
+        // 单路径处理失败（P1008 查询超时等）不再拖垮整轮轮询（报告 #52）：跳过本路径，其余继续
+        logger.warn('自动重试轮询：单路径处理失败，跳过本路径', {
           pathId: path.id,
-          retryCount: nextRetryCount,
-          appendMode: !useReplace,
-          terminal,
-          ...(errorCode ? { errorCode } : {}),
           error: error instanceof Error ? error.message : String(error)
         });
       }
