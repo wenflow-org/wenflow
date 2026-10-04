@@ -82,6 +82,10 @@ model agent_call_logs {
   // 全量调用计数按 executionLayer 分组只取 success——索引即覆盖，免去 9 万行宽行回表
   @@index([calledAt, success])
   @@index([executionLayer, success])
+  // 覆盖索引（2026-10-05）：执行日志「全部」窗口的 stats 分组（groupBy(sourceEntry, success)）——
+  // 既有 calledAt 前导覆盖索引在无时间范围时用不上，分组回落全表 SCAN + TEMP B-TREE（实测 2.6s）；
+  // 本索引让 groupBy 走索引序免回表免临时排序
+  @@index([sourceEntry, success])
   @@index([providerId, calledAt])
   // 覆盖索引（2026-10-04 页面加载性能批，8.5GB 表随机 IO 治理）：
   // 执行日志窗口聚合（sourceEntry×success 分组 / 失败行 / 金丝雀计数）与
