@@ -222,7 +222,8 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     const w = mount(LearnerCenter);
     await settle();
     // ①统计四卡（共享 .mk-kpi-grid）：总数 / 需关注 / 低置信 / 平均置信度
-    const kpiLabels = w.findAll('.lc-analytics .mk-kpi__label').map((c) => c.text().trim());
+    // ①统计四卡（共享 .mk-kpi-grid，2026-10-04 拆到页级）：总数 / 需关注 / 低置信 / 平均置信度
+    const kpiLabels = w.findAll('.lc-kpi .mk-kpi__label').map((c) => c.text().trim());
     expect(kpiLabels).toEqual(['学习者', '需关注', '低置信', '平均置信度']);
     // ②置信分段分布条（2026-10-04 一屏工作台：直方图/逐人排行退役）：图例五档带人数，
     //   副题只含有任务的快照；25–49% 与 ≥90% 各 1 人

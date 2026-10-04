@@ -16,6 +16,23 @@
       <span class="mk-status__meta" title="学习者快照单次最多加载 500 条，搜索/筛选只在已加载范围内命中">仅加载前 500 位，搜索限已加载 500 人</span>
     </div>
 
+    <!-- 学习状态概览 KPI 带（2026-10-04 用户拍板：按同组形态拆出工作台卡到页级，
+         页头/口径条之下、内容卡之上，与记忆复习 KPI 栅格同形同节拍） -->
+    <section v-if="rows.length" class="mk-kpi-grid lc-kpi" aria-label="学习状态概览">
+      <!-- P1#16 数据层已接线（live.ts liveLearnersTotal）：真窗口显「N · 已载 M」，total 未知才退「已加载 N」。
+           P2（2026-10-04 全站评审）：hint 撤截断句（单源=页状态条），只留口径差异 -->
+      <MkKpi
+        label="学习者"
+        :value="learnerTotalText"
+        :hint="`口径：${includeTest ? '含测试账号' : '不含测试账号'}${learnerTotal == null ? '；全量总数接口未返回' : ''}`"
+      />
+      <!-- P1#17：需关注收窄为真异常（趋势降 ∨ 疲劳高 ∨ 有风险摘要）；
+           常态档「疲劳=中」拆到 pills 的「观察」，不再把需关注撑爆 -->
+      <MkKpi label="需关注" :value="riskCount" :tone="riskCount ? 'warn' : ''" hint="趋势下降 / 疲劳高 / 有风险摘要" />
+      <MkKpi label="低置信" :value="lowConfCount" :tone="lowConfCount ? 'warn' : ''" hint="快照置信度低于 50%" />
+      <MkKpi label="平均置信度" :value="avgConfText" :hint="avgConfHint" />
+    </section>
+
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
@@ -66,28 +83,11 @@
         action-text="重试"
         @action="retryLoad"
       />
-      <!-- 一屏工作台（2026-10-04 用户拍板「顶部紧凑宏观观测 + 下部排查表格」）：
-           旧分析层（四卡 144px + 直方图 132px + 逐人条形排行 446px）把表格首行推到 1190px
-           （实测要滚一屏多才见数据），且逐人排行与表格置信列同数据重复——整层退役。
-           现在：分析层压成单行观测栏（KPI 组 + 可点置信分段条，点击下钻筛选表格），
-           表格区内滚升入首屏，分页器保持卡尾吸底。 -->
+      <!-- 一屏工作台（2026-10-04 用户拍板「顶部紧凑宏观观测 + 下部排查表格」；同日 KPI 已按同组形态
+           拆到页级，观测栏只剩置信度分段条）：点击分段下钻筛选表格，表格区内滚升入首屏，
+           分页器保持卡尾吸底。 -->
       <div v-else class="lc-body">
         <div v-if="rows.length" class="lc-analytics">
-          <section class="mk-kpi-grid" aria-label="学习状态概览">
-            <!-- P1#16 数据层已接线（live.ts liveLearnersTotal）：真窗口显「N · 已载 M」，total 未知才退「已加载 N」。
-                 P2（2026-10-04 全站评审）：hint 撤截断句（单源=页状态条），只留口径差异 -->
-            <MkKpi
-              label="学习者"
-              :value="learnerTotalText"
-              :hint="`口径：${includeTest ? '含测试账号' : '不含测试账号'}${learnerTotal == null ? '；全量总数接口未返回' : ''}`"
-            />
-            <!-- P1#17：需关注收窄为真异常（趋势降 ∨ 疲劳高 ∨ 有风险摘要）；
-                 常态档「疲劳=中」拆到 pills 的「观察」，不再把需关注撑爆 -->
-            <MkKpi label="需关注" :value="riskCount" :tone="riskCount ? 'warn' : ''" hint="趋势下降 / 疲劳高 / 有风险摘要" />
-            <MkKpi label="低置信" :value="lowConfCount" :tone="lowConfCount ? 'warn' : ''" hint="快照置信度低于 50%" />
-            <MkKpi label="平均置信度" :value="avgConfText" :hint="avgConfHint" />
-          </section>
-
           <!-- 置信度分段分布条（替代竖向直方图）：极端数据下不扁平、占一条高度；
                点击分段/图例 = 只看该置信区间（看大盘 → 定位群体 → 查表格闭环） -->
           <section v-if="confRows.length" class="lc-dist" aria-label="置信度分布">
@@ -642,18 +642,14 @@ async function recomputeAll() {
    逐人条形排行与竖向直方图整层退役（与表格置信列同数据重复、实测合计 578px）。 */
 .lc-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .lc-tablewrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* 观测栏（2026-10-04 KPI 拆到页级后只剩置信度分段条，双列栅格随之简化为单列） */
 .lc-analytics {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
-  gap: 12px 20px;
-  align-items: start;
+  gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--mk-line);
 }
-/* 观测栏内 KPI 更轻量（用户拍板「轻量指标卡」）：flex-basis 180→150 让四卡在左列单行，
-   观测栏总高压到 ~110px，表格首屏行数最大化 */
-.lc-analytics .mk-kpi-grid > * { flex-basis: 150px; }
-.lc-analytics .mk-kpi-grid { gap: 12px; }
+/* （观测栏内 KPI 的 150px 轻量卡规格随 KPI 拆到页级退役——页级走 mk-kpi-grid 标准刻度，与记忆复习同形） */
 .lc-section-title { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
 .lc-section-sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 /* 置信分段分布条：段可点下钻（role=button），激活段描边 + 图例加粗（.sbl--on 原语） */
