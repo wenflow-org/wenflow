@@ -35,30 +35,33 @@
       />
     </section>
 
-    <!-- 阶段导航：五个 tab = 五个阶段（浏览 + 编辑 + 治理都在阶段工作区内）——chrome 固定 -->
-    <div class="orch-stage-tabs" role="tablist">
-      <button
-        v-for="s in stages"
-        :key="s.id"
-        type="button"
-        role="tab"
-        class="orch-stage-tab"
-        :class="{ 'is-active': !['sandbox', 'overview'].includes(pane) && active === s.id }"
-        :aria-selected="!['sandbox', 'overview'].includes(pane) && active === s.id"
-        :title="stageTabTitle(s)"
-        @click="selectStage(s.id)"
-      >
-        <span class="orch-stage-tab__name">{{ s.name.replace(/阶段$/, '') }}</span>
-        <span class="orch-stage-tab__meta">{{ s.skills.length }} Skill</span>
-      </button>
-    </div>
-
     <!-- 子面板页签（原型 .tabs 下划线页签：2026-10-01 由 mk-pills 胶囊迁入——
          胶囊只做筛选 chips，视图/分区切换归页签）：五个面板统一可达——
          总览（全旅程 odg 画布，缺省）/字段旅程/字段路由/治理/沙盘 -->
     <div class="tabs orch-pane-tabs" role="tablist" aria-label="编排图子面板">
       <button v-for="pt in ORCH_PANES" :key="pt.id" type="button" role="tab" class="tab"
         :aria-selected="pane === pt.id" @click="pane = pt.id">{{ pt.label }}</button>
+    </div>
+
+    <!-- 阶段选择 chips（2026-10-05 阶段导航大卡退役）：大卡与页首 KPI 带对同一批数字数两遍
+         （KPI「阶段 5 · Skill 21」 vs 五卡各带「N Skill」），且总览画布本身就是五阶段——撤。
+         选择职能下沉为轻量 chips，只在单阶段视图（字段旅程/字段路由/治理）出现；总览/沙盘
+         不出现（总览画布即五阶段全貌，沙盘与阶段无关）。阶段是范围选择，按 2026-10-01 约定
+         归胶囊语言（胶囊=筛选 chips、页签=视图切换） -->
+    <div v-if="stageScoped" class="orch-stage-pills" role="group" aria-label="阶段选择">
+      <button
+        v-for="s in stages"
+        :key="s.id"
+        type="button"
+        class="mk-pill"
+        :class="{ 'mk-pill--active': active === s.id }"
+        :aria-pressed="active === s.id"
+        :title="stageTabTitle(s)"
+        @click="selectStage(s.id)"
+      >
+        {{ s.name.replace(/阶段$/, '') }}
+        <span class="mk-pill__count">{{ s.skills.length }}</span>
+      </button>
     </div>
 
     <!-- ===== 总览：全旅程 odg 画布（newui/admin odg-canvas 形态）=====
@@ -266,6 +269,9 @@ const ORCH_PANES: Array<{ id: OrchPane; label: string }> = [
   { id: 'sandbox', label: '沙盘契约' },
 ]
 const pane = ref<OrchPane>('overview')
+/** 单阶段视图（字段旅程/字段路由/治理）才需要阶段选择 chips——总览画布即五阶段全貌、
+     沙盘与阶段无关（原阶段导航大卡的显示条件同此，2026-10-05 大卡退役后沿用） */
+const stageScoped = computed(() => ['journey', 'routing', 'governance'].includes(pane.value))
 
 /** 字段流转图数据版本：行级编辑/字段路由变更后 +1 触发重挂载刷新 */
 const flowKey = ref(0)
@@ -659,7 +665,7 @@ async function retryStages() {
   ])
 }
 
-/** 阶段 tab tooltip：skills=0 时说明去向（此前 tab 只显示「0 Skill」，无从判断是真空还是没拉到） */
+/** 阶段 chip tooltip：skills=0 时说明去向（chip 计数只显「0」，无从判断是真空还是没拉到） */
 function stageTabTitle(s: Stage): string {
   if (!s.skills.length) return '该阶段下辖 0 个 Skill：可能调度树未登记，或拓扑 / 目录尚未拉取成功'
   return `${s.name}：${s.skills.length} 个 Skill`
@@ -747,66 +753,19 @@ const govMetaTitle = computed(() =>
 /* 字段路由：卡头 + 工具条吸顶，仅表格区内滚（.frt__scroll 自带 .mk-table-scroll 横向滚动） */
 .orch-routing .frt { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
 .orch-routing .frt__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-/* fill 布局下阶段导航的外边距由页面 gap（12px）接管 */
-.mk-page--fill .orch-stage-tabs { margin: 0; }
-
-.orch-stage-tabs {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 6px;
-  margin: 10px 0 12px;
-}
-.orch-stage-tab {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
-  padding: 9px 14px;
-  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface); font: inherit; text-align: left;
-  cursor: pointer;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
-}
-.orch-stage-tab:hover { border-color: color-mix(in srgb, var(--mk-blue) 45%, var(--mk-line)); }
-.orch-stage-tab.is-active {
-  border-color: var(--mk-blue);
-  background: color-mix(in srgb, var(--mk-blue) 8%, transparent);
-  box-shadow: inset 0 0 0 1px var(--mk-blue);
-}
-.orch-stage-tab__name { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); }
-.orch-stage-tab.is-active .orch-stage-tab__name { color: var(--mk-blue); }
-.orch-stage-tab__meta { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+/* 阶段选择 chips（2026-10-05 阶段导航大卡退役）：样式走 .mk-pill 全局原语，这里只管行布局；
+   页面 mk-page--fill 的 flex gap（12px）接管与页签/内容区的间距 */
+.orch-stage-pills { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* 折叠层（字段路由 / 治理）：阶段工作区的查阅层，默认收起 */
 /* 折叠头走 .mk-section__summary（shared.css） */
 
 /* 沙盘（深链次要入口）顶部条 */
 
-/* 4K：阶段导航与折叠层跟随全站节奏 */
-@media (min-width: 2000px) {
-  .orch-stage-tab { padding: 11px 16px; }
-  .orch-stage-tab__name { font-size: var(--mk-fs-body); }
-  .orch-stage-tab__meta { font-size: var(--mk-fs-micro); }
-}
-@media (min-width: 2800px) {
-  .orch-stage-tab { padding: 13px 19px; }
-  .orch-stage-tab__name { font-size: var(--mk-fs-body); }
-  .orch-stage-tab__meta { font-size: var(--mk-fs-micro); }
-}
-@media (min-width: 3600px) {
-  .orch-stage-tab { padding: 15px 22px; }
-  .orch-stage-tab__name { font-size: var(--mk-fs-emphasis); }
-  .orch-stage-tab__meta { font-size: var(--mk-fs-body); }
-}
-
 /* ================= 暗色模式（D1 补完）：编排图 ================= */
 html[data-theme='dark'] {
 
-  /* 阶段 tab 大分段卡 */
-  .orch-stage-tab { background: #19191a; border-color: var(--wf-border-light); }
-  .orch-stage-tab:hover { border-color: color-mix(in srgb, var(--mk-blue) 45%, #313235); }
-  .orch-stage-tab.is-active {
-    background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent);
-    border-color: var(--mk-blue);
-    
-  }
+  /* 阶段选择 chips：mk-pill 暗色基调由全局原语承接，无页面私有限定 */
 
   /* 折叠层（字段路由 / 治理） */
   /* 折叠头基调由 .mk-section__summary--muted / :hover 提供（原 #afb1b6 即 --mk-muted 暗色值） */
