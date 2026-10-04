@@ -114,6 +114,30 @@ describe('VirtualSessionReclaimService', () => {
     )
   })
 
+  it('以连续 error 收尾（≥3 条）的僵死会话收敛为 abandoned（报告 #12：不再长期滞留 running）', async () => {
+    const errorTailLogs = JSON.stringify([
+      { timestamp: '2026-07-30T09:50:00.000Z', phase: 'error', details: { error: 'PROVIDER_RETRY_BUDGET_EXHAUSTED' } },
+      { timestamp: '2026-07-30T09:52:00.000Z', phase: 'error', details: { error: 'PROVIDER_RETRY_BUDGET_EXHAUSTED' } },
+      { timestamp: '2026-07-30T09:55:00.000Z', phase: 'error', details: { error: 'API request canceled' } }
+    ])
+    mockFindMany.mockResolvedValue([staleSession({ id: 'vs-error-tail', logs: errorTailLogs })])
+    mockFindFirst.mockResolvedValue(null)
+    const service = new VirtualSessionReclaimService({ database: mockDatabase, thresholdMs: 24 * 60 * 60 * 1000 })
+
+    const result = await service.runReclaimOnce({ now: NOW })
+
+    expect(result.reclaimed).toBe(1)
+    const updateCall = mockUpdate.mock.calls[0]
+    expect(updateCall[0].data).toEqual(expect.objectContaining({ status: 'abandoned' }))
+    const stageResults = JSON.parse(updateCall[0].data.stageResults)
+    expect(stageResults.staleReclaim).toEqual(expect.objectContaining({
+      reason: 'stale-session-timeout',
+      previousStatus: 'running'
+    }))
+    // 回收即终态：此后推进入口由 terminal-guard 拒绝（error 尾不再继续增长）
+    expect(mockLogCreateMany).toHaveBeenCalledTimes(1)
+  })
+
   it('有活跃租约的会话跳过（不误回收正在执行的会话）', async () => {
     mockFindMany.mockResolvedValue([staleSession()])
     mockFindFirst.mockResolvedValue({ id: 'lease-1' })

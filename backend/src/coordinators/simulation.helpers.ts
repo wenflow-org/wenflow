@@ -165,6 +165,20 @@ export function boundTaskCompletionError(error: unknown): string {
   return message.length > 1000 ? `${message.slice(0, 997)}...` : message;
 }
 
+/**
+ * 「推进入口」终态闸门（全量测试报告 #10：僵尸回收后仍被写 path-review/stage-transition 推进日志）。
+ *
+ * abandoned（含 stale 回收）与 failed 是终态：一切**推进**入口（path 阶段推进/评审/重规划、
+ * 开课）必须拒绝，否则回收后仍会继续产生进度与日志，终局语义不收敛。
+ * 唯一的显式复活通道是 restartLearningPhase / restartPathPhase——它们会先把会话恢复为
+ * running 再进入这些入口，因此不会撞闸门。
+ */
+export function terminalProgressBlockReason(session: { status?: string | null } | null | undefined): string | null {
+  const status = String(session?.status || '');
+  if (status === 'failed' || status === 'abandoned') return `学习已停止（${status}）`;
+  return null;
+}
+
 export function findTaskInPath(milestones: SimulationMilestone[], taskId?: string | null) {
   if (!taskId) return null;
 

@@ -81,7 +81,9 @@ export async function startLearningPhase(ctx: SimulationOrchestrator, sessionId:
     const session = await ctx.getVirtualSession(sessionId);
     
     const sessionStageResults = parseStageResultsPayload(session.stageResults);
-    if (session.status === 'failed' || sessionStageResults.teaching?.manualStop === true) {
+    // failed/abandoned 都是终态（abandoned 含僵尸回收，报告 #10）：不得再开课；
+    // 显式复活走 restartLearningPhase（它先恢复为 running 再调本函数）
+    if (session.status === 'failed' || session.status === 'abandoned' || sessionStageResults.teaching?.manualStop === true) {
       throw new Error('学习会话已停止或失败，请先重新开始学习（restartLearningPhase）');
     }
 

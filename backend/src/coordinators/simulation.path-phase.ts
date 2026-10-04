@@ -32,6 +32,7 @@ import {
   parseStoryContextFromStageResults,
   resolveLearnerLoadProfile,
   resolveScenarioBudget,
+  terminalProgressBlockReason,
 } from './simulation.helpers';
 import { buildAssistedLearnerMemory } from './simulation.memory';
 import type { SimulationOrchestrator } from './simulation.coordinator';
@@ -180,7 +181,11 @@ export async function advanceToPathGeneration(ctx: SimulationOrchestrator, sessi
 }> {
   try {
     const session = await ctx.getVirtualSession(sessionId);
-    
+
+    // 终态闸门（报告 #10）：回收/失败的会话不得再生成或推进 Path
+    const blocked = terminalProgressBlockReason(session);
+    if (blocked) return { success: false, error: blocked };
+
     if (!session.goalConversationId) {
       throw new Error('Goal对话不存在');
     }
@@ -372,7 +377,11 @@ export async function reviewPathProposal(ctx: SimulationOrchestrator, sessionId:
 }> {
   try {
     const session = await ctx.getVirtualSession(sessionId);
-    
+
+    // 终态闸门（报告 #10）：回收/失败的会话不得再执行评审、写 path-review 推进日志
+    const blocked = terminalProgressBlockReason(session);
+    if (blocked) return { success: false, error: blocked };
+
     if (!session.learningPathId) {
       throw new Error('学习路径不存在，请先生成路径');
     }
@@ -493,6 +502,9 @@ export async function reviewPathProposal(ctx: SimulationOrchestrator, sessionId:
 export async function acceptPathReview(ctx: SimulationOrchestrator, sessionId: string, options: { force?: boolean } = {}): Promise<{ success: boolean; error?: string }> {
   try {
     const session = await ctx.getVirtualSession(sessionId);
+    // 终态闸门（报告 #10）：回收/失败的会话不得再被推进到 path-accepted
+    const blocked = terminalProgressBlockReason(session);
+    if (blocked) return { success: false, error: blocked };
     const stageResults = parseStageResultsPayload(session.stageResults);
     const pathReview = (stageResults.path_review || {}) as Record<string, unknown>;
 
@@ -537,6 +549,9 @@ export async function replanPathFromReview(ctx: SimulationOrchestrator, sessionI
   error?: string;
 }> {
   const session = await ctx.getVirtualSession(sessionId);
+  // 终态闸门（报告 #10）：回收/失败的会话不得再触发重规划与推进日志
+  const blocked = terminalProgressBlockReason(session);
+  if (blocked) return { success: false, error: blocked };
   const stageResults = parseStageResultsPayload(session.stageResults);
   const pathReview = stageResults.path_review || {};
 
@@ -675,6 +690,9 @@ export async function resolvePathReview(ctx: SimulationOrchestrator, sessionId: 
   error?: string;
 }> {
   const session = await ctx.getVirtualSession(sessionId);
+  // 终态闸门（报告 #10）：回收/失败的会话不得再自动接受评审或启动 Learn
+  const blocked = terminalProgressBlockReason(session);
+  if (blocked) return { success: false, currentStage: session.currentStage, error: blocked };
   if (!session.learningPathId) {
     return { success: false, currentStage: 'path', error: '学习路径不存在，请先生成 Path' };
   }
