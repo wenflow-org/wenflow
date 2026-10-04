@@ -11,10 +11,10 @@
         </button>
       </template>
     </MkPageHead>
-    <!-- 后端学习者域 limit=50 截断口径（自 People 宿主迁入，单源仍一处） -->
-    <div v-if="liveLearners.length >= 50" class="mk-status mk-status--muted">
+    <!-- 后端学习者域窗口截断口径（2026-10-04 解锁 50→500，窗口内不提示；单源仍一处） -->
+    <div v-if="liveLearners.length >= 500" class="mk-status mk-status--muted">
       <span class="mk-status__dot"></span>
-      <span class="mk-status__meta" title="学习者快照单次最多加载 50 条，搜索/筛选只在已加载范围内命中">仅加载前 50 位，搜索限已加载 50 人</span>
+      <span class="mk-status__meta" title="学习者快照单次最多加载 500 条，搜索/筛选只在已加载范围内命中">仅加载前 500 位，搜索限已加载 500 人</span>
     </div>
 
     <div class="mk-card mk-card--fill">
@@ -53,8 +53,8 @@
             :default-hidden="['risk']"
             v-model:hidden="lcHiddenCols"
           />
-          <!-- 后端学习者域 limit=50 截断口径单源住在 People 页状态条（P2 2026-10-04 全站评审：
-               此处卡头同句与「50 / 50 人」撤——截断说明不在同屏念三遍） -->
+          <!-- 后端学习者域窗口截断口径单源住在页头状态条（P2 2026-10-04 全站评审：
+               此处卡头同句与「N / N 人」撤——截断说明不在同屏念三遍） -->
           <span v-if="filtered.length !== rows.length" class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 人</span>
         </div>
       </div>
@@ -76,7 +76,7 @@
       <div v-else class="lc-body">
         <div v-if="rows.length" class="lc-analytics">
           <section class="mk-kpi-grid" aria-label="学习状态概览">
-            <!-- P1#16 数据层已接线（live.ts liveLearnersTotal）：有 total 显「N · 已载 M」，仅窗口时显「已加载 N」。
+            <!-- P1#16 数据层已接线（live.ts liveLearnersTotal）：真窗口显「N · 已载 M」，total 未知才退「已加载 N」。
                  P2（2026-10-04 全站评审）：hint 撤截断句（单源=页状态条），只留口径差异 -->
             <MkKpi
               label="学习者"
@@ -394,11 +394,12 @@ async function sendIntervene() {
   }
 }
 
-/** P1#16 数据层接线：liveLearnersTotal=后端分页 total；仅窗口时如实「已加载 N」 */
+/** P1#16 数据层接线：liveLearnersTotal=后端分页 total；真窗口显「N · 已载 M」，
+ *  total 未知才退「已加载 N」（2026-10-04 解锁 500 窗口后全量加载成常态，等值时念「已加载」=假截断暗示） */
 const learnerTotal = computed(() => liveLearnersTotal.value)
 const learnerTotalText = computed(() => {
   const t = learnerTotal.value
-  if (t != null && t !== rows.value.length) return `${t} · 已载 ${rows.value.length}`
+  if (t != null) return t === rows.value.length ? String(t) : `${t} · 已载 ${rows.value.length}`
   return rows.value.length ? `已加载 ${rows.value.length}` : '0'
 })
 const rows = computed<Row[]>(() =>

@@ -99,7 +99,9 @@ export class LearnerSnapshotRefreshService {
     limit?: number;
   }) {
     const page = Math.max(1, Number(params?.page || 1));
-    const limit = Math.max(1, Math.min(50, Number(params?.limit || 20)));
+    // 窗口上限 500（2026-10-04 用户拍板解锁 50 截断：管理端学习状态页要全量学习者；
+    // 默认仍 20，天花板防滥用）。放开后冷缓存整页重建量大，配套 stillMissing 分批消费。
+    const limit = Math.max(1, Math.min(500, Number(params?.limit || 20)));
 
     // 软删用户不进入管理端快照列表（列表与总数口径一致）。
     // 默认排除虚拟学习者与测试/审计账号（风险队列只给真实用户看）；
@@ -187,15 +189,20 @@ export class LearnerSnapshotRefreshService {
         stillMissing.push(entry);
       }
       // 仅未命中（缓存过期且无新鲜投影）才重建。
+      // 分批消费（16/批）：窗口解锁到 500 后冷缓存一页可达数百人，无界 Promise.all 会让
+      // 每人一次的快照构建 + 投影 upsert 同刻轰 SQLite 单写锁（busy/内存双险）。
       if (stillMissing.length > 0) {
-        await Promise.all(stillMissing.map(async (entry) => {
-          const snapshot = await this.refresh({
-            userId: entry.user.id,
-            pathId: entry.path?.id,
-            scope: entry.path?.id ? 'path' : 'global',
-          });
-          snapshotsByUser.set(entry.user.id, snapshot);
-        }));
+        const REBUILD_CHUNK = 16;
+        for (let i = 0; i < stillMissing.length; i += REBUILD_CHUNK) {
+          await Promise.all(stillMissing.slice(i, i + REBUILD_CHUNK).map(async (entry) => {
+            const snapshot = await this.refresh({
+              userId: entry.user.id,
+              pathId: entry.path?.id,
+              scope: entry.path?.id ? 'path' : 'global',
+            });
+            snapshotsByUser.set(entry.user.id, snapshot);
+          }));
+        }
       }
     }
 

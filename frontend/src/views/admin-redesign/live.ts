@@ -1243,7 +1243,7 @@ export interface LiveLearner {
 }
 
 export const liveLearners = ref<LiveLearner[]>([])
-/** 学习者域总数（后端分页 total；前端拉取窗口 limit 50——P1#16 的数据层根修） */
+/** 学习者域总数（后端分页 total；前端拉取窗口 limit 500——2026-10-04 用户拍板解锁 50 截断，P1#16 的数据层根修） */
 export const liveLearnersTotal = ref<number | null>(null)
 
 function mapTrend(t?: string): 'up' | 'down' | 'flat' {
@@ -1257,7 +1257,7 @@ function mapFatigue(f?: string): string {
 }
 
 async function fetchLiveLearners(includeTest = false): Promise<void> {
-  const res = await adminLearnerModelsApi.list({ limit: 50, ...(includeTest ? { includeTest: true } : { excludeTest: true }) })
+  const res = await adminLearnerModelsApi.list({ limit: 500, ...(includeTest ? { includeTest: true } : { excludeTest: true }) })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.items || []
   // P1#16 数据层：接住分页 total（此前被丢弃，KPI 只能显示「已加载 N」）
