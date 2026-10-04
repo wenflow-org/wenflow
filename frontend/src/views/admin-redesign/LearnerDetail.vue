@@ -30,7 +30,7 @@
     </MkDetailHero>
 
     <!-- 状态条（原型 renderLearnerDetail 的 statstrip：hero 与 subtabs 之间的一行四格读数）。
-         全部来自已加载的 Detail：进度/阶段/任务/最近会话窗口。 -->
+         全部来自已加载的 Detail：进度/阶段/任务/最近动态窗口。 -->
     <section class="mk-card">
       <div class="statstrip" role="list" aria-label="学习者概览">
         <div class="statstrip__stat" role="listitem">
@@ -47,8 +47,10 @@
           <span class="statstrip__value" :title="d.task">{{ d.task || '—' }}</span>
         </div>
         <div class="statstrip__stat" role="listitem">
-          <span class="statstrip__label">最近会话</span>
-          <!-- P2：「（加载窗口）」角标改 title 口径；「最近」语义上移进读数 -->
+          <span class="statstrip__label">最近动态</span>
+          <!-- P1-2（2026-10-04 全站评审）：原标签「最近会话」数的是学习事件（d.sessions=liveEvidence
+               切片），与正下方真实会话卡「最近 0 条」同屏矛盾——改名「最近动态」与动态卡同源同词，
+               「会话」词位让给真实会话计数，全页「会话」只挂一个数字 -->
           <span class="statstrip__value" :title="recentSessionsHint">最近 {{ d.sessions.length }} 条</span>
         </div>
       </div>
@@ -206,7 +208,7 @@
               </div>
               <span class="ld-session__time">{{ s.time }}</span>
             </div>
-            <p v-if="!d.sessions.length" class="ld-none">暂无会话记录</p>
+            <p v-if="!d.sessions.length" class="ld-none">暂无动态记录</p>
           </div>
         </section>
 
@@ -1366,8 +1368,8 @@ const pctTitle = computed(() => {
     ? `路径进度 ${v.pct}%：按路径全部任务折算（任务 ${v.taskDone}/${v.taskTotal}）；下方「当前里程碑」行用的是里程碑内分母`
     : `路径进度 ${v.pct}%：按路径全部任务折算（暂无任务分母）`
 })
-/** statstrip「最近会话」口径：d.sessions 是最近学习事件前 6 条，非会话全量 */
-const recentSessionsHint = '口径：最近学习事件前 6 条（非会话全量）；完整教学会话列表见「教学会话」页签'
+/** statstrip「最近动态」口径：d.sessions 是最近学习事件前 6 条（与「最近动态」卡同源），非会话 */
+const recentSessionsHint = '口径：最近学习事件前 6 条（非会话）；完整教学会话列表见「教学会话」页签'
 
 const d = computed<Detail | null>(() => {
   if (detailError.value) return null

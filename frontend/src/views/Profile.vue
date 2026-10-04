@@ -45,7 +45,7 @@
           </div>
         </article>
 
-        <!-- 学习概览 KPI（原型 wf-kpis）：连续天数（/users/me 自带）+ 成就解锁（轻请求）+ 已掌握概念（图谱 stability） -->
+        <!-- 学习概览 KPI（原型 wf-kpis）：连续天数（会话推算，与学习状态页同口径）+ 成就解锁（轻请求）+ 已掌握概念（图谱 stability） -->
         <div class="profile-kpis" role="list" aria-label="学习概览">
           <div class="profile-kpi" role="listitem">
             <strong>{{ kpi.streak ?? '—' }}</strong>
@@ -103,19 +103,32 @@ import { toast } from '@/utils/toast'
 import request from '@/utils/api'
 import { learningAPI } from '@/api/learning'
 import { unwrapArray } from '@/views/v2/unwrap'
+import { computeStreakDays } from '@/views/v2/streak'
+import { localDateKeyFromIso } from '@/utils/date'
 import { useUserStore } from '../stores/user'
 import '@/components/user/uc.css'
 
 const userStore = useUserStore()
 
 /* ---------- 学习概览 KPI（原型 wf-kpis 三卡） ----------
-   连续天数随 /users/me 免费带回；成就与概念掌握各发一个轻请求，
-   失败静默显示「—」，不阻塞资料卡渲染。 */
+   连续天数走全站唯一口径 computeStreakDays（views/v2/streak.ts，P1-1 2026-10-04）：
+   原先直读 users.streakDays 库字段快照（无实时刷新机制），与学习状态页的实时推算
+   跨页打架（同账号同天 1 vs 0），现拉会话按同一算法推算；成就与概念掌握各发一个
+   轻请求，失败静默显示「—」，不阻塞资料卡渲染。 */
 const kpi = ref<{ streak?: number; achievements?: number; mastery?: number }>({})
 
 async function loadKpis() {
-  const streak = (userStore.user as { streakDays?: number } | null)?.streakDays
-  if (typeof streak === 'number') kpi.value.streak = streak
+  try {
+    const res = await request.get('/users/me/sessions', { params: { limit: 500 } })
+    const list = unwrapArray<{ startTime?: string; durationMinutes?: number }>(res)
+    const minutesByDate = new Map<string, number>()
+    for (const s of list) {
+      const key = localDateKeyFromIso(typeof s.startTime === 'string' ? s.startTime : null)
+      if (!key) continue
+      minutesByDate.set(key, (minutesByDate.get(key) ?? 0) + (typeof s.durationMinutes === 'number' ? s.durationMinutes : 0))
+    }
+    kpi.value.streak = computeStreakDays(minutesByDate)
+  } catch { /* 静默：KPI 缺数好过卡报错 */ }
   try {
     const res = await request.get('/achievements/all')
     const items = unwrapArray<{ unlocked?: boolean }>(res)

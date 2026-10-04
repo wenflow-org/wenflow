@@ -728,6 +728,18 @@ const govMetaTitle = computed(() =>
 .orch-pane--center { justify-content: center; }
 /* 总览双卡（原型：odg 画布卡 + margin-top 的交接明细卡）：画布卡弹性填满、交接卡自然高度贴底 */
 .orch-overview { gap: 12px; }
+/* P1-4（2026-10-04 全站评审）：fill 布局下交接明细卡自然高度（4 行 ≈394px）把上方
+   「字段数据旅程」画布压成 84px 滚动缝（clientHeight=84/scrollHeight=754，五条泳道
+   首行全部拦腰切断）。按本页 .frt__scroll 判例给交接卡设 45% 上限、表格区内滚，
+   画布保住首屏至少一条完整泳道。 */
+.orch-overview .orch-handoff {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 45%;
+  display: flex;
+  flex-direction: column;
+}
+.orch-overview .orch-handoff .mk-table-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* 阶段交接明细（原型 .tbl 的 mono/sub/wrap 形态）：交接列 id 对弱化 mono；传递字段可换行 */
 .orch-handoff__pair { color: var(--mk-muted); white-space: nowrap; }
 /* 治理徽章随行：span 需补手型，与阶段 id 对之间留 6px（点击落点复用页头两枚红字） */

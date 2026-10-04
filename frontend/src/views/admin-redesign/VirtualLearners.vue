@@ -385,7 +385,9 @@ const stateFilterOptions = computed(() => {
   return [
     { key: '', label: '全部', count: samples.value.length, hint: '' },
     { key: 'running', label: '进行中', count: count((s) => s.runningCount > 0), hint: '' },
-    { key: 'paused', label: '已暂停', count: count((s) => (s.pausedCount ?? 0) > 0), hint: '' },
+    // P1-3（2026-10-04 全站评审）：计数谓词与 filtered 的筛选谓词（runningCount===0 && pausedCount>0）同式，
+    // 否则 pill「已暂停 2」点进去只筛出 1 条（同时在跑的学习者被计入却被筛掉）
+    { key: 'paused', label: '已暂停', count: count((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0), hint: '口径：当前无进行中会话、有暂停会话的学习者' },
     // P2（2026-10-02 人类可读性）：原名「需关注」读作当前异常，实为累计曾失败/被终止——正名 + 口径入 title
     { key: 'failed', label: '曾失败', count: count((s) => s.failedCount > 0), hint: '口径：累计有失败/终止会话的虚拟学习者，非当前异常' },
   ]

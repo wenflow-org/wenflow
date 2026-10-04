@@ -452,6 +452,7 @@ import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
+import { computeStreakDays } from './streak';
 import { unwrap, unwrapArray } from './unwrap';
 
 type MetricKey = 'lsb' | 'lss' | 'ktl' | 'lf';
@@ -818,8 +819,9 @@ async function loadSessions() {
 
 /* ---------- 顶部三张 KPI（原型 wf-kpis 三等权卡：连续天数 / 本周分钟 / 已掌握知识点） ----------
    三张卡全部由本页已有数据推导，不新增后端接口：
-   · 连续天数 = /users/me/sessions 按天汇总的客户端连击推算（与学习台的本地回退同口径，
-     今天没学则从昨天起数）；
+   · 连续天数 = /users/me/sessions 按天汇总后走全站唯一口径 computeStreakDays
+     （views/v2/streak.ts，P1-1 2026-10-04：学习台/账户页的 users.streakDays 库字段
+     快照已统一到本算法，三页同源不再跨页打架）；
    · 本周分钟 = 同一份按天汇总里「本周一 ~ 今天」的分钟和（与学习台「本周条」同口径）；
    · 已掌握知识点 = /learning/concept-graph 里 stability=stable 的节点数（与个人中心 KPI 同源）。 */
 const minutesByDate = computed(() => {
@@ -830,16 +832,7 @@ const minutesByDate = computed(() => {
 
 const kpiStreak = computed<number | null>(() => {
   if (!sessionsOk.value) return null;
-  let streak = 0;
-  const d = new Date();
-  if ((minutesByDate.value.get(localDateKey(d)) ?? 0) === 0) d.setDate(d.getDate() - 1);
-  // guard：dailyLoad 只有有限天，往前数到第一个空档必然终止；上限只是防呆
-  for (let i = 0; i < 3650; i++) {
-    if ((minutesByDate.value.get(localDateKey(d)) ?? 0) <= 0) break;
-    streak += 1;
-    d.setDate(d.getDate() - 1);
-  }
-  return streak;
+  return computeStreakDays(minutesByDate.value);
 });
 
 const kpiWeekMinutes = computed<number | null>(() => {
@@ -1406,7 +1399,7 @@ function loadGuidance() {
 /* 胶囊底色用「前景 ink × 表面」混色：暗色主题自动降饱和（外部评审：原 rgba 撞色在暗底上刺眼） */
 .metric__note--green { color: var(--green-ink); background: color-mix(in srgb, var(--green-ink) 13%, var(--surface)); }
 .metric__note--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue-deep) 13%, var(--surface)); }
-.metric__note--purple { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, var(--surface)); }
+.metric__note--purple { color: var(--purple-ink); background: color-mix(in srgb, var(--accent) 13%, var(--surface)); }
 .metric__note--amber { color: var(--amber-ink); background: color-mix(in srgb, var(--amber-ink) 14%, var(--surface)); }
 .metric__note--red { color: var(--red-ink); background: color-mix(in srgb, var(--red-ink) 13%, var(--surface)); }
 
@@ -1737,7 +1730,7 @@ function loadGuidance() {
 }
 .ff-info b { color: var(--ink); }
 .ff-info__fitness { color: var(--blue-deep); font-weight: 700; }
-.ff-info__fatigue { color: var(--accent); font-weight: 700; }
+.ff-info__fatigue { color: var(--purple-ink); font-weight: 700; }
 </style>
 
 <style scoped>

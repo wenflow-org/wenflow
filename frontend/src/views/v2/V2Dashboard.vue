@@ -71,12 +71,13 @@
                 <Sparkles :size="13" :stroke-width="1.75" />
                 <span>{{ actionReason }}</span>
               </p>
-              <!-- 分钟数只在底部进度条出现一次（原 meta 里的「约 N 分钟」与它同源，2026-09-25 去重）。
-                   foot 改 grid：今日进度行在按钮**上方**（原型 wf-action__foot） -->
+              <!-- 分钟数只在底部进度条行出现一次（2026-09-25 去掉 meta 的「约 N 分钟」；
+                   P1-6 2026-10-04 再撤句尾「还剩约 N 分钟」——0/30 已隐含余量，镜像复读且
+                   nowrap 下把它推出 390 视口，「去处理」随之不可点） -->
               <div class="action__foot">
                 <div class="action__today">
                   <div class="action__today-bar"><i :style="{ width: todayBarPct + '%' }"></i></div>
-                  <span>今日已学 {{ todayMinutes }} / {{ todayTask?.minutes || 25 }} 分钟<template v-if="todayRemaining > 0"> · 还剩约 {{ todayRemaining }} 分钟</template></span>
+                  <span>今日已学 {{ todayMinutes }} / {{ todayTask?.minutes || 25 }} 分钟</span>
                 </div>
                 <!-- 调控提醒位（2026-09-27）：有待确认的调整建议时在行动卡就地露头，
                      不用进学习状态页才能发现；点击进入该页调控区处理 -->
@@ -399,6 +400,7 @@ import AiContentNote from '@/components/AiContentNote.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
+import { computeStreakDays } from './streak';
 import { useCurrentTask } from '@/composables/useCurrentTask';
 import { useSafePolling } from '@/composables/useSafePolling';
 import { unwrapArray } from './unwrap';
@@ -911,8 +913,8 @@ const streakNote = computed(() => {
   if (streakDays.value > 0) return todayMinutes.value > 0 ? '连续记录保住了，继续保持' : '今天还没点亮 · 学一会儿就能续上';
   return '今天学 10 分钟，开始连续记录';
 });
-/** 还剩约多少分钟（行动卡进度行叙事，批17） */
-const todayRemaining = computed(() => Math.max((todayTask.value?.minutes || 25) - todayMinutes.value, 0));
+/* P1-6（2026-10-04）：「还剩约 N 分钟」句尾已撤（0/30 镜像复读且 nowrap 下把「去处理」推出视口），
+   todayRemaining 计算随之退役 */
 
 const minutesByDate = computed(() => {
   const map = new Map<string, number>();
@@ -926,23 +928,10 @@ const minutesByDate = computed(() => {
 
 const todayMinutes = computed(() => minutesByDate.value.get(todayStr) ?? 0);
 
-/* 优先使用服务端 streak，回退到客户端计算 */
-const streakDays = computed(() => {
-  const serverStreak = userStore.user?.streakDays;
-  if (serverStreak != null && serverStreak > 0) return serverStreak;
-  /* 客户端回退（兼容旧数据） */
-  let streak = 0;
-  const d = new Date();
-  if ((minutesByDate.value.get(todayStr) ?? 0) === 0) d.setDate(d.getDate() - 1);
-  for (;;) {
-    const key = localDateKey(d);
-    if ((minutesByDate.value.get(key) ?? 0) > 0) {
-      streak += 1;
-      d.setDate(d.getDate() - 1);
-    } else break;
-  }
-  return streak;
-});
+/* P1-1（2026-10-04 全站评审）：「连续 N 天」全站统一为客户端推算（views/v2/streak.ts），
+   不再优先读 users.streakDays 库字段快照——该字段无实时刷新机制，与学习状态页的
+   实时推算跨页打架（同账号同天一处 1 一处 0）。 */
+const streakDays = computed(() => computeStreakDays(minutesByDate.value));
 
 /**
  * 热力等级 0-3（背景表示学习强度）。
@@ -1377,8 +1366,11 @@ onMounted(loadAll);
 .tag--cyan { background: color-mix(in srgb, var(--cyan) 12%, transparent); border-color: color-mix(in srgb, var(--cyan) 35%, transparent); color: var(--cyan-ink); }
 .tag--red { background: color-mix(in srgb, var(--wf-color-danger) 10%, transparent); border-color: color-mix(in srgb, var(--wf-color-danger) 35%, transparent); color: var(--red-ink); }
 .action__footer { display: flex; align-items: center; gap: 12px; margin-top: auto; flex-wrap: wrap; }
-/* 行动卡 foot（原型 wf-action__foot 345-349）：grid，今日进度行在按钮行**上方** */
-.action__foot { display: grid; gap: 12px; margin-top: auto; }
+/* 行动卡 foot（原型 wf-action__foot 345-349）：grid，今日进度行在按钮行**上方**。
+   P1-6（2026-10-04）：轨道必须显式 minmax(0,1fr)——隐式 auto 轨道按子项 max-content
+   定尺，今日进度行的 nowrap 文案会把轨道撑到 465px 溢出 390 视口（「去处理」随之
+   落到屏外不可点），子项的收缩/省略在无约束轨道下永远不触发。 */
+.action__foot { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: auto; }
 .action__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
@@ -1395,11 +1387,14 @@ onMounted(loadAll);
   border: 1px solid var(--line); background: var(--surface);
   font-size: 14px; font-weight: 700; color: var(--muted); cursor: pointer;
 }
-.action__today { display: flex; align-items: center; gap: 10px; }
-.action__today span { font-size: 12px; color: var(--faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.action__today { display: flex; align-items: center; gap: 10px; min-width: 0; }
+/* P1-6（2026-10-04）：span 须可收缩（flex-shrink+min-width:0+ellipsis），否则 nowrap 文案
+   在 390 视口把整行撑出屏（实测溢出 107px、「去处理」按钮落在屏外不可点） */
+.action__today span { font-size: 12px; color: var(--faint); white-space: nowrap; font-variant-numeric: tabular-nums; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* 调控提醒位（2026-09-27）：有要拍板的调整时在行动卡就地露头，蓝色弱底不抢主 CTA */
 .action__control {
   display: flex; align-items: center; gap: 7px;
+  max-width: 100%;
   padding: 9px 12px;
   border: 1px solid color-mix(in srgb, var(--blue) 28%, transparent);
   border-radius: var(--mk-radius-lg, 12px);
