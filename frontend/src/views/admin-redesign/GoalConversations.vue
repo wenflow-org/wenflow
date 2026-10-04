@@ -42,7 +42,8 @@
            完成率随副标；停滞信号随「进行中」段悬停披露（原桶 foot 迁移）；stats 失败/空数据整带隐藏 -->
       <MkDistBand
         v-if="!statsError && stats && stats.total > 0"
-        class="gc-distband"
+        card
+class="gc-distband"
         title="目标对话状态分布"
         :sub="`点击分段只看该状态 · 共 ${stats.total} 条（服务端状态计数，非本页窗口） · 完结率 ${stats.completionRate ?? 0}%`"
         unit="条"

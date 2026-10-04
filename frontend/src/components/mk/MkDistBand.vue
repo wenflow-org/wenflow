@@ -1,39 +1,41 @@
 <template>
-  <div class="mk-distband">
-    <div v-if="title || sub" class="mk-distband__head">
-      <span v-if="title" class="mk-distband__title">{{ title }}</span>
-      <span v-if="sub" class="mk-distband__sub">{{ sub }}</span>
+  <div class="mk-distband" :class="{ 'mk-distband--card mk-card': card }">
+    <div v-if="title || sub" class="mk-distband__head" :class="{ 'mk-card__head': card }">
+      <span v-if="title" class="mk-distband__title" :class="{ 'mk-card__title': card }">{{ title }}</span>
+      <span v-if="sub" class="mk-distband__sub" :class="{ 'mk-card__meta': card }">{{ sub }}</span>
     </div>
-    <div class="stageband mk-distband__band" role="group" :aria-label="ariaLabel || title || '状态分布'">
-      <template v-for="b in bins" :key="b.key">
-        <span
-          v-if="b.n > 0"
-          role="button"
-          tabindex="0"
-          class="mk-distband__seg"
-          :class="{ 'mk-distband__seg--on': activeKey === b.key }"
-          :style="{ width: widthOf(b), background: b.tone }"
+    <div class="mk-distband__cardbody">
+      <div class="stageband mk-distband__band" role="group" :aria-label="ariaLabel || title || '状态分布'">
+        <template v-for="b in bins" :key="b.key">
+          <span
+            v-if="b.n > 0"
+            role="button"
+            tabindex="0"
+            class="mk-distband__seg"
+            :class="{ 'mk-distband__seg--on': activeKey === b.key }"
+            :style="{ width: widthOf(b), background: b.tone }"
+            :title="segTitle(b)"
+            :aria-pressed="activeKey === b.key"
+            @click="emit('select', b.key)"
+            @keydown.enter.prevent="emit('select', b.key)"
+          ></span>
+        </template>
+      </div>
+      <div class="stageband__legend">
+        <button
+          v-for="b in bins"
+          :key="b.key"
+          type="button"
+          class="sbl sbl--link"
+          :class="{ 'sbl--on': activeKey === b.key }"
           :title="segTitle(b)"
-          :aria-pressed="activeKey === b.key"
           @click="emit('select', b.key)"
-          @keydown.enter.prevent="emit('select', b.key)"
-        ></span>
-      </template>
-    </div>
-    <div class="stageband__legend">
-      <button
-        v-for="b in bins"
-        :key="b.key"
-        type="button"
-        class="sbl sbl--link"
-        :class="{ 'sbl--on': activeKey === b.key }"
-        :title="segTitle(b)"
-        @click="emit('select', b.key)"
-      >
-        <span class="sbl__sw" :style="{ background: b.tone }" aria-hidden="true"></span>
-        <span class="sbl__name">{{ b.label }}</span>
-        <span class="sbl__n">{{ b.n }}</span>
-      </button>
+        >
+          <span class="sbl__sw" :style="{ background: b.tone }" aria-hidden="true"></span>
+          <span class="sbl__name">{{ b.label }}</span>
+          <span class="sbl__n">{{ b.n }}</span>
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -64,8 +66,12 @@ const props = withDefaults(
     unit?: string
     ariaLabel?: string
     minPercent?: number
+    /** 卡装（2026-10-05 用户拍板「单独用个卡片包一下」，判例=原型 renderSessions/renderPaths
+     *  的独立分布卡）：true 时套 mk-card 壳，标题/口径升入 mk-card__head，分段+图例进卡体。
+     *  页面级摆放用 card，裸条模式保留给嵌在卡内的场景 */
+    card?: boolean
   }>(),
-  { activeKey: null, title: '', sub: '', unit: '条', ariaLabel: '', minPercent: 3 }
+  { activeKey: null, title: '', sub: '', unit: '条', ariaLabel: '', minPercent: 3, card: false }
 )
 
 const emit = defineEmits<{ (e: 'select', key: string): void }>()
@@ -95,4 +101,9 @@ function segTitle(b: MkDistBin): string {
 .mk-distband__seg:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 /* stageband__legend 全局有 margin-top:14px；组件用 grid gap 统一节奏，归零避免双倍间距 */
 .mk-distband .stageband__legend { margin-top: 0; }
+/* 卡装（card，2026-10-05 用户拍板「单独用个卡片包一下」；判例=原型 renderSessions/renderPaths
+   的独立分布卡：mk-card 壳 + mk-card__head 标题/口径 + 卡体 16px 内边距，摆列表卡上方）。
+   卡头与卡体之间不吃根级 gap（mk-card__head 自带 border-bottom 分隔），节奏在卡体内统一 */
+.mk-distband--card { gap: 0; }
+.mk-distband--card .mk-distband__cardbody { display: grid; gap: 8px; padding: 16px; }
 </style>

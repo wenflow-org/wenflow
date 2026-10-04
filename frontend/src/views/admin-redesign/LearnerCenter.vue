@@ -38,7 +38,8 @@
          3% 宽度下限在组件内单源 -->
     <MkDistBand
       v-if="rows.length && confRows.length && !loadFailed"
-      title="置信度分布"
+      card
+title="置信度分布"
       :sub="confBaseNote"
       unit="人"
       aria-label="按置信度分档筛选"

@@ -3,7 +3,7 @@
     <!-- 教学会话页头（newui/admin pagehead；embedded 由宿主承载，本组件不渲染页头）。
          本页 20s 静默轮询，手动「刷新」钮与之重复已撤（对齐执行日志/健康中心先例：
          轮询页不放刷新钮）；拉取失败走错误条重试钮（refreshNow 仍被错误态与宿主联动使用）。
-         统计口径（2026-10-04 晚贴表分布条）：全页统计带 = 表格卡内 MkDistBand 唯一一处；
+         统计口径（2026-10-05 分段条升卡装）：全页统计带 = 列表卡上方 MkDistBand 唯一一处；
          计数每个只出现一次——加载/筛选/总量/截断住卡头 meta，待关注 / 缺总结 / 有建议住
          卡头 chips（后两者无分布组覆盖），进行中 chip 是 active 单状态 ≠ 分布条
          「进行中」四状态合并档（两个不同口径，见各自 title） -->
@@ -32,7 +32,8 @@
          无数据不留空带 -->
     <MkDistBand
       v-if="!embedded && rows.length"
-      class="ts-distband"
+      card
+class="ts-distband"
       title="会话状态分布"
       :sub="tsBandSub"
       unit="条"
