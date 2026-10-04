@@ -15,7 +15,7 @@
            passRate 缺失显「—」+ title「暂无评测数据」，不再 `?? 0` 把缺数据伪装成「0% 通过」；
            agent 筛选生效时句面带限定词（筛选口径进句面，数字不再无口径裸奔） -->
       <template v-if="runs.length">
-        <strong class="mk-status__title" :class="lastRateCls" :title="lastRateTitle">最近评测<template v-if="agentFilter">（仅 {{ agentLabel(agentFilter) }}）</template> · {{ lastPassRateText }}{{ lastRateBase }} 通过</strong>
+        <strong class="mk-status__title" :class="lastRateCls" :title="lastRateTitle">最近评测<template v-if="agentFilter">（仅 {{ agentLabel(agentFilter) }}）</template> · {{ lastPassRateText }}{{ lastRateBase }}<template v-if="!lastRunEmpty"> 通过</template></strong>
         <span class="mk-status__sep" aria-hidden="true"></span>
       </template>
       <span class="mk-status__meta">用例 {{ cases.length }}</span>
@@ -598,20 +598,33 @@ const statusTone = computed(() =>
 /* 评估历史加载窗口（getEvalRuns 上限 30）：状态条「最近 N 次」句面与 title 共用此常量 */
 const RUNS_LIMIT = 30
 /* 原型 statusbar 主句口径：最近一次评估的通过率（runs[0] 即最新一次，reloadRuns 保持接口倒序）。
-   精度/阈值/兜底走 rate-utils 单点：passRate 缺失显「—」+ title「暂无评测数据」（不 ?? 0 伪装 0%） */
-const lastPassRateText = computed(() => formatRate(runs.value[0]?.summary?.passRate) ?? '—')
-/** 基数（23/25）：summary 带通过数/总次数才拼接，缺一项就不硬凑 */
+   精度/阈值/兜底走 rate-utils 单点：passRate 缺失显「—」+ title「暂无评测数据」（不 ?? 0 伪装 0%）。
+   P2（2026-10-04 全站评审）：totalRuns=0（用例全部被跳过）也不是「0% 通过」失败态——绿点+红字
+   同条打架；无分母走中性句，红档只留给真跑过且未达标的运行（后端在空跑时仍持久化 passRate=0）。 */
+const lastRunEmpty = computed(() => {
+  const s = runs.value[0]?.summary
+  return !!s && (s.totalRuns ?? 0) === 0
+})
+const lastPassRateText = computed(() => {
+  if (lastRunEmpty.value) return '暂无通过数据（0 次执行）'
+  return formatRate(runs.value[0]?.summary?.passRate) ?? '—'
+})
+/** 基数（23/25）：summary 带通过数/总次数才拼接，缺一项就不硬凑；0 次执行不拼「（0/0）」 */
 const lastRateBase = computed(() => {
+  if (lastRunEmpty.value) return ''
   const s = runs.value[0]?.summary
   if (!s || typeof s.passedCount !== 'number' || typeof s.totalRuns !== 'number') return ''
   return `（${s.passedCount}/${s.totalRuns}）`
 })
-const lastRateCls = computed(() => rateToneClass(rateToneOf(runs.value[0]?.summary?.passRate), 'mk-status__meta'))
-const lastRateTitle = computed(() =>
-  lastPassRateText.value === '—'
+const lastRateCls = computed(() =>
+  lastRunEmpty.value ? '' : rateToneClass(rateToneOf(runs.value[0]?.summary?.passRate), 'mk-status__meta')
+)
+const lastRateTitle = computed(() => {
+  if (lastRunEmpty.value) return '最近一次评估 0 次执行（用例全部被跳过或未运行），无通过率可显示'
+  return lastPassRateText.value === '—'
     ? '暂无评测数据：该运行未回传通过率'
     : `最近一次评估通过率；${RATE_THRESHOLD_NOTE}`
-)
+})
 const lastRunText = computed(() => (runs.value.length ? `最近 ${timeAgo(runs.value[0]?.createdAt)}` : '暂无评估记录'))
 const lastRunHint = computed(() => {
   const s = runs.value[0]?.summary

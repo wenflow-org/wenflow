@@ -78,7 +78,7 @@
       <div class="mk-card">
         <div class="mk-card__head">
           <span class="mk-card__title">记忆强度分布</span>
-          <span class="mk-card__meta" :title="`记忆强度 = FSRS 可提取率 retrievability；无 FSRS 状态的 ${mrStrengthPending} 条不进分母（不硬造）`">按记忆强度分档 · 平均 {{ mrAvgStrengthPct }}% · 有强度 {{ mrStrengthTotal }}/{{ queueRows.length }} 条</span>
+          <span class="mk-card__meta" :title="`记忆强度 = FSRS 可提取率 retrievability；无 FSRS 状态的 ${mrStrengthPending} 条不进分母（不硬造）${mrStrengthTotal === 0 ? '；窗口内暂无 FSRS 强度数据' : ''}`">按记忆强度分档 · 平均 {{ mrStrengthTotal === 0 ? '—' : `${mrAvgStrengthPct}%` }} · 有强度 {{ mrStrengthTotal }}/{{ queueRows.length }} 条</span>
         </div>
         <div class="mr-dist__body">
           <div class="histo" role="img" :aria-label="mrHistoAria">
@@ -734,7 +734,10 @@ const mrStrengthBuckets = computed(() => {
   return MR_STRENGTH_BUCKETS.map((bucket, i) => ({
     ...bucket,
     n: counts[i],
-    h: Math.max(6, Math.round((counts[i] / maxB) * 100)) // 原型公式：零桶/极小桶压到 6px 起步
+    h: Math.max(6, Math.round((counts[i] / maxB) * 100)), // 原型公式：零桶/极小桶压到 6px 起步
+    // P2（2026-10-04 全站评审）：窗口内没有任何强度数据时整片降灰——5 根满饱和彩柱高度 6px
+    // 会被读成「强度全低」的分布（与同屏列表 72-85% 互斥）；空数据是状态，不是一档分布
+    tone: mrStrengthTotal.value === 0 ? 'var(--mk-surface-3)' : bucket.tone
   }))
 })
 

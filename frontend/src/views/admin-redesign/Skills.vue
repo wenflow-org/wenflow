@@ -331,7 +331,7 @@ import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures
 import { categoryText } from './statusText'
 import { COMPLETION_META, completionMetaOf } from './glossaryMeta'
 import { EXTRA_CAPABILITY_SKILLS } from './capabilityCatalog'
-import { RATE_THRESHOLD_NOTE, successRateOf, successRateText, successRateTone, rateToneClass } from './rate-utils'
+import { RATE_THRESHOLD_NOTE, successRateOf, successRateText, successRateTone, rateToneClass, rateToneOf } from './rate-utils'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
@@ -403,7 +403,7 @@ watch(
   },
   { immediate: true }
 )
-type Health = 'ok' | 'idle' | 'error'
+type Health = 'ok' | 'idle' | 'warn' | 'error'
 /** 目录表行（档案 + 实时统计 + 健康态） */
 interface SkillRow {
   id: string
@@ -528,7 +528,14 @@ const cards = computed<SkillRow[]>(() => {
   const profiles = liveSkillProfiles.value.map((p) => ({ ...p, promptVersion: '', description: '' }))
   return profiles.map((p) => {
     const stat = skillStatOf(p.id)
-    const health: Health = stat.errors > 0 ? 'error' : stat.calls === 0 ? 'idle' : 'ok'
+    // P2（2026-10-04 全站评审）：健康点挂 rate-utils 共享阈值档——errors>0 即红点曾让
+    // 24/31 个 Skill 全挂红灯（本窗口成功率 94.9%），指示器饱和失去分辨力。
+    // 现在：成功率 <90% 红「异常」（可闪）、<97% 琥珀「有失败」、其余绿/灰；
+    // 无分母（calls=0）= 空闲。
+    const rate = successRateOf(stat.calls, stat.errors)
+    const tone = rateToneOf(rate)
+    const health: Health =
+      stat.calls === 0 || rate === null ? 'idle' : tone === 'bad' ? 'error' : tone === 'warn' ? 'warn' : 'ok'
     return { ...p, ...stat, health }
   })
 })
@@ -537,6 +544,7 @@ const cards = computed<SkillRow[]>(() => {
     仅靠 title 时触屏/读屏拿不到状态（且 title 会成为行可访问名的首词） */
 function healthLabel(health: Health): string {
   if (health === 'error') return '异常'
+  if (health === 'warn') return '有失败'
   if (health === 'idle') return '空闲'
   return '健康'
 }
@@ -924,7 +932,14 @@ const fallbackPolicyTitle = computed(() =>
 .sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .sk-dot--ok { background: var(--mk-green); }
 .sk-dot--idle { background: #c3cede; }
+/* P2（2026-10-04 全站评审）：琥珀「有失败」中间档（errors>0 但成功率 ≥90%）；
+   红档才闪——闪键帧此前引用 SkillReconciliation scoped 编译名，本页从未生效（死动画），补本地定义 */
+.sk-dot--warn { background: var(--mk-amber); }
 .sk-dot--error { background: var(--mk-red); animation: sk-blink 1.2s ease infinite; }
+@keyframes sk-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
 /* 完成度列：对账拉取失败的行内提示（红字 + title 带原因） */
 .sk-rec-fail { color: var(--mk-red); font-weight: 700; }
 

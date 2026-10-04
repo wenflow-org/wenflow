@@ -49,7 +49,7 @@
       <section class="mk-kpi-grid">
         <MkKpi
           label="完成率"
-          :value="statsKpiValue(`${runStats.completionRate ?? 0}%`)"
+          :value="statsKpiValue(statsKpiPct(completionPct))"
           :tone="statsState === 'error' ? 'bad' : ''"
           :hint="statsKpiHint(`已完成 ${runStats.completed} / 全部 ${runStats.totalSessions}`)"
           :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : ''"
@@ -58,7 +58,7 @@
         />
         <MkKpi
           label="失败率"
-          :value="statsKpiValue(`${runStats.systemFailureRate ?? 0}%`)"
+          :value="statsKpiValue(statsKpiPct(runStats.systemFailureRate))"
           :tone="statsState === 'error' ? 'bad' : (runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''"
           :hint="statsKpiHint(`系统失败 ${runStats.failed} · 人为终止 ${runStats.abandoned}`)"
           :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : ''"
@@ -602,6 +602,12 @@ const partition = computed(() => {
 
 /* ===== A5 运行统计：完成率/失败率/平均时长/卡死最长分钟（GET /virtual-learners/stats） ===== */
 const runStats = computed(() => liveVirtualRunStats.value)
+/** P3（2026-10-04 全站评审）：完成率用原始分子/分母现算——后端 completionRate 是整数舍入值，
+    3/685≈0.44% 被舍成 0% 后显「0%」读作「没有任何完成」（假零）；现算值交给 statsKpiPct 出「<1%」 */
+const completionPct = computed(() => {
+  const s = runStats.value
+  return s.totalSessions > 0 ? (s.completed / s.totalSessions) * 100 : 0
+})
 
 /* ===== P1#19 运行统计三态（2026-10-02 人类可读性）：
      live.ts 导出 liveVirtualStatsLoading/liveVirtualStatsError（stats 拉取失败不再被静默吞掉），
@@ -617,6 +623,12 @@ function statsKpiValue(ready: string): string {
   if (statsState.value === 'loading') return '…'
   if (statsState.value === 'error') return '不可用'
   return ready
+}
+/** P3（2026-10-04 全站评审）：0<rate<1 显「<1%」——3/685≈0.44% 整数舍入成「0%」会被读成
+    「没有任何完成」（假零）；真 0（无分母/无完成）照常显 0% */
+function statsKpiPct(rate: number | null | undefined): string {
+  const v = rate ?? 0
+  return v > 0 && v < 1 ? '<1%' : `${v}%`
 }
 /** 三态 hint：error 档给出动作出口 */
 function statsKpiHint(ready: string): string {

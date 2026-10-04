@@ -82,7 +82,15 @@
         <span v-if="deadFailed" class="mk-badge mk-badge--bad">加载失败</span>
         <span v-else-if="!deadLoading && deadCount > 0" class="mk-badge mk-badge--warn">{{ deadCount }} 条待重放</span>
         <div class="mk-card__head-right">
-          <button type="button" class="mk-btn mk-btn--sm" :disabled="requeueBusy" @click="requeueAll">
+          <!-- P3（2026-10-04 全站评审）：空态不给假动作——0 死信时禁点（此前点了会弹
+               「重放全部 0 条死信」确认框，暗示一个不存在的可执行动作） -->
+          <button
+            type="button"
+            class="mk-btn mk-btn--sm"
+            :disabled="requeueBusy || (!deadLoading && !deadFailed && deadCount === 0)"
+            :title="!deadLoading && !deadFailed && deadCount === 0 ? '暂无死信可重放' : undefined"
+            @click="requeueAll"
+          >
             {{ requeueBusy ? '重放中…' : '重放全部死信' }}
           </button>
         </div>

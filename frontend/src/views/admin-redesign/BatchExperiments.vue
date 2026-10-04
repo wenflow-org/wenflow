@@ -5,7 +5,11 @@
     <MkPageHead v-if="!embedded" title="批量实验" sub="用多组虚拟画像批量压测教学闭环与 Skill 稳定性" />
     <div v-if="!embedded" class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
-      <span class="mk-status__meta">共 {{ experiments.length }} 个实验 · 进行中 {{ runningCount }} · 学习者 {{ learnerTotal }}</span>
+      <span class="mk-status__meta">
+        <!-- P3（2026-10-04 全站评审）：空库不再三个 0 连排——「暂无批量实验」一句，细分归零零信息 -->
+        <template v-if="experiments.length === 0">暂无批量实验</template>
+        <template v-else>共 {{ experiments.length }} 个实验 · 进行中 {{ runningCount }} · 学习者 {{ learnerTotal }}</template>
+      </span>
       <!-- P1#23（2026-10-02 人类可读性）：状态条此前只答「多少在跑」不答「跑得好不好」——
            补失败/卡死聚合（红/琥珀），口径（已加载 runs 客户端聚合）入 title -->
       <span v-if="failedRunTotal || stalledRunTotal" class="mk-status__meta" :title="aggregateTitle">
