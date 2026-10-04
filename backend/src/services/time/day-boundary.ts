@@ -21,6 +21,25 @@ const PLATFORM_TIMEZONE_KEY = 'timezone';
 
 let appTimeZone = normalizeTimeZone(process.env.APP_TIMEZONE) || DEFAULT_APP_TIME_ZONE;
 
+/* Intl.DateTimeFormat 构造很贵（单次 ~50-200µs），而 dayKeyOf/hourKeyOf 在统计聚合里逐行调用
+ * （总览单次聚合 ~30-50 万次调用曾实测烧掉 12s 纯 CPU）。格式化器只依赖 tz + 固定选项，
+ * 模块级缓存、setAppTimeZone 时失效（2026-10-04 性能批）。 */
+const partsFormatterCache = new Map<string, Intl.DateTimeFormat>();
+
+function getPartsFormatter(tz: string): Intl.DateTimeFormat {
+  let formatter = partsFormatterCache.get(tz);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    partsFormatterCache.set(tz, formatter);
+  }
+  return formatter;
+}
+
 /** 当前应用时区（同步读缓存值；刷新见 refreshAppTimeZoneFromSettings）。 */
 export function getAppTimeZone(): string {
   return appTimeZone;
@@ -43,6 +62,7 @@ export function setAppTimeZone(value: unknown): boolean {
   const normalized = normalizeTimeZone(value);
   if (!normalized) return false;
   appTimeZone = normalized;
+  partsFormatterCache.clear();
   return true;
 }
 
@@ -62,12 +82,7 @@ export async function refreshAppTimeZoneFromSettings(): Promise<string> {
 
 /** 某时刻在指定时区下的 UTC 偏移（毫秒；东区为正）。 */
 function timeZoneOffsetMs(tz: string, at: Date): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
-    hour12: false,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-  }).formatToParts(at);
+  const parts = getPartsFormatter(tz).formatToParts(at);
   const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? '0');
   const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
   return asUtc - at.getTime();

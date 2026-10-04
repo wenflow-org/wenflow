@@ -27,17 +27,17 @@ import {
   accumulateCost,
   createCostBucket,
   describePricingStatus,
-  summarizeCallCosts,
   type CostBucket,
   type PricingStatus,
 } from '../../services/cost/call-cost-aggregation';
 import {
   resolveRealUserIds,
-  findTokenCostRows,
+  aggregateWindow,
+  aggregateTokenGroups,
   listUsersBasicInfo,
 } from '../../services/cost/token-cost.service';
 import { logger } from '../../utils/logger';
-import { dayKeyOf, addDaysToDayKey } from '../../services/time/day-boundary';
+import { dayKeyOf, addDaysToDayKey, parseDayKeyStart } from '../../services/time/day-boundary';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -152,87 +152,80 @@ export function __clearTokenCacheForTests(): void {
 }
 
 /**
- * 统一数据加载：
- * - tokenRows：带 token 的 gateway 行（含 metadata.skillId 解析）
- * - callRows：全量行（调用/失败计数）
- * 返回按维度聚合好的排行 + 总量 + 按天趋势。
+ * 启动预热（2026-10-04 页面加载性能批）：SQL 聚合改造后冷载仍需读 ~100MB
+ * metadata（7 天窗 8.4 万 token 行，json_extract 在 C 层取值）——在启动后台
+ * 空转时先算一次默认口径（7d/仅真实），首访成本分析页直接命中 TTL 缓存。
+ * 失败静默：用户访问时自然重算（口径/新鲜度约束不变）。
+ */
+export function warmTokenCostCache(): Promise<TokenDataResult> {
+  return loadTokenDataCached(7, false);
+}
+
+/**
+ * 统一数据加载（2026-10-04 SQL 聚合改造）：
+ * 原实现外拉 17.5 万全量行 + 8.4 万 token 行（metadata ~100MB 逐行 JSON.parse）到 JS 聚合，
+ * 冷载实测 28.5s。现改由 SQL 端聚合：
+ * - aggregateTokenGroups：skillId × userId × model 分组（组基数 ~4k），json_extract 在 C 层取值；
+ * - aggregateWindow：总量一次 + 每个本地日一个小窗（calledAt 索引），一次扫出 调用/失败/token；
+ * JS 侧只做装配（组级合计经 accumulateCost(rowCount) 累加，语义与逐行一致，见该函数注释）。
  */
 async function loadTokenData(days: number, includeTest: boolean) {
   const since = new Date(Date.now() - days * 86400000);
   const realUserIds = includeTest ? null : await resolveRealUserIds();
-  // userId 过滤：真实用户口径时排除虚拟/测试（userId 不在真实集合 → 剔除；null/孤儿同样剔除）
-  const userScope = realUserIds ? { userId: { in: realUserIds } } : {};
+  const sinceMs = since.getTime();
 
-  const [tokenRows, callRows] = await findTokenCostRows({ since, userScope });
+  // 日标签按**应用时区本地日**（day-boundary），与学习侧日界/前端 localDateKey 同口径；
+  // trend 只含最近 days 个整本地日——窗口头部不足一日的行只进总量（与原逐行
+  // dayKeyOf + daily.get 命不中即跳过的行为一致）
+  const todayKey = dayKeyOf(new Date());
+  const dayLabels: string[] = [];
+  for (let i = days - 1; i >= 0; i -= 1) {
+    dayLabels.push(addDaysToDayKey(todayKey, -i));
+  }
 
-  // —— token 维度排行 ——
+  const [windowTotals, tokenGroups, ...dayAggregates] = await Promise.all([
+    aggregateWindow(sinceMs, null, realUserIds),
+    aggregateTokenGroups(sinceMs, realUserIds),
+    ...dayLabels.map((label) => {
+      const fromMs = parseDayKeyStart(label).getTime();
+      const toMs = parseDayKeyStart(addDaysToDayKey(label, 1)).getTime();
+      return aggregateWindow(fromMs, toMs, realUserIds);
+    }),
+  ]);
+
+  // —— token 维度排行（组级装配：每组合计视作一行、行数 = calls）——
   const skillMap = new Map<string, RankEntry>();
   const userMap = new Map<string, RankEntry>();
   const modelMap = new Map<string, RankEntry>();
   let totalTokens = 0;
   let totalPrompt = 0;
   let totalCompletion = 0;
+  const costTotals = createCostBucket();
 
-  for (const r of tokenRows) {
-    const t = r.tokensUsed || 0;
-    const skillId = parseMetadataSkillId(r.metadata) || '未归因';
-    const userKey = r.userId || '未归因';
-    const modelKey = r.model || '未归因';
+  for (const g of tokenGroups) {
+    totalTokens += g.tokens;
+    totalPrompt += g.promptTokens;
+    totalCompletion += g.completionTokens;
 
-    totalTokens += t;
-    totalPrompt += r.promptTokens || 0;
-    totalCompletion += r.completionTokens || 0;
-
-    // —— 三个维度统一累加 ——
-    const entries: Array<[string, string]> = [
-      [skillId, agentDisplayName(skillId)],
-      [userKey, userKey],
-      [modelKey, modelKey],
+    // 成本输入只有 model/prompt/completion（无缓存明细 → cachedTokens 恒 0，与原实现一致）
+    const costRow = { model: g.model ?? '', promptTokens: g.promptTokens, completionTokens: g.completionTokens };
+    const triples: Array<[Map<string, RankEntry>, string, string]> = [
+      [skillMap, g.skillId || '未归因', agentDisplayName(g.skillId || '未归因')],
+      [userMap, g.userId || '未归因', g.userId || '未归因'],
+      [modelMap, g.model || '未归因', g.model || '未归因'],
     ];
-    const maps: Array<{ get: (k: string) => RankEntry | undefined; set: (k: string, v: RankEntry) => void }> = [skillMap, userMap, modelMap];
-    for (let i = 0; i < maps.length; i += 1) {
-      const key = entries[i][0];
-      const display = entries[i][1];
-      const e = maps[i].get(key) || { key, display, tokens: 0, failed: 0, ...createCostBucket() };
-      e.tokens += t;
-      if (r.success === false) e.failed += 1;
-      // 成本单遍累加：calls/promptTokens/completionTokens/金额一次写入（agent_call_logs 无缓存明细 → 缓存按 0 全价计）
-      accumulateCost(e, r);
-      maps[i].set(key, e);
+    for (const [map, key, display] of triples) {
+      const e = map.get(key) || { key, display, tokens: 0, failed: 0, ...createCostBucket() };
+      e.tokens += g.tokens;
+      e.failed += g.failed;
+      accumulateCost(e, costRow, undefined, g.calls);
+      map.set(key, e);
     }
+    accumulateCost(costTotals, costRow, undefined, g.calls);
   }
 
-  // 总量成本：只对带 token 的 gateway 行（与 token 排行同源）；单价未配置时 usd=null
-  const costTotals = summarizeCallCosts(tokenRows);
-  const pricingStatus = describePricingStatus(tokenRows.map((r) => r.model));
-
-  // —— 调用/失败计数补全（全量行，含 skill 层）——
-  const callCount = callRows.length;
-  let callFailed = 0;
-  const daily = new Map<string, { date: string; tokens: number; calls: number; failed: number }>();
-  // 日标签按**应用时区本地日**（day-boundary），与学习侧日界/前端 localDateKey 同口径
-  const todayKey = dayKeyOf(new Date());
-  for (let i = days - 1; i >= 0; i -= 1) {
-    const label = addDaysToDayKey(todayKey, -i);
-    daily.set(label, { date: label, tokens: 0, calls: 0, failed: 0 });
-  }
-  for (const r of callRows) {
-    if (r.success === false) callFailed += 1;
-    const label = dayKeyOf(new Date(r.calledAt));
-    const b = daily.get(label);
-    if (b) {
-      b.calls += 1;
-      if (r.success === false) b.failed += 1;
-    }
-  }
-  // token 按天叠加
-  for (const r of tokenRows) {
-    const label = dayKeyOf(new Date(r.calledAt));
-    const b = daily.get(label);
-    if (b) {
-      b.tokens += r.tokensUsed || 0;
-    }
-  }
+  // 单价配置状态：已出现模型（组级去重同口径）
+  const pricingStatus = describePricingStatus(tokenGroups.map((g) => g.model));
 
   const sortByTokens = (map: Map<string, RankEntry>) => [...map.values()].sort((a, b) => b.tokens - a.tokens);
 
@@ -241,15 +234,21 @@ async function loadTokenData(days: number, includeTest: boolean) {
       tokens: totalTokens,
       promptTokens: totalPrompt,
       completionTokens: totalCompletion,
-      calls: callCount,
-      failed: callFailed,
-      // 新增成本字段（语义不变，仅追加）：usd=null 表示无已定价调用；pricingKnown 为 false 时金额不完整
+      // 调用/失败：窗口全量行口径（含 skill 层），与改造前 callRows.length 一致
+      calls: windowTotals.calls,
+      failed: windowTotals.failed,
+      // 成本字段（语义不变）：usd=null 表示无已定价调用；pricingKnown 为 false 时金额不完整
       usd: costTotals.usd,
       pricingKnown: costTotals.pricingKnown,
       callsMissingPricing: costTotals.callsMissingPricing,
       pricedCalls: costTotals.pricedCalls,
     },
-    trend: [...daily.values()],
+    trend: dayLabels.map((label, i) => ({
+      date: label,
+      tokens: dayAggregates[i]?.tokens ?? 0,
+      calls: dayAggregates[i]?.calls ?? 0,
+      failed: dayAggregates[i]?.failed ?? 0,
+    })),
     bySkill: sortByTokens(skillMap),
     byUser: sortByTokens(userMap),
     byModel: sortByTokens(modelMap),

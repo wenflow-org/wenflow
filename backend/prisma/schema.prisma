@@ -83,6 +83,13 @@ model agent_call_logs {
   @@index([calledAt, success])
   @@index([executionLayer, success])
   @@index([providerId, calledAt])
+  // 覆盖索引（2026-10-04 页面加载性能批，8.5GB 表随机 IO 治理）：
+  // 执行日志窗口聚合（sourceEntry×success 分组 / 失败行 / 金丝雀计数）与
+  // Token 成本窗口聚合（COUNT×失败×token 三合一扫描）——按 calledAt 范围索引即覆盖；
+  // 总览全量累计的真实用户口径（userId IN × 业务行谓词）——用户域索引即覆盖
+  @@index([calledAt, agentId, sourceEntry, success])
+  @@index([calledAt, executionLayer, tokensUsed, success])
+  @@index([userId, success, executionLayer])
 }
 
 
@@ -123,6 +130,8 @@ model prompt_call_logs {
   createdAt           DateTime @default(now())
 
   @@index([agentId, createdAt])
+  // 日志保留清理按 createdAt 范围取批（2026-10-04 性能批）：无纯 createdAt 索引时 112k 宽行全表排序 47.8s
+  @@index([createdAt])
   @@index([pipelineRunId])
   @@index([pathId])
   @@index([userId])

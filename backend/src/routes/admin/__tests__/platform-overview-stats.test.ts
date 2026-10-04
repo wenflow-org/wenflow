@@ -312,18 +312,19 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
         ? Promise.resolve([{ id: 'real1' }, { id: 'real2' }])
         : Promise.resolve([{ id: 'real1' }, { id: 'real2' }, { id: 'virt1' }, { id: 'virt2' }])
     );
-    // 全量累计 groupBy（两次调用：真实 + All）——10 分钟长缓存子层，仍带 SQL userId 过滤
-    mockAgentCallLogs.groupBy.mockImplementation((args: any) =>
-      args?.where?.userId
-        ? Promise.resolve([
-            { success: true, _count: 8 },
-            { success: false, _count: 4 },
-          ])
-        : Promise.resolve([
-            { success: true, _count: 10 },
-            { success: false, _count: 14 },
-          ])
-    );
+    // 全量累计（10 分钟长缓存子层）：2026-10-04 性能批后不再 groupBy（Prisma 对
+    // userId IN + GROUP BY success 会退化成 success 索引全表扫），改为 6 笔等值 count 相减：
+    // 真实业务 = 真实全量 − 真实 gateway；全量业务 = 全量 − gateway。
+    // 数值按原 groupBy 夹具拆解：真实业务 12（8 成功）、全量业务 24。
+    mockAgentCallLogs.count.mockImplementation((args?: any) => {
+      const w = args?.where || {};
+      const hasUser = !!w.userId;
+      const isGateway = w.executionLayer === 'api-gateway';
+      if (hasUser && isGateway) return Promise.resolve(w.success === false ? 0 : 4);
+      if (hasUser) return Promise.resolve(w.success === true ? 12 : 16);
+      if (isGateway) return Promise.resolve(6);
+      return Promise.resolve(30);
+    });
     // LLM 单扫：startedAt 窗口、无 userId 过滤（端内分桶）；真实 12×2.5 万 + 虚拟 12×7.5 万
     mockPrisma.llm_execution_attempts.findMany.mockResolvedValue([
       ...Array.from({ length: 12 }, (_, i) => ({ userId: 'real1', resolvedModel: 'm1', totalTokens: 25000, startedAt: now, id: `lr-${i}` })),
@@ -339,9 +340,10 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     // 真实用户 id 集合来自 users.findMany（REAL_USER_WHERE 过滤）
     expect(mockPrisma.users.findMany).toHaveBeenCalledWith(expect.objectContaining({ select: { id: true } }));
 
-    // 真实口径：userId in 过滤仍注入到全量累计 groupBy（长缓存子层）
-    const agentWhere = mockAgentCallLogs.groupBy.mock.calls.find((c: any) => c[0]?.where?.userId)?.[0].where;
-    expect(agentWhere.userId).toEqual({ in: ['real1', 'real2'] });
+    // 真实口径：userId in 过滤仍注入到全量累计计数（长缓存子层，等值 count 形态）
+    const agentCountWheres = mockAgentCallLogs.count.mock.calls.map((c: any) => c[0]?.where || {});
+    const realUserCountWhere = agentCountWheres.find((w: any) => w.userId && !w.executionLayer);
+    expect(realUserCountWhere?.userId).toEqual({ in: ['real1', 'real2'] });
 
     // 单扫窗口：agent/llm 都是纯时间窗（无 userId 过滤，端内分桶）
     const agentScanWhere = mockAgentCallLogs.findMany.mock.calls.find(

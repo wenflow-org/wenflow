@@ -114,17 +114,24 @@ function toNonNegativeInt(value: number | null | undefined): number {
  * - 与 `computeCallCostUsd` 语义完全一致（不重复实现换算）；
  * - 未知单价的调用只增加 `callsMissingPricing`，不污染 `usd`；
  * - 每次累加后同步 `pricingKnown = callsMissingPricing === 0`。
+ *
+ * `rowCount`（2026-10-04）：SQL 分组聚合改造后，一行代表 N 条同 (skill,user,model) 调用
+ * （payload 为组内合计）。单价按 token 线性 → 组级金额 = 逐行金额之和（差异仅在
+ * roundUsd 舍入位：逐行舍入 vs 组级一次舍入，≤ 组内行数 × 1e-6 级，展示口径无感）；
+ * calls / pricedCalls / callsMissingPricing 按行数计数，与原逐行口径一致。
  */
 export function accumulateCost(
   bucket: CostBucket,
   row: CostInputRow,
   pricingTable: PricingTable = AVAILABLE_MODELS,
+  rowCount = 1,
 ): CostBucket {
   const promptTokens = toNonNegativeInt(row?.promptTokens);
   const completionTokens = toNonNegativeInt(row?.completionTokens);
   const cachedTokens = Math.min(toNonNegativeInt(row?.cachedTokens), promptTokens);
+  const n = Math.max(1, Math.floor(rowCount));
 
-  bucket.calls += 1;
+  bucket.calls += n;
   bucket.promptTokens += promptTokens;
   bucket.completionTokens += completionTokens;
 
@@ -134,10 +141,10 @@ export function accumulateCost(
   );
 
   if (result.pricingKnown && result.usd !== null) {
-    bucket.pricedCalls += 1;
+    bucket.pricedCalls += n;
     bucket.usd = roundUsd((bucket.usd ?? 0) + result.usd);
   } else {
-    bucket.callsMissingPricing += 1;
+    bucket.callsMissingPricing += n;
   }
   bucket.pricingKnown = bucket.callsMissingPricing === 0;
   return bucket;

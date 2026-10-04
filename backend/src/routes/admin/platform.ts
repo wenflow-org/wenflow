@@ -290,6 +290,14 @@ export function clearOverviewStatsCache(): void {
   clearOverviewAllTimeCache();
 }
 
+/** 预热/后台刷新（schedulers 装配调用）：把总览重算成本搬离用户请求路径。
+ *  按 4 分钟节奏刷新（< 5min 主 TTL）→ 请求恒命中缓存；内部同时填服务层两个长缓存子层。
+ *  失败静默（调用方 runBackgroundTask 记账），请求路径仍会按需重算，无功能依赖。 */
+export async function warmOverviewStatsCache(): Promise<void> {
+  const data = await computeOverviewStats(false);
+  overviewStatsCache.set('overview-stats', { payload: data, cachedAt: Date.now() });
+}
+
 router.get('/overview/stats', async (req: Request, res: Response) => {
   try {
     const cacheKey = 'overview-stats';
@@ -547,12 +555,12 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       AND: [] as any[]
     };
 
-    where.AND.push({
-      OR: [
-        { metadata: null },
-        { NOT: { metadata: { contains: '"eventType":"path-generation-stage"' } } }
-      ]
-    });
+    /* stage 事件排除（2026-10-04 性能）：原用 metadata NOT LIKE '%"eventType":"path-generation-stage"%'
+       过滤，需对窗口内全行读大文本列（冷缓存 27s/24 万行级）。实测双向等价（当天全库：
+       agentId='path-agent' 的 4952 行 100% 是 stage 事件；非 path-agent 行 0 行带该元数据）→
+       改写为列过滤走 agentId 索引，不再触碰 metadata。
+       维护注意：若未来新增阶段事件的发射者/复用方，需同步本判据（stage 事件的写入方=path-agent）。 */
+    where.AND.push({ NOT: { agentId: 'path-agent' } });
 
     if (agentName) {
       const agentIds = AGENT_NAME_TO_IDS[agentName as string];

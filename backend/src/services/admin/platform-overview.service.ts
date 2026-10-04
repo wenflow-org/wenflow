@@ -85,32 +85,39 @@ let allTimeInflight: Promise<{ total: number; success: number; totalAll: number 
 export function clearOverviewAllTimeCache(): void {
   allTimeCache = null;
   allTimeInflight = null;
+  sevenDayScanCache = null;
+  sevenDayScanInflight = null;
 }
 
-async function computeAllTimeCallStats(realUserScope: { userId: { in: string[] } }, businessExecutionWhere: object, force = false): Promise<{ total: number; success: number; totalAll: number }> {
+async function computeAllTimeCallStats(realUserIds: string[], force = false): Promise<{ total: number; success: number; totalAll: number }> {
   if (!force && allTimeCache && Date.now() - allTimeCache.cachedAt < ALL_TIME_CACHE_TTL_MS) {
     return allTimeCache.payload;
   }
   if (allTimeInflight) return allTimeInflight;
   const computation = (async () => {
-    const [realGroups, allGroups] = await Promise.all([
-      // Agent 调用统计（真实用户口径：按 userId 归属过滤）
-      prisma.agent_call_logs.groupBy({
-        by: ['success'],
-        where: { ...businessExecutionWhere, ...realUserScope },
-        _count: true,
-      }),
-      // Agent 调用统计全量（含虚拟/测试账号与孤儿行，前端副口径标注）
-      prisma.agent_call_logs.groupBy({
-        by: ['success'],
-        where: businessExecutionWhere,
-        _count: true,
-      }),
-    ]);
+    /* 性能（2026-10-04 页面加载性能批）：原用 businessExecutionWhere（executionLayer IS NULL OR
+       != 'api-gateway'）直接 groupBy——8.5GB 表下计划对行评估 OR 谓词无法走索引，实测 3.2s
+       （撞上日志保留清理时 21s）。全部口径改「可索引计数相减」，两步恒等：
+       ① 业务行 = 全量 − gateway 行（executionLayer IS NULL 在两侧一致保留，同快照对拍相等）；
+       ② 一律不用 GROUP BY：Prisma 对 `userId IN (281) + GROUP BY success` 会选 success 索引
+          全表扫（为省分组排序，实测 2-2.6s），拆成等值 count 后走 userId 覆盖索引（实测 20-60ms）。
+       注意 gateway 侧计数必须按 success 拆两笔（success 混合时计划退化为 gateway 侧扫描，1-15s）。 */
+    const [realAllTotal, realAllSuccess, gatewayOwnedSuccess, gatewayOwnedFailed, allTotal, gatewayTotal] =
+      await Promise.all([
+        prisma.agent_call_logs.count({ where: { userId: { in: realUserIds } } }),
+        prisma.agent_call_logs.count({ where: { userId: { in: realUserIds }, success: true } }),
+        prisma.agent_call_logs.count({ where: { userId: { in: realUserIds }, success: true, executionLayer: 'api-gateway' } }),
+        prisma.agent_call_logs.count({ where: { userId: { in: realUserIds }, success: false, executionLayer: 'api-gateway' } }),
+        prisma.agent_call_logs.count(),
+        prisma.agent_call_logs.count({ where: { executionLayer: 'api-gateway' } }),
+      ]);
+    const gatewayOwned = gatewayOwnedSuccess + gatewayOwnedFailed;
     return {
-      total: realGroups.reduce((sum, s) => sum + s._count, 0),
-      success: realGroups.find((s) => s.success === true)?._count || 0,
-      totalAll: allGroups.reduce((sum, s) => sum + s._count, 0),
+      // 真实用户口径业务行 = 真实用户全量 − 真实用户 gateway 行
+      total: realAllTotal - gatewayOwned,
+      success: realAllSuccess - gatewayOwnedSuccess,
+      // 全量口径业务行 = 全量 − gateway（恒等：业务 = NOT gateway，含 executionLayer IS NULL）
+      totalAll: allTotal - gatewayTotal,
     };
   })();
   allTimeInflight = computation;
@@ -120,6 +127,101 @@ async function computeAllTimeCallStats(realUserScope: { userId: { in: string[] }
     return payload;
   } finally {
     if (allTimeInflight === computation) allTimeInflight = null;
+  }
+}
+
+/* ===== 近 7 天两次大扫描（长缓存子层） =====
+ * 单扫架构的两笔重扫：agent_call_logs 7d 全量行（~9 万行、含 error 文本）与
+ * llm_execution_attempts 7d 全量行（~9 万行），实测各 ~3s，是 5min 主缓存到期重算的主要构成。
+ * 两者派生的都是趋势/排行/24h 脉搏/7d 口径图表指标（口径上容忍分钟级陈旧），拆出 10 分钟 TTL
+ * 子缓存后重算只剩计数类查询（~1-2s）。今日 KPI 同源于 agentScan7d（与主缓存合计 ≤10min 陈旧）；
+ * fresh=1 手动刷新绕过本层拿真值（语义不变）。启动预热 + 4 分钟后台刷新兜底（schedulers）。 */
+const SEVEN_DAY_SCAN_CACHE_TTL_MS = 10 * 60 * 1000;
+/** 业务执行层口径（排除 api-gateway 自身调用）：OR 谓词不走索引，仅用于本文件两处 7d 单扫
+ *  （扫描本就按 calledAt 窗口索引取行）；计数类聚合一律改「全量 − gateway」等值减法。 */
+const BUSINESS_EXECUTION_WHERE = {
+  OR: [{ executionLayer: null }, { executionLayer: { not: 'api-gateway' } }],
+};
+type AgentScanRow = {
+  calledAt: Date;
+  success: boolean;
+  userId: string | null;
+  agentId: string | null;
+  errorCategory: string | null;
+  errorCode: string | null;
+  error: string | null;
+};
+type SevenDayScans = {
+  agentScan7d: AgentScanRow[];
+  llmScan7d: Array<{ userId: string | null; resolvedModel: string | null; totalTokens: number | null }>;
+  wrapupLogs: Array<{ output: string | null }>;
+  newUsers7dRows: Array<{ createdAt: Date }>;
+  activeUsers7dRows: Array<{ startTime: Date; userId: string }>;
+};
+let sevenDayScanCache: { payload: SevenDayScans; cachedAt: number } | null = null;
+let sevenDayScanInflight: Promise<SevenDayScans> | null = null;
+
+async function getSevenDayScans(realUserIds: string[], sevenDaysAgo: Date, force = false): Promise<SevenDayScans> {
+  if (!force && sevenDayScanCache && Date.now() - sevenDayScanCache.cachedAt < SEVEN_DAY_SCAN_CACHE_TTL_MS) {
+    return sevenDayScanCache.payload;
+  }
+  if (sevenDayScanInflight) return sevenDayScanInflight;
+  const computation = (async (): Promise<SevenDayScans> => {
+    /* 顺序执行（2026-10-04 复测）：两笔 ~9 万行大扫并发时互抢页缓存/WAL，单笔墙钟被拉长 3-6 倍
+     * （隔离 1.5s ↔ 并发 3.4s+）；串行总墙钟更短，且减少对在线小查询的干扰。 */
+    // 单扫 1：agent_call_logs 近 7 天全量行（含虚拟/测试/孤儿，端内分桶）
+    // 消费方：今日 5 计数 / activeAgents24h / trend7d / topSkills / last24h 脉搏（含超时覆盖）/
+    // calls7d 与 calls7dAll / 失败归因行。select 按消费方并集取最小列集；
+    // 不 orderBy——所有消费方都按时间键分桶，与行序无关（省一次排序）。
+    const agentScan7d = await prisma.agent_call_logs.findMany({
+      where: { ...BUSINESS_EXECUTION_WHERE, calledAt: { gte: sevenDaysAgo } },
+      select: {
+        calledAt: true,
+        success: true,
+        userId: true,
+        agentId: true,
+        errorCategory: true,
+        errorCode: true,
+        error: true,
+      },
+    });
+
+    // 单扫 2：llm_execution_attempts 近 7 天全量行（端内分桶）
+    // 消费方：totalTokens7d / totalTokens7dAll / calls 双口径（_count）/ models7d 分布。
+    const llmScan7d = await prisma.llm_execution_attempts.findMany({
+      where: { startedAt: { gte: sevenDaysAgo } },
+      select: { userId: true, resolvedModel: true, totalTokens: true },
+    });
+
+    // wrapup 来源分布抽样（200 → 50：仅用于 wrapupSourceStats 比例估算；真实用户口径）
+    const wrapupLogs = await prisma.agent_call_logs.findMany({
+      where: { agentId: 'skill:session-wrapup', userId: { in: realUserIds } },
+      orderBy: { calledAt: 'desc' },
+      take: 50,
+      select: { output: true },
+    });
+
+    // G2 总览「用户增长」：近 7 天新增注册（真实用户）
+    const newUsers7dRows = await prisma.users.findMany({
+      where: { ...REAL_USER_WHERE, createdAt: { gte: sevenDaysAgo } },
+      select: { createdAt: true },
+    });
+
+    // G3 总览「用户增长」：近 7 天活跃用户（教学会话 startTime 按天去重）
+    const activeUsers7dRows = await prisma.teaching_sessions.findMany({
+      where: { users: REAL_USER_WHERE, startTime: { gte: sevenDaysAgo } },
+      select: { startTime: true, userId: true },
+    });
+
+    return { agentScan7d, llmScan7d, wrapupLogs, newUsers7dRows, activeUsers7dRows };
+  })();
+  sevenDayScanInflight = computation;
+  try {
+    const payload = await computation;
+    sevenDayScanCache = { payload, cachedAt: Date.now() };
+    return payload;
+  } finally {
+    if (sevenDayScanInflight === computation) sevenDayScanInflight = null;
   }
 }
 
@@ -135,12 +237,6 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
     // 保证「24h 总数 = 各小时之和」恒成立；活跃 Agent 统计仍用严格 24h 滚动窗口。
     const trendWindowStart = new Date(startOfHour(new Date()).getTime() - 23 * 3600000);
 
-    const businessExecutionWhere = {
-      OR: [
-        { executionLayer: null },
-        { executionLayer: { not: 'api-gateway' } }
-      ]
-    };
     // 生产统计排除虚拟学习者与测试/审计账号：见模块级 REAL_USER_WHERE
 
     // 调用/token 口径（R5）：agent_call_logs / llm_execution_attempts 按 userId 归属过滤，
@@ -174,11 +270,7 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       completedConversations,
       activeConversations,
       allTimeStats,
-      agentScan7d,
-      llmScan7d,
-      wrapupLogs,
-      newUsers7dRows,
-      activeUsers7dRows
+      sevenDayScans
     ] = await Promise.all([
       // 总用户数（不含虚拟学习者）
       prisma.users.count({
@@ -271,53 +363,14 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
         },
       }),
       
-      // 全量累计调用数（长缓存子层：两个全表 groupBy 拆到 10 分钟 TTL，见 computeAllTimeCallStats）
-      computeAllTimeCallStats({ userId: { in: [...realUserSet] } }, businessExecutionWhere, force),
+      // 全量累计调用数（长缓存子层：全表聚合拆到 10 分钟 TTL，见 computeAllTimeCallStats）
+      computeAllTimeCallStats([...realUserSet], force),
 
-      /* ===== 单扫 1：agent_call_logs 近 7 天全量行（含虚拟/测试/孤儿，端内分桶） =====
-       * 消费方：今日 5 计数 / activeAgents24h / trend7d / topSkills / last24h 脉搏（含超时覆盖）/
-       * calls7d 与 calls7dAll / 失败归因行。select 按消费方并集取最小列集；
-       * 不 orderBy——所有消费方都按时间键分桶，与行序无关（省一次 3 万行排序）。 */
-      prisma.agent_call_logs.findMany({
-        where: { ...businessExecutionWhere, calledAt: { gte: sevenDaysAgo } },
-        select: {
-          calledAt: true,
-          success: true,
-          userId: true,
-          agentId: true,
-          errorCategory: true,
-          errorCode: true,
-          error: true,
-        },
-      }),
-
-      /* ===== 单扫 2：llm_execution_attempts 近 7 天全量行（端内分桶） =====
-       * 消费方：totalTokens7d / totalTokens7dAll / calls 双口径（_count）/ models7d 分布。 */
-      prisma.llm_execution_attempts.findMany({
-        where: { startedAt: { gte: sevenDaysAgo } },
-        select: { userId: true, resolvedModel: true, totalTokens: true },
-      }),
-
-      // wrapup 来源分布抽样（200 → 50：仅用于 wrapupSourceStats 比例估算；真实用户口径）
-      prisma.agent_call_logs.findMany({
-        where: { agentId: 'skill:session-wrapup', userId: { in: [...realUserSet] } },
-        orderBy: { calledAt: 'desc' },
-        take: 50,
-        select: { output: true }
-      }),
-
-      // G2 总览「用户增长」：近 7 天新增注册（真实用户）
-      prisma.users.findMany({
-        where: { ...REAL_USER_WHERE, createdAt: { gte: sevenDaysAgo } },
-        select: { createdAt: true },
-      }),
-
-      // G3 总览「用户增长」：近 7 天活跃用户（教学会话 startTime 按天去重）
-      prisma.teaching_sessions.findMany({
-        where: { users: REAL_USER_WHERE, startTime: { gte: sevenDaysAgo } },
-        select: { startTime: true, userId: true },
-      })
+      // 近 7 天两次大扫描（长缓存子层：10 分钟 TTL，见 getSevenDayScans）
+      getSevenDayScans([...realUserSet], sevenDaysAgo, force)
     ]);
+
+    const { agentScan7d, llmScan7d, wrapupLogs, newUsers7dRows, activeUsers7dRows } = sevenDayScans;
 
     const wrapupSourceStats = {
       sampleSize: 0,
@@ -359,16 +412,7 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
      * - 真实口径 = userId ∈ realUserSet（原 realUserScope）
      * - 虚拟口径 = userId ∈ virtualUserSet 且非空（原 in virtualUserIds，空集时空转）
      */
-    type AgentScanRow = {
-      calledAt: Date;
-      success: boolean;
-      userId: string | null;
-      agentId: string | null;
-      errorCategory: string | null;
-      errorCode: string | null;
-      error: string | null;
-    };
-    const agentRows = agentScan7d as AgentScanRow[];
+    const agentRows: AgentScanRow[] = agentScan7d;
     const todayStartTs = today.getTime();
     const tomorrowTs = tomorrow.getTime();
     const rolling24hTs = rolling24hStart.getTime();

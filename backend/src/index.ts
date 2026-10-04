@@ -40,6 +40,8 @@ import {
   runLearningStartupRecovery,
   startEnrichmentRetryLoop,
   runDashboardGuidanceBackfill,
+  runOverviewStatsCacheWarmup,
+  runTokenCostCacheWarmup,
 } from './bootstrap/schedulers';
 import type { EduClawGateway } from './gateway';
 import type { DurableOutboxWorker } from './events/outbox.worker';
@@ -103,6 +105,8 @@ export async function startServer() {
     await runLearningStartupRecovery(assertStartupActive);
     stopEnrichmentRetry = startEnrichmentRetryLoop();
     runDashboardGuidanceBackfill();
+    runTokenCostCacheWarmup();
+    runOverviewStatsCacheWarmup();
 
     assertStartupActive();
     await new Promise<void>((resolveServer, reject) => {

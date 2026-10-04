@@ -123,3 +123,38 @@ export function runDashboardGuidanceBackfill(): void {
     logger.info('首页引导快照回填完成', result);
   });
 }
+
+/**
+ * Token 成本缓存预热（2026-10-04 页面加载性能批）：延迟 20s 算一次默认口径进 5min TTL 缓存。
+ * 延迟是为避开启动高峰的 IO 争抢（冷载需读 ~100MB metadata）；
+ * 失败静默（用户访问成本分析页时自然重算，口径/新鲜度约束不变）。
+ */
+export function runTokenCostCacheWarmup(): void {
+  const timer = setTimeout(() => {
+    runBackgroundTask('token-cost.cache-warmup', async () => {
+      const { warmTokenCostCache } = await import('../routes/admin/token-cost');
+      const data = await warmTokenCostCache();
+      logger.info('Token 成本缓存预热完成', { days: 7, tokens: data.totals.tokens });
+    });
+  }, 20_000);
+  timer.unref?.();
+}
+
+/**
+ * 总览统计缓存预热 + 周期刷新（2026-10-04 页面加载性能批）：
+ * 延迟 25s 首次预热（避开启动高峰与日志保留清理的 IO 争抢），此后每 4 分钟后台刷新一次
+ * （< 5min 主 TTL）→ 管理端每次进页/切页都命中缓存，重算成本移出用户请求路径；
+ * 失败静默（后台任务记账），请求路径仍会按需重算，无功能依赖。
+ */
+export function runOverviewStatsCacheWarmup(): void {
+  const refresh = () => {
+    runBackgroundTask('overview.stats.cache-refresh', async () => {
+      const { warmOverviewStatsCache } = await import('../routes/admin/platform');
+      await warmOverviewStatsCache();
+    });
+  };
+  const timer = setTimeout(refresh, 25_000);
+  timer.unref?.();
+  const interval = setInterval(refresh, 4 * 60 * 1000);
+  interval.unref?.();
+}
