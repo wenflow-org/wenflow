@@ -125,19 +125,22 @@ export function runDashboardGuidanceBackfill(): void {
 }
 
 /**
- * Token 成本缓存预热（2026-10-04 页面加载性能批）：延迟 20s 算一次默认口径进 5min TTL 缓存。
- * 延迟是为避开启动高峰的 IO 争抢（冷载需读 ~100MB metadata）；
+ * Token 成本缓存预热 + 周期刷新（2026-10-04 页面加载性能批）：延迟 20s 算一次默认口径进 5min TTL 缓存，
+ * 此后每 4 分钟后台刷新（< 5min TTL）→ 成本分析页恒命中缓存，消除 TTL 边界上的重算停顿（实测冷算 9.7s）；
  * 失败静默（用户访问成本分析页时自然重算，口径/新鲜度约束不变）。
  */
 export function runTokenCostCacheWarmup(): void {
-  const timer = setTimeout(() => {
+  const refresh = (logFirst = false) => {
     runBackgroundTask('token-cost.cache-warmup', async () => {
       const { warmTokenCostCache } = await import('../routes/admin/token-cost');
       const data = await warmTokenCostCache();
-      logger.info('Token 成本缓存预热完成', { days: 7, tokens: data.totals.tokens });
+      if (logFirst) logger.info('Token 成本缓存预热完成', { days: 7, tokens: data.totals.tokens });
     });
-  }, 20_000);
+  };
+  const timer = setTimeout(() => refresh(true), 20_000);
   timer.unref?.();
+  const interval = setInterval(() => refresh(false), 4 * 60 * 1000);
+  interval.unref?.();
 }
 
 /**
@@ -157,4 +160,25 @@ export function runOverviewStatsCacheWarmup(): void {
   timer.unref?.();
   const interval = setInterval(refresh, 4 * 60 * 1000);
   interval.unref?.();
+}
+
+/**
+ * 管理端页面冷读预热（一次性，延迟 30s 避开启动高峰）：
+ * - 技能目录页统计（默认 7d + 可选 all）填进路由 5min 缓存；
+ * - 执行日志页默认周窗筛选空跑一次（纯页缓存/索引页焐热，无缓存语义）。
+ * 二者冷首触实测 20s+（重启后首位访客付全款），预热后用户侧只剩毫秒级命中。
+ */
+export function runAdminPageColdWarmup(): void {
+  const timer = setTimeout(() => {
+    runBackgroundTask('admin.pages.cold-warmup', async () => {
+      const [{ warmSkillListStatsCache }, { warmExecLogsPageTouch }] = await Promise.all([
+        import('../routes/admin/skills'),
+        import('../routes/admin/platform'),
+      ]);
+      await warmSkillListStatsCache();
+      await warmExecLogsPageTouch();
+      logger.info('管理端页面冷读预热完成');
+    });
+  }, 30_000);
+  timer.unref?.();
 }

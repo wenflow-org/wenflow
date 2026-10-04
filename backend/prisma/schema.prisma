@@ -90,6 +90,8 @@ model agent_call_logs {
   @@index([calledAt, agentId, sourceEntry, success])
   @@index([calledAt, executionLayer, tokensUsed, success])
   @@index([userId, success, executionLayer])
+  // Skill 统计覆盖索引（2026-10-04 性能批）：agentId IN 聚合的 AVG(durationMs)/MAX(calledAt) 全程索引内
+  @@index([agentId, success, durationMs, calledAt])
 }
 
 
@@ -132,6 +134,9 @@ model prompt_call_logs {
   @@index([agentId, createdAt])
   // 日志保留清理按 createdAt 范围取批（2026-10-04 性能批）：无纯 createdAt 索引时 112k 宽行全表排序 47.8s
   @@index([createdAt])
+  // Skill 统计覆盖索引（2026-10-04 性能批）：列序 agentId+createdAt 承载窗口范围，
+  // success/durationMs 尾列让 AVG/COUNT 索引内完成（避免宽行根页随机读，实测 35s→毫秒）
+  @@index([agentId, createdAt, success, durationMs])
   @@index([pipelineRunId])
   @@index([pathId])
   @@index([userId])

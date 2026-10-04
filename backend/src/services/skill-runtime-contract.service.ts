@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import systemPrisma from '../config/system-database';
+import { Prisma } from '@prisma/client';
 import { getAPIGateway } from '../gateway/api-gateway';
 import {
   getAgentManifest,
@@ -97,6 +98,50 @@ function rangeToSince(range: SkillStatsRange): Date | null {
   return new Date(Date.now() - ms);
 }
 
+/* ===== metadata 兜底嗅探门（性能批 2026-10-04） =====
+ * 非前缀行按 metadata.skillId 归属是既定契约，但读取 metadata 大列很贵（本库非前缀行
+ * ~5k 条 / 142MB）。先做一次窗口无关的存在性嗅探（instr 快检，含嵌套误报宁可多跑），
+ * 结果按 10 分钟 TTL 缓存：无此形态数据 → 常态零成本；有 → 照旧执行原兜底扫描。 */
+const METADATA_SKILL_ID_SNIFF_TTL_MS = 10 * 60 * 1000;
+let metadataSkillIdSniff: { present: boolean; checkedAt: number } | null = null;
+
+async function hasNonPrefixedMetadataSkillId(): Promise<boolean> {
+  if (metadataSkillIdSniff && Date.now() - metadataSkillIdSniff.checkedAt < METADATA_SKILL_ID_SNIFF_TTL_MS) {
+    return metadataSkillIdSniff.present;
+  }
+  const rows = await prisma.$queryRaw<Array<{ one: number }>>`
+    SELECT 1 AS "one"
+    FROM "agent_call_logs"
+    WHERE ("executionLayer" IS NULL OR "executionLayer" != 'api-gateway')
+      AND "agentId" NOT LIKE 'skill:%'
+      AND "metadata" IS NOT NULL
+      AND instr("metadata", '"skillId"') > 0
+    LIMIT 1`;
+  const present = rows.length > 0;
+  metadataSkillIdSniff = { present, checkedAt: Date.now() };
+  return present;
+}
+
+/** 测试辅助：清掉嗅探缓存 */
+export function __clearMetadataSkillIdSniffForTests(): void {
+  metadataSkillIdSniff = null;
+}
+
+async function resolveMetadataFallbackRows(
+  since: Date | null
+): Promise<Array<{ agentId: string; skillId: string | null; success: boolean | number; durationMs: number | null; calledAt: Date | string | null }>> {
+  if (!(await hasNonPrefixedMetadataSkillId())) return [];
+  return prisma.$queryRaw<Array<{ agentId: string; skillId: string | null; success: boolean | number; durationMs: number | null; calledAt: Date | string | null }>>`
+    SELECT "agentId",
+           CASE WHEN "metadata" IS NOT NULL AND json_valid("metadata")
+                THEN json_extract("metadata", '$.skillId') END AS "skillId",
+           "success", "durationMs", "calledAt"
+    FROM "agent_call_logs"
+    WHERE ("executionLayer" IS NULL OR "executionLayer" != 'api-gateway')
+      AND "agentId" NOT LIKE 'skill:%'
+      ${since ? Prisma.sql`AND "calledAt" >= ${since}` : Prisma.empty}`;
+}
+
 function emptyStats(skillId: string, range: SkillStatsRange): UnifiedSkillStats {
   const short = toShortSkillId(skillId);
   return {
@@ -142,6 +187,15 @@ function finalizeStats(
  * 1) 有 prompt_call_logs → 以 prompt 调用为准（LLM skill）
  * 2) 否则 skill 层 agent_call_logs（排除 api-gateway）
  * 3) 同一 range 口径
+ *
+ * 性能批 2026-10-04：原实现一次全表原生扫描（业务行）逐行 json_extract(metadata) 端内归属——
+ * range='all' 实测 68.7s（124k 业务行 × metadata 大列 183MB 全读）；7d 窗口同样付 metadata 列读。
+ * 实测业务行 96%（119k/124k）以 `skill:` 前缀 agentId 归属，非前缀行仅 path-agent（~5k）且
+ * 顶层 metadata.skillId 命中 0。改写为：
+ *   ① 前缀行按 agentId 精确 IN → SQL 侧 GROUP BY 聚合（索引驱动，完全不读 metadata 列）；
+ *   ② metadata 兜底分支保留（既定契约），由「嗅探门」门控：先按 10 分钟 TTL 检查非前缀行是否
+ *      存在顶层 skillId，有才跑原兜底扫描（付费仅当该形态数据真实存在）。
+ * 端内归属语义与改造前逐行等价（前缀优先、短 id 精确匹配、prompt 命中者跳过）。
  */
 export async function getUnifiedSkillStats(
   skillIds: string[],
@@ -162,7 +216,7 @@ export async function getUnifiedSkillStats(
   const promptWhere: any = { agentId: { in: promptAgentIds } };
   if (since) promptWhere.createdAt = { gte: since };
 
-  const [promptGroups, promptSuccessGroups, agentLogRows] = await Promise.all([
+  const [promptGroups, promptSuccessGroups, prefixedGroups, metadataFallbackRows] = await Promise.all([
     prisma.prompt_call_logs.groupBy({
       by: ['agentId'],
       where: promptWhere,
@@ -175,27 +229,20 @@ export async function getUnifiedSkillStats(
       where: promptWhere,
       _count: { _all: true },
     }),
-    /* agent_call_logs 归属统计（性能批 2026-09-30）：
-       原写法把每个 skill 的 2 条 metadata LIKE 拼进同一 OR（40 skill ≈ 80 个 LIKE，
-       每行 80 次子串匹配）还整列拉回 metadata 大 JSON 文本，7d 窗口实测 ~1.8s。
-       改为一次原生扫描：json_valid 守卫 + json_extract 只取 $.skillId（SQLite C 速度），
-       归属判断留在端内，与原逐行逻辑同语义（agentId 带 skill: 前缀优先，否则取 metadata.skillId）。 */
-    since
-      ? prisma.$queryRaw<Array<{ agentId: string; skillId: string | null; success: boolean; durationMs: number; calledAt: Date }>>`
-          SELECT "agentId",
-                 CASE WHEN "metadata" IS NOT NULL AND json_valid("metadata")
-                      THEN json_extract("metadata", '$.skillId') END AS "skillId",
-                 "success", "durationMs", "calledAt"
-          FROM "agent_call_logs"
-          WHERE ("executionLayer" IS NULL OR "executionLayer" != 'api-gateway')
-            AND "calledAt" >= ${since}`
-      : prisma.$queryRaw<Array<{ agentId: string; skillId: string | null; success: boolean; durationMs: number; calledAt: Date }>>`
-          SELECT "agentId",
-                 CASE WHEN "metadata" IS NOT NULL AND json_valid("metadata")
-                      THEN json_extract("metadata", '$.skillId') END AS "skillId",
-                 "success", "durationMs", "calledAt"
-          FROM "agent_call_logs"
-          WHERE ("executionLayer" IS NULL OR "executionLayer" != 'api-gateway')`,
+    /* ① 前缀行聚合：agentId IN（skill:xxx…）精确命中，走 agentId 索引，不读 metadata 大列 */
+    prisma.$queryRaw<Array<{ agentId: string; success: number | boolean; n: number | bigint; durSum: number | bigint | null; lastAt: Date | string | null }>>`
+      SELECT "agentId",
+             "success",
+             COUNT(*) AS "n",
+             SUM(COALESCE("durationMs", 0)) AS "durSum",
+             MAX("calledAt") AS "lastAt"
+      FROM "agent_call_logs"
+      WHERE ("executionLayer" IS NULL OR "executionLayer" != 'api-gateway')
+        ${since ? Prisma.sql`AND "calledAt" >= ${since}` : Prisma.empty}
+        AND "agentId" IN (${Prisma.join(promptAgentIds)})
+      GROUP BY "agentId", "success"`,
+    /* ② metadata 兜底（非前缀行按 metadata.skillId 归属）：先过嗅探门，未命中形态零成本 */
+    resolveMetadataFallbackRows(since),
   ]);
 
   const promptSuccessMap = new Map<string, number>();
@@ -228,18 +275,7 @@ export async function getUnifiedSkillStats(
     string,
     { total: number; success: number; durationTotal: number; lastCalledAt: Date | null }
   >();
-  for (const log of agentLogRows) {
-    let short = '';
-    if (typeof log.agentId === 'string' && log.agentId.startsWith('skill:')) {
-      short = log.agentId.replace(/^skill:/, '');
-    } else {
-      // metadata.skillId 已由 json_extract 在库端取出（无效 JSON → null）
-      const raw = typeof log.skillId === 'string' ? log.skillId : '';
-      short = raw.replace(/^skill:/, '');
-    }
-    if (!shortIds.includes(short)) continue;
-    if (promptBacked.has(short)) continue;
-
+  const bumpAgg = (short: string, success: boolean, durationMs: number, calledAt: Date | null) => {
     const current = agentAgg.get(short) || {
       total: 0,
       success: 0,
@@ -247,12 +283,44 @@ export async function getUnifiedSkillStats(
       lastCalledAt: null,
     };
     current.total += 1;
-    current.success += log.success ? 1 : 0;
-    current.durationTotal += log.durationMs || 0;
-    if (!current.lastCalledAt || log.calledAt > current.lastCalledAt) {
-      current.lastCalledAt = log.calledAt;
+    current.success += success ? 1 : 0;
+    current.durationTotal += durationMs || 0;
+    if (calledAt && (!current.lastCalledAt || calledAt > current.lastCalledAt)) {
+      current.lastCalledAt = calledAt;
     }
     agentAgg.set(short, current);
+  };
+  // ① 前缀聚合行（GROUP BY 后每 skill 至多两行：success/failed）
+  for (const group of prefixedGroups) {
+    const short = String(group.agentId || '').replace(/^skill:/, '');
+    if (!shortIds.includes(short)) continue;
+    if (promptBacked.has(short)) continue;
+    const n = Number(group.n) || 0;
+    const durSum = Number(group.durSum) || 0;
+    const successFlag = group.success === true || group.success === 1;
+    const lastAt = group.lastAt ? new Date(group.lastAt) : null;
+    const current = agentAgg.get(short) || {
+      total: 0,
+      success: 0,
+      durationTotal: 0,
+      lastCalledAt: null,
+    };
+    current.total += n;
+    current.success += successFlag ? n : 0;
+    current.durationTotal += durSum;
+    if (lastAt && (!current.lastCalledAt || lastAt > current.lastCalledAt)) {
+      current.lastCalledAt = lastAt;
+    }
+    agentAgg.set(short, current);
+  }
+  // ② 兜底行（已由嗅探门过滤，常态为空集）
+  for (const log of metadataFallbackRows) {
+    // metadata.skillId 已由 json_extract 在库端取出（无效 JSON → null）
+    const raw = typeof log.skillId === 'string' ? log.skillId : '';
+    const short = raw.replace(/^skill:/, '');
+    if (!shortIds.includes(short)) continue;
+    if (promptBacked.has(short)) continue;
+    bumpAgg(short, log.success === true || Number(log.success) === 1, Number(log.durationMs) || 0, log.calledAt ? new Date(log.calledAt) : null);
   }
 
   for (const [short, stats] of agentAgg.entries()) {

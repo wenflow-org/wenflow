@@ -41,6 +41,7 @@ import {
   startEnrichmentRetryLoop,
   runDashboardGuidanceBackfill,
   runOverviewStatsCacheWarmup,
+  runAdminPageColdWarmup,
   runTokenCostCacheWarmup,
 } from './bootstrap/schedulers';
 import type { EduClawGateway } from './gateway';
@@ -107,6 +108,7 @@ export async function startServer() {
     runDashboardGuidanceBackfill();
     runTokenCostCacheWarmup();
     runOverviewStatsCacheWarmup();
+    runAdminPageColdWarmup();
 
     assertStartupActive();
     await new Promise<void>((resolveServer, reject) => {

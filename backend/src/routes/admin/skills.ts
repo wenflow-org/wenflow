@@ -164,6 +164,16 @@ function getSkillRuntimeStatsCached(skillNames: string[], range: SkillStatsRange
   return computation;
 }
 
+/** 启动预热（schedulers 装配调用）：把技能目录页默认窗口的统计重算移出用户路径。
+ *  7d 是前端默认窗口、all 是可选长窗——两者共用同一覆盖索引，冷首触合计 ~1s（后台付费一次）。 */
+export async function warmSkillListStatsCache(): Promise<void> {
+  const names = getGateway().matchSkills({}).map((s) => s.definition.name);
+  await Promise.all([
+    getSkillRuntimeStatsCached(names, '7d'),
+    getSkillRuntimeStatsCached(names, 'all'),
+  ]);
+}
+
 router.get('/', async (req: Request, res: Response) => {
   try {
     const gateway = getGateway();

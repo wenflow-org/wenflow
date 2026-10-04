@@ -298,6 +298,17 @@ export async function warmOverviewStatsCache(): Promise<void> {
   overviewStatsCache.set('overview-stats', { payload: data, cachedAt: Date.now() });
 }
 
+/** 启动预热（无缓存语义，纯页缓存/索引页焐热）：按执行日志页默认筛选（周窗，与前端
+ *  fetchLiveSpans 的 timeRange='week' 同参）空跑一次取数，避免重启后首位访客付冷读（实测 20s+）。 */
+export async function warmExecLogsPageTouch(): Promise<void> {
+  const weekAgo = new Date(startOfDay(new Date()).getTime() - 7 * 86400000);
+  const where: any = {
+    AND: [{ NOT: { agentId: 'path-agent' } }, { sourceEntry: { not: 'system-canary' } }],
+    calledAt: { gte: weekAgo },
+  };
+  await fetchAgentLogPage({ where, skip: 0, limitNum: 200, logOrderBy: [{ calledAt: 'desc' }, { id: 'desc' }] });
+}
+
 router.get('/overview/stats', async (req: Request, res: Response) => {
   try {
     const cacheKey = 'overview-stats';
