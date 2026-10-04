@@ -118,6 +118,9 @@ beforeEach(() => {
   jest.clearAllMocks()
   usersFindUnique.mockResolvedValue({ isAdmin: true })
   // 缺省：没有按次留档凭据、没有审计（各用例按需覆盖）
+  // tracesFindMany 缺省空数组：总览的「薄弱项/平均强度/最近复习」三列读数走
+  // findTracesForStrengthAgg → memory_traces.findMany（b7b21d41 新增），不设桩会 undefined 不可迭代
+  tracesFindMany.mockResolvedValue([])
   evidenceFindMany.mockResolvedValue([])
   projectionsFindMany.mockResolvedValue([])
   listAppliedMerges.mockResolvedValue([])
