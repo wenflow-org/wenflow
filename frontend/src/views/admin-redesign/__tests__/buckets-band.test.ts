@@ -1,7 +1,7 @@
 /**
  * 教学组页首统计带（buckets 构成带，2026-10-04 用户拍板统一形态）：
  * - 共享原语 MkBuckets：值大字 + 份额条 + 口径脚注，直接落页面无卡壳（判例 = 目标对话四桶）
- * - 教学会话：十状态归四组 + 完成率（窗口口径）；异常快捷筛选迁工具条右组
+ * - 教学会话：十状态归四组 + 完成率（窗口口径）；异常快捷筛选迁卡头快捷 chips
  *   （2026-10-04 用户拍板：页头状态条整体退役，异常计数由本带「异常终态」单源承载）
  * - 学习路径：getStats byStatus 全平台口径直出（零值桶如实显示、枚举外归「其它」）
  * - 用户与学习者：真实 / 虚拟 / 测试 三桶互斥构成（管理员作真实桶 foot）
@@ -95,7 +95,7 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     liveUsersTotal.value = 0;
   });
 
-  it('教学会话：十状态归四组 + 完成率，组内合并口径在 foot 披露；异常筛选迁工具条右组', async () => {
+  it('教学会话：十状态归四组 + 完成率，组内合并口径在 foot 披露；异常筛选迁卡头快捷 chips', async () => {
     tsList.mockResolvedValue({
       data: { data: { total: 7, items: [
         { id: 's1', status: 'active', userName: '甲', topic: 'T1' },
@@ -123,17 +123,17 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     expect(feet).toContain('失败 / 超时 / 收尾失败合计');
     expect(feet).toContain('含已被替代');
     expect(feet.some((t) => t.includes('口径：已完成 ÷ 窗口 7 条'))).toBe(true);
-    // 异常快捷筛选迁工具条右组（2026-10-04 状态条退役后）：失败+超时 = 2 由本带「异常终态」单源承载，
+    // 异常快捷筛选迁卡头快捷 chips（2026-10-04 状态条退役后）：失败+超时 = 2 由本带「异常终态」单源承载，
     // chip 不显计数（同一数字不两处渲染），点击可穿
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
-    const abnormalBtn = w.findAll('.ts-toolbar__right .mk-pill').find((b) => b.text().startsWith('异常'));
+    const abnormalBtn = w.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').find((b) => b.text().startsWith('异常'));
     expect(abnormalBtn?.text()).toBe('异常');
     // 右组另一枚 = 有建议（服务端过滤，计数无构成桶覆盖，保留）
-    expect(w.find('.ts-toolbar__right .mk-pill').text()).toBe('有建议0');
+    expect(w.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').text()).toBe('有建议0');
     w.unmount();
   });
 
-  it('学习路径：getStats byStatus 全平台口径直出，零值桶如实显示、枚举外归「其它」', async () => {
+  it('学习路径：贴表分布条（2026-10-04 晚接棒构成带）——byStatus 全平台口径，零值档图例如实显示、枚举外归「其它」', async () => {
     pathStats.mockResolvedValue({
       data: { data: { total: 10, totalMilestones: 3, totalTasks: 5, byStatus: { active: 4, completed: 3, failed: 2, archived: 0, custom_state: 1 } } }
     });
@@ -141,10 +141,13 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     await ready;
     const w = mount(OpsContent, { global: { plugins: [router] } });
     await settle();
-    expect(w.find('.stageband').exists()).toBe(false);
-    expect(bucketLabels(w)).toEqual(['学习中', '已完成', '生成失败', '已下线', '其它']);
-    // 零值桶如实显示（原 stageband 零值段直接不渲染）
-    expect(bucketValues(w)).toEqual(['4', '3', '2', '0', '1']);
+    // 构成带退役（教学组统一贴表分布条），buckets 不再出现
+    expect(w.find('.buckets').exists()).toBe(false);
+    // 图例恒显全部档位（含零值「已下线 0」），段仅非零（custom_state 1 → 其它段出现 = 5 段中 4 段非零）
+    const legend = w.findAll('.stageband__legend .sbl');
+    expect(legend.map((el) => el.find('.sbl__name').text())).toEqual(['学习中', '已完成', '生成失败', '已下线', '其它']);
+    expect(legend.map((el) => el.find('.sbl__n').text())).toEqual(['4', '3', '2', '0', '1']);
+    expect(w.findAll('.mk-distband__seg')).toHaveLength(4);
     w.unmount();
   });
 

@@ -1,7 +1,8 @@
 /**
  * OpsContent「学习路径」重设计回归（2026-09-05）：
- * 与教学会话/目标对话 tab 同族——状态条为路径自身统计、头部 pill 组+搜索+口径+列显隐、
- * 无独立场景 KPI 大卡、无学科列（subject 实为长目标文本，改目标摘要单行省略）。
+ * 与教学会话/目标对话 tab 同族——状态条为路径自身统计、状态筛选唯一入口 = 表格卡内贴表分布条
+ * （2026-10-04 晚：pills 与构成带退役，分段/图例可点下钻）、无独立场景 KPI 大卡、
+ * 无学科列（subject 实为长目标文本，改目标摘要单行省略）。
  * 断言 = 视觉骨架（结构类），浏览器人工复核负责像素级细节。
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -88,7 +89,7 @@ afterEach(() => {
 });
 
 describe('OpsContent 学习路径 tab 重设计骨架', () => {
-  it('embedded：无状态条（宿主承载）；上报链已退役不发射；卡头含 pill+搜索+口径+列显隐；表头无学科列', async () => {
+  it('embedded：无状态条（宿主承载）；上报链已退役不发射；卡头含搜索+列显隐（状态筛选已迁贴表分布条且 embedded 隐藏）；表头无学科列', async () => {
     const w = mount(OpsContent, { props: { embedded: true } });
     await flushPromises();
     await nextTick();
@@ -102,9 +103,9 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     // 独立页同样无 KPI 卡（2026-10-02 用户拍板：状态条已单源承载 总数/里程碑/任务/已下线）
     expect(w.find('.mk-kpi').exists()).toBe(false);
 
-    // 头部 pill（状态）
-    const pills = w.findAll('.mk-card__head .mk-filter .mk-pill').map((b) => b.text().replace(/\d+$/, ''));
-    expect(pills).toEqual(['学习中', '已完成', '生成失败', '已下线']);
+    // 状态筛选唯一入口 = 贴表分布条（2026-10-04 晚）：卡头不再有状态 pill；embedded 时分布条隐藏
+    expect(w.find('.mk-card__head .mk-filter .mk-pill').exists()).toBe(false);
+    expect(w.find('.mk-distband').exists()).toBe(false);
 
     // 右侧组件（2026-10-04 整组统一：口径开关上收页头，embedded 页头隐藏 → 卡头无 ds-toggle）
     expect(w.find('.mk-card__head input.mk-filter__input').exists()).toBe(true);
@@ -131,17 +132,21 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     w.unmount();
   });
 
-  it('embedded：状态 pill 点击本地过滤；目标摘要列单行省略类存在', async () => {
-    const w = mount(OpsContent, { props: { embedded: true } });
+  it('贴表分布条点击 = 状态筛选（原 pills 的接棒者）；目标摘要列单行省略类存在', async () => {
+    const w = mount(OpsContent);
     await flushPromises();
     await nextTick();
     expect(w.findAll('tbody tr').length).toBe(3);
 
-    // 点击「已完成」pill → 1 行
-    await w.findAll('.mk-card__head .mk-pill').find((b) => b.text().startsWith('已完成'))!.trigger('click');
+    // 点图例「已完成」→ 1 行；再点取消恢复 3 行
+    const doneBtn = w.findAll('.stageband__legend .sbl').find((b) => b.text().includes('已完成'))!;
+    await doneBtn.trigger('click');
     await nextTick();
     expect(w.findAll('tbody tr').length).toBe(1);
     expect(w.find('tbody').text()).toContain('完成的目标摘要');
+    await doneBtn.trigger('click');
+    await nextTick();
+    expect(w.findAll('tbody tr').length).toBe(3);
 
     // 摘要列带省略样式（2026-10-03 方言收敛：oc-subject 私有类退役 → 共享 mk-cell-text）
     expect(w.find('.mk-cell-text').exists()).toBe(true);
@@ -239,7 +244,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
   });
 
   /** P1#9 + P2 顺手（2026-10-02）：口径标注 / 进度条三态 / 失败行入口 / 失败严重度对齐 OpsHub */
-  it('口径标注 + 三态 + 失败行入口：pill 窗口 title；进度条失败红/100% 绿/进行中中性；失败行「去详情」；状态条失败抬红带「可重规划」', async () => {
+  it('口径标注 + 三态 + 失败行入口：分布条副标带全平台口径；进度条失败红/100% 绿/进行中中性；失败行「去详情」；状态条抬红但红链已由分布条红段接棒', async () => {
     listMock.mockResolvedValue({
       data: {
         data: {
@@ -256,9 +261,8 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await flushPromises();
     await nextTick();
 
-    // P1#9：pill 组带窗口口径标注（stats 端点无 includeTest 参数，选就地标注而非同步重拉）
-    // （2026-10-04 起页头 ds-toggle 也是 .mk-pills——限定卡头作用域，别误中页头开关）
-    expect(w.find('.mk-card__head .mk-pills').attributes('title')).toContain('窗口');
+    // 口径单源迁分布条副标（pills 已退役）：全平台计数口径就地披露
+    expect(w.find('.mk-distband__sub').text()).toContain('全平台计数');
 
     // 进度条三态：100% = 绿（ok）/ 进行中 = 默认中性（无 warn 琥珀）/ 失败 = 红（bad）
     const tones = w.findAll('tbody .mk-minibar__fill').map((el) => el.attributes('data-tone') || '');
@@ -269,9 +273,12 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(failRow.find('.mk-actions .mk-btn').text()).toBe('去详情');
     expect(failRow.find('.mk-actions .mk-btn').attributes('title')).toContain('重规划');
 
-    // 状态条：生成失败抬红（与 OpsHub 待办 failed=bad 对齐）+「可重规划」文案
-    expect(w.find('.mk-status--bad').exists()).toBe(true);
-    expect(w.find('.mk-status').text()).toContain('生成失败 1（可重规划）');
+    // 状态条已退役（2026-10-04）：失败抬红由分布条红段单源承载；总量读数迁 MkKpi 卡带
+    expect(w.find('.mk-status').exists()).toBe(false);
+    expect(w.find('.mk-kpi-grid').exists()).toBe(true);
+    const failSeg = w.findAll('.mk-distband__seg').find((seg) => (seg.attributes('title') || '').includes('生成失败'))!;
+    expect(failSeg.attributes('title')).toContain('重规划');
+    expect(failSeg.attributes('title')).toContain('点击只看');
 
     w.unmount();
   });

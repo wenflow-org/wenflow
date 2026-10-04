@@ -174,7 +174,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     expect(kpiCard('低置信').find('.mk-kpi__num').text()).toBe('2'); // 丙/丁；无任务的戊不计（旧口径=3）
     expect(kpiCard('低置信').find('.mk-kpi__hint').text()).toContain('n=4'); // 基数=有任务的快照
 
-    const sub = w.find('.lc-dist__head .lc-section-sub').text();
+    const sub = w.find('.mk-distband__sub').text();
     expect(sub).toContain('共 4 个有任务的快照');
     expect(sub).toContain('另 1 位无任务/无快照不计');
 

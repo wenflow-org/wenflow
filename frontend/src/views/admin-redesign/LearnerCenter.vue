@@ -87,46 +87,18 @@
            拆到页级，观测栏只剩置信度分段条）：点击分段下钻筛选表格，表格区内滚升入首屏，
            分页器保持卡尾吸底。 -->
       <div v-else class="lc-body">
-        <div v-if="rows.length" class="lc-analytics">
-          <!-- 置信度分段分布条（替代竖向直方图）：极端数据下不扁平、占一条高度；
-               点击分段/图例 = 只看该置信区间（看大盘 → 定位群体 → 查表格闭环） -->
-          <section v-if="confRows.length" class="lc-dist" aria-label="置信度分布">
-            <div class="lc-dist__head">
-              <span class="lc-section-title">置信度分布</span>
-              <span class="lc-section-sub">{{ confBaseNote }}</span>
-            </div>
-            <div class="stageband lc-dist__band" role="group" aria-label="按置信度分档筛选">
-              <span
-                v-for="(b, i) in histoBins"
-                v-show="b.n > 0"
-                :key="b.label"
-                role="button"
-                tabindex="0"
-                class="lc-dist__seg"
-                :class="{ 'lc-dist__seg--on': confBin === i }"
-                :style="{ width: binWidth(i), background: BIN_TONE[b.tone] }"
-                :title="`${b.label}：${b.n} 人 · 点击${confBin === i ? '取消' : '只看'}该区间`"
-                :aria-pressed="confBin === i"
-                @click="toggleConfBin(i)"
-                @keydown.enter.prevent="toggleConfBin(i)"
-              ></span>
-            </div>
-            <div class="lc-dist__legend">
-              <button
-                v-for="(b, i) in histoBins"
-                :key="b.label"
-                type="button"
-                class="sbl sbl--link"
-                :class="{ 'sbl--on': confBin === i }"
-                :title="`${b.label}：${b.n} 人 · 点击${confBin === i ? '取消' : '只看'}该区间`"
-                @click="toggleConfBin(i)"
-              >
-                <span class="sbl__sw" :style="{ background: BIN_TONE[b.tone] }"></span>
-                <span class="sbl__name">{{ b.label }}</span>
-                <span class="sbl__n">{{ b.n }}</span>
-              </button>
-            </div>
-          </section>
+        <div v-if="rows.length && confRows.length" class="lc-analytics">
+          <!-- 置信度分段分布条（2026-10-04 升格共享原语 MkDistBand：教学组贴表分布条标准件，
+               段与图例均可点下钻；偏态保护 min-width 14px + 3% 宽度下限在组件内单源） -->
+          <MkDistBand
+            title="置信度分布"
+            :sub="confBaseNote"
+            unit="人"
+            aria-label="按置信度分档筛选"
+            :bins="confBandBins"
+            :active-key="confBin == null ? null : String(confBin)"
+            @select="toggleConfBand"
+          />
         </div>
 
       <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
@@ -280,6 +252,7 @@ import MkCols from '@/components/mk/MkCols.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
+import MkDistBand from '@/components/mk/MkDistBand.vue'
 import { Bell, RotateCw, UserRound } from 'lucide-vue-next'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
@@ -510,12 +483,13 @@ function binOf(r: { task?: string; confidence?: number | null }): number {
 /* 一屏工作台（2026-10-04 用户拍板）：分段条点击 = 只看该置信区间（再点取消），
    「看大盘 → 定位群体 → 查表格」闭环；与 pill/搜索叠加生效，清除筛选一并清 */
 const confBin = ref<number | null>(null)
-function toggleConfBin(i: number) {
+/** MkDistBand 以 key（分箱序号串）通认；段宽/悬停文案/偏态下限在组件内单源 */
+const confBandBins = computed(() =>
+  histoBins.value.map((b, i) => ({ key: String(i), label: b.label, n: b.n, tone: BIN_TONE[b.tone] }))
+)
+function toggleConfBand(key: string) {
+  const i = Number(key)
   confBin.value = confBin.value === i ? null : i
-}
-const binWidth = (i: number) => {
-  const total = confRows.value.length || 1
-  return `${Math.max((histoBins.value[i]?.n ?? 0) / total * 100, 3)}%`
 }
 
 const filtered = computed(() => {
@@ -659,29 +633,14 @@ async function recomputeAll() {
    逐人条形排行与竖向直方图整层退役（与表格置信列同数据重复、实测合计 578px）。 */
 .lc-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .lc-tablewrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-/* 观测栏（2026-10-04 KPI 拆到页级后只剩置信度分段条，双列栅格随之简化为单列） */
+/* 观测栏（2026-10-04 KPI 拆到页级后只剩置信度分段条，双列栅格随之简化为单列；
+   分段条本体已升格共享原语 MkDistBand，页内不再持有 stageband/图例样式） */
 .lc-analytics {
   display: grid;
   gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--mk-line);
 }
-/* （观测栏内 KPI 的 150px 轻量卡规格随 KPI 拆到页级退役——页级走 mk-kpi-grid 标准刻度，与记忆复习同形） */
-.lc-section-title { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
-.lc-section-sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-/* 置信分段分布条：段可点下钻（role=button），激活段描边 + 图例加粗（.sbl--on 原语） */
-.lc-dist { display: grid; gap: 8px; }
-.lc-dist__head { display: flex; align-items: baseline; gap: 8px; }
-.lc-dist__band { height: 16px; }
-.lc-dist__seg {
-  cursor: pointer;
-  min-width: 6px;
-  transition: filter var(--mk-dur) var(--mk-ease-out), box-shadow var(--mk-dur) var(--mk-ease-out);
-}
-.lc-dist__seg:hover { filter: brightness(1.08); }
-.lc-dist__seg--on { box-shadow: inset 0 0 0 2px var(--mk-surface), 0 0 0 1px var(--mk-ink); }
-.lc-dist__seg:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
-.lc-dist__legend { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 @media (max-width: 1100px) {
   .lc-analytics { grid-template-columns: 1fr; }
 }

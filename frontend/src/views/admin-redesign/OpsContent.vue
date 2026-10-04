@@ -1,66 +1,39 @@
 <template>
   <div :class="embedded ? 'mk-page--fill oc-embedded' : 'mk-page mk-page--fill'">
-    <!-- 学习路径页头（单行状态条：页面名 + 口径副文 + 四态可点计数 + 里程碑/任务总量 + 刷新）
-         embedded（学习会话合并宿主）时由宿主状态条承载域计数，本组件不再渲染状态条
-         副文 = 原型 renderPaths pageTitle 的 sub：「由目标澄清生成的阶段式路径与推进状态」 -->
-    <!-- 页头（mk-pagehead 标准形态，2026-10-03 用户拍板全站统一）：标题+口径副文+刷新。
-         原状态条顶替页头的「页面名/副文」上收，状态条只留 点色 + 可点计数 + 总量口径 -->
+    <!-- 页头（mk-pagehead 标准形态，2026-10-03 用户拍板全站统一）：标题+口径副文+口径开关。
+         2026-10-04 页头状态条退役：总量读数迁 MkKpi 卡带，失败抬红归贴表分布条红段 -->
     <MkPageHead v-if="!embedded" title="学习路径" sub="由目标澄清生成的阶段式路径与推进状态">
       <template #actions>
         <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
         <DataScopeToggle v-model="includeTest" />
       </template>
     </MkPageHead>
-    <div v-if="!embedded" class="mk-status" :class="`mk-status--${dashTone}`">
-      <span class="mk-status__dot"></span>
-      <!-- P2（2026-10-04 全站评审）：四态计数撤除——与下方 pills（窗口口径）/分布卡比例条（全量）
-           同屏三层复读；筛选唯一入口=pills，状态条回归纯口径句 + 「生成失败」红链（需关注结论位） -->
-      <button
-        v-if="byStatus('failed') > 0"
-        type="button"
-        class="mk-status__meta mk-status__meta-link mk-status__meta--bad"
-        title="点击只看生成失败的路径；失败可在路径详情页重规划（该计数为服务端全量口径）"
-        @click="statusFilter = statusFilter === 'failed' ? '' : 'failed'"
-      >生成失败 {{ byStatus('failed') }}（可重规划）</button>
-      <span class="mk-status__meta" title="仅真实用户（不含测试账号）；切换「含测试」后显示全量并灰标模拟行">共 {{ stats?.total ?? '—' }} 条 · 里程碑 {{ stats?.totalMilestones ?? '—' }} · 任务 {{ stats?.totalTasks ?? '—' }}</span>
-    </div>
+    <!-- 路径总量 KPI（2026-10-04 状态条退役：原状态条「共 N 条 · 里程碑 · 任务」读数迁入 MkKpi 卡带；
+         生成失败抬红由卡内贴表分布条红段单源承载，不再重复着色） -->
+    <section v-if="!embedded" class="mk-kpi-grid" aria-label="路径总量">
+      <MkKpi
+        label="路径总数"
+        :value="stats?.total ?? '—'"
+        :hint="includeTest ? '含虚拟学习者与测试账号' : '仅真实用户口径'"
+        :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户（不含测试账号）；切换页头「含测试」后显示全量并灰标模拟行'"
+      />
+      <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" title="已生成路径的里程碑总数（口径随页头「含测试」开关）" />
+      <MkKpi label="任务" :value="stats?.totalTasks ?? '—'" title="已生成路径的任务总数（口径随页头「含测试」开关）" />
+    </section>
 
-    <!-- 路径状态分布（newui 原型 renderPaths「路径状态分布」移植）。数据源 = loadStats 已拉的
-         adminLearningContentApi.getStats() 的 byStatus（服务端按状态 group-by 的全平台计数，
-         服务端 60s 缓存）——响应自带逐状态计数，无需 dashboard 兜底推导，零新增请求。
-         本页唯一统计带 = 顶部状态条（2026-10-02 用户拍板「也是kpi问题」撤 KPI 栅格：
-         原型 renderPaths 无 KPI 板块，总数/里程碑/任务/已下线已单源住在状态条 meta）。
-         embedded 时整卡隐藏（宿主状态条已承载四态计数）；stats 拉取失败或全零时
-         整卡 v-if 静默隐藏，不留空卡 -->
-    <!-- 状态构成带（2026-10-04 用户拍板教学组统一 buckets 形态，替代 stageband 分布卡）：
-         数据源 = adminLearningContentApi.getStats() 的 byStatus（服务端 group-by 全平台计数，
-         非本页 1000 条窗口推导）；文案复用 opsShared statusText；四枚举之外的取值归「其它」桶
-         （仅实际出现时追加）。直接落页面无卡壳，嵌入模式隐藏 -->
-    <MkBuckets v-if="!embedded && pathBandReady" label="学习路径状态构成" :items="lpBucketItems" />
+    <!-- 路径状态分布：2026-10-04 晚拍板教学组统一「贴表分布条」形态（提案=邻近原则，宏观切片
+         紧贴数据行），构成带（buckets）与状态 pills 同步退役——分布条（分段+图例均可点下钻）
+         是本页唯一状态筛选面，住在表格卡内表头正上方。数据源与口径不变：getStats().byStatus
+         服务端按状态 group-by 全平台计数（60s 缓存），非本页 1000 条窗口推导；
+         embedded 时隐藏（宿主承载域计数）；stats 拉取失败或全零时静默隐藏，不留空带 -->
 
     <!-- 筛选 + 列表（单行头部与教学会话/目标对话 tab 一致：pill 组 + 搜索 + 数据口径 + 列显隐） -->
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <!-- P1#9 口径标注 / P2（2026-10-04 全站评审）：pills 是全页唯一筛选面与分态计数位——
-               pill 计数 = 当前列表窗口（最近 1000 条，随「含测试」切换），与 stats 全量口径不同源
-               （getStats 端点不接受 includeTest 参数，重拉拿回的还是同一份全量计数，同步是无效
-               请求；pill 是本地筛选控件，计数本就该与所筛列表一致）。此前状态条/分布卡与 pills
-               同屏三层复读同组数字，已收敛：状态条只留口径句+生成失败红链，分布卡只留比例条。 -->
-          <div class="mk-pills" title="pill 计数 = 当前列表窗口内计数（最近 1000 条，随「含测试」切换），非全量；全量分布见「路径状态分布」卡（悬停分段看条数）">
-            <button
-              v-for="p in statusPills"
-              :key="p.id"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': statusFilter === p.id }"
-              :aria-pressed="statusFilter === p.id"
-              :title="p.id === 'failed' ? '生成失败的路径；行内「去详情」进详情页可重规划' : undefined"
-              @click="statusFilter = statusFilter === p.id ? '' : p.id"
-            >
-              {{ p.label }}<span class="mk-pill__count">{{ p.count }}</span>
-            </button>
-          </div>
+          <!-- 状态筛选唯一入口 = 卡内「路径状态分布」分布条（2026-10-04 晚：原 pills 与分布条
+               同驱一个 statusFilter，同屏两处筛选面退役一处）；pill 计数（窗口口径）随 pills 退役，
+               全量计数由分布条图例恒显。此处只留搜索与筛选清理 -->
           <MkFilterSearch v-model="keyword" placeholder="搜索标题 / 用户 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
@@ -75,6 +48,21 @@
           </span>
         </div>
       </div>
+
+      <!-- 贴表分布条（教学组标准件 MkDistBand）：宏观切片紧贴数据行（邻近原则）；
+           分段/图例点击 = 单状态筛选（与原 pills 同一 statusFilter，深链 ?status= 照常生效），
+           再点取消；「其它」段 = 四枚举之外取值的聚合（过滤谓词见 pathStatusMatch） -->
+      <MkDistBand
+        v-if="!embedded && pathBandReady"
+        class="oc-distband"
+        title="路径状态分布"
+        :sub="`点击分段只看该状态 · 共 ${pathBandTotal} 条（服务端按状态 group-by 全平台计数，非本页窗口）`"
+        unit="条"
+        aria-label="按路径状态筛选"
+        :bins="pathBandBins"
+        :active-key="statusFilter || null"
+        @select="toggleStatusBand"
+      />
 
       <MockSkeletonTable v-if="loading && !rows.length" :cols="7" />
       <div v-else-if="failed" class="oc-error" role="alert">
@@ -251,7 +239,8 @@ import Pagination from './Pagination.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
-import MkBuckets from '@/components/mk/MkBuckets.vue'
+import MkDistBand from '@/components/mk/MkDistBand.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import { statusText, statusBadge } from './opsShared'
 
@@ -277,17 +266,6 @@ const includeTest = computed({
 })
 const stats = ref<LearningContentStats | null>(null)
 
-/* 状态 pill 组（与教学会话/目标对话头部同形态；点击可取消，取色全站语义） */
-const statusPills = computed(() => {
-  const all = rows.value
-  return [
-    { id: 'active', label: '学习中', count: all.filter((p) => p.status === 'active').length },
-    { id: 'completed', label: '已完成', count: all.filter((p) => p.status === 'completed').length },
-    { id: 'failed', label: '生成失败', count: all.filter((p) => p.status === 'failed').length },
-    { id: 'archived', label: '已下线', count: all.filter((p) => p.status === 'archived').length }
-  ]
-})
-
 /* 列显隐（与同页其他列表一致）：路径/操作固定，其余可隐藏 */
 const colDefs = [
   { key: 'difficulty', label: '难度', title: '路径难度：由目标对话里的水平自述归一（入门/进阶/高阶）；无法判断时为未知' },
@@ -299,16 +277,9 @@ const colDefs = [
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())
 
-/* 状态条四态计数 + 基调（与目标对话/教学会话同形态：失败>0 警示琥珀，空库静默） */
+/* 状态条四态计数遗留口径：byStatus 仍供贴表分布条分段/图例（2026-10-04 状态条退役后
+   dashTone 随条删除——失败抬红由分布条红段单源承载） */
 const byStatus = (s: string) => stats.value?.byStatus?.[s] || 0
-
-/* 生成失败抬红（bad，P2）：与 OpsHub 待办的 failed=红对齐（此前本页只 warn 琥珀，
-   同一「生成失败」跨页两级着色）；空库静默 */
-const dashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
-  if (!stats.value || stats.value.total === 0) return 'muted'
-  if ((stats.value.byStatus?.failed || 0) > 0) return 'bad'
-  return 'ok'
-})
 
 /* ===== 路径状态分布（newui 原型 renderPaths「路径状态分布」移植）=====
    数据源 = adminLearningContentApi.getStats() 的 byStatus（loadStats 已拉取；服务端按状态
@@ -337,21 +308,28 @@ const pathBand = computed<PathBandEntry[]>(() => {
   return entries
 })
 const pathBandTotal = computed(() => pathBand.value.reduce((a, e) => a + e.n, 0))
-/* 状态构成桶（2026-10-04 用户拍板教学组统一 buckets 形态，替代 stageband 分布卡）：
-   值大字直出（原分段条把条数藏在悬停里的反面教材）；比例条 = 各状态占路径总数份额；
-   口径 = 服务端按状态 group-by 全平台计数（值悬停披露）。零值桶如实显示（如 已下线 0）。 */
-const lpBucketItems = computed(() => {
-  const total = pathBandTotal.value || 1
-  return pathBand.value.map((e) => ({
-    value: e.n,
-    label: e.name,
-    pct: Math.round((e.n / total) * 100),
-    tone: e.tone,
-    valueTitle: `${e.name} · ${e.n} 条 · 服务端按状态 group-by 全平台计数`
-  }))
-})
 /* stats 拉取失败（null）或状态合计为 0 → 整带隐藏（v-if），不留空带 */
 const pathBandReady = computed(() => !!stats.value && pathBandTotal.value > 0)
+
+/** 贴表分布条数据（与构成带同源：byStatus 全平台计数）；hint 只给失败段（重规划去向） */
+const pathBandBins = computed(() =>
+  pathBand.value.map((e) => ({
+    key: e.key,
+    label: e.name,
+    n: e.n,
+    tone: e.tone,
+    hint: e.key === 'failed' ? '行内「去详情」进详情页可重规划' : undefined
+  }))
+)
+/** 分布条点击 = 单状态筛选（与原 pills 同一 statusFilter）；再点取消 */
+function toggleStatusBand(key: string) {
+  statusFilter.value = statusFilter.value === key ? '' : key
+}
+/** 「其它」段 = 四枚举之外取值的聚合，不能按单状态等值比较（点了要真能筛出那些行） */
+function pathStatusMatch(status: string, key: string): boolean {
+  if (key === 'other') return !(status in PATH_BAND_TONE)
+  return status === key
+}
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
 const { toggle: toggleOcSort, sortState: ocSortState, sortRows: sortOcRows } = useTableSort<PathRow>({
@@ -372,7 +350,7 @@ const { toggle: toggleOcSort, sortState: ocSortState, sortRows: sortOcRows } = u
 const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase()
   return sortOcRows(rows.value.filter((p) => {
-    if (statusFilter.value && p.status !== statusFilter.value) return false
+    if (statusFilter.value && !pathStatusMatch(p.status, statusFilter.value)) return false
     if (!k) return true
     return `${p.title} ${p.user?.name || ''} ${p.user?.email || ''} ${p.subject || ''}`.toLowerCase().includes(k)
   }))
@@ -575,6 +553,8 @@ defineExpose({ reload: () => void reload(true) })
 /* 页头计数锚点改用全局 .mk-status__meta-link（见 shared.css:136） */
 /* 嵌入模式（目标对话页「学习路径」tab）：fill 容器内占满，主卡片弹性 */
 .oc-embedded { flex: 1; min-height: 0; overflow: hidden; }
+/* 贴表分布条：与表格同卡，贴着表头（同学习状态 lc-analytics 的间隔节奏） */
+.oc-distband { padding: 12px 16px; border-bottom: 1px solid var(--mk-line); }
 .oc-error {
   display: flex;
   align-items: center;

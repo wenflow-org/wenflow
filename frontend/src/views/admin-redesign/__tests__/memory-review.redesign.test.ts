@@ -1,6 +1,7 @@
 /**
  * 记忆与复习页 redesign 结构契约（newui 原型 renderMemory 1963-2045 移植）：
- * - 到期时间轴：.stageband 六档（零值段跳过、图例恒六行）+ .sbl 色块/名/数
+ * - 到期时间轴：贴表分布条 MkDistBand（2026-10-04 晚，原独立卡移入表格卡）——
+ *   .stageband 六档（零值段跳过、图例恒六行）+ .sbl 色块/名/数，分段/图例可点下钻筛用户行
  * - 记忆强度分布：.histo 五桶（hval/hbar/hcap），高度按最大桶比例、零桶 6px 起步；
  *   无 retrievability（FSRS 状态缺失）的条目不进分母
  * - 窗口口径：adminMemoryTracesApi.list（limit 200、includeVirtual 随作用域开关）
@@ -46,7 +47,7 @@ const at = (dayOffset: number) => {
   d.setHours(12, 0, 0, 0);
   return d.toISOString();
 };
-const row = (over: Partial<{ id: string; extractionCount: number; dueAt: string | null; retrievability: number | null }>) => ({
+const row = (over: Partial<{ id: string; userId: string; extractionCount: number; dueAt: string | null; retrievability: number | null }>) => ({
   id: 't0',
   userId: 'u1',
   conceptKey: 'k0',
@@ -123,10 +124,46 @@ describe('MemoryReview redesign：到期时间轴 + 记忆强度分布', () => {
     expect(legend.map((el) => el.find('.sbl__name').text())).toEqual(['已逾期', '今天', '明天', '2天后', '3天后', '5天后']);
     expect(legend.map((el) => el.find('.sbl__n').text())).toEqual(['1', '2', '1', '1', '1', '0']);
 
-    // 5天后 = 0 → 段跳过，其余 5 段渲染（原型 distBand 口径）
-    const segments = w.findAll('.stageband > span');
+    // 5天后 = 0 → 段不渲染，其余 5 段渲染（原型 distBand 口径；组件 v-if，隐藏段不留 DOM）
+    const segments = w.findAll('.mk-distband__seg');
     expect(segments).toHaveLength(5);
-    expect(segments[0].attributes('title')).toBe('已逾期 · 1');
+    expect(segments[0].attributes('title')).toBe('已逾期：1 个 · 点击只看');
+  });
+
+  it('贴表到期带可点下钻：点「已逾期」→ 只剩窗口内该档有到期痕迹的学习者；再点取消', async () => {
+    // 两名学习者：u1 有逾期痕迹（t1），u2 只有明天到期（t8）→ 逾期档下钻应只剩 u1
+    overview.mockResolvedValue({
+      data: { data: {
+        totals: { users: 2, traces: 2, due: 2, usersWithAudit: 0, proposed: 0, autoApplicable: 0, ambiguous: 0, applied: 0, deleted: 0 },
+        users: [
+          { userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: 1, due: 1, audit: null, weak: 1, avgStrength: 0.19, lastReviewedAt: new Date().toISOString() },
+          { userId: 'u2', name: '小红', email: null, isVirtualLearner: false, traces: 1, due: 1, audit: null, weak: 0, avgStrength: 0.5, lastReviewedAt: new Date().toISOString() },
+        ],
+      } },
+    });
+    traceList.mockResolvedValue({
+      data: { data: { total: 2, rows: [
+        row({ id: 't1', userId: 'u1', dueAt: at(-1), extractionCount: 2, retrievability: 0.19 }),
+        row({ id: 't8', userId: 'u2', dueAt: at(1), retrievability: 0.5 }),
+      ] } },
+    });
+    const w = mount(MemoryReview);
+    await flushPromises();
+    expect(w.findAll('tbody tr')).toHaveLength(2);
+
+    const overdueBtn = w.findAll('.stageband__legend .sbl').find((b) => b.text().includes('已逾期'))!;
+    await overdueBtn.trigger('click');
+    await flushPromises();
+    const rowsText = w.findAll('tbody tr').map((r) => r.text());
+    expect(rowsText).toHaveLength(1);
+    expect(rowsText[0]).toContain('小明');
+    expect(rowsText[0]).not.toContain('小红');
+    expect(w.text()).toContain('已筛 1 位');
+
+    await overdueBtn.trigger('click');
+    await flushPromises();
+    expect(w.findAll('tbody tr')).toHaveLength(2);
+    w.unmount();
   });
 
   it('强度直方图：五桶、无强度条目不进分母、高度按最大桶比例（零桶 6px）', async () => {

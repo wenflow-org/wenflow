@@ -227,12 +227,12 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     expect(kpiLabels).toEqual(['学习者', '需关注', '低置信', '平均置信度']);
     // ②置信分段分布条（2026-10-04 一屏工作台：直方图/逐人排行退役）：图例五档带人数，
     //   副题带基数口径且明示口径外人数；25–49% 与 ≥90% 各 1 人
-    expect(w.find('.lc-dist__head .lc-section-sub').text()).toContain('共 2 个有任务的快照');
-    expect(w.find('.lc-dist__head .lc-section-sub').text()).toContain('另 1 位无任务/无快照不计');
+    expect(w.find('.mk-distband__sub').text()).toContain('共 2 个有任务的快照');
+    expect(w.find('.mk-distband__sub').text()).toContain('另 1 位无任务/无快照不计');
     // 低置信卡与分布同口径：丙（无任务、confidence 0）不计入（外部评审「274 vs 高分区 7」型接缝的护栏）
     const lowKpi = w.findAll('.lc-kpi .mk-kpi').find((c) => c.text().includes('低置信'));
     expect(lowKpi!.find('.mk-kpi__num').text()).toBe('1'); // 乙（0.32）；丙无任务不计
-    const legend = w.findAll('.lc-dist__legend .sbl');
+    const legend = w.findAll('.stageband__legend .sbl');
     expect(legend).toHaveLength(5);
     expect(legend[1].text()).toContain('25–49%');
     expect(legend[1].find('.sbl__n').text()).toBe('1');

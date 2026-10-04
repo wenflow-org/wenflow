@@ -36,40 +36,13 @@
       />
     </section>
 
-    <!-- 到期时间轴 + 记忆强度分布（newui 原型 renderMemory 2029-2034 两卡 grid 原样移植：
-         stageband 卡在前（1.5fr）、histo 卡在后（1fr），页头 KPI 之后、用户列表之前）。
-         数据源 = adminMemoryTracesApi.list（GET /admin/memory-traces，后端注释即「观察复习调度状态
-         与记忆保持率分布」）：逐条 dueAt → 六档到期带（已逾期/今天/明天/2/3/5 天后，distBand 判例 =
-         OpsContent 状态分布卡：零值段跳过、图例恒六行）；retrievability（FSRS 可提取率）→ 五桶
-         强度直方图（无强度数据的条目不进分母，不硬造）。窗口口径：后端上限 200 条（updatedAt 倒序），
-         卡 meta 如实标注「窗口/非全量」（同 TeachingSessions 分布卡判例）；队列口径 = extractionCount>0
-         （从未提取过的点不进复习队列，与后端 due 统计一致）。拉取失败或队列为空整块隐藏，不留空卡。 -->
+    <!-- 记忆强度分布（newui 原型 renderMemory 2029-2034 两卡之一）。到期时间轴已迁入下方
+         用户列表卡表头正上方并升级为可点下钻的贴表分布条（2026-10-04 晚拍板教学组贴表形态），
+         本卡独占一行。数据源 = adminMemoryTracesApi.list（GET /admin/memory-traces）：
+         retrievability（FSRS 可提取率）→ 五桶强度直方图（无强度数据的条目不进分母，不硬造）。
+         窗口口径：后端上限 200 条（updatedAt 倒序），卡 meta 如实标注「窗口/非全量」；
+         拉取失败或队列为空整块隐藏，不留空卡。 -->
     <section v-if="traceWindowReady" class="mr-bandgrid">
-      <div class="mk-card">
-        <div class="mk-card__head">
-          <span class="mk-card__title">到期时间轴</span>
-          <!-- P3（2026-10-04 全站评审）：「共」字让给全量数（页头 KPI「当前到期」），本卡是
-               窗口口径——与 KPI 同屏两个到期数时不再互相冒充 -->
-          <span class="mk-card__meta" :title="`复习队列 = 已被提取过的记忆痕迹（extractionCount>0）；窗口为最近 ${traceRows.length} 条痕迹（updatedAt 倒序），非全量——全量到期数见页头 KPI「当前到期」`">按到期日聚合的复习点分布 · 窗口内 {{ queueRows.length }} 个 · 最近 {{ traceRows.length }} 条痕迹</span>
-        </div>
-        <div class="mr-dist__body">
-          <div class="stageband" role="img" :aria-label="mrBandAria">
-            <span
-              v-for="seg in mrDueSegments"
-              :key="seg.key"
-              :style="{ width: seg.pct, background: seg.tone }"
-              :title="`${seg.name} · ${seg.n}`"
-            ></span>
-          </div>
-          <div class="stageband__legend">
-            <div v-for="entry in mrDueBand" :key="entry.key" class="sbl" :title="entry.title">
-              <span class="sbl__sw" :style="{ background: entry.tone }" aria-hidden="true"></span>
-              <span class="sbl__name">{{ entry.name }}</span>
-              <span class="sbl__n">{{ entry.n }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
       <div class="mk-card">
         <div class="mk-card__head">
           <span class="mk-card__title">记忆强度分布</span>
@@ -92,8 +65,24 @@
         <h3 class="mk-card__title">用户列表</h3>
         <!-- 口径：totals.users 是后端全量统计，列表只取痕迹数倒序前 N 且暂无分页——
              两个数字必须同时给出，否则「页头 137 / 表下共 50」读起来像数据缺失 -->
-        <span class="mk-card__meta" :title="`后端口径为全量有记忆痕迹用户；列表按待复习（到期）量倒序只取前 ${rows.length} 名，暂无分页`">共 {{ totals.users }} 位有记忆痕迹用户（展示前 {{ rows.length }}）· 按待复习量倒序</span>
+        <span class="mk-card__meta" :title="`后端口径为全量有记忆痕迹用户；列表按待复习（到期）量倒序只取前 ${rows.length} 名，暂无分页${dueBandFilter ? '；当前按到期档下钻，命中集只含窗口内学习者' : ''}`">共 {{ totals.users }} 位有记忆痕迹用户（展示前 {{ rows.length }}）<template v-if="dueBandFilter">· 已筛 {{ visibleRows.length }} 位</template> · 按待复习量倒序</span>
       </div>
+      <!-- 贴表到期分布（2026-10-04 晚拍板教学组贴表分布条）：原「到期时间轴」独立卡移入表格卡
+           表头正上方并升级为可点下钻（MkDistBand）——点某档 = 只看窗口内该档有到期痕迹的学习者。
+           口径不变：复习队列 = extractionCount>0，窗口 = 最近 200 条痕迹（updatedAt 倒序），
+           非全量——全量到期数见页头 KPI「当前到期」；下钻命中集同样只含窗口内学习者。
+           注意：本带独立 v-if，不进下方 错误/骨架/空态/表格 的互斥链（否则命中时表格不渲染） -->
+      <MkDistBand
+        v-if="traceWindowReady"
+        class="mr-distband"
+        title="到期时间轴"
+        :sub="`点击分段只看该档学习者 · 窗口内 ${queueRows.length} 个复习点（最近 ${traceRows.length} 条痕迹，非全量）`"
+        unit="个"
+        aria-label="按到期时间筛选学习者"
+        :bins="mrDueBins"
+        :active-key="dueBandFilter"
+        @select="toggleDueBand"
+      />
       <p v-if="error" class="mr__error">{{ error }}</p>
       <MockSkeletonTable v-if="loading && !rows.length" :cols="7" :rows="8" />
       <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" description="当前口径内还没有用户产生记忆痕迹。等学习者开始学习并完成概念提取后，这里会按待复习量倒序列出用户。" />
@@ -104,7 +93,7 @@
            需人工看为本地真实运营信号（归并候选），原型无此列、保留。
            原型 .tbl 自动布局：无 colgroup/无 fixed，列宽随内容、td nowrap（同 Users.vue 判例） -->
       <div v-else class="mk-table-scroll">
-        <table class="mk-table mk-table--click">
+        <table v-if="visibleRows.length" class="mk-table mk-table--click">
           <thead>
             <tr>
               <th>学习者</th>
@@ -120,7 +109,7 @@
             <!-- 原型 renderMemory：学习者行/「记忆点」按钮均 data-action="open-learner" → go("learner") 页。
                  行点击改跳学习者详情页（原型铁令：实体行跳页不开浮层）；「明细」钮保留页内复盘二级视图（记忆点子实体明细，原型允许形态）。 -->
             <tr
-              v-for="row in rows"
+              v-for="row in visibleRows"
               :key="row.userId"
               :class="{ 'mr__row--active': row.userId === selectedId }"
               tabindex="0"
@@ -170,6 +159,12 @@
             </tr>
           </tbody>
         </table>
+        <!-- 到期档下钻筛空：不是「无数据」，提示取消路径而非空态误导 -->
+        <MkEmptyState
+          v-else-if="dueBandFilter"
+          title="该到期档暂无学习者"
+          description="窗口内没有学习者的到期痕迹落在这个时间档。再点一次分布条上的同档分段即可取消筛选。"
+        />
       </div>
     </div>
     </template>
@@ -467,6 +462,7 @@ import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
+import MkDistBand from '@/components/mk/MkDistBand.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'
@@ -691,28 +687,53 @@ function dueCell(trace: { dueAt?: string | null }): { text: string; overdue: boo
   return { text: `${days} 天后`, overdue: false, title: `到期时刻 ${abs}（${days} 天后到期）` }
 }
 
+/** 日差 → 桶位（桶名 = 起始日，尾部并档）：负 = 已逾期；0/1/2 = 今天/明天/2天后；
+    3–4 归「3天后」桶；≥5 归「5天后」桶。分档计数与下钻命中集共用同一分桶。 */
+function dueBucketIndexOf(dueAt: string, epoch: Date): number {
+  const idx = dayIndexFromToday(dueAt, epoch)
+  return idx < 0 ? 0 : idx <= 2 ? idx + 1 : idx <= 4 ? 4 : 5
+}
+
 const mrDueBand = computed(() => {
   const epoch = new Date()
   const counts = MR_DUE_BAND.map(() => 0)
   for (const row of queueRows.value) {
-    const idx = dayIndexFromToday(row.dueAt as string, epoch)
-    // 日差 → 桶位（桶名 = 起始日，尾部并档）：负 = 已逾期；0/1/2 = 今天/明天/2天后；
-    // 3–4 归「3天后」桶；≥5 归「5天后」桶
-    const bucket = idx < 0 ? 0 : idx <= 2 ? idx + 1 : idx <= 4 ? 4 : 5
-    counts[bucket] += 1
+    counts[dueBucketIndexOf(row.dueAt as string, epoch)] += 1
   }
   return MR_DUE_BAND.map((def, i) => ({ ...def, n: counts[i] }))
 })
 
-/* 段宽 = n / 合计（原型 distBand 口径，合计为 0 时按 1 兜底）；零值段不渲染，图例恒六行 */
-const mrBandTotal = computed(() => mrDueBand.value.reduce((sum, entry) => sum + entry.n, 0))
-const mrDueSegments = computed(() => {
-  const total = mrBandTotal.value || 1
-  return mrDueBand.value
-    .filter((entry) => entry.n > 0)
-    .map((entry) => ({ key: entry.key, name: entry.name, n: entry.n, tone: entry.tone, pct: `${(entry.n / total) * 100}%` }))
+/* ===== 到期带下钻（2026-10-04 晚贴表分布条）：点某档 = 窗口内该档有到期痕迹的学习者 =====
+   队列行自带 userId，可直接归组；再点取消；下钻与列表共用 dueBucketIndexOf 分桶。 */
+const dueBandFilter = ref<string | null>(null)
+function toggleDueBand(key: string) {
+  dueBandFilter.value = dueBandFilter.value === key ? null : key
+}
+/** 桶 key → 窗口内该档有到期痕迹的学习者集合 */
+const dueBucketUsers = computed(() => {
+  const map = new Map<string, Set<string>>()
+  const epoch = new Date()
+  for (const row of queueRows.value) {
+    const key = MR_DUE_BAND[dueBucketIndexOf(row.dueAt as string, epoch)].key
+    let set = map.get(key)
+    if (!set) {
+      set = new Set()
+      map.set(key, set)
+    }
+    set.add(row.userId)
+  }
+  return map
 })
-const mrBandAria = computed(() => `到期时间轴：${mrDueBand.value.map((entry) => `${entry.name} ${entry.n}`).join(' · ')}`)
+/** 下钻后的用户列表（无下钻 = 原列表）；下钻只可能命中窗口内学习者，属已披露口径 */
+const visibleRows = computed(() =>
+  dueBandFilter.value
+    ? rows.value.filter((r) => dueBucketUsers.value.get(dueBandFilter.value!)?.has(r.userId))
+    : rows.value
+)
+/** MkDistBand bins：图例恒六档（含 0 值档），段仅非零（组件内 v-show） */
+const mrDueBins = computed(() =>
+  mrDueBand.value.map((entry) => ({ key: entry.key, label: entry.name, n: entry.n, tone: entry.tone }))
+)
 
 /* 原型 sBuckets 原样移植：边界 min 含、max 不含（0.2 归 20–39%，0.8 归 80–99%）；上限 1.01 兜住 100% */
 const MR_STRENGTH_BUCKETS = [
@@ -1076,8 +1097,9 @@ onMounted(async () => {
 
 /* 到期带 + 强度直方图两卡 grid（原型 renderMemory 2029 行 grid-template-columns:
    minmax(0,1.5fr) minmax(0,1fr) + align-items:start 原样移植；窄屏收单列） */
-.mr-bandgrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; align-items: start; }
-@media (max-width: 960px) { .mr-bandgrid { grid-template-columns: minmax(0, 1fr); } }
+.mr-bandgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+/* 贴表到期分布：与表格同卡、贴着表头（同 lc-analytics / oc-distband 的间隔节奏） */
+.mr-distband { padding: 12px 16px; border-bottom: 1px solid var(--mk-line); }
 
 /* 强度直方图（newui 原型 .histo 579-584 原样移植；token 映射：--mono→--mk-mono、
    --muted→--mk-muted、--faint→--mk-faint、11px 字号→--mk-fs-micro（设计语言 12px 下限），
