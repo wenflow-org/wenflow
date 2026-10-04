@@ -59,10 +59,14 @@ import {
 import type { PendingTeachingCheckpoint } from './simulation.coordinator';
 import type { SimulationOrchestrator } from './simulation.coordinator';
 
-/** 教学回合「模型抖动」类结构化错误（详见 simulation.coordinator 历史说明；迁入本模块并自 coordinator re-export） */
+/** 教学回合「模型抖动」类结构化错误（详见 simulation.coordinator 历史说明；迁入本模块并自 coordinator re-export）
+ *  2026-10-04 并入「非 JSON 输出」：上游偶发 200+纯散文（无截断、token 富余，实测约 3%/步），
+ *  prompt-composer 的 JSON 提取拒绝即抛此文案。不归类时直通终局把会话判死→整课重来（死亡螺旋，
+ *  实测 24 工位被压到 ~2 课/小时）；归类后走步骤级有界重试，耗尽也只是可续跑暂停。 */
 export function isTeachingTurnHiccupError(error: unknown): boolean {
   const message = String(asErrorLike(error).message || error || '');
-  return /TEACHING_TURN_(REPLY_MISSING|REQUIRED_BLOCK_MISSING|REPLY_COMPLETION_MISMATCH|OUTPUT_NOT_OBJECT|OUTPUT_INVALID)/i.test(message);
+  if (/TEACHING_TURN_(REPLY_MISSING|REQUIRED_BLOCK_MISSING|REPLY_COMPLETION_MISMATCH|OUTPUT_NOT_OBJECT|OUTPUT_INVALID)/i.test(message)) return true;
+  return /response does not contain valid JSON/i.test(message);
 }
 
 export async function startLearningPhase(ctx: SimulationOrchestrator, sessionId: string, options: { taskId?: string } = {}): Promise<{
