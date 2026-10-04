@@ -36,11 +36,27 @@
     />
 
     <template v-else>
+      <!-- 目标对话状态分布（教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」：回到卡上方
+           页面级，与旧构成带同位）：分段/图例点击 = 状态筛选（与原 pills 同一 statusFilter，
+           「已取消」= 取补集聚合段）；口径 = stats 服务端全量状态计数（非本页 LIST_LIMIT 窗口），
+           完成率随副标；停滞信号随「进行中」段悬停披露（原桶 foot 迁移）；stats 失败/空数据整带隐藏 -->
+      <MkDistBand
+        v-if="!statsError && stats && stats.total > 0"
+        class="gc-distband"
+        title="目标对话状态分布"
+        :sub="`点击分段只看该状态 · 共 ${stats.total} 条（服务端状态计数，非本页窗口） · 完结率 ${stats.completionRate ?? 0}%`"
+        unit="条"
+        aria-label="按目标对话状态筛选"
+        :bins="gcBandBins"
+        :active-key="statusFilter || null"
+        @select="toggleStatusBand"
+      />
+
       <!-- 列表 -->
       <div class="mk-card mk-card--fill">
         <div class="mk-card__head">
           <div class="mk-filter">
-            <!-- 状态筛选唯一入口 = 卡内贴表分布条（2026-10-04 晚：pills 与页级构成带同驱一个
+            <!-- 状态筛选唯一入口 = 上方分布条（2026-10-04 晚：pills 与构成带同驱一个
                  statusFilter，同屏两处筛选面收敛一处；「已取消」段与原 pill 同口径取补集） -->
             <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 邮箱 / 目标摘要" />
             <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
@@ -54,22 +70,6 @@
             <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含测试' : '仅真实' }}）<template v-if="stats && stats.total > rows.length"> · 仅显示最近 {{ rows.length }} 条</template></span>
           </div>
         </div>
-
-        <!-- 贴表分布条（教学组标准件 MkDistBand，2026-10-04 晚构成带换装）：宏观切片紧贴数据行；
-             分段/图例点击 = 状态筛选（与原 pills 同一 statusFilter，「已取消」= 取补集聚合段）；
-             口径 = stats 服务端全量状态计数（非本页 LIST_LIMIT 窗口），完成率随副标；
-             停滞信号随「进行中」段悬停披露（原桶 foot 迁移）；stats 失败/空数据整带隐藏 -->
-        <MkDistBand
-          v-if="!statsError && stats && stats.total > 0"
-          class="gc-distband"
-          title="目标对话状态分布"
-          :sub="`点击分段只看该状态 · 共 ${stats.total} 条（服务端状态计数，非本页窗口） · 完结率 ${stats.completionRate ?? 0}%`"
-          unit="条"
-          aria-label="按目标对话状态筛选"
-          :bins="gcBandBins"
-          :active-key="statusFilter || null"
-          @select="toggleStatusBand"
-        />
 
         <MockSkeletonTable v-if="loading && !rows.length" :cols="9" />
         <!-- P0 修复：加载失败行内错误 + 重试（此前失败伪装成「暂无会话」） -->
@@ -666,8 +666,8 @@ onMounted(() => {
    该列会被内容多的列挤到 ~90px（2026-10-02 视觉核对实测），名字/邮箱全截断——
    给内容格兜底宽度，压缩由可换行的摘要/约束列吸收 */
 .gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }
-/* 状态分布已换装共享原语 MkDistBand（2026-10-04 晚贴表分布条，教学组标准件） */
-.gc-distband { padding: 12px 16px; border-bottom: 1px solid var(--mk-line); }
+/* 分布条在卡上方页面级（2026-10-05 用户拍板「分段条在上」）：贴条 padding/下边框随撤，
+   页面级间距由 .mk-page 的 --mk-stack-gap 统一供。gc-distband 类保留作测试与定位钩子 */
 .gc-user .mk-cell-main { min-width: 0; flex: 1; }.gc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }/* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
 .gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }.gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }.gc-stage-cell__dots { display: inline-flex; gap: 3px; }.gc-stage-cell__dot {
   width: 6px;

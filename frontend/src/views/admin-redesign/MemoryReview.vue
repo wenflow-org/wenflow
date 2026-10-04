@@ -60,6 +60,22 @@
       </div>
     </section>
 
+    <!-- 到期时间轴（教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」：回到用户列表卡
+         上方页面级）——点某档 = 只看窗口内该档有到期痕迹的学习者。口径不变：复习队列 =
+         extractionCount>0，窗口 = 最近 200 条痕迹（updatedAt 倒序），非全量——全量到期数见
+         页头 KPI「当前到期」；下钻命中集同样只含窗口内学习者 -->
+    <MkDistBand
+      v-if="traceWindowReady"
+      class="mr-distband"
+      title="到期时间轴"
+      :sub="`点击分段只看该档学习者 · 窗口内 ${queueRows.length} 个复习点（最近 ${traceRows.length} 条痕迹，非全量）`"
+      unit="个"
+      aria-label="按到期时间筛选学习者"
+      :bins="mrDueBins"
+      :active-key="dueBandFilter"
+      @select="toggleDueBand"
+    />
+
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <h3 class="mk-card__title">用户列表</h3>
@@ -67,22 +83,6 @@
              两个数字必须同时给出，否则「页头 137 / 表下共 50」读起来像数据缺失 -->
         <span class="mk-card__meta" :title="`后端口径为全量有记忆痕迹用户；列表按待复习（到期）量倒序只取前 ${rows.length} 名，暂无分页${dueBandFilter ? '；当前按到期档下钻，命中集只含窗口内学习者' : ''}`">共 {{ totals.users }} 位有记忆痕迹用户（展示前 {{ rows.length }}）<template v-if="dueBandFilter">· 已筛 {{ visibleRows.length }} 位</template> · 按待复习量倒序</span>
       </div>
-      <!-- 贴表到期分布（2026-10-04 晚拍板教学组贴表分布条）：原「到期时间轴」独立卡移入表格卡
-           表头正上方并升级为可点下钻（MkDistBand）——点某档 = 只看窗口内该档有到期痕迹的学习者。
-           口径不变：复习队列 = extractionCount>0，窗口 = 最近 200 条痕迹（updatedAt 倒序），
-           非全量——全量到期数见页头 KPI「当前到期」；下钻命中集同样只含窗口内学习者。
-           注意：本带独立 v-if，不进下方 错误/骨架/空态/表格 的互斥链（否则命中时表格不渲染） -->
-      <MkDistBand
-        v-if="traceWindowReady"
-        class="mr-distband"
-        title="到期时间轴"
-        :sub="`点击分段只看该档学习者 · 窗口内 ${queueRows.length} 个复习点（最近 ${traceRows.length} 条痕迹，非全量）`"
-        unit="个"
-        aria-label="按到期时间筛选学习者"
-        :bins="mrDueBins"
-        :active-key="dueBandFilter"
-        @select="toggleDueBand"
-      />
       <p v-if="error" class="mr__error">{{ error }}</p>
       <MockSkeletonTable v-if="loading && !rows.length" :cols="7" :rows="8" />
       <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" description="当前口径内还没有用户产生记忆痕迹。等学习者开始学习并完成概念提取后，这里会按待复习量倒序列出用户。" />
@@ -1098,8 +1098,8 @@ onMounted(async () => {
 /* 到期带 + 强度直方图两卡 grid（原型 renderMemory 2029 行 grid-template-columns:
    minmax(0,1.5fr) minmax(0,1fr) + align-items:start 原样移植；窄屏收单列） */
 .mr-bandgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
-/* 贴表到期分布：与表格同卡、贴着表头（同 lc-analytics / oc-distband 的间隔节奏） */
-.mr-distband { padding: 12px 16px; border-bottom: 1px solid var(--mk-line); }
+/* 到期时间轴在用户列表卡上方页面级（2026-10-05 用户拍板「分段条在上」）：贴条 padding/下边框
+   随撤，页面级间距由 .mk-page 的 --mk-stack-gap 统一供。mr-distband 类保留作测试与定位钩子 */
 
 /* 强度直方图（newui 原型 .histo 579-584 原样移植；token 映射：--mono→--mk-mono、
    --muted→--mk-muted、--faint→--mk-faint、11px 字号→--mk-fs-micro（设计语言 12px 下限），

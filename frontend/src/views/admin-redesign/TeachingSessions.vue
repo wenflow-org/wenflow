@@ -24,6 +24,24 @@
       未能定位该会话：它可能不在当前列表范围内（最近 {{ LIST_LIMIT }} 条），或已被删除。
     </div>
 
+    <!-- 会话状态分布（教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」：回到卡上方
+         页面级，与旧构成带同位）：十状态按收束语义归四组 + 完结率（组内合并口径在分段悬停披露，
+         完结率随副标）；枚举外取值归「其它」段（仅实际出现时追加）。数据 = 已加载列表行
+         （rows，最近 LIST_LIMIT 条加载窗口），非后端全量口径。分段/图例点击 = 只看该组
+         （与「高级筛选」弹层的单状态下拉互斥切换）；embedded 时隐藏（宿主承载域计数）；
+         无数据不留空带 -->
+    <MkDistBand
+      v-if="!embedded && rows.length"
+      class="ts-distband"
+      title="会话状态分布"
+      :sub="tsBandSub"
+      unit="条"
+      aria-label="按会话状态组筛选"
+      :bins="tsBandBins"
+      :active-key="bandGroup"
+      @select="toggleBandGroup"
+    />
+
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
@@ -107,23 +125,6 @@
           <span class="mk-card__meta" :title="`${includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'}；${totalTitle}`">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）<template v-if="truncated"> · 共 {{ listTotal }}，仅显示最近 {{ LIST_LIMIT }} 条</template></span>
         </div>
       </div>
-
-      <!-- 贴表分布条（教学组标准件 MkDistBand，2026-10-04 晚构成带换装）：十状态按收束语义
-           归四组 + 完结率（组内合并口径在分段悬停披露，完结率随副标）；枚举外取值归「其它」段
-           （仅实际出现时追加）。数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口），
-           非后端全量口径。分段/图例点击 = 只看该组（与「高级筛选」弹层的单状态下拉互斥切换）；
-           embedded 时隐藏（宿主承载域计数）；无数据不留空带 -->
-      <MkDistBand
-        v-if="!embedded && rows.length"
-        class="ts-distband"
-        title="会话状态分布"
-        :sub="tsBandSub"
-        unit="条"
-        aria-label="按会话状态组筛选"
-        :bins="tsBandBins"
-        :active-key="bandGroup"
-        @select="toggleBandGroup"
-      />
 
       <div v-if="loadFailed" class="ts-error" role="alert">
         <span>教学会话加载失败</span>
@@ -847,8 +848,8 @@ defineExpose({ refreshNow })
   white-space: nowrap;
 }/* 异常堆积（合计 ≥ 阈值）chip 转红：原状态条 mk-status--bad 的同一告警，阈值在 chip title 披露。
    选中态（筛选生效中）由模板守卫——abnormalOnly 时不再加本类，让位给 .mk-pill--active 的蓝 */
-/* 贴表分布条：与表格同卡、贴着表头（同 lc-analytics / oc-distband 的间隔节奏） */
-.ts-distband { padding: 12px 16px; border-bottom: 1px solid var(--mk-line); }
+/* 分布条在卡上方页面级（2026-10-05 用户拍板「分段条在上」）：卡片内的贴条 padding/下边框随撤，
+   页面级间距由 .mk-page 的 --mk-stack-gap 统一供。ts-distband 类保留作测试与定位钩子 */
 .ts-abn-chip--heap {
   color: var(--mk-red);
   border-color: color-mix(in srgb, var(--mk-red) 45%, var(--mk-line));

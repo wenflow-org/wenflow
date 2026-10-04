@@ -33,6 +33,20 @@
       <MkKpi label="平均置信度" :value="avgConfText" :hint="avgConfHint" />
     </section>
 
+    <!-- 置信度分段分布条（教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」：移出表格卡，
+         回到卡上方页面级，与教学组其余页同位）——段与图例均可点下钻；偏态保护 min-width 14px +
+         3% 宽度下限在组件内单源 -->
+    <MkDistBand
+      v-if="rows.length && confRows.length && !loadFailed"
+      title="置信度分布"
+      :sub="confBaseNote"
+      unit="人"
+      aria-label="按置信度分档筛选"
+      :bins="confBandBins"
+      :active-key="confBin == null ? null : String(confBin)"
+      @select="toggleConfBand"
+    />
+
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
@@ -85,22 +99,9 @@
         @action="retryLoad"
       />
       <!-- 一屏工作台（2026-10-04 用户拍板「顶部紧凑宏观观测 + 下部排查表格」；同日 KPI 已按同组形态
-           拆到页级，观测栏只剩置信度分段条）：点击分段下钻筛选表格，表格区内滚升入首屏，
-           分页器保持卡尾吸底。 -->
+           拆到页级；2026-10-05 置信度分段条随「分段条在上」移出卡到页面级）：点击分段下钻筛选
+           表格，表格区内滚升入首屏，分页器保持卡尾吸底。 -->
       <div v-else class="lc-body">
-        <div v-if="rows.length && confRows.length" class="lc-analytics">
-          <!-- 置信度分段分布条（2026-10-04 升格共享原语 MkDistBand：教学组贴表分布条标准件，
-               段与图例均可点下钻；偏态保护 min-width 14px + 3% 宽度下限在组件内单源） -->
-          <MkDistBand
-            title="置信度分布"
-            :sub="confBaseNote"
-            unit="人"
-            aria-label="按置信度分档筛选"
-            :bins="confBandBins"
-            :active-key="confBin == null ? null : String(confBin)"
-            @select="toggleConfBand"
-          />
-        </div>
 
       <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
            列按内容自然分宽；长昵称/长任务由 mk-cell-main 上限与下方 max-width 截断兜底 -->
@@ -629,22 +630,11 @@ async function recomputeAll() {
 /* 键盘可达（对齐 gc-row/oc-row 判例）：行可聚焦，焦点态描边提示当前位置 */
 .lc-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }
 /* ================= 一屏工作台（2026-10-04 用户拍板「观测栏 + 排查表格」） =================
-   lc-body 从整区滚动容器改为 flex 列：观测栏（lc-analytics）静态贴顶、
-   表格区（lc-tablewrap，带 mk-table-scroll 保 sticky 表头）内滚升入首屏；
-   逐人条形排行与竖向直方图整层退役（与表格置信列同数据重复、实测合计 578px）。 */
+   lc-body 为 flex 列：表格区（lc-tablewrap，带 mk-table-scroll 保 sticky 表头）内滚升入首屏；
+   观测栏（置信度分段条）2026-10-05 随「分段条在上」移出卡到页面级（lc-analytics 随撤，
+   页面级间距由 .mk-page 的 --mk-stack-gap 统一供）；逐人条形排行与竖向直方图整层退役。 */
 .lc-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .lc-tablewrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-/* 观测栏（2026-10-04 KPI 拆到页级后只剩置信度分段条，双列栅格随之简化为单列；
-   分段条本体已升格共享原语 MkDistBand，页内不再持有 stageband/图例样式） */
-.lc-analytics {
-  display: grid;
-  gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--mk-line);
-}
-@media (max-width: 1100px) {
-  .lc-analytics { grid-template-columns: 1fr; }
-}
 /* 学习者单元格（原型 celluser：头像 + 主行/副行 + 身份徽章，Users.vue ul-user 同款判例） */
 .lc-celluser { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .lc-celluser .mk-cell-main { min-width: 0; flex: 1; }
