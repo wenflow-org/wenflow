@@ -2171,6 +2171,26 @@ export async function loadLiveData(force = false) {
   const { spans: _s, overview, ...rest } = jobs
   const spansSkippable = liveDomainSkippable('spans', force)
   const overviewSkippable = liveDomainSkippable('overview', force)
+
+  /* 后台诸域与首屏门闩并发起跑（2026-10-04 性能批四段）：原先串行在门闩之后，
+     门闩（周窗 200 行样本）会把其余域整体后推同样时长——浏览器时间线实测执行日志页
+     因此白等 ~1.8s。两批无数据依赖；「整体失败换错误页」的判定仍只看门闩两笔，
+     后台域各自失败只落 liveFailures（局部降级语义不变）。 */
+  const entries = Object.entries(rest)
+  const background = Promise.all(
+    entries.map(async ([key, fn]) => {
+      if (liveDomainSkippable(key, force)) return
+      try {
+        await fn()
+        liveFetchAt[key] = Date.now()
+      } catch (e) {
+        liveFailures.value[key] = errMsg(e)
+      }
+    })
+  ).then(() => {
+    liveLoading.value = false
+  })
+
   const [spansResult, overviewResult] = await Promise.allSettled([
     spansSkippable ? Promise.resolve() : jobs.spans(),
     overviewSkippable ? Promise.resolve() : overview(),
@@ -2187,28 +2207,16 @@ export async function loadLiveData(force = false) {
 
   // 核心域（日志）失败才算整体失败；其余局部降级。
   // 阶段 0 R1：后端不可用不再自动降级 demo（杜绝假数据静默展示），
-  // 由 AdminConsole 全屏错误页承接（可重试）。
+  // 由 AdminConsole 全屏错误页承接（可重试）。liveLoading 交还 false 保证「重试」可用；
+  // 后台在途请求自然收尾（结果只落各域 ref，错误页不受影响）。
   if (liveFailures.value.spans && !liveSpans.value?.length) {
     liveLoading.value = false
     return
   }
 
-  // 关键域就绪即放行首屏；其余域后台继续
+  // 关键域就绪即放行首屏；后台域已在并行推进
   dataSource.value = 'live'
-  const entries = Object.entries(rest)
-  void Promise.all(
-    entries.map(async ([key, fn]) => {
-      if (liveDomainSkippable(key, force)) return
-      try {
-        await fn()
-        liveFetchAt[key] = Date.now()
-      } catch (e) {
-        liveFailures.value[key] = errMsg(e)
-      }
-    })
-  ).then(() => {
-    liveLoading.value = false
-  })
+  void background
 }
 
 export function backToDemo() {

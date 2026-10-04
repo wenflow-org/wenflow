@@ -298,13 +298,21 @@ export async function warmOverviewStatsCache(): Promise<void> {
   overviewStatsCache.set('overview-stats', { payload: data, cachedAt: Date.now() });
 }
 
-/* ===== 执行日志统计缓存（2026-10-04 性能批三段） =====
- * 统计的两笔扫描中，失败行拉取要读周窗 7k+ 行的 error 文本（宽行回表：冷页实测 20-30s、
- * 热 ~1.5s）；夜批写入持续冲刷页缓存使「页热」不可靠 → 进程内缓存（60s TTL + 在途去重），
- * 行数据仍实时取（limit 受限，代价与窗口无关）。默认视图由启动预热填一次，稳态即命中。 */
-const EXEC_LOGS_STATS_TTL_MS = 60 * 1000;
+/* ===== 执行日志缓存（2026-10-04 性能批三段/四段） =====
+ * 统计（groupBy + 周窗 7k+ 行失败文本回表）与列表行（200 行 × metadata 大列）都要读宽行
+ * 散落页；夜批写入持续冲刷页缓存使「页热」不可靠 → 进程内缓存：
+ * - 统计键覆盖一切影响统计的筛选参数（page/limit/sort 不影响统计）；
+ * - 行键 = 全参数签名（page/limit/sort 决定行集，必须入键）。
+ * 默认视图形状（壳层 200 行样本 + 执行日志页今日默认视图）由启动预热 + 60s 强制刷新保活，
+ * 用户请求恒命中进程内存；读路径过期但仍有旧值时走 SWR（立即返回旧值、重算转后台）——
+ * 夜批争抢下重算可长达数秒，绝不让用户请求阻塞在重算上（四段实测 7.8s 慢窗的修法）；
+ * 其余形状随用随填、180s（3× 刷新周期）自然过期（筛选变更/翻页即换键走实时）。 */
+const EXEC_LOGS_STATS_TTL_MS = 3 * 60 * 1000;
+const EXEC_LOGS_ROWS_TTL_MS = 3 * 60 * 1000;
 const execLogsStatsCache = new Map<string, { payload: AgentLogStatsTuple; cachedAt: number }>();
 const execLogsStatsInflight = new Map<string, Promise<AgentLogStatsTuple>>();
+const execLogsRowsCache = new Map<string, { payload: any[]; cachedAt: number }>();
+const execLogsRowsInflight = new Map<string, Promise<any[]>>();
 
 /** 统计缓存键：覆盖一切影响统计的筛选参数（page/limit/sort 不影响统计，不入键） */
 function execLogsStatsKey(query: Record<string, unknown>): string {
@@ -312,45 +320,125 @@ function execLogsStatsKey(query: Record<string, unknown>): string {
   return keys.map((k) => `${k}=${query[k] ?? ''}`).join('|');
 }
 
-async function getExecLogsStatsCached(key: string, compute: () => Promise<AgentLogStatsTuple>): Promise<AgentLogStatsTuple> {
-  const cached = execLogsStatsCache.get(key);
-  if (cached && Date.now() - cached.cachedAt < EXEC_LOGS_STATS_TTL_MS) {
+/** 行缓存键：全参数签名（page/limit/sort 决定行集，必须入键） */
+function execLogsRowsKey(query: Record<string, unknown>): string {
+  const keys = [
+    'timeRange', 'startTime', 'endTime', 'status', 'sourceEntry', 'agentName', 'agentId', 'errorCategory', 'keyword', 'traceId', 'sessionId',
+    'page', 'limit', 'sort', 'order',
+  ];
+  return keys.map((k) => `${k}=${query[k] ?? ''}`).join('|');
+}
+
+/** 简单容量保护：检索类筛选可产生较多键，超限时清掉最旧一半 */
+function trimCacheByAge<T>(cache: Map<string, { payload: T; cachedAt: number }>, limit = 200): void {
+  if (cache.size <= limit) return;
+  const byAge = [...cache.entries()].sort((a, b) => a[1].cachedAt - b[1].cachedAt);
+  for (const [k] of byAge.slice(0, Math.floor(limit / 2))) cache.delete(k);
+}
+
+/** 读缓存通用实现（统计/行共用）：
+ * - 新鲜（age < ttl）直接返回；
+ * - force（周期刷新）跳过新鲜判断，强制重算并替换——否则 TTL 内的缓存会让定时刷新变 no-op；
+ * - 过期但有旧值 → stale-while-revalidate：立即返回旧值，重算转后台（失败静默，旧值兜底）；
+ * - 完全冷键 → 阻塞在重算上（在途去重与 force/普通读共享同一 inflight 句柄）。 */
+async function getExecLogsCached<T>(
+  cache: Map<string, { payload: T; cachedAt: number }>,
+  inflight: Map<string, Promise<T>>,
+  key: string,
+  compute: () => Promise<T>,
+  ttlMs: number,
+  force = false
+): Promise<T> {
+  const cached = cache.get(key);
+  if (!force && cached && Date.now() - cached.cachedAt < ttlMs) {
     return cached.payload;
   }
-  const inflight = execLogsStatsInflight.get(key);
-  if (inflight) return inflight;
+  const running = inflight.get(key);
+  if (running) return cached ? cached.payload : running;
   const computation = compute()
     .then((payload) => {
-      // 容量保护：检索类筛选可产生较多键，超限时清掉最旧一半
-      if (execLogsStatsCache.size > 200) {
-        const byAge = [...execLogsStatsCache.entries()].sort((a, b) => a[1].cachedAt - b[1].cachedAt);
-        for (const [k] of byAge.slice(0, 100)) execLogsStatsCache.delete(k);
-      }
-      execLogsStatsCache.set(key, { payload, cachedAt: Date.now() });
+      trimCacheByAge(cache);
+      cache.set(key, { payload, cachedAt: Date.now() });
       return payload;
     })
     .finally(() => {
-      if (execLogsStatsInflight.get(key) === computation) execLogsStatsInflight.delete(key);
+      if (inflight.get(key) === computation) inflight.delete(key);
     });
-  execLogsStatsInflight.set(key, computation);
+  inflight.set(key, computation);
+  if (!force && cached) {
+    void computation.catch(() => {});
+    return cached.payload;
+  }
   return computation;
 }
 
-/** 启动预热（schedulers 装配调用）：按执行日志页默认筛选（周窗，与前端 fetchLiveSpans 的
- *  timeRange='week' 同参）填统计缓存；顺带空跑一次行取数焐热页（尽力而为，无缓存语义）。 */
-export async function warmExecLogsStatsCache(): Promise<void> {
-  const weekAgo = new Date(startOfDay(new Date()).getTime() - 7 * 86400000);
-  // where 形态与路由默认视图逐字对齐（含 canary 排除子句；failedRows 用它）
-  const baseWhere: any = {
+async function getExecLogsStatsCached(key: string, compute: () => Promise<AgentLogStatsTuple>, force = false): Promise<AgentLogStatsTuple> {
+  return getExecLogsCached(execLogsStatsCache, execLogsStatsInflight, key, compute, EXEC_LOGS_STATS_TTL_MS, force);
+}
+
+async function getExecLogsRowsCached(key: string, compute: () => Promise<any[]>, force = false): Promise<any[]> {
+  return getExecLogsCached(execLogsRowsCache, execLogsRowsInflight, key, compute, EXEC_LOGS_ROWS_TTL_MS, force);
+}
+
+/** 默认视图 where：周窗/今日两档（与路由 timeRange 分支同构；壳层 span 样本用 week、
+ *  执行日志页默认筛选用 today）。canary 排除子句与路由默认视图逐字对齐。 */
+function defaultExecLogsWhereFor(timeRange: 'week' | 'today'): { where: any; statsWhere: any; canaryWhere: any } {
+  const today = startOfDay(new Date());
+  const gte = timeRange === 'week' ? new Date(today.getTime() - 7 * 86400000) : today;
+  const where: any = {
     AND: [{ NOT: { agentId: 'path-agent' } }, { sourceEntry: { not: 'system-canary' } }],
-    calledAt: { gte: weekAgo },
+    calledAt: { gte },
   };
-  const statsWhere: any = { ...baseWhere, AND: [baseWhere.AND[0]] };
-  const canaryWhere: any = { ...baseWhere, AND: [baseWhere.AND[0], { sourceEntry: 'system-canary' }] };
-  await getExecLogsStatsCached(execLogsStatsKey({ timeRange: 'week' }), () =>
-    fetchAgentLogStats({ where: baseWhere, canaryWhere, statsWhere, canarySourceEntry: 'system-canary' })
-  );
-  await fetchAgentLogRows({ where: baseWhere, skip: 0, limitNum: 200, logOrderBy: [{ calledAt: 'desc' }, { id: 'desc' }] });
+  const statsWhere: any = { ...where, AND: [where.AND[0]] };
+  const canaryWhere: any = { ...where, AND: [where.AND[0], { sourceEntry: 'system-canary' }] };
+  return { where, statsWhere, canaryWhere };
+}
+
+/** 默认视图形状 = 实际请求逐字签名（键含全参数，必须与前端 URL 完全一致才算命中）：
+ *  ① 壳层 200 行样本（fetchLiveSpans → timeRange=week&limit=200）；
+ *  ② 执行日志页默认视图（limit=30&page=1&timeRange=today&sort=calledAt&order=desc，浏览器实抓）。 */
+const EXEC_LOGS_DEFAULT_SHAPES: Array<{ query: Record<string, unknown>; timeRange: 'week' | 'today' }> = [
+  { query: { timeRange: 'week', limit: '200' }, timeRange: 'week' },
+  { query: { limit: '30', page: '1', timeRange: 'today', sort: 'calledAt', order: 'desc' }, timeRange: 'today' },
+];
+
+/** 填默认视图的统计 + 行样本；启动预热（force=false）与 60s 周期刷新（force=true）共用。
+ *  顺序执行：与夜批重 IO 并发实测互相拖长 3-6 倍（二段结论），后台刷新不赶时间。 */
+async function fillExecLogsDefaultCaches(force = false): Promise<void> {
+  for (const { query, timeRange } of EXEC_LOGS_DEFAULT_SHAPES) {
+    const { where, statsWhere, canaryWhere } = defaultExecLogsWhereFor(timeRange);
+    const limitNum = Math.min(200, Math.max(1, Math.floor(Number(query.limit)) || 20));
+    const pageNum = Math.max(1, Math.floor(Number(query.page)) || 1);
+    await getExecLogsStatsCached(execLogsStatsKey(query), () =>
+      fetchAgentLogStats({ where, canaryWhere, statsWhere, canarySourceEntry: 'system-canary' }), force);
+    await getExecLogsRowsCached(execLogsRowsKey(query), () =>
+      fetchAgentLogRows({ where, skip: (pageNum - 1) * limitNum, limitNum, logOrderBy: [{ calledAt: 'desc' }, { id: 'desc' }] }), force);
+  }
+}
+
+/** 启动预热（schedulers 装配调用） */
+export async function warmExecLogsStatsCache(): Promise<void> {
+  await fillExecLogsDefaultCaches(false);
+}
+
+/** 周期刷新（schedulers 每 60s 调用）：force 强制重算替换（TTL 内检查会让刷新变 no-op）；
+ *  失败静默，旧值继续兜底（读路径 SWR），用户请求恒不为重算等待。 */
+export async function refreshExecLogsCache(): Promise<void> {
+  await fillExecLogsDefaultCaches(true);
+}
+
+/** 测试辅助：清空执行日志统计/行缓存与在途句柄（模块级缓存跨用例复用会污染路由级断言） */
+export function __clearExecLogsCachesForTests(): void {
+  execLogsStatsCache.clear();
+  execLogsStatsInflight.clear();
+  execLogsRowsCache.clear();
+  execLogsRowsInflight.clear();
+}
+
+/** 测试辅助：把所有条目置为已过期（TTL 为分钟级，用例内无法等待自然过期） */
+export function __expireExecLogsCachesForTests(): void {
+  for (const entry of execLogsStatsCache.values()) entry.cachedAt = 0;
+  for (const entry of execLogsRowsCache.values()) entry.cachedAt = 0;
 }
 
 router.get('/overview/stats', async (req: Request, res: Response) => {
@@ -885,10 +973,13 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       };
     };
 
-    /* 行实时取 + 统计走进程内缓存（2026-10-04 性能批三段）：失败行拉取读 7k+ 行 error 文本，
-       夜批持续冲刷页缓存使「页热」不可靠；缓存键覆盖全部影响统计的筛选参数。 */
+    /* 行与统计都走进程内缓存（2026-10-04 性能批三段/四段）：失败行拉取读 7k+ 行 error 文本、
+       200 行样本要读 metadata 大列；夜批持续冲刷页缓存使「页热」不可靠。
+       缓存键覆盖全部影响取数的筛选参数（行键含 page/limit/sort）；读路径 SWR，冷键才阻塞。 */
     const [logs, [total, successCount, timeoutCount, errorCount, bySourceRows, canaryCount]] = await Promise.all([
-      fetchAgentLogRows({ where, skip, limitNum, logOrderBy }),
+      getExecLogsRowsCached(execLogsRowsKey(req.query as Record<string, unknown>), () =>
+        fetchAgentLogRows({ where, skip, limitNum, logOrderBy })
+      ),
       getExecLogsStatsCached(execLogsStatsKey(req.query as Record<string, unknown>), () =>
         fetchAgentLogStats({ where, canaryWhere, statsWhere, canarySourceEntry })
       ),

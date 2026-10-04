@@ -38,7 +38,7 @@ jest.mock('../../../services/learning/goal-conversation.service', () => ({
   generateLearningPathFromConversation: jest.fn(),
 }))
 
-import platformRouter from '../platform'
+import platformRouter, { __clearExecLogsCachesForTests } from '../platform'
 
 function getRouteHandler(router: any, path: string, method: string): RouteHandler {
   const layer = router.stack.find(
@@ -76,6 +76,8 @@ function hasCanaryExclusion(and: any[]): boolean {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  // 进程内缓存跨用例复用会返回上一用例的 payload（断言变空跑）——每次清空
+  __clearExecLogsCachesForTests()
   findMany.mockResolvedValue([])
   count.mockResolvedValue(0)
   groupBy.mockResolvedValue([])

@@ -176,7 +176,8 @@ export function runOverviewStatsCacheWarmup(): void {
 /**
  * 管理端页面冷读预热（一次性，延迟 30s 避开启动高峰）：
  * - 技能目录页统计（默认 7d + 可选 all）填进路由 5min 缓存；
- * - 执行日志页默认周窗筛选空跑一次（纯页缓存/索引页焐热，无缓存语义）；
+ * - 执行日志默认视图的统计 + 两档行样本进进程内缓存，并由 60s 周期刷新保活
+ *  （2026-10-04 性能批四段：页缓存被夜批写入持续冲刷，「焐热」不可靠；内存缓存才稳）；
  * - 学习状态页列表投影：按页面默认参数（limit 500 / 排除测试）走一次，
  *   把 60 分钟新鲜度窗内到期的 281 人投影分批重建挪到后台（冷首触实测 ~2s）。
  */
@@ -195,4 +196,14 @@ export function runAdminPageColdWarmup(): void {
     });
   }, 30_000);
   timer.unref?.();
+
+  // 执行日志默认视图缓存保活：60s force 刷新（读路径 SWR 兜底，条目 180s 才过期）；
+  // 夜批争抢下重算可长达数秒，force+SWR 保证用户请求永不为重算等待
+  const refresh = setInterval(() => {
+    runBackgroundTask('admin.exec-logs.cache-refresh', async () => {
+      const { refreshExecLogsCache } = await import('../routes/admin/platform');
+      await refreshExecLogsCache();
+    });
+  }, 60_000);
+  refresh.unref?.();
 }
