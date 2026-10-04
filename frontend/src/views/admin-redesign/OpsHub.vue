@@ -91,9 +91,15 @@
           <button type="button" class="mk-link" @click="goContent">管理 →</button>
         </div>
         <div class="ow-state">
-          <div v-if="pathTotal > 0 && pathHasDistribution" class="ow-state__seg" aria-hidden="true">
-            <i v-for="s in pathSegments" :key="s.key" :class="`ow-seg--${s.tone}`" :style="{ width: s.pct }" :title="`${s.label} ${s.count}`"></i>
-          </div>
+          <!-- 构成条走共享原语（2026-10-04）：原自搓 .ow-state__seg 与 .stageband 四项分叉
+               （高度/gap/轨道色/子元素）+ muted 硬编码，收编后只传段数据 -->
+          <MkStageband
+            v-if="pathTotal > 0 && pathHasDistribution"
+            :segments="pathSegments"
+            size="sm"
+            :legend="false"
+            aria-hidden="true"
+          />
           <div v-else-if="pathTotal === 0" class="ow-state__empty">暂无学习路径</div>
           <!-- P3（2026-10-04 全站评审）：空态时三行 0 计数不再与「暂无…」并存（零信息复读） -->
           <div v-if="pathTotal > 0" class="ow-state__rows">
@@ -110,9 +116,13 @@
           <button type="button" class="mk-link" @click="goAnnouncements">管理 →</button>
         </div>
         <div class="ow-state">
-          <div v-if="annTotal > 0 && annHasDistribution" class="ow-state__seg" aria-hidden="true">
-            <i v-for="s in annSegments" :key="s.key" :class="`ow-seg--${s.tone}`" :style="{ width: s.pct }" :title="`${s.label} ${s.count}`"></i>
-          </div>
+          <MkStageband
+            v-if="annTotal > 0 && annHasDistribution"
+            :segments="annSegments"
+            size="sm"
+            :legend="false"
+            aria-hidden="true"
+          />
           <div v-else-if="annTotal === 0" class="ow-state__empty">暂无公告</div>
           <!-- P3：同上，空态只留占位行 -->
           <div v-if="annTotal > 0" class="ow-state__rows">
@@ -174,6 +184,7 @@ import OpsAchievements from './OpsAchievements.vue'
 import Announcements from './Announcements.vue'
 import Notifications from './Notifications.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
+import MkStageband from '@/components/mk/MkStageband.vue'
 
 /* ===== 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知（阶段 1 导航收敛） =====
    低频页折入 tab 宿主；?tab= 双向同步，深链/刷新/前进后退可寻址（对齐消息/用户宿主约定） */
@@ -599,17 +610,10 @@ onMounted(() => {
 .ow-rankrow--failed .ow-rankrow__main { color: var(--mk-red); }
 .ow-rankrow__go--bad { color: var(--mk-red); }
 
-/* 状态面板：比例条 + 行式计数 */
+/* 状态面板：构成条（MkStageband）+ 行式计数 */
 .ow-state { padding: 8px 14px 12px; display: grid; gap: 10px; }
-.ow-state__seg {
-  display: flex;
-  height: 8px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: var(--mk-line);
-}
-.ow-state__seg i { display: block; height: 100%; min-width: 0; transition: width 0.2s ease; }
-/* 无数据时的占位：保留比例条的高度位，但不画空灰条（避免「像坏图」） */
+/* 无数据时的占位：保留比例条的高度位，但不画空灰条（避免「像坏图」）。
+   8px = MkStageband size="sm" 的轨道高度，占位与实条同高才不跳。 */
 .ow-state__empty {
   height: 8px;
   display: flex;
@@ -618,12 +622,6 @@ onMounted(() => {
   color: var(--mk-faint);
   line-height: 1;
 }
-.ow-seg--ok { background: var(--mk-green); }
-.ow-seg--info { background: var(--mk-blue); }
-.ow-seg--warn { background: var(--mk-amber); }
-.ow-seg--bad { background: var(--mk-red); }
-.ow-seg--muted { background: #c3cbda; }
-html[data-theme='dark'] .ow-seg--muted { background: #404244; }
 .ow-state__rows { display: grid; gap: 5px; }
 .ow-state__row {
   display: flex;
@@ -647,12 +645,13 @@ html[data-theme='dark'] .ow-seg--muted { background: #404244; }
   margin-right: 8px;
   vertical-align: 1px;
 }
+/* 行式图例点：tone 名与 MkStageband 同词汇。muted→--mk-faint（原 #c3cbda/#404244 硬编码
+   与另两页同槽位（MemoryReview「5天后及以远」、LearnerCenter 低置信档）不一致，收编为全站语义色）。 */
 .ow-state__dot--ok { background: var(--mk-green); }
 .ow-state__dot--info { background: var(--mk-blue); }
 .ow-state__dot--warn { background: var(--mk-amber); }
 .ow-state__dot--bad { background: var(--mk-red); }
-.ow-state__dot--muted { background: #c3cbda; }
-html[data-theme='dark'] .ow-state__dot--muted { background: #404244; }
+.ow-state__dot--muted { background: var(--mk-faint); }
 
 /* 生效中公告列表 */
 .ow-ann-list { padding: 2px 14px 6px; }

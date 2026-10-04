@@ -21,6 +21,7 @@ vi.mock('../live', async () => {
 vi.mock('../store', () => ({ intent: {} }))
 
 import OpsHub from '../OpsHub.vue'
+import MkStageband from '@/components/mk/MkStageband.vue'
 
 describe('运营中心：学习路径构成条（回归）', () => {
   it('仅一个非零状态：不渲染满格构成条，行式计数仍展示', async () => {
@@ -28,7 +29,8 @@ describe('运营中心：学习路径构成条（回归）', () => {
     const w = mount(OpsHub)
     await flushPromises()
 
-    expect(w.findAll('.ow-state__seg')).toHaveLength(0)
+    // 断言改为组件计数（2026-10-04 收编 MkStageband 后类名不再是契约）
+    expect(w.findAllComponents(MkStageband)).toHaveLength(0)
     expect(w.text()).toContain('学习中')
     expect(w.text()).toContain('暂无公告')
 
@@ -40,7 +42,14 @@ describe('运营中心：学习路径构成条（回归）', () => {
     const w = mount(OpsHub)
     await flushPromises()
 
-    expect(w.findAll('.ow-state__seg').length).toBeGreaterThanOrEqual(1)
+    expect(w.findAllComponents(MkStageband).length).toBeGreaterThanOrEqual(1)
+    // 段色走全站语义色 token：archived 槽位是 muted→--mk-faint
+    // （收编前自搓类写死 #c3cbda / 暗色 #404244，本断言防硬编码回流）
+    const segs = w.findAll('.stageband > span').map((s) => s.attributes('style') ?? '')
+    expect(segs.join(' ')).toContain('var(--mk-green)') // active → ok
+    expect(segs.join(' ')).toContain('var(--mk-blue)') // completed → info
+    expect(segs.join(' ')).toContain('var(--mk-faint)') // archived → muted
+    expect(segs.join(' ')).not.toMatch(/#[0-9a-f]{6}/i)
 
     w.unmount()
   })

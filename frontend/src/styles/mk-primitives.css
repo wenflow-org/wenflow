@@ -754,6 +754,9 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
    可点档 .sbl--link / 选中档 .sbl--on 由列表页按需挂。 ---- */
 .stageband { display: flex; gap: 2px; height: 12px; border-radius: 999px; overflow: hidden; background: var(--mk-surface-3); }
 .stageband > span { display: block; height: 100%; transition: width var(--mk-dur) var(--mk-ease-out); }
+/* 紧凑档：卡内构成条（8px）。两档 = md 12 / sm 8，**只此两档**——
+   自搓高度是 OpsHub .ow-state__seg 与原型分叉的四项之一，收编后不要再在页面上发明新高度。 */
+.stageband--sm { height: 8px; }
 .stageband__legend { display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 14px; }
 .sbl { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); }
 .sbl__sw { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); flex: none; }
