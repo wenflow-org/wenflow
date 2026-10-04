@@ -345,8 +345,10 @@ export async function runSkillReadinessChecks(
 ): Promise<SkillsReadinessReport> {
   const book = loadSkillsBookRaw();
   const [activeRows, registrations, parityReport] = await Promise.all([
+    // 只取**基线**行（variant: null，与 core-hash-parity 同口径）：户口簿按 skill 只有一个身份，
+    // A/B 实验臂（variant='xxx'）不参与基线对账。
     systemDb.agent_prompts.findMany({
-      where: { status: 'ACTIVE' },
+      where: { status: 'ACTIVE', variant: null },
       select: { agentId: true, metadata: true, coreHash: true, coreVersion: true },
     }),
     systemDb.skill_registrations.findMany({

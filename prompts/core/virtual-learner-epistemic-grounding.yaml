@@ -27,6 +27,7 @@ inputs:
     desc: 上一轮学习者主观状态（可选，用于状态连续性）
   - name: forcedCorrectness
     type: object
+    ref: sandbox:simulation.forcedCorrectness
     desc: 编排层受控错误指令（可选，仅采样命中时出现）：{forced:true, targetConcept, hint}，出现时判决必须服从
 rules:
   - 只输出认知判决，不生成学习者可见文本，不模拟对话

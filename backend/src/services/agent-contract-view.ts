@@ -79,6 +79,13 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'cognitiveCore',
     'planningHints',
     'replan',
+    // stage-designer 声明、编排层直接注入的三个沙盘键（无路由行）——此前未登记，
+    // prompts:check-handoff:strict 恒红（2026-10-04 与 epistemic-grounding 的 ref 缺口一并结清）：
+    // schoolAnchor（校内锚：教材版本/考纲/进度）、supplementRequest（补课请求，提示词按规则消费）、
+    // pathStageMap（渐进式设计的阶段映射）。
+    'schoolAnchor',
+    'supplementRequest',
+    'pathStageMap',
   ],
   'teaching-agent': [
     'session.messages',
@@ -124,6 +131,10 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'learnerState',
     'currentTask',
     'knowledgeSnapshot',
+    // epistemic-grounding 声明 ref: sandbox:simulation.forcedCorrectness（编排层受控错误采样指令，
+    // simulation.learn-phase 直接注入、无路由行）。此前该 core 文件缺 ref 而 schema 不合法，
+    // 全量扫描/编译工具链与 CI prompts:core:check 因此一直红（2026-10-04 修复）。
+    'forcedCorrectness',
     'publicTrace',
     'refereeTrace',
     'control',

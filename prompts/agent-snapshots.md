@@ -183,13 +183,16 @@ sandbox:path-agent.normalizedInput.successCriteria.observableResult
 sandbox:path-agent.normalizedInput.understanding.adjustments
 sandbox:path-agent.path.name
 sandbox:path-agent.path.summary
+sandbox:path-agent.pathStageMap
 sandbox:path-agent.planningHints
 sandbox:path-agent.previousMilestone
 sandbox:path-agent.repairHints
 sandbox:path-agent.replan
+sandbox:path-agent.schoolAnchor
 sandbox:path-agent.subtasks
 sandbox:path-agent.subtasks.acceptanceCriteria
 sandbox:path-agent.subtasks.title
+sandbox:path-agent.supplementRequest
 ```
 
 ## 教学 Agent（Teaching）（teaching-agent）
@@ -340,6 +343,7 @@ sandbox:simulation-agent.existingKnown
 sandbox:simulation-agent.existingPersonaSeed
 sandbox:simulation-agent.existingStruggle
 sandbox:simulation-agent.experimentSummary
+sandbox:simulation-agent.forcedCorrectness
 sandbox:simulation-agent.frictionBudget
 sandbox:simulation-agent.goalState
 sandbox:simulation-agent.knowledgeSnapshot

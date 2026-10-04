@@ -178,7 +178,7 @@ export function analyzeCoreHashParity(input: {
 export interface CoreHashParityQueryAdapter {
   agent_prompts: {
     findMany: (args: {
-      where: { status: 'ACTIVE' };
+      where: { status: 'ACTIVE'; variant: null };
       select: { agentId: true; metadata: true; coreHash: true; coreVersion: true };
     }) => Promise<CoreHashParityActiveRow[]>;
   };
@@ -188,8 +188,11 @@ export async function checkCoreHashParity(
   prisma: CoreHashParityQueryAdapter,
   scan = scanPromptFiles()
 ): Promise<CoreHashParityReport> {
+  // 只比**基线**行（variant: null）——A/B 实验臂（variant='xxx'）与文件本就该不同哈希，
+  // 漏掉该过滤会把臂行当基线参与比对 → 误报 db-mismatch（实测 teaching-turn/session-wrapup
+  // 两个带臂的 skill 长期挂着假 red）。「当前生效基线」在仓库内处处是 variant:null 口径。
   const activeRows = await prisma.agent_prompts.findMany({
-    where: { status: 'ACTIVE' },
+    where: { status: 'ACTIVE', variant: null },
     select: { agentId: true, metadata: true, coreHash: true, coreVersion: true },
   });
   return analyzeCoreHashParity({

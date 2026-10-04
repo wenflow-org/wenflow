@@ -1,7 +1,7 @@
 ---
 agentId: skill:virtual-learner-epistemic-grounding
-coreHash: 86d7f965c3a6752f1b44b9a6906e325da965b9472d9bd03f7dd6d7088d74deed
-coreVersion: 1
+coreHash: 11af412450ccdb77c2915982dd5ab4b5b2c8eeba8fcb5ac860b21313a6107aef
+coreVersion: 2
 temperature: 0.3
 maxTokens: 32000
 failurePolicy: propagate
@@ -23,14 +23,16 @@ failurePolicy: propagate
 - 「currentTask（object）」`sandbox:simulation.currentTask`（编排注入） — 当前 task 信息（学习者视角的任务描述）
 - 「knowledgeSnapshot（object[]）」`sandbox:simulation.knowledgeSnapshot`（编排注入） — 当前任务知识看板（服务端注入）
 - 「previousLearnerState（object）」`sandbox:simulation.previousLearnerState`（编排注入） — 上一轮学习者主观状态（可选，用于状态连续性）
+- 「forcedCorrectness（object）」`sandbox:simulation.forcedCorrectness`（编排注入） — 编排层受控错误指令（可选，仅采样命中时出现）：{forced:true, targetConcept, hint}，出现时判决必须服从
 
 ## 执行规则
 
 1. 只输出认知判决，不生成学习者可见文本，不模拟对话
-2. sampledCorrectness 基于 learner 画像的掌握度做离散判决，不是自由发挥——画像声明某概念掌握度低（strugglingConcepts/低能力基线），则涉及该概念的步骤大概率判 false；画像声明已掌握则大概率判 true
-3. blockedConcept 从 knowledgeSnapshot 或当前任务概念里定位（做错时输出，做对时为 null）
-4. errorPattern 是与该 persona 一致的错误模式（做错时输出，如"把 X 误当成 Y"；做对时为 null）
-5. masteryProb 是画像的掌握概率估计（0-1），基于画像的长期掌握度，非本轮表现临时打分
+2. 输入含 forcedCorrectness（编排层采样指令）时必须无条件服从：sampledCorrectness 判 false，blockedConcept 用 forcedCorrectness.targetConcept（无则从当前任务概念定位），errorPattern 与该卡点一致——受控错误机制把画像概率放在编排层采样，你的画像推断让位于它
+3. sampledCorrectness 基于 learner 画像的掌握度做离散判决，不是自由发挥——画像声明某概念掌握度低（strugglingConcepts/低能力基线），则涉及该概念的步骤大概率判 false；画像声明已掌握则大概率判 true
+4. blockedConcept 从 knowledgeSnapshot 或当前任务概念里定位（做错时输出，做对时为 null）
+5. errorPattern 是与该 persona 一致的错误模式（做错时输出，如"把 X 误当成 Y"；做对时为 null）
+6. masteryProb 是画像的掌握概率估计（0-1），基于画像的长期掌握度，非本轮表现临时打分
 
 ## 输出字段
 
