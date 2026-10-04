@@ -186,6 +186,69 @@ describe('AutopilotService 全自动模式', () => {
     ;(service as any).runningSessions.delete('live')
   })
 
+  it('对账：跨进程活运行（心跳新鲜）不被收敛（报告 #58——翻转会让 stop 失效）', async () => {
+    mockSessionFindMany.mockResolvedValue([
+      {
+        id: 'foreign-live',
+        status: 'running',
+        stageResults: JSON.stringify({
+          autopilot: { status: 'running', heartbeatAt: new Date(Date.now() - 30 * 1000).toISOString() }
+        })
+      }
+    ])
+
+    const reconciled = await service.reconcileStaleRuns()
+
+    expect(reconciled).toBe(0)
+    expect(mockSessionUpdate).not.toHaveBeenCalled()
+  })
+
+  it('对账：心跳陈旧（含旧版无心跳数据）的非终态残留仍收敛为 idle', async () => {
+    mockSessionFindMany.mockResolvedValue([
+      {
+        id: 'dead-run',
+        status: 'running',
+        stageResults: JSON.stringify({
+          autopilot: { status: 'running', heartbeatAt: new Date(Date.now() - 30 * 60 * 1000).toISOString() }
+        })
+      },
+      // 本改动之前写入的 running 状态没有 heartbeatAt → 按陈旧处理
+      { id: 'legacy-run', status: 'running', stageResults: JSON.stringify({ autopilot: { status: 'running' } }) }
+    ])
+
+    const reconciled = await service.reconcileStaleRuns()
+
+    expect(reconciled).toBe(2)
+    const patch = JSON.parse((mockSessionUpdate.mock.calls[0][0] as any).data.stageResults)
+    expect(patch.autopilot.status).toBe('idle')
+    expect(String(patch.autopilot.lastError)).toContain('进程重启')
+  })
+
+  it('stop：跨进程活运行只写停止标志、不就地收口（报告 #58）', async () => {
+    sessionRecord = buildSession('goal', 'running', {
+      autopilot: { status: 'running', heartbeatAt: new Date(Date.now() - 20 * 1000).toISOString() }
+    })
+    mockSessionFindUnique.mockImplementation(async () => sessionRecord)
+
+    const result = await service.stop('s1')
+
+    expect(result.accepted).toBe(true)
+    const state = autopilotOf()
+    expect(state.stopRequested).toBe(true)
+    // 不掀翻：状态仍是 running，等持有循环在下一个安全点自行收口
+    expect(state.status).toBe('running')
+  })
+
+  it('stop：心跳陈旧的悬挂运行就地收口为 stopped', async () => {
+    sessionRecord = buildSession('goal', 'running', { autopilot: { status: 'running' } })
+    mockSessionFindUnique.mockImplementation(async () => sessionRecord)
+
+    const result = await service.stop('s1')
+
+    expect(result.accepted).toBe(true)
+    expect(autopilotOf().status).toBe('stopped')
+  })
+
   it('assisted 全链路：goal → path → 逐课 → 达到最终目标（completed）', async () => {
     mockExecuteSingleStep.mockImplementation(async () => {
       sessionRecord.currentStage = 'path'

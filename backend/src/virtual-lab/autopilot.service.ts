@@ -70,6 +70,12 @@ export type AutopilotState = {
   stopRequested?: boolean
   lessonRecoveries?: number
   waitingSince?: string | null
+  /**
+   * 自动驾驶自己的心跳（全量测试报告 #58）：每次 writeState 落一次。跨进程对账/stop 判定
+   * 「持有循环是否还活着」只看它——行 updatedAt 会被无关写者（手动 teaching-step、状态机）
+   * 推动，不能作为存活证据。
+   */
+  heartbeatAt?: string
 }
 
 export class AutopilotConflictError extends Error {
@@ -107,6 +113,21 @@ const TERMINAL_STATUSES = new Set(['completed', 'failed', 'abandoned'])
 
 /** 周期对账间隔：把「进程重启/异常退出」留下的状态错位在 1 个周期内收敛 */
 const AUTOPILOT_RECONCILE_INTERVAL_MS = 5 * 60 * 1000
+
+/**
+ * 非终态会话「持有循环已死」的新鲜度阈值（全量测试报告 #58）：running/queued 的心跳落后
+ * 超过该阈值才允许跨进程收敛/就地收口。阈值取 10 分钟——远大于单回合最长静默（含模型重试
+ * 的长教学回合、路径生成的等待观察期，期间循环按 15s~分钟级心跳写状态），确保不会把另一
+ * 进程正在跑的循环掀翻（翻转会让随后 stop 返回 accepted:false 而循环继续推进）。
+ */
+const AUTOPILOT_STALE_RUN_FRESHNESS_MS = 10 * 60 * 1000
+
+/** 非终态会话的 autopilot 状态是否已陈旧到可判定「持有循环已死」（心跳缺失按陈旧处理）。 */
+function isStaleAutopilotRun(heartbeatAt: string | Date | null | undefined, now = Date.now()): boolean {
+  const ts = heartbeatAt ? new Date(heartbeatAt).getTime() : NaN
+  if (!Number.isFinite(ts)) return true
+  return now - ts > AUTOPILOT_STALE_RUN_FRESHNESS_MS
+}
 
 /** 会话终态 → 自动驾驶应收敛到的终态（避免「终态会话仍显示运行中」） */
 function autopilotStatusForTerminalSession(sessionStatus: string): AutopilotState['status'] {
@@ -164,7 +185,9 @@ export class AutopilotService {
     const stageResults = parseStageResults(session.stageResults)
     stageResults.autopilot = {
       ...(base || (stageResults.autopilot as AutopilotState | undefined) || {}),
-      ...patch
+      ...patch,
+      // 心跳（报告 #58）：每次状态写入都盖一次，跨进程对账据此判定持有循环存活
+      heartbeatAt: new Date().toISOString()
     }
     await prisma.virtual_sessions.update({
       where: { id: sessionId },
@@ -319,6 +342,7 @@ export class AutopilotService {
       select: { id: true, status: true, stageResults: true }
     })
     let reconciled = 0
+    const now = Date.now()
     for (const s of sessions) {
       if (this.runningSessions.has(s.id) || this.isQueued(s.id)) continue
       const stageResults = parseStageResults(s.stageResults)
@@ -326,6 +350,10 @@ export class AutopilotService {
       if (!ap || (ap.status !== 'running' && ap.status !== 'queued')) continue
       const sessionStatus = String(s.status || '')
       const terminal = TERMINAL_STATUSES.has(sessionStatus)
+      // 多进程护栏（报告 #58）：非终态的 running/queued 可能是**另一进程**正在跑的循环——
+      // 本进程内存看不到它，但它的心跳在前进。只有心跳陈旧（持有者已死）才允许收敛，
+      // 否则会掀翻活循环、并让随后 stop 因状态被写成 idle 而返回 accepted:false。
+      if (!terminal && !isStaleAutopilotRun(ap.heartbeatAt, now)) continue
       stageResults.autopilot = {
         ...ap,
         status: terminal ? autopilotStatusForTerminalSession(sessionStatus) : 'idle',
@@ -431,7 +459,9 @@ export class AutopilotService {
     // runningSessions 已清空、状态机永远不会消费该标志），直接终态化为 stopped，
     // 避免「会话 running + stopRequested」悬挂态（前端会显示已停止却无按钮可点）。
     // 若主循环仍在运行，则标志由循环下一轮消费并 markStopped，这里不做重复写入。
-    if (!this.runningSessions.has(sessionId)) {
+    // 多进程护栏（报告 #58）：本进程内存没有 ≠ 循环已死——心跳新鲜说明有别的进程在跑，
+    // 只写标志、由那个进程收口；只有心跳陈旧才就地收口。
+    if (!this.runningSessions.has(sessionId) && isStaleAutopilotRun(state.heartbeatAt)) {
       await this.markStopped(sessionId, 'stopRequested / 后台循环已不在运行，直接收口')
     }
     logger.info('[autopilot] 请求停止全自动', { sessionId })
