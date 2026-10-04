@@ -630,8 +630,10 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 /* 骨架版式（形状）走 MkSkeleton；本类只管外层堆叠 */
 .ud-skel { display: grid; gap: 14px; padding-top: 8px; }
 /* 页头身份区走 .mk-entity（shared.css）；本页只保留页头内的统计行 */
-/* 状态条（原型 statstrip：一张卡通栏分格，label 12 / 数值 22，右分隔线；
-   LearnerDetail 同款页本地复刻） */
+/* 状态条（原型 statstrip：一张卡通栏分格，label 12 / 数值 18，右分隔线；
+   LearnerDetail 同款页本地复刻）。债务登记（2026-10-04 批次五）：完整替换成共享 MkStatStrip
+   是正解，但测试依赖 .statstrip__stat DOM 结构，暂不做组件替换（同 LearnerDetail）；
+   本轮数值档 22px→18px 对齐共享组件，长文本格改两行换行不再 nowrap 截断。 */
 .statstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .statstrip__stat {
   display: grid; gap: 6px; align-content: start;
@@ -641,9 +643,10 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 .statstrip__stat:last-child { border-right: 0; }
 .statstrip__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .statstrip__value {
-  font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+  font-size: 18px; font-weight: 700; letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums; color: var(--mk-ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 /* 主卡（原型详情页主区结构）：subtabs 在卡顶，pane 在卡内。

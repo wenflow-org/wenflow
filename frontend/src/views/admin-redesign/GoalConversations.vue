@@ -90,7 +90,7 @@
               storage-key="wf_goal_hidden_cols"
               v-model:hidden="gcHiddenCols"
             />
-            <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）<template v-if="stats && stats.total > rows.length"> · 仅显示最近 {{ rows.length }} 条</template></span>
+            <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含测试' : '仅真实' }}）<template v-if="stats && stats.total > rows.length"> · 仅显示最近 {{ rows.length }} 条</template></span>
           </div>
         </div>
 
@@ -229,7 +229,7 @@
           v-else
           icon="◌"
           :title="keyword || statusFilter ? '当前筛选无匹配' : '暂无目标对话'"
-          :description="keyword || statusFilter ? '放宽筛选条件试试。' : (includeTest ? '全量口径下暂无目标对话。' : '默认仅展示真实用户；切换「含模拟」可查看全部。')"
+          :description="keyword || statusFilter ? '放宽筛选条件试试。' : (includeTest ? '全量口径下暂无目标对话。' : '默认仅展示真实用户；切换「含测试」可查看全部。')"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
@@ -598,7 +598,7 @@ function closeDetail() {
     行点击与「详情」钮同走 goConsole（2026-10-02 与 TeachingSessions 行点击语义对齐：两页行点击都进座舱） */
 const { goTrace, goConsole } = useSessionDrill(closeDetail)
 
-/** 页头副题随 includeTest 切换如实（评审 §口径）：默认仅真实，切「含模拟」后不得再声称仅真实用户口径 */
+/** 页头副题随 includeTest 切换如实（评审 §口径）：默认仅真实，切「含测试」后不得再声称仅真实用户口径 */
 const gcScopeSub = computed(() =>
   includeTest.value
     ? '与学习者澄清真实目标 · 约束条件与澄清轮次（含虚拟学习者与测试账号）'
@@ -679,7 +679,7 @@ onMounted(() => {
 .gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }/* 状态桶组（newui renderGoals/bucketCard 原型移植；token 映射：--sp-3→--mk-space-3、
    --line→--mk-line、--surface→--mk-surface、--r-lg→--mk-radius-lg、--surface-3→--mk-surface-3、
    --muted→--mk-muted、--fs-micro→--mk-fs-micro）。桶组直接落页面（原型形态），无内边距。 */
-.buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--mk-space-3); }.bucket { display: grid; gap: 3px; padding: 13px 15px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-lg); background: var(--mk-surface); }.bucket__v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }.bucket__l { font-size: var(--mk-fs-micro); color: var(--mk-muted); }.bucket__bar { height: 4px; border-radius: 999px; background: var(--mk-surface-3); overflow: hidden; margin-top: 5px; }.bucket__bar > i { display: block; height: 100%; border-radius: 999px; }/* foot（原型 bucketCard 第 5 参 inline style 的类化）：弱化说明文字 */
+.buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--mk-space-3); }.bucket { display: grid; gap: 3px; padding: 13px 15px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-lg); background: var(--mk-surface); }.bucket__v { font-size: 28px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }.bucket__l { font-size: var(--mk-fs-micro); color: var(--mk-muted); }.bucket__bar { height: 4px; border-radius: 999px; background: var(--mk-surface-3); overflow: hidden; margin-top: 5px; }.bucket__bar > i { display: block; height: 100%; border-radius: 999px; }/* foot（原型 bucketCard 第 5 参 inline style 的类化）：弱化说明文字 */
 .bucket__foot { color: var(--mk-faint); }.gc-user .mk-cell-main { min-width: 0; flex: 1; }.gc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }/* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
 .gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }.gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }.gc-stage-cell__dots { display: inline-flex; gap: 3px; }.gc-stage-cell__dot {
   width: 6px;

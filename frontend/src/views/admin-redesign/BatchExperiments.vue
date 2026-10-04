@@ -1,8 +1,14 @@
 <template>
   <div :class="embedded ? 'be-embedded' : 'mk-page'">
-    <!-- 页头（newui pagehead）：页名 + 口径副文。原型 actions 里的「导出」无真实后端能力，不加
-         （文案不得暗示不存在的功能）；「新建实验」是真实能力，留在状态条原位。 -->
-    <MkPageHead v-if="!embedded" title="批量实验" sub="用多组虚拟画像批量压测教学闭环与 Skill 稳定性" />
+    <!-- 页头（newui pagehead）：页名 + 口径副文 + 主操作。原型 actions 里的「导出」无真实后端能力，不加
+         （文案不得暗示不存在的功能）。「新建实验」主钮上移页头（2026-10-04 全站评审 P2-20：
+         真机可见「新建」类主钮 3:1，页头 mk-btn--sm--primary 是多数派，本页状态条主钮是唯一离群方——
+         材质亦有差：fw700/radius6 vs 多数派 fw600/radius8）。 -->
+    <MkPageHead v-if="!embedded" title="批量实验" sub="用多组虚拟画像批量压测教学闭环与 Skill 稳定性">
+      <template #actions>
+        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openCreate">新建实验</button>
+      </template>
+    </MkPageHead>
     <div v-if="!embedded" class="mk-status" :class="statusTone">
       <span class="mk-status__dot"></span>
       <span class="mk-status__meta">
@@ -15,9 +21,8 @@
       <span v-if="failedRunTotal || stalledRunTotal" class="mk-status__meta" :title="aggregateTitle">
         <template v-if="failedRunTotal"><b class="be-agg--bad">失败 {{ failedRunTotal }}</b><template v-if="stalledRunTotal"> · </template></template><template v-if="stalledRunTotal"><b class="be-agg--stall">卡死 {{ stalledRunTotal }}</b></template>
       </span>
-      <span class="mk-status__actions">
-        <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建实验</button>
-      </span>
+      <!-- 主钮已上移页头（2026-10-04 全站评审 P2-20）；状态条回归纯状态摘要。
+           embedded 态无页头（宿主卡头自带「新建实验」mk-btn，见下），故无主钮缺口。 -->
     </div>
 
     <div v-if="embedded" class="mk-card__head be-embedded__head">
@@ -817,7 +822,7 @@ watch(shouldPoll, (on) => (on ? poll.start() : poll.stop()), { immediate: true }
    150px 推导（1920×1080、无 zoom；本页挂在 AdminConsole 壳层 .mshell__content 内滚动）：
      面包屑 .mshell__crumb        ~32（上下 7px 内边距 + 12px 微字号行高 ~18 + 1px 下边框）
      页面 padding-top              16（.mk-page 的 --mk-space-4）
-     状态条 .mk-status             48（min-height，本页带「新建实验」按钮即撑满该高度）
+     状态条 .mk-status             48（min-height；主钮已上移页头，纯摘要条仍按 min-height 撑满）
      状态条与卡片间距              16（.mk-page 的 grid gap = --mk-space-4）
      页面 padding-bottom           20（.mk-page 的 --mk-space-5）
      卡片上下边框                   2

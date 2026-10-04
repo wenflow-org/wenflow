@@ -3,7 +3,9 @@
     <!-- 页头（newui/admin pagehead）：页名 + 各 tab 的主操作上移；状态条退位为纯状态摘要（随 tab 变化） -->
     <MkPageHead title="模型与接入" sub="管理模型供应商、Skill 路由与后台访问安全策略">
       <template #actions>
-        <button v-if="tab === 'connection'" type="button" class="mk-btn mk-btn--sm" :disabled="fetching || !form.apiUrl" @click="fetchModels">
+        <!-- 本页唯一主操作升 primary（2026-10-04 全站评审 P3#37：此前 sm 次要形态，
+             动作权重与视觉权重倒挂）；sm 档保留，与页头动作位其余刷新钮同高 -->
+        <button v-if="tab === 'connection'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="fetching || !form.apiUrl" @click="fetchModels">
           <MkLoading v-if="fetching" inline text="拉取中…" />
           <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
         </button>

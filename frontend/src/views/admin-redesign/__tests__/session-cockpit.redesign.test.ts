@@ -2,7 +2,8 @@
  * SessionCockpit 会话监控页骨架对齐原型 renderSessionDetail（2026-10-01 重排）。
  *
  * 断言 = 原型版式的每一块 + 数据诚实性：
- *  - hero（头像「S」/ 会话 id / 学习者·科目·开始于副文 / 状态 + 阶段 + 回合 pills / 真实能力动作）
+ *  - hero（头像「S」/ 会话主题主标题 + 会话 ID 副行 meta（2026-10-04 批次五 P2-7）/ 学习者·科目·开始于副文 /
+ *    状态 + 阶段 pills——回合 pill 已撤（P3#13：回合数单源=阶段推进卡）/ 真实能力动作）
  *  - 教学闭环定位（.loop 五环：目标对话→…→记忆复习；教学回合 active，其余 done）
  *  - 阶段推进（.stepper done/active/idle 三态 + 卡头「已完成 N / 4 阶段」+ statstrip 三读数）
  *  - 双栏 grid(1.5fr/1fr)：回合记录表（# / 类型 / 内容 / 时间；原型 Token/耗时/解答分无真数据不硬造）
@@ -66,7 +67,10 @@ vi.mock('@/api/adminApi', () => ({
   hasAdminSession: vi.fn(() => true)
 }));
 
-/** 真实教学会话载荷：含 subject/startTime/knowledgeState/advisory/goal+课堂消息（进行中） */
+/** 真实教学会话载荷：含 subject/startTime/knowledgeState/advisory/goal+课堂消息（进行中）
+ * 返回 any：结构随端点演化、用例中就地置 null 降级，不必强类型化（同 sessionCockpit.real.test.ts 口径；
+ * 该文件在 .eslintrc allowlist，本文件不在——就地 disable，2026-10-04 批次五顺手补漏） */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function realTeachingPayload(): any {
   const learningMessages = [
     { role: 'user', content: '我不理解函数参数', time: '2026-09-30T09:01:00.000Z' },
@@ -129,6 +133,7 @@ function realTeachingPayload(): any {
 }
 
 /** 虚拟会话载荷：Learn 进行中（goal/path 已过、learning 当前、wrapup 未进），无任何知识数据 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function virtualLearningPayload(): any {
   return {
     data: {
@@ -187,20 +192,26 @@ beforeEach(() => {
 });
 
 describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）', () => {
-  it('hero：头像 S + 会话 id + 科目/开始于副文 + 状态/阶段/回合 pills；真实能力动作，不搬原型假钮', async () => {
+  it('hero：头像 S + 会话主题主标题 + ID 副行 meta + 科目/开始于副文 + 状态/阶段 pills；真实能力动作，不搬原型假钮', async () => {
     stableVirtualApi.getRealSessionConsole.mockResolvedValue(realTeachingPayload());
     const w = await mountCockpit('session-real', 'ts_re_1');
 
     expect(w.find('.mk-hero__avatar').text()).toBe('S');
-    expect(w.find('.mk-hero__title').text()).toBe('ts_re_1');
+    // 主标题 = 会话主题（teaching.topic）：截断裸 ID 不再做 24px/700 主标题（2026-10-04 全站评审 P2-7）
+    expect(w.find('.mk-hero__title').text()).toBe('函数');
+    // 会话 ID 降为 pills 行 meta（mono 小字，title 带全量 ID）
+    const idMeta = w.find('.cp-hero__id');
+    expect(idMeta.text()).toBe('ts_re_1');
+    expect(idMeta.attributes('title')).toBe('会话 ID：ts_re_1');
     const sub = w.find('.mk-hero__sub').text();
     expect(sub).toContain('Python 入门');
     expect(sub).toContain('开始于');
 
+    // 回合 pill 撤（2026-10-04 批次五 P3#13）：回合数单源=「阶段推进」卡 statstrip「已用回合」格
     const pills = w.findAll('.mk-hero__pills .mk-badge').map((b) => b.text());
     expect(pills[0]).toBe('进行中');
     expect(pills[1]).toBe('Learn');
-    expect(pills[2]).toBe('回合 2'); // Goal 1 条学习者发言 + 课堂 1 条学习者发言（真实计数）
+    expect(pills).toHaveLength(2);
 
     // 真实会话只读：hero 动作区无按钮；原型假钮（导出日志）与危险动作（中断会话）不出现
     expect(w.findAll('.mk-hero__actions button')).toHaveLength(0);

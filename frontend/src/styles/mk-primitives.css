@@ -106,6 +106,19 @@
 .mk-status--warn .mk-status__dot { background: var(--mk-amber); }
 .mk-status--bad .mk-status__dot { background: var(--mk-red); }
 .mk-status--muted .mk-status__dot { background: var(--mk-faint); }
+/* 结论为 warn/bad 时整条淡同色底 + 同色描边（2026-10-04 批次五用户拍板「全站统一染底」）：
+   白面状态条落在满页白卡之间，与「一切正常」无从区分，预警被读成背景。
+   配方原为总览页私有（.ov-status--warn/--bad），提为共享后各状态页（ops-hub/health-center 等）
+   的 warn/bad 状态条同样染底；字色不动，底/描边走既有语义 token（亮 #fffbeb/#fef2f2 · 暗 rgba 14%），
+   与 .pill--warn / 闭环 alert 同一套语义色。 */
+.mk-status--warn {
+  background: var(--mk-amber-bg);
+  border-color: color-mix(in srgb, var(--mk-amber) 30%, var(--mk-line));
+}
+.mk-status--bad {
+  background: var(--mk-red-bg);
+  border-color: color-mix(in srgb, var(--mk-red) 30%, var(--mk-line));
+}
 /* 状态点颜色图例：悬停显示该色含义（纯 CSS，覆盖全站 29 处状态条，无需逐页改标记）
    2026-09-24 桌面端验收：原来只有 `.mk-status__dot:hover` 一个触发点——点是 8px 的装饰元素，
    键盘用户永远看不到图例。触发面扩到整条状态条，并补 :focus-within（键盘 Tab 进条内

@@ -8,7 +8,7 @@
     <MkPageHead
       title="成本分析"
       sub="按模型、Skill 与时间维度追踪模型调用成本"
-      :hint="`近 ${days} 天 · ${includeTest ? '含测试流量' : '仅真实用户'}`"
+      :hint="`近 ${days} 天 · ${includeTest ? '含测试' : '仅真实用户'}`"
     >
       <template #actions>
         <!-- 导出报表（原型 pagehead 动作位真实化）：当前窗口三张明细表合一个 CSV，客户端生成 -->
@@ -76,7 +76,7 @@
         min
         icon="◌"
         title="这个时间窗暂无 LLM 调用"
-        :description="`近 ${days} 天${includeTest ? '（含测试流量）' : ''}没有任何调用记录，产生调用后这里展示 Token 用量、趋势与排行。`"
+        :description="`近 ${days} 天${includeTest ? '（含测试）' : ''}没有任何调用记录，产生调用后这里展示 Token 用量、趋势与排行。`"
         :action-text="days !== 90 ? '看近 90 天' : ''"
         @action="days = 90"
       />
@@ -378,7 +378,7 @@ function exportCsv() {
   const sharePct = (tokens: number) =>
     totalTokens.value > 0 ? ((tokens / totalTokens.value) * 100).toFixed(1) : '0.0'
   const lines: string[] = [
-    `成本分析 · 近 ${days.value} 天 · ${includeTest.value ? '含测试流量' : '仅真实用户'} · 导出于 ${new Date().toLocaleString('zh-CN', { hour12: false })}`,
+    `成本分析 · 近 ${days.value} 天 · ${includeTest.value ? '含测试' : '仅真实用户'} · 导出于 ${new Date().toLocaleString('zh-CN', { hour12: false })}`,
     '',
     '[按 Skill 成本明细]',
     'Skill,调用,Token,prompt,completion,成本USD,占比%',
@@ -451,7 +451,7 @@ const failedCallsText = computed(() =>
   failedCalls.value > 0 ? `${failedCalls.value} 次` : '0 次'
 )
 const failedHint = computed(() => {
-  const win = `近 ${days.value} 天${includeTest.value ? '（含测试流量）' : ''}`
+  const win = `近 ${days.value} 天${includeTest.value ? '（含测试）' : ''}`
   const base = `口径：${win} · 失败/总调用 = ${failedCalls.value}/${totalCalls.value}；重试后仍失败才计入（终态口径）`
   return failedCalls.value > 0
     ? `${base}；逐条失败可在「按 Skill 成本明细」点对应行直达执行日志`
@@ -597,7 +597,8 @@ const trendCols = computed(() => trend.value.map((d) => ({
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
-  align-items: start;
+  /* align-items:start 撤（2026-10-04 全站评审 P3#25，判例 42107f8e）：并排排行卡底边差 114.5px
+     （右卡悬空），撤后 grid stretch 等高，与总览 Row A 同判 */
 }
 @media (max-width: 1200px) {
   .tc-ranks { grid-template-columns: 1fr; }

@@ -255,8 +255,9 @@ describe('SessionCockpit 双模式', () => {
     // 真实会话无黑盒数据 → 轨迹面板不出现
     expect(wrapper.text()).not.toContain('裁判旁路诊断');
 
-    // 只读提示
-    expect(wrapper.text()).toContain('真实会话：只读监控');
+    // 只读提示（2026-10-04 批次五 P3#13：「只读监控」声明并入顶栏模式 chip 单源，
+    // 控制台条不再对真实会话复读——断言同步新契约：全角间隔号形态）
+    expect(wrapper.text()).toContain('真实会话 · 只读监控');
 
     wrapper.unmount();
   });

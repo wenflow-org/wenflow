@@ -1998,7 +1998,10 @@ function barToneBadge(tone: ConceptBarTone): string {
 <style scoped>
 .ld { gap: 16px; }
 
-/* 状态条（原型 .statstrip：hero 与 subtabs 之间的一行分格读数，格子间 1px 竖分隔） */
+/* 状态条（原型 .statstrip：hero 与 subtabs 之间的一行分格读数，格子间 1px 竖分隔）。
+   债务登记（2026-10-04 批次五）：本页与 UserAccountPane 各持一份本地 statstrip 复刻，
+   完整替换成共享 MkStatStrip 组件是正解——但测试依赖 .statstrip__stat DOM 结构，暂不做组件替换；
+   本轮只归一字阶（数值 18px = MkStatStrip 展示档）并把长文本格从 nowrap 截断改为两行换行。 */
 .statstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .statstrip__stat {
   display: grid; gap: 6px; align-content: start;
@@ -2008,9 +2011,12 @@ function barToneBadge(tone: ConceptBarTone): string {
 .statstrip__stat:last-child { border-right: 0; }
 .statstrip__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .statstrip__value {
-  font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+  /* 22px 本地展示档退役（2026-10-04 批次五）：对齐共享 MkStatStrip 的 18px 数值档；
+     长文本格（当前阶段/当前任务）不再 nowrap 截断丢字——允许换行最多两行，全文留在 title */
+  font-size: 18px; font-weight: 700; letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums; color: var(--mk-ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 /* 页头身份区走 .mk-entity（shared.css） */

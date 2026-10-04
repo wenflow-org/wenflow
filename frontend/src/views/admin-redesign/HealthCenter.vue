@@ -1,10 +1,14 @@
 <template>
   <div class="mk-page">
-    <!-- 页头（newui pagehead）：页名 + 口径副文，主操作「刷新」从状态条上移（同 AuditLogs/ExecLogs 判例；
-         原型的「生成报告」是无后端能力的假按钮，不加）。状态条退位为纯状态摘要，不再重复页名。 -->
+    <!-- 页头（newui pagehead）：页名 + 口径副文。原型的「生成报告」是无后端能力的假按钮，不加。
+         手动「刷新」钮撤（2026-10-04 全站评审 P2-3：本页 60s 轮询（useSafePolling interval 60_000），
+         常驻刷新钮违背 6c51fdca「轮询页不放刷新钮」家族规则——本页有钮系旧判例漏盘点），
+         改 Overview 同款注记形态：正常显「60s 自动检测」、检测期显「检测中…」。
+         refresh(true) 强制复检能力不丢：失败态 MkEmptyState「重试」与修复动作完成后的强制复检
+         仍走 refresh(true)，登记在案（2026-10-04 批次五）。状态条退位为纯状态摘要，不再重复页名。 -->
     <MkPageHead title="健康中心" sub="服务可用性、依赖链路与告警跟踪">
       <template #actions>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="refresh(true)">{{ loading ? '检测中…' : '刷新' }}</button>
+        <span class="hc-refresh-note" role="status">{{ loading ? '检测中…' : '60s 自动检测' }}</span>
       </template>
     </MkPageHead>
     <div class="mk-status" :class="`mk-status--${barTone}`">
@@ -790,6 +794,9 @@ defineExpose({ refresh })
    gap 归 16（与 .mk-kpi-grid 同口径）；margin-bottom 撤除（2026-10-03）：块间距归
    .mk-page 的 --mk-stack-gap——原先 14px margin 叠加页 gap 16 产生 30px 双重间距 */
 .hc-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--mk-space-4); }
+/* 页头轮询节奏注记（Overview 同款形态，2026-10-04 全站评审 P2-3）：60s 轮询页不放手动刷新钮，
+   注记只陈述节奏；强制复检保留在失败态重试与修复完成后的 refresh(true)（见页头注释） */
+.hc-refresh-note { flex: none; align-self: center; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 /* 首载骨架（R3）：形状由 MkSkeleton 提供，本类只补占位布局与间距 */
 .hc-skel__kpi { display: grid; gap: 8px; align-content: start; }
 .hc-skel__rows { padding: 12px 16px 14px; }

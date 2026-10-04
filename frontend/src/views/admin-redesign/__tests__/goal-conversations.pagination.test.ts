@@ -261,13 +261,13 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(w.findAll('button').some((b) => b.text() === '控制台')).toBe(false);
   });
 
-  it('页头副题随 includeTest 切换如实：默认「仅真实用户口径」，切「含模拟」后改为含虚拟与测试账号', async () => {
+  it('页头副题随 includeTest 切换如实：默认「仅真实用户口径」，切「含测试」后改为含虚拟与测试账号（2026-10-04 批次五族语统一，原「含模拟」）', async () => {
     const w = await mountGoals();
     expect(w.text()).toContain('仅真实用户口径');
     // .ds-toggle 是 DataScopeToggle 的稳定测试钩子（见组件注释）
     const toggle = w.find('.ds-toggle');
     expect(toggle.exists()).toBe(true);
-    await toggle.findAll('button')[1].trigger('click'); // 含模拟
+    await toggle.findAll('button')[1].trigger('click'); // 含测试
     await nextTick();
     expect(w.text()).toContain('含虚拟学习者与测试账号');
     expect(w.text()).not.toContain('仅真实用户口径');

@@ -23,7 +23,7 @@
         title="点击只看生成失败的路径；失败可在路径详情页重规划（该计数为服务端全量口径）"
         @click="statusFilter = statusFilter === 'failed' ? '' : 'failed'"
       >生成失败 {{ byStatus('failed') }}（可重规划）</button>
-      <span class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">共 {{ stats?.total ?? '—' }} 条 · 里程碑 {{ stats?.totalMilestones ?? '—' }} · 任务 {{ stats?.totalTasks ?? '—' }}</span>
+      <span class="mk-status__meta" title="仅真实用户（不含测试账号）；切换「含测试」后显示全量并灰标模拟行">共 {{ stats?.total ?? '—' }} 条 · 里程碑 {{ stats?.totalMilestones ?? '—' }} · 任务 {{ stats?.totalTasks ?? '—' }}</span>
     </div>
 
     <!-- 路径状态分布（newui 原型 renderPaths「路径状态分布」移植）。数据源 = loadStats 已拉的
@@ -63,11 +63,11 @@
       <div class="mk-card__head">
         <div class="mk-filter">
           <!-- P1#9 口径标注 / P2（2026-10-04 全站评审）：pills 是全页唯一筛选面与分态计数位——
-               pill 计数 = 当前列表窗口（最近 1000 条，随「含模拟」切换），与 stats 全量口径不同源
+               pill 计数 = 当前列表窗口（最近 1000 条，随「含测试」切换），与 stats 全量口径不同源
                （getStats 端点不接受 includeTest 参数，重拉拿回的还是同一份全量计数，同步是无效
                请求；pill 是本地筛选控件，计数本就该与所筛列表一致）。此前状态条/分布卡与 pills
                同屏三层复读同组数字，已收敛：状态条只留口径句+生成失败红链，分布卡只留比例条。 -->
-          <div class="mk-pills" title="pill 计数 = 当前列表窗口内计数（最近 1000 条，随「含模拟」切换），非全量；全量分布见「路径状态分布」卡（悬停分段看条数）">
+          <div class="mk-pills" title="pill 计数 = 当前列表窗口内计数（最近 1000 条，随「含测试」切换），非全量；全量分布见「路径状态分布」卡（悬停分段看条数）">
             <button
               v-for="p in statusPills"
               :key="p.id"
@@ -92,7 +92,7 @@
             v-model:hidden="hiddenCols"
           />
           <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">
-            {{ rows.length }} / {{ total }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）
+            {{ rows.length }} / {{ total }} 条（{{ includeTest ? '含测试' : '仅真实' }}）
           </span>
         </div>
       </div>

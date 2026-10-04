@@ -58,7 +58,7 @@
           百分比 basis 对不确定宽度解析失败，行高按单行 48px 定死、第二行溢出被裁
           （2026-10-03 实测 gridTemplateRows 该行 48px / scrollHeight 87px）。
           块序对齐原型 1353-1398：pagehead → KPI 栅格 → statusbar → 教学闭环卡。 -->
-    <div class="mk-status ov-status--stack" :class="[`mk-status--${data.tone}`, `ov-status--${data.tone}`]">
+    <div class="mk-status ov-status--stack" :class="`mk-status--${data.tone}`">
       <div class="ov-row">
         <span class="mk-status__dot"></span>
         <span class="mk-status__title">{{ health.headline }}</span>
@@ -142,7 +142,7 @@
       <div class="card">
         <div class="card__head">
           <span class="card__title">Skill 调用量 Top 5</span>
-          <span class="card__sub">近 7 天</span>
+          <span class="card__sub">近 7 天 · 每行：调用量 · 失败数</span>
         </div>
         <div class="card__body">
           <div class="ranklist">
@@ -228,7 +228,7 @@
               <span class="feedrow__time">{{ f.time }}</span>
               <div class="feedrow__grow">
                 <span class="t">{{ f.text }}</span>
-                <span class="d">{{ feedDesc(f) }}</span>
+                <span class="d">{{ f.desc }}</span>
               </div>
             </div>
           </div>
@@ -258,7 +258,6 @@ import {
   liveVirtualRunStats, liveVirtualStatsError, liveVirtualStatsLoaded,
   recentActivityText, type LiveOverviewFull
 } from './live';
-import { errorCategoryText } from './statusText';
 import OvBars from './OvBars.vue';
 import { adminHealthCenterApi, adminMemoryReviewApi, adminTeachingSessionsApi } from '@/api/adminApi';
 import MkPageHead from '@/components/mk/MkPageHead.vue';
@@ -598,12 +597,14 @@ const feedRows = computed<FeedView[]>(() => {
   const out: FeedView[] = [];
   for (const f of testFilteredFeed.value) {
     const last = out[out.length - 1];
-    const m = /^执行失败：.+（(.+)）$/.exec(f.text);
+    // 「执行失败：来源（类别）」解析：捕获 1=来源、2=类别（feedRows 折叠与 desc 兜底共用此口径）
+    const m = /^执行失败：(.+)（(.+)）$/.exec(f.text);
     if (f.tone === 'bad' && m && last && last.tone === 'bad' && last.count > 0 && last.text.startsWith('执行失败：') && last.desc.startsWith('Skill · ')) {
       // 同构坏消息追加来源（desc 形如「Skill · a、b」）；首条 desc 的单名改组名
       last.count += 1;
-      const name = f.agentId || m[2];
-      if (!last.desc.includes(name)) last.desc = `${last.desc}、${name}`;
+      // 来源名：agentId 优先；缺源时 live.ts 在标题里写「未知节点」占位，该占位不进来源清单
+      const name = f.agentId || (m[1] !== '未知节点' ? m[1] : '');
+      if (name && !last.desc.includes(name)) last.desc = `${last.desc}、${name}`;
       continue;
     }
     out.push({ time: f.time, text: f.text, desc: feedDesc(f), tone: f.tone, errorCategory: f.errorCategory, count: 1 });
@@ -612,8 +613,8 @@ const feedRows = computed<FeedView[]>(() => {
 });
 function feedDesc(f: BriefData['feed'][number]): string {
   if (f.agentId) return `Skill · ${f.agentId}`
-  // 首层不裸透英文枚举（P2）：provider_timeout → 「上游超时」；未知枚举回退原文
-  if (f.errorCategory) return `失败类别 · ${errorCategoryText(f.errorCategory)}`
+  // 失败类别不再回填副行（2026-10-04 全站评审 P3）：标题括注「（调用方中止）」已把类别说了一次，
+  // 副行「失败类别 · 调用方中止」属同屏双写——类别只在标题出现一次；副行回退可点提示
   return f.tone === 'bad' || f.tone === 'warn' ? '点击查看日志' : ''
 }
 function feedJump(f: { tone: string; errorCategory?: string }) {
@@ -751,19 +752,10 @@ watch(dataSource, () => {
 /* 复原 .mk-status__meta-link 的负外边距（-6px 热区补偿会把本行 gap 吃成字墙）；
    本行间隙改由 .ov-subs 的 gap 真实给出 */
 .ov-status--stack .ov-subs .mk-status__meta-link { margin: 0; }
-/* 结论为 warn/bad 时给整条一层极淡同色底 + 同色描边（2026-10-03 用户反馈
-   「重点预警不突出」）：白面状态条落在满页白卡之间，与「一切正常」无从区分，
-   预警被读成背景。底色用既有 token（亮 #fffbeb/#fef2f2 · 暗 rgba 14%），
-   与 .pill--warn / 闭环 alert 同一套语义色。
-   只在本页生效——不写进共享 .mk-status，避免 20 个列表页的状态条一起换底色。 */
-.ov-status--warn {
-  background: var(--mk-amber-bg);
-  border-color: color-mix(in srgb, var(--mk-amber) 30%, var(--mk-line));
-}
-.ov-status--bad {
-  background: var(--mk-red-bg);
-  border-color: color-mix(in srgb, var(--mk-red) 30%, var(--mk-line));
-}
+/* 结论为 warn/bad 时整条淡同色底 + 同色描边：原为本页私有配方（2026-10-03 用户反馈
+   「重点预警不突出」），2026-10-04 批次五用户拍板「全站统一染底，不留一页孤例」——
+   配方已提为共享 .mk-status--warn/--bad（mk-primitives.css，底/描边走 --mk-amber-bg/--mk-red-bg
+   同款 token），本页私染 CSS 随之撤除，染底效果由共享类承接。 */
 
 /* ---- KPI（.grid auto-fit 210 + .card.kpi）---- */
 .kpigrid {

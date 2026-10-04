@@ -50,15 +50,20 @@
       </div>
     </header>
 
-    <!-- ===== hero（原型 renderSessionDetail）：会话身份 + 状态/阶段/回合 pills + 真实能力动作 ===== -->
-    <MkDetailHero class="cp-hero" avatar="S" :title="shortId" :sub="heroSub">
+    <!-- ===== hero（原型 renderSessionDetail）：会话身份 + 状态/阶段 pills + 真实能力动作 =====
+         主标题传会话主题（2026-10-04 全站评审 P2-7：截断裸会话 ID 做 24px/700 主标题不可读，
+         人类可读主题此前缩在 12.5px 副行）；无主题回退 shortId。会话 ID 降为 pills 行 meta。 -->
+    <MkDetailHero class="cp-hero" avatar="S" :title="heroTitle" :sub="heroSub">
       <template #pills>
         <!-- 状态 pill：生命周期合成态（与原顶栏徽章同源，原型 statusPill 位） -->
         <span class="mk-badge" :class="`mk-badge--${heroStatusTone}`" :title="statusTitle">{{ heroStatusText }}</span>
         <!-- 阶段 pill：归一后的当前阶段（原型 pill--info 位） -->
         <span class="mk-badge mk-badge--info">{{ stageLabel(currentStage) }}</span>
-        <!-- 回合 pill：已落库对话的学习者回合数（原型 pill--mute「回合 N」位，真实计数） -->
-        <span class="mk-badge mk-badge--muted">回合 {{ heroTurnCount }}</span>
+        <!-- 回合 pill 撤（2026-10-04 全站评审 P3#13）：回合数单源=「阶段推进」卡 statstrip
+             「已用回合」格，同屏双写收敛 -->
+        <!-- 会话 ID meta：主标题已让位给会话主题，原始 ID 降为副行 mono 小字（title 带全量 ID；
+             原始 ID 留在 URL 与日志） -->
+        <span class="cp-hero__id mono" :title="`会话 ID：${sessionId}`">{{ shortId }}</span>
       </template>
       <template #actions>
         <!-- 动作区只放真实能力（原型「导出日志」假钮不搬）：会话生命周期控制（vlab-controls 统一模型）
@@ -136,9 +141,10 @@
         </template>
 
         <!-- ③ 会话生命周期已迁至 hero 动作区（原型 hero 右侧动作位），此处不再重复 -->
-        <!-- 真实/黑盒模式声明 -->
-        <span v-if="isRealMode || isBlackbox" class="cp-console__note">
-          {{ isRealMode ? '真实会话：只读监控' : '黑盒模式：由黑盒执行器驱动，辅助控制不可用' }}
+        <!-- 黑盒模式声明（2026-10-04 全站评审 P3#13）：真实会话的「只读监控」声明已并入
+             顶栏模式 chip（modeText 单源），此处不再对真实会话重复一遍 -->
+        <span v-if="isBlackbox" class="cp-console__note">
+          黑盒模式：由黑盒执行器驱动，辅助控制不可用
         </span>
       </div>
     </div>
@@ -958,7 +964,9 @@ const blackboxTraceCount = computed(() => {
   const trace = bb.publicTrace
   return Array.isArray(trace) ? trace.length : 0
 })
-const modeText = computed(() => (isRealMode.value ? '真实会话' : isBlackbox.value ? '黑盒模式' : '辅助模式'))
+/** 模式声明单源（2026-10-04 全站评审 P3#13）：真实会话 chip 吸收控制台「只读监控」条的语义，
+    同屏只此一处；黑盒/辅助口径不变（黑盒控制台内另有专项声明条） */
+const modeText = computed(() => (isRealMode.value ? '真实会话 · 只读监控' : isBlackbox.value ? '黑盒模式' : '辅助模式'))
 const isTerminal = computed(() => {
   const st = normalized(session.value?.status || runtime.value.status)
   return ['completed', 'failed', 'abandoned'].includes(st)
@@ -1517,6 +1525,13 @@ const heroSub = computed(() => {
   const started = startedRaw ? formatTime(startedRaw) : ''
   if (started) segments.push(`开始于 ${started}`)
   return segments.join(' · ')
+})
+
+/* hero 主标题 = 会话主题（2026-10-04 全站评审 P2-7：人类可读主题升 24px/700 主位，
+   截断裸 ID 退位）——真实教学会话取 teaching.topic；无主题（虚拟会话/goal 会话）回退 shortId */
+const heroTitle = computed(() => {
+  const topic = firstText(String(asRecord(session.value?.teaching).topic || ''))
+  return topic || shortId.value
 })
 
 /* 状态 pill：生命周期合成态（与原顶栏徽章同源）→ mk-badge 档位。
@@ -2274,6 +2289,9 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 
 /* ===== 原型 renderSessionDetail 骨架：hero / 教学闭环 .loop / 阶段推进 .stepper / 双栏 ===== */
 .cp-hero { margin: 12px 2px 0; }
+/* 会话 ID meta（pills 行内 mono 小字，2026-10-04 P2-7）：主标题已让位给会话主题，
+   ID 不再以 24px/700 出现；meta 弱化为 muted 微字号，全量 ID 走 title */
+.cp-hero__id { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); }
 /* 卡体（mk-card 头下内容衬距；mk 原语无 .mk-card__body，用本页局部类） */
 .cp-cardbody { padding: 12px 14px 16px; }
 
