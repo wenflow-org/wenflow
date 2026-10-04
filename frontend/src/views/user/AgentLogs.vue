@@ -757,7 +757,7 @@ const copyText = async (text: string, successMessage: string) => {
   border: 1px solid var(--line, #e3e9f4);
   border-radius: 16px;
   background: var(--surface, #fff);
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+  box-shadow: var(--mk-shadow-sm);
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
@@ -829,7 +829,7 @@ const copyText = async (text: string, successMessage: string) => {
 
 .stat-card {
   padding: 14px 16px;
-  border-radius: 14px;
+  border-radius: var(--mk-radius-xl);
   border: 1px solid var(--line, #e3e9f4);
   background: var(--canvas, #f3f6fb);
   box-shadow: none;
@@ -931,7 +931,7 @@ const copyText = async (text: string, successMessage: string) => {
 .detail-collapse summary::after {
   content: '▾';
   color: var(--faint, #67758f);
-  font-size: 11px;
+  font-size: var(--mk-fs-micro);
   transition: transform 0.15s ease;
 }
 
@@ -981,7 +981,7 @@ const copyText = async (text: string, successMessage: string) => {
   border: 1px solid rgba(239, 117, 120, 0.3);
   /* 墨色走 token：写死的 #c0454a 在暗色下对比度不足 */
   color: var(--red-ink, #c0454a);
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
   padding: 12px;
   margin: 12px;
   line-height: 1.6;

@@ -65,7 +65,7 @@ const animated = computed(() => props.pulse && (isRunning.value || isQueued.valu
 .rs-badge--warn { background: rgba(252, 209, 78, 0.18); color: #8a6d00; border-color: rgba(252, 209, 78, 0.45); }
 .rs-badge--info { background: rgba(24, 96, 242, 0.1); color: #1d4ed8; border-color: rgba(24, 96, 242, 0.3); }
 .rs-badge--muted { background: rgba(100, 116, 139, 0.12); color: #64748b; border-color: rgba(100, 116, 139, 0.3); }
-.rs-badge--running { background: rgba(24, 96, 242, 0.12); color: #1860f2; border-color: rgba(24, 96, 242, 0.4); }
+.rs-badge--running { background: rgba(24, 96, 242, 0.12); color: var(--mk-accent-deep); border-color: rgba(24, 96, 242, 0.4); }
 .rs-badge--queued { background: #ede7f6; color: #4527a0; border-color: #b39ddb; }
 .rs-badge--paused { background: rgba(100, 116, 139, 0.14); color: #64748b; border-color: rgba(100, 116, 139, 0.4); }
 

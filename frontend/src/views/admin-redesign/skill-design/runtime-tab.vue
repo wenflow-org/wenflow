@@ -419,7 +419,7 @@ watch(
   border-radius: var(--mk-radius-xl);
   background: var(--mk-blue-bg);
   border: 1px solid #dbe7f6;
-  color: #41516e;
+  color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
   line-height: 1.6;
 }

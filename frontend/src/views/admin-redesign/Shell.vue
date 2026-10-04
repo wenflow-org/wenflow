@@ -720,7 +720,7 @@ watch(
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.mshell__item--active .mshell__item-badge { background: var(--mk-blue-bg-strong); color: var(--mk-blue); }
+.mshell__item--active .mshell__item-badge { background: var(--mk-blue-bg-strong); color: var(--mk-accent-deep); }
 .mshell__item-badge--alarm {
   background: var(--mk-red-bg-strong);
   color: var(--mk-red-strong);

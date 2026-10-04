@@ -551,7 +551,7 @@ watch(
   padding: 1px 6px;
   border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-2);
-  color: #41516e;
+  color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
 /* Prompt 版本名称列：上限 420px（原 656px 占半屏无上限）+ ellipsis + title 全值 */
@@ -603,7 +603,7 @@ watch(
 .sdp-diff__line.is-removed .sdp-diff__text { color: var(--mk-red-strong); }
 .sdp-diff__line.is-removed .sdp-diff__no::after { content: '−'; color: var(--mk-red-strong); margin-left: 3px; }
 .sdp-diff__no { color: var(--mk-faint); text-align: right; user-select: none; }
-.sdp-diff__text { white-space: pre-wrap; word-break: break-word; color: #41516e; }
+.sdp-diff__text { white-space: pre-wrap; word-break: break-word; color: var(--mk-muted); }
 .sdp-diff__gap { padding: 2px 12px; color: #c3cede; user-select: none; }
 .sdp-diff__same { margin: 8px 12px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 

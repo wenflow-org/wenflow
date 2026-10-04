@@ -254,7 +254,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   font-size: var(--mk-fs-micro);
 }
 .sdp-rule__id { color: var(--wf-color-accent); font-size: var(--mk-fs-micro); font-weight: 700; }
-.sdp-rule__text { color: #263950; line-height: 1.55; }
+.sdp-rule__text { color: var(--mk-ink); line-height: 1.55; }
 
 /* 4K：字号跟随壳层放大 */
 @media (min-width: 3600px) {

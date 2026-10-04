@@ -465,11 +465,12 @@ main {
   font-weight: 900;
   color: var(--blue-deep);
   padding-top: 4px;
-  transition: transform 0.3s var(--ease), color 0.3s var(--ease);
+  transition: color 0.3s var(--ease);
 }
 @media (prefers-reduced-motion: no-preference) {
+  /* 「友好而平」：取消 hover 位移/缩放（原 scale(1.25) translateX(2px)）；
+     悬停只保留纯文字色反馈。 */
   .vn-cap__list li:hover > span {
-    transform: scale(1.25) translateX(2px);
     color: var(--purple);
   }
 }

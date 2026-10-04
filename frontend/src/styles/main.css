@@ -131,7 +131,7 @@
   --mk-on-fill: #ffffff;              /* 深色/饱和实心底上的文字（各主题同值，无需暗色档） */
   --mk-pill-active-bg: #ffffff;
   --mk-pill-active-fg: var(--mk-blue);
-  --mk-pill-count-active-fg: var(--mk-blue);
+  --mk-pill-count-active-fg: var(--mk-accent-deep);
   --mk-meta-link-on-fg: var(--mk-blue);
   --mk-search-clear-bg: #e2e8f0;
   --mk-search-clear-fg: var(--mk-muted);
@@ -524,7 +524,8 @@ html[data-theme='dark'] {
   --mk-rec-handler: #b45309;
   --mk-rec-core: #5b8def;
   --mk-rec-synced: #0f766e;
-  --mk-rec-live: #16a34a;
+  --mk-rec-live: #15803d;   /* 与亮色同值：实心底 + 白字按 §7.5.2 定死 #15803d（6.13:1）。
+                               曾为 #16a34a（白字仅 3.28:1，不达 AA），2026-10-03 渲染层审计改回。 */
 
   /* 图形页 token 暗色覆写（值 = 两页原暗色块字面量，逐一对应）。
      on-accent / err-ink / notice-ink / down / bar-* / attempt-bg 暗色不变，故不在此覆写。 */
