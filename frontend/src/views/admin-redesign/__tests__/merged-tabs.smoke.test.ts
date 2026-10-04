@@ -213,7 +213,7 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     w2.unmount();
   });
 
-  it('People 学习状态 tab 分析层（原型 renderPeople state 分支）：置信度四卡 + 直方图五档 + 排行行点击进详情', async () => {
+  it('People 学习状态 tab 一屏工作台：置信度四卡 + 分段分布条点击下钻（逐人排行/直方图已退役）', async () => {
     // 直接播种 live 学习者域（快照无 LSB 字段，分析层以快照置信度 confidence 0~1 作逐人分数；
     // 丙无进行中任务 → 不计入分布，与表格置信列「—」口径一致）
     liveLearners.value = [
@@ -224,17 +224,26 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     subPage.value = null;
     const w = mount(LearnerCenter, { props: { embedded: true, tab: 'state' } });
     await settle();
-    // ①统计四卡（共享 .mk-kpi-grid，原型 metricCard 四卡行）：总数 / 需关注 / 低置信 / 平均置信度
+    // ①统计四卡（共享 .mk-kpi-grid）：总数 / 需关注 / 低置信 / 平均置信度
     const kpiLabels = w.findAll('.lc-analytics .mk-kpi__label').map((c) => c.text().trim());
     expect(kpiLabels).toEqual(['学习者', '需关注', '低置信', '平均置信度']);
-    // ②直方图（原型 .histo）：五档 .hcol；副题计数只含有任务的快照
-    expect(w.findAll('.lc-histo .lc-hcol').length).toBe(5);
-    expect(w.find('.lc-section-sub').text()).toContain('共 2 个快照');
-    // ③排行（原型 .ranklist）：置信度由低到高（乙 32% → 甲 92%），行点击 openSubPage('learner')
-    const rankNames = w.findAll('.lc-rankrow .lc-rankrow__name').map((c) => c.text());
-    expect(rankNames).toEqual(['乙', '甲']);
-    await w.findAll('.lc-rankrow')[0].trigger('click');
-    expect(subPage.value).toMatchObject({ view: 'learner', id: 'u2' });
+    // ②置信分段分布条（2026-10-04 一屏工作台：直方图/逐人排行退役）：图例五档带人数，
+    //   副题只含有任务的快照；25–49% 与 ≥90% 各 1 人
+    expect(w.find('.lc-dist__head .lc-section-sub').text()).toContain('共 2 个快照');
+    const legend = w.findAll('.lc-dist__legend .sbl');
+    expect(legend).toHaveLength(5);
+    expect(legend[1].text()).toContain('25–49%');
+    expect(legend[1].find('.sbl__n').text()).toBe('1');
+    expect(legend[4].find('.sbl__n').text()).toBe('1');
+    expect(w.findAll('.lc-rankrow').length).toBe(0);
+    // ③点击分段下钻：只看 25–49% → 表格只剩乙；再点取消 → 恢复 2 行
+    await legend[1].trigger('click');
+    await nextTick();
+    expect(w.findAll('tbody tr').length).toBe(1);
+    expect(w.find('tbody tr').text()).toContain('乙');
+    await legend[1].trigger('click');
+    await nextTick();
+    expect(w.findAll('tbody tr').length).toBe(3);
     w.unmount();
     liveLearners.value = [];
     subPage.value = null;

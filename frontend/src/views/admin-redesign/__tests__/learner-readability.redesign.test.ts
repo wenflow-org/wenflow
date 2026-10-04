@@ -141,6 +141,9 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
   });
 
   it('风险摘要带量级「X 等 2 个概念挣扎」；平均置信度 hint 带 n=', async () => {
+    // 风险摘要列 2026-10-04 起默认隐藏（MkCols :default-hidden）——本用例播种「用户选择显示」
+    // 的列偏好，仍锁行内量级文案的渲染契约
+    localStorage.setItem('wf_learner_hidden_cols_v2', JSON.stringify([]));
     const w = mount(LearnerCenter, { props: { embedded: true, tab: 'state' } });
     await settle();
     const dingRow = w.findAll('tbody tr').find((r) => r.text().includes('丁'));
@@ -148,6 +151,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     const avg = w.findAll('.mk-kpi').find((c) => c.text().includes('平均置信度'));
     expect(avg!.text()).toContain(`n=${4}`); // 四人都有任务，全部入均值
     w.unmount();
+    localStorage.removeItem('wf_learner_hidden_cols_v2');
     liveLearners.value = [];
   });
 });

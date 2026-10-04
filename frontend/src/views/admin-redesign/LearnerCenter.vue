@@ -43,7 +43,8 @@
           <DataScopeToggle v-if="isLive" v-model="includeTest" />
           <MkCols
             :col-defs="lcColDefs"
-            storage-key="wf_learner_hidden_cols"
+            storage-key="wf_learner_hidden_cols_v2"
+            :default-hidden="['risk']"
             v-model:hidden="lcHiddenCols"
           />
           <!-- 后端学习者域 limit=50 截断口径单源住在 People 页状态条（P2 2026-10-04 全站评审：
@@ -61,12 +62,12 @@
         action-text="重试"
         @action="retryLoad"
       />
-      <!-- fill 滚动契约（.mk-card--fill > .mk-table-scroll 接管纵向滚动，sticky 表头依赖该类名）：
-           原型 state 分支的分析层（四卡 → 直方图 → 排行）与列表同区滚动，分页器仍在卡尾吸底 -->
-      <div v-else class="mk-table-scroll lc-body">
-        <!-- 学习状态分析层（原型 renderPeople state 分支）：统计四卡 → 置信度分布直方图 → 排行。
-             口径 = 当前加载的学习者快照全集（随「含测试账号」范围联动），
-             不随下方 pill / 搜索筛选变化（与原型从全体学习者聚合一致） -->
+      <!-- 一屏工作台（2026-10-04 用户拍板「顶部紧凑宏观观测 + 下部排查表格」）：
+           旧分析层（四卡 144px + 直方图 132px + 逐人条形排行 446px）把表格首行推到 1190px
+           （实测要滚一屏多才见数据），且逐人排行与表格置信列同数据重复——整层退役。
+           现在：分析层压成单行观测栏（KPI 组 + 可点置信分段条，点击下钻筛选表格），
+           表格区内滚升入首屏，分页器保持卡尾吸底。 -->
+      <div v-else class="lc-body">
         <div v-if="rows.length" class="lc-analytics">
           <section class="mk-kpi-grid" aria-label="学习状态概览">
             <!-- P1#16 数据层已接线（live.ts liveLearnersTotal）：有 total 显「N · 已载 M」，仅窗口时显「已加载 N」。
@@ -83,47 +84,50 @@
             <MkKpi label="平均置信度" :value="avgConfText" :hint="avgConfHint" />
           </section>
 
-          <template v-if="confRows.length">
-            <div class="lc-section-head">
+          <!-- 置信度分段分布条（替代竖向直方图）：极端数据下不扁平、占一条高度；
+               点击分段/图例 = 只看该置信区间（看大盘 → 定位群体 → 查表格闭环） -->
+          <section v-if="confRows.length" class="lc-dist" aria-label="置信度分布">
+            <div class="lc-dist__head">
               <span class="lc-section-title">置信度分布</span>
-              <span class="lc-section-sub">学习者按快照置信度分档 · 共 {{ confRows.length }} 个快照</span>
+              <span class="lc-section-sub">点击分段只看该区间 · 共 {{ confRows.length }} 个快照</span>
             </div>
-            <!-- 原型 .histo：.hcol（hval 数值 + hbar 柱 + hcap 档位帽），柱高 = n / maxBin -->
-            <div class="lc-histo" role="img" :aria-label="histoAria">
-              <div v-for="b in histoBins" :key="b.label" class="lc-hcol">
-                <span class="lc-hval">{{ b.n }}</span>
-                <span class="lc-hbar" :class="`lc-hbar--${b.tone}`" :style="{ height: b.h + 'px' }"></span>
-                <span class="lc-hcap">{{ b.label }}</span>
-              </div>
+            <div class="stageband lc-dist__band" role="group" aria-label="按置信度分档筛选">
+              <span
+                v-for="(b, i) in histoBins"
+                v-show="b.n > 0"
+                :key="b.label"
+                role="button"
+                tabindex="0"
+                class="lc-dist__seg"
+                :class="{ 'lc-dist__seg--on': confBin === i }"
+                :style="{ width: binWidth(i), background: BIN_TONE[b.tone] }"
+                :title="`${b.label}：${b.n} 人 · 点击${confBin === i ? '取消' : '只看'}该区间`"
+                :aria-pressed="confBin === i"
+                @click="toggleConfBin(i)"
+                @keydown.enter.prevent="toggleConfBin(i)"
+              ></span>
             </div>
-          </template>
-
-          <template v-if="rankRows.length">
-            <div class="lc-section-head">
-              <span class="lc-section-title">学习状态分布 · 置信度由低到高</span>
-            </div>
-            <!-- 原型 .ranklist/.rankrow：meterrow 迷你条 + mono 数值，行点击进详情（按钮化保键盘可达） -->
-            <div class="lc-ranklist">
+            <div class="lc-dist__legend">
               <button
-                v-for="r in rankRows"
-                :key="r.row.id"
+                v-for="(b, i) in histoBins"
+                :key="b.label"
                 type="button"
-                class="lc-rankrow"
-                :title="`查看 ${r.name} 的学习详情`"
-                @click="openDetail(r.row)"
+                class="sbl sbl--link"
+                :class="{ 'sbl--on': confBin === i }"
+                :title="`${b.label}：${b.n} 人 · 点击${confBin === i ? '取消' : '只看'}该区间`"
+                @click="toggleConfBin(i)"
               >
-                <span class="lc-rankrow__name">{{ r.name }}</span>
-                <span class="mk-minibar lc-rankrow__bar" aria-hidden="true">
-                  <i class="mk-minibar__fill" :data-tone="r.tone" :style="{ width: r.pct + '%' }"></i>
-                </span>
-                <span class="lc-rankrow__val">{{ r.label }}</span>
+                <span class="sbl__sw" :style="{ background: BIN_TONE[b.tone] }"></span>
+                <span class="sbl__name">{{ b.label }}</span>
+                <span class="sbl__n">{{ b.n }}</span>
               </button>
             </div>
-          </template>
+          </section>
         </div>
 
       <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
            列按内容自然分宽；长昵称/长任务由 mk-cell-main 上限与下方 max-width 截断兜底 -->
+      <div class="mk-table-scroll lc-tablewrap">
       <table v-if="filtered.length" class="mk-table">
         <thead>
           <tr>
@@ -206,7 +210,8 @@
           @action="clearFilters"
         />
       </div>
-      <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
+      </div>
+      <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片；lc-body 外 = 卡尾吸底恒可见 -->
       <Pagination
         v-if="filtered.length"
         v-model:page="page"
@@ -317,6 +322,8 @@ const lcColDefs = [
   { key: 'risk', label: '风险摘要', title: '风险原因' },
   { key: 'updated', label: '更新', title: '快照更新时间' },
 ] as const
+/* 风险摘要默认隐藏走 MkCols :default-hidden（首次访问生效，已有配置尊重用户）；
+   风险摘要仍住在 pills「需关注」与干预弹窗 */
 const lcHiddenCols = ref<Set<string>>(new Set())
 
 /* 更新列新鲜度三档（批B，mk-fresh 原语） */
@@ -463,27 +470,38 @@ const histoBins = computed(() => {
       return v >= b.min && (i === HISTO_BINS.length - 1 || v < HISTO_BINS[i + 1].min)
     }).length
   )
-  const max = Math.max(1, ...counts)
-  return HISTO_BINS.map((b, i) => ({ ...b, n: counts[i], h: Math.max(6, Math.round((counts[i] / max) * 100)) }))
+  return HISTO_BINS.map((b, i) => ({ ...b, n: counts[i] }))
 })
-const histoAria = computed(() => histoBins.value.map((b) => `${b.label}：${b.n} 人`).join('，'))
-/** 排行（原型 .ranklist slice(0,10)）：置信度由低到高，最不确定的排最前
-    （与列表「先找有问题的人」同取向），行点击进详情；row 携带原行供 openDetail */
-const rankRows = computed(() =>
-  [...confRows.value]
-    .sort((a, b) => (a.confidence ?? 0) - (b.confidence ?? 0))
-    .slice(0, 10)
-    .map((row) => {
-      const pct = Math.round((row.confidence ?? 0) * 100)
-      return { row, name: row.name, pct, label: `${pct}%`, tone: pct >= 90 ? 'ok' as const : pct >= 50 ? undefined : 'warn' as const }
-    })
-)
+/** 分档色（stageband 段与图例共用）；行 → 分箱序号（下钻谓词用） */
+const BIN_TONE: Record<string, string> = {
+  bad: 'var(--mk-red)',
+  warn: 'var(--mk-amber)',
+  faint: 'var(--mk-faint)',
+  brand: 'var(--mk-blue)',
+  ok: 'var(--mk-green)'
+}
+function binOf(r: { task?: string; confidence?: number | null }): number {
+  const v = (r.confidence ?? 0) * 100
+  return HISTO_BINS.findIndex((b, i) => v >= b.min && (i === HISTO_BINS.length - 1 || v < HISTO_BINS[i + 1].min))
+}
+/* 一屏工作台（2026-10-04 用户拍板）：分段条点击 = 只看该置信区间（再点取消），
+   「看大盘 → 定位群体 → 查表格」闭环；与 pill/搜索叠加生效，清除筛选一并清 */
+const confBin = ref<number | null>(null)
+function toggleConfBin(i: number) {
+  confBin.value = confBin.value === i ? null : i
+}
+const binWidth = (i: number) => {
+  const total = confRows.value.length || 1
+  return `${Math.max((histoBins.value[i]?.n ?? 0) / total * 100, 3)}%`
+}
 
 const filtered = computed(() => {
   let list = rows.value
   if (pill.value === 'risk') list = rows.value.filter(isRisk)
   if (pill.value === 'watch') list = rows.value.filter(isWatch)
   if (pill.value === 'stale') list = rows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1))
+  // 置信分段下钻（一屏工作台）：只看命中分箱且有快照的学习者
+  if (confBin.value != null) list = list.filter((r) => r.task && r.confidence != null && binOf(r) === confBin.value)
   // 关键词搜索
   const kw = keyword.value.trim().toLowerCase()
   if (kw) {
@@ -501,9 +519,10 @@ const filtered = computed(() => {
   })
 })
 
-const isFiltered = computed(() => pill.value !== 'all' || !!keyword.value.trim())
+const isFiltered = computed(() => pill.value !== 'all' || confBin.value != null || !!keyword.value.trim())
 function clearFilters() {
   pill.value = 'all'
+  confBin.value = null
   keyword.value = ''
 }
 
@@ -624,39 +643,42 @@ async function recomputeAll() {
 .lc-row { cursor: pointer; }
 /* 键盘可达（对齐 gc-row/oc-row 判例）：行可聚焦，焦点态描边提示当前位置 */
 .lc-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }
-/* ================= 学习状态分析层（原型 renderPeople state 分支） =================
-   ①统计四卡 = 共享 .mk-kpi-grid + MkKpi；②直方图复刻原型 .histo（hval/hbar/hcap，
-   柱高 = n/max；原型 11px 字级抬到 12px 下限，6/6/3/3 圆角收进 token 档 6/6/4/4）；
-   ③排行复刻 .ranklist/.rankrow（迷你条 + mono 数值，行点击进详情） */
-.lc-analytics { display: grid; gap: 14px; padding: 14px 16px 6px; }
-.lc-section-head { display: flex; align-items: baseline; gap: 8px; }
+/* ================= 一屏工作台（2026-10-04 用户拍板「观测栏 + 排查表格」） =================
+   lc-body 从整区滚动容器改为 flex 列：观测栏（lc-analytics）静态贴顶、
+   表格区（lc-tablewrap，带 mk-table-scroll 保 sticky 表头）内滚升入首屏；
+   逐人条形排行与竖向直方图整层退役（与表格置信列同数据重复、实测合计 578px）。 */
+.lc-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.lc-tablewrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.lc-analytics {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 12px 20px;
+  align-items: start;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--mk-line);
+}
+/* 观测栏内 KPI 更轻量（用户拍板「轻量指标卡」）：flex-basis 180→150 让四卡在左列单行，
+   观测栏总高压到 ~110px，表格首屏行数最大化 */
+.lc-analytics .mk-kpi-grid > * { flex-basis: 150px; }
+.lc-analytics .mk-kpi-grid { gap: 12px; }
 .lc-section-title { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
 .lc-section-sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.lc-histo { display: flex; align-items: flex-end; gap: 10px; height: 132px; padding-top: 10px; }
-.lc-hcol { flex: 1 1 0; min-width: 0; display: grid; align-content: end; justify-items: center; gap: 6px; }
-.lc-hbar {
-  width: 100%; max-width: 52px; min-height: 3px;
-  border-radius: var(--mk-radius-sm) var(--mk-radius-sm) var(--mk-radius-xs) var(--mk-radius-xs);
-  background: var(--mk-blue);
+/* 置信分段分布条：段可点下钻（role=button），激活段描边 + 图例加粗（.sbl--on 原语） */
+.lc-dist { display: grid; gap: 8px; }
+.lc-dist__head { display: flex; align-items: baseline; gap: 8px; }
+.lc-dist__band { height: 16px; }
+.lc-dist__seg {
+  cursor: pointer;
+  min-width: 6px;
+  transition: filter var(--mk-dur) var(--mk-ease-out), box-shadow var(--mk-dur) var(--mk-ease-out);
 }
-.lc-hbar--bad { background: var(--mk-red); }
-.lc-hbar--warn { background: var(--mk-amber); }
-.lc-hbar--faint { background: var(--mk-faint); }
-.lc-hbar--ok { background: var(--mk-green); }
-.lc-hval { font-size: var(--mk-fs-micro); font-family: var(--mk-mono); font-variant-numeric: tabular-nums; color: var(--mk-muted); }
-.lc-hcap { font-size: var(--mk-fs-micro); color: var(--mk-faint); text-align: center; white-space: nowrap; }
-@media (max-width: 768px) { .lc-histo { height: 108px; gap: 6px; } }
-.lc-ranklist { display: grid; gap: 2px; }
-.lc-rankrow {
-  display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 0;
-  border: 0; border-bottom: 1px solid var(--mk-line);
-  background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+.lc-dist__seg:hover { filter: brightness(1.08); }
+.lc-dist__seg--on { box-shadow: inset 0 0 0 2px var(--mk-surface), 0 0 0 1px var(--mk-ink); }
+.lc-dist__seg:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
+.lc-dist__legend { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+@media (max-width: 1100px) {
+  .lc-analytics { grid-template-columns: 1fr; }
 }
-.lc-rankrow:last-child { border-bottom: 0; }
-.lc-rankrow__name { flex: 0 1 auto; min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.lc-rankrow:hover .lc-rankrow__name { color: var(--mk-blue); }
-.lc-rankrow__bar { flex: 1 1 0; width: auto; min-width: 40px; }
-.lc-rankrow__val { flex: none; width: 44px; text-align: right; font-family: var(--mk-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
 /* 学习者单元格（原型 celluser：头像 + 主行/副行 + 身份徽章，Users.vue ul-user 同款判例） */
 .lc-celluser { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .lc-celluser .mk-cell-main { min-width: 0; flex: 1; }
