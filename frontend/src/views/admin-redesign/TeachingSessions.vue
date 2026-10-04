@@ -4,8 +4,8 @@
          本页 20s 静默轮询，手动「刷新」钮与之重复已撤（对齐执行日志/健康中心先例：
          轮询页不放刷新钮）；拉取失败走错误条重试钮（refreshNow 仍被错误态与宿主联动使用）。
          统计口径（2026-10-04 状态条退役后）：全页统计带 = 构成带（MkBuckets）唯一一处；
-         计数每个只出现一次——加载/筛选/总量/截断住卡头 meta，待关注 / 缺总结住焦点 chips，
-         有建议住工具条右组（三者均无构成桶覆盖），进行中 chip 是 active 单状态 ≠ 构成带
+         计数每个只出现一次——加载/筛选/总量/截断住卡头 meta，待关注 / 缺总结 / 有建议住
+         卡头 chips（后两者无构成桶覆盖），进行中 chip 是 active 单状态 ≠ 构成带
          「进行中」四状态合并档（两个不同口径，见各自 title） -->
     <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 状态分布与需关注识别">
       <template #actions>
@@ -14,16 +14,16 @@
       </template>
     </MkPageHead>
     <!-- 页头状态条整体退役（2026-10-04 用户拍板：教学组已有构成带，顶部这条复读）——
-         它的「需关注 / 缺总结」与工具条焦点 chips 同源同数，异常计数与构成带「异常终态」
-         同源同数（同一数字不两处渲染）；「只看需关注」= 待关注 chip 的同一动作，直接删。
-         两个别处没有的**动作**迁工具条右组（有建议服务端过滤 / 异常多选筛选），
+         它的「需关注 / 缺总结」与焦点 chips 同源同数、异常计数与构成带「异常终态」同源同数
+         （同一数字不两处渲染）；「只看需关注」= 待关注 chip 的同一动作，直接删。
+         两个别处没有的**动作**（有建议服务端过滤 / 异常多选筛选）随迁卡头 chips；
          总数与窗口截断口径并进卡头 meta（真触上限才算限定，未触限时窗口=全量）。 -->
 
     <!-- 状态构成带（2026-10-04 用户拍板教学组统一 buckets 形态，替代 stageband 分布卡）：
          十状态按收束语义归四组 + 完成率（镜像目标对话四桶判例），组内合并口径在桶 foot 披露，
          窗口口径在值悬停披露；枚举外取值归「其它」桶（仅实际出现时追加）。
          数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口），非后端全量口径。
-         细粒度单状态筛选保留在卡头「按状态筛选」select（原分布卡 legend 点击筛选退役）；
+         细粒度单状态筛选保留在卡头「高级筛选」弹层的状态下拉（原分布卡 legend 点击筛选退役）；
          embedded 时隐藏（宿主承载域计数）；无数据不留空带 -->
     <MkBuckets v-if="!embedded && rows.length" label="会话状态构成" :items="tsBucketItems" />
 
@@ -35,16 +35,45 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
+          <!-- 表前只此一行（2026-10-04 用户拍板：快筛并回卡头，与教学组其余五页一致）：
+               左组 = 焦点 chips（单选 全部/进行中/待关注/缺总结）+ 两枚独立开关
+               （有建议服务端过滤 / 异常多选，aria-pressed 表开关态，故另起 aria group），
+               随后是搜索；放不下主栏的次级筛选（全部状态 / 全部时间 两个下拉）收进
+               右侧「高级筛选」弹层（与用户与学习者同构，外壳见 .mk-adv 原语）。 -->
+          <div class="mk-pills" role="group" aria-label="焦点筛选">
+            <button
+              v-for="p in pills"
+              :key="p.id"
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': pill === p.id }"
+              :aria-pressed="pill === p.id"
+              :title="p.title"
+              @click="pill = p.id"
+            >
+              {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
+            </button>
+          </div>
+          <div class="mk-pills" role="group" aria-label="快捷筛选">
+            <button
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': onlyAdvisory }"
+              :aria-pressed="onlyAdvisory"
+              title="含教学建议（完课调整 / 复习建议）的会话数；最近加载窗口计数。点击 = 服务端过滤只看有建议（再点取消）"
+              @click="toggleOnlyAdvisory"
+            >有建议<span class="mk-pill__count">{{ advisoryCount }}</span></button>
+            <button
+              v-if="abnormalSessionCount"
+              type="button"
+              class="mk-pill ts-abn-chip"
+              :class="{ 'mk-pill--active': abnormalOnly, 'ts-abn-chip--heap': abnormalHeap && !abnormalOnly }"
+              :aria-pressed="abnormalOnly"
+              :title="`失败 / 收尾失败 / 超时合计 ${abnormalSessionCount}（${abnormalHeap ? `≥ ${TS_BAD_THRESHOLD}，异常堆积` : '需排查'}）；数字见上方「异常终态」桶。点击只看异常会话（状态多选），再点取消`"
+              @click="abnormalOnly = !abnormalOnly"
+            >异常</button>
+          </div>
           <MkFilterSearch v-model="keyword" placeholder="搜索主题 / 用户 / 邮箱 / ID" />
-          <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
-            <option value="">全部状态</option>
-            <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
-          </select>
-          <select v-model="dateFilter" class="mk-filter__select" aria-label="按开始时间筛选">
-            <option value="">全部时间</option>
-            <option value="7d">近 7 天</option>
-            <option value="30d">近 30 天</option>
-          </select>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
@@ -53,54 +82,37 @@
             storage-key="wf_teaching_hidden_cols"
             v-model:hidden="tsHiddenCols"
           />
+          <div class="mk-adv">
+            <!-- 高级筛选：主栏只留 chips + 搜索；10 档状态枚举与时间窗收进弹层
+                 （点击展开、遮罩吞外点、Esc 关闭）。触发钮标出生效数，收起来也不丢状态 -->
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm"
+              :aria-expanded="advOpen"
+              @click="advOpen = !advOpen"
+            >
+              <Filter :size="14" :stroke-width="1.75" />高级筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
+            </button>
+            <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
+            <div v-show="advOpen" class="mk-adv__pop" @click.stop>
+              <label class="ts-adv__field">
+                <span class="mk-cell-sub">状态</span>
+                <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
+                  <option value="">全部状态</option>
+                  <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
+                </select>
+              </label>
+              <label class="ts-adv__field">
+                <span class="mk-cell-sub">开始时间</span>
+                <select v-model="dateFilter" class="mk-filter__select" aria-label="按开始时间筛选">
+                  <option value="">全部时间</option>
+                  <option value="7d">近 7 天</option>
+                  <option value="30d">近 30 天</option>
+                </select>
+              </label>
+            </div>
+          </div>
           <span class="mk-card__meta" :title="`${includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'}；${totalTitle}`">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）<template v-if="truncated"> · 共 {{ listTotal }}，仅显示最近 {{ LIST_LIMIT }} 条</template></span>
-        </div>
-      </div>
-
-      <!-- 卡内工具条（原型 .toolbar：左 chips + grow + 右 chips）。
-           右组 11 枚状态 chips 退役（2026-10-03 用户反馈「胶囊过于琐碎」）：收进卡头
-           「按状态筛选」select——原状态下拉本就是 select 形态，本页枚举 10 档远超原型
-           右组的 5 枚，硬塞 chips 把工具条顶成第二行、表格首屏被挤到 436px。
-           长尾状态仍可从「按状态筛选」select 全量点选（原分布卡 legend 点击筛选退役）。
-           左组 = 页面既有「焦点」筛选（全部 / 进行中 / 待关注 / 缺总结）——
-           原型左组为阶段筛选，但列表无 stage 字段（字段没有的不硬造），沿用既有轴 -->
-      <div class="ts-toolbar">
-        <div class="mk-pills" role="group" aria-label="焦点筛选">
-          <button
-            v-for="p in pills"
-            :key="p.id"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': pill === p.id }"
-            :aria-pressed="pill === p.id"
-            :title="p.title"
-            @click="pill = p.id"
-          >
-            {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
-          </button>
-        </div>
-        <!-- 右组 = 两个独立开关（非左组那样的单选焦点 chips，故另起一组、aria-pressed 表开关态）：
-             2026-10-04 页头状态条退役后随迁——两枚都是「别处没有的动作」，纯导航不新增口径。
-             异常 chip 不显计数：同一窗口的同一集合由构成带「异常终态」单源承载（数字不两处渲染）；
-             异常堆积（合计 ≥ 阈值）时 chip 转红，阈值在 title 披露（告警条件化纪律） -->
-        <div class="ts-toolbar__right">
-          <button
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': onlyAdvisory }"
-            :aria-pressed="onlyAdvisory"
-            title="含教学建议（完课调整 / 复习建议）的会话数；最近加载窗口计数。点击 = 服务端过滤只看有建议（再点取消）"
-            @click="toggleOnlyAdvisory"
-          >有建议<span class="mk-pill__count">{{ advisoryCount }}</span></button>
-          <button
-            v-if="abnormalSessionCount"
-            type="button"
-            class="mk-pill ts-abn-chip"
-            :class="{ 'mk-pill--active': abnormalOnly, 'ts-abn-chip--heap': abnormalHeap && !abnormalOnly }"
-            :aria-pressed="abnormalOnly"
-            :title="`失败 / 收尾失败 / 超时合计 ${abnormalSessionCount}（${abnormalHeap ? `≥ ${TS_BAD_THRESHOLD}，异常堆积` : '需排查'}）；数字见上方「异常终态」桶。点击只看异常会话（状态多选），再点取消`"
-            @click="abnormalOnly = !abnormalOnly"
-          >异常</button>
         </div>
       </div>
 
@@ -287,6 +299,8 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkBuckets from '@/components/mk/MkBuckets.vue'
+import { Filter } from 'lucide-vue-next'
+import { useEscape } from './useEscape'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
     （原 count/stats 上报链随合并宿主退役，2026-10-02 撤页头 KPI 区时一并清除） */
@@ -525,6 +539,12 @@ const pill = ref<'all' | 'active' | 'attention' | 'missing'>('all')
 const keyword = ref('')
 const statusFilter = ref('')
 const dateFilter = ref('')
+/* 高级筛选弹层（状态 / 时间两个下拉）：表前只留一行，放不进主栏的次级筛选收在这里。
+   Esc 关闭走共享 useEscape（与 用户与学习者 同一外壳 .mk-adv*） */
+const advOpen = ref(false)
+useEscape(() => advOpen.value, () => { advOpen.value = false })
+/** 弹层里生效的筛选数：触发钮上标出来，收起来也不丢状态（0 = 不标） */
+const advCount = computed(() => (statusFilter.value ? 1 : 0) + (dateFilter.value ? 1 : 0))
 
 /* P1-3 列显隐（公共组件 MkCols）：用户/状态/互动/进度/产物/关注 可隐藏，会话/详情固定 */
 const tsColDefs = [
@@ -790,17 +810,8 @@ defineExpose({ refreshNow })
 /* 行首关注度色条已撤（2026-10-03 用户拍板：与「关注」列同源冗余、语义不可发现）；
    关注度由「关注」列（高/中/低 色字 + title）单源承载 *//* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
 .ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
-.ts-tags { display: flex; gap: 6px; margin-top: 2px; }/* 卡内工具条（原型 .toolbar：底边框分隔表头）：左组焦点 chips + 右组两个开关
-   （11 枚状态 chips 已退役收进卡头 select；右组 2026-10-04 状态条退役后承接
-   有建议 / 异常 两个动作，用 margin-left:auto 推右缘） */
-.ts-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--mk-space-2);
-  flex-wrap: wrap;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--mk-line);
-}/* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
+.ts-tags { display: flex; gap: 6px; margin-top: 2px; }/* 高级筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
+.ts-adv__field { display: grid; gap: 4px; justify-items: start; }/* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
    长内容由 .ts-summary-preview / .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底）。
    本组件仅列表一张 mk-table（抽屉内无表格），裸选择器即可 */
@@ -814,9 +825,7 @@ defineExpose({ refreshNow })
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   white-space: nowrap;
-}/* 工具条右组（原型 .toolbar 右 chips）：两个独立开关推右缘，与左组单选焦点 chips 分家。
-   页面前缀命名（规则 1：mk- 前缀属全局原语，页面不得自造） */
-.ts-toolbar__right { margin-left: auto; display: flex; align-items: center; gap: var(--mk-space-2); }/* 异常堆积（合计 ≥ 阈值）chip 转红：原状态条 mk-status--bad 的同一告警，阈值在 chip title 披露。
+}/* 异常堆积（合计 ≥ 阈值）chip 转红：原状态条 mk-status--bad 的同一告警，阈值在 chip title 披露。
    选中态（筛选生效中）由模板守卫——abnormalOnly 时不再加本类，让位给 .mk-pill--active 的蓝 */
 .ts-abn-chip--heap {
   color: var(--mk-red);
