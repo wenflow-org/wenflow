@@ -70,21 +70,13 @@ function kpiLabels(w: ReturnType<typeof mount>): string[] {
   return w.findAll('.mk-kpi-grid .mk-kpi__label').map((el) => el.text().trim());
 }
 
-/** People 的视图切换 tab（2026-10-01 起为原型 .tabs 下划线页签，非胶囊） */
-async function clickTab(w: ReturnType<typeof mount>, label: string) {
-  const btn = w.findAll('.tab').find((b) => b.text().includes(label));
-  expect(btn, `未找到视图切换 tab：${label}`).toBeTruthy();
-  await btn!.trigger('click');
-  await settle();
-}
-
 describe('页头 KPI 区（教学三页统一形态）', () => {
   beforeEach(() => {
     overview.mockResolvedValue({ data: { data: {} } });
     detail.mockResolvedValue({ data: { data: {} } });
   });
 
-  it('People：页头 KPI 带已退役（2026-10-01 用户拍板：原型无此板块），域计数仍由 pills 承担', async () => {
+  it('People：页头 KPI 带已退役（2026-10-01 用户拍板：原型无此板块），页头=单视图「用户与学习者」', async () => {
     const { router, ready } = mockRouter('/admin/people');
     await ready;
     const w = mount(People, { global: { plugins: [router] } });
@@ -92,12 +84,10 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     // 反向断言：不再渲染任何 KPI 卡
     expect(kpiLabels(w)).toEqual([]);
     expect(w.find('.mk-kpi-grid').exists()).toBe(false);
-    // 页头 = 原型 pageTitle 形态：页名 + 副题（随视图切换）；副题文案随 0a4d9a8a 原型对齐更新
+    // 页头 = 原型 pageTitle 形态：页名 + 副题（2026-10-04 学习状态拆页后副题固定为账号管理口径）
     expect(w.find('.mk-pagehead').exists()).toBe(true);
     expect(w.find('.mk-pagehead').text()).toContain('管理用户账号、角色与登录状态');
-    // 原型 .tabs 下划线页签仍是唯一视图切换控件，副题随 tab 切换
-    await clickTab(w, '学习状态');
-    expect(w.find('.mk-pagehead').text()).toContain('学习者学习状态分布与风险跟踪');
+    expect(w.find('.mk-pagehead').text()).not.toContain('学习状态分布');
     w.unmount();
   });
 

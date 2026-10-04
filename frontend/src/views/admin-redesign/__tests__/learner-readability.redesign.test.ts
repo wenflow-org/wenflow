@@ -96,7 +96,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
   });
 
   it('需关注收窄（不含疲劳=中）；「观察」pill 单列疲劳中且可筛选；pill 计数只留无 KPI 孪生的「观察」', async () => {
-    const w = mount(LearnerCenter, { props: { embedded: true, tab: 'state' } });
+    const w = mount(LearnerCenter);
     await settle();
     const pillCount = (label: string) => {
       const pill = w.findAll('.mk-pill').find((p) => p.text().includes(label));
@@ -119,7 +119,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
   });
 
   it('KPI「学习者」显「已加载 N」+ 口径 hint（截断句单源=页状态条）；需关注 hint 收窄为疲劳高', async () => {
-    const w = mount(LearnerCenter, { props: { embedded: true, tab: 'state' } });
+    const w = mount(LearnerCenter);
     await settle();
     const kpi = (label: string) => {
       const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text().trim() === label);
@@ -127,7 +127,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
       return card!.text();
     };
     expect(kpi('学习者')).toContain('已加载 4');
-    // P2（2026-10-04 全站评审）：「快照单次最多加载 50 条」不再进 hint（单源=People 页状态条）
+    // P2（2026-10-04 全站评审）：「快照单次最多加载 50 条」不再进 hint（单源=本页状态条，拆页后住学习状态页头）
     expect(kpi('学习者')).toContain('口径：不含测试账号');
     expect(kpi('学习者')).not.toContain('50 条');
 
@@ -144,7 +144,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     // 风险摘要列 2026-10-04 起默认隐藏（MkCols :default-hidden）——本用例播种「用户选择显示」
     // 的列偏好，仍锁行内量级文案的渲染契约
     localStorage.setItem('wf_learner_hidden_cols_v2', JSON.stringify([]));
-    const w = mount(LearnerCenter, { props: { embedded: true, tab: 'state' } });
+    const w = mount(LearnerCenter);
     await settle();
     const dingRow = w.findAll('tbody tr').find((r) => r.text().includes('丁'));
     expect(dingRow!.text()).toContain('「X」等 2 个概念挣扎');

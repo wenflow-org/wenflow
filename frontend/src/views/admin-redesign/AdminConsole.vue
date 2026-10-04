@@ -84,6 +84,8 @@ function asyncPage(loader: () => Promise<any>) {
 
 const Overview = asyncPage(() => import('./Overview.vue'));
 const People = asyncPage(() => import('./People.vue'));
+// 2026-10-04 用户拍板拆回独立页：学习状态从 people 宿主 tab 释放（组件沿用 LearnerCenter.vue，转正为页面）
+const LearnerState = asyncPage(() => import('./LearnerCenter.vue'));
 // 2026-09-29 用户拍板拆回独立页：「学习会话」合并宿主退役，教学会话/目标对话/学习路径各自成页
 const TeachingSessions = asyncPage(() => import('./TeachingSessions.vue'));
 const GoalConversations = asyncPage(() => import('./GoalConversations.vue'));
@@ -121,6 +123,7 @@ const components: Record<string, unknown> = {
   // 2026-09-29 用户拍板：健康中心从 skills 宿主 tab 释放为独立场景（系统组）
   'health-center': HealthCenter,
   'people': People,
+  'learner-state': LearnerState,
   'teaching-sessions': TeachingSessions,
   'goal-conversations': GoalConversations,
   'learning-paths': LearningPaths,

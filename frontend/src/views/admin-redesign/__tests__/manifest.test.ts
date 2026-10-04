@@ -39,8 +39,8 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('导航（2026-09-29 拆页 + 健康中心独立；2026-10-01 学习者卡库）：7 分组 / 19 场景与目标 IA 完全一致', () => {
-    expect(MOCK_SCENES).toHaveLength(19);
+  it('导航（2026-09-29 拆页 + 健康中心独立；2026-10-01 学习者卡库；2026-10-04 学习状态拆页）：7 分组 / 20 场景与目标 IA 完全一致', () => {
+    expect(MOCK_SCENES).toHaveLength(20);
     // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
     const groups = MOCK_SCENES.map((s) => s.group);
     expect([...new Set(groups)]).toEqual(['总览', '教学', '虚拟学习者', 'Skill', '观测', '系统', '运营']);
@@ -48,7 +48,7 @@ describe('AdminConsole 页面注册表', () => {
     for (const s of MOCK_SCENES) (byGroup[s.group] ||= []).push(s.id);
     expect(byGroup).toEqual({
       总览: ['overview'],
-      教学: ['people', 'teaching-sessions', 'goal-conversations', 'learning-paths', 'memory-review'],
+      教学: ['people', 'learner-state', 'teaching-sessions', 'goal-conversations', 'learning-paths', 'memory-review'],
       虚拟学习者: ['virtual-learners', 'virtual-learner-cards', 'batch-experiments'],
       Skill: ['orchestrator', 'skills', 'prompt-eval'],
       观测: ['execution-logs', 'token-cost', 'audit-logs'],

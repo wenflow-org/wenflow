@@ -1,6 +1,6 @@
 /**
  * 合并宿主页冒烟（2026-09-04 导航收敛）：
- * - People（用户与学习者：账号/学习状态 tab + ?tab= 深链 + intent quickAction 新建用户直达）
+ * - People（用户与学习者：账号单视图；2026-10-04 学习状态拆出独立页 learner-state，旧 ?tab=state 深链重定向）
  * - Sessions（学习会话：教学会话/目标对话/学习路径 tab + ?tab= 深链）
  * - OpsHub（通知与公告：公告/站内通知 tab + ?tab= 深链；2026-09-19 由已下线的 Messages 宿主承接）
  * - ExecLogs（执行日志）+ TokenCost（成本分析，2026-09-29 拆回独立页 token-cost）
@@ -92,7 +92,7 @@ async function settle() {
 }
 
 /**
- * 点击视图切换 tab（原型 .tabs 下划线页签：People 与 OpsHub 2026-10-01 起均改下划线式，非胶囊）。
+ * 点击视图切换 tab（原型 .tabs 下划线页签，非胶囊；2026-10-04 起 People 页签随拆页退役，此助手仅 OpsHub 在用）。
  * tab 文本带计数角标（如「站内通知」），按 .tab 定位 + includes 匹配标签。
  */
 async function clickTab(w: ReturnType<typeof mount>, label: string) {
@@ -109,39 +109,36 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     intent.quickAction = '';
   });
 
-  it('People：默认账号 tab（Users）；切「学习状态」→ LearnerCenter + ?tab=state 写入', async () => {
+  it('People：单视图（账号管理，页签随学习状态拆页退役）', async () => {
     const { router, ready } = mockRouter('/admin/people');
     await ready;
     const w = mount(People, { global: { plugins: [router] } });
     await settle();
     expect(w.findComponent(Users).exists()).toBe(true);
     expect(w.findComponent(LearnerCenter).exists()).toBe(false);
-
-    await clickTab(w, '学习状态');
-    await settle();
-    expect(w.findComponent(LearnerCenter).exists()).toBe(true);
-    expect(w.findComponent(Users).exists()).toBe(false);
-    expect(router.currentRoute.value.query.tab).toBe('state');
+    expect(w.findAll('.tab').length).toBe(0);
     w.unmount();
   });
 
-  it('People：深链 /admin/people?tab=state 直达学习状态；intent quickAction 强制账号 tab + 弹新建', async () => {
+  it('People：旧深链 ?tab=state 重定向 /admin/learner-state（拆页 2026-10-04）；intent quickAction 直弹新建', async () => {
     const { router, ready } = mockRouter('/admin/people?tab=state');
     await ready;
     const w = mount(People, { global: { plugins: [router] } });
     await settle();
-    expect(w.findComponent(LearnerCenter).exists()).toBe(true);
+    // 学习状态不再由 People 承载：旧深链改投独立页，本页保持账号视图
+    expect(router.currentRoute.value.path).toBe('/admin/learner-state');
+    expect(w.findComponent(Users).exists()).toBe(true);
     w.unmount();
 
     intent.quickAction = 'create-user';
-    const { router: r2, ready: ready2 } = mockRouter('/admin/people?tab=state');
+    const { router: r2, ready: ready2 } = mockRouter('/admin/people');
     await ready2;
     const w2 = mount(People, {
       global: { plugins: [r2] },
       attachTo: document.body
     });
     await settle();
-    // quickAction 强转账号 tab → Users 挂载并消费 quickAction 打开新建弹窗（Teleport 到 body）
+    // 单视图下 Users 常驻，自行消费 quickAction 打开新建弹窗（Teleport 到 body）
     expect(w2.findComponent(Users).exists()).toBe(true);
     expect(document.body.querySelector('.mk-modal')).toBeTruthy();
     w2.unmount();
@@ -213,7 +210,7 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     w2.unmount();
   });
 
-  it('People 学习状态 tab 一屏工作台：置信度四卡 + 分段分布条点击下钻（逐人排行/直方图已退役）', async () => {
+  it('学习状态独立页一屏工作台：置信度四卡 + 分段分布条点击下钻（逐人排行/直方图已退役）', async () => {
     // 直接播种 live 学习者域（快照无 LSB 字段，分析层以快照置信度 confidence 0~1 作逐人分数；
     // 丙无进行中任务 → 不计入分布，与表格置信列「—」口径一致）
     liveLearners.value = [
@@ -222,7 +219,7 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
       { userId: 'u3', name: '丙', email: 'c@x.com', pathTitle: null, currentTask: '', currentMilestone: null, trend: 'flat', fatigue: '中', confidence: 0, generatedAt: '2026-10-01T08:00:00Z', struggling: [], fragile: [] }
     ];
     subPage.value = null;
-    const w = mount(LearnerCenter, { props: { embedded: true, tab: 'state' } });
+    const w = mount(LearnerCenter);
     await settle();
     // ①统计四卡（共享 .mk-kpi-grid）：总数 / 需关注 / 低置信 / 平均置信度
     const kpiLabels = w.findAll('.lc-analytics .mk-kpi__label').map((c) => c.text().trim());

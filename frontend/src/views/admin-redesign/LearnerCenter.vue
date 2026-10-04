@@ -1,16 +1,23 @@
 <template>
-  <div :class="embedded ? 'mk-page--fill lc-embedded' : 'mk-page mk-page--fill'">
-    <!-- （原非嵌入模式状态条已删，2026-10-02 死代码确认：/admin/learner-center 路由已重定向
-         /admin/people?tab=state（router/index.ts），本组件全仓仅 People 以 embedded 挂载
-         （merged-tabs.smoke.test.ts 同）——v-if="!embedded" 分支永不渲染，且其「需关注」计数
-         已被下方 pills/KPI 承接。计数入口收敛到卡头 pills，同屏不再四处重复。 -->
+  <div class="mk-page mk-page--fill">
+    <!-- 2026-10-04 用户拍板：学习状态从「用户与学习者」宿主 tab 释放为独立页（/admin/learner-state，
+         同 2026-09-29 教学三页拆页先例）；旧深链 /admin/people?tab=state 与 /admin/learner-center、
+         /admin/learner-models 由路由/宿主重定向兼容。一屏工作台：观测栏（KPI + 可点置信分段条）
+         静态贴顶 + 表格区内滚，首行 530px 入首屏。 -->
+    <MkPageHead title="学习状态" sub="学习者学习状态分布与风险跟踪">
+      <template #actions>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="liveLoading" @click="retryLoad">
+          {{ liveLoading ? '刷新中…' : '刷新' }}
+        </button>
+      </template>
+    </MkPageHead>
+    <!-- 后端学习者域 limit=50 截断口径（自 People 宿主迁入，单源仍一处） -->
+    <div v-if="liveLearners.length >= 50" class="mk-status mk-status--muted">
+      <span class="mk-status__dot"></span>
+      <span class="mk-status__meta" title="学习者快照单次最多加载 50 条，搜索/筛选只在已加载范围内命中">仅加载前 50 位，搜索限已加载 50 人</span>
+    </div>
 
     <div class="mk-card mk-card--fill">
-      <!-- 视图切换（原型 card > .tabs 下划线页签）：tab 状态由宿主 People 持有 -->
-      <div v-if="embedded" class="tabs" role="tablist" aria-label="视图切换">
-        <button type="button" class="tab" role="tab" :aria-selected="tab === 'account'" @click="$emit('switch', 'account')">账号管理</button>
-        <button type="button" class="tab" role="tab" :aria-selected="tab === 'state'" @click="$emit('switch', 'state')">学习状态</button>
-      </div>
       <div class="mk-card__head">
         <div class="mk-filter">
           <div class="mk-pills">
@@ -34,7 +41,6 @@
         </div>
         <div class="mk-card__head-right">
           <button
-            v-if="embedded"
             type="button"
             class="mk-btn mk-btn--sm"
             :disabled="recomputingAll || !rows.length"
@@ -280,11 +286,7 @@ import { Bell, RotateCw, UserRound } from 'lucide-vue-next'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
 import { adminNotificationsApi, adminLearnerModelsApi } from '@/api/adminApi'
-
-/** 嵌入模式：作为「用户与学习者」页「学习状态」tab 渲染（仅去掉外层壳，状态条/列表/干预弹窗保留）。
-    tab/switch：宿主持有的视图页签状态（原型 card > .tabs，页签在卡内顶部） */
-withDefaults(defineProps<{ embedded?: boolean; tab?: string }>(), { embedded: false, tab: 'state' })
-defineEmits<{ (e: 'switch', tab: 'account' | 'state'): void }>()
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 
 interface Row {
   id: string
@@ -533,8 +535,6 @@ const loadFailed = computed(
 function retryLoad() {
   void loadLiveData()
 }
-/* 宿主刷新联动（用户与学习者合并宿主「刷新」按钮 → 重拉 live 学习者域） */
-defineExpose({ refresh: () => { void loadLiveData() } })
 
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
    数据全量在客户端（live 拉取），筛选后按页切片；
@@ -629,17 +629,6 @@ async function recomputeAll() {
 </script>
 
 <style scoped>
-/* 嵌入模式（宿主 People 页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
-.lc-embedded { flex: 1; min-height: 0; overflow: hidden; }
-/* 视图切换（原型 .tabs 下划线页签，卡内顶部） */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
-.tab {
-  border: 0; background: transparent; color: var(--mk-muted);
-  padding: 9px 12px; cursor: pointer; font-weight: 600;
-  font-size: var(--mk-fs-micro); border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-}
-.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
 .lc-row { cursor: pointer; }
 /* 键盘可达（对齐 gc-row/oc-row 判例）：行可聚焦，焦点态描边提示当前位置 */
 .lc-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }

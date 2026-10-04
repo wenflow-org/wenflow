@@ -21,11 +21,6 @@
 
 
     <div class="mk-card mk-card--fill">
-      <!-- 视图切换（原型 card > .tabs 下划线页签）：tab 状态由宿主 People 持有 -->
-      <div v-if="embedded" class="tabs" role="tablist" aria-label="视图切换">
-        <button type="button" class="tab" role="tab" :aria-selected="tab === 'account'" @click="$emit('switch', 'account')">账号管理</button>
-        <button type="button" class="tab" role="tab" :aria-selected="tab === 'state'" @click="$emit('switch', 'state')">学习状态</button>
-      </div>
       <div class="mk-card__head">
         <div class="mk-filter">
           <div class="mk-pills">
@@ -307,10 +302,9 @@ function xpToNext(xp: number): number {
   return xpProgress(xp).toNext
 }
 
-/** 嵌入模式：作为「用户与学习者」页「账号管理」tab 渲染（仅去掉外层壳，状态条/列表/弹窗保留）。
-    tab/switch：宿主持有的视图页签状态（原型 card > .tabs，页签在卡内顶部） */
-withDefaults(defineProps<{ embedded?: boolean; tab?: string }>(), { embedded: false, tab: 'account' })
-defineEmits<{ (e: 'switch', tab: 'account' | 'state'): void }>()
+/** 嵌入模式：作为「用户与学习者」页渲染（仅去掉外层壳，状态条/列表/弹窗保留）。
+    2026-10-04：学习状态 tab 拆出独立页 /admin/learner-state，本组件只剩账号管理单视图 */
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 /** 与后端 validatePasswordRule 一致：≥8 位且同时包含字母和数字 */
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
@@ -802,15 +796,7 @@ function clearFilters() {
   background: var(--mk-surface); border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl); box-shadow: var(--mk-shadow-pop);
 }
-/* 视图切换（原型 .tabs 下划线页签，卡内顶部） */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
-.tab {
-  border: 0; background: transparent; color: var(--mk-muted);
-  padding: 9px 12px; cursor: pointer; font-weight: 600;
-  font-size: var(--mk-fs-micro); border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-}
-.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+/* 视图页签随学习状态拆页退役（2026-10-04，单视图不再需要 .tabs） */
 .ul-row { cursor: pointer; }
 /* 键盘可达（对齐 gc-row/oc-row 判例）：行可聚焦，焦点态描边提示当前位置 */
 .ul-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }

@@ -219,18 +219,19 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Skill 设计', requiresAdminAuth: true }
   },
   // 旧版带参数路由 → 新平级页面（参数型无法被 /admin/:page 吸收，保留重定向）
+  // 2026-10-04：学习状态从 people?tab=state 拆出独立页 /admin/learner-state，旧深链改投新页
   {
     path: '/admin/learner-models/:userId?',
-    redirect: '/admin/people?tab=state'
+    redirect: '/admin/learner-state'
   },
   {
-    // 导航收敛 2026-09-04：用户+学习者中心合并为「用户与学习者」（同域双子视图 tab 化）
+    // 导航收敛 2026-09-04：用户+学习者中心合并为「用户与学习者」；2026-10-04 学习状态再拆出独立页
     path: '/admin/users',
-    redirect: () => ({ path: '/admin/people', query: { tab: 'account' } })
+    redirect: '/admin/people'
   },
   {
     path: '/admin/learner-center',
-    redirect: () => ({ path: '/admin/people', query: { tab: 'state' } })
+    redirect: '/admin/learner-state'
   },
   {
     // 2026-09-29 拆回独立页：教学会话 / 目标对话 / 学习路径各自成场景，旧重定向退役；

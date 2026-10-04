@@ -26,7 +26,7 @@
 
 import type { Component } from 'vue'
 import {
-  Coins, FlaskConical, HeartPulse, History, IdCard, Layers, LayoutDashboard, ListChecks,
+  Activity, Coins, FlaskConical, HeartPulse, History, IdCard, Layers, LayoutDashboard, ListChecks,
   Megaphone, MessagesSquare, Plug, Route, ScrollText, ShieldCheck, Sparkles,
   Target, Users, Workflow, Wrench,
 } from 'lucide-vue-next'
@@ -49,6 +49,9 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'overview', label: '平台总览', group: '总览', glyph: '览', icon: LayoutDashboard, pinned: true },
   // 教学组：真实学习者 / 会话 / 复习（虚拟学习者已独立成组）
   { id: 'people', label: '用户与学习者', group: '教学', glyph: '人', icon: Users },
+  // 2026-10-04 用户拍板拆回独立页：学习状态从 people 宿主 tab 释放（同 2026-09-29 教学三页先例），
+  // 一屏工作台（观测栏 + 排查表格）自成入口；旧 ?tab=state / learner-center / learner-models 深链重定向兼容
+  { id: 'learner-state', label: '学习状态', group: '教学', glyph: '态', icon: Activity },
   // 2026-09-29 用户拍板拆回独立页：2026-09-04 曾合并为「学习会话」宿主（sessions，已下线、URL 重定向兼容），
   // 三域口径互异且入口层级深一层，教学会话 / 目标对话 / 学习路径各自占一个侧栏入口
   { id: 'teaching-sessions', label: '教学会话', group: '教学', glyph: '教', icon: MessagesSquare },
