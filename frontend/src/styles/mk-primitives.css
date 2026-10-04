@@ -618,6 +618,28 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-menu__item--danger { color: var(--mk-red, #dc2626); }
 .mk-menu__item--danger:hover { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .mk-menu__sep { height: 1px; margin: 3px 4px; background: var(--mk-line); }
+/* ----- 高级筛选弹层（工具栏右侧「列」旁的 .mk-btn--sm + Filter 图标）-----
+   把放不进主栏的次级筛选（搜索 / 状态下拉 / 时间下拉）收进弹层，主栏只留 chips——
+   原型工具栏右侧即此形态（.btn--sm），本原语是它的实现：点击展开、遮罩吞外点、
+   Esc 关闭（页内 useEscape，见各页）。面板视觉与 .mk-menu__pop 同一套。
+   2026-10-04 提升为共享原语（第二处使用者「教学会话」出现时，原为 Users.vue 页面私有）。 */
+.mk-adv { position: relative; display: inline-flex; }
+.mk-adv__mask { position: fixed; inset: 0; z-index: var(--mk-z-menu); }
+.mk-adv__pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: var(--mk-z-menu);
+  min-width: 280px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  box-shadow: var(--mk-shadow-pop);
+}
 
 /* 表格横向滚动容器：窄屏多列表不溢出，粘性表头仍可用 */
 .mk-table-scroll { overflow-x: auto; }

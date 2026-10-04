@@ -127,10 +127,10 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     expect(meta.attributes('title')).not.toContain('全量口径');
     // 计数各自唯一：待关注 / 缺总结住焦点 chips（「全部」不显数 = meta 的已加载行数），
     // 有建议住右组；0 行时异常 chip 不出现
-    expect(w.findAll('.ts-toolbar .mk-pills .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
+    expect(w.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
       '全部', '进行中', '待关注', '缺总结'
     ]);
-    expect(w.findAll('.ts-toolbar__right .mk-pill').map((c) => c.text())).toEqual(['有建议0']);
+    expect(w.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').map((c) => c.text())).toEqual(['有建议0']);
     w.unmount();
   });
 

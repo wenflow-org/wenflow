@@ -48,15 +48,15 @@
             storage-key="wf_users_hidden_cols"
             v-model:hidden="hiddenCols"
           />
-          <div class="adv">
+          <div class="mk-adv">
             <button
               type="button"
               class="mk-btn mk-btn--sm"
               :aria-expanded="advOpen"
               @click="advOpen = !advOpen"
             ><Filter :size="14" :stroke-width="1.75" />高级筛选</button>
-            <div v-if="advOpen" class="adv__mask" @click="advOpen = false"></div>
-            <div v-show="advOpen" class="adv__pop" @click.stop>
+            <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
+            <div v-show="advOpen" class="mk-adv__pop" @click.stop>
               <MkFilterSearch v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
               <!-- 口径开关上收页头（2026-10-04 整组统一），高级筛选弹层只留搜索 -->
             </div>
@@ -789,16 +789,7 @@ function clearFilters() {
 .ul-ps { font-variant-numeric: tabular-nums; }
 .ul-ps b { font-weight: 600; }
 .ul-ps i { font-style: normal; color: var(--mk-faint); margin: 0 2px; }
-/* 高级筛选（原型工具栏右侧：.btn--sm + filter 图标；弹层复用 mk-menu__pop 视觉语法） */
-.adv { position: relative; display: inline-flex; }
-.adv__mask { position: fixed; inset: 0; z-index: var(--mk-z-menu); }
-.adv__pop {
-  position: absolute; right: 0; top: calc(100% + 6px); z-index: var(--mk-z-menu);
-  min-width: 280px; padding: 12px;
-  display: grid; gap: 10px; justify-items: start;
-  background: var(--mk-surface); border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl); box-shadow: var(--mk-shadow-pop);
-}
+/* 高级筛选弹层外壳（.mk-adv*）已提升为共享原语：见 styles/mk-primitives.css */
 /* 视图页签随学习状态拆页退役（2026-10-04，单视图不再需要 .tabs） */
 .ul-row { cursor: pointer; }
 /* 键盘可达（对齐 gc-row/oc-row 判例）：行可聚焦，焦点态描边提示当前位置 */

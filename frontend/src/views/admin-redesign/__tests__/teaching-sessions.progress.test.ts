@@ -172,7 +172,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     // 页头状态条整体退役：需关注 / 缺总结与 chips 同源同数、异常与构成带「异常终态」同源同数
     expect(wrapper.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
     const chip = (label: string) =>
-      wrapper.findAll('.ts-toolbar .mk-pills .mk-pill').find((c) => c.text().replace(/\d+$/, '') === label)!;
+      wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').find((c) => c.text().replace(/\d+$/, '') === label)!;
     // 「全部」不显数 = 卡头 meta 的已加载行数（同 People 页判例：同一数字不两处渲染）
     expect(chip('全部').find('.mk-pill__count').exists()).toBe(false);
     expect(chip('待关注').text()).toBe('待关注1');
@@ -202,7 +202,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('工具条右组「有建议」可点穿：服务端 onlyWithAdvisory 过滤 toggle（再点取消）；建议徽章行内预览 + title 全文', async () => {
+  it('卡头「有建议」开关可点穿：服务端 onlyWithAdvisory 过滤 toggle（再点取消）；建议徽章行内预览 + title 全文', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -217,7 +217,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const link = wrapper.find('.ts-toolbar__right .mk-pill');
+    const link = wrapper.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill');
     expect(link.text()).toBe('有建议1');
     expect(link.attributes('aria-pressed')).toBe('false');
     // 建议徽章：行内直出建议标题（首行预览），title 挂完整建议文本
@@ -228,15 +228,15 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     await link.trigger('click');
     await flushPromises();
     expect(listMock).toHaveBeenLastCalledWith(expect.objectContaining({ onlyWithAdvisory: true, limit: 1000 }));
-    expect(wrapper.find('.ts-toolbar__right .mk-pill').attributes('aria-pressed')).toBe('true');
-    await wrapper.find('.ts-toolbar__right .mk-pill').trigger('click');
+    expect(wrapper.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').attributes('aria-pressed')).toBe('true');
+    await wrapper.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').trigger('click');
     await flushPromises();
     const lastArg = listMock.mock.calls[listMock.mock.calls.length - 1][0];
     expect(lastArg.onlyWithAdvisory).toBeUndefined();
     wrapper.unmount();
   });
 
-  it('工具条右组「异常」chip 可点穿：失败/收尾失败/超时 状态多选筛选 toggle；计数由构成带单源承载', async () => {
+  it('卡头「异常」开关可点穿：失败/收尾失败/超时 状态多选筛选 toggle；计数由构成带单源承载', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -305,7 +305,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('筛选：状态收进卡头 select（2026-10-03 退役右组 11 枚 chips）；左组为既有焦点 chips', async () => {
+  it('筛选：一行到底——chips 全在卡头，状态下拉与时间下拉收进「高级筛选」弹层', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -313,26 +313,31 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    // 状态筛选 = 卡头 select（枚举 = 全部状态 + statusOptions 10 档）
-    const sel = wrapper.find('select[aria-label="按状态筛选"]');
+    // 表前只有一行：快筛条 .ts-toolbar 退役（chips 并回卡头，2026-10-04）
+    expect(wrapper.find('.ts-toolbar').exists(), '快筛条已并回卡头一行').toBe(false);
+    // 状态 / 时间 = 高级筛选弹层里的 select（枚举 = 全部状态 + statusOptions 10 档）
+    await wrapper.find('.mk-adv .mk-btn').trigger('click');
+    const sel = wrapper.find('.mk-adv__pop select[aria-label="按状态筛选"]');
     expect(sel.exists()).toBe(true);
     expect(sel.findAll('option').map((o) => o.text())).toEqual([
       '全部状态', '初始化中', '进行中', '已暂停', '超时', '已被替代', '失败', '收尾中', '收尾失败', '已完成', '已废弃'
     ]);
-    // 工具条：左组 = 单选焦点 chips（11 枚状态 chips 已退役）；右组 = 两个独立开关
-    // （2026-10-04 页头状态条退役后迁入），不属于单选焦点组，故 .mk-pills 仍只有一组
-    const groups = wrapper.findAll('.ts-toolbar .mk-pills');
-    expect(groups).toHaveLength(1);
-    expect(groups[0].findAll('.mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
+    expect(wrapper.find('.mk-adv__pop select[aria-label="按开始时间筛选"]').exists()).toBe(true);
+    // 卡头两组 chips：焦点（单选，全部不显数）+ 快捷（两个独立开关）
+    const groups = wrapper.findAll('.mk-card__head .mk-pills');
+    expect(groups.map((g) => g.attributes('aria-label'))).toEqual(['焦点筛选', '快捷筛选']);
+    expect(wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
       '全部', '进行中', '待关注', '缺总结'
     ]);
-    expect(wrapper.findAll('.ts-toolbar__right .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
+    expect(wrapper.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
       '有建议', '异常'
     ]);
     await sel.setValue('failed');
     const rows = wrapper.findAll('tbody tr');
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain('用户a');
+    // 弹层里生效的筛选数标在触发钮上（收起来也不丢状态）
+    expect(wrapper.find('.mk-adv .mk-btn .mk-pill__count').text()).toBe('1');
     wrapper.unmount();
   });
 
