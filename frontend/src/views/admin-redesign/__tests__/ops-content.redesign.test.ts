@@ -106,15 +106,18 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(w.find('.mk-cols').exists()).toBe(true);
     expect(w.text()).toContain('条（仅真实）');
 
-    // 表头：路径/主题/用户/状态/进度/更新/操作（subject 或为学科或为目标长文本，均单行省略）
+    // 表头：路径/用户/状态/进度/更新/操作——「主题」独立列已退役（P2-6 2026-10-04 全站评审：
+    // 91% 行与路径列同文），subject≠title 时作路径列副行
     const ths = w.findAll('thead th').map((t) => t.text());
     expect(ths).toContain('路径');
-    expect(ths).toContain('主题');
+    expect(ths).not.toContain('主题');
     expect(ths).toContain('用户');
     expect(ths).toContain('状态');
     expect(ths).toContain('进度');
     expect(ths).toContain('操作');
-    expect(ths).not.toContain('学科');
+    // fixture 的 subject 与 title 不同 → 路径列出现主题副行（首行 = lp_a 的长目标文本）
+    const pathCell = w.findAll('tbody td')[0];
+    expect(pathCell.text()).toContain('这是一段很长的学习目标描述');
 
     // 虚拟行标记
     expect(w.find('.oc-tags .mk-badge--virtual').exists()).toBe(true);
@@ -171,13 +174,16 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     const ths = w.findAll('thead th').map((t) => t.text());
     expect(ths).toContain('难度');
     expect(ths).toContain('时长');
-    // 难度在主题之后、用户之前（路径自身属性成组）
-    expect(ths.indexOf('难度')).toBe(ths.indexOf('主题') + 1);
+    // 「主题」列已退役（P2-6 2026-10-04）：难度紧跟路径列、用户之前（路径自身属性成组）
+    expect(ths).not.toContain('主题');
+    expect(ths.indexOf('难度')).toBe(ths.indexOf('路径') + 1);
 
-    // 路径列副行只留短 ID：不再夹带难度/时长
+    // 路径列副行 = 主题（仅 subject≠title 时；P2-6）+ 短 ID，不夹带难度/时长
     const subs = w.findAll('tbody tr td:first-child .mk-cell-sub').map((s) => s.text());
     expect(subs.every((s) => !/入门|进阶|高阶|~?\d+h/.test(s))).toBe(true);
-    expect(subs[0]).toContain('lp_d1');
+    expect(subs[0]).toContain('这是一段很长的学习目标描述');
+    expect(subs[1]).toContain('lp_d1');
+    expect(subs[3]).toContain('lp_d2');
 
     // 难度三态：枚举归一为中文、英文 unknown 与自述整句都收敛为「未知」
     expect(w.findAll('.oc-diff').map((e) => e.text())).toEqual(['进阶', '未知', '未知']);

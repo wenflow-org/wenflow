@@ -116,13 +116,6 @@
                 @click="toggleOcSort('path')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('path')">路径<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
-                v-if="!hiddenCols.has('subject')"
-                scope="col"
-                class="mk-th--sortable"
-                :aria-sort="ocSortState('subject')"
-                @click="toggleOcSort('subject')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('subject')">主题<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th
                 v-if="!hiddenCols.has('difficulty')"
                 scope="col"
                 class="mk-th--sortable"
@@ -174,10 +167,12 @@
               <td>
                 <div class="mk-cell-main">
                   <strong class="mk-cell-text">{{ p.title }}</strong>
+                  <!-- P2-6（2026-10-04 全站评审）：独立「主题」列退役——91% 行与路径列同文
+                       （库内 885/951），改作路径副行且仅当 subject≠title 渲染（28/312 行有真增量） -->
+                  <span v-if="p.subject && p.subject !== p.title" class="mk-cell-sub" :title="p.subject">{{ p.subject }}</span>
                   <span class="mk-cell-sub" :title="p.id">{{ shortId(p.id, 10, 4) }}</span>
                 </div>
               </td>
-              <td v-if="!hiddenCols.has('subject')"><span class="mk-cell-text" :title="p.subject || ''">{{ p.subject || '—' }}</span></td>
               <td v-if="!hiddenCols.has('difficulty')">
                 <!-- 难度：只有三个枚举值可判；老数据里混着 unknown 与自述整句（~35%），
                      一律显示「未知」，原文进 title，不把半句话当难度展示 -->
@@ -311,7 +306,6 @@ const statusPills = computed(() => {
 
 /* 列显隐（与同页其他列表一致）：路径/操作固定，其余可隐藏 */
 const colDefs = [
-  { key: 'subject', label: '主题', title: '路径主题（学科或目标）' },
   { key: 'difficulty', label: '难度', title: '路径难度：由目标对话里的水平自述归一（入门/进阶/高阶）；无法判断时为未知' },
   { key: 'hours', label: '时长', title: '预计学习时长（后端 estimatedHours 估算值，带 ~ 表示近似）' },
   { key: 'user', label: '用户', title: '所属用户' },
@@ -373,7 +367,7 @@ const pathBandReady = computed(() => !!stats.value && pathBandTotal.value > 0)
 const { toggle: toggleOcSort, sortState: ocSortState, sortRows: sortOcRows } = useTableSort<PathRow>({
   accessors: {
     path: (p) => p.title,
-    subject: (p) => p.subject || '',
+    /* P2-6（2026-10-04 全站评审）：「主题」独立列退役（91% 行与路径列同文），随列撤排序 */
     /* 难度按语义序排（入门→进阶→高阶→未知），不按字符串字典序 */
     difficulty: (p) => DIFF_ORDINAL[difficultyEnum(p.difficulty)],
     hours: (p) => (typeof p.estimatedHours === 'number' && p.estimatedHours > 0 ? p.estimatedHours : null),
@@ -618,7 +612,8 @@ defineExpose({ reload: () => void reload(true) })
 /* 行点击已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） */
 /* 主题列：subject 字段或为学科或为生成路径时写入的目标文本（可能很长），单行省略 + hover 全文。
    自动布局下列宽随内容，必须给显式截断上限（截断上限由共享 .mk-cell-text 承担） */
-/* 主题列截断走共享 .mk-cell-text（oc-subject 私有复制退役，2026-10-03） */
+/* 主题列已退役（P2-6 2026-10-04：91% 行与路径列同文）——subject≠title 时作路径列副行，
+   截断走共享 .mk-cell-sub（oc-subject 私有复制此前已退役） */
 
 /* 难度：三个语义值 + 未知；未知降一档灰，不抢视觉 */
 .oc-diff { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }

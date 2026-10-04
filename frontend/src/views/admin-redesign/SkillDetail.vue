@@ -229,7 +229,7 @@
                     <td>{{ v.name || '—' }}</td>
                     <td v-if="hasVersionMeta" class="mono">{{ fmtDate(v.createdAt) }}</td>
                     <td v-if="hasVersionMeta">{{ v.createdBy || '—' }}</td>
-                    <td v-if="hasVersionMeta" class="skd-td-wrap">{{ v.description || '—' }}</td>
+                    <td v-if="hasVersionMeta" class="skd-td-wrap" :title="versionDescTitle(v)">{{ versionDescText(v) }}</td>
                     <td><span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">{{ versionStatusText(v.status) }}</span></td>
                   </tr>
                 </tbody>
@@ -850,6 +850,21 @@ const versionsStateText = computed(() => {
 /* versionStatusText 改用 statusText.ts 共享字典（P2-15）：本地函数已删，历史字面量在字典补键对齐 */
 /** 原型 versions 表含 日期/作者/变更说明（index.html 2344-2346）；三项均空则省略列 */
 const hasVersionMeta = computed(() => versions.value.some((v) => v.createdAt || v.createdBy || v.description))
+/* P2-18（2026-10-04 全站评审）：变更说明列常被冒充——同步占位「从文件 X.md 加载」与
+   prompt-lab 克隆时写入的提示词正文首行（「你是…」开头）都不是变更说明；
+   两种形态显「—」+ title 说明原因，真实说明照旧直出（实测 12 行中 10 行被冒充） */
+const versionDescText = (v: VersionItem): string => {
+  const d = (v.description || '').trim()
+  if (!d || /^从文件 .+\.md 加载$/.test(d) || /^你是/.test(d)) return '—'
+  return d
+}
+const versionDescTitle = (v: VersionItem): string | undefined => {
+  const d = (v.description || '').trim()
+  if (!d) return '版本未附带变更说明'
+  if (/^从文件 .+\.md 加载$/.test(d)) return `同步占位（${d}），非变更说明`
+  if (/^你是/.test(d)) return '该行是提示词正文首行的摘录，非变更说明'
+  return undefined
+}
 const fmtDate = (v?: string) => {
   if (!v) return '—'
   const t = new Date(v).getTime()

@@ -13,6 +13,9 @@
     </MkPageHead>
     <div class="mk-status" :class="`mk-status--${barTone}`">
       <span class="mk-status__dot"></span>
+      <!-- P2-4（2026-10-04 全站评审）：加载期此前只剩裸点+48px 空条（meta/徽章全 v-if），读作渲染坏了；
+           补一行检测中说明（加载窗口实测 1.9-3.7s，可感知非一闪而过） -->
+      <span v-if="!displayReport" class="mk-status__meta">健康报告检测中…</span>
       <span class="mk-status__meta" v-if="displayReport" :title="skillCountTitle">
         <!-- 「上线 N/M」2026-10-02 撤出状态条：与完成度卡「已上线 N/M」同屏双写同一数字，
              且「上线/已上线」用词不一。单源下沉到概要 KPI 第 4 卡 hint（统一用词「已上线」） -->
