@@ -165,18 +165,21 @@ export function runOverviewStatsCacheWarmup(): void {
 /**
  * 管理端页面冷读预热（一次性，延迟 30s 避开启动高峰）：
  * - 技能目录页统计（默认 7d + 可选 all）填进路由 5min 缓存；
- * - 执行日志页默认周窗筛选空跑一次（纯页缓存/索引页焐热，无缓存语义）。
- * 二者冷首触实测 20s+（重启后首位访客付全款），预热后用户侧只剩毫秒级命中。
+ * - 执行日志页默认周窗筛选空跑一次（纯页缓存/索引页焐热，无缓存语义）；
+ * - 学习状态页列表投影：按页面默认参数（limit 500 / 排除测试）走一次，
+ *   把 60 分钟新鲜度窗内到期的 281 人投影分批重建挪到后台（冷首触实测 ~2s）。
  */
 export function runAdminPageColdWarmup(): void {
   const timer = setTimeout(() => {
     runBackgroundTask('admin.pages.cold-warmup', async () => {
-      const [{ warmSkillListStatsCache }, { warmExecLogsPageTouch }] = await Promise.all([
+      const [{ warmSkillListStatsCache }, { warmExecLogsPageTouch }, { learnerSnapshotRefreshService }] = await Promise.all([
         import('../routes/admin/skills'),
         import('../routes/admin/platform'),
+        import('../services/learner/LearnerSnapshotRefreshService'),
       ]);
       await warmSkillListStatsCache();
       await warmExecLogsPageTouch();
+      await learnerSnapshotRefreshService.listForAdmin({ excludeTest: true, limit: 500 });
       logger.info('管理端页面冷读预热完成');
     });
   }, 30_000);
