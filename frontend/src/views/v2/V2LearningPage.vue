@@ -17,7 +17,7 @@
           aria-controls="learn-kp-panel"
           @click="toggleKp"
         >知识点 <b>{{ masteredCount }}/{{ knowledgePoints.length }}</b></button>
-        <span class="learn__live">{{ session ? '学习中' : '连接中' }}</span>
+        <span class="learn__live" :class="{ 'learn__live--err': !!initError }">{{ liveState }}</span>
         <ImmersiveMenu>
           <div class="learn__menu-group">
               <span class="learn__menu-label">结束本节课</span>
@@ -426,11 +426,16 @@
           </div>
         </Transition>
 
-        <!-- 完课入口（原型 .wf-cta：位于快捷回复之后、composer 之前，作为对话流的收束按钮） -->
+        <!-- 完课入口（原型 .wf-cta：位于快捷回复之后、composer 之前，作为对话流的收束按钮）。
+             P2-28（2026-10-04 评审）：本课知识点明确存在未掌握时降为描边次级（lessonCtaDamped），
+             课堂前半程视觉权重最大的不该是与当前任务相逆的「完成」；仅换状态样式，位置与
+             760px 单栏契约不动 -->
         <button
           v-if="!completed"
           type="button"
           class="lesson-cta"
+          :class="{ 'lesson-cta--damped': lessonCtaDamped }"
+          :title="lessonCtaDamped ? '本课知识点尚未全部掌握' : undefined"
           :disabled="actionBusy || finalizing"
           @click="completeAndSettle"
         >完成本课 · +20 XP</button>
@@ -750,6 +755,16 @@ const friendlyError = computed(() => {
     return '没有找到这个学习任务，它可能已被删除或重建。';
   }
   return raw || '开课失败，请重试。';
+});
+
+/* 顶栏连接态（P2-25 附带核查 2026-10-04，评审记为「未稳定复现」的稳定形态）：
+   此前 `session ? '学习中' : '连接中'` 与错误态无关——boot 失败（initError）时 session
+   恒为 null，正文已是「本节暂时开不了课」而顶栏绿显「连接中」，同屏自相矛盾。
+   失败显式（三态纪律）：错误态改红字「连接失败」；点「重新尝试」成功（initError 清空）
+   自动回到「连接中/学习中」流转。 */
+const liveState = computed(() => {
+  if (initError.value) return '连接失败';
+  return session.value ? '学习中' : '连接中';
 });
 
 const msgs = ref<ChatMsg[]>([]);
@@ -1609,6 +1624,16 @@ const {
   masteredCount, weightedProgressPct
 } = useKnowledgePanel(knowledgePoints)
 
+/* P2-28（2026-10-04 设计评审）：课堂刚开始（0/N 掌握、仅 1 条消息）时视觉权重最大的
+   固定按钮是「完成本课 · +20 XP」，主 CTA 与当前任务（上课）相逆、压在输入流上方易误触。
+   降级而非移除：本课知识点**明确存在未掌握**时按钮从实底主钮降为描边次级（材质对齐
+   .btn-ghost），title 说明原因；知识点数据未加载/为空（复习课等无知识点场景）不降级不误伤。
+   已拍板的 760px 单栏契约与气泡形态不动，仅调该按钮的状态样式。 */
+const lessonCtaDamped = computed(() => {
+  const total = knowledgePoints.value.length;
+  return total > 0 && masteredCount.value < total;
+});
+
 /* 头部掌握度小圆环：r=8 → 周长 2πr≈50.27，弧长 = 已掌握/总数（与「n/N 已掌握」胶囊同口径） */
 const KP_RING_C = 2 * Math.PI * 8;
 const kpRingDash = computed(() => {
@@ -1808,6 +1833,9 @@ onBeforeUnmount(() => {
 .learn__live {
   font-size: 12px; font-weight: 700; color: var(--green-ink);
 }
+/* boot 失败态（P2-25 核查 2026-10-04）：红字显式失败——正文已显「本节暂时开不了课」，
+   顶栏不再绿显「连接中」假装还在连接 */
+.learn__live--err { color: var(--red-ink); }
 
 /* ---------- 布局（原型 .wf-screen：单列、gap 14、≥1024 定宽 880 居中） ----------
    原型的课堂屏没有左侧栏：知识点从常驻列降级成「头部入口 + 浮层抽屉」，正文只剩一列。 */
@@ -2603,6 +2631,18 @@ onBeforeUnmount(() => {
 }
 .lesson-cta:active { transform: scale(0.98); }
 .lesson-cta:disabled { opacity: 0.55; cursor: default; }
+/* P2-28（2026-10-04）：知识点未全部掌握时完成入口降为描边次级——位置/尺寸/单栏契约不变，
+   只换材质：surface 底 + line 描边 + muted 字（与 .btn-ghost 同语言；token 引用暗色自动翻转）。
+   hover 与 .btn-ghost 同款：边框/文字变蓝即可，不再回到实底主钮的视觉权重。 */
+.lesson-cta--damped {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--muted);
+}
+.lesson-cta--damped:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+  color: var(--blue-deep);
+}
 
 /* ---------- 输入区（对齐原型 .wf-composer：760 居中收纳盒 + focus-within 光环） ---------- */
 .composer {

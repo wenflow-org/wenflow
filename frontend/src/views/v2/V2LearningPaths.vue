@@ -189,7 +189,8 @@
 
             <!-- failed：待重试 -->
             <template v-else>
-              <div class="pcard__fail-reason">{{ card.errorText || '生成失败，目标和已确认信息已保留。' }}</div>
+              <!-- P2-30（设计评审）：错误行动词与按钮对齐——后端兜底句在渲染层改说「主结构」，见 failReasonText -->
+              <div class="pcard__fail-reason">{{ failReasonText(card) || '生成失败，目标和已确认信息已保留。' }}</div>
               <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
                 <span>确认删除这条路径？删除后不可自行恢复。</span>
                 <button type="button" class="pcard__confirm-yes" @click="doDelete(card)">删除</button>
@@ -558,6 +559,15 @@ function statusLabel(card: PathCard) {
   if (card.kind === 'ready') return '进行中';
   if (card.kind === 'generating') return '生成中';
   return card.retryType === 'stage_design' ? '阶段任务失败' : '主结构失败';
+}
+
+/** P2-30（设计评审 2026-10-04）：后端失败兜底句「学习路径生成失败，请先重新生成路径。」
+ *  （errorMessage/lastError 缺失时回退 learningBlockedReason，见 api/learning.ts normalizeGenerationLifecycle）
+ *  与徽章/按钮的「主结构失败 / 重新生成主结构」是同一重试动作两套名词——渲染处按卡自身
+ *  重试名词改说（core→主结构、stage_design→阶段任务），其余 errorMessage 原样直出；后端模板不动。 */
+function failReasonText(card: PathCard): string {
+  if (card.errorText.trim() !== '学习路径生成失败，请先重新生成路径。') return card.errorText;
+  return card.retryType === 'stage_design' ? '阶段任务准备中断，可重试。' : '主结构生成中断，可重试。';
 }
 function badgeCls(card: PathCard) {
   if (card.kind === 'completed') return 'pcard__badge--green';

@@ -209,7 +209,7 @@
  *  ② 空/错/骨架三态改整屏形态（V2ResultState + SkeletonLoader，替换 rail 与图卡）；
  *  ③ 节点详情补原型抽屉的内容结构：状态徽章 / 掌握程度两条 bar / 复习说明 / 主 CTA + ghost。
  */
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import MkGraph, { relationStyleOf } from './MkGraph.vue'
 import type { MkGraphEdge, MkGraphNode } from './MkGraph.vue'
 import SkeletonLoader from '../ui/SkeletonLoader.vue'
@@ -306,6 +306,30 @@ function onRailKeydown(event: KeyboardEvent, value: string | null) {
   selectPath(options[next].value)
   void nextTick(() => railEl.value?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus())
 }
+
+/** 轨道是否已挂在 DOM：三态整屏（加载/错误/空态）替换掉 rail 与图卡，此时无 chip 可滚 */
+const railVisible = computed(
+  () => !props.loading && !props.error && props.nodes.length > 0 && props.paths.length > 1
+)
+
+/**
+ * 选中 chip 滚到轨道可视区中央（P2-24 2026-10-04 全站评审 adjusted）：
+ * 轨道 overflow-x:auto 但 scrollbar-width:none，组件此前没有任何滚动定位——
+ * 程序化选中末枚 chip 后 scrollLeft 恒 0，「轨上还有 N 条路径」零 affordance。
+ * 初始加载（rail 刚挂载，nextTick 等 DOM 就绪）与 pathId 变化（selectPath/键盘换选/
+ * 宿主程序化切路径后 props 同步）统一走这里；block:'nearest' 只做横向滚动，
+ * 不纵向拽动页面，避免「选个 chip 页面跳一下」。
+ */
+function scrollSelectedChip() {
+  void nextTick(() => {
+    railEl.value?.querySelector<HTMLElement>('[aria-checked="true"]')
+      ?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
+  })
+}
+
+watch([railVisible, () => props.pathId], ([ready]) => {
+  if (ready) scrollSelectedChip()
+})
 
 /* ---------- 层级筛选（本地）：节点筛掉后，两端不齐的边也一并筛掉 ---------- */
 
@@ -522,11 +546,19 @@ function onPractice() {
 .mk-ge__rail::-webkit-scrollbar {
   display: none;
 }
-/* 路径 chip（原型 .wf-chip：38px 高胶囊；选中态 = 蓝 14% 底 + 蓝描边） */
+/* 路径 chip（原型 .wf-chip：38px 高胶囊；选中态 = 蓝 14% 底 + 蓝描边）。
+   P2-24（2026-10-04 评审）：路径标题整句直出，390 视口选中 chip（19 字实测
+   scrollWidth=275）溢出 42px 尾部被裁、后续 chip 排到 right=1763 且轨道无滚动定位。
+   chip 收敛为单行省略（完整标题由选中说明与详情承载）；选中 chip 由 script 的
+   scrollSelectedChip 居中，兼作「轨上还有其他路径」的滚动 affordance。 */
 .mk-ge__chip {
   flex: none;
   min-height: 38px;
+  max-width: 260px;
   padding: 8px 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-pill);
   background: var(--surface);

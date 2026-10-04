@@ -97,6 +97,31 @@ interface GraphCallbackParams {
 
 const el = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
+/** 最近一次 buildOption 烘焙的「值得标注」节点集（批次四：graphRoam 缩放档回填标签用） */
+let lastLabelWorthy = new Set<string>()
+/** 缩放低于该值视为「看不清标签」档：全量收标（hover/emphasis 仍出词），放大恢复 */
+const ZOOM_LABEL_OFF = 0.85
+let labelsHiddenByZoom = false
+
+/** graphRoam 缩放跨档时翻转节点标签：低于阈值全收（密集区字压字不可读），回升恢复 labelWorthy 常显集合 */
+function applyZoomLabels() {
+  if (!chart) return
+  const opt = chart.getOption() as { series?: Array<{ zoom?: number; data?: Array<{ id?: string; label?: { show?: boolean } }> }> }
+  const zoom = opt.series?.[0]?.zoom
+  const hide = typeof zoom === 'number' && zoom < ZOOM_LABEL_OFF
+  if (hide === labelsHiddenByZoom) return
+  labelsHiddenByZoom = hide
+  const data = opt.series?.[0]?.data
+  if (!Array.isArray(data)) return
+  chart.setOption({
+    series: [{
+      data: data.map((d) => ({
+        ...d,
+        label: { ...d.label, show: !hide && lastLabelWorthy.has(String(d.id ?? '')) }
+      }))
+    }]
+  })
+}
 let ro: ResizeObserver | null = null
 
 /**
@@ -171,15 +196,19 @@ function buildOption(): EChartsCoreOption {
   if (!denseGraph) {
     for (const node of nodes) labelWorthy.add(node.id)
   } else {
+    // 批次四 P2（2026-10-04 全站评审）：枢纽标注 10→6——默认视图密集区标签字压字，
+    // 收紧常显集合让标签碰撞可辨；弱势/脆弱节点仍全标（教学信号优先）
     const byDegree = [...nodes]
       .sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0))
-      .slice(0, 10)
+      .slice(0, 6)
     for (const node of byDegree) labelWorthy.add(node.id)
     for (const node of nodes) {
       const weak = node.stability === 'fragile' || (node.masteryScore !== null && node.masteryScore !== undefined && node.masteryScore < 0.45)
       if (weak) labelWorthy.add(node.id)
     }
   }
+  // 供 graphRoam 缩放档回填 label.show 用（buildOption 每次重算，roam 不触发它）
+  lastLabelWorthy = labelWorthy
 
   return {
     backgroundColor: 'transparent',
@@ -286,8 +315,11 @@ function render() {
       const data = params.data as { raw?: MkGraphNode } | undefined
       emit('select', data?.raw ?? null)
     })
+    // 批次四 P2：缩放跨档收/放节点标签（setOption(notMerge) 重建会重置缩放档标志）
+    chart.on('graphRoam', () => applyZoomLabels())
   }
   chart.setOption(buildOption(), true)
+  labelsHiddenByZoom = false
 }
 
 let lastNarrow = false

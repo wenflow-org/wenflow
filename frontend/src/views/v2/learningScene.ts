@@ -23,12 +23,15 @@ export function useOpeningSceneViews(openingScene: Ref<Record<string, any> | nul
     if (k === 'review') return '今日复习：回捞快忘的知识点';
     return '开始这节课';
   });
-  /** 副文案：依据 kind 给一句人话引导 */
+  /** 副文案：依据 kind 给一句人话引导。
+   *  P2-27（2026-10-04 全站评审 confirmed）：resume 分支副文已删——原「你的进度还在，接着上次
+   *  的内容继续，不用从头开始。」与标题「继续这节课 · 从上次离开的地方接着学」同信息，
+   *  一卡内「继续」×4 同义复读收敛为徽章/标题/按钮（操作位职责保留）；resume 时 sceneLead
+   *  返回 ''，模板 v-if 不渲染副文行。continuation/relearn/review 的副文各承载增量信息，不动。 */
   const sceneLead = computed(() => {
     const sc = openingScene.value;
     if (!sc) return '';
     const k = sc.kind;
-    if (k === 'resume') return '你的进度还在，接着上次的内容继续，不用从头开始。';
     if (k === 'continuation') {
       const rel = sc.recap?.relation;
       if (rel === 'prev-milestone') return `上节课在「${sc.recap?.sourceTitle || '上一阶段'}」结束，这节课是它的下一步。`;

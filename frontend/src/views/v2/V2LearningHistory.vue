@@ -119,7 +119,8 @@
               <!-- 色点对读屏是冗余（状态文案在右侧徽章里），标记装饰；批19 aria 补课 -->
               <span class="history__dot" :class="`history__dot--${t.state}`" aria-hidden="true"></span>
               <div class="history__item-main">
-                <strong>{{ t.title }}</strong>
+                <!-- P2-34：完整标题挂 :title 作桌面悬停兜底（触屏无 hover，移动端出口是两行截断本身） -->
+                <strong :title="t.title">{{ t.title }}</strong>
                 <!-- 副行（原型 wf-hist__item-main span 882）：时长并入这一行，
                      聚合行多带一段「N 次会话」（类名被回归测试锁定） -->
                 <span class="history__item-meta">{{ metaLine(t) }}</span>
@@ -808,12 +809,17 @@ onMounted(async () => {
   gap: 2px;
 }
 
+/* 行标题两行截断（P2-34：单行 nowrap 下实测 22/25 条截断且移动端无法看全文，
+   两行让可读信息量翻倍；line-height 1.5→1.4 收敛两行占高。原单行截断
+   nowrap/ellipsis/text-overflow 随之整体移除，不留死规则） */
 .history__item-main strong {
   font-size: 14px;
+  line-height: 1.4;
   color: var(--ink);
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* 聚合行/单行副行（原型 wf-hist__item-main span 882：12px muted）：
@@ -864,13 +870,14 @@ onMounted(async () => {
 }
 
 /* 动作改文字链（原型无动作行，但「继续/查看反馈」是本页主要出口，保留）：
-   13px/700 蓝链 + 36px 触控高（mobile:spec 的 lt36 门禁） */
+   13px/700 蓝链。触控高 36→44（P2-35：实测 60.7×36px、桌面档 38.9px 同低于 44 地板；
+   基础样式抬齐而非只进移动媒体查询，字号不动、扩的是热区） */
 .history__resume,
 .history__feedback,
 .history__restart {
   display: inline-flex;
   align-items: center;
-  min-height: 36px;
+  min-height: 44px;
   padding: 0;
   border: 0;
   background: none;
@@ -924,8 +931,9 @@ onMounted(async () => {
   color: var(--muted);
 }
 .month__arrow {
-  width: 36px;
-  height: 36px;
+  /* 36×36 → 44×44（P2-35 触控地板）：min 尺寸扩的是热区，居中仍由 grid place-items 承担 */
+  min-width: 44px;
+  min-height: 44px;
   border-radius: var(--mk-radius-md);
   border: 1px solid var(--line);
   background: var(--surface);

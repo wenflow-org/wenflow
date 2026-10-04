@@ -1,6 +1,8 @@
 ﻿<template>
-  <!-- ===== 顶栏：品牌居左 · 胶囊导航居中 · 操作居右（原型 2026-09-30 版 wf-appbar：桌面无侧栏）===== -->
-  <header class="v2nav-bar" :data-current="onDashboard ? 'dashboard' : 'other'">
+  <!-- ===== 顶栏：品牌居左 · 胶囊导航居中 · 操作居右（原型 2026-09-30 版 wf-appbar：桌面无侧栏）=====
+       data-notitle：顶栏标题隐藏集合（学习台 + 知识图谱——页内已有可见 H1，见 script titleHidden），
+       窄屏左槽亮品牌 logo 与学习台先例一致 -->
+  <header class="v2nav-bar" :data-notitle="titleHidden || undefined">
     <div class="v2nav-bar__left">
       <button v-if="showBack" type="button" class="v2nav-back" aria-label="返回上一页" @click="goBack">
         <ChevronLeft :size="20" :stroke-width="2" aria-hidden="true" />
@@ -8,7 +10,7 @@
       <router-link to="/dashboard" class="v2nav-bar__brand" aria-label="问流 WenFlow，返回工作台">
         <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="" class="v2nav-bar__logo" />
       </router-link>
-      <strong v-if="pageTitle" class="v2nav-bar__title" :class="{ 'v2nav-bar__title--dash': onDashboard }">{{ pageTitle }}</strong>
+      <strong v-if="pageTitle" class="v2nav-bar__title">{{ pageTitle }}</strong>
     </div>
 
     <!-- 桌面主导航（≥1024）：图标+文字胶囊，<1024 由底部 dock 接管 -->
@@ -123,15 +125,26 @@ const items: Array<{ to: string; label: string; match: string[]; icon: Component
    头像菜单保留两条捷径（原型 wf-user-menu 同款五项） */
 
 function isActive(item: { to: string; match: string[] }) {
-  // 个人中心 /user/* 挂在「学习台」簇下（从学习台头像菜单进入）：给入口一个当前态
-  if (route.path.startsWith('/user') && item.to === '/dashboard') return true;
+  // P2-31（2026-10-04 全站评审 confirmed）：/user/*（个人中心）域内 dock 与顶导航全部不点亮。
+  // 旧注释「/user/* 挂学习台簇下，给入口一个当前态」是有意设计，但复核确认客观效果是
+  // 导航 active 不唯一指示位置（/user/account 与 /dashboard 的 dock 状态完全相同），
+  // 读屏 aria-current 也标错域；个人中心的入口已由头像菜单与顶栏头像承担，不需要假当前态。
   return item.match.some((m) => route.path.startsWith(m));
 }
 
 /* 原型壳语义：5 个 tab 屏不带返回钮，其余（路径详情/个人中心等）带 */
 const onTabSection = computed(() => items.some((item) => route.path.startsWith(item.to)));
 const showBack = computed(() => !onTabSection.value);
-const onDashboard = computed(() => route.path.startsWith('/dashboard'));
+/**
+ * 顶栏标题隐藏集合（P2-23 2026-10-04 全站评审 confirmed）：页内已有可见 H1 的 tab 屏，
+ * 顶栏 17px 标题与之同屏复读。集合从 dashboard 扩到 dashboard+knowledge-map——
+ * 知识图谱窄屏曾同屏三处「知识图谱」（导航高亮 + 顶栏标题 + 正文 H1，顶栏与 H1 相距 62px）。
+ * 对齐学习台先例：进页隐藏顶栏标题、窄屏左槽亮品牌 logo（header 上的 data-notitle），
+ * 正文 H1 保留为唯一页题。
+ */
+const titleHidden = computed(
+  () => route.path.startsWith('/dashboard') || route.path.startsWith('/knowledge-map')
+);
 const pageTitle = computed(() => {
   const t = route.meta?.title;
   return typeof t === 'string' ? t : '';
@@ -248,14 +261,14 @@ onUnmounted(() => {
   .v2nav-topnav__link:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 }
 
-/* 窄屏：dashboard 显品牌、其余屏显标题（原型同款互斥）；≥1024 品牌常驻
-   （位置感由导航胶囊表达，原型已在桌面隐藏页题） */
+/* 窄屏：顶栏标题隐藏屏（学习台/知识图谱——正文 H1 是唯一页题，P2-23 2026-10-04）左槽显品牌，
+   其余屏显标题（原型同款互斥）；≥1024 品牌常驻（位置感由导航胶囊表达，原型已在桌面隐藏页题）。
+   标题的 display:none 由基座规则承担，data-notitle 只负责窄屏的品牌/标题互换。 */
 .v2nav-bar__brand { display: none; }
 .v2nav-bar__title { display: none; }
-.v2nav-bar__title--dash { display: none; }
 @media (max-width: 1023.98px) {
-  .v2nav-bar[data-current='dashboard'] .v2nav-bar__brand { display: flex; }
-  .v2nav-bar:not([data-current='dashboard']) .v2nav-bar__title { display: block; }
+  .v2nav-bar[data-notitle] .v2nav-bar__brand { display: flex; }
+  .v2nav-bar:not([data-notitle]) .v2nav-bar__title { display: block; }
 }
 @media (min-width: 1024px) {
   .v2nav-bar__brand { display: flex; }

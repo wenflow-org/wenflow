@@ -15,10 +15,13 @@
           <span class="greet__date">{{ dateText }}<template v-if="greetSub && !tipVisible"> · <span class="greet__sub">{{ greetSub }}</span></template></span>
         </div>
         <!-- 连续学习天数的唯一出处：0 态也给一句话，不整块消失（2026-09-25 去重：
-             原侧栏 mini 卡把同一个数字再显示一遍，现 mini 只留鼓励文案） -->
+             原侧栏 mini 卡把同一个数字再显示一遍，现 mini 只留鼓励文案）。
+             P2-21（2026-10-04 全站评审 confirmed）：「今天还没开始」后缀撤除——它与本周节奏卡
+             week__note「今天还没点亮 · 学一会儿就能续上」条件恒同、同陈述双写；
+             提醒单源留给 week__note（streakNote 逻辑保留），徽章只报天数 -->
         <div class="streak" :class="{ 'streak--off': streakDays === 0 }" title="连续学习天数">
           <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/></svg>
-          <template v-if="streakDays > 0">连续 {{ streakDays }} 天{{ todayMinutes > 0 ? '' : ' · 今天还没开始' }}</template>
+          <template v-if="streakDays > 0">连续 {{ streakDays }} 天</template>
           <template v-else>点亮连续记录</template>
         </div>
       </div>
@@ -105,7 +108,10 @@
                     </button>
                     <router-link v-else to="/learning-paths" class="btn-primary">查看全部路径</router-link>
                   </template>
-                  <button type="button" class="link-muted" @click="setResting(true)">今天休息</button>
+                  <!-- P2-22（2026-10-04 全站评审 confirmed）：「今天休息」触控 36px 低于 44px 地板，
+                       与同排 44px 主按钮并排不齐——独立 .action__rest 类补齐（不污染通用 .link-muted，
+                       本页其余 link-muted 是纯文字链，仍走 36px 紧凑带登记口径） -->
+                  <button type="button" class="link-muted action__rest" @click="setResting(true)">今天休息</button>
                 </div>
               </div>
             </template>
@@ -1835,5 +1841,17 @@ a.btn-primary { text-decoration: none; }
     align-items: center;
     justify-content: center;
   }
+}
+
+/* ── P2-22（2026-10-04 全站设计评审）：「今天休息」触控 36px→44px ──────────────────
+   复核实测：移动 390 该钮 h=36.0（同排主按钮 44.0、顶差 4px），桌面 1600 反而更差
+   h=31.8——36px 的 min-height 原本只写在上面的 ≤1100 媒体查询里，媒体查询外没有兜底。
+   基础样式（媒体查询外）+ 独立 .action__rest 类补齐 inline-flex/44px/垂直居中，
+   与同排 44px 主按钮垂直对齐（.action__actions 已是 align-items:center，补高后自然对齐）；
+   置于媒体查询块之后，同特异性下按文档顺序赢过上面 .link-muted 的 36px 档。 */
+.action__rest {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 </style>
