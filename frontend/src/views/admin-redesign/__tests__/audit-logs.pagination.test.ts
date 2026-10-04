@@ -173,3 +173,103 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     expect(last).toMatchObject({ page: 1, keyword: 'admin' });
   });
 });
+
+/* ---------- 2026-10-05 重设计：动作快筛（当前页聚合 → keyword 尾段下钻）+ 负载美化 ----------
+   刷屏根因：调试期自动化调用与人工操作混排（「推进虚拟会话」单动作占当前页 70%）。
+   下拉选项=当前页动作聚合（口径 title 披露），下钻词取 path 稳定尾段（/teaching-step 等，
+   同资源前缀 /virtual-learners 区分不了动作）；选中态由 keyword 单源推导，手动改搜索框自动回落。 */
+describe('AuditLogs 动作快筛 + 负载美化（2026-10-05 重设计）', () => {
+  beforeEach(() => {
+    h.getLogs.mockReset();
+    h.getStats.mockReset();
+    window.scrollTo = vi.fn();
+  });
+
+  function opRow(i: number, tail: string) {
+    return {
+      id: `op-${tail}-${i}`,
+      adminName: 'admin',
+      action: `raw:${tail}`,
+      targetType: '虚拟会话',
+      targetId: `vs-${i}`,
+      method: 'POST',
+      path: `/api/admin/virtual-learners/sessions/s-${i}/${tail}`,
+      statusCode: 200,
+      success: true,
+      createdAt: `2026-10-05T10:00:${String(i % 60).padStart(2, '0')}`,
+    };
+  }
+
+  function mockMixedActions() {
+    const logs = [
+      ...Array.from({ length: 21 }, (_, i) => opRow(i, 'teaching-step')),
+      ...Array.from({ length: 3 }, (_, i) => opRow(100 + i, 'restart-learning')),
+      ...Array.from({ length: 2 }, (_, i) => opRow(200 + i, 'start-learning')),
+    ];
+    h.getLogs.mockImplementation(async () => ({
+      data: { data: { logs, attempts: [], pagination: { total: logs.length, page: 1, limit: 30 } } },
+    }));
+    h.getStats.mockResolvedValue({ data: { data: { stats: { total: logs.length } } } });
+  }
+
+  it('动作下拉：当前页聚合计数排序（21/3/2），登录 tab 不渲染', async () => {
+    mockMixedActions();
+    const w = await mountAudit();
+    await nextTick();
+    const sel = w.find('select[aria-label="按动作筛选"]');
+    expect(sel.exists()).toBe(true);
+    const options = sel.findAll('option').map((o) => o.text());
+    expect(options).toHaveLength(4); // 全部动作 + 3 个聚合动作
+    expect(options[1]).toContain('21'); // 按计数倒序：推进（21）第一
+    expect(options[2]).toContain('3');
+    expect(options[3]).toContain('2');
+    // 语义名来自 path 兜底映射（尾段 → 中文动作名）
+    expect(options[1]).toContain('推进虚拟会话');
+    // 切登录 tab：动作维度不存在
+    await w.findAll('.tab').find((x) => x.text() === '登录审计')!.trigger('click');
+    await flushPromises();
+    expect(w.find('select[aria-label="按动作筛选"]').exists()).toBe(false);
+  });
+
+  it('选中动作 → keyword=路径稳定尾段（/teaching-step）回第 1 页重查；手动改搜索框后下拉回落「全部动作」', async () => {
+    mockMixedActions();
+    const w = await mountAudit();
+    await nextTick();
+    const sel = w.find('select[aria-label="按动作筛选"]');
+    const restartValue = sel.findAll('option')[2].element.getAttribute('value')!;
+    await sel.setValue(restartValue);
+    await flushPromises();
+    const last = h.getLogs.mock.calls.at(-1)![0];
+    expect(last).toMatchObject({ page: 1, keyword: '/restart-learning' });
+    // keyword 单源推导：下拉保持选中态
+    expect((w.find('select[aria-label="按动作筛选"]').element as HTMLSelectElement).value).toBe(restartValue);
+    // 手动改搜索框（非任何动作的下钻词）→ 下拉回落「全部动作」
+    const input = w.find<HTMLInputElement>('.mk-filter__input');
+    await input.setValue('admin');
+    await input.trigger('keydown.enter');
+    await flushPromises();
+    expect((w.find('select[aria-label="按动作筛选"]').element as HTMLSelectElement).value).toBe('');
+  });
+
+  it('展开行负载美化：紧凑 JSON 两格缩进（与执行日志同款 prettyPayload）', async () => {
+    h.getLogs.mockImplementation(async () => ({
+      data: {
+        data: {
+          logs: [{
+            id: 'op-1', adminName: 'admin', action: 'user.update', targetType: 'user', targetId: 'u-1',
+            method: 'POST', path: '/x', statusCode: 200, success: true, createdAt: '2026-08-13T10:00:00',
+            requestJson: '{"a":1,"b":{"c":2}}',
+          }],
+          attempts: [],
+          pagination: { total: 1, page: 1, limit: 30 },
+        },
+      },
+    }));
+    const w = await mountAudit();
+    await w.find('.log-tr').trigger('click');
+    await nextTick();
+    const pre = w.find('.log-payload pre');
+    expect(pre.exists()).toBe(true);
+    expect(pre.text()).toBe('{\n  "a": 1,\n  "b": {\n    "c": 2\n  }\n}');
+  });
+});

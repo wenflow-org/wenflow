@@ -359,6 +359,7 @@ const PATH_ACTION_RULES: Array<[RegExp, string]> = [
   [/\/virtual-learners\/sessions\/reclaim-stale$/, '回收卡死会话'],
   [/\/virtual-learners\/sessions\/terminate$/, '批量终止虚拟会话'],
   [/\/virtual-learners\/sessions\/[^/]+\/teaching-step$/, '推进虚拟会话'],
+  [/\/virtual-learners\/sessions\/[^/]+\/wrapup$/, '结束虚拟会话'],
   [/\/virtual-learners\/sessions\/[^/]+\/restart-learning$/, '重启虚拟会话学习'],
   [/\/virtual-learners\/sessions\/[^/]+\/start-learning$/, '开始虚拟会话学习'],
   [/\/virtual-learners\/sessions\/[^/]+\/stop-learning$/, '停止虚拟会话学习'],

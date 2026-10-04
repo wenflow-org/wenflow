@@ -40,6 +40,21 @@
             :placeholder="tab === 'login' ? '用户名 / IP，回车查询' : '关键词，回车查询'"
             @keydown.enter="applyFilters"
           />
+          <!-- 动作快筛（2026-10-05 重设计）：调试期自动化调用（如「推进虚拟会话」连发 20+ 行）
+               淹没人工操作，70% 当前行是同一动作的机械重复。选项=当前页 30 行动作聚合
+               （口径如实标注，非全量 TOP）；下钻走 keyword 搜索（path 稳定尾段 contains /
+               语义键），与失败 TOP chip 同机制、同一搜索框真源（手动改搜索词后下拉自动回落）。 -->
+          <select
+            v-if="tab === 'operation'"
+            :value="activeActionValue"
+            class="mk-filter__select"
+            aria-label="按动作筛选"
+            title="按动作快筛（当前页动作聚合；搜索词写入左侧关键词框，可再叠加其他关键词）"
+            @change="applyActionFilter(($event.target as HTMLSelectElement).value)"
+          >
+            <option value="">全部动作</option>
+            <option v-for="a in actionOptions" :key="a.value" :value="a.value">{{ a.label }} {{ a.count }}</option>
+          </select>
           <select v-model="timeRange" class="mk-filter__select" aria-label="时间范围" @change="applyFilters">
             <option value="today">今天</option>
             <option value="yesterday">昨天</option>
@@ -164,15 +179,16 @@
                     </div>
                     <div v-if="log.requestJson" class="log-section">
                       <span class="log-label">请求</span>
-                      <pre>{{ log.requestJson }}</pre>
+                      <!-- 负载美化（2026-10-05 与执行日志同批）：紧凑单行 JSON 两格缩进，非 JSON 原样 -->
+                      <pre>{{ prettyPayload(log.requestJson) }}</pre>
                     </div>
                     <div v-if="log.beforeJson" class="log-section">
                       <span class="log-label">变更前</span>
-                      <pre>{{ log.beforeJson }}</pre>
+                      <pre>{{ prettyPayload(log.beforeJson) }}</pre>
                     </div>
                     <div v-if="log.afterJson" class="log-section">
                       <span class="log-label">变更后</span>
-                      <pre>{{ log.afterJson }}</pre>
+                      <pre>{{ prettyPayload(log.afterJson) }}</pre>
                     </div>
                     <p v-if="!log.requestJson && !log.beforeJson && !log.afterJson" class="log-none">无请求内容记录</p>
                   </div>
@@ -277,6 +293,7 @@ import { KeyRound, Lock } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
 import { errMsg, shortId } from './live'
+import { prettyPayload } from './payload-format'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
@@ -332,6 +349,57 @@ function actionLabelOf(log: AuditLogRow): string {
   const mapped = actionText(log.action)
   if (mapped !== log.action) return mapped
   return pathActionText(log.path, log.method) || log.path || mapped
+}
+
+/* —— 动作快筛（2026-10-05 重设计）：当前页动作聚合 → keyword 下钻 ——
+   刷屏根因是自动化调用与人工操作混排（「推进虚拟会话」单动作可占当前页 70%）；
+   给动作维度一个免打字的入口。下钻词取 path 稳定尾段（/wrapup /restart 这类）：
+   同资源前缀（/api/admin/virtual-learners）区分不了动作，尾段（或语义键）才能。 */
+interface ActionOption {
+  /** 选项唯一键：METHOD·语义名（语义动作为 语义名） */
+  value: string
+  label: string
+  /** 写入 keyword 的下钻词：语义键或 /尾段（uuid 结尾取前一段） */
+  keyword: string
+  count: number
+}
+function pathDrillKeyword(path: string): string {
+  const segs = path.split('?')[0].split('/').filter(Boolean)
+  if (!segs.length) return ''
+  const last = segs[segs.length - 1]
+  // 尾段是动态 id（uuid / 纯数字）时取前一段，避免搜到不可复现的个体 id
+  return /^[0-9a-f-]{16,}$|^\d+$/.test(last) ? `/${segs[segs.length - 2] ?? last}` : `/${last}`
+}
+const actionOptions = computed<ActionOption[]>(() => {
+  if (tab.value !== 'operation') return []
+  const map = new Map<string, ActionOption>()
+  for (const log of logs.value) {
+    const method = methodOf(log)
+    const label = actionLabelOf(log)
+    const key = method ? `${method}·${label}` : label
+    let opt = map.get(key)
+    if (!opt) {
+      const kw = method
+        ? pathDrillKeyword(log.path || '')
+        : String(log.action || label)
+      // label 兜底截断：语义映射未覆盖的原始 path 长达 60+ 字符，select option 撑爆卡头
+      const shown = label.length > 26 ? `${label.slice(0, 26)}…` : label
+      opt = { value: key, label: shown, keyword: kw, count: 0 }
+      map.set(key, opt)
+    }
+    opt.count++
+  }
+  return [...map.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+})
+/** 下拉选中态由 keyword 单源推导：keyword 恰好等于某动作的下钻词时高亮该动作，
+    手动改搜索框 / 点失败 TOP chip 后自动回落「全部动作」，不出现两处筛选各说各话 */
+const activeActionValue = computed(
+  () => actionOptions.value.find((a) => a.keyword && keyword.value.trim() === a.keyword)?.value ?? ''
+)
+function applyActionFilter(value: string) {
+  const opt = actionOptions.value.find((a) => a.value === value)
+  keyword.value = opt?.keyword ?? ''
+  void applyFilters()
 }
 
 const tabs = [
@@ -901,8 +969,10 @@ function exportCurrentPage() {
   margin: 0;
   padding: 10px 12px;
   border-radius: var(--mk-radius-sm);
-  background: #0d1420;
-  color: #8ba3c7;
+  /* 2026-10-05 token 化（原硬编码 #0d1420/#8ba3c7 恰为亮色值）：亮色零视觉差，
+     暗色自动归队 token 暗档，与执行日志页展开区同一套 code 表面 */
+  background: var(--mk-code-bg);
+  color: var(--mk-code-fg);
   font: 11px/1.6 var(--mk-mono);
   overflow: auto;
   max-height: 240px;
@@ -985,8 +1055,8 @@ html[data-theme='dark'] .log-method--head { background: #2d2d2f; color: var(--mk
 /* ================= 空态撑满主区剩余高度（P1-1，2026-09-27 走查「空态利用」）=================
    本页是 .mk-page--fill + .mk-card--fill 应用式布局：空态带 mk-empty--min 后若不按本页壳层
    覆写 --mk-empty-min-h，会用全局默认口径（100dvh - 230px）——本页卡内还有页签
-   切换行与筛选头两层，默认值会把空态撑出卡片导致底部裁切。走 BatchExperiments.vue
-   同款页面覆写口（mk-primitives.css 预留），按本页壳层实测逐项推导（1920×1080、无 zoom；
+   切换行与筛选头两层，默认值会把空态撑出卡片导致底部裁切。走 mk-primitives.css
+   预留的页面覆写口（--mk-empty-min-h），按本页壳层实测逐项推导（1920×1080、无 zoom；
    本页挂在 AdminConsole 壳层 .mshell__content 内滚动；2026-10-02 撤状态条后重算）：
      面包屑 .mshell__crumb         ~32（上下 7px 内边距 + 12px 微字号行高 ~18 + 1px 下边框）
      页面 padding-top               16（.mk-page--fill 的 --mk-space-4）
