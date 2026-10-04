@@ -13,17 +13,45 @@
       </template>
     </MkPageHead>
 
+    <!-- 账号构成带（2026-10-04 用户拍板教学组统一 buckets 形态）：真实用户 / 虚拟学习者 / 测试账号
+         三桶 = 同一整体（已加载账号）的互斥构成，份额条按占比；口径在值悬停披露。
+         数据 = live 域已加载行（后端总数在 liveUsersTotal，超上限截断时口径里注明） -->
+    <MkBuckets v-if="ppBuckets.length" label="账号构成" :items="ppBuckets" />
+
     <Users ref="usersRef" embedded />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
+import MkBuckets from '@/components/mk/MkBuckets.vue'
 import Users from './Users.vue'
+import { liveUsers, liveUsersTotal } from './live'
 
 const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
+
+/* 账号构成桶（2026-10-04 教学组统一 buckets）：真实 / 虚拟 / 测试 = 同一整体的互斥构成
+   （徽章同款互斥判据：虚拟 > 测试 > 其余真实）；管理员数作真实用户桶 foot（角色属真实域细分）。
+   管理员数是运营要看的角色分布，不单独立桶（角色与账号性质非同一整体，混桶=假比例）。 */
+const ppBuckets = computed(() => {
+  const rows = liveUsers.value
+  const total = rows.length
+  if (!total) return []
+  const virtual = rows.filter((u) => u.isVirtualLearner).length
+  const test = rows.filter((u) => !u.isVirtualLearner && u.isTestAccount).length
+  const realRows = rows.filter((u) => !u.isVirtualLearner && !u.isTestAccount)
+  const real = realRows.length
+  const admins = realRows.filter((u) => u.isAdmin).length
+  const pct = (v: number) => Math.round((v / total) * 100)
+  const calibre = `按已加载 ${total} 行统计（后端共 ${liveUsersTotal.value}）；虚拟 / 测试账号默认不入教学统计口径`
+  return [
+    { value: real, label: '真实用户', pct: pct(real), tone: 'var(--mk-blue)', valueTitle: calibre, foots: [{ text: `其中管理员 ${admins}` }] },
+    { value: virtual, label: '虚拟学习者', pct: pct(virtual), tone: 'var(--mk-amber)', valueTitle: calibre, foots: [{ text: '模拟数据账号' }] },
+    { value: test, label: '测试账号', pct: pct(test), tone: 'var(--mk-faint)', valueTitle: calibre, foots: [{ text: '统计口径默认排除' }] }
+  ]
+})
 
 const route = useRoute()
 const router = useRouter()

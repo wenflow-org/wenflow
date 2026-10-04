@@ -236,7 +236,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('分布卡「异常」badge 可点穿：失败/收尾失败/超时 状态多选筛选 toggle', async () => {
+  it('状态条「异常」meta-link 可点穿：失败/收尾失败/超时 状态多选筛选 toggle（2026-10-04 分布卡退役后迁此）', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -250,20 +250,20 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const abn = wrapper.find('.ts-badge-toggle');
+    const abn = wrapper.findAll('.mk-status__meta-link').find((b) => b.text().startsWith('异常'))!;
     expect(abn.text()).toBe('异常 2');
     expect(abn.attributes('aria-pressed')).toBe('false');
     await abn.trigger('click');
     await nextTick();
     expect(wrapper.findAll('tbody tr')).toHaveLength(2);
-    expect(wrapper.find('.ts-badge-toggle').attributes('aria-pressed')).toBe('true');
-    await wrapper.find('.ts-badge-toggle').trigger('click');
+    expect(wrapper.findAll('.mk-status__meta-link').find((b) => b.text().startsWith('异常'))!.attributes('aria-pressed')).toBe('true');
+    await wrapper.findAll('.mk-status__meta-link').find((b) => b.text().startsWith('异常'))!.trigger('click');
     await nextTick();
     expect(wrapper.findAll('tbody tr')).toHaveLength(3);
     wrapper.unmount();
   });
 
-  it('分布卡 legend：零值档折叠为「+N 个零值状态」（与段条滤零口径一致），title 披露档名', async () => {
+  it('分布卡退役（2026-10-04 教学组统一 buckets 构成带）：stageband 不再出现，构成带按收束语义归组', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -271,11 +271,14 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const legend = wrapper.findAll('.sbl');
-    // 10 档枚举中仅 失败/进行中 非零 + 1 行零值折叠提示
-    expect(legend).toHaveLength(3);
-    expect(legend[2].text()).toBe('+8 个零值状态');
-    expect(legend[2].attributes('title')).toContain('初始化中');
+    expect(wrapper.find('.stageband').exists()).toBe(false);
+    expect(wrapper.find('.buckets').exists()).toBe(true);
+    const labels = wrapper
+      .findAll('.buckets .bucket .bucket__l')
+      .filter((el) => !el.classes().includes('bucket__foot'))
+      .map((el) => el.text().trim());
+    // failed + active：进行中 1 / 已完成 0 / 异常终态 1 / 已废弃 0 / 完成率（零值桶如实显示）
+    expect(labels).toEqual(['进行中', '已完成', '异常终态', '已废弃', '完成率']);
     wrapper.unmount();
   });
 

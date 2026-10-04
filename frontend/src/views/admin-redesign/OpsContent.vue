@@ -33,30 +33,11 @@
          原型 renderPaths 无 KPI 板块，总数/里程碑/任务/已下线已单源住在状态条 meta）。
          embedded 时整卡隐藏（宿主状态条已承载四态计数）；stats 拉取失败或全零时
          整卡 v-if 静默隐藏，不留空卡 -->
-    <section v-if="!embedded && pathBandReady" class="mk-card">
-      <div class="mk-card__head">
-        <span class="mk-card__title">路径状态分布</span>
-        <!-- P2（2026-10-04 全站评审）：卡头「共 N 条」与「N 条已完成」badge 撤——总数住状态条、
-             分态数字住比例条悬停（title），本卡只做形态呈现不做第二处计数 -->
-        <span class="mk-card__meta">按状态聚合 · 悬停分段看各状态条数</span>
-      </div>
-      <div class="oc-bandcard__body">
-        <div class="stageband">
-          <span
-            v-for="seg in pathBandSegments"
-            :key="seg.key"
-            :style="{ width: seg.pct, background: seg.tone }"
-            :title="`${seg.name} · ${seg.n}`"
-          ></span>
-        </div>
-        <div class="stageband__legend">
-          <div v-for="seg in pathBand" :key="seg.key" class="sbl">
-            <span class="sbl__sw" :style="{ background: seg.tone }"></span>
-            <span class="sbl__name">{{ seg.name }}</span>
-          </div>
-        </div>
-      </div>
-    </section>
+    <!-- 状态构成带（2026-10-04 用户拍板教学组统一 buckets 形态，替代 stageband 分布卡）：
+         数据源 = adminLearningContentApi.getStats() 的 byStatus（服务端 group-by 全平台计数，
+         非本页 1000 条窗口推导）；文案复用 opsShared statusText；四枚举之外的取值归「其它」桶
+         （仅实际出现时追加）。直接落页面无卡壳，嵌入模式隐藏 -->
+    <MkBuckets v-if="!embedded && pathBandReady" label="学习路径状态构成" :items="lpBucketItems" />
 
     <!-- 筛选 + 列表（单行头部与教学会话/目标对话 tab 一致：pill 组 + 搜索 + 数据口径 + 列显隐） -->
     <div class="mk-card mk-card--fill">
@@ -272,6 +253,7 @@ import Pagination from './Pagination.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
+import MkBuckets from '@/components/mk/MkBuckets.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import { statusText, statusBadge } from './opsShared'
 
@@ -353,14 +335,20 @@ const pathBand = computed<PathBandEntry[]>(() => {
   return entries
 })
 const pathBandTotal = computed(() => pathBand.value.reduce((a, e) => a + e.n, 0))
-/* 段宽 = n / 合计（原型 distBand 口径，合计为 0 时按 1 兜底）；零值段不渲染 */
-const pathBandSegments = computed(() => {
+/* 状态构成桶（2026-10-04 用户拍板教学组统一 buckets 形态，替代 stageband 分布卡）：
+   值大字直出（原分段条把条数藏在悬停里的反面教材）；比例条 = 各状态占路径总数份额；
+   口径 = 服务端按状态 group-by 全平台计数（值悬停披露）。零值桶如实显示（如 已下线 0）。 */
+const lpBucketItems = computed(() => {
   const total = pathBandTotal.value || 1
-  return pathBand.value
-    .filter((e) => e.n > 0)
-    .map((e) => ({ ...e, pct: `${(e.n / total) * 100}%` }))
+  return pathBand.value.map((e) => ({
+    value: e.n,
+    label: e.name,
+    pct: Math.round((e.n / total) * 100),
+    tone: e.tone,
+    valueTitle: `${e.name} · ${e.n} 条 · 服务端按状态 group-by 全平台计数`
+  }))
 })
-/* stats 拉取失败（null）或状态合计为 0 → 整卡隐藏（v-if），不留空卡 */
+/* stats 拉取失败（null）或状态合计为 0 → 整带隐藏（v-if），不留空带 */
 const pathBandReady = computed(() => !!stats.value && pathBandTotal.value > 0)
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
@@ -622,8 +610,7 @@ defineExpose({ reload: () => void reload(true) })
 
 /* 结构详情抽屉已退役（2026-10-01 行点击改走 PathDetail 二级页）；本页只保留列表自身样式 */
 
-/* 状态分布条已升全局原语（mk-primitives .stageband/.sbl）；.oc-bandcard__body 保留页私有卡体 padding */
-.oc-bandcard__body { padding: 12px 16px 16px; }
+/* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页） */
 
 /* 4K：进度数字跟随全站节奏 */
 @media (min-width: 2000px) {

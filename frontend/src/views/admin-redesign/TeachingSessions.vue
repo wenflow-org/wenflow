@@ -34,6 +34,17 @@
         @click="toggleOnlyAdvisory"
       >有建议 {{ advisoryCount }}</button>
       <span class="mk-status__meta" :title="`终态（已完成 / 失败 / 超时 / 废弃 / 收尾失败）会话缺课后总结数；非终态缺失是过程态不计；最近 ${LIST_LIMIT} 条窗口计数`">缺总结 {{ missingWrapupCount }}</span>
+      <!-- 异常快捷筛选（2026-10-04 随分布卡退役迁入状态条，与 有建议 同族交互）：
+           点击 = 异常状态多选筛选（失败 / 收尾失败 / 超时），再点取消 -->
+      <button
+        v-if="abnormalSessionCount"
+        type="button"
+        class="mk-status__meta-link"
+        :class="{ 'mk-status__meta-link--on': abnormalOnly }"
+        :aria-pressed="abnormalOnly"
+        title="失败 / 收尾失败 / 超时 合计——需排查。点击只看异常会话（状态多选），再点取消"
+        @click="abnormalOnly = !abnormalOnly"
+      >异常 {{ abnormalSessionCount }}</button>
       <!-- 右侧快捷钮（原型 .statusbar__act「只看需关注」）：接页面既有「待关注」筛选，
            再点取消；纯导航，不新增数据口径 -->
       <span class="mk-status__actions">
@@ -48,62 +59,13 @@
       </span>
     </div>
 
-    <!-- 状态分布条（newui 原型 renderSessions「闭环阶段分布」卡同位移植）：distBand 结构 =
-         OpsContent 状态分布卡判例（stageband 五段条 + stageband__legend/sbl 逐行同构）。
-         原型五段按回合状态机 stage（开场澄清/教学回合/介入补强/检查点/收尾·产出）聚合，
-         但教学会话列表/后端均无 stage 字段——字段没有的不硬造，改按现有 status 枚举聚合
-         （文案复用 statusOptions，不另造词；未知取值归「其它」档），卡头 meta 如实注明口径。
-         卡头右组 pill 位（原型 card__tools「N 个介入中」）= 现有「异常」warn 徽章（失败 /
-         收尾失败 / 超时合计，需排查）；介入中需 stage 字段，同样不硬造。
+    <!-- 状态构成带（2026-10-04 用户拍板教学组统一 buckets 形态，替代 stageband 分布卡）：
+         十状态按收束语义归四组 + 完成率（镜像目标对话四桶判例），组内合并口径在桶 foot 披露，
+         窗口口径在值悬停披露；枚举外取值归「其它」桶（仅实际出现时追加）。
          数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口），非后端全量口径。
-         embedded 时整卡隐藏（宿主状态条承载域计数）；无数据/加载失败不留空卡 -->
-    <section v-if="!embedded && rows.length" class="mk-card">
-      <div class="mk-card__head">
-        <span class="mk-card__title">会话状态分布</span>
-        <span class="mk-card__meta">按状态聚合 · 最近 {{ rows.length }} 条（加载窗口，非全量）</span>
-        <div class="mk-card__head-right">
-          <!-- 异常 badge 可点穿（评审 §5）：点击 = 状态多选筛选（失败 / 收尾失败 / 超时），再点取消 -->
-          <button
-            v-if="abnormalSessionCount"
-            type="button"
-            class="mk-badge mk-badge--warn ts-badge-toggle"
-            :class="{ 'ts-badge-toggle--on': abnormalOnly }"
-            :aria-pressed="abnormalOnly"
-            title="失败 / 收尾失败 / 超时 合计——需排查。点击只看异常会话（状态多选），再点取消"
-            @click="abnormalOnly = !abnormalOnly"
-          >异常 {{ abnormalSessionCount }}</button>
-        </div>
-      </div>
-      <div class="ts-bandcard__body">
-        <div class="stageband">
-          <span
-            v-for="seg in statusBandSegments"
-            :key="seg.key"
-            :style="{ width: seg.pct, background: seg.tone }"
-            :title="`${seg.name} · ${seg.n}`"
-          ></span>
-        </div>
-        <div class="stageband__legend">
-          <!-- 枚举内档位可点 = 状态筛选 toggle（与工具条状态 chips 同源）；「其它」档无对应筛选项不可点。
-               零值档不渲染（与段条已滤零的口径一致），折成一行「+N 个零值状态」提示（title 披露档名） -->
-          <component
-            :is="seg.clickable ? 'button' : 'div'"
-            v-for="seg in statusBandVisible"
-            :key="seg.key"
-            :type="seg.clickable ? 'button' : undefined"
-            class="sbl"
-            :class="{ 'sbl--link': seg.clickable, 'sbl--on': seg.clickable && statusFilter === seg.key }"
-            :title="seg.clickable ? `点击${statusFilter === seg.key ? '取消筛选' : '筛选'}「${seg.name}」` : `${seg.name} · ${seg.n}`"
-            @click="seg.clickable ? toggleStatusFilter(seg.key) : undefined"
-          >
-            <span class="sbl__sw" :style="{ background: seg.tone }"></span>
-            <span class="sbl__name">{{ seg.name }}</span>
-            <span class="sbl__n">{{ seg.n }}</span>
-          </component>
-          <div v-if="zeroBandCount" class="sbl" :title="`零值档未列出：${zeroBandNames}`">+{{ zeroBandCount }} 个零值状态</div>
-        </div>
-      </div>
-    </section>
+         细粒度单状态筛选保留在工具条状态 chips（原分布卡 legend 点击筛选退役）；
+         embedded 时隐藏（宿主状态条承载域计数）；无数据不留空带 -->
+    <MkBuckets v-if="!embedded && rows.length" label="会话状态构成" :items="tsBucketItems" />
 
     <!-- 深链未命中提示：?session= 存在但当前列表（最近 LIST_LIMIT 条）中找不到 -->
     <div v-if="deepLinkMiss" class="mk-alert" role="alert">
@@ -341,6 +303,7 @@ import MkCols from '@/components/mk/MkCols.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
+import MkBuckets from '@/components/mk/MkBuckets.vue'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
     （原 count/stats 上报链随合并宿主退役，2026-10-02 撤页头 KPI 区时一并清除） */
@@ -613,64 +576,48 @@ const statusOptions = [
   { value: 'discarded', label: '已废弃' }
 ]
 
-/* ===== 状态分布条（newui 原型「闭环阶段分布」stageband 移植）=====
-   数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口）按 status 聚合；
-   文案复用上方 statusOptions（不另造词）。tone 与表格状态徽章同语义：
-   过程态（初始化/进行中/收尾中）蓝、完成绿、失败族（失败/收尾失败）红、
-   超时/已被替代琥珀、暂停/废弃中性灰；枚举之外的取值归「其它」档（灰）。 */
-const STATUS_BAND_TONE: Record<string, string> = {
-  initializing: 'var(--mk-blue)',
-  active: 'var(--mk-blue)',
-  finalizing: 'var(--mk-blue)',
-  completed: 'var(--mk-green)',
-  failed: 'var(--mk-red)',
-  finalization_failed: 'var(--mk-red)',
-  timeout: 'var(--mk-amber)',
-  superseded: 'var(--mk-amber)',
-  paused: 'var(--mk-faint)',
-  discarded: 'var(--mk-faint)'
-}
-interface StatusBandEntry { key: string; name: string; n: number; tone: string; clickable: boolean }
-const statusBand = computed<StatusBandEntry[]>(() => {
-  const counts = new Map<string, number>()
-  for (const r of rows.value) counts.set(r.status, (counts.get(r.status) || 0) + 1)
-  const known = new Set(statusOptions.map((s) => s.value))
-  const entries: StatusBandEntry[] = statusOptions.map((s) => ({
-    key: s.value,
-    name: s.label,
-    n: counts.get(s.value) || 0,
-    tone: STATUS_BAND_TONE[s.value] || 'var(--mk-faint)',
-    clickable: true
-  }))
-  /* 「其它」档：仅枚举外取值实际出现时追加（无对应筛选项 → 不可点） */
-  let other = 0
-  for (const [k, n] of counts) if (!known.has(k)) other += n
-  if (other > 0) entries.push({ key: 'other', name: '其它', n: other, tone: 'var(--mk-faint)', clickable: false })
-  return entries
-})
-/* legend 零值档折叠（P2）：只渲染非零档（与段条已滤零一致），零值折成「+N 个零值状态」提示 */
-const statusBandVisible = computed(() => statusBand.value.filter((e) => e.n > 0))
-const zeroBandEntries = computed(() => statusBand.value.filter((e) => e.n === 0))
-const zeroBandCount = computed(() => zeroBandEntries.value.length)
-const zeroBandNames = computed(() => zeroBandEntries.value.map((e) => e.name).join('、'))
-/* 段宽 = n / 合计（原型 distBand 口径，合计为 0 时按 1 兜底）；零值段不渲染 */
-const statusBandSegments = computed(() => {
-  const total = statusBand.value.reduce((a, e) => a + e.n, 0) || 1
-  return statusBand.value
-    .filter((e) => e.n > 0)
-    .map((e) => ({ ...e, pct: `${(e.n / total) * 100}%` }))
-})
 /* 卡头异常 badge：失败/收尾失败/超时合计（与进度列中断态、时间线失败/超时的排查口径一致） */
 const ABNORMAL_STATUSES = new Set(['failed', 'finalization_failed', 'timeout'])
 const abnormalSessionCount = computed(() =>
   rows.value.filter((r) => ABNORMAL_STATUSES.has(r.status)).length
 )
-/* 异常 badge 可点穿（评审 §5）：点击 = 异常状态多选筛选（与单选 statusFilter 叠加为 AND） */
+/* 异常 badge 可点穿（评审 §5）：点击 = 异常状态多选筛选（与单选 statusFilter 叠加为 AND）；
+   2026-10-04 随分布卡退役迁入状态条 meta-link（与 有建议 同族交互） */
 const abnormalOnly = ref(false)
-/* legend 可点档：点击 = 状态筛选 toggle（与表头状态下拉、清除筛选同一 statusFilter） */
-function toggleStatusFilter(key: string) {
-  statusFilter.value = statusFilter.value === key ? '' : key
-}
+/* 状态构成桶（2026-10-04 用户拍板教学组统一 buckets 形态，替代 stageband 分布卡）：
+   十状态按收束语义归四组 + 完成率（镜像目标对话四桶判例），组内合并口径在桶 foot 披露，
+   窗口口径在值悬停披露；枚举外取值归「其它」桶（仅实际出现时追加）。
+   数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口），非后端全量口径；
+   比例条 = 各组占窗口行数份额（同属一个整体，非假比例）。 */
+const tsBucketItems = computed(() => {
+  const total = rows.value.length || 1
+  const cnt = (pred: (s: string) => boolean) => rows.value.filter((r) => pred(r.status)).length
+  const running = cnt((s) => s === 'initializing' || s === 'active' || s === 'paused' || s === 'finalizing')
+  const completed = cnt((s) => s === 'completed')
+  const abnormal = cnt((s) => ABNORMAL_STATUSES.has(s))
+  const retired = cnt((s) => s === 'discarded' || s === 'superseded')
+  const known = new Set(statusOptions.map((s) => s.value))
+  const other = cnt((s) => !known.has(s))
+  const pct = (v: number) => Math.round((v / total) * 100)
+  const winTitle = `按已加载 ${rows.value.length} 条窗口聚合（最近 ${LIST_LIMIT} 条上限），非后端全量口径`
+  /* value 联合类型：状态桶为计数、完成率桶为百分比串 */
+  const items: Array<{ value: string | number; label: string; pct: number; tone: string; valueTitle: string; foots: { text: string }[] }> = [
+    { value: running, label: '进行中', pct: pct(running), tone: 'var(--mk-blue)', valueTitle: winTitle, foots: [{ text: '含初始化 / 暂停 / 收尾中' }] },
+    { value: completed, label: '已完成', pct: pct(completed), tone: 'var(--mk-green)', valueTitle: winTitle, foots: [{ text: '终态' }] },
+    { value: abnormal, label: '异常终态', pct: pct(abnormal), tone: 'var(--mk-red)', valueTitle: winTitle, foots: [{ text: '失败 / 超时 / 收尾失败合计' }] },
+    { value: retired, label: '已废弃', pct: pct(retired), tone: 'var(--mk-faint)', valueTitle: winTitle, foots: [{ text: '含已被替代' }] }
+  ]
+  if (other > 0) items.push({ value: other, label: '其它', pct: pct(other), tone: 'var(--mk-faint)', valueTitle: winTitle, foots: [{ text: '枚举外取值' }] })
+  items.push({
+    value: `${((completed / total) * 100).toFixed(2)}%`,
+    label: '完成率',
+    pct: pct(completed),
+    tone: 'var(--mk-blue)',
+    valueTitle: winTitle,
+    foots: [{ text: `口径：已完成 ÷ 窗口 ${rows.value.length} 条` }]
+  })
+  return items
+})
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
 const { toggle: toggleTsSort, sortState: tsSortState, sortRows: sortTsRows, sortKey: tsSortKey, sortDir: tsSortDir } = useTableSort<Row>({
@@ -882,8 +829,7 @@ defineExpose({ refreshNow })
   border-color: color-mix(in srgb, var(--mk-blue) 44%, var(--mk-line));
   color: var(--mk-pill-active-fg);
 }/* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字） */
-.ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }/* 可点异常徽章（button 形态的 .mk-badge）：reset 原生按钮外观保徽章样，选中态描边（token 复用，同 .mk-pill--active 语义） */
-.ts-badge-toggle { border: 0; cursor: pointer; font: inherit; }.ts-badge-toggle--on { outline: 2px solid var(--mk-blue); outline-offset: 1px; }/* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
+.ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }/* 可点异常徽章已迁状态条 meta-link（2026-10-04 分布卡退役，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
    badge 本体 inline-flex，截断由内层文本节点承载（flex 项 overflow!=visible → min-width 归 0 可收缩） */
 .ts-adv-badge { margin-left: 4px; max-width: 168px; }.ts-adv-badge__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }/* 加载失败错误条 */
 .ts-error {
@@ -897,8 +843,8 @@ defineExpose({ refreshNow })
   color: var(--mk-red);
   font-size: var(--mk-fs-micro);
   font-weight: 600;
-}/* 状态分布条样式已升全局原语（mk-primitives .stageband/.sbl，2026-10-03 三页拷贝收敛）。
-   .ts-bandcard__body 保留页私有（卡体 padding）。4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
+}/* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页）。
+   4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {
 }/* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */
 @media (min-width: 3600px) {

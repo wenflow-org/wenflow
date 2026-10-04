@@ -20,39 +20,13 @@
          「进行中」桶 foot 携停滞信号（窗口内 active 且超 7 天未更新）；
          「已取消」桶 foot 写明「取消 / 中断 / 回收合计」口径（= 总数 − 进行中 − 已完成，
          含 abandoned / failed，不再是纯「用户取消」）。 -->
-    <section v-if="statsError" class="buckets" aria-label="目标对话状态构成">
-      <div class="bucket">
-        <span class="bucket__l">统计获取失败</span>
-        <span class="bucket__l bucket__foot">状态构成（进行中 / 已完成 / 已取消 / 完成率）暂不可用 · <button type="button" class="mk-link" @click="load(true)">重试</button></span>
-      </div>
-    </section>
-    <section v-else-if="stats && stats.total > 0" class="buckets" aria-label="目标对话状态构成">
-      <div class="bucket">
-        <span class="bucket__v">{{ stats.active }}</span>
-        <span class="bucket__l">进行中</span>
-        <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcActivePct + '%', background: 'var(--mk-blue)' }"></i></span>
-        <span class="bucket__l bucket__foot">澄清中或待确认</span>
-        <span v-if="rows.length" class="bucket__l bucket__foot" :title="`停滞口径：状态「进行中」且最近 ${STALLED_DAYS} 天无更新（updatedAt）；按最近 ${LIST_LIMIT} 条加载窗口估算，非全量`">其中 {{ staleActiveCount }} 条超 {{ STALLED_DAYS }} 天未更新</span>
-      </div>
-      <div class="bucket">
-        <span class="bucket__v">{{ stats.completed }}</span>
-        <span class="bucket__l">已完成</span>
-        <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCompletedPct + '%', background: 'var(--mk-green)' }"></i></span>
-        <span class="bucket__l bucket__foot">已生成学习路径</span>
-      </div>
-      <div class="bucket">
-        <span class="bucket__v">{{ gcCancelledCount }}</span>
-        <span class="bucket__l">已取消</span>
-        <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCancelledPct + '%', background: 'var(--mk-red)' }"></i></span>
-        <span class="bucket__l bucket__foot" title="已取消 = 总数 − 进行中 − 已完成：含用户主动取消（cancelled）、失败中断（failed）与无心跳自动回收（abandoned），非全部用户主动取消">取消 / 中断 / 回收合计</span>
-      </div>
-      <div class="bucket">
-        <span class="bucket__v">{{ stats.completionRate }}%</span>
-        <span class="bucket__l">完成率</span>
-        <span class="bucket__bar" aria-hidden="true"><i :style="{ width: gcCompletedPct + '%', background: 'var(--mk-blue)' }"></i></span>
-        <span class="bucket__l bucket__foot" title="完成率 = 已完成 ÷ 总数；已完成分子见左桶，不在两处复读">口径：已完成 ÷ 总数 {{ stats.total }}</span>
-      </div>
-    </section>
+    <MkBuckets
+      v-if="statsError"
+      label="目标对话状态构成"
+      error="状态构成（进行中 / 已完成 / 已取消 / 完成率）暂不可用"
+      @retry="load(true)"
+    />
+    <MkBuckets v-else-if="stats && stats.total > 0" label="目标对话状态构成" :items="gcBucketItems" />
 
     <!-- ===== 目标对话列表 ===== -->
     <MkEmptyState
@@ -260,6 +234,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkBuckets from '@/components/mk/MkBuckets.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { useTableSort } from './useTableSort'
@@ -338,6 +313,37 @@ function gcStatusSeg(n: number): number {
 const gcActivePct = computed(() => gcStatusSeg(stats.value?.active ?? 0))
 const gcCompletedPct = computed(() => Math.max(0, Math.min(100, Math.round(Number(stats.value?.completionRate ?? 0)))))
 const gcCancelledPct = computed(() => gcStatusSeg(gcCancelledCount.value))
+/* 桶组数据（2026-10-04 抽共享原语 MkBuckets，教学组统一形态）：模板收敛为数据驱动；
+   四桶口径披露原样随桶迁移（停滞口径 / 已取消口径 / 完成率口径），比例条 = 占总数份额 */
+const gcBucketItems = computed(() => [
+  {
+    value: stats.value?.active ?? 0,
+    label: '进行中',
+    pct: gcActivePct.value,
+    tone: 'var(--mk-blue)',
+    foots: [
+      { text: '澄清中或待确认' },
+      ...(rows.value.length
+        ? [{ text: `其中 ${staleActiveCount.value} 条超 ${STALLED_DAYS} 天未更新`, title: `停滞口径：状态「进行中」且最近 ${STALLED_DAYS} 天无更新（updatedAt）；按最近 ${LIST_LIMIT} 条加载窗口估算，非全量` }]
+        : [])
+    ]
+  },
+  { value: stats.value?.completed ?? 0, label: '已完成', pct: gcCompletedPct.value, tone: 'var(--mk-green)', foots: [{ text: '已生成学习路径' }] },
+  {
+    value: gcCancelledCount.value,
+    label: '已取消',
+    pct: gcCancelledPct.value,
+    tone: 'var(--mk-red)',
+    foots: [{ text: '取消 / 中断 / 回收合计', title: '已取消 = 总数 − 进行中 − 已完成：含用户主动取消（cancelled）、失败中断（failed）与无心跳自动回收（abandoned），非全部用户主动取消' }]
+  },
+  {
+    value: `${stats.value?.completionRate ?? 0}%`,
+    label: '完成率',
+    pct: gcCompletedPct.value,
+    tone: 'var(--mk-blue)',
+    foots: [{ text: `口径：已完成 ÷ 总数 ${stats.value?.total ?? 0}`, title: '完成率 = 已完成 ÷ 总数；已完成分子见左桶，不在两处复读' }]
+  }
+])
 const keyword = ref('')
 const statusFilter = ref('')
 
@@ -676,11 +682,8 @@ onMounted(() => {
 /* 用户格 min-width：本表为自动布局（无 colgroup），补「澄清进度/约束条件」两列后
    该列会被内容多的列挤到 ~90px（2026-10-02 视觉核对实测），名字/邮箱全截断——
    给内容格兜底宽度，压缩由可换行的摘要/约束列吸收 */
-.gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }/* 状态桶组（newui renderGoals/bucketCard 原型移植；token 映射：--sp-3→--mk-space-3、
-   --line→--mk-line、--surface→--mk-surface、--r-lg→--mk-radius-lg、--surface-3→--mk-surface-3、
-   --muted→--mk-muted、--fs-micro→--mk-fs-micro）。桶组直接落页面（原型形态），无内边距。 */
-.buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: var(--mk-space-3); }.bucket { display: grid; gap: 3px; padding: 13px 15px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-lg); background: var(--mk-surface); }.bucket__v { font-size: 28px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }.bucket__l { font-size: var(--mk-fs-micro); color: var(--mk-muted); }.bucket__bar { height: 4px; border-radius: 999px; background: var(--mk-surface-3); overflow: hidden; margin-top: 5px; }.bucket__bar > i { display: block; height: 100%; border-radius: 999px; }/* foot（原型 bucketCard 第 5 参 inline style 的类化）：弱化说明文字 */
-.bucket__foot { color: var(--mk-faint); }.gc-user .mk-cell-main { min-width: 0; flex: 1; }.gc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }/* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
+.gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }/* 状态桶组样式已提升共享原语（components/mk/MkBuckets.vue，2026-10-04 用户拍板教学组统一形态；口径脚注/失败态一并入组件） */
+.gc-user .mk-cell-main { min-width: 0; flex: 1; }.gc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }/* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
 .gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }.gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }.gc-stage-cell__dots { display: inline-flex; gap: 3px; }.gc-stage-cell__dot {
   width: 6px;
   height: 6px;
