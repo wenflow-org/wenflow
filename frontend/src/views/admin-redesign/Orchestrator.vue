@@ -129,8 +129,8 @@
                   <span v-if="h.unresolvedN" class="mk-badge mk-badge--sm mk-badge--warn" title="该交接两端阶段存在未解析步骤 · 点击切「字段旅程」定位" @click="goUnresolved()">未解析 {{ h.unresolvedN }}</span>
                   <span v-if="h.driftN" class="mk-badge mk-badge--sm mk-badge--bad" title="该交接两端 Agent 命中 W4 core 哈希漂移名单 · 点击跳健康中心" @click="goHashDrift()">哈希漂移 {{ h.driftN }}</span>
                 </td>
-                <td class="mono">{{ h.fromAgent }}</td>
-                <td class="mono">{{ h.toAgent }}</td>
+                <td class="mono orch-handoff__agent">{{ h.fromAgent }}</td>
+                <td class="mono orch-handoff__agent">{{ h.toAgent }}</td>
                 <td class="orch-handoff__fields">
                   <!-- 点号长串 → 徽章列表（2026-10-03 反馈「字段密集堆叠」）：7 个键名连成
                        一句独吞 65% 列宽，键名边界只能靠 · 猜；逐枚徽章可数可扫，列宽随之收回 -->
@@ -746,6 +746,11 @@ const govMetaTitle = computed(() =>
 .orch-handoff__pair .mk-badge { margin-left: 6px; cursor: pointer; }
 /* 传递字段 = 逐枚徽章（mk-badge--sm），格内 flex 换行；不再用点号长串（独吞 65% 列宽） */
 .orch-handoff__fields { white-space: normal; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+/* P2-12（设计评审 4.2）：上/下游 Agent 列仅 115px，simulation-agent 词中断成 simulatio/n-agent
+   （body 全局 overflow-wrap:anywhere 所致）。两列回 nowrap 单行，并回 overflow-wrap:normal
+   让长词 min-content 恢复整词宽度——auto 布局才能把列宽增量分给「传递字段」徽章换行列，
+   不溢出容器（本表无 fixed 布局 / colgroup，无需调列宽比例）。 */
+.orch-handoff__agent { white-space: nowrap; overflow-wrap: normal; }
 /* 字段路由：卡头 + 工具条吸顶，仅表格区内滚（.frt__scroll 自带 .mk-table-scroll 横向滚动） */
 .orch-routing .frt { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
 .orch-routing .frt__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }

@@ -92,7 +92,7 @@
                   <span class="skd-step__n">{{ i + 1 }}</span>{{ n }}
                 </div>
               </div>
-              <p v-else class="skd-none">core YAML 未声明 stateMachine / states 字段，暂无回合状态机数据。</p>
+              <p v-else class="skd-none" title="core YAML 未声明 stateMachine / states 字段">该 Skill 未声明回合状态机。</p>
             </div>
           </section>
           <div class="skd-grid">
@@ -105,7 +105,7 @@
                 <div v-if="coreTerminations.length" class="skd-ranklist">
                   <div v-for="(t, i) in coreTerminations" :key="`${t}-${i}`" class="skd-rankrow">{{ t }}</div>
                 </div>
-                <p v-else class="skd-none">core YAML 未声明 termination / limits 字段，暂无终止条件。</p>
+                <p v-else class="skd-none" title="core YAML 未声明 termination / limits 字段">该 Skill 未声明终止条件。</p>
               </div>
             </section>
             <section class="mk-card">
@@ -135,9 +135,10 @@
               <div class="skd-pad">
                 <textarea v-model="trialInput" class="mk-input mono skd-ta" rows="7" spellcheck="false" aria-label="样例输入" placeholder='{"input": "…"}'></textarea>
                 <div class="skd-ta-foot">
+                  <!-- P3-23（设计评审）：「尚未试跑」全页签只在此脚注说一次（含入口指引） -->
                   <span class="skd-none">
                     <template v-if="trialResult">上次试跑 {{ trialResult.success ? '成功' : '失败' }}<template v-if="trialResult.duration != null"> · {{ fmtMs(trialResult.duration) }}</template></template>
-                    <template v-else>尚未试跑</template>
+                    <template v-else>尚未试跑——输入 JSON 点「试跑」后，输出与执行链路在此展示</template>
                   </span>
                   <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="trialRunning" @click="runTrial">
                     {{ trialRunning ? '运行中…' : '试跑' }}
@@ -159,7 +160,9 @@
                   <span class="skd-vrow__desc skd-vrow__desc--strong" :title="s.label">{{ s.label }}</span>
                   <span class="mono skd-vrow__type">{{ s.ms != null ? `${s.ms} ms` : '—' }}</span>
                 </div>
-                <p v-if="!trialSteps.length" class="skd-none">{{ trialResult ? '本次试跑仅返回最终输出；逐步执行链路等待后端下发（testSkill 暂只回最终输出）。' : '试跑后展示执行链路。' }}</p>
+                <!-- P3-23：未跑态显统一占位灰块（成句的「尚未试跑」已收敛到样例输入卡脚注）；
+                     跑过但无逐步链路的说明保留（与占位态不同事实） -->
+                <div v-if="!trialSteps.length" class="skd-tbd" :title="trialResult ? '本次试跑仅返回最终输出' : '尚未试跑'">{{ trialResult ? '本次试跑仅返回最终输出；逐步执行链路等待后端下发（testSkill 暂只回最终输出）。' : '—' }}</div>
               </div>
             </section>
           </div>
@@ -170,7 +173,9 @@
                 <span v-if="trialResult" class="mk-badge" :class="trialResult.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ trialResult.success ? '成功' : '失败' }}</span>
               </div>
               <div class="skd-pad">
-                <pre class="skd-code skd-code--tall">{{ trialOutputText || '尚无试跑结果：在左侧输入 JSON 后点「试跑」。' }}</pre>
+                <!-- P3-23：未跑态显统一占位灰块（成句的「尚无试跑结果」已收敛到样例输入卡脚注） -->
+                <pre v-if="trialOutputText" class="skd-code skd-code--tall">{{ trialOutputText }}</pre>
+                <div v-else class="skd-tbd" :title="trialResult ? '本次试跑未返回输出' : '尚未试跑'">—</div>
               </div>
             </section>
             <!-- 试跑对比：原型 renderSkillDetail 2338-2341（meterrow 维度分）；有评分才渲染 -->
@@ -413,7 +418,7 @@
                 <div class="mk-facts">
                   <div><span>Skill ID</span><strong class="mono" :title="view.id">{{ view.id }}</strong></div>
                   <div><span>归属 Agent</span><strong>{{ view.agentName || view.agentId || '—' }}</strong></div>
-                  <div><span>类别</span><strong>{{ view.category }}</strong></div>
+                  <div><span>类别</span><strong :title="`类别枚举：${view.category}`">{{ categoryText(view.category) }}</strong></div>
                   <div v-if="coreFilePath"><span>核心文件</span><strong class="mono" :title="coreFilePath">{{ coreFilePath }}</strong></div>
                   <div><span>统计口径</span><strong>{{ statsNote || '—' }}</strong></div>
                 </div>
@@ -429,9 +434,9 @@
                 <div v-if="coreDeps.length" class="skd-chips">
                   <span v-for="d in coreDeps" :key="d" class="mk-badge mk-badge--muted mono" :title="d">{{ d }}</span>
                 </div>
-                <p v-else class="skd-none">core YAML 未声明输入依赖（inputs 的 skill:/sandbox: 引用），暂无依赖清单。</p>
+                <p v-else class="skd-none" title="core YAML 未声明 inputs 的 skill:/sandbox: 引用">该 Skill 未声明输入依赖。</p>
                 <!-- 四段发布流（草稿/评审/灰度/回滚）后端无阶段状态接口 → 空态；本系统发布链见设计页「协议」页签 -->
-                <p class="skd-none">发布流（草稿 / 评审 / 灰度 / 回滚）阶段状态后端未提供；本系统发布链为「保存并编译 → 发布」。</p>
+                <p class="skd-none" title="后端未提供草稿 / 评审 / 灰度 / 回滚阶段状态接口">发布链：保存并编译 → 发布（暂无草稿 / 评审 / 灰度阶段状态）。</p>
                 <div class="skd-actions">
                   <button type="button" class="mk-btn mk-btn--primary" @click="goDesign('engineering')">打开工程视图 →</button>
                 </div>
@@ -565,7 +570,9 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { subPage, closeSubPage, setSubPageLabel, skillStatOf, recentSpansOf, openTrace } from './store'
 import { liveSkillProfiles, liveExtraProfiles, errMsg, liveSkillStatsRange } from './live'
-import { categoryText } from './statusText'
+/* P2-15（设计评审）：版本状态走共享字典（与设计页 versions-tab 同域同词：ARCHIVED→已归档），
+   删本页本地 versionStatusText（只映射 ACTIVE/DRAFT，ARCHIVED 直出英文） */
+import { categoryText, versionStatusText } from './statusText'
 import { successRateText, successRateTone } from './rate-utils'
 import {
   adminSkillsApi,
@@ -840,7 +847,7 @@ const versionsStateText = computed(() => {
   // 列表是「最近 12 条」截断窗口（下方 slice(0, 12)）：「共 N 个」冒充全量 → 改窗口词
   return `最近 ${versions.value.length} 个`
 })
-const versionStatusText = (s: string) => (s === 'ACTIVE' ? '生效' : s === 'DRAFT' ? '草稿' : s || '—')
+/* versionStatusText 改用 statusText.ts 共享字典（P2-15）：本地函数已删，历史字面量在字典补键对齐 */
 /** 原型 versions 表含 日期/作者/变更说明（index.html 2344-2346）；三项均空则省略列 */
 const hasVersionMeta = computed(() => versions.value.some((v) => v.createdAt || v.createdBy || v.description))
 const fmtDate = (v?: string) => {
@@ -1552,6 +1559,18 @@ useEscape(
 .skd-note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .skd-note--flat { padding: 0; }
 .skd-none { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+/* P3-23（设计评审）：试跑页签未跑态收敛——「尚未试跑」只在样例输入卡脚注说一次，
+   执行链路 / 样例输出两卡未跑时显统一占位灰块（不再各自成句复读） */
+.skd-tbd {
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
+}
 
 /* ===== Prompt 弹层（原型 modal--wide；面板宽走 .mk-modal__panel--wide 原语） ===== */
 .skd-pm__body { display: grid; gap: 14px; }

@@ -8,7 +8,10 @@
            行内续写（不新增第三行），整行排不下时靠日期行的省略号截断 -->
       <div v-if="!loadError" class="greet">
         <div class="greet__main">
-          <strong>{{ greetHeadline }}</strong>
+          <!-- P3-39（设计评审）：视觉主标题原是无语义 strong，h1 挂在今日行动卡 14px 任务标题上
+               （大纲与视觉权重倒挂）——greet 升 h1（读屏大纲恢复页面结构，样式不变）、
+               今日行动卡 action__title 降 h2 -->
+          <h1 class="greet__headline">{{ greetHeadline }}</h1>
           <span class="greet__date">{{ dateText }}<template v-if="greetSub && !tipVisible"> · <span class="greet__sub">{{ greetSub }}</span></template></span>
         </div>
         <!-- 连续学习天数的唯一出处：0 态也给一句话，不整块消失（2026-09-25 去重：
@@ -51,7 +54,7 @@
           <section v-if="pageState === 'active'" class="card action">
             <template v-if="resting">
               <div class="action__eyebrow action__eyebrow--rest"><span>今天休息</span></div>
-              <h1 class="action__title">给自己放个小假</h1>
+              <h2 class="action__title">给自己放个小假</h2>
               <p class="action__desc">想回来的时候，任务还在这里等你。</p>
               <div class="action__footer">
                 <button type="button" class="btn-primary" @click="setResting(false)">恢复学习</button>
@@ -65,7 +68,7 @@
                 <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
                 <span class="action__tag">阶段 {{ stageInfo }} · {{ todayTask?.kind || '任务' }}</span>
               </div>
-              <h1 class="action__title">{{ todayTask?.title || '今天没有待办任务' }}</h1>
+              <h2 class="action__title">{{ todayTask?.title || '今天没有待办任务' }}</h2>
               <p v-if="actionDesc" class="action__desc">{{ actionDesc }}</p>
               <p v-if="actionReason" class="action__reason">
                 <Sparkles :size="13" :stroke-width="1.75" />
@@ -113,7 +116,7 @@
               <span>需要先处理</span>
               <span class="action__from">路径「{{ primaryPath?.title }}」</span>
             </div>
-            <h1 class="action__title">这版路径没生成出来，重试一般能好</h1>
+            <h2 class="action__title">这版路径没生成出来，重试一般能好</h2>
             <p class="action__desc">{{ primaryPath?.errorText || '生成失败。你的目标和已确认信息都保留着，不会丢。' }}</p>
             <div class="action__meta">
               <span class="tag tag--red">{{ primaryPath?.retryType === 'stage_design' ? '阶段任务失败' : '主结构失败' }}</span>
@@ -135,7 +138,7 @@
               <span>路径生成中</span>
               <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
             </div>
-            <h1 class="action__title">路径正在生成，稍等一下</h1>
+            <h2 class="action__title">路径正在生成，稍等一下</h2>
             <p class="action__desc">生成一般需要 1-2 分钟，这一页会自动检查进度，完成后直接出现今日行动。你也可以先去别的页面看看。</p>
             <div class="action__meta">
               <span class="tag tag--cyan">正在生成</span>
@@ -156,7 +159,7 @@
           <section v-else class="card action action--empty">
             <!-- 图标盘（原型 wf-empty__art 形态）：66px 圆角盘 + 30px 图标，卡片其余结构保留 -->
             <span class="action__art" aria-hidden="true"><Box :size="30" :stroke-width="1.6" /></span>
-            <h1 class="action__title">用 2 分钟，理出一条能执行的路径</h1>
+            <h2 class="action__title">用 2 分钟，理出一条能执行的路径</h2>
             <p class="action__desc">{{ guidanceEmptyText }}</p>
             <div class="action__examples">
               <router-link v-for="e in examples" :key="e.text" :to="{ path: '/goal-conversation', query: { seed: e.seed } }" class="example">{{ e.text }}</router-link>
@@ -861,11 +864,14 @@ const nearestAchievement = computed(() => {
   if (!locked.length) return null;
   const nearest = locked.sort((a, b) => (b.progress?.percentage ?? 0) - (a.progress?.percentage ?? 0))[0];
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toString());
+  /* P3-38（设计评审）：「KTL达到7.0（4.6/7）」目标与进度无缝拼接，读作两个互相矛盾的 KTL 值——
+     补衔接词分家：「目标 <描述> · 进度 c/t」（description 缺失时只说进度） */
+  const prog = `${fmt(nearest.progress?.current ?? 0)}/${fmt(nearest.progress?.total ?? 1)}`;
   return {
     iconUrl: typeof nearest.icon === 'string' && nearest.icon.startsWith('http') ? nearest.icon : '',
     name: nearest.name,
     achieved: (nearest.progress?.current ?? 0) >= (nearest.progress?.total ?? 1),
-    hint: `${nearest.description}（${fmt(nearest.progress?.current ?? 0)}/${fmt(nearest.progress?.total ?? 1)}）`
+    hint: nearest.description ? `目标 ${nearest.description} · 进度 ${prog}` : `进度 ${prog}`
   };
 });
 
@@ -1183,7 +1189,8 @@ onMounted(loadAll);
 /* min-width: 0：让日期行的省略号接管「排不下」——副标 inline 续写在后面，
    整行 nowrap，排不下时截断而不是把 streak 药丸顶出首屏 */
 .greet__main { display: grid; gap: 3px; min-width: 0; }
-.greet__main strong { font-size: 21px; font-weight: 800; letter-spacing: -0.01em; color: var(--ink); }
+/* 视觉主标题（原 strong，P3-39 升 h1）：h1 默认 margin 清零，字号字重沿用原 21px/800 不变 */
+.greet__main .greet__headline { margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -0.01em; color: var(--ink); }
 .greet__date {
   font-size: 12.5px; color: var(--faint);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

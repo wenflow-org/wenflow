@@ -18,9 +18,9 @@ describe('Pagination 原型口径收口', () => {
   const mountPager = (props: Record<string, unknown> = {}) =>
     mount(Pagination, { props: { page: 1, total: 378, pageSize: 30, ...props } })
 
-  it('信息行恒显「共 N 条 · 每页 S 条 · 第 P / T 页」（不传 showTotal 也完整，原型 .pager__info 口径）', () => {
+  it('信息行恒显「共 N 条 · 第 P / T 页」（P3-28，设计评审 4.3-28：撤「每页 S 条」——与右侧「S条/页」下拉同屏复读，条数单源在下拉）', () => {
     const w = mountPager()
-    expect(w.find('.mk-pagination__total').text()).toBe('共 378 条 · 每页 30 条 · 第 1 / 13 页')
+    expect(w.find('.mk-pagination__total').text()).toBe('共 378 条 · 第 1 / 13 页')
   })
 
   it('信息行不再加粗当前页（原型为统一 muted 信息行，无 <strong>）', () => {

@@ -1,10 +1,12 @@
 <template>
   <div class="mk-pagination">
-    <!-- 信息行 = 原型 .pager__info 口径（newui pager()）：「共 N 条 · 每页 S 条 · 第 P / T 页」恒显、
+    <!-- 信息行 = 原型 .pager__info 口径（newui pager()）：「共 N 条 · 第 P / T 页」恒显、
          muted 弱化色、tabular-nums，不再加粗当前页。showTotal 保留为兼容 prop（12 个页面在传），
-         原「共 N 条」前缀开关已并入恒显口径。 -->
+         原「共 N 条」前缀开关已并入恒显口径。
+         P3-28（设计评审）：撤「每页 S 条」段——与右侧「S条/页」下拉同屏复读同事实，
+         条数口径单源留在下拉（aria-label 已有「每页条数」）。 -->
     <span class="mk-pagination__total">
-      共 {{ total }} 条 · 每页 {{ pageSize }} 条 · 第 {{ page }} / {{ totalPages }} 页
+      共 {{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页
     </span>
     <span class="mk-pagination__right">
       <select

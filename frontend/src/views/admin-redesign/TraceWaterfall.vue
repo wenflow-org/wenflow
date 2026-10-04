@@ -815,6 +815,19 @@ const verdictText = computed(() => {
 /* 嵌入态（执行日志「Trace 链路」tab）：外壳不作为布局盒子，内部各块（筛选条/提示/瀑布/空态）
    直接成为宿主 flex 列的子项，与宿主其余区块共享等比间距（此前该类无任何规则 = 死类） */
 .wf-embedded { display: contents; }
+/* P3-24（设计评审）：嵌入态页签体只占卡上半段，卡底约 40% 死空白——
+   .wf 此前不参与 mk-card--fill 的弹性分配（fill 契约里 flex:1 内滚位只给了
+   .mk-table-scroll/.log-body 等）。让 .wf 接管 .log-body 同款弹性滚动位（flex:1 内滚），
+   并把「加载更多样本」margin-top:auto 固定贴卡底：短链路的剩余空间落在瀑布容器内、
+   被贴底的翻页锚住，读作「列表待续」而非整块死空白（长链路内滚，行为与日志页签体一致） */
+.wf-embedded .wf {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.wf-embedded .wf > .mk-list-more { margin-top: auto; }
 
 /* 卡片形态：1px 发丝线 + 平底 + 12px 圆角（原型 .card 208） */
 .wf {

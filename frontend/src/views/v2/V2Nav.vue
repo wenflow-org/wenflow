@@ -214,7 +214,9 @@ onUnmounted(() => {
 .v2nav-bar__logo { height: 38px; width: auto; object-fit: contain; display: block; }
 .v2nav-bar__title {
   margin: 0;
-  font-size: 17px; font-weight: 800; letter-spacing: -0.01em;
+  /* P3-43（设计评审）：17px 是硬编码游离字号——归 --text-lg（18px，design-system 档位），
+     全组 6 页共享页头一次归档 */
+  font-size: var(--text-lg); font-weight: 800; letter-spacing: -0.01em;
   color: var(--ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }

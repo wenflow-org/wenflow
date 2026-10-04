@@ -2177,7 +2177,9 @@ onBeforeUnmount(() => {
   display: grid; place-items: center;
   flex: 0 0 auto; margin-top: 2px;
 }
-.msg__meta { font-size: 12px; color: var(--faint); }
+/* P3-40（设计评审）：「问流导师 · 00:37」在 73px 窄容器折行断眉标——nowrap 单行；
+   时间戳 tabular-nums 定宽不会撑破气泡 */
+.msg__meta { font-size: 12px; color: var(--faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* 消息入场：新气泡浮出（typing 圆点除外） */
 @media (prefers-reduced-motion: no-preference) {

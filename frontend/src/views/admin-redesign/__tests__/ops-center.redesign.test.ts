@@ -1,8 +1,10 @@
 /**
  * 系统工具页原型对齐护栏（2026-10-01 用户点名师查「系统工具完全不一样」后的复刻收口）：
- * 原型 renderOpsCenter（newui index.html 1848-1886）骨架 = pageTitle(副标+右上主钮「导出数据」)
+ * 原型 renderOpsCenter（newui index.html 1848-1886）骨架 = pageTitle(副标+右上主钮)
  * → 单张卡内「.tabs 页签 + 页签体」；数据导出页签 = 范围 chips 多选 + 右对齐「开始导出」。
  * 后端导出接口不支持时间范围 / JSONL 格式，对应控件不得渲染（不暗示不存在的功能）。
+ * 2026-10-04 修订（P3-33/34，全站设计评审 4.3）：页头「导出数据」主钮做的是 tab 导航、
+ * 与页签栏完全重复入口 → 撤（页签即唯一入口）；页签「会话安全」未知态角标「—」→「待访问」。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -48,12 +50,21 @@ describe('系统工具页原型对齐', () => {
     document.body.innerHTML = ''
   })
 
-  it('页头有副标 + 「导出数据」主钮；状态条（mk-status）退役', async () => {
+  it('页头有副标；「导出数据」页头主钮已撤（P3-33：主钮只做 tab 导航，页签即入口）；状态条（mk-status）退役', async () => {
     const w = await mountPage()
     expect(w.find('.mk-pagehead__sub').text()).toContain('数据导出')
-    const primary = w.findAll('button').find((b) => b.text() === '导出数据')
-    expect(primary, '页头右上要有「导出数据」主钮（原型 pageTitle actions）').toBeTruthy()
-    expect(w.find('.mk-status').exists(), '本页无状态条（原型无此块；信息各归其位）').toBe(false)
+    expect(
+      w.findAll('button').find((b) => b.text() === '导出数据'),
+      '页头不再有「导出数据」主钮——导出入口唯一在页签栏'
+    ).toBeUndefined()
+    expect(w.find('.mk-status').exists(), '本页无状态条（信息各归其位）').toBe(false)
+  })
+
+  it('页签「会话安全」未访问角标显「待访问」弱灰小字（P3-34：原「—」孤悬破折号像渲染残留）', async () => {
+    const w = await mountPage()
+    const tab = w.findAll('.tabs .tab').find((t) => t.text().includes('会话安全'))
+    expect(tab?.text()).toContain('待访问')
+    expect(tab?.text()).not.toContain('—')
   })
 
   it('页签在单张卡内（tabs 与页签体同卡；页签体内嵌工具卡=原型 tools 卡片格形态）', async () => {

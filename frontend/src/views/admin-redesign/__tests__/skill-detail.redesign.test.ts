@@ -300,11 +300,12 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     // System Prompt：生效内容代码卡 + 截断说明不误报
     expect(w.find('.skd-code').text()).toContain('SYSTEM PROMPT BODY')
     expect(w.text()).not.toContain('已截断')
-    // 回合状态机 / 终止条件：core YAML 无 stateMachine/states/termination/limits → 明确空态（不硬造）
+    // 回合状态机 / 终止条件：core YAML 无 stateMachine/states/termination/limits → 明确空态（不硬造）。
+    // 文案 2026-10-04 P3-21（设计评审）人话化：人话领句「该 Skill 未声明…」，schema 细节挪 title
     expect(w.text()).toContain('回合状态机')
-    expect(w.text()).toContain('暂无回合状态机数据')
+    expect(w.text()).toContain('该 Skill 未声明回合状态机')
     expect(w.text()).toContain('终止条件')
-    expect(w.text()).toContain('暂无终止条件')
+    expect(w.text()).toContain('该 Skill 未声明终止条件')
 
     w.unmount()
   })
@@ -432,9 +433,11 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(w.text()).toContain('skill-a')
     expect(w.text()).toContain('教学 Agent')
     expect(w.text()).toContain('prompts/skill.teaching.md')
-    // 依赖与发布：core YAML 无 inputs / 发布流后端无阶段状态 → 空态（依赖 chips 与 feed 不硬造）
+    // 依赖与发布：core YAML 无 inputs / 发布流后端无阶段状态 → 空态（依赖 chips 与 feed 不硬造）。
+    // 文案 2026-10-04 P3-21（设计评审）人话化：人话领句「该 Skill 未声明…」，schema 细节挪 title
     expect(w.text()).toContain('依赖与发布')
-    expect(w.text()).toContain('暂无依赖清单')
+    expect(w.text()).toContain('该 Skill 未声明输入依赖')
+    expect(w.text()).toContain('发布链：保存并编译 → 发布')
     expect(w.text()).not.toContain('代码仓库')
     expect(w.text()).not.toContain('值班')
     expect(w.text()).not.toContain('SLI / SLO')

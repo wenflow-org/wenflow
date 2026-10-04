@@ -57,9 +57,12 @@ export function statusText(s: string | null | undefined): string {
 }
 
 /** 版本状态（核心文件 / Prompt 版本表）→ 中文。
-    勿复用 statusText：通用表把 'active' 映射成「进行中」，而版本域的 ACTIVE 是「当前生效」。 */
+    勿复用 statusText：通用表把 'active' 映射成「进行中」，而版本域的 ACTIVE 是「当前生效」。
+    DRAFT 补键（设计评审 4.2 P2-15）：SkillDetail 版本页签的本地同名函数只映射 ACTIVE/DRAFT，
+    改引本共享字典后草稿态不再漏译；历史字面量在字典补键对齐，状态列统一中文。 */
 const VERSION_STATUS_TEXT: Record<string, string> = {
   ACTIVE: '当前生效',
+  DRAFT: '草稿',
   SUPERSEDED: '已被替代',
   ARCHIVED: '已归档'
 }
@@ -576,10 +579,13 @@ export function runTaskProgressText(p: { done: number; total: number } | null | 
   return `任务 ${Math.min(Math.max(p.done, 0), p.total)}/${p.total}`
 }
 
-/** IP 展示：本机回环地址补中文说明（IPv6 `::1` / IPv4 `127.0.0.1` → 「(本机)」） */
+/** IP 展示：本机回环地址补中文说明（IPv6 `::1` / IPv4 `127.0.0.1` → 「(本机)」）。
+    P3-27（设计评审）：先剥 IPv4-mapped IPv6 前缀 `::ffff:` 再比对本机地址——
+    审计日志实查 30 行全为「::ffff:127.0.0.1」，此前只精确匹配裸值，本机归一漏掉该形态 */
 export function ipText(ip?: string | null): string {
   const v = (ip || '').trim()
   if (!v) return '—'
-  if (v === '::1' || v === '127.0.0.1' || v === 'localhost') return '127.0.0.1（本机）'
-  return v
+  const bare = v.replace(/^::ffff:/i, '')
+  if (bare === '::1' || bare === '127.0.0.1' || bare === 'localhost') return '127.0.0.1（本机）'
+  return bare
 }

@@ -3,11 +3,13 @@
     <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题 + 说明） -->
     <div class="history__body">
       <!-- 统计行（批19）：三个数字合并为一行内联统计，不再三张等权卡片。
-           接口失败时整行隐藏——显 0 会让学习者误以为「没学过」 -->
+           接口失败时整行隐藏——显 0 会让学习者误以为「没学过」。
+           P2-33（设计评审）：「N 天有学习」是全量口径，与日历卡的当月口径同词不同值——
+           加「累计」限定，量词口径分家 -->
       <div v-if="statsOk" class="history__stats">
         <span class="history__stat">学习 <strong>{{ totalSessions }}</strong> 次</span>
         <span class="history__stat">累计 <strong>{{ totalMinutes }}</strong> 分钟</span>
-        <span class="history__stat"><strong>{{ activeDays }}</strong> 天有学习</span>
+        <span class="history__stat">累计 <strong>{{ activeDays }}</strong> 天有学习</span>
       </div>
 
       <!-- 整月日历（原型 wf-week/wf-day 382-405 的整月版；月导航/7 列格/图例归本页，
@@ -35,10 +37,11 @@
           >查看全部</button>
         </div>
 
+        <!-- P2-33（设计评审）：三统计全部加「本月」限定——与顶部「累计」口径分家，不再同词不同值 -->
         <div class="month__meta">
           <span>本月 <b>{{ monthTotals.minutes }}</b> 分钟</span>
-          <span><b>{{ monthTotals.days }}</b> 天有学习</span>
-          <span><b>{{ monthTotals.sessions }}</b> 次</span>
+          <span>本月 <b>{{ monthTotals.days }}</b> 天有学习</span>
+          <span>本月 <b>{{ monthTotals.sessions }}</b> 次</span>
           <span class="month__legend">
             <i class="lg lg--0"></i>无
             <i class="lg lg--1"></i>&lt;30分
@@ -46,6 +49,12 @@
             <i class="lg lg--3"></i>&gt;60分
           </span>
         </div>
+
+        <!-- P2-33②：定位月无任何记录时给一句事实说明（上月条数按需查询，见 queryPrevMonthCount），
+             月份导航 ‹ › 可回看上月 -->
+        <p v-if="!monthTotals.sessions && !monthFailed" class="month__empty" role="status">
+          {{ monthLabel }}暂无记录<template v-if="prevMonthCount !== null"> · 上月 {{ prevMonthCount }} 项</template>
+        </p>
 
         <div class="month__grid">
           <span v-for="w in weekdayLabels" :key="w" class="month__wd">{{ w }}</span>
@@ -460,6 +469,8 @@ const visibleGroups = computed<DayGroup[]>(() => {
 const monthSessions = ref<SessionRecord[]>([]);
 const monthCursor = ref({ year: new Date().getFullYear(), month: new Date().getMonth() });
 const todayStr = localDateKey(new Date());
+/* 月历请求失败标记：失败清空格子≠该月真无记录，空月提示句须避让（不误导） */
+const monthFailed = ref(false);
 
 const monthLabel = computed(() => `${monthCursor.value.year}年${monthCursor.value.month + 1}月`);
 const isCurrentMonth = computed(() => {
@@ -492,10 +503,41 @@ async function loadMonth() {
   const seq = ++monthSeq;
   try {
     const list = await fetchMonthSessions(monthCursor.value);
-    if (seq === monthSeq) monthSessions.value = list;
+    if (seq === monthSeq) {
+      monthSessions.value = list;
+      monthFailed.value = false;
+      /* P2-33②：空月时按需查上月条数，供「N 月暂无记录 · 上月 N 项」提示句使用 */
+      prevMonthCount.value = null;
+      if (!list.length) void queryPrevMonthCount(monthCursor.value);
+    }
   } catch {
     /* 月历失败不影响列表：清空即全部格子无色 */
-    if (seq === monthSeq) monthSessions.value = [];
+    if (seq === monthSeq) {
+      monthSessions.value = [];
+      monthFailed.value = true;
+    }
+  }
+}
+
+/* P2-33②：空月提示的「上月 N 项」——轻量查询（limit=1 只取 total），按月缓存避免反复请求 */
+const prevMonthCount = ref<number | null>(null);
+const prevMonthCountCache = new Map<string, number>();
+async function queryPrevMonthCount(cursor: { year: number; month: number }) {
+  const d = new Date(cursor.year, cursor.month - 1, 1);
+  const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const cached = prevMonthCountCache.get(ym);
+  if (cached !== undefined) { prevMonthCount.value = cached; return; }
+  try {
+    const lastDate = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    const res = await request.get('/users/me/sessions', {
+      params: { startDate: `${ym}-01`, endDate: `${ym}-${String(lastDate).padStart(2, '0')}`, limit: 1 }
+    });
+    const total = (res as { total?: number })?.total;
+    const n = typeof total === 'number' ? total : 0;
+    prevMonthCountCache.set(ym, n);
+    prevMonthCount.value = n;
+  } catch {
+    prevMonthCount.value = null;
   }
 }
 
@@ -609,9 +651,26 @@ function loadMore() {
   void load(false);
 }
 
-onMounted(() => {
-  // 顺序即契约：列表分页请求必须先发（回归测试锁 listCalls[0] = {page:1,limit:30}），整月日历随后
-  void load(true);
+/** P2-33②（设计评审）：日历默认定位最近有记录的月份——原默认渲染当前月，记录全在上月时
+    首屏第一大卡是全灰空月，与下方「9月22日 N 项」脱节。取已加载会话的最新时间戳归月，
+    无记录 / 时间戳不可解析时回落当前月 */
+function syncMonthCursorToLatestRecord() {
+  let latest = '';
+  for (const s of sessions.value) {
+    const t = String(s.startTime || s.endTime || '');
+    if (t > latest) latest = t;
+  }
+  if (!latest) return;
+  const d = new Date(latest);
+  if (Number.isNaN(d.getTime())) return;
+  monthCursor.value = { year: d.getFullYear(), month: d.getMonth() };
+}
+
+onMounted(async () => {
+  // 顺序即契约：列表分页请求必须先发（回归测试锁 listCalls[0] = {page:1,limit:30}），整月日历随后。
+  // P2-33②：先等列表首屏回来，把月游标定位到最近有记录的月份，再拉整月
+  await load(true);
+  syncMonthCursorToLatestRecord();
   void loadStats();
   void loadMonth();
 });
@@ -898,6 +957,12 @@ onMounted(() => {
   color: var(--muted);
 }
 .month__meta b { color: var(--ink); font-weight: 800; }
+/* P2-33②：空月事实说明（默认定位最近有记录月份后，手动翻到空月时出现），弱灰一行不抢格子 */
+.month__empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--faint);
+}
 .month__legend {
   margin-left: auto;
   display: inline-flex;

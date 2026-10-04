@@ -256,9 +256,10 @@
                 <strong>学习调控</strong>
                 <span class="band__meta">{{ pendingAdjust.length ? `${pendingAdjust.length} 条待确认` : '暂无待确认' }}</span>
               </div>
-              <!-- 待你确认：课后 advisory，确认走与完课卡同一个 replan 接口 -->
+              <!-- P3-41（设计评审）：区块头已有「N 条待确认」计数，子块标签再带数字同屏双计数——
+                   子块改纯语义「待我处理」撤数字，计数只留区块头一处 -->
               <section class="ctl">
-                <p class="ctl__label">待你确认<b v-if="pendingAdjust.length">{{ pendingAdjust.length }}</b></p>
+                <p class="ctl__label">待我处理</p>
                 <p v-if="!pendingAdjust.length" class="ctl__empty">没有待处理的调整。课后 AI 认为需要调整时，会在这里出现，你可以在这里确认或忽略。</p>
                 <article v-for="card in pendingAdjust" :key="card.id" class="ctl-card">
                   <header class="ctl-card__head">
@@ -1356,7 +1357,9 @@ function loadGuidance() {
   padding: 13px 8px; display: grid; justify-items: center; gap: 2px; text-align: center;
 }
 .kpi strong {
-  font-size: 22px; font-weight: 800; letter-spacing: -.02em;
+  /* P3-42（设计评审）：22px 是游离字号（不在 12/14/15/16/24/28 任何一档），
+     且与 /user/account 同类统计 16px 不同档——归 16px 档（--wf-fs-title） */
+  font-size: var(--wf-fs-title); font-weight: 800; letter-spacing: -.02em;
   font-variant-numeric: tabular-nums; color: var(--ink);
 }
 /* 原型为 11px → 12px：本仓门禁基础作用域字号下限 12px（同个人中心 KPI 的取舍） */

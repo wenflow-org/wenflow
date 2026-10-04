@@ -57,7 +57,7 @@
             <tr>
               <th>用例</th>
               <th>Agent</th>
-              <th class="mk-th--right">消息</th>
+              <th class="mk-th--right">消息数</th>
               <th>期望</th>
               <th>状态</th>
               <th>更新</th>
@@ -83,7 +83,12 @@
                 </div>
               </td>
               <td><span class="mk-badge mk-badge--info" :title="agentLabel(c.agentId)">{{ agentLabel(c.agentId) }}</span></td>
-              <td class="mk-num" :title="c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟用例：学生话由模拟器生成，无需手写消息' : ''">{{ c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟' : c.messages.length }}</td>
+              <!-- P3（设计评审 4.3-19）：「消息」列头下放的是模式词「模拟」，列头与内容错位——
+                   列头改「消息数」；模拟用例该格改 mk-badge--muted 徽章与数量值视觉区分（title 保留原解释） -->
+              <td class="mk-num" :title="c.messages.length === 0 && c.expectations?.mode === 'simulated' ? '模拟用例：学生话由模拟器生成，无需手写消息' : ''">
+                <span v-if="c.messages.length === 0 && c.expectations?.mode === 'simulated'" class="mk-badge mk-badge--muted">模拟</span>
+                <template v-else>{{ c.messages.length }}</template>
+              </td>
               <td>
                 <div v-if="expectationText(c)" class="pe-expect" :title="expectationText(c)">{{ expectationText(c) }}</div>
                 <span v-else class="mk-na">无</span>
@@ -625,7 +630,9 @@ const lastRateTitle = computed(() => {
     ? '暂无评测数据：该运行未回传通过率'
     : `最近一次评估通过率；${RATE_THRESHOLD_NOTE}`
 })
-const lastRunText = computed(() => (runs.value.length ? `最近 ${timeAgo(runs.value[0]?.createdAt)}` : '暂无评估记录'))
+/* P3（设计评审 4.3-20）：状态条同屏两个「最近」异义——「最近 30 次」是窗口、「最近 N 小时前」是时刻；
+   时刻改「上次」前缀消歧（窗口词保留在「最近 N 次」meta） */
+const lastRunText = computed(() => (runs.value.length ? `上次 ${timeAgo(runs.value[0]?.createdAt)}` : '暂无评估记录'))
 const lastRunHint = computed(() => {
   const s = runs.value[0]?.summary
   if (!s) return ''

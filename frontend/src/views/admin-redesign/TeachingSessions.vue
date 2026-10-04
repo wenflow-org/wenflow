@@ -225,10 +225,10 @@
                   <strong>{{ r.topic }}</strong>
                   <span class="mk-cell-sub" :title="taskTypeTitle(r.taskType)">{{ r.subject }} · {{ taskTypeText(r.taskType) }}</span>
                   <span
-                    v-if="r.wrapup?.topicSummary"
+                    v-if="tsSubNote(r)"
                     class="mk-cell-sub ts-summary"
-                    :title="r.wrapup.topicSummary"
-                  >{{ r.wrapup.topicSummary }}</span>
+                    :title="tsSubNote(r)?.title"
+                  >{{ tsSubNote(r)?.text }}</span>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('user')">
@@ -744,6 +744,22 @@ const wrapupText = (r: Row) => (wrapupTier(r) === 'complete' ? '有总结' : wra
 const wrapupBadge = (r: Row) =>
   wrapupTier(r) === 'complete' ? 'mk-badge--ok' : wrapupTier(r) === 'missing' ? 'mk-badge--warn' : 'mk-badge--muted'
 const isMissingWrapup = (r: Row) => wrapupTier(r) === 'missing'
+
+/* P3（设计评审 4.3-9）：异常态（失败/收尾失败/超时）会话列副行是后端降级模板句
+   「本次会话未正常结束，为你保留了基础学习记录。」——与状态徽章同事实且首屏多行同文。
+   命中模板句时改显行内已有的增量信息（时长优先，缺时长用开始时间；两者皆缺撤副行不硬凑）。
+   后端模板句不动，title 保留降级总结原文供排查。 */
+const ABNORMAL_SUMMARY_MARK = '本次会话未正常结束'
+const tsSubNote = (r: Row): { text: string; title?: string } | null => {
+  const summary = String(r.wrapup?.topicSummary || '')
+  if (!summary) return null
+  if (!ABNORMAL_STATUSES.has(r.status) || !summary.includes(ABNORMAL_SUMMARY_MARK)) {
+    return { text: summary, title: summary }
+  }
+  if (r.duration > 0) return { text: `时长 ${fmtDuration(r.duration)}`, title: '异常会话：降级总结与状态徽章同义已省略，此处显示会话时长' }
+  if (r.startAt) return { text: `开始于 ${r.startAt}`, title: '异常会话：降级总结与状态徽章同义已省略，此处显示开始时间' }
+  return null
+}
 
 /* 教学概览（ts-dash：会话域结论，状态条承载基调；逐项计数由卡头 pills 承载，不重复渲染）。
    bad 档（补死代码分支）：失败 / 收尾失败 / 超时合计 ≥ TS_BAD_THRESHOLD 视为异常堆积，页头转红

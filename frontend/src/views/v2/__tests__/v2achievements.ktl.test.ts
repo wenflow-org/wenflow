@@ -74,7 +74,7 @@ describe('V2Achievements 经验值口径（与账号页同源）', () => {
     getMock.mockReset();
   });
 
-  it('已获得经验值显示账号权威 user.xp，并以子注标明其中来自成就', async () => {
+  it('已获得经验值显示账号权威 user.xp，成就贡献以「成就贡献 N XP · 总计 M XP」标明归属（P3-46，设计评审 4.3-46：原「其中成就 N」归属含糊）', async () => {
     // 一条已解锁成就（+10）；账号另有任务完成奖励 50 → user.xp = 60
     getMock.mockResolvedValue({
       success: true,
@@ -87,6 +87,6 @@ describe('V2Achievements 经验值口径（与账号页同源）', () => {
 
     const kpi = w.find('.ov-line');
     expect(kpi.text()).toContain('60');
-    expect(kpi.text()).toContain('其中成就 10');
+    expect(kpi.text()).toContain('成就贡献 10 XP · 总计 60 XP');
   });
 });

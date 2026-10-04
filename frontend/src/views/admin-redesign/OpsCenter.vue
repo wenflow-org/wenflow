@@ -1,9 +1,10 @@
 <template>
   <div class="mk-page mk-page--fill oc-host">
-    <!-- 页头（原型 pageTitle：页名+副标+右上主钮「导出数据」切到导出页签；刷新是各页签真实能力，随 tab 显示） -->
+    <!-- 页头（原型 pageTitle：页名+副标；刷新是各页签真实能力，随 tab 显示）。
+         P3-33（设计评审）：原页头 primary「导出数据」做的是 tab 导航、与页签栏完全重复入口——
+         已撤（原型只是组件参考，页签即唯一入口），页头动作位留给当前页签真实能力（刷新） -->
     <MkPageHead title="系统工具" sub="数据导出、会话安全与运维工具">
       <template #actions>
-        <button v-if="tab !== 'export'" type="button" class="mk-btn mk-btn--primary" @click="switchTab('export')">导出数据</button>
         <button v-if="tab === 'tools'" type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
         <button v-else-if="tab === 'security'" type="button" class="mk-btn mk-btn--sm" @click="securityRef?.refresh?.()">刷新</button>
       </template>
@@ -15,7 +16,9 @@
       <div class="tabs oc-tabs" role="tablist" aria-label="系统工具视图切换">
         <button type="button" role="tab" class="tab" :aria-selected="tab === 'tools'" @click="switchTab('tools')">运维工具</button>
         <button type="button" role="tab" class="tab" :aria-selected="tab === 'export'" @click="switchTab('export')">数据导出</button>
-        <button type="button" role="tab" class="tab" :aria-selected="tab === 'security'" @click="switchTab('security')">会话安全<span class="tab__count">{{ securityCount === null ? '—' : securityCount }}</span></button>
+        <!-- P3-34（设计评审）：未知态角标由孤悬「—」改「待访问」弱灰小字——「—」像渲染残留、
+             与「外挂能力 0」真计数并读语义无法区分；title 保留「未访问≠0」语义 -->
+        <button type="button" role="tab" class="tab" :aria-selected="tab === 'security'" @click="switchTab('security')">会话安全<span class="tab__count" :title="securityCount === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ securityCount === null ? '待访问' : securityCount }}</span></button>
       </div>
       <div class="oc-card__body">
 
@@ -223,7 +226,8 @@ const tab = ref<OcTab>('tools')
 const route = useRoute()
 const router = useRouter()
 /** 会话安全域计数（SessionSecurity embedded 上报）；null = 尚未访问该 tab，
-    此时状态条/pill 显示「—」而非 0（0 会被读成「确认无会话」，是另一种假信号） */
+    此时页签角标显「待访问」弱灰小字而非 0（0 会被读成「确认无会话」，是另一种假信号；
+    原「—」孤悬破折号像渲染残留，P3-34 改词） */
 const securityCount = ref<number | null>(null)
 const securityRef = ref<{ refresh?: () => void } | null>(null)
 /* URL → tab（深链/刷新/前进后退）；非法值回落 tools。组件单测可无 router 挂载，故访问保持可选 */

@@ -17,13 +17,18 @@
         <section class="card ov-line" aria-label="成就概览">
           <div class="ov-line__top">
             <strong>{{ unlockedCount }} / {{ items.length }}</strong>
-            <span>个成就已解锁<template v-if="items.length - unlockedCount > 0">，还剩 {{ items.length - unlockedCount }} 个</template></span>
+            <!-- P3-46（设计评审）：「4 / 14 个成就已解锁，还剩 10 个」同句复读——删「还剩 N 个」，
+                 剩余量由左式 4 / 14 与进度条表达 -->
+            <span>个成就已解锁</span>
           </div>
           <div class="ov-line__bar" role="img" :aria-label="`解锁进度 ${unlockPct}%`">
             <i :style="{ width: unlockPct + '%' }"></i>
           </div>
+          <!-- P3-46：「1360 XP · 其中成就 260」归属含糊——改「成就贡献 260 XP · 总计 1360 XP」
+               （两值相等时无需区分归属，回到单一 XP 数） -->
           <div class="ov-line__xp">
-            {{ totalXpAll }} XP<span v-if="totalXpAll !== totalXp"> · 其中成就 {{ totalXp }}</span>
+            <template v-if="totalXpAll !== totalXp">成就贡献 {{ totalXp }} XP · 总计 {{ totalXpAll }} XP</template>
+            <template v-else>{{ totalXpAll }} XP</template>
           </div>
         </section>
 
@@ -123,15 +128,17 @@ const items = ref<Achievement[]>([]);
 const loading = ref(true);
 const loadError = ref(false);
 
-/** 成就图标：按类型给「色块 + 字标」（里/连/完/掌/社），与管理端 AchIcon.vue 同一套映射，
+/** 成就图标：按类型给「色块 + 字标」，与管理端 AchIcon.vue 同一类型域。
+    P3-48（设计评审）：单字「里」单独无法解码、读作占位噪音——用户侧改可解码双字
+    （里→里程 / 连→连续 / 完→完成 / 掌→掌握，社→社交 同步对齐；管理端 AchIcon 保持单字紧凑档）。
     色块由 .ach-card__icon--* 系列 token 色给底（未解锁一律中性灰）。
     替代原来的 emoji——各系统渲染不一致，且与全站的线性图标 + 色块徽标语言不搭。 */
 const ACH_TYPE_MARK: Record<string, string> = {
-  milestone: '里',
-  streak: '连',
-  completion: '完',
-  mastery: '掌',
-  social: '社',
+  milestone: '里程',
+  streak: '连续',
+  completion: '完成',
+  mastery: '掌握',
+  social: '社交',
 };
 function achMark(a: Achievement): string {
   return ACH_TYPE_MARK[a.type] || '成';
@@ -310,7 +317,9 @@ onMounted(() => {
 /* 筛选（原型 wf-filters / wf-filter 840-846）：状态 chip 与类型 chip 同一套胶囊语言 */
 .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .filter {
-  min-height: 36px;
+  /* P3-47（设计评审）：筛选 chips 是本页唯一筛选交互，36px 低于 44px 移动触控地板——
+     抬到 44px 扩热区，视觉字号不动 */
+  min-height: 44px;
   padding: 7px 14px;
   border: 1px solid var(--line);
   background: var(--surface);
@@ -337,13 +346,14 @@ onMounted(() => {
   transition: none;
 }
 
-/* ── 42×42 类型色块（原型 wf-ach__icon 853-862） ── */
+/* ── 42×42 类型色块（原型 wf-ach__icon 853-862）──
+    P3-48：字标升双字（19px 单字 → 14px 双字），42px 块内两字 + 字距放得下 */
 .ach-card__icon {
   width: 42px; height: 42px;
   border-radius: 12px;
   margin-bottom: 4px;
   display: grid; place-items: center;
-  font-size: 19px; font-weight: 800;
+  font-size: 14px; font-weight: 800;
   letter-spacing: 0.02em;
 }
 .ach-card__icon--neutral { background: color-mix(in srgb, var(--line) 60%, transparent); color: var(--faint); }
@@ -406,9 +416,9 @@ onMounted(() => {
   .ov-line { padding-left: 14px; padding-right: 14px; }
   .ach-card { padding: 12px 14px; }
   .filters { gap: 6px; }
-  /* 筛选药丸 33px → 36（lt36 门禁）。这类紧凑芯片的横向内边距不动，只补高度：
+  /* 筛选药丸 36 → 44（P3-47 触控地板；compact 档也须守住 44，内边距收窄补高度）：
      一行 7 颗在 390 下的总宽预算不变。 */
-  .filter { padding: 6px 11px; min-height: 36px; font-size: 12.5px; }
+  .filter { padding: 6px 11px; min-height: 44px; font-size: 12.5px; }
 }
 @media (max-width: 560px) {
   .grid { grid-template-columns: 1fr; }

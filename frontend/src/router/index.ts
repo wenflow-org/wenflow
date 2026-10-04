@@ -126,7 +126,9 @@ const routes: RouteRecordRaw[] = [
     path: '/user/settings',
     name: 'UserSettings',
     component: () => import('@/views/user/Settings.vue'),
-    meta: { title: 'API 接入', requiresAuth: true }
+    /* P2-32（设计评审 4.2）：页内容已含密码/注销/MCP，页名「设置」名实相符；
+       「API 接入」降为页内第一个分区的 H3 名 */
+    meta: { title: '设置', requiresAuth: true }
   },
   {
     // 成就 / 学习历史：2026-09-24 从顶层导航收进个人中心（走 CapabilityShell 分段导航）

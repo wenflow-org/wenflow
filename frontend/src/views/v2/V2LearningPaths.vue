@@ -13,7 +13,10 @@
       </transition>
 
       <!-- 页头按原型 wf-paths__head（index.html 1786-1792）：左 16px 标题 + 右 ghost「新目标」，
-           无 hero 大标题与说明文字；失败态仍隐藏（与失败原因同屏会互相矛盾） -->
+           无 hero 大标题与说明文字；失败态仍隐藏（与失败原因同屏会互相矛盾）。
+           P3-44（设计评审）：同一「新建目标」动作两入口主名词统一为「新目标」——
+           页头短钮「新目标」（Plus 为 aria-hidden 图标非文字）+ 页尾长文案「用 2 分钟规划一个新目标」
+           可并存，改文案时两处主名词须同步 -->
       <div v-if="!loadError" class="paths__head">
         <h2>我的学习路径</h2>
         <button type="button" class="paths__new-goal" @click="router.push('/goal-conversation')">

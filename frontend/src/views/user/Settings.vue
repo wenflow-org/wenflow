@@ -1,12 +1,12 @@
 <template>
-  <CapabilityShell title="API 接入">
+  <!-- P2-32（设计评审 4.2）：页名「设置」由顶栏承载（meta.title 同步改名，名实相符——
+       页内容含密码/注销/MCP）；「API 接入」降为第一个分区的 H3 名 -->
+  <CapabilityShell title="设置">
     <div class="user-settings-page">
-      <!-- 状态条 -->
+      <!-- 状态条（P3-45，设计评审）：撤「已启用/未启用」徽章——徽章 + switch + 「禁用」标签
+           三重表达同一状态；状态词随 switch 单源随动（「使用平台默认模型服务」等） -->
       <div class="settings-status">
         <div class="settings-status__left">
-          <span class="uc-badge" :class="apiConfig.enabled ? 'uc-badge--ok' : 'uc-badge--muted'">
-            {{ apiConfig.enabled ? '已启用' : '未启用' }}
-          </span>
           <div>
             <strong>{{ apiConfig.enabled ? '使用自定义模型服务' : '使用平台默认模型服务' }}</strong>
             <p>对话模型 {{ apiConfig.chatModel || 'deepseek-v4-flash' }} · 推理模型 {{ apiConfig.reasoningModel || 'deepseek-v4-pro' }}</p>
@@ -41,7 +41,8 @@
         <article class="uc-card">
           <div class="uc-card__head">
             <div>
-              <h3>服务配置</h3>
+              <!-- P2-32：页名改「设置」后，「API 接入」降为第一个分区的 H3 名 -->
+              <h3>API 接入</h3>
               <p>填写兼容 OpenAI 协议的自定义模型端点</p>
             </div>
           </div>
@@ -752,6 +753,23 @@ const handleDeactivate = async () => {
   min-width: 0;
 }
 
+/* P2-32（设计评审 4.2）：移动端顶栏已承载页名（meta.title「设置」），页内 deeptitle H1 同屏复读——
+   ≤1023.98px 撤视觉呈现（sr-only 保读屏大纲，对齐壳层 .uc__vh 惯例）；桌面顶栏不显标题，
+   deeptitle 仍是唯一可见页名，保留 */
+@media (max-width: 1023.98px) {
+  :deep(.uc__deeptitle) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 /* 状态条 */
 .settings-status {
   display: flex;
@@ -760,9 +778,9 @@ const handleDeactivate = async () => {
   gap: 16px;
   padding: 14px 18px;
   border: 1px solid var(--line, #e3e9f4);
-  border-radius: 14px;
+  border-radius: var(--mk-radius-xl);
   background: var(--surface, #fff);
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+  box-shadow: var(--mk-shadow-sm);
   flex-wrap: wrap;
 }
 
@@ -910,7 +928,7 @@ const handleDeactivate = async () => {
 .help-tip {
   margin-top: 16px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
   background: var(--canvas, #f3f6fb);
   border: 1px dashed var(--line, #e3e9f4);
   font-size: 12.5px;
@@ -1113,7 +1131,7 @@ const handleDeactivate = async () => {
 .mcp-hint {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--mk-radius-lg);
   background: var(--canvas, #f3f6fb);
   border: 1px dashed var(--line, #e3e9f4);
   font-size: 12.5px;
