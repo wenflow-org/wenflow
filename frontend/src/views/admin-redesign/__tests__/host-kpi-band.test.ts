@@ -108,7 +108,7 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     w.unmount();
   });
 
-  it('教学会话独立页：页头 KPI 带已退役（2026-10-02），统计带 = 构成带唯一一处（2026-10-04 状态条退役）', async () => {
+  it('教学会话独立页：页头 KPI 带已退役（2026-10-02），统计带 = 表格卡内贴表分布条唯一一处（2026-10-04 晚）', async () => {
     const { router, ready } = mockRouter('/admin/teaching-sessions');
     await ready;
     const w = mount(TeachingSessions, { global: { plugins: [router] } });
@@ -116,7 +116,7 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     expect(kpiLabels(w)).toEqual([]);
     expect(w.find('.mk-kpi-grid').exists()).toBe(false);
     // 2026-10-04 用户拍板：页头状态条整体退役——需关注 / 缺总结与焦点 chips 同源同数、
-    // 异常与构成带「异常终态」同源同数（同一数字不两处渲染）；总数与窗口截断口径并进卡头 meta
+    // 异常与分布条「异常终态」段同源同数（同一数字不两处渲染）；总数与窗口截断口径并进卡头 meta
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
     const meta = w.find('.mk-card__meta');
     expect(meta.text()).toContain('0 / 0 条');

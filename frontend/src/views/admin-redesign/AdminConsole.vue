@@ -100,7 +100,6 @@ const TokenCost = asyncPage(() => import('./TokenCost.vue'));
 const AuditLogs = asyncPage(() => import('./AuditLogs.vue'));
 const ApiConfig = asyncPage(() => import('./ApiConfig.vue'));
 const PromptWorkbench = asyncPage(() => import('./PromptWorkbench.vue'));
-const PromptEval = asyncPage(() => import('./PromptEval.vue'));
 const OpsHub = asyncPage(() => import('./OpsHub.vue'));
 const OpsCenter = asyncPage(() => import('./OpsCenter.vue'));
 const LearnerDetail = asyncPage(() => import('./LearnerDetail.vue'));
@@ -132,7 +131,8 @@ const components: Record<string, unknown> = {
   'virtual-learner-cards': VirtualLearnerCards,
   'skills': Skills,
   'orchestrator': Orchestrator,
-  'prompt-eval': PromptEval,
+  // 「Prompt 评估」2026-10-04 下线（折入 skills 宿主「Prompt 评估」页签；
+  // 组件更名 PromptEvalPanel 由 Skills 异步加载）；旧 URL 在 router 重定向 ?tab=cases|runs → ?peTab=
   'execution-logs': ExecLogs,
   'token-cost': TokenCost,
   'memory-review': MemoryReview,

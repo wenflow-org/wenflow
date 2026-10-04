@@ -23,6 +23,10 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
+          <!-- 列表卡头统一语法（2026-10-05 教学组六页同一槽位序）：
+               左 = 快筛 chips → 搜索 → 清除筛选（激活时）；右 = 页级动作 → 列 → 高级筛选(仅有次级筛选时) → 计数 meta(仅说独有事实时)。
+               本页无次级筛选（口径开关在页头），「高级筛选」弹层随之退役——搜索回到行内，
+               「N / N 人」meta 维持不渲染（与分页器「共 N 条」复读，计数唯一住在 pills 上） -->
           <div class="mk-pills">
             <button
               v-for="p in pills"
@@ -38,29 +42,15 @@
               {{ p.label }}<span v-if="p.count != null && p.id !== 'all'" class="mk-pill__count">{{ p.count }}</span>
             </button>
           </div>
+          <MkFilterSearch v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
-        <!-- 原型工具栏右侧：主栏只留 chips，次级筛选收敛进「高级筛选」弹层（计数与 pills 重复的
-             「N / N 人」meta 一并撤除——计数唯一住在 pills 上） -->
         <div class="mk-card__head-right">
           <MkCols
             :col-defs="ulColDefs"
             storage-key="wf_users_hidden_cols"
             v-model:hidden="hiddenCols"
           />
-          <div class="mk-adv">
-            <button
-              type="button"
-              class="mk-btn mk-btn--sm"
-              :aria-expanded="advOpen"
-              @click="advOpen = !advOpen"
-            ><Filter :size="14" :stroke-width="1.75" />高级筛选</button>
-            <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
-            <div v-show="advOpen" class="mk-adv__pop" @click.stop>
-              <MkFilterSearch v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
-              <!-- 口径开关上收页头（2026-10-04 整组统一），高级筛选弹层只留搜索 -->
-            </div>
-          </div>
         </div>
       </div>
 
@@ -275,7 +265,6 @@ import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
-import { Filter } from 'lucide-vue-next';
 import { useEscape } from './useEscape'
 import { useIsNarrow } from './useIsNarrow'
 import { toast } from '@/utils/toast'
@@ -492,9 +481,6 @@ function closeCreate() {
   if (!creating.value) createOpen.value = false
 }
 useEscape(() => createOpen.value, closeCreate)
-/* 高级筛选弹层：Esc 关闭（遮罩吞外点） */
-const advOpen = ref(false)
-useEscape(() => advOpen.value, () => { advOpen.value = false })
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 
 /** 行内 ⋯ 菜单项：先关菜单再执行 */

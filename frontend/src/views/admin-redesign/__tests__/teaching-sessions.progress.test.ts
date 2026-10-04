@@ -169,7 +169,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    // 页头状态条整体退役：需关注 / 缺总结与 chips 同源同数、异常与构成带「异常终态」同源同数
+    // 页头状态条整体退役：需关注 / 缺总结与 chips 同源同数、异常与分布条「异常终态」段同源同数
     expect(wrapper.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
     const chip = (label: string) =>
       wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').find((c) => c.text().replace(/\d+$/, '') === label)!;
@@ -236,7 +236,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('卡头「异常」开关可点穿：失败/收尾失败/超时 状态多选筛选 toggle；计数由构成带单源承载', async () => {
+  it('卡头「异常」开关可点穿：失败/收尾失败/超时 状态多选筛选 toggle；计数由分布条红段单源承载', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -251,7 +251,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     });
     const wrapper = await mountLive();
     const abn = wrapper.find('.ts-abn-chip');
-    // chip 不显计数（同窗口同集合由构成带「异常终态」桶单源承载，数字不两处渲染）
+    // chip 不显计数（同窗口同集合由分布条「异常终态」段单源承载，数字不两处渲染）
     expect(abn.text()).toBe('异常');
     expect(abn.attributes('aria-pressed')).toBe('false');
     await abn.trigger('click');
@@ -264,7 +264,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('分布卡退役（2026-10-04 教学组统一 buckets 构成带）：stageband 不再出现，构成带按收束语义归组', async () => {
+  it('贴表分布条（2026-10-04 晚接棒 buckets 构成带）：MkDistBand 四组归并，buckets/stageband 均不再出现', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -272,14 +272,14 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    expect(wrapper.find('.stageband').exists()).toBe(false);
-    expect(wrapper.find('.buckets').exists()).toBe(true);
-    const labels = wrapper
-      .findAll('.buckets .bucket .bucket__l')
-      .filter((el) => !el.classes().includes('bucket__foot'))
-      .map((el) => el.text().trim());
-    // failed + active：进行中 1 / 已完成 0 / 异常终态 1 / 已废弃 0 / 完成率（零值桶如实显示）
-    expect(labels).toEqual(['进行中', '已完成', '异常终态', '已废弃', '完成率']);
+    // 旧「stageband 分布卡」护栏语义已失效（MkDistBand 复用 stageband 原语类）——
+    // 改断言：buckets 不再出现 + 新形态贴表分布条在场
+    expect(wrapper.find('.buckets').exists()).toBe(false);
+    expect(wrapper.find('.ts-distband .mk-distband__band').exists()).toBe(true);
+    // failed + active：图例恒显四组（零值档如实显示）；「其它」段无枚举外取值不出现
+    const legend = wrapper.findAll('.ts-distband .stageband__legend .sbl');
+    expect(legend.map((el) => el.find('.sbl__name').text())).toEqual(['进行中', '已完成', '异常终态', '已废弃']);
+    expect(legend.map((el) => el.find('.sbl__n').text())).toEqual(['1', '0', '1', '0']);
     wrapper.unmount();
   });
 

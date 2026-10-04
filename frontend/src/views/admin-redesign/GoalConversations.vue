@@ -21,13 +21,12 @@
          「进行中」桶 foot 携停滞信号（窗口内 active 且超 7 天未更新）；
          「已取消」桶 foot 写明「取消 / 中断 / 回收合计」口径（= 总数 − 进行中 − 已完成，
          含 abandoned / failed，不再是纯「用户取消」）。 -->
-    <MkBuckets
-      v-if="statsError"
-      label="目标对话状态构成"
-      error="状态构成（进行中 / 已完成 / 已取消 / 完成率）暂不可用"
-      @retry="load(true)"
-    />
-    <MkBuckets v-else-if="stats && stats.total > 0" label="目标对话状态构成" :items="gcBucketItems" />
+    <!-- stats 三态（P1#6）：失败显错误条 + 重试（原错误桶随构成带退役，2026-10-04 晚贴表分布条） -->
+    <div v-if="statsError" class="mk-status mk-status--bad">
+      <span class="mk-status__dot"></span>
+      <span class="mk-status__meta">状态构成（进行中 / 已完成 / 已取消 / 完成率）暂不可用</span>
+      <button type="button" class="mk-status__meta mk-status__meta-link" @click="load(true)">重试</button>
+    </div>
 
     <!-- ===== 目标对话列表 ===== -->
     <MkEmptyState
@@ -41,20 +40,8 @@
       <div class="mk-card mk-card--fill">
         <div class="mk-card__head">
           <div class="mk-filter">
-            <div class="mk-pills">
-              <button
-                v-for="p in statusPills"
-                :key="p.id"
-                type="button"
-                class="mk-pill"
-                :class="{ 'mk-pill--active': statusFilter === p.id }"
-                :aria-pressed="statusFilter === p.id"
-                :title="p.title || undefined"
-                @click="statusFilter = statusFilter === p.id ? '' : p.id"
-              >
-                {{ p.label }}
-              </button>
-            </div>
+            <!-- 状态筛选唯一入口 = 卡内贴表分布条（2026-10-04 晚：pills 与页级构成带同驱一个
+                 statusFilter，同屏两处筛选面收敛一处；「已取消」段与原 pill 同口径取补集） -->
             <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 邮箱 / 目标摘要" />
             <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           </div>
@@ -67,6 +54,22 @@
             <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含测试' : '仅真实' }}）<template v-if="stats && stats.total > rows.length"> · 仅显示最近 {{ rows.length }} 条</template></span>
           </div>
         </div>
+
+        <!-- 贴表分布条（教学组标准件 MkDistBand，2026-10-04 晚构成带换装）：宏观切片紧贴数据行；
+             分段/图例点击 = 状态筛选（与原 pills 同一 statusFilter，「已取消」= 取补集聚合段）；
+             口径 = stats 服务端全量状态计数（非本页 LIST_LIMIT 窗口），完成率随副标；
+             停滞信号随「进行中」段悬停披露（原桶 foot 迁移）；stats 失败/空数据整带隐藏 -->
+        <MkDistBand
+          v-if="!statsError && stats && stats.total > 0"
+          class="gc-distband"
+          title="目标对话状态分布"
+          :sub="`点击分段只看该状态 · 共 ${stats.total} 条（服务端状态计数，非本页窗口） · 完结率 ${stats.completionRate ?? 0}%`"
+          unit="条"
+          aria-label="按目标对话状态筛选"
+          :bins="gcBandBins"
+          :active-key="statusFilter || null"
+          @select="toggleStatusBand"
+        />
 
         <MockSkeletonTable v-if="loading && !rows.length" :cols="9" />
         <!-- P0 修复：加载失败行内错误 + 重试（此前失败伪装成「暂无会话」） -->
@@ -234,7 +237,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import MkBuckets from '@/components/mk/MkBuckets.vue'
+import MkDistBand from '@/components/mk/MkDistBand.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { useTableSort } from './useTableSort'
@@ -303,45 +306,26 @@ const staleActiveCount = computed(() => {
     return Number.isFinite(t) && t < cutoff
   }).length
 })
-function gcStatusSeg(n: number): number {
-  const s = stats.value
-  if (!s || !s.total) return 0
-  return Math.round((n / s.total) * 100)
-}
-/* 桶组占比（newui bucketCard 的 pct 参数）：进行中/已取消 = 占总数比例（与 gcStatusSeg 同一算法）；
-   已完成桶直接用后端 completionRate（口径单一来源，避免同屏两算），全部 clamp 0-100。 */
-const gcActivePct = computed(() => gcStatusSeg(stats.value?.active ?? 0))
-const gcCompletedPct = computed(() => Math.max(0, Math.min(100, Math.round(Number(stats.value?.completionRate ?? 0)))))
-const gcCancelledPct = computed(() => gcStatusSeg(gcCancelledCount.value))
-/* 桶组数据（2026-10-04 抽共享原语 MkBuckets，教学组统一形态）：模板收敛为数据驱动；
-   四桶口径披露原样随桶迁移（停滞口径 / 已取消口径 / 完成率口径），比例条 = 占总数份额 */
-const gcBucketItems = computed(() => [
+/* ===== 目标对话状态分布（2026-10-04 晚贴表分布条 MkDistBand，构成带换装）=====
+   三段口径披露原样随段迁移（停滞口径 / 已取消口径），完成率用后端单一来源（避免同屏两算）。
+   「已取消」段与原 pill/桶同口径：cancelled + failed + abandoned（非 active 且非 completed 取补集）。 */
+const gcBandBins = computed(() => [
   {
-    value: stats.value?.active ?? 0,
+    key: 'active',
     label: '进行中',
-    pct: gcActivePct.value,
     tone: 'var(--mk-blue)',
-    foots: [
-      { text: '澄清中或待确认' },
-      ...(rows.value.length
-        ? [{ text: `其中 ${staleActiveCount.value} 条超 ${STALLED_DAYS} 天未更新`, title: `停滞口径：状态「进行中」且最近 ${STALLED_DAYS} 天无更新（updatedAt）；按最近 ${LIST_LIMIT} 条加载窗口估算，非全量` }]
-        : [])
-    ]
+    n: stats.value?.active ?? 0,
+    hint: rows.value.length
+      ? `澄清中或待确认 · 其中 ${staleActiveCount.value} 条超 ${STALLED_DAYS} 天未更新（停滞口径：状态「进行中」且最近 ${STALLED_DAYS} 天无更新，按加载窗口估算，非全量）`
+      : '澄清中或待确认'
   },
-  { value: stats.value?.completed ?? 0, label: '已完成', pct: gcCompletedPct.value, tone: 'var(--mk-green)', foots: [{ text: '已生成学习路径' }] },
+  { key: 'completed', label: '已完成', tone: 'var(--mk-green)', n: stats.value?.completed ?? 0, hint: '已生成学习路径' },
   {
-    value: gcCancelledCount.value,
+    key: 'cancelled',
     label: '已取消',
-    pct: gcCancelledPct.value,
     tone: 'var(--mk-red)',
-    foots: [{ text: '取消 / 中断 / 回收合计', title: '已取消 = 总数 − 进行中 − 已完成：含用户主动取消（cancelled）、失败中断（failed）与无心跳自动回收（abandoned），非全部用户主动取消' }]
-  },
-  {
-    value: `${stats.value?.completionRate ?? 0}%`,
-    label: '完成率',
-    pct: gcCompletedPct.value,
-    tone: 'var(--mk-blue)',
-    foots: [{ text: `口径：已完成 ÷ 总数 ${stats.value?.total ?? 0}`, title: '完成率 = 已完成 ÷ 总数；已完成分子见左桶，不在两处复读' }]
+    n: gcCancelledCount.value,
+    hint: '取消 / 中断 / 回收合计 = 总数 − 进行中 − 已完成：含用户取消（cancelled）、失败中断（failed）与无心跳回收（abandoned）'
   }
 ])
 const keyword = ref('')
@@ -408,16 +392,11 @@ function menuRemove(r: Row) {
   void remove(r)
 }
 
-const statusPills = computed(() => [
-  // 原型 chips 首枚「全部」（原型 renderGoals filters）：显式复位入口，不再依赖再点一次取消。
-  // 计数不进 pills：四态条数由页头桶组单源呈现（原型 chips 同样无计数，避免同屏两套口径）。
-  // 「已取消」pill 与同名桶同口径（P1#5）：筛非 active 且非 completed 的全部行
-  // （= cancelled + failed + abandoned），与桶「取消 / 中断 / 回收合计」算法一致，点进去对得上。
-  { id: '', label: '全部', title: '' },
-  { id: 'active', label: '进行中', title: '' },
-  { id: 'completed', label: '已完成', title: '' },
-  { id: 'cancelled', label: '已取消', title: '取消 / 中断 / 回收合计：cancelled + failed + abandoned（与上方「已取消」桶同口径）' }
-])
+/** 状态筛选唯一入口 = 贴表分布条（2026-10-04 晚 pills 退役）：再点取消；
+    「已取消」段走 isCancelledBucketRow 取补集（与段计数同口径，点进去对得上） */
+function toggleStatusBand(key: string) {
+  statusFilter.value = statusFilter.value === key ? '' : key
+}
 
 /** 「已取消」筛选谓词：与桶同取补集（非进行中且非已完成），保证 pill 与桶数字/语义一致 */
 const isCancelledBucketRow = (r: Row) => r.status !== 'active' && r.status !== 'completed'
@@ -686,7 +665,9 @@ onMounted(() => {
 /* 用户格 min-width：本表为自动布局（无 colgroup），补「澄清进度/约束条件」两列后
    该列会被内容多的列挤到 ~90px（2026-10-02 视觉核对实测），名字/邮箱全截断——
    给内容格兜底宽度，压缩由可换行的摘要/约束列吸收 */
-.gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }/* 状态桶组样式已提升共享原语（components/mk/MkBuckets.vue，2026-10-04 用户拍板教学组统一形态；口径脚注/失败态一并入组件） */
+.gc-user { display: flex; align-items: center; gap: 9px; min-width: 200px; }
+/* 状态分布已换装共享原语 MkDistBand（2026-10-04 晚贴表分布条，教学组标准件） */
+.gc-distband { padding: 12px 16px; border-bottom: 1px solid var(--mk-line); }
 .gc-user .mk-cell-main { min-width: 0; flex: 1; }.gc-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }/* 阶段列：徽章 + 四步过程点条 + 轻量时间线（创建→澄清→方案→完成，statusText 单源） */
 .gc-stage-cell { display: grid; gap: 4px; min-width: 148px; }.gc-stage-cell__head { display: flex; align-items: center; gap: 8px; }.gc-stage-cell__dots { display: inline-flex; gap: 3px; }.gc-stage-cell__dot {
   width: 6px;

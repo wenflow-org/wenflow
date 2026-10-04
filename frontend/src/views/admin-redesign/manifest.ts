@@ -26,7 +26,7 @@
 
 import type { Component } from 'vue'
 import {
-  Activity, Coins, FlaskConical, HeartPulse, History, IdCard, Layers, LayoutDashboard, ListChecks,
+  Activity, Coins, FlaskConical, HeartPulse, History, IdCard, Layers, LayoutDashboard,
   Megaphone, MessagesSquare, Plug, Route, ScrollText, ShieldCheck, Sparkles,
   Target, Users, Workflow, Wrench,
 } from 'lucide-vue-next'
@@ -62,13 +62,13 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟学习者', glyph: '拟', icon: FlaskConical },
   { id: 'virtual-learner-cards', label: '学习者卡库', group: '虚拟学习者', glyph: '卡', icon: IdCard },
   { id: 'batch-experiments', label: '批量实验', group: '虚拟学习者', glyph: '批', icon: Layers },
-  // Skill 组：健康中心已于 2026-09-29 抽出为独立场景（系统组），本组只剩编排图/Skill/Prompt 评估
-  // 场景下线，Skill 组由 4 项收敛为 3 项（orchestrator · skills · prompt-eval）。
+  // Skill 组：健康中心已于 2026-09-29 抽出为独立场景（系统组）。
+  // 「Prompt 评估」2026-10-04 折入 skills 宿主「Prompt 评估」页签，本组收敛为 2 项
+  // （orchestrator · skills）；旧 URL /admin/prompt-eval 在 router 重定向。
   // label 带上「提示词」关键词（2026-09 定位收敛：管理台=轻运营调整，改 prompt 的
-  // 动线从这里进——新人搜「提示词」能落到正确入口，不再误入 Prompt 评估）
+  // 动线从这里进——新人搜「提示词」落到本组；评估动线现同在 skills 宿主页签内）
   { id: 'orchestrator', label: '编排图', group: 'Skill', glyph: '流', icon: Workflow },
   { id: 'skills', label: 'Skill 与提示词', group: 'Skill', glyph: '能', icon: Sparkles },
-  { id: 'prompt-eval', label: 'Prompt 评估', group: 'Skill', glyph: '评', icon: ListChecks },
   // 观测组：Token 成本并入执行日志第三 tab（成本分析）；记忆与复习移出后只剩日志双子页
   // 2026-09-29 用户拍板拆回独立页：成本分析从执行日志宿主 tab 释放（原 2026-09-04 并入）
   { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志', icon: ScrollText },

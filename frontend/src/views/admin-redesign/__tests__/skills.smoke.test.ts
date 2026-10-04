@@ -221,7 +221,8 @@ describe('Skill 目录 P1 修复批', () => {
 });
 
 /* 2026-09-29 用户拍板：健康检查/漂移/对账三 tab 退役——三者本是同一份报表的三刀，
-   合一后独立成 /admin/health-center（系统组）。Skills 只剩 Skill 运行 / 模型路由。 */
+   合一后独立成 /admin/health-center（系统组）。2026-10-04 Prompt 评估由独立场景折入，
+   Skills 现为 Skill 运行 / 模型路由 / Prompt 评估三页签。 */
 async function mountHost(path: string) {
   dataSource.value = 'live';
   const router = createRouter({
@@ -248,10 +249,10 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
     liveSkillStatsMap.value = null;
   });
 
-  it('只剩 Skill 运行 / 模型路由两个 tab，且不再渲染健康中心', async () => {
+  it('三个页签：Skill 运行 / 模型路由 / Prompt 评估，且不再渲染健康中心', async () => {
     const { wrapper } = await mountHost('/admin/skills');
     const tabs = wrapper.findAll('.skills-tabs .tab');
-    expect(tabs.map((t) => t.text())).toEqual(['Skill 运行', '模型路由']);
+    expect(tabs.map((t) => t.text())).toEqual(['Skill 运行', '模型路由', 'Prompt 评估']);
     expect(wrapper.find('.hc-embedded').exists()).toBe(false);
     // 运行视图在位：状态条走 run 分支（无档案时「共 0 个 Skill」）
     expect(wrapper.text()).toContain('共 0 个 Skill');

@@ -304,6 +304,17 @@ const routes: RouteRecordRaw[] = [
   // /admin/batch-experiments 直连由 /admin/:page 兜底渲染；旧的合并宿主深链
   // /admin/virtual-learners?tab=experiments 不再需要（落到学习者列表，行为优雅降级）。
   {
+    // 「Prompt 评估」2026-10-04 下线：折入 skills 宿主「Prompt 评估」页签（组件更名
+    // PromptEvalPanel 由 Skills 异步加载，场景注册同步撤销）。旧页内页签键 ?tab=cases|runs
+    // 改写为宿主 ?tab=prompt-eval + 内层 ?peTab=，其余 query 透传
+    path: '/admin/prompt-eval',
+    redirect: (to) => {
+      const { tab: evalTab, ...rest } = to.query as Record<string, string>
+      const peTab = evalTab === 'runs' || evalTab === 'cases' ? { peTab: evalTab } : {}
+      return { path: '/admin/skills', query: { ...rest, tab: 'prompt-eval', ...peTab } }
+    }
+  },
+  {
     path: '/admin/models',
     redirect: '/admin/api-config'
   },

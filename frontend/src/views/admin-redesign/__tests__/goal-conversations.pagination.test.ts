@@ -156,7 +156,8 @@ describe('GoalConversations 客户端分页（mk-pagination）', () => {
     await findBtn(w, '下一页').trigger('click');
     await nextTick();
     expect(w.text()).toContain('第 2 / 3 页');
-    await w.findAll('.mk-pill').find((x) => x.text().startsWith('已取消'))!.trigger('click');
+    // 状态筛选唯一入口 = 贴表分布条（2026-10-04 晚 pills 退役）
+    await w.findAll('.gc-distband .stageband__legend .sbl').find((x) => x.text().startsWith('已取消'))!.trigger('click');
     await nextTick();
     expect(w.text()).toContain('第 1 / 1 页');
     expect(w.findAll('tbody tr')).toHaveLength(5);
@@ -194,12 +195,13 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
       data: { success: true, data: { total: 5, active: 1, completed: 1, completionRate: '20' } }
     });
     const w = await mountGoals();
-    // 桶值 = 5 − 1 − 1 = 3；foot 披露「取消 / 中断 / 回收合计」口径（不再是「用户取消或中断」）
-    expect(w.text()).toContain('取消 / 中断 / 回收合计');
+    // 段值 = 5 − 1 − 1 = 3；口径披露随分段悬停 hint（title 属性，不再是「用户取消或中断」文案）
+    const cancelSeg = w.findAll('.gc-distband .mk-distband__seg').find((x) => (x.attributes('title') || '').startsWith('已取消'))!;
+    expect(cancelSeg.attributes('title')).toContain('取消 / 中断 / 回收合计');
     expect(w.text()).not.toContain('用户取消或中断');
-    const cancelPill = w.findAll('.mk-pill').find((x) => x.text() === '已取消')!;
-    expect(cancelPill.attributes('title')).toContain('同口径');
-    await cancelPill.trigger('click');
+    expect(cancelSeg.attributes('title')).toContain('点击只看');
+    // 图例点击「已取消」→ 与段计数同口径（补集聚合），点进去对得上
+    await w.findAll('.gc-distband .stageband__legend .sbl').find((x) => x.text().startsWith('已取消'))!.trigger('click');
     await nextTick();
     const rows = w.findAll('tbody tr');
     expect(rows).toHaveLength(3);
@@ -227,30 +229,32 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
       data: { success: true, data: { total: 2, active: 2, completed: 0, completionRate: '0' } }
     });
     const w = await mountGoals();
-    expect(w.text()).toContain('其中 1 条超 7 天未更新');
-    const stalledFoot = w.findAll('.bucket__foot').find((el) => el.text().includes('超 7 天未更新'))!;
-    expect(stalledFoot).toBeTruthy();
-    expect(stalledFoot.attributes('title')).toContain('按最近 1000 条');
-    expect(stalledFoot.attributes('title')).toContain('非全量');
+    // 口径披露随「进行中」段悬停 hint（title 属性，原桶 foot 文案迁移）
+    const activeSeg = w.findAll('.gc-distband .mk-distband__seg').find((el) => (el.attributes('title') || '').startsWith('进行中'))!;
+    expect(activeSeg.attributes('title')).toContain('其中 1 条超 7 天未更新');
+    expect(activeSeg.attributes('title')).toContain('按加载窗口估算');
+    expect(activeSeg.attributes('title')).toContain('非全量');
   });
 
-  it('P1#6 stats 拉取失败 → 桶位显示「统计获取失败 · 重试」，不再整组静默消失', async () => {
+  it('P1#6 stats 拉取失败 → 错误条「状态构成暂不可用 · 重试」，不再整组静默消失（2026-10-04 晚错误桶随构成带退役）', async () => {
     statsMock.mockRejectedValue(new Error('stats boom'));
     const w = await mountGoals();
-    const buckets = w.find('.buckets');
-    expect(buckets.exists()).toBe(true);
-    expect(buckets.text()).toContain('统计获取失败');
-    const retry = buckets.findAll('button').find((b) => b.text() === '重试');
+    const strip = w.find('.mk-status--bad');
+    expect(strip.exists()).toBe(true);
+    expect(strip.text()).toContain('状态构成');
+    expect(strip.text()).toContain('暂不可用');
+    const retry = strip.findAll('button').find((b) => b.text() === '重试');
     expect(retry).toBeTruthy();
-    // 重试后 stats 恢复 → 错误桶消失、正常桶组回来
+    expect(w.find('.gc-distband').exists()).toBe(false);
+    // 重试后 stats 恢复 → 错误条消失、贴表分布条回来
     statsMock.mockResolvedValue({
       data: { success: true, data: { total: 5, active: 5, completed: 0, completionRate: '0' } }
     });
     await retry!.trigger('click');
     await flushPromises();
     await flushPromises();
-    expect(w.find('.buckets').text()).not.toContain('统计获取失败');
-    expect(w.find('.buckets').text()).toContain('进行中');
+    expect(w.find('.mk-status--bad').exists()).toBe(false);
+    expect(w.find('.gc-distband .mk-distband__title').text()).toBe('目标对话状态分布');
   });
 
   it('行点击进座舱（与 TeachingSessions 语义对齐）：openSubPage session-real；操作列按钮改名「详情」，不再叫「控制台」', async () => {

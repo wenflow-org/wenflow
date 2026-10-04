@@ -1,7 +1,7 @@
 /**
  * 教学组页首统计带（buckets 构成带，2026-10-04 用户拍板统一形态）：
  * - 共享原语 MkBuckets：值大字 + 份额条 + 口径脚注，直接落页面无卡壳（判例 = 目标对话四桶）
- * - 教学会话：十状态归四组 + 完成率（窗口口径）；异常快捷筛选迁卡头快捷 chips
+ * - 教学会话：贴表分布条 MkDistBand（2026-10-04 晚接棒 buckets）——十状态归四组+完结率入副标（窗口口径）；异常快捷筛选迁卡头快捷 chips
  *   （2026-10-04 用户拍板：页头状态条整体退役，异常计数由本带「异常终态」单源承载）
  * - 学习路径：getStats byStatus 全平台口径直出（零值桶如实显示、枚举外归「其它」）
  * - 用户与学习者：真实 / 虚拟 / 测试 三桶互斥构成（管理员作真实桶 foot）
@@ -95,7 +95,7 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     liveUsersTotal.value = 0;
   });
 
-  it('教学会话：十状态归四组 + 完成率，组内合并口径在 foot 披露；异常筛选迁卡头快捷 chips', async () => {
+  it('教学会话：贴表分布条四组归并+完结率入副标（组内口径在分段悬停披露）；下钻互斥可取消；异常筛选迁卡头快捷 chips', async () => {
     tsList.mockResolvedValue({
       data: { data: { total: 7, items: [
         { id: 's1', status: 'active', userName: '甲', topic: 'T1' },
@@ -111,18 +111,28 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     await ready;
     const w = mount(TeachingSessions, { global: { plugins: [router] } });
     await settle();
-    // 旧形态退役护栏：stageband 分布卡不再出现
-    expect(w.find('.stageband').exists()).toBe(false);
-    expect(w.text()).not.toContain('会话状态分布');
-    // 构成带：进行中 2（active+initializing）/ 已完成 1 / 异常终态 2（failed+timeout）/ 已废弃 1 / 其它 1 / 完成率
-    expect(bucketLabels(w)).toEqual(['进行中', '已完成', '异常终态', '已废弃', '其它', '完成率']);
-    expect(bucketValues(w)).toEqual(['2', '1', '2', '1', '1', '14.29%']);
-    // 组内合并口径披露 + 窗口口径在完成率 foot
-    const feet = w.findAll('.bucket__foot').map((f) => f.text());
-    expect(feet).toContain('含初始化 / 暂停 / 收尾中');
-    expect(feet).toContain('失败 / 超时 / 收尾失败合计');
-    expect(feet).toContain('含已被替代');
-    expect(feet.some((t) => t.includes('口径：已完成 ÷ 窗口 7 条'))).toBe(true);
+    // 2026-10-04 晚换装贴表分布条（MkDistBand）：buckets 不再出现；其它段 1 人（枚举外）出现
+    expect(w.find('.buckets').exists()).toBe(false);
+    expect(w.find('.ts-distband .mk-distband__title').text()).toBe('会话状态分布');
+    // 图例恒显全档（含 0 值）：进行中 2（active+initializing）/ 已完成 1 / 异常终态 2 / 已废弃 1 / 其它 1
+    const legend = w.findAll('.ts-distband .stageband__legend .sbl');
+    expect(legend.map((el) => el.find('.sbl__name').text())).toEqual(['进行中', '已完成', '异常终态', '已废弃', '其它']);
+    expect(legend.map((el) => el.find('.sbl__n').text())).toEqual(['2', '1', '2', '1', '1']);
+    // 组内合并口径披露 + 完结率随副标（14.29% = 1/7）
+    const segTitles = w.findAll('.ts-distband .mk-distband__seg').map((el) => el.attributes('title') || '');
+    expect(segTitles.some((t) => t.includes('含初始化 / 暂停 / 收尾中'))).toBe(true);
+    expect(segTitles.some((t) => t.includes('失败 / 超时 / 收尾失败合计'))).toBe(true);
+    expect(segTitles.some((t) => t.includes('含已被替代'))).toBe(true);
+    expect(w.find('.ts-distband .mk-distband__sub').text()).toContain('完结率 14.29%');
+    // 下钻：点「已完成」图例 → 只剩丙；再点取消恢复 7 行
+    const doneBtn = legend.find((el) => el.find('.sbl__name').text() === '已完成')!;
+    await doneBtn.trigger('click');
+    await settle();
+    expect(w.findAll('tbody tr').map((r) => r.text()).filter((t) => t.includes('丙'))).toHaveLength(1);
+    expect(w.findAll('tbody tr').length).toBe(1);
+    await doneBtn.trigger('click');
+    await settle();
+    expect(w.findAll('tbody tr').length).toBe(7);
     // 异常快捷筛选迁卡头快捷 chips（2026-10-04 状态条退役后）：失败+超时 = 2 由本带「异常终态」单源承载，
     // chip 不显计数（同一数字不两处渲染），点击可穿
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);

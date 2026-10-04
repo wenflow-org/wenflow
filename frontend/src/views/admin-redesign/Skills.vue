@@ -1,50 +1,64 @@
 <template>
   <div class="mk-page mk-page--fill skills-host">
-    <!-- 页头（newui/admin pagehead）：页名对齐原型（Skill 与提示词）+ 随 tab 切换的口径副文；
-         本页无页级动作（范围控件在卡头），状态条承载活状态 -->
-    <MkPageHead title="Skill 与提示词" :sub="headSub" />
-    <div class="mk-status" :class="hostTone">
-      <span class="mk-status__dot"></span>
-      <template v-if="tab === 'run'">
-        <MkLoading v-if="liveLoading && !cards.length" inline text="Skill 加载中…" /><span v-else class="mk-status__meta" :title="skillCountHint">共 {{ cards.length }} 个 Skill</span>
-        <!-- 「N 个 live」（原型 statusbar meta）：完成度对账 status=live 的 Skill 数。
-             三态（评审「状态三态缺失」）：对账加载中 → 「live …」；加载失败 → 灰「live ?」（读不到 ≠ 0）；
-             就绪且为 0 → 红字「0 个 live」（全 draft 是真异常，必须显性报警而非整条 meta 静默消失） -->
-        <span v-if="recLoading" class="mk-status__meta" title="完成度对账加载中，live 计数暂不可用">live …</span>
-        <span v-else-if="recError" class="mk-status__meta" :title="`完成度对账加载失败：${recError}；读不到对账 ≠ 0 个 live`">live ?</span>
-        <span v-else-if="liveCount === 0" class="mk-status__meta mk-status__meta--bad" title="对账已就绪且 status=live 的 Skill 数为 0：所有 Skill 均未走完上线门槛（draft → live），属真异常">0 个 live</span>
-        <span v-else class="mk-status__meta" title="完成度对账 status=live（ACTIVE prompt 生效）的 Skill 数">{{ liveCount }} 个 live</span>
-        <!-- 窗口切换刷新中：先摘掉旧窗口的统计数字，避免新口径加载完成前旧 KPI 滞留误导（live.ts 侧 boot 窗口静默 no-op 属 live.ts，这里只兜 UI 观感） -->
-        <MkLoading v-if="rangeRefreshing" inline text="统计刷新中…" />
-        <template v-else>
-          <span v-if="overallRateText" class="mk-status__meta" :class="overallRateCls" :title="`窗口内成功率 = 成功调用 / 总调用；${RATE_THRESHOLD_NOTE}`">
-            成功率 {{ overallRateText }}<template v-if="totalCalls">（{{ okCalls }}/{{ totalCalls }}）</template>
-          </span>
-          <button
-            v-if="errorCount > 0"
-            type="button"
-            class="mk-status__meta-link"
-            :class="{ 'mk-status__meta-link--on': onlyAttention }"
-            :title="'窗口内出现失败调用的节点数；点击筛选「仅看需关注」'"
-            @click="onlyAttention = !onlyAttention"
-          >失败节点 {{ errorCount }}</button>
-          <span v-if="idleCount > 0" class="mk-status__meta" title="窗口内无调用的 Skill 数">空闲 {{ idleCount }}</span>
-          <span v-if="avgLatencyText !== '—'" class="mk-status__meta" title="成功调用平均耗时（按调用量加权）">平均耗时 {{ avgLatencyText }}</span>
-        </template>
+    <!-- 页头（newui/admin pagehead）：页名对齐原型（Skill 与提示词）+ 随 tab 切换的口径副文。
+         2026-10-04 页头状态条退役：运行读数迁下方 MkKpi 卡带（仅 run 页签渲染）；
+         「失败节点」不再单列——卡头「仅看需关注」pill 已带同源计数并承载筛选。
+         唯一页级动作 = Prompt 评估页签的「批量跑评估」（原 /admin/prompt-eval 页头动作随
+         场景下线上移至此，经面板 defineExpose 驱动）；run/模型路由页签仍无页级动作 -->
+    <MkPageHead title="Skill 与提示词" :sub="headSub">
+      <template #actions>
+        <!-- running：批量/试跑期间互斥禁用，防止并发多批真实 LLM 调用重复烧 token -->
+        <button
+          v-if="tab === 'prompt-eval'"
+          type="button"
+          class="mk-btn mk-btn--primary"
+          :disabled="!pePanel?.canRunBatch || pePanel?.running"
+          @click="pePanel?.runBatch()"
+        >{{ pePanel?.running ? '评估运行中…' : '批量跑评估' }}</button>
       </template>
-      <template v-else>
-        <span class="mk-status__meta" title="技能 × 通道 × 参数 × 兜底的覆盖矩阵">覆盖矩阵</span>
-      </template>
-      <span v-if="tab === 'run'" class="mk-status__meta">{{ rangeLabel }}</span>
-    </div>
+    </MkPageHead>
+    <section v-if="tab === 'run'" class="mk-kpi-grid" aria-label="Skill 运行统计">
+      <MkKpi label="Skill" :value="liveLoading && !cards.length ? '…' : cards.length" :title="skillCountHint || '全量注册的 Skill 数'" />
+      <!-- live 三态（评审「状态三态缺失」）：对账加载中 → 「…」；加载失败 → 「?」（读不到 ≠ 0）；
+           就绪且为 0 → 红 0（全 draft 是真异常，必须显性报警而非静默消失） -->
+      <MkKpi
+        label="live"
+        :value="recLoading ? '…' : recError ? '?' : liveCount"
+        :tone="!recLoading && !recError && liveCount === 0 ? 'bad' : ''"
+        hint="ACTIVE prompt 生效"
+        :title="recLoading
+          ? '完成度对账加载中，live 计数暂不可用'
+          : recError
+            ? `完成度对账加载失败：${recError}；读不到对账 ≠ 0 个 live`
+            : liveCount === 0
+              ? '对账已就绪且 status=live 的 Skill 数为 0：所有 Skill 均未走完上线门槛（draft → live），属真异常'
+              : '完成度对账 status=live（ACTIVE prompt 生效）的 Skill 数'"
+      />
+      <MkKpi
+        label="成功率"
+        :value="rangeRefreshing ? '…' : (overallRateText ?? '—')"
+        :tone="overallRateTone"
+        :hint="totalCalls ? `${okCalls}/${totalCalls} · ${rangeLabel}` : rangeLabel"
+        :title="`窗口内成功率 = 成功调用 / 总调用；${RATE_THRESHOLD_NOTE}`"
+      />
+      <MkKpi
+        label="平均耗时"
+        :value="rangeRefreshing ? '…' : avgLatencyText"
+        hint="成功调用按调用量加权"
+        :title="`成功调用平均耗时（按调用量加权）· ${rangeLabel}`"
+      />
+      <MkKpi v-if="idleCount > 0" label="空闲" :value="idleCount" title="窗口内无调用的 Skill 数（空闲是信号不是故障，不着色）" />
+    </section>
 
     <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
          2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签）：
-         Skill 运行 / 模型路由。健康检查 · 漂移 · 对账三 tab 已退役（2026-09-29 用户拍板）：
-         三者本就是同一份报表的三刀，合一后独立成 /admin/health-center，侧栏落在「系统」组。 -->
+         Skill 运行 / 模型路由 / Prompt 评估。健康检查 · 漂移 · 对账三 tab 已退役（2026-09-29 用户拍板）：
+         三者本就是同一份报表的三刀，合一后独立成 /admin/health-center，侧栏落在「系统」组。
+         Prompt 评估 2026-10-04 由独立场景 /admin/prompt-eval 折入（内层用例/历史页签用 ?peTab=） -->
     <div class="tabs skills-tabs" role="tablist" aria-label="Skill 视图切换">
       <button type="button" role="tab" class="tab" :aria-selected="tab === 'run'" @click="switchTab('run')">Skill 运行</button>
       <button type="button" role="tab" class="tab" :aria-selected="tab === 'model-routing'" @click="switchTab('model-routing')">模型路由</button>
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'prompt-eval'" @click="switchTab('prompt-eval')">Prompt 评估</button>
     </div>
 
     <!-- ===== Tab1: Skill 运行（原 Skills.vue 全量内容） ===== -->
@@ -320,18 +334,23 @@
         </div>
       </div>
     </div>
+
+    <!-- ===== Tab3: Prompt 评估（原 /admin/prompt-eval 独立场景，2026-10-04 折入；旧 URL 走
+         router 重定向 ?tab=cases|runs → ?peTab=）。内层 评估用例/评估历史 页签寻址用 ?peTab=
+         （宿主 ?tab= 归本页页签所有，不共键）；主操作「批量跑评估」在宿主页头（pePanel ref 驱动） -->
+    <PromptEvalPanel v-else-if="tab === 'prompt-eval'" ref="pePanel" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { skillStatOf, openSubPage, isLive, intent, investigateAgent } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
 import { COMPLETION_META, completionMetaOf } from './glossaryMeta'
 import { EXTRA_CAPABILITY_SKILLS } from './capabilityCatalog'
-import { RATE_THRESHOLD_NOTE, successRateOf, successRateText, successRateTone, rateToneClass, rateToneOf } from './rate-utils'
+import { RATE_THRESHOLD_NOTE, successRateOf, successRateText, successRateTone, rateToneOf } from './rate-utils'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
@@ -340,19 +359,23 @@ import Pagination from './Pagination.vue'
 import { useIsNarrow } from './useIsNarrow'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import MkLoading from '@/components/mk/MkLoading.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import SkillModelCoverage from './SkillModelCoverage.vue'
 import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
-/* ================= 宿主：Skill 运行 · 模型路由（原 5 tab 收敛为 2，健康中心 2026-09-29 独立成页） =================
+/* ================= 宿主：Skill 运行 · 模型路由 · Prompt 评估（原 5 tab，健康中心 2026-09-29
+   独立成页；Prompt 评估 2026-10-04 由 /admin/prompt-eval 场景折入，Skill 组侧栏 3→2） =================
    健康中心由独立场景折入本宿主 tab（侧栏 15→14 项）；?tab= 双向同步，深链/刷新/前进后退可寻址；
-   唯一 tab 控件 = 本行 pills（健康中心内不再嵌套 pills，R1）。 */
-const SKILLS_TABS = ['run', 'model-routing'] as const
+   唯一 tab 控件 = 本行页签（健康中心内不再嵌套 pills，R1）。 */
+const SKILLS_TABS = ['run', 'model-routing', 'prompt-eval'] as const
 type SkillsTab = (typeof SKILLS_TABS)[number]
 const tab = ref<SkillsTab>('run')
 const route = useRoute()
 const router = useRouter()
+/* Prompt 评估面板动作面（defineExpose）：页头「批量跑评估」的禁用态与点击经模板 ref 驱动 */
+interface PromptEvalPanelExpose { running: boolean; canRunBatch: boolean; runBatch: () => Promise<void> }
+const pePanel = ref<PromptEvalPanelExpose | null>(null)
+const PromptEvalPanel = defineAsyncComponent(() => import('./PromptEvalPanel.vue'))
 /** 轻运营直达：列表行「设计」→ 设计页「协议」页签（改提示词的唯一编辑点） */
 function openDesign(id: string) {
   void router.push(`/admin/skills/${encodeURIComponent(id)}?tab=protocol`)
@@ -382,9 +405,14 @@ function switchTab(t: SkillsTab) {
   tab.value = t
   if (route && router && route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
 }
-/* 页头副文（原型 1698）：随 tab 切换口径——运行=目录/版本/提示词，模型路由=路由与降级策略 */
+/* 页头副文（原型 1698）：随 tab 切换口径——运行=目录/版本/提示词，模型路由=路由与降级策略，
+   Prompt 评估=用例集与历史运行（沿原独立页副文） */
 const headSub = computed(() =>
-  tab.value === 'model-routing' ? 'Skill 的模型路由与降级策略' : 'Skill 目录、版本与提示词管理'
+  tab.value === 'model-routing'
+    ? 'Skill 的模型路由与降级策略'
+    : tab.value === 'prompt-eval'
+      ? '提示词质量评测 · 用例集与历史运行'
+      : 'Skill 目录、版本与提示词管理'
 )
 /* 跨页深链：intent.tab 指向退役 tab（旧调用方还在传 health/drift/recon）也改投独立页 */
 watch(
@@ -579,7 +607,6 @@ const filtered = computed(() => {
   return sortRows(list)
 })
 
-const activeCount = computed(() => cards.value.filter((c) => c.calls > 0).length)
 const errorCount = computed(() => cards.value.filter((c) => c.errors > 0).length)
 
 /* ===== Skill 运营概览（sk-dash：窗口内聚合 + 结论 + KPI） ===== */
@@ -594,7 +621,11 @@ const skillCountHint = computed(
 )
 /** 状态条成功率：精度/阈值/兜底走 rate-utils 单点（P1#26：1 位小数，99.9% 不再显示 100%） */
 const overallRateText = computed(() => successRateText(totalCalls.value, totalErrors.value))
-const overallRateCls = computed(() => rateToneClass(successRateTone(totalCalls.value, totalErrors.value), 'mk-status__meta'))
+/** 2026-10-04 状态条退役：成功率 KPI tone——rate-utils 的 muted（无分母）对 MkKpi 显空档 */
+const overallRateTone = computed<'' | 'ok' | 'warn' | 'bad'>(() => {
+  const t = successRateTone(totalCalls.value, totalErrors.value)
+  return t === 'muted' ? '' : t
+})
 const idleCount = computed(() => cards.value.filter((c) => c.calls === 0).length)
 const avgLatencyMs = computed(() => {
   const called = cards.value.filter((c) => c.calls > 0 && c.avgMs > 0)
@@ -633,9 +664,8 @@ watch(filtered, (list) => {
   if (page.value > maxPage) page.value = maxPage
 })
 
-const statusTone = computed(() => (errorCount.value ? 'mk-status--bad' : activeCount.value ? 'mk-status--ok' : 'mk-status--muted'))
-/** 状态条基调：只剩运行视图三态（健康/漂移/对账已独立成 /admin/health-center） */
-const hostTone = computed(() => statusTone.value)
+// 页级状态基调（statusTone/hostTone/activeCount）已随 2026-10-04 状态条退役删除——
+// KPI 卡各自带 tone，空闲/异常信号在卡级承载
 
 /* 行级成功率显示/着色直接用 rate-utils 的 successRateText / successRateTone（单点口径，见上方 import） */
 

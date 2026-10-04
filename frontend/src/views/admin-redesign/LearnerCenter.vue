@@ -52,7 +52,8 @@
                    与「学习者」卡承载，pill 退为纯筛选开关，同组数字不再同屏念两遍 -->
             </button>
           </div>
-          <MkFilterSearch v-model="keyword" style="width: 200px;" placeholder="搜索名称 / 邮箱 / ID" />
+          <!-- 搜索框走共享默认宽（2026-10-05 卡头统一语法：页内不再私定宽度） -->
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 邮箱 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">

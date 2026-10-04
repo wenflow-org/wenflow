@@ -11,7 +11,7 @@
     "src/views/admin-redesign/Notifications.vue": 2,
     "src/views/admin-redesign/OpsHub.vue": 6,
     "src/views/admin-redesign/Orchestrator.vue": 2,
-    "src/views/admin-redesign/PromptEval.vue": 2,
+    "src/views/admin-redesign/PromptEvalPanel.vue": 2,
     "src/views/admin-redesign/RunStateBadge.vue": 17,
     "src/views/admin-redesign/SandboxView.vue": 4,
     "src/views/admin-redesign/SessionCockpit.vue": 36,

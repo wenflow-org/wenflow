@@ -3,9 +3,9 @@
     <!-- 教学会话页头（newui/admin pagehead；embedded 由宿主承载，本组件不渲染页头）。
          本页 20s 静默轮询，手动「刷新」钮与之重复已撤（对齐执行日志/健康中心先例：
          轮询页不放刷新钮）；拉取失败走错误条重试钮（refreshNow 仍被错误态与宿主联动使用）。
-         统计口径（2026-10-04 状态条退役后）：全页统计带 = 构成带（MkBuckets）唯一一处；
+         统计口径（2026-10-04 晚贴表分布条）：全页统计带 = 表格卡内 MkDistBand 唯一一处；
          计数每个只出现一次——加载/筛选/总量/截断住卡头 meta，待关注 / 缺总结 / 有建议住
-         卡头 chips（后两者无构成桶覆盖），进行中 chip 是 active 单状态 ≠ 构成带
+         卡头 chips（后两者无分布组覆盖），进行中 chip 是 active 单状态 ≠ 分布条
          「进行中」四状态合并档（两个不同口径，见各自 title） -->
     <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 状态分布与需关注识别">
       <template #actions>
@@ -13,19 +13,11 @@
         <DataScopeToggle v-model="includeTest" />
       </template>
     </MkPageHead>
-    <!-- 页头状态条整体退役（2026-10-04 用户拍板：教学组已有构成带，顶部这条复读）——
-         它的「需关注 / 缺总结」与焦点 chips 同源同数、异常计数与构成带「异常终态」同源同数
-         （同一数字不两处渲染）；「只看需关注」= 待关注 chip 的同一动作，直接删。
+    <!-- 页头状态条整体退役（2026-10-04 用户拍板：教学组已有统计带，顶部这条复读）——
+         它的「需关注 / 缺总结」与焦点 chips 同源同数、异常计数与分布条「异常终态」段
+         同源同数（同一数字不两处渲染）；「只看需关注」= 待关注 chip 的同一动作，直接删。
          两个别处没有的**动作**（有建议服务端过滤 / 异常多选筛选）随迁卡头 chips；
          总数与窗口截断口径并进卡头 meta（真触上限才算限定，未触限时窗口=全量）。 -->
-
-    <!-- 状态构成带（2026-10-04 用户拍板教学组统一 buckets 形态，替代 stageband 分布卡）：
-         十状态按收束语义归四组 + 完成率（镜像目标对话四桶判例），组内合并口径在桶 foot 披露，
-         窗口口径在值悬停披露；枚举外取值归「其它」桶（仅实际出现时追加）。
-         数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口），非后端全量口径。
-         细粒度单状态筛选保留在卡头「高级筛选」弹层的状态下拉（原分布卡 legend 点击筛选退役）；
-         embedded 时隐藏（宿主承载域计数）；无数据不留空带 -->
-    <MkBuckets v-if="!embedded && rows.length" label="会话状态构成" :items="tsBucketItems" />
 
     <!-- 深链未命中提示：?session= 存在但当前列表（最近 LIST_LIMIT 条）中找不到 -->
     <div v-if="deepLinkMiss" class="mk-alert" role="alert">
@@ -115,6 +107,23 @@
           <span class="mk-card__meta" :title="`${includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'}；${totalTitle}`">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）<template v-if="truncated"> · 共 {{ listTotal }}，仅显示最近 {{ LIST_LIMIT }} 条</template></span>
         </div>
       </div>
+
+      <!-- 贴表分布条（教学组标准件 MkDistBand，2026-10-04 晚构成带换装）：十状态按收束语义
+           归四组 + 完结率（组内合并口径在分段悬停披露，完结率随副标）；枚举外取值归「其它」段
+           （仅实际出现时追加）。数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口），
+           非后端全量口径。分段/图例点击 = 只看该组（与「高级筛选」弹层的单状态下拉互斥切换）；
+           embedded 时隐藏（宿主承载域计数）；无数据不留空带 -->
+      <MkDistBand
+        v-if="!embedded && rows.length"
+        class="ts-distband"
+        title="会话状态分布"
+        :sub="tsBandSub"
+        unit="条"
+        aria-label="按会话状态组筛选"
+        :bins="tsBandBins"
+        :active-key="bandGroup"
+        @select="toggleBandGroup"
+      />
 
       <div v-if="loadFailed" class="ts-error" role="alert">
         <span>教学会话加载失败</span>
@@ -298,7 +307,7 @@ import MkCols from '@/components/mk/MkCols.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
-import MkBuckets from '@/components/mk/MkBuckets.vue'
+import MkDistBand from '@/components/mk/MkDistBand.vue'
 import { Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 
@@ -598,41 +607,49 @@ const abnormalSessionCount = computed(() =>
   rows.value.filter((r) => ABNORMAL_STATUSES.has(r.status)).length
 )
 /* 异常 badge 可点穿（评审 §5）：点击 = 异常状态多选筛选（与单选 statusFilter 叠加为 AND）；
-   2026-10-04 随分布卡退役迁入状态条 meta-link（与 有建议 同族交互） */
+   与分布条「异常终态」段的差别：chip 可与其它筛选叠加 + 承载异常堆积告警（阈值转红），
+   分布条段 = 互斥切片（一次只看一组）。 */
 const abnormalOnly = ref(false)
-/* 状态构成桶（2026-10-04 用户拍板教学组统一 buckets 形态，替代 stageband 分布卡）：
-   十状态按收束语义归四组 + 完成率（镜像目标对话四桶判例），组内合并口径在桶 foot 披露，
-   窗口口径在值悬停披露；枚举外取值归「其它」桶（仅实际出现时追加）。
-   数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口），非后端全量口径；
-   比例条 = 各组占窗口行数份额（同属一个整体，非假比例）。 */
-const tsBucketItems = computed(() => {
-  const total = rows.value.length || 1
-  const cnt = (pred: (s: string) => boolean) => rows.value.filter((r) => pred(r.status)).length
-  const running = cnt((s) => s === 'initializing' || s === 'active' || s === 'paused' || s === 'finalizing')
-  const completed = cnt((s) => s === 'completed')
-  const abnormal = cnt((s) => ABNORMAL_STATUSES.has(s))
-  const retired = cnt((s) => s === 'discarded' || s === 'superseded')
+
+/* ===== 会话状态分布（2026-10-04 晚贴表分布条，构成带换装 MkDistBand）=====
+   十状态按收束语义归四组 + 枚举外归「其它」段（仅实际出现时追加）；完结率随副标披露。
+   数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口），非后端全量口径。
+   点击分段/图例 = 只看该组（bandGroup，互斥开关）；与「高级筛选」弹层的单状态
+   statusFilter 互斥切换（同属「状态范围」一个维度，两控件不同粒度）。 */
+const TS_BAND_GROUPS = [
+  { key: 'running', label: '进行中', tone: 'var(--mk-blue)', hint: '含初始化 / 暂停 / 收尾中', statuses: ['initializing', 'active', 'paused', 'finalizing'] },
+  { key: 'completed', label: '已完成', tone: 'var(--mk-green)', hint: '终态', statuses: ['completed'] },
+  { key: 'abnormal', label: '异常终态', tone: 'var(--mk-red)', hint: '失败 / 超时 / 收尾失败合计', statuses: ['failed', 'finalization_failed', 'timeout'] },
+  { key: 'retired', label: '已废弃', tone: 'var(--mk-faint)', hint: '含已被替代', statuses: ['discarded', 'superseded'] }
+] as const
+const tsBandBins = computed(() => {
   const known = new Set(statusOptions.map((s) => s.value))
+  const cnt = (pred: (s: string) => boolean) => rows.value.filter((r) => pred(r.status)).length
+  // 显式放宽为 string：可变的「其它」段（枚举外聚合）要与 as const 组档同数组
+  const bins: Array<{ key: string; label: string; tone: string; hint: string; n: number }> = TS_BAND_GROUPS.map((g) => ({
+    key: g.key, label: g.label, tone: g.tone, hint: g.hint,
+    n: cnt((s) => (g.statuses as readonly string[]).includes(s))
+  }))
   const other = cnt((s) => !known.has(s))
-  const pct = (v: number) => Math.round((v / total) * 100)
-  const winTitle = `按已加载 ${rows.value.length} 条窗口聚合（最近 ${LIST_LIMIT} 条上限），非后端全量口径`
-  /* value 联合类型：状态桶为计数、完成率桶为百分比串 */
-  const items: Array<{ value: string | number; label: string; pct: number; tone: string; valueTitle: string; foots: { text: string }[] }> = [
-    { value: running, label: '进行中', pct: pct(running), tone: 'var(--mk-blue)', valueTitle: winTitle, foots: [{ text: '含初始化 / 暂停 / 收尾中' }] },
-    { value: completed, label: '已完成', pct: pct(completed), tone: 'var(--mk-green)', valueTitle: winTitle, foots: [{ text: '终态' }] },
-    { value: abnormal, label: '异常终态', pct: pct(abnormal), tone: 'var(--mk-red)', valueTitle: winTitle, foots: [{ text: '失败 / 超时 / 收尾失败合计' }] },
-    { value: retired, label: '已废弃', pct: pct(retired), tone: 'var(--mk-faint)', valueTitle: winTitle, foots: [{ text: '含已被替代' }] }
-  ]
-  if (other > 0) items.push({ value: other, label: '其它', pct: pct(other), tone: 'var(--mk-faint)', valueTitle: winTitle, foots: [{ text: '枚举外取值' }] })
-  items.push({
-    value: `${((completed / total) * 100).toFixed(2)}%`,
-    label: '完成率',
-    pct: pct(completed),
-    tone: 'var(--mk-blue)',
-    valueTitle: winTitle,
-    foots: [{ text: `口径：已完成 ÷ 窗口 ${rows.value.length} 条` }]
-  })
-  return items
+  if (other > 0) bins.push({ key: 'other', label: '其它', tone: 'var(--mk-faint)', hint: '枚举外取值', n: other })
+  return bins
+})
+const tsBandSub = computed(() =>
+  `点击分段只看该组 · 窗口 ${rows.value.length} 条（最近 ${LIST_LIMIT} 条上限，非后端全量） · 完结率 ${((rows.value.filter((r) => r.status === 'completed').length / (rows.value.length || 1)) * 100).toFixed(2)}%`
+)
+const bandGroup = ref<string | null>(null)
+/** 「其它」段 = 枚举外取值聚合，不能按组内枚举等值判断 */
+function inBandGroup(status: string, key: string): boolean {
+  if (key === 'other') return !statusOptions.some((s) => s.value === status)
+  const group = TS_BAND_GROUPS.find((g) => g.key === key)
+  return !!group && (group.statuses as readonly string[]).includes(status)
+}
+function toggleBandGroup(key: string) {
+  bandGroup.value = bandGroup.value === key ? null : key
+  if (bandGroup.value) statusFilter.value = ''
+}
+watch(statusFilter, (v) => {
+  if (v) bandGroup.value = null // 单状态（高级筛选）与状态组（分布条）互斥切换
 })
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
@@ -653,6 +670,8 @@ const filtered = computed(() => {
   if (pill.value === 'attention') list = list.filter((r) => r.attention !== 'low')
   if (pill.value === 'missing') list = list.filter(isMissingWrapup)
   if (abnormalOnly.value) list = list.filter((r) => ABNORMAL_STATUSES.has(r.status))
+  const bg = bandGroup.value
+  if (bg) list = list.filter((r) => inBandGroup(r.status, bg))
   if (statusFilter.value) {
     list = list.filter((r) => r.status === statusFilter.value)
   }
@@ -669,10 +688,11 @@ const filtered = computed(() => {
   return sortTsRows(list)
 })
 
-const isFiltered = computed(() => pill.value !== 'all' || abnormalOnly.value || !!statusFilter.value || !!dateFilter.value || !!keyword.value.trim())
+const isFiltered = computed(() => pill.value !== 'all' || abnormalOnly.value || !!bandGroup.value || !!statusFilter.value || !!dateFilter.value || !!keyword.value.trim())
 function clearFilters() {
   pill.value = 'all'
   abnormalOnly.value = false
+  bandGroup.value = null
   statusFilter.value = ''
   dateFilter.value = ''
   keyword.value = ''
@@ -827,6 +847,8 @@ defineExpose({ refreshNow })
   white-space: nowrap;
 }/* 异常堆积（合计 ≥ 阈值）chip 转红：原状态条 mk-status--bad 的同一告警，阈值在 chip title 披露。
    选中态（筛选生效中）由模板守卫——abnormalOnly 时不再加本类，让位给 .mk-pill--active 的蓝 */
+/* 贴表分布条：与表格同卡、贴着表头（同 lc-analytics / oc-distband 的间隔节奏） */
+.ts-distband { padding: 12px 16px; border-bottom: 1px solid var(--mk-line); }
 .ts-abn-chip--heap {
   color: var(--mk-red);
   border-color: color-mix(in srgb, var(--mk-red) 45%, var(--mk-line));

@@ -53,7 +53,7 @@ module.exports = {
     "src/views/admin-redesign/MemoryReview.vue",
     "src/views/admin-redesign/OpsCenter.vue",
     "src/views/admin-redesign/Orchestrator.vue",
-    "src/views/admin-redesign/PromptEval.vue",
+    "src/views/admin-redesign/PromptEvalPanel.vue",
     "src/views/admin-redesign/PromptWorkbench.vue",
     "src/views/admin-redesign/QuickLearnPanel.vue",
     "src/views/admin-redesign/SandboxView.vue",
