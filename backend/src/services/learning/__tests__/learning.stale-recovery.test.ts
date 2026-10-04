@@ -50,6 +50,7 @@ describe('LearningService stale core recovery', () => {
       if (where.status && current?.status !== where.status) return { count: 0 }
       return { count: 1 }
     })
+    ;(learningService as any).pathTemplateMemo?.clear?.()
     mockPrisma.learning_paths.findMany.mockResolvedValue([])
     mockPrisma.milestones.findMany.mockResolvedValue([])
     mockPrisma.$transaction.mockImplementation(async (callback: any) => callback(mockPrisma))
@@ -188,7 +189,7 @@ describe('LearningService stale core recovery', () => {
   })
 
   it('P4：预检失败也会把重试计数落库（修复每分钟无限重试）', async () => {
-    mockPrisma.learning_paths.findMany.mockResolvedValue([stageDesignCandidate()])
+    setRetrySweepCandidate(stageDesignCandidate())
     const queue = jest.spyOn(learningService as any, 'queuePathEnrichmentRetry')
       .mockRejectedValue(Object.assign(new Error('阶段任务生成失败'), { code: 'STAGE_DESIGN_TMP' }))
 
@@ -202,7 +203,7 @@ describe('LearningService stale core recovery', () => {
   })
 
   it('P4：不可自愈的路径变更冲突直接把重试次数顶到上限，终止自动重试', async () => {
-    mockPrisma.learning_paths.findMany.mockResolvedValue([stageDesignCandidate()])
+    setRetrySweepCandidate(stageDesignCandidate())
     jest.spyOn(learningService as any, 'queuePathEnrichmentRetry')
       .mockRejectedValue(Object.assign(new Error('相关学习内容已有已完成课堂记录，不能删除或覆盖'), {
         code: 'PATH_MUTATION_HAS_COMPLETED_TEACHING_EVIDENCE',
@@ -218,7 +219,7 @@ describe('LearningService stale core recovery', () => {
   })
 
   it('P4：计数已达上限后不再触发新的重试（无新重试调用/无新日志）', async () => {
-    mockPrisma.learning_paths.findMany.mockResolvedValue([stageDesignCandidate({ stageDesignRetryCount: 3 })])
+    setRetrySweepCandidate(stageDesignCandidate({ stageDesignRetryCount: 3 }))
     const queue = jest.spyOn(learningService as any, 'queuePathEnrichmentRetry')
 
     await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(0)
@@ -228,8 +229,7 @@ describe('LearningService stale core recovery', () => {
   })
 
   it('报告 #52：排队撞瞬时 DB 故障（P1008）→ 预算与退避档位不消耗，参照时间保持原值', async () => {
-    const candidate = stageDesignCandidate()
-    mockPrisma.learning_paths.findMany.mockResolvedValue([candidate])
+    const candidate = setRetrySweepCandidate(stageDesignCandidate())
     jest.spyOn(learningService as any, 'getEnrichmentRetryReferenceTime').mockReturnValue(0)
     jest.spyOn(learningService as any, 'queuePathEnrichmentRetry').mockRejectedValue(
       Object.assign(
@@ -251,7 +251,12 @@ describe('LearningService stale core recovery', () => {
 
   it('报告 #52：单路径处理失败（DB 查询超时）不再拖垮整轮——其余路径照常重试', async () => {
     const broken = { ...stageDesignCandidate(), id: 'path-broken', activeGenerationRunId: 'run-broken' }
-    mockPrisma.learning_paths.findMany.mockResolvedValue([broken, stageDesignCandidate()])
+    const healthy = stageDesignCandidate()
+    mockPrisma.learning_paths.findMany.mockResolvedValue([broken, healthy])
+    mockPrisma.learning_paths.findUnique.mockImplementation(async ({ where }: any) => {
+      const byId: Record<string, any> = { 'path-broken': broken, 'path-1': healthy }
+      return { aiPromptTemplate: byId[where?.id]?.aiPromptTemplate ?? null }
+    })
     mockPrisma.path_generation_runs.findFirst
       .mockRejectedValueOnce(Object.assign(new Error('Operations timed out'), { code: 'P1008' }))
       .mockResolvedValue(null)
@@ -267,12 +272,13 @@ describe('LearningService stale core recovery', () => {
 
   it('追加式自愈：replace 不可用（课堂证据永久冲突）但存在空白阶段 → 走追加通道', async () => {
     const recent = new Date().toISOString()
-    mockPrisma.learning_paths.findMany.mockResolvedValue([{
+    const pendingCandidate = {
       ...stageDesignCandidate(),
       // pending + 刚更新 → resolveGenerationRetry 不 allowed（既非 failed 也非 stale）
       aiPromptTemplate: JSON.stringify({ _generation: { stageDesign: 'pending', updatedAt: recent } }),
       updatedAt: new Date(recent)
-    }])
+    }
+    setRetrySweepCandidate(pendingCandidate)
     jest.spyOn(learningService as any, 'getEnrichmentRetryReferenceTime').mockReturnValue(0)
     jest.spyOn(learningService as any, 'listEmptyMilestoneIds').mockResolvedValue(['ms-1'])
     const append = jest.spyOn(learningService as any, 'queuePathEnrichmentAppend')
@@ -286,7 +292,7 @@ describe('LearningService stale core recovery', () => {
   })
 
   it('追加式自愈：replace 预算已被顶满但仍有空白阶段 → 改用追加通道（真实卡死路径场景）', async () => {
-    mockPrisma.learning_paths.findMany.mockResolvedValue([stageDesignCandidate({ stageDesignRetryCount: 3 })])
+    setRetrySweepCandidate(stageDesignCandidate({ stageDesignRetryCount: 3 }))
     jest.spyOn(learningService as any, 'getEnrichmentRetryReferenceTime').mockReturnValue(0)
     jest.spyOn(learningService as any, 'listEmptyMilestoneIds').mockResolvedValue(['ms-1', 'ms-2'])
     const append = jest.spyOn(learningService as any, 'queuePathEnrichmentAppend')
@@ -337,6 +343,14 @@ function stageDesignCandidate(overrides: { stageDesignRetryCount?: number } = {}
     activeGenerationRunId: null,
     updatedAt: new Date(oldIso)
   }
+}
+
+/** 扫描夹具 + 按需模板读同步喂（2026-10-04 性能批：轮询不再携带 aiPromptTemplate 大列，
+ *  retryOnePreparedPath 经 getPathTemplateMemoized 单行读取模板） */
+function setRetrySweepCandidate(candidate: any) {
+  mockPrisma.learning_paths.findMany.mockResolvedValue([candidate])
+  mockPrisma.learning_paths.findUnique.mockResolvedValue({ aiPromptTemplate: candidate.aiPromptTemplate })
+  return candidate
 }
 
 function staleRun(

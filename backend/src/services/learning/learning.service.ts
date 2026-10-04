@@ -174,7 +174,14 @@ class LearningService {
     }, run.id);
 
     const analysis = {
-      ...parsePathPromptTemplate(path.aiPromptTemplate || null),
+      // 模板按需单行读取（2026-10-04 性能批）：轮询扫描不再携带 aiPromptTemplate 大列，
+      // 仅在真正触发重试/追加（罕见）时取最新模板——对象上的旧值一律忽略，避免记忆化陈旧。
+      ...parsePathPromptTemplate(
+        (await prisma.learning_paths.findUnique({
+          where: { id: path.id },
+          select: { aiPromptTemplate: true }
+        }))?.aiPromptTemplate || null
+      ),
       subject: path.subject || '综合'
     };
 
@@ -230,7 +237,14 @@ class LearningService {
     }, run.id);
 
     const analysis = {
-      ...parsePathPromptTemplate(path.aiPromptTemplate || null),
+      // 模板按需单行读取（2026-10-04 性能批）：轮询扫描不再携带 aiPromptTemplate 大列，
+      // 仅在真正触发重试/追加（罕见）时取最新模板——对象上的旧值一律忽略，避免记忆化陈旧。
+      ...parsePathPromptTemplate(
+        (await prisma.learning_paths.findUnique({
+          where: { id: path.id },
+          select: { aiPromptTemplate: true }
+        }))?.aiPromptTemplate || null
+      ),
       subject: path.subject || '综合'
     };
 
@@ -438,7 +452,7 @@ class LearningService {
     activeGenerationRunId?: string | null;
     updatedAt: Date;
   }): Promise<boolean> {
-    const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
+    const generationStatus = parsePathGenerationStatus(await this.getPathTemplateMemoized(path.id, path.updatedAt));
     const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
     const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
     const canReplace = retry.allowed && retry.retryType === 'stageDesign';
@@ -521,6 +535,24 @@ class LearningService {
     }
   }
 
+  /** pathId → { updatedAt 戳, 模板文本 }：模板读取记忆化（2026-10-04 性能批）。
+   *  updatedAt 是所有模板写入方的变更戳（updatePathGenerationStatus / kc-annotation /
+   *  path-generation.core 场景写均落 updatedAt）；戳一致即模板未变，直接复用。 */
+  private pathTemplateMemo = new Map<string, { stampMs: number; template: string | null }>();
+
+  private async getPathTemplateMemoized(pathId: string, updatedAt: Date): Promise<string | null> {
+    const stampMs = new Date(updatedAt).getTime();
+    const hit = this.pathTemplateMemo.get(pathId);
+    if (hit && hit.stampMs === stampMs) return hit.template;
+    const row = await prisma.learning_paths.findUnique({
+      where: { id: pathId },
+      select: { aiPromptTemplate: true }
+    });
+    const template = row?.aiPromptTemplate ?? null;
+    this.pathTemplateMemo.set(pathId, { stampMs, template });
+    return template;
+  }
+
   async retryEligibleFailedPathPreparations(): Promise<number> {
     const candidatePaths = await prisma.learning_paths.findMany({
       where: {
@@ -537,7 +569,9 @@ class LearningService {
         subject: true,
         deadline: true,
         deadlineText: true,
-        aiPromptTemplate: true,
+        // 不含 aiPromptTemplate（2026-10-04 性能批）：833 条 active 路径 × ~150KB 模板
+        // = 125MB/轮，60s 一次且 3001/3010 两进程各跑——改由 getPathTemplateMemoized
+        // 按 (id, updatedAt) 记忆化按需读取（常态只剩变更行单行读）
         activeGenerationRunId: true,
         updatedAt: true
       },
@@ -545,8 +579,10 @@ class LearningService {
     });
 
     let retriedCount = 0;
+    const seenIds = new Set<string>();
 
     for (const path of candidatePaths) {
+      seenIds.add(path.id);
       try {
         if (await this.retryOnePreparedPath(path)) {
           retriedCount += 1;
@@ -558,6 +594,11 @@ class LearningService {
           error: error instanceof Error ? error.message : String(error)
         });
       }
+    }
+
+    // 记忆表裁剪：只保留本轮仍在 active 集合中的路径（防无界增长）
+    for (const memoId of [...this.pathTemplateMemo.keys()]) {
+      if (!seenIds.has(memoId)) this.pathTemplateMemo.delete(memoId);
     }
 
     if (retriedCount > 0) {

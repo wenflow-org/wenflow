@@ -1602,6 +1602,22 @@ router.get('/', async (req: Request, res) => {
         struggleConcepts: p.struggleConcepts ? JSON.parse(p.struggleConcepts) : [],
         personalityTraits: p.personalityTraits ? JSON.parse(p.personalityTraits) : {},
         tags: p.tags ? JSON.parse(p.tags) : [],
+        /* 会话样本瘦身（2026-10-04 性能批，浏览器实测抓到）：样本的 stageResults 是列表
+           响应 ~17.7MB 的主源（688 条样本合计 7.2MB 原文，JSON 转义后基本翻倍）——paused/
+           阶段进度/模拟进度等派生字段均已由本路由全量聚合补齐；前端仅在旧缓存缺字段时兜底
+           解析它（live.ts pausedFallback）。样本其余字段保留供一屏信号与兼容。 */
+        sessions: sessionSample.map((s) => ({
+          id: s.id,
+          status: s.status,
+          currentStage: s.currentStage,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+          completedTasks: s.completedTasks,
+          totalTasks: s.totalTasks,
+          goalConversationId: s.goalConversationId,
+          learningPathId: s.learningPathId,
+          currentTaskId: s.currentTaskId,
+        })),
         sessionCount: p._count?.sessions ?? sessionSample.length,
         storyCount: storyPool.length,
         runningCount: runningByProfile.get(p.id) ?? 0,

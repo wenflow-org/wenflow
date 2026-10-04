@@ -8,74 +8,106 @@ import { timeoutErrorSignals } from './failure-classification';
  *
  * canaryWhere：默认视图已排除 system-canary 行，前端「测试日志」入口的计数
  * 无法从主查询结果里数出来——路由层传入「同筛选、仅统计 system-canary」的
- * where，这里顺带 count；为空（显式 sourceEntry 筛选）时计 0。
+ * where，这里顺带统计；为空（显式 sourceEntry 筛选）时计 0。
  *
  * 性能批 2026-09-30：total/success/timeout/error/bySource 原本是 5 个独立 count/groupBy，
  * 每个都要为评估 metadata NOT LIKE 全窗读大文本列（周窗 ~1.4 万行 × 5）。
  * 收成两次扫描：groupBy(sourceEntry, success) 一次给 total/success/bySource，
  * 失败行小拉取一次给 timeout/error（分类口径镜像 buildTimeoutCondition，见 matchesTimeoutCondition）。
+ *
+ * 性能批 2026-10-04：扫描按「行 / 统计」拆为两个函数——
+ * fetchAgentLogRows（列表行，实时）与 fetchAgentLogStats（统计，可被路由层做进程内缓存）。
+ * 统计的失败行拉取要读 7k+ 行 error 文本（宽行回表），页缓存又被夜批写入持续冲刷，
+ * 「页热」不可靠；进程内缓存 + 启动预热才让执行日志页稳定毫秒级。
  */
-export async function fetchAgentLogPage(params: {
+
+/** 统计四件套：[total, success, timeout, error, bySource, canary] */
+export type AgentLogStatsTuple = [number, number, number, number, any[], number];
+
+/** 列表行取数（实时，行窗口受 limit 限制，代价与窗口无关） */
+export async function fetchAgentLogRows(params: {
   where: any;
   skip: number;
   limitNum: number;
   logOrderBy: any;
+}): Promise<any[]> {
+  const { where, skip, limitNum, logOrderBy } = params;
+  // select 裁剪：列表仅消费下列字段（input/output 由详情接口按需拉取，不在列表传输）
+  return prisma.agent_call_logs.findMany({
+    where,
+    skip,
+    take: limitNum,
+    orderBy: logOrderBy,
+    select: {
+      id: true,
+      agentId: true,
+      callerAgent: true,
+      sourceEntry: true,
+      success: true,
+      error: true,
+      errorCode: true,
+      traceId: true,
+      durationMs: true,
+      calledAt: true,
+      metadata: true,
+      executionLayer: true,
+      providerId: true,
+      providerType: true,
+      routeSource: true,
+      model: true,
+      statusCode: true,
+      attemptCount: true,
+      maxAttempts: true,
+      finishReason: true,
+      promptTokens: true,
+      completionTokens: true,
+    },
+  });
+}
+
+export async function fetchAgentLogStats(params: {
+  where: any;
   canaryWhere?: any;
-}): Promise<[any[], number, number, number, number, any[], number]> {
-  const { where, skip, limitNum, logOrderBy, canaryWhere } = params;
-  const [logs, sourceSuccessGroups, failedRows, canaryCount] = await Promise.all([
-    // select 裁剪：列表仅消费下列字段（input/output 由详情接口按需拉取，不在列表传输）
-    prisma.agent_call_logs.findMany({
-      where,
-      skip,
-      take: limitNum,
-      orderBy: logOrderBy,
-      select: {
-        id: true,
-        agentId: true,
-        callerAgent: true,
-        sourceEntry: true,
-        success: true,
-        error: true,
-        errorCode: true,
-        traceId: true,
-        durationMs: true,
-        calledAt: true,
-        metadata: true,
-        executionLayer: true,
-        providerId: true,
-        providerType: true,
-        routeSource: true,
-        model: true,
-        statusCode: true,
-        attemptCount: true,
-        maxAttempts: true,
-        finishReason: true,
-        promptTokens: true,
-        completionTokens: true,
-      },
-    }),
-    // total（组计数之和）/ success / bySource 三笔来自同一次扫描
+  /** 统计口径 where（2026-10-04 性能批二段）：默认视图 = where 去掉「排除 canary」子句，
+   *  canarySourceEntry='system-canary' → total/success/bySource 与 canary 计数由**同一次
+   *  groupBy 扫描**派生（JS 剔除 canary 分组），省掉第二趟全窗索引走查。
+   *  显式 sourceEntry 筛选时两者均为缺省（统计不过滤、canary 计 0，与原语义一致）。 */
+  statsWhere?: any;
+  canarySourceEntry?: string | null;
+}): Promise<AgentLogStatsTuple> {
+  const { where, canaryWhere, statsWhere, canarySourceEntry } = params;
+  const canaryFiltered = canaryWhere != null && canarySourceEntry != null;
+  const [sourceSuccessGroups, failedRows] = await Promise.all([
+    // total（组计数之和）/ success / bySource / canaryCount 同来自这一次扫描：
+    // 默认视图扫 statsWhere（含 canary 行），JS 侧把 canary 分组从主口径剔除、单独计数
     prisma.agent_call_logs.groupBy({
       by: ['sourceEntry', 'success'],
-      where,
+      where: statsWhere ?? where,
       _count: { _all: true },
     }),
-    // 失败行小拉取（周窗 ~470 行）：timeout/error 拆分在端内按 buildTimeoutCondition 同口径分类
+    // 失败行小拉取（周窗 ~7k 行）：timeout/error 拆分在端内按 buildTimeoutCondition 同口径分类
     prisma.agent_call_logs.findMany({
       where: { ...where, success: false },
       select: { errorCode: true, errorCategory: true, error: true },
     }),
-    canaryWhere ? prisma.agent_call_logs.count({ where: canaryWhere }) : Promise.resolve(0),
   ]);
 
-  const total = sourceSuccessGroups.reduce((sum, g) => sum + g._count._all, 0);
-  const successCount = sourceSuccessGroups.filter((g) => g.success === true).reduce((sum, g) => sum + g._count._all, 0);
+  const isCanaryGroup = (g: { sourceEntry: string | null }) =>
+    canaryFiltered && g.sourceEntry === canarySourceEntry;
+  const statsGroups = sourceSuccessGroups.filter((g) =>
+    canaryFiltered ? !isCanaryGroup(g) && g.sourceEntry != null : true
+  );
+  const canaryCount = canaryFiltered
+    ? sourceSuccessGroups.filter(isCanaryGroup).reduce((sum, g) => sum + g._count._all, 0)
+    : 0;
+
+  const total = statsGroups.reduce((sum, g) => sum + g._count._all, 0);
+  const successCount = statsGroups.filter((g) => g.success === true).reduce((sum, g) => sum + g._count._all, 0);
   const timeoutCount = failedRows.filter(matchesTimeoutCondition).length;
   const errorCount = failedRows.length - timeoutCount;
   // 路由消费形态保持 { sourceEntry, _count: { _all } }[]（仅按 sourceEntry 聚合的视图）
   const sourceTotals = new Map<string, number>();
-  for (const g of sourceSuccessGroups) {
+  for (const g of statsGroups) {
     const key = g.sourceEntry || 'platform';
     sourceTotals.set(key, (sourceTotals.get(key) || 0) + g._count._all);
   }
@@ -84,7 +116,25 @@ export async function fetchAgentLogPage(params: {
     _count: { _all },
   }));
 
-  return [logs, total, successCount, timeoutCount, errorCount, bySourceRows, canaryCount];
+  return [total, successCount, timeoutCount, errorCount, bySourceRows, canaryCount];
+}
+
+/** 兼容组合（行 + 统计）：未接缓存的调用方（测试/其他入口）仍可用单函数形态 */
+export async function fetchAgentLogPage(params: {
+  where: any;
+  skip: number;
+  limitNum: number;
+  logOrderBy: any;
+  canaryWhere?: any;
+  statsWhere?: any;
+  canarySourceEntry?: string | null;
+}): Promise<[any[], number, number, number, number, any[], number]> {
+  const { where, skip, limitNum, logOrderBy, canaryWhere, statsWhere, canarySourceEntry } = params;
+  const [logs, stats] = await Promise.all([
+    fetchAgentLogRows({ where, skip, limitNum, logOrderBy }),
+    fetchAgentLogStats({ where, canaryWhere, statsWhere, canarySourceEntry }),
+  ]);
+  return [logs, ...stats] as [any[], number, number, number, number, any[], number];
 }
 
 /**

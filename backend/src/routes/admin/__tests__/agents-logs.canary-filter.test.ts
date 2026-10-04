@@ -101,20 +101,26 @@ describe('执行日志默认排除金丝雀探针（回归）', () => {
     expect(hasCanaryExclusion(where.AND)).toBe(false)
   })
 
-  it('默认查询时以「同筛选、仅 system-canary」的 where 顺带统计 canary 计数', async () => {
+  it('默认查询时 canary 计数与统计同源自一次 groupBy（2026-10-04 性能批：省第二趟全窗走查）', async () => {
+    groupBy.mockResolvedValue([
+      { sourceEntry: 'platform', success: true, _count: { _all: 10 } },
+      { sourceEntry: 'platform', success: false, _count: { _all: 2 } },
+      { sourceEntry: 'system-canary', success: true, _count: { _all: 3 } },
+    ] as any)
     const res = await run(getRouteHandler(platformRouter, '/agents/logs', 'get'), {
       query: { timeRange: 'week', status: 'error' },
     })
 
     expect(res.statusCode).toBe(200)
-    // 2026-09-30 性能批：total/success/timeout/error 由 groupBy(2 列)+失败行小拉取合成，
-    // count 只剩 canary 计数一笔（canaryWhere 存在时恰好一次）
-    expect(count).toHaveBeenCalledTimes(1)
-    const canaryWhere = count.mock.calls[0][0].where
-    // 排除条件换成仅 canary，其余过滤（时间范围/状态）保持同口径
-    expect(canaryWhere.AND).toEqual(expect.arrayContaining([{ sourceEntry: 'system-canary' }]))
-    expect(hasCanaryExclusion(canaryWhere.AND)).toBe(false)
-    expect(res.body.data.stats.canary).toBe(0)
+    // 独立的 canary count 已退役：统计与 canary 由同一 groupBy 扫描派生
+    expect(count).not.toHaveBeenCalled()
+    expect(groupBy).toHaveBeenCalledTimes(1)
+    const statsWhere = groupBy.mock.calls[0][0].where
+    // 统计口径 where 不含 canary 排除子句（canary 行随扫描返回，JS 侧从主口径剔除）
+    expect(hasCanaryExclusion(statsWhere.AND)).toBe(false)
+    expect(statsWhere.calledAt).toBeDefined()
+    expect(res.body.data.stats.canary).toBe(3)
+    expect(res.body.data.stats.total).toBe(12)
   })
 
   it('显式 sourceEntry 筛选时不追加 canary 计数（stats.canary = 0）', async () => {

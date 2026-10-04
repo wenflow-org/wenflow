@@ -928,7 +928,10 @@ async function generateLearningPathCore(data: GeneratePathData) {
               ...(persistedTemplate._generation || {}),
               scene: sceneSummary
             }
-          })
+          }),
+          // 模板变更必须落 updatedAt（2026-10-04 性能批）：重试轮询按 (id, updatedAt)
+          // 记忆化模板读取，缺此戳会让场景写对轮询不可见
+          updatedAt: new Date()
         }
       });
     }

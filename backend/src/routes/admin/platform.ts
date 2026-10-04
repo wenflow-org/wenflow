@@ -43,7 +43,7 @@ import {
 } from '../../services/admin/failure-classification';
 import { computeOverviewStats, clearOverviewAllTimeCache } from '../../services/admin/platform-overview.service';
 import { collectManifestDiagnostics } from '../../services/admin/platform-manifest-diagnostics.service';
-import { fetchAgentLogPage, fetchAgentLogWithAttempts } from '../../services/admin/platform-agent-logs.service';
+import { fetchAgentLogRows, fetchAgentLogStats, fetchAgentLogWithAttempts, type AgentLogStatsTuple } from '../../services/admin/platform-agent-logs.service';
 import { getPlatformActivityFeed } from '../../services/admin/platform-activity.service';
 import { listTeachingSessionsDebug } from '../../services/admin/platform-teaching-sessions.service';
 
@@ -298,15 +298,59 @@ export async function warmOverviewStatsCache(): Promise<void> {
   overviewStatsCache.set('overview-stats', { payload: data, cachedAt: Date.now() });
 }
 
-/** 启动预热（无缓存语义，纯页缓存/索引页焐热）：按执行日志页默认筛选（周窗，与前端
- *  fetchLiveSpans 的 timeRange='week' 同参）空跑一次取数，避免重启后首位访客付冷读（实测 20s+）。 */
-export async function warmExecLogsPageTouch(): Promise<void> {
+/* ===== 执行日志统计缓存（2026-10-04 性能批三段） =====
+ * 统计的两笔扫描中，失败行拉取要读周窗 7k+ 行的 error 文本（宽行回表：冷页实测 20-30s、
+ * 热 ~1.5s）；夜批写入持续冲刷页缓存使「页热」不可靠 → 进程内缓存（60s TTL + 在途去重），
+ * 行数据仍实时取（limit 受限，代价与窗口无关）。默认视图由启动预热填一次，稳态即命中。 */
+const EXEC_LOGS_STATS_TTL_MS = 60 * 1000;
+const execLogsStatsCache = new Map<string, { payload: AgentLogStatsTuple; cachedAt: number }>();
+const execLogsStatsInflight = new Map<string, Promise<AgentLogStatsTuple>>();
+
+/** 统计缓存键：覆盖一切影响统计的筛选参数（page/limit/sort 不影响统计，不入键） */
+function execLogsStatsKey(query: Record<string, unknown>): string {
+  const keys = ['timeRange', 'startTime', 'endTime', 'status', 'sourceEntry', 'agentName', 'agentId', 'errorCategory', 'keyword', 'traceId', 'sessionId'];
+  return keys.map((k) => `${k}=${query[k] ?? ''}`).join('|');
+}
+
+async function getExecLogsStatsCached(key: string, compute: () => Promise<AgentLogStatsTuple>): Promise<AgentLogStatsTuple> {
+  const cached = execLogsStatsCache.get(key);
+  if (cached && Date.now() - cached.cachedAt < EXEC_LOGS_STATS_TTL_MS) {
+    return cached.payload;
+  }
+  const inflight = execLogsStatsInflight.get(key);
+  if (inflight) return inflight;
+  const computation = compute()
+    .then((payload) => {
+      // 容量保护：检索类筛选可产生较多键，超限时清掉最旧一半
+      if (execLogsStatsCache.size > 200) {
+        const byAge = [...execLogsStatsCache.entries()].sort((a, b) => a[1].cachedAt - b[1].cachedAt);
+        for (const [k] of byAge.slice(0, 100)) execLogsStatsCache.delete(k);
+      }
+      execLogsStatsCache.set(key, { payload, cachedAt: Date.now() });
+      return payload;
+    })
+    .finally(() => {
+      if (execLogsStatsInflight.get(key) === computation) execLogsStatsInflight.delete(key);
+    });
+  execLogsStatsInflight.set(key, computation);
+  return computation;
+}
+
+/** 启动预热（schedulers 装配调用）：按执行日志页默认筛选（周窗，与前端 fetchLiveSpans 的
+ *  timeRange='week' 同参）填统计缓存；顺带空跑一次行取数焐热页（尽力而为，无缓存语义）。 */
+export async function warmExecLogsStatsCache(): Promise<void> {
   const weekAgo = new Date(startOfDay(new Date()).getTime() - 7 * 86400000);
-  const where: any = {
+  // where 形态与路由默认视图逐字对齐（含 canary 排除子句；failedRows 用它）
+  const baseWhere: any = {
     AND: [{ NOT: { agentId: 'path-agent' } }, { sourceEntry: { not: 'system-canary' } }],
     calledAt: { gte: weekAgo },
   };
-  await fetchAgentLogPage({ where, skip: 0, limitNum: 200, logOrderBy: [{ calledAt: 'desc' }, { id: 'desc' }] });
+  const statsWhere: any = { ...baseWhere, AND: [baseWhere.AND[0]] };
+  const canaryWhere: any = { ...baseWhere, AND: [baseWhere.AND[0], { sourceEntry: 'system-canary' }] };
+  await getExecLogsStatsCached(execLogsStatsKey({ timeRange: 'week' }), () =>
+    fetchAgentLogStats({ where: baseWhere, canaryWhere, statsWhere, canarySourceEntry: 'system-canary' })
+  );
+  await fetchAgentLogRows({ where: baseWhere, skip: 0, limitNum: 200, logOrderBy: [{ calledAt: 'desc' }, { id: 'desc' }] });
 }
 
 router.get('/overview/stats', async (req: Request, res: Response) => {
@@ -691,9 +735,12 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     }
 
     /* 测试（金丝雀）日志计数：默认视图已排除 canary 行，前端「测试 N」入口从结果里
-       数不到——用「同筛选、仅 system-canary」的 where 顺带 count（放在全部过滤条件
-       组装完之后，保证入口计数与「仅看测试」视图条数对得上）。浅拷贝保留 where 里 Date 引用。 */
+       数不到——用「同筛选、仅 system-canary」的 statsWhere + canarySourceEntry 交服务层
+       在同一次 groupBy 扫描里派生（省一趟全窗索引走查，2026-10-04 性能批二段）。
+       浅拷贝保留 where 里 Date 引用。 */
     let canaryWhere: any = null;
+    let statsWhere: any = null;
+    let canarySourceEntry: string | null = null;
     if (!sourceEntry && Array.isArray(where.AND)) {
       canaryWhere = {
         ...where,
@@ -701,6 +748,11 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
           clause?.sourceEntry?.not === 'system-canary' ? { sourceEntry: 'system-canary' } : clause
         ),
       };
+      statsWhere = {
+        ...where,
+        AND: (where.AND as any[]).filter((clause) => clause?.sourceEntry?.not !== 'system-canary'),
+      };
+      canarySourceEntry = 'system-canary';
     }
 
     const buildStatusLabel = (log: { success: boolean; errorCode: string | null; error: string | null }) => {
@@ -833,13 +885,14 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
       };
     };
 
-    const [logs, total, successCount, timeoutCount, errorCount, bySourceRows, canaryCount] = await fetchAgentLogPage({
-      where,
-      skip,
-      limitNum,
-      logOrderBy,
-      canaryWhere,
-    });
+    /* 行实时取 + 统计走进程内缓存（2026-10-04 性能批三段）：失败行拉取读 7k+ 行 error 文本，
+       夜批持续冲刷页缓存使「页热」不可靠；缓存键覆盖全部影响统计的筛选参数。 */
+    const [logs, [total, successCount, timeoutCount, errorCount, bySourceRows, canaryCount]] = await Promise.all([
+      fetchAgentLogRows({ where, skip, limitNum, logOrderBy }),
+      getExecLogsStatsCached(execLogsStatsKey(req.query as Record<string, unknown>), () =>
+        fetchAgentLogStats({ where, canaryWhere, statsWhere, canarySourceEntry })
+      ),
+    ]);
 
     const bySource = bySourceRows.reduce((acc, row) => {
       acc[row.sourceEntry || 'platform'] = row._count._all;

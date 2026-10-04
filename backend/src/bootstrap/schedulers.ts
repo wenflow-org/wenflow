@@ -183,13 +183,13 @@ export function runOverviewStatsCacheWarmup(): void {
 export function runAdminPageColdWarmup(): void {
   const timer = setTimeout(() => {
     runBackgroundTask('admin.pages.cold-warmup', async () => {
-      const [{ warmSkillListStatsCache }, { warmExecLogsPageTouch }, { learnerSnapshotRefreshService }] = await Promise.all([
+      const [{ warmSkillListStatsCache }, { warmExecLogsStatsCache }, { learnerSnapshotRefreshService }] = await Promise.all([
         import('../routes/admin/skills'),
         import('../routes/admin/platform'),
         import('../services/learner/LearnerSnapshotRefreshService'),
       ]);
       await warmSkillListStatsCache();
-      await warmExecLogsPageTouch();
+      await warmExecLogsStatsCache();
       await learnerSnapshotRefreshService.listForAdmin({ excludeTest: true, limit: 500 });
       logger.info('管理端页面冷读预热完成');
     });
