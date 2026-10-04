@@ -29,7 +29,7 @@
       <!-- P1#17：需关注收窄为真异常（趋势降 ∨ 疲劳高 ∨ 有风险摘要）；
            常态档「疲劳=中」拆到 pills 的「观察」，不再把需关注撑爆 -->
       <MkKpi label="需关注" :value="riskCount" :tone="riskCount ? 'warn' : ''" hint="趋势下降 / 疲劳高 / 有风险摘要" />
-      <MkKpi label="低置信" :value="lowConfCount" :tone="lowConfCount ? 'warn' : ''" hint="快照置信度低于 50%" />
+      <MkKpi label="低置信" :value="lowConfCount" :tone="lowConfCount ? 'warn' : ''" :hint="lowConfHint" />
       <MkKpi label="平均置信度" :value="avgConfText" :hint="avgConfHint" />
     </section>
 
@@ -93,7 +93,7 @@
           <section v-if="confRows.length" class="lc-dist" aria-label="置信度分布">
             <div class="lc-dist__head">
               <span class="lc-section-title">置信度分布</span>
-              <span class="lc-section-sub">点击分段只看该区间 · 共 {{ confRows.length }} 个快照</span>
+              <span class="lc-section-sub">{{ confBaseNote }}</span>
             </div>
             <div class="stageband lc-dist__band" role="group" aria-label="按置信度分档筛选">
               <span
@@ -441,7 +441,7 @@ const isRisk = (r: Row) => r.trend === 'down' || r.fatigue === '高' || !!r.risk
 const isWatch = (r: Row) => !isRisk(r) && r.fatigue === '中'
 const riskCount = computed(() => rows.value.filter(isRisk).length)
 const watchCount = computed(() => rows.value.filter(isWatch).length)
-const lowConfCount = computed(() => rows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1)).length)
+/* lowConfCount 随「低置信 KPI 与分档条同口径」移居 confRows 段（惰性求值，先引用后定义无碍） */
 
 /* —— 学习状态分析层（原型 renderPeople state 分支：①统计四卡 ②分布直方图 ③排行）——
    原型以 LSB（学习状态平衡分，-30~30）作逐人评分；本仓快照域（live.ts LiveLearner）
@@ -449,6 +449,23 @@ const lowConfCount = computed(() => rows.value.filter((r) => evidenceLowConfiden
    口径 = rows 全集（随「含测试账号」范围联动），不随 pill / 搜索筛选变化；
    有学习任务（r.task）才有有效置信度，与表格置信列的「—」口径一致 */
 const confRows = computed(() => rows.value.filter((r) => r.task && r.confidence != null))
+/** 口径外的行数（无任务/无置信度）：分档条与均值都不含它们——就地明示去向，
+    否则「卡 1 的 281」与「分档条的 241」同屏会被读成数字打架（2026-10-04 外部评审误读台账） */
+const excludedFromConf = computed(() => rows.value.length - confRows.value.length)
+const confBaseNote = computed(() =>
+  `点击分段只看该区间 · 共 ${confRows.value.length} 个有任务的快照` +
+  (excludedFromConf.value ? `（另 ${excludedFromConf.value} 位无任务/无快照不计）` : '')
+)
+/** 低置信 KPI 与分档条/均值同一口径（有任务的快照）：无任务行在表里置信列本显「—」，
+    计入会与紧邻方的分布对不上（分布合计里数不出它）——外部评审「274 vs 高分区 7 人」的
+    真接缝即此（274=234+40 无任务行），统一后 KPI 恒等于分档条 <50% 两档之和 */
+const lowConfCount = computed(() => confRows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1)).length)
+/** 低置信 hint 带基数（与平均置信度同判例：数字要能对上分母） */
+const lowConfHint = computed(() =>
+  confRows.value.length
+    ? `有任务的快照中置信度低于 50% · n=${confRows.value.length}`
+    : '暂无有任务的快照'
+)
 const avgConfText = computed(() => {
   if (!confRows.value.length) return '—'
   const avg = confRows.value.reduce((s, r) => s + (r.confidence ?? 0), 0) / confRows.value.length
@@ -505,7 +522,7 @@ const filtered = computed(() => {
   let list = rows.value
   if (pill.value === 'risk') list = rows.value.filter(isRisk)
   if (pill.value === 'watch') list = rows.value.filter(isWatch)
-  if (pill.value === 'stale') list = rows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1))
+  if (pill.value === 'stale') list = confRows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1))
   // 置信分段下钻（一屏工作台）：只看命中分箱且有快照的学习者
   if (confBin.value != null) list = list.filter((r) => r.task && r.confidence != null && binOf(r) === confBin.value)
   // 关键词搜索

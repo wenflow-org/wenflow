@@ -154,6 +154,39 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     localStorage.removeItem('wf_learner_hidden_cols_v2');
     liveLearners.value = [];
   });
+
+  it('低置信 KPI 与分档条/均值同口径（无任务快照不计）；基数差异就地显式（281/241 型接缝）', async () => {
+    // 四人都有任务 + 戊无任务且低置信（0.2）：旧口径会把戊算进低置信 → 与紧邻的分布对不上
+    liveLearners.value = [
+      learner({ userId: 'jia', name: '甲', currentTask: '任务A', confidence: 0.6 }),
+      learner({ userId: 'yi', name: '乙', currentTask: '任务B', confidence: 0.5 }),
+      learner({ userId: 'bing', name: '丙', currentTask: '任务C', confidence: 0.4 }),
+      learner({ userId: 'ding', name: '丁', currentTask: '任务D', confidence: 0.3 }),
+      learner({ userId: 'wu', name: '戊', currentTask: null, confidence: 0.2 })
+    ];
+    const w = mount(LearnerCenter);
+    await settle();
+    const kpiCard = (label: string) => {
+      const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text().trim() === label);
+      expect(card, `缺少 KPI：${label}`).toBeTruthy();
+      return card!;
+    };
+    expect(kpiCard('低置信').find('.mk-kpi__num').text()).toBe('2'); // 丙/丁；无任务的戊不计（旧口径=3）
+    expect(kpiCard('低置信').find('.mk-kpi__hint').text()).toContain('n=4'); // 基数=有任务的快照
+
+    const sub = w.find('.lc-dist__head .lc-section-sub').text();
+    expect(sub).toContain('共 4 个有任务的快照');
+    expect(sub).toContain('另 1 位无任务/无快照不计');
+
+    // 「低置信」pill 过滤与 KPI 同口径：戊不出现，行数=KPI 读数（否则计数/过滤再打架）
+    await w.findAll('.mk-pill').find((p) => p.text().includes('低置信'))!.trigger('click');
+    await nextTick();
+    const rowsText = w.findAll('tbody tr').map((r) => r.text());
+    expect(rowsText).toHaveLength(2);
+    expect(rowsText.some((t) => t.includes('戊'))).toBe(false);
+    w.unmount();
+    liveLearners.value = [];
+  });
 });
 
 describe('UserAccountPane 账号轴口径（人员详情合并后）', () => {
