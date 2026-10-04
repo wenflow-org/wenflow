@@ -16,6 +16,8 @@ export interface LearnerSnapshotRefreshInput {
 export class LearnerSnapshotRefreshService {
   private cache = new Map<string, { snapshot: LearnerSnapshot; cachedAt: number }>();
   private static readonly CACHE_TTL_MS = 5 * 60 * 1000;
+  /** 列表路径可接受的投影陈旧度：60 分钟（2026-10-04，原 10 分钟在 500 窗口下每页加载都全量重建） */
+  private static readonly LIST_PROJECTION_FRESH_MS = 60 * 60 * 1000;
 
   async refresh(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
     const key = this.buildKey(input);
@@ -165,10 +167,13 @@ export class LearnerSnapshotRefreshService {
     }
 
     if (refreshQueue.length > 0) {
+      // 列表路径的投影保鲜窗 60 分钟（2026-10-04）：原 10 分钟导致解锁 500 窗口后
+      // 每次页面加载都触发数百人全量重建（实测把 agents/logs 挤过 30s 超时 → 壳层判死全域空）。
+      // 列表消费的是趋势/疲劳/置信度这类缓变信号，60 分钟陈旧度可接受；重建仍只针对真缺失。
       const persisted = await prisma.learner_projections.findMany({
         where: {
           projectionKey: { in: refreshQueue.map((entry) => entry.key) },
-          generatedAt: { gte: new Date(Date.now() - 10 * 60 * 1000) },
+          generatedAt: { gte: new Date(Date.now() - LearnerSnapshotRefreshService.LIST_PROJECTION_FRESH_MS) },
         },
         select: { projectionKey: true, payload: true },
       });
