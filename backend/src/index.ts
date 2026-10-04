@@ -12,6 +12,7 @@ import { logger } from './utils/logger';
 import { isBenignConnectionError } from './utils/connection-errors';
 import { ReadinessService } from './services/readiness.service';
 import { ApplicationLifecycle, resolveShutdownDeadlineMs } from './services/application-lifecycle.service';
+import { applyServerTimeouts } from './config/server-timeouts';
 import { aiTeachingOrchestrator } from './services/ai-teaching/AITeachingCoordinator';
 import { aiCapabilityHealthService } from './services/ai-capability-health.service';
 import { backgroundTaskTracker } from './services/background-task-tracker.service';
@@ -117,6 +118,9 @@ export async function startServer() {
         server.off('error', onError);
         resolveServer();
       });
+      // 长程同步请求（/auto 多轮、教学回合最长 300s）需要比 Node 默认 5 分钟更宽的服务端超时，
+      // 否则合法长请求会被拦腰截断（报告 #59：304s 时 http=0，在途教学轮被取消）
+      applyServerTimeouts(server);
       httpServer = server;
       server.once('error', onError);
     });
