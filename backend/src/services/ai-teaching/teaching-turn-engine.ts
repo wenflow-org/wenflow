@@ -21,6 +21,7 @@ import { memoryTraceService } from '../memory/memory-trace.service';
 import { recordMisconceptions } from '../learner/misconception-ledger.service';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { CHECKPOINT_MAX_ATTEMPTS, parseSessionArtifacts } from './checkpoint-shared';
+import { shouldDeferCompletionForClosure } from './teaching-closure';
 import {
   promoteSupplementSlot,
   fetchSupplementMaterial,
@@ -433,7 +434,23 @@ export async function processStudentMessage(
     && noPendingPoints
     && avgTargetProgress >= SOFT_COMPLETION_PROGRESS_FLOOR
     && (modelRequestedCompletion || replySignalsClosing);
-  const completionReady = targetsConsolidated || backstopReady || softCompletionReady;
+  // 收口闭合门禁（teaching-closure.ts，H3 回测立项）：完成信号与本回合新抛问题/未答检查点
+  // 同回合出现时，学员永远轮不到作答课就 completed（26.5% 完结课残留此形态且三窗稳定，
+  // 提示词与强制消费均不触及）。此处延迟一轮收束：先让学员答完末问，下一回合再走收口。
+  const closureGate = shouldDeferCompletionForClosure({
+    reply: teachingOutput.reply || '',
+    pendingCheckpoint: previousTeachingState.pendingCheckpoint,
+    checkpointEmittedThisTurn: !!teachingOutput.control?.checkpoint,
+    priorDeferrals: Number(previousTeachingState.completionDeferrals) || 0,
+  });
+  const completionReady = (targetsConsolidated || backstopReady || softCompletionReady) && !closureGate.defer;
+  if (closureGate.defer) {
+    logger.info('[AITeaching] 收口闭合门禁：完成信号延迟一轮（末问未答，先让学员作答）', {
+      sessionId: session.id,
+      reason: closureGate.reason,
+      deferrals: (Number(previousTeachingState.completionDeferrals) || 0) + 1,
+    });
+  }
   const envelopeCompletionSignal =
     turnRuntimeEnvelope?.businessState?.phase === 'completion-candidate'
     || turnRuntimeEnvelope?.businessState?.isTerminal === true;
@@ -849,6 +866,11 @@ export async function processStudentMessage(
     // 继承上一回合顶层状态后再覆盖本回合字段：否则 pendingCheckpoint / lastCheckpointTurn /
     // checkpointHistory 会在每次重建时丢失（18 号报告 N2）。
     const teachingState: Record<string, any> = inheritTeachingState(previousTeachingState, turnState);
+
+    // 收口闭合门禁计数：延迟发生时 +1（跨回合继承），供 COMPLETION_DEFERRAL_CAP 活力兜底
+    if (closureGate.defer) {
+      teachingState.completionDeferrals = (Number(previousTeachingState.completionDeferrals) || 0) + 1;
+    }
 
     // 检查点产生：teaching-turn 可选输出 control.checkpoint，按规则落库为 pendingCheckpoint
     const checkpointCandidate = teachingOutput.control.checkpoint;
