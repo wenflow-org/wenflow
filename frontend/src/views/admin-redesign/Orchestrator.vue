@@ -73,7 +73,9 @@
     <div v-if="pane === 'overview' && stages.length" class="orch-pane orch-overview">
       <section class="mk-card mk-card--fill orch-odg-page">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">字段数据旅程（逻辑图 · 字段血缘）</h3>
+        <!-- 卡题 2026-10-05 改名：原「字段数据旅程」与「字段旅程」页签撞车（两处都自称旅程）——
+             本卡是五阶段全貌，归属「总览」；单阶段旅程图归「字段旅程」页签 -->
+        <h3 class="mk-card__title">管线总览 · 五阶段字段血缘</h3>
         <!-- 图例（原型 card__tools：卡头右侧只放工具/图例，title 独占左侧） -->
         <div class="mk-card__head-right">
           <span class="orch-odg-chip orch-odg-chip--in">阶段入参</span>
@@ -180,7 +182,7 @@
     </div>
 
     <!-- 阶段工作区：占满剩余视高（fill 布局，底部不再有空白）。
-         旅程图 = 卡内画布滚动（工具条/旅程条吸顶）；路由/治理/沙盘 = 面板内滚；页面本身不滚 -->
+         旅程图 = 卡内画布滚动（工具条/旅程条吸顶）；路由/治理 = 面板内滚；页面本身不滚 -->
     <DataFlowGraph
       v-else-if="current && pane === 'journey'"
       class="orch-pane orch-pane--journey"
@@ -192,9 +194,15 @@
     <section v-else-if="current && pane === 'routing'" class="mk-card mk-card--fill orch-pane orch-routing">
       <div class="mk-card__head">
         <h3 class="mk-card__title">字段路由与编排文件</h3>
-        <!-- 阶段级变量流：截断只显示前 5 项，必须把总数说出来（此前静默 slice） -->
-        <span class="mk-card__meta" :title="ioContractTitle(current)">
-          {{ current.skills.length }} Skill · 输入 {{ current.consumes.length }}/{{ current.consumesTotal }} 字段 · 输出 {{ current.produces.length }}/{{ current.producesTotal }} 字段
+        <!-- meta 换同源口径（2026-10-05 页签重设计）：原「输入 0/0 · 输出 0/0」来自
+             liveSkillCatalog 的阶段级变量流——catalog 对多数阶段为空，出假零，与表内
+             25 行字段同页打架。改用字段契约 stageFieldContract（与画布 chips/交接明细
+             同源同数）：必填入参 = hard-required，产出 = 三产出角色；未加载显「…」 -->
+        <span class="mk-card__meta" :title="routingMetaTitle">
+          <!-- 未加载显「…」（与画布 chips 同一三态约定；规则 5 禁内联「加载中」文案，
+               口径解释在 :title 里） -->
+          <template v-if="!contractOf(active).loaded">…</template>
+          <template v-else>必填入参 {{ contractOf(active).ins.length }} · 产出 {{ contractOf(active).outs.length }} · {{ current.skills.length }} Skill</template>
         </span>
       </div>
       <FieldRoutingTable :stage="active" @changed="onRoutingChanged" />
@@ -202,20 +210,18 @@
     <section v-else-if="current && pane === 'governance'" class="mk-card mk-card--fill orch-pane orch-pane--scroll">
       <div class="mk-card__head">
         <h3 class="mk-card__title">治理：{{ TERMS.driftContract }}报告 + 变更审计</h3>
-        <!-- 运行时定义与对账口径落到治理面板：orchCount/skillDefCount/recReport 此前只写不读 -->
+        <!-- 口径摆面上（2026-10-05）：原「对账已上线 37/37」与「Skill 定义 32」表面打架——
+             37 含外挂能力（skill-catalog 口径）、32 是运行时 Skill 定义数，两数不同源不冲突，
+             但必须自解释才不像「数字对不上」 -->
         <span class="mk-card__meta" :title="govMetaTitle">
-          编辑后核对文件与库一致 · 编排定义 {{ orchCount }} · Skill 定义 {{ skillDefCount }}<template v-if="recReport"> · 对账已上线 {{ recLiveCount }}/{{ recTotalCount }}</template>
+          编辑后核对文件与库一致 · 编排定义 {{ orchCount }} · Skill 定义 {{ skillDefCount }}<template v-if="recReport"> · 对账 live {{ recLiveCount }}/{{ recTotalCount }}（口径含外挂能力）</template>
         </span>
       </div>
-      <!-- 定义明细（definitionNotes 此前只写不读，两个定义接口等于白拉） -->
-      <ul v-if="definitionNotes.length" class="orch-gov-defs">
-        <li v-for="(n, i) in definitionNotes" :key="i" class="orch-gov-defs__item">{{ n }}</li>
-      </ul>
+      <!-- 定义明细（definitionNotes 调试转储）2026-10-05 撤：Skill 行名称字段全空
+           （API 无 name/title 字段）、编排行与总览/字段路由信息重复，且双定义接口
+           为此白拉——治理回归三折叠本体（新建字段/漂移报告/最近变更） -->
       <DriftAuditPanel :stage="active" />
     </section>
-    <div v-else-if="pane === 'sandbox'" class="orch-pane orch-pane--scroll">
-      <SandboxView />
-    </div>
     <div v-else class="orch-pane orch-pane--center">
       <!-- 首屏骨架：此前是居中小 spinner，4K 下整页空白只挂一行字 -->
       <template v-if="pageLoading">
@@ -246,12 +252,11 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSubPage } from './store'
-import { liveTopoNodes, liveSkillCatalog, liveLoading, liveFailures, errMsg, reloadLiveTopology } from './live'
+import { liveTopoNodes, liveSkillCatalog, liveLoading, liveFailures, reloadLiveTopology } from './live'
 import { TERMS } from './terms'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
 import DataFlowGraph from './DataFlowGraph.vue'
-import SandboxView from './SandboxView.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
@@ -259,18 +264,19 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 
-/** 阶段工作区子面板:总览(全旅程 odg 画布,缺省)/字段旅程/字段路由/治理;沙盘为顶层独立面板(深链 ?tab=sandbox 兼容) */
-type OrchPane = 'overview' | 'journey' | 'routing' | 'governance' | 'sandbox'
+/** 阶段工作区子面板:总览(全旅程 odg 画布,缺省)/字段旅程/字段路由/治理。
+     沙盘契约 2026-10-05 下线（内容被 总览列脚 + 字段旅程 + 字段路由 三处覆盖，
+     自我定位即「深链次要入口」）；旧深链 ?tab=sandbox 落总览 */
+type OrchPane = 'overview' | 'journey' | 'routing' | 'governance'
 const ORCH_PANES: Array<{ id: OrchPane; label: string }> = [
   { id: 'overview', label: '总览' },
   { id: 'journey', label: '字段旅程' },
   { id: 'routing', label: '字段路由' },
   { id: 'governance', label: '治理' },
-  { id: 'sandbox', label: '沙盘契约' },
 ]
 const pane = ref<OrchPane>('overview')
-/** 单阶段视图（字段旅程/字段路由/治理）才需要阶段选择 chips——总览画布即五阶段全貌、
-     沙盘与阶段无关（原阶段导航大卡的显示条件同此，2026-10-05 大卡退役后沿用） */
+/** 单阶段视图（字段旅程/字段路由/治理）才需要阶段选择 chips——总览画布即五阶段全貌
+     （原阶段导航大卡的显示条件同此，2026-10-05 大卡退役后沿用） */
 const stageScoped = computed(() => ['journey', 'routing', 'governance'].includes(pane.value))
 
 /** 字段流转图数据版本：行级编辑/字段路由变更后 +1 触发重挂载刷新 */
@@ -291,9 +297,9 @@ function applyStageQuery() {
   const qStage = typeof route.query.stage === 'string' && route.query.stage.trim() ? route.query.stage.trim() : ''
   const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
   if (qStage) active.value = qStage
-  // ?tab= 语义:overview(缺省)/journey/routing/governance/sandbox;legacy:drift→治理,topology→旅程
-  if (qTab === 'sandbox') pane.value = 'sandbox'
-  else if (qTab === 'routing') pane.value = 'routing'
+  // ?tab= 语义:overview(缺省)/journey/routing/governance;legacy:drift→治理,topology→旅程,
+  // sandbox→总览（2026-10-05 沙盘契约下线,内容已被 总览/字段旅程/字段路由 覆盖）
+  if (qTab === 'routing') pane.value = 'routing'
   else if (qTab === 'governance' || qTab === 'drift') pane.value = 'governance'
   else if (qTab === 'journey' || qTab === 'topology') pane.value = 'journey'
   else pane.value = 'overview'
@@ -302,7 +308,6 @@ function applyStageQuery() {
 
 function selectStage(id: string) {
   active.value = id
-  if (pane.value === 'sandbox') pane.value = 'journey'
   flowKey.value++
 }
 
@@ -314,7 +319,6 @@ const defsLoaded = ref(false)
 const stagesLoading = ref(false)
 const orchCount = ref(0)
 const skillDefCount = ref(0)
-const definitionNotes = ref<string[]>([])
 const orchDefs = ref<Array<Record<string, any>>>([])
 
 /* ================= 完成度对账（reconciliation + readiness W4，live-only） ================= */
@@ -357,17 +361,7 @@ async function loadDefinitions() {
     orchCount.value = orchItems.length
     skillDefCount.value = skillItems.length
     orchDefs.value = orchItems
-    definitionNotes.value = [
-      ...orchItems.slice(0, 6).map((o: Record<string, unknown>) =>
-        `编排 ${String(o.id || o.name || '—')} · ${String(o.title || o.label || o.description || '').slice(0, 48)}`
-      ),
-      ...skillItems.slice(0, 6).map((a: Record<string, unknown>) =>
-        `Skill ${String(a.id || a.skillId || '—')} · ${String(a.name || a.title || '').slice(0, 40)}`
-      )
-    ]
     defsLoaded.value = true
-  } catch (e) {
-    definitionNotes.value = [`定义拉取失败：${errMsg(e)}`]
   } finally {
     defsLoading.value = false
   }
@@ -398,11 +392,6 @@ interface Stage {
   id: string
   name: string
   agentId: string
-  consumes: string[]
-  produces: string[]
-  /** 阶段级变量流总数（consumes/produces 本身最多显示前 5 项） */
-  consumesTotal: number
-  producesTotal: number
   skills: SkillNode[]
   defSteps?: DefStep[]
 }
@@ -475,20 +464,12 @@ const stages = computed<Stage[]>(() => {
         produces: catalog?.outputFields || []
       }
     })
-    // 阶段级变量：下辖 Skill 输入 = 消费，输出 = 产出
-    const allInputs = [...new Set(skills.flatMap((skill) => catalogById.get(skill.id)?.inputFields || []))]
-    const allOutputs = [...new Set(skills.flatMap((skill) => skill.produces))]
     // 定义级步骤（编排定义实时编译，含 role/condition/loopOver/resolved）
     const def = defById.value.get(agentId)
     return {
       id: s.id,
       name: s.displayName,
       agentId,
-      // 截断到前 5 项，但总数随数据带出（面板/ tooltip 报「共 N 项」）
-      consumes: allInputs.slice(0, 5),
-      produces: allOutputs.slice(0, 5),
-      consumesTotal: allInputs.length,
-      producesTotal: allOutputs.length,
       skills,
       defSteps: def?.steps || []
     }
@@ -671,37 +652,21 @@ function stageTabTitle(s: Stage): string {
   return `${s.name}：${s.skills.length} 个 Skill`
 }
 
-/** 字段路由卡头 tooltip：阶段级变量流总量（截断前口径） */
-function ioContractTitle(s: Stage): string {
-  return `阶段级变量流来自下辖 Skill 的输入/输出字段（去重）；输入、输出各最多显示前 5 项，共 ${s.consumesTotal} 输入 / ${s.producesTotal} 输出`
-}
+/** 字段路由卡头 tooltip：与画布 chips / 阶段交接明细同一份字段契约（同页同数纪律） */
+const routingMetaTitle = computed(() => {
+  const c = contractOf(active.value)
+  if (!c.loaded) return '字段契约加载中（GET /admin/field-routings/stages/:id）'
+  return `口径与画布 chips / 阶段交接明细同源：必填入参 = hard-required ${c.ins.length} 项；产出 = 方案产出/公开回复/派生展示 ${c.outs.length} 项`
+})
 
 /** 治理卡头 tooltip：定义与对账口径说明 */
 const govMetaTitle = computed(() =>
   [
     '运行时定义：GET /admin/runtime-definitions（orchestrator / agent 两类）',
-    recReport.value ? `对账：已上线 ${recLiveCount.value} / 登记 ${recTotalCount.value}（口径含外挂能力）` : '对账报告不可用'
+    recReport.value ? `对账：live ${recLiveCount.value} / 登记 ${recTotalCount.value}（口径含外挂能力，多于 Skill 定义数属正常）` : '对账报告不可用'
   ].join('；')
 )
 </script><style scoped>
-/* 治理面板：运行时定义明细（definitionNotes，micro 列表，不抢漂移报告的视觉重心） */
-.orch-gov-defs {
-  margin: 0 0 10px;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 3px;
-}
-.orch-gov-defs__item {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  line-height: 1.5;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 阶段导航：五个 tab = 五个阶段（大分段卡，每卡含阶段名 + Skill/调用概要） */
 /* 子面板页签（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签同款） */
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
 .tab {
