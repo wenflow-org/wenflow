@@ -141,6 +141,13 @@
         </template>
 
         <!-- ③ 会话生命周期已迁至 hero 动作区（原型 hero 右侧动作位），此处不再重复 -->
+        <!-- ③′ 黑盒人工入口（报告 #37，原两分支零按钮可达）：推进由黑盒执行器承担，
+             人工操作只有 终止实验 / 按原输入重跑（后者仅终态，后端 409 契约同口径前置） -->
+        <template v-if="!isRealMode && isBlackbox">
+          <button type="button" class="cp-btn" :disabled="busy" title="终止当前黑盒实验：公开轨迹与评估保留，不可撤销" @click="act('abandon')">终止实验</button>
+          <button type="button" class="cp-btn" :disabled="busy || !isTerminal" :title="blackboxRerunTitle" @click="act('rerun')">按原输入重跑</button>
+          <span class="cp-console__sep"></span>
+        </template>
         <!-- 黑盒模式声明（2026-10-04 全站评审 P3#13）：真实会话的「只读监控」声明已并入
              顶栏模式 chip（modeText 单源），此处不再对真实会话重复一遍 -->
         <span v-if="isBlackbox" class="cp-console__note">
@@ -975,6 +982,10 @@ const isTerminal = computed(() => {
 })
 const terminalStatus = computed(() => normalized(session.value?.status || runtime.value.status))
 const isFailedTerminal = computed(() => ['failed', 'abandoned'].includes(terminalStatus.value))
+/** 黑盒 rerun 仅终态可跑（后端 409：只有终态黑盒实验可按原输入重跑），按钮禁用前置同一口径（报告 #37） */
+const blackboxRerunTitle = computed(() => isTerminal.value
+  ? '按原输入重跑本实验：生成新会话（运行配置与运行时快照不变）'
+  : '只有终态（完成/失败/已终止）实验可按原输入重跑')
 /* 手动停止（emergencyStop）后后端写 status=failed + stageResults.teaching.manualStop */
 const manualStopped = computed(() =>
   learningResult.value.manualStop === true

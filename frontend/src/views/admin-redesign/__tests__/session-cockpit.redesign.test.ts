@@ -168,6 +168,26 @@ function virtualLearningPayload(): any {
   };
 }
 
+/** 黑盒会话载荷（报告 #37）：experiment+blackbox 双键触发 isBlackbox，status 由用例给定 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function blackboxPayload(status: string): any {
+  return {
+    data: {
+      id: 'vs_bb_1',
+      status,
+      currentStage: 'teaching',
+      stageResults: {
+        experiment: { mode: 'blackbox-api', experimentId: 'exp1', runId: 'run1' },
+        blackbox: { publicTrace: [{ timestamp: '2026-10-04T10:00:00.000Z', observation: { stage: 'goal' } }] },
+        goal: {}, path: {}, teaching: {}
+      },
+      runtime: { status, currentStage: 'teaching', stageStatus: {}, bindings: {} },
+      conversations: { goal: { messages: [] }, learning: { messages: [] } },
+      profile: { userName: '黑盒员' }
+    }
+  };
+}
+
 async function settle() {
   await flushPromises();
   await nextTick();
@@ -219,6 +239,34 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(w.text()).not.toContain('中断会话');
 
     w.unmount();
+  });
+
+  it('黑盒人工入口（报告 #37）：终止实验 + 按原输入重跑（仅终态可跑）；辅助模式不出现', async () => {
+    // 进行中黑盒：终止可用、重跑禁用（后端契约：只有终态实验可按原输入重跑）
+    stableVirtualApi.getVirtualSession.mockResolvedValue(blackboxPayload('active'));
+    const running = await mountCockpit('session', 'vs_bb_1');
+    const runningBtns = running.findAll('.cp-console__actions button');
+    expect(runningBtns.map((b) => b.text())).toEqual(['终止实验', '按原输入重跑']);
+    expect(runningBtns.find((b) => b.text() === '终止实验')!.attributes('disabled')).toBeUndefined();
+    expect(runningBtns.find((b) => b.text() === '按原输入重跑')!.attributes('disabled')).toBeDefined();
+    running.unmount();
+
+    // 终态黑盒：重跑可点，点击调用 rerun API
+    stableVirtualApi.getVirtualSession.mockResolvedValue(blackboxPayload('completed'));
+    stableVirtualApi.rerunBlackboxVirtualSession.mockResolvedValue({ data: { data: { id: 'vs_bb_new' } } });
+    const done = await mountCockpit('session', 'vs_bb_1');
+    const doneRerun = done.findAll('.cp-console__actions button').find((b) => b.text() === '按原输入重跑')!;
+    expect(doneRerun.attributes('disabled')).toBeUndefined();
+    await doneRerun.trigger('click');
+    await settle();
+    expect(stableVirtualApi.rerunBlackboxVirtualSession).toHaveBeenCalledWith('vs_bb_1');
+    done.unmount();
+
+    // 辅助模式：黑盒人工入口不出现
+    stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
+    const assisted = await mountCockpit('session', 'vs_1');
+    expect(assisted.findAll('.cp-console__actions button').map((b) => b.text())).not.toContain('终止实验');
+    assisted.unmount();
   });
 
   it('教学闭环定位：P1#8 真实模式隐藏静态卡（防伪造进度）；虚拟模式五环同构（教学回合 active，其余 done）', async () => {

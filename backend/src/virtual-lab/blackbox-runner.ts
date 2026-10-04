@@ -99,6 +99,12 @@ function deepValue(value: Record<string, unknown>, path: string[]): unknown {
 const TERMINAL_SESSION_STATUSES = new Set(['completed', 'failed', 'abandoned'])
 const COMMAND_LEASE_MS = 10 * 60 * 1000
 const COMMAND_LEASE_RENEW_MS = 2 * 60 * 1000
+// 崩溃残留命令自愈阈值（报告 #39）：processing 命令无平台回执且静默超过该时长，视为持有进程已死亡
+// （命令租约 TTL=10min，能进入 barrier 逻辑即代表旧租约已过期），允许后续命令将其命令级落 failed 放行
+const CRASH_STALE_COMMAND_MS = (() => {
+  const raw = Number(process.env.BLACKBOX_STALE_COMMAND_MS)
+  return Number.isFinite(raw) && raw > 0 ? raw : 10 * 60 * 1000
+})()
 const LEASE_RETRY_DELAYS_MS = [25, 50, 100]
 /** 模拟器 LLM 调用重试次数（对齐 quick-learn 3-strike 语义：瞬态失败/空回复可重试） */
 const BLACKBOX_SIMULATOR_RETRY_ATTEMPTS = 3
@@ -279,34 +285,39 @@ export class BlackboxVirtualLearnerRunner {
         }
         if (afterLease) this.assertCommandMatches(afterLease, options.kind, options.request)
 
-        const pendingCommands = await prisma.virtual_experiment_commands.findMany({
-          where: { runId, status: { in: ['processing', 'failed'] } },
-          orderBy: { sequence: 'asc' }
-        })
-        const barriers = pendingCommands.filter(command => this.isCommandOrderingBarrier(command)
-          && (!afterLease || command.commandId === commandId || command.sequence < afterLease.sequence))
-        if (afterLease && this.isCommandOrderingBarrier(afterLease)
-          && !barriers.some(command => command.id === afterLease.id)) barriers.push(afterLease)
-        barriers.sort((left, right) => (left.sequence || 0) - (right.sequence || 0))
-        const earliestPending = barriers[0] || null
-        if (earliestPending && earliestPending.commandId !== commandId) {
+        // barrier 清理（逐个放行）：优先自动对账（有完整回执仅重放投影）；崩溃残留
+        // （processing 无回执且超过 stale 阈值，报告 #39）落命令级 failed 自愈放行；
+        // 其余保持「请使用原 Idempotency-Key 重试」的 409 语义。
+        let barrierSweeps = 0
+        for (;;) {
+          const pendingCommands = await prisma.virtual_experiment_commands.findMany({
+            where: { runId, status: { in: ['processing', 'failed'] } },
+            orderBy: { sequence: 'asc' }
+          })
+          const barriers = pendingCommands.filter(command => this.isCommandOrderingBarrier(command)
+            && (!afterLease || command.commandId === commandId || command.sequence < afterLease.sequence))
+          if (afterLease && this.isCommandOrderingBarrier(afterLease)
+            && !barriers.some(command => command.id === afterLease.id)) barriers.push(afterLease)
+          barriers.sort((left, right) => (left.sequence || 0) - (right.sequence || 0))
+          const earliestPending = barriers[0] || null
+          if (!earliestPending || earliestPending.commandId === commandId) break
+          barrierSweeps += 1
+          if (barrierSweeps > 8) {
+            // 极多 barrier 时宁可 409 也不能跳过 ordering 语义
+            throw new BlackboxReconciliationPendingError(
+              `较早的黑盒命令 ${earliestPending.commandId} 仍待对账，请先使用其 Idempotency-Key 重试`
+            )
+          }
+          if (this.isCrashStaleCommand(earliestPending)) {
+            await this.selfHealCrashStaleCommand(options.sessionId, earliestPending)
+            continue
+          }
           // 死锁修复：barrier 命令已具备完整平台回执（finalProjection=true 的 result 回执）时，
           // 自动落盘其投影并完成该命令再放行当前命令；仅重放已发生的平台副作用，不重新执行平台操作，
           // 幂等语义不变。无完整回执（checkpoint/未终局 step）的 barrier 保持原语义要求同 key 重试。
           if (!(await this.tryResolveOrderingBarrier(options.sessionId, earliestPending))) {
             throw new BlackboxReconciliationPendingError(
               `较早的黑盒命令 ${earliestPending.commandId} 仍待对账，请先使用其 Idempotency-Key 重试`
-            )
-          }
-          const remaining = await prisma.virtual_experiment_commands.findMany({
-            where: { runId, status: { in: ['processing', 'failed'] } },
-            orderBy: { sequence: 'asc' }
-          })
-          const stillBlocked = remaining.find(command => this.isCommandOrderingBarrier(command)
-            && (!afterLease || command.commandId === commandId || command.sequence < afterLease.sequence))
-          if (stillBlocked) {
-            throw new BlackboxReconciliationPendingError(
-              `较早的黑盒命令 ${stillBlocked.commandId} 仍待对账，请先使用其 Idempotency-Key 重试`
             )
           }
         }
@@ -342,6 +353,15 @@ export class BlackboxVirtualLearnerRunner {
                 triggeredBy: options.operatorId
               }
               retryRebuilt = true
+            } else if (this.isCrashStaleCommand(command)) {
+              // 崩溃残留自愈（报告 #39）：同 key 重试遇到「processing 无回执且已超 stale 阈值」的命令，
+              // 命令级落 failed（会话保活），操作方换新 Idempotency-Key 继续；
+              // 不再把整条 run 废成 abandoned（不重放、不猜测平台副作用，语义与 barrier 级自愈一致）。
+              await this.selfHealCrashStaleCommand(options.sessionId, command)
+              throw new BlackboxRunStateError(
+                '崩溃残留命令已自愈为 failed，请换新的 Idempotency-Key 重新发起操作',
+                'BLACKBOX_CRASH_STALE_SELF_HEAL'
+              )
             } else {
               // 死锁兜底（2026-09-15）：进程在「命令已落 processing、平台回执未落盘」之间崩溃时，
               // 该命令永远无法对账（同 key 重试因缺回执被拒；新命令被 ordering barrier 挡住），
@@ -1371,6 +1391,45 @@ export class BlackboxVirtualLearnerRunner {
       }
     })
     logger.warn('[blackbox-runner] 命令回执丢失，会话已标记 abandoned', { sessionId, commandId })
+  }
+
+  /** 崩溃残留判定（报告 #39）：processing、无平台回执、静默超过 stale 阈值（此时租约必然已过期，持有进程已死） */
+  private isCrashStaleCommand(command: VirtualExperimentCommandRow, now = Date.now()): boolean {
+    if (!command || command.status !== 'processing') return false
+    if (this.pendingProjectionReceipt(command)) return false
+    const updatedAt = command.updatedAt instanceof Date
+      ? command.updatedAt.getTime()
+      : Number(command.updatedAt)
+    if (!Number.isFinite(updatedAt)) return false
+    return now - updatedAt > CRASH_STALE_COMMAND_MS
+  }
+
+  /**
+   * 崩溃残留命令自愈（报告 #39）：两次真实使用死于「step 中途进程死亡」留下的 processing 无回执命令——
+   * 同 key 重试把整条 run 废成 abandoned、新 key 被 ordering barrier 永久 409，只能等 24h stale 回收。
+   * 此处将该命令**命令级**落 failed（retryable=false、code=BLACKBOX_CRASH_STALE_SELF_HEAL），
+   * 不重放、不猜测平台副作用，会话保活；操作方换新 Idempotency-Key 即可继续。
+   */
+  private async selfHealCrashStaleCommand(sessionId: string, command: VirtualExperimentCommandRow): Promise<void> {
+    await this.assertCurrentLease(sessionId)
+    await prisma.virtual_experiment_commands.update({
+      where: { id: command.id },
+      data: {
+        status: 'failed',
+        errorJson: JSON.stringify({
+          name: 'BlackboxRunStateError',
+          message: '进程崩溃残留：命令超过 stale 阈值仍无平台回执，已命令级自愈为 failed（会话保活）',
+          code: 'BLACKBOX_CRASH_STALE_SELF_HEAL',
+          statusCode: null,
+          retryable: false
+        }),
+        completedAt: new Date()
+      }
+    })
+    logger.warn('[blackbox-runner] 崩溃残留命令已自愈为 failed，放行后续命令', {
+      sessionId,
+      commandId: command.commandId
+    })
   }
 
   private isRetryableFailedCommand(command: VirtualExperimentCommandRow): boolean {

@@ -1040,6 +1040,99 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(adapter.startGoal).toHaveBeenCalledTimes(1)
   })
 
+  it('崩溃残留 barrier（无回执超时）命令级自愈为 failed 并放行新命令，会话保活', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const currentSession = sessionWith({})
+    runner.getSession = jest.fn(async () => currentSession)
+    runner.context = jest.fn(async () => ({
+      session: currentSession,
+      state: JSON.parse(currentSession.stageResults),
+      adapter: {}
+    }))
+    const staleBarrier = {
+      id: 'command-barrier', runId: 'run1', commandId: 'crashed-command', sequence: 1,
+      kind: 'step', requestJson: '{}', status: 'processing',
+      resultJson: null, errorJson: null,
+      updatedAt: new Date(Date.now() - 11 * 60_000)
+    }
+    const commands: any[] = [staleBarrier]
+    ;(prisma.virtual_experiment_commands.findUnique as jest.Mock).mockImplementation(async ({ where }: any) => {
+      if (where.id) return commands.find(c => c.id === where.id) || null
+      return commands.find(c => c.commandId === where.runId_commandId.commandId) || null
+    })
+    ;(prisma.virtual_experiment_commands.findFirst as jest.Mock).mockResolvedValue(null)
+    ;(prisma.virtual_experiment_commands.findMany as jest.Mock).mockImplementation(async () =>
+      commands.filter(c => c.status === 'processing'))
+    ;(prisma.virtual_experiment_commands.create as jest.Mock).mockImplementation(async ({ data }: any) => {
+      const created = { id: 'command-new', status: 'processing', resultJson: null, errorJson: null, ...data }
+      commands.push(created)
+      return created
+    })
+    ;(prisma.virtual_experiment_commands.update as jest.Mock).mockImplementation(async ({ where, data }: any) => {
+      const target = commands.find(c => c.id === where.id)
+      Object.assign(target, data)
+      return target
+    })
+    const work = jest.fn(async () => ({ ok: true }))
+
+    const result = await runner.runCommand({
+      sessionId: 'vs1', operatorId: 'admin1', commandId: 'fresh-after-crash',
+      kind: 'step', request: {}, expectedTraceCount: 0
+    }, work)
+
+    expect(result).toMatchObject({ reused: false })
+    expect(work).toHaveBeenCalledTimes(1)
+    expect(staleBarrier).toEqual(expect.objectContaining({ status: 'failed' }))
+    expect(JSON.parse(staleBarrier.errorJson)).toMatchObject({
+      code: 'BLACKBOX_CRASH_STALE_SELF_HEAL', retryable: false
+    })
+    // 会话保活：不走 markSessionLostCommand 的 abandoned 终态
+    expect(prisma.virtual_sessions.update).not.toHaveBeenCalled()
+  })
+
+  it('同 key 重试崩溃残留命令：命令级自愈为 failed，不再把会话废成 abandoned', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const currentSession = sessionWith({})
+    runner.getSession = jest.fn(async () => currentSession)
+    runner.context = jest.fn(async () => ({
+      session: currentSession,
+      state: JSON.parse(currentSession.stageResults),
+      adapter: {}
+    }))
+    const crashed = {
+      id: 'command-crashed', runId: 'run1', commandId: 'lost-command', sequence: 1,
+      kind: 'step', requestJson: '{}', status: 'processing',
+      resultJson: null, errorJson: null,
+      updatedAt: new Date(Date.now() - 12 * 60_000)
+    }
+    ;(prisma.virtual_experiment_commands.findUnique as jest.Mock).mockImplementation(async ({ where }: any) => {
+      if (where.id) return crashed.id === where.id ? crashed : null
+      return crashed.commandId === where.runId_commandId.commandId ? crashed : null
+    })
+    ;(prisma.virtual_experiment_commands.findMany as jest.Mock).mockResolvedValue([crashed])
+    ;(prisma.virtual_experiment_commands.update as jest.Mock).mockImplementation(async ({ where, data }: any) => {
+      Object.assign(crashed, data)
+      return crashed
+    })
+    const work = jest.fn(async () => ({ ok: true }))
+    const options = {
+      sessionId: 'vs1', operatorId: 'admin1', commandId: 'lost-command',
+      kind: 'step' as const, request: {}, expectedTraceCount: 0
+    }
+
+    await expect(runner.runCommand(options, work))
+      .rejects.toMatchObject({ code: 'BLACKBOX_CRASH_STALE_SELF_HEAL' })
+    expect(work).not.toHaveBeenCalled()
+    expect(crashed).toEqual(expect.objectContaining({ status: 'failed' }))
+    expect(JSON.parse(crashed.errorJson)).toMatchObject({ code: 'BLACKBOX_CRASH_STALE_SELF_HEAL' })
+    expect(prisma.virtual_sessions.update).not.toHaveBeenCalled()
+
+    // 自愈后同 key 再试：拿到诚实失败回执，不会重复执行平台副作用
+    await expect(runner.runCommand(options, work))
+      .rejects.toMatchObject({ code: 'BLACKBOX_COMMAND_PREVIOUSLY_FAILED' })
+    expect(work).not.toHaveBeenCalled()
+  })
+
   it('命令完成写已提交但客户端报错时重读并返回成功且不标记 failed', async () => {
     const runner = new BlackboxVirtualLearnerRunner()
     const session = sessionWith({})
