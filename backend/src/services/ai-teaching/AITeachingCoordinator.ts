@@ -139,6 +139,10 @@ export class AITeachingOrchestrator {
   private pausedSessionTimeoutMs = 24 * 60 * 60 * 1000;
   /** 终态脏数据保留期：failed/superseded/discarded 行超过该时长后由 idle 巡检清理 */
   private terminalSessionRetentionMs = 30 * 24 * 60 * 60 * 1000;
+  /** 收束失败自愈（报告 #3）：失败后到自动重试的冷却期，避免与用户重试/在途租约打架 */
+  private finalizationRetryCooldownMs = 2 * 60 * 1000;
+  /** 收束失败自愈的自动重试次数上限（记在 operation.attemptCount） */
+  private finalizationAutoRetryCap = 3;
   private idleTimer: NodeJS.Timeout | null = null;
   private idleCheckInFlight: Promise<void> | null = null;
   private stopping = false;
@@ -291,6 +295,92 @@ export class AITeachingOrchestrator {
     return processPeerMessageImpl(sessionId, message);
   }
 
+  /**
+   * 收束失败有界自愈（全量测试报告 #3）。
+   *
+   * 候选：status='finalization_failed' 且距上次写入超过冷却期（默认 2 分钟）的会话；
+   * 预算：自动重试使用稳定幂等键 `auto-finalize-retry:<sessionId>`——claimFinalization 的
+   * re-claim 路径会自增 attemptCount，天然做持久化计数；attemptCount ≥ 上限（3）或最近一次
+   * 失败被标记 retryable=false（如持久化失败）时放弃，交给「下次开课 supersede」与人工。
+   * 幂等与并发：收束受理后会话转 finalizing（不再是候选），不会重复触发；失败则由本方法
+   * 下一轮巡检在冷却后接续。
+   */
+  private async retryFailedFinalizations(): Promise<number> {
+    const candidates = await prisma.teaching_sessions.findMany({
+      where: {
+        status: 'finalization_failed',
+        updatedAt: { lte: new Date(Date.now() - this.finalizationRetryCooldownMs) },
+      },
+      orderBy: { updatedAt: 'asc' },
+      take: 5,
+      select: { id: true, userId: true, revision: true, teachingState: true },
+    });
+    if (candidates.length === 0) return 0;
+
+    let retried = 0;
+    for (const session of candidates) {
+      const retryKey = `auto-finalize-retry:${session.id}`;
+      try {
+        const [retryLedger, latestFailure] = await Promise.all([
+          prisma.session_finalization_operations.findUnique({
+            where: { sessionId_idempotencyKey: { sessionId: session.id, idempotencyKey: retryKey } },
+            select: { status: true, attemptCount: true, retryable: true },
+          }),
+          prisma.session_finalization_operations.findFirst({
+            where: { sessionId: session.id },
+            orderBy: { createdAt: 'desc' },
+            select: { status: true, retryable: true, errorCode: true },
+          }),
+        ]);
+        if (latestFailure?.status === 'failed' && latestFailure.retryable === false) continue;
+        const usedAttempts = retryLedger?.attemptCount || 0;
+        const exhausted = retryLedger?.status === 'failed' && usedAttempts >= this.finalizationAutoRetryCap;
+        if (exhausted) continue;
+
+        const artifacts = (() => {
+          // prisma select 返回的是 JSON 字符串（与 paused 巡检同口径先解析）
+          let teachingState: Record<string, any> | null = null;
+          try {
+            teachingState = session.teachingState ? JSON.parse(String(session.teachingState)) : null;
+          } catch {
+            teachingState = null;
+          }
+          return parseSessionArtifacts(teachingState);
+        })();
+        const endReason = typeof artifacts.endReason === 'string' && artifacts.endReason
+          ? artifacts.endReason
+          : 'manual-end';
+        // 动态导入：SessionFinalizationService 反向依赖本模块的实例（endSession），静态导入成环
+        const { sessionFinalizationService } = await import('./SessionFinalizationService');
+        const result: { status?: string } = await sessionFinalizationService.finalize({
+          sessionId: session.id,
+          userId: session.userId,
+          action: 'end_only',
+          operationId: retryKey,
+          revision: session.revision,
+          endReason,
+        } as never);
+        retried += 1;
+        logger.info('[AITeaching] 收束失败已自动重试', {
+          sessionId: session.id,
+          attempt: usedAttempts + 1,
+          status: result?.status ?? 'ok',
+          lastErrorCode: latestFailure?.errorCode ?? null,
+        });
+      } catch (error) {
+        // 预检失败（revision 竞争/租约占用等）不产生 operation 行：推进冷却时间窗，避免热循环
+        await prisma.teaching_sessions
+          .updateMany({ where: { id: session.id }, data: { updatedAt: new Date() } })
+          .catch(() => undefined);
+        logger.warn('[AITeaching] 收束失败自动重试未受理（冷却后下一轮再试）', {
+          sessionId: session.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return retried;
+  }
+
   private async checkIdleSessions(): Promise<void> {
     const cutoff = new Date(Date.now() - this.idleTimeoutMs);
     const sessions = await prisma.teaching_sessions.findMany({
@@ -346,6 +436,19 @@ export class AITeachingOrchestrator {
         await this.syncVirtualSessionTimeout(session.id);
         await this.applyTimeoutWrapupFallback(session.id);
       }
+    }
+
+    // 收束失败自愈（全量测试报告 #3）：finalization_failed 且失败可重试的会话，冷却后自动走
+    // 应用自己的收束路径重试（预算 ≤3 次，记在 session_finalization_operations.attemptCount）。
+    // 此前只有「下次开课 supersede」一条出路：课堂 wrapup/endTime 永久为空，前端提示「重新进入」
+    // 也不改变状态（真实案例 teaching_7d44d6de…：end_only 收束上游超时 FINALIZATION_PROVIDER_TIMEOUT，
+    // retryable=true，挂 45 分钟无人接）。
+    try {
+      await this.retryFailedFinalizations();
+    } catch (error) {
+      logger.warn('[AITeaching] 收束失败自愈巡检出错（不影响其它巡检）', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     // 终态脏数据治理：failed/superseded/discarded 行无业务价值（开课失败已改为复用 openKey），
