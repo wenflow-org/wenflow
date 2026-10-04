@@ -199,9 +199,7 @@ describe('Skill 目录 P1 修复批', () => {
   it('对账面板「仅看异常」：过滤后仅剩异常行（未注册/非 live），live 行隐藏', async () => {
     getReconciliationMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
     const wrapper = await mountRecon();
-    // 展开对账面板（details 默认折叠态需点击 summary 展开才能看到表格；recOpen 由深度链控制时自动展开）
-    await wrapper.find('.sk-rec__summary').trigger('click');
-    await nextTick();
+    // 整卡折叠已退役（2026-10-05，details 包壳撤）：面板常开，无需展开步骤
     await flushPromises();
     const pills = wrapper.findAll('.sk-rec-tools .mk-pill');
     expect(pills.some((p) => p.text() === '仅看异常')).toBe(true);
@@ -254,8 +252,8 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
     const tabs = wrapper.findAll('.skills-tabs .tab');
     expect(tabs.map((t) => t.text())).toEqual(['Skill 运行', '模型路由', 'Prompt 评估']);
     expect(wrapper.find('.hc-embedded').exists()).toBe(false);
-    // 运行视图在位：状态条走 run 分支（无档案时「共 0 个 Skill」）
-    expect(wrapper.text()).toContain('共 0 个 Skill');
+    // 运行视图在位：KPI 卡带走 run 分支（无档案时 Skill 卡显 0；2026-10-04 状态条已退役）
+    expect(wrapper.find('.mk-kpi-grid').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -274,9 +272,10 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
     await wrapper.findAll('.skills-tabs .tab').find((t) => t.text() === '模型路由')!.trigger('click');
     await flushPromises();
     expect(router.currentRoute.value.query.tab).toBe('model-routing');
-    // 离开运行视图后不再渲染目录（状态条换成覆盖矩阵口径）
-    expect(wrapper.text()).not.toContain('共 0 个 Skill');
-    expect(wrapper.text()).toContain('覆盖矩阵');
+    // 离开运行视图后：运行统计带随页签消失（模型路由页签自带路由四卡，非运行读数）
+    const runRateCard = wrapper.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '成功率');
+    expect(runRateCard).toBeUndefined();
+    expect(wrapper.text()).not.toContain('仅看需关注');
     wrapper.unmount();
   });
 });
