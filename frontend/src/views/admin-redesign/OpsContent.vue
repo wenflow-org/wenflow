@@ -7,9 +7,8 @@
          原状态条顶替页头的「页面名/副文」上收，状态条只留 点色 + 可点计数 + 总量口径 -->
     <MkPageHead v-if="!embedded" title="学习路径" sub="由目标澄清生成的阶段式路径与推进状态">
       <template #actions>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="reload(true)">
-          {{ loading ? '刷新中…' : '刷新' }}
-        </button>
+        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
+        <DataScopeToggle v-model="includeTest" />
       </template>
     </MkPageHead>
     <div v-if="!embedded" class="mk-status" :class="`mk-status--${dashTone}`">
@@ -66,7 +65,6 @@
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
-          <DataScopeToggle v-model="includeTest" />
           <MkCols
             :col-defs="colDefs"
             storage-key="wf_paths_hidden_cols"
@@ -237,7 +235,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { timeAgo, errMsg, shortId, isPageCacheFresh, markPageFetched } from './live'
+import { timeAgo, errMsg, shortId, isPageCacheFresh, markPageFetched, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { intent, openSubPage } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
@@ -272,7 +270,11 @@ const loading = ref(false)
 const failed = ref(false)
 const keyword = ref('')
 const statusFilter = ref('')
-const includeTest = ref(false)
+/* 口径整组统一（2026-10-04 用户拍板）：get/set 走 live.ts 共享态（页头开关同源），本页 watch 只负责重拉 */
+const includeTest = computed({
+  get: () => liveIncludeVirtual.value,
+  set: (v) => liveSetIncludeVirtual(v)
+})
 const stats = ref<LearningContentStats | null>(null)
 
 /* 状态 pill 组（与教学会话/目标对话头部同形态；点击可取消，取色全站语义） */

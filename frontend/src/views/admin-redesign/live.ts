@@ -2102,6 +2102,20 @@ export function clearPageCache(domain?: string): void {
   if (domain) delete pageFetchAt[domain]
   else Object.keys(pageFetchAt).forEach((k) => delete pageFetchAt[k])
 }
+
+/** 教学组统一数据口径开关（2026-10-04 用户拍板：撤页头刷新钮，整组统一「是否包含虚拟」）：
+ *  是否包含虚拟学习者/测试账号——整组一个状态、localStorage 持久化跨页保持；
+ *  六页页头挂同一 DataScopeToggle。切换即清全部页面 TTL 缓存：本页 watch 强制重拉，
+ *  跨页导航后的首拉也按新口径（缓存键不带口径，只能整体失效）。 */
+export const liveIncludeVirtual = ref<boolean>((() => {
+  try { return localStorage.getItem('wf_include_virtual') === '1' } catch { return false }
+})())
+export function liveSetIncludeVirtual(v: boolean): void {
+  if (liveIncludeVirtual.value === v) return
+  liveIncludeVirtual.value = v
+  try { localStorage.setItem('wf_include_virtual', v ? '1' : '0') } catch { /* 隐私模式下仅内存态 */ }
+  clearPageCache()
+}
 /** 各域「已有数据」判定：null 型 ref 以非 null 为准，数组型以非空为准（空列表视为未就绪，下次重拉） */
 const liveDomainReady: Record<string, () => boolean> = {
   spans: () => liveSpans.value !== null,
@@ -2141,8 +2155,8 @@ export async function loadLiveData(force = false) {
     spans: async () => { liveSpans.value = await fetchLiveSpans() },
     skills: async () => { liveSkillStatsMap.value = await fetchLiveSkills() },
     overview: async () => { liveOverview.value = await fetchLiveOverview() },
-    users: fetchLiveUsers,
-    learners: fetchLiveLearners,
+    users: () => fetchLiveUsers(liveIncludeVirtual.value),
+    learners: () => fetchLiveLearners(liveIncludeVirtual.value),
     virtuals: fetchLiveVirtuals,
     apiConfig: fetchLiveApiConfig,
     topology: () => fetchLiveTopology(force),

@@ -150,10 +150,14 @@ describe('MemoryReview redesign：到期时间轴 + 记忆强度分布', () => {
     const w = await mountWithRows(ROWS);
     expect(traceList).toHaveBeenCalledWith({ limit: 200, includeVirtual: false });
 
-    // 切「包含虚拟学习者」→ 窗口随作用域重拉
-    await w.find('input[type="checkbox"]').setValue(true);
+    // 切「含测试」（2026-10-04 整组统一 DataScopeToggle，原包含虚拟学习者 checkbox 退役）→ 窗口随作用域重拉
+    const scopePills = w.findAll('.ds-toggle .mk-pill');
+    await scopePills.find((p) => p.text() === '含测试')!.trigger('click');
     await flushPromises();
     expect(traceList).toHaveBeenLastCalledWith({ limit: 200, includeVirtual: true });
+    // 还原共享口径（整组状态是模块级，别泄漏给后续用例）
+    await scopePills.find((p) => p.text() === '仅真实')!.trigger('click');
+    await flushPromises();
 
     // 空窗口 → 到期带/直方图整块隐藏，不留空卡
     const empty = await mountWithRows([]);

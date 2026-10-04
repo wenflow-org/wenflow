@@ -7,7 +7,12 @@
          也是本页唯一统计带（2026-10-02 用户拍板「新UI没有第二个kpi区」撤 KPI 栅格）：
          meta 只放别处没有的计数——总数=后端全量口径（分布卡/列表都是加载窗口）、
          有建议=全页唯一出口；已完成/失败/进行中由分布卡图例单源承载，不在两处复读 -->
-    <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 状态分布与需关注识别" />
+    <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 状态分布与需关注识别">
+      <template #actions>
+        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
+        <DataScopeToggle v-model="includeTest" />
+      </template>
+    </MkPageHead>
     <!-- 口径标注（P1#4）：状态带里只有「共 N」可能是后端全量口径（后端未回 total 时退化为
          窗口行数，title 如实降级、不得再声称全量）；需关注 / 有建议 / 缺总结三个计数全部来自
          最近 LIST_LIMIT 条加载窗口，就地括注「（最近 1000 条）」防窗口冒充全量。
@@ -88,7 +93,6 @@
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
-          <DataScopeToggle v-model="includeTest" />
           <MkCols
             :col-defs="tsColDefs"
             storage-key="wf_teaching_hidden_cols"
@@ -289,7 +293,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSubPage } from './store'
 import { useSessionDrill } from './useSessionDrill'
-import { timeAgo, isPageCacheFresh, markPageFetched, shortId } from './live'
+import { timeAgo, isPageCacheFresh, markPageFetched, shortId, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone } from './statusText'
 import type { SessionProgress } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
@@ -348,8 +352,12 @@ const rows = ref<Row[]>([])
 const refreshing = ref(false)
 const loadFailed = ref(false)
 
-/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后重拉全量并灰标虚拟/测试行 */
-const includeTest = ref(false)
+/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；口径整组统一（2026-10-04 用户拍板）——
+   get/set 走 live.ts 共享态（页头 DataScopeToggle 同源），本页 watch 只负责按新口径重拉 */
+const includeTest = computed({
+  get: () => liveIncludeVirtual.value,
+  set: (v) => liveSetIncludeVirtual(v)
+})
 
 /* 列表拉取上限：文案与实现共用同一常量，避免再次漂移
    （此前文案写「最近 100 条」而实现是 limit: 1000 —— 审计 附 A #9） */

@@ -58,7 +58,7 @@
             <div v-if="advOpen" class="adv__mask" @click="advOpen = false"></div>
             <div v-show="advOpen" class="adv__pop" @click.stop>
               <MkFilterSearch v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
-              <DataScopeToggle v-if="isLive && pill !== 'deleted'" v-model="includeTest" />
+              <!-- 口径开关上收页头（2026-10-04 整组统一），高级筛选弹层只留搜索 -->
             </div>
           </div>
         </div>
@@ -262,7 +262,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
-import { liveUsers, liveCreateUser, liveDeleteUser, liveSetUserRole, liveUsersTotal, liveSetUsersIncludeTest, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData } from './live'
+import { liveUsers, liveCreateUser, liveDeleteUser, liveSetUserRole, liveUsersTotal, liveSetUsersIncludeTest, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -270,7 +270,6 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
-import DataScopeToggle from './DataScopeToggle.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
@@ -415,8 +414,12 @@ const users = computed<UserRow[]>(() => {
 const pill = ref('all')
 const keyword = ref('')
 
-/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后按新口径重拉并灰标虚拟/测试行 */
-const includeTest = ref(false)
+/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；口径整组统一（2026-10-04 用户拍板）——
+   get/set 走 live.ts 共享态（页头 DataScopeToggle 同源），本页 watch 只负责按新口径重拉并灰标 */
+const includeTest = computed({
+  get: () => liveIncludeVirtual.value,
+  set: (v) => liveSetIncludeVirtual(v)
+})
 watch(includeTest, (v) => {
   // 切换失败不静默：用户以为已切到全量/仅真实口径，实际列表还是旧口径
   if (isLive.value && pill.value !== 'deleted') {

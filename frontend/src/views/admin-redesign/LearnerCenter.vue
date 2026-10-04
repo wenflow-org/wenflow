@@ -6,9 +6,8 @@
          静态贴顶 + 表格区内滚，首行 530px 入首屏。 -->
     <MkPageHead title="学习状态" sub="学习者学习状态分布与风险跟踪">
       <template #actions>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="liveLoading" @click="retryLoad">
-          {{ liveLoading ? '刷新中…' : '刷新' }}
-        </button>
+        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
+        <DataScopeToggle v-model="includeTest" />
       </template>
     </MkPageHead>
     <!-- 后端学习者域窗口截断口径（2026-10-04 解锁 50→500，窗口内不提示；单源仍一处） -->
@@ -46,7 +45,6 @@
             :disabled="recomputingAll || !rows.length"
             @click="recomputeAll"
           >{{ recomputingAll ? `重算中 ${recomputeProgress}/${rows.length}…` : '全部重算' }}</button>
-          <DataScopeToggle v-if="isLive" v-model="includeTest" />
           <MkCols
             :col-defs="lcColDefs"
             storage-key="wf_learner_hidden_cols_v2"
@@ -269,7 +267,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { openSubPage, isLive } from './store'
-import { liveLearners, liveLearnersTotal, liveRecomputeLearner, liveSetLearnersIncludeTest, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg } from './live'
+import { liveLearners, liveLearnersTotal, liveRecomputeLearner, liveSetLearnersIncludeTest, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { evidenceLowConfidence } from './evidence'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -306,7 +304,12 @@ interface Row {
 
 const pill = ref<'all' | 'risk' | 'watch' | 'stale'>('all')
 const keyword = ref('')
-const includeTest = ref(false)
+/* 整组统一口径（2026-10-04 用户拍板）：get/set 走 live.ts 共享态（localStorage 持久化、跨页保持）；
+   本页 watch 只负责按新口径重拉学习者域 */
+const includeTest = computed({
+  get: () => liveIncludeVirtual.value,
+  set: (v) => liveSetIncludeVirtual(v)
+})
 watch(includeTest, (v) => {
   // 切换失败不静默：用户以为已切到全量/仅真实口径，实际列表还是旧口径
   if (isLive.value) {

@@ -13,7 +13,7 @@ import TeachingSessions from '../TeachingSessions.vue';
 import GoalConversations from '../GoalConversations.vue';
 import Users from '../Users.vue';
 import { dataSource } from '../store';
-import { liveUsers, liveSetUsersIncludeTest, clearPageCache } from '../live';
+import { liveUsers, liveSetUsersIncludeTest, liveIncludeVirtual, clearPageCache } from '../live';
 
 const mockRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
 
@@ -44,7 +44,13 @@ vi.mock('../store', async () => {
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
+  // 2026-10-04 整组统一口径：共享 ref + set 回写（真实现语义），组件 computed/watch 才能联动
+  const liveIncludeVirtual = ref(false);
   return {
+    liveIncludeVirtual,
+    liveSetIncludeVirtual: vi.fn((v: boolean) => {
+      liveIncludeVirtual.value = v;
+    }),
     liveUsers: ref([]),
     liveUsersTotal: ref(0),
     liveLoading: ref(false),
@@ -144,6 +150,7 @@ beforeEach(() => {
     data: { success: true, data: { total: 1, active: 1, completed: 0, completionRate: '0' } }
   });
   dataSource.value = 'live';
+  liveIncludeVirtual.value = false; // 整组统一口径：用例间复位共享态
   clearPageCache(); // 清除页面级 TTL 缓存，确保每次测试都重新拉取
 });
 
@@ -263,7 +270,9 @@ describe('Users 数据隔离切换（A3）', () => {
     expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
     expect(wrapper.text()).toContain('真实 1');
 
-    await findBtn(wrapper, '含测试').trigger('click');
+    // 开关已上收 People 页头（2026-10-04 整组统一）：直接改共享口径 → Users watch 联动重拉
+    liveIncludeVirtual.value = true;
+    await flushPromises();
     await nextTick();
     expect(liveSetUsersIncludeTest).toHaveBeenCalledWith(true);
     // 切换后全量口径：后端返回虚拟/测试行 → 虚拟行带「虚拟」灰标

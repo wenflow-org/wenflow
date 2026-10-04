@@ -8,7 +8,8 @@
       :sub="gcScopeSub"
     >
       <template #actions>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="load(true)">{{ loading ? '刷新中…' : '刷新' }}</button>
+        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
+        <DataScopeToggle v-model="includeTest" />
       </template>
     </MkPageHead>
 
@@ -58,7 +59,6 @@
             <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           </div>
           <div class="mk-card__head-right">
-            <DataScopeToggle v-model="includeTest" />
             <MkCols
               :col-defs="gcColDefs"
               storage-key="wf_goal_hidden_cols"
@@ -226,7 +226,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { isLive, openSubPage } from './store'
 import { useSessionDrill } from './useSessionDrill'
-import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
+import { errMsg, timeAgo, isPageCacheFresh, markPageFetched, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, stageTimeline, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS, statusText } from './statusText'
 import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -393,8 +393,12 @@ watch(
   { immediate: true }
 )
 
-/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；切换「含虚拟·测试」后重拉全量并灰标虚拟/测试行 */
-const includeTest = ref(false)
+/* 数据隔离（A3）：默认仅真实（排除虚拟/测试账号）；口径整组统一（2026-10-04 用户拍板）——
+   get/set 走 live.ts 共享态（页头开关同源），本页 watch 只负责重拉 */
+const includeTest = computed({
+  get: () => liveIncludeVirtual.value,
+  set: (v) => liveSetIncludeVirtual(v)
+})
 
 const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
 

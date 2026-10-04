@@ -49,14 +49,20 @@ vi.mock('@/api/adminApi', () => ({
   hasAdminSession: vi.fn(() => true),
 }));
 
-vi.mock('../live', () => ({
-  isLive: { value: true },
-  timeAgo: (v: string) => v,
-  errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
-  shortId: (id: string, h: number, t: number) => (id ? `${id.slice(0, h)}…${id.slice(-t)}` : id),
-  isPageCacheFresh: () => false,
-  markPageFetched: () => {},
-}));
+vi.mock('../live', async () => {
+  const { ref } = await import('vue');
+  return {
+    isLive: { value: true },
+    // 2026-10-04 整组统一口径：includeTest 升为共享 ref（须真 ref 才能驱动 computed/watch）
+    liveIncludeVirtual: ref(false),
+    liveSetIncludeVirtual: vi.fn(),
+    timeAgo: (v: string) => v,
+    errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+    shortId: (id: string, h: number, t: number) => (id ? `${id.slice(0, h)}…${id.slice(-t)}` : id),
+    isPageCacheFresh: () => false,
+    markPageFetched: () => {},
+  };
+});
 
 const rows = [
   mkPath('lp_a', { user: { id: 'u2', name: '虚拟生', email: 'v@wenflow.local', isVirtualLearner: true } }),
@@ -100,9 +106,9 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     const pills = w.findAll('.mk-card__head .mk-filter .mk-pill').map((b) => b.text().replace(/\d+$/, ''));
     expect(pills).toEqual(['学习中', '已完成', '生成失败', '已下线']);
 
-    // 右侧组件
+    // 右侧组件（2026-10-04 整组统一：口径开关上收页头，embedded 页头隐藏 → 卡头无 ds-toggle）
     expect(w.find('.mk-card__head input.mk-filter__input').exists()).toBe(true);
-    expect(w.find('.ds-toggle').exists()).toBe(true);
+    expect(w.find('.ds-toggle').exists()).toBe(false);
     expect(w.find('.mk-cols').exists()).toBe(true);
     expect(w.text()).toContain('条（仅真实）');
 
@@ -251,7 +257,8 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await nextTick();
 
     // P1#9：pill 组带窗口口径标注（stats 端点无 includeTest 参数，选就地标注而非同步重拉）
-    expect(w.find('.mk-pills').attributes('title')).toContain('窗口');
+    // （2026-10-04 起页头 ds-toggle 也是 .mk-pills——限定卡头作用域，别误中页头开关）
+    expect(w.find('.mk-card__head .mk-pills').attributes('title')).toContain('窗口');
 
     // 进度条三态：100% = 绿（ok）/ 进行中 = 默认中性（无 warn 琥珀）/ 失败 = 红（bad）
     const tones = w.findAll('tbody .mk-minibar__fill').map((el) => el.attributes('data-tone') || '');

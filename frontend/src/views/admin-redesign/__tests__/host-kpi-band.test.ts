@@ -138,9 +138,9 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     const w = mount(MemoryReview, { global: { plugins: [router] } });
     await settle();
     expect(kpiLabels(w)).toEqual(['用户', '记忆痕迹', '当前到期', '需人工看', '待归并建议']);
-    // 页头为 pagehead 形态（newui/admin），作用域开关（整页口径）在页头动作区
+    // 页头为 pagehead 形态（newui/admin），数据范围开关（整组统一 DataScopeToggle，2026-10-04）在页头动作区
     expect(w.find('.mk-pagehead').exists()).toBe(true);
-    expect(w.find('.mk-pagehead .mk-status__scope').exists()).toBe(true);
+    expect(w.find('.mk-pagehead .ds-toggle').exists()).toBe(true);
     // 旧形态回归护栏：概览带 / 口径与术语折叠卡 / 状态条散文计数
     expect(w.find('.mr-summary').exists()).toBe(false);
     expect(w.find('.mk-section__summary').exists()).toBe(false);

@@ -38,9 +38,15 @@ function makeUser(i: number) {
 
 vi.mock('../live', async () => {
   const { ref } = await import('vue');
+  // 2026-10-04 整组统一口径：共享 ref + set 回写（真实现语义）
+  const liveIncludeVirtual = ref(false);
   return {
     liveUsers: ref([]),
     liveUsersTotal: ref(0),
+    liveIncludeVirtual,
+    liveSetIncludeVirtual: vi.fn((v: boolean) => {
+      liveIncludeVirtual.value = v;
+    }),
     liveLoading: ref(false),
     liveFailures: ref<Record<string, string>>({}),
     registrationEnabled: ref<boolean | null>(null),

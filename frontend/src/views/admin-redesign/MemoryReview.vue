@@ -15,15 +15,10 @@
       hint="记忆层（用户级、跨 path）：到期积压 · 课内温故配额 · 概念归并审计；归并默认观察模式，只记录建议，不动 memory_traces"
     >
       <template #actions>
-        <!-- 作用域开关收在页头（原在「记忆层概览」卡头）：它切换的是整页口径，
-             而卡片区读起来像「表格控件」。绝对值移到 KPI 区后页头只留身份 + 作用域 + 操作。 -->
-        <label class="mk-status__scope" title="切换后整页重新统计：含虚拟学习者时，用户 / 痕迹 / 到期与归并队列一并纳入仿真账号">
-          <input v-model="includeVirtual" type="checkbox" @change="refreshAll" />
-          包含虚拟学习者
-        </label>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="refreshAll">
-          {{ loading ? '刷新中…' : '刷新' }}
-        </button>
+        <!-- 口径开关收在页头（原在「记忆层概览」卡头 → 原生 checkbox；2026-10-04 整组统一为
+             DataScopeToggle：学习组六页同一位、同一状态，撤页头刷新钮）。
+             它切换的是整页口径：含虚拟学习者时，用户 / 痕迹 / 到期与归并队列一并纳入仿真账号 -->
+        <DataScopeToggle v-model="includeVirtual" />
       </template>
     </MkPageHead>
     <!-- 页头 KPI 区（2026-09-28）：原「状态条散文 3 数 + 概览卡 880px 构成条 + 四张队列卡」
@@ -463,7 +458,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminMemoryReviewApi, adminMemoryTracesApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -473,12 +468,13 @@ import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
+import DataScopeToggle from './DataScopeToggle.vue'
 import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'
 import { askConfirm } from './useConfirm'
 import { useEscape } from './useEscape'
 import { openSubPage } from './store'
 import { toast } from '@/utils/toast'
-import { errMsg, shortId, timeAgo } from './live'
+import { errMsg, shortId, timeAgo, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 
 interface AuditUserSummary {
   mode: string
@@ -573,7 +569,15 @@ const legacyWindowOnlyMerges = computed<AppliedMergeView[]>(() => detail.value?.
 const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
-const includeVirtual = ref(false)
+/* 口径整组统一（2026-10-04 用户拍板）：get/set 走 live.ts 共享态（页头 DataScopeToggle 同源），
+   本页 watch 负责整页重新统计（原 checkbox @change 的职责） */
+const includeVirtual = computed({
+  get: () => liveIncludeVirtual.value,
+  set: (v) => liveSetIncludeVirtual(v)
+})
+watch(includeVirtual, () => {
+  void refreshAll()
+})
 const rows = ref<OverviewRow[]>([])
 /** 明细态状态点：与页头 KPI 同一阈值语义（P1#13）——占该用户痕迹 ≥20% 或到期 ≥5 条才亮
  *  需关注；阈值内是间隔复习的常态积压，不着琥珀（否则告警常亮、琥珀失去语义）。 */

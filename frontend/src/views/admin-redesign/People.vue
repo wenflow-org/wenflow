@@ -8,8 +8,10 @@
       sub="管理用户账号、角色与登录状态"
     >
       <template #actions>
+        <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态）；
+             数据域重拉由内嵌 Users 的 watch 承担 -->
+        <DataScopeToggle :model-value="liveIncludeVirtual" @update:model-value="liveSetIncludeVirtual" />
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="usersRef?.openCreate?.()">新建用户</button>
-        <button type="button" class="mk-btn mk-btn--sm" @click="usersRef?.refresh?.()">刷新</button>
       </template>
     </MkPageHead>
 
@@ -27,8 +29,9 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkBuckets from '@/components/mk/MkBuckets.vue'
+import DataScopeToggle from './DataScopeToggle.vue'
 import Users from './Users.vue'
-import { liveUsers, liveUsersTotal } from './live'
+import { liveUsers, liveUsersTotal, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 
 const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
 
