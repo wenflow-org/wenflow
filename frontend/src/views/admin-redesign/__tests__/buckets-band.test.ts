@@ -1,7 +1,8 @@
 /**
  * 教学组页首统计带（buckets 构成带，2026-10-04 用户拍板统一形态）：
  * - 共享原语 MkBuckets：值大字 + 份额条 + 口径脚注，直接落页面无卡壳（判例 = 目标对话四桶）
- * - 教学会话：十状态归四组 + 完成率（窗口口径）；异常快捷筛选迁状态条 meta-link
+ * - 教学会话：十状态归四组 + 完成率（窗口口径）；异常快捷筛选迁工具条右组
+ *   （2026-10-04 用户拍板：页头状态条整体退役，异常计数由本带「异常终态」单源承载）
  * - 学习路径：getStats byStatus 全平台口径直出（零值桶如实显示、枚举外归「其它」）
  * - 用户与学习者：真实 / 虚拟 / 测试 三桶互斥构成（管理员作真实桶 foot）
  * - 替代形态回归护栏：stageband 分布卡不再出现在教学会话/学习路径页
@@ -94,7 +95,7 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     liveUsersTotal.value = 0;
   });
 
-  it('教学会话：十状态归四组 + 完成率，组内合并口径在 foot 披露；异常筛选迁状态条', async () => {
+  it('教学会话：十状态归四组 + 完成率，组内合并口径在 foot 披露；异常筛选迁工具条右组', async () => {
     tsList.mockResolvedValue({
       data: { data: { total: 7, items: [
         { id: 's1', status: 'active', userName: '甲', topic: 'T1' },
@@ -122,9 +123,13 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     expect(feet).toContain('失败 / 超时 / 收尾失败合计');
     expect(feet).toContain('含已被替代');
     expect(feet.some((t) => t.includes('口径：已完成 ÷ 窗口 7 条'))).toBe(true);
-    // 异常快捷筛选迁状态条 meta-link（与 有建议 同族）：失败+超时 = 2，可点穿
-    const abnormalBtn = w.findAll('.mk-status__meta-link').find((b) => b.text().startsWith('异常'));
-    expect(abnormalBtn?.text()).toBe('异常 2');
+    // 异常快捷筛选迁工具条右组（2026-10-04 状态条退役后）：失败+超时 = 2 由本带「异常终态」单源承载，
+    // chip 不显计数（同一数字不两处渲染），点击可穿
+    expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
+    const abnormalBtn = w.findAll('.ts-toolbar__right .mk-pill').find((b) => b.text().startsWith('异常'));
+    expect(abnormalBtn?.text()).toBe('异常');
+    // 右组另一枚 = 有建议（服务端过滤，计数无构成桶覆盖，保留）
+    expect(w.find('.ts-toolbar__right .mk-pill').text()).toBe('有建议0');
     w.unmount();
   });
 

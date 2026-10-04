@@ -2,74 +2,29 @@
   <div :class="embedded ? 'mk-page--fill ts-embedded' : 'mk-page mk-page--fill'">
     <!-- 教学会话页头（newui/admin pagehead；embedded 由宿主承载，本组件不渲染页头）。
          本页 20s 静默轮询，手动「刷新」钮与之重复已撤（对齐执行日志/健康中心先例：
-         轮询页不放刷新钮）；拉取失败走状态条重试钮（refreshNow 仍被错误态与宿主联动使用）。
-         状态条 = 原型 .statusbar 结构（结论粗体 + 分隔线 + meta 串 + 右侧快捷筛选钮），
-         也是本页唯一统计带（2026-10-02 用户拍板「新UI没有第二个kpi区」撤 KPI 栅格）：
-         meta 只放别处没有的计数——总数=后端全量口径（分布卡/列表都是加载窗口）、
-         有建议=全页唯一出口；已完成/失败/进行中由分布卡图例单源承载，不在两处复读 -->
+         轮询页不放刷新钮）；拉取失败走错误条重试钮（refreshNow 仍被错误态与宿主联动使用）。
+         统计口径（2026-10-04 状态条退役后）：全页统计带 = 构成带（MkBuckets）唯一一处；
+         计数每个只出现一次——加载/筛选/总量/截断住卡头 meta，待关注 / 缺总结住焦点 chips，
+         有建议住工具条右组（三者均无构成桶覆盖），进行中 chip 是 active 单状态 ≠ 构成带
+         「进行中」四状态合并档（两个不同口径，见各自 title） -->
     <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 状态分布与需关注识别">
       <template #actions>
         <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
         <DataScopeToggle v-model="includeTest" />
       </template>
     </MkPageHead>
-    <!-- 口径标注（P1#4）：状态带里只有「共 N」可能是后端全量口径（后端未回 total 时退化为
-         窗口行数，title 如实降级、不得再声称全量）；需关注 / 有建议 / 缺总结三个计数全部来自
-         最近 LIST_LIMIT 条加载窗口，就地括注「（最近 1000 条）」防窗口冒充全量。
-         bad 档（异常堆积）阈值在条 title 披露（告警条件化纪律：着色必须带阈值） -->
-    <div
-      v-if="!embedded"
-      class="mk-status"
-      :class="tsDashTone === 'bad' ? 'mk-status--bad' : tsDashTone === 'warn' ? 'mk-status--warn' : tsDashTone === 'muted' ? 'mk-status--muted' : 'mk-status--ok'"
-      :title="tsDashTone === 'bad' ? `异常堆积：失败 / 收尾失败 / 超时合计 ${abnormalSessionCount} ≥ ${TS_BAD_THRESHOLD}（最近 ${LIST_LIMIT} 条窗口），页头转红` : undefined"
-    >
-      <span class="mk-status__dot"></span>
-      <strong class="mk-status__title" title="需关注 = 关注度高 / 中的会话数（失败 / 超时 / 终态缺总结 / 高优建议）；最近加载窗口计数，非全量">{{ attentionCount }} 个会话需关注</strong>
-      <span class="mk-status__sep"></span>
-      <span class="mk-status__meta" :title="totalTitle">共 {{ listTotal || rows.length }}</span>
-      <!-- P3（2026-10-04 全站评审）：窗口口径全条只说一次（此前 title/有建议/缺总结各括注一遍）；
-           仅在真触到加载上限时出现——未触限时窗口=全量，无需限定 -->
-      <span v-if="truncated" class="mk-status__meta" :title="`列表仅加载最近 ${LIST_LIMIT} 条，以下窗口计数非全量`">最近 {{ LIST_LIMIT }} 条窗口</span>
-      <button
-        type="button"
-        class="mk-status__meta-link"
-        :class="{ 'mk-status__meta-link--on': onlyAdvisory }"
-        :aria-pressed="onlyAdvisory"
-        title="含教学建议（完课调整 / 复习建议）的会话数；最近加载窗口计数。点击 = 服务端过滤只看有建议（再点取消）"
-        @click="toggleOnlyAdvisory"
-      >有建议 {{ advisoryCount }}</button>
-      <span class="mk-status__meta" :title="`终态（已完成 / 失败 / 超时 / 废弃 / 收尾失败）会话缺课后总结数；非终态缺失是过程态不计；最近 ${LIST_LIMIT} 条窗口计数`">缺总结 {{ missingWrapupCount }}</span>
-      <!-- 异常快捷筛选（2026-10-04 随分布卡退役迁入状态条，与 有建议 同族交互）：
-           点击 = 异常状态多选筛选（失败 / 收尾失败 / 超时），再点取消 -->
-      <button
-        v-if="abnormalSessionCount"
-        type="button"
-        class="mk-status__meta-link"
-        :class="{ 'mk-status__meta-link--on': abnormalOnly }"
-        :aria-pressed="abnormalOnly"
-        title="失败 / 收尾失败 / 超时 合计——需排查。点击只看异常会话（状态多选），再点取消"
-        @click="abnormalOnly = !abnormalOnly"
-      >异常 {{ abnormalSessionCount }}</button>
-      <!-- 右侧快捷钮（原型 .statusbar__act「只看需关注」）：接页面既有「待关注」筛选，
-           再点取消；纯导航，不新增数据口径 -->
-      <span class="mk-status__actions">
-        <button
-          type="button"
-          class="mk-status__action"
-          :class="{ 'ts-status-action--on': pill === 'attention' }"
-          :aria-pressed="pill === 'attention'"
-          title="只看关注度非低的会话（高 / 中关注），再点取消"
-          @click="pill = pill === 'attention' ? 'all' : 'attention'"
-        >只看需关注</button>
-      </span>
-    </div>
+    <!-- 页头状态条整体退役（2026-10-04 用户拍板：教学组已有构成带，顶部这条复读）——
+         它的「需关注 / 缺总结」与工具条焦点 chips 同源同数，异常计数与构成带「异常终态」
+         同源同数（同一数字不两处渲染）；「只看需关注」= 待关注 chip 的同一动作，直接删。
+         两个别处没有的**动作**迁工具条右组（有建议服务端过滤 / 异常多选筛选），
+         总数与窗口截断口径并进卡头 meta（真触上限才算限定，未触限时窗口=全量）。 -->
 
     <!-- 状态构成带（2026-10-04 用户拍板教学组统一 buckets 形态，替代 stageband 分布卡）：
          十状态按收束语义归四组 + 完成率（镜像目标对话四桶判例），组内合并口径在桶 foot 披露，
          窗口口径在值悬停披露；枚举外取值归「其它」桶（仅实际出现时追加）。
          数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口），非后端全量口径。
-         细粒度单状态筛选保留在工具条状态 chips（原分布卡 legend 点击筛选退役）；
-         embedded 时隐藏（宿主状态条承载域计数）；无数据不留空带 -->
+         细粒度单状态筛选保留在卡头「按状态筛选」select（原分布卡 legend 点击筛选退役）；
+         embedded 时隐藏（宿主承载域计数）；无数据不留空带 -->
     <MkBuckets v-if="!embedded && rows.length" label="会话状态构成" :items="tsBucketItems" />
 
     <!-- 深链未命中提示：?session= 存在但当前列表（最近 LIST_LIMIT 条）中找不到 -->
@@ -98,7 +53,7 @@
             storage-key="wf_teaching_hidden_cols"
             v-model:hidden="tsHiddenCols"
           />
-          <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）</span>
+          <span class="mk-card__meta" :title="`${includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'}；${totalTitle}`">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含模拟' : '仅真实' }}）<template v-if="truncated"> · 共 {{ listTotal }}，仅显示最近 {{ LIST_LIMIT }} 条</template></span>
         </div>
       </div>
 
@@ -106,7 +61,7 @@
            右组 11 枚状态 chips 退役（2026-10-03 用户反馈「胶囊过于琐碎」）：收进卡头
            「按状态筛选」select——原状态下拉本就是 select 形态，本页枚举 10 档远超原型
            右组的 5 枚，硬塞 chips 把工具条顶成第二行、表格首屏被挤到 436px。
-           长尾状态仍可从「会话状态分布」legend 点选（含计数、覆盖全部枚举）。
+           长尾状态仍可从「按状态筛选」select 全量点选（原分布卡 legend 点击筛选退役）。
            左组 = 页面既有「焦点」筛选（全部 / 进行中 / 待关注 / 缺总结）——
            原型左组为阶段筛选，但列表无 stage 字段（字段没有的不硬造），沿用既有轴 -->
       <div class="ts-toolbar">
@@ -118,10 +73,34 @@
             class="mk-pill"
             :class="{ 'mk-pill--active': pill === p.id }"
             :aria-pressed="pill === p.id"
+            :title="p.title"
             @click="pill = p.id"
           >
             {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
           </button>
+        </div>
+        <!-- 右组 = 两个独立开关（非左组那样的单选焦点 chips，故另起一组、aria-pressed 表开关态）：
+             2026-10-04 页头状态条退役后随迁——两枚都是「别处没有的动作」，纯导航不新增口径。
+             异常 chip 不显计数：同一窗口的同一集合由构成带「异常终态」单源承载（数字不两处渲染）；
+             异常堆积（合计 ≥ 阈值）时 chip 转红，阈值在 title 披露（告警条件化纪律） -->
+        <div class="ts-toolbar__right">
+          <button
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': onlyAdvisory }"
+            :aria-pressed="onlyAdvisory"
+            title="含教学建议（完课调整 / 复习建议）的会话数；最近加载窗口计数。点击 = 服务端过滤只看有建议（再点取消）"
+            @click="toggleOnlyAdvisory"
+          >有建议<span class="mk-pill__count">{{ advisoryCount }}</span></button>
+          <button
+            v-if="abnormalSessionCount"
+            type="button"
+            class="mk-pill ts-abn-chip"
+            :class="{ 'mk-pill--active': abnormalOnly, 'ts-abn-chip--heap': abnormalHeap && !abnormalOnly }"
+            :aria-pressed="abnormalOnly"
+            :title="`失败 / 收尾失败 / 超时合计 ${abnormalSessionCount}（${abnormalHeap ? `≥ ${TS_BAD_THRESHOLD}，异常堆积` : '需排查'}）；数字见上方「异常终态」桶。点击只看异常会话（状态多选），再点取消`"
+            @click="abnormalOnly = !abnormalOnly"
+          >异常</button>
         </div>
       </div>
 
@@ -423,7 +402,7 @@ async function toggleOnlyAdvisory() {
 const totalTitle = computed(() => {
   if (onlyAdvisory.value) return `「只看有建议」服务端过滤生效：此处为该过滤口径的总数；列表按最近 ${LIST_LIMIT} 条窗口展示`
   return totalFromBackend.value
-    ? '后端全量口径；下方分布卡与列表按最近加载窗口展示'
+    ? '后端全量口径；上方构成带与列表按最近加载窗口展示'
     : `后端未返回总数：此处为最近加载窗口内已加载行数（≤ ${LIST_LIMIT} 条），非全量`
 })
 
@@ -558,16 +537,25 @@ const tsColDefs = [
   { key: 'start', label: '时间', title: '开始时间（相对 · 悬停看绝对时间）' },
 ] as const
 const tsHiddenCols = ref<Set<string>>(new Set())
+/* 焦点 chips（本组是这些计数的唯一来源，2026-10-04 页头状态条退役后）：
+   「全部」不显数——它 = 卡头 meta「已加载 N 条」的同一个数，不两处渲染（同 People 页判例）；
+   待关注 / 缺总结别处没有（构成带四桶不含），保留计数；
+   「进行中」= active 单状态口径，title 注明与构成带「进行中」（初始化/进行中/已暂停/收尾中
+   四状态合并）不是同一个数——避免同名两数无解释。
+   历史教训：pill 与页头状态条曾各算一遍「高关注」，口径不同（attention==='high' vs
+   !=='low'）致数字打架，该状态条计数已删。 */
 const pills = computed(() => {
   const all = rows.value
   return [
-    { id: 'all' as const, label: '全部', count: all.length },
-    { id: 'active' as const, label: '进行中', count: all.filter((r) => r.status === 'active').length },
-    // 计数与下方 missingWrapupCount / attentionCount 同源：那两者同时服务页头基调，
-    // 避免「同一个 pill 有两个不同数字」（原状态条「高关注」按 attention==='high' 统计，
-    // 而本 pill 的筛选口径是 attention!=='low'，点击后条数对不上 —— 已删该状态条计数）。
-    { id: 'attention' as const, label: '待关注', count: attentionCount.value },
-    { id: 'missing' as const, label: '缺总结', count: missingWrapupCount.value }
+    { id: 'all' as const, label: '全部', count: undefined as number | undefined, title: undefined as string | undefined },
+    {
+      id: 'active' as const,
+      label: '进行中',
+      count: all.filter((r) => r.status === 'active').length,
+      title: '仅 status=active；上方构成带「进行中」含初始化 / 暂停 / 收尾中，口径更宽'
+    },
+    { id: 'attention' as const, label: '待关注', count: attentionCount.value, title: '关注度高 / 中的会话数（关注度低不计）' },
+    { id: 'missing' as const, label: '缺总结', count: missingWrapupCount.value, title: '终态（已完成 / 失败 / 超时 / 废弃 / 收尾失败）会话缺课后总结数；非终态缺失是过程态不计' }
   ]
 })
 /* 状态筛选选项（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
@@ -716,18 +704,13 @@ const tsSubNote = (r: Row): { text: string; title?: string } | null => {
   return null
 }
 
-/* 教学概览（ts-dash：会话域结论，状态条承载基调；逐项计数由卡头 pills 承载，不重复渲染）。
-   bad 档（补死代码分支）：失败 / 收尾失败 / 超时合计 ≥ TS_BAD_THRESHOLD 视为异常堆积，页头转红
-   （阈值在状态条 title 披露，见模板）；warn 只由终态缺失 / 待关注触发：missingWrapupCount 已按
-   P1 口径只数终态会话，进行中会话不再把页头钉死在 warn。 */
+/* 异常堆积告警（原页头状态条 mk-status--bad 的同一判据，2026-10-04 状态条退役后迁往
+   工具条右组「异常」chip）：失败 / 收尾失败 / 超时合计 ≥ TS_BAD_THRESHOLD → chip 转红，
+   阈值在 chip title 披露（告警条件化纪律：着色必须带阈值）。
+   原 warn / ok / muted 三档只服务状态条底色，随状态条一并退役——彼时 warn 的
+   「终态缺总结 / 待关注」信号由缺总结 / 待关注 chips 的计数直接可见，不靠底色转译。 */
 const TS_BAD_THRESHOLD = 10
-const tsDashTone = computed<'ok' | 'warn' | 'bad' | 'muted'>(() => {
-  if (!rows.value.length) return 'muted'
-  if (abnormalSessionCount.value >= TS_BAD_THRESHOLD) return 'bad'
-  if (missingWrapupCount.value > 0) return 'warn'
-  if (attentionCount.value > 0) return 'warn'
-  return 'ok'
-})
+const abnormalHeap = computed(() => abnormalSessionCount.value >= TS_BAD_THRESHOLD)
 
 const route = useRoute()
 const router = useRouter()
@@ -807,8 +790,9 @@ defineExpose({ refreshNow })
 /* 行首关注度色条已撤（2026-10-03 用户拍板：与「关注」列同源冗余、语义不可发现）；
    关注度由「关注」列（高/中/低 色字 + title）单源承载 *//* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
 .ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
-.ts-tags { display: flex; gap: 6px; margin-top: 2px; }/* 卡内工具条（原型 .toolbar：底边框分隔表头）：右组状态 chips 已退役收进卡头 select，
-   只剩左组焦点 chips（__grow 随之删除——无右组可推） */
+.ts-tags { display: flex; gap: 6px; margin-top: 2px; }/* 卡内工具条（原型 .toolbar：底边框分隔表头）：左组焦点 chips + 右组两个开关
+   （11 枚状态 chips 已退役收进卡头 select；右组 2026-10-04 状态条退役后承接
+   有建议 / 异常 两个动作，用 margin-left:auto 推右缘） */
 .ts-toolbar {
   display: flex;
   align-items: center;
@@ -830,14 +814,15 @@ defineExpose({ refreshNow })
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   white-space: nowrap;
-}/* 状态条快捷钮选中态（原型 .statusbar__act 语义 = 筛选生效高亮）：与 .mk-pill--active 同词汇。
+}/* 工具条右组（原型 .toolbar 右 chips）：两个独立开关推右缘，与左组单选焦点 chips 分家。
    页面前缀命名（规则 1：mk- 前缀属全局原语，页面不得自造） */
-.ts-status-action--on {
-  background: var(--mk-blue-bg);
-  border-color: color-mix(in srgb, var(--mk-blue) 44%, var(--mk-line));
-  color: var(--mk-pill-active-fg);
+.ts-toolbar__right { margin-left: auto; display: flex; align-items: center; gap: var(--mk-space-2); }/* 异常堆积（合计 ≥ 阈值）chip 转红：原状态条 mk-status--bad 的同一告警，阈值在 chip title 披露。
+   选中态（筛选生效中）由模板守卫——abnormalOnly 时不再加本类，让位给 .mk-pill--active 的蓝 */
+.ts-abn-chip--heap {
+  color: var(--mk-red);
+  border-color: color-mix(in srgb, var(--mk-red) 45%, var(--mk-line));
 }/* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字） */
-.ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }/* 可点异常徽章已迁状态条 meta-link（2026-10-04 分布卡退役，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
+.ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
    badge 本体 inline-flex，截断由内层文本节点承载（flex 项 overflow!=visible → min-width 归 0 可收缩） */
 .ts-adv-badge { margin-left: 4px; max-width: 168px; }.ts-adv-badge__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }/* 加载失败错误条 */
 .ts-error {

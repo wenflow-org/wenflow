@@ -108,27 +108,29 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     w.unmount();
   });
 
-  it('教学会话独立页：页头 KPI 带已退役（2026-10-02 用户拍板原型无第二统计带），计数住状态条 meta', async () => {
+  it('教学会话独立页：页头 KPI 带已退役（2026-10-02），统计带 = 构成带唯一一处（2026-10-04 状态条退役）', async () => {
     const { router, ready } = mockRouter('/admin/teaching-sessions');
     await ready;
     const w = mount(TeachingSessions, { global: { plugins: [router] } });
     await settle();
     expect(kpiLabels(w)).toEqual([]);
     expect(w.find('.mk-kpi-grid').exists()).toBe(false);
-    // 状态条 = 原型 .statusbar 形态：结论粗体 + meta 计数串（总数=后端全量 / 有建议 / 缺总结）
-    const status = w.find('.mk-status');
-    expect(status.text()).toContain('共 0');
-    expect(status.text()).toContain('有建议 0');
-    expect(status.text()).toContain('缺总结 0');
-    // P1#4 口径括注 → P3（2026-10-04 全站评审）收敛：逐项括注撤除，窗口口径只在触上限时
-    // 以一枚「最近 1000 条窗口」meta 出现（本用例 0 行未触限，不出现）
-    expect(status.text()).not.toContain('（最近 1000 条）');
-    expect(status.text()).not.toContain('条窗口');
-    // P1#4 兜底诚实化：后端未回 total（mock 空响应）时「共 N」退化为窗口行数，title 不得声称全量
-    const totalMeta = status.findAll('.mk-status__meta').find((el) => el.text().startsWith('共 '))!;
-    expect(totalMeta).toBeTruthy();
-    expect(totalMeta.attributes('title')).toContain('非全量');
-    expect(totalMeta.attributes('title')).not.toContain('全量口径');
+    // 2026-10-04 用户拍板：页头状态条整体退役——需关注 / 缺总结与焦点 chips 同源同数、
+    // 异常与构成带「异常终态」同源同数（同一数字不两处渲染）；总数与窗口截断口径并进卡头 meta
+    expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
+    const meta = w.find('.mk-card__meta');
+    expect(meta.text()).toContain('0 / 0 条');
+    // 本用例 0 行未触上限：不出现截断口径（触限时 meta 追加「共 N，仅显示最近 1000 条」）
+    expect(meta.text()).not.toContain('条窗口');
+    // P1#4 兜底诚实化：后端未回 total（mock 空响应）时，meta title 不得声称全量
+    expect(meta.attributes('title')).toContain('非全量');
+    expect(meta.attributes('title')).not.toContain('全量口径');
+    // 计数各自唯一：待关注 / 缺总结住焦点 chips（「全部」不显数 = meta 的已加载行数），
+    // 有建议住右组；0 行时异常 chip 不出现
+    expect(w.findAll('.ts-toolbar .mk-pills .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
+      '全部', '进行中', '待关注', '缺总结'
+    ]);
+    expect(w.findAll('.ts-toolbar__right .mk-pill').map((c) => c.text())).toEqual(['有建议0']);
     w.unmount();
   });
 

@@ -161,7 +161,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
 });
 
 describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对照）', () => {
-  it('状态条：粗体结论（窗口口径单源化）+ 缺总结 meta + 「只看需关注」快捷钮（点选接既有待关注筛选）', async () => {
+  it('状态条退役（2026-10-04）：计数各自唯一——待关注 / 缺总结住焦点 chips，点选即筛选', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -169,25 +169,24 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const status = wrapper.find('.mk-status');
-    // P3（2026-10-04 全站评审）：逐项窗口括注撤除；未触上限时不显示窗口 meta
-    expect(status.find('.mk-status__title').text()).toBe('1 个会话需关注');
-    expect(status.text()).not.toContain('（最近 1000 条）');
-    expect(status.text()).not.toContain('条窗口');
-    expect(status.text()).toContain('缺总结 1');
-    const quick = status.find('.mk-status__actions button');
-    expect(quick.text()).toBe('只看需关注');
-    expect(quick.attributes('aria-pressed')).toBe('false');
-    await quick.trigger('click');
-    expect(quick.attributes('aria-pressed')).toBe('true');
-    // 快捷钮 = 既有「待关注」筛选口径（attention !== low）：只剩失败行
+    // 页头状态条整体退役：需关注 / 缺总结与 chips 同源同数、异常与构成带「异常终态」同源同数
+    expect(wrapper.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
+    const chip = (label: string) =>
+      wrapper.findAll('.ts-toolbar .mk-pills .mk-pill').find((c) => c.text().replace(/\d+$/, '') === label)!;
+    // 「全部」不显数 = 卡头 meta 的已加载行数（同 People 页判例：同一数字不两处渲染）
+    expect(chip('全部').find('.mk-pill__count').exists()).toBe(false);
+    expect(chip('待关注').text()).toBe('待关注1');
+    expect(chip('缺总结').text()).toBe('缺总结1');
+    // 点选 = 既有「待关注」筛选口径（attention !== low）：只剩失败行
+    await chip('待关注').trigger('click');
+    expect(chip('待关注').attributes('aria-pressed')).toBe('true');
     const rows = wrapper.findAll('tbody tr');
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain('用户a');
     wrapper.unmount();
   });
 
-  it('tsDashTone bad 档（补死分支）：失败/收尾失败/超时合计 ≥ 10 → 页头转红 + title 披露阈值', async () => {
+  it('异常堆积告警（原 tsDashTone bad 档）：失败/收尾失败/超时合计 ≥ 10 → 「异常」chip 转红 + title 披露阈值', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -195,14 +194,15 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const status = wrapper.find('.mk-status');
-    expect(status.classes()).toContain('mk-status--bad');
-    expect(status.attributes('title')).toContain('≥ 10');
-    expect(status.attributes('title')).toContain('失败 / 收尾失败 / 超时');
+    const abn = wrapper.find('.ts-abn-chip');
+    expect(abn.exists()).toBe(true);
+    expect(abn.classes()).toContain('ts-abn-chip--heap');
+    expect(abn.attributes('title')).toContain('≥ 10');
+    expect(abn.attributes('title')).toContain('失败 / 收尾失败 / 超时');
     wrapper.unmount();
   });
 
-  it('状态条「有建议」可点穿：服务端 onlyWithAdvisory 过滤 toggle（再点取消）；建议徽章行内预览 + title 全文', async () => {
+  it('工具条右组「有建议」可点穿：服务端 onlyWithAdvisory 过滤 toggle（再点取消）；建议徽章行内预览 + title 全文', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -217,8 +217,8 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const link = wrapper.find('.mk-status__meta-link');
-    expect(link.text()).toContain('有建议 1');
+    const link = wrapper.find('.ts-toolbar__right .mk-pill');
+    expect(link.text()).toBe('有建议1');
     expect(link.attributes('aria-pressed')).toBe('false');
     // 建议徽章：行内直出建议标题（首行预览），title 挂完整建议文本
     const adv = wrapper.find('.ts-adv-badge');
@@ -228,15 +228,15 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     await link.trigger('click');
     await flushPromises();
     expect(listMock).toHaveBeenLastCalledWith(expect.objectContaining({ onlyWithAdvisory: true, limit: 1000 }));
-    expect(wrapper.find('.mk-status__meta-link').attributes('aria-pressed')).toBe('true');
-    await wrapper.find('.mk-status__meta-link').trigger('click');
+    expect(wrapper.find('.ts-toolbar__right .mk-pill').attributes('aria-pressed')).toBe('true');
+    await wrapper.find('.ts-toolbar__right .mk-pill').trigger('click');
     await flushPromises();
     const lastArg = listMock.mock.calls[listMock.mock.calls.length - 1][0];
     expect(lastArg.onlyWithAdvisory).toBeUndefined();
     wrapper.unmount();
   });
 
-  it('状态条「异常」meta-link 可点穿：失败/收尾失败/超时 状态多选筛选 toggle（2026-10-04 分布卡退役后迁此）', async () => {
+  it('工具条右组「异常」chip 可点穿：失败/收尾失败/超时 状态多选筛选 toggle；计数由构成带单源承载', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -250,14 +250,15 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    const abn = wrapper.findAll('.mk-status__meta-link').find((b) => b.text().startsWith('异常'))!;
-    expect(abn.text()).toBe('异常 2');
+    const abn = wrapper.find('.ts-abn-chip');
+    // chip 不显计数（同窗口同集合由构成带「异常终态」桶单源承载，数字不两处渲染）
+    expect(abn.text()).toBe('异常');
     expect(abn.attributes('aria-pressed')).toBe('false');
     await abn.trigger('click');
     await nextTick();
     expect(wrapper.findAll('tbody tr')).toHaveLength(2);
-    expect(wrapper.findAll('.mk-status__meta-link').find((b) => b.text().startsWith('异常'))!.attributes('aria-pressed')).toBe('true');
-    await wrapper.findAll('.mk-status__meta-link').find((b) => b.text().startsWith('异常'))!.trigger('click');
+    expect(wrapper.find('.ts-abn-chip').attributes('aria-pressed')).toBe('true');
+    await wrapper.find('.ts-abn-chip').trigger('click');
     await nextTick();
     expect(wrapper.findAll('tbody tr')).toHaveLength(3);
     wrapper.unmount();
@@ -318,11 +319,15 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(sel.findAll('option').map((o) => o.text())).toEqual([
       '全部状态', '初始化中', '进行中', '已暂停', '超时', '已被替代', '失败', '收尾中', '收尾失败', '已完成', '已废弃'
     ]);
-    // 工具条只剩左组焦点 chips（右组 chips 退役 → 无第二组）
+    // 工具条：左组 = 单选焦点 chips（11 枚状态 chips 已退役）；右组 = 两个独立开关
+    // （2026-10-04 页头状态条退役后迁入），不属于单选焦点组，故 .mk-pills 仍只有一组
     const groups = wrapper.findAll('.ts-toolbar .mk-pills');
     expect(groups).toHaveLength(1);
     expect(groups[0].findAll('.mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
       '全部', '进行中', '待关注', '缺总结'
+    ]);
+    expect(wrapper.findAll('.ts-toolbar__right .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
+      '有建议', '异常'
     ]);
     await sel.setValue('failed');
     const rows = wrapper.findAll('tbody tr');
