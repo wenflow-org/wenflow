@@ -139,7 +139,14 @@ export function promoteSupplementSlot(
   currentTurn: number
 ): { slot: SupplementSlot | null; payload: ReturnType<typeof buildSupplementPayload> } {
   if (!slot || slot.status !== 'requested') return { slot: slot ?? null, payload: null };
-  const materialId = findWebRecordByTitle(userId, slot.query || slot.topic)?.id;
+  // 优先用采集链回写的 materialId（全量测试报告 #28）：查询词与实际页标题经常不同义
+  //（实测「CPA 各模块分值」→《22年CPA的调分规则来了》），标题匹配两例全败；回写是链自己
+  //选源结果的持久化，零猜测。标题匹配保留为回写缺失时（存量槽位/竞态丢失）的兜底。
+  let materialId = slot.materialId;
+  if (!materialId) {
+    // 回写缺失时的兜底（存量槽位 / 竞态丢失）：标题双向包含匹配
+    materialId = findWebRecordByTitle(userId, slot.query || slot.topic)?.id;
+  }
   if (materialId) {
     const payload = buildSupplementPayload(userId, materialId, slot.topic);
     if (payload) {

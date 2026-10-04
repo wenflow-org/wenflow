@@ -77,6 +77,43 @@ describe('promoteSupplementSlot 状态机', () => {
     expect(slot).toBeNull();
     expect(payload).toBeNull();
   });
+
+  it('槽位带 materialId（回写命中）→ 按 id 直取，即使标题匹配会命中另一篇（报告 #28）', async () => {
+    const userId = 'user_sup5';
+    // 诱饵：标题「PLCSIM」是查询词子串，标题匹配本会命中错的一篇；真选中的页标题与查询词毫无交集
+    const decoyId = await seedLibrary(userId, 'PLCSIM');
+    const { ingestWebMaterial } = await import('../../materials/material-web-ingest.service');
+    const chosen = await ingestWebMaterial({
+      userId,
+      url: 'https://www.reddit.com/r/PLC/comments/xyz',
+      title: 'Siemens PLC Software/Hardware Requirements : r/PLC',
+      text: '正文内容。'.repeat(80),
+    });
+    const slot: SupplementSlot = {
+      status: 'requested',
+      topic: '西门子 TIA Portal / PLCSIM 兼容性对照',
+      query: 'TIA Portal PLCSIM compatibility Windows 10 22H2 64-bit official system requirements',
+      requestedAt: new Date().toISOString(),
+      requestedTurn: 40,
+      materialId: chosen!.record.id,
+    };
+    const { slot: next, payload } = promoteSupplementSlot(slot, userId, 41);
+    expect(next?.status).toBe('delivered');
+    expect(payload?.materialId).toBe(chosen!.record.id);
+    expect(payload?.materialId).not.toBe(decoyId);
+  });
+
+  it('槽位无 materialId（回写缺失）→ 退回标题匹配兜底', async () => {
+    const userId = 'user_sup6';
+    const materialId = await seedLibrary(userId, '费曼学习法');
+    const slot: SupplementSlot = {
+      status: 'requested', topic: '费曼学习法', query: '费曼学习法',
+      requestedAt: new Date().toISOString(), requestedTurn: 2,
+    };
+    const { slot: next, payload } = promoteSupplementSlot(slot, userId, 3);
+    expect(next?.status).toBe('delivered');
+    expect(payload?.materialId).toBe(materialId);
+  });
 });
 
 describe('fetchSupplementMaterial 选源（2026-09-26 与备课采集同源）', () => {

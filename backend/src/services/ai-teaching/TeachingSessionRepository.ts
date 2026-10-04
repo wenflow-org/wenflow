@@ -224,6 +224,32 @@ function parseJsonSafe<T>(raw: string | null | undefined, fallback: T): T {
   }
 }
 
+/**
+ * 教师补充槽 materialId 抢救合并（全量测试报告 #28 竞态）：后台采集完成回写槽位与回合提交
+ *（整包重写 teachingState）无锁竞争——回合「读取早于回写、提交晚于回写」的顺序会把刚回写的
+ * id 覆盖掉。合并只在「外发槽位是同一笔 requested 且缺 materialId、库中同笔槽位已有 materialId」
+ * 时生效，其余键一律不动。
+ */
+function mergeSupplementMaterialId(
+  outgoing: Record<string, any> | null | undefined,
+  current: Record<string, any> | null | undefined
+): boolean {
+  const outSlot = outgoing?.sessionArtifacts?.supplement;
+  if (!outSlot || outSlot.status !== 'requested' || outSlot.materialId) return false;
+  const curSlot = current?.sessionArtifacts?.supplement;
+  if (!curSlot || curSlot.status !== 'requested' || !curSlot.materialId) return false;
+  if (String(curSlot.requestedAt || '') !== String(outSlot.requestedAt || '')) return false;
+  outgoing.sessionArtifacts = {
+    ...outgoing.sessionArtifacts,
+    supplement: {
+      ...outSlot,
+      materialId: curSlot.materialId,
+      sourceUrl: curSlot.sourceUrl ?? outSlot.sourceUrl ?? null,
+    },
+  };
+  return true;
+}
+
 function mapRecord(record: any): TeachingSessionRecord {
   return {
     id: record.id,
@@ -684,6 +710,19 @@ export class TeachingSessionRepository {
     }
   ): Promise<void> {
     await withTransaction(async (tx) => {
+      // 补充槽 materialId 抢救合并（报告 #28）：仅在外发状态存在「待回写的 requested 槽位」时
+      // 多读一次当前行走窄合并——等待窗口外零成本；把并发回写的 id 并入本次整包写入。
+      if (
+        payload.teachingState
+        && (payload.teachingState as any)?.sessionArtifacts?.supplement?.status === 'requested'
+        && !(payload.teachingState as any)?.sessionArtifacts?.supplement?.materialId
+      ) {
+        const currentRow = await tx.teaching_sessions.findUnique({
+          where: { id: sessionId },
+          select: { teachingState: true },
+        });
+        mergeSupplementMaterialId(payload.teachingState, parseJsonSafe(currentRow?.teachingState ?? null, null));
+      }
       const updated = await tx.teaching_sessions.updateMany({
         where: {
           id: sessionId,
@@ -739,6 +778,46 @@ export class TeachingSessionRepository {
         });
       }
     });
+  }
+
+  /**
+   * 教师补充槽 materialId 回写（活的 path 批次 E / 全量测试报告 #28）：后台采集任务成功后调用。
+   * 不持 operation 租约——事务内重读当前 teachingState，只合并 sessionArtifacts.supplement 的
+   * materialId/sourceUrl（requestedAt 对得上、状态仍是 requested 才写）。与 commitTurnState 的
+   * 抢救合并互为兜底：无论回写与回合提交谁先谁后，id 都不丢。
+   */
+  async patchSessionSupplementMaterial(
+    sessionId: string,
+    request: { requestedAt: string },
+    patch: { materialId: string; sourceUrl?: string | null }
+  ): Promise<boolean> {
+    return withTransaction(async (tx) => {
+      const row = await tx.teaching_sessions.findUnique({
+        where: { id: sessionId },
+        select: { teachingState: true },
+      });
+      const teachingState = parseJsonSafe(row?.teachingState ?? null, null as Record<string, any> | null);
+      const slot = teachingState?.sessionArtifacts?.supplement;
+      if (!teachingState || !slot || slot.status !== 'requested') return false;
+      if (String(slot.requestedAt || '') !== String(request.requestedAt || '')) return false;
+      if (slot.materialId === patch.materialId) return true;
+      const next = {
+        ...teachingState,
+        sessionArtifacts: {
+          ...teachingState.sessionArtifacts,
+          supplement: {
+            ...slot,
+            materialId: patch.materialId,
+            sourceUrl: patch.sourceUrl ?? slot.sourceUrl ?? null,
+          },
+        },
+      };
+      await tx.teaching_sessions.update({
+        where: { id: sessionId },
+        data: { teachingState: JSON.stringify(next), updatedAt: new Date() },
+      });
+      return true;
+    }, { label: 'teaching.patchSupplementMaterial' });
   }
 
   /**

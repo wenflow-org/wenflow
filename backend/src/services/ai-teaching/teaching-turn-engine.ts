@@ -838,13 +838,34 @@ export async function processStudentMessage(
           };
           runBackgroundTask('teaching.material-supplement', async () => {
             const outcome = await fetchSupplementMaterial(session.userId, slot.topic, slot.query);
-            if (!outcome.ok) {
-              logger.warn('[AITeaching] 教师补充资料采集失败（fail-open，槽位靠轮次超时过期）', {
+            if (outcome.ok && outcome.materialId) {
+              // 槽位回写（全量测试报告 #28）：晋升按采集链自己选中的 id 直取，不再依赖
+              // 「查询词 × 网页标题」模糊匹配（实测两例全败：CPA 分值查询 →《22年CPA的调分规则来了》）。
+              const written = await teachingSessionRepository
+                .patchSessionSupplementMaterial(
+                  sessionId,
+                  { requestedAt: slot.requestedAt },
+                  { materialId: outcome.materialId, sourceUrl: outcome.sourceUrl ?? null }
+                )
+                .catch((error) => {
+                  logger.warn('[AITeaching] 补充材料槽位回写失败（fail-open，晋升退回标题匹配）', {
+                    sessionId,
+                    error: error instanceof Error ? error.message : String(error),
+                  });
+                  return false;
+                });
+              logger.info('[AITeaching] 补充材料已入库并回写槽位', {
                 sessionId,
-                topic: slot.topic,
-                error: outcome.error,
+                materialId: outcome.materialId,
+                written,
               });
+              return;
             }
+            logger.warn('[AITeaching] 教师补充资料采集失败（fail-open，槽位靠轮次超时过期）', {
+              sessionId,
+              topic: slot.topic,
+              error: outcome.error,
+            });
           });
           logger.info('[AITeaching] 教师补充请求已受理', {
             sessionId,
