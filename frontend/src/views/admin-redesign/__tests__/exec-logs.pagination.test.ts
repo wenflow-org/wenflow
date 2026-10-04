@@ -278,7 +278,9 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
     liveLogsTotal.value = 5;
     const { w, router } = await mountExecAt('/admin/execution-logs?agent=api-gateway&status=err&test=only');
     await nextTick();
-    expect(w.text()).toContain('仅看测试');
+    // 2026-10-04 状态条退役：筛选徽章随条删除，「仅看测试」态改由工具栏「测试」pill 激活态承载
+    const testPill = w.findAll('.mk-pill').find((b) => b.text().startsWith('测试'))!;
+    expect(testPill.classes()).toContain('mk-pill--active');
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({
       agentId: 'api-gateway',
       status: 'error',
@@ -318,8 +320,10 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
   });
 });
 
-/* ---------- P1#24（2026-10-02 人类可读性）：错误摘要条窗口联动 + Top 归因 chip + 只看失败 ---------- */
-describe('P1#24：错误摘要条（窗口随 timeRange / Top chip 下钻 / 只看失败）', () => {
+/* ---------- P1#24（2026-10-02 人类可读性）：错误摘要条窗口联动 + Top 归因 chip；
+   2026-10-04 外部评审拍板：撤「只看失败」次按钮（与失败 pill 同源），时间/节点筛选提上主行，
+   时间档补 15m/1h 自定义窗 ---------- */
+describe('P1#24：错误摘要条（窗口随 timeRange / Top chip 下钻 / 失败 pill 单源）', () => {
   beforeEach(() => {
     h.reload.mockClear();
     liveLogsPage.value = 1;
@@ -360,16 +364,36 @@ describe('P1#24：错误摘要条（窗口随 timeRange / Top chip 下钻 / 只�
     expect(w.text()).not.toContain('近 24h');
   });
 
-  it('切「近 7 天」→ 摘要条文案随查询窗口联动', async () => {
+  it('切「近 7 天」→ 摘要条文案随查询窗口联动（时间筛选已提上卡头主行，无需开高级）', async () => {
     liveLogStats.value = { total: 700, success: 690, timeout: 2, error: 8, canary: 0 };
     liveLogsTotal.value = 1;
     liveLogsFiltered.value = [errSpan(1)];
     const { w } = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    await findBtn(w, '高级').trigger('click');
     await w.find('select[aria-label="时间范围筛选"]').setValue('week');
     await flushPromises();
     expect(w.text()).toContain('近 7 天捕获 8 条错误级日志');
+  });
+
+  it('小时级自定义窗（15m/1h）：不传 timeRange（后端枚举会 400），换算 startTime 下发', async () => {
+    liveLogStats.value = { total: 5, success: 4, timeout: 0, error: 1, canary: 0 };
+    liveLogsTotal.value = 1;
+    liveLogsFiltered.value = [errSpan(1)];
+    const { w } = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    await w.find('select[aria-label="时间范围筛选"]').setValue('1h');
+    await flushPromises();
+    const q = h.reload.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(q.timeRange).toBeUndefined();
+    expect(typeof q.startTime).toBe('string');
+    expect(new Date(q.startTime as string).getTime()).toBeLessThan(Date.now());
+    // 起点取整到分钟：同档重复触发签名稳定，不绕过 applyServerQuery 去重
+    await w.find('select[aria-label="时间范围筛选"]').setValue('today');
+    await flushPromises();
+    await w.find('select[aria-label="时间范围筛选"]').setValue('1h');
+    await flushPromises();
+    const q2 = h.reload.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(q.startTime).toBe(q2.startTime);
   });
 
   it('Top 错误类别 chip：点击即设 errorCategory 服务端重查（title 披露口径），再点取消', async () => {
@@ -409,17 +433,90 @@ describe('P1#24：错误摘要条（窗口随 timeRange / Top chip 下钻 / 只�
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ agentId: 'skill:a' });
   });
 
-  it('「只看失败」次按钮：status=err 服务端过滤，再点恢复全部', async () => {
+  it('「只看失败」次按钮已撤（与失败 pill 同源重复）：失败 pill 承担 status=err 过滤，再点恢复', async () => {
     liveLogStats.value = { total: 100, success: 90, timeout: 0, error: 10, canary: 0 };
     liveLogsTotal.value = 1;
     liveLogsFiltered.value = [errSpan(1)];
     const { w } = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    await findBtn(w, '只看失败').trigger('click');
+    expect(w.findAll('button').some((b) => b.text().includes('只看失败'))).toBe(false);
+    const failPill = w.findAll('.mk-pills .mk-pill').find((p) => p.text().startsWith('失败'))!;
+    expect(failPill).toBeTruthy();
+    await failPill.trigger('click');
     await flushPromises();
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ status: 'error' });
-    await findBtn(w, '只看失败').trigger('click');
+    await w.findAll('.mk-pills .mk-pill').find((p) => p.text().startsWith('失败'))!.trigger('click');
     await flushPromises();
     expect((h.reload.mock.calls.at(-1)![0] as Record<string, unknown>).status).toBeUndefined();
+  });
+});
+
+/* ---------- 2026-10-04 状态条退役：页头 .mk-status 整块下线，读数迁页首 KPI 卡带、
+   「测试」入口迁日志卡头工具栏 pill（判例 buckets-band.test.ts 结构断言 + 护栏） ---------- */
+describe('2026-10-04 状态条退役（ExecLogs）', () => {
+  beforeEach(() => {
+    h.reload.mockClear();
+    liveLogsPage.value = 1;
+    liveLogsPageSize.value = 30;
+    liveLogsTotal.value = 0;
+    liveLogsFiltered.value = [];
+    liveLogStats.value = null;
+    window.scrollTo = vi.fn();
+    localStorage.clear();
+  });
+
+  async function mountExecAt(url: string) {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
+    });
+    await router.push(url);
+    await router.isReady();
+    const w = mount(ExecLogs, { global: { plugins: [router] } });
+    await flushPromises();
+    return w;
+  }
+
+  it('护栏：页头无 .mk-status；读数迁 KPI 卡带（成功率按数值着色 / P50 / P99），「测试」pill 迁工具栏可点', async () => {
+    liveLogStats.value = { total: 200, success: 190, timeout: 4, error: 6, canary: 5 };
+    liveLogsTotal.value = 378;
+    liveLogsFiltered.value = [fakeSpan(1), fakeSpan(2)];
+    const w = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    // 状态条整块下线
+    expect(w.find('.mk-status').exists()).toBe(false);
+    // KPI 卡带三张：成功率（95% ≥ 90 是健康读数，有失败也不标红——错误信号由告警条单源承载）
+    const kpis = w.findAll('.mk-kpi');
+    expect(kpis.length).toBe(3);
+    expect(kpis[0].text()).toContain('成功率');
+    expect(kpis[0].text()).toContain('95%');
+    expect(kpis[0].classes()).not.toContain('mk-kpi--bad');
+    expect(kpis[1].text()).toContain('P50');
+    expect(kpis[2].text()).toContain('P99');
+    // 「测试」入口迁日志卡头工具栏 pill：计数常驻（canary 5），点击仅看测试上服务端
+    const testPill = w.findAll('.mk-pill').find((b) => b.text().startsWith('测试'))!;
+    expect(testPill.text()).toContain('5');
+    await testPill.trigger('click');
+    await flushPromises();
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ sourceEntry: 'system-canary' });
+  });
+
+  it('成功率 KPI 着色只跟数值走：<90% 标红，与是否有失败日志无关（外部评审解耦拍板）', async () => {
+    // 89% < 90 → 红（即使本样本无失败行）；90% → 不红
+    liveLogStats.value = { total: 100, success: 89, timeout: 0, error: 11, canary: 0 };
+    liveLogsTotal.value = 2;
+    liveLogsFiltered.value = [fakeSpan(1), fakeSpan(2)];
+    const w = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    expect(w.findAll('.mk-kpi')[0].classes()).toContain('mk-kpi--bad');
+  });
+
+  it('无日志不显数值：KPI 带随 logs.length 隐藏（原状态条同语义）；「测试」pill 仍常驻', async () => {
+    const w = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    expect(w.find('.mk-status').exists()).toBe(false);
+    expect(w.find('.mk-kpi-grid').exists()).toBe(false);
+    // 测试入口常驻语义保留：计数为 0 也保持可点（否则切过去后失去切回入口）
+    expect(w.findAll('.mk-pill').find((b) => b.text().startsWith('测试'))).toBeTruthy();
   });
 });

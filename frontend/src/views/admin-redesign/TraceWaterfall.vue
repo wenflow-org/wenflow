@@ -199,8 +199,8 @@
               <span v-if="promptOf(span)!.tokens">{{ promptOf(span)!.tokens }}</span>
               <span v-if="promptOf(span)!.errorCode">{{ errorCodeLabel(promptOf(span)!.errorCode) ?? `[${promptOf(span)!.errorCode}]` }} {{ promptOf(span)!.errorMessage }}</span>
             </div>
-            <pre v-if="promptOf(span)!.userPayload" class="wf-payload">{{ promptOf(span)!.userPayload }}</pre>
-            <pre v-if="promptOf(span)!.rawModelOutput" class="wf-payload">{{ promptOf(span)!.rawModelOutput }}</pre>
+            <pre v-if="promptOf(span)!.userPayload" class="wf-payload">{{ prettyPayload(promptOf(span)!.userPayload) }}</pre>
+            <pre v-if="promptOf(span)!.rawModelOutput" class="wf-payload">{{ prettyPayload(promptOf(span)!.rawModelOutput) }}</pre>
           </div>
           <!-- 重试时间线（live，展开时拉取） -->
           <div v-if="detailLoading === span.id" class="wf-facts"><span class="wf-fact">拉取重试时间线…</span></div>
@@ -228,11 +228,11 @@
           <!-- 输入/输出 -->
           <template v-if="detailCache[span.id]?.input || detailCache[span.id]?.output">
             <span v-if="detailCache[span.id]?.input" class="wf-detail-label">输入</span>
-            <pre v-if="detailCache[span.id]?.input" class="wf-payload">{{ detailCache[span.id].input }}</pre>
+            <pre v-if="detailCache[span.id]?.input" class="wf-payload">{{ prettyPayload(detailCache[span.id].input) }}</pre>
             <span v-if="detailCache[span.id]?.output" class="wf-detail-label">输出</span>
-            <pre v-if="detailCache[span.id]?.output" class="wf-payload">{{ detailCache[span.id].output }}</pre>
+            <pre v-if="detailCache[span.id]?.output" class="wf-payload">{{ prettyPayload(detailCache[span.id].output) }}</pre>
           </template>
-          <pre v-if="span.payload" class="wf-payload">{{ span.payload }}</pre>
+          <pre v-if="span.payload" class="wf-payload">{{ prettyPayload(span.payload) }}</pre>
           <div class="wf-row__detail-actions">
             <button type="button" class="mk-link" @click.stop="openSkillDrawer(span.agent)">查看 Skill →</button>
           </div>
@@ -306,6 +306,7 @@ import {
 } from './live'
 import { statusText } from './statusText'
 import { TERMS, errorCodeLabel } from './terms'
+import { prettyPayload } from './payload-format'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 

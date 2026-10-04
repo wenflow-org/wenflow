@@ -1,35 +1,24 @@
 <template>
   <div class="mk-page mk-page--fill">
-    <!-- 页头（newui/admin pagehead）：页名 + 导出上移；状态条退位为纯状态摘要
-         （成功率/耗时分位/测试入口/筛选标记留状态条；总数=分页器单源、失败=告警条+pill，2026-10-04 撤） -->
+    <!-- 页头（newui/admin pagehead）：页名 + 导出上移。
+         2026-10-04 状态条退役（用户拍板：场景页页头状态条全部下线）：成功率/耗时分位读数迁页首
+         KPI 卡带、「测试」入口迁日志卡头工具栏 pill（常驻语义保留）；筛选徽章不迁——工具栏已有
+         「清除筛选」（v-if isFiltered），SavedViewsBar :suggest-name 也吃 filterLabel，信息不丢；
+         总数=分页器单源、失败=告警条+pill（2026-10-04 撤） -->
     <MkPageHead title="执行日志" sub="Skill 执行日志、调用 Trace 与失败定位">
       <template #actions>
         <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注；无数据时禁用 -->
         <button type="button" class="mk-btn mk-btn--sm" :disabled="!logs.length" @click="exportJson">导出本页</button>
       </template>
     </MkPageHead>
-    <div class="mk-status" :class="`mk-status--${statusTone}`">
-      <span class="mk-status__dot"></span>
-      <!-- P2（2026-10-04 全站评审）：撤「共 N 条」（分页器单源，判例=AuditLogs「总数在分页 foot
-           单源可见」）与「失败 N」（错误告警条 + 失败 pill 已各念一遍，失败 pill 且可点筛选）；
-           状态条保留成功率/耗时分位/测试入口/筛选徽章 -->
-      <span v-if="logs.length" class="mk-status__meta">成功率 {{ successRate }}%</span>
-      <span v-if="logs.length" class="mk-status__meta mono" :title="'延迟分位（仅成功日志）：P50 = 中位耗时 · P99 = 99% 请求耗时'">耗时 P50 {{ latencyP50 }} · P99 {{ latencyP99 }}<template v-if="latencySampled">（样本估算）</template></span>
-      <!-- 测试入口常驻：即使计数为 0（或「仅看测试」态查空）也保持可点，否则切过去后失去切回入口 -->
-      <button
-        type="button"
-        class="mk-status__meta-link"
-        :class="{ 'mk-status__meta-link--on': testFilter !== '' }"
-        :title="testFilter === 'only' ? '仅看测试 → 点击恢复默认视图' : '连通性/探活测试日志（模型接入页产生，默认视图已排除），点击仅看测试'"
-        @click="toggleTestFilter"
-      >
-        测试 {{ testCount }}
-      </button>
-      <span v-if="isFiltered" class="mk-status__filter">
-        {{ filterLabel }}
-        <button type="button" class="mk-status__clear" @click="clearFilter">×</button>
-      </span>
-    </div>
+    <!-- KPI 卡带（2026-10-04 状态条退役）：成功率/耗时分位读数自页头状态条迁入（页头与单卡容器之间），
+         保持原「无日志不显数值」语义（v-if="logs.length"）；成功率着色沿用原 statusTone 的 ok/bad 语义，
+         耗时卡 hint 注明口径（仅成功日志），样本回退时如实标注「样本估算」 -->
+    <section v-if="logs.length" class="mk-kpi-grid">
+      <MkKpi label="成功率" :value="`${successRate}%`" :tone="successKpiTone" title="成功率 = 成功 ÷ 全部（口径同当前查询窗口）；低于 90% 标红，错误详情见下方告警条" />
+      <MkKpi label="耗时 P50" :value="latencyP50" :hint="latencyHint" title="延迟分位（仅成功日志）：P50 = 中位耗时" />
+      <MkKpi label="耗时 P99" :value="latencyP99" :hint="latencyHint" title="延迟分位（仅成功日志）：P99 = 99% 请求耗时" />
+    </section>
 
     <!-- 单卡容器（原型 renderObserve：card > .tabs 页签 + 页签体，对齐 Users.vue 卡内页签判例）：
          日志 / Trace 链路（Trace 为执行日志下钻视图）两个页签体共用一张卡；
@@ -54,8 +43,9 @@
            走全局 .mk-alert（红底红字，全局错误通道②「区块级提示」），外层留卡头同款内边距。
            P1#24（2026-10-02 人类可读性）：① 窗口文案随 timeRange 联动（原恒写「近 24h」，而
            stats 实际跟随查询窗口，切 7 天后文案与数字口径冲突）；② 内联 Top 错误类别/Skill chip
-           （当前页失败样本聚合，点击即设 errorCategory/agentFilter 下钻）+「只看失败」次按钮，
-           判例 = AuditLogs 失败 TOP chip。 -->
+           （当前页失败样本聚合，点击即设 errorCategory/agentFilter 下钻），判例 = AuditLogs 失败 TOP chip。
+           2026-10-04 外部评审拍板：撤「只看失败」次按钮（与卡头失败 pill 同源重复），
+           失败筛选单源留在 pill。 -->
       <div v-if="errCount > 0" class="exec-alertwrap">
         <div class="mk-alert mk-alert--row exec-alert">
           <span class="mk-alert__msg">
@@ -72,13 +62,6 @@
             >{{ c.label }} {{ c.count }}</button>
           </span>
           <span class="exec-alert__ops">
-            <button
-              type="button"
-              class="mk-btn mk-btn--sm"
-              :aria-pressed="statusFilter === 'err'"
-              :title="statusFilter === 'err' ? '已在「只看失败」视图，点击恢复全部' : '只看失败日志（status=err，服务端过滤）'"
-              @click="toggleFailedOnly"
-            >只看失败</button>
             <button type="button" class="mk-btn mk-btn--sm" @click="goHealthCenter">查看健康中心</button>
           </span>
         </div>
@@ -89,6 +72,25 @@
           <div class="mk-pills">
             <button v-for="p in statusPills" :key="p.id" type="button" class="mk-pill" :class="{ 'mk-pill--active': statusFilter === p.id }" :aria-pressed="statusFilter === p.id" @click="statusFilter = statusFilter === p.id ? '' : p.id">{{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span></button>
           </div>
+          <!-- 「测试」入口 pill（2026-10-04 状态条退役自页头迁入）：入口常驻语义保留——
+               即使计数为 0（或「仅看测试」态查空）也保持可点，否则切过去后失去切回入口 -->
+          <button
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': testFilter !== '' }"
+            :aria-pressed="testFilter !== ''"
+            :title="testFilter === 'only' ? '仅看测试 → 点击恢复默认视图' : '连通性/探活测试日志（模型接入页产生，默认视图已排除），点击仅看测试'"
+            @click="toggleTestFilter"
+          >测试<span class="mk-pill__count">{{ testCount }}</span></button>
+          <!-- 时间范围 / 节点（Skill）下拉提上主行（2026-10-04 外部评审拍板：排障最高频的
+               两个筛选器此前折叠在「高级」面板里默认不可见）；时间档补 15m/1h 小时级窗口 -->
+          <select v-model="timeRange" class="mk-filter__select" aria-label="时间范围筛选" @change="applyServerQuery()">
+            <option v-for="o in timeRangeOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+          </select>
+          <select v-model="agentFilter" class="mk-filter__select mono" aria-label="按节点（Skill）筛选" title="按 Skill 精确筛选（全集来自注册表 + 当前页 + 保存视图）">
+            <option value="">全部节点</option>
+            <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
+          </select>
           <MkFilterSearch v-model="keyword" placeholder="关键词搜索" @keydown.enter="applyServerQuery()" />
           <MkFilterSearch v-model="traceId" placeholder="Trace ID（链路 ID）" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery()" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
@@ -108,23 +110,13 @@
         <div class="mk-card__head-right">
           <span class="mk-card__meta" v-if="errorCategory">类别「{{ errorCategory }}」<button type="button" class="mk-link" @click="errorCategory = ''; applyServerQuery()">×</button></span>
           <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
-          <button type="button" class="mk-link" :class="{ 'mk-link--active': advOpen }" @click="advOpen = !advOpen" title="高级筛选">高级</button>
+          <button type="button" class="mk-link" :class="{ 'mk-link--active': advOpen }" @click="advOpen = !advOpen" title="高级筛选（按会话 sessionId）">高级</button>
           <MkCols :col-defs="colDefs" :storage-key="COLS_KEY" :default-hidden="DEFAULT_HIDDEN" v-model:hidden="hiddenCols" />
         </div>
       </div>
+      <!-- 高级面板只剩低频精确筛选（2026-10-04：时间范围/节点下拉已提上卡头主行） -->
       <div v-if="advOpen" class="log-advpanel">
-        <select v-model="agentFilter" class="mk-filter__select mono" aria-label="按节点（Skill）筛选">
-          <option value="">全部节点</option>
-          <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
-        </select>
         <input v-model="sessionId" class="mk-filter__input" placeholder="sessionId" aria-label="按会话 sessionId 筛选" @keydown.enter="applyServerQuery()" />
-        <select v-model="timeRange" class="mk-filter__select" aria-label="时间范围筛选" @change="applyServerQuery()">
-          <option value="today">今天</option>
-          <option value="yesterday">昨天</option>
-          <option value="week">近 7 天</option>
-          <option value="month">近 30 天</option>
-          <option value="all">全部</option>
-        </select>
       </div>
       <!-- 三态均在卡片内（对齐 Users.vue）：首载骨架 / 加载失败 / 表格；筛选头常驻不随数据空否消失 -->
       <MockSkeletonTable v-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="4" :rows="6" />
@@ -287,11 +279,12 @@
                         </div>
                         <div v-if="detailCache[log.id].input" class="tline__section">
                           <span class="tline__label">输入</span>
-                          <pre>{{ detailCache[log.id].input }}</pre>
+                          <!-- 负载美化（2026-10-04 外部评审）：紧凑单行 JSON 两格缩进展示，非 JSON 原样 -->
+                          <pre>{{ prettyPayload(detailCache[log.id].input) }}</pre>
                         </div>
                         <div v-if="detailCache[log.id].output" class="tline__section">
                           <span class="tline__label">输出</span>
-                          <pre>{{ detailCache[log.id].output }}</pre>
+                          <pre>{{ prettyPayload(detailCache[log.id].output) }}</pre>
                         </div>
                         <!-- Prompt 契约维度（prompt_call_logs，同 traceId 关联） -->
                         <div v-if="promptOf(log)" class="tline__section tline__prompt">
@@ -302,10 +295,10 @@
                             <span v-if="promptOf(log)!.tokens">{{ promptOf(log)!.tokens }}</span>
                             <span v-if="promptOf(log)!.errorCode">{{ errorCodeLabel(promptOf(log)!.errorCode) ?? `[${promptOf(log)!.errorCode}]` }} {{ promptOf(log)!.errorMessage }}</span>
                           </div>
-                          <pre v-if="promptOf(log)!.userPayload">{{ promptOf(log)!.userPayload }}</pre>
-                          <pre v-if="promptOf(log)!.rawModelOutput">{{ promptOf(log)!.rawModelOutput }}</pre>
-                          <pre v-if="promptOf(log)!.extractedJson">{{ promptOf(log)!.extractedJson }}</pre>
-                          <pre v-if="promptOf(log)!.normalizedOutput">{{ promptOf(log)!.normalizedOutput }}</pre>
+                          <pre v-if="promptOf(log)!.userPayload">{{ prettyPayload(promptOf(log)!.userPayload) }}</pre>
+                          <pre v-if="promptOf(log)!.rawModelOutput">{{ prettyPayload(promptOf(log)!.rawModelOutput) }}</pre>
+                          <pre v-if="promptOf(log)!.extractedJson">{{ prettyPayload(promptOf(log)!.extractedJson) }}</pre>
+                          <pre v-if="promptOf(log)!.normalizedOutput">{{ prettyPayload(promptOf(log)!.normalizedOutput) }}</pre>
                         </div>
                         <!-- 未命中契约时的覆盖范围说明：契约索引只拉最近 200 次调用（live.ts loadPromptIndex limit:200），
                              周均 15k+ 调用量下绝大多数历史行不在索引内——显式说明而非静默空白，避免误读为「该调用无契约记录」 -->
@@ -356,9 +349,11 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import TraceWaterfall from './TraceWaterfall.vue'
 import { TERMS, errorCodeLabel, routeSourceLabel } from './terms'
+import { prettyPayload } from './payload-format'
 import { useTableSort } from './useTableSort'
 import SavedViewsBar from './SavedViewsBar.vue'
 import { useSavedViews, sameViewQuery, type SavedView } from './useSavedViews'
@@ -414,7 +409,27 @@ watch(
 const openId = ref('')
 const statusFilter = ref('')
 const agentFilter = ref('')
-const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('today')
+/* 时间档：快捷枚举（today/yesterday/week/month/all）+ 小时级自定义窗（15m/1h，排障最常用
+   的「最近一刻钟/一小时」档）。自定义档不传 timeRange（后端枚举校验会 400），换算成
+   startTime（ISO）下发——后端精确时间优先且 statsWhere 与行查询同窗口，口径一致。 */
+type ExecTimeRange = 'today' | 'yesterday' | 'week' | 'month' | 'all' | '15m' | '1h'
+const timeRange = ref<ExecTimeRange>('today')
+const timeRangeOptions: Array<{ value: ExecTimeRange; label: string }> = [
+  { value: '15m', label: '近 15 分钟' },
+  { value: '1h', label: '近 1 小时' },
+  { value: 'today', label: '今天' },
+  { value: 'yesterday', label: '昨天' },
+  { value: 'week', label: '近 7 天' },
+  { value: 'month', label: '近 30 天' },
+  { value: 'all', label: '全部' },
+]
+const CUSTOM_WINDOW_MS: Partial<Record<ExecTimeRange, number>> = { '15m': 15 * 60_000, '1h': 3_600_000 }
+const isCustomWindow = (r: ExecTimeRange): r is '15m' | '1h' => r in CUSTOM_WINDOW_MS
+/** 自定义窗起点取整到分钟：同档内查询签名稳定（不因 Date.now 漂移绕过 applyServerQuery 去重） */
+function customWindowStart(r: '15m' | '1h'): string {
+  const ms = CUSTOM_WINDOW_MS[r] ?? 3_600_000
+  return new Date(Math.floor((Date.now() - ms) / 60_000) * 60_000).toISOString()
+}
 const keyword = ref('')
 const traceId = ref('')
 const sessionId = ref('')
@@ -577,8 +592,8 @@ const {
 
 function currentQuery(): SpanQuery {
   const status = statusFilter.value === 'err' ? 'error' : statusFilter.value === 'warn' ? 'timeout' : statusFilter.value === 'ok' ? 'success' : undefined
-  return {
-    timeRange: timeRange.value,
+  const range = timeRange.value
+  const base: SpanQuery = {
     keyword: keyword.value.trim() || undefined,
     status,
     agentId: agentFilter.value || undefined,
@@ -591,6 +606,9 @@ function currentQuery(): SpanQuery {
     sort: (logSortKey.value || undefined) as SpanQuery['sort'],
     order: logSortDir.value
   }
+  /* 自定义窗（15m/1h）换算 startTime 下发（后端枚举不认这两档，传了会 400） */
+  if (isCustomWindow(range)) return { ...base, startTime: customWindowStart(range) }
+  return { ...base, timeRange: range }
 }
 
 /* 上次已下发查询签名：同签名重复触发（显式调用与 watch 叠加、URL 回写回环）直接跳过，
@@ -686,7 +704,7 @@ function goHealthCenter() {
 /* ===== P1#24 错误摘要条（2026-10-02 人类可读性） ===== */
 /** 窗口文案随 timeRange 联动：liveLogStats 跟随查询窗口聚合（原「近 24h」恒写失真） */
 const errWindowLabel = computed(() => {
-  const m: Record<string, string> = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部时间' }
+  const m: Record<string, string> = { '15m': '近 15 分钟', '1h': '近 1 小时', today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部时间' }
   return m[timeRange.value] || timeRangeLabels[timeRange.value] || '当前窗口'
 })
 
@@ -726,10 +744,8 @@ const errTopChips = computed(() => {
   return [...catChips, ...agentChips].sort((a, b) => b.count - a.count).slice(0, 3)
 })
 
-/** 「只看失败」次按钮：与状态 pill「失败」同源（statusFilter=err，watch 触发服务端重查） */
-function toggleFailedOnly() {
-  statusFilter.value = statusFilter.value === 'err' ? '' : 'err'
-}
+/* 「只看失败」次按钮已撤（2026-10-04 外部评审拍板）：与卡头失败 pill 完全同源
+   （statusFilter=err），同一动作两个入口徒增交互歧义；失败筛选单源留在 pill。 */
 
 /* live 模式：展开行时拉真实 input/output + 重试时间线 */
 const DETAIL_CACHE_MAX = 50
@@ -779,7 +795,7 @@ watch(
     agentFilter.value = intent.agentFilter
     statusFilter.value = intent.statusFilter
     if (intent.errorCategory) errorCategory.value = intent.errorCategory
-    const TR = ['today', 'yesterday', 'week', 'month', 'all'] as const
+    const TR = ['today', 'yesterday', 'week', 'month', 'all', '15m', '1h'] as const
     if ((TR as readonly string[]).includes(intent.timeRange)) timeRange.value = intent.timeRange as typeof timeRange.value
   },
   { immediate: true }
@@ -791,7 +807,7 @@ watch(
    注册在 intent watch 之后：深链直达时 URL 权威（覆盖 intent 空值回写）；
    站内跳转时 AdminConsole 已把 intent 带进 query，两源一致不抖动。 */
 const FILTER_QUERY_KEYS = ['agent', 'status', 'cat', 'range', 'q', 'trace', 'session', 'test'] as const
-const EL_TIME_RANGES = ['today', 'yesterday', 'week', 'month', 'all'] as const
+const EL_TIME_RANGES = ['today', 'yesterday', 'week', 'month', 'all', '15m', '1h'] as const
 const queryVal = (v: unknown): string => (typeof v === 'string' ? v : '')
 /* 上次 URL 筛选签名：route watch 对比完整查询签名，任一筛选变化即重查。
    此前仅 status/agent/test 的 ref watch 触发重查，前进/后退/深链改
@@ -992,6 +1008,8 @@ function percentileOf(durations: number[], q: number): string {
 const latencySampled = computed(
   () => !(liveStats.value?.latencyPercentiles?.p50 != null) && logs.value.some((l) => l.status === 'ok')
 )
+/* 耗时分位卡 hint（2026-10-04 状态条退役迁入）：口径「仅成功日志」；回退样本估算时如实标注 */
+const latencyHint = computed(() => (latencySampled.value ? '仅成功日志 · 样本估算' : '仅成功日志'))
 function percentileMsOf(durations: unknown[], q: number): number | null {
   const arr = durations.filter((d): d is number => typeof d === 'number' && d >= 0).sort((a, b) => a - b)
   if (!arr.length) return null
@@ -1016,7 +1034,16 @@ function latencyTone(durationMs: unknown): string {
   if (latencyP50Ms.value != null && d >= latencyP50Ms.value) return 'mk-latency--warn'
   return ''
 }
-const statusTone = computed(() => (!logs.value.length ? 'muted' : errCount.value ? 'bad' : 'ok'))
+/* 2026-10-04 状态条退役：原状态条基调 statusTone（muted/bad/ok）随条删除，ok/bad 语义改由
+   成功率 KPI 卡着色承载；muted 空态档不再需要（KPI 带 v-if="logs.length"）。
+   2026-10-04 外部评审拍板再解耦：成功率是监控指标不是故障告警——「有失败就标红」把 95%
+   的健康读数读成系统故障（红 KPI + 红告警条上下夹页签）。改只跟数值走：<90% 红，否则绿；
+   错误信号由卡内告警条单源承载，同一事实只出现一次。 */
+const HEALTHY_RATE = 90
+const successKpiTone = computed(() => {
+  const rate = Number(successRate.value)
+  return Number.isFinite(rate) && rate < HEALTHY_RATE ? 'bad' : 'ok'
+})
 /** 测试日志计数：默认态读后端 stats.canary（默认视图已排除 canary，行内数不到）；
     仅看测试态 = 该查询的 total（口径即测试行数） */
 const testCount = computed(() => {
@@ -1028,7 +1055,7 @@ function toggleTestFilter() {
   testFilter.value = testFilter.value === '' ? 'only' : ''
 }
 /* 排查徽章：读本地筛选（修复此前读 intent 导致的空值）；live 下补充关键词/时间范围/trace/会话 */
-const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const
+const timeRangeLabels = { '15m': '近 15 分钟', '1h': '近 1 小时', today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const
 const filterLabel = computed(() =>
   [
     timeRange.value !== 'today' ? timeRangeLabels[timeRange.value] : '',
@@ -1155,7 +1182,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 /* 右侧动作组：与消息端拉开（mk-alert--row 已两端排布，这里只管组内间距） */
 .exec-alert__ops { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
-/* 状态条筛选徽章 / 清除按钮已提升为全局 .mk-status__filter / .mk-status__clear（见 shared.css） */
+/* 状态条筛选徽章 / 清除按钮已随 2026-10-04 状态条退役删除，本页不再保留其字号覆写（全局类定义见 shared.css） */
 
 .log-advpanel {
   flex-basis: 100%;
@@ -1267,7 +1294,10 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-mu
 .exec-cell__sub { flex-wrap: wrap; gap: 5px; }
 /* 节点列：等宽短名，长名 ellipsis（title 全值，点击开 Skill 抽屉）。
    display:inline-block 必须显式声明——span 为 inline 元素时 max-width/overflow/ellipsis 全部失效；
-   自动布局下 max-content 决定列宽，需固定截断上限（160px）防长节点名撑列（实测 46 字符节点名） */
+   自动布局下 max-content 决定列宽，需固定截断上限防长节点名撑列。
+   260px（2026-10-04 外部评审拍板，原 160px）：覆盖 virtual-learner-* 家族全名（实测最长
+   253px/35 字符）在 1280 视口下完整可辨——1920 列宽本就分到 292px，160px 上限是列有空间
+   不给显；更长名字（46 字符级）仍截断由 title 兜底。 */
 .exec-stage {
   display: inline-block;
   font-size: var(--mk-fs-micro);
@@ -1276,7 +1306,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-mu
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 160px;
+  max-width: 260px;
 }
 .exec-stage:hover { text-decoration: underline; }
 /* 模型 / Tokens 独立列：单行截断（同为 inline span，需 inline-block 让截断生效；
@@ -1456,8 +1486,6 @@ html[data-theme='dark'] .tline-attempt--fail { background: rgba(220, 38, 38, 0.0
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3，高度换算回逻辑坐标） ========== */
 @media (min-width: 2000px) {
   .log-auto { font-size: var(--mk-fs-micro); }
-  .mk-status__filter { font-size: var(--mk-fs-micro); }
-  .mk-status__clear { font-size: var(--mk-fs-body); }
   /* 列宽：时间列由 shared.css 4K token 覆盖（--mk-col-time-full），固定列 4K 档字号放大 */
   .exec-time,
   .exec-dur,
@@ -1489,8 +1517,6 @@ html[data-theme='dark'] .tline-attempt--fail { background: rgba(220, 38, 38, 0.0
 @media (min-width: 3600px) {
   /* zoom 1.3 档：字号继续放大 */
   .log-auto { font-size: var(--mk-fs-micro); }
-  .mk-status__filter { font-size: var(--mk-fs-micro); }
-  .mk-status__clear { font-size: var(--mk-fs-body); }
   .exec-table { }
   .exec-time,
   .exec-dur,

@@ -511,6 +511,9 @@ async function fetchLiveSpans(): Promise<TraceSpan[]> {
 /** 带筛选的服务端重查（执行日志页：时间范围 / 关键词 / 节点 / 状态 / trace / 会话） */
 export interface SpanQuery {
   timeRange?: 'today' | 'yesterday' | 'week' | 'month' | 'all'
+  /** 精确窗口起点（ISO）：小时级自定义档（15m/1h）走这里——后端精确时间优先于 timeRange，
+      且 statsWhere 与行查询共享同一窗口，计数与列表口径一致 */
+  startTime?: string
   keyword?: string
   agentName?: string
   /** 节点过滤走 agentId（服务端做 skill:/agent: 前缀规范化，兼容裸名）；agentName 保留给分组名场景 */
