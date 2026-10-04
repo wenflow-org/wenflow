@@ -138,8 +138,8 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
     const abnormalBtn = w.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').find((b) => b.text().startsWith('异常'));
     expect(abnormalBtn?.text()).toBe('异常');
-    // 右组另一枚 = 有建议（服务端过滤，计数无构成桶覆盖，保留）
-    expect(w.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').text()).toBe('有建议0');
+    // 右组另一枚 = 有建议（2026-10-05 计数升 KPI 面板后去计数，学习状态判例）
+    expect(w.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').text()).toBe('有建议');
     w.unmount();
   });
 

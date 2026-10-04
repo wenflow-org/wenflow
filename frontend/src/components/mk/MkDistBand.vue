@@ -103,27 +103,9 @@ function segTitle(b: MkDistBin): string {
 .mk-distband .stageband__legend { margin-top: 0; }
 /* 卡装（card，2026-10-05 用户拍板「单独用个卡片包一下」；判例=原型 renderSessions/renderPaths
    的独立分布卡：mk-card 壳 + mk-card__head 标题/口径 + 卡体 16px 内边距，摆列表卡上方）。
-   卡头与卡体之间不吃根级 gap（mk-card__head 自带 border-bottom 分隔），节奏在卡体内统一 */
+   卡头与卡体之间不吃根级 gap（mk-card__head 自带 border-bottom 分隔），节奏在卡体内统一。
+   档位保持「色点+标签+计数」小图例——KPI 级数值归各页 MkKpi 面板（学习路径统一面板设计），
+   分布条只承载状态比例，不因页面缺 KPI 而改版（2026-10-05 撤销当日的卡内大值档试验） */
 .mk-distband--card { gap: 0; }
-.mk-distband--card .mk-distband__cardbody { display: grid; gap: 12px; padding: 16px; }
-/* 卡装档位升 KPI（2026-10-05 用户「但是 kpi 没了啊」）：卡内图例从「色点+标签+小计数」
-   升为构成带级大值档——值 28px（原型 bucketCard 值字级）在上、色点+标签在下；
-   一条带同时承载比例（分段）与 KPI 级数值，同屏仍只此一带。裸条模式保持小图例 */
-.mk-distband--card .stageband__legend { display: flex; flex-wrap: wrap; gap: 12px 44px; }
-.mk-distband--card .sbl {
-  display: grid;
-  grid-template-columns: auto auto;
-  gap: 3px 8px;
-  justify-items: start;
-  align-items: center;
-}
-.mk-distband--card .sbl__n {
-  grid-column: 1 / -1;
-  order: -1;
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -.02em;
-  color: var(--mk-ink);
-}
-.mk-distband--card .sbl--on .sbl__n { color: var(--mk-blue); }
+.mk-distband--card .mk-distband__cardbody { display: grid; gap: 8px; padding: 16px; }
 </style>

@@ -67,7 +67,7 @@
     <MkDistBand
       v-if="traceWindowReady"
       card
-class="mr-distband"
+      class="mr-distband"
       title="到期时间轴"
       :sub="`点击分段只看该档学习者 · 窗口内 ${queueRows.length} 个复习点（最近 ${traceRows.length} 条痕迹，非全量）`"
       unit="个"

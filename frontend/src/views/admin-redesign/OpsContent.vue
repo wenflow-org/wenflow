@@ -28,7 +28,7 @@
     <MkDistBand
       v-if="!embedded && pathBandReady"
       card
-class="oc-distband"
+      class="oc-distband"
       title="路径状态分布"
       :sub="`点击分段只看该状态 · 共 ${pathBandTotal} 条（服务端按状态 group-by 全平台计数，非本页窗口）`"
       unit="条"

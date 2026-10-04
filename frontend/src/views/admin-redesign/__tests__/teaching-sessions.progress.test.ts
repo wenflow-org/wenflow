@@ -161,6 +161,27 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
 });
 
 describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对照）', () => {
+  it('KPI 面板（2026-10-05 统一面板设计）：需关注 / 缺总结 / 有建议升 MkKpi 卡带，同源 chips 去计数', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: { items: [makeItem('a', { status: 'failed' }), makeItem('b', { status: 'active' })] }
+      }
+    });
+    const wrapper = await mountLive();
+    // 三运维关注量住 MkKpi 卡带（值 = attentionCount / missingWrapupCount / advisoryCount）
+    const tiles = wrapper.findAll('.mk-kpi-grid .mk-kpi');
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '缺总结', '有建议']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '0']);
+    // KPI 孪生 chips 去计数（学习状态判例）：pill 退为纯筛选开关
+    const chip = (label: string) =>
+      wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').find((c) => c.text().replace(/\d+$/, '') === label)!;
+    expect(chip('待关注').find('.mk-pill__count').exists()).toBe(false);
+    expect(chip('缺总结').find('.mk-pill__count').exists()).toBe(false);
+    expect(wrapper.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill .mk-pill__count').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('状态条退役（2026-10-04）：计数各自唯一——待关注 / 缺总结住焦点 chips，点选即筛选', async () => {
     listMock.mockResolvedValue({
       data: {
@@ -175,8 +196,8 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').find((c) => c.text().replace(/\d+$/, '') === label)!;
     // 「全部」不显数 = 卡头 meta 的已加载行数（同 People 页判例：同一数字不两处渲染）
     expect(chip('全部').find('.mk-pill__count').exists()).toBe(false);
-    expect(chip('待关注').text()).toBe('待关注1');
-    expect(chip('缺总结').text()).toBe('缺总结1');
+    expect(chip('待关注').text()).toBe('待关注');
+    expect(chip('缺总结').text()).toBe('缺总结');
     // 点选 = 既有「待关注」筛选口径（attention !== low）：只剩失败行
     await chip('待关注').trigger('click');
     expect(chip('待关注').attributes('aria-pressed')).toBe('true');
@@ -218,7 +239,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     });
     const wrapper = await mountLive();
     const link = wrapper.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill');
-    expect(link.text()).toBe('有建议1');
+    expect(link.text()).toBe('有建议');
     expect(link.attributes('aria-pressed')).toBe('false');
     // 建议徽章：行内直出建议标题（首行预览），title 挂完整建议文本
     const adv = wrapper.find('.ts-adv-badge');

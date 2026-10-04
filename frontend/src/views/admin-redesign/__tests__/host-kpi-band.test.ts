@@ -1,10 +1,13 @@
 /**
- * 页头 KPI 区形态契约（2026-09-28 立，2026-10-01/02 收紧）
+ * 页头 KPI 区形态契约（2026-09-28 立，2026-10-01/02 收紧，2026-10-05 放宽教学会话）
  *
- * 契约：**页面统计带服从原型该页自己的形态，同屏只许一带、数字不重复**——
- * - People / 教学会话：原型无 KPI 板块，页头 KPI 带退役（计数住状态条 meta 或 pills）
- * - 目标对话：唯一统计带 = 原型 renderGoals 的 buckets 四桶（kpi 栅格 + 构成卡双带已撤）
- * - 记忆与复习：保留 .mk-kpi-grid（页级绝对值只住 KPI 卡）
+ * 契约：**页面统计带服从原型该页自己的形态，数字不重复**——
+ * - People：原型无 KPI 板块，页头 KPI 带退役（计数住 pills / meta）
+ * - 教学会话：2026-10-05 用户拍板「像学习路径页面 kpi 面板，统一面板设计」——
+ *   补 MkKpi 卡带（需关注 / 缺总结 / 有建议，v-if 有行才渲染），同源 chips 去计数；
+ *   状态比例归分布卡（两维度不重叠）
+ * - 目标对话：状态分布 = 分布卡（旧 buckets 四桶 / kpi 栅格双带已撤）
+ * - 记忆与复习 / 学习路径：保留 .mk-kpi-grid（页级绝对值只住 KPI 卡）
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -108,13 +111,13 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     w.unmount();
   });
 
-  it('教学会话独立页：页头 KPI 带已退役（2026-10-02），统计带 = 表格卡内贴表分布条唯一一处（2026-10-04 晚）', async () => {
+  it('教学会话独立页：KPI 面板 = 需关注/缺总结/有建议（2026-10-05 统一面板设计，v-if 有行才渲染），状态比例归分布卡', async () => {
     const { router, ready } = mockRouter('/admin/teaching-sessions');
     await ready;
     const w = mount(TeachingSessions, { global: { plugins: [router] } });
     await settle();
+    // 本用例 mock 空响应（0 行）：KPI 面板 v-if rows.length 不渲染；有行时的值见 progress 测试
     expect(kpiLabels(w)).toEqual([]);
-    expect(w.find('.mk-kpi-grid').exists()).toBe(false);
     // 2026-10-04 用户拍板：页头状态条整体退役——需关注 / 缺总结与焦点 chips 同源同数、
     // 异常与分布条「异常终态」段同源同数（同一数字不两处渲染）；总数与窗口截断口径并进卡头 meta
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
@@ -125,12 +128,12 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     // P1#4 兜底诚实化：后端未回 total（mock 空响应）时，meta title 不得声称全量
     expect(meta.attributes('title')).toContain('非全量');
     expect(meta.attributes('title')).not.toContain('全量口径');
-    // 计数各自唯一：待关注 / 缺总结住焦点 chips（「全部」不显数 = meta 的已加载行数），
-    // 有建议住右组；0 行时异常 chip 不出现
+    // 计数升 KPI 后 chips 全部去计数（学习状态判例：KPI 孪生 pill 退为纯筛选开关）；
+    // 0 行时异常 chip 不出现
     expect(w.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
       '全部', '进行中', '待关注', '缺总结'
     ]);
-    expect(w.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').map((c) => c.text())).toEqual(['有建议0']);
+    expect(w.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').map((c) => c.text())).toEqual(['有建议']);
     w.unmount();
   });
 
