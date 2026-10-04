@@ -102,6 +102,21 @@ describe('teaching-turn payload snapshot parity', () => {
     expect(payload.latestLearnerMessage).toBe('那变量为什么不会被回收？')
   })
 
+  it('检查点代码裁决原样进 payload（报告 #14：反馈口径与系统记录对齐的输入通道）', async () => {
+    await teachingTurnAgentHandler({
+      ...MINIMAL_INPUT,
+      controls: {
+        mode: 'tutor' as const,
+        checkpointVerdict: { passed: false, detail: '缺少要点：再做/手动' },
+      },
+    } as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const payload = spec.buildUserPayload(input, {})
+
+    expect(payload.controls.checkpointVerdict).toEqual({ passed: false, detail: '缺少要点：再做/手动' })
+  })
+
   it('fields declaration reconciles with real payload and output keys (File-as-Truth)', async () => {
     await teachingTurnAgentHandler(MINIMAL_INPUT as any)
 

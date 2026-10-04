@@ -53,7 +53,11 @@ export function appendTimestamp(messages: Array<{ role: string; content: string;
 export async function buildTeachingTurnInput(
   session: TeachingSessionRecord,
   context: TeachingScenarioContext,
-  options: { anchorTarget?: AnchorProbePlan | null } = {},
+  options: {
+    anchorTarget?: AnchorProbePlan | null;
+    /** 检查点作答回合的代码裁决（报告 #14）：透传进 controls.checkpointVerdict（缺省不注入） */
+    checkpointVerdict?: { passed: boolean; detail: string | null } | null;
+  } = {},
 ): Promise<TeachingTurnInput> {
   const compression = teachingContextCompressionService.compress(session.messages);
   const teachingState = session.teachingState || {};
@@ -176,6 +180,14 @@ export async function buildTeachingTurnInput(
   // 对该概念的独立复测（见 prompts/core/teaching-turn.yaml 的锚题约束）。目标为 null 时不注入任何字段。
   if (anchorTarget) {
     controls.anchorProbe = buildAnchorPromptTarget(anchorTarget);
+  }
+  // 检查点作答回合的代码裁决（全量测试报告 #14）：有裁决就显式送进本轮输入——此前只落库不
+  // 进提示词，实测模型反馈「答得对」与系统记录 passed=false 相反（15/15）。提示词据此对齐口径。
+  if (options.checkpointVerdict) {
+    controls.checkpointVerdict = {
+      passed: options.checkpointVerdict.passed === true,
+      detail: options.checkpointVerdict.detail ?? null,
+    };
   }
   // 真实侧时间信号（Q19 真实侧）：有前序会话才注入；无前序时字段缺失，提示词行为不变。
   if (context.temporalGap) {

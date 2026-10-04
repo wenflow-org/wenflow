@@ -331,7 +331,13 @@ export async function processStudentMessage(
     // 落库消息保持原文（见上方 updatedMessages），因此这里传的是围栏后的浅拷贝。
     messages: fenceLearnerMessagesForModel(updatedMessages),
     knowledgeState: frozenKnowledgeState,
-  }, context, { anchorTarget });
+  }, context, {
+    anchorTarget,
+    // 检查点作答回合：把代码裁决显式送进本轮输入（报告 #14），让老师反馈口径与系统记录一致
+    checkpointVerdict: options.checkpointJudgement?.judgedBy === 'code'
+      ? { passed: options.checkpointJudgement.passed, detail: options.checkpointJudgement.detail ?? null }
+      : null,
+  });
   // 教师补充材料（批次 E）：上一轮请求已入库 → 本轮把就绪载荷送进 scenario（模型可引用出处讲）。
   if (supplementPromotion.payload) {
     (turnInput.scenario as Record<string, unknown>).supplementaryMaterial = supplementPromotion.payload;

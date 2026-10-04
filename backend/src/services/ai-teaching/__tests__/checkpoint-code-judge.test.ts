@@ -61,6 +61,40 @@ describe('judgeCheckpointAnswer：简答按要点做保守包含判定', () => {
   });
 });
 
+describe('judgeCheckpointAnswer：简答要点同义组（全量测试报告 #14 复盘）', () => {
+  it('「甲|乙」任一写法命中即算该要点满足；要点之间仍须全部满足', () => {
+    const grouped = { type: 'short_answer' as const, expectedKeywords: ['重新|重填', '复制|拷贝'] };
+
+    expect(judgeCheckpointAnswer(grouped, { answerText: '把上个月的表复制一份，数字重填一遍' }))
+      .toMatchObject({ judgedBy: 'code', passed: true });
+    // 第二组两种写法都没出现 → 仍判不通过，并原样列出同义组
+    const missed = judgeCheckpointAnswer(grouped, { answerText: '把数字重新填一遍就行' });
+    expect(missed).toMatchObject({ passed: false });
+    expect(missed!.detail).toContain('复制/拷贝');
+  });
+
+  it('真实复盘：字面判负的答法在「同义组」下判通过（学生说「还得再…」，非逐字复述「再做」）', () => {
+    const checkpoint = {
+      type: 'short_answer' as const,
+      expectedKeywords: ['重新|重填|再填', '再做|重做|还得'],
+    };
+    const answerText = '下个月还得把上个月那张表复制一份，产量那列的数重新填一遍。';
+    expect(judgeCheckpointAnswer(checkpoint, { answerText })).toMatchObject({ passed: true });
+    // 对照组：逐字版要点（旧语义）对同一作答判负——同义组消灭这一类误判
+    expect(judgeCheckpointAnswer(
+      { type: 'short_answer', expectedKeywords: ['重新', '再做'] },
+      { answerText }
+    )).toMatchObject({ passed: false });
+  });
+
+  it('全角竖线｜同样支持', () => {
+    expect(judgeCheckpointAnswer(
+      { type: 'short_answer', expectedKeywords: ['重新｜重填'] },
+      { answerText: '重填一遍' }
+    )).toMatchObject({ passed: true });
+  });
+});
+
 describe('stripCheckpointAnswerKeys：答案键绝不下发', () => {
   const state = {
     pendingCheckpoint: { id: 'cp1', question: 'Q', correctOptionIds: ['B'], expectedKeywords: ['事实'] },

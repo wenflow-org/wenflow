@@ -260,6 +260,17 @@ export interface TeachingTurnInput {
      * false/缺失时不得产出。理由：此前完全由模型自决，实测最近 60 个会话零检查点 ⇒ 独立传感器没有样本。
      */
     emitCheckpoint?: boolean;
+    /**
+     * 检查点作答回合的**代码裁决**（全量测试报告 #14）：本回合是对某个检查点的提交作答时，
+     * 编排层按答案键算出对错后显式送进来（`{ passed, detail }`，detail 为未通过时缺的要点）。
+     * 为什么必须送：此前裁决只用于落库与消费，不进提示词——实测模型反馈「答得对/答到了」
+     * 与系统记录 passed=false 相反（15/15）。模型反馈口径必须与裁决一致（提示词规则见
+     * prompts/core/teaching-turn.yaml 的 checkpointVerdict 条）。
+     */
+    checkpointVerdict?: {
+      passed: boolean;
+      detail: string | null;
+    };
   };
   classroomContext?: Record<string, any>;
   classroomEventContext?: Record<string, any>;

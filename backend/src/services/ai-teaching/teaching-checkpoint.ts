@@ -203,14 +203,26 @@ export function judgeCheckpointAnswer(
     };
   }
 
-  const keywords = (checkpoint.expectedKeywords || []).map(normalizeForMatch).filter(Boolean);
-  if (keywords.length === 0) return null;
+  // 简答要点支持**同义组**（全量测试报告 #14）：一个要点写成「甲|乙」= 任一写法出现即算该要点
+  // 满足；要点之间仍是「全部满足才通过」。真实复盘：要点 ["重新","再做","手动"] 对 15 次
+  // 概念全对的作答 15/15 判负——「手动」直接出现在题干（照抄题干即可命中，无判别力）、
+  // 「再做」要求逐字复述（学生说「还得再复制一份/重填一遍」永远对不上）。生成契约已同步要求
+  // 同义写法用「|」合并、不得用题干词当要点（见 prompts/core/teaching-turn.yaml）。
+  const groups = (checkpoint.expectedKeywords || [])
+    .map((raw) => String(raw ?? '')
+      .split(/[|｜]/)
+      .map(normalizeForMatch)
+      .filter(Boolean))
+    .filter((alternatives) => alternatives.length > 0);
+  if (groups.length === 0) return null;
   const text = normalizeForMatch(submission?.answerText);
-  const missing = keywords.filter((keyword) => !text.includes(keyword));
+  const missing = groups.filter((alternatives) => !alternatives.some((alt) => text.includes(alt)));
   return {
     judgedBy: 'code',
     passed: missing.length === 0,
-    detail: missing.length === 0 ? '作答包含全部要点' : `缺少要点：${missing.join('/')}`,
+    detail: missing.length === 0
+      ? '作答包含全部要点'
+      : `缺少要点：${missing.map((alternatives) => alternatives.join('/')).join('；')}`,
   };
 }
 
