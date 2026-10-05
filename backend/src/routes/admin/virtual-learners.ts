@@ -79,6 +79,7 @@ import {
   validateCards as validateCardDocument,
   importCards as importCardDocument,
   exportCards as exportCardLibrary,
+  getCardWallIndex,
   attachMaterialsToLearner,
 } from '../../services/virtual-lab/card-import.service';
 import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
@@ -3934,6 +3935,21 @@ router.get('/cards/export', async (_req: Request, res) => {
   } catch (error) {
     logger.error('学习者卡导出失败:', error);
     res.status(500).json({ success: false, error: (error as Error).message || '学习者卡导出失败' });
+  }
+});
+
+/**
+ * 卡墙索引（2026-10-05 卡库改版）：全部卡（预置+自建）的展示摘要。
+ * 卡=账号拍板不变；「从卡库选人」= openSubPage('virtual', userId) 直达该学习者画像。
+ * GET /api/admin/virtual-learners/cards/index
+ */
+router.get('/cards/index', async (_req: Request, res) => {
+  try {
+    const data = await getCardWallIndex();
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error('卡墙索引失败:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || '卡墙索引失败' });
   }
 });
 

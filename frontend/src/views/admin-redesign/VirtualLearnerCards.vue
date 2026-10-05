@@ -1,146 +1,203 @@
 <template>
   <div :class="embedded ? 'vlc-embedded' : 'mk-page'">
-    <!-- 页头（mk-pagehead 标准形态，2026-10-03 用户拍板全站统一）：标题+口径副文+导出；
-         2026-10-04 状态条退役：仅剩的「自建卡计数」迁「导入卡文档」卡头 meta（本页唯一读数） -->
-    <MkPageHead v-if="!embedded" title="学习者卡库" sub="结构化卡：账号 + 档案 + 故事池，导入即用（不经编译链）">
+    <!-- 页头（mk-pagehead 标准形态）：标题+口径副文+导出+导入。
+         2026-10-05 卡库改版（用户「有卡啊得，导入是功能，卡展示也是，方便从卡库选人到虚拟学习者」）：
+         页面主体从导入表单换成卡墙——卡=账号拍板不变（导入即建号），卡墙=全部卡的可视清单，
+         点卡直达该学习者画像（openSubPage virtual）；导入收进抽屉，仍是本页一等功能。 -->
+    <MkPageHead v-if="!embedded" title="学习者卡库" sub="结构化卡：账号 + 档案 + 故事池，导入即用（不经编译链）；点卡直达虚拟学习者">
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="exporting" @click="doExport">
           {{ exporting ? '导出中…' : '导出卡库' }}
         </button>
+        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="drawerOpen = true">导入卡</button>
       </template>
     </MkPageHead>
 
+    <!-- 卡库总量 KPI（全站家法：label + 28px 值 + hint 一短句口径，长解释收 title） -->
+    <section class="mk-kpi-grid" aria-label="卡库总量">
+      <MkKpi label="卡总数" :value="summary?.total ?? '—'" :hint="summary ? `预置 ${summary.builtin} · 自建 ${summary.custom}` : '按创建时间倒序'" title="卡库全部卡数（预置 + 自建）；一张卡 = 一个虚拟学习者账号 + 档案 + 故事池" />
+      <MkKpi label="预置卡" :value="summary?.builtin ?? '—'" hint="仓库预置随部署同步" title="presetKey 幂等同步的仓库预置角色（presets.yaml），导出不包含" />
+      <MkKpi label="自建卡" :value="summary?.custom ?? '—'" hint="导入与 AI 创建" title="卡文档导入与后台/AI 创建的卡；「导出卡库」仅导出这部分" />
+    </section>
+
+    <!-- 卡墙：全部卡的可视清单（搜名称/Key/目标/标签/邮箱）；点卡 = 到虚拟学习者 -->
     <section class="mk-card">
       <div class="mk-card__head">
         <div>
-          <h3 class="mk-card__title">导入卡文档</h3>
-          <span class="mk-card__meta">YAML / JSON 的 <code>{ cards: [...] }</code>；一张卡 = 一个虚拟学习者账号 + 档案 + 故事池。建议先校验再导入。</span>
+          <h3 class="mk-card__title">卡墙</h3>
+          <span class="mk-card__meta" title="点卡直达该学习者的画像页（虚拟学习者）">共 {{ filtered.length }} 张<template v-if="keyword"> · 命中 {{ filtered.length }}/{{ cards.length }}</template></span>
         </div>
         <div class="mk-card__head-right">
-          <!-- 自建卡计数（原页头状态条读数，2026-10-04 状态条退役迁入；null=导出接口未回/失败，显 — 不显 0） -->
-          <span class="mk-card__meta" title="卡库导出接口计数：当前自建卡总数，导入/导出后自动刷新">当前自建卡 {{ libraryCount ?? '—' }} 张</span>
-          <button type="button" class="mk-btn mk-btn--sm" @click="triggerPick">选择文件</button>
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / Key / 目标 / 标签" />
         </div>
       </div>
-      <div class="vlc-body">
-        <input ref="fileRef" type="file" accept=".yaml,.yml,.json" class="vlc-file" @change="onFileChange" />
-        <div
-          class="vlc-drop"
-          :class="{ 'is-drag': isDragOver }"
+
+      <MockSkeletonTable v-if="indexLoading" :cols="4" :rows="6" />
+      <MkEmptyState
+        v-else-if="!cards.length"
+        title="卡库还是空的"
+        description="导入卡文档后，这里会以卡片墙展示全部学习者卡；一张卡就是一个可直接运行的虚拟学习者。"
+      >
+        <button type="button" class="mk-btn mk-btn--primary" @click="drawerOpen = true">导入第一张卡</button>
+      </MkEmptyState>
+      <MkEmptyState
+        v-else-if="!filtered.length"
+        title="没有命中的卡"
+        description="换个关键词试试（名称 / Key / 目标 / 标签 / 邮箱）。"
+      />
+      <div v-else class="vlc-wall">
+        <article
+          v-for="c in filtered"
+          :key="c.profileId"
+          class="vlc-card"
           role="button"
           tabindex="0"
-          @click="triggerPick"
-          @keydown.enter.prevent="triggerPick"
-          @dragenter.prevent="onDragEnter"
-          @dragover.prevent="onDragOver"
-          @dragleave="onDragLeave"
-          @drop.prevent="onDrop"
+          :title="`${cardName(c)}（${c.cardKey || '无 Key'}）· 点击到虚拟学习者`"
+          @click="goLearner(c)"
+          @keydown.enter.prevent="goLearner(c)"
+          @keydown.space.prevent="goLearner(c)"
         >
-          <span class="vlc-drop__title">{{ isDragOver ? '松开导入卡文档' : (fileName || '拖入或点击选择 .yaml / .json 卡文档') }}</span>
-          <span class="vlc-drop__hint">{{ isDragOver ? '松开后将读取并填入下方文本框' : '也可以直接粘贴到下方文本框' }}</span>
-        </div>
-        <textarea
-          v-model="rawText"
-          class="mk-field__textarea vlc-text"
-          rows="9"
-          spellcheck="false"
-          placeholder="cards:&#10;  - cardKey: w6-math-01&#10;    persona:&#10;      nameHint: 高一学生&#10;      background: …&#10;    story:&#10;      visibleOpening: …&#10;      followUps: [ … ]&#10;    source:&#10;      kind: web   # 或 synthetic&#10;      ref: https://…"
-          @input="resetReports"
-        ></textarea>
-        <div class="vlc-opts">
-          <label class="vlc-check">
-            <input v-model="enrich" type="checkbox" />
-            <span>导入时富化（调用 persona-designer 逐卡生成完整认知人设，较慢）</span>
-          </label>
-          <label class="vlc-check">
-            <input v-model="update" type="checkbox" />
-            <span>覆盖已存在的同 cardKey 卡（默认跳过）</span>
-          </label>
-        </div>
-        <div class="vlc-actions">
-          <button type="button" class="mk-btn" :disabled="!hasText || validating || importing" @click="doValidate">
-            {{ validating ? '校验中…' : '校验' }}
-          </button>
-          <button type="button" class="mk-btn mk-btn--primary" :disabled="!canImport || importing || validating" @click="doImport">
-            {{ importing ? '导入中…' : '导入' }}
-          </button>
-          <span class="vlc-format">识别格式：{{ formatHint }}</span>
-        </div>
+          <header class="vlc-card__head">
+            <span class="vlc-avatar" :class="`vlc-avatar--${vlAvatarIndexOf(cardName(c))}`" aria-hidden="true">{{ cardName(c).slice(0, 1) }}</span>
+            <strong class="vlc-card__name" :title="cardName(c)">{{ cardName(c) }}</strong>
+            <span class="mk-badge" :class="sourceBadge(c)" :title="sourceTitle(c)">{{ sourceText(c) }}</span>
+          </header>
+          <div class="vlc-card__key">{{ c.cardKey || '（无 cardKey）' }}</div>
+          <p class="vlc-card__goal" :title="c.goal">{{ c.goal }}</p>
+          <p v-if="c.opening" class="vlc-card__opening" :title="c.opening">{{ c.opening }}</p>
+          <div v-if="shownTags(c).length" class="vlc-card__tags">
+            <span v-for="t in shownTags(c)" :key="t" class="mk-badge mk-badge--muted">{{ t }}</span>
+            <span v-if="c.tags.length > shownTags(c).length" class="vlc-card__more" :title="c.tags.join(' · ')">+{{ c.tags.length - shownTags(c).length }}</span>
+          </div>
+          <footer class="vlc-card__foot">
+            <span class="vlc-card__level" :title="`知识水平：${c.knowledgeLevel}`">{{ levelText(c.knowledgeLevel) }}</span>
+            <span class="vlc-card__go">到虚拟学习者 →</span>
+          </footer>
+        </article>
       </div>
     </section>
 
-    <section v-if="report" class="mk-card">
-      <div class="mk-card__head">
-        <div>
-          <h3 class="mk-card__title">校验结果</h3>
-          <span class="mk-card__meta">
-            共 {{ report.summary.total }} · 可导入 {{ report.summary.ok }} · 已存在 {{ report.summary.exists }} ·
-            <span :class="{ 'vlc-bad': report.summary.error > 0 }">错误 {{ report.summary.error }}</span>
-          </span>
-        </div>
-      </div>
-      <div class="mk-table-scroll">
-        <table class="mk-table">
-          <thead>
-            <tr>
-              <th>卡 Key</th>
-              <th>状态</th>
-              <th>问题</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in report.reports" :key="(r.cardKey || 'row') + i">
-              <td><span class="vlc-key">{{ r.cardKey || '（无 cardKey）' }}</span></td>
-              <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
-              <td>
-                <div class="vlc-issues">
-                  <span v-for="(e, ei) in r.errors" :key="'e' + ei" class="vlc-issue vlc-issue--err">{{ e }}</span>
-                  <span v-for="(w, wi) in r.warnings" :key="'w' + wi" class="vlc-issue vlc-issue--warn">{{ w }}</span>
-                  <span v-if="!r.errors.length && !r.warnings.length" class="vlc-issue vlc-issue--ok">通过</span>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <!-- 导入抽屉（mk-drawer 体系，wide 档：表单+逐卡报告需要宽度）。
+         导入成功后刷新卡墙索引（新卡即刻上墙，按创建时间倒序在最前） -->
+    <Teleport to="body">
+      <div v-if="drawerOpen" class="mk-drawer">
+        <div class="mk-drawer__mask" @click="closeDrawer"></div>
+        <aside class="mk-drawer__panel mk-drawer__panel--wide" role="dialog" aria-label="导入卡文档">
+          <header class="mk-drawer__head">
+            <div class="mk-drawer__heading">
+              <h3 class="mk-drawer__title">导入卡文档</h3>
+              <span class="mk-drawer__sub">YAML / JSON 的 <code>{ cards: [...] }</code>；一张卡 = 一个虚拟学习者账号 + 档案 + 故事池</span>
+            </div>
+            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeDrawer">✕</button>
+          </header>
+          <div class="mk-drawer__body">
+            <div class="vlc-body">
+              <input ref="fileRef" type="file" accept=".yaml,.yml,.json" class="vlc-file" @change="onFileChange" />
+              <div
+                class="vlc-drop"
+                :class="{ 'is-drag': isDragOver }"
+                role="button"
+                tabindex="0"
+                @click="triggerPick"
+                @keydown.enter.prevent="triggerPick"
+                @dragenter.prevent="onDragEnter"
+                @dragover.prevent="onDragOver"
+                @dragleave="onDragLeave"
+                @drop.prevent="onDrop"
+              >
+                <span class="vlc-drop__title">{{ isDragOver ? '松开导入卡文档' : (fileName || '拖入或点击选择 .yaml / .json 卡文档') }}</span>
+                <span class="vlc-drop__hint">{{ isDragOver ? '松开后将读取并填入下方文本框' : '也可以直接粘贴到下方文本框' }}</span>
+              </div>
+              <textarea
+                v-model="rawText"
+                class="mk-field__textarea vlc-text"
+                rows="9"
+                spellcheck="false"
+                placeholder="cards:&#10;  - cardKey: w6-math-01&#10;    persona:&#10;      nameHint: 高一学生&#10;      background: …&#10;    story:&#10;      visibleOpening: …&#10;      followUps: [ … ]&#10;    source:&#10;      kind: web   # 或 synthetic&#10;      ref: https://…"
+                @input="resetReports"
+              ></textarea>
+              <div class="vlc-opts">
+                <label class="vlc-check">
+                  <input v-model="enrich" type="checkbox" />
+                  <span>导入时富化（调用 persona-designer 逐卡生成完整认知人设，较慢）</span>
+                </label>
+                <label class="vlc-check">
+                  <input v-model="update" type="checkbox" />
+                  <span>覆盖已存在的同 cardKey 卡（默认跳过）</span>
+                </label>
+              </div>
+              <div class="vlc-actions">
+                <button type="button" class="mk-btn" :disabled="!hasText || validating || importing" @click="doValidate">
+                  {{ validating ? '校验中…' : '校验' }}
+                </button>
+                <button type="button" class="mk-btn mk-btn--primary" :disabled="!canImport || importing || validating" @click="doImport">
+                  {{ importing ? '导入中…' : '导入' }}
+                </button>
+                <span class="vlc-format">识别格式：{{ formatHint }}</span>
+              </div>
+            </div>
 
-    <section v-if="importResult" class="mk-card">
-      <div class="mk-card__head">
-        <div>
-          <h3 class="mk-card__title">导入结果</h3>
-          <span class="mk-card__meta">
-            新建 {{ importResult.summary.created }} · 覆盖 {{ importResult.summary.updated }} ·
-            跳过 {{ importResult.summary.skipped }} ·
-            <span :class="{ 'vlc-bad': importResult.summary.failed > 0 }">失败 {{ importResult.summary.failed }}</span>
-          </span>
-        </div>
+            <section v-if="report" class="vlc-report">
+              <h4 class="vlc-report__title">校验结果 <span class="vlc-report__meta">共 {{ report.summary.total }} · 可导入 {{ report.summary.ok }} · 已存在 {{ report.summary.exists }} · <span :class="{ 'vlc-bad': report.summary.error > 0 }">错误 {{ report.summary.error }}</span></span></h4>
+              <div class="mk-table-scroll">
+                <table class="mk-table">
+                  <thead>
+                    <tr><th>卡 Key</th><th>状态</th><th>问题</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(r, i) in report.reports" :key="(r.cardKey || 'row') + i">
+                      <td><span class="vlc-key">{{ r.cardKey || '（无 cardKey）' }}</span></td>
+                      <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
+                      <td>
+                        <div class="vlc-issues">
+                          <span v-for="(e, ei) in r.errors" :key="'e' + ei" class="vlc-issue vlc-issue--err">{{ e }}</span>
+                          <span v-for="(w, wi) in r.warnings" :key="'w' + wi" class="vlc-issue vlc-issue--warn">{{ w }}</span>
+                          <span v-if="!r.errors.length && !r.warnings.length" class="vlc-issue vlc-issue--ok">通过</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section v-if="importResult" class="vlc-report">
+              <h4 class="vlc-report__title">导入结果 <span class="vlc-report__meta">新建 {{ importResult.summary.created }} · 覆盖 {{ importResult.summary.updated }} · 跳过 {{ importResult.summary.skipped }} · <span :class="{ 'vlc-bad': importResult.summary.failed > 0 }">失败 {{ importResult.summary.failed }}</span></span></h4>
+              <div class="mk-table-scroll">
+                <table class="mk-table">
+                  <thead>
+                    <tr><th>卡 Key</th><th>动作</th><th>备注</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(r, i) in importResult.results" :key="(r.cardKey || 'row') + i">
+                      <td><span class="vlc-key">{{ r.cardKey || '（无 cardKey）' }}</span></td>
+                      <td><span class="mk-badge" :class="actionBadge(r.action)">{{ actionText(r.action) }}</span></td>
+                      <td><span class="vlc-reason" :title="r.reason || ''">{{ r.reason || '—' }}</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+          <footer class="mk-drawer__foot">
+            <span class="vlc-drawer-note">导入成功的卡即刻上墙（新卡在最前）</span>
+            <button type="button" class="mk-btn" @click="closeDrawer">关闭</button>
+          </footer>
+        </aside>
       </div>
-      <div class="mk-table-scroll">
-        <table class="mk-table">
-          <thead>
-            <tr>
-              <th>卡 Key</th>
-              <th>动作</th>
-              <th>备注</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in importResult.results" :key="(r.cardKey || 'row') + i">
-              <td><span class="vlc-key">{{ r.cardKey || '（无 cardKey）' }}</span></td>
-              <td><span class="mk-badge" :class="actionBadge(r.action)">{{ actionText(r.action) }}</span></td>
-              <td><span class="vlc-reason" :title="r.reason || ''">{{ r.reason || '—' }}</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
+import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MockSkeletonTable from './SkeletonTable.vue'
+import { vlAvatarIndexOf } from '@/components/mk/vlAvatar'
+import { openSubPage } from './store'
 import { errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
@@ -151,6 +208,20 @@ withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 type CardFormat = 'yaml' | 'json'
 type CardStatus = 'ok' | 'error' | 'exists' | 'warn'
 type CardAction = 'created' | 'updated' | 'skipped' | 'failed'
+
+interface CardWallEntry {
+  profileId: string
+  userId: string
+  cardKey: string | null
+  name: string
+  goal: string
+  opening: string | null
+  knowledgeLevel: string
+  tags: string[]
+  preset: boolean
+  sourceKind: string | null
+  email: string | null
+}
 
 interface CardIssueReport {
   cardKey: string | null
@@ -170,6 +241,72 @@ interface ImportPayload {
   summary: { total: number; created: number; updated: number; skipped: number; failed: number }
 }
 
+/* ===== 卡墙 ===== */
+const cards = ref<CardWallEntry[]>([])
+const summary = ref<{ total: number; builtin: number; custom: number } | null>(null)
+const indexLoading = ref(false)
+const keyword = ref('')
+
+const filtered = computed(() => {
+  const kw = keyword.value.trim().toLowerCase()
+  if (!kw) return cards.value
+  return cards.value.filter((c) =>
+    [c.name, c.cardKey, c.goal, c.opening, c.email, ...c.tags]
+      .filter(Boolean)
+      .some((v) => String(v).toLowerCase().includes(kw))
+  )
+})
+
+async function loadIndex() {
+  indexLoading.value = true
+  try {
+    const res = await adminVirtualLearnersApi.cardsIndex()
+    const d = (res.data?.data ?? res.data) as { cards: CardWallEntry[]; summary: { total: number; builtin: number; custom: number } }
+    cards.value = d?.cards ?? []
+    summary.value = d?.summary ?? null
+  } catch (e) {
+    toast.error(errMsg(e) || '卡库索引加载失败')
+  } finally {
+    indexLoading.value = false
+  }
+}
+
+/** 「从卡库选人到虚拟学习者」：卡=账号，点卡直达该学习者画像页 */
+function goLearner(c: CardWallEntry) {
+  openSubPage('virtual', c.userId)
+}
+
+function cardName(c: CardWallEntry): string {
+  return c.name || c.cardKey || c.email || '未命名卡'
+}
+/** tags[0] 是导入时写入的 cardKey 本身，展示时剔掉 */
+function shownTags(c: CardWallEntry): string[] {
+  return c.tags.filter((t) => t !== c.cardKey).slice(0, 3)
+}
+function sourceText(c: CardWallEntry): string {
+  if (c.preset) return '预置'
+  if (c.sourceKind === 'web') return 'web'
+  if (c.sourceKind === 'synthetic') return '合成'
+  return '自建'
+}
+function sourceBadge(c: CardWallEntry): string {
+  if (c.preset) return 'mk-badge--info'
+  if (c.sourceKind === 'web') return 'mk-badge--ok'
+  return 'mk-badge--muted'
+}
+function sourceTitle(c: CardWallEntry): string {
+  if (c.preset) return '仓库预置角色（部署时按 presetKey 幂等同步）'
+  if (c.sourceKind === 'web') return '来源：网络采集卡'
+  if (c.sourceKind === 'synthetic') return '来源：合成生成卡'
+  return '后台手动 / AI 创建'
+}
+function levelText(level: string): string {
+  const map: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高阶' }
+  return map[level] || level || '—'
+}
+
+/* ===== 导入（原表单整体收进抽屉，逻辑不变）===== */
+const drawerOpen = ref(false)
 const fileRef = ref<HTMLInputElement | null>(null)
 const rawText = ref('')
 const fileName = ref('')
@@ -181,7 +318,6 @@ const importing = ref(false)
 const exporting = ref(false)
 const report = ref<ValidatePayload | null>(null)
 const importResult = ref<ImportPayload | null>(null)
-const libraryCount = ref<number | null>(null)
 
 const hasText = computed(() => rawText.value.trim().length > 0)
 
@@ -214,6 +350,10 @@ function actionBadge(a: CardAction): string {
 function resetReports() {
   report.value = null
   importResult.value = null
+}
+
+function closeDrawer() {
+  drawerOpen.value = false
 }
 
 function triggerPick() {
@@ -289,21 +429,11 @@ async function doImport() {
     if (s.failed > 0) toast.warning(`导入完成：新建 ${s.created} · 失败 ${s.failed}`)
     else toast.success(`导入完成：新建 ${s.created} · 覆盖 ${s.updated} · 跳过 ${s.skipped}`)
     report.value = null
-    void refreshCount()
+    void loadIndex()
   } catch (e) {
     toast.error(errMsg(e) || '导入失败')
   } finally {
     importing.value = false
-  }
-}
-
-async function refreshCount() {
-  try {
-    const res = await adminVirtualLearnersApi.cardsExport()
-    const d = res.data?.data ?? res.data
-    libraryCount.value = typeof d?.count === 'number' ? d.count : null
-  } catch {
-    libraryCount.value = null
   }
 }
 
@@ -330,15 +460,112 @@ async function doExport() {
   }
 }
 
-onMounted(refreshCount)
+onMounted(loadIndex)
 </script>
 
 <style scoped>
-.vlc-body {
+/* ===== 卡墙（2026-10-05 卡库改版）：自适应卡网格，260px 起步、窄档降列 ===== */
+.vlc-wall {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 12px;
   padding: 16px;
 }
+.vlc-card {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 14px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  background: var(--mk-surface);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+  min-width: 0;
+}
+.vlc-card:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
+.vlc-card:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
+.vlc-card__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* 首字头像：与虚拟学习者/画像页同 8 色板（--mk-vl-avatar-*，CM3 单源） */
+.vlc-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mk-on-fill);
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  flex: none;
+}
+.vlc-avatar--0 { background: var(--mk-vl-avatar-0); }
+.vlc-avatar--1 { background: var(--mk-vl-avatar-1); }
+.vlc-avatar--2 { background: var(--mk-vl-avatar-2); }
+.vlc-avatar--3 { background: var(--mk-vl-avatar-3); }
+.vlc-avatar--4 { background: var(--mk-vl-avatar-4); }
+.vlc-avatar--5 { background: var(--mk-vl-avatar-5); }
+.vlc-avatar--6 { background: var(--mk-vl-avatar-6); }
+.vlc-avatar--7 { background: var(--mk-vl-avatar-7); }
+.vlc-card__name {
+  font-size: var(--mk-fs-body);
+  color: var(--mk-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.vlc-card__head .mk-badge { flex: none; }
+.vlc-card__key {
+  font-family: var(--mk-mono);
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vlc-card__goal {
+  margin: 0;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-ink);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.9em;
+}
+.vlc-card__opening {
+  margin: 0;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vlc-card__tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.vlc-card__more { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.vlc-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+.vlc-card__level { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.vlc-card__go { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue); white-space: nowrap; }
+
+/* ===== 导入抽屉内的表单（原页内表单样式随迁）===== */
+.vlc-body {
+  display: grid;
+  gap: 12px;
+}
+.vlc-report { margin-top: 16px; }
+.vlc-report__title { margin: 0 0 8px; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
+.vlc-report__meta { margin-left: 8px; font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); }
+.vlc-drawer-note { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .vlc-file {
   display: none;
 }

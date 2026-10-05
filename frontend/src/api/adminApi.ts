@@ -1625,6 +1625,11 @@ export const adminVirtualLearnersApi = {
   cardsExport: async () => {
     return adminAxios.get('/admin/virtual-learners/cards/export');
   },
+
+  /** 卡墙索引（2026-10-05 卡库改版）：全部卡（预置+自建）展示摘要 + 分计 */
+  cardsIndex: async () => {
+    return adminAxios.get('/admin/virtual-learners/cards/index');
+  },
 };
 
 // ============================================================

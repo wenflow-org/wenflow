@@ -185,6 +185,24 @@ export function findCustomCardsForExport() {
   });
 }
 
+/** 卡墙索引取数（2026-10-05 卡库改版）：全部卡（预置+自建）带展示列与账号信息，新卡在前 */
+export function findProfilesForCardWall() {
+  return prisma.virtual_learner_profiles.findMany({
+    select: {
+      id: true,
+      userId: true,
+      profile: true,
+      tags: true,
+      learningGoal: true,
+      knowledgeLevel: true,
+      presetKey: true,
+      createdAt: true,
+      users: { select: { name: true, email: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
 /** 卡导入更新路径：按 profileId 取归属 userId（自带资料要写进该用户的资料库） */
 export async function findProfileUserIdById(id: string): Promise<string | null> {
   const r = await prisma.virtual_learner_profiles.findUnique({ where: { id }, select: { userId: true } });

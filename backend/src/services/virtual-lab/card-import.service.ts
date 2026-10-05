@@ -18,6 +18,7 @@ import {
   createVirtualLearnerProfile,
   updateProfileFields,
   findAllProfilesForCardIndex,
+  findProfilesForCardWall,
   findCustomCardsForExport,
   findProfileUserIdById,
   findProfileJsonById,
@@ -356,8 +357,7 @@ export function resolveCardKey(profile: Record<string, unknown>, tags: string[])
 }
 
 /** 收集库内已存在卡的查重索引 */
-async function buildExistingIndex(): Promise<{ byKey: Map<string, string>; refs: Map<string, string[]> }> {
-  const rows = await findAllProfilesForCardIndex();
+async function buildExistingIndex(): Promise<{ byKey: Map<string, string>; refs: Map<string, string[]> }> {  const rows = await findAllProfilesForCardIndex();
   const byKey = new Map<string, string>();
   const refs = new Map<string, string[]>();
   for (const r of rows) {
@@ -375,6 +375,87 @@ async function buildExistingIndex(): Promise<{ byKey: Map<string, string>; refs:
     if (ref) { const list = refs.get(ref) || []; list.push(cardKey || name || r.id); refs.set(ref, list); }
   }
   return { byKey, refs };
+}
+
+export interface CardWallEntry {
+  profileId: string;
+  userId: string;
+  cardKey: string | null;
+  name: string;
+  goal: string;
+  opening: string | null;
+  knowledgeLevel: string;
+  tags: string[];
+  preset: boolean;
+  sourceKind: string | null;
+  email: string | null;
+}
+
+/**
+ * 卡墙索引映射（2026-10-05 卡库改版「导入是功能，卡展示也是」）：profiles 即卡
+ * （「卡=账号」2026-10-01 拍板不变），解析 personaSeed.scenarioCard 取展示字段。
+ * 纯函数（可单测）；坏 JSON 行降级为占位卡，不阻断整面卡墙。
+ */
+export function buildCardWallEntries(
+  rows: Array<{
+    id: string;
+    userId: string;
+    profile: string;
+    tags: string | null;
+    learningGoal: string;
+    knowledgeLevel: string;
+    presetKey: string | null;
+    users: { name: string | null; email: string | null } | null;
+  }>
+): CardWallEntry[] {
+  return rows.map((r) => {
+    const tagList = parseTags(r.tags);
+    let cardKey: string | null = null;
+    let nameHint: string | null = null;
+    let opening: string | null = null;
+    let sourceKind: string | null = null;
+    try {
+      const p = JSON.parse(r.profile || '{}') as Record<string, unknown>;
+      const seed = (p.personaSeed || {}) as Record<string, unknown>;
+      const sc = (seed.scenarioCard || {}) as Record<string, unknown>;
+      // 复用查重同款回退链（profile.cardKey → scenarioCard.personaId → 合法形态 tags，跳过 w5/w6 波次标签）
+      cardKey = resolveCardKey(p, tagList);
+      nameHint = (seed.nameHint as string) || null;
+      opening = (sc.opening as string) || null;
+      sourceKind = (sc.sourceKind as string) || null;
+    } catch {
+      /* 坏 JSON：占位展示（名称回退 email/cardKey），不阻断整面卡墙 */
+    }
+    const email = r.users?.email ?? null;
+    const key = cardKey || tagList.find((t) => CARD_KEY_RE.test(t) && !/^w\d+$/i.test(t)) || null;
+    return {
+      profileId: r.id,
+      userId: r.userId,
+      cardKey: key,
+      name: nameHint || r.users?.name || key || email || '未命名卡',
+      goal: r.learningGoal,
+      opening,
+      knowledgeLevel: r.knowledgeLevel,
+      tags: tagList,
+      preset: r.presetKey != null,
+      sourceKind,
+      email,
+    };
+  });
+}
+
+/** 卡墙索引聚合（GET /cards/index 数据源）：卡列表 + 预置/自建分计 */
+export async function getCardWallIndex() {
+  const rows = await findProfilesForCardWall();
+  const cards = buildCardWallEntries(rows);
+  return {
+    cards,
+    summary: {
+      total: cards.length,
+      builtin: cards.filter((c) => c.preset).length,
+      custom: cards.filter((c) => !c.preset).length,
+    },
+  };
 }
 
 export async function validateCards(content: string, format: 'yaml' | 'json') {

@@ -1,4 +1,4 @@
-import { parseCardDocument, validateCard, resolveCardKey, type LearnerCard } from '../card-import.service';
+import { parseCardDocument, validateCard, resolveCardKey, buildCardWallEntries, type LearnerCard } from '../card-import.service';
 
 function emptyIndex() {
   return { byKey: new Map<string, string>(), refs: new Map<string, string[]>(), seenInDoc: new Set<string>() };
@@ -156,5 +156,57 @@ describe('card-import：resolveCardKey（历史卡身份回退）', () => {
   it('nameHint 符合 cardKey 形态时才回退', () => {
     expect(resolveCardKey({ personaSeed: { nameHint: 'rw-cook-03' } }, [])).toBe('rw-cook-03');
     expect(resolveCardKey({ personaSeed: { nameHint: '高三学生小张' } }, [])).toBeNull();
+  });
+});
+
+describe('card-import：卡墙索引映射（buildCardWallEntries，2026-10-05 卡库改版）', () => {
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: 'prof-1',
+    userId: 'user-1',
+    profile: JSON.stringify({
+      personaSeed: {
+        nameHint: '高一学生',
+        scenarioCard: { cardKey: 'w6-math-01', opening: '我这次月考函数只考了 58 分。', sourceKind: 'web' },
+      },
+      cardKey: 'w6-math-01',
+    }),
+    tags: JSON.stringify(['w6-math-01', '数学', '函数']),
+    learningGoal: '高中数学·函数',
+    knowledgeLevel: 'beginner',
+    presetKey: null,
+    users: { name: '小陈', email: 'c1@vl.local' },
+    ...over,
+  });
+
+  it('解析 personaSeed.scenarioCard 展示字段；preset 按 presetKey 判定', () => {
+    const [a] = buildCardWallEntries([row()]);
+    expect(a.cardKey).toBe('w6-math-01');
+    expect(a.name).toBe('高一学生');
+    expect(a.opening).toContain('58 分');
+    expect(a.sourceKind).toBe('web');
+    expect(a.preset).toBe(false);
+    expect(a.userId).toBe('user-1');
+  });
+
+  it('name 回退链：nameHint → displayName → cardKey → email；坏 JSON 降级占位不抛', () => {
+    const noHint = buildCardWallEntries([row({ profile: JSON.stringify({ personaSeed: { scenarioCard: { cardKey: 'k-1' } } }) })])[0];
+    expect(noHint.name).toBe('小陈');
+    const bad = buildCardWallEntries([row({ profile: '{oops' })])[0];
+    // 坏 JSON 也从 tags 兜底出 key（跳过波次标签的同款过滤），占位展示更准确
+    expect(bad.cardKey).toBe('w6-math-01');
+    expect(bad.name).toBe('小陈');
+  });
+
+  it('scenarioCard 缺 cardKey 的存量卡由 tags[0] 兜底（导入时恒写入）', () => {
+    const legacy = buildCardWallEntries([row({
+      profile: JSON.stringify({ personaSeed: { nameHint: '老卡' } }),
+      tags: JSON.stringify(['legacy-key-01', '标签']),
+    })])[0];
+    expect(legacy.cardKey).toBe('legacy-key-01');
+  });
+
+  it('预置卡 preset=true', () => {
+    const [p] = buildCardWallEntries([row({ presetKey: 'retiree-photography' })]);
+    expect(p.preset).toBe(true);
   });
 });
