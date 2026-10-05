@@ -36,31 +36,6 @@
       />
     </section>
 
-    <!-- 记忆强度分布（newui 原型 renderMemory 2029-2034 两卡之一）。到期时间轴已迁入下方
-         用户列表卡表头正上方并升级为可点下钻的贴表分布条（2026-10-04 晚拍板教学组贴表形态）。
-         2026-10-05 LAYOUT-4：本卡是描述性上下文（主任务是按待复习量找要干预的人），
-         降为默认收起——结论行（标题 + 口径 meta：平均/样本）常驻，直方图收进 <details>，
-         与 mk-section 硬约束（结论与细节分层）同形；KPI 带与 MkDistBand 贴表条不动。
-         数据源 = adminMemoryTracesApi.list（GET /admin/memory-traces）：
-         retrievability（FSRS 可提取率）→ 五桶强度直方图（无强度数据的条目不进分母，不硬造）。
-         窗口口径：后端上限 200 条（updatedAt 倒序），卡 meta 如实标注「窗口/非全量」；
-         拉取失败或队列为空整块隐藏，不留空卡。 -->
-    <details v-if="traceWindowReady" class="mk-card mr-strength">
-      <summary class="mk-card__head mk-section__summary">
-        <span class="mk-card__title">记忆强度分布</span>
-        <span class="mk-card__meta" :title="`记忆强度 = FSRS 可提取率 retrievability；无 FSRS 状态的 ${mrStrengthPending} 条不进分母（不硬造）${mrStrengthTotal === 0 ? '；窗口内暂无 FSRS 强度数据' : ''}`">{{ mrStrengthMeta }}</span>
-      </summary>
-      <div class="mr-dist__body">
-        <div class="histo" role="img" :aria-label="mrHistoAria">
-          <div v-for="b in mrStrengthBuckets" :key="b.label" class="hcol">
-            <span class="hval">{{ b.n }}</span>
-            <span class="hbar" :style="{ height: b.h + 'px', background: b.tone }" :title="`${b.label} · ${b.n}`"></span>
-            <span class="hcap">{{ b.label }}</span>
-          </div>
-        </div>
-      </div>
-    </details>
-
     <!-- 到期时间轴（教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」：回到用户列表卡
          上方页面级）——点某档 = 只看窗口内该档有到期痕迹的学习者。口径不变：复习队列 =
          extractionCount>0，窗口 = 最近 200 条痕迹（updatedAt 倒序），非全量——全量到期数见
@@ -621,7 +596,7 @@ const dueCardTitle = computed(() => {
   return `到该复习而未复习 ${t.due} 条，占全部痕迹 ${duePct.value}%；示警阈值：占痕迹 ≥${DUE_WARN_PCT}% 或人均 ≥${DUE_WARN_PER_USER} 条（阈值内为间隔复习的常态积压，不着警示色）`
 })
 
-/* ===== 到期时间轴 + 记忆强度分布（newui 原型 renderMemory dueBand/distBand + sBuckets/histo 移植）=====
+/* ===== 到期时间轴（newui 原型 renderMemory dueBand/distBand 移植；强度直方图 2026-10-05 用户令退役）=====
    数据窗口 = adminMemoryTracesApi.list（GET /admin/memory-traces，后端上限 200 条、updatedAt 倒序）。
    队列口径 = extractionCount > 0 且 dueAt 非空（从未提取过的点不进复习队列，与后端 due 统计一致）。
    六档到期带按 dueAt 与今天 0 点的日差分桶：桶名 = 起始日（「3天后」= 3–4 天，「5天后」= 5 天及以远）；
@@ -739,57 +714,6 @@ const visibleRows = computed(() =>
 const mrDueBins = computed(() =>
   mrDueBand.value.map((entry) => ({ key: entry.key, label: entry.name, n: entry.n, tone: entry.tone }))
 )
-
-/* 原型 sBuckets 原样移植：边界 min 含、max 不含（0.2 归 20–39%，0.8 归 80–99%）；上限 1.01 兜住 100% */
-const MR_STRENGTH_BUCKETS = [
-  { label: '0–19%', min: 0, max: 0.2, tone: 'var(--mk-red)' },
-  { label: '20–39%', min: 0.2, max: 0.4, tone: 'var(--mk-red)' },
-  { label: '40–59%', min: 0.4, max: 0.6, tone: 'var(--mk-amber)' },
-  { label: '60–79%', min: 0.6, max: 0.8, tone: 'var(--mk-blue)' },
-  { label: '80–99%', min: 0.8, max: 1.01, tone: 'var(--mk-green)' }
-]
-
-const mrStrengthRows = computed(() => queueRows.value.filter((row) => typeof row.retrievability === 'number'))
-const mrStrengthTotal = computed(() => mrStrengthRows.value.length)
-const mrStrengthPending = computed(() => queueRows.value.length - mrStrengthTotal.value)
-
-const mrStrengthBuckets = computed(() => {
-  const counts = MR_STRENGTH_BUCKETS.map(() => 0)
-  for (const row of mrStrengthRows.value) {
-    const value = row.retrievability as number
-    const idx = MR_STRENGTH_BUCKETS.findIndex((bucket) => value >= bucket.min && value < bucket.max)
-    if (idx >= 0) counts[idx] += 1
-  }
-  const maxB = Math.max(...counts, 1)
-  return MR_STRENGTH_BUCKETS.map((bucket, i) => ({
-    ...bucket,
-    n: counts[i],
-    h: Math.max(6, Math.round((counts[i] / maxB) * 100)), // 原型公式：零桶/极小桶压到 6px 起步
-    // P2（2026-10-04 全站评审）：窗口内没有任何强度数据时整片降灰——5 根满饱和彩柱高度 6px
-    // 会被读成「强度全低」的分布（与同屏列表 72-85% 互斥）；空数据是状态，不是一档分布
-    tone: mrStrengthTotal.value === 0 ? 'var(--mk-surface-3)' : bucket.tone
-  }))
-})
-
-const mrAvgStrengthPct = computed(() => {
-  const rows = mrStrengthRows.value
-  if (!rows.length) return 0
-  return Math.round((rows.reduce((sum, row) => sum + (row.retrievability as number), 0) / rows.length) * 100)
-})
-/* D10：有强度样本占比过低（<10%）时均值只来自极少数条，直出「平均 100%」会与同屏列表
-   71–94% 互斥。此时不给均值数字，改报「样本不足」（复用 :764-766 零强度降灰的
-   「空/不足是状态、不是一档分布」判例）。 */
-const mrStrengthSampleLow = computed(() =>
-  mrStrengthTotal.value > 0 && mrStrengthTotal.value / Math.max(queueRows.value.length, 1) < 0.1
-)
-/** 强度卡常驻结论行（折叠卡 meta）：样本充足给均值，样本不足只报样本量 */
-const mrStrengthMeta = computed(() => {
-  const q = queueRows.value.length
-  if (mrStrengthTotal.value === 0) return `按记忆强度分档 · 有强度 0/${q} 条 · 暂无强度数据`
-  if (mrStrengthSampleLow.value) return `按记忆强度分档 · 有强度 ${mrStrengthTotal.value}/${q} 条 · 样本不足，均值不具代表性`
-  return `按记忆强度分档 · 平均 ${mrAvgStrengthPct.value}% · 有强度 ${mrStrengthTotal.value}/${q} 条`
-})
-const mrHistoAria = computed(() => `记忆强度分布：${mrStrengthBuckets.value.map((bucket) => `${bucket.label} ${bucket.n}`).join(' · ')}`)
 
 /* 窗口拉取失败或队列为空 → 整块隐藏（不留空卡；失败同 OpsContent pathBandReady 判例静默） */
 const traceWindowReady = computed(() => !traceFailed.value && queueRows.value.length > 0)
@@ -1105,30 +1029,6 @@ onMounted(async () => {
 .mr__strength { display: inline-flex; align-items: center; gap: 8px; }
 .mr__strength .mono { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 
-
-/* 记忆分布（newui「教学分组」stageband 原型移植；token 映射：--surface-3→--mk-surface-3、
-   --muted→--mk-muted、--fs-micro→--mk-fs-micro、sbl__sw 3px 圆角→--mk-radius-xs）。
-   mk-card 没有 body padding 原语 → 本地 .mr-dist__body（非 mk- 前缀）。
-   12/16 = 原型 .card__body（--sp-3/--sp-4），与 TeachingSessions 分布卡同一档。 */
-.mr-dist__body { padding: 12px 16px 16px; }
-/* stageband/sbl 已升全局原语（mk-primitives，2026-10-03 三页拷贝收敛）。 */
-
-/* 到期带曾与强度直方图同 grid（原型 renderMemory 2029 行两列 minmax(0,1.5fr) minmax(0,1fr)）——
-   2026-10-05 LAYOUT-4 后强度卡降为默认收起的 <details class="mk-card mr-strength">，
-   本页不再需要该 grid，.mr-bandgrid 单列规则随之下线（避免死 CSS）。 */
-/* 到期时间轴在用户列表卡上方页面级（2026-10-05 用户拍板「分段条在上」）：贴条 padding/下边框
-   随撤，页面级间距由 .mk-page 的 --mk-stack-gap 统一供。mr-distband 类保留作测试与定位钩子 */
-
-/* 强度直方图（newui 原型 .histo 579-584 原样移植；token 映射：--mono→--mk-mono、
-   --muted→--mk-muted、--faint→--mk-faint、11px 字号→--mk-fs-micro（设计语言 12px 下限），
-   几何尺寸/圆角保持 px 原值） */
-.histo { display: flex; align-items: flex-end; gap: 10px; height: 132px; padding-top: 10px; }
-.histo .hcol { flex: 1 1 0; min-width: 0; display: grid; align-content: end; justify-items: center; gap: 6px; }
-/* 原型 6/6/3/3px → 圆角档 sm6/xs4（项目圆角四档铁律，xs 为最近档） */
-.histo .hbar { width: 100%; max-width: 52px; border-radius: var(--mk-radius-sm) var(--mk-radius-sm) var(--mk-radius-xs) var(--mk-radius-xs); min-height: 3px; }
-.histo .hval { font-size: var(--mk-fs-micro); font-family: var(--mk-mono); color: var(--mk-muted); }
-.histo .hcap { font-size: var(--mk-fs-micro); color: var(--mk-faint); text-align: center; white-space: nowrap; }
-@media (max-width: 768px) { .histo { height: 108px; gap: 6px; } }
 
 /* 需人工看：>0 抬成琥珀胶囊；0 压成安静破折号 */
 /* 数字胶囊已换共享 mk-badge--sm--warn（私有 color-mix 复刻退役，2026-10-03）；页私有只留数字对齐 */

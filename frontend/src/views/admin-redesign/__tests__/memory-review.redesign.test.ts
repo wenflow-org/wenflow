@@ -2,8 +2,7 @@
  * 记忆与复习页 redesign 结构契约（newui 原型 renderMemory 1963-2045 移植）：
  * - 到期时间轴：贴表分布条 MkDistBand（2026-10-04 晚，原独立卡移入表格卡）——
  *   .stageband 六档（零值段跳过、图例恒六行）+ .sbl 色块/名/数，分段/图例可点下钻筛用户行
- * - 记忆强度分布：.histo 五桶（hval/hbar/hcap），高度按最大桶比例、零桶 6px 起步；
- *   无 retrievability（FSRS 状态缺失）的条目不进分母
+ * - 记忆强度直方图已退役（2026-10-05 用户令「柱状图不要了」）；无 retrievability 条目不进任何分母的纪律保留
  * - 窗口口径：adminMemoryTracesApi.list（limit 200、includeVirtual 随作用域开关）
  * - 既有功能不丢：用户行点击 → openSubPage('learner', userId)
  */
@@ -111,7 +110,7 @@ async function openDetailOf(w: ReturnType<typeof mount>) {
   await flushPromises();
 }
 
-describe('MemoryReview redesign：到期时间轴 + 记忆强度分布', () => {
+describe('MemoryReview redesign：到期时间轴（强度直方图已退役）', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -166,23 +165,6 @@ describe('MemoryReview redesign：到期时间轴 + 记忆强度分布', () => {
     w.unmount();
   });
 
-  it('强度直方图：五桶、无强度条目不进分母、高度按最大桶比例（零桶 6px）', async () => {
-    const w = await mountWithRows(ROWS);
-
-    const cols = w.findAll('.histo .hcol');
-    expect(cols).toHaveLength(5);
-    expect(cols.map((el) => el.find('.hval').text())).toEqual(['1', '1', '1', '0', '2']);
-    expect(cols.map((el) => el.find('.hcap').text())).toEqual(['0–19%', '20–39%', '40–59%', '60–79%', '80–99%']);
-
-    // maxB = 2 → 高度 50/50/50/6(零桶起步)/100
-    const bars = cols.map((el) => el.find('.hbar').element as HTMLElement);
-    expect(bars.map((el) => el.style.height)).toEqual(['50px', '50px', '50px', '6px', '100px']);
-
-    // 平均 = (0.19+0.2+0.5+0.8+0.9)/5 = 52%；有强度 5 / 队列 6（t3 无强度、t7 未进队列）
-    expect(w.text()).toContain('平均 52%');
-    expect(w.text()).toContain('有强度 5/6');
-  });
-
   it('窗口口径：list 带 limit 200 与作用域开关；窗口为空时整块隐藏', async () => {
     const w = await mountWithRows(ROWS);
     expect(traceList).toHaveBeenCalledWith({ limit: 200, includeVirtual: false });
@@ -196,10 +178,9 @@ describe('MemoryReview redesign：到期时间轴 + 记忆强度分布', () => {
     await scopePills.find((p) => p.text() === '仅真实')!.trigger('click');
     await flushPromises();
 
-    // 空窗口 → 到期带/直方图整块隐藏，不留空卡
+    // 空窗口 → 到期带整块隐藏，不留空卡（强度直方图已退役）
     const empty = await mountWithRows([]);
     expect(empty.find('.stageband').exists()).toBe(false);
-    expect(empty.find('.histo').exists()).toBe(false);
   });
 
   it('既有功能不丢：用户行点击仍跳学习者页（open-learner 判例）', async () => {
