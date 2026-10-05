@@ -174,6 +174,14 @@ function handleFeedback(thumbsUp: boolean) {
     backdrop-filter: none;
     padding: 0;
   }
+  /* EG6/EG20（2026-10-05 复测）：触屏下消息操作按钮实测 29×26（图标钮）/ 81×26（文字钮），
+     低于移动端触控目标下限（EG20 <36 / EG6 <40）。触屏档统一抬到 40×40 且图标居中；
+     桌面 hover 档不受影响（信息密度仍按原 4px 8px 小钮）。 */
+  .msg-actions__btn {
+    min-width: 40px;
+    min-height: 40px;
+    justify-content: center;
+  }
 }
 
 /* Transition */

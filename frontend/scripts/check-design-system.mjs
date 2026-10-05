@@ -2,7 +2,7 @@
 /**
  * 设计系统守卫（ADMIN_PAGE_TEMPLATES.md 阶段 0 门禁）
  *
- * 十八条规则（下列 1–8 逐条展开；9 起为后续增补，其约定集中记在文末段落里）：
+ * 十九条规则（下列 1–8 逐条展开；9 起为后续增补，其约定集中记在文末段落里）：
  *  1) mk- 前缀类禁止在页面 scoped 内定义
  *     —— mk- 前缀 = 全局原语，只有 src/styles/*.css（含 mk-primitives.css）与原语组件可以定义。
  *        在页面里定义会让"全局原语"事实上分裂成每页一套（审计 §附 A #13）。
@@ -42,6 +42,18 @@
  * （ADMIN_VISUAL_LAYER_SPEC v4 §0.5）。2026-10-02 补 8px（= --mk-radius-md）：
  * 它是控件 / 按钮 / 输入框的标准档，此前白名单漏了它，写规范内最常见的字面量反被判违规。
  *
+ * 规则 14/15 的扫描面（2026-10-02 扩，批次 E）：此前只跑在「.vue 的 scoped <style> 块」
+ * 上，而 src/styles/*.css 根本不是 .vue —— 于是整片原语层从没进过圆角/阴影检查，
+ * 「admin 圆角基线 0」其实是**没扫**而不是**合规**。渲染层复核在 /admin/health-center
+ * 实测出 .mk-minibar 是 99px 而守卫报 0，据此把 src/styles/*.css 全量纳入。
+ *
+ * 规则 19（2026-10-02 增，硬失败、无基线）：档位令牌的**定义值**必须落在阶梯上。
+ *  与 14/15 分工 —— 14/15 拦引用处、19 拦定义处。14/15 现在放行 var(--radius-*) 这类
+ *  转发（三支别名是同一条阶梯的转发，见 isRadiusOk 注释），于是「往别名链里塞 13px」
+ *  会在每一处引用上都合法通过；只有钉死链的起点才堵得住。圆角按字面比对阶梯，
+ *  阴影按「全中性」判（把 rgba 通道乘 alpha 看推偏量，规范自己的 slate 阴影推偏 ≤2，
+ *  彩色光晕上百）。
+ *
  * 规则 17/18（2026-10-02 增，硬失败、无基线）：退役材质不得复辟。
  *  17) 主按钮底不得用「交互蓝 → 深蓝」的 135° 渐变
  *      —— 被清掉的原形是 background: linear-gradient(135deg, var(--blue), var(--blue-deep))。
@@ -77,13 +89,19 @@ const BASELINE_PATH = join(ROOT, 'scripts', 'design-system-baseline.json')
 const ADMIN_PREFIX = 'src/views/admin-redesign/'
 const MK_PREFIX = 'src/components/mk/'
 /**
- * 用户侧治理面（2026-10-02 纳入棘轮）。
+ * 用户侧治理面（2026-10-02 纳入棘轮；2026-10-03 补 `src/views/user/`）。
  * 为什么要补：批次 C/D 把 admin 收敛到 0 之后，**全部剩余漂移**都在这些从未被扫过的目录里
  * —— 治理面只覆盖 admin 时，"棘轮只降不升"对用户侧完全失效，欠账永远不会被记进基线，
  * 也就永远不会被提醒。现在它们与 admin 同等纳入棘轮（存量一次 --update 记账，之后只降不升）。
+ *
+ * 2026-10-03 补 `src/views/user/`：与 §7.5.6 同型的缺口 —— 渲染层审计在 AgentLogs / Settings
+ * 两页实测出 `border-radius: 14px / 10px` 与手写 `0 1px 2px rgba(23,32,51,.04)`，而这两枚
+ * `.vue` 因为不在本清单里，从未进过圆角/阴影/hex 检查。补入时两文件已修到 0（hex/圆角/阴影/
+ * 小字号皆 0），故与 admin 一样按"存量 0 起算"，不写进基线。
  */
 const USER_PREFIXES = [
   'src/views/v2/',
+  'src/views/user/',
   'src/components/user/',
   'src/components/chat/',
   'src/components/learning/',
@@ -389,14 +407,82 @@ const shadowCounts = {} // 规则 15：页面 scoped 非法 box-shadow（棘轮�
    阴影三档：面=none、悬浮/弹层=var(--mk-shadow-*)、描边=inset 或 0 0 0 Npx 环
    （含焦点环与脉冲初始态；@keyframes 里的脉冲帧在扫描前剥离）。 */
 const RADIUS_OK = new Set(['0', '4px', '6px', '8px', '12px', '16px', '999px', '50%'])
+/* 2026-10-02（批次 E 尾）：把 var() 的可接受前缀从 `--mk-radius-` 放宽到三支别名。
+   三支全部是**同一条阶梯的转发**（main.css 的 --radius-* → --mk-radius-* → --wf-radius-*），
+   放宽不等于放水；若某天有人往这条链里插一个档外值，失败会出现在定义处而不是引用处，
+   靠下面新加的「令牌取值自检」兜住，而不是靠在引用处逐个 var() 拦。 */
 const isRadiusOk = (v) =>
-  v.split(/\s+/).every((t) => RADIUS_OK.has(t) || /^var\(--mk-radius-/.test(t))
+  v.split(/\s+/).every(
+    (t) => RADIUS_OK.has(t) || /^var\(--(mk|wf)-radius-/.test(t) || /^var\(--radius-/.test(t)
+  )
 const isShadowOk = (v) =>
   v === 'none' ||
-  /^var\(--mk-shadow-/.test(v) ||
+  /^var\(--(?:mk-|wf-)?shadow-/.test(v) ||   // 注意连字符在组内：`--mk-` + `shadow-`，写成 `(mk|wf-)?shadow-` 会匹配不上 `var(--mk-shadow-*)`
+  /^var\(--[\w-]*ring\b/.test(v) ||          // 焦点环 token（值就是 0 0 0 Npx 环）。规则 15 的白名单本就写明「含焦点环」，
+                                              // 只是 token 名不含 shadow，前缀检查漏了它；环形取值由规则 19 的中性检查管不到
+                                              // （焦点环按设计是交互蓝，不算彩色光晕），故在此显式放行。
   /^(inset\s+)?0\s+0\s+0(\s|$|,)/.test(v) ||
   /\binset\b/.test(v)
 const stripKeyframes = (css) => css.replace(/@keyframes[^{]*\{(?:[^{}]|\{[^{}]*\})*\}/g, '')
+
+/* ---------- 规则 14/15（续）：src/styles/*.css 的圆角 / 阴影 ----------
+   为什么现在才扫：规则 14/15 原本长在「遍历 .vue 的 scoped <style> 块」那个循环里，
+   而 src/styles/*.css 根本不是 .vue，从未进过那个循环。后果不是漏了几个数——
+   是**整个结论错了**：admin 的圆角基线一直是 0，被读成「admin 100% 合规」，
+   可 admin 的圆角几乎全写在 mk-primitives.css 里。2026-10-02 的渲染层复核
+   在 /admin/health-center 上实测出 .mk-minibar 是 99px，而守卫当时报 0。
+   扩面后首次扫描即查出 4 处字面量档外（mk-primitives 99px×2、14px×1、
+   admin-theme 14px×1），已当场修掉，故基线从 0 起算而不是把违规写进基线。 */
+const CSS_RADIUS_TARGETS = readdirSync(join(SRC, 'styles'))
+  .filter((f) => f.endsWith('.css'))
+  .map((f) => posix.join('src', 'styles', f))
+for (const relPath of CSS_RADIUS_TARGETS) {
+  const abs = join(ROOT, relPath)
+  if (!existsSync(abs)) continue
+  const body = stripKeyframes(readFileSync(abs, 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''))
+  for (const m of body.matchAll(/border-radius\s*:\s*([^;}]*)/g)) {
+    if (!isRadiusOk(m[1].trim())) radiusCounts[relPath] = (radiusCounts[relPath] || 0) + 1
+  }
+  for (const m of body.matchAll(/box-shadow\s*:\s*([^;}]*)/g)) {
+    if (!isShadowOk(m[1].trim())) shadowCounts[relPath] = (shadowCounts[relPath] || 0) + 1
+  }
+}
+
+/* ---------- 令牌取值自检：档位令牌的**定义**必须落在阶梯上 ----------
+   上面接受 `var(--radius-*)` 这类引用，代价是引用处不再逐个求值。补这一道，
+   保证「整条链的字面量起点」有且只有阶梯内的值 —— 否则往别名链里塞一个
+   13px，规则 14/15 会一路绿灯放行。只查名里带 radius/shadow 的自定义属性，
+   且只查字面量取值（转发 var() 的不查，它由链上另一处的定义负责）。 */
+const offLadderTokenDefs = []
+for (const relPath of CSS_RADIUS_TARGETS) {
+  const abs = join(ROOT, relPath)
+  if (!existsSync(abs)) continue
+  const body = stripKeyframes(readFileSync(abs, 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''))
+  for (const m of body.matchAll(/(--[\w-]*(?:radius|shadow)[\w-]*)\s*:\s*([^;}]+)/g)) {
+    const [, name, raw] = m
+    const v = raw.trim()
+    if (v === 'none' || v.startsWith('var(')) continue          // 转发不重复判
+    if (/radius/.test(name)) {
+      if (!isRadiusOk(v)) offLadderTokenDefs.push({ file: relPath, name, value: v })
+    } else {
+      // 阴影的「三档」不是几个固定字符串（它是 0 1px 2px … 这样的自由组合），
+      // 拿文本比对分不清档位。规范对阴影真正硬的那条要求是**全中性**（SPEC §0），
+      // 所以这里只查染色量：把每个 rgba 通道乘上 alpha，看它最多能推偏底色多少。
+      // 规范自己的 --wf-shadow-raised 用 slate rgba(15,23,42,.04/.06)，推偏 ≤2；
+      // 彩色光晕（如 rgba(59,130,246,.5)）推偏上百 → 报。
+      for (const one of v.split(/,(?![^(]*\))/)) {
+        const m2 = one.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,/]\s*([\d.]+))?/)
+        if (!m2) continue
+        const a = m2[4] === undefined ? 1 : +m2[4]
+        const p = [+m2[1], +m2[2], +m2[3]].map((x) => x * a)
+        if (Math.max(...p) - Math.min(...p) > 8) {
+          offLadderTokenDefs.push({ file: relPath, name, value: v })
+          break
+        }
+      }
+    }
+  }
+}
 
 /* 规则 8：var(--*) 引用的自定义属性必须已定义（引用面 = admin-redesign + 原语层 mk/ + src/styles）
    2026-10-02 放宽到任意前缀：前缀只是命名约定，不能当作"已定义"的证明 —— --mk-ep-primary-bg
@@ -1047,6 +1133,20 @@ if (shadowRegressions.length) {
 ✖ 规则 15：页面 scoped 非法 box-shadow 不得超过基线（只降不升）`)
   console.log('  阴影三档：面=none、悬浮/弹层=var(--mk-shadow-*)、描边=inset；彩色光晕/自写投影禁止（SPEC v2 §0.5）。')
   for (const v of shadowRegressions) console.log(`    ${v.file}: ${v.base} → ${v.now}`)
+}
+
+/* 规则 19：档位令牌的**取值**必须落在阶梯上（硬失败，不进基线）。
+   与 14/15 的分工：14/15 拦「引用处」，这条拦「定义处」。因为 14/15 现在放行
+   `var(--radius-*)` 这类转发，光靠引用处检查会让「往别名链里塞 13px」一路绿灯；
+   这一条把整条链的字面量起点钉死。硬失败而非棘轮的理由与 17/18 一致：
+   存量已清零，任何新增都是刚写进去的，没有「历史包袱」需要豁免。 */
+if (offLadderTokenDefs.length) {
+  failed = true
+  console.log(`
+✖ 规则 19：档位令牌的定义值落在阶梯外（${offLadderTokenDefs.length} 处）`)
+  console.log('  令牌是整条引用链的起点：这里写了档位外的值，所有 var() 引用处都会合法地继承它。')
+  console.log('  圆角阶梯 4/6/8/12/16/999（+0/50%）；阴影必须全中性（SPEC §0，禁止彩色光晕）。')
+  for (const v of offLadderTokenDefs) console.log(`    ${v.file}  ${v.name}: ${v.value.slice(0, 60)}`)
 }
 
 const baseSmallFontRegressions = []

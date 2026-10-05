@@ -1,7 +1,7 @@
 /**
- * Skills 页头（单行状态条）+ 可读性批（2026-10）：
+ * Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）+ 可读性批（2026-10）：
  * - 成功率精度/阈值/兜底走 rate-utils 单点（99.9% 不再显示 100%；<90 红 / <97 琥珀）
- * - liveCount 三态（live … / live ? / 红字 0 个 live）
+ * - liveCount 三态（… / ? / 红 0）
  * - 「状态」列更名「完成度」；失败行「查失败」intent 直达；P95 默认隐藏
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -96,7 +96,12 @@ async function mountSkills(live?: { profiles?: unknown[]; stats?: Record<string,
   return wrapper
 }
 
-describe('Skills 新页头（单行状态条）', () => {
+describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', () => {
+  /** 按标签取 KPI 卡（run 页签的统计带） */
+  function kpiOf(w: ReturnType<typeof mount>, label: string) {
+    return w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label);
+  }
+
   beforeEach(() => {
     liveSkillProfiles.value = []
     liveSkillStatsMap.value = {}
@@ -105,29 +110,28 @@ describe('Skills 新页头（单行状态条）', () => {
     getReconciliationMock.mockResolvedValue({ data: { data: { items: [], completion: {} } } })
   })
 
-  it('不再渲染 MkOverview 块（已统一为单行状态条）', async () => {
+  it('不再渲染 MkOverview 块；状态条已退役换 KPI 卡带', async () => {
     const w = await mountSkills()
     expect(w.find('.mk-overview').exists()).toBe(false)
-    expect(w.find('.mk-status').exists()).toBe(true)
+    expect(w.find('.mk-status').exists()).toBe(false)
+    expect(w.find('.mk-kpi-grid').exists()).toBe(true)
   })
 
-  it('状态条显示成功率/失败节点/空闲/平均耗时 meta', async () => {
+  it('KPI 卡带：成功率/空闲/平均耗时卡（失败节点由卡头「仅看需关注」pill 单源承载）', async () => {
     const w = await mountSkills()
-    const meta = w.findAll('.mk-status__meta').map((m) => m.text())
-    const linkTexts = w.findAll('.mk-status__meta-link').map((m) => m.text())
-    // 成功率 76.7%（100+50 调用，30+5 失败 → 115/150，1 位小数精度）
-    expect(meta.some((t) => t.includes('成功率'))).toBe(true)
-    const rateMeta0 = w.findAll('.mk-status__meta').find((m) => m.text().includes('成功率'))!
-    expect(rateMeta0.text()).toContain('76.7%（115/150）')
-    expect(linkTexts.some((t) => t.includes('失败节点'))).toBe(true)
-    expect(meta.some((t) => t.includes('空闲'))).toBe(true)
-    expect(meta.some((t) => t.includes('平均耗时'))).toBe(true)
-    // 总调用已并入成功率括号（如 76.7%（115/150）），不再独立展示
-    expect(meta.some((t) => t.includes('成功率') && t.includes('（'))).toBe(true)
-    // 成功率 title 披露全站统一阈值（着色必须带条件阈值）
-    const rateMeta = w.findAll('.mk-status__meta').find((m) => m.text().includes('成功率'))!
-    expect(rateMeta.attributes('title')).toContain('<90% 红')
-    expect(rateMeta.attributes('title')).toContain('<97% 琥珀')
+    // 成功率 76.7%（100+50 调用，30+5 失败 → 115/150，1 位小数精度）+ 口径 hint + 阈值 title
+    const rate = kpiOf(w, '成功率')!
+    expect(rate.find('.mk-kpi__num').text()).toBe('76.7%')
+    expect(rate.find('.mk-kpi__hint').text()).toContain('115/150')
+    expect(rate.attributes('title')).toContain('<90% 红')
+    expect(rate.attributes('title')).toContain('<97% 琥珀')
+    // 空闲（skill:c 0 调用）/ 平均耗时卡在
+    expect(kpiOf(w, '空闲')!.find('.mk-kpi__num').text()).toBe('1')
+    expect(kpiOf(w, '平均耗时')!.find('.mk-kpi__num').text()).toBeTruthy()
+    // 失败节点不再单列：卡头 pill 承载同源计数
+    expect(w.text()).not.toContain('失败节点')
+    expect(w.text()).toContain('仅看需关注')
+    w.unmount()
   })
 
   it('成功率精度：99.9% 显示 99.9%（toFixed(0) 曾把它抹成 100%）', async () => {
@@ -135,53 +139,52 @@ describe('Skills 新页头（单行状态条）', () => {
       profiles: [{ id: 'skill:a', name: 'A', agentId: 'agent-1', agentName: '阶段一', category: 'teaching' }],
       stats: { 'skill:a': { calls: 1000, errors: 1, avgMs: 100 } },
     })
-    const rateMeta = w.findAll('.mk-status__meta').find((m) => m.text().includes('成功率'))!
-    expect(rateMeta.text()).toContain('99.9%')
-    expect(rateMeta.text()).not.toContain('100%')
+    expect(kpiOf(w, '成功率')!.find('.mk-kpi__num').text()).toBe('99.9%')
+    expect(w.text()).not.toContain('100%')
     w.unmount()
   })
 
-  it('失败节点计数可点击切换「仅看需关注」', async () => {
+  it('「仅看需关注」pill 点击切换筛选（原状态条失败节点 meta-link 的动作迁卡头 pill）', async () => {
     const w = await mountSkills()
-    const link = w.find('.mk-status__meta-link')
-    expect(link.exists()).toBe(true)
-    expect(link.text()).toContain('失败节点')
-    await link.trigger('click')
+    const pill = w.findAll('.mk-pill').find((p) => p.text().includes('仅看需关注'))!
+    expect(pill).toBeTruthy()
+    await pill.trigger('click')
     expect((w.vm as any).onlyAttention).toBe(true)
     // 激活态类
-    expect(link.classes()).toContain('mk-status__meta-link--on')
+    expect(pill.classes()).toContain('mk-pill--active')
   })
 
   it('成功率 tone 着色：77% < 90 归红档（全站阈值收敛 <90 红 / <97 琥珀，旧 <70/<90 私有口径退役）', async () => {
     const w = await mountSkills()
-    const rateMeta = w.findAll('.mk-status__meta').find((m) => m.text().includes('成功率'))!
-    expect(rateMeta.classes()).toContain('mk-status__meta--bad')
-    expect(w.findAll('.mk-status__meta--warn').length).toBe(0)
-  })
-
-  it('liveCount 三态：对账就绪且为 0 → 红字「0 个 live」（全 draft 是真异常，不再静默隐藏）', async () => {
-    const w = await mountSkills()
-    const live = w.findAll('.mk-status__meta').find((m) => m.text().includes('个 live'))!
-    expect(live.text()).toBe('0 个 live')
-    expect(live.classes()).toContain('mk-status__meta--bad')
+    const rate = kpiOf(w, '成功率')!
+    expect(rate.classes()).toContain('mk-kpi--bad')
+    expect(w.findAll('.mk-kpi--warn').length).toBe(0)
     w.unmount()
   })
 
-  it('liveCount 三态：对账加载中 → 「live …」', async () => {
+  it('liveCount 三态：对账就绪且为 0 → 红 0（全 draft 是真异常，不再静默隐藏）', async () => {
+    const w = await mountSkills()
+    const live = kpiOf(w, 'live')!
+    expect(live.find('.mk-kpi__num').text()).toBe('0')
+    expect(live.classes()).toContain('mk-kpi--bad')
+    w.unmount()
+  })
+
+  it('liveCount 三态：对账加载中 → 「…」', async () => {
     getReconciliationMock.mockReturnValue(new Promise(() => {}))
     const w = await mountSkills()
-    const live = w.findAll('.mk-status__meta').find((m) => m.text().includes('live'))!
-    expect(live.text()).toBe('live …')
-    expect(live.classes()).not.toContain('mk-status__meta--bad')
+    const live = kpiOf(w, 'live')!
+    expect(live.find('.mk-kpi__num').text()).toBe('…')
+    expect(live.classes()).not.toContain('mk-kpi--bad')
     w.unmount()
   })
 
-  it('liveCount 三态：对账加载失败 → 灰「live ?」（读不到 ≠ 0）', async () => {
+  it('liveCount 三态：对账加载失败 → 「?」（读不到 ≠ 0）', async () => {
     getReconciliationMock.mockRejectedValue(new Error('recon boom'))
     const w = await mountSkills()
-    const live = w.findAll('.mk-status__meta').find((m) => m.text().endsWith('live ?'))!
-    expect(live.text()).toBe('live ?')
-    expect(live.classes()).not.toContain('mk-status__meta--bad')
+    const live = kpiOf(w, 'live')!
+    expect(live.find('.mk-kpi__num').text()).toBe('?')
+    expect(live.classes()).not.toContain('mk-kpi--bad')
     expect(live.attributes('title')).toContain('recon boom')
     w.unmount()
   })

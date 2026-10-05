@@ -1,10 +1,12 @@
 ﻿<template>
-  <details ref="recPanelRef" class="mk-card sk-rec" :open="recOpen">
-    <summary class="mk-card__head sk-rec__summary">
+  <!-- 2026-10-05：整卡折叠退役（details 包壳）——唯一挂载点是健康中心的「对账」页签，
+       页签已承担分区，卡头回归常驻；?recon=1 深链保留自动滚动定位 -->
+  <section ref="recPanelRef" class="mk-card sk-rec">
+    <div class="mk-card__head">
       <div class="sk-rec__title">
         <h3 class="mk-card__title">技能对账</h3>
         <span class="mk-card__meta" title="核对四个来源的登记是否一致：配置文件清单（manifest）、系统运行注册（gateway）、生效版本（ACTIVE prompt）、技能登记册">配置文件 × 运行注册 × 生效版本 × 登记册</span>
-        <button v-if="recDiff" type="button" class="mk-link sk-rec__clear" @click.stop="clearRecDiff">✕ 清除差集定位</button>
+        <button v-if="recDiff" type="button" class="mk-link sk-rec__clear" @click="clearRecDiff">✕ 清除差集定位</button>
       </div>
       <MkLoading v-if="recLoading" inline />
       <template v-else-if="recReport">
@@ -16,9 +18,9 @@
           <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="登记册已删除/不存在，但注册记录仍残留（幽灵注册）">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
           <span v-else class="mk-pill">失效注册 0</span>
         </div>
-        <button type="button" class="sk-rec__refresh" :disabled="recLoading" @click.stop="refresh">刷新</button>
+        <button type="button" class="sk-rec__refresh" :disabled="recLoading" @click="refresh">刷新</button>
       </template>
-    </summary>
+    </div>
 
     <MkEmptyState
       v-if="recError"
@@ -44,7 +46,7 @@
         <span class="mk-card__meta" title="异常 = 未注册（配置文件缺失）/ 缺 ACTIVE（无生效版本）/ 未上线（完成度非 live）">异常 = 未注册 / 无生效版本 / 未上线</span>
       </div>
       <div class="mk-table-scroll">
-        <table v-if="recReport.items.length" class="mk-table sk-table sk-rec-table mk-table--fixed">
+        <table v-if="recReport.items.length && recPageRows.length" class="mk-table sk-table sk-rec-table mk-table--fixed">
           <colgroup>
             <col style="width:var(--mk-col-text)">
             <col style="width:var(--mk-col-badge)">
@@ -116,6 +118,13 @@
             </template>
           </tbody>
         </table>
+        <!-- EG21：筛选后 0 行时表体不再空白——落共享空态 MkEmptyState（compact 档，
+             一句现状结论），而非手写 .mk-empty（设计守卫规则 4）。 -->
+        <MkEmptyState
+          v-else-if="recReport.items.length"
+          compact
+          :title="recEmptyText"
+        />
       </div>
       <div v-if="recCanMore" class="mk-list-more">
         <button type="button" class="mk-link" @click="recLoadMore">加载更多（已显示 {{ recShown.length }} / {{ recFlat.length }}）</button>
@@ -140,7 +149,7 @@
       action-busy-text="刷新中…"
       @action="refresh"
     />
-  </details>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -168,7 +177,6 @@ const recReport = computed<SkillReconciliationReport | null>(() =>
 );
 const recError = computed<string>(() => (props.error !== undefined ? props.error || "" : ownError.value));
 const recLoading = ref(false);
-const recOpen = ref(false);
 const recOnlyAbnormal = ref(false);
 const route = useRoute();
 const recDiff = ref("");
@@ -179,13 +187,12 @@ function applyRecQuery() {
   const recon = String(route.query.recon || "");
   const diff = typeof route.query.diff === "string" ? route.query.diff : "";
   recDeepLinked = recon === "1" || recon === "true";
-  recOpen.value = recDeepLinked;
   recDiff.value = diff === "unregistered" || diff === "active-missing" || diff === "live" ? diff : "";
 }
-function clearRecDiff() { recDiff.value = ""; recOpen.value = false; }
+function clearRecDiff() { recDiff.value = ""; }
 
 watch(recReport, async (report) => {
-  if (!report || !recDeepLinked || !recOpen.value) return;
+  if (!report || !recDeepLinked) return;
   await nextTick();
   recPanelRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
@@ -278,6 +285,15 @@ const recPageRows = computed<RecEntry[]>(() => {
   return out;
 });
 
+/** 筛选后 0 行的空态文案（EG21）：把「空表体」换成可读结论——「无异常技能：N 项全部对账一致」等 */
+const recEmptyText = computed<string>(() => {
+  const total = recReport.value?.summary.total ?? 0;
+  if (recDiff.value === "unregistered") return "无未注册 Skill：全部已在配置文件中声明";
+  if (recDiff.value === "active-missing") return "无缺生效版本的 Skill：全部有 ACTIVE prompt";
+  if (recDiff.value === "live") return "无完成度 live 的 Skill";
+  return `无异常技能：${total} 项全部对账一致`;
+});
+
 const recKindText = (kind: string) => ({ mainline: "主线", aux: "辅助", "handler-only": "纯函数" })[kind] || kind;
 function recDotTone(row: RecRow) {
   if (row.diff === "unregistered") return "error";
@@ -296,17 +312,12 @@ function recGateDetail(completion: SkillCompletion): string {
   return "全部门槛通过";
 }
 
-defineExpose({ refresh, recReport, recOpen, recDiff, openPanel });
-
-/** 供父组件（健康中心概要卡跳转）展开对账面板 */
-function openPanel() { recOpen.value = true; }
+// 2026-10-05：整卡折叠退役后 openPanel/recOpen 不再有意义（唯一挂载点=健康中心「对账」页签，
+// 页签即展开态）；refresh/recDiff 仍暴露给潜在宿主
+defineExpose({ refresh, recReport, recDiff });
 </script>
 <style scoped>
 .sk-rec { margin-top: 0; }
-.sk-rec__summary { cursor: pointer; user-select: none; list-style: none; }
-.sk-rec__summary::-webkit-details-marker { display: none; }
-.sk-rec__summary::before { content: "▸"; display: inline-block; margin-right: 6px; color: var(--mk-blue); transition: transform 0.14s ease; }
-.sk-rec[open] > .sk-rec__summary::before { transform: rotate(90deg); }
 .sk-rec-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px 4px; }
 .sk-rec__title { display: flex; flex-direction: column; gap: 2px; }
 .sk-rec__clear { width: fit-content; }

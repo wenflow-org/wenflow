@@ -39,8 +39,8 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('导航（2026-09-29 拆页 + 健康中心独立；2026-10-01 学习者卡库；2026-10-04 学习状态拆页 + Prompt 评估折入 skills）：7 分组 / 19 场景与目标 IA 完全一致', () => {
-    expect(MOCK_SCENES).toHaveLength(19);
+  it('导航（2026-09 拆页 + 健康中心独立；2026-10-01 学习者卡库；2026-10-04 学习状态拆页 + 批量实验下线 + Prompt 评估折入 skills）：7 分组 / 18 场景与目标 IA 完全一致', () => {
+    expect(MOCK_SCENES).toHaveLength(18);
     // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
     const groups = MOCK_SCENES.map((s) => s.group);
     expect([...new Set(groups)]).toEqual(['总览', '教学', '虚拟学习者', 'Skill', '观测', '系统', '运营']);
@@ -49,7 +49,7 @@ describe('AdminConsole 页面注册表', () => {
     expect(byGroup).toEqual({
       总览: ['overview'],
       教学: ['people', 'learner-state', 'teaching-sessions', 'goal-conversations', 'learning-paths', 'memory-review'],
-      虚拟学习者: ['virtual-learners', 'virtual-learner-cards', 'batch-experiments'],
+      虚拟学习者: ['virtual-learners', 'virtual-learner-cards'],
       Skill: ['orchestrator', 'skills'],
       观测: ['execution-logs', 'token-cost', 'audit-logs'],
       系统: ['health-center', 'api-config', 'ops-center'],
@@ -57,11 +57,12 @@ describe('AdminConsole 页面注册表', () => {
     });
   });
 
-  it('退役场景（已折入宿主 tab）不再出现在侧栏清单', () => {
+  it('退役场景（已折入宿主 tab / 已下线）不再出现在侧栏清单', () => {
     const ids = new Set(MOCK_SCENES.map((s) => s.id));
-    // health-center 2026-09-29 回归侧栏（系统组独立场景），故不在退役名单
+    // health-center 2026-09-29 回归侧栏（系统组独立场景），故不在退役名单；
+    // batch-experiments 2026-10-04 整体下线（运行态并入 virtual-learners、资产输入归卡库，URL 重定向）
     // prompt-eval 2026-10-04 折入 skills 宿主「Prompt 评估」页签（旧 URL 重定向）
-    for (const retired of ['feedback', 'ops-achievements', 'messages', 'addons', 'session-security', 'prompt-eval']) {
+    for (const retired of ['feedback', 'ops-achievements', 'messages', 'addons', 'session-security', 'batch-experiments', 'prompt-eval']) {
       expect(ids.has(retired), `退役场景「${retired}」不应在侧栏清单`).toBe(false);
     }
   });

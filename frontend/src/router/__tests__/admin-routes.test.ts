@@ -80,16 +80,15 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.params.agentId).toEqual(['goal-agent']);
   });
 
-  it('导航收敛旧 URL 重定向（2026-09-04 合并 + 2026-09-29 学习会话拆回独立页）', async () => {
+  it('导航收敛旧 URL 重定向（2026-09-04 合并 + 2026-09-29 学习会话拆回独立页 + 2026-10-04 学习状态拆出独立页）', async () => {
     await router.push('/admin/users');
     expect(router.currentRoute.value.path).toBe('/admin/people');
-    expect(router.currentRoute.value.query.tab).toBe('account');
+    // 2026-10-04 学习状态拆页后 People 回归单视图，tab=account / tab=state 一律就地归零（People.vue 同口径）
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
     await router.push('/admin/learner-center');
-    expect(router.currentRoute.value.path).toBe('/admin/people');
-    expect(router.currentRoute.value.query.tab).toBe('state');
+    expect(router.currentRoute.value.path).toBe('/admin/learner-state');
     await router.push('/admin/learner-models/u1');
-    expect(router.currentRoute.value.path).toBe('/admin/people');
-    expect(router.currentRoute.value.query.tab).toBe('state');
+    expect(router.currentRoute.value.path).toBe('/admin/learner-state');
     // 2026-09-29 拆页：教学会话/目标对话/学习路径各自成场景，旧合并 URL /admin/sessions 反向重定向
     await router.push('/admin/sessions');
     expect(router.currentRoute.value.path).toBe('/admin/teaching-sessions');
@@ -140,11 +139,11 @@ describe('Admin 路由重定向', () => {
 });
 
 describe('Admin 主路由解析', () => {
-  it('/admin/users → /admin/people?tab=account（用户与学习者 · 账号 tab）', async () => {
+  it('/admin/users → /admin/people（2026-10-04 学习状态拆页后单视图，tab 归零）', async () => {
     await router.push('/admin/users');
     expect(router.currentRoute.value.name).toBe('AdminConsole');
     expect(router.currentRoute.value.params.page).toBe('people');
-    expect(router.currentRoute.value.query.tab).toBe('account');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
   });
 
   it('/admin/skills/:agentId → SkillDesignPage 路由（不被 :page 吞掉）', async () => {
@@ -170,6 +169,13 @@ describe('Admin 主路由解析', () => {
     await router.push('/admin/health?refresh=1');
     expect(router.currentRoute.value.params.page).toBe('health-center');
     expect(router.currentRoute.value.query.refresh).toBe('1');
+  });
+
+  it('/admin/batch-experiments → /admin/virtual-learners（批量实验 2026-10-04 下线，旧深链兼容）', async () => {
+    await router.push('/admin/batch-experiments?includeTest=true');
+    expect(router.currentRoute.value.name).toBe('AdminConsole');
+    expect(router.currentRoute.value.params.page).toBe('virtual-learners');
+    expect(router.currentRoute.value.query.includeTest).toBe('true');
   });
 
   it('未知 page 仍解析到 AdminConsole（组件内回退 overview）', async () => {

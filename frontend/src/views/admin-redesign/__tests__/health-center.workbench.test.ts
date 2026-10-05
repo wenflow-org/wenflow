@@ -1,10 +1,10 @@
 /**
  * 健康中心（巡检工作台 G1）冒烟测试：
- * 1. 组件挂载（demo 模式）：不请求后端，仅状态条
- * 2. live 模式 + summary mock：概要卡四张 / 健康检查高亮分组 + 正常折叠组 / 行内明细展开 / 漂移 / 对账 / 完成度
+ * 1. 组件挂载（live 模式）：不请求真实后端（2026-10-04 状态条退役，页头仅剩轮询注记）
+ * 2. live 模式 + summary mock：概要卡四张 / 四域页签 / 健康检查高亮分组 + 正常折叠组 / 行内明细展开 / 漂移 / 对账 / 完成度
  * 3. 计数口径：漂移卡只计「需处理」（契约 + W4），运行时遥测为只读观测不计入
  * 4. 网络失败降级：wb-failed + 重试可恢复
- * 5. ?refresh=1 深链强制刷新
+ * 5. ?refresh=1 深链强制刷新；?tab= 深链直达对应域页签
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -120,11 +120,11 @@ describe('健康中心（G1）', () => {
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
     expect(getSummaryMock).toHaveBeenCalledWith(false);
 
-    // 全局状态条：技能数 / 异常（含异常技能）；「上线 N/M」2026-10-02 下沉概要 KPI hint（用词统一「已上线」）
-    const bar = wrapper.find('.mk-status').text();
-    expect(bar).toContain('技能 8');
-    expect(bar).toContain('异常 6');
-    expect(bar).not.toContain('上线');
+    // 2026-10-04 状态条退役（原断言读全局条「技能 8 / 异常 6」）：条下线后技能总数并入完成度卡
+    // hint、异常计数由概要 KPI 承载（检查异常 4 + 完成度未达标 2 = 原徽章「异常 6」同源拆解）、
+    // 「更新于」并入页头注记；「上线」旧用词不回归（统一「已上线」，见下方 cards[3] 断言）
+    expect(wrapper.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
+    expect(wrapper.find('.hc-refresh-note').text()).toContain('更新于');
 
     // 概要 KPI 四张（P1#30 语义统一：value = 需处理数（0=好），总数/达成数下沉 hint，
     // tone 只挂真正异常卡——修复「登记总数 8 被着成警示琥珀」）
@@ -137,7 +137,8 @@ describe('健康中心（G1）', () => {
     expect(cards[2].text()).toContain('5');                    // 对账异常（value=异常数，非登记总数）
     expect(cards[2].text()).toContain('登记 8 项');
     expect(cards[3].text()).toContain('2');                    // 完成度未达标
-    expect(cards[3].text()).toContain('已上线 2/8');            // 达成数下沉 hint + 用词统一「已上线」
+    expect(cards[3].text()).toContain('已上线 2/8');           // 达成数下沉 hint + 用词统一「已上线」
+    expect(cards[3].text()).toContain('共 8 个技能');           // 原状态条「技能 8」2026-10-04 并入本卡 hint
     expect(cards[3].attributes('title')).toContain('未达 live');
 
     // 健康检查 13 行全部渲染；异常/关注项默认展开，正常项收进折叠组
@@ -147,13 +148,49 @@ describe('健康中心（G1）', () => {
     expect(wrapper.findAll('.hc-check--warn').length).toBe(2);
     expect(wrapper.find('.hc-ok__summary').text()).toContain('其余 9 项正常');
 
-    // 漂移区：契约/W4 红标，运行时遥测为信息蓝标（只读观测）
+    // 四域页签（2026-10-04 平铺改页签）：四枚与概要 KPI 一一对应，默认落在健康检查
+    const tabs = wrapper.findAll('.hc-tabs .tab');
+    expect(tabs.map((t) => t.text())).toEqual(['健康检查', '漂移', '对账', '完成度']);
+    expect(tabs[0].attributes('aria-selected')).toBe('true');
+
+    // 漂移页签：点概要卡「漂移」切入（原锚点滚动改为切页签）；契约/W4 红标，运行时遥测为信息蓝标
+    await cards[1].trigger('click');
+    await nextTick();
+    expect(wrapper.find('.hc-tabs .tab[aria-selected="true"]').text()).toBe('漂移');
     const driftItems = wrapper.findAll('.hc-drift__item');
     expect(driftItems.length).toBe(3);
     expect(wrapper.find('.hc-drift .mk-badge--info').exists()).toBe(true);
 
     // 对账卡 tooltip 说明同源不重复计数
     expect(cards[2].attributes('title')).toContain('同源');
+  });
+
+  it('漂移页签空态：无漂移时显「全部一致」ok 卡（页签常驻，不再整段隐匿）', async () => {
+    getSummaryMock.mockResolvedValue({
+      data: { success: true, data: makeReport({ drift: { contract: 0, hash: 0, runtime: 0 } }) },
+    });
+    const wrapper = await mountWorkbench();
+    await wrapper.findAll('.hc-tabs .tab').find((t) => t.text() === '漂移')!.trigger('click');
+    await nextTick();
+    expect(wrapper.find('.hc-drift-none').exists()).toBe(true);
+    expect(wrapper.text()).toContain('全部一致');
+    wrapper.unmount();
+  });
+
+  it('?tab= 深链直达对应域页签（刷新/分享可还原）', async () => {
+    getSummaryMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
+    dataSource.value = 'live';
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
+    });
+    await router.push('/admin/health-center?tab=recon');
+    await router.isReady();
+    const wrapper = mount(HealthCenter, { global: { plugins: [router] } });
+    await flushPromises();
+    await nextTick();
+    expect(wrapper.find('.hc-tabs .tab[aria-selected="true"]').text()).toBe('对账');
+    wrapper.unmount();
   });
 
   it('P2 顺手 + P1#28：服务卡按 tone 排序（error→warn→ok）；fixHint 常驻在检查行动作区', async () => {

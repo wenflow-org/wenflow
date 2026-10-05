@@ -103,6 +103,11 @@
 
 故事可改：`PUT /:id/stories/:storyIndex`（可不改代码注入自定义故事）；`DELETE /:id/stories/:storyIndex`。
 
+> 注（2026-10-04）：管理台「批量实验」页已下线——批量发起走「虚拟学习者」列表页的「批量新建」
+> （`POST /api/admin/virtual-learners/batch-create`，后台队列生成），资产输入走「学习者卡库」。
+> `POST /api/admin/batch-experiments` 路由与调度器保留（`batch_experiments` 两表建页至今 0 行），
+> 供脚本/后续独立面板按需直连。
+
 ---
 
 ## 6. 扮演机制（模拟器）

@@ -1,17 +1,5 @@
 <template>
-  <div :class="embedded ? 'add-embedded' : 'mk-page'">
-    <!-- 状态条（embedded 时由模型与接入宿主承载域计数，不再渲染） -->
-    <div v-if="!embedded" class="mk-status" :class="capabilityRows.length ? 'mk-status--ok' : 'mk-status--muted'">
-      <span class="mk-status__dot"></span>
-      <strong class="mk-status__title">外挂能力</strong>
-      <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">共 {{ capabilityRows.length }} 个</span>
-      <span class="mk-status__meta">MCP {{ mcpCount }}</span>
-      <span class="mk-status__meta">能力 Skill {{ capabilityCount }}</span>
-      <span class="mk-status__meta">已接入 {{ readyCount }}</span>
-      <span class="mk-status__meta">MCP 服务 {{ mcpTools.length }}</span>
-    </div>
-
+  <div class="add-embedded">
     <!-- ① 外挂能力 + ② MCP 服务：行数少时并栏（审计 E3），数据增长后回到单列全宽 -->
     <div class="ac-cards" :class="{ 'ac-cards--side': sideBySide }">
 
@@ -226,9 +214,10 @@ import { toast } from '@/utils/toast'
 
 const router = useRouter()
 
-/** 嵌入模式：作为「模型与接入」页「外挂能力」tab 渲染（仅去掉外层状态条；宿主承载域计数与刷新）。
+/** 嵌入模式：「模型与接入」页「外挂能力」tab 的唯一挂载形态（ApiConfig 传 embedded）。
+    prop 仅声明以吸收该 attr（声明过的 prop 不落 $attrs/根 DOM），组件内不再分支。
     count 事件：外挂能力数上报（宿主「外挂能力 N」徽章） */
-withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+defineProps<{ embedded?: boolean }>()
 const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
 /* ---------- ① 外挂能力（白名单驱动） ---------- */
@@ -321,10 +310,6 @@ const capabilityRows = computed<CapabilityRow[]>(() => {
 watch(capabilityRows, (rows) => {
   emit('count', rows.length)
 }, { immediate: true })
-
-const mcpCount = computed(() => capabilityRows.value.filter((r) => r.type === 'mcp').length)
-const capabilityCount = computed(() => capabilityRows.value.filter((r) => r.type === 'capability').length)
-const readyCount = computed(() => capabilityRows.value.filter((r) => r.ready).length)
 
 /* 2026-09-29 拆回模型与接入宿主 tab 后容器从全宽变为 ac-tab-body 内嵌，
    半宽卡内能力表 874px 溢出 506px 容器 370px——外挂能力表和 MCP 服务改为堆叠全宽 */

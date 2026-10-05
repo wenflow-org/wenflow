@@ -1,6 +1,6 @@
 /**
  * VirtualLearners P1 批量管理与生命周期视图（A1/A2）测试：
- * 分区计数状态条（全量口径）/ 已截断提示 / 复选框批量条 /
+ * 分区筛选 chips（2026-10-04 自页头状态条迁入卡头）/ 活动会话 hint / 已截断提示 / 复选框批量条 /
  * 批量终止（profileIds → terminate 端点）/ 批量清理卡死与一键回收（reclaim-stale dryRun → 确认落地）/
  * 进行中列直达座舱 / 卡死·失败 bad 色标注 / 批量删除标记待 2B
  */
@@ -152,7 +152,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     openSubPageMock.mockClear();
   });
 
-  it('状态条：会话口径活动数 + 画像口径分区计数 + 已截断提示', async () => {
+  it('状态条已退役：分区筛选计数迁卡头 chips + 活动会话进完成率 hint + 已截断提示保留', async () => {
     liveVirtualSessionStats.value = { created: 3, running: 2, failed: 1, abandoned: 1, completed: 0, total: 7 };
     liveVirtualStaleCount.value = 2;
     liveVirtualsTotal.value = 80;
@@ -162,13 +162,19 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
       makeVirtual(3, { failedCount: 1, stalledCount: 2 }),
     ];
     const w = await mountPage();
-    // 会话口径：活动 = running 2 + created 3
+    // 2026-10-04 页头状态条整体退役（教学会话同款判例）：复读的「共 N 人」随条删除
+    expect(w.find('.mk-status').exists()).toBe(false);
+    // 会话口径：活动 = running 2 + created 3 → 完成率卡 hint（同一会话漏斗）
     expect(w.text()).toContain('活动会话 5');
-    // 画像口径分区筛选计数（P2：「需关注」已正名「曾失败」，口径=累计失败）
-    expect(w.text()).toContain('进行中 1');
-    expect(w.text()).toContain('已暂停 1');
-    expect(w.text()).toContain('曾失败 1');
+    // 画像口径分区筛选计数（P2：「需关注」已正名「曾失败」，口径=累计失败）→ 卡头工具栏 chips
+    const head = w.find('.mk-card__head');
+    const countOf = (label: string) =>
+      head.findAll('.mk-pill').find((p) => p.text().replace(/\s/g, '').startsWith(label))?.find('.mk-pill__count').text();
+    expect(countOf('进行中')).toBe('1');
+    expect(countOf('已暂停')).toBe('1');
+    expect(countOf('曾失败')).toBe('1');
     expect(w.text()).not.toContain('需关注');
+    // 截断提示迁卡头 meta（与行数同格）
     expect(w.text()).toContain('已截断 · 共 80 人');
     expect(w.text()).toContain('回收卡死（2）');
   });
@@ -431,7 +437,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.find('.vl-state-cell .mk-badge--bad').exists()).toBe(false);
   });
 
-  it('「新建」触发新建弹窗（阶段 2：批量实验已独立成页，弹窗不再受 tab 门控）', async () => {
+  it('「新建」触发新建弹窗（批量实验已下线，列表页「新建/批量新建」是唯一创建入口）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
     const createBtn = w.findAll('button').find((b) => b.text() === '新建')!;

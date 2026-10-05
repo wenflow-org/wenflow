@@ -301,8 +301,14 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/execution-logs'
   },
   // 阶段 2（2026-09-19）：「批量实验」由 virtual-learners 的 tab 提升为独立场景。
-  // /admin/batch-experiments 直连由 /admin/:page 兜底渲染；旧的合并宿主深链
-  // /admin/virtual-learners?tab=experiments 不再需要（落到学习者列表，行为优雅降级）。
+  // 2026-10-04：整体下线——运行态并入 virtual-learners（批量新建/并发配额/全局限速/实例流水），
+  // 资产输入归学习者卡库；且建页至今 batch_experiments 两表 0 行（空占位页）。
+  // 旧深链（书签/外链）重定向到列表页；旧的合并宿主深链 /admin/virtual-learners?tab=experiments
+  // 本就落到学习者列表（页面已不读 tab），行为不变。
+  {
+    path: '/admin/batch-experiments',
+    redirect: (to) => ({ path: '/admin/virtual-learners', query: to.query })
+  },
   {
     // 「Prompt 评估」2026-10-04 下线：折入 skills 宿主「Prompt 评估」页签（组件更名
     // PromptEvalPanel 由 Skills 异步加载，场景注册同步撤销）。旧页内页签键 ?tab=cases|runs

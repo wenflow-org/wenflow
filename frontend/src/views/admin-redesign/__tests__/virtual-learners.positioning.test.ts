@@ -77,39 +77,40 @@ beforeEach(() => {
 });
 
 describe('虚拟学习者定位（D1）', () => {
-  it('无数据时：状态条精简，分区筛选计数全 0（无「创建中」旧叫法）', async () => {
+  it('状态条已退役：筛选 chips 住卡头工具栏，计数全 0（无「创建中」旧叫法）', async () => {
     const wrapper = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
-    const bar = wrapper.find('.mk-status');
-    expect(bar.exists()).toBe(true);
-    expect(bar.text()).toContain('共 0 人');
-    // 分区筛选计数（画像口径；P2「需关注」已正名「曾失败」，口径=累计失败）
-    expect(bar.text()).toContain('进行中 0');
-    expect(bar.text()).toContain('已暂停 0');
-    expect(bar.text()).toContain('曾失败 0');
-    expect(bar.text()).not.toContain('创建中');
+    // 2026-10-04 页头状态条整体退役（教学会话同款判例）：复读的「共 N 人」随条删除
+    expect(wrapper.find('.mk-status').exists()).toBe(false);
+    // 分区筛选计数（画像口径；P2「需关注」已正名「曾失败」，口径=累计失败）→ 卡头工具栏 chips
+    const head = wrapper.find('.mk-card__head');
+    const countOf = (label: string) =>
+      head.findAll('.mk-pill').find((p) => p.text().replace(/\s/g, '').startsWith(label))?.find('.mk-pill__count').text();
+    expect(countOf('进行中')).toBe('0');
+    expect(countOf('已暂停')).toBe('0');
+    expect(countOf('曾失败')).toBe('0');
+    expect(wrapper.text()).not.toContain('创建中');
     wrapper.unmount();
   });
 
-  it('有数据时：状态条活动会话按全量口径（running + created，已失败含 abandoned）', async () => {
+  it('活动会话按全量会话口径（running + created）进完成率卡 hint', async () => {
     liveVirtualSessionStats.value = { created: 1, running: 2, failed: 3, abandoned: 1, completed: 0, total: 7 };
     const wrapper = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
-    const bar = wrapper.find('.mk-status');
-    expect(bar.exists()).toBe(true);
-    // 活动会话 = running 2 + created 1 = 3
-    expect(bar.text()).toContain('活动会话 3');
+    // 活动会话 = running 2 + created 1 = 3（原状态条读数迁入完成率卡 hint，不再住页头条）
+    expect(wrapper.find('.mk-status').exists()).toBe(false);
+    expect(wrapper.text()).toContain('活动会话 3');
     wrapper.unmount();
   });
 
-  it('manifest 导航中虚拟学习者归入「虚拟学习者」组（阶段 2：实验室独立成组）', () => {
+  it('manifest 导航中虚拟学习者组收敛为两个职责页（运行态 + 卡库；批量实验 2026-10-04 下线）', () => {
     const scene = MOCK_SCENES.find((s) => s.id === 'virtual-learners');
     expect(scene).toBeDefined();
     expect(scene!.group).toBe('虚拟学习者');
-    const batch = MOCK_SCENES.find((s) => s.id === 'batch-experiments');
-    expect(batch).toBeDefined();
-    expect(batch!.group).toBe('虚拟学习者');
+    const groupIds = MOCK_SCENES.filter((s) => s.group === '虚拟学习者').map((s) => s.id);
+    expect(groupIds).toEqual(['virtual-learners', 'virtual-learner-cards']);
+    expect(MOCK_SCENES.find((s) => s.id === 'batch-experiments')).toBeUndefined();
   });
 });

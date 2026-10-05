@@ -326,7 +326,7 @@ describe('结果态方言收敛（统一走字典单源）', () => {
     expect(statusText('abandoned')).toBe('已放弃'); // 页内曾写「已终止」
     expect(statusText('aborted')).toBe('已中止');
     expect(statusText('interrupted')).toBe('已中断');
-    expect(statusText('stopped')).toBe('已停止'); // BatchExperiments 枚举
+    expect(statusText('stopped')).toBe('已停止'); // 停止态枚举（会话/运维处置）
     expect(statusText('done')).toBe('已完成');
   });
 });

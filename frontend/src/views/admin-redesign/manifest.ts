@@ -22,11 +22,17 @@
  * 合一成独立页并归入「系统」组；skills 只留 Skill 运行 / 模型路由 两个 tab。侧栏 17 项/7 组。
  * （同日收尾：参数一致性语义重分类为 consistency——它是 core↔definition 镜像的对等比对，
  *   不是「配置改了没生效」的方向性漂移；19 处镜像滞后已按 b905880c 的 32k 预算同步归零。）
+ *
+ * 2026-10-04（用户拍板）：「批量实验」场景整体下线。其运行态能力已被「虚拟学习者」页吸收
+ * （批量新建 / 并发配额 / 全局限速 / 实例流水），资产输入归「学习者卡库」；且建页至今
+ * batch_experiments / batch_experiment_runs 两表始终 0 行（空占位页）。侧栏「虚拟学习者」
+ * 组收敛为 2 项：虚拟学习者（运行态）+ 学习者卡库（配置态）；旧 URL
+ * /admin/batch-experiments 重定向到 /admin/virtual-learners。侧栏 19 项/7 组。
  */
 
 import type { Component } from 'vue'
 import {
-  Activity, Coins, FlaskConical, HeartPulse, History, IdCard, Layers, LayoutDashboard,
+  Activity, Coins, FlaskConical, HeartPulse, History, IdCard, LayoutDashboard,
   Megaphone, MessagesSquare, Plug, Route, ScrollText, ShieldCheck, Sparkles,
   Target, Users, Workflow, Wrench,
 } from 'lucide-vue-next'
@@ -58,10 +64,9 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'goal-conversations', label: '目标对话', group: '教学', glyph: '话', icon: Target },
   { id: 'learning-paths', label: '学习路径', group: '教学', glyph: '径', icon: Route },
   { id: 'memory-review', label: '记忆与复习', group: '教学', glyph: '忆', icon: History },
-  // 虚拟学习者组：个体实验 / 规模实验 / 卡库
+  // 虚拟学习者组：运行态（虚拟学习者）+ 配置态（学习者卡库）；「批量实验」2026-10-04 下线
   { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟学习者', glyph: '拟', icon: FlaskConical },
   { id: 'virtual-learner-cards', label: '学习者卡库', group: '虚拟学习者', glyph: '卡', icon: IdCard },
-  { id: 'batch-experiments', label: '批量实验', group: '虚拟学习者', glyph: '批', icon: Layers },
   // Skill 组：健康中心已于 2026-09-29 抽出为独立场景（系统组）。
   // 「Prompt 评估」2026-10-04 折入 skills 宿主「Prompt 评估」页签，本组收敛为 2 项
   // （orchestrator · skills）；旧 URL /admin/prompt-eval 在 router 重定向。
