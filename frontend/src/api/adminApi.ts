@@ -980,8 +980,8 @@ export const adminTokenCostApi = {
       params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
     });
   },
-  /** per-user token 排行 */
-  getByUser: async (params?: { days?: number; includeTest?: boolean; limit?: number }) => {
+  /** per-user token 排行（q=按 用户ID/昵称/邮箱 服务端搜索） */
+  getByUser: async (params?: { days?: number; includeTest?: boolean; limit?: number; q?: string }) => {
     return adminAxios.get('/admin/token-cost/by-user', {
       params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
     });

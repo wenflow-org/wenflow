@@ -1122,7 +1122,7 @@ main {
 @media (max-width: 1023px) {
   .hn-hero {
     grid-template-columns: 1fr;
-    /* 原型 wf-phero ≤980：44px 上 / 40px 下 */
+    /* 断点 1023 与页身对齐（原 980 注释已过时）；原型 wf-phero ≤980：44px 上 / 40px 下 */
     padding: 44px 0 40px;
     gap: 28px;
   }

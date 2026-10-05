@@ -280,8 +280,10 @@ router.get('/me/achievements', async (req, res, next) => {
 router.get('/me/sessions', async (req, res, next) => {
   try {
     const userId = req.user.userId;
-    // limit 钳制（1-100），防止无上限分页拉全表
-    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 100);
+    // limit 钳制（1-500），防止无上限分页拉全表；上限对齐调用方——V2Dashboard 近 90 天
+    // streak/节奏窗口与 Profile 均按 500 拉取，旧 100 上限会静默截断重度用户（>100 条会话）
+    // 导致跨月窗口缺数（2026-10-05 评审收敛）
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 500);
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
     // 排除 superseded（stale/failed 行被回收重开：无真实进展，openKey 被新会话接管），

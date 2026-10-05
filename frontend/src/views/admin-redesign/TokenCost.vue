@@ -525,12 +525,16 @@ function fmtCostUsd(v: number): string {
   return v.toFixed(6)
 }
 
+/* 请求序号：切窗竞态下丢弃过期金额响应。旧实现在途即 return，新窗口调用被静默丢弃，
+   在途旧响应回来把旧窗口金额写在新标签下且不自愈（2026-10-05 评审收敛） */
+let costSeq = 0
 async function loadCostSummary() {
-  if (costLoading.value) return
+  const seq = ++costSeq
   costLoading.value = true
   costFailed.value = false
   try {
     const res = await adminTokenCostApi.getSummary({ days: days.value, includeTest: includeTest.value })
+    if (seq !== costSeq) return
     const totals = res.data?.data?.totals ?? null
     costUsd.value = totals?.usd ?? null
     costPricingKnown.value = totals?.pricingKnown ?? false
@@ -538,12 +542,13 @@ async function loadCostSummary() {
     costMissingCalls.value = totals?.callsMissingPricing ?? 0
     missingPricingModels.value = res.data?.pricingStatus?.missingPricingModels ?? []
   } catch {
+    if (seq !== costSeq) return
     /* 金额条为辅助信息：失败显式报错并可重试，绝不静默降级成「无调用」 */
     costFailed.value = true
     costUsd.value = null
     costPricingKnown.value = false
   } finally {
-    costLoading.value = false
+    if (seq === costSeq) costLoading.value = false
   }
 }
 
@@ -564,6 +569,12 @@ watch([days, includeTest], () => {
     byModel.value = []
     loadedKey.value = null
     userSeq += 1 // 作废在途的用户搜索响应，避免旧窗口结果覆盖新窗口
+    // 金额卡独立于 load() 同批数据：一并清空，保证数值与窗口标签同一响应驱动，不留旧窗口读数
+    costUsd.value = null
+    costPricingKnown.value = false
+    costPricedCalls.value = 0
+    costMissingCalls.value = 0
+    missingPricingModels.value = []
   }
   void load()
   void loadCostSummary()
@@ -576,6 +587,7 @@ async function load(force = false) {
   // 仅当「同窗口 + 缓存新鲜 + 已有数据」才短路；否则一律重拉（避免旧窗口数据被读成新窗口）
   if (!force && isPageCacheFresh(key) && summary.value && loadedKey.value === key) return
   const seq = ++loadSeq
+  const uSeq = userSeq // 用户搜索序号快照：窗口加载期间搜索若已接管，本批 byUser 不得回写覆盖
   loading.value = true
   loadFailed.value = false
   try {
@@ -589,7 +601,7 @@ async function load(force = false) {
     if (seq !== loadSeq) return // 窗口已再次切换：丢弃本批过期响应
     summary.value = sumRes.data?.data ?? sumRes.data ?? null
     bySkill.value = (skillRes.data?.data?.items ?? []) as SkillCostRow[]
-    byUser.value = (userRes.data?.data?.items ?? []) as RankRow[]
+    if (uSeq === userSeq) byUser.value = (userRes.data?.data?.items ?? []) as RankRow[]
     byModel.value = (modelRes.data?.data?.items ?? []) as RankRow[]
     loadedKey.value = key
     markPageFetched(key)

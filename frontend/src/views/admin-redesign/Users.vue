@@ -46,9 +46,10 @@
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
+          <!-- CM8：默认隐藏列集变更，存储键必须升 v2——旧键早被历史访问写回，不升会盖掉新默认（判例 ExecLogs/LearnerCenter） -->
           <MkCols
             :col-defs="ulColDefs"
-            storage-key="wf_users_hidden_cols"
+            storage-key="wf_users_hidden_cols_v2"
             :default-hidden="['check', 'created']"
             v-model:hidden="hiddenCols"
           />

@@ -84,7 +84,8 @@
         />
         <!-- 「共 N 个技能」2026-10-04 状态条退役并入本卡 hint（原状态条「技能 N（含 M 个外挂能力）」）：
              四卡 hint 原先都没提技能总数，故下沉此处；外挂拆解口径已在 skillCountTitle（页头注记
-             title）与对账卡 title 披露，不在此复读 -->
+             title）与对账卡 title 披露，不在此复读。
+             （2026-10-05 评审登记：与对账卡 hint「登记 N 项」同值同屏出现两次——是否并轨留用户拍板） -->
         <MkKpi
           label="完成度未达标"
           :value="global.abnormalSkills"

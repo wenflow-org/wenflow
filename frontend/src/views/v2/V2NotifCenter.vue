@@ -772,6 +772,10 @@ onBeforeUnmount(() => {
   font-size: 12.5px; font-weight: 700; color: var(--blue-deep); text-decoration: none;
 }
 .nc__empty-links a:hover { text-decoration: underline; }
+/* LY17/EG20 触控地板：≤1100 抬到 40（与 V2Dashboard .link-muted 同口径） */
+@media (max-width: 1100px) {
+  .nc__empty-links a { min-height: 40px; }
+}
 .nc__empty--error { color: var(--muted); }
 .nc__retry {
   font: inherit; font-size: 12px; font-weight: 700;

@@ -109,14 +109,15 @@
           </thead>
           <tbody>
             <!-- 原型 renderMemory：学习者行/「记忆点」按钮均 data-action="open-learner" → go("learner") 页。
-                 行点击改跳学习者详情页（原型铁令：实体行跳页不开浮层）；「明细」钮保留页内复盘二级视图（记忆点子实体明细，原型允许形态）。 -->
+                 行点击改跳学习者详情页（原型铁令：实体行跳页不开浮层）；「明细」钮保留页内复盘二级视图（记忆点子实体明细，原型允许形态）。
+                 EG1：回车不劫持行内按钮——仅行本身聚焦时 Enter 跳页（.self），聚焦「明细/重新观察」时走按钮自身动作 -->
             <tr
               v-for="row in visibleRows"
               :key="row.userId"
               :class="{ 'mr__row--active': row.userId === selectedId }"
               tabindex="0"
               @click="openSubPage('learner', row.userId)"
-              @keydown.enter.prevent="openSubPage('learner', row.userId)"
+              @keydown.enter.self.prevent="openSubPage('learner', row.userId)"
             >
               <td>
                 <div class="mr__user">
