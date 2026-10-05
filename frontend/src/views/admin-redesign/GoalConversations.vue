@@ -177,7 +177,7 @@
                   <span v-else class="mk-na">—</span>
                 </div>
               </td>
-              <td v-if="showCol('turns')">
+              <td v-if="showCol('turns')" class="mk-num">
                 <!-- 原型「澄清进度」列 = meter turns/targetTurns；本系统无目标轮次分母，
                      只呈现「N 轮」诚实读数（学习者发言条数），不造 meter -->
                 <span v-if="r.turns != null" class="mk-num" :title="`学习者发言 ${r.turns} 轮`">{{ r.turns }} 轮</span>

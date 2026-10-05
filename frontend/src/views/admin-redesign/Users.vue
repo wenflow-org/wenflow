@@ -135,7 +135,7 @@
               <span class="ul-email" :title="u.email">{{ u.email }}</span>
             </td>
             <td v-if="showCol('role')"><span class="mk-badge" :class="u.admin ? 'mk-badge--info' : 'mk-badge--muted'">{{ u.admin ? '管理员' : '用户' }}</span></td>
-            <td v-if="showCol('paths')">
+            <td v-if="showCol('paths')" class="mk-num">
               <!-- 原型列语言：数字列就是 mono 文本，不加自造可视化（双段条退役，计数进悬停）。
                    P2：0 值统一 mk-na 弱化（此前只有会话 0 弱化，路径 0 却实心黑，双标） -->
               <span class="ul-ps" :title="`路径 ${u.paths} 条 · 会话 ${u.sessions} 次`"><b :class="{ 'mk-na': !u.paths }">{{ u.paths }}</b><i>/</i><b :class="{ 'mk-na': !u.sessions }">{{ u.sessions }}</b></span>

@@ -143,11 +143,6 @@
             <td v-if="!lcHiddenCols.has('trend')">
               <span class="lc-trend" :class="`lc-trend--${r.trend}`" :title="trendTitle(r)">
                 <i class="lc-trend__arrow" aria-hidden="true">{{ r.trend === 'up' ? '↗' : r.trend === 'down' ? '↘' : '→' }}</i>
-                <span class="lc-trend__bars" aria-hidden="true">
-                  <i class="lc-trend__bar lc-trend__bar--1"></i>
-                  <i class="lc-trend__bar lc-trend__bar--2"></i>
-                  <i class="lc-trend__bar lc-trend__bar--3"></i>
-                </span>
                 {{ trendText(r.trend) }}
               </span>
             </td>
@@ -159,8 +154,8 @@
                 :class="{ 'conf--low': evidenceLowConfidence(r.confidence) }"
                 :title="`置信度 ${Math.round(r.confidence * 100)}%。低于 50% 表示证据不足`"
               >
-                {{ Math.round(r.confidence * 100) }}%<em v-if="evidenceLowConfidence(r.confidence)" class="conf__lack">证据不足</em>
                 <span class="mk-minibar lc-conf__bar" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="evidenceLowConfidence(r.confidence) ? 'warn' : undefined" :style="{ width: Math.round(r.confidence * 100) + '%' }"></i></span>
+                <span class="mono">{{ Math.round(r.confidence * 100) }}%</span><em v-if="evidenceLowConfidence(r.confidence)" class="conf__lack">证据不足</em>
               </span>
               <span v-else class="mk-na" :title="r.task ? '' : '尚未开始学习，暂无置信度'">—</span>
             </td>
@@ -171,10 +166,12 @@
               <span v-else class="mk-na">—</span>
             </td>
             <td>
-              <div class="mk-actions mk-actions--left">
-                <button type="button" class="mk-icon-btn" title="详情" @click.stop="openDetail(r)"><UserRound :size="15" :stroke-width="1.75" /></button>
-                <button v-if="isLive && !r.isTestAccount" type="button" class="mk-icon-btn" :class="{ 'lc-intervene--hot': isRisk(r) }" title="干预：查看会话 / 发送提醒" @click.stop="openIntervene(r)"><Bell :size="15" :stroke-width="1.75" /></button>
-                <button type="button" class="mk-icon-btn" :disabled="isUpdating(r.id)" :title="isUpdating(r.id) ? '重算中…' : '重算'" @click.stop="recompute(r)"><RotateCw :size="15" :stroke-width="1.75" /></button>
+              <!-- 2026-10-05 表格方言收敛：icon-only 钮是全站唯一离群（LP/Users/TS/GC/MR 均为
+                   mk-btn--sm 文字钮），且 mk-actions--left 与 th--right 左右分家致操作列偏移 -->
+              <div class="mk-actions">
+                <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(r)">详情</button>
+                <button v-if="isLive && !r.isTestAccount" type="button" class="mk-btn mk-btn--sm" :class="{ 'lc-intervene--hot': isRisk(r) }" :title="isRisk(r) ? '该学习者有风险，建议立即干预：查看会话 / 发送提醒' : '干预：查看会话 / 发送提醒'" @click.stop="openIntervene(r)">干预</button>
+                <button type="button" class="mk-btn mk-btn--sm" :disabled="isUpdating(r.id)" :title="isUpdating(r.id) ? '重算中…' : '重算：重新拉取该学习者快照'" @click.stop="recompute(r)">{{ isUpdating(r.id) ? '重算中…' : '重算' }}</button>
               </div>
             </td>
           </tr>
@@ -256,7 +253,6 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkDistBand from '@/components/mk/MkDistBand.vue'
-import { Bell, RotateCw, UserRound } from 'lucide-vue-next'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
 import { adminNotificationsApi, adminLearnerModelsApi } from '@/api/adminApi'
@@ -653,25 +649,15 @@ async function recomputeAll() {
 .lc-trend--down { color: var(--mk-red); }
 .lc-trend--flat { color: var(--mk-muted); }
 .lc-trend__arrow { font-style: normal; }
-.lc-trend__bars { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 12px; }
-.lc-trend__bar { width: 3px; border-radius: var(--mk-radius-xs); background: currentColor; opacity: 0.55; }
-.lc-trend__bar--1 { height: 5px; }
-.lc-trend__bar--2 { height: 8px; }
-.lc-trend__bar--3 { height: 11px; }
-.lc-trend--up .lc-trend__bar--1 { height: 11px; opacity: 0.85; }
-.lc-trend--up .lc-trend__bar--2 { height: 8px; }
-.lc-trend--up .lc-trend__bar--3 { height: 5px; opacity: 0.4; }
-.lc-trend--down .lc-trend__bar--1 { height: 5px; opacity: 0.4; }
-.lc-trend--down .lc-trend__bar--2 { height: 8px; }
-.lc-trend--down .lc-trend__bar--3 { height: 11px; opacity: 0.85; }
+
 .progress-title { font-weight: 600; }
 .risk-text { color: var(--mk-amber); font-size: var(--mk-fs-micro); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 更新列：相对时间不换行（"4 分钟前"拆行问题） */
 .lc-updated { white-space: nowrap; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.conf { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-muted); cursor: help; }
+.conf { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-muted); cursor: help; }
 .conf__lack { font-style: normal; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
 .conf--low { color: var(--mk-amber); }
-.lc-conf__bar { display: block; width: 56px; margin-top: 3px; }
+.lc-conf__bar { width: 56px; flex-shrink: 0; }
 
 @media (min-width: 2000px) {
   .risk-text { font-size: var(--mk-fs-body); }

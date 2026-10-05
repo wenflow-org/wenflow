@@ -130,9 +130,11 @@
                 </div>
               </td>
               <td class="mk-num">
+                <!-- 2026-10-05 表格方言收敛：数字在上+条在下（堆叠档）退役，与右邻「平均记忆强度」
+                     同语法 = 条 + 数值右侧（全站进度表达唯一：mk-minibar + mono 值） -->
                 <span class="mr__due" :class="`mr__due--${dueTone(row)}`" :title="`到该复习而未复习 ${row.due} 条，占该用户痕迹 ${duePctOf(row)}%`">
-                  <b>{{ row.due }}</b>
                   <span class="mk-minibar mr__bar" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="dueTone(row) === 'high' ? 'bad' : dueTone(row) === 'warn' ? 'warn' : undefined" :style="{ width: duePctOf(row) + '%' }"></i></span>
+                  <b>{{ row.due }}</b>
                 </span>
               </td>
               <td class="mk-num">
@@ -143,7 +145,7 @@
                 <span v-if="row.weak > 0" class="mk-badge mk-badge--sm mk-badge--warn mr__need" :title="`${row.weak} 条痕迹强度已跌破 40%，临近遗忘`">{{ row.weak }}</span>
                 <span v-else class="mk-na" title="没有跌破 40% 的痕迹">—</span>
               </td>
-              <td>
+              <td class="mk-num">
                 <span v-if="row.avgStrength != null" class="mr__strength" :title="`全部有强度痕迹的 FSRS 可提取率均值 ${Math.round(row.avgStrength * 100)}%`">
                   <span class="mk-minibar mr__bar"><i class="mk-minibar__fill" :style="{ width: Math.round(row.avgStrength * 100) + '%' }"></i></span>
                   <span class="mono">{{ Math.round(row.avgStrength * 100) }}%</span>
@@ -1090,7 +1092,7 @@ onMounted(async () => {
 .mr__user .mk-cell-main { min-width: 0; flex: 1; }
 
 /* 到期压力条：数字在上、比例条在下；右对齐与同列的数字表头对齐 */
-.mr__due { display: grid; gap: 3px; justify-items: end; }
+.mr__due { display: inline-flex; align-items: center; gap: 6px; }
 .mr__due b { font-variant-numeric: tabular-nums; font-weight: 700; }
 .mr__due--none b { color: var(--mk-faint); font-weight: 400; }
 .mr__due--warn b { color: var(--mk-amber); }

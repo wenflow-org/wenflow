@@ -1022,6 +1022,11 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mono { font-family: var(--mk-mono); }
 .mk-th--right { text-align: right; }
 .mk-table th.mk-th--right { text-align: right; }
+/* 右对齐可排序列：caret 绝对定位进 th 右内边距带——表头**文字**右缘与数据右缘对齐
+   （判例=用户与学习者「路径 / 会话」：caret 占位使数字越过表头末字 12px，视觉读作错位）。
+   锚定在 .mk-th__btn（relative）而非 th——th 在滚动表里是 sticky，改 relative 会碎吸顶 */
+.mk-table th.mk-th--right .mk-th__btn { position: relative; }
+.mk-table th.mk-th--right .mk-th__caret { position: absolute; right: -12px; top: 50%; transform: translateY(-50%); }
 .mk-empty--compact { padding: 24px 16px; }
 
 /* ----- 页面级视图切换页签（原型 .tabs）-----

@@ -94,17 +94,16 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     w.unmount();
   });
 
-  it('目标对话独立页：统计带 = 原型 buckets 四桶单带（kpi 栅格已撤），pills 不带计数', async () => {
+  it('目标对话独立页：KPI 面板 = 会话总数/参与用户/近 7 日新增（2026-10-05 248dd8c2 对齐学习路径家族），状态构成归分布带', async () => {
     const { router, ready } = mockRouter('/admin/goal-conversations');
     await ready;
     const w = mount(GoalConversations, { global: { plugins: [router] } });
     await settle();
-    // 反向断言：KPI 栅格不再渲染（2026-10-02 用户拍板撤双带：kpi 栅格 + 构成卡复读同批数字）
-    expect(kpiLabels(w)).toEqual([]);
-    expect(w.find('.mk-kpi-grid').exists()).toBe(false);
+    // 2026-10-05 并行批 248dd8c2：三卡 KPI 升 MkKpi 面板（OpsContent 同款），与分布带（状态比例）分属两维度
+    expect(kpiLabels(w)).toEqual(['会话总数', '参与用户', '近 7 日新增']);
+    expect(w.find('.mk-kpi-grid').exists()).toBe(true);
+    // 构成卡旧形态不复辟：状态构成唯一住在分布带（10-02 撤双带判例不回退）
     expect(w.find('.mk-card .buckets').exists()).toBe(false);
-    // buckets 是页面级统计带（原型直接落页面，无卡壳）；mock 空数据（stats 未回填且无失败）下整组隐藏
-    // （stats 拉取失败的三态「统计获取失败 · 重试」在 goal-conversations.pagination.test.ts 覆盖）
     expect(w.find('.buckets').exists()).toBe(false);
     // 2026-09-29 拆回独立页：学习会话合并宿主的视图切换 pills 不应再出现
     expect(w.find('.gc-tabs').exists()).toBe(false);
