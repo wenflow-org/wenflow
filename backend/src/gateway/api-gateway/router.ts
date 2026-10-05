@@ -54,6 +54,11 @@ const LEARN_DIALOGUE_SKILLS = new Set([
   'adaptive-guidance-copy',
   'learning-predictor',
   'virtual-learner-goal-dialogue-simulator',
+  // 2026-10-05：跑批把 ds 空出来（外部测试零影响）——这两条一并纳入用户模型优先集。
+  // 只有「调用链从用户自有 provider 起步」（有 user-agent 绑定的上下文，跑批 admin 即此）
+  // 才走用户模型；外部测试者无绑定 → 技能行 ds 照常生效。
+  'goal-conversation',
+  'teaching-opening-generator',
 ]);
 
 /** 解析 skill_model_configs.paramOverrides（JSON）。非对象/坏 JSON 一律视为未覆盖。 */

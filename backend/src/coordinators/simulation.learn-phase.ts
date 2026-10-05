@@ -654,6 +654,10 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     let epistemicGrounding: any = null;
     try {
       const groundingRaw: any = await executeSkill(virtualLearnerEpistemicGroundingDefinition, {
+        // 路由身份（2026-10-04）：扮演类技能以 VL 本人 userId 解析——user_api_configs 的
+        // agnes 绑定（独立 RPM 桶）只在「调用链从用户自有 provider 起步」时生效，批跑以
+        // admin 身份调用会永远回落平台 ds。技能内透传给 callPrompt 的 context.userId。
+        routingUserId: simulationContext.profile.userId,
         learner: {
           profile: profile.profile || {},
           learningGoal: profile.learningGoal,
@@ -725,6 +729,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     }
 
     const virtualReplyOutput = await ctx.retryLearnUpstream(sessionId, 'simulate-teaching-turn', () => executeSkill(virtualLearnerLearnTurnSimulatorDefinition, {
+      // 同上：扮演身份 = VL 本人（接通 agnes 独立 RPM 桶）
+      routingUserId: simulationContext.profile.userId,
       learner: {
         profile: profile.profile || {},
         learningGoal: profile.learningGoal,

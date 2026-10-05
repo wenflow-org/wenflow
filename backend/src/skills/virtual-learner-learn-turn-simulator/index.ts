@@ -533,7 +533,7 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
         maxAttempts: 2,
         onValidationFail: ({ failureReason }) => `上一次输出失败：${failureReason}。请只返回一个完整、可解析的 JSON 对象；不要 markdown，不要代码块，不要解释；所有字符串必须闭合。`
       },
-    }, input || {});
+    }, input || {}, { userId: (input as any)?.routingUserId || undefined });
 
     if (!result.success || !result.output) {
       // 失败显式传播：不产出伪 learnerState/伪 selfReportedTaskDone（与 catch 路径统一 success:false 语义）

@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { adminLoginOnce, refreshAdminCookie } from './admin-session.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
@@ -17,8 +18,18 @@ const IDS_FILE = arg('ids-file', '');
 const LIMIT = Number(arg('limit', '0'));
 const CONC = Math.max(1, Number(arg('concurrency', '10')));
 const LEARN = process.argv.includes('--learn');
+// --lessons=N：每人上 N 节课就收（默认 1 = 首课）。N≥2 时 learn-done 收尾（wrapup 落库）后
+// 继续 start-learning 推进下一任务，以 completedTasks 基线 +1 为第二课完课信号，wrapup 后终态。
+const LESSONS = Math.max(1, Number(arg('lessons', '1')));
+// --path-only：集中资源冲 path。hold 未开场格子（不再新开会话）、跳过 learn/learn-done（暂停授课），
+// 已到 path-ready 的直接收格不开课。goal-path/poll-path 照常推进到 path 就绪。
+const PATH_ONLY = process.argv.includes('--path-only');
+// --skip-learn：清扫模式（开场→goal→path），但把 learn/learn-done 格子 hold 给上课轨
+// （区别于 --path-only：start 格子照常开场跑 path——通宵库存清扫用）
+const SKIP_LEARN = process.argv.includes('--skip-learn');
 const TAG = arg('tag', 'vl');
-const RUN_DATE = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`; })();
+const RUN_DATE = process.env.VL_RUN_DATE || (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`; })();
+// 跨零点发射时按启动日分目录会丢状态（2026-10-03 00:00 教训）：VL_RUN_DATE=20261002 钉住旧目录续跑
 const EVAL_DIR = path.join(ROOT, 'doc/local/runs', RUN_DATE, 'vl-evals');
 fs.mkdirSync(EVAL_DIR, { recursive: true });
 const SUMMARY = path.join(EVAL_DIR, `vl-${TAG}-summary.jsonl`);
@@ -28,11 +39,14 @@ const log = (m) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}
 const env = fs.readFileSync(path.join(ROOT, 'backend', '.env'), 'utf8');
 const envGet = (k) => (env.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim() || '';
 let cookie = '';
+// fleet 共享 cookie（adminAuth 单会话互踢，2026-10-03 实锤死锁）：登录/认领走共享模块
 async function adminLogin() {
-  const res = await fetch(BASE + '/api/admin-auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' }, body: JSON.stringify({ name: envGet('INIT_ADMIN_NAME'), password: envGet('INIT_ADMIN_PASSWORD'), remember: true }) });
-  cookie = (res.headers.get('set-cookie') || '').split(';')[0];
-  const j = await res.json().catch(() => ({}));
-  if (!cookie || j.success === false) throw new Error('admin 登录失败');
+  cookie = await adminLoginOnce(BASE, envGet);
+  if (!cookie) throw new Error('admin 登录失败');
+}
+async function refreshLogin() {
+  cookie = await refreshAdminCookie(BASE, envGet, cookie);
+  if (!cookie) throw new Error('admin cookie 刷新失败');
 }
 /** node:http 直连（绕开 undici headersTimeout=300s：run-full 服务端跑完整个 goal 阶段才回
  *  响应头，远超 5 分钟，fetch 必死 "fetch failed"（UND_ERR_HEADERS_TIMEOUT）——2026-10-02 实证根因） */
@@ -78,7 +92,13 @@ async function api(method, urlPath, body, { retries = 8, timeout = 600000, netBu
   for (;;) {
     try {
       const { status: resStatus, json } = await httpJson(method, urlPath, body, timeout);
-      if (resStatus === 401) { await adminLogin(); continue; }
+      // 401 或「会话已吊销/过期」403（11 驱动同秒互踢登录所致）→ 重登续命；
+      // 复用 respRetries 计数防无限循环
+      if (resStatus === 401 || (resStatus === 403 && /吊销|过期/.test(String(json?.error?.message || json?.error || '')))) {
+        if (++respRetries > retries) throw new Error(`${resStatus} 登录态失效且重登超限`);
+        await refreshLogin();
+        continue;
+      }
       if (!resStatus || resStatus >= 400 || json?.success === false) {
         last = `${resStatus} ${String(json?.error?.message || json?.error || json?.raw || '').slice(0, 140)}`;
         if (resStatus === 409) {
@@ -150,6 +170,26 @@ async function runOne(pid) {
   const vl = findByPersona(pid);
   if (!vl) { record({ id: pid, ok: false, err: 'no-vl-profile' }); log(`${pid} 无对应 VL`); return; }
   let st = loadState(pid) || { pid, vlId: vl.id, phase: 'start' };
+  // --path-only：三类格子直接 hold（不记结果，恢复期原样续跑）；path-ready 收格不开课
+  if (PATH_ONLY && ['start', 'learn', 'learn-done'].includes(st.phase)) {
+    log(`${pid} hold@${st.phase}（--path-only）`);
+    return;
+  }
+  // --skip-learn：learn/learn-done hold 给上课轨，start 照常开场跑 path
+  if (SKIP_LEARN && ['learn', 'learn-done'].includes(st.phase)) {
+    log(`${pid} hold@${st.phase}（--skip-learn）`);
+    return;
+  }
+  // 课额已满（上完目标节数）的格子终态短路：监工队列重发会反复把 learn-done 格子重进
+  // finalize+wrapup+3min 轮询，上满两节后必须秒收（只补一条记录，不碰 API）
+  if (LEARN && !PATH_ONLY && st.phase === 'learn-done' && st.lesson2Done && LESSONS >= 2) {
+    record({ id: pid, ok: true, phase: 'learn-done-2', sessionId: st.sessionId, pathId: st.pathId, turns: st.turns2 || 0, durSec: 0 });
+    return;
+  }
+  if (PATH_ONLY && st.phase === 'path-ready') {
+    record({ id: pid, ok: true, phase: 'path-ready', pathOnly: true, sessionId: st.sessionId, pathId: st.pathId });
+    return;
+  }
   // 会话被回收（fast-stale abandon）自愈：探测到终止态 → 重置状态开新会话（最多 2 次）
   if (st.sessionId && st.restarts === undefined) st.restarts = 0;
   let attempt = 0;
@@ -241,12 +281,12 @@ async function runPhase(pid, vl, st, t0) {
       if (!ready) { record({ id: pid, ok: false, phase: 'poll-path', err: `path 未就绪(status=${lastStatus})`, sessionId: st.sessionId }); log(`${pid} path 超时`); return; }
       st.phase = 'path-ready'; saveState(pid, st);
     }
-    if (st.phase === 'path-ready' && !LEARN) {
+    if (st.phase === 'path-ready' && (!LEARN || PATH_ONLY)) {
       record({ id: pid, ok: true, phase: 'path-ready', sessionId: st.sessionId, pathId: st.pathId, durSec: Math.round((Date.now() - t0) / 1000) });
       log(`${pid} path OK (${Math.round((Date.now() - t0) / 1000)}s)`);
       return;
     }
-    if (st.phase === 'path-ready' && LEARN) {
+    if (st.phase === 'path-ready' && LEARN && !PATH_ONLY) {
       await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/start-learning`, {});
       st.phase = 'learn'; saveState(pid, st);
     }
@@ -255,22 +295,35 @@ async function runPhase(pid, vl, st, t0) {
       const deadline = Date.now() + 75 * 60 * 1000;
       let doneTurn = 0;
       let learnRestarted = 0;
+      let stepRetries = 0;
       while (Date.now() < deadline) {
         let r;
         try {
           r = await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-step`, {}, { timeout: 300000 });
         } catch (e) {
-          // 「学习已停止（failed）」= 此前爆发期把学习会话判死。自愈：restart-learning 复活后
+          const emsg = String(e.message || e);
+          // 「学习已停止/学习会话已停止或失败」= 会话本体已死。自愈：restart-learning 复活后
           // 继续走轮（≤2 次）；不死丢格（2026-10-02 爆发期掉格主形态之一）
-          if (/学习已停止/.test(String(e.message || e)) && learnRestarted < 2) {
+          if (/已停止|已失败/.test(emsg) && learnRestarted < 2) {
             learnRestarted++;
             log(`${pid} 学习会话已停止 → restart-learning 自愈 ${learnRestarted}/2`);
             await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/restart-learning`, {}, { timeout: 120000 });
             await sleep(5000);
             continue;
           }
+          // 模型抖动两形态（2026-10-04 实测占失败 80%+）：①上游偶发输出非 JSON（网关 200 但
+          // skill 校验拒），②服务端模型重试链耗尽。实测多数只毁这一步、会话仍活着（6 样本 4 running）
+          // → 原地重试 teaching-step（≤4 次），不动会话（restart-learning 会误杀活课）；连续失败
+          // 会转成「已停止」走上面的复活分支。
+          if (/valid JSON|retry budget exhausted/i.test(emsg) && stepRetries < 4) {
+            stepRetries++;
+            log(`${pid} 模型抖动（${/JSON/i.test(emsg) ? '非JSON输出' : '重试预算耗尽'}）→ 原地重试 ${stepRetries}/4`);
+            await sleep(10000);
+            continue;
+          }
           throw e;
         }
+        stepRetries = 0;
         const d = r.data || {};
         doneTurn++;
         const s = d.status || d.sessionStatus || d.phase || '';
@@ -313,6 +366,87 @@ async function runPhase(pid, vl, st, t0) {
       }
       record({ id: pid, ok: true, phase: 'learn-done', sessionId: st.sessionId, pathId: st.pathId, turns: st.turns, wrapup: wrapupStatus, durSec: Math.round((Date.now() - t0) / 1000) });
       log(`${pid} learn 首课 OK (turns=${st.turns}, wrapup=${wrapupStatus})`);
+      // --lessons≥2：wrapup 落库后再上一节。completedTasks 基线 +1 为完课信号；失败不重试
+      // （写 lesson2Done 防止队列反复重进），格子保持 learn-done 终态，监工队列不会重排它。
+      if (LESSONS >= 2 && !st.lesson2Done) {
+        st.lesson2Done = true; saveState(pid, st);
+        let ok2 = false, turns2 = 0;
+        // 整体重试 ≤2 次：撞上会话 failed/停止（后端重启连锁）→ restart-learning 复活再开
+        for (let attempt = 1; attempt <= 2 && !ok2; attempt++) {
+          try {
+            const sessRes = await api('GET', `/api/admin/virtual-learners/sessions/${st.sessionId}`, undefined, { timeout: 30000 });
+            const sess = sessRes?.data?.session || sessRes?.data || {};
+            const baseline = Number(sess.completedTasks || 0);
+            try {
+              await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/start-learning`, {});
+            } catch (e) {
+              const em = String(e.message || e);
+              if (/已在学习|already/i.test(em)) { /* 已在课中，直接走轮 */ }
+              else if (/已停止|已失败|重新开始学习/i.test(em)) {
+                // 完课收尾或后端重启把学习相位停了：restart-learning 复活后重试一次
+                log(`${pid} 第二课 start-learning 撞停止 → restart-learning 自愈（attempt ${attempt}）`);
+                await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/restart-learning`, {}, { timeout: 120000 });
+                await sleep(5000);
+                await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/start-learning`, {});
+              } else throw e;
+            }
+            const deadline2 = Date.now() + 75 * 60 * 1000;
+            turns2 = 0; let restarted2 = 0, done2 = false, stepRetries2 = 0;
+            while (Date.now() < deadline2) {
+              let r2;
+              try {
+                r2 = await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-step`, {}, { timeout: 300000 });
+              } catch (e) {
+                const em2 = String(e.message || e);
+                if (/已停止|已失败/.test(em2) && restarted2 < 2) {
+                  restarted2++;
+                  log(`${pid} 第二课会话已停止 → restart-learning 自愈 ${restarted2}/2`);
+                  await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/restart-learning`, {}, { timeout: 120000 });
+                  await sleep(5000);
+                  continue;
+                }
+                if (/valid JSON|retry budget exhausted/i.test(em2) && stepRetries2 < 4) {
+                  stepRetries2++;
+                  log(`${pid} 第二课模型抖动 → 原地重试 ${stepRetries2}/4`);
+                  await sleep(10000);
+                  continue;
+                }
+                throw e;
+              }
+              stepRetries2 = 0;
+              const d2 = r2.data || {};
+              turns2++;
+              const s2 = d2.status || d2.sessionStatus || d2.phase || '';
+              if (Number(d2.completedTasks ?? -1) >= baseline + 1 || d2.taskCompleted === true || d2.isPathCompleted === true) { done2 = true; break; }
+              if (s2 === 'failed') throw new Error('teaching step failed(2nd): ' + JSON.stringify(d2).slice(0, 120));
+              await sleep(2000);
+            }
+            if (!done2) throw new Error('第二课未完成(超时)');
+            for (let f = 0; f < 2; f++) {
+              try {
+                const fd = await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-step`, {}, { timeout: 300000 });
+                if (fd?.data?.taskCompleted === true) continue;
+                break;
+              } catch { break; }
+            }
+            await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/wrapup`, {}).catch(() => { });
+            ok2 = true;
+          } catch (e) {
+            if (attempt >= 2) {
+              record({ id: pid, ok: false, phase: 'learn-2', err: String(e.message || e).slice(0, 200), sessionId: st.sessionId });
+              log(`${pid} 第二课 FAIL: ${String(e.message || e).slice(0, 100)}`);
+            } else {
+              log(`${pid} 第二课 attempt${attempt} 失败重试: ${String(e.message || e).slice(0, 80)}`);
+              await sleep(8000);
+            }
+          }
+        }
+        if (ok2) {
+          st.turns2 = turns2; saveState(pid, st);
+          record({ id: pid, ok: true, phase: 'learn-done-2', sessionId: st.sessionId, pathId: st.pathId, turns: turns2, durSec: Math.round((Date.now() - t0) / 1000) });
+          log(`${pid} 第二课 OK (turns=${turns2})`);
+        }
+      }
       return;
     }
 }

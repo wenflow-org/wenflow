@@ -128,7 +128,7 @@ export async function virtualLearnerEpistemicGrounding(input: any): Promise<Skil
         maxAttempts: 2,
         onValidationFail: ({ failureReason }) => `上一次输出失败：${failureReason}。请只返回一个完整、可解析的 JSON 对象；不要 markdown，不要代码块，不要解释。`,
       },
-    }, input || {});
+    }, input || {}, { userId: (input as any)?.routingUserId || undefined });
 
     if (!result.success || !result.output) {
       return {
