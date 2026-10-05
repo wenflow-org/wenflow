@@ -195,7 +195,7 @@ function confirm() {
   border-color: var(--mk-blue, #2f6ae0);
   color: #fff;
 }
-.mk-btn--primary:hover { background: #2b64d8; }
+.mk-btn--primary:hover { background: var(--mk-blue-fill-hover, #1f57cc); }
 /* 危险按钮：红底白字。复用全站 .mk-btn--danger 语义类（而非自定义类名），
    否则在 admin 页会与 shared.css 的 .mk-btn 同特异性竞争、被后者按层叠顺序覆盖为白底。 */
 .mk-btn--danger {
