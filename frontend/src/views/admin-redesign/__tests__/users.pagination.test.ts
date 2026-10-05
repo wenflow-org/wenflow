@@ -162,10 +162,15 @@ describe('Users 客户端分页（mk-pagination）', () => {
 
   it('筛选强化：pill 计数 + 搜索清空 × + 过滤态「清除筛选」', async () => {
     const w = await mountUsers();
-    // pill 计数：「全部」不显计数（P3 2026-10-04 全站评审：总数单源=分页器）、管理员 1（makeUser 仅 i=1 为 admin）
+    // pill 计数（2026-10-05）：「全部」不显计数（总数单源=分页器）；管理员 / 30 分钟在线
+    // 计数升宿主 People KPI 面板后去计数（KPI 孪生 pill 退纯开关）；普通用户 36 别处没有，保留
     const pills = w.findAll('.mk-pill');
     expect(pills.find((p) => p.text().includes('全部'))?.find('.mk-pill__count').exists()).toBe(false);
-    expect(pills.find((p) => p.text().includes('管理员'))?.find('.mk-pill__count').text()).toBe('1');
+    expect(pills.find((p) => p.text().includes('管理员'))?.find('.mk-pill__count').exists()).toBe(false);
+    expect(pills.find((p) => p.text().includes('30 分钟在线'))?.find('.mk-pill__count').exists()).toBe(false);
+    // 计数徽章在用户数据到达后才渲染（CI 时序下 pill 先行、count 后至 → 空 DOMWrapper 竞态）——waitFor 轮询
+    const normalPill = pills.find((p) => p.text().includes('普通用户'));
+    await vi.waitFor(() => expect(normalPill?.find('.mk-pill__count').text()).toBe('36'));
     // 无筛选态：不显示清空 × 与「清除筛选」
     expect(w.find('.mk-search__clear').exists()).toBe(false);
     expect(w.findAll('button').some((b) => b.text() === '清除筛选')).toBe(false);
