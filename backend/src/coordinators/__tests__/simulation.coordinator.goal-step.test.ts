@@ -357,6 +357,27 @@ describe('SimulationOrchestrator.executeSingleStep Goal 阶段', () => {
     expect(mockStartConversation).not.toHaveBeenCalled()
   })
 
+  it('终态会话被重复推进收敛（风暴可识别，报告 #11）：撤销后 6 次 continue 全部被同一守卫拒绝，零写零 skill', async () => {
+    // 报告 #11：134 条 abandoned 会话在回收后仍被反复 continue（重试风暴）。
+    // 守卫逐次拒绝 + 零副作用 = 风暴可识别且不放大；此判例把「重复调用应收敛」钉死。
+    sessionRecord.status = 'abandoned'
+    const failures: Array<{ success: boolean; error?: string }> = []
+    for (let i = 0; i < 6; i += 1) {
+      failures.push(await coordinator.executeSingleStep({ sessionId: 'simulation-1', userId: 'user-1', mode: 'single-step' }))
+    }
+
+    // 每一次都被拒且错误可识别（含状态名）——计数 = 调用数，风暴可数
+    expect(failures).toHaveLength(6)
+    expect(failures.every(r => r.success === false)).toBe(true)
+    expect(failures.every(r => String(r.error).includes('会话已终止') && String(r.error).includes('abandoned'))).toBe(true)
+    // 收敛且不放大：重复调用不触达任何写路径/skill/会话开场
+    expect(mockExecuteSkill).not.toHaveBeenCalled()
+    expect(mockStartConversation).not.toHaveBeenCalled()
+    expect(mockContinueConversation).not.toHaveBeenCalled()
+    expect(mockVirtualSessionUpdate).not.toHaveBeenCalled()
+    expect(mockTxUpdate).not.toHaveBeenCalled()
+  })
+
   it('回合中途租约失效：runLeasedExclusive 以 VirtualSessionLeaseLostError 拒绝，且未发生会话写', async () => {
     jest.useFakeTimers({ now: new Date('2026-07-19T00:00:00.000Z') })
     let leaseHealthy = true
