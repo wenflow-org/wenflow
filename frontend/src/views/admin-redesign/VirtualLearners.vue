@@ -34,11 +34,13 @@
           label="完成率"
           :value="statsKpiValue(statsKpiPct(completionPct))"
           :tone="statsState === 'error' ? 'bad' : ''"
-          :hint="statsKpiHint(`已完成 ${runStats.completed} / 全部 ${runStats.totalSessions} · 活动会话 ${activeSessions}`)"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '活动会话 = 当前进行中 + 创建中会话数（含卡死），全库口径（原页头状态条读数，2026-10-04 迁入本卡）'"
+          :hint="statsKpiHint(completionHint)"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '活动会话 = 当前进行中 + 创建中会话数（含卡死），全库口径；会话均长 = 终态会话「创建→结束」的平均墙钟时长（非单次调用延迟，2026-10-05 口径纠偏：原挂「今日调用」卡下标「平均耗时」）'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
-        />
+        >
+          <span class="mk-minibar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: completionBarPct }"></i></span>
+        </MkKpi>
         <MkKpi
           label="失败率"
           :value="statsKpiValue(statsKpiPct(runStats.systemFailureRate))"
@@ -54,12 +56,14 @@
           :tone="concurrencyTone === 'ok' ? 'ok' : 'warn'"
           hint="自动驾驶并发配额"
           title="并发 = 自动驾驶同时在跑的会话数占配额比；「已满」是资源占满（后续请求排队），不是故障"
-        />
+        >
+          <span class="mk-minibar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: concurrencyBarPct }"></i></span>
+        </MkKpi>
         <MkKpi
           label="今日调用"
           :value="statsKpiValue(String(runStats.todayCalls ?? 0))"
-          :hint="statsKpiHint(todayCallsHint)"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : ''"
+          :hint="statsKpiHint('虚拟/测试账号口径')"
+          title="今日虚拟/测试账号出站调用数（仿真看板口径；总览页「今日调用」为真实用户口径，两者相加为全平台）。2026-10-05 口径纠偏：原 hint「平均耗时」实为终态会话平均墙钟时长（最长以天计），已迁完成率卡改标「会话均长」"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />
@@ -72,18 +76,22 @@
       </section>
     </div>
 
-    <!-- 实验环境条（2026-10-05 重排）：VL RPM 与日期模拟同属「实验环境写控制」，
-         两组合进一个中性壳（读/写分块判例不变——写控件仍不进 KPI 数字栅格），
-         中间竖分隔线分组；此前是两条各自描边的浮条 + 一行裸表单，页头五层条带节奏碎。
-         EG4：改值不再失焦即静默 PUT（走查曾误清空致服务端 60→0）——显式「保存」钮 +
-         「未保存」脏态；回车等价保存。控件自带类 vl-rpm__input，不与筛选框混用其布局语义。 -->
-    <div class="vl-env">
-      <div class="vl-rpm">
+    <!-- 压测参数卡（2026-10-05 用户拍板 tab 化，平台 .tabs 下划线页签语言）：
+         速率上限/日期模拟两页签，一次只露当前页签自己的保存（此前展开日期模拟产生
+         490×307 死角 + 双保存各占一角，外部评审命中）；日期模拟开启态以「已开启」徽标
+         上到页签标签（未激活也可见）。EG4 守卫不变：显式「保存」钮 + 「未保存」脏态，回车等价保存 -->
+    <div class="mk-card vl-settings">
+      <div class="tabs" role="tablist" aria-label="压测参数">
+        <button type="button" class="tab" role="tab" :aria-selected="settingsTab === 'rate'" @click="settingsTab = 'rate'">速率上限</button>
+        <button type="button" class="tab" role="tab" :aria-selected="settingsTab === 'date'" @click="settingsTab = 'date'">
+          日期模拟<span v-if="dateSimEnabled" class="vl-settings__on">已开启</span>
+        </button>
+      </div>
+      <div v-show="settingsTab === 'rate'" class="vl-settings__pane">
         <label
           class="vl-rpm__field"
           title="虚拟学习者专属出站上限（每分钟调用数）；与平台全局速率相互独立，不挤占真实用户额度"
         >
-          <span class="vl-rpm__label">速率上限</span>
           <input
             v-model.number="vlRpm.limit"
             type="number"
@@ -105,8 +113,9 @@
         <span v-if="vlRpmDirty" class="vl-rpm__dirty">未保存</span>
         <span class="vl-rpm__hint">虚拟学习者专属 · 0 = 不限 · 不占真实用户额度</span>
       </div>
-      <span class="vl-env__div" aria-hidden="true"></span>
-      <SimulatedDaySettings />
+      <div v-show="settingsTab === 'date'" class="vl-settings__pane">
+        <SimulatedDaySettings @enabled="dateSimEnabled = $event" />
+      </div>
     </div>
 
     <!-- 学习者列表（「批量实验」2026-10-04 下线：批量发起与运行监控统一收在本页，
@@ -580,6 +589,9 @@ const concurrencyTone = computed(() => {
 
 /* 虚拟学习者专属出站速率（RPM）：设置 + 运行态。与平台全局速率相互独立。 */
 const vlRpm = reactive({ limit: 0, inFlight: 0, queued: 0, rpm: 0 })
+/* 压测参数卡页签（2026-10-05 tab 化）：默认速率上限（轻页签日常位）；日期模拟开启态徽标 */
+const settingsTab = ref<'rate' | 'date'>('rate')
+const dateSimEnabled = ref(false)
 /** 已保存的 RPM 上限（P1#20）：速率卡「上限」分母只认服务端已保存值/保存成功回执，
     不吃输入框脏值——管理员改到一半的数字不该出现在只读 KPI 里 */
 const vlRpmSavedLimit = ref(0)
@@ -728,13 +740,27 @@ const rateValue = computed(() => {
 })
 const rateHint = computed(() => (vlRpm.queued > 0 ? `在途 / 上限（已保存值）· 排队 ${vlRpm.queued}` : '在途 / 上限（已保存值）'))
 
-/** 「今日调用」卡的 hint：有调用给平均耗时（派生口径，数字不复述），没有就点明计数口径 */
-const todayCallsHint = computed(() => {
-  const s = runStats.value
-  if (!s.todayCalls) return '虚拟/测试账号口径'
-  const ms = s.avgDurationMs
-  const human = ms >= 60000 ? `${Math.round(ms / 60000)} 分钟` : ms >= 1000 ? `${(ms / 1000).toFixed(1)} 秒` : `${Math.round(ms)} 毫秒`
-  return `平均耗时 ${human}`
+/** 「今日调用」卡 hint（2026-10-05 口径纠偏）：只报口径不复述数字。原 hint「平均耗时」
+    实为 avgDurationMs = 终态会话「创建→结束」平均墙钟时长（virtual-learners.ts:1704），
+    挂在单次调用计数卡下读作「单次调用延迟 1494 分钟」（外部评审命中）——已迁完成率卡改标「会话均长」 */
+const sessionAvgHuman = computed(() => {
+  const ms = runStats.value.avgDurationMs || 0
+  if (!ms) return ''
+  if (ms >= 2 * 86400000) return `${(ms / 86400000).toFixed(1)} 天`
+  if (ms >= 3600000) return `${Math.round(ms / 3600000)} 小时`
+  if (ms >= 60000) return `${Math.round(ms / 60000)} 分钟`
+  return `${Math.round(ms / 1000)} 秒`
+})
+const completionHint = computed(() => {
+  const parts = [`已完成 ${runStats.value.completed} / 全部 ${runStats.value.totalSessions}`, `活动会话 ${activeSessions.value}`]
+  if (sessionAvgHuman.value) parts.push(`会话均长 ${sessionAvgHuman.value}`)
+  return parts.join(' · ')
+})
+/* 卡内进度槽（.mk-minibar 家族原语）：完成率宏观推进比 / 并发配额利用率 */
+const completionBarPct = computed(() => `${Math.min(Math.max(completionPct.value, 0), 100)}%`)
+const concurrencyBarPct = computed(() => {
+  const c = concurrency.value
+  return c.limit > 0 ? `${Math.min((c.used / c.limit) * 100, 100)}%` : '0%'
 })
 
 /** 运行指标已改走共享 KPI 栅格（模板内 MkKpi ×5）：原先的 MkStatStrip 自由指标条
@@ -814,42 +840,25 @@ function openRunningSession(s: Sample) {
 .vl-faillink:hover { color: var(--mk-blue); background: var(--mk-blue-bg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue) 18%, transparent); }
 
 /* 运行指标带：KPI 独占整行（共享 .mk-kpi-grid + MkKpi，卡自带面/描边，外层不套盒子）；
-   读写分块判例不变：写控制（速率上限/日期模拟）不进数字栅格，合成一条「实验环境」壳 */
+   读写分块判例不变：写控制（速率上限/日期模拟）不进数字栅格，收进下方「压测参数」页签卡；
+   完成率/并发卡内附挂 .mk-minibar 进度槽（MkKpi 默认 slot，家族原语） */
 .vl-kpi {
   display: grid;
   gap: 8px;
   flex: none;
 }
-/* 实验环境条（2026-10-05 重排）：一个中性壳装两组写控制（与运行条同壳语言：
-   line 描边 + surface 底 + radius-xl），竖分隔线分组；flex-wrap 兜窄档——
-   放不下时日期模拟组整组折到第二行，不横滚不裁切 */
-.vl-env {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 16px;
-  padding: 8px 12px;
-  border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-  flex: none;
-}
-.vl-env__div { width: 1px; align-self: stretch; background: var(--mk-line); }
-.vl-rpm {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  flex: none;
+/* 压测参数卡（2026-10-05 tab 化）：.tabs 通栏贴卡顶（平台页签原语，页签底线即卡内分隔线），
+   页签体左右与卡 16px 内边距对齐；写控件不进 KPI 数字栅格（读/写分块判例不变） */
+.vl-settings { flex: none; }
+.vl-settings .tabs { padding: 0 16px; }
+.vl-settings__pane { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px 14px; }
+.vl-settings__on {
+  margin-left: 6px;
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  color: var(--mk-green);
 }
 .vl-rpm__field { display: inline-flex; align-items: center; gap: 8px; cursor: text; }
-.vl-rpm__label {
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--mk-muted);
-  white-space: nowrap;
-}
 .vl-rpm__input { width: 84px; }
 .vl-rpm__unit {
   font-size: var(--mk-fs-micro);

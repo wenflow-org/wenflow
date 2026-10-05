@@ -281,22 +281,34 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.findAll('.mk-kpi')).toHaveLength(5);
   });
 
-  it('实验环境条（2026-10-05 重排）：速率上限与日期模拟同壳分组，写控制不进 KPI 数字栅格', async () => {
+  it('压测参数卡（2026-10-05 tab 化）：速率上限/日期模拟两页签，写控制不进 KPI 数字栅格', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    const env = w.find('.vl-env');
-    expect(env.exists()).toBe(true);
-    // 两组写控制同壳：速率上限（input+保存）| 分隔线 | 日期模拟
-    expect(env.find('.vl-rpm input').exists()).toBe(true);
-    expect(env.find('.vl-rpm button').text()).toContain('保存');
-    expect(env.find('.vl-env__div').exists()).toBe(true);
-    expect(env.find('.sd-settings').exists()).toBe(true);
-    // 读/写分块判例：写控件不得混进 KPI 数字栅格
-    expect(w.find('.vl-kpi .vl-rpm').exists()).toBe(false);
-    expect(w.find('.vl-kpi .sd-settings').exists()).toBe(false);
-    // RPM 组改版口径：label 用家族词「速率上限」+ 单位 /分（原裸「VL RPM」）
-    expect(env.find('.vl-rpm__label').text()).toBe('速率上限');
-    expect(env.find('.vl-rpm__unit').text()).toBe('/分');
+    const card = w.find('.vl-settings');
+    expect(card.exists()).toBe(true);
+    const tabs = card.findAll('.tab');
+    expect(tabs.map((t) => t.text().trim())).toEqual(['速率上限', '日期模拟']);
+    // 默认速率页签：输入框+保存可见；页签 aria-selected 契约（平台 .tabs 语言）
+    expect(tabs[0].attributes('aria-selected')).toBe('true');
+    expect(card.find('.vl-rpm__input').exists()).toBe(true);
+    expect(card.text()).toContain('保存');
+    // 日期页签体隐藏（v-show 落在 pane 元素上），切换后可见
+    const panes = card.findAll('.vl-settings__pane');
+    expect((panes[1].element as HTMLElement).style.display).toBe('none');
+    await tabs[1].trigger('click');
+    expect(tabs[1].attributes('aria-selected')).toBe('true');
+    expect((panes[1].element as HTMLElement).style.display).not.toBe('none');
+    expect(card.find('.sd-settings').exists()).toBe(true);
+    // 读/写分块判例：写控制不进 KPI 数字栅格
+    expect(w.find('.vl-kpi .vl-settings').exists()).toBe(false);
+    expect(w.findAll('.vl-kpi .mk-kpi')).toHaveLength(5);
+  });
+
+  it('KPI 卡内附挂 .mk-minibar 进度槽（完成率/并发），家族原语不私造', async () => {
+    liveVirtuals.value = [makeVirtual(1)];
+    const w = await mountPage();
+    const bars = w.findAll('.vl-kpi .mk-kpi .mk-minibar');
+    expect(bars.length).toBe(2);
   });
 
   it('无卡死时不出现一键回收按钮；未截断时不出现截断提示', async () => {

@@ -3,6 +3,9 @@
     <span class="mk-kpi__label">{{ label }} </span>
     <strong class="mk-kpi__num">{{ value }}</strong>
     <span v-if="hint && !compact" class="mk-kpi__hint">{{ hint }}</span>
+    <!-- 默认 slot（2026-10-05）：卡内附挂位（VL 判例 = .mk-minibar 进度槽）。空 slot 渲染零节点，
+         既有用法无感；附挂物走卡面原语（mk-minibar），不在页面发明新卡内词汇 -->
+    <slot></slot>
   </div>
 </template>
 
