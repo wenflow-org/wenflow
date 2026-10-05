@@ -1,4 +1,4 @@
-import { parseCardDocument, validateCard, resolveCardKey, buildCardWallEntries, cleanDisplayName, type LearnerCard } from '../card-import.service';
+import { parseCardDocument, validateCard, resolveCardKey, buildCardWallEntries, cleanDisplayName, deriveCardNickname, stripWaveTags, type LearnerCard } from '../card-import.service';
 
 function emptyIndex() {
   return { byKey: new Map<string, string>(), refs: new Map<string, string[]>(), seenInDoc: new Set<string>() };
@@ -217,7 +217,7 @@ describe('card-import：卡墙索引映射（buildCardWallEntries，2026-10-05 �
     expect(c.name).toBe('24岁广告公司文案');
   });
 
-  it('卡面标签剔 cardKey 自身与 w\d+ 波次标签（demo 面貌不入批次代号）', () => {
+  it('卡面标签剔 cardKey 自身与波次标签（demo 面貌不入批次代号）', () => {
     const [e] = buildCardWallEntries([row({ tags: JSON.stringify(['k-1', 'w6', 'w5', '数学']) , profile: JSON.stringify({ personaSeed: { scenarioCard: { cardKey: 'k-1' } } }) })]);
     expect(e.tags).toEqual(['数学']);
   });
@@ -238,5 +238,20 @@ describe('card-import：cleanDisplayName（批次产物名清理）', () => {
     expect(cleanDisplayName('rw-plain-id')).toBe('rw-plain-id');
     expect(cleanDisplayName(null)).toBeNull();
     expect(cleanDisplayName('')).toBeNull();
+  });
+});
+
+describe('card-import：存量卡规范化（deriveCardNickname / stripWaveTags，2026-10-05）', () => {
+  it('昵称推导：竖线/括号族取人设短语；key 形态 nameHint 跳过走 users.name；已有 nickname 不重复派生', () => {
+    expect(deriveCardNickname({ nameHint: 'rw-school-02｜二年级学生家长·社区快递驿站店主' }, null)).toBe('二年级学生家长·社区快递驿站店主');
+    expect(deriveCardNickname({ nameHint: 'rw-int6-07（24岁广告公司文案）' }, null)).toBe('24岁广告公司文案');
+    expect(deriveCardNickname({ nameHint: '高一学生' }, null)).toBe('高一学生');
+    expect(deriveCardNickname({ nameHint: 'w6-math-01' }, 'rw-wild6-03（重度玩家）')).toBe('重度玩家');
+    expect(deriveCardNickname({ nameHint: 'w6-math-01' }, 'rw-plain-id')).toBeNull();
+    expect(deriveCardNickname({ nickname: '已有' }, '任意')).toBeNull();
+  });
+
+  it('波次标签剔除：w0/w5/w6 全剔，普通标签与 cardKey 锚保留', () => {
+    expect(stripWaveTags(['k-1', 'w0', 'w5', 'w6', '数学', 'W12'])).toEqual(['k-1', '数学']);
   });
 });
