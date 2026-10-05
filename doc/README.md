@@ -5,7 +5,7 @@
 > 需要时以 doc/ 根目录现行文档与代码为准。
 > **登记门禁（2026-09-28 起）**：新文档入库三件套 = 白名单 + 本表登记 + 状态头；实现与「不做」声明相悖须同提交改文档。
 
-## 总索引（39 篇 · 全覆盖 · 2026-09-28）
+## 总索引（40 篇 · 全覆盖 · 2026-10-05）
 
 > 每篇文档头部有状态行（📌 类型｜最后核验）。**登记约定**：新增 doc/ 文档须同时 ①加入根 .gitignore 白名单 ②登记本表 ③写状态头；凡实现与文档「不做/待办」声明相悖的改动，须同一提交内更新该文档声明。审计详见 doc/local/DOC-TIMELINESS-AUDIT-2026-09-28（本机）。
 
@@ -35,6 +35,7 @@
 | NON_FUNCTIONAL_GOVERNANCE_PLAN.md | 治理计划 | ⚠️ 状态基线 2026-07-17 |
 | EDUCATIONAL_THEORY_MAP.md | 参考资料 | 理论地图（文献已核实） |
 | ADMIN_TERMINOLOGY_AUDIT.md | 活规范 | 术语 SSOT（不可归档） |
+| ADMIN_OPERATIONS_MANUAL.md | 活规范 | 管理端运营操作手册（路由 → 职责、指标口径、动作名、SOP + YAML 速查） |
 | ADMIN_VISUAL_LAYER_SPEC.md | 活规范 | ⛔ 禁归档（守卫硬引用）｜v4 已接设计体系包，令牌层/圆角/阴影/材质收口完毕 |
 | ADMIN_COLUMN_WIDTH_SPEC.md | 活规范 | 48/48 全中 |
 | ADMIN_PAGE_TEMPLATES.md | 历史快照·已存档 | 2026-10-02 存档：T1-T4 模板职责由 newui 原型复刻体系 + spec v4 承接 |
