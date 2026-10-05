@@ -20,6 +20,7 @@ import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 import { classifyFinalizationError } from './FinalizationErrors';
 import { hasReliableSessionEvaluation, mergeFinalTeachingState } from './SessionFinalizationPolicy';
+import { getPendingCheckpoint, recordCheckpointAttemptEvidence } from './teaching-checkpoint';
 import {
   aggregateSessionEvaluationFromMessages,
   buildSessionEvaluationShadow,
@@ -931,6 +932,10 @@ export async function endSession(
       sessionStartAt: session.startTime,
     });
 
+    // H1 失败留痕：收尾时仍挂起的检查点＝「被聊天绕过」的未作答收场（下面的 mergeFinalTeachingState
+    // 会静默清掉 pending）。在只读态先捕获，收尾成功后再写证据（幂等键防收尾重试重复计数）。
+    const pendingCheckpointAtClose = getPendingCheckpoint(session.teachingState);
+
     try {
       await leaseGuard.assertOwned();
       await teachingSessionRepository.completeWithEvent(sessionId, operationId, leaseOwner, {
@@ -955,6 +960,11 @@ export async function endSession(
         continue;
       }
       throw error;
+    }
+
+    // H1 失败留痕：收尾成功且检查点仍未作答 → 落一条 checkpoint:attempt（unresolved）。只留痕、不改写。
+    if (pendingCheckpointAtClose) {
+      await recordCheckpointAttemptEvidence(session, pendingCheckpointAtClose, { outcome: 'unresolved' });
     }
 
     // 课后刷新统一包进「当前教学会话」作用域：这些 aux skill 的 LLM 调用据此可归到本节

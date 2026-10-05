@@ -20,6 +20,7 @@ import {
   CheckpointSubmitResult,
   getPendingCheckpoint,
   judgeCheckpointAnswer,
+  recordCheckpointAttemptEvidence,
   stripCheckpointAnswerKeys,
 } from './teaching-checkpoint';
 import { buildTeachingStateWithArtifacts } from './teaching-classroom-flow';
@@ -149,6 +150,11 @@ export async function submitCheckpoint(
         taskId: session.taskId,
         userId: session.userId,
       });
+
+      // H1 失败留痕（LEARNING_SCIENCE_AUDIT §3.9 遗留）：跳过是「未作答」收场，此前只留
+      // checkpointHistory、不落证据行（分母缺位）。只留痕、不改写；幂等键防重复计数。
+      await recordCheckpointAttemptEvidence(session, checkpoint, { outcome: 'skipped' });
+
       return {
         passed: false,
         feedback: '已跳过这个检查点，我们继续。',
@@ -502,6 +508,10 @@ export async function applyTimeoutWrapupFallback(sessionId: string): Promise<voi
     const session = await teachingSessionRepository.getById(sessionId);
     if (!session || session.status !== 'timeout' || session.wrapup) return;
 
+    // H1 失败留痕：超时收尾时仍挂起的检查点＝未作答收场（下方终态清理会静默清掉 pending）。
+    // 在读态先捕获，清理成功后再写证据。
+    const pendingCheckpointAtTimeout = getPendingCheckpoint(session.teachingState);
+
     // 活跃时长：按消息时间戳估算（间隔 > 30 分钟视为暂停），避免把 idle 时间算入
     const messages = Array.isArray(session.messages) ? session.messages : [];
     const times = messages
@@ -586,6 +596,11 @@ export async function applyTimeoutWrapupFallback(sessionId: string): Promise<voi
     if (guarded.count !== 1) {
       logger.info('[AITeaching] 兜底 wrapup 被跳过（会话已离开 timeout 或已有正式总结）', { sessionId });
       return;
+    }
+
+    // H1 失败留痕：终态清理已生效——若此前有挂起检查点，补一条 checkpoint:attempt（unresolved）。
+    if (pendingCheckpointAtTimeout) {
+      await recordCheckpointAttemptEvidence(session, pendingCheckpointAtTimeout, { outcome: 'unresolved' });
     }
     if (!hasLearnerEvidence) {
       logger.info('[AITeaching] 零证据超时会话跳过兜底学习记录（仅终态清理）', { sessionId });

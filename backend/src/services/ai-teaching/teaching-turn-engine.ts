@@ -33,6 +33,7 @@ import {
   getPendingCheckpoint,
   inheritTeachingState,
   recordAnchorProbeResult,
+  recordCheckpointAttemptEvidence,
   recordCheckpointResultEvidence,
   resolveAnchorProbeTarget,
   resolveCheckpointConsumption,
@@ -1000,6 +1001,12 @@ export async function processStudentMessage(
         logger.info('[teaching-turn] 检查点重答到顶，强制消费 pendingCheckpoint（打破同一题循环）', {
           sessionId,
           checkpointId: submittedCheckpoint.id,
+          attempts: sameCheckpointAttempts,
+        });
+        // H1 失败留痕：到顶强消是「未解决收场」的终局标记——每笔答错已有 checkpoint:result，
+        // 此前终局只写日志、测量层不可见（实测重答上限可被绕过 27 次）。只留痕、不改写。
+        await recordCheckpointAttemptEvidence(session, submittedCheckpoint, {
+          outcome: 'attempts_exhausted',
           attempts: sameCheckpointAttempts,
         });
       }

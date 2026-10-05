@@ -14,6 +14,7 @@ const mockCommitTurnState = jest.fn()
 const mockReleaseOperation = jest.fn()
 const mockTurnSkill = jest.fn()
 const mockRecordCheckpointEvidence = jest.fn(async () => undefined)
+const mockRecordCheckpointAttemptEvidence = jest.fn(async () => undefined)
 const mockRecordAnchorProbeResult = jest.fn(async () => undefined)
 const mockResolveAnchorTarget = jest.fn(async () => null)
 
@@ -103,6 +104,7 @@ jest.mock('../teaching-checkpoint', () => {
   return {
     ...actual,
     recordCheckpointResultEvidence: (...args: any[]) => mockRecordCheckpointEvidence(...(args as [])),
+    recordCheckpointAttemptEvidence: (...args: any[]) => mockRecordCheckpointAttemptEvidence(...(args as [])),
     recordAnchorProbeResult: (...args: any[]) => mockRecordAnchorProbeResult(...(args as [])),
     resolveAnchorProbeTarget: (...args: any[]) => mockResolveAnchorTarget(...(args as [])),
   }
@@ -197,6 +199,8 @@ describe('检查点提交链路集成（报告 #15/#16）', () => {
       expect.objectContaining({ id: 'cp-1' }),
       expect.objectContaining({ passed: false, judgedBy: 'code', detail: expect.stringContaining('缺少要点') }),
     );
+    // H1 负对照：未到顶的普通答错不写终局留痕（只有真正的终局才落 checkpoint:attempt）
+    expect(mockRecordCheckpointAttemptEvidence).not.toHaveBeenCalled();
   })
 
   it('同义组命中（重填|再做）→ 判过并消费 pendingCheckpoint', async () => {
@@ -246,5 +250,11 @@ describe('检查点提交链路集成（报告 #15/#16）', () => {
     expect(committedState.sessionArtifacts?.pendingCheckpoint).toBeUndefined();
     expect(committedState.checkpointHistory).toHaveLength(2);
     expect(committedState.checkpointHistory.every((row: any) => row.checkpointId === 'cp-1')).toBe(true);
+    // H1 失败留痕：到顶强消的终局也要落 checkpoint:attempt（此前只写日志、测量层不可见）
+    expect(mockRecordCheckpointAttemptEvidence).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: 'cp-1' }),
+      expect.objectContaining({ outcome: 'attempts_exhausted', attempts: 2 }),
+    );
   })
 })

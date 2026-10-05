@@ -285,6 +285,70 @@ export async function recordCheckpointResultEvidence(
 }
 
 /**
+ * 检查点尝试留痕（`learner_evidence` type=`checkpoint:attempt`）：失败/跳过终局的分母补齐（H1）。
+ *
+ * 为什么单独留痕：`checkpoint:result` 只在「有作答」时产生——跳过、重答到顶强消、会话收尾时仍挂起
+ * （被聊天绕过/超时，收尾会静默清掉 pending）三种**未作答收场**此前不落任何证据行，使任何以
+ * 「留痕作答」为分母的成功率/覆盖率都是上界（LEARNING_SCIENCE_AUDIT §3.9 遗留，2026-10-05 测量工作流 H1）。
+ *
+ * 纪律：**只留痕、不改写**——不参与掌握/难度/信念判定，也不被现有信号消费（与锚题纪律一致）。
+ * 幂等：同一 checkpointId 的终局唯一——(eventId, evidenceKey) 由 checkpointId 派生并命中唯一约束，
+ * 收尾重试/重复触发只保留第一行（update 为空，终局不可变）。
+ */
+export async function recordCheckpointAttemptEvidence(
+  session: TeachingSessionRecord,
+  checkpoint: TeachingCheckpoint,
+  result: {
+    /** skipped=学员主动跳过；attempts_exhausted=重答到顶强消；unresolved=会话收尾时仍挂起（被聊天绕过/超时） */
+    outcome: 'skipped' | 'attempts_exhausted' | 'unresolved';
+    /** 到顶时的累计作答次数（仅 attempts_exhausted 有意义） */
+    attempts?: number;
+  },
+): Promise<void> {
+  try {
+    const at = simulatedNowOr();
+    const eventId = `checkpoint-attempt:${checkpoint.id}`;
+    const evidenceKey = `checkpoint:attempt:${checkpoint.id}`;
+    await prisma.learner_evidence.upsert({
+      where: { eventId_evidenceKey: { eventId, evidenceKey } },
+      create: {
+        id: `lev_cpa_${checkpoint.id}_${at.getTime()}`,
+        eventId,
+        evidenceKey,
+        userId: session.userId,
+        pathId: session.learningPathId ?? null,
+        taskId: session.taskId ?? null,
+        sessionId: session.id,
+        evidenceType: 'checkpoint:attempt',
+        payload: JSON.stringify({
+          checkpointId: checkpoint.id,
+          type: checkpoint.type,
+          title: checkpoint.title,
+          outcome: result.outcome,
+          ...(typeof result.attempts === 'number' ? { attempts: result.attempts } : {}),
+        }),
+        confidence: 1,
+        occurredAt: at,
+      },
+      // 终局不可变：重复触发只保留第一行
+      update: {},
+    });
+    logger.info('[AITeaching] 检查点尝试留痕', {
+      sessionId: session.id,
+      checkpointId: checkpoint.id,
+      outcome: result.outcome,
+      ...(typeof result.attempts === 'number' ? { attempts: result.attempts } : {}),
+    });
+  } catch (error) {
+    logger.warn('[AITeaching] 检查点尝试留痕失败（不影响课堂）', {
+      sessionId: session.id,
+      checkpointId: checkpoint.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
  * 锚题探针 · 回合内目标解析（本接线里唯一的 I/O 点）。
  *
  * 仅在**本轮满足出检查点条件**（`emitCheckpoint=true`，即 `shouldEmitCheckpoint` 为真）时才接线——
