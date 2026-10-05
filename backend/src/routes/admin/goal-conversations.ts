@@ -10,6 +10,7 @@ import {
   countAiGeneratedPathsByUser,
   getGoalConversationStatusCounts,
   findRecentGoalConversationsForTrend,
+  countDistinctGoalConversationUsers,
 } from '../../services/admin/goal-conversation-admin.repo';
 import { generateLearningPathFromConversation } from '../../services/learning/goal-conversation.service';
 import { REAL_USER_WHERE, isTestAccountUser } from '../../utils/test-account';
@@ -232,7 +233,10 @@ router.get('/stats/overview', async (req: any, res) => {
     // （与 GET / 的 includeTest 分支同一判据，否则分布条/完成率与列表不同源）
     const includeTest = String(req.query.includeTest || '') === 'true';
     const userWhere = includeTest ? {} : STATS_USER_WHERE;
-    const [total, active, completed, cancelled] = await getGoalConversationStatusCounts(userWhere);
+    const [[total, active, completed, cancelled], distinctUsers] = await Promise.all([
+      getGoalConversationStatusCounts(userWhere),
+      countDistinctGoalConversationUsers(userWhere)
+    ]);
 
     // 获取最近 7 天的对话趋势（含 7 天内完成但更早创建的对话，保证「当日完成」完整）
     const sevenDaysAgo = new Date();
@@ -269,6 +273,7 @@ router.get('/stats/overview', async (req: any, res) => {
         active,
         completed,
         cancelled,
+        distinctUsers,
         completionRate: total > 0 ? ((completed / total) * 100).toFixed(2) : '0',
         dailyStats: Object.entries(dailyStats).map(([date, stats]) => ({
           date,

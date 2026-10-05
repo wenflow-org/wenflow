@@ -13,18 +13,35 @@
       </template>
     </MkPageHead>
 
-    <!-- 状态桶组（newui renderGoals 原型移植）：本页唯一统计带 = 页头 KPI，
-         四桶「进行中 / 已完成 / 已取消 / 完成率」直接落页面（原型 buckets 无卡壳）。
-         此前 kpi 栅格与构成卡两带并存、已取消/已完成数字复读（2026-10-02 用户拍板撤双带）；
-         卡头 pills 因此不带计数。
-         三态（P1#6）：stats 拉取失败时桶位显示「统计获取失败 · 重试」，不再整组静默消失；
-         「进行中」桶 foot 携停滞信号（窗口内 active 且超 7 天未更新）；
-         「已取消」桶 foot 写明「取消 / 中断 / 回收合计」口径（= 总数 − 进行中 − 已完成，
-         含 abandoned / failed，不再是纯「用户取消」）。 -->
+    <!-- 会话总量 KPI（2026-10-05 用户令对齐学习路径家族：MkKpi 卡带置于分布卡上方，OpsContent 同款）。
+         10-02 撤双带退役的是「状态数字 KPI」（四桶与构成带同数字复读）——本卡带只放总量/参与用户/
+         近 7 日新增三个与分布带零重叠的指标，状态构成仍以分布带为唯一来源（计数全页只出现一次：
+         总数升 KPI 卡后分布带副文不再复读「共 N 条」）。
+         hint = 一短句可见口径（全站家法，TokenCost 判例）；长解释收 title 悬停 -->
+    <section class="mk-kpi-grid" aria-label="目标对话总量">
+      <MkKpi
+        label="会话总数"
+        :value="stats?.total ?? '—'"
+        :hint="includeTest ? '含虚拟学习者与测试账号' : '仅真实用户口径'"
+        :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户（不含测试账号）；切换页头「含测试」后显示全量并灰标模拟行'"
+      />
+      <MkKpi
+        label="参与用户"
+        :value="stats?.distinctUsers ?? '—'"
+        hint="发起过目标对话的去重用户"
+        title="至少发起过一次目标对话的去重用户数（口径随页头「含测试」开关）"
+      />
+      <MkKpi
+        label="近 7 日新增"
+        :value="recentCreated7d ?? '—'"
+        hint="按创建日归集"
+        title="最近 7 天创建的目标对话数（服务端按创建日 UTC 日历日归集；完成数按完成日归集，不影响本口径）"
+      />
+    </section>
     <!-- stats 三态（P1#6）：失败显错误条 + 重试（原错误桶随构成带退役，2026-10-04 晚贴表分布条） -->
     <div v-if="statsError" class="mk-status mk-status--bad">
       <span class="mk-status__dot"></span>
-      <span class="mk-status__meta">状态构成（进行中 / 已完成 / 已取消 / 完成率）暂不可用</span>
+      <span class="mk-status__meta">统计暂不可用（KPI 面板与状态分布同源）</span>
       <button type="button" class="mk-status__meta mk-status__meta-link" @click="load(true)">重试</button>
     </div>
 
@@ -45,7 +62,7 @@
       card
       class="gc-distband"
         title="目标对话状态分布"
-        :sub="`点击分段只看该状态 · 共 ${stats.total} 条（服务端状态计数 · ${includeTest ? '含测试' : '仅真实'}口径，非本页窗口） · 完结率 ${stats.completionRate ?? 0}%`"
+        :sub="`点击分段只看该状态 · 服务端按状态 group-by 全平台计数（非本页窗口，口径：${includeTest ? '含测试全量' : '仅真实用户'}） · 完结率 ${stats.completionRate ?? 0}%`"
         unit="条"
         aria-label="按目标对话状态筛选"
         :bins="gcBandBins"
@@ -240,6 +257,7 @@ import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkDistBand from '@/components/mk/MkDistBand.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { useTableSort } from './useTableSort'
@@ -287,7 +305,10 @@ interface Row {
 const loading = ref(false)
 const rows = ref<Row[]>([])
 const loadError = ref('')
-const stats = ref<{ total: number; active: number; completed: number; completionRate: string } | null>(null)
+const stats = ref<{
+  total: number; active: number; completed: number; completionRate: string;
+  distinctUsers: number | null; dailyStats: { date: string; total: number }[]
+} | null>(null)
 /* stats 三态（P1#6）：失败置 statsError，桶位显示「统计获取失败 · 重试」而非整组静默消失 */
 const statsError = ref(false)
 /* 「已取消」桶（P1#5）= 总数 − 进行中 − 已完成：把用户取消（cancelled）、失败中断（failed）、
@@ -296,6 +317,16 @@ const gcCancelledCount = computed(() => {
   const s = stats.value
   if (!s) return 0
   return Math.max(s.total - s.active - s.completed, 0)
+})
+/* 近 7 日新增（KPI 卡）：dailyStats 按创建日（UTC 日历日）归集；「7 天内完成但更早创建」
+   的对话会按创建日额外成桶且桶日期在窗口外——按日期过滤后求和才是纯「新增」口径 */
+const recentCreated7d = computed<number | null>(() => {
+  const ds = stats.value?.dailyStats
+  if (!ds || !ds.length) return null
+  const cutoff = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10)
+  let sum = 0
+  for (const d of ds) if (d.date >= cutoff) sum += Number(d.total) || 0
+  return sum
 })
 /* 停滞信号（P1#6 前端可做部分）：列表窗口内 active 且 updatedAt 超 7 天未更新的行数；
    口径 title「按最近 1000 条窗口」随行披露（全量分位需后端 lastActivity，登记不做） */
@@ -576,8 +607,8 @@ async function load(force = false) {
     loading.value = false
     markPageFetched('goal-conversations')
   }
-  /* stats 非阻塞后台拉取：到达后回填四态比例条与域计数。
-     三态（P1#6）：失败时置 statsError（桶位显示「统计获取失败 · 重试」），
+  /* stats 非阻塞后台拉取：到达后回填 KPI 面板（总量/参与用户/近 7 日新增）与状态分布带。
+     三态（P1#6）：失败时置 statsError（错误条 + 重试，KPI 卡显「—」），
      绝不回滚列表、不阻塞首屏；代际不符（已发起新一轮 load）的迟到响应直接丢弃 */
   void adminGoalConversationsApi.getStats(includeTest.value)
     .then((statsRes) => {
@@ -588,7 +619,9 @@ async function load(force = false) {
             total: Number(s.total || 0),
             active: Number(s.active || 0),
             completed: Number(s.completed || 0),
-            completionRate: String(s.completionRate || '0')
+            completionRate: String(s.completionRate || '0'),
+            distinctUsers: s.distinctUsers == null ? null : Number(s.distinctUsers),
+            dailyStats: Array.isArray(s.dailyStats) ? s.dailyStats : []
           }
         : null
       statsError.value = false

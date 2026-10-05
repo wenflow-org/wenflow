@@ -236,13 +236,13 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(activeSeg.attributes('title')).toContain('非全量');
   });
 
-  it('P1#6 stats 拉取失败 → 错误条「状态构成暂不可用 · 重试」，不再整组静默消失（2026-10-04 晚错误桶随构成带退役）', async () => {
+  it('P1#6 stats 拉取失败 → 错误条「统计暂不可用 · 重试」，不再整组静默消失（2026-10-05 起 KPI 面板与分布带同源，错误条措辞随域扩展）', async () => {
     statsMock.mockRejectedValue(new Error('stats boom'));
     const w = await mountGoals();
     const strip = w.find('.mk-status--bad');
     expect(strip.exists()).toBe(true);
-    expect(strip.text()).toContain('状态构成');
-    expect(strip.text()).toContain('暂不可用');
+    expect(strip.text()).toContain('统计暂不可用');
+    expect(strip.text()).toContain('KPI 面板与状态分布同源');
     const retry = strip.findAll('button').find((b) => b.text() === '重试');
     expect(retry).toBeTruthy();
     expect(w.find('.gc-distband').exists()).toBe(false);
@@ -255,6 +255,35 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     await flushPromises();
     expect(w.find('.mk-status--bad').exists()).toBe(false);
     expect(w.find('.gc-distband .mk-distband__title').text()).toBe('目标对话状态分布');
+  });
+
+  it('2026-10-05 KPI 面板：三卡（会话总数/参与用户/近 7 日新增）与分布带零重叠——总数升 KPI 后分布带副文不再复读「共 N 条」', async () => {
+    // 日期动态生成（组件按「今天−6」UTC 日历日过滤窗口，硬编码日期会跨日失效）；
+    // d(9) 在窗口外，必须被过滤掉——证明近 7 日新增口径没被「按完成日归集的老对话」污染
+    const d = (offsetDays: number) => new Date(Date.now() - offsetDays * 86400000).toISOString().slice(0, 10);
+    statsMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          total: 40, active: 40, completed: 0, completionRate: '0',
+          distinctUsers: 12,
+          dailyStats: [
+            { date: d(2), total: 3, active: 3, completed: 0, cancelled: 0 },
+            { date: d(5), total: 5, active: 5, completed: 0, cancelled: 0 },
+            { date: d(9), total: 7, active: 0, completed: 7, cancelled: 0 }
+          ]
+        }
+      }
+    });
+    const w = await mountGoals();
+    const tiles = w.findAll('.mk-kpi-grid .mk-kpi');
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['会话总数', '参与用户', '近 7 日新增']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['40', '12', '8']);
+    // 状态数字只活在分布带（10-02 撤双带判例）；完结率保留在带副文
+    const band = w.find('.gc-distband').text();
+    expect(band).toContain('进行中');
+    expect(band).toContain('完结率');
+    expect(band).not.toContain('共 40 条');
   });
 
   it('行点击进座舱（与 TeachingSessions 语义对齐）：openSubPage session-real；操作列按钮改名「详情」，不再叫「控制台」', async () => {

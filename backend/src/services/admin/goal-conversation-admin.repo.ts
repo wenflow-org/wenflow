@@ -181,3 +181,10 @@ export function findRecentGoalConversationsForTrend(userWhere: Prisma.usersWhere
     }
   });
 }
+
+/** 参与用户数（去重）：发起过目标对话的 distinct 用户（口径随 userWhere，与状态计数同源同开关） */
+export function countDistinctGoalConversationUsers(userWhere: Prisma.usersWhereInput) {
+  return prisma.goal_conversations
+    .groupBy({ by: ['userId'], where: { users: userWhere } })
+    .then((rows) => rows.length);
+}
