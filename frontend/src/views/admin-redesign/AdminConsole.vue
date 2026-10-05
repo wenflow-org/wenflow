@@ -109,7 +109,6 @@ const PathDetail = asyncPage(() => import('./PathDetail.vue'));
 const SkillDetail = asyncPage(() => import('./SkillDetail.vue'));
 const SessionCockpit = asyncPage(() => import('./SessionCockpit.vue'));
 const MemoryReview = asyncPage(() => import('./MemoryReview.vue'));
-const BatchExperiments = asyncPage(() => import('./BatchExperiments.vue'));
 
 const components: Record<string, unknown> = {
   'overview': Overview,
@@ -129,6 +128,8 @@ const components: Record<string, unknown> = {
   'virtual-learners': VirtualLearners,
   // 学习者卡库（2026-10-01）：角色卡结构化导入/导出，卡=账号+档案+故事池，不经编译链
   'virtual-learner-cards': VirtualLearnerCards,
+  // 「批量实验」2026-10-04 下线（运行态并入 virtual-learners、资产输入归卡库；
+  // 建页至今 batch_experiments 两表 0 行）；旧 URL 在 router 重定向到 /admin/virtual-learners
   'skills': Skills,
   'orchestrator': Orchestrator,
   // 「Prompt 评估」2026-10-04 下线（折入 skills 宿主「Prompt 评估」页签；
@@ -136,7 +137,6 @@ const components: Record<string, unknown> = {
   'execution-logs': ExecLogs,
   'token-cost': TokenCost,
   'memory-review': MemoryReview,
-  'batch-experiments': BatchExperiments,
   'audit-logs': AuditLogs,
   'api-config': ApiConfig,
   // 隐藏场景（不在 manifest 侧栏）：PromptWorkbench 是「新建 Skill」骨架生成的唯一入口，
