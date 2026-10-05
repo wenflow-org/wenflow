@@ -71,34 +71,55 @@
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" :aria-pressed="!onlyAttention" @click="onlyAttention = false">全部</button>
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" :aria-pressed="onlyAttention" @click="onlyAttention = true">仅看需关注<span class="mk-pill__count">{{ errorCount }}</span></button>
           </div>
-          <!-- P1② 归属 Agent 筛选（原型 renderSkillHub 1662-1706 工具条）：
-               label「归属 Agent」+ select（全部 Agent + 每 Agent 名（N）），change 即筛。
-               2026-10-05 CP1：全部档去计数（与 KPI「Skill N」/ 卡头计数三处复读，单源交 KPI） -->
-          <label class="sk-filter-label" for="skillAgentFilter">归属 Agent</label>
-          <select id="skillAgentFilter" v-model="agentFilter" class="mk-filter__select" aria-label="按归属 Agent 筛选">
-            <option value="">全部 Agent</option>
-            <option v-for="a in agentOptions" :key="a.id" :value="a.id">{{ a.label }}（{{ a.count }}）</option>
-          </select>
-          <select v-model="categoryFilter" class="mk-filter__select" aria-label="按类别筛选">
-            <option value="">全部类别</option>
-            <option v-for="c in categoryOptions" :key="c" :value="c">{{ categoryText(c) }}</option>
-          </select>
-          <select v-model="statsRange" class="mk-filter__select" aria-label="统计窗口">
+          <!-- 2026-10-05 卡头统一弹层法：归属 Agent / 类别 两下拉收进右侧「高级筛选」弹层
+              （统计窗口是全页 KPI 口径的视图范围开关，不是行筛选，留右区）；
+              触发钮标生效数 -->
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / ID / 类别" />
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
+        </div>
+        <div class="mk-card__head-right">
+          <select v-model="statsRange" class="mk-filter__select" aria-label="统计窗口" title="统计窗口：改动本页 KPI 与卡内统计的聚合窗口，不筛列表行">
             <option value="7d">近 7 天</option>
             <option value="24h">近 24 小时</option>
             <option value="30d">近 30 天</option>
             <option value="all">全部</option>
           </select>
-          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / ID / 类别" />
-          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
-        </div>
-        <div class="mk-card__head-right">
           <MkCols
             :col-defs="menuColDefs"
             :storage-key="SK_COLS_KEY"
             v-model:hidden="hiddenCols"
             :default-hidden="SK_COLS_DEFAULT_HIDDEN"
           />
+          <div class="mk-adv">
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm"
+              :aria-expanded="advOpen"
+              @click="advOpen = !advOpen"
+            >
+              <Filter :size="14" :stroke-width="1.75" />高级筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
+            </button>
+            <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
+            <div v-show="advOpen" class="mk-adv__pop" @click.stop>
+              <label class="mk-adv__field">
+                <span class="mk-cell-sub">归属 Agent</span>
+                <!-- P1② 归属 Agent 筛选（原型 renderSkillHub 1662-1706 工具条）：
+                     全部 Agent + 每 Agent 名（N），change 即筛。
+                     2026-10-05 CP1：全部档去计数（与 KPI「Skill N」/ 卡头计数三处复读，单源交 KPI） -->
+                <select id="skillAgentFilter" v-model="agentFilter" class="mk-filter__select" aria-label="按归属 Agent 筛选">
+                  <option value="">全部 Agent</option>
+                  <option v-for="a in agentOptions" :key="a.id" :value="a.id">{{ a.label }}（{{ a.count }}）</option>
+                </select>
+              </label>
+              <label class="mk-adv__field">
+                <span class="mk-cell-sub">类别</span>
+                <select v-model="categoryFilter" class="mk-filter__select" aria-label="按类别筛选">
+                  <option value="">全部类别</option>
+                  <option v-for="c in categoryOptions" :key="c" :value="c">{{ categoryText(c) }}</option>
+                </select>
+              </label>
+            </div>
+          </div>
           <!-- 卡头不再出「筛选后 N 个」命中数：与分页器「共 N 条」同屏复读，计数单源交分页器
                （2026-10-05 CP1 判例 Users.vue:26-29） -->
         </div>
@@ -345,6 +366,8 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { Filter } from 'lucide-vue-next'
+import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
 import { skillStatOf, openSubPage, isLive, intent, investigateAgent } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
@@ -493,6 +516,12 @@ const menuColDefs = computed<ReadonlyArray<{ key: string; label: string; title: 
   return list
 })
 const statsRange = liveSkillStatsRange
+
+/* 高级筛选弹层（2026-10-05 卡头统一：归属 Agent/类别自主行收进共享 .mk-adv），
+   Esc 关闭走共享 useEscape（与教学会话同一外壳） */
+const advOpen = ref(false)
+useEscape(() => advOpen.value, () => { advOpen.value = false })
+const advCount = computed(() => (agentFilter.value ? 1 : 0) + (categoryFilter.value ? 1 : 0))
 
 /** 类别下拉动态化：取当前档案实际出现的类别（覆盖 standard/teaching/simulation/tool） */
 const categoryOptions = computed(() => {
@@ -1013,7 +1042,6 @@ const fallbackPolicyTitle = computed(() =>
 }
 
 /* 工具条「归属 Agent」label（原型 toolbar 1667）：12px 重字，与下拉同排 */
-.sk-filter-label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); white-space: nowrap; }
 
 /* ===== 模型路由页签（原型 renderSkillHub 1665-1681 routing 分支）=====
    KPI 栅格 + 小节头固定在上，路由表与覆盖矩阵共用下方滚动区 */

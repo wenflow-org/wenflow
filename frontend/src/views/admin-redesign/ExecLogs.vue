@@ -82,17 +82,9 @@
             :title="testFilter === 'only' ? '仅看测试 → 点击恢复默认视图' : '连通性/探活测试日志（模型接入页产生，默认视图已排除），点击仅看测试'"
             @click="toggleTestFilter"
           >测试<span class="mk-pill__count">{{ testCount }}</span></button>
-          <!-- 时间范围 / 节点（Skill）下拉提上主行（2026-10-04 外部评审拍板：排障最高频的
-               两个筛选器此前折叠在「高级」面板里默认不可见）；时间档补 15m/1h 小时级窗口 -->
-          <select v-model="timeRange" class="mk-filter__select" aria-label="时间范围筛选" @change="applyServerQuery()">
-            <option v-for="o in timeRangeOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-          </select>
-          <select v-model="agentFilter" class="mk-filter__select mono" aria-label="按节点（Skill）筛选" title="按 Skill 精确筛选（全集来自注册表 + 当前页 + 保存视图）">
-            <option value="">全部节点</option>
-            <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
-          </select>
+          <!-- 2026-10-05 卡头统一弹层法：时间范围 / 节点 / Trace ID 三件收进右侧「高级筛选」弹层
+              （2026-10-04「提上主行」的发现性问题由弹层钮生效计数兜住），主行回到 pills + 搜索 -->
           <MkFilterSearch v-model="keyword" placeholder="关键词搜索" @keydown.enter="applyServerQuery()" />
-          <MkFilterSearch v-model="traceId" placeholder="Trace ID（链路 ID）" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery()" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
           <SavedViewsBar
@@ -106,18 +98,49 @@
             @save="onSaveView"
           />
         </div>
-        <!-- 右侧：错误类别 / 自动刷新 / 高级 / 列设置（对齐 Users：切换控件 + 统计） -->
+        <!-- 右侧：自动刷新 / 列 / 高级筛选（2026-10-05 全站卡头统一弹层法：时间范围/节点/
+             Trace ID 自主行收进共享 .mk-adv 弹层（此前 10-04 提上主行致 1440 折两行），
+             与私有的 sessionId「高级」面板合并为同一弹层；触发钮标生效数） -->
         <div class="mk-card__head-right">
+          <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
+          <MkCols :col-defs="colDefs" :storage-key="COLS_KEY" :default-hidden="DEFAULT_HIDDEN" v-model:hidden="hiddenCols" />
+          <div class="mk-adv">
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm"
+              :aria-expanded="advOpen"
+              @click="advOpen = !advOpen"
+            >
+              <Filter :size="14" :stroke-width="1.75" />高级筛选<span v-if="advancedFilterCount" class="mk-pill__count">{{ advancedFilterCount }}</span>
+            </button>
+            <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
+            <div v-show="advOpen" class="mk-adv__pop" @click.stop>
+              <label class="mk-adv__field">
+                <span class="mk-cell-sub">时间范围</span>
+                <select v-model="timeRange" class="mk-filter__select" aria-label="时间范围筛选" @change="applyServerQuery()">
+                  <option v-for="o in timeRangeOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+                </select>
+              </label>
+              <label class="mk-adv__field">
+                <span class="mk-cell-sub">节点（Skill）</span>
+                <select v-model="agentFilter" class="mk-filter__select mono" aria-label="按节点（Skill）筛选" title="按 Skill 精确筛选（全集来自注册表 + 当前页 + 保存视图）">
+                  <option value="">全部节点</option>
+                  <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
+                </select>
+              </label>
+              <label class="mk-adv__field">
+                <span class="mk-cell-sub">Trace ID（链路 ID）</span>
+                <input v-model="traceId" class="mk-filter__input" placeholder="按调用链路 ID 精确查询" aria-label="Trace ID（链路 ID）" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery()" />
+              </label>
+              <label class="mk-adv__field">
+                <span class="mk-cell-sub">会话 sessionId</span>
+                <input v-model="sessionId" class="mk-filter__input" placeholder="sessionId" aria-label="按会话 sessionId 筛选" @keydown.enter="applyServerQuery()" />
+              </label>
+            </div>
+          </div>
           <span class="mk-card__meta" v-if="errorCategory">类别「{{ errorCategory }}」<button type="button" class="mk-link" @click="errorCategory = ''; applyServerQuery()">×</button></span>
           <span v-if="listRefreshing" class="mk-card__meta exec-updating" role="status" aria-live="polite">更新中…</span>
-          <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
-          <button type="button" class="mk-link" :class="{ 'mk-link--active': advOpen }" @click="advOpen = !advOpen" title="高级筛选（按会话 sessionId）">高级<span v-if="advancedFilterCount" class="mk-pill__count">{{ advancedFilterCount }}</span></button>
-          <MkCols :col-defs="colDefs" :storage-key="COLS_KEY" :default-hidden="DEFAULT_HIDDEN" v-model:hidden="hiddenCols" />
         </div>
-      </div>
-      <!-- 高级面板只剩低频精确筛选（2026-10-04：时间范围/节点下拉已提上卡头主行） -->
-      <div v-if="advOpen" class="log-advpanel">
-        <input v-model="sessionId" class="mk-filter__input" placeholder="sessionId" aria-label="按会话 sessionId 筛选" @keydown.enter="applyServerQuery()" />
       </div>
       <!-- 三态均在卡片内（对齐 Users.vue）：首载骨架 / 加载失败 / 表格；筛选头常驻不随数据空否消失 -->
       <MockSkeletonTable v-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="4" :rows="6" />
@@ -338,7 +361,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Copy, Waypoints } from 'lucide-vue-next'
+import { Copy, Waypoints, Filter } from 'lucide-vue-next'
+import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { intent, openSkillDrawer, clearInvestigation, dataSource, liveSkillStatsMap } from './store'
@@ -439,6 +463,8 @@ const errorCategory = ref('')
 const testFilter = ref<'only' | ''>('')
 const autoRefresh = ref(false)
 const advOpen = ref(false)
+/* 弹层 Esc 关闭走共享 useEscape（与教学会话同一外壳 .mk-adv*） */
+useEscape(() => advOpen.value, () => { advOpen.value = false })
 
 /** 行展开切换（click / Enter 复用）：键盘事件仅目标为行自身时生效，
     避免行内按钮（trace 入口/节点链接）的 Enter 冒泡误触发展开 */
@@ -926,7 +952,10 @@ const logs = computed(() => liveLogsFiltered.value)
 const listRefreshing = computed(() => (liveLoading.value || liveLogsLoading.value) && logs.value.length > 0)
 /* 「高级」筛选生效计数（EG17）：目前面板内仅 sessionId 一项；非空即计 1，
    面板收起时按钮上仍有徽章，状态不丢。 */
-const advancedFilterCount = computed(() => (sessionId.value.trim() ? 1 : 0))
+/** 高级筛选弹层生效数：时间档非默认 / 节点 / Trace ID / sessionId 任一激活即计（收起也不丢状态） */
+const advancedFilterCount = computed(
+  () => (timeRange.value !== 'today' ? 1 : 0) + (agentFilter.value ? 1 : 0) + (traceId.value.trim() ? 1 : 0) + (sessionId.value.trim() ? 1 : 0)
+)
 /* 分页口径说明（D19）：本页把同一调用的网关行与 Skill 行合并为一行展示，
    一页 30 行原始记录合并后可见行数更少——页码器注明已并入条数，避免与「30 条/页」口径打架。 */
 const mergedRowsNote = computed(() =>
@@ -1186,18 +1215,6 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 
 /* 状态条筛选徽章 / 清除按钮已随 2026-10-04 状态条退役删除，本页不再保留其字号覆写（全局类定义见 shared.css） */
 
-.log-advpanel {
-  flex-basis: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding-top: 2px;
-  animation: log-adv-in 0.15s ease;
-}
-@keyframes log-adv-in {
-  from { opacity: 0; transform: translateY(-3px); }
-}
 .log-auto {
   display: inline-flex;
   align-items: center;

@@ -197,7 +197,8 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     await nextTick();
     await findBtn(w, '下一页').trigger('click');
     await flushPromises();
-    const input = w.find<HTMLInputElement>('input[placeholder="Trace ID（链路 ID）"]');
+    // 2026-10-05 卡头统一：Trace ID 收进「高级筛选」弹层（v-show 常驻 DOM，jsdom 直接可寻址）
+    const input = w.find<HTMLInputElement>('input[aria-label="Trace ID（链路 ID）"]');
     await input.setValue('tr:abc');
     await input.trigger('keydown.enter');
     await flushPromises();

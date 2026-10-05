@@ -640,6 +640,9 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
    2026-10-04 提升为共享原语（第二处使用者「教学会话」出现时，原为 Users.vue 页面私有）。 */
 .mk-adv { position: relative; display: inline-flex; }
 .mk-adv__mask { position: fixed; inset: 0; z-index: var(--mk-z-menu); }
+/* 弹层内字段 = 标签(小字) + 控件 纵排（教学会话判例 ts-adv__field，2026-10-05 执行日志/审计日志/
+   技能三页收编下拉时提升共享；标签用 .mk-cell-sub，控件用 .mk-filter__select / .mk-filter__input） */
+.mk-adv__field { display: grid; gap: 4px; justify-items: start; }
 .mk-adv__pop {
   position: absolute;
   right: 0;

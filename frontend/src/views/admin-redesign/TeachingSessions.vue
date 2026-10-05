@@ -134,14 +134,14 @@
             </button>
             <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
             <div v-show="advOpen" class="mk-adv__pop" @click.stop>
-              <label class="ts-adv__field">
+              <label class="mk-adv__field">
                 <span class="mk-cell-sub">状态</span>
                 <select v-model="statusFilter" class="mk-filter__select" aria-label="按状态筛选">
                   <option value="">全部状态</option>
                   <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
                 </select>
               </label>
-              <label class="ts-adv__field">
+              <label class="mk-adv__field">
                 <span class="mk-cell-sub">开始时间</span>
                 <select v-model="dateFilter" class="mk-filter__select" aria-label="按开始时间筛选">
                   <option value="">全部时间</option>
@@ -860,7 +860,7 @@ defineExpose({ refreshNow })
    关注度由「关注」列（高/中/低 色字 + title）单源承载 *//* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
 .ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
 .ts-tags { display: flex; gap: 6px; margin-top: 2px; }/* 高级筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
-.ts-adv__field { display: grid; gap: 4px; justify-items: start; }/* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
+/* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
    长内容由 .ts-summary-preview / .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底）。
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class），本页不再私持拷贝 *//* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */

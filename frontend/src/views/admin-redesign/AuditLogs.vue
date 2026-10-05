@@ -40,28 +40,6 @@
             :placeholder="tab === 'login' ? '用户名 / IP，回车查询' : '关键词，回车查询'"
             @keydown.enter="applyFilters"
           />
-          <!-- 动作快筛（2026-10-05 重设计）：调试期自动化调用（如「推进虚拟会话」连发 20+ 行）
-               淹没人工操作，70% 当前行是同一动作的机械重复。选项=当前页 30 行动作聚合
-               （口径如实标注，非全量 TOP）；下钻走 keyword 搜索（path 稳定尾段 contains /
-               语义键），与失败 TOP chip 同机制、同一搜索框真源（手动改搜索词后下拉自动回落）。 -->
-          <select
-            v-if="tab === 'operation'"
-            :value="activeActionValue"
-            class="mk-filter__select"
-            aria-label="按动作筛选"
-            title="按动作快筛（当前页动作聚合；搜索词写入左侧关键词框，可再叠加其他关键词）"
-            @change="applyActionFilter(($event.target as HTMLSelectElement).value)"
-          >
-            <option value="">全部动作</option>
-            <option v-for="a in actionOptions" :key="a.value" :value="a.value">{{ a.label }} {{ a.count }}</option>
-          </select>
-          <select v-model="timeRange" class="mk-filter__select" aria-label="时间范围" @change="applyFilters">
-            <option value="today">今天</option>
-            <option value="yesterday">昨天</option>
-            <option value="week">近 7 天</option>
-            <option value="month">近 30 天</option>
-            <option value="all">全部</option>
-          </select>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
           <SavedViewsBar
@@ -76,22 +54,66 @@
           />
         </div>
         <div class="mk-card__head-right">
-          <span v-if="failureByAction.length" class="al-fails">
-            <span class="al-fails__label" title="失败最多的动作（近 2000 条失败内聚合），点击 chip 下钻只看失败">失败 TOP</span>
-            <!-- P2：span→button。后端 /admin/audit-logs 支持 success=true/false 白名单参数（parseSuccess），
-                 点击 = 只看失败 + path 首段关键词；再点已激活的 chip 退出下钻 -->
-            <button
-              v-for="f in failureByAction"
-              :key="f.action"
-              type="button"
-              class="al-fails__chip"
-              :class="{ 'al-fails__chip--on': failedOnly && failedAction === f.action }"
-              :title="f.action"
-              :aria-pressed="failedOnly && failedAction === f.action"
-              @click="filterByFailure(f.action)"
-            >{{ failureLabel(f.action) }} <b>{{ f.count }}</b></button>
-          </span>
+          <!-- 2026-10-05 卡头统一弹层法：动作/时间下拉自主行收进共享 .mk-adv 弹层，
+               失败 TOP 快捷下钻同迁（此前在头部右区占位致 1440 折两行）；触发钮标生效数 -->
           <MkCols :col-defs="alColDefs" :storage-key="AL_COLS_KEY" v-model:hidden="hiddenCols" />
+          <div class="mk-adv">
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm"
+              :aria-expanded="advOpen"
+              @click="advOpen = !advOpen"
+            >
+              <Filter :size="14" :stroke-width="1.75" />高级筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
+            </button>
+            <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
+            <div v-show="advOpen" class="mk-adv__pop" @click.stop>
+              <label v-if="tab === 'operation'" class="mk-adv__field">
+                <span class="mk-cell-sub">动作快筛</span>
+                <!-- 动作快筛（2026-10-05 重设计）：调试期自动化调用（如「推进虚拟会话」连发 20+ 行）
+                     淹没人工操作。选项=当前页 30 行动作聚合（口径如实标注，非全量 TOP）；下钻走
+                     keyword 搜索（path 稳定尾段 contains / 语义键），与失败 TOP chip 同机制、
+                     同一搜索框真源（手动改搜索词后下拉自动回落）。 -->
+                <select
+                  :value="activeActionValue"
+                  class="mk-filter__select"
+                  aria-label="按动作筛选"
+                  title="按动作快筛（当前页动作聚合；搜索词写入关键词框，可再叠加其他关键词）"
+                  @change="applyActionFilter(($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="">全部动作</option>
+                  <option v-for="a in actionOptions" :key="a.value" :value="a.value">{{ a.label }} {{ a.count }}</option>
+                </select>
+              </label>
+              <label class="mk-adv__field">
+                <span class="mk-cell-sub">时间范围</span>
+                <select v-model="timeRange" class="mk-filter__select" aria-label="时间范围" @change="applyFilters">
+                  <option value="today">今天</option>
+                  <option value="yesterday">昨天</option>
+                  <option value="week">近 7 天</option>
+                  <option value="month">近 30 天</option>
+                  <option value="all">全部</option>
+                </select>
+              </label>
+              <!-- 失败 TOP 快捷下钻（近 2000 条失败内聚合）：点击 = 只看失败 + path 首段关键词，
+                   再点已激活 chip 退出；自头部右区迁入（同一机制，只换家不换行为） -->
+              <div v-if="failureByAction.length" class="al-fails al-fails--pop">
+                <span class="al-fails__label" title="失败最多的动作（近 2000 条失败内聚合），点击 chip 下钻只看失败">失败 TOP</span>
+                <!-- P2：span→button。后端 /admin/audit-logs 支持 success=true/false 白名单参数（parseSuccess），
+                     点击 = 只看失败 + path 首段关键词；再点已激活的 chip 退出下钻 -->
+                <button
+                  v-for="f in failureByAction"
+                  :key="f.action"
+                  type="button"
+                  class="al-fails__chip"
+                  :class="{ 'al-fails__chip--on': failedOnly && failedAction === f.action }"
+                  :title="f.action"
+                  :aria-pressed="failedOnly && failedAction === f.action"
+                  @click="filterByFailure(f.action)"
+                >{{ failureLabel(f.action) }} <b>{{ f.count }}</b></button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -289,7 +311,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { KeyRound, Lock } from 'lucide-vue-next'
+import { KeyRound, Lock, Filter } from 'lucide-vue-next'
+import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuditApi, type AuditLogQuery } from '@/api/adminApi'
 import { errMsg, shortId } from './live'
@@ -411,6 +434,13 @@ type TabId = (typeof tabs)[number]['id']
 const tab = ref<TabId>('operation')
 const keyword = ref('')
 const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('today')
+/* 高级筛选弹层（2026-10-05 卡头统一：动作/时间/失败 TOP 自主行收进共享 .mk-adv），
+   Esc 关闭走共享 useEscape（与教学会话同一外壳） */
+const advOpen = ref(false)
+useEscape(() => advOpen.value, () => { advOpen.value = false })
+const advCount = computed(
+  () => (activeActionValue.value ? 1 : 0) + (timeRange.value !== 'today' ? 1 : 0)
+)
 
 /* 深链：?tab=login 直达登录审计（会话安全页「审计日志 · 登录审计 →」跳入） */
 const route = useRoute()
@@ -880,6 +910,8 @@ function exportCurrentPage() {
 }
 /* P2-16：失败 TOP 聚合 chip（点击下钻到该动作的失败记录） */
 .al-fails { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 48%; }
+/* 弹层内档位：不受头部右区 48% 限宽，chip 允许换行铺开 */
+.al-fails--pop { max-width: none; }
 .al-fails__label { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); }
 .al-fails__chip {
   border: 1px solid var(--mk-line);

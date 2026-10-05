@@ -138,6 +138,9 @@
         <div class="mk-card__head-right">
           <!-- CP1：筛选命中数单源住在分页器（「共 N 条」），卡头不再渲染「X / N 人」；
                截断警示仍在此（数据完整性事实，与行数同格就近） -->
+          <!-- 2026-10-05 卡头统一：补「列」按钮（此前全站唯一没有列控制的列表页）；
+               窄屏档（isNarrow）仍按视口折叠，列勾选在桌面档生效 -->
+          <MkCols :col-defs="vlColDefs" storage-key="wf_vl_hidden_cols_v1" v-model:hidden="hiddenCols" />
           <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-card__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
             已截断 · 共 {{ liveVirtualsTotal }} 人
           </span>
@@ -162,9 +165,9 @@
               :aria-sort="vlSortState('name')"
               @click="toggleVlSort('name')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('name')">虚拟学习者<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th v-if="!isNarrow">长期倾向</th>
+            <th v-if="!isNarrow && !hiddenCols.has('tendency')">长期倾向</th>
             <th
-              v-if="!isNarrow"
+              v-if="!isNarrow && !hiddenCols.has('story')"
               scope="col"
               class="mk-th--right mk-th--sortable"
               title="已生成故事条数（0 = 未生成，需先生成才能运行）"
@@ -179,7 +182,7 @@
               @click="toggleVlSort('running')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('running')">进行中<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
-              v-if="!isNarrow"
+              v-if="!isNarrow && !hiddenCols.has('sessions')"
               scope="col"
               class="mk-th--right mk-th--sortable"
               title="累计会话数（全部会话，含终态）"
@@ -187,7 +190,7 @@
               @click="toggleVlSort('sessions')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('sessions')">会话<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
-              v-if="!isNarrow"
+              v-if="!isNarrow && !hiddenCols.has('failed')"
               scope="col"
               class="mk-th--right mk-th--sortable"
               title="已失败/已终止会话数（全量聚合）"
@@ -195,7 +198,7 @@
               @click="toggleVlSort('failed')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('failed')">失败<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
-              v-if="!isNarrow"
+              v-if="!isNarrow && !hiddenCols.has('stalled')"
               scope="col"
               class="mk-th--right mk-th--sortable"
               title="超过回收阈值无写入且无活跃租约的会话数（可在状态条一键回收）"
@@ -203,7 +206,7 @@
               @click="toggleVlSort('stalled')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('stalled')">卡死<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
-              v-if="!isNarrow"
+              v-if="!isNarrow && !hiddenCols.has('created')"
               scope="col"
               class="mk-th--sortable"
               :aria-sort="vlSortState('created')"
@@ -226,10 +229,10 @@
                 </div>
               </div>
             </td>
-            <td v-if="!isNarrow">
+            <td v-if="!isNarrow && !hiddenCols.has('tendency')">
               <span class="mk-cell-text--wrap" :class="{ 'mk-na': !s.goal || s.goal === '—' }" :title="s.goal || undefined">{{ s.goal || '未设置' }}</span>
             </td>
-            <td v-if="!isNarrow" class="mk-num" :title="s.storyCount > 0 ? `故事池 ${s.storyCount} 条` : '尚未生成故事，需先生成才能运行'">
+            <td v-if="!isNarrow && !hiddenCols.has('story')" class="mk-num" :title="s.storyCount > 0 ? `故事池 ${s.storyCount} 条` : '尚未生成故事，需先生成才能运行'">
               <span v-if="s.storyCount > 0">{{ s.storyCount }}</span>
               <span v-else class="mk-na">—</span>
             </td>
@@ -251,8 +254,8 @@
                 <span v-else class="mk-na" title="当前没有进行中的会话">空闲</span>
               </div>
             </td>
-            <td v-if="!isNarrow" class="mk-num">{{ s.sessions }}</td>
-            <td v-if="!isNarrow" class="mk-num">
+            <td v-if="!isNarrow && !hiddenCols.has('sessions')" class="mk-num">{{ s.sessions }}</td>
+            <td v-if="!isNarrow && !hiddenCols.has('failed')" class="mk-num">
               <button
                 type="button"
                 class="vl-faillink mk-num"
@@ -261,11 +264,11 @@
                 @click.stop="openSubPage('virtual', s.id)"
               >{{ s.failedCount }}</button>
             </td>
-            <td v-if="!isNarrow" class="mk-num">
+            <td v-if="!isNarrow && !hiddenCols.has('stalled')" class="mk-num">
               <span v-if="s.stalledCount > 0" class="vl-num--bad" :title="`${s.stalledCount} 个进行中会话已卡死（超过回收阈值无写入），可在状态条一键回收`">{{ s.stalledCount }}</span>
               <span v-else class="mk-na" title="无卡死会话">—</span>
             </td>
-            <td v-if="!isNarrow"><span class="mk-cell-sub" :title="s.createdAt ? `创建于 ${fmtDateTime(s.createdAt)}` : undefined">{{ s.created }}</span></td>
+            <td v-if="!isNarrow && !hiddenCols.has('created')"><span class="mk-cell-sub" :title="s.createdAt ? `创建于 ${fmtDateTime(s.createdAt)}` : undefined">{{ s.created }}</span></td>
             <td>
               <div class="mk-actions mk-actions--left">
                 <!-- live：入口在名称格（画像页），此处只留真正的行内操作（运行 / 测试 / 更多）
@@ -356,6 +359,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkCols from '@/components/mk/MkCols.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import SimulatedDaySettings from './SimulatedDaySettings.vue'
@@ -526,6 +530,19 @@ function menuRemove(s: Sample) {
    失败/卡死/创建）随 useIsNarrow 隐藏——此前整表 860px 最小宽只能横向拖（vlab 大表
    窄屏零降级问题）；行详情（画像页）信息不丢 */
 const isNarrow = useIsNarrow()
+
+/* 列显隐（2026-10-05 卡头统一补「列」按钮）：六个次要列可勾选；名称/进行中/操作是
+   身份与动作列不进 colDefs，勾选列仍随 live+窄屏逻辑。窄屏（isNarrow）折叠优先于列
+   勾选——窄屏档勾了也不显（行详情进画像页，信息不丢） */
+const vlColDefs = [
+  { key: 'tendency', label: '长期倾向' },
+  { key: 'story', label: '故事池', title: '已生成故事条数（0 = 未生成，需先生成才能运行）' },
+  { key: 'sessions', label: '会话', title: '累计会话数（全部会话，含终态）' },
+  { key: 'failed', label: '失败', title: '已失败/已终止会话数（全量聚合）' },
+  { key: 'stalled', label: '卡死', title: '超过回收阈值无写入且无活跃租约的会话数（可在状态条一键回收）' },
+  { key: 'created', label: '创建' },
+] as const
+const hiddenCols = ref<Set<string>>(new Set())
 
 /* ===== intent 快捷动作：直达并打开新建弹窗（子组件挂载后触发，保持深链行为） ===== */
 watch(
