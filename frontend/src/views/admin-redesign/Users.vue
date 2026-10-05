@@ -460,13 +460,14 @@ defineExpose({ refresh: () => { void loadLiveData() }, openCreate })
    计数取自全量 liveUsers；「已删除」为独立数据源，切过去才拉取，未加载时不显示计数。 */
 const pills = computed(() => {
   const active = liveUsers.value
-  const isOnline = (u: { lastLoginAt?: string | null }) =>
-    !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 30 * 60000
+  /* 2026-10-05：管理员 / 30 分钟在线计数升宿主 People 的 KPI 面板（统一面板设计），
+     KPI 孪生 pill 不再显数（学习状态判例），退为纯筛选开关；普通用户 / 已删除
+     别处没有，保留计数。「全部」本就不显数 = 分页器「共 N 条」单源 */
   return [
     { id: 'all', label: '全部', count: active.length },
-    { id: 'admin', label: '管理员', count: active.filter((u) => u.isAdmin).length },
+    { id: 'admin', label: '管理员', count: null },
     { id: 'user', label: '普通用户', count: active.filter((u) => !u.isAdmin).length },
-    { id: 'online', label: '30 分钟在线', count: active.filter(isOnline).length },
+    { id: 'online', label: '30 分钟在线', count: null },
     { id: 'deleted', label: '已删除', count: deletedUsers.value.length || null }
   ]
 })

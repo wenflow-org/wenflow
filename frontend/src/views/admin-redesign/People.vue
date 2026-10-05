@@ -15,10 +15,22 @@
       </template>
     </MkPageHead>
 
-    <!-- 账号构成带（2026-10-04 用户拍板教学组统一 buckets 形态）：真实用户 / 虚拟学习者 / 测试账号
-         三桶 = 同一整体（已加载账号）的互斥构成，份额条按占比；口径在值悬停披露。
-         数据 = live 域已加载行（后端总数在 liveUsersTotal，超上限截断时口径里注明） -->
-    <MkBuckets v-if="ppBuckets.length" label="账号构成" :items="ppBuckets" />
+    <!-- 账号 KPI（2026-10-05 用户纠偏「用户与学习者也没做 kpi 版，只做了一个」）：
+         三口径升 MkKpi 卡带（全站统一面板设计，hint 可见短口径 + title 长释）；
+         构成带只在「含测试」档出现（D18：仅真实档三分桶结构性恒 100/0/0，
+         单桶假构成不再渲染——它的信息由 KPI hint 承载） -->
+    <section v-if="ppKpi.length" class="mk-kpi-grid" aria-label="账号概览">
+      <MkKpi
+        v-for="k in ppKpi"
+        :key="k.label"
+        :label="k.label"
+        :value="k.value"
+        :hint="k.hint"
+        :tone="k.tone"
+        :title="k.title"
+      />
+    </section>
+    <MkBuckets v-if="ppBuckets.length > 1" label="账号构成" :items="ppBuckets" />
 
     <Users ref="usersRef" embedded />
   </div>
@@ -28,6 +40,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import MkBuckets from '@/components/mk/MkBuckets.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Users from './Users.vue'
@@ -40,6 +53,43 @@ const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(n
    管理员数是运营要看的角色分布，不单独立桶（角色与账号性质非同一整体，混桶=假比例）。
    D18：默认「仅真实」口径下后端已把虚拟/测试排除，三分桶会结构性恒 100/0/0（两桶死档）——
    故默认只渲染真实单桶 + 披露未纳入，切到「含测试」后才展示三桶互斥构成。 */
+/* 账号 KPI（2026-10-05 统一面板设计）：真实用户 / 管理员 / 30 分钟在线。
+   口径：真实用户 = 非虚拟且非测试（两口径开关下都不变）；管理员 = 真实域细分（与旧桶 foot 同源）；
+   在线 = 最后登录在 30 分钟内（与列表卡「30 分钟在线」pill 同口径，pill 已随之去计数）。
+   数据 = live 域已加载行（后端总数在 liveUsersTotal，超上限截断时 title 注明） */
+type PpKpiTile = { label: string; value: number; hint: string; tone: '' | 'ok' | 'warn' | 'bad'; title: string }
+const ppKpi = computed<PpKpiTile[]>(() => {
+  const rows = liveUsers.value
+  if (!rows.length) return []
+  const realRows = rows.filter((u) => !u.isVirtualLearner && !u.isTestAccount)
+  const admins = realRows.filter((u) => u.isAdmin).length
+  const online = rows.filter((u) => !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 30 * 60000).length
+  const scope = `按已加载 ${rows.length} 行统计（后端共 ${liveUsersTotal.value}）`
+  return [
+    {
+      label: '真实用户',
+      value: realRows.length,
+      hint: liveIncludeVirtual.value ? '不含虚拟 / 测试' : '虚拟 / 测试账号未纳入',
+      tone: '',
+      title: `${scope}；切换页头「含测试」后下方出现完整账号构成带`,
+    },
+    {
+      label: '管理员',
+      value: admins,
+      hint: realRows.length ? `占真实用户 ${Math.round((admins / realRows.length) * 100)}%` : '—',
+      tone: '',
+      title: '真实用户中的管理员数（角色属真实域细分，不与虚拟/测试混算）',
+    },
+    {
+      label: '30 分钟在线',
+      value: online,
+      hint: '最后登录在 30 分钟内',
+      tone: '',
+      title: scope,
+    },
+  ]
+})
+
 const ppBuckets = computed(() => {
   const rows = liveUsers.value
   const total = rows.length

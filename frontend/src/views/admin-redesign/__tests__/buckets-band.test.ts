@@ -4,7 +4,7 @@
  * - 教学会话：贴表分布条 MkDistBand（2026-10-04 晚接棒 buckets）——十状态归四组+完结率入副标（窗口口径）；异常快捷筛选迁卡头快捷 chips
  *   （2026-10-04 用户拍板：页头状态条整体退役，异常计数由本带「异常终态」单源承载）
  * - 学习路径：getStats byStatus 全平台口径直出（零值桶如实显示、枚举外归「其它」）
- * - 用户与学习者：真实 / 虚拟 / 测试 三桶互斥构成（管理员作真实桶 foot）
+ * - 用户与学习者：KPI 面板常驻（2026-10-05 统一面板设计）；构成带仅「含测试」档三桶互斥构成
  * - 替代形态回归护栏：stageband 分布卡不再出现在教学会话/学习路径页
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -161,7 +161,7 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     w.unmount();
   });
 
-  it('用户与学习者：默认「仅真实」单桶 + 披露；含测试后真实 / 虚拟 / 测试三桶互斥构成，管理员作真实桶 foot', async () => {
+  it('用户与学习者：默认「仅真实」KPI 面板无构成带（2026-10-05 统一面板设计）；含测试后 KPI 常驻 + 三桶互斥构成，管理员作真实桶 foot', async () => {
     const { router, ready } = mockRouter('/admin/people');
     await ready;
     liveIncludeVirtual.value = false;
@@ -178,17 +178,21 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     ];
     liveUsersTotal.value = 4;
     await nextTick();
-    // D18：默认「仅真实」口径下虚拟 / 测试结构性为 0，是死档 → 只渲染真实单桶 + 披露未纳入
-    expect(bucketLabels(w)).toEqual(['真实用户']);
-    expect(bucketValues(w)).toEqual(['2']);
-    expect(w.findAll('.bucket__foot').map((f) => f.text()).join(' ')).toContain('虚拟 / 测试账号未纳入');
+    // D18：默认「仅真实」口径下虚拟 / 测试结构性为 0，是死档 → 单桶假构成撤，改 KPI 面板承载
+    expect(bucketLabels(w)).toEqual([]);
+    const tiles = w.findAll('.mk-kpi-grid .mk-kpi');
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['真实用户', '管理员', '30 分钟在线']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['2', '1', '0']);
+    expect(tiles[0].find('.mk-kpi__hint').text()).toContain('虚拟 / 测试账号未纳入');
+    expect(tiles[1].find('.mk-kpi__hint').text()).toContain('占真实用户 50%');
     w.unmount();
 
-    // 含测试口径 → 三桶互斥构成（管理员数作真实桶 foot；口径悬停给行数与后端总数）
+    // 含测试口径 → KPI 常驻 + 三桶互斥构成（管理员数作真实桶 foot；口径悬停给行数与后端总数）
     liveIncludeVirtual.value = true;
     const w2 = mount(People, { global: { plugins: [router] } });
     await settle();
     await nextTick();
+    expect(w2.findAll('.mk-kpi-grid .mk-kpi')).toHaveLength(3);
     expect(bucketLabels(w2)).toEqual(['真实用户', '虚拟学习者', '测试账号']);
     expect(bucketValues(w2)).toEqual(['2', '1', '1']);
     const feet = w2.findAll('.bucket__foot').map((f) => f.text());
