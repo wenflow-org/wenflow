@@ -281,6 +281,24 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.findAll('.mk-kpi')).toHaveLength(5);
   });
 
+  it('实验环境条（2026-10-05 重排）：速率上限与日期模拟同壳分组，写控制不进 KPI 数字栅格', async () => {
+    liveVirtuals.value = [makeVirtual(1)];
+    const w = await mountPage();
+    const env = w.find('.vl-env');
+    expect(env.exists()).toBe(true);
+    // 两组写控制同壳：速率上限（input+保存）| 分隔线 | 日期模拟
+    expect(env.find('.vl-rpm input').exists()).toBe(true);
+    expect(env.find('.vl-rpm button').text()).toContain('保存');
+    expect(env.find('.vl-env__div').exists()).toBe(true);
+    expect(env.find('.sd-settings').exists()).toBe(true);
+    // 读/写分块判例：写控件不得混进 KPI 数字栅格
+    expect(w.find('.vl-kpi .vl-rpm').exists()).toBe(false);
+    expect(w.find('.vl-kpi .sd-settings').exists()).toBe(false);
+    // RPM 组改版口径：label 用家族词「速率上限」+ 单位 /分（原裸「VL RPM」）
+    expect(env.find('.vl-rpm__label').text()).toBe('速率上限');
+    expect(env.find('.vl-rpm__unit').text()).toBe('/分');
+  });
+
   it('无卡死时不出现一键回收按钮；未截断时不出现截断提示', async () => {
     liveVirtualSessionStats.value = { created: 0, running: 0, failed: 0, abandoned: 0, completed: 5, total: 5 };
     liveVirtualStaleCount.value = 0;

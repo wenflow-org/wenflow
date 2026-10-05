@@ -174,20 +174,29 @@ onMounted(load)
 </script>
 
 <style scoped>
-/* 外边距已撤：消费方（VirtualLearners）把本组件当页级控制条用，间距交给 .mk-page 的
-   --mk-stack-gap 栅格（卡内嵌套时代的 margin-top: 8px 是另一套口径） */
-.sd-settings { border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); padding: 10px 12px; }
+/* 外壳归零（2026-10-05 重排）：本组件嵌入消费方「实验环境」条（.vl-env 提供描边/内边距/
+   分隔线），自身只管「head 行同行参与 + 展开体折到第二行」的换行布局：
+   收起态 = head 与速率上限同行（title flex:1 把摘要/开关推到条右端，同原独立条形态）；
+   展开态 = body flex-basis:100% 折到第二行，起点在日期模拟组自己的列位（速率组不受打扰） */
+.sd-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  flex: 1 1 320px;
+  min-width: 0;
+}
 /* 折叠头是 role=button 的整行开关，高度原来等于 13px 文字行高（~19px），低于 24px 可点下限 */
 /* 头部禁用 space-between：三子元素会把中位箭头孤立在行中（裸评审 2026-10-03 实测 x=839 悬空）；
    改标题 flex:1 吃余量，▸ 与开关成组靠右（同 .mk-card__head 成组判例） */
-.sd-settings__head { display: flex; align-items: center; gap: 12px; min-height: 24px; cursor: pointer; }
+.sd-settings__head { display: flex; align-items: center; gap: 12px; min-height: 24px; min-width: 0; flex: 1 1 auto; cursor: pointer; }
 .sd-settings__title { flex: 1 1 auto; }
 .sd-settings__arrow { color: var(--mk-faint, #6b7c96); font-size: var(--mk-fs-micro); transition: transform 0.15s ease; }
 .sd-settings__arrow[data-open='true'] { transform: rotate(90deg); }
 /* 折叠头标题字重对齐卡头/折叠头词汇（mk-card__title、mk-section__summary 均 700） */
 .sd-settings__title { font-weight: 700; font-size: var(--mk-fs-body); }
 .sd-switch { display: flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); cursor: pointer; }
-.sd-settings__body { padding-top: 4px; }
+.sd-settings__body { flex-basis: 100%; width: 100%; padding-top: 4px; }
 .sd-settings__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 12px; margin-top: 8px; }
 .sd-settings__sum { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sd-settings__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }

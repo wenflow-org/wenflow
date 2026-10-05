@@ -144,23 +144,23 @@ function stageLabel(stage: string | null | undefined): string {
 .vl-batch-detail__err { color: var(--mk-red, #dc2626); }
 
 /* ===== 正在运行条：原型 .statusbar 词汇——中性壳（line 描边 + surface 底），
-   活跃感只由绿点脉冲与 chip 色调承载（原整条绿染底/绿描边是另一套状态条语言） ===== */
+   活跃感只由绿点与 chip 色调承载。
+   2026-10-05 重排（用户令重设计）：①去横向滚动——收起态只渲染前 4 个 chip 天然单行，
+   展开态 flex-wrap 换行铺开（45 个 ≈ 3 行），横滚绿墙与滚动条退役；
+   ②脉冲降噪——chip 绿点全部改静态，脉冲只留条首 label 大点与批量 chip（活感单源）；
+   ③间距归页栈 --mk-stack-gap（原 margin:10px 与页栅格叠加成 22px 双重节拍） ===== */
 .vl-running {
-  margin: 10px 0 0;
   padding: 5px 12px;
   border-radius: var(--mk-radius-xl);
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  /* 单行 + 横向滚动：chips 再多也不换行撑高，保持顶部紧凑 */
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  row-gap: 4px;
+  min-width: 0;
 }
-.vl-running::-webkit-scrollbar { height: 4px; }
-.vl-running::-webkit-scrollbar-thumb { background: var(--mk-line); border-radius: var(--mk-radius-xs); }
 .vl-running__label {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
@@ -202,9 +202,9 @@ function stageLabel(stage: string | null | undefined): string {
   height: 7px;
   border-radius: 50%;
   background: var(--mk-green);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-green) 50%, transparent);
-  animation: vl-pulse 1.6s infinite;
   flex-shrink: 0;
+  /* 脉冲已撤（2026-10-05 降噪）：45 个 chip 每点都动画 = 绿光墙 + 无谓重绘；
+     活感由条首 label 大点（仍在 vl-pulse）单源承载 */
 }
 @keyframes vl-pulse {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mk-green) 50%, transparent); }

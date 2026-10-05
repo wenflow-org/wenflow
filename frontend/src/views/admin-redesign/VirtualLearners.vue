@@ -21,11 +21,10 @@
       </template>
     </MkPageHead>
 
-    <!-- 运行指标带（2026-09-29 从列表卡头搬出；2026-09-29 二次归一）：
+    <!-- 运行指标带（2026-09-29 从列表卡头搬出；2026-09-29 二次归一；2026-10-05 重排）：
          完成率/失败率/并发/今日调用/速率本来是 MkStatStrip 自由指标条，与全站 KPI 语言
          （共享 .mk-kpi-grid + MkKpi 卡）不是同一套（用户：「这个 kpi 还是很自由的 kpi 啊」），
-         现改走共享栅格；每张卡的 hint 给派生口径，不复述数字。
-         VL RPM 是「写」控件，与只读 KPI 保持分行/分块，不混进数字栅格。 -->
+         现改走共享栅格；每张卡的 hint 给派生口径，不复述数字。 -->
     <div class="vl-kpi">
       <!-- P1#19（2026-10-02 人类可读性）：运行统计三态——此前 stats 拉取失败被 .catch 静默吞掉，
            KPI 恒显「失败率 0%」假绿。现 loading→「…」、error→弱红「不可用」可点重试（调 live 层
@@ -71,13 +70,20 @@
           title="在途 = 正在出站的调用数；上限 = 已保存的 VL RPM 配置（不含输入框未保存的改动）"
         />
       </section>
-      <!-- VL RPM：写控件单独一行——与只读 KPI 分块（读/写不混排），也让 5 张卡在 1280 仍是一行
-           （同排时 RPM 抢走 114px，栅格降成 4 列、第 5 张孤零零换行）。
-           EG4：改值不再失焦即静默 PUT（走查曾误清空致服务端 60→0）——改为显式「保存」钮 +
-           「未保存」脏态；回车等价保存。控件自带类 vl-rpm__input，不与筛选框混用其布局语义。 -->
+    </div>
+
+    <!-- 实验环境条（2026-10-05 重排）：VL RPM 与日期模拟同属「实验环境写控制」，
+         两组合进一个中性壳（读/写分块判例不变——写控件仍不进 KPI 数字栅格），
+         中间竖分隔线分组；此前是两条各自描边的浮条 + 一行裸表单，页头五层条带节奏碎。
+         EG4：改值不再失焦即静默 PUT（走查曾误清空致服务端 60→0）——显式「保存」钮 +
+         「未保存」脏态；回车等价保存。控件自带类 vl-rpm__input，不与筛选框混用其布局语义。 -->
+    <div class="vl-env">
       <div class="vl-rpm">
-        <label class="vl-rpm__field">
-          <span class="vl-rpm__label">VL RPM</span>
+        <label
+          class="vl-rpm__field"
+          title="虚拟学习者专属出站上限（每分钟调用数）；与平台全局速率相互独立，不挤占真实用户额度"
+        >
+          <span class="vl-rpm__label">速率上限</span>
           <input
             v-model.number="vlRpm.limit"
             type="number"
@@ -91,13 +97,16 @@
             @input="vlRpmDirty = true"
             @keydown.enter.prevent="saveVlRpm"
           />
+          <span class="vl-rpm__unit">/分</span>
         </label>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="!vlRpmDirty || vlRpmSaving" @click="saveVlRpm">
           {{ vlRpmSaving ? '保存中…' : '保存' }}
         </button>
         <span v-if="vlRpmDirty" class="vl-rpm__dirty">未保存</span>
-        <span class="vl-rpm__hint">虚拟学习者专属出站上限，0 = 不限；与平台全局速率相互独立，不挤占真实用户额度</span>
+        <span class="vl-rpm__hint">虚拟学习者专属 · 0 = 不限 · 不占真实用户额度</span>
       </div>
+      <span class="vl-env__div" aria-hidden="true"></span>
+      <SimulatedDaySettings />
     </div>
 
     <!-- 学习者列表（「批量实验」2026-10-04 下线：批量发起与运行监控统一收在本页，
@@ -113,9 +122,8 @@
       @dismiss="batchCreateRef?.dismiss()"
     />
 
-    <!-- 日期模拟：VL 域级实验控制（模拟日期推进影响全部虚拟学习者），不是列表筛选——
-         移出列表卡单列一行（列表卡只装 筛选+表格+分页，同运行指标条出卡逻辑） -->
-    <SimulatedDaySettings />
+    <!-- 日期模拟已并入上方「实验环境」条（2026-10-05 重排）：域级实验控制（模拟日期推进
+         影响全部虚拟学习者），不是列表筛选——与速率上限同壳分组，展开体落条内第二行 -->
 
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
@@ -806,19 +814,35 @@ function openRunningSession(s: Sample) {
 .vl-faillink:hover { color: var(--mk-blue); background: var(--mk-blue-bg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue) 18%, transparent); }
 
 /* 运行指标带：KPI 独占整行（共享 .mk-kpi-grid + MkKpi，卡自带面/描边，外层不套盒子）；
-   下一行是 VL RPM 写控件（读/写分块），一行小字说明口径，省掉只有 hover 才看得见的 title */
+   读写分块判例不变：写控制（速率上限/日期模拟）不进数字栅格，合成一条「实验环境」壳 */
 .vl-kpi {
   display: grid;
   gap: 8px;
   flex: none;
 }
+/* 实验环境条（2026-10-05 重排）：一个中性壳装两组写控制（与运行条同壳语言：
+   line 描边 + surface 底 + radius-xl），竖分隔线分组；flex-wrap 兜窄档——
+   放不下时日期模拟组整组折到第二行，不横滚不裁切 */
+.vl-env {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  padding: 8px 12px;
+  border-radius: var(--mk-radius-xl);
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface);
+  flex: none;
+}
+.vl-env__div { width: 1px; align-self: stretch; background: var(--mk-line); }
 .vl-rpm {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex: none;
 }
-.vl-rpm__field { display: inline-flex; align-items: center; gap: 8px; }
+.vl-rpm__field { display: inline-flex; align-items: center; gap: 8px; cursor: text; }
 .vl-rpm__label {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
@@ -827,6 +851,11 @@ function openRunningSession(s: Sample) {
   white-space: nowrap;
 }
 .vl-rpm__input { width: 84px; }
+.vl-rpm__unit {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-faint);
+  white-space: nowrap;
+}
 .vl-rpm__dirty {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
