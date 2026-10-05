@@ -81,6 +81,17 @@
   --mk-amber-bg: #fffbeb;
   --mk-red: #c81e1e;
   --mk-red-bg: #fef2f2;
+  /* ---- 虚拟学习者「身份哈希八色」头像色板（单源；彩底白字对比度已调 ≥4.5:1，走查 2026-09-27）----
+     消费方：VirtualLearners .vl-avatar--N / VirtualProfile .vp-avatar--N；
+     哈希映射在 components/mk/vlAvatar.ts（CM3：原 TS 数组 + 两页 CSS 三份拷贝收敛）。 */
+  --mk-vl-avatar-0: #2563eb; /* 蓝 */
+  --mk-vl-avatar-1: #7c3aed; /* 紫 */
+  --mk-vl-avatar-2: #047857; /* 绿 */
+  --mk-vl-avatar-3: #b45309; /* 琥珀 */
+  --mk-vl-avatar-4: #dc2626; /* 红 */
+  --mk-vl-avatar-5: #0e7490; /* 青 */
+  --mk-vl-avatar-6: #db2777; /* 粉 */
+  --mk-vl-avatar-7: #64748b; /* 灰 */
   --mk-blue-bg: #eff6ff;         /* 胶囊底（浅）：徽章/幽灵按钮/空态动作。规范用
                                     color-mix(primary 10%)，与本值非同一表达式 → 批次 D */
   --mk-blue-bg-strong: #dbeafe;  /* 胶囊底（深）：上述元素的悬停档 */

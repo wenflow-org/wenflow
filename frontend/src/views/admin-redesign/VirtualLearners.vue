@@ -361,6 +361,7 @@ import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
+import { vlAvatarIndexOf } from '@/components/mk/vlAvatar'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import SimulatedDaySettings from './SimulatedDaySettings.vue'
 import { useTableSort } from './useTableSort'
@@ -376,13 +377,10 @@ import VirtualLearnerBatchBar from './VirtualLearnerBatchBar.vue'
 import VirtualLearnerPromptTest from './VirtualLearnerPromptTest.vue'
 import type { VirtualLearnerRow as Sample, BatchTask } from './virtualLearnersTypes'
 
-/* 头像色板：按名称哈希取色，同一人恒定同色（此处仅取 length 做哈希模，
-   色值真身在 .vl-avatar--N 样式，两处须同步；走查 2026-09-27 加深至白字对比度 ≥4.5:1） */
-const AVATAR_COLORS = ['#2563eb', '#7c3aed', '#047857', '#b45309', '#dc2626', '#0e7490', '#db2777', '#64748b']
+/* 头像按名称哈希取色，同一人恒定同色；八色板单源 = main.css --mk-vl-avatar-* +
+   mk/vlAvatar.ts 的共享哈希（CM3：原 TS 数组 + 两页 CSS 三份拷贝收敛） */
 function avatarClass(s: Sample): string {
-  let h = 0
-  for (let i = 0; i < s.name.length; i++) h = (h * 31 + s.name.charCodeAt(i)) >>> 0
-  return `vl-avatar--${h % AVATAR_COLORS.length}`
+  return `vl-avatar--${vlAvatarIndexOf(s.name)}`
 }
 
 const samples = computed<Sample[]>(() =>
@@ -853,7 +851,7 @@ function openRunningSession(s: Sample) {
 /* 名称头像：按名字哈希取色，同一人恒定同色。
    色板整改（走查 2026-09-27）：彩底白字对比度须 ≥4.5:1，各色保持色相加深至达标
    （emerald/amber/cyan 需取 700 档；slate 原 #64748b 已 4.76:1 达标不动），
-   26px 尺寸不变；行尾为对比白的前后比值，与 JS 侧 AVATAR_COLORS 同步维护 */
+   26px 尺寸不变；行尾为对比白的前后比值。色值单源 = main.css --mk-vl-avatar-*（CM3） */
 .vl-avatar {
   width: 26px;
   height: 26px;
@@ -866,14 +864,14 @@ function openRunningSession(s: Sample) {
   font-weight: 800;
   flex-shrink: 0;
 }
-.vl-avatar--0 { background: #2563eb; } /* 蓝 3.68→5.17 */
-.vl-avatar--1 { background: #7c3aed; } /* 紫 4.23→5.70 */
-.vl-avatar--2 { background: #047857; } /* 绿 2.54→5.48 */
-.vl-avatar--3 { background: #b45309; } /* 琥珀 2.15→5.02 */
-.vl-avatar--4 { background: #dc2626; } /* 红 3.76→4.83 */
-.vl-avatar--5 { background: #0e7490; } /* 青 2.43→5.36 */
-.vl-avatar--6 { background: #db2777; } /* 粉 3.53→4.60 */
-.vl-avatar--7 { background: #64748b; } /* 灰 4.76 原值已达标 */
+.vl-avatar--0 { background: var(--mk-vl-avatar-0); } /* 蓝 5.17 */
+.vl-avatar--1 { background: var(--mk-vl-avatar-1); } /* 紫 5.70 */
+.vl-avatar--2 { background: var(--mk-vl-avatar-2); } /* 绿 5.48 */
+.vl-avatar--3 { background: var(--mk-vl-avatar-3); } /* 琥珀 5.02 */
+.vl-avatar--4 { background: var(--mk-vl-avatar-4); } /* 红 4.83 */
+.vl-avatar--5 { background: var(--mk-vl-avatar-5); } /* 青 5.36 */
+.vl-avatar--6 { background: var(--mk-vl-avatar-6); } /* 粉 4.60 */
+.vl-avatar--7 { background: var(--mk-vl-avatar-7); } /* 灰 4.76 原值已达标 */
 /* 名称列可点击进二级（整行不再监听点击，避免多选勾选时误触） */
 .vl-cell--click { cursor: pointer; border-radius: 6px; transition: background 0.12s ease; }
 .vl-cell--click:hover { background: color-mix(in srgb, var(--mk-blue) 6%, transparent); }

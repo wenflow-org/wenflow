@@ -802,6 +802,7 @@ import type { EChartsCoreOption } from 'echarts/core'
  *  此处 re-export 维持单测的导入路径（virtual-profile.memory-curve.test.ts）不变。 */
 export { MEMORY_CURVE_COLORS, memoryCurveColor } from '@/components/mk/chartPalette';
 import { memoryCurveColor as _memoryCurveColor, MK_CHART_PALETTES } from '@/components/mk/chartPalette';
+import { vlAvatarIndexOf } from '@/components/mk/vlAvatar'
 
 export interface MemoryCurveConcept {
   name: string
@@ -2471,11 +2472,9 @@ const runDayGroups = computed<RunDayGroup[]>(() => {
   return groups
 })
 
-/* 首字头像配色：按名称哈希取色（与虚拟学习者列表同 8 色板） */
+/* 首字头像配色：按名称哈希取色（与虚拟学习者列表同 8 色板；单源 mk/vlAvatar.ts） */
 function avatarClassOf(name: string): string {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
-  return `vp-avatar--${h % 8}`
+  return `vp-avatar--${vlAvatarIndexOf(name)}`
 }
 
 /* ---- 头部「更多操作」⋯ 菜单（复用行内菜单模型：点击外部/Esc/方向键关闭，fixed 定位防裁切） ---- */
@@ -2532,16 +2531,16 @@ async function quietReload(id: string) {
 }
 /* 页头身份区走 .mk-entity（shared.css）：--flat + --round 头像 + --lg 名字。
    以下是头像色板（按名称哈希取色，同一人恒定同色）：只给 background，形状来自原语。
-   单源意图：色值与 VirtualLearners.vue 的 .vl-avatar--N 严格同值（两页同一人同色），
-   该 8 色板经走查 2026-09-27 加深至白字对比度 ≥4.5:1，两处须同步修改。 */
-.vp-avatar--0 { background: #2563eb; } /* 蓝 5.17 */
-.vp-avatar--1 { background: #7c3aed; } /* 紫 5.70 */
-.vp-avatar--2 { background: #047857; } /* 绿 5.48 */
-.vp-avatar--3 { background: #b45309; } /* 琥珀 5.02 */
-.vp-avatar--4 { background: #dc2626; } /* 红 4.83 */
-.vp-avatar--5 { background: #0e7490; } /* 青 5.36 */
-.vp-avatar--6 { background: #db2777; } /* 粉 4.60 */
-.vp-avatar--7 { background: #64748b; } /* 灰 4.76 */
+   单源：色值 token = main.css --mk-vl-avatar-*（与 .vl-avatar--N 同源同值，CM3 收敛），
+   该 8 色板经走查 2026-09-27 加深至白字对比度 ≥4.5:1。 */
+.vp-avatar--0 { background: var(--mk-vl-avatar-0); } /* 蓝 5.17 */
+.vp-avatar--1 { background: var(--mk-vl-avatar-1); } /* 紫 5.70 */
+.vp-avatar--2 { background: var(--mk-vl-avatar-2); } /* 绿 5.48 */
+.vp-avatar--3 { background: var(--mk-vl-avatar-3); } /* 琥珀 5.02 */
+.vp-avatar--4 { background: var(--mk-vl-avatar-4); } /* 红 4.83 */
+.vp-avatar--5 { background: var(--mk-vl-avatar-5); } /* 青 5.36 */
+.vp-avatar--6 { background: var(--mk-vl-avatar-6); } /* 粉 4.60 */
+.vp-avatar--7 { background: var(--mk-vl-avatar-7); } /* 灰 4.76 */
 .vp-top__level { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
 /* 页头主操作走 .mk-entity__actions（shared.css） */
 /* 生命周期状态徽章（vlab-controls 唯一语义：进行中/已暂停/已失败/已终止/已完成…）

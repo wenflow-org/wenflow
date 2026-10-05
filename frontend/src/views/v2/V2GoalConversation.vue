@@ -1720,7 +1720,12 @@ function shuffleScenes() {
 .msg--user:hover .msg__edit-btn { opacity: 1; }
 .msg--user .msg__edit-btn:hover { color: var(--blue-deep); }
 @media (hover: none) {
-  .msg--user .msg__edit-btn { opacity: 1; }
+  .msg--user .msg__edit-btn {
+    opacity: 1;
+    /* EG20：触屏触控地板 40（与 AI 操作条同口径），图标居中——本体达标后不再依赖 ::before 扩热区 */
+    width: 40px;
+    height: 40px;
+  }
 }
 /* 编辑态 */
 .msg--editing { align-self: flex-end; align-items: flex-end; }
@@ -2296,12 +2301,7 @@ function shuffleScenes() {
   /* 快捷补充面板占满整宽：基础样式的 margin-left 40（对齐气泡正文）在手机上白丢 40px 宽度，
      而这是整屏最常点的区域 */
   .replies { margin-left: 0; }
-  /* 编辑按钮视觉仍 20px，热区扩到 40px（触屏常显；20 对拇指太小，低于 40 触控下限） */
-  .msg--user .msg__edit-btn::before {
-    content: '';
-    position: absolute;
-    inset: -10px;
-  }
+  /* 编辑按钮触屏即 40×40 本体（EG20 复验收口，见 (hover: none) 块），不再用 ::before 扩热区 */
   /* 移动端 hint 行整体脱离文档流（0 高，原占 17px + gap 7px），内容挂到输入框与底部导航
      之间那道缝里：左「新目标」入口、中计数、右 AI 生成声明。触屏没有键盘快捷键提示，隐藏之。 */
   .composer { position: relative; }

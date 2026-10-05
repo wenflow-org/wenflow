@@ -2115,7 +2115,12 @@ onBeforeUnmount(() => {
 .msg--user:hover .msg__edit-btn { opacity: 1; }
 .msg--user .msg__edit-btn:hover { color: var(--blue-deep); }
 @media (hover: none) {
-  .msg--user .msg__edit-btn { opacity: 1; }
+  .msg--user .msg__edit-btn {
+    opacity: 1;
+    /* EG20：触屏触控地板 40（与 AI 操作条 msg-actions 同口径），图标居中 */
+    width: 40px;
+    height: 40px;
+  }
 }
 /* 编辑态 */
 .msg--editing { align-self: flex-end; align-items: flex-end; }
