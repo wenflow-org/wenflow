@@ -33,29 +33,18 @@
          全部来自已加载的 Detail：进度/阶段/任务/最近动态窗口。 -->
     <!-- P2（2026-10-04 全站评审）：页级学习轴 statstrip 在「账号与许可」页签下不渲染——
          路径进度/阶段/任务是学习轴词汇，与账号轴无关；且该页签下它与账号条同屏叠两条同形统计条 -->
+    <!-- 2026-10-05（批次五 CM2）：本地 .statstrip 复刻退役，改用共享 MkStatStrip 的 grid 变体 -->
     <section v-if="tab !== 'account'" class="mk-card">
-      <div class="statstrip" role="list" aria-label="学习者概览">
-        <div class="statstrip__stat" role="listitem">
-          <span class="statstrip__label">路径进度</span>
-          <!-- P2 双分母标注：本格按路径全部任务折算，「当前里程碑」行另有里程碑内分母，title 写明口径 -->
-          <span class="statstrip__value" :title="pctTitle">{{ d.pct }}%</span>
-        </div>
-        <div class="statstrip__stat" role="listitem">
-          <span class="statstrip__label">当前阶段</span>
-          <span class="statstrip__value" :title="d.stage">{{ d.stage || '—' }}</span>
-        </div>
-        <div class="statstrip__stat" role="listitem">
-          <span class="statstrip__label">当前任务</span>
-          <span class="statstrip__value" :title="d.task">{{ d.task || '—' }}</span>
-        </div>
-        <div class="statstrip__stat" role="listitem">
-          <span class="statstrip__label">最近动态</span>
-          <!-- P1-2（2026-10-04 全站评审）：原标签「最近会话」数的是学习事件（d.sessions=liveEvidence
-               切片），与正下方真实会话卡「最近 0 条」同屏矛盾——改名「最近动态」与动态卡同源同词，
-               「会话」词位让给真实会话计数，全页「会话」只挂一个数字 -->
-          <span class="statstrip__value" :title="recentSessionsHint">最近 {{ d.sessions.length }} 条</span>
-        </div>
-      </div>
+      <MkStatStrip
+        layout="grid"
+        aria-label="学习者概览"
+        :items="[
+          { label: '路径进度', value: `${d.pct}%`, title: pctTitle },
+          { label: '当前阶段', value: d.stage || '—', title: d.stage },
+          { label: '当前任务', value: d.task || '—', title: d.task },
+          { label: '最近动态', value: `最近 ${d.sessions.length} 条`, title: recentSessionsHint },
+        ]"
+      />
     </section>
 
     <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向）。
@@ -813,6 +802,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
+import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import UserAccountPane from './UserAccountPane.vue'
 import MkRowList from '@/components/mk/MkRowList.vue'
 import MkRow from '@/components/mk/MkRow.vue'
@@ -1998,26 +1988,8 @@ function barToneBadge(tone: ConceptBarTone): string {
 <style scoped>
 .ld { gap: 16px; }
 
-/* 状态条（原型 .statstrip：hero 与 subtabs 之间的一行分格读数，格子间 1px 竖分隔）。
-   债务登记（2026-10-04 批次五）：本页与 UserAccountPane 各持一份本地 statstrip 复刻，
-   完整替换成共享 MkStatStrip 组件是正解——但测试依赖 .statstrip__stat DOM 结构，暂不做组件替换；
-   本轮只归一字阶（数值 18px = MkStatStrip 展示档）并把长文本格从 nowrap 截断改为两行换行。 */
-.statstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-.statstrip__stat {
-  display: grid; gap: 6px; align-content: start;
-  padding: 12px 16px;
-  border-right: 1px solid var(--mk-line);
-}
-.statstrip__stat:last-child { border-right: 0; }
-.statstrip__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.statstrip__value {
-  /* 22px 本地展示档退役（2026-10-04 批次五）：对齐共享 MkStatStrip 的 18px 数值档；
-     长文本格（当前阶段/当前任务）不再 nowrap 截断丢字——允许换行最多两行，全文留在 title */
-  font-size: 18px; font-weight: 700; letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums; color: var(--mk-ink);
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-  overflow: hidden;
-}
+/* 状态条已在 2026-10-05（批次五 CM2）收敛为共享 MkStatStrip 的 grid 变体：
+   原本地 .statstrip 复刻（18px 数值档/两行换行）整块退役，样式归组件。 */
 
 /* 页头身份区走 .mk-entity（shared.css） */
 

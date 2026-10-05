@@ -109,8 +109,9 @@
         <!-- 右侧：错误类别 / 自动刷新 / 高级 / 列设置（对齐 Users：切换控件 + 统计） -->
         <div class="mk-card__head-right">
           <span class="mk-card__meta" v-if="errorCategory">类别「{{ errorCategory }}」<button type="button" class="mk-link" @click="errorCategory = ''; applyServerQuery()">×</button></span>
+          <span v-if="listRefreshing" class="mk-card__meta exec-updating" role="status" aria-live="polite">更新中…</span>
           <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
-          <button type="button" class="mk-link" :class="{ 'mk-link--active': advOpen }" @click="advOpen = !advOpen" title="高级筛选（按会话 sessionId）">高级</button>
+          <button type="button" class="mk-link" :class="{ 'mk-link--active': advOpen }" @click="advOpen = !advOpen" title="高级筛选（按会话 sessionId）">高级<span v-if="advancedFilterCount" class="mk-pill__count">{{ advancedFilterCount }}</span></button>
           <MkCols :col-defs="colDefs" :storage-key="COLS_KEY" :default-hidden="DEFAULT_HIDDEN" v-model:hidden="hiddenCols" />
         </div>
       </div>
@@ -130,7 +131,7 @@
         action-text="重试"
         @action="retryLiveLogs"
       />
-      <div v-else-if="logs.length" class="mk-table-scroll">
+      <div v-else-if="logs.length" class="mk-table-scroll" :class="{ 'exec-table-refreshing': listRefreshing }">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
              单元格 nowrap、列按内容自然分宽；长内容列（Skill/消息/模型）设 max-width 截断兜底，
              勿让单列独吃宽度（列全开时容器横向滚动，见 .mk-table-scroll .exec-table min-width） -->
@@ -329,7 +330,7 @@
         :action-text="isFiltered ? '清除筛选，回「今天」窗口' : ''"
         @action="clearFilterToAll"
       />
-      <Pagination v-if="logs.length" v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" />
+      <Pagination v-if="logs.length" v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" :note="mergedRowsNote" />
       </template>
     </div>
   </div>
@@ -341,7 +342,7 @@ import { Copy, Waypoints } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { intent, openSkillDrawer, clearInvestigation, dataSource, liveSkillStatsMap } from './store'
-import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
+import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, liveLogsRowsMerged, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from '@/components/mk/MkCols.vue'
@@ -709,23 +710,29 @@ const errWindowLabel = computed(() => {
 })
 
 /** Top 错误归因 chip：错误类别 + Skill 各取失败行聚合的前 2，按次数合并取前 3。
-    口径 = 当前页失败行样本（服务端分页 30 行），非全量 TOP——title 就地披露。 */
+    口径 = 当前页失败行样本（服务端分页 30 行），非全量 TOP——title 就地披露。
+    chip 聚合键 = 下钻查询值（与后端 buildErrorCategoryWhere 同源）：
+    无 errorCategory 的行后端已派生为 'internal'（启发式兜底桶），显示文案走
+    CATEGORY_LABEL_OVERRIDE 映射成中文「其他」——label 与查询值分离，防止
+    「点 chip 传『其他』→ 后端无此类别 → 0 行空态」的回归。 */
+const CATEGORY_LABEL_OVERRIDE: Record<string, string> = { internal: '其他' }
+const categoryLabel = (cat: string) => CATEGORY_LABEL_OVERRIDE[cat] || cat
 const errTopChips = computed(() => {
   const catMap = new Map<string, number>()
   const agentMap = new Map<string, number>()
   for (const l of logs.value) {
     if (l.status !== 'err') continue
-    const cat = l.errorCategory || '其他'
+    const cat = l.errorCategory || 'internal'
     catMap.set(cat, (catMap.get(cat) || 0) + 1)
     if (l.agent) agentMap.set(l.agent, (agentMap.get(l.agent) || 0) + 1)
   }
   const topOf = (m: Map<string, number>, n: number) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n)
   const catChips = topOf(catMap, 2).map(([cat, count]) => ({
     key: `cat:${cat}`,
-    label: cat,
+    label: categoryLabel(cat),
     count,
     active: errorCategory.value === cat,
-    title: `错误类别「${cat}」· 当前页失败行聚合（非全量 TOP）· 点击只看该类别，再点取消`,
+    title: `错误类别「${categoryLabel(cat)}」· 当前页失败行聚合（非全量 TOP）· 点击只看该类别，再点取消`,
     apply: () => {
       errorCategory.value = errorCategory.value === cat ? '' : cat
       void applyServerQuery()
@@ -913,6 +920,18 @@ function onSaveView(name: string) {
 }
 
 const logs = computed(() => liveLogsFiltered.value)
+/* 列表可见加载态（EG7）：已有数据时的重查（排序/筛选/翻页）此前无任何反馈，
+   该查询实测可达 30s，用户易误判「箭头变了、数据没变」。卡片头「更新中」角标 +
+   表格降透明，收起骨架条件（骨架只在无数据首载显示）。 */
+const listRefreshing = computed(() => (liveLoading.value || liveLogsLoading.value) && logs.value.length > 0)
+/* 「高级」筛选生效计数（EG17）：目前面板内仅 sessionId 一项；非空即计 1，
+   面板收起时按钮上仍有徽章，状态不丢。 */
+const advancedFilterCount = computed(() => (sessionId.value.trim() ? 1 : 0))
+/* 分页口径说明（D19）：本页把同一调用的网关行与 Skill 行合并为一行展示，
+   一页 30 行原始记录合并后可见行数更少——页码器注明已并入条数，避免与「30 条/页」口径打架。 */
+const mergedRowsNote = computed(() =>
+  liveLogsRowsMerged.value > 0 ? `本页 ${liveLogsRowsMerged.value} 条网关记录已并入对应 Skill 行` : ''
+)
 /* 节点下拉数据源不能只来自当前页 30 行（截断后筛不到页外的 skill）。
    组合三源：注册表 skill 全集（liveSkillStatsMap，boot 域预载，去掉 skill: 前缀与行内
    agent 口径对齐）+ 当前页实际出现的节点（网关/流程行不在注册表）+ 保存视图历史用过的节点 */
@@ -1135,25 +1154,8 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 </script>
 
 <style scoped>
-/* 视图切换（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签、OpsHub 宿主页签同款：
-   12px/600、激活蓝字+2px 蓝下划线、通栏底线） */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
-.tab {
-  border: 0;
-  background: transparent;
-  color: var(--mk-muted);
-  padding: 9px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  font-size: var(--mk-fs-micro);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  white-space: nowrap;
-  transition: color 0.14s ease, border-color 0.14s ease;
-}
-.tab:hover { color: var(--mk-ink); }
-.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+/* 视图切换（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
+   （mk-primitives.css），本页不再私持拷贝。 */
 
 /* 错误摘要条（原型 renderObserve 的 alert--error）：外形走全局 .mk-alert--row（红底红字 +
    消息/按钮两端排布），本页只补卡头同款内边距（.mk-card 无 padding）与按钮不缩（窄屏换行时按钮保完整） */
@@ -1205,6 +1207,10 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
   cursor: pointer;
   white-space: nowrap;
 }
+/* 列表可见加载态（EG7：「更新中」角标 + 表格降透明）——排序/筛选/翻页重查时该查询
+   实测可达 30s，无反馈时用户误判「箭头变了、数据没变」。仅在有数据时出现（首载走骨架）。 */
+.exec-updating { color: var(--mk-blue); font-weight: 600; white-space: nowrap; }
+.exec-table-refreshing { opacity: 0.55; transition: opacity 0.15s ease; }
 
 /* 加载失败横幅：外形走 .mk-alert--row（shared.css），已不再需要本页私有样式 */
 
@@ -1397,6 +1403,16 @@ html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; colo
    用户开启全部 9 列时由列定宽自然撑超(≈962px),容器横向滚动(AntD Table 标准行为)。
    原 min-width:962px 在 5 列默认下也硬撑导致 1080px 视口多余滚动。 */
 .mk-table-scroll .exec-table { min-width: 620px; }
+
+/* 笔记本带收拾档（LY12，≤1365）：多列表格在 1280（内容宽 ~994）容器级横滚 63px。
+   只收本页内容上限与单元格内边距，不动列序/截断契约；1440（内容宽 1138）不受影响
+   （实测该档 dx=0），故断点取 1365 而非全站中宽档 1599。 */
+@media (max-width: 1365px) {
+  .exec-table th,
+  .exec-table td { padding-inline: 10px; }
+  .exec-cell { max-width: 380px; }
+  .exec-stage { max-width: 210px; }
+}
 
 /* ---------- 行内 chip（沿用；2026-09 降噪：与主行字号差从 3px 收窄到 ~1px，
    错误码红底 chip 改为轻红文字——错误语义由红标题与状态 pill 承担，副行只作元数据） ---------- */

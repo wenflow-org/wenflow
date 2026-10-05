@@ -675,7 +675,7 @@ async function goDashboard() {
   background: color-mix(in srgb, var(--blue) 6%, transparent);
 }
 
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   .ob__card { padding: 22px 16px 18px; border-radius: var(--mk-radius-modal); }
   .ob__title { font-size: 18px; }
   .ob__progress span { width: 24px; }
@@ -688,15 +688,15 @@ async function goDashboard() {
 /* 暗色 CTA 投影不再单列：--blue 在暗档已翻转，color-mix 随之变亮（原型也只有一条） */
 
 /* ===== 移动端收敛（2026-09-24 反馈） ===== */
-@media (max-width: 720px) {
+@media (max-width: 640px) {
   /* logo 放大一档（44 → 56）：引导页里 logo 是唯一的品牌元素，
      44px 放在手机上比下方卡片还弱（2026-09-24 反馈「logo 可以再大一点」） */
   .ob__logo img { height: 56px; }
   /* 主容器留白：实测 390 下 .ob__main 上下 40px + 模块间距 22px，比卡片自己的
-     22/16/18/16（≤480 块已收）还大——容器留白比内容卡还厚，收到 28/16 + 间距 16 */
+     22/16/18/16（≤640 块已收）还大——容器留白比内容卡还厚，收到 28/16 + 间距 16 */
   .ob__main { gap: 16px; padding: 28px 16px; }
 }
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   /* 主 CTA 收一档：原 14.5px / 11×26 内边距在 390 宽下是 132×44 的实心蓝块，
      与卡内其余元素（12~13.5px）不成比例；降到 14px / 9×18（≈114×39）。
      纵向内边距保留 9px，触控高度仍在可用区间。 */

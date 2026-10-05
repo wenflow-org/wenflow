@@ -47,18 +47,27 @@
 
         <!-- 学习概览 KPI（原型 wf-kpis）：连续天数（会话推算，与学习状态页同口径）+ 成就解锁（轻请求）+ 已掌握概念（图谱 stability） -->
         <div class="profile-kpis" role="list" aria-label="学习概览">
-          <div class="profile-kpi" role="listitem">
-            <strong>{{ kpi.streak ?? '—' }}</strong>
-            <span>连续天数</span>
-          </div>
-          <div class="profile-kpi" role="listitem">
-            <strong>{{ kpi.achievements ?? '—' }}</strong>
-            <span>已解锁成就</span>
-          </div>
-          <div class="profile-kpi" role="listitem">
-            <strong>{{ kpi.mastery ?? '—' }}</strong>
-            <span>已掌握知识点</span>
-          </div>
+          <!-- 弱网骨架（EG25）：三个来源各自异步、失败仍落「—」，出数前给骨架，
+               避免「—」停在屏上被读成「无数据」（与学习状态页骨架口径一致） -->
+          <template v-if="kpiLoading">
+            <div v-for="i in 3" :key="i" class="profile-kpi profile-kpi--loading" role="listitem">
+              <SkeletonLoader variant="lines" :count="2" />
+            </div>
+          </template>
+          <template v-else>
+            <div class="profile-kpi" role="listitem">
+              <strong>{{ kpi.streak ?? '—' }}</strong>
+              <span>连续天数</span>
+            </div>
+            <div class="profile-kpi" role="listitem">
+              <strong>{{ kpi.achievements ?? '—' }}</strong>
+              <span>已解锁成就</span>
+            </div>
+            <div class="profile-kpi" role="listitem">
+              <strong>{{ kpi.mastery ?? '—' }}</strong>
+              <span>已掌握知识点</span>
+            </div>
+          </template>
         </div>
 
         <!-- 快捷入口列表卡（原型 wf-list 同构） -->
@@ -99,6 +108,7 @@
 import { onMounted, ref } from 'vue'
 import { History, Settings, Trophy } from 'lucide-vue-next'
 import CapabilityShell from '@/components/user/CapabilityShell.vue'
+import SkeletonLoader from '@/components/ui/SkeletonLoader.vue'
 import { toast } from '@/utils/toast'
 import request from '@/utils/api'
 import { learningAPI } from '@/api/learning'
@@ -116,29 +126,35 @@ const userStore = useUserStore()
    跨页打架（同账号同天 1 vs 0），现拉会话按同一算法推算；成就与概念掌握各发一个
    轻请求，失败静默显示「—」，不阻塞资料卡渲染。 */
 const kpi = ref<{ streak?: number; achievements?: number; mastery?: number }>({})
+/** 三源全部 settle 前显示骨架（失败也算 settle，仍落「—」） */
+const kpiLoading = ref(true)
 
 async function loadKpis() {
   try {
-    const res = await request.get('/users/me/sessions', { params: { limit: 500 } })
-    const list = unwrapArray<{ startTime?: string; durationMinutes?: number }>(res)
-    const minutesByDate = new Map<string, number>()
-    for (const s of list) {
-      const key = localDateKeyFromIso(typeof s.startTime === 'string' ? s.startTime : null)
-      if (!key) continue
-      minutesByDate.set(key, (minutesByDate.get(key) ?? 0) + (typeof s.durationMinutes === 'number' ? s.durationMinutes : 0))
-    }
-    kpi.value.streak = computeStreakDays(minutesByDate)
-  } catch { /* 静默：KPI 缺数好过卡报错 */ }
-  try {
-    const res = await request.get('/achievements/all')
-    const items = unwrapArray<{ unlocked?: boolean }>(res)
-    kpi.value.achievements = items.filter((a) => a.unlocked).length
-  } catch { /* 静默：KPI 缺数好过卡报错 */ }
-  try {
-    const graph = (await learningAPI.getConceptGraph()) as { nodes?: Array<{ stability?: string | null }> } | null
-    const nodes = Array.isArray(graph?.nodes) ? graph!.nodes! : []
-    kpi.value.mastery = nodes.filter((n) => n.stability === 'stable').length
-  } catch { /* 静默 */ }
+    try {
+      const res = await request.get('/users/me/sessions', { params: { limit: 500 } })
+      const list = unwrapArray<{ startTime?: string; durationMinutes?: number }>(res)
+      const minutesByDate = new Map<string, number>()
+      for (const s of list) {
+        const key = localDateKeyFromIso(typeof s.startTime === 'string' ? s.startTime : null)
+        if (!key) continue
+        minutesByDate.set(key, (minutesByDate.get(key) ?? 0) + (typeof s.durationMinutes === 'number' ? s.durationMinutes : 0))
+      }
+      kpi.value.streak = computeStreakDays(minutesByDate)
+    } catch { /* 静默：KPI 缺数好过卡报错 */ }
+    try {
+      const res = await request.get('/achievements/all')
+      const items = unwrapArray<{ unlocked?: boolean }>(res)
+      kpi.value.achievements = items.filter((a) => a.unlocked).length
+    } catch { /* 静默：KPI 缺数好过卡报错 */ }
+    try {
+      const graph = (await learningAPI.getConceptGraph()) as { nodes?: Array<{ stability?: string | null }> } | null
+      const nodes = Array.isArray(graph?.nodes) ? graph!.nodes! : []
+      kpi.value.mastery = nodes.filter((n) => n.stability === 'stable').length
+    } catch { /* 静默 */ }
+  } finally {
+    kpiLoading.value = false
+  }
 }
 
 /* ---------- 修改密码 / 注销账号 ----------
@@ -342,6 +358,13 @@ async function handleSaveName() {
   font-size: 12px;
   color: var(--faint);
 }
+
+/* 骨架态：保高与出数态一致（避免出数时卡片跳动），骨架撑满卡宽 */
+.profile-kpi--loading {
+  min-height: 68px;
+  align-content: center;
+}
+.profile-kpi--loading :deep(.skeleton-loader) { width: 100%; }
 
 /* 快捷入口列表（原型 wf-list：行 52px + 行顶分割线 + 尾部 chevron） */
 .profile-menu {

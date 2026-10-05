@@ -37,7 +37,9 @@ const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(n
 
 /* 账号构成桶（2026-10-04 教学组统一 buckets）：真实 / 虚拟 / 测试 = 同一整体的互斥构成
    （徽章同款互斥判据：虚拟 > 测试 > 其余真实）；管理员数作真实用户桶 foot（角色属真实域细分）。
-   管理员数是运营要看的角色分布，不单独立桶（角色与账号性质非同一整体，混桶=假比例）。 */
+   管理员数是运营要看的角色分布，不单独立桶（角色与账号性质非同一整体，混桶=假比例）。
+   D18：默认「仅真实」口径下后端已把虚拟/测试排除，三分桶会结构性恒 100/0/0（两桶死档）——
+   故默认只渲染真实单桶 + 披露未纳入，切到「含测试」后才展示三桶互斥构成。 */
 const ppBuckets = computed(() => {
   const rows = liveUsers.value
   const total = rows.length
@@ -48,9 +50,24 @@ const ppBuckets = computed(() => {
   const real = realRows.length
   const admins = realRows.filter((u) => u.isAdmin).length
   const pct = (v: number) => Math.round((v / total) * 100)
-  const calibre = `按已加载 ${total} 行统计（后端共 ${liveUsersTotal.value}）；虚拟 / 测试账号默认不入教学统计口径`
+  const scopeNote = `按已加载 ${total} 行统计（后端共 ${liveUsersTotal.value}）`
+  const realBucket = {
+    value: real,
+    label: '真实用户',
+    pct: pct(real),
+    tone: 'var(--mk-blue)',
+    foots: [{ text: `其中管理员 ${admins}` }],
+  }
+  if (!liveIncludeVirtual.value) {
+    return [{
+      ...realBucket,
+      valueTitle: `${scopeNote}；当前为「仅真实」口径，虚拟 / 测试账号未纳入`,
+      foots: [{ text: `其中管理员 ${admins}` }, { text: '虚拟 / 测试账号未纳入（切换「含测试」查看构成）' }],
+    }]
+  }
+  const calibre = `${scopeNote}；三分桶为同一整体（已加载账号）的互斥构成`
   return [
-    { value: real, label: '真实用户', pct: pct(real), tone: 'var(--mk-blue)', valueTitle: calibre, foots: [{ text: `其中管理员 ${admins}` }] },
+    { ...realBucket, valueTitle: calibre },
     { value: virtual, label: '虚拟学习者', pct: pct(virtual), tone: 'var(--mk-amber)', valueTitle: calibre, foots: [{ text: '模拟数据账号' }] },
     { value: test, label: '测试账号', pct: pct(test), tone: 'var(--mk-faint)', valueTitle: calibre, foots: [{ text: '统计口径默认排除' }] }
   ]

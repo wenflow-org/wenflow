@@ -34,7 +34,7 @@
         tabindex="0"
         :title="kpiTitle(i)"
         @click="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
-        @keydown.enter.prevent="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
+        @keydown.enter.self.prevent="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
       >
         <div class="kpi">
           <span class="kpi__label">{{ k.label }}</span>
@@ -112,8 +112,8 @@
               tabindex="0"
               :title="s.title"
               @click="jump(s.scene)"
-              @keydown.enter.prevent="jump(s.scene)"
-              @keydown.space.prevent="jump(s.scene)"
+              @keydown.enter.self.prevent="jump(s.scene)"
+              @keydown.space.self.prevent="jump(s.scene)"
             >
               <span class="loop__no">阶段 {{ i + 1 }}</span>
               <span class="loop__name">{{ s.name }}</span>
@@ -150,15 +150,15 @@
               v-for="(s, i) in data.topSkills"
               :key="s.agentId"
               class="rankrow rankrow--link"
-              :title="`${s.agentId}：${s.calls} 次调用 · ${s.failed} 次失败 · 点击查看 Skill 运行`"
+              :title="`${skillIdOf(s.agentId)}：${s.calls} 次调用 · ${s.failed} 次失败 · 点击查看 Skill 运行`"
               role="button"
               tabindex="0"
-              @click="openSubPage('skill', s.agentId)"
-              @keydown.enter.prevent="openSubPage('skill', s.agentId)"
-              @keydown.space.prevent="openSubPage('skill', s.agentId)"
+              @click="openSubPage('skill', skillIdOf(s.agentId))"
+              @keydown.enter.self.prevent="openSubPage('skill', skillIdOf(s.agentId))"
+              @keydown.space.self.prevent="openSubPage('skill', skillIdOf(s.agentId))"
             >
               <span class="rankrow__idx">{{ i + 1 }}</span>
-              <span class="rankrow__grow mono">{{ s.agentId }}</span>
+              <span class="rankrow__grow mono">{{ skillIdOf(s.agentId) }}</span>
               <!-- 占比条（mk-minibar 共享原语）：名次数字只给序，条给「梯队差距」一眼可读；
                    无金银铜——排序徽章是装饰不编码信息 -->
               <span class="mk-minibar rankrow__bar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: topBarPct(Number(s.calls)) }"></i></span>
@@ -222,8 +222,8 @@
               :role="(f.tone === 'bad' || f.tone === 'warn') ? 'button' : undefined"
               :tabindex="(f.tone === 'bad' || f.tone === 'warn') ? 0 : undefined"
               @click="feedJump(f)"
-              @keydown.enter.prevent="feedJump(f)"
-              @keydown.space.prevent="feedJump(f)"
+              @keydown.enter.self.prevent="feedJump(f)"
+              @keydown.space.self.prevent="feedJump(f)"
             >
               <span class="feedrow__time">{{ f.time }}</span>
               <div class="feedrow__grow">
@@ -256,6 +256,7 @@ import { overviewHealth, investigateAgent, intent, dataSource, openSubPage } fro
 import {
   liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing,
   liveVirtualRunStats, liveVirtualStatsError, liveVirtualStatsLoaded,
+  liveIncludeVirtual,
   recentActivityText, type LiveOverviewFull
 } from './live';
 import OvBars from './OvBars.vue';
@@ -315,7 +316,7 @@ const loopStages = computed<LoopStage[]>(() => {
     {
       name: '教学回合', meta: '回合式讲解与追问',
       val: teachTotal.value == null ? '—' : `${teachTotal.value.toLocaleString()} 累计`, tone: 'done',
-      title: '教学会话累计数（教学会话列表 total · 进页时拉取）· 点击查看教学会话',
+      title: '教学会话累计数（教学会话列表 total · 随全站「含测试」口径，进页/切换口径时拉取）· 点击查看教学会话',
       scene: 'teaching-sessions',
     },
     {
@@ -328,7 +329,7 @@ const loopStages = computed<LoopStage[]>(() => {
       name: '记忆复习', meta: '遗忘曲线调度复习',
       val: memDue.value == null ? '—' : `${memDue.value} 待办`,
       tone: (memDue.value ?? 0) > 0 ? 'alert' : 'done',
-      title: '到期未复习的记忆条数（记忆与复盘 totals.due · 进页时拉取）· 点击查看记忆与复盘',
+      title: '到期未复习的记忆条数（记忆与复盘 totals.due · 随全站「含测试」口径，进页/切换口径时拉取）· 点击查看记忆与复盘',
       scene: 'memory-review',
     },
   ];
@@ -346,14 +347,17 @@ function jumpToFailedPaths() {
 }
 async function loadLoopExtras() {
   try {
-    const r = await adminMemoryReviewApi.overview({ limit: 1 });
+    // 口径随全站「含测试」开关（D12）：此前写死仅真实口径拉取，开关开着时同指标相差约 35 倍
+    const r = await adminMemoryReviewApi.overview({ limit: 1, includeVirtual: liveIncludeVirtual.value });
     memDue.value = Number(r.data?.data?.totals?.due ?? 0);
   } catch { /* 拉不到就留「—」，不阻塞页面 */ }
   try {
-    const r = await adminTeachingSessionsApi.list({ limit: 1 });
+    const r = await adminTeachingSessionsApi.list({ limit: 1, includeTest: liveIncludeVirtual.value });
     teachTotal.value = Number(r.data?.data?.total ?? 0);
   } catch { /* 同上 */ }
 }
+/* 口径切换（全站「含测试」开关）后重拉闭环条两个进页口径，避免与已切口径的其他页同指标不同源 */
+watch(liveIncludeVirtual, () => { void loadLoopExtras() });
 
 /* 页头副文（原型 pageTitle p）：数据截至 + 刷新语义（P2 文案纠偏）。
    - 「数据截至」只绑定真实拉到数据的时刻（不再拿挂载时刻冒充；未拉到前不渲染该段）；
@@ -629,6 +633,10 @@ function feedJump(f: { tone: string; errorCategory?: string }) {
 const topMaxCalls = computed(() => Math.max(1, ...(data.value?.topSkills || []).map((s) => Number(s.calls) || 0)));
 /** Top5 占比条：以榜首调用量为分母，下限 4% 保证末名可见（数字仍为唯一精确口径） */
 const topBarPct = (calls: number) => `${Math.max(Math.round((calls / topMaxCalls.value) * 100), 4)}%`;
+/** Top5 行 agentId 形如 "skill:goal-conversation"（agent_call_logs 口径）；Skill 详情二级页
+    与四个只读端点（effective-prompt / skill-model-configs / field-routings / prompt-lab-core）
+    都按注册表裸 id 取数——直接透传前缀会让子视图全线 404/400/500、指标恒 0（FN8）。 */
+const skillIdOf = (agentId: string) => String(agentId || '').replace(/^(?:skill|agent):/, '')
 
 interface TodoItem { key: string; text: string; main: string; note: string; tone: Tone; actLabel: string; action: () => void }
 /** 拆末尾括号口径：「甲 采样窗口 1 次失败（近 7 天 · 200 条采样）」→ main/note */
@@ -775,6 +783,13 @@ watch(dataSource, () => {
   font-variant-numeric: tabular-nums; color: var(--mk-ink); line-height: 1.2;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* CM9：总览 KPI 数值档位对齐共享 MkKpi（.mk-kpi__num 同款 28/29/30/31/34/38），
+   此前只在基档 28、1440 起与其余页 29 脱节（同一屏两种数字字号）。 */
+@media (min-width: 1440px) { .kpi__value { font-size: 29px; } }
+@media (min-width: 1920px) { .kpi__value { font-size: 30px; } }
+@media (min-width: 2000px) { .kpi__value { font-size: 31px; } }
+@media (min-width: 2800px) { .kpi__value { font-size: 34px; } }
+@media (min-width: 3600px) { .kpi__value { font-size: 38px; } }
 .kpi__foot {
   display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted);
 }

@@ -110,3 +110,30 @@ describe('执行日志服务端排序', () => {
     expect(findMany).not.toHaveBeenCalled()
   })
 })
+
+/* FN1 闭环：列表回传派生错误类别，供前端错误摘要条 chip 聚合与下钻同源（此前漏选 errorCategory
+   → 前端整列兜底「其他」→ 点 chip 查询 0 行空态）。 */
+describe('执行日志错误类别回传（FN1）', () => {
+  const baseRow = {
+    callerAgent: null,
+    sourceEntry: 'platform',
+    durationMs: 10,
+    metadata: null,
+    executionLayer: 'api-gateway',
+    promptTokens: 0,
+    completionTokens: 0,
+  }
+
+  it('select 拉取 errorCategory 列；无类别行按启发式归并、有类别行原样回传', async () => {
+    findMany.mockResolvedValue([
+      { ...baseRow, id: 'l1', agentId: 'api-gateway', success: false, error: 'CALLER_ABORTED: user canceled', errorCode: 'CALLER_ABORTED', errorCategory: null, traceId: 'tr:1', calledAt: new Date('2026-10-05T00:00:00Z') },
+      { ...baseRow, id: 'l2', agentId: 'api-gateway', success: false, error: 'boom', errorCode: 'UPSTREAM_500', errorCategory: 'provider_timeout', traceId: 'tr:2', calledAt: new Date('2026-10-05T00:00:01Z') },
+    ])
+    const res = await run(handler(), { query: { keyword: 'fn1-marker' } })
+    expect(res.statusCode).toBe(200)
+    expect(findMany.mock.calls[0][0].select.errorCategory).toBe(true)
+    const logs = res.body.data.logs
+    expect(logs[0].errorCategory).toBe('caller_abort')
+    expect(logs[1].errorCategory).toBe('provider_timeout')
+  })
+})

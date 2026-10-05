@@ -756,26 +756,9 @@ function exportCurrentPage() {
 <style scoped>
 /* 本页无统计带（原型 renderAudit 页头下直接是列表卡，2026-10-02 撤） */
 
-/* ================= 视图切换（原型 .tabs 下划线页签，页面本地复刻） =================
-   2026-10-01 由 mk-pills 胶囊迁入；与 OpsHub 宿主页签、Users.vue 卡内页签同款：
-   12px/600、激活蓝字+2px 蓝下划线、通栏底线 */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
-.tab {
-  border: 0;
-  background: transparent;
-  color: var(--mk-muted);
-  padding: 9px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  font-size: var(--mk-fs-micro);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  white-space: nowrap;
-  transition: color 0.14s ease, border-color 0.14s ease;
-}
-.tab:hover { color: var(--mk-ink); }
-.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+/* ================= 视图切换（原型 .tabs 下划线页签） =================
+   2026-10-01 由 mk-pills 胶囊迁入；样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
+   （mk-primitives.css），本页不再私持拷贝。 */
 
 /* 加载失败错误态 */
 
@@ -867,6 +850,13 @@ function exportCurrentPage() {
 /* 非 API 动作（中文标签）：中性蓝 chip */
 /* UI 复查 #11：操作列是末列，贴表格右缘过紧，补右留白 */
 .al-act { padding-right: 16px; }
+/* LY9：1280 档动作列（方法徽标 + 动作名 + 路径）折行致近半数行高 46→70px。
+   收紧路径 max-width 并锁方法徽标单行，三者保持同行不折。 */
+@media (max-width: 1439px) {
+  .log-path { max-width: 150px; }
+  .log-method { white-space: nowrap; }
+  .log-action { max-width: 200px; }
+}
 /* 窄屏（≤720，次要列已随 useIsNarrow 隐藏）：操作者/动作列收为弹性宽 + 单行截断
    （全文在 title），长值不撑列 → 免横向滚动。
    （原 colgroup 固定列宽的 .al-col-* width:auto 覆盖随 fixed 布局一并退役） */
@@ -899,6 +889,9 @@ function exportCurrentPage() {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   padding: 2px 8px;
+  /* LY14：下钻态 chip 被 max-width:48% 压到 106px，内部计数折到第二行把卡头撑高；
+     单行不折，超出由 .al-fails 的 flex-wrap 换行承载。 */
+  white-space: nowrap;
   /* span→button：重置按钮默认字体并补手型 */
   cursor: pointer;
   font-family: inherit;
@@ -1060,17 +1053,19 @@ html[data-theme='dark'] .log-method--head { background: #2d2d2f; color: var(--mk
    本页挂在 AdminConsole 壳层 .mshell__content 内滚动；2026-10-02 撤状态条后重算）：
      面包屑 .mshell__crumb         ~32（上下 7px 内边距 + 12px 微字号行高 ~18 + 1px 下边框）
      页面 padding-top               16（.mk-page--fill 的 --mk-space-4）
+     页头 .mk-pagehead              ~90（页名/副标两行 + 内边距；LY15 补算——原推导漏此项，
+                                       空态盒在 1440/1280 下溢出卡片约 95px 被 clip）
      页签切换行（.tabs，卡内顶部）    ~36（tab 上下 padding 9px×2 + 微字号行高 ~18）
      卡片头 .mk-card__head          ~54（12px 内边距×2 + 32px 筛选控件；失败 TOP chips 换行的
                                        场景必有数据，不会落到空态分支，不参与推导）
      卡片上下边框                    2
      页面 padding-bottom            20（.mk-page 的 --mk-space-5）
-   合计 ≈160，留 ~8px 余量取整 168（宁少勿溢：多留余量只是空态盒底部差一点撑满，
+   合计 ≈250，留 ~8px 余量取整 258（宁少勿溢：多留余量只是空态盒底部差一点撑满，
    少留则 min-height 顶破 flex 高度被 .mk-page--fill 的 overflow:hidden 裁掉）。
    上限用 min(..., 1200px) 而非 max-height：CSS 里 min-height 优先于 max-height，
    超长竖屏下直接写 max-height 会被 min 顶掉不生效，min() 才能真正收口。
    骨架/错误态/列表分支不带 mk-empty--min，不受影响。 */
 .mk-card--fill > .mk-empty--min {
-  --mk-empty-min-h: min(calc(100dvh - 168px), 1200px);
+  --mk-empty-min-h: min(calc(100dvh - 258px), 1200px);
 }
 </style>

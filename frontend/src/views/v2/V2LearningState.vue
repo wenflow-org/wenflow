@@ -89,12 +89,20 @@
             </div>
             <template v-else>
               <!-- 触屏补 touchstart/touchmove（2026-09-27 a11y）：历史值此前只认 mousemove，
-                   手机上永远看不到。不 preventDefault，手势仍归页面滚动 -->
+                   手机上永远看不到。不 preventDefault，手势仍归页面滚动。
+                   键盘补 tabindex + 方向键（EG22）：读屏/键盘用户此前无法切换日期，
+                   aria-live 播报区永不触发；方向键移动 hoverDay，Home/End 跳到首/末。 -->
               <div
                 class="ff-chart"
                 role="img"
                 :aria-label="trendAriaLabel"
+                tabindex="0"
                 @mousemove="onChartHover" @touchstart="onChartHover" @touchmove="onChartHover" @mouseleave="hoverDay = null"
+                @keydown.left.prevent="moveHover(-1)"
+                @keydown.right.prevent="moveHover(1)"
+                @keydown.home.prevent="moveHoverTo(0)"
+                @keydown.end.prevent="moveHoverTo(points.length - 1)"
+                @blur="hoverDay = null"
               >
                 <!-- y 轴刻度（原型 wf-trend__yaxis）：贴左留白的绝对定位标签，与 5 条网格线同位 -->
                 <div class="ff-yaxis" aria-hidden="true">
@@ -787,6 +795,23 @@ function onChartHover(e: MouseEvent | TouchEvent) {
     }
   }
   hoverDay.value = best;
+}
+
+/* 键盘切换日期（EG22）：以当前显示日为锚点，方向键在序列上前后移动；
+   此前历史值只有鼠标/触摸途径，读屏 aria-live 播报区永不触发。 */
+function moveHoverTo(index: number) {
+  const list = points.value;
+  if (!list.length) return;
+  const i = Math.min(list.length - 1, Math.max(0, index));
+  hoverDay.value = list[i];
+}
+function moveHover(dir: -1 | 1) {
+  const list = points.value;
+  if (!list.length) return;
+  const cur = hoverDay.value ?? displayDay.value;
+  const idx = cur ? list.findIndex((p) => p.date === cur.date) : -1;
+  const base = idx >= 0 ? idx : list.length - 1;
+  moveHoverTo(base + dir);
 }
 
 /** 时长背景柱（仅展示不参与状态计算）：与 42/90 窗口无关，进页拉一次即可——
@@ -1690,6 +1715,8 @@ function loadGuidance() {
 /* ff-chart 现在承载 y 轴刻度与阈值标签的绝对定位层（原型 wf-trend__chart 757-762）→ 必须是定位上下文 */
 .ff-chart { position: relative; width: 100%; }
 .ff-chart svg { display: block; width: 100%; height: auto; }
+/* 键盘聚焦（EG22）：图本身不承担视觉容器，聚焦用圆角描边提示可操作 */
+.ff-chart:focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; border-radius: var(--mk-radius-md); }
 /* y 轴刻度（原型 wf-trend__yaxis）：贴左侧 AXIS_W 留白（46/760 ≈ 6.05%），
    与 5 条网格线同位、右对齐，正好落在 grid 的 x1=plotX0 之外的空白里 */
 .ff-yaxis { position: absolute; left: 0; top: 0; bottom: 0; width: 6.05%; pointer-events: none; }

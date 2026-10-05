@@ -67,8 +67,14 @@
             <!-- 指标只放「环以外」的信息：总进度由右侧进度环唯一承载（去重：原「任务进度」格
                  与环的 percent 是同一比值，且每阶段卡、侧栏「还剩 N 个任务」已有计数） -->
             <div class="hero__metrics">
-              <span class="metric"><b>{{ currentStageNo }} / {{ stages.length || '?' }}</b>当前阶段</span>
-              <span class="metric"><b>{{ lessonCount ? `${lessonCount} 节课 · 约 ${path.estimatedHours} 小时` : '—' }}</b>已备好</span>
+              <!-- 生成中/失败态：阶段与课程都还没备好，此时展示「N/N 当前阶段」「— 已备好」
+                   会与横幅的「正在准备阶段任务」自相矛盾（EG24）——此态只报「准备中」，
+                   两个指标待 lifecycle ready 再出；失败态由横幅承担，指标一并隐去。 -->
+              <span v-if="lifecyclePreparing && !lifecycleFailed" class="metric"><b>准备中</b>课程与任务</span>
+              <template v-else-if="!lifecyclePreparing">
+                <span class="metric"><b>{{ currentStageNo }} / {{ stages.length || '?' }}</b>当前阶段</span>
+                <span class="metric"><b>{{ lessonCount ? `${lessonCount} 节课 · 约 ${path.estimatedHours} 小时` : '—' }}</b>已备好</span>
+              </template>
               <span v-if="path.deadlineText" class="metric"><b>{{ path.deadlineText }}</b>目标周期</span>
             </div>
             <div class="hero__actions">
@@ -740,6 +746,8 @@ watch(
 );
 
 const lifecycleFailed = computed(() => lifecycle.value && (lifecycle.value.status === 'failed' || lifecycle.value.status === 'stale'));
+/** 生成中（phase 未到 ready）：阶段/课程尚未备好，hero 指标与横幅口径需对齐（EG24） */
+const lifecyclePreparing = computed(() => !!lifecycle.value && lifecycle.value.phase !== 'ready');
 const canLearn = computed(() => !lifecycle.value || lifecycle.value.phase === 'ready');
 
 // ---- 重排回退（R8 选项 B：调整前安排自动留存，一键回退） ----
@@ -2090,15 +2098,19 @@ onBeforeUnmount(() => {
   .sidecard strong { font-size: 14px; }
   .stage__title strong { font-size: 14px; }
   .detail__loading { padding: 32px 0; }
-  .genbar { padding: 12px 14px; }
+  .genbar { padding: 12px 14px; flex-wrap: wrap; }
+  /* 失败横幅主 CTA「重新准备阶段任务」在窄屏换行成两行、与左侧文案不齐（LY16）：
+     窄屏让按钮独占一行、通栏居中，并禁止文字换行 */
+  .genbar--failed .btn-primary { width: 100%; justify-content: center; white-space: nowrap; }
   .adjust-dialog-mask { padding: 14px; }
   .adjust-dialog { padding: 16px 18px; }
   /* 26×26 对拇指偏小（弹窗右上角唯一退出路径），抬到 36 */
   .adjust-dialog__close { width: 36px; height: 36px; }
-  /* 「展开全文 / 收起」是 33px 的纯文字链，抬到 36（同上的手势目标口径） */
+  /* 「展开全文 / 收起」纯文字链在 375 实测 50×36，低于触屏 40 下限（LY17）：
+     抬到 40（仍不动字号） */
   .hero__desc-toggle,
   .sidecard__intent-toggle {
-    min-height: 36px;
+    min-height: 40px;
     display: inline-flex;
     align-items: center;
   }

@@ -513,19 +513,13 @@ function buildDashboardSnapshot() {
     achievements: achievements.value,
     reviewDue: reviewDue.value,
     reviewPlan: reviewPlan.value,
-    todaySchedule: todaySchedule.value,
-    monthCursor: { ...monthCursor.value }
+    todaySchedule: todaySchedule.value
   };
 }
 let dashboardSnapshot: ReturnType<typeof buildDashboardSnapshot> | null = null;
 
 async function loadAll() {
-  // 作废所有在途的月历会话请求：loadAll 的结果总是最新，翻月/选日的慢响应不得覆盖
-  sessionsSeq += 1;
   const snap = dashboardSnapshot;
-  const sameMonth = !!snap
-    && snap.monthCursor.year === monthCursor.value.year
-    && snap.monthCursor.month === monthCursor.value.month;
   if (snap) {
     // 先渲快照（loading 不置 true → 不出骨架屏），随后静默刷新
     stats.value = snap.stats;
@@ -533,17 +527,19 @@ async function loadAll() {
     achievements.value = snap.achievements;
     reviewDue.value = snap.reviewDue;
     reviewPlan.value = snap.reviewPlan;
-    if (sameMonth) sessions.value = snap.sessions;
-    if (sameMonth && snap.todaySchedule) todaySchedule.value = snap.todaySchedule;
+    // 会话窗口固定为「近 90 天」，快照与实时刷新同窗，复用不会闪现错窗数据
+    sessions.value = snap.sessions;
+    if (snap.todaySchedule) todaySchedule.value = snap.todaySchedule;
   } else {
     loading.value = true;
     loadError.value = false;
     sourceFailed.value = { budget: false, review: false, week: false };
   }
+  const { start: winStart, end: winEnd } = sessionWindowDates();
   const fastGroup = await Promise.allSettled([
     learningAPI.getStats(),
     learningAPI.getPaths(),
-    fetchSessions(monthCursor.value),
+    fetchSessions(winStart, winEnd),
     request.get('/achievements/all'),
     request.get('/ai-teaching/review/due'),
     request.get('/ai-teaching/review/plan'),
@@ -588,11 +584,20 @@ async function loadAll() {
     .catch(() => { /* 引导缺失不影响首屏 */ });
 }
 
-async function fetchSessions(cursor: { year: number; month: number }) {
-  const first = `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}-01`;
-  const lastDate = new Date(cursor.year, cursor.month + 1, 0).getDate();
-  const last = `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}-${String(lastDate).padStart(2, '0')}`;
-  const response = await request.get('/users/me/sessions', { params: { startDate: first, endDate: last, limit: 500 } });
+/* 会话窗口：近 90 天（含今天）。原先只拉「当月」，导致：
+   ① 跨月那一周（周一~周日跨月）周首屏系统性低估——上月几天不在集合里；
+   ② 连续天数在月界假断档（streak.ts 遇空档即断）；
+   ③ 与学习状态页/账户页（limit=500 无日期窗）同指标不同值。
+   改为滚动窗口后，streak / 本周节奏 / 本月摘要共用同一份近期数据（2026-10-05 修复）。 */
+const SESSION_WINDOW_DAYS = 90;
+function sessionWindowDates(): { start: string; end: string } {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(end.getDate() - (SESSION_WINDOW_DAYS - 1));
+  return { start: localDateKey(start), end: localDateKey(end) };
+}
+async function fetchSessions(startDate: string, endDate: string) {
+  const response = await request.get('/users/me/sessions', { params: { startDate, endDate, limit: 500 } });
   const raw: unknown = response.data ?? response;
   return (Array.isArray(raw) ? raw : []) as Array<Record<string, any>>;
 }
@@ -824,7 +829,7 @@ const tipTone = computed(() => {
 });
 
 const tipText = computed(() => {
-  if (pageState.value === 'attention') return '路径生成失败通常是暂时的。重新生成一般需要 1-2 分钟，已确认的信息都会保留。';
+  if (pageState.value === 'attention') return '路径生成失败通常是暂时的。已确认的信息都会保留，点「重新生成路径」手动重试。';
   if (pageState.value === 'generating') return '路径正在生成中，一般需要 1-2 分钟，完成后这一页会自动更新。';
   const copy = guidanceCopy.value;
   const warning = copy?.warningCopy;
@@ -913,10 +918,9 @@ const agendaMeta = computed(() => {
   const parts: string[] = [];
   if (todaySchedule.value?.activeGoals?.length) parts.push(`预算 ${todaySchedule.value.totalPlanned} 分钟`);
   if (reviewDue.value.length) {
-    // 与下方复习行同口径标注两个数字：到期=接口全量、课上带=预算裁剪后的计划数——
-    // 此前卡头「复习 6 项」与计划行「先复习 1 个」同屏无解释，像同一个数字的两个说法
-    const planned = reviewPlan.value?.items?.length ?? 0;
-    parts.push(planned > 0 ? `到期 ${reviewDue.value.length} · 课上带 ${planned}` : `到期 ${reviewDue.value.length}`);
+    // 「课上带 N」（预算裁剪后的计划数）由下方复习主句独占，卡头只报「到期 N」：
+    // 同卡同屏双报同一 reviewPlan.items.length 属复读（2026-10-05 去重；拍板豁免的是异屏，不含同卡）
+    parts.push(`到期 ${reviewDue.value.length}`);
   }
   return parts.join(' · ');
 });
@@ -977,39 +981,45 @@ const hasAnyMinutes = computed(() => [...minutesByDate.value.values()].some((m) 
 const weekTotal = computed(() => weekDays.value.reduce((s, d) => s + d.minutes, 0));
 const weekActiveDays = computed(() => weekDays.value.filter((d) => d.minutes > 0).length);
 
-/* 月度数据游标：sessions 按「月」拉取，月度摘要与本周节奏共用这份数据源。
-   整月日历卡已按原型收成一行摘要（待移位：整月日历迁去学习历史页），
-   游标保留——loadAll 只取当月会话，跨月周（周一~周日跨月）点选时按需补拉 */
-const monthCursor = ref({ year: new Date().getFullYear(), month: new Date().getMonth() });
-
-/* 会话请求序号：快速跨月/连点日期时，慢的旧请求后到会把新月份的数据整个覆盖
-   （sessions 是唯一数据源）。只接受最后一次发起的结果（2026-09-27 竞态修复） */
-let sessionsSeq = 0;
+/* 月度数据游标已退役（2026-10-05）：sessions 改拉「近 90 天」滚动窗口，
+   月度摘要按当前自然月从窗口内过滤，不再靠翻月重拉。 */
 
 const monthTotals = computed(() => {
+  // 本月节奏只统计当前自然月（窗口含前两月，必须按前缀过滤，否则把三个月都算进「本月」）
+  const now = new Date();
+  const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-`;
   let minutes = 0;
   let days = 0;
-  for (const [, m] of minutesByDate.value) {
+  for (const [date, m] of minutesByDate.value) {
+    if (!date.startsWith(prefix)) continue;
     if (m > 0) { minutes += m; days += 1; }
   }
-  const sessionsCount = sessions.value.length;
+  const sessionsCount = sessions.value.filter((s) => sessionLocalDate(s).startsWith(prefix)).length;
   return { minutes, days, sessions: sessionsCount };
 });
 
 /* 选中日：整月日历移除后，周节奏格是唯一的日期入口——点一天直接开当天复盘抽屉
-   （原「整月日历 → 当天明细 › 查看当天明细」两级入口降级为一级） */
+   （原「整月日历 → 当天明细 › 查看当天明细」两级入口降级为一级）。
+   会话集合已是近 90 天窗口，周格内日期恒在窗内；窗口外的日期才补拉该月并「合并」进集合
+   （不再整体换月——换月会丢掉窗口内其它月的数据，2026-10-05 修复）。 */
 const selectedDate = ref(todayStr);
 function selectDay(date: string) {
   selectedDate.value = date;
-  if (date.slice(0, 7) !== `${monthCursor.value.year}-${String(monthCursor.value.month + 1).padStart(2, '0')}`) {
+  daySheetOpen.value = true;
+  const { start } = sessionWindowDates();
+  if (date < start) {
     const [y, m] = date.split('-').map(Number);
-    monthCursor.value = { year: y, month: m - 1 };
-    const seq = ++sessionsSeq;
-    fetchSessions(monthCursor.value)
-      .then((list) => { if (seq === sessionsSeq) sessions.value = list; })
+    const first = `${y}-${String(m).padStart(2, '0')}-01`;
+    const lastDate = new Date(y, m, 0).getDate();
+    const last = `${y}-${String(m).padStart(2, '0')}-${String(lastDate).padStart(2, '0')}`;
+    fetchSessions(first, last)
+      .then((list) => {
+        const byId = new Map(sessions.value.map((s) => [s.id, s]));
+        for (const s of list) byId.set(s.id, s);
+        sessions.value = [...byId.values()];
+      })
       .catch(() => {});
   }
-  daySheetOpen.value = true;
 }
 
 /* 选中日摘要：只保留「入口」需要的字段（日期/分钟/次数）；
@@ -1730,7 +1740,7 @@ a.btn-primary { text-decoration: none; }
 .sheet-enter-from .sheet, .sheet-leave-to .sheet { transform: translateX(40px); }
 
 /* 移动端：底部弹层 */
-@media (max-width: 720px) {
+@media (max-width: 640px) {
   .sheet-mask { align-items: flex-end; }
   .sheet {
     width: 100%; height: auto; max-height: 86vh;
@@ -1827,16 +1837,15 @@ a.btn-primary { text-decoration: none; }
     padding-right: 16px;
   }
 
-  /* ── 手势目标补齐到 36px（mobile:spec 的 lt36 门禁）─────────────────────
-     下面三个在 375 下实测 30/32/35px，低于仓库自己定的「次级操作 36-40」带。
+  /* ── 手势目标补齐到 40px（LY17：下两处 375 实测 36–38）──────────────────
      只加最小高度与居中，不动字号与视觉。 */
   .link-muted {
-    min-height: 36px;
+    min-height: 40px;
     display: inline-flex;
     align-items: center;
   }
   .path__detail-link {
-    min-height: 36px;
+    min-height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;

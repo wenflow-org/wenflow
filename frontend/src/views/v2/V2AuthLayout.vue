@@ -267,7 +267,7 @@ const isDark = useIsDark();
 }
 
 /* ---------- 移动端：上下堆叠 ---------- */
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .auth__card { grid-template-columns: 1fr; }
   .auth__demo-side {
     border-left: 0;
@@ -277,7 +277,7 @@ const isDark = useIsDark();
   .demo__tagline { font-size: 13px; }
   .auth__form-side { padding: 22px 20px 24px; }
 }
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   .auth__demo-side { display: none; }
 }
 
@@ -295,7 +295,7 @@ const isDark = useIsDark();
    自己的标签（.field__label 12.5px）还大 28%，390 下输入框是全页最重的块。
    低于 16px 在 iOS Safari 聚焦时会有一次整页 zoom，这里接受这个取舍
    （理由与「不要表单里字大大小小」的权衡见 uc.css 的 .uc-field__input 注释）。 */
-@media (max-width: 760px) {
+@media (max-width: 640px) {
   .auth__main { gap: 20px; padding: 28px 16px 24px; }
   .auth__logo img { height: 60px; }
   .auth__card { border-radius: var(--mk-radius-modal); }

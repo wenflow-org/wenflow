@@ -105,6 +105,9 @@
      与上一组同源：原为「亮色硬编码 + 暗色补丁」，现集中成对定义。按变体命名，
      因为这些是各变体专有的 tint（4 种绿、3 种 slate 面等近邻值无法无损合并）。 */
   --mk-badge-info-bg: #eff6ff;
+  /* info 徽章文字：亮色用交互蓝；暗色档提亮（见 dark 块），
+     否则 --mk-blue(#5b8def) 压在蓝 tint 底上仅 3.5–4.5:1（审计 VS1 蓝字小字组）。 */
+  --mk-badge-info-fg: var(--mk-blue);
   --mk-badge-virtual-bg: #f1f5f9;
   --mk-badge-virtual-fg: #5b6572;
   --mk-badge-virtual-line: #cbd5e1;
@@ -127,6 +130,14 @@
   --mk-btn-ok-bg-hover: #d1fae5;
   --mk-btn-ok-line-hover: #86efac;
   --mk-toast-info-fg: var(--mk-blue);
+  /* toast 成对 token（2026-10-05 修复「暗色档取色未成对」）：
+     toast 是「深底浅字胶囊」——底色与文字色必须各自成对、不随主题翻转，
+     否则暗色下 --mk-ink 变浅、--wf-text-inverse 变深，整套 toast 会翻成亮底暗字。
+     固定底的错误档文字也必须固定浅色（原用 --wf-text-inverse，暗色下近黑压深红仅 2.14:1）。 */
+  --mk-toast-bg: var(--mk-ink);        /* 亮色：深墨 #1a2a44 */
+  --mk-toast-fg: var(--wf-text-inverse); /* 亮色：#ffffff */
+  --mk-toast-error-bg: #8f2233;        /* 固定深红底（明暗同值） */
+  --mk-toast-error-fg: #ffffff;        /* 固定深红底 → 恒浅字 */
   /* ---- 其余组件对 ---- */
   --mk-on-fill: #ffffff;              /* 深色/饱和实心底上的文字（各主题同值，无需暗色档） */
   --mk-pill-active-bg: #ffffff;
@@ -143,6 +154,7 @@
   --mk-drawer-close-hover-bg: #e2eaf7;
   --mk-card-foot-bg: #fafbfe;
   --mk-card-foot-line: var(--mk-line); /* 暗色档独立于 --mk-line（原补丁值 #2f3239） */
+  --mk-card-line: var(--mk-line);      /* 卡片描边（VS4）：暗色档独立提亮，见下 dark 块 */
   /* （--mk-batchbar-bg / --mk-batchbar-line 零消费已删：.mk-batchbar 类实际用的是
      var(--mk-surface) 与手写 rgba 边框色，从未引用这两枚。） */
   --mk-batchbar-danger-fg: #ffffff;
@@ -186,6 +198,10 @@
   --mk-green-fill: #15803d;
   --mk-amber-fill: #b45309;
   --mk-blue-fill: #2f6ae0;
+  /* 实心蓝底的悬停档（配白字）：明暗两态都用「更深」的一档。
+     不能用 --mk-blue-hover——它在暗色档被有意提亮成 #6a9cf3（供文字 hover），
+     当背景会让白字对比掉到 2.6:1（审计 VS1「主按钮 3.23」同族）。 */
+  --mk-blue-fill-hover: #1f57cc;
   --mk-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
   /* 回退字体用 Cascadia Code 而非规范的 Fira Code：本机实测栈更完整，保留。
      规范值见 tokens.css --wf-font-mono。 */
@@ -427,6 +443,10 @@ html[data-theme='dark'] {
   --mk-blue-bg-strong: rgba(91, 141, 239, 0.26);
   /* 组件级表面/悬停对的暗色档（与 :root 同名；取代原 shared.css 暗色补丁段） */
   --mk-surface-3: #34363b;
+  /* 卡片描边暗色档（VS4）：--mk-line(#36373c) 对卡面 #202124 仅 1.36:1，暗色下卡片边界读不出来。
+     独立提亮到 #6e7075（对 #202124 ≈3.25:1，过非文字 UI ≥3:1）。
+     只改卡片描边，不动 --mk-line（表内分隔线/输入框维持原层级，避免整片描边一起变亮）。 */
+  --mk-card-line: #6e7075;
   /* 表头条带在暗色下"比卡片更亮"（亮色档是"比卡片更暗"）。
      暗色里比卡片更暗就贴近页面底色，读成"卡片上破了个洞"而不是"表头条带"；
      同一 ΔL* 在暗端也不如亮端看得出来，故条带取 6 级台阶。 */
@@ -442,6 +462,7 @@ html[data-theme='dark'] {
   --mk-blue-hover: #6a9cf3;
   /* 徽章族 / 按钮族 / 其余组件对的暗色档（与 :root 同名） */
   --mk-badge-info-bg: rgba(91, 141, 239, 0.18);
+  --mk-badge-info-fg: #9db8f5;   /* 暗色提亮：压蓝 tint 底 ≥5:1（同 --mk-toast-info-fg 一族） */
   --mk-badge-virtual-bg: #2a2b2f;
   --mk-badge-virtual-fg: #a2a5a9;
   --mk-badge-virtual-line: #3f4146;
@@ -463,6 +484,11 @@ html[data-theme='dark'] {
   --mk-btn-ok-bg-hover: rgba(74, 222, 128, 0.22);
   --mk-btn-ok-line-hover: rgba(74, 222, 128, 0.5);
   --mk-toast-info-fg: #9db8f5;
+  /* toast 成对 token 的暗色档：底色不随 --mk-ink 翻成浅色（保持「深底浅字胶囊」），
+     固定深红底上的文字固定浅红（原用 --wf-text-inverse 近黑，2.14:1 不可读）。 */
+  --mk-toast-bg: #2b2d31;
+  --mk-toast-fg: #efeff0;
+  --mk-toast-error-fg: #ffc2cb;
   --mk-pill-active-bg: rgba(91, 141, 239, 0.22);
   --mk-pill-active-fg: #9db8f5;
   --mk-pill-count-active-fg: #9db8f5;
@@ -509,7 +535,7 @@ html[data-theme='dark'] {
   --mk-graph-pipe-bg: linear-gradient(180deg, var(--mk-graph-canvas), #161718);
   --mk-purple: #a78bfa;          /* 规范暗色 accent 为 #a98fff，值不同 → batch D */
   --mk-teal: #2dd4bf;
-  --mk-red-strong: #ef4444;
+  --mk-red-strong: #f87171;      /* #ef4444 压卡面 #202124 仅 4.28:1（<4.5 AA）；对齐 --mk-red 的 5.82:1 */
   --mk-code-bg: #0f0f10;
   --mk-code-fg: #b7b9bd;
   --mk-code-border: #2d2d2f;

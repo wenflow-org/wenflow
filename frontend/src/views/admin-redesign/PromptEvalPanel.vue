@@ -659,8 +659,11 @@ function fmtMs(ms: number | undefined | null): string {
 const promptSourceText = (s: string) => ({ active: 'ACTIVE', version: '版本', custom: '自定义', draft: '草稿' }[s] || s)
 /** mode 枚举 → 中文（后端 prompt_eval_runs.mode 现仅 eval-set；未知值回退原文） */
 const modeText = (m: string) => ({ 'eval-set': '用例集' }[m] || m || '—')
-/** 运行行通过率文案：缺失显「—」（不 ?? 0 把缺数据伪装成 0%） */
-const runRateText = (r: EvalRun) => formatRate(r.summary?.passRate) ?? '—'
+/** 0 次执行（totalRuns=0，用例全被跳过）不是「0% 通过」失败态（D15）：
+    无分母不着色、显「—」，与同屏 KPI「暂无通过数据」口径一致。 */
+const isEmptyRun = (summary: { totalRuns?: number } | null | undefined) => (summary?.totalRuns ?? 0) === 0
+/** 运行行通过率文案：缺失显「—」（不 ?? 0 把缺数据伪装成 0%）；0 次执行同样显「—」 */
+const runRateText = (r: EvalRun) => (isEmptyRun(r.summary) ? '—' : formatRate(r.summary?.passRate) ?? '—')
 /** 把校验 key 翻译成人话，例如 mustContain:先问目标 → 「必须出现"先问目标"」 */
 const checkLabel = (rawKey: string): string => {
   const [kind, ...rest] = rawKey.split(':')
@@ -686,8 +689,9 @@ const checkLabel = (rawKey: string): string => {
   }
   return map[rawKey] || rawKey
 }
-/** 结果格基调：阈值走 rate-utils 单点（原私有 90/60 两档）；passRate 缺失不着色（muted） */
+/** 结果格基调：阈值走 rate-utils 单点（原私有 90/60 两档）；passRate 缺失或 0 次执行不着色（muted） */
 const resultTone = (r: EvalRun) => {
+  if (isEmptyRun(r.summary)) return ''
   const tone = rateToneOf(typeof r.summary?.passRate === 'number' ? r.summary.passRate : null)
   return tone === 'muted' ? '' : `pe-result--${tone}`
 }
@@ -1206,12 +1210,15 @@ const runDetailTarget = ref<EvalRun | null>(null)
 /* 通过率徽章基调收敛到 rate-utils 三档 + 无数据档（原「全过=ok 否则 warn」两档：90 分与 0 分同色）；
    阈值在徽章 title 披露（调用处）。passRate 缺失 → muted 徽章（缺数据 ≠ 未达成） */
 function passTone(summary: { passRate?: number; passedCount?: number; totalRuns?: number } | null | undefined): string {
+  if (isEmptyRun(summary)) return 'mk-badge--muted'
   const tone = rateToneOf(typeof summary?.passRate === 'number' ? summary.passRate : null)
   return tone === 'ok' ? 'mk-badge--ok' : tone === 'bad' ? 'mk-badge--bad' : tone === 'warn' ? 'mk-badge--warn' : 'mk-badge--muted'
 }
 
-/** 抽屉通过率文案：缺失显「—」（不 ?? 0） */
-const detailPassRateText = computed(() => formatRate(runDetail.value?.summary?.passRate) ?? '—')
+/** 抽屉通过率文案：缺失或 0 次执行显「—」（不 ?? 0） */
+const detailPassRateText = computed(() =>
+  isEmptyRun(runDetail.value?.summary) ? '—' : formatRate(runDetail.value?.summary?.passRate) ?? '—'
+)
 
 /** 失败用例 → 对应 Skill 详情（openCaseSkill 同口径剥 skill: 前缀；评审「失败用例无去改 Prompt 链路」） */
 function goCaseSkill(agentId: unknown) {

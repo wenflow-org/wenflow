@@ -46,6 +46,9 @@ export async function fetchAgentLogRows(params: {
       success: true,
       error: true,
       errorCode: true,
+      // 错误类别列（2026-10-05）：/agents/logs 列表需回传派生的错误类别，供错误摘要条
+      // 的类别 chip 聚合与下钻查询值同源（此前漏选，前端只能把整列兜底成「其他」）
+      errorCategory: true,
       traceId: true,
       durationMs: true,
       calledAt: true,

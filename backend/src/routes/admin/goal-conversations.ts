@@ -228,13 +228,17 @@ router.post('/:id/regenerate-path', async (req: any, res) => {
  */
 router.get('/stats/overview', async (req: any, res) => {
   try {
-    const [total, active, completed, cancelled] = await getGoalConversationStatusCounts(STATS_USER_WHERE);
+    // 口径随列表「含测试」开关联动：默认仅真实用户；includeTest=true 时不过滤 users
+    // （与 GET / 的 includeTest 分支同一判据，否则分布条/完成率与列表不同源）
+    const includeTest = String(req.query.includeTest || '') === 'true';
+    const userWhere = includeTest ? {} : STATS_USER_WHERE;
+    const [total, active, completed, cancelled] = await getGoalConversationStatusCounts(userWhere);
 
     // 获取最近 7 天的对话趋势（含 7 天内完成但更早创建的对话，保证「当日完成」完整）
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const recentConversations = await findRecentGoalConversationsForTrend(STATS_USER_WHERE, sevenDaysAgo);
+    const recentConversations = await findRecentGoalConversationsForTrend(userWhere, sevenDaysAgo);
 
     // 按日期分组统计（口径修复：新增按创建日归集；「完成」按完成时间（completedAt）
     // 归集 = 当日实际完成数，而非「当日创建、查询时点已完成」；

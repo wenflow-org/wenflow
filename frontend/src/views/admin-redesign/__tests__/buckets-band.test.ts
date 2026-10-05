@@ -14,7 +14,7 @@ import { nextTick } from 'vue';
 import TeachingSessions from '../TeachingSessions.vue';
 import OpsContent from '../OpsContent.vue';
 import People from '../People.vue';
-import { liveUsers, liveUsersTotal } from '../live';
+import { liveUsers, liveUsersTotal, liveIncludeVirtual } from '../live';
 
 const { tsList, pathStats, lcApi, tsApi, apiObject } = vi.hoisted(() => {
   const apiObject = (): Record<string, unknown> =>
@@ -161,9 +161,10 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     w.unmount();
   });
 
-  it('用户与学习者：真实 / 虚拟 / 测试 三桶互斥构成，管理员作真实桶 foot', async () => {
+  it('用户与学习者：默认「仅真实」单桶 + 披露；含测试后真实 / 虚拟 / 测试三桶互斥构成，管理员作真实桶 foot', async () => {
     const { router, ready } = mockRouter('/admin/people');
     await ready;
+    liveIncludeVirtual.value = false;
     const w = mount(People, { global: { plugins: [router] } });
     await settle();
     // 空数据不出空带
@@ -177,15 +178,27 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     ];
     liveUsersTotal.value = 4;
     await nextTick();
-    expect(bucketLabels(w)).toEqual(['真实用户', '虚拟学习者', '测试账号']);
-    expect(bucketValues(w)).toEqual(['2', '1', '1']);
-    const feet = w.findAll('.bucket__foot').map((f) => f.text());
+    // D18：默认「仅真实」口径下虚拟 / 测试结构性为 0，是死档 → 只渲染真实单桶 + 披露未纳入
+    expect(bucketLabels(w)).toEqual(['真实用户']);
+    expect(bucketValues(w)).toEqual(['2']);
+    expect(w.findAll('.bucket__foot').map((f) => f.text()).join(' ')).toContain('虚拟 / 测试账号未纳入');
+    w.unmount();
+
+    // 含测试口径 → 三桶互斥构成（管理员数作真实桶 foot；口径悬停给行数与后端总数）
+    liveIncludeVirtual.value = true;
+    const w2 = mount(People, { global: { plugins: [router] } });
+    await settle();
+    await nextTick();
+    expect(bucketLabels(w2)).toEqual(['真实用户', '虚拟学习者', '测试账号']);
+    expect(bucketValues(w2)).toEqual(['2', '1', '1']);
+    const feet = w2.findAll('.bucket__foot').map((f) => f.text());
     expect(feet).toContain('其中管理员 1');
-    // 口径悬停：已加载行数 + 后端总数
-    const vt = w.find('.bucket__v').attributes('title');
+    const vt = w2.find('.bucket__v').attributes('title');
     expect(vt).toContain('按已加载 4 行统计');
     expect(vt).toContain('后端共 4');
-    w.unmount();
+    w2.unmount();
+
+    liveIncludeVirtual.value = false;
     liveUsers.value = [];
   });
 });

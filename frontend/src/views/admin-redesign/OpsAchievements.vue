@@ -61,7 +61,7 @@
       <div v-else-if="records.length" class="mk-table-scroll ac-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap；
              成就/用户双行单元格由 mk-cell-main 全局 max-width 截断兜底 -->
-        <table class="mk-table">
+        <table class="mk-table mk-table--nowrap">
           <thead>
             <tr>
               <th>成就</th>
@@ -124,8 +124,10 @@
       <MkEmptyState
         v-else
         icon="◌"
-        title="还没有解锁记录"
-        description="用户完成任务、连续学习、达成里程碑后自动解锁，也可在「成就定义」手动发放。"
+        :title="isRecordsFiltered ? '没有符合筛选条件的解锁记录' : '还没有解锁记录'"
+        :description="isRecordsFiltered
+          ? '当前搜索/筛选条件下无匹配记录，可清除筛选查看全部。'
+          : '用户完成任务、连续学习、达成里程碑后自动解锁，也可在「成就定义」手动发放。'"
         min
         :action-text="isRecordsFiltered ? '清除筛选' : ''"
         @action="clearRecordsFilters"
@@ -517,30 +519,13 @@ onMounted(() => {
 }
 .ac-card__grant { font-size: var(--mk-fs-micro); }
 
-/* ================= 视图切换（原型 .tabs 下划线页签，页面本地复刻） =================
-   与宿主 OpsHub 页签、Users.vue 卡内页签同款：12px/600、激活蓝字+2px 蓝下划线、通栏底线 */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
-.tab {
-  border: 0;
-  background: transparent;
-  color: var(--mk-muted);
-  padding: 9px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  font-size: var(--mk-fs-micro);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  white-space: nowrap;
-  transition: color 0.14s ease, border-color 0.14s ease;
-}
-.tab:hover { color: var(--mk-ink); }
-.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+/* ================= 视图切换（原型 .tabs 下划线页签） =================
+   样式 2026-10-05 CM1 收敛到全局 .tabs/.tab（mk-primitives.css），本页不再私持拷贝。 */
 /* 嵌入模式：宿主页签与本页签之间补 .mk-page 同款 12px 节奏（嵌入根是 block 无 grid gap） */
 .oa-embedded > .tabs { margin-bottom: var(--mk-space-3, 12px); }
 
-/* 原型 .tbl td：nowrap（长内容由 mk-cell-main/mk-cell-text 全局 max-width 截断兜底） */
-.mk-table td { white-space: nowrap; }
+/* 原型 .tbl td：nowrap（长内容由 mk-cell-main/mk-cell-text 全局 max-width 截断兜底）。
+   2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class）。 */
 
 
 .ac-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

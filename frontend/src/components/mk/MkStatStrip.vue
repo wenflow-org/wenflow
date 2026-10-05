@@ -1,7 +1,14 @@
 <template>
-  <div class="mk-stat-strip">
+  <div
+    class="mk-stat-strip"
+    :class="`mk-stat-strip--${layout}`"
+    :role="layout === 'grid' ? 'list' : undefined"
+    :aria-label="layout === 'grid' ? (ariaLabel || undefined) : undefined"
+  >
     <!-- 分格指标条：标签在上、数值在下，格子间 1px 竖分隔；窄屏自动换行。
-         用于页头「多组指标平铺成一句话」的场景（虚拟学习者等），提供标签/数值层级与可点击筛选。 -->
+         inline（默认）：用于页头「多组指标平铺成一句话」的场景（虚拟学习者等），
+                         提供标签/数值层级与可点击筛选。
+         grid：实体页头「一行四格读数条」（原型 statstrip，hero 与二级页签之间）。 -->
     <template v-for="(item, i) in items" :key="item.key ?? i">
       <button
         v-if="item.clickable"
@@ -10,6 +17,7 @@
         :class="[item.tone ? `mk-stat--${item.tone}` : '', { 'mk-stat--on': item.active }]"
         :title="item.title || undefined"
         :aria-pressed="item.active ? 'true' : 'false'"
+        :role="layout === 'grid' ? 'listitem' : undefined"
         @click="$emit('select', item.key)"
       >
         <span class="mk-stat__label">{{ item.label }}</span> <span class="mk-stat__value">{{ item.value }}</span>
@@ -19,6 +27,7 @@
         class="mk-stat"
         :class="item.tone ? `mk-stat--${item.tone}` : ''"
         :title="item.title || undefined"
+        :role="layout === 'grid' ? 'listitem' : undefined"
       >
         <span class="mk-stat__label">{{ item.label }}</span> <span class="mk-stat__value">{{ item.value }}</span>
       </div>
@@ -44,7 +53,11 @@ export interface MkStatItem {
 </script>
 
 <script setup lang="ts">
-withDefaults(defineProps<{ items: MkStatItem[] }>(), { items: () => [] })
+withDefaults(defineProps<{ items: MkStatItem[]; layout?: 'inline' | 'grid'; ariaLabel?: string }>(), {
+  items: () => [],
+  layout: 'inline',
+  ariaLabel: ''
+})
 
 defineEmits<{ select: [key: string | undefined] }>()
 </script>
@@ -105,6 +118,38 @@ defineEmits<{ select: [key: string | undefined] }>()
 .mk-stat--on { background: color-mix(in srgb, var(--mk-blue) 12%, transparent); }
 .mk-stat--on .mk-stat__label,
 .mk-stat--on .mk-stat__value { color: var(--mk-blue); }
+
+/* 布局变体 grid：实体页头「一行四格读数条」（原型 .statstrip）。label 在上、数值在下，
+   格子等宽 auto-fit、竖分隔在右（与 inline 的分隔在左互不干扰）。数值固定 18px 展示档
+   （与页内正文分离，是页级读数档；不随 4K 字号阶梯放大，保持四页一致）。
+   收敛 LearnerDetail / UserAccountPane / VirtualProfile / SessionCockpit 四处私有 .statstrip 复刻。 */
+.mk-stat-strip--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.mk-stat-strip--grid .mk-stat {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 12px 16px;
+  border-left: 0;
+  border-right: 1px solid var(--mk-line);
+}
+.mk-stat-strip--grid .mk-stat:first-child { padding-left: 16px; border-left: 0; }
+.mk-stat-strip--grid .mk-stat:last-child { border-right: 0; }
+.mk-stat-strip--grid .mk-stat__value {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--mk-ink);
+  /* 长文本格（当前阶段/当前任务）不 nowrap 截断丢字：最多两行，全文留在 title */
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
 
 /* 4K 档对齐全站字号阶梯 */
 @media (min-width: 2000px) {

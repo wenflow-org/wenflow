@@ -5,8 +5,12 @@
          原「共 N 条」前缀开关已并入恒显口径。
          P3-28（设计评审）：撤「每页 S 条」段——与右侧「S条/页」下拉同屏复读同事实，
          条数口径单源留在下拉（aria-label 已有「每页条数」）。 -->
-    <span class="mk-pagination__total">
-      共 {{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页
+    <span class="pagination-left">
+      <span class="mk-pagination__total">
+        共 {{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页
+      </span>
+      <!-- 口径说明（可选，如执行日志「本页 N 条网关记录已并入」）：与 total 同组，弱化补充，不占按钮区 -->
+      <span v-if="note" class="pagination-note">{{ note }}</span>
     </span>
     <span class="mk-pagination__right">
       <select
@@ -70,12 +74,15 @@ const props = withDefaults(
     /** 固定每页行数场景（如字段路由表 15 行/页）：隐藏每页条数下拉，页码器形态不变 */
     hideSize?: boolean
     sizes?: number[]
+    /** 附加口径说明（如「本页 N 条网关记录已并入」）：显示在总数右侧，弱化文本 */
+    note?: string
   }>(),
   {
     loading: false,
     showTotal: false,
     hideSize: false,
-    sizes: () => [15, 30, 50, 100]
+    sizes: () => [15, 30, 50, 100],
+    note: ''
   }
 )
 
@@ -135,6 +142,19 @@ watch(
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* 左侧信息组：总数字 + 可选口径说明（如「本页 N 条网关记录已并入」）同组排布 */
+.pagination-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.pagination-note {
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
   white-space: nowrap;
 }
 .mk-pagination__right {

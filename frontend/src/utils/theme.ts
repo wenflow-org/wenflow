@@ -41,4 +41,13 @@ export function writeTheme(mode: ThemeMode) {
 export function applyDocumentTheme(mode: ThemeMode) {
   document.documentElement.dataset.theme = mode;
   document.documentElement.classList.toggle('dark', mode === 'dark');
+  /* index.html 首屏脚本为了防白闪，直接给 body 写了内联背景/文字色；运行时切主题不会更新它，
+     载入浅色再切深色后 body 内联仍停在亮底（当前被 shell 层遮住，属潜在亮块/暗块）。
+     body 的基础样式（design-system.css）已按 var(--bg-body)/var(--text-primary) 随 data-theme 翻转，
+     故这里清掉内联即可让样式表接管——不在此硬编码颜色，也不与启动脚本字面量分家。 */
+  const body = document.body;
+  if (body && (body.style.background || body.style.color)) {
+    body.style.background = '';
+    body.style.color = '';
+  }
 }

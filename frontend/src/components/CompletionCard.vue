@@ -474,4 +474,9 @@ const tagClass = (type: string) => ({
      这类主决策按钮；窄屏已铺满整宽，触屏高度抬到 34px */
   .completion-btn--small { height: 44px; padding: 8px 12px; }
 }
+/* 触屏设备（含 641–1023 横屏手机 / 小平板，如 844×390）：此档此前只有 36px，
+   低于 40 触控下限，而同页 375 竖屏已达 44——按指针类型统一抬到 44（LY11）。 */
+@media (pointer: coarse) {
+  .completion-btn--small { height: 44px; padding: 8px 12px; }
+}
 </style>

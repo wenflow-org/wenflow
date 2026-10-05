@@ -39,7 +39,8 @@ import { checkIsAdmin } from '../../services/admin-access.service';
 import {
   timeoutErrorSignals,
   buildErrorCategoryWhere,
-  buildTimeoutCondition
+  buildTimeoutCondition,
+  classifyFailureCategory
 } from '../../services/admin/failure-classification';
 import { computeOverviewStats, clearOverviewAllTimeCache } from '../../services/admin/platform-overview.service';
 import { collectManifestDiagnostics } from '../../services/admin/platform-manifest-diagnostics.service';
@@ -1007,6 +1008,18 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
         // input/output 不再随列表传输（详情接口 /agents/logs/:id 按需拉取）
         error: log.error,
         errorCode: log.errorCode,
+        /* 派生错误类别（2026-10-05）：现代 gateway 行直接采用 errorCategory 列，老/skill 行
+           由 errorCode/error 文本启发式归并（与 /agents/logs 的 errorCategory 筛选
+           buildErrorCategoryWhere 同源），使「错误摘要条类别 chip 聚合 ↔ 下钻查询 ↔
+           总览失败归因」三处闭环一致。缺此字段时前端把整列兜底成「其他」，下钻必空。
+           成功行不带失败类别（否则启发式兜底会把成功行也标成 internal）。 */
+        errorCategory: log.success
+          ? null
+          : classifyFailureCategory({
+              errorCategory: log.errorCategory ?? null,
+              errorCode: log.errorCode ?? null,
+              error: log.error ?? null,
+            }),
         traceId: log.traceId,
         sessionId: extractSessionIdFromMetadata(log.metadata),
         durationMs: log.durationMs,

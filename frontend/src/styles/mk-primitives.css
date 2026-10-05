@@ -254,7 +254,7 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
    弹层=shadow-pop。此前卡片边框+阴影叠加，暗色下阴影不可见、亮色靠阴影撑质感，
    明暗两套皮肤各自生长，是"每页各像各的"的主要来源。 */
 .mk-card {
-  border: 1px solid var(--mk-line);
+  border: 1px solid var(--mk-card-line);
   border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
   /* overflow: clip（而非 hidden）：同样裁圆角溢出，但不产生滚动容器，
@@ -537,6 +537,13 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
 .mk-table--dense td { padding: 8px 12px; }
 .mk-table--dense td { font-size: var(--mk-fs-micro); }
 
+/* 单元格不换行档（原型 .tbl td nowrap）：自动布局下整表按内容自然分宽、单行呈现。
+   2026-10-05 CM6：GoalConversations / LearnerCenter / TeachingSessions / OpsAchievements / Users
+   五处页私有 `.mk-table td { white-space: nowrap }` 拷贝收敛为本修饰类（表格加 .mk-table--nowrap）。
+   需要换行的长文本仍走 span 级 .mk-cell-text--wrap / -webkit-line-clamp（white-space:normal
+   定义在内层 span 上，优先级高于 td 继承，换行契约不受影响）。 */
+.mk-table--nowrap td { white-space: nowrap; }
+
 /* 全局紧凑档（D3 表格增强）：html[data-density='compact'] 一键收紧全站表格。
    纯 CSS 实现（无需逐页改），与 .mk-table--dense 语义等价但全局生效；
    切换按钮在 Shell 顶栏（localStorage 持久化，见 Shell.vue）。
@@ -743,7 +750,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 }
 .mk-badge--bad { background: var(--mk-red-bg); color: var(--mk-red); }
 .mk-badge--muted { background: var(--mk-surface-3); color: var(--mk-muted); }
-.mk-badge--info { background: var(--mk-badge-info-bg); color: var(--mk-blue); }
+.mk-badge--info { background: var(--mk-badge-info-bg); color: var(--mk-badge-info-fg, var(--mk-blue)); }
 /* 紧凑变体：行内小标签（10.5px / 1px 8px），替代各页面散落的 gc-tag/ts-tag/ul-tag */
 .mk-badge--sm { font-size: var(--mk-fs-micro); padding: 1px 8px; letter-spacing: 0.03em; }
 /* 虚拟学习者标记：slate 灰 + 虚线边框（与测试 amber 区分） */
@@ -1014,6 +1021,33 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-table th.mk-th--right { text-align: right; }
 .mk-empty--compact { padding: 24px 16px; }
 
+/* ----- 页面级视图切换页签（原型 .tabs）-----
+   2026-10-05 CM1：AuditLogs / ExecLogs / OpsAchievements / OpsCenter / OpsHub /
+   Orchestrator / Skills / HealthCenter 八处逐字 scoped 拷贝收敛为全局原语（保留既有
+   `.tabs/.tab/.tab__count` 类名，测试与各页模板零改动）。与 MkSubTabs（.mk-subtab）
+   同视觉（12px/600、激活蓝字 + 2px 蓝下划线、通栏底线），区别在用途：本类是宿主页
+   顶层视图/分区切换；MkSubTabs 是详情页 hero 下的分区页签。
+   HTML 契约：<div class="tabs" role="tablist"> + <button class="tab" role="tab" aria-selected> */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+.tab {
+  border: 0;
+  background: transparent;
+  color: var(--mk-muted);
+  padding: 9px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--mk-fs-micro);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+.tab:hover { color: var(--mk-ink); }
+.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+.tab__count { margin-left: 5px; color: var(--mk-faint); font-weight: 600; }
+.tab[aria-selected='true'] .tab__count { color: inherit; opacity: 0.72; }
+
 /* ----- 空态 ----- */
 .mk-empty {
   padding: 48px 20px;
@@ -1022,6 +1056,17 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   display: grid;
   gap: 6px;
   justify-items: center;
+}
+/* 一行式空态（CM7）：卡内表格/列表筛选后 0 行的内联空态——
+   与 .mk-empty 的居中大块空态区分：单行、左对齐、不占最小高度。
+   口径：一句「为什么空 + 现状结论」，不塞图标/动作（动作留给筛选条）。 */
+.mk-empty--line {
+  display: block;
+  padding: 14px 16px;
+  margin: 0;
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-body);
+  text-align: left;
 }
 .mk-empty strong { color: var(--mk-muted); font-size: var(--mk-fs-emphasis); }
 .mk-empty span { font-size: var(--mk-fs-body); }
@@ -1313,11 +1358,13 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-btn:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
 .mk-btn:hover { background: var(--mk-btn-hover-bg); }
 .mk-btn--primary {
-  background: var(--mk-blue, #2f6ae0);
-  border-color: var(--mk-blue, #2f6ae0);
+  /* 实心底走 --mk-blue-fill（明暗两态恒 #2f6ae0）：不用 --mk-blue，
+     后者暗色档提亮成 #5b8def，白字只有 3.23:1（审计 VS1）。 */
+  background: var(--mk-blue-fill, #2f6ae0);
+  border-color: var(--mk-blue-fill, #2f6ae0);
   color: var(--mk-on-fill);
 }
-.mk-btn--primary:hover { background: var(--mk-blue-hover); }
+.mk-btn--primary:hover { background: var(--mk-blue-fill-hover, #1f57cc); border-color: var(--mk-blue-fill-hover, #1f57cc); }
 /* 危险按钮：红底白字（规格对齐 .mk-btn--primary），悬停/按下加深 */
 .mk-btn--danger {
   background: var(--mk-red-fill, #dc2626);
@@ -1778,10 +1825,24 @@ input[type='checkbox'] {
   flex: none;
 }
 
-/* 管理端 code/pre 继承所在文本档：design-system.css 给 `code` 设了用户侧的 --text-sm（14px），
-   在管理端会盖住表格/卡片的文本档——3840 上就是一枚档外字号（实测 skill-workbench 15 处）。
-   用 body.admin-route 提权重（路由守卫给管理端路由加该类），覆盖层（Teleport 到 body）同样命中。 */
-body.admin-route code { font-size: inherit; }
+/* 管理端 code/pre 归零用户侧全局 code/pre 样式：design-system.css 给 `code` 设了用户侧的
+   --text-sm（14px）红字胶囊（:410-417）、给 `pre` 设了浅色 1px 边框（:418-424），
+   在管理端会盖住表格/卡片的文本档与底色——
+     · font-size:inherit —— 3840 上就是一枚档外字号（实测 skill-workbench 15 处）；
+     · color/background/padding/border-radius 归零 —— 用户侧红字胶囊（亮色 3.36:1）外溢进
+       admin 的 13 文件 47 处裸 code，管理端身份哈希/Skill id 等本应中性；
+     · pre{border:0} —— 用户侧给 pre 的 1px 浅色边框在 admin 代码井上多出一道外框
+       （admin 各页只覆写背景/字号/内边距，未重置边框）。
+   用 body.admin-route 提权重（路由守卫给管理端路由加该类），覆盖层（Teleport 到 body）同样命中。
+   页面自带的反制样式（颜色/内边距）在此之后仍以更高优先级或同权重靠后生效。 */
+body.admin-route code {
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+body.admin-route pre { border: 0; }
 
 /* ----- 回到顶部浮动按钮（滚动规范 #9：页面 >2 屏时出现；Shell 挂载，全局可用） ----- */
 .mk-backtop {

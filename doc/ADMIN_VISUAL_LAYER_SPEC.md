@@ -1,6 +1,12 @@
 # Admin 视觉层设计语言（v4，2026-10-02）
 
-> 📌 类型：活规范（⛔ 禁归档，守卫硬引用）｜最后核验：2026-10-02
+> 📌 类型：活规范（⛔ 禁归档，守卫硬引用）｜最后核验：2026-10-03
+>
+> **2026-10-03 台账对账**：规则层（§0–§7.5）逐条与代码复核，全部一致，未改；只更新了
+> 落地台账类条目——§2 总览骨架（Row B 两卡）、§6 组件词汇表（`.stageband` 升共享原语、
+> `.barchart` 退役→`OvBars`、`.tabs` 下划线页签、`.statstrip` 五页、`meterrow` 归属）、
+> §8 hex 存量 464→218 并补 10-03 四批、§9.4（两卡）与 §9.7（趋势已恢复）。
+> 本次复核未动的登记项：§7.5.2/§7.5.7 的暗色红口径自相矛盾（见 §7.5.2 待体系包补档）。
 >
 > **v4 相对 v3 的变更**：接入 `WenFlow-Design-System` 设计体系包，把设计语言
 > 收敛为一套「友好而平」（Warm-Flat）。数值全部来自 `develop` 实测，非新增发明。
@@ -123,7 +129,7 @@ v4 修正）。
 
 ## 1. 层级（Typography hierarchy）
 
-文本仍只有**三个角色 token**（micro 12 / body 14 / emphasis 15，档位覆写见 main.css）。
+文本仍只有**三个角色 token**（micro 12 / body 14 / emphasis 15；档位覆写在 `styles/mk-primitives.css` 的 `:root` —— 1440 档 12.5/14.5/15.5、1920 档 13/15/16，**不在 main.css**）。
 v3 修订两条：
 
 1. **卡片标题升到 emphasis 档**：`mk-card__title` 15/700 墨色（v2 时是 body 14/700；
@@ -143,11 +149,11 @@ v3 修订两条：
 | 卡间距 | 16 | 不变 |
 | `.mk-card__head` | **12×16** | 见上 |
 | `.mk-status` | 9×14 / min-h 48 | 不变（与原型 .statusbar 同款） |
-| `.mk-table` th/td | **10×16** | v3 对齐原型 .tbl；表头与单元格左右必须同档 |
+| `.mk-table` th/td | **10×16**（≥1600）；**≤1599 中宽档 padding-inline 12** | v3 对齐原型 .tbl；表头与单元格左右必须同档。中宽档收窄为各页 scoped 判例（Skills / VirtualLearners），密集表在 ≤1599 回收列宽 |
 
 **页面骨架节奏（v3 新增，每页按此排）**：
 列表页 = 页头 → KPI → 状态条 →（本页招牌块：分布条/桶组）→ 主表卡（toolbar+table+pager）。
-总览 = 页头 → KPI → 状态条 → 教学闭环 → Row A（图 1.6fr + 事件 1fr）→ Row B 三小卡（auto-fit 280）。
+总览 = 页头 → KPI → 状态条 → 教学闭环 → Row A（图 1.6fr + 事件 1fr）→ Row B 两小卡（auto-fit 280；原型第三卡「学习状态分布」不落，见 §9.4）。
 
 ## 3. 透气（Density）
 
@@ -174,7 +180,9 @@ v3 修订两条：
 ## 5. 守卫与演进（v3 增补复刻方法）
 
 - `npm run design:check`：hex/死类/圆角/阴影/字号棘轮，只降不升。
-  另含两条**硬失败**规则（非棘轮，恒须为 0）：规则 17 禁渐变主按钮、规则 18 禁 `backdrop-filter`。
+  圆角/阴影的扫描面含 `src/styles/*.css`（2026-10-02 补，此前只扫 `.vue`，见 §7.5.6）。
+  另含三条**硬失败**规则（非棘轮，恒须为 0）：规则 17 禁渐变主按钮、规则 18 禁
+  `backdrop-filter`、规则 19 档位令牌的定义值必须落在阶梯上。
   治理面已于 v4 扩到用户侧，见 §7.5.3。
 - 视觉层改动只允许发生在 token / 原语层；页面 scoped 只允许布局与**原型复刻件**。
 - **复刻方法（v3 钉死）**：对齐原型 = 读 `newui/**/index.html` 的 render 函数与 CSS，
@@ -191,21 +199,23 @@ v3 修订两条：
 | `.btn / .btn--sm` | `.mk-btn / .mk-btn--sm` | 原语 |
 | `.card/.card__head/.card__title/.card__sub/.card__tools/.card__body` | `.mk-card` 族（title 15/700） | 原语 |
 | `.grid + .card > .kpi` | `MkKpi`（白面、数值 28/700、foot 可带 ▲▼ 趋势）+ `.mk-kpi-grid` | 原语组件 |
-| `.tabs / .subtabs` | `MkSubTabs`（下划线式，9×12） | 原语组件 |
+| `.tabs` | 顶层视图切换 = **下划线页签**（宿主页实现，如 `Users.vue` 的账号/学习状态；`.mk-pills` 不再承担视图切换，只留筛选/多标签过滤） | 页面 |
+| `.subtabs` | `MkSubTabs`（下划线式，9×12；抽屉/弹窗内部内容分区） | 原语组件 |
 | `.chips / .chip` | `.mk-pills / .mk-pill`（描边胶囊；激活=蓝底蓝字蓝调边） | 原语 |
 | `.tbl` | `.mk-table`（10×16；fixed 档列宽走 `--mk-col-*`） | 原语 |
 | `.pager` | `Pagination.vue` | 原语组件 |
-| `.empty` | `MkEmptyState` | 原语组件 |
+| `.empty` | `MkEmptyState`（大块居中空态）；筛选后 0 行的卡内表格/列表用 `.mk-empty--line`（**一行式内联空态**：单句「为什么空 + 现状结论」，不占最小高度，CM7） | 原语组件 / 原语 |
 | `.drawer/.modal/.ovl` | `.mk-drawer/.mk-modal` | 原语 |
 | `.field/.input/.select` | `.mk-filter__input/.mk-filter__select`、`.mk-field` | 原语 |
-| `.stageband/.stageband__legend/.sbl` | 页面本地复刻（TeachingSessions / OpsContent / MemoryReview） | 页面 |
-| `.buckets/.bucket` | 页面本地复刻（GoalConversations） | 页面 |
+| `.stageband/.stageband__legend/.sbl` | **共享原语**（`mk-primitives.css`；2026-10-03 由 TeachingSessions / OpsContent / MemoryReview 三处逐字 scoped 拷贝收敛，见 §8 10-03 行） | 原语 |
+| `.buckets/.bucket` | 页面本地复刻（GoalConversations / LearnerDetail） | 页面 |
 | `.loop` | 页面本地复刻（Overview 教学闭环） | 页面 |
-| `.barchart` | 页面本地复刻（Overview 近 7 天活跃）；echarts 重图仍走 MkChart | 页面 |
+| ~~`.barchart`~~ | **已退役**：Overview 近 7 天活跃改用统一柱图组件 `OvBars`（2026-10-02 P1#2，零值「·」+ 今日列高亮内建）；echarts 重图仍走 MkChart | — |
 | `.feed/.feedrow` | 页面本地复刻（Overview 最近事件；健康中心告警流） | 页面 |
-| `.ranklist/.rankrow`、`.meterrow/.meter` | 页面本地复刻（Overview Row B） | 页面 |
+| `.ranklist/.rankrow` | 页面本地复刻（Overview Row B / LearnerCenter / ApiConfig 等） | 页面 |
+| `.meterrow/.meter` | 页面本地复刻（LearnerCenter / LearnerDetail / DayTimeline） | 页面 |
 | `.hero` | `MkDetailHero`（24px 标题） | 原语组件 |
-| `.statstrip`（L2 详情页 hero 下的一行分格读数） | LearnerDetail 页面本地复刻（四格：进度/阶段/任务/最近会话） | 页面 |
+| `.statstrip`（L2 详情页 hero 下的一行分格读数） | 页面本地复刻 —— **五个 L2/L3 页**：LearnerDetail / PathDetail / UserDetail / SessionCockpit / VirtualProfile | 页面 |
 | L2 详情骨架（hero + statstrip + subtabs） | UserDetail / LearnerDetail 已按此骨架（318da349 起） | 页面 |
 | `.login*` | `Login.vue` 页面复刻（分栏品牌 aside + 表单 panel） | 页面 |
 | `odg-*` | `DataFlowGraph`（orch-odg-*） | 页面 |
@@ -336,6 +346,72 @@ v4 改为扫出 `<Transition name>` 的静态 name 集合 + Vue 约定的钩子�
 真实死 CSS 从 80 降到 **27**（8 个文件）。教训记此：**扩大治理面前，先验一遍新规则
 在自己身上会不会误报**，否则一次 `--update` 就把误报固化成「现状」。
 
+### 7.5.6 规则 14/15 从未扫过 `src/styles/*.css`（v4 的渲染层复核查出）
+
+**这是本轮最值得记的一条：一个「已 100% 合规」的结论，实际是「没扫」。**
+
+规则 14/15（圆角 / 阴影棘轮）原本长在「遍历 `.vue` 的 scoped `<style>` 块」那个循环里。
+`src/styles/*.css` 根本不是 `.vue`，从未进入过那个循环 —— 而 admin 的圆角几乎**全部**
+写在 `mk-primitives.css` 里。于是：
+
+- 守卫长期报 `radius 基线 = 0`，被读作「admin 圆角 100% 合规」；
+- 实际渲染层在 `/admin/health-center` 实测出 `.mk-minibar` 是 `99px`（阶梯是
+  4/6/8/12/16/999），守卫报 0。
+
+**怎么发现的**：不是靠读代码，是靠渲染层复核 —— 打开页面，对 `getComputedStyle`
+出来的每个元素算 `border-radius` / `box-shadow`，再按阶梯判。源码扫描与渲染扫描
+是两种不同的证据，前者会漏掉自己没遍历到的文件类型。
+
+扩面后首次扫描查出 **4 处圆角 + 6 处阴影** 字面量档外，全部当场修掉（没有写进基线）：
+
+| 文件 | 原值 | 改为 | 说明 |
+|---|---|---|---|
+| `mk-primitives.css` `.mk-minibar`/`__fill` | `99px` ×2 | `999px` | 6px 高的条上两者都被 clamp 到 3px，**渲染零差别**，改的是记法 |
+| `mk-primitives.css` `.mk-status` @2800 | `14px` | 删除 | 基础档已是 `--mk-radius-xl`=16；这句 14px 是批次 C 抬 xl 后留下的**回归**（超大屏上把圆角从 16 缩回 14） |
+| `admin-theme.css` `.admin-session-validation-card` | `14px` | `var(--mk-radius-xl)` | 它是卡，与 `.mk-card` 同族 |
+| `admin-theme.css` 同卡 ×2（浅/暗） | `0 18px 48px …` | `var(--mk-shadow-pop)` / 删除暗色副本 | 18/48 是三档之外的第四档；暗色副本删除即可，token 自动翻转 |
+| `mk-primitives.css` `.mk-seg__item--active` | `0 1px 2px rgba(23,32,51,.1)` | `var(--mk-shadow-sm)` | raised 档的职责；色值 23,32,51 不在调色板里 |
+
+同时**新增规则 19**（硬失败）：档位令牌的**定义值**必须落在阶梯上。
+理由是 14/15 现在放行 `var(--radius-*)` 这类转发（三支别名是同一条阶梯的转发），
+只查引用处会让「往别名链里塞 13px」在每一处引用上都合法通过 —— 必须钉死链的起点。
+圆角按字面比对阶梯；阴影没有「几条固定字符串」可比，改按规范 §0 那条真正硬的要求判：
+**全中性**（把 rgba 通道乘 alpha 看推偏量，规范自己的 slate 阴影推偏 ≤2，彩色光晕上百）。
+
+### 7.5.7 渲染层视觉回归（2026-10-02，亮/暗双档 × 10 页）
+
+批次 C/D 都是「按数据改」的，改完必须回到浏览器确认观感。方法：playwright 起
+1440×900 双档上下文，注入会话 cookie，逐页截图 + 跑三个渲染层探针
+（对比度 / 退役材质 / 圆角档）。脚本与截图存于仓库外临时目录，不入库。
+
+**通过项**：
+
+| 检查 | 结果 |
+|---|---|
+| 退役材质（`backdrop-filter` / 135° 蓝渐变主按钮 / 彩色发光） | **全站 0**，亮暗两档都是 0 |
+| 对比度 · 亮色档（8 页） | **0 失败** |
+| Admin 顶栏材质 | 不透明平面 + 1px 发丝线，毛玻璃已退 ✓ |
+| 卡片圆角观感 | 16px 统一，无塌陷、无突兀 |
+
+> 探针本身踩了两个坑，记此备查：① 半透明底若不当成不透明算，10% 蓝底会被当成
+> 满色蓝，凭空造出一批假阳性 —— 必须把背景链**自下而上合成**到不透明再比；
+> ② 「阴影 RGB 三通道不等」不能当彩色判据，因为**规范自己的阴影就带色**
+> （`--wf-shadow-*` 用 slate `rgba(15,23,42,…)`），要算预乘后的染色量，
+> 且 0 模糊的是描边环不是阴影。
+
+**未通过项（暗色档 2 处，全站性）**：
+
+| 现象 | 实测 | 判据 |
+|---|---|---|
+| 主按钮白字 | `#fff` on `#5b8def` = **3.23:1** | 正文需 4.5:1 |
+| 暗色 muted 次要文字 | `rgb(122,126,133)` on `rgb(32,33,36)` = **3.95:1** | 正文需 4.5:1 |
+
+亮色档同一颗主按钮是 `#fff` on `#2f6ae0` = **4.93:1，通过**；问题只出在暗色档的
+`--wf-color-primary`（`#5b8def`）。这是 **§7.5.2 那个规范缺口的延伸**：
+体系给的交互蓝在亮色档够白字，在暗色档不够 —— 因为暗色档为了让蓝在深底上「够亮」，
+把明度提上去了，代价是压不住白字。**待体系包补档**，不建议在本仓私自把暗色蓝调深
+（会与 `WenFlow-Design-System` 的定义分叉）。
+
 ---
 
 ## 8. 洼地与批次状态（v4 更新）
@@ -352,12 +428,15 @@ v4 改为扫出 `<Transition name>` 的静态 name 集合 + Vue 约定的钩子�
 | **10-02 B** | 暗色调色板归一：用户侧 `--color-primary` #5a94f8→#5b8def（补上 18f09fd3 漏掉的一半）、`--neutral-*` 十一档改实测收敛坡道；`--shadow-xs` 改 `none` | ✅ |
 | **10-02 C** | 圆角收口：砍 `--mk-radius-lg(10)`、`--mk-radius-xl` 12→16（全站卡片 +4px）、删 `--radius-md` 越权覆盖（12→8，用户侧与 Admin 侧控件圆角首次统一）；阴影四档→三档 | ✅ |
 | **10-02 D** | 退役材质：渐变主按钮 34→0、`backdrop-filter` 15→0、hover 抬升 20→0、彩色外发光 35→0；同步退役 §7 顶栏毛玻璃 | ✅ |
-| **10-02 E** | 守卫扩面 + 两条硬规则（禁渐变主按钮 / 禁 backdrop-filter）；新增 `isAdminGoverned` 收窄规则 5/6 闸门（见 §7.5.4）；修规则 7 对 `<Transition>` 钩子的 53 条误报（见 §7.5.5） | ✅ |
+| **10-02 E** | 守卫扩面 + 两条硬规则（禁渐变主按钮 / 禁 backdrop-filter）；新增 `isAdminGoverned` 收窄规则 5/6 闸门（见 §7.5.4）；修规则 7 对 `<Transition>` 钩子的 53 条误报（见 §7.5.5）；**补扫 `src/styles/*.css` 的圆角/阴影**（规则 14/15 此前从未扫过该面，见 §7.5.6）+ 新增规则 19（档位令牌取值自检）+ 渲染层双档视觉回归（见 §7.5.7） | ✅ |
 | — | 清理 `design-system.css` 20 个类 + `learning-components.css` 41 个类（全部零消费），连带清零 20 枚 ZPD 令牌 | ✅ |
 | — | 修规则 8 漏检的两处未定义 token（`--mk-ep-primary-bg`、`--transition-base`）：引用了不存在的令牌且无兜底，导致按钮 hover 掉色、徽章失去过渡 | ✅ |
+| **10-03 #1** | 教学组四表单元格方言收敛到共享原语（26f44a33）：`.stageband/.sbl` 升全局原语、八处私有类退役、`.mk-table--click` 补键盘半边；新增方言回归门禁 `teaching-tables.dialect.test.ts` | ✅ |
+| **10-03 #2** | 教学组列序统一口径（86c549a9）+ 全站行首色条撤销（47c66bc2）+ 目标对话阶段格三通道去重（7fe36f1a） | ✅ |
+| **10-03 #3** | 虚拟学习者列表按方言体系重排（67931eb2：格词汇归原语、列序对齐、假行点击退役）+ KPI 带压缩（6fbc5fa5） | ✅ |
+| **10-03 #4** | 平台总览密度优化（4e9d3d55）：状态条改「结论 / 明细」两层、待办长句主副行、事件流底部渐隐、KPI 注记防孤字 | ✅ |
 
-当前全站私写 hex 存量 **464**（基线棘轮已同步；v2 收官 649 → 09-29 505 → 09-30 464）。
-批次 E 扩面后该数字口径已变（用户侧纳入计数），以 `design-system-baseline.json` 为准。
+当前全站私写 hex 存量以 `scripts/design-system-baseline.json` 为准（**218**；口径沿革 v2 收官 649 → 09-29 505 → 09-30 464 → 10-03 **218**，批次 E 扩面后用户侧纳入计数）。
 
 ## 9. 与原型的已登记偏离（复刻时不照搬的部分）
 
@@ -366,13 +445,16 @@ v4 改为扫出 `<Transition name>` 的静态 name 集合 + Vue 约定的钩子�
 2. **按钮字号 14px**：原型 .btn 与 .btn--sm 同为 12px（字号不承载层级，高度才是）；
    我们保留 14/12 两级，密集管理台里 12px 中文按钮标签偏小。
 3. **侧栏宽度档位**：原型恒 244px；我们 244 基档 + 各断点 +36（4K zoom 补偿，沿 v2 档位体系）。
-4. **总览第三张小卡**：原型「学习状态分布」→ 我们「模型与失败」（后端暂无学习状态聚合口径），
-   meterrow 视觉同构、数据真实。
+4. **总览 Row B 只有两张小卡**：原型是「图 1.6fr + 事件 1fr」下一排三小卡，其中第三张
+   「学习状态分布」**不落**（后端暂无学习状态聚合口径）。曾短暂做过「模型与失败」顶替卡，
+   2026-10-01 用户拍板**不做顶替卡**，Row B 固定两卡（Skill 调用量 Top 5 + 待处理事项）。
 5. **登录 aside 的「当前来源 IP」**：原型硬编码假信息，禁止照搬；三条安全要点写真实机制。
 6. **假动作按钮**：原型「手动生成路径」等无真实流程的按钮不上页面；每个按钮必须接真实行为。
-7. **KPI 趋势 foot 暂缓**：原型四卡全带 ▲▼；曾用「今日 vs 昨日全日」实现过，
-   2026-10-01 凌晨实测 ▼-97%/▼-100%——自然日的部分窗口与全日直接相比必然失真，
-   已下线。等后端提供「昨日同时刻」同期窗口再恢复。
+7. **KPI 趋势 foot 已恢复（预算窗口）**：原型四卡全带 ▲▼，曾因「今日 vs 昨日全日」在
+   2026-10-01 凌晨实测 ▼-97%/▼-100% 而下线。**2026-10-03 已重新上线**：改用
+   **昨日同时刻同期窗口**（今日 00:00→now vs 昨日同长窗口，后端 `todayCallsBaseline` /
+   `activeTodayBaseline` 字段），基线为 0 时不给百分比、foot 落「昨日同时刻无对照」。
+   即本条的「等后端提供同期窗口再恢复」条件已满足。
 8. **L2/L3 详情页的模板分工**（2026-10-01 勘察）：
    - UserDetail / LearnerDetail = 标准 L2（MkDetailHero + 状态条/MkKpi + MkSubTabs），已对齐；
    - VirtualProfile 头部**有意**只留身份信息（2026-09-27 决策「数量即 tab 角标，不单设 KPI 行」），

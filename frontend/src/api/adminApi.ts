@@ -1011,8 +1011,8 @@ export const adminGoalConversationsApi = {
     // LLM 上游调用（Path 重生成）：放宽到 AI 请求超时
     return adminAxios.post(`/admin/goal-conversations/${encodeURIComponent(id)}/regenerate-path`, undefined, { timeout: AI_REQUEST_TIMEOUT });
   },
-  getStats: async () => {
-    return adminAxios.get('/admin/goal-conversations/stats/overview');
+  getStats: async (includeTest?: boolean) => {
+    return adminAxios.get('/admin/goal-conversations/stats/overview', { params: { includeTest } });
   }
 };
 
@@ -1680,6 +1680,7 @@ export const adminPromptOpsApi = {
 
   // 沙盘契约视图（只读）：5 个顶层 agent 的输入通道 / 输出字段 / 合法沙盘键
 
+
   getSkillRulesOverview: async () => {
     return adminAxios.get('/admin/prompt-ops/skill-rules-overview');
   },
@@ -1994,44 +1995,6 @@ export const restoreUser = async (userId: string) => {
 // 后端：backend/src/routes/admin/batch-experiments.ts
 // ============================================================
 
-export interface BatchLearnerInput {
-  name: string;
-  learningGoal?: string;
-  frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test';
-}
-
-export interface BatchExperimentRun {
-  id: string;
-  experimentId: string;
-  profileId?: string | null;
-  sessionId?: string | null;
-  learnerName: string;
-  frictionBudget: string;
-  phase: string;
-  status: string;
-  completedTasks: number;
-  totalTasks?: number | null;
-  currentTask?: string | null;
-  stallCount: number;
-  lastError?: string | null;
-  checkpoints?: string | null;
-  decaySims?: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface BatchExperiment {
-  id: string;
-  name: string;
-  description?: string | null;
-  status: string;
-  createdBy: string;
-  learnersConfig: string;
-  createdAt: string;
-  updatedAt: string;
-  runs?: BatchExperimentRun[];
-}
-
 /**
  * 会话评审（裁判）独立面 — 2026-09-27 从 adminVirtualLearnersApi 迁出。
  * VL 页面不再有评审入口/徽章；此命名空间供独立评审工具/脚本与将来的独立面板使用。
@@ -2043,29 +2006,9 @@ export const adminSessionAuditsApi = {
   }
 };
 
-export const adminBatchExperimentsApi = {
-  list: async () => {
-    return adminAxios.get('/admin/batch-experiments');
-  },
-  create: async (payload: { name: string; description?: string; learners: BatchLearnerInput[] }) => {
-    return adminAxios.post('/admin/batch-experiments', payload);
-  },
-  detail: async (id: string) => {
-    return adminAxios.get(`/admin/batch-experiments/${encodeURIComponent(id)}`);
-  },
-  stop: async (id: string) => {
-    return adminAxios.post(`/admin/batch-experiments/${encodeURIComponent(id)}/stop`);
-  },
-  advanceRun: async (experimentId: string, runId: string) => {
-    return adminAxios.post(`/admin/batch-experiments/${encodeURIComponent(experimentId)}/runs/${encodeURIComponent(runId)}/advance`);
-  },
-  decayRun: async (experimentId: string, runId: string) => {
-    return adminAxios.post(`/admin/batch-experiments/${encodeURIComponent(experimentId)}/runs/${encodeURIComponent(runId)}/decay`);
-  },
-  snapshotRun: async (experimentId: string, runId: string) => {
-    return adminAxios.post(`/admin/batch-experiments/${encodeURIComponent(experimentId)}/runs/${encodeURIComponent(runId)}/snapshot`);
-  },
-};
+// 「批量实验」前端 API 封装已随页面下线移除（2026-10-04）：运行态并入 virtual-learners、
+// 资产输入归学习者卡库，建页至今 batch_experiments 两表 0 行。后端路由与调度器保留
+//（backend/src/routes/admin/batch-experiments.ts），供脚本/后续独立面板按需直连。
 
 /** 已删用户列表（status=deleted 反转软删筛选，供「已删除」筛选 pill 使用） */
 export const getDeletedUsers = async (params?: { page?: number; limit?: number; search?: string }) => {
@@ -2185,8 +2128,10 @@ export const adminLearningContentApi = {
   deletePath: async (id: string) => {
     return adminAxios.delete(`/admin/learning-content/paths/${encodeURIComponent(id)}`);
   },
-  getStats: async () => {
-    return adminAxios.get<{ success: boolean; data: LearningContentStats }>('/admin/learning-content/stats');
+  getStats: async (includeTest?: boolean) => {
+    return adminAxios.get<{ success: boolean; data: LearningContentStats }>('/admin/learning-content/stats', {
+      params: { includeTest },
+    });
   },
 };
 

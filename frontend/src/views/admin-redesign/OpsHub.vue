@@ -1,6 +1,6 @@
 <template>
   <div class="mk-page mk-page--fill oh-host">
-    <!-- 页头（newui/admin pagehead）：页名 + 刷新/重试上移；状态条退位为纯状态摘要（随 tab 变化） -->
+    <!-- 页头（newui/admin pagehead）：页名 + 刷新/重试上移（2026-10-04 状态条退役：整块下线，读数各归其位） -->
     <MkPageHead title="运营中心" sub="运营待办、用户反馈、成就与公告运营">
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshActive">
@@ -8,39 +8,19 @@
         </button>
       </template>
     </MkPageHead>
-    <div class="mk-status" :class="hostTone">
-      <span class="mk-status__dot"></span>
-      <template v-if="tab === 'todo'">
-        <!-- P2-1（2026-10-04 全站评审）：状态条回归结论句。四组裸计数撤除——同一组数字曾与
-             下方指标卡/行动行/页签角标同屏念 3-4 遍；计数单一来源=指标卡，行动行与页签角标保留。
-             公告口径分家：总条数只住页签角标（announcePillCount），草稿数只住指标卡「草稿公告」。 -->
-        <strong v-if="wbLoading" class="mk-status__title">待办统计更新中…</strong>
-        <strong v-else-if="wbHasError" class="mk-status__title mk-status__meta--bad" :title="wbErrorText">待办数据加载失败</strong>
-        <strong v-else class="mk-status__title">{{ todoConclusion }}</strong>
-      </template>
-      <template v-else-if="tab === 'feedback'">
-        <span class="mk-status__meta">共 {{ domainCount.feedback }} 条反馈</span>
-      </template>
-      <template v-else-if="tab === 'achievements'">
-        <span class="mk-status__meta">解锁 {{ domainCount.achievements }}</span>
-      </template>
-      <template v-else-if="tab === 'announce'">
-        <span class="mk-status__meta">公告 {{ announcePillCount }} 条</span>
-      </template>
-      <template v-else>
-        <span class="mk-status__meta">站内通知 {{ domainCount.inapp }} 条</span>
-      </template>
-    </div>
+    <!-- 2026-10-04 状态条退役（整条下线，不另起 KPI 带）：todo 结论句并入下方「运营待办」卡头 meta；
+         feedback/achievements/announce/inapp 四个计数与页签角标（tab__count）同源同数，属复读，删；
+         todo 失败信号由页签体内既有 mk-alert（role=alert）+ 指标卡「加载失败」foot 承载，不丢。 -->
 
     <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
          2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签。
          各视图计数以角标随页签呈现，形态同共享 MkSubTabs 的 count 角标） -->
     <div class="tabs" role="tablist" aria-label="运营中心视图切换">
       <button type="button" class="tab" role="tab" :aria-selected="tab === 'todo'" @click="switchTab('todo')">运营待办</button>
-      <button type="button" class="tab" role="tab" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span class="tab__count">{{ domainCount.feedback }}</span></button>
-      <button type="button" class="tab" role="tab" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span class="tab__count">{{ domainCount.achievements }}</span></button>
+      <button type="button" class="tab" role="tab" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span class="tab__count" :title="domainCount.feedback === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.feedback === null ? '待访问' : domainCount.feedback }}</span></button>
+      <button type="button" class="tab" role="tab" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span class="tab__count" :title="domainCount.achievements === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.achievements === null ? '待访问' : domainCount.achievements }}</span></button>
       <button type="button" class="tab" role="tab" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告<span class="tab__count">{{ announcePillCount }}</span></button>
-      <button type="button" class="tab" role="tab" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span class="tab__count">{{ domainCount.inapp }}</span></button>
+      <button type="button" class="tab" role="tab" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span class="tab__count" :title="domainCount.inapp === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.inapp === null ? '待访问' : domainCount.inapp }}</span></button>
     </div>
 
     <!-- ===== Tab1: 运营待办（原运营中心全量内容） ===== -->
@@ -57,7 +37,8 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h4 class="mk-card__title">运营待办</h4>
-        <span class="mk-card__meta">按优先级排序 · 点击直达对应页面</span>
+        <!-- 2026-10-04 状态条退役：结论句（原页头状态条 strong）并入卡头 meta，不另占一条 -->
+        <span class="mk-card__meta">{{ todoConclusion }} · 按优先级排序 · 点击直达</span>
       </div>
       <div class="oh-metrics">
         <div v-for="m in todoMetrics" :key="m.key" class="oh-metric">
@@ -73,6 +54,7 @@
           type="button"
           class="ow-rankrow"
           :class="{ 'ow-rankrow--done': t.count === 0 && !t.failed, 'ow-rankrow--failed': t.failed, 'ow-rankrow--act': t.actionable }"
+          :disabled="!t.actionable"
           :title="t.failed ? '该域数据加载失败，计数不可信' : (t.count > 0 ? t.hint : '该事项已清零')"
           @click="t.actionable ? t.action() : undefined"
         >
@@ -194,12 +176,14 @@ const tab = ref<OhTab>('todo')
 const route = useRoute()
 const router = useRouter()
 
-/** 宿主域计数（由激活子视图上报）：反馈总数 / 解锁数 / 公告数 / 通知数 */
-const domainCount = ref<{ feedback: number; achievements: number; announce: number; inapp: number }>({
-  feedback: 0,
-  achievements: 0,
-  announce: 0,
-  inapp: 0
+/** 宿主域计数（由激活子视图上报）：反馈总数 / 解锁数 / 公告数 / 通知数。
+    null = 该子页签尚未访问、计数未拉取 → 页签角标显「待访问」弱灰字，
+    不显 0（EG10：0 会被读成「确认无数据」，是假信号；对照 OpsCenter 会话安全页签判例）。 */
+const domainCount = ref<{ feedback: number | null; achievements: number | null; announce: number | null; inapp: number | null }>({
+  feedback: null,
+  achievements: null,
+  announce: null,
+  inapp: null
 })
 function onDomainCount(domain: keyof typeof domainCount.value, n: number) {
   domainCount.value[domain] = n
@@ -286,8 +270,11 @@ async function loadWorkbench() {
   ])
 
   if (feedbackR.status === 'fulfilled') {
-    const d = feedbackR.value.data?.data ?? feedbackR.value.data ?? {}
-    wbPendingFeedback.value = Number(d.pagination?.total ?? d.total ?? 0)
+    /* D7：后端信封为 { success, data: [...], pagination: { total } }——pagination 与 data 平级，
+       而非 data.pagination。原 `data?.data?.pagination` 恒 undefined → 真实 10 条待处理显示成 0。
+       对齐 Feedback.vue:388 的 `res.data?.pagination?.total`。 */
+    const body = feedbackR.value.data ?? {}
+    wbPendingFeedback.value = Number(body.pagination?.total ?? 0)
   } else {
     errors.feedback = errMsg(feedbackR.reason)
   }
@@ -319,14 +306,9 @@ const annFailed = computed(() => !!liveFailures.value.announcements)
 const wbErrorText = computed(() =>
   [...Object.values(wbErrors.value).filter(Boolean), ...(annFailed.value ? ['公告列表加载失败'] : [])].join('；')
 )
-/** 页头基调：任一域失败 → bad；有失败路径/死信 → warn；否则 ok（R2 状态语义表） */
-const statusTone = computed(() =>
-  wbHasError.value
-    ? 'mk-status--bad'
-    : (wbFailedPaths.value > 0 || wbDeadLetters.value > 0)
-      ? 'mk-status--warn'
-      : 'mk-status--ok'
-)
+/* 2026-10-04 状态条退役：页头基调 statusTone（ok/warn/bad）与宿主分 tab 基调 hostTone
+   随状态条整块删除——失败信号由页签体内 mk-alert + 指标卡「加载失败」foot 承载，
+   页面不再有整页红绿基调（wbHasError/wbErrorText 仍供 alert 与页头重试钮消费） */
 /** P2-1（2026-10-04 全站评审）：待办结论句——只点名非零事项，全零给清零句；
     数字细节唯一住在下方指标卡（「已清零」逐行状态由行动行承载）。 */
 const todoConclusion = computed(() => {
@@ -337,13 +319,6 @@ const todoConclusion = computed(() => {
   if (!parts.length) return '运营待办全部已清零'
   return `${parts.join('、')}，其余已清零`
 })
-/** 宿主状态条基调：待办 tab 沿用三域聚合；其余 tab 按域计数 ok/muted */
-const hostTone = computed(() => {
-  if (tab.value === 'todo') return statusTone.value
-  const n = domainCount.value[tab.value as keyof typeof domainCount.value] || 0
-  return n > 0 ? 'mk-status--ok' : 'mk-status--muted'
-})
-
 const TODO_SEV_RANK = { bad: 0, warn: 1, muted: 2 } as const
 /* 待办清单：按严重度排序（坏>警告>中性，同档按计数降序），零值弱化为「已清零」；
    域加载失败时该行显示「—」+「加载失败」，不再伪装成 0；
@@ -390,7 +365,7 @@ const ann = announcementCounts
 const announcePillCount = computed(() => {
   if (annFailed.value) return '—'
   const embedded = domainCount.value.announce
-  if (embedded > 0) return embedded
+  if (embedded !== null && embedded > 0) return embedded
   return ann.value.rows
 })
 
@@ -478,28 +453,9 @@ onMounted(() => {
 
 <style scoped>
 /* ================= 宿主布局（tab 宿主：运营待办内滚；嵌入子页占满剩余高度） ================= */
-/* 视图切换（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签、MkSubTabs 同款：
-   pill 计数角标随迁为 tab__count——faint 微字不抢层级，激活时继承蓝字降透明度） */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
-.tab {
-  border: 0;
-  background: transparent;
-  color: var(--mk-muted);
-  padding: 9px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  font-size: var(--mk-fs-micro);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  white-space: nowrap;
-  transition: color 0.14s ease, border-color 0.14s ease;
-}
-.tab:hover { color: var(--mk-ink); }
-.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
-.tab__count { margin-left: 5px; color: var(--mk-faint); font-weight: 600; }
-.tab[aria-selected='true'] .tab__count { color: inherit; opacity: 0.72; }
-/* 待办 tab：内容在宿主 flex 列内独立滚动（状态条/页签固定） */
+/* 视图切换（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
+   （含 __count 角标，mk-primitives.css），本页不再私持拷贝。 */
+/* 待办 tab：内容在宿主 flex 列内独立滚动（页头/页签固定） */
 .oh-body {
   flex: 1 1 auto;
   min-height: 0;

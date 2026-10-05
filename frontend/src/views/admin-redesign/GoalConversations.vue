@@ -45,7 +45,7 @@
       card
       class="gc-distband"
         title="目标对话状态分布"
-        :sub="`点击分段只看该状态 · 共 ${stats.total} 条（服务端状态计数，非本页窗口） · 完结率 ${stats.completionRate ?? 0}%`"
+        :sub="`点击分段只看该状态 · 共 ${stats.total} 条（服务端状态计数 · ${includeTest ? '含测试' : '仅真实'}口径，非本页窗口） · 完结率 ${stats.completionRate ?? 0}%`"
         unit="条"
         aria-label="按目标对话状态筛选"
         :bins="gcBandBins"
@@ -64,11 +64,11 @@
           </div>
           <div class="mk-card__head-right">
             <MkCols
-              :col-defs="gcColDefs"
+              :col-defs="gcColDefsFiltered"
               storage-key="wf_goal_hidden_cols"
               v-model:hidden="gcHiddenCols"
             />
-            <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">{{ filtered.length }} / {{ rows.length }} 条（{{ includeTest ? '含测试' : '仅真实' }}）<template v-if="stats && stats.total > rows.length"> · 仅显示最近 {{ rows.length }} 条</template></span>
+            <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">（{{ includeTest ? '含测试' : '仅真实' }}口径）<template v-if="truncated"> · 后端共 {{ listTotal }} 条，仅显示最近 {{ rows.length }} 条</template></span>
           </div>
         </div>
 
@@ -81,10 +81,10 @@
         <div v-else-if="filtered.length" class="mk-table-scroll">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
              列按内容自然分宽；长摘要/长邮箱由 .mk-cell-text / .mk-cell-main 的 max-width 截断兜底 -->
-        <table class="mk-table mk-table--click">
+        <table class="mk-table mk-table--click mk-table--nowrap">
           <thead>
             <tr>
-              <th v-if="!gcHiddenCols.has('summary')">目标摘要</th>
+              <th v-if="showCol('summary')">目标摘要</th>
               <th
                 scope="col"
                 class="mk-th--sortable"
@@ -92,35 +92,35 @@
                 @click="toggleGcSort('user')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
-                v-if="!gcHiddenCols.has('status')"
+                v-if="showCol('status')"
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="gcSortState('status')"
                 @click="toggleGcSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
-                v-if="!gcHiddenCols.has('stage')"
+                v-if="showCol('stage')"
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="gcSortState('stage')"
                 @click="toggleGcSort('stage')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('stage')">阶段<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
-                v-if="!gcHiddenCols.has('turns')"
+                v-if="showCol('turns')"
                 scope="col"
                 class="mk-th--sortable mk-th--right"
                 :aria-sort="gcSortState('turns')"
                 @click="toggleGcSort('turns')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清进度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!gcHiddenCols.has('constraints')">约束条件</th>
-              <th v-if="!gcHiddenCols.has('path')">路径</th>
-              <th v-if="!gcHiddenCols.has('created')">创建时间</th>
+              <th v-if="showCol('constraints')">约束条件</th>
+              <th v-if="showCol('path')">路径</th>
+              <th v-if="showCol('created')">创建时间</th>
               <th class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in paged" :key="r.id" tabindex="0" @click="goConsole(r)" @keydown.enter.prevent="goConsole(r)">
-              <td v-if="!gcHiddenCols.has('summary')">
+            <tr v-for="r in paged" :key="r.id" tabindex="0" @click="goConsole(r)" @keydown.enter.self.prevent="goConsole(r)">
+              <td v-if="showCol('summary')">
                 <!-- 原型目标摘要格 = wrap 两行：strong 摘要 + sub mono 会话 ID。
                      列序统一（2026-10-03）：主体列恒在首（同 TS 会话/OC 路径/MR 学习者），用户列随后。
                      摘要改两行档 .mk-cell-text--wrap（2026-10-03 用户反馈「截断到看不清含义」）：
@@ -143,8 +143,8 @@
                   </div>
                 </div>
               </td>
-              <td v-if="!gcHiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(r.status)" :title="statusHint(r.status)">{{ statusLabel(r.status) }}</span></td>
-              <td v-if="!gcHiddenCols.has('stage')">
+              <td v-if="showCol('status')"><span class="mk-badge" :class="statusBadge(r.status)" :title="statusHint(r.status)">{{ statusLabel(r.status) }}</span></td>
+              <td v-if="showCol('stage')">
                 <div class="gc-stage-cell">
                   <div class="gc-stage-cell__head">
                     <!-- P3（2026-10-04 全站评审）：阶段词与状态词相同（完成态「已完成」/失败态「失败」）
@@ -160,13 +160,13 @@
                   <span v-else class="mk-na">—</span>
                 </div>
               </td>
-              <td v-if="!gcHiddenCols.has('turns')">
+              <td v-if="showCol('turns')">
                 <!-- 原型「澄清进度」列 = meter turns/targetTurns；本系统无目标轮次分母，
                      只呈现「N 轮」诚实读数（学习者发言条数），不造 meter -->
                 <span v-if="r.turns != null" class="mk-num" :title="`学习者发言 ${r.turns} 轮`">{{ r.turns }} 轮</span>
                 <span v-else class="mk-na">—</span>
               </td>
-              <td v-if="!gcHiddenCols.has('constraints')">
+              <td v-if="showCol('constraints')">
                 <!-- 原型「约束条件」列 = pill--mute 多枚 wrap；真实数据为澄清收集的
                      可用时间/期限文案（稀疏属真实分布），空时 — -->
                 <div v-if="r.constraints.length" class="gc-constraints">
@@ -174,13 +174,13 @@
                 </div>
                 <span v-else class="mk-na">—</span>
               </td>
-              <td v-if="!gcHiddenCols.has('path')">
+              <td v-if="showCol('path')">
                 <!-- 原型 open-path 习惯：生成过的路径成跳转（路径详情二级页）；后端未回 pathId 时回落徽章 -->
                 <button v-if="r.pathId" type="button" class="mk-btn mk-btn--sm" title="查看该目标生成的路径详情" @click.stop="openPathPage(r)">查看路径</button>
                 <span v-else-if="r.hasPath" class="mk-badge mk-badge--info">已生成</span>
                 <span v-else class="mk-na">—</span>
               </td>
-              <td v-if="!gcHiddenCols.has('created')"><span class="mk-cell-sub mono" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
+              <td v-if="showCol('created')"><span class="mk-cell-sub mono" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
               <td>
                 <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）。
                      行内只留高频项（链路/详情）；重建路径与删除同属低频矫正操作，收 ⋯ 菜单——
@@ -233,6 +233,7 @@ import { useSessionDrill } from './useSessionDrill'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, stageTimeline, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS, statusText } from './statusText'
 import { useRowMenu } from './useRowMenu'
+import { useIsNarrow } from './useIsNarrow'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
@@ -343,6 +344,27 @@ const gcColDefs = [
   { key: 'created', label: '创建时间', title: '对话创建时间' },
 ] as const
 const gcHiddenCols = ref<Set<string>>(new Set())
+
+/* 窄档列降级（UI 方案 §1 LAYOUT-3）：9 列 nowrap 表 1440 容器级横滚 151px（操作列被挤出）。
+   ≤1599 收「约束条件」（真实数据稀疏、自然宽仅 ~83px）；≤1320 再收「创建时间」
+   （相对时间由阶段副行日期承载）。强制收起的列同时从 MkCols 菜单过滤，避免死开关。 */
+const isMid = useIsNarrow(1600)
+const isCompact = useIsNarrow(1320)
+const GC_MID_HIDDEN = new Set(['constraints'])
+const GC_COMPACT_HIDDEN = new Set(['constraints', 'created'])
+const showCol = (key: string) =>
+  !gcHiddenCols.value.has(key) &&
+  !(isMid.value && GC_MID_HIDDEN.has(key)) &&
+  !(isCompact.value && GC_COMPACT_HIDDEN.has(key))
+const gcColDefsFiltered = computed(() =>
+  gcColDefs.filter((c) => !(isCompact.value && GC_COMPACT_HIDDEN.has(c.key)) && !(isMid.value && GC_MID_HIDDEN.has(c.key)))
+)
+
+/* 截断提示口径：改用列表 pagination.total 与已加载行数比较。
+   旧实现拿「仅真实口径的 stats.total」比「含测试的 rows.length」，开关打开时
+   必然 stats.total(403) < rows.length(1000) → 截断提示被错误抑制。 */
+const listTotal = ref(0)
+const truncated = computed(() => listTotal.value > rows.value.length)
 
 /* ?goal= 语义（2026-10-01 对齐原型习惯：目标行点击进二级详情页，不再开抽屉）：
    深链直达座舱（session-real 只读监控），随后清参避免与座舱返回冲突 */
@@ -542,9 +564,11 @@ async function load(force = false) {
     const listRes = await adminGoalConversationsApi.list({ limit: LIST_LIMIT, includeTest: includeTest.value })
     const body = listRes.data?.data ?? listRes.data ?? {}
     rows.value = ((body.conversations as Record<string, unknown>[]) || []).map(mapRow)
+    listTotal.value = Number(body.pagination?.total ?? rows.value.length)
   } catch (e) {
     // P0 修复：失败置行内错误标记（此前只有 toast，列表显示「暂无会话」伪装空态）
     rows.value = []
+    listTotal.value = 0
     stats.value = null
     loadError.value = `加载失败：${errMsg(e)}`
     toast.error(loadError.value)
@@ -555,7 +579,7 @@ async function load(force = false) {
   /* stats 非阻塞后台拉取：到达后回填四态比例条与域计数。
      三态（P1#6）：失败时置 statsError（桶位显示「统计获取失败 · 重试」），
      绝不回滚列表、不阻塞首屏；代际不符（已发起新一轮 load）的迟到响应直接丢弃 */
-  void adminGoalConversationsApi.getStats()
+  void adminGoalConversationsApi.getStats(includeTest.value)
     .then((statsRes) => {
       if (seq !== statsReqSeq) return
       const s = statsRes?.data?.data ?? statsRes?.data
@@ -677,8 +701,9 @@ onMounted(() => {
   background: #e2e8f2;
 }.gc-stage-cell__dot.is-on { background: var(--mk-blue); }.gc-stage-cell__dot.is-on:last-child { background: var(--mk-green); }/* gc-stage-cell__tl→.mk-cell-sub、gc-summary→.mk-cell-text（2026-10-03 方言收敛，截断/灰阶由原语承担） *//* 约束条件列：mute 徽章多枚 wrap（原型 .wrap 格内 pill--mute 判例） */
 .gc-constraints { display: flex; flex-wrap: wrap; gap: 5px; max-width: 220px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
-   长摘要 .mk-cell-text 与 .mk-cell-main/.mk-cell-sub 的 max-width 截断兜底） */
-.mk-table td { white-space: nowrap; }.gc-error {
+   长摘要 .mk-cell-text 与 .mk-cell-main/.mk-cell-sub 的 max-width 截断兜底）。
+   2026-10-05 CM6：裸 `.mk-table td { white-space: nowrap }` 收敛为全局修饰类
+   .mk-table--nowrap（表元素已挂该 class），本页不再私持拷贝。 */.gc-error {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -692,6 +717,17 @@ onMounted(() => {
   font-weight: 600;
   margin-bottom: 14px;
 }/* 按钮规格对齐 .mk-btn（8x16 / 12.5px）；危险操作实心红（与 .mk-btn--danger 一致） */
+
+/* 中宽档（≤1599）：9 列 nowrap 表在 1440 容器级横滚 151px、1280 达 282px（UI 方案 §1）。
+   单元格 padding 16→12 + 三处 min-width 各收一档 + 阶段进度点收起（时间线仍在 title/副行）；
+   「约束条件」列默认不进表（showCol 同源）。 */
+@media (max-width: 1599px) {
+  .mk-table th, .mk-table td { padding-inline: 12px; }
+  .gc-user { min-width: 176px; }
+  .gc-stage-cell { min-width: 120px; }
+  .gc-stage-cell__dots { display: none; }
+  .mk-cell-main .mk-cell-text--wrap { min-width: 180px; }
+}
 
 /* 4K：抽屉加宽 + 字号跟随壳层放大 */
 @media (min-width: 2000px) {

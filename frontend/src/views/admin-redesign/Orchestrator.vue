@@ -667,24 +667,8 @@ const govMetaTitle = computed(() =>
   ].join('；')
 )
 </script><style scoped>
-/* 子面板页签（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签同款） */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
-.tab {
-  border: 0;
-  background: transparent;
-  color: var(--mk-muted);
-  padding: 9px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  font-size: var(--mk-fs-micro);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  white-space: nowrap;
-  transition: color 0.14s ease, border-color 0.14s ease;
-}
-.tab:hover { color: var(--mk-ink); }
-.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+/* 子面板页签（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局
+   .tabs/.tab（mk-primitives.css），本页只留容器间距修饰。 */
 .orch-pane-tabs { margin-bottom: 2px; }
 /* ===== 阶段工作区（fill 布局：占满剩余视高，底部不再留空白；面板各自内滚，页面不滚） ===== */
 .orch-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
@@ -694,12 +678,15 @@ const govMetaTitle = computed(() =>
 .orch-overview { gap: 12px; }
 /* P1-4（2026-10-04 全站评审）：fill 布局下交接明细卡自然高度（4 行 ≈394px）把上方
    「字段数据旅程」画布压成 84px 滚动缝（clientHeight=84/scrollHeight=754，五条泳道
-   首行全部拦腰切断）。按本页 .frt__scroll 判例给交接卡设 45% 上限、表格区内滚，
-   画布保住首屏至少一条完整泳道。 */
+   首行全部拦腰切断）。按本页 .frt__scroll 判例给交接卡设上限、表格区内滚，
+   画布保住首屏至少一条完整泳道。
+   LY5（2026-10-05 布局方案 §3）：45%→55%——1440 起让 4 行明细全见（现末行底 1032>880），
+   1280 从 1.5 行提升到 2~3 行；画布仍保 ≥1 条完整泳道。不给画布加 max-height，
+   4K 可见性由全局壳层（§0）修复保证，本页不加 4K 专用补丁。 */
 .orch-overview .orch-handoff {
   flex: 0 1 auto;
   min-height: 0;
-  max-height: 45%;
+  max-height: 55%;
   display: flex;
   flex-direction: column;
 }
@@ -743,7 +730,15 @@ html[data-theme='dark'] {
    innerHTML 注入，不带 scoped 属性，因此样式放在非 scoped 块并统一 .orch-odg 前缀命名空间 ===== */
 /* 交接明细拆出独立卡后，画布滚动区接管画布卡的剩余高度（否则卡底留白） */
 .orch-odg-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 12px 16px; }
-.orch-odg-canvas { position: relative; display: flex; align-items: flex-start; gap: 100px; min-width: max-content; }
+.orch-odg-canvas {
+  position: relative; display: flex; align-items: flex-start; gap: 100px;
+  /* LY13（4K 实测）：画布容器被撑到视口宽 3798，但五列固定 232 + gap100 只到 ~1560，
+     右侧空 33%（节点区右缘停在 33% 处）。改为内容宽度 + 水平居中：
+     宽屏下节点组居中留白两侧均分；窄屏（内容 > 容器）margin auto 归 0，overflow 正常左对齐横滚，
+     offsetLeft/offsetWidth 与 SVG 坐标系不变（连线布局不受影响）。 */
+  width: max-content; margin-inline: auto;
+  min-width: max-content;
+}
 .orch-odg-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
 .orch-odg-edge { fill: none; stroke: var(--mk-blue, #2f6ae0); stroke-width: 1.6; opacity: 0.85; }
 .orch-odg-svg marker path { fill: var(--mk-blue, #2f6ae0); }

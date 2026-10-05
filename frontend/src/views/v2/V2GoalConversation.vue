@@ -30,6 +30,22 @@
         </button>
       </div>
 
+      <!-- 最近会话（D14）：此前目标规划没有任何产品内回访入口——入口页无历史列表，
+           其它页面只挂裸 /goal-conversation，深链 /goal-conversation/:id 可达但无处可点。
+           本地记录最近几次会话的 id + 首句摘要，给出可点的深链回访入口。 -->
+      <div v-if="recentGoals.length" class="recent">
+        <span class="recent__title">最近会话</span>
+        <ul class="recent__list">
+          <li v-for="r in recentGoals" :key="r.id">
+            <router-link :to="`/goal-conversation/${r.id}`" class="recent__item">
+              <span class="recent__preview">{{ r.preview }}</span>
+              <span class="recent__time">{{ recentTime(r.at) }}</span>
+              <span class="recent__go" aria-hidden="true">›</span>
+            </router-link>
+          </li>
+        </ul>
+      </div>
+
       <!-- stopped 与 failed 并行：主动停止不是「连接失败」，用独立文案（useGoalLive.stopped） -->
       <div v-if="live.failed === 'start' && !live.stopped" class="errorbar">
         连接失败，没能开始对话。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
@@ -382,6 +398,7 @@
       aria-modal="true"
       aria-label="方案确认"
       tabindex="-1"
+      @click.self="onOverlayBackdrop"
     >
       <!-- 预览：对齐原型 dialog 三段 —— head（eyebrow + 标题 + 关关闭 ×）/
            body（rows + 大纲 + 自测 + 提示）/ 贴底 foot（ghost「再补充」+ primary「确认」） -->
@@ -499,15 +516,24 @@
 
       <!-- 生成成功 -->
       <div v-else-if="phase === 'done'" class="proposal proposal--center">
+        <button
+          type="button"
+          class="proposal__x proposal__x--corner"
+          aria-label="关闭"
+          title="关闭（Esc 可随时关闭）"
+          @click="proposalDismissed = true"
+        >×</button>
         <span class="done-ring">
           <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
         </span>
         <h2 class="proposal__title">路径已生成</h2>
-        <p class="proposal__generating-note">阶段与任务正在后台组装，稍后即可查看。</p>
+        <p class="proposal__generating-note">可以进入「我的路径」查看阶段与任务的准备进度。</p>
         <div class="proposal__actions proposal__actions--center">
           <button type="button" class="btn-primary btn-primary--lg" @click="goPaths">查看我的路径</button>
           <!-- 只在方案还在（stage=proposing）时给「返回方案」：否则点了只是关浮层，无路可回 -->
           <button v-if="live.stage === 'proposing' && live.proposal" type="button" class="btn-ghost" @click="phase = 'preview'">返回方案</button>
+          <!-- 留在本页：done 态此前只有 Esc 一个退出途径（触屏无 Esc），补显式次级出口 -->
+          <button type="button" class="btn-ghost" @click="proposalDismissed = true">留在本页</button>
         </div>
       </div>
     </div>
@@ -591,6 +617,7 @@ onMounted(() => {
   narrowMq?.addEventListener('change', onNarrowChange);
   // 每次进入页面随机展示一批场景
   shuffleScenes();
+  loadRecentGoals();
   const cid = typeof route.params.conversationId === 'string' ? route.params.conversationId : '';
   // P2-10：首页预设方向带入（?seed=…）→ 作为首条消息直接开始澄清，不丢失用户点击的意图
   const seeded = typeof route.query.seed === 'string' ? route.query.seed.trim() : '';
@@ -608,6 +635,10 @@ onMounted(() => {
     // 回到初始态；localStorage 保留，仍可「继续上次的规划」恢复。
     resetToEntry();
   }
+  // 草稿回填：刷新后长草稿不丢，并聚焦到输入框（EG14）
+  if (restoreDraft()) {
+    void nextTick(() => (chatInputEl.value ?? entryInputEl.value)?.focus());
+  }
 });
 
 onBeforeUnmount(() => {
@@ -616,6 +647,9 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onViewportResize);
   window.visualViewport?.removeEventListener('resize', onViewportResize);
   narrowMq?.removeEventListener('change', onNarrowChange);
+  // 离页/刷新前把在途草稿落盘（防抖窗口内未落的那一版）
+  window.clearTimeout(draftTimer);
+  saveDraft();
 });
 
 /** 清回初始态（内存 + 组件局部状态；live.resetView 保留 localStorage 恢复入口） */
@@ -630,6 +664,7 @@ function resetToEntry() {
 /** 页面内点击导航「规划新目标」：重置为全新初始态（保留本地恢复入口） */
 function onNewGoalEvent() {
   resetToEntry();
+  clearDraft();
   // 清掉 URL 中残留的旧会话参数，避免刷新后按旧 conversationId 恢复
   if (typeof route.params.conversationId === 'string') {
     router.replace({ name: 'V2GoalConversation' });
@@ -652,6 +687,8 @@ watch(
     const next = typeof cid === 'string' ? cid : '';
     if (next && next !== live.conversationId) {
       resumeFromRoute(next);
+      // 切到某会话的深链时回填该会话草稿（EG14）
+      if (restoreDraft()) void nextTick(() => chatInputEl.value?.focus());
     } else if (!next && live.started) {
       // 导航到无参路由（如「规划新目标」）时组件被复用、onMounted 不重跑：
       // 这里清掉模块级残留的上一轮对话回到初始态；localStorage 保留，仍可恢复
@@ -664,6 +701,7 @@ watch(
 watch(
   () => live.conversationId,
   (cid) => {
+    if (cid) rememberGoal(cid);
     const cur = typeof route.params.conversationId === 'string' ? route.params.conversationId : '';
     if (cid && cid !== cur) {
       router.replace({ name: 'V2GoalConversation', params: { conversationId: cid } });
@@ -690,6 +728,71 @@ function autogrow(el: HTMLTextAreaElement | null) {
 watch(input, () => {
   void nextTick(() => { autogrow(chatInputEl.value); autogrow(entryInputEl.value); });
 });
+
+/* 草稿持久化（EG14）：长草稿刷新即丢。按会话键写 localStorage，防抖保存、发送后清除、
+   刷新回填并聚焦。无会话时用 'entry' 键承接初始态草稿。 */
+const DRAFT_PREFIX = 'wf_goal_draft:';
+function draftKey(): string {
+  const cid = live.conversationId
+    || (typeof route.params.conversationId === 'string' ? route.params.conversationId : '')
+    || 'entry';
+  return DRAFT_PREFIX + cid;
+}
+function saveDraft() {
+  try {
+    if (input.value.trim()) localStorage.setItem(draftKey(), input.value);
+    else localStorage.removeItem(draftKey());
+  } catch { /* 隐私模式忽略 */ }
+}
+function clearDraft() {
+  try { localStorage.removeItem(draftKey()); } catch { /* 忽略 */ }
+}
+/** 回填草稿；命中时返回 true（决定是否聚焦） */
+function restoreDraft(): boolean {
+  try {
+    const v = localStorage.getItem(draftKey());
+    if (!v) return false;
+    input.value = v;
+    return true;
+  } catch { return false; }
+}
+let draftTimer = 0;
+watch(input, () => {
+  window.clearTimeout(draftTimer);
+  draftTimer = window.setTimeout(saveDraft, 400);
+});
+
+/* 最近会话（D14）：本地留存最近 5 次会话的 id 与首句摘要，在入口页给可点深链回访入口。
+   目标会话此前没有产品内回访路径（其余页面只挂裸 /goal-conversation）。 */
+interface RecentGoal { id: string; preview: string; at: number }
+const RECENT_KEY = 'wf_goal_recent';
+const recentGoals = ref<RecentGoal[]>([]);
+function loadRecentGoals() {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    recentGoals.value = Array.isArray(list)
+      ? list.filter((r: unknown): r is RecentGoal => !!r && typeof (r as RecentGoal).id === 'string').slice(0, 5)
+      : [];
+  } catch { recentGoals.value = []; }
+}
+function rememberGoal(id: string) {
+  if (!id) return;
+  const first = live.messages.find((m) => m.role === 'user' && m.content)?.content?.replace(/\s+/g, ' ').trim() || '';
+  const preview = (first || '未命名规划').slice(0, 40);
+  const rest = recentGoals.value.filter((r) => r.id !== id);
+  recentGoals.value = [{ id, preview, at: Date.now() }, ...rest].slice(0, 5);
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(recentGoals.value)); } catch { /* 忽略 */ }
+}
+function recentTime(at: number): string {
+  const d = new Date(at);
+  const now = new Date();
+  const dayDiff = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000);
+  if (dayDiff <= 0) return '今天';
+  if (dayDiff === 1) return '昨天';
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
 /** 当前展示轮的快捷补充入口（快选为勾选语义：全部常驻，点选打勾，再点取消） */
 const currentQuickReplies = ref<Array<{ text: string; icon?: string }>>([]);
 
@@ -882,6 +985,10 @@ function onProposalKey(e: KeyboardEvent) {
     proposalDismissed.value = true;
   }
 }
+/** 点遮罩关闭：仅 done 态（preview 需用户显式选「确认/再补充」，generating 需等/停止） */
+function onOverlayBackdrop() {
+  if (phase.value === 'done') proposalDismissed.value = true;
+}
 watch(() => live.proposal, () => { proposalDismissed.value = false; });
 
 function stageCls(i: number) {
@@ -938,6 +1045,7 @@ async function doSend(e?: unknown) {
   const t = input.value.trim();
   if (!t || live.sending) return;
   input.value = '';
+  clearDraft();
   try {
     await live.send(t);
   } catch {
@@ -1193,6 +1301,22 @@ function shuffleScenes() {
 .resume__body strong { font-size: 13.5px; }
 .resume__body small { font-size: 12px; color: var(--muted); }
 .resume__go { font-size: 13px; font-weight: 800; color: var(--blue-deep); }
+
+/* 最近会话列表（D14）：入口页回访入口；与 hero 同栏限宽，条目 ≥44px 触控带 */
+.recent { width: 100%; max-width: 640px; margin: 4px auto 0; }
+.recent__title { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 800; letter-spacing: 0.04em; color: var(--faint); }
+.recent__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.recent__item {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 44px; padding: 9px 12px;
+  border: 1px solid var(--line); border-radius: var(--mk-radius-lg);
+  background: var(--surface); color: var(--ink); text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.recent__item:hover { border-color: color-mix(in srgb, var(--blue) 45%, transparent); background: color-mix(in srgb, var(--blue) 5%, transparent); }
+.recent__preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.recent__time { flex: none; font-size: 12px; color: var(--faint); }
+.recent__go { flex: none; color: var(--faint); font-weight: 700; }
 
 .entry__hero {
   display: flex; align-items: flex-end; justify-content: space-between;
@@ -1581,6 +1705,7 @@ function shuffleScenes() {
    原绝对定位悬浮在气泡外侧空白处，位置语义不明且会盖到别的内容 */
 .msg--user .msg__meta { display: inline-flex; align-items: center; gap: 7px; }
 .msg--user .msg__edit-btn {
+  position: relative;
   width: 20px; height: 20px;
   display: inline-grid; place-items: center;
   padding: 0;
@@ -1874,6 +1999,8 @@ function shuffleScenes() {
   transition: background 0.15s ease, color 0.15s ease;
 }
 .proposal__x:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 12%, var(--surface)); }
+/* done/generating 态无 head 段：× 钉在卡片右上角，给触屏一个显式关闭出口（此前仅 Esc） */
+.proposal__x--corner { position: absolute; top: 12px; right: 12px; }
 .proposal__body {
   flex: 1 1 auto; min-height: 0;
   overflow-y: auto;
@@ -1888,7 +2015,7 @@ function shuffleScenes() {
   background: var(--surface);
   border-top: 1px solid var(--line);
 }
-.proposal--center { display: grid; justify-items: center; text-align: center; gap: 12px; padding: 34px 28px; overflow-y: auto; }
+.proposal--center { position: relative; display: grid; justify-items: center; text-align: center; gap: 12px; padding: 34px 28px; overflow-y: auto; }
 .proposal__stream {
   width: 100%;
   text-align: left;
@@ -2101,6 +2228,9 @@ function shuffleScenes() {
     display: inline-flex; align-items: center; gap: 5px;
     margin-right: 16px;
     padding: 7px 8px;
+    /* EG20（2026-10-05 复测）：触屏下该药丸实测 81×34，低于 36px 触控下限 →
+       抬到 min-height 38（≥36），横向 padding 与阶段导航共处一行不变 */
+    min-height: 38px;
     border: 1px solid var(--line);
     border-radius: var(--mk-radius-pill);
     background: var(--surface);
@@ -2166,19 +2296,21 @@ function shuffleScenes() {
   /* 快捷补充面板占满整宽：基础样式的 margin-left 40（对齐气泡正文）在手机上白丢 40px 宽度，
      而这是整屏最常点的区域 */
   .replies { margin-left: 0; }
-  /* 编辑按钮视觉仍 24px，但热区扩到 36px（触屏常显，24 对拇指太小） */
+  /* 编辑按钮视觉仍 20px，热区扩到 40px（触屏常显；20 对拇指太小，低于 40 触控下限） */
   .msg--user .msg__edit-btn::before {
     content: '';
     position: absolute;
-    inset: -6px;
+    inset: -10px;
   }
   /* 移动端 hint 行整体脱离文档流（0 高，原占 17px + gap 7px），内容挂到输入框与底部导航
      之间那道缝里：左「新目标」入口、中计数、右 AI 生成声明。触屏没有键盘快捷键提示，隐藏之。 */
   .composer { position: relative; }
   /* .composer--page 基础档自带 env(safe-area-inset-bottom)：那是给「无底部导航」的设备用的。
      本档 .v2-page 已有 padding-bottom:72px 让位底部 tab 栏，再叠 safe-area 会在
-     composer 与 tab 栏之间留出一条空缝 —— 移动端覆写为纯 10px 上下。 */
-  .composer--page { padding: 10px 0; }
+     composer 与 tab 栏之间留出一条空缝 —— 移动端覆写为纯 10px 上下。
+     下内边距 46px 是给 0 高 hint 行里的「新目标」按钮（36px）预留的可点空间，
+     避免它溢进底部导航被遮挡（LY10 修复）。 */
+  .composer--page { padding: 10px 0 46px; }
   /* 移动端不加左列占位：面板已改绝对定位的零占位锚点，输入条独占整行
      （基础档的 284px 空列会把输入框整个推到右边、只占半屏） */
   .composer__inner {
@@ -2192,16 +2324,20 @@ function shuffleScenes() {
   .composer--page .composer__box { grid-column: 1; }
   .composer__hint {
     position: absolute;
-    left: 0; right: 0; bottom: 0;
+    left: 0; right: 0; bottom: 6px;
     height: 0;
-    align-items: flex-start;
+    /* 底部对齐：hint 行（0 高）里的内容向上生长，落进 composer 预留的下内边距里，
+       不再向下溢进底部导航（此前 bottom:0 + flex-start 把「新目标」推进 dock 之下，
+       390 实测只剩 6px 可点）。 */
+    align-items: flex-end;
     justify-content: space-between;
     flex-wrap: nowrap;
     padding: 0;
   }
   /* P1：移动端唯一「规划新目标」入口（桌面隐藏）。挂在输入区下的 0 高 hint 缝里：
      chat 头部带在移动端已被阶段导航 + 目标信息药丸占满（390 下合计 ~325/336px），
-     没有第二块空地。36px 高满足触屏门禁，向下溢到 composer 与底部导航的空隙里 */
+     没有第二块空地。36px 高满足触屏门禁，靠 composer 的 46px 下内边距落在输入条内侧，
+     完整可点（不再被底部 dock 遮挡）。 */
   .composer__new-goal {
     display: inline-flex; align-items: center; flex: 0 0 auto;
     min-height: 36px; padding: 4px 12px;

@@ -16,6 +16,8 @@ import {
   liveLogsTotal,
   liveLogsFiltered,
   liveLogStats,
+  liveLogsRowsMerged,
+  liveLogsLoading,
 } from '../live';
 
 const h = vi.hoisted(() => ({
@@ -34,6 +36,7 @@ vi.mock('../live', async () => {
     liveLogsTotal: ref(0),
     liveLogsPage,
     liveLogsPageSize: ref(30),
+    liveLogsRowsMerged: ref(0),
     liveLogsLoading: ref(false),
     liveLogsError: ref(''),
     liveLogStats: ref(null),
@@ -433,6 +436,24 @@ describe('P1#24：错误摘要条（窗口随 timeRange / Top chip 下钻 / 失�
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ agentId: 'skill:a' });
   });
 
+  it('FN1: 无 errorCategory 的失败行 chip 显示「其他」但下钻传派生口径 internal（不再查 0 行空态）', async () => {
+    liveLogStats.value = { total: 100, success: 90, timeout: 0, error: 10, canary: 0 };
+    liveLogsTotal.value = 2;
+    liveLogsFiltered.value = [
+      errSpan(1, { agent: 'skill:a' }), // 无 errorCategory → 兜底派生
+      errSpan(2, { agent: 'skill:b' }),
+    ];
+    const { w } = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    const chip = w.findAll('.exec-err-chip').find((c) => c.text().includes('其他'))!;
+    expect(chip).toBeTruthy();
+    expect(chip.text()).toContain('2');
+    await chip.trigger('click');
+    await flushPromises();
+    // label=「其他」但查询值必须是后端支持的 internal（此前直传「其他」→ buildErrorCategoryWhere 无匹配 → 空）
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ errorCategory: 'internal' });
+  });
+
   it('「只看失败」次按钮已撤（与失败 pill 同源重复）：失败 pill 承担 status=err 过滤，再点恢复', async () => {
     liveLogStats.value = { total: 100, success: 90, timeout: 0, error: 10, canary: 0 };
     liveLogsTotal.value = 1;
@@ -518,5 +539,65 @@ describe('2026-10-04 状态条退役（ExecLogs）', () => {
     expect(w.find('.mk-kpi-grid').exists()).toBe(false);
     // 测试入口常驻语义保留：计数为 0 也保持可点（否则切过去后失去切回入口）
     expect(w.findAll('.mk-pill').find((b) => b.text().startsWith('测试'))).toBeTruthy();
+  });
+});
+
+/* ---------- 批次 1 修复合集（EG7 加载反馈 / EG17 高级计数 / D19 合并口径） ---------- */
+describe('批次 1：EG7 / EG17 / D19', () => {
+  beforeEach(() => {
+    h.reload.mockClear();
+    liveLogsPage.value = 1;
+    liveLogsPageSize.value = 30;
+    liveLogsTotal.value = 0;
+    liveLogsFiltered.value = [];
+    liveLogsRowsMerged.value = 0;
+    liveLogStats.value = null;
+    window.scrollTo = vi.fn();
+    localStorage.clear();
+  });
+
+  async function mountExecAt(url: string) {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
+    });
+    await router.push(url);
+    await router.isReady();
+    const w = mount(ExecLogs, { global: { plugins: [router] } });
+    await flushPromises();
+    return w;
+  }
+
+  it('EG7：有数据时重查（loading）→ 「更新中」角标 + 表格降透明；无数据首载不显示', async () => {
+    liveLogsTotal.value = 378;
+    liveLogsFiltered.value = [fakeSpan(1)];
+    const w = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    expect(w.find('.exec-updating').exists()).toBe(false);
+    liveLogsLoading.value = true;
+    await nextTick();
+    expect(w.find('.exec-updating').text()).toContain('更新中');
+    expect(w.find('.exec-table-refreshing').exists()).toBe(true);
+    liveLogsLoading.value = false;
+    await nextTick();
+    expect(w.find('.exec-updating').exists()).toBe(false);
+  });
+
+  it('EG17：sessionId 生效时「高级」钮带计数徽章（收起也不丢状态）', async () => {
+    liveLogsTotal.value = 1;
+    liveLogsFiltered.value = [fakeSpan(1)];
+    const w = await mountExecAt('/admin/execution-logs?session=sess-xyz');
+    await nextTick();
+    const adv = findBtn(w, '高级');
+    expect(adv.find('.mk-pill__count').text()).toBe('1');
+  });
+
+  it('D19：本页有网关行并入时页码器注明口径', async () => {
+    liveLogsTotal.value = 30;
+    liveLogsFiltered.value = [fakeSpan(1)];
+    liveLogsRowsMerged.value = 2;
+    const w = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    expect(w.find('.pagination-note').text()).toContain('2 条网关记录已并入');
   });
 });

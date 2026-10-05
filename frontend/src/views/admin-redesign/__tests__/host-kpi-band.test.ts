@@ -122,9 +122,10 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     // 异常与分布条「异常终态」段同源同数（同一数字不两处渲染）；总数与窗口截断口径并进卡头 meta
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
     const meta = w.find('.mk-card__meta');
-    expect(meta.text()).toContain('0 / 0 条');
-    // 本用例 0 行未触上限：不出现截断口径（触限时 meta 追加「共 N，仅显示最近 1000 条」）
-    expect(meta.text()).not.toContain('条窗口');
+    // 卡头 meta 只留分页器没有的事实（口径开关；命中数/总数交分页器单源）
+    expect(meta.text()).toContain('（仅真实口径）');
+    // 本用例 0 行未触上限：不出现截断口径（触限时 meta 追加「后端共 N 条，仅显示最近 1000 条」）
+    expect(meta.text()).not.toContain('仅显示最近');
     // P1#4 兜底诚实化：后端未回 total（mock 空响应）时，meta title 不得声称全量
     expect(meta.attributes('title')).toContain('非全量');
     expect(meta.attributes('title')).not.toContain('全量口径');

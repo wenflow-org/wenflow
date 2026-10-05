@@ -5,24 +5,14 @@
          常驻刷新钮违背 6c51fdca「轮询页不放刷新钮」家族规则——本页有钮系旧判例漏盘点），
          改 Overview 同款注记形态：正常显「60s 自动检测」、检测期显「检测中…」。
          refresh(true) 强制复检能力不丢：失败态 MkEmptyState「重试」与修复动作完成后的强制复检
-         仍走 refresh(true)，登记在案（2026-10-04 批次五）。状态条退位为纯状态摘要，不再重复页名。 -->
+         仍走 refresh(true)，登记在案（2026-10-04 批次五）。
+         2026-10-04 状态条退役：「更新于 X」自状态条并入本注记（一行说清轮询节奏 + 报告新鲜度），
+         title 带报告覆盖口径（skillCountTitle：登记总数 = Skill 运行 + 外挂能力）。 -->
     <MkPageHead title="健康中心" sub="服务可用性、依赖链路与告警跟踪">
       <template #actions>
-        <span class="hc-refresh-note" role="status">{{ loading ? '检测中…' : '60s 自动检测' }}</span>
+        <span class="hc-refresh-note" role="status" :title="displayReport ? skillCountTitle : undefined">{{ refreshNote }}</span>
       </template>
     </MkPageHead>
-    <div class="mk-status" :class="`mk-status--${barTone}`">
-      <span class="mk-status__dot"></span>
-      <!-- P2-4（2026-10-04 全站评审）：加载期此前只剩裸点+48px 空条（meta/徽章全 v-if），读作渲染坏了；
-           补一行检测中说明（加载窗口实测 1.9-3.7s，可感知非一闪而过） -->
-      <span v-if="!displayReport" class="mk-status__meta">健康报告检测中…</span>
-      <span class="mk-status__meta" v-if="displayReport" :title="skillCountTitle">
-        <!-- 「上线 N/M」2026-10-02 撤出状态条：与完成度卡「已上线 N/M」同屏双写同一数字，
-             且「上线/已上线」用词不一。单源下沉到概要 KPI 第 4 卡 hint（统一用词「已上线」） -->
-        技能 {{ global.total }}<template v-if="extraCapabilityCount">（含 {{ extraCapabilityCount }} 个外挂能力）</template> · {{ displayReport.generatedAt ? '更新于 ' + timeAgo(displayReport.generatedAt) : '' }}
-      </span>
-      <span class="mk-badge" :class="topAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'" v-if="displayReport" :title="badgeTitle">{{ topAbnormal > 0 ? `异常 ${topAbnormal}` : '全部健康' }}</span>
-    </div>
 
     <MkEmptyState
       v-if="failed"
@@ -37,7 +27,8 @@
       @action="refresh(true)"
     />
 
-    <!-- 首载骨架（R3）：状态条保持可用，内容区用共享 MkSkeleton 版式占位，避免数秒空白。
+    <!-- 首载骨架（R3）：页头注记保持可用（加载期显「检测中…」，2026-10-04 状态条退役后原
+         「健康报告检测中…」说明由页头注记承担），内容区用共享 MkSkeleton 版式占位，避免数秒空白。
          版式与真实内容一致：KPI 行 + 健康检查卡（原首块是引导卡骨架，随引导卡一并撤除） -->
     <div v-else-if="loading && !displayReport" class="hc-skel" aria-hidden="true">
       <div class="hc-summary">
@@ -59,7 +50,7 @@
            有更细的词条，口径留在各段标题与卡片的 title 上，不必再占 48px 首屏。
            下面删掉 kpi 前的引导卡后，概要 KPI 上移到首屏。 -->
 
-      <!-- 概要 KPI（共享 MkKpi 统一形态：标签 + 数字 + 副行，可点击跳转锚点）
+      <!-- 概要 KPI（共享 MkKpi 统一形态：标签 + 数字 + 副行，可点击切对应域页签）
            2026-10-02 语义统一（P1#30）：四卡 value 全部对齐「需处理数」（0 = 好，绿色），
            总数 / 达成数下沉 hint——修复此前「对账卡 value=登记总数 8 也被着成警示琥珀」的
            语义倒挂（MkKpi tone 只挂真正异常卡）。 -->
@@ -70,7 +61,7 @@
           :hint="`健康检查共 ${displayReport.health.summary.total} 项`"
           :tone="healthAbnormal > 0 ? 'warn' : 'ok'"
           clickable
-          :title="`${displayReport.health.summary.total} 项健康检查，${healthAbnormal} 项异常（0 = 全部正常）`"
+          :title="healthAbnormalTitle"
           @click="kpiGo('health')"
         />
         <MkKpi
@@ -91,10 +82,13 @@
           :title="reconCardTitle"
           @click="kpiGo('recon')"
         />
+        <!-- 「共 N 个技能」2026-10-04 状态条退役并入本卡 hint（原状态条「技能 N（含 M 个外挂能力）」）：
+             四卡 hint 原先都没提技能总数，故下沉此处；外挂拆解口径已在 skillCountTitle（页头注记
+             title）与对账卡 title 披露，不在此复读 -->
         <MkKpi
           label="完成度未达标"
           :value="global.abnormalSkills"
-          :hint="`已上线 ${completionLive}/${reconciliation.total}`"
+          :hint="`已上线 ${completionLive}/${reconciliation.total} · 共 ${global.total} 个技能`"
           :tone="global.abnormalSkills > 0 ? 'warn' : 'ok'"
           clickable
           :title="completionCardTitle"
@@ -102,6 +96,23 @@
         />
       </div>
 
+      <!-- 四域页签（2026-10-04 用户拍板：区块平铺改页签）——与概要 KPI 四卡一一对应：
+           卡=各域「需处理数」裁决且常驻页首（不因切页签消失，规避 2026-09-29 tab 时代
+           「刀口切错、异常域藏在没打开的页签里」的旧问题），点卡=切页签（原锚点滚动退役）；
+           页签本体只承载域内明细。?tab= 深链可刷新/分享还原 -->
+      <div class="tabs hc-tabs" role="tablist" aria-label="健康中心视图切换">
+        <button
+          v-for="t in HC_TABS"
+          :key="t.id"
+          type="button"
+          role="tab"
+          class="tab"
+          :aria-selected="hcTab === t.id"
+          @click="switchTab(t.id)"
+        >{{ t.label }}</button>
+      </div>
+
+      <template v-if="hcTab === 'health'">
       <!-- 服务卡组（复刻 newui 原型 .service/.tile「服务卡」）：13 项检查按基准真源归域成卡
            （分组字段 = item.base，后端 health-center.service.ts buildItem 逐项标注「谁是真源」）。
            状态点取域内最高严重度（有 error 红 / 有 warn 琥珀 / 全正常绿），计数全部来自真实检查项。
@@ -181,7 +192,7 @@
                 <i class="feedrow__dot feedrow__dot--ok"></i>
                 <span class="t">全部正常</span>
               </span>
-              <span class="d">{{ displayReport.health.summary.total }} 项检查全部正常</span>
+              <span class="d">全部检查项正常</span>
             </span>
           </div>
         </div>
@@ -189,13 +200,14 @@
 
       <!-- 健康检查 -->
       <section class="mk-card" id="hc-health">
-        <details open>
-          <summary class="mk-card__head mk-section__summary">
-            <h3 class="mk-card__title">健康检查</h3>
-            <span class="mk-card__meta">{{ displayReport.health.summary.total }} 项</span>
-            <span class="mk-badge" :class="healthAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'">{{ healthAbnormal > 0 ? `${healthAbnormal} 异常` : '无异常' }}</span>
-          </summary>
-          <div class="hc-checks">
+        <!-- 2026-10-05：页签已分区，整卡折叠（details open）退役——卡头回归常驻头；
+             唯一保留的内容级折叠 = 「其余 N 项正常」降噪组与检查行的明细展开 -->
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">健康检查</h3>
+          <!-- CP2：总数单源住在概要 KPI 的 hint，卡头不再复读「N 项」；此处只留异常徽章 -->
+          <span class="mk-badge" :class="healthAbnormal > 0 ? 'mk-badge--bad' : 'mk-badge--ok'">{{ healthAbnormal > 0 ? `${healthAbnormal} 异常` : '无异常' }}</span>
+        </div>
+        <div class="hc-checks">
             <!-- 异常/关注项：默认展开 -->
             <div v-for="item in healthHighlight" :id="`hc-check-${item.id}`" :key="item.id" class="hc-check" :class="`hc-check--${item.severity}`">
               <button type="button" class="hc-check__row" :aria-expanded="detailOpen(item.id)" @click="toggleDetail(item.id)">
@@ -245,23 +257,31 @@
               </div>
             </details>
           </div>
-        </details>
       </section>
 
-      <!-- 漂移：配置与生效不一致（改完配置没同步/发布，普通运营可理解为「配置改了但没生效」）
-           段内那行可见说明 2026-09-29 收进折叠头条的 title（用户：「说明文不需要占位」）：
-           三行漂移各自带「去同步/去发布/执行日志」出口与 title 口径，说明文只是重复。 -->
-      <section v-if="driftAny" class="mk-card" id="hc-drift">
-        <details open>
-          <summary
-            class="mk-card__head mk-section__summary"
-            title="配置内容与实际运行不一致：通常是修改了 Skill 配置但尚未同步/发布生效；处理后可保持线上行为与配置一致"
-          >
+      </template>
+
+      <!-- 漂移（2026-10-04 平铺改页签：原 v-if driftAny 整段隐匿改为常驻页签+一致空态——
+           页签数恒定才能与概要 KPI 卡一一对应；段内说明收在折叠头条 title 的口径不变） -->
+      <template v-else-if="hcTab === 'drift'">
+        <section v-if="!driftAny" class="mk-card">
+          <div class="mk-card__head">
             <h3 class="mk-card__title">{{ TERMS.driftContract }}</h3>
-            <span class="mk-card__meta">{{ driftActionable }} 项需处理</span>
-            <span v-if="drift.runtime" class="mk-card__meta">遥测 {{ drift.runtime }} 条</span>
-          </summary>
-          <div class="hc-drift">
+            <span class="mk-badge mk-badge--ok">全部一致</span>
+          </div>
+          <div class="hc-drift-none">配置与线上运行一致：无契约漂移、哈希一致，也没有运行观测记录。</div>
+        </section>
+        <section v-else class="mk-card" id="hc-drift">
+        <!-- 2026-10-05：整卡折叠退役（页签已分区）；原 summary 的口径 title 移到卡头 -->
+        <div
+          class="mk-card__head"
+          title="配置内容与实际运行不一致：通常是修改了 Skill 配置但尚未同步/发布生效；处理后可保持线上行为与配置一致"
+        >
+          <h3 class="mk-card__title">{{ TERMS.driftContract }}</h3>
+          <span class="mk-card__meta">{{ driftActionable }} 项需处理</span>
+          <span v-if="drift.runtime" class="mk-card__meta">遥测 {{ drift.runtime }} 条</span>
+        </div>
+        <div class="hc-drift">
             <div class="hc-drift__item" v-if="drift.contract">
               <strong :title="TERMS.driftValueMismatch">{{ TERMS.driftContractQualified }}</strong>
               <span class="mk-badge mk-badge--bad" title="编排文件声明与数据库不一致的处数">{{ drift.contract }}</span>
@@ -279,31 +299,35 @@
               <span class="hc-drift__hint">只读观测记录：若确认线上行为正常可忽略；配置同步后不再新增。</span>
             </div>
           </div>
-        </details>
       </section>
 
-      <!-- 技能对账（SkillReconciliation 自身即是 mk-card，外层仅作滚动锚点，避免卡中卡） -->
-      <section id="hc-recon" class="hc-anchor">
+      </template>
+
+      <!-- 技能对账（SkillReconciliation 自身即是 mk-card，外层仅作页签容器，避免卡中卡） -->
+      <template v-else-if="hcTab === 'recon'">
+        <section>
         <!-- @openSkill 此前未绑定 → 对账行点击无反应（审计 附 A #5）。绑定到全局 skill 抽屉。 -->
-        <SkillReconciliation ref="reconRef" :report="reconReport" :error="reconError" @openSkill="openSkillDrawer" @refresh="emit('refreshRecon')" />
-      </section>
+        <SkillReconciliation :report="reconReport" :error="reconError" @openSkill="openSkillDrawer" @refresh="emit('refreshRecon')" />
+        </section>
+      </template>
 
       <!-- 完成度分布（归属对账视图：完成度即对账 completion 映射的来源） -->
-      <section class="mk-card" id="hc-completion">
-        <details>
-          <summary class="mk-card__head mk-section__summary">
-            <h3 class="mk-card__title">完成度分布</h3>
-            <span class="mk-card__meta">{{ completionLive }} / {{ reconciliation.total }} 已上线</span>
-          </summary>
-          <div class="hc-completion">
+      <template v-else>
+        <section class="mk-card" id="hc-completion">
+        <!-- 2026-10-05：整卡折叠退役——原 details 默认收起，切到本页签只看到标题、读作空页签 -->
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">完成度分布</h3>
+          <span class="mk-card__meta">{{ completionLive }} / {{ reconciliation.total }} 已上线</span>
+        </div>
+        <div class="hc-completion">
             <div v-for="tier in completionTiers" :key="tier.status" class="hc-completion__bar">
               <span class="hc-completion__label">{{ tier.label }}</span>
               <span class="mk-minibar hc-completion__track"><i class="mk-minibar__fill" :style="{ width: Math.max((tierCount(tier.status) / Math.max(reconciliation.total, 1)) * 100, 0) + '%' }" :class="`hc-completion__fill--${tier.status}`"></i></span>
               <span class="hc-completion__num">{{ tierCount(tier.status) }}</span>
             </div>
           </div>
-        </details>
-      </section>
+        </section>
+      </template>
     </template>
   </div>
 </template>
@@ -341,14 +365,13 @@ import SkillReconciliation from './SkillReconciliation.vue'
    且刀口切错：当时唯一的 error 项「参数一致性」被归为 baseline-drift 却不在漂移分维度里，
    造成「漂移 0 项需处理」与「1 异常」并存。现已收口（同日）：该项语义重分类为 consistency
    （core↔definition 镜像的对等比对，非「配置改了没生效」），19 处镜像滞后按 b905880c 的
-   32k 预算同步归零。整页呈现全部区块（健康检查 → 漂移 → 对账 → 完成度），
-   三个 id（#hc-health / #hc-drift / #hc-recon）继续存在，作为概要卡跳转的锚点。 */
+   32k 预算同步归零。整页呈现全部区块（健康检查 → 漂移 → 对账 → 完成度）。
+   2026-10-04 用户拍板：区块平铺改四域页签——概要 KPI 卡常驻页首保全局视野（异常域
+   不会藏进没打开的页签，合页初衷保留），点卡切页签；?tab= 深链可还原。 */
 /* reconReport/reconError：对账面板可直接用外部下发的报告（缺省自行拉取）。
    Skill 运行页的完成度列也要对账报告，跨页下发属可选优化，故两者都可缺省。 */
 defineProps<{ reconReport?: SkillReconciliationReport | null; reconError?: string | null }>()
 const emit = defineEmits<{ (e: 'refreshRecon'): void }>()
-
-const reconRef = ref<{ openPanel?: () => void } | null>(null)
 
 /** 外挂能力数（MCP + 能力 Skill）：健康中心/对账的登记总数含它们，Skill 运行页不含——口径标注用 */
 const extraCapabilityCount = EXTRA_CAPABILITY_SKILLS.length
@@ -391,35 +414,44 @@ const reconCardTitle = computed(() => {
 const skillCountTitle = computed(
   () => `登记总数 ${global.value.total} = Skill 运行 ${global.value.total - extraCapabilityCount} 个 + 外挂能力 ${extraCapabilityCount} 个（数据源 prompts/skills.yaml）`,
 )
-const badgeTitle = computed(() => {
-  const c = counts.value
-  const parts: string[] = []
-  if (c.error > 0) parts.push(`${c.error} 项严重`)
-  if (c.warn > 0) parts.push(`${c.warn} 项关注`)
-  if (global.value.abnormalSkills > 0) parts.push(`${global.value.abnormalSkills} 项技能完成度未达标`)
-  const note = drift.value.runtime > 0 ? `；另有 ${drift.value.runtime} 条运行观测记录（只读参考，非异常）` : ''
-  return parts.length > 0 ? parts.join('、') + note : '全部健康'
+/** 页头注记（2026-10-04 状态条退役）：「更新于 X」自状态条并入——加载期「检测中…」、
+    有报告带更新时间、报告未就绪维持「60s 自动检测」；报告覆盖口径（skillCountTitle）挂注记 title */
+const refreshNote = computed(() => {
+  if (loading.value) return '检测中…'
+  const iso = displayReport.value?.generatedAt
+  return iso ? `60s 自动检测 · 更新于 ${timeAgo(iso)}` : '60s 自动检测'
 })
 
-function scrollTo(id: string) {
-  if (id === 'recon') {
-    reconRef.value?.openPanel?.()
-  }
-  const el = document.getElementById('hc-' + id)
-  if (!el) return
-  // 滚动目标若默认折叠则先展开，避免滚到空白标题
-  const details = el.querySelector('details')
-  if (details && !details.open && id !== 'recon') details.open = true
-  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-/** 概要卡跳转：整页呈现后一律锚点滚动（此前单视图模式下要通知宿主切 tab） */
+/** 概要卡跳转（2026-10-04 平铺改页签）：= 切到对应域页签；
+    对账面板 2026-10-05 随整卡折叠退役不再有展开态，切页签即达 */
 function kpiGo(target: 'health' | 'drift' | 'recon' | 'completion') {
-  scrollTo(target === 'completion' ? 'completion' : target)
+  switchTab(target)
 }
 
 const router = useRouter()
 const route = useRoute()
+
+/* ---------- 四域页签（2026-10-04 平铺改页签）----------
+   页签=健康检查 / 漂移 / 对账 / 完成度，与概要 KPI 四卡一一对应；卡常驻页首承载各域
+   「需处理数」裁决，切页签不丢全局视野。?tab= 深链可刷新/分享还原（与 Skills/ApiConfig
+   同一 ?tab= 契约）；非法值忽略保默认健康检查。 */
+type HcTab = 'health' | 'drift' | 'recon' | 'completion'
+const HC_TABS: Array<{ id: HcTab; label: string }> = [
+  { id: 'health', label: '健康检查' },
+  { id: 'drift', label: '漂移' },
+  { id: 'recon', label: '对账' },
+  { id: 'completion', label: '完成度' },
+]
+const hcTab = ref<HcTab>('health')
+function switchTab(t: HcTab) {
+  if (hcTab.value === t) return
+  hcTab.value = t
+  if (route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
+}
+watch(() => route.query.tab, (t) => {
+  const v = HC_TABS.find((x) => x.id === t)?.id
+  if (v && v !== hcTab.value) hcTab.value = v
+}, { immediate: true })
 
 const report = ref<HealthCenterSummaryReport | null>(null)
 const loading = ref(false)
@@ -450,22 +482,10 @@ const reconciliation = computed<HealthReconciliationSummary>(
 )
 const distribution = computed(() => displayReport.value?.completion.distribution || {})
 const healthAbnormal = computed(() => displayReport.value?.health.abnormal ?? 0)
-const topAbnormal = computed(() => healthAbnormal.value + (displayReport.value?.global.abnormalSkills ?? 0))
-
-
-/** 客户端聚合严重度计数（服务端 summary 不输出 ok/warn/error 明细） */
-const counts = computed(() => {
-  const c = { ok: 0, warn: 0, error: 0, info: 0 }
-  for (const item of displayReport.value?.health.items || []) c[item.severity] = (c[item.severity] || 0) + 1
-  return c
-})
-
-const barTone = computed(() => {
-  if (!displayReport.value) return 'muted'
-  if (counts.value.error > 0 || global.value.abnormalSkills > 0) return 'bad'
-  if (counts.value.warn > 0) return 'warn'
-  return 'ok'
-})
+/** 检查异常卡悬停：只给增量口径（值/总数已在 value/hint 可见，title 不再复读——CP2/CP9） */
+const healthAbnormalTitle = computed(
+  () => '异常 = error / warn 检查项；info 为只读观测，不计入异常。点击切到「健康检查」页签'
+)
 
 const completionTiers = COMPLETION_META
 
@@ -473,9 +493,11 @@ function tierCount(status: string): number {
   return distribution.value?.[status as keyof typeof distribution.value] ?? 0
 }
 
-/* ---------- 健康检查项分组：异常/关注项展开，正常项收进折叠组 ---------- */
+/* ---------- 健康检查项分组：异常/关注项展开，正常项收进折叠组 ----------
+   D17：谓词须与后端 abnormal 口径一致——info 是「只读观测项」，不计入异常（告警流同样只收
+   warn/error）。此前 info 且 count>0 也进高亮组，致高亮行数 > KPI「检查异常」数（同屏双口径）。 */
 function isHealthAbnormal(item: HealthCenterItem): boolean {
-  return item.severity === 'error' || item.severity === 'warn' || item.count > 0
+  return item.severity === 'error' || item.severity === 'warn' || (item.severity !== 'info' && item.count > 0)
 }
 const healthHighlight = computed(() => sortedHealthItems.value.filter(isHealthAbnormal))
 const healthRemaining = computed(() => sortedHealthItems.value.filter((i) => !isHealthAbnormal(i)))
@@ -577,6 +599,7 @@ watch(() => displayReport.value?.health.items, (items) => { if (items) seedDetai
 const deepCheckId = computed(() => (typeof route.query.check === 'string' ? route.query.check.trim() : ''))
 watch([deepCheckId, () => displayReport.value?.health.items], async ([cid, items]) => {
   if (!cid || !items?.length || !items.some((i) => i.id === cid)) return
+  hcTab.value = 'health' // 检查行只住在健康检查页签（2026-10-04 平铺改页签）
   const s = new Set(detailOpenIds.value)
   s.add(cid)
   detailOpenIds.value = s
@@ -708,8 +731,14 @@ function jump(id: HealthCenterItemId) {
   if (id === 'field-routing' || id === 'field-routing-contract' || id === 'fields-sync') void router.push('/admin/orchestrator?tab=drift')
   else if (id === 'yaml-crosscheck' || id === 'params-consistency') void router.push(workbenchPath(id))
   else {
-    scrollTo('health')
+    // 域内定位（2026-10-04 平铺改页签）：先切到健康检查页签，再展开目标行并滚动定位
+    hcTab.value = 'health'
     if (!detailOpen(id)) toggleDetail(id)
+    const okGroup = document.querySelector<HTMLDetailsElement>('details.hc-ok')
+    if (okGroup) okGroup.open = true
+    void nextTick().then(() => {
+      document.getElementById(`hc-check-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
   }
 }
 
@@ -804,7 +833,10 @@ defineExpose({ refresh })
 .hc-skel__kpi { display: grid; gap: 8px; align-content: start; }
 .hc-skel__rows { padding: 12px 16px 14px; }
 /* 滚动锚点（技能对账外层：组件自身即卡，这里只留定位不留卡盒） */
-.hc-anchor { scroll-margin-top: 14px; }
+/* 四域页签（2026-10-04 平铺改页签）：样式 2026-10-05 CM1 收敛到全局
+   .tabs/.tab（mk-primitives.css），本页不再私持拷贝。 */
+/* 漂移页签一致空态（2026-10-04：页签常驻，无漂移显 ok 空态卡而非隐匿整段） */
+.hc-drift-none { padding: 14px 16px; color: var(--mk-muted); font-size: var(--mk-fs-body); }
 
 /* 服务卡组（复刻 newui .service/.tile：卡壳用本页统一的 mk-card，.service 只管内容网格与内边距；
    原型 token 映射：--sp-*→间距字面量与 hc-summary 同节奏、--muted→--mk-muted、--ink→--mk-ink） */
@@ -839,7 +871,8 @@ defineExpose({ refresh })
 /* warn/error 行的裸圆点已换成 mk-badge（原型 statusPill 形态）；--ok 留给「全部正常」行 */
 .feedrow__dot--ok { background: var(--mk-green); }
 
-/* 可折叠头走 .mk-section__summary（shared.css） */
+/* 内容级折叠只剩「其余 N 项正常」降噪组（details.hc-ok，自带 hc-ok__summary 样式）；
+   整卡折叠 2026-10-05 随页签化退役（mk-section__summary 不再使用） */
 
 
 /* 健康检查行 */

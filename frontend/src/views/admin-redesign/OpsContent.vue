@@ -31,7 +31,7 @@
       card
       class="oc-distband"
       title="路径状态分布"
-      :sub="`点击分段只看该状态 · 共 ${pathBandTotal} 条（服务端按状态 group-by 全平台计数，非本页窗口）`"
+      :sub="`点击分段只看该状态 · 服务端按状态 group-by 全平台计数（非本页窗口，口径：${includeTest ? '含测试全量' : '仅真实用户'}）`"
       unit="条"
       aria-label="按路径状态筛选"
       :bins="pathBandBins"
@@ -56,7 +56,7 @@
             v-model:hidden="hiddenCols"
           />
           <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">
-            {{ rows.length }} / {{ total }} 条（{{ includeTest ? '含测试' : '仅真实' }}）
+            （{{ includeTest ? '含测试' : '仅真实' }}口径）<template v-if="total > rows.length"> · 后端共 {{ total }} 条，仅显示最近 {{ rows.length }} 条</template>
           </span>
         </div>
       </div>
@@ -126,7 +126,7 @@
               :key="p.id"
               tabindex="0"
               @click="openPath(p)"
-              @keydown.enter.prevent="openPath(p)"
+              @keydown.enter.self.prevent="openPath(p)"
             >
               <td>
                 <div class="mk-cell-main">
@@ -438,7 +438,9 @@ async function reload(force = false) {
 
 async function loadStats() {
   try {
-    const res = await adminLearningContentApi.getStats()
+    // 口径与列表同一判据：/stats 已收 includeTest（否则 KPI/里程碑/分布条恒仅真实，
+    // 与同屏卡头「含测试」总数相差约 3 倍）
+    const res = await adminLearningContentApi.getStats(includeTest.value)
     stats.value = res.data?.data ?? res.data
   } catch {
     stats.value = null
@@ -537,9 +539,10 @@ onMounted(() => {
   void reload()
   void loadStats()
 })
-/* 数据隔离切换：仅真实 ↔ 含虚拟/测试（口径变化需绕过 TTL 缓存强制重拉） */
+/* 数据隔离切换：仅真实 ↔ 含虚拟/测试（口径变化需绕过 TTL 缓存强制重拉；stats 与列表同源齐拉） */
 watch(includeTest, () => {
   void reload(true)
+  void loadStats()
 })
 
 /* 宿主刷新联动（学习会话合并宿主「刷新」按钮 → 强制重拉：包装 force，TTL 内点击仍生效） */

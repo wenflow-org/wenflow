@@ -1,7 +1,7 @@
 <template>
   <div :class="embedded ? 'vlc-embedded' : 'mk-page'">
     <!-- 页头（mk-pagehead 标准形态，2026-10-03 用户拍板全站统一）：标题+口径副文+导出；
-         原状态条顶替页头的「页面名/副文/动作」上收，状态条只留 自建卡计数 -->
+         2026-10-04 状态条退役：仅剩的「自建卡计数」迁「导入卡文档」卡头 meta（本页唯一读数） -->
     <MkPageHead v-if="!embedded" title="学习者卡库" sub="结构化卡：账号 + 档案 + 故事池，导入即用（不经编译链）">
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="exporting" @click="doExport">
@@ -9,10 +9,6 @@
         </button>
       </template>
     </MkPageHead>
-    <div v-if="!embedded" class="mk-status">
-      <span class="mk-status__dot"></span>
-      <span v-if="libraryCount !== null" class="mk-status__meta">当前自建卡 {{ libraryCount }} 张</span>
-    </div>
 
     <section class="mk-card">
       <div class="mk-card__head">
@@ -21,14 +17,27 @@
           <span class="mk-card__meta">YAML / JSON 的 <code>{ cards: [...] }</code>；一张卡 = 一个虚拟学习者账号 + 档案 + 故事池。建议先校验再导入。</span>
         </div>
         <div class="mk-card__head-right">
+          <!-- 自建卡计数（原页头状态条读数，2026-10-04 状态条退役迁入；null=导出接口未回/失败，显 — 不显 0） -->
+          <span class="mk-card__meta" title="卡库导出接口计数：当前自建卡总数，导入/导出后自动刷新">当前自建卡 {{ libraryCount ?? '—' }} 张</span>
           <button type="button" class="mk-btn mk-btn--sm" @click="triggerPick">选择文件</button>
         </div>
       </div>
       <div class="vlc-body">
         <input ref="fileRef" type="file" accept=".yaml,.yml,.json" class="vlc-file" @change="onFileChange" />
-        <div class="vlc-drop" role="button" tabindex="0" @click="triggerPick" @keydown.enter.prevent="triggerPick" @dragover.prevent @drop.prevent="onDrop">
-          <span class="vlc-drop__title">{{ fileName || '拖入或点击选择 .yaml / .json 卡文档' }}</span>
-          <span class="vlc-drop__hint">也可以直接粘贴到下方文本框</span>
+        <div
+          class="vlc-drop"
+          :class="{ 'is-drag': isDragOver }"
+          role="button"
+          tabindex="0"
+          @click="triggerPick"
+          @keydown.enter.prevent="triggerPick"
+          @dragenter.prevent="onDragEnter"
+          @dragover.prevent="onDragOver"
+          @dragleave="onDragLeave"
+          @drop.prevent="onDrop"
+        >
+          <span class="vlc-drop__title">{{ isDragOver ? '松开导入卡文档' : (fileName || '拖入或点击选择 .yaml / .json 卡文档') }}</span>
+          <span class="vlc-drop__hint">{{ isDragOver ? '松开后将读取并填入下方文本框' : '也可以直接粘贴到下方文本框' }}</span>
         </div>
         <textarea
           v-model="rawText"
@@ -230,7 +239,19 @@ function onFileChange(e: Event) {
   input.value = ''
 }
 
+/* 拖拽文件悬停高亮（EG12）：:hover 在 HTML5 拖拽循环中不触发，需 dragenter/dragleave
+   深度计数切状态类（判例 V2GoalConversation.vue 的 boxDragDepth）。 */
+const isDragOver = ref(false)
+let dragDepth = 0
+function onDragEnter() { dragDepth += 1; isDragOver.value = true }
+function onDragOver(e: DragEvent) { e.preventDefault() }
+function onDragLeave() {
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (!dragDepth) isDragOver.value = false
+}
 function onDrop(e: DragEvent) {
+  dragDepth = 0
+  isDragOver.value = false
   const file = e.dataTransfer?.files?.[0]
   if (file) readFile(file)
 }
@@ -334,6 +355,12 @@ onMounted(refreshCount)
 }
 .vlc-drop:hover {
   border-color: var(--mk-blue);
+}
+/* 拖拽悬停高亮（EG12）：可松手视觉指示（实线蓝框 + 淡蓝底 + 文案改「松开导入」） */
+.vlc-drop.is-drag {
+  border-color: var(--mk-blue);
+  border-style: solid;
+  background: var(--mk-blue-bg);
 }
 .vlc-drop__title {
   font-size: var(--mk-fs-body);

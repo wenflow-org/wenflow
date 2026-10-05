@@ -103,7 +103,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in paged" :key="r.id" class="fb-row" tabindex="0" @click="openDetail(r)" @keydown.enter.prevent="openDetail(r)">
+            <tr v-for="r in paged" :key="r.id" class="fb-row" tabindex="0" @click="openDetail(r)" @keydown.enter="($event.target === $event.currentTarget) && openDetail(r)">
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ r.userName }}</strong>

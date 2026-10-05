@@ -77,8 +77,10 @@ const dismissToast = (item: ToastItem) => {
   padding: 12px 14px;
   /* toast = 弹层 → 卡片·弹层档 16（§0.5） */
   border-radius: var(--mk-radius-xl);
-  background: var(--mk-ink);
-  color: var(--wf-text-inverse);
+  /* 深底浅字胶囊：底色/文字色走 --mk-toast-* 成对 token，不随主题翻转
+     （原 background:var(--mk-ink) + color:var(--wf-text-inverse) 在暗色下会翻成亮底暗字） */
+  background: var(--mk-toast-bg);
+  color: var(--mk-toast-fg);
   font-size: 13.5px;
   line-height: 1.5;
   /* toast → 模态阴影档（§0.5 阴影表：模态/抽屉/toast/登录壳） */
@@ -87,8 +89,10 @@ const dismissToast = (item: ToastItem) => {
 }
 
 .toast-item--error {
-  /* 原型字面值（.wf-toast--err）：固定深红，暗色下同样成立（无对应令牌，保留登记） */
-  background: #8f2233;
+  /* 原型字面值（.wf-toast--err）：固定深红底——文字必须固定浅红，
+     否则暗色下 --wf-text-inverse(近黑) 压深红仅 2.14:1（亮色 8.59:1）。 */
+  background: var(--mk-toast-error-bg);
+  color: var(--mk-toast-error-fg);
 }
 
 /* 「友好而平」：hover 不抬升不加投影，悬停反馈只走背景/文字（§0.5 阴影） */
@@ -128,7 +132,8 @@ const dismissToast = (item: ToastItem) => {
   font-size: 13.5px;
   font-weight: 500;
   line-height: 1.5;
-  color: var(--wf-text-inverse);
+  /* 继承胶囊前/底色对应的成对文字色（错误档 .toast-item--error 已改浅红） */
+  color: inherit;
   word-break: break-word;
 }
 
@@ -141,7 +146,7 @@ const dismissToast = (item: ToastItem) => {
   justify-content: center;
   border: none;
   background: transparent;
-  color: color-mix(in srgb, var(--wf-text-inverse) 72%, transparent);
+  color: color-mix(in srgb, var(--mk-toast-fg) 72%, transparent);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
@@ -150,8 +155,8 @@ const dismissToast = (item: ToastItem) => {
 }
 
 .toast-close:hover {
-  color: var(--wf-text-inverse);
-  background: color-mix(in srgb, var(--wf-text-inverse) 12%, transparent);
+  color: var(--mk-toast-fg);
+  background: color-mix(in srgb, var(--mk-toast-fg) 12%, transparent);
 }
 
 .toast-close:focus-visible {

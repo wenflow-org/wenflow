@@ -237,6 +237,31 @@ describe('GET /token-cost/by-user', () => {
     expect(body.data.items[0].name).toBe('张三');
     expect(body.data.items[0].email).toBe('zhang@test.com');
   });
+
+  it('q 过滤：按昵称/邮箱命中，且搜索面覆盖全量（不受 limit 截断）', async () => {
+    mockResolveRealUserIds.mockResolvedValue(['u1', 'u2', 'u3']);
+    mockWindow();
+    mockAggregateTokenGroups.mockResolvedValue([
+      group('teaching-turn', 'u1', 'm1', { tokens: 900 }),
+      group('teaching-turn', 'u2', 'm1', { tokens: 800 }),
+      group('teaching-turn', 'u3', 'm1', { tokens: 700 }),
+    ]);
+    mockListUsersBasicInfo.mockResolvedValue([
+      { id: 'u1', name: '甲', email: 'a@test.com' },
+      { id: 'u2', name: '乙', email: 'b@test.com' },
+      { id: 'u3', name: '测试账号丙', email: 'c@test.com' },
+    ]);
+
+    const handler = getRouteHandler('/by-user', 'get');
+    const res = createResponse();
+    // limit=1，但按昵称命中的是排名第 3 的 u3 → 证明搜索在全量 byUser 上过滤，而非只搜 Top-limit
+    await handler(createRequest({ days: '7', limit: '1', q: '测试账号' }), res);
+
+    const body = res.json.mock.calls[0][0];
+    expect(body.data.items).toHaveLength(1);
+    expect(body.data.items[0].key).toBe('u3');
+    expect(body.data.items[0].name).toBe('测试账号丙');
+  });
 });
 
 describe('GET /token-cost/by-model', () => {

@@ -181,7 +181,9 @@ router.get('/stats', async (req: Request, res: Response) => {
     const allowed = await ensureAdmin(req.user?.userId);
     if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
 
-    const [total, byStatus, bySubject, totalMilestones, totalTasks] = await getLearningContentStats();
+    // 口径与 /paths 同一判据：默认仅真实用户；includeTest=true 时含虚拟/测试账号
+    const includeTest = String(req.query.includeTest || '') === 'true';
+    const [total, byStatus, bySubject, totalMilestones, totalTasks] = await getLearningContentStats(includeTest);
 
     res.json({
       success: true,

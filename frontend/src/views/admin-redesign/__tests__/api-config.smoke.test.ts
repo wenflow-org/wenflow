@@ -2,7 +2,7 @@
  * ApiConfig.vue P1 修复批冒烟：
  * 1. 能力健康汇总角标（「5 能力 · N 异常」）
  * 2. 脏位分域标注（连接/路由/策略/可靠性/探测 分组列出）
- * 3. 快照过期语义 + 页面进入自动探测（仅探针开启时 stale → 自动补一次探测）+ 状态条与能力行时间同源
+ * 3. 快照过期语义 + 页面进入自动探测（仅探针开启时 stale → 自动补一次探测）+ 页首读数带（2026-10-04 状态条退役后为 KPI 卡）与能力行时间同源
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -183,9 +183,9 @@ describe('ApiConfig P1 修复批', () => {
   });
 
   /** 2026-09-29 拆 tab 后：能力健康/调用参数在「调用与健康」tab，路由在「模型路由」tab
-   *  （2026-10-01 设计语言对齐：视图切换由胶囊改原型 .tabs 下划线页签，按 .tab 定位） */
+   *  （2026-10-05 CM1：视图切换收敛到共享 MkSubTabs，按 .mk-subtab 定位） */
   async function gotoTab(wrapper: ReturnType<typeof mountApiConfig> extends Promise<infer W> ? W : never, label: string) {
-    const tab = wrapper.findAll('.tab').find((b) => b.text().includes(label));
+    const tab = wrapper.findAll('.mk-subtab').find((b) => b.text().includes(label));
     expect(tab, `应存在「${label}」tab`).toBeTruthy();
     await tab!.trigger('click');
     await flushPromises();
@@ -281,19 +281,45 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('探测时间单源：状态条不再带「上次探测」（P3 2026-10-04 复读收敛，卡角 badge 承载）；能力行同源快照 checkedAt', async () => {
+  it('探测时间单源：页头状态条已退役（2026-10-04），读数迁页首 KPI 带；能力行同源快照 checkedAt', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    // KPI 读数取自 live 配置域（applyLiveConfig 在挂载 watch 即消费）：挂载前播种，
+    // 得「密钥已配置 + 2 模型 + 3 路由」的已加载态（不播种则如实显初始 未配置/未拉取/0/3）
+    liveApiConfig.value = {
+      apiUrl: 'https://api.example.com/v1',
+      apiKeyConfigured: true,
+      availableModels: ['model-a', 'model-b'],
+      defaultModel: 'model-a',
+      defaultReasoningModel: 'model-a',
+      defaultEvaluationModel: 'model-b',
+      defaultThinkingMode: 'default',
+      defaultReasoningEffort: 'default',
+      defaultResponseFormat: 'none',
+      connectionStatus: 'connected',
+      lastCheckedAt: '2026-08-13T09:00:00.000Z',
+      networkPolicy: { adminAccessMode: 'private', adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
+    };
     const wrapper = await mountApiConfig();
-    expect(wrapper.find('.mk-status').text()).not.toContain('上次探测');
+    // 护栏（判例 buckets-band.test.ts）：页头状态条整块下线，「上次探测」复读随之消失
+    expect(wrapper.find('.mk-status').exists()).toBe(false);
+    // 原状态条三读数由 KPI 卡承接（连接 tab 默认分支：beforeeach 已 mock 已配置密钥 + 2 模型 + 3 路由）
+    const kpiTexts = wrapper.findAll('.mk-kpi').map((k) => k.text());
+    expect(kpiTexts).toHaveLength(3);
+    expect(kpiTexts[0]).toContain('API 密钥');
+    expect(kpiTexts[0]).toContain('已配置');
+    expect(kpiTexts[1]).toContain('模型清单');
+    expect(kpiTexts[1]).toContain('2 个');
+    expect(kpiTexts[2]).toContain('默认路由');
+    expect(kpiTexts[2]).toContain('3/3');
     await gotoTab(wrapper, '调用与健康');
     expect(wrapper.find('.ac-sec__sub').text()).toContain('最近探测');
     wrapper.unmount();
   });
 
-  it('模型总览 tab：切换后渲染只读总览，状态条显示模型数与提示数', async () => {
+  it('模型总览 tab：切换后渲染只读总览，页首 KPI 带显示注册模型与漂移提示（2026-10-04 状态条退役迁入）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    const tab = wrapper.findAll('.tab').find((b) => b.text().includes('模型总览'));
+    const tab = wrapper.findAll('.mk-subtab').find((b) => b.text().includes('模型总览'));
     expect(tab, '应存在「模型总览」tab').toBeTruthy();
 
     await tab!.trigger('click');
@@ -302,10 +328,17 @@ describe('ApiConfig P1 修复批', () => {
     await flushPromises();
 
     expect(getModelRegistryMock).toHaveBeenCalled();
-    expect(wrapper.text()).toContain('模型：2 个');
-    expect(wrapper.text()).toContain('提示：1 条');
-    // 总览是只读的：不应出现保存按钮
-    expect(wrapper.text()).toContain('只读');
+    // 原状态条读数迁 KPI 卡：「模型：2 个 / 提示：1 条 / 只读」→ 注册模型 2（hint 只读视图）+ 漂移提示 1
+    const kpiTexts = wrapper.findAll('.mk-kpi').map((k) => k.text());
+    expect(kpiTexts).toHaveLength(2);
+    expect(kpiTexts[0]).toContain('注册模型');
+    expect(kpiTexts[0]).toContain('2');
+    expect(kpiTexts[0]).toContain('能力注册表只读视图');
+    expect(kpiTexts[1]).toContain('漂移提示');
+    expect(kpiTexts[1]).toContain('1');
+    // 漂移 > 0 → warn 档；总览仍无保存按钮（只读语义不变）
+    expect(wrapper.find('.mk-kpi--warn').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('保存连接');
     wrapper.unmount();
   });
 

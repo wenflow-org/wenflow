@@ -37,28 +37,29 @@
     </section>
 
     <!-- 记忆强度分布（newui 原型 renderMemory 2029-2034 两卡之一）。到期时间轴已迁入下方
-         用户列表卡表头正上方并升级为可点下钻的贴表分布条（2026-10-04 晚拍板教学组贴表形态），
-         本卡独占一行。数据源 = adminMemoryTracesApi.list（GET /admin/memory-traces）：
+         用户列表卡表头正上方并升级为可点下钻的贴表分布条（2026-10-04 晚拍板教学组贴表形态）。
+         2026-10-05 LAYOUT-4：本卡是描述性上下文（主任务是按待复习量找要干预的人），
+         降为默认收起——结论行（标题 + 口径 meta：平均/样本）常驻，直方图收进 <details>，
+         与 mk-section 硬约束（结论与细节分层）同形；KPI 带与 MkDistBand 贴表条不动。
+         数据源 = adminMemoryTracesApi.list（GET /admin/memory-traces）：
          retrievability（FSRS 可提取率）→ 五桶强度直方图（无强度数据的条目不进分母，不硬造）。
          窗口口径：后端上限 200 条（updatedAt 倒序），卡 meta 如实标注「窗口/非全量」；
          拉取失败或队列为空整块隐藏，不留空卡。 -->
-    <section v-if="traceWindowReady" class="mr-bandgrid">
-      <div class="mk-card">
-        <div class="mk-card__head">
-          <span class="mk-card__title">记忆强度分布</span>
-          <span class="mk-card__meta" :title="`记忆强度 = FSRS 可提取率 retrievability；无 FSRS 状态的 ${mrStrengthPending} 条不进分母（不硬造）${mrStrengthTotal === 0 ? '；窗口内暂无 FSRS 强度数据' : ''}`">按记忆强度分档 · 平均 {{ mrStrengthTotal === 0 ? '—' : `${mrAvgStrengthPct}%` }} · 有强度 {{ mrStrengthTotal }}/{{ queueRows.length }} 条</span>
-        </div>
-        <div class="mr-dist__body">
-          <div class="histo" role="img" :aria-label="mrHistoAria">
-            <div v-for="b in mrStrengthBuckets" :key="b.label" class="hcol">
-              <span class="hval">{{ b.n }}</span>
-              <span class="hbar" :style="{ height: b.h + 'px', background: b.tone }" :title="`${b.label} · ${b.n}`"></span>
-              <span class="hcap">{{ b.label }}</span>
-            </div>
+    <details v-if="traceWindowReady" class="mk-card mr-strength">
+      <summary class="mk-card__head mk-section__summary">
+        <span class="mk-card__title">记忆强度分布</span>
+        <span class="mk-card__meta" :title="`记忆强度 = FSRS 可提取率 retrievability；无 FSRS 状态的 ${mrStrengthPending} 条不进分母（不硬造）${mrStrengthTotal === 0 ? '；窗口内暂无 FSRS 强度数据' : ''}`">{{ mrStrengthMeta }}</span>
+      </summary>
+      <div class="mr-dist__body">
+        <div class="histo" role="img" :aria-label="mrHistoAria">
+          <div v-for="b in mrStrengthBuckets" :key="b.label" class="hcol">
+            <span class="hval">{{ b.n }}</span>
+            <span class="hbar" :style="{ height: b.h + 'px', background: b.tone }" :title="`${b.label} · ${b.n}`"></span>
+            <span class="hcap">{{ b.label }}</span>
           </div>
         </div>
       </div>
-    </section>
+    </details>
 
     <!-- 到期时间轴（教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」：回到用户列表卡
          上方页面级）——点某档 = 只看窗口内该档有到期痕迹的学习者。口径不变：复习队列 =
@@ -80,9 +81,9 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <h3 class="mk-card__title">用户列表</h3>
-        <!-- 口径：totals.users 是后端全量统计，列表只取痕迹数倒序前 N 且暂无分页——
-             两个数字必须同时给出，否则「页头 137 / 表下共 50」读起来像数据缺失 -->
-        <span class="mk-card__meta" :title="`后端口径为全量有记忆痕迹用户；列表按待复习（到期）量倒序只取前 ${rows.length} 名，暂无分页${dueBandFilter ? '；当前按到期档下钻，命中集只含窗口内学习者' : ''}`">共 {{ totals.users }} 位有记忆痕迹用户（展示前 {{ rows.length }}）<template v-if="dueBandFilter">· 已筛 {{ visibleRows.length }} 位</template> · 按待复习量倒序</span>
+        <!-- 口径：totals.users 是后端全量统计，唯一住在页头 KPI「用户」卡；卡头只报本列表的窗口事实
+             （展示前 N、排序键、下钻命中），不再复读全量数（CP6：同屏 KPI 与卡头两处同数） -->
+        <span class="mk-card__meta" :title="`后端口径为全量有记忆痕迹用户（全量数见页头 KPI）；列表按待复习（到期）量倒序只取前 ${rows.length} 名，暂无分页${dueBandFilter ? '；当前按到期档下钻，命中集只含窗口内学习者' : ''}`">展示前 {{ rows.length }} · 按待复习量倒序<template v-if="dueBandFilter"> · 已筛 {{ visibleRows.length }} 位</template></span>
       </div>
       <p v-if="error" class="mr__error">{{ error }}</p>
       <MockSkeletonTable v-if="loading && !rows.length" :cols="7" :rows="8" />
@@ -772,6 +773,19 @@ const mrAvgStrengthPct = computed(() => {
   if (!rows.length) return 0
   return Math.round((rows.reduce((sum, row) => sum + (row.retrievability as number), 0) / rows.length) * 100)
 })
+/* D10：有强度样本占比过低（<10%）时均值只来自极少数条，直出「平均 100%」会与同屏列表
+   71–94% 互斥。此时不给均值数字，改报「样本不足」（复用 :764-766 零强度降灰的
+   「空/不足是状态、不是一档分布」判例）。 */
+const mrStrengthSampleLow = computed(() =>
+  mrStrengthTotal.value > 0 && mrStrengthTotal.value / Math.max(queueRows.value.length, 1) < 0.1
+)
+/** 强度卡常驻结论行（折叠卡 meta）：样本充足给均值，样本不足只报样本量 */
+const mrStrengthMeta = computed(() => {
+  const q = queueRows.value.length
+  if (mrStrengthTotal.value === 0) return `按记忆强度分档 · 有强度 0/${q} 条 · 暂无强度数据`
+  if (mrStrengthSampleLow.value) return `按记忆强度分档 · 有强度 ${mrStrengthTotal.value}/${q} 条 · 样本不足，均值不具代表性`
+  return `按记忆强度分档 · 平均 ${mrAvgStrengthPct.value}% · 有强度 ${mrStrengthTotal.value}/${q} 条`
+})
 const mrHistoAria = computed(() => `记忆强度分布：${mrStrengthBuckets.value.map((bucket) => `${bucket.label} ${bucket.n}`).join(' · ')}`)
 
 /* 窗口拉取失败或队列为空 → 整块隐藏（不留空卡；失败同 OpsContent pathBandReady 判例静默） */
@@ -1096,9 +1110,9 @@ onMounted(async () => {
 .mr-dist__body { padding: 12px 16px 16px; }
 /* stageband/sbl 已升全局原语（mk-primitives，2026-10-03 三页拷贝收敛）。 */
 
-/* 到期带 + 强度直方图两卡 grid（原型 renderMemory 2029 行 grid-template-columns:
-   minmax(0,1.5fr) minmax(0,1fr) + align-items:start 原样移植；窄屏收单列） */
-.mr-bandgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+/* 到期带曾与强度直方图同 grid（原型 renderMemory 2029 行两列 minmax(0,1.5fr) minmax(0,1fr)）——
+   2026-10-05 LAYOUT-4 后强度卡降为默认收起的 <details class="mk-card mr-strength">，
+   本页不再需要该 grid，.mr-bandgrid 单列规则随之下线（避免死 CSS）。 */
 /* 到期时间轴在用户列表卡上方页面级（2026-10-05 用户拍板「分段条在上」）：贴条 padding/下边框
    随撤，页面级间距由 .mk-page 的 --mk-stack-gap 统一供。mr-distband 类保留作测试与定位钩子 */
 

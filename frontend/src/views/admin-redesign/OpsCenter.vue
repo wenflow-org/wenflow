@@ -133,7 +133,8 @@
           </table>
         </div>
         <div class="mk-list-more">
-          <span>最近 50 条 · 共 {{ deadCount }} 条死信</span>
+          <!-- CP8：死信总条数由卡头 warn 徽标单源承载，列表尾不再复读「共 N 条死信」 -->
+          <span>最近 50 条</span>
           <button type="button" class="mk-link" @click="loadDead">刷新</button>
         </div>
       </template>
@@ -477,27 +478,9 @@ watch(tab, (t) => {
   align-content: start;
 }
 .dt-body { padding: 14px; display: grid; gap: 14px; }
-/* 视图切换（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签、OpsHub 宿主页签同款：
-   12px/600、激活蓝字+2px 蓝下划线、通栏底线。2026-10-01 由独立胶囊卡片条迁入） */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); padding: 0 14px; }
-.tab {
-  border: 0;
-  background: transparent;
-  color: var(--mk-muted);
-  padding: 9px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  font-size: var(--mk-fs-micro);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  white-space: nowrap;
-  transition: color 0.14s ease, border-color 0.14s ease;
-}
-.tab:hover { color: var(--mk-ink); }
-.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
-.tab__count { margin-left: 5px; color: var(--mk-faint); font-weight: 600; }
-.tab[aria-selected='true'] .tab__count { color: inherit; opacity: 0.72; }
+/* 视图切换（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
+   （mk-primitives.css）；本页只保留卡内 14px 横向内边距（.tabs 特有 padding）。 */
+.oc-tabs { padding: 0 14px; }
 /* 死信表（自动布局）：单元格 nowrap；事件类型长名截断（title 全值） */
 .oc-dead-table td { white-space: nowrap; }
 .oc-ev {

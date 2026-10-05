@@ -16,7 +16,7 @@
  * 端点：
  *   GET /api/admin/token-cost/summary?days=7&includeTest=0|1
  *   GET /api/admin/token-cost/by-skill?days=7&includeTest=0|1
- *   GET /api/admin/token-cost/by-user?days=7&includeTest=0|1&limit=20
+ *   GET /api/admin/token-cost/by-user?days=7&includeTest=0|1&limit=20&q=<关键词>
  *   GET /api/admin/token-cost/by-model?days=7&includeTest=0|1
  */
 
@@ -297,25 +297,37 @@ router.get('/by-skill', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/admin/token-cost/by-user?days=7&includeTest=0|1&limit=20
+ * GET /api/admin/token-cost/by-user?days=7&includeTest=0|1&limit=20&q=<关键词>
+ * q（D13，2026-10-05）：按 用户ID / 昵称 / 邮箱 过滤（大小写不敏感），先在全量 byUser 上过滤再取 limit；
+ * 无 q 时保持原行为（只 enrich Top-limit，避免无谓的全量用户信息查询）。
  */
 router.get('/by-user', async (req: Request, res: Response) => {
   try {
     const days = parseDays(req.query.days);
     const includeTest = parseIncludeTest(req.query.includeTest);
     const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
     const data = await loadTokenDataCached(days, includeTest);
 
-    const top = data.byUser.slice(0, limit);
-    const ids = top.map((r) => r.key).filter((k) => k !== '未归因');
+    // D13：搜索需覆盖全量用户（只 enrich Top-N 会让中小用户按昵称/邮箱搜不到）
+    const pool = q ? data.byUser : data.byUser.slice(0, limit);
+    const ids = pool.map((r) => r.key).filter((k) => k !== '未归因');
     const users = ids.length
       ? await listUsersBasicInfo(ids)
       : [];
     const userMap = new Map(users.map((u) => [u.id, u]));
-    const items = top.map((r) => {
+    const enriched = pool.map((r) => {
       const u = userMap.get(r.key);
       return { ...r, name: u?.name || null, email: u?.email || null };
     });
+    const matched = q
+      ? enriched.filter((r) =>
+          r.key.toLowerCase().includes(q)
+          || (r.name ? r.name.toLowerCase().includes(q) : false)
+          || (r.email ? r.email.toLowerCase().includes(q) : false),
+        )
+      : enriched;
+    const items = matched.slice(0, limit);
 
     res.json({ success: true, pricingStatus: data.pricingStatus, data: { days, includeTest, items } });
   } catch (error: any) {

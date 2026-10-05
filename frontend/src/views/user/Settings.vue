@@ -868,7 +868,7 @@ const handleDeactivate = async () => {
   grid-column: 1 / -1;
 }
 
-@media (max-width: 560px) {
+@media (max-width: 640px) {
   .pwd-grid {
     grid-template-columns: 1fr;
   }

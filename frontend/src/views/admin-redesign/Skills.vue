@@ -39,13 +39,13 @@
         :value="rangeRefreshing ? '…' : (overallRateText ?? '—')"
         :tone="overallRateTone"
         :hint="totalCalls ? `${okCalls}/${totalCalls} · ${rangeLabel}` : rangeLabel"
-        :title="`窗口内成功率 = 成功调用 / 总调用；${RATE_THRESHOLD_NOTE}`"
+        :title="`窗口内成功率 = ${RATE_MEANING}；${RATE_THRESHOLD_NOTE}`"
       />
       <MkKpi
         label="平均耗时"
         :value="rangeRefreshing ? '…' : avgLatencyText"
         hint="成功调用按调用量加权"
-        :title="`成功调用平均耗时（按调用量加权）· ${rangeLabel}`"
+        :title="`统计窗口：${rangeLabel}`"
       />
       <MkKpi v-if="idleCount > 0" label="空闲" :value="idleCount" title="窗口内无调用的 Skill 数（空闲是信号不是故障，不着色）" />
     </section>
@@ -68,14 +68,15 @@
       <div class="mk-card__head">
         <div class="mk-filter">
           <div class="mk-pills">
-            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" :aria-pressed="!onlyAttention" @click="onlyAttention = false">全部<span class="mk-pill__count">{{ cards.length }}</span></button>
+            <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" :aria-pressed="!onlyAttention" @click="onlyAttention = false">全部</button>
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" :aria-pressed="onlyAttention" @click="onlyAttention = true">仅看需关注<span class="mk-pill__count">{{ errorCount }}</span></button>
           </div>
           <!-- P1② 归属 Agent 筛选（原型 renderSkillHub 1662-1706 工具条）：
-               label「归属 Agent」+ select（全部 Agent（N）+ 每 Agent 名（N）），change 即筛 -->
+               label「归属 Agent」+ select（全部 Agent + 每 Agent 名（N）），change 即筛。
+               2026-10-05 CP1：全部档去计数（与 KPI「Skill N」/ 卡头计数三处复读，单源交 KPI） -->
           <label class="sk-filter-label" for="skillAgentFilter">归属 Agent</label>
           <select id="skillAgentFilter" v-model="agentFilter" class="mk-filter__select" aria-label="按归属 Agent 筛选">
-            <option value="">全部 Agent（{{ cards.length }}）</option>
+            <option value="">全部 Agent</option>
             <option v-for="a in agentOptions" :key="a.id" :value="a.id">{{ a.label }}（{{ a.count }}）</option>
           </select>
           <select v-model="categoryFilter" class="mk-filter__select" aria-label="按类别筛选">
@@ -98,8 +99,8 @@
             v-model:hidden="hiddenCols"
             :default-hidden="SK_COLS_DEFAULT_HIDDEN"
           />
-          <!-- 原型右侧「筛选后 N 个」；总数在状态条「共 N 个 Skill」仍在 -->
-          <span class="mk-card__meta">筛选后 {{ filtered.length }} 个</span>
+          <!-- 卡头不再出「筛选后 N 个」命中数：与分页器「共 N 条」同屏复读，计数单源交分页器
+               （2026-10-05 CP1 判例 Users.vue:26-29） -->
         </div>
       </div>
 
@@ -151,7 +152,7 @@
                 class="mk-th--right mk-th--sortable"
                 :aria-sort="sortState('rate')"
                 @click="toggleSort('rate')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')" :title="`窗口内成功率（= 成功调用 / 总调用）；${RATE_THRESHOLD_NOTE}`">通过率<span class="visually-hidden">成功率</span><span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')" :title="`窗口内成功率（= ${RATE_MEANING}）；${RATE_THRESHOLD_NOTE}`">成功率<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- 完成度 = 对账 completion status（draft → live）；原列名「状态」与行首健康点双语义 → 更名 -->
               <th
                 v-if="showCol('status')"
@@ -172,7 +173,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" @click="openSubPage('skill', s.id)" @keydown.enter.prevent="openSubPage('skill', s.id)">
+            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" @click="openSubPage('skill', s.id)" @keydown.enter.self.prevent="openSubPage('skill', s.id)">
               <td>
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
@@ -244,7 +245,7 @@
       <MkEmptyState
         v-else-if="!filtered.length"
         :title="onlyAttention ? '没有需关注的 Skill' : keyword ? '当前筛选无 Skill' : '暂无运行数据'"
-        :description="onlyAttention ? '窗口内没有出现失败调用的节点。' : keyword ? '换个关键词试试。' : ''"
+        :description="onlyAttention ? '窗口内没有成功率低于 90% 的节点（需关注 = 健康点红档）。' : keyword ? '换个关键词试试。' : ''"
         :action-text="isFiltered ? '清除筛选' : ''"
         @action="clearFilters"
       />
@@ -313,7 +314,7 @@
           </thead>
           <tbody>
             <!-- 原型行 data-action="open-skill"：本页行点击同样进 Skill 详情 -->
-            <tr v-for="s in cards" :key="s.id" class="sk-row" tabindex="0" @click="openSubPage('skill', s.id)" @keydown.enter.prevent="openSubPage('skill', s.id)">
+            <tr v-for="s in cards" :key="s.id" class="sk-row" tabindex="0" @click="openSubPage('skill', s.id)" @keydown.enter.self.prevent="openSubPage('skill', s.id)">
               <td><strong class="sk-name-main mk-ellipsis" :title="s.name">{{ s.name }}</strong></td>
               <td><span class="mono sk-routing__sub" :title="s.agentId || '工具类'">{{ agentLabelOf(s) }}</span></td>
               <td><span class="mono" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
@@ -464,7 +465,7 @@ const skColDefs = [
   { key: 'routing', label: '路由模型', title: '生效模型；未配置=平台默认；无覆盖行=—' },
   { key: 'calls', label: '调用', title: '统计窗口内调用次数（随窗口筛选）' },
   { key: 'p95', label: 'P95', title: '接口未提供技能级 P95，恒「—」；默认隐藏' },
-  { key: 'rate', label: '通过率', title: '窗口内成功率' },
+  { key: 'rate', label: '成功率', title: '窗口内成功率' },
   { key: 'status', label: '完成度', title: '完成度对账 status（draft→live）' },
   { key: 'cat', label: '类别', title: 'Skill 类别' },
   { key: 'last', label: '最近调用', title: '最近调用时间' },
@@ -475,10 +476,22 @@ const hiddenCols = ref<Set<string>>(new Set())
 const isNarrow = useIsNarrow()
 /* 中宽档（<1600）：「最近调用」列收进 Skill 名副行——本表 1440 自然宽超容器 136px（布局量测），裁掉最次要列即收回 */
 const isMid = useIsNarrow(1600)
+/* 小宽档（<1320，Users 判例）：再收「版本」列——1280 带仍余 48px 容器级横滚（LAYOUT-12） */
+const isSmall = useIsNarrow(1320)
 const MOBILE_HIDDEN_COLS = new Set(['version', 'routing', 'calls', 'p95', 'cat', 'last'])
-const showCol = (key: string) => !hiddenCols.value.has(key) && !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key)) && !(isMid.value && key === 'last')
-/* 列菜单同源：<1600 不提供「最近调用」开关（列已强制收进副行，菜单可勾却不见=说谎） */
-const menuColDefs = computed(() => (isMid.value ? skColDefs.filter((c) => c.key !== 'last') : skColDefs))
+const SMALL_HIDDEN_COLS = new Set(['version'])
+const showCol = (key: string) =>
+  !hiddenCols.value.has(key) &&
+  !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key)) &&
+  !(isMid.value && key === 'last') &&
+  !(isSmall.value && SMALL_HIDDEN_COLS.has(key))
+/* 列菜单同源：被档位强制收起的列不出现在菜单里（菜单可勾却不见 = 说谎） */
+const menuColDefs = computed<ReadonlyArray<{ key: string; label: string; title: string }>>(() => {
+  let list: ReadonlyArray<{ key: string; label: string; title: string }> = skColDefs
+  if (isMid.value) list = list.filter((c) => c.key !== 'last')
+  if (isSmall.value) list = list.filter((c) => !SMALL_HIDDEN_COLS.has(c.key))
+  return list
+})
 const statsRange = liveSkillStatsRange
 
 /** 类别下拉动态化：取当前档案实际出现的类别（覆盖 standard/teaching/simulation/tool） */
@@ -505,7 +518,10 @@ const agentOptions = computed<AgentOption[]>(() => {
   return [...m.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh'))
 })
 
-/** 通过率单元格 title：比例 + 全站统一阈值披露；无分母说明兜底口径（不按 0% 计） */
+/** 成功率含义短句（KPI 卡与列头 title 共用本页单源，避免「= 成功调用 / 总调用」逐字复读两套） */
+const RATE_MEANING = '成功调用 / 总调用'
+
+/** 成功率单元格 title：比例 + 全站统一阈值披露；无分母说明兜底口径（不按 0% 计） */
 function rowRateTitle(s: { calls: number; errors: number }): string {
   if (!s.calls) return '窗口内无调用：无分母不显示成功率（不按 0% 计）'
   return `成功率 ${s.calls - s.errors}/${s.calls}；${RATE_THRESHOLD_NOTE}`
@@ -607,7 +623,10 @@ const filtered = computed(() => {
   return sortRows(list)
 })
 
-const errorCount = computed(() => cards.value.filter((c) => c.errors > 0).length)
+/* 「仅看需关注」计数与筛选谓词同源（D3）：health==='error'（成功率<90% 红档）。
+   旧实现用 errors>0 计数，与点击后 health==='error' 的谓词不同源（徽标 25 vs 点出 9），
+   成功率 90–97% 的大失败量节点被漏掉。 */
+const errorCount = computed(() => cards.value.filter((c) => c.health === 'error').length)
 
 /* ===== Skill 运营概览（sk-dash：窗口内聚合 + 结论 + KPI） ===== */
 const totalCalls = computed(() => cards.value.reduce((a, c) => a + c.calls, 0))
@@ -899,25 +918,8 @@ const fallbackPolicyTitle = computed(() =>
 
 <style scoped>
 /* ================= 宿主布局（tab 宿主：运行 tab 内滚；模型路由 tab 自管） ================= */
-/* 视图切换（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签、OpsHub 宿主页签同款：
-   12px/600、激活蓝字+2px 蓝下划线、通栏底线） */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
-.tab {
-  border: 0;
-  background: transparent;
-  color: var(--mk-muted);
-  padding: 9px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  font-size: var(--mk-fs-micro);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  white-space: nowrap;
-  transition: color 0.14s ease, border-color 0.14s ease;
-}
-.tab:hover { color: var(--mk-ink); }
-.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+/* 视图切换（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
+   （mk-primitives.css），本页不再私持拷贝。 */
 
 /* 列表视图 */
 .sk-row { cursor: pointer; }

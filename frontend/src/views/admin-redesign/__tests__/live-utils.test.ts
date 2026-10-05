@@ -234,6 +234,19 @@ describe('live.mapLogsToSpans（P1 消息列语义 + 网关配对 + 状态映射
     expect(gatewayPairWindowMs(25600, 11400)).toBe(11400);
     expect(gatewayPairWindowMs(3000, 8000)).toBe(3000);
   });
+
+  it('preserveOrder：保留服务端行序（耗时排序不再被前端 ts 降序覆盖，FN2）', () => {
+    // 服务端按 durationMs desc 返回：最大耗时在最前，但时间戳恰是最旧（会被时间降序打乱）
+    const items = [
+      { id: 'a', createdAt: '2026-08-13T10:00:00.000', durationMs: 9000, status: 'success' },
+      { id: 'b', createdAt: '2026-08-13T10:00:30.000', durationMs: 4000, status: 'success' },
+      { id: 'c', createdAt: '2026-08-13T10:00:10.000', durationMs: 1000, status: 'success' },
+    ];
+    // 默认行为：按时间倒序重排 → b, c, a
+    expect(mapLogsToSpans(items).map((s) => s.id)).toEqual(['b', 'c', 'a']);
+    // preserveOrder：保持服务端返回序 → a, b, c
+    expect(mapLogsToSpans(items, { preserveOrder: true }).map((s) => s.id)).toEqual(['a', 'b', 'c']);
+  });
 });
 
 describe('live.mergeSpanPages（W1 瀑布服务端分页追加：去重 + 跨页同 trace 重算 startMs）', () => {  const span = (id: string, traceId: string, ts: number, startMs: number, durationMs: number, extra: Partial<TraceSpan> = {}): TraceSpan => ({

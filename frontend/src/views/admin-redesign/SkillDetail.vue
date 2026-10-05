@@ -37,6 +37,9 @@
               </div>
               <div class="skd-pad skd-rows">
                 <MkLoading v-if="routingsLoading && !routings" inline text="字段契约加载中…" />
+                <template v-else-if="routingsNotApplicable">
+                  <p class="skd-none">该 Skill 为辅助类（无编排阶段归属），字段契约不适用。</p>
+                </template>
                 <template v-else-if="routingsFailed">
                   <p class="skd-none">字段契约加载失败。<button type="button" class="mk-link" @click="load(true)">重试</button></p>
                 </template>
@@ -59,6 +62,9 @@
               </div>
               <div class="skd-pad skd-rows">
                 <MkLoading v-if="routingsLoading && !routings" inline text="字段契约加载中…" />
+                <template v-else-if="routingsNotApplicable">
+                  <p class="skd-none">该 Skill 为辅助类（无编排阶段归属），字段契约不适用。</p>
+                </template>
                 <template v-else-if="routingsFailed">
                   <p class="skd-none">字段契约加载失败。<button type="button" class="mk-link" @click="load(true)">重试</button></p>
                 </template>
@@ -485,6 +491,7 @@
               </table>
               <div class="skd-pad" v-else>
                 <MkLoading v-if="routingsLoading" inline text="字段路由加载中…" />
+                <p v-else-if="routingsNotApplicable" class="skd-none">该 Skill 为辅助类（无编排阶段归属），字段路由不适用。</p>
                 <p v-else-if="routingsFailed" class="skd-none">字段路由加载失败。<button type="button" class="mk-link" @click="load(true)">重试</button></p>
                 <p v-else class="skd-none">该 Skill 暂无产出行（无编排路由声明）。</p>
               </div>
@@ -589,6 +596,7 @@ import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
+import { askConfirm } from './useConfirm'
 
 /* ===== 6 页签（运行时置首：健康+证据先于配置，评审「结论埋深」；key 与设计页 ?tab= 深链键对齐，便于互跳） ===== */
 const TABS: Array<{ key: string; label: string }> = [
@@ -778,6 +786,9 @@ interface RoutingsData {
 const routings = ref<RoutingsData | null>(null)
 const routingsLoading = ref(false)
 const routingsFailed = ref(false)
+/** EG15：kind=aux 辅助类技能后端返回 422「无编排阶段归属」——这是「不适用」而非「加载失败」，
+    分开标记以免把不适用呈现成坏了+重试。 */
+const routingsNotApplicable = ref(false)
 
 /** 输出方向角色（与 Orchestrator.vue 的 OUT_ROLES 同一套语义：对外可见或可供下游消费） */
 const OUT_ROLES = ['proposal-output', 'public-reply', 'derived-presentation']
@@ -822,8 +833,17 @@ const routingRows = computed(() => {
 /** 原型字段路由 5 列（字段/来源/目标/转换规则/脱敏）vs 本表 6 列（来源+目标并在「流向」、脱敏变属性 badges）：
    仅当后端真的下发了 masked 布尔才补出「脱敏」列，否则保持现状并省略（无数据不硬造）。 */
 const hasMaskedCol = computed(() => routingRows.value.some((r) => typeof r.masked === 'boolean'))
+/** 422 + 「无编排阶段归属（kind=aux）」= 辅助类技能不适用字段路由，而非加载失败（EG15） */
+function isRoutingsNotApplicable(e: unknown): boolean {
+  const err = e as { response?: { status?: number; data?: { error?: { message?: string } | string } } } | undefined
+  if (err?.response?.status !== 422) return false
+  const body = err.response.data?.error
+  const message = typeof body === 'string' ? body : String(body?.message || '')
+  return message.includes('无编排阶段归属')
+}
 const routingRowsStateText = computed(() => {
   if (routingsLoading.value) return '加载中…'
+  if (routingsNotApplicable.value) return '不适用'
   if (routingsFailed.value) return '加载失败'
   return `${routingRows.value.length} 行`
 })
@@ -979,12 +999,16 @@ async function load(force = false) {
     (async () => {
       routingsLoading.value = true
       routingsFailed.value = false
+      routingsNotApplicable.value = false
       try {
         const res = await adminFieldRoutingsApi.getSkillRoutings(id)
         if (!guard(true)) return
         routings.value = (res.data?.data ?? res.data ?? null) as RoutingsData | null
-      } catch {
-        if (guard(true)) { routings.value = null; routingsFailed.value = true }
+      } catch (e) {
+        if (!guard(true)) return
+        routings.value = null
+        routingsNotApplicable.value = isRoutingsNotApplicable(e)
+        routingsFailed.value = !routingsNotApplicable.value
       } finally {
         if (guard(true)) routingsLoading.value = false
       }
@@ -1241,6 +1265,13 @@ async function saveRuntimeConfig() {
 async function resetRuntimeConfig() {
   const id = skillId.value
   if (!id || rtSaving.value) return
+  // EG2：破坏性动作（删除本 Skill 独立模型配置）先确认，文案对齐 skill-design/runtime-tab 的 askConfirm
+  const ok = await askConfirm({
+    title: '恢复默认配置',
+    message: '确定恢复该 Skill 的默认模型配置吗？\n独立配置将被删除，恢复为继承上层 / 平台默认。',
+    confirmText: '恢复默认'
+  })
+  if (!ok) return
   rtSaving.value = true
   rtMsg.value = ''
   rtErr.value = false
@@ -1330,6 +1361,7 @@ watch(
     routings.value = null
     routingsLoading.value = false
     routingsFailed.value = false
+    routingsNotApplicable.value = false
     versions.value = []
     versionsLoading.value = false
     versionsFailed.value = false

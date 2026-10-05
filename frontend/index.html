@@ -32,9 +32,12 @@
           localStorage.setItem('v2_theme', mode);
           localStorage.setItem('wenflow-theme', mode);
         } catch (e) {}
-        var c = dark ? '#0f1620' : '#f3f6fb';
+        /* 与 --mk-bg 对齐（亮 #f7f8fa / 暗 #141415）：此前暗色写死 #0f1620，与主题 token
+           #141415 不同值；applyDocumentTheme 运行后会清掉这份内联交由样式表接管，
+           这里的字面量只负责 CSS 加载前的一帧，值对齐即可避免载入瞬间的色跳。 */
+        var c = dark ? '#141415' : '#f7f8fa';
         document.body.style.background = c;
-        document.body.style.color = dark ? '#e6edf7' : '#172033';
+        document.body.style.color = dark ? '#efeff0' : '#1a2a44';
       })();
     </script>
     <script type="module" src="/src/main.ts"></script>

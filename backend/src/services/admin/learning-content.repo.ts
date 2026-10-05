@@ -87,15 +87,18 @@ export function deleteLearningPath(id: string) {
   return prisma.learning_paths.delete({ where: { id } });
 }
 
-/** 内容统计（治理页顶部：总数 / 按状态 / 按学科 / 里程碑与任务总量；真实用户口径） */
-export function getLearningContentStats() {
+/** 内容统计（治理页顶部：总数 / 按状态 / 按学科 / 里程碑与任务总量）。
+ *  口径随列表页「含测试」开关联动：默认仅真实用户；includeTest=true 时不过滤 users，
+ *  与 GET /paths 的 REAL_USER_WHERE 分支同一判据（否则卡头开关切换后 KPI/分布条与列表不同源）。 */
+export function getLearningContentStats(includeTest = false) {
+  const userWhere = includeTest ? {} : { users: REAL_USER_WHERE };
   return Promise.all([
-    prisma.learning_paths.count({ where: { users: REAL_USER_WHERE } }),
-    prisma.learning_paths.groupBy({ by: ['status'], _count: { _all: true }, where: { users: REAL_USER_WHERE } }),
-    prisma.learning_paths.groupBy({ by: ['subject'], _count: { _all: true }, where: { users: REAL_USER_WHERE } }),
-    prisma.milestones.count({ where: { learning_paths: { users: REAL_USER_WHERE } } }),
+    prisma.learning_paths.count({ where: userWhere }),
+    prisma.learning_paths.groupBy({ by: ['status'], _count: { _all: true }, where: userWhere }),
+    prisma.learning_paths.groupBy({ by: ['subject'], _count: { _all: true }, where: userWhere }),
+    prisma.milestones.count({ where: { learning_paths: userWhere } }),
     // 口径修复：subtasks.users 关系建在 usersId（生产路径从不写入，恒为 null），
     // 改走 milestones → learning_paths → users（learning_paths.users 建在 userId 上，可靠）。
-    prisma.subtasks.count({ where: { milestones: { learning_paths: { users: REAL_USER_WHERE } } } }),
+    prisma.subtasks.count({ where: { milestones: { learning_paths: userWhere } } }),
   ]);
 }

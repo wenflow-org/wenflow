@@ -42,10 +42,14 @@ function onDocKeydown(e: KeyboardEvent) {
 onMounted(() => {
   try {
     const raw = localStorage.getItem(props.storageKey)
-    if (raw == null && props.defaultHidden?.length) {
-      hidden.value = new Set(props.defaultHidden)
+    if (raw == null) {
+      /* 首访：只有在给了 defaultHidden 时才覆盖 v-model 初值。
+         若既无本地记录、也无 defaultHidden，不能拿空集覆盖页面传入的 v-model 初值
+         （否则首访默认隐藏列永不生效，且 watch 会立刻把这枚空集写回 localStorage，
+          把用户配置也一并钉死）。 */
+      if (props.defaultHidden?.length) hidden.value = new Set(props.defaultHidden)
     } else {
-      const saved = JSON.parse(raw || '[]') as unknown
+      const saved = JSON.parse(raw) as unknown
       if (Array.isArray(saved)) hidden.value = new Set(saved.filter((x): x is string => typeof x === 'string'))
     }
   } catch { /* 隐私模式忽略 */ }

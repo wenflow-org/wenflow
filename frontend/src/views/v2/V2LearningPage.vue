@@ -220,8 +220,8 @@
                   @keydown.esc="cancelEdit"
                 ></textarea>
                 <div class="msg__edit-actions">
-                  <span class="msg__edit-save" role="button" tabindex="0" @click="saveEdit(m)" @keydown.enter="saveEdit(m)">保存</span>
-                  <span class="msg__edit-cancel" role="button" tabindex="0" @click="cancelEdit" @keydown.enter="cancelEdit">取消</span>
+                  <span class="msg__edit-save" role="button" tabindex="0" @click="saveEdit(m)" @keydown.enter="saveEdit(m)" @keydown.space.prevent="saveEdit(m)">保存</span>
+                  <span class="msg__edit-cancel" role="button" tabindex="0" @click="cancelEdit" @keydown.enter="cancelEdit" @keydown.space.prevent="cancelEdit">取消</span>
                 </div>
               </div>
               <template v-else>
@@ -438,7 +438,7 @@
           :title="lessonCtaDamped ? '本课知识点尚未全部掌握' : undefined"
           :disabled="actionBusy || finalizing"
           @click="completeAndSettle"
-        >完成本课 · +20 XP</button>
+        >完成本课</button>
 
         <!-- 输入区 -->
         <div class="composer">
@@ -526,9 +526,9 @@
               <i class="peerdock__status-dot"></i>{{ peerHeadline }}
             </span>
           </div>
-          <span class="peerdock__min" title="收起" @click="minimizePeer" aria-label="收起伴学窗">
-            <svg viewBox="0 0 24 24" width="12" height="12"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M5 12h14"/></svg>
-          </span>
+          <button type="button" class="peerdock__min" title="收起" aria-label="收起伴学窗" @click="minimizePeer">
+            <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M5 12h14"/></svg>
+          </button>
         </div>
         <div ref="peerScrollEl" class="peerdock__scroll">
           <div v-for="(p, i) in peerItems" :key="i" class="peerdock__msg" :class="`peerdock__msg--${p.role}`">
@@ -1625,7 +1625,7 @@ const {
 } = useKnowledgePanel(knowledgePoints)
 
 /* P2-28（2026-10-04 设计评审）：课堂刚开始（0/N 掌握、仅 1 条消息）时视觉权重最大的
-   固定按钮是「完成本课 · +20 XP」，主 CTA 与当前任务（上课）相逆、压在输入流上方易误触。
+   固定按钮是「完成本课」，主 CTA 与当前任务（上课）相逆、压在输入流上方易误触。
    降级而非移除：本课知识点**明确存在未掌握**时按钮从实底主钮降为描边次级（材质对齐
    .btn-ghost），title 说明原因；知识点数据未加载/为空（复习课等无知识点场景）不降级不误伤。
    已拍板的 760px 单栏契约与气泡形态不动，仅调该按钮的状态样式。 */
@@ -2333,9 +2333,13 @@ onBeforeUnmount(() => {
   background: var(--wf-color-success);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--wf-color-success) 18%, transparent);
 }
+/* 收起键：原生 button（键盘可聚焦、Enter/Space 触发——原 span 无 tabindex，键盘用户
+   开窗后只能用鼠标收起）；热区 36px（原 24px 对拇指偏小）。视觉仍是 12px 图标。 */
 .peerdock__min {
-  width: 24px; height: 24px; border-radius: var(--mk-radius-md);
+  flex: 0 0 auto;
+  width: 36px; height: 36px; border-radius: var(--mk-radius-md);
   display: grid; place-items: center;
+  border: 0; background: transparent; padding: 0;
   color: var(--muted); cursor: pointer;
 }
 .peerdock__min:hover { background: color-mix(in srgb, var(--wf-color-warning) 12%, transparent); color: var(--ink); }

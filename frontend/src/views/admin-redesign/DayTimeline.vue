@@ -391,6 +391,9 @@ watch(
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-lg);
   background: var(--mk-surface);
+  /* LY8：网格项默认 min-width:auto 会被内部 nowrap 内容（任务 meta / 读数行）顶开，
+     258px 的格宽下 345px 子内容溢出到右邻格。置 0 让子元素按格宽收缩。 */
+  min-width: 0;
 }
 .schcell--done { border-color: color-mix(in srgb, var(--mk-green) 30%, var(--mk-line)); }
 .schcell--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
@@ -402,8 +405,8 @@ watch(
 .schcell__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .schcell--active .schcell__meta { color: var(--mk-blue); font-weight: 600; }
 
-.dt-cell__head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.dt-cell__detail { display: grid; gap: 6px; margin-top: 4px; }
+.dt-cell__head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.dt-cell__detail { display: grid; gap: 6px; margin-top: 4px; min-width: 0; }
 
 /* 状态 chip（节奏/信号）：胶囊词汇，同原型 .pill（238-244） */
 .dt-chip { font-size: var(--mk-fs-micro); padding: 1px 8px; border-radius: 999px; background: var(--mk-surface-3); color: var(--mk-muted); }
@@ -412,12 +415,12 @@ watch(
 .dt-chip--pace-fast { background: var(--mk-blue-bg); color: var(--mk-blue); }
 
 /* 读数行：等宽数字（原型 .meterrow / .kpi__value 的 tabular-nums 口径） */
-.dt-metrics { display: flex; flex-wrap: wrap; gap: 12px; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+.dt-metrics { display: flex; flex-wrap: wrap; gap: 12px; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; min-width: 0; max-width: 100%; }
 .dt-metric b { color: var(--mk-ink); }
 
-.dt-tasks { display: flex; flex-direction: column; gap: 4px; }
-.dt-task { display: flex; justify-content: space-between; gap: 12px; font-size: var(--mk-fs-micro); }
-.dt-task__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt-tasks { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dt-task { display: flex; justify-content: space-between; gap: 12px; font-size: var(--mk-fs-micro); min-width: 0; }
+.dt-task__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .dt-task__meta { color: var(--mk-faint); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
 
 .dt-adjust { font-size: var(--mk-fs-micro); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

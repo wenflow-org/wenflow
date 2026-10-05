@@ -458,7 +458,7 @@ main {
   from { opacity: 0; transform: rotate(4.4deg) translateY(38px); }
   to { opacity: 1; transform: rotate(1.2deg) translateX(18px); }
 }
-@media (max-width: 980px) and (prefers-reduced-motion: no-preference) {
+@media (max-width: 1023px) and (prefers-reduced-motion: no-preference) {
   .hn-stage__chat,
   .hn-stage__desk {
     animation-name: hn-rise;
@@ -466,7 +466,7 @@ main {
 }
 
 /* 移动端：桌面装饰位移（translateX(18px)+rotate）会把卡片推出窄视口，归零防裁切 */
-@media (max-width: 980px) {
+@media (max-width: 1023px) {
   .hn-stage__desk {
     transform: none;
   }
@@ -1119,7 +1119,7 @@ main {
   color: var(--blue-deep);
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1023px) {
   .hn-hero {
     grid-template-columns: 1fr;
     /* 原型 wf-phero ≤980：44px 上 / 40px 下 */
@@ -1175,7 +1175,7 @@ main {
   }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 640px) {
   .hn-shell {
     width: min(100% - 28px, 1180px);
   }
@@ -1327,7 +1327,7 @@ main {
    流程卡 22×16（×5）、idea 卡 18×16（×4）；hero CTA 是 .hn-btn--lg
    （基础档 52px 高 / 26px 横向内边距 / 16px 字 → 移动端 46 / 22 / 15）。
    展示型字号（hero 的 clamp）与 18/22px 圆角是这一页的视觉语言，不动。 */
-@media (max-width: 980px) {
+@media (max-width: 1023px) {
   .hn-stage__chat,
   .hn-stage__desk,
   .hn-panel { padding: 14px; }

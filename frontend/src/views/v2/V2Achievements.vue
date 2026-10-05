@@ -420,7 +420,7 @@ onMounted(() => {
      一行 7 颗在 390 下的总宽预算不变。 */
   .filter { padding: 6px 11px; min-height: 44px; font-size: 12.5px; }
 }
-@media (max-width: 560px) {
+@media (max-width: 640px) {
   .grid { grid-template-columns: 1fr; }
 }
 /* ≥1024 放 3 列（原型 wf-ach__grid 931）。放在 max-width:1100 之后：

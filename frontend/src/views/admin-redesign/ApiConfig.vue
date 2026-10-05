@@ -1,6 +1,6 @@
 <template>
   <div class="mk-page mk-page--fill ac-host">
-    <!-- 页头（newui/admin pagehead）：页名 + 各 tab 的主操作上移；状态条退位为纯状态摘要（随 tab 变化） -->
+    <!-- 页头（newui/admin pagehead）：页名 + 各 tab 的主操作上移（2026-10-04 状态条退役：页头只剩页名与主操作） -->
     <MkPageHead title="模型与接入" sub="管理模型供应商、Skill 路由与后台访问安全策略">
       <template #actions>
         <!-- 本页唯一主操作升 primary（2026-10-04 全站评审 P3#37：此前 sm 次要形态，
@@ -10,33 +10,37 @@
           <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
         </button>
         <button v-else-if="tab === 'overview'" type="button" class="mk-btn mk-btn--sm" @click="registryRef?.refresh?.(true)">刷新</button>
-        <button v-else type="button" class="mk-btn mk-btn--sm" @click="addonsRef?.refresh?.()">刷新</button>
+        <!-- 刷新钮只挂在真有远端数据源的页签（总览/外挂能力）；四个配置 tab 的读取失败
+             重试走卡内 mk-alert「重试」，页头不放无效刷新（此前 v-else 落到 addonsRef 空引用） -->
+        <button v-else-if="tab === 'addons'" type="button" class="mk-btn mk-btn--sm" @click="addonsRef?.refresh?.()">刷新</button>
       </template>
     </MkPageHead>
-    <div class="mk-status" :class="statusTone">
-      <span class="mk-status__dot"></span>
-      <template v-if="isConfigTab">
-        <span class="mk-status__meta" title="服务商 API Key 是否已配置">密钥：{{ apiConfigFailed ? '—' : (keySet ? '已配置' : '未配置') }}</span>
-        <span class="mk-status__meta" :title="modelListTitle">模型清单：{{ apiConfigFailed ? '—' : (models.length ? `${models.length} 个` : '未拉取') }}</span>
-        <span class="mk-status__meta" :title="routeTitle">默认路由：{{ apiConfigFailed ? '—' : `${routeCount}/3` }}</span>
-        <!-- P3（2026-10-04 全站评审）：「上次探测」撤——连接卡的卡角 badge 已带同一时间
-             （「连接正常 · N 前」），同屏同值念两遍；探测时间语义由卡角单源承载 -->
-      </template>
-      <template v-else-if="tab === 'overview'">
-        <span class="mk-status__meta" title="后端能力注册表（唯一写源）中的模型数">模型：{{ registryCount.models }} 个</span>
-        <span class="mk-status__meta" :title="registryCount.warnings ? '存在配置漂移提示' : '无配置漂移'">提示：{{ registryCount.warnings }} 条</span>
-        <span class="mk-status__meta">只读</span>
-      </template>
-      <template v-else>
-        <span class="mk-status__meta">外挂能力 {{ addonsCount }} 个</span>
-      </template>
-    </div>
+    <!-- 2026-10-04 状态条退役：指标类读数就地归位为页首 KPI 带（共享 .mk-kpi-grid + MkKpi，判例 VirtualLearners），
+         随页签切换；「上次探测」按 P3（2026-10-04 全站评审）撤除（连接卡角 badge 单源承载，此处不再出现）。
+         外挂能力页签不渲染带——「外挂能力 N 个」与下方页签角标同源同数，属复读，计数住角标单源。 -->
+    <section v-if="isConfigTab" class="mk-kpi-grid">
+      <MkKpi
+        label="API 密钥"
+        :value="apiConfigFailed ? '—' : (keySet ? '已配置' : '未配置')"
+        :tone="apiConfigFailed ? '' : (keySet ? 'ok' : 'bad')"
+        title="服务商 API Key 是否已配置"
+      />
+      <MkKpi label="模型清单" :value="apiConfigFailed ? '—' : (models.length ? `${models.length} 个` : '未拉取')" :title="modelListTitle" />
+      <MkKpi label="默认路由" :value="apiConfigFailed ? '—' : `${routeCount}/3`" :title="routeTitle" />
+    </section>
+    <!-- 「只读」不再独占一格：并进注册模型卡 hint（2026-10-04 状态条退役，同一句语义不占整格） -->
+    <section v-else-if="tab === 'overview'" class="mk-kpi-grid">
+      <MkKpi label="注册模型" :value="registryCount.models" hint="能力注册表只读视图" title="后端能力注册表（唯一写源）中的模型数" />
+      <MkKpi
+        label="漂移提示"
+        :value="registryCount.warnings"
+        :tone="registryCount.warnings > 0 ? 'warn' : 'ok'"
+        :title="registryCount.warnings ? '存在配置漂移提示' : '无配置漂移'"
+      />
+    </section>
 
-    <!-- 视图切换（原型 .tabs 下划线页签：2026-10-01 由 mk-pills 胶囊迁入——
-         胶囊只做筛选 chips，视图/分区切换归页签；外挂能力计数以角标随页签呈现，
-         形态同共享 MkSubTabs 的 count 角标）：接入与验证 / 模型路由 / 调用与健康 /
-         安全与访问 / 模型总览 / 外挂能力
-
+    <!-- 视图切换（原型 .tabs 下划线页签）：2026-10-05 CM1 收敛到共享 MkSubTabs（原页内 .tabs/.tab
+         本地拷贝退役）；外挂能力计数走 MkSubTabs 的 count 角标，形态与其余二级页签一致。
          原型 4 页签 → 现状 6 页签映射（原型 index.html:1789 renderModels tabs）：
          · 接入与模型 = 「接入与验证」 + 「模型总览」
          · 连接与安全 = 「接入与验证」（服务地址 / 密钥 / 连通性）
@@ -46,84 +50,93 @@
          · 外挂能力   = 「外挂能力」
          现状 6 页签是能力扩展：原型把「连接与安全」「路由与降级」各压成一页，
          本页按可独立保存的配置域拆成四页（连接/路由/运行时/策略），页签数量不改。 -->
-    <div class="tabs ac-tabs" role="tablist" aria-label="模型与接入视图切换">
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'connection'" @click="switchTab('connection')">接入与验证</button>
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'routing'" @click="switchTab('routing')">模型路由</button>
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'runtime'" @click="switchTab('runtime')">调用与健康</button>
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'security'" @click="switchTab('security')">安全与访问</button>
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'overview'" @click="switchTab('overview')">模型总览</button>
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'addons'" @click="switchTab('addons')">外挂能力<span class="tab__count">{{ addonsCount }}</span></button>
-    </div>
+    <MkSubTabs
+      class="ac-tabs"
+      :tabs="acTabs"
+      :model-value="tab"
+      aria-label="模型与接入视图切换"
+      @update:model-value="onTabChange"
+    />
 
     <!-- ===== Tab1-4：接入与验证 / 模型路由 / 调用与健康 / 安全与访问（2026-09-29 由单一大 tab 拆分，每 tab 一张语义卡；分段保存按钮随卡） ===== -->
     <template v-if="isConfigTab">
     <template v-if="tab === 'connection'">
-    <div class="ac-tab-body mk-narrow">
-<!-- 接入与模型(重设计):长卡拆两张语义卡——连接与验证 / 模型路由与思考 -->
-        <section class="mk-card">
+    <!-- 2026-10-05 满屏重排：mk-narrow 限宽列在宽屏下「一张卡悬着」（用户实测批注）。
+         去限宽，单卡拆三卡满宽三列，与页首 KPI 三卡垂直对位（API 密钥→连接 / 模型清单→清单 /
+         默认路由→模型路由页签）；窄屏（≤1100px）回落单列。 -->
+    <div class="ac-tab-body ac-conn-body">
+      <!-- 接入域（live 层）读取失败：表单全空不得伪装成「未配置」，显式失败 + 重试（置顶一次，管三张卡） -->
+      <div v-if="apiConfigFailed" class="mk-alert mk-alert--row" role="alert">
+        <span class="mk-alert__msg">配置读取失败，表单为空是读取失败而非未配置</span>
+        <button type="button" class="mk-alert__btn" @click="retryApiConfigLoad">重试</button>
+      </div>
+      <section class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">连接与验证</h3>
+        <h3 class="mk-card__title">连接</h3>
         <!-- connBadge 附「N 前」（P1#32 子集）：连接状态是上次拉取/探测落库的结果，
              无时间的「连接正常」会把陈旧快照读成实时健康，误导熔断判断 -->
         <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
         <button v-if="dirty.has('conn')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['conn'])">{{ saving ? '保存中…' : '保存连接' }}</button>
       </div>
-      <!-- 接入域（live 层）读取失败：表单全空不得伪装成「未配置」，显式失败 + 重试 -->
-      <div v-if="apiConfigFailed" class="mk-alert mk-alert--row ac-config-error" role="alert">
-        <span class="mk-alert__msg">配置读取失败，表单为空是读取失败而非未配置</span>
-        <button type="button" class="mk-alert__btn" @click="retryApiConfigLoad">重试</button>
+      <div class="ac-body">
+        <label class="mk-field">
+          <span class="mk-field__label">服务地址</span>
+          <input class="mk-filter__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
+        </label>
+        <label class="mk-field">
+          <span class="mk-field__label">API Key</span>
+          <span class="ac-key-wrap">
+            <span class="ac-key-input-row">
+              <input
+                class="mk-filter__input"
+                :type="keyVisible ? 'text' : 'password'"
+                v-model="form.apiKey"
+                autocomplete="new-password"
+                :placeholder="keySet ? '已配置，留空沿用' : '输入 API Key'"
+                @input="markDirty('conn')"
+              />
+              <button
+                v-if="keySet || form.apiKey"
+                type="button"
+                class="ac-key-toggle"
+                :title="keyVisible ? '隐藏' : '显示'"
+                @click="keyVisible = !keyVisible"
+              ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
+                <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
+            </span>
+            <em v-if="keyHintNeeded" class="ac-keyhint">⚠ 更换服务地址需重新输入密钥</em>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">模型清单</h3>
       </div>
       <div class="ac-body">
-        <!-- 连接凭证：地址与密钥并排，密钥附显示切换 -->
-        <div class="ac-row ac-row--2-1">
-          <label class="mk-field mk-field--row">
-            <span class="mk-field__label">服务地址</span>
-            <input class="mk-filter__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
-          </label>
-          <label class="mk-field mk-field--row">
-            <span class="mk-field__label">API Key</span>
-            <span class="ac-key-wrap">
-              <span class="ac-key-input-row">
-                <input
-                  class="mk-filter__input"
-                  :type="keyVisible ? 'text' : 'password'"
-                  v-model="form.apiKey"
-                  autocomplete="new-password"
-                  :placeholder="keySet ? '已配置，留空沿用' : '输入 API Key'"
-                  @input="markDirty('conn')"
-                />
-                <button
-                  v-if="keySet || form.apiKey"
-                  type="button"
-                  class="ac-key-toggle"
-                  :title="keyVisible ? '隐藏' : '显示'"
-                  @click="keyVisible = !keyVisible"
-                ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
-                  <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
-              </span>
-              <em v-if="keyHintNeeded" class="ac-keyhint">⚠ 更换服务地址需重新输入密钥</em>
-            </span>
-          </label>
-        </div>
-        <label class="mk-field">
-          <span class="mk-field__label">可用模型</span>
-          <div class="ac-models">
-            <template v-if="models.length">
-              <span v-for="m in models" :key="m" class="ac-model">{{ m }}</span>
-            </template>
-            <div v-else class="ac-models__empty">
-              <span class="ac-models__empty-icon" aria-hidden="true">﹢</span>
-              <!-- fetchError 人话化（P2）：裸 errMsg（HTTP 枚举/堆栈词）对运营不可读——
-                   人话一句给动作，错误原文进 title 供排查贴单 -->
-              <span v-if="fetchError" :title="`错误原文：${fetchError}`">模型清单拉取失败：请检查服务地址与密钥是否正确、服务商是否可访问，然后点右上角「重新拉取」。</span>
-              <!-- P3（2026-10-04 全站评审）：括号内连接状态复读撤——同一张卡头 40px 上方 badge
-                   已承载「连接正常 · N 前」，空态句只说自己没拉清单 -->
-              <span v-else>模型清单尚未拉取。平台实际在用模型见「模型总览」tab 的解析结果；点击右上角「连接并拉取」获取服务商列表。</span>
-            </div>
+        <div class="ac-models">
+          <template v-if="models.length">
+            <span v-for="m in models" :key="m" class="ac-model" :title="m">{{ m }}</span>
+          </template>
+          <div v-else class="ac-models__empty">
+            <span class="ac-models__empty-icon" aria-hidden="true">﹢</span>
+            <!-- fetchError 人话化（P2）：裸 errMsg（HTTP 枚举/堆栈词）对运营不可读——
+                 人话一句给动作，错误原文进 title 供排查贴单 -->
+            <span v-if="fetchError" :title="`错误原文：${fetchError}`">模型清单拉取失败：请检查服务地址与密钥是否正确、服务商是否可访问，然后点右上角「重新拉取」。</span>
+            <!-- P3（2026-10-04 全站评审）：括号内连接状态复读撤——「连接」卡 40px 左侧 badge
+                 已承载「连接正常 · N 前」，空态句只说自己没拉清单 -->
+            <span v-else>模型清单尚未拉取。平台实际在用模型见「模型总览」tab 的解析结果；点击右上角「连接并拉取」获取服务商列表。</span>
           </div>
-        </label>
-        <!-- 连通性验证（连接卡的收尾动作：测通即连接可信） -->
-        <div class="ac-sec__title">连通性验证</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">连通性验证</h3>
+      </div>
+      <div class="ac-body">
         <div class="ac-test">
           <label class="mk-field ac-test__model">
             <span class="mk-field__label">测试模型</span>
@@ -144,71 +157,101 @@
         </div>
       </div>
     </section>
-
-    
     </div>
     </template>
     <template v-else-if="tab === 'routing'">
-    <div class="ac-tab-body mk-narrow">
+    <div class="ac-tab-body">
 <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">模型路由与思考</h3>
-        <span class="ac-sec__hint">可填具体模型 id、provider/model 限定式引用，或逻辑别名（chat / reasoning / light）</span>
         <button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存路由' }}</button>
       </div>
       <div class="ac-body">
-        <!-- 路由与降级概览（只读）：原型 index.html:1808-1812 ranklist/.rankrow 形态。
-             角色行取真实路由配置与降级守卫状态，未配置显式标注「未配置」，不臆造模型名；
-             输入能力保留在下方三列输入框（原型为纯只读，本页需保留可编辑路由）。 -->
-        <div class="ac-ranklist" role="list" aria-label="路由角色概览">
-          <div v-for="r in routeOverview" :key="r.role" class="ac-rankrow" role="listitem">
-            <span class="ac-rankrow__grow">
-              <span class="ac-rankrow__role">{{ r.role }}</span>
-              <span class="ac-rankrow__val" :class="{ 'is-unset': !r.configured }">{{ r.value }}</span>
-            </span>
-            <span class="mk-badge" :class="r.badgeCls">{{ r.badgeText }}</span>
-          </div>
-        </div>
-        <!-- 底部 warn 内联提示条（原型 index.html:1812 statusbar）：取真实降级守卫 / 能力健康，
-             均无异常则整条省略（不硬造） -->
+        <!-- 能力健康内联提示（原 ranklist 下 statusbar，2026-10-05 重设计移到区块前：域级状态先于配置项）：
+             取真实降级守卫 / 能力健康，均无异常则整条省略（不硬造） -->
         <div v-if="routeWarnText" class="ac-route-warn" role="status">
           <span class="ac-route-warn__dot"></span>
           <span>{{ routeWarnText }}</span>
         </div>
-        <div class="ac-row ac-row--3">
-          <label class="mk-field">
-            <span class="mk-field__label">对话默认</span>
-            <input
-              class="mk-filter__input mono"
-              list="ac-model-options"
-              :value="form.defaultModel"
-              placeholder="模型 id 或别名"
-              title="可填逻辑别名（chat / reasoning / light），或从已拉取清单中选择"
-              @input="form.defaultModel = ($event.target as HTMLInputElement).value; markDirty('route')"
-            />
-          </label>
-          <label class="mk-field">
-            <span class="mk-field__label">推理默认</span>
-            <input
-              class="mk-filter__input mono"
-              list="ac-model-options"
-              :value="form.defaultReasoningModel"
-              placeholder="模型 id 或别名"
-              title="推理档：别名 reasoning 会按能力过滤到支持思考的成员"
-              @input="form.defaultReasoningModel = ($event.target as HTMLInputElement).value; markDirty('route')"
-            />
-          </label>
-          <label class="mk-field">
-            <span class="mk-field__label">评估默认</span>
-            <input
-              class="mk-filter__input mono"
-              list="ac-model-options"
-              :value="form.defaultEvaluationModel"
-              placeholder="模型 id 或别名"
-              title="评估档：同样支持逻辑别名"
-              @input="form.defaultEvaluationModel = ($event.target as HTMLInputElement).value; markDirty('route')"
-            />
-          </label>
+        <!-- 2026-10-05 满屏重排：去 mk-narrow 限宽，卡内左右双列（左=默认路由，右=生成参数），
+             双列家族与「调用与健康」页签同款 ac-cols；≤1100px 回落单列 -->
+        <div class="ac-cols">
+          <div class="ac-cols__main">
+            <!-- 默认路由：三行「角色行」（2026-10-05 重设计）——原只读 ranklist 概览与下方三列输入
+                 是同屏两份回声（概览读的就是同一组 form 值），合并为一行 = 角色 + 输入 + 状态徽标；
+                 徽标随输入实时翻转（已配置 ⇄ 未配置），编辑动作得到即时确认。
+                 原型第四行「降级备用」本页无独立配置字段，不虚构该行。 -->
+            <div class="ac-sec__title">默认路由<span class="ac-sec__hint">可填具体模型 id、provider/model 限定式引用，或逻辑别名（chat / reasoning / light）</span></div>
+            <div class="ac-route" role="list" aria-label="默认路由角色">
+              <label v-for="r in routeRoles" :key="r.key" class="ac-route__row" role="listitem">
+                <span class="ac-route__label">{{ r.role }}</span>
+                <input
+                  class="mk-filter__input mono"
+                  list="ac-model-options"
+                  :value="r.value"
+                  placeholder="模型 id 或别名"
+                  :title="r.title"
+                  @input="r.set(($event.target as HTMLInputElement).value)"
+                />
+                <span class="mk-badge" :class="r.value ? 'mk-badge--ok' : 'mk-badge--muted'">{{ r.value ? '已配置' : '未配置' }}</span>
+              </label>
+            </div>
+          </div>
+          <div class="ac-cols__side">
+            <!-- 默认思考：平台级开关 + 强度（未单独配置的 Skill 继承此默认；skill 级可在设计页运行时 tab 覆盖） -->
+            <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖<span v-if="dirty.has('route')"> · 保存见卡头「保存路由」</span></span></div>
+            <div class="ac-row ac-row--3 ac-think">
+              <label class="mk-field mk-field--switch">
+                <input
+                  type="checkbox"
+                  :checked="thinkingOn"
+                  @change="setThinkingOn(($event.target as HTMLInputElement).checked)"
+                />
+                <span class="mk-field__label" style="margin:0">启用思考</span>
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">思考强度</span>
+                <select
+                  class="mk-filter__select"
+                  :disabled="!thinkingOn"
+                  :value="form.defaultReasoningEffort"
+                  @change="setEffort(($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="default">跟随模型默认</option>
+                  <option value="low">低（low）</option>
+                  <option value="high">高（high）</option>
+                  <option value="max">最高（max）</option>
+                </select>
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">思考模式</span>
+                <select
+                  class="mk-filter__select"
+                  :value="form.defaultThinkingMode"
+                  @change="setThinkingMode(($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="default">跟随模型默认</option>
+                  <option value="enabled">强制开启</option>
+                  <option value="disabled">关闭</option>
+                </select>
+              </label>
+            </div>
+
+            <!-- 结构化输出：平台级默认（json 媒介 Skill 的请求附 response_format，上游解码层强制 JSON；
+                 需渠道支持——2026-10-02 对本渠道直连实测为真强制；skill 级 paramOverrides.responseFormat 可覆盖/显式关闭） -->
+            <div class="ac-sec__title">结构化输出<span class="ac-sec__hint">对输出 JSON 的 Skill 由上游强制 JSON（防「自然停止但吐散文」类失败）；仅支持 OpenAI 风格 response_format 的渠道可开<span v-if="dirty.has('route')"> · 保存见卡头「保存路由」</span></span></div>
+            <label class="mk-field">
+              <span class="mk-field__label">输出格式</span>
+              <select
+                class="mk-filter__select"
+                :value="form.defaultResponseFormat"
+                @change="form.defaultResponseFormat = ($event.target as HTMLSelectElement).value as 'none' | 'json_object'; markDirty('route')"
+              >
+                <option value="none">关闭（默认行为）</option>
+                <option value="json_object">JSON 对象（json_object）</option>
+              </select>
+            </label>
+          </div>
         </div>
         <!-- 路由默认的候选：模型目录（File-as-Truth，带「供应商 · tier」标注）+ 通道拉取清单 + 逻辑别名 -->
         <datalist id="ac-model-options">
@@ -217,200 +260,155 @@
           <option v-for="a in aliasOptions" :key="`alias-${a}`" :value="a" />
         </datalist>
 
-        <!-- 默认思考：平台级开关 + 强度（未单独配置的 Skill 继承此默认；skill 级可在设计页运行时 tab 覆盖） -->
-        <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖<span v-if="dirty.has('route')"> · 保存见卡头「保存路由」</span></span></div>        <div class="ac-row ac-row--3 ac-think">
-          <label class="mk-field mk-field--switch">
-            <input
-              type="checkbox"
-              :checked="thinkingOn"
-              @change="setThinkingOn(($event.target as HTMLInputElement).checked)"
-            />
-            <span class="mk-field__label" style="margin:0">启用思考</span>
-          </label>
-          <label class="mk-field">
-            <span class="mk-field__label">思考强度</span>
-            <select
-              class="mk-filter__select"
-              :disabled="!thinkingOn"
-              :value="form.defaultReasoningEffort"
-              @change="setEffort(($event.target as HTMLSelectElement).value)"
-            >
-              <option value="default">跟随模型默认</option>
-              <option value="low">低（low）</option>
-              <option value="high">高（high）</option>
-              <option value="max">最高（max）</option>
-            </select>
-          </label>
-          <label class="mk-field">
-            <span class="mk-field__label">思考模式</span>
-            <select
-              class="mk-filter__select"
-              :value="form.defaultThinkingMode"
-              @change="setThinkingMode(($event.target as HTMLSelectElement).value)"
-            >
-              <option value="default">跟随模型默认</option>
-              <option value="enabled">强制开启</option>
-              <option value="disabled">关闭</option>
-            </select>
-          </label>
-        </div>
-
-        <!-- 结构化输出：平台级默认（json 媒介 Skill 的请求附 response_format，上游解码层强制 JSON；
-             需渠道支持——2026-10-02 对本渠道直连实测为真强制；skill 级 paramOverrides.responseFormat 可覆盖/显式关闭） -->
-        <div class="ac-sec__title">结构化输出<span class="ac-sec__hint">对输出 JSON 的 Skill 由上游强制 JSON（防「自然停止但吐散文」类失败）；仅支持 OpenAI 风格 response_format 的渠道可开<span v-if="dirty.has('route')"> · 保存见卡头「保存路由」</span></span></div>
-        <div class="ac-row">
-          <label class="mk-field">
-            <span class="mk-field__label">输出格式</span>
-            <select
-              class="mk-filter__select"
-              :value="form.defaultResponseFormat"
-              @change="form.defaultResponseFormat = ($event.target as HTMLSelectElement).value as 'none' | 'json_object'; markDirty('route')"
-            >
-              <option value="none">关闭（默认行为）</option>
-              <option value="json_object">JSON 对象（json_object）</option>
-            </select>
-          </label>
-        </div>
-
       </div>
     </section>
-
-      
     </div>
     </template>
     <template v-else-if="tab === 'security'">
-    <div class="ac-tab-body mk-narrow">
-<!-- 安全与访问（左列第二张卡：2×2 宫格，填满左列下方） -->
+    <!-- 2026-10-05 满屏重排：去 mk-narrow 限宽，四条策略各自成卡排 2×2 宫格（≤1100px 回落单列），
+         分区标题行承担组级 badge 与「保存策略」（同「调用与健康」页签「调用参数」标题行模式） -->
+    <div class="ac-tab-body ac-sec-body">
+      <div class="ac-sec__title ac-sec-head">
+        安全与访问
+        <span class="mk-badge mk-badge--info">平台策略 · 热生效</span>
+        <button v-if="dirty.has('policy')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['policy'])">{{ saving ? '保存中…' : '保存策略' }}</button>
+      </div>
       <section class="mk-card">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">安全与访问</h3>
-          <span class="mk-badge mk-badge--info">平台策略 · 热生效</span>
-          <button v-if="dirty.has('policy')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['policy'])">{{ saving ? '保存中…' : '保存策略' }}</button>
+          <h3 class="mk-card__title">访问来源模式</h3>
         </div>
-        <div class="ac-policy ac-policy--2x2">
-          <div class="ac-policy__item">
-            <span class="ac-policy__label">访问来源模式</span>
-            <!-- 原型 index.html:1793-1798 访问来源模式：radio 单选卡片
-                 （radiogroup + role=radio + aria-checked，Enter/Space 可切）；
-                 取值与提交逻辑不变，仍为 policy.adminAccessMode -->
-            <div class="ac-radio-row" role="radiogroup" aria-label="访问来源模式">
-              <span
-                v-for="opt in accessOptions"
-                :key="opt.id"
-                class="ac-radio"
-                role="radio"
-                tabindex="0"
-                :aria-checked="policy.adminAccessMode === opt.id"
-                @click="setAccessMode(opt.id)"
-                @keydown.enter.prevent="setAccessMode(opt.id)"
-                @keydown.space.prevent="setAccessMode(opt.id)"
-              >
-                <span class="ac-radio__mark" aria-hidden="true">{{ policy.adminAccessMode === opt.id ? '●' : '○' }}</span>
-                <span class="ac-radio__text">
-                  <span class="ac-radio__title">{{ opt.label }}</span>
-                  <span class="ac-radio__sub">{{ opt.sub }}</span>
-                </span>
-              </span>
-            </div>
-            <span class="ac-policy__hint">策略持久化到 System DB 并热生效；环境变量仅作默认值。</span>
-            <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">⚠ 公网开放 · 入口无访问限制</span>
-            <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
-              <span class="mk-field__label">额外允许的客户端 IP（每行一个，可留空）</span>
-              <textarea
-                class="mk-filter__input ac-textarea"
-                rows="2"
-                :value="policy.adminAllowedIps.join('\n')"
-                @input="policy.adminAllowedIps = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
-                placeholder="203.0.113.10"
-              ></textarea>
-            </label>
-          </div>
-          <div class="ac-policy__item">
-            <span class="ac-policy__label">私有网络服务</span>
-            <div class="mk-seg" role="radiogroup" aria-label="私有网络服务">
-              <button
-                type="button"
-                class="mk-seg__item"
-                :class="{ 'mk-seg__item--active': policy.allowPrivateNetwork }"
-                :aria-pressed="policy.allowPrivateNetwork"
-                @click="policy.allowPrivateNetwork = true; markDirty('policy')"
-              >
-                允许
-              </button>
-              <button
-                type="button"
-                class="mk-seg__item"
-                :class="{ 'mk-seg__item--active': !policy.allowPrivateNetwork }"
-                :aria-pressed="!policy.allowPrivateNetwork"
-                @click="policy.allowPrivateNetwork = false; markDirty('policy')"
-              >
-                仅白名单
-              </button>
-            </div>
-            <label v-if="!policy.allowPrivateNetwork" class="mk-field">
-              <span class="mk-field__label">允许的 Host / IP（每行一个）</span>
-              <textarea
-                class="mk-filter__input ac-textarea"
-                rows="2"
-                :value="policy.privateNetworkHosts.join('\n')"
-                @input="policy.privateNetworkHosts = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
-                placeholder="192.168.1.20"
-              ></textarea>
-            </label>
-          </div>
-          <!-- 新用户注册（live） -->
-          <div v-if="isLive && registrationEnabled !== null" class="ac-policy__item">
-            <span class="ac-policy__label">新用户注册</span>
-            <span class="ac-policy__desc">{{ registrationEnabled ? '任何人可注册' : '仅管理员创建' }}</span>
-            <button
-              type="button"
-              class="mk-seg__item ac-policy__toggle"
-              :disabled="registrationBusy"
-              @click="toggleRegistration"
+        <div class="ac-body ac-policy__item">
+          <!-- 原型 index.html:1793-1798 访问来源模式：radio 单选卡片
+               （radiogroup + role=radio + aria-checked，Enter/Space 可切）；
+               取值与提交逻辑不变，仍为 policy.adminAccessMode -->
+          <div class="ac-radio-row" role="radiogroup" aria-label="访问来源模式">
+            <span
+              v-for="opt in accessOptions"
+              :key="opt.id"
+              class="ac-radio"
+              role="radio"
+              tabindex="0"
+              :aria-checked="policy.adminAccessMode === opt.id"
+              @click="setAccessMode(opt.id)"
+              @keydown.enter.prevent="setAccessMode(opt.id)"
+              @keydown.space.prevent="setAccessMode(opt.id)"
             >
-              {{ registrationBusy ? '切换中…' : registrationEnabled ? '关闭注册' : '开放注册' }}
-            </button>
+              <span class="ac-radio__mark" aria-hidden="true">{{ policy.adminAccessMode === opt.id ? '●' : '○' }}</span>
+              <span class="ac-radio__text">
+                <span class="ac-radio__title">{{ opt.label }}</span>
+                <span class="ac-radio__sub">{{ opt.sub }}</span>
+              </span>
+            </span>
           </div>
-          <!-- 单 IP 每日注册配额（live；默认关，避免误伤同一内网/出口的正常注册） -->
-          <div v-if="isLive && registerIpQuotaEnabled !== null" class="ac-policy__item">
-            <span class="ac-policy__label">单 IP 每日注册配额</span>
-            <span class="ac-policy__desc">{{ quotaEnabledText }}，超过后该 IP 当天无法再创建账号</span>
-            <div class="ac-quota-row">
-              <div class="mk-seg ac-quota-seg" role="group" aria-label="单 IP 每日注册配额开关">
-                <button
-                  type="button"
-                  class="mk-seg__item"
-                  :class="{ 'mk-seg__item--active': registerIpQuotaEnabled }"
-                  :disabled="quotaBusy"
-                  @click="setQuotaEnabled(true)"
-                >启用</button>
-                <button
-                  type="button"
-                  class="mk-seg__item"
-                  :class="{ 'mk-seg__item--active': !registerIpQuotaEnabled }"
-                  :disabled="quotaBusy"
-                  @click="setQuotaEnabled(false)"
-                >关闭</button>
-              </div>
-              <label v-if="registerIpQuotaEnabled" class="ac-quota-field">
-                <span class="mk-field__label">每日上限</span>
-                <input
-                  type="number"
-                  class="mk-filter__input"
-                  min="1"
-                  max="100"
-                  :value="quotaInput"
-                  :disabled="quotaBusy"
-                  @change="onQuotaInput"
-                />
-                <em>个 / IP</em>
-              </label>
-            </div>
-            <span class="ac-policy__hint">默认关闭。启用后，同一公网出口 IP 24 小时内最多注册 {{ quotaInput || 5 }} 个账号，适合在批量注册风险显现时开启。</span>
-          </div>
+          <span class="ac-policy__hint">策略持久化到 System DB 并热生效；环境变量仅作默认值。</span>
+          <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">⚠ 公网开放 · 入口无访问限制</span>
+          <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
+            <span class="mk-field__label">额外允许的客户端 IP（每行一个，可留空）</span>
+            <textarea
+              class="mk-filter__input ac-textarea"
+              rows="2"
+              :value="policy.adminAllowedIps.join('\n')"
+              @input="policy.adminAllowedIps = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
+              placeholder="203.0.113.10"
+            ></textarea>
+          </label>
         </div>
       </section>
-      
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">私有网络服务</h3>
+        </div>
+        <div class="ac-body ac-policy__item">
+          <div class="mk-seg" role="radiogroup" aria-label="私有网络服务">
+            <button
+              type="button"
+              class="mk-seg__item"
+              :class="{ 'mk-seg__item--active': policy.allowPrivateNetwork }"
+              :aria-pressed="policy.allowPrivateNetwork"
+              @click="policy.allowPrivateNetwork = true; markDirty('policy')"
+            >
+              允许
+            </button>
+            <button
+              type="button"
+              class="mk-seg__item"
+              :class="{ 'mk-seg__item--active': !policy.allowPrivateNetwork }"
+              :aria-pressed="!policy.allowPrivateNetwork"
+              @click="policy.allowPrivateNetwork = false; markDirty('policy')"
+            >
+              仅白名单
+            </button>
+          </div>
+          <label v-if="!policy.allowPrivateNetwork" class="mk-field">
+            <span class="mk-field__label">允许的 Host / IP（每行一个）</span>
+            <textarea
+              class="mk-filter__input ac-textarea"
+              rows="2"
+              :value="policy.privateNetworkHosts.join('\n')"
+              @input="policy.privateNetworkHosts = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
+              placeholder="192.168.1.20"
+            ></textarea>
+          </label>
+        </div>
+      </section>
+      <!-- 新用户注册（live） -->
+      <section v-if="isLive && registrationEnabled !== null" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">新用户注册</h3>
+        </div>
+        <div class="ac-body ac-policy__item">
+          <span class="ac-policy__desc">{{ registrationEnabled ? '任何人可注册' : '仅管理员创建' }}</span>
+          <button
+            type="button"
+            class="mk-seg__item ac-policy__toggle"
+            :disabled="registrationBusy"
+            @click="toggleRegistration"
+          >
+            {{ registrationBusy ? '切换中…' : registrationEnabled ? '关闭注册' : '开放注册' }}
+          </button>
+        </div>
+      </section>
+      <!-- 单 IP 每日注册配额（live；默认关，避免误伤同一内网/出口的正常注册） -->
+      <section v-if="isLive && registerIpQuotaEnabled !== null" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">单 IP 每日注册配额</h3>
+        </div>
+        <div class="ac-body ac-policy__item">
+          <span class="ac-policy__desc">{{ quotaEnabledText }}，超过后该 IP 当天无法再创建账号</span>
+          <div class="ac-quota-row">
+            <div class="mk-seg ac-quota-seg" role="group" aria-label="单 IP 每日注册配额开关">
+              <button
+                type="button"
+                class="mk-seg__item"
+                :class="{ 'mk-seg__item--active': registerIpQuotaEnabled }"
+                :disabled="quotaBusy"
+                @click="setQuotaEnabled(true)"
+              >启用</button>
+              <button
+                type="button"
+                class="mk-seg__item"
+                :class="{ 'mk-seg__item--active': !registerIpQuotaEnabled }"
+                :disabled="quotaBusy"
+                @click="setQuotaEnabled(false)"
+              >关闭</button>
+            </div>
+            <label v-if="registerIpQuotaEnabled" class="ac-quota-field">
+              <span class="mk-field__label">每日上限</span>
+              <input
+                type="number"
+                class="mk-filter__input"
+                min="1"
+                max="100"
+                :value="quotaInput"
+                :disabled="quotaBusy"
+                @change="onQuotaInput"
+              />
+              <em>个 / IP</em>
+            </label>
+          </div>
+          <span class="ac-policy__hint">默认关闭。启用后，同一公网出口 IP 24 小时内最多注册 {{ quotaInput || 5 }} 个账号，适合在批量注册风险显现时开启。</span>
+        </div>
+      </section>
     </div>
     </template>
     <template v-else-if="tab === 'runtime'">
@@ -478,10 +476,14 @@
         <!-- 左列：调用参数（重试 / 超时 / 探测 分组） -->
         <div v-if="reliability || probe.loaded" class="ac-cols__main">
           <div class="ac-sec__title">调用参数<button v-if="dirty.has('reliability')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['reliability'])">{{ saving ? '保存中…' : '保存参数' }}</button></div>
+          <!-- 不变式违例升格为卡级告警（2026-10-05 重设计：原埋在字段组内当脚注，7 个数字里最该先读的一句）；
+               触发条件本身由「尝试与降级」组内驻留说明承载，此处只说裁决与动作（同一事实不重复） -->
+          <div v-if="reliability && fallbackDisabled" class="mk-alert mk-alert--row ac-fallback-alert" role="alert">
+            <span class="mk-alert__msg">当前配置下「模型降级」永远不会触发，请增大「上游最大尝试」或减小「传输重试」</span>
+          </div>
           <div class="ac-groups">
             <div v-if="reliability" class="ac-group">
-              <div class="ac-group__title">重试与超时</div>
-              <div v-if="fallbackDisabled" class="ac-keyhint">⚠ 当前配置下「模型降级」永远不会触发:降级要求「1 + 传输重试 &lt; 上游最大尝试」。如需保留降级能力,请增大上游最大尝试或减小传输重试。</div>
+              <div class="ac-group__title">尝试与降级</div>
               <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">上游最大尝试</span>
@@ -495,6 +497,12 @@
                   <span class="mk-field__label">逻辑重试</span>
                   <input v-model.number="reliability.maxLogicalRetries" type="number" min="0" :max="limMax('maxLogicalRetries', 5)" class="mk-filter__input" @input="markDirty('reliability')" />
                 </label>
+              </div>
+              <div class="ac-group__note">模型降级触发条件：1 + 传输重试 ＜ 上游最大尝试（例如 3 次尝试、1 次传输重试时仍留一次降级机会）</div>
+            </div>
+            <div v-if="reliability" class="ac-group">
+              <div class="ac-group__title">退避与超时</div>
+              <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">退避基数（毫秒）</span>
                   <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-filter__input" @input="markDirty('reliability')" />
@@ -585,7 +593,7 @@
     <ModelRegistryOverview v-else-if="tab === 'overview'" ref="registryRef" @count="registryCount = $event" @aliases="aliasOptions = $event" />
 
     <!-- ===== Tab3: 外挂能力（Addons embedded） ===== -->
-    <Addons v-else ref="addonsRef" embedded @count="addonsCount = $event" />
+    <Addons v-else ref="addonsRef" embedded @count="onAddonsCount" />
   </div>
 </template>
 
@@ -624,6 +632,9 @@ loadModelCatalog()
 import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
+import MkSubTabs from '@/components/mk/MkSubTabs.vue'
+/* 2026-10-04 状态条退役：原页头 .mk-status 读数迁 KPI 带（页首 .mk-kpi-grid + MkKpi） */
+import MkKpi from '@/components/mk/MkKpi.vue'
 import { toast } from '@/utils/toast'
 
 /* ---------- 宿主：接入与模型 · 模型总览 · 外挂能力 ----------
@@ -637,6 +648,26 @@ const isConfigTab = computed(() => ['connection', 'routing', 'runtime', 'securit
 const route = useRoute()
 const router = useRouter()
 const addonsCount = ref(0)
+/* D11：Addons 只在切到「外挂能力」页签才挂载并上报计数；未访问前 addonsCount 恒为初始 0，
+   角标显 0 会被读成「外挂能力 0 个」（实际 4）。故用 ready 位区分「未加载」与「就是 0」——
+   未加载不渲染角标（隐藏而非显 0）。 */
+const addonsCountReady = ref(false)
+function onAddonsCount(n: number) {
+  addonsCount.value = n
+  addonsCountReady.value = true
+}
+/** 页签定义（CM1：收敛到 MkSubTabs；count 只在已加载时给出，见上） */
+const acTabs = computed(() => [
+  { key: 'connection', label: '接入与验证' },
+  { key: 'routing', label: '模型路由' },
+  { key: 'runtime', label: '调用与健康' },
+  { key: 'security', label: '安全与访问' },
+  { key: 'overview', label: '模型总览' },
+  { key: 'addons', label: '外挂能力', count: addonsCountReady.value ? addonsCount.value : undefined },
+])
+function onTabChange(key: string) {
+  switchTab(key as AcTab)
+}
 const addonsRef = ref<{ refresh?: () => void } | null>(null)
 const registryCount = ref({ models: 0, warnings: 0 })
 const registryRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
@@ -755,8 +786,8 @@ async function probeHealth() {
 
 /* ---------- 表单状态（live 一套交互） ---------- */
 /**
- * 接入域（live 层 getConfig）读取失败：表单全空 + 状态条三 meta 显示「—」+ 卡内 alert。
- * 原实现失败时 keySet/models/routeCount 全部为初始值，状态条显示确定态「未配置/未拉取/0-3」——
+ * 接入域（live 层 getConfig）读取失败：表单全空 + 页首 KPI 卡三读数显「—」+ 卡内 alert。
+ * 原实现失败时 keySet/models/routeCount 全部为初始值，读数显示确定态「未配置/未拉取/0-3」——
  * 把「读不到」伪装成「没配置」，是审计不可接受的假信号。失败态由 liveFailures.apiConfig 驱动
  * （live.ts 已导出；读取成功后自动清除，无需本地维护）。
  */
@@ -1050,25 +1081,33 @@ function setEffort(v: string) {
   }
 }
 
-const ready = computed(() => keySet.value && models.value.length > 0 && !!form.defaultModel)
+/* 2026-10-04 状态条退役：原「就绪」判定 ready（仅 statusTone 消费）随状态条删除，零引用一并清理 */
 const routeCount = computed(() => [form.defaultModel, form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length)
-/* 路由与降级概览（原型 index.html:1808-1812 ranklist/.rankrow）：只读三行 = 本系统的三个
-   真实路由角色（对话 / 推理 / 评估默认，对应下方三列输入）。原型第四行「降级备用」本页无
-   独立配置字段，不虚构该行。未配置的行显式标注「未配置」，不臆造模型名。 */
-const routeOverview = computed(() => {
-  const rows = [
-    { role: '对话默认', value: form.defaultModel },
-    { role: '推理默认', value: form.defaultReasoningModel },
-    { role: '评估默认', value: form.defaultEvaluationModel },
-  ]
-  return rows.map((r) => ({
-    role: r.role,
-    value: r.value || '未配置',
-    configured: !!r.value,
-    badgeText: r.value ? '已配置' : '未配置',
-    badgeCls: r.value ? 'mk-badge--ok' : 'mk-badge--muted',
-  }))
-})
+/* 默认路由三角色行（2026-10-05 重设计：原 routeOverview 只读概览与三列输入是同屏回声，
+   合并为一行 = 角色 + 输入 + 状态徽标；value 直读 form，徽标随输入实时翻转）。 */
+const routeRoles = computed(() => [
+  {
+    key: 'chat',
+    role: '对话默认',
+    value: form.defaultModel,
+    title: '可填逻辑别名（chat / reasoning / light），或从已拉取清单中选择',
+    set: (v: string) => { form.defaultModel = v; markDirty('route') },
+  },
+  {
+    key: 'reasoning',
+    role: '推理默认',
+    value: form.defaultReasoningModel,
+    title: '推理档：别名 reasoning 会按能力过滤到支持思考的成员',
+    set: (v: string) => { form.defaultReasoningModel = v; markDirty('route') },
+  },
+  {
+    key: 'evaluation',
+    role: '评估默认',
+    value: form.defaultEvaluationModel,
+    title: '评估档：同样支持逻辑别名',
+    set: (v: string) => { form.defaultEvaluationModel = v; markDirty('route') },
+  },
+])
 /* 降级内联提示（原型 index.html:1812 statusbar）：与页面能力健康卡同源（health 快照），
    只列异常/不可用项；无异常或无快照时整条省略（不硬造）。 */
 const routeWarnText = computed(() => {
@@ -1087,12 +1126,8 @@ const modelListTitle = computed(() =>
 const routeTitle = computed(
   () => `已指定 ${routeCount.value} / 3 条默认路由（对话 / 推理 / 评估）。路由数只表示已指定，不代表模型清单已就绪`,
 )
-const statusTone = computed(() => {
-  if (apiConfigFailed.value) return 'mk-status--bad'
-  if (ready.value) return 'mk-status--ok'
-  if (keySet.value) return 'mk-status--muted'
-  return 'mk-status--warn'
-})
+/* 2026-10-04 状态条退役：页头红/黄/绿基调 statusTone 随状态条整块删除（读取失败信号由
+   接入卡内 mk-alert + KPI 卡「—」读数承载，不再有整页基调色） */
 const connBadge = computed(() => {
   // 附「N 前」时间戳（P1#32 子集）：连接状态是上次连通性验证的结果，无时间的「连接正常」
   // 会把陈旧快照读成实时健康。时间源 = 本次会话刚拉取成功的时刻，否则退回 DB lastCheckedAt
@@ -1352,27 +1387,10 @@ async function saveQuota(enabled: boolean, quota: number) {
 
 <style scoped>
 /* ================= 宿主布局（tab 宿主：模型 tab 内滚；嵌入子页占满剩余高度） ================= */
-/* 视图切换（原型 .tabs 下划线页签，页面本地复刻；写法与 Users.vue 卡内页签、OpsHub 宿主页签同款） */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
-.tab {
-  border: 0;
-  background: transparent;
-  color: var(--mk-muted);
-  padding: 9px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  font-size: var(--mk-fs-micro);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  white-space: nowrap;
-  transition: color 0.14s ease, border-color 0.14s ease;
-}
-.tab:hover { color: var(--mk-ink); }
-.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
-.tab__count { margin-left: 5px; color: var(--mk-faint); font-weight: 600; }
-.tab[aria-selected='true'] .tab__count { color: inherit; opacity: 0.72; }
-/* 模型 tab：内容在宿主 flex 列内独立滚动（状态条/页签固定；底部保存条 sticky 于滚动容器） */
+/* 视图切换已收敛到共享 MkSubTabs（CM1，2026-10-05）：原页内 .tabs/.tab/.tab__count
+   本地拷贝退役——下划线页签的 padding/字号/hover/▸ 指示由 .mk-subtabs/.mk-subtab 单源提供。
+   此处仅保留宿主级类作定位钩子（无本地样式）。 */
+/* 模型 tab：内容在宿主 flex 列内独立滚动（页头/页签固定；底部保存条 sticky 于滚动容器） */
 .ac-tab-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -1384,10 +1402,18 @@ async function saveQuota(enabled: boolean, quota: number) {
 /* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度 */
 .ac-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
 
+/* 满屏重排（2026-10-05）：mk-narrow 限宽列在宽屏下读作「一张卡悬着」（用户实测截图批注）。
+   接入三列（与页首 KPI 三卡垂直对位：密钥→连接 / 清单→模型清单 / 路由→模型路由页签）、
+   安全 2×2 策略卡宫格（标题行跨双列），≤1100px 回落单列 */
+.ac-conn-body { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+.ac-sec-body { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.ac-sec-head { grid-column: 1 / -1; }
+/* 置顶告警（接入域读取失败）横跨全部列，不占卡位把卡片挤换行 */
+.ac-conn-body > .mk-alert { grid-column: 1 / -1; }
+
 /* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
 .ac-row { display: grid; gap: 14px; align-items: end; }
-.ac-row--2-1 { grid-template-columns: 1.6fr 1fr; }
 .ac-row--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 /* mk-field 已在 shared.css 定义；此处只补 mk-field 下 .mk-filter__input 的 100% 宽 */
 .mk-field .mk-filter__input,
@@ -1442,7 +1468,15 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-test__text--bad { color: var(--mk-red); }
 .ac-test__btn { align-self: flex-end; }
 
-.ac-models { display: flex; gap: 6px; flex-wrap: wrap; }
+/* 长清单降噪（2026-10-05）：约 4 行高度帽 + 内滚，几十枚模型不再把卡片拉到一屏外 */
+.ac-models {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  max-height: 132px;
+  overflow-y: auto;
+}
 .ac-model {
   padding: 4px 10px;
   border-radius: var(--mk-radius-sm);
@@ -1483,12 +1517,9 @@ async function saveQuota(enabled: boolean, quota: number) {
 
 /* 安全与访问卡：2×2 宫格（左列 ~700px 宽），虚线分隔按行划分——
    第 1、2 项无上分隔；第 3、4 项加顶部虚线换行分隔 */
-.ac-policy { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 0; padding: 6px 16px 16px; }
-.ac-policy__item { display: grid; gap: 10px; align-content: start; min-width: 0; padding-left: 18px; border-left: 1px dashed var(--mk-line); }
-.ac-policy__item:nth-child(odd) { padding-left: 0; border-left: none; }
-.ac-policy__item:nth-child(n + 3) { padding-top: 14px; border-top: 1px dashed var(--mk-line); }
-html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
-.ac-policy__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
+/* 策略域（2026-10-05 满屏重排）：四条策略各自成卡排 2×2（.ac-sec-body 宫格），
+   本类只剩卡体内容栅格语义 + 测试选择器钩子（原 dashed 宫格边框随 ac-policy 宫格退役） */
+.ac-policy__item { min-width: 0; }
 .ac-policy__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
 .ac-policy__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.55; display: block; }
 .ac-policy__toggle { width: fit-content; }
@@ -1598,29 +1629,20 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 .ac-health__id { font-size: var(--mk-fs-micro); color: var(--mk-ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-health__msg { color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-health__lat { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
-/* 路由与降级概览（原型 index.html:1808-1812 ranklist / statusbar 形态，token 化） */
-.ac-ranklist {
+/* 默认路由角色行（2026-10-05 重设计：原 ranklist 概览 + 三列输入合并为行式
+   label | input | badge；ac-body 已有 14px 栅格，此处不用再加外距） */
+.ac-route { display: grid; gap: 8px; }
+.ac-route__row {
   display: grid;
-  gap: 2px;
-  margin-bottom: 14px;
-}
-.ac-rankrow {
-  display: flex;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--mk-line);
 }
-.ac-rankrow:last-child { border-bottom: 0; }
-.ac-rankrow__grow { display: grid; gap: 2px; min-width: 0; }
-.ac-rankrow__role { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.ac-rankrow__val { font-family: var(--mk-mono); font-weight: 600; color: var(--mk-ink); }
-.ac-rankrow__val.is-unset { font-family: inherit; font-weight: 500; color: var(--mk-faint); }
+.ac-route__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
 .ac-route-warn {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 14px;
   padding: 9px 12px;
   border: 1px solid color-mix(in srgb, var(--mk-amber) 32%, var(--mk-line));
   border-radius: var(--mk-radius-md);
@@ -1678,9 +1700,14 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 
 .ac-health__stale { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
-/* 调用参数 + 能力健康：右卡内纵向分区（ac-body 统一间距，无内嵌双栏/竖线） */
-.ac-cols { display: grid; gap: 14px; align-items: start; }
-.ac-cols__main, .ac-cols__side { min-width: 0; padding: 0; }
+/* 调用参数 + 能力健康：两列（左参数右健康，2026-10-05 修复——注释/1100px 收合断点/
+   移动端摘边距规则都证明双列是设计意图，基础 grid-template-columns 却在历史改动中丢失，
+   实际一直堆叠渲染，健康表被参数组压到折叠线下）；分隔线沿用卡内原 dashed 方言。
+   「模型路由」页签同款复用（左=默认路由，右=生成参数），两列各自立栅同节奏 */
+.ac-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.ac-cols__main, .ac-cols__side { display: grid; gap: 12px; align-content: start; min-width: 0; padding: 0; }
+.ac-cols__side { border-left: 1px dashed var(--mk-line); padding-left: 18px; }
+.ac-fallback-alert { margin: 0; }
 .ac-groups { display: grid; gap: 12px; }
 .ac-group { display: grid; gap: 10px; }
 .ac-group__fields {
@@ -1698,6 +1725,8 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   letter-spacing: 0.04em;
   color: var(--mk-faint);
 }
+/* 组内驻留说明（如降级触发条件）：比副标题再轻一档，常驻不抢读 */
+.ac-group__note { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 开关控件：统一走全站 mk-field--switch（原生 checkbox + label + accent-color 蓝），
    不再使用自定义 iOS 滑块（2026-09 与全站 admin 视觉对齐） */
 .mk-field--switch { align-content: start; }
@@ -1750,28 +1779,20 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 .ac-save__primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
 
-/* 侧栏占 208px，断点需按视口 1100px 触发（内容区 ≈ 892px），安全策略单列 */
+/* 侧栏占 208px，断点需按视口 1100px 触发（内容区 ≈ 892px）：满宽构图回落单列 */
 @media (max-width: 1100px) {
-  .ac-policy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ac-cols { grid-template-columns: 1fr; }
-  .ac-cols__main { padding: 0 16px; }
-  .ac-cols__side { border-left: none; padding: 0 16px; margin-top: 6px; }
+  .ac-conn-body, .ac-sec-body, .ac-cols { grid-template-columns: 1fr; }
+  .ac-cols__side { border-left: none; padding-left: 0; margin-top: 6px; }
 }
 @media (max-width: 800px) {
-  /* 两列/三列栅格在窄屏回落单列：此前漏掉这两条，390 下「服务地址 | API Key」
+  /* 三列栅格在窄屏回落单列：此前漏掉这条，390 下「服务地址 | API Key」
      仍强行并排，服务地址输入框被 180px 下限撑破、压掉 API Key（审计 P1 2.2） */
-  .ac-row--2-1,
   .ac-row--3 { grid-template-columns: 1fr; }
   .ac-group__fields { grid-template-columns: 1fr; }
   .ac-health__row { grid-template-columns: 10px minmax(0, 1fr) auto; }
   .ac-health__head { grid-template-columns: 10px minmax(0, 1fr) auto; }
   .ac-health__msg { display: none; }
   .ac-health__head span:nth-child(3) { display: none; }
-
-  .ac-policy { grid-template-columns: 1fr; }
-  .ac-policy__item { padding-left: 0; border-left: none; padding-top: 12px; border-top: 1px dashed var(--mk-line); }
-  .ac-policy__item:first-child { padding-top: 0; border-top: none; }
-  html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
@@ -1780,8 +1801,6 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   .mk-field__label { font-size: var(--mk-fs-micro); }
   .ac-model { font-size: var(--mk-fs-micro); padding: 5px 12px; }
 
-  .ac-policy { gap: 16px 0; padding: 6px 18px 18px; }
-  .ac-policy__label { font-size: var(--mk-fs-micro); }
   .ac-policy__desc { font-size: var(--mk-fs-micro); }
   .ac-policy__warn { font-size: var(--mk-fs-micro); }
   .mk-seg { border-radius: 12px; }
@@ -1809,8 +1828,6 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   .mk-field__label { font-size: var(--mk-fs-micro); }
   .ac-model { font-size: var(--mk-fs-micro); padding: 6px 14px; border-radius: var(--mk-radius-xl); }
 
-  .ac-policy { gap: 18px 0; padding: 8px 22px 22px; }
-  .ac-policy__label { font-size: var(--mk-fs-micro); }
   .ac-policy__desc { font-size: var(--mk-fs-micro); }
   .ac-policy__warn { font-size: var(--mk-fs-micro); }
   .mk-seg__item { font-size: var(--mk-fs-micro); padding: 9px 16px; }
@@ -1837,8 +1854,6 @@ html[data-theme='dark'] .ac-policy__item { border-color: #2d2d2f; }
   .mk-field__label { font-size: var(--mk-fs-body); }
   .ac-model { font-size: var(--mk-fs-body); padding: 7px 16px; }
 
-  .ac-policy { gap: 20px 0; padding: 10px 26px 26px; }
-  .ac-policy__label { font-size: var(--mk-fs-body); }
   .ac-policy__desc { font-size: var(--mk-fs-body); }
   .ac-policy__warn { font-size: var(--mk-fs-body); }
   .mk-seg__item { font-size: var(--mk-fs-body); padding: 11px 19px; }

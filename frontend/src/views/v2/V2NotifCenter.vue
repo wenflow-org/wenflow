@@ -2,6 +2,7 @@
   <div class="nc" ref="rootRef">
     <!-- 合并触发按钮：通知 + AI 任务，无边框圆形铃铛 -->
     <button
+      ref="bellRef"
       type="button"
       class="nc__bell"
       :class="{ 'nc__bell--open': open, 'nc__bell--busy': busyItems.length }"
@@ -22,7 +23,7 @@
 
     <!-- 合并下拉面板 -->
     <Transition name="nc-pop">
-      <div v-if="open" class="nc__panel" role="dialog" aria-label="通知与 AI 任务">
+      <div v-if="open" ref="panelRef" class="nc__panel" role="dialog" aria-modal="true" aria-label="通知与 AI 任务" tabindex="-1">
         <!-- Tab 切换 -->
         <div class="nc__tabs" role="tablist">
           <button
@@ -78,11 +79,18 @@
               <span>通知加载失败</span>
               <button type="button" class="nc__retry" @click="notifLoad(true)">重试</button>
             </div>
+            <!-- 空态给出口径 + 下一步引导（其余空态均可操作/可去别处）：
+                 说明通知何时产生，并给两个次级出口，避免只报「暂无」让人无处可去 -->
             <div v-else class="nc__empty">
               <span class="nc__empty-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6v-5c0-3.07-1.64-5.64-4.5-6.32V4a2.5 2.5 0 0 0-5 0v.68C6.63 5.36 5 7.93 5 11v5l-2 2v1h18v-1l-2-2z" opacity=".85"/></svg>
               </span>
-              <span>暂无通知</span>
+              <p>暂无通知</p>
+              <span>完成一次学习、路径有更新或系统有提醒时，会出现在这里。</span>
+              <span class="nc__empty-links">
+                <router-link to="/dashboard">去学习台</router-link>
+                <router-link to="/learning-paths">查看学习路径</router-link>
+              </span>
             </div>
           </template>
 
@@ -187,7 +195,7 @@
  * - 铃铛：无边框圆形（初始风格），通知未读红点数字、AI 任务运行中脉冲环
  * - 面板：Tab 切换「通知」/「AI 任务」，默认落在有内容的一栏
  */
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '@/utils/api';
 import { timeAgo } from '@/views/admin-redesign/live';
@@ -215,6 +223,8 @@ interface FeedEvent {
 const open = ref(false);
 const tab = ref<'notif' | 'tasks'>('notif');
 const rootRef = ref<HTMLElement | null>(null);
+const bellRef = ref<HTMLButtonElement | null>(null);
+const panelRef = ref<HTMLElement | null>(null);
 
 /* ---------- 通知 ---------- */
 const notifItems = ref<NotifItem[]>([]);
@@ -235,11 +245,14 @@ async function notifLoad(reset = true) {
   notifError.value = false;
   try {
     const res = await api.get('/notifications', { params: { page: notifPage.value, limit: 10 } });
-    const data = res.data?.data ?? {};
+    // 用户侧 api 画像 unwrapResponse:true（utils/api.ts:99）→ res 已是响应体
+    // {success, data:{items, pagination, unread}}，再取一层 .data 会永远落到空对象
+    //（铃铛不亮红点、列表恒空，2026-10-05 修复）。单跳取 res.data。
+    const data = res.data ?? {};
     const list = data.items || [];
     if (reset) notifItems.value = list;
     else notifItems.value = [...notifItems.value, ...list];
-    notifTotal.value = data.total ?? notifItems.value.length;
+    notifTotal.value = data.pagination?.total ?? notifItems.value.length;
     if (typeof data.unread === 'number') unreadCount.value = data.unread;
   } catch {
     notifError.value = true;
@@ -251,7 +264,7 @@ async function notifLoad(reset = true) {
 async function refreshUnread() {
   try {
     const res = await api.get('/notifications', { params: { page: 1, limit: 1 } });
-    const data = res.data?.data ?? {};
+    const data = res.data ?? {};
     if (typeof data.unread === 'number') unreadCount.value = data.unread;
   } catch { /* 静默：角标失败不干扰 AI 任务轮询 */ }
 }
@@ -409,19 +422,26 @@ async function pollOnce() {
 }
 
 /* ---------- 交互 ---------- */
+/** 打开时移焦进面板（读屏按 dialog 播报、Esc 立即可达）；关闭/Esc 归还铃铛，
+    不再把键盘用户留在被遮住或已卸载的节点上（2026-10-05 a11y 修复）。 */
+function closePanel() {
+  if (!open.value) return;
+  open.value = false;
+  void nextTick(() => bellRef.value?.focus({ preventScroll: true }));
+}
 function toggle() {
-  open.value = !open.value;
-  if (open.value) {
-    // 默认落有内容的一栏；都空则通知
-    tab.value = busyItems.value.length || feed.value.length ? 'tasks' : 'notif';
-    if (!notifItems.value.length) void notifLoad();
-  }
+  if (open.value) { closePanel(); return; }
+  open.value = true;
+  // 默认落有内容的一栏；都空则通知
+  tab.value = busyItems.value.length || feed.value.length ? 'tasks' : 'notif';
+  if (!notifItems.value.length) void notifLoad();
+  void nextTick(() => panelRef.value?.focus({ preventScroll: true }));
 }
 function onDocClick(e: MouseEvent) {
-  if (open.value && rootRef.value && !rootRef.value.contains(e.target as Node)) open.value = false;
+  if (open.value && rootRef.value && !rootRef.value.contains(e.target as Node)) closePanel();
 }
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') open.value = false;
+  if (e.key === 'Escape') closePanel();
 }
 onMounted(() => {
   void refresh();
@@ -744,6 +764,14 @@ onBeforeUnmount(() => {
 }
 .nc__empty p { margin: 0; font-weight: 700; color: var(--muted); }
 .nc__empty-icon { font-size: 22px; }
+/* 空态次级出口：纯文字链，热区用 padding 撑到触控带 */
+.nc__empty-links { display: flex; gap: 16px; margin-top: 2px; }
+.nc__empty-links a {
+  display: inline-flex; align-items: center; min-height: 36px;
+  padding: 0 2px;
+  font-size: 12.5px; font-weight: 700; color: var(--blue-deep); text-decoration: none;
+}
+.nc__empty-links a:hover { text-decoration: underline; }
 .nc__empty--error { color: var(--muted); }
 .nc__retry {
   font: inherit; font-size: 12px; font-weight: 700;

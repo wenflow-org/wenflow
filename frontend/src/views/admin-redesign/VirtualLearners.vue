@@ -1,7 +1,9 @@
 <template>
   <div class="mk-page mk-page--fill">
-    <!-- 页头（newui/admin pagehead）：页名 + 主操作（新建/批量新建/回收）上移；
-         状态条退位为纯状态摘要（人数/筛选/活动会话/截断提示） -->
+    <!-- 页头（newui/admin pagehead）：页名 + 主操作（新建/批量新建/回收）。
+         2026-10-04 页头状态条整体退役（教学会话页 c4ade91b 同款判例）：复读的「共 N 人」删
+         （卡头行数已有）；生命周期筛选迁卡头工具栏 chips（该计数唯一来源）；「活动会话」
+         并进完成率卡 hint（同一会话漏斗）；「已截断」警示并进卡头 meta（与行数同格就近）。 -->
     <MkPageHead title="虚拟学习者" sub="用合成画像批量压测教学闭环与 Skill 稳定性">
       <template #actions>
         <button
@@ -18,24 +20,6 @@
         <button type="button" class="mk-btn mk-btn--sm" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="openBatchCreate">批量新建</button>
       </template>
     </MkPageHead>
-    <div class="mk-status" :class="samples.length ? 'mk-status--ok' : 'mk-status--muted'">
-      <span class="mk-status__dot"></span>
-      <span class="mk-status__sep"></span>
-      <span class="mk-status__meta">共 {{ samples.length }} 人</span>
-      <button
-        v-for="o in statePillOptions"
-        :key="o.key"
-        type="button"
-        class="mk-status__meta-link"
-        :class="{ 'mk-status__meta-link--on': stateFilter === o.key }"
-        :title="o.hint ? `${o.label}（${o.hint}）· 点击筛选` : `点击筛选「${o.label}」虚拟学习者`"
-        @click="stateFilter = stateFilter === o.key ? '' : o.key"
-      >{{ o.label }} {{ o.count }}</button>
-      <span class="mk-status__meta" title="当前进行中 + 创建中会话数（含卡死）">活动会话 {{ partition.running + partition.created }}</span>
-      <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-status__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
-        已截断 · 共 {{ liveVirtualsTotal }} 人
-      </span>
-    </div>
 
     <!-- 运行指标带（2026-09-29 从列表卡头搬出；2026-09-29 二次归一）：
          完成率/失败率/并发/今日调用/速率本来是 MkStatStrip 自由指标条，与全站 KPI 语言
@@ -51,8 +35,8 @@
           label="完成率"
           :value="statsKpiValue(statsKpiPct(completionPct))"
           :tone="statsState === 'error' ? 'bad' : ''"
-          :hint="statsKpiHint(`已完成 ${runStats.completed} / 全部 ${runStats.totalSessions}`)"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : ''"
+          :hint="statsKpiHint(`已完成 ${runStats.completed} / 全部 ${runStats.totalSessions} · 活动会话 ${activeSessions}`)"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '活动会话 = 当前进行中 + 创建中会话数（含卡死），全库口径（原页头状态条读数，2026-10-04 迁入本卡）'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />
@@ -88,15 +72,36 @@
         />
       </section>
       <!-- VL RPM：写控件单独一行——与只读 KPI 分块（读/写不混排），也让 5 张卡在 1280 仍是一行
-           （同排时 RPM 抢走 114px，栅格降成 4 列、第 5 张孤零零换行） -->
-      <label class="vl-rpm" title="虚拟学习者专属出站 RPM 上限（0=不限）；与平台全局速率相互独立，不会挤占真实用户额度">
-        <span class="vl-rpm__label">VL RPM</span>
-        <input v-model.number="vlRpm.limit" type="number" min="0" max="100000" step="10" class="mk-filter__input vl-rpm__input" @focus="vlRpmFocused = true" @blur="vlRpmFocused = false" @input="vlRpmDirty = true" @change="saveVlRpm" />
+           （同排时 RPM 抢走 114px，栅格降成 4 列、第 5 张孤零零换行）。
+           EG4：改值不再失焦即静默 PUT（走查曾误清空致服务端 60→0）——改为显式「保存」钮 +
+           「未保存」脏态；回车等价保存。控件自带类 vl-rpm__input，不与筛选框混用其布局语义。 -->
+      <div class="vl-rpm">
+        <label class="vl-rpm__field">
+          <span class="vl-rpm__label">VL RPM</span>
+          <input
+            v-model.number="vlRpm.limit"
+            type="number"
+            min="0"
+            max="100000"
+            step="10"
+            class="mk-filter__input vl-rpm__input"
+            aria-label="虚拟学习者专属出站 RPM 上限"
+            @focus="vlRpmFocused = true"
+            @blur="vlRpmFocused = false"
+            @input="vlRpmDirty = true"
+            @keydown.enter.prevent="saveVlRpm"
+          />
+        </label>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="!vlRpmDirty || vlRpmSaving" @click="saveVlRpm">
+          {{ vlRpmSaving ? '保存中…' : '保存' }}
+        </button>
+        <span v-if="vlRpmDirty" class="vl-rpm__dirty">未保存</span>
         <span class="vl-rpm__hint">虚拟学习者专属出站上限，0 = 不限；与平台全局速率相互独立，不挤占真实用户额度</span>
-      </label>
+      </div>
     </div>
 
-    <!-- 学习者列表（「批量实验」已独立成页：/admin/batch-experiments） -->
+    <!-- 学习者列表（「批量实验」2026-10-04 下线：批量发起与运行监控统一收在本页，
+         资产输入归「学习者卡库」；旧 /admin/batch-experiments 深链重定向到本页） -->
     <!-- 正在运行：列出有活跃会话的虚拟学习者（折叠：默认前 8 个，展开看全部）；批量生成也在此显示 -->
     <VirtualLearnerRunningBar
       v-if="(runningSamples.length || pausedSamples.length || batchTask?.active) && isLive"
@@ -116,9 +121,27 @@
       <div class="mk-card__head">
         <div class="mk-filter">
           <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
+          <!-- 生命周期筛选（原页头状态条的 meta-link 迁入，2026-10-04）：这三个计数在本页
+               仅此一处；点选筛选 / 再点取消，胶囊形态对齐全站工具条 chips（同 TeachingSessions） -->
+          <button
+            v-for="o in statePillOptions"
+            :key="o.key"
+            type="button"
+            class="mk-pill"
+            :class="{ 'mk-pill--active': stateFilter === o.key }"
+            :aria-pressed="stateFilter === o.key"
+            :title="o.hint ? `${o.label}（${o.hint}）· 点击筛选` : `点击筛选「${o.label}」虚拟学习者`"
+            @click="stateFilter = stateFilter === o.key ? '' : o.key"
+          >{{ o.label }}<span class="mk-pill__count">{{ o.count }}</span></button>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
-        <span class="mk-card__meta" title="当前筛选后的行数 / 总数">{{ filtered.length }} / {{ samples.length }} 人</span>
+        <div class="mk-card__head-right">
+          <!-- CP1：筛选命中数单源住在分页器（「共 N 条」），卡头不再渲染「X / N 人」；
+               截断警示仍在此（数据完整性事实，与行数同格就近） -->
+          <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-card__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
+            已截断 · 共 {{ liveVirtualsTotal }} 人
+          </span>
+        </div>
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !samples.length" :cols="6" />
@@ -379,7 +402,8 @@ const samples = computed<Sample[]>(() =>
 const keyword = ref('')
 /** 状态过滤（轴 A 生命周期）：'' = 全部 / running / paused / queued / failed / created */
 const stateFilter = ref('')
-/** 状态过滤 chips 计数（与 samples 联动）；hint 进 title（P2 2026-10-02：口径随名披露） */
+/** 状态过滤 chips 计数（与 samples 联动）；hint 进 title（P2 2026-10-02：口径随名披露）。
+    2026-10-04 状态条退役后由卡头工具栏 chips 消费（该计数唯一来源） */
 const stateFilterOptions = computed(() => {
   const count = (pred: (s: Sample) => boolean) => samples.value.filter(pred).length
   return [
@@ -541,6 +565,8 @@ const vlRpmSavedLimit = ref(0)
    rpm/inFlight/queued 是只读展示字段，始终照常刷新 */
 const vlRpmFocused = ref(false)
 const vlRpmDirty = ref(false)
+/** 保存中位（EG4）：显式保存钮的忙碌态，防重复提交 */
+const vlRpmSaving = ref(false)
 async function loadVlRpm() {
   try {
     const res = await adminVirtualLearnersApi.getVirtualLabSettings()
@@ -557,8 +583,10 @@ async function loadVlRpm() {
   } catch { /* 保留上次值 */ }
 }
 async function saveVlRpm() {
+  if (vlRpmSaving.value || !vlRpmDirty.value) return
   const value = Math.max(0, Math.min(100000, Math.round(Number(vlRpm.limit) || 0)))
   vlRpm.limit = value
+  vlRpmSaving.value = true
   try {
     const res = await adminVirtualLearnersApi.updateVirtualLabSettings({ virtualLearnerRpmLimit: value })
     vlRpmDirty.value = false /* 已保存：服务端值与输入一致，恢复轮询回填 */
@@ -572,6 +600,8 @@ async function saveVlRpm() {
     toast.success(value > 0 ? `虚拟学习者 RPM 上限已设为 ${value}` : '虚拟学习者 RPM 已设为不限')
   } catch (e) {
     toast.error(errMsg(e) || '保存失败')
+  } finally {
+    vlRpmSaving.value = false
   }
 }
 const vlRpmPolling = useSafePolling(() => loadVlRpm(), {
@@ -590,7 +620,9 @@ const runningSamples = computed(() => samples.value.filter((s) => s.runningCount
 /** 已暂停自动驾驶的虚拟人：无进行中会话，但有暂停会话（autopilot=stopped） */
 const pausedSamples = computed(() => samples.value.filter((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0))
 
-/* ===== A2 生命周期分区：全量聚合口径（后端 sessionStats/staleCount），替代样本口径状态条 ===== */
+/* ===== A2 生命周期分区：全量聚合口径（后端 sessionStats/staleCount）。
+   2026-10-04 页头状态条退役后：stale 供页头「回收卡死」钮、活动会话（running+created）
+   供完成率卡 hint（同一会话漏斗，读数不消失只换位） ===== */
 const partition = computed(() => {
   const st = liveVirtualSessionStats.value
   return {
@@ -599,6 +631,8 @@ const partition = computed(() => {
     stale: liveVirtualStaleCount.value
   }
 })
+/** 活动会话（全量会话口径）= 当前进行中 + 创建中（含卡死）；原状态条读数，2026-10-04 迁入完成率卡 hint */
+const activeSessions = computed(() => partition.value.running + partition.value.created)
 
 /* ===== A5 运行统计：完成率/失败率/平均时长/卡死最长分钟（GET /virtual-learners/stats） ===== */
 const runStats = computed(() => liveVirtualRunStats.value)
@@ -650,7 +684,7 @@ function fmtDateTime(iso: string): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-/** 状态筛选（页头 meta-link）：进行中/已暂停/需关注；点激活项取消筛选 */
+/** 状态筛选（卡头工具栏 chips，2026-10-04 自页头状态条迁入）：进行中/已暂停/曾失败；点激活项取消筛选 */
 const statePillOptions = computed(() => stateFilterOptions.value.filter((o) => o.key))
 
 /** 并发文案：used/limit（满 / 排队） */
@@ -723,6 +757,14 @@ function openRunningSession(s: Sample) {
 @media (max-width: 1599px) {
   .mk-table th, .mk-table td { padding-inline: 12px; }
 }
+/* LY12（1280 实测）：10 列内容宽 1071 vs 容器 994，最右「操作」列被卡片裁掉 77px。
+   ≤1439 档再收紧：单元格内边距 12→10（×10 列 ≈40px）+「长期倾向」换行格
+   min/max 220/320 → 120/160（该列是唯一可换行的宽列，收窄仍保两行语义骨架）
+   → 整表塞回容器，1280 dx 归零。 */
+@media (max-width: 1439px) {
+  .mk-table th, .mk-table td { padding-inline: 10px; }
+  .mk-table .mk-cell-text--wrap { min-width: 120px; max-width: 160px; }
+}
 /* 窄屏（≤720）次要列已随 useIsNarrow 隐藏，仅剩 3 列可完整放下，不再强制最小宽 */
 @media (max-width: 720px) {
   .mk-table-scroll .mk-table { min-width: 0; }
@@ -761,6 +803,7 @@ function openRunningSession(s: Sample) {
   gap: 8px;
   min-width: 0;
 }
+.vl-rpm__field { display: inline-flex; align-items: center; gap: 8px; }
 .vl-rpm__label {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
@@ -769,6 +812,12 @@ function openRunningSession(s: Sample) {
   white-space: nowrap;
 }
 .vl-rpm__input { width: 84px; }
+.vl-rpm__dirty {
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  color: var(--mk-amber);
+  white-space: nowrap;
+}
 .vl-rpm__hint {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);

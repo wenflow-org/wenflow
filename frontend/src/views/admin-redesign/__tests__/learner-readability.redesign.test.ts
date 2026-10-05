@@ -214,14 +214,14 @@ describe('UserAccountPane 账号轴口径（人员详情合并后）', () => {
 
   it('统计条「学习状态」格已撤（P2 2026-10-04 全站评审）：趋势/疲劳/置信与同屏 hero pills 逐项复读', async () => {
     const w = await mountPane();
-    const cell = w.findAll('.statstrip__stat').find((s) => s.text().includes('学习状态'));
+    const cell = w.findAll('.mk-stat').find((s) => s.text().includes('学习状态'));
     expect(cell).toBeUndefined();
     w.unmount();
   });
 
   it('等级读数用单点词汇「L2 · 进阶」；最后登录无兜底显「—」不显「从未」', async () => {
     const w = await mountPane();
-    expect(w.find('.statstrip').text()).toContain('L2 · 进阶');
+    expect(w.find('.mk-stat-strip').text()).toContain('L2 · 进阶');
     const kv = w.find('.ud-kv').text();
     expect(kv).not.toContain('从未');
     w.unmount();

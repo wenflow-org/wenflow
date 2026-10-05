@@ -111,7 +111,8 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(w.find('.mk-card__head input.mk-filter__input').exists()).toBe(true);
     expect(w.find('.ds-toggle').exists()).toBe(false);
     expect(w.find('.mk-cols').exists()).toBe(true);
-    expect(w.text()).toContain('条（仅真实）');
+    // 卡头 meta 只留分页器没有的事实（口径开关；命中数/总数交分页器单源）
+    expect(w.text()).toContain('（仅真实口径）');
 
     // 表头：路径/用户/状态/进度/更新/操作——「主题」独立列已退役（P2-6 2026-10-04 全站评审：
     // 91% 行与路径列同文），subject≠title 时作路径列副行

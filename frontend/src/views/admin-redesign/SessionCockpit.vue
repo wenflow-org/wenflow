@@ -396,8 +396,8 @@
                     <span v-if="lessonWrapup.turnCount" class="cp-lesson-wrapup__score">{{ lessonWrapup.turnCount }} 轮对话</span>
                     <span v-if="lessonWrapup.avgUnderstanding !== null" class="cp-lesson-wrapup__score">理解 {{ Math.round(lessonWrapup.avgUnderstanding * 100) }}%</span>
                     <span v-if="lessonWrapup.avgEngagement !== null" class="cp-lesson-wrapup__score">参与 {{ Math.round(lessonWrapup.avgEngagement * 100) }}%</span>
-                    <span v-if="lessonWrapup.lss !== null" class="cp-lesson-wrapup__score cp-lesson-wrapup__score--primary">LSS {{ Math.round(lessonWrapup.lss * 100) }}%</span>
-                    <span v-if="lessonWrapup.ktl !== null" class="cp-lesson-wrapup__score cp-lesson-wrapup__score--primary">KTL {{ Math.round(lessonWrapup.ktl * 100) }}%</span>
+                    <span v-if="lessonWrapup.lss !== null" class="cp-lesson-wrapup__score cp-lesson-wrapup__score--primary">LSS {{ scoreText(lessonWrapup.lss) }}</span>
+                    <span v-if="lessonWrapup.ktl !== null" class="cp-lesson-wrapup__score cp-lesson-wrapup__score--primary">KTL {{ scoreText(lessonWrapup.ktl) }}</span>
                   </span>
                 </div>
                 <div class="cp-lesson-wrapup__body">
@@ -493,21 +493,37 @@
                 <span class="cp-wrapup-ms__title">{{ group.milestone }}</span>
                 <span class="cp-wrapup-ms__count">{{ group.doneCount }}/{{ group.lessons.length }}</span>
               </div>
-              <!-- 行即 button（原 div+click 键盘不可达）：仅可查看总结的课可聚焦，其余行 disabled 出 tab 序 -->
-              <button
-                v-for="l in group.lessons"
-                :key="l.taskId"
-                type="button"
-                class="cp-wrapup-lesson"
-                :class="{ 'is-done': l.state === 'done', 'is-active': l.state === 'active' }"
-                :disabled="!(l.state === 'done' && l.teachingSessionId)"
-                @click="viewLessonSummary(l)"
-              >
-                <span class="cp-wrapup-lesson__mark">{{ lessonMark(l.state) }}</span>
-                <span class="cp-wrapup-lesson__num">第{{ lessonNumber(l.taskId) }}课</span>
-                <span class="cp-wrapup-lesson__title">{{ l.title }}</span>
-                <span v-if="l.state === 'done' && l.teachingSessionId" class="cp-wrapup-lesson__action">查看总结 →</span>
-              </button>
+              <!-- 行即 button（原 div+click 键盘不可达）：仅可查看总结的课可聚焦，其余行 disabled 出 tab 序。
+                   真实会话（isRealMode）载荷无 teachingSessionHistory、且 teaching-detail 端点仅服务虚拟会话，
+                   单课总结结构性不可达——此分支渲染只读行，不给恒 disabled 的假入口（FN4）。 -->
+              <template v-if="!isRealMode">
+                <button
+                  v-for="l in group.lessons"
+                  :key="l.taskId"
+                  type="button"
+                  class="cp-wrapup-lesson"
+                  :class="{ 'is-done': l.state === 'done', 'is-active': l.state === 'active' }"
+                  :disabled="!(l.state === 'done' && l.teachingSessionId)"
+                  @click="viewLessonSummary(l)"
+                >
+                  <span class="cp-wrapup-lesson__mark">{{ lessonMark(l.state) }}</span>
+                  <span class="cp-wrapup-lesson__num">第{{ lessonNumber(l.taskId) }}课</span>
+                  <span class="cp-wrapup-lesson__title">{{ l.title }}</span>
+                  <span v-if="l.state === 'done' && l.teachingSessionId" class="cp-wrapup-lesson__action">查看总结 →</span>
+                </button>
+              </template>
+              <template v-else>
+                <div
+                  v-for="l in group.lessons"
+                  :key="l.taskId"
+                  class="cp-wrapup-lesson is-readonly"
+                  :class="{ 'is-done': l.state === 'done', 'is-active': l.state === 'active' }"
+                >
+                  <span class="cp-wrapup-lesson__mark">{{ lessonMark(l.state) }}</span>
+                  <span class="cp-wrapup-lesson__num">第{{ lessonNumber(l.taskId) }}课</span>
+                  <span class="cp-wrapup-lesson__title">{{ l.title }}</span>
+                </div>
+              </template>
             </div>
           </div>
 
@@ -668,18 +684,20 @@
           </div>
         </section>
 
-        <!-- 总结阶段卡：总结统计 -->
+        <!-- 总结阶段卡：总结状态（CP3：原「总结统计」正文复读左卡「N/M 课已完成 · 终局总结已生成」，
+             改为行动/状态指向——计数与生成状态由左「学习总结」卡单源承载） -->
         <section v-if="!isRealMode && !isBlackbox && activeTab === 'wrapup'" class="mk-card">
           <div class="mk-card__head">
-            <h4 class="mk-card__title">总结统计 <span class="cp-aside-dot" :class="hasWrapup ? 'is-ok' : 'is-muted'"></span></h4>
-            <span class="mk-card__meta">{{ hasWrapup ? '终局总结已生成' : '学习完成后生成' }}</span>
+            <h4 class="mk-card__title">总结状态 <span class="cp-aside-dot" :class="hasWrapup ? 'is-ok' : 'is-muted'"></span></h4>
+            <span class="mk-card__meta">{{ hasWrapup ? '详情见左侧「学习总结」' : '学习完成后生成' }}</span>
           </div>
           <div class="cp-aside-body">
             <div class="cp-aside-state" :class="hasWrapup ? 'cp-aside-state--ok' : 'cp-aside-state--empty'">
               <span class="cp-aside-state__icon" aria-hidden="true">{{ hasWrapup ? '✓' : '◌' }}</span>
-              <strong>{{ completedTaskCount }}/{{ learnLessons.length || '—' }} 课已完成</strong>
-              <p v-if="!hasWrapup && lessonTree.length">全部课程完成后，可在控制台生成终局总结（学习目标、评估、知识掌握）。</p>
-              <p v-else-if="!lessonTree.length">尚未开始学习，生成 Path 并启动 Learn 后这里会展示进度。</p>
+              <strong>{{ hasWrapup ? '总结已就绪' : '尚未生成总结' }}</strong>
+              <p v-if="hasWrapup">完整总结（学习目标 / 评估 / 知识掌握）见左侧「学习总结」卡。</p>
+              <p v-else-if="lessonTree.length">全部课程完成后，可在控制台生成终局总结（学习目标、评估、知识掌握）。</p>
+              <p v-else>尚未开始学习，生成 Path 并启动 Learn 后这里会展示进度。</p>
             </div>
           </div>
         </section>
@@ -907,6 +925,12 @@ const teachingDetailLoading = ref(false)
 /** 当前查看课时的 wrapup 总结数据 */
 const lessonWrapup = computed(() => buildLessonWrapup(teachingDetail.value))
 
+/** 单课 wrapup 的 LSS/KTL 读数：后端为 0–10 分制（learning-state.service / PredictionCalibrationService，
+    与 CompletionCard 的 toFixed(1) 同口径）。D6：原实现 ×100 当 0–1 比率，实测渲染成「600%」。 */
+function scoreText(v: number | null): string {
+  return v == null ? '—' : Number(v).toFixed(1)
+}
+
 /** P1#7 课时健康读数：真实模式且有总结时上提首屏（理解/参与/LSS/KTL/困惑点）。
     口径=当前查看课时单课读数（前端唯一可得），会话级聚合需后端，title 如实说明。 */
 const healthStrip = computed(() => {
@@ -915,8 +939,8 @@ const healthStrip = computed(() => {
   const parts: string[] = []
   if (w.avgUnderstanding != null) parts.push(`理解 ${Math.round(w.avgUnderstanding * 100)}%`)
   if (w.avgEngagement != null) parts.push(`参与 ${Math.round(w.avgEngagement * 100)}%`)
-  if (w.lss != null) parts.push(`LSS ${Math.round(w.lss * 100)}%`)
-  if (w.ktl != null) parts.push(`KTL ${Math.round(w.ktl * 100)}%`)
+  if (w.lss != null) parts.push(`LSS ${scoreText(w.lss)}`)
+  if (w.ktl != null) parts.push(`KTL ${scoreText(w.ktl)}`)
   if (w.confusionPoints?.length) parts.push(`困惑点 ${w.confusionPoints.length}`)
   if (!parts.length) return null
   return { text: parts.join(' · '), degraded: !!w.degraded }
@@ -1304,7 +1328,20 @@ const learningConversation = computed(() => {
   return Array.isArray(history) ? history : []
 })
 const learningTaskRuntime = computed(() => asRecord(learningResult.value.taskRuntime))
-const completedTaskCount = computed(() => numberValue(session.value?.completedTasks) || 0)
+/* 已完成课数：真实控制台载荷顶层无 completedTasks，计数由 path.completedTasks 提供
+   （session-console.ts resolvePathView 返回）；虚拟会话回落 path-status / stageResults.path。
+   D5：原先只读 session.completedTasks → 真实会话结构性恒 0（与同卡 done 课时行自相矛盾）。 */
+const completedTaskCount = computed(() => {
+  const direct = numberValue(session.value?.completedTasks)
+  if (direct !== null) return direct
+  const payloadPath = asRecord(session.value?.path)
+  const fromPayload = numberValue(payloadPath.completedTasks)
+  if (fromPayload !== null) return fromPayload
+  const fromStatus = numberValue(pathStatusPath.value.completedTasks)
+  if (fromStatus !== null) return fromStatus
+  const fromStage = numberValue(asRecord(stageResults.value.path).completedTasks)
+  return fromStage ?? 0
+})
 const hasCompletedTask = computed(() =>
   completedTaskCount.value > 0 || normalized(learningTaskRuntime.value.status) === 'completed'
 )
@@ -2625,7 +2662,7 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-log__raw summary { cursor: pointer; color: var(--mk-faint); font-weight: 600; user-select: none; }
 .cp-log__raw pre {
   margin: 4px 0 0; padding: 6px 8px; border-radius: 6px; background: var(--mk-code-bg);
-  color: var(--mk-code-fg); font: 10px/1.5 var(--mk-mono); white-space: pre-wrap;
+  color: var(--mk-code-fg); font: var(--mk-fs-micro)/1.5 var(--mk-mono); white-space: pre-wrap;
   word-break: break-all; max-height: 120px; overflow: auto;
 }
 /* 骨架形状走 MkSkeleton（shimmer/暗色/reduced-motion 均由 .mk-skeleton 统一提供） */
@@ -3016,6 +3053,10 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-wrapup-lesson.is-done:hover {
   background: var(--mk-green-bg);
 }
+/* 真实会话只读行（FN4）：无单课总结可下钻，不给手型与 hover 假反馈 */
+.cp-wrapup-lesson.is-readonly,
+.cp-wrapup-lesson.is-readonly.is-done { cursor: default; }
+.cp-wrapup-lesson.is-readonly.is-done:hover { background: transparent; }
 .cp-wrapup-lesson.is-active {
   color: var(--mk-blue);
   font-weight: 700;

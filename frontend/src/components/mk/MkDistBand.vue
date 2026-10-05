@@ -18,6 +18,7 @@
             :aria-pressed="activeKey === b.key"
             @click="emit('select', b.key)"
             @keydown.enter.prevent="emit('select', b.key)"
+            @keydown.space.prevent="emit('select', b.key)"
           ></span>
         </template>
       </div>

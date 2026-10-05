@@ -133,7 +133,8 @@ export function gatewayPairWindowMs(skillDurMs: number, gatewayDurMs: number): n
   return Math.max(GATEWAY_PAIR_WINDOW_MS, Math.min(skillDurMs, gatewayDurMs))
 }
 
-export function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
+export function mapLogsToSpans(items: RawLog[], opts: { preserveOrder?: boolean } = {}): TraceSpan[] {
+  const preserveOrder = opts.preserveOrder === true
   const byTrace = new Map<string, number>()
   for (const log of items) {
     const t = log.traceId || `log:${log.id}`
@@ -215,19 +216,24 @@ export function mapLogsToSpans(items: RawLog[]): TraceSpan[] {
     }
   }
 
-  const out: TraceSpan[] = []
+  const out: Array<{ span: TraceSpan; i: number }> = []
   for (const { l: log, i } of skillRows) {
     const gi = paired.get(i)
     const gatewayLog = gi !== undefined ? gatewayRows.find(({ i: x }) => x === gi)?.l : undefined
-    out.push(spanOf(log, i, gatewayLog))
+    out.push({ span: spanOf(log, i, gatewayLog), i })
   }
   for (const { l: log, i } of gatewayRows) {
-    if (!usedGateway.has(i)) out.push(spanOf(log, i))
+    if (!usedGateway.has(i)) out.push({ span: spanOf(log, i), i })
   }
   for (const { l: log, i } of otherRows) {
-    out.push(spanOf(log, i))
+    out.push({ span: spanOf(log, i), i })
   }
-  return out.sort((a, b) => (b.ts || 0) - (a.ts || 0))
+  /* preserveOrder：保留服务端返回的行序（服务端已显式排序时前端不得二次排序——
+     否则「耗时排序」会被 ts 降序覆盖、耗时列乱序）。默认仍按时间倒序（boot 样本/瀑布）。 */
+  const ordered = preserveOrder
+    ? [...out].sort((a, b) => a.i - b.i)
+    : [...out].sort((a, b) => (b.span.ts || 0) - (a.span.ts || 0))
+  return ordered.map((o) => o.span)
 }
 
 /**
@@ -536,6 +542,9 @@ export interface SpanQuery {
  * 避免筛选结果污染其他页面的统计与列表
  */
 export const liveLogsFiltered = ref<TraceSpan[]>([])
+/** 本页被合并掉的网关行数（D19）：列表把同一调用的网关行与 Skill 行合并为一行展示，
+    页码器据此注明「本页 N 条网关记录已并入」，避免与「共 N 条 / 30 条每页」口径打架 */
+export const liveLogsRowsMerged = ref(0)
 
 /** 执行日志服务端查询 loading（首屏骨架屏用；与全局 liveLoading 区分，后者覆盖全量 boot） */
 export const liveLogsLoading = ref(false)
@@ -590,13 +599,23 @@ export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void>
     const total = Number(rawTotal)
     if (Number.isFinite(total)) liveLogsTotal.value = total
     /* 传统分页：整页替换（下一页可达性由页码器按 page < totalPagesOf(total, pageSize) 判定）；
-       网关/skill 并列行做执行日志专用合并（瀑布/链路视图不受影响） */
-    liveLogsFiltered.value = mergeGatewayPairsForExecLogs(mapLogsToSpans(items))
+       网关/skill 并列行做执行日志专用合并（瀑布/链路视图不受影响）。
+       preserveOrder：执行日志页排序由服务端显式执行（calledAt/durationMs），前端不得再按
+       时间二次排序——否则点「耗时」排序后列表仍按时间降序、耗时列乱序（FN2）。 */
+    const rawSpans = mapLogsToSpans(items, { preserveOrder: true })
+    const mergedSpans = mergeGatewayPairsForExecLogs(rawSpans)
+    /* D19：合并行数必须含 mapLogsToSpans 的首轮配对（同 traceId 的 skill+gateway → 1 行），
+       只算 mergeGatewayPairsForExecLogs 二次合并时该阶段常为 0，note 恒空。
+       items.length 为服务端本页原始记录数，mergedSpans.length 为最终渲染行数，
+       差值即「被并入的网关记录数」。 */
+    liveLogsRowsMerged.value = Math.max(0, items.length - mergedSpans.length)
+    liveLogsFiltered.value = mergedSpans
     liveLogsPage.value = page
   } catch (error) {
     // P0 修复：失败必须可见（此前吞错导致首查失败显示「暂无日志」）
     liveLogsError.value = errMsg(error) || '执行日志加载失败'
     liveLogsFiltered.value = []
+    liveLogsRowsMerged.value = 0
     liveLogsTotal.value = 0
   } finally {
     logsQuerying = false

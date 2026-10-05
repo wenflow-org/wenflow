@@ -47,6 +47,21 @@ describe('MkStatStrip', () => {
     })
     expect(w.find('.mk-stat--bad').exists()).toBe(true)
   })
+
+  it('layout=grid：实体页头读数条走 list 语义（收敛四处私有 .statstrip）', () => {
+    const w = mount(MkStatStrip, {
+      props: {
+        layout: 'grid',
+        ariaLabel: '学习者概览',
+        items: [{ label: '路径进度', value: '42%' }, { label: '当前阶段', value: 'L2 · 进阶' }],
+      },
+    })
+    expect(w.classes()).toContain('mk-stat-strip--grid')
+    expect(w.attributes('role')).toBe('list')
+    expect(w.attributes('aria-label')).toBe('学习者概览')
+    expect(w.findAll('[role="listitem"]')).toHaveLength(2)
+    expect(w.text()).toContain('L2 · 进阶')
+  })
 })
 
 describe('MkEmptyState', () => {

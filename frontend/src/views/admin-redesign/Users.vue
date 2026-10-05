@@ -7,7 +7,7 @@
       <span class="mk-status__meta" :title="isLive ? (liveUsersTotal > users.length ? '后端共 ' + liveUsersTotal + ' 人，列表仅加载前 ' + users.length + ' 行' : '后端共 ' + liveUsersTotal + ' 人') : undefined">
         共 {{ users.length }} 人
       </span>
-      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅真实用户（不含模拟账号）；切换「含模拟」后显示全量并灰标模拟行">
+      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅真实用户（不含测试/虚拟账号）；切换「含测试」后显示全量并灰标测试/虚拟行">
         真实 {{ realUsers }}
       </span>
       <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" title="全量口径：含虚拟学习者与测试/审计账号（行内带标记）">测试/虚拟 {{ users.length - realUsers }}</span>
@@ -49,6 +49,7 @@
           <MkCols
             :col-defs="ulColDefs"
             storage-key="wf_users_hidden_cols"
+            :default-hidden="['check', 'created']"
             v-model:hidden="hiddenCols"
           />
         </div>
@@ -66,7 +67,7 @@
       <div v-else-if="filtered.length" class="mk-table-scroll">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
              列按内容自然分宽、余量摊给可收缩列；长邮箱/长昵称用 max-width 截断兜底 -->
-        <table class="mk-table">
+        <table class="mk-table mk-table--nowrap">
           <thead>
             <tr>
               <th v-if="isLive && showCol('check')" scope="col">
@@ -107,7 +108,7 @@
         <tbody>
           <!-- 行点击进用户详情；键盘等价：tabindex + Enter 触发（对齐 gc-row/oc-row 判例），
                行内控件已 stopPropagation，聚焦自身即可回车，不产生双份焦点停靠 -->
-          <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" tabindex="0" @click="openSubPage('user', u.id)" @keydown.enter.prevent="openSubPage('user', u.id)">
+          <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" tabindex="0" @click="openSubPage('user', u.id)" @keydown.enter="($event.target === $event.currentTarget) && openSubPage('user', u.id)">
             <td v-if="isLive && showCol('check')"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isTestAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
               <div class="ul-user">
@@ -417,8 +418,9 @@ watch(includeTest, (v) => {
 })
 
 /* D3 表格增强：列显隐（公共组件 MkCols 接管：菜单 + localStorage 持久化；列可隐藏，用户/操作列固定）。
-   默认列集对齐原型 .tbl（用户/邮箱/角色/路径会话/最后登录/操作）：「注册时间」降为可选列
-   （列菜单可恢复）；等级收进用户单元格 meta（原型 celluser 同款），不再单列。 */
+   默认列集对齐原型 .tbl（用户/邮箱/角色/路径会话/最后登录/操作）：「选择框」「注册时间」默认隐藏
+   （列菜单可恢复）。首访默认隐藏走 MkCols :default-hidden 单源（与 LearnerCenter/ExecLogs 同判例）；
+   页面不再私设 v-model 初值——否则 localStorage 已存在时会被双源钉死。 */
 const ulColDefs = [
   { key: 'check', label: '选择框', title: '批量操作选择框' },
   { key: 'email', label: '邮箱', title: '登录邮箱' },
@@ -427,7 +429,7 @@ const ulColDefs = [
   { key: 'created', label: '注册时间', title: '账号创建时间' },
   { key: 'lastlogin', label: '最后登录', title: '最近登录时间' },
 ] as const
-const hiddenCols = ref<Set<string>>(new Set(['check', 'created']))
+const hiddenCols = ref<Set<string>>(new Set())
 
 /* 移动端仅保留「名称 / 状态 / 操作」：隐藏勾选列与时间/邮箱等次要列，避免多列挤进横向滚动。
    中屏（≤1320，覆盖最常见的 1280 笔记本减侧栏后的内容区）再收起「邮箱 / 注册时间」——
@@ -801,8 +803,8 @@ function clearFilters() {
   display: block; max-width: 220px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* 原型 .tbl td：nowrap（长内容由上面的 max-width 兜底，不换行撑行高） */
-.mk-table td { white-space: nowrap; }
+/* 原型 .tbl td：nowrap（长内容由上面的 max-width 兜底，不换行撑行高）。
+   2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class）。 */
 
 @media (min-width: 2000px) {
   .ul-tags { gap: 6px; margin-top: 3px; }

@@ -13,7 +13,7 @@
     <!-- 后端学习者域窗口截断口径（2026-10-04 解锁 50→500，窗口内不提示；单源仍一处） -->
     <div v-if="liveLearners.length >= 500" class="mk-status mk-status--muted">
       <span class="mk-status__dot"></span>
-      <span class="mk-status__meta" title="学习者快照单次最多加载 500 条，搜索/筛选只在已加载范围内命中">仅加载前 500 位，搜索限已加载 500 人</span>
+      <span class="mk-status__meta" title="学习者快照接口单次窗口上限（live.ts liveLearners 域）">仅加载前 500 位，搜索限已加载 500 人</span>
     </div>
 
     <!-- 学习状态概览 KPI 带（2026-10-04 用户拍板：按同组形态拆出工作台卡到页级，
@@ -84,9 +84,8 @@
             :default-hidden="['risk']"
             v-model:hidden="lcHiddenCols"
           />
-          <!-- 后端学习者域窗口截断口径单源住在页头状态条（P2 2026-10-04 全站评审：
-               此处卡头同句与「N / N 人」撤——截断说明不在同屏念三遍） -->
-          <span v-if="filtered.length !== rows.length" class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 人</span>
+          <!-- 后端学习者域窗口截断口径单源住在页头状态条；筛选命中数单源住在分页器（「共 N 条」），
+               卡头不再渲染「N / N 人」——同屏与分页器复读（CP1，2026-10-04 全站评审口径） -->
         </div>
       </div>
 
@@ -107,7 +106,7 @@
       <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
            列按内容自然分宽；长昵称/长任务由 mk-cell-main 上限与下方 max-width 截断兜底 -->
       <div class="mk-table-scroll lc-tablewrap">
-      <table v-if="filtered.length" class="mk-table">
+      <table v-if="filtered.length" class="mk-table mk-table--nowrap">
         <thead>
           <tr>
             <th v-if="!lcHiddenCols.has('learner')">学习者</th>
@@ -121,9 +120,10 @@
           </tr>
         </thead>
         <tbody>
-          <!-- 行点击进学习者详情；键盘等价：tabindex + Enter 触发（对齐 gc-row/oc-row 判例），
-               行内控件已 stopPropagation，聚焦自身即可回车，不产生双份焦点停靠 -->
-          <tr v-for="r in paged" :key="r.id" class="lc-row" tabindex="0" @click="openDetail(r)" @keydown.enter.prevent="openDetail(r)">
+          <!-- 行点击进学习者详情；键盘等价：tabindex + Enter 触发（对齐 gc-row/oc-row 判例）。
+               行内控件的回车不劫持：仅当事件源就是行本身（target === currentTarget）才开详情，
+               聚焦「详情/干预/重算」等行内按钮时回车走按钮自身动作（EG1） -->
+          <tr v-for="r in paged" :key="r.id" class="lc-row" tabindex="0" @click="openDetail(r)" @keydown.enter="($event.target === $event.currentTarget) && openDetail(r)">
             <td v-if="!lcHiddenCols.has('learner')">
               <div class="lc-celluser">
                 <MkCellAvatar :name="r.name" :tone="r.isTestAccount ? 'test' : 'default'" />
@@ -183,8 +183,8 @@
 
         <MkEmptyState
           v-else
-          :title="pill === 'all' ? '暂无学习者快照' : '当前分组暂无学习者'"
-          :description="pill === 'all' ? '学习者产生学习行为后，快照将自动生成。' : '该风险分组暂无匹配的学习者。'"
+          :title="isFiltered ? '没有匹配的学习者' : '暂无学习者快照'"
+          :description="isFiltered ? '当前搜索 / 筛选条件没有命中任何学习者，可清除筛选或换个关键词。' : '学习者产生学习行为后，快照将自动生成。'"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
@@ -641,8 +641,8 @@ async function recomputeAll() {
 .lc-celluser .mk-cell-main { min-width: 0; flex: 1; }
 .lc-celluser .mk-cell-sub { max-width: 230px; }
 .lc-task .mk-cell-sub { max-width: 240px; }
-/* 原型 .tbl td：nowrap（表自动布局判例见 Users.vue；长内容由上方 max-width 截断兜底） */
-.mk-table td { white-space: nowrap; }
+/* 原型 .tbl td：nowrap（表自动布局判例见 Users.vue；长内容由上方 max-width 截断兜底）。
+   2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class）。 */
 /* （原页头计数锚点 .mk-status__meta-link 的暗色覆盖随死状态条删除；
    该暗色规则早已提升为 shared.css 全局，其余页面的计数锚点不受影响） */
 /* 趋势列（P0-1 信号可视化）：箭头 + 迷你条 + 文字（无历史序列时的三态可视化；

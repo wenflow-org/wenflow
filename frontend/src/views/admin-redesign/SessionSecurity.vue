@@ -91,9 +91,9 @@
             <colgroup>
               <col style="width:var(--mk-col-text)">
               <col style="width:var(--mk-col-id)">
-              <col style="width:var(--mk-col-datetime)">
-              <col style="width:var(--mk-col-datetime)">
-              <col style="width:var(--mk-col-datetime)">
+              <col class="ss-col--time">
+              <col class="ss-col--time">
+              <col class="ss-col--time">
               <col style="width:var(--mk-col-badge)">
               <col style="width:var(--mk-col-actions-wide)">
             </colgroup>
@@ -168,9 +168,9 @@
               <colgroup>
                 <col style="width:var(--mk-col-text)">
                 <col style="width:var(--mk-col-id)">
-                <col style="width:var(--mk-col-datetime)">
-                <col style="width:var(--mk-col-datetime)">
-                <col style="width:var(--mk-col-datetime)">
+                <col class="ss-col--time">
+                <col class="ss-col--time">
+                <col class="ss-col--time">
                 <col style="width:var(--mk-col-badge)">
                 <col style="width:var(--mk-col-actions-wide)">
               </colgroup>
@@ -249,6 +249,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { adminAuthApi, adminSessionsApi } from '@/api/adminApi'
 import { errMsg } from './live'
 import { useLoadMore } from './useLoadMore'
+import { useIsNarrow } from './useIsNarrow'
 import { ipText } from './statusText'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -511,10 +512,14 @@ async function revokeAll(g: SessionGroup) {
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
+/* LY6（2026-10-05 布局方案 §4）：≤1599 档三列 datetime 收 176→112，可见时刻改紧凑口径
+   MM-DD HH:mm（省年，会话有效期以天计）；完整时间仍在 title（fmtFull）与下线确认弹窗。 */
+const isMid = useIsNarrow(1600)
 function fmtDateTime(iso?: string | null): string {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
+  if (isMid.value) return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 function fmtFull(iso?: string | null): string {
@@ -610,6 +615,12 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .ss-time--soon { color: var(--mk-amber, #b45309); font-weight: 700; }
+/* LY6（2026-10-05 布局方案 §4）：三列时刻在 ≤1599 档收 176→112（MM-DD HH:mm 预算），
+   七列合计 968px，在 1280 内容区 992 内不再横向滚动；≥1600 恢复 token 原值。 */
+.ss-col--time { width: var(--mk-col-datetime); }
+@media (max-width: 1599px) {
+  .ss-col--time { width: 112px; }
+}
 .ss-current {
   display: inline-flex;
   align-items: center;

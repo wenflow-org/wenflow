@@ -18,17 +18,13 @@
       </div>
     </div>
     <!-- 状态条（原型 renderLearnerDetail 的 statstrip：hero 与 subtabs 之间的一行四格读数，
-         一张卡通栏分格，非 KPI 卡栅格——LearnerDetail 同款模板） -->
+         一张卡通栏分格，非 KPI 卡栅格——LearnerDetail 同款模板）。
+         2026-10-05（批次五 CM2）：本地 .statstrip 复刻退役，改用共享 MkStatStrip 的 grid 变体。 -->
     <section class="mk-card">
-      <div class="statstrip" role="list" aria-label="账号概览">
-        <div v-for="s in d.stats" :key="s.label" class="statstrip__stat" role="listitem" :title="s.hint">
-          <span class="statstrip__label">{{ s.label }}</span>
-          <span class="statstrip__value">{{ s.value }}</span>
-        </div>
-        <!-- P2（2026-10-04 全站评审）：原 P1#15「学习状态」格撤——趋势/疲劳/置信三事实同屏
-             已由 hero pills 逐项承载，格内是原样复读；学习轴读数也已随页级 statstrip
-             在本页签下不渲染（LearnerDetail）而归位各页签 -->
-      </div>
+      <MkStatStrip layout="grid" aria-label="账号概览" :items="accountStatItems" />
+      <!-- P2（2026-10-04 全站评审）：原 P1#15「学习状态」格撤——趋势/疲劳/置信三事实同屏
+           已由 hero pills 逐项承载，格内是原样复读；学习轴读数也已随页级 statstrip
+           在本页签下不渲染（LearnerDetail）而归位各页签 -->
     </section>
 
     <!-- 主卡（原型 renderLearnerDetail 主区结构）：subtabs 置卡顶、pane 在同一张卡内，
@@ -138,6 +134,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { subPage, openSubPage } from './store'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
+import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import { liveUsers, timeAgo, errMsg } from './live'
 import { adminUsersApi, adminTeachingSessionsApi, adminGoalConversationsApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { statusText } from './statusText'
@@ -619,6 +616,9 @@ async function loadDetail() {
 
 const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
+/* 账号概览读数 → 共享 MkStatStrip（grid 变体）所需条目（title 承接原 statstrip 格的 hint） */
+const accountStatItems = computed(() => (d.value?.stats || []).map((s) => ({ label: s.label, value: s.value, title: s.hint })))
+
 /* P1#15 的「学习状态」格已撤（P2 2026-10-04 全站评审）：趋势/疲劳/置信与同屏 hero pills
    逐项复读；学习者轴读数归位 LearnerDetail 页级 statstrip（仅学习轴页签渲染）。 */
 </script>
@@ -630,24 +630,8 @@ const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 /* 骨架版式（形状）走 MkSkeleton；本类只管外层堆叠 */
 .ud-skel { display: grid; gap: 14px; padding-top: 8px; }
 /* 页头身份区走 .mk-entity（shared.css）；本页只保留页头内的统计行 */
-/* 状态条（原型 statstrip：一张卡通栏分格，label 12 / 数值 18，右分隔线；
-   LearnerDetail 同款页本地复刻）。债务登记（2026-10-04 批次五）：完整替换成共享 MkStatStrip
-   是正解，但测试依赖 .statstrip__stat DOM 结构，暂不做组件替换（同 LearnerDetail）；
-   本轮数值档 22px→18px 对齐共享组件，长文本格改两行换行不再 nowrap 截断。 */
-.statstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-.statstrip__stat {
-  display: grid; gap: 6px; align-content: start;
-  padding: 12px 16px;
-  border-right: 1px solid var(--mk-line);
-}
-.statstrip__stat:last-child { border-right: 0; }
-.statstrip__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.statstrip__value {
-  font-size: 18px; font-weight: 700; letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums; color: var(--mk-ink);
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-  overflow: hidden;
-}
+/* 状态条已在 2026-10-05（批次五 CM2）收敛为共享 MkStatStrip 的 grid 变体：
+   原本地 .statstrip 复刻（18px 数值档/两行换行）整块退役，样式归组件。 */
 
 /* 主卡（原型详情页主区结构）：subtabs 在卡顶，pane 在卡内。
    pane 内边距 = 原型 .subpane（--sp-4 → 16px）；列表 pane 贴卡边（原型 sessions pane 表格同款） */

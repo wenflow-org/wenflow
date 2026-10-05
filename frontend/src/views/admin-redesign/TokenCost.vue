@@ -172,7 +172,18 @@
             <span role="columnheader">成本</span>
             <span role="columnheader">占比</span>
           </div>
-          <div v-for="r in skillRows" :key="r.key" class="tc-skilltable__row" role="row" :title="skillRowTitle(r)" @click="goSkillLogs(r)">
+          <!-- EG19：整行可点下钻，键盘等价 tabindex + Enter/Space（此前 div role=row 无 tabindex，键盘不可达） -->
+          <div
+            v-for="r in skillRows"
+            :key="r.key"
+            class="tc-skilltable__row"
+            role="row"
+            tabindex="0"
+            :title="skillRowTitle(r)"
+            @click="goSkillLogs(r)"
+            @keydown.enter.prevent="goSkillLogs(r)"
+            @keydown.space.prevent="goSkillLogs(r)"
+          >
             <span class="tc-st__name" role="cell"><strong :title="r.display || r.key">{{ r.display || r.key }}</strong></span>
             <span class="tc-st__num" role="cell">{{ r.calls }}</span>
             <span class="tc-st__num" role="cell">{{ fmtTokens(r.tokens) }}</span>
@@ -194,7 +205,9 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">用户用量排行</h3>
             <div class="mk-card__head-right">
-              <span class="mk-card__meta">Top {{ byUser.length }}<template v-if="!userAll && byUser.length > userLimit"> · 显示前 {{ userLimit }}</template></span>
+              <!-- D13：中小用户此前不可见——加按 用户ID/昵称/邮箱 的服务端搜索（不改动 summary/趋势） -->
+              <MkFilterSearch v-model="userQuery" placeholder="搜索用户 ID / 昵称 / 邮箱" />
+              <span class="mk-card__meta">{{ userQuery ? `匹配 ${byUser.length}` : `Top ${byUser.length}` }}<template v-if="!userAll && byUser.length > userLimit"> · 显示前 {{ userLimit }}</template></span>
               <button
                 v-if="byUser.length > userLimit"
                 type="button"
@@ -206,7 +219,7 @@
             </div>
           </div>
           <TcRankTable v-if="byUser.length" :items="userRows" variant="user" :total-tokens="totalTokens" />
-          <p v-else class="mk-card__note">暂无数据。</p>
+          <p v-else class="mk-card__note">{{ userQuery ? `没有匹配「${userQuery}」的用户` : '暂无数据。' }}</p>
         </section>
 
         <section class="mk-card tc-card">
@@ -224,7 +237,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { isLive, intent, tokenCostCacheKey, tokenCostFilters } from './store'
 import { errMsg, isPageCacheFresh, markPageFetched } from './live'
 import { adminTokenCostApi } from '@/api/adminApi'
@@ -233,6 +246,7 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import OvBars from './OvBars.vue'
 import TcRankTable, { type RankRow } from './TcRankTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { toast } from '@/utils/toast'
@@ -276,6 +290,45 @@ const skillAll = ref(false)
 /** 用户排行默认展示行数（与模型卡等高，避免右列过长失衡）；超出可一键展开全部 */
 const userLimit = 5
 const userAll = ref(false)
+
+/* D13：by-user 此前只拉 Top-20，中小用户（如 7 天 10 万 token 的测试账号）在任何视图不可见，
+   且无按用户搜索/下钻。现拉取上限抬到后端封顶 100，并加按 用户ID/昵称/邮箱 的服务端搜索
+   （后端 /by-user 增 q 过滤；列表仍是待复习/用量倒序切片展示）。 */
+const userFetchLimit = 100
+const userQuery = ref('')
+let userSeq = 0
+let userQueryTimer: ReturnType<typeof setTimeout> | null = null
+
+/** by-user 参数装配：q 仅在有关键词时带出（避免空串污染后端过滤） */
+function fetchByUser() {
+  const params: { days?: number; includeTest?: boolean; limit?: number; q?: string } = {
+    days: days.value,
+    includeTest: includeTest.value,
+    limit: userFetchLimit,
+  }
+  const q = userQuery.value.trim()
+  if (q) params.q = q
+  return adminTokenCostApi.getByUser(params)
+}
+/** 仅重拉用户排行（搜索变更时，不动 summary/趋势/明细），并丢弃过期响应 */
+async function loadByUser() {
+  const seq = ++userSeq
+  try {
+    const res = await fetchByUser()
+    if (seq !== userSeq) return
+    byUser.value = (res.data?.data?.items ?? []) as RankRow[]
+    userAll.value = false
+  } catch {
+    /* 排行属辅助信息：失败保留旧值，不弹错遮挡主表 */
+  }
+}
+watch(userQuery, () => {
+  if (userQueryTimer) clearTimeout(userQueryTimer)
+  userQueryTimer = setTimeout(() => { void loadByUser() }, 300)
+})
+onBeforeUnmount(() => {
+  if (userQueryTimer) clearTimeout(userQueryTimer)
+})
 
 const rangePills = [
   { days: 7, label: '近 7 天' },
@@ -494,7 +547,24 @@ async function loadCostSummary() {
   }
 }
 
+/* 已加载数据对应的窗口键（D4）：缓存命中只在「同一窗口」时短路。
+   切走再切回、或窗口 pill 切换时，旧窗口的 summary/趋势/明细/排行整组不可继续当作新窗口结论
+   （旧实现只判 isPageCacheFresh 就 return，导致同屏「窗口标签已变、数值还是上一窗口」双口径）。 */
+const loadedKey = ref<string | null>(null)
+/** 请求序号（EG3）：快速连续切窗时丢弃过期响应，避免后到的旧结果覆盖新窗口 */
+let loadSeq = 0
+
 watch([days, includeTest], () => {
+  const key = tokenCostCacheKey()
+  // 切窗：清旧窗口数据进骨架态（loading 由 load 置真）——保证 pills 高亮与卡片数值同一响应驱动
+  if (loadedKey.value && loadedKey.value !== key) {
+    summary.value = null
+    bySkill.value = []
+    byUser.value = []
+    byModel.value = []
+    loadedKey.value = null
+    userSeq += 1 // 作废在途的用户搜索响应，避免旧窗口结果覆盖新窗口
+  }
   void load()
   void loadCostSummary()
 }, { immediate: true })
@@ -502,8 +572,10 @@ watch([days, includeTest], () => {
 
 
 async function load(force = false) {
-  if (loading.value) return
-  if (!force && isPageCacheFresh(tokenCostCacheKey()) && summary.value) return
+  const key = tokenCostCacheKey()
+  // 仅当「同窗口 + 缓存新鲜 + 已有数据」才短路；否则一律重拉（避免旧窗口数据被读成新窗口）
+  if (!force && isPageCacheFresh(key) && summary.value && loadedKey.value === key) return
+  const seq = ++loadSeq
   loading.value = true
   loadFailed.value = false
   try {
@@ -511,19 +583,22 @@ async function load(force = false) {
     const [sumRes, skillRes, userRes, modelRes] = await Promise.all([
       adminTokenCostApi.getSummary(params),
       adminTokenCostApi.getBySkill(params),
-      adminTokenCostApi.getByUser({ ...params, limit: 20 }),
+      fetchByUser(),
       adminTokenCostApi.getByModel(params),
     ])
+    if (seq !== loadSeq) return // 窗口已再次切换：丢弃本批过期响应
     summary.value = sumRes.data?.data ?? sumRes.data ?? null
     bySkill.value = (skillRes.data?.data?.items ?? []) as SkillCostRow[]
     byUser.value = (userRes.data?.data?.items ?? []) as RankRow[]
     byModel.value = (modelRes.data?.data?.items ?? []) as RankRow[]
-    markPageFetched(tokenCostCacheKey())
+    loadedKey.value = key
+    markPageFetched(key)
   } catch (e) {
+    if (seq !== loadSeq) return
     loadFailed.value = true
     toast.error(`加载失败：${errMsg(e)}`)
   } finally {
-    loading.value = false
+    if (seq === loadSeq) loading.value = false
   }
 }
 
@@ -600,8 +675,11 @@ const trendCols = computed(() => trend.value.map((d) => ({
   /* align-items:start 撤（2026-10-04 全站评审 P3#25，判例 42107f8e）：并排排行卡底边差 114.5px
      （右卡悬空），撤后 grid stretch 等高，与总览 Row A 同判 */
 }
-@media (max-width: 1200px) {
-  .tc-ranks { grid-template-columns: 1fr; }
+/* LY2（2026-10-05）：TcRankTable 半宽侧表最小内容宽 594px，卡宽 <622px 时
+   .mk-card 的 overflow:clip 会静默裁掉最右「占比」列。回落档从 1200 抬到 1599——
+   双列只在「每卡 ≥622px 内容宽」时成立；1201–1599 夹缝带一律单列全宽（保留 gap 与等高说明）。 */
+@media (max-width: 1599px) {
+  .tc-ranks { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* 展开全部 / 收起（Skill 排行） */
@@ -664,6 +742,8 @@ const trendCols = computed(() => trend.value.map((d) => ({
 }
 .tc-skilltable__row:last-child { border-bottom: none; }
 .tc-skilltable__row:hover { background: var(--mk-table-row-hover-bg); }
+/* EG19：行可键盘聚焦，补可见焦点环（与 vl-cell--click:focus-visible 同判例） */
+.tc-skilltable__row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .tc-st__name { min-width: 0; }
 .tc-st__name strong {
   display: block;
