@@ -1,4 +1,4 @@
-import { parseCardDocument, validateCard, resolveCardKey, buildCardWallEntries, type LearnerCard } from '../card-import.service';
+import { parseCardDocument, validateCard, resolveCardKey, buildCardWallEntries, cleanDisplayName, type LearnerCard } from '../card-import.service';
 
 function emptyIndex() {
   return { byKey: new Map<string, string>(), refs: new Map<string, string[]>(), seenInDoc: new Set<string>() };
@@ -205,8 +205,38 @@ describe('card-import：卡墙索引映射（buildCardWallEntries，2026-10-05 �
     expect(legacy.cardKey).toBe('legacy-key-01');
   });
 
+  it('昵称链（2026-10-05）：seed.nickname > nameHint > users.name 清理版 > key；users.name 批次产物名取括号内人设短语', () => {
+    const rows = [
+      row({ profile: JSON.stringify({ personaSeed: { nickname: '想啃西瓜书的研究生', scenarioCard: { cardKey: 'k1' } } }) }),
+      row({ id: 'p2', userId: 'u2', profile: JSON.stringify({ personaSeed: { nameHint: '高一学生', scenarioCard: { cardKey: 'k2' } } }) }),
+      row({ id: 'p3', userId: 'u3', profile: JSON.stringify({ personaSeed: { scenarioCard: { cardKey: 'k3' } } }), users: { name: 'rw-wild6-03（24岁广告公司文案）', email: 'x@vl.local' } }),
+    ];
+    const [a, b, c] = buildCardWallEntries(rows);
+    expect(a.name).toBe('想啃西瓜书的研究生');
+    expect(b.name).toBe('高一学生');
+    expect(c.name).toBe('24岁广告公司文案');
+  });
+
+  it('卡面标签剔 cardKey 自身与 w\d+ 波次标签（demo 面貌不入批次代号）', () => {
+    const [e] = buildCardWallEntries([row({ tags: JSON.stringify(['k-1', 'w6', 'w5', '数学']) , profile: JSON.stringify({ personaSeed: { scenarioCard: { cardKey: 'k-1' } } }) })]);
+    expect(e.tags).toEqual(['数学']);
+  });
+
   it('预置卡 preset=true', () => {
     const [p] = buildCardWallEntries([row({ presetKey: 'retiree-photography' })]);
     expect(p.preset).toBe(true);
+  });
+});
+
+describe('card-import：cleanDisplayName（批次产物名清理）', () => {
+  it('ID（人设短语）取括号内短语', () => {
+    expect(cleanDisplayName('rw-wild6-03（24岁广告公司文案）')).toBe('24岁广告公司文案');
+    expect(cleanDisplayName('vl-x1(half-width)')).toBe('half-width');
+  });
+  it('正常名/空值原样', () => {
+    expect(cleanDisplayName('研一学生小陈')).toBe('研一学生小陈');
+    expect(cleanDisplayName('rw-plain-id')).toBe('rw-plain-id');
+    expect(cleanDisplayName(null)).toBeNull();
+    expect(cleanDisplayName('')).toBeNull();
   });
 });

@@ -196,6 +196,7 @@ export function findProfilesForCardWall() {
       learningGoal: true,
       knowledgeLevel: true,
       presetKey: true,
+      notes: true,
       createdAt: true,
       users: { select: { name: true, email: true } },
     },

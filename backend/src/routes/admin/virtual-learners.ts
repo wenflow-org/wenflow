@@ -80,6 +80,7 @@ import {
   importCards as importCardDocument,
   exportCards as exportCardLibrary,
   getCardWallIndex,
+  getCardDetail,
   attachMaterialsToLearner,
 } from '../../services/virtual-lab/card-import.service';
 import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
@@ -3950,6 +3951,24 @@ router.get('/cards/index', async (_req: Request, res) => {
   } catch (error) {
     logger.error('卡墙索引失败:', error);
     res.status(500).json({ success: false, error: (error as Error).message || '卡墙索引失败' });
+  }
+});
+
+/**
+ * 卡详情（2026-10-05 卡库改版二）：卡墙点卡抽屉的全字段数据源——
+ * 人设键值面 / 故事池（开场白+追问+预算）/ 自带资料 / 来源 / 账号 / 标签。
+ * GET /api/admin/virtual-learners/cards/:profileId/detail
+ */
+router.get('/cards/:profileId/detail', async (req: Request, res) => {
+  try {
+    const detail = await getCardDetail(String(req.params.profileId || ''));
+    if (!detail) {
+      return res.status(404).json({ success: false, error: '卡不存在' });
+    }
+    res.json({ success: true, data: detail });
+  } catch (error) {
+    logger.error('卡详情失败:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || '卡详情失败' });
   }
 });
 

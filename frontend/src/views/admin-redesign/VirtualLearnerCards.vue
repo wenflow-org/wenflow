@@ -52,10 +52,10 @@
           class="vlc-card"
           role="button"
           tabindex="0"
-          :title="`${cardName(c)}（${c.cardKey || '无 Key'}）· 点击到虚拟学习者`"
-          @click="goLearner(c)"
-          @keydown.enter.prevent="goLearner(c)"
-          @keydown.space.prevent="goLearner(c)"
+          :title="`${cardName(c)}（${c.cardKey || '无 Key'}）· 点击查看卡详情`"
+          @click="openDetail(c)"
+          @keydown.enter.prevent="openDetail(c)"
+          @keydown.space.prevent="openDetail(c)"
         >
           <header class="vlc-card__head">
             <span class="vlc-avatar" :class="`vlc-avatar--${vlAvatarIndexOf(cardName(c))}`" aria-hidden="true">{{ cardName(c).slice(0, 1) }}</span>
@@ -65,17 +65,108 @@
           <div class="vlc-card__key">{{ c.cardKey || '（无 cardKey）' }}</div>
           <p class="vlc-card__goal" :title="c.goal">{{ c.goal }}</p>
           <p v-if="c.opening" class="vlc-card__opening" :title="c.opening">{{ c.opening }}</p>
-          <div v-if="shownTags(c).length" class="vlc-card__tags">
-            <span v-for="t in shownTags(c)" :key="t" class="mk-badge mk-badge--muted">{{ t }}</span>
-            <span v-if="c.tags.length > shownTags(c).length" class="vlc-card__more" :title="c.tags.join(' · ')">+{{ c.tags.length - shownTags(c).length }}</span>
+          <div v-if="c.tags.length" class="vlc-card__tags">
+            <span v-for="t in c.tags.slice(0, 3)" :key="t" class="mk-badge mk-badge--muted">{{ t }}</span>
+            <span v-if="c.tags.length > 3" class="vlc-card__more" :title="c.tags.join(' · ')">+{{ c.tags.length - 3 }}</span>
           </div>
           <footer class="vlc-card__foot">
             <span class="vlc-card__level" :title="`知识水平：${c.knowledgeLevel}`">{{ levelText(c.knowledgeLevel) }}</span>
-            <span class="vlc-card__go">到虚拟学习者 →</span>
+            <span class="vlc-card__go">看详情 →</span>
           </footer>
         </article>
       </div>
     </section>
+
+    <!-- 卡详情抽屉（2026-10-05 改版二，用户「点一个啥也没有，我得看得到信息」）：
+         点卡 = 全字段可视（人设键值/故事池/预算/自带资料/来源/账号/标签），
+         「到虚拟学习者」动作保留（看运行态时用）。此前点卡裸跳 openSubPage 只改 URL——
+         virtual 子页宿主挂在虚拟学习者 scene，卡库 scene 下什么都不渲染 -->
+    <Teleport to="body">
+      <div v-if="detail" class="mk-drawer">
+        <div class="mk-drawer__mask" @click="detail = null"></div>
+        <aside class="mk-drawer__panel mk-drawer__panel--wide" role="dialog" aria-label="卡详情">
+          <header class="mk-drawer__head">
+            <div class="mk-drawer__heading">
+              <h3 class="mk-drawer__title">
+                <span class="vlc-avatar vlc-avatar--sm" :class="`vlc-avatar--${vlAvatarIndexOf(detail.name)}`" aria-hidden="true">{{ detail.name.slice(0, 1) }}</span>
+                {{ detail.name }}
+              </h3>
+              <span class="mk-drawer__sub mono">
+                {{ detail.cardKey || '（无 cardKey）' }}
+                <span class="mk-badge" :class="sourceBadge(detail)">{{ sourceText(detail) }}</span>
+              </span>
+            </div>
+            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="detail = null">✕</button>
+          </header>
+          <div class="mk-drawer__body vlc-dbody">
+            <!-- 概览事实栅格（mk-facts 家族：标签在上值在下） -->
+            <div class="mk-facts">
+              <div><span>学习目标</span><strong>{{ detail.goal || '—' }}</strong></div>
+              <div><span>知识水平</span><strong>{{ levelText(detail.knowledgeLevel) }}</strong></div>
+              <div><span>账号</span><strong class="mono">{{ detail.email || '—' }}</strong></div>
+              <div><span>来源</span><strong>
+                <template v-if="detail.sourceRef"><a :href="detail.sourceRef" target="_blank" rel="noopener" class="mk-link">{{ detail.sourceRef }}</a></template>
+                <template v-else>{{ sourceText(detail) }}</template>
+              </strong></div>
+            </div>
+
+            <!-- 人设 -->
+            <section class="vlc-dsec">
+              <h4 class="vlc-dsec__head">人设</h4>
+              <p v-if="detail.background" class="vlc-dsec__bg">{{ detail.background }}</p>
+              <div v-if="detail.personaFacts.length" class="mk-facts">
+                <div v-for="f in detail.personaFacts" :key="f.label">
+                  <span>{{ f.label }}</span><strong>{{ f.value }}</strong>
+                </div>
+              </div>
+              <p v-if="!detail.background && !detail.personaFacts.length" class="vlc-dsec__empty">这张卡没有人设字段（可能是批次运行产物，仅有账号与目标）。</p>
+            </section>
+
+            <!-- 故事池 -->
+            <section class="vlc-dsec">
+              <h4 class="vlc-dsec__head">故事池 <span class="vlc-dsec__count">{{ detail.stories.length }} 个</span></h4>
+              <article v-for="(s, i) in detail.stories" :key="i" class="vlc-story">
+                <div class="vlc-story__title">{{ s.title || `故事 ${i + 1}` }}</div>
+                <p v-if="s.opening" class="vlc-story__opening">「{{ s.opening }}」</p>
+                <ul v-if="s.followUps.length" class="vlc-story__hooks">
+                  <li v-for="(h, hi) in s.followUps" :key="hi">{{ h }}</li>
+                </ul>
+                <div class="vlc-story__meta">
+                  <span v-if="s.domain" class="mk-badge mk-badge--muted">{{ s.domain }}</span>
+                  <span v-if="s.intentType" class="mk-badge mk-badge--muted">意图 {{ s.intentType }}</span>
+                  <span v-if="s.schoolAnchor" class="mk-badge mk-badge--muted">{{ s.schoolAnchor }}</span>
+                  <template v-for="(v, k) in s.budget" :key="k">
+                    <span v-if="v != null && v !== ''" class="mk-badge mk-badge--muted">{{ budgetLabel(String(k)) }} {{ v }}</span>
+                  </template>
+                </div>
+              </article>
+              <p v-if="!detail.stories.length" class="vlc-dsec__empty">无故事池（该学习者可能是运行产物，无卡式故事）。</p>
+            </section>
+
+            <!-- 自带资料 -->
+            <section v-if="detail.materials.length" class="vlc-dsec">
+              <h4 class="vlc-dsec__head">自带资料 <span class="vlc-dsec__count">{{ detail.materials.length }} 份</span></h4>
+              <div class="vlc-dsec__mats">
+                <span v-for="m in detail.materials" :key="m.title" class="mk-badge mk-badge--muted" :title="`类型：${m.kind}`">{{ materialIcon(m.kind) }} {{ m.title }}</span>
+              </div>
+            </section>
+
+            <!-- 标签 + 备注 -->
+            <section v-if="detail.tags.length || detail.notes" class="vlc-dsec">
+              <h4 class="vlc-dsec__head">标签与备注</h4>
+              <div v-if="detail.tags.length" class="vlc-card__tags">
+                <span v-for="t in detail.tags" :key="t" class="mk-badge mk-badge--muted">{{ t }}</span>
+              </div>
+              <p v-if="detail.notes" class="vlc-dsec__bg">{{ detail.notes }}</p>
+            </section>
+          </div>
+          <footer class="mk-drawer__foot">
+            <span class="vlc-drawer-note" :title="detail.createdAt ? new Date(detail.createdAt).toLocaleString() : ''">卡 = 一个可直接运行的虚拟学习者</span>
+            <button type="button" class="mk-btn mk-btn--primary" @click="goLearner(detail.profileId)">到虚拟学习者 →</button>
+          </footer>
+        </aside>
+      </div>
+    </Teleport>
 
     <!-- 导入抽屉（mk-drawer 体系，wide 档：表单+逐卡报告需要宽度）。
          导入成功后刷新卡墙索引（新卡即刻上墙，按创建时间倒序在最前） -->
@@ -113,7 +204,7 @@
                 class="mk-field__textarea vlc-text"
                 rows="9"
                 spellcheck="false"
-                placeholder="cards:&#10;  - cardKey: w6-math-01&#10;    persona:&#10;      nameHint: 高一学生&#10;      background: …&#10;    story:&#10;      visibleOpening: …&#10;      followUps: [ … ]&#10;    source:&#10;      kind: web   # 或 synthetic&#10;      ref: https://…"
+                placeholder="cards:&#10;  - cardKey: gaozhong-math-01&#10;    nickname: 想补函数的高一学生&#10;    persona:&#10;      nameHint: 高一学生&#10;      background: …&#10;    story:&#10;      visibleOpening: …&#10;      followUps: [ … ]&#10;    source:&#10;      kind: web   # 或 synthetic&#10;      ref: https://…"
                 @input="resetReports"
               ></textarea>
               <div class="vlc-opts">
@@ -191,19 +282,21 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import { vlAvatarIndexOf } from '@/components/mk/vlAvatar'
-import { openSubPage } from './store'
 import { errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 
 /** 嵌入模式：作为 tab 渲染时隐藏页面外壳（当前为独立场景，保留以对齐同组页面） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+
+const router = useRouter()
 
 type CardFormat = 'yaml' | 'json'
 type CardStatus = 'ok' | 'error' | 'exists' | 'warn'
@@ -221,6 +314,36 @@ interface CardWallEntry {
   preset: boolean
   sourceKind: string | null
   email: string | null
+}
+
+interface CardDetail {
+  profileId: string
+  userId: string
+  cardKey: string | null
+  name: string
+  goal: string
+  knowledgeLevel: string
+  tags: string[]
+  preset: boolean
+  sourceKind: string | null
+  sourceRef: string | null
+  email: string | null
+  notes: string | null
+  createdAt: string
+  personaFacts: Array<{ label: string; value: string }>
+  nickname: string | null
+  nameHint: string | null
+  background: string | null
+  stories: Array<{
+    title: string | null
+    opening: string | null
+    followUps: string[]
+    domain: string | null
+    intentType: string | null
+    schoolAnchor: string | null
+    budget: Record<string, unknown>
+  }>
+  materials: Array<{ kind: string; title: string }>
 }
 
 interface CardIssueReport {
@@ -271,30 +394,66 @@ async function loadIndex() {
   }
 }
 
-/** 「从卡库选人到虚拟学习者」：卡=账号，点卡直达该学习者画像页 */
-function goLearner(c: CardWallEntry) {
-  openSubPage('virtual', c.userId)
+/** 「到虚拟学习者」：详情抽屉动作——跳虚拟学习者 scene 的画像二级页。
+    ①跨 scene 必须 router.push（openSubPage 只切内存 state，子页宿主在虚拟学习者 scene，
+    从卡库调只改 URL 不渲染——实测「点一个啥也没有」同源问题）；
+    ②id 传 profileId：画像详情接口 findProfileDetail 按 virtual_learner_profiles.id 查
+    （VL 列表行 id 同源），传 userId 会 404「画像加载失败」 */
+function goLearner(profileId: string) {
+  detail.value = null
+  void router.push({ path: '/admin/virtual-learners', query: { view: 'virtual', id: profileId } })
+}
+
+/* ===== 卡详情抽屉（2026-10-05 改版二，用户「点一个啥也没有，我得看得到信息」）===== */
+const detail = ref<CardDetail | null>(null)
+async function openDetail(c: CardWallEntry) {
+  // 先以墙上面片数据占位（秒开），详情接口回填全字段；失败保留基础字段不弹走
+  detail.value = {
+    ...c,
+    notes: null,
+    createdAt: '',
+    sourceRef: null,
+    personaFacts: [],
+    nickname: null,
+    nameHint: null,
+    background: null,
+    stories: [],
+    materials: [],
+  }
+  try {
+    const res = await adminVirtualLearnersApi.cardsDetail(c.profileId)
+    detail.value = (res.data?.data ?? res.data) as CardDetail
+  } catch (e) {
+    toast.error(errMsg(e) || '卡详情加载失败')
+  }
+}
+
+/** 预算字段中文标签 */
+function budgetLabel(k: string): string {
+  const map: Record<string, string> = { dailyMinutes: '每日', horizonDays: '周期(天)', expectedHours: '预期(时)', weeklyHours: '每周(时)' }
+  return map[k] || k
+}
+/** 资料类型字标（不用 emoji，色块+字标） */
+function materialIcon(kind: string): string {
+  const map: Record<string, string> = { book: '书', course: '课', syllabus: '纲', note: '记' }
+  return map[kind] || '记'
 }
 
 function cardName(c: CardWallEntry): string {
   return c.name || c.cardKey || c.email || '未命名卡'
 }
-/** tags[0] 是导入时写入的 cardKey 本身，展示时剔掉 */
-function shownTags(c: CardWallEntry): string[] {
-  return c.tags.filter((t) => t !== c.cardKey).slice(0, 3)
-}
-function sourceText(c: CardWallEntry): string {
+function sourceText(c: Pick<CardWallEntry, 'preset' | 'sourceKind'>): string {
   if (c.preset) return '预置'
   if (c.sourceKind === 'web') return 'web'
   if (c.sourceKind === 'synthetic') return '合成'
   return '自建'
 }
-function sourceBadge(c: CardWallEntry): string {
+function sourceBadge(c: Pick<CardWallEntry, 'preset' | 'sourceKind'>): string {
   if (c.preset) return 'mk-badge--info'
   if (c.sourceKind === 'web') return 'mk-badge--ok'
   return 'mk-badge--muted'
 }
-function sourceTitle(c: CardWallEntry): string {
+function sourceTitle(c: Pick<CardWallEntry, 'preset' | 'sourceKind'>): string {
   if (c.preset) return '仓库预置角色（部署时按 presetKey 幂等同步）'
   if (c.sourceKind === 'web') return '来源：网络采集卡'
   if (c.sourceKind === 'synthetic') return '来源：合成生成卡'
@@ -556,6 +715,25 @@ onMounted(loadIndex)
 }
 .vlc-card__level { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .vlc-card__go { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue); white-space: nowrap; }
+
+/* ===== 卡详情抽屉（2026-10-05 改版二）===== */
+.vlc-dbody { display: grid; gap: 18px; }
+.vlc-dsec { display: grid; gap: 8px; }
+.vlc-dsec__head { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
+.vlc-dsec__count { margin-left: 6px; font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-faint); }
+.vlc-dsec__bg { margin: 0; font-size: var(--mk-fs-body); line-height: 1.6; color: var(--mk-ink); white-space: pre-wrap; }
+.vlc-dsec__empty { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.vlc-dsec__mats { display: flex; flex-wrap: wrap; gap: 4px; }
+.vlc-story { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-lg); background: var(--mk-surface-2); }
+.vlc-story__title { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
+.vlc-story__opening { margin: 0; font-size: var(--mk-fs-body); line-height: 1.6; color: var(--mk-ink); }
+.vlc-story__hooks { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
+.vlc-story__hooks li { font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
+.vlc-story__meta { display: flex; flex-wrap: wrap; gap: 4px; }
+/* 抽屉标题内小头像（与卡面同色板，缩尺寸） */
+.vlc-avatar--sm { width: 22px; height: 22px; font-size: var(--mk-fs-micro); }
+.mk-drawer__sub .mk-badge { margin-left: 6px; }
+.vlc-dbody .mono, .mk-drawer__sub.mono { font-family: var(--mk-mono); }
 
 /* ===== 导入抽屉内的表单（原页内表单样式随迁）===== */
 .vlc-body {

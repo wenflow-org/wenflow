@@ -43,6 +43,13 @@ export interface LearnerCard {
   cardKey: string;
   version?: number;
   enabled?: boolean;
+  /**
+   * 昵称（2026-10-05 卡库 demo 化）：卡面主名——人设化短语（如「想啃西瓜书的研究生」），
+   * 与 cardKey（稳定 ID，可含批次代号）分离。展示链：nickname → story.title →
+   * persona.nameHint → users.name 清理版 → cardKey。导入写 personaSeed.nickname，
+   * 导出带回，YAML demo 面貌完整。
+   */
+  nickname?: string;
   account?: { displayName?: string; emailPrefix?: string };
   persona?: Record<string, unknown>;
   story?: {
@@ -185,7 +192,7 @@ function cardToProfile(card: LearnerCard): Record<string, unknown> {
     ...(materials.length ? { materials } : {}),
   };
   return normalizeProfileShape({
-    personaSeed: { ...persona, scenarioCard },
+    personaSeed: { ...(card.nickname ? { nickname: String(card.nickname).trim() } : {}), ...persona, scenarioCard },
     storyPool: [{
       id: 'story-1',
       title: story.title || domain,
@@ -199,6 +206,19 @@ function cardToProfile(card: LearnerCard): Record<string, unknown> {
     isSyntheticSource: card.source?.kind === 'synthetic',
     importedAt: new Date().toISOString(),
   });
+}
+
+/**
+ * 批次产物名清理（2026-10-05 卡库 demo 化）：本地跑批脚本建的 VL 名称形如
+ * 「rw-wild6-03（24岁广告公司文案）」——ID（人设短语）。取括号内人设短语作卡面名；
+ * 无括号的裸 ID / 正常名原样返回。
+ */
+export function cleanDisplayName(raw: string | null | undefined): string | null {
+  const s = String(raw || '').trim();
+  if (!s) return null;
+  const m = s.match(/^[^\s（(]{2,}[（(]([^）)]{2,})[）)]\s*$/);
+  if (m) return m[1].trim();
+  return s;
 }
 
 /* ---------- 自带资料（卡 → 用户资料库，复用现网上传资料管线） ---------- */
@@ -381,10 +401,12 @@ export interface CardWallEntry {
   profileId: string;
   userId: string;
   cardKey: string | null;
+  /** 卡面昵称（2026-10-05）：nickname → nameHint → users.name 清理版 → key → email */
   name: string;
   goal: string;
   opening: string | null;
   knowledgeLevel: string;
+  /** 展示标签（已剔 cardKey 自身与 w\d+ 波次标签；波次代号不入 demo 卡面） */
   tags: string[];
   preset: boolean;
   sourceKind: string | null;
@@ -411,6 +433,7 @@ export function buildCardWallEntries(
   return rows.map((r) => {
     const tagList = parseTags(r.tags);
     let cardKey: string | null = null;
+    let nickname: string | null = null;
     let nameHint: string | null = null;
     let opening: string | null = null;
     let sourceKind: string | null = null;
@@ -420,6 +443,7 @@ export function buildCardWallEntries(
       const sc = (seed.scenarioCard || {}) as Record<string, unknown>;
       // 复用查重同款回退链（profile.cardKey → scenarioCard.personaId → 合法形态 tags，跳过 w5/w6 波次标签）
       cardKey = resolveCardKey(p, tagList);
+      nickname = (seed.nickname as string) || null;
       nameHint = (seed.nameHint as string) || null;
       opening = (sc.opening as string) || null;
       sourceKind = (sc.sourceKind as string) || null;
@@ -432,11 +456,11 @@ export function buildCardWallEntries(
       profileId: r.id,
       userId: r.userId,
       cardKey: key,
-      name: nameHint || r.users?.name || key || email || '未命名卡',
+      name: nickname || nameHint || cleanDisplayName(r.users?.name) || key || email || '未命名卡',
       goal: r.learningGoal,
       opening,
       knowledgeLevel: r.knowledgeLevel,
-      tags: tagList,
+      tags: tagList.filter((t) => t !== key && !/^w\d+$/i.test(t)),
       preset: r.presetKey != null,
       sourceKind,
       email,
@@ -455,6 +479,139 @@ export async function getCardWallIndex() {
       builtin: cards.filter((c) => c.preset).length,
       custom: cards.filter((c) => !c.preset).length,
     },
+  };
+}
+
+export interface CardDetail {
+  profileId: string;
+  userId: string;
+  cardKey: string | null;
+  name: string;
+  goal: string;
+  knowledgeLevel: string;
+  tags: string[];
+  preset: boolean;
+  sourceKind: string | null;
+  sourceRef: string | null;
+  email: string | null;
+  notes: string | null;
+  createdAt: Date;
+  /** 人设（personaSeed 去 scenarioCard/nickname 后的键值面） */
+  personaFacts: Array<{ label: string; value: string }>;
+  nickname: string | null;
+  nameHint: string | null;
+  background: string | null;
+  stories: Array<{
+    title: string | null;
+    opening: string | null;
+    followUps: string[];
+    domain: string | null;
+    intentType: string | null;
+    schoolAnchor: string | null;
+    budget: Record<string, unknown>;
+  }>;
+  materials: Array<{ kind: string; title: string }>;
+}
+
+const PERSONA_FACT_LABELS: Record<string, string> = {
+  background: '背景',
+  availableTime: '可用时间',
+  cognitiveLoadTolerance: '认知负荷容忍',
+  learningStylePreference: '学习风格偏好',
+  learningStyle: '学习风格',
+  motivation: '动机',
+  motivationType: '动机类型',
+  motivationOrientation: '动机取向',
+  familyEnvironment: '家庭环境',
+  techComfort: '技术熟练度',
+  digitalLiteracy: '数字素养',
+  profession: '职业',
+  occupation: '职业',
+  education: '教育背景',
+  age: '年龄',
+  gender: '性别',
+  location: '所在地',
+  corePersona: '核心人设',
+  emotionalBaseline: '情绪基线',
+  helpSeekingPattern: '求助模式',
+  adversarialPattern: '抗辩模式',
+  selfAwarenessPattern: '自我认知模式',
+  planningFollowThrough: '计划执行力',
+  overloadReaction: '过载反应',
+  memoryRepairPattern: '记忆修复模式',
+  behavioralProfileSummary: '行为档案',
+  metacognitiveProfile: '元认知档案',
+  selfRegulationStyle: '自我调节风格',
+  priorAttempts: '既往尝试',
+  communicationStyle: '沟通风格',
+  resiliencePattern: '复原力模式',
+};
+
+/** 卡详情聚合（GET /cards/:profileId/detail 数据源）：卡墙点卡后的全字段可视 */
+export async function getCardDetail(profileId: string): Promise<CardDetail | null> {
+  const rows = await findProfilesForCardWall();
+  const row = rows.find((x) => x.id === profileId);
+  if (!row) return null;
+  const [entry] = buildCardWallEntries([row]);
+  const seed = (() => {
+    try {
+      const p = JSON.parse(row.profile || '{}') as Record<string, unknown>;
+      return (p.personaSeed || {}) as Record<string, unknown>;
+    } catch {
+      return {} as Record<string, unknown>;
+    }
+  })();
+  const sc = (seed.scenarioCard || {}) as Record<string, unknown>;
+  const pool = (() => {
+    try {
+      const p = JSON.parse(row.profile || '{}') as Record<string, unknown>;
+      return (p.storyPool as Array<Record<string, unknown>> | undefined) || [];
+    } catch {
+      return [] as Array<Record<string, unknown>>;
+    }
+  })();
+  // 人设键值面：已知字段给中文标签，未知字段保留原键；scenarioCard/nickname 单列不入键值面
+  const personaFacts: CardDetail['personaFacts'] = [];
+  for (const [k, v] of Object.entries(seed)) {
+    if (k === 'scenarioCard' || k === 'nickname' || k === 'nameHint' || v == null || typeof v === 'object') continue;
+    const value = String(v).trim();
+    if (!value) continue;
+    personaFacts.push({ label: PERSONA_FACT_LABELS[k] || k, value: value.length > 200 ? `${value.slice(0, 200)}…` : value });
+  }
+  const materials = ((sc.materials as Array<{ kind?: string; title?: string }> | undefined) || [])
+    .map((m) => ({ kind: String(m.kind || 'note'), title: String(m.title || '') }))
+    .filter((m) => m.title);
+  return {
+    profileId: row.id,
+    userId: row.userId,
+    cardKey: entry.cardKey,
+    name: entry.name,
+    goal: row.learningGoal,
+    knowledgeLevel: row.knowledgeLevel,
+    tags: entry.tags,
+    preset: entry.preset,
+    sourceKind: entry.sourceKind,
+    sourceRef: (sc.sourceRef as string) || null,
+    email: entry.email,
+    notes: row.notes ?? null,
+    createdAt: row.createdAt,
+    personaFacts,
+    nickname: (seed.nickname as string) || null,
+    nameHint: (seed.nameHint as string) || null,
+    background: (seed.background as string) || null,
+    stories: pool.map((s) => {
+      const gs = (s.goalSeed as Record<string, unknown> | undefined) || {};
+      return {
+        title: (s.title as string) || null,
+        opening: (s.visibleOpening as string) || null,
+        followUps: (s.behaviorHooks as string[]) || [],
+        domain: (gs.domain as string) || (sc.domain as string) || null,
+        intentType: (gs.intentType as string) || (sc.intentType as string) || null,
+        schoolAnchor: (gs.schoolAnchor as string) || (sc.schoolAnchor as string) || null,
+        budget: (gs.budget as Record<string, unknown>) || (sc.budget as Record<string, unknown>) || {},
+      };
+    }),
+    materials,
   };
 }
 
@@ -607,6 +764,8 @@ export async function exportCards(): Promise<{ format: 'yaml'; content: string; 
       cardKey,
       version: (p.cardVersion as number) || 1,
       knowledgeLevel: r.knowledgeLevel || undefined,
+      // 昵称回程（2026-10-05 卡库 demo 化）：personaSeed.nickname → 卡面主名
+      ...(seed.nickname ? { nickname: String(seed.nickname) } : {}),
       persona: { ...seed, scenarioCard: undefined } as Record<string, unknown>,
       story: {
         title: (pool[0]?.title as string) || (scenario.domain as string) || undefined,

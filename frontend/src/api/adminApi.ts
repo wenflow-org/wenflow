@@ -1630,6 +1630,11 @@ export const adminVirtualLearnersApi = {
   cardsIndex: async () => {
     return adminAxios.get('/admin/virtual-learners/cards/index');
   },
+
+  /** 卡详情（卡墙点卡抽屉）：人设/故事池/预算/资料/来源/账号全字段 */
+  cardsDetail: async (profileId: string) => {
+    return adminAxios.get(`/admin/virtual-learners/cards/${encodeURIComponent(profileId)}/detail`);
+  },
 };
 
 // ============================================================
