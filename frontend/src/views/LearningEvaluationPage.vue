@@ -475,15 +475,26 @@ const handleAdvisoryAction = async (action: string) => {
   const advisory = detail?.advisory;
   if (!detail || !advisory?.shouldSuggest) return;
 
+  // 轻埋点：保留/稍后/预览此前零服务端记录（审计无法区分「没处置」与「点了保留」）。
+  // 失败不影响提示与主流程，静默降级。
+  const reportAdvisoryResponse = (a: 'keep' | 'later' | 'preview') => {
+    const sid = sessionId.value;
+    if (!sid) return;
+    void aiTeachingAPI.recordAdvisoryResponse(sid, a).catch(() => { /* 埋点失败静默 */ });
+  };
+
   if (action === 'keep') {
     toast.success('已保留当前学习计划');
+    reportAdvisoryResponse('keep');
     return;
   }
   if (action === 'later') {
     toast.info('已保留建议，你可以稍后再决定');
+    reportAdvisoryResponse('later');
     return;
   }
   if (action === 'preview') {
+    reportAdvisoryResponse('preview');
     await askConfirm({
       title: advisory.ui.title || '调整建议',
       message: advisory.ui.body || advisory.rationale,

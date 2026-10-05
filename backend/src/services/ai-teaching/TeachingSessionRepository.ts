@@ -507,6 +507,35 @@ export class TeachingSessionRepository {
     return session;
   }
 
+  /**
+   * 调整建议处置埋点：记录学习者对「保留 / 稍后再看 / 预览」的轻动作。
+   * 只追加 advisory.learnerResponse，不改任何执行语义（真调整动作走 replan 链）。
+   * 审计口径：建议生成后是「没处置 / 保留 / 推迟 / 预览过 / 真执行」，此前只可见最后一项。
+   */
+  async recordAdvisoryResponse(
+    sessionId: string,
+    userId: string,
+    action: 'keep' | 'later' | 'preview'
+  ): Promise<{ status: 'ok' | 'not_found' | 'no_advisory'; advisory?: Record<string, any> }> {
+    const session = await this.getById(sessionId);
+    if (!session || session.userId !== userId) {
+      return { status: 'not_found' };
+    }
+    const advisory = session.advisory;
+    if (!advisory || advisory.shouldSuggest !== true) {
+      return { status: 'no_advisory' };
+    }
+    const merged = {
+      ...advisory,
+      learnerResponse: { action, at: new Date().toISOString() },
+    };
+    await prisma.teaching_sessions.update({
+      where: { id: sessionId },
+      data: { advisory: JSON.stringify(merged) },
+    });
+    return { status: 'ok', advisory: merged };
+  }
+
   async getActiveByTask(userId: string, taskId: string): Promise<TeachingSessionRecord | null> {
     const record = await prisma.teaching_sessions.findFirst({
       where: {

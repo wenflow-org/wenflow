@@ -17,6 +17,8 @@ const mockTeachingSessionRepository = {
   // 路由 2026-10-02 起在开课前先做「完课死锁自愈」探测（findStuckFinalizingSession）；
   // 默认 null = 无卡住会话，测试沿用正常开课路径。
   findStuckFinalizingSession: jest.fn(),
+  // #35 调整建议处置埋点（保留/稍后/预览）
+  recordAdvisoryResponse: jest.fn(),
 };
 
 const mockLearningService = {
@@ -640,5 +642,64 @@ describe('ai-teaching routes', () => {
       success: true,
       data: expect.objectContaining({ sessionId: 'session-new', mode: 'new' })
     }));
+  });
+
+  describe('调整建议处置埋点（#35：保留/稍后再看/预览）', () => {
+    it('keep/later/preview 透传落库并回写 learnerResponse', async () => {
+      mockTeachingSessionRepository.recordAdvisoryResponse.mockResolvedValue({
+        status: 'ok',
+        advisory: {
+          shouldSuggest: true,
+          recommendation: 'reinforce',
+          learnerResponse: { action: 'keep', at: '2026-10-05T00:00:00.000Z' },
+        },
+      });
+      const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
+      const res = createResponse();
+
+      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action: 'keep' } }, res);
+
+      expect(mockTeachingSessionRepository.recordAdvisoryResponse).toHaveBeenCalledWith('session-1', 'user-1', 'keep');
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({
+          sessionId: 'session-1',
+          action: 'keep',
+          advisory: expect.objectContaining({
+            learnerResponse: expect.objectContaining({ action: 'keep' }),
+          }),
+        }),
+      }));
+    });
+
+    it('非法动作（如真调整 confirm）→ 400 且不触达 repository', async () => {
+      const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
+      const res = createResponse();
+
+      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action: 'confirm' } }, res);
+
+      expect(mockTeachingSessionRepository.recordAdvisoryResponse).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    it('无待处置建议的会话 → 409 ADVISORY_NOT_FOUND', async () => {
+      mockTeachingSessionRepository.recordAdvisoryResponse.mockResolvedValue({ status: 'no_advisory' });
+      const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
+      const res = createResponse();
+
+      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action: 'later' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+    });
+
+    it('非本人会话 → 404', async () => {
+      mockTeachingSessionRepository.recordAdvisoryResponse.mockResolvedValue({ status: 'not_found' });
+      const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
+      const res = createResponse();
+
+      await handler({ user: { userId: 'user-2' }, params: { sessionId: 'session-1' }, body: { action: 'preview' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
   });
 });

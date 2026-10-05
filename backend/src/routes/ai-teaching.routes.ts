@@ -621,6 +621,52 @@ router.post('/sessions/:sessionId/resume', async (req: any, res) => {
 });
 
 /**
+ * 调整建议处置埋点（保留 / 稍后再看 / 预览）
+ * POST /api/ai-teaching/sessions/:sessionId/advisory-response
+ * 轻量记账：只写 advisory.learnerResponse{action,at}，不触发任何调整执行（真动作走 replan 链）。
+ */
+router.post('/sessions/:sessionId/advisory-response', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return sendUnauthorized(res);
+    }
+
+    const { sessionId } = req.params;
+    const action = String(req.body?.action || '');
+    if (!['keep', 'later', 'preview'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: '无效的建议处置动作', code: 'INVALID_ADVISORY_ACTION' },
+      });
+    }
+
+    const result = await teachingSessionRepository.recordAdvisoryResponse(
+      sessionId,
+      userId,
+      action as 'keep' | 'later' | 'preview'
+    );
+    if (result.status === 'not_found') {
+      return res.status(404).json({
+        success: false,
+        error: { message: '会话不存在', code: 'SESSION_NOT_FOUND' },
+      });
+    }
+    if (result.status === 'no_advisory') {
+      return res.status(409).json({
+        success: false,
+        error: { message: '当前会话没有待处置的调整建议', code: 'ADVISORY_NOT_FOUND' },
+      });
+    }
+
+    res.json({ success: true, data: { sessionId, action, advisory: result.advisory } });
+  } catch (error: any) {
+    logger.error('记录调整建议处置失败:', error);
+    return sendTeachingError(res, error, '记录调整建议处置失败');
+  }
+});
+
+/**
  * 重置授课会话
  * POST /api/ai-teaching/sessions/:sessionId/reset
  */

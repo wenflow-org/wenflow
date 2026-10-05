@@ -604,6 +604,14 @@ export const aiTeachingAPI = {
     return result.data || result;
   },
 
+  /** 调整建议处置埋点（保留/稍后再看/预览）：只记账不执行，见后端 advisory-response 端点 */
+  async recordAdvisoryResponse(
+    sessionId: string,
+    action: 'keep' | 'later' | 'preview'
+  ): Promise<void> {
+    await api.post(`/ai-teaching/sessions/${sessionId}/advisory-response`, { action });
+  },
+
   async pauseSession(sessionId: string, reason: 'manual' | 'pagehide' | 'hidden', revision: number): Promise<number> {
     const result = await api.post(`/ai-teaching/sessions/${sessionId}/pause`, { reason, revision });
     return result.data?.revision;
