@@ -303,91 +303,89 @@
             >{{ q.text }}</button>
           </div>
         </div>
+        <!-- 输入区：对话卡内的底条（2026-10-06 归位）——回形针资料入口内置输入框，
+             已传资料 chips 浮在输入框上方；输入框本身是拖放目标。
+             它是 .chat 的最后一个 flex 子项（flex:0 0 auto），宽度天然等于对话列：
+             与上方气泡同宽同左右缘，不再需要复刻 .work 栅格的 .composer__inner 壳。
+             v-if 与 main.work 同条件：初始态/未登录态各有自己的 .composer--entry
+             （两者共用 uploadRef，同时挂载会撞 ref；且会出双输入条） -->
+        <div
+          v-if="loggedIn && live.started"
+          class="composer"
+          @dragenter.prevent="onBoxDragEnter"
+          @dragover.prevent="onBoxDragOver"
+          @dragleave.prevent="onBoxDragLeave"
+          @drop.prevent="onBoxDrop"
+        >
+          <MaterialUploadArea ref="uploadRef" @change="materialCount = $event" />
+          <label class="visually-hidden" for="goal-chat-input">回答上面的问题，或补充你的基础、时间和限制</label>
+          <div class="composer__box" :class="{ 'composer__box--dropping': boxDropping }">
+            <button
+              type="button"
+              class="composer__attach"
+              aria-label="添加资料"
+              title="添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框"
+              @click="uploadRef?.openPicker()"
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16.5 6v11.5a4 4 0 0 1-8 0V6a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v10.5a2.5 2.5 0 0 0 5 0V6a4 4 0 0 0-8 0v11.5a5.5 5.5 0 0 0 11 0V6z"/></svg>
+              <span v-if="materialCount" class="composer__attach-count">{{ materialCount }}</span>
+            </button>
+            <textarea
+              id="goal-chat-input"
+              ref="chatInputEl"
+              v-model="input"
+              class="composer__textarea"
+              rows="1"
+              :maxlength="INPUT_MAX"
+              :placeholder="chatPlaceholder"
+              @keydown.enter.exact.prevent="doSend"
+            ></textarea>
+            <span v-if="boxDropping" class="composer__drop-hint">松开上传到资料</span>
+            <!-- 发送/停止 同位置切换：生成中变停止（主流聊天交互，位置固定不占额外空间） -->
+            <button
+              v-if="!live.sending"
+              type="button"
+              class="composer__send"
+              :class="{ 'composer__send--off': !input.trim() }"
+              :disabled="!input.trim()"
+              aria-label="发送"
+              @click="doSend"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
+            </button>
+            <button
+              v-else
+              type="button"
+              class="composer__send composer__send--stop"
+              aria-label="停止生成"
+              @click="live.stop()"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+            </button>
+          </div>
+          <!-- 底部提示一条基线（2026-09-27 用户反馈）：快捷键+计数+AI 声明归右带；
+               左侧不再放平台说明（那句话已回左栏信息面板底部） -->
+          <div class="composer__hint">
+            <!-- P1：≤1100 移动端唯一的「规划新目标」入口——底部 tab「目标规划」同路由点击
+                 不派发 v2:new-goal（V2Nav 只在顶部 CTA 挂了该逻辑，≤900 已隐藏），
+                 本页 .chat__clear 移动端又隐藏，会话态会被锁死在旧对话。
+                 走 onNewGoalEvent：回初始态、本地保留「继续上次的规划」，不删记录。 -->
+            <button
+              type="button"
+              class="composer__new-goal"
+              title="规划新目标（当前对话保留在本机，可恢复）"
+              @click="onNewGoalEvent"
+            >新目标</button>
+            <span class="composer__hint-right">
+              <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
+              <span class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
+              <AiContentNote />
+            </span>
+          </div>
+        </div>
       </section>
     </main>
 
-    <!-- 输入区：页级通栏底条（原型 .wf-composer）——回形针资料入口内置输入框，
-         已传资料 chips 浮在输入框上方；输入框本身是拖放目标。
-         .composer__inner 复刻 .work 的栅格，把内容条放进右列（对话列）：
-         底条背景/上边框仍通栏，但输入框与上方气泡对齐成同一条竖线。
-         v-if 与 main.work 同条件：初始态/未登录态各有自己的 .composer--entry
-         （两者共用 uploadRef，同时挂载会撞 ref；且会出双输入条） -->
-    <div
-      v-if="loggedIn && live.started"
-      class="composer composer--page"
-      @dragenter.prevent="onBoxDragEnter"
-      @dragover.prevent="onBoxDragOver"
-      @dragleave.prevent="onBoxDragLeave"
-      @drop.prevent="onBoxDrop"
-    >
-      <div class="composer__inner">
-      <MaterialUploadArea ref="uploadRef" @change="materialCount = $event" />
-      <label class="visually-hidden" for="goal-chat-input">回答上面的问题，或补充你的基础、时间和限制</label>
-      <div class="composer__box" :class="{ 'composer__box--dropping': boxDropping }">
-        <button
-          type="button"
-          class="composer__attach"
-          aria-label="添加资料"
-          title="添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框"
-          @click="uploadRef?.openPicker()"
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16.5 6v11.5a4 4 0 0 1-8 0V6a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v10.5a2.5 2.5 0 0 0 5 0V6a4 4 0 0 0-8 0v11.5a5.5 5.5 0 0 0 11 0V6z"/></svg>
-          <span v-if="materialCount" class="composer__attach-count">{{ materialCount }}</span>
-        </button>
-        <textarea
-          id="goal-chat-input"
-          ref="chatInputEl"
-          v-model="input"
-          class="composer__textarea"
-          rows="1"
-          :maxlength="INPUT_MAX"
-          :placeholder="chatPlaceholder"
-          @keydown.enter.exact.prevent="doSend"
-        ></textarea>
-        <span v-if="boxDropping" class="composer__drop-hint">松开上传到资料</span>
-        <!-- 发送/停止 同位置切换：生成中变停止（主流聊天交互，位置固定不占额外空间） -->
-        <button
-          v-if="!live.sending"
-          type="button"
-          class="composer__send"
-          :class="{ 'composer__send--off': !input.trim() }"
-          :disabled="!input.trim()"
-          aria-label="发送"
-          @click="doSend"
-        >
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
-        </button>
-        <button
-          v-else
-          type="button"
-          class="composer__send composer__send--stop"
-          aria-label="停止生成"
-          @click="live.stop()"
-        >
-          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
-        </button>
-      </div>
-      <!-- 底部提示一条基线（2026-09-27 用户反馈）：快捷键+计数+AI 声明归右带；
-           左侧不再放平台说明（那句话已回左栏信息面板底部） -->
-      <div class="composer__hint">
-        <!-- P1：≤1100 移动端唯一的「规划新目标」入口——底部 tab「目标规划」同路由点击
-             不派发 v2:new-goal（V2Nav 只在顶部 CTA 挂了该逻辑，≤900 已隐藏），
-             本页 .chat__clear 移动端又隐藏，会话态会被锁死在旧对话。
-             走 onNewGoalEvent：回初始态、本地保留「继续上次的规划」，不删记录。 -->
-        <button
-          type="button"
-          class="composer__new-goal"
-          title="规划新目标（当前对话保留在本机，可恢复）"
-          @click="onNewGoalEvent"
-        >新目标</button>
-        <span class="composer__hint-right">
-          <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
-          <span class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
-          <AiContentNote />
-        </span>
-      </div>
-      </div><!-- /.composer__inner -->
-    </div>
 
     <!-- 方案确认浮层：dialog 语义 + 打开时移焦/关闭归还（onProposalKey/watch showProposal） -->
     <div
@@ -1920,54 +1918,23 @@ function shuffleScenes() {
   to { opacity: 1; transform: none; }
 }
 
-/* ---------- 页级通栏底条 composer（原型 .wf-composer） ---------- */
-.composer--page {
-  flex: none;
-  display: grid; gap: 6px;
-  /* 左右内边距交给 .composer__inner（0 20px）——若这里再留 16px，
-     内容左边缘会比 .work 多出 16px，气泡与输入框就对不成同一条竖线。
-     自带 safe-area：无底部导航的设备上输入条不压 home 指示条
-     （移动端媒体查询里会改掉，因为那档有底部 tab 栏接管该区域） */
-  padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px));
-  background: var(--canvas);
+/* ---------- 输入区：对话卡内的底条（2026-10-06 归位） ----------
+   它是 .chat（对话卡）的最后一个 flex 子项：宽度 = 对话列，与上方气泡同列同左右缘。
+   历史教训：2026-10-02 曾把输入区拆成「页级通栏底条 + 复刻 .work 栅格的 .composer__inner」，
+   靠 284px 空列把内容凑到对话列下面——一旦 .work 在宽屏放宽（≥1680 的 1180 档）或 zoom
+   档生效，两套宽度立刻错开：1080P 实测气泡 821px、输入框 583px，输入区与对话割裂。
+   宽度只有一处来源（= 对话列）才不会漂。 */
+.chat > .composer {
+  flex: 0 0 auto;
+  /* 左右 16 = .chat__scroll 的左右内边距：输入框左右缘与上方气泡严格同一条竖线
+     （宽屏两者都吃 760 上限，窄屏两者都等于「对话列 − 32」）。 */
+  padding: 12px 16px;
   border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  /* 自带 safe-area：无底部导航的设备上输入条不压 home 指示条
+     （移动端媒体查询里会改掉，因为那档有底部 tab 栏接管该区域） */
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
-/* 内容栅格复刻 .work（同 max-width / 同左右内边距 / 同两栏 / 同 gap），
-   把整条输入内容放进**右列**——即上方对话列的正下方。
-   原先内容用 justify-items:center 居中于整视口（中心 640），而对话列中心在 790
-   （.work 880 栅格的右列），两者错开 150px，输入框左半截压在「目标信息」面板下方。
-   底条的背景与上边框仍通栏（视觉上是页脚），只有内容收进右列。 */
-.composer__inner {
-  width: 100%;
-  max-width: 880px;
-  margin: 0 auto;
-  padding: 0 20px;
-  box-sizing: border-box;
-  display: grid;
-  grid-template-columns: 284px minmax(0, 1fr);
-  /* 分轴 gap：列间距 16 复刻 .work（与上方两栏对齐），行间距 6 是输入框↔资料 chips↔
-     提示行原本的行距。整块用 gap:16 会把竖向间距一起撑成 16，比改前高 10px×2。 */
-  column-gap: 16px;
-  row-gap: 6px;
-  align-items: center;
-}
-/* 资料入口/hint 的容器列（0 宽占位，内容不参与左列视觉） */
-.composer__inner > .mat-upload,
-.composer__inner > .composer__hint { grid-column: 2; }
-.composer--page .composer__box {
-  grid-column: 2;
-  width: 100%;
-  border-radius: 16px;
-}
-/* 左侧空列只作对齐占位，不拦截指针（底条背景由 .composer--page 通栏铺满） */
-.composer__inner::before {
-  content: '';
-  grid-column: 1;
-  grid-row: 1 / span 3;
-}
-/* hint：右对齐一行，「Enter 发送」快捷键提示 ≥1024 才显示（原型 .wf-composer__hint） */
-.composer--page .composer__hint { width: 100%; }
-
 /* ---------- 方案确认浮层 ---------- */
 /* 页面级模态（原型 .wf-modal / .wf-dialog）：fixed 铺满视口，
    遮罩盖住页级 composer 与导航（原先 absolute 只盖住 .chat 一块） */
@@ -2308,23 +2275,10 @@ function shuffleScenes() {
   /* 移动端 hint 行整体脱离文档流（0 高，原占 17px + gap 7px），内容挂到输入框与底部导航
      之间那道缝里：左「新目标」入口、中计数、右 AI 生成声明。触屏没有键盘快捷键提示，隐藏之。 */
   .composer { position: relative; }
-  /* .composer--page 基础档自带 env(safe-area-inset-bottom)：那是给「无底部导航」的设备用的。
-     本档 .v2-page 已有 padding-bottom:72px 让位底部 tab 栏，再叠 safe-area 会在
-     composer 与 tab 栏之间留出一条空缝 —— 移动端覆写为纯 10px 上下。
-     下内边距 46px 是给 0 高 hint 行里的「新目标」按钮（36px）预留的可点空间，
-     避免它溢进底部导航被遮挡（LY10 修复）。 */
-  .composer--page { padding: 10px 0 46px; }
-  /* 移动端不加左列占位：面板已改绝对定位的零占位锚点，输入条独占整行
-     （基础档的 284px 空列会把输入框整个推到右边、只占半屏） */
-  .composer__inner {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 0 16px;
-    gap: 6px;
-  }
-  .composer__inner::before { display: none; }
-  .composer__inner > .mat-upload,
-  .composer__inner > .composer__hint,
-  .composer--page .composer__box { grid-column: 1; }
+  /* 本档 .v2-page 已有 padding-bottom:72px 让位底部 tab 栏，不再叠 safe-area
+     （会留出空缝）；下内边距 46px 是给 0 高 hint 行里的「新目标」按钮（36px）预留的
+     可点空间，避免它溢进底部导航被遮挡（LY10 修复）。 */
+  .chat > .composer { padding: 10px 16px 46px; }
   .composer__hint {
     position: absolute;
     left: 0; right: 0; bottom: 6px;
@@ -2464,5 +2418,9 @@ function shuffleScenes() {
 @media (min-width: 1101px) {
   .chat__scroll > * { max-width: 760px; width: 100%; margin-left: auto; margin-right: auto; }
   .composer__box { max-width: 760px; width: 100%; margin-left: auto; margin-right: auto; }
+  /* 提示行跟输入框同一列：输入框收在 760 而 hint 仍通栏时，hint 右侧内容（计数/AI 声明）
+     会比输入框右缘多出 (列宽−760)/2 —— 1920 实测 26px，看起来像多伸出来一截。
+     width:100% + 同款左右 auto 让两端都与输入框对齐（与课堂页 .composer__hint 同法）。 */
+  .composer__hint { max-width: 760px; width: 100%; margin-left: auto; margin-right: auto; }
 }
 </style>

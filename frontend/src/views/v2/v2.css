@@ -594,9 +594,13 @@ html, body {
      组件内 ≥1500 档自管 1180 */
   .v2-page.goal .work { max-width: 1180px; }
   .v2-page.goal .entry { max-width: 1360px; }
-  .v2-page.learn .learn__body { max-width: 1600px; }
-  /* 无知识点面板时壳随内容收紧：900 的控制台不该漂在 1600 壳里（两侧各空 ~350px） */
-  .v2-page.learn .learn__body--no-kp { max-width: 960px; }
+  /* 课堂是单列（阅读列 760 + 进度卡/对话卡），1680+ 只给 960 的壳，不再给 1600。
+     1600 是「知识点常驻侧栏」时代的遗产：侧栏早已降级为 fixed 抽屉、不占布局，
+     1600 壳里只剩一条 760 阅读列 —— 1920 实测卡片 1663px 而消息/输入框 821px，
+     卡片是内容的 2 倍，输入区看着像贴在巨卡底部的一条独立横带（2026-10-06 用户反馈
+     「输入区割裂」）。960 = 阅读列 + 两侧各 100 呼吸位，卡片与内容的比例回到 1440 档。
+     （原 .learn__body--no-kp 的 960 是同一判断，但那个类模板从未挂过，属死规则，收在此处。） */
+  .v2-page.learn .learn__body { max-width: 960px; }
   .v2-page .v2footer__inner { max-width: 1360px; }
 }
 
