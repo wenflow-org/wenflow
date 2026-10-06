@@ -65,6 +65,9 @@ export class PredictionCalibrationService {
   /**
    * task:completed 时自动回写实际结果（从最近会话推导挣扎信号）：
    * - knowledgeState 含 review / wrapup.evaluation 判为 high 档（legacy：sessionLss >= 6）→ struggled
+   * - 本任务存在 checkpoint 负证据（checkpoint:result passed=false 或 checkpoint:attempt
+   *   attempts_exhausted）→ struggled（2026-10-06 F4：code 裁决是独立于 LLM 自评的第一手观测，
+   *   此前两次判错仍记 smooth——R1 实测失明）
    * - 否则 → smooth
    * 找不到未回写的预测记录时静默放弃（预测可能未及写入——fire-and-forget 竞态窗口可忽略）。
    */
@@ -88,6 +91,25 @@ export class PredictionCalibrationService {
           ? sessionLssTier === 'high'
           : (Number.isFinite(sessionLss) && sessionLss >= 6);
         if (reviewHit || lssHigh) outcome = 'struggled';
+      }
+      // F4：checkpoint 负证据与知识面/LSS 判据独立——留痕按 taskId 落（learner_evidence.taskId），
+      // 会话内失败必然在此命中。skipped/unresolved/通过不判负（未作答≠答错）。
+      if (outcome !== 'struggled') {
+        const negative = await prisma.learner_evidence.findMany({
+          where: {
+            userId,
+            taskId,
+            evidenceType: { in: ['checkpoint:result', 'checkpoint:attempt'] },
+          },
+          select: { evidenceType: true, payload: true },
+        });
+        const failedByCode = negative.some((row) => {
+          const payload = safeParseObj(row.payload);
+          if (!payload) return false;
+          if (row.evidenceType === 'checkpoint:result') return payload.passed === false;
+          return payload.outcome === 'attempts_exhausted';
+        });
+        if (failedByCode) outcome = 'struggled';
       }
       return await this.resolveOutcome(userId, taskId, outcome);
     } catch {

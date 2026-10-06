@@ -8,6 +8,10 @@ const mockPrisma = {
   teaching_sessions: {
     findFirst: jest.fn(),
   },
+  learner_evidence: {
+    // 默认无 checkpoint 留痕（clearAllMocks 只清调用不清实现，既有用例天然走空证据）
+    findMany: jest.fn().mockResolvedValue([]),
+  },
 };
 
 jest.mock('../../../config/database', () => ({ __esModule: true, default: mockPrisma }));
@@ -105,6 +109,81 @@ describe('PredictionCalibrationService（校准闭环）', () => {
       mockPrisma.prediction_records.findFirst.mockResolvedValue({ id: 'prd_1' });
       mockPrisma.prediction_records.update.mockResolvedValue({});
       mockPrisma.teaching_sessions.findFirst.mockResolvedValue(null);
+      await predictionCalibrationService.resolveFromTaskCompletion('u1', 't1');
+      expect(mockPrisma.prediction_records.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ outcome: 'smooth' }) })
+      );
+    });
+
+    it('两次 code 裁决 failed（checkpoint:result passed=false）→ struggled（F4：判据消费 code 负证据）', async () => {
+      mockPrisma.prediction_records.findFirst.mockResolvedValue({ id: 'prd_1' });
+      mockPrisma.prediction_records.update.mockResolvedValue({});
+      // R1 复刻：知识面 mastered + sessionLss 低档，旧判据会记 smooth，但 code 两次判错
+      mockPrisma.teaching_sessions.findFirst.mockResolvedValue({
+        knowledgeState: '[{"name":"A","status":"mastered","progress":100}]',
+        wrapup: '{"evaluation":{"sessionLss":2.1}}',
+      });
+      mockPrisma.learner_evidence.findMany.mockResolvedValue([
+        {
+          evidenceType: 'checkpoint:result',
+          payload: '{"checkpointId":"cp1","passed":false,"judgedBy":"code","detail":"缺少要点：合并聚合"}',
+        },
+        {
+          evidenceType: 'checkpoint:result',
+          payload: '{"checkpointId":"cp2","passed":false,"judgedBy":"code","detail":"缺少要点：换元"}',
+        },
+      ]);
+      await predictionCalibrationService.resolveFromTaskCompletion('u1', 't1');
+      expect(mockPrisma.learner_evidence.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ userId: 'u1', taskId: 't1' }),
+        })
+      );
+      expect(mockPrisma.prediction_records.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ outcome: 'struggled' }) })
+      );
+    });
+
+    it('checkpoint:attempt attempts_exhausted（重答到顶强消）→ struggled', async () => {
+      mockPrisma.prediction_records.findFirst.mockResolvedValue({ id: 'prd_1' });
+      mockPrisma.prediction_records.update.mockResolvedValue({});
+      mockPrisma.teaching_sessions.findFirst.mockResolvedValue({
+        knowledgeState: '[{"name":"A","status":"mastered","progress":100}]',
+        wrapup: '{"evaluation":{"sessionLss":2.1}}',
+      });
+      mockPrisma.learner_evidence.findMany.mockResolvedValue([
+        {
+          evidenceType: 'checkpoint:attempt',
+          payload: '{"checkpointId":"cp1","outcome":"attempts_exhausted","attempts":3}',
+        },
+      ]);
+      await predictionCalibrationService.resolveFromTaskCompletion('u1', 't1');
+      expect(mockPrisma.prediction_records.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ outcome: 'struggled' }) })
+      );
+    });
+
+    it('checkpoint 通过/跳过不判负（passed=true、attempt=skipped）→ smooth', async () => {
+      mockPrisma.prediction_records.findFirst.mockResolvedValue({ id: 'prd_1' });
+      mockPrisma.prediction_records.update.mockResolvedValue({});
+      mockPrisma.teaching_sessions.findFirst.mockResolvedValue({
+        knowledgeState: '[{"name":"A","status":"mastered","progress":100}]',
+        wrapup: '{"evaluation":{"sessionLss":2.1}}',
+      });
+      mockPrisma.learner_evidence.findMany.mockResolvedValue([
+        {
+          evidenceType: 'checkpoint:result',
+          payload: '{"checkpointId":"cp1","passed":true,"judgedBy":"code"}',
+        },
+        {
+          evidenceType: 'checkpoint:attempt',
+          payload: '{"checkpointId":"cp2","outcome":"skipped"}',
+        },
+        {
+          evidenceType: 'checkpoint:attempt',
+          payload: '{"checkpointId":"cp3","outcome":"unresolved"}',
+        },
+      ]);
       await predictionCalibrationService.resolveFromTaskCompletion('u1', 't1');
       expect(mockPrisma.prediction_records.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ outcome: 'smooth' }) })
