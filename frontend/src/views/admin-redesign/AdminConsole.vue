@@ -112,6 +112,9 @@ const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
 const PathDetail = asyncPage(() => import('./PathDetail.vue'));
 // 技能详情二级页（原型 renderSkillDetail 落点；Skill 目录行 / 编排图节点下钻）
 const SkillDetail = asyncPage(() => import('./SkillDetail.vue'));
+// 卡库二级页（2026-10-06 抽屉退役：卡详情/导入卡从 mk-drawer 迁标准二级页）
+const CardDetailPage = asyncPage(() => import('./CardDetailPage.vue'));
+const CardImportPage = asyncPage(() => import('./CardImportPage.vue'));
 const SessionCockpit = asyncPage(() => import('./SessionCockpit.vue'));
 const MemoryReview = asyncPage(() => import('./MemoryReview.vue'));
 
@@ -161,7 +164,10 @@ const detailComponents: Record<string, unknown> = {
   // 路径详情二级页（原型 renderPathDetail 落点；列表行/学习者进度卡下钻）
   path: PathDetail,
   // 技能详情二级页（原型 renderSkillDetail 落点；Skill 目录行/编排图节点下钻，替代 SkillDrawer 打开）
-  skill: SkillDetail
+  skill: SkillDetail,
+  // 卡库二级页（卡墙点卡 / 页头「导入卡」）
+  card: CardDetailPage,
+  'card-import': CardImportPage
 };
 
 export const SCENE_COMPONENTS: Readonly<Record<string, unknown>> = components;
@@ -225,7 +231,7 @@ const router = useRouter()
    二级页此前只存在内存 ref，刷新/深链/前进后退均无法寻址（URL 不显示）。
    打开：openSubPage（任意组件）→ subPage 变化 → URL 补 query；
    恢复：整页刷新 /admin/:page?view=virtual&id=xxx → query watch → subPage 恢复 → 详情组件直接渲染。 */
-const SUBPAGE_VIEWS = ['learner', 'virtual', 'user', 'session', 'session-real', 'path', 'skill']
+const SUBPAGE_VIEWS = ['learner', 'virtual', 'user', 'session', 'session-real', 'path', 'skill', 'card', 'card-import']
 // URL → subPage（深链/刷新/前进后退）；includeTest 透传（虚拟学习者/测试账号深链可查）
 watch(
   () => [route.query.view, route.query.id, route.query.includeTest] as [unknown, unknown, unknown],

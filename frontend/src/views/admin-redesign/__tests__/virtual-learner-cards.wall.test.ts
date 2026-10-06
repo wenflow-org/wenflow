@@ -1,18 +1,21 @@
 /**
  * 学习者卡库卡墙（2026-10-05 卡库改版，用户「有卡啊得，导入是功能，卡展示也是，
- * 方便从卡库选人到虚拟学习者」）：页面主体=卡墙（全部卡可视清单），导入收进抽屉；
- * 卡=账号拍板不变，「选人」= 点卡 openSubPage('virtual', userId) 直达画像。
+ * 方便从卡库选人到虚拟学习者」；2026-10-06 二级页化——用户不喜欢抽屉设计：
+ * 点卡=卡详情二级页（?view=card&id=）、导入=卡导入二级页（?view=card-import），
+ * 两个 mk-drawer 退役，走 SkillDetail/PathDetail 家族标准二级页机制）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+const { openSubPageMock } = vi.hoisted(() => ({ openSubPageMock: vi.fn() }));
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: pushMock }) }));
 vi.mock('../store', async () => {
   const { ref } = await import('vue');
   return {
     isLive: ref(true),
+    openSubPage: openSubPageMock,
+    subPage: ref(null),
+    closeSubPage: vi.fn(),
     intent: { agentFilter: '', statusFilter: '', quickAction: '' },
   };
 });
@@ -30,20 +33,8 @@ vi.mock('@/api/adminApi', () => ({
         },
       },
     })),
-    cardsDetail: vi.fn(async () => ({
-      data: {
-        data: {
-          profileId: 'p1', userId: 'u1', cardKey: 'w6-math-01', name: '高一学生小陈', goal: '高中数学·函数补差',
-          knowledgeLevel: 'beginner', tags: ['数学'], preset: false, sourceKind: 'web',
-          sourceRef: 'https://example.com/note', email: 'c1@vl.local', notes: null, createdAt: '2026-10-05T00:00:00Z',
-          personaFacts: [{ label: '可用时间', value: '每天 60 分钟' }],
-          nickname: null, nameHint: '高一学生', background: '县城重点高中高一在读，函数基础薄弱',
-          stories: [{ title: '函数补差', opening: '我这次月考函数只考了 58 分。', followUps: ['平时函数作业完成情况如何？'], domain: '高中数学·函数', intentType: null, schoolAnchor: null, budget: { dailyMinutes: 60 } }],
-          materials: [{ kind: 'book', title: '人教版必修一' }],
-        },
-      },
-    })),
     cardsExport: vi.fn(async () => ({ data: { data: { count: 1, content: 'cards: []' } } })),
+    cardsDetail: vi.fn(),
     cardsValidate: vi.fn(),
     cardsImport: vi.fn(),
   },
@@ -55,19 +46,14 @@ vi.mock('../live', () => ({ errMsg: (e: unknown) => String(e) }));
 import VirtualLearnerCards from '../VirtualLearnerCards.vue';
 
 const mountPage = async () => {
-  const w = mount(VirtualLearnerCards, {
-    global: {
-      // Teleport 内容（导入抽屉）VTU 默认不渲染进组件树，stub 成透传才能断言
-      stubs: { Teleport: true },
-    },
-  });
+  const w = mount(VirtualLearnerCards);
   await flushPromises();
   return w;
 };
 
-describe('学习者卡库卡墙（2026-10-05 卡库改版）', () => {
+describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页化）', () => {
   beforeEach(() => {
-    pushMock.mockClear();
+    openSubPageMock.mockClear();
   });
 
   it('KPI 三卡（卡总数/预置卡/自建卡）+ 卡墙渲染全部卡与来源徽章', async () => {
@@ -81,24 +67,11 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版）', () => {
     expect(wall[1].text()).toContain('预置');
   });
 
-  it('「从卡库选人」改版二：点卡开详情抽屉（全字段可视），抽屉「到虚拟学习者」直达画像', async () => {
+  it('点卡 → 卡详情二级页（openSubPage card + profileId，抽屉退役）', async () => {
     const w = await mountPage();
-    // 点卡不再裸跳（此前 openSubPage 只改 URL，卡库 scene 下什么都不渲染）
+    expect(w.find('.mk-drawer').exists()).toBe(false);
     await w.findAll('.vlc-card')[0].trigger('click');
-    await flushPromises();
-    const drawer = w.find('.mk-drawer__panel');
-    expect(drawer.exists()).toBe(true);
-    // 全字段可视：人设背景 / 故事池（开场白+追问+预算）/ 资料 / 来源 / 账号
-    expect(drawer.text()).toContain('县城重点高中高一在读');
-    expect(drawer.text()).toContain('我这次月考函数只考了 58 分');
-    expect(drawer.text()).toContain('平时函数作业完成情况如何');
-    expect(drawer.text()).toContain('人教版必修一');
-    expect(drawer.text()).toContain('每天 60 分钟');
-    expect(drawer.text()).toContain('c1@vl.local');
-    // 抽屉动作：到虚拟学习者（跨 scene router.push，openSubPage 在卡库 scene 不渲染）
-    const go = drawer.findAll('button').find((b) => b.text().includes('到虚拟学习者'))!;
-    await go.trigger('click');
-    expect(pushMock).toHaveBeenCalledWith({ path: '/admin/virtual-learners', query: { view: 'virtual', id: 'p1' } });
+    expect(openSubPageMock).toHaveBeenCalledWith('card', 'p1');
   });
 
   it('搜索过滤（名称/Key/目标/标签任一命中）', async () => {
@@ -107,13 +80,11 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版）', () => {
     expect(w.findAll('.vlc-card')).toHaveLength(1);
   });
 
-  it('导入收进抽屉：页头「导入卡」开抽屉，表单/拖拽区在抽屉内', async () => {
+  it('导入卡 → 卡导入二级页（openSubPage card-import，抽屉退役）', async () => {
     const w = await mountPage();
-    expect(w.find('.mk-drawer').exists()).toBe(false);
     const btn = w.findAll('button').find((b) => b.text() === '导入卡')!;
     await btn.trigger('click');
-    expect(w.find('.mk-drawer').exists()).toBe(true);
-    expect(w.find('.vlc-drop').exists()).toBe(true);
-    expect(w.find('.vlc-text').exists()).toBe(true);
+    expect(openSubPageMock).toHaveBeenCalledWith('card-import', 'new');
+    expect(w.find('.mk-drawer').exists()).toBe(false);
   });
 });
