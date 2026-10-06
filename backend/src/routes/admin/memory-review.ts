@@ -80,7 +80,7 @@ function retentionOf(trace: {
 /**
  * GET /api/admin/memory-review
  * 跨用户总览：记忆层规模 + 到期积压 + 归并审计汇总（按痕迹数倒序）。
- * query: limit?（默认 30，上限 100）、includeVirtual?（默认排除虚拟学习者）
+ * query: limit?（默认 30，上限 100）、offset?（默认 0，#41 分页）、includeVirtual?（默认排除虚拟学习者）
  */
 router.get('/', async (req, res) => {
   try {
@@ -89,6 +89,11 @@ router.get('/', async (req, res) => {
     }
     const rawLimit = req.query.limit ? Number(req.query.limit) : 30;
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 30;
+    /* 审核 #41（T1 硬约束「列表必须分页」）：此前只接 limit，101 位有痕迹用户里第 51 位起
+       永远不可达也不可搜。增 offset（同 clamp，非负）；排序在切片前做（待复习量倒序），
+       totals 仍按全量 ranked 聚合，翻页不改总量口径。 */
+    const rawOffset = req.query.offset ? Number(req.query.offset) : 0;
+    const offset = Number.isFinite(rawOffset) ? Math.max(rawOffset, 0) : 0;
     const includeVirtual = String(req.query.includeVirtual || '') === 'true';
     const now = new Date();
 
@@ -143,10 +148,10 @@ router.get('/', async (req, res) => {
       })
       // 原型 renderMemory 排序口径：按待复习（到期）量倒序，同量按痕迹数（存量体积）破平
       .sort((a, b) => (b.due - a.due) || (b.traces - a.traces));
-    // 列表只返回 top limit，但 totals 必须按全量聚合：
+    // 列表只返回 offset 起的 limit 条（#41 分页），但 totals 必须按全量聚合：
     // totals.users 是全量有痕迹用户数，若 traces/due 只对切片求和，
     // 用户数超过 limit 时前端的「覆盖 N 位用户」与到期比例条口径不一致（到期占比被低估）。
-    const rows = ranked.slice(0, limit);
+    const rows = ranked.slice(offset, offset + limit);
 
     const userIds = rows.map((row) => row.userId);
     const users = userIds.length > 0

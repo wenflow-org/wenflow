@@ -122,6 +122,10 @@ export class LearnerSnapshotRefreshService {
         id: true,
         name: true,
         email: true,
+        /** 审核 #11：身份标记要与 Users.vue 同源——虚拟学习者（紫「虚拟」）与测试账号
+            （琥珀「测试」）是两类人；isTestAccountUser 对 /^virtual_/ 也返回 true，
+            只靠它会把虚拟学习者渲染成「测试账号」。 */
+        isVirtualLearner: true,
         learning_paths: {
           where: params?.pathId ? { id: params.pathId } : { status: 'active' },
           select: {
@@ -220,6 +224,8 @@ export class LearnerSnapshotRefreshService {
         userId: user.id,
         userName: user.name,
         email: user.email,
+        /** 虚拟学习者（审核 #11）：前端按 Users.vue 同款三元区分「虚拟 / 测试」两类身份 */
+        isVirtualLearner: user.isVirtualLearner,
         /** 测试/虚拟账号标记（excludeTest 未开启时供前端灰标签展示；开启后恒为 false） */
         isTestAccount: isTestAccountUser(user),
         pathId: path?.id || null,

@@ -301,7 +301,9 @@ import {
   type PromptMetaRow
 } from './live'
 import { statusText } from './statusText'
-import { TERMS, errorCodeLabel } from './terms'
+/* shortTrace 单源自 ./terms（2026-10-06 审核 #121，与日志页签同规则）；import 有提升，
+   上方 immediate watch 引用它不再有 TDZ 顾虑 */
+import { TERMS, errorCodeLabel, shortTrace } from './terms'
 import { prettyPayload } from './payload-format'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -436,17 +438,8 @@ watch(openSpanId, async (id) => {
   }
 })
 
-/* 长 trace ID 在下拉与标题中截断显示 */
-/* TDZ 修复：intent.sessionId / intentTraceMiss 的 immediate watch 会引用本函数，必须先于 watch 声明。
-   审核 #121：与 ExecLogs.shortTrace 统一规则——只有 `tr:` / `se:` 前缀才保留前缀，纯 ID 统一
-   取「…+末 12 位」；旧实现 `…+末 16 位` 与日志页签的「前缀:…末6」两套形态，同一标识跨页对不上。 */
-const shortTrace = (t: string) => {
-  if (!t) return t
-  const m = /^(tr|se):(.+)$/.exec(t)
-  if (m) return m[2].length > 12 ? `${m[1]}:…${m[2].slice(-12)}` : t
-  return t.length > 12 ? `…${t.slice(-12)}` : t
-}
-
+/* 长 trace ID 在下拉与标题中截断显示：shortTrace 单源自 ./terms（2026-10-06 审核 #121）——
+   旧私实现 `…+末 16 位` 与日志页签的「前缀:…末6」两套形态已废弃 */
 const allTraceIds = computed(() => [...new Set(baseSpans.value.map((s) => s.traceId))])
 
 // intent.traceId 驱动（从日志/总览跳进来时预填）
@@ -746,7 +739,7 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms
 const fmtTokens = (n: number) => (n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0))
 const badgeOf = (s: string) => (s === 'err' ? 'mk-badge--bad' : s === 'warn' ? 'mk-badge--warn' : 'mk-badge--ok')
 
-/* 长 trace ID 在下拉与标题中截断显示（shortTrace 已上移至 watch 之前，见文件上方声明） */
+/* 长 trace ID 在下拉与标题中截断显示（shortTrace 单源自 ./terms，审核 #121） */
 function traceLabel(t: string) {
   /* 读预聚合 traceAggMap（此前每个下拉选项渲染都全量 filter/reduce 一次） */
   const a = traceAggMap.value.get(t)

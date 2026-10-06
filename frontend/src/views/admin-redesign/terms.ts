@@ -130,3 +130,24 @@ export function humanizeHttpError(message: string, status?: number): string | un
   if (m) return `上游服务异常（HTTP ${m[1]}）`
   return undefined
 }
+
+// ============================================================
+// Trace/会话短标识（审核 #121 单源：执行日志与 Trace 链路两页签共用）
+// ============================================================
+
+/**
+ * 长 traceId/sessionId 的短形态（2026-10-06 审核 #121 单源）：
+ * - 带 `tr:` / `se:` 前缀才保留前缀（前缀 + …+末 12 位，短于 12 位原样返回）
+ * - 纯 ID 统一取「…+末 12 位」（≤12 位原样返回）
+ * 旧两套私有实现（ExecLogs `/^(\w{2}):?([\w-]+)$/` 会给无冒号的纯 ID 造出「17:」「14:」
+ * 这种并不存在的假前缀；TraceWaterfall `…+末 16 位`）导致同一标识跨页签两种形态、要重新对位。
+ */
+export function shortTrace(id: string): string {
+  if (!id) return id
+  const m = /^(tr|se):(.+)$/.exec(id)
+  if (m) {
+    const body = m[2]
+    return body.length > 12 ? `${m[1]}:…${body.slice(-12)}` : id
+  }
+  return id.length > 12 ? `…${id.slice(-12)}` : id
+}

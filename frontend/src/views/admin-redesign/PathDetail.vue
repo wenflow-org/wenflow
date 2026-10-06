@@ -40,7 +40,7 @@
       <p class="pd-note">口径：% 按阶段（{{ stageDone }}/{{ stageTotal }}）；「任务 X / Y」按子任务（{{ taskTotals.done }}/{{ taskTotals.total }}），两者分母不同</p>
     </section>
 
-    <!-- stagecard 手风琴（原型：单开、默认首阶段展开；点击阶段头切换展开） -->
+    <!-- stagecard 手风琴（原型：单开、点击阶段头切换展开；默认展开「当前阶段」——2026-10-06 审核 #80） -->
     <MkEmptyState
       v-if="!stages.length"
       icon="◌"
@@ -236,7 +236,8 @@ const d = ref<PathDetailData | null>(null)
 const loading = ref(false)
 const loadError = ref('')
 const busy = ref(false)
-const openStage = ref<number | null>(0)
+/* 初值 null：真实展开项由 load() 按数据派生（审核 #80），骨架期本就无阶段可展开 */
+const openStage = ref<number | null>(null)
 
 const pathId = computed(() => subPage.value?.id || '')
 /* subtasks 兜底成数组：阶段/任务计数与模板都直接读 .length，缺列时页面不应炸 */
@@ -256,6 +257,18 @@ function closeTask() {
 /* 加载序号：刷新/换路径时旧响应丢弃（判例 UserDetail last-wins 守卫） */
 let loadSeq = 0
 
+/** 手风琴默认展开的「当前阶段」索引（2026-10-06 审核 #80）：
+ *  第一个有未完成任务的阶段 → 全部任务都完成回落最后一个阶段 → 无任何任务数据回落首阶段；
+ *  无阶段返回 null。按 subtasks 实数据派生（与阶段/任务统计同口径，不依赖行上反规范化状态），
+ *  subtasks 兜底成数组与 stages computed 同防御。 */
+function defaultOpenStage(list: PathMilestone[]): number | null {
+  if (!list.length) return null
+  const subs = (m: PathMilestone) => (Array.isArray(m.subtasks) ? m.subtasks : [])
+  const pending = list.findIndex((m) => subs(m).some((t) => t.status !== 'completed'))
+  if (pending >= 0) return pending
+  return list.some((m) => subs(m).length) ? list.length - 1 : 0
+}
+
 async function load(force = false) {
   const pid = pathId.value
   if (!pid) return
@@ -272,10 +285,9 @@ async function load(force = false) {
     loadError.value = ''
     // 面包屑回写路径名（内部 ID → 可读标题）
     if (body.title) setSubPageLabel(String(body.title))
-    // 默认展开首个阶段（原型 state.expanded.stage = 0）；换路径重来时同样复位
-    // （审核 #80「默认展开当前阶段」暂缓：与 path-detail.redesign.test.ts:152-155 锁定的
-    //   首阶段默认展开契约冲突，需同步改单测——超出本批文件范围）
-    openStage.value = (body.milestones || []).length ? 0 : null
+    // 审核 #80：默认展开「当前阶段」（第一个有未完成任务的阶段；全完成回落最后阶段；
+    //   无任务数据回落首阶段），单开模型不变、其余阶段收起；换路径重来时同样复位
+    openStage.value = defaultOpenStage(body.milestones || [])
   } catch (e) {
     if (seq !== loadSeq || pathId.value !== pid) return
     // 刷新失败时保留旧数据（页面不白屏），首载失败走错误态
@@ -292,7 +304,7 @@ watch(
     loadSeq += 1
     d.value = null
     loadError.value = ''
-    openStage.value = 0
+    openStage.value = null
     closeTask()
     if (pid) void load()
   },

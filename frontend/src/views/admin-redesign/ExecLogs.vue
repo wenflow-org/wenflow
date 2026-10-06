@@ -393,7 +393,9 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import TraceWaterfall from './TraceWaterfall.vue'
-import { TERMS, errorCodeLabel, routeSourceLabel } from './terms'
+/* shortTrace 单源自 terms.ts（2026-10-06 审核 #121）：Trace 页签（TraceWaterfall）同规则，
+   同一 traceId/sessionId 跨页签形态一致 */
+import { TERMS, errorCodeLabel, routeSourceLabel, shortTrace } from './terms'
 import { prettyPayload } from './payload-format'
 import { useTableSort } from './useTableSort'
 import SavedViewsBar from './SavedViewsBar.vue'
@@ -1177,19 +1179,8 @@ function fmtTime(ts?: number): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
-/* 短标识（审核 #121）：只有 `tr:` / `se:` 前缀才保留前缀，纯 ID 统一取「…+末 12 位」——
-   与 TraceWaterfall.shortTrace 同规则，同一 traceId/sessionId 在两个页签显示一致。
-   旧实现 `/^(\w{2}):?([\w-]+)$/` 会给无冒号的纯 ID 造出「17:」「14:」这种假前缀。
-   （理想做法是抽共享 helper 到 terms.ts/traceSummary.ts，属共享模块，登记「需中央处理」。） */
-function shortTrace(id: string): string {
-  if (!id) return id
-  const m = /^(tr|se):(.+)$/.exec(id)
-  if (m) {
-    const body = m[2]
-    return body.length > 12 ? `${m[1]}:…${body.slice(-12)}` : id
-  }
-  return id.length > 12 ? `…${id.slice(-12)}` : id
-}
+/* 短标识：单源自 ./terms 的 shortTrace（2026-10-06 审核 #121），本页不再私持实现。
+   旧实现 `/^(\w{2}):?([\w-]+)$/` 会给无冒号的纯 ID 造出「17:」「14:」这种假前缀，已废弃。 */
 /* 绝对时间 tooltip：YYYY-MM-DD HH:MM:SS（与审计页同格式）；ts 为 epoch 毫秒 */
 function fmtFull(ts?: number | null): string {
   if (!ts) return ''

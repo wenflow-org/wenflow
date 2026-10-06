@@ -1250,6 +1250,9 @@ export interface LiveLearner {
   userId: string
   name: string
   email: string
+  /** 虚拟学习者（审核 #11：后端回传 users.isVirtualLearner，与 Users.vue 同源；
+      旧响应无此字段时由邮箱前缀兜底） */
+  isVirtualLearner?: boolean
   /** 测试/虚拟账号标记（后端命名约定识别；excludeTest=true 时恒为 false） */
   isTestAccount?: boolean
   pathId?: string
@@ -1290,6 +1293,7 @@ async function fetchLiveLearners(includeTest = false): Promise<void> {
     userId: String(m.userId),
     name: String(m.userName || m.userId),
     email: String(m.email || ''),
+    isVirtualLearner: !!m.isVirtualLearner,
     isTestAccount: !!m.isTestAccount,
     pathId: (m.pathId as string) || undefined,
     pathTitle: (m.pathTitle as string) || null,

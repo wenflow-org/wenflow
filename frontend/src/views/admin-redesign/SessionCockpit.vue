@@ -650,41 +650,27 @@
             <span class="mk-card__meta">{{ sessionStatusLabel }}</span>
           </div>
           <div class="cp-aside-body">
-            <div class="cp-run">
-              <div v-if="autopilotResultText && !autopilotRunning" class="cp-run__autopilot-result" :class="{
-                'cp-run__autopilot-result--ok': autopilot.status === 'completed',
-                'cp-run__autopilot-result--bad': autopilot.status === 'failed' || autopilot.status === 'incomplete',
-                'cp-run__autopilot-result--muted': autopilot.status === 'stopped'
-              }">{{ autopilotResultText }}</div>
-              <div class="cp-run__stages">
-                <div class="cp-run__stage-row" v-for="st in stageFlow" :key="st">
-                  <span class="cp-run__stage-dot" :class="`cp-run__stage-dot--${stageDone(st as StageKey) ? 'done' : stageActive(st as StageKey) ? 'active' : 'pending'}`"></span>
-                  <span class="cp-run__stage-label">{{ stageLabel(st) }}</span>
-                  <span class="cp-run__stage-status">{{ stageMiniStatus(st as StageKey) }}</span>
-                </div>
-              </div>
-              <div class="cp-run__foot">
-                <label v-if="!isBlackbox && !isRealMode" class="cp-run__budget">
-                  难度
-                  <select v-model="frictionBudget" class="mk-filter__select" :disabled="frictionSaving" @change="saveFriction">
-                    <option value="none">无</option>
-                    <option value="low">低</option>
-                    <option value="normal">正常</option>
-                    <option value="high">高</option>
-                    <option value="stress_test">压力测试</option>
-                  </select>
-                </label>
-                <label v-if="!isBlackbox && !isRealMode" class="cp-run__budget">
-                  模型
-                  <select v-model="simModel" class="mk-filter__select" :disabled="simModelSaving" @change="saveModel">
-                    <option value="">默认（路由）</option>
-                    <option v-for="m in (liveApiConfig?.availableModels || [])" :key="m" :value="m">{{ m }}</option>
-                  </select>
-                  <span class="cp-run__budget-hint" title="实验快照在会话启动时捕获，模型变更需重跑（rerun）或新会话才生效">重跑生效</span>
-                </label>
-                <span v-if="showPathReadiness" class="cp-run__readiness" :class="`cp-run__readiness--${pathReadinessTone}`">{{ pathReadinessText }}</span>
-              </div>
-            </div>
+            <!-- 内芯抽共享（审核 #73）：与侧栏折叠运维面板同一份 RunStatusPanel -->
+            <RunStatusPanel
+              v-model:friction-budget="frictionBudget"
+              v-model:sim-model="simModel"
+              :autopilot-result-text="autopilotResultText"
+              :autopilot-running="autopilotRunning"
+              :autopilot-status="autopilot.status"
+              :stage-done="stageDone"
+              :stage-active="stageActive"
+              :stage-mini-status="stageMiniStatus"
+              :stage-label="stageLabel"
+              :is-blackbox="isBlackbox"
+              :show-path-readiness="showPathReadiness"
+              :path-readiness-tone="pathReadinessTone"
+              :path-readiness-text="pathReadinessText"
+              :available-models="liveApiConfig?.availableModels || []"
+              :friction-saving="frictionSaving"
+              :sim-model-saving="simModelSaving"
+              @save-friction="saveFriction"
+              @save-model="saveModel"
+            />
           </div>
         </section>
 
@@ -714,46 +700,28 @@
             <span class="cp-sidebar__toggle-hint">{{ sessionStatusLabel }}</span>
           </button>
           <div v-if="sidebarOpen.run" class="cp-sidebar__body">
-            <div class="cp-run">
-              <!-- 自动驾驶结果 -->
-              <div v-if="autopilotResultText && !autopilotRunning" class="cp-run__autopilot-result" :class="{
-                'cp-run__autopilot-result--ok': autopilot.status === 'completed',
-                'cp-run__autopilot-result--bad': autopilot.status === 'failed' || autopilot.status === 'incomplete',
-                'cp-run__autopilot-result--muted': autopilot.status === 'stopped'
-              }">{{ autopilotResultText }}</div>
-
-              <!-- 阶段进度指示 -->
-              <div class="cp-run__stages" v-if="!isRealMode">
-                <div class="cp-run__stage-row" v-for="st in stageFlow" :key="st">
-                  <span class="cp-run__stage-dot" :class="`cp-run__stage-dot--${stageDone(st as StageKey) ? 'done' : stageActive(st as StageKey) ? 'active' : 'pending'}`"></span>
-                  <span class="cp-run__stage-label">{{ stageLabel(st) }}</span>
-                  <span class="cp-run__stage-status">{{ stageMiniStatus(st as StageKey) }}</span>
-                </div>
-              </div>
-
-              <!-- 难度 -->
-              <div class="cp-run__foot">
-                <label v-if="!isBlackbox && !isRealMode" class="cp-run__budget">
-                  难度
-                  <select v-model="frictionBudget" class="mk-filter__select" :disabled="frictionSaving" @change="saveFriction">
-                    <option value="none">无</option>
-                    <option value="low">低</option>
-                    <option value="normal">正常</option>
-                    <option value="high">高</option>
-                    <option value="stress_test">压力测试</option>
-                  </select>
-                </label>
-                <label v-if="!isBlackbox && !isRealMode" class="cp-run__budget">
-                  模型
-                  <select v-model="simModel" class="mk-filter__select" :disabled="simModelSaving" @change="saveModel">
-                    <option value="">默认（路由）</option>
-                    <option v-for="m in (liveApiConfig?.availableModels || [])" :key="m" :value="m">{{ m }}</option>
-                  </select>
-                  <span class="cp-run__budget-hint" title="实验快照在会话启动时捕获，模型变更需重跑（rerun）或新会话才生效">重跑生效</span>
-                </label>
-                <span v-if="showPathReadiness" class="cp-run__readiness" :class="`cp-run__readiness--${pathReadinessTone}`">{{ pathReadinessText }}</span>
-              </div>
-            </div>
+            <!-- 同一份内芯（审核 #73 去重）；阶段行恒渲染——本宿主外层已排除 real 模式，
+                 原第二处 stages 上的 v-if="!isRealMode" 是恒真冗余，随抽取删除 -->
+            <RunStatusPanel
+              v-model:friction-budget="frictionBudget"
+              v-model:sim-model="simModel"
+              :autopilot-result-text="autopilotResultText"
+              :autopilot-running="autopilotRunning"
+              :autopilot-status="autopilot.status"
+              :stage-done="stageDone"
+              :stage-active="stageActive"
+              :stage-mini-status="stageMiniStatus"
+              :stage-label="stageLabel"
+              :is-blackbox="isBlackbox"
+              :show-path-readiness="showPathReadiness"
+              :path-readiness-tone="pathReadinessTone"
+              :path-readiness-text="pathReadinessText"
+              :available-models="liveApiConfig?.availableModels || []"
+              :friction-saving="frictionSaving"
+              :sim-model-saving="simModelSaving"
+              @save-friction="saveFriction"
+              @save-model="saveModel"
+            />
           </div>
         </div>
 
@@ -886,6 +854,7 @@ import {
   type LearnLesson
 } from './cockpitLessons'
 import { useCockpitStages, stageFlow, type StageKey } from './cockpitStages'
+import RunStatusPanel from './session-cockpit/RunStatusPanel.vue'
 import { useCockpitAutopilot } from './cockpitAutopilot'
 
 const sessionId = computed(() => subPage.value?.id || '')
@@ -2582,65 +2551,8 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-sidebar__toggle-hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 400; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
 .cp-sidebar__body { padding: 10px 14px 14px; display: grid; gap: 8px; }
 
-/* ----- Run in sidebar ----- */
-.cp-run { display: grid; gap: 10px; }
-
-
-
-
-.cp-run__autopilot-result { font-size: var(--mk-fs-micro); font-weight: 700; padding: 6px 10px; border-radius: 6px; background: var(--mk-surface-2); }
-.cp-run__autopilot-result--ok { color: var(--mk-green, var(--mk-green-fill)); }
-.cp-run__autopilot-result--bad { color: var(--mk-red, var(--mk-red-strong)); }
-.cp-run__autopilot-result--muted { color: var(--mk-muted); }
-
-/* 阶段进度指示 */
-.cp-run__stages {
-  display: grid;
-  gap: 4px;
-  padding: 8px 10px;
-  background: var(--mk-surface-2);
-  border-radius: var(--mk-radius-sm);
-}
-.cp-run__stage-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--mk-fs-micro);
-}
-.cp-run__stage-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.cp-run__stage-dot--done { background: var(--mk-green); }
-.cp-run__stage-dot--active { background: var(--mk-blue); }
-.cp-run__stage-dot--pending { background: var(--mk-line); }
-.cp-run__stage-label {
-  font-weight: 700;
-  color: var(--mk-ink);
-  width: 40px;
-  flex-shrink: 0;
-}
-.cp-run__stage-status {
-  color: var(--mk-faint);
-  font-size: var(--mk-fs-micro);
-  font-variant-numeric: tabular-nums;
-}
-
-.cp-run__foot {
-  display: grid;
-  gap: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--mk-line);
-}
-.cp-run__budget { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.cp-run__budget-hint { font-weight: 400; font-size: var(--mk-fs-micro); color: var(--mk-faint); cursor: help; }
-.cp-run__budget select { min-width: 90px; font-size: var(--mk-fs-micro); }
-.cp-run__readiness { font-size: var(--mk-fs-micro); font-weight: 700; }
-.cp-run__readiness--ok { color: var(--mk-green, var(--mk-green-fill)); }
-.cp-run__readiness--pending { color: var(--mk-amber, var(--mk-amber-fill)); }
-.cp-run__readiness--bad { color: var(--mk-red, var(--mk-red-strong)); }
+/* ----- Run in sidebar：.cp-run* 内芯样式已随审核 #73 抽取迁至
+   session-cockpit/RunStatusPanel.vue（Learn 卡与折叠面板两宿主共用），此处不再保留副本。 */
 
 
 
@@ -3426,7 +3338,7 @@ html[data-theme='dark'] {
   /* 原型骨架补漏：闭环 active 环 / stepper active 步点在暗色下的底色 */
   .cp-loop__step--active { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); border-color: color-mix(in srgb, var(--wf-color-primary) 40%, transparent); }
   .cp-stp--active .cp-stp__dot { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--mk-accent-deep); }
-  .cp-stp__dot { background: #19191a; }  .cp-run__autopilot-result { background: #19191a; }
+  .cp-stp__dot { background: #19191a; }
   .cp-transcript__message { background: #19191a; border-left-color: #313235; }
   .cp-transcript__message.is-teacher { background: color-mix(in srgb, var(--wf-color-primary) 12%, transparent); border-left-color: var(--mk-blue); }
   .cp-transcript__message.is-learner { background: rgba(45, 212, 191, 0.1); border-left-color: var(--mk-teal); }
@@ -3449,7 +3361,6 @@ html[data-theme='dark'] {
   .cp-wrapup-section,
   .cp-trace-panel { background: #19191a; border-color: var(--wf-border-light); }
   .cp-trace-list__body { background: #202122; }
-  .cp-run__stages { background: #19191a; }
   .cp-wrapup-lesson.is-active { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--mk-ghost-fg); }
   .cp-wrapup-lesson.is-done:hover { background: rgba(74, 222, 128, 0.1); }
   .cp-timeline__kind[data-kind='referee'] { background: color-mix(in srgb, var(--wf-color-danger) 14%, transparent); color: var(--wf-color-danger); }

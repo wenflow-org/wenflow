@@ -209,6 +209,7 @@ v3 修订两条：
 | `.tbl` | `.mk-table`（10×16；fixed 档列宽走 `--mk-col-*`） | 原语 |
 | `.pager` | `Pagination.vue` | 原语组件 |
 | `.empty` | `MkEmptyState`（大块居中空态）；筛选后 0 行的卡内表格/列表用 `.mk-empty--line`（**一行式内联空态**：单句「为什么空 + 现状结论」，不占最小高度，CM7） | 原语组件 / 原语 |
+| `.skd-tbd`（96px 虚线占位块） | 页面本地复刻（SkillDetail 试跑页签：后端暂不下发逐步执行链路时的占位灰块——testSkill 暂只回最终输出；与 `.mk-empty--line` 的一行式空态是不同事实，同页「样例输出」卡未跑/无输出亦复用此块） | 页面 |
 | `.drawer/.modal/.ovl` | `.mk-drawer/.mk-modal` | 原语 |
 | `.field/.input/.select` | `.mk-filter__input/.mk-filter__select`、`.mk-field` | 原语 |
 | `.stageband/.stageband__legend/.sbl` | **共享原语**（`mk-primitives.css`；2026-10-03 由 TeachingSessions / OpsContent / MemoryReview 三处逐字 scoped 拷贝收敛，见 §8 10-03 行） | 原语 |

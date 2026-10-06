@@ -5,7 +5,7 @@
  *  - hero（路头像 / 标题 / 学习者·阶段·更新副文 / 状态 + 当前阶段 pills）
  *  - statstrip（阶段/任务/时长/更新四个真实读数）
  *  - 总体进度（meterrow + mono % + meter 条）
- *  - stagecard 手风琴（默认首阶段展开、点击头切换）+ taskrow 三态 pill
+ *  - stagecard 手风琴（默认展开当前阶段（审核 #80）、点击头切换）+ taskrow 三态 pill
  *  - 任务详情三段式弹层（序号圆 + 任务名 + 阶段名 / 状态 + 真实事实 / 关闭），
  *    并显式断言原型有而接口没有的「验收点 / 关联产出 / 学习证据」不出现。
  */
@@ -133,7 +133,7 @@ describe('PathDetail 路径详情二级页（renderPathDetail 落点）', () => 
     w.unmount()
   })
 
-  it('stagecard 手风琴：默认首阶段展开、点击头切换；taskrow 三态 pill 与修饰类', async () => {
+  it('stagecard 手风琴：默认展开当前阶段、点击头切换；taskrow 三态 pill 与修饰类', async () => {
     const w = mountPage()
     await flushPromises()
     await nextTick()
@@ -149,20 +149,22 @@ describe('PathDetail 路径详情二级页（renderPathDetail 落点）', () => 
     expect(heads[1].find('.mk-badge').text()).toBe('进行中')
     expect(heads[2].find('.mk-badge').text()).toBe('未解锁')
 
-    // 默认仅首阶段展开（原型 state.expanded.stage = 0）
+    // 审核 #80：默认展开当前阶段（第一个未完成，即有未完成任务的阶段；全部完成回落最后阶段）——
+    // fixture 阶段1全完成、阶段2有未完成任务 → 默认展开第 2 阶段（单开，其余收起）
+    expect(w.findAll('.pd-stage__body').length).toBe(1)
+    expect(stages[1].find('.pd-stage__body').exists()).toBe(true)
+    expect(heads[1].attributes('aria-expanded')).toBe('true')
+    expect(stages[0].find('.pd-stage__body').exists()).toBe(false)
+
+    // 点击第一阶段头 → 单开切换（第 2 阶段收起）
+    await heads[0].trigger('click')
     expect(w.findAll('.pd-stage__body').length).toBe(1)
     expect(stages[0].find('.pd-stage__body').exists()).toBe(true)
-    expect(heads[0].attributes('aria-expanded')).toBe('true')
-
-    // 点击第二阶段头 → 单开切换
-    await heads[1].trigger('click')
-    expect(w.findAll('.pd-stage__body').length).toBe(1)
-    expect(stages[0].find('.pd-stage__body').exists()).toBe(false)
-    expect(stages[1].find('.pd-stage__body').exists()).toBe(true)
-    expect(w.findAll('.pd-stage__head')[1].attributes('aria-expanded')).toBe('true')
+    expect(stages[1].find('.pd-stage__body').exists()).toBe(false)
+    expect(w.findAll('.pd-stage__head')[0].attributes('aria-expanded')).toBe('true')
 
     // 再点同一头 → 收起（切换语义）
-    await w.findAll('.pd-stage__head')[1].trigger('click')
+    await w.findAll('.pd-stage__head')[0].trigger('click')
     expect(w.findAll('.pd-stage__body').length).toBe(0)
 
     // taskrow：完成态修饰 + ok pill；进行中 info；未开始 mute
@@ -188,13 +190,59 @@ describe('PathDetail 路径详情二级页（renderPathDetail 落点）', () => 
     w.unmount()
   })
 
+  it('手风琴默认展开回落（审核 #80：全完成回落最后阶段；无任务数据回落首阶段）', async () => {
+    // 场景一：全部任务都完成 → 回落最后一个阶段
+    detailMock.mockResolvedValue({
+      data: {
+        data: {
+          ...detail,
+          status: 'completed',
+          milestones: [
+            {
+              id: 'm1', stageNumber: 1, title: '阶段一', status: 'completed',
+              subtasks: [{ id: 't1', title: '任务一', status: 'completed', taskType: 'practice', estimatedMinutes: 10 }]
+            },
+            {
+              id: 'm2', stageNumber: 2, title: '阶段二', status: 'completed',
+              subtasks: [{ id: 't2', title: '任务二', status: 'completed', taskType: 'acquire', estimatedMinutes: 15 }]
+            }
+          ]
+        }
+      }
+    })
+    let w = mountPage()
+    await flushPromises()
+    await nextTick()
+    expect(w.findAll('.pd-stage__body').length).toBe(1)
+    expect(w.findAll('.pd-stage')[1].find('.pd-stage__body').exists()).toBe(true)
+    w.unmount()
+
+    // 场景二：无任何任务数据 → 回落首阶段
+    detailMock.mockResolvedValue({
+      data: {
+        data: {
+          ...detail,
+          milestones: [
+            { id: 'm1', stageNumber: 1, title: '阶段一', status: 'in_progress', subtasks: [] },
+            { id: 'm2', stageNumber: 2, title: '阶段二', status: 'locked', subtasks: [] }
+          ]
+        }
+      }
+    })
+    w = mountPage()
+    await flushPromises()
+    await nextTick()
+    expect(w.findAll('.pd-stage__body').length).toBe(1)
+    expect(w.findAll('.pd-stage')[0].find('.pd-stage__body').exists()).toBe(true)
+    w.unmount()
+  })
+
   it('任务详情弹层：序号圆+任务名+阶段名；状态 + 真实事实；无验收点/关联产出/学习证据；关闭/遮罩/Esc 可收', async () => {
     const w = mountPage()
     await flushPromises()
     await nextTick()
 
-    // 打开第二阶段进行中任务
-    await w.findAll('.pd-stage__head')[1].trigger('click')
+    // 打开第二阶段进行中任务（第二阶段 = 当前阶段，审核 #80 默认已展开，无需先点头）
     await w.findAll('.pd-stage')[1].findAll('.pd-task')[0].trigger('click')
     await nextTick()
 

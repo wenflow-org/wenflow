@@ -209,9 +209,10 @@
       </div>
       <ul class="oc-export__notes">
         <li>执行日志默认导出最近 1000 行，可切换上限；其余业务表导出最近 20000 条。</li>
-        <!-- 文案与实现同口径（#157）：后端 users 导出只排 isVirtualLearner，测试账号（e2e_/shotsnap/@test.local 等）当前仍会包含；
-             待后端接入 REAL_USER_WHERE 后，本条应同步改回「排除虚拟学习者与测试账号」 -->
-        <li>用户导出默认排除虚拟学习者；测试账号（e2e_ / shotsnap / @test.local 等）当前仍会包含。</li>
+        <!-- 文案与实现同口径（#157）：后端 users 导出已接 REAL_USER_WHERE（排虚拟学习者 +
+             e2e_/shotsnap/@test.local 等测试账号前缀/域名），脚注承诺与实现一致。
+             本页导出表单不提供 includeTest 开关（后端接口保留该参数供深链/脚本用）。 -->
+        <li>用户导出默认排除虚拟学习者与测试账号（e2e_ / shotsnap / @test.local 等前缀或域名）。</li>
         <li>导出为只读操作，不产生审计记录；敏感字段（密码哈希、API Key）一律不包含。</li>
       </ul>
     </div>

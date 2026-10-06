@@ -304,6 +304,7 @@ interface Row {
   id: string
   name: string
   email: string
+  isVirtualLearner?: boolean
   isTestAccount?: boolean
   path: string
   task: string
@@ -431,6 +432,7 @@ const rows = computed<Row[]>(() =>
     id: m.userId,
     name: m.name,
     email: m.email,
+    isVirtualLearner: m.isVirtualLearner,
     isTestAccount: m.isTestAccount,
     path: m.pathTitle || '',
     task: m.currentTask || m.currentMilestone || '',
@@ -450,10 +452,11 @@ const rows = computed<Row[]>(() =>
   }))
 )
 
-/** 虚拟学习者识别（审核 #11）：学习者快照域无 isVirtualLearner 字段，按后端创建约定
-    （email = virtual_<uuid>@test.local，见 virtual-learners.ts）识别；真实用户口径
-    （REAL_USER_WHERE）已排除该前缀，不会误判。仅决定身份标记的「虚拟 / 测试」分档。 */
-const isVirtualRow = (r: Row) => /^virtual_/i.test(r.email)
+/** 虚拟学习者识别（审核 #11）：优先用后端回传的 isVirtualLearner（users 表真列，与
+    Users.vue 同源）；旧后端响应无此字段时按创建约定兜底（email = virtual_<uuid>@test.local，
+    见 virtual-learners.ts），真实用户口径（REAL_USER_WHERE）已排除该前缀，不会误判。
+    仅决定身份标记的「虚拟 / 测试」分档。 */
+const isVirtualRow = (r: Row) => r.isVirtualLearner === true || (r.isVirtualLearner === undefined && /^virtual_/i.test(r.email))
 
 const pills = computed(() => [
   { id: 'all' as const, label: '全部', count: rows.value.length },

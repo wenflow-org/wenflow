@@ -413,7 +413,7 @@ export const adminMemoryTracesApi = {
  * 只读；recompute 走 observe（只记录建议，不动 memory_traces）。
  */
 export const adminMemoryReviewApi = {
-  overview: async (params?: { limit?: number; includeVirtual?: boolean }) => {
+  overview: async (params?: { limit?: number; offset?: number; includeVirtual?: boolean }) => {
     return adminAxios.get('/admin/memory-review', { params });
   },
   detail: async (userId: string) => {

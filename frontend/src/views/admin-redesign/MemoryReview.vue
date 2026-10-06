@@ -65,7 +65,10 @@
         <h3 class="mk-card__title">用户列表</h3>
         <!-- 口径：totals.users 是后端全量统计，唯一住在页头 KPI「用户」卡；卡头只报本列表的窗口事实
              （展示前 N、排序键、下钻命中），不再复读全量数（CP6：同屏 KPI 与卡头两处同数） -->
-        <span class="mk-card__meta" :title="`后端口径为全量有记忆痕迹用户（全量数见页头 KPI）；列表按待复习（到期）量倒序只取前 ${rows.length} 名，暂无分页${dueBandFilter ? '；当前按到期档下钻，命中集只含窗口内学习者' : ''}`">展示前 {{ rows.length }} · 按待复习量倒序<template v-if="dueBandFilter"> · 已筛 {{ visibleRows.length }} 位</template></span>
+        <!-- 口径：totals.users 是后端全量统计，唯一住在页头 KPI「用户」卡；卡头只报本列表的窗口事实
+             （页码/页大小、排序键、下钻命中），不再复读全量数（CP6：同屏 KPI 与卡头两处同数）。
+             #41：列表已接服务端分页（offset），「暂无分页」自述删除 -->
+        <span class="mk-card__meta" :title="`按待复习（到期）量倒序服务端分页，每页 ${USER_PAGE_SIZE} 位；全量有记忆痕迹用户数见页头 KPI${dueBandFilter ? '。当前按到期档下钻，命中集只含当前窗口内学习者' : ''}`">第 {{ userPage }} 页 · 每页 {{ USER_PAGE_SIZE }} 位 · 按待复习量倒序<template v-if="dueBandFilter"> · 已筛 {{ visibleRows.length }} 位</template></span>
       </div>
       <!-- 取数失败不得渲染成「暂无数据」（R2）：总览失败且无行 → MkEmptyState tone="error" + 重试；
            有旧行时保留旧行并在上方给出带重试的 .mk-alert（失败原因不静默） -->
@@ -162,8 +165,8 @@
             </tr>
           </tbody>
         </table>
-        <!-- 到期档下钻筛空：两种口径要分开说。下钻命中的是「窗口内该档有到期痕迹的学习者」，
-             列表是「前 50 名」——两者求交集为空时，断言「窗口内没有学习者的到期痕迹」是错的
+        <!-- 到期档下钻筛空：两种口径要分开说。下钻命中的是「当前窗口内该档有到期痕迹的学习者」，
+             列表是服务端分页窗口（每页 50）——两者求交集为空时，断言「窗口内没有学习者的到期痕迹」是错的
              （实测「明天」档窗口内 42 痕 / 12 人，交集 0，界面却报窗口内没有）。 -->
         <MkEmptyState
           v-else-if="dueBandFilter"
@@ -171,6 +174,15 @@
           :description="dueBandEmpty.desc"
         />
       </div>
+      <!-- 服务端分页（审核 #41，T1 硬约束「列表必须分页」）：total=后端全量有痕迹用户数
+           （totals.users，与页头 KPI 同源）；与 AuditLogs 同一分页器形态，作为 .mk-card--fill
+           的直接子元素吸底 -->
+      <Pagination
+        v-model:page="userPage"
+        :page-size="USER_PAGE_SIZE"
+        :total="totals.users"
+        :loading="loading"
+      />
     </div>
     </template>
 
@@ -477,6 +489,7 @@ import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkDistBand from '@/components/mk/MkDistBand.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
+import Pagination from './Pagination.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'
 import { askConfirm } from './useConfirm'
@@ -585,9 +598,18 @@ const includeVirtual = computed({
   set: (v) => liveSetIncludeVirtual(v)
 })
 watch(includeVirtual, () => {
+  userPage.value = 1
   void refreshAll()
 })
 const rows = ref<OverviewRow[]>([])
+/* 用户列表服务端分页（审核 #41，T1 硬约束「列表必须分页」）：此前后端只接 limit、
+   前端固定拉前 50 名，101 位有痕迹用户里第 51 位起不可达也不可搜。页码驱动 offset，
+   totals.users（全量有痕迹用户数）作分页 total；到期档下钻仍是对当前窗口的本地过滤。 */
+const USER_PAGE_SIZE = 50
+const userPage = ref(1)
+watch(userPage, () => {
+  void loadOverview()
+})
 /** 明细态状态点：与页头 KPI 同一阈值语义（P1#13）——占该用户痕迹 ≥20% 或到期 ≥5 条才亮
  *  需关注；阈值内是间隔复习的常态积压，不着琥珀（否则告警常亮、琥珀失去语义）。 */
 const detailTone = computed<'ok' | 'warn' | 'muted'>(() => {
@@ -985,10 +1007,15 @@ async function loadOverview() {
   loading.value = true
   error.value = ''
   try {
-    const res: any = await adminMemoryReviewApi.overview({ limit: 50, includeVirtual: includeVirtual.value })
+    const res: any = await adminMemoryReviewApi.overview({ limit: USER_PAGE_SIZE, offset: (userPage.value - 1) * USER_PAGE_SIZE, includeVirtual: includeVirtual.value })
     if (seq !== overviewSeq) return // 已有更新的概览请求在途/完成：丢弃过期响应
     const body = res.data?.data ?? res.data ?? {}
     rows.value = Array.isArray(body.users) ? body.users : []
+    // 越界页（数据收缩/重算后本页无行）回第 1 页重查一次；已在第 1 页仍空则如实显示空态
+    if (!rows.value.length && userPage.value > 1) {
+      userPage.value = 1
+      return
+    }
     totals.value = { ...totals.value, ...(body.totals || {}) }
   } catch (e) {
     if (seq !== overviewSeq) return
