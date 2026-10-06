@@ -22,6 +22,7 @@ import {
   CHECKPOINT_MIN_TURNS,
   CHECKPOINT_TRIGGER_MIN_UNDERSTANDING,
   parseSessionArtifacts,
+  type CheckpointConceptAttribution,
 } from './checkpoint-shared';
 
 /**
@@ -63,6 +64,15 @@ export interface TeachingCheckpoint {
   anchorKind?: 'independent' | 'delayed';
   /** 延迟锚题的自然日间隔（UTC 日界，仅 `anchorKind='delayed'`）；用于"间隔 vs 保持率" */
   anchorIntervalDays?: number;
+  /**
+   * 概念归属（F1 修复轮 a）：普通检查点带上当前教学点的知识身份——失败证据据此挂到概念，
+   * 掌握聚合仲裁（KnowledgeStateService.merge 的 code 负证据阻断）与误解失败路由才有可用键。
+   * **锚题探针不带**：其归属由 `anchorConceptKey` 承载，且纪律 2 禁止锚题结果改写掌握，
+   * 不得经本通道进入聚合。无归属的存量检查点（历史行）三字段皆缺省。
+   */
+  conceptName?: string;
+  conceptKey?: string;
+  conceptSource?: CheckpointConceptAttribution['conceptSource'];
 }
 
 export interface CheckpointSubmitPayload {
@@ -149,6 +159,59 @@ export interface CheckpointCodeJudgement {
   detail: string;
 }
 
+/* ────────────────────────── 掌握聚合仲裁（F1 修复轮 b，2026-10-06） ──────────────────────────
+ * R1 finding A2：knowledgeState 只升不降（KnowledgeStateService merge 默认 allowDegrade=false）
+ * + 失败证据无概念归属 → 同会话内 code 裁决失败（含 attempts_exhausted）不影响任何掌握聚合，
+ * VL-1 两败仍 mastered@100。修复：聚合按**检查点归属概念**消费 code 负证据——
+ * 本会话内有 code 失败的概念不得晋升 mastered（阻断晋升；不做普通课降级，复习课通道不动）。
+ */
+
+/** code 负证据仲裁的聚合形状（喂给 KnowledgeStateService.merge 的第 4 参） */
+export interface CheckpointCodeArbitration {
+  /** 本会话内有 code 裁决失败（检查点归属）的概念名——merge 对其阻断 mastered 晋升 */
+  codeFailedConceptNames: string[];
+  /** 本会话内有 code 裁决记录（无论对错）的概念名——授予处 evidenceSource 标注用 */
+  codeJudgedConceptNames: string[];
+}
+
+/**
+ * 从检查点历史（+ 本回合裁决）聚合 code 负证据（纯函数，供单测）。
+ *
+ * 口径：
+ * - 只认 `judgedBy==='code'` 的行（独立传感器）；model-reference 派生判定与 skip 不构成负证据；
+ * - 只认带 `conceptName` 归属的行（F1 修复轮 a 起落档；历史无归属行无法定位概念，不误伤）；
+ * - **attempts_exhausted 不需单独通道**：它由同一检查点的失败作答行派生，失败行本身即负证据；
+ * - 本回合裁决显式并入：merge 在判分落 checkpointHistory 之前执行（teaching-turn-engine 内
+ *   mergedKnowledge 先算、checkpoint 分支后走），当轮失败必须从入参带上。
+ */
+export function buildCheckpointCodeArbitration(
+  history: unknown,
+  currentVerdict?: { judgedBy?: string; passed?: boolean } | null,
+  currentCheckpoint?: Pick<TeachingCheckpoint, 'conceptName'> | null,
+): CheckpointCodeArbitration {
+  const failed = new Set<string>();
+  const judged = new Set<string>();
+  const rows = Array.isArray(history) ? history : [];
+  for (const row of rows) {
+    if (!row || row.judgedBy !== 'code') continue;
+    const name = typeof row.conceptName === 'string' ? row.conceptName.trim().toLowerCase() : '';
+    if (!name) continue;
+    judged.add(name);
+    if (row.passed === false) failed.add(name);
+  }
+  const currentName = typeof currentCheckpoint?.conceptName === 'string'
+    ? currentCheckpoint.conceptName.trim().toLowerCase()
+    : '';
+  if (currentVerdict?.judgedBy === 'code' && currentName) {
+    judged.add(currentName);
+    if (currentVerdict.passed === false) failed.add(currentName);
+  }
+  return {
+    codeFailedConceptNames: Array.from(failed),
+    codeJudgedConceptNames: Array.from(judged),
+  };
+}
+
 /** 归一化选项 id 集合（大小写/空白容错） */
 function normalizeIdSet(ids: unknown): Set<string> {
   if (!Array.isArray(ids)) return new Set();
@@ -227,6 +290,20 @@ export function judgeCheckpointAnswer(
 }
 
 /**
+ * 证据 payload 的概念归属字段（F1 修复轮 a）：带归属才展开，无归属缺省（存量形状逐字节不变）。
+ * 此前 checkpoint 证据 payload 不带 conceptKey（R1 H2：全库 0/5955）——失败证据无概念可挂，
+ * 掌握聚合与跨课归位全部失锚。
+ */
+function checkpointConceptPayloadFields(checkpoint: TeachingCheckpoint): Record<string, unknown> {
+  if (!checkpoint.conceptKey) return {};
+  return {
+    conceptName: checkpoint.conceptName ?? null,
+    conceptKey: checkpoint.conceptKey,
+    conceptSource: checkpoint.conceptSource ?? 'derived',
+  };
+}
+
+/**
  * 检查点结果留痕（`learner_evidence` type=`checkpoint:result`）。
  *
  * 为什么单独留痕：这是**独立于 LLM 自评**的第一手观测（`judgedBy='code'` 时）——
@@ -262,6 +339,8 @@ export async function recordCheckpointResultEvidence(
           passed: result.passed,
           judgedBy: result.judgedBy,
           detail: result.detail,
+          // 概念归属（F1 修复轮 a）：失败证据知道自己是哪个概念的
+          ...checkpointConceptPayloadFields(checkpoint),
           ...(result.submission.selectedOptionIds?.length
             ? { selectedOptionIds: result.submission.selectedOptionIds }
             : {}),
@@ -325,6 +404,8 @@ export async function recordCheckpointAttemptEvidence(
           type: checkpoint.type,
           title: checkpoint.title,
           outcome: result.outcome,
+          // 概念归属（F1 修复轮 a）：attempts_exhausted/skipped/unresolved 终局同样带归属
+          ...checkpointConceptPayloadFields(checkpoint),
           ...(typeof result.attempts === 'number' ? { attempts: result.attempts } : {}),
         }),
         confidence: 1,

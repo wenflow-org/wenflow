@@ -19,6 +19,7 @@ import { createHash } from 'crypto';
 import { logger } from '../../utils/logger';
 import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
 import { conceptRegistryService } from './concept-registry.service';
+import { isPlaceholderConceptKey, type CheckpointConceptAttribution } from '../ai-teaching/checkpoint-shared';
 
 /**
  * 解析概念身份（canonical conceptId），best-effort：注册表故障不得阻断误解记录。
@@ -98,6 +99,25 @@ export function misconceptionDedupeAnchor(hypothesis: string, canonicalLabel?: s
   const label = normalizeMisconceptionLabel(canonicalLabel || '');
   if (label) return `lbl:${hashHypothesis(label)}`;
   return `hyp:${hashHypothesis(normalizeMisconceptionLabel(hypothesis))}`;
+}
+
+/**
+ * 误解失败路由的占位键治理（F1 修复轮 c，2026-10-06，纯函数供单测）。
+ *
+ * R2 复现：模型给的 conceptKey 常是路径生成骨架的 `concept-N` 序列占位（misconception_ledger
+ * 实测 8 行里 concept-1×2 + concept-2×1），失败被归到不存在的占位概念——同键不同义、跨课
+ * 注入（priorMisconceptions observed 按概念键拉取）永远拉不到。路由规则：
+ * - 真键（非占位、非空）→ 原样保留（模型的规范概念键不被改写）；
+ * - 占位键/空键 → 改挂检查点归属键（teaching-checkpoint 发出时带上的当前教学点概念）；
+ * - 占位键且无归属可挂 → null（调用方丢弃该条：宁缺勿错挂，**绝不落 concept-N 占位**）。
+ */
+export function rerouteMisconceptionConceptKey(
+  modelKey: string | null | undefined,
+  attribution: CheckpointConceptAttribution | null | undefined,
+): string | null {
+  const key = typeof modelKey === 'string' ? modelKey.trim() : '';
+  if (key && !isPlaceholderConceptKey(key)) return key;
+  return attribution?.conceptKey ?? null;
 }
 
 /** 再次观察到同一误解时要写回的字段（与"归并"的字段集不同，故单列） */

@@ -18,9 +18,9 @@ import { peerTriggerService } from './PeerTriggerService';
 import { buildTeachingScenarioContext, type TeachingScenarioContext } from './TeachingContextBuilder';
 import { fenceLearnerMessagesForModel } from './input-fence';
 import { memoryTraceService } from '../memory/memory-trace.service';
-import { recordMisconceptions } from '../learner/misconception-ledger.service';
+import { recordMisconceptions, rerouteMisconceptionConceptKey } from '../learner/misconception-ledger.service';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
-import { CHECKPOINT_MAX_ATTEMPTS, parseSessionArtifacts } from './checkpoint-shared';
+import { CHECKPOINT_MAX_ATTEMPTS, parseSessionArtifacts, resolveCheckpointConceptAttribution } from './checkpoint-shared';
 import { shouldDeferCompletionForClosure } from './teaching-closure';
 import {
   promoteSupplementSlot,
@@ -29,6 +29,7 @@ import {
 } from './teaching-supplement.service';
 import {
   TeachingCheckpoint,
+  buildCheckpointCodeArbitration,
   checkpointForMessageResult,
   getPendingCheckpoint,
   inheritTeachingState,
@@ -331,7 +332,13 @@ export async function processStudentMessage(
     // B2/Q14：喂给模型前对学习者消息做输入围栏（正常文本原样；疑似注入被打标为不可信数据）。
     // 落库消息保持原文（见上方 updatedMessages），因此这里传的是围栏后的浅拷贝。
     messages: fenceLearnerMessagesForModel(updatedMessages),
-    knowledgeState: frozenKnowledgeState,
+    // 模型可见的看板投影（F1 修复轮 b）：evidenceSource 是服务端权威标注，只落库不进提示词
+    //（提示词载荷与修复前逐字节一致，也避免模型回显该字段）。
+    knowledgeState: frozenKnowledgeState.map((point) => ({
+      name: point.name,
+      status: point.status,
+      progress: point.progress,
+    })),
   }, context, {
     anchorTarget,
     // 检查点作答回合：把代码裁决显式送进本轮输入（报告 #14），让老师反馈口径与系统记录一致
@@ -393,12 +400,21 @@ export async function processStudentMessage(
   // 到期旧知与本节看板物理分离（历史事故 2e3ca16：跨 path 到期点串进「本节知识点」被
   // 误显示为「进行中 · x%」，导致课内复习整体下线）：温故点只进 sessionArtifacts.memoryWarmup，
   // 收束时回写记忆引擎（FSRS 重排 dueAt + 落 learner_evidence 供动态预算回校准）。
+  // 掌握聚合仲裁（F1 修复轮 b，R1 finding A2）：本会话内有 code 裁决失败的（检查点归属）概念
+  // 不得晋升 mastered。负证据 = checkpointHistory 的 code 失败行 + **本回合**检查点裁决
+  // （merge 在判分落历史之前执行，当轮失败必须显式并入，否则「末轮答错→同轮判 mastered」漏网）。
+  const codeEvidenceArbitration = buildCheckpointCodeArbitration(
+    previousTeachingState.checkpointHistory,
+    options.checkpointJudgement,
+    submittedCheckpoint,
+  );
   const mergedKnowledge = normalizeFrozenKnowledgeState(
     effectiveInitialKnowledgeState,
     knowledgeStateService.merge(
       existingPoints,
       teachingOutput.knowledge.points,
-      session.mode === 'review' // 复习课允许 mastered 降级：复习失败在掌握度数据上真实可见
+      session.mode === 'review', // 复习课允许 mastered 降级：复习失败在掌握度数据上真实可见
+      codeEvidenceArbitration
     )
   );
   // 收束判定锚定「冻结目标集」而非每轮合并后的膨胀集合：
@@ -914,6 +930,12 @@ export async function processStudentMessage(
       const checkpointTitle = checkpointCandidate.question.length > 20
         ? `${checkpointCandidate.question.slice(0, 20)}…`
         : checkpointCandidate.question;
+      // 概念归属（F1 修复轮 a，R1 H2：全库 0/5955 无归属）：普通检查点带上当前教学点的知识身份——
+      // 模型输出无键，用当前点名字的确定性派生键并标注 source='derived'。锚题探针不带：
+      // 其归属由 anchorConceptKey 承载，且纪律 2 禁止锚题结果改写掌握，不得经本通道进聚合。
+      const checkpointConcept = anchorTarget
+        ? null
+        : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint);
       teachingState.pendingCheckpoint = {
         id: `cp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: checkpointCandidate.type,
@@ -925,6 +947,14 @@ export async function processStudentMessage(
         // 答案键（服务端保存，客户端投影会剥离）：用于代码裁决，保证"对错"不来自模型自评
         ...(checkpointCandidate.correctOptionIds?.length ? { correctOptionIds: checkpointCandidate.correctOptionIds } : {}),
         ...(checkpointCandidate.expectedKeywords?.length ? { expectedKeywords: checkpointCandidate.expectedKeywords } : {}),
+        // 概念归属（F1-a）：失败证据据此挂到概念，掌握聚合与误解路由才有可用键
+        ...(checkpointConcept
+          ? {
+              conceptName: checkpointConcept.conceptName,
+              conceptKey: checkpointConcept.conceptKey,
+              conceptSource: checkpointConcept.conceptSource,
+            }
+          : {}),
         // 锚题标记（Q13/B4 独立证伪；Q8 延迟保持率复测）：本轮由代码选定锚题目标时打标，
         // 随 inheritTeachingState 跨回合继承；不含答案键，因此 stripCheckpointAnswerKeys 会原样保留
         ...(anchorTarget
@@ -965,6 +995,10 @@ export async function processStudentMessage(
         passed,
         judgedBy,
         understanding,
+        // 概念归属（F1 修复轮 a/b）：掌握聚合仲裁按归属概念消费 code 负证据——
+        // 无归属的存量检查点（修复前发出的 pending）不带这两字段，聚合侧不误伤
+        ...(submittedCheckpoint.conceptName ? { conceptName: submittedCheckpoint.conceptName } : {}),
+        ...(submittedCheckpoint.conceptKey ? { conceptKey: submittedCheckpoint.conceptKey } : {}),
       });
 
       // 检查点结果留痕（learner_evidence）：独立传感器的原始观测，供 §7 P1-1 的成功率带与控制律消费
@@ -1025,11 +1059,21 @@ export async function processStudentMessage(
     });
     committed = true;
 
-    // 误解台账（G-R-R Phase 2）：异步记录本轮结构化误解，best-effort 不阻断回合
+    // 误解台账（G-R-R Phase 2）：异步记录本轮结构化误解，best-effort 不阻断回合。
+    // 失败路由占位键治理（F1 修复轮 c，R2 复现 concept-1/concept-2 占位入账）：模型给的
+    // conceptKey 是路径骨架 concept-N 占位时改挂检查点归属键（发出时带上的当前教学点概念；
+    // 无检查点回合退到当前教学点），真键原样，无归属可挂 → 丢弃（宁缺勿错挂）。
     const misconceptions = teachingOutput.analysis?.misconceptions;
     if (Array.isArray(misconceptions) && misconceptions.length > 0) {
+      const misconceptionAttribution = (submittedCheckpoint?.conceptKey
+        ? {
+            conceptName: submittedCheckpoint.conceptName ?? '',
+            conceptKey: submittedCheckpoint.conceptKey,
+            conceptSource: submittedCheckpoint.conceptSource ?? ('derived' as const),
+          }
+        : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint));
       void recordMisconceptions(session.userId, sessionId, misconceptions.map((m) => ({
-        conceptKey: m.conceptKey || '',
+        conceptKey: rerouteMisconceptionConceptKey(m.conceptKey, misconceptionAttribution) || '',
         hypothesis: m.hypothesis,
         canonicalLabel: m.canonicalLabel ?? null,
         confidence: m.confidence,

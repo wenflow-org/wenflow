@@ -7,6 +7,7 @@
  * MAX_KNOWLEDGE_POINTS 为合并上限护栏。自 AITeachingCoordinator 头部迁出，行为不变。
  */
 import type { TeachingKnowledgePointState } from './TeachingSessionRepository';
+import type { ArbitratedTeachingKnowledgePointState } from './KnowledgeStateService';
 import type { TeachingScenarioContext } from './TeachingContextBuilder';
 import type { TeachingTurnOutput } from '../../skills/teaching-turn';
 
@@ -24,7 +25,19 @@ export function normalizeKnowledgePoints(points: TeachingKnowledgePointState[]):
   }));
 }
 
-export function cloneKnowledgePoints(points: TeachingKnowledgePointState[] | null | undefined): TeachingKnowledgePointState[] {
+/**
+ * 授予证据标注（F1 修复轮 b）随克隆保留：knowledgeState 是 JSON 列，evidenceSource 落库后
+ * 经此往返；此前 pick 字段的克隆会把它剥掉，授予处标注形同虚设。仅内部权威面携带——
+ * normalizeKnowledgePoints（客户端投影）刻意不透出，前端形状不变。
+ */
+function carryEvidenceSource(
+  point: TeachingKnowledgePointState,
+): Pick<ArbitratedTeachingKnowledgePointState, 'evidenceSource'> | Record<string, never> {
+  const source = (point as ArbitratedTeachingKnowledgePointState).evidenceSource;
+  return typeof source === 'string' ? { evidenceSource: source } : {};
+}
+
+export function cloneKnowledgePoints(points: TeachingKnowledgePointState[] | null | undefined): ArbitratedTeachingKnowledgePointState[] {
   if (!Array.isArray(points)) return [];
   return points
     .filter((point) => point && typeof point.name === 'string' && point.name.trim())
@@ -32,6 +45,7 @@ export function cloneKnowledgePoints(points: TeachingKnowledgePointState[] | nul
       name: point.name.trim(),
       status: point.status,
       progress: Number.isFinite(point.progress) ? Number(point.progress) : 0,
+      ...carryEvidenceSource(point),
     }));
 }
 
@@ -41,7 +55,7 @@ export const MAX_KNOWLEDGE_POINTS = 12;
 export function normalizeFrozenKnowledgeState(
   frozenPoints: TeachingKnowledgePointState[] | null | undefined,
   currentPoints: TeachingKnowledgePointState[] | null | undefined,
-): TeachingKnowledgePointState[] {
+): ArbitratedTeachingKnowledgePointState[] {
   const frozen = cloneKnowledgePoints(frozenPoints);
   const current = cloneKnowledgePoints(currentPoints);
   if (frozen.length === 0) {
@@ -56,11 +70,17 @@ export function normalizeFrozenKnowledgeState(
   );
 
   const merged = frozen.map((point, index) => {
-    const currentPoint = currentMap.get(point.name.trim().toLowerCase());
+    const currentPoint = currentMap.get(point.name.trim().toLowerCase()) as
+      | ArbitratedTeachingKnowledgePointState
+      | undefined;
     return {
       name: point.name,
       status: currentPoint?.status || point.status || (index === 0 ? 'learning' : 'pending'),
       progress: currentPoint ? Math.max(point.progress || 0, currentPoint.progress || 0) : (point.progress || 0),
+      // 本回合合并结果的授予标注优先，其次保留冻结面的历史标注（F1 修复轮 b）
+      ...(currentPoint?.evidenceSource
+        ? { evidenceSource: currentPoint.evidenceSource }
+        : carryEvidenceSource(point)),
     };
   });
 
