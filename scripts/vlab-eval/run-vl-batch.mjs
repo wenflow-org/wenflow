@@ -2,7 +2,10 @@
 /** run-vl-batch.mjs — VL 原生批量驱动（Phase 2/3）：goal→path（run-full）→ 轮询就绪 → 可选 learn 首课。
  * 教训内置：per-VL 状态文件续跑、瞬时退避、admin 登录重登、错峰启动、单摘要 jsonl。
  * 用法：node scripts/vlab-eval/run-vl-batch.mjs [--ids-file=results/wave6-ids.txt] [--limit=20] [--concurrency=10]
- *        [--learn] [--tag=w6vl] [--base=http://127.0.0.1:3010]
+ *        [--conc-max=N] [--learn] [--tag=w6vl] [--base=http://127.0.0.1:3010]
+ * --conc-max=N：AIMD 并发上限显式覆盖（默认=--concurrency 本身，R1 A38：上限不得越过操作者指定值）。
+ * --selftest：跑纯函数断言（错误分类/重试决策/AIMD 界/path 任务就绪判定）后退出，不连后端不碰 fs；
+ *   回归命令：node scripts/vlab-eval/test-run-vl-batch.mjs
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,10 +16,110 @@ import { adminLoginOnce, refreshAdminCookie } from './admin-session.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
 const arg = (k, d) => { const hit = process.argv.find((a) => a.startsWith(`--${k}=`)); return hit ? hit.split('=').slice(1).join('=') : (process.argv.includes(`--${k}`) ? true : d); };
+
+// ---- 纯函数：错误分类与重试决策（--selftest 判定面；三缺陷 R1 A8/A9/A38 修复的核心判定） ----
+
+/** [F3-a / R1 A9] 200 包裹的上游错误分类。
+ * 背景（R1 §13 / R2 §10-异常①实锤）：上游池 403「No active subscription found for this group」
+ * 不以 HTTP 403 暴露，而是网关吃下后以 HTTP 200 + body 错误回传（B1 格一次即败实录
+ * vl-r1b-summary.jsonl:1：「200 API request failed with status 403: {"error":{"message":
+ * "No active subscription found for this group","type":"bad_response_status_code"…}」）——
+ * 旧 api() 重试分类只认直连 429/5xx/409/超时，这类错误落在「立即抛」分支。
+ * 返回 null（非上游包裹错误 → 维持立即抛，业务错不烧重试预算）；命中返回：
+ *   { upstreamStatus, sub403, retryable }
+ *   - sub403=true：池级订阅 403（已知形态）——api() 重试前先走 revive 钩子（R2 ad-driver.mjs
+ *     advanceDay/reviveIfFailed:260-271 已验证修法：restart-learning 复活被终态化的会话再重发）；
+ *   - retryable：上游 404（模型/资源不存在）重试无意义=false；上游 5xx/429/403 与无状态码的
+ *     AUTH_INVALID 家族（R2 seq 轨实败形态）=true。 */
+function classifyWrappedUpstream(msg) {
+  const text = String(msg || '');
+  const m = text.match(/API request failed with status (\d{3})/i);
+  const family = m !== null || /bad_response_status_code|AUTH_INVALID|No active subscription/i.test(text);
+  if (!family) return null;
+  const upstreamStatus = m ? Number(m[1]) : 0;
+  return {
+    upstreamStatus,
+    sub403: /No active subscription/i.test(text),
+    retryable: m ? Number(m[1]) !== 404 : true,
+  };
+}
+
+/** [F3-b / R1 A8] path-ready 竞态错误识别：start-learning 报「第一个里程碑没有可用任务」
+ * = 阶段任务生成未就绪（simulation.learn-phase.ts:184-185 两种形态都自带"请稍后重试"语义），
+ * 是可等待状态而非格死（B2 因此搁浅 38 分钟）。实败形态：vl-r1b-summary.jsonl:2、
+ * vl-learn-queue-summary.jsonl:248/:569。 */
+function isPathTasksNotReadyError(msg) {
+  return /第一个里程碑没有可用任务/.test(String(msg || ''));
+}
+
+/** [F3-b] path 任务就绪状态（口径与后端 waitForPathReady 对齐：simulation.path-phase.ts:58-70
+ * 「里程碑存在 ≠ 可启动。任务（subtasks）可能在里程碑写入后才插入……必须等到至少一个里程碑下
+ * 有非 completed 的可启动任务」）。
+ *   generating=任务尚未写入（继续等）；ready=存在非 completed 任务（可开课）；
+ *   exhausted=任务已写入但全部 completed（开课必再败，早停不空等——实录形态
+ *   vl-learn-queue-summary.jsonl:248「阶段任务已经准备完成，无需重试」）；unknown=响应异常（继续等）。 */
+function pathTasksState(milestones) {
+  if (!Array.isArray(milestones)) return 'unknown';
+  let anySub = false;
+  for (const m of milestones) {
+    if (!Array.isArray(m?.subtasks)) continue;
+    for (const t of m.subtasks) { anySub = true; if (String(t?.status || '') !== 'completed') return 'ready'; }
+  }
+  return anySub ? 'exhausted' : 'generating';
+}
+
+/** [F3-c / R1 A38] AIMD 并发界。上限默认=操作者指定的 --concurrency 本身（旧 max(CONC,1.7×)
+ * 使实跑并发越过指定值 2→3，A38 实锤）；--conc-max=N 显式覆盖（可放大可收紧）；
+ * 下限不越过上限（显式 conc-max < 0.5×CONC 时下限钳到上限）。 */
+function concBounds(conc, concMaxExplicit) {
+  const max = Number(concMaxExplicit) > 0 ? Number(concMaxExplicit) : conc;
+  const min = Math.min(max, Math.max(1, Math.round(conc * 0.5)));
+  return { min, max };
+}
+
+// --selftest：在任何 fs/网络副作用之前短路退出（纯函数声明提升可用）。退出码 0=全过。
+if (process.argv.includes('--selftest')) {
+  const cases = [];
+  const t = (name, fn) => { try { fn(); cases.push([name, true, '']); } catch (e) { cases.push([name, false, e?.message || String(e)]); } };
+  const eq = (got, want, what) => { if (JSON.stringify(got) !== JSON.stringify(want)) throw new Error(`${what}: got ${JSON.stringify(got)} want ${JSON.stringify(want)}`); };
+  // a) 200 包裹上游错误分类
+  const b1msg = 'API request failed with status 403: {"error":{"message":"No active subscription found for this group","type":"bad_response_status_code","param":null}}';
+  t('a·B1 实败形态(200 包裹 403 订阅)→retryable+sub403', () => eq(classifyWrappedUpstream(b1msg), { upstreamStatus: 403, sub403: true, retryable: true }, 'class'));
+  t('a·200 包裹上游 500→retryable、无需复活', () => eq(classifyWrappedUpstream('API request failed with status 500: {"error":{"message":"upstream boom"}}'), { upstreamStatus: 500, sub403: false, retryable: true }, 'class'));
+  t('a·200 包裹上游 404→不可重试', () => eq(classifyWrappedUpstream('API request failed with status 404: {"error":{"message":"model not found"}}').retryable, false, 'retryable'));
+  t('a·AUTH_INVALID 家族(无状态码,R2 seq 形态)→retryable', () => eq(classifyWrappedUpstream('AUTH_INVALID: opening-generator failed').retryable, true, 'retryable'));
+  t('a·业务竞态错不属上游家族→null(不烧重试预算)', () => eq(classifyWrappedUpstream('第一个里程碑没有可用任务（阶段设计未就绪：阶段任务仍在生成中，请稍后查看）'), null, 'class'));
+  t('a·会话已停止不属上游家族→null(交给会话自愈分支)', () => eq(classifyWrappedUpstream('学习已停止（failed）'), null, 'class'));
+  // b) path-ready 竞态识别 + 任务就绪判定
+  t('b·竞态错·阶段设计未就绪(vl-r1b-02 实败形态)', () => eq(isPathTasksNotReadyError('200 第一个里程碑没有可用任务（阶段设计未就绪：阶段任务仍在生成中，请稍后查看）'), true, 'is'));
+  t('b·竞态错·阶段任务生成中(重试已触发形态)', () => eq(isPathTasksNotReadyError('200 第一个里程碑没有可用任务（阶段任务生成中：已触发阶段设计重试 #4，请稍后重试）'), true, 'is'));
+  t('b·非竞态·run-full 预期止步不误判', () => eq(isPathTasksNotReadyError('未能进入教学阶段（当前阶段：path）'), false, 'is'));
+  t('b·非竞态·路径生成超时不误判', () => eq(isPathTasksNotReadyError('等待路径生成超时'), false, 'is'));
+  t('b·任务状态·空里程碑=generating(继续等)', () => eq(pathTasksState([]), 'generating', 'state'));
+  t('b·任务状态·里程碑在子任务未写入=generating', () => eq(pathTasksState([{ title: 'm1', subtasks: [] }]), 'generating', 'state'));
+  t('b·任务状态·存在非 completed 任务=ready', () => eq(pathTasksState([{ subtasks: [{ status: 'completed' }, { status: 'pending' }] }]), 'ready', 'state'));
+  t('b·任务状态·全部 completed=exhausted(早停不空等38分钟)', () => eq(pathTasksState([{ subtasks: [{ status: 'completed' }] }]), 'exhausted', 'state'));
+  t('b·任务状态·响应异常=unknown(继续等)', () => eq(pathTasksState(undefined), 'unknown', 'state'));
+  // c) AIMD 并发界
+  t('c·conc=2 上限=2(旧 1.7× 越界到 3,R1 A38)', () => eq(concBounds(2), { min: 1, max: 2 }, 'bounds'));
+  t('c·conc=10 上限=10(旧 17)', () => eq(concBounds(10), { min: 5, max: 10 }, 'bounds'));
+  t('c·conc-max=3 显式放大上限', () => eq(concBounds(2, 3), { min: 1, max: 3 }, 'bounds'));
+  t('c·conc-max=1 显式收紧·下限钳到上限', () => eq(concBounds(2, 1), { min: 1, max: 1 }, 'bounds'));
+  t('c·conc-max=3 < 0.5×10·下限钳到 3', () => eq(concBounds(10, 3), { min: 3, max: 3 }, 'bounds'));
+  t('c·conc-max 显式 0/缺省=上限即指定并发', () => eq(concBounds(6, 0), { min: 3, max: 6 }, 'bounds'));
+  let fail = 0;
+  for (const [name, ok, err] of cases) { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ' — ' + err}`); if (!ok) fail++; }
+  console.log(`selftest: ${cases.length - fail}/${cases.length} passed`);
+  process.exit(fail ? 1 : 0);
+}
+
 const BASE = arg('base', 'http://127.0.0.1:3010');
 const IDS_FILE = arg('ids-file', '');
 const LIMIT = Number(arg('limit', '0'));
 const CONC = Math.max(1, Number(arg('concurrency', '10')));
+// [F3-c] AIMD 上限显式覆盖（--conc-max=N）。裸 --conc-max（无=值）与非法值一律忽略回退默认
+// （=CONC 本身），防 Number(true)=1 之类的隐式坑。
+const CONC_MAX_EXPLICIT = /^[0-9]+$/.test(String(arg('conc-max', ''))) ? Number(arg('conc-max', '')) : 0;
 const LEARN = process.argv.includes('--learn');
 // --lessons=N：每人上 N 节课就收（默认 1 = 首课）。N≥2 时 learn-done 收尾（wrapup 落库）后
 // 继续 start-learning 推进下一任务，以 completedTasks 基线 +1 为第二课完课信号，wrapup 后终态。
@@ -83,10 +186,11 @@ function httpJson(method, urlPath, body, timeoutMs) {
   });
 }
 
-async function api(method, urlPath, body, { retries = 8, timeout = 600000, netBudgetMs = 600000 } = {}) {
+async function api(method, urlPath, body, { retries = 8, timeout = 600000, netBudgetMs = 600000, revive = null } = {}) {
   let last = null;
   let respRetries = 0;
   let retries409 = 0;
+  let revives = 0;
   let netStart = 0;
   let netRetries = 0;
   for (;;) {
@@ -100,13 +204,31 @@ async function api(method, urlPath, body, { retries = 8, timeout = 600000, netBu
         continue;
       }
       if (!resStatus || resStatus >= 400 || json?.success === false) {
-        last = `${resStatus} ${String(json?.error?.message || json?.error || json?.raw || '').slice(0, 140)}`;
+        const rawMsg = String(json?.error?.message || json?.error || json?.raw || '');
+        last = `${resStatus} ${rawMsg.slice(0, 140)}`;
         if (resStatus === 409) {
           // 409=会话写锁被占（孤儿轮/相邻驱动）。与限流不同，这是「等就完事」的错：
           // 独立预算 20 次、退避封顶 48s（累计可容忍 ~13 分钟锁占用），别占用 429/5xx 的快速失败预算
           if (++retries409 > 20) throw new Error(last);
           await sleep(8000 * Math.min(retries409, 6));
           continue;
+        }
+        // [F3-a / R1 A9] 200 包裹的上游错误：网关吃下上游 4xx/5xx 后以 HTTP 200 回填错误体
+        // （B1 格实败：403「No active subscription found for this group」以 200 返回，旧分类
+        // 只认直连 429/5xx/409 → 一次即败）。上游 5xx/429/403/AUTH_INVALID → 与同名直连错误
+        // 同预算退避重试；上游 404 不可重试直接抛；未命中上游家族的业务错维持「立即抛」不烧预算。
+        if (resStatus >= 100 && resStatus < 400 && json?.success === false) {
+          const cls = classifyWrappedUpstream(rawMsg);
+          if (cls) {
+            if (!cls.retryable) throw new Error(last);
+            // 池级订阅 403 会把 vsession 终态化 failed（R2 §8：对 failed 重试只烧尽）——
+            // 重发前先核对会话状态、failed/abandoned 才 restart-learning 复活
+            //（R2 ad-driver.mjs advanceDay+reviveIfFailed 已验证修法，每调用至多 2 次）
+            if (cls.sub403 && revive && revives < 2) { revives++; try { await revive(); } catch { /* 复活失败不阻断重试链 */ } }
+            if (++respRetries > retries) throw new Error(last);
+            await sleep(8000 * respRetries);
+            continue;
+          }
         }
         if (resStatus === 429 || resStatus >= 500) {
           if (++respRetries > retries) throw new Error(last);
@@ -158,12 +280,58 @@ let idsArg = [];
 if (IDS_FILE) idsArg = fs.readFileSync(path.resolve(ROOT, IDS_FILE), 'utf8').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
 else idsArg = tagStrings.map((t) => { const segs = t.tags.split(',').map((s) => s.trim()); return segs[1] || ''; }).filter(Boolean);
 if (LIMIT > 0) idsArg = idsArg.slice(0, LIMIT);
-log(`目标 ${idsArg.length} 个 VL，并发 ${CONC}${LEARN ? '（含 learn 首课）' : ''}`);
+const _aimdBounds = concBounds(CONC, CONC_MAX_EXPLICIT);
+log(`目标 ${idsArg.length} 个 VL，并发 ${Math.min(CONC, _aimdBounds.max)}${_aimdBounds.max !== CONC ? `（AIMD 界 [${_aimdBounds.min}, ${_aimdBounds.max}]，--conc-max 指定）` : ''}${LEARN ? '（含 learn 首课）' : ''}`);
 
 const record = (o) => fs.appendFileSync(SUMMARY, JSON.stringify(o) + '\n');
 const statePath = (pid) => path.join(EVAL_DIR, `vlstate-${pid}.json`);
 const loadState = (pid) => { try { return JSON.parse(fs.readFileSync(statePath(pid), 'utf8')); } catch { return null; } };
 const saveState = (pid, st) => fs.writeFileSync(statePath(pid), JSON.stringify(st, null, 1));
+
+// [F3-a] 池级订阅 403 的复活钩子（R2 ad-driver.mjs reviveIfFailed:260-271 已验证修法搬移；
+// 会话状态核对走产品 API 而非直查 DB——本脚本不持 sqlite 连接）：仅当 vsession 已被终态化
+// （failed/abandoned）才 restart-learning，活会话不碰（防误杀活课，同 ad-driver 的先查后复活）。
+async function reviveIfSessionDead(st) {
+  const sp = await api('GET', `/api/admin/virtual-learners/sessions/${st.sessionId}`, undefined, { timeout: 30000 }).catch(() => null);
+  const sess = sp?.data?.session || sp?.data || {};
+  if (!['failed', 'abandoned'].includes(String(sess.status || ''))) return false;
+  log(`会话已被终态化（${sess.status}）→ restart-learning 复活（sub403 重发前置）`);
+  await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/restart-learning`, {}, { timeout: 120000 }).catch(() => { });
+  await sleep(5000);
+  return true;
+}
+
+// [F3-b / R1 A8] path-ready 竞态等待：轮询 path 详情等任务就绪再开课（上限 10 分钟，间隔 15s→60s 递增）。
+// 详情端点 GET /api/admin/learning-content/paths/:id（learning-content.repo.ts:43-56：milestones[]
+// 含 subtasks[]{status}；挂载 bootstrap/routers.ts:195）；就绪口径与后端 waitForPathReady 一致
+// （simulation.path-phase.ts:58-70：里程碑存在 ≠ 可启动，须有非 completed 的可启动任务）。
+async function waitPathTasksReady(pid, st, timeoutMs = 10 * 60 * 1000) {
+  const deadline = Date.now() + timeoutMs;
+  let gap = 15000;
+  for (let k = 0; ; k++) {
+    const pd = await api('GET', `/api/admin/learning-content/paths/${st.pathId}`, undefined, { timeout: 30000 }).catch(() => null);
+    const state = pathTasksState(pd?.data?.milestones);
+    if (state === 'ready') { if (k > 0) log(`${pid} path 任务就绪（等待 ${k} 轮后）`); return 'ready'; }
+    if (state === 'exhausted') { log(`${pid} path 任务已全部 completed（开课必再败，早停）`); return 'exhausted'; }
+    if (Date.now() >= deadline) return 'timeout';
+    if (k % 3 === 0) log(`${pid} path 任务未就绪（${state}）→ ${Math.round(gap / 1000)}s 后再查`);
+    await sleep(gap);
+    gap = Math.min(60000, gap + 10000);
+  }
+}
+
+// [F3-b] start-learning 撞「第一个里程碑没有可用任务」从直接判格失败改为：轮询等任务就绪 → 重发开课。
+async function startLearningWhenTasksReady(pid, st) {
+  const url = `/api/admin/virtual-learners/sessions/${st.sessionId}/start-learning`;
+  try {
+    await api('POST', url, {}, { revive: () => reviveIfSessionDead(st) });
+  } catch (e) {
+    if (!isPathTasksNotReadyError(e?.message || e)) throw e;
+    log(`${pid} start-learning 撞 path-ready 竞态 → 轮询等任务就绪（≤10min）`);
+    if (!st.pathId || (await waitPathTasksReady(pid, st)) !== 'ready') throw e;
+    await api('POST', url, {}, { revive: () => reviveIfSessionDead(st) });
+  }
+}
 
 async function runOne(pid) {
   const t0 = Date.now();
@@ -231,7 +399,7 @@ async function runPhase(pid, vl, st, t0) {
     }
     if (st.phase === 'goal-path') {
       try {
-        await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/run-full`, { maxRounds: 30, maxMilestones: 10, continueOnTaskComplete: false, autoAdvanceToPath: true, autoAdvanceToLearning: false }, { timeout: 40 * 60 * 1000 });
+        await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/run-full`, { maxRounds: 30, maxMilestones: 10, continueOnTaskComplete: false, autoAdvanceToPath: true, autoAdvanceToLearning: false }, { timeout: 40 * 60 * 1000, revive: () => reviveIfSessionDead(st) });
       } catch (e) {
         // autoAdvanceToLearning:false 时 run-full 必然以「未能进入教学阶段（当前阶段：path）」收尾——
         // 那是"诚实停在 path"的状态标记（run-vl-one.js 同款处理），不是失败；其余错误照抛。
@@ -287,7 +455,8 @@ async function runPhase(pid, vl, st, t0) {
       return;
     }
     if (st.phase === 'path-ready' && LEARN && !PATH_ONLY) {
-      await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/start-learning`, {});
+      // [F3-b / R1 A8] 竞态感知开课：撞「第一个里程碑没有可用任务」→ 轮询等任务就绪 → 重发
+      await startLearningWhenTasksReady(pid, st);
       st.phase = 'learn'; saveState(pid, st);
     }
     if (st.phase === 'learn') {
@@ -299,7 +468,7 @@ async function runPhase(pid, vl, st, t0) {
       while (Date.now() < deadline) {
         let r;
         try {
-          r = await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-step`, {}, { timeout: 300000 });
+          r = await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-step`, {}, { timeout: 300000, revive: () => reviveIfSessionDead(st) });
         } catch (e) {
           const emsg = String(e.message || e);
           // 「学习已停止/学习会话已停止或失败」= 会话本体已死。自愈：restart-learning 复活后
@@ -378,10 +547,17 @@ async function runPhase(pid, vl, st, t0) {
             const sess = sessRes?.data?.session || sessRes?.data || {};
             const baseline = Number(sess.completedTasks || 0);
             try {
-              await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/start-learning`, {});
+              await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/start-learning`, {}, { revive: () => reviveIfSessionDead(st) });
             } catch (e) {
               const em = String(e.message || e);
               if (/已在学习|already/i.test(em)) { /* 已在课中，直接走轮 */ }
+              else if (isPathTasksNotReadyError(em)) {
+                // [F3-b] 第二课同样撞 path-ready 竞态（实录 vl-learn-queue-summary.jsonl:248/:555，
+                // 旧分类下直接判格失败）：等任务就绪再重发，全部 completed 则早停抛原错
+                log(`${pid} 第二课 start-learning 撞 path-ready 竞态 → 轮询等任务就绪`);
+                if (!st.pathId || (await waitPathTasksReady(pid, st)) !== 'ready') throw e;
+                await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/start-learning`, {}, { revive: () => reviveIfSessionDead(st) });
+              }
               else if (/已停止|已失败|重新开始学习/i.test(em)) {
                 // 完课收尾或后端重启把学习相位停了：restart-learning 复活后重试一次
                 log(`${pid} 第二课 start-learning 撞停止 → restart-learning 自愈（attempt ${attempt}）`);
@@ -395,7 +571,7 @@ async function runPhase(pid, vl, st, t0) {
             while (Date.now() < deadline2) {
               let r2;
               try {
-                r2 = await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-step`, {}, { timeout: 300000 });
+                r2 = await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/teaching-step`, {}, { timeout: 300000, revive: () => reviveIfSessionDead(st) });
               } catch (e) {
                 const em2 = String(e.message || e);
                 if (/已停止|已失败/.test(em2) && restarted2 < 2) {
@@ -453,11 +629,12 @@ async function runPhase(pid, vl, st, t0) {
 
 // ---- AIMD 自适应并发（P3）：后端 rpm 运行态做反馈 ----
 // queued>0（后端令牌桶在排队）→ 立即降 2；限流类失败 → 立即降 2；
-// 队列空且 90s 内无限流失败 → 缓升 1。上下界由 --concurrency 推导（0.5x ~ 1.7x）。
+// 队列空且 90s 内无限流失败 → 缓升 1。
+// [F3-c / R1 A38] 界：默认 [0.5×CONC, CONC]——上限=操作者 --concurrency 指定值本身
+// （旧 max(CONC, 1.7×) 推导让实跑并发越过指定值 2→3，A38 实锤）；--conc-max=N 显式改界。
+const { min: CONC_MIN, max: CONC_MAX } = concBounds(CONC, CONC_MAX_EXPLICIT);
 let cursor = 0, doneCount = 0, active = 0;
-let targetConc = CONC;
-const CONC_MIN = Math.max(1, Math.round(CONC * 0.5));
-const CONC_MAX = Math.max(CONC, Math.round(CONC * 1.7));
+let targetConc = Math.min(CONC, CONC_MAX);
 let rateLimitedFails = 0;
 let lastGrowAt = Date.now();
 let stopping = false;
