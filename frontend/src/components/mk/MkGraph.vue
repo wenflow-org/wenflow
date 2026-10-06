@@ -41,6 +41,24 @@ export interface MkGraphEdge {
   toConceptId: string
   relation: string
 }
+
+/**
+ * 密集图判据：超过这个节点数就只标「值得标注」的节点（枢纽 + 薄弱），其余靠悬停。
+ *
+ * 阈值必须按**画布面积**给，不能只认节点数（2026-10-05 实测）：同一个 18 概念的单路径图，
+ * 桌面 823×620 画布上标签互不打扰，390 视口挤进 345×392（面积 0.27 倍）就字压字——
+ * 而 18 恰好不满足宽画布的 `> 18`，全量标签照画。
+ *
+ * 8 是折算值：画布面积 0.27 倍，窄屏标签盒又更小（10px/7 字 vs 11px/9 字，面积 0.65 倍），
+ * 18 × 0.27 / 0.65 ≈ 8。注：窄屏判据**只影响标签集合**——斥力/边长/重力三处都以 narrow
+ * 优先（见 setup 里 force 段），所以收紧这里不会把力导向参数带跑。
+ */
+export const DENSE_LABEL_NODES = 18
+export const DENSE_LABEL_NODES_NARROW = 8
+
+export function isDenseLabelGraph(nodeCount: number, narrow: boolean): boolean {
+  return nodeCount > (narrow ? DENSE_LABEL_NODES_NARROW : DENSE_LABEL_NODES)
+}
 </script>
 
 <template>
@@ -203,10 +221,11 @@ function buildOption(): EChartsCoreOption {
   const RELATION_LABEL: Record<string, string> = { prerequisite: '前置依赖', part_of: '属于' }
   // 可读性（视觉验证实测）：节点一多，常显全部标签会让中心区糊成一团；但全都不显示又只剩点。
   // 故密集图只给"值得标注"的节点显示标签：① 连接度最高的若干（结构枢纽）② 薄弱/脆弱节点。其余靠悬停。
-  const denseGraph = nodes.length > 18
+  // 密集阈值按画布面积给（窄屏更早进密集档），理由与折算见 isDenseLabelGraph 的注释。
+  const narrow = isNarrow.value
+  const denseGraph = isDenseLabelGraph(nodes.length, narrow)
   // 力导向总跨度 ≈ 边长·√n；斥力/边长的原值按 ~40 节点校准，故以 40 为基准反比收缩
   const shrink = Math.sqrt(40 / Math.max(1, nodes.length))
-  const narrow = isNarrow.value
   const perLine = narrow ? 7 : 9
   const labelWorthy = new Set<string>()
   if (!denseGraph) {
