@@ -42,6 +42,9 @@ check('[a] 池级订阅 403 先复活会话再重发（ad-driver 已验证修法
 // ---- [F3-b / R1 A8] path-ready 竞态可等待 ----
 check('[b] 存在竞态错误识别 isPathTasksNotReadyError()', /function isPathTasksNotReadyError\(/.test(SRC), '未找到识别函数');
 check('[b] 存在任务就绪轮询 waitPathTasksReady()（GET /paths/:id 口径）', /function waitPathTasksReady\(/.test(SRC) && /\/api\/admin\/learning-content\/paths\/\$\{/.test(SRC), '未找到轮询实现');
+// [F4 / FIX-REPORT §5-11] 终态早停接线：轮询先查 path.status（pathTerminalStatus），再判任务状态；
+// 顺序断言保证「终态 → 立即返回非 ready，调用方 !== 'ready' → 抛原错」语义不被未来重构破坏。
+check('[b] waitPathTasksReady 先查 path.status 终态再判任务（早停不空等 10min）', /pathTerminalStatus\(pd\?\.data\?\.status\)[\s\S]{0,400}pathTasksState\(pd\?\.data\?\.milestones\)/.test(SRC) && /return `terminal:\$\{ts\}`/.test(SRC), '未找到终态前置判定/终态返回值');
 check('[b] start-learning 撞竞态错后转等待并重发开课（不再直接判格失败）', /isPathTasksNotReadyError\([\s\S]{0,300}waitPathTasksReady\(/.test(SRC), 'start-learning 未接等待分支');
 check('[b] 就绪判据与后端 waitForPathReady 对齐（非 completed 即可启动）', /pathTasksState\(/.test(SRC), '未找到 pathTasksState');
 

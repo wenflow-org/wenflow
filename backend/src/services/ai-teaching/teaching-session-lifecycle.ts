@@ -175,6 +175,56 @@ export function buildEndSessionRequestIdentity(endReason: string) {
 }
 
 /**
+ * 非正常终态收束判定（幽灵课 / 弃跑状态泄漏，2026-10-06 修复）。
+ *
+ * 语义：这次收束不是「学完了」而是「跑掉了 / 课已经废了」。命中后收束**仍然闭合状态机**
+ * （会话照常落到 completed，wrapup 照常落库，调用方的轮询/清场逻辑不变），但**不写正式轨**：
+ * learner_evidence（含 lesson:completed 事件与快照刷新）/ learning_metrics（session-wrapup 与
+ * session_load）/ 记忆回写（FSRS trace、误解台账、休眠信号）/ 温故回写（review:completed），
+ * 只留一条审计日志。
+ *
+ * 判定口径（宁窄勿宽——正常收束路径必须逐字不变）：
+ * - `endReason === 'learner-abandoned'`：调用方显式声明学习者放弃。这是当前唯一可达的异常信号：
+ *   产品结束接口（`ai-teaching.routes.ts:906,965`）、清场服务（`open-session-clearance.service.ts:130`）、
+ *   虚拟学习者驾驶器弃跑（`platform-user-adapter.ts:398`）都走它。
+ * - `status ∈ {discarded, superseded, failed}`：防御性覆盖。正常状态机下这些状态到不了收束入口
+ *   （`TeachingSessionRepository.ts:1025-1030` 的 allowedStatuses 已把它们挡在 claim 之外）。
+ * - **`timeout` 不在集合内**：超时是可恢复态（`timeoutIfIdle`/`timeoutIfPaused` → 下一轮教学回合
+ *   `commitTurnState` 复活为 active），其轻量兜底 wrapup 是既定行为；把它当异常会误伤
+ *   「超时后回来继续学、正常收束」的路径。
+ */
+export const ABNORMAL_CLOSURE_STATUSES = ['discarded', 'superseded', 'failed'] as const;
+
+export function isAbnormalSessionClosure(input: {
+  endReason?: string | null;
+  status?: string | null;
+}): boolean {
+  if (input.endReason === 'learner-abandoned') return true;
+  return !!input.status && (ABNORMAL_CLOSURE_STATUSES as readonly string[]).includes(input.status);
+}
+
+/**
+ * 非正常终态的唯一留痕：一条审计日志（不写 learner_evidence / learning_metrics / 记忆回写 / 温故回写）。
+ * 事件侧留痕见 endSession 里 lesson:completed 事件带 `userId: null`（所有学习者消费者都会早退），
+ * 该 outbox 行只作审计，不进任何投影。
+ */
+export function logAbnormalSessionClosure(input: {
+  sessionId: string;
+  userId?: string | null;
+  endReason?: string | null;
+  status?: string | null;
+  suppressed: string[];
+}): void {
+  logger.warn('[AITeaching] 非正常终态收束：跳过正式轨写入，仅落审计留痕', {
+    sessionId: input.sessionId,
+    userId: input.userId ?? null,
+    endReason: input.endReason ?? null,
+    status: input.status ?? null,
+    suppressed: input.suppressed,
+  });
+}
+
+/**
  * 归因证据（有界、带稳定 id 供模型引用）：本课复盘要点 + 状态信号 + 不稳定概念名单。
  * 只给"事实"，不给结论——结论是归因层要产出的东西。
  */
@@ -604,6 +654,27 @@ export async function endSession(
     };
   }
   const { session, operationId, leaseOwner } = finalization;
+  // 幽灵课 / 弃跑状态泄漏拦截（2026-10-06）：非正常终态只闭合状态机，不写正式轨。
+  // 注：claim 已把 end_only 的 status 改成 'finalizing'，所以这里能看到的运行态信号只有 endReason；
+  // status 分支是防御性的（discarded/superseded/failed 正常到不了这里，见谓词注释）。
+  const abnormalClosure = isAbnormalSessionClosure({ endReason, status: session.status });
+  if (abnormalClosure) {
+    logAbnormalSessionClosure({
+      sessionId,
+      userId: session.userId,
+      endReason,
+      status: session.status,
+      suppressed: [
+        'learner_evidence(lesson:completed)',
+        'learning_metrics(session-wrapup/session_load)',
+        'memory_traces(FSRS 回写)',
+        'misconception_ledger / churn_evidence',
+        'checkpoint_attempt_evidence',
+        'insight_calibration',
+        'aux 课后刷新链',
+      ],
+    });
+  }
   const leaseGuard = new FinalizationLeaseGuard(sessionId, operationId, leaseOwner);
   leaseGuard.start();
   try {
@@ -764,7 +835,10 @@ export async function endSession(
   } : null;
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const metricCommit = scoreInput
+    // 非正常终态：metricCommit 置 null —— completeWithEvent 不写 learning_metrics（session-wrapup:<id>），
+    // finalState 随之 null → wrapup.stateUpdate 也为空，读侧（getSessionStateTimeline 的 wrapup 兜底）
+    // 不会把弃跑课读成一次有效收束（R2 §3-a3 追问二 泄漏④）。
+    const metricCommit = scoreInput && !abnormalClosure
       ? await learningStateService.prepareSessionScoreCommit(session.userId, scoreInput)
       : null;
     const finalState = metricCommit?.metrics || null;
@@ -859,7 +933,7 @@ export async function endSession(
       advisory = attribution
         ? replanAdvisoryService.applyAttribution(thresholdAdvisory, attribution)
         : thresholdAdvisory;
-      if (advisory.attribution?.claim && isCalibratableDirection(advisory.recommendation)) {
+      if (advisory.attribution?.claim && isCalibratableDirection(advisory.recommendation) && !abnormalClosure) {
         // 可证伪断言单独成列（insightType=replan_attribution），不与状态评审的可靠性混算
         await insightCalibrationService.recordInsights(session.userId, session.learningPathId || null, [{
           claim: advisory.attribution.claim,
@@ -885,7 +959,10 @@ export async function endSession(
       type: 'lesson:completed',
       aggregateType: 'lesson',
       aggregateId: session.id,
-      userId: session.userId,
+      // 非正常终态：事件**不带 userId**——LearnerEvidenceProjector / LessonKnowledgeEnrichmentConsumer
+      // / 画像快照刷新都会在 `!event.userId` 处早退，于是 learner_evidence 与投影零写入；
+      // 这条 outbox 行只作审计留痕（R2 §3-a3 追问二 泄漏①②）。
+      userId: abnormalClosure ? null : session.userId,
       source: AI_TEACHING_AGENT_ID,
       data: {
         lessonId: session.id,
@@ -910,27 +987,34 @@ export async function endSession(
       }
     });
 
-    await commitSessionLoadMetric(session).catch((error) => {
-      logger.warn('[AITeaching] session_load 指标写入失败（不影响收束）', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
+    // 非正常终态：session_load 也是 learning_metrics 正式轨，弃跑课不写（改调用点，不动 views 侧签名）。
+    if (!abnormalClosure) {
+      await commitSessionLoadMetric(session).catch((error) => {
+        logger.warn('[AITeaching] session_load 指标写入失败（不影响收束）', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
-    });
+    }
 
     // 误解结算（G-R-R 三态补全，2026-09-26）：本课已展示掌握的概念上的活跃误解 → addressed。
     // 此前全仓无人写 addressed/resolvedAt——活跃误解只增不减，被持续注入后续课堂并压低 FSRS 稳定性。
+    // 非正常终态：误解台账属正式轨（R2 §3-a3 追问二 泄漏⑤），弃跑课不结算。
     const masteredConcepts: string[] = learnerReplanProjection?.mastery?.stableConcepts ?? [];
-    if (masteredConcepts.length > 0) {
+    if (masteredConcepts.length > 0 && !abnormalClosure) {
       void markMisconceptionsAddressed(session.userId, masteredConcepts, { source: 'lesson:mastery' });
     }
 
     // 休眠信号（疲劳→干预闭环第一刀，2026-09-26）：结算「开课时距上次活跃」的档位——
     // 非 active 写证据、cooling/dormant 发站内轻提醒（详见 churn-evidence.service）；fail-open
-    void recordChurnRiskAtFinalize({
-      userId: session.userId,
-      sessionId: session.id,
-      sessionStartAt: session.startTime,
-    });
+    // 非正常终态：写证据/发提醒都在正式轨之外，弃跑课不结算。
+    if (!abnormalClosure) {
+      void recordChurnRiskAtFinalize({
+        userId: session.userId,
+        sessionId: session.id,
+        sessionStartAt: session.startTime,
+      });
+    }
 
     // H1 失败留痕：收尾时仍挂起的检查点＝「被聊天绕过」的未作答收场（下面的 mergeFinalTeachingState
     // 会静默清掉 pending）。在只读态先捕获，收尾成功后再写证据（幂等键防收尾重试重复计数）。
@@ -942,7 +1026,12 @@ export async function endSession(
         messages: session.messages,
         knowledgeState: session.knowledgeState,
         teachingState: mergeFinalTeachingState(session.teachingState, finalState, sessionArtifacts),
-        wrapup: finalWrapup,
+        // 非正常终态：**不落正式 wrapup**（保持 NULL）——幽灵课若带 wrapup，三个正式消费者会把它
+        // 当有效收束读：achievement.service.ts:257-263（连课 streak 计入）、
+        // TeachingContextBuilder.ts:741-745/795-803（把弃跑课当「上一课 recap / 同任务历史」注入下节）、
+        // path-mutation-safety.ts:331-336（PATH_MUTATION_HAS_COMPLETED_TEACHING_EVIDENCE 拦截重排）。
+        // 审计留痕走 lessonEvent（userId=null，无消费者读取），汇总不丢。
+        wrapup: abnormalClosure ? null : finalWrapup,
         advisory,
         duration: durationMinutes
       }, lessonEvent, metricCommit ? {
@@ -963,8 +1052,21 @@ export async function endSession(
     }
 
     // H1 失败留痕：收尾成功且检查点仍未作答 → 落一条 checkpoint:attempt（unresolved）。只留痕、不改写。
-    if (pendingCheckpointAtClose) {
+    // 非正常终态：该留痕写 learner_evidence，弃跑课不写。
+    if (pendingCheckpointAtClose && !abnormalClosure) {
       await recordCheckpointAttemptEvidence(session, pendingCheckpointAtClose, { outcome: 'unresolved' });
+    }
+
+    // 非正常终态：到此为止——aux 课后刷新链（快照/状态评审/概念归并/备课）会写正式轨读数，跳过。
+    // 返回值也保持 wrapup=null，与落库语义一致（调用方按 status 判定收束完成，不依赖 wrapup）。
+    if (abnormalClosure) {
+      return {
+        status: 'completed',
+        operationId,
+        wrapup: undefined,
+        advisory,
+        revision: session.revision + 1,
+      };
     }
 
     // 课后刷新统一包进「当前教学会话」作用域：这些 aux skill 的 LLM 调用据此可归到本节

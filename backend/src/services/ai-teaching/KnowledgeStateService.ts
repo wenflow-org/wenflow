@@ -1,11 +1,13 @@
 import type { TeachingKnowledgePointState } from './TeachingSessionRepository';
+import { normalizeConceptName } from './checkpoint-shared';
 
 /**
  * 掌握授予的证据来源（F1 修复轮 b，2026-10-06）：
  * - `code`：本会话有 code 裁决记录（独立传感器）且无失败行——授予有独立证据背书；
  * - `llm`：零 code 证据——授予纯出 LLM 判定（历史默认形态，行为不变仅标注，可追溯）；
- * - `mixed`：存在 code 失败行的同时保留了 mastered（此前已达成的点按"只阻断晋升、
- *   不做普通课降级"的最小语义保留，如实标注证据混杂）。
+ * - `mixed`：存在 code 失败行的同时点为 mastered——复习课（allowDegrade）通道下 LLM 重授
+ *   保留 mastered 时如实标注证据混杂，或历史遗留标注。普通课遇 code 负证据已直接降级为
+ *   learning（F1 修复轮 c，兑现 R1「checkpoint 负证据可降级」），正常路径不再新产 mixed。
  */
 export type KnowledgePointEvidenceSource = 'code' | 'llm' | 'mixed';
 
@@ -39,9 +41,11 @@ export class KnowledgeStateService {
    *   避免 LLM 单轮误判导致掌握度倒退）。
    * @param arbitration 掌握聚合仲裁（F1 修复轮 b，缺省 = 历史行为）：本会话内有 code 裁决
    *   失败的（检查点归属）概念阻断 mastered 晋升——R1 finding A2「代码裁决的检查点失败不进
-   *   任何掌握聚合」的聚合侧修复。语义保持最小：**只阻断晋升**（被阻断点落 learning），
-   *   不做普通课降级（已达成 mastered 的点保留，标 evidenceSource='mixed'）；复习课
-   *   （allowDegrade=true）通道不叠加阻断。
+   *   任何掌握聚合」的聚合侧修复。F1 修复轮 c：已 mastered 的点遇 code 负证据时降为
+   *   learning（兑现 R1 处置建议「checkpoint 负证据可降级」，与授予处 mixed 标注同一判据
+   *   路径——不再「保留 mastered + 标 mixed」双写状态）；复习课（allowDegrade=true）通道
+   *   行为保持原样，LLM 判定照旧生效。名字匹配与派生键同口径（normalizeConceptName，
+   *   折叠全部空白+小写），同名异写不得绕过阻断/降级。
    */
   merge(
     existing: TeachingKnowledgePointState[],
@@ -55,11 +59,13 @@ export class KnowledgeStateService {
   ): ArbitratedTeachingKnowledgePointState[] {
     if (!incoming.length) return existing;
 
+    // 名字匹配口径与派生键一致（normalizeConceptName：折叠全部空白 + 小写），
+    // 避免同名异写（'A B' vs 'AB'）绕过阻断/降级（F1 修复轮 c，复核 P16）
     const failedNames = new Set(
-      (arbitration?.codeFailedConceptNames || []).map((name) => String(name || '').trim().toLowerCase()).filter(Boolean)
+      (arbitration?.codeFailedConceptNames || []).map((name) => normalizeConceptName(name)).filter(Boolean)
     );
     const judgedNames = new Set(
-      (arbitration?.codeJudgedConceptNames || []).map((name) => String(name || '').trim().toLowerCase()).filter(Boolean)
+      (arbitration?.codeJudgedConceptNames || []).map((name) => normalizeConceptName(name)).filter(Boolean)
     );
     /** 授予处证据标注（evidenceSource）：mastered 点必标；failed 有失败行 → mixed，否则有 code 记录 → code，零 code 证据 → llm（保留旧标注） */
     const evidenceSourceFor = (
@@ -72,16 +78,20 @@ export class KnowledgeStateService {
           ? 'code'
           : (previous?.evidenceSource ?? 'llm');
 
-    const merged = new Map(existing.map((point) => [point.name, { ...point } as ArbitratedTeachingKnowledgePointState]));
+    // 看板映射同样按归一名字键（与派生键同口径）：同名异写的存量点与新点归并到同一概念，
+    // 不让「已 mastered 的旧写法」并存存活绕过阻断/降级
+    const merged = new Map(
+      existing.map((point) => [normalizeConceptName(point.name), { ...point } as ArbitratedTeachingKnowledgePointState])
+    );
     for (const point of incoming) {
-      const nameKey = point.name.trim().toLowerCase();
-      const previous = merged.get(point.name);
+      const nameKey = normalizeConceptName(point.name);
+      const previous = merged.get(nameKey);
       if (!previous) {
         // F1-b：code 失败概念不得经「新点直接报 mastered」绕过阻断。
         // 显式挑字段：evidenceSource 是代码权威标注，不透传模型输出里的同名回显
         const blocked = failedNames.has(nameKey) && !allowDegrade && point.status === 'mastered';
         const status = blocked ? 'learning' as const : point.status;
-        merged.set(point.name, {
+        merged.set(nameKey, {
           name: point.name,
           status,
           progress: point.progress,
@@ -91,19 +101,24 @@ export class KnowledgeStateService {
       }
 
       const retainedMastered = previous.status === 'mastered' && !allowDegrade;
-      // 只升不降：mastered 一旦达成，除非 allowDegrade（复习课）否则不降级；
-      // F1-b：code 失败概念的 mastered 晋升被仲裁阻断（落 learning），负证据进入聚合
+      // F1-b/F1-c：code 失败概念——晋升被阻断，且已 mastered 的点在普通课降为 learning
+      // （负证据降级；与授予处 mixed 标注同判据路径，不再保留 mastered 造成状态双写）。
+      // 复习课（allowDegrade）通道不叠加仲裁，LLM 判定照旧生效。
       const incomingBlocked =
         failedNames.has(nameKey) && !allowDegrade && point.status === 'mastered';
+      const degradeByNegativeEvidence =
+        failedNames.has(nameKey) && !allowDegrade && previous.status === 'mastered';
       const nextStatus =
-        retainedMastered
-          ? previous.status
-          : incomingBlocked
-            ? ('learning' as const)
-            : point.status;
+        degradeByNegativeEvidence
+          ? ('learning' as const)
+          : retainedMastered
+            ? previous.status
+            : incomingBlocked
+              ? ('learning' as const)
+              : point.status;
       const nextEvidenceSource =
         nextStatus === 'mastered' ? evidenceSourceFor(nameKey, previous) : previous.evidenceSource;
-      merged.set(point.name, {
+      merged.set(nameKey, {
         ...previous,
         status: nextStatus,
         progress: allowDegrade ? point.progress : Math.max(previous.progress, point.progress),

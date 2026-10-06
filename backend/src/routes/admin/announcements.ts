@@ -96,7 +96,7 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-/** PUT /:id/publish — 发布 */
+/** PUT /:id/publish — 发布（注：无状态机前置校验——重复发布/已归档再发布均 200 并刷新 publishedAt，MIMOSA C2；补 guard 属行为变更待决策） */
 router.put('/:id/publish', async (req: Request, res: Response) => {
   try {
     // 操作审计：发布前快照旧实体
@@ -116,7 +116,7 @@ router.put('/:id/publish', async (req: Request, res: Response) => {
   }
 });
 
-/** PUT /:id/archive — 下线 */
+/** PUT /:id/archive — 下线（注：同上，无状态机前置校验——重复下线幂等覆盖，MIMOSA C2） */
 router.put('/:id/archive', async (req: Request, res: Response) => {
   try {
     // 操作审计：下线前快照旧实体

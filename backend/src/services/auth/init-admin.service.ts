@@ -43,6 +43,7 @@ function initialAdminPassword(environment: NodeJS.ProcessEnv): string | null {
     return password;
   }
   // 未配置时：开发环境使用内置默认密码（便于本地初始化）；生产环境拒绝默认口令，必须显式配置
+  // 注意：闸门为精确等值——NODE_ENV 漏配或写作 prod/Production 时仍回退默认口令（收紧属行为变更，见 MIMOSA-TRIAGE §3-C1，待决策）
   if (environment.NODE_ENV === 'production') {
     return null;
   }

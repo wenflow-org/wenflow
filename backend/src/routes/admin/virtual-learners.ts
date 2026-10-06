@@ -2177,7 +2177,7 @@ router.post('/:id/projection-token', async (req: Request, res) => {
 router.post('/sessions/:sessionId/step', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const result = await runAssistedSessionMutation(sessionId, session =>
+    const result = await runAssistedSessionMutationWithSimClock(sessionId, session =>
       simulationCoordinator.executeSingleStep({
         sessionId,
         userId: session.userId,
@@ -2205,7 +2205,7 @@ router.post('/sessions/:sessionId/auto', async (req: Request, res) => {
     const { sessionId } = req.params;
     const maxRounds = parseSimulationLimit(req.body?.maxRounds, 20, 50, 'maxRounds');
     
-    const results = await runAssistedSessionMutation(sessionId, session =>
+    const results = await runAssistedSessionMutationWithSimClock(sessionId, session =>
       simulationCoordinator.executeAutoLoop(
         {
           sessionId,
@@ -2238,7 +2238,7 @@ router.post('/sessions/:sessionId/auto', async (req: Request, res) => {
 router.post('/sessions/:sessionId/advance-path', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const result = await runAssistedSessionMutation(sessionId, () =>
+    const result = await runAssistedSessionMutationWithSimClock(sessionId, () =>
       simulationCoordinator.advanceToPathGeneration(sessionId)
     );
     
@@ -2377,6 +2377,42 @@ async function runAssistedSessionMutation<T>(
     const result = await work(session, assertLeaseOwned);
     await assertLeaseOwned();
     return result;
+  });
+}
+
+/**
+ * 已有会话的「模拟钟」包装（对齐本文件 advance-day 分支的现成模式：
+ * resolveSimulationClock 解析会话钟 + runWithSimulatedClock 包住执行）：
+ * 在该会话当前模拟时刻（clock.simulatedNow）的上下文内执行 work —— 使学习执行链内的
+ * 「今天/now」（温故计划 buildReviewPlan、温故额度记账 daily.date 等）与写入侧同钟
+ * （FIX-REPORT-2026-10-06 §5-2 / ROUND2-REVIEW-2026-10-06.md:202）。
+ * 时钟来源 = resolveSimulationClock 的完整口径（session 级 clock > profile 级 > 全局 settings），
+ * 与 advance-day / simulated-day.service 完全一致；无任何来源启用时原样直调、不建上下文
+ * （现网行为零变化）。
+ *
+ * `work` 收到同一 session 行（调用方需要 userId 等字段，且避免二次读库）。
+ * 适用入口：凡会进入学习执行链（开课 / 教学回合 / 自动循环 / 全流程 / 复活 / wrapup）的
+ * 已有会话端点；新建会话（regression-run）无存量会话钟，保持直调。
+ */
+async function runAssistedSessionMutationWithSimClock<T>(
+  sessionId: string,
+  work: (session: VirtualSessionRow, assertLeaseOwned: (leaseClient?: LeaseClientLike) => Promise<void>) => Promise<T>
+) {
+  return runAssistedSessionMutation(sessionId, async (session, assertLeaseOwned) => {
+    const stageResults = parseJson<StageResults>(session.stageResults, {});
+    const settings = await getVirtualLabSettings().catch(() => ({ ...DEFAULT_VIRTUAL_LAB_SETTINGS }));
+    const profile = await findProfileJsonById(session.virtualProfileId).catch(() => null);
+    const profileData = parseJson<Record<string, unknown>>(profile?.profile, {});
+    const clock = resolveSimulationClock({
+      stageResultsClock: (stageResults as any).simulationClock ?? null,
+      profileClock: (profileData as any)?.simulationClock ?? null,
+      settings: settings.dateSimulation,
+      sessionCreatedAt: session.createdAt,
+    });
+    if (!clock.enabled) return work(session, assertLeaseOwned);
+    const asOf = new Date(clock.simulatedNow);
+    if (Number.isNaN(asOf.getTime())) return work(session, assertLeaseOwned);
+    return runWithSimulatedClock(asOf, () => work(session, assertLeaseOwned));
   });
 }
 
@@ -2850,7 +2886,7 @@ router.post('/sessions/:sessionId/start-learning', async (req: Request, res) => 
   try {
     const { sessionId } = req.params;
     const { taskId } = req.body || {};
-    const result = await runAssistedSessionMutation(sessionId, () =>
+    const result = await runAssistedSessionMutationWithSimClock(sessionId, () =>
       simulationCoordinator.startLearningPhase(sessionId, { taskId })
     );
     
@@ -2872,7 +2908,7 @@ router.post('/sessions/:sessionId/start-learning', async (req: Request, res) => 
 router.post('/sessions/:sessionId/teaching-step', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const result = await runAssistedSessionMutation(sessionId, () =>
+    const result = await runAssistedSessionMutationWithSimClock(sessionId, () =>
       simulationCoordinator.executeLearningStep(sessionId)
     );
     
@@ -2897,7 +2933,7 @@ router.post('/sessions/:sessionId/auto-learning', async (req: Request, res) => {
     const maxMilestones = parseSimulationLimit(req.body?.maxMilestones, 10, 20, 'maxMilestones');
     // 回合上限前端可配（默认 LEARN_AUTO_TURN_CAP=40）：不同课的收束节奏差异很大
     const maxTurns = parseSimulationLimit(req.body?.maxTurns, 40, 100, 'maxTurns');
-    const result = await runAssistedSessionMutation(sessionId, () =>
+    const result = await runAssistedSessionMutationWithSimClock(sessionId, () =>
       simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones, maxTurns })
     );
     
@@ -2930,7 +2966,7 @@ router.post('/sessions/:sessionId/run-full', async (req: Request, res) => {
     const maxRounds = parseSimulationLimit(requestedMaxRounds, 20, 50, 'maxRounds');
     const maxMilestones = parseSimulationLimit(requestedMaxMilestones, 10, 20, 'maxMilestones');
 
-    const result = await runAssistedSessionMutation(sessionId, () =>
+    const result = await runAssistedSessionMutationWithSimClock(sessionId, () =>
       simulationCoordinator.executeFullSession(sessionId, {
         maxRounds,
         maxMilestones,
@@ -2958,7 +2994,7 @@ router.post('/sessions/:sessionId/run-full', async (req: Request, res) => {
 router.post('/sessions/:sessionId/wrapup', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const result = await runAssistedSessionMutation(sessionId, () =>
+    const result = await runAssistedSessionMutationWithSimClock(sessionId, () =>
       simulationCoordinator.generateWrapupForSession(sessionId)
     );
 
@@ -3239,7 +3275,7 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
 router.post('/sessions/:sessionId/restart-path', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const result = await runAssistedSessionMutation(sessionId, () =>
+    const result = await runAssistedSessionMutationWithSimClock(sessionId, () =>
       simulationCoordinator.restartPathPhase(sessionId)
     );
 
@@ -3258,7 +3294,7 @@ router.post('/sessions/:sessionId/restart-learning', async (req: Request, res) =
   try {
     const { sessionId } = req.params;
     const { taskId } = req.body || {};
-    const result = await runAssistedSessionMutation(sessionId, () =>
+    const result = await runAssistedSessionMutationWithSimClock(sessionId, () =>
       simulationCoordinator.restartLearningPhase(sessionId, { taskId })
     );
 

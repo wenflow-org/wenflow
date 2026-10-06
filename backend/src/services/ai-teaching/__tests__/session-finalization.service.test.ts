@@ -5,9 +5,13 @@ const mockRepository = {
   failFinalization: jest.fn(),
   renewFinalizationLease: jest.fn(),
   recoverExpiredFinalizations: jest.fn(),
+  markReviewCompleted: jest.fn(),
 }
 const mockEndSession = jest.fn()
 const mockCompleteTask = jest.fn()
+// F2 入队侧收紧（2026-10-06）：温故回写的入队必须可观测——不 mock 就只能看真实入队副作用
+const mockApplyWarmupExtractionForSession = jest.fn()
+const mockEnqueueReviewCompletedEvent = jest.fn()
 
 jest.mock('../TeachingSessionRepository', () => ({
   FinalizationOperationError: class FinalizationOperationError extends Error {},
@@ -21,6 +25,10 @@ jest.mock('../AITeachingCoordinator', () => ({
 jest.mock('../../learning/learning.service', () => ({
   __esModule: true,
   default: { completeTask: mockCompleteTask }
+}))
+jest.mock('../warmup-writeback', () => ({
+  applyWarmupExtractionForSession: mockApplyWarmupExtractionForSession,
+  enqueueReviewCompletedEvent: mockEnqueueReviewCompletedEvent,
 }))
 
 import { SessionFinalizationService } from '../SessionFinalizationService'
@@ -61,6 +69,9 @@ describe('SessionFinalizationService', () => {
     mockRepository.failFinalization.mockResolvedValue(undefined)
     mockRepository.renewFinalizationLease.mockResolvedValue(new Date(Date.now() + 60_000))
     mockRepository.recoverExpiredFinalizations.mockResolvedValue(1)
+    mockRepository.markReviewCompleted.mockResolvedValue(undefined)
+    mockApplyWarmupExtractionForSession.mockResolvedValue(undefined)
+    mockEnqueueReviewCompletedEvent.mockResolvedValue(undefined)
   })
 
   it('任务完成失败时只标记 taskCompletion 失败，不调用 Wrapup', async () => {
@@ -337,5 +348,161 @@ describe('SessionFinalizationService', () => {
     )
     expect(result.operationId).toBe('expired-operation-id')
     expect(result.status).toBe('failed')
+  })
+
+  // ── F2 入队侧收紧 + 弃跑温故不写（2026-10-06 修复轮）────────────────────────────
+  it('end_only：endSession 抛错时不入队 review:completed（温故回写 0 次）', async () => {
+    mockRepository.assertOwnership.mockResolvedValue(
+      completedSession({ status: 'active', wrapup: null, revision: 4 })
+    )
+    mockEndSession.mockRejectedValue(new Error('端到端收束失败'))
+
+    await expect(service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'end_only',
+      operationId: 'end-op',
+      revision: 4,
+      endReason: 'manual-end'
+    })).rejects.toThrow('端到端收束失败')
+
+    expect(mockApplyWarmupExtractionForSession).not.toHaveBeenCalled()
+    expect(mockEnqueueReviewCompletedEvent).not.toHaveBeenCalled()
+  })
+
+  it('end_only：endSession 仍在 processing 时不入队（返回 202 语义，不触发回写）', async () => {
+    mockRepository.assertOwnership.mockResolvedValue(
+      completedSession({ status: 'active', wrapup: null, revision: 4 })
+    )
+    mockEndSession.mockResolvedValue({ status: 'processing', operationId: 'end-op', revision: 4 })
+
+    const result = await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'end_only',
+      operationId: 'end-op',
+      revision: 4,
+      endReason: 'manual-end'
+    })
+
+    expect(result.status).toBe('processing')
+    expect(mockApplyWarmupExtractionForSession).not.toHaveBeenCalled()
+    expect(mockEnqueueReviewCompletedEvent).not.toHaveBeenCalled()
+  })
+
+  it('end_only：endSession 返回 completed 但会话未真正闭合（无 wrapup）时不入队', async () => {
+    mockRepository.assertOwnership
+      .mockResolvedValueOnce(completedSession({ status: 'active', wrapup: null, revision: 4 }))
+      .mockResolvedValueOnce(completedSession({ status: 'finalizing', wrapup: null, revision: 5 }))
+    mockEndSession.mockResolvedValue({ status: 'completed', operationId: 'end-op', revision: 5 })
+
+    await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'end_only',
+      operationId: 'end-op',
+      revision: 4,
+      endReason: 'manual-end'
+    })
+
+    expect(mockApplyWarmupExtractionForSession).not.toHaveBeenCalled()
+  })
+
+  it('end_only：正常收束（completed + wrapup，manual-end）→ 温故回写照常执行', async () => {
+    mockRepository.assertOwnership
+      .mockResolvedValueOnce(completedSession({ status: 'active', wrapup: null, revision: 4 }))
+      .mockResolvedValueOnce(completedSession({ revision: 5 }))
+    mockEndSession.mockResolvedValue({ status: 'completed', operationId: 'end-op', revision: 5 })
+
+    await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'end_only',
+      operationId: 'end-op',
+      revision: 4,
+      endReason: 'manual-end'
+    })
+
+    expect(mockApplyWarmupExtractionForSession).toHaveBeenCalledTimes(1)
+  })
+
+  it('end_only：弃跑（learner-abandoned）→ 温故额度不回写（幽灵课不写正式轨）', async () => {
+    mockRepository.assertOwnership
+      .mockResolvedValueOnce(completedSession({ status: 'active', wrapup: null, revision: 4 }))
+      .mockResolvedValueOnce(completedSession({ revision: 5 }))
+    mockEndSession.mockResolvedValue({ status: 'completed', operationId: 'end-op', revision: 5 })
+
+    await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'end_only',
+      operationId: 'end-op',
+      revision: 4,
+      endReason: 'learner-abandoned'
+    })
+
+    expect(mockEndSession).toHaveBeenCalled()
+    expect(mockApplyWarmupExtractionForSession).not.toHaveBeenCalled()
+  })
+
+  it('complete_review：正常收束 → 复习结果入队 review:completed（路径逐字不变）', async () => {
+    const reviewSession = completedSession({
+      mode: 'review',
+      knowledgeState: [{ name: '叶绿体', status: 'mastered', progress: 100 }],
+    })
+    mockRepository.assertOwnership.mockResolvedValue(reviewSession)
+    mockEndSession.mockResolvedValue({ status: 'completed', operationId: 'review-op', revision: 5 })
+
+    await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_review',
+      operationId: 'review-op',
+      revision: 4,
+    })
+
+    expect(mockEnqueueReviewCompletedEvent).toHaveBeenCalledTimes(1)
+    expect(mockEnqueueReviewCompletedEvent.mock.calls[0][1]).toEqual([
+      expect.objectContaining({ conceptKey: '叶绿体', rating: 'easy' }),
+    ])
+  })
+
+  it('complete_review：endSession 抛错时不入队 review:completed', async () => {
+    const reviewSession = completedSession({
+      mode: 'review',
+      knowledgeState: [{ name: '叶绿体', status: 'mastered', progress: 100 }],
+    })
+    mockRepository.assertOwnership.mockResolvedValue(reviewSession)
+    mockEndSession.mockRejectedValue(new Error('复习收束失败'))
+
+    await expect(service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_review',
+      operationId: 'review-op',
+      revision: 4,
+    })).rejects.toThrow('复习收束失败')
+
+    expect(mockEnqueueReviewCompletedEvent).not.toHaveBeenCalled()
+  })
+
+  it('complete_review：弃跑（learner-abandoned）→ 复习结果不入队', async () => {
+    const reviewSession = completedSession({
+      mode: 'review',
+      knowledgeState: [{ name: '叶绿体', status: 'mastered', progress: 100 }],
+    })
+    mockRepository.assertOwnership.mockResolvedValue(reviewSession)
+    mockEndSession.mockResolvedValue({ status: 'completed', operationId: 'review-op', revision: 5 })
+
+    await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_review',
+      operationId: 'review-op',
+      revision: 4,
+      endReason: 'learner-abandoned',
+    })
+
+    expect(mockEnqueueReviewCompletedEvent).not.toHaveBeenCalled()
   })
 })

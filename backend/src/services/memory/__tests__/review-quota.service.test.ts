@@ -146,4 +146,34 @@ describe('reserveDailyQuota', () => {
     const { deps } = build({ write: jest.fn().mockRejectedValue(new Error('db down')) });
     await expect(reserveDailyQuota('u1', { sessionId: 's1', load: 2, keys: ['A'] }, { deps })).resolves.toBeNull();
   });
+
+  it('模拟时钟上下文内：记账落在模拟日（daily.date / 投影键 / generatedAt 同一模拟钟）', async () => {
+    // 回归：温故额度记账此前用墙钟日（"date":"2026-10-06" 出现在模拟日 10-01/10-05 的课里，
+    // ROUND2-REVIEW-2026-10-06.md:202）。记账的三处日期口径必须一致走 simulatedNowOr()。
+    const asOf = new Date('2026-10-01T10:00:00Z'); // 本地 18:00 → 模拟日 2026-10-01
+    const { deps, writes } = build();
+    const state = await runWithSimulatedClock(asOf, () =>
+      reserveDailyQuota('u1', { sessionId: 's1', load: 1.5, keys: ['A'] }, { deps, limitLoad: 6 }),
+    );
+    expect(state?.date).toBe('2026-10-01');
+    const writeArg = writes.write.mock.calls[0][0];
+    expect(writeArg.where.projectionKey).toBe('review-daily-quota-v1:u1:2026-10-01');
+    expect(JSON.parse(writeArg.create.payload).date).toBe('2026-10-01');
+    // generatedAt 也落模拟时刻（不能是墙钟 now）
+    expect(new Date(writeArg.create.generatedAt).toISOString()).toBe(asOf.toISOString());
+  });
+
+  it('模拟时钟上下文外：记账仍走墙钟日（现网行为零变化）', async () => {
+    // 固定墙钟为一天 ≠ 上一用例的模拟日（2026-10-01），避免套件恰在 2026-10-01 运行时的假红
+    jest.useFakeTimers({ now: new Date('2026-09-16T10:00:00Z') });
+    try {
+      const { deps, writes } = build();
+      const state = await reserveDailyQuota('u1', { sessionId: 's9', load: 1, keys: ['A'] }, { deps, limitLoad: 6 });
+      expect(state?.date).toBe('2026-09-16'); // 本地 18:00
+      expect(state?.date).not.toBe('2026-10-01');
+      expect(writes.write.mock.calls[0][0].where.projectionKey).toBe('review-daily-quota-v1:u1:2026-09-16');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

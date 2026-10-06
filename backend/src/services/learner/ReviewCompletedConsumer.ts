@@ -8,6 +8,10 @@
  *   - memory_traces：复习调度数据源（rating 语义：mastered→Good、推进→Hard、未推进→Again）
  *
  * 幂等：domain_event_inbox 记录（consumerId=review-completed-consumer-v1 + eventId 唯一）。
+ * 事件级幂等之外，再加**稳定键幂等**（FIX 报告 §5-7 残留修复）：一次课堂收束失败/二次收束
+ * （end_only 后再 complete_task、超时兜底叠加直连回写等）会对同一会话重复入队 review:completed，
+ * 两条事件的 eventId 与 occurredAt 都不同——事件级幂等拦不住。故按「会话 + 概念」稳定键
+ * （见 `reviewEvidenceKeyForConcept`）对每个 reviewItem 恰好应用一次；重复条目直接跳过。
  * 事件 payload：
  *   {
  *     sessionId, mode: 'review', reviewItems: [
@@ -25,6 +29,14 @@ import { getActiveForConcepts } from './misconception-ledger.service';
 import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
 
 const CONSUMER_ID = 'review-completed-consumer-v1';
+
+/**
+ * 单条复习结果的稳定身份：`review:result:<conceptKey>`（与写入 learner_evidence 的 evidenceKey 同源）。
+ * 配合会话 id 构成「同一会话 × 同一概念」的稳定键——跨事件（eventId 不同）去重用。
+ */
+function reviewEvidenceKeyForConcept(conceptKey: string): string {
+  return `review:result:${conceptKey}`;
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -98,9 +110,34 @@ export class ReviewCompletedConsumer {
       let degradedItems = 0;
 
       let skippedNegativeInterval = 0;
+      // 稳定键幂等：同一会话同一概念只应用一次（重复收束/重投的第二个事件在这里被拦下）
+      let skippedDuplicateItems = 0;
+      const seenInEvent = new Set<string>();
       for (const item of items) {
         const conceptKey = String(item.conceptKey || '').trim();
         if (!conceptKey) continue;
+
+        // 事件内重复（同一事件里同名概念重复出现）：只处理第一条
+        const evidenceKey = reviewEvidenceKeyForConcept(conceptKey);
+        if (seenInEvent.has(evidenceKey)) {
+          skippedDuplicateItems += 1;
+          continue;
+        }
+        seenInEvent.add(evidenceKey);
+
+        // 跨事件重复（同会话被收束两次 → 两条 review:completed）：learner_evidence 里已有
+        // (sessionId, evidenceKey) 行则说明该点已应用过，跳过证据写入与 FSRS 重排。
+        // 仅在事件带 sessionId 时启用（无会话无法界定稳定身份，退回事件级幂等）。
+        if (data.sessionId) {
+          const alreadyApplied = await tx.learner_evidence.findFirst({
+            where: { userId: event.userId, sessionId: data.sessionId, evidenceKey },
+            select: { id: true },
+          });
+          if (alreadyApplied) {
+            skippedDuplicateItems += 1;
+            continue;
+          }
+        }
 
         // 现有记忆状态：既是 FSRS 前值，也是 elapsedDays 的来源（必须在写证据前读到）
         const existing = await tx.memory_traces.findUnique({
@@ -147,7 +184,7 @@ export class ReviewCompletedConsumer {
           data: {
             id: `lev_${event.id}_${conceptKey.slice(0, 40)}`,
             eventId: event.id,
-            evidenceKey: `review:result:${conceptKey}`,
+            evidenceKey,
             userId: event.userId,
             sessionId: data.sessionId || null,
             evidenceType: 'review:completed',
@@ -234,6 +271,7 @@ export class ReviewCompletedConsumer {
         itemCount: items.length,
         ...(degradedItems > 0 ? { degradedItems } : {}),
         ...(skippedNegativeInterval > 0 ? { skippedNegativeInterval } : {}),
+        ...(skippedDuplicateItems > 0 ? { skippedDuplicateItems } : {}),
       });
     }, { label: 'learner.review-completed-consumer' });
   }

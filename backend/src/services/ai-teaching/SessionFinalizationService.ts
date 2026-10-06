@@ -16,6 +16,8 @@ import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 // 课内温故回写抽到叶子模块（避免本服务 ↔ AITeachingCoordinator 成环，18 号报告 N10）
 import { applyWarmupExtractionForSession, enqueueReviewCompletedEvent } from './warmup-writeback';
+// 非正常终态判定（幽灵课 / 弃跑状态泄漏）：叶子方向的单向依赖，不成环（lifecycle 不 import 本服务）
+import { isAbnormalSessionClosure } from './teaching-session-lifecycle';
 
 export interface FinalizeSessionInput {
   sessionId: string;
@@ -71,6 +73,29 @@ function derivedClosureOperationId(operationId: string): string {
   return `${operationId}#closure`;
 }
 
+/**
+ * 温故回写的入队前置（F2 入队侧收紧，2026-10-06）：
+ * `review:completed` 只在 endSession **真正成功**后入队——
+ * - `endSession` 抛错：调用点在此之前就抛出，本函数根本走不到（入队为 0）；
+ * - `endSession` 仍 `processing`：上面已 early-return（入队为 0）；
+ * - 正常返回：再要求会话**确实是 completed 且已有 wrapup**，否则不入队。
+ *
+ * 为什么还要这一层：`assertOwnership` 之后读到的会话可能因并发（另一路收束/清场）状态漂移，
+ * 或 endSession 幂等命中 `status='completed'` 分支却未落 wrapup；此时入队会把「没真正收束的课」
+ * 写进记忆引擎（消费端按 (consumerId,eventId) 幂等，跨事件不去重——二次收束会产生重复 review:completed，
+ * 见 FIX-REPORT §5-7）。消费端去重由另一路负责，这里只管入队侧。
+ *
+ * 非正常终态（`endReason==='learner-abandoned'` 等，见 isAbnormalSessionClosure）：温故额度属正式轨，
+ * 一律不入队（幽灵课泄漏面）。
+ */
+function shouldEnqueueWarmupWriteback(
+  session: TeachingSessionRecord,
+  endReason: string | undefined
+): boolean {
+  if (isAbnormalSessionClosure({ endReason, status: session.status })) return false;
+  return session.status === 'completed' && !!session.wrapup;
+}
+
 // 课内温故回写的实现已迁到 `warmup-writeback.ts`；此处 re-export 保持既有引用（含测试）不变。
 export { collectWarmupReviewItems, hasLearnerTurnAfter } from './warmup-writeback';
 export type { WarmupReviewItem } from './warmup-writeback';
@@ -109,8 +134,9 @@ export class SessionFinalizationService {
       }
       // 断链修复 P0-1/2 + 单一写入者（2026-09-17）：复习结果**只采集**，写入统一走 review:completed
       // 事件消费者（幂等/可重放）。此前这里还直写记忆引擎，与消费者叠加成 2~3 次应用（审计 §4.2(1)）。
+      // 入队前置（F2 收紧）：endSession 已真正成功（completed + wrapup），且非弃跑等非正常终态。
       const reviewItems = await this.collectReviewOutcomes(completedSession);
-      if (reviewItems.length > 0) {
+      if (reviewItems.length > 0 && shouldEnqueueWarmupWriteback(completedSession, input.endReason)) {
         await enqueueReviewCompletedEvent(completedSession, reviewItems);
       }
       return this.completedResponse(completedSession, result.operationId, {
@@ -137,7 +163,7 @@ export class SessionFinalizationService {
         };
       }
       const completedSession = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
-      await this.applyWarmupExtraction(completedSession);
+      await this.applyWarmupExtractionGuarded(completedSession, input.endReason);
       return this.completedResponse(completedSession, result.operationId, {
         status: 'skipped',
         alreadyCompleted: false
@@ -242,7 +268,7 @@ export class SessionFinalizationService {
           }
         }
       );
-      await this.applyWarmupExtraction(completedSession);
+      await this.applyWarmupExtractionGuarded(completedSession, input.endReason);
       return this.completedResponse(completedSession, claim.operationId, {
         status: 'completed',
         alreadyCompleted: completion.alreadyCompleted === true
@@ -396,6 +422,26 @@ export class SessionFinalizationService {
    */
   private async applyWarmupExtraction(session: TeachingSessionRecord): Promise<void> {
     return applyWarmupExtractionForSession(session);
+  }
+
+  /**
+   * 入队侧收紧后的温故回写（F2）：只有 endSession 真正成功（completed + wrapup）且非弃跑等
+   * 非正常终态时才回写。判定不通过 → 只留一条日志，不调用叶子模块（= 不入队 review:completed）。
+   */
+  private async applyWarmupExtractionGuarded(
+    session: TeachingSessionRecord,
+    endReason: string | undefined
+  ): Promise<void> {
+    if (!shouldEnqueueWarmupWriteback(session, endReason)) {
+      logger.info('[SessionFinalization] 跳过温故回写（收束未真正成功或属非正常终态）', {
+        sessionId: session.id,
+        status: session.status,
+        hasWrapup: !!session.wrapup,
+        endReason: endReason ?? null,
+      });
+      return;
+    }
+    return this.applyWarmupExtraction(session);
   }
 }
 

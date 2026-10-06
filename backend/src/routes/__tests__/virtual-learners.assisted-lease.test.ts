@@ -40,7 +40,9 @@ const mockSimulationCoordinator = {
   runLeasedExclusive: mockRunLeasedExclusive,
   executeLearningStep: mockExecuteLearningStep,
   executeAutoLearning: mockExecuteAutoLearning,
-  executeFullSession: mockExecuteFullSession
+  executeFullSession: mockExecuteFullSession,
+  restartLearningPhase: jest.fn(),
+  startLearningPhase: jest.fn()
 }
 
 jest.mock('../../config/database', () => ({
@@ -109,8 +111,15 @@ jest.mock('../../virtual-lab/blackbox-runner', () => ({
     runLeasedExclusive: mockBlackboxRunLeasedExclusive
   }
 }))
+// 模拟钟包装只读设置（会话级 clock 缺省回落到 settings.dateSimulation）→ 测试注入默认值，免触真 system.db
+jest.mock('../../services/virtual-lab-settings.service', () => {
+  const actual = jest.requireActual('../../services/virtual-lab-settings.service')
+  return { ...actual, getVirtualLabSettings: jest.fn() }
+})
 
 import router from '../admin/virtual-learners'
+import { getSimulatedAsOf } from '../../services/virtual-lab/simulation-clock-context'
+import * as virtualLabSettings from '../../services/virtual-lab-settings.service'
 
 function getPostHandler(path: string) {
   const layer = (router as any).stack.find((item: any) => item.route?.path === path && item.route?.methods?.post)
@@ -134,6 +143,13 @@ function createResponse() {
 describe('assisted virtual learner route leases', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    jest.mocked(virtualLabSettings.getVirtualLabSettings).mockResolvedValue({
+      ...virtualLabSettings.DEFAULT_VIRTUAL_LAB_SETTINGS,
+      dateSimulation: {
+        ...virtualLabSettings.DEFAULT_VIRTUAL_LAB_SETTINGS.dateSimulation,
+        enabled: false // 时钟来源：会话级 clock 显式覆盖；缺省关（对齐现网）
+      }
+    })
     mockVirtualSessionFindUnique.mockResolvedValue({
       id: 'session-1',
       userId: 'user-1',
@@ -309,6 +325,161 @@ describe('assisted virtual learner route leases', () => {
     expect(mockRunLeasedExclusive).toHaveBeenCalledTimes(1)
     expect(mockRunLeasedExclusive).toHaveBeenCalledWith('session-1', expect.any(Function))
     expect(mockExecuteAutoLearning).toHaveBeenCalledWith('session-1', { maxMilestones: 4, maxTurns: 40 })
+  })
+
+  it('已有会话入口：会话级模拟钟启用时，教学步在模拟时刻上下文内执行（时钟域统一）', async () => {
+    mockVirtualSessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-1',
+      virtualProfileId: 'profile-1',
+      createdAt: new Date('2026-09-30T00:00:00.000Z'),
+      stageResults: JSON.stringify({
+        simulationClock: {
+          enabled: true,
+          baseDate: '2026-10-01',
+          dayIndex: 1,
+          simulatedNow: '2026-10-01T15:59:59.999Z'
+        }
+      })
+    })
+    // 在教学步执行点观测当前时钟上下文：应等于会话模拟时刻（而非墙钟）
+    let asOfInWork: string | null = null
+    mockExecuteLearningStep.mockImplementation(async () => {
+      asOfInWork = getSimulatedAsOf()?.toISOString() ?? null
+      return { success: true }
+    })
+    const handler = getPostHandler('/sessions/:sessionId/teaching-step')
+    const res = createResponse()
+
+    await handler({ params: { sessionId: 'session-1' }, body: {} }, res)
+
+    expect(asOfInWork).toBe('2026-10-01T15:59:59.999Z')
+    expect(getSimulatedAsOf()).toBeNull() // 上下文不外泄
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: { success: true }, error: undefined })
+  })
+
+  it('已有会话入口：会话级模拟钟未启用时不建上下文（现网行为零变化）', async () => {
+    mockVirtualSessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-1',
+      virtualProfileId: 'profile-1',
+      createdAt: new Date('2026-09-30T00:00:00.000Z'),
+      stageResults: '{}'
+    })
+    let asOfInWork: string | null = 'unset'
+    mockExecuteLearningStep.mockImplementation(async () => {
+      asOfInWork = getSimulatedAsOf()?.toISOString() ?? null
+      return { success: true }
+    })
+    const handler = getPostHandler('/sessions/:sessionId/teaching-step')
+    const res = createResponse()
+
+    await handler({ params: { sessionId: 'session-1' }, body: {} }, res)
+
+    expect(asOfInWork).toBeNull()
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: { success: true }, error: undefined })
+  })
+
+  it('restart-learning 复活开课：在模拟时刻上下文内执行（温故 due 判定不再走墙钟）', async () => {
+    // 缺陷②（ROUND2-REVIEW-2026-10-06.md:202）：复活开课的温故 due 判定此前走墙钟。
+    mockVirtualSessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-1',
+      virtualProfileId: 'profile-1',
+      createdAt: new Date('2026-09-30T00:00:00.000Z'),
+      stageResults: JSON.stringify({
+        simulationClock: { enabled: true, baseDate: '2026-10-01', dayIndex: 4, simulatedNow: '2026-10-05T15:59:59.999Z' }
+      })
+    })
+    let asOfInWork: string | null = null
+    mockSimulationCoordinator.restartLearningPhase.mockImplementation(async () => {
+      asOfInWork = getSimulatedAsOf()?.toISOString() ?? null
+      return { success: true }
+    })
+    const handler = getPostHandler('/sessions/:sessionId/restart-learning')
+    const res = createResponse()
+
+    await handler({ params: { sessionId: 'session-1' }, body: { taskId: 't1' } }, res)
+
+    expect(asOfInWork).toBe('2026-10-05T15:59:59.999Z')
+    expect(mockSimulationCoordinator.restartLearningPhase).toHaveBeenCalledWith('session-1', { taskId: 't1' })
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: { success: true }, error: undefined })
+  })
+
+  it('start-learning 开课（含 harness 第二课路径）：在模拟时刻上下文内执行（温故记账同钟）', async () => {
+    // 复核实证：harness 在既有会话上调用 start-learning（scripts/vlab-eval/run-vl-batch.mjs:574-587），
+    // 此时 stageResults.simulationClock.enabled=true——该入口即 backend-3011.log:4159「开始学习阶段」源起。
+    mockVirtualSessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-1',
+      virtualProfileId: 'profile-1',
+      createdAt: new Date('2026-09-30T00:00:00.000Z'),
+      stageResults: JSON.stringify({
+        simulationClock: { enabled: true, baseDate: '2026-10-01', dayIndex: 1, simulatedNow: '2026-10-02T15:59:59.999Z' }
+      })
+    })
+    let asOfInWork: string | null = null
+    mockSimulationCoordinator.startLearningPhase.mockImplementation(async () => {
+      asOfInWork = getSimulatedAsOf()?.toISOString() ?? null
+      return { success: true }
+    })
+    const handler = getPostHandler('/sessions/:sessionId/start-learning')
+    const res = createResponse()
+
+    await handler({ params: { sessionId: 'session-1' }, body: { taskId: 't1' } }, res)
+
+    expect(asOfInWork).toBe('2026-10-02T15:59:59.999Z')
+    expect(mockSimulationCoordinator.startLearningPhase).toHaveBeenCalledWith('session-1', { taskId: 't1' })
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: { success: true }, error: undefined })
+  })
+
+  it('run-full 全流程：在模拟时刻上下文内执行（executeFullSession 内的开课/温故同钟）', async () => {
+    mockVirtualSessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-1',
+      virtualProfileId: 'profile-1',
+      createdAt: new Date('2026-09-30T00:00:00.000Z'),
+      stageResults: JSON.stringify({
+        simulationClock: { enabled: true, baseDate: '2026-10-01', dayIndex: 2, simulatedNow: '2026-10-03T15:59:59.999Z' }
+      })
+    })
+    let asOfInWork: string | null = null
+    mockExecuteFullSession.mockImplementation(async () => {
+      asOfInWork = getSimulatedAsOf()?.toISOString() ?? null
+      return { success: true }
+    })
+    const handler = getPostHandler('/sessions/:sessionId/run-full')
+    const res = createResponse()
+
+    await handler({ params: { sessionId: 'session-1' }, body: {} }, res)
+
+    expect(asOfInWork).toBe('2026-10-03T15:59:59.999Z')
+  })
+
+  it('时钟门与 resolveSimulationClock 同口径：仅全局 settings 启用时也建上下文（session>profile>global）', async () => {
+    jest.mocked(virtualLabSettings.getVirtualLabSettings).mockResolvedValue({
+      ...virtualLabSettings.DEFAULT_VIRTUAL_LAB_SETTINGS,
+      dateSimulation: { ...virtualLabSettings.DEFAULT_VIRTUAL_LAB_SETTINGS.dateSimulation, enabled: true, timezone: 'Asia/Shanghai' }
+    })
+    mockVirtualSessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-1',
+      virtualProfileId: 'profile-1',
+      createdAt: new Date('2026-10-01T03:00:00.000Z'),
+      stageResults: '{}' // 无会话级/画像级 clock → 由全局 settings 启用
+    })
+    let asOfInWork: string | null = null
+    mockExecuteLearningStep.mockImplementation(async () => {
+      asOfInWork = getSimulatedAsOf()?.toISOString() ?? null
+      return { success: true }
+    })
+    const handler = getPostHandler('/sessions/:sessionId/teaching-step')
+    const res = createResponse()
+
+    await handler({ params: { sessionId: 'session-1' }, body: {} }, res)
+
+    // dayIndex=0 → baseDate=会话创建日(本地 2026-10-01) 日末
+    expect(asOfInWork).toBe('2026-10-01T15:59:59.999Z')
   })
 
   it('performs a final lease assertion after the assisted mutation returns', async () => {

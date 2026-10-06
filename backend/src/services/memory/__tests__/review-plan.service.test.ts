@@ -583,4 +583,33 @@ describe('buildReviewPlan（课内温故计划）', () => {
     expect(plan.items).toHaveLength(2);
     expect(plan.budget).toBe(2);
   });
+
+  it('时钟域：模拟上下文外默认 now 走墙钟（现网行为零变化）', async () => {
+    const getDueTraces = jest.fn().mockResolvedValue([]);
+    const before = Date.now();
+    await buildReviewPlan('u-wall', { deps: buildDeps({ getDueTraces }) });
+    const after = Date.now();
+    const nowArg = (getDueTraces.mock.calls[0][1] as { now: Date }).now.getTime();
+    expect(nowArg).toBeGreaterThanOrEqual(before);
+    expect(nowArg).toBeLessThanOrEqual(after);
+  });
+
+  it('时钟域：模拟上下文内"明日预告"与当日额度回退日期同走模拟日（不混墙钟）', async () => {
+    // 回归 ROUND2-REVIEW-2026-10-06.md:202「模拟钟/墙钟混写」：读侧 now 之外的日期派生
+    // （endOfDay/tomorrowCount、daily 回退 date）也必须同钟。
+    const asOf = new Date('2026-11-05T08:00:00Z'); // 本地 16:00 → 模拟日 2026-11-05
+    const countDueBetween = jest.fn().mockResolvedValue(3);
+    const deps = buildDeps({
+      getDueTraces: jest.fn().mockResolvedValue([]),
+      getDailyState: jest.fn().mockRejectedValue(new Error('projection down')),
+      countDueBetween,
+    });
+    const plan = await runWithSimulatedClock(asOf, () => buildReviewPlan('u-sim2', { deps }));
+    // daily 回退日期 = 模拟日（此前回退分支写死 new Date().toISOString().slice(0,10) = 墙钟日）
+    expect(plan.daily.date).toBe('2026-11-05');
+    // 明日预告窗口按模拟日的日界算：endOfToday=11-05T15:59:59.999Z，endOfTomorrow=11-06T15:59:59.999Z
+    const [, from, to] = countDueBetween.mock.calls[0] as [string, Date, Date];
+    expect(from.toISOString()).toBe('2026-11-05T15:59:59.999Z');
+    expect(to.toISOString()).toBe('2026-11-06T15:59:59.999Z');
+  });
 });

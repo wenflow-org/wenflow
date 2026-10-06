@@ -106,7 +106,7 @@ router.get('/paths/:id', async (req: Request, res: Response) => {
   }
 });
 
-/** 下线路径（内容治理：用户端不可继续学习；status=archived） */
+/** 下线路径（内容治理：用户端不可继续学习；status=archived。注：无前置状态校验——已归档再 archive 仍 200，MIMOSA C3，补 guard 属行为变更待决策） */
 router.post('/paths/:id/archive', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
@@ -129,7 +129,7 @@ router.post('/paths/:id/archive', async (req: Request, res: Response) => {
   }
 });
 
-/** 恢复路径（archived → active） */
+/** 恢复路径（archived → active。注：无前置状态校验——非 archived 路径 restore 仍 200，MIMOSA C3） */
 router.post('/paths/:id/restore', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);

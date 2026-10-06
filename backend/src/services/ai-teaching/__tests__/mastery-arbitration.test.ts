@@ -250,8 +250,9 @@ describe('F1-b 掌握聚合仲裁（code 负证据阻断 mastered 晋升）', ()
     expect(llmOnly[0].evidenceSource).toBe('llm')
   })
 
-  it('evidenceSource：先 mastery 后 code 失败（不降级语义）保留 mastered 但标 mixed', () => {
-    // 最小降级语义：只阻断晋升、不做普通课降级——此前已被判 mastered 的点保留，但如实标注证据混杂
+  it('F1-c 负证据降级：先 mastery 后 code 失败（普通课）→ 从 mastered 降为 learning', () => {
+    // R1 处置建议「checkpoint 负证据可降级」的聚合兑现：已达成 mastered 的点遇 code 负证据，
+    // 沿授予处 mixed 标注同一判据路径降级（不再保留 mastered 造成状态双写）
     const arbitration = buildCheckpointCodeArbitration([
       { checkpointId: 'cp-1', passed: false, judgedBy: 'code', conceptName: '汽车故障码读取' },
     ])
@@ -261,8 +262,115 @@ describe('F1-b 掌握聚合仲裁（code 负证据阻断 mastered 晋升）', ()
       false,
       arbitration,
     )
-    expect(merged[0].status).toBe('mastered')
-    expect(merged[0].evidenceSource).toBe('mixed')
+    expect(merged[0].status).toBe('learning')
+    expect(merged[0].status).not.toBe('mastered')
+  })
+
+  it('F1-c 负证据降级：同一轮 LLM 仍报 mastered 也降级（末轮答错→同轮判 mastered 不漏网）', () => {
+    const arbitration = buildCheckpointCodeArbitration(
+      [{ checkpointId: 'cp-1', passed: false, judgedBy: 'code', conceptName: '汽车故障码读取' }],
+    )
+    const merged = knowledgeStateService.merge(
+      [{ name: '汽车故障码读取', status: 'mastered' as const, progress: 100 }],
+      [masteredIncoming],
+      false,
+      arbitration,
+    )
+    expect(merged[0].status).toBe('learning')
+    expect(merged[0].evidenceSource).not.toBe('mixed')
+  })
+
+  it('F1-c 反例：无 code 负证据时绝不降级（mastered 照常保留）', () => {
+    // 有 code 判定行但全过：不降级
+    const passOnly = knowledgeStateService.merge(
+      [{ name: '汽车故障码读取', status: 'mastered' as const, progress: 100 }],
+      [learning],
+      false,
+      buildCheckpointCodeArbitration([
+        { checkpointId: 'cp-1', passed: true, judgedBy: 'code', conceptName: '汽车故障码读取' },
+      ]),
+    )
+    expect(passOnly[0].status).toBe('mastered')
+
+    // model-reference 失败不是 code 负证据：不降级（只认独立传感器）
+    const modelReference = knowledgeStateService.merge(
+      [{ name: '汽车故障码读取', status: 'mastered' as const, progress: 100 }],
+      [learning],
+      false,
+      buildCheckpointCodeArbitration([
+        { checkpointId: 'cp-1', passed: false, judgedBy: 'model-reference', conceptName: '汽车故障码读取' },
+      ]),
+    )
+    expect(modelReference[0].status).toBe('mastered')
+
+    // 缺省仲裁（旧调用形态）：不降级
+    const noArbitration = knowledgeStateService.merge(
+      [{ name: '汽车故障码读取', status: 'mastered' as const, progress: 100 }],
+      [learning],
+    )
+    expect(noArbitration[0].status).toBe('mastered')
+  })
+
+  it('F1-c 名字匹配折叠空格：失败行 A B vs 看板 AB 仍阻断/降级（复核 P16 探针形态）', () => {
+    const arbitration = buildCheckpointCodeArbitration([
+      { checkpointId: 'cp-1', passed: false, judgedBy: 'code', conceptName: 'A B' },
+    ])
+    // 新点直报 mastered：空格异写不绕过阻断
+    const blocked = knowledgeStateService.merge(
+      [],
+      [{ name: 'AB', status: 'mastered' as const, progress: 90 }],
+      false,
+      arbitration,
+    )
+    expect(blocked[0].status).toBe('learning')
+    // 已 mastered 的点：空格异写不绕过降级
+    const degraded = knowledgeStateService.merge(
+      [{ name: 'AB', status: 'mastered' as const, progress: 100 }],
+      [{ name: 'A B', status: 'learning' as const, progress: 50 }],
+      false,
+      arbitration,
+    )
+    expect(degraded[0].status).toBe('learning')
+  })
+
+  it('F1-c 名字匹配折叠空格：cpt 键同源（含中文/全角空白）同样进阻断', () => {
+    // 派生键口径：折叠全部空白，'光合 作用' 与 '光合作用' 派生同键 → 仲裁必须同判
+    const arbitration = buildCheckpointCodeArbitration([
+      { checkpointId: 'cp-1', passed: false, judgedBy: 'code', conceptName: '光合 作用' },
+    ])
+    expect(deriveConceptKeyFromName('光合 作用')).toBe(deriveConceptKeyFromName('光合作用'))
+    const merged = knowledgeStateService.merge(
+      [{ name: '光合作用', status: 'mastered' as const, progress: 100 }],
+      [{ name: '光合作用', status: 'mastered' as const, progress: 95 }],
+      false,
+      arbitration,
+    )
+    expect(merged[0].status).toBe('learning')
+  })
+
+  it('复习课（allowDegrade）通道不受 F1-c 降级影响：已 mastered 遇 code 失败仍由 LLM 判定生效', () => {
+    const arbitration = buildCheckpointCodeArbitration([
+      { checkpointId: 'cp-1', passed: false, judgedBy: 'code', conceptName: '汽车故障码读取' },
+    ])
+    // 复习课 LLM 报 learning → learning（与改动前一致）
+    const toLearning = knowledgeStateService.merge(
+      [{ name: '汽车故障码读取', status: 'mastered' as const, progress: 100 }],
+      [learning],
+      true,
+      arbitration,
+    )
+    expect(toLearning[0].status).toBe('learning')
+    expect(toLearning[0].progress).toBe(40)
+
+    // 复习课 LLM 仍报 mastered → 保留 mastered，按原语义标 mixed
+    const keptMastered = knowledgeStateService.merge(
+      [{ name: '汽车故障码读取', status: 'mastered' as const, progress: 100 }],
+      [masteredIncoming],
+      true,
+      arbitration,
+    )
+    expect(keptMastered[0].status).toBe('mastered')
+    expect(keptMastered[0].evidenceSource).toBe('mixed')
   })
 
   it('复习课（allowDegrade）通道不受仲裁影响：LLM 判定照旧生效', () => {

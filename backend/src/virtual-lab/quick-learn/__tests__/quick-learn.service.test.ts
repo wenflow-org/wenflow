@@ -113,6 +113,18 @@ jest.mock('../../../services/learning/learning.service', () => ({
   },
 }))
 
+// 断链接通（FIX §5-8）：收束后按授课会话回写课内温故结果
+const getTeachingSessionMock = jest.fn()
+jest.mock('../../../services/ai-teaching/TeachingSessionRepository', () => ({
+  __esModule: true,
+  teachingSessionRepository: { getById: getTeachingSessionMock },
+}))
+const applyWarmupMock = jest.fn()
+jest.mock('../../../services/ai-teaching/warmup-writeback', () => ({
+  __esModule: true,
+  applyWarmupExtractionForSession: applyWarmupMock,
+}))
+
 const getSnapshotMock = jest.fn()
 jest.mock('../../../services/learner/LearnerSnapshotService', () => ({
   learnerSnapshotService: { getSnapshot: getSnapshotMock },
@@ -254,6 +266,24 @@ describe('QuickLearnService', () => {
     })
     assertReadyMock.mockResolvedValue(undefined)
     completeTaskMock.mockResolvedValue({})
+
+    getTeachingSessionMock.mockResolvedValue({
+      id: 'ts-1',
+      userId: 'u1',
+      taskId: 't1',
+      mode: 'tutor',
+      status: 'completed',
+      messages: [],
+      teachingState: {
+        sessionArtifacts: {
+          memoryWarmup: {
+            usedLoad: 1,
+            items: [{ conceptKey: '温故点A', label: '温故点A', outcome: { status: 'learning', progress: 40 } }],
+          },
+        },
+      },
+    })
+    applyWarmupMock.mockResolvedValue(undefined)
 
     let snapshotCall = 0
     getSnapshotMock.mockImplementation(async () => {
@@ -455,6 +485,94 @@ describe('QuickLearnService', () => {
       expect(memoryRun?.status).toBe('failed')
       expect(memoryRun?.error).toContain('模拟器连续失败')
       expect(completeTaskMock).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('课内温故回写（FIX §5-8 quick-learn 断链接通）', () => {
+    it('正常闭合后按授课会话记录回写温故结果', async () => {
+      executeSkillMock.mockResolvedValue(simulatorOutput(true))
+      processMessageMock.mockResolvedValue({
+        analysis: {},
+        aiResponse: '很好，你掌握了',
+        strategies: ['feedback'],
+        knowledgePoint: '投影',
+        knowledgePoints: [{ name: '投影' }],
+        isCompletion: true,
+        currentState: {},
+        peerTriggered: false,
+        revision: 1,
+      })
+
+      await quickLearnService.startRun({ profileId: 'p1', taskId: 't1' })
+      await executeRunDirect('run-1')
+
+      expect(memoryRun?.status).toBe('completed')
+      expect(getTeachingSessionMock).toHaveBeenCalledWith('ts-1')
+      expect(applyWarmupMock).toHaveBeenCalledTimes(1)
+      expect(applyWarmupMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'ts-1' }))
+    })
+
+    it('取会话记录失败不阻断运行收尾（仅告警）', async () => {
+      executeSkillMock.mockResolvedValue(simulatorOutput(true))
+      processMessageMock.mockResolvedValue({
+        analysis: {},
+        aiResponse: '很好，你掌握了',
+        strategies: [],
+        knowledgePoint: null,
+        knowledgePoints: [],
+        isCompletion: true,
+        currentState: {},
+        peerTriggered: false,
+        revision: 1,
+      })
+      getTeachingSessionMock.mockRejectedValue(new Error('db down'))
+
+      await quickLearnService.startRun({ profileId: 'p1', taskId: 't1' })
+      await executeRunDirect('run-1')
+
+      expect(memoryRun?.status).toBe('completed')
+      expect(applyWarmupMock).not.toHaveBeenCalled()
+    })
+
+    it('endSession 持续 processing（未闭合）时不回写，避免与二次收束重复入队', async () => {
+      executeSkillMock.mockResolvedValue(simulatorOutput(true))
+      processMessageMock.mockResolvedValue({
+        analysis: {},
+        aiResponse: '很好，你掌握了',
+        strategies: [],
+        knowledgePoint: null,
+        knowledgePoints: [],
+        isCompletion: true,
+        currentState: {},
+        peerTriggered: false,
+        revision: 1,
+      })
+      // 直接钉住「未闭合」边界：endSessionWithRetry 重试耗尽返回 null（等价于 10 轮 processing），
+      // 避免实跑 10 × END_SESSION_RETRY_INTERVAL_MS（20s）拖慢整套。
+      const retrySpy = jest.spyOn(quickLearnService as any, 'endSessionWithRetry').mockResolvedValue(null)
+
+      try {
+        await quickLearnService.startRun({ profileId: 'p1', taskId: 't1' })
+        await executeRunDirect('run-1')
+
+        expect(retrySpy).toHaveBeenCalled()
+        expect(applyWarmupMock).not.toHaveBeenCalled()
+      } finally {
+        retrySpy.mockRestore()
+      }
+    })
+
+    it('异常收尾（catch 路径闭合成功）同样回写温故结果', async () => {
+      executeSkillMock.mockResolvedValue(simulatorOutput(false))
+      processMessageMock.mockRejectedValue(new Error('模拟回合炸了'))
+
+      await quickLearnService.startRun({ profileId: 'p1', taskId: 't1' })
+      await executeRunDirect('run-1')
+
+      expect(memoryRun?.status).toBe('failed')
+      expect(endSessionMock).toHaveBeenCalledWith('ts-1', 'quick-learn-error', 0)
+      expect(applyWarmupMock).toHaveBeenCalledTimes(1)
+      expect(applyWarmupMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'ts-1' }))
     })
   })
 

@@ -40,12 +40,12 @@ describe('R8-1 同题复读禁令：提示词规则已编译进产物', () => {
     expect(line.trimStart().startsWith('32.')).toBe(true);
   });
 
-  it('最新追加的规则在末位（真实交付锚，2026-10-03 A/B 修复批；校内锚此后被后移属预期）', () => {
-    expect(CORE).toContain('校内锚（schoolAnchor');
+  it('最新追加的规则在末位（示范题面自带规则，2026-10-07 实测修复批；真实交付锚此后被后移属预期）', () => {
+    expect(CORE).toContain('示范题/例题/真题引用必须自带题面');
     expect(CORE).toContain('真实交付锚');
     const nums = [...MD.matchAll(/^(\d+)\.\s/gm)].map((m) => Number(m[1]));
     const last = Math.max(...nums);
-    const line = MD.split('\n').find((l) => l.includes('真实交付锚')) || '';
+    const line = MD.split('\n').find((l) => l.includes('示范题/例题/真题引用必须自带题面')) || '';
     expect(line.trimStart().startsWith(`${last}.`)).toBe(true);
     // 编号连续：追加不跳号、不夹塞
     expect(nums[last - 1]).toBe(last);

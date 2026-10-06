@@ -25,6 +25,8 @@ import {
   type LearnLearnerSimulationOutput,
 } from '../../skills/virtual-learner-learn-turn-simulator';
 import aiTeachingCoordinator from '../../services/ai-teaching/AITeachingCoordinator';
+import { teachingSessionRepository } from '../../services/ai-teaching/TeachingSessionRepository';
+import { applyWarmupExtractionForSession } from '../../services/ai-teaching/warmup-writeback';
 import learningService from '../../services/learning/learning.service';
 import { learnerSnapshotService } from '../../services/learner/LearnerSnapshotService';
 import { learnerProjectionService } from '../../services/learner/LearnerProjectionService';
@@ -513,6 +515,13 @@ export class QuickLearnService {
         lifecycle.wrapupGenerated = !!endResult.wrapup;
         lifecycle.wrapupSource = (endResult.wrapup?.summarySource as any) || null;
         if (endResult.revision !== undefined) revision = endResult.revision;
+        // 课内温故回写（R2 判定#7 同类断链，quick-learn 轨）：本轨直接调
+        // aiTeachingCoordinator.endSession（end_only 实现），不经过 SessionFinalizationService.finalize
+        // 的 end_only/complete_task 分支，因此 applyWarmupExtractionForSession 从未被触发——
+        // 温故计划落库在授课会话的 sessionArtifacts.memoryWarmup 上、收束却不回写。
+        // 与 VL 收束（simulation.execution.ts）、超时兜底（teaching-session-ops.ts）共用同一叶子实现。
+        // 仅在课堂真正闭合（endResult 非 null）时回写，避免 processing 时与二次收束重复入队。
+        await this.writebackWarmupOutcomes(teachingSessionId, run.id);
       } else {
         warnings.push('课堂未能正常闭合（endSession 持续 processing）');
       }
@@ -535,11 +544,13 @@ export class QuickLearnService {
       logger.error('[QuickLearn] 运行失败', { runId: run.id, error: runError });
       if (teachingSessionId && lifecycle.sessionStarted && !lifecycle.sessionClosed) {
         await this.endSessionWithRetry(teachingSessionId, 'quick-learn-error', revision)
-          .then((endResult) => {
+          .then(async (endResult) => {
             if (endResult) {
               lifecycle.sessionClosed = true;
               lifecycle.wrapupGenerated = !!endResult.wrapup;
               lifecycle.wrapupSource = (endResult.wrapup?.summarySource as any) || null;
+              // 异常收尾同样要回写温故结果（会话已闭合；失败不阻断运行收尾）
+              await this.writebackWarmupOutcomes(teachingSessionId, run.id);
             }
           })
           .catch(() => undefined);
@@ -809,6 +820,29 @@ export class QuickLearnService {
     if (currentIndex < 0) return null;
     const next = flat.slice(currentIndex + 1).find((task) => task.status !== 'completed');
     return next ? { taskId: next.id, title: next.title } : null;
+  }
+
+  /**
+   * 课内温故结果回写记忆引擎（断链接通，与 VL 收束 / finalize / 超时兜底共用叶子实现）。
+   *
+   * 授课会话的 `sessionArtifacts.memoryWarmup` 计划在开课时建立、随教学回合合并结果；
+   * 收束后必须按会话记录调用 `applyWarmupExtractionForSession`，否则温故结果永不入队
+   * `review:completed`，ReviewCompletedConsumer 不写 learner_evidence / FSRS 重排。
+   * 失败只告警不阻断运行收尾。
+   */
+  private async writebackWarmupOutcomes(teachingSessionId: string, runId: string): Promise<void> {
+    try {
+      const closedSession = await teachingSessionRepository.getById(teachingSessionId);
+      if (closedSession) {
+        await applyWarmupExtractionForSession(closedSession);
+      }
+    } catch (error) {
+      logger.warn('[QuickLearn] 课内温故回写失败（不阻断运行收尾）', {
+        runId,
+        teachingSessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async endSessionWithRetry(sessionId: string, endReason: string, revision: number) {

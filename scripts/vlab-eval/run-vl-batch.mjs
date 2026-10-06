@@ -68,6 +68,15 @@ function pathTasksState(milestones) {
   return anySub ? 'exhausted' : 'generating';
 }
 
+/** [F4 / FIX-REPORT §2 F3 边界] path 终态判定：learning_paths.status 落入终态 → 生成链已死、
+ * 阶段任务永远不会写入，继续轮询只会空等满 10 分钟再抛同一个错（等待窗白烧，驱动格子被单格
+ * 拖满等待上限）。实际写入面终态：failed（learning.service.ts:348-356/:409-417 生成失败回收）、
+ * archived（learning-content.repo.ts:62-66 内容下线）；abandoned/cancelled 为防御性并入
+ * （会话域同名词，路径域当前无写入点）。非终态（active/generating/空/异常响应）一律继续等。 */
+function pathTerminalStatus(status) {
+  return /^(failed|archived|abandoned|cancelled)$/.test(String(status || ''));
+}
+
 /** [F3-c / R1 A38] AIMD 并发界。上限默认=操作者指定的 --concurrency 本身（旧 max(CONC,1.7×)
  * 使实跑并发越过指定值 2→3，A38 实锤）；--conc-max=N 显式覆盖（可放大可收紧）；
  * 下限不越过上限（显式 conc-max < 0.5×CONC 时下限钳到上限）。 */
@@ -107,6 +116,14 @@ if (process.argv.includes('--selftest')) {
   t('c·conc-max=1 显式收紧·下限钳到上限', () => eq(concBounds(2, 1), { min: 1, max: 1 }, 'bounds'));
   t('c·conc-max=3 < 0.5×10·下限钳到 3', () => eq(concBounds(10, 3), { min: 3, max: 3 }, 'bounds'));
   t('c·conc-max 显式 0/缺省=上限即指定并发', () => eq(concBounds(6, 0), { min: 3, max: 6 }, 'bounds'));
+  // d) [FIX-REPORT §5-11] path 终态判定：已终态 → 生成链已死，立即返回不空等 10 分钟
+  t('d·failed=终态(生成失败回收→早停不空等)', () => eq(pathTerminalStatus('failed'), true, 'terminal'));
+  t('d·archived=终态(内容下线→早停不空等)', () => eq(pathTerminalStatus('archived'), true, 'terminal'));
+  t('d·abandoned=终态(防御性并入)', () => eq(pathTerminalStatus('abandoned'), true, 'terminal'));
+  t('d·cancelled=终态(防御性并入)', () => eq(pathTerminalStatus('cancelled'), true, 'terminal'));
+  t('d·active=非终态(任务仍可能写入,继续等)', () => eq(pathTerminalStatus('active'), false, 'terminal'));
+  t('d·generating=非终态(继续等)', () => eq(pathTerminalStatus('generating'), false, 'terminal'));
+  t('d·空/undefined/null=非终态(响应异常不误早停)', () => eq([pathTerminalStatus(''), pathTerminalStatus(undefined), pathTerminalStatus(null)], [false, false, false], 'terminal'));
   let fail = 0;
   for (const [name, ok, err] of cases) { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ' — ' + err}`); if (!ok) fail++; }
   console.log(`selftest: ${cases.length - fail}/${cases.length} passed`);
@@ -305,11 +322,18 @@ async function reviveIfSessionDead(st) {
 // 详情端点 GET /api/admin/learning-content/paths/:id（learning-content.repo.ts:43-56：milestones[]
 // 含 subtasks[]{status}；挂载 bootstrap/routers.ts:195）；就绪口径与后端 waitForPathReady 一致
 // （simulation.path-phase.ts:58-70：里程碑存在 ≠ 可启动，须有非 completed 的可启动任务）。
+// [F4] 轮询先查 path.status：已终态（failed/archived 等）→ 生成链已死、任务永不来，立即带原错
+// 返回（返回非 'ready' 值，两处调用方保持 `!== 'ready'` → throw 原错语义），不再空等 10 分钟。
 async function waitPathTasksReady(pid, st, timeoutMs = 10 * 60 * 1000) {
   const deadline = Date.now() + timeoutMs;
   let gap = 15000;
   for (let k = 0; ; k++) {
     const pd = await api('GET', `/api/admin/learning-content/paths/${st.pathId}`, undefined, { timeout: 30000 }).catch(() => null);
+    if (pathTerminalStatus(pd?.data?.status)) {
+      const ts = String(pd.data.status);
+      log(`${pid} path 已终态（${ts}）→ 生成链已死，早停不空等`);
+      return `terminal:${ts}`;
+    }
     const state = pathTasksState(pd?.data?.milestones);
     if (state === 'ready') { if (k > 0) log(`${pid} path 任务就绪（等待 ${k} 轮后）`); return 'ready'; }
     if (state === 'exhausted') { log(`${pid} path 任务已全部 completed（开课必再败，早停）`); return 'exhausted'; }
