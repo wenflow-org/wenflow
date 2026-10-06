@@ -299,3 +299,6 @@ text/
 
 # v4 渲染层审计原始结果（可重跑：node scripts/v4-ui-audit.mjs）
 scripts/v4-ui-audit-results/
+
+# 测量验证轮次的运行产物（驱动器在 backend/scripts/measurement-verify/，可复跑；快照不入库）
+backend/scripts/measurement-verify/out/
