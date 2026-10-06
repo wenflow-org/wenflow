@@ -20,11 +20,16 @@ import { DatabaseSync } from 'node:sqlite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.join(__dirname, 'out');
-const LOG_PATH = path.join(OUT_DIR, 'r3-run.log');
-const STATE_PATH = path.join(OUT_DIR, 'r3-f1.state.json');
-const RESULT_PATH = path.join(OUT_DIR, 'r3-f1.result.json');
+// MV_TAG：并行实例标签（空=默认，向后兼容）。多实例并发跑时用它隔离 log/state/result，
+// 否则同名文件互相覆盖、断点续跑会串账号。
+const TAG = process.env.MV_TAG || '';
+const LOG_PATH = path.join(OUT_DIR, `r3-run${TAG}.log`);
+const STATE_PATH = path.join(OUT_DIR, `r3-f1${TAG}.state.json`);
+const RESULT_PATH = path.join(OUT_DIR, `r3-f1${TAG}.result.json`);
 const BASE = process.env.MV_BASE || 'http://127.0.0.1:3011';
-const ORIGIN = 'http://localhost:5174';
+// MV_ORIGIN：csrf 按实例 CORS_ORIGIN 白名单校验带 cookie 写请求——3011 白名单含 5174，
+// 3001(.env) 含 5173；打哪个实例配哪个 Origin（默认 5174 不变）
+const ORIGIN = process.env.MV_ORIGIN || 'http://localhost:5174';
 const PASSWORD = 'MvF1R32026x';
 const DB_PATH = path.resolve(__dirname, '../../prisma/dev.db');
 const GOAL_TEXT = '我是初中二年级学生，想在两个月内系统掌握初中生物的「光合作用与呼吸作用」这部分，每天能学 30 分钟。请按这个目标帮我规划。';
