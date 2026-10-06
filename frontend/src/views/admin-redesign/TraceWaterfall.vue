@@ -245,14 +245,10 @@
         <p>{{ verdictText }}</p>
       </div>
 
-      <!-- 底部加载提示（原型 renderObserve trace 页签）：骨架行 + 居中 faint 文案，
-           示意下方还有更早的 Trace；无限滚动暂未实现（保持「加载更多样本」翻页，形态差已登记），
-           故骨架/提示常驻于还有样本时，按钮保留为显式触发 -->
-      <div v-if="waterfallHasMore" class="wf-skel mk-skeleton-rows" aria-hidden="true">
-        <span class="mk-skeleton" style="height: 10px; width: 38%"></span>
-        <span class="mk-skeleton" style="height: 6px; width: 100%"></span>
-      </div>
-      <p v-if="waterfallHasMore" class="wf-skel-hint">滚动到底部加载更早的 Trace…</p>
+      <!-- 底部加载提示（审核 #109）：原常驻「滚动到底部加载更早的 Trace…」承诺了未实现的
+           无限滚动（滚到底不发请求、行数不变），骨架行也在暗示会自动加载——改为与下方按钮
+           一致的点击式文案，删骨架行，不再让用户滚动等待 -->
+      <p v-if="waterfallHasMore" class="wf-skel-hint">点击下方「加载更多样本」查看更早的 Trace…</p>
 
       <!-- 翻页：追加下一页样本（统一 mk-list-more 页脚形态，与全局加载更多页脚同构） -->
       <div v-if="canLoadMoreWaterfall" class="mk-list-more">
@@ -441,8 +437,15 @@ watch(openSpanId, async (id) => {
 })
 
 /* 长 trace ID 在下拉与标题中截断显示 */
-/* TDZ 修复：intent.sessionId / intentTraceMiss 的 immediate watch 会引用本函数，必须先于 watch 声明 */
-const shortTrace = (t: string) => (t.length > 20 ? `…${t.slice(-16)}` : t)
+/* TDZ 修复：intent.sessionId / intentTraceMiss 的 immediate watch 会引用本函数，必须先于 watch 声明。
+   审核 #121：与 ExecLogs.shortTrace 统一规则——只有 `tr:` / `se:` 前缀才保留前缀，纯 ID 统一
+   取「…+末 12 位」；旧实现 `…+末 16 位` 与日志页签的「前缀:…末6」两套形态，同一标识跨页对不上。 */
+const shortTrace = (t: string) => {
+  if (!t) return t
+  const m = /^(tr|se):(.+)$/.exec(t)
+  if (m) return m[2].length > 12 ? `${m[1]}:…${m[2].slice(-12)}` : t
+  return t.length > 12 ? `…${t.slice(-12)}` : t
+}
 
 const allTraceIds = computed(() => [...new Set(baseSpans.value.map((s) => s.traceId))])
 
@@ -829,6 +832,15 @@ const verdictText = computed(() => {
   overflow-y: auto;
 }
 .wf-embedded .wf > .mk-list-more { margin-top: auto; }
+/* 宿主内衬（审核 #104）：筛选条/概要卡/瀑布盒自带 1px 描边 + 16px 圆角，与宿主卡内容盒
+   逐像素同宽、上下 0 间距 → 左右/下缘与卡框形成相邻双层描边 + 同档圆角套叠。
+   统一 16px 横向内衬与 12px 块间距（首块补顶部 12px，与 .wf-verdict 的 12/16 外边距同判例）。 */
+.wf-embedded > .wf-tracepick,
+.wf-embedded > .wf-summary,
+.wf-embedded > .wf,
+.wf-embedded > .wf-notice,
+.wf-embedded > .mk-empty { margin: 0 16px 12px; }
+.wf-embedded > .wf-tracepick:first-child { margin-top: 12px; }
 
 /* 卡片形态：1px 发丝线 + 平底 + 12px 圆角（原型 .card 208） */
 .wf {
@@ -1177,9 +1189,8 @@ const verdictText = computed(() => {
 }
 .wf-row__detail-actions { display: flex; justify-content: flex-end; }
 
-/* 底部加载提示（原型 renderObserve trace 页签 .skelrow + 居中 faint 文案）：
-   骨架视觉/形状走全局 .mk-skeleton / .mk-skeleton-rows，本页只补与瀑布行对齐的水平内边距 */
-.wf-skel { padding: 12px 16px 4px; }
+/* 底部加载提示（原型 renderObserve trace 页签 .skelrow + 居中 faint 文案；骨架行随
+   审核 #109 撤——文案改点击式，不再暗示自动加载）：只留与瀑布行对齐的水平内边距 */
 .wf-skel-hint {
   margin: 0;
   padding: 0 16px 12px;

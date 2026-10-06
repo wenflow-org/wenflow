@@ -93,10 +93,11 @@ const ADMIN_PAGES = [
   ['virtual-learners', '/admin/virtual-learners'],
   ['virtual-learner-cards', '/admin/virtual-learner-cards'],
   ['orchestrator', '/admin/orchestrator'],
-  // 编排图三面板：?tab= 语义 = journey/routing/governance（旧表用 ?tab=flow，实测回落总览，
-  // 于是 DataFlowGraph / FieldRoutingTable 从未被渲染审计）
+  // 编排图四面板：?tab= 语义 = overview/journey/routing/governance（旧表用 ?tab=flow，
+  // 实测回落总览，于是 DataFlowGraph / FieldRoutingTable / DriftAuditPanel 从未被渲染审计）
   ['orchestrator-journey', '/admin/orchestrator?tab=journey&stage=teaching'],
   ['orchestrator-routing', '/admin/orchestrator?tab=routing&stage=teaching'],
+  ['orchestrator-governance', '/admin/orchestrator?tab=governance&stage=teaching'],
   ['skills-run', '/admin/skills?tab=run'],
   ['skills-model-routing', '/admin/skills?tab=model-routing'],
   ['skills-health', '/admin/skills?tab=health'],
@@ -126,6 +127,9 @@ const ADMIN_PAGES = [
   // 二级页必须带 ?view=&id=（旧表 skill-detail 用 /admin/skills/teaching-turn，那条路由是
   // SkillDesignPage，量到的从来不是 SkillDetail；user-detail 用裸 /admin/people/，量的是列表页）
   ['skill-detail', '/admin/skills?view=skill&id=teaching-turn'],
+  // SkillDesignPage 单列一条（审核 #137）：它与 skill-detail 是两个不同页面，
+  // 旧表用同一个 URL 混在一起，于是设计页的问题一直被记在详情页账上。
+  ['skill-design', '/admin/skills/teaching-turn'],
   ['user-detail', `/admin/people?view=learner&id=${RICH_USER.id}`],
   ['path-detail', `/admin/learning-paths?view=path&id=${RICH_USER.pathId}`],
 ];
@@ -340,7 +344,10 @@ const MEASURE = String.raw`(() => {
   // 8) 表格行高
   //    同时覆盖 div+role=table 的自绘表（TokenCost/TcRankTable 等）——此前只扫原生
   //    table tbody tr，这类表的行高从未进过量测（2026-10-06 审核 #115）。
+  //    排除表头行（原生 thead / 自绘 .*__head / 含 role=columnheader 的行）：§3 的 40px
+  //    行高约束针对数据行，表头本就比数据行矮（TokenCost 实测表头 35px），计入即假阳性。
   const rows = Array.from(document.querySelectorAll('table tbody tr, [role="table"] [role="row"]'))
+    .filter((tr) => !tr.closest('thead') && !/(^|[\s_-])[\w-]*__head(\s|$)/.test(tr.className || '') && !tr.querySelector('[role="columnheader"]'))
     .map((tr) => Math.round(tr.getBoundingClientRect().height)).filter((h) => h > 0);
   out.tableRows = { n: rows.length, min: rows.length ? Math.min(...rows) : null, under40: rows.filter((h) => h < 40).length };
 
@@ -350,7 +357,21 @@ const MEASURE = String.raw`(() => {
     if (!m) return null;
     return { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] };
   };
-  const over = (fg, bg) => ({ r: fg.r * fg.a + bg.r * (1 - fg.a), g: fg.g * fg.a + bg.g * (1 - fg.a), b: fg.b * fg.a + bg.b * (1 - fg.a), a: 1 });
+  /* 非预乘色的标准 source-over：必须正确传播 alpha。
+     旧实现恒返回 a:1，导致「半透明元素叠在同色半透明底上」时立刻被判为不透明——
+     颜色算成前景色本身、fg 与 bg 相等 → ratio 1 的假阳性（skill-design 的
+     .mk-badge--warn 压 .mk-status--warn 即此案：两处都是 rgba(251,191,36,.14)，
+     真值需再合成到页面底 #141415 → rgb(80,65,25)，实测 5.96:1 通过）。 */
+  const over = (fg, bg) => {
+    const a = fg.a + bg.a * (1 - fg.a);
+    if (a === 0) return { r: 0, g: 0, b: 0, a: 0 };
+    return {
+      r: (fg.r * fg.a + bg.r * bg.a * (1 - fg.a)) / a,
+      g: (fg.g * fg.a + bg.g * bg.a * (1 - fg.a)) / a,
+      b: (fg.b * fg.a + bg.b * bg.a * (1 - fg.a)) / a,
+      a,
+    };
+  };
   const effBg = (el) => {
     let acc = null; let node = el;
     while (node && node !== document.documentElement.parentElement) {

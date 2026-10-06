@@ -47,6 +47,22 @@
       />
     </section>
 
+    <!-- 首载占位（2026-10-06 审核 #44）：KPI 带与分布条以 rows.length 为渲染条件，
+         首载整块不存在，数据到达后两块同时插入把主表卡下推约 230px；
+         改为首载渲染等高 .mk-skeleton 占位（R3 卡片区加载态），主表卡位置不跳 -->
+    <section
+      v-if="!embedded && refreshing && !rows.length && !loadFailed"
+      class="mk-kpi-grid"
+      aria-hidden="true"
+    >
+      <div v-for="n in 3" :key="n" class="mk-skeleton ts-skel-kpi"></div>
+    </section>
+    <div
+      v-if="!embedded && refreshing && !rows.length && !loadFailed"
+      class="mk-skeleton ts-skel-distband"
+      aria-hidden="true"
+    ></div>
+
     <!-- 深链未命中提示：?session= 存在但当前列表（最近 LIST_LIMIT 条）中找不到 -->
     <div v-if="deepLinkMiss" class="mk-alert" role="alert">
       未能定位该会话：它可能不在当前列表范围内（最近 {{ LIST_LIMIT }} 条），或已被删除。
@@ -155,9 +171,9 @@
         </div>
       </div>
 
-      <div v-if="loadFailed" class="ts-error" role="alert">
-        <span>教学会话加载失败</span>
-        <button type="button" class="mk-link" :disabled="refreshing" @click="refreshNow">{{ refreshing ? '重试中…' : '重试' }}</button>
+      <div v-if="loadFailed" class="mk-alert mk-alert--row ts-error" role="alert">
+        <span class="mk-alert__msg">教学会话加载失败</span>
+        <button type="button" class="mk-alert__btn" :disabled="refreshing" @click="refreshNow">{{ refreshing ? '重试中…' : '重试' }}</button>
       </div>
 
       <MockSkeletonTable v-if="refreshing && !rows.length" :cols="9" />
@@ -183,7 +199,7 @@
               <th
                 v-if="!tsHiddenCols.has('status')"
                 scope="col"
-                class="mk-th--sortable"
+                class="mk-th--sortable ts-status"
                 :aria-sort="tsSortState('status')"
                 @click="toggleTsSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -192,6 +208,7 @@
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="tsSortState('interact')"
+                title="互动：时长 / 消息数 / 知识点；时长 ≥ 25 分钟按长时标琥珀（信号，非故障）"
                 @click="toggleTsSort('interact')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">互动<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!tsHiddenCols.has('progress')">进度</th>
@@ -219,12 +236,9 @@
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ r.topic }}</strong>
-                  <span class="mk-cell-sub" :title="taskTypeTitle(r.taskType)">{{ r.subject }} · {{ taskTypeText(r.taskType) }}</span>
-                  <span
-                    v-if="tsSubNote(r)"
-                    class="mk-cell-sub ts-summary"
-                    :title="tsSubNote(r)?.title"
-                  >{{ tsSubNote(r)?.text }}</span>
+                  <!-- 副行并档（2026-10-06 审核 #39）：原「学科·任务类型」与「总结摘要」两行
+                       合成一条（全文仍留 title），会话列三行并回两行，行高向全站 66px 档收敛 -->
+                  <span class="mk-cell-sub" :class="{ 'ts-summary': tsSubNote(r) }" :title="sessionSubTitle(r)">{{ sessionSubText(r) }}</span>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('user')">
@@ -238,12 +252,13 @@
                   <MkVariantBadge v-else-if="r.isTestAccount" kind="test" />
                 </div>
               </td>
-              <td v-if="!tsHiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
+              <td v-if="!tsHiddenCols.has('status')" class="ts-status"><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
               <td v-if="!tsHiddenCols.has('interact')">
-                <!-- 行级设计（批B）：时长主值+档位 tone（≥25 分钟挂机红 / <1 分钟秒退弱化），消息/知识点降 sub 行；
-                     挂机红阈值（duration ≥ 1500 秒）写进 title 披露（P3） -->
+                <!-- 行级设计（批B）：时长主值+档位 tone（≥25 分钟长时标琥珀 / <1 分钟秒退弱化），消息/知识点降 sub 行；
+                     长时阈值（duration ≥ 1500 秒）写进 title 披露（P3）。
+                     2026-10-06 审核：≥25 分钟是「长时」信号而非故障，红色让位给失败/缺总结等真红信号，改用琥珀 -->
                 <div class="ts-ia" :title="interactTitle(r)">
-                  <b class="ts-ia__dur" :class="{ 'mk-latency--slow': r.duration >= IDLE_RED_SECONDS, 'ts-ia__dur--brief': r.duration > 0 && r.duration < 60 }">{{ r.duration ? fmtDuration(r.duration) : '—' }}</b>
+                  <b class="ts-ia__dur" :class="{ 'ts-ia__dur--long': r.duration >= IDLE_LONG_SECONDS, 'ts-ia__dur--brief': r.duration > 0 && r.duration < 60 }">{{ r.duration ? fmtDuration(r.duration) : '—' }}</b>
                   <span class="mk-cell-sub">{{ r.messageCount }} 条<template v-if="r.knowledgePointCount"> · 知识 {{ r.knowledgePointCount }} 点</template></span>
                 </div>
               </td>
@@ -266,8 +281,10 @@
                 <span v-else class="mk-na">—</span>
               </td>
               <td v-if="!tsHiddenCols.has('output')">
-                <!-- 建议徽章可读（评审 §5）：行内直出建议标题（首行预览），title 挂完整建议文本 -->
-                <span class="mk-badge" :class="wrapupBadge(r)">{{ wrapupText(r) }}</span>
+                <!-- 建议徽章可读（评审 §5）：行内直出建议标题（首行预览），title 挂完整建议文本。
+                     「有总结」且 wrapupDegraded（summary-only / fallback 兜底来源）时 badge 文案
+                     改「降级总结」+ title 说明（2026-10-06 审核 #40：该标记此前算出无消费） -->
+                <span class="mk-badge" :class="wrapupBadge(r)" :title="wrapupTitle(r)">{{ wrapupText(r) }}</span>
                 <span
                   v-if="r.hasAdvisory"
                   class="mk-badge ts-adv-badge"
@@ -283,14 +300,18 @@
                 >{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span>
               </td>
               <td v-if="!tsHiddenCols.has('start')">
-                <!-- 原型末数据列「时间」.sub mono 形态：相对时间 + title 绝对时间（Users 判例） -->
-                <span class="mk-cell-sub mono" :title="r.startTime || r.startAt">{{ r.startAt || '—' }}</span>
+                <!-- 原型末数据列「时间」.sub mono 形态：相对时间 + title 绝对时间（Users 判例）。
+                     悬停给本地化绝对时刻（2026-10-06 审核 #38）：原样直出后端 ISO（UTC 带 Z），
+                     跨时区读不出真实时刻 -->
+                <span class="mk-cell-sub mono" :title="startAbsTitle(r)">{{ r.startAt || '—' }}</span>
               </td>
               <td>
                 <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）；
                      右对齐走共享 .mk-actions，与 mk-th--right 表头对齐 -->
                 <div class="mk-actions">
-                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="goTrace(r)">链路</button>
+                  <!-- 链路/详情都须有 id 守卫（2026-10-06 审核 #41）：id 缺失时 goTrace 会带空
+                       sessionId 跳执行日志的无效筛选态，与「详情」的 v-if="r.id" 对齐 -->
+                  <button v-if="r.id" type="button" class="mk-btn mk-btn--sm" @click.stop="goTrace(r)">链路</button>
                   <button v-if="r.id" type="button" class="mk-btn mk-btn--sm" @click.stop="goConsole(r)">详情</button>
                 </div>
               </td>
@@ -300,8 +321,8 @@
 
         <MkEmptyState
           v-else-if="!loadFailed"
-          :title="rows.length ? '当前筛选无会话' : '暂无教学会话'"
-          :description="rows.length ? '放宽筛选条件试试。' : '学习者开始上课后，会话记录将自动出现在这里。'"
+          :title="onlyAdvisory ? '「有建议」过滤下无会话' : rows.length ? '当前筛选无会话' : '暂无教学会话'"
+          :description="onlyAdvisory ? '服务端过滤口径下没有含教学建议的会话；可清除筛选查看全部。' : rows.length ? '放宽筛选条件试试。' : '学习者开始上课后，会话记录将自动出现在这里。'"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
@@ -717,14 +738,21 @@ const filtered = computed(() => {
   return sortTsRows(list)
 })
 
-const isFiltered = computed(() => pill.value !== 'all' || abnormalOnly.value || !!bandGroup.value || !!statusFilter.value || !!dateFilter.value || !!keyword.value.trim())
+const isFiltered = computed(() => pill.value !== 'all' || abnormalOnly.value || !!bandGroup.value || !!statusFilter.value || !!dateFilter.value || !!keyword.value.trim() || onlyAdvisory.value)
 function clearFilters() {
+  const hadOnlyAdvisory = onlyAdvisory.value
   pill.value = 'all'
   abnormalOnly.value = false
   bandGroup.value = null
   statusFilter.value = ''
   dateFilter.value = ''
   keyword.value = ''
+  /* 「有建议」是服务端过滤参数：只改本地不生效，需强制重拉（绕过 TTL 缓存） */
+  if (hadOnlyAdvisory) {
+    onlyAdvisory.value = false
+    refreshing.value = true
+    void fetchRows(true).finally(() => { refreshing.value = false })
+  }
 }
 
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
@@ -737,7 +765,7 @@ const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([pill, statusFilter, dateFilter, keyword, tsSortKey, tsSortDir], () => {
+watch([pill, statusFilter, dateFilter, keyword, tsSortKey, tsSortDir, abnormalOnly, bandGroup, onlyAdvisory], () => {
   page.value = 1
 })
 
@@ -752,9 +780,19 @@ const attentionCount = computed(() => rows.value.filter((r) => r.attention !== '
    进行中会话页头就恒 warn、计数虚高。 */
 const wrapupTier = (r: Row): 'complete' | 'missing' | 'pending' =>
   r.wrapupStatus === 'complete' ? 'complete' : isTerminal(r.status) ? 'missing' : 'pending'
-const wrapupText = (r: Row) => (wrapupTier(r) === 'complete' ? '有总结' : wrapupTier(r) === 'missing' ? '缺总结' : '未生成')
+const wrapupText = (r: Row) => {
+  const t = wrapupTier(r)
+  /* 降级总结（#40）：summary-only / fallback 兜底来源与「完全没总结」同档计数，
+     但行内文案区分——否则 wrapupDegraded 算出无消费（死数据） */
+  return t === 'complete' ? '有总结' : t === 'missing' ? (r.wrapupDegraded ? '降级总结' : '缺总结') : '未生成'
+}
 const wrapupBadge = (r: Row) =>
   wrapupTier(r) === 'complete' ? 'mk-badge--ok' : wrapupTier(r) === 'missing' ? 'mk-badge--warn' : 'mk-badge--muted'
+/** 产物徽章悬停（#40）：降级总结说明来源；口径与「缺总结」同档（KPI 计数不含本档差异） */
+const wrapupTitle = (r: Row): string | undefined =>
+  wrapupTier(r) === 'missing' && r.wrapupDegraded
+    ? '降级总结：summary-only / fallback 兜底来源，非完整课后总结（与「缺总结」同档计数）'
+    : undefined
 const isMissingWrapup = (r: Row) => wrapupTier(r) === 'missing'
 
 /* P3（设计评审 4.3-9）：异常态（失败/收尾失败/超时）会话列副行是后端降级模板句
@@ -771,6 +809,18 @@ const tsSubNote = (r: Row): { text: string; title?: string } | null => {
   if (r.duration > 0) return { text: `时长 ${fmtDuration(r.duration)}`, title: '异常会话：降级总结与状态徽章同义已省略，此处显示会话时长' }
   if (r.startAt) return { text: `开始于 ${r.startAt}`, title: '异常会话：降级总结与状态徽章同义已省略，此处显示开始时间' }
   return null
+}
+
+/** 会话列副行文案（#39 行高并档）：学科 · 任务类型 [+ 总结摘要/异常替代]，全文进 title */
+function sessionSubText(r: Row): string {
+  const base = `${r.subject} · ${taskTypeText(r.taskType)}`
+  const note = tsSubNote(r)
+  return note ? `${base} · ${note.text}` : base
+}
+/** 会话列副行 title：任务类型原文与摘要全文合并披露（各自长文都保留） */
+function sessionSubTitle(r: Row): string | undefined {
+  const parts = [taskTypeTitle(r.taskType), tsSubNote(r)?.title].filter(Boolean)
+  return parts.length ? parts.join('；') : undefined
 }
 
 /* 异常堆积告警（原页头状态条 mk-status--bad 的同一判据，2026-10-04 状态条退役后迁往
@@ -814,14 +864,19 @@ function closeDetail() {
 const { goTrace, goConsole } = useSessionDrill(closeDetail)
 
 /* 状态映射统一走共享字典（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
-/* 状态徽章降噪（P0-5）：只对异常态上色，正常态统一灰——对齐 Langfuse「只有
-   ERROR/WARNING 上色」；completed/succeeded 不再绿（绿留给业务正向信号） */
+/* 状态徽章（P0-5 降噪后回补两档语义色）：异常态红 / 已被替代琥珀 / 已废弃中性；
+   completed 回绿（与同页分布条「已完成」段同色）、active 系回蓝（与「进行中」段同色），
+   消除「徽章全灰 vs 分布条绿蓝」的同页自相矛盾（对齐 GoalConversations 两档映射） */
 const statusBadge = (s: string) =>
-  s === 'failed' || s === 'timeout' || s === 'discarded' || s === 'finalization_failed'
+  s === 'failed' || s === 'timeout' || s === 'finalization_failed'
     ? 'mk-badge--bad'
-    : s === 'superseded'
-      ? 'mk-badge--warn'
-      : 'mk-badge--muted'
+    : s === 'completed'
+      ? 'mk-badge--ok'
+      : s === 'active' || s === 'initializing' || s === 'finalizing'
+        ? 'mk-badge--info'
+        : s === 'superseded'
+          ? 'mk-badge--warn'
+          : 'mk-badge--muted'
 /* 建议徽章带优先级色（T3）：high=bad / medium=warn / 其余 info */
 const advisoryBadge = (p?: string) => (p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info')
 /* 任务类型字典：未命中枚举回退「—」，原文进 title（不裸直出枚举，也不猜词） */
@@ -832,13 +887,19 @@ const taskTypeText = (t: string) => TASK_TYPE_TEXT[t] || '—'
 const taskTypeTitle = (t: string) => (t && !TASK_TYPE_TEXT[t] ? `任务类型原文：${t}` : undefined)
 /* 时长格式化：分钟向下取整（P3：90 秒显示「1 分钟」而非四舍五入成「2 分钟」） */
 const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.floor(sec / 60)} 分钟` : `${sec} 秒`)
-/** 挂机红阈值（秒）：≥1500s（25 分钟）时长标红；阈值写进互动列 title 披露 */
-const IDLE_RED_SECONDS = 1500
-/** 互动列 title：时长 + 消息数；触发挂机红时披露阈值口径 */
+/** 时间列悬停：本地化绝对时刻（后端原始 ISO 为 UTC 带 Z，直出跨时区读不出真实时刻——审核 #38） */
+function startAbsTitle(r: Row): string | undefined {
+  if (!r.startTime) return r.startAt || undefined
+  const t = new Date(r.startTime).getTime()
+  return Number.isFinite(t) ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : r.startAt || undefined
+}
+/** 长时阈值（秒）：≥1500s（25 分钟）时长标琥珀；阈值写进互动列 title 与表头披露 */
+const IDLE_LONG_SECONDS = 1500
+/** 互动列 title：时长 + 消息数；触发长时着色时披露阈值口径 */
 function interactTitle(r: Row): string | undefined {
   if (!r.duration) return undefined
   const base = `时长 ${fmtDuration(r.duration)} · ${r.messageCount} 条消息`
-  return r.duration >= IDLE_RED_SECONDS ? `${base} · 时长 ≥ 25 分钟按挂机标红` : base
+  return r.duration >= IDLE_LONG_SECONDS ? `${base} · 时长 ≥ 25 分钟按长时标注（信号，非故障）` : base
 }
 /** 进度工具提示（人话）：阶段 n/m · 任务 x/y；无里程碑维度只给任务 */
 function progressTitle(r: Row): string {
@@ -853,6 +914,9 @@ defineExpose({ refreshNow })
 </script>
 
 <style scoped>/* 嵌入模式（宿主学习会话页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
+/* 首载占位（#44）：等比 MkKpi 卡（16px 内边距 + 三行内容 ≈ 114px）与 MkDistBand 卡（≈ 120px） */
+.ts-skel-kpi { height: 114px; border-radius: var(--mk-radius-xl); }
+.ts-skel-distband { height: 120px; border-radius: var(--mk-radius-xl); }
 .ts-embedded { flex: 1; min-height: 0; overflow: hidden; }/* 总结预览行（P1-2）：副行语义走 .mk-cell-sub（截断/灰阶原语承担）；页私有只留 help 悬停 + emoji 前缀 */
 .ts-summary { cursor: help; }
 .ts-summary::before { content: '📝 '; opacity: 0.7; }
@@ -865,7 +929,7 @@ defineExpose({ refreshNow })
    长内容由 .ts-summary-preview / .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底）。
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class），本页不再私持拷贝 *//* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
 /* 互动列（批B）：时长主值+副行 */
-.ts-ia { display: grid; gap: 2px; justify-items: start; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }.ts-ia__dur--brief { color: var(--mk-faint); font-weight: 400; }.ts-prog { display: grid; gap: 4px; max-width: 96px; }.ts-prog__num { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }.ts-prog__bar { width: 88px; height: 5px; }/* 终态完成列（P1 语义修复）：只显「已完成」文字，不再与进度条并存；title 保留历史进度 */
+.ts-ia { display: grid; gap: 2px; justify-items: start; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }.ts-ia__dur--long { color: var(--mk-amber); }.ts-ia__dur--brief { color: var(--mk-faint); font-weight: 400; }.ts-prog { display: grid; gap: 4px; max-width: 96px; }.ts-prog__num { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }.ts-prog__bar { width: 88px; height: 5px; }/* 终态完成列（P1 语义修复）：只显「已完成」文字，不再与进度条并存；title 保留历史进度 */
 .ts-prog--done {
   display: inline-flex;
   align-items: center;
@@ -880,22 +944,14 @@ defineExpose({ refreshNow })
 .ts-abn-chip--heap {
   color: var(--mk-red);
   border-color: color-mix(in srgb, var(--mk-red) 45%, var(--mk-line));
-}/* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字） */
-.ts-row td:nth-child(3) .mk-badge { min-width: 60px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
+}/* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字）。
+   锚点用稳定类 .ts-status（2026-10-06 审核 #37）：原 td:nth-child(3) 在用户列被
+   隐藏后失配（状态列变第 2 个 td），切换状态筛选时列宽照样跳动——正是本规则要防的。
+   68px = 4 字 × micro 档 + 徽章内边距，容得下最长档 */
+.ts-status .mk-badge { min-width: 68px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
    badge 本体 inline-flex，截断由内层文本节点承载（flex 项 overflow!=visible → min-width 归 0 可收缩） */
-.ts-adv-badge { margin-left: 4px; max-width: 168px; }.ts-adv-badge__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }/* 加载失败错误条 */
-.ts-error {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 16px 10px;
-  padding: 8px 12px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-red-bg);
-  color: var(--mk-red);
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-}/* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页）。
+.ts-adv-badge { margin-left: 4px; max-width: 168px; }.ts-adv-badge__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
+.ts-error { margin: 0 16px 10px; }/* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页）。
    4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {
 }/* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */

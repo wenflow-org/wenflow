@@ -11,7 +11,7 @@
              → 运行时页签（健康+证据先于配置，评审「结论埋深」） -->
         <button type="button" class="mk-badge skd-badge-btn" :class="healthBadge.cls" :title="healthBadge.title" @click="goRuntimeTab">{{ healthBadge.text }}</button>
         <!-- 类别人话（Skills.vue:194 同字段判例）：裸枚举 teaching → 「教学」，title 保留原值备查 -->
-        <span class="mk-badge mk-badge--muted" :title="`类别：${view.category}`">{{ categoryText(view.category) }}</span>
+        <span class="mk-badge mk-badge--muted" :title="`类别：${view.category}（来源：${view.categorySource}）`">{{ categoryText(view.category) }}</span>
         <span v-if="modelLabel" class="mk-badge mk-badge--muted mono" :title="'生效模型（skill_model_configs 覆盖或 ACTIVE Prompt 声明）'">{{ modelLabel }}</span>
         <span v-if="promptVersionText" class="mk-badge mk-badge--info">ACTIVE {{ promptVersionText }}</span>
       </template>
@@ -38,10 +38,13 @@
               <div class="skd-pad skd-rows">
                 <MkLoading v-if="routingsLoading && !routings" inline text="字段契约加载中…" />
                 <template v-else-if="routingsNotApplicable">
-                  <p class="skd-none">该 Skill 为辅助类（无编排阶段归属），字段契约不适用。</p>
+                  <p class="mk-empty--line">该 Skill 为辅助类（无编排阶段归属），字段契约不适用。</p>
                 </template>
                 <template v-else-if="routingsFailed">
-                  <p class="skd-none">字段契约加载失败。<button type="button" class="mk-link" @click="load(true)">重试</button></p>
+                  <div class="mk-alert mk-alert--row" role="alert">
+                    <span class="mk-alert__msg">字段契约加载失败。</span>
+                    <button type="button" class="mk-alert__btn" @click="load(true)">重试</button>
+                  </div>
                 </template>
                 <template v-else>
                   <div v-for="f in contractIns" :key="f.fieldId" class="skd-vrow">
@@ -49,9 +52,12 @@
                     <span class="mk-badge mk-badge--info">入参</span>
                     <span class="skd-vrow__desc" :title="f.description || ''">{{ f.description || '—' }}</span>
                     <span class="mono skd-vrow__type">{{ f.valueType || '—' }}</span>
-                    <span class="mk-badge" :class="f.promptRole === 'hard-required' ? 'mk-badge--warn' : 'mk-badge--muted'">{{ f.promptRole === 'hard-required' ? '必填' : '可选' }}</span>
+                    <!-- #131：改用与输出契约同一单源 roleLabel(f.promptRole)，不再用二值
+                         「必填/可选」覆盖真实 promptRole（隐式推断/控制信号等被一律译成「可选」） -->
+                    <span class="mk-badge" :class="roleCls(f.promptRole)">{{ roleLabel(f.promptRole) }}</span>
+                    <span v-if="f.promptRole === 'hard-required'" class="mk-badge mk-badge--warn">必填</span>
                   </div>
-                  <p v-if="!contractIns.length" class="skd-none">该 Skill 暂无输入字段声明（无编排路由或全部为产出字段）。</p>
+                  <p v-if="!contractIns.length" class="mk-empty--line">该 Skill 暂无输入字段声明（无编排路由或全部为产出字段）。</p>
                 </template>
               </div>
             </section>
@@ -63,10 +69,13 @@
               <div class="skd-pad skd-rows">
                 <MkLoading v-if="routingsLoading && !routings" inline text="字段契约加载中…" />
                 <template v-else-if="routingsNotApplicable">
-                  <p class="skd-none">该 Skill 为辅助类（无编排阶段归属），字段契约不适用。</p>
+                  <p class="mk-empty--line">该 Skill 为辅助类（无编排阶段归属），字段契约不适用。</p>
                 </template>
                 <template v-else-if="routingsFailed">
-                  <p class="skd-none">字段契约加载失败。<button type="button" class="mk-link" @click="load(true)">重试</button></p>
+                  <div class="mk-alert mk-alert--row" role="alert">
+                    <span class="mk-alert__msg">字段契约加载失败。</span>
+                    <button type="button" class="mk-alert__btn" @click="load(true)">重试</button>
+                  </div>
                 </template>
                 <template v-else>
                   <div v-for="f in contractOuts" :key="f.fieldId" class="skd-vrow">
@@ -76,7 +85,7 @@
                     <span class="mono skd-vrow__type">{{ f.valueType || '—' }}</span>
                     <span class="mk-badge mk-badge--muted">{{ roleLabel(f.promptRole) }}</span>
                   </div>
-                  <p v-if="!contractOuts.length" class="skd-none">该 Skill 暂无产出字段声明。</p>
+                  <p v-if="!contractOuts.length" class="mk-empty--line">该 Skill 暂无产出字段声明。</p>
                 </template>
               </div>
             </section>
@@ -89,16 +98,18 @@
             </div>
             <div class="skd-pad">
               <div v-if="coreStateNodes.length" class="skd-steps">
+                <!-- #148：不再把第 1 个节点无条件标成「当前」——core YAML 无 stateMachine/states
+                     字段（也无「当前态」数据源），aria-current 与蓝染是自造状态；
+                     状态机只作序列展示，真实当前态等后端字段下发后再着色 -->
                 <div
                   v-for="(n, i) in coreStateNodes"
                   :key="`${n}-${i}`"
                   class="skd-step"
-                  :aria-current="i === 0 ? 'true' : undefined"
                 >
                   <span class="skd-step__n">{{ i + 1 }}</span>{{ n }}
                 </div>
               </div>
-              <p v-else class="skd-none" title="core YAML 未声明 stateMachine / states 字段">该 Skill 未声明回合状态机。</p>
+              <p v-else class="mk-empty--line" title="core YAML 未声明 stateMachine / states 字段">该 Skill 未声明回合状态机。</p>
             </div>
           </section>
           <div class="skd-grid">
@@ -111,7 +122,7 @@
                 <div v-if="coreTerminations.length" class="skd-ranklist">
                   <div v-for="(t, i) in coreTerminations" :key="`${t}-${i}`" class="skd-rankrow">{{ t }}</div>
                 </div>
-                <p v-else class="skd-none" title="core YAML 未声明 termination / limits 字段">该 Skill 未声明终止条件。</p>
+                <p v-else class="mk-empty--line" title="core YAML 未声明 termination / limits 字段">该 Skill 未声明终止条件。</p>
               </div>
             </section>
             <section class="mk-card">
@@ -119,12 +130,12 @@
                 <h3 class="mk-card__title">System Prompt</h3>
                 <div class="mk-card__head-right">
                   <span class="mk-card__meta">{{ promptStateText }}</span>
-                  <button type="button" class="mk-btn mk-btn--sm" @click="openPromptModal">编辑 Prompt</button>
+                  <button type="button" class="mk-btn mk-btn--sm" @click="openPromptModal">查看 Prompt</button>
                 </div>
               </div>
               <div class="skd-pad">
                 <pre class="skd-code">{{ systemPromptCap || (promptFailed ? '生效 Prompt 加载失败，请刷新重试。' : '暂无生效 Prompt。') }}</pre>
-                <p v-if="promptTruncated" class="skd-none">已截断：仅显示前 1200 字（共 {{ promptLen }} 字），完整内容在设计页查看。</p>
+                <p v-if="promptTruncated" class="mk-card__note">已截断：仅显示前 1200 字（共 {{ promptLen }} 字），完整内容在设计页查看。</p>
               </div>
             </section>
           </div>
@@ -142,7 +153,7 @@
                 <textarea v-model="trialInput" class="mk-input mono skd-ta" rows="7" spellcheck="false" aria-label="样例输入" placeholder='{"input": "…"}'></textarea>
                 <div class="skd-ta-foot">
                   <!-- P3-23（设计评审）：「尚未试跑」全页签只在此脚注说一次（含入口指引） -->
-                  <span class="skd-none">
+                  <span class="mk-card__note">
                     <template v-if="trialResult">上次试跑 {{ trialResult.success ? '成功' : '失败' }}<template v-if="trialResult.duration != null"> · {{ fmtMs(trialResult.duration) }}</template></template>
                     <template v-else>尚未试跑——输入 JSON 点「试跑」后，输出与执行链路在此展示</template>
                   </span>
@@ -199,11 +210,13 @@
                     </div>
                   </div>
                 </div>
-                <p class="skd-none">试跑在隔离沙箱执行，不写入生产数据，结果仅供调试参考。</p>
+                <!-- #130：原「试跑在隔离沙箱执行，不写入生产数据」与实现相反——testSkill 走真实 handler，
+                     写 agent_call_logs / prompt_call_logs，并计入本页调用次数/成功率/最近调用 -->
+                <p class="mk-card__note">试跑 = 真实执行：会写入 agent_call_logs / prompt_call_logs，并计入本页的调用次数、成功率与最近调用窗口；失败的试跑同样产出一条失败记录。</p>
               </div>
             </section>
           </div>
-          <p class="skd-note">试跑直接调用该 Skill 的真实 handler 执行；重跑日志、ACTIVE Prompt 参照等完整诊断在设计页「试跑」页签。</p>
+          <p class="mk-card__note">试跑直接调用该 Skill 的真实 handler 执行；重跑日志、ACTIVE Prompt 参照等完整诊断在设计页「试跑」页签。</p>
         </template>
 
         <!-- ========== 版本（原型 versions：.tbl 表格；日期/作者/变更说明有字段才补列，回滚投设计页） ========== -->
@@ -242,8 +255,11 @@
               </table>
               <div class="skd-pad" v-else>
                 <MkLoading v-if="versionsLoading" inline text="版本加载中…" />
-                <p v-else-if="versionsFailed" class="skd-none">版本列表加载失败。<button type="button" class="mk-link" @click="load(true)">重试</button></p>
-                <p v-else class="skd-none">暂无 Prompt 版本记录。</p>
+                <div v-else-if="versionsFailed" class="mk-alert mk-alert--row" role="alert">
+                  <span class="mk-alert__msg">版本列表加载失败。</span>
+                  <button type="button" class="mk-alert__btn" @click="load(true)">重试</button>
+                </div>
+                <p v-else class="mk-empty--line">暂无 Prompt 版本记录。</p>
               </div>
             </div>
             <div class="mk-card__foot">
@@ -255,26 +271,16 @@
 
         <!-- ========== 运行时（原型 runtime：指标卡 + 模型与路由 + 保存配置；SkillDrawer 的配置/探测/最近调用迁入此页签） ========== -->
         <template v-else-if="tab === 'runtime'">
-          <!-- 原型 renderSkillDetail 2349-2350：4 张独立 metricCard（KPI label/value/foot），非合体指标格 -->
-          <div class="skd-metrics" role="list" aria-label="运行指标">
-            <section class="mk-card skd-metric" role="listitem">
-              <span class="skd-metric__label">调用次数</span>
-              <strong class="skd-metric__value">{{ stat.calls }}</strong>
-            </section>
-            <section class="mk-card skd-metric" role="listitem">
-              <span class="skd-metric__label">失败</span>
-              <strong class="skd-metric__value" :class="{ 'is-bad': stat.calls > 0 && stat.errors > 0 }">{{ stat.calls ? stat.errors : '—' }}</strong>
-            </section>
-            <section class="mk-card skd-metric" role="listitem">
-              <span class="skd-metric__label">成功率</span>
-              <strong class="skd-metric__value" :class="rateTone ? `is-${rateTone}` : ''">{{ successRate }}</strong>
-            </section>
-            <section class="mk-card skd-metric" role="listitem">
-              <span class="skd-metric__label">平均耗时</span>
-              <strong class="skd-metric__value">{{ stat.calls ? fmtMs(stat.avgMs) : '—' }}</strong>
-            </section>
-          </div>
-          <p v-if="statsNote" class="skd-note">统计口径：{{ statsNote }}</p>
+          <!-- 原型 renderSkillDetail 2349-2350：4 张独立 metricCard（KPI label/value/foot）。
+               审核 #146：原页内私有 .skd-metric（与 MkKpi 同解剖，值档/4K 档各成一套）收编共享
+               MkKpi + .mk-kpi-grid，档位由原语自带。 -->
+          <section class="mk-kpi-grid" aria-label="运行指标">
+            <MkKpi label="调用次数" :value="stat.calls" />
+            <MkKpi label="失败" :value="stat.calls ? stat.errors : '—'" :tone="stat.calls > 0 && stat.errors > 0 ? 'bad' : ''" />
+            <MkKpi label="成功率" :value="successRate" :tone="rateTone" />
+            <MkKpi label="平均耗时" :value="stat.calls ? fmtMs(stat.avgMs) : '—'" />
+          </section>
+          <p v-if="statsNote" class="mk-card__note">统计口径：{{ statsNote }}</p>
           <!-- 运行时限制：原型 renderSkillDetail 2355-2357（dl.kv）；后端逐 skill 仅 requestTimeoutMs 可得，其余空态 -->
           <section class="mk-card">
             <div class="mk-card__head">
@@ -288,7 +294,7 @@
                   <span class="mono skd-kv__v">{{ r.v }}</span>
                 </div>
               </div>
-              <p v-else class="skd-none">后端未返回该 Skill 的独立运行时限制（仅 skill_model_configs.requestTimeoutMs 一项可得）。</p>
+              <p v-else class="mk-empty--line">后端未返回该 Skill 的独立运行时限制（仅 skill_model_configs.requestTimeoutMs 一项可得）。</p>
             </div>
           </section>
           <div class="skd-grid">
@@ -339,13 +345,13 @@
                 </div>
                 <p v-if="rtMsg" class="skd-msg" :class="{ 'is-err': rtErr }">{{ rtMsg }}</p>
                 <div class="skd-actions">
-                  <button type="button" class="mk-btn skd-btn--danger" :disabled="rtSaving" @click="resetRuntimeConfig">恢复默认</button>
+                  <button type="button" class="mk-btn mk-btn--danger-ghost" :disabled="rtSaving" @click="resetRuntimeConfig">恢复默认</button>
                   <button type="button" class="mk-btn" :disabled="rtSaving" @click="refreshRuntimeConfig">刷新</button>
                   <button type="button" class="mk-btn mk-btn--primary" :disabled="rtSaving" @click="saveRuntimeConfig">
                     {{ rtSaving ? '保存中…' : '保存配置' }}
                   </button>
                 </div>
-                <p class="skd-none">模型仅当该 Skill 的 ACTIVE Prompt 未声明 model 时生效；生成参数（含 model）以 ACTIVE Prompt 为准。</p>
+                <p class="mk-card__note">模型仅当该 Skill 的 ACTIVE Prompt 未声明 model 时生效；生成参数（含 model）以 ACTIVE Prompt 为准。</p>
               </div>
             </section>
             <!-- 模型测试（SkillDrawer「模型测试」页签整体迁入：model-probe 直发上游，不落库） -->
@@ -392,7 +398,7 @@
                   </div>
                   <pre v-if="probeResult.contentPreview" class="skd-code skd-code--short mono">{{ probeResult.contentPreview }}</pre>
                 </div>
-                <p class="skd-none">探测用 ACTIVE Prompt + 当前路由直发上游，测「改档位后真实延迟 / JSON / token」；先验证再保存配置。</p>
+                <p class="mk-card__note">探测用 ACTIVE Prompt + 当前路由直发上游，测「改档位后真实延迟 / JSON / token」；先验证再保存配置。</p>
               </div>
             </section>
           </div>
@@ -400,7 +406,9 @@
           <section class="mk-card">
             <div class="mk-card__head">
               <h3 class="mk-card__title">最近调用</h3>
-              <span class="mk-card__meta">{{ recent.length ? `${recent.length} 条` : '近 60 条日志窗口' }}</span>
+              <!-- #150：有数据时也带窗口口径——列表是日志采样窗口内的最近 5 条（store.recentSpansOf
+                   默认 limit=5），裸「N 条」会被读成全量（同屏指标卡可能显示 27852 次调用） -->
+              <span class="mk-card__meta">{{ recent.length ? `最近 ${recent.length} 条（近 7 天采样窗口）` : '近 7 天采样窗口' }}</span>
             </div>
             <div class="skd-pad skd-rows">
               <button v-for="s in recent" :key="s.id" type="button" class="skd-call" :title="`traceId：${s.traceId}`" @click="goTrace(s.traceId)">
@@ -408,7 +416,7 @@
                 <span class="skd-call__title">{{ s.title }}</span>
                 <span class="mono skd-call__ms">{{ fmtMs(s.durationMs) }}</span>
               </button>
-              <p v-if="!recent.length" class="skd-none">日志窗口内无调用（统计为全量口径）。</p>
+              <p v-if="!recent.length" class="mk-empty--line">日志窗口内无调用（上方指标同为窗口口径，随 Skill 列表「统计窗口」切换）。</p>
             </div>
           </section>
         </template>
@@ -424,7 +432,7 @@
                 <div class="mk-facts">
                   <div><span>Skill ID</span><strong class="mono" :title="view.id">{{ view.id }}</strong></div>
                   <div><span>归属 Agent</span><strong>{{ view.agentName || view.agentId || '—' }}</strong></div>
-                  <div><span>类别</span><strong :title="`类别枚举：${view.category}`">{{ categoryText(view.category) }}</strong></div>
+                  <div><span>类别</span><strong :title="`类别枚举：${view.category}（来源：${view.categorySource}）`">{{ categoryText(view.category) }}</strong></div>
                   <div v-if="coreFilePath"><span>核心文件</span><strong class="mono" :title="coreFilePath">{{ coreFilePath }}</strong></div>
                   <div><span>统计口径</span><strong>{{ statsNote || '—' }}</strong></div>
                 </div>
@@ -440,9 +448,9 @@
                 <div v-if="coreDeps.length" class="skd-chips">
                   <span v-for="d in coreDeps" :key="d" class="mk-badge mk-badge--muted mono" :title="d">{{ d }}</span>
                 </div>
-                <p v-else class="skd-none" title="core YAML 未声明 inputs 的 skill:/sandbox: 引用">该 Skill 未声明输入依赖。</p>
+                <p v-else class="mk-empty--line" title="core YAML 未声明 inputs 的 skill:/sandbox: 引用">该 Skill 未声明输入依赖。</p>
                 <!-- 四段发布流（草稿/评审/灰度/回滚）后端无阶段状态接口 → 空态；本系统发布链见设计页「协议」页签 -->
-                <p class="skd-none" title="后端未提供草稿 / 评审 / 灰度 / 回滚阶段状态接口">发布链：保存并编译 → 发布（暂无草稿 / 评审 / 灰度阶段状态）。</p>
+                <p class="mk-card__note" title="后端未提供草稿 / 评审 / 灰度 / 回滚阶段状态接口">发布链：保存并编译 → 发布（暂无草稿 / 评审 / 灰度阶段状态）。</p>
                 <div class="skd-actions">
                   <button type="button" class="mk-btn mk-btn--primary" @click="goDesign('engineering')">打开工程视图 →</button>
                 </div>
@@ -491,20 +499,23 @@
               </table>
               <div class="skd-pad" v-else>
                 <MkLoading v-if="routingsLoading" inline text="字段路由加载中…" />
-                <p v-else-if="routingsNotApplicable" class="skd-none">该 Skill 为辅助类（无编排阶段归属），字段路由不适用。</p>
-                <p v-else-if="routingsFailed" class="skd-none">字段路由加载失败。<button type="button" class="mk-link" @click="load(true)">重试</button></p>
-                <p v-else class="skd-none">该 Skill 暂无产出行（无编排路由声明）。</p>
+                <p v-else-if="routingsNotApplicable" class="mk-empty--line">该 Skill 为辅助类（无编排阶段归属），字段路由不适用。</p>
+                <div v-else-if="routingsFailed" class="mk-alert mk-alert--row" role="alert">
+                  <span class="mk-alert__msg">字段路由加载失败。</span>
+                  <button type="button" class="mk-alert__btn" @click="load(true)">重试</button>
+                </div>
+                <p v-else class="mk-empty--line">该 Skill 暂无产出行（无编排路由声明）。</p>
               </div>
             </div>
             <div class="skd-pad">
-              <p class="skd-note skd-note--flat">字段路由决定 Skill 与上下游 Agent 之间传递的结构化字段；标注「内部」的字段不进入用户可见回复。</p>
+              <p class="mk-card__note">字段路由决定 Skill 与上下游 Agent 之间传递的结构化字段；标注「内部」的字段不进入用户可见回复。</p>
             </div>
           </section>
         </template>
       </div>
     </section>
 
-    <!-- ===== Prompt 编辑弹层（原型 openPromptModal：modal modal--wide；草稿保存/发布在设计页完成） ===== -->
+    <!-- ===== Prompt 弹层（原型 openPromptModal：modal modal--wide；草稿保存/发布在设计页完成） ===== -->
     <Teleport to="body">
       <div v-if="pmOpen" ref="pmMaskRef" class="mk-modal">
         <div ref="pmPanelRef" class="mk-modal__panel mk-modal__panel--wide skd-pm" role="dialog" aria-modal="true" aria-label="编辑 Prompt">
@@ -513,6 +524,11 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closePromptModal">✕</button>
           </div>
           <div class="mk-modal__body skd-pm__body">
+            <!-- #135：此处是「起草」区，草稿不再随关闭/跳转静默丢弃——关闭或跳设计页前写
+                 sessionStorage（skd-prompt-draft:<skillId>），下次打开自动恢复并提示；另给「复制」带走 -->
+            <p v-if="pmDraftRestored" class="skd-draft-note" role="status">
+              已恢复上次未提交的草稿（{{ pmDraftSavedAt }}）；「前往设计页编辑」不会携带草稿，可先「复制内容」。
+            </p>
             <label class="skd-field">
               <span>system</span>
               <textarea v-model="pmText" class="mk-input mono skd-ta" rows="12" spellcheck="false"></textarea>
@@ -524,8 +540,9 @@
             </label>
           </div>
           <div class="mk-modal__foot">
+            <button type="button" class="mk-btn" @click="copyPromptDraft">复制内容</button>
             <button type="button" class="mk-btn" @click="closePromptModal">取消</button>
-            <button type="button" class="mk-btn mk-btn--primary" @click="goDesign('protocol')">前往设计页编辑 →</button>
+            <button type="button" class="mk-btn mk-btn--primary" @click="goDesignWithDraft()">前往设计页编辑 →</button>
           </div>
         </div>
       </div>
@@ -594,34 +611,62 @@ import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
 import { askConfirm } from './useConfirm'
+import { toast } from '@/utils/toast'
 
-/* ===== 6 页签（运行时置首：健康+证据先于配置，评审「结论埋深」；key 与设计页 ?tab= 深链键对齐，便于互跳） ===== */
+/* ===== 6 页签（运行时置首：健康+证据先于配置，评审「结论埋深」）
+   #149：键与设计页 ?tab= 深链键真对齐——「字段路由」设计页键是 routing，本页原写 fields
+   导致跨页互跳时该档丢失（被归一到默认档）。现统一为 routing；已分享的旧链 ?tab=fields
+   由 normalizeSkdTab 做别名兼容，不失效。 ===== */
 const TABS: Array<{ key: string; label: string }> = [
   { key: 'runtime', label: '运行时' },
   { key: 'protocol', label: '协议' },
   { key: 'trial', label: '试跑' },
   { key: 'versions', label: '版本' },
   { key: 'engineering', label: '工程' },
-  { key: 'fields', label: '字段路由' }
+  { key: 'routing', label: '字段路由' }
 ]
 const DEFAULT_TAB = 'runtime'
 const tab = ref(DEFAULT_TAB)
 
-/* ?tab= 写/读（tab 路由化，判例 LearnerDetail P0-2 / Orchestrator ?stage=&tab=）：
-   深链/刷新/前进后退保持所在页签——此前页签不写 URL，刷新即回协议页 */
+/* ?skdTab= 写/读（tab 路由化，判例 LearnerDetail P0-2 / Orchestrator ?stage=&tab=）：
+   深链/刷新/前进后退保持所在页签——此前页签不写 URL，刷新即回协议页。
+   #133：键必须与宿主列表页 Skills 的 ?tab=（run/model-routing/prompt-eval）分开——
+   本页在 /admin/skills?view=skill&id=… 上，与列表共用一个 ?tab= 会互相覆盖
+   （详情内切页签 → 列表键被写成 versions → Esc 关闭后列表被静默重置为「Skill 运行」）。 */
 const tabRoute = useRoute()
 const TAB_KEYS = new Set(TABS.map((t) => t.key))
+/** #149：旧深链别名——本页「字段路由」历史键 fields（设计页键是 routing），
+    归一读取以免已分享链接失效；写回一律用 routing */
+const TAB_ALIASES: Record<string, string> = { fields: 'routing' }
 function normalizeSkdTab(t: unknown): string {
-  return typeof t === 'string' && TAB_KEYS.has(t) ? t : DEFAULT_TAB
+  if (typeof t !== 'string') return DEFAULT_TAB
+  const key = TAB_ALIASES[t] || t
+  return TAB_KEYS.has(key) ? key : DEFAULT_TAB
+}
+/** 读：优先本页自己的 skdTab；旧深链（?tab=versions 等，宿主列表键 run/model-routing/prompt-eval
+    与本页键不相交）仍兼容读取，不破坏既有分享/刷新链接 */
+function readTabFromQuery(): string {
+  const q = tabRoute?.query
+  const own = q?.skdTab
+  if (typeof own === 'string') return normalizeSkdTab(own)
+  return normalizeSkdTab(q?.tab)
+}
+/** 写回键（#133）：URL 上已有「本页页签键」的 ?tab= 时属旧深链，继续写回同一键（向后兼容）；
+    否则一律写本页独立键 skdTab，绝不动宿主列表的 run/model-routing/prompt-eval */
+function useLegacyTabKey(): boolean {
+  const t = tabRoute?.query?.tab
+  // 旧别名（fields）同样视为本页键：写回继续落在 ?tab=，不另起 skdTab 双键
+  return typeof t === 'string' && TAB_KEYS.has(TAB_ALIASES[t] || t)
 }
 // URL → tab（深链/刷新/前进后退；route 可能缺位——二级页可被无路由宿主挂载，防御式读取）
 watch(
-  () => tabRoute?.query?.tab,
-  (t) => {
-    const v = normalizeSkdTab(t)
+  [() => tabRoute?.query?.skdTab, () => tabRoute?.query?.tab],
+  () => {
+    const v = readTabFromQuery()
     if (v !== tab.value) tab.value = v
   },
   { immediate: true }
@@ -629,13 +674,14 @@ watch(
 // tab → URL（replace 不污染历史栈；缺省档不占 URL，与 Orchestrator overview 缺省不写同约定）
 watch(tab, (t) => {
   if (!router) return
-  const cur = typeof tabRoute?.query?.tab === 'string' ? tabRoute.query.tab : ''
   // 无匹配路由的宿主（测试/嵌入场景）不做 URL 回写，避免 vue-router「No match」噪声
   if (!router.currentRoute.value.matched.length) return
+  const key = useLegacyTabKey() ? 'tab' : 'skdTab'
+  const cur = typeof tabRoute?.query?.[key] === 'string' ? (tabRoute.query[key] as string) : ''
   if (t === DEFAULT_TAB) {
-    if (cur) void router.replace({ query: { ...tabRoute.query, tab: undefined } }).catch(() => {})
+    if (cur) void router.replace({ query: { ...tabRoute.query, [key]: undefined } }).catch(() => {})
   } else if (cur !== t) {
-    void router.replace({ query: { ...tabRoute.query, tab: t } }).catch(() => {})
+    void router.replace({ query: { ...tabRoute.query, [key]: t } }).catch(() => {})
   }
 })
 
@@ -648,7 +694,10 @@ const router = useRouter()
 const skillId = computed(() => (subPage.value?.view === 'skill' ? subPage.value.id || '' : ''))
 
 /* ===== 身份：live 注册表档案优先，workbench meta 兜底（外挂能力 / 深链时注册表可能未就绪） ===== */
-interface SkillIdentity { id: string; name: string; category: string; agentId: string; agentName: string }
+/** 类别权威源（#138）：live 技能列表接口（与 Skills 列表同源）优先——同一技能在两个接口返回
+    不同枚举（live category='generation' / workbench meta category='teaching'），此前静默合成
+    导致同页不同加载时刻显示两种类别。现显式披露来源，避免无解释的跳变。 */
+interface SkillIdentity { id: string; name: string; category: string; categorySource: string; agentId: string; agentName: string }
 /** workbench meta 松散契约（后端字段可选并持续新增；按已知键读取，不硬造展示） */
 interface WorkbenchMeta {
   parentAgent?: { id?: string; name?: string }
@@ -673,6 +722,8 @@ const view = computed<SkillIdentity | null>(() => {
       id: lp.id,
       name: lp.name,
       category: lp.category,
+      // #138：类别权威源 = live 技能列表（与 Skills 列表同源），显式披露
+      categorySource: '技能列表 /admin/skills',
       agentId: lp.agentId || '',
       agentName: lp.agentName || String(meta.value?.parentAgent?.name || '')
     }
@@ -683,6 +734,7 @@ const view = computed<SkillIdentity | null>(() => {
       id: skillId.value,
       name: m.skill?.name || skillId.value,
       category: m.skill?.category || '—',
+      categorySource: 'workbench-meta（兜底：live 档案未就绪）',
       agentId: m.parentAgent?.id || '',
       agentName: m.parentAgent?.name || m.parentAgent?.id || ''
     }
@@ -763,11 +815,9 @@ const statsNote = computed(() => {
   return `${src} · ${statsRangeLabel.value}窗口（与 Skill 列表「统计窗口」同源，随其切换）`
 })
 
-/* ===== 指标（运行时页签 metric 格；0 与未知分开；阈值/精度走 rate-utils 单点） ===== */
-const rateTone = computed(() => {
-  const tone = successRateTone(stat.value.calls, stat.value.errors)
-  return tone === 'muted' ? 'na' : tone
-})
+/* ===== 指标（运行时页签 KPI 卡；0 与未知分开；阈值/精度走 rate-utils 单点） ===== */
+/** 成功率 tone → MkKpi 的 tone prop（'muted' 无数据档已由 MkKpi 支持 → 直通） */
+const rateTone = computed<'ok' | 'warn' | 'bad' | 'muted' | ''>(() => successRateTone(stat.value.calls, stat.value.errors))
 const successRate = computed(() => successRateText(stat.value.calls, stat.value.errors) ?? '—')
 
 const fmtMs = (ms: number | null | undefined) => (ms == null || ms === undefined ? '—' : ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
@@ -942,12 +992,14 @@ const coreTerminations = computed<string[]>(() => {
   const c = coreSnap.value
   return c ? toStringList(c.termination ?? c.terminations ?? c.limits) : []
 })
-/** 上游依赖（原型 chips，index.html 2368）：core.inputs 的 skill:/sandbox: 引用即依赖边 */
+/** 上游依赖（原型 chips，index.html 2368）：core.inputs 的 skill:/sandbox: 引用即依赖边。
+    #132：原正则 `([^.\s]+)` 在首个「.」截断，7 条 sandbox:teaching.* 被截成同一条
+    「sandbox:teaching」、去重后只剩 1 条（与真实依赖清单双错）→ 取完整 ref（到空白为止）。 */
 const coreDeps = computed<string[]>(() => {
   const out: string[] = []
   for (const i of coreSnap.value?.inputs || []) {
     const ref = String(i?.ref || '').trim()
-    const m = /^(skill|sandbox):([^.\s]+)/.exec(ref)
+    const m = /^(skill|sandbox):(\S+)/.exec(ref)
     if (!m) continue
     const label = `${m[1]}:${m[2]}`
     if (!out.includes(label)) out.push(label)
@@ -1376,7 +1428,7 @@ watch(
     coreSnap.value = null
     notFound.value = false
     // 深链保持：URL 明确带合法 ?tab= 时尊重它，否则回落运行时（健康+证据先于配置）
-    tab.value = normalizeSkdTab(tabRoute?.query?.tab)
+    tab.value = readTabFromQuery()
     resetTrial()
     resetProbe()
     rtMsg.value = ''
@@ -1385,29 +1437,82 @@ watch(
   { immediate: true }
 )
 
-/* ===== Prompt 编辑弹层（原型 openPromptModal；外壳走共享 .mk-modal 原语，wide 档） ===== */
+/* ===== Prompt 弹层（原型 openPromptModal；外壳走共享 .mk-modal 原语，wide 档）。
+   #135：这是「起草 + 查看」区，唯一前进动作是跳设计页（不携带草稿）——
+   草稿按 skill 写 sessionStorage（skd-prompt-draft:<skillId>），下次打开自动恢复并提示，
+   再给「复制内容」把草稿带走；不再让输入随关闭/跳转静默丢弃 */
 const pmOpen = ref(false)
 const pmText = ref('')
 const pmNote = ref('')
+const pmDraftRestored = ref(false)
+const pmDraftSavedAt = ref('')
 const pmMaskRef = ref<HTMLElement | null>(null)
 const pmPanelRef = ref<HTMLElement | null>(null)
 
+const pmDraftKey = () => `skd-prompt-draft:${skillId.value}`
+
 function openPromptModal() {
-  pmText.value = systemPromptText.value
-  pmNote.value = ''
+  pmDraftRestored.value = false
+  pmDraftSavedAt.value = ''
+  let draft: { text?: string; note?: string; at?: string } | null = null
+  try {
+    const raw = sessionStorage.getItem(pmDraftKey())
+    if (raw) draft = JSON.parse(raw) as { text?: string; note?: string; at?: string }
+  } catch { /* 隐私模式忽略 */ }
+  if (draft && typeof draft.text === 'string' && draft.text !== systemPromptText.value) {
+    pmText.value = draft.text
+    pmNote.value = draft.note || ''
+    pmDraftRestored.value = true
+    pmDraftSavedAt.value = draft.at || ''
+  } else {
+    pmText.value = systemPromptText.value
+    pmNote.value = ''
+  }
   pmOpen.value = true
 }
+/** 关闭时保留草稿（与生效内容一致则清掉，避免残留过期草稿） */
+function persistPromptDraft() {
+  try {
+    if (pmText.value && pmText.value !== systemPromptText.value || pmNote.value.trim()) {
+      sessionStorage.setItem(pmDraftKey(), JSON.stringify({ text: pmText.value, note: pmNote.value, at: new Date().toLocaleString('zh-CN', { hour12: false }) }))
+    } else {
+      sessionStorage.removeItem(pmDraftKey())
+    }
+  } catch { /* 隐私模式忽略 */ }
+}
 function closePromptModal() {
+  persistPromptDraft()
   pmOpen.value = false
+}
+/** 跳设计页：先落草稿（设计页无接收通道，草稿留在本页下次可恢复），再走既有跳转 */
+function goDesignWithDraft() {
+  persistPromptDraft()
+  void goDesign('protocol')
+}
+async function copyPromptDraft() {
+  if (!pmText.value) return
+  try {
+    await navigator.clipboard.writeText(pmText.value)
+    toast.success('已复制 Prompt 内容')
+  } catch {
+    toast.error('复制失败：剪贴板不可用')
+  }
 }
 /* 弹层开合行为四件套：Esc（栈顶优先）/ 遮罩 / 焦点陷阱 / 滚动锁（判例 PathDetail 任务弹层） */
 useOverlay(computed(() => pmOpen.value), pmPanelRef)
 useMaskClose(pmMaskRef, closePromptModal)
 useEscape(() => pmOpen.value, closePromptModal)
-/* 页面级 Esc：弹层未开时 Esc 关详情页（关闭 = 清 ?view=&id= 回列表，判例二级页范式） */
+/* 页面级 Esc：弹层未开时 Esc 关详情页（关闭 = 清 ?view=&id= 回列表，判例二级页范式）。
+   #136：焦点在输入框/文本域/下拉等编辑态时不关页——此前在试跑输入里按 Esc 会直接关掉整个详情页、
+   未保存输入静默丢失（表单未保存改动的同类风险同源：模型配置表单/试跑输入均无离开守卫）。 */
 useEscape(
   () => !pmOpen.value,
-  () => { if (subPage.value?.view === 'skill') closeSubPage() }
+  () => {
+    const ae = document.activeElement as HTMLElement | null
+    const tag = ae?.tagName
+    if (ae && (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || ae.isContentEditable)) return
+    if (subPage.value?.view === 'skill') closeSubPage()
+  }
 )
 </script>
 
@@ -1421,6 +1526,10 @@ useEscape(
 /* hero 健康徽标可点（button 复用 .mk-badge 皮）：只重置按钮默认 chrome，视觉与相邻 badge 同语言 */
 .skd-badge-btn { border: 0; cursor: pointer; font: inherit; }
 .skd-pane { display: grid; gap: 12px; padding: 16px; border-top: 1px solid var(--mk-line); }
+/* #134：grid 子项默认 min-width:auto 会被内容撑开，窄屏（1366/1280）下字段路由表被容器裁掉、
+   .skd-tablewrap 的 overflow-x:auto 拿不到滚动条（右侧「属性/脱敏」列不可达）。
+   与 mk-primitives 的 `.mk-page > * { min-width: 0 }` 同款修法，让子项可收缩、横滚真正接管。 */
+.skd-pane > * { min-width: 0; }
 .skd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .skd-grid > .mk-card { box-shadow: none; }
 .skd-pad { padding: 12px 16px; display: grid; gap: 10px; align-content: start; }
@@ -1455,8 +1564,6 @@ useEscape(
   font-size: var(--mk-fs-micro);
   font-weight: 700;
 }
-.skd-step[aria-current='true'] { color: var(--mk-blue); font-weight: 600; }
-.skd-step[aria-current='true'] .skd-step__n { background: var(--mk-blue); color: var(--mk-surface); }
 
 /* ===== 协议/试跑：ranklist 与 meterrow（原型 .ranklist/.rankrow/.meter，index.html 297-302 / 2340） ===== */
 .skd-ranklist { display: grid; gap: 2px; }
@@ -1501,7 +1608,7 @@ useEscape(
   background: var(--mk-code-bg);
   border: 1px solid var(--mk-code-border);
   color: var(--mk-code-fg);
-  font: 12px/1.65 var(--mk-mono);
+  font: var(--mk-fs-micro)/1.65 var(--mk-mono);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 300px;
@@ -1521,21 +1628,8 @@ useEscape(
 .skd-tablewrap .mk-table .skd-td-wrap { white-space: normal; min-width: 160px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .skd-tablewrap .mk-table th.skd-th-wrap { white-space: normal; }
 
-/* ===== 运行时：指标卡（原型 metricCard 四张独立卡，index.html 1704 / 2349-2350） ===== */
-.skd-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-.skd-metric { display: grid; gap: 4px; padding: 12px 16px; }
-.skd-metric__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.skd-metric__value {
-  font-family: var(--mk-mono);
-  font-size: var(--mk-fs-emphasis);
-  font-weight: 600;
-  color: var(--mk-ink);
-  font-variant-numeric: tabular-nums;
-}
-.skd-metric__value.is-bad { color: var(--mk-red); }
-.skd-metric__value.is-ok { color: var(--mk-green); }
-.skd-metric__value.is-warn { color: var(--mk-amber); }
-.skd-metric__value.is-na { color: var(--mk-faint); }
+/* ===== 运行时：指标卡（原型 metricCard 四张独立卡）走共享 MkKpi + .mk-kpi-grid（审核 #146），
+   本文件的 .skd-metric* 私有实现已删（含值档与 4K 档覆写，原语自带全档位） ===== */
 
 /* ===== 运行时：模型配置表单（SkillDrawer mt-* 迁入，统一 skd- 前缀） ===== */
 .skd-check {
@@ -1556,8 +1650,6 @@ useEscape(
 .skd-msg { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-green); font-weight: 600; }
 .skd-msg.is-err { color: var(--mk-red); }
 .skd-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
-.skd-btn--danger { color: var(--mk-red); border-color: rgba(220, 38, 38, 0.35); background: transparent; }
-.skd-btn--danger:hover { background: var(--mk-red-bg); }
 .skd-resolved {
   margin: 0;
   padding: 6px 10px;
@@ -1575,8 +1667,8 @@ useEscape(
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
 }
-.skd-probe.is-ok { border-color: rgba(34, 197, 94, 0.35); }
-.skd-probe.is-bad { border-color: rgba(220, 38, 38, 0.35); }
+.skd-probe.is-ok { border-color: color-mix(in srgb, var(--mk-green) 35%, transparent); }
+.skd-probe.is-bad { border-color: color-mix(in srgb, var(--mk-red) 35%, transparent); }
 .skd-probe__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
 .skd-probe__grid > div { display: grid; gap: 2px; min-width: 0; }
 .skd-probe__grid span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
@@ -1609,12 +1701,12 @@ useEscape(
 .skd-call__title { font-weight: 500; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .skd-call__ms { color: var(--mk-muted); font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; }
 
-/* ===== 说明行（原型 .note 词汇） ===== */
-.skd-note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.skd-note--flat { padding: 0; }
-.skd-none { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+/* ===== 说明行 / 卡内空态：复用共享原语（.mk-card__note / .mk-empty--line），
+   不再私持 .skd-none / .skd-note（#147）===== */
 /* P3-23（设计评审）：试跑页签未跑态收敛——「尚未试跑」只在样例输入卡脚注说一次，
-   执行链路 / 样例输出两卡未跑时显统一占位灰块（不再各自成句复读） */
+   执行链路 / 样例输出两卡未跑时显统一占位灰块（不再各自成句复读）。
+   注：本类是「96px 虚线占位块」复刻件（与 .mk-empty--line 的一行式空态不同事实），
+   若产品确认保留，需在 ADMIN_VISUAL_LAYER_SPEC §6 词汇表登记。 */
 .skd-tbd {
   min-height: 96px;
   display: flex;
@@ -1629,21 +1721,28 @@ useEscape(
 /* ===== Prompt 弹层（原型 modal--wide；面板宽走 .mk-modal__panel--wide 原语） ===== */
 .skd-pm__body { display: grid; gap: 14px; }
 .skd-hint { font-style: normal; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 草稿恢复提示（#135）：中性信息条 */
+.skd-draft-note {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-blue-bg);
+  color: var(--mk-blue);
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+}
 
 /* ===== 大屏/4K 适配（全站 mk 体系档位） ===== */
 @media (min-width: 2000px) {
   .skd-vrow__name { font-size: var(--mk-fs-micro); }
-  .skd-metric__value { font-size: var(--mk-fs-emphasis); }
   .skd-call { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
   .skd-vrow__name { font-size: var(--mk-fs-micro); }
-  .skd-metric__value { font-size: var(--mk-fs-emphasis); }
   .skd-call { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 3600px) {
   .skd-vrow__name { font-size: var(--mk-fs-body); }
-  .skd-metric__value { font-size: 26px; }
   .skd-call { font-size: var(--mk-fs-emphasis); }
   .skd-call__ms { font-size: var(--mk-fs-body); }
 }

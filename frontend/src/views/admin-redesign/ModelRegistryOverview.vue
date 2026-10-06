@@ -431,7 +431,9 @@ defineExpose({ refresh })
   place-items: center;
   border-radius: var(--mk-radius-md);
   background: var(--mk-surface-2);
-  color: var(--mk-blue);
+  /* --mk-blue 压 --mk-surface-2 亮色仅 4.39:1（<4.5 AA）；--mk-accent-deep 亮色 #1f57cc 实测
+     5.68:1、暗色 #7aa2ff 自动翻转（与 .mk-badge--self 同款用法） */
+  color: var(--mk-accent-deep, #1f57cc);
   font-family: var(--mk-mono);
   font-size: var(--mk-fs-micro);
   font-weight: 700;

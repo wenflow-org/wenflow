@@ -589,8 +589,14 @@ for (const abs of vueFiles) {
 
   // 规则 4：页面模板不得手写 .mk-empty 结构（应使用 MkEmptyState 共用组件）
   //   \bmk-empty\b 只命中独立的 mk-empty 类 token，不会误伤 mk-empty__icon / --min
+  //   2026-10-06 修规则自身的漏洞：`\b` 在 `-` 前成立，于是 `mk-empty--line`
+  //   （规范 §6 明文要求「筛选后 0 行的卡内列表用 .mk-empty--line」的那个修饰）
+  //   反被判成手写结构——规则禁止了它自己指定的原语。MkEmptyState + class="mk-empty--line"
+  //   合并后类名是 `mk-empty mk-empty--line`，按独立 token 仍会命中，故整条 class 属性
+  //   只要含 `--line` 即放行（结构仍由 MkEmptyState 提供，与本规则不冲突）。
   if (!primitiveLayer && isGoverned(relPath)) {
     for (const m of tpl.matchAll(/class="([^"]*\bmk-empty\b[^"]*)"/g)) {
+      if (/(^|\s)mk-empty--line(\s|$)/.test(m[1])) continue
       handRolledEmpty.push({ file: relPath, cls: m[1] })
     }
     // 规则 5：页面模板不得手写加载态（自建 spinner 容器，或元素内的「加载中…」文案）

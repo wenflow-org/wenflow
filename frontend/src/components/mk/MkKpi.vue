@@ -10,7 +10,7 @@
   >
     <span class="mk-kpi__label">{{ label }} </span>
     <strong class="mk-kpi__num">{{ value }}</strong>
-    <span v-if="hint && !compact" class="mk-kpi__hint">{{ hint }}</span>
+    <span v-if="hint && !compact" class="mk-kpi__hint" :class="hintTone ? `mk-kpi__hint--${hintTone}` : ''">{{ hint }}</span>
     <!-- 默认 slot（2026-10-05）：卡内附挂位（VL 判例 = .mk-minibar 进度槽）。空 slot 渲染零节点，
          既有用法无感；附挂物走卡面原语（mk-minibar），不在页面发明新卡内词汇 -->
     <slot></slot>
@@ -23,14 +23,17 @@ withDefaults(
     label: string
     value: string | number
     hint?: string
-    /** 数字着色：ok 绿 / warn 琥珀 / bad 红（含失败告警态） */
-    tone?: 'ok' | 'warn' | 'bad' | ''
+    /** 数字着色：ok 绿 / warn 琥珀 / bad 红（含失败告警态）/ muted 弱灰（无数据，非异常） */
+    tone?: 'ok' | 'warn' | 'bad' | 'muted' | ''
+    /** 脚注着色：失败域「加载失败，计数不可信」等需要红字脚注的调用方（2026-10-06 审核
+        §OpsHub #174——页内自搓瓦片为红脚注私生一张卡，收编进共享原语而非每页再长一张） */
+    hintTone?: 'ok' | 'warn' | 'bad' | ''
     /** 可点击（总览 KPI 等跳转入口）：hover 高亮 */
     clickable?: boolean
     /** 紧凑模式（列表页顶部 KPI）：减内边距/字号、隐藏 hint，压缩垂直空间 */
     compact?: boolean
   }>(),
-  { hint: '', tone: '', clickable: false, compact: false }
+  { hint: '', tone: '', hintTone: '', clickable: false, compact: false }
 )
 </script>
 
@@ -57,9 +60,15 @@ withDefaults(
   line-height: 1.25;
 }
 .mk-kpi__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.mk-kpi__hint--bad { color: var(--mk-red); }
+.mk-kpi__hint--warn { color: var(--mk-amber); }
+.mk-kpi__hint--ok { color: var(--mk-green); }
 .mk-kpi--bad .mk-kpi__num { color: var(--mk-red); }
 .mk-kpi--warn .mk-kpi__num { color: var(--mk-amber); }
 .mk-kpi--ok .mk-kpi__num { color: var(--mk-green); }
+/* muted：无数据档（非异常）——SkillDetail 成功率「无调用」原用 .skd-metric.is-na 的
+   --mk-faint，收编进共享原语后保留该档（2026-10-06 审核 #146） */
+.mk-kpi--muted .mk-kpi__num { color: var(--mk-faint); }
 /* 可点击态的悬停反馈：只换描边色，不做位移（批次 D，2026-10-02）。
    原为 translateY(-1px) + transition 里带 transform。KPI 卡是网格排布的，
    抬 1px 会让相邻卡片在鼠标经过时保持原位、只有当前卡浮起，读作「错位」

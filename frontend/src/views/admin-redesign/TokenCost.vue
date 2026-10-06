@@ -27,20 +27,26 @@
     <!-- 调用成本 2026-09-29 收编进概览区（原私有 cost-strip 金额条与全站 KPI 语言不一致；
          单价未配置/加载失败态由 KPI 卡 hint + tone 承担）。2026-10-01 成本批：成本升为第一张卡 -->
 
-    <!-- 加载失败（优先于空态） -->
+    <!-- 加载失败（优先于空态）——审核 #113：补 tone="error"（role=alert + 错误配色，全站失败态统一），
+         并给重试按钮 actionBusy 反馈（与 ExecLogs 失败态对齐） -->
     <MkEmptyState
       v-if="loadFailed && !summary"
       icon="◌"
+      tone="error"
       min
       title="Token 成本数据加载失败"
       description="无法从后端拉取用量统计，请重试或稍后再来。"
       action-text="重试"
+      action-busy-text="重试中…"
+      :action-busy="loading"
       @action="() => load(true)"
     />
 
     <!-- 首载骨架：KPI 卡 + 趋势图 + 排行占位（对齐全站 MockSkeleton 语言） -->
     <template v-else-if="!summary && loading">
-      <div class="tc-filterbar tc-filterbar--skeleton"></div>
+      <!-- 筛选条占位用形状化骨架（审核 #131）：原 tc-filterbar--skeleton 是空条（有边框底色、
+           零骨架块），读作「筛选条坏了」而非「加载中」；真 pills 数据到达后立即替换 -->
+      <div class="tc-filterbar"><MkSkeleton w="320" :h="20" :radius="999" /></div>
       <section class="mk-kpi-grid">
         <div v-for="i in 4" :key="i" class="mk-kpi tc-skel-kpi"><MkSkeleton w="60%" :h="26" /><MkSkeleton w="40%" :h="12" /></div>
       </section>
@@ -145,16 +151,23 @@
              2026-10-06 审核修复：此前写死 bar-width=44 且不传 labelEvery/showNums，
              90 天时 90 列各带柱顶数字与日期标签互相压印（实测 70 对重叠、柱宽被压到 4.7px）。
              按窗口收口：柱宽随列数收窄，>30 天隐藏柱顶数字、日期按 12 列稀显。 -->
-        <OvBars
-          v-if="trend.length"
-          :cols="trendCols"
-          :bar-width="days <= 7 ? 44 : days <= 30 ? 20 : 10"
-          :show-nums="days <= 30"
-          :label-every="days <= 7 ? 1 : days <= 30 ? 4 : 12"
-          :min-bars-height="150"
-        />
+        <!-- 图表区内衬（审核 #130）：OvBars 原直挂 .mk-card 无左右内边距，柱带与「今日」高亮列
+             贴到卡片圆角边缘（1px），与同卡卡头 16px / 下方明细表 14px 不同档；包一层与明细表同档内衬 -->
+        <div class="tc-trendbody">
+          <OvBars
+            v-if="trend.length"
+            :cols="trendCols"
+            :bar-width="days <= 7 ? 44 : days <= 30 ? 20 : 10"
+            :show-nums="days <= 30"
+            :label-every="days <= 7 ? 1 : days <= 30 ? 4 : 12"
+            :min-bars-height="150"
+          />
+        </div>
+        <!-- 趋势卡尾 note（审核 #111）：原由 trend.reduce 求和，与 KPI 的 totals 在非整日窗口
+             （窗口头部不足一日的行只进总量）下同屏两值（7 天窗 224218 vs KPI 224298）。
+             改为与 KPI 同源的 totals 渲染，全页同一事实只用一个数据源。 -->
         <p v-if="trend.length" class="mk-card__note">
-          合计 {{ fmtTokens(trend.reduce((acc, d) => acc + d.tokens, 0)) }} token · {{ trend.reduce((acc, d) => acc + d.calls, 0) }} 次调用 · 失败 {{ trend.reduce((acc, d) => acc + d.failed, 0) }} 次
+          合计 {{ fmtTokens(summary?.totals.tokens ?? 0) }} token · {{ summary?.totals.calls ?? 0 }} 次调用 · 失败 {{ summary?.totals.failed ?? 0 }} 次<template v-if="summary && trendCallsShortfall > 0">（与图中逐日合计差 {{ trendCallsShortfall }} 次：窗口头部不足一日的行只计入总量）</template>
         </p>
         <p v-else class="mk-card__note">近 {{ days }} 天暂无调用记录。</p>
       </section>
@@ -267,7 +280,11 @@ import { toast } from '@/utils/toast'
 interface Summary {
   days: number
   includeTest: boolean
-  totals: { tokens: number; promptTokens: number; completionTokens: number; calls: number; failed: number }
+  totals: {
+    tokens: number; promptTokens: number; completionTokens: number; calls: number; failed: number
+    /* 成本桶（审核 #110：与 summary 同响应下发，不再单发一次请求；后端 totals 原样携带） */
+    usd?: number | null; pricingKnown?: boolean; pricedCalls?: number; callsMissingPricing?: number
+  }
   trend: Array<{ date: string; tokens: number; calls: number; failed: number }>
 }
 
@@ -351,6 +368,13 @@ const rangePills = [
 
 const trend = computed(() => summary.value?.trend || [])
 const totalTokens = computed(() => summary.value?.totals.tokens || 0)
+/* 审核 #111：趋势卡尾 note 改用 totals（与 KPI 同源）。若窗口头部不足一日的行只进总量
+   （后端口径），totals.calls 会略大于 trend 逐日合计——此差额用于 note 里如实自证口径。 */
+const trendCallsShortfall = computed(() => {
+  const t = summary.value?.totals.calls ?? 0
+  const sum = trend.value.reduce((acc, d) => acc + d.calls, 0)
+  return Math.max(0, t - sum)
+})
 /* 空窗口判据：后端 getSummary 恒返回对象（totals 全 0），「!summary」整页空态不可达；
    以 calls === 0 判空，筛选项（时间窗/测试流量）切换后用户仍可换窗自救 */
 const summaryEmpty = computed(() => !!summary.value && summary.value.totals.calls === 0)
@@ -443,24 +467,31 @@ function exportCsv() {
   }
   const sharePct = (tokens: number) =>
     totalTokens.value > 0 ? ((tokens / totalTokens.value) * 100).toFixed(1) : '0.0'
+  /* 审核 #133：页面 Skill 表「占比」在配了单价时按金额算（skillShareNum），而导出原只有 Token 占比
+     却同样叫「占比%」——将来配价后会给出不同数值。现 Skill 段拆成「Token占比%/成本占比%」两列，
+     成本占比与页面同源（skillCostTotal 为分母），未定价时写 —（不拿 Token 占比冒充成本占比）。 */
+  const costSharePct = (usd: number | null | undefined) =>
+    skillCostTotal.value > 0 && typeof usd === 'number' ? ((usd / skillCostTotal.value) * 100).toFixed(1) : '—'
   const lines: string[] = [
     `成本分析 · 近 ${days.value} 天 · ${includeTest.value ? '含测试' : '仅真实用户'} · 导出于 ${new Date().toLocaleString('zh-CN', { hour12: false })}`,
     '',
     '[按 Skill 成本明细]',
-    'Skill,调用,Token,prompt,completion,成本USD,占比%',
+    'Skill,调用,Token,prompt,completion,成本USD,Token占比%,成本占比%',
     ...bySkill.value.map((r) =>
       [esc(r.display || r.key), r.calls, r.tokens, r.promptTokens ?? '', r.completionTokens ?? '',
-        typeof r.usd === 'number' ? r.usd.toFixed(4) : '单价未配置', sharePct(r.tokens)].join(',')),
+        typeof r.usd === 'number' ? r.usd.toFixed(4) : '单价未配置', sharePct(r.tokens), costSharePct(r.usd)].join(',')),
     '',
     '[用户用量排行]',
-    '用户,邮箱,调用,失败,Token,占比%',
+    '用户,邮箱,调用,失败,Token,成本USD,占比%',
     ...byUser.value.map((r) =>
-      [esc(r.display), esc(r.email || ''), r.calls, r.failed, r.tokens, sharePct(r.tokens)].join(',')),
+      [esc(r.display), esc(r.email || ''), r.calls, r.failed, r.tokens,
+        typeof r.usd === 'number' ? r.usd.toFixed(4) : '单价未配置', sharePct(r.tokens)].join(',')),
     '',
     '[模型用量排行]',
-    '模型,调用,失败,Token,占比%',
+    '模型,调用,失败,Token,成本USD,占比%',
     ...byModel.value.map((r) =>
-      [esc(r.display), r.calls, r.failed, r.tokens, sharePct(r.tokens)].join(',')),
+      [esc(r.display), r.calls, r.failed, r.tokens,
+        typeof r.usd === 'number' ? r.usd.toFixed(4) : '单价未配置', sharePct(r.tokens)].join(',')),
   ]
   const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
@@ -538,38 +569,12 @@ function fmtCostUsd(v: number): string {
   return v.toFixed(6)
 }
 
-/* 请求序号：切窗竞态下丢弃过期金额响应。旧实现在途即 return，新窗口调用被静默丢弃，
-   在途旧响应回来把旧窗口金额写在新标签下且不自愈（2026-10-05 评审收敛） */
-let costSeq = 0
-async function loadCostSummary() {
-  const seq = ++costSeq
-  costLoading.value = true
-  costFailed.value = false
-  try {
-    const res = await adminTokenCostApi.getSummary({ days: days.value, includeTest: includeTest.value })
-    if (seq !== costSeq) return
-    const totals = res.data?.data?.totals ?? null
-    costUsd.value = totals?.usd ?? null
-    costPricingKnown.value = totals?.pricingKnown ?? false
-    costPricedCalls.value = totals?.pricedCalls ?? 0
-    costMissingCalls.value = totals?.callsMissingPricing ?? 0
-    missingPricingModels.value = res.data?.pricingStatus?.missingPricingModels ?? []
-  } catch {
-    if (seq !== costSeq) return
-    /* 金额条为辅助信息：失败显式报错并可重试，绝不静默降级成「无调用」 */
-    costFailed.value = true
-    costUsd.value = null
-    costPricingKnown.value = false
-  } finally {
-    if (seq === costSeq) costLoading.value = false
-  }
-}
-
 /* 已加载数据对应的窗口键（D4）：缓存命中只在「同一窗口」时短路。
    切走再切回、或窗口 pill 切换时，旧窗口的 summary/趋势/明细/排行整组不可继续当作新窗口结论
    （旧实现只判 isPageCacheFresh 就 return，导致同屏「窗口标签已变、数值还是上一窗口」双口径）。 */
 const loadedKey = ref<string | null>(null)
-/** 请求序号（EG3）：快速连续切窗时丢弃过期响应，避免后到的旧结果覆盖新窗口 */
+/** 请求序号（EG3）：快速连续切窗时丢弃过期响应，避免后到的旧结果覆盖新窗口。
+    审核 #110：金额字段已并入 load() 的同一 summary 响应，原独立的 loadCostSummary/costSeq 删除。 */
 let loadSeq = 0
 
 watch([days, includeTest], () => {
@@ -582,7 +587,7 @@ watch([days, includeTest], () => {
     byModel.value = []
     loadedKey.value = null
     userSeq += 1 // 作废在途的用户搜索响应，避免旧窗口结果覆盖新窗口
-    // 金额卡独立于 load() 同批数据：一并清空，保证数值与窗口标签同一响应驱动，不留旧窗口读数
+    // 金额卡与主数据同一响应驱动（审核 #110）：一并清空，保证数值与窗口标签一致，不留旧窗口读数
     costUsd.value = null
     costPricingKnown.value = false
     costPricedCalls.value = 0
@@ -590,16 +595,13 @@ watch([days, includeTest], () => {
     missingPricingModels.value = []
   }
   void load()
-  void loadCostSummary()
 }, { immediate: true })
 
 
 
-/** 页头「刷新」：主数据与金额卡必须一起重拉（金额卡只由 watch([days, includeTest]) 触发，
-    不重拉就永远停在失败态）。 */
+/** 页头「刷新」：主数据（含金额字段，审核 #110 已并入同一响应）强制重拉。 */
 function refreshAll() {
   void load(true)
-  void loadCostSummary()
 }
 
 async function load(force = false) {
@@ -610,6 +612,8 @@ async function load(force = false) {
   const uSeq = userSeq // 用户搜索序号快照：窗口加载期间搜索若已接管，本批 byUser 不得回写覆盖
   loading.value = true
   loadFailed.value = false
+  costLoading.value = true
+  costFailed.value = false
   try {
     const params = { days: days.value, includeTest: includeTest.value }
     const [sumRes, skillRes, userRes, modelRes] = await Promise.all([
@@ -619,7 +623,15 @@ async function load(force = false) {
       adminTokenCostApi.getByModel(params),
     ])
     if (seq !== loadSeq) return // 窗口已再次切换：丢弃本批过期响应
-    summary.value = sumRes.data?.data ?? sumRes.data ?? null
+    const body = sumRes.data?.data ?? sumRes.data ?? null
+    summary.value = body
+    // 金额字段从同一 summary 响应提取（审核 #110）：不再对 /token-cost/summary 发第二次请求
+    const totals = (body as Summary | null)?.totals ?? null
+    costUsd.value = totals?.usd ?? null
+    costPricingKnown.value = totals?.pricingKnown ?? false
+    costPricedCalls.value = totals?.pricedCalls ?? 0
+    costMissingCalls.value = totals?.callsMissingPricing ?? 0
+    missingPricingModels.value = sumRes.data?.pricingStatus?.missingPricingModels ?? []
     bySkill.value = (skillRes.data?.data?.items ?? []) as SkillCostRow[]
     if (uSeq === userSeq) byUser.value = (userRes.data?.data?.items ?? []) as RankRow[]
     byModel.value = (modelRes.data?.data?.items ?? []) as RankRow[]
@@ -628,9 +640,13 @@ async function load(force = false) {
   } catch (e) {
     if (seq !== loadSeq) return
     loadFailed.value = true
+    /* 金额条为辅助信息：失败显式报错并可重试，绝不静默降级成「无调用」 */
+    costFailed.value = true
+    costUsd.value = null
+    costPricingKnown.value = false
     toast.error(`加载失败：${errMsg(e)}`)
   } finally {
-    if (seq === loadSeq) loading.value = false
+    if (seq === loadSeq) { loading.value = false; costLoading.value = false }
   }
 }
 
@@ -738,6 +754,10 @@ const trendCols = computed(() => trend.value.map((d) => ({
   min-width: 0;
 }
 
+/* 趋势图表区内衬（审核 #130）：与下方 .tc-skilltable 同档（padding: 2px 14px 0），
+   避免 OvBars 柱带/高亮列贴到卡片圆角边缘；min-width:0 保证窄屏内不溢出 */
+.tc-trendbody { padding: 2px 14px 4px; min-width: 0; }
+
 /* —— 按 Skill 成本明细（原型 renderCost 1778-1784 .tbl 五列）—— */
 .tc-skilltable {
   display: flex;
@@ -766,7 +786,9 @@ const trendCols = computed(() => trend.value.map((d) => ({
 }
 .tc-skilltable__head > span:not(:first-child) { text-align: right; }
 .tc-skilltable__row {
-  padding: 7px 0;
+  /* 行高下限（审核 #115）：原 padding 7px 0 → 行高 35.6px < SPEC §3 的 40px；
+     改 10px 0（对齐 .mk-table 的 10×16 口径），12.5px×1.65 + 20 + 1 ≈ 41.6px */
+  padding: 10px 0;
   border-bottom: 1px solid var(--mk-table-row-line);
   transition: background 0.12s;
   /* P1#25：整行可点 → 执行日志携该 Skill 的 agentFilter 深链（hover 反馈已有，补手型） */
@@ -814,7 +836,6 @@ html[data-theme='dark'] {
 }
 
 /* 首载骨架：KPI 卡 / 趋势图 / 排行行 占位（skeleton shimmer 对齐 SkillReconciliation sk-rec__skeleton 手法） */
-.tc-filterbar--skeleton { height: 44px; }
 .tc-skel-kpi { display: grid; gap: 8px; }
 /* 骨架内边距（形状由 MkSkeleton 提供） */
 .tc-skel-pad { padding: 12px 16px 16px; }

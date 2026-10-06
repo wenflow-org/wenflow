@@ -1,32 +1,38 @@
 <template>
-  <!-- 面板（2026-10-04 独立场景下线，折入 Skills 宿主「Prompt 评估」页签）：
-       根 = 宿主页签卡（mk-card--fill，对齐 run 页签卡形态）；原页头退役——
-       主操作「批量跑评估」上移宿主页头（defineExpose 供宿主驱动），KPI 带随面板入卡 -->
-  <div class="mk-card mk-card--fill pe">
-    <!-- KPI 带（2026-10-04 状态条退役）：原条读数改三卡——最近评测通过率（阈值着色语义不变，
-         类名 tone 翻译成 MkKpi tone；agent 筛选限定词与基数并进 hint）、用例总数、评估历史
-         （窗口上限口径进 title，上次评估时刻降为 hint）。批量跑评估在宿主页头，工具行动作在本卡 -->
-    <section class="mk-kpi-grid">
-      <MkKpi
-        label="最近评测通过率"
-        :value="lastPassRateText"
-        :tone="lastRateTone"
-        :hint="lastRateHint"
-        :title="lastRateTitle"
-      />
-      <MkKpi label="评估用例" :value="cases.length" title="用例总数" />
-      <MkKpi label="评估历史" :value="runs.length" :hint="lastRunText" :title="runsKpiTitle" />
-    </section>
+  <!-- 面板（2026-10-04 独立场景下线，折入 Skills 宿主「Prompt 评估」页签）。多根片段（2026-10-06 审核
+       #87）：KPI 带移到宿主页签卡外，与 run 页签同构（KPI 在卡外、卡内只放页签+工具栏+表格），
+       不再把 KPI/页签/筛选/表格全塞进同一张 .mk-card--fill（ADMIN_VISUAL_LAYER_SPEC §163）。
+       原页头退役——主操作「批量跑评估」上移宿主页头（defineExpose 供宿主驱动）。 -->
+  <!-- 运行中常显条（#86）：批量/试跑是真 LLM 调用且跨页签存活（标志模块级），
+       切到别的页签再回来仍能看到「还在跑」，不再只靠常驻 toast -->
+  <div v-if="running" class="mk-alert mk-alert--row mk-alert--info pe-running" role="status" aria-live="polite">
+    <span class="mk-alert__msg">{{ runningInfo || '评估运行中…' }}</span>
+  </div>
+  <!-- KPI 带（2026-10-04 状态条退役）：原条读数改三卡——最近评测通过率（阈值着色语义不变，
+       类名 tone 翻译成 MkKpi tone；agent 筛选限定词与基数并进 hint）、评估用例、评估历史
+       （窗口上限口径进 title，上次评估时刻降为 hint）。批量跑评估在宿主页头，工具行动作在本卡 -->
+  <section class="mk-kpi-grid" aria-label="Prompt 评估统计">
+    <MkKpi
+      label="最近评测通过率"
+      :value="lastPassRateText"
+      :tone="lastRateTone"
+      :hint="lastRateHint"
+      :title="lastRateTitle"
+    />
+    <MkKpi label="评估用例" :value="cases.length" :hint="casesKpiHint" :title="casesKpiTitle" />
+    <MkKpi label="评估历史" :value="runs.length" :hint="lastRunText" :title="runsKpiTitle" />
+  </section>
 
+  <div class="mk-card mk-card--fill pe">
     <!-- 卡内主视图切换（原型 renderPromptEval card > .tabs 页签 + 工具栏 + 页签体；
          对齐 Users.vue / ExecLogs.vue / AuditLogs.vue 卡内页签判例。内层页签寻址用
          ?peTab=（宿主 ?tab= 归 Skills 页签所有，二者不共键） -->
-    <!-- 主视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
-           2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips。页内弹窗的手写/模拟切换
-           共用同一套 pe-tabs 页签语言，不再各持一词） -->
-      <div class="pe-tabs" role="tablist" aria-label="评估视图切换">
-        <button type="button" role="tab" id="pe-tab-cases" aria-controls="pe-panel-cases" class="pe-tab" :aria-selected="tab === 'cases'" @click="switchTab('cases')">评估用例</button>
-        <button type="button" role="tab" id="pe-tab-runs" aria-controls="pe-panel-runs" class="pe-tab" :aria-selected="tab === 'runs'" @click="switchTab('runs')">评估历史</button>
+    <!-- 主视图切换（全局 .tabs/.tab 原语，判例 Skills.vue:58-62）：
+           2026-10-06 审核收口——此前页内自搓 .pe-tabs/.pe-tab 是全仓最后一份 scoped 拷贝，
+           与全局逐字重复且缺 transition（hover/激活硬切）。弹窗内两组改用 MkSubTabs -->
+      <div class="tabs" role="tablist" aria-label="评估视图切换">
+        <button type="button" role="tab" id="pe-tab-cases" aria-controls="pe-panel-cases" class="tab" :aria-selected="tab === 'cases'" @click="switchTab('cases')">评估用例</button>
+        <button type="button" role="tab" id="pe-tab-runs" aria-controls="pe-panel-runs" class="tab" :aria-selected="tab === 'runs'" @click="switchTab('runs')">评估历史</button>
       </div>
 
       <!-- 筛选/工具栏行（两页签共用 agent 筛选；原型 cases 工具栏右侧的 primary sm
@@ -138,12 +144,23 @@
 
     <!-- 历史 Tab -->
     <div v-else id="pe-panel-runs" role="tabpanel" aria-labelledby="pe-tab-runs" class="pe-panel">
-      <MockSkeletonTable v-if="runsLoading && !runs.length" :cols="6" />
+      <!-- 跨运行对比（#94）：勾选 ≤2 次运行 → 并排 diff（benchmark 排期第 3 步的最小实现） -->
+      <div v-if="runs.length" class="pe-compare-bar">
+        <span class="pe-filter__hint">勾选两次运行可并排对比（最多 2 条）</span>
+        <button
+          type="button"
+          class="mk-btn mk-btn--sm mk-btn--primary"
+          :disabled="compareIds.length !== 2 || compareLoading"
+          @click="openCompare"
+        >{{ compareLoading ? '对比中…' : `对比选中 ${compareIds.length}/2` }}</button>
+      </div>
+      <MockSkeletonTable v-if="runsLoading && !runs.length" :cols="8" />
       <div v-else-if="runs.length" class="mk-table-scroll pe-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 fixed/colgroup），单元格 nowrap、列宽随内容 -->
         <table class="mk-table">
           <thead>
             <tr>
+              <th class="pe-compare-col"><span class="visually-hidden">选择对比</span></th>
               <th>运行</th>
               <th>Agent</th>
               <th>结果</th>
@@ -155,6 +172,15 @@
           </thead>
           <tbody>
             <tr v-for="r in runs" :key="r.id">
+              <td class="pe-compare-col">
+                <input
+                  type="checkbox"
+                  :checked="compareIds.includes(r.id)"
+                  :disabled="!compareIds.includes(r.id) && compareIds.length >= 2"
+                  :aria-label="`选择运行 ${shortId(r.id, 8, 4)} 参与对比`"
+                  @change="toggleCompare(r.id)"
+                />
+              </td>
               <td>
                 <!-- P2-5（2026-09-27 走查）：主标识原先只有截断 UUID（#a1b2c3d4），扫一行看不出
                      这次评估结果如何。主行改为「通过率% · N 例 × M 次」，副行「agent · 时间」，
@@ -238,16 +264,17 @@
               </label>
             </div>
 
-            <!-- 学生输入：标准 tab 切换 -->
+            <!-- 学生输入：共享 MkSubTabs 原语（role=tablist + roving tabindex + 方向键）。
+                 图标为装饰性，原语无 icon 插槽（mk/* 属共享模块不改），此处以纯文字呈现 -->
             <div class="pe-input-block">
-              <div class="pe-tabs" role="tablist" aria-label="学生输入方式">
-                <button type="button" class="pe-tab" role="tab" id="pe-tab-manual" aria-controls="pe-input-panel" :aria-selected="form.inputSource === 'manual'"
-                  @click="form.inputSource = 'manual'"><PenLine class="pe-tab__icon" :size="14" :stroke-width="1.75" aria-hidden="true" />手写对话</button>
-                <button type="button" class="pe-tab" role="tab" id="pe-tab-simulated" aria-controls="pe-input-panel" :aria-selected="form.inputSource === 'simulated'"
-                  @click="form.inputSource = 'simulated'"><Users class="pe-tab__icon" :size="14" :stroke-width="1.75" aria-hidden="true" />模拟学生</button>
-              </div>
+              <MkSubTabs
+                :tabs="INPUT_SOURCE_TABS"
+                :model-value="form.inputSource"
+                aria-label="学生输入方式"
+                @update:model-value="setInputSource"
+              />
 
-              <div class="pe-tab-body" id="pe-input-panel" role="tabpanel" :aria-labelledby="form.inputSource === 'manual' ? 'pe-tab-manual' : 'pe-tab-simulated'">
+              <div class="pe-tab-body" id="pe-input-panel" role="tabpanel" aria-label="学生输入方式">
                 <!-- 手写对话 -->
                 <template v-if="form.inputSource === 'manual'">
                   <div class="pe-msgs">
@@ -460,12 +487,91 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- 跨运行对比抽屉（#94）：按 caseId 对齐两次运行，通过率/耗时差异着色（升绿降红），失败用例标红 -->
+    <Teleport to="body">
+      <div v-if="compareOpen" ref="compareMaskRef" class="mk-drawer">
+        <div class="mk-drawer__mask" @click="closeCompare"></div>
+        <div ref="comparePanelRef" class="mk-drawer__panel mk-drawer__panel--wide" role="dialog" aria-label="两次评估运行对比">
+          <header class="mk-drawer__head">
+            <div class="mk-drawer__heading">
+              <h3 class="mk-drawer__title">运行对比</h3>
+              <span class="mk-drawer__sub mono">{{ compareLabel }}</span>
+            </div>
+            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeCompare">✕</button>
+          </header>
+          <div class="mk-drawer__body pe-detail__body">
+            <MkLoading v-if="compareLoading" inline />
+            <MkEmptyState
+              v-else-if="compareFailed"
+              tone="error"
+              compact
+              title="对比加载失败"
+              description="无法读取所选运行的结果明细。"
+              action-text="重试"
+              @action="openCompare"
+            />
+            <template v-else-if="compareRows.length">
+              <div class="pe-detail__pills">
+                <span class="mk-badge mk-badge--muted">A {{ compareRunA?.summary?.passRate != null ? formatRate(compareRunA.summary.passRate) : '—' }}</span>
+                <span class="mk-badge mk-badge--muted">B {{ compareRunB?.summary?.passRate != null ? formatRate(compareRunB.summary.passRate) : '—' }}</span>
+                <span v-if="compareDeltaText" class="mk-badge" :class="compareDeltaTone">{{ compareDeltaText }}</span>
+              </div>
+              <div class="mk-table-scroll">
+                <table class="mk-table pe-compare-table">
+                  <thead>
+                    <tr>
+                      <th>用例</th>
+                      <th>A · 结果</th>
+                      <th>A · 耗时</th>
+                      <th>B · 结果</th>
+                      <th>B · 耗时</th>
+                      <th class="mk-th--right">耗时差</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in compareRows" :key="row.caseId" :class="{ 'pe-compare-row--fail': row.aPassed === false || row.bPassed === false }">
+                      <td>
+                        <div class="mk-cell-main">
+                          <strong>{{ row.caseName || row.caseId }}</strong>
+                          <span class="mk-cell-sub mono">{{ row.caseId }}</span>
+                        </div>
+                      </td>
+                      <td><span class="mk-badge" :class="row.aPassed === true ? 'mk-badge--ok' : row.aPassed === false ? 'mk-badge--bad' : 'mk-badge--muted'">{{ row.aPassed === true ? '通过' : row.aPassed === false ? '未通过' : '未跑' }}</span></td>
+                      <td class="mk-num">{{ fmtMs(row.aDurationMs) }}</td>
+                      <td><span class="mk-badge" :class="row.bPassed === true ? 'mk-badge--ok' : row.bPassed === false ? 'mk-badge--bad' : 'mk-badge--muted'">{{ row.bPassed === true ? '通过' : row.bPassed === false ? '未通过' : '未跑' }}</span></td>
+                      <td class="mk-num">{{ fmtMs(row.bDurationMs) }}</td>
+                      <td class="mk-num" :class="deltaClass(row)">{{ deltaText(row) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+            <MkEmptyState v-else compact title="无可对比的用例明细" />
+          </div>
+          <footer class="mk-drawer__foot">
+            <button type="button" class="mk-btn" @click="closeCompare">关闭</button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
+<script lang="ts">
+/* 模块级共享状态（与 <script setup> 编译进同一模块，故用命名空间导入避免 ref 重名） */
+import * as vue from 'vue'
+
+/* 运行互斥标志提到模块级（#86）：宿主 Skills.vue 用 v-else-if 挂载本面板，切页签即卸载实例——
+   实例内的 running 随卸载消失，切回后按钮恢复可点，可再发起第二批真实 LLM 调用（并发烧 token）。
+   模块级 ref 跨挂载存活，任何实例都读同一枚标志。 */
+const sharedRunning = vue.ref(false)
+/** 运行中条文案（用例数 / 试跑名）：模块级同样跨卸载存活 */
+const sharedRunningInfo = vue.ref('')
+</script>
+
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { PenLine, Users } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { timeAgo, errMsg, shortId } from './live'
 import { adminPromptOpsApi, adminVirtualLearnersApi, type CreateEvalCasePayload } from '@/api/adminApi'
@@ -480,6 +586,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 
 interface EvalCase {
   id: string
@@ -553,6 +660,14 @@ const agentMustContainExample = computed(() => AGENT_META[form.value.agentId]?.m
 const agentMustContainPlaceholder = computed(() => `例如：${AGENT_META[form.value.agentId]?.mustContainExample || ''}`)
 
 const tab = ref<'cases' | 'runs'>('cases')
+/* 弹窗内「手写对话 / 模拟学生」页签定义（表驱动，配共享 MkSubTabs 原语） */
+const INPUT_SOURCE_TABS: Array<{ key: string; label: string }> = [
+  { key: 'manual', label: '手写对话' },
+  { key: 'simulated', label: '模拟学生' },
+]
+function setInputSource(key: string) {
+  if (key === 'manual' || key === 'simulated') form.value.inputSource = key
+}
 const route = useRoute()
 const router = useRouter()
 const agentFilter = ref('')
@@ -640,9 +755,18 @@ const lastRunHint = computed(() => {
   const rate = formatRate(s.passRate)
   return `${rate ? `通过率 ${rate}` : '通过率暂无数据'}；${RATE_THRESHOLD_NOTE}`
 })
-/** 评估历史卡 title（2026-10-04 状态条退役）：窗口上限口径 + 原条 lastRunHint 语义并入 */
+/** 评估历史卡 title（2026-10-04 状态条退役）：窗口上限口径 + 原条 lastRunHint 语义并入。
+    #88：数字随 agent 筛选收窄，限定词一并披露 */
 const runsKpiTitle = computed(() =>
-  `评估历史按最近 ${RUNS_LIMIT} 次窗口加载（上限非总数）${lastRunHint.value ? `；${lastRunHint.value}` : ''}`
+  `评估历史按最近 ${RUNS_LIMIT} 次窗口加载（上限非总数）${agentFilter.value ? `；仅 ${agentLabel(agentFilter.value)}` : ''}${lastRunHint.value ? `；${lastRunHint.value}` : ''}`
+)
+/* #88：用例/历史两张 KPI 的数字随顶部 agent 筛选收窄（reloadCases/reloadRuns 都带 agentFilter），
+   口径文案必须同步披露这层限定——否则「用例总数」被读成全站总数，切筛选后数字骤降像「用例丢了」 */
+const casesKpiHint = computed(() => (agentFilter.value ? `仅 ${agentLabel(agentFilter.value)}` : '全部 Agent'))
+const casesKpiTitle = computed(() =>
+  agentFilter.value
+    ? `当前 agent 筛选「${agentLabel(agentFilter.value)}」下的评估用例数（非全站总数）`
+    : '全部 Agent 的评估用例数（可按顶部 Agent 筛选收窄）'
 )
 
 function fmtDate(iso: string): string {
@@ -1107,8 +1231,10 @@ async function toggleEnabled(c: EvalCase) {
 
 /** 批量跑评估：对当前 agentFilter 下所有启用用例跑（走 DB caseIds） */
 const canRunBatch = computed(() => cases.value.some((c) => c.enabled))
-/* 运行互斥：批量/试跑都是真实 LLM 调用，运行期间禁用全部入口，防止并发多批重复烧 token */
-const running = ref(false)
+/* 运行互斥：批量/试跑都是真实 LLM 调用，运行期间禁用全部入口，防止并发多批重复烧 token。
+   running 为模块级 ref（见文件头 <script> 块）：面板被宿主切页签卸载后标志仍在，切回不可再发起 */
+const running = sharedRunning
+const runningInfo = sharedRunningInfo
 async function runBatch() {
   if (running.value) return
   if (!canRunBatch.value) { toast.info('请先创建并启用至少一个用例'); return }
@@ -1126,6 +1252,7 @@ async function runBatch() {
   const totalCases = targetCases.length
   const busy = toast.info(`正在批量评估 ${totalCases} 个用例…`, 0)
   running.value = true
+  runningInfo.value = `批量评估运行中：${totalCases} 个用例（切换页签不会中断，完成前不可再发起）`
   try {
     let passed = 0
     let totalRuns = 0
@@ -1155,6 +1282,7 @@ async function runBatch() {
     toast.error(`批量评估失败：${errMsg(e)}`)
   } finally {
     running.value = false
+    runningInfo.value = ''
   }
 }
 
@@ -1163,6 +1291,7 @@ async function runSingle(c: EvalCase) {
   if (running.value) { toast.info('已有评估在运行，请等它结束再试跑'); return }
   const busy = toast.info(`正在试跑「${c.name}」…`, 0)
   running.value = true
+  runningInfo.value = `单条试跑运行中：「${c.name}」`
   try {
     const structured = {
       ...((c as any).previousState || {}),
@@ -1191,6 +1320,7 @@ async function runSingle(c: EvalCase) {
     toast.error(`试跑失败：${errMsg(e)}`)
   } finally {
     running.value = false
+    runningInfo.value = ''
   }
 }
 
@@ -1246,6 +1376,106 @@ function retryRunDetail() {
   if (runDetailTarget.value) void openRunDetail(runDetailTarget.value)
 }
 
+/* ===== 跨运行对比（#94，benchmark 排期第 3 步的最小实现）=====
+   历史表勾选 ≤2 次运行 → 并排 diff：按 caseId 对齐，通过率/耗时差异着色（升绿降红），失败用例标红。 */
+const compareIds = ref<string[]>([])
+const compareOpen = ref(false)
+const compareLoading = ref(false)
+const compareFailed = ref(false)
+const compareMaskRef = ref<HTMLElement | null>(null)
+const comparePanelRef = ref<HTMLElement | null>(null)
+useOverlay(computed(() => compareOpen.value), comparePanelRef)
+useMaskClose(compareMaskRef, closeCompare)
+useEscape(() => compareOpen.value, closeCompare)
+interface CompareDetailResult { caseId: string; caseName?: string; passed?: boolean; durationMs?: number }
+const compareRunA = ref<any>(null)
+const compareRunB = ref<any>(null)
+
+/** 勾选/取消一条运行（最多 2 条，超出时忽略——checkbox 已 disabled） */
+function toggleCompare(id: string) {
+  const i = compareIds.value.indexOf(id)
+  if (i >= 0) compareIds.value = compareIds.value.filter((x) => x !== id)
+  else if (compareIds.value.length < 2) compareIds.value = [...compareIds.value, id]
+}
+function closeCompare() {
+  compareOpen.value = false
+}
+/** 按 caseId 对齐两次运行的结果明细；某次缺该用例 → 该侧「未跑」 */
+const compareRows = computed(() => {
+  const a = (compareRunA.value?.results || []) as CompareDetailResult[]
+  const b = (compareRunB.value?.results || []) as CompareDetailResult[]
+  const keys: string[] = []
+  const push = (k: string) => { if (k && !keys.includes(k)) keys.push(k) }
+  for (const r of a) push(String(r.caseId || ''))
+  for (const r of b) push(String(r.caseId || ''))
+  return keys.map((caseId) => {
+    const ra = a.find((x) => String(x.caseId || '') === caseId)
+    const rb = b.find((x) => String(x.caseId || '') === caseId)
+    return {
+      caseId,
+      caseName: ra?.caseName || rb?.caseName || '',
+      aPassed: typeof ra?.passed === 'boolean' ? ra.passed : null,
+      bPassed: typeof rb?.passed === 'boolean' ? rb.passed : null,
+      aDurationMs: ra?.durationMs,
+      bDurationMs: rb?.durationMs,
+    }
+  })
+})
+const compareLabel = computed(() => {
+  const a = compareRunA.value
+  const b = compareRunB.value
+  if (!a || !b) return ''
+  return `A v${a.promptVersion ?? '—'} ↔ B v${b.promptVersion ?? '—'}`
+})
+/** 两次运行整体通过率差（B − A）：升绿降红；无分母不出结论 */
+const compareDeltaText = computed(() => {
+  const a = compareRunA.value?.summary?.passRate
+  const b = compareRunB.value?.summary?.passRate
+  if (typeof a !== 'number' || typeof b !== 'number') return ''
+  const d = Math.round((b - a) * 1000) / 10
+  return `通过率 ${d > 0 ? '+' : ''}${d} pt`
+})
+const compareDeltaTone = computed(() => {
+  const a = compareRunA.value?.summary?.passRate
+  const b = compareRunB.value?.summary?.passRate
+  if (typeof a !== 'number' || typeof b !== 'number') return 'mk-badge--muted'
+  return b > a ? 'mk-badge--ok' : b < a ? 'mk-badge--bad' : 'mk-badge--muted'
+})
+/** 单用例耗时差（B − A）：正=变慢红、负=变快绿；任一侧缺失不出结论 */
+function deltaText(row: { aDurationMs?: number; bDurationMs?: number }): string {
+  if (typeof row.aDurationMs !== 'number' || typeof row.bDurationMs !== 'number') return '—'
+  const d = row.bDurationMs - row.aDurationMs
+  return `${d > 0 ? '+' : ''}${d}ms`
+}
+function deltaClass(row: { aDurationMs?: number; bDurationMs?: number }): string {
+  if (typeof row.aDurationMs !== 'number' || typeof row.bDurationMs !== 'number') return ''
+  return row.bDurationMs > row.aDurationMs ? 'pe-delta--slow' : row.bDurationMs < row.aDurationMs ? 'pe-delta--fast' : ''
+}
+
+async function openCompare() {
+  if (compareIds.value.length !== 2) return
+  compareOpen.value = true
+  compareLoading.value = true
+  compareFailed.value = false
+  compareRunA.value = null
+  compareRunB.value = null
+  try {
+    const [ra, rb] = await Promise.all([
+      adminPromptOpsApi.getEvalRun(compareIds.value[0]),
+      adminPromptOpsApi.getEvalRun(compareIds.value[1]),
+    ])
+    compareRunA.value = ra.data?.data ?? ra.data ?? null
+    compareRunB.value = rb.data?.data ?? rb.data ?? null
+  } catch (e) {
+    compareFailed.value = true
+    toast.error(`加载对比失败：${errMsg(e)}`)
+  } finally {
+    compareLoading.value = false
+  }
+}
+/* 切换筛选后旧的选中运行可能已不在列表里：清掉避免对比到看不见的行 */
+watch(agentFilter, () => { compareIds.value = [] })
+
 // 挂载加载统一走上方 watch 的 immediate 首跑（bootstrapped 分支），此处不再裸拉一遍
 
 /* 宿主协作面：批量跑评估上移 Skills 宿主页头（本面板无页头），宿主经模板 ref 驱动——
@@ -1254,9 +1484,19 @@ defineExpose({ running, canRunBatch, runBatch })
 </script>
 
 <style scoped>
+/* 运行中条（#86）：卡外通栏，与 KPI 带同宽 */
+.pe-running { flex: none; }
 /* 筛选/工具栏行收进单卡容器：与页签体之间以发丝线分层（原型 .toolbar border-bottom） */
 .pe-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--mk-line); }
 .pe-filter__hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); margin-left: auto; }
+
+/* 跨运行对比（#94）：选择列窄 + 对比工具条 */
+.pe-compare-bar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--mk-line); }
+.pe-compare-col { width: 32px; }
+.pe-compare-col input { accent-color: var(--mk-blue); }
+.pe-compare-row--fail { background: var(--mk-red-bg); }
+.pe-delta--slow { color: var(--mk-red); font-weight: 700; }
+.pe-delta--fast { color: var(--mk-green); font-weight: 700; }
 /* 列表高度：空态占位交给 mk-empty--min，有数据时表格自然高度（不再硬撑满屏） */
 .pe-list { min-height: 0; }
 /* 原型 .tbl td：nowrap（自动布局下列宽随内容；长内容由 mk-cell-main 上限与 pe-expect 截断兜底，
@@ -1315,28 +1555,11 @@ defineExpose({ running, canRunBatch, runBatch })
    KPI 带/页签/筛选行钉在卡顶，仅页签体滚 ===== */
 .pe > .pe-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
-/* ===== 页签（原型 .tabs/.tab 下划线式：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
-   主视图切换与弹窗内「手写对话/模拟学生」共用一套，激活态走 aria-selected） ===== */
-.pe-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
-.pe-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  background: transparent;
-  padding: 9px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  color: var(--mk-muted);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  white-space: nowrap;
-}
-.pe-tab__icon { width: 14px; height: 14px; flex: 0 0 auto; }
-.pe-tab:hover { color: var(--mk-ink); }
-.pe-tab[aria-selected='true'] { color: var(--mk-blue, #2f6ae0); border-bottom-color: var(--mk-blue, #2f6ae0); }
+/* ===== 页签（主视图切换走全局 .tabs/.tab 原语；弹窗内学生输入方式走共享 MkSubTabs）。
+   2026-10-06 审核收口：删除 .pe-tabs/.pe-tab 全仓最后一份 scoped 拷贝（与 mk-primitives.css
+   .tabs/.tab 逐字重复且缺 transition），只保留页签体容器样式 ===== */
+.pe-input-block { display: grid; gap: 10px; }
+/* 页签体接在 MkSubTabs 的下划线之下：去顶边、只圆下方两角（与宿主 .tabs/.tab 同视觉） */
 .pe-tab-body {
   border: 1px solid var(--mk-line);
   border-top: 0;

@@ -16,11 +16,15 @@ const props = withDefaults(defineProps<{
   pulse?: boolean
   /** 紧凑模式（只显示点+图标，不显示文字） */
   compact?: boolean
+  /** 挂点击语义（进会话座舱等）：根元素输出 role=button + tabindex=0，
+      并监听 Enter/Space 激活（审核 #60：裸 span 挂点击键盘不可达） */
+  clickable?: boolean
 }>(), {
   status: null,
   hint: '',
   pulse: true,
   compact: false,
+  clickable: false,
 })
 
 const tone = computed<RunStateTone>(() => runStateTone(props.status))
@@ -29,13 +33,24 @@ const text = computed(() => statusText(props.status))
 const isRunning = computed(() => props.status === 'running' || props.status === 'active')
 const isQueued = computed(() => props.status === 'queued')
 const animated = computed(() => props.pulse && (isRunning.value || isQueued.value))
+
+/** 键盘激活：把 Enter/Space 转成一次真实 click（父级 @click 处理器照常生效） */
+function onActivate(e: KeyboardEvent) {
+  if (!props.clickable) return
+  e.preventDefault()
+  ;(e.currentTarget as HTMLElement | null)?.click()
+}
 </script>
 
 <template>
   <span
     class="rs-badge"
-    :class="[`rs-badge--${tone}`, { 'rs-badge--compact': compact, 'rs-badge--anim': animated }]"
+    :class="[`rs-badge--${tone}`, { 'rs-badge--compact': compact, 'rs-badge--anim': animated, 'rs-badge--clickable': clickable }]"
     :title="hint || text"
+    :role="clickable ? 'button' : undefined"
+    :tabindex="clickable ? 0 : undefined"
+    @keydown.enter="onActivate"
+    @keydown.space="onActivate"
   >
     <span class="rs-badge__icon" aria-hidden="true">{{ icon }}</span>
     <span v-if="!compact" class="rs-badge__text">{{ text }}</span>
@@ -56,6 +71,10 @@ const animated = computed(() => props.pulse && (isRunning.value || isQueued.valu
   border: 1px solid transparent;
   cursor: default;
 }
+/* 可点击档（#60）：鼠标可点 + 键盘焦点环，与同页名称格 vl-cell--click 同款 */
+.rs-badge--clickable { cursor: pointer; }
+.rs-badge--clickable:hover { border-color: color-mix(in srgb, currentColor 45%, transparent); }
+.rs-badge--clickable:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .rs-badge__icon { font-size: var(--mk-fs-micro); line-height: 1; flex-shrink: 0; }
 .rs-badge--compact { padding: 2px 6px; }
 

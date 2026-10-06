@@ -153,7 +153,7 @@ v3 修订两条：
 
 **页面骨架节奏（v3 新增，每页按此排）**：
 列表页 = 页头 → KPI → 状态条 →（本页招牌块：分布条/桶组）→ 主表卡（toolbar+table+pager）。
-总览 = 页头 → KPI → 状态条 → 教学闭环 → Row A（图 1.6fr + 事件 1fr）→ Row B 两小卡（auto-fit 280；原型第三卡「学习状态分布」不落，见 §9.4）。
+总览 = 页头 → KPI → 状态条 → 教学闭环 → 动作带（Row B 两小卡：Skill 调用量 Top 5 + 待处理事项）→ 图 + 事件（Row A：图 1.6fr + 事件 1fr；原型第三卡「学习状态分布」不落，见 §9.4）。
 
 ## 3. 透气（Density）
 
@@ -219,8 +219,8 @@ v3 修订两条：
 | `.ranklist/.rankrow` | 页面本地复刻（Overview Row B / LearnerCenter / ApiConfig 等） | 页面 |
 | `.meterrow/.meter` | 页面本地复刻（LearnerCenter / LearnerDetail / DayTimeline） | 页面 |
 | `.hero` | `MkDetailHero`（24px 标题） | 原语组件 |
-| `.statstrip`（L2 详情页 hero 下的一行分格读数） | 页面本地复刻 —— **五个 L2/L3 页**：LearnerDetail / PathDetail / UserDetail / SessionCockpit / VirtualProfile | 页面 |
-| L2 详情骨架（hero + statstrip + subtabs） | UserDetail / LearnerDetail 已按此骨架（318da349 起） | 页面 |
+| `.statstrip`（L2 详情页 hero 下的一行分格读数） | **共享原语** `MkStatStrip`（`layout="grid"`，2026-10-05 批次五 CM2 收敛页私有复刻，`components/mk/MkStatStrip.vue:124-127`）；现消费四处：LearnerDetail / UserAccountPane（原 UserDetail 抽出的账号面）/ VirtualProfile / SessionCockpit。**PathDetail 不渲染**（2026-10-02 用户拍板撤除，原型路径详情本无此带） | 原语组件 |
+| L2 详情骨架（hero + statstrip + subtabs） | LearnerDetail 已按此骨架（318da349 起；原独立 UserDetail 页并入其「账号与许可」页签，由 UserAccountPane 承载） | 页面 |
 | `.login*` | `Login.vue` 页面复刻（分栏品牌 aside + 表单 panel） | 页面 |
 | `odg-*` | `DataFlowGraph`（orch-odg-*） | 页面 |
 
@@ -459,10 +459,12 @@ v4 改为扫出 `<Transition name>` 的静态 name 集合 + Vue 约定的钩子�
    **昨日同时刻同期窗口**（今日 00:00→now vs 昨日同长窗口，后端 `todayCallsBaseline` /
    `activeTodayBaseline` 字段），基线为 0 时不给百分比、foot 落「昨日同时刻无对照」。
    即本条的「等后端提供同期窗口再恢复」条件已满足。
-8. **L2/L3 详情页的模板分工**（2026-10-01 勘察）：
-   - UserDetail / LearnerDetail = 标准 L2（MkDetailHero + 状态条/MkKpi + MkSubTabs），已对齐；
-   - VirtualProfile 头部**有意**只留身份信息（2026-09-27 决策「数量即 tab 角标，不单设 KPI 行」），
-     不加 statstrip——复刻时不要替它补；
+8. **L2/L3 详情页的模板分工**（2026-10-01 勘察；2026-10-06 按代码现状校准）：
+   - LearnerDetail = 标准 L2（MkDetailHero + MkStatStrip + MkSubTabs），已对齐；原独立
+     UserDetail 页已并入其「账号与许可」页签（账号面 = UserAccountPane，自带「账号概览」读数条）；
+   - VirtualProfile 头部**有意**只留身份信息（2026-09-27 决策「数量即 tab 角标，不单设 KPI 行》）——
+     头部不放读数；hero 下、subtabs 上现有一行共享 `MkStatStrip`（grid 变体，2026-10-05 由原
+     vp-metricgrid 收敛而来，见 `VirtualProfile.vue:31-37`），复刻时按此，不再另设私有统计带；
    - SessionCockpit 是 **T3 驾驶舱自有模板**（cp-topbar + RunStageBar 已覆盖原型
      session-detail 的 hero/stepper 职责，且多出日志/瀑布/自动驾控等监控面），
      不按 L2 详情改造；

@@ -7,8 +7,10 @@
          总数=分页器单源、失败=告警条+pill（2026-10-04 撤） -->
     <MkPageHead title="执行日志" sub="Skill 执行日志、调用 Trace 与失败定位">
       <template #actions>
-        <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注；无数据时禁用 -->
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="!logs.length" @click="exportJson">导出本页</button>
+        <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注；无数据时禁用。
+             审核 #123：该按钮在 Trace 页签下也可见可点，但导出的日志行在 Trace 页签根本不在 DOM
+             （表格在 logs 页签体内）——「本页」指向不明；限 logs 页签显示，文案细化「导出日志本页」 -->
+        <button v-if="elTab === 'logs'" type="button" class="mk-btn mk-btn--sm" :disabled="!logs.length" @click="exportJson">导出日志本页</button>
       </template>
     </MkPageHead>
     <!-- KPI 卡带（2026-10-04 状态条退役）：成功率/耗时分位读数自页头状态条迁入（页头与单卡容器之间），
@@ -25,20 +27,23 @@
          页签 2026-10-01 由 mk-pills 胶囊迁入下划线页签——胶囊只做筛选 chips，视图/分区切换归页签；
          成本分析 2026-09-29 拆回独立页 /admin/token-cost -->
     <div class="mk-card mk-card--fill">
+      <!-- 审核 #122：ARIA tabs 补全关联——页签有 id/aria-controls，两个页签体各有
+           role=tabpanel + aria-labelledby（方向键切换留待后续，roving 未承诺） -->
       <div class="tabs" role="tablist" aria-label="执行日志视图切换">
-        <button type="button" role="tab" class="tab" :aria-selected="elTab === 'logs'" @click="switchElTab('logs')">日志</button>
-        <button type="button" role="tab" class="tab" :aria-selected="elTab === 'trace'" @click="switchElTab('trace')">Trace 链路</button>
+        <button type="button" role="tab" id="el-tab-logs" aria-controls="el-panel-logs" class="tab" :aria-selected="elTab === 'logs'" @click="switchElTab('logs')">日志</button>
+        <button type="button" role="tab" id="el-tab-trace" aria-controls="el-panel-trace" class="tab" :aria-selected="elTab === 'trace'" @click="switchElTab('trace')">Trace 链路</button>
       </div>
 
       <!-- ===== Tab2: Trace 链路（嵌入 TraceWaterfall 组件；embedded 根节点 display:contents，
-           子元素直接成为本卡的 flex 子项，与日志页签体同卡） ===== -->
-      <TraceWaterfall v-if="elTab === 'trace'" embedded />
+           子元素直接成为本卡的 flex 子项，与日志页签体同卡）。id/role/aria-labelledby 经
+           属性透传落到组件根节点（未设 inheritAttrs:false），display:contents 不影响 aria 属性 ===== -->
+      <TraceWaterfall v-if="elTab === 'trace'" embedded id="el-panel-trace" role="tabpanel" aria-labelledby="el-tab-trace" />
 
       <!-- ===== Tab1: 日志流（默认） ===== -->
       <!-- 卡片常驻（对齐 Users.vue：页签 + 常驻筛选头同卡，骨架/错误/空态/表格/分页都在卡片内）。
            旧实现把渲染条件挂在卡片外壳（v-else-if="filtered.length"），空列表时状态 pills / 搜索 /
            高级筛选 / 列设置 / 保存视图 / 页码器整组消失，只剩一页没有任何筛选出口的死路空态 -->
-      <template v-if="elTab === 'logs'">
+      <div v-if="elTab === 'logs'" id="el-panel-logs" role="tabpanel" aria-labelledby="el-tab-logs" class="exec-tabpanel">
       <!-- 错误摘要条（原型 renderObserve 的 alert--error）：errCount>0 时红底提示 + 直达健康中心。
            走全局 .mk-alert（红底红字，全局错误通道②「区块级提示」），外层留卡头同款内边距。
            P1#24（2026-10-02 人类可读性）：① 窗口文案随 timeRange 联动（原恒写「近 24h」，而
@@ -47,7 +52,9 @@
            2026-10-04 外部评审拍板：撤「只看失败」次按钮（与卡头失败 pill 同源重复），
            失败筛选单源留在 pill。 -->
       <div v-if="errCount > 0" class="exec-alertwrap">
-        <div class="mk-alert mk-alert--row exec-alert">
+        <!-- 区块级错误通道（原语判据：区块级失败/降级 → .mk-alert，必须 role=alert）：
+             审核 #106 补 role=alert；轮询/筛选会让计数反复变化，用 aria-live=polite 避免打断式播报 -->
+        <div class="mk-alert mk-alert--row exec-alert" role="alert" aria-live="polite">
           <span class="mk-alert__msg">
             {{ errWindowLabel }}捕获 <b>{{ errCount }}</b> 条错误级日志
             <button
@@ -60,6 +67,9 @@
               :title="c.title"
               @click="c.apply()"
             >{{ c.label }} {{ c.count }}</button>
+            <!-- 审核 #124：窗口级错误总数与 chip（本页失败行聚合）并列时口径不同却只藏在 title，
+                 可见处补一句样本口径，避免读成「3 万条里只有 1 条属于该类别」 -->
+            <span class="exec-alert__caliber">归因样本＝本页 {{ logs.length }} 行</span>
           </span>
           <span class="exec-alert__ops">
             <button type="button" class="mk-btn mk-btn--sm" @click="goHealthCenter">查看健康中心</button>
@@ -84,7 +94,9 @@
           >测试<span class="mk-pill__count">{{ testCount }}</span></button>
           <!-- 2026-10-05 卡头统一弹层法：时间范围 / 节点 / Trace ID 三件收进右侧「高级筛选」弹层
               （2026-10-04「提上主行」的发现性问题由弹层钮生效计数兜住），主行回到 pills + 搜索 -->
-          <MkFilterSearch v-model="keyword" placeholder="关键词搜索" @keydown.enter="applyServerQuery()" />
+          <!-- 审核 #127：搜索框补 aria-label（MkFilterSearch inheritAttrs:false + v-bind="$attrs"，
+               属性直达内层 input），与同工具栏 Trace ID / 会话输入的显式标签口径一致 -->
+          <MkFilterSearch v-model="keyword" placeholder="关键词搜索" aria-label="关键词搜索（回车查询）" @keydown.enter="applyServerQuery()" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
           <SavedViewsBar
@@ -143,7 +155,9 @@
         </div>
       </div>
       <!-- 三态均在卡片内（对齐 Users.vue）：首载骨架 / 加载失败 / 表格；筛选头常驻不随数据空否消失 -->
-      <MockSkeletonTable v-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="4" :rows="6" />
+      <!-- 首载骨架列数对齐真实可见列（审核 #126：原写死 4 列，而默认可见 6 列，
+           首载完成时列数明显跳变；visibleColCount 随列设置变化） -->
+      <MockSkeletonTable v-if="(liveLoading || liveLogsLoading) && !logs.length" :cols="visibleColCount" :rows="6" />
       <!-- 错误态走 MkEmptyState tone="error"（role=alert + 红系图标 + 重试按钮），不再手拼 mk-alert 横幅 -->
       <MkEmptyState
         v-else-if="liveLogsError && !logs.length"
@@ -189,7 +203,9 @@
           </thead>
           <tbody>
             <template v-for="log in shown" :key="log.id">
-              <tr class="exec-row" :class="[`exec-row--${log.status}`, { 'exec-row--test': isTestLog(log), 'exec-row--open': openId === log.id }]" tabindex="0" role="button" :aria-expanded="openId === log.id" @click="toggleRowOpen(log.id)" @keydown.enter="toggleRowOpen(log.id, $event)">
+              <!-- 行可键盘展开：审核 #107 去掉 role=button（保留 tr 行语义/列头关联），
+                   保留 tabindex/aria-expanded/@click，补 Space 处理（非 button 元素 Space 默认滚页） -->
+              <tr class="exec-row" :class="[`exec-row--${log.status}`, { 'exec-row--test': isTestLog(log), 'exec-row--open': openId === log.id }]" tabindex="0" :aria-expanded="openId === log.id" @click="toggleRowOpen(log.id)" @keydown.enter.prevent="toggleRowOpen(log.id, $event)" @keydown.space.prevent="toggleRowOpen(log.id, $event)">
                 <td v-if="!hiddenCols.has('time')"><span class="mono exec-time" :title="fmtFull(log.ts)">{{ fmtTime(log.ts) }}</span></td>
                 <td v-if="!hiddenCols.has('status')"><span class="exec-status" :class="`exec-status--${log.status}`">{{ statusText[log.status] }}</span></td>
                 <td v-if="!hiddenCols.has('kind')">
@@ -199,10 +215,10 @@
                   </span>
                 </td>
                 <!-- Skill 格显完整名（原型 Skill 列=真实名；此前只给短标签、全名藏在 title 提示里） -->
-                <td v-if="!hiddenCols.has('agent')"><span class="mono exec-stage" :title="log.agent" role="button" tabindex="0" :aria-label="`查看 ${log.agent} 详情`" @click.stop="openSkillDrawer(log.agent)" @keydown.enter.stop.prevent="openSkillDrawer(log.agent)">{{ log.agent }}</span></td>
+                <td v-if="!hiddenCols.has('agent')"><span class="mono exec-stage" :title="log.agent" role="button" tabindex="0" :aria-label="`查看 ${log.agent} 详情`" @click.stop="openSkillDrawer(log.agent)" @keydown.enter.stop.prevent="openSkillDrawer(log.agent)" @keydown.space.stop.prevent="openSkillDrawer(log.agent)">{{ log.agent }}</span></td>
                 <td v-if="!hiddenCols.has('trace')">
                   <span class="exec-tracecell">
-                    <span class="mono exec-trace" :title="`${log.traceId} · 点击查看完整链路`" role="button" tabindex="0" :aria-label="`查看链路 ${shortTrace(log.traceId)}`" @click.stop="showTrace(log.traceId)" @keydown.enter.stop.prevent="showTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
+                    <span class="mono exec-trace" :title="`${log.traceId} · 点击查看完整链路`" role="button" tabindex="0" :aria-label="`查看链路 ${shortTrace(log.traceId)}`" @click.stop="showTrace(log.traceId)" @keydown.enter.stop.prevent="showTrace(log.traceId)" @keydown.space.stop.prevent="showTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
                     <button
                       type="button"
                       class="exec-copy-btn"
@@ -229,7 +245,7 @@
                       <span v-if="log.statusCode && log.statusCode >= 400" class="tline__http mono">HTTP {{ log.statusCode }}</span>
                       <span v-if="log.recoveredByRetry" class="tline__recovered">重试 {{ (log.attempts || 1) - 1 }} 次后成功</span>
                       <span v-if="promptOf(log)?.drift" class="tline__drift">{{ TERMS.driftRuntime }}</span>
-                      <span v-if="log.sessionId" class="tline__session mono" :title="`按业务会话在链路中归组查看：${log.sessionId}`" role="button" tabindex="0" :aria-label="`查看会话 ${log.sessionId} 链路`" @click.stop="showTrace(undefined, log.sessionId)" @keydown.enter.stop.prevent="showTrace(undefined, log.sessionId)">会话 {{ shortTrace(log.sessionId) }}</span>
+                      <span v-if="log.sessionId" class="tline__session mono" :title="`按业务会话在链路中归组查看：${log.sessionId}`" role="button" tabindex="0" :aria-label="`查看会话 ${log.sessionId} 链路`" @click.stop="showTrace(undefined, log.sessionId)" @keydown.enter.stop.prevent="showTrace(undefined, log.sessionId)" @keydown.space.stop.prevent="showTrace(undefined, log.sessionId)">会话 {{ shortTrace(log.sessionId) }}</span>
                     </div>
                   </div>
                 </td>
@@ -241,7 +257,7 @@
                     <span class="mk-cell-sub">{{ tokensSplitText(log) }}</span>
                   </div>
                 </td>
-                <td v-if="!hiddenCols.has('dur')" class="right"><span class="mk-latency exec-dur" :class="latencyTone(log.durationMs)" :title="`${fmtMs(log.durationMs)}（P50 ${latencyP50} · P99 ${latencyP99}）`">{{ fmtMs(log.durationMs) }}</span></td>
+                <td v-if="!hiddenCols.has('dur')" class="right"><span class="mk-latency exec-dur" :class="latencyTone(log.durationMs)" :title="`${fmtMs(log.durationMs)}（P90 ${latencyP90} · P99 ${latencyP99}）`">{{ fmtMs(log.durationMs) }}</span></td>
               </tr>
               <tr v-if="openId === log.id" class="exec-detail">
                 <td :colspan="visibleColCount">
@@ -350,11 +366,11 @@
         icon="◌"
         :title="emptyTitle"
         :description="emptyDesc"
-        :action-text="isFiltered ? '清除筛选，回「今天」窗口' : ''"
+        :action-text="isFiltered ? '清除筛选，放宽到全部时间' : ''"
         @action="clearFilterToAll"
       />
       <Pagination v-if="logs.length" v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" :note="mergedRowsNote" />
-      </template>
+      </div>
     </div>
   </div>
 </template>
@@ -519,7 +535,7 @@ const COLS_KEY = 'wf_exec_hidden_cols_v2'
 const colDefs = [
   { key: 'time', label: '时间', title: '记录时间（MM-DD HH:mm:ss）' },
   { key: 'status', label: '级别', title: '执行级别（成功/失败/超时）——原型第二列' },
-  { key: 'kind', label: '类型', title: '日志类型（执行/重试/告警）' },
+  { key: 'kind', label: '类型', title: '日志来源层（流程 / Skill / 网关 / 调用），由 executionLayer 判定' },
   { key: 'agent', label: 'Skill', title: 'Skill 完整名；点击直达 Skill 详情' },
   { key: 'trace', label: 'Trace', title: '调用链路 ID：点击看完整链路，按钮复制' },
   { key: 'msg', label: '消息', title: '调用消息（输出摘要 / 错误信息）' },
@@ -1064,22 +1080,31 @@ function percentileMsOf(durations: unknown[], q: number): number | null {
   const idx = Math.min(arr.length - 1, Math.max(0, Math.round((arr.length - 1) * q)))
   return arr[idx]
 }
-/* 行级设计（批B）：行耗时 vs 全局分位 → 三档 tone（≥P99 红 / ≥P50 琥珀 / 其余默认） */
-const latencyP50Ms = computed(() => {
-  const st = liveStats.value
-  if (st && st.latencyPercentiles?.p50 != null) return st.latencyPercentiles.p50
-  return percentileMsOf(logs.value.filter((l) => l.status === 'ok').map((l) => l.durationMs), 0.5)
-})
+/* 行级设计（批B）：行耗时 vs 全局分位 → 三档 tone（≥P99 红 / ≥P90 琥珀 / 其余默认）。
+   审核 #105：琥珀档原用 P50（中位数）→ 约半数行被着色，分级失去「把慢行挑出来」的区分度；
+   提到 P90（后端 stats 有 p90 就用，否则成功样本取 0.9 分位）。 */
 const latencyP99Ms = computed(() => {
   const st = liveStats.value
   if (st && st.latencyPercentiles?.p99 != null) return st.latencyPercentiles.p99
   return percentileMsOf(logs.value.filter((l) => l.status === 'ok').map((l) => l.durationMs), 0.99)
 })
+const latencyP90Ms = computed(() => {
+  const st = liveStats.value
+  const backendP90 = st?.latencyPercentiles?.p90
+  if (backendP90 != null) return backendP90
+  return percentileMsOf(logs.value.filter((l) => l.status === 'ok').map((l) => l.durationMs), 0.9)
+})
+const latencyP90 = computed(() => {
+  const st = liveStats.value
+  const backendP90 = st?.latencyPercentiles?.p90
+  if (backendP90 != null) return fmtMs(backendP90)
+  return percentileOf(logs.value.filter((l) => l.status === 'ok').map((l) => l.durationMs), 0.9)
+})
 function latencyTone(durationMs: unknown): string {
   const d = typeof durationMs === 'number' ? durationMs : -1
   if (d < 0) return ''
   if (latencyP99Ms.value != null && d >= latencyP99Ms.value) return 'mk-latency--slow'
-  if (latencyP50Ms.value != null && d >= latencyP50Ms.value) return 'mk-latency--warn'
+  if (latencyP90Ms.value != null && d >= latencyP90Ms.value) return 'mk-latency--warn'
   return ''
 }
 /* 2026-10-04 状态条退役：原状态条基调 statusTone（muted/bad/ok）随条删除，ok/bad 语义改由
@@ -1152,11 +1177,18 @@ function fmtTime(ts?: number): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
+/* 短标识（审核 #121）：只有 `tr:` / `se:` 前缀才保留前缀，纯 ID 统一取「…+末 12 位」——
+   与 TraceWaterfall.shortTrace 同规则，同一 traceId/sessionId 在两个页签显示一致。
+   旧实现 `/^(\w{2}):?([\w-]+)$/` 会给无冒号的纯 ID 造出「17:」「14:」这种假前缀。
+   （理想做法是抽共享 helper 到 terms.ts/traceSummary.ts，属共享模块，登记「需中央处理」。） */
 function shortTrace(id: string): string {
-  const m = id.match(/^(\w{2}):?([\w-]+)$/)
-  if (!m) return id.slice(0, 12)
-  const body = m[2] || id
-  return body.length > 14 ? `${m[1]}:…${body.slice(-6)}` : id
+  if (!id) return id
+  const m = /^(tr|se):(.+)$/.exec(id)
+  if (m) {
+    const body = m[2]
+    return body.length > 12 ? `${m[1]}:…${body.slice(-12)}` : id
+  }
+  return id.length > 12 ? `…${id.slice(-12)}` : id
 }
 /* 绝对时间 tooltip：YYYY-MM-DD HH:MM:SS（与审计页同格式）；ts 为 epoch 毫秒 */
 function fmtFull(ts?: number | null): string {
@@ -1185,6 +1217,9 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 <style scoped>
 /* 视图切换（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
    （mk-primitives.css），本页不再私持拷贝。 */
+/* 日志页签体（审核 #122 补 role=tabpanel 的容器）：display:contents 保持原布局
+   （其子元素仍是 .mk-card--fill 的 flex 子项，与嵌入态 TraceWaterfall 根节点同法） */
+.exec-tabpanel { display: contents; }
 
 /* 错误摘要条（原型 renderObserve 的 alert--error）：外形走全局 .mk-alert--row（红底红字 +
    消息/按钮两端排布），本页只补卡头同款内边距（.mk-card 无 padding）与按钮不缩（窄屏换行时按钮保完整） */
@@ -1210,6 +1245,8 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 }
 .exec-err-chip:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
 .exec-err-chip--on { background: var(--mk-red); border-color: var(--mk-red); color: var(--mk-on-fill); }
+/* 归因样本口径（审核 #124）：弱化小字，紧跟在 chip 后 */
+.exec-alert__caliber { margin-left: 8px; font-size: var(--mk-fs-micro); font-weight: 400; opacity: 0.8; }
 /* 右侧动作组：与消息端拉开（mk-alert--row 已两端排布，这里只管组内间距） */
 .exec-alert__ops { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
@@ -1249,10 +1286,12 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 .exec-table td { padding: 8px 13px; white-space: nowrap; }
 
 .exec-row--open { background: var(--mk-table-row-hover-bg); }
-/* 连通性/探活测试行：弱化（降饱和降透明度），保留可读但不再与业务日志抢眼 */
-.exec-row--test { opacity: 0.62; }
-.exec-row--test:hover { opacity: 0.85; }
-.exec-row--test.exec-row--open { opacity: 0.9; }
+/* 连通性/探活测试行：弱化——审核 #103：原整行 opacity:.62 把正文对比度压到 2.46:1（AA 需 4.5:1），
+   改为降一档文字色（--mk-faint-soft，亮/暗两档都在可读线以上），正文保持 ≥4.5:1；
+   hover / 展开时回常态色，弱化语义不变 */
+.exec-row--test:not(:hover):not(.exec-row--open) .exec-time,
+.exec-row--test:not(:hover):not(.exec-row--open) .exec-title:not(.exec-title--err),
+.exec-row--test:not(:hover):not(.exec-row--open) .exec-trace { color: var(--mk-faint-soft); }
 .exec-kind-group { display: inline-flex; align-items: center; gap: 5px; }
 /* 类型徽章（流程/Skill/网关/调用）：中性浅灰 pill，与审计动作 chip 同风格——低调可读不抢色 */
 .exec-kind-group .mk-badge {
@@ -1386,7 +1425,8 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-mu
 /* 展开详情行（colspan=动态列数）：浅底 + 内容盒内聚，干扰最小化；
    文本可换行（列表行的 nowrap 不下探进详情区） */
 .exec-detail td { padding: 6px 14px 14px; background: #fbfcfe; vertical-align: top; white-space: normal; }
-html[data-theme='dark'] .exec-detail td { background: #161718; }
+/* 审核 #125：此处原有 `html[data-theme='dark'] .exec-detail td{background:#161718}`，与文件末尾暗色块内
+   同选择器的 #19191a 同特异性、后者在后取胜——一行永不生效的死规则，删 */
 .exec-detail__box {
   display: grid;
   gap: 8px;
@@ -1583,7 +1623,8 @@ html[data-theme='dark'] {
   .exec-detail td { background: #19191a; }
   .exec-detail__box { background: var(--wf-bg-body); border-color: var(--wf-border-light); }
   .exec-detail__box pre { color: var(--mk-pre-fg); }
-  .tline { background: #19191a; border-color: var(--wf-border-light); }
+  /* 审核 #125：原 `.tline { background:#19191a; border-color:… }` 是死类——模板从不输出裸
+     `.tline`（只有 tline__* / tline-attempt*），且白占两条硬编码 hex，删 */
   .tline-attempt { background: var(--wf-bg-subtle); border-color: var(--wf-border-light); }
   .tline-attempt--fail { background: #241a1a; border-left-color: var(--mk-red); }
 

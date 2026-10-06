@@ -57,6 +57,7 @@
               :tabindex="f.sessionId ? 0 : undefined"
               @click="f.sessionId && openSession(f.sessionId)"
               @keydown.enter="f.sessionId && openSession(f.sessionId)"
+              @keydown.space.prevent="f.sessionId && openSession(f.sessionId)"
             >
               <span class="ud-feed__time">{{ f.time }}</span>
               <div class="ud-feed__grow">

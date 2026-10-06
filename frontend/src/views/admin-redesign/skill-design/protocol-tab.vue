@@ -42,6 +42,11 @@
           <span>{{ dg.message }}</span>
         </div>
       </div>
+      <!-- 本地表单校验失败（#125）：挂到对应卡片，不再只在保存后由服务端 diagnostics 笼统列出 -->
+      <p v-if="coreFormIssue" class="sdp-pw__diag sdp-pw__diag--err" role="alert">
+        <strong>{{ coreFormIssue.message }}</strong>
+        <button type="button" class="mk-link" @click="coreFormIssue = null">知道了</button>
+      </p>
       <div v-if="coreInputWarnings.length" class="sdp-pw__diag sdp-pw__diag--warn">
         <div v-for="(w, i) in coreInputWarnings" :key="i" class="sdp-pw__diag-item">
           <span class="mono">{{ w.code }}</span>
@@ -54,10 +59,10 @@
         <template v-if="coreForm">
           <!-- 身份 -->
           <section class="sdp-pwform__card">
-            <button type="button" class="sdp-pwform__cardhead" @click="toggleFormSection('identity')">
-              <span>身份</span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('identity') }">▾</i>
+            <button type="button" class="sdp-pwform__cardhead" :aria-expanded="openFormSections.has('identity')" aria-controls="core-sec-identity" @click="toggleFormSection('identity')">
+              <span>身份</span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('identity') }" aria-hidden="true">▾</i>
             </button>
-            <div v-show="openFormSections.has('identity')" class="sdp-pwform__cardbody">
+            <div id="core-sec-identity" v-show="openFormSections.has('identity')" class="sdp-pwform__cardbody">
             <label class="sdp-pwform__field">
               <span>identity（角色定位）</span>
               <textarea v-model="coreForm.identity" rows="3" class="mk-input" @input="markDirty"></textarea>
@@ -92,10 +97,10 @@
 
           <!-- 输入声明（上游字段引用） -->
           <section class="sdp-pwform__card">
-            <button type="button" class="sdp-pwform__cardhead" @click="toggleFormSection('inputs')">
-              <span>输入声明 <b class="mono">{{ coreForm.inputs.length }}</b></span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('inputs') }">▾</i>
+            <button type="button" class="sdp-pwform__cardhead" :aria-expanded="openFormSections.has('inputs')" aria-controls="core-sec-inputs" @click="toggleFormSection('inputs')">
+              <span>输入声明 <b class="mono">{{ coreForm.inputs.length }}</b></span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('inputs') }" aria-hidden="true">▾</i>
             </button>
-            <div v-show="openFormSections.has('inputs')" class="sdp-pwform__cardbody">
+            <div id="core-sec-inputs" v-show="openFormSections.has('inputs')" class="sdp-pwform__cardbody">
             <p class="sdp-pwform__note">
               声明本 Skill 消费的输入。ref 前缀 = 来源分类：<code class="mono">skill:xxx.fieldPath</code>（上游 Skill 模型输出）/
               <code class="mono">sandbox:agent.key</code>（编排注入，对照沙盘说明书 <code class="mono">prompts/agent-snapshots.md</code>）/
@@ -114,10 +119,10 @@
 
           <!-- 规则 -->
           <section class="sdp-pwform__card">
-            <button type="button" class="sdp-pwform__cardhead" @click="toggleFormSection('rules')">
-              <span>执行规则 <b class="mono">{{ coreForm.rules.length }}</b></span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('rules') }">▾</i>
+            <button type="button" class="sdp-pwform__cardhead" :aria-expanded="openFormSections.has('rules')" aria-controls="core-sec-rules" @click="toggleFormSection('rules')">
+              <span>执行规则 <b class="mono">{{ coreForm.rules.length }}</b></span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('rules') }" aria-hidden="true">▾</i>
             </button>
-            <div v-show="openFormSections.has('rules')" class="sdp-pwform__cardbody">
+            <div id="core-sec-rules" v-show="openFormSections.has('rules')" class="sdp-pwform__cardbody">
             <div v-for="i in coreForm.rules.length" :key="i - 1" class="sdp-pwform__listitem">
               <span class="sdp-pwform__idx mono">{{ i }}</span>
               <textarea v-model="coreForm.rules[i - 1]" rows="2" class="mk-input" @input="markDirty"></textarea>
@@ -133,10 +138,10 @@
 
           <!-- 输出字段（高危：字段冻结守门） -->
           <section class="sdp-pwform__card sdp-pwform__card--danger">
-            <button type="button" class="sdp-pwform__cardhead" @click="toggleFormSection('fields')">
-              <span>输出字段 <b class="mono">{{ coreForm.fields.length }}</b></span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('fields') }">▾</i>
+            <button type="button" class="sdp-pwform__cardhead" :aria-expanded="openFormSections.has('fields')" aria-controls="core-sec-fields" @click="toggleFormSection('fields')">
+              <span>输出字段 <b class="mono">{{ coreForm.fields.length }}</b></span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('fields') }" aria-hidden="true">▾</i>
             </button>
-            <div v-show="openFormSections.has('fields')" class="sdp-pwform__cardbody">
+            <div id="core-sec-fields" v-show="openFormSections.has('fields')" class="sdp-pwform__cardbody">
             <p class="sdp-pwform__warn">增删字段、改型、改名会触发字段冻结守门。</p>
             <div class="sdp-pwform__fields">
               <div class="sdp-pwform__fieldrow sdp-pwform__fieldrow--head">
@@ -159,10 +164,10 @@
 
           <!-- 约束 -->
           <section class="sdp-pwform__card">
-            <button type="button" class="sdp-pwform__cardhead" @click="toggleFormSection('constraints')">
-              <span>自检约束 <b class="mono">{{ coreForm.constraints.length }}</b></span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('constraints') }">▾</i>
+            <button type="button" class="sdp-pwform__cardhead" :aria-expanded="openFormSections.has('constraints')" aria-controls="core-sec-constraints" @click="toggleFormSection('constraints')">
+              <span>自检约束 <b class="mono">{{ coreForm.constraints.length }}</b></span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('constraints') }" aria-hidden="true">▾</i>
             </button>
-            <div v-show="openFormSections.has('constraints')" class="sdp-pwform__cardbody">
+            <div id="core-sec-constraints" v-show="openFormSections.has('constraints')" class="sdp-pwform__cardbody">
             <div v-for="i in coreForm.constraints.length" :key="i - 1" class="sdp-pwform__listitem">
               <span class="sdp-pwform__idx mono">-</span>
               <textarea v-model="coreForm.constraints[i - 1]" rows="2" class="mk-input" @input="markDirty"></textarea>
@@ -178,10 +183,10 @@
 
           <!-- 参数 -->
           <section class="sdp-pwform__card">
-            <button type="button" class="sdp-pwform__cardhead" @click="toggleFormSection('params')">
-              <span>生成参数</span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('params') }">▾</i>
+            <button type="button" class="sdp-pwform__cardhead" :aria-expanded="openFormSections.has('params')" aria-controls="core-sec-params" @click="toggleFormSection('params')">
+              <span>生成参数</span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('params') }" aria-hidden="true">▾</i>
             </button>
-            <div v-show="openFormSections.has('params')" class="sdp-pwform__cardbody">
+            <div id="core-sec-params" v-show="openFormSections.has('params')" class="sdp-pwform__cardbody">
             <div class="sdp-pwform__row3">
               <label class="sdp-pwform__field">
                 <span>temperature</span>
@@ -251,7 +256,12 @@
     <section class="sdp-block">
       <header class="sdp-block__head">
         <h4>编译预览</h4>
-        <span class="sdp-block__meta">保存后自动编译（dry run，不写入）</span>
+        <!-- #126：保存（表单↔源码切换时的自动保存）只写盘、不编译，预览与磁盘可能不一致 →
+             文案改为明确指向「保存并编译」，并在内容变更后显式标「待重新编译」 -->
+        <span class="sdp-block__meta">
+          <span v-if="corePreviewStale" class="mk-badge mk-badge--warn">内容已变更，待重新编译</span>
+          点「保存并编译」后自动编译（dry run，不写入）
+        </span>
       </header>
       <div class="sdp-pw__pane">
         <div v-if="coreGates" class="sdp-pw__gates">
@@ -374,10 +384,14 @@ const coreUncertain = ref<any>(null)
 const corePublishIssues = ref<Array<Record<string, unknown>>>([])
 const coreViewMode = ref<'form' | 'raw'>('form')
 const coreForm = ref<CoreFormState | null>(null)
+/** 编译预览是否已过期（#126）：保存只写盘、不重编译，预览内容可能落后于磁盘 */
+const corePreviewStale = ref(false)
 let coreRequested = false
 
 function markDirty() {
   coreEditorState.dirty = true
+  // 用户继续编辑 → 收起上一次的字段级校验提示（#125）
+  coreFormIssue.value = null
 }
 
 /* 协议表单折叠：高频段（身份/输入/输出字段）默认展开，低频段默认收起 */
@@ -561,8 +575,40 @@ async function ensureCoreLoaded() {
   }
 }
 
+/* 表单本地校验（#125）：channels 至少一个 / 字段 name 非空且唯一 / 规则不留空行。
+   界面上写着「channels（材料池，至少一个）」但此前取消全部通道仍可保存，错误只在保存后
+   由服务端 diagnostics 列出、不定位卡片。这里先本地拦下并挂到对应卡。 */
+const coreFormIssue = ref<{ card: string; message: string } | null>(null)
+function failForm(card: string, message: string): false {
+  coreFormIssue.value = { card, message }
+  // 报错卡若处于收起态先展开，保证提示可见
+  if (!openFormSections.value.has(card)) {
+    openFormSections.value = new Set([...openFormSections.value, card])
+  }
+  toast.error(message)
+  return false
+}
+/** 返回 '' = 通过；否则为错误文案（挂到 card） */
+function validateCoreForm(): { card: string; message: string } | null {
+  const f = coreForm.value
+  if (!f) return { card: 'identity', message: '表单未加载，请刷新后重试' }
+  if (!f.channels.length) return { card: 'identity', message: 'channels（材料池）至少选一个：全部取消会让该 Skill 失去材料来源' }
+  const names = f.fields.map((x) => x.name.trim())
+  if (names.some((n) => !n)) return { card: 'fields', message: '输出字段：name 不能为空（空名会生成非法 core YAML）' }
+  const dup = names.find((n, i) => names.indexOf(n) !== i)
+  if (dup) return { card: 'fields', message: `输出字段：name 重复「${dup}」——字段名必须唯一` }
+  const blankRule = f.rules.findIndex((r) => !String(r).trim())
+  if (blankRule >= 0) return { card: 'rules', message: `执行规则：第 ${blankRule + 1} 条为空行，请填写或删除` }
+  return null
+}
+
 async function saveCore() {
   if (!coreLoaded.value || coreSaving.value) return
+  coreFormIssue.value = null
+  if (coreViewMode.value === 'form') {
+    const issue = validateCoreForm()
+    if (issue) return failForm(issue.card, issue.message)
+  }
   coreSaving.value = true
   coreClassification.value = null
   coreDiagnostics.value = []
@@ -583,6 +629,11 @@ async function saveCore() {
       coreInputWarnings.value = res.data?.inputWarnings || []
     }
     coreEditorState.dirty = false
+    // #126：保存后编译预览已过期（内容变了、门禁/产物还是上一次的），显式标脏并清旧产物
+    corePreviewStale.value = true
+    coreGates.value = null
+    coreCompiledPrompt.value = ''
+    coreCompiledMeta.value = null
     toast.success(`已保存（${coreLevelLabel(coreClassification.value?.level || 'safe')}），状态：待编译发布`)
     return true
   } catch (e) {
@@ -607,6 +658,7 @@ async function previewCore() {
     coreGates.value = res.data?.gates || null
     coreCompiledPrompt.value = res.data?.prompt || ''
     coreCompiledMeta.value = { coreHash: res.data?.coreHash, coreVersion: res.data?.coreVersion }
+    corePreviewStale.value = false
   } catch (e) {
     const data = (e as { response?: { data?: { error?: string; diagnostics?: CoreDiagnostic[] } } })?.response?.data
     // 编译错误落入行内诊断区（可停留查看），toast 仅作补充
@@ -707,6 +759,8 @@ watch(
     corePublishIssues.value = []
     coreViewMode.value = 'form'
     openFormSections.value = new Set(['identity', 'inputs', 'fields'])
+    corePreviewStale.value = false
+    coreFormIssue.value = null
     void ensureCoreLoaded()
   },
   { immediate: true }
@@ -829,6 +883,18 @@ watch(
 .sdp-pw__classify--blocked { background: var(--mk-red-bg); }
 .sdp-pw__diag { margin: 0 16px 10px; display: grid; gap: 4px; }
 .sdp-pw__diag--warn .sdp-pw__diag-item { color: var(--mk-amber); }
+/* 本地表单校验失败（#125）：红底条 + 定位到具体卡片的文案 */
+.sdp-pw__diag--err {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-red-bg);
+  color: var(--mk-red);
+  font-size: var(--mk-fs-micro);
+}
 .sdp-pw__diag-item { display: flex; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-red); }
 .sdp-pw__diag-item .mono { flex-shrink: 0; }
 .sdp-pw__publish {

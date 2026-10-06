@@ -1,12 +1,19 @@
 <template>
-  <div class="mr mk-page mk-page--fill">
+  <div ref="rootEl" class="mr mk-page mk-page--fill">
     <!-- ===== 列表态 / 明细态二选一 =====
          选中用户前：状态条 + KPI 区 + 用户列表（列表卡内部滚动）；
          选中用户后：整页让位给「该用户的记忆复盘」二级页（明细拿到整幅宽高）。
          旧版把明细塞在用户列表卡内部共用一条 flex 列：表网格 flex:1 被明细压成 0 高
          （一选用户列表整条消失），超出的 2000+px 又被 .mk-card 的 overflow:clip 裁掉，
          下半页永远滚不到。二级页形态与「用户与学习者 → 用户详情」「虚拟学习者 → 画像」一致。 -->
-    <template v-if="!detail">
+    <!-- ===== 明细取数中：骨架占位（T2 硬约束 4；此前无任何加载反馈，2026-10-06 审核 #45） ===== -->
+    <template v-if="detailLoading && !detail">
+      <div class="mr__detail">
+        <MockSkeletonTable :cols="4" :rows="4" />
+      </div>
+    </template>
+
+    <template v-else-if="!detail">
     <!-- 页头（newui/admin pagehead）：页名（悬停带口径长注）+ 作用域开关/刷新上移；
          原状态条整体退役 -->
     <MkPageHead
@@ -60,8 +67,23 @@
              （展示前 N、排序键、下钻命中），不再复读全量数（CP6：同屏 KPI 与卡头两处同数） -->
         <span class="mk-card__meta" :title="`后端口径为全量有记忆痕迹用户（全量数见页头 KPI）；列表按待复习（到期）量倒序只取前 ${rows.length} 名，暂无分页${dueBandFilter ? '；当前按到期档下钻，命中集只含窗口内学习者' : ''}`">展示前 {{ rows.length }} · 按待复习量倒序<template v-if="dueBandFilter"> · 已筛 {{ visibleRows.length }} 位</template></span>
       </div>
-      <p v-if="error" class="mr__error">{{ error }}</p>
-      <MockSkeletonTable v-if="loading && !rows.length" :cols="7" :rows="8" />
+      <!-- 取数失败不得渲染成「暂无数据」（R2）：总览失败且无行 → MkEmptyState tone="error" + 重试；
+           有旧行时保留旧行并在上方给出带重试的 .mk-alert（失败原因不静默） -->
+      <div v-if="error && rows.length" class="mk-alert mk-alert--row" role="alert">
+        <span class="mk-alert__msg">{{ error }}</span>
+        <button type="button" class="mk-alert__btn" :disabled="loading" @click="refreshAll">{{ loading ? '重试中…' : '重试' }}</button>
+      </div>
+      <MkEmptyState
+        v-if="error && !rows.length"
+        tone="error"
+        :title="error"
+        description="总览取数失败，页面数字不可信。"
+        action-text="重试"
+        :action-busy="loading"
+        action-busy-text="重试中…"
+        @action="refreshAll"
+      />
+      <MockSkeletonTable v-else-if="loading && !rows.length" :cols="7" :rows="8" />
       <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" description="当前口径内还没有用户产生记忆痕迹。等学习者开始学习并完成概念提取后，这里会按待复习量倒序列出用户。" />
       <!-- 用户列表（列集 = 原型 renderMemory：学习者 | 待复习 | 薄弱项 | 平均记忆强度 | 最近复习 | 操作；
            2026-10-02 用户拍板「这个列表的列按新UI来」：撤痕迹列（排序键改到期量，与原型
@@ -89,6 +111,7 @@
             <tr
               v-for="row in visibleRows"
               :key="row.userId"
+              :data-mr-row="row.userId"
               :class="{ 'mr__row--active': row.userId === selectedId }"
               tabindex="0"
               @click="openSubPage('learner', row.userId)"
@@ -132,7 +155,7 @@
               </td>
               <td>
                 <div class="mk-actions">
-                <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(row.userId)">明细</button>
+                <button type="button" class="mk-btn mk-btn--sm" :disabled="detailLoading" title="打开该用户的记忆复盘明细" @click.stop="openDetail(row.userId)">明细</button>
                 <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingId === row.userId" title="对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹" @click.stop="recompute(row.userId)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
                 </div>
               </td>
@@ -154,9 +177,13 @@
     <!-- ===== 明细态（二级页）===== -->
     <template v-else>
       <header class="mk-status" :class="`mk-status--${detailTone}`">
-        <button type="button" class="mk-back" title="返回用户列表（Esc）" @click="closeDetail">← 用户列表</button>
+        <!-- 状态点补齐（2026-10-06 审核 #60）：tone 语义由 .mk-status__dot 唯一承载
+             （原语层 CSS 的 tone 只给 __dot 上色、图例文案挂 __dot::after），
+             此前无 dot → warn 只剩染底、ok/muted 相对默认卡面零差异 -->
+        <span class="mk-status__dot" aria-hidden="true"></span>
+        <button type="button" class="mk-back mr__back" title="返回用户列表（Esc）" @click="closeDetail">← 用户列表</button>
         <span class="mk-status__sep"></span>
-        <strong class="mk-status__title">记忆复盘 · {{ detail.user.name || '未命名' }}</strong>
+        <strong ref="detailTitleEl" class="mk-status__title" tabindex="-1">记忆复盘 · {{ detail.user.name || '未命名' }}</strong>
         <span
           class="mk-status__meta"
           title="该用户名下记忆痕迹总览：到期 = 到该复习而未复习；同族重复 = 归一化键相同、措辞不同的痕迹（组 / 条）；从未提取 = 一直没被当作复习点接住过。状态点示警阈值：占该用户痕迹 ≥20% 或到期 ≥5 条（阈值内为间隔复习的常态积压，不亮警示）"
@@ -167,10 +194,9 @@
         </span>
       </header>
 
-      <!-- 明细态 error 出口（P1#12）：此前 error 渲染点只在列表态分支内，apply / rollback /
-           recompute 在明细态失败时人类完全无感知（只写 error.value 无人渲染）。除页内红字外
-           同步 toast.error（三处动作的 catch 内补），两层出口。 -->
-      <p v-if="error" class="mr__error" role="alert">{{ error }}</p>
+      <!-- 明细态 error 出口（P1#12 + 审核 #40）：写动作/明细取数失败时人类必须可感知；
+           形态回归共享 .mk-alert（红底 + 正文档），不再用页私有 micro 字号横条 -->
+      <p v-if="error" class="mk-alert mr__detail-error" role="alert">{{ error }}</p>
 
       <div class="mr__detail">
       <!-- 1. 课内温故计划：本节该接几个 + 每个记忆点的负担与来源 -->
@@ -191,14 +217,16 @@
             </thead>
             <tbody>
               <tr v-for="item in detail.reviewPlan.items" :key="item.conceptKey">
-                <td><strong>{{ item.label }}</strong><small class="mr__sub">{{ item.conceptKey }}</small></td>
+                <!-- 概念格（2026-10-06 审核 #65）：后端 label 与 conceptKey 常同值（本库 23/23），
+                     相同时不再重复渲染第二行（看着像渲染故障，也把行高撑成两行） -->
+                <td><strong>{{ item.label }}</strong><small v-if="item.conceptKey && item.conceptKey !== item.label" class="mr__sub">{{ item.conceptKey }}</small></td>
                 <td class="mk-num">
                   <span class="mr-pct" :class="{ 'mr-pct--warn': item.retention < 0.7 }" :title="`记忆强度 ${Math.round(item.retention * 100)}%，低于 70% 优先安排`">
                     <b>{{ Math.round(item.retention * 100) }}%</b>
                     <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="item.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
                   </span>
                 </td>
-                <td>{{ item.reason }}</td>
+                <td :title="item.reason ? `后端枚举：${item.reason}` : undefined">{{ reasonText(item.reason) }}</td>
                 <td class="mk-num">{{ item.load }}</td>
                 <td class="mr__sub">{{ item.loadFactors.join('、') || '—' }}</td>
                 <td>{{ item.originPathTitle || '—' }}</td>
@@ -245,7 +273,7 @@
                 </span>
               </td>
               <td class="mk-num">{{ trace.extractionCount }}</td>
-              <td class="mr__sub">{{ trace.source }}</td>
+              <td class="mr__sub" :title="trace.source ? `后端枚举：${trace.source}` : undefined">{{ sourceText(trace.source) }}</td>
               <!-- 到期列（P1#13）：裸绝对时刻读不出「急不急」，改相对表达（已逾期 N 天 / N 天后）
                    并给逾期着色；绝对时刻进 title（P2 到期带判例同源） -->
               <td>
@@ -352,6 +380,7 @@
                 <td>
                   <input
                     type="checkbox"
+                    class="mr__check"
                     :checked="selected[proposal.canonical] === true"
                     :aria-label="`勾选执行归并：${proposal.canonical}${proposal.autoApplicable ? '' : '（需人工确认）'}`"
                     @change="toggleSelect(proposal.canonical, proposal.autoApplicable)"
@@ -389,11 +418,13 @@
           <h4 class="mr__h4">需人工看（ambiguous，不会被执行）</h4>
           <div v-if="detail.audit.ambiguous.length" class="mk-table-scroll">
           <table class="mk-table">
-            <thead><tr><th>A</th><th>B</th><th>理由</th></tr></thead>
+            <!-- 表头补明「候选 A / B 是概念键」（2026-10-06 审核 #62）：原表头只写 A / B
+                 两个单字母；A/B 两列是无人类可读 label 的裸 conceptKey，与另三表同降 .mr__sub 档 -->
+            <thead><tr><th>候选 A（概念键）</th><th>候选 B（概念键）</th><th>理由</th></tr></thead>
             <tbody>
               <tr v-for="(item, index) in detail.audit.ambiguous" :key="`${item.a}-${item.b}-${index}`">
-                <td>{{ item.a }}</td>
-                <td>{{ item.b }}</td>
+                <td class="mr__sub">{{ item.a }}</td>
+                <td class="mr__sub">{{ item.b }}</td>
                 <td class="mr__sub">{{ item.reason || '—' }}</td>
               </tr>
             </tbody>
@@ -410,7 +441,7 @@
                 <td class="mr__sub">{{ merge.canonical }}</td>
                 <td class="mr__sub">{{ merge.aliases.join(' / ') }}</td>
                 <td class="mk-num">{{ merge.deletedRows }}</td>
-                <td><span class="mk-cell-sub mono">{{ new Date(merge.appliedAt).toLocaleString() }}</span></td>
+                <td><span class="mk-cell-sub mono" :title="merge.appliedAt">{{ fmtDateTime(merge.appliedAt) }}</span></td>
                 <td>
                   <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" @click="rollbackOne(merge.canonical)">回滚</button>
                 </td>
@@ -435,7 +466,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminMemoryReviewApi, adminMemoryTracesApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -669,6 +700,31 @@ function dueCell(trace: { dueAt?: string | null }): { text: string; overdue: boo
   return { text: `${days} 天后`, overdue: false, title: `到期时刻 ${abs}（${days} 天后到期）` }
 }
 
+/* 枚举中文化（R5：面向运营页主视觉位禁止直出内部标识；2026-10-06 审核 #44）。
+   未命中映射时回落原文，原文恒进 title 供排查。 */
+const REASON_ZH: Record<string, string> = {
+  'interval-elapsed': '间隔到期',
+  overdue: '已逾期',
+  scheduled: '计划到期',
+  'new-trace': '新痕迹首排'
+}
+const SOURCE_ZH: Record<string, string> = {
+  derived: '概念派生',
+  'review-event': '复习事件',
+  manual: '人工添加',
+  consolidated: '归并合并'
+}
+const reasonText = (r?: string | null) => (r ? REASON_ZH[r] || r : '—')
+const sourceText = (s?: string | null) => (s ? SOURCE_ZH[s] || s : '—')
+
+/** 日期时间格式化（#66）：与最近复习列同参（zh-CN 24 小时制带分组），
+ *  避免同屏两处时间格式不同（执行时间列原用无参 toLocaleString，随浏览器 locale 变） */
+function fmtDateTime(iso?: string | null): string {
+  if (!iso) return '—'
+  const t = new Date(iso).getTime()
+  return Number.isFinite(t) ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : '—'
+}
+
 /** 日差 → 桶位（桶名 = 起始日，尾部并档）：负 = 已逾期；0/1/2 = 今天/明天/2天后；
     3–4 归「3天后」桶；≥5 归「5天后」桶。分档计数与下钻命中集共用同一分桶。 */
 function dueBucketIndexOf(dueAt: string, epoch: Date): number {
@@ -746,39 +802,42 @@ interface OverviewCard {
 }
 
 /** 页级绝对值单一来源：用户 / 痕迹 / 到期 / 归并队列都只在 KPI 区出现一次（原状态条散文与
- *  概览卡 legend 各重说一遍）。到期与需人工看是运营可行动项，>0 才抬琥珀；其余保持中性墨色。 */
+ *  概览卡 legend 各重说一遍）。到期与需人工看是运营可行动项，>0 才抬琥珀；其余保持中性墨色。
+ *  取数失败（error 非空）时值一律 '—'，禁止把失败静默归零（R2；2026-10-06 审核 #40）。 */
 const overviewCards = computed<OverviewCard[]>(() => {
   const t = totals.value;
+  const failed = !!error.value
+  const val = (v: number) => (failed ? '—' : v)
   return [
     {
       label: '用户',
-      value: t.users,
+      value: val(t.users),
       hint: '有记忆痕迹',
       title: '后端口径为全量有记忆痕迹用户；是否含虚拟学习者随状态条开关'
     },
     {
       label: '记忆痕迹',
-      value: t.traces,
+      value: val(t.traces),
       hint: '跨全部学习路径',
       title: '记忆层痕迹总数（用户级、跨该用户全部 path）'
     },
     {
       label: '当前到期',
-      value: t.due,
+      value: val(t.due),
       hint: t.traces ? `占痕迹 ${duePct.value}%` : '暂无痕迹',
-      tone: dueWarn.value ? 'warn' : '',
+      tone: !failed && dueWarn.value ? 'warn' : '',
       title: dueCardTitle.value
     },
     {
       label: '需人工看',
-      value: t.ambiguous,
+      value: val(t.ambiguous),
       hint: '归并候选 · 不自动执行',
-      tone: t.ambiguous > 0 ? 'warn' : '',
+      tone: !failed && t.ambiguous > 0 ? 'warn' : '',
       title: '像但不确定的归并候选，需人工确认，不会自动执行'
     },
     {
       label: '待归并建议',
-      value: t.proposed,
+      value: val(t.proposed),
       hint: `可自动 ${t.autoApplicable} · 已执行 ${t.applied}/${t.deleted}`,
       title: '模型给出的同义候选；「可自动」= 把握度 + 词面闸门都过；「已执行 / 删除」留快照可回滚'
     }
@@ -809,7 +868,7 @@ const planKpiItems = computed<MkStatItem[]>(() => {
       value: plan.successRate === null ? '—' : `${Math.round(plan.successRate * 100)}%`,
       title: '<70% 收缩预算 / >90% 扩张'
     },
-    { key: 'relearn', label: '需回路径重学', value: plan.relearnSuggestions.length, tone: 'warn', title: '连续没接上，已退出队列' },
+    { key: 'relearn', label: '需回路径重学', value: plan.relearnSuggestions.length, tone: plan.relearnSuggestions.length > 0 ? 'warn' : '', title: '连续没接上，已退出队列' },
     {
       key: 'daily',
       label: '今日额度',
@@ -822,6 +881,12 @@ const planKpiItems = computed<MkStatItem[]>(() => {
 })
 const selectedId = ref('')// detail.appliedMerges = 按次留档的归并凭据视图（rollbackable / rolledBack / legacyWindowOnly）
 const detail = ref<ReviewDetail | null>(null)
+/** 明细取数中（T2 硬约束 4：详情加载态用骨架；行内「明细」钮据此禁用，2026-10-06 审核 #45） */
+const detailLoading = ref(false)
+/** 明细页头标题（打开成功后 nextTick 聚焦，键盘用户不被抛回页顶） */
+const detailTitleEl = ref<HTMLElement | null>(null)
+/** 本组件根（关闭明细后按 data-mr-row 回焦到触发行） */
+const rootEl = ref<HTMLElement | null>(null)
 const route = useRoute()
 const router = useRouter()
 /** 勾选状态（key = 规范键）；默认只勾「可自动执行」的 */
@@ -875,8 +940,9 @@ async function applySelected() {
     const res: any = await adminMemoryReviewApi.apply(selectedId.value, keys, { includeNeedsReview: needsReview > 0 })
     const body = res.data?.data ?? res.data ?? {}
     toast.success(`已执行 ${body.applied ?? 0} 条归并${body.skipped?.length ? `，跳过 ${body.skipped.length} 条` : ''}`)
-    await openDetail(selectedId.value)
-    await loadOverview()
+    /* 写动作后口径同步（#42）：执行归并会删行，到期时间轴的痕迹窗口/档位计数必须同刷，
+       否则窗口内容长期停在旧值（各请求自带 last-wins 代际号，并发安全） */
+    await Promise.all([openDetail(selectedId.value), loadOverview(), loadTraceWindow()])
   } catch (e) {
     error.value = errMsg(e)
     // 明细态失败必须有感知（P1#12）：error 渲染点在明细区之外还可能在滚动视野外，toast 兜底
@@ -900,8 +966,8 @@ async function rollbackOne(canonical: string) {
     const res: any = await adminMemoryReviewApi.rollback(selectedId.value, [canonical])
     const body = res.data?.data ?? res.data ?? {}
     toast.success(body.rolledBack ? '已回滚' : '未找到可回滚的记录')
-    await openDetail(selectedId.value)
-    await loadOverview()
+    /* 回滚会重建被删痕迹：概览 + 明细 + 到期窗口三处口径同刷（#42） */
+    await Promise.all([openDetail(selectedId.value), loadOverview(), loadTraceWindow()])
   } catch (e) {
     error.value = errMsg(e)
     toast.error(`回滚失败：${errMsg(e)}`)
@@ -935,7 +1001,9 @@ async function loadOverview() {
 
 async function openDetail(userId: string) {
   const seq = ++detailSeq
+  const wasOpen = !!detail.value
   selectedId.value = userId
+  detailLoading.value = true
   busy.value = true
   error.value = ''
   try {
@@ -946,6 +1014,11 @@ async function openDetail(userId: string) {
     // 双向深链：选中即写进 URL，页面可收藏/分享（进来时靠 route.query.userId 落位）
     if (route.query.userId !== userId) {
       router.replace({ query: { ...route.query, userId } })
+    }
+    // 首次打开（非刷新）时把焦点移进明细标题（tabindex=-1），键盘用户不被抛回页顶
+    if (!wasOpen) {
+      await nextTick()
+      detailTitleEl.value?.focus()
     }
   } catch (e) {
     if (seq !== detailSeq) return
@@ -958,7 +1031,10 @@ async function openDetail(userId: string) {
       router.replace({ query: next })
     }
   } finally {
-    if (seq === detailSeq) busy.value = false
+    if (seq === detailSeq) {
+      busy.value = false
+      detailLoading.value = false
+    }
   }
 }
 
@@ -968,14 +1044,21 @@ async function refreshAll() {
   if (selectedId.value) await openDetail(selectedId.value)
 }
 
-/** 收起明细：同时清掉 URL 上的 userId（否则刷新又会弹回来） */
+/** 收起明细：同时清掉 URL 上的 userId（否则刷新又会弹回来）；
+ *  关闭后把焦点还给触发行（键盘用户不被抛回页顶，2026-10-06 审核 #45） */
 function closeDetail() {
+  const backTo = selectedId.value
   detail.value = null
   selectedId.value = ''
   if (route.query.userId) {
     const next = { ...route.query }
     delete next.userId
     router.replace({ query: next })
+  }
+  if (backTo) {
+    void nextTick(() => {
+      rootEl.value?.querySelector<HTMLElement>(`[data-mr-row="${backTo}"]`)?.focus()
+    })
   }
 }
 /* 明细态的返回：Esc 与左上角「← 用户列表」同一条路径（二级页的通用退出口） */
@@ -1004,8 +1087,8 @@ async function recompute(userId: string) {
   error.value = ''
   try {
     await adminMemoryReviewApi.recompute(userId)
-    await openDetail(userId)
-    await loadOverview()
+    /* 重新观察会改到期时刻：概览 + 明细 + 到期窗口三处口径同刷（#42） */
+    await Promise.all([openDetail(userId), loadOverview(), loadTraceWindow()])
     toast.success('已完成一次记忆复盘')
   } catch (e) {
     error.value = errMsg(e)
@@ -1057,6 +1140,10 @@ onMounted(async () => {
 .mr__h4 { margin: 14px 16px 6px; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 /* 归并表勾选列表头：收窄，别把「选择」撑成正文列宽 */
 .mr__th-check { width: 40px; }
+/* 归并建议勾选框配色（2026-10-06 审核 #63）：尺寸 16px 属原语层登记豁免
+   （mk-primitives.css「checkbox 24px 下限按平台惯例例外」），仅把 accent-color
+   从浏览器默认蓝收回品牌蓝（同 .mk-status__scope input 判例） */
+.mr__check { accent-color: var(--mk-blue); }
 .mr__sub { display: block; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 /* 但写在 <td> 上的降档文本必须是 table-cell：display:block 会把 td 移出表格布局，
    浏览器把连续的非单元格子元素包进同一个匿名单元格，整行自「别名」列起左移一列
@@ -1067,8 +1154,12 @@ td.mr__sub { display: table-cell; }
    看起来像漏排；表格仍按设计通边（单元格自带 padding） */
 .mr p.mr__sub { margin: 0; padding: 10px 16px 14px; }
 .mr__row--active { background: var(--mk-blue-bg); }
-/* 列表卡内的错误行同样要内边距（与卡头对齐） */
-.mr__error { margin: 6px 16px; color: var(--mk-red-strong); font-size: var(--mk-fs-micro); }
+/* 明细态返回钮暗色对比度（2026-10-06 审核 #61）：琥珀染底状态条上 --mk-blue 实测 4.28:1
+   （< 正文 4.5:1 门限）。页面侧走 --mk-back-color 覆盖钩子（原语层提亮档属共享改动），
+   暗色取 --mk-blue-hover（#6a9cf3，本仓暗色文字提亮档，压琥珀 tint ≥5:1）。 */
+html[data-theme='dark'] .mr__back { --mk-back-color: var(--mk-blue-hover); }
+/* 明细态错误条（形态走共享 .mk-alert，页私有只留外边距；原 .mr__error micro 字号私有类已撤） */
+.mr__detail-error { margin: 8px 16px 0; }
 
 /* 到期清单预览 · 逾期格（P1#13）：逾期红、未来时刻中性墨色——此前未来时刻裸 toLocaleString
    与逾期时刻同貌，「急不急」要人肉换算 */
@@ -1082,7 +1173,7 @@ td.mr__sub { display: table-cell; }
 /* 温故计划指标条：MkStatStrip 首格 padding-left:0，放进卡里需自备横向内边距 */
 .mr__strip { padding: 8px 16px 10px; border-bottom: 1px solid var(--mk-line); }
 /* 明细区百分比列（批E）：数字+色阶条，与概览带/用户表同一语言 */
-.mr-pct { display: grid; gap: 2px; justify-items: start; }
+.mr-pct { display: inline-grid; justify-items: end; gap: 2px; }
 .mr-pct b { font-variant-numeric: tabular-nums; font-weight: 700; }
 /* 比例条已换共享 mk-minibar（默认蓝承接原绿档；warn 琥珀由模板 data-tone 驱动，2026-10-03） */
 .mr-pct--warn b { color: var(--mk-amber); }
@@ -1094,7 +1185,7 @@ td.mr__sub { display: table-cell; }
 .mr-audit-queue__item--hot b { color: var(--mk-amber); }
 .mr-audit-queue__item--quiet { background: transparent; }
 .mr-audit-queue__item b { font-size: 18px; font-weight: 800; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
-.mr-audit-queue__item b i { font-style: normal; font-size: 12px; font-weight: 600; color: var(--mk-faint); }
+.mr-audit-queue__item b i { font-style: normal; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); }
 .mr-audit-queue__item span { font-size: var(--mk-fs-micro); color: var(--mk-muted); } /* 12px 下限（设计语言规则 5），原 11px */
 .mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
 .mr__bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 16px 10px; }

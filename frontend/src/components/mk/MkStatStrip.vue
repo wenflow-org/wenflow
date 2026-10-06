@@ -153,17 +153,24 @@ defineEmits<{ select: [key: string | undefined] }>()
   overflow: hidden;
 }
 
-/* 4K 档对齐全站字号阶梯 */
+/* 4K 档对齐全站字号阶梯。
+   注意 grid 档的值选择器 `.mk-stat-strip--grid .mk-stat__value`（0,2,0）特异性高于
+   单档 `.mk-stat__value`（0,1,0），只写后者会让 grid 档在 4K 下恒停 18px
+   （2026-10-06 渲染探针 3840 实测 user-detail 四处 span.mk-stat__value 档外 18px）——
+   故每档把两个选择器并列写全。 */
 @media (min-width: 2000px) {
   .mk-stat__label { font-size: var(--mk-fs-micro); }
-  .mk-stat__value { font-size: 20px; }
+  .mk-stat__value,
+  .mk-stat-strip--grid .mk-stat__value { font-size: 20px; }
 }
 @media (min-width: 2800px) {
   .mk-stat__label { font-size: var(--mk-fs-micro); }
-  .mk-stat__value { font-size: var(--mk-fs-emphasis); }
+  .mk-stat__value,
+  .mk-stat-strip--grid .mk-stat__value { font-size: var(--mk-fs-emphasis); }
 }
 @media (min-width: 3600px) {
   .mk-stat__label { font-size: var(--mk-fs-micro); }
-  .mk-stat__value { font-size: 24px; }
+  .mk-stat__value,
+  .mk-stat-strip--grid .mk-stat__value { font-size: 24px; }
 }
 </style>

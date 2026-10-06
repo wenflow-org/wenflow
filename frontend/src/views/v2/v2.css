@@ -641,7 +641,7 @@ html, body {
 /* 认证页桌面基线（≥1101）：聚焦单卡页，字级比应用页大半档
    （2026-09-27 用户反馈「1080p 不太清楚」）。移动端不受影响（块是 min-width）。 */
 @media (min-width: 1101px) {
-  .v2-page .auth__card .head h2 { font-size: 22px; }
+  .v2-page .auth__card .head :is(h1, h2) { font-size: 22px; }
   /* 2026-10-06 审核 §主题 6：原为 14.5/13/15/15 四个字面值，与档位角色 token 同视口并存
      → 登录页实测 5 个文本档（12/13/14/14.5/15），超 SPEC §1 的 ≤3 档。改引角色 token：
      1101-1439 → 12/14/15、1440 → 12.5/14.5/15.5、1920 → 13/15/16。层级不变，
@@ -655,7 +655,7 @@ html, body {
 /* 2000-2799：认证页（无 zoom 覆盖区间）表单字号随视口放大 */
 @media (min-width: 2800px) {
   .v2-page.auth .auth__card { width: min(920px, 100%); }
-  .v2-page .auth__card .head h2 { font-size: 28px; }
+  .v2-page .auth__card .head :is(h1, h2) { font-size: 28px; }
   .v2-page .auth__card .head p { font-size: 16px; }
   .v2-page .auth__card .field__label { font-size: 14.5px; }
   .v2-page .auth__card .field__input { font-size: 16px; padding: 13px 16px; }
@@ -666,12 +666,12 @@ html, body {
 }
 @media (min-width: 3600px) {
   .v2-page.auth .auth__card { width: min(980px, 100%); }
-  .v2-page .auth__card .head h2 { font-size: 30px; }
+  .v2-page .auth__card .head :is(h1, h2) { font-size: 30px; }
   .v2-page .auth__card .field__input { font-size: 17px; }
   .v2-page .auth .demo__msg, .v2-page .auth .demo__panel { font-size: 16px; }
 }
 @media (min-width: 2000px) and (max-width: 2799px) {
-  .v2-page .auth__card .head h2 { font-size: 26px; }
+  .v2-page .auth__card .head :is(h1, h2) { font-size: 26px; }
   .v2-page .auth__card .head p { font-size: 15px; }
   .v2-page .auth__card .field__label { font-size: 14px; }
   .v2-page .auth__card .field__input { padding: 13px 16px; font-size: 16px; }

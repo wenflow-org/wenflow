@@ -62,15 +62,23 @@
       </div>
 
       <MockSkeletonTable v-if="loading && !rows.length" :cols="7" />
-      <div v-else-if="failed" class="oc-error" role="alert">
-        <span>路径列表加载失败</span>
-        <button type="button" class="mk-link" @click="reload(true)">重试</button>
-      </div>
-      <div v-else-if="filtered.length" class="mk-table-scroll oc-list">
+      <MkEmptyState
+        v-else-if="failed"
+        tone="error"
+        title="路径列表加载失败"
+        :description="loadError"
+        action-text="重试"
+        :action-busy="loading"
+        action-busy-text="重试中…"
+        @action="reload(true)"
+      />
+      <div v-else-if="filtered.length" class="mk-table-scroll">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
              列按内容自然分宽；长标题/长主题由 .mk-cell-main/.mk-cell-text 的 max-width 截断兜底
-             （同 GoalConversations 判例）。此前 fixed+colgroup 是为压制超长主题列，截断类已兜住 -->
-        <table class="mk-table mk-table--click">
+             （同 GoalConversations 判例）。此前 fixed+colgroup 是为压制超长主题列，截断类已兜住。
+             2026-10-06 审核 #56：td nowrap 收敛全局修饰类 .mk-table--nowrap（同批 5 页已挂），
+             本页私有 .oc-list td 拷贝与容器钩子 oc-list 随撤 -->
+        <table class="mk-table mk-table--click mk-table--nowrap">
           <thead>
             <tr>
               <th
@@ -130,7 +138,9 @@
             >
               <td>
                 <div class="mk-cell-main">
-                  <strong class="mk-cell-text">{{ p.title }}</strong>
+                  <!-- 主标识列截断上限 260px（--mk-cell-main-max）：长标题被省略号截断，补 title 全值
+                       （同格更次要的 subject/id 副行都有 title，2026-10-06 审核 #37） -->
+                  <strong class="mk-cell-text" :title="p.title">{{ p.title }}</strong>
                   <!-- P2-6（2026-10-04 全站评审）：独立「主题」列退役——91% 行与路径列同文
                        （库内 885/951），改作路径副行且仅当 subject≠title 渲染（28/312 行有真增量） -->
                   <span v-if="p.subject && p.subject !== p.title" class="mk-cell-sub" :title="p.subject">{{ p.subject }}</span>
@@ -163,9 +173,12 @@
               </td>
               <td v-if="!hiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(p.status)">{{ statusText(p.status) }}</span></td>
               <td v-if="!hiddenCols.has('progress')">
+                <!-- 进度列直出里程碑计数（2026-10-06 审核 #54）：此前「已完成/总数」只挂 title，
+                     扫读看不到达成量（判断卡在 2/5 还是 4/5 必须逐行悬停） -->
                 <div class="oc-progress" :title="`${p.completedMilestones}/${p.totalMilestones} 里程碑`">
                   <span class="mk-minibar"><span class="mk-minibar__fill" :data-tone="progressTone(p)" :style="{ width: progressPct(p) + '%' }"></span></span>
                   <span class="oc-progress__num">{{ progressPct(p) }}%</span>
+                  <span class="oc-progress__count mk-cell-sub">{{ p.completedMilestones }}/{{ p.totalMilestones }}</span>
                 </div>
               </td>
               <td v-if="!hiddenCols.has('updated')" :title="fmtDate(p.updatedAt)"><span class="mk-cell-sub mono">{{ timeAgo(p.updatedAt) }}</span></td>
@@ -243,6 +256,7 @@ import MkDistBand from '@/components/mk/MkDistBand.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import { statusText, statusBadge } from './opsShared'
+import { isTestAccountUser } from './learner-profile'
 
 /** 嵌入模式：作为「目标对话」页内「学习路径」tab 渲染（隐藏页面壳与状态条，筛选/表格/抽屉保留）；
     initialStatus：宿主深链预筛（如工作台「生成失败路径」→ 'failed'），挂载时应用。
@@ -253,12 +267,25 @@ type PathRow = LearningPathRow & { busy?: boolean; isTestAccount?: boolean }
 
 const rows = ref<PathRow[]>([])
 const total = ref(0)
-const page = ref(1)
+/* 列表态快照（2026-10-06 审核 #39）：行点击进 PathDetail 二级页会互斥卸载本组件
+   （AdminConsole <component :is> 无 KeepAlive），返回后筛选/关键字/页码此前全部回初值。
+   在「行内下钻」出站时把当前状态存进模块级快照，挂载时一次性读回（consume-once：
+   只服务「进详情再返回」这一个场景，不用 localStorage，避免跨会话残留旧筛选）。 */
+let savedListState: { page: number; keyword: string; statusFilter: string } | null = null
+function takeSavedListState() {
+  const s = savedListState
+  savedListState = null
+  return s
+}
+const restoredListState = takeSavedListState()
+const page = ref(restoredListState?.page || 1)
 const pageSize = ref(15)
 const loading = ref(false)
 const failed = ref(false)
-const keyword = ref('')
-const statusFilter = ref('')
+/** 失败原因（R2：错误态要显示失败原因，不能只进 toast） */
+const loadError = ref('')
+const keyword = ref(restoredListState?.keyword || '')
+const statusFilter = ref(restoredListState?.statusFilter || '')
 /* 口径整组统一（2026-10-04 用户拍板）：get/set 走 live.ts 共享态（页头开关同源），本页 watch 只负责重拉 */
 const includeTest = computed({
   get: () => liveIncludeVirtual.value,
@@ -332,12 +359,17 @@ function pathStatusMatch(status: string, key: string): boolean {
 }
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
-const { toggle: toggleOcSort, sortState: ocSortState, sortRows: sortOcRows } = useTableSort<PathRow>({
+const { toggle: toggleOcSort, sortState: ocSortState, sortRows: sortOcRows, sortKey: ocSortKey, sortDir: ocSortDir } = useTableSort<PathRow>({
   accessors: {
     path: (p) => p.title,
     /* P2-6（2026-10-04 全站评审）：「主题」独立列退役（91% 行与路径列同文），随列撤排序 */
-    /* 难度按语义序排（入门→进阶→高阶→未知），不按字符串字典序 */
-    difficulty: (p) => DIFF_ORDINAL[difficultyEnum(p.difficulty)],
+    /* 难度按语义序排（入门→进阶→高阶），不按字符串字典序。
+       「未知」不编码成序数（2026-10-06 审核 #53）：否则换列默认降序时成片未知被排到最前，
+       与同表时长列「空值恒末尾」方向相反——返回 null 交给 useTableSort 的空值恒末尾 */
+    difficulty: (p) => {
+      const e = difficultyEnum(p.difficulty)
+      return e === 'unknown' ? null : DIFF_ORDINAL[e]
+    },
     hours: (p) => (typeof p.estimatedHours === 'number' && p.estimatedHours > 0 ? p.estimatedHours : null),
     status: (p) => p.status,
     progress: (p) => progressPct(p),
@@ -360,9 +392,17 @@ function clearFilters() {
   keyword.value = ''
   statusFilter.value = ''
 }
-watch(filtered, () => {
+/* 回第 1 页只监听筛选输入与排序（TeachingSessions 判例）：监听 filtered 会让数据回填
+   （重挂载恢复列表态后的装载）也把页码打回第 1 页，快照里的 page 就永远无效。
+   越界收敛由 Pagination 自带 watcher 兜底。 */
+watch([keyword, statusFilter, ocSortKey, ocSortDir], () => {
   page.value = 1
 })
+/* 出站下钻时把当前列表态存进快照（#39）：只在下钻路径调用，不在每次筛选变化时写，
+   避免污染其它场景；返回时由 takeSavedListState 一次性读回 */
+function saveListState() {
+  savedListState = { page: page.value, keyword: keyword.value, statusFilter: statusFilter.value }
+}
 
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
@@ -390,7 +430,7 @@ const DIFF_ENUM_BY_ALIAS: Record<string, Exclude<DiffEnum, 'unknown'>> = {
   advanced: 'advanced', 高级: 'advanced', 资深: 'advanced',
 }
 const DIFF_TEXT: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高阶' }
-const DIFF_ORDINAL: Record<DiffEnum, number> = { beginner: 0, intermediate: 1, advanced: 2, unknown: 3 }
+const DIFF_ORDINAL: Record<Exclude<DiffEnum, 'unknown'>, number> = { beginner: 0, intermediate: 1, advanced: 2 }
 
 function difficultyEnum(d?: string | null): DiffEnum {
   return DIFF_ENUM_BY_ALIAS[String(d || '').trim().toLowerCase()] || 'unknown'
@@ -414,11 +454,14 @@ function fmtDate(iso?: string | null): string {
 }
 
 async function reload(force = false) {
-  // 页面级 TTL 缓存（与另两 tab 同款模式）：显式刷新/口径切换传 force 绕过；
-  // 切走再切回（embedded 下重新挂载触发 onMounted）时 TTL 内且已有数据则跳过重拉
+  /* 页面级 TTL 缓存（与另两 tab 同款模式）：显式刷新/口径切换传 force 绕过。
+     注意（2026-10-06 审核 #39）：本组件被 AdminConsole 互斥卸载/重挂载（无 KeepAlive），
+     重挂载后 rows 必为 []，此短路条件恒不成立——所以本页每次进入都会重拉一次，
+     这也是列表态必须走快照恢复（saveListState/takeSavedListState）的原因。 */
   if (!force && isPageCacheFresh('learning-paths') && rows.value.length) return
   loading.value = true
   failed.value = false
+  loadError.value = ''
   try {
     /* 全量拉最近 1000 条后客户端过滤（与教学会话/目标对话一致；筛选即时响应，无服务端往返） */
     const res = await adminLearningContentApi.listPaths({
@@ -427,13 +470,20 @@ async function reload(force = false) {
       includeTest: includeTest.value || undefined,
     })
     const body = res.data?.data ?? res.data ?? {}
-    rows.value = (body.paths || []).map((p: PathRow) => ({ ...p, busy: false }))
+    /* 行内测试账号标记（A3 承诺「含测试口径下行内带标记」）：后端 learning-content 列表未产出
+       isTestAccount，按 Users.vue:317 同源单点从 user 派生（2026-10-06 审核 #36） */
+    rows.value = (body.paths || []).map((p: PathRow) => ({
+      ...p,
+      busy: false,
+      isTestAccount: isTestAccountUser(p.user || {})
+    }))
     total.value = body.pagination?.total ?? rows.value.length
     // 仅成功后标记缓存：失败不缓存，下次进入自动重拉
     markPageFetched('learning-paths')
   } catch (e) {
     failed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
+    loadError.value = `加载失败：${errMsg(e)}`
+    toast.error(loadError.value)
   } finally {
     loading.value = false
   }
@@ -519,9 +569,11 @@ async function remove(p: PathRow) {
 }
 
 /* 行点击进路径详情二级页（原型 renderPaths 行 data-action="open-path" → renderPathDetail；
-   2026-10-01 结构详情抽屉随行点击改造整体退役，与教学会话行点击进座舱同一交互习惯） */
+   2026-10-01 结构详情抽屉随行点击改造整体退役，与教学会话行点击进座舱同一交互习惯）。
+   出站前存列表态（#39）：返回时组件重挂载可恢复筛选/关键字/页码，不再回初值 */
 function openPath(p: PathRow) {
   closeMenu()
+  saveListState()
   openSubPage('path', p.id)
 }
 
@@ -557,25 +609,15 @@ defineExpose({ reload: () => void reload(true) })
 .oc-embedded { flex: 1; min-height: 0; overflow: hidden; }
 /* 分布条在卡上方页面级（2026-10-05 用户拍板「分段条在上」）：贴条 padding/下边框随撤，
    页面级间距由 .mk-page 的 --mk-stack-gap 统一供。oc-distband 类保留作测试与定位钩子 */
-.oc-error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: var(--mk-red-bg, #fef2f2);
-  border: 1px solid rgba(220, 38, 38, 0.3);
-  color: var(--mk-red, #dc2626);
-  font-size: var(--mk-fs-body);
-  font-weight: 600;
-  margin: 10px 14px;
-}
-/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；长内容由截断类兜底） */
-.oc-list td { white-space: nowrap; }
+/* 加载失败错误态已收敛共享 MkEmptyState tone="error"（role=alert + 失败原因 + 重试/busy），
+   私有 .oc-error 与暗色描边覆写随撤（2026-10-06 审核 #38） */
+/* 原型 .tbl td nowrap 已收敛全局修饰类 .mk-table--nowrap（2026-10-06 审核 #56），
+   本页私有 .oc-list td 拷贝随撤 */
 .oc-progress { display: flex; align-items: center; gap: 8px; min-width: 120px; }
 .oc-progress .mk-minibar { flex: 1; }
 .oc-progress__num { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* 里程碑计数直出（#54）：百分比旁的达成量，等宽数字、不抢主值 */
+.oc-progress__count { font-variant-numeric: tabular-nums; }
 /* 虚拟/测试行内标记（对齐同页 conversations/teaching 行样式） */
 .oc-tags { display: flex; gap: 4px; margin-top: 2px; }
 /* 用户格（原型 .celluser = 头像 + 姓名；同 GoalConversations .gc-user 组合） */
@@ -596,17 +638,10 @@ defineExpose({ reload: () => void reload(true) })
 
 /* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页） */
 
-/* 4K：进度数字跟随全站节奏 */
-@media (min-width: 2000px) {
-  .oc-progress__num { font-size: var(--mk-fs-micro); }
-}
-@media (min-width: 2800px) {
-  .oc-progress__num { font-size: var(--mk-fs-micro); }
-}
+/* 4K：进度数字跟随全站节奏。
+   2026-10-06 审核 #57：≥2000 / ≥2800 两档原先把 .oc-progress__num 覆写成与基准相同的
+   var(--mk-fs-micro)（token 本身已随档位变化），属零效果空转，随撤；仅保留 ≥3600 真升档 */
 @media (min-width: 3600px) {
   .oc-progress__num { font-size: var(--mk-fs-body); }
 }
-
-/* 暗色模式：补齐暗色覆写（原缺失，与全站 Token 红覆盖对齐） */
-html[data-theme='dark'] .oc-error { border-color: rgba(248, 113, 113, 0.35); }
 </style>

@@ -28,9 +28,11 @@
       <button type="button" class="mk-link" @click="goAuditLogs">审计日志 · 登录审计 →</button>
     </div>
 
-    <!-- 加载失败错误态：整页无数据可显示 → MkEmptyState tone="error" + 重试（原型 .empty 词汇 + R3 错误态口径） -->
+    <!-- 加载失败错误态：仅「整页无数据可显示」时走整页错误（审核 #179：原判据只有 loadError，
+         刷新失败会把已渲染的会话表整个顶掉——用户只是想更新数据却丢掉整屏。有旧行时改走
+         下方卡内行内 alert 并保留表格，与同单元 DayTimeline「操作失败不顶掉已渲染内容」同口径） -->
     <MkEmptyState
-      v-if="loadError"
+      v-if="loadError && !sessions.length"
       icon="◌"
       tone="error"
       title="会话列表加载失败"
@@ -41,6 +43,13 @@
 
     <!-- 加载中骨架 -->
     <div v-else class="mk-card mk-card--fill">
+      <!-- 有旧行时刷新失败：行内 alert + 保留表格（重试入口就地在案） -->
+      <div v-if="loadError" class="mk-alert mk-alert--row ss-stale-alert" role="alert">
+        <div class="mk-alert__msg">{{ loadError }}</div>
+        <div class="mk-alert__act">
+          <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="applyFilters">重试</button>
+        </div>
+      </div>
       <div class="mk-card__head">
         <div class="mk-filter">
           <div class="mk-pills">
@@ -76,12 +85,12 @@
             <span class="ss-group__count">{{ g.sessions.length }} 个会话<template v-if="g.active.length"> · {{ g.active.length }} 个活跃</template></span>
           </div>
           <button
-            v-if="g.active.length"
+            v-if="revokeCount(g)"
             type="button"
             class="mk-btn mk-btn--danger-ghost mk-btn--sm"
             @click="revokeAll(g)"
           >
-            下线全部<template v-if="g.active.length > 1">（{{ g.active.length }}）</template>
+            下线全部<template v-if="revokeCount(g) > 1">（{{ revokeCount(g) }}）</template>
           </button>
         </div>
 
@@ -332,9 +341,12 @@ const statusFilter = ref<'' | SessionStatus>('')
 const myId = ref('')
 let fetching = false
 
-/** 宿主域计数徽章（embedded 才消费）：会话总数就绪/变化即上报 */
-watch(sessions, (list) => {
-  emit('count', list.length)
+/** 宿主域计数徽章（embedded 才消费）：会话总数就绪/变化即上报。
+    审核 #175：原实现 immediate 上报空数组的 0，且加载中/加载失败都写 0——宿主注释明确把 0
+    判为「确认无会话」的假信号（只有未访问才显示「待访问」）。加就绪门：仅加载成功上报真实
+    条数，加载中/失败上报 -1，宿主把 <0 也渲染成「待访问」。 */
+watch([sessions, loadError], ([list, err]) => {
+  emit('count', err ? -1 : list.length)
 }, { immediate: true })
 
 const route = useRoute()
@@ -376,6 +388,14 @@ const currentId = computed(() => {
   if (!mine.length) return ''
   return [...mine].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0].id
 })
+
+/** 「下线全部」实际会下线的会话数：后端 excludeCurrent 恒定剔除请求者自己的 jti，
+    当前管理员自己那一组比 g.active.length 少 1（当前标签页）。按钮与确认文案同源。 */
+function revokeCount(g: SessionGroup): number {
+  const n = g.active.length
+  if (g.adminId === myId.value && currentId.value) return Math.max(0, n - 1)
+  return n
+}
 
 const activeCount = computed(() => sessions.value.filter((s) => statusOf(s) === 'active').length)
 const expiredCount = computed(() => sessions.value.filter((s) => statusOf(s) === 'expired').length)
@@ -494,7 +514,7 @@ async function revoke(s: AdminSessionRow) {
 async function revokeAll(g: SessionGroup) {
   const confirmed = await askConfirm({
     title: '下线该管理员全部会话',
-    message: `将强制下线「${g.adminName}」除当前登录标签页外的全部 ${g.active.length} 个活跃会话，确定吗？`,
+    message: `将强制下线「${g.adminName}」除当前登录标签页外的全部 ${revokeCount(g)} 个活跃会话，确定吗？`,
     confirmText: '全部下线',
     busy: true,
   })
@@ -563,6 +583,9 @@ onMounted(async () => {
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
+/* 链接在 --mk-surface-2 底上仅 4.39:1（<4.5 AA）：加深到 --mk-accent-deep（亮色 #1f57cc，
+   对 #eef2fa 实测 5.68:1；暗色自动翻转），与 .mk-badge--self 同款 */
+.ss-note .mk-link { color: var(--mk-accent-deep, #1f57cc); }
 /* 深链横幅：底色/字色/圆角由 .mk-alert--info 承担，这里只补行内布局 */
 .ss-deeplink {
   display: flex;
@@ -577,6 +600,9 @@ onMounted(async () => {
 
 /* 加载失败错误态走 MkEmptyState（模板内），此处不再自建错误卡 */
 
+/* 有旧行时刷新失败的行内 alert（审核 #179）：贴卡头下方，保留表格可读 */
+.ss-stale-alert { margin: 10px 14px 0; }
+
 .ss-body { display: grid; gap: var(--mk-space-4); }
 
 /* 分组卡走全局 .mk-card / .mk-card__head（原型 card 词汇），页面只保留组头内的身份排版 */
@@ -588,6 +614,8 @@ onMounted(async () => {
 /* 表格内自定义单元格 */
 .ss-tr--current td { background: var(--mk-blue-bg); }
 .ss-tr--current:hover td { background: color-mix(in srgb, var(--mk-blue-bg) 75%, var(--mk-line)); }
+/* 当前行次要文字用 muted 而非 faint：暗色下 faint 叠 16% 蓝行底仅 4.22:1（<4.5 AA） */
+.ss-tr--current .mk-cell-sub { color: var(--mk-muted); }
 .ss-tr--empty td {
   padding: 26px 14px;
   text-align: center;
@@ -600,14 +628,19 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 平台色点：一眼区分设备平台（颜色仅作辅助，不传达状态语义） */
+/* 平台色点：一眼区分设备平台（颜色仅作辅助，不传达状态语义）。
+   2026-10-06 审核 #184：原 6 色为 scoped 硬编码 hex，其中 android 绿 #22c55e 与 linux 琥珀
+   #f59e0b 借用了规范「绿/琥珀/红 = 语义，禁止当装饰」的色，且全部 hex 不随暗色主题翻转。
+   现全部改用语义中立的现有 token（蓝 / 紫 / 青 / 灰蓝 / 中性灰），每枚都在 main.css 有亮暗两档
+   → 暗色自动归队，本文件硬编码 hex 由 6 降至 0。平台识别不靠颜色单通道：浏览器/系统名文字为准。
+   映射：windows=蓝、mac=灰蓝、linux=青、android=紫、ios=中性灰、other=浅灰（未知平台弱化）。 */
 .ss-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.ss-dot--windows { background: #3b82f6; }
-.ss-dot--mac { background: #94a3b8; }
-.ss-dot--linux { background: #f59e0b; }
-.ss-dot--android { background: #22c55e; }
-.ss-dot--ios { background: #64748b; }
-.ss-dot--other { background: #cbd5e1; }
+.ss-dot--windows { background: var(--mk-blue); }
+.ss-dot--mac { background: var(--mk-faint); }
+.ss-dot--linux { background: var(--mk-teal); }
+.ss-dot--android { background: var(--mk-purple); }
+.ss-dot--ios { background: var(--mk-muted); }
+.ss-dot--other { background: var(--mk-badge-virtual-line); }
 .ss-ip { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .ss-time {
   color: var(--mk-muted);
@@ -628,7 +661,9 @@ onMounted(async () => {
   font-weight: 700;
   border-radius: 999px;
   padding: 2px 9px;
-  background: var(--mk-blue-bg);
+  /* 实底 surface（而非与当前行底同色 16% 蓝）：胶囊形状与行底分层；文字 accent-deep
+     对 surface 复算 ~6.5:1（原同色叠同色在暗色下胶囊消失、文字仅 4.11:1） */
+  background: var(--mk-surface);
   color: var(--mk-accent-deep, #1f57cc);
   white-space: nowrap;
 }

@@ -7,7 +7,8 @@
       <template #actions>
         <!-- 导出的是服务端分页返回的当前页（非全量筛选结果），文案如实标注；无数据时禁用 -->
         <button type="button" class="mk-btn mk-btn--sm" :disabled="!rows.length" @click="exportCurrentPage">导出本页</button>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="applyFilters">
+        <!-- 刷新 = 重取当前页（保留页码与列表，不闪骨架）；筛选/排序变更才回第 1 页（审核 #153） -->
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="refreshPage">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
       </template>
@@ -18,14 +19,20 @@
          12px/600、激活蓝字+2px 蓝下划线、通栏底线（2026-10-01 由 mk-pills 胶囊迁入——
          胶囊只做筛选 chips，视图/分区切换归页签） -->
     <div class="mk-card mk-card--fill">
-      <div class="tabs" role="tablist" aria-label="审计视图切换">
+      <!-- 键盘契约（审核 #154）：role=tablist/tab 兑现 roving tabindex + 左右方向键循环切换，
+           每枚页签 aria-controls 到对应 role=tabpanel 的内容容器（判例 HealthCenter.vue:104-119） -->
+      <div class="tabs" role="tablist" aria-label="审计视图切换" @keydown="onTabKeydown">
         <button
-          v-for="t in tabs"
+          v-for="(t, i) in tabs"
           :key="t.id"
+          :id="`al-tab-${t.id}`"
+          :ref="(el) => setTabRef(el, i)"
           type="button"
           role="tab"
           class="tab"
           :aria-selected="tab === t.id"
+          :aria-controls="`al-panel-${t.id}`"
+          :tabindex="tab === t.id ? 0 : -1"
           @click="switchTab(t.id)"
         >
           {{ t.label }}
@@ -41,6 +48,16 @@
             @keydown.enter="applyFilters"
           />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
+          <!-- 失败 TOP 下钻的常驻状态（审核 #152）：弹层关闭后仍可见可退；徽章计数含 failedOnly，
+               点击 = 退出下钻（与弹层内已激活 chip 同义） -->
+          <button
+            v-if="failedOnly"
+            type="button"
+            class="al-fails__chip al-fails__chip--on"
+            aria-pressed="true"
+            :title="`只看失败：${failedAction ? failureLabel(failedAction) : '全部失败'}（点击退出下钻）`"
+            @click="filterByFailure(failedAction)"
+          >只看失败 ×</button>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
           <SavedViewsBar
             :views="savedViews"
@@ -56,7 +73,9 @@
         <div class="mk-card__head-right">
           <!-- 2026-10-05 卡头统一弹层法：动作/时间下拉自主行收进共享 .mk-adv 弹层，
                失败 TOP 快捷下钻同迁（此前在头部右区占位致 1440 折两行）；触发钮标生效数 -->
-          <MkCols :col-defs="alColDefs" :storage-key="AL_COLS_KEY" v-model:hidden="hiddenCols" />
+          <!-- 列设置仅操作审计页签有效（登录表 6 列为固定列，不读 colVisible）；
+               在登录页签隐藏，避免出现「勾选无效却写 localStorage 的隐式副作用」 -->
+          <MkCols v-if="tab === 'operation'" :col-defs="alColDefs" :storage-key="AL_COLS_KEY" v-model:hidden="hiddenCols" />
           <div class="mk-adv">
             <button
               type="button"
@@ -117,9 +136,12 @@
         </div>
       </div>
 
-    <!-- 加载失败错误态 + 重试 -->
+    <!-- 加载失败错误态 + 重试（role=tabpanel：页签关联，审核 #154） -->
     <MkEmptyState
       v-if="loadError"
+      :id="panelId"
+      role="tabpanel"
+      :aria-labelledby="tabId"
       tone="error"
       title="审计日志加载失败"
       :description="loadError"
@@ -130,11 +152,13 @@
 
     <!-- 加载中骨架 -->
     <!-- 登录表 6 列（时间/用户名/IP/结果/原因/操作），骨架列数与真实表头对齐 -->
-    <MockSkeletonTable v-else-if="loading && !rows.length" :cols="tab === 'login' ? 6 : 7" :rows="6" />
+    <MockSkeletonTable v-else-if="loading && !rows.length" :id="panelId" role="tabpanel" :aria-labelledby="tabId" :cols="tab === 'login' ? 6 : 7" :rows="6" />
 
-    <!-- 操作审计列表 -->
-    <div v-else-if="tab === 'operation' && logs.length" class="log-body">
-      <div class="mk-table-scroll">
+    <!-- 操作审计列表：<template> 使 .mk-table-scroll 与 <Pagination> 成为 .mk-card--fill 的直接
+         子元素（不再被 .log-body 多包一层）——表格区 flex:1 接管纵向滚动、表头 sticky 锚在真正的
+         滚动体上，分页器随卡片吸底。与 ExecLogs.vue:157/356 同判例。 -->
+    <template v-else-if="tab === 'operation' && logs.length">
+      <div ref="scrollEl" :id="panelId" role="tabpanel" :aria-labelledby="tabId" class="mk-table-scroll">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），列随 colVisible 增删、
              按内容自然分宽；操作者/路径/IP 等长值由局部 max-width 截断兜底 -->
         <table class="mk-table mk-table--click">
@@ -227,11 +251,11 @@
         :total="total"
         :loading="loading"
       />
-    </div>
+    </template>
 
-    <!-- 登录审计列表 -->
-    <div v-else-if="tab === 'login' && attempts.length" class="log-body">
-      <div class="mk-table-scroll">
+    <!-- 登录审计列表：同操作审计，.mk-table-scroll / Pagination 为 .mk-card--fill 直接子元素 -->
+    <template v-else-if="tab === 'login' && attempts.length">
+      <div ref="scrollEl" :id="panelId" role="tabpanel" :aria-labelledby="tabId" class="mk-table-scroll">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap -->
         <table class="mk-table">
           <thead>
@@ -287,13 +311,16 @@
         :total="total"
         :loading="loading"
       />
-    </div>
+    </template>
 
     <!-- 空态（P1-1/P2-8，2026-09-27 走查）：
          min：本页是 .mk-card--fill 应用式布局，未传 :min 时空态贴卡片头、下方 60-70% 视口空白；
          文案按 tab 分流，筛选无结果时登录 tab 也说「无登录记录」而非统一的「无审计记录」 -->
     <MkEmptyState
       v-else
+      :id="panelId"
+      role="tabpanel"
+      :aria-labelledby="tabId"
       min
       :title="isFiltered ? (tab === 'login' ? '当前筛选无登录记录' : '当前筛选无审计记录') : tab === 'login' ? '暂无登录审计' : '暂无审计记录'"
       :description="tab === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕'"
@@ -310,7 +337,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { KeyRound, Lock, Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
@@ -438,9 +465,18 @@ const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('today')
    Esc 关闭走共享 useEscape（与教学会话同一外壳） */
 const advOpen = ref(false)
 useEscape(() => advOpen.value, () => { advOpen.value = false })
+/* 生效筛选计数（触发钮角标）：动作快筛 / 非默认时间范围 / 只看失败下钻——
+   下钻态此前不计入，弹层关闭后工具栏无任何可见指示（审核 #152） */
 const advCount = computed(
-  () => (activeActionValue.value ? 1 : 0) + (timeRange.value !== 'today' ? 1 : 0)
+  () =>
+    (activeActionValue.value ? 1 : 0) +
+    (timeRange.value !== 'today' ? 1 : 0) +
+    (failedOnly.value ? 1 : 0)
 )
+
+/** 页签 panel 关联（审核 #154）：id/aria-controls 成对，面板随当前页签取同名 id */
+const panelId = computed(() => `al-panel-${tab.value}`)
+const tabId = computed(() => `al-tab-${tab.value}`)
 
 /* 深链：?tab=login 直达登录审计（会话安全页「审计日志 · 登录审计 →」跳入） */
 const route = useRoute()
@@ -462,6 +498,8 @@ const pageSize = ref(30)
 const loading = ref(false)
 const loadError = ref('')
 const openId = ref('')
+/** 表格纵向滚动体（.mk-card--fill 的直接子元素）；翻页后回顶要滚它而非 window */
+const scrollEl = ref<HTMLElement | null>(null)
 
 /* 服务端排序：白名单 createdAt / success（operation / login 两个 tab 共用），默认时间倒序。
    排序在后端执行（不使用 sortRows）；变更回第 1 页重查，状态 localStorage 记忆。 */
@@ -541,14 +579,15 @@ function buildParams(nextPage: number, scopeOverride?: typeof tab.value): AuditL
     竞态守卫：seq 代际号 last-wins 丢弃过期响应；写入目标按「发起时」的 tab 固定，
     防止快速切 tab 后旧响应把操作审计写进登录审计（或反之） */
 let fetchSeq = 0
-async function fetchPage(nextPage: number) {
+/** 返回本次请求的代际号：调用方（applyFilters）据此判断 loading 熄灭时是否仍是当代请求 */
+async function fetchPage(nextPage: number): Promise<number> {
   const seq = ++fetchSeq
   const scope = tab.value
   try {
     const res = await adminAuditApi.getAuditLogs(buildParams(nextPage, scope))
     const data = res.data?.data ?? {}
     const list = (scope === 'operation' ? data.logs : data.attempts) ?? []
-    if (seq !== fetchSeq) return // 已有更新的请求在途/完成：丢弃本次过期响应
+    if (seq !== fetchSeq) return seq // 已有更新的请求在途/完成：丢弃本次过期响应
     if (scope === 'operation') {
       logs.value = list
     } else {
@@ -561,13 +600,16 @@ async function fetchPage(nextPage: number) {
   } catch (e) {
     if (seq === fetchSeq) loadError.value = errMsg(e)
   }
+  return seq
 }
 
 async function goPage(p: number) {
   if (p < 1 || p === page.value) return
   await fetchPage(p)
-  /* 翻页替换列表后滚动回顶部 */
-  window.scrollTo(0, 0)
+  /* 翻页替换列表后滚动回顶部：滚真正的滚动体（.mk-table-scroll），而非 window——
+     本页是 .mk-page--fill 应用式布局，window 不滚，滚的是卡片内表格区。
+     直接置 scrollTop（jsdom 无 scrollTo 实现，且语义等价） */
+  if (scrollEl.value) scrollEl.value.scrollTop = 0
 }
 
 /* stats 独立代际号：applyFilters 并行发起列表与统计，慢的旧 stats 响应
@@ -635,8 +677,10 @@ async function applyFilters() {
      原串行 await 会让慢 stats 拖住首屏列表 */
   const pageTask = fetchPage(1)
   void fetchStats()
-  await pageTask
-  loading.value = false
+  /* 代际守卫：只有当代请求落地才熄 loading。并发筛选时过期请求先返回不得熄灭
+     loading（否则新请求在途、rows 已清空 → 误渲染「当前筛选无审计记录」空态）。 */
+  const seq = await pageTask
+  if (seq === fetchSeq) loading.value = false
 }
 
 /** tab 回写 URL query：与 ?tab=login 深链闭环（切回默认 operation 时清掉参数） */
@@ -652,6 +696,37 @@ function switchTab(id: TabId) {
   tab.value = id
   syncTabQuery(id)
   void applyFilters()
+}
+
+/* 页签键盘契约（审核 #154）：roving tabindex（仅选中项可 Tab 进入）+ 左右方向键循环切换并移动焦点，
+   兑现 role=tablist/role=tab 的 ARIA tabs 语义（判例 HealthCenter.vue:471-490） */
+const tabEls = ref<(HTMLButtonElement | null)[]>([])
+function setTabRef(el: unknown, i: number) {
+  tabEls.value[i] = (el as HTMLButtonElement) || null
+}
+function onTabKeydown(e: KeyboardEvent) {
+  const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
+  if (!keys.includes(e.key)) return
+  const n = tabs.length
+  const cur = tabs.findIndex((t) => t.id === tab.value)
+  const from = cur >= 0 ? cur : 0
+  let next = from
+  if (e.key === 'ArrowRight') next = (from + 1) % n
+  else if (e.key === 'ArrowLeft') next = (from - 1 + n) % n
+  else if (e.key === 'Home') next = 0
+  else next = n - 1
+  e.preventDefault()
+  switchTab(tabs[next].id)
+  void nextTick(() => tabEls.value[next]?.focus())
+}
+
+/** 刷新当前页（审核 #153）：保留页码与列表，只重取数据；不闪骨架、不回第 1 页 */
+async function refreshPage() {
+  loadError.value = ''
+  loading.value = true
+  const seq = await fetchPage(page.value)
+  void fetchStats()
+  if (seq === fetchSeq) loading.value = false
 }
 
 /* 排序变更：与筛选同义，回第 1 页重查 */
@@ -792,13 +867,10 @@ function exportCurrentPage() {
 
 /* 加载失败错误态 */
 
-.log-body {
-  overflow-x: auto;
-}
-
 /* 表格容器：全站 mk-table 标准表格（4K 由 shared.css 档位覆盖；窄屏表内横向滚动）。
-   卡内内容区（原 .log-body 自绘边框随 mk-card 统一收敛，不再重复描边）。 */
-.log-body .mk-table th { white-space: nowrap; }
+   卡内内容区（原 .log-body 自绘边框随 mk-card 统一收敛，不再重复描边）。
+   2026-10-06：.log-body 包裹层已拆（#139/#140），th nowrap 由 mk-primitives.css 的
+   .mk-table th 承担，纵向滚动与表头 sticky 交给 .mk-card--fill > .mk-table-scroll。 */
 
 /* 行状态：失败行淡红底 + 展开行高亮（行首 3px 色条已撤，2026-10-03 用户拍板：
    与级别列同源冗余、语义不可发现；失败语义由级别徽章 + 淡红底承载） */
@@ -960,7 +1032,7 @@ function exportCurrentPage() {
 /* 展开指示：行末箭头，展开时旋转 90°。
    箭头列显式定宽 + 居中 + overflow hidden：auto 布局下表头空列宽度随内容抖动，
    大字号/旋转动画下字符可能溢出列边界压到相邻列（用户反馈展开后箭头与邻列视觉重叠） */
-.log-body table th:last-child { width: 36px; }
+.mk-table-scroll table th:last-child { width: 36px; }
 .log-arrow {
   display: block;
   width: 36px;
@@ -1078,26 +1150,16 @@ html[data-theme='dark'] .log-method--options,
 html[data-theme='dark'] .log-method--head { background: #2d2d2f; color: var(--mk-muted); }
 
 /* ================= 空态撑满主区剩余高度（P1-1，2026-09-27 走查「空态利用」）=================
-   本页是 .mk-page--fill + .mk-card--fill 应用式布局：空态带 mk-empty--min 后若不按本页壳层
-   覆写 --mk-empty-min-h，会用全局默认口径（100dvh - 230px）——本页卡内还有页签
-   切换行与筛选头两层，默认值会把空态撑出卡片导致底部裁切。走 mk-primitives.css
-   预留的页面覆写口（--mk-empty-min-h），按本页壳层实测逐项推导（1920×1080、无 zoom；
-   本页挂在 AdminConsole 壳层 .mshell__content 内滚动；2026-10-02 撤状态条后重算）：
-     面包屑 .mshell__crumb         ~32（上下 7px 内边距 + 12px 微字号行高 ~18 + 1px 下边框）
-     页面 padding-top               16（.mk-page--fill 的 --mk-space-4）
-     页头 .mk-pagehead              ~90（页名/副标两行 + 内边距；LY15 补算——原推导漏此项，
-                                       空态盒在 1440/1280 下溢出卡片约 95px 被 clip）
-     页签切换行（.tabs，卡内顶部）    ~36（tab 上下 padding 9px×2 + 微字号行高 ~18）
-     卡片头 .mk-card__head          ~54（12px 内边距×2 + 32px 筛选控件；失败 TOP chips 换行的
-                                       场景必有数据，不会落到空态分支，不参与推导）
-     卡片上下边框                    2
-     页面 padding-bottom            20（.mk-page 的 --mk-space-5）
-   合计 ≈250，留 ~8px 余量取整 258（宁少勿溢：多留余量只是空态盒底部差一点撑满，
-   少留则 min-height 顶破 flex 高度被 .mk-page--fill 的 overflow:hidden 裁掉）。
-   上限用 min(..., 1200px) 而非 max-height：CSS 里 min-height 优先于 max-height，
-   超长竖屏下直接写 max-height 会被 min 顶掉不生效，min() 才能真正收口。
+   本页是 .mk-page--fill + .mk-card--fill 应用式布局，空态带 mk-empty--min 后若不按本页壳层
+   覆写，会用全局默认口径（100dvh - 230px）——本页卡内还有页签切换行与筛选头两层，默认值会
+   把空态撑出卡片导致底部裁切。
+   2026-10-06（审核 #156）：原「逐项推导常量」--mk-empty-min-h: min(calc(100dvh - 258px), 1200px)
+   比实测可用高度大 5px（推导漏算 .mk-page--fill 的 12px gap），盒底越出卡片下缘被 overflow:clip
+   裁切；窗口更矮/卡头更高时会真顶破。改为让空态盒直接吃掉卡内剩余高度（父卡已是 flex 列）：
+   flex:1 + min-height:0 恒定不溢，也不再依赖任何手工常量。
    骨架/错误态/列表分支不带 mk-empty--min，不受影响。 */
 .mk-card--fill > .mk-empty--min {
-  --mk-empty-min-h: min(calc(100dvh - 258px), 1200px);
+  flex: 1;
+  min-height: 0;
 }
 </style>

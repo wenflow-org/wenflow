@@ -14,7 +14,9 @@
     </div>
 
 
-    <div class="mk-card">
+    <!-- .mk-card--fill：列表区（.mk-table-scroll）接管高度与纵向滚动、Pagination 卡内吸底；
+         与 Feedback/Notifications 同口径（原 .an-list 的 calc(100dvh - Npx) 撑高已删，T1 禁令） -->
+    <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
           <MkFilterSearch v-model="keyword" placeholder="搜索标题 / 正文" />
@@ -48,6 +50,7 @@
 
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="7" />
       <div v-else-if="filtered.length" class="mk-table-scroll an-list">
+      <!-- 列表区由 .mk-card--fill > .mk-table-scroll 接管纵向滚动（an-list 仅留列/单元格口径） -->
       <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），列按内容自然分宽；
            标题列 = 原型 .wrap 白名单（双行 cell-main + 正文预览换行），
            其余列 nowrap，长内容由全局 mk-cell-main max-width / an-body 截断兜底。
@@ -66,7 +69,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in filtered" :key="r.id">
+          <tr v-for="r in paged" :key="r.id">
             <td>
               <div class="mk-cell-main">
                 <strong>{{ r.title }}</strong>
@@ -86,9 +89,11 @@
                 <button v-if="r.status === 'published'" type="button" class="mk-link" :disabled="r.busy" @click="archive(r)">下线</button>
                 <button type="button" class="mk-link" :disabled="r.busy" @click="openEdit(r)">编辑</button>
                 <div class="mk-menu">
-                  <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(r.id)">⋯</button>
-                  <div v-if="openMenu === r.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                    <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="r.busy" @click="menuRemove(r)">删除</button>
+                  <!-- aria-expanded 按行判定（审核 #168）：menuOpen 是 useRowMenu 的全局布尔，
+                       任一行开菜单其余行都报 expanded=true；openMenu 才是「本行是否开」 -->
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === r.id" @click.stop="toggleMenu(r.id)">⋯</button>
+                  <div v-if="openMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                    <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" :disabled="r.busy" @click="menuRemove(r)">删除</button>
                   </div>
                 </div>
               </div>
@@ -110,13 +115,22 @@
         @action="retryLive"
       />
 
+      <!-- 空态补 icon（审核 #170）：同单元反馈/通知/成就三处均为 icon="◌"，此处漏挂致骨架不同形 -->
       <MkEmptyState
         v-else
+        icon="◌"
         :title="isFiltered ? '没有匹配的公告' : '还没有公告'"
         :description="isFiltered ? '放宽筛选条件试试。' : '维护通知、功能发布、政策变更都会在这里汇总。'"
         :action-text="isFiltered ? '清除筛选' : '新建公告'"
         min
         @action="isFiltered ? clearFilters() : openCreate()"
+      />
+      <!-- 客户端分页（T1 硬约束「列表必须分页」）：筛选后按页切片，卡内尾部吸底 -->
+      <Pagination
+        v-if="filtered.length"
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total="filtered.length"
       />
     </div>
 
@@ -137,13 +151,16 @@
           </label>
           <label class="mk-field">
             <span class="mk-field__label">级别</span>
-            <div class="an-severity">
+            <!-- 三选一分组：role=group + aria-label，每个按钮带 aria-pressed（读屏可知当前级别；
+                 选中态不再只靠颜色与描边表达，与 DataScopeToggle / Feedback 状态 pill 同判例） -->
+            <div class="an-severity" role="group" aria-label="公告级别">
               <button
                 v-for="s in severities"
                 :key="s.id"
                 type="button"
                 class="an-sev"
                 :class="[`an-sev--${s.id}`, { 'an-sev--on': form.severity === s.id }]"
+                :aria-pressed="form.severity === s.id"
                 @click="form.severity = s.id"
               >
                 {{ s.label }}
@@ -162,13 +179,16 @@
             <input v-model="form.expiresAt" type="datetime-local" class="mk-field__input" />
             <span class="mk-field__hint">留空 = 不过期，直到手动下线</span>
           </label>
-          <label class="mk-field an-publish-now">
+          <!-- 仅新建态显示：编辑走「保存修改」，saveEdit 不读 publishNow（发布由行内「发布」按钮负责），
+               编辑态留着会是看得见、改了没用的控件 -->
+          <label v-if="!editingId" class="mk-field an-publish-now">
             <input v-model="form.publishNow" type="checkbox" />
             <span class="mk-field__label" style="margin:0">创建后立即发布</span>
           </label>
         </div>
         <div class="mk-modal__foot">
-          <button type="button" class="mk-btn" @click="createOpen = false">取消</button>
+          <!-- 统一关闭路径：提交中禁关（此前绕过 closeCreate，与 Esc/遮罩/✕ 的守卫不一致） -->
+          <button type="button" class="mk-btn" @click="closeCreate">取消</button>
           <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="editingId ? saveEdit() : create()">
             {{ creating ? '保存中…' : editingId ? '保存修改' : form.publishNow ? '创建并发布' : '创建草稿' }}
           </button>
@@ -203,6 +223,7 @@ import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import Pagination from './Pagination.vue'
 
 /** 嵌入模式：作为「通知与公告」页「公告」tab 渲染（仅去掉外层壳，状态条/新建/编辑弹窗保留）。
     count 事件：公告总数上报（宿主「公告 N」徽章；embedded 才消费） */
@@ -257,6 +278,17 @@ function clearFilters() {
   severityFilter.value = ''
   statusFilter.value = ''
 }
+/* 客户端分页（T1 硬约束「列表必须分页」）：公告全量在 live 层，筛选后按页切片；
+   筛选/数据变化自动回第 1 页（与 Feedback/Notifications 同款） */
+const page = ref(1)
+const pageSize = ref(15)
+const paged = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
+})
+watch(filtered, () => {
+  page.value = 1
+})
 
 watch(
   liveFailures,
@@ -306,7 +338,7 @@ const draftCount = computed(() => rows.value.filter((r) => r.status === 'draft')
 const archivedCount = computed(() => rows.value.filter((r) => r.status === 'archived').length)
 
 /* 操作 */
-const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
+const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 
 /** 菜单项执行：先关菜单再执行（避免菜单残留） */
 function menuRemove(r: Row) {
@@ -319,6 +351,8 @@ async function publish(r: Row) {
     title: '发布公告',
     message: `确认发布公告「${r.title}」？\n发布后全站用户立即可见。`,
     confirmText: '发布',
+    /* 发布是正向动作（撤回即有对应反向动作），不该吃默认红底危险样式 */
+    danger: false,
     busy: true
   })
   if (!ok) return
@@ -531,12 +565,10 @@ function expiresLabel(iso: string): string {
 </script>
 
 <style scoped>
-/* 嵌入模式（宿主通知与公告页 flex 列内）：占满剩余高度，列表区接管滚动 */
-.an-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-/* 列表区兜底高度：行数少时卡片铺满页面，消除表格下方 760px 全宽灰区（复用空态 --mk-empty-min-h 同款口径） */
-.an-list {
-  min-height: var(--mk-empty-min-h, calc(100dvh - 230px));
-}
+/* 嵌入模式（宿主通知与公告页 flex 列内）：占满剩余高度；高度由卡内 .mk-table-scroll 接管
+   （.mk-card--fill 直接子元素），不再用 calc(100dvh - Npx) 撑列表区（T1 硬约束：min-height 撑屏禁令）。
+   overflow:hidden 与 Feedback.vue .fb-embedded 同口径：空态带 --mk-empty-min-h 时由宿主裁切而非撑破页面 */
+.an-embedded { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 /* 原型 .tbl td：nowrap（长内容由全局 mk-cell-main max-width 截断兜底）；
    标题列例外（原型 td.wrap）：双行 cell-main + 正文两行预览需要换行 */
 .an-list .mk-table td { white-space: nowrap; }

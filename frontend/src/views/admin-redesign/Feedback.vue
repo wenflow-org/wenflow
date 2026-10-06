@@ -122,7 +122,7 @@
               <td><span class="mono fb-agent">{{ r.agentId || '—' }}</span></td>
               <td><span class="fb-strategy">{{ r.strategy || '—' }}</span></td>
               <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span></td>
-              <td><span class="mk-cell-sub">{{ r.createdAt }}</span></td>
+              <td><span class="mk-cell-sub" :title="fmtDateTime(r.createdAtRaw)">{{ r.createdAt }}</span></td>
               <td>
                 <div class="mk-actions">
                   <button type="button" class="mk-link" @click.stop="openDetail(r)">处理</button>
@@ -132,7 +132,8 @@
           </tbody>
         </table>
         </div>
-        <MkLoading v-else-if="loading" min text="正在从后端拉取反馈。" />
+        <!-- 加载态：与同单元另三张表同口径（骨架屏，非 spinner 文案）——审核 #170 -->
+        <MockSkeletonTable v-else-if="loading" :cols="8" />
         <MkEmptyState
           v-else
           icon="◌"
@@ -142,29 +143,30 @@
           :action-text="isFiltered ? '清除筛选' : '刷新'"
           @action="isFiltered ? clearFilters() : load(true)"
         />
+        <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片。
+             必须在 .mk-card--fill 卡内（尾部吸底），不能挂卡外（破坏吸底契约）。 -->
+        <Pagination
+          v-if="filtered.length"
+          v-model:page="page"
+          v-model:pageSize="pageSize"
+          :total="filtered.length"
+          :showTotal="true"
+        />
       </div>
-      <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
-      <Pagination
-        v-if="filtered.length"
-        v-model:page="page"
-        v-model:pageSize="pageSize"
-        :total="filtered.length"
-        :showTotal="true"
-      />
     </template>
 
     <!-- 处理面板（mk-drawer 体系：暗色/4K 由全局接管） -->
     <Teleport to="body">
       <div v-if="detail" ref="maskRef" class="mk-drawer">
-        <div class="mk-drawer__mask" @click="detail = null"></div>
-        <aside ref="panelRef" class="mk-drawer__panel fb-panel" role="dialog" aria-label="反馈详情">
+        <div class="mk-drawer__mask" @click="closeDetail"></div>
+        <aside ref="panelRef" class="mk-drawer__panel" role="dialog" aria-label="反馈详情">
           <!-- 头部（原型 .ovl__head：标题 + grow + 关闭钮，下边框）：状态徽章下沉到正文首段徽章行 -->
           <header class="mk-drawer__head">
             <div class="mk-drawer__heading">
               <h3 class="mk-drawer__title">{{ detail.userName }} 的反馈</h3>
               <span class="mk-drawer__sub mono">{{ detail.id }}</span>
             </div>
-            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="detail = null">✕</button>
+            <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeDetail">✕</button>
           </header>
           <div class="mk-drawer__body fb-body">
             <!-- 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 难度适配 / UI 类型 / 轮次（均为行上已有字段） -->
@@ -184,6 +186,8 @@
               <div><span>策略</span><strong :title="detail.strategy || ''">{{ detail.strategy || '—' }}</strong></div>
               <div><span>任务</span><strong class="mono" :title="detail.taskId || ''">{{ detail.taskId || '—' }}</strong></div>
               <div><span>会话</span><strong class="mono" :title="detail.sessionId || ''">{{ detail.sessionId || '—' }}</strong></div>
+              <!-- 提交时间（审核 #169）：绝对时间入事实格，相对时间留列表列（另三张表同口径） -->
+              <div><span>提交时间</span><strong class="mono" :title="detail.createdAtRaw">{{ fmtDateTime(detail.createdAtRaw) }}</strong></div>
             </div>
 
             <section v-if="detail.comment" class="fb-section">
@@ -236,7 +240,7 @@ import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import MkLoading from '@/components/mk/MkLoading.vue'
+import MockSkeletonTable from './SkeletonTable.vue'
 
 /** 嵌入模式：作为运营中心「反馈」tab 渲染（仅去掉外层状态条；宿主承载域计数）。
     count 事件：反馈总数上报（宿主「反馈 N」徽章） */
@@ -258,6 +262,8 @@ interface Row {
   sessionId: string
   status: Status
   createdAt: string
+  /** 原始 ISO（mapRow 里被覆写成相对时间文案前先留底）：行 title / 抽屉事实格里给绝对值（审核 #169） */
+  createdAtRaw: string
 }
 
 interface Detail extends Row {
@@ -290,11 +296,16 @@ const statusFilter = ref('')
 const lowOnly = ref(false)
 const detail = ref<Detail | null>(null)
 const noteDraft = ref('')
-useEscape(() => !!detail.value, () => { detail.value = null })
+/** 抽屉统一关闭路径：提交中（saving）禁止 Esc/遮罩/✕ 误关——请求仍在跑却失去上下文。
+    ✕/遮罩/Esc 全部指向本函数（与 Confirm.vue busy 拦截同款）。 */
+function closeDetail() {
+  if (!saving.value) detail.value = null
+}
+useEscape(() => !!detail.value, closeDetail)
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => !!detail.value), panelRef)
-useMaskClose(maskRef, () => { detail.value = null })
+useMaskClose(maskRef, closeDetail)
 
 const statusPills = computed(() => {
   const all = rows.value
@@ -313,6 +324,15 @@ const statusLabel = (s: string) =>
 const statusBadge = (s: string) =>
   s === 'resolved' ? 'mk-badge--ok' : s === 'new' ? 'mk-badge--warn' : s === 'triaged' ? 'mk-badge--info' : 'mk-badge--muted'
 
+/** 绝对时间（反馈列表/抽屉只有相对时间，无法回溯核对；审核 #169）：YYYY-MM-DD HH:mm */
+function fmtDateTime(iso: string): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function mapRow(f: Record<string, unknown>): Row {
   const u = (f.user as Record<string, unknown>) || {}
   return {
@@ -327,7 +347,9 @@ function mapRow(f: Record<string, unknown>): Row {
     taskId: String(f.taskId || ''),
     sessionId: String(f.sessionId || ''),
     status: (f.status as Status) || 'new',
-    createdAt: timeAgo(String(f.createdAt || ''))
+    /* 列表显示相对时间；原始 ISO 留底供 title 与抽屉事实格查绝对值（审核 #169） */
+    createdAt: timeAgo(String(f.createdAt || '')),
+    createdAtRaw: String(f.createdAt || '')
   }
 }
 
@@ -549,7 +571,9 @@ onMounted(() => {
 
 /* 暗色模式（D1 补完）：fb- 内容区细节（面板底色/头/体已由 mk-drawer 全局接管） */
 html[data-theme='dark'] {
-  .fb-note { background: #19191a; border-color: var(--wf-border-light); color: var(--mk-ink); }
+  /* 审核 #166：#19191a 是硬编码第二真源；改引 --mk-surface-2（暗色档 #27282c，比卡面
+     #202124 亮一档，与同单元其它「卡内次级面」同源）。 */
+  .fb-note { background: var(--mk-surface-2); border-color: var(--mk-line); color: var(--mk-ink); }
   .fb-note:focus { border-color: var(--mk-blue); }
 }
 </style>

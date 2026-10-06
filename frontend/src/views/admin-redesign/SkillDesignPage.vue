@@ -7,7 +7,11 @@
         <span class="mk-status__dot"></span>
         <strong class="mk-status__title">{{ overview.displayName || skillId }}</strong>
         <span class="mk-badge" :class="healthBadgeCls">{{ healthLabel }}</span>
-        <span v-if="workbenchMeta?.parentAgent" class="sdp-parent" :style="{ color: tone.hue }">
+        <!-- 阶段色只做色点、不上文字（2026-10-06 审核 / 暗色探针：AGENT_TONES.hue 是拓扑图用的
+             原始色（teaching=#2f6ae0），直接当文字色压状态条底合成后只有 2.8:1；色相留在点里，
+             文字回到状态条自己的 meta 档，明暗两态都可读 -->
+        <span v-if="workbenchMeta?.parentAgent" class="sdp-parent">
+          <i class="sdp-parent__dot" :style="{ background: tone.hue }" aria-hidden="true"></i>
           ↑ {{ workbenchMeta.parentAgent.name }}
         </span>
         <span class="mk-status__sep"></span>
@@ -62,35 +66,37 @@
       <!-- Tabs（单层 6 tab：协议 / 试跑 / 版本 / 运行时 / 工程 / 字段路由）
            原型 renderSkillDetail 2398-2399 用 .subtabs/.subtab（role=tablist + role=tab + aria-selected）；
            复用共享 MkSubTabs 原语（role=tablist/tab + aria-selected）替代旧 .mk-pills + aria-pressed。 -->
-      <MkSubTabs :tabs="tabs" :model-value="tab" @update:model-value="onTabSelect" />
+      <MkSubTabs :tabs="tabs" :model-value="tab" id-base="sdp" @update:model-value="onTabSelect" />
 
+      <!-- #128：首次激活才挂载、之后 v-show 保状态——此前 6 页签首屏全挂载，各页 immediate watch
+           立即发请求（只看协议也拉试跑/版本/变体/运行时/工程/字段路由，首屏 17 个唯一接口） -->
       <!-- 协议：core YAML（SSOT）编辑与发布（发布链 3 步：保存并编译 → 发布 → 强制发布） -->
-      <div v-show="tab === 'protocol'" class="sdp-pane">
+      <div v-if="visited.has('protocol')" v-show="tab === 'protocol'" class="sdp-pane" id="sdp-panel-protocol" role="tabpanel" aria-labelledby="sdp-tab-protocol">
         <ProtocolTab :skill-id="skillId" :reload-tick="coreReloadTick" @published="onPublished" />
       </div>
 
       <!-- 试跑：试跑 + ACTIVE 参照 + 最近调用（验证闭环） -->
-      <div v-show="tab === 'trial'" class="sdp-pane">
-        <TrialTab :skill-id="skillId" :file-path="overview.file?.path" :refresh-tick="refreshTick" @failures="onFailures" />
+      <div v-if="visited.has('trial')" v-show="tab === 'trial'" class="sdp-pane" id="sdp-panel-trial" role="tabpanel" aria-labelledby="sdp-tab-trial">
+        <TrialTab :skill-id="skillId" :file-path="overview.file?.path" :refresh-tick="refreshTick" @failures="onFailures" @dirty="(d) => onTabDirty('trial', d)" />
       </div>
 
       <!-- 版本（单一入口）：核心文件版本（协议发布）+ Prompt 版本 -->
-      <div v-show="tab === 'versions'" class="sdp-pane">
-        <VersionsTab :skill-id="skillId" :refresh-tick="refreshTick" @core-rolled-back="onCoreRolledBack" />
+      <div v-if="visited.has('versions')" v-show="tab === 'versions'" class="sdp-pane" id="sdp-panel-versions" role="tabpanel" aria-labelledby="sdp-tab-versions">
+        <VersionsTab :skill-id="skillId" :refresh-tick="refreshTick" @core-rolled-back="onCoreRolledBack" @dirty="(d) => onTabDirty('versions', d)" />
       </div>
 
       <!-- 运行时：路由与可靠性 -->
-      <div v-show="tab === 'runtime'" class="sdp-pane">
-        <RuntimeTab :skill-id="skillId" :refresh-tick="refreshTick" />
+      <div v-if="visited.has('runtime')" v-show="tab === 'runtime'" class="sdp-pane" id="sdp-panel-runtime" role="tabpanel" aria-labelledby="sdp-tab-runtime">
+        <RuntimeTab :skill-id="skillId" :refresh-tick="refreshTick" @dirty="(d) => onTabDirty('runtime', d)" />
       </div>
 
       <!-- 工程：低频只读区块 -->
-      <div v-show="tab === 'engineering'" class="sdp-pane">
+      <div v-if="visited.has('engineering')" v-show="tab === 'engineering'" class="sdp-pane" id="sdp-panel-engineering" role="tabpanel" aria-labelledby="sdp-tab-engineering">
         <EngineeringTab :skill-id="skillId" :overview="overview" />
       </div>
 
       <!-- 字段路由（skill 维度 · 加字段向导闭环 + 字段血缘） -->
-      <div v-show="tab === 'routing'" class="sdp-pane">
+      <div v-if="visited.has('routing')" v-show="tab === 'routing'" class="sdp-pane" id="sdp-panel-routing" role="tabpanel" aria-labelledby="sdp-tab-routing">
         <RoutingTab :skill-id="skillId" />
       </div>
     </template>
@@ -105,7 +111,7 @@
  * 各 tab 内容在 skill-design/ 下独立组件（protocol/trial/versions/runtime/engineering/routing）。
  * 设计主线：复现问题 / 安全变更 / 性能排障 三条工作流
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import {
   adminPromptOpsApi,
@@ -148,7 +154,7 @@ function goConsole() {
 
 /** Dry Run → 试跑页签 */
 function goDryRun() {
-  tab.value = 'trial'
+  onTabSelect('trial')
 }
 
 /* ---------- 阶段色（与拓扑/抽屉同套，单源 store.AGENT_TONES） ---------- */
@@ -210,9 +216,24 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'routing', label: '字段路由' }
 ]
 const TAB_KEYS = tabs.map((t) => t.key)
-/** MkSubTabs 回传 string：收敛回 TabKey（非法键忽略） */
+/** #128 已激活过的页签（首次激活才挂载，之后 v-show 保状态）：协议页签是默认入口，预置 */
+const visited = reactive(new Set<TabKey>(['protocol']))
+/** MkSubTabs 回传 string：收敛回 TabKey（非法键忽略）。
+    #143：切换同时写回 ?tab=，与 applyQTab（唯一读取入口）形成双向同步——
+    此前只写内存，切到「版本」后刷新/分享/复制链接会回到旧页签。
+    默认档 protocol 从 URL 摘除（与 SkillDetail 缺省不占 URL 同约定），保持链接干净。 */
 function onTabSelect(key: string) {
-  if ((TAB_KEYS as string[]).includes(key)) tab.value = key as TabKey
+  if (!(TAB_KEYS as string[]).includes(key)) return
+  visited.add(key as TabKey)
+  tab.value = key as TabKey
+  const nextTab = key === 'protocol' ? undefined : key
+  const curTab = typeof route.query.tab === 'string' ? route.query.tab : undefined
+  if (curTab !== nextTab) {
+    const query = { ...route.query }
+    if (nextTab) query.tab = nextTab
+    else delete query.tab
+    void router.replace({ query })
+  }
 }
 // ?tab= 直达 + 旧链接兼容（workbench 已拆入试跑）
 function applyQTab() {
@@ -220,6 +241,8 @@ function applyQTab() {
   if (['protocol', 'trial', 'versions', 'runtime', 'engineering', 'routing'].includes(qTab)) tab.value = qTab as TabKey
   if (qTab === 'workbench' || qTab === 'inspect' || qTab === 'preview' || qTab === 'trial') tab.value = 'trial'
   if (qTab === 'edit') tab.value = 'protocol'
+  // 深链直达的页签同样标记为已激活，否则 v-if 会把它挡住
+  visited.add(tab.value)
 }
 applyQTab()
 watch(() => route.query.tab, applyQTab)
@@ -260,11 +283,11 @@ const loadFailed = ref(false)
 async function loadAll() {
   const id = skillId.value
   if (!id) return
-  // 刷新会丢弃未保存的 core 修改，先确认
-  if (coreEditorState.dirty) {
+  // 刷新会丢弃未保存的修改，先确认
+  if (anyDirty()) {
     const ok = await askConfirm({
       title: '刷新设计页',
-      message: '当前 Skill 有未保存的修改，刷新后将丢失，确定刷新？',
+      message: `当前 Skill 有未保存的修改（${dirtySummary()}），刷新后将丢失，确定刷新？`,
       confirmText: '刷新并放弃修改',
       danger: false
     })
@@ -305,26 +328,46 @@ function shortFilePath(p?: string) {
   return parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : p
 }
 
-/* 脏态离开保护：切 Skill / 关闭页面 / 刷新前确认，避免静默丢编辑内容 */
-let lastAgentId = ''
+/* 脏态离开保护：切 Skill / 关闭页面 / 刷新前确认，避免静默丢编辑内容。
+   #119：lastAgentId 初始化为挂载时的真实 agentId——此前恒为空串，组件挂载后首次参数变化前
+   取消切换会 replace 到 `/admin/skills/`（空 id，落 Skill 目录页），等于「点了取消却离开当前 Skill」 */
+let lastAgentId = agentIdParam.value
+/** 已确认停留的完整路径（含 query）：取消切换时原样回滚，不丢 ?tab= 等定位参数 */
+let lastFullPath = route.fullPath
+/* #118：脏态多源登记——运行时/试跑/版本等页签的未保存改动经 @dirty 上报（sdp-shared 的
+   coreEditorState 只管协议编辑器，改共享模块不在本批范围），守卫按「任一处脏」拦截 */
+const tabDirty = reactive<Record<string, { dirty: boolean; label: string }>>({})
+function onTabDirty(key: string, payload: { dirty: boolean; label: string }) {
+  tabDirty[key] = payload
+}
+/** 当前所有未保存改动的来源（人话标签），空数组 = 无脏 */
+function dirtyParts(): string[] {
+  const parts: string[] = []
+  if (coreEditorState.dirty) parts.push('协议编辑器')
+  for (const v of Object.values(tabDirty)) if (v.dirty) parts.push(v.label)
+  return parts
+}
+const anyDirty = () => dirtyParts().length > 0
+const dirtySummary = () => dirtyParts().join('、')
 watch(agentIdParam, async (id) => {
   // router.replace 回弹（取消切换）会以原 id 再触发一次：直接跳过，避免误重置
   if (id === lastAgentId) return
-  if (coreEditorState.dirty && id && id !== lastAgentId) {
+  if (anyDirty() && id && id !== lastAgentId) {
     const ok = await askConfirm({
       title: '切换 Skill',
-      message: '当前 Skill 有未保存的修改，切换后将丢失，确定离开？',
+      message: `当前 Skill 有未保存的修改（${dirtySummary()}），切换后将丢失，确定离开？`,
       confirmText: '离开并放弃修改',
       danger: false
     })
     if (!ok) {
-      // 取消：回滚 URL，不执行任何重置（回弹再进 watcher 时因 id === lastAgentId 直接跳过）
-      void router.replace({ path: `/admin/skills/${lastAgentId}`, query: route.query })
+      // 取消：回滚到已确认的完整 URL（不执行任何重置；回弹再进 watcher 时因 id === lastAgentId 直接跳过）
+      void router.replace(lastFullPath)
       return
     }
   }
   // 确认离开：通知子组件按新 skill 重拉（协议编辑器由 coreReloadTick 驱动复位）
   lastAgentId = id
+  lastFullPath = route.fullPath
   coreReloadTick.value++
   refreshTick.value++
   if (agentIdParam.value) void loadAll()
@@ -332,10 +375,10 @@ watch(agentIdParam, async (id) => {
 
 /* SPA 内导航离开（返回控制台 / 跳其他路由）有未保存修改必须确认；刷新/关闭由 beforeunload 兜底 */
 onBeforeRouteLeave(async () => {
-  if (!coreEditorState.dirty) return true
+  if (!anyDirty()) return true
   const ok = await askConfirm({
     title: '离开设计页',
-    message: '当前 Skill 有未保存的修改，离开后将丢失，确定离开？',
+    message: `当前 Skill 有未保存的修改（${dirtySummary()}），离开后将丢失，确定离开？`,
     confirmText: '离开并放弃修改',
     danger: false
   })
@@ -343,7 +386,7 @@ onBeforeRouteLeave(async () => {
 })
 
 function onPageBeforeUnload(e: BeforeUnloadEvent) {
-  if (coreEditorState.dirty) {
+  if (anyDirty()) {
     e.preventDefault()
     e.returnValue = ''
   }
@@ -375,7 +418,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnl
   align-items: start;
   padding: 4px 0 2px;
 }
-.sdp-parent { font-size: var(--mk-fs-micro); font-weight: 600; white-space: nowrap; }
+.sdp-parent { display: inline-flex; align-items: center; gap: 5px; font-size: var(--mk-fs-micro); font-weight: 600; white-space: nowrap; color: var(--mk-muted); }
+.sdp-parent__dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .sdp-ellipsis {
   max-width: 320px;
   overflow: hidden;

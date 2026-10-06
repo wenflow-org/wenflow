@@ -12,9 +12,12 @@
          面板并定位首个含未解析步骤的阶段；哈希漂移 → 健康中心（W4 coreHash 检查归属页，本页
          治理面板 DriftAuditPanel 只覆盖契约漂移）。加载中显「—」不按 0 渲染 -->
     <section class="mk-kpi-grid">
-      <MkKpi label="阶段" :value="pageLoading ? '—' : stages.length" />
-      <MkKpi label="Skill" :value="pageLoading ? '—' : totalSkills" />
-      <MkKpi label="阶段交接" :value="pageLoading ? '—' : handoffCount" hint="线性拓扑 = 阶段数 − 1" />
+      <!-- 审核 #113：失败态 KPI 也走「—」三态——原式 pageLoading 只在加载窗口成立，拓扑失败后
+           stages 恒空、pageLoading 回落 false，KPI 带把「不知道」渲染成 0（与正文失败空态同屏打架）。
+           加载中或失败一律「—」，不按 0 渲染 -->
+      <MkKpi label="阶段" :value="kpiUnknown ? '—' : stages.length" />
+      <MkKpi label="Skill" :value="kpiUnknown ? '—' : totalSkills" />
+      <MkKpi label="阶段交接" :value="kpiUnknown ? '—' : handoffCount" hint="线性拓扑 = 阶段数 − 1" />
       <MkKpi
         v-if="unresolvedCount > 0"
         label="未解析"
@@ -36,11 +39,13 @@
     </section>
 
     <!-- 子面板页签（原型 .tabs 下划线页签：2026-10-01 由 mk-pills 胶囊迁入——
-         胶囊只做筛选 chips，视图/分区切换归页签）：五个面板统一可达——
-         总览（全旅程 odg 画布，缺省）/字段旅程/字段路由/治理/沙盘 -->
-    <div class="tabs orch-pane-tabs" role="tablist" aria-label="编排图子面板">
-      <button v-for="pt in ORCH_PANES" :key="pt.id" type="button" role="tab" class="tab"
-        :aria-selected="pane === pt.id" @click="pane = pt.id">{{ pt.label }}</button>
+         胶囊只做筛选 chips，视图/分区切换归页签）：四个面板统一可达——
+         总览（全旅程 odg 画布，缺省）/字段旅程/字段路由/治理/沙盘。
+         键盘契约（审核 #97）：role=tablist/tab 兑现 roving tabindex + 左右方向键循环切换，
+         每页签 aria-controls 到对应 role=tabpanel 内容容器 -->
+    <div class="tabs orch-pane-tabs" role="tablist" aria-label="编排图子面板" @keydown="onPaneTabKeydown">
+      <button v-for="(pt, i) in ORCH_PANES" :key="pt.id" :id="`orch-tab-${pt.id}`" :ref="(el) => setPaneTabRef(el, i)" type="button" role="tab" class="tab"
+        :aria-selected="pane === pt.id" :aria-controls="`orch-pane-${pt.id}`" :tabindex="pane === pt.id ? 0 : -1" @click="pane = pt.id">{{ pt.label }}</button>
     </div>
 
     <!-- 阶段选择 chips（2026-10-05 阶段导航大卡退役）：大卡与页首 KPI 带对同一批数字数两遍
@@ -70,7 +75,7 @@
          「字段旅程」页签三处承载，边标签曾以 6 行字段名画在 120px 间隙里压住
          相邻列节点文字——实测四条边全相交，2026-10-04 撤），layoutOrch 在
          渲染/窗口 resize 时重算；点 Skill 节点进入该技能详情二级页（原型 open-skill）。 -->
-    <div v-if="pane === 'overview' && stages.length" class="orch-pane orch-overview">
+    <div v-if="pane === 'overview' && stages.length" id="orch-pane-overview" role="tabpanel" aria-labelledby="orch-tab-overview" class="orch-pane orch-overview">
       <section class="mk-card mk-card--fill orch-odg-page">
       <div class="mk-card__head">
         <!-- 卡题 2026-10-05 改名：原「字段数据旅程」与「字段旅程」页签撞车（两处都自称旅程）——
@@ -97,12 +102,11 @@
                 :key="sk.id"
                 type="button"
                 class="orch-odg-node"
-                :title="`查看「${sk.name}」详情`"
+                :title="`查看「${sk.name}」（${s.agentId}）详情`"
                 @click="openSkillFromOverview(sk.id)"
               >
                 <span class="orch-odg-idx mono">{{ i + 1 }}.{{ j + 1 }}</span>
                 <span class="orch-odg-nodename">{{ sk.name }}</span>
-                <span class="orch-odg-nodemeta mono">{{ s.agentId }}</span>
               </button>
             </div>
             <footer class="orch-odg-foot">
@@ -136,9 +140,10 @@
               <tr v-for="(h, i) in stageHandoffs" :key="i">
                 <td class="mono orch-handoff__pair">
                   {{ h.from }} → {{ h.to }}
-                  <!-- 治理信号随行（口径与页首 KPI 带两枚红卡同源，2026-10-04 状态条退役）；点跳转复用红卡落点 -->
-                  <span v-if="h.unresolvedN" class="mk-badge mk-badge--sm mk-badge--warn" title="该交接两端阶段存在未解析步骤 · 点击切「字段旅程」定位" @click="goUnresolved()">未解析 {{ h.unresolvedN }}</span>
-                  <span v-if="h.driftN" class="mk-badge mk-badge--sm mk-badge--bad" title="该交接两端 Agent 命中 W4 core 哈希漂移名单 · 点击跳健康中心" @click="goHashDrift()">哈希漂移 {{ h.driftN }}</span>
+                  <!-- 治理信号随行（口径与页首 KPI 带两枚红卡同源，2026-10-04 状态条退役）；点跳转复用红卡落点。
+                       审核 #96：徽章入口原是无 role/tabindex 的 span + @click，键盘不可达；改真 <button> -->
+                  <button v-if="h.unresolvedN" type="button" class="mk-badge mk-badge--sm mk-badge--warn orch-handoff__badge-btn" title="该交接上游阶段存在未解析步骤（末段含下游阶段，四行合计 = 页首读数） · 点击切「字段旅程」定位" @click="goUnresolved()">未解析 {{ h.unresolvedN }}</button>
+                  <button v-if="h.driftN" type="button" class="mk-badge mk-badge--sm mk-badge--bad orch-handoff__badge-btn" title="该交接上游 Agent 命中 W4 core 哈希漂移名单（末段含下游 Agent，四行合计 = 页首读数） · 点击跳健康中心" @click="goHashDrift()">哈希漂移 {{ h.driftN }}</button>
                 </td>
                 <td class="mono orch-handoff__agent">{{ h.fromAgent }}</td>
                 <td class="mono orch-handoff__agent">{{ h.toAgent }}</td>
@@ -159,7 +164,7 @@
         </div>
       </section>
     </div>
-    <div v-else-if="pane === 'overview'" class="orch-pane orch-pane--center">
+    <div v-else-if="pane === 'overview'" id="orch-pane-overview" role="tabpanel" aria-labelledby="orch-tab-overview" class="orch-pane orch-pane--center">
       <!-- 总览无数据：走与既有一致的加载/空态（stages 为空时 current 也为空） -->
       <template v-if="pageLoading">
         <MockSkeletonTable :cols="6" :rows="8" />
@@ -185,13 +190,16 @@
          旅程图 = 卡内画布滚动（工具条/旅程条吸顶）；路由/治理 = 面板内滚；页面本身不滚 -->
     <DataFlowGraph
       v-else-if="current && pane === 'journey'"
+      id="orch-pane-journey"
+      role="tabpanel"
+      aria-labelledby="orch-tab-journey"
       class="orch-pane orch-pane--journey"
       :key="`${active}-${flowKey}`"
       :stage="active"
       @changed="onRoutingChanged"
       @stage="onStageChange"
     />
-    <section v-else-if="current && pane === 'routing'" class="mk-card mk-card--fill orch-pane orch-routing">
+    <section v-else-if="current && pane === 'routing'" id="orch-pane-routing" role="tabpanel" aria-labelledby="orch-tab-routing" class="mk-card mk-card--fill orch-pane orch-routing">
       <div class="mk-card__head">
         <h3 class="mk-card__title">字段路由与编排文件</h3>
         <!-- meta 换同源口径（2026-10-05 页签重设计）：原「输入 0/0 · 输出 0/0」来自
@@ -207,7 +215,7 @@
       </div>
       <FieldRoutingTable :stage="active" @changed="onRoutingChanged" />
     </section>
-    <section v-else-if="current && pane === 'governance'" class="mk-card mk-card--fill orch-pane orch-pane--scroll">
+    <section v-else-if="current && pane === 'governance'" id="orch-pane-governance" role="tabpanel" aria-labelledby="orch-tab-governance" class="mk-card mk-card--fill orch-pane orch-pane--scroll">
       <div class="mk-card__head">
         <h3 class="mk-card__title">治理：{{ TERMS.driftContract }}报告 + 变更审计</h3>
         <!-- 口径摆面上（2026-10-05）：原「对账已上线 37/37」与「Skill 定义 32」表面打架——
@@ -222,7 +230,9 @@
            为此白拉——治理回归三折叠本体（新建字段/漂移报告/最近变更） -->
       <DriftAuditPanel :stage="active" />
     </section>
-    <div v-else class="orch-pane orch-pane--center">
+    <!-- 无阶段数据兜底：id/aria-labelledby 随当前 pane 动态给出，保证 journey/routing/governance
+         的 aria-controls 在此状态下仍指向真实面板（v-else 与上面各分支互斥，无重复 id） -->
+    <div v-else :id="`orch-pane-${pane}`" role="tabpanel" :aria-labelledby="`orch-tab-${pane}`" class="orch-pane orch-pane--center">
       <!-- 首屏骨架：此前是居中小 spinner，4K 下整页空白只挂一行字 -->
       <template v-if="pageLoading">
         <MockSkeletonTable :cols="6" :rows="8" />
@@ -275,6 +285,28 @@ const ORCH_PANES: Array<{ id: OrchPane; label: string }> = [
   { id: 'governance', label: '治理' },
 ]
 const pane = ref<OrchPane>('overview')
+/* 页签键盘契约（审核 #97）：roving tabindex（仅选中项可 Tab 进入）+ 左右方向键循环切换并移动焦点，
+   兑现 role=tablist/role=tab 的 ARIA tabs 语义（此前四页签全在 Tab 序、方向键无反应，属半套契约） */
+const paneTabEls = ref<(HTMLButtonElement | null)[]>([])
+function setPaneTabRef(el: unknown, i: number) {
+  paneTabEls.value[i] = (el as HTMLButtonElement) || null
+}
+function onPaneTabKeydown(e: KeyboardEvent) {
+  const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
+  if (!keys.includes(e.key)) return
+  const n = ORCH_PANES.length
+  const cur = ORCH_PANES.findIndex((p) => p.id === pane.value)
+  const from = cur >= 0 ? cur : 0
+  let next = from
+  if (e.key === 'ArrowRight') next = (from + 1) % n
+  else if (e.key === 'ArrowLeft') next = (from - 1 + n) % n
+  else if (e.key === 'Home') next = 0
+  else next = n - 1
+  e.preventDefault()
+  pane.value = ORCH_PANES[next].id
+  // 切换后焦点跟随新页签（ARIA tabs 惯例）；等 tabindex 更新后再聚焦
+  void nextTick(() => paneTabEls.value[next]?.focus())
+}
 /** 单阶段视图（字段旅程/字段路由/治理）才需要阶段选择 chips——总览画布即五阶段全貌
      （原阶段导航大卡的显示条件同此，2026-10-05 大卡退役后沿用） */
 const stageScoped = computed(() => ['journey', 'routing', 'governance'].includes(pane.value))
@@ -292,18 +324,27 @@ function onStageChange(s: string) {
 const route = useRoute()
 const router = useRouter()
 
-/** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排图页跳转闭环；旧 /admin/topology 重定向落位阶段视图） */
+/** ?stage=&tab= 直达（Skill 设计页字段路由 tab → 编排图页跳转闭环；旧 /admin/topology 重定向落位阶段视图）。
+    审核 #118：无法识别的 ?tab= 值此前静默回落总览且不回写 URL——URL 声称的面板 ≠ 渲染的面板
+    （如 ?tab=flow 实际渲染总览），量测/分享链接都会对不上；现与 ?stage= 的校正同纪律：
+    未知 tab 不留脏参数，清掉 tab 并按真实面板回写 URL。 */
 function applyStageQuery() {
   const qStage = typeof route.query.stage === 'string' && route.query.stage.trim() ? route.query.stage.trim() : ''
-  const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
+  const qTab = typeof route.query.tab === 'string' ? route.query.tab.trim() : ''
   if (qStage) active.value = qStage
   // ?tab= 语义:overview(缺省)/journey/routing/governance;legacy:drift→治理,topology→旅程,
   // sandbox→总览（2026-10-05 沙盘契约下线,内容已被 总览/字段旅程/字段路由 覆盖）
+  const knownTab = qTab === '' || qTab === 'routing' || qTab === 'governance' || qTab === 'drift' || qTab === 'journey' || qTab === 'topology'
   if (qTab === 'routing') pane.value = 'routing'
   else if (qTab === 'governance' || qTab === 'drift') pane.value = 'governance'
   else if (qTab === 'journey' || qTab === 'topology') pane.value = 'journey'
   else pane.value = 'overview'
-
+  if (!knownTab) {
+    const q: Record<string, string> = { ...(route.query as Record<string, string>) }
+    delete q.tab
+    q.stage = active.value
+    void router.replace({ query: q })
+  }
 }
 
 function selectStage(id: string) {
@@ -406,6 +447,7 @@ watch([active, pane], ([s, p]) => {
   if (s === curStage && curTab === wantTab) return
   const q: Record<string, string> = { ...(route.query as Record<string, string>), stage: s }
   if (wantTab) q.tab = wantTab
+  else delete q.tab // 审核 #118：overview 为缺省档不占 URL——切回总览时清掉旧 tab，不留脏参数
   void router.replace({ query: q })
 })
 applyStageQuery()
@@ -553,10 +595,11 @@ const stageHandoffs = computed(() => {
       toAgent: down.agentId,
       fields: contractOf(down.id).ins,
       loaded: contractOf(down.id).loaded === true,
-      // 阶段归属不重复计：上游阶段记进本交接，末阶段（无下游交接）回记到最后一段——
-      // 四行合计 === 页头 unresolvedCount（每阶段恰计一次）
+      // 阶段归属不重复计（审核 #101）：与未解析同纪律——上游阶段记进本交接，末阶段（无下游交接）
+      // 回记到最后一段，四行合计 === 页首 KPI 的 w4Drifted.length（每阶段恰计一次）。
+      // 原 driftOf(up)+driftOf(down) 把中间阶段各计两次，合计大于页首读数，两处同源治理口径互相冲突。
       unresolvedN: unresolvedOf(up) + (i === stages.value.length - 2 ? unresolvedOf(down) : 0),
-      driftN: driftOf(up.agentId) + driftOf(down.agentId),
+      driftN: driftOf(up.agentId) + (i === stages.value.length - 2 ? driftOf(down.agentId) : 0),
     })
   }
   return out
@@ -635,6 +678,8 @@ const pageLoading = computed(() => liveLoading.value && !stages.value.length)
    该域失败时 liveTopoNodes 为空 → stages 为空，此前与「后端本就没数据」
    同落「暂无编排阶段数据」，把接口失败伪装成空态；这里区分并给重试。 */
 const topoFailure = computed(() => liveFailures.value.topology || '')
+/** KPI 带未知态（审核 #113）：加载中或拓扑失败时三张读数卡显「—」，不把未知渲染成 0 */
+const kpiUnknown = computed(() => pageLoading.value || !!topoFailure.value)
 
 async function retryStages() {
   await Promise.all([
@@ -695,8 +740,10 @@ const govMetaTitle = computed(() =>
 .orch-overview .orch-handoff .mk-table-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* 阶段交接明细（原型 .tbl 的 mono/sub/wrap 形态）：交接列 id 对弱化 mono；传递字段可换行 */
 .orch-handoff__pair { color: var(--mk-muted); white-space: nowrap; }
-/* 治理徽章随行：span 需补手型，与阶段 id 对之间留 6px（点击落点复用页头两枚红字） */
-.orch-handoff__pair .mk-badge { margin-left: 6px; cursor: pointer; }
+/* 治理徽章随行：真 <button> 复用 .mk-badge 皮（审核 #96）——只补按钮默认字族与手型，
+   不再对 span 手写 cursor 补丁；与阶段 id 对之间留 6px */
+.orch-handoff__pair .mk-badge { margin-left: 6px; }
+.orch-handoff__badge-btn { font-family: inherit; cursor: pointer; }
 /* 传递字段 = 逐枚徽章（mk-badge--sm），格内 flex 换行；不再用点号长串（独吞 65% 列宽） */
 .orch-handoff__fields { white-space: normal; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 /* P2-12（设计评审 4.2）：上/下游 Agent 列仅 115px，simulation-agent 词中断成 simulatio/n-agent
@@ -772,8 +819,8 @@ html[data-theme='dark'] {
 }
 .orch-odg-node:hover { border-color: var(--mk-blue, #2f6ae0); box-shadow: var(--mk-shadow-sm, 0 1px 3px rgba(15, 23, 42, 0.1)); }
 .orch-odg-idx { font-family: var(--mk-mono, Consolas, monospace); font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
-.orch-odg-nodename { font-size: var(--mk-fs-13, 13px); font-weight: 600; color: var(--mk-ink); }
-.orch-odg-nodemeta { font-family: var(--mk-mono, Consolas, monospace); font-size: var(--mk-fs-micro, 12px); color: var(--mk-muted); }
+.orch-odg-nodename { font-size: var(--mk-fs-micro, 12px); font-weight: 600; color: var(--mk-ink); }
+/* 审核 #117：.orch-odg-nodemeta 规则随节点内重复 agentId 一起删（列头已承接，类无消费者） */
 .orch-odg-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-top: 2px; }
 .orch-odg-chip {
   font-size: var(--mk-fs-micro, 12px); padding: 1px 6px;
@@ -781,11 +828,21 @@ html[data-theme='dark'] {
   background: var(--mk-surface-2, #eef2fa); color: var(--mk-muted); white-space: nowrap;
 }
 .orch-odg-chip--in { background: color-mix(in srgb, var(--mk-blue, #2f6ae0) 10%, transparent); color: var(--mk-accent-deep, #1f57cc); }
-.orch-odg-chip--out { background: color-mix(in srgb, var(--mk-green, #15803d) 12%, transparent); color: var(--mk-accent-deep, #1f57cc); }
+/* 审核 #119：--out 原继承 --mk-accent-deep 蓝字，与 --in 字色相同——绿底蓝字把「产出」读成可交互蓝。
+   绿系 chip 字色改绿深档，让「蓝=入参/交互、绿=产出」在字色层也成立 */
+.orch-odg-chip--out { background: color-mix(in srgb, var(--mk-green, #15803d) 12%, transparent); color: var(--mk-green, #15803d); }
 .orch-odg-fields {
   flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-family: var(--mk-mono, Consolas, monospace);
   font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint);
+}
+/* 审核 #110：1440 档卡内可用宽约 1136px，而 5×232 + 4×100 = 1560 必横滚约 448px 才见第 4-5 列，
+   卡题「管线总览 · 五阶段字段血缘」的全貌在标准视野内不成立。1599 档收窄列宽与列间距
+   （5×196 + 4×48 + 24 ≈ 1196，接近卡宽；仍略超则保留少量内横滚）。1920 起沿用原全展开档。
+   必须放在 .orch-odg-col 基规则之后：同特异性下按源序后者胜，否则 flex-basis 被 232px 覆盖 */
+@media (max-width: 1599px) {
+  .orch-odg-canvas { gap: 48px; }
+  .orch-odg-col { flex-basis: 196px; }
 }
 </style>
 

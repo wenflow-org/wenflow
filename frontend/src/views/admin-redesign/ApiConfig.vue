@@ -55,6 +55,7 @@
       :tabs="acTabs"
       :model-value="tab"
       aria-label="模型与接入视图切换"
+      id-base="ac"
       @update:model-value="onTabChange"
     />
 
@@ -64,7 +65,7 @@
     <!-- 2026-10-05 满屏重排：mk-narrow 限宽列在宽屏下「一张卡悬着」（用户实测批注）。
          去限宽，单卡拆三卡满宽三列，与页首 KPI 三卡垂直对位（API 密钥→连接 / 模型清单→清单 /
          默认路由→模型路由页签）；窄屏（≤1100px）回落单列。 -->
-    <div class="ac-tab-body ac-conn-body">
+    <div class="ac-tab-body ac-conn-body" id="ac-panel-connection" role="tabpanel" aria-labelledby="ac-tab-connection">
       <!-- 接入域（live 层）读取失败：表单全空不得伪装成「未配置」，显式失败 + 重试（置顶一次，管三张卡） -->
       <div v-if="apiConfigFailed" class="mk-alert mk-alert--row" role="alert">
         <span class="mk-alert__msg">配置读取失败，表单为空是读取失败而非未配置</span>
@@ -81,14 +82,14 @@
       <div class="ac-body">
         <label class="mk-field">
           <span class="mk-field__label">服务地址</span>
-          <input class="mk-filter__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
+          <input class="mk-field__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
         </label>
         <label class="mk-field">
           <span class="mk-field__label">API Key</span>
           <span class="ac-key-wrap">
             <span class="ac-key-input-row">
               <input
-                class="mk-filter__input"
+                class="mk-field__input"
                 :type="keyVisible ? 'text' : 'password'"
                 v-model="form.apiKey"
                 autocomplete="new-password"
@@ -140,7 +141,7 @@
         <div class="ac-test">
           <label class="mk-field ac-test__model">
             <span class="mk-field__label">测试模型</span>
-            <select class="mk-filter__select" :disabled="!models.length" :value="testModel" @change="testModel = ($event.target as HTMLSelectElement).value">
+            <select class="mk-field__select" :disabled="!models.length" :value="testModel" @change="testModel = ($event.target as HTMLSelectElement).value">
               <option v-if="!models.length" value="">无可用模型（等待拉取）</option>
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
             </select>
@@ -152,7 +153,8 @@
           <span v-if="testResult" class="ac-test__result">
             <span class="mk-badge" :class="testResult.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ testResult.ok ? '测试通过' : '测试失败' }}</span>
             <span class="ac-test__meta mono">{{ testResult.latency || '—' }}{{ testResult.usage ? ` · ${testResult.usage}` : '' }}</span>
-            <span class="ac-test__text" :class="{ 'ac-test__text--bad': !testResult.ok }">「{{ testResult.text }}」</span>
+            <!-- 回文/错误原文全值进 title（审核 #162）：视觉仍单行截断，但运营可悬停核对模型真实输出 -->
+            <span class="ac-test__text" :class="{ 'ac-test__text--bad': !testResult.ok }" :title="testResult.text">「{{ testResult.text }}」</span>
           </span>
         </div>
       </div>
@@ -160,7 +162,7 @@
     </div>
     </template>
     <template v-else-if="tab === 'routing'">
-    <div class="ac-tab-body">
+    <div class="ac-tab-body" id="ac-panel-routing" role="tabpanel" aria-labelledby="ac-tab-routing">
 <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">模型路由与思考</h3>
@@ -186,7 +188,7 @@
               <label v-for="r in routeRoles" :key="r.key" class="ac-route__row" role="listitem">
                 <span class="ac-route__label">{{ r.role }}</span>
                 <input
-                  class="mk-filter__input mono"
+                  class="mk-field__input mono"
                   list="ac-model-options"
                   :value="r.value"
                   placeholder="模型 id 或别名"
@@ -212,7 +214,7 @@
               <label class="mk-field">
                 <span class="mk-field__label">思考强度</span>
                 <select
-                  class="mk-filter__select"
+                  class="mk-field__select"
                   :disabled="!thinkingOn"
                   :value="form.defaultReasoningEffort"
                   @change="setEffort(($event.target as HTMLSelectElement).value)"
@@ -226,7 +228,7 @@
               <label class="mk-field">
                 <span class="mk-field__label">思考模式</span>
                 <select
-                  class="mk-filter__select"
+                  class="mk-field__select"
                   :value="form.defaultThinkingMode"
                   @change="setThinkingMode(($event.target as HTMLSelectElement).value)"
                 >
@@ -243,7 +245,7 @@
             <label class="mk-field">
               <span class="mk-field__label">输出格式</span>
               <select
-                class="mk-filter__select"
+                class="mk-field__select"
                 :value="form.defaultResponseFormat"
                 @change="form.defaultResponseFormat = ($event.target as HTMLSelectElement).value as 'none' | 'json_object'; markDirty('route')"
               >
@@ -267,7 +269,7 @@
     <template v-else-if="tab === 'security'">
     <!-- 2026-10-05 满屏重排：去 mk-narrow 限宽，四条策略各自成卡排 2×2 宫格（≤1100px 回落单列），
          分区标题行承担组级 badge 与「保存策略」（同「调用与健康」页签「调用参数」标题行模式） -->
-    <div class="ac-tab-body ac-sec-body">
+    <div class="ac-tab-body ac-sec-body" id="ac-panel-security" role="tabpanel" aria-labelledby="ac-tab-security">
       <div class="ac-sec__title ac-sec-head">
         安全与访问
         <span class="mk-badge mk-badge--info">平台策略 · 热生效</span>
@@ -280,14 +282,16 @@
         <div class="ac-body ac-policy__item">
           <!-- 原型 index.html:1793-1798 访问来源模式：radio 单选卡片
                （radiogroup + role=radio + aria-checked，Enter/Space 可切）；
+               键盘契约（审核 #160）：roving tabindex（仅选中项可 Tab 进入）+ 左右方向键循环切换，
                取值与提交逻辑不变，仍为 policy.adminAccessMode -->
-          <div class="ac-radio-row" role="radiogroup" aria-label="访问来源模式">
+          <div class="ac-radio-row" role="radiogroup" aria-label="访问来源模式" @keydown="onAccessKeydown">
             <span
-              v-for="opt in accessOptions"
+              v-for="(opt, i) in accessOptions"
               :key="opt.id"
+              :ref="(el) => setAccessRef(el, i)"
               class="ac-radio"
               role="radio"
-              tabindex="0"
+              :tabindex="policy.adminAccessMode === opt.id ? 0 : -1"
               :aria-checked="policy.adminAccessMode === opt.id"
               @click="setAccessMode(opt.id)"
               @keydown.enter.prevent="setAccessMode(opt.id)"
@@ -305,7 +309,7 @@
           <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
             <span class="mk-field__label">额外允许的客户端 IP（每行一个，可留空）</span>
             <textarea
-              class="mk-filter__input ac-textarea"
+              class="mk-field__textarea ac-textarea"
               rows="2"
               :value="policy.adminAllowedIps.join('\n')"
               @input="policy.adminAllowedIps = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
@@ -319,7 +323,7 @@
           <h3 class="mk-card__title">私有网络服务</h3>
         </div>
         <div class="ac-body ac-policy__item">
-          <div class="mk-seg" role="radiogroup" aria-label="私有网络服务">
+          <div class="mk-seg" role="group" aria-label="私有网络服务">
             <button
               type="button"
               class="mk-seg__item"
@@ -342,7 +346,7 @@
           <label v-if="!policy.allowPrivateNetwork" class="mk-field">
             <span class="mk-field__label">允许的 Host / IP（每行一个）</span>
             <textarea
-              class="mk-filter__input ac-textarea"
+              class="mk-field__textarea ac-textarea"
               rows="2"
               :value="policy.privateNetworkHosts.join('\n')"
               @input="policy.privateNetworkHosts = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
@@ -396,7 +400,7 @@
               <span class="mk-field__label">每日上限</span>
               <input
                 type="number"
-                class="mk-filter__input"
+                class="mk-field__input"
                 min="1"
                 max="100"
                 :value="quotaInput"
@@ -412,7 +416,7 @@
     </div>
     </template>
     <template v-else-if="tab === 'runtime'">
-    <div class="ac-tab-body">
+    <div class="ac-tab-body" id="ac-panel-runtime" role="tabpanel" aria-labelledby="ac-tab-runtime">
       <section v-if="isLive && (reliability || probe.loaded || configLoadFailed)" class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">AI 调用与健康</h3>
@@ -448,7 +452,7 @@
               :min="Math.ceil(probe.minIntervalMs / 1000)"
               :max="Math.floor(probe.maxIntervalMs / 1000)"
               step="30"
-              class="mk-filter__input"
+              class="mk-field__input"
               :disabled="probeBusy"
               @change="saveProbeInterval"
             />
@@ -487,15 +491,15 @@
               <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">上游最大尝试</span>
-                  <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-field__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">传输重试</span>
-                  <input v-model.number="reliability.maxTransportRetries" type="number" min="0" :max="limMax('maxTransportRetries', 5)" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.maxTransportRetries" type="number" min="0" :max="limMax('maxTransportRetries', 5)" class="mk-field__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">逻辑重试</span>
-                  <input v-model.number="reliability.maxLogicalRetries" type="number" min="0" :max="limMax('maxLogicalRetries', 5)" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.maxLogicalRetries" type="number" min="0" :max="limMax('maxLogicalRetries', 5)" class="mk-field__input" @input="markDirty('reliability')" />
                 </label>
               </div>
               <div class="ac-group__note">模型降级触发条件：1 + 传输重试 ＜ 上游最大尝试（例如 3 次尝试、1 次传输重试时仍留一次降级机会）</div>
@@ -505,15 +509,15 @@
               <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">退避基数（毫秒）</span>
-                  <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-field__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">Retry-After 上限（毫秒）</span>
-                  <input v-model.number="reliability.maxRetryAfterMs" type="number" min="0" :max="limMax('maxRetryAfterMs', 30000)" step="1000" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.maxRetryAfterMs" type="number" min="0" :max="limMax('maxRetryAfterMs', 30000)" step="1000" class="mk-field__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">单次超时（毫秒）</span>
-                  <input v-model.number="reliability.defaultRequestTimeoutMs" type="number" :min="limMin('minRequestTimeoutMs', 1000)" :max="limMax('maxRequestTimeoutMs', 600000)" step="1000" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.defaultRequestTimeoutMs" type="number" :min="limMin('minRequestTimeoutMs', 1000)" :max="limMax('maxRequestTimeoutMs', 600000)" step="1000" class="mk-field__input" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field mk-field--switch">
                   <input type="checkbox" v-model="reliability.jitterEnabled" @change="markDirty('reliability')" />
@@ -526,7 +530,7 @@
               <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">平台全局 RPM 上限（0=不限）</span>
-                  <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-filter__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input" @input="markDirty('reliability')" />
                   <span class="mk-field__hint">真实用户与平台自身调用的出站 LLM 请求速率上限；虚拟学习者走独立通道，不计入此处</span>
                 </label>
               </div>
@@ -589,16 +593,17 @@
     </template>
 
 
-    <!-- ===== Tab2: 模型总览（只读；消费 /api/admin/model-registry） ===== -->
-    <ModelRegistryOverview v-else-if="tab === 'overview'" ref="registryRef" @count="registryCount = $event" @aliases="aliasOptions = $event" />
+    <!-- ===== Tab2: 模型总览（只读；消费 /api/admin/model-registry） =====
+         id/role/aria-labelledby 走组件根元素透传，与 MkSubTabs 的 id-base="ac" 成对（审核 #161） -->
+    <ModelRegistryOverview v-else-if="tab === 'overview'" id="ac-panel-overview" role="tabpanel" aria-labelledby="ac-tab-overview" ref="registryRef" @count="registryCount = $event" @aliases="aliasOptions = $event" />
 
     <!-- ===== Tab3: 外挂能力（Addons embedded） ===== -->
-    <Addons v-else ref="addonsRef" embedded @count="onAddonsCount" />
+    <Addons v-else id="ac-panel-addons" role="tabpanel" aria-labelledby="ac-tab-addons" ref="addonsRef" embedded @count="onAddonsCount" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 /* Eye 与 EyeOff 成对使用（密钥显隐两态）：此前只导入了 EyeOff，
    点「显示密钥」后切到 <Eye> 是空白图标（f66cd78d 漏了孪生图标，2026-09-29 补） */
 import { Eye, EyeOff } from 'lucide-vue-next'
@@ -642,6 +647,13 @@ import { toast } from '@/utils/toast'
    外挂能力嵌入 Addons（embedded，域计数上报宿主） */
 const AC_TABS = ['connection', 'routing', 'runtime', 'security', 'overview', 'addons'] as const
 type AcTab = (typeof AC_TABS)[number]
+/** 旧页签键别名归一：站内「配置 →」与量测脚本曾用 ?tab=model / ?tab=registry / ?tab=model-routing；
+    这些键不在白名单，watcher 原会静默把用户送到「接入与验证」，深链/书签永远落不到目标页签 */
+const TAB_ALIAS: Record<string, AcTab> = {
+  model: 'connection',
+  registry: 'overview',
+  'model-routing': 'routing',
+}
 const tab = ref<AcTab>('connection')
 /** 四个配置 tab 共享底部保存条（脏位跨 tab 不丢） */
 const isConfigTab = computed(() => ['connection', 'routing', 'runtime', 'security'].includes(tab.value))
@@ -679,9 +691,18 @@ const aliasOptions = ref<string[]>([])
 watch(
   () => route?.query?.tab,
   (t) => {
-    const v = typeof t === 'string' && (AC_TABS as readonly string[]).includes(t) ? (t as AcTab) : null
-    if (v && v !== tab.value) tab.value = v
-    else if (!v && tab.value !== 'connection') tab.value = 'connection'
+    const raw = typeof t === 'string' ? t : ''
+    const alias = TAB_ALIAS[raw]
+    const v = (AC_TABS as readonly string[]).includes(raw) ? (raw as AcTab) : alias ?? null
+    if (v) {
+      if (v !== tab.value) tab.value = v
+      /* 旧键已展开成有效键：回写 URL（switchTab 的 replace 同款），书签/深链不再停在别名 */
+      if (alias && route && router && route.query.tab !== v) {
+        void router.replace({ query: { ...route.query, tab: v } })
+      }
+    } else if (tab.value !== 'connection') {
+      tab.value = 'connection'
+    }
   },
   { immediate: true }
 )
@@ -1162,6 +1183,28 @@ function setAccessMode(mode: 'loopback' | 'private' | 'any') {
   markDirty('policy')
 }
 
+/* 访问来源模式键盘契约（审核 #160）：roving tabindex（仅选中项可 Tab 进入）
+   + 方向键循环切换并移动焦点——此前三项均 tabindex=0，键盘要按三次 Tab 才穿过 */
+const accessEls = ref<(HTMLElement | null)[]>([])
+function setAccessRef(el: unknown, i: number) {
+  accessEls.value[i] = (el as HTMLElement) || null
+}
+function onAccessKeydown(e: KeyboardEvent) {
+  const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End']
+  if (!keys.includes(e.key)) return
+  const n = accessOptions.length
+  const cur = accessOptions.findIndex((o) => o.id === policy.adminAccessMode)
+  const from = cur >= 0 ? cur : 0
+  let next = from
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (from + 1) % n
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (from - 1 + n) % n
+  else if (e.key === 'Home') next = 0
+  else next = n - 1
+  e.preventDefault()
+  setAccessMode(accessOptions[next].id)
+  void nextTick(() => accessEls.value[next]?.focus())
+}
+
 /* ---------- 操作 ---------- */
 const fetching = ref(false)
 const testing = ref(false)
@@ -1209,12 +1252,13 @@ async function runTest() {
     })
     testResult.value = {
       ok: true,
-      text: r.text.slice(0, 80),
+      /* 原文全量保留（截断只由 .ac-test__text 的 CSS 承担）：title 可核对完整回文（审核 #162） */
+      text: r.text,
       latency: r.latencyMs ? `${r.latencyMs}ms` : `${Date.now() - started}ms`,
       usage: r.usage
     }
   } catch (e) {
-    testResult.value = { ok: false, text: errMsg(e).slice(0, 80) }
+    testResult.value = { ok: false, text: errMsg(e) }
   } finally {
     testing.value = false
   }
@@ -1299,6 +1343,12 @@ function saveAll() {
 }
 
 function discardAll() {
+  /* 配置域读取失败（cfg 为空）时 applyLiveConfig 直接 return：脏位不清、表单不回滚，
+     不能假报「已放弃」——否则用户以为改动已撤。显式提示先重试。 */
+  if (!cfg.value) {
+    toast.error('配置尚未读取成功，表单无法回滚，请先点顶部「重试」')
+    return
+  }
   applyLiveConfig()
   void loadReliability()
   void loadProbe()
@@ -1415,14 +1465,14 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
 .ac-row { display: grid; gap: 14px; align-items: end; }
 .ac-row--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-/* mk-field 已在 shared.css 定义；此处只补 mk-field 下 .mk-filter__input 的 100% 宽 */
-.mk-field .mk-filter__input,
-.mk-field .mk-filter__select { width: 100%; }
+/* 2026-10-06 审核 #159：四个配置页签的字段控件统一走 .mk-field__input/__select/__textarea
+   （与 MCP 弹窗、加字段向导同原语）——原「.mk-field 下 .mk-filter__input 补 100% 宽」的补偿规则
+   随控件换原语一并删除（字段原语自身即 width:100%） */
 .ac-body .mk-field { margin: 0; min-width: 0; }
-.ac-body .mk-filter__select[disabled] { opacity: 0.6; cursor: not-allowed; }
+.ac-body .mk-field__select[disabled] { opacity: 0.6; cursor: not-allowed; }
 .ac-key-wrap { display: grid; gap: 4px; min-width: 0; }
 .ac-key-input-row { display: flex; align-items: center; gap: 6px; }
-.ac-key-input-row .mk-filter__input { flex: 1; min-width: 0; }
+.ac-key-input-row .mk-field__input { flex: 1; min-width: 0; }
 .ac-key-toggle {
   flex-shrink: 0;
   border: 1px solid var(--mk-line);
@@ -1561,7 +1611,7 @@ async function saveQuota(enabled: boolean, quota: number) {
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
-.ac-quota-field .mk-filter__input { width: 76px; text-align: center; }
+.ac-quota-field .mk-field__input { width: 76px; text-align: center; }
 .ac-quota-field em { font-style: normal; color: var(--mk-faint); }
 /* 分段小标题（连接 / 路由默认 / 默认思考 / 连通性验证 / 调用参数 / 能力健康）：
    统一简洁粗体灰字——不放大写、不加横线后缀，用留白分区（与全站表单一致） */
@@ -1593,7 +1643,9 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-sec__save:disabled { opacity: 0.6; cursor: not-allowed; }
 /* 分段控件走 .mk-seg（shared.css） */
 
-.ac-textarea { resize: vertical; font-size: var(--mk-fs-micro); }
+/* 策略 IP 列表：走字段原语 .mk-field__textarea（审核 #159）；rows=2 的紧凑清单不需要
+   原语默认 96px 最小高，覆写回 0 保持原视觉高度 */
+.ac-textarea { resize: vertical; font-size: var(--mk-fs-micro); min-height: 0; }
 
 /* 能力健康 */
 .ac-health { display: grid; padding: 2px 0 8px; }
@@ -1695,7 +1747,7 @@ async function saveQuota(enabled: boolean, quota: number) {
   gap: 6px;
   margin: 0;
 }
-.ac-probe__interval .mk-filter__input { width: 72px; text-align: center; }
+.ac-probe__interval .mk-field__input { width: 72px; text-align: center; }
 .ac-probe__unit { font-style: normal; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 .ac-health__stale { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
@@ -1878,8 +1930,8 @@ async function saveQuota(enabled: boolean, quota: number) {
 /* ================= 暗色模式（D1 补完）：模型与接入 ================= */
 html[data-theme='dark'] {
   .ac-key-toggle:hover { background: color-mix(in srgb, var(--wf-color-primary) 14%, transparent); }
-  .mk-seg { background: #232325; }
-  .mk-seg__item--active { background: color-mix(in srgb, var(--wf-color-primary) 22%, transparent); color: var(--wf-color-primary-light); box-shadow: none; }
+  /* 审核 #163：原 .mk-seg 覆写 #232325 对卡面 #202124 仅 3 个 sRGB 级台阶（<6），
+     轨道几乎与卡面同色——删除覆写，回到 token（--mk-pills-bg 暗色 #27282c，7/8 级） */
   .ac-save { background: #19191a; border-color: var(--wf-border-light); }
   /* 补漏：密钥切换钮/模型胶囊浅底 */
   .ac-key-toggle,

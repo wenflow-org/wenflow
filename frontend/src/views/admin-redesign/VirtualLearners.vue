@@ -70,8 +70,11 @@
         <MkKpi
           label="速率"
           :value="rateValue"
+          :tone="vlRpmLoadFailed ? 'bad' : ''"
           :hint="rateHint"
-          title="在途 = 正在出站的调用数；上限 = 已保存的 VL RPM 配置（不含输入框未保存的改动）"
+          :clickable="vlRpmLoadFailed"
+          :title="vlRpmLoadFailed ? '设置未加载：点击重试' : '在途 = 正在出站的调用数；上限 = 已保存的 VL RPM 配置（不含输入框未保存的改动）'"
+          @click="vlRpmLoadFailed && loadVlRpm()"
         />
       </section>
     </div>
@@ -100,6 +103,8 @@
             step="10"
             class="mk-filter__input vl-rpm__input"
             aria-label="虚拟学习者专属出站 RPM 上限"
+            :disabled="vlRpmLoadFailed"
+            :title="vlRpmLoadFailed ? '设置未加载：为避免用错底数覆盖服务端配置，已禁用编辑' : undefined"
             @focus="vlRpmFocused = true"
             @blur="vlRpmFocused = false"
             @input="vlRpmDirty = true"
@@ -107,11 +112,12 @@
           />
           <span class="vl-rpm__unit">/分</span>
         </label>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="!vlRpmDirty || vlRpmSaving" @click="saveVlRpm">
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="!vlRpmDirty || vlRpmSaving || vlRpmLoadFailed" @click="saveVlRpm">
           {{ vlRpmSaving ? '保存中…' : '保存' }}
         </button>
         <span v-if="vlRpmDirty" class="vl-rpm__dirty">未保存</span>
-        <span class="vl-rpm__hint">虚拟学习者专属 · 0 = 不限 · 不占真实用户额度</span>
+        <span v-if="vlRpmLoadFailed" class="vl-rpm__failed" role="alert">设置未加载，保存已禁用（请刷新重试）</span>
+        <span v-else class="vl-rpm__hint">虚拟学习者专属 · 0 = 不限 · 不占真实用户额度</span>
       </div>
       <div v-show="settingsTab === 'date'" class="vl-settings__pane">
         <SimulatedDaySettings @enabled="dateSimEnabled = $event" />
@@ -259,6 +265,7 @@
                   <RunStateBadge
                     :status="s.runningCount > 0 ? 'running' : 'paused'"
                     :hint="`${s.runningCount} 个会话进行中 / ${s.pausedCount ?? 0} 个已暂停 · 点击进入会话座舱`"
+                    clickable
                     @click.stop="openRunningSession(s)"
                   />
                   <RunStageBar
@@ -306,9 +313,11 @@
                   @click.stop="openPromptTest(s)"
                 ><SquareCheckBig :size="14" :stroke-width="1.75" /><span>测试</span></button>
                 <div v-if="isLive" class="mk-menu">
-                  <button type="button" class="mk-menu__btn" aria-label="更多操作（删除）" aria-haspopup="menu" :aria-expanded="menuOpen" :title="'更多操作：删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
-                  <div v-if="openMenu === s.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                    <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="busyId === s.id" title="删除该虚拟学习者（级联删除，不可恢复）" @click="menuRemove(s)">删除</button>
+                  <!-- aria-expanded 按行判定（同审核 #168 判例）：menuOpen 是全局布尔，任一行开
+                       菜单其余行都报 expanded=true；openMenu 才是「本行是否开」 -->
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作（删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
+                  <div v-if="openMenu === s.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                    <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" :disabled="busyId === s.id" title="删除该虚拟学习者（级联删除，不可恢复）" @click="menuRemove(s)">删除</button>
                   </div>
                 </div>
               </div>
@@ -320,7 +329,7 @@
 
       <MkEmptyState
         v-else-if="loadFailed"
-        icon="◌"
+        tone="error"
         title="虚拟学习者加载失败"
         description="无法从后端拉取虚拟学习者列表。"
         action-text="重试"
@@ -523,6 +532,8 @@ async function removeSample(s: Sample) {
   busyId.value = s.id
   try {
     await liveDeleteVirtual(s.id)
+    // 行内删除成功：把该 id 从选中集合摘除，批量条不残留已删除对象（审核 #57）
+    selected.value = selected.value.filter((id) => id !== s.id)
     toast.success(`「${s.name}」已删除`)
     doneConfirm()
   } catch (e) {
@@ -538,7 +549,7 @@ async function removeSample(s: Sample) {
 const busyId = ref<string | null>(null)
 
 /* ===== A1 行内 ⋯ 菜单：先关菜单再执行删除 ===== */
-const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
+const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 function menuRemove(s: Sample) {
   closeMenu()
   void removeSample(s)
@@ -605,6 +616,9 @@ const vlRpmFocused = ref(false)
 const vlRpmDirty = ref(false)
 /** 保存中位（EG4）：显式保存钮的忙碌态，防重复提交 */
 const vlRpmSaving = ref(false)
+/** 设置未加载位（#59）：getVirtualLabSettings 失败时置位——速率卡改显「不可用」、
+   保存钮与输入框禁用，禁止管理员拿初始 0 当底数覆盖服务端配置（对齐 SimulatedDaySettings.loadFailed） */
+const vlRpmLoadFailed = ref(false)
 async function loadVlRpm() {
   try {
     const res = await adminVirtualLearnersApi.getVirtualLabSettings()
@@ -618,10 +632,14 @@ async function loadVlRpm() {
     vlRpm.rpm = Number(r.rpm ?? 0)
     vlRpm.inFlight = Number(r.inFlight ?? 0)
     vlRpm.queued = Number(r.queued ?? 0)
-  } catch { /* 保留上次值 */ }
+    vlRpmLoadFailed.value = false
+  } catch {
+    /* 保留上次值（若有）；首访失败置 loadFailed，速率卡不把「没拉到」说成「0 / 不限」 */
+    vlRpmLoadFailed.value = true
+  }
 }
 async function saveVlRpm() {
-  if (vlRpmSaving.value || !vlRpmDirty.value) return
+  if (vlRpmSaving.value || !vlRpmDirty.value || vlRpmLoadFailed.value) return
   const value = Math.max(0, Math.min(100000, Math.round(Number(vlRpm.limit) || 0)))
   vlRpm.limit = value
   vlRpmSaving.value = true
@@ -745,10 +763,15 @@ const concurrencyText = computed(() => {
     拉伸到 180px（连带 220px 的 KPI 带吃掉列表卡高度，裸评审 2026-10-03）；拆开后各占一行。
     上限读已保存值（vlRpmSavedLimit），不用输入框脏值 */
 const rateValue = computed(() => {
+  // #59：设置未加载时不把初始 0 断言成「0 / 不限」，显式「不可用」
+  if (vlRpmLoadFailed.value) return '不可用'
   const cap = vlRpmSavedLimit.value > 0 ? `${vlRpmSavedLimit.value}/分` : '不限'
   return `${vlRpm.inFlight} / ${cap}`
 })
-const rateHint = computed(() => (vlRpm.queued > 0 ? `在途 / 上限（已保存值）· 排队 ${vlRpm.queued}` : '在途 / 上限（已保存值）'))
+const rateHint = computed(() => {
+  if (vlRpmLoadFailed.value) return '设置未加载 · 点击重试'
+  return vlRpm.queued > 0 ? `在途 / 上限（已保存值）· 排队 ${vlRpm.queued}` : '在途 / 上限（已保存值）'
+})
 
 /** 「今日调用」卡 hint（2026-10-05 口径纠偏）：只报口径不复述数字。原 hint「平均耗时」
     实为 avgDurationMs = 终态会话「创建→结束」平均墙钟时长（virtual-learners.ts:1704），
@@ -783,6 +806,19 @@ const concurrencyBarPct = computed(() => {
 const selected = ref<string[]>([])
 const selectable = computed(() => filtered.value)
 const allChecked = computed(() => selectable.value.length > 0 && selected.value.length === selectable.value.length)
+
+/* 选中集合随筛选与数据刷新收敛（审核 #57）：先勾选再筛掉后，批量条不得继续按
+   视口外的旧集合执行批量终止/删除/自动驾驶——筛选条件一变即清空选中。 */
+watch([keyword, stateFilter], () => {
+  selected.value = []
+})
+/* 数据刷新（行已在别处删除）后按存活 id 收敛，宁可让批量条消失也不误伤已删对象 */
+watch(samples, (list) => {
+  if (!selected.value.length) return
+  const alive = new Set(list.map((s) => s.id))
+  const next = selected.value.filter((id) => alive.has(id))
+  if (next.length !== selected.value.length) selected.value = next
+})
 
 function toggleAll() {
   selected.value = allChecked.value ? [] : selectable.value.map((s) => s.id)
@@ -879,6 +915,13 @@ function openRunningSession(s: Sample) {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-amber);
+  white-space: nowrap;
+}
+/* 设置未加载提示（#59）：失败态红字，与「未保存」脏态区分 */
+.vl-rpm__failed {
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  color: var(--mk-red);
   white-space: nowrap;
 }
 .vl-rpm__hint {

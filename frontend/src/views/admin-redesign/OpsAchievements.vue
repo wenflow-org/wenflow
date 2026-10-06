@@ -11,16 +11,18 @@
     <!-- 主视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
          2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签；
          写法与宿主 OpsHub 页签、Users.vue 卡内页签同款） -->
-    <div class="tabs" role="tablist" aria-label="成就视图切换">
-      <button type="button" role="tab" class="tab" :aria-selected="achTab === 'defs'" @click="switchAchTab('defs')">成就定义</button>
-      <button type="button" role="tab" class="tab" :aria-selected="achTab === 'records'" @click="switchAchTab('records')">解锁记录</button>
+    <!-- 键盘契约（审核 #167）：roving tabindex + 左右方向键循环切换，页签 aria-controls 到
+         对应 role=tabpanel 容器（判例 HealthCenter.vue:104-119） -->
+    <div class="tabs" role="tablist" aria-label="成就视图切换" @keydown="onAchTabKeydown">
+      <button type="button" role="tab" id="oa-tab-defs" :ref="(el) => setAchTabRef(el, 0)" :tabindex="achTab === 'defs' ? 0 : -1" aria-controls="oa-panel-defs" class="tab" :aria-selected="achTab === 'defs'" @click="switchAchTab('defs')">成就定义</button>
+      <button type="button" role="tab" id="oa-tab-records" :ref="(el) => setAchTabRef(el, 1)" :tabindex="achTab === 'records' ? 0 : -1" aria-controls="oa-panel-records" class="tab" :aria-selected="achTab === 'records'" @click="switchAchTab('records')">解锁记录</button>
     </div>
 
     <!-- 成就定义（原型 1890-1893 卡片栅格：每卡 名 strong + grow + 状态 badge；
          副行 描述 sub；底行 已解锁 b mono N 人 + grow）。原型底行右侧为「解锁率」，
          但 /admin/achievements/definitions 只回 unlockCount（全量含虚拟），
          缺「总学习者」分母——按无数据不硬造，右侧改显真实奖励 +XP；「手动发放」能力保留。 -->
-    <div v-if="achTab === 'defs'" class="mk-card">
+    <div v-if="achTab === 'defs'" id="oa-panel-defs" role="tabpanel" aria-labelledby="oa-tab-defs" class="mk-card">
       <MockSkeletonTable v-if="defsLoading && !defs.length" :cols="3" />
       <div v-else-if="defs.length" class="ac-grid">
         <div v-for="d in defs" :key="d.id" class="ac-card">
@@ -49,7 +51,7 @@
     </div>
 
     <!-- 解锁记录 -->
-    <div v-else class="mk-card mk-card--fill">
+    <div v-else id="oa-panel-records" role="tabpanel" aria-labelledby="oa-tab-records" class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="ac-filter">
           <MkFilterSearch v-model="recordSearch" placeholder="搜索用户姓名 / 邮箱…" @keydown.enter="reloadRecordsFromFirstPage" />
@@ -149,7 +151,7 @@
         <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="手动发放成就">
           <div class="mk-modal__head">
             <h3 class="mk-modal__title">手动发放成就</h3>
-            <button type="button" class="mk-modal__close" aria-label="关闭" @click="grantOpen = false">✕</button>
+            <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeGrant">✕</button>
           </div>
           <div class="mk-modal__body">
             <div class="mk-field">
@@ -185,7 +187,8 @@
             <div v-if="grantError" class="mk-alert" role="alert">{{ grantError }}</div>
           </div>
           <div class="mk-modal__foot">
-            <button type="button" class="mk-btn" @click="grantOpen = false">取消</button>
+            <!-- 统一关闭路径：发放中禁关（与 Esc/遮罩/✕ 同守卫） -->
+            <button type="button" class="mk-btn" @click="closeGrant">取消</button>
             <button type="button" class="mk-btn mk-btn--primary" :disabled="!grantUserId || granting" @click="confirmGrant">
               {{ granting ? '发放中…' : '确认发放（+XP）' }}
             </button>
@@ -197,7 +200,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useTableSort } from './useTableSort'
 import { timeAgo, errMsg } from './live'
 import { adminAchievementsApi, adminUsersApi, type AchievementDef, type AchievementRecord } from '@/api/adminApi'
@@ -221,6 +224,28 @@ const achTab = ref<'defs' | 'records'>('defs')
 function switchAchTab(t: 'defs' | 'records') {
   achTab.value = t
   if (t === 'records' && !records.value.length && !recordsLoading.value) void reloadRecords()
+}
+
+/* 页签键盘契约（审核 #167）：roving tabindex + 左右方向键循环切换并移动焦点 */
+const ACH_TABS = ['defs', 'records'] as const
+const achTabEls = ref<(HTMLButtonElement | null)[]>([])
+function setAchTabRef(el: unknown, i: number) {
+  achTabEls.value[i] = (el as HTMLButtonElement) || null
+}
+function onAchTabKeydown(e: KeyboardEvent) {
+  const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
+  if (!keys.includes(e.key)) return
+  const n = ACH_TABS.length
+  const cur = ACH_TABS.indexOf(achTab.value)
+  const from = cur >= 0 ? cur : 0
+  let next = from
+  if (e.key === 'ArrowRight') next = (from + 1) % n
+  else if (e.key === 'ArrowLeft') next = (from - 1 + n) % n
+  else if (e.key === 'Home') next = 0
+  else next = n - 1
+  e.preventDefault()
+  switchAchTab(ACH_TABS[next])
+  void nextTick(() => achTabEls.value[next]?.focus())
 }
 
 /* 定义 */
@@ -394,11 +419,15 @@ async function revoke(r: AchievementRecord & { busy?: boolean }) {
 
 /* 发放 */
 const grantOpen = ref(false)
-useEscape(() => grantOpen.value, () => { grantOpen.value = false })
+/** 弹窗统一关闭路径：发放中（granting）禁止 Esc/遮罩/✕/取消 误关——请求仍在跑却失去上下文 */
+function closeGrant() {
+  if (!granting.value) grantOpen.value = false
+}
+useEscape(() => grantOpen.value, closeGrant)
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => grantOpen.value), panelRef)
-useMaskClose(maskRef, () => { grantOpen.value = false })
+useMaskClose(maskRef, closeGrant)
 
 const grantTarget = ref<AchievementDef | null>(null)
 const grantSearch = ref('')
@@ -477,6 +506,15 @@ onMounted(() => {
 .oa-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .ac-list { min-height: 120px; }
 .ac-icon { margin-right: 4px; }
+/* 记录行图标：后端填了 iconUrl 时用真图；补尺寸约束（与 AchIcon 20×20 同档），
+   避免未来 iconUrl 有值时无约束 <img> 把行高撑坏（审核 #165，原类零定义） */
+.ac-icon-img {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--mk-radius-sm);
+  object-fit: cover;
+  vertical-align: -4px;
+}
 
 /* 成就定义卡片栅格（原型 1890-1893：grid minmax(260px,1fr) + card） */
 .ac-grid {

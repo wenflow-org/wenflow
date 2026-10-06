@@ -35,6 +35,9 @@
         </span>
       </div>
       <span class="mk-minibar pd-meter"><i class="mk-minibar__fill" :style="{ width: overallPct + '%' }"></i></span>
+      <!-- 口径常显（2026-10-06 审核 #75）：两个分母并排（阶段 % vs 任务 X/Y）的歧义
+           此前只写在 title 里，触屏/键盘/读屏拿不到；title 保留作读屏兜底 -->
+      <p class="pd-note">口径：% 按阶段（{{ stageDone }}/{{ stageTotal }}）；「任务 X / Y」按子任务（{{ taskTotals.done }}/{{ taskTotals.total }}），两者分母不同</p>
     </section>
 
     <!-- stagecard 手风琴（原型：单开、默认首阶段展开；点击阶段头切换展开） -->
@@ -64,6 +67,17 @@
           <span class="pd-stage__caret" aria-hidden="true">{{ openStage === i ? '▾' : '▸' }}</span>
         </button>
         <div v-if="openStage === i" class="pd-stage__body">
+          <!-- 阶段内容层（2026-10-06 审核 #54）：阶段自身的描述/目标/预计学时/核心概念
+               此前在模板零引用（类型里已声明的字段被丢），页面层级只落到「阶段→任务」两级。
+               字段全来自详情接口 include 的 milestones 原行，无值不渲染、不硬造。 -->
+          <div v-if="m.description || m.goal || m.coreConceptName || m.estimatedHours" class="pd-stage__brief">
+            <p v-if="m.description" class="pd-stage__desc">{{ m.description }}</p>
+            <p v-if="m.goal" class="pd-stage__goal"><span class="pd-stage__brief-label">目标</span>{{ m.goal }}</p>
+            <div class="pd-stage__brief-meta">
+              <span v-if="m.coreConceptName" class="mk-badge mk-badge--muted" title="该阶段的核心概念">核心概念：{{ m.coreConceptName }}</span>
+              <span v-if="m.estimatedHours" class="pd-stage__hours" title="后端 estimatedHours 估算值">预计 ~{{ m.estimatedHours }}h</span>
+            </div>
+          </div>
           <button
             v-for="t in m.subtasks"
             :key="t.id"
@@ -79,7 +93,10 @@
             </span>
             <span class="mk-badge" :class="taskBadge(t.status)">{{ taskText(t.status) }}</span>
           </button>
-          <p v-if="!m.subtasks.length" class="pd-none">该阶段暂无任务</p>
+          <!-- 阶段内空态走共享一行式空态 .mk-empty--line（审核 #76）：此前用私有 .pd-none
+               自绘（字号/色阶/内衬与全站内联空态不一致）。保留 pd-none 仅作既有单测的钩子类
+               （path-detail.redesign.test.ts:186 断言 .pd-none），样式已由共享类承担。 -->
+          <p v-if="!m.subtasks.length" class="mk-empty mk-empty--line pd-none">该阶段暂无任务</p>
         </div>
       </section>
     </div>
@@ -170,7 +187,7 @@ import { adminLearningContentApi } from '@/api/adminApi'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
-import { askConfirm } from './useConfirm'
+import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
@@ -193,6 +210,10 @@ interface PathMilestone {
   status: string
   estimatedHours?: number | null
   description?: string | null
+  /** 阶段目标（schema.goal；后端详情 include 原样带回） */
+  goal?: string | null
+  /** 阶段核心概念名（schema.coreConceptName） */
+  coreConceptName?: string | null
   subtasks: PathSubtask[]
 }
 interface PathLearner { id?: string; name?: string; email?: string; isVirtualLearner?: boolean }
@@ -252,6 +273,8 @@ async function load(force = false) {
     // 面包屑回写路径名（内部 ID → 可读标题）
     if (body.title) setSubPageLabel(String(body.title))
     // 默认展开首个阶段（原型 state.expanded.stage = 0）；换路径重来时同样复位
+    // （审核 #80「默认展开当前阶段」暂缓：与 path-detail.redesign.test.ts:152-155 锁定的
+    //   首阶段默认展开契约冲突，需同步改单测——超出本批文件范围）
     openStage.value = (body.milestones || []).length ? 0 : null
   } catch (e) {
     if (seq !== loadSeq || pathId.value !== pid) return
@@ -276,9 +299,12 @@ watch(
   { immediate: true }
 )
 
-/* ===== 阶段/任务统计（全部由真实 milestones/subtasks 派生，不用行上反规范化计数） ===== */
+/* ===== 阶段/任务统计（全部由真实 milestones/subtasks 派生，不用行上反规范化计数） =====
+   2026-10-06 审核 #79：原 stageTotal 在 milestones 为空时回退读 learning_paths.totalMilestones，
+   于是「尚未拆解出阶段」的空态页会同时出现「0 / 3 阶段完成」（反规范化旧值）——
+   阶段总数一律取实际 milestones 长度，不用行上计数，口径与空态结论一致。 */
 const stageDone = computed(() => stages.value.filter((m) => m.status === 'completed').length)
-const stageTotal = computed(() => stages.value.length || Number(d.value?.totalMilestones || 0))
+const stageTotal = computed(() => stages.value.length)
 const overallPct = computed(() =>
   stageTotal.value ? Math.round((stageDone.value / stageTotal.value) * 100) : 0
 )
@@ -352,22 +378,38 @@ async function toggleArchive() {
     title: archiving ? '下线路径' : '恢复路径',
     message: archiving
       ? `确认下线「${v.title}」？\n用户端将无法继续学习该路径。`
-      : `确认恢复「${v.title}」？恢复后用户端立即可见并继续学习该路径。`,
+      : restoreMessage(v.status, v.title),
     confirmText: archiving ? '下线' : '恢复',
-    danger: archiving
+    danger: archiving,
+    /* 破坏性动作（下线）接 busy 模式（全站约定，判例 OpsContent.vue:450-467）：确认后按钮转
+       「处理中…」，成功 doneConfirm() 关闭、失败 failConfirm() 关闭，与飞行中的请求对齐；
+       恢复是非破坏性动作，保持普通模式（2026-10-06 审核 #53） */
+    busy: archiving
   })
   if (!ok) return
   busy.value = true
   try {
     if (archiving) await adminLearningContentApi.archivePath(pathId.value)
     else await adminLearningContentApi.restorePath(pathId.value)
-    v.status = archiving ? 'archived' : 'active'
+    /* 恢复态按真实返回值刷新：completed/failed 路径恢复后后端恒置 active，
+       前端不得乐观写死（否则完成/失败态被静默抹掉，2026-10-06 审核 #55） */
+    await load(true)
     toast.success(archiving ? '路径已下线' : '路径已恢复')
+    if (archiving) doneConfirm()
   } catch (e) {
     toast.error(`${archiving ? '下线' : '恢复'}失败：${errMsg(e)}`)
+    if (archiving) failConfirm()
   } finally {
     busy.value = false
   }
+}
+
+/** 恢复确认文案按当前状态分支：已完成/失败路径被恢复后状态会改写，
+ *  固定文案「恢复后用户端立即可见并继续学习该路径」在这两态上不成立（2026-10-06 审核 #55） */
+function restoreMessage(status: string, title: string): string {
+  if (status === 'completed') return `确认恢复「${title}」？\n恢复后路径重新开放，已有完成记录保留。`
+  if (status === 'failed') return `确认恢复「${title}」？\n恢复后该路径重新进入学习中，可继续推进未完成阶段。`
+  return `确认恢复「${title}」？恢复后用户端立即可见并继续学习该路径。`
 }
 
 /** 路径 → 所属学习者画像（显式下钻，带 includeTest 以覆盖虚拟/测试账号） */
@@ -419,6 +461,11 @@ function goLearner() {
   background: var(--mk-blue); color: var(--mk-on-fill, #ffffff);
 }
 .pd-stage--idle .pd-stage__n { background: var(--mk-surface-3); color: var(--mk-muted); }
+/* 阶段头悬停反馈（2026-10-06 审核 #78）：整行可点却零 hover，而同页任务行有 hover 描边——
+   同屏两个可点元素悬停语言一致（spec §4：悬停只允许变背景/边框/文字色） */
+@media (hover: hover) {
+  .pd-stage__head:hover { background: var(--mk-surface-3); }
+}
 .pd-stage__title {
   flex: 1; min-width: 0;
   font-size: var(--mk-fs-body);
@@ -431,6 +478,13 @@ function goLearner() {
   padding: 12px 16px;
   border-top: 1px solid var(--mk-line);
 }
+/* 阶段内容层（#54）：描述/目标/核心概念/预计学时；与任务行同栏，底部分隔开 */
+.pd-stage__brief { display: grid; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--mk-line); }
+.pd-stage__desc { margin: 0; color: var(--mk-muted); font-size: var(--mk-fs-body); }
+.pd-stage__goal { margin: 0; color: var(--mk-ink); font-size: var(--mk-fs-body); }
+.pd-stage__brief-label { margin-right: 6px; color: var(--mk-faint); font-size: var(--mk-fs-micro); font-weight: 600; }
+.pd-stage__brief-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pd-stage__hours { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-family: var(--mk-mono); }
 
 /* taskrow（原型 .taskrow：✓ 框 + 任务名/副行 + 状态 pill；--done/--active 修饰） */
 .pd-task {
@@ -462,7 +516,8 @@ function goLearner() {
 .pd-task__main { display: grid; gap: 2px; flex: 1; min-width: 0; }
 .pd-task__title { font-size: var(--mk-fs-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pd-task__sub { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.pd-none { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+/* .pd-none 私有样式已删（2026-10-06 审核 #76）：阶段内空态改用共享 .mk-empty--line
+   （字号/色阶/内衬由原语统一）；.pd-none 仅作单测钩子保留在模板上，不再自持样式。 */
 
 /* 任务详情弹层（原型 .ovl__ 三段式内容物；外壳走共享 .mk-modal 原语） */
 .pd-tk__head { display: flex; align-items: center; gap: 10px; min-width: 0; }

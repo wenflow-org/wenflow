@@ -4,10 +4,12 @@
       v-for="(t, i) in tabs"
       :key="t.key"
       :ref="(el) => setTabRef(el, i)"
+      :id="idBase ? `${idBase}-tab-${t.key}` : undefined"
       type="button"
       role="tab"
       class="mk-subtab"
       :aria-selected="t.key === modelValue"
+      :aria-controls="idBase ? `${idBase}-panel-${t.key}` : undefined"
       :tabindex="t.key === modelValue ? 0 : -1"
       @click="$emit('update:modelValue', t.key)"
     >
@@ -27,10 +29,21 @@
  * 键盘契约（2026-10-06 审核修复）：声明了 role=tablist/role=tab 就必须兑现 tablist 语义——
  * 方向键在页签间移动并切换、roving tabindex（仅选中项可 Tab 进入）、Home/End 跳首尾。
  * 此前 9 个页签全部落在 Tab 序里逐个通过、方向键无反应，属「半套 ARIA」。
+ *
+ * panel 关联（2026-10-06 审核 #151/#161）：传 idBase（如 "ac"）即自动下发
+ * `${idBase}-tab-${key}` / `aria-controls=${idBase}-panel-${key}`；宿主把内容区
+ * 写成 `id="${idBase}-panel-${key}" role="tabpanel" aria-labelledby="${idBase}-tab-${key}"`
+ * 即完成 tablist↔tabpanel 双向关联。不传 idBase 时只输出 tablist/tab 语义（向后兼容，
+ * 既有调用方行为不变）。
  */
 import { ref } from 'vue'
 
-const props = defineProps<{ tabs: Array<{ key: string; label: string; count?: number | string }>; modelValue: string }>();
+const props = defineProps<{
+  tabs: Array<{ key: string; label: string; count?: number | string }>
+  modelValue: string
+  /** 关联前缀：给了才输出 id/aria-controls（宿主据此写 tabpanel） */
+  idBase?: string
+}>()
 const emit = defineEmits<{ (e: 'update:modelValue', key: string): void }>();
 
 const tabEls = ref<(HTMLButtonElement | null)[]>([])

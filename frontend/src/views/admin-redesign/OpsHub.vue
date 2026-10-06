@@ -15,17 +15,17 @@
     <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
          2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签。
          各视图计数以角标随页签呈现，形态同共享 MkSubTabs 的 count 角标） -->
-    <div class="tabs" role="tablist" aria-label="运营中心视图切换">
-      <button type="button" class="tab" role="tab" :aria-selected="tab === 'todo'" @click="switchTab('todo')">运营待办</button>
-      <button type="button" class="tab" role="tab" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span class="tab__count" :title="domainCount.feedback === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.feedback === null ? '待访问' : domainCount.feedback }}</span></button>
-      <button type="button" class="tab" role="tab" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span class="tab__count" :title="domainCount.achievements === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.achievements === null ? '待访问' : domainCount.achievements }}</span></button>
-      <button type="button" class="tab" role="tab" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告<span class="tab__count">{{ announcePillCount }}</span></button>
-      <button type="button" class="tab" role="tab" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span class="tab__count" :title="domainCount.inapp === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.inapp === null ? '待访问' : domainCount.inapp }}</span></button>
+    <div class="tabs" role="tablist" aria-label="运营中心视图切换" @keydown="onTabKeydown">
+      <button type="button" class="tab" role="tab" id="oh-tab-todo" :ref="(el) => setTabRef(el, 0)" :tabindex="tab === 'todo' ? 0 : -1" aria-controls="oh-panel-todo" :aria-selected="tab === 'todo'" @click="switchTab('todo')">运营待办</button>
+      <button type="button" class="tab" role="tab" id="oh-tab-feedback" :ref="(el) => setTabRef(el, 1)" :tabindex="tab === 'feedback' ? 0 : -1" aria-controls="oh-panel-feedback" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span class="tab__count" :title="domainCount.feedback === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.feedback === null ? '待访问' : domainCount.feedback }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span class="tab__count" :title="domainCount.achievements === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : '成就解锁人次（含虚拟学习者）；解锁记录列表默认仅统计真实用户，可在页签内用「数据范围」切换对齐'">{{ domainCount.achievements === null ? '待访问' : domainCount.achievements }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-announce" :ref="(el) => setTabRef(el, 3)" :tabindex="tab === 'announce' ? 0 : -1" aria-controls="oh-panel-announce" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告<span class="tab__count" :title="announcePillTitle">{{ announcePillCount }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span class="tab__count" :title="domainCount.inapp === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.inapp === null ? '待访问' : domainCount.inapp }}</span></button>
     </div>
 
     <!-- ===== Tab1: 运营待办（原运营中心全量内容） ===== -->
     <template v-if="tab === 'todo'">
-    <div class="oh-body">
+    <div class="oh-body" id="oh-panel-todo" role="tabpanel" aria-labelledby="oh-tab-todo">
     <!-- 失败必须显式落地：取不到 ≠ 没事（原实现把失败写成 0，页面伪装成「全部已清零」） -->
     <p v-if="wbHasError" class="mk-alert" role="alert">
       待办数据加载失败，对应计数不可信：{{ wbErrorText }}
@@ -37,19 +37,32 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h4 class="mk-card__title">运营待办</h4>
-        <!-- 2026-10-04 状态条退役：结论句（原页头状态条 strong）并入卡头 meta，不另占一条 -->
-        <span class="mk-card__meta">{{ todoConclusion }} · 按优先级排序 · 点击直达</span>
+        <!-- 2026-10-04 状态条退役：结论句（原页头状态条 strong）并入卡头 meta，不另占一条。
+             三态纪律：首屏三请求未回来前不得渲染「全部已清零」（取不到 ≠ 没事） -->
+        <span class="mk-card__meta">{{ wbLoading && !stats ? '正在拉取待办…' : `${todoConclusion} · 按优先级排序 · 点击直达` }}</span>
       </div>
-      <div class="oh-metrics">
-        <div v-for="m in todoMetrics" :key="m.key" class="oh-metric">
-          <span class="oh-metric__label">{{ m.label }}</span>
-          <span class="oh-metric__value" :class="{ 'oh-metric__value--bad': m.bad, 'oh-metric__value--na': m.failed }">{{ m.failed ? '—' : m.value }}</span>
-          <span class="oh-metric__foot" :class="{ 'oh-metric__foot--bad': m.failed }">{{ m.failed ? '加载失败，计数不可信' : m.foot }}</span>
-        </div>
+      <!-- 首屏加载态：三个待办请求在途且尚无 stats 时渲染骨架，不落定 0 值指标卡 -->
+      <MockSkeletonTable v-if="wbLoading && !stats" :cols="4" :rows="1" />
+      <!-- 审核 #174：四张自搓瓦片（.oh-metric 与 MkKpi 同解剖、值档/4K 档各成一套）收编共享
+           MkKpi；失败态脚注的红字走新增的 hintTone prop（扩共享原语而非页内再长一张卡）。 -->
+      <div v-else class="mk-kpi-grid oh-metrics">
+        <MkKpi
+          v-for="m in todoMetrics"
+          :key="m.key"
+          :label="m.label"
+          :value="m.failed ? '—' : m.value"
+          :tone="m.failed ? 'bad' : (m.bad ? 'warn' : '')"
+          :hint="m.foot"
+          :hint-tone="m.failed ? 'bad' : ''"
+        />
       </div>
       <div class="ow-ranklist">
+        <!-- 首屏加载期间整段不落定（不渲染「已清零 / 去处理」），改渲染共用加载原语，
+             避免把「还没拉到」显示成「确认清零」 -->
+        <MkLoading v-if="wbLoading && !stats" inline />
         <button
           v-for="t in todoItems"
+          v-else
           :key="t.key"
           type="button"
           class="ow-rankrow"
@@ -136,9 +149,9 @@
     </template>
 
     <!-- ===== Tab2: 反馈（Feedback embedded） ===== -->
-    <Feedback v-else-if="tab === 'feedback'" ref="feedbackRef" embedded @count="onDomainCount('feedback', $event)" />
+    <Feedback v-else-if="tab === 'feedback'" id="oh-panel-feedback" role="tabpanel" aria-labelledby="oh-tab-feedback" ref="feedbackRef" embedded @count="onDomainCount('feedback', $event)" />
     <!-- ===== Tab3: 成就（OpsAchievements embedded） ===== -->
-    <OpsAchievements v-else-if="tab === 'achievements'" ref="achievementsRef" embedded @count="onDomainCount('achievements', $event)" />
+    <OpsAchievements v-else-if="tab === 'achievements'" id="oh-panel-achievements" role="tabpanel" aria-labelledby="oh-tab-achievements" ref="achievementsRef" embedded @count="onDomainCount('achievements', $event)" />
     <!-- ===== Tab4: 公告（Announcements embedded） =====
          嵌入态下 Announcements 隐藏自身承载「新建公告」的状态条，列表非空时无可见入口；
          由宿主提供工具行并调用其暴露的 openCreate()（defineExpose），不再重复按钮。 -->
@@ -147,7 +160,7 @@
         <span class="oh-tabbar__sub">面向学习者的公告、站内信与推送</span>
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="announceRef?.openCreate?.()">新建公告</button>
       </div>
-      <Announcements ref="announceRef" embedded @count="onDomainCount('announce', $event)" />
+      <Announcements id="oh-panel-announce" role="tabpanel" aria-labelledby="oh-tab-announce" ref="announceRef" embedded @count="onDomainCount('announce', $event)" />
     </template>
     <!-- ===== Tab5: 站内通知（Notifications embedded） =====
          与公告 tab 同判例：嵌入态下 Notifications 隐藏自身状态条，列表非空时
@@ -157,13 +170,13 @@
         <span class="oh-tabbar__sub">站内信与推送</span>
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="notifRef?.openSend?.()">发送通知</button>
       </div>
-      <Notifications ref="notifRef" embedded @count="onDomainCount('inapp', $event)" />
+      <Notifications id="oh-panel-inapp" role="tabpanel" aria-labelledby="oh-tab-inapp" ref="notifRef" embedded @count="onDomainCount('inapp', $event)" @go-announce="switchTab('announce')" />
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { timeAgo, liveAnnouncements, liveFailures, errMsg } from './live'
 import { intent } from './store'
@@ -175,6 +188,9 @@ import Announcements from './Announcements.vue'
 import Notifications from './Notifications.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkStageband from '@/components/mk/MkStageband.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
+import MkKpi from '@/components/mk/MkKpi.vue'
+import MockSkeletonTable from './SkeletonTable.vue'
 
 /* ===== 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知（阶段 1 导航收敛） =====
    低频页折入 tab 宿主；?tab= 双向同步，深链/刷新/前进后退可寻址（对齐消息/用户宿主约定） */
@@ -228,6 +244,28 @@ watch(
 function switchTab(t: OhTab) {
   tab.value = t
   if (route && router && route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
+}
+
+/* 页签键盘契约（审核 #167）：roving tabindex（仅选中项可 Tab 进入）+ 左右方向键循环切换并移动焦点，
+   兑现 role=tablist/role=tab 的 ARIA tabs 语义（判例 HealthCenter.vue:471-490） */
+const tabEls = ref<(HTMLButtonElement | null)[]>([])
+function setTabRef(el: unknown, i: number) {
+  tabEls.value[i] = (el as HTMLButtonElement) || null
+}
+function onTabKeydown(e: KeyboardEvent) {
+  const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
+  if (!keys.includes(e.key)) return
+  const n = OH_TABS.length
+  const cur = OH_TABS.indexOf(tab.value)
+  const from = cur >= 0 ? cur : 0
+  let next = from
+  if (e.key === 'ArrowRight') next = (from + 1) % n
+  else if (e.key === 'ArrowLeft') next = (from - 1 + n) % n
+  else if (e.key === 'Home') next = 0
+  else next = n - 1
+  e.preventDefault()
+  switchTab(OH_TABS[next])
+  void nextTick(() => tabEls.value[next]?.focus())
 }
 
 /* intent 深链：跨页跳转带 tab（待处理反馈 → feedback / 公告管理 → announce） */
@@ -318,14 +356,15 @@ const wbErrorText = computed(() =>
    随状态条整块删除——失败信号由页签体内 mk-alert + 指标卡「加载失败」foot 承载，
    页面不再有整页红绿基调（wbHasError/wbErrorText 仍供 alert 与页头重试钮消费） */
 /** P2-1（2026-10-04 全站评审）：待办结论句——只点名非零事项，全零给清零句；
-    数字细节唯一住在下方指标卡（「已清零」逐行状态由行动行承载）。 */
+    数字细节唯一住在下方指标卡（「已清零」逐行状态由行动行承载）。
+    2026-10-06 审核 #173：原句逐项复述数字，与下方四张指标卡 + 行动行构成「同一组四项讲三遍」。
+    改为总括句（项数 + 排序 + 直达承诺），逐项数字只留指标卡一处。 */
 const todoConclusion = computed(() => {
-  const parts: string[] = []
-  if (wbPendingFeedback.value > 0) parts.push(`待处理反馈 ${wbPendingFeedback.value}`)
-  if (wbFailedPaths.value > 0) parts.push(`失败路径 ${wbFailedPaths.value} 条需重规划`)
-  if (wbDeadLetters.value > 0) parts.push(`死信 ${wbDeadLetters.value} 条待重投`)
-  if (!parts.length) return '运营待办全部已清零'
-  return `${parts.join('、')}，其余已清零`
+  const pending = todoItems.value.filter((t) => t.count > 0 && !t.failed).length
+  /* 有域失败时不得断言「全部已清零」：失败域的计数未被更新，清零结论不可信 */
+  if (wbHasError.value) return pending ? `${pending} 项待处理；另有待办域加载失败，结论不完整` : '待办数据加载失败，无法确认是否清零'
+  if (!pending) return '运营待办全部已清零'
+  return `${pending} 项待处理`
 })
 const TODO_SEV_RANK = { bad: 0, warn: 1, muted: 2 } as const
 /* 待办清单：按严重度排序（坏>警告>中性，同档按计数降序），零值弱化为「已清零」；
@@ -371,10 +410,17 @@ const ann = announcementCounts
  * 嵌入门 @count 仅作覆盖刷新（进入 tab 后仍以其上报为准）。
  */
 const announcePillCount = computed(() => {
-  if (annFailed.value) return '—'
+  /* 加载失败：与「待访问」同形占位（审核 #171——同排页签角标统一为「数字 / 待访问」两态，
+     不再出现第三种「—」形态；失败语义由 title 说明） */
+  if (annFailed.value) return '待访问'
   const embedded = domainCount.value.announce
   if (embedded !== null && embedded > 0) return embedded
   return ann.value.rows
+})
+/** 公告角标悬停说明：失败与未加载分开口径（数字态不给 title，避免复读） */
+const announcePillTitle = computed(() => {
+  if (annFailed.value) return '公告列表加载失败，计数不可信，此处显示为占位（失败 ≠ 0）'
+  return undefined
 })
 
 /* 状态面板：路径四态 + 公告三态（比例条 + 行式计数） */
@@ -497,34 +543,10 @@ onMounted(() => {
      底边悬空 28.9px（先例 42107f8e 同判）；stretch 拉齐，增量由 .ow-state 行距消化 */
 }
 
-/* 运营待办 · 4 张 metricCard（原型 1704-1706 metricCard：label + 24px value + foot）
-   value 用 token 档（--mk-fs-20）落地，4K 档内继续放大，不写死 px */
 .oh-metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  /* 网格由共享 .mk-kpi-grid 承担（审核 #174）；此处只留卡内边距 */
   padding: 4px 14px 12px;
 }
-.oh-metric {
-  display: grid;
-  gap: 4px;
-  padding: 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
-}
-.oh-metric__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.oh-metric__value {
-  font-size: var(--mk-fs-20);
-  font-weight: 800;
-  color: var(--mk-ink);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-}
-.oh-metric__value--bad { color: var(--mk-red); }
-.oh-metric__value--na { color: var(--mk-faint); }
-.oh-metric__foot { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.oh-metric__foot--bad { color: var(--mk-red); }
 
 /* ranklist 行动行（原型 290-295 .ranklist/.rankrow）：事项 + 行尾 mute 类别 pill；
    「去处理」作为行尾按钮保留（行动能力不丢）。仅可跳转行给 pointer。 */
@@ -635,8 +657,8 @@ onMounted(() => {
 }
 .ow-ann:last-child { border-bottom: none; }
 .ow-ann:hover { background: var(--mk-table-row-hover-bg); }
-html[data-theme='dark'] .ow-ann { border-bottom-color: #252627; }
-html[data-theme='dark'] .ow-ann:hover { background: #202122; }
+/* 审核 #166：原暗色覆写 #252627 / #202122 是同一语义的第二个真源；基础规则已引
+   --mk-table-row-line / --mk-table-row-hover-bg，暗色随 token 自动换档，覆写删除 */
 .ow-ann__title {
   flex: 1;
   min-width: 0;
@@ -653,10 +675,9 @@ html[data-theme='dark'] .ow-ann:hover { background: #202122; }
   .ow-panels { grid-template-columns: 1fr; }
 }
 
-/* 4K：待办 metricCard / ranklist 行跟随全站节奏 */
+/* 4K：待办 metricCard / ranklist 行跟随全站节奏
+   （metricCard 档位已归共享 MkKpi，2026-10-06 审核 #174 删除页内死档） */
 @media (min-width: 2000px) {
-  .oh-metric__label, .oh-metric__foot { font-size: var(--mk-fs-micro); }
-  .oh-metric__value { font-size: 22px; }
   .ow-rankrow__main { font-size: var(--mk-fs-body); }
   .ow-rankrow__go { font-size: var(--mk-fs-micro); }
   .ow-state__row { font-size: var(--mk-fs-micro); }
@@ -665,8 +686,6 @@ html[data-theme='dark'] .ow-ann:hover { background: #202122; }
   .ow-ann__meta, .ow-ann__go { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .oh-metric__label, .oh-metric__foot { font-size: var(--mk-fs-micro); }
-  .oh-metric__value { font-size: 26px; }
   .ow-rankrow__main { font-size: var(--mk-fs-body); }
   .ow-rankrow__go { font-size: var(--mk-fs-micro); }
   .ow-state__row { font-size: var(--mk-fs-micro); }
@@ -675,8 +694,6 @@ html[data-theme='dark'] .ow-ann:hover { background: #202122; }
   .ow-ann__meta, .ow-ann__go { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
-  .oh-metric__label, .oh-metric__foot { font-size: var(--mk-fs-body); }
-  .oh-metric__value { font-size: 30px; }
   .ow-rankrow__main { font-size: var(--mk-fs-emphasis); }
   .ow-rankrow__go { font-size: var(--mk-fs-body); }
   .ow-state__row { font-size: var(--mk-fs-body); }

@@ -33,7 +33,7 @@
         </span>
         <span class="sdp-chip">耗时 <b class="mono">{{ trialResult.duration ?? '—' }}ms</b></span>
         <span class="sdp-chip">{{ trialResult.cached ? '缓存' : '实时' }}</span>
-        <button type="button" class="mk-link" @click="clearTrial">清空</button>
+        <button type="button" class="mk-link" title="保留上方输入，仅清除本次运行结果" @click="clearTrial">清除结果</button>
       </div>
       <div v-if="trialError" class="sdp-error">{{ trialError }}</div>
       <pre v-if="trialOutputText" class="sdp-output mono">{{ trialOutputText }}</pre>
@@ -128,7 +128,7 @@ import MkLoading from '@/components/mk/MkLoading.vue'
 hljs.registerLanguage('json', json)
 
 const props = defineProps<{ skillId: string; filePath?: string; refreshTick: number }>()
-const emit = defineEmits<{ (e: 'failures', n: number): void }>()
+const emit = defineEmits<{ (e: 'failures', n: number): void; (e: 'dirty', p: { dirty: boolean; label: string }): void }>()
 
 /* ---------- Prompt 内容 ---------- */
 /* 二级编译已退役：ACTIVE Prompt 只有源文本一条数据源（effective-prompt），无编译产物视图 */
@@ -150,7 +150,8 @@ async function loadInspect() {
 }
 
 /* ---------- 试跑 ---------- */
-const trialInput = ref('{\n  "input": "用一句话介绍你自己"\n}')
+const TRIAL_INPUT_DEFAULT = '{\n  "input": "用一句话介绍你自己"\n}'
+const trialInput = ref(TRIAL_INPUT_DEFAULT)
 const trialRunning = ref(false)
 const trialResult = ref<{ success?: boolean; duration?: number; cached?: boolean; output?: unknown; data?: unknown } | null>(null)
 const trialError = ref('')
@@ -190,6 +191,9 @@ async function runTrial() {
     const res = await adminSkillsApi.testSkill(id, payload)
     if (id !== props.skillId) return
     trialResult.value = res.data?.data ?? res.data ?? null
+    // 已运行 → 输入被消费，不算未保存改动（#118）
+    trialBase = trialInput.value
+    emit('dirty', { dirty: false, label: '试跑输入' })
   } catch (e) {
     if (id !== props.skillId) return
     trialResult.value = null
@@ -367,6 +371,19 @@ watch(
   },
   { immediate: true }
 )
+
+/* #118：试跑输入改动上报宿主脏态（此前切 Skill/离开页面会静默丢弃）。
+   基线 = 默认样例；每次成功运行或切换 skill 后视为已消费，复位。 */
+let trialBase = TRIAL_INPUT_DEFAULT
+function reportTrialDirty() {
+  emit('dirty', { dirty: trialInput.value !== trialBase, label: '试跑输入' })
+}
+watch(trialInput, reportTrialDirty)
+watch(() => props.skillId, () => {
+  trialInput.value = TRIAL_INPUT_DEFAULT
+  trialBase = TRIAL_INPUT_DEFAULT
+  emit('dirty', { dirty: false, label: '试跑输入' })
+})
 </script>
 
 <style scoped>
@@ -426,7 +443,9 @@ watch(
   border: 1px solid #eef2f8;
   white-space: pre-wrap;
   word-break: break-word;
-  font: 11.5px/1.65 var(--mk-mono);
+  /* #127：原 11.5px 是正文三档 token 之外的第 4 档（跨档位 11.5→20px 跳变）→ 归到 micro 档，
+     与 .sdp-json / .sdp-output 同档 */
+  font: var(--mk-fs-micro)/1.65 var(--mk-mono);
   color: var(--mk-ink);
 }
 .sdp-prompt__hint { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.6; }

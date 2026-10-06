@@ -14,6 +14,13 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="nt-filter">
+          <!-- 关键词搜索：后端列表接口无关键词参数（adminApi list 无 search），按当前页客户端过滤；
+               口径在 title 里写明，不把「当前页内过滤」读成全量搜索 -->
+          <MkFilterSearch
+            v-model="keyword"
+            placeholder="搜索通知标题 / 用户姓名 / 邮箱"
+            title="在当前页内过滤（后端列表接口暂不支持关键词参数；翻页可查看其它页）"
+          />
           <select v-model="kindFilter" class="mk-filter__select" @change="reloadFromFirstPage">
             <option value="">全部类型</option>
             <option value="system">系统</option>
@@ -24,7 +31,17 @@
             <input v-model="unreadOnly" type="checkbox" @change="reloadFromFirstPage" />
             <span class="mk-field__label" style="margin:0">仅未读</span>
           </label>
-          <span class="nt-boundary" title="全站横幅公告请到「公告」页管理">横幅公告 → 公告页</span>
+          <!-- 嵌入态（宿主 OpsHub 有相邻「公告」页签）做成真按钮：点它切到公告页（审核 #172）——
+               此前是带右箭头的纯展示胶囊（cursor:help），看着像跳转却点了没反应。
+               独立页无相邻页签，退回纯提示文案并去掉箭头。 -->
+          <button
+            v-if="embedded"
+            type="button"
+            class="nt-boundary nt-boundary--link"
+            title="全站横幅公告请到「公告」页管理"
+            @click="emit('go-announce')"
+          >横幅公告 → 公告页</button>
+          <span v-else class="nt-boundary" title="全站横幅公告请到「公告」页管理">全站横幅公告在「公告」页管理</span>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
         </div>
       </div>
@@ -41,11 +58,13 @@
           </span>
         </span>
         <b class="mono nt-rate__pct">{{ readRate }}%</b>
-        <span class="nt-rate__note">已读 {{ readCount }} / 送达 {{ total }}<template v-if="isFiltered">（当前筛选）</template></span>
+        <!-- 口径：已读率来自服务端 total/unreadTotal，只反映类型/未读筛选；
+             关键词只过滤当前页明细，不参与此聚合，故此处不以「当前筛选」误标 -->
+        <span class="nt-rate__note">已读 {{ readCount }} / 送达 {{ total }}<template v-if="kindFilter || unreadOnly">（当前筛选）</template></span>
       </div>
 
       <MockSkeletonTable v-if="loading && !items.length" :cols="5" />
-      <div v-else-if="items.length" class="mk-table-scroll nt-list">
+      <div v-else-if="visibleItems.length" class="mk-table-scroll nt-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap，
              列按内容自然分宽；通知/用户双行单元格由 mk-cell-main 全局 max-width 截断兜底 -->
         <table class="mk-table">
@@ -70,7 +89,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="n in items" :key="n.id" :class="{ 'nt-row--unread': !n.isRead }">
+            <tr v-for="n in visibleItems" :key="n.id" :class="{ 'nt-row--unread': !n.isRead }">
               <td>
                 <div class="mk-cell-main">
                   <strong>{{ n.title }}</strong>
@@ -85,8 +104,9 @@
               </td>
               <td><span class="mk-badge" :class="kindBadge(n.kind)">{{ kindText(n.kind) }}</span></td>
               <td>
-                <!-- 批C：未读=蓝点+粗体（行底色冗余信号降为一枚点），已读=弱化点；徽章位让给语义 -->
-                <span class="nt-read" :class="n.isRead ? 'nt-read--yes' : 'nt-read--no'">
+                <!-- 批C：未读=蓝点+粗体（行底色冗余信号降为一枚点），已读=弱化点；徽章位让给语义。
+                     已读态即 .nt-read 基础样式，不再挂零定义的 nt-read--yes（审核 #165） -->
+                <span class="nt-read" :class="{ 'nt-read--no': !n.isRead }">
                   <i class="nt-read__dot" aria-hidden="true"></i>{{ n.isRead ? '已读' : '未读' }}
                 </span>
               </td>
@@ -109,11 +129,11 @@
         @action="reload"
       />
       <MkEmptyState
-        v-else-if="kindFilter || unreadOnly"
+        v-else-if="isFiltered"
         icon="◌"
         min
         title="当前筛选无匹配"
-        description="试试切换通知类型，或关闭「仅未读」。"
+        description="试试切换通知类型、关闭「仅未读」，或清空搜索关键词。"
         action-text="清除筛选"
         @action="clearFilter"
       />
@@ -132,6 +152,7 @@
         v-model:pageSize="pageSize"
         :total="total"
         :loading="loading"
+        :note="keyword.trim() ? '关键词仅过滤当前页' : ''"
         show-total
         @update:page="reload"
       />
@@ -143,7 +164,7 @@
         <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="发送通知">
           <div class="mk-modal__head">
             <h3 class="mk-modal__title">发送通知</h3>
-            <button type="button" class="mk-modal__close" aria-label="关闭" @click="sendOpen = false">✕</button>
+            <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeSend">✕</button>
           </div>
           <div class="mk-modal__body">
             <label class="mk-field" :class="{ 'mk-field--error': errors.title }">
@@ -204,7 +225,8 @@
             <div v-if="sendError" class="mk-alert" role="alert">{{ sendError }}</div>
           </div>
           <div class="mk-modal__foot">
-            <button type="button" class="mk-btn" @click="sendOpen = false">取消</button>
+            <!-- 统一关闭路径：发送中禁关（与 Esc/遮罩/✕ 同守卫） -->
+            <button type="button" class="mk-btn" @click="closeSend">取消</button>
             <button type="button" class="mk-btn mk-btn--primary" :disabled="sending" @click="confirmSend">
               {{ sending ? '发送中…' : '发送' }}
             </button>
@@ -226,12 +248,14 @@ import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import Pagination from './Pagination.vue'
 
 /** 嵌入模式：作为「通知与公告」页「站内通知」tab 渲染（仅去掉外层壳，状态条/发送弹窗保留）。
-    count 事件：通知总数上报（宿主「通知 N」徽章；embedded 才消费） */
+    count 事件：通知总数上报（宿主「通知 N」徽章；embedded 才消费）
+    go-announce 事件：嵌入态「横幅公告 →」胶囊的跳转（审核 #172，宿主收后 switchTab('announce')） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
-const emit = defineEmits<{ (e: 'count', total: number): void }>()
+const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'go-announce'): void }>()
 
 interface NotifRow {
   id: string
@@ -255,6 +279,16 @@ const loading = ref(false)
 const failed = ref(false)
 const kindFilter = ref('')
 const unreadOnly = ref(false)
+/** 关键词：后端列表接口无 search 参数，仅对当前页做客户端过滤（口径在输入框 title 与分页 note 标注） */
+const keyword = ref('')
+/** 当前页可见行：关键词非空时按标题/正文/用户姓名/邮箱过滤当前页 */
+const visibleItems = computed(() => {
+  const k = keyword.value.trim().toLowerCase()
+  if (!k) return items.value
+  return items.value.filter((n) =>
+    `${n.title} ${n.body || ''} ${n.user?.name || ''} ${n.user?.email || ''}`.toLowerCase().includes(k)
+  )
+})
 
 /* 服务端排序：白名单 createdAt / isRead，默认时间倒序；变更回第 1 页重查。 */
 const {
@@ -273,16 +307,17 @@ function reloadFromFirstPage() {
   page.value = 1
   void reload()
 }
-/** 清除筛选并重新加载（回第 1 页） */
+/** 清除筛选并重新加载（回第 1 页）；关键词一并清空 */
 function clearFilter() {
   kindFilter.value = ''
   unreadOnly.value = false
+  keyword.value = ''
   reloadFromFirstPage()
 }
 /* 每页条数变化：回第 1 页重查（此前只传 :page-size 不监听 @update:pageSize，
    下拉可选但列表恒按 20 条渲染，是死控件） */
 watch(pageSize, () => { reloadFromFirstPage() })
-const isFiltered = computed(() => !!kindFilter.value || unreadOnly.value)
+const isFiltered = computed(() => !!kindFilter.value || unreadOnly.value || !!keyword.value.trim())
 
 /** 已读率聚合（原型 1900-1904 表内「已读率」列）：同筛选域内 已读 = 送达 − 未读 */
 const readCount = computed(() => Math.max(0, total.value - unreadTotal.value))
@@ -362,11 +397,15 @@ async function remove(n: NotifRow) {
 
 /* 发送 */
 const sendOpen = ref(false)
-useEscape(() => sendOpen.value, () => { sendOpen.value = false })
+/** 弹窗统一关闭路径：发送中（sending）禁止 Esc/遮罩/✕/取消 误关——请求仍在跑却失去上下文 */
+function closeSend() {
+  if (!sending.value) sendOpen.value = false
+}
+useEscape(() => sendOpen.value, closeSend)
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 useOverlay(computed(() => sendOpen.value), panelRef)
-useMaskClose(maskRef, () => { sendOpen.value = false })
+useMaskClose(maskRef, closeSend)
 
 const form = ref({ title: '', body: '', kind: 'system', scope: 'all' as 'all' | 'user' })
 const errors = ref<{ title?: string }>({})
@@ -457,6 +496,19 @@ void reload()
   border-radius: 999px;
   cursor: help;
 }
+/* 嵌入态的可点跳转档（审核 #172）：同一外形，但改实线边框 + 指针 + 悬停底色，
+   让「看着像跳转」的胶囊真的可点，且与纯提示档有可辨差异 */
+.nt-boundary--link {
+  cursor: pointer;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--mk-blue) 35%, var(--mk-line));
+  /* 亮色前景用 --mk-accent-deep（#1f57cc）：--mk-blue 压 --mk-line(#e6ebf4) 底仅 4.12:1 < 4.5
+     （2026-10-06 渲染探针亮色 1920 实测 button.nt-boundary--link）；暗色档自动取 #7aa2ff。 */
+  color: var(--mk-accent-deep, var(--mk-blue));
+  font-family: inherit;
+}
+.nt-boundary--link:hover { background: var(--mk-blue-bg); }
+.nt-boundary--link:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
 .nt-list { flex: 1; min-height: 0; overflow-y: auto; }
 /* 已读率聚合行（原型 meterrow：meter 条 + mono %）：条沿用共享 .mk-minibar 原语 */
 .nt-rate {
@@ -523,6 +575,8 @@ void reload()
 /* ================= 暗色模式（D1 补完）：站内通知 ================= */
 html[data-theme='dark'] {
   .nt-row--unread { background: color-mix(in srgb, var(--wf-color-primary) 8%, transparent); }
-  .nt-boundary { background: #202122; border-color: #313235; color: var(--mk-muted); }
+  /* 审核 #166：原 #202122/#313235 是同一语义的第二个真源；改引 token（--mk-surface-2 /
+     --mk-line 暗色档自动换档）。可点档不吃这条覆写，其蓝 tint 由 .nt-boundary--link 自带。 */
+  .nt-boundary:not(.nt-boundary--link) { background: var(--mk-surface-2); border-color: var(--mk-line); color: var(--mk-muted); }
 }
 </style>

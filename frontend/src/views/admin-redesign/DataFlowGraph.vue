@@ -21,6 +21,12 @@
           <span class="dfg-stage-dot" :style="{ background: toneOf(flow?.stageId || '').hue }"></span>
           <strong class="dfg-title">{{ flow?.stageName || '' }}<span class="dfg-title__agent mono"> {{ flow?.agentId }}</span></strong>
           <span class="dfg-meta">{{ flow ? flow.fieldCount : '—' }} 字段 · {{ flow ? flow.steps.length : '—' }} 步</span>
+          <!-- 搜索命中反馈（审核 #114）：无命中此前与空闲态完全一致（画布原样、无提示），
+               用户分不清「没这个字段」还是「搜索没生效」；有输入即报命中数，0 命中给醒目提示。
+               清除入口复用搜索框右侧 ✕（v-if="query"） -->
+          <span v-if="query.trim()" class="dfg-meta dfg-hitnote" :class="{ 'dfg-hitnote--none': !queryHitCount }">
+            {{ queryHitCount ? `${queryHitCount} 个字段命中` : '无匹配字段' }}
+          </span>
         </div>
         <div class="dfg-toolbar__controls">
           <div class="dfg-search">
@@ -149,8 +155,9 @@
               <span v-if="c.valueType" class="dfg-chip__type">{{ c.valueType }}</span>
               <span v-if="c.accumulate" class="dfg-chip__flag dfg-chip__flag--accum" title="累积进学习者状态">累</span>
             </button>
-            <button v-if="entryVisible.length > ENTRY_LIMIT && !expandedEntry" type="button" class="dfg-chip dfg-chip--more" @click="expandedEntry = true">
-              +{{ entryVisible.length - ENTRY_LIMIT }} 更多
+            <!-- 折叠开关常显（审核 #99）：此前 v-if 只在折叠中渲染，展开后按钮消失 → 无法收起 -->
+            <button v-if="entryVisible.length > ENTRY_LIMIT" type="button" class="dfg-chip dfg-chip--more" @click="expandedEntry = !expandedEntry">
+              {{ expandedEntry ? '收起' : `+${entryVisible.length - ENTRY_LIMIT} 更多` }}
             </button>
           </div>
         </section>
@@ -190,8 +197,8 @@
                   <span v-if="c.internal" class="dfg-chip__flag" title="内部信令">内</span>
                   <span v-if="c.handoffTargets.length" class="dfg-chip__to mono">{{ c.toTags.length ? c.toTags[0].label : c.handoffTargets[0] }}<template v-if="c.handoffTargets.length > 1"> +{{ c.handoffTargets.length - 1 }}</template></span>
                 </button>
-                <button v-if="stepFolded(step, 'out') > 0" type="button" class="dfg-chip dfg-chip--more" @click="toggleStep(step)">
-                  +{{ stepFolded(step, 'out') }} 更多
+                <button v-if="stepOverflow(step, 'out')" type="button" class="dfg-chip dfg-chip--more" @click="toggleStep(step)">
+                  {{ expandedSteps.has(step.agentId) ? '收起' : `+${stepFolded(step, 'out')} 更多` }}
                 </button>
               </div>
             </div>
@@ -261,8 +268,8 @@
                       <span v-if="c.internal" class="dfg-chip__flag" title="内部信令">内</span>
                       <span v-if="c.accumulate" class="dfg-chip__flag dfg-chip__flag--accum" title="累积进学习者状态">累</span>
                     </button>
-                    <button v-if="stepFolded(step, 'in') > 0" type="button" class="dfg-chip dfg-chip--more" @click="toggleStep(step)">
-                      +{{ stepFolded(step, 'in') }} 更多
+                    <button v-if="stepOverflow(step, 'in')" type="button" class="dfg-chip dfg-chip--more" @click="toggleStep(step)">
+                      {{ expandedSteps.has(step.agentId) ? '收起' : `+${stepFolded(step, 'in')} 更多` }}
                     </button>
                   </div>
                 </div>
@@ -299,8 +306,8 @@
                         >{{ t.kind === 'stage' ? `→ ${t.label}` : `→ ${t.label}` }}</span>
                       </template>
                     </button>
-                    <button v-if="stepFolded(step, 'out') > 0" type="button" class="dfg-chip dfg-chip--more" @click="toggleStep(step)">
-                      +{{ stepFolded(step, 'out') }} 更多
+                    <button v-if="stepOverflow(step, 'out')" type="button" class="dfg-chip dfg-chip--more" @click="toggleStep(step)">
+                      {{ expandedSteps.has(step.agentId) ? '收起' : `+${stepFolded(step, 'out')} 更多` }}
                     </button>
                   </div>
                 </div>
@@ -341,8 +348,9 @@
               <span v-if="c.internal" class="dfg-chip__flag" title="内部信令">内</span>
               <span v-if="c.accumulate" class="dfg-chip__flag dfg-chip__flag--accum" title="累积进学习者状态">累</span>
             </button>
-            <button v-if="(flow && flow.exit.length > ENTRY_LIMIT && !expandedEntry)" type="button" class="dfg-chip dfg-chip--more" @click="expandedEntry = true">
-              +{{ (flow ? flow.exit.length : 0) - ENTRY_LIMIT }} 更多
+            <!-- 折叠开关常显（审核 #99）：此前 v-if 只在折叠中渲染，展开后按钮消失 → 无法收起 -->
+            <button v-if="(flow?.exit.length || 0) > ENTRY_LIMIT" type="button" class="dfg-chip dfg-chip--more" @click="expandedExit = !expandedExit">
+              {{ expandedExit ? '收起' : `+${(flow?.exit.length || 0) - ENTRY_LIMIT} 更多` }}
             </button>
           </div>
         </section>
@@ -383,7 +391,9 @@
       <div v-if="selected" class="mk-drawer">
         <!-- 遮罩关闭走 useMaskClose（按下-松开守卫）：防在抽屉内选中文本/拖动画布到遮罩松手误关 -->
         <div ref="maskRef" class="mk-drawer__mask" @click="selected = null"></div>
-        <aside class="mk-drawer__panel dfg-drawer" role="dialog" aria-label="字段详情" :style="semanticVars">
+        <!-- 模态语义（审核 #95）：useOverlay 统一提供锁滚 + aria-modal + 聚焦面板 + Tab 陷阱 + 关闭回焦
+             （与 FieldRoutingTable 编排文件弹窗同款接法） -->
+        <aside ref="drawerPanelRef" class="mk-drawer__panel dfg-drawer" role="dialog" aria-label="字段详情" :style="semanticVars">
           <header class="mk-drawer__head">
             <div class="mk-drawer__heading">
               <h3 class="mk-drawer__title mono">{{ selected.fieldId }}</h3>
@@ -506,7 +516,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { adminFieldRoutingsApi, adminRuntimeDefinitionsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
-import { useMaskClose } from './useOverlay'
+import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import { ensureLiveTopologyRaw } from './live'
 import {
@@ -689,7 +699,9 @@ function visibleChips(chips: FlowChip[]) {
 const ENTRY_LIMIT = 8
 const OUTPUT_LIMIT = 8
 const INPUT_LIMIT = 6
+/* 入口/出口折叠状态各自独立（审核 #99）：此前两处共用 expandedEntry，点任一处会同时展开另一处 */
 const expandedEntry = ref(false)
+const expandedExit = ref(false)
 const expandedSteps = ref<Set<string>>(new Set())
 function toggleStep(step: WalkStep) {
   const next = new Set(expandedSteps.value)
@@ -708,10 +720,15 @@ function stepFolded(step: WalkStep, which: 'in' | 'out') {
   const chips = which === 'in' ? step.inputChips : step.outputChips
   return Math.max(0, chips.length - (which === 'in' ? INPUT_LIMIT : OUTPUT_LIMIT))
 }
+/** 是否超过折叠阈值（与展开态无关）：折叠开关的显示条件，保证展开后按钮仍在、可收起（审核 #99） */
+function stepOverflow(step: WalkStep, which: 'in' | 'out') {
+  const chips = which === 'in' ? step.inputChips : step.outputChips
+  return chips.length > (which === 'in' ? INPUT_LIMIT : OUTPUT_LIMIT)
+}
 
 const entryVisible = computed(() => visibleChips(flow.value?.entry || []))
 const entryShown = computed(() => (expandedEntry.value ? entryVisible.value : entryVisible.value.slice(0, ENTRY_LIMIT)))
-const exitShown = computed(() => (expandedEntry.value ? flow.value?.exit || [] : (flow.value?.exit || []).slice(0, ENTRY_LIMIT)))
+const exitShown = computed(() => (expandedExit.value ? flow.value?.exit || [] : (flow.value?.exit || []).slice(0, ENTRY_LIMIT)))
 
 /* ================= 步骤卡芯片（过滤 + 折叠后） ================= */
 
@@ -770,17 +787,24 @@ function chipClass(c: FlowChip, role: string) {
     'is-entry': role === 'entry',
   }
 }
-function onQueryInput() {
-  const q = query.value.trim().toLowerCase()
-  if (!q) { focusId.value = ''; return }
-  const all = flowSteps.value.flatMap((s) => [...s.inputChips, ...s.outputChips])
-  const hit = all.find((c) =>
-    c.fieldId.toLowerCase().includes(q) ||
+function chipMatchesQuery(c: FlowChip, q: string): boolean {
+  return c.fieldId.toLowerCase().includes(q) ||
     c.family.toLowerCase().includes(q) ||
     c.agentId.toLowerCase().includes(q) ||
     c.description.toLowerCase().includes(q) ||
     (c.persistKey || '').toLowerCase().includes(q)
-  )
+}
+/** 搜索命中字段数（审核 #114：工具栏可见反馈，0 命中显「无匹配字段」；未搜索时为 0 且不渲染） */
+const queryHitCount = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  if (!q) return 0
+  return flowSteps.value.flatMap((s) => [...s.inputChips, ...s.outputChips]).filter((c) => chipMatchesQuery(c, q)).length
+})
+function onQueryInput() {
+  const q = query.value.trim().toLowerCase()
+  if (!q) { focusId.value = ''; return }
+  const all = flowSteps.value.flatMap((s) => [...s.inputChips, ...s.outputChips])
+  const hit = all.find((c) => chipMatchesQuery(c, q))
   if (hit) {
     focusId.value = hit.id
     const step = flowSteps.value.find((s) => [...s.inputChips, ...s.outputChips].some((x) => x.id === hit.id))
@@ -1042,6 +1066,7 @@ watch(edgeSet, scheduleMeasure)
 watch(showHidden, scheduleMeasure)
 watch(focusId, scheduleMeasure)
 watch(expandedEntry, scheduleMeasure)
+watch(expandedExit, scheduleMeasure)
 watch(expandedSteps, scheduleMeasure, { deep: true })
 watch(() => flow.value?.stageId, scheduleMeasure)
 // hover / 数据族聚焦只影响边的高亮态（无需重测 DOM），轻量重算几何
@@ -1074,6 +1099,12 @@ useEscape(() => !!selected.value, () => { selected.value = null })
    或从画布拖选字段到遮罩松手时误关（同 GoalConversations/OpsContent 接法） */
 const maskRef = ref<HTMLElement | null>(null)
 useMaskClose(maskRef, () => { selected.value = null })
+/* 模态覆盖层语义（审核 #95）：此前抽屉只有 role=dialog，焦点不进抽屉、Tab 可一路走到
+   底层 130+ 芯片、背景可滚、无 aria-modal、关闭不回焦。useOverlay 一次收口
+   （锁滚 + aria-modal + 聚焦面板 + Tab 陷阱 + 关闭回焦），与 FieldRoutingTable 弹窗同款。 */
+const drawerPanelRef = ref<HTMLElement | null>(null)
+const drawerOpen = computed(() => !!selected.value)
+useOverlay(drawerOpen, drawerPanelRef)
 
 /** 旅程摘要：谁产出 / 谁消费 / 交给谁 */
 function producersOf(c: FlowChip): string[] {
@@ -1208,6 +1239,9 @@ function stepHue(step: FlowStep): string {
 .dfg-title { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); }
 .dfg-title__agent { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); }
 .dfg-meta { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
+/* 搜索命中反馈（审核 #114）：0 命中用琥珀强调，与「命中 N」的中性读数区分 */
+.dfg-hitnote { color: var(--mk-muted); }
+.dfg-hitnote--none { color: var(--mk-amber); }
 
 .dfg-toolbar__controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .dfg-search { position: relative; display: inline-flex; align-items: center; }

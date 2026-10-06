@@ -13,20 +13,26 @@
     <!-- 原型骨架：单张卡内「.tabs 页签 + 页签体」（Users 卡内页签判例）。状态条退役——
          死信计数在死信卡头、会话计数在页签角标、CSV 说明在导出表单脚注，不再三处投影 -->
     <section class="mk-card oc-card">
-      <div class="tabs oc-tabs" role="tablist" aria-label="系统工具视图切换">
-        <button type="button" role="tab" class="tab" :aria-selected="tab === 'tools'" @click="switchTab('tools')">运维工具</button>
-        <button type="button" role="tab" class="tab" :aria-selected="tab === 'export'" @click="switchTab('export')">数据导出</button>
+      <!-- 键盘契约（审核 #182）：role=tablist/tab 兑现 roving tabindex + 左右/Home/End 方向键
+           循环切换并移动焦点，每枚页签 aria-controls 到对应 role=tabpanel 的页签体
+           （判例 AuditLogs.vue:701-721） -->
+      <div class="tabs oc-tabs" role="tablist" aria-label="系统工具视图切换" @keydown="onTabKeydown">
+        <button id="oc-tab-tools" :ref="(el) => setTabRef(el, 0)" type="button" role="tab" class="tab" :aria-selected="tab === 'tools'" aria-controls="oc-panel-tools" :tabindex="tab === 'tools' ? 0 : -1" @click="switchTab('tools')">运维工具</button>
+        <button id="oc-tab-export" :ref="(el) => setTabRef(el, 1)" type="button" role="tab" class="tab" :aria-selected="tab === 'export'" aria-controls="oc-panel-export" :tabindex="tab === 'export' ? 0 : -1" @click="switchTab('export')">数据导出</button>
         <!-- P3-34（设计评审）：未知态角标由孤悬「—」改「待访问」弱灰小字——「—」像渲染残留、
-             与「外挂能力 0」真计数并读语义无法区分；title 保留「未访问≠0」语义 -->
-        <button type="button" role="tab" class="tab" :aria-selected="tab === 'security'" @click="switchTab('security')">会话安全<span class="tab__count" :title="securityCount === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ securityCount === null ? '待访问' : securityCount }}</span></button>
+             与「外挂能力 0」真计数并读语义无法区分；title 保留「未访问≠0」语义。
+             2026-10-06 审核 #175：SessionSecurity 加载中/失败上报 -1（原来 immediate 写 0 是
+             「确认无会话」的假信号），负数与 null 一并渲染「待访问」。 -->
+        <button id="oc-tab-security" :ref="(el) => setTabRef(el, 2)" type="button" role="tab" class="tab" :aria-selected="tab === 'security'" aria-controls="oc-panel-security" :tabindex="tab === 'security' ? 0 : -1" @click="switchTab('security')">会话安全<span class="tab__count" :title="securityCount === null || securityCount < 0 ? '尚未访问该页签，或计数未拉取成功（待访问 ≠ 0）' : undefined">{{ securityCount === null || securityCount < 0 ? '待访问' : securityCount }}</span></button>
       </div>
       <div class="oc-card__body">
 
     <!-- ===== Tab1: 运维工具 ===== -->
     <template v-if="tab === 'tools'">
     <!-- 全宽页签体（原型 renderOpsCenter tools/export/security 三 pane 均通栏；2026-10-02
-         撤 mk-narrow 限宽——此前仅本页签被 1200px 居中收窄，宽屏下两翼留白、三个页签不一致） -->
-    <div class="oc-tab-body">
+         撤 mk-narrow 限宽——此前仅本页签被 1200px 居中收窄，宽屏下两翼留白、三个页签不一致）
+         role=tabpanel + aria-labelledby：与页签 aria-controls 成对（审核 #182） -->
+    <div id="oc-panel-tools" role="tabpanel" aria-labelledby="oc-tab-tools" class="oc-tab-body">
     <!-- 时间推进模拟 -->
     <section class="mk-card">
       <div class="mk-card__head">
@@ -87,11 +93,13 @@
         <div class="mk-card__head-right">
           <!-- P3（2026-10-04 全站评审）：空态不给假动作——0 死信时禁点（此前点了会弹
                「重放全部 0 条死信」确认框，暗示一个不存在的可执行动作） -->
+          <!-- 清单加载失败时作用域未知，禁用重放（否则确认框按 deadCount=0 生成假读数，
+               与「重放全部」自相矛盾） -->
           <button
             type="button"
             class="mk-btn mk-btn--sm"
-            :disabled="requeueBusy || (!deadLoading && !deadFailed && deadCount === 0)"
-            :title="!deadLoading && !deadFailed && deadCount === 0 ? '暂无死信可重放' : undefined"
+            :disabled="requeueBusy || deadFailed || (!deadLoading && deadCount === 0)"
+            :title="deadFailed ? '清单未加载成功，请先重试' : (!deadLoading && deadCount === 0 ? '暂无死信可重放' : undefined)"
             @click="requeueAll"
           >
             {{ requeueBusy ? '重放中…' : '重放全部死信' }}
@@ -133,14 +141,20 @@
           </table>
         </div>
         <div class="mk-list-more">
-          <!-- CP8：死信总条数由卡头 warn 徽标单源承载，列表尾不再复读「共 N 条死信」 -->
-          <span>最近 50 条</span>
+          <!-- CP8：死信总条数由卡头 warn 徽标单源承载，列表尾不再复读「共 N 条死信」。
+               口径与后端一致（outbox.worker 按 occurredAt 升序 take 50 → 实为最早 50 条，
+               不是「最近」）；总数一并给出，避免把窗口读成全量 -->
+          <span>最早 50 条（共 {{ deadCount }} 条）</span>
           <button type="button" class="mk-link" @click="loadDead">刷新</button>
         </div>
       </template>
+      <!-- 失败态走 tone=error（红系图标 + role=alert），与页内另两处错误态同口径 -->
       <MkEmptyState
         v-else-if="deadFailed"
+        tone="error"
+        icon="!"
         title="死信清单加载失败"
+        description="可重试；先重试再决定是否重放。"
         action-text="重试"
         compact
         @action="loadDead"
@@ -158,7 +172,7 @@
     <!-- ===== Tab2: 数据导出（原型表单形态：范围 chips 多选 + 右对齐「开始导出」；
          时间范围 / JSONL 格式后端导出接口不支持，不渲染假控件） ===== -->
     <template v-else-if="tab === 'export'">
-    <div class="oc-tab-body oc-export">
+    <div id="oc-panel-export" role="tabpanel" aria-labelledby="oc-tab-export" class="oc-tab-body oc-export">
       <div class="mk-field">
         <span class="mk-field__label">导出范围</span>
         <div class="mk-pills" role="group" aria-label="导出范围多选">
@@ -170,18 +184,20 @@
             :class="{ 'mk-pill--active': exportSel.includes(item.key) }"
             :aria-pressed="exportSel.includes(item.key)"
             :title="item.desc"
+            :disabled="exporting !== ''"
             @click="toggleExport(item.key)"
           >{{ item.label }}</button>
         </div>
       </div>
-      <div v-if="exportSel.some((k) => LOG_EXPORT_KEYS.has(k))" class="mk-field oc-export__limit">
+      <!-- label 包裹而非 div（审核 #176）：与同页另三处 .mk-field 同构，select 拿到可访问名 -->
+      <label v-if="exportSel.some((k) => LOG_EXPORT_KEYS.has(k))" class="mk-field oc-export__limit">
         <span class="mk-field__label">日志行数上限</span>
         <select v-model="logLimit" class="mk-filter__select" :disabled="exporting !== ''">
           <option :value="1000">1000 行</option>
           <option :value="5000">5000 行</option>
           <option :value="20000">20000 行</option>
         </select>
-      </div>
+      </label>
       <div class="oc-export__foot">
         <span class="oc-export__hint">已选 {{ exportSel.length }} 项 · CSV（UTF-8 BOM，Excel / WPS 可直接打开）</span>
         <button
@@ -193,21 +209,24 @@
       </div>
       <ul class="oc-export__notes">
         <li>执行日志默认导出最近 1000 行，可切换上限；其余业务表导出最近 20000 条。</li>
-        <li>用户导出默认排除虚拟学习者与测试账号；如需全量请在后端接口加 includeTest=1。</li>
+        <!-- 文案与实现同口径（#157）：后端 users 导出只排 isVirtualLearner，测试账号（e2e_/shotsnap/@test.local 等）当前仍会包含；
+             待后端接入 REAL_USER_WHERE 后，本条应同步改回「排除虚拟学习者与测试账号」 -->
+        <li>用户导出默认排除虚拟学习者；测试账号（e2e_ / shotsnap / @test.local 等）当前仍会包含。</li>
         <li>导出为只读操作，不产生审计记录；敏感字段（密码哈希、API Key）一律不包含。</li>
       </ul>
     </div>
     </template>
 
-    <!-- ===== Tab3: 会话安全（SessionSecurity embedded） ===== -->
-    <SessionSecurity v-else ref="securityRef" embedded @count="securityCount = $event" />
+    <!-- ===== Tab3: 会话安全（SessionSecurity embedded） =====
+         role=tabpanel/aria-labelledby 透传到 SessionSecurity 根 div（单根组件，审核 #182） -->
+    <SessionSecurity v-else id="oc-panel-security" role="tabpanel" aria-labelledby="oc-tab-security" ref="securityRef" embedded @count="securityCount = $event" />
       </div><!-- /oc-card__body -->
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { timeAgo, errMsg, shortId } from './live'
 import { askConfirm } from './useConfirm'
@@ -246,6 +265,28 @@ function switchTab(t: OcTab) {
   /* tools 死信懒加载统一交给文件尾的 tab watcher：此处直接调会与 watcher 同帧各发一次请求 */
   /* URL 同步（?tab=…）：深链/刷新/前进后退可寻址 */
   if (route && route.query.tab !== t) void router?.replace({ query: { ...route.query, tab: t } })
+}
+
+/* 页签键盘契约（审核 #182）：roving tabindex（仅选中项可 Tab 进入）+ 方向键循环切换并移动焦点，
+   兑现 role=tablist/role=tab 的 ARIA tabs 语义（判例 AuditLogs.vue:701-721） */
+const tabEls = ref<(HTMLButtonElement | null)[]>([])
+function setTabRef(el: unknown, i: number) {
+  tabEls.value[i] = (el as HTMLButtonElement) || null
+}
+function onTabKeydown(e: KeyboardEvent) {
+  const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
+  if (!keys.includes(e.key)) return
+  const n = OC_TABS.length
+  const cur = (OC_TABS as readonly string[]).indexOf(tab.value)
+  const from = cur >= 0 ? cur : 0
+  let next = from
+  if (e.key === 'ArrowRight') next = (from + 1) % n
+  else if (e.key === 'ArrowLeft') next = (from - 1 + n) % n
+  else if (e.key === 'Home') next = 0
+  else next = n - 1
+  e.preventDefault()
+  switchTab(OC_TABS[next])
+  void nextTick(() => tabEls.value[next]?.focus())
 }
 
 const refreshing = ref(false)
@@ -437,9 +478,12 @@ async function doExport(key: string) {
   }
 }
 
-/** 顺序导出所选项（共用 exporting 守卫，按钮同时禁用防并发） */
+/** 顺序导出所选项（共用 exporting 守卫，按钮同时禁用防并发）。
+    审核 #177：先快照数组再遍历——此前 for…of 直接迭代 ref，导出中途改选会改到本次导出集，
+    与实时变的「已选 N 项」提示不一致（chips 现已随 exporting 禁用，快照是第二道保险）。 */
 async function runExport() {
-  for (const key of exportSel.value) {
+  const keys = [...exportSel.value]
+  for (const key of keys) {
     if (exporting.value !== '') return
     await doExport(key)
   }

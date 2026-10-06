@@ -1,38 +1,28 @@
 {
   "hex": {
-    "src/views/admin-redesign/AchIcon.vue": 4,
-    "src/views/admin-redesign/ApiConfig.vue": 9,
-    "src/views/admin-redesign/AuditLogs.vue": 10,
-    "src/views/admin-redesign/ExecLogs.vue": 9,
-    "src/views/admin-redesign/Feedback.vue": 1,
-    "src/views/admin-redesign/GoalConversations.vue": 2,
-    "src/views/admin-redesign/LearnerCenter.vue": 1,
+    "src/views/admin-redesign/AchIcon.vue": 3,
+    "src/views/admin-redesign/ApiConfig.vue": 6,
+    "src/views/admin-redesign/AuditLogs.vue": 8,
+    "src/views/admin-redesign/ExecLogs.vue": 7,
     "src/views/admin-redesign/LearnerDetail.vue": 2,
-    "src/views/admin-redesign/Notifications.vue": 2,
-    "src/views/admin-redesign/OpsHub.vue": 6,
-    "src/views/admin-redesign/Orchestrator.vue": 2,
     "src/views/admin-redesign/PromptEvalPanel.vue": 2,
-    "src/views/admin-redesign/RunStateBadge.vue": 17,
-    "src/views/admin-redesign/SandboxView.vue": 4,
+    "src/views/admin-redesign/RunStateBadge.vue": 16,
     "src/views/admin-redesign/SessionCockpit.vue": 36,
-    "src/views/admin-redesign/SessionSecurity.vue": 6,
     "src/views/admin-redesign/Shell.vue": 1,
-    "src/views/admin-redesign/skill-design/engineering-tab.vue": 12,
+    "src/views/admin-redesign/skill-design/engineering-tab.vue": 11,
     "src/views/admin-redesign/skill-design/protocol-tab.vue": 7,
-    "src/views/admin-redesign/skill-design/runtime-tab.vue": 2,
-    "src/views/admin-redesign/skill-design/trial-tab.vue": 21,
-    "src/views/admin-redesign/skill-design/versions-tab.vue": 6,
+    "src/views/admin-redesign/skill-design/runtime-tab.vue": 1,
+    "src/views/admin-redesign/skill-design/trial-tab.vue": 17,
+    "src/views/admin-redesign/skill-design/versions-tab.vue": 4,
     "src/views/admin-redesign/Skills.vue": 1,
     "src/views/admin-redesign/Users.vue": 1,
-    "src/views/admin-redesign/VirtualLearners.vue": 8,
-    "src/views/admin-redesign/VirtualProfile.vue": 8,
     "src/views/HomeNext.vue": 2,
     "src/views/v2/V2AuthLayout.vue": 1,
     "src/views/v2/V2LearningPage.vue": 27,
     "src/views/v2/V2LearningState.vue": 1,
     "src/views/v2/V2Login.vue": 1,
     "src/components/chat/MessageActions.vue": 1,
-    "src/components/ui/ToastHost.vue": 5
+    "src/components/ui/ToastHost.vue": 4
   },
   "mediaSpacing": {
     "src/styles/mk-primitives.css": 34,
@@ -42,7 +32,6 @@
     "src/styles/mk-primitives.css": 11
   },
   "baseSmallFont": {
-    "src/views/user/AgentLogs.vue": 1,
     "src/styles/mk-primitives.css": 5
   },
   "radius": {

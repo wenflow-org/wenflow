@@ -7,7 +7,9 @@
       class="sd-switch sd-settings__enable"
       :title="form.enabled ? '已开启：允许按自然日推进虚拟学习' : '默认关闭，现网零变化'"
     >
-      <input v-model="form.enabled" type="checkbox" @change="onToggleEnabled" />
+      <!-- 可访问名（审核 #181）：label 唯一文本是状态词，读屏只听到「已关闭 复选框」不知在开关
+           什么；给 input 补 aria-label 而不动 span 文案（该 span 是可见状态字，单测亦锁定其文本） -->
+      <input v-model="form.enabled" type="checkbox" aria-label="启用日期模拟" @change="onToggleEnabled" />
       <span>{{ form.enabled ? '已开启' : '已关闭' }}</span>
     </label>
     <div class="sd-settings__grid">

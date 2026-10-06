@@ -6,6 +6,9 @@
       <div class="sk-rec__title">
         <h3 class="mk-card__title">技能对账</h3>
         <span class="mk-card__meta" title="核对四个来源的登记是否一致：配置文件清单（manifest）、系统运行注册（gateway）、生效版本（ACTIVE prompt）、技能登记册">配置文件 × 运行注册 × 生效版本 × 登记册</span>
+        <!-- 口径说明（审核 #83）：对账数据不在页面 60s 轮询内，进入本页签时拉取一次；
+             手刷钮仅在自取模式出现（宿主下发报告时数据归宿主，刷新由宿主承担） -->
+        <span class="mk-card__meta" title="对账报告不随健康中心 60s 轮询，切换进入本页签时拉取一次；失败态可重试">进入本页签时刷新 · 不随 60s 轮询</span>
         <button v-if="recDiff" type="button" class="mk-link sk-rec__clear" @click="clearRecDiff">✕ 清除差集定位</button>
       </div>
       <MkLoading v-if="recLoading" inline />
@@ -18,7 +21,8 @@
           <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="登记册已删除/不存在，但注册记录仍残留（幽灵注册）">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
           <span v-else class="mk-pill">失效注册 0</span>
         </div>
-        <button type="button" class="sk-rec__refresh" :disabled="recLoading" @click="refresh">刷新</button>
+        <!-- 常驻手刷钮撤（审核 #83）：对账数据不随 60s 轮询，进入本页签即挂载重拉；
+             轮询家族规则「轮询页不放刷新钮」，失败/空态仍保留重试逃生动作 -->
       </template>
     </div>
 
@@ -53,24 +57,22 @@
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-text)">
           </colgroup>
           <thead>
             <tr>
               <th>Skill</th>
-              <th title="是否存在于技能登记册">登记册</th>
               <th title="manifest：是否在配置文件中声明">配置声明</th>
               <th title="gateway 注册：是否已在系统运行中注册">运行注册</th>
               <th title="ACTIVE prompt：是否有生效版本">生效版本</th>
               <th>完成度</th>
-              <th>差集</th>
+              <th title="差集：本表只列未注册 / 无生效版本 / 未上线三类异常；登记册成员恒为「已登记」故不再单列">差集</th>
             </tr>
           </thead>
           <tbody>
             <template v-for="(e, i) in recPageRows" :key="e.kind === 'group' ? `g-${e.group.parentAgent}-${i}` : e.row.skillId">
               <tr v-if="e.kind === 'group'" class="sk-rec-group">
-                <td colspan="7">
+                <td colspan="6">
                   <span class="sk-rec-group__name">{{ e.group.parentAgent }}</span>
                   <span class="sk-rec-group__meta">下辖 {{ e.group.items.length }} 条</span>
                   <span class="sk-rec-group__meta">live {{ e.group.liveCount }} / {{ e.group.items.length }}</span>
@@ -93,7 +95,6 @@
                     </div>
                   </div>
                 </td>
-                <td><span class="sk-rec-yn sk-rec-yn--ok">✓</span></td>
                 <td>
                   <span :class="['sk-rec-yn', e.row.manifest ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.manifest ? '✓' : '✗' }}</span>
                   <span v-if="e.row.kind === 'aux' && !e.row.manifest" class="mk-badge mk-badge--muted sk-rec-tag">免注册</span>
@@ -328,9 +329,6 @@ defineExpose({ refresh, recReport, recDiff });
 .sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; align-items: center; }
 /* 同行里 mk-pill（中性口径）与 mk-badge（异常语气）统一到同一档尺寸，避免高矮不齐 */
 .sk-rec__pills > * { padding: 5px 12px; border-radius: 999px; font-size: var(--mk-fs-micro); font-weight: 600; }
-.sk-rec__refresh { border: 1px solid var(--mk-line); background: var(--mk-surface); border-radius: var(--mk-radius-sm); padding: 3px 10px; font: inherit; font-size: var(--mk-fs-micro); color: var(--mk-muted); cursor: pointer; white-space: nowrap; }
-.sk-rec__refresh:hover { border-color: var(--mk-blue); color: var(--mk-blue); }
-.sk-rec__refresh:disabled { opacity: 0.5; cursor: default; }
 .sk-rec__skeleton { padding: 12px; }
 .sk-rec-table th, .sk-rec-table td { text-align: left; }
 .sk-rec-yn { font-weight: 700; font-size: var(--mk-fs-body); }
@@ -343,7 +341,9 @@ defineExpose({ refresh, recReport, recDiff });
 /* 分组行不覆写内边距：单行小字单元格曾因 6px 纵向内边距落到 37px，低于 SPEC §3 的 40px 行高下限。
    跟随 .mk-table td 的档位节奏（9px 起，≥2800 档 14px）后为 43px 且随档位增长。 */
 .sk-rec-group td { background: var(--mk-surface-2); border-bottom: 1px solid var(--mk-line); }
-.sk-rec-group__name { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue); }
+/* 分组行组名（审核 #80）：--mk-blue 在 --mk-surface-2 底上亮色仅 4.39:1（<4.5:1），
+   换同色系深档 --mk-accent-deep（亮 5.68:1 / 暗 5.92:1），字号档位不动 */
+.sk-rec-group__name { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-accent-deep); }
 .sk-rec-group__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); margin-left: 10px; }
 .sk-rec-legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid var(--mk-line); font-size: var(--mk-fs-micro); }
 .sk-rec-legend__item { display: inline-flex; align-items: center; gap: 4px; }

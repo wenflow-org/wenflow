@@ -7,9 +7,10 @@
         <span class="frt__toolbar-hint">编辑 prompts/orchestration/{{ stage }}.yaml（字段路由唯一声明源）</span>
       </div>
     </div>
-    <!-- 原型 .note--info：入口说明（不再自搓虚线蓝框） -->
+    <!-- 原型 .note--info：入口说明（不再自搓虚线蓝框）。审核 #111：按钮实为工具条最左侧（非右上角），
+         文案改「本面板顶部」与 DriftAuditPanel 同口径，避免指路与实际位置相反 -->
     <p class="note note--info frt__notice">
-      行级编辑已收敛：修改字段路由请使用右上角「编排文件」按钮，保存后新建行即时生效，已有行修改后点「{{ TERMS.syncToDb }}」
+      行级编辑已收敛：修改字段路由请使用本面板顶部的「编排文件」按钮，保存后新建行即时生效，已有行修改后点「{{ TERMS.syncToDb }}」
     </p>
 
     <!-- core 联动提示条（M3 轻量：当前 stage 各 skill 的 fields-sync 状态角标） -->
@@ -159,9 +160,23 @@
             <span class="mk-badge mk-badge--muted">{{ filteredOf(agent.agentId).length }}<template v-if="filterActive"> / {{ routingsOf(agent.agentId).length }}</template> 行</span>
           </div>
           <div v-if="rowsOf(agent.agentId).length" class="frt__scroll mk-table-scroll">
-            <!-- 原型 .tbl：自动布局（去 mk-table--fixed 与 <colgroup>），
-                 单元格 nowrap；长文本列（含义）走 wrap 列，长标识列 max-width+ellipsis 截断 -->
-            <table class="mk-table mk-table--dense frt__table">
+            <!-- 审核 #98：原自动布局（去 mk-table--fixed 与 <colgroup>）导致 5 张并列分组表同名列
+                 跨组不同宽（字段列 153/107/50/136/125px），最窄组字段名被截成 2 字符。改 fixed + colgroup
+                 固定列宽契约（字段/移交/落库键 --mk-col-id、含义 --mk-col-text、类型 --mk-col-model、
+                 角色/可见性/内部/累积/锁定 --mk-col-badge），五组同名列像素级对齐，基准合计 1140 ≤ 1182。 -->
+            <table class="mk-table mk-table--dense mk-table--fixed frt__table">
+              <colgroup>
+                <col style="width:var(--mk-col-id)" />
+                <col style="width:var(--mk-col-text)" />
+                <col style="width:var(--mk-col-model)" />
+                <col style="width:var(--mk-col-badge)" />
+                <col style="width:var(--mk-col-badge)" />
+                <col style="width:var(--mk-col-id)" />
+                <col style="width:var(--mk-col-badge)" />
+                <col style="width:var(--mk-col-badge)" />
+                <col style="width:var(--mk-col-id)" />
+                <col style="width:var(--mk-col-badge)" />
+              </colgroup>
               <thead>
                 <tr>
                   <th scope="col">字段</th>
@@ -229,8 +244,11 @@
             :action-text="filterActive ? '清除筛选' : ''"
             @action="clearFilter"
           />
-          <!-- 每 agent 组分页（统一 mk-pagination 页码器：固定 15 行/页，隐藏每页条数） -->
+          <!-- 每 agent 组分页（统一 mk-pagination 页码器：固定 15 行/页，隐藏每页条数）。
+               审核 #112：0 命中时原无条件渲染「共 0 条 · 第 1 / 1 页」+禁用翻页，五张卡叠五份
+               空页码器（像还有内容）——有行才出页码器，0 命中只留上方 MkEmptyState -->
           <Pagination
+            v-if="filteredOf(agent.agentId).length"
             :page="pageOf(agent.agentId) + 1"
             :total="filteredOf(agent.agentId).length"
             :page-size="AGENT_PAGE_SIZE"
@@ -623,7 +641,11 @@ async function closeOrchestration() {
       title: '放弃未保存的修改？',
       message: '编排文件内容已被修改且尚未保存到文件，关闭将丢弃这些改动。',
       confirmText: '丢弃并关闭',
-      danger: true,
+      /* danger:false = 「放弃未保存修改」统一档（2026-10-06 审核 §主题 7）：
+         与 SkillDesignPage 三处（刷新设计页/切换 Skill/离开设计页）同语义，
+         原为 true 造成同一语义两页分级相反。doc/ADMIN_PAGE_TEMPLATES.md:644 的
+         19 处清单以此档为准，本条已登记。 */
+      danger: false,
     });
     if (!ok) return;
   }
@@ -806,6 +828,11 @@ watch(() => props.stage, () => void loadStage());
   line-height: 1.55;
 }
 .note--info { background: var(--mk-blue-bg); color: var(--mk-blue); }
+/* 暗色对比度（2026-10-06 复核）：--mk-blue(#5b8def) 压在 --mk-blue-bg(16% 蓝 tint，合成 #293244)
+   上仅 3.98:1 < 4.5。暗色覆写文字色为同族提亮档 --mk-badge-info-fg(#9db8f5，实测 6.49:1)，底色不动。
+   同一问题见「core 联动」标题：--mk-blue 在 surface-2 上 4.56，一并提亮到 7.44 留余量 */
+html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
+html[data-theme='dark'] .frt-syncbar__title { color: var(--mk-badge-info-fg); }
 .frt__notice { font-weight: 600; }
 .frt__toolbar-hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
@@ -818,7 +845,11 @@ watch(() => props.stage, () => void loadStage());
   margin: 0 0 12px;
 }
 .frt-syncbar--muted { color: var(--mk-muted); }
-.frt-syncbar__title { font-weight: 800; color: var(--mk-blue); }
+/* 亮色对比度（2026-10-06 渲染探针亮色 1920）：--mk-blue(#2f6ae0) 压 .note 的 --mk-surface-2
+   底（#eef2fa）实测 4.39:1 < 4.5（本元素字号 micro 且非大字档）。改用 --mk-accent-deep
+   （亮色 #1f57cc，同 .mk-badge--self 用法）→ 5.59:1；暗色档仍由下方 html[data-theme='dark']
+   覆写取 --mk-badge-info-fg(#9db8f5)。 */
+.frt-syncbar__title { font-weight: 800; color: var(--mk-accent-deep, var(--mk-blue)); }
 /* 胶囊徽章走全局 .mk-badge（--ok/--warn/--bad/--muted 四态）；本类只保留按钮复位与悬停反馈 */
 .frt-syncbar__badge {
   cursor: pointer;
@@ -928,8 +959,9 @@ watch(() => props.stage, () => void loadStage());
 }
 
 /* 字段列：点分名 + 层级分段小字。
-   行高统一修复：fieldId 由 word-break:break-all 改单行 ellipsis（不再折行撑高） */
-.frt__fieldcell { max-width: 300px; display: grid; gap: 2px; min-width: 0; }
+   行高统一修复：fieldId 由 word-break:break-all 改单行 ellipsis（不再折行撑高）
+   （审核 #98：列宽已由 colgroup 的 --mk-col-id 决定，撤原 max-width:300px 自动布局残留） */
+.frt__fieldcell { display: grid; gap: 2px; min-width: 0; }
 .frt__field { display: block; min-width: 0; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .frt__fieldpath {
   font-size: var(--mk-fs-micro);
@@ -939,12 +971,11 @@ watch(() => props.stage, () => void loadStage());
   text-overflow: ellipsis;
 }
 
-/* 原型 .tbl td.wrap：含义是长文本列 → 换行不截断（完整文案仍在 title） */
-.frt__table th.frt__wrap, .frt__table td.frt__wrap { white-space: normal; min-width: 220px; }
-.frt__meaning { min-width: 220px; }
+/* 含义是长文本列 → 换行不截断（完整文案仍在 title）；列宽由 colgroup 的 --mk-col-text 决定 */
+.frt__table th.frt__wrap, .frt__table td.frt__wrap { white-space: normal; }
 .frt__meaning-text {
   display: block;
-  max-width: 340px;
+  max-width: 100%;
   white-space: normal;
   overflow-wrap: anywhere;
   color: var(--mk-muted);
@@ -954,8 +985,8 @@ watch(() => props.stage, () => void loadStage());
 /* 角色徽章（7 类着色，与图例共用） */
 /* render 徽章 */
 /* 流转徽章（图例） */
-/* 落库键列：截断上限统一引用 token（原散落 180px） */
-.frt__persist { display: inline-block; max-width: var(--mk-col-id); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* 落库键列：截断上限随列宽（fixed 布局下列宽 = colgroup --mk-col-id，用 100% 防内层 span 越出单元格） */
+.frt__persist { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .frt__persist--alias { color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: var(--mk-radius-sm); padding: 0 5px; }
 
 /* 编排弹窗值域速查条：视觉走 .note--info，本类只留排版 */
@@ -970,7 +1001,7 @@ watch(() => props.stage, () => void loadStage());
 .frt__orch-quick-title { font-weight: 800; color: var(--mk-blue); }
 .frt__orch-quick-item b { margin-right: 4px; color: var(--mk-ink); }
 
-.frt__handoff { max-width: var(--mk-col-id); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frt__handoff { max-width: 100%; color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (min-width: 2000px) {
   .frt__toolbar-hint { font-size: var(--mk-fs-micro); }

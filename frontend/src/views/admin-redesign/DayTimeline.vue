@@ -33,20 +33,21 @@
         <span class="dt-status__meta">起点 {{ clock.baseDate }}</span>
         <span class="dt-status__meta">已推进 {{ clock.dayIndex }} / {{ clock.maxSimulatedDays }} 天</span>
         <span class="dt-status__meta">{{ clock.timezone }}</span>
-        <span class="dt-status__act">
+        <span v-if="!readonly" class="dt-status__act">
           <button type="button" class="mk-link mk-link--danger" :disabled="resetting" title="重置推进进度（dayIndex=0、清空 history；不回改已写时间戳）" @click="resetClock">
             {{ resetting ? '重置中…' : '重置进度' }}
           </button>
         </span>
       </div>
 
-      <!-- 按钮层级（原型 .btn 191-206）：推进 = 次级，推进并上课 = 主操作 -->
+      <!-- 按钮层级（原型 .btn 191-206）：推进 = 次级，推进并上课 = 主操作。
+           readonly（#67）：嵌入只读视图（画像·日程 tab）时只留课表元信息，不渲染写操作 -->
       <div class="dt-controls">
         <span class="dt-status__meta">课表 {{ weekdaysLabel(clock.courseWeekdays) }} · 每天 {{ clock.lessonsPerDay }} 节</span>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 1 个上课日（跳过非上课日）' : '请先开启日期模拟'" @click="advance(1)">推进 1 天</button>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 5 个上课日' : '请先开启日期模拟'" @click="advance(5)">推进 5 天</button>
-        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '推进 1 天并真实跑当天课程（业务时间戳落在模拟日；每节消耗 AI 调用）' : '请先开启日期模拟'" @click="advance(1, true)">推进并上课</button>
-        <label class="dt-auto" :title="clock.enabled ? '开启后由后台按课表自动推进（仅时钟簿记；当天任务重放归系统层）' : '请先开启日期模拟'">
+        <button v-if="!readonly" type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 1 个上课日（跳过非上课日）' : '请先开启日期模拟'" @click="advance(1)">推进 1 天</button>
+        <button v-if="!readonly" type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 5 个上课日' : '请先开启日期模拟'" @click="advance(5)">推进 5 天</button>
+        <button v-if="!readonly" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '推进 1 天并真实跑当天课程（业务时间戳落在模拟日；每节消耗 AI 调用）' : '请先开启日期模拟'" @click="advance(1, true)">推进并上课</button>
+        <label v-if="!readonly" class="dt-auto" :title="clock.enabled ? '开启后由后台按课表自动推进（仅时钟簿记；当天任务重放归系统层）' : '请先开启日期模拟'">
           <input
             type="checkbox"
             :checked="clock.autoAdvance"
@@ -94,6 +95,8 @@
         >
           <div class="dt-cell__head">
             <span class="schcell__day">第 {{ day.dayIndex + 1 }} 天</span>
+            <!-- 状态第二通道（审核 #183）：颜色之外给字，色弱/灰度可辨四态 -->
+            <span v-if="dayStateLabel(day)" class="schcell__state" :class="`schcell__state--${dayState(day)}`">{{ dayStateLabel(day) }}</span>
             <span class="schcell__slot">{{ day.simulatedDay }}</span>
           </div>
 
@@ -192,9 +195,16 @@ interface DayEntry {
   memory: { traceCount: number; dueCount: number; fragileCount: number; stableCount: number; avgRetention: number | null }
 }
 
-const props = withDefaults(defineProps<{ sessionId: string; from?: number; to?: number }>(), {
+const props = withDefaults(defineProps<{
+  sessionId: string
+  from?: number
+  to?: number
+  /** 只读视图（#67）：嵌入声明为「只读」的 tab（画像·日程）时隐藏推进/自动推进/重置等写操作 */
+  readonly?: boolean
+}>(), {
   from: 0,
   to: 29,
+  readonly: false,
 })
 
 /** 分页窗口：默认窗口只有 30 天，长会话更早的历史按 30 天一档翻页回看；load() 沿用这组 from/to 拉取参数 */
@@ -237,6 +247,17 @@ function pickErr(e: unknown, fallback: string): string {
 
 async function advance(days: number, runTasks = false) {
   if (!props.sessionId) return
+  /* 审核 #180：「推进并上课」真实跑当天课程（业务时间戳落模拟日 + 每节消耗 AI 调用），
+     是代价最高且不可撤销的动作，此前不经确认（同页成本更低、可反复的重置反而有确认框，
+     危险分级与代价相反；成本说明只在 title，触屏/键盘读不到）。补确认框把代价显式化。 */
+  if (runTasks) {
+    const ok = await askConfirm({
+      title: '推进并上课',
+      message: `将真实跑 ${clock.value?.lessonsPerDay ?? 1} 节课程（业务时间戳落在模拟日），每节消耗对应 AI 调用；课程产出会写入学习者数据，不可撤销。`,
+      confirmText: '推进并上课',
+    })
+    if (!ok) return
+  }
   advancing.value = true
   actionError.value = ''
   try {
@@ -312,6 +333,19 @@ function dayState(day: DayEntry): 'active' | 'done' | 'skip' | 'idle' {
   if (day.tasks.some((t) => t.actualMinutes !== null)) return 'done'
   if (day.dayLoad && day.dayLoad.lessons === 0) return 'skip'
   return 'idle'
+}
+
+/** 状态词（审核 #183）：四态里 skip 与 idle 同底色、done 与 idle 只差一条 30% 绿描边，
+    状态只靠颜色表达 → 色弱/灰度下分不出。给日程格补第二通道（格内状态字），
+    idle 不加字（「未上课」是默认态，加了反而噪音）。 */
+const DAY_STATE_LABEL: Record<'active' | 'done' | 'skip' | 'idle', string> = {
+  active: '当前',
+  done: '已完成',
+  skip: '无课',
+  idle: '',
+}
+function dayStateLabel(day: DayEntry) {
+  return DAY_STATE_LABEL[dayState(day)]
 }
 
 async function load() {
@@ -399,6 +433,19 @@ watch(
 .schcell--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
 .schcell--skip,
 .schcell--idle { background: var(--mk-surface-2); }
+/* 状态字（审核 #183）：四态的颜色之外的第二通道。done 绿字、skip 弱灰字、active 蓝字，
+   与格底色同族但更深（文字可读性优先）；尺寸取 micro，不抢「第 N 天」主标识。 */
+.schcell__state {
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  opacity: 0.85;
+}
+.schcell__state--active { color: var(--mk-blue); }
+.schcell__state--done { color: var(--mk-green); }
+.schcell__state--skip { color: var(--mk-muted); }
 .schcell__day { font-weight: 700; font-size: var(--mk-fs-micro); color: var(--mk-ink); }
 .schcell__slot { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .schcell__scene { display: flex; flex-wrap: wrap; gap: 4px; font-size: var(--mk-fs-micro); }

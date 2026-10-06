@@ -43,7 +43,6 @@ const PAGES = [
   { name: 'sessions-paths', url: '/admin/sessions?tab=paths' },
   { name: 'memory-review', url: '/admin/memory-review' },
   { name: 'virtual-learners', url: '/admin/virtual-learners' },
-  { name: 'batch-experiments', url: '/admin/batch-experiments' },
   { name: 'orchestrator', url: '/admin/orchestrator' },
   { name: 'skills-run', url: '/admin/skills?tab=run', tier: true },
   { name: 'skills-health', url: '/admin/skills?tab=health' },

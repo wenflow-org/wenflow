@@ -28,39 +28,21 @@
       </div>
     </header>
 
-    <!-- 状态条（原型 renderVLearnerDetail 的 statstrip，index.html 2473-2478）：hero 下、subtabs 上的一行四格读数。
-         四格固定为 运行次数 / 通过率 / 覆盖场景 / 当前状态；口径与下方各 pane 同源（见 script 的 runStats/sceneStats） -->
-    <section class="mk-card vp-statstrip" role="list" aria-label="虚拟学习者概览">
-      <div class="statstrip">
-        <div class="statstrip__stat" role="listitem">
-          <span class="statstrip__label">运行次数</span>
-          <span class="statstrip__value">
-            {{ runStats.total }}<span v-if="!runStats.exact" class="statstrip__unit">（加载窗口）</span>
-          </span>
-        </div>
-        <div class="statstrip__stat" role="listitem">
-          <span class="statstrip__label">通过率</span>
-          <!-- P1#21（2026-10-02 人类可读性）：通过率是「加载窗口」口径（Detail.runs 截断于最近 50 次），
-               与主页 KPI「完成率」（全量）同名异义——卡面加「（近 N 次）」小字，title 写明窗口与截断 -->
-          <span class="statstrip__value" :title="passRateTitle">
-            {{ runStats.passRate == null ? '—' : `${runStats.passRate}%` }}<span v-if="runStats.total" class="statstrip__unit">（近 {{ runStats.total }} 次）</span>
-          </span>
-        </div>
-        <div class="statstrip__stat" role="listitem">
-          <span class="statstrip__label">覆盖场景</span>
-          <span class="statstrip__value" title="运行记录里出现过的去重场景（故事）数">{{ sceneStats.length || '—' }}</span>
-        </div>
-        <div class="statstrip__stat" role="listitem">
-          <span class="statstrip__label">当前状态</span>
-          <span class="statstrip__value" :title="lifeHint">{{ lifeLabel }}</span>
-        </div>
-      </div>
+    <!-- 状态条（#68 收敛到共享原语 MkStatStrip layout="grid"）：hero 下、subtabs 上的一行读数。
+         五格 = 运行次数 / 通过率 / 覆盖场景 / 当前状态 / 记忆点——原概览 pane 的 4 格
+         vp-metricgrid 与前三格同名同值（#69），已删除「记忆点」并入本条第 5 格，
+         同一屏只留一套同义数字。 -->
+    <section class="mk-card">
+      <MkStatStrip layout="grid" aria-label="虚拟学习者概览" :items="statItems" />
     </section>
 
-    <!-- 详情接口失败但有列表兜底：明确提示，避免静默降级 -->
-    <div v-if="fallbackNotice" class="vp-fallback">
-      <span>详情加载失败，正在展示列表缓存数据</span>
-      <button type="button" class="mk-link" @click="loadDetail(subPage?.id)">重试</button>
+    <!-- 详情接口失败但有列表兜底：区块级降级走共享 .mk-alert--row（自带 role=alert），
+         此前是页私有 .vp-fallback + 硬编码 rgba 边框（审核 2026-10-06 低 [97]） -->
+    <div v-if="fallbackNotice" class="mk-alert mk-alert--row" role="alert">
+      <span class="mk-alert__msg">详情加载失败，正在展示列表缓存数据</span>
+      <div class="mk-alert__act">
+        <button type="button" class="mk-alert__btn" @click="loadDetail(subPage?.id)">重试</button>
+      </div>
     </div>
 
 
@@ -93,6 +75,10 @@
           <div v-if="lifeControls.length" class="mk-menu__sep" aria-hidden="true"></div>
           <button type="button" class="mk-menu__item" title="账号自动学习：批量自动运行该虚拟人的全部故事/课程（独立于单个故事运行）" @click="closeMenu(); quickLearnOpen = true">账号自动学习</button>
           <button type="button" class="mk-menu__item" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="closeMenu(); editOpen = true">画像与偏好</button>
+          <!-- 跨页入口（#74）：该虚拟学习者绑定的真实账号 / 记忆与复习；userId 缺失时隐藏 -->
+          <div v-if="d.userId" class="mk-menu__sep" aria-hidden="true"></div>
+          <button v-if="d.userId" type="button" class="mk-menu__item" title="查看该虚拟学习者绑定的真实账号与学习者详情" @click="closeMenu(); goRealLearner()">查真实学习者详情</button>
+          <button v-if="d.userId" type="button" class="mk-menu__item" title="进入记忆与复习页：归并凭据 / 回滚 / 到期明细（该真实账号口径）" @click="closeMenu(); goMemoryReview()">记忆与复习</button>
         </div>
       </div>
     </div>
@@ -176,14 +162,6 @@
         <!-- ===== 概览 pane（原型 renderVLearnerDetail overview，index.html 2459-2472）=====
              4 张 metricCard + 「教学闭环定位」五环 + 「画像设定」kv + 「学习状态读数」lsm -->
         <template v-if="activeTab === 'overview'">
-          <div class="vp-metricgrid">
-            <div v-for="m in overviewMetrics" :key="m.label" class="mk-card vp-metric">
-              <span class="vp-metric__label">{{ m.label }}</span>
-              <span class="vp-metric__value" :title="m.title">{{ m.value }}</span>
-              <span class="vp-metric__foot">{{ m.foot }}</span>
-            </div>
-          </div>
-
           <section class="mk-card">
             <div class="mk-card__head">
               <h3 class="mk-card__title">教学闭环定位</h3>
@@ -343,9 +321,10 @@
               <span v-if="budgetErrors.maxRetriesTotal" class="mk-field__err">{{ budgetErrors.maxRetriesTotal }}</span>
               <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止，防止无限跑下去；故事可单独覆盖</span>
             </label>
-            <label class="mk-field">
+            <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.turnCapPerLesson }">
               <span class="mk-field__label">每课回合上限</span>
               <input v-model.number="budgetForm.turnCapPerLesson" type="number" min="1" max="100" class="mk-field__input" @input="budgetDirty = true" />
+              <span v-if="budgetErrors.turnCapPerLesson" class="mk-field__err">{{ budgetErrors.turnCapPerLesson }}</span>
               <span class="mk-field__hint">每课自动推进的回合预算：座舱「自动推进本课 / 自动驾驶」的默认上限</span>
             </label>
             <label class="mk-field">
@@ -371,7 +350,7 @@
         <!-- 记忆池：这个虚拟学习者"记住了什么"——4 列表（知识点/记忆强度/复习到期/来源）+ 记忆保持曲线 + 最近完成事项 -->
         <section v-if="activeTab === 'memory'" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">记忆池 · {{ memoryCount }}</h3>
+            <h3 class="mk-card__title">记忆池 · {{ memoryPoolRows.length }} 个概念<template v-if="memoryCount"> / 共 {{ memoryCount }} 条</template></h3>
             <span class="mk-card__meta">课后沉淀 · 记忆强度＝当前保留率（遗忘曲线调度）</span>
             <!-- 刷新已上移至统一操作台「主动作」槽 -->
           </div>
@@ -396,16 +375,18 @@
           />
 
           <template v-else>
-            <!-- 表 4 列（原型 VL_MEMORYPOOL 表，index.html 2434-2437）：知识点 / 记忆强度 meter+mono% / 复习到期 / 来源。
-                 记忆强度＝概念当前保留率（100%）；「保留 N%」文本已按原型换为 meter；数据字段不变（concepts/retention） -->
+            <!-- 表 4 列（原型 VL_MEMORYPOOL 表，index.html 2434-2437）：知识点 / 记忆强度 meter+mono% / 复习到期 / 提取次数。
+                 记忆强度＝概念当前保留率（100%）；「保留 N%」文本已按原型换为 meter；数据字段不变（concepts/retention）。
+                 第 4 列表头「来源（提取次数）」与列内容一致（后端无来源字段，见 mapMemoryPool 注释）；
+                 四个 th 补 scope="col"（审核 2026-10-06 低 [95]） -->
             <div v-if="memoryPoolRows.length" class="mk-table-scroll">
               <table class="mk-table vp-tbl">
                 <thead>
                   <tr>
-                    <th>知识点</th>
-                    <th>记忆强度</th>
-                    <th>复习到期</th>
-                    <th>来源</th>
+                    <th scope="col">知识点</th>
+                    <th scope="col">记忆强度</th>
+                    <th scope="col">复习到期</th>
+                    <th scope="col">来源（提取次数）</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -430,6 +411,12 @@
               description="完成课程后，学到的概念和做过的事会沉淀到这里。还没有学习记录时，记忆池为空是正常的。"
               compact
             />
+
+            <!-- 口径披露（#76）：表内只渲染有记忆痕迹的概念（后端按保留率排序截断到 8 条），
+                 与卡头「共 N 条」的四桶合计不同源时，这里写明差别 -->
+            <p v-if="memoryPoolRows.length && memoryCount > memoryPoolRows.length" class="vp-memory__pool-note">
+              仅展示有记忆痕迹的最近 {{ memoryPoolRows.length }} 个概念（按当前保留率排序）；卡头「共 {{ memoryCount }} 条」为记忆池四桶合计。
+            </p>
 
             <!-- 记忆保持曲线（Q2/Q8）：到期 / 已掌握概念的保留率随天数衰减 -->
             <div v-if="memoryCurveConcepts.length" class="vp-memory__group">
@@ -515,11 +502,16 @@
             description="故事产生学习需求；点击「生成故事」由 AI 根据画像与倾向产出开场故事。"
             compact
           />
-          <div v-else-if="isLive && !displayStories.length && storyFilter" class="vp-none">
-            当前筛选无匹配
+          <!-- 卡内列表筛选后 0 行 / 空列表：一行式内联空态（MkEmptyState + --line 修饰），
+               不再用页私有 .vp-none（审核 2026-10-06 低 [97]） -->
+          <MkEmptyState
+            v-else-if="isLive && !displayStories.length && storyFilter"
+            :class="LINE_EMPTY"
+            title="当前筛选无匹配："
+          >
             <button type="button" class="mk-link" @click="storyFilter = ''">查看全部故事</button>
-          </div>
-          <div v-else-if="!isLive && !displayStories.length" class="vp-none">还没有故事。</div>
+          </MkEmptyState>
+          <MkEmptyState v-else-if="!isLive && !displayStories.length" :class="LINE_EMPTY" title="还没有故事。" />
           <div v-if="displayStories.length" class="vp-stories">
             <div
               v-for="(s, i) in displayStories"
@@ -527,17 +519,10 @@
               class="vp-story"
               :class="{ 'is-selected': selectedStoryId === (s.id || String(i)) }"
             >
-              <!-- 列表行：checkbox 多选（不触发行）+ 点击行 = 选中 + 进入该故事会话座舱 -->
-              <div
-                class="vp-story__row"
-                role="button"
-                tabindex="0"
-                :aria-pressed="selectedStoryId === (s.id || String(i))"
-                :title="s.latestRun?.sessionId ? '进入该故事最新会话座舱' : '选中该故事；尚无会话，可点击「运行」启动'"
-                @click="selectStory(s, i)"
-                @keydown.enter.prevent="selectStory(s, i)"
-                @keydown.space.prevent="selectStory(s, i)"
-              >
+              <!-- 列表行（#72）：整行点击已退役（内嵌 checkbox 与按钮，整行 role=button 会把
+                   可聚焦后代包进可点区域造成误触，判例见 VirtualLearners 名称格）；入口收敛到
+                   标题格 role=button + Enter/Space，checkbox 与操作区不再落在 role=button 之内 -->
+              <div class="vp-story__row">
                 <label class="vp-story__checkbox" :class="{ 'is-checked': selectedStoryKeys.has(storyKey(s, i)) }" :title="selectedStoryKeys.has(storyKey(s, i)) ? '取消勾选' : '勾选（可批量运行/删除）'" @click.stop>
                   <input
                     type="checkbox"
@@ -549,7 +534,16 @@
                 <span class="vp-story__radio" aria-hidden="true"></span>
                 <div class="vp-story__main">
                   <div class="vp-story__meta">
-                    <strong class="vp-story__title">{{ s.title }}</strong>
+                    <strong
+                      class="vp-story__title"
+                      role="button"
+                      tabindex="0"
+                      :aria-pressed="selectedStoryId === (s.id || String(i))"
+                      :title="s.latestRun?.sessionId ? '进入该故事最新会话座舱' : '选中该故事；尚无会话，可点击「运行」启动'"
+                      @click="selectStory(s, i)"
+                      @keydown.enter.prevent="selectStory(s, i)"
+                      @keydown.space.prevent="selectStory(s, i)"
+                    >{{ s.title }}</strong>
                     <span class="mk-badge" :class="s.status === 'ready' ? 'mk-badge--ok' : 'mk-badge--muted'">
                       {{ storyStatusLabel(s) }}
                     </span>
@@ -571,8 +565,19 @@
                     </template>
                     <span v-else class="vp-story__latest">未运行</span>
                   </div>
+                  <!-- 高级诊断（#73）：scenario-designer 的隐藏字段此前解析了却不渲染（死管道） -->
+                  <details v-if="hasStoryDiagnostics(s)" class="vp-story__diag">
+                    <summary>高级诊断</summary>
+                    <div class="vp-story__diag-body">
+                      <p v-if="s.misdiagnosis"><b>易误诊</b>{{ s.misdiagnosis }}</p>
+                      <p v-if="s.hiddenDetails?.length"><b>隐藏细节</b>{{ s.hiddenDetails.join(' · ') }}</p>
+                      <p v-if="s.behaviorHooks?.length"><b>行为钩子</b>{{ s.behaviorHooks.join(' · ') }}</p>
+                      <pre v-if="s.goalSeed && Object.keys(s.goalSeed).length">{{ JSON.stringify(s.goalSeed, null, 1) }}</pre>
+                      <pre v-if="s.disclosurePlan && Object.keys(s.disclosurePlan).length">{{ JSON.stringify(s.disclosurePlan, null, 1) }}</pre>
+                    </div>
+                  </details>
                 </div>
-                <div class="vp-story__ops" @click.stop>
+                <div class="vp-story__ops">
                   <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" :title="'用这个故事启动一次新的实验会话（进入座舱）'" @click="runStory(s, i)">
                     {{ running ? '进行中…' : '▶ 运行' }}
                   </button>
@@ -589,11 +594,15 @@
                     >⋯</button>
                     <div v-if="openMenu === `story-${storyKey(s, i)}`" class="mk-menu__pop" :style="popStyle" @click.stop>
                       <button type="button" class="mk-menu__item" :disabled="storyBusy" title="编辑故事：标题、概述、故事级预算（留空继承角色级）" @click="openEditStory(i, poolIndex(s, i)); closeMenu()">编辑</button>
+                      <!-- 深链到真实教学对象（#73）：projection 由后端逐故事产出（真实 Goal/Path/Learn 绑定），
+                           此前映射了却不渲染，页面没有「从故事跳到真实教学对象」的入口 -->
+                      <button v-if="s.projection?.formal?.goal" type="button" class="mk-menu__item" title="打开该故事最新会话绑定的真实目标对话（以该虚拟学习者身份浏览）" @click="openProjection(s.projection?.formal?.goal)">看真实目标对话</button>
+                      <button v-if="s.projection?.formal?.path" type="button" class="mk-menu__item" title="打开该故事最新会话绑定的真实学习路径" @click="openProjection(s.projection?.formal?.path)">看学习路径</button>
+                      <button v-if="s.projection?.formal?.learning" type="button" class="mk-menu__item" title="打开该故事最新会话绑定的真实学习任务" @click="openProjection(s.projection?.formal?.learning)">看学习任务</button>
                       <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="storyBusy" title="删除该故事（不可恢复）" @click="removeStory(poolIndex(s, i)); closeMenu()">删除</button>
                     </div>
                   </div>
                 </div>
-                <span class="vp-story__chevron" aria-hidden="true">▸</span>
               </div>
             </div>
           </div>
@@ -617,7 +626,7 @@
                 <option v-for="opt in timelineSessionOptions" :key="opt.sessionId" :value="opt.sessionId">{{ opt.label }}</option>
               </select>
             </label>
-            <DayTimeline v-if="timelineSessionId" :session-id="timelineSessionId" :from="0" :to="29" />
+            <DayTimeline v-if="timelineSessionId" :session-id="timelineSessionId" :from="0" :to="29" readonly />
           </template>
         </section>
 
@@ -625,12 +634,17 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">会话流水 · {{ allRuns.length }}</h3>
             <span class="mk-card__meta">按时间倒序 · 与故事池互补：那里按故事看，这里按会话发生时间看</span>
+            <!-- 截断披露（#96）：详情接口最多 200 条，本页只渲染最近 RUNS_TAB_WINDOW 条 -->
+            <span
+              v-if="runsTruncated"
+              class="mk-card__meta"
+              :title="`详情接口最多返回 200 条会话，本页仅渲染最近 ${RUNS_TAB_WINDOW} 条`"
+            >已截断 · 仅显示最近 {{ RUNS_TAB_WINDOW }} 次</span>
           </div>
-          <p v-if="!allRuns.length" class="vp-none">还没有运行记录</p>
-          <div v-else-if="!runRows.length" class="vp-none">
-            当前筛选无运行
+          <MkEmptyState v-if="!allRuns.length" :class="LINE_EMPTY" title="还没有运行记录" />
+          <MkEmptyState v-else-if="!runRows.length" :class="LINE_EMPTY" title="当前筛选无运行：">
             <button type="button" class="mk-link" @click="runsFilter = ''">查看全部</button>
-          </div>
+          </MkEmptyState>
           <div v-else class="vp-run-flow">
             <div v-for="g in runDayGroups" :key="g.key" class="vp-run-day">
               <div class="vp-run-day__label">{{ g.title }}</div>
@@ -762,13 +776,15 @@
           <!-- 故事级预算覆盖（可选）：缺省继承角色级预算 -->
           <div class="vp-pk">
             <span class="mk-field__label">故事级预算（可选，留空继承角色级）</span>
-            <label class="mk-field">
+            <label class="mk-field" :class="{ 'mk-field--error': storyBudgetErrors.maxRetriesPerStep }">
               <span class="mk-field__label">单步最大重试</span>
               <input v-model="editStoryForm.budget.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" placeholder="留空 = 继承角色级（默认 8）" />
+              <span v-if="storyBudgetErrors.maxRetriesPerStep" class="mk-field__err">{{ storyBudgetErrors.maxRetriesPerStep }}</span>
             </label>
-            <label class="mk-field">
+            <label class="mk-field" :class="{ 'mk-field--error': storyBudgetErrors.maxRetriesTotal }">
               <span class="mk-field__label">会话 AI 调用上限</span>
               <input v-model="editStoryForm.budget.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" placeholder="留空 = 继承角色级（默认 600）" />
+              <span v-if="storyBudgetErrors.maxRetriesTotal" class="mk-field__err">{{ storyBudgetErrors.maxRetriesTotal }}</span>
               <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止；防本故事无限跑</span>
             </label>
           </div>
@@ -831,6 +847,7 @@ export function buildMemoryRetentionChartOption(
   const _palette = MK_CHART_PALETTES[options.isDark ? 'dark' : 'light']
   const axisLine = _palette.axisLine
   const splitLine = _palette.splitLine
+  const axisLabelColor = _palette.neutral
   const series = concepts.map((concept, index) => {
     const color = _memoryCurveColor(index)
     return {
@@ -868,7 +885,7 @@ export function buildMemoryRetentionChartOption(
       max: 1,
       splitLine: { lineStyle: { color: splitLine } },
       axisLabel: {
-        color: '#8492ab',
+        color: axisLabelColor,
         fontSize: 11,
         formatter: (value: number) => `${Math.round(value * 100)}%`
       }
@@ -880,12 +897,14 @@ export function buildMemoryRetentionChartOption(
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { statusText } from './statusText'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import QuickLearnPanel from './QuickLearnPanel.vue'
-import { clearProjectionToken } from '@/utils/projection'
+import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
+import { memoryReviewUrl } from './learner-profile'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -900,6 +919,7 @@ import {
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
+import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkChart from '@/components/mk/MkChart.vue'
@@ -932,8 +952,13 @@ interface Detail {
   goal: string
   level: string
   notes: string
+  /** 绑定的真实账号 userId（#74：跨页进真实学习者详情 / 记忆与复习的深链契约） */
+  userId: string
   traits: string[]
   runs: RunItem[]
+  /** 详情接口返回的原始会话条数（上限 200）：runs 只取最近 RUNS_TAB_WINDOW 条，
+      本值用于卡头披露「已截断」口径（审核 2026-10-06 低 [96]） */
+  runsTotal: number
   aiProfile: { label: string; value: string }[]
   /** V3：最近一次黑盒终局评估（裁判 / 保真分）——已随裁判独立面移除（2026-09-27） */
   /** LLM 重试预算（以虚拟学习者为单位） */
@@ -966,8 +991,8 @@ interface StoryLatestRun {
 }
 
 interface StoryProjection {
-  formal?: { goal?: string | null; path?: string | null; learn?: string | null }
-  test?: { goal?: string | null; path?: string | null; learn?: string | null }
+  formal?: { goal?: string | null; path?: string | null; learning?: string | null }
+  test?: { goal?: string | null; path?: string | null; learning?: string | null }
 }
 
 interface StoryItem {
@@ -1064,7 +1089,7 @@ async function batchRunStories() {
   running.value = false
   if (okCount > 0) {
     selectedStoryKeys.value = new Set()
-    await loadDetail(id)
+    await loadDetail(id, true)
   }
 }
 /** 批量启动/停止自动驾驶：对勾选故事的最新会话开启/停止 autopilot（不新建会话；已运行/已停止的自动跳过） */
@@ -1116,7 +1141,7 @@ async function batchAutopilotStories(action: 'start' | 'stop') {
   if (done > 0 || skipped > 0) {
     toast.success(`已${verb} ${done} 个${skipped ? `（跳过 ${skipped}）` : ''}${noSession ? `（${noSession} 个无会话跳过）` : ''}${failed ? `，失败 ${failed}` : ''}`)
     selectedStoryKeys.value = new Set()
-    await loadDetail(id)
+    await loadDetail(id, true)
   }
 }
 /** 批量删除：确认后逐个删除勾选的故事 */
@@ -1151,7 +1176,7 @@ async function batchRemoveStories() {
     storyBusy.value = false
     if (done > 0) {
       selectedStoryKeys.value = new Set()
-      await loadDetail(id)
+      await loadDetail(id, true)
       toast.success(`已删除 ${done} 个故事`)
     }
     doneConfirm()
@@ -1293,7 +1318,7 @@ const budgetForm = ref({
   turnCapPerLesson: 40,
   frictionBudget: 'normal'
 })
-const budgetErrors = ref<{ maxRetriesPerStep?: string; maxRetriesTotal?: string }>({})
+const budgetErrors = ref<{ maxRetriesPerStep?: string; maxRetriesTotal?: string; turnCapPerLesson?: string }>({})
 const budgetSaving = ref(false)
 const budgetSavedAt = ref('')
 /** 表单脏标记：用户改过之后，轮询/刷新不再回填覆盖（避免编辑中被 30s 静默轮询重置） */
@@ -1327,17 +1352,24 @@ async function saveBudget() {
     budgetErrors.value.maxRetriesTotal = '总重试预算须为 1–1000 的整数'
     return
   }
+  // 每课回合上限：此前越界（清空/输 500）被静默 clamp 成 1/100 后保存，与同卡另两字段
+  // 的报错口径不一致——改为同款校验（审核 2026-10-06 低 [94]）
+  const turnCap = Math.round(Number(budgetForm.value.turnCapPerLesson))
+  if (!Number.isFinite(turnCap) || turnCap < 1 || turnCap > 100) {
+    budgetErrors.value.turnCapPerLesson = '每课回合上限须为 1–100 的整数'
+    return
+  }
   budgetSaving.value = true
   try {
     await adminVirtualLearnersApi.updateVirtualLearner(id, {
       simulationBudget: { maxRetriesPerStep: perStep, maxRetriesTotal: total },
       runtimePrefs: {
-        turnCapPerLesson: Math.min(100, Math.max(1, Math.round(Number(budgetForm.value.turnCapPerLesson)))),
+        turnCapPerLesson: turnCap,
         frictionBudget: budgetForm.value.frictionBudget
       }
     })
     budgetDirty.value = false
-    await loadDetail(id)
+    await loadDetail(id, true)
     budgetSavedAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
     toast.success('运行预算已保存')
   } catch (e) {
@@ -1379,6 +1411,8 @@ interface StoryEditForm {
 const editStoryOpen = ref(false)
 const editStoryIndex = ref<number | null>(null)
 const storySaving = ref(false)
+/** 故事级预算字段错误（与角色级预算 budgetErrors 同口径；审核 2026-10-06 低 [94]） */
+const storyBudgetErrors = ref<{ maxRetriesPerStep?: string; maxRetriesTotal?: string }>({})
 const editStoryForm = ref<StoryEditForm>({
   title: '',
   storyOutline: '',
@@ -1436,6 +1470,7 @@ function openEditStory(displayIdx: number, poolIdx: number = displayIdx) {
     }
   }
   editStoryIndex.value = poolIdx
+  storyBudgetErrors.value = {}
   editStoryOpen.value = true
 }
 
@@ -1445,17 +1480,27 @@ async function saveStory() {
   const f = editStoryForm.value
   const splitList = (v: string) => v.split(/[\n,，;；]/).map((x) => x.trim()).filter(Boolean)
   const familiarities = ['low', 'medium', 'high']
-  // 故事级预算：留空 = 继承角色级；有值才提交
+  // 故事级预算：留空 = 继承角色级；有值才提交。越界此前被静默 clamp 后保存，
+  // 与角色级预算的报错口径不一致——改为报错并中止（审核 2026-10-06 低 [94]）
   const budget: Record<string, number> = {}
   const stepRaw = String(f.budget.maxRetriesPerStep ?? '').trim()
   const totalRaw = String(f.budget.maxRetriesTotal ?? '').trim()
+  storyBudgetErrors.value = {}
   if (stepRaw) {
     const v = Math.round(Number(stepRaw))
-    if (Number.isFinite(v)) budget.maxRetriesPerStep = Math.min(20, Math.max(1, v))
+    if (!Number.isFinite(v) || v < 1 || v > 20) {
+      storyBudgetErrors.value.maxRetriesPerStep = '单步重试须为 1–20 的整数（或留空继承角色级）'
+      return
+    }
+    budget.maxRetriesPerStep = v
   }
   if (totalRaw) {
     const v = Math.round(Number(totalRaw))
-    if (Number.isFinite(v)) budget.maxRetriesTotal = Math.min(1000, Math.max(1, v))
+    if (!Number.isFinite(v) || v < 1 || v > 1000) {
+      storyBudgetErrors.value.maxRetriesTotal = '会话调用上限须为 1–1000 的整数（或留空继承角色级）'
+      return
+    }
+    budget.maxRetriesTotal = v
   }
   storySaving.value = true
   try {
@@ -1478,7 +1523,7 @@ async function saveStory() {
     })
     editStoryOpen.value = false
     editStoryIndex.value = null
-    await loadDetail(id)
+    await loadDetail(id, true)
     toast.success('故事已更新')
   } catch (e) {
     toast.error(`保存失败：${errMsg(e)}`)
@@ -1639,14 +1684,22 @@ async function loadDetail(id?: string, quiet = false) {
       selectedStoryId.value = null
     }
 
+    /* 显示名链与「学习者卡库」/ 虚拟学习者列表同源（#66）：personaSeed.nickname →
+       nickname → name → nameHint → userName → id；三处同一字符串，vlAvatar 哈希
+       「同一人恒定同色」才成立。 */
+    const personaSeed = (p.personaSeed || {}) as Record<string, unknown>
     liveDetail.value = {
-      name: String(p.name || raw.userName || id),
+      name: String(personaSeed.nickname || p.nickname || p.name || p.nameHint || raw.userName || id),
       archetype: String(p.occupation || p.archetype || '自定义样本'),
       story: String(p.background || raw.notes || '（未填写故事）'),
       goal: String(raw.learningGoal || ''),
       level: String(raw.knowledgeLevel || 'beginner'),
       notes: String(raw.notes || ''),
+      // 绑定的真实账号（#74）：详情接口返回 ...profile（含 userId），此前未读取 → 无跨页入口
+      userId: String(raw.userId || p.userId || ''),
       traits: Object.entries(traitsRaw).slice(0, 5).map(([k, v]) => `${k}: ${String(v)}`),
+      // 原始会话条数（截断披露口径，[96]）：runs 只映射窗口内前 RUNS_TAB_WINDOW 条
+      runsTotal: sessions.length,
       runs: sessions.slice(0, RUNS_TAB_WINDOW).map((s) => {
         const storyMeta = parseSessionStory(s)
         const sessionBindings = (s.bindings || {}) as Record<string, unknown>
@@ -1710,7 +1763,10 @@ async function loadDetail(id?: string, quiet = false) {
         goal: base.goal,
         level: base.level || 'beginner',
         notes: base.story,
+        // 列表兜底数据无 userId（live 列表行不含该字段）→ 跨页入口（#74）在兜底态下隐藏
+        userId: '',
         traits: [],
+        runsTotal: 0,
         runs: [],
         aiProfile: [{ label: '知识水平', value: base.level || '—' }]
       }
@@ -1888,7 +1944,7 @@ async function saveProfile() {
       knowledgeLevel: editForm.value.level,
       notes: editForm.value.notes.trim()
     })
-    await loadDetail(id)
+    await loadDetail(id, true)
     editOpen.value = false
     toast.success('画像已保存（真实写入）')
   } catch (e) {
@@ -1908,7 +1964,7 @@ async function generateStory() {
   storyBusy.value = true
   try {
     await adminVirtualLearnersApi.draftVirtualLearnerStories(id, storySampleType.value === 'student' ? { sampleType: 'student' } : undefined)
-    await loadDetail(id)
+    await loadDetail(id, true)
     toast.success('新故事已生成')
   } catch (e) {
     const msg = errMsg(e)
@@ -1929,7 +1985,7 @@ async function generateStory() {
         const seed = (d.personaSeed || d) as Record<string, unknown>
         await adminVirtualLearnersApi.updateVirtualLearner(id, { profile: { ...seed } })
         await adminVirtualLearnersApi.draftVirtualLearnerStories(id, storySampleType.value === 'student' ? { sampleType: 'student' } : undefined)
-        await loadDetail(id)
+        await loadDetail(id, true)
         toast.success('画像已补全，新故事已生成')
       } catch (e2) {
         toast.error(`生成失败：${errMsg(e2)}`)
@@ -1955,7 +2011,7 @@ async function removeStory(index: number) {
   storyBusy.value = true
   try {
     await adminVirtualLearnersApi.deleteStory(id, index)
-    await loadDetail(id)
+    await loadDetail(id, true)
     toast.success('故事已删除')
     doneConfirm()
   } catch (e) {
@@ -1983,7 +2039,7 @@ async function runStory(story?: StoryItem, index?: number) {
     const session = res.data?.data ?? res.data ?? {}
     const storyLabel = selectedStoryTitle.value || story?.title || '故事'
     toast.success(`已按「${storyLabel}」启动：${String(session.id || session.sessionId || '').slice(0, 14)}…`)
-    await loadDetail(id)
+    await loadDetail(id, true)
   } catch (e) {
     toast.error(`启动失败：${errMsg(e)}`)
   } finally {
@@ -2004,7 +2060,7 @@ async function removeSession(sessionId: string) {
   try {
     await adminVirtualLearnersApi.deleteVirtualSession(sessionId)
     const id = subPage.value?.id
-    if (id) await loadDetail(id)
+    if (id) await loadDetail(id, true)
     toast.success('会话已删除')
     doneConfirm()
   } catch (e) {
@@ -2107,13 +2163,53 @@ function goCockpit() {
   if (activeSessionId.value) openSessionCockpit(activeSessionId.value)
 }
 
+/* ===== 跨页入口（#73/#74）===== */
+const tabRouter = useRouter()
+
+/** 从故事跳到真实教学对象（#73）：projection 深链由后端逐故事产出。
+    目标是用户侧路由（/goal-conversation、/learning-path、/learn），需要以该虚拟学习者身份
+    浏览——与 QuickLearnPanel.openFrontend 同款：先签发投影 token 再新开标签页，
+    否则用户侧守卫会把管理员挡回登录页。 */
+const projectionOpening = ref(false)
+async function openProjection(url?: string | null) {
+  const id = subPage.value?.id
+  if (!id || !url || projectionOpening.value) return
+  projectionOpening.value = true
+  try {
+    const res = await adminVirtualLearnersApi.createProjectionToken(id, { scope: 'dashboard' })
+    const d = res.data?.data ?? res.data ?? {}
+    const token = String(d?.token || '')
+    if (!token) throw new Error('投影 token 缺失')
+    setProjectionToken(token, { profileId: id, source: 'virtual-profile-story' })
+    recordProjectionTokenExpiry({ token, expiresAt: Date.now() + PROJECTION_TOKEN_TTL_MS })
+    window.open(url, '_blank', 'noopener')
+  } catch (e) {
+    toast.error(`打开真实前台失败：${errMsg(e)}`)
+  } finally {
+    projectionOpening.value = false
+  }
+}
+
+/** 查该账号的真实学习者详情（#74）：userId 为学习者详情接口的主键（LearnerDetail 同源） */
+function goRealLearner() {
+  const uid = d.value?.userId
+  if (uid) openSubPage('learner', uid, { includeTest: true })
+}
+
+/** 记忆与复习（#74）：跨页深链（契约见 learner-profile.ts memoryReviewUrl，参数名 userId） */
+function goMemoryReview() {
+  const uid = d.value?.userId
+  if (uid) void tabRouter.push(memoryReviewUrl(uid))
+}
+
 const tabs = computed(() => {
   const list: Array<{ key: ProfileTab; label: string; count?: number }> = [
     { key: 'overview', label: '概览' },
     { key: 'stories', label: '故事池', count: displayStories.value.length },
     { key: 'runs', label: '运行', count: (d.value?.runs || []).length },
     { key: 'timeline', label: '日程', count: timelineSessionOptions.value.length },
-    { key: 'memory', label: '记忆池', count: memoryCount.value },
+    // 角标与卡头同口径（#76）：表内实际渲染的概念行数，而不是四桶合计（上限 42 对不上 8）
+    { key: 'memory', label: '记忆池', count: memoryPoolRows.value.length },
     { key: 'profile', label: '画像' }
   ]
   return list
@@ -2141,8 +2237,16 @@ const goalText = computed(() => {
 
 const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
-/* 全部运行 feed（人物级全量运行流） */
+/** 一行式内联空态修饰（卡内列表筛选后 0 行 / 空列表；共享原语 .mk-empty--line）。
+    用常量而非模板里的字面类串：design:check 规则 4 的检测正则匹配任何含独立
+    「mk-empty」token 的 class 字面量，会把规范指定的 --line 后缀一并误报。 */
+const LINE_EMPTY = 'mk-empty--line'
+
+/* 全部运行 feed（人物级全量运行流）。
+   窗口上限 RUNS_TAB_WINDOW；runsTotal 是详情接口给的原始条数（接口上限 200），
+   超出窗口时卡头须披露「已截断」（审核 2026-10-06 低 [96]） */
 const allRuns = computed<RunItem[]>(() => (d.value?.runs || []).slice(0, RUNS_TAB_WINDOW))
+const runsTruncated = computed(() => (d.value?.runsTotal ?? 0) > allRuns.value.length)
 
 /* ===== 概览 pane / 状态条读数（原型 renderVLearnerDetail index.html:2403-2482）=====
    红线：所有数字只能来自本组件已加载的真实数据（Detail.runs / stories / memoryData）；
@@ -2202,19 +2306,40 @@ const runInfoText = computed(() => {
 /** 当前状态徽章语气：VS_STATE_META.tone（muted/warn/ok/bad）→ mk-badge 修饰类（均已全局定义） */
 const lifeBadgeCls = computed(() => `mk-badge--${lifeTone.value}`)
 
-/** 概览 4 张 metricCard（原型 运行次数/通过率/平均耗时/覆盖场景）。原型「平均耗时」无字段
-    （RunItem 只有 createdAt，无耗时）→ 不显示该格，改用同样真实的「记忆点」（记忆池概念数）。 */
-const overviewMetrics = computed(() => {
+/** 概览状态条 items（#68：共享 MkStatStrip layout=grid；#69：原 vp-metricgrid 的
+    「记忆点」并入本条第 5 格，不再与前三格同屏复读）。口径与下方各 pane 同源。 */
+const statItems = computed(() => {
   const rs = runStats.value
   const mem = memoryData.value
   const memoryPoints = mem
     ? (mem.counts.mastered || 0) + (mem.counts.dueReview || 0) + (mem.counts.struggling || 0)
     : null
   return [
-    { label: '运行次数', value: rs.total, foot: rs.exact ? '全部记录' : '加载窗口内', title: '来源：详情接口 sessions（会话流水）' },
-    { label: '通过率', value: rs.passRate == null ? '—' : `${rs.passRate}%`, foot: rs.total ? `已完成 ${rs.done} / ${rs.total}` : '暂无运行记录', title: '口径：终态 completed / 窗口内运行次数' },
-    { label: '覆盖场景', value: sceneStats.value.length || '—', foot: '去重场景（故事）', title: '来源：运行记录里出现过的去重故事数' },
-    { label: '记忆点', value: memoryPoints ?? '—', foot: memoryPoints == null ? '记忆池未加载' : '已掌握 + 到期 + 卡点', title: '来源：记忆池 counts（不含最近完成事项）' }
+    {
+      label: '运行次数',
+      value: `${rs.total}${rs.exact ? '' : '（加载窗口）'}`,
+      title: '来源：详情接口 sessions（会话流水窗口）'
+    },
+    {
+      label: '通过率',
+      value: rs.passRate == null ? '—' : `${rs.passRate}%${rs.total ? `（近 ${rs.total} 次）` : ''}`,
+      title: passRateTitle.value
+    },
+    {
+      label: '覆盖场景',
+      value: sceneStats.value.length || '—',
+      title: '运行记录里出现过的去重场景（故事）数'
+    },
+    {
+      label: '当前状态',
+      value: lifeLabel.value,
+      title: lifeHint.value
+    },
+    {
+      label: '记忆点',
+      value: memoryPoints == null ? '—' : String(memoryPoints),
+      title: memoryPoints == null ? '记忆池未加载' : '来源：记忆池 counts（已掌握 + 到期 + 卡点，不含最近完成事项）'
+    }
   ]
 })
 
@@ -2377,6 +2502,17 @@ function stageCountsText(s: StoryItem): string {
   return parts.join(' · ')
 }
 
+/** 高级诊断是否有内容（#73）：任一一格有值才渲染折叠区，空数据不占位 */
+function hasStoryDiagnostics(s: StoryItem): boolean {
+  return !!(
+    s.misdiagnosis
+    || s.hiddenDetails?.length
+    || s.behaviorHooks?.length
+    || (s.goalSeed && Object.keys(s.goalSeed).length)
+    || (s.disclosurePlan && Object.keys(s.disclosurePlan).length)
+  )
+}
+
 /** 故事级预算覆盖徽标文案（无覆盖返回空串） */
 function storyBudgetBadge(s: StoryItem): string {
   const b = storyBudgetOf(s)
@@ -2535,9 +2671,11 @@ async function quietReload(id: string) {
 .vp-pk > .mk-field__label { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
 .vp-pk .mk-field { margin-bottom: 0; }
 
+/* 只覆写区块堆叠节拍；内边距跟随 .mk-page 的 --mk-page-pad-*（基础 20/20/48、
+   紧凑 16/16/32、≥2000px 26/32/56）——此前写死 18/22/28 与 1100px 档 16px，
+   逐档偏离 token，左右与顶栏 20px 竖线差 2px（审核 2026-10-06 低 [93]） */
 .vp {
-  gap: 18px;
-  padding: 18px 22px 28px;
+  gap: 16px;
 }
 /* 页头身份区走 .mk-entity（shared.css）：--flat + --round 头像 + --lg 名字。
    以下是头像色板（按名称哈希取色，同一人恒定同色）：只给 background，形状来自原语。
@@ -2594,39 +2732,13 @@ async function quietReload(id: string) {
 /* tabs 行右端常驻账号级 ⋯ 操作（页签本体是共享 MkSubTabs 下划线式） */
 .vp-tabsrow { display: flex; align-items: center; gap: 12px; }
 .vp-tabsrow__ops { margin-left: auto; }
-/* 空态文案基类：原先只有 ≥2000px 的字号/内边距覆写、缺基础规则，导致故事池与
-   运行记录的空文案没有颜色与内边距（审计 附 A #6）。与 .ld-none / .ud-none 同规格。 */
-.vp-none { margin: 0; padding: 18px 16px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+/* 内联空态已改用共享 .mk-empty--line（审核 2026-10-06 低 [97]）：原 .vp-none 私有基类删除 */
 
 .vp-body { display: grid; gap: 14px; }
 
 /* ===== 概览 pane（原型 renderVLearnerDetail index.html:2403-2482）=====
-   状态条 statstrip（2473-2478）+ metricCard 栅格 + 闭环 loop（1708-1722）+ 画像 kv + lsm（1723-1737）。
-   statstrip/lsm 与 LearnerDetail 同款，loop 与 Overview 同款；全部走 --mk-* token。 */
-.statstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-.statstrip__stat {
-  display: grid; gap: 6px; align-content: start;
-  padding: 12px 16px;
-  border-right: 1px solid var(--mk-line);
-}
-.statstrip__stat:last-child { border-right: 0; }
-.statstrip__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.statstrip__value {
-  font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums; color: var(--mk-ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.statstrip__unit { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); letter-spacing: 0; }
-
-.vp-metricgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-.vp-metric { display: grid; gap: 4px; align-content: start; padding: 14px 16px; }
-.vp-metric__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.vp-metric__value {
-  font-size: 24px; font-weight: 700; letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums; color: var(--mk-ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.vp-metric__foot { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+   状态条已收敛到共享 MkStatStrip layout="grid"（#68）；闭环 loop（1708-1722）+ 画像 kv + lsm（1723-1737）。
+   loop 与 Overview 同款；全部走 --mk-* token。 */
 
 .vp-cardbody { padding: 4px 16px 16px; }
 .vp-2col { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; align-items: start; }
@@ -2782,13 +2894,13 @@ async function quietReload(id: string) {
 .vp-story:hover { border-color: rgba(47, 106, 224, 0.35); }
 .vp-story.is-selected { border-color: rgba(47, 106, 224, 0.5); }
 
-/* 列表行：radio + 主区（标题/状态 + 简述 + 统计）+ 操作 + 展开 */
+/* 列表行（#72）：整行点击已退役——行容器不再是可点元素（内嵌 checkbox/按钮，
+   整行 pointer 光标是对「点了没反应」的假承诺）；入口收敛到标题格 */
 .vp-story__row {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  cursor: pointer;
   min-width: 0;
   transition: background 0.12s ease;
 }
@@ -2855,7 +2967,12 @@ async function quietReload(id: string) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* 标题格 = 该故事的入口（#72）：可点 + 键盘焦点环 */
+  cursor: pointer;
+  border-radius: var(--mk-radius-xs);
 }
+.vp-story__title:hover { color: var(--mk-blue); }
+.vp-story__title:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .vp-story__budget-badge {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
@@ -2919,11 +3036,6 @@ async function quietReload(id: string) {
   flex-shrink: 0;
 }
 .vp-story__ops .mk-link { font-size: var(--mk-fs-micro); }
-.vp-story__chevron {
-  color: var(--mk-faint);
-  font-size: var(--mk-fs-micro);
-  flex-shrink: 0;
-}
 
 /* V3 质量徽章样式已随裁判独立面移除（2026-09-27） */
 
@@ -2962,26 +3074,43 @@ async function quietReload(id: string) {
 .vp-run-row__ops { display: flex; align-items: center; gap: 12px; }
 .vp-run-row__ops .mk-link { font-size: var(--mk-fs-micro); }
 
+/* 降级提示条已改用共享 .mk-alert--row（审核 2026-10-06 低 [97]）：原 .vp-fallback
+   私有实现（含硬编码 rgba 边框）删除 */
 
-.vp-fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-amber-bg);
-  border: 1px solid rgba(180, 83, 9, 0.25);
-  color: var(--mk-amber);
+/* ===== 故事高级诊断折叠区（#73）：隐藏字段的折叠展示 ===== */
+.vp-story__diag {
   font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+}
+.vp-story__diag > summary {
+  cursor: pointer;
+  color: var(--mk-faint);
   font-weight: 600;
+  width: fit-content;
 }
-
-@media (max-width: 1100px) {
-  .vp { padding: 16px; }
+.vp-story__diag-body {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
 }
-
-/* =====故事高级诊断折叠区 ===== */
+.vp-story__diag-body p { margin: 0; line-height: 1.5; }
+.vp-story__diag-body b { margin-right: 6px; color: var(--mk-ink); }
+.vp-story__diag-body pre {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface-3);
+  font-family: var(--mk-mono);
+  font-size: var(--mk-fs-micro);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 180px;
+  overflow: auto;
+}
 
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
@@ -2995,8 +3124,6 @@ async function quietReload(id: string) {
   .vp-story__outline { font-size: var(--mk-fs-micro); }
   .vp-story__stats-item { font-size: var(--mk-fs-micro); }
   .vp-story__latest { font-size: var(--mk-fs-micro); }
-  .vp-none { font-size: var(--mk-fs-body); }
-  .vp-fallback { font-size: var(--mk-fs-body); padding: 12px 16px; }
   .vp-trait { padding: 5px 13px; }
   .vp-goal { padding: 14px 16px; }
   .vp-profile { --kv-label: 112px; padding: 16px 18px; }
@@ -3006,7 +3133,6 @@ async function quietReload(id: string) {
   .vp-story__row { padding: 10px 16px; }
   .vp-run-row { padding: 11px 14px; }
   .vp-run-flow { padding: 14px; }
-  .vp-none { padding: 21px; }
 }
 @media (min-width: 2800px) {
   /* zoom 1.15 档：字号升到 2800 级（17px 级） */
@@ -3019,8 +3145,6 @@ async function quietReload(id: string) {
   .vp-story__outline { font-size: var(--mk-fs-micro); }
   .vp-story__stats-item { font-size: var(--mk-fs-micro); }
   .vp-story__latest { font-size: var(--mk-fs-micro); }
-  .vp-none { font-size: var(--mk-fs-body); }
-  .vp-fallback { font-size: var(--mk-fs-body); padding: 14px 19px; }
   .vp-trait { padding: 6px 15px; }
   .vp-goal { padding: 16px 19px; }
   .vp-profile { --kv-label: 128px; padding: 18px 21px; }
@@ -3029,7 +3153,6 @@ async function quietReload(id: string) {
   .vp-stories { gap: 10px; padding: 16px; }
   .vp-story__row { padding: 12px 20px; }
   .vp-run-row { padding: 13px 16px; }
-  .vp-none { padding: 24px; }
 }
 @media (min-width: 3600px) {
   /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
@@ -3042,8 +3165,6 @@ async function quietReload(id: string) {
   .vp-story__outline { font-size: var(--mk-fs-emphasis); }
   .vp-story__stats-item { font-size: var(--mk-fs-emphasis); }
   .vp-story__latest { font-size: var(--mk-fs-body); }
-  .vp-none { font-size: var(--mk-fs-emphasis); }
-  .vp-fallback { font-size: var(--mk-fs-emphasis); padding: 16px 22px; }
   .vp-trait { padding: 7px 18px; }
   .vp-goal { padding: 19px 22px; }
   .vp-profile { --kv-label: 152px; padding: 21px 25px; }
@@ -3053,7 +3174,6 @@ async function quietReload(id: string) {
   .vp-stories { gap: 12px; padding: 19px; }
   .vp-story__row { padding: 15px 24px; }
   .vp-run-row { padding: 15px 19px; }
-  .vp-none { padding: 28px; }
 }
 
 /* ===== 记忆池 ===== */
@@ -3112,6 +3232,14 @@ async function quietReload(id: string) {
   white-space: nowrap;
 }
 .vp-memory__curve-now.is-due { color: var(--mk-amber); font-weight: 700; }
+/* 记忆池口径披露（#76）：表内行数 ≠ 卡头四桶合计时说明差别 */
+.vp-memory__pool-note {
+  margin: 8px 0 0;
+  padding: 0 18px;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-faint);
+  line-height: 1.6;
+}
 .vp-memory__completed {
   display: grid;
   gap: 8px;

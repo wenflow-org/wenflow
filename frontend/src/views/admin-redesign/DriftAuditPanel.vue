@@ -63,6 +63,10 @@
           <span class="mk-badge mk-badge--muted fdp__change-kind">{{ String(c.changeType || '—') }}</span>
           <span class="fdp__change-target">{{ String(c.targetTable || '') }}</span>
           <span class="mono">{{ String(c.targetId || '') }}</span>
+          <!-- P2（审核 #81）：「最近变更」此前只有 changeType/表/ID，无法判断是 5 分钟前还是半年前、也无操作人线索；
+               接口逐行已返回 createdAt/actorId/actorRole/reason，这里补时间与操作人两列（完整值与原因走 title） -->
+          <span class="fdp__change-time mono" :title="changeTimeFull(c.createdAt)">{{ changeTime(c.createdAt) }}</span>
+          <span class="fdp__change-actor" :title="actorTitle(c)">{{ actorText(c) }}</span>
         </li>
       </ul>
       <MkEmptyState
@@ -112,6 +116,35 @@ function stringify(value: unknown) {
 const driftKindLabels: Record<string, string> = { contract: '契约', field: '字段', routing: '路由' };
 function kindLabel(kind: unknown) {
   return driftKindLabels[String(kind || '')] || String(kind || '');
+}
+
+/* 审计行时间/操作人（审核 #81）：接口逐行带 createdAt/actorId/actorRole/reason，
+   此前未渲染导致「最近变更」看不出新旧与是谁改的。时间行内取「今天 HH:mm / M/D HH:mm」，
+   完整时间戳与原因挂 title；操作人缺省时退回角色或「—」 */
+function changeTime(iso: unknown): string {
+  const ts = typeof iso === 'string' ? new Date(iso).getTime() : NaN;
+  if (!Number.isFinite(ts)) return '—';
+  const d = new Date(ts);
+  const now = new Date();
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return sameDay ? `今天 ${p(d.getHours())}:${p(d.getMinutes())}` : `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function changeTimeFull(iso: unknown): string {
+  const ts = typeof iso === 'string' ? new Date(iso).getTime() : NaN;
+  return Number.isFinite(ts) ? new Date(ts).toLocaleString() : '时间未知';
+}
+function actorText(c: Record<string, unknown>): string {
+  const id = c.actorId != null && String(c.actorId).trim() ? String(c.actorId) : '';
+  if (id) return id;
+  const role = c.actorRole != null && String(c.actorRole).trim() ? String(c.actorRole) : '';
+  return role || '—';
+}
+function actorTitle(c: Record<string, unknown>): string {
+  const parts: string[] = [`操作人：${actorText(c)}`];
+  if (c.actorRole) parts.push(`角色：${String(c.actorRole)}`);
+  if (c.reason) parts.push(`原因：${String(c.reason)}`);
+  return parts.join(' · ');
 }
 
 async function loadDrift() {
@@ -168,11 +201,14 @@ watch(() => props.stage, () => {
   border: 1px solid color-mix(in srgb, var(--mk-blue) 35%, var(--mk-line));
   border-radius: var(--mk-radius-xl);
   background: var(--mk-blue-bg, #eff6ff);
-  color: var(--mk-blue, #2f6ae0);
+  /* 蓝 tint 胶囊上的前景用 --mk-badge-info-fg（明暗两态已验）：暗色档 --mk-blue 提亮成
+     #5b8def，压 rgba(91,141,239,.16) 合成底只有 3.96:1（2026-10-06 渲染探针
+     orchestrator-governance 实测 span.mono）。 */
+  color: var(--mk-badge-info-fg, #2f6ae0);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
 }
-.fdp__guide-file .mono { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue, #2f6ae0); }
+.fdp__guide-file .mono { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-badge-info-fg, #2f6ae0); }
 .fdp__guide-text code { font-family: var(--mk-mono, ui-monospace, monospace); font-size: var(--mk-fs-micro); background: var(--mk-surface-3); padding: 1px 6px; border-radius: var(--mk-radius-sm); }
 .fdp__drift-list { margin: 0; padding: 6px 14px 12px; list-style: none; }
 /* 漂移条目：原型 .note--warn 语义（soft 琥珀底 + 圆角，不再自搓描边盒）——原型 .note 438-439 */
@@ -209,6 +245,9 @@ watch(() => props.stage, () => {
 .fdp__change:last-child { border-bottom: 0; }
 .fdp__change-kind { flex-shrink: 0; }
 .fdp__change-target { color: var(--mk-muted, #5b6577); }
+/* 时间列等宽数字防跳动；操作人弱化，完整原因/角色在 title（审核 #81） */
+.fdp__change-time { color: var(--mk-faint, var(--mk-muted)); font-variant-numeric: tabular-nums; }
+.fdp__change-actor { color: var(--mk-muted, #5b6577); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 
 @media (min-width: 2000px) {
   .fdp__guide { padding: 14px 17px; }

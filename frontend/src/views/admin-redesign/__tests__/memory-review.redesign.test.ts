@@ -237,8 +237,9 @@ describe('MemoryReview redesign：到期时间轴（强度直方图已退役）'
     await w.findAll('button').find((b) => b.text().startsWith('执行选中'))!.trigger('click');
     await flushPromises();
     expect(toast.error).toHaveBeenCalledWith('执行归并失败：归并冲突');
-    expect(w.find('.mr__error').exists()).toBe(true);
-    expect(w.find('.mr__error').text()).toContain('归并冲突');
+    // 2026-10-06 审核 #40：明细态错误条形态收敛共享 .mk-alert（页私有 .mr__error 已撤）
+    expect(w.find('.mr__detail-error').exists()).toBe(true);
+    expect(w.find('.mr__detail-error').text()).toContain('归并冲突');
 
     // rollback 失败
     rollback.mockRejectedValueOnce(new Error('快照缺失'));

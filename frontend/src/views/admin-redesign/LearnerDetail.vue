@@ -11,7 +11,14 @@
     />
   </div>
   <div v-else-if="loading" class="mk-page ld">
-    <MkLoading min text="正在加载学习者详情…" />
+    <!-- 审核 #25（2026-10-06）：整页加载改用骨架屏（与同页「账号与许可」pane 的 UserAccountPane
+         骨架同源），不再 spinner + 文字——同一详情页两种加载语言，且切人/刷新会先转圈再出骨架。
+         版式对齐 hero(identity) / statstrip(cards×4) / 页签内容(cards×2) 的实际高度。 -->
+    <div class="ld-skel" aria-hidden="true">
+      <MkSkeleton variant="identity" :avatar="48" />
+      <MkSkeleton variant="cards" :count="4" :h="64" :cols="4" :radius="10" />
+      <MkSkeleton variant="cards" :count="4" :h="140" :cols="2" :radius="12" />
+    </div>
   </div>
   <div v-else-if="d" class="mk-page ld">
 
@@ -52,15 +59,29 @@
     <MkSubTabs
       :tabs="tabs.map((t) => ({ key: t.id, label: t.label }))"
       :model-value="tab"
+      id-base="ld"
       @update:model-value="switchTab"
     />
 
     <!-- ============ 总览：进度 + 概念掌握图形 + 活跃 + 会话 + 建议行动 ============ -->
-    <div v-if="tab === 'overview'" class="ld-grid">
+    <div v-if="tab === 'overview'" class="ld-grid" id="ld-panel-overview" role="tabpanel" aria-labelledby="ld-tab-overview">
       <div class="ld-col">
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">当前进度</h3>
+            <!-- 审核 #22（2026-10-06）：原「学习路径」页签读数并入本卡——里程碑分母 + 路径状态徽章
+                 （页签已撤，下钻入口即右侧「查看路径结构 →」，同页不再复读一处卡片栅格） -->
+            <span
+              v-if="pathInfo && pathInfo.total"
+              class="mk-card__meta"
+              :title="`里程碑完成 ${pathInfo.done}/${pathInfo.total}（快照 currentPath.progress 口径）`"
+            >里程碑 {{ pathInfo.done }}/{{ pathInfo.total }}</span>
+            <span
+              v-if="pathInfo"
+              class="mk-badge"
+              :class="`mk-badge--${pathStatus.tone}`"
+              :title="`路径状态：${pathStatus.text}（按快照进度百分比判定）`"
+            >{{ pathStatus.text }}</span>
             <!-- P2（2026-10-04 全站评审）：卡头 0% badge 与阶段/「正在做」两行撤——正上方 statstrip
                  已逐项承载同三个事实（0% / 阶段 / 任务），卡内只留增量：路径名 + 里程碑分母 + 进度条 -->
             <button v-if="currentPathId" type="button" class="mk-link" @click="openPathDetail">查看路径结构 →</button>
@@ -120,7 +141,10 @@
               <template v-else>{{ ldSessionRows.length > recentSessionRows.length ? `最近 ${recentSessionRows.length} 条 · 共 ${ldSessionRows.length}` : `最近 ${recentSessionRows.length} 条` }}</template>
             </span>
           </div>
-          <MkRowList :empty="!recentSessionRows.length" :loading="ldSessLoading" empty-text="暂无教学会话" empty-hint="该学习者上课后，这里会出现会话列表。">
+          <!-- 审核 #23（2026-10-06）：原卡头 MkLoading + MkRowList :loading 同时出两个转圈——
+               卡头文案保留为全卡唯一加载信号，列表 loading 撤；同时把空态挂起条件补上
+               ldSessLoading，避免加载中先闪「暂无教学会话」 -->
+          <MkRowList :empty="!recentSessionRows.length && !ldSessLoading" empty-text="暂无教学会话" empty-hint="该学习者上课后，这里会出现会话列表。">
             <MkRow
               v-for="s in recentSessionRows"
               :key="s.id"
@@ -242,7 +266,7 @@
     </div>
 
     <!-- ============ 画像：认知 + 偏好情绪 + 行为历史 + 课程控制 + 派生 + 记忆 + 教学建议 ============ -->
-    <div v-else-if="tab === 'profile'" class="ld-tabpage">
+    <div v-else-if="tab === 'profile'" class="ld-tabpage" id="ld-panel-profile" role="tabpanel" aria-labelledby="ld-tab-profile">
       <template v-if="profile">
         <section class="mk-card">
           <div class="mk-card__head"><h3 class="mk-card__title">认知特征</h3></div>
@@ -397,7 +421,7 @@
     </div>
 
     <!-- ============ 证据：指标卡横排 + 左时间线 / 右曲线·建议·密度 两栏 ============ -->
-    <div v-else-if="tab === 'evidence'" class="ld-tabpage">
+    <div v-else-if="tab === 'evidence'" class="ld-tabpage" id="ld-panel-evidence" role="tabpanel" aria-labelledby="ld-tab-evidence">
       <template v-if="dynamicState">
         <div class="ld-metrics">
           <MkKpi
@@ -442,6 +466,7 @@
               :title="e.sessionId ? '点击打开该事件的会话座舱' : undefined"
               @click="e.sessionId && openSessionCockpit(e.sessionId)"
               @keydown.enter="e.sessionId && openSessionCockpit(e.sessionId)"
+              @keydown.space.prevent="e.sessionId && openSessionCockpit(e.sessionId)"
             >
               <span class="ld-ev__rail" aria-hidden="true"></span>
               <span
@@ -605,7 +630,7 @@
 
     <!-- ============ 知识图谱：概念图画布（节点=概念，边=前置/属于）
          卡片走 .mk-card 原语（原 ld-card* 是不存在的私有类，渲染成无样式裸块） ============ -->
-    <div v-else-if="tab === 'graph'" class="ld-tabpage">
+    <div v-else-if="tab === 'graph'" class="ld-tabpage" id="ld-panel-graph" role="tabpanel" aria-labelledby="ld-tab-graph">
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">知识图谱</h3>
@@ -629,49 +654,16 @@
       </section>
     </div>
 
-    <!-- ============ 学习路径（原型 renderLearnerDetail 2165-2171）：路径卡栅格 → PathDetail ============ -->
-    <div v-else-if="tab === 'paths'" class="ld-tabpage">
-      <section v-if="pathInfo && pathInfo.id" class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">学习路径</h3>
-          <span class="mk-card__meta">当前路径快照</span>
-        </div>
-        <div class="ld-pathgrid">
-          <button type="button" class="ld-pathcard" @click="openPathDetail">
-            <div class="ld-pathcard__top">
-              <strong>{{ pathInfo.title || '未命名路径' }}</strong>
-              <span class="mk-badge" :class="`mk-badge--${pathStatus.tone}`">{{ pathStatus.text }}</span>
-            </div>
-            <div class="ld-pathcard__mid">
-              <span class="ld-pathcard__step">{{ pathInfo.task || pathInfo.stage || '—' }}</span>
-              <span class="ld-pathcard__mono">{{ pathInfo.done }} / {{ pathInfo.total }} 里程碑</span>
-            </div>
-            <span class="mk-minibar ld-pathcard__meter">
-              <i class="mk-minibar__fill" :data-tone="pathInfo.pct >= 100 ? 'ok' : undefined" :style="{ width: pathInfo.pct + '%' }"></i>
-            </span>
-          </button>
-        </div>
-      </section>
-      <!-- 空态 CTA：原型为「发起目标对话」，但本页没有目标对话入口；改用可执行的重算快照（路径由快照物化） -->
-      <MkEmptyState
-        v-else
-        icon="◌"
-        title="还没有学习路径"
-        description="为这位学习者澄清目标后，路径会在这里出现。"
-        action-text="重算快照"
-        :action-busy="recomputing"
-        @action="recompute"
-      />
-    </div>
-
     <!-- ============ 教学会话（原型 2172-2177）：7 列表格，行点击进会话座舱 ============ -->
-    <div v-else-if="tab === 'sessions'" class="ld-tabpage">
+    <div v-else-if="tab === 'sessions'" class="ld-tabpage" id="ld-panel-sessions" role="tabpanel" aria-labelledby="ld-tab-sessions">
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">教学会话</h3>
+          <!-- 审核 #24（2026-10-06）：条数是「最近 20 条窗口」的截断值，达窗口上限时把口径写进
+               可见文案（与证据页签「仅最近 20 条」同写法），不再只藏在 title -->
           <span class="mk-card__meta" title="口径：该学习者最近 20 条教学会话窗口；阶段=后端按里程碑归因">
             <MkLoading v-if="ldSessLoading" inline min text="加载中…" />
-            <template v-else>{{ ldSessError ? '加载失败' : (ldStageFilter === 'all' ? `${ldSessionRows.length} 条` : `${ldSessionRowsFiltered.length} / ${ldSessionRows.length} 条`) }}</template>
+            <template v-else>{{ ldSessError ? '加载失败' : (ldStageFilter === 'all' ? ldSessionMetaText : `${ldSessionRowsFiltered.length} / ${ldSessionRows.length} 条`) }}</template>
           </span>
         </div>
         <!-- 阶段切换器：档位与计数从会话窗口派生（见 ldStageChips）；单阶段不渲染 -->
@@ -695,7 +687,11 @@
             </thead>
             <tbody>
               <tr v-for="s in ldSessionRowsFiltered" :key="s.id" class="ld-pane-row" @click="openSessionCockpit(s.id)">
-                <td class="ld-strong" :title="s.topic">{{ s.topic }}</td>
+                <!-- 审核 #20（2026-10-06）：整行可点（鼠标）但完全不可聚焦，键盘用户打不开任何会话。
+                     主题格给出行级真按钮入口（原生 button，Enter/Space/焦点环天然可用）。 -->
+                <td class="ld-strong" :title="s.topic">
+                  <button type="button" class="mk-link ld-strong" :title="`打开只读座舱：${s.topic}`" @click.stop="openSessionCockpit(s.id)">{{ s.topic }}</button>
+                </td>
                 <td>{{ s.skill }}</td>
                 <td><span class="mk-badge mk-badge--info">{{ s.stage }}</span></td>
                 <td class="ld-mono" title="口径：用户消息条数（后端无独立回合计数）">{{ s.turns }}</td>
@@ -712,7 +708,7 @@
     </div>
 
     <!-- ============ 记忆与复习（原型 2178-2183）：6 列表格（FSRS 单源） ============ -->
-    <div v-else-if="tab === 'memory'" class="ld-tabpage">
+    <div v-else-if="tab === 'memory'" class="ld-tabpage" id="ld-panel-memory" role="tabpanel" aria-labelledby="ld-tab-memory">
       <section v-if="memoryPaneRows.length" class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">记忆与复习（FSRS）</h3>
@@ -751,16 +747,21 @@
     </div>
 
     <!-- ============ 账号与许可（人员详情合并）：整块由原 UserDetail 抽为 UserAccountPane ============ -->
-    <div v-else-if="tab === 'account'" class="ld-tabpage">
+    <div v-else-if="tab === 'account'" class="ld-tabpage" id="ld-panel-account" role="tabpanel" aria-labelledby="ld-tab-account">
       <UserAccountPane :user-id="subPage?.id || ''" />
     </div>
 
     <!-- ============ 操作记录（原型 2184-2187）：feed/feedrow；口径见注释 ============ -->
-    <div v-else-if="tab === 'audit'" class="ld-tabpage">
+    <div v-else-if="tab === 'audit'" class="ld-tabpage" id="ld-panel-audit" role="tabpanel" aria-labelledby="ld-tab-audit">
       <section class="mk-card">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">操作记录</h3>
-          <span class="mk-card__meta">学习事件时间线 · 最近 {{ auditRows.length }} 条</span>
+          <!-- 审核 #21（2026-10-06）：原「操作记录」名实不符（内容是与「证据」同源的学习事件，
+               非管理侧审计流水）——卡题/页签名统一改「学习事件」，口径说明从卡尾段落提到卡头 title -->
+          <h3 class="mk-card__title">学习事件</h3>
+          <span
+            class="mk-card__meta"
+            title="口径：后台暂未提供管理侧审计流水接口，本页以学习者学习事件（learner_evidence，与「证据」页签同源）如实渲染，语义为「学习事件」而非「管理员操作审计」"
+          >学习事件时间线 · 最近 {{ auditRows.length }} 条</span>
         </div>
         <div v-if="auditRows.length" class="ld-feed">
           <div v-for="(a, i) in auditRows" :key="i" class="ld-feedrow">
@@ -771,12 +772,8 @@
             </div>
           </div>
         </div>
-        <MkEmptyState v-else icon="◌" title="暂无操作记录" description="该学习者还没有学习事件流水。" />
+        <MkEmptyState v-else icon="◌" title="暂无学习事件" description="该学习者还没有学习事件流水。" />
       </section>
-      <!-- 口径标注：后台无管理侧审计流水接口；此处为学习事件（learner_evidence），非管理员操作审计 -->
-      <p class="ld-none">
-        口径说明：后台暂未提供管理侧审计流水接口，本页以学习者学习事件（learner_evidence）如实渲染，语义为「学习事件」而非「管理员操作审计」。
-      </p>
     </div>
   </div>
 </template>
@@ -800,6 +797,7 @@ import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkStatStrip from '@/components/mk/MkStatStrip.vue'
@@ -856,13 +854,17 @@ const recomputing = ref(false)
  * 新增 id 只在本页扩展——共享的 learner-profile.ts `LearnerTab` 仍是 4 项联合（未改动），
  * 本地 normalizeLdTab 先识别 8 项，再回落共享 normalizeLearnerTab 处理旧 6-tab 深链重定向。
  */
-const LD_TAB_IDS = ['overview', 'profile', 'evidence', 'graph', 'paths', 'sessions', 'memory', 'audit', 'account'] as const
+const LD_TAB_IDS = ['overview', 'profile', 'evidence', 'graph', 'sessions', 'memory', 'audit', 'account'] as const
 type LdTab = (typeof LD_TAB_IDS)[number] | LearnerTab
+/** 审核 #22（2026-10-06）：撤「学习路径」页签后旧深链 ?tab=paths 的兼容落点
+    （概览的「当前进度」卡已承载路径读数与下钻入口） */
+const LD_TAB_ALIAS: Record<string, (typeof LD_TAB_IDS)[number]> = { paths: 'overview' }
 function isLdTab(v: unknown): v is (typeof LD_TAB_IDS)[number] {
   return typeof v === 'string' && (LD_TAB_IDS as readonly string[]).includes(v)
 }
 function normalizeLdTab(v: unknown): LdTab {
   const s = String(v || '').toLowerCase()
+  if (LD_TAB_ALIAS[s]) return LD_TAB_ALIAS[s]
   return isLdTab(s) ? s : normalizeLearnerTab(s)
 }
 
@@ -875,11 +877,15 @@ const tabs = [
   { id: 'profile' as const, label: '画像' },
   { id: 'evidence' as const, label: '证据' },
   { id: 'graph' as const, label: '图谱' },
-  { id: 'paths' as const, label: '学习路径' },
   { id: 'sessions' as const, label: '教学会话' },
   { id: 'memory' as const, label: '记忆与复习' },
-  { id: 'audit' as const, label: '操作记录' },
+  // 审核 #21（2026-10-06）：原「操作记录」语义暗示管理侧审计流水，实际渲染的是与「证据」
+  // 同源的学习事件（liveEvidence）——页签名改「学习事件」，口径写进卡头 title，名实一致。
+  // 审核 #22（2026-10-06）：原「学习路径」单卡栅格与页级 statstrip +「当前进度」卡高度重合，
+  // 下钻入口在概览卡头也已有一条（同页复读）——撤该页签，里程碑分母/路径状态并进「当前进度」卡；
+  // 旧深链 ?tab=paths 由 normalizeLdTab 回落概览。
   // 人员详情合并（2026-10-03 用户拍板）：账号轴并入本页，?view=user 深链别名默认落本页签
+  { id: 'audit' as const, label: '学习事件' },
   { id: 'account' as const, label: '账号与许可' }
 ]
 
@@ -900,10 +906,11 @@ const currentPathId = ref<string | null>(null)
 const pathInfo = ref<{ id: string | null; title: string; stage: string; task: string; done: number; total: number; pct: number } | null>(null)
 /** 学习者画像 kv 卡：用户详情补充的层级/路径数/注册时间（后端 findUserDetailForAdmin） */
 const userRecord = ref<{ currentLevel: string; xp: number; pathCount: number; createdAt: string } | null>(null)
-/** 跟随 admin 主题（暗色用同族配色，见 MkGraph 的 colorOf） */
-const graphTheme = computed<'light' | 'dark'>(() =>
-  typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
-)
+/** 跟随 admin 主题（暗色用同族配色，见 MkGraph 的 colorOf）。
+ *  审核 #17（2026-10-06）：原直接读 document.documentElement.dataset.theme，
+ *  无响应依赖 → 运行时切主题时图谱 Edge/画布配色停在亮色。复用响应式 isDark
+ *  （useIsDark 的 MutationObserver 跟随 data-theme），与同文件图表同源。 */
+const graphTheme = computed<'light' | 'dark'>(() => (isDark.value ? 'dark' : 'light'))
 async function loadConceptGraph(userId: string, pathId: string | null = graphPathId.value) {
   if (!userId) return
   graphLoading.value = true
@@ -1021,6 +1028,14 @@ interface LdSessionRow {
 const ldSessionRows = ref<LdSessionRow[]>([])
 /** 概览左栏「最近会话」卡只取前 5 条；教学会话 pane 用全量（同源） */
 const recentSessionRows = computed(() => ldSessionRows.value.slice(0, 5))
+/** 教学会话窗口上限（loadLdSessions 请求 limit 与此同源）：达上限时 meta 可见文案改
+    「最近 20 条（窗口上限）」，不再让截断值被读成总量（审核 #24，2026-10-06） */
+const LD_SESSION_WINDOW = 20
+const ldSessionMetaText = computed(() =>
+  ldSessionRows.value.length >= LD_SESSION_WINDOW
+    ? `最近 ${LD_SESSION_WINDOW} 条（窗口上限）`
+    : `${ldSessionRows.value.length} 条`
+)
 
 /* ---------- 阶段切换器（用户诉求「切换学习者不同阶段」）----------
    档位从会话行的 milestoneIndex 派生（后端 deriveTeachingSessionProgress 已归因，零新契约）；
@@ -1080,7 +1095,7 @@ async function loadLdSessions(id: string) {
   const stale = () => seq !== detailLoadSeq || subPage.value?.id !== id
   try {
     // limit 20：教学会话 pane 需要更完整列表（原概览卡只展示 5 条，由 recentSessionRows 截取）
-    const res = await adminTeachingSessionsApi.list({ userId: id, limit: 20, includeTest: subPage.value?.includeTest })
+    const res = await adminTeachingSessionsApi.list({ userId: id, limit: LD_SESSION_WINDOW, includeTest: subPage.value?.includeTest })
     // 竞态守卫与 loadDetail 同款：换人/重载后丢弃旧响应
     if (stale()) return
     const body = res.data?.data ?? res.data ?? {}
@@ -1156,6 +1171,16 @@ async function loadDetail(id: string | undefined) {
       ? (currentPath.conceptStates as { label?: string; status?: string }[])
       : []
     const totalTasks = Number(progress.totalTasks || 0)
+    // 审核 #15（2026-10-06）：不存在的 userId 深链——详情接口对未知 id 返回 200 空壳
+    // （data 里有 scope.userId 但无 userName、无任务），列表兜底也没有。必须走既有错误态，
+    // 否则渲染出「趋势：→ 稳定 / 疲劳：低 / 路径 0%」的假详情（同页 ?tab=account 却能正确报错）。
+    // 例外：账号页签（?view=user / ?tab=account）由 UserAccountPane 自取用户记录、自带
+    // 「该用户不存在或已被删除」错误态；且软删用户需在此恢复（列表域不含软删行），
+    // 故该页签不置页级错误，避免挡住恢复入口。
+    if (tab.value !== 'account' && !base && !model.userName && !totalTasks) {
+      detailError.value = true
+      return
+    }
     const completedTasks = Number(progress.completedTasks || 0)
     const pct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
     // 学习路径 pane 卡数据：快照 currentPath + 列表兜底（快照只含当前路径，故栅格通常单卡）
@@ -1301,11 +1326,15 @@ async function loadDetail(id: string | undefined) {
   }
 }
 
-/** 关联实体（P1）：查看该学习者的用户账号（记忆返回来源） */
+/** 关联实体（P1）：查看该学习者的用户账号（记忆返回来源）。
+ *  审核 #16（2026-10-06）：壳层 pageKey（AdminConsole.vue:191 只含 id:includeTest）不含 view，
+ *  view=learner→user 同 key 同组件不重建，只改 URL 时页签仍停在原处，点「用户账号」看着没反应。
+ *  「?view=user 默认落账号页签」是既有约定（loadDetail 的别名落点），页内跳转同样兑现。 */
 function goUser() {
   const id = subPage.value?.id
   if (!id) return
   openSubPage('user', id, { includeTest: subPage.value?.includeTest })
+  switchTab('account')
 }
 
 /**
@@ -1994,6 +2023,8 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 <style scoped>
 .ld { gap: 16px; }
+/* 整页骨架（审核 #25）：段间距与真实 hero/statstrip/页签内容一致，避免加载完跳一次 */
+.ld-skel { display: grid; gap: 16px; }
 
 /* 状态条已在 2026-10-05（批次五 CM2）收敛为共享 MkStatStrip 的 grid 变体：
    原本地 .statstrip 复刻（18px 数值档/两行换行）整块退役，样式归组件。 */
@@ -2168,21 +2199,8 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-lsm__val { font-size: var(--mk-fs-micro); font-weight: 700; font-variant-numeric: tabular-nums; }
 .ld-lsm__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); text-align: right; }
 
-/* 学习路径卡栅格（原型 2165-2171） */
-.ld-pathgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; padding: 14px 16px; }
-.ld-pathcard {
-  display: grid; gap: 8px; padding: 14px 16px;
-  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface); font: inherit; color: inherit; text-align: left; cursor: pointer;
-  transition: border-color 0.12s ease;
-}
-.ld-pathcard:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
-.ld-pathcard__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.ld-pathcard__top strong { font-size: var(--mk-fs-emphasis); }
-.ld-pathcard__mid { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.ld-pathcard__step { font-size: var(--mk-fs-micro); color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ld-pathcard__mono { margin-left: auto; font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
-.ld-pathcard__meter { margin-top: 2px; }
+/* 学习路径卡栅格样式已随「学习路径」页签撤销（审核 #22，2026-10-06）：
+   里程碑分母 / 路径状态徽章并入概览「当前进度」卡，下钻入口沿用卡头「查看路径结构 →」。 */
 
 /* 表格 pane（教学会话 / 记忆与复习）：行可点击 + 等宽列 */
 .ld-pane-row { cursor: pointer; }

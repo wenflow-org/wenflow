@@ -76,6 +76,10 @@
               触发钮标生效数 -->
           <MkFilterSearch v-model="keyword" placeholder="搜索名称 / ID / 类别" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
+          <!-- #107：默认排序键 errors 无可见列 → 默认态给可见说明，非默认态给一键复位
+               （此前点过别的表头就再也回不到默认序，只能清 localStorage） -->
+          <span v-if="isDefaultSort" class="mk-cell-sub sk-sort-hint" title="默认排序：失败数降序（问题浮顶）">默认按失败数排列</span>
+          <button v-else type="button" class="mk-link" @click="resetSort">恢复默认序（失败数优先）</button>
         </div>
         <div class="mk-card__head-right">
           <select v-model="statsRange" class="mk-filter__select" aria-label="统计窗口" title="统计窗口：改动本页 KPI 与卡内统计的聚合窗口，不筛列表行">
@@ -125,6 +129,13 @@
         </div>
       </div>
 
+      <!-- 统计窗口切换失败（已有数据时此前静默吞掉：KPI 副文已换新窗口口径、数字却还是旧窗口，
+           页面无任何提示）→ 卡内显式错误条 + 重试，不把故障混进旧数字 -->
+      <div v-if="liveSkillsError && cards.length" class="mk-alert mk-alert--row sk-live-err" role="alert">
+        <span class="mk-alert__msg">{{ rangeLabelOf(statsRange) }}窗口统计加载失败：{{ liveSkillsError }}（下方仍为{{ rangeLabel }}的数据）</span>
+        <button type="button" class="mk-alert__btn" @click="retrySkills">重试</button>
+      </div>
+
       <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="11" />
       <template v-else>
       <!-- 列表视图：列对齐 + 排序，问题浮顶 -->
@@ -132,7 +143,7 @@
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
              单元格 nowrap、列按内容自然分宽；Skill 名/副行两行都设 max-width 截断兜底，
              防长名单列独吃宽度（上限引用 --mk-cell-main-max token） -->
-        <table v-if="filtered.length" class="mk-table sk-table">
+        <table v-if="filtered.length" class="mk-table mk-table--click sk-table">
           <!-- P1① 列结构对齐原型 renderSkillHub 1662-1706 的 8 列：
                Skill / 归属 Agent / 版本 / 路由模型 / 24h 调用 / P95 / 通过率 / 完成度。
                数据来源核查见脚本「路由 · 版本元数据」小节；P95 接口缺失 → 恒「—」且默认隐藏。
@@ -194,7 +205,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" @click="openSubPage('skill', s.id)" @keydown.enter.self.prevent="openSubPage('skill', s.id)">
+            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`查看 ${s.name} 详情`" @click="openSubPage('skill', s.id)" @keydown.enter.self.prevent="openSubPage('skill', s.id)" @keydown.space.self.prevent="openSubPage('skill', s.id)">
               <td>
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
@@ -323,7 +334,7 @@
       </div>
 
       <div class="sk-routing__scroll">
-        <table v-if="cards.length" class="mk-table sk-table">
+        <table v-if="cards.length" class="mk-table mk-table--click sk-table">
           <thead>
             <tr>
               <th scope="col">Skill</th>
@@ -335,7 +346,7 @@
           </thead>
           <tbody>
             <!-- 原型行 data-action="open-skill"：本页行点击同样进 Skill 详情 -->
-            <tr v-for="s in cards" :key="s.id" class="sk-row" tabindex="0" @click="openSubPage('skill', s.id)" @keydown.enter.self.prevent="openSubPage('skill', s.id)">
+            <tr v-for="s in cards" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`查看 ${s.name} 详情`" @click="openSubPage('skill', s.id)" @keydown.enter.self.prevent="openSubPage('skill', s.id)" @keydown.space.self.prevent="openSubPage('skill', s.id)">
               <td><strong class="sk-name-main mk-ellipsis" :title="s.name">{{ s.name }}</strong></td>
               <td><span class="mono sk-routing__sub" :title="s.agentId || '工具类'">{{ agentLabelOf(s) }}</span></td>
               <td><span class="mono" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
@@ -343,16 +354,30 @@
               <td>
                 <span v-if="completionBadgeOf(s.id)" class="mk-badge" :class="completionBadgeOf(s.id)!.cls" :title="completionBadgeOf(s.id)!.title">{{ completionBadgeOf(s.id)!.text }}</span>
                 <span v-else-if="recLoading" class="mk-na" title="对账报告加载中，状态暂不可用">…</span>
+                <!-- 三态对齐 run 表（Skills.vue:238）：对账加载失败 ≠「对账报告中无此 Skill」，
+                     此前失败与无数据同显「—」，把故障说成正常无数据 -->
+                <span v-else-if="recError" class="mk-na sk-rec-fail" :title="`对账加载失败：${recError}`">对账失败</span>
                 <span v-else class="mk-na" title="对账报告中无此 Skill（外挂能力等不在对账口径内）">—</span>
               </td>
             </tr>
           </tbody>
         </table>
+        <!-- live 目录三态：加载失败（tone=error + 重试）与真空目录分开，不再用一句「暂无 Skill」吞掉故障 -->
+        <MkEmptyState
+          v-if="skillsError && !cards.length"
+          tone="error"
+          title="Skill 数据加载失败"
+          :description="skillsError"
+          action-text="重试"
+          @action="retrySkills"
+        />
         <MkEmptyState v-else title="暂无 Skill" description="主目录没有可路由的 Skill。" />
 
-        <!-- 覆盖矩阵（技能 × 通道 × 参数 × 兜底）：原型无此块，作为增强保留在原型结构之下 -->
+        <!-- 覆盖矩阵（技能 × 通道 × 参数 × 兜底）：原型无此块，作为增强保留在原型结构之下。
+             套用成功后 emit applied → 本页重拉 coverageById，避免同屏「路由模型/备用模型」两列
+             与四张 KPI 停留在旧值、与下方矩阵互相打架（#93） -->
         <div class="sk-routing__matrix">
-          <SkillModelCoverage />
+          <SkillModelCoverage @applied="refreshCoverage" />
         </div>
       </div>
     </div>
@@ -508,9 +533,12 @@ const showCol = (key: string) =>
   !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key)) &&
   !(isMid.value && key === 'last') &&
   !(isSmall.value && SMALL_HIDDEN_COLS.has(key))
-/* 列菜单同源：被档位强制收起的列不出现在菜单里（菜单可勾却不见 = 说谎） */
+/* 列菜单同源：被档位强制收起的列不出现在菜单里（菜单可勾却不见 = 说谎）；
+   三档强制收起与 showCol 逐档同源（≤720 移动档此前漏了 MOBILE_HIDDEN_COLS，
+   菜单里四项勾着也不显示，正是本注释自己禁止的形态） */
 const menuColDefs = computed<ReadonlyArray<{ key: string; label: string; title: string }>>(() => {
   let list: ReadonlyArray<{ key: string; label: string; title: string }> = skColDefs
+  if (isNarrow.value) list = list.filter((c) => !MOBILE_HIDDEN_COLS.has(c.key))
   if (isMid.value) list = list.filter((c) => c.key !== 'last')
   if (isSmall.value) list = list.filter((c) => !SMALL_HIDDEN_COLS.has(c.key))
   return list
@@ -568,11 +596,15 @@ function rateTone(s: { calls: number; errors: number }): string {
 }
 // 时间窗口切换 → 按新窗口重新拉取统计；期间状态条展示局部 loading，摘掉旧窗口数字
 const rangeRefreshing = ref(false)
+/* 已生效窗口（只有成功拉到新窗口数据才推进）：切换失败时 KPI 数字仍是旧窗口的，
+   副文口径必须跟着数字走，否则出现「旧窗口数字 + 新窗口口径」的自相矛盾读数（#85） */
+const appliedRange = ref(statsRange.value)
 watch(statsRange, async () => {
   rangeRefreshing.value = true
   try {
     await refreshLiveSkills()
     liveSkillsError.value = ''
+    appliedRange.value = statsRange.value
     // 版本/描述与统计同源（/admin/skills），窗口切换后一并重取
     void refreshSkillMeta()
   } catch (e) {
@@ -590,6 +622,7 @@ async function retrySkills() {
   liveSkillsError.value = ''
   try {
     await refreshLiveSkills()
+    appliedRange.value = statsRange.value
     if (liveFailures.value.skills) delete liveFailures.value.skills
   } catch (e) {
     liveSkillsError.value = errMsg(e)
@@ -623,8 +656,11 @@ function healthLabel(health: Health): string {
 }
 
 /* 表格排序：默认失败数优先（问题浮顶，保持既有行为），表头可点切换。
+   #107：默认键 errors 不在可见列里（表无「失败数」列），初始行序无可见列可解释，
+   且点过别的表头后无法回到默认序 → 在工具条给「默认按失败数排列」可见说明 +
+   非默认态一键「恢复默认序」（useTableSort.reset，此前解构未取用）。
    数据为 live 注册表全量（有界）→ 客户端排序是诚实的；截断/服务端分页列表不适用本机制。 */
-const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir } = useTableSort<SkillRow>({
+const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir, reset: resetSort } = useTableSort<SkillRow>({
   accessors: {
     errors: (s) => s.errors,
     skill: (s) => s.name || s.id,
@@ -639,6 +675,8 @@ const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir } = useTableSo
   defaultDir: 'desc',
   storageKey: 'wf_skills_sort'
 })
+/** 当前是否仍在默认序（失败数降序）：非默认时工具条出「恢复默认序」按钮 */
+const isDefaultSort = computed(() => sortKey.value === 'errors' && sortDir.value === 'desc')
 
 const filtered = computed(() => {
   let list = cards.value
@@ -682,7 +720,9 @@ const avgLatencyMs = computed(() => {
 })
 const avgLatencyText = computed(() => (avgLatencyMs.value == null ? '—' : avgLatencyMs.value >= 1000 ? `${(avgLatencyMs.value / 1000).toFixed(1)}s` : `${avgLatencyMs.value}ms`))
 const RANGE_LABELS: Record<string, string> = { '7d': '近 7 天', '24h': '近 24 小时', '30d': '近 30 天', all: '全部时间' }
-const rangeLabel = computed(() => RANGE_LABELS[statsRange.value] || '近期')
+/** 口径文案取「已生效窗口」（appliedRange）而非下拉当前值：切换失败时数字没换，口径也不能换 */
+const rangeLabel = computed(() => RANGE_LABELS[appliedRange.value] || '近期')
+const rangeLabelOf = (r: string) => RANGE_LABELS[r] || '近期'
 
 const isFiltered = computed(() => onlyAttention.value || !!keyword.value.trim() || !!categoryFilter.value || !!agentFilter.value)
 function clearFilters() {
@@ -950,8 +990,11 @@ const fallbackPolicyTitle = computed(() =>
 /* 视图切换（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
    （mk-primitives.css），本页不再私持拷贝。 */
 
-/* 列表视图 */
-.sk-row { cursor: pointer; }
+/* 列表视图（行可点：cursor/行内焦点环由共享 .mk-table--click 提供，不再私持拷贝） */
+/* 统计刷新失败条：卡内位置 + 不参与 fill 伸缩 */
+.sk-live-err { flex: none; margin: 10px 16px 0; }
+/* #107：默认排序口径说明（与「清除筛选」同排的弱化小字） */
+.sk-sort-hint { white-space: nowrap; }
 /* Skill 格 min-width：本表 11 列自动布局，Skill 名列会被调用/通过率等数字列挤窄
    （2026-10-02 视觉核对实测主行截成 4 字）——给内容格兜底宽度 */
 .sk-cell { display: flex; align-items: center; gap: 10px; min-width: 200px; }

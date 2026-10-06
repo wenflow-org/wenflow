@@ -23,28 +23,20 @@
       </template>
     </MkPageHead>
 
-    <!-- KPI（原型 .grid auto-fit 210 + .card.kpi）：label 12 / 数值 28 / ▲▼趋势 foot。
-         趋势口径 = 昨日同时刻窗口（后端 overview/stats 基线字段），口径注释进悬停 tooltip。 -->
-    <div class="kpigrid">
-      <div
+    <!-- KPI：统一走共享 MkKpi（clickable 渲染真 <button>，Enter/Space/焦点环天然可用）+ .mk-kpi-grid。
+         趋势口径 = 昨日同时刻窗口（后端 overview/stats 基线字段），趋势与 foot 合流进 hint，
+         口径注释进悬停 tooltip（2026-10-06 审核：自搓 .card/.kpi 家族退役）。 -->
+    <div class="mk-kpi-grid">
+      <MkKpi
         v-for="(k, i) in kpiCards"
         :key="k.label"
-        class="card card--kpi"
-        role="button"
-        tabindex="0"
+        clickable
+        :label="k.label"
+        :value="k.value"
+        :hint="kpiHint(k)"
         :title="kpiTitle(i)"
         @click="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
-        @keydown.enter.self.prevent="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
-      >
-        <div class="kpi">
-          <span class="kpi__label">{{ k.label }}</span>
-          <span class="kpi__value">{{ k.value }}</span>
-          <span class="kpi__foot">
-            <span v-if="k.trend" class="trend" :class="k.trend.up ? 'trend--up' : 'trend--down'">{{ k.trend.up ? '▲' : '▼' }} {{ k.trend.pct }}</span>
-            <span class="kpi-note">{{ k.foot }}</span>
-          </span>
-        </div>
-      </div>
+      />
     </div>
 
     <!-- 系统状态（原型 .statusbar）：点色=结论、粗体=标题、meta=子项、右端=动作。
@@ -94,14 +86,14 @@
     <!-- 教学闭环（原型 .loop 招牌块）：五环各一卡，读数全真实。
          口径：对话/路径/评估来自 overview/stats（随 10s 轮询）；
          教学回合=会话累计、记忆复习=到期待办（进页拉一次）。 -->
-    <div class="card">
-      <div class="card__head">
-        <span class="card__title">教学闭环</span>
+    <div class="mk-card">
+      <div class="mk-card__head">
+        <span class="mk-card__title">教学闭环</span>
         <!-- 原型副文「目标对话 → … → 记忆复习」撤（2026-10-03 用户反馈文案重复）：
              五张阶段卡本身就是这条链，副文是逐字预告 -->
 
       </div>
-      <div class="card__body">
+      <div class="ov-card__body">
         <div class="loop">
           <template v-for="(s, i) in loopStages" :key="s.name">
             <span v-if="i" class="loop__arrow" aria-hidden="true">→</span>
@@ -139,12 +131,12 @@
     <!-- 动作队列带（原 Row B，2026-10-03 上移进首屏）：待处理事项是全页唯一
          要求操作的板块，不能落在折叠线下；Top 5 作参考位同行 -->
     <div class="row3">
-      <div class="card">
-        <div class="card__head">
-          <span class="card__title">Skill 调用量 Top 5</span>
-          <span class="card__sub">近 7 天 · 每行：调用量 · 失败数</span>
+      <div class="mk-card">
+        <div class="mk-card__head">
+          <span class="mk-card__title">Skill 调用量 Top 5</span>
+          <span class="mk-card__meta">近 7 天 · 真实账号口径（含 admin 发起的仿真跑批）· 每行：调用量 · 失败数</span>
         </div>
-        <div class="card__body">
+        <div class="ov-card__body">
           <div class="ranklist">
             <div
               v-for="(s, i) in data.topSkills"
@@ -169,12 +161,14 @@
         </div>
       </div>
 
-      <div class="card">
-        <div class="card__head">
-          <span class="card__title">待处理事项</span>
+      <div class="mk-card">
+        <div class="mk-card__head">
+          <span class="mk-card__title">待处理事项</span>
+          <!-- 口径副文（#4）：动作来自 200 条日志采样窗口的 Top 失败，与状态条的「今日失败」不同源 -->
+          <span class="mk-card__meta">近 7 天 · 200 条采样窗口 · 按失败数取前 2</span>
           <span v-if="todoItems.length" class="pill pill--warn"><span class="pill__dot"></span>{{ todoItems.length }}</span>
         </div>
-        <div class="card__body">
+        <div class="ov-card__body">
           <div class="ranklist">
             <div v-for="t in todoItems" :key="t.key" class="rankrow rankrow--todo">
               <!-- 主行 + 口径副行（拆分见 todoItems）：长句不再一行堆满 -->
@@ -192,27 +186,34 @@
     <!-- 趋势带（原 Row A，2026-10-03 下移）：图表/事件流是二阶信息，退居动作队列之后；
          构图叙事 = 出什么事(状态条) → 哪个阶段(闭环) → 要做什么(动作带) → 趋势如何 -->
     <div class="row2">
-      <div class="card card--chart">
-        <div class="card__head">
-          <span class="card__title">近 7 天活跃学习者</span>
-          <span class="card__sub">单位：人 · 每日活跃</span>
-          <span class="card__tools">
+      <div class="mk-card ov-card--chart">
+        <div class="mk-card__head">
+          <span class="mk-card__title">近 7 天活跃学习者</span>
+          <span class="mk-card__meta">单位：人 · 每日活跃</span>
+          <span class="mk-card__head-right">
             <button type="button" class="mk-btn mk-btn--sm" @click="jump('people')">用户与学习者 →</button>
           </span>
         </div>
-        <div class="card__body">
+        <div class="ov-card__body">
           <!-- P1#2：手写 .barchart 无「今日进行中」语义（清晨当日累计尚小 → 柱高塌陷读成活跃崩塌），
-               换全站统一 OvBars：零值「·」+ 今日列高亮内建；今日列 title 补「截至现在」防误读。 -->
-          <OvBars :cols="barchartCols" :bar-width="40" :min-bars-height="120" />
+               换全站统一 OvBars：零值「·」+ 今日列高亮内建；今日列 title 补「截至现在」防误读。
+               审核 #1（2026-10-06）：本卡补空态——四张列表/图表卡中唯一没有空态文案，
+               growth7d 为空时整块留白会被读成渲染坏了。 -->
+          <OvBars v-if="barchartCols.length" :cols="barchartCols" :bar-width="40" :min-bars-height="120" />
+          <p v-else class="note">近 7 天暂无活跃数据。</p>
         </div>
       </div>
-      <div class="card">
-        <div class="card__head">
-          <span class="card__title">最近事件</span>
-          <span class="card__sub">近 24h</span>
+      <div class="mk-card">
+        <div class="mk-card__head">
+          <span class="mk-card__title">最近事件</span>
+          <span class="mk-card__meta">近 24h</span>
         </div>
-        <div class="card__body">
-          <div class="feed feed--capped">
+        <div class="ov-card__body">
+          <div
+            ref="feedRef"
+            class="feed feed--capped"
+            :class="{ 'feed--capped--overflow': feedOverflow }"
+          >
             <div
               v-for="(f, i) in feedRows"
               :key="`f${i}`"
@@ -241,17 +242,21 @@
 
   </div>
   <MkLoading v-else-if="liveLoading" min text="正在加载真实数据…" />
+  <!-- 加载失败是错误事实，不是中性空态（审核 #4，2026-10-06）：走原语 tone="error"
+       （红系图标 + role=alert），与同页另三态（加载/空/有数据）纪律一致 -->
   <MkEmptyState
     v-else
     min
+    tone="error"
     title="真实数据暂不可用，请刷新或稍后重试。"
+    description="总览接口未返回数据，可能是后端未启动或网络不可达。"
     action-text="重试"
     @action="retryOverview"
   />
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue';
 import { overviewHealth, investigateAgent, intent, dataSource, openSubPage } from './store';
 import {
   liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing,
@@ -262,6 +267,7 @@ import {
 import OvBars from './OvBars.vue';
 import { adminHealthCenterApi, adminMemoryReviewApi, adminTeachingSessionsApi } from '@/api/adminApi';
 import MkPageHead from '@/components/mk/MkPageHead.vue';
+import MkKpi from '@/components/mk/MkKpi.vue';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
 import { useSafePolling } from '@/composables/useSafePolling';
@@ -274,11 +280,13 @@ type BriefData = LiveOverviewFull;
 const health = computed(() => overviewHealth.value);
 
 // 健康结论与行动项同源：health 提示异常时即使静态 actions 为空也要给出排查入口
+// （2026-10-06 审核 #5）：原只认 warn，tone='bad'（成功率<80 且失败≥3）时红结论与
+// 「没有待处理的事项」同屏。放宽为 warn/bad——muted（空闲/未就绪）不伪造失败结论。
 const effectiveActions = computed(() => {
   if (!data.value) return [];
   if (data.value.actions.length) return data.value.actions;
   const tone = health.value.tone;
-  if (tone === 'warn') {
+  if (tone === 'warn' || tone === 'bad') {
     // 兜底动作不伪造 agentId：空串让 investigateAgent 只带失败状态筛选
     return [{ text: '教学链路出现失败，检查模型服务与限流配置', tone: 'bad' as Tone, agentId: '', link: '' }];
   }
@@ -320,9 +328,11 @@ const loopStages = computed<LoopStage[]>(() => {
       scene: 'teaching-sessions',
     },
     {
+      // 口径（#3）：evalOk 是「最近 sampleSize 条 wrapup 日志」里的成功条数（结构上 ≤ sampleSize），
+      // 与另外四环的全量口径不同源——数值必须带分母，否则与「320 待办 / 208 累计」并排会被读成漏斗塌陷
       name: '课后评估', meta: '产出与掌握度评估',
-      val: `${evalOk} 份`, tone: 'done',
-      title: `评估产出 ${evalOk} 份 · 失败 ${d?.wrapup.evaluationFailed ?? 0}（wrapup 样本口径 · 随轮询刷新）· 点击查看教学会话`,
+      val: `${evalOk}/${d?.wrapup.sampleSize ?? 0} 样本`, tone: 'done',
+      title: `评估产出 ${evalOk} 份 / 最近 ${d?.wrapup.sampleSize ?? 0} 次课后总结样本 · 失败 ${d?.wrapup.evaluationFailed ?? 0}（wrapup 样本口径，非全量评估总数 · 随轮询刷新）· 点击查看教学会话`,
       scene: 'teaching-sessions',
     },
     {
@@ -561,11 +571,21 @@ function kpiTitle(i: number): string {
       : target === 'goal-conversations' ? '目标对话' : 'Skill 目录'
   return [hint, `点击查看${label}`].filter(Boolean).join(' · ')
 }
+/** KPI 副文（MkKpi hint）：趋势 + foot 合流（原自搓 .kpi__foot 两段承载），口径注释仍走 title */
+function kpiHint(k: KpiCard): string {
+  const trend = k.trend ? `${k.trend.up ? '▲' : '▼'} ${k.trend.pct}` : ''
+  return [trend, k.foot].filter(Boolean).join(' · ')
+}
 function jump(scene: string, tab?: string) {
   if (!scene) return
   intent.agentFilter = ''
   intent.statusFilter = ''
   intent.traceId = ''
+  // 审核 #2（2026-10-06）：补清会话深链字段——上一次 drill-in 留下的 sessionId 会让
+  // 执行日志页 immediate watch 命中即切「会话模式」并提示「会话 … 未找到」；
+  // traceFocus 同源（与 store.clearInvestigation 及 jumpToFailures/jumpToFailedPaths 对齐）
+  intent.sessionId = ''
+  intent.traceFocus = false
   intent.errorCategory = ''
   intent.timeRange = ''
   intent.tab = tab || ''
@@ -626,6 +646,27 @@ function feedJump(f: { tone: string; errorCategory?: string }) {
   jumpToFailures(f.errorCategory || '')
 }
 
+/* 底部渐隐只在「确有下文被裁」时挂（审核 #0，2026-10-06）：
+   此前 mask-image 无条件写在 .feed--capped 上，≤4 条（元素高 <236px）时末条下缘
+   照样被 22px 渐隐淡掉——把「下面还有」画在没有下文的地方。改为渲染后量 scrollHeight
+   与 clientHeight 判定溢出，只在 overflow 类下挂 mask；窗口尺寸/条数变化时复测。 */
+const feedRef = ref<HTMLElement | null>(null)
+const feedOverflow = ref(false)
+function measureFeedOverflow() {
+  const el = feedRef.value
+  feedOverflow.value = !!el && el.scrollHeight > el.clientHeight + 1
+}
+let feedRo: ResizeObserver | null = null
+watch(feedRef, (el) => {
+  feedRo?.disconnect()
+  feedRo = null
+  if (!el || typeof ResizeObserver === 'undefined') return
+  feedRo = new ResizeObserver(() => measureFeedOverflow())
+  feedRo.observe(el)
+  measureFeedOverflow()
+})
+watch(feedRows, () => { void nextTick(measureFeedOverflow) })
+
 /* 待处理事项（原型 Row B 第二卡）：与状态条同源，不另起口径。
    密度优化（2026-10-03）：text 里末尾括号是口径标注（「近 7 天 · 200 条采样」），
    与主句挤一行读着冗长 → 拆成主行 + 口径副行（副行弱化为 faint 小字）。
@@ -646,6 +687,22 @@ function splitTodoNote(text: string): { main: string; note: string } {
 }
 const todoItems = computed<TodoItem[]>(() => {
   const items: TodoItem[] = [];
+  // 健康检查异常（#5）：状态条已红/琥珀报「N 项异常」，此处必须有对应条目，
+  // 否则同屏红结论配「没有待处理的事项」（healthTone 由 healthCheck error/warn 计数派生）
+  const hc = healthCheck.value;
+  if (healthState.value === 'ready' && hc && (hc.error > 0 || hc.warn > 0)) {
+    const n = hc.error > 0 ? hc.error : hc.warn;
+    const label = hc.error > 0 ? '异常' : '需关注';
+    items.push({
+      key: 'health',
+      text: `健康检查 ${n} 项${label}（健康中心 · 全量检查清单）`,
+      main: `健康检查 ${n} 项${label}`,
+      note: '健康中心 · 全量检查清单',
+      tone: (hc.error > 0 ? 'bad' : 'warn') as Tone,
+      actLabel: '健康中心',
+      action: () => jump('health-center'),
+    });
+  }
   for (const a of effectiveActions.value) {
     items.push({
       key: `a-${a.agentId}-${a.text}`,
@@ -714,6 +771,7 @@ watch(dataSource, () => {
   lastUpdated.value = nowHm()
   startAutoRefresh()
 })
+onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
 </script>
 
 <style scoped>
@@ -765,57 +823,12 @@ watch(dataSource, () => {
    配方已提为共享 .mk-status--warn/--bad（mk-primitives.css，底/描边走 --mk-amber-bg/--mk-red-bg
    同款 token），本页私染 CSS 随之撤除，染底效果由共享类承接。 */
 
-/* ---- KPI（.grid auto-fit 210 + .card.kpi）---- */
-.kpigrid {
-  /* flex 填满（2026-10-03 用户拍板「内容区随视口流式」）：同 .mk-kpi-grid，N 卡铺满整行不留空轨 */
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--mk-space-4);
-}
-.kpigrid > * { flex: 1 1 210px; min-width: 0; }
-.card--kpi { cursor: pointer; transition: border-color 0.12s ease; }
-.card--kpi:hover { border-color: color-mix(in srgb, var(--mk-blue) 45%, var(--mk-line)); }
-.card--kpi:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }
-.kpi { display: grid; gap: 6px; padding: 16px; align-content: start; }
-.kpi__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.kpi__value {
-  font-size: 28px; font-weight: 700; letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums; color: var(--mk-ink); line-height: 1.2;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-/* CM9：总览 KPI 数值档位对齐共享 MkKpi（.mk-kpi__num 同款 28/29/30/31/34/38），
-   此前只在基档 28、1440 起与其余页 29 脱节（同一屏两种数字字号）。 */
-@media (min-width: 1440px) { .kpi__value { font-size: 29px; } }
-@media (min-width: 1920px) { .kpi__value { font-size: 30px; } }
-@media (min-width: 2000px) { .kpi__value { font-size: 31px; } }
-@media (min-width: 2800px) { .kpi__value { font-size: 34px; } }
-@media (min-width: 3600px) { .kpi__value { font-size: 38px; } }
-.kpi__foot {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted);
-}
-/* 注记整句不拆（1280 实测「…较昨日同」后「时刻」孤行、balance 又断在「·」前更碎）：
-   空间不够时让 trend 与注记各自成行，注记保持完整；极端窄幅才截断 */
-.kpi__foot .kpi-note { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* 趋势（原型 .trend：粗体 tabular；涨绿跌红） */
-.trend { font-weight: 700; font-variant-numeric: tabular-nums; flex: none; }
-.trend--up { color: var(--mk-green); }
-.trend--down { color: var(--mk-red); }
+/* ---- KPI：壳走共享 .mk-kpi-grid + MkKpi（2026-10-06 审核 #1/#2）----
+   原页内 .kpigrid/.card--kpi/.kpi* 自搓家族退役：暗色卡片描边误用 --mk-line（1.36:1）、
+   可点 KPI 缺 :active、role=button 只绑 Enter。现由共享原语承担（MkKpi clickable=真 button）。 */
 
-/* ---- 卡片（原型 .card：head 12/16 分隔线 + body 16）---- */
-.card {
-  background: var(--mk-surface);
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  overflow: clip;
-}
-.card__head {
-  display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px; border-bottom: 1px solid var(--mk-line);
-}
-.card__title { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
-.card__sub { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.card__tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.card__body { padding: 16px; }
+/* ---- 卡片体（共享 .mk-card 无 .mk-card__body 原语，衬距用本页局部类，SessionCockpit 同判例）---- */
+.ov-card__body { padding: 16px; }
 
 /* ---- 胶囊（原型 .pill：卡头 tools 徽标）---- */
 .pill {
@@ -841,26 +854,37 @@ watch(dataSource, () => {
 .loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
 .loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
 .loop__step--alert { border-color: color-mix(in srgb, var(--mk-amber) 42%, var(--mk-line)); background: var(--mk-amber-bg); }
-.loop__no { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.loop__no { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .loop__name { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
 .loop__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .loop__val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-ink); }
 /* 指标行 = 数值 + 失败徽章（错误内联，2026-10-03）：徽章可点，需手型与文字对齐 */
 .loop__valrow { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
 .loop__fail { cursor: pointer; font-family: inherit; }
+/* 对比度（#0）：暗色 --mk-red-bg 是 14% 半透明红，红字压在本页 .loop__step--alert 的
+   半透明琥珀底上合成 3.49:1（<小字 AA 4.5）。徽章自铺不透明底板：暗色取 --mk-surface-2
+   （不透明 #27282c，红字实测 ≈5.3:1），亮色档本已达标、不动。
+   不用 color-mix：Chromium 把 color-mix 结果序列化为 color(srgb …)，渲染层审计
+   （scripts/v4-ui-audit.mjs）的取色器只认 rgb()/rgba()，会跳过本元素底板、继续向上
+   合成到琥珀底（误报 4.26:1）。不透明 token 的 computed 值即 rgb()，可被如实量到。 */
+html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 
 /* ---- Row A：图（1.6fr）+ 事件（1fr）----
    等高（2026-10-03 用户指出左右卡底边错位 69px）：撤 align-items:start，
-   两卡由 grid 拉齐到同一行高；差值给柱图消化（.card--chart body 转 flex 列，
+   两卡由 grid 拉齐到同一行高；差值给柱图消化（ov-card--chart 的卡体转 flex 列，
    OvBars 自带 flex:1 自适应长高），不再留中空 */
 .row2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
-.card--chart .card__body { display: flex; flex-direction: column; min-height: 0; }
+.ov-card--chart .ov-card__body { display: flex; flex-direction: column; min-height: 0; }
 
 /* 最近事件（原型 .feed--capped：时间列 + 标题/描述，限高滚动）。
    底部 22px 渐隐（mask）提示「下面还有」：内滚区边界落在条目中间时会把最后可见条的
-   副标题切半行，不加暗示会被读成「内容坏了」（裸评审 2026-10-03）。浅/深色均走 alpha 遮罩。 */
+   副标题切半行，不加暗示会被读成「内容坏了」（裸评审 2026-10-03）。浅/深色均走 alpha 遮罩。
+   审核 #0（2026-10-06）：mask 只在确有溢出（scrollHeight > clientHeight，见 feedOverflow）
+   时挂——条目不足一屏时渐隐会画在没有下文的地方。 */
 .feed--capped {
   display: grid; gap: 2px; max-height: 236px; overflow-y: auto; overscroll-behavior: contain;
+}
+.feed--capped--overflow {
   -webkit-mask-image: linear-gradient(180deg, black calc(100% - 22px), transparent);
   mask-image: linear-gradient(180deg, black calc(100% - 22px), transparent);
 }

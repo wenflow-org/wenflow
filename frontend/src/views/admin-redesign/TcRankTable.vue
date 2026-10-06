@@ -6,8 +6,10 @@
       <span class="tc-c tc-c--name" role="columnheader">{{ nameLabel }}</span>
       <span class="tc-c tc-c--num" role="columnheader">调用</span>
       <span class="tc-c tc-c--num" role="columnheader">失败</span>
-      <span v-if="variant === 'skill'" class="tc-c tc-c--num" role="columnheader">平均/次</span>
       <span class="tc-c tc-c--tok" role="columnheader">Token 用量</span>
+      <!-- 成本列（审核 #112）：接口 RankEntry 已带成本桶，此前 user/model 排行未渲染，与页头
+           「按模型、Skill 与时间维度追踪模型调用成本」承诺不符 -->
+      <span class="tc-c tc-c--cost" role="columnheader">成本</span>
       <span class="tc-c tc-c--share" role="columnheader">占比</span>
     </div>
 
@@ -26,7 +28,9 @@
       <!-- 名称列（各维度形态不同） -->
       <div class="tc-c tc-c--name" role="cell">
         <template v-if="variant === 'user'">
-          <MkCellAvatar :name="r.name || r.key" />
+          <!-- 审核 #135：显式给 tone（原不传 → MkCellAvatar 渲染幽灵类 mk-ava--undefined）。
+               测试/虚拟账号的差异化着色需后端 by-user enrich 返回 isTest（当前无此标记，见报告「暂缓」） -->
+          <MkCellAvatar :name="r.name || r.key" tone="default" />
           <span class="tc-c__main">
             <strong :title="r.name || r.key">{{ r.name || shortId(r.key) }}</strong>
             <em class="tc-c__sub" :title="r.email || r.key">
@@ -49,13 +53,14 @@
         {{ r.failed > 0 ? r.failed : '0' }}<em v-if="r.failed > 0" class="tc-c__sub">{{ failRate(r) }}</em>
       </span>
 
-      <span v-if="variant === 'skill'" class="tc-c tc-c--num tc-num tc-avg" role="cell">{{ avgPerCall(r) }}</span>
-
       <!-- Token 用量：主值 + prompt·completion 拆分 -->
       <div class="tc-c tc-c--tok" role="cell">
         <strong class="tc-num">{{ fmtTokens(r.tokens) }}</strong>
         <em class="tc-c__sub">prompt {{ fmtTokens(r.promptTokens) }}<template v-if="(r.completionTokens ?? 0) > 0"> · comp {{ fmtTokens(r.completionTokens) }}</template></em>
       </div>
+
+      <!-- 成本（审核 #112）：照抄 SkillCostRow 取值口径——已定价 ≈$x / 单价未配置 / — -->
+      <span class="tc-c tc-c--cost tc-cost" role="cell" :title="costTitle(r)">{{ costText(r) }}</span>
 
       <!-- 占比：迷你进度条（mk-minibar 原语，替代页内自搓渐变条）+ 百分比 -->
       <div class="tc-c tc-c--share" role="cell">
@@ -77,6 +82,12 @@ export interface RankRow {
   failed: number
   name?: string | null
   email?: string | null
+  /* 成本桶（审核 #112）：后端 RankEntry extends CostBucket，原样回传 usd/pricingKnown/
+     pricedCalls/callsMissingPricing；此前未声明也未渲染，user/model 排行缺成本列 */
+  usd?: number | null
+  pricingKnown?: boolean
+  pricedCalls?: number
+  callsMissingPricing?: number
 }
 </script>
 
@@ -87,16 +98,15 @@ import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 const props = withDefaults(
   defineProps<{
     items: RankRow[]
-    /** skill = 全宽大表（多一列平均/次）；user/model = 半宽侧表 */
-    variant: 'skill' | 'user' | 'model'
+    /** user/model = 半宽侧表（Skill 明细表已由 TokenCost 页自有 .tc-skilltable 承担，
+        本组件不再提供 skill 档——审核 #132 删除无消费者的死分支） */
+    variant: 'user' | 'model'
     totalTokens: number
   }>(),
   { totalTokens: 0 }
 )
 
-const nameLabel = computed(() =>
-  props.variant === 'skill' ? 'Skill 名称' : props.variant === 'user' ? '用户' : '模型'
-)
+const nameLabel = computed(() => (props.variant === 'user' ? '用户' : '模型'))
 
 function fmtTokens(n: number | undefined): string {
   if (!Number.isFinite(n as number) || !n || n <= 0) return '0'
@@ -129,14 +139,27 @@ function failRate(r: RankRow): string {
   return `${Math.round((r.failed / r.calls) * 100)}%`
 }
 
-function avgPerCall(r: RankRow): string {
-  if (!r.calls) return '—'
-  return fmtTokens(r.tokens / r.calls)
+/* 成本取值口径（审核 #112）：照抄 TokenCost 的 skillRowCost——已定价 ≈$x / 单价未配置 / — */
+function fmtCostUsd(v: number): string {
+  if (!Number.isFinite(v) || v <= 0) return '0'
+  if (v >= 1) return v.toFixed(2)
+  if (v >= 0.01) return v.toFixed(4)
+  return v.toFixed(6)
+}
+function costText(r: RankRow): string {
+  if (typeof r.usd === 'number') return `≈ $${fmtCostUsd(r.usd)}`
+  if ((r.callsMissingPricing ?? 0) > 0) return '单价未配置'
+  return '—'
+}
+function costTitle(r: RankRow): string {
+  if (typeof r.usd === 'number') return `已定价 ${r.pricedCalls ?? 0} 次调用金额合计（USD）`
+  if ((r.callsMissingPricing ?? 0) > 0) return `${r.callsMissingPricing} 次调用未配置模型单价，不计入金额`
+  return '本行无已定价调用'
 }
 
 function rowTitle(r: RankRow): string {
   const label = props.variant === 'user' ? (r.name || r.key) : (r.display || r.key)
-  const parts = [label, `${r.calls} 次调用`, `失败 ${r.failed}`]
+  const parts = [label, `${r.calls} 次调用`, `失败 ${r.failed}`, `成本 ${costText(r)}`]
   if (r.promptTokens || r.completionTokens) {
     parts.push(`prompt ${fmtTokens(r.promptTokens)} · completion ${fmtTokens(r.completionTokens)}`)
   }
@@ -157,28 +180,26 @@ function rowTitle(r: RankRow): string {
   align-items: center;
   gap: 10px;
 }
-/* skill = 全宽大表；user/model = 半宽侧表（统一列模板，跨卡对齐）。
-   skill 表卡片 1638px：名称/数字列全按 fr 比例摊余量——原「名称 1fr 独吃」在宽卡下
-   名称列撑到 ~1100px，右侧五个定宽数字列全挤在 530px 里（用户实测「后面挤起来了」）。 */
-.tc-table--skill .tc-table__head,
-.tc-table--skill .tc-table__row {
-  grid-template-columns:
-    28px
-    minmax(140px, 1.2fr)
-    minmax(56px, 0.6fr)
-    minmax(48px, 0.5fr)
-    minmax(64px, 0.7fr)
-    minmax(150px, 1.3fr)
-    minmax(100px, 0.9fr);
-}
 /* user/model 半宽侧表：原「名称 1fr 独吃 + Token 固定 112px」——Token 副行
    （prompt X · comp Y）实测宽 183px，溢出列宽 71px 压到「失败」列上（用户实测「挤着」）。
-   名称与 Token 双 fr 摊分：名称足够放邮箱（~178px），Token 放得下 183px 副行。 */
+   名称与 Token 双 fr 摊分：名称足够放邮箱（~178px），Token 放得下 183px 副行。
+   审核 #112：Token 与占比之间插成本列（minmax 保证「单价未配置」可读）。 */
 .tc-table--user .tc-table__head,
 .tc-table--user .tc-table__row,
 .tc-table--model .tc-table__head,
 .tc-table--model .tc-table__row {
-  grid-template-columns: 26px minmax(140px, 1fr) 52px 46px minmax(180px, 1fr) 100px;
+  grid-template-columns: 26px minmax(140px, 1fr) 52px 46px minmax(180px, 1fr) minmax(96px, 0.7fr) 100px;
+}
+/* 审核 #129：≤1599 时 TokenCost 的 .tc-ranks 回落单列全宽（卡内 ~1110px），而上面的双 fr 模板
+   把 836px 余量平摊给名称/Token 两列（各 ~418px），数据列仅 52/46px——文本列大片空转。
+   单列档改用带上限的列模板（合计 ~1100px 贴合卡宽），两文本列不再无限膨胀 */
+@media (max-width: 1599px) {
+  .tc-table--user .tc-table__head,
+  .tc-table--user .tc-table__row,
+  .tc-table--model .tc-table__head,
+  .tc-table--model .tc-table__row {
+    grid-template-columns: 26px minmax(160px, 300px) 60px 54px minmax(200px, 360px) minmax(96px, 140px) 100px;
+  }
 }
 
 /* 表头 */
@@ -270,7 +291,16 @@ function rowTitle(r: RankRow): string {
   white-space: nowrap;
   font-size: var(--mk-fs-micro);
 }
-.tc-avg { color: var(--mk-muted); font-weight: 600; }
+/* 成本列（审核 #112）：等宽数字右对齐，未定价走弱化色 */
+.tc-cost {
+  font-family: var(--mk-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  color: var(--mk-ink);
+  text-align: right;
+  white-space: nowrap;
+}
 
 /* 失败列 */
 .tc-fail--bad { color: var(--mk-red); font-weight: 800; font-size: var(--mk-fs-micro); }

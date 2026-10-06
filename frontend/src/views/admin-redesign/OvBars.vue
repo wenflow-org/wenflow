@@ -1,5 +1,10 @@
 <template>
-  <div class="ovbars" :style="{ '--ovbars-cols': String(cols.length), '--ovbars-min': `${minBarsHeight}px` }">
+  <div
+    class="ovbars"
+    role="img"
+    :aria-label="ariaLabel ?? colsSummary"
+    :style="{ '--ovbars-cols': String(cols.length), '--ovbars-min': `${minBarsHeight}px` }"
+  >
     <div
       v-for="(c, i) in cols"
       :key="c.key"
@@ -48,9 +53,22 @@ const props = withDefaults(defineProps<{
   /** 单柱宽度（px）：默认 9（半宽卡）；全宽卡（如成本页趋势）传更宽的值，
       否则 7 列铺满 1600px 时柱子细成发丝 */
   barWidth?: number;
+  /** 可访问名：调用方给整图语义（如「近 7 天每日活跃人数」）；
+      缺省时由 cols 逐列拼「标签 数值」兜底，见 colsSummary */
+  ariaLabel?: string;
 }>(), { showNums: true, labelEvery: 1, minBarsHeight: 64, barWidth: 9 });
 
 const labelShown = computed(() => (i: number) => i % props.labelEvery === 0 || i === props.cols.length - 1);
+
+/* 可访问名（审核 #3）：根节点 role="img" 把一串纯数字列收成一句整图语义，
+   否则读屏只念出一串数字、不知每根柱是什么。ariaLabel 未传时由 cols 逐列拼
+   「标签 数值」兜底（稀显藏掉的标签此处仍读全）；有今日列时补「截至现在」，
+   与列 title 的进行中口径一致。两调用方（Overview 活跃图 / TokenCost 用量图）
+   共用本兜底——补语义化前缀应由调用方传 ariaLabel。 */
+const colsSummary = computed(() => {
+  const parts = props.cols.map((c) => `${c.label} ${c.num && c.num !== '' ? c.num : '0'}`);
+  return `柱状图：${parts.join('、')}${props.cols.some((c) => c.today) ? '（今日为截至现在）' : ''}`;
+});
 </script>
 
 <style scoped>

@@ -1,7 +1,8 @@
 <template>
   <div class="add-embedded">
-    <!-- ① 外挂能力 + ② MCP 服务：行数少时并栏（审计 E3），数据增长后回到单列全宽 -->
-    <div class="ac-cards" :class="{ 'ac-cards--side': sideBySide }">
+    <!-- ① 外挂能力 + ② MCP 服务：堆叠单列全宽（2026-09-29 实测半宽卡内能力表 874px 溢出
+         506px 容器，并栏不可行；审核 #157 删除恒 false 的 sideBySide 死分支与不可达 CSS） -->
+    <div class="ac-cards">
 
     <!-- ① 外挂能力 -->
     <div class="mk-card">
@@ -16,7 +17,7 @@
       <!-- 外挂能力卡片栅格（原型 index.html:1814-1817 addons 卡栅格）：每卡=顶行（名 strong + grow
            + 状态徽标）/ 副行 id / 真实配置元信息 / 底行右对齐操作钮。卡栅格仍以 tbody(display:grid)
            承载，保留 .mk-cell-main/.mk-cell-sub 的截断与 title 全值语义（能力名与 id 截断处可读）。 -->
-      <div v-if="capabilityRows.length" class="ac-cap-grid">
+      <div v-if="capabilityRows.length && !loading" class="ac-cap-grid">
         <table class="ac-cap-table">
           <tbody>
             <tr v-for="r in capabilityRows" :key="r.id" class="ac-cap-card">
@@ -44,6 +45,10 @@
           </tbody>
         </table>
       </div>
+
+      <!-- 能力配置加载中：对齐 MCP 卡的 MkLoading（审核 #158）——此前首帧即渲染 4 张
+           「待配置」卡，配置接口返回后才翻真值，闪一次假信号 -->
+      <MkLoading v-if="loading" min text="能力配置加载中…" />
 
       <MkEmptyState
         v-if="!capabilityRows.length && !loading"
@@ -313,8 +318,9 @@ watch(capabilityRows, (rows) => {
 }, { immediate: true })
 
 /* 2026-09-29 拆回模型与接入宿主 tab 后容器从全宽变为 ac-tab-body 内嵌，
-   半宽卡内能力表 874px 溢出 506px 容器 370px——外挂能力表和 MCP 服务改为堆叠全宽 */
-const sideBySide = ref(false)
+   半宽卡内能力表 874px 溢出 506px 容器 370px——外挂能力表和 MCP 服务改为堆叠全宽。
+   审核 #157：恒为 false 的 sideBySide 状态位与「行数少时并栏」注释一并删除，
+   避免注释与实现长期分叉（并栏分支不可达）。 */
 
 /* ---------- ② MCP 服务（平台工具） ---------- */
 interface McpTool {
@@ -508,8 +514,9 @@ function goLogs(skillId: string) {
   investigateAgent(skillId)
 }
 function goConfig() {
-  // 本页常以 ?tab=addons 嵌入宿主；push 同路径不带 query 不会重置 tab，显式指定落到「接入与模型」
-  void router.push({ path: '/admin/api-config', query: { tab: 'model' } })
+  // 本页常以 ?tab=addons 嵌入宿主；push 同路径不带 query 不会重置 tab，显式指定落到「接入与验证」。
+  // 用宿主白名单键 connection（旧键 model 已由 ApiConfig 的 TAB_ALIAS 兼容，但新代码直接用有效键）。
+  void router.push({ path: '/admin/api-config', query: { tab: 'connection' } })
 }
 
 /* toast */
@@ -551,7 +558,7 @@ function goConfig() {
 }
 .ac-cap-card__foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 
-/* E3 并栏容器：默认单列全宽；内容少时 1fr 1fr 并排 */
+/* 两卡容器：堆叠单列全宽（并栏分支 2026-09-29 实测溢出后退役，审核 #157 清掉不可达规则） */
 .ac-cards {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -560,9 +567,6 @@ function goConfig() {
 }
 /* 卡片可压缩：左卡宽表 min-content 会撑爆 1fr，饿死右卡导致 MCP 行逐字竖排 */
 .ac-cards > .mk-card { min-width: 0; }
-@media (min-width: 1100px) {
-  .ac-cards--side { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-}
 
 /* 能力配置加载失败错误条：外形走 .mk-alert--row，本类只保留卡内位置 */
 .ac-error { margin: 12px 16px 0; }

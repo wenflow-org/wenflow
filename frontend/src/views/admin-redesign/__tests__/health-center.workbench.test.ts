@@ -138,7 +138,9 @@ describe('健康中心（G1）', () => {
     expect(cards[2].text()).toContain('登记 8 项');
     expect(cards[3].text()).toContain('2');                    // 完成度未达标
     expect(cards[3].text()).toContain('已上线 2/8');           // 达成数下沉 hint + 用词统一「已上线」
-    expect(cards[3].text()).toContain('共 8 个技能');           // 原状态条「技能 8」2026-10-04 并入本卡 hint
+    // 2026-10-06 审核 #102：本卡 hint 的「共 N 个技能」与相邻对账卡 hint「登记 N 项」同值同屏
+    // 复读且两种叫法，已撤（登记总数单源住在页头注记 title 与对账卡 title）。
+    expect(cards[3].text()).not.toContain('共 8 个技能');
     expect(cards[3].attributes('title')).toContain('未达 live');
 
     // 健康检查 13 行全部渲染；异常/关注项默认展开，正常项收进折叠组
@@ -146,7 +148,11 @@ describe('健康中心（G1）', () => {
     expect(rows.length).toBe(13);
     expect(wrapper.findAll('.hc-check--error').length).toBe(2);
     expect(wrapper.findAll('.hc-check--warn').length).toBe(2);
-    expect(wrapper.find('.hc-ok__summary').text()).toContain('其余 9 项正常');
+    // 2026-10-06 审核 #100：组头不再一律写「正常」——组内含 info 只读观测项（如「运行时漂移（遥测）」），
+    // 改「无异常」+ 观测条数披露口径。审核 #99：展开/收起文案状态化（点击展开 / 点击收起）。
+    const okSummary = wrapper.find('.hc-ok__summary').text();
+    expect(okSummary).toContain('其余 9 项无异常');
+    expect(okSummary).toContain('点击展开');
 
     // 四域页签（2026-10-04 平铺改页签）：四枚与概要 KPI 一一对应，默认落在健康检查
     const tabs = wrapper.findAll('.hc-tabs .tab');

@@ -78,23 +78,33 @@
                  statusFilter，同屏两处筛选面收敛一处；「已取消」段与原 pill 同口径取补集） -->
             <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 邮箱 / 目标摘要" />
             <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
+            <!-- 排序复位入口（2026-10-06 审核 #51）：默认序是服务端 createdAt 倒序，
+                 排序态持久化后此前无路可回；创建时间已接排序，另给一键回默认序 -->
+            <button v-if="gcSortKey" type="button" class="mk-link" @click="gcResetSort()">恢复默认排序</button>
           </div>
           <div class="mk-card__head-right">
             <MkCols
               :col-defs="gcColDefsFiltered"
               storage-key="wf_goal_hidden_cols"
+              :default-hidden="['constraints']"
               v-model:hidden="gcHiddenCols"
             />
-            <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">（{{ includeTest ? '含测试' : '仅真实' }}口径）<template v-if="truncated"> · 后端共 {{ listTotal }} 条，仅显示最近 {{ rows.length }} 条</template></span>
+            <span class="mk-card__meta" :title="`${includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'}${truncated ? `；排序与搜索仅覆盖已加载的最近 ${LIST_LIMIT} 条` : ''}`">（{{ includeTest ? '含测试' : '仅真实' }}口径）<template v-if="truncated"> · 后端共 {{ listTotal }} 条，仅显示最近 {{ rows.length }} 条（排序/搜索仅覆盖该窗口）</template></span>
           </div>
         </div>
 
         <MockSkeletonTable v-if="loading && !rows.length" :cols="9" />
-        <!-- P0 修复：加载失败行内错误 + 重试（此前失败伪装成「暂无会话」） -->
-        <div v-else-if="loadError" class="gc-error" role="alert">
-          <span>{{ loadError }}</span>
-          <button type="button" class="mk-link" @click="load(true)">重试</button>
-        </div>
+        <!-- P0 修复：加载失败行内错误 + 重试（此前失败伪装成「暂无会话」）。
+             形态收敛共享 MkEmptyState tone="error"（2026-10-06 审核 #48）：私有 .gc-error
+             与同页 stats 失败条两套错误形态并存的局面收敛，role=alert + 重试由原语承担 -->
+        <MkEmptyState
+          v-else-if="loadError"
+          tone="error"
+          title="目标对话列表加载失败"
+          :description="loadError"
+          action-text="重试"
+          @action="load(true)"
+        />
         <div v-else-if="filtered.length" class="mk-table-scroll">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap、
              列按内容自然分宽；长摘要/长邮箱由 .mk-cell-text / .mk-cell-main 的 max-width 截断兜底 -->
@@ -105,6 +115,7 @@
               <th
                 scope="col"
                 class="mk-th--sortable"
+                :title="sortWindowTitle"
                 :aria-sort="gcSortState('user')"
                 @click="toggleGcSort('user')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('user')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -112,6 +123,7 @@
                 v-if="showCol('status')"
                 scope="col"
                 class="mk-th--sortable"
+                :title="sortWindowTitle"
                 :aria-sort="gcSortState('status')"
                 @click="toggleGcSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -119,6 +131,7 @@
                 v-if="showCol('stage')"
                 scope="col"
                 class="mk-th--sortable"
+                :title="sortWindowTitle"
                 :aria-sort="gcSortState('stage')"
                 @click="toggleGcSort('stage')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('stage')">阶段<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -126,12 +139,20 @@
                 v-if="showCol('turns')"
                 scope="col"
                 class="mk-th--sortable mk-th--right"
+                :title="sortWindowTitle"
                 :aria-sort="gcSortState('turns')"
                 @click="toggleGcSort('turns')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清进度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="showCol('constraints')">约束条件</th>
               <th v-if="showCol('path')">路径</th>
-              <th v-if="showCol('created')">创建时间</th>
+              <th
+                v-if="showCol('created')"
+                scope="col"
+                class="mk-th--sortable"
+                :title="sortWindowTitle"
+                :aria-sort="gcSortState('created')"
+                @click="toggleGcSort('created')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('created')">创建时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th class="mk-th--right">操作</th>
             </tr>
           </thead>
@@ -151,8 +172,11 @@
                 <div class="gc-user">
                   <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
                   <div class="mk-cell-main">
-                    <strong>{{ r.userName }}</strong>
-                    <span class="mk-cell-sub">{{ r.userEmail }}</span>
+                    <!-- 全表唯一截断后无 title 的文本格（2026-10-06 审核 #46）：该格有
+                         200px（≤1599 收 176px）强制最小宽，长名字/长邮箱被省略号截断后
+                         看不到全值——同表其余格均有 title -->
+                    <strong :title="r.userName">{{ r.userName }}</strong>
+                    <span class="mk-cell-sub" :title="r.userEmail">{{ r.userEmail }}</span>
                   </div>
                   <div class="gc-tags">
                     <MkVariantBadge v-if="r.isVirtualLearner" kind="virtual" />
@@ -207,10 +231,13 @@
                   <button type="button" class="mk-btn mk-btn--sm" @click.stop="goTrace(r)">链路</button>
                   <button type="button" class="mk-btn mk-btn--sm" title="打开会话座舱（只读监控）" @click.stop="goConsole(r)">详情</button>
                   <div class="mk-menu">
-                    <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu(r.id)">⋯</button>
-                    <div v-if="openMenu === r.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                      <button type="button" class="mk-menu__item" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '对该会话重新生成学习路径'" @click="regenerate(r)">{{ r.regenerating ? '生成中…' : '重建路径' }}</button>
-                      <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuRemove(r)">删除会话</button>
+                    <!-- aria-expanded 按行判定（2026-10-06 审核 #50）：此前绑全局 menuOpen，
+                         菜单一开 15 个按钮同时报 expanded=true；role=menu/menuitem 兑现
+                         aria-haspopup="menu" 的语义承诺 -->
+                    <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === r.id" @click.stop="toggleMenu(r.id)">⋯</button>
+                    <div v-if="openMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                      <button type="button" class="mk-menu__item" role="menuitem" :disabled="r.regenerating" :title="r.regenerating ? '生成中…' : '对该会话重新生成学习路径'" @click="regenerate(r)">{{ r.regenerating ? '生成中…' : '重建路径' }}</button>
+                      <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" @click="menuRemove(r)">删除会话</button>
                     </div>
                   </div>
                 </div>
@@ -438,7 +465,7 @@ const includeTest = computed({
   set: (v) => liveSetIncludeVirtual(v)
 })
 
-const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
+const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 
 /** 菜单项执行：先关菜单再执行（避免菜单残留与整行点击冒泡） */
 function menuRemove(r: Row) {
@@ -532,13 +559,16 @@ function mapRow(c: Record<string, unknown>): Row {
   }
 }
 
-/* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
-const { toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows } = useTableSort<Row>({
+/* 客户端排序：默认保持服务端顺序。窗口截断时（含测试口径触 LIST_LIMIT）排序与关键词
+   只覆盖已加载窗口，属「窗口内排序」而非全量排序 —— 由 sortWindowTitle 在表头与卡头披露
+   （2026-10-06 审核 #35：原注释「全量拉取 → 排序诚实」在截断口径下不成立） */
+const { toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows, sortKey: gcSortKey, reset: gcResetSort } = useTableSort<Row>({
   accessors: {
     user: (r) => r.userName,
     status: (r) => r.status,
     stage: (r) => r.stageIndex,
-    turns: (r) => r.turns ?? -1
+    turns: (r) => r.turns ?? -1,
+    created: (r) => r.createdAtAbs
   },
   storageKey: 'wf_goal_conversations_sort'
 })
@@ -579,12 +609,26 @@ watch(filtered, () => {
 /* 列表拉取上限：请求与深链提示文案共用同一常量，避免「文案 100 / 实现 1000」再次漂移（同 TeachingSessions.LIST_LIMIT） */
 const LIST_LIMIT = 1000
 
+/* 截断口径披露（2026-10-06 审核 #35）：触 LIST_LIMIT 时表头排序与关键词搜索只覆盖已加载窗口，
+   可排序表头 title 与卡头 meta 都须如实说明，不能读起来像全量 */
+const sortWindowTitle = computed(() =>
+  truncated.value ? `排序与搜索仅覆盖已加载的最近 ${LIST_LIMIT} 条（后端共 ${listTotal.value} 条），非全量` : ''
+)
+
 /* force = true 绕过页面级 TTL 缓存（显式刷新/口径切换用），保证用户操作必然重拉 */
 /* stats 请求代际号：stats 改为后台回填后，用代际比对丢弃迟到的旧口径响应（includeTest 切换/重拉场景） */
 let statsReqSeq = 0
+/* 加载期间被守卫挡下的强制刷新（口径切换/重试）：本轮结束后补跑一次，避免新旧口径混排 */
+let pendingForce = false
 
 async function load(force = false) {
-  if (!isLive.value || loading.value) return
+  if (!isLive.value) return
+  /* 加载中的强制刷新不得静默丢弃：记账，本轮结束后补跑一次（否则加载期间点「含测试/仅真实」
+     或「重试」时，文案/KPI hint 已改口新口径而表格仍是旧口径行，2026-10-06 审核 #34） */
+  if (loading.value) {
+    pendingForce = pendingForce || force
+    return
+  }
   // 页面级 TTL 缓存
   if (!force && isPageCacheFresh('goal-conversations') && rows.value.length) return
   const seq = ++statsReqSeq
@@ -606,6 +650,11 @@ async function load(force = false) {
   } finally {
     loading.value = false
     markPageFetched('goal-conversations')
+    /* 补跑加载期间被挡下的强制刷新（本轮已完成，递归一次即可清账） */
+    if (pendingForce) {
+      pendingForce = false
+      void load(true)
+    }
   }
   /* stats 非阻塞后台拉取：到达后回填 KPI 面板（总量/参与用户/近 7 日新增）与状态分布带。
      三态（P1#6）：失败时置 statsError（错误条 + 重试，KPI 卡显「—」），
@@ -671,7 +720,10 @@ async function regenerate(r: Row) {
     const res = await adminGoalConversationsApi.regeneratePath(r.id)
     const d = res.data?.data ?? res.data ?? {}
     toast.success(`已生成路径「${d.learningPathName || '未命名'}」（v${d.version ?? '—'}）`)
-    r.hasPath = true
+    /* 用响应里的 learningPathId 回写路径格（服务端契约：由调用方把新 pathId 写回）：
+       否则行从「—」变不可点的「已生成」徽章、刷新后又回「—」，新路径无法下钻（2026-10-06 审核 #33） */
+    if (d.learningPathId) r.pathId = String(d.learningPathId)
+    r.hasPath = !!r.pathId
   } catch (e) {
     toast.error(`重建失败：${errMsg(e)}`)
   } finally {
@@ -731,34 +783,24 @@ onMounted(() => {
   width: 6px;
   height: 6px;
   border-radius: var(--mk-radius-pill);
-  background: #e2e8f2;
+  /* 未点亮色走 --mk-line（2026-10-06 审核 #47）：原私持字面量 #e2e8f2 是全仓唯一，
+     与 --mk-line 同一用途成对令牌（亮 #e6ebf4 / 暗 #36373c 由 tokens 切换） */
+  background: var(--mk-line);
 }.gc-stage-cell__dot.is-on { background: var(--mk-blue); }.gc-stage-cell__dot.is-on:last-child { background: var(--mk-green); }/* gc-stage-cell__tl→.mk-cell-sub、gc-summary→.mk-cell-text（2026-10-03 方言收敛，截断/灰阶由原语承担） *//* 约束条件列：mute 徽章多枚 wrap（原型 .wrap 格内 pill--mute 判例） */
 .gc-constraints { display: flex; flex-wrap: wrap; gap: 5px; max-width: 220px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
    长摘要 .mk-cell-text 与 .mk-cell-main/.mk-cell-sub 的 max-width 截断兜底）。
    2026-10-05 CM6：裸 `.mk-table td { white-space: nowrap }` 收敛为全局修饰类
-   .mk-table--nowrap（表元素已挂该 class），本页不再私持拷贝。 */.gc-error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: var(--mk-red-bg, #fef2f2);
-  border: 1px solid rgba(220, 38, 38, 0.3);
-  color: var(--mk-red, #dc2626);
-  font-size: var(--mk-fs-body);
-  font-weight: 600;
-  margin-bottom: 14px;
-}/* 按钮规格对齐 .mk-btn（8x16 / 12.5px）；危险操作实心红（与 .mk-btn--danger 一致） */
+   .mk-table--nowrap（表元素已挂该 class），本页不再私持拷贝。 */
+/* 按钮规格对齐 .mk-btn（8x16 / 12.5px）；危险操作实心红（与 .mk-btn--danger 一致） */
 
 /* 中宽档（≤1599）：9 列 nowrap 表在 1440 容器级横滚 151px、1280 达 282px（UI 方案 §1）。
-   单元格 padding 16→12 + 三处 min-width 各收一档 + 阶段进度点收起（时间线仍在 title/副行）；
-   「约束条件」列默认不进表（showCol 同源）。 */
+   单元格 padding 16→12 + 三处 min-width 各收一档；「约束条件」列默认不进表（showCol 同源）。
+   阶段四步点条（4×6px + gap ≈ 45px）保留：该列 min-width 120px 已容得下点条，
+   收起后完成态行（徽章因与状态列同词隐藏）只剩日期、阶段格无标注（2026-10-06 审核 #32） */
 @media (max-width: 1599px) {
   .mk-table th, .mk-table td { padding-inline: 12px; }
   .gc-user { min-width: 176px; }
   .gc-stage-cell { min-width: 120px; }
-  .gc-stage-cell__dots { display: none; }
   .mk-cell-main .mk-cell-text--wrap { min-width: 180px; }
 }
 
@@ -772,10 +814,7 @@ onMounted(() => {
 @media (min-width: 3600px) {
 
   .mk-btn--sm { font-size: var(--mk-fs-emphasis); }
-}/* ================= 暗色模式（D1 补完）：目标对话 ================= */
-html[data-theme='dark'] {
-  /* 消息气泡：容器级旧覆写修正为气泡级（assistant 灰蓝 / user 深蓝） */
-  .gc-stage-cell__dot { background: #313235; }
-  .gc-error { border-color: rgba(248, 113, 113, 0.35); }
-}
+}/* ================= 暗色模式（D1 补完）：目标对话 =================
+   2026-10-06 审核 #47/#48：阶段点未点亮色改走 --mk-line（随主题切换）、私有 .gc-error
+   收敛 MkEmptyState tone="error"——本页原有两处暗色覆写随之整体退役（无剩余项）。 */
 </style>

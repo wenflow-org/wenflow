@@ -819,7 +819,10 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-badge--role-control-signal { background: var(--mk-surface-3); color: var(--mk-muted); }
 .mk-badge--render-visible { background: var(--mk-badge-visible-bg); color: var(--mk-green); }
 .mk-badge--render-hidden { background: var(--mk-surface-3); color: var(--mk-muted); }
-.mk-badge--flow-handoff { background: var(--mk-badge-handoff-bg); color: var(--mk-blue); }
+/* 亮色前景提亮到 --mk-accent-deep（#1f57cc）：--mk-blue 压 #eef2ff 只有 4.41:1 < 4.5
+   （2026-10-06 渲染探针亮色 1920 实测 span.mk-badge--flow-handoff）。暗色档由下方
+   html[data-theme='dark'] 覆写取 --mk-badge-info-fg(#9db8f5)。 */
+.mk-badge--flow-handoff { background: var(--mk-badge-handoff-bg); color: var(--mk-accent-deep, var(--mk-blue)); }
 .mk-badge--flow-internal { background: var(--mk-badge-internal-bg); color: var(--mk-badge-internal-fg); }
 .mk-badge--flow-accumulate { background: var(--mk-badge-accumulate-bg); color: var(--mk-green); }
 .mk-badge--lock-system { background: var(--mk-red-bg); color: var(--mk-red); }
@@ -1639,7 +1642,10 @@ html[data-theme='dark'] {
     color: var(--mk-on-fill);
   }
   .mk-pagination__btn:disabled { background: transparent; }
-  .mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); }
+  /* 实心底走 --mk-blue-fill（明暗两态恒 #2f6ae0）：不用 --mk-blue —— 后者暗色档
+     提亮成 #5b8def，白字只有 3.23:1（与 .mk-btn--primary 同款坑，2026-10-06 审核
+     在新覆盖的 skill-design 页实测到 button.mk-status__action 白字压 #5b8def = 3.23:1）。 */
+  .mk-status__action--primary { background: var(--mk-blue-fill, #2f6ae0); border-color: var(--mk-blue-fill, #2f6ae0); }
   .mk-btn--danger:hover,
   .mk-btn--danger:active { background: var(--mk-red-fill-strong, #b91c1c); }
   .mk-icon-btn svg { color: var(--mk-faint); }

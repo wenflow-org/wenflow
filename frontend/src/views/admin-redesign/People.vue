@@ -52,18 +52,21 @@ const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(n
    （徽章同款互斥判据：虚拟 > 测试 > 其余真实）；管理员数作真实用户桶 foot（角色属真实域细分）。
    管理员数是运营要看的角色分布，不单独立桶（角色与账号性质非同一整体，混桶=假比例）。
    D18：默认「仅真实」口径下后端已把虚拟/测试排除，三分桶会结构性恒 100/0/0（两桶死档）——
-   故默认只渲染真实单桶 + 披露未纳入，切到「含测试」后才展示三桶互斥构成。 */
+   审核 #7（2026-10-06）：默认档不出构成带（下方 return []，原页内单桶分支是死代码：
+   卡带 gate 为 length > 1，且 D18 明确「单桶假构成不再渲染」）；未纳入口径由 KPI hint
+   「虚拟 / 测试账号未纳入」承载，切到「含测试」后才展示三桶互斥构成。 */
 /* 账号 KPI（2026-10-05 统一面板设计）：真实用户 / 管理员 / 30 分钟在线。
    口径：真实用户 = 非虚拟且非测试（两口径开关下都不变）；管理员 = 真实域细分（与旧桶 foot 同源）；
-   在线 = 最后登录在 30 分钟内（与列表卡「30 分钟在线」pill 同口径，pill 已随之去计数）。
-   数据 = live 域已加载行（后端总数在 liveUsersTotal，超上限截断时 title 注明） */
+   在线 = 最后登录在 30 分钟内（审核 #9，2026-10-06：与同面板真实用户同域取 realRows，
+   不再把含测试档下的虚拟/测试行算进在线）；数据 = live 域已加载行（后端总数在 liveUsersTotal，
+   超上限截断时 title 注明） */
 type PpKpiTile = { label: string; value: number; hint: string; tone: '' | 'ok' | 'warn' | 'bad'; title: string }
 const ppKpi = computed<PpKpiTile[]>(() => {
   const rows = liveUsers.value
   if (!rows.length) return []
   const realRows = rows.filter((u) => !u.isVirtualLearner && !u.isTestAccount)
   const admins = realRows.filter((u) => u.isAdmin).length
-  const online = rows.filter((u) => !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 30 * 60000).length
+  const online = realRows.filter((u) => !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 30 * 60000).length
   const scope = `按已加载 ${rows.length} 行统计（后端共 ${liveUsersTotal.value}）`
   return [
     {
@@ -85,7 +88,7 @@ const ppKpi = computed<PpKpiTile[]>(() => {
       value: online,
       hint: '最后登录在 30 分钟内',
       tone: '',
-      title: scope,
+      title: `${scope}；真实域口径（不含虚拟 / 测试账号），与「真实用户」同集合`,
     },
   ]
 })
@@ -94,6 +97,9 @@ const ppBuckets = computed(() => {
   const rows = liveUsers.value
   const total = rows.length
   if (!total) return []
+  // 审核 #7（2026-10-06）：默认「仅真实」档不出构成带——后端已排除虚拟/测试，三分桶结构性
+  // 恒 100/0/0，单桶 100% 是假构成（D18）。未纳入口径由 KPI hint 承载，故此处直接空数组。
+  if (!liveIncludeVirtual.value) return []
   const virtual = rows.filter((u) => u.isVirtualLearner).length
   const test = rows.filter((u) => !u.isVirtualLearner && u.isTestAccount).length
   const realRows = rows.filter((u) => !u.isVirtualLearner && !u.isTestAccount)
@@ -107,13 +113,6 @@ const ppBuckets = computed(() => {
     pct: pct(real),
     tone: 'var(--mk-blue)',
     foots: [{ text: `其中管理员 ${admins}` }],
-  }
-  if (!liveIncludeVirtual.value) {
-    return [{
-      ...realBucket,
-      valueTitle: `${scopeNote}；当前为「仅真实」口径，虚拟 / 测试账号未纳入`,
-      foots: [{ text: `其中管理员 ${admins}` }, { text: '虚拟 / 测试账号未纳入（切换「含测试」查看构成）' }],
-    }]
   }
   const calibre = `${scopeNote}；三分桶为同一整体（已加载账号）的互斥构成`
   return [

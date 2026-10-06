@@ -15,16 +15,24 @@
       <span class="mk-status__dot"></span>
       <span class="mk-status__meta" title="学习者快照接口单次窗口上限（live.ts liveLearners 域）">仅加载前 500 位，搜索限已加载 500 人</span>
     </div>
+    <!-- 审核 #17（2026-10-06）：已有旧行时刷新失败此前无任何呈现（loadFailed 要求列表为空），
+         页面继续把上次结果当当前值——补一条行内告警 + 重试出口（对照 Feedback.vue 行内告警判例） -->
+    <div v-if="refreshFailed" class="mk-alert mk-alert--row" role="alert">
+      <span class="mk-alert__msg">快照刷新失败，以下为上次结果。</span>
+      <button type="button" class="mk-alert__btn" @click="retryLoad">重试</button>
+    </div>
 
     <!-- 学习状态概览 KPI 带（2026-10-04 用户拍板：按同组形态拆出工作台卡到页级，
          页头/口径条之下、内容卡之上，与记忆复习 KPI 栅格同形同节拍） -->
     <section v-if="rows.length" class="mk-kpi-grid lc-kpi" aria-label="学习状态概览">
       <!-- P1#16 数据层已接线（live.ts liveLearnersTotal）：真窗口显「N · 已载 M」，total 未知才退「已加载 N」。
-           P2（2026-10-04 全站评审）：hint 撤截断句（单源=页状态条），只留口径差异 -->
+           P2（2026-10-04 全站评审）：hint 撤截断句（单源=页状态条），只留口径差异。
+           审核 #13（2026-10-06）：label 改「学习者账号」并补与用户页同集合的说明——
+           本卡与「用户」页「共 N 人」同 where（未删除、排除测试/虚拟），且含从未开始学习的账号。 -->
       <MkKpi
-        label="学习者"
+        label="学习者账号"
         :value="learnerTotalText"
-        :hint="`口径：${includeTest ? '含测试账号' : '不含测试账号'}${learnerTotal == null ? '；全量总数接口未返回' : ''}`"
+        :hint="`口径：${includeTest ? '含测试账号' : '不含测试账号'} · =「用户」页「共 N 人」同口径；含未开始学习的账号${learnerTotal == null ? '；全量总数接口未返回' : ''}`"
       />
       <!-- P1#17：需关注收窄为真异常（趋势降 ∨ 疲劳高 ∨ 有风险摘要）；
            常态档「疲劳=中」拆到 pills 的「观察」，不再把需关注撑爆 -->
@@ -73,15 +81,21 @@
         </div>
         <div class="mk-card__head-right">
           <button
+            v-if="recomputingAll"
             type="button"
             class="mk-btn mk-btn--sm"
-            :disabled="recomputingAll || !rows.length"
+            @click="recomputeAbort = true"
+          >停止</button>
+          <button
+            type="button"
+            class="mk-btn mk-btn--sm"
+            :disabled="recomputingAll || !filtered.length"
+            :title="recomputingAll ? '批量重算进行中，可点「停止」中止' : '重算当前筛选命中的全部学习者快照'"
             @click="recomputeAll"
-          >{{ recomputingAll ? `重算中 ${recomputeProgress}/${rows.length}…` : '全部重算' }}</button>
+          >{{ recomputingAll ? `重算中 ${recomputeProgress}/${recomputeTotal}…` : '全部重算' }}</button>
           <MkCols
             :col-defs="lcColDefs"
-            storage-key="wf_learner_hidden_cols_v2"
-            :default-hidden="['risk']"
+            storage-key="wf_learner_hidden_cols_v3"
             v-model:hidden="lcHiddenCols"
           />
           <!-- 后端学习者域窗口截断口径单源住在页头状态条；筛选命中数单源住在分页器（「共 N 条」），
@@ -90,12 +104,17 @@
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="8" />
+      <!-- 审核 #17（2026-10-06）：加载失败走原语错误档（红系图标 + role=alert + 重试中反馈），
+           不再与中性空态同款 -->
       <MkEmptyState
         v-else-if="loadFailed"
+        tone="error"
         icon="◌"
         title="学习者快照加载失败"
         description="无法从后端拉取学习者状态。"
         action-text="重试"
+        :action-busy="liveLoading"
+        action-busy-text="重试中…"
         @action="retryLoad"
       />
       <!-- 一屏工作台（2026-10-04 用户拍板「顶部紧凑宏观观测 + 下部排查表格」；同日 KPI 已按同组形态
@@ -113,10 +132,26 @@
             <th v-if="!lcHiddenCols.has('progress')">当前进度</th>
             <th v-if="!lcHiddenCols.has('trend')">趋势</th>
             <th v-if="!lcHiddenCols.has('fatigue')">疲劳</th>
-            <th v-if="!lcHiddenCols.has('conf')" title="快照置信度：模型对该学习者状态的把握程度，低于 50% 为低置信">置信</th>
+            <!-- 审核 #20（2026-10-06）：置信 / 更新接共享 useTableSort（Users.vue 同写法），
+                 未点表头时保持默认序「风险优先 → 更新时间新→旧」（写进「操作」列表头 title） -->
+            <th
+              v-if="!lcHiddenCols.has('conf')"
+              scope="col"
+              class="mk-th--sortable"
+              title="快照置信度：模型对该学习者状态的把握程度，低于 50% 为低置信"
+              :aria-sort="lcSortState('conf')"
+              @click="toggleLcSort('conf')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('conf')">置信<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th v-if="!lcHiddenCols.has('risk')">风险摘要</th>
-            <th v-if="!lcHiddenCols.has('updated')">更新</th>
-            <th class="mk-th--right">操作</th>
+            <th
+              v-if="!lcHiddenCols.has('updated')"
+              scope="col"
+              class="mk-th--sortable"
+              title="快照更新时间"
+              :aria-sort="lcSortState('updated')"
+              @click="toggleLcSort('updated')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th class="mk-th--right" title="默认排序：风险优先 → 更新时间新→旧；点「置信」「更新」表头可切换">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -126,18 +161,24 @@
           <tr v-for="r in paged" :key="r.id" class="lc-row" tabindex="0" @click="openDetail(r)" @keydown.enter="($event.target === $event.currentTarget) && openDetail(r)">
             <td v-if="!lcHiddenCols.has('learner')">
               <div class="lc-celluser">
-                <MkCellAvatar :name="r.name" :tone="r.isTestAccount ? 'test' : 'default'" />
+                <MkCellAvatar :name="r.name" :tone="isVirtualRow(r) ? 'virtual' : r.isTestAccount ? 'test' : 'default'" />
                 <div class="mk-cell-main">
-                  <strong>{{ r.name }}</strong>
-                  <span class="mk-cell-sub">{{ r.email }}</span>
+                  <strong :title="r.name">{{ r.name }}</strong>
+                  <span class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
                 </div>
-                <MkVariantBadge v-if="r.isTestAccount" kind="test" />
+                <!-- 身份标记与「用户」页一致（审核 #11）：虚拟学习者出「虚拟」（紫，MkVariantBadge kind=virtual），
+                     仅审计/测试账号才出「测试」——此前后端 isTestAccountUser 对 /^virtual_/ 恒真，
+                     虚拟学习者被渲染成「测试账号」，两页同一账号标签互相矛盾 -->
+                <MkVariantBadge v-if="isVirtualRow(r)" kind="virtual" />
+                <MkVariantBadge v-else-if="r.isTestAccount" kind="test" />
               </div>
             </td>
             <td v-if="!lcHiddenCols.has('progress')">
+              <!-- 审核 #18（2026-10-06）：任务/路径（与邮箱同理）被 max-width 截断，
+                   补 title 全值——被截掉的部分不再无处可查 -->
               <div class="mk-cell-main lc-task">
-                <strong class="progress-title">{{ r.task || '未开始' }}</strong>
-                <span class="mk-cell-sub">{{ r.path || '尚未开始学习' }}</span>
+                <strong class="progress-title" :title="r.task || '未开始'">{{ r.task || '未开始' }}</strong>
+                <span class="mk-cell-sub" :title="r.path || '尚未开始学习'">{{ r.path || '尚未开始学习' }}</span>
               </div>
             </td>
             <td v-if="!lcHiddenCols.has('trend')">
@@ -171,7 +212,7 @@
               <div class="mk-actions">
                 <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDetail(r)">详情</button>
                 <button v-if="isLive && !r.isTestAccount" type="button" class="mk-btn mk-btn--sm" :class="{ 'lc-intervene--hot': isRisk(r) }" :title="isRisk(r) ? '该学习者有风险，建议立即干预：查看会话 / 发送提醒' : '干预：查看会话 / 发送提醒'" @click.stop="openIntervene(r)">干预</button>
-                <button type="button" class="mk-btn mk-btn--sm" :disabled="isUpdating(r.id)" :title="isUpdating(r.id) ? '重算中…' : '重算：重新拉取该学习者快照'" @click.stop="recompute(r)">{{ isUpdating(r.id) ? '重算中…' : '重算' }}</button>
+                <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingAll || isUpdating(r.id)" :title="recomputingAll ? '批量重算进行中，请先停止' : isUpdating(r.id) ? '重算中…' : '重算：重新拉取该学习者快照'" @click.stop="recompute(r)">{{ isUpdating(r.id) ? '重算中…' : '重算' }}</button>
               </div>
             </td>
           </tr>
@@ -206,7 +247,7 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="intervene = null">✕</button>
           </div>
           <div class="mk-modal__body">
-            <div v-if="intervene.risk" class="lc-iv__risk" :class="{ 'lc-iv__risk--hot': isRisk(intervene) }">
+            <div v-if="intervene.risk" class="lc-iv__risk" :class="{ 'lc-iv__risk--hot': riskBoxHot(intervene) }">
               <strong>风险摘要</strong>
               <span>{{ intervene.risk }}</span>
             </div>
@@ -237,7 +278,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { openSubPage, isLive } from './store'
 import { liveLearners, liveLearnersTotal, liveRecomputeLearner, liveSetLearnersIncludeTest, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { evidenceLowConfidence } from './evidence'
@@ -255,6 +296,7 @@ import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkDistBand from '@/components/mk/MkDistBand.vue'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
+import { useTableSort } from './useTableSort'
 import { adminNotificationsApi, adminLearnerModelsApi } from '@/api/adminApi'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 
@@ -301,8 +343,10 @@ const lcColDefs = [
   { key: 'risk', label: '风险摘要', title: '风险原因' },
   { key: 'updated', label: '更新', title: '快照更新时间' },
 ] as const
-/* 风险摘要默认隐藏走 MkCols :default-hidden（首次访问生效，已有配置尊重用户）；
-   风险摘要仍住在 pills「需关注」与干预弹窗 */
+/* 审核 #12（2026-10-06）：风险摘要列不再默认隐藏——它是 KPI「需关注」的判据之一
+   （isRisk 含 !!r.risk），默认收起会让「需关注」筛出的行在可见列里全像正常值，看不出被抓原因。
+   默认集变更必须升存储键（v2→v3，Users.vue CM8 判例）：旧键已被历史访问写回，
+   不升键则老本地配置（risk 隐藏）会盖掉新默认。 */
 const lcHiddenCols = ref<Set<string>>(new Set())
 
 /* 更新列新鲜度三档（批B，mk-fresh 原语） */
@@ -358,7 +402,10 @@ async function sendIntervene() {
     await adminNotificationsApi.send({
       title: interveneTitle.value.trim(),
       body: interveneBody.value.trim() || undefined,
-      kind: 'learning',
+      // 审核 #19（2026-10-06）：kind 只能用后端白名单 ['system','announcement','achievement']，
+      // 原 'learning' 会被静默回落成 'system'，通知列表里恒显示「系统」且按学习类筛不出。
+      // 直接写 system 与后端实际落库一致；「学习提醒」语义由 title 承载。
+      kind: 'system',
       scope: 'user',
       userId: r.id
     })
@@ -403,6 +450,11 @@ const rows = computed<Row[]>(() =>
   }))
 )
 
+/** 虚拟学习者识别（审核 #11）：学习者快照域无 isVirtualLearner 字段，按后端创建约定
+    （email = virtual_<uuid>@test.local，见 virtual-learners.ts）识别；真实用户口径
+    （REAL_USER_WHERE）已排除该前缀，不会误判。仅决定身份标记的「虚拟 / 测试」分档。 */
+const isVirtualRow = (r: Row) => /^virtual_/i.test(r.email)
+
 const pills = computed(() => [
   { id: 'all' as const, label: '全部', count: rows.value.length },
   { id: 'risk' as const, label: '需关注', count: riskCount.value },
@@ -414,6 +466,10 @@ const pills = computed(() => [
    收窄：趋势降 ∨ 疲劳高 ∨ 有风险摘要 = 需关注；疲劳=中 且非需关注 = 「观察」（单独 pill 计数） */
 const isRisk = (r: Row) => r.trend === 'down' || r.fatigue === '高' || !!r.risk
 const isWatch = (r: Row) => !isRisk(r) && r.fatigue === '中'
+/** 干预弹窗风险框分档（审核 #15，2026-10-06）：框体渲染条件就是 `intervene.risk`，
+    而 isRisk 含 `!!r.risk` → 恒真，琥珀底（需关注语义）成为死样式。分档改用不含摘要
+    本身的判据——趋势降 / 疲劳高走红（异常语义），仅概念挣扎 / 待巩固的摘要走琥珀。 */
+const riskBoxHot = (r: Row) => r.trend === 'down' || r.fatigue === '高'
 const riskCount = computed(() => rows.value.filter(isRisk).length)
 const watchCount = computed(() => rows.value.filter(isWatch).length)
 /* lowConfCount 随「低置信 KPI 与分档条同口径」移居 confRows 段（惰性求值，先引用后定义无碍） */
@@ -494,6 +550,18 @@ function toggleConfBand(key: string) {
   confBin.value = confBin.value === i ? null : i
 }
 
+/* 表头排序（审核 #20，2026-10-06）：置信 / 更新两列接共享 useTableSort
+   （与 Users.vue 同写法：mk-th--sortable + aria-sort + .mk-th__btn）。
+   数据完整性：live 学习者域全量拉取（≤500 窗口，窗口截断另有页头状态条如实标注），
+   客户端排序口径诚实。 */
+const { sortKey: lcSortKey, toggle: toggleLcSort, sortState: lcSortState, sortRows: sortLcRows } = useTableSort<Row>({
+  accessors: {
+    conf: (r) => r.confidence ?? null,
+    updated: (r) => r.ts ?? null
+  },
+  storageKey: 'wf_learner_sort'
+})
+
 const filtered = computed(() => {
   let list = rows.value
   if (pill.value === 'risk') list = rows.value.filter(isRisk)
@@ -510,12 +578,16 @@ const filtered = computed(() => {
       r.id?.toLowerCase().includes(kw)
     )
   }
-  // 先找有问题的人：风险位优先，组内按更新时间新→旧
-  return [...list].sort((a, b) => {
-    const riskDiff = Number(isRisk(a)) - Number(isRisk(b))
-    if (riskDiff) return -riskDiff
-    return (b.ts ?? 0) - (a.ts ?? 0)
-  })
+  // 审核 #20（2026-10-06）：未点表头排序时保持默认序「先找有问题的人」（风险优先，
+  // 组内更新时间新→旧，口径写进「操作」列表头 title）；点「置信」「更新」后由共享 hook 接管。
+  if (!lcSortKey.value) {
+    return [...list].sort((a, b) => {
+      const riskDiff = Number(isRisk(a)) - Number(isRisk(b))
+      if (riskDiff) return -riskDiff
+      return (b.ts ?? 0) - (a.ts ?? 0)
+    })
+  }
+  return sortLcRows(list)
 })
 
 const isFiltered = computed(() => pill.value !== 'all' || confBin.value != null || !!keyword.value.trim())
@@ -528,6 +600,11 @@ function clearFilters() {
 /** live 学习者域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
 const loadFailed = computed(
   () => isLive.value && !liveLoading.value && !!liveFailures.value.learners && !liveLearners.value.length
+)
+/** 审核 #17（2026-10-06）：已有旧行时刷新失败——loadFailed 不覆盖（它要求列表为空），
+    单独给「旧结果 + 行内告警 + 重试」通路，避免失败被静默当成当前值 */
+const refreshFailed = computed(
+  () => isLive.value && !liveLoading.value && !!liveFailures.value.learners && liveLearners.value.length > 0
 )
 function retryLoad() {
   void loadLiveData()
@@ -555,6 +632,10 @@ const fatigueBadge = (f: string) => (f === '高' ? 'mk-badge--bad' : f === '中'
 /* 重算 */
 const recomputingAll = ref(false)
 const recomputeProgress = ref(0)
+/** 本批目标数（按筛选命中计数，非全窗口 500）与中止标志（审核 #14：可停止、离页即止） */
+const recomputeTotal = ref(0)
+const recomputeAbort = ref(false)
+onBeforeUnmount(() => { recomputeAbort.value = true })
 /** 行级重算中状态：独立 Set，保证模板能及时响应重渲染 */
 const updatingIds = ref<Set<string>>(new Set())
 const isUpdating = (id: string) => updatingIds.value.has(id)
@@ -584,46 +665,63 @@ async function recompute(row: Row) {
 }
 
 async function recomputeAll() {
-  if (recomputingAll.value || !rows.value.length) return
+  // 审核 #14（2026-10-06）：原对 rows 全窗口（上限 500 人）逐个顺序重算——无上限、无中止、
+  // 无失败名单，进度只写在按钮文案里，离开页面循环仍在跑。改为：按当前筛选命中计数、
+  // 超阈值提示分批、可中止、失败行进 toast 明细、批量中禁用行内重算。
+  const targets = filtered.value
+  if (recomputingAll.value || !targets.length) return
   const confirmed = await askConfirm({
-    title: '全部重算快照',
-    message: `确认重算全部 ${rows.value.length} 位学习者的快照？将逐个重新生成，耗时取决于人数。`,
-    confirmText: '全部重算',
+    title: '重算快照',
+    message: `确认重算当前筛选命中的 ${targets.length} 位学习者的快照？将逐个重新生成，耗时取决于人数。`
+      + (targets.length > 50 ? `\n当前命中 ${targets.length} 人（超过 50），建议先筛选分批；开始后可随时点「停止」中止。` : ''),
+    confirmText: `重算 ${targets.length} 人`,
     danger: false
   })
   if (!confirmed) return
   recomputingAll.value = true
+  recomputeAbort.value = false
   recomputeProgress.value = 0
+  recomputeTotal.value = targets.length
+  const failed: string[] = []
   let ok = 0
-  let fail = 0
-  for (const r of rows.value) {
-    updatingIds.value = new Set(updatingIds.value).add(r.id)
-    try {
-      // 循环内只调重算接口、不刷列表：liveRecomputeLearner 每次附带全量重拉学习者域，
-      // N 人重算会触发 N 次全量请求；改为循环结束统一刷新一次。pathId 与单行重算同口径。
-      await adminLearnerModelsApi.recompute(r.id, r.pathId ? { pathId: r.pathId } : undefined)
-      ok++
-    } catch {
-      fail++
-    } finally {
-      const next = new Set(updatingIds.value)
-      next.delete(r.id)
-      updatingIds.value = next
-      recomputeProgress.value++
-    }
-  }
-  // 循环结束统一刷新一次（带当前「含模拟」口径，保持列表范围一致）
   try {
-    await liveSetLearnersIncludeTest(includeTest.value)
-  } catch {
-    toast.error('重算完成，但列表刷新失败，请手动刷新')
+    for (const r of targets) {
+      if (recomputeAbort.value) break
+      updatingIds.value = new Set(updatingIds.value).add(r.id)
+      try {
+        // 循环内只调重算接口、不刷列表：liveRecomputeLearner 每次附带全量重拉学习者域，
+        // N 人重算会触发 N 次全量请求；改为循环结束统一刷新一次。pathId 与单行重算同口径。
+        await adminLearnerModelsApi.recompute(r.id, r.pathId ? { pathId: r.pathId } : undefined)
+        ok++
+      } catch {
+        failed.push(r.name || r.id)
+      } finally {
+        const next = new Set(updatingIds.value)
+        next.delete(r.id)
+        updatingIds.value = next
+        recomputeProgress.value++
+      }
+    }
+    // 循环结束统一刷新一次（带当前「含模拟」口径，保持列表范围一致）
+    try {
+      await liveSetLearnersIncludeTest(includeTest.value)
+    } catch {
+      toast.error('重算完成，但列表刷新失败，请手动刷新')
+    }
+    const stopped = recomputeAbort.value ? '已停止：' : '重算完成：'
+    if (failed.length) {
+      const shown = failed.slice(0, 3).join('、')
+      toast.error(`${stopped}${ok} 成功 · ${failed.length} 失败（${shown}${failed.length > 3 ? ' 等' : ''}）`)
+    } else if (recomputeAbort.value) {
+      toast.error(`${stopped}${ok} 成功 · ${targets.length - ok} 未执行`)
+    } else {
+      toast.success(`已重算 ${ok} 个快照`)
+    }
+  } finally {
+    recomputingAll.value = false
+    recomputeAbort.value = false
+    recomputeTotal.value = 0
   }
-  if (fail) {
-    toast.error(`重算完成：${ok} 成功 · ${fail} 失败`)
-  } else {
-    toast.success(`已重算 ${ok} 个快照`)
-  }
-  recomputingAll.value = false
 }
 </script>
 
@@ -667,23 +765,22 @@ async function recomputeAll() {
 @media (min-width: 2000px) {
   .risk-text { font-size: var(--mk-fs-body); }
 }
-@media (min-width: 2800px) {
-  .risk-text { font-size: var(--mk-fs-body); }
-}
 
 /* ================= C2 干预动线 ================= */
+/* 审核 #16（2026-10-06）：原 `html[data-theme='dark'] .lc-intervene--hot { color: #fbbf24; }`
+   是零效果死规则（--mk-amber 暗色本身即 #fbbf24）且引入页内私写 hex，已删；描边改走
+   color-mix(…, var(--mk-line))，暗色随 --mk-amber/--mk-red 自动翻转，不再是亮色档字面量。 */
 .lc-intervene--hot { color: var(--mk-amber); }
-html[data-theme='dark'] .lc-intervene--hot { color: #fbbf24; }
 .lc-iv__risk {
   display: grid;
   gap: 4px;
   padding: 10px 12px;
   border-radius: var(--mk-radius-xl);
   background: var(--mk-amber-bg);
-  border: 1px solid rgba(180, 83, 9, 0.25);
+  border: 1px solid color-mix(in srgb, var(--mk-amber) 30%, var(--mk-line));
   color: var(--mk-amber);
 }
-.lc-iv__risk--hot { background: var(--mk-red-bg); border-color: rgba(220, 38, 38, 0.25); color: var(--mk-red); }
+.lc-iv__risk--hot { background: var(--mk-red-bg); border-color: color-mix(in srgb, var(--mk-red) 30%, var(--mk-line)); color: var(--mk-red); }
 .lc-iv__risk strong { font-size: var(--mk-fs-micro); font-weight: 800; letter-spacing: 0.04em; }
 .lc-iv__risk span { font-size: var(--mk-fs-micro); line-height: 1.6; }
 .lc-iv__actions { display: flex; gap: 8px; flex-wrap: wrap; }

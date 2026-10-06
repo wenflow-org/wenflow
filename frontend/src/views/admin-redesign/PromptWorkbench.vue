@@ -23,6 +23,12 @@
         <h3 class="mk-card__title">核心文件</h3>
         <span class="mk-card__meta">改提示词与发布在 Skill 设计页「协议」页签；从 0 新建是代码级动作，走 CLI：backend/scripts/scaffold-skill.ts（见 doc/SKILL_DEVELOPMENT_GUIDE.md）</span>
       </div>
+      <!-- 刷新失败但已有清单（2026-10-06 审核 #139）：保留已渲染表格，行内 alert 说明数据可能过期 + 重试入口；
+           无数据（首载失败）时才由下方 MkEmptyState 走整页错误态（口径同 MemoryReview / DayTimeline） -->
+      <div v-if="loadError && cores.length" class="mk-alert mk-alert--row" role="alert">
+        <span class="mk-alert__msg">{{ loadError }}（下表仍为上次成功加载的数据，可能已过期）</span>
+        <button type="button" class="mk-alert__btn" :disabled="loading" @click="loadList">{{ loading ? '重试中…' : '重试' }}</button>
+      </div>
       <div class="mk-table-scroll">
       <!-- 首载骨架屏（对齐全站「骨架替代空白」约定；此前整表无占位） -->
       <MockSkeletonTable v-if="loading && !cores.length" :cols="6" :rows="8" />
@@ -40,12 +46,14 @@
           </tr>
         </thead>
         <tbody>
+          <!-- 键盘契约（2026-10-06 审核 #138）：本行操作列已有原生 <button>，若整行再挂
+               role="button" + tabindex 会构成「按钮套按钮」的嵌套交互体（键鼠/读屏语义冲突）。
+               故行保留 tr 原生语义、不聚焦：整行点击只留给指针（cursor 由 .mk-table--click 提供），
+               键盘入口下沉到行内原生按钮（Tab 可达、Enter/Space 原生激活、aria-label 带 skillId 消歧）。 -->
           <tr
             v-for="item in shownCores"
             :key="item.skillId"
-            tabindex="0"
             @click="openDesign(item.skillId)"
-            @keydown.enter="($event.target === $event.currentTarget) && openDesign(item.skillId)"
           >
             <td><code class="mono" :title="item.skillId">{{ item.skillId }}</code></td>
             <td class="mk-na">{{ item.fields }} 字段 · {{ item.channels.length }} 通道</td>
@@ -56,7 +64,7 @@
             </td>
             <td>
               <div class="mk-actions">
-                <button type="button" class="mk-link" @click.stop="openDesign(item.skillId)">协议 / 发布 →</button>
+                <button type="button" class="mk-link" :aria-label="`协议 / 发布：${item.skillId}`" @click.stop="openDesign(item.skillId)">协议 / 发布 →</button>
               </div>
             </td>
           </tr>
@@ -155,8 +163,9 @@ async function loadList() {
     cores.value = res.data?.items || [];
   } catch (e) {
     /* 错误人话化走全站单源 errMsg（此前直抛 e.message，管理员会看到
-       "Request failed with status code 500" 之类的原始英文） */
-    cores.value = [];
+       "Request failed with status code 500" 之类的原始英文）。
+       刷新失败不得清空已渲染清单（2026-10-06 审核 #139，与 DayTimeline「操作失败不顶掉已渲染内容」
+       同口径）：有旧数据 → 保留表格、行内 alert 提示可能过期；无数据（首载失败）→ 才走 MkEmptyState 整页错误态。 */
     loadError.value = `清单加载失败：${errMsg(e)}`;
     toast.error(loadError.value);
   } finally {

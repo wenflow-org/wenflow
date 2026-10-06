@@ -21,24 +21,34 @@
         </button>
         <button type="button" class="mk-link" :disabled="loading" @click="load"><MkLoading v-if="loading" inline min text="加载中…" /><template v-else>刷新</template></button>
       </div>
-      <p v-if="bulkMsg" class="note" :class="{ 'note--bad': bulkErr }">{{ bulkMsg }}</p>
+      <!-- 刷新失败但表内仍有上次数据时：顶部错误条（空表时由下方 tone=error 空态承载，不重复） -->
+      <p v-if="loadErr && rows.length" class="note note--bad" role="alert">刷新失败：{{ loadErr }}（下表仍为上次成功的数据）</p>
+      <p v-if="bulkMsg" class="note" :class="{ 'note--bad': bulkErr }" :role="bulkErr ? 'alert' : 'status'" aria-live="polite">{{ bulkMsg }}</p>
 
       <!-- 原型 .tbl：统一 mk-table--dense 词表；长内容列（参数/兜底链）走 wrap 列 -->
       <div v-if="rows.length" class="mk-table-scroll">
         <table class="mk-table mk-table--dense skc__table">
           <thead>
             <tr>
-              <th><input type="checkbox" :checked="allChecked" @change="toggleAll(($event.target as HTMLInputElement).checked)" /></th>
-              <th>Skill</th>
-              <th>路由来源</th>
-              <th>model</th>
-              <th>参数覆盖</th>
-              <th class="skc__wrap">兜底链</th>
+              <th scope="col">
+                <input
+                  type="checkbox"
+                  aria-label="全选技能"
+                  :checked="allChecked"
+                  :indeterminate="someChecked"
+                  @change="toggleAll(($event.target as HTMLInputElement).checked)"
+                />
+              </th>
+              <th scope="col">Skill</th>
+              <th scope="col">路由来源</th>
+              <th scope="col">model</th>
+              <th scope="col">参数覆盖</th>
+              <th scope="col" class="skc__wrap">兜底链</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="s in rows" :key="s.skillId">
-              <td><input v-model="selected" type="checkbox" :value="s.skillId" /></td>
+              <td><input v-model="selected" type="checkbox" :value="s.skillId" :aria-label="`选择技能 ${s.skillId}`" /></td>
               <td class="mono">{{ s.skillId }}</td>
               <td>
                 <span class="mk-badge" :class="s.source === 'platform-default' ? 'mk-badge--muted' : 'mk-badge--ok'">
@@ -53,9 +63,17 @@
         </table>
       </div>
       <MkEmptyState
+        v-else-if="!loading && loadErr"
+        tone="error"
+        title="技能覆盖数据加载失败"
+        :description="loadErr"
+        action-text="重试"
+        @action="load"
+      />
+      <MkEmptyState
         v-else-if="!loading"
         title="暂无技能覆盖数据"
-        description="技能目录为空，或接口暂不可用。可点击「刷新」重新拉取。"
+        description="技能目录为空（该 skill 未登记 skill-model-config）。可点击「刷新」重新拉取。"
         action-text="刷新"
         @action="load"
       />
@@ -75,6 +93,10 @@ import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { askConfirm } from './useConfirm'
+
+/** 套用成功 → 通知宿主 Skills.vue 重拉 coverageById（#93：否则上方路由表两列与四张 KPI
+    仍用挂载时的旧值，与下方矩阵同屏互相打架） */
+const emit = defineEmits<{ (e: 'applied'): void }>()
 
 const { options: catalogOptions, load: loadModelCatalog } = useModelCatalog()
 loadModelCatalog()
@@ -96,6 +118,9 @@ const bulk = ref({ endpoint: '', apiKey: '', model: '' })
 const bulkSaving = ref(false)
 const bulkMsg = ref('')
 const bulkErr = ref(false)
+/** 列表加载失败（#92）：与「套用失败」分开——此前共用一个 bulkErr，
+    加载失败时 endpoint/apiKey 被染红（用户什么都没填却被指为无效） */
+const loadErr = ref('')
 
 /** axios 错误文本归一（unknown 收窄；管理端错误体 {error:{message}}） */
 function httpErrText(e: unknown): string {
@@ -104,6 +129,8 @@ function httpErrText(e: unknown): string {
 }
 
 const allChecked = computed(() => rows.value.length > 0 && selected.value.length === rows.value.length)
+/** 部分选中（已选 >0 且未全选）：全选框呈 indeterminate，用户才看得出「已选 M/N」 */
+const someChecked = computed(() => selected.value.length > 0 && !allChecked.value)
 
 function toggleAll(on: boolean) {
   selected.value = on ? rows.value.map(r => r.skillId) : []
@@ -111,13 +138,14 @@ function toggleAll(on: boolean) {
 
 async function load() {
   loading.value = true
+  loadErr.value = ''
   try {
     const res = await adminSkillsApi.getSkillModelCoverage()
     const data = res.data?.data as { skills?: Row[] } | undefined
     rows.value = data?.skills || []
   } catch (e) {
-    bulkErr.value = true
-    bulkMsg.value = `加载失败：${httpErrText(e)}`
+    loadErr.value = httpErrText(e)
+    rows.value = []
   } finally {
     loading.value = false
   }
@@ -154,9 +182,15 @@ async function applyBulk() {
     })
     const data = res.data?.data as { applied?: number; failed?: number; results?: Array<{ skillId: string; ok: boolean; error?: string }> } | undefined
     const failed = (data?.results || []).filter(r => !r.ok)
+    const applied = data?.applied ?? 0
     bulkErr.value = failed.length > 0
-    bulkMsg.value = `已套用 ${data?.applied ?? 0} 个，失败 ${failed.length} 个${failed.length ? '：' + failed.map(f => `${f.skillId}(${f.error})`).join('；') : ''}`
+    // 结果句拆成「已套用 N 个 / 失败 M 个」两个可读片段（读屏也拿得到唯一反馈）
+    bulkMsg.value = failed.length
+      ? `已套用 ${applied} 个；失败 ${failed.length} 个：${failed.map(f => `${f.skillId}(${f.error})`).join('；')}`
+      : `已套用 ${applied} 个，全部成功`
     await load()
+    // 通知宿主重拉 coverage（#93）：上方路由表与四张 KPI 同屏跟随
+    emit('applied')
   } catch (e) {
     bulkErr.value = true
     bulkMsg.value = `套用失败：${httpErrText(e)}`

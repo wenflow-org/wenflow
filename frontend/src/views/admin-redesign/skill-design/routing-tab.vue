@@ -13,6 +13,11 @@
           </tr>
         </tbody>
       </table>
+      <!-- 失败 ≠「确实没有登记」：失败态显式报错 + 重试（失败后 lineageLoaded 复位，收起再展开可重拉） -->
+      <p v-else-if="lineageError" class="sdp-none sdp-bad-text">
+        血缘加载失败：{{ lineageError }}
+        <button type="button" class="mk-link" @click="retryLineage">重试</button>
+      </p>
       <p v-else class="sdp-none">该 skill 暂无血缘注册（后台消费或未登记）</p>
     </details>
 
@@ -27,7 +32,6 @@
  */
 import { ref, watch } from 'vue'
 import { adminPromptWorkbenchApi } from '@/api/adminApi'
-import { toast } from '@/utils/toast'
 import SkillFieldRouting from '../SkillFieldRouting.vue'
 import { errText } from './sdp-shared'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -37,21 +41,32 @@ const props = defineProps<{ skillId: string }>()
 interface CoreLineageEntry { field: string; consumers: string[] }
 const lineage = ref<CoreLineageEntry[]>([])
 const lineageLoading = ref(false)
+const lineageError = ref('')
 let lineageLoaded = false
 
 async function loadLineage() {
   const id = props.skillId
   lineageLoading.value = true
+  lineageError.value = ''
   try {
     const res = await adminPromptWorkbenchApi.getCoreLineage(id)
     if (id !== props.skillId) return
     lineage.value = res.data?.lineage || []
   } catch (e) {
     if (id !== props.skillId) return
-    toast.error(`血缘加载失败：${errText(e)}`)
+    lineage.value = []
+    lineageError.value = errText(e)
+    // 失败不算「已加载」：复位标志，收起再展开或点重试可重新拉取
+    lineageLoaded = false
   } finally {
     if (id === props.skillId) lineageLoading.value = false
   }
+}
+
+/** 重试（失败态按钮）：显式重拉，不依赖折叠块开合 */
+function retryLineage() {
+  lineageLoaded = true
+  void loadLineage()
 }
 
 /** 折叠块首次展开才拉数据（懒加载） */
@@ -68,6 +83,7 @@ watch(
   () => {
     lineageLoaded = false
     lineage.value = []
+    lineageError.value = ''
   },
   { immediate: true }
 )
@@ -103,6 +119,8 @@ watch(
 .sdp-routing__table th { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
 .sdp-routing__consumer { font-size: var(--mk-fs-micro); color: var(--mk-muted); padding: 1px 0; }
 .sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 血缘加载失败：红字（与同单元 SkillFieldRouting 错误态同语言） */
+.sdp-bad-text { color: var(--mk-red); font-weight: 700; }
 
 /* 暗色模式 */
 [data-theme='dark'] .sdp-routing__lineage { background: var(--wf-bg-subtle); }

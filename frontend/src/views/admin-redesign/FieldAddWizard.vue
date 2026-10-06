@@ -139,7 +139,9 @@
         <button v-if="result" type="button" class="mk-btn mk-btn--primary" @click="close">完成</button>
         <template v-else>
           <button type="button" class="mk-btn" :disabled="saving" @click="close">取消</button>
-          <button type="button" class="mk-btn mk-btn--primary" :disabled="saving || !canSubmit" @click="submit">
+          <!-- 不禁用（仅保存中禁用）：表单有问题时点击 submit() 会把汇集的原因渲染到下方
+               .faw__msg is-err；此前 !canSubmit 置灰使该提示路径永不可达，用户只看到点不动的灰按钮 -->
+          <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="submit">
             {{ saving ? '保存中…' : mode === 'edit' ? '保存修改（双文件原子）' : '保存并校验（双文件原子）' }}
           </button>
         </template>
@@ -374,7 +376,6 @@ const formProblems = computed(() => {
   if (form.value.optional && isNested.value) list.push('「可选」只在顶层字段生效（嵌套字段不要加 ?）')
   return list
 })
-const canSubmit = computed(() => !saving.value && formProblems.value.length === 0)
 
 const previewYaml = computed(() => {
   const name = form.value.name.trim() || 'new_field'

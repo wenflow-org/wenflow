@@ -11,13 +11,15 @@
       <div class="mk-modal__body">
         <p class="mk-alert mk-alert--info">设置人数与故事数，点击创建后立即返回——AI 会在后台为每人生成身份与故事，页面顶部状态条可查看进度。</p>
         <div class="vl-batch-config">
-          <label class="mk-field vl-batch-config__count">
+          <label class="mk-field vl-batch-config__count" :class="{ 'mk-field--error': !batchCountValid }">
             <span class="mk-field__label">人数</span>
             <input v-model.number="batchFillCount" type="number" class="mk-field__input" min="1" max="20" />
+            <span v-if="!batchCountValid" class="mk-field__err">人数须为 1–20 的整数</span>
           </label>
-          <label class="mk-field vl-batch-config__stories">
+          <label class="mk-field vl-batch-config__stories" :class="{ 'mk-field--error': !batchStoriesValid }">
             <span class="mk-field__label">每人故事数</span>
             <input v-model.number="batchStoryCount" type="number" class="mk-field__input" min="0" max="5" />
+            <span v-if="!batchStoriesValid" class="mk-field__err">故事数须为 0–5 的整数</span>
           </label>
           <label class="mk-field vl-batch-config__prefix">
             <span class="mk-field__label">名称前缀 <em class="mk-field__opt">可选</em></span>
@@ -37,7 +39,7 @@
       <!-- 动作收进 .mk-modal__foot（原型 .ovl__foot：上边框、右对齐、常驻滚动区外，index.html 368） -->
       <div class="mk-modal__foot">
         <button type="button" class="mk-btn" :disabled="batchCreating" @click="closeBatch">取消</button>
-        <button type="button" class="mk-btn mk-btn--primary" :disabled="batchCreating" @click="doBatchCreate">
+        <button type="button" class="mk-btn mk-btn--primary" :disabled="batchCreating || !batchCountValid || !batchStoriesValid" @click="doBatchCreate">
           {{ batchCreating ? '创建中…' : `创建 ${batchFillCount || 0} 人 × ${batchStoryCount || 0} 故事（后台生成）` }}
         </button>
       </div>
@@ -70,6 +72,16 @@ const batchCohort = ref('')
 /** 批次备注（可选）：写入每人的 notes 字段，便于识别 */
 const batchNote = ref('')
 const batchError = ref('')
+/* 主按钮的规模口径必须与提交同源（审核 #58）：按钮按输入原值渲染，越界/空值
+   显式报错并禁用提交，不再在提交时静默 clamp（此前「填 999 显 999 实建 20」）。 */
+const batchCountValid = computed(() => {
+  const n = Number(batchFillCount.value)
+  return Number.isInteger(n) && n >= 1 && n <= 20
+})
+const batchStoriesValid = computed(() => {
+  const n = Number(batchStoryCount.value)
+  return Number.isInteger(n) && n >= 0 && n <= 5
+})
 const batchPanelRef = ref<HTMLElement | null>(null)
 const batchMaskRef = ref<HTMLElement | null>(null)
 /** 弹窗统一关闭路径：创建中禁止 Esc/遮罩/✕ 误关（进度视图在此弹窗里；任务本身服务端执行不受影响） */
@@ -133,8 +145,17 @@ async function retryBatchTask() {
 }
 
 async function doBatchCreate() {
-  const count = Math.max(1, Math.min(20, Math.round(Number(batchFillCount.value)) || 3))
-  const stories = Math.max(0, Math.min(5, Math.round(Number(batchStoryCount.value)) || 0))
+  // 越界/空值显式报错，不静默修正（按钮文案即提交口径，两者必须一致）
+  if (!batchCountValid.value) {
+    batchError.value = '人数须为 1–20 的整数'
+    return
+  }
+  if (!batchStoriesValid.value) {
+    batchError.value = '每人故事数须为 0–5 的整数'
+    return
+  }
+  const count = Number(batchFillCount.value)
+  const stories = Number(batchStoryCount.value)
   const prefix = batchPrefix.value.trim() || '虚拟学习者'
   batchError.value = ''
   batchCreating.value = true

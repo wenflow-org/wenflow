@@ -35,6 +35,7 @@
               class="mk-pill"
               :class="{ 'mk-pill--active': pill === p.id }"
               :aria-pressed="pill === p.id"
+              :title="p.title"
               @click="pill = p.id"
             >
               <!-- P3（2026-10-04 全站评审）：「全部」不显计数——分页器「共 N 条」是总数单源；
@@ -46,11 +47,13 @@
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
-          <!-- CM8：默认隐藏列集变更，存储键必须升 v2——旧键早被历史访问写回，不升会盖掉新默认（判例 ExecLogs/LearnerCenter） -->
+          <!-- CM8：默认隐藏列集变更，存储键必须升 v2——旧键早被历史访问写回，不升会盖掉新默认（判例 ExecLogs/LearnerCenter）
+               审核 #7（2026-10-06）：check 从默认隐藏摘出——批量删除与导出 CSV 的唯一入口依赖勾选列，
+               而勾选列默认关着 = 两条批量操作默认无入口；注册时间仍默认收起 -->
           <MkCols
             :col-defs="ulColDefs"
-            storage-key="wf_users_hidden_cols_v2"
-            :default-hidden="['check', 'created']"
+            storage-key="wf_users_hidden_cols_v3"
+            :default-hidden="['created']"
             v-model:hidden="hiddenCols"
           />
         </div>
@@ -59,6 +62,7 @@
       <MockSkeletonTable v-if="liveLoading && !users.length || (deletedLoading && !users.length)" :cols="7" />
       <MkEmptyState
         v-else-if="loadFailed"
+        tone="error"
         icon="◌"
         title="数据加载失败"
         description="无法从后端拉取用户列表。"
@@ -115,7 +119,7 @@
               <div class="ul-user">
                 <MkCellAvatar :name="u.name" :tone="avaTone(u)" />
                 <div class="mk-cell-main">
-                  <strong>{{ u.name }}</strong>
+                  <strong :title="u.name">{{ u.name }}</strong>
                   <!-- 原型 celluser meta 模式：等级 · N 条路径（XP 细节进悬停）。
                        等级词汇单点（learner-profile.ts）：统一「L2 · 进阶」并存格式 -->
                   <span
@@ -179,7 +183,7 @@
         icon="◌"
         :title="isFiltered ? '当前筛选无用户' : '暂无真实用户'"
         :description="isFiltered ? '放宽筛选条件试试。' : '用户注册后将自动出现在这里。'"
-        :action-text="isFiltered ? '清除筛选' : ''"
+        :action-text="isFiltered ? '显示全部用户' : ''"
         @action="clearFilters"
       />
       <!-- 客户端分页（P2：37 行长表单页直排 → mk-pagination 统一分页器，15-30-50-100 条/页） -->
@@ -194,7 +198,9 @@
 
     <!-- 批量操作条（全局 mk-batchbar） -->
     <div v-if="isLive && selected.length" class="mk-batchbar">
-      <span>已选 {{ selected.length }} 人</span>
+      <!-- 审核 #13（2026-10-06）：表头全选勾的是整个筛选集（跨页），批量条如实标注未显示页行数，
+           否则「已选 304 人」在只看得见 15 行的屏上会被读成「全在眼前」 -->
+      <span>已选 {{ selected.length }} 人<template v-if="selectedOffPage">（含未显示页 {{ selectedOffPage }} 行）</template></span>
       <button type="button" class="mk-link" @click="selected = []">取消选择</button>
       <button type="button" class="mk-link" :disabled="batchBusy" @click="exportSelected">导出 CSV</button>
       <button type="button" class="mk-batchbar__danger" :disabled="batchBusy" @click="batchDelete">
@@ -342,6 +348,7 @@ interface UserRow {
 }
 
 /** Phase 2：已删除筛选 pill 的独立数据源（后端 status=deleted，与活跃列表隔离） */
+const DELETED_WINDOW = 50
 const deletedUsers = ref<UserRow[]>([])
 const deletedLoading = ref(false)
 
@@ -368,7 +375,7 @@ function mapDeletedRow(u: Record<string, unknown>): UserRow {
 async function loadDeletedUsers() {
   deletedLoading.value = true
   try {
-    const res = await getDeletedUsers({ limit: 50 })
+    const res = await getDeletedUsers({ limit: DELETED_WINDOW })
     const body = res.data?.data ?? res.data ?? {}
     const items = body.users || body.items || []
     deletedUsers.value = items.map(mapDeletedRow)
@@ -458,17 +465,30 @@ function retryLoad() {
 defineExpose({ refresh: () => { void loadLiveData() }, openCreate })
 /* 筛选 pill（角色 / 活跃 / 生命周期单源；已去掉原「全部角色」下拉，避免与「管理员」pill 语义冲突）。
    计数取自全量 liveUsers；「已删除」为独立数据源，切过去才拉取，未加载时不显示计数。 */
-const pills = computed(() => {
+const pills = computed<Array<{ id: string; label: string; count: number | string | null; title?: string }>>(() => {
   const active = liveUsers.value
   /* 2026-10-05：管理员 / 30 分钟在线计数升宿主 People 的 KPI 面板（统一面板设计），
      KPI 孪生 pill 不再显数（学习状态判例），退为纯筛选开关；普通用户 / 已删除
-     别处没有，保留计数。「全部」本就不显数 = 分页器「共 N 条」单源 */
+     别处没有，保留计数。「全部」本就不显数 = 分页器「共 N 条」单源。
+     审核 #8（2026-10-06）：「普通用户」改真实域口径（排除虚拟/测试），与同面板 KPI
+     「真实用户」（hint 明写不含虚拟/测试）保持同一口径——此前含测试档下 480 虚拟 + 25 测试
+     全被算成普通用户，与同屏「真实用户 311」自相矛盾。 */
+  const realActive = active.filter((u) => !isTestAccountUser(u))
   return [
     { id: 'all', label: '全部', count: active.length },
     { id: 'admin', label: '管理员', count: null },
-    { id: 'user', label: '普通用户', count: active.filter((u) => !u.isAdmin).length },
+    { id: 'user', label: '普通用户', count: realActive.filter((u) => !u.isAdmin).length },
     { id: 'online', label: '30 分钟在线', count: null },
-    { id: 'deleted', label: '已删除', count: deletedUsers.value.length || null }
+    /* 审核 #14（2026-10-06）：已删除列表取自单次 limit 窗口，超过窗口时计数会小于真实值——
+       到顶显示「50+」并在 title 标注截断，界面不再把窗口当全量。 */
+    {
+      id: 'deleted',
+      label: '已删除',
+      count: deletedUsers.value.length
+        ? (deletedUsers.value.length >= DELETED_WINDOW ? `${DELETED_WINDOW}+` : deletedUsers.value.length)
+        : null,
+      title: `最多加载最近 ${DELETED_WINDOW} 条已删除账号（接口窗口上限）；计数到顶显示「${DELETED_WINDOW}+」`
+    }
   ]
 })
 
@@ -590,6 +610,12 @@ const selected = ref<string[]>([])
 const batchBusy = ref(false)
 const selectable = computed(() => filtered.value.filter((u) => !isTestAccount(u) && !u.deleted))
 const allChecked = computed(() => selectable.value.length > 0 && selected.value.length === selectable.value.length)
+/** 审核 #13（2026-10-06）：已选中但不在当前页的条数——表头全选勾的是整个筛选集（跨页），
+    批量条据此如实标注「含未显示页 N 行」 */
+const selectedOffPage = computed(() => {
+  const onPage = new Set(paged.value.map((u) => u.id))
+  return selected.value.filter((id) => !onPage.has(id)).length
+})
 
 function toggleAll() {
   selected.value = allChecked.value ? [] : selectable.value.map((u) => u.id)
@@ -717,6 +743,14 @@ async function restoreUserRow(u: UserRow) {
     await restoreUser(u.id)
     toast.success(`「${u.name}」已恢复`)
     deletedUsers.value = deletedUsers.value.filter((x) => x.id !== u.id)
+    // 审核 #10（2026-10-06）：恢复必须同步 live 用户域，否则切回「全部」看不到刚恢复的用户
+    // （pill 的 watch 只在切到 deleted 时拉取，切回 all 不重拉）——与 liveDeleteUser 的
+    // 对称清理成对；重拉失败不静默，如实告知需手动刷新
+    if (isLive.value) {
+      await liveSetUsersIncludeTest(includeTest.value).catch(() => {
+        toast.error('用户已恢复，但列表刷新失败，请手动刷新')
+      })
+    }
   } catch (e) {
     toast.error(`恢复失败：${errMsg(e)}`)
   } finally {
@@ -744,7 +778,9 @@ const filtered = computed(() =>
   sortUserRows(users.value.filter((u) => {
     if (pill.value === 'deleted' && !u.deleted) return false
     if (pill.value === 'admin' && !u.admin) return false
-    if (pill.value === 'user' && u.admin) return false
+    // 审核 #8（2026-10-06）：与 pill 计数同一真实域口径——「普通用户」不含虚拟/测试账号，
+    // 否则含测试档下计数（真实域）与列表（含虚拟/测试）对不上
+    if (pill.value === 'user' && (u.admin || isTestAccount(u))) return false
     if (pill.value === 'online' && !u.online) return false
     const q = keyword.value.trim().toLowerCase()
     if (q && !`${u.name} ${u.email} ${u.id}`.toLowerCase().includes(q)) return false
@@ -790,7 +826,13 @@ function clearFilters() {
 .ul-row { cursor: pointer; }
 /* 键盘可达（对齐 gc-row/oc-row 判例）：行可聚焦，焦点态描边提示当前位置 */
 .ul-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }
-.ul-row--deleted { opacity: 0.62; filter: saturate(0.2); }
+/* 已删除行（审核 #8，2026-10-06）：整行 opacity 0.62 会把行内文字压到 AA 之下
+   （姓名 4.28 / 已删除徽章 2.99 / 次级行 2.45，正文需 4.5:1）。撤整行透明度，
+   降色改元素级：主名/副行降一档到 --mk-muted（同底实测 5.07:1），
+   保留 saturate(0.2) 表达「已删除」的灰化语义。 */
+.ul-row--deleted { filter: saturate(0.2); }
+.ul-row--deleted .mk-cell-main strong { color: var(--mk-muted); }
+.ul-row--deleted .mk-cell-sub { color: var(--mk-muted); }
 
 /* ===== 行级设计（2026-09-26）：身份 chip / 等级色阶+升级条 / 登录新鲜度 ===== */
 .ul-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
@@ -808,7 +850,7 @@ function clearFilters() {
   font-size: var(--mk-fs-micro); color: var(--mk-muted);
 }
 .ul-user .mk-cell-main strong {
-  display: block; max-width: 220px;
+  display: block; max-width: var(--mk-cell-main-max);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* 原型 .tbl td：nowrap（长内容由上面的 max-width 兜底，不换行撑行高）。

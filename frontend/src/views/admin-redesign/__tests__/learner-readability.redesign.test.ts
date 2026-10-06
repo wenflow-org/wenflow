@@ -126,24 +126,26 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
       expect(card, `缺少 KPI：${label}`).toBeTruthy();
       return card!.text();
     };
-    expect(kpi('学习者')).toContain('已加载 4');
+    expect(kpi('学习者账号')).toContain('已加载 4');
     // P2（2026-10-04 全站评审）：「快照单次最多加载 50 条」不再进 hint（单源=本页状态条，拆页后住学习状态页头）
-    expect(kpi('学习者')).toContain('口径：不含测试账号');
-    expect(kpi('学习者')).not.toContain('50 条');
+    expect(kpi('学习者账号')).toContain('口径：不含测试账号');
+    // 审核 #13：hint 补「与用户页『共 N 人』同集合 + 含未开始学习的账号」
+    expect(kpi('学习者账号')).toContain('含未开始学习的账号');
+    expect(kpi('学习者账号')).not.toContain('50 条');
 
     // 数据层接线后：liveLearnersTotal 有值且 ≠ 窗口数 → 显「N · 已载 M」
     const { liveLearnersTotal } = await import('../live');
     (liveLearnersTotal as unknown as { value: number | null }).value = 137;
     await nextTick();
-    expect(kpi('学习者')).toContain('137 · 已载 4');
+    expect(kpi('学习者账号')).toContain('137 · 已载 4');
     expect(kpi('需关注')).toContain('疲劳高');
     w.unmount();
   });
 
   it('风险摘要带量级「X 等 2 个概念挣扎」；平均置信度 hint 带 n=', async () => {
-    // 风险摘要列 2026-10-04 起默认隐藏（MkCols :default-hidden）——本用例播种「用户选择显示」
+    // 审核 #12：风险摘要列不再默认隐藏（默认集变更同时升键 v2→v3）；本用例播种「全列显示」
     // 的列偏好，仍锁行内量级文案的渲染契约
-    localStorage.setItem('wf_learner_hidden_cols_v2', JSON.stringify([]));
+    localStorage.setItem('wf_learner_hidden_cols_v3', JSON.stringify([]));
     const w = mount(LearnerCenter);
     await settle();
     const dingRow = w.findAll('tbody tr').find((r) => r.text().includes('丁'));
@@ -151,7 +153,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     const avg = w.findAll('.mk-kpi').find((c) => c.text().includes('平均置信度'));
     expect(avg!.text()).toContain(`n=${4}`); // 四人都有任务，全部入均值
     w.unmount();
-    localStorage.removeItem('wf_learner_hidden_cols_v2');
+    localStorage.removeItem('wf_learner_hidden_cols_v3');
     liveLearners.value = [];
   });
 

@@ -147,7 +147,7 @@
 
       <div class="sdp-form__footer">
         <p v-if="rtMsg" class="sdp-form__msg" :class="{ 'is-err': rtErr }">{{ rtMsg }}</p>
-        <button type="button" class="mk-btn sdp-btn--danger" :disabled="rtSaving" @click="resetRuntime">恢复默认</button>
+        <button type="button" class="mk-btn mk-btn--danger-ghost" :disabled="rtSaving" @click="resetRuntime">恢复默认</button>
         <button type="button" class="mk-btn" :disabled="rtSaving" @click="loadRuntime">刷新</button>
         <button type="button" class="mk-btn mk-btn--primary" :disabled="rtSaving" @click="saveRuntime">
           {{ rtSaving ? '保存中…' : '保存配置' }}
@@ -178,6 +178,8 @@ const { options: catalogOptions, load: loadModelCatalog } = useModelCatalog()
 loadModelCatalog()
 
 const props = defineProps<{ skillId: string; refreshTick: number }>()
+/* #118：运行时配置的未保存改动上报宿主（此前只有协议编辑器有脏态，切 Skill/离开页面会静默丢弃） */
+const emit = defineEmits<{ (e: 'dirty', p: { dirty: boolean; label: string }): void }>()
 
 interface RuntimeForm {
   tier: 'chat' | 'reasoning'
@@ -334,6 +336,9 @@ async function loadRuntime() {
     resetRtForm()
     generationParams.value = null
   }
+  // 数据落地 → 重置脏态基线（#118：加载失败走的是默认值分支，同样不该算用户改动）
+  dirtyBase = formSnapshot()
+  emit('dirty', { dirty: false, label: '运行时配置' })
 }
 
 async function saveRuntime() {
@@ -429,6 +434,35 @@ watch(
   },
   { immediate: true }
 )
+
+/* ===== 脏态上报（#118）=====
+   以「最近一次加载/保存成功后的表单快照」为基线（loadRuntime 末尾重设），表单任一处偏离即脏。
+   保存成功与切换 skill 都会经 loadRuntime 重设基线，脏态自动复位。 */
+function formSnapshot(): string {
+  return JSON.stringify({
+    f: rtForm.value,
+    lr: logicalRetryMode.value,
+    cr: customLogicalRetries.value,
+    t: paramT.value,
+    tp: paramTopP.value,
+    mx: paramMax.value,
+    fc: fallbackChain.value
+  })
+}
+let dirtyBase = formSnapshot()
+function reportDirty() {
+  emit('dirty', { dirty: formSnapshot() !== dirtyBase, label: '运行时配置' })
+}
+watch(
+  [rtForm, logicalRetryMode, customLogicalRetries, paramT, paramTopP, paramMax, fallbackChain],
+  reportDirty,
+  { deep: true }
+)
+// 切换 skill 时先复位基线（新数据到达前不算脏）
+watch(() => props.skillId, () => {
+  dirtyBase = formSnapshot()
+  emit('dirty', { dirty: false, label: '运行时配置' })
+})
 </script>
 
 <style scoped>
@@ -510,8 +544,6 @@ watch(
 }
 .sdp-form__msg { margin: 0 auto 0 0; font-size: var(--mk-fs-micro); color: var(--mk-green); font-weight: 600; }
 .sdp-form__msg.is-err { color: var(--mk-red); }
-.sdp-btn--danger { color: var(--mk-red); border-color: rgba(220, 38, 38, 0.35); background: transparent; }
-.sdp-btn--danger:hover { background: var(--mk-red-bg); }
 .sdp-error {
   padding: 10px 12px;
   border-radius: var(--mk-radius-xl);

@@ -40,16 +40,19 @@
                 <input
                   v-model.number="variantWeightEdit[v.id]"
                   class="sdp-var__w"
+                  :class="{ 'sdp-var__w--err': weightInvalid(v) }"
                   type="number"
                   min="1"
                   max="99"
+                  :aria-invalid="weightInvalid(v)"
+                  :title="weightInvalid(v) ? '权重需为 1–99 的整数（留空保存会被拦下）' : ''"
                   :disabled="variantBusy === v.id"
                   @keydown.enter.prevent="saveVariantWeight(v)"
                 />
                 <button
                   type="button"
                   class="mk-link"
-                  :disabled="variantBusy === v.id || variantWeightEdit[v.id] === v.trafficWeight"
+                  :disabled="variantBusy === v.id || weightInvalid(v) || Number(variantWeightEdit[v.id]) === Number(v.trafficWeight)"
                   @click="saveVariantWeight(v)"
                 >保存</button>
               </td>
@@ -63,8 +66,11 @@
                 </div>
               </td>
             </tr>
-            <tr v-if="!variantBaseline && !variantArms.length && !variantsLoading">
-              <td colspan="7"><span class="mk-na">加载中或该 skill 暂无 ACTIVE 版本</span></td>
+            <tr v-if="variantsLoading">
+              <td colspan="7"><MkLoading inline text="变体加载中…" /></td>
+            </tr>
+            <tr v-else-if="!variantBaseline && !variantArms.length">
+              <td colspan="7"><span class="mk-na">该 skill 暂无 ACTIVE 版本，先在协议页签发布一次</span></td>
             </tr>
           </tbody>
         </table>
@@ -109,9 +115,11 @@
         <span class="sdp-sec-meta">{{ coreVersions.length }} 个 · 回滚会替换磁盘文件与 ACTIVE</span>
       </header>
       <div class="sdp-table-wrap">
-        <table class="sdp-pw__table">
+        <!-- #121：改用共享 .mk-table（原私有 .sdp-pw__table padding 6px 8px 无 hover、
+             操作列空表头，行高 34px 低于 40px 下限）——同页三张表统一语汇 -->
+        <table class="mk-table">
           <thead>
-            <tr><th>版本</th><th title="coreHash">核心哈希</th><th title="coreVer">核心版本</th><th>状态</th><th>发布者</th><th></th></tr>
+            <tr><th>版本</th><th title="coreHash">核心哈希</th><th title="coreVer">核心版本</th><th>状态</th><th>发布者</th><th class="mk-th--right mk-col--actions-wide">操作</th></tr>
           </thead>
           <tbody>
             <tr v-for="v in coreVersions" :key="v.version" :class="{ 'sdp-pw__table-active': v.status === 'ACTIVE' }">
@@ -121,14 +129,16 @@
               <td>{{ versionStatusText(v.status) }}</td>
               <td>{{ v.createdBy }}</td>
               <td>
-                <button
-                  v-if="v.status !== 'ACTIVE' && v.rollbackable"
-                  type="button"
-                  class="mk-link"
-                  :disabled="coreRollbacking"
-                  @click="rollbackCore(v.version)"
-                >回滚</button>
-                <span v-else-if="v.status !== 'ACTIVE'" class="sdp-pw__audit" title="该历史版本没有可验证的 core 快照，只保留审计用途">仅审计</span>
+                <div class="mk-actions">
+                  <button
+                    v-if="v.status !== 'ACTIVE' && v.rollbackable"
+                    type="button"
+                    class="mk-link"
+                    :disabled="coreRollbacking"
+                    @click="rollbackCore(v.version)"
+                  >回滚</button>
+                  <span v-else-if="v.status !== 'ACTIVE'" class="sdp-pw__audit" title="该历史版本没有可验证的 core 快照，只保留审计用途">仅审计</span>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -140,7 +150,9 @@
     <section class="sdp-eng">
       <header class="mk-section__head">
         <h4>Prompt 版本</h4>
-        <span class="sdp-sec-meta">{{ promptVersions.length }} 个版本</span>
+        <!-- #122：接口总数被切片丢弃过——区头写「N 个版本」而 N=切片长度（12），
+             等于把窗口当总数对外宣称；现披露「共 N · 显示最近 M」并给「加载更多」 -->
+        <span class="sdp-sec-meta">共 {{ promptVersionTotal }} 个 · 显示最近 {{ promptVersions.length }} 个</span>
       </header>
       <p v-if="versionMsg" class="sdp-versions-msg" :class="{ 'is-err': versionErr }">{{ versionMsg }}</p>
       <div class="sdp-table-wrap">
@@ -181,6 +193,12 @@
           </tbody>
         </table>
       </div>
+      <!-- #122：第 13 条起的版本此前完全不可见（无分页/加载更多）→ 补「加载更多」 -->
+      <div v-if="promptVersions.length < promptVersionTotal" class="sdp-versions-more">
+        <button type="button" class="mk-btn mk-btn--sm" @click="loadMorePromptVersions">
+          加载更多（剩余 {{ promptVersionTotal - promptVersions.length }} 个）
+        </button>
+      </div>
 
       <!-- 对比结果 -->
       <div v-if="compareResult" class="sdp-diff">
@@ -217,9 +235,10 @@ import { askConfirm } from '../useConfirm'
 import { toast } from '@/utils/toast'
 import { coreShortHash, errText } from './sdp-shared'
 import { versionStatusText } from '../statusText'
+import MkLoading from '@/components/mk/MkLoading.vue'
 
 const props = defineProps<{ skillId: string; refreshTick: number }>()
-const emit = defineEmits<{ (e: 'core-rolled-back'): void }>()
+const emit = defineEmits<{ (e: 'core-rolled-back'): void; (e: 'dirty', p: { dirty: boolean; label: string }): void }>()
 
 /* ---------- A/B 实验变体（2026-10-01） ---------- */
 interface VariantMetrics { calls: number; successRate: number | null; avgDurationMs: number | null }
@@ -241,6 +260,11 @@ const variantNewSource = ref<number | null>(null)
 
 const baselineRemainder = computed(() => Math.max(0, 100 - variantArms.value.reduce((a, v) => a + (Number(v.trafficWeight) || 0), 0)))
 const variantSourceOptions = computed(() => promptVersions.value.filter((v) => Number(v.version) !== variantBaseline.value?.version))
+/** 下一个可用变体键：A→B→C→D 里挑未占用的（loadVariants 与脏态基线共用） */
+const nextAvailableKey = computed(() => {
+  const used = new Set(variantArms.value.map((v) => v.variant))
+  return ['A', 'B', 'C', 'D'].find((k) => !used.has(k)) || 'E'
+})
 
 function fmtRate(rate: number | null) {
   return rate == null ? '—' : `${Math.round(rate * 100)}%`
@@ -264,8 +288,10 @@ async function loadVariants() {
     variantWeightEdit.value = edits
     if (variantBaseline.value && variantNewSource.value == null) variantNewSource.value = variantBaseline.value.version
     // 下一个可用变体键：A→B→C→D 里挑未占用的
-    const used = new Set(variantArms.value.map((v) => v.variant))
-    variantNewKey.value = ['A', 'B', 'C', 'D'].find((k) => !used.has(k)) || 'E'
+    variantNewKey.value = nextAvailableKey.value
+    // 数据落地 → 重设脏态基线并复位（#118）
+    variantDirtyBase = variantSnapshot()
+    emit('dirty', { dirty: false, label: '变体权重/建变体表单' })
   } catch (e) {
     if (id !== props.skillId) return
     variantMsg.value = `变体加载失败：${errText(e)}`
@@ -273,6 +299,23 @@ async function loadVariants() {
   } finally {
     if (id === props.skillId) variantsLoading.value = false
   }
+}
+
+/* #118：版本页签的未保存改动（变体权重编辑 / 建变体表单）上报宿主脏态。
+   基线 = 最近一次变体数据加载成功后的快照（loadVariants 末尾重设），快照偏离才算脏。
+   声明必须早于 loadVariants 的调用点（immediate watch 在 setup 期同步执行）。 */
+let variantDirtyBase = ''
+function variantSnapshot(): string {
+  return JSON.stringify({
+    w: variantArms.value.map((v) => [v.id, Number(variantWeightEdit.value[v.id])]),
+    k: variantNewKey.value,
+    nw: variantNewWeight.value,
+    ns: variantNewSource.value
+  })
+}
+function reportVariantDirty() {
+  if (!variantDirtyBase) return
+  emit('dirty', { dirty: variantSnapshot() !== variantDirtyBase, label: '变体权重/建变体表单' })
 }
 
 const variantCorePublishing = ref(false)
@@ -286,7 +329,10 @@ async function publishCoreAsVariant() {
       '把当前 core.yaml 的未发布改动编译发布为变体 ' + variantNewKey.value + '（' + variantNewWeight.value + '% 流量）？',
       '基线与线上文件保持不变；发布守门检查照常执行。'
     ].join('\n'),
-    confirmText: '发布'
+    confirmText: '发布',
+    /* 发布/停止/晋级都是可逆的实验臂操作（版本行保留为历史，可再克隆/再晋级），
+       非销毁动作不该吃默认红底（doc/ADMIN_PAGE_TEMPLATES.md:644）。 */
+    danger: false
   })
   if (!ok) return
   variantCorePublishing.value = true
@@ -329,14 +375,28 @@ async function createVariant() {
   }
 }
 
+/** 权重输入合法性（#117）：清空/越界不得按 0 或非法值提交（后端 400），
+    保存按钮据此禁用，并在行内给字段级提示 */
+function weightInvalid(v: VariantRow): boolean {
+  const n = Number(variantWeightEdit.value[v.id])
+  return !Number.isFinite(n) || n < 1 || n > 99
+}
+
 async function saveVariantWeight(v: VariantRow) {
   if (variantBusy.value) return
+  // 显式拦截空值/越界，不静默 clamp、不写 0（留空提交会发出 weight=0 的非法请求）
+  if (weightInvalid(v)) {
+    variantErr.value = true
+    variantMsg.value = `变体 ${v.variant} 权重无效：需为 1–99 的整数（当前「${String(variantWeightEdit.value[v.id] ?? '')}」）`
+    return
+  }
   variantBusy.value = v.id
   variantMsg.value = ''
   variantErr.value = false
   try {
-    await adminPromptWorkbenchApi.updatePromptVariantWeight(v.id, Number(variantWeightEdit.value[v.id]))
-    toast.success(`变体 ${v.variant} 权重已改为 ${variantWeightEdit.value[v.id]}%`)
+    const w = Number(variantWeightEdit.value[v.id])
+    await adminPromptWorkbenchApi.updatePromptVariantWeight(v.id, w)
+    toast.success(`变体 ${v.variant} 权重已改为 ${w}%`)
     await loadVariants()
   } catch (e) {
     variantMsg.value = `调权重失败：${errText(e)}`
@@ -351,7 +411,8 @@ async function stopVariant(v: VariantRow) {
   const ok = await askConfirm({
     title: '停止变体',
     message: `确认停止变体 ${v.variant}（v${v.version}）？\n其流量将全部回到基线；该版本行保留为历史，可再克隆。`,
-    confirmText: '停止'
+    confirmText: '停止',
+    danger: false
   })
   if (!ok) return
   variantBusy.value = v.id
@@ -374,7 +435,8 @@ async function promoteVariant(v: VariantRow) {
   const ok = await askConfirm({
     title: '晋级为基线',
     message: `确认把变体 ${v.variant}（v${v.version}）晋级为基线？\n该内容将写回 core.yaml 与 skill.md（文件 SSOT），旧基线转为历史。`,
-    confirmText: '晋级'
+    confirmText: '晋级',
+    danger: false
   })
   if (!ok) return
   variantBusy.value = v.id
@@ -396,7 +458,12 @@ async function promoteVariant(v: VariantRow) {
 
 /* ---------- Prompt 版本 ---------- */
 interface VersionItem { id: string; version: string | number; status: string; name: string }
+const PROMPT_VERSIONS_PAGE = 12
 const promptVersions = ref<VersionItem[]>([])
+/** 接口总数（后端 data.total；缺失时回退当前列表长度）——区头口径与「加载更多」判据（#122） */
+const promptVersionTotal = ref(0)
+/** 全量版本（已排序）在内存缓存：加载更多是客户端切片，不再重复打接口 */
+let allPromptVersions: VersionItem[] = []
 const versionBusy = ref('')
 const compareLoading = ref('')
 const versionMsg = ref('')
@@ -411,16 +478,25 @@ async function loadVersions() {
   if (id !== props.skillId) return
   const body = res?.data?.data ?? res?.data ?? []
   const items = Array.isArray(body) ? body : body.list || body.items || body.versions || []
+  // 接口总数（#122）：后端返回 data.total 时保留，否则回退列表长度
+  const total = Number((Array.isArray(body) ? null : body?.total) ?? items.length)
+  promptVersionTotal.value = Number.isFinite(total) ? total : items.length
   // ACTIVE 优先排前，避免切片后「对比生效版」误报没有生效版本
   const sorted = [...(items as Array<Record<string, unknown>>)].sort(
     (a, b) => Number(String(b.status === 'ACTIVE')) - Number(String(a.status === 'ACTIVE'))
   )
-  promptVersions.value = sorted.slice(0, 12).map((v: Record<string, unknown>) => ({
+  allPromptVersions = sorted.map((v: Record<string, unknown>) => ({
     id: String(v.id || ''),
     version: (v.version as string | number) ?? '—',
     status: String(v.status || '—'),
     name: String(v.name || '')
   }))
+  promptVersions.value = allPromptVersions.slice(0, PROMPT_VERSIONS_PAGE)
+}
+
+/** 「加载更多」：客户端再放一页（全量已在内存，不重复打接口） */
+function loadMorePromptVersions() {
+  promptVersions.value = allPromptVersions.slice(0, promptVersions.value.length + PROMPT_VERSIONS_PAGE)
 }
 
 async function compareWithActive(v: VersionItem) {
@@ -533,6 +609,18 @@ watch(
   },
   { immediate: true }
 )
+
+/* #118：变体权重/建变体表单的编辑 → 上报宿主脏态 */
+watch(
+  [variantWeightEdit, variantNewKey, variantNewWeight, variantNewSource],
+  reportVariantDirty,
+  { deep: true }
+)
+// 切换 skill：旧 skill 的编辑基线作废（新数据到达前不算脏；加载失败也不会残留脏态挡住下一次切换）
+watch(() => props.skillId, () => {
+  variantDirtyBase = ''
+  emit('dirty', { dirty: false, label: '变体权重/建变体表单' })
+})
 </script>
 
 <style scoped>
@@ -606,19 +694,17 @@ watch(
 .sdp-diff__text { white-space: pre-wrap; word-break: break-word; color: var(--mk-muted); }
 .sdp-diff__gap { padding: 2px 12px; color: #c3cede; user-select: none; }
 .sdp-diff__same { margin: 8px 12px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* Prompt 版本「加载更多」（#122） */
+.sdp-versions-more { display: flex; justify-content: center; padding-top: 4px; }
 
-/* 核心文件版本表（沿用协议 tab 原 sdp-pw__table 视觉） */
-.sdp-pw__table { width: 100%; border-collapse: collapse; font-size: var(--mk-fs-micro); }
-.sdp-pw__table th, .sdp-pw__table td {
-  text-align: left;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--mk-surface-3);
-}
+/* 核心文件版本表（#121）：改用共享 .mk-table 语汇；只保留 ACTIVE 行高亮与「仅审计」微字 */
 .sdp-pw__table-active { background: var(--mk-green-bg); }
 .sdp-pw__audit { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* A/B 变体区：行内权重输入 + 建变体表单 */
 .sdp-var__w { width: 56px; padding: 2px 6px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); }
+/* 权重非法（空/越界）：字段级红边提示（#117） */
+.sdp-var__w--err { border-color: var(--mk-red); background: var(--mk-red-bg); }
 .sdp-var__key { width: 56px; padding: 2px 6px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); }
 .sdp-var__sel { max-width: 180px; padding: 2px 6px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); }
 .sdp-var__create { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 10px; border: 1px dashed var(--mk-line); border-radius: 12px; background: var(--mk-surface); }
@@ -639,7 +725,6 @@ watch(
   .sdp-diff__head { font-size: var(--mk-fs-body); padding: 12px 16px; }
   .sdp-diff__body { font-size: var(--mk-fs-body); max-height: 460px; }
   .sdp-diff__same { font-size: var(--mk-fs-body); }
-  .sdp-pw__table { font-size: var(--mk-fs-body); }
   .sdp-pw__audit { font-size: var(--mk-fs-body); }
 }
 

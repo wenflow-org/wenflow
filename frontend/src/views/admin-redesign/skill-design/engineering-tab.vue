@@ -48,7 +48,10 @@
         <h4>协议视图</h4>
         <span class="sdp-sec-meta">{{ protocols.length ? `${protocols.length} 组协议` : '' }}</span>
       </header>
-      <div v-if="protocols.length" class="sdp-protocols">
+      <!-- #116 三态互斥：加载中 / 失败 / 空。此前 engLoaded 只是普通变量、无 loading ref，
+           「暂无协议数据」在数据到达前就渲染，把「加载中」当「没有」呈现给用户 -->
+      <p v-if="engLoading" class="sdp-none"><MkLoading inline text="协议数据加载中…" /></p>
+      <div v-else-if="protocols.length" class="sdp-protocols">
         <article v-for="p in protocols" :key="p.id" class="sdp-protocol">
           <header>
             <strong>{{ p.title }}</strong>
@@ -58,7 +61,7 @@
           <span class="sdp-protocol__sites mono">{{ p.callSites }}</span>
         </article>
       </div>
-      <p v-if="engProtoFailed" class="sdp-none sdp-bad-text">协议数据加载失败。<button type="button" class="mk-link" @click="retryEngineering">重试</button></p>
+      <p v-else-if="engProtoFailed" class="sdp-none sdp-bad-text">协议数据加载失败。<button type="button" class="mk-link" @click="retryEngineering">重试</button></p>
       <p v-else class="sdp-none">暂无协议数据。</p>
     </section>
 
@@ -78,13 +81,14 @@
           <code class="mono">{{ c.prefix }}</code> 同时被 <code class="mono">{{ c.agentIds.join(', ') }}</code> 使用
         </span>
       </div>
-      <div v-if="nodeRules.length" class="sdp-rules">
+      <p v-if="engLoading" class="sdp-none"><MkLoading inline text="规则数据加载中…" /></p>
+      <div v-else-if="nodeRules.length" class="sdp-rules">
         <div v-for="r in nodeRules" :key="r.ruleId" class="sdp-rule">
           <span class="sdp-rule__id mono">{{ r.ruleId }}</span>
           <span class="sdp-rule__text">{{ r.text }}</span>
         </div>
       </div>
-      <p v-if="engRulesFailed" class="sdp-none sdp-bad-text">规则数据加载失败。</p>
+      <p v-else-if="engRulesFailed" class="sdp-none sdp-bad-text">规则数据加载失败。<button type="button" class="mk-link" @click="retryEngineering">重试</button></p>
       <p v-else class="sdp-none">本节点没有登记规则。</p>
     </section>
   </div>
@@ -98,6 +102,7 @@ import { computed, ref, watch } from 'vue'
 import { adminPromptOpsApi } from '@/api/adminApi'
 import { TERMS } from '../terms'
 import { shortHash } from './sdp-shared'
+import MkLoading from '@/components/mk/MkLoading.vue'
 
 const props = defineProps<{ skillId: string; overview: Overview }>()
 
@@ -122,6 +127,7 @@ interface RuleItem { ruleId: string; text: string; agentId: string }
 const protocols = ref<Protocol[]>([])
 const rulesOverview = ref<{ summary: { totalRules: number; totalPrefixes: number; conflictPrefixCount: number }; conflictPrefixes: Array<{ prefix: string; agentIds: string[] }>; byPrefix: Record<string, RuleItem[]> } | null>(null)
 let engLoaded = false
+const engLoading = ref(false)
 const engProtoFailed = ref(false)
 const engRulesFailed = ref(false)
 
@@ -140,23 +146,28 @@ const nodeRules = computed(() => {
 async function loadEngineering() {
   if (engLoaded) return
   engLoaded = true
+  engLoading.value = true
   let pvOk = true
   let roOk = true
-  const [pv, ro] = await Promise.all([
-    adminPromptOpsApi.getProtocolView().catch(() => { pvOk = false; return null }),
-    adminPromptOpsApi.getSkillRulesOverview().catch(() => { roOk = false; return null })
-  ])
-  engProtoFailed.value = !pvOk
-  engRulesFailed.value = !roOk
-  const pBody = pv?.data?.data ?? pv?.data ?? {}
-  protocols.value = ((pBody.protocols as Record<string, unknown>[]) || []).map((p) => ({
-    id: String(p.id || ''),
-    title: String(p.title || p.id || ''),
-    statusLabel: String(p.statusLabel || p.status || ''),
-    summary: String(p.summary || ''),
-    callSites: String(p.callSites || '')
-  }))
-  rulesOverview.value = (ro?.data?.data ?? ro?.data ?? null) as typeof rulesOverview.value
+  try {
+    const [pv, ro] = await Promise.all([
+      adminPromptOpsApi.getProtocolView().catch(() => { pvOk = false; return null }),
+      adminPromptOpsApi.getSkillRulesOverview().catch(() => { roOk = false; return null })
+    ])
+    engProtoFailed.value = !pvOk
+    engRulesFailed.value = !roOk
+    const pBody = pv?.data?.data ?? pv?.data ?? {}
+    protocols.value = ((pBody.protocols as Record<string, unknown>[]) || []).map((p) => ({
+      id: String(p.id || ''),
+      title: String(p.title || p.id || ''),
+      statusLabel: String(p.statusLabel || p.status || ''),
+      summary: String(p.summary || ''),
+      callSites: String(p.callSites || '')
+    }))
+    rulesOverview.value = (ro?.data?.data ?? ro?.data ?? null) as typeof rulesOverview.value
+  } finally {
+    engLoading.value = false
+  }
 }
 
 function retryEngineering() {
@@ -206,14 +217,16 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   font-weight: 600;
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
-  padding: 7px 12px;
+  /* 2026-10-06 审核 #120：原 7px 12px → 行高 36-37px，17 行全部低于规范下限 40px；
+     提到与 .mk-table th/td 同档（10px 16px）后行高回到 ~44px */
+  padding: 10px 16px;
   width: 180px;
   background: #f8fafc;
   border-right: 1px solid var(--mk-surface-3);
   vertical-align: top;
 }
 .sdp-kv td {
-  padding: 7px 12px;
+  padding: 10px 16px;
   color: #334155;
   border-bottom: 1px solid var(--mk-surface-3);
   word-break: break-all;

@@ -84,10 +84,17 @@ export function createApiClient(profile: ApiClientProfile): AxiosInstance {
 
         // 返回错误信息，保留完整 response 以便上层读取 422 恢复信封等结构化数据。
         // 兼容后端两种错误形态：{ error: { message } } 与 { error: "字符串" }（约 209 处历史端点）
-        const errBody = (data as { error?: { message?: string; details?: unknown } | string } | null)?.error;
+        // responseType:'blob' 的下载请求（如管理端数据导出）失败时后端 JSON 错误体被包成 Blob，
+        // 上面两条都读不到 → 退化成通用「请求失败」，运维看不到后端给的原因（审核 #178）。
+        // 这里把 Blob 读回文本再解析一次；await 一次 text() 只在错误分支发生，不影响成功路径。
+        let body: unknown = data;
+        if (data instanceof Blob && data.type && data.type.includes('json')) {
+          try { body = JSON.parse(await data.text()); } catch { body = data; }
+        }
+        const errBody = (body as { error?: { message?: string; details?: unknown } | string } | null)?.error;
         const errMessage = typeof errBody === 'string'
           ? errBody
-          : errBody?.message || (data as { message?: string } | null)?.message || '请求失败';
+          : errBody?.message || (body as { message?: string } | null)?.message || '请求失败';
         return Promise.reject({
           message: errMessage,
           status,

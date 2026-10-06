@@ -304,7 +304,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('P3 顺手：90 秒显示「1 分钟」（向下取整）；挂机红阈值进 title；未知任务类型回退「—」+ title 原文', async () => {
+  it('P3 顺手：90 秒显示「1 分钟」（向下取整）；长时阈值进 title（2026-10-06 审核 #30：红→琥珀）；未知任务类型回退「—」+ title 原文', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -322,7 +322,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(rows[0].text()).not.toContain('2 分钟');
     expect(rows[0].text()).toContain('—');
     expect(rows[0].find('td .mk-cell-sub').attributes('title')).toBe('任务类型原文：weird_type');
-    expect(rows[1].find('.ts-ia').attributes('title')).toContain('≥ 25 分钟按挂机标红');
+    expect(rows[1].find('.ts-ia').attributes('title')).toContain('≥ 25 分钟按长时标注');
     wrapper.unmount();
   });
 

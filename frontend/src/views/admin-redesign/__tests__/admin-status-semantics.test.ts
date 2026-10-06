@@ -77,13 +77,14 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     // 显式错误条（页签体内 mk-alert，可重试的信号，而非静默）
     expect(w.find('.mk-alert').exists()).toBe(true)
     expect(w.text()).toContain('待办数据加载失败')
-    // 指标卡不得显假 0：三个失败域显「—」+「加载失败，计数不可信」foot
-    const naValues = w.findAll('.oh-metric__value--na')
+    // 指标卡不得显假 0：三个失败域显「—」+「加载失败，计数不可信」foot。
+    // 2026-10-06 审核 #174：页内 .oh-metric 瓦片收编共享 MkKpi（tone=bad 着色数字，
+    // hintTone=bad 着色脚注），选择器随之迁移，断言语义不变。
+    const naValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '—')
     expect(naValues).toHaveLength(3)
-    for (const v of naValues) expect(v.text()).toBe('—')
-    expect(w.findAll('.oh-metric__foot--bad')).toHaveLength(3)
+    expect(w.findAll('.mk-kpi__hint--bad')).toHaveLength(3)
     // 全页唯一显 0 的是「草稿公告」（取 live 层，未失败 → 0 是真实值，如实显示）
-    const zeroValues = w.findAll('.oh-metric__value').filter((v) => v.text() === '0')
+    const zeroValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '0')
     expect(zeroValues).toHaveLength(1)
     // 三个失败域行动行标失败态，且该行不得显示「已清零」
     // （第 4 行「草稿公告」取自 live 层，未失败 → 仍显示「已清零」是正确的）
@@ -119,7 +120,8 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     expect(todoHead.find('.mk-card__title').text()).toBe('运营待办')
     expect(todoHead.find('.mk-card__meta').text()).toContain('运营待办全部已清零')
     // 指标卡如实显示 0（真实 0 可以显；四卡：待处理反馈/生成失败路径/Outbox 死信/草稿公告）
-    const values = w.findAll('.oh-metric__value').map((v) => v.text())
+    // 2026-10-06 审核 #174：瓦片迁 MkKpi，.oh-metric__value → .mk-kpi__num
+    const values = w.findAll('.mk-kpi__num').map((v) => v.text())
     expect(values).toEqual(['0', '0', '0', '0'])
     // 行动行仍给「已清零」收尾
     expect(w.text()).toContain('已清零')
@@ -137,12 +139,12 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     const w = mount(OpsHub)
     await flushPromises()
 
-    // 指标卡如实显示 10（不再解析错位成 0）
-    const values = w.findAll('.oh-metric__value').map((v) => v.text())
+    // 指标卡如实显示 10（不再解析错位成 0）。2026-10-06 审核 #174：瓦片迁 MkKpi。
+    const values = w.findAll('.mk-kpi__num').map((v) => v.text())
     expect(values).toContain('10')
-    // 结论句点名该事项（不再「全部已清零」）
+    // 结论句改总括句（审核 #173：逐项数字只留指标卡一处，卡头不再复述数字）
     const todoHead = w.find('.mk-card__head')
-    expect(todoHead.find('.mk-card__meta').text()).toContain('待处理反馈 10')
+    expect(todoHead.find('.mk-card__meta').text()).toContain('1 项待处理')
     // 行动行可点（非 disabled + act 类）——D7 修复前反馈计数恒 0 → 该行 actionable=false 被禁点
     const feedbackRow = w.findAll('.ow-rankrow').find((r) => r.text().includes('待处理反馈'))!
     expect(feedbackRow.attributes('disabled')).toBeUndefined()

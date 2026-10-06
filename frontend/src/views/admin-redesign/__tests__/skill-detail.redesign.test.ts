@@ -398,8 +398,11 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     await w.findAll('.mk-subtab')[0].trigger('click')
     await nextTick()
 
-    // 指标格：100 调用 / 0 失败（calls>0 显真实失败数，0 调用才显 —）/ 100%（rate-utils 1 位小数、整值省 .0）/ 2.2s
-    const values = w.findAll('.skd-metric__value').map((v) => v.text())
+    // 指标卡（共享 MkKpi，审核 #146）：100 调用 / 0 失败（calls>0 显真实失败数，0 调用才显 —）/
+    // 100%（rate-utils 1 位小数、整值省 .0）/ 2.2s
+    const cards = w.findAll('.mk-kpi')
+    expect(cards.length).toBe(4)
+    const values = cards.map((v) => v.find('.mk-kpi__num').text())
     expect(values).toEqual(['100', '0', '100%', '2.2s'])
     expect(w.text()).toContain('统计口径')
     // 统计口径对齐真实窗口（liveSkillStatsMap 默认近 7 天）：不再照抄 meta.stats 的「全量」
