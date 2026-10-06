@@ -26,7 +26,12 @@
       @glossary="glossaryOpen = true"
       @crumb-click="closeSubPage"
     >
-      <MockSkeletonTable v-if="booting" :rows="7" :cols="6" />
+      <!-- 骨架补 .mk-page 容器（2026-10-06 审核）：骨架卡本身无 margin/padding，
+           直接贴在内容区左上角；正式页面走 .mk-page 的 20/20 留白 —— 从加载态切到
+           正式页面的瞬间整页内容会右移/下移 20px。包一层同款容器即对齐同一条竖线。 -->
+      <div v-if="booting" class="mk-page">
+        <MockSkeletonTable :rows="7" :cols="6" />
+      </div>
       <!-- :key=详情 id+includeTest（回归 R3）：两个实体深链间前进/后退时强制重建组件，
            否则 <component> 同类型复用实例，旧实体的异步写入会串到新 id 的页面上；
            同 id 深链带/不带 includeTest 是两次不同取数（LearnerDetail 挂载时读 subPage.includeTest），
@@ -371,12 +376,15 @@ async function boot() {
   }
 }
 
-/** 复制诊断信息（bootError 原文，含后端 message；剪贴板不可用则静默） */
+/** 复制诊断信息（bootError 原文，含后端 message）。
+    此前 catch 里只有注释（静默失败），而文案明确要求用户「复制下方诊断信息发给研发」，
+    用户会以为已复制（2026-10-06 审核）。成功/失败都给 toast 反馈。 */
 async function copyDiagnostics() {
   try {
     await navigator.clipboard.writeText(`控制台数据加载失败：${bootError.value}`);
+    toast.success('诊断信息已复制');
   } catch {
-    /* 剪贴板权限不可用：忽略 */
+    toast.error('复制失败，请手动选中诊断信息');
   }
 }
 

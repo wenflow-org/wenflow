@@ -1,5 +1,15 @@
 <template>
-  <div class="mk-card skl-card" :style="{ '--skl-cols': cols }">
+  <!-- role=status + aria-live（2026-10-06 审核）：骨架屏是全站唯一启动占位
+       （AdminConsole）与全部异步页面的 loading 组件，此前是纯装饰节点，读屏用户
+       得不到「正在加载」的任何信息（对照 MkLoading 明确给了 role=status）。 -->
+  <div
+    class="mk-card skl-card"
+    :style="{ '--skl-cols': cols }"
+    role="status"
+    aria-live="polite"
+    aria-busy="true"
+    aria-label="内容加载中"
+  >
     <div class="skl" v-for="i in rows" :key="i">
       <span
         v-for="j in cols"

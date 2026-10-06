@@ -65,6 +65,7 @@ export interface MkGraphEdge {
  *     点图例会把整张图隐藏 → 去掉画布内图例，图例改由外层容器用 DOM 呈现。
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useIsDark } from '@/composables/useIsDark'
 import * as echarts from 'echarts/core'
 import { GraphChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
@@ -80,12 +81,19 @@ const props = withDefaults(
     nodes: MkGraphNode[]
     edges: MkGraphEdge[]
     height?: string
+    /** 主题：不传则跟随 <html data-theme>（与 MkChart 同款）。显式传值可覆盖。 */
     theme?: 'light' | 'dark'
     /** 是否隐藏"无任何关系"的孤立节点（默认隐藏：实测它们只是散在四周造成噪声） */
     hideIsolated?: boolean
   }>(),
-  { height: '520px', theme: 'light', hideIsolated: true }
+  { height: '520px', theme: undefined, hideIsolated: true }
 )
+
+/* 主题跟随（2026-10-06 审核）：默认原为写死 'light'，不跟随 <html data-theme>——
+   新增消费方漏传 theme 时，暗色页面会渲染亮色节点/标签与轴文字。MkChart 同族已用
+   本模式（props.theme ?? useIsDark()），此处对齐。 */
+const isDark = useIsDark()
+const resolvedTheme = computed<'light' | 'dark'>(() => props.theme ?? (isDark.value ? 'dark' : 'light'))
 
 const emit = defineEmits<{ (e: 'select', node: MkGraphNode | null): void }>()
 
@@ -174,7 +182,7 @@ function escapeHtml(text: string): string {
 }
 
 function buildOption(): EChartsCoreOption {
-  const dark = props.theme === 'dark'
+  const dark = resolvedTheme.value === 'dark'
   const nodes = visibleNodes.value
   const nodeIds = new Set(nodes.map((n) => n.id))
   const edges = props.edges.filter((e) => nodeIds.has(e.fromConceptId) && nodeIds.has(e.toConceptId))
@@ -302,13 +310,13 @@ function render() {
   if (!el.value) return
   // 主题是 echarts.init 时烘进实例的（tooltip 底色/文字色跟着主题走），setOption 换不掉：
   // 运行时切主题必须 dispose 重建，否则暗色页面里还弹亮底 tooltip。
-  if (chart && chartTheme !== props.theme) {
+  if (chart && chartTheme !== resolvedTheme.value) {
     chart.dispose()
     chart = null
   }
   if (!chart) {
-    chart = echarts.init(el.value, props.theme)
-    chartTheme = props.theme
+    chart = echarts.init(el.value, resolvedTheme.value)
+    chartTheme = resolvedTheme.value
     // 不注解入参（交给 ECharts 的 ECElementEvent），内部按图节点形状取值——避免 any
     chart.on('click', (params) => {
       if (params?.dataType !== 'node') { emit('select', null); return }
@@ -344,7 +352,7 @@ onMounted(() => {
   if (el.value) ro.observe(el.value)
 })
 
-watch(() => [props.nodes, props.edges, props.theme, props.hideIsolated], () => render(), { deep: true })
+watch(() => [props.nodes, props.edges, resolvedTheme.value, props.hideIsolated], () => render(), { deep: true })
 
 onBeforeUnmount(() => {
   ro?.disconnect()

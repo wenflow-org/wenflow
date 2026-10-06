@@ -269,7 +269,7 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     assisted.unmount();
   });
 
-  it('教学闭环定位：P1#8 真实模式隐藏静态卡（防伪造进度）；虚拟模式五环同构（教学回合 active，其余 done）', async () => {
+  it('教学闭环定位：真实模式隐藏该卡（防伪造进度）；虚拟模式五环由真实阶段状态机派生（2026-10-06 审核 #46）', async () => {
     // 真实会话：静态「已完成/本会话进行中」与真实进度无关，监控页上是负信息 → 整卡隐藏
     stableVirtualApi.getRealSessionConsole.mockResolvedValue(realTeachingPayload());
     const real = await mountCockpit('session-real', 'ts_re_1');
@@ -277,7 +277,7 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(real.text()).not.toContain('教学闭环定位');
     real.unmount();
 
-    // 虚拟会话：原型同构保留
+    // 虚拟会话：五环状态与同屏 stepper 同源（Learn 当前 → 前两环 done、教学回合 active、其余 idle）
     stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
     const w = await mountCockpit('session', 'vs_1');
 
@@ -292,8 +292,12 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(active[0].find('.cp-loop__name').text()).toBe('教学回合');
     expect(active[0].find('.cp-loop__meta').text()).toBe('本会话进行中');
     const done = steps.filter((s) => s.classes().includes('cp-loop__step--done'));
-    expect(done).toHaveLength(4);
+    expect(done.map((s) => s.find('.cp-loop__name').text())).toEqual(['目标对话', '路径规划']);
     expect(done.every((s) => s.find('.cp-loop__meta').text() === '已完成')).toBe(true);
+    // 未进入的阶段不得再被写成「已完成」（原写死状态的负信息）
+    const idle = steps.filter((s) => s.classes().includes('cp-loop__step--idle'));
+    expect(idle.map((s) => s.find('.cp-loop__name').text())).toEqual(['课后评估', '记忆复习']);
+    expect(idle.every((s) => s.find('.cp-loop__meta').text() === '未进入')).toBe(true);
 
     w.unmount();
   });
@@ -310,18 +314,20 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(steps[2].find('.cp-stp__meta').text()).toBe('进行中');
     expect(steps[3].classes()).toContain('cp-stp--idle');
     expect(steps[3].find('.cp-stp__meta').text()).toBe('待进入');
-    // done 步点 = ✓ 字标 + 真实 meta（Goal 对话轮次）；无真实数字的阶段不硬造
+    // done 步点 = ✓ 字标 + 真实 meta（Goal 学习者发言数）；无真实数字的阶段不硬造。
+    // 口径 2026-10-06 审核 §主题 4：原「对话 N 轮」数的是含平台回复的全量消息，
+    // 与同卡 statstrip「已用回合」（只数 user）打架；现统一为只数学习者发言。
     expect(steps[0].find('.cp-stp__dot').text()).toBe('✓');
-    expect(steps[0].find('.cp-stp__meta').text()).toBe('对话 1 轮');
+    expect(steps[0].find('.cp-stp__meta').text()).toBe('学习者发言 1');
     expect(steps[1].find('.cp-stp__meta').text()).toBe('已完成');
 
     // 卡头右侧完成计数
     expect(w.find('.cp-stepcard').text()).toContain('已完成');
     expect(w.find('.cp-stepcard').text()).toContain('/ 4 阶段');
 
-    // statstrip 三格：当前阶段 / 已用回合 / 下一阶段（真实派生）
-    const labels = w.findAll('.statstrip__label').map((e) => e.text());
-    const values = w.findAll('.statstrip__value').map((e) => e.text());
+    // 阶段推进读数（2026-10-06 审核 #50）：页私有 .statstrip 复刻已迁共享 MkStatStrip grid 档
+    const labels = w.findAll('.mk-stat__label').map((e) => e.text());
+    const values = w.findAll('.mk-stat__value').map((e) => e.text());
     expect(labels).toEqual(['当前阶段', '已用回合', '下一阶段']);
     expect(values).toEqual(['Learn', '2', '总结']);
 

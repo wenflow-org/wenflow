@@ -25,13 +25,23 @@
   color-scheme: light;
 
   /* 层级 token：抽屉/弹窗/菜单统一 z-index，避免散落硬编码。
-     critical：全屏兜底层（会话校验遮罩/启动失败卡），必须盖过一切业务弹层与 toast
-     （--mk-z-toast 零消费已删。） */
+     critical：全屏兜底层（会话校验遮罩/启动失败卡），必须盖过一切业务弹层与 toast */
   --mk-z-menu: 60;
   --mk-z-drawer: 240;
   --mk-z-sidebar: 220;
   --mk-z-modal: 300;
   --mk-z-critical: 500;
+  /* Toast：压在所有业务覆盖层之上、critical 兜底层之下（2026-10-06 审核）：
+     此前 ToastHost 硬编码 9999，脱离本词汇表。取 450（> modal 300、< critical 500），
+     与上方「critical 必须盖过一切业务弹层与 toast」的不变量一致。
+     （tokens.css 另有一套规范层 --wf-z-*，本文件是业务层词汇，两者分工见
+      design-system.css 的说明。） */
+  --mk-z-toast: 450;
+  /* 行内 popover（useRowMenu 的 ⋯ 菜单等，2026-10-06 审核 #205）：层数此前只以内联
+     TS 字面量存在（zIndex: 120），原语里的 --mk-z-menu(60) 在行内菜单上恒被覆盖。
+     登记为独立档：行内浮层需高于同页静态内容与菜单层、低于抽屉/弹窗。
+     菜单若嵌在抽屉内，120 在该抽屉的层叠上下文里依然够用。 */
+  --mk-z-popover: 120;
 
   /* 抽屉宽度档 token：所有右侧详情抽屉统一走此阶梯（base 560 → lg 700 → xl 880 → xxl 1040）。
      `.mk-drawer__panel` 用 base，`.mk-drawer__panel--wide` 用 lg；4K 各升一档。
@@ -278,13 +288,15 @@
   /* 字号阶梯 token（A 组设计改进）：全站字号单一来源，替代散落 9~20px 硬编码。
      基础正文 14px；辅助/说明文案下限 12px。4K 档仍由 shared.css 媒体查询放大。
      （--mk-fs-11 / -14 / -15 零消费已删：文本一律走下方三个角色 token，
-     展示型字号走 -12_5 / -13 / -16 / -18 / -20 存量档。）
+     展示型字号走 -12_5 / -16 / -18 / -20 存量档。）
      注：--mk-fs-12: 12px 必须保留——守卫规则 8 的引用正则不含下划线，
      var(--mk-fs-12_5) 会被截断成 --mk-fs-12 参与查字典，删了它 V2KnowledgeMap
      等处的 -12_5 引用会被误判「未定义」。 */
   --mk-fs-12: 12px;
   --mk-fs-12_5: 12.5px;
-  --mk-fs-13: 13px;
+  /* --mk-fs-13 零消费已删（2026-10-06 审核 §主题 6）：它是「档外字号」的供货源，
+     Orchestrator 节点名 / MkGraphExplorer 芯片曾引用它，同屏出现第 4 个文本档。
+     两处改走 --mk-fs-micro 后本 token 已无引用者。 */
   --mk-fs-16: 16px;
   --mk-fs-18: 18px;
   --mk-fs-20: 20px;
@@ -300,7 +312,31 @@
   --mk-fs-micro: var(--wf-fs-micro);
   --mk-fs-body: var(--wf-fs-body);
   --mk-fs-emphasis: var(--wf-fs-emphasis);
+  /* 档位覆写放在本文件（全局加载）而非 mk-primitives.css（2026-10-06 审核 §主题 6）：
+     后者只被 AdminConsole.vue / SkillDesignPage.vue 懒加载，于是 /admin/login 这类
+     独立路由停在基准值 12/14/15，1440→1920 之间整页不放大——同视口比同域其它页
+     少半像素档。基准值本就在本文件，档位覆写与它同处才是单一来源。 */
+}
 
+/* 1440px 中间档：文本档只有三级角色（SPEC §1），本档只覆写这三个 token。 */
+@media (min-width: 1440px) {
+  :root {
+    --mk-fs-micro: 12.5px;
+    --mk-fs-body: 14.5px;
+    --mk-fs-emphasis: 15.5px;
+  }
+}
+
+/* 1920px 档（D4 补丁：最低标准 1920×1080 全屏时落在 1440 档，字号/间距偏小）。 */
+@media (min-width: 1920px) {
+  :root {
+    --mk-fs-micro: 13px;
+    --mk-fs-body: 15px;
+    --mk-fs-emphasis: 16px;
+  }
+}
+
+:root {
   /* 间距阶梯 token（A 组设计改进）：替代散落 10/12/14/16/18px 硬编码。
      改指 --wf-space-*（原为同值字面量双写）；--mk-space-7 零消费已删，
      -8 按 tokens.css 别名映射表转接（8 → space-12）。 */
@@ -590,6 +626,11 @@ html[data-theme='dark'] {
   --mk-graph-accent-purple-ink: #c4b5fd;
   --mk-graph-flag-purple-ink: #d8b4fe;
   --mk-graph-warn-ink: #fcd34d;
+  /* 暗色覆写（2026-10-06 审核 §主题 1/6）：原注释记「err-ink 暗色不变，故不在此覆写」，
+     但亮色档 #dc2626 压暗面卡 #202124 实测 3.33:1（小字 AA 需 4.5:1）——失败定位的
+     核心信息恰是暗色下最难读的一列（.wf-row__errcode / .wf-fact--bad 共用本令牌）。
+     #f87171 = 暗色 --mk-red，对暗面实测 5.82:1。 */
+  --mk-graph-err-ink: #f87171;
   --mk-graph-err-strong-ink: #fca5a5;
   --mk-graph-flow-out: #343537;
   --mk-graph-port-ink: #8fb3ff;

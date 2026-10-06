@@ -44,13 +44,15 @@ const meta = computed(
   font-weight: 800;
   line-height: 1;
   vertical-align: -4px;
-  background: #94a3b8;
+  /* 灰档底色原为 #94a3b8：白字对比仅 2.56:1（小字 AA 要求 4.5:1），且未知 type 兜底
+     就落这一档——后台返回任何新成就类型都会命中。改深 slate #64748b（白字实算 4.76:1）。 */
+  background: #64748b;
 }
 .ach-icon--info { background: var(--mk-blue); }
 .ach-icon--ok { background: var(--mk-green-fill, #15803d); }
 .ach-icon--warn { background: var(--mk-amber-fill, #b45309); }
-.ach-icon--mastery { background: #7c3aed; }
-.ach-icon--muted { background: #94a3b8; }
+.ach-icon--mastery { background: var(--mk-badge-hidden-fg); }
+.ach-icon--muted { background: #64748b; }
 .ach-icon--lg {
   width: 26px;
   height: 26px;

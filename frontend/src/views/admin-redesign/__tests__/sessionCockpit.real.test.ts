@@ -221,10 +221,11 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.text()).toContain('真实会话');
     expect(wrapper.find('.mk-back').text()).toContain('会话列表');
 
-    // 阶段推进 stepper：4 步 + meta 副标（Path 1/2 里程碑、Goal 对话轮次）
+    // 阶段推进 stepper：4 步 + meta 副标（Path 1/2 里程碑、Goal 学习者发言数）
+    // （口径 2026-10-06 审核 §主题 4：原「对话 N 轮」含平台回复，与同卡「已用回合」打架）
     expect(wrapper.findAll('.cp-stp')).toHaveLength(4);
     expect(wrapper.text()).toContain('1/2 里程碑');
-    expect(wrapper.text()).toContain('对话 1 轮');
+    expect(wrapper.text()).toContain('学习者发言 1');
 
     // 时间线日志卡（真实模式由 payload.timeline 承载，会话总结已生成在尾部）
     const logText = wrapper.find('.cp-logs').text();

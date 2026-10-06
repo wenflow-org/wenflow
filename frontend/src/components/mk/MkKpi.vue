@@ -85,20 +85,9 @@ button.mk-kpi:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
 .mk-kpi--compact .mk-kpi__label { font-size: var(--mk-fs-micro); }
 .mk-kpi--compact .mk-kpi__num { font-size: var(--mk-fs-emphasis); line-height: 1.2; }
 
-/* 横向紧凑形态（低分辨率区间媒体查询触发）：
-   label+hint 左侧、数字右侧单行排布，高度 ≈56px（TailAdmin stat card 形态） */
-.mk-kpi--row {
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
-  column-gap: 8px;
-  align-items: baseline;
-  padding: 8px 12px;
-  gap: 1px 8px;
-  border-radius: var(--mk-radius-xl);
-}
-.mk-kpi--row .mk-kpi__label { grid-column: 1; grid-row: 1; font-size: var(--mk-fs-micro); }
-.mk-kpi--row .mk-kpi__num { grid-column: 2; grid-row: 1 / span 2; font-size: 19px; text-align: right; }
-.mk-kpi--row .mk-kpi__hint { grid-column: 1; grid-row: 2; font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 横向紧凑形态（低分辨率区间媒体查询触发）已删（2026-10-06 审核 §主题 3）：
+   `.mk-kpi--row` 组件模板从不输出该类、无 prop、也无媒体查询接线，注释里说的
+   「低分辨率区间触发」从未实现，属死样式。如需横排读数条，应先加 prop 再写样式。 */
 
 /* 暗色模式（D1）：底色已与普通卡片同档（--mk-surface），无需覆写 */
 html[data-theme='dark'] .mk-kpi { border-color: var(--mk-line); }

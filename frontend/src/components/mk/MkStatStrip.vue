@@ -8,7 +8,10 @@
     <!-- 分格指标条：标签在上、数值在下，格子间 1px 竖分隔；窄屏自动换行。
          inline（默认）：用于页头「多组指标平铺成一句话」的场景（虚拟学习者等），
                          提供标签/数值层级与可点击筛选。
-         grid：实体页头「一行四格读数条」（原型 statstrip，hero 与二级页签之间）。 -->
+         grid：实体页头「一行四格读数条」（原型 statstrip，hero 与二级页签之间）。
+         role 分工（2026-10-06 审核）：grid 档外层是 role=list，**不可点的**格子才挂
+         role=listitem；可点格子保持原生 <button> 语义（role=listitem 会覆盖掉按钮角色，
+         使 aria-pressed 失效、读屏把按钮读成列表项）。 -->
     <template v-for="(item, i) in items" :key="item.key ?? i">
       <button
         v-if="item.clickable"
@@ -17,7 +20,6 @@
         :class="[item.tone ? `mk-stat--${item.tone}` : '', { 'mk-stat--on': item.active }]"
         :title="item.title || undefined"
         :aria-pressed="item.active ? 'true' : 'false'"
-        :role="layout === 'grid' ? 'listitem' : undefined"
         @click="$emit('select', item.key)"
       >
         <span class="mk-stat__label">{{ item.label }}</span> <span class="mk-stat__value">{{ item.value }}</span>

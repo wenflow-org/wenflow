@@ -36,7 +36,12 @@ function onDocMousedown(e: MouseEvent) {
   if (root && e.target instanceof Node && !root.contains(e.target)) open.value = false
 }
 function onDocKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && open.value) open.value = false
+  if (e.key !== 'Escape' || !open.value) return
+  /* 拦下冒泡（2026-10-06 审核，与 useRowMenu.ts 既定做法同款）：列菜单若出现在
+     抽屉/弹窗内，一次 Esc 会被 window 上的 useEscape LIFO 栈再关掉底层一层。
+     当前 9 处调用方都在卡头（不在覆盖层内），但契约应与行内菜单一致。 */
+  e.stopPropagation()
+  open.value = false
 }
 
 onMounted(() => {

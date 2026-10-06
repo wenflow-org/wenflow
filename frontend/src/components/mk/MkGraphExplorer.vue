@@ -88,7 +88,7 @@
             <MkGraph
               :nodes="levelNodes"
               :edges="levelEdges"
-              :theme="theme"
+              :theme="resolvedTheme"
               :height="height"
               :hide-isolated="hideIsolated"
               @select="selected = $event"
@@ -211,6 +211,7 @@
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import MkGraph, { relationStyleOf } from './MkGraph.vue'
+import { useIsDark } from '@/composables/useIsDark'
 import type { MkGraphEdge, MkGraphNode } from './MkGraph.vue'
 import SkeletonLoader from '../ui/SkeletonLoader.vue'
 import V2ResultState from '../ui/V2ResultState.vue'
@@ -223,6 +224,7 @@ const props = withDefaults(
     paths?: Array<{ id: string; title: string | null }>
     /** 当前路径筛选（空 = 全部路径）。由父组件负责重新请求 */
     pathId?: string | null
+    /** 主题：不传则跟随 <html data-theme>（与 MkGraph/MkChart 同款） */
     theme?: 'light' | 'dark'
     height?: string
     loading?: boolean
@@ -238,7 +240,7 @@ const props = withDefaults(
   {
     paths: () => [],
     pathId: null,
-    theme: 'light',
+    theme: undefined,
     height: '520px',
     loading: false,
     error: null,
@@ -450,8 +452,13 @@ const labelById = computed(() => new Map(props.nodes.map((n) => [n.id, n.label])
 
 /** 图例线样式与画布边线同源（relationStyleOf 按 theme 出色）：此前图例写死 --mk-blue，
  *  画布实际是 #7a8ba6，图例教的颜色和图里画的不是同一个 */
+/* 主题跟随（2026-10-06 审核）：默认原为写死 'light'，不跟随 <html data-theme>——
+   图例线色（relationStyleOf 按 dark 出色）会与画布不一致。与 MkGraph/MkChart 同款。 */
+const isDark = useIsDark()
+const resolvedTheme = computed<'light' | 'dark'>(() => props.theme ?? (isDark.value ? 'dark' : 'light'))
+
 const legendLines = computed(() => {
-  const dark = props.theme === 'dark'
+  const dark = resolvedTheme.value === 'dark'
   return {
     prereq: relationStyleOf('prerequisite', dark),
     part: relationStyleOf('part_of', dark)
@@ -564,7 +571,9 @@ function onPractice() {
   background: var(--surface);
   color: var(--muted);
   font: inherit;
-  font-size: var(--mk-fs-13);
+  /* --mk-fs-13 是档外字面量 token（1440 档三档为 12.5/14.5/15.5），
+     用角色 token 取代，避免同屏第 4 个文本档（2026-10-06 审核 §主题 6）。 */
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;

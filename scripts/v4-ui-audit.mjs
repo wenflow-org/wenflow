@@ -338,7 +338,10 @@ const MEASURE = String.raw`(() => {
   out.offScaleFontKinds = Object.keys(offScale).length;
 
   // 8) 表格行高
-  const rows = Array.from(document.querySelectorAll('table tbody tr')).map((tr) => Math.round(tr.getBoundingClientRect().height)).filter((h) => h > 0);
+  //    同时覆盖 div+role=table 的自绘表（TokenCost/TcRankTable 等）——此前只扫原生
+  //    table tbody tr，这类表的行高从未进过量测（2026-10-06 审核 #115）。
+  const rows = Array.from(document.querySelectorAll('table tbody tr, [role="table"] [role="row"]'))
+    .map((tr) => Math.round(tr.getBoundingClientRect().height)).filter((h) => h > 0);
   out.tableRows = { n: rows.length, min: rows.length ? Math.min(...rows) : null, under40: rows.filter((h) => h < 40).length };
 
   // 9) 对比度（合成背景链，跳过背景图/渐变祖先）

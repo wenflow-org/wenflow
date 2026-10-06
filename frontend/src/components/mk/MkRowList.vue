@@ -13,12 +13,16 @@
 <template>
   <div class="mk-rows">
     <slot />
-    <p v-if="empty && !loading" class="mk-rows__empty">
+    <!-- 行内空态走规范指定的共享类（2026-10-06 审核）：此前自搓 .mk-rows__empty，
+         与 .mk-empty--line 并存 → 同屏两种内联空态（左边距/字号/色阶都不同），
+         新页面不知道该跟哪一套。ADMIN_VISUAL_LAYER_SPEC §6 指定「筛选后 0 行的
+         卡内列表用 .mk-empty--line」。 -->
+    <p v-if="empty && !loading" class="mk-empty mk-empty--line">
       {{ emptyText || '暂无记录' }}
       <span v-if="emptyHint" class="mk-rows__hint">{{ emptyHint }}</span>
     </p>
     <div v-else-if="loading" class="mk-rows__loading">
-      <MkLoading inline min :text="loadingText || '加载中…'" />
+      <MkLoading inline :text="loadingText || '加载中…'" />
     </div>
   </div>
 </template>
@@ -39,12 +43,8 @@ defineProps<{
 
 <style scoped>
 .mk-rows { display: grid; }
-.mk-rows__empty {
-  margin: 0;
-  padding: 18px 16px;
-  color: var(--mk-faint);
-  font-size: var(--mk-fs-micro);
-}
+/* .mk-rows__empty 私有样式已删（2026-10-06 审核）：空态改用共享 .mk-empty--line。
+   .mk-rows__hint 保留——它是本原语的空态副行，共享类没有对应钩子。 */
 .mk-rows__hint { display: block; margin-top: 2px; color: var(--mk-faint); }
 .mk-rows__loading { padding: 14px 16px; }
 </style>

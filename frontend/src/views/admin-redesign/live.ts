@@ -437,8 +437,9 @@ export interface LiveLogStats {
   bySource?: Record<string, number>
   /** 测试（金丝雀）日志数：默认视图已排除 canary，后端按同筛选口径单独计数（驱动「测试 N」入口显隐） */
   canary?: number
-  /** 延迟分位（毫秒）：后端 stats 提供时优先（P50/P99 对标 Langfuse 观测台核心指标） */
-  latencyPercentiles?: { p50?: number; p99?: number }
+  /** 延迟分位（毫秒）：后端 stats 提供时优先（P50/P99 对标 Langfuse 观测台核心指标）。
+      p90 供延迟分级（琥珀档）用——后端给则优先，缺则样本内取 0.9 分位（2026-10-06 审核 #105）。 */
+  latencyPercentiles?: { p50?: number; p90?: number; p99?: number }
 }
 export const liveLogStats = ref<LiveLogStats | null>(null)
 
@@ -1611,7 +1612,19 @@ async function fetchLiveVirtuals(): Promise<void> {
     })
     return {
       id: String(p.id),
-      name: String(profile.name || profile.nameHint || p.userName || p.id),
+      /* 显示名链必须与「学习者卡库」同源（2026-10-06 审核 §主题 5）：
+         卡库用 card-import.service 的 nickname || personaSeed.nameHint || cleanDisplayName(users.name) || key || email；
+         此处此前只用 profile.name || profile.nameHint || userName || id —— 两链对同一张卡给出不同字符串，
+         vlAvatar 哈希（「同一人恒定同色」）随之分裂：480 张卡实测 235 张两页显示名不同、
+         205 张首字不同、207 张色档不同。优先取 personaSeed.nickname（卡的人设短语），与卡库 nickname 同源。 */
+      name: String(
+        (profile.personaSeed as Record<string, unknown> | undefined)?.nickname
+        || profile.nickname
+        || profile.name
+        || profile.nameHint
+        || p.userName
+        || p.id
+      ),
       goal: String(p.learningGoal || '未设置目标'),
       level: String(p.knowledgeLevel || ''),
       story: String(profile.background || profile.corePersonality || p.notes || ''),

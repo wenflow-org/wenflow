@@ -66,7 +66,7 @@ userStore.initFromStorage();
   border-radius: 8px;
   background: var(--mk-blue-fill, #2f6ae0);
   color: #fff;
-  font-size: 13px;
+  font-size: var(--mk-fs-micro);
   font-weight: 700;
   text-decoration: none;
   transform: translateY(-200%);

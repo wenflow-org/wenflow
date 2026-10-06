@@ -79,10 +79,13 @@ export function useCockpitStages(deps: {
     }
   }
 
-  /* 阶段条进度副标（遗留项 2 C2）：当前阶段显示 x/y 或百分比；数据源不足给空串 */
+  /* 阶段条进度副标（遗留项 2 C2）：当前阶段显示 x/y 或百分比；数据源不足给空串。
+     口径（2026-10-06 审核 §主题 4）：`goalConversationMessages` 含平台回复，数全量会把
+     「2 学习者发言 + 2 平台回复」说成「对话 4 轮」，与同卡 statstrip 的「已用回合」
+     （只数 user）打架。改为只数学习者发言并显式命名，两处读数同源可比。 */
   const goalRoundText = computed(() => {
-    const n = goalConversationMessages.value.length
-    if (n) return `对话 ${n} 轮`
+    const n = goalConversationMessages.value.filter((m) => m.role === 'user').length
+    if (n) return `学习者发言 ${n}`
     const confidence = numberValue(stageStatus.value.goal?.confidence)
     if (confidence !== null) return `置信度 ${Math.round(confidence * 100)}%`
     return ''

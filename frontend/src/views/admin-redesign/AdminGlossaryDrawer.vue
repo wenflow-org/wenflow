@@ -75,6 +75,7 @@
                   <span class="agd__term-name">{{ m.label }}<span class="agd__term-en mono">{{ m.status }}</span></span>
                   <span class="agd__term-def">{{ m.hint }}</span>
                 </li>
+                <li v-if="filteredCompletion.length === 0" class="agd__empty">无匹配词条</li>
               </ul>
               <h4 class="agd__section-title">健康区三分语义</h4>
               <ul class="agd__list">
@@ -82,6 +83,7 @@
                   <span class="agd__term-name">{{ s.label }}<span class="agd__term-en mono">{{ s.id }}</span></span>
                   <span class="agd__term-def">{{ s.hint }}</span>
                 </li>
+                <li v-if="filteredSemantics.length === 0" class="agd__empty">无匹配词条</li>
               </ul>
             </section>
 
@@ -93,6 +95,7 @@
                   <span class="agd__term-name">{{ s.label }}<span class="agd__term-en mono">{{ s.id }}</span></span>
                   <span class="agd__term-def">{{ s.hint }}</span>
                 </li>
+                <li v-if="filteredStages.length === 0" class="agd__empty">无匹配词条</li>
               </ul>
             </section>
 
@@ -200,7 +203,10 @@ const activeSection = ref('flow')
 
 function jumpToSection(id: string) {
   const el = bodyRef.value?.querySelector<HTMLElement>(`#agd-sec-${id}`)
-  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  /* 尊重「减少动态效果」（2026-10-06 审核）：全站 reduced-motion 兜底只压 CSS 动画/过渡，
+     对 scrollIntoView 的 smooth 行为无效。 */
+  const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  el?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
 }
 function onBodyScroll() {
   const body = bodyRef.value
@@ -208,7 +214,10 @@ function onBodyScroll() {
   let current = NAV[0].id
   for (const s of NAV) {
     const el = body.querySelector<HTMLElement>(`#agd-sec-${s.id}`)
-    if (el && el.offsetTop <= body.scrollTop + 240) current = s.id
+    /* 同坐标系比较（2026-10-06 审核）：el.offsetTop 相对定位祖先 .mk-drawer__panel，
+       而 body.scrollTop 是 .agd__body 自身的滚动量——两者差一个 body 的 offsetTop（实测 205px），
+       原判据恒定偏移一个「头+搜索行」的高度。改用 rect 差。 */
+    if (el && el.getBoundingClientRect().top - body.getBoundingClientRect().top <= 240) current = s.id
   }
   activeSection.value = current
 }
@@ -222,12 +231,21 @@ function showCategory(id: string) {
 const flowRoles = computed<PromptRoleMeta[]>(() => [...promptRoles.value, ...FLOW_EXTRAS])
 
 function countOf(id: string) {
-  if (id === 'all') return flowRoles.value.length + completionStates.value.length + semantics.value.length + stages.value.length + terms.value.length + docs.value.length
+  /* 搜索生效时分类计数必须跟随过滤（2026-10-06 审核）：此前用全量长度，输入「移交」后
+     pill 仍显示「全部（83）」而正文只剩 1 条，数字与结果对不上。直接引用过滤后的集合。 */
+  const searching = !!kwLower.value
+  if (id === 'all') {
+    if (searching) {
+      return filteredRoles.value.length + filteredCompletion.value.length + filteredSemantics.value.length
+        + filteredStages.value.length + termsOf('concept').length + termsOf('health').length + filteredDocs.value.length
+    }
+    return flowRoles.value.length + completionStates.value.length + semantics.value.length + stages.value.length + terms.value.length + docs.value.length
+  }
   /* flow 分类 = 动态 promptRoles + 固有语义 + terms 中 category='flow' 的词条（勿写死数量：静态/接口词条会增减） */
-  if (id === 'flow') return flowRoles.value.length + terms.value.filter((t) => t.category === 'flow').length
-  if (id === 'status') return completionStates.value.length + semantics.value.length
-  if (id === 'stage') return stages.value.length
-  return terms.value.filter((t) => t.category === id).length
+  if (id === 'flow') return filteredRoles.value.length + terms.value.filter((t) => t.category === 'flow' && (!searching || t.term.toLowerCase().includes(kwLower.value) || t.def.toLowerCase().includes(kwLower.value))).length
+  if (id === 'status') return filteredCompletion.value.length + filteredSemantics.value.length
+  if (id === 'stage') return filteredStages.value.length
+  return terms.value.filter((t) => t.category === id && (!searching || t.term.toLowerCase().includes(kwLower.value) || t.def.toLowerCase().includes(kwLower.value))).length
 }
 
 function termsOf(id: 'concept' | 'health') {

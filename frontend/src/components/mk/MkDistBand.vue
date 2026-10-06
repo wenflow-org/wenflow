@@ -6,19 +6,17 @@
     </div>
     <div class="mk-distband__cardbody">
       <div class="stageband mk-distband__band" role="group" :aria-label="ariaLabel || title || '状态分布'">
+        <!-- 分段条是装饰层（2026-10-06 审核 #194）：此前每段 role=button + tabindex=0，
+             与下方图例按钮渲染同一批桶 → 同一个桶两个 Tab 停靠点，n 个桶要穿 2n 次 Tab，
+             且分段无可访问名（只有 title）。键盘选中收敛到图例按钮，分段只保留鼠标点击。 -->
         <template v-for="b in bins" :key="b.key">
           <span
             v-if="b.n > 0"
-            role="button"
-            tabindex="0"
             class="mk-distband__seg"
             :class="{ 'mk-distband__seg--on': activeKey === b.key }"
             :style="{ width: widthOf(b), background: b.tone }"
             :title="segTitle(b)"
-            :aria-pressed="activeKey === b.key"
             @click="emit('select', b.key)"
-            @keydown.enter.prevent="emit('select', b.key)"
-            @keydown.space.prevent="emit('select', b.key)"
           ></span>
         </template>
       </div>

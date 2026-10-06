@@ -58,7 +58,9 @@ const dismissToast = (item: ToastItem) => {
   left: 50%;
   bottom: 26px;
   transform: translateX(-50%);
-  z-index: 9999;
+  /* 层级走全站 token（2026-10-06 审核）：原为硬编码 9999，脱离 --mk-z-* 词汇表；
+     toast 应压在所有业务覆盖层之上、critical 兜底层之下。 */
+  z-index: var(--mk-z-toast, 450);
   display: flex;
   flex-direction: column;
   gap: 10px;

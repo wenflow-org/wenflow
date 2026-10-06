@@ -1,7 +1,14 @@
 <template>
   <div class="mshell" :data-collapsed="collapsed || forcedCollapse ? 'true' : 'false'" :data-navopen="mobileNavOpen ? 'true' : 'false'">
-    <!-- 迷你侧边栏（导航 + 侧栏再设计展示） -->
-    <aside class="mshell__side">
+    <!-- 迷你侧边栏（导航 + 侧栏再设计展示）。≤768 时它变移动端抽屉（#191）：
+         打开态加 role=dialog/aria-modal，焦点陷阱/背景锁滚/关闭回焦由 useOverlay 提供
+         （与 AdminGlossaryDrawer 同款）。 -->
+    <aside
+      ref="sideRef"
+      class="mshell__side"
+      :role="mobileNavOpen ? 'dialog' : undefined"
+      :aria-label="mobileNavOpen ? '管理导航' : undefined"
+    >
       <div class="mshell__brand">
         <!-- 展开：长方形全 logo（图标 + 问流）；折叠：正方形图标。
              暗色用深色版资产（深墨字标→浅色，保留品牌蓝），而非 CSS 提亮滤镜。
@@ -90,14 +97,14 @@
       </footer>
     </aside>
 
-    <!-- 移动端抽屉遮罩（原型 .navscrim 判例：点遮罩收抽屉；≤768 渲染） -->
-    <button
+    <!-- 移动端抽屉遮罩（原型 .navscrim 判例：点遮罩收抽屉；≤768 渲染）。
+         关闭走 useMaskClose（按下+松开同点守卫，防抽屉内选中文本拖到遮罩误关）。 -->
+    <div
       v-if="mobileNavOpen"
-      type="button"
+      ref="navScrimRef"
       class="mshell__navscrim"
-      aria-label="关闭导航"
-      @click="mobileNavOpen = false"
-    ></button>
+      role="presentation"
+    ></div>
 
     <!-- 主区：顶栏（面包屑 / 搜索 / 主题 / 账户，newui/admin 原型壳）+ 内容 -->
     <div class="mshell__main">
@@ -105,7 +112,7 @@
         <!-- 移动端菜单钮（原型 ≤768 判例：抽屉开合；桌面 display:none） -->
         <button
           type="button"
-          class="mshell__menu-btn"
+          class="mshell__menu-btn mshell__square-btn"
           aria-label="打开导航"
           :aria-expanded="mobileNavOpen ? 'true' : 'false'"
           @click="mobileNavOpen = !mobileNavOpen"
@@ -113,9 +120,9 @@
           <Menu :size="18" :stroke-width="1.75" aria-hidden="true" />
         </button>
         <button
-          v-if="crumb"
+          v-if="crumb && crumbClickable !== false"
           type="button"
-          class="mshell__top-back"
+          class="mshell__top-back mshell__square-btn"
           :title="`返回${topTitle}`"
           aria-label="返回上一级"
           @click="$emit('crumb-click')"
@@ -129,26 +136,39 @@
         <div class="mshell__top-grow" aria-hidden="true"></div>
         <div class="mshell__search" ref="searchRef">
           <Search :size="15" :stroke-width="1.75" aria-hidden="true" class="mshell__search-icon" />
+          <!-- combobox 语义 + 方向键导航（2026-10-06 审核 #192）：此前输入框与结果弹层
+               之间没有 ARIA 关系（无 combobox/aria-expanded/aria-controls/aria-activedescendant），
+               结果项是 role=option 的按钮却不参与任何键盘导航，键盘只能 Enter 去第一条。 -->
           <input
             v-model="searchQuery"
             class="mshell__search-input"
             type="text"
+            role="combobox"
+            :aria-expanded="searchOpen && !!searchHits.length"
+            aria-controls="mshell-search-list"
+            aria-autocomplete="list"
+            :aria-activedescendant="searchActiveId || undefined"
             placeholder="搜索页面…"
             aria-label="搜索页面，按 / 聚焦"
             @focus="searchOpen = true"
-            @input="searchOpen = true"
-            @keydown.enter.prevent="searchGoFirst"
+            @input="onSearchInput"
+            @keydown.enter.prevent="searchGoActive"
+            @keydown.down.prevent="searchMove(1)"
+            @keydown.up.prevent="searchMove(-1)"
             @keydown.escape.prevent="closeSearch"
           />
           <kbd class="mshell__search-kbd" aria-hidden="true">/</kbd>
-          <div v-if="searchOpen && searchQuery.trim()" class="mshell__search-pop" role="listbox" aria-label="页面搜索结果">
+          <div v-if="searchOpen && searchQuery.trim()" id="mshell-search-list" class="mshell__search-pop" role="listbox" aria-label="页面搜索结果">
             <button
-              v-for="hit in searchHits"
+              v-for="(hit, i) in searchHits"
+              :id="`mshell-search-opt-${hit.id}`"
               :key="hit.id"
               type="button"
               role="option"
-              :aria-selected="hit.id === current"
+              :aria-selected="i === searchActiveIndex"
               class="mshell__search-hit"
+              :class="{ 'mshell__search-hit--active': i === searchActiveIndex }"
+              @mousemove="searchActiveIndex = i"
               @click="searchGo(hit)"
             >
               <component :is="hit.icon" :size="15" :stroke-width="1.75" aria-hidden="true" />
@@ -217,7 +237,7 @@
                  原型的「登录页预览 / 账户设置」2026-10-05 用户拍板删除——前者是原型残留
                  （已登录守卫会把新标签页弹回总览，永远看不到登录页），后者开到用户侧
                  /user/account（管理端无独立账户页，跨侧跳转语义错误，且暗示了不存在的功能） -->
-            <button type="button" role="menuitem" class="mshell__user-item" @click="logout">
+            <button type="button" role="menuitem" class="mshell__user-item" @click="confirmLogout">
               <LogOut :size="15" :stroke-width="1.75" aria-hidden="true" />
               <span>退出登录</span>
             </button>
@@ -227,11 +247,16 @@
       <main ref="contentEl" class="mshell__content">
         <slot />
       </main>
-      <!-- 滚动修复 #9：回到顶部（>2 屏长页出现，全站统一由 Shell 挂载） -->
+      <!-- 滚动修复 #9：回到顶部（>2 屏长页出现，全站统一由 Shell 挂载）
+           隐藏态只靠 opacity:0 + pointer-events:none 不足（2026-10-06 审核 §主题 6）：
+           按钮仍在 Tab 序里，键盘用户每次进页第一个 Tab 就落在完全看不见的控件上。
+           tabindex/aria-hidden 随可见态翻转，双保险。 -->
       <button
         type="button"
         class="mk-backtop"
         :class="{ 'mk-backtop--show': backtopVisible }"
+        :tabindex="backtopVisible ? 0 : -1"
+        :aria-hidden="!backtopVisible"
         aria-label="回到顶部"
         @click="backToTop"
       >
@@ -248,6 +273,9 @@ import { ChevronLeft, CircleHelp, LogOut, Menu, Moon, PanelLeftClose, PanelLeftO
 import { MOCK_SCENES, type MockSceneDef } from './manifest'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live'
 import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
+import { askConfirm } from './useConfirm'
+import { useEscape } from './useEscape'
+import { useOverlay, useMaskClose } from './useOverlay'
 import { readTheme, writeTheme, applyDocumentTheme } from '@/utils/theme'
 
 const props = defineProps<{ current: string; crumb?: string; crumbTitle?: string; crumbClickable?: boolean; release?: boolean }>()
@@ -332,17 +360,36 @@ const searchHits = computed(() => {
   if (!q) return []
   return MOCK_SCENES.filter((s) => `${s.label} ${s.group}`.toLowerCase().includes(q)).slice(0, 8)
 })
+/* 结果项键盘导航（#192）：activeIndex 是列表内高亮位，-1 = 未选（Enter 回落到第一条）。 */
+const searchActiveIndex = ref(-1)
+const searchActiveId = computed(() => {
+  const hit = searchHits.value[searchActiveIndex.value]
+  return hit ? `mshell-search-opt-${hit.id}` : ''
+})
+function onSearchInput() {
+  searchOpen.value = true
+  searchActiveIndex.value = -1
+}
+function searchMove(delta: number) {
+  const n = searchHits.value.length
+  if (!n) return
+  if (!searchOpen.value) searchOpen.value = true
+  // 环形移动：从 -1 向下到 0、向上到末条
+  searchActiveIndex.value = (searchActiveIndex.value + delta + n) % n
+}
 function searchGo(scene: MockSceneDef) {
   closeSearch()
   go(scene)
 }
-function searchGoFirst() {
-  const first = searchHits.value[0]
-  if (first) searchGo(first)
+/* Enter：落到当前高亮项；无高亮（未用方向键）时回落到第一条，保持既有手感 */
+function searchGoActive() {
+  const hit = searchHits.value[searchActiveIndex.value] ?? searchHits.value[0]
+  if (hit) searchGo(hit)
 }
 function closeSearch() {
   searchOpen.value = false
   searchQuery.value = ''
+  searchActiveIndex.value = -1
 }
 /** `/` 全局聚焦页面搜索（输入态不抢焦点） */
 function onGlobalKey(e: KeyboardEvent) {
@@ -377,6 +424,16 @@ function syncMobileNavViewport() {
   if (mobileMq && !mobileMq.matches) mobileNavOpen.value = false
 }
 watch(() => props.current, () => { mobileNavOpen.value = false })
+
+/* 移动端抽屉的覆盖层行为（2026-10-06 审核 #191）：此前只是 CSS 位移 + 手写遮罩，
+   无焦点陷阱/无 role=dialog/aria-modal/无背景锁滚，Tab 可逃到遮罩与页面内容。
+   与 AdminGlossaryDrawer 同款接法：useEscape + useOverlay + useMaskClose。
+   仅移动端打开态才生效（桌面侧栏常驻，不该被当模态）。 */
+const sideRef = ref<HTMLElement | null>(null)
+const navScrimRef = ref<HTMLElement | null>(null)
+useEscape(() => mobileNavOpen.value, () => { mobileNavOpen.value = false })
+useOverlay(computed(() => mobileNavOpen.value), sideRef)
+useMaskClose(navScrimRef, () => { mobileNavOpen.value = false })
 
 /* D1 暗色模式：统一走 utils/theme.ts SSOT（readTheme/writeTheme）。
    背景：主题 key 已收敛到 v2_theme（用户侧 ThemeToggle 原 key）+ wenflow-theme 兼容 key，
@@ -506,6 +563,21 @@ const adminName = ref(readAdminName())
 window.addEventListener('storage', (e) => {
   if (e.key === ADMIN_USER_KEY || e.key === null) adminName.value = readAdminName()
 })
+
+/* 退出登录确认（2026-10-06 审核）：一次点击即销毁管理会话并跳转登录页的不可逆动作，
+   菜单里唯一一项就是它，此前无二次确认。走全站统一确认层（Confirm.vue + useConfirm），
+   与「删除/终止」同档 danger。 */
+async function confirmLogout() {
+  userMenuOpen.value = false
+  const ok = await askConfirm({
+    title: '退出登录',
+    message: '当前管理会话将被销毁，需要重新登录才能回到控制台。',
+    confirmText: '退出登录',
+    danger: true
+  })
+  if (!ok) return
+  await logout()
+}
 
 async function logout() {
   try {
@@ -814,7 +886,10 @@ watch(
   position: relative;
   z-index: 20;
 }
-.mshell__top-back {
+/* 顶栏方形描边钮基类（2026-10-06 审核 #190）：顶栏返回钮与移动端菜单钮
+   此前是两份逐字拷贝的 border/radius/background/color/hover——改一处必漏另一处。
+   抽成基类，各自只保留 display 差异。 */
+.mshell__square-btn {
   display: grid;
   place-items: center;
   width: 34px;
@@ -827,7 +902,7 @@ watch(
   cursor: pointer;
   transition: border-color 0.14s ease, color 0.14s ease;
 }
-.mshell__top-back:hover { border-color: color-mix(in srgb, var(--mk-blue, #2f6ae0) 40%, transparent); color: var(--mk-blue, #2f6ae0); }
+.mshell__square-btn:hover { border-color: color-mix(in srgb, var(--mk-blue, #2f6ae0) 40%, transparent); color: var(--mk-blue, #2f6ae0); }
 .mshell__top-crumb { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .mshell__top-title {
   font-size: var(--mk-fs-emphasis, 15px);
@@ -858,6 +933,10 @@ watch(
   transition: background 0.14s ease, color 0.14s ease;
 }
 .mshell__top-btn:hover { background: var(--mk-hover-surface); color: var(--mk-ink); }
+/* 禁用态视觉（2026-10-06 审核）：刷新钮在 liveLoading 时被 :disabled 禁用却无任何视觉，
+   看起来仍可点（与 .mk-btn:disabled{opacity:.65} 同口径）。 */
+.mshell__top-btn:disabled { opacity: 0.5; cursor: default; }
+.mshell__top-btn:disabled:hover { background: transparent; color: var(--mk-muted); }
 
 /* 页面搜索：场景跳转（label/组名过滤，Enter 去第一个命中） */
 .mshell__search { position: relative; flex: 0 1 280px; min-width: 200px; }
@@ -933,6 +1012,8 @@ watch(
 }
 .mshell__search-hit svg { color: var(--mk-muted); flex: none; }
 .mshell__search-hit:hover { background: var(--mk-hover-surface); }
+/* 键盘高亮项与 hover 同款（方向键导航时鼠标可能不在项上） */
+.mshell__search-hit--active { background: var(--mk-hover-surface); }
 .mshell__search-hit-group { margin-left: auto; color: var(--mk-faint); font-weight: 500; }
 .mshell__search-empty { padding: 10px; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
 
@@ -1153,19 +1234,8 @@ html[data-theme='dark'] {
   .mshell { grid-template-columns: minmax(0, 1fr); }
   /* 原型 ≤1100 即隐藏顶栏搜索（.search{display:none}）：390 视口下搜索框挤压面包屑 */
   .mshell__search { display: none; }
-  .mshell__menu-btn {
-    display: inline-grid;
-    place-items: center;
-    width: 34px;
-    height: 34px;
-    flex: none;
-    border: 1px solid var(--mk-line, #e6ebf4);
-    border-radius: var(--mk-radius-md);
-    background: var(--mk-surface, #fff);
-    color: var(--mk-ink);
-    cursor: pointer;
-  }
-  .mshell__menu-btn:hover { border-color: color-mix(in srgb, var(--mk-blue, #2f6ae0) 40%, transparent); color: var(--mk-blue, #2f6ae0); }
+  /* 尺寸/描边/悬停复用 .mshell__square-btn 基类，此处只切 display（移动端才出现） */
+  .mshell__menu-btn { display: inline-grid; }
   .mshell__side {
     position: fixed;
     top: 0;

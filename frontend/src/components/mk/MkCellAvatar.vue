@@ -32,7 +32,10 @@ const initial = computed(() => (props.name || '用').trim().charAt(0) || '用')
   display: grid;
   place-items: center;
   font-style: normal;
-  font-size: 12px;
+  /* 走文本三档的微字档（2026-10-06 审核 §主题 6）：原为硬编码 12px，
+     在各档位（1440→12.5 / 1920→13 / 2800→15.5）下不成档，是全站「档外字号」
+     量测的长尾来源之一。 */
+  font-size: var(--mk-fs-micro);
   font-weight: 800;
   background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
   color: var(--mk-accent-deep);

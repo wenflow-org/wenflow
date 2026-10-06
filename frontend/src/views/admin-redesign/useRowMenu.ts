@@ -22,7 +22,9 @@ export function useRowMenu() {
   const openMenu = ref('')
   /** 是否有菜单处于打开状态，供触发按钮绑定 aria-expanded */
   const menuOpen = ref(false)
-  /** 弹层 fixed 定位样式 { position: 'fixed', left, top, zIndex: 120 }，未打开时为空对象 */
+  /** 弹层 fixed 定位样式 { position: 'fixed', left, top, zIndex }，未打开时为空对象。
+      zIndex 走全站 token --mk-z-popover（2026-10-06 审核 #205）：此前内联 120 只存在于
+      TS 里，原语 --mk-z-menu(60) 在行内菜单上恒被覆盖。 */
   const popStyle = ref<Record<string, number | string>>({})
 
   let popEl: HTMLElement | null = null
@@ -73,7 +75,7 @@ export function useRowMenu() {
         // 行菜单盖在抽屉/弹窗之上：Esc 只关菜单。必须拦下冒泡，
         // 否则 window 层 useEscape 的 LIFO 栈会在同一次按键把底层抽屉一并关掉
         e.stopPropagation()
-        closeMenu()
+        closeMenu(true)
         break
       case 'ArrowDown':
         e.preventDefault()
@@ -121,7 +123,7 @@ export function useRowMenu() {
     }
     if (left < VIEWPORT_MARGIN) left = VIEWPORT_MARGIN
     if (top < VIEWPORT_MARGIN) top = VIEWPORT_MARGIN
-    popStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', zIndex: 120 }
+    popStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', zIndex: 'var(--mk-z-popover, 120)' }
   }
 
   function toggleMenu(id: string) {
@@ -146,8 +148,9 @@ export function useRowMenu() {
     })
   }
 
-  function closeMenu() {
+  function closeMenu(restoreFocus = false) {
     if (!openMenu.value) return
+    const trigger = triggerEl
     openMenu.value = ''
     menuOpen.value = false
     popStyle.value = {}
@@ -155,17 +158,31 @@ export function useRowMenu() {
     popEl = null
     popKeydown = null
     triggerEl = null
+    /* 焦点归位（2026-10-06 审核 §主题 2）：菜单条目激活或 Esc 关闭后，
+       焦点必须还给 ⋯ 触发钮——否则掉到 body，键盘用户在长表格里每操作一次就丢位置。
+       必须在 triggerEl 置空之前取引用；只在「菜单内操作 / 键盘关闭」时回焦，
+       点击页面其它位置关闭时不抢焦点（用户已把注意力移走）。 */
+    if (restoreFocus && trigger && document.contains(trigger)) {
+      trigger.focus({ preventScroll: true })
+    }
   }
 
   function onDocClickCapture(e: MouseEvent) {
     lastClickTarget = e.target
+  }
+  function onDocClick(e: MouseEvent) {
+    if (!openMenu.value) return
+    const t = e.target as Node | null
+    const insideMenu = !!(popEl && t && popEl.contains(t))
+    const onTrigger = !!(triggerEl && t && triggerEl.contains(t))
+    closeMenu(insideMenu || onTrigger)
   }
   function onDocKeydown(e: KeyboardEvent) {
     // 焦点不在菜单内时 Esc 走到这里（document 冒泡先于 window 监听）：
     // 关菜单后 stopPropagation，阻断 useEscape 的 LIFO 栈在同一次 Esc 里继续关底层抽屉
     if (e.key === 'Escape' && openMenu.value) {
       e.stopPropagation()
-      closeMenu()
+      closeMenu(true)
     }
   }
   function onDocScroll() {
@@ -174,20 +191,24 @@ export function useRowMenu() {
     if (Date.now() - openedAt < 200) return
     closeMenu()
   }
+  /* resize 与 scroll 同档：只是收菜单，不回焦（视口变化/滚动不代表用户在菜单里做了操作） */
+  function onDocResize() {
+    closeMenu()
+  }
 
   onMounted(() => {
-    document.addEventListener('click', closeMenu)
+    document.addEventListener('click', onDocClick)
     document.addEventListener('click', onDocClickCapture, true)
     document.addEventListener('keydown', onDocKeydown)
     document.addEventListener('scroll', onDocScroll, true)
-    window.addEventListener('resize', closeMenu)
+    window.addEventListener('resize', onDocResize)
   })
   onBeforeUnmount(() => {
-    document.removeEventListener('click', closeMenu)
+    document.removeEventListener('click', onDocClick)
     document.removeEventListener('click', onDocClickCapture, true)
     document.removeEventListener('keydown', onDocKeydown)
     document.removeEventListener('scroll', onDocScroll, true)
-    window.removeEventListener('resize', closeMenu)
+    window.removeEventListener('resize', onDocResize)
   })
 
   return { openMenu, toggleMenu, closeMenu, menuOpen, popStyle }

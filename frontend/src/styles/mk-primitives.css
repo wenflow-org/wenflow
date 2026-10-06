@@ -37,11 +37,13 @@
   min-width: 0;
 }
 
-/* 键盘焦点可见环（无障碍底线）：覆盖按钮/输入/选择/链接；:root 级使 Teleport 到 body 的抽屉/弹窗同样生效 */
+/* 键盘焦点可见环（无障碍底线）：覆盖按钮/输入/选择/链接；:root 级使 Teleport 到 body 的抽屉/弹窗同样生效。
+   勿在此声明 border-radius（2026-10-06 审核 §主题 6）：特异度 (0,2,0) 高于 .mk-pill/.mk-btn/.mk-input，
+   会把元素自身圆角抢写成 4px——胶囊 999→4、按钮 8→4、输入框 6→4，每次 Tab 聚焦形状都跳一下。
+   outline 本就跟随元素自身圆角，删掉即可，视觉不变。 */
 :root :focus-visible {
   outline: 2px solid rgba(47, 106, 224, 0.85);
   outline-offset: 2px;
-  border-radius: var(--mk-radius-xs);
 }
 
 /* ----- 应用式布局（列表页：右侧内容区占满视口，表格区内滚，分页器吸底） -----
@@ -1142,7 +1144,11 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   padding: 0;
   font-size: inherit;
 }
-.mk-loading--min { min-height: var(--mk-empty-min-h, calc(100dvh - 230px)); }
+/* 两档叠加时 --inline 必须赢（2026-10-06 审核）：`--inline` 与 `--min` 同特异度，
+   靠源码顺序会被后面的 --min 覆盖，故在 --min 上显式排除 --inline。
+   实测 MkRowList / LearnerDetail 的 `.mk-loading--inline.mk-loading--min` 高 470px
+   （=100dvh-230px），行列表加载态在卡内撑出近一屏空白。--min 只服务整页加载。 */
+.mk-loading--min:not(.mk-loading--inline) { min-height: var(--mk-empty-min-h, calc(100dvh - 230px)); }
 .mk-loading__text { color: var(--mk-muted); }
 
 /* ----- 骨架屏（统一 shimmer）-----
@@ -1303,7 +1309,6 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-field__opt { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 500; }
 .mk-field__req { color: var(--mk-red, #dc2626); font-style: normal; font-weight: 700; margin-left: 2px; }
 .mk-field__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint, #8492ab); margin-top: 2px; }
-.mk-field__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint, #8492ab); }
 .mk-field__input,
 .mk-field__select,
 .mk-field__textarea {
@@ -1626,12 +1631,23 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
    新代码应优先引用 --mk-* token，此段只兜底存量硬编码。 */
 html[data-theme='dark'] {
   .mk-badge--self { background: rgba(91, 141, 239, 0.22); }
-  .mk-empty__action { border-color: rgba(91, 141, 239, 0.35); }
+  .mk-empty__action {
+    /* 暗色对比度（2026-10-06 审核）：原为透明底 + --mk-blue 文字压 16% 蓝 wash = 3.96:1
+       （小字 AA 要求 4.5:1），实心蓝底 + 白字实算 4.93:1。 */
+    background: var(--mk-blue-fill, #2f6ae0);
+    border-color: transparent;
+    color: var(--mk-on-fill);
+  }
   .mk-pagination__btn:disabled { background: transparent; }
   .mk-status__action--primary { background: var(--mk-blue); border-color: var(--mk-blue); }
   .mk-btn--danger:hover,
   .mk-btn--danger:active { background: var(--mk-red-fill-strong, #b91c1c); }
   .mk-icon-btn svg { color: var(--mk-faint); }
+  /* 蓝系徽章暗色对比度（2026-10-06 审核 §主题 1）：`--mk-blue`(#5b8def) 作前景压
+     16-18% 蓝 tint 底实测 3.84–3.96:1（12.5px 小字 AA 需 4.5:1）。
+     改用暗色 --mk-badge-info-fg（#9db8f5，同族已验 ≥5:1）作前景，底色不动。 */
+  .mk-badge--role-soft-info,
+  .mk-badge--flow-handoff { color: var(--mk-badge-info-fg); }
   /* 暗色遮罩加深：浅色遮罩 rgba(15,23,42,.36) 在深底上分离度不足 */
   .mk-modal, .mk-drawer__mask { background: var(--wf-overlay); }
 }
@@ -1656,25 +1672,13 @@ html[data-theme='dark'] {
    本档必须**覆盖全部文本型选择器**:没被覆盖的会落回基线值,在 1440 上又变成第 4 档
    (此前 .mk-section__head h4 / .mk-card__note / .mk-field__opt 等就是这样漏的)。
    展示型字号(实体名/图标字符/KPI 数字)不占文本档位,单独按 display 档放大,见各档 display 段。 */
-@media (min-width: 1440px) {
-  /* 文本档只有三级角色，本档只覆写这三个 token；页面引用 var(--mk-fs-*) 即自动跟随档位。 */
-  :root {
-    --mk-fs-micro: 12.5px;
-    --mk-fs-body: 14.5px;
-    --mk-fs-emphasis: 15.5px;
-  }
-}
+/* 1440 / 1920 两档的文本档 :root 覆写已迁到全局 main.css（2026-10-06 审核 §主题 6）：
+   本文件只被 AdminConsole / SkillDesignPage 懒加载，独立路由（/admin/login）拿不到，
+   于是登录页停在基准 12/14/15。改在 main.css 一处定义，全站同源。 */
 
 /* 1920px 档（D4 补丁：最低标准 1920×1080 全屏时落在 1440 档，字号/间距偏小。
    取 1440 档与 2000 档之间的中间值，1080p 全屏观感更舒展）。
-   文本档同 1440：micro 13 / body 15 / emphasis 16。 */
-@media (min-width: 1920px) {
-  :root {
-    --mk-fs-micro: 13px;
-    --mk-fs-body: 15px;
-    --mk-fs-emphasis: 16px;
-  }
-}
+   文本档同 1440：micro 13 / body 15 / emphasis 16 —— 覆写见 main.css。 */
 
 @media (min-width: 2000px) {
   /* 档位收敛(2026-09-24 桌面端验收):本档只负责**间距/尺寸/列宽/覆盖层宽度**,不再声明字号。

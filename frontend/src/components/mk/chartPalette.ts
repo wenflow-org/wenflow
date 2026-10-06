@@ -54,8 +54,23 @@ export const MK_CHART_PALETTES: Record<'light' | 'dark', MkChartPalette> = {
 export const MK_CHART_THEME = { light: 'mk-light', dark: 'mk-dark' } as const
 
 /** 记忆保持曲线分类色板（多折线按概念序取模循环；自 VirtualProfile.vue 私有板上移共享，
- *  单测仍从 VirtualProfile.vue 导入——该文件 re-export 这两个名字） */
-export const MEMORY_CURVE_COLORS = ['#2f6ae0', '#dc2626', '#15803d', '#b7791f', '#7c3aed', '#0891b2'] as const
+ *  单测仍从 VirtualProfile.vue 导入——该文件 re-export 这两个名字）。
+ *
+ *  八色而非六色（2026-10-06 审核 §主题 3）：后端概念上限就是 8 条
+ *  （virtual-learners.ts max:8 → retention-series slice(0,max)），六色取模会让
+ *  第 7/8 条与第 1/2 条同色，图例色点分不出折线。且原板含 '#dc2626' 红与 '#b7791f'
+ *  琥珀——本文件 :6-7 自定规则「红只给失败/异常、琥珀只给预警」，分类色不该占用语义色。
+ *  现板全部为纯分类冷色（蓝/青/紫/靛/灰蓝族），与语义色互不冲突。 */
+export const MEMORY_CURVE_COLORS = [
+  '#2f6ae0',
+  '#0891b2',
+  '#7c3aed',
+  '#15803d',
+  '#4f46e5',
+  '#0e7490',
+  '#9333ea',
+  '#5b6b8c',
+] as const
 
 export function memoryCurveColor(index: number): string {
   return MEMORY_CURVE_COLORS[index % MEMORY_CURVE_COLORS.length]

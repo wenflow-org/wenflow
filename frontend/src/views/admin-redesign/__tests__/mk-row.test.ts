@@ -16,7 +16,9 @@ describe('MkRowList', () => {
     })
     expect(w.text()).toContain('暂无教学会话')
     expect(w.text()).toContain('上课后出现')
-    expect(w.find('.mk-rows__empty').exists()).toBe(true)
+    /* 空态改用规范指定的共享类 .mk-empty--line（2026-10-06 审核）：
+       此前 MkRowList 自搓 .mk-rows__empty，与 .mk-empty--line 并存造成同屏两种内联空态。 */
+    expect(w.find('.mk-empty--line').exists()).toBe(true)
   })
 
   it('loading 优先于 empty：渲染加载态而非空态', () => {
