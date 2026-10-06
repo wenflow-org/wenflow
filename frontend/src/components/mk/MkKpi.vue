@@ -1,12 +1,20 @@
 <template>
-  <div class="mk-kpi" :class="[tone ? `mk-kpi--${tone}` : '', { 'mk-kpi--clickable': clickable, 'mk-kpi--compact': compact }]">
+  <!-- 可点 KPI 渲染真 <button>（2026-10-06 审核修复）：此前根恒为 div，clickable 只加类，
+       键盘用户 Enter/Space 都无法激活（调用方也没人补 keydown）。用原生 button 一处收口，
+       全站 clickable KPI 同时拿到 Enter/Space/焦点环。 -->
+  <component
+    :is="clickable ? 'button' : 'div'"
+    :type="clickable ? 'button' : undefined"
+    class="mk-kpi"
+    :class="[tone ? `mk-kpi--${tone}` : '', { 'mk-kpi--clickable': clickable, 'mk-kpi--compact': compact }]"
+  >
     <span class="mk-kpi__label">{{ label }} </span>
     <strong class="mk-kpi__num">{{ value }}</strong>
     <span v-if="hint && !compact" class="mk-kpi__hint">{{ hint }}</span>
     <!-- 默认 slot（2026-10-05）：卡内附挂位（VL 判例 = .mk-minibar 进度槽）。空 slot 渲染零节点，
          既有用法无感；附挂物走卡面原语（mk-minibar），不在页面发明新卡内词汇 -->
     <slot></slot>
-  </div>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -60,6 +68,15 @@ withDefaults(
 .mk-kpi--clickable { cursor: pointer; transition: border-color 0.12s var(--mk-ease-out); }
 .mk-kpi--clickable:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
 .mk-kpi--clickable:active { transform: scale(0.98); }
+/* 根为 <button> 时抹掉 UA 默认（字体/对齐/宽度），保证与 div 版渲染一致 */
+button.mk-kpi {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  appearance: none;
+}
+button.mk-kpi:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
 /* 已删除死样式 .mk-kpi--linked-on（P3）：组件模板从未输出该类，全仓也无调用方传入，
    「筛选联动激活态」需求未接线——如需启用应加 prop（如 linkedOn）而不是保留不可达样式 */
 

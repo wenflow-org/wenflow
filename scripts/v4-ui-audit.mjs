@@ -85,22 +85,32 @@ const ADMIN_PAGES = [
   ['overview', '/admin/overview'],
   ['people-account', '/admin/people?tab=account'],
   ['people-state', '/admin/people?tab=state'],
+  ['learner-state', '/admin/learner-state'],
   ['teaching-sessions', '/admin/teaching-sessions'],
   ['goal-conversations', '/admin/goal-conversations'],
   ['learning-paths', '/admin/learning-paths'],
   ['memory-review', '/admin/memory-review'],
   ['virtual-learners', '/admin/virtual-learners'],
+  ['virtual-learner-cards', '/admin/virtual-learner-cards'],
   ['orchestrator', '/admin/orchestrator'],
+  // 编排图三面板：?tab= 语义 = journey/routing/governance（旧表用 ?tab=flow，实测回落总览，
+  // 于是 DataFlowGraph / FieldRoutingTable 从未被渲染审计）
+  ['orchestrator-journey', '/admin/orchestrator?tab=journey&stage=teaching'],
+  ['orchestrator-routing', '/admin/orchestrator?tab=routing&stage=teaching'],
   ['skills-run', '/admin/skills?tab=run'],
+  ['skills-model-routing', '/admin/skills?tab=model-routing'],
   ['skills-health', '/admin/skills?tab=health'],
   ['skills-drift', '/admin/skills?tab=drift'],
-  ['prompt-eval', '/admin/prompt-eval'],
+  // Prompt 评估已折入 skills 宿主页签（旧 /admin/prompt-eval 走重定向；直接给目标 URL）
+  ['prompt-eval', '/admin/skills?peTab=cases'],
   ['prompt-workbench', '/admin/prompt-workbench'],
   ['exec-logs', '/admin/execution-logs?tab=logs'],
   ['exec-trace', '/admin/execution-logs?tab=trace'],
   ['exec-cost', '/admin/execution-logs?tab=cost'],
   ['audit-logs', '/admin/audit-logs'],
-  ['api-config-model', '/admin/api-config?tab=model'],
+  // api-config 真实页签 = connection/routing/runtime/security/overview/addons（旧表用 ?tab=model，
+  // 该键不存在，静默回落默认页签）；模型总览表在 ?tab=overview，不是 ?tab=registry
+  ['api-config-connection', '/admin/api-config?tab=connection'],
   ['api-config-overview', '/admin/api-config?tab=overview'],
   ['api-config-addons', '/admin/api-config?tab=addons'],
   ['ops-center-tools', '/admin/ops-center?tab=tools'],
@@ -112,17 +122,12 @@ const ADMIN_PAGES = [
   ['ops-hub-announce', '/admin/ops-hub?tab=announce'],
   ['ops-hub-inapp', '/admin/ops-hub?tab=inapp'],
   ['health-center', '/admin/health-center'],
-  ['skill-detail', '/admin/skills/teaching-turn'],
-  ['user-detail', '/admin/people/'],
   ['token-cost', '/admin/token-cost'],
-  ['notifications', '/admin/notifications'],
-  ['announcements', '/admin/announcements'],
-  ['feedback', '/admin/feedback'],
-  ['ops-achievements', '/admin/ops-achievements'],
-  ['ops-content', '/admin/ops-content'],
-  ['session-security', '/admin/session-security'],
-  ['model-registry', '/admin/api-config?tab=registry'],
-  ['data-flow', '/admin/orchestrator?tab=flow'],
+  // 二级页必须带 ?view=&id=（旧表 skill-detail 用 /admin/skills/teaching-turn，那条路由是
+  // SkillDesignPage，量到的从来不是 SkillDetail；user-detail 用裸 /admin/people/，量的是列表页）
+  ['skill-detail', '/admin/skills?view=skill&id=teaching-turn'],
+  ['user-detail', `/admin/people?view=learner&id=${RICH_USER.id}`],
+  ['path-detail', `/admin/learning-paths?view=path&id=${RICH_USER.pathId}`],
 ];
 
 const USER_PAGES = [
