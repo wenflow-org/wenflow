@@ -48,6 +48,8 @@ import {
 } from './simulation.goal.steps';
 import { persistAssistedLearnerMemory } from './simulation.memory';
 import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingCoordinator';
+import { teachingSessionRepository } from '../services/ai-teaching/TeachingSessionRepository';
+import { applyWarmupExtractionForSession } from '../services/ai-teaching/warmup-writeback';
 import { resolveStorySessionDemand } from '../virtual-lab/story-demand';
 import type { SimulationOrchestrator } from './simulation.coordinator';
 
@@ -90,6 +92,24 @@ export async function completeCheckpointedSimulationTask(
       } catch (error: unknown) {
         logger.warn('[simulation-coordinator] 完课收束 endSession 失败（不阻断任务完成）', {
           sessionId,
+          error: asErrorLike(error).message || String(error)
+        });
+      }
+      // 课内温故回写（R2 判定#7 VL 轨断链修复）：VL 收束直接调 endSession、不经过
+      // SessionFinalizationService.finalize（其 end_only/complete_task 分支才调
+      // applyWarmupExtractionForSession）→ 温故结果永不入队 review:completed，
+      // ReviewCompletedConsumer 不写证据/FSRS 重排（6 VL×3 模拟日实测 0 事件）。
+      // 温故计划与作答结果都持久化在本授课会话的 sessionArtifacts.memoryWarmup 上，
+      // 此处按会话取记录后走与 finalize/超时兜底共用的同一叶子实现；失败不阻断任务完成。
+      try {
+        const closedTeachingSession = await teachingSessionRepository.getById(wrapupTeachingSessionId);
+        if (closedTeachingSession) {
+          await applyWarmupExtractionForSession(closedTeachingSession);
+        }
+      } catch (error: unknown) {
+        logger.warn('[simulation-coordinator] 完课温故回写失败（不阻断任务完成）', {
+          sessionId,
+          teachingSessionId: wrapupTeachingSessionId,
           error: asErrorLike(error).message || String(error)
         });
       }
