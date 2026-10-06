@@ -337,7 +337,17 @@ async function deliberatelyFail(ctx, sessionId, cp, rec, tag) {
   if (cp.type === 'short_answer') {
     wrongPayloads.push({ answerText: WRONG_SHORT_ANSWERS[0] }, { answerText: WRONG_SHORT_ANSWERS[1] });
   } else {
-    const rankedAsc = rankOptions(cp).slice().reverse();
+    // 修偏置：旧法直接取 rankOptions 反序（最不相似=错项），实测 4/5 次反而命中正确项，
+    // 错答被判 passed=true 使 cap 实验落空。改为作答前先问老师点名正确选项
+    //（confirmChatBeforeChoiceSubmit 落 ctx.hintedOptionId），错答时排除它——「选一个不是
+    // 老师点名的选项」才是真错项；未识别到 hint 则退回现行为（rankOptions 升序取最不相似者）。
+    try { await confirmChatBeforeChoiceSubmit(ctx, sessionId, cp); } catch (e) { log(ctx, `  故意错答前确认聊天失败（继续作答）: ${clip(e?.message, 100)}`); }
+    let rankedAsc = rankOptions(cp).slice().reverse();
+    if (ctx.hintedOptionId) {
+      const filtered = rankedAsc.filter((o) => o.id !== ctx.hintedOptionId);
+      if (filtered.length > 0) rankedAsc = filtered;
+    }
+    log(ctx, `  故意错答选型 hint=${ctx.hintedOptionId || '(未识别)'} 候选=${rankedAsc.map((o) => o.id).join('/')}`);
     if (rankedAsc.length >= 3) wrongPayloads.push({ selectedOptionIds: [rankedAsc[0].id] }, { selectedOptionIds: [rankedAsc[1].id] });
     else {
       if (rankedAsc.length >= 1) wrongPayloads.push({ selectedOptionIds: [rankedAsc[0].id] });
