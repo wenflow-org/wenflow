@@ -55,7 +55,7 @@ const detail = {
       estimatedHours: 4,
       description: '把真实问题写成一句话',
       subtasks: [
-        { id: 't1', title: '写下真实问题', status: 'completed', taskType: 'reflection', estimatedMinutes: 30, completedAt: '2026-09-01T00:00:00Z', cognitiveLoad: 'low' },
+        { id: 't1', title: '写下真实问题', status: 'completed', taskType: 'deconstruct', estimatedMinutes: 30, completedAt: '2026-09-01T00:00:00Z', cognitiveLoad: 'low' },
         { id: 't2', title: '盘点已有基础', status: 'completed', taskType: 'practice', estimatedMinutes: 45, cognitiveLoad: 'medium' }
       ]
     },
@@ -174,7 +174,9 @@ describe('PathDetail 路径详情二级页（renderPathDetail 落点）', () => 
     expect(doneTasks[0].classes()).toContain('pd-task--done')
     expect(doneTasks[0].find('.mk-badge--ok').text()).toBe('已完成')
     // 副行 = 真实字段（任务类型 · 预计用时），不是原型的「验收点」
-    expect(doneTasks[0].find('.pd-task__sub').text()).toBe('反思 · 30 分钟')
+    // 2026-10-05：fixture 原用 taskType='reflection'——该枚举生产库从不出现（真实 7 枚举见
+    // learning.constants.NEW_PATH_TASK_TYPES），恰好绕开了字典裸直出英文的缺陷；改用真实枚举。
+    expect(doneTasks[0].find('.pd-task__sub').text()).toBe('拆解 · 30 分钟')
     expect(doneTasks[0].text()).not.toContain('验收点')
 
     await w.findAll('.pd-stage__head')[1].trigger('click')

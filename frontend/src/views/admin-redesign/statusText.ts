@@ -56,6 +56,26 @@ export function statusText(s: string | null | undefined): string {
   return STATUS_TEXT[key] || String(s || '')
 }
 
+/** 任务类型字典（subtasks.taskType → 中文）。
+    全集 = 教学会话页 2026-10-05 前的 11 档私有映射；迁入本字典做单源，因为路径详情页
+    同时存在一份 4 档私有映射（practice/acquire/reflection/assessment），
+    其余枚举裸直出英文（实测 7 个在用枚举 deconstruct/model/execute/… 全落英文）。
+    未命中回退「—」，原文进 taskTypeTitle（不裸直出枚举，也不猜词）。 */
+const TASK_TYPE_TEXT: Record<string, string> = {
+  reading: '阅读', practice: '练习', project: '项目', quiz: '测验', acquire: '获取',
+  deconstruct: '拆解', model: '建模', execute: '执行', diagnose: '诊断', refine: '打磨', consolidate: '巩固'
+}
+
+/** 任务类型 → 中文；未命中枚举回退「—」（原文用 taskTypeTitle 披露） */
+export function taskTypeText(t: string | null | undefined): string {
+  return (t && TASK_TYPE_TEXT[t]) || '—'
+}
+
+/** 未命中枚举时给 title 的原文披露；命中或空值返回 undefined（不产生多余 tooltip） */
+export function taskTypeTitle(t: string | null | undefined): string | undefined {
+  return t && !TASK_TYPE_TEXT[t] ? `任务类型原文：${t}` : undefined
+}
+
 /** 版本状态（核心文件 / Prompt 版本表）→ 中文。
     勿复用 statusText：通用表把 'active' 映射成「进行中」，而版本域的 ACTIVE 是「当前生效」。
     DRAFT 补键（设计评审 4.2 P2-15）：SkillDetail 版本页签的本地同名函数只映射 ACTIVE/DRAFT，

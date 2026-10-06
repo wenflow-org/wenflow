@@ -1984,6 +1984,11 @@ onBeforeUnmount(() => {
   padding: 20px;
   display: flex; flex-direction: column; gap: 18px;
 }
+/* 消息区贴底：首个子项吃满剩余空间（等价 justify-content:flex-end；溢出时 auto 外边距按 0 处理，
+   不会把顶部推出滚动可达范围）。短会话下最新一条与下方快捷块/检查点紧贴输入框。
+   2026-10-05：原先只在窄屏媒体块生效，桌面同病（1440×900 实测消息与快捷块之间空 236px），
+   提到基础档后全宽度一致生效。 */
+.tutor__scroll > :first-child { margin-top: auto; }
 
 /* 消息空态（批20）：居中轻提示，不抢开场卡 */
 .tutor__empty {
@@ -2828,8 +2833,7 @@ onBeforeUnmount(() => {
   /* 头部三行（「当前任务」标签 / 任务名 / 路径名）在手机上白占 22px——标签本身只是分类提示，
      去掉后头部 79→57px，全部还给消息区 */
   .learn__title { gap: 1px; }
-  /* 消息区贴底（与目标对话页一致）：否则对话刚开始时消息顶在上方、与下方快捷块之间空一大截 */
-  .tutor__scroll > :first-child { margin-top: auto; }
+  /* 消息区贴底已提到基础档（2026-10-05），窄屏不再单独声明 */
   /* 快捷块瘦身见文件末尾的媒体块：.replies/.reply 的基础规则在本文件靠后的 style 块里，
      同权重下写在这里会被覆盖 */
   /* 弹窗锚定在 ⋯ 按钮正下方、右对齐按钮 */
