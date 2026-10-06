@@ -19,7 +19,7 @@
 
 ### 1.2 范围
 
-- 本协议约束 **`prompts/core/` 下的全部 core skill**（清单见附录 A）。**以 `prompts/core/` 实际文件数为准**（2026-09-28 复核：32 个 yaml 文件；2026-09-14 口径 30 = 20 mainline + 10 aux、更早 26/25/24 等均已过期）。
+- 本协议约束 **`prompts/core/` 下的全部 core skill**（清单见附录 A）。**以 `prompts/core/` 实际文件数为准**（2026-10-06 复核：31 个 yaml 文件，triage-judge 退役后；2026-09-28 口径 32、2026-09-14 口径 30 = 20 mainline + 10 aux、更早 26/25/24 等均已过期）。
 - code-only skill（acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-selector）豁免，不进入核心文件体系（handler-only 确定性组件，无 LLM prompt）。
 - 无生产调用点的注册 skill（label-generator 等 11 个）维持现状，接入生产时必须先满足本协议。
 
@@ -382,7 +382,7 @@ coreHash 写入侧 = 编译发布流程（与 sourceHash 同批落库）；判�
 
 ## 附录 A. 受约束 skill 清单（30 core；3 个 code-only 组件已退役）
 
-> 2026-09-28 复核：以 `prompts/core/` 实际文件数为准（现 32 个 yaml；2026-09-14 口径 30、更早 26/25/24 均已过期）。
+> 2026-10-06 复核：以 `prompts/core/` 实际文件数为准（现 31 个 yaml，triage-judge 退役后；2026-09-28 口径 32、2026-09-14 口径 30、更早 26/25/24 均已过期）。
 
 首批（15）：
 conversational：goal-conversation、teaching-turn、virtual-learner-goal-dialogue-simulator、virtual-learner-learn-turn-simulator
@@ -393,7 +393,7 @@ copywriter：adaptive-guidance-copy、peer-reinforcement
 
 后续新增（core，未列入首批）：path-reviewer、kc-mapper、virtual-learner-epistemic-grounding
 
-辅助 Skill（9，2026-09-28 复核 = v4-aux-skills index.ts 实际 handler 数；generic-chat 于 **2026-09-15 正式退役**；course-design / basic-evaluator / goal-alignment-checker 同日退役（四同步，详见附录 A 退役注记）；concept-priority / path-adjustment-generator **已退役，仅 manifest 残留（2026-08）**，无 core.yaml，均不计数）：
+辅助 Skill（8，2026-10-06 复核 = v4-aux-skills 注册面 handler 数（~~9~~ 2026-09-28 口径，triage-judge 退役后）；generic-chat 于 **2026-09-15 正式退役**；course-design / basic-evaluator / goal-alignment-checker 同日退役（四同步，详见附录 A 退役注记）；triage-judge 于 **2026-10-06 退役**（摘注册 + 名单 RESIDUE 位，handler 保留供 eval/replay 脚本直调，详见退役注记）；concept-priority / path-adjustment-generator **已退役，仅 manifest 残留（2026-08）**，无 core.yaml，均不计数）：
 generator：teaching-opening-generator（~~course-design~~ 2026-09-15 退役）
 extractor：skill-compiler、learner-state-review（~~basic-evaluator~~、~~goal-alignment-checker~~ 2026-09-15 退役）
 copywriter：learner-progress-report、skill-author
@@ -418,6 +418,8 @@ acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-
 > 退役注记（2026-09-15 完整退役）：course-design / basic-evaluator / goal-alignment-checker 自 v4-aux-skills 注册 / 户口簿 / core+manifest+编译产物 / 文档**四同步注销**（`PURGED_SKILLS` → 39，`ALL_RETIRED_SKILLS` → 44），存量 DB 行由启动 purge 清理；附录 A 同步移除，aux 计数 9→6，core 文件 27→24。**业务依据**：① course-design 的"周计划"模型被 path→milestone→stage-designer 取代（唯一入口 `designWeekCourses` 与孪生 `generateTasksForExistingPath` 均无调用者，一并删除）；② goal-alignment-checker 被现役 path-reviewer（CIDDP 五维，含 Pertinence，且能触发重规划）完全覆盖；③ basic-evaluator 无"评分/等级"产品面（如未来做作业评分/等级/证书可复用其 prompt 设计）。此前 2026-08-10 的"保留注册"决定随之覆盖。
 
 > 退役注记（2026-09-15 generic-chat 退役）：generic-chat（无专用 skill 时的通用文本兜底）自 v4-aux 注册 / 户口簿 / core+manifest+编译产物 / 文档四同步注销（`PURGED_SKILLS` → 40，`ALL_RETIRED_SKILLS` → 45），aux 计数 6→5，core 文件 24→23。依据：唯一入口 `aiService.chat()` 与全部内部调用方（evaluatePromptBatch/judgeResult/analyzeLearningGoal/generateTasksForTopic/diagnoseGoal）均无调用方，正式业务均有专用 skill；连带清理底座 `services/ai/ai.service.ts`（含测试）、死链 `learning.service.generateTasksForExistingPath`、两处死 import 与三处 jest.mock。
+
+> 退役注记（2026-10-06 僵尸位退役，R1 REVIEW 2026-10-05 finding A15）：triage-judge（需求分流判官）自 v4-aux-skills 注册 / 户口簿 / core+manifest+编译产物 / 文档**四同步注销**。依据：判据 v1 经 60 例评测未达标（弃权率 32%、once 召回≈0，`backend/src/scripts/eval-triage-judge.ts`），manifest 自注「尚未接入生产调用方」，生产链路零发射器，goal 链分流已改确定性 `triageGoalResponse`（`services/learning/response-triage`）。**偏离 course-design 波先例：入 `RESIDUE_ONLY_SKILLS` 位而非 `PURGED_SKILLS`**（`PURGED_SKILLS` 保持 40 项，`ALL_RETIRED_SKILLS` 45→46）——本批口径为最小可逆 + 不动历史数据：启动 purge 不清其 `skill_model_configs` / `agent_prompts` ACTIVE v12 存量行（v1-v11 ARCHIVED，2026-10-06 DB 只读实查）（可逆），物理清理走 `cleanup-retired-field-data.ts` 手动脚本（摘注册后活跃守卫已放行）；`eval-triage-judge` / `replay-path-planning` 经 `auxSkillDefinitionMap` + `executableSkillHandlers`（skills/index.ts 注册面∪退役面）直调保留。aux 注册计数 9→8（handler 函数 9 个保留），core 文件 32→31。
 
 ## 附录 B. goal-conversation 核心文件（参照样例）
 

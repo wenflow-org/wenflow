@@ -13,7 +13,9 @@ jest.mock('../../middleware/auth.middleware', () => ({
 jest.mock('../../middleware/api-rate-limit.middleware', () => ({
   learningPathsPollingLimiter: (_req: any, _res: any, next: () => void) => next(),
 }));
-jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn() } }));
+// warn 必须在 mock 内：模块加载链上 prompt-files/loader.ts 的缺文件告警走 logger.warn
+// （如退役技能 triage-judge 无编译产物 .md 时），mock 缺 warn 会让整个套件加载失败。
+jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn() } }));
 jest.mock('../../coordinators/path.coordinator', () => ({ __esModule: true, default: {} }));
 jest.mock('../../services/learning/goal-path-visible-summary', () => ({
   buildGoalPathVisibleSummary: jest.fn(),

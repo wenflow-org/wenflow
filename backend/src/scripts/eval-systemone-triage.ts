@@ -5,8 +5,9 @@
  * 为什么测这两个字段：
  *  - `primary_block_type`(5 类) 是 `response-triage.ts` 里 `triageByBlockType` 的**唯一开关**，
  *    单独翻它就能把结果在 learning_path / combination / emotional_support / referral 之间移动。
- *  - `recurrence`(once|recurring) 是**现有 LLM 已实证失败**的字段：`prompts/manifests/triage-judge.yaml`
- *    记录判据 v1 在 60 例上弃权率 32%、once 召回≈0。
+ *  - `recurrence`(once|recurring) 是**现有 LLM 已实证失败**的字段：triage-judge 判据 v1
+ *    在 60 例上弃权率 32%、once 召回≈0（manifest 注记；该 skill 已于 2026-10-06 退役，
+ *    core/manifest 文件删除，见 backend/src/skills/retired-skills.ts RESIDUE_ONLY_SKILLS）。
  *
  * 公平性：与 `eval-triage-judge.ts` 完全对齐 —— 只给**用户可见文本**
  * （visibleOpening / triggerEvent+domain / background），不给 primaryBlockType / recurrence /

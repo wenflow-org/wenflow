@@ -57,7 +57,7 @@ import { executeMaterialCollector as executeMaterialCollectorFn } from './materi
 import { generateMaterialBriefDraft as generateMaterialBriefFn } from './material-brief';
 
 // v4 辅助 LLM Skills（由原遗留插件/旁路迁入）
-import { auxSkillDefinitions, auxSkillHandlers } from './v4-aux-skills';
+import { auxSkillDefinitions, auxSkillHandlers, auxRetiredSkillHandlers } from './v4-aux-skills';
 export { auxSkillDefinitions, auxSkillDefinitionMap } from './v4-aux-skills';
 
 // 虚拟学习者场景设计
@@ -254,6 +254,18 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'peer-reinforcement': (input: any) => peerAgentHandler(input.input, (input as any).context),
 };
 
+/**
+ * 可执行面 = 注册面（skillHandlers）+ 退役面（auxRetiredSkillHandlers）。
+ * 退役 skill（见 retired-skills.ts；v4-aux-skills RETIRED_AUX_SKILL_IDS）不进注册面——
+ * gateway 不注册（bootstrap 只遍历 allSkillDefinitions）、户口簿 F8/F11 与 retired:check
+ * 活跃守卫要求注册集与退役名单互斥——但保留 executeSkillWithResult 直调入口：
+ * eval-triage-judge / replay-path-planning 等离线脚本依赖（退役 ≠ 删代码）。
+ */
+export const executableSkillHandlers: Record<string, (input: any) => Promise<any>> = {
+  ...skillHandlers,
+  ...auxRetiredSkillHandlers,
+};
+
 import { executeSkillHandler } from './executor';
 import type { SkillExecutionOptions } from './protocol';
 
@@ -273,8 +285,8 @@ export async function executeSkillWithResult(
   options: SkillExecutionOptions = {}
 ): Promise<any> {
   const rawId = (definition.id || definition.name) as string;
-  const skillId = skillHandlers[rawId] ? rawId : rawId.replace(/^skill:/, '');
-  const handler = skillHandlers[skillId];
+  const skillId = executableSkillHandlers[rawId] ? rawId : rawId.replace(/^skill:/, '');
+  const handler = executableSkillHandlers[skillId];
   if (!handler) {
     throw new Error(`Skill handler not found: ${skillId}`);
   }

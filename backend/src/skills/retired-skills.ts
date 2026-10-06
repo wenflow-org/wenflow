@@ -104,11 +104,18 @@ export const PURGED_SKILLS: readonly string[] = [
 ] as const;
 
 /**
- * 仅残留清理项（5 项）：从未注册，不入启动 purge，仅供 cleanup 脚本清理历史行。
+ * 仅残留清理项（2026-10-06 起 6 项）：不入启动 purge，仅供 cleanup 脚本清理历史行。
  * - goal-understanding-composer / teaching-strategy-selector / acceptance-evidence-evaluator：
  *   2026-08 LLM skill 本体注销，保留确定性纯函数模块（被 goal-conversation / teaching-turn 消费）
  * - concept-priority / path-adjustment-generator：2026-08-09 退役，仅 manifest 残留
  *   （prompts/manifests/，resolve-prompt-contract 按需加载，无运行影响）
+ * - triage-judge：2026-10-06 退役（**曾注册于 v4-aux-skills**，R1 REVIEW 2026-10-05 finding A15
+ *   僵尸位：生产链路零发射器，仅 eval-triage-judge / replay-path-planning 脚本调用；goal 链分流
+ *   已改确定性 triageGoalResponse）。**特意不入 PURGED_SKILLS**（偏离 course-design 波的
+ *   "整体注销"先例，因本批口径为最小可逆 + 不动历史数据）：启动 purge 不清其
+ *   skill_model_configs / agent_prompts ACTIVE v11 存量行（可逆），物理清理走
+ *   cleanup-retired-field-data.ts 手动脚本（摘注册后活跃守卫已放行）；其 handler/definition
+ *   保留在 v4-aux-skills（auxRetiredSkillHandlers），eval/replay 脚本直调不受影响。
  */
 const RESIDUE_ONLY_SKILLS: readonly string[] = [
   'goal-understanding-composer',
@@ -116,6 +123,8 @@ const RESIDUE_ONLY_SKILLS: readonly string[] = [
   'acceptance-evidence-evaluator',
   'concept-priority',
   'path-adjustment-generator',
+  // 2026-10-06 triage-judge 僵尸位退役（曾注册；按「不动历史数据」口径入本位不入 PURGED，见上注）
+  'triage-judge',
 ] as const;
 
 /**

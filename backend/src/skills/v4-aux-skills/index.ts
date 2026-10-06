@@ -672,13 +672,27 @@ async function triageJudgeHandler(input: any) {
 // ============================================================
 // 注册表
 // ============================================================
-export const auxSkillDefinitions: SkillDefinition[] = Object.values(META).map(definition);
 
-export const auxSkillDefinitionMap: Record<AuxSkillId, SkillDefinition> = Object.fromEntries(
-  auxSkillDefinitions.map((def) => [def.name as AuxSkillId, def]),
-) as Record<AuxSkillId, SkillDefinition>;
+/**
+ * 退役 aux skill（2026-10-06，R1 REVIEW 2026-10-05 finding A15 僵尸位）：
+ * - triage-judge 生产链路零发射器（全仓仅 eval-triage-judge / replay-path-planning 脚本调用），
+ *   goal 链分流已改确定性 triageGoalResponse（services/learning/response-triage）。
+ * - 处置 = 摘注册（不入 auxSkillDefinitions / auxSkillHandlers → allSkillDefinitions / skillHandlers，
+ *   gateway 不再注册）+ 入 retired-skills.ts 退役名单（RESIDUE 位，不入启动 purge——
+ *   「不动历史数据」口径：skill_model_configs / agent_prompts ACTIVE 存量行保留）。
+ * - handler / definition 保留导出（auxRetiredSkillHandlers / auxSkillDefinitionMap），
+ *   eval/replay 脚本经 executeSkillWithResult 直调不受影响。
+ */
+const RETIRED_AUX_SKILL_IDS: readonly AuxSkillId[] = ['triage-judge'];
 
-export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillExecutionResult<any>>> = {
+const isRetiredAuxSkill = (skillId: AuxSkillId): boolean =>
+  RETIRED_AUX_SKILL_IDS.includes(skillId);
+
+export const auxSkillDefinitions: SkillDefinition[] = Object.values(META)
+  .filter((meta) => !isRetiredAuxSkill(meta.skillId))
+  .map(definition);
+
+const AUX_SKILL_HANDLER_TABLE: Record<AuxSkillId, (input: any) => Promise<SkillExecutionResult<any>>> = {
   'teaching-opening-generator': teachingOpeningGeneratorHandler,
   'learner-progress-report': learnerProgressReportHandler,
   'skill-author': skillAuthorHandler,
@@ -689,3 +703,20 @@ export const auxSkillHandlers: Record<AuxSkillId, (input: any) => Promise<SkillE
   'replan-attribution': replanAttributionHandler,
   'triage-judge': triageJudgeHandler,
 };
+
+/** 注册面 handler（退役项除外）：skills/index.ts 据此注册 gateway；户口簿 F11/F8 以此为活跃口径 */
+export const auxSkillHandlers: Record<string, (input: any) => Promise<SkillExecutionResult<any>>> =
+  Object.fromEntries(
+    Object.entries(AUX_SKILL_HANDLER_TABLE).filter(([skillId]) => !isRetiredAuxSkill(skillId as AuxSkillId)),
+  );
+
+/** 退役面 handler：不入注册，仅供 eval/replay 等离线脚本直调（skills/index.ts executableSkillHandlers 聚合） */
+export const auxRetiredSkillHandlers: Record<string, (input: any) => Promise<SkillExecutionResult<any>>> =
+  Object.fromEntries(
+    Object.entries(AUX_SKILL_HANDLER_TABLE).filter(([skillId]) => isRetiredAuxSkill(skillId as AuxSkillId)),
+  );
+
+/** 退役项保留 definition（eval/replay 需要 definition.name 寻址 handler），故从全量 META 派生而非注册集 */
+export const auxSkillDefinitionMap: Record<string, SkillDefinition> = Object.fromEntries(
+  Object.values(META).map((meta) => [meta.skillId, definition(meta)]),
+);
