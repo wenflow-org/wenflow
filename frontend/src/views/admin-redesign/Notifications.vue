@@ -129,8 +129,8 @@
       <Pagination
         v-if="total > pageSize"
         v-model:page="page"
+        v-model:pageSize="pageSize"
         :total="total"
-        :page-size="pageSize"
         :loading="loading"
         show-total
         @update:page="reload"
@@ -279,6 +279,9 @@ function clearFilter() {
   unreadOnly.value = false
   reloadFromFirstPage()
 }
+/* 每页条数变化：回第 1 页重查（此前只传 :page-size 不监听 @update:pageSize，
+   下拉可选但列表恒按 20 条渲染，是死控件） */
+watch(pageSize, () => { reloadFromFirstPage() })
 const isFiltered = computed(() => !!kindFilter.value || unreadOnly.value)
 
 /** 已读率聚合（原型 1900-1904 表内「已读率」列）：同筛选域内 已读 = 送达 − 未读 */

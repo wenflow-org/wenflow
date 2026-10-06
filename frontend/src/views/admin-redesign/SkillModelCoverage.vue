@@ -13,8 +13,8 @@
         对多个技能套用同一份通道/模型/参数/兜底配置：
       </p>
       <div class="skc__apply">
-        <input v-model="bulk.endpoint" class="mk-input mono" placeholder="endpoint（http://host:30001）" :class="{ 'is-err': bulkErr }" />
-        <input v-model="bulk.apiKey" class="mk-input mono" type="password" placeholder="apiKey" :class="{ 'is-err': bulkErr }" />
+        <input v-model="bulk.endpoint" class="mk-input mono" placeholder="endpoint（必填，http://host:30001）" :class="{ 'is-err': bulkErr }" />
+        <input v-model="bulk.apiKey" class="mk-input mono" type="password" placeholder="apiKey（必填）" :class="{ 'is-err': bulkErr }" />
         <input v-model="bulk.model" class="mk-input mono" placeholder="model（留空=不覆盖）" list="skc-model-options" />
         <button type="button" class="mk-btn mk-btn--primary" :disabled="bulkSaving || !selected.length" @click="applyBulk">
           {{ bulkSaving ? '套用中…' : `套用到 ${selected.length} 个技能` }}
@@ -74,6 +74,7 @@ import { adminSkillsApi } from '@/api/adminApi'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import { askConfirm } from './useConfirm'
 
 const { options: catalogOptions, load: loadModelCatalog } = useModelCatalog()
 loadModelCatalog()
@@ -124,14 +125,30 @@ async function load() {
 
 async function applyBulk() {
   if (bulkSaving.value || !selected.value.length) return
+  // 空 endpoint/apiKey 会把所选技能的通道与密钥覆写成空串（静默清掉已配的独立通道，
+  // 正是本卡开头那句「未配置 = 走平台默认」的同型事故）。这里显式拦住并给出原因。
+  const endpoint = bulk.value.endpoint.trim()
+  const apiKey = bulk.value.apiKey.trim()
+  if (!endpoint || !apiKey) {
+    bulkErr.value = true
+    bulkMsg.value = `请先填写 ${!endpoint ? 'endpoint' : ''}${!endpoint && !apiKey ? ' 与 ' : ''}${!apiKey ? 'apiKey' : ''}：留空提交会把所选技能的通道/密钥覆写成空值。`
+    return
+  }
+  const ok = await askConfirm({
+    title: '批量套用通道配置',
+    message: `将把 endpoint 与 apiKey 覆盖到选中的 ${selected.value.length} 个技能（model 留空则不覆盖）。\n这会替换这些技能已有的独立通道与密钥，且不可撤销。确定继续？`,
+    confirmText: '覆盖套用',
+    busy: true,
+  })
+  if (!ok) return
   bulkSaving.value = true
   bulkMsg.value = ''
   bulkErr.value = false
   try {
     const res = await adminSkillsApi.bulkApplySkillModelConfig({
       skillIds: selected.value,
-      endpoint: bulk.value.endpoint.trim(),
-      apiKey: bulk.value.apiKey.trim(),
+      endpoint,
+      apiKey,
       model: bulk.value.model.trim() || undefined,
       tier: 'chat',
     })

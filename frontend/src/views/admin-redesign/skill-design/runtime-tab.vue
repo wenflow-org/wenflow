@@ -346,11 +346,30 @@ async function saveRuntime() {
     return Number(v)
   }
   try {
-    // 参数覆盖：有 override 发对象；本有覆盖但被清空 → 发 null 显式清空；本就无覆盖且无 override → 不发
+    // 参数覆盖：有 override 发对象；本有覆盖但被清空 → 发 null 显式清空；本就无覆盖且无 override → 不发。
+    // 覆盖档必须给有效数字：v-model.number 清空得 ''，而 `'' != null` 为真、Number('') === 0——
+    // temperature 会被静默写成 0（0 在合法区间内，直接生效），topP/maxTokens 则发出非法 0 让后端 400，
+    // 用户看到的是接口报错而不是「这项没填」。空值一律拦住，让用户明确切回「继承」。
+    let invalid = false
+    const overrideNum = (label: string, mode: string, value: unknown): number | null => {
+      if (mode !== 'override') return null
+      const n = normNum(value)
+      if (n == null) {
+        invalid = true
+        rtErr.value = true
+        rtMsg.value = `${label} 的覆盖值未填（或不是数字）：清空该项请把模式切回「继承」，留空保存会按 0 提交。`
+        return null
+      }
+      return n
+    }
+    const tVal = overrideNum('temperature', paramT.value.mode, paramT.value.value)
+    const topPVal = overrideNum('topP', paramTopP.value.mode, paramTopP.value.value)
+    const maxVal = overrideNum('maxTokens', paramMax.value.mode, paramMax.value.value)
+    if (invalid) return
     const overrides: Record<string, number> = {}
-    if (paramT.value.mode === 'override' && paramT.value.value != null) overrides.temperature = Number(paramT.value.value)
-    if (paramTopP.value.mode === 'override' && paramTopP.value.value != null) overrides.topP = Number(paramTopP.value.value)
-    if (paramMax.value.mode === 'override' && paramMax.value.value != null) overrides.maxTokens = Number(paramMax.value.value)
+    if (tVal != null) overrides.temperature = tVal
+    if (topPVal != null) overrides.topP = topPVal
+    if (maxVal != null) overrides.maxTokens = maxVal
     const payload: Record<string, unknown> = {
       tier: rtForm.value.tier,
       model: rtForm.value.model || undefined,

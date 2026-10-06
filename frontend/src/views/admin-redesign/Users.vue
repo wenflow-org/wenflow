@@ -763,6 +763,12 @@ const paged = computed(() => {
 })
 watch(filtered, () => {
   page.value = 1
+  // 选中集合同步收敛：切 pill / 改搜索后，屏幕上已看不到的行仍留在 selected 里，
+  // 批量条却报「已选 N 人」——此时批量删除会删掉不可见的行、导出会静默少导。
+  if (!selected.value.length) return
+  const visible = new Set(filtered.value.map((u) => u.id))
+  const next = selected.value.filter((id) => visible.has(id))
+  if (next.length !== selected.value.length) selected.value = next
 })
 
 const isFiltered = computed(() => pill.value !== 'all' || !!keyword.value.trim())

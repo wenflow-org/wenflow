@@ -114,6 +114,16 @@ describe('ModelRegistryOverview（只读模型总览）', () => {
     expect(text).toContain('未注册模型');
 
     expect(wrapper.findAll('table').length).toBeGreaterThanOrEqual(4);
+
+    // ⑥ 能力与限额表：表头列数必须等于数据行列数（曾表头 10 列 / 行 9 格，
+    //    从「档位」起整列右移、降级链列恒空；只断言文本包含抓不到这种错位）
+    const limitTable = wrapper.findAll('table').find((t) => t.text().includes('降级链'));
+    expect(limitTable).toBeTruthy();
+    const thCount = limitTable!.findAll('thead th').length;
+    const firstRowTds = limitTable!.find('tbody tr')?.findAll('td').length ?? 0;
+    expect(thCount).toBeGreaterThan(0);
+    expect(firstRowTds).toBe(thCount);
+
     wrapper.unmount();
   });
 

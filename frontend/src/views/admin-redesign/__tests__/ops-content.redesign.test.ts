@@ -62,6 +62,8 @@ vi.mock('../live', async () => {
     shortId: (id: string, h: number, t: number) => (id ? `${id.slice(0, h)}…${id.slice(-t)}` : id),
     isPageCacheFresh: () => false,
     markPageFetched: () => {},
+    // Pagination.vue 从 ../live 导入 totalPagesOf；翻页器改为常驻后本 mock 首次被真实消费
+    totalPagesOf: (total: number, pageSize: number) => Math.max(1, Math.ceil(total / Math.max(1, pageSize))),
   };
 });
 

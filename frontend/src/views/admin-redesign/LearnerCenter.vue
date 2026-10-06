@@ -272,6 +272,8 @@ interface Row {
   confidence?: number
   /** 更新时间戳（用于排序） */
   ts?: number
+  /** 当前活跃路径 ID：重算必须带上，否则后端写 global 口径投影而本页读 path 口径 */
+  pathId?: string
 }
 
 const pill = ref<'all' | 'risk' | 'watch' | 'stale'>('all')
@@ -396,7 +398,8 @@ const rows = computed<Row[]>(() =>
           : '',
     updated: timeAgo(m.generatedAt),
     confidence: m.confidence,
-    ts: m.generatedAt ? new Date(m.generatedAt).getTime() : undefined
+    ts: m.generatedAt ? new Date(m.generatedAt).getTime() : undefined,
+    pathId: m.pathId
   }))
 )
 
@@ -567,7 +570,9 @@ async function recompute(row: Row) {
   if (!ok) return
   updatingIds.value = new Set(updatingIds.value).add(row.id)
   try {
-    await liveRecomputeLearner(row.id)
+    // 必须带 pathId：不带时后端把快照写到 global 口径键，而本页行数据读 path 口径键，
+    // 结果「点了重算但行内更新/趋势/置信不变」（详情页早已传 pathId，此处对齐）
+    await liveRecomputeLearner(row.id, row.pathId)
     toast.success(`「${row.name}」快照已重算`)
   } catch (e) {
     toast.error(`重算失败：${errMsg(e)}`)
@@ -595,8 +600,8 @@ async function recomputeAll() {
     updatingIds.value = new Set(updatingIds.value).add(r.id)
     try {
       // 循环内只调重算接口、不刷列表：liveRecomputeLearner 每次附带全量重拉学习者域，
-      // N 人重算会触发 N 次全量请求；改为循环结束统一刷新一次
-      await adminLearnerModelsApi.recompute(r.id)
+      // N 人重算会触发 N 次全量请求；改为循环结束统一刷新一次。pathId 与单行重算同口径。
+      await adminLearnerModelsApi.recompute(r.id, r.pathId ? { pathId: r.pathId } : undefined)
       ok++
     } catch {
       fail++

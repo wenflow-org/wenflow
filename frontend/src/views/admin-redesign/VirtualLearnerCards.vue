@@ -33,6 +33,18 @@
       </div>
 
       <MockSkeletonTable v-if="indexLoading" :cols="4" :rows="6" />
+      <!-- 索引接口失败必须落在持久错误态 + 重试入口：此前只有一次瞬时 toast，
+           失败后 cards 仍为 []，命中下面的空态，页面显示「卡库还是空的 / 导入第一张卡」，
+           把「没拉到」说成「本来就没有」（ADMIN_PAGE_TEMPLATES R2 硬约束）。 -->
+      <MkEmptyState
+        v-else-if="indexError"
+        tone="error"
+        title="卡库索引加载失败"
+        :description="indexError"
+        action-text="重试"
+        :action-busy="indexLoading"
+        @action="loadIndex"
+      />
       <MkEmptyState
         v-else-if="!cards.length"
         title="卡库还是空的"
@@ -368,6 +380,8 @@ interface ImportPayload {
 const cards = ref<CardWallEntry[]>([])
 const summary = ref<{ total: number; builtin: number; custom: number } | null>(null)
 const indexLoading = ref(false)
+/** 索引拉取失败原因（非空 = 渲染持久错误态 + 重试入口，而不是把失败画成空态） */
+const indexError = ref('')
 const keyword = ref('')
 
 const filtered = computed(() => {
@@ -382,13 +396,16 @@ const filtered = computed(() => {
 
 async function loadIndex() {
   indexLoading.value = true
+  indexError.value = ''
   try {
     const res = await adminVirtualLearnersApi.cardsIndex()
     const d = (res.data?.data ?? res.data) as { cards: CardWallEntry[]; summary: { total: number; builtin: number; custom: number } }
     cards.value = d?.cards ?? []
     summary.value = d?.summary ?? null
   } catch (e) {
-    toast.error(errMsg(e) || '卡库索引加载失败')
+    const msg = errMsg(e) || '卡库索引加载失败'
+    indexError.value = msg
+    toast.error(msg)
   } finally {
     indexLoading.value = false
   }

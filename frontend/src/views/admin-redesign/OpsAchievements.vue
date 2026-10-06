@@ -135,8 +135,8 @@
       <Pagination
         v-if="totalRecords > pageSize"
         v-model:page="recordPage"
+        v-model:pageSize="pageSize"
         :total="totalRecords"
-        :page-size="pageSize"
         :loading="recordsLoading"
         show-total
         @update:page="reloadRecords"
@@ -357,6 +357,9 @@ function clearRecordsFilters() {
   achIncludeTest.value = false
   reloadRecordsFromFirstPage()
 }
+/* 每页条数变化：回第 1 页重查（此前只传 :page-size 不监听 @update:pageSize，
+   下拉可选但列表恒按 20 条渲染，是死控件） */
+watch(pageSize, () => { reloadRecordsFromFirstPage() })
 
 function fmtDate(iso?: string | null): string {
   if (!iso) return '—'

@@ -588,8 +588,8 @@
                       @click.stop="toggleMenu(`story-${storyKey(s, i)}`)"
                     >⋯</button>
                     <div v-if="openMenu === `story-${storyKey(s, i)}`" class="mk-menu__pop" :style="popStyle" @click.stop>
-                      <button type="button" class="mk-menu__item" :disabled="storyBusy" title="编辑故事：标题、概述、故事级预算（留空继承角色级）" @click="openEditStory(i); closeMenu()">编辑</button>
-                      <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="storyBusy" title="删除该故事（不可恢复）" @click="removeStory(i); closeMenu()">删除</button>
+                      <button type="button" class="mk-menu__item" :disabled="storyBusy" title="编辑故事：标题、概述、故事级预算（留空继承角色级）" @click="openEditStory(i, poolIndex(s, i)); closeMenu()">编辑</button>
+                      <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="storyBusy" title="删除该故事（不可恢复）" @click="removeStory(poolIndex(s, i)); closeMenu()">删除</button>
                     </div>
                   </div>
                 </div>
@@ -1007,6 +1007,12 @@ const selectedStoryKeys = ref<Set<string>>(new Set())
 function storyKey(s: StoryItem, i: number): string {
   return s.id || String(i)
 }
+/** 提交给后端的故事池下标：必须用池内真实下标（mapStoryItem 落下的 s.index），
+    不能用 displayStories 的遍历下标——storyFilter 生效时两者错位，
+    编辑/删除会落到池内另一条故事上（表单与确认框说的是一条、实际改的是另一条）。 */
+function poolIndex(s: StoryItem, displayIdx: number): number {
+  return typeof s.index === 'number' ? s.index : displayIdx
+}
 function toggleStorySelect(s: StoryItem, i: number) {
   const k = storyKey(s, i)
   const next = new Set(selectedStoryKeys.value)
@@ -1028,7 +1034,7 @@ function toggleAllStories() {
 async function batchRunStories() {
   const list = displayStories.value
   const targets = list
-    .map((s, i) => ({ s, i, k: storyKey(s, i) }))
+    .map((s, i) => ({ s, i: poolIndex(s, i), k: storyKey(s, i) }))
     .filter(({ k }) => selectedStoryKeys.value.has(k))
   if (!targets.length) { toast.error('请先勾选要运行的故事'); return }
   const id = subPage.value?.id
@@ -1117,7 +1123,7 @@ async function batchAutopilotStories(action: 'start' | 'stop') {
 async function batchRemoveStories() {
   const list = displayStories.value
   const targets = list
-    .map((s, i) => ({ s, i, k: storyKey(s, i) }))
+    .map((s, i) => ({ s, i: poolIndex(s, i), k: storyKey(s, i) }))
     .filter(({ k }) => selectedStoryKeys.value.has(k))
   if (!targets.length) { toast.error('请先勾选要删除的故事'); return }
   const id = subPage.value?.id
@@ -1397,8 +1403,12 @@ useEscape(() => editStoryOpen.value, () => { if (!storySaving.value) editStoryOp
 useOverlay(computed(() => editStoryOpen.value), storyPanelRef)
 useMaskClose(storyMaskRef, () => { if (!storySaving.value) editStoryOpen.value = false })
 
-function openEditStory(index: number) {
-  const s = displayStories.value[index]
+/**
+ * @param displayIdx displayStories 里的遍历下标（用于取回表单回填数据）
+ * @param poolIdx    提交给后端的池内真实下标（storyFilter 生效时与 displayIdx 不同）
+ */
+function openEditStory(displayIdx: number, poolIdx: number = displayIdx) {
+  const s = displayStories.value[displayIdx]
   if (!s || storySaving.value) return
   const raw = s.raw || {}
   const pk = (raw.problemKnowledge && typeof raw.problemKnowledge === 'object'
@@ -1425,7 +1435,7 @@ function openEditStory(index: number) {
       maxRetriesTotal: Number.isFinite(Number(b.maxRetriesTotal)) ? String(b.maxRetriesTotal) : ''
     }
   }
-  editStoryIndex.value = index
+  editStoryIndex.value = poolIdx
   editStoryOpen.value = true
 }
 

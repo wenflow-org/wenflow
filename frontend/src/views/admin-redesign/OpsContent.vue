@@ -206,8 +206,11 @@
         @action="clearFilters"
       />
 
+      <!-- 翻页器常驻（判例 GoalConversations/TeachingSessions）：此前 v-if="filtered.length > pageSize"，
+           结果 ≤100 行时把「每页条数」调大会卸载翻页器，页码一起消失，表格只剩表头 0 行、
+           既无空态也无回路，整页像数据没了。Pagination 自带越界收敛 watcher。 -->
       <Pagination
-        v-if="filtered.length > pageSize"
+        v-if="filtered.length"
         v-model:page="page"
         v-model:pageSize="pageSize"
         :total="filtered.length"

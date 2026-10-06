@@ -149,8 +149,16 @@
       </div>
       <Announcements ref="announceRef" embedded @count="onDomainCount('announce', $event)" />
     </template>
-    <!-- ===== Tab5: 站内通知（Notifications embedded） ===== -->
-    <Notifications v-else ref="notifRef" embedded @count="onDomainCount('inapp', $event)" />
+    <!-- ===== Tab5: 站内通知（Notifications embedded） =====
+         与公告 tab 同判例：嵌入态下 Notifications 隐藏自身状态条，列表非空时
+         「发送通知」主钮无处可见（空态按钮只在无数据时出现），宿主补工具行并调其 openSend()。 -->
+    <template v-else>
+      <div class="oh-tabbar">
+        <span class="oh-tabbar__sub">站内信与推送</span>
+        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="notifRef?.openSend?.()">发送通知</button>
+      </div>
+      <Notifications ref="notifRef" embedded @count="onDomainCount('inapp', $event)" />
+    </template>
   </div>
 </template>
 

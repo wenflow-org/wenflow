@@ -511,8 +511,8 @@
                 <span class="is-lsb-t">LSB {{ loadFmt(loadDisplayDay.lsb) }}</span>
               </div>
               <div class="ld-load__zones">
-                <span><i class="ld-load__dot is-lss"></i>LSS 学习压力（0-10，越高越累）</span>
-                <span><i class="ld-load__dot is-lf"></i>LF 疲劳度（0-10，≥6 警戒）</span>
+                <span><i class="ld-load__dot is-lss"></i>LSS 学习压力（0-100，越高越累）</span>
+                <span><i class="ld-load__dot is-lf"></i>LF 疲劳度（0-100，≥60 警戒）</span>
                 <span><i class="ld-load__dot is-lsb"></i>LSB 状态平衡（KTL-LF，负=状态差）</span>
               </div>
             </div>
@@ -1141,6 +1141,10 @@ async function loadDetail(id: string | undefined) {
       liveGetLearnerEvidence(id, pathId, includeTest).catch(() => ({ items: [], domain: [], loadCurve: [] }))
     ])
     if (stale()) return
+    // 画像/证据/概览多处 computeds 读 rawDetail（:1370-1382）——此前只在 resetDerivedState
+    // 里置 null、从未回填，导致画像页签 10 张卡、证据页签指标卡、概览学习状态追踪全部
+    // 只落空态。这里补齐唯一的赋值点。
+    rawDetail.value = raw
     const model = (raw.model as Record<string, unknown>) || raw
     const km = ((model.knowledgeMemory as Record<string, unknown>) || (raw.knowledgeMemory as Record<string, unknown>) || {}) as Record<string, unknown>
     const currentPath = (km.currentPath || {}) as Record<string, unknown>
@@ -1767,7 +1771,9 @@ const loadChartOption = computed<EChartsCoreOption>(() => {
       type: 'value',
       // min 用回调：数据里出现 < -4 的 LSB（如 KTL=0、LF=10 → −10）时下界跟着走，避免截断
       min: (e: { min: number }) => Math.min(-4, e.min),
-      max: 12,
+      // max 同样用回调：接口的 loadCurve 是 0-100 刻度（lss/ktl/lf/lsb），此前写死 12 会把
+      // LSS/LF 两条线整段裁到网格外、只剩一个点。下界保底 12 只服务「全 0」的极端数据。
+      max: (e: { max: number }) => Math.max(12, Math.ceil(e.max ?? 0)),
       axisLabel: { fontSize: 11 },
     },
     series: [
@@ -1817,7 +1823,8 @@ const loadChartOption = computed<EChartsCoreOption>(() => {
       {
         name: '疲劳警戒',
         type: 'line',
-        data: Array(labels.length).fill(6),
+        // 与图例同刻度：loadCurve 是 0-100，警戒线 = 60（原 6 属 0-10 口径的残留）
+        data: Array(labels.length).fill(60),
         silent: true,
         symbol: 'none',
         lineStyle: { type: 'dashed', width: 1, color: 'rgba(220,38,38,0.35)' },

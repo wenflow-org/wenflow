@@ -167,13 +167,14 @@
               </select>
             </label>
           </div>
-          <label class="mk-field">
+          <label class="mk-field" :class="{ 'mk-field--error': toolErrors.endpoint }">
             <span class="mk-field__label">{{ toolForm.transport === 'mcp' ? 'MCP 服务地址' : 'Endpoint' }}</span>
             <input
               v-model="toolForm.endpoint"
               class="mk-field__input"
               :placeholder="toolForm.transport === 'mcp' ? 'https://…/mcp' : 'https://… 或 local / ${ENV_VAR}'"
             />
+            <span v-if="toolErrors.endpoint" class="mk-field__err">{{ toolErrors.endpoint }}</span>
           </label>
           <p v-if="toolForm.transport === 'mcp'" class="ac-mcp__hint">
             MCP 服务的工具由服务端 <code>tools/list</code> 动态发现，不在本页逐个登记；调用时以
@@ -406,7 +407,12 @@ async function saveTool() {
   if (!toolForm.value.id.trim()) toolErrors.value.id = '请输入工具 ID'
   if (!toolForm.value.name.trim()) toolErrors.value.name = '请输入名称'
   if (!toolForm.value.endpoint.trim()) toolErrors.value.endpoint = '请输入 Endpoint 地址'
-  if (Object.keys(toolErrors.value).length) return
+  if (Object.keys(toolErrors.value).length) {
+    // 兜底：任何字段的校验失败都必须有可见反馈，不能静默 return（此前 endpoint 的错误
+    // 没有渲染位，点保存既不提交也无提示，用户读作按钮坏了）
+    toast.error('请先补全表单中标红的必填项')
+    return
+  }
   toolSaving.value = true
   try {
     if (toolEditingId.value) {

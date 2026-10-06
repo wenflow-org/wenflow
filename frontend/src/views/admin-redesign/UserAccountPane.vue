@@ -11,7 +11,7 @@
         {{ restoring ? '恢复中…' : '恢复用户' }}
       </button>
       <div v-if="canDelete" class="mk-menu">
-        <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click="toggleMenu('hero')">⋯</button>
+        <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu('hero')">⋯</button>
         <div v-if="openMenu === 'hero'" class="mk-menu__pop" :style="popStyle" @click.stop>
           <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留，可在用户列表恢复" @click="menuDelete">删除账户…</button>
         </div>

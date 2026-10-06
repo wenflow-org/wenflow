@@ -3,13 +3,24 @@
     <MkLoading v-if="loading" />
     <MkEmptyState v-else-if="error" tone="error" :title="error" action-text="重试" @action="load" />
 
+    <!-- 本阶段单独失败（其余阶段成功，故整体 error 不置位）：不能画成空白画布 + 「0 字段 · 0 步」，
+         那与「这阶段真没数据」无从分辨。给失败态与重试入口。 -->
+    <MkEmptyState
+      v-else-if="!flow && stageErrors[active]"
+      tone="error"
+      :title="stageErrors[active]"
+      description="本阶段的字段路由接口没有返回数据；其余阶段已加载，可重试。"
+      action-text="重试"
+      @action="load"
+    />
+
     <!-- 工作区：工具栏 + 流水线画布 -->
     <div v-else class="dfg-frame">
       <div class="dfg-toolbar">
         <div class="dfg-toolbar__status">
           <span class="dfg-stage-dot" :style="{ background: toneOf(flow?.stageId || '').hue }"></span>
           <strong class="dfg-title">{{ flow?.stageName || '' }}<span class="dfg-title__agent mono"> {{ flow?.agentId }}</span></strong>
-          <span class="dfg-meta">{{ flow?.fieldCount || 0 }} 字段 · {{ flow?.steps.length || 0 }} 步</span>
+          <span class="dfg-meta">{{ flow ? flow.fieldCount : '—' }} 字段 · {{ flow ? flow.steps.length : '—' }} 步</span>
         </div>
         <div class="dfg-toolbar__controls">
           <div class="dfg-search">
@@ -515,6 +526,9 @@ const emit = defineEmits<{ changed: []; stage: [string] }>()
 const loading = ref(false)
 const error = ref('')
 const detailByStage = ref<Record<string, StageDetailLike | null>>({})
+/** 逐阶段失败原因：五阶段并发拉取时只要有一个失败就记在这里（此前只留 firstErr，
+    且只有「五个全失败」才置整体 error，单个阶段失败会画成空白画布）。 */
+const stageErrors = ref<Record<string, string>>({})
 const orchDefs = ref<Record<string, DefStepLike[]>>({})
 const stageNames = ref<Record<string, string>>({})
 const showHidden = ref(false)
@@ -567,6 +581,7 @@ async function load() {
       })
     )
     const next: Record<string, StageDetailLike | null> = {}
+    const errs: Record<string, string> = {}
     let firstErr = ''
     results.forEach((r, i) => {
       const s = STAGE_ORDER[i]
@@ -574,10 +589,13 @@ async function load() {
         next[s] = r.value.detail
       } else {
         next[s] = null
-        if (!firstErr) firstErr = (r.reason as any)?.response?.data?.error?.message || (r.reason as any)?.message || `阶段 ${s} 加载失败`
+        const msg = (r.reason as any)?.response?.data?.error?.message || (r.reason as any)?.message || `阶段 ${s} 加载失败`
+        errs[s] = msg
+        if (!firstErr) firstErr = msg
       }
     })
     detailByStage.value = next
+    stageErrors.value = errs
     if (!Object.values(next).some((d) => d)) error.value = firstErr || '字段流转加载失败'
   } catch (e: any) {
     error.value = e?.response?.data?.error?.message || e?.message || '字段流转加载失败'

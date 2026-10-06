@@ -165,6 +165,10 @@
                     <span class="mono">{{ model.providerId }}</span>
                     <span v-if="model.hasOwnEndpoint" class="ac-mr-label" title="该供应商自带端点：路由时整体切换 endpoint/key">独立端点</span>
                   </td>
+                  <!-- 档位列：表头有「档位」而此前缺这一格，整行从第 3 列起右移一列
+                       （「档位」列显示思考徽标、「并发上限」列显示降级链、「降级链」恒空），
+                       诊断页数值与标签错配会被读成真实配置。 -->
+                  <td><span class="mk-badge mk-badge--muted">{{ model.tier || '—' }}</span></td>
                   <td>
                     <span class="mk-badge" :class="model.capabilities.supportsThinking ? 'mk-badge--ok' : 'mk-badge--muted'">
                       {{ model.capabilities.supportsThinking ? '支持' : '不支持' }}

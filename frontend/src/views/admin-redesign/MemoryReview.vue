@@ -139,11 +139,13 @@
             </tr>
           </tbody>
         </table>
-        <!-- 到期档下钻筛空：不是「无数据」，提示取消路径而非空态误导 -->
+        <!-- 到期档下钻筛空：两种口径要分开说。下钻命中的是「窗口内该档有到期痕迹的学习者」，
+             列表是「前 50 名」——两者求交集为空时，断言「窗口内没有学习者的到期痕迹」是错的
+             （实测「明天」档窗口内 42 痕 / 12 人，交集 0，界面却报窗口内没有）。 -->
         <MkEmptyState
           v-else-if="dueBandFilter"
-          title="该到期档暂无学习者"
-          description="窗口内没有学习者的到期痕迹落在这个时间档。再点一次分布条上的同档分段即可取消筛选。"
+          :title="dueBandEmpty.title"
+          :description="dueBandEmpty.desc"
         />
       </div>
     </div>
@@ -715,6 +717,23 @@ const mrDueBins = computed(() =>
   mrDueBand.value.map((entry) => ({ key: entry.key, label: entry.name, n: entry.n, tone: entry.tone }))
 )
 
+/** 下钻筛空的诚实文案：窗口口径与「前 50 名」口径不同，不能把交集为空说成「窗口内没有」。 */
+const dueBandEmpty = computed(() => {
+  const band = dueBandFilter.value
+  const inWindow = band ? (dueBucketUsers.value.get(band)?.size ?? 0) : 0
+  const label = band ? (mrDueBins.value.find((b) => b.key === band)?.label ?? band) : ''
+  if (inWindow > 0) {
+    return {
+      title: '前 50 名里没有该档学习者',
+      desc: `窗口内「${label}」档有 ${inWindow} 位学习者带到期痕迹，但都不在列表前 50 名内（列表只显示前 50 名）。再点一次分布条上的同档分段即可取消筛选。`
+    }
+  }
+  return {
+    title: '该到期档暂无学习者',
+    desc: '窗口内没有学习者的到期痕迹落在这个时间档。再点一次分布条上的同档分段即可取消筛选。'
+  }
+})
+
 /* 窗口拉取失败或队列为空 → 整块隐藏（不留空卡；失败同 OpsContent pathBandReady 判例静默） */
 const traceWindowReady = computed(() => !traceFailed.value && queueRows.value.length > 0)
 
@@ -1039,6 +1058,11 @@ onMounted(async () => {
 /* 归并表勾选列表头：收窄，别把「选择」撑成正文列宽 */
 .mr__th-check { width: 40px; }
 .mr__sub { display: block; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* 但写在 <td> 上的降档文本必须是 table-cell：display:block 会把 td 移出表格布局，
+   浏览器把连续的非单元格子元素包进同一个匿名单元格，整行自「别名」列起左移一列
+   （实测：95% 落在「别名」表头下、理由长文落在「可自动执行」列，最右「理由」恒空）。
+   归并建议表与已执行归并表均受影响；非单元格场景（p / small）仍按块渲染。 */
+td.mr__sub { display: table-cell; }
 /* 卡内说明段（非表格单元格里的 sub 文本）：补 16px 内边距与卡头文字对齐 —— 原来贴着卡左缘，
    看起来像漏排；表格仍按设计通边（单元格自带 padding） */
 .mr p.mr__sub { margin: 0; padding: 10px 16px 14px; }

@@ -425,14 +425,17 @@ const stateFilter = ref('')
     2026-10-04 状态条退役后由卡头工具栏 chips 消费（该计数唯一来源） */
 const stateFilterOptions = computed(() => {
   const count = (pred: (s: Sample) => boolean) => samples.value.filter(pred).length
+  // 列表失败时计数不可信（samples 为空 → 全 0，读作「一条都没有」）；显示 '—' 而非 0
+  const failed = statsState.value === 'error'
+  const n = (v: number) => (failed ? '—' : v)
   return [
-    { key: '', label: '全部', count: samples.value.length, hint: '' },
-    { key: 'running', label: '进行中', count: count((s) => s.runningCount > 0), hint: '' },
+    { key: '', label: '全部', count: n(samples.value.length), hint: '' },
+    { key: 'running', label: '进行中', count: n(count((s) => s.runningCount > 0)), hint: '' },
     // P1-3（2026-10-04 全站评审）：计数谓词与 filtered 的筛选谓词（runningCount===0 && pausedCount>0）同式，
     // 否则 pill「已暂停 2」点进去只筛出 1 条（同时在跑的学习者被计入却被筛掉）
-    { key: 'paused', label: '已暂停', count: count((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0), hint: '口径：当前无进行中会话、有暂停会话的学习者' },
+    { key: 'paused', label: '已暂停', count: n(count((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0)), hint: '口径：当前无进行中会话、有暂停会话的学习者' },
     // P2（2026-10-02 人类可读性）：原名「需关注」读作当前异常，实为累计曾失败/被终止——正名 + 口径入 title
-    { key: 'failed', label: '曾失败', count: count((s) => s.failedCount > 0), hint: '口径：累计有失败/终止会话的虚拟学习者，非当前异常' },
+    { key: 'failed', label: '曾失败', count: n(count((s) => s.failedCount > 0)), hint: '口径：累计有失败/终止会话的虚拟学习者，非当前异常' },
   ]
 })
 /** live 虚拟人域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
@@ -685,6 +688,10 @@ const completionPct = computed(() => {
 const statsState = computed<'loading' | 'error' | 'ready'>(() => {
   if (liveVirtualStatsLoading.value) return 'loading'
   if (liveVirtualStatsError.value) return 'error'
+  // 列表域失败必须并入：live.ts 只在列表 GET 成功后才去拉 stats（live.ts:1598），
+  // 列表失败时 stats 保持初值 0 且 liveVirtualStatsError 仍为 false，
+  // 于是「没拉到」被渲染成真实 0（完成率 0%、并发 0/10 还带 ok 绿调）。
+  if (liveFailures.value.virtuals) return 'error'
   return 'ready'
 })
 /** 三态取值：仅 ready 渲染真实数字 */
@@ -705,10 +712,13 @@ function statsKpiHint(ready: string): string {
   if (statsState.value === 'error') return '统计不可用 · 点击重试'
   return ready
 }
-/** 点卡片重试（live 层 retryLiveVirtualStats）；非错误态点击是空操作 */
+/** 点卡片重试（live 层 retryLiveVirtualStats）；非错误态点击是空操作。
+    列表域失败也会把 statsState 置 error，故重试要同时重拉列表——否则只重试 stats
+    而列表仍是失败态，KPI 会立刻回到 error，用户读作「点了没用」。 */
 function onStatsRetry() {
   if (statsState.value !== 'error') return
   void retryLiveVirtualStats()
+  void loadLiveData()
 }
 
 /** 绝对时间（创建列 title，P1#20）：相对时间一律配绝对时间，10 秒内可判断新旧 */

@@ -15,7 +15,10 @@
         <button type="button" class="mk-btn mk-btn--sm" :disabled="!summary || summaryEmpty" title="导出当前窗口的 Skill 明细 / 用户排行 / 模型排行（CSV）" @click="exportCsv">
           导出报表
         </button>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="() => load(true)">
+        <!-- 刷新必须同时重拉金额卡：此前只调 load()（summary/趋势/三表），
+             「调用成本 / 单次调用均值」不在其列——金额卡一旦落到「加载失败」，
+             用刷新永远恢复不了，只有切窗口 pill 能救。 -->
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="refreshAll">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
       </template>
@@ -138,8 +141,18 @@
           </div>
         </div>
         <!-- 趋势柱：走全 admin 统一图表语言 OvBars（2026-09-29 自 MkChart/ECharts 换入）。
-             2026-10-01 成本批：原 Token+failed 双柱改为单柱序列（金额缺失，单位=Token）。 -->
-        <OvBars v-if="trend.length" :cols="trendCols" :bar-width="44" :min-bars-height="150" />
+             2026-10-01 成本批：原 Token+failed 双柱改为单柱序列（金额缺失，单位=Token）。
+             2026-10-06 审核修复：此前写死 bar-width=44 且不传 labelEvery/showNums，
+             90 天时 90 列各带柱顶数字与日期标签互相压印（实测 70 对重叠、柱宽被压到 4.7px）。
+             按窗口收口：柱宽随列数收窄，>30 天隐藏柱顶数字、日期按 12 列稀显。 -->
+        <OvBars
+          v-if="trend.length"
+          :cols="trendCols"
+          :bar-width="days <= 7 ? 44 : days <= 30 ? 20 : 10"
+          :show-nums="days <= 30"
+          :label-every="days <= 7 ? 1 : days <= 30 ? 4 : 12"
+          :min-bars-height="150"
+        />
         <p v-if="trend.length" class="mk-card__note">
           合计 {{ fmtTokens(trend.reduce((acc, d) => acc + d.tokens, 0)) }} token · {{ trend.reduce((acc, d) => acc + d.calls, 0) }} 次调用 · 失败 {{ trend.reduce((acc, d) => acc + d.failed, 0) }} 次
         </p>
@@ -581,6 +594,13 @@ watch([days, includeTest], () => {
 }, { immediate: true })
 
 
+
+/** 页头「刷新」：主数据与金额卡必须一起重拉（金额卡只由 watch([days, includeTest]) 触发，
+    不重拉就永远停在失败态）。 */
+function refreshAll() {
+  void load(true)
+  void loadCostSummary()
+}
 
 async function load(force = false) {
   const key = tokenCostCacheKey()

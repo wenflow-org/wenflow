@@ -90,7 +90,6 @@ const ADMIN_PAGES = [
   ['learning-paths', '/admin/learning-paths'],
   ['memory-review', '/admin/memory-review'],
   ['virtual-learners', '/admin/virtual-learners'],
-  ['batch-experiments', '/admin/batch-experiments'],
   ['orchestrator', '/admin/orchestrator'],
   ['skills-run', '/admin/skills?tab=run'],
   ['skills-health', '/admin/skills?tab=health'],
@@ -156,6 +155,11 @@ const arg = (name, def) => {
 };
 const THEME = arg('--theme', 'light');
 const SIDE = arg('--side', 'both');
+// 视口：默认 1920×1080（1080p，最常见档）。此前写死 1440×900，而真实投放是
+// 1080p / 2K / 4K——1440 恰好落在「≥2000 档」之下、拿不到大屏字号与列宽 token，
+// 于是大屏专属缺陷（zoom 档、2000/2800/3600 镜像档）在量测里全部隐形。
+const WIDTH = Number(arg('--width', '1920'));
+const HEIGHT = Number(arg('--height', '1080'));
 const ONLY = (() => {
   const i = args.indexOf('--only');
   return i >= 0 ? new Set(args[i + 1].split(',').map((s) => s.trim())) : null;
@@ -405,7 +409,7 @@ async function run() {
 
   const results = [];
   for (const [name, url, side] of pages.map((p) => [p[0], p[1], p.side])) {
-    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    const ctx = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, deviceScaleFactor: 1 });
     await ctx.addCookies([
       { name: 'wenflow_admin_token', value: ADMIN_TOKEN, domain: 'localhost', path: '/' },
       { name: 'wenflow_token', value: USER_TOKEN, domain: 'localhost', path: '/' },
@@ -465,7 +469,7 @@ async function run() {
 
   const dir = join(HERE, 'v4-ui-audit-results');
   mkdirSync(dir, { recursive: true });
-  const file = join(dir, `${THEME}-${SIDE}-${Date.now()}.json`);
+  const file = join(dir, `${THEME}-${SIDE}-${WIDTH}x${HEIGHT}-${Date.now()}.json`);
   writeFileSync(file, JSON.stringify(results, null, 2));
   console.log(`\n→ ${file}`);
 }
