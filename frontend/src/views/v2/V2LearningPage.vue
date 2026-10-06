@@ -22,7 +22,7 @@
           <div class="learn__menu-group">
               <span class="learn__menu-label">结束本节课</span>
               <button type="button" class="learn__menu-item learn__menu-item--primary" @click="completeAndSettle">
-                <span class="learn__menu-item-main"><strong>完成并结算任务</strong><small>计入进度 · 生成本次学习总结</small></span>
+                <span class="learn__menu-item-main"><strong>完成并结算任务</strong><small>{{ finishHint }}</small></span>
               </button>
               <button type="button" class="learn__menu-item" @click="endSession">
                 <span class="learn__menu-item-main"><strong>结束学习（不计入完成）</strong><small>生成本次总结，不推进任务进度</small></span>
@@ -425,20 +425,6 @@
           </div>
           </div>
         </Transition>
-
-        <!-- 完课入口（原型 .wf-cta：位于快捷回复之后、composer 之前，作为对话流的收束按钮）。
-             P2-28（2026-10-04 评审）：本课知识点明确存在未掌握时降为描边次级（lessonCtaDamped），
-             课堂前半程视觉权重最大的不该是与当前任务相逆的「完成」；仅换状态样式，位置与
-             760px 单栏契约不动 -->
-        <button
-          v-if="!completed"
-          type="button"
-          class="lesson-cta"
-          :class="{ 'lesson-cta--damped': lessonCtaDamped }"
-          :title="lessonCtaDamped ? '本课知识点尚未全部掌握' : undefined"
-          :disabled="actionBusy || finalizing"
-          @click="completeAndSettle"
-        >完成本课</button>
 
         <!-- 输入区 -->
         <div class="composer">
@@ -1624,15 +1610,23 @@ const {
   masteredCount, weightedProgressPct
 } = useKnowledgePanel(knowledgePoints)
 
-/* P2-28（2026-10-04 设计评审）：课堂刚开始（0/N 掌握、仅 1 条消息）时视觉权重最大的
-   固定按钮是「完成本课」，主 CTA 与当前任务（上课）相逆、压在输入流上方易误触。
-   降级而非移除：本课知识点**明确存在未掌握**时按钮从实底主钮降为描边次级（材质对齐
-   .btn-ghost），title 说明原因；知识点数据未加载/为空（复习课等无知识点场景）不降级不误伤。
-   已拍板的 760px 单栏契约与气泡形态不动，仅调该按钮的状态样式。 */
-const lessonCtaDamped = computed(() => {
+/* 完课入口的位置（2026-10-06 用户指令「把完成本课放在这里，不合适吧」）：
+   原先在快捷回复之后、composer 之前常驻一颗整宽「完成本课」（原型 #wfFinishLesson 带来的），
+   它与 ⋯ 菜单里的「完成并结算任务」是同一个 handler（completeAndSettle），属重复入口；
+   而且它压在输入流上方、与当前任务（上课）相逆 —— P2-28（2026-10-04 评审）当时已指出
+   「主 CTA 与当前任务相逆、压在输入流上方易误触」，但只降了材质（lesson-cta--damped）没动位置。
+   现改为：完课只保留 ⋯ 菜单一处（课级动作与「结束学习/暂离或重学」同组，语义正确），
+   并把「本课知识点尚未全部掌握」的信号带进该菜单项副文，不再丢信息。 */
+const kpIncomplete = computed(() => {
   const total = knowledgePoints.value.length;
   return total > 0 && masteredCount.value < total;
 });
+/** ⋯ 菜单「完成并结算任务」副文：知识点未掌握时前置提示，其余为常规口径 */
+const finishHint = computed(() =>
+  kpIncomplete.value
+    ? '本课知识点尚未全部掌握 · 仍可计入进度并生成总结'
+    : '计入进度 · 生成本次学习总结'
+);
 
 /* 头部掌握度小圆环：r=8 → 周长 2πr≈50.27，弧长 = 已掌握/总数（与「n/N 已掌握」胶囊同口径） */
 const KP_RING_C = 2 * Math.PI * 8;
@@ -2623,38 +2617,9 @@ onBeforeUnmount(() => {
 .checkpoint__input:focus { border-color: color-mix(in srgb, var(--blue) 50%, transparent); }
 .checkpoint__actions { display: flex; gap: 10px; }
 
-/* ---------- 完课入口（原型 #wfFinishLesson：整宽主按钮，位于快捷回复之后、输入条之前） ---------- */
-.lesson-cta {
-  display: inline-flex; align-items: center; justify-content: center;
-  gap: 7px;
-  width: calc(100% - 28px);
-  max-width: 760px;
-  margin: 2px auto 4px;
-  min-height: 44px;
-  padding: 0 18px;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  /* 整宽主按钮：实色 --blue + 无投影（蓝色 30% 发光与 :active scale(.98) 一起退役） */
-  background: var(--blue);
-  color: var(--text-on-primary);
-  font: inherit; font-size: 14px; font-weight: 700;
-  cursor: pointer;
-  transition: transform 0.16s ease, opacity 0.16s ease;
-}
-.lesson-cta:active { transform: scale(0.98); }
-.lesson-cta:disabled { opacity: 0.55; cursor: default; }
-/* P2-28（2026-10-04）：知识点未全部掌握时完成入口降为描边次级——位置/尺寸/单栏契约不变，
-   只换材质：surface 底 + line 描边 + muted 字（与 .btn-ghost 同语言；token 引用暗色自动翻转）。
-   hover 与 .btn-ghost 同款：边框/文字变蓝即可，不再回到实底主钮的视觉权重。 */
-.lesson-cta--damped {
-  background: var(--surface);
-  border-color: var(--line);
-  color: var(--muted);
-}
-.lesson-cta--damped:not(:disabled):hover {
-  border-color: color-mix(in srgb, var(--blue) 35%, transparent);
-  color: var(--blue-deep);
-}
+/* ---------- 完课入口 ----------
+   整宽 .lesson-cta（原型 #wfFinishLesson：快捷回复之后、输入条之前）2026-10-06 退役：
+   与 ⋯ 菜单「完成并结算任务」重复，且压在输入流上方。完课入口现只在 ⋯ 菜单里。 */
 
 /* ---------- 输入区（对齐原型 .wf-composer：760 居中收纳盒 + focus-within 光环） ---------- */
 .composer {
@@ -3234,7 +3199,6 @@ onBeforeUnmount(() => {
      展开态也不再需要 absolute 下拉面板 —— 抽屉自带滚动与遮罩。 */
   .lessonbar { padding: 12px 14px; }
   .composer { gap: 4px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
-  .lesson-cta { width: calc(100% - 24px); }
 }
 
 /* 桌面阅读宽度：>1100（全局列宽收窄不生效的区段）把消息/卡片限在 ~760px 居中，
@@ -3252,7 +3216,6 @@ onBeforeUnmount(() => {
   .tutor > .oscene,
   .tutor > .tutor__resume,
   .tutor > .replies,
-  .tutor > .lesson-cta,
   .tutor > .checkpoint {
     width: calc(100% - 28px);
     max-width: 760px;
