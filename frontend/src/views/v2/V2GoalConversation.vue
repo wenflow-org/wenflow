@@ -1661,12 +1661,10 @@ function shuffleScenes() {
   display: flex; flex-direction: column; gap: 18px;
   transition: filter .2s ease, opacity .2s ease;
 }
-/* 消息少时贴底：首个子项吃满剩余空间（等价 justify-content:flex-end，但溢出时不会把顶部
-   推出可达范围——auto 外边距在无剩余空间时按 0 处理）。短会话下最新一条与快捷补充紧贴输入框，
-   视线与拇指都不用上下跑。
-   2026-10-05：原先只在 ≤1100px 媒体块生效，桌面短会话同样空一截（1440×900 实测 170px），
-   提到基础档后全宽度一致生效。 */
-.chat__scroll > :first-child { margin-top: auto; }
+/* 消息从上方开始、向下生长：桌面**刻意不做贴底**。
+   2026-10-05 曾把窄屏那条贴底规则提到基础档（当时理由是「短会话消息与下方快捷块之间空一截」），
+   结果桌面整段对话吊在底部：1440×1250 实测首条消息距对话区顶部 141px，看起来像对话从下往上长。
+   2026-10-06 用户否掉（「消息不应该是从上面往下面走吗」），回退为窄屏专属（见 ≤1100 档）。 */
 
 .chat__scroll--dim { filter: blur(2px); opacity: .45; pointer-events: none; }
 
@@ -2266,7 +2264,10 @@ function shuffleScenes() {
   /* overscroll-behavior:contain 隔断滚动链——列表滚到边缘时不再触发整页橡皮筋
      （本页 height:100dvh 不随文档滚动，iOS 上链式滚动会把底部导航一起拽动） */
   .chat__scroll { min-height: 0; overscroll-behavior: contain; }
-  /* 消息少时贴底已提到基础档（2026-10-05），窄屏不再单独声明 */
+  /* 消息少时贴底：首个子项吃满剩余空间（等价 justify-content:flex-end，但溢出时不会把顶部
+     推出可达范围——auto 外边距在无剩余空间时按 0 处理）。短会话下最新一条与快捷补充紧贴输入框，
+     视线与拇指都不用上下跑。窄屏专属：桌面要从上往下长（见基础档注释）。 */
+  .chat__scroll > :first-child { margin-top: auto; }
   .msg { max-width: 96%; }
   /* 快捷补充面板占满整宽：基础样式的 margin-left 40（对齐气泡正文）在手机上白丢 40px 宽度，
      而这是整屏最常点的区域 */
