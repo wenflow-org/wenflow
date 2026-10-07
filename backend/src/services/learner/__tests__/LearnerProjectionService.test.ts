@@ -137,3 +137,34 @@ describe('toPlanningProjection（新建路径时的难度校准证据）', () =>
     expect(learnerProjectionService.toPlanningProjection(snapshot as any)?.conceptLedgerSize).toBe(60);
   });
 });
+
+describe('toTeachingProjection · 概念身份接口（kcid 读取侧契约）', () => {
+  /**
+   * 上游（LearnerKnowledgeMemoryService 台账聚合）已按 conceptId 优先归并：
+   * 投影层对台账行 **1:1 透传**（仅 slice 截断）——不再按名字拆分/合并，
+   * 保证「上游归并结果 = 课堂 prompt 看到的结果」。
+   */
+  const mergedLedger = [
+    { conceptKey: '判断两个元素间的对齐关系', label: '判断两个元素间的对齐关系', familiarity: 'practiced', transferReadiness: 'medium', misconceptionRisk: 'low', sourcePaths: ['p1'], sourceTasks: ['t1'], evidenceCount: 2 },
+    { conceptKey: '独立概念', label: '独立概念', familiarity: 'seen', transferReadiness: 'low', misconceptionRisk: 'low', sourcePaths: ['p1'], sourceTasks: [], evidenceCount: 1 },
+  ];
+  const snapshot = {
+    ...heavySnapshot(),
+    knowledgeMemory: {
+      ...heavySnapshot().knowledgeMemory,
+      globalBackground: { ...heavySnapshot().knowledgeMemory.globalBackground, conceptLedger: mergedLedger },
+    },
+  } as any;
+
+  it('台账行 1:1 透传（上游 conceptId 归并结果不被投影层再拆分/再合并）', () => {
+    const projection = learnerProjectionService.toTeachingProjection(snapshot);
+    expect(projection.backgroundKnowledge.recentConceptLedger).toEqual(mergedLedger);
+    expect(projection.backgroundKnowledge.recentConceptLedger).toHaveLength(2);
+  });
+
+  it('名字作展示接口：mastered/fragile/struggling 与台账 label 原样输出（不按 conceptKey 改写）', () => {
+    const projection = learnerProjectionService.toTeachingProjection(snapshot);
+    expect(projection.relevantKnowledge.mastered).toEqual(heavySnapshot().knowledgeMemory.globalSignals.masteredConcepts);
+    expect(projection.backgroundKnowledge.recentConceptLedger[0].label).toBe('判断两个元素间的对齐关系');
+  });
+});

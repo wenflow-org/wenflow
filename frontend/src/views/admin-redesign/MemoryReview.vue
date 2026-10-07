@@ -46,6 +46,23 @@
       />
     </section>
 
+    <!-- 碎片率 KPI 行（R7 概念本体治理批）：重复 label 比率 / 未挂靠散键 / 待审队列深度。
+         数据来自 overview.totals.fragmentation（outlet 域契约 D「暴露在 memory-review 接口里」）；
+         后端未部署该指标 → 字段缺失显 '—'（不把缺失当 0），加载中/失败沿用页头 KPI 同一套口径。
+         MkKpi 家法：hint 一短句可见口径 + title 长释悬停（全站判例，勿自造样式） -->
+    <section class="mk-kpi-grid" :aria-busy="kpiPending || undefined">
+      <MkKpi
+        v-for="card in fragmentationCards"
+        :key="card.label"
+        :label="card.label"
+        :value="card.value"
+        :hint="card.hint"
+        :tone="card.tone"
+        :title="card.title"
+        :aria-busy="kpiPending || undefined"
+      />
+    </section>
+
     <!-- 到期时间轴（教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」：回到用户列表卡
          上方页面级）——点某档 = 只看窗口内该档有到期痕迹的学习者。口径不变：复习队列 =
          extractionCount>0，窗口 = 最近 200 条痕迹（updatedAt 倒序），非全量——全量到期数见
@@ -335,16 +352,29 @@
         </div>
       </section>
 
-      <!-- 4. 概念归并审计：可写动作（勾选执行 / 回滚），默认观察模式 -->
+      <!-- 4. 概念归并审计：可写动作（勾选执行 / 单条确认 / 驳回 / 回滚），默认观察模式。
+           R7 概念本体治理批：三组建议（归并 / 需人工看 / 散键清理）全部给出入口——
+           此前 dropCandidates 只在类型里声明计数（审计 CC-2）、ambiguous 无操作位； -->
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">概念归并审计</h3>
+          <!-- 来源（任务书 B：每条建议可见来源——同组建议同源，来源挂在卡头不逐行复读） -->
           <span class="mk-card__meta">
-            <template v-if="detail.audit">{{ detail.audit.mode }} 模式 · {{ timeAgo(detail.audit.generatedAt) }}</template>
+            <template v-if="detail.audit">来源：概念归并观察（{{ detail.audit.mode }} 模式）· {{ timeAgo(detail.audit.generatedAt) }}</template>
             <template v-else>尚未观察（点「重新观察」跑一次）</template>
           </span>
+          <!-- 已执行历史入口（R7 任务书 B：mode=apply 审计一个入口可见）：默认展开保持既有可达性，
+               可收起给三组建议让出主视觉；aria-expanded 供读屏 -->
+          <button
+            v-if="detail.audit && appliedHistoryCount > 0"
+            type="button"
+            class="mk-btn mk-btn--sm"
+            :aria-expanded="historyOpen"
+            title="本用户已执行过的归并（mode=apply 审计 + 按次留档凭据，含 alias 式归并），可回滚"
+            @click="historyOpen = !historyOpen"
+          >已执行历史（{{ appliedHistoryCount }}）</button>
         </div>
-        <!-- 审计计数（批E）：卡头 6 计数平摊 → 处理队列四格（与概览带同一语言） -->
+        <!-- 审计计数（批E）：卡头 6 计数平摊 → 处理队列四格（与概览带同一语言）；R7 补「散键清理」格 -->
         <div v-if="detail.audit" class="mr-audit-queue">
           <div class="mr-audit-queue__item">
             <b>{{ detail.audit.stats.candidates }}</b><span>候选</span>
@@ -358,6 +388,9 @@
           <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': detail.audit.stats.ambiguous > 0 }">
             <b>{{ detail.audit.stats.ambiguous }}</b><span>需人工看</span>
           </div>
+          <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': mrDropCount > 0 }">
+            <b>{{ mrDropCount }}</b><span>散键清理</span>
+          </div>
           <div class="mr-audit-queue__item mr-audit-queue__item--quiet">
             <b>{{ detail.audit.stats.applied }}<i>/{{ detail.audit.stats.deleted }}</i></b><span>已执行 / 删除</span>
           </div>
@@ -367,21 +400,24 @@
           <h4 class="mr__h4">
             归并建议（canonical ← aliases）
             <span class="mr__sub-inline">
-              勾选后执行；默认只勾选「可自动执行」的（把握度 + 词面闸门都过）。
-              执行会改动该用户的 memory_traces，但会留整行前后快照，可回滚。
+              勾选后「执行选中」批量执行（确认弹层列明迁移哪些表）；默认只勾选「可自动执行」的（把握度 + 词面闸门都过）。
+              执行会改动该用户的记忆痕迹，但留整行快照，可回滚。
             </span>
           </h4>
-          <div v-if="detail.audit.proposals.length" class="mr__bulk">
+          <div v-if="detail.audit && hasSuggestions" class="mr__bulk">
             <button type="button" class="mk-btn mk-btn--sm" @click="selectAllApplicable">全选可自动执行</button>
             <button type="button" class="mk-btn mk-btn--sm" @click="clearSelection">清空</button>
             <button
               type="button"
               class="mk-btn mk-btn--sm mk-btn--danger-ghost"
-              :disabled="busy || selectedKeys.length === 0"
+              :disabled="busy || selectedTotal === 0"
               @click="applySelected"
-            >执行选中（{{ selectedKeys.length }}）</button>
+            >执行选中（{{ selectedTotal }}）</button>
             <span v-if="selectedNeedsReview.length" class="mr__warn-inline">
               {{ selectedNeedsReview.length }} 条属于「需人工确认」，执行前请先看清
+            </span>
+            <span v-else-if="selectedAmbiguousPairs.length" class="mr__warn-inline">
+              含 {{ selectedAmbiguousPairs.length }} 条「需人工看」对，执行前请先看清
             </span>
           </div>
           <div v-if="detail.audit.proposals.length" class="mk-table-scroll">
@@ -389,8 +425,8 @@
             <thead>
               <tr>
                 <th class="mr__th-check">选择</th>
-                <th>规范键</th><th>别名</th><th class="mk-num">把握度</th><th class="mk-num">词面相似</th>
-                <th>可自动执行</th><th>理由</th>
+                <th>归并目标</th><th>证据（别名 · 理由）</th><th class="mk-num">置信度</th><th class="mk-num">词面相似</th>
+                <th>可自动执行</th><th class="mk-th--right">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -405,7 +441,10 @@
                   />
                 </td>
                 <td class="mr__sub">{{ proposal.canonical }}</td>
-                <td class="mr__sub">{{ proposal.aliases.join(' / ') }}</td>
+                <td class="mr__sub">
+                  <div>{{ proposal.aliases.join(' / ') }}</div>
+                  <div>{{ proposal.rationale || '—' }}</div>
+                </td>
                 <td class="mk-num">
                   <span class="mr-pct" :title="`把握度 ${Math.round(proposal.confidence * 100)}%`">
                     <b>{{ Math.round(proposal.confidence * 100) }}%</b>
@@ -426,30 +465,126 @@
                     :title="proposal.autoApplicable ? '把握度 + 词面闸门都过，默认已勾选' : '未过词面闸门或把握度不足，勾选后需人工确认'"
                   >{{ proposal.autoApplicable ? '可自动' : '需人工确认' }}</span>
                 </td>
-                <td class="mr__sub">{{ proposal.rationale || '—' }}</td>
+                <td>
+                  <div class="mk-actions">
+                    <button
+                      type="button"
+                      class="mk-btn mk-btn--sm"
+                      :disabled="busy"
+                      :title="proposal.autoApplicable ? '确认执行这条归并（确认弹层列明迁移表）' : '确认并强行执行这条需人工确认的归并（确认弹层列明迁移表）'"
+                      @click="applyOne({ canonicals: [proposal.canonical] }, `归并「${proposal.aliases.join('、')}」→「${proposal.canonical}」`, { includeNeedsReview: !proposal.autoApplicable })"
+                    >确认</button>
+                    <button
+                      type="button"
+                      class="mk-btn mk-btn--sm"
+                      :disabled="busy"
+                      title="驳回这条建议：服务端留痕后不再重复给出（不改动记忆痕迹）"
+                      @click="rejectOne({ canonicals: [proposal.canonical] }, `归并建议「${proposal.canonical}」`)"
+                    >驳回</button>
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
           </div>
           <p v-else class="mr__sub">本次没有达到把握度阈值的归并建议。</p>
 
-          <h4 class="mr__h4">需人工看（ambiguous，不会被执行）</h4>
+          <h4 class="mr__h4">
+            需人工看（ambiguous，不会被执行）
+            <span class="mr__sub-inline">语义远距 / 把握度不足落进人审队列；「确认」= 按 候选 B → 候选 A 执行归并（弹层列明迁移表）</span>
+          </h4>
           <div v-if="detail.audit.ambiguous.length" class="mk-table-scroll">
           <table class="mk-table">
             <!-- 表头补明「候选 A / B 是概念键」（2026-10-06 审核 #62）：原表头只写 A / B
-                 两个单字母；A/B 两列是无人类可读 label 的裸 conceptKey，与另三表同降 .mr__sub 档 -->
-            <thead><tr><th>候选 A（概念键）</th><th>候选 B（概念键）</th><th>理由</th></tr></thead>
+                 两个单字母；A/B 两列是无人类可读 label 的裸 conceptKey，与另三表同降 .mr__sub 档。
+                 R7：补 选择/操作 两列——此前这组建议只可看不可动（审计 CC-2） -->
+            <thead><tr><th class="mr__th-check">选择</th><th>归并目标（候选 A）</th><th>并入（候选 B）</th><th>证据（理由）</th><th class="mk-th--right">操作</th></tr></thead>
             <tbody>
               <tr v-for="(item, index) in detail.audit.ambiguous" :key="`${item.a}-${item.b}-${index}`">
+                <td>
+                  <input
+                    type="checkbox"
+                    class="mr__check"
+                    :checked="selectedAmbiguous[ambiguousKey(item)] === true"
+                    :aria-label="`勾选执行归并：${item.b} 并入 ${item.a}（需人工确认）`"
+                    @change="toggleSelectAmbiguous(item)"
+                  />
+                </td>
                 <td class="mr__sub">{{ item.a }}</td>
                 <td class="mr__sub">{{ item.b }}</td>
                 <td class="mr__sub">{{ item.reason || '—' }}</td>
+                <td>
+                  <div class="mk-actions">
+                    <button
+                      type="button"
+                      class="mk-btn mk-btn--sm"
+                      :disabled="busy"
+                      title="确认这确实是同一概念，按「B 并入 A」执行归并（确认弹层列明迁移表）"
+                      @click="applyOne({ canonicals: [item.a], ambiguous: [{ a: item.a, b: item.b }] }, `「${item.b}」并入「${item.a}」`, { includeNeedsReview: true })"
+                    >确认</button>
+                    <button
+                      type="button"
+                      class="mk-btn mk-btn--sm"
+                      :disabled="busy"
+                      title="驳回这条建议：服务端留痕后不再重复给出（不改动记忆痕迹）"
+                      @click="rejectOne({ ambiguous: [{ a: item.a, b: item.b }] }, `人工确认对「${item.a} ← ${item.b}」`)"
+                    >驳回</button>
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
           </div>
           <p v-else class="mr__sub">没有待人工确认项。</p>
 
+          <h4 class="mr__h4">
+            散键清理（dropCandidates）
+            <span class="mr__sub-inline">判定为误提取 / 无效的散概念键；「确认」= 清理该键（弹层列明迁移表），不会自动执行</span>
+          </h4>
+          <!-- R7 任务书 B：dropCandidates 此前只在类型里声明计数、从不渲染（审计 CC-2）——补第三组建议列表 -->
+          <div v-if="mrDropCount" class="mk-table-scroll">
+          <table class="mk-table">
+            <thead><tr><th class="mr__th-check">选择</th><th>散键（概念键）</th><th>证据（理由）</th><th class="mk-th--right">操作</th></tr></thead>
+            <tbody>
+              <tr v-for="(drop, index) in detail.audit.dropCandidates" :key="`${drop.conceptKey}-${index}`">
+                <td>
+                  <input
+                    type="checkbox"
+                    class="mr__check"
+                    :checked="selectedDrops[drop.conceptKey] === true"
+                    :aria-label="`勾选清理散键：${drop.conceptKey}`"
+                    @change="toggleSelectDrop(drop.conceptKey)"
+                  />
+                </td>
+                <td class="mr__sub">{{ drop.conceptKey }}</td>
+                <td class="mr__sub">{{ drop.reason || '—' }}</td>
+                <td>
+                  <div class="mk-actions">
+                    <button
+                      type="button"
+                      class="mk-btn mk-btn--sm"
+                      :disabled="busy"
+                      title="确认清理该散键（确认弹层列明迁移表）"
+                      @click="applyOne({ drops: [drop.conceptKey] }, `清理散键「${drop.conceptKey}」`)"
+                    >确认</button>
+                    <button
+                      type="button"
+                      class="mk-btn mk-btn--sm"
+                      :disabled="busy"
+                      title="驳回这条建议：服务端留痕后不再重复给出（不改动记忆痕迹）"
+                      @click="rejectOne({ drops: [drop.conceptKey] }, `散键清理「${drop.conceptKey}」`)"
+                    >驳回</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          </div>
+          <p v-else class="mr__sub">没有待清理的散键。</p>
+
+          <!-- 已执行历史（R7 任务书 B：mode=apply 审计一个入口可见——卡头「已执行历史」开关；
+               默认展开保持既有可达性）。含破坏性归并凭据与 alias 式归并凭据两族 -->
+          <template v-if="historyOpen">
           <h4 class="mr__h4">已执行归并（可回滚 · 按次留档）</h4>
           <div v-if="rollbackableMerges.length" class="mk-table-scroll">
           <table class="mk-table">
@@ -476,6 +611,34 @@
             已回滚 {{ rolledBackMerges.length }} 条（保留凭据痕迹，不再重复回滚）：
             {{ rolledBackMerges.map((m) => m.canonical).slice(0, 3).join('、') }}
           </p>
+
+          <!-- alias 式归并（S3 非破坏策略，现行默认）：凭据同样按次留档；此前前端从未渲染（detail 里一直有） -->
+          <h4 class="mr__h4">alias 式归并（非破坏：别名登记 + 行重指向）</h4>
+          <div v-if="appliedAliasRollbackable.length" class="mk-table-scroll">
+          <table class="mk-table">
+            <thead><tr><th>归并目标</th><th>别名</th><th class="mk-num">重指向行数</th><th>执行时间</th><th></th></tr></thead>
+            <tbody>
+              <tr v-for="merge in appliedAliasRollbackable" :key="merge.aliasMergeId || `${merge.canonical}-${merge.appliedAt}`">
+                <td class="mr__sub">{{ merge.canonical }}</td>
+                <td class="mr__sub">{{ merge.aliases.join(' / ') }}</td>
+                <td class="mk-num">{{ merge.repointedRows }}</td>
+                <td><span class="mk-cell-sub mono" :title="merge.appliedAt">{{ fmtDateTime(merge.appliedAt) }}</span></td>
+                <td>
+                  <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" title="按规范键回滚：删别名并还原 conceptId 指向" @click="rollbackOne(merge.canonical)">回滚</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          </div>
+          <p v-else class="mr__sub">没有可回滚的 alias 归并。</p>
+          <p v-if="appliedAliasLegacy.length" class="mr__sub">
+            另有 {{ appliedAliasLegacy.length }} 条早期 alias 归并：凭据只在审计窗口内，页面内暂不支持回滚。
+          </p>
+          <p v-if="appliedAliasRolledBack.length" class="mr__sub">
+            已回滚 {{ appliedAliasRolledBack.length }} 条 alias 归并（保留凭据痕迹，不再重复回滚）：
+            {{ appliedAliasRolledBack.map((m) => m.canonical).slice(0, 3).join('、') }}
+          </p>
+          </template>
         </template>
       </section>
       </div>
@@ -542,6 +705,29 @@ interface AppliedMergeView {
   deletedRows: number
 }
 
+/** alias 式归并凭据视图（S3 非破坏策略；R7 已执行历史入口新增渲染——此前 detail 一直回、前端从未声明） */
+interface AppliedAliasMergeView {
+  aliasMergeId: string | null
+  canonical: string
+  aliases: string[]
+  appliedAt: string
+  rolledBackAt: string | null
+  repointedRows: number
+}
+
+/** 碎片率指标（R7 outlet 域契约 D：暴露在 memory-review 接口里）。
+ *  ⚠ 假设字段名（outlet 路由本批并行开发、尚未落地，按任务书契约先绑定）：
+ *  overview.totals.fragmentation = { duplicateLabelRatio, unattachedKeys, pendingReview }。
+ *  字段缺失 → KPI 显 '—'（不把缺失当 0），等 outlet 落地后对齐实际字段名。 */
+interface FragmentationMetrics {
+  /** 重复 label 比率（0-1）：措辞重复的痕迹占比 */
+  duplicateLabelRatio?: number
+  /** 未挂靠散键数：解析不到 KC 本体（conceptId 空）的自由措辞概念键 */
+  unattachedKeys?: number
+  /** 待审队列深度：人审队列中的建议数 */
+  pendingReview?: number
+}
+
 /** 明细响应类型（P3 量力补齐）：只声明模板/脚本实际读取的字段，后端多余字段不声明 */
 interface ReviewPlanItem {
   conceptKey: string
@@ -582,11 +768,18 @@ interface ReviewDetail {
     stats: { candidates: number; proposed: number; autoApplicable: number; ambiguous: number; applied: number; deleted: number }
     proposals: Array<{ canonical: string; aliases: string[]; confidence: number; lexicalSimilarity: number; autoApplicable: boolean; rationale?: string | null }>
     ambiguous: Array<{ a: string; b: string; reason?: string | null }>
+    /** R7：散键清理建议（ConceptConsolidationAudit.dropCandidates；此前只声明过计数 drops、从不渲染） */
+    dropCandidates?: Array<{ conceptKey: string; reason: string }>
   } | null
   appliedMerges?: {
     rollbackable: AppliedMergeView[]
     rolledBack: AppliedMergeView[]
     legacyWindowOnly: AppliedMergeView[]
+  }
+  appliedAliasMerges?: {
+    rollbackable: AppliedAliasMergeView[]
+    rolledBack: AppliedAliasMergeView[]
+    legacyWindowOnly: AppliedAliasMergeView[]
   }
   duplicatedFamilies: Array<{ family: string; size: number; members: Array<{ conceptKey: string; extractionCount: number; masteryScore: number }> }>
   duePreview: Array<{ conceptKey: string; label: string; retention: number; masteryScore: number; extractionCount: number; source?: string | null; dueAt?: string | null; fsrsScheduled?: boolean }>
@@ -595,6 +788,22 @@ interface ReviewDetail {
 const rollbackableMerges = computed<AppliedMergeView[]>(() => detail.value?.appliedMerges?.rollbackable ?? [])
 const rolledBackMerges = computed<AppliedMergeView[]>(() => detail.value?.appliedMerges?.rolledBack ?? [])
 const legacyWindowOnlyMerges = computed<AppliedMergeView[]>(() => detail.value?.appliedMerges?.legacyWindowOnly ?? [])
+/* alias 式归并凭据（R7 已执行历史入口）：非破坏策略的执行记录（现行默认策略，此前前端从未渲染） */
+const appliedAliasRollbackable = computed<AppliedAliasMergeView[]>(() => detail.value?.appliedAliasMerges?.rollbackable ?? [])
+const appliedAliasRolledBack = computed<AppliedAliasMergeView[]>(() => detail.value?.appliedAliasMerges?.rolledBack ?? [])
+const appliedAliasLegacy = computed<AppliedAliasMergeView[]>(() => detail.value?.appliedAliasMerges?.legacyWindowOnly ?? [])
+/** 已执行历史入口计数（卡头「已执行历史（N）」）：两族凭据合计 */
+const appliedHistoryCount = computed(
+  () =>
+    rollbackableMerges.value.length +
+    rolledBackMerges.value.length +
+    legacyWindowOnlyMerges.value.length +
+    appliedAliasRollbackable.value.length +
+    appliedAliasRolledBack.value.length +
+    appliedAliasLegacy.value.length
+)
+/** 已执行历史展开态（默认展开保持既有可达性；收起给三组建议让出主视觉） */
+const historyOpen = ref(true)
 /** 到期预览中按旧痕迹回退估算强度的条数（B5-F3-3）：头部「有 FSRS 状态」只数显式
  *  fsrsStability 的痕迹，而预览的强度对无 FSRS 状态的旧痕迹走 fsrsStateFromLegacy 回退——
  *  两个数字来源不同，这里把回退条数公开给卡头，同屏各自标明来源，不再互相打架。 */
@@ -658,7 +867,9 @@ const totals = ref({
   autoApplicable: 0,
   ambiguous: 0,
   applied: 0,
-  deleted: 0
+  deleted: 0,
+  /** R7 outlet 域碎片率指标（契约 D）；后端未部署时缺省 → 碎片率 KPI 显 '—' */
+  fragmentation: null as FragmentationMetrics | null
 })
 /** 总览是否已落定一次（B5-F3-2）：首屏取数在途时 totals 还是初值 0，未落定前 KPI
  *  不得把初值当真实数渲染（与「确实是 0」不可区分）；失败态由 error 另行兜底。 */
@@ -921,6 +1132,47 @@ const overviewCards = computed<OverviewCard[]>(() => {
   ];
 });
 
+/* ===== 碎片率 KPI 行（R7 outlet 域契约 D）=====
+   三卡口径由后端计算、前端只读（假设字段见 FragmentationMetrics 注释）。
+   装载/失败/字段缺失三态与页头 KPI 同一套纪律：取数未落定或失败 → '—'；
+   后端未部署碎片率指标（字段整体缺失）→ 同样 '—'，hint 注明「指标未取到」，不把缺失当 0。 */
+const fragmentationCards = computed<OverviewCard[]>(() => {
+  const frag = totals.value.fragmentation
+  const failed = !!error.value
+  const pending = kpiPending.value
+  const na = failed || pending
+  /** 整体缺失（后端未部署）与单字段缺失都显 '—'，hint 区分口径来源 */
+  const metricMissing = !frag
+  const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
+  const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : metricMissing ? '指标未取到' : text)
+  const ratio = frag?.duplicateLabelRatio
+  const unattached = frag?.unattachedKeys
+  const pendingReview = frag?.pendingReview
+  return [
+    {
+      label: '重复 label 比率',
+      value: na || ratio == null ? '—' : `${Math.round(ratio * 100)}%`,
+      hint: numHint('措辞重复的痕迹占比'),
+      tone: numTone(!na && ratio != null && ratio >= 0.2 ? 'warn' : ''),
+      title: '同一口径内措辞重复（归一化后同键 / 同 label）的记忆痕迹占比，越高说明概念越碎；≥20% 建议先进「概念归并审计」收拢。后端计算（overview.totals.fragmentation），是否含虚拟学习者随页头开关'
+    },
+    {
+      label: '未挂靠散键',
+      value: na || unattached == null ? '—' : unattached,
+      hint: numHint('解析不到 KC 本体的键'),
+      tone: numTone(!na && unattached != null && unattached > 0 ? 'warn' : ''),
+      title: '自由措辞、解析不到 KC 本体（conceptId 为空）的概念键数量——无法按本体自动收拢，只能靠归并/清理建议逐条治理；写入侧 kcId 键控上线后新增散键会趋零'
+    },
+    {
+      label: '待审队列',
+      value: na || pendingReview == null ? '—' : pendingReview,
+      hint: numHint('人审队列中的建议数'),
+      tone: numTone(!na && pendingReview != null && pendingReview > 0 ? 'warn' : ''),
+      title: '待审队列深度：未执行的归并建议 + 需人工看 + 散键清理建议总数。不会自动执行——进具体用户的「概念归并审计」逐条确认或驳回'
+    }
+  ];
+});
+
 /** 到期压力档：0=安静；占痕迹 ≥50% 或绝对数 ≥12 = 重压（红）；其余 = 提醒（琥珀） */
 function dueTone(row: OverviewRow): 'none' | 'warn' | 'high' {
   if (!row.due) return 'none';
@@ -966,8 +1218,11 @@ const detailTitleEl = ref<HTMLElement | null>(null)
 const rootEl = ref<HTMLElement | null>(null)
 const route = useRoute()
 const router = useRouter()
-/** 勾选状态（key = 规范键）；默认只勾「可自动执行」的 */
+/** 勾选状态（R7：三组建议共用一套「选中 → 执行」，组内 key 唯一）；归并建议默认只勾「可自动执行」的 */
 const selected = ref<Record<string, boolean>>({})
+/** 需人工看对的勾选（key = `${a} => ${b}`）；散键清理的勾选（key = conceptKey）默认不勾 */
+const selectedAmbiguous = ref<Record<string, boolean>>({})
+const selectedDrops = ref<Record<string, boolean>>({})
 
 const selectedKeys = computed(() => Object.keys(selected.value).filter((key) => selected.value[key]))
 const selectedNeedsReview = computed(() => {
@@ -978,14 +1233,54 @@ const selectedNeedsReview = computed(() => {
   })
 })
 
+/** 需人工看对的勾选键（同序渲染用同一把 key） */
+function ambiguousKey(item: { a: string; b: string }): string {
+  return `${item.a} => ${item.b}`
+}
+/** 勾中的「需人工看」对（执行时随确认列表上送） */
+const selectedAmbiguousPairs = computed(() =>
+  (detail.value?.audit?.ambiguous ?? [])
+    .filter((item) => selectedAmbiguous.value[ambiguousKey(item)] === true)
+    .map((item) => ({ a: item.a, b: item.b }))
+)
+/** 勾中的散键清理建议 */
+const selectedDropKeys = computed(() =>
+  (detail.value?.audit?.dropCandidates ?? [])
+    .filter((drop) => selectedDrops.value[drop.conceptKey] === true)
+    .map((drop) => drop.conceptKey)
+)
+/** 三组合计的选中数（批量执行按钮读数） */
+const selectedTotal = computed(
+  () => selectedKeys.value.length + selectedAmbiguousPairs.value.length + selectedDropKeys.value.length
+)
+/** 三组建议有没有可展示的行（批量条只在有建议时出现） */
+const hasSuggestions = computed(() => {
+  const audit = detail.value?.audit
+  if (!audit) return false
+  return audit.proposals.length > 0 || audit.ambiguous.length > 0 || (audit.dropCandidates?.length ?? 0) > 0
+})
+/** 散键清理建议计数（审计队列格 + 列表空态分支共用） */
+const mrDropCount = computed(() => (detail.value?.audit?.dropCandidates ?? []).length)
+
 function resetSelection(audit?: ReviewDetail['audit']) {
   const next: Record<string, boolean> = {}
   for (const proposal of audit?.proposals ?? []) next[proposal.canonical] = !!proposal.autoApplicable
   selected.value = next
+  selectedAmbiguous.value = {}
+  selectedDrops.value = {}
 }
 
 function toggleSelect(canonical: string, _auto: boolean) {
   selected.value = { ...selected.value, [canonical]: !selected.value[canonical] }
+}
+
+function toggleSelectAmbiguous(item: { a: string; b: string }) {
+  const key = ambiguousKey(item)
+  selectedAmbiguous.value = { ...selectedAmbiguous.value, [key]: !selectedAmbiguous.value[key] }
+}
+
+function toggleSelectDrop(conceptKey: string) {
+  selectedDrops.value = { ...selectedDrops.value, [conceptKey]: !selectedDrops.value[conceptKey] }
 }
 
 function selectAllApplicable() {
@@ -996,17 +1291,36 @@ function selectAllApplicable() {
 
 function clearSelection() {
   selected.value = {}
+  selectedAmbiguous.value = {}
+  selectedDrops.value = {}
 }
 
+/** apply 的迁移面（R7 outlet 域任务书 A：合并面 = 所有按「用户 × 概念键」键控的表；
+ *  服务端以其实际合并语义为准，这里列进确认弹层——任务书 D：批量 apply 是破坏性操作，
+ *  二次确认弹层必须列明将迁移哪些表）。 */
+const MERGE_MIGRATED_TABLES = [
+  'memory_traces（记忆痕迹行）',
+  'learner_evidence（学习证据）',
+  'learner_projections（概念台账投影）',
+  'misconception_ledger（误解台账）'
+].join('\n')
+
+/** 批量执行选中项（三组建议同一入口）：确认弹层列明迁移表 → apply（确认列表 = 勾选的规范键 + 对 + 散键） */
 async function applySelected() {
-  const keys = selectedKeys.value
-  if (!keys.length) return
-  const needsReview = selectedNeedsReview.value.length
+  const canonicals = selectedKeys.value
+  const ambiguous = selectedAmbiguousPairs.value
+  const drops = selectedDropKeys.value
+  const total = canonicals.length + ambiguous.length + drops.length
+  if (!total) return
+  const needsReview = selectedNeedsReview.value.length + ambiguous.length
+  const parts = [
+    canonicals.length ? `归并 ${canonicals.length} 条` : '',
+    ambiguous.length ? `人工确认对 ${ambiguous.length} 条` : '',
+    drops.length ? `散键清理 ${drops.length} 条` : ''
+  ].filter(Boolean).join(' · ')
   const ok = await askConfirm({
     title: '执行概念归并',
-    message: needsReview > 0
-      ? `将执行 ${keys.length} 条归并（其中 ${needsReview} 条属于「需人工确认」），会删除该用户的重复记忆痕迹。执行后可回滚，但请先确认这些确实是同一个概念。`
-      : `将执行 ${keys.length} 条归并，会删除该用户的重复记忆痕迹（保留合并字段后的那条）。执行后可回滚。`,
+    message: `将执行 ${total} 项（${parts}）${needsReview > 0 ? `，其中 ${needsReview} 项属于「需人工确认」` : ''}。\n将迁移以下按「用户 × 概念键」键控的表：\n${MERGE_MIGRATED_TABLES}\n执行后可回滚（留整行前后快照），但请先确认这些确实是同一个概念。`,
     confirmText: '执行归并',
     danger: true,
   })
@@ -1014,7 +1328,11 @@ async function applySelected() {
   busy.value = true
   error.value = ''
   try {
-    const res: any = await adminMemoryReviewApi.apply(selectedId.value, keys, { includeNeedsReview: needsReview > 0 })
+    const res: any = await adminMemoryReviewApi.apply(selectedId.value, canonicals, {
+      includeNeedsReview: needsReview > 0,
+      ...(ambiguous.length ? { ambiguous } : {}),
+      ...(drops.length ? { drops } : {})
+    })
     const body = res.data?.data ?? res.data ?? {}
     toast.success(`已执行 ${body.applied ?? 0} 条归并${body.skipped?.length ? `，跳过 ${body.skipped.length} 条` : ''}`)
     /* 写动作后口径同步（#42）：执行归并会删行，到期时间轴的痕迹窗口/档位计数必须同刷，
@@ -1024,6 +1342,65 @@ async function applySelected() {
     error.value = errMsg(e)
     // 明细态失败必须有感知（P1#12）：error 渲染点在明细区之外还可能在滚动视野外，toast 兜底
     toast.error(`执行归并失败：${errMsg(e)}`)
+  } finally {
+    busy.value = false
+  }
+}
+
+/** 单条建议的「确认」（三组建议同一条路径，任务书 B 操作位）：确认弹层同批量口径（列明迁移表） */
+async function applyOne(
+  payload: { canonicals?: string[]; ambiguous?: Array<{ a: string; b: string }>; drops?: string[] },
+  summary: string,
+  opts: { includeNeedsReview?: boolean } = {}
+) {
+  const ok = await askConfirm({
+    title: '执行概念归并',
+    message: `将执行：${summary}。\n将迁移以下按「用户 × 概念键」键控的表：\n${MERGE_MIGRATED_TABLES}\n执行后可回滚（留整行前后快照）。`,
+    confirmText: '执行归并',
+    danger: true,
+  })
+  if (!ok) return
+  busy.value = true
+  error.value = ''
+  try {
+    const res: any = await adminMemoryReviewApi.apply(selectedId.value, payload.canonicals ?? [], {
+      includeNeedsReview: opts.includeNeedsReview === true,
+      ...(payload.ambiguous?.length ? { ambiguous: payload.ambiguous } : {}),
+      ...(payload.drops?.length ? { drops: payload.drops } : {})
+    })
+    const body = res.data?.data ?? res.data ?? {}
+    toast.success(`已执行 ${body.applied ?? 0} 条归并${body.skipped?.length ? `，跳过 ${body.skipped.length} 条` : ''}`)
+    await Promise.all([openDetail(selectedId.value), loadOverview(), loadTraceWindow()])
+  } catch (e) {
+    error.value = errMsg(e)
+    toast.error(`执行归并失败：${errMsg(e)}`)
+  } finally {
+    busy.value = false
+  }
+}
+
+/** 驳回单条建议（R7 outlet 契约 POST reject）：非破坏写动作——不迁移数据，服务端留痕后
+ *  不再重复给出这条建议；按本页写动作惯例过确认弹层（非危险档，同「重新观察」） */
+async function rejectOne(
+  payload: { canonicals?: string[]; ambiguous?: Array<{ a: string; b: string }>; drops?: string[] },
+  describe: string
+) {
+  const ok = await askConfirm({
+    title: '驳回建议',
+    message: `驳回${describe}？服务端会留痕，这条建议之后不再重复给出（不改动记忆痕迹；重新观察仍可能生成新建议）。`,
+    confirmText: '驳回',
+    danger: false,
+  })
+  if (!ok) return
+  busy.value = true
+  error.value = ''
+  try {
+    await adminMemoryReviewApi.reject(selectedId.value, payload)
+    toast.success('已驳回，这条建议之后不再重复给出')
+    await Promise.all([openDetail(selectedId.value), loadOverview()])
+  } catch (e) {
+    error.value = errMsg(e)
+    toast.error(`驳回失败：${errMsg(e)}`)
   } finally {
     busy.value = false
   }

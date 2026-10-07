@@ -142,7 +142,12 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     await ready;
     const w = mount(MemoryReview, { global: { plugins: [router] } });
     await settle();
-    expect(kpiLabels(w)).toEqual(['用户', '记忆痕迹', '当前到期', '需人工看', '待归并建议']);
+    expect(kpiLabels(w)).toEqual([
+      '用户', '记忆痕迹', '当前到期', '需人工看', '待归并建议',
+      // R7 碎片率 KPI 行（outlet 域指标，独立第二条 .mk-kpi-grid）：
+      // overview mock 未带 fragmentation 字段 → 三卡值显 '—'，但标签恒在（行不消失）
+      '重复 label 比率', '未挂靠散键', '待审队列'
+    ]);
     // 页头为 pagehead 形态（newui/admin），数据范围开关（整组统一 DataScopeToggle，2026-10-04）在页头动作区
     expect(w.find('.mk-pagehead').exists()).toBe(true);
     expect(w.find('.mk-pagehead .ds-toggle').exists()).toBe(true);

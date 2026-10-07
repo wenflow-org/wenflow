@@ -415,6 +415,8 @@ export const adminMemoryTracesApi = {
 /**
  * 记忆与复习观测（记忆层）：到期积压 + 课内温故计划 + 概念归并审计。
  * 只读；recompute 走 observe（只记录建议，不动 memory_traces）。
+ * R7 概念本体治理批：apply/reject/candidates 给「建议 → 人工确认 → 代码执行」后半环接线
+ * （outlet 域：apply 引擎 + 自动档 + 预闸门 + 碎片率指标）。
  */
 export const adminMemoryReviewApi = {
   overview: async (params?: { limit?: number; offset?: number; includeVirtual?: boolean }) => {
@@ -426,14 +428,59 @@ export const adminMemoryReviewApi = {
   recompute: async (userId: string) => {
     return adminAxios.post(`/admin/memory-review/${userId}/recompute`);
   },
-  /** 执行选中的归并建议（服务端会留整行前后快照，可回滚） */
-  apply: async (userId: string, canonicals: string[], options?: { includeNeedsReview?: boolean }) => {
+  /**
+   * 待审建议读取（R7 outlet 域契约「GET 候选，复用现有 proposal 读取」）。
+   * ⚠ 假设（outlet 路由本批并行开发、尚未落地）：路径 = GET /admin/memory-review/:userId/candidates，
+   * data 形状与 detail().audit 同源——proposals / ambiguous / dropCandidates 三组（ConceptConsolidationAudit）。
+   * 页面当前消费 detail().audit（同源数据，后端已有），此绑定供候选独立刷新位使用。
+   */
+  candidates: async (userId: string) => {
+    return adminAxios.get(`/admin/memory-review/${userId}/candidates`);
+  },
+  /**
+   * 执行选中的建议（服务端按建议留快照/凭据，可回滚）。
+   * R7 outlet 域契约「POST apply（批量，body 带确认列表）」：确认列表 = 勾选的归并规范键
+   * + 确认的 ambiguous 对 + 确认清理的散键。
+   * ⚠ 假设：outlet 扩展同一 POST /:userId/apply 承载 ambiguous / drops 两类确认项
+   * （现有后端只处理 canonicals，多传字段会被忽略并落 skipped，不会误执行）。
+   */
+  apply: async (
+    userId: string,
+    canonicals: string[],
+    options?: {
+      includeNeedsReview?: boolean;
+      /** 确认执行的「需人工看」对（a ← b） */
+      ambiguous?: Array<{ a: string; b: string }>;
+      /** 确认清理的散键（dropCandidates.conceptKey） */
+      drops?: string[];
+    }
+  ) => {
     return adminAxios.post(`/admin/memory-review/${userId}/apply`, {
       canonicals,
-      ...(options?.includeNeedsReview ? { includeNeedsReview: true } : {})
+      ...(options?.includeNeedsReview ? { includeNeedsReview: true } : {}),
+      ...(options?.ambiguous?.length ? { ambiguous: options.ambiguous } : {}),
+      ...(options?.drops?.length ? { drops: options.drops } : {})
     });
   },
-  /** 回滚指定归并（胜出者还原 + 被删行重建） */
+  /**
+   * 驳回建议（R7 outlet 域契约「POST reject」）：服务端留痕，之后不再重复给出同一条建议。
+   * ⚠ 假设（outlet 路由未落地）：路径 = POST /admin/memory-review/:userId/reject，
+   * body 按三组建议各自的主键可选携带（一次可驳一组或多组）。
+   */
+  reject: async (
+    userId: string,
+    payload: {
+      /** 驳回的归并建议（proposals.canonical） */
+      canonicals?: string[];
+      /** 驳回的「需人工看」对（ambiguous 的 a/b） */
+      ambiguous?: Array<{ a: string; b: string }>;
+      /** 驳回的散键清理建议（dropCandidates.conceptKey） */
+      drops?: string[];
+    }
+  ) => {
+    return adminAxios.post(`/admin/memory-review/${userId}/reject`, payload);
+  },
+  /** 回滚指定归并（胜出者还原 + 被删行重建；alias 凭据按 canonical 一并还原） */
   rollback: async (userId: string, canonicals: string[]) => {
     return adminAxios.post(`/admin/memory-review/${userId}/rollback`, { canonicals });
   },

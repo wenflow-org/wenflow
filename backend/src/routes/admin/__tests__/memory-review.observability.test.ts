@@ -45,12 +45,25 @@ const applyProposals = jest.fn()
 const rollbackMerge = jest.fn()
 const listAppliedMerges = jest.fn()
 const listAppliedAliasMerges = jest.fn()
+const listCandidates = jest.fn()
+const applyConfirmed = jest.fn()
+const rejectProposals = jest.fn()
 jest.mock('../../../services/learner/ConceptConsolidatorService', () => ({
   CONSOLIDATION_AUDIT_PROJECTION_SCOPE: 'concept-consolidation',
   MERGE_RECORD_EVIDENCE_TYPE: 'concept:merge:applied',
   parseMergeRecord: (payload: string | null) => {
     if (!payload) return null
     try { return JSON.parse(payload) } catch { return null }
+  },
+  classifyProposals: (proposals: any[]) => (proposals ?? []).map((p: any) => ({ ...p, track: 'review' })),
+  // 路由读侧的 computeFragmentationMetrics（repo，未 mock）依赖这个纯函数：
+  // 给一个与实现同语义的替身（normalizeConceptKey + 小写/全半角折叠/去空白）
+  conceptFormKey: (raw: unknown) => {
+    let s = String(raw ?? '').trim().replace(/\s+/g, ' ').replace(/[「」『』"'“”‘’]/g, '')
+    const colon = s.search(/[：:]/)
+    if (colon >= 4) s = s.slice(0, colon)
+    s = s.replace(/[。．.，,、；;！!？?~～\-—…\s]+$/g, '')
+    return s.toLowerCase().replace(/[\uFF01-\uFF5E]/g, (ch: string) => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)).replace(/\s+/g, '')
   },
   conceptConsolidatorService: {
     getAudit: (...args: any[]) => getAudit(...args),
@@ -59,6 +72,9 @@ jest.mock('../../../services/learner/ConceptConsolidatorService', () => ({
     rollbackMerge: (...args: any[]) => rollbackMerge(...args),
     listAppliedMerges: (...args: any[]) => listAppliedMerges(...args),
     listAppliedAliasMerges: (...args: any[]) => listAppliedAliasMerges(...args),
+    listCandidates: (...args: any[]) => listCandidates(...args),
+    applyConfirmed: (...args: any[]) => applyConfirmed(...args),
+    rejectProposals: (...args: any[]) => rejectProposals(...args),
   },
 }))
 
@@ -125,6 +141,9 @@ beforeEach(() => {
   projectionsFindMany.mockResolvedValue([])
   listAppliedMerges.mockResolvedValue([])
   listAppliedAliasMerges.mockResolvedValue([])
+  listCandidates.mockResolvedValue(null)
+  applyConfirmed.mockResolvedValue({ applied: 0, skipped: [], merges: [], drops: [], audit: null })
+  rejectProposals.mockResolvedValue({ rejected: 0, skipped: [], audit: null })
   ;(conceptGraphService.buildGraphView as jest.Mock).mockResolvedValue({
     nodes: [{ id: 'cpt_1', label: '分组键唯一性', level: 'concept', taxonomy: null, masteryScore: 0.4, stability: 'fragile', extractionCount: 3, lastSeenAt: null }],
     edges: [],
@@ -145,7 +164,7 @@ describe('权限', () => {
 })
 
 describe('总览', () => {
-  it('按痕迹倒序 + 到期口径 + 审计汇总 + 排除虚拟学习者', async () => {
+  it('按痕迹倒序 + 到期口径 + 审计汇总 + 排除虚拟学习者 + 碎片率口径', async () => {
     usersFindMany
       .mockResolvedValueOnce([{ id: 'virtual-1' }])
       .mockResolvedValueOnce([
@@ -158,6 +177,8 @@ describe('总览', () => {
         { userId: 'u2', _count: { _all: 5 } },
       ])
       .mockResolvedValueOnce([{ userId: 'u1', _count: { _all: 9 } }])
+      // outlet(D)：未挂靠散键（conceptId 为空）跨用户计数
+      .mockResolvedValueOnce([{ userId: 'u1', _count: { _all: 4 } }])
     projectionsFindMany.mockResolvedValue([
       { userId: 'u1', payload: JSON.stringify(auditPayload), generatedAt: new Date('2026-09-15T10:00:00Z') },
       { userId: 'u2', payload: '{bad json', generatedAt: new Date('2026-09-15T09:00:00Z') },
@@ -171,6 +192,10 @@ describe('总览', () => {
     expect(body.users[0].audit).toMatchObject({ proposed: 4, autoApplicable: 2, ambiguous: 1, applied: 0, deleted: 0 })
     expect(body.users[1].audit).toBeNull() // 脏 payload 不影响其它行
     expect(body.totals).toMatchObject({ users: 2, traces: 25, due: 9, usersWithAudit: 2, proposed: 4 })
+    // outlet(D)：跨用户合计只暴露可全量聚合的两个口径
+    expect(body.totals).toMatchObject({ pendingReview: 1, unattachedScatterKeys: 4 })
+    expect(body.users[0].pendingReviewQueueDepth).toBe(1)   // 0 proposals + 1 ambiguous + 0 drops
+    expect(body.users[1].pendingReviewQueueDepth).toBe(0)
 
     // 到期口径：dueAt <= now 且 extractionCount > 0（与复习队列一致，排除 kt-estimate 孤儿）
     const dueCall = tracesGroupBy.mock.calls[1][0]
@@ -216,6 +241,16 @@ describe('单用户明细', () => {
     expect(body.reviewPlan.backlogCount).toBe(7)
     expect(body.reviewPlan.relearnSuggestions).toHaveLength(1)
     expect(body.audit.mode).toBe('observe')
+    // outlet(D)：碎片率（重复 label 比率 / 未挂靠散键 / 待审队列深度）
+    // 夹具行都没有 conceptId → 4 行全部未挂靠；同形族（冒号变体）2 行 → 比率 0.5
+    expect(body.fragmentation).toMatchObject({
+      traceCount: 4,
+      duplicatedTraces: 2,
+      duplicateLabelRatio: 0.5,
+      duplicateFamilyCount: 1,
+      unattachedScatterKeys: 4,
+      pendingReviewQueueDepth: 1,   // 0 proposals + 1 ambiguous + 0 drops
+    })
   })
 
   it('归并凭据按次留档展示：窗口外的旧归并也看得见、已回滚的单独列出', async () => {
@@ -270,28 +305,64 @@ describe('执行 / 回滚归并', () => {
     usersFindUnique.mockImplementation(async (args: any) => (args?.select?.isAdmin ? { isAdmin: true } : { id: 'u1' }))
   })
 
-  it('apply：校验必填，按勾选执行（默认不强行执行需人工确认项）', async () => {
+  it('apply：校验必填，批量执行确认名单（canonicals + ambiguous + drops → apply 引擎）', async () => {
     const missing = await run(getRouteHandler(memoryReviewRouter, '/:userId/apply', 'post'), { ...adminReq, params: { userId: 'u1' }, body: {} })
     expect(missing.statusCode).toBe(400)
 
-    applyProposals.mockResolvedValue({ audit: null, applied: 1, skipped: [] })
+    applyConfirmed.mockResolvedValue({
+      applied: 2, skipped: ['不在名单'],
+      merges: [{ fromKey: '旧键', toKey: '新键', status: 'applied', applied: true }],
+      drops: [{ conceptKey: '散键', status: 'applied', applied: true }],
+      audit: { mode: 'apply' },
+    })
     const res = await run(getRouteHandler(memoryReviewRouter, '/:userId/apply', 'post'), {
       ...adminReq,
       params: { userId: 'u1' },
-      body: { canonicals: ['离开前翻页立好', ''] },
+      body: {
+        canonicals: ['新键', ''],
+        ambiguous: [{ a: '甲键', b: '乙键' }],
+        drops: ['散键'],
+        includeNeedsReview: true, // 旧契约参数：兼容保留，R7 后需人工项必须显式进 ambiguous 名单
+      },
     })
-    expect(applyProposals).toHaveBeenCalledWith('u1', ['离开前翻页立好'], { includeNeedsReview: false })
-    expect(res.body.data.applied).toBe(1)
+    expect(applyConfirmed).toHaveBeenCalledWith('u1', {
+      canonicals: ['新键'],
+      ambiguous: [{ a: '甲键', b: '乙键' }],
+      drops: ['散键'],
+    })
+    expect(res.body.data.applied).toBe(2)
+    expect(res.body.data.skipped).toEqual(['不在名单'])
   })
 
-  it('apply：显式 includeNeedsReview 才允许执行需人工确认项', async () => {
-    applyProposals.mockResolvedValue({ audit: null, applied: 2, skipped: [] })
-    await run(getRouteHandler(memoryReviewRouter, '/:userId/apply', 'post'), {
+  it('apply：空数组同样 400；用户不存在 404', async () => {
+    const empty = await run(getRouteHandler(memoryReviewRouter, '/:userId/apply', 'post'), {
+      ...adminReq, params: { userId: 'u1' }, body: { canonicals: [], ambiguous: [], drops: [] },
+    })
+    expect(empty.statusCode).toBe(400)
+
+    usersFindUnique.mockImplementation(async (args: any) => (args?.select?.isAdmin ? { isAdmin: true } : null))
+    const missingUser = await run(getRouteHandler(memoryReviewRouter, '/:userId/apply', 'post'), {
+      ...adminReq, params: { userId: 'nope' }, body: { canonicals: ['a'] },
+    })
+    expect(missingUser.statusCode).toBe(404)
+  })
+
+  it('reject：驳回建议（canonicals/ambiguous/drops 可选携带，至少一项）', async () => {
+    const missing = await run(getRouteHandler(memoryReviewRouter, '/:userId/reject', 'post'), { ...adminReq, params: { userId: 'u1' }, body: {} })
+    expect(missing.statusCode).toBe(400)
+
+    rejectProposals.mockResolvedValue({ rejected: 2, skipped: [], audit: { rejected: [{ kind: 'drop' }] } })
+    const res = await run(getRouteHandler(memoryReviewRouter, '/:userId/reject', 'post'), {
       ...adminReq,
       params: { userId: 'u1' },
-      body: { canonicals: ['a', 'b'], includeNeedsReview: true },
+      body: { canonicals: ['A'], ambiguous: [{ a: '甲', b: '乙' }], drops: ['散键'] },
     })
-    expect(applyProposals).toHaveBeenCalledWith('u1', ['a', 'b'], { includeNeedsReview: true })
+    expect(rejectProposals).toHaveBeenCalledWith('u1', {
+      canonicals: ['A'],
+      ambiguous: [{ a: '甲', b: '乙' }],
+      drops: ['散键'],
+    })
+    expect(res.body.data.rejected).toBe(2)
   })
 
   it('rollback：按 canonicals 回滚，缺参 400', async () => {
@@ -308,12 +379,74 @@ describe('执行 / 回滚归并', () => {
     expect(res.body.data.rolledBack).toBe(1)
   })
 
-  it('执行 / 回滚都要求管理员', async () => {
+  it('执行 / 回滚 / 驳回都要求管理员', async () => {
     usersFindUnique.mockResolvedValue({ isAdmin: false })
     const apply = await run(getRouteHandler(memoryReviewRouter, '/:userId/apply', 'post'), { ...adminReq, params: { userId: 'u1' }, body: { canonicals: ['a'] } })
+    const reject = await run(getRouteHandler(memoryReviewRouter, '/:userId/reject', 'post'), { ...adminReq, params: { userId: 'u1' }, body: { canonicals: ['a'] } })
     const rollback = await run(getRouteHandler(memoryReviewRouter, '/:userId/rollback', 'post'), { ...adminReq, params: { userId: 'u1' }, body: { canonicals: ['a'] } })
     expect(apply.statusCode).toBe(403)
+    expect(reject.statusCode).toBe(403)
     expect(rollback.statusCode).toBe(403)
+  })
+})
+
+describe('outlet：候选读取（GET /:userId/candidates）', () => {
+  beforeEach(() => {
+    usersFindUnique.mockImplementation(async (args: any) => (args?.select?.isAdmin ? { isAdmin: true } : { id: 'u1' }))
+  })
+
+  it('双档分类 + 碎片率指标随候选返回（数据与 detail().audit 同源）', async () => {
+    listCandidates.mockResolvedValue({
+      generatedAt: '2026-09-15T10:00:00Z',
+      mode: 'observe',
+      proposals: [
+        { canonical: '概念甲(变体)', aliases: ['概念甲（变体）'], confidence: 0.9, rationale: 'x', lexicalSimilarity: 1, autoApplicable: true, track: 'auto' },
+        { canonical: '近形键', aliases: ['近形键书'], confidence: 0.9, rationale: 'x', lexicalSimilarity: 0.8, autoApplicable: true, track: 'review' },
+      ],
+      ambiguous: [{ a: '甲', b: '乙', reason: '语义近' }],
+      dropCandidates: [{ conceptKey: '散键', reason: '命名残缺' }],
+      rejected: [{ kind: 'merge-proposal', canonical: '已驳回', rejectedAt: '2026-09-14T00:00:00Z' }],
+      stats: { candidates: 4, proposed: 2, autoApplicable: 2, applied: 0, deleted: 0, rejected: 1 },
+    })
+    tracesFindMany.mockResolvedValue([
+      { conceptKey: '概念甲(变体)', label: '概念甲(变体)', conceptId: 'cpt_1', masteryScore: 0.5, extractionCount: 2, lastSeenAt: new Date(), dueAt: null, fsrsStability: null, fsrsDifficulty: null, fsrsLapses: null, fsrsReps: null },
+      { conceptKey: '概念甲（变体）', label: null, conceptId: null, masteryScore: 0.5, extractionCount: 1, lastSeenAt: new Date(), dueAt: null, fsrsStability: null, fsrsDifficulty: null, fsrsLapses: null, fsrsReps: null },
+    ])
+
+    const res = await run(getRouteHandler(memoryReviewRouter, '/:userId/candidates', 'get'), { ...adminReq, params: { userId: 'u1' } })
+    const body = res.body.data
+
+    expect(body.proposals).toHaveLength(2)
+    expect(body.proposals[0]).toMatchObject({ canonical: '概念甲(变体)', track: 'auto' })
+    expect(body.proposals[1]).toMatchObject({ canonical: '近形键', track: 'review' })
+    expect(body.rejected).toHaveLength(1)
+    // 碎片率：两行同族（全半角括号变体）→ 比率 1；散键 1 行（conceptId 空）；
+    // 队列深度 = 2 review + 1 ambiguous + 1 drop（测试替身的分类器把全部建议标为 review）
+    expect(body.fragmentation).toMatchObject({
+      traceCount: 2,
+      duplicatedTraces: 2,
+      duplicateLabelRatio: 1,
+      unattachedScatterKeys: 1,
+      pendingReviewQueueDepth: 4,
+    })
+  })
+
+  it('无审计（从未观察过）→ 空候选 + 仍给碎片率', async () => {
+    listCandidates.mockResolvedValue(null)
+    tracesFindMany.mockResolvedValue([])
+    const res = await run(getRouteHandler(memoryReviewRouter, '/:userId/candidates', 'get'), { ...adminReq, params: { userId: 'u1' } })
+    expect(res.body.data.proposals).toEqual([])
+    expect(res.body.data.fragmentation).toMatchObject({ traceCount: 0, duplicateLabelRatio: 0, pendingReviewQueueDepth: 0 })
+  })
+
+  it('候选读取要求管理员；用户不存在 404', async () => {
+    usersFindUnique.mockResolvedValue({ isAdmin: false })
+    const denied = await run(getRouteHandler(memoryReviewRouter, '/:userId/candidates', 'get'), { ...adminReq, params: { userId: 'u1' } })
+    expect(denied.statusCode).toBe(403)
+
+    usersFindUnique.mockImplementation(async (args: any) => (args?.select?.isAdmin ? { isAdmin: true } : null))
+    const missing = await run(getRouteHandler(memoryReviewRouter, '/:userId/candidates', 'get'), { ...adminReq, params: { userId: 'nope' } })
+    expect(missing.statusCode).toBe(404)
   })
 })
 

@@ -162,6 +162,43 @@ export function conceptIdentityKey(item: { conceptKey?: string | null; label?: s
   return normalizeConceptKeyCanonical(raw) || raw;
 }
 
+/**
+ * 台账聚合分组（读取侧 conceptId 优先 · 设计 doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §3.4 #8
+ * 「按 conceptId 聚合，label 保留展示」）。
+ *
+ * 分组键（kcid 域，2026-10-07）：
+ * - **conceptId 优先**：行可解析出身份（identityOf）时，归到该 canonical 身份名下既有的组——
+ *   同一概念经注册表归并后的不同写法/键空间（痕迹键 vs 任务标签键）收敛为一行；
+ * - **名字键兜底**：未挂靠行（解析不出身份）按 conceptIdentityKey（P1-16 label 优先归一化）
+ *   归组——**未挂靠键的旧行为逐字兼容**；
+ * - 只认「身份精确相等」或「名字键精确相等」，不做任何模糊匹配——宁缺勿错，不误并。
+ *
+ * 不变式：同名字键、不同 conceptId 的双锚行在本数据流中不可构造（带身份的确定性行与
+ * conceptStates 一一同名且键唯一；模型行恒无身份），名字兜底归并不会越过身份边界。
+ */
+function groupItemsByConceptIdentity<T extends { conceptKey?: string | null; label?: string | null }>(
+  items: readonly T[],
+  identityOf: (item: T) => string | undefined,
+): Array<[string, T[]]> {
+  const groups = new Map<string, T[]>();
+  const groupKeyById = new Map<string, string>();
+  for (const item of items) {
+    if (!item?.conceptKey) continue; // 旧行为：无 conceptKey 的行不进台账
+    const nameKey = conceptIdentityKey(item) ?? item.conceptKey;
+    const conceptId = identityOf(item);
+    let key = nameKey;
+    if (conceptId) {
+      const owner = groupKeyById.get(conceptId);
+      if (owner) key = owner; // conceptId 优先：并到同身份既有组
+      else groupKeyById.set(conceptId, key); // 首见身份：以名字键建组
+    }
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(item);
+    else groups.set(key, [item]);
+  }
+  return [...groups.entries()];
+}
+
 function signalFromProgress(progress: number, status: 'pending' | 'learning' | 'mastered' | 'review') {
   const score = clamp(progress / 100, 0, 1);
   const stability = status === 'mastered'
@@ -801,49 +838,76 @@ export class LearnerKnowledgeMemoryService {
         lastSeenAt: concept.lastSeenAt,
       }));
 
+    // 概念身份反查表（只读、精确等值）：台账行 → 注册表 conceptId。
+    // 确定性行与 conceptStates 一一同名（1:1 派生），按 conceptKey/label 反查即可锚定身份；
+    // 模型行（learner_evidence payload）不带身份 → undefined = 未挂靠 → 聚合退回名字键（旧行为）。
+    const conceptIdByLedgerKey = new Map<string, string>();
+    for (const state of conceptStates) {
+      if (!state.conceptId) continue;
+      if (!conceptIdByLedgerKey.has(state.conceptKey)) conceptIdByLedgerKey.set(state.conceptKey, state.conceptId);
+      if (state.label && !conceptIdByLedgerKey.has(state.label)) conceptIdByLedgerKey.set(state.label, state.conceptId);
+    }
+    const identityOfLedgerItem = (item: { conceptKey?: string | null; label?: string | null }): string | undefined =>
+      (item?.conceptKey ? conceptIdByLedgerKey.get(item.conceptKey) : undefined)
+      ?? (item?.label ? conceptIdByLedgerKey.get(item.label) : undefined);
+
+    // 台账聚合：conceptId 优先归并（同一 canonical 的痕迹键/任务标签键收敛为一行），名字键兜底
     const ledgerMap = new Map<string, LearnerBackgroundConceptLedgerItem>();
-    for (const item of [...deterministicConceptLedger, ...enrichedLedger]) {
-      if (!item?.conceptKey) continue;
-      // P1-16：按「中文 label 归一化」为身份键 join（英文 slug 与中文 label 同概念合并为一行）
-      const key = conceptIdentityKey(item) ?? item.conceptKey;
-      const existing = ledgerMap.get(key);
-      ledgerMap.set(key, existing
-        ? {
-            ...existing,
-            ...item,
-            sourcePaths: dedupe([...(existing.sourcePaths || []), ...(item.sourcePaths || [])]),
-            sourceTasks: dedupe([...(existing.sourceTasks || []), ...(item.sourceTasks || [])]),
-            evidenceCount: Math.max(existing.evidenceCount || 0, item.evidenceCount || 0)
-          }
-        : item);
+    for (const [key, group] of groupItemsByConceptIdentity<LearnerBackgroundConceptLedgerItem>(
+      [...deterministicConceptLedger, ...enrichedLedger],
+      identityOfLedgerItem,
+    )) {
+      let merged = group[0];
+      for (let i = 1; i < group.length; i += 1) {
+        const item = group[i];
+        // P1-16 既有合并体：后者覆盖标量、集合字段求并（聚合语义与改造前逐字一致）
+        merged = {
+          ...merged,
+          ...item,
+          sourcePaths: dedupe([...(merged.sourcePaths || []), ...(item.sourcePaths || [])]),
+          sourceTasks: dedupe([...(merged.sourceTasks || []), ...(item.sourceTasks || [])]),
+          evidenceCount: Math.max(merged.evidenceCount || 0, item.evidenceCount || 0)
+        };
+      }
+      ledgerMap.set(key, merged);
     }
     const conceptLedger = Array.from(ledgerMap.values()).slice(0, 60);
 
+    // 反复误解聚合：与台账同口径（conceptId 优先归并，名字键兜底）
     const confusionMap = new Map<string, LearnerRecurringConfusion>();
-    for (const item of [...deterministicConfusions, ...enrichedConfusions]) {
-      if (!item?.conceptKey) continue;
-      const key = conceptIdentityKey(item) ?? item.conceptKey;
-      const existing = confusionMap.get(key);
-      confusionMap.set(key, existing
-        ? {
-            ...existing,
-            ...item,
-            confidence: Math.max(existing.confidence || 0, item.confidence || 0),
-            count: Math.max(existing.count || 0, item.count || 0)
-          }
-        : item);
+    for (const [key, group] of groupItemsByConceptIdentity<LearnerRecurringConfusion>(
+      [...deterministicConfusions, ...enrichedConfusions],
+      identityOfLedgerItem,
+    )) {
+      let merged = group[0];
+      for (let i = 1; i < group.length; i += 1) {
+        const item = group[i];
+        merged = {
+          ...merged,
+          ...item,
+          confidence: Math.max(merged.confidence || 0, item.confidence || 0),
+          count: Math.max(merged.count || 0, item.count || 0)
+        };
+      }
+      confusionMap.set(key, merged);
     }
     const recurringConfusions = Array.from(confusionMap.values()).slice(0, 20);
 
+    // 迁移信号聚合：与台账同口径（conceptId 优先归并，名字键兜底；组内仍按置信度/就绪度取优替换）
     const readinessRank = { low: 0, medium: 1, high: 2 } as const;
     const transferMap = new Map<string, LearnerTransferSignal>();
-    for (const item of [...deterministicTransferSignals, ...enrichedTransferSignals]) {
-      if (!item?.conceptKey) continue;
-      const key = conceptIdentityKey(item) ?? item.conceptKey;
-      const existing = transferMap.get(key);
-      if (!existing || (item.confidence || 0) > existing.confidence || readinessRank[item.readiness] > readinessRank[existing.readiness]) {
-        transferMap.set(key, item);
+    for (const [key, group] of groupItemsByConceptIdentity<LearnerTransferSignal>(
+      [...deterministicTransferSignals, ...enrichedTransferSignals],
+      identityOfLedgerItem,
+    )) {
+      let merged = group[0];
+      for (let i = 1; i < group.length; i += 1) {
+        const item = group[i];
+        if ((item.confidence || 0) > merged.confidence || readinessRank[item.readiness] > readinessRank[merged.readiness]) {
+          merged = item;
+        }
       }
+      transferMap.set(key, merged);
     }
     const transferSignals = Array.from(transferMap.values()).slice(0, 30);
 

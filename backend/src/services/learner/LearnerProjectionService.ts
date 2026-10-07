@@ -169,6 +169,12 @@ export class LearnerProjectionService {
    * @param options.taskDifficulty 任务级难度调整结论（由 TaskDifficultyAdjustmentService 判定）。
    * 作为 learnerProjection 的字段整体注入课堂 prompt，使"这节课的难度"由学习者模型驱动，
    * 而不是留给模型自行揣测。
+   *
+   * 概念身份接口（kcid 域，2026-10-07）：本投影是**展示层**——概念一律以 label/conceptKey
+   * 名字面输出（课堂可读），**不做任何按名字的再归并/再拆分**。同一 canonical 概念的多写法
+   * 已在上游聚合层（LearnerKnowledgeMemoryService 台账聚合）按 conceptId 优先收敛为一行；
+   * 未挂靠行保持名字键旧行为（宁缺勿错，不误并）。投影对台账行 1:1 透传（仅 slice 截断），
+   * 保证「上游归并结果 = 下游看到的结果」。
    */
   toTeachingProjection(
     snapshot: LearnerSnapshot,

@@ -7,7 +7,12 @@
  * 3. 概念归并审计（concept-consolidator，观察模式）：同义重复多少、多少可自动执行、
  *    多少需要人工看（ambiguous）、已执行/已删除多少。
  *
- * 只读 + 一个显式的「重新观察」（force observe，不动数据）。
+ * 只读 + outlet 出口（R7，「建议 → 人工确认 → 代码执行」后半环接线，2026-10-07 拍板）：
+ * - GET  /:userId/candidates —— 候选读取（双档分类 auto/review + 碎片率指标）；
+ * - POST /:userId/apply      —— 批量执行确认名单（canonicals/ambiguous/drops → 事务化 apply 引擎）；
+ * - POST /:userId/reject     —— 驳回建议（留痕 + 移出待办 + 不再重复建议）；
+ * - POST /:userId/rollback   —— 回滚指定归并（凭据还原）；
+ * - POST /:userId/recompute  —— 强制重观察（observe，不动数据）。
  */
 import express from 'express';
 import { checkIsAdmin } from '../../services/admin-access.service';
@@ -15,6 +20,7 @@ import {
   listVirtualLearnerIds,
   groupTraceCountsByUser,
   groupDueCountsByUser,
+  groupUnattachedCountsByUser,
   findConsolidationAuditProjections,
   findMergeRecordEvidence,
   findUsersByIdsWithFlags,
@@ -22,6 +28,8 @@ import {
   findUserMemoryProfile,
   listUserMemoryTraces,
   findUserIdOnly,
+  computeFragmentationMetrics,
+  type FragmentationMetrics,
 } from '../../services/admin/memory-review.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { logger } from '../../utils/logger';
@@ -31,6 +39,7 @@ import {
   conceptConsolidatorService,
   CONSOLIDATION_AUDIT_PROJECTION_SCOPE,
   MERGE_RECORD_EVIDENCE_TYPE,
+  classifyProposals,
   parseMergeRecord,
   type AppliedConceptAliasMerge,
   type AppliedConceptMerge,
@@ -44,6 +53,17 @@ router.use(authMiddleware);
 
 async function ensureAdmin(userId?: string) {
   return checkIsAdmin(userId);
+}
+
+/**
+ * 待审队列深度（outlet D，任务书拍板口径）：人审队列待办条数 =
+ * review 档建议数（近形/语义近义，需人判断）+ ambiguous 对数 + 散键清理建议数。
+ * auto 档不进队列（预闸门自动执行，无需人工）。
+ */
+function pendingReviewQueueDepth(audit: ConceptConsolidationAudit | null): number {
+  if (!audit) return 0;
+  const reviewProposals = classifyProposals(audit.proposals ?? []).filter((item) => item.track === 'review');
+  return reviewProposals.length + (audit.ambiguous?.length ?? 0) + (audit.dropCandidates?.length ?? 0);
 }
 
 function parseAudit(payload: string | null): ConceptConsolidationAudit | null {
@@ -102,15 +122,18 @@ router.get('/', async (req, res) => {
       : (await listVirtualLearnerIds()).map((row) => row.id);
 
     const baseWhere = virtualIds.length > 0 ? { userId: { notIn: virtualIds } } : {};
-    const [traceCounts, dueCounts, audits, mergeRecords] = await Promise.all([
+    const [traceCounts, dueCounts, audits, mergeRecords, unattachedCounts] = await Promise.all([
       groupTraceCountsByUser(baseWhere),
       groupDueCountsByUser(baseWhere, now),
       findConsolidationAuditProjections(),
       // 按次留档的归并凭据（权威、长期有效）：概览必须基于它，否则"审计窗口滚出去的旧归并"在界面上消失
       findMergeRecordEvidence(),
+      // outlet(D)：未挂靠散键（conceptId 为空）跨用户计数——全量口径，供 totals 聚合
+      groupUnattachedCountsByUser(baseWhere),
     ]);
 
     const dueByUser = new Map(dueCounts.map((row) => [row.userId, row._count._all]));
+    const unattachedByUser = new Map(unattachedCounts.map((row) => [row.userId, row._count._all]));
     const auditByUser = new Map(audits.map((row) => [row.userId, row]));
     // 归并凭据按用户汇总：仍可回滚 / 已回滚（凭据不删，保留审计痕迹）
     const mergesByUser = new Map<string, { rollbackable: number; rolledBack: number }>();
@@ -131,6 +154,9 @@ router.get('/', async (req, res) => {
           traces: row._count._all,
           due: dueByUser.get(row.userId) ?? 0,
           merges,
+          // outlet(D)：待审队列深度（人审档建议 + ambiguous 对 + 散键清理建议）
+          pendingReviewQueueDepth: pendingReviewQueueDepth(audit),
+          unattachedScatterKeys: unattachedByUser.get(row.userId) ?? 0,
           audit: audit
             ? {
                 mode: audit.mode,
@@ -174,6 +200,13 @@ router.get('/', async (req, res) => {
       if (!agg.last || t.lastSeenAt > agg.last) agg.last = t.lastSeenAt;
       aggByUser.set(t.userId, agg);
     }
+    // outlet(D)：碎片率按该用户全部入围行计算（含 lastSeenAt 为空的行——它们同样占碎片口径），
+    // 与强度三列共用一次取数，不加第二次扫描
+    const fragByUser = new Map<string, FragmentationMetrics>();
+    for (const userId of userIds) {
+      const rows = traceAggRows.filter((t) => t.userId === userId);
+      if (rows.length > 0) fragByUser.set(userId, computeFragmentationMetrics(rows));
+    }
 
     const totals = {
       users: ranked.length,
@@ -187,10 +220,15 @@ router.get('/', async (req, res) => {
       deleted: 0,
       rollbackableMerges: 0,
       rolledBackMerges: 0,
+      // outlet(D)：跨用户合计只暴露两个可全量聚合的口径（重复 label 比率按用户粒度暴露，见各用户行）
+      pendingReview: 0,
+      unattachedScatterKeys: 0,
     };
     for (const row of ranked) {
       totals.rollbackableMerges += row.merges.rollbackable;
       totals.rolledBackMerges += row.merges.rolledBack;
+      totals.pendingReview += row.pendingReviewQueueDepth;
+      totals.unattachedScatterKeys += row.unattachedScatterKeys;
       if (!row.audit) continue;
       totals.proposed += row.audit.proposed;
       totals.autoApplicable += row.audit.autoApplicable;
@@ -214,6 +252,8 @@ router.get('/', async (req, res) => {
             weak: agg?.weak ?? 0,
             avgStrength: agg && agg.seen > 0 ? Math.round((agg.sum / agg.seen) * 100) / 100 : null,
             lastReviewedAt: agg?.last ?? null,
+            // outlet(D)：重复 label 比率等按用户粒度（供 adminui 渲染「概念碎片」读数）
+            fragmentation: fragByUser.get(row.userId) ?? null,
           };
         }),
       },
@@ -377,6 +417,11 @@ router.get('/:userId', async (req, res) => {
         audit,
         appliedMerges,
         appliedAliasMerges,
+        // outlet(D)：碎片率（重复 label 比率 / 未挂靠散键数 / 待审队列深度），供 adminui 渲染
+        fragmentation: {
+          ...computeFragmentationMetrics(traces),
+          pendingReviewQueueDepth: pendingReviewQueueDepth(audit),
+        },
       },
     });
   } catch (error: any) {
@@ -386,10 +431,62 @@ router.get('/:userId', async (req, res) => {
 });
 
 /**
+ * GET /api/admin/memory-review/:userId/candidates
+ * 候选读取（outlet C「GET 候选，复用现有 proposal 读取」）：数据与 detail().audit 同源
+ * （proposals / ambiguous / dropCandidates 三组 + rejected 留痕），proposals 附双档分类
+ * track（auto = autoApplicable 且完全同形，预闸门自动执行；review = 人审队列），
+ * 并附碎片率指标（供 adminui 渲染）。
+ */
+router.get('/:userId/candidates', async (req, res) => {
+  try {
+    if (!(await ensureAdmin(req.user?.userId))) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+    const { userId } = req.params;
+    const user = await findUserIdOnly(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: { message: '用户不存在' } });
+    }
+    const [candidates, traces] = await Promise.all([
+      conceptConsolidatorService.listCandidates(userId).catch(() => null),
+      listUserMemoryTraces(userId),
+    ]);
+    const auditForDepth = candidates
+      ? { proposals: candidates.proposals, ambiguous: candidates.ambiguous, dropCandidates: candidates.dropCandidates, rejected: candidates.rejected } as ConceptConsolidationAudit
+      : null;
+    res.json({
+      success: true,
+      data: {
+        ...(candidates ?? {
+          generatedAt: null,
+          mode: null,
+          proposals: [],
+          ambiguous: [],
+          dropCandidates: [],
+          rejected: [],
+          stats: null,
+        }),
+        fragmentation: {
+          ...computeFragmentationMetrics(traces),
+          pendingReviewQueueDepth: pendingReviewQueueDepth(auditForDepth),
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error('[admin/memory-review] 候选读取失败:', error);
+    return res.status(500).json({ success: false, error: { message: '读取候选失败' } });
+  }
+});
+
+/**
  * POST /api/admin/memory-review/:userId/apply
- * 执行选中的归并建议（前端勾选，默认只含 autoApplicable）。
- * body: { canonicals: string[]; includeNeedsReview?: boolean }
- * 每条都会留「胜出者合并前整行 + 被删行整行」快照，可经 rollback 还原。
+ * 执行确认名单（outlet C「POST apply（批量，body 带确认列表）」——事务化 apply 引擎）：
+ * - canonicals：勾选的归并建议（按 canonical 匹配，逐别名成对执行 applyKeyMerge）；
+ * - ambiguous：确认的「需人工看」对（a ← b：b 并入 a）；
+ * - drops：确认清理的散键（dropCandidates.conceptKey，走 applyKeyDrop）。
+ * 名单由前端勾选、服务端再校验一次（只执行审计里真实存在的建议，其余落 skipped）；
+ * 每条都在事务里完成全部表迁移 + 按次凭据（防重放）+ 审计快照，可经 rollback 还原。
+ * includeNeedsReview：旧契约参数，兼容保留——R7 后「需人工看」项必须显式进 ambiguous 名单。
  */
 router.post('/:userId/apply', async (req, res) => {
   try {
@@ -400,20 +497,63 @@ router.post('/:userId/apply', async (req, res) => {
     const canonicals = Array.isArray(req.body?.canonicals)
       ? req.body.canonicals.map((item: unknown) => String(item || '').trim()).filter(Boolean)
       : [];
-    if (canonicals.length === 0) {
-      return res.status(400).json({ success: false, error: { message: '缺少要执行的归并项（canonicals）' } });
+    const ambiguous = Array.isArray(req.body?.ambiguous)
+      ? req.body.ambiguous
+        .map((item: any) => ({ a: String(item?.a || '').trim(), b: String(item?.b || '').trim() }))
+        .filter((item: { a: string; b: string }) => item.a && item.b)
+      : [];
+    const drops = Array.isArray(req.body?.drops)
+      ? req.body.drops.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : [];
+    if (canonicals.length === 0 && ambiguous.length === 0 && drops.length === 0) {
+      return res.status(400).json({ success: false, error: { message: '缺少要执行的确认项（canonicals / ambiguous / drops）' } });
     }
     const user = await findUserIdOnly(userId);
     if (!user) {
       return res.status(404).json({ success: false, error: { message: '用户不存在' } });
     }
-    const result = await conceptConsolidatorService.applyProposals(userId, canonicals, {
-      includeNeedsReview: req.body?.includeNeedsReview === true,
-    });
+    const result = await conceptConsolidatorService.applyConfirmed(userId, { canonicals, ambiguous, drops });
     res.json({ success: true, data: result });
   } catch (error: any) {
     logger.error('[admin/memory-review] 执行归并失败:', error);
     return res.status(500).json({ success: false, error: { message: '执行归并失败' } });
+  }
+});
+
+/**
+ * POST /api/admin/memory-review/:userId/reject
+ * 驳回建议（outlet C「POST reject」）：三组建议各自的主键可选携带（一次可驳一组或多组）。
+ * 服务端留痕（audit.rejected）、移出待办，之后不再重复给出同一条建议。
+ */
+router.post('/:userId/reject', async (req, res) => {
+  try {
+    if (!(await ensureAdmin(req.user?.userId))) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+    const { userId } = req.params;
+    const canonicals = Array.isArray(req.body?.canonicals)
+      ? req.body.canonicals.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : [];
+    const ambiguous = Array.isArray(req.body?.ambiguous)
+      ? req.body.ambiguous
+        .map((item: any) => ({ a: String(item?.a || '').trim(), b: String(item?.b || '').trim() }))
+        .filter((item: { a: string; b: string }) => item.a && item.b)
+      : [];
+    const drops = Array.isArray(req.body?.drops)
+      ? req.body.drops.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : [];
+    if (canonicals.length === 0 && ambiguous.length === 0 && drops.length === 0) {
+      return res.status(400).json({ success: false, error: { message: '缺少要驳回的建议（canonicals / ambiguous / drops）' } });
+    }
+    const user = await findUserIdOnly(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: { message: '用户不存在' } });
+    }
+    const result = await conceptConsolidatorService.rejectProposals(userId, { canonicals, ambiguous, drops });
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error('[admin/memory-review] 驳回建议失败:', error);
+    return res.status(500).json({ success: false, error: { message: '驳回建议失败' } });
   }
 });
 

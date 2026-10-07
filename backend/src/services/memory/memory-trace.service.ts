@@ -27,8 +27,26 @@ import {
 } from './fsrs';
 
 /**
- * 解析概念身份（canonical conceptId），best-effort：注册表故障不得阻断痕迹写入。
- * 设计：doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §3.4（写入点双写，只写不读）。
+ * 概念身份解析（best-effort）与「未挂靠」语义 —— memory_traces 写入侧键控契约（kcid 域，2026-10-07）
+ *
+ * 身份链：模型自由措辞的 conceptKey → normalizeConceptKey → aliasNorm
+ *   → concept_aliases @@unique([userId, aliasNorm]) 一次索引命中 → concepts.id（canonical conceptId）。
+ * 零 LLM、零 LIKE 扫描：解析是 O(1) 唯一索引点查 + 进程内 LRU（concept-registry.service），
+ * 不构成大表聚合查询（Admin 性能批次的 AVG 无索引教训在此路径不存在）。
+ *
+ * 落库契约（本文件所有写入路径共用；设计：doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §3.4）：
+ * - **解析成功 → conceptId 必填**：未命中按设计新建身份（createIfMissing=true，write_time 源），
+ *   所以"成功"覆盖命中与新建两种情形；create 直接落，update 只在成功时写入——这既是
+ *   「未挂靠 → 锚定」的增量补全通道，也是 alias 归并后把旧锚重指到新 canonical 的唯一通道。
+ * - **解析失败 → 明确落「未挂靠」**：失败模式唯一 = 注册表故障（抛错）。此时 create 落
+ *   conceptId=null，update 不触碰既有值（绝不把已锚定的行写回 null）。**该列 null 即「未挂靠」
+ *   的现有列表达**（schema 注释同口径），不新增迁移、不加新列；痕迹本身照常落库（键控退回
+ *   conceptKey 名字键），注册表故障不得阻断记忆写入。
+ * - **读侧配套契约**：一律「conceptId 优先，空则回落 conceptKey/label」——未挂靠键按名字键的
+ *   旧行为逐字兼容（宁缺勿错，不误并）。
+ *
+ * 语义近义（"判断对齐关系" vs "识别对齐关系"）解析不到同一身份，不在写入侧处理——留给
+ * ConceptConsolidatorService 的 LLM 建议 + outlet 域 apply 路径；写入侧只做机械归一同形。
  */
 async function resolveConceptIdSafe(userId: string, conceptKey: string, pathId?: string | null): Promise<string | null> {
   try {
@@ -247,8 +265,9 @@ class MemoryTraceService {
       && existing !== null && existing !== undefined
       && existing.fsrsStability !== null && existing.fsrsStability !== undefined;
 
-    // 概念身份（canonical）：best-effort 解析，失败留空不阻断；update 分支也写，
-    // 让被触碰的历史行顺带补齐 conceptId（回填之外的增量补全通道）。
+    // 概念身份（canonical）——键控契约见 resolveConceptIdSafe：
+    // 解析成功 → conceptId 必填（create 落 / update 覆盖为最新解析，含增量补全与归并重锚）；
+    // 解析失败 → create 落 null（=「未挂靠」，现有列表达）、update 不触碰既有值（不回退为 null）。
     const conceptId = await resolveConceptIdSafe(input.userId, conceptKey, input.pathId ?? null);
 
     await prisma.memory_traces.upsert({
@@ -259,6 +278,7 @@ class MemoryTraceService {
         id: `mt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
         userId: input.userId,
         conceptKey,
+        // 解析失败时为 null = 「未挂靠」（现有列表达；读侧「conceptId 优先，空则回落 conceptKey」）
         conceptId,
         label: input.label ?? null,
         masteryScore,
@@ -297,6 +317,10 @@ class MemoryTraceService {
 
   /**
    * endSession 后按知识看板状态确定性回写内化强度。
+   *
+   * 概念键控：本方法只是 recordExtraction 的**确定性映射漏斗**（状态→掌握度/内化强度），
+   * conceptKey 与 label 同取看板项名，身份解析/落库/「未挂靠」语义全部由 recordExtraction
+   * 的键控契约统一保证（见 resolveConceptIdSafe）——此处不重复解析。
    *
    * FSRS 通电（2026-10-07，P1-10 根因）：看板项带证据时**同时**传 `fsrsGrade`，
    * 经现有 `fsrsSchedule` 写原生四元组（fsrsStability/Difficulty/Lapses/Reps + FSRS dueAt）。
@@ -458,6 +482,9 @@ class MemoryTraceService {
    * θ−d 知识状态 EMA：将 teaching-turn 的 ktEstimate.conceptMastery 以 α=0.2 滑动平均
    * 累积进 memory_traces.ktMasteryEma（跨会话知识状态的确定性通道，替代每轮 LLM 独立估计）。
    * 只更新 ktMasteryEma，不触碰 extractionCount/lastSeenAt/FSRS 状态（不干扰复习调度）。
+   *
+   * 概念键控：同样走 resolveConceptIdSafe 的键控契约——解析成功 → update 补齐 conceptId /
+   * create 直接落；解析失败 → 「未挂靠」（create 落 null、update 不触碰既有值）。
    */
   async applyKtEstimate(
     userId: string,
