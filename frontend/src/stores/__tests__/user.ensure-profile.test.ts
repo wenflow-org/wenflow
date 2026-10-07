@@ -8,8 +8,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
-const { getProfile, hasUserSessionMock } = vi.hoisted(() => ({
+const { getProfile, authLogin, apiPost, hasUserSessionMock } = vi.hoisted(() => ({
   getProfile: vi.fn(),
+  authLogin: vi.fn(),
+  apiPost: vi.fn(),
   hasUserSessionMock: vi.fn(() => false),
 }));
 
@@ -17,15 +19,16 @@ vi.mock('@/api/user', () => ({
   userAPI: { getProfile, updateProfile: vi.fn() },
 }));
 vi.mock('@/api/auth', () => ({
-  authAPI: { login: vi.fn(), register: vi.fn() },
+  authAPI: { login: authLogin, register: vi.fn() },
 }));
 vi.mock('@/utils/api', () => ({
-  default: { post: vi.fn(), get: vi.fn() },
+  default: { post: apiPost, get: vi.fn() },
   USER_SESSION_KEY: 'wenflow_session',
   hasUserSession: hasUserSessionMock,
 }));
 
 import { useUserStore } from '../user';
+import { recentGoalsKey, setRecentGoalsStorage } from '@/utils/sessionCleanup';
 
 const FULL_PROFILE = {
   id: 'u_1',
@@ -77,6 +80,41 @@ describe('user store：守卫档案缓存', () => {
     await expect(p1).resolves.toMatchObject({ id: 'u_1' });
     await expect(p2).resolves.toMatchObject({ id: 'u_1' });
     expect(getProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it('登录切换账号后只读新账号命名空间，保留两边互不串用的最近会话', async () => {
+    localStorage.setItem('user', JSON.stringify({ id: 'u_old', name: '旧账号' }));
+    localStorage.setItem('wenflow_session', '1');
+    setRecentGoalsStorage('u_old', JSON.stringify([{ id: 'gc_old', preview: '旧会话', at: 1 }]));
+    setRecentGoalsStorage('u_new', JSON.stringify([{ id: 'gc_new', preview: '新账号自己的会话', at: 2 }]));
+    localStorage.setItem('wf_goal_recent', JSON.stringify([{ id: 'gc_legacy', preview: '归属不明', at: 3 }]));
+    hasUserSessionMock.mockReturnValue(true);
+    authLogin.mockResolvedValue({ user: { id: 'u_new', name: '新账号' } });
+    getProfile.mockResolvedValue({ ...FULL_PROFILE, id: 'u_new', name: '新账号' });
+    const store = useUserStore();
+
+    await store.login('新账号', 'password');
+
+    expect(store.user?.id).toBe('u_new');
+    expect(JSON.parse(localStorage.getItem(recentGoalsKey('u_new')) || '[]')[0].id).toBe('gc_new');
+    expect(JSON.parse(localStorage.getItem(recentGoalsKey('u_old')) || '[]')[0].id).toBe('gc_old');
+    expect(localStorage.getItem('wf_goal_recent')).toBeNull();
+  });
+
+  it('登出会删除所有账号的最近会话列表', async () => {
+    setRecentGoalsStorage('u_1', JSON.stringify([{ id: 'gc_1', preview: 'one', at: 1 }]));
+    setRecentGoalsStorage('u_2', JSON.stringify([{ id: 'gc_2', preview: 'two', at: 2 }]));
+    localStorage.setItem('wf_goal_recent', '[]');
+    apiPost.mockResolvedValue({});
+    const store = useUserStore();
+    store.user = { id: 'u_1', name: '测试用户' } as never;
+    store.hasSession = true;
+
+    await expect(store.logout()).resolves.toBe(true);
+
+    expect(localStorage.getItem(recentGoalsKey('u_1'))).toBeNull();
+    expect(localStorage.getItem(recentGoalsKey('u_2'))).toBeNull();
+    expect(localStorage.getItem('wf_goal_recent')).toBeNull();
   });
 
   it('markLoggedIn 的部分档案（onboardingCompleted 未知）不视为有效缓存', async () => {

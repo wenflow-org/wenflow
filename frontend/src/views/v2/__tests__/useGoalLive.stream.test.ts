@@ -88,6 +88,37 @@ describe('useGoalLive 流式渐进渲染', () => {
     expect(live.messages.some((m) => m.role === 'ai' && m.content === '官方回复')).toBe(true);
   });
 
+  it('恢复最近会话遇到 404 时暴露归属/失效状态，供入口页安全移除旧链接', async () => {
+    apiMock.getGoalConversation.mockRejectedValueOnce({ status: 404, message: '对话会话不存在' });
+    const live = useGoalLive();
+    live.reset();
+
+    await expect(live.resumeById('gc_missing')).resolves.toBe(false);
+    expect(live.failed).toBe('resume');
+    expect(live.resumeErrorStatus).toBe(404);
+  });
+
+  it('恢复最近会话遇到网络错误时不伪报 404', async () => {
+    apiMock.getGoalConversation.mockRejectedValueOnce({ message: '网络错误，请检查连接' });
+    const live = useGoalLive();
+    live.reset();
+
+    await expect(live.resumeById('gc_retry')).resolves.toBe(false);
+    expect(live.failed).toBe('resume');
+    expect(live.resumeErrorStatus).toBeNull();
+  });
+
+  it('reset 会清掉上一次恢复的 HTTP 状态', async () => {
+    apiMock.getGoalConversation.mockRejectedValueOnce({ status: 404 });
+    const live = useGoalLive();
+    live.reset();
+    await live.resumeById('gc_missing');
+    expect(live.resumeErrorStatus).toBe(404);
+
+    live.reset();
+    expect(live.resumeErrorStatus).toBeNull();
+  });
+
   it('reset 后过期 delta 不写入（代次守卫）', async () => {
     let capturedOnDelta: ((t: string) => void) | null = null;
     apiMock.streamStartGoalConversation.mockImplementationOnce(

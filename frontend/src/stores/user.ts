@@ -8,6 +8,7 @@ import {
   clearUserLocalState,
   currentUserId,
   dropLegacyGoalConversationStorage,
+  dropLegacyRecentGoalsStorage,
   migrateLegacyGoalConversationStorage,
   removeGoalConversationStorage
 } from '../utils/sessionCleanup';
@@ -32,6 +33,7 @@ export const useUserStore = defineStore('user', () => {
     }
     // 旧版未作用域缓存无法本地核实归属：登录动作一律丢弃，绝不迁移给新账号
     dropLegacyGoalConversationStorage();
+    dropLegacyRecentGoalsStorage();
     hasSession.value = true;
     user.value = profile as UserProfile;
     // 会话已确立，撤销 restoreFromCookie 的未登录负缓存（若还挂着会误拦 60s）
@@ -216,6 +218,8 @@ export const useUserStore = defineStore('user', () => {
   }
 
   function initFromStorage() {
+    // 旧版最近会话键没有账号归属：无论当前是否登录，都只能丢弃，不能迁移。
+    dropLegacyRecentGoalsStorage();
     const storedUser = localStorage.getItem('user');
     // 无时间戳（旧版写入/被清理）按 0 处理：false 缓存冷启动即过期，首次导航重拉一次自愈
     profileFetchedAt.value = Number(localStorage.getItem(PROFILE_FETCHED_AT_KEY)) || 0;

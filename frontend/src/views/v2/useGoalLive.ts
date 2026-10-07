@@ -122,6 +122,7 @@ const probeAnswers = ref<Record<string, string>>({});
 const learningPath = ref<{ id: string; status?: string } | null>(null);
 const sending = ref(false);
 const failed = ref<'start' | 'reply' | 'confirm' | 'supplement' | 'resume' | ''>('');
+const resumeErrorStatus = ref<number | null>(null);
 /** 最近一次「用户主动停止」的动作：与 failed 并行记录。主动中止不是故障，
     视图据此显示「已停止」而非「连接失败」（failed 仍置位以保留重试入口） */
 const stopped = ref<'start' | 'reply' | 'confirm' | 'supplement' | ''>('');
@@ -526,17 +527,23 @@ async function resume(): Promise<boolean> {
 async function resumeById(cid: string): Promise<boolean> {
   const gen = generation;
   failed.value = '';
+  resumeErrorStatus.value = null;
   sending.value = true;
   try {
     const env = await getGoalConversation(cid);
+    if (gen === generation) resumeErrorStatus.value = null;
     applyEnvelope(env, { replaceMessages: true }, gen);
     if (gen === generation && messages.value.length === 0) {
       const cached = getGoalConversationMsgs();
       if (cached) messages.value = JSON.parse(cached) as LiveMessage[];
     }
     return true;
-  } catch (e) {
-    if (gen === generation) failed.value = 'resume';
+  } catch (error) {
+    if (gen === generation) {
+      failed.value = 'resume';
+      const status = error && typeof error === 'object' ? (error as { status?: unknown }).status : null;
+      resumeErrorStatus.value = typeof status === 'number' ? status : null;
+    }
     return false;
   } finally {
     if (gen === generation) sending.value = false;
@@ -550,6 +557,7 @@ function hasSession(): boolean {
 function reset(clearStorage = true) {
   // 自增代次：作废所有在途请求的响应，防止其把已清空的状态写回
   generation += 1;
+  resumeErrorStatus.value = null;
   currentAbort?.abort();
   currentAbort = null;
   userStopped = false;
@@ -599,6 +607,7 @@ export function useGoalLive() {
     sending,
     streamingText,
     failed,
+    resumeErrorStatus,
     stopped,
     started,
     meta: metaTracker,

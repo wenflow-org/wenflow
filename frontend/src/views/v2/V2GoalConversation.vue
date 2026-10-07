@@ -37,11 +37,15 @@
         <span class="recent__title">最近会话</span>
         <ul class="recent__list">
           <li v-for="r in recentGoals" :key="r.id">
-            <router-link :to="`/goal-conversation/${r.id}`" class="recent__item">
+            <a
+              :href="`/goal-conversation/${r.id}`"
+              class="recent__item"
+              @click.prevent="openRecentGoal(r.id)"
+            >
               <span class="recent__preview">{{ r.preview }}</span>
               <span class="recent__time">{{ recentTime(r.at) }}</span>
               <span class="recent__go" aria-hidden="true">›</span>
-            </router-link>
+            </a>
           </li>
         </ul>
       </div>
@@ -547,12 +551,15 @@ import { useIsDark } from '@/composables/useIsDark';
 const isDark = useIsDark();
 import { useRoute, useRouter } from 'vue-router';
 import { useGoalLive, type LiveMessage } from './useGoalLive';
+import { forgetRecentGoalForUser, loadRecentGoalsForUser, rememberRecentGoalForUser, type RecentGoalEntry } from '@/utils/recentGoals';
 import { isProbeAnswer, probeAnswerParts } from './probeAnswer';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import MessageActions from '@/components/chat/MessageActions.vue';
 import MaterialUploadArea from '@/components/learning/MaterialUploadArea.vue';
 import { hasUserSession } from '@/utils/api';
+import { useUserStore } from '@/stores/user';
+import { currentUserId, dropLegacyRecentGoalsStorage } from '@/utils/sessionCleanup';
 import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { toast } from '@/utils/toast';
 import { feedbackApi } from '@/api/feedback';
@@ -561,7 +568,10 @@ import { askConfirm } from '@/views/admin-redesign/useConfirm';
 const route = useRoute();
 const router = useRouter();
 const live = useGoalLive();
+const userStore = useUserStore();
 const loggedIn = hasUserSession();
+const recentGoalsUserId = computed(() => userStore.user?.id || currentUserId());
+let recentGoalsLoadGeneration = 0;
 
 /* 移动端信息清单折叠：桌面（>900px）恒展开，窄屏默认折叠，点击顶栏展开/收起 */
 const narrowMq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 1100px)') : null;
@@ -606,7 +616,6 @@ onMounted(() => {
   narrowMq?.addEventListener('change', onNarrowChange);
   // 每次进入页面随机展示一批场景
   shuffleScenes();
-  loadRecentGoals();
   const cid = typeof route.params.conversationId === 'string' ? route.params.conversationId : '';
   // P2-10：首页预设方向带入（?seed=…）→ 作为首条消息直接开始澄清，不丢失用户点击的意图
   const seeded = typeof route.query.seed === 'string' ? route.query.seed.trim() : '';
@@ -742,28 +751,48 @@ watch(input, () => {
   draftTimer = window.setTimeout(saveDraft, 400);
 });
 
-/* 最近会话（D14）：本地留存最近 5 次会话的 id 与首句摘要，在入口页给可点深链回访入口。
-   目标会话此前没有产品内回访路径（其余页面只挂裸 /goal-conversation）。 */
-interface RecentGoal { id: string; preview: string; at: number }
-const RECENT_KEY = 'wf_goal_recent';
-const recentGoals = ref<RecentGoal[]>([]);
-function loadRecentGoals() {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY);
-    const list = raw ? JSON.parse(raw) : [];
-    recentGoals.value = Array.isArray(list)
-      ? list.filter((r: unknown): r is RecentGoal => !!r && typeof (r as RecentGoal).id === 'string').slice(0, 5)
-      : [];
-  } catch { recentGoals.value = []; }
-}
+/* 最近会话：本地留存当前账号最近 5 次会话的 id 与首句摘要；旧共享键不迁移。 */
+const recentGoals = ref<RecentGoalEntry[]>([]);
 function rememberGoal(id: string) {
-  if (!id) return;
+  const ownerId = recentGoalsUserId.value;
+  if (!id || !ownerId) return;
   const first = live.messages.find((m) => m.role === 'user' && m.content)?.content?.replace(/\s+/g, ' ').trim() || '';
   const preview = (first || '未命名规划').slice(0, 40);
-  const rest = recentGoals.value.filter((r) => r.id !== id);
-  recentGoals.value = [{ id, preview, at: Date.now() }, ...rest].slice(0, 5);
-  try { localStorage.setItem(RECENT_KEY, JSON.stringify(recentGoals.value)); } catch { /* 忽略 */ }
+  recentGoals.value = rememberRecentGoalForUser(ownerId, { id, preview, at: Date.now() });
 }
+function forgetRecentGoal(userId: string, id: string) {
+  const next = forgetRecentGoalForUser(userId, id);
+  if (recentGoalsUserId.value === userId) recentGoals.value = next;
+}
+
+watch(recentGoalsUserId, (nextId, previousId) => {
+  recentGoalsLoadGeneration += 1;
+  dropLegacyRecentGoalsStorage();
+  recentGoals.value = loadRecentGoalsForUser(nextId);
+  if (previousId && previousId !== nextId) {
+    if (live.started) resetToEntry();
+    if (typeof route.params.conversationId === 'string') {
+      void router.replace({ name: 'V2GoalConversation' });
+    }
+  }
+}, { immediate: true });
+
+async function openRecentGoal(id: string) {
+  const ownerId = recentGoalsUserId.value;
+  if (!ownerId) return;
+  const generationAtStart = recentGoalsLoadGeneration;
+  const ok = await live.resumeById(id);
+  if (recentGoalsUserId.value !== ownerId || generationAtStart !== recentGoalsLoadGeneration) return;
+  if (!ok) {
+    if (live.resumeErrorStatus === 404) {
+      forgetRecentGoal(ownerId, id);
+      toast.info('这条会话已不可用，已从最近会话中移除');
+    }
+    return;
+  }
+  await router.push({ name: 'V2GoalConversation', params: { conversationId: id } });
+}
+
 function recentTime(at: number): string {
   const d = new Date(at);
   const now = new Date();

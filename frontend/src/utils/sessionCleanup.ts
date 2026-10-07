@@ -8,6 +8,9 @@ export const LEGACY_GOAL_CONVERSATION_MSGS_KEY = 'v2_goal_msgs';
 
 const GOAL_CID_PREFIX = 'v2_goal_cid';
 const GOAL_MSGS_PREFIX = 'v2_goal_msgs';
+const RECENT_GOALS_PREFIX = 'wf_goal_recent';
+/** 旧版未按用户隔离的最近会话列表键；无法证明归属，只能丢弃，不能迁移 */
+export const LEGACY_RECENT_GOALS_KEY = RECENT_GOALS_PREFIX;
 
 /** 从 localStorage 读取当前登录用户 id（由 stores/user 写入）；无法解析返回 null */
 export function currentUserId(): string | null {
@@ -29,6 +32,30 @@ export function goalConversationCidKey(userId: string): string {
 
 export function goalConversationMsgsKey(userId: string): string {
   return `${GOAL_MSGS_PREFIX}:${userId}`;
+}
+
+/** 最近会话摘要键：按 userId 隔离；未作用域旧键不迁移 */
+export function recentGoalsKey(userId: string): string {
+  return `${RECENT_GOALS_PREFIX}:${userId}`;
+}
+
+export function getRecentGoalsStorage(userId: string): string | null {
+  return userId ? localStorage.getItem(recentGoalsKey(userId)) : null;
+}
+
+export function setRecentGoalsStorage(userId: string, json: string): void {
+  if (!userId) return;
+  localStorage.setItem(recentGoalsKey(userId), json);
+}
+
+export function removeRecentGoalsStorage(userId: string): void {
+  if (!userId) return;
+  localStorage.removeItem(recentGoalsKey(userId));
+}
+
+/** 丢弃旧版共享最近会话列表：其中会话归属不明，绝不能迁移给当前账号 */
+export function dropLegacyRecentGoalsStorage(): void {
+  localStorage.removeItem(LEGACY_RECENT_GOALS_KEY);
 }
 
 /** 读取当前用户缓存的目标会话 ID（未登录返回 null） */
@@ -87,7 +114,7 @@ export function migrateLegacyGoalConversationStorage(userId: string): void {
   dropLegacyGoalConversationStorage();
 }
 
-/** 清空全部 v2_goal_* 缓存（旧版未作用域键 + 所有账号作用域键），防止切号残留 */
+/** 清空全部目标对话缓存（旧版未作用域键 + 所有账号作用域键），防止切号残留 */
 export function clearGoalConversationStorage(): void {
   // 先收集再删除：边遍历边删除会使后续键下标位移，可能漏删（尤其 cid/msgs 相邻时）
   const keys: string[] = [];
@@ -97,8 +124,10 @@ export function clearGoalConversationStorage(): void {
     if (
       key === LEGACY_GOAL_CONVERSATION_CID_KEY
       || key === LEGACY_GOAL_CONVERSATION_MSGS_KEY
+      || key === LEGACY_RECENT_GOALS_KEY
       || key.startsWith(`${GOAL_CID_PREFIX}:`)
       || key.startsWith(`${GOAL_MSGS_PREFIX}:`)
+      || key.startsWith(`${RECENT_GOALS_PREFIX}:`)
     ) {
       keys.push(key);
     }
