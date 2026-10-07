@@ -354,17 +354,18 @@ onUnmounted(() => {
   text-decoration: none;
   cursor: pointer;
 }
-.v2nav__menu a svg,
-.v2nav__menu button svg {
+/* 行内直接子图标：染色 + 补齐 22px 图标槽。
+   ① 只用 `> svg`：写成 `a svg` 会连主题芯片里那个 14px 图标一起命中，而直接命中的规则
+      比继承更优先，芯片声明的 --blue-deep 会被无声盖成灰色（实测 rgb(175,177,182)）。
+   ② 补 3.5px 对称边距：主题项是 22px 键帽芯片，其余是 15px 线图标；不补的话那四行文字
+      会比「切换到亮色模式」左移 7px（390 实测 235.7 vs 242.7）。15 + 3.5×2 = 22。 */
+.v2nav__menu a > svg,
+.v2nav__menu button > svg {
   color: var(--muted);
   flex-shrink: 0;
+  margin: 0 3.5px;
 }
-/* 图标列统一 22px：主题项是 22px 的键帽芯片（.v2nav__menu-theme-icon），其余是 15px 线图标。
-   不补这 3.5px 边距，那四行的文字会比「切换到亮色模式」左移 7px（390 实测 235.7 vs 242.7）。
-   用 > svg 只取行内直接子图标，芯片自己的 14px 图标不受影响。 */
-.v2nav__menu a > svg,
-.v2nav__menu button > svg { margin: 0 3.5px; }
-.v2nav__menu button.v2nav__menu-danger svg {
+.v2nav__menu button.v2nav__menu-danger > svg {
   color: var(--red-ink);
 }
 .v2nav__menu a:hover,

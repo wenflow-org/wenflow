@@ -129,6 +129,12 @@ describe('账户菜单：图标列与菜单头共用一条左栏', () => {
 
     const chip = ruleAfter(source, '.v2nav__menu-theme-icon');
     const chipW = px(decl(chip, 'width'));
+    expect(decl(chip, 'color'), '主题芯片应声明蓝色，图标需继承该颜色').toBe('var(--blue-deep)');
+    const rowIcons = ruleAfter(source, '.v2nav__menu a > svg');
+    expect(decl(rowIcons, 'color')).toBe('var(--muted)');
+    expect(source).toContain('.v2nav__menu button > svg {');
+    expect(source).not.toContain('.v2nav__menu button svg {');
+    expect(source).not.toContain('.v2nav__menu a svg,');
     expect(
       Number(rowSizes[0]) + margin[1] * 2,
       '图标 + 两侧边距 != 主题芯片宽度：五项文字会再次错行'
