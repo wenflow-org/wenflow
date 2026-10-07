@@ -363,19 +363,11 @@
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
             </button>
           </div>
-          <!-- 底部提示一条基线（2026-09-27 用户反馈）：快捷键+计数+AI 声明归右带；
-               左侧不再放平台说明（那句话已回左栏信息面板底部） -->
+          <!-- 底部提示只承载输入元数据：快捷键、字数与 AI 声明。
+               「新目标」不塞进这里：它不是输入辅助信息，而是离开当前会话的导航动作；
+               移动端点击底部「目标规划」会进入无参路由，route.params watcher 负责回到初始态，
+               并保留「继续上次的规划」恢复入口。 -->
           <div class="composer__hint">
-            <!-- P1：≤1100 移动端唯一的「规划新目标」入口——底部 tab「目标规划」同路由点击
-                 不派发 v2:new-goal（V2Nav 只在顶部 CTA 挂了该逻辑，≤900 已隐藏），
-                 本页 .chat__clear 移动端又隐藏，会话态会被锁死在旧对话。
-                 走 onNewGoalEvent：回初始态、本地保留「继续上次的规划」，不删记录。 -->
-            <button
-              type="button"
-              class="composer__new-goal"
-              title="规划新目标（当前对话保留在本机，可恢复）"
-              @click="onNewGoalEvent"
-            >新目标</button>
             <span class="composer__hint-right">
               <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
               <span class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
@@ -606,7 +598,6 @@ const lastAiKey = computed(() => {
 });
 
 onMounted(() => {
-  window.addEventListener('v2:new-goal', onNewGoalEvent);
   window.addEventListener('keydown', onProposalKey);
   window.addEventListener('resize', onViewportResize);
   // iOS 键盘不改布局视口高度、只改 visualViewport，需单独监听（Android 的
@@ -629,8 +620,10 @@ onMounted(() => {
   if (cid && cid !== live.conversationId) {
     resumeFromRoute(cid);
   } else if (!cid && live.started) {
-    // SPA 内从旧会话切换回来（如路径页点「规划新目标」）：清掉模块级残留的上一轮对话，
-    // 回到初始态；localStorage 保留，仍可「继续上次的规划」恢复。
+    // SPA 内从旧会话切回无参路由（点底部「目标规划」tab、路径页「新目标」、知识图谱
+    // 「开始学习」都会走到这里）：清掉模块级残留的上一轮对话回到初始态；
+    // localStorage 保留，仍可「继续上次的规划」恢复。这也是移动端会话态唯一的
+    // 「开始另一个目标」出口——页面内不再单设「新目标」按钮（见 .composer__hint 注释）。
     resetToEntry();
   }
   // 草稿回填：刷新后长草稿不丢，并聚焦到输入框（EG14）
@@ -640,7 +633,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('v2:new-goal', onNewGoalEvent);
   window.removeEventListener('keydown', onProposalKey);
   window.removeEventListener('resize', onViewportResize);
   window.visualViewport?.removeEventListener('resize', onViewportResize);
@@ -657,16 +649,6 @@ function resetToEntry() {
   supplementMode.value = false;
   supplementText.value = '';
   input.value = '';
-}
-
-/** 页面内点击导航「规划新目标」：重置为全新初始态（保留本地恢复入口） */
-function onNewGoalEvent() {
-  resetToEntry();
-  clearDraft();
-  // 清掉 URL 中残留的旧会话参数，避免刷新后按旧 conversationId 恢复
-  if (typeof route.params.conversationId === 'string') {
-    router.replace({ name: 'V2GoalConversation' });
-  }
 }
 
 /** 路由 cid 恢复入口：失败且本地无会话可回退时明示——否则坏 cid 链接打开
@@ -1394,6 +1376,10 @@ function shuffleScenes() {
 .composer__box {
   position: relative;
   display: flex; align-items: flex-end; gap: 10px;
+  /* .composer 是单列 grid，盒是 grid item，min-width:auto 时它的最小贡献=min-content，
+     会把那一列撑到 ≈295px 的硬下限（≤355 视口下顶出列宽，320 实测右缘越过视口 1.3px）。
+     归零后轨道跟随容器，内部 textarea 的 min-width:0 才真正起作用。 */
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal);
@@ -1446,6 +1432,11 @@ function shuffleScenes() {
 }
 .composer__textarea {
   flex: 1;
+  /* 无 cols 属性 → 浏览器按 cols=20 给 textarea 一个内在最小宽（16px 字号下 ≈160px），
+     flex 项默认 min-width:auto 不许收缩到它以下，整个输入盒因此有 ≈295px 的硬下限：
+     ≤355 视口下输入盒会顶出 composer 的列宽（320 实测右缘 321.3 > composer 右缘 310，
+     并越过 320 视口 1.3px）。这一条允许它缩到列宽内。 */
+  min-width: 0;
   border: 0; outline: none; resize: none;
   font: inherit; font-size: 15px; line-height: 1.5;
   color: var(--ink);
@@ -1494,9 +1485,8 @@ function shuffleScenes() {
   margin-top: auto;
 }
 .composer__count { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* 「新目标」入口：桌面隐藏（chat 头部「清空重聊」+ 导航「规划新目标」CTA 已覆盖）；
-   ≤1100 移动端它是唯一入口（见模板注释），在移动端媒体查询内放开 */
-.composer__new-goal { display: none; }
+/* 「新目标」不属于 composer 元数据条：移动端由底部「目标规划」导航回到无参路由，
+   route.params watcher 负责 resetToEntry，并保留「继续上次的规划」恢复入口。 */
 
 /* ---------- 工作台布局 ---------- */
 .work {
@@ -2300,38 +2290,32 @@ function shuffleScenes() {
   .replies { margin-left: 0; }
   /* 编辑按钮触屏即 40×40 本体（EG20 复验收口，见 (hover: none) 块），不再用 ::before 扩热区 */
   /* 移动端 hint 行整体脱离文档流（0 高，原占 17px + gap 7px），内容挂到输入框与底部导航
-     之间那道缝里：左「新目标」入口、中计数、右 AI 生成声明。触屏没有键盘快捷键提示，隐藏之。 */
+     之间那道缝里。触屏没有键盘快捷键提示，隐藏之。 */
   .composer { position: relative; }
-  /* 本档 .v2-page 已有 padding-bottom:72px 让位底部 tab 栏，不再叠 safe-area
-     （会留出空缝）；下内边距 46px 是给 0 高 hint 行里的「新目标」按钮（36px）预留的
-     可点空间，避免它溢进底部导航被遮挡（LY10 修复）。 */
-  .chat > .composer { padding: 10px 16px 46px; }
+  /* 本档 .v2-page 已有 padding-bottom:72px 让位底部 tab 栏，不再叠 safe-area（会留出空缝）。
+     下内边距 46→30：那 46 是给「新目标」按钮（36px）预留的可点空间（LY10），
+     该按钮已移除，只剩 hint 行（hint 文本 19.2px + 距底 5px = 24.2px）要落在这段内边距里。
+     30 而非 22：22 时 hint 顶边（757.8）会压过输入框底边（760）2.2px（390 实测）。 */
+  .chat > .composer { padding: 10px 16px 30px; }
   .composer__hint {
     position: absolute;
-    left: 0; right: 0; bottom: 6px;
+    /* left/right 取 .composer 的左右内边距（16），不是 0：绝对定位的包含块是 composer 的
+       padding box，写 0 会让 hint 比输入框右缘多探出 16px（390 实测 380 vs 364），
+       AI 声明于是贴到屏幕边上。对齐到输入框同一条列宽。 */
+    left: 16px; right: 16px; bottom: 5px;
     height: 0;
     /* 底部对齐：hint 行（0 高）里的内容向上生长，落进 composer 预留的下内边距里，
-       不再向下溢进底部导航（此前 bottom:0 + flex-start 把「新目标」推进 dock 之下，
-       390 实测只剩 6px 可点）。 */
+       不向下溢进底部导航。 */
     align-items: flex-end;
-    justify-content: space-between;
+    justify-content: flex-end;
     flex-wrap: nowrap;
     padding: 0;
   }
-  /* P1：移动端唯一「规划新目标」入口（桌面隐藏）。挂在输入区下的 0 高 hint 缝里：
-     chat 头部带在移动端已被阶段导航 + 目标信息药丸占满（390 下合计 ~325/336px），
-     没有第二块空地。36px 高满足触屏门禁，靠 composer 的 46px 下内边距落在输入条内侧，
-     完整可点（不再被底部 dock 遮挡）。 */
-  .composer__new-goal {
-    display: inline-flex; align-items: center; flex: 0 0 auto;
-    min-height: 36px; padding: 4px 12px;
-    border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
-    background: var(--surface); color: var(--muted);
-    font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
-  }
   .composer__hint-shortcut { display: none; }
-  /* 计数与 AI 声明分列缝的两端（两者原本裹在 .composer__hint-right 里，会挤成一堆） */
-  .composer__hint-right { display: contents; }
+  /* 计数与 AI 声明同处一条基线、整体靠右（与输入框右缘对齐）。
+     此前用 display:contents 把两者拉到缝的两端，是为了给左侧的「新目标」让位；
+     按钮移除后两端分布只会把一条元数据拉散成两截，改回一个右对齐的簇。 */
+  .composer__hint-right { display: inline-flex; align-items: baseline; gap: 10px; }
   /* iOS Safari 聚焦 <16px 的输入框会触发视口自动放大，打完字还要 pinch 收回——
      textarea 必须留 16px；想让空态看着轻一点只能压 placeholder（占位符字号不影响聚焦判定）。
      盒内继续收紧：外内边距左 12→8、gap 10→8、textarea 上下 10→8、发送键 40→36，盒高 62→54。
@@ -2371,6 +2355,11 @@ function shuffleScenes() {
   @media (max-width: 360px) {
     .stage-nav__item:not(.stage-nav__item--current) { font-size: 0; gap: 0; padding: 4px 3px; }
     .stage-nav__item i { font-size: 12px; }
+    /* AI 声明（226px）已占满对齐后的列宽（390 实测 hint 内容 283.5px），
+       ≤335 时「计数 + 声明」放不进输入框那条列宽，会向左溢出压到 composer 内边距上。
+       字号不能再降（mobile:spec 的 fonts 门禁），故此处让位的是计数——
+       textarea 有 maxlength 强约束，超限本身不可能发生，计数只是提示。 */
+    .composer__count { display: none; }
   }
   .chat__clear { display: none; }
 
