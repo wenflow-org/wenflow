@@ -28,6 +28,14 @@ export interface EpistemicGroundingInput {
   previousLearnerState?: Record<string, any> | null;
   /** 编排层受控错误指令（decideControlledError 采样命中时传入，判决必须服从） */
   forcedCorrectness?: { forced: boolean; targetConcept: string | null; hint: string | null } | null;
+  /**
+   * 学习者可见的对话上下文（P1-7）：判决"本轮能否做对当前这一步"必须看到教师本轮实际讲了什么——
+   * 此前 payload 无对话历史/教师最新消息，判决对象是模型从未见过的"这一步"。
+   */
+  visibleContext?: {
+    history?: Array<{ role?: string; content?: string }>;
+    lastTeacherMessage?: string | null;
+  } | null;
 }
 
 function clamp01(value: any, fallback: number): number {
@@ -52,6 +60,26 @@ function normalizeGrounding(parsed: any): EpistemicGrounding {
   };
 }
 
+function buildVisibleContextProjection(
+  input: EpistemicGroundingInput['visibleContext']
+): { history: Array<{ role: 'teacher' | 'learner'; content: string }>; lastTeacherMessage: string } | null {
+  if (!input || typeof input !== 'object') return null;
+  const history = Array.isArray(input.history)
+    ? input.history
+        .map((message) => ({
+          role: message?.role === 'teacher' ? 'teacher' as const : 'learner' as const,
+          content: safeText(message?.content).slice(0, 400),
+        }))
+        .filter((message) => message.content)
+        .slice(-6)
+    : [];
+  const lastTeacherMessage = safeText(input.lastTeacherMessage)
+    || [...history].reverse().find((message) => message.role === 'teacher')?.content
+    || '';
+  if (!history.length && !lastTeacherMessage) return null;
+  return { history, lastTeacherMessage };
+}
+
 function buildUserPayload(input: EpistemicGroundingInput) {
   // 缓存前缀优化：learner 里逐回合被回写的概念数组（knownConcepts/struggleConcepts，含 profile 内副本）
   // 移到 payload 尾部，稳定画像（profile/learningGoal/personalityTraits 等）前置——否则首个键即变化，前缀缓存全灭
@@ -66,6 +94,8 @@ function buildUserPayload(input: EpistemicGroundingInput) {
   }
   const stableLearner: Record<string, any> = { ...learnerRest };
   if (learnerProfileSrc) stableLearner.profile = learnerProfileSrc;
+  // P1-7：可见对话上下文（逐回合变化）放尾部缓存区，稳定画像仍前置
+  const visibleContext = buildVisibleContextProjection(input.visibleContext);
   return {
     learner: stableLearner,
     currentTask: input.currentTask || null,
@@ -73,6 +103,7 @@ function buildUserPayload(input: EpistemicGroundingInput) {
     struggleConcepts: Array.isArray(struggleConcepts) ? struggleConcepts : [],
     knowledgeSnapshot: Array.isArray(input.knowledgeSnapshot) ? input.knowledgeSnapshot.slice(0, 5) : [],
     previousLearnerState: input.previousLearnerState || null,
+    ...(visibleContext ? { visibleContext } : {}),
     // 编排层硬指令放 payload 尾部（与逐轮变化的概念数组同区，保住稳定画像的前缀缓存）
     ...(input.forcedCorrectness?.forced ? { forcedCorrectness: input.forcedCorrectness } : {}),
   };
@@ -91,6 +122,7 @@ export const virtualLearnerEpistemicGroundingDefinition: SkillDefinition = {
       currentTask: { type: 'object', description: '当前 task 信息' },
       knowledgeSnapshot: { type: 'array', description: '当前任务知识看板' },
       previousLearnerState: { type: 'object', description: '上一轮学习者主观状态' },
+      visibleContext: { type: 'object', description: '学习者可见的对话上下文（history + lastTeacherMessage）' },
     },
   },
   outputSchema: {

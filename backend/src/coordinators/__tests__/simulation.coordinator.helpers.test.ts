@@ -13,6 +13,9 @@ import {
   buildDefaultLearnerState,
   buildStoryBehaviorBias,
   mergeLearnerState,
+  hasExplicitGoalRefusal,
+  finalizeGoalLearnerState,
+  shouldAutoConfirmGoalProposal,
   buildGoalConcernPool,
   flattenGoalConcernPool,
   resolveLearnTurnBudget,
@@ -297,6 +300,89 @@ describe('mergeLearnerState goal clamps', () => {
   it('restores a non-finite goalReadiness to the stage default', () => {
     const state = mergeLearnerState(baseProfile(), { goalReadiness: NaN }, 'goal')
     expect(state.goalReadiness).toBe(0.28)
+  })
+})
+
+/**
+ * P1-12 / GD-1 回归：27 轮矛盾组合（LLM readyToProceed=false 但 goalReadiness≥0.78
+ * 且 wantsClarification=false）不得产出确认。DB 实证样例 pcl_1a58b16c（learner 明说
+ * 「时间不好说…每周三四个小时」而 goalReadiness=0.8/readyToProceed=false）。
+ */
+describe('P1-12 GD-1：显式不同意不得被钳制/收敛翻转为同意', () => {
+  const contradictionState = {
+    goalReadiness: 0.8,
+    readyToProceed: false,
+    wantsClarification: false,
+    readyToAdvance: true, // 模型自评矛盾：同一行把 readyToAdvance 报成 true
+    willingToTry: true,
+    proposalFit: 0.75,
+    taskRelevance: 0.8,
+    executionConcern: 0.6,
+  }
+
+  it('mergeLearnerState：readyToProceed=false 时数值钳制不得升 readyToAdvance 为 true', () => {
+    // 隔离钳制：readyToAdvance 未给（undefined），旧实现在 goalReadiness≥0.78 且
+    // wantsClarification=false 时会把它升为 true，与明示 readyToProceed=false 矛盾。
+    const refused = mergeLearnerState(
+      baseProfile(),
+      { goalReadiness: 0.8, wantsClarification: false, readyToProceed: false, readyToAdvance: undefined },
+      'goal'
+    )
+    expect(refused.goalReadiness).toBeGreaterThanOrEqual(0.78)
+    expect(refused.readyToAdvance).not.toBe(true)
+
+    // 对照：无显式拒绝时，数值达标仍可合流 readyToAdvance=true（不破坏原行为）
+    const agreed = mergeLearnerState(
+      baseProfile(),
+      { goalReadiness: 0.8, wantsClarification: false, readyToProceed: true, readyToAdvance: undefined },
+      'goal'
+    )
+    expect(agreed.readyToAdvance).toBe(true)
+  })
+
+  it('finalizeGoalLearnerState：finalStage=ready 且有显式拒绝时保留自评、不清空 remainingUnknowns', () => {
+    const state = finalizeGoalLearnerState(
+      baseProfile(),
+      { ...contradictionState, readyToAdvance: false, remainingUnknowns: ['每周三四个小时零碎时间够不够'] },
+      undefined,
+      'ready'
+    )
+    expect(state.readyToAdvance).toBe(false)
+    expect(state.remainingUnknowns).toEqual(['每周三四个小时零碎时间够不够'])
+    // 不得把 goalReadiness 抬到 0.86 的「已同意」档
+    expect(state.goalReadiness).toBeLessThan(0.86)
+  })
+
+  it('finalizeGoalLearnerState：无显式拒绝时仍按 final 阶段收敛（不破坏正常流程）', () => {
+    const state = finalizeGoalLearnerState(
+      baseProfile(),
+      { goalReadiness: 0.9, readyToAdvance: true, wantsClarification: false, remainingUnknowns: ['x'] },
+      undefined,
+      'ready'
+    )
+    expect(state.readyToAdvance).toBe(true)
+    expect(state.remainingUnknowns).toEqual([])
+    expect(state.goalReadiness).toBeGreaterThanOrEqual(0.86)
+  })
+
+  it('shouldAutoConfirmGoalProposal：矛盾组合一律不代发确认', () => {
+    expect(shouldAutoConfirmGoalProposal(contradictionState)).toBe(false)
+    // 缺省（非显式 true）不代发
+    expect(shouldAutoConfirmGoalProposal({ readyToAdvance: undefined })).toBe(false)
+    expect(shouldAutoConfirmGoalProposal(null)).toBe(false)
+    // 显式拒绝旁证
+    expect(shouldAutoConfirmGoalProposal({ readyToAdvance: true, readyToProceed: false })).toBe(false)
+    expect(shouldAutoConfirmGoalProposal({ readyToAdvance: true, wantsClarification: true })).toBe(false)
+    // 唯一放行：显式同意且无拒绝信号
+    expect(shouldAutoConfirmGoalProposal({ readyToAdvance: true, readyToProceed: true, wantsClarification: false })).toBe(true)
+  })
+
+  it('hasExplicitGoalRefusal：只认显式位，缺省不算拒绝', () => {
+    expect(hasExplicitGoalRefusal({ readyToProceed: false })).toBe(true)
+    expect(hasExplicitGoalRefusal({ willingToTry: false })).toBe(true)
+    expect(hasExplicitGoalRefusal({ wantsClarification: true })).toBe(true)
+    expect(hasExplicitGoalRefusal({ goalReadiness: 0.9 })).toBe(false)
+    expect(hasExplicitGoalRefusal(undefined)).toBe(false)
   })
 })
 

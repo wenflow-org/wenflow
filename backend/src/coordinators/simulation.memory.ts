@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import { memoryTraceService } from '../services/memory/memory-trace.service';
 import {
   buildLearnerMemorySnapshot,
+  deriveCuratedSelfState,
   recordCompletedArtifact,
   writeProfileConceptsAfterLesson,
   type LessonKnowledgePoint,
@@ -140,19 +141,21 @@ export async function persistAssistedLearnerMemory(
     };
     // 记忆提炼 skill（LLM 主路径，失败走确定性 fallback）
     const curated = await runAssistedMemoryCurator(session, learningState, task);
+    // P1-2：mastery 取 curator confidence（不再写死 0.85）；taskDone 尊重学习者原话
     const effectiveSelfState: SelfReportedLearnerState | null = curated
-      ? {
-          ...(selfState || {}),
-          conceptName: curated.masteredConcepts[0]?.name || curated.struggleConcepts[0]?.name
-            || selfState?.conceptName || task.title || null,
-          conceptualMastery: curated.masteredConcepts.length > 0 ? 0.85 : selfState?.conceptualMastery ?? null,
-          selfReportedTaskDone: curated.masteredConcepts.length > 0 ? true : selfState?.selfReportedTaskDone ?? null,
-          remainingBlockers: curated.struggleConcepts.length > 0
-            ? curated.struggleConcepts.map((s) => s.blocker).filter(Boolean)
-            : selfState?.remainingBlockers || null,
-        }
+      ? deriveCuratedSelfState(selfState, {
+          mastered: curated.masteredConcepts,
+          struggle: curated.struggleConcepts,
+          fallbackConcept: task.title || null,
+        })
       : selfState;
-    await writeProfileConceptsAfterLesson(session.userId, knowledgePoints, { source: 'assisted', selfState: effectiveSelfState });
+    await writeProfileConceptsAfterLesson(session.userId, knowledgePoints, {
+      source: 'assisted',
+      selfState: effectiveSelfState,
+      curatedConcepts: curated
+        ? { mastered: curated.masteredConcepts.map((m) => m.name), struggling: curated.struggleConcepts.map((s) => s.name) }
+        : null,
+    });
     await recordCompletedArtifact({
       userId: session.userId,
       taskId: task.id,
@@ -163,8 +166,9 @@ export async function persistAssistedLearnerMemory(
       selfState: effectiveSelfState,
       memoryDelta: curated?.memoryDelta || null,
       memoryCurated: curated ? {
-        mastered: curated.masteredConcepts.map((m) => m.name),
-        struggling: curated.struggleConcepts.map((s) => s.name),
+        // P2-32：evidence/confidence/severity 随名单落库（不再只留 name）
+        mastered: curated.masteredConcepts,
+        struggling: curated.struggleConcepts,
         selfCalibration: curated.selfCalibration,
       } : undefined,
       milestoneTitle: null,
@@ -197,14 +201,37 @@ export async function runAssistedMemoryCurator(
     };
     // 从 conversationHistory 构建回合序列
     const history = Array.isArray(learningState.conversationHistory) ? learningState.conversationHistory : [];
-    const turnSequence = history.slice(-24).map((m: Record<string, unknown>, index: number) => ({
-      turn: index + 1,
-      reply: typeof m.content === 'string' ? m.content : '',
-      emotion: null,
-      learnerState: undefined,
-      learnerFeedback: undefined,
-      role: m.role || 'learner',
-    }));
+    // P1-3：收束轮的 learnerState / latestLearnerFeedback 就在本函数作用域内（:126-129），
+    // 挂到最后一轮 turnSequence——否则提示词规则 2/3/8 要求「从 learnerState/learnerFeedback 找证据」
+    // 时输入里根本没有这些字段（592 条 payload 实测 0 在场），模型只能对幻影字段断言。
+    const closingLearnerState = (learningState.learnerState && typeof learningState.learnerState === 'object'
+      ? learningState.learnerState : {}) as Record<string, unknown>;
+    const closingFeedback = (learningState.latestLearnerFeedback && typeof learningState.latestLearnerFeedback === 'object'
+      ? learningState.latestLearnerFeedback : {}) as Record<string, unknown>;
+    const window = history.slice(-24);
+    // P2-32：assisted 链的 learningState.conversationHistory 上游已被 trimLearningConversationHistory
+    // 截到 ≤6 条（simulation.helpers.ts:561-566），**没有绝对轮号可用**——这里的 turn 就是
+    // 所提供窗口内的序号（从 1 起）。yaml 输入契约已声明该语义，模型不得当作跨课绝对轮次。
+    const turnSequence = window.map((m: Record<string, unknown>, index: number) => {
+      const isClosingTurn = index === window.length - 1;
+      return {
+        turn: index + 1,
+        reply: typeof m.content === 'string' ? m.content : '',
+        learnerState: isClosingTurn ? {
+          phaseFocus: typeof closingLearnerState.phaseFocus === 'string' ? closingLearnerState.phaseFocus : undefined,
+          conceptualMastery: typeof closingLearnerState.conceptualMastery === 'number' ? closingLearnerState.conceptualMastery : undefined,
+          taskUnderstanding: typeof closingLearnerState.taskUnderstanding === 'number' ? closingLearnerState.taskUnderstanding : undefined,
+          wantsHint: typeof closingLearnerState.wantsHint === 'boolean' ? closingLearnerState.wantsHint : undefined,
+        } : undefined,
+        learnerFeedback: isClosingTurn ? {
+          selfReportedTaskDone: typeof closingFeedback.selfReportedTaskDone === 'boolean' ? closingFeedback.selfReportedTaskDone : undefined,
+          confidence: typeof closingFeedback.confidence === 'number' ? closingFeedback.confidence : undefined,
+          wantsMoreHelp: typeof closingFeedback.wantsMoreHelp === 'boolean' ? closingFeedback.wantsMoreHelp : undefined,
+          remainingBlockers: Array.isArray(closingFeedback.remainingBlockers) ? closingFeedback.remainingBlockers : undefined,
+        } : undefined,
+        role: m.role || 'learner',
+      };
+    });
     const existing = await buildLearnerMemorySnapshot(session.userId, { limit: 30 }).catch(() => null);
     const result = await executeSkill(virtualLearnerMemoryCuratorDefinition, {
       persona,
@@ -217,8 +244,10 @@ export async function runAssistedMemoryCurator(
       existingKnown: existing?.mastered.map((m) => m.name) || [],
       existingStruggle: existing?.struggling.map((m) => m.name) || [],
     });
-    if (!result.success || !result.output) return null;
-    const output = result.output as Record<string, unknown>;
+    // P1-1：executeSkill 已解包（skills/index.ts:296-301 return result.output），
+    // 返回值就是 output 本身——不能再检查 result.success（恒 undefined → 恒 return null）。
+    const output = result as Record<string, unknown> | null | undefined;
+    if (!output || typeof output !== 'object') return null;
     return {
       masteredConcepts: Array.isArray(output.masteredConcepts) ? output.masteredConcepts : [],
       struggleConcepts: Array.isArray(output.struggleConcepts) ? output.struggleConcepts : [],

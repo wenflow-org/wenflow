@@ -47,6 +47,10 @@ import {
   loadTeachTurnKnowledgeAssets,
   computeClosureDecision,
   buildNextLearningState,
+  auditGroundingCompliance,
+  clampLearnerStateToJudgment,
+  reconcileKnowledgeBoardWithJudgment,
+  demoteProfileKnownConcepts,
   type LearningClosureDecision,
 } from './simulation.learn.steps';
 import { VirtualSessionLeaseBusyError } from './simulation.errors';
@@ -302,6 +306,42 @@ export async function finalizePathCompletion(ctx: SimulationOrchestrator, sessio
       details: {
         error: asErrorLike(err).message || 'wrapup generation failed'
       }
+    });
+  }
+}
+
+/**
+ * P1-6 实际看板闭环：把判决对账的降级项从画像 knownConcepts 中移除（并保留到 struggleConcepts）。
+ * 背景：persistProfileConcepts 只做 `knownConcepts ∪ mastered`，永不移除；而下一轮
+ * knowledgeSnapshot 的 mastered 正是由 buildLearnerMemorySnapshot 从 profile.knownConcepts 读出
+ * （learner-memory.ts:388/394-397）。不执行本步，降级只改 memory_traces 与 struggle，看板仍显示
+ * mastered。best-effort——失败只告警不阻断教学回合。
+ */
+async function demoteProfileConceptsForJudgment(
+  userId: string,
+  downgraded: Array<{ name: string; from: string; to: string }>
+): Promise<void> {
+  if (!userId || !Array.isArray(downgraded) || !downgraded.length) return;
+  try {
+    const profile = await prisma.virtual_learner_profiles.findUnique({ where: { userId } });
+    if (!profile) return;
+    const profileData = safeJsonParse<Record<string, unknown>>(profile.profile, {});
+    const next = demoteProfileKnownConcepts(profileData, downgraded);
+    const knownConcepts = Array.isArray(next.knownConcepts) ? next.knownConcepts : [];
+    const struggleConcepts = Array.isArray(next.struggleConcepts) ? next.struggleConcepts : [];
+    await prisma.virtual_learner_profiles.update({
+      where: { userId },
+      data: {
+        profile: JSON.stringify(next),
+        knownConcepts: JSON.stringify(knownConcepts),
+        struggleConcepts: JSON.stringify(struggleConcepts),
+        updatedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    logger.warn('[simulation-coordinator] 判决对账降级画像概念失败（不阻断教学回合）', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -653,6 +693,16 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     });
     let epistemicGrounding: any = null;
     try {
+      // P1-7：判决器内容失明——此前 payload 只有画像/任务/看板，判决器看不到"老师本轮讲了什么"，
+      // 却要对"本轮能否做对当前这一步"下判决，模拟器又必须服从（simulator yaml:91）。
+      // 这里把执行器已经拿到的可见上下文（对话切片 + 教师最新消息）注入判决 payload 尾部。
+      const judgeVisibleContext = {
+        history: trimmedConversationHistory.map((item) => ({
+          role: item.role === 'assistant' ? 'teacher' : 'learner',
+          content: item.content,
+        })),
+        lastTeacherMessage: lastAssistantMessage,
+      };
       const groundingRaw: any = await executeSkill(virtualLearnerEpistemicGroundingDefinition, {
         // 路由身份（2026-10-04）：扮演类技能以 VL 本人 userId 解析——user_api_configs 的
         // agnes 绑定（独立 RPM 桶）只在「调用链从用户自有 provider 起步」时生效，批跑以
@@ -672,6 +722,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           description: currentTask.description || null,
         },
         knowledgeSnapshot,
+        visibleContext: judgeVisibleContext,
         previousLearnerState: mergedLearnerState,
         ...(controlledError.forced ? { forcedCorrectness: controlledError } : {}),
       });
@@ -765,16 +816,44 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     }));
 
     const resolvedLearnState = resolveSimLearnerState(virtualReplyOutput);
+    // P1-4：判决服从核验——virtualReplyResult 组装时对 blockedConcept 与 reply 做一致性检查。
+    // 判错轮 reply 未暴露卡点 / 却宣称"已会" / 自评掌握度越过 masteryProb 上界 → 记 drift，
+    // 随会话日志落证据链（区分「判决→服从→答错」与「判决→翻案→答对」，供 VL-1 受控错误锚点甄别）。
+    const rawGroundingCompliance = auditGroundingCompliance({
+      grounding: epistemicGrounding,
+      reply: virtualReplyOutput?.reply || '',
+      learnerState: resolvedLearnState as { conceptualMastery?: number; proceduralMastery?: number } | null,
+    });
+    // P1-4 最低验收：判错轮把自评掌握度钳制到 masteryProb 上界（判决缺失/判对原样）。
+    const masteryClamp = clampLearnerStateToJudgment(
+      resolvedLearnState as Record<string, unknown>,
+      epistemicGrounding
+    );
+    const clampedLearnState = masteryClamp.learnerState;
+    const groundingCompliance = masteryClamp.clampedFields.length
+      ? {
+          ...auditGroundingCompliance({
+            grounding: epistemicGrounding,
+            reply: virtualReplyOutput?.reply || '',
+            learnerState: clampedLearnState as { conceptualMastery?: number; proceduralMastery?: number } | null,
+          }),
+          masteryClampedFields: masteryClamp.clampedFields,
+          preClampDrift: rawGroundingCompliance.drift,
+        }
+      : rawGroundingCompliance;
     const virtualReplyResult = {
       success: !!virtualReplyOutput?.reply,
       userVisible: virtualReplyOutput?.reply || '',
-      learnerState: resolvedLearnState,
+      learnerState: clampedLearnState,
       learnerFeedback: virtualReplyOutput?.learnerFeedback,
       runtimeEnvelope: virtualReplyOutput?.runtimeEnvelope || null,
       internal: {
         emotion: virtualReplyOutput?.emotion,
-        learnerState: resolvedLearnState,
+        learnerState: clampedLearnState,
         learnerFeedback: virtualReplyOutput?.learnerFeedback,
+        // 判决 + 服从核验：随 internal 一并透出，供日志证据与后续消费方核对
+        epistemicGrounding: epistemicGrounding || null,
+        groundingCompliance
       }
     };
     
@@ -795,7 +874,10 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           learnerState: virtualReplyResult.learnerState || virtualReplyResult.internal?.learnerState,
           runtimeEnvelope: virtualReplyResult.runtimeEnvelope,
           learnerFeedback: virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null,
-          emotion: virtualReplyResult.internal?.emotion
+          emotion: virtualReplyResult.internal?.emotion,
+          // P1-4：主链路判决结构化落证据（session 日志）——判决字段 + 服从核验结果
+          epistemicGrounding: epistemicGrounding || null,
+          groundingCompliance
         }
       }
     });
@@ -835,14 +917,27 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         
         aiResponse = aiResult.aiResponse || '';
         
+        // P1-6：看板 × 判决对账——判错轮里被 blockedConcept 命中的教师侧看板项若仍标 mastered，
+        // 落库前降级为 learning（progress ≤40），避免教师看板与判决器自相矛盾（audit n=12 中 6 条）。
+        // 判决缺失/非判错轮 → 原样（宁松勿误伤）。
+        const boardReconciliation = reconcileKnowledgeBoardWithJudgment(
+          aiResult.knowledgePoints,
+          epistemicGrounding
+        );
         // 记忆引擎：教学回合后增量写 memory_traces（知识看板状态 → 内化强度）
-        persistKnowledgeState(session.userId, aiResult.knowledgePoints);
+        persistKnowledgeState(session.userId, boardReconciliation.points as Array<{ name: string; status: string; progress: number }>);
         // 画像回写：掌握 → knownConcepts，仍在学/需复习 → struggleConcepts
-        void persistProfileConcepts(sessionId, session.userId, aiResult.knowledgePoints);
+        await persistProfileConcepts(sessionId, session.userId, boardReconciliation.points as Array<{ name: string; status: string; progress: number }>);
+        // P1-6 闭环：persistProfileConcepts 对 knownConcepts 是 union-only（不移除），单把当前点改成
+        // learning 仍会让 stale knownConcepts 在下一轮被 buildLearnerMemorySnapshot 读回 mastered。
+        // 这里在画像回写之后执行 demotion，使「看板降级」真正落到下一轮 knowledgeSnapshot。
+        await demoteProfileConceptsForJudgment(session.userId, boardReconciliation.downgraded);
         
         closureDecision = computeClosureDecision(
           aiResult.closureSignal,
-          virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null
+          virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null,
+          // P1-5：把认知判决接进完成裁决——判错/掌握不足时 learnerReady 强制 false
+          epistemicGrounding
         );
 
         logs.push({
@@ -862,7 +957,15 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
               peerMessage: aiResult.peerMessage || null,
               currentState: aiResult.currentState || null,
               promptDebug: aiResult.promptDebug || null,
-              closureDecision
+              closureDecision,
+              // P1-6：对账降级留痕（哪些看板项因判决被判错而降级）
+              knowledgeBoardReconciliation: boardReconciliation.downgraded.length
+                ? boardReconciliation.downgraded
+                : null,
+              // P1-6：实际 profile knownConcepts 移除留痕（下一轮 mastered 不再读回）
+              profileKnownConceptsDemotion: boardReconciliation.downgraded.length
+                ? boardReconciliation.downgraded
+                : null
             }
           }
         });

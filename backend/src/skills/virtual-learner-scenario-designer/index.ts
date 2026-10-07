@@ -243,6 +243,56 @@ const DEFAULT_RECENT_SCENARIO_HINTS = [
   '避免 nameHint 总是小陈/小张这类重复模板',
 ];
 
+/**
+ * 学段与年龄一致性校验（P1-15，与 persona-designer 同款；本文件为历史二次固化点
+ * index.ts:255 的 Math.max(18, Math.min(60, age))——同一套规则在此同步，
+ * 学生身份而 age 越出学段区间 → 校验失败重试，不夹值）。
+ */
+const SCENARIO_STAGE_AGE_RANGES = [
+  { stage: '小学', min: 6, max: 13 },
+  { stage: '初中', min: 11, max: 16 },
+  { stage: '高中', min: 14, max: 19 },
+] as const;
+
+/** 家长/教师/陪读等非学生语境词——命中即不判为「该学段的学生」。 */
+const SCENARIO_NON_STUDENT_CONTEXT = /家长|妈妈|爸爸|父母|陪读|家长群|老师|教师|家教|辅导员|班主任|教资|教师编|家长会/;
+
+/** 从身份文本（nameHint/occupation/education）识别「本人是该学段的学生」（不扫 background，避免家长/教师语境误伤）。 */
+export function detectScenarioStudentStage(seed: any): '小学' | '初中' | '高中' | null {
+  const fields = [seed?.nameHint, seed?.occupation, seed?.education]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  if (!fields.length) return null;
+  const idText = fields.join(' ');
+  // 高等教育/职校阶段不做年龄区间约束（成人回炉、专升本、考研跨度大）
+  if (/大学|本科|大专|高职|大[一二三四]|研究生|硕士|博士|考研|职校|中专|技校|职高|中职/.test(idText)) return null;
+  // 逐字段判定：某字段带家长/教师语境只跳过该字段（nameHint 写「妈妈陪学」不影响 occupation 里的学生身份）
+  for (const field of fields) {
+    if (SCENARIO_NON_STUDENT_CONTEXT.test(field)) continue;
+    if (!/学生|在读|年级|在校|应届|考生|复读|女生|男生/.test(field)) continue;
+    // 顺序敏感：「高中三年级」不能被 [一二三四五六]年级 判成小学
+    if (/高中|高[一二三]/.test(field)) return '高中';
+    if (/初中|初[一二三]|[七八九]年级/.test(field)) return '初中';
+    if (/小学|[一二三四五六]年级/.test(field)) return '小学';
+  }
+  return null;
+}
+
+/** 学段-年龄一致性：越界返回失败原因（供 validateScenarioOutput 重试），不夹值。 */
+export function validateScenarioStageAge(seed: any): { valid: boolean; failureReason?: string } {
+  const stage = detectScenarioStudentStage(seed);
+  if (!stage) return { valid: true };
+  const range = SCENARIO_STAGE_AGE_RANGES.find((item) => item.stage === stage)!;
+  const age = Number(seed?.age);
+  if (!Number.isFinite(age)) return { valid: true };
+  if (age < range.min || age > range.max) {
+    return {
+      valid: false,
+      failureReason: `SCENARIO_OUTPUT_INVALID: age=${age} 与学段「${stage}」不一致（${stage}学段合理区间 ${range.min}-${range.max}）——请修正 age 使其与身份学段相符，不要改身份学段去迁就年龄`,
+    };
+  }
+  return { valid: true };
+}
+
 function normalizeScenarioOutput(raw: any) {
   const storyRaw = raw?.story && typeof raw?.story === 'object' ? raw.story : null;
   const personaSeed = raw?.personaSeed && typeof raw.personaSeed === 'object' ? raw.personaSeed : {};
@@ -252,7 +302,11 @@ function normalizeScenarioOutput(raw: any) {
   return {
     personaSeed: {
       nameHint: normalizeString(personaSeed.nameHint),
-      age: Number.isFinite(Number(personaSeed.age)) ? Math.max(18, Math.min(60, Number(personaSeed.age))) : null,
+      // P1-15：去掉 [18,60] 硬夹（与 persona-designer 同款二次固化点）。学段-年龄一致性由
+      // validateScenarioOutput 校验（越界重试而非夹值）；此处只做通用合理区间兜底（3-100）。
+      age: Number.isFinite(Number(personaSeed.age))
+        ? Math.max(3, Math.min(100, Number(personaSeed.age)))
+        : null,
       occupation: normalizeString(personaSeed.occupation),
       education: normalizeString(personaSeed.education),
       background: normalizeString(personaSeed.background),
@@ -329,6 +383,10 @@ export function validateScenarioOutput(parsed: any): { valid: boolean; failureRe
   if (!Number.isFinite(Number(personaSeed.age))) {
     return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.age must be a number' };
   }
+
+  // P1-15：学段与年龄一致性——学生身份而 age 越出学段区间即失败重试（不夹值）
+  const stageAge = validateScenarioStageAge(personaSeed);
+  if (!stageAge.valid) return stageAge;
 
   if (normalizeStringArray(personaSeed.knownConcepts).length === 0) {
     return { valid: false, failureReason: 'SCENARIO_OUTPUT_INVALID: personaSeed.knownConcepts must contain at least one item' };

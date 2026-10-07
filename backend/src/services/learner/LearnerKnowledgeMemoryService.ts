@@ -141,6 +141,27 @@ function dedupe(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.map((value) => normalizeConceptKey(value)).filter(Boolean) as string[]));
 }
 
+/**
+ * 概念身份键（P1-16 修复，2026-10-06 审计）。
+ *
+ * 确定性台账的键是**中文 label**（task.linkedConceptName / displayLabel / 会话知识点名），
+ * 而 lesson-knowledge-enricher 的模型行自拟 `conceptKey`（实测 67/120 为英文 slug，如
+ * `hand-over-choice` 对应 label「交出选择权降低开场抵触」）。两套键空间按精确 conceptKey
+ * 永不 join → 同一概念「确定性一行 + 模型一行」并存，经 toTeachingProjection 注入课堂 prompt
+ * 后，下一个授课模型看到互相矛盾的状态。
+ *
+ * 归并键改为：**中文 label 优先**（label 才是课堂可读身份，也是确定性台账的既有键），
+ * label 缺失时才回落 conceptKey；再做机械归一化（去空白/引号/冒号从句/尾标点，与
+ * 记忆层 `normalizeConceptKey` 同口径）。这样英文 slug 行与中文 label 行在同一概念上
+ * 收敛为一行，杜绝双行矛盾。
+ */
+export function conceptIdentityKey(item: { conceptKey?: string | null; label?: string | null }): string | null {
+  const label = typeof item?.label === 'string' ? item.label.trim() : '';
+  const raw = label || (typeof item?.conceptKey === 'string' ? item.conceptKey.trim() : '');
+  if (!raw) return null;
+  return normalizeConceptKeyCanonical(raw) || raw;
+}
+
 function signalFromProgress(progress: number, status: 'pending' | 'learning' | 'mastered' | 'review') {
   const score = clamp(progress / 100, 0, 1);
   const stability = status === 'mastered'
@@ -783,8 +804,10 @@ export class LearnerKnowledgeMemoryService {
     const ledgerMap = new Map<string, LearnerBackgroundConceptLedgerItem>();
     for (const item of [...deterministicConceptLedger, ...enrichedLedger]) {
       if (!item?.conceptKey) continue;
-      const existing = ledgerMap.get(item.conceptKey);
-      ledgerMap.set(item.conceptKey, existing
+      // P1-16：按「中文 label 归一化」为身份键 join（英文 slug 与中文 label 同概念合并为一行）
+      const key = conceptIdentityKey(item) ?? item.conceptKey;
+      const existing = ledgerMap.get(key);
+      ledgerMap.set(key, existing
         ? {
             ...existing,
             ...item,
@@ -799,8 +822,9 @@ export class LearnerKnowledgeMemoryService {
     const confusionMap = new Map<string, LearnerRecurringConfusion>();
     for (const item of [...deterministicConfusions, ...enrichedConfusions]) {
       if (!item?.conceptKey) continue;
-      const existing = confusionMap.get(item.conceptKey);
-      confusionMap.set(item.conceptKey, existing
+      const key = conceptIdentityKey(item) ?? item.conceptKey;
+      const existing = confusionMap.get(key);
+      confusionMap.set(key, existing
         ? {
             ...existing,
             ...item,
@@ -815,9 +839,10 @@ export class LearnerKnowledgeMemoryService {
     const transferMap = new Map<string, LearnerTransferSignal>();
     for (const item of [...deterministicTransferSignals, ...enrichedTransferSignals]) {
       if (!item?.conceptKey) continue;
-      const existing = transferMap.get(item.conceptKey);
+      const key = conceptIdentityKey(item) ?? item.conceptKey;
+      const existing = transferMap.get(key);
       if (!existing || (item.confidence || 0) > existing.confidence || readinessRank[item.readiness] > readinessRank[existing.readiness]) {
-        transferMap.set(item.conceptKey, item);
+        transferMap.set(key, item);
       }
     }
     const transferSignals = Array.from(transferMap.values()).slice(0, 30);

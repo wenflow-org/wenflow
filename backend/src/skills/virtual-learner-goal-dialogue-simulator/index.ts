@@ -197,6 +197,13 @@ function normalizeOutput(parsed: any, input: GoalLearnerSimulationInput): GoalLe
   const executionConcern = clamp01(rawState.executionConcern, fallback.learnerState.executionConcern);
   const willingToTry = safeBool(rawState.willingToTry, fallback.learnerState.willingToTry);
   const readyToProceed = safeBool(rawState.readyToProceed, willingToTry && proposalFit >= 0.7 && executionConcern < 0.7);
+  const wantsClarification = safeBool(rawState.wantsClarification, !readyToProceed);
+  // P1-12/GD-1：readyToAdvance 保留 LLM 自评，不再无条件改写为 readyToProceed。
+  // 只有当存在显式拒绝信号（readyToProceed===false / wantsClarification / willingToTry===false）时
+  // 才钳为 false；否则沿用模型给出的 readyToAdvance（缺失时回退到 readyToProceed）。
+  // 「同意」不得被代码代答，也不得把明示的不同意翻转为 true。
+  const explicitRefusal = readyToProceed === false || wantsClarification === true || willingToTry === false;
+  const readyToAdvance = explicitRefusal ? false : safeBool(rawState.readyToAdvance, readyToProceed);
   const normalizedFallback = {
     fieldCount: GOAL_STATE_FIELDS.filter((field) => !(field in rawState)).length,
     fields: GOAL_STATE_FIELDS.filter((field) => !(field in rawState)).slice(0, 8),
@@ -214,10 +221,10 @@ function normalizeOutput(parsed: any, input: GoalLearnerSimulationInput): GoalLe
       executionConcern,
       willingToTry,
       readyToProceed,
-      wantsClarification: safeBool(rawState.wantsClarification, !readyToProceed),
-      readyToAdvance: readyToProceed,
-      goalReadiness: readyToProceed ? Math.max(clamp01(rawState.goalReadiness, 0), 0.82) : clamp01(rawState.goalReadiness, Math.max(proposalFit, taskRelevance) * 0.8),
-      remainingUnknowns: readyToProceed ? [] : normalizeStringArray(rawState.remainingUnknowns).length ? normalizeStringArray(rawState.remainingUnknowns) : fallback.learnerState.remainingUnknowns,
+      wantsClarification,
+      readyToAdvance,
+      goalReadiness: readyToAdvance ? Math.max(clamp01(rawState.goalReadiness, 0), 0.82) : clamp01(rawState.goalReadiness, Math.max(proposalFit, taskRelevance) * 0.8),
+      remainingUnknowns: readyToAdvance ? [] : normalizeStringArray(rawState.remainingUnknowns).length ? normalizeStringArray(rawState.remainingUnknowns) : fallback.learnerState.remainingUnknowns,
     },
     debug: {
       visibleSignal: sanitizeVisibleContent(parsed?.debug?.visibleSignal || ''),

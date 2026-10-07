@@ -51,6 +51,7 @@ import { logger } from '../utils/logger'
 import { ensureFixtureMaterialsForVirtualSession } from './fixture-materials'
 import {
   buildLearnerMemorySnapshot,
+  deriveCuratedSelfState,
   extractSelfStateFromTrace,
   recordCompletedArtifact,
   writeProfileConceptsAfterLesson,
@@ -1730,22 +1731,20 @@ export class BlackboxVirtualLearnerRunner {
       const selfState = extractSelfStateFromTrace(trace, taskId);
       // 记忆提炼 skill（LLM 主路径，失败走确定性 fallback）
       const curated = await this.runMemoryCurator(session, state, teachingSessionId, task, trace);
-      const curatedMastered = curated?.masteredConcepts?.map((m) => m.name) || [];
-      const curatedStruggle = curated?.struggleConcepts?.map((s) => s.name) || [];
+      // P1-2：mastery 取 curator confidence（不再写死 0.85）；taskDone 尊重学习者原话
       const effectiveSelfState: SelfReportedLearnerState | null = curated
-        ? {
-            ...(selfState || {}),
-            conceptName: curatedMastered[0] || curatedStruggle[0] || selfState?.conceptName || task?.title || null,
-            conceptualMastery: curatedMastered.length > 0 ? 0.85 : selfState?.conceptualMastery ?? null,
-            selfReportedTaskDone: curatedMastered.length > 0 ? true : selfState?.selfReportedTaskDone ?? null,
-            remainingBlockers: curatedStruggle.length > 0
-              ? curated.struggleConcepts.map((s) => s.blocker).filter(Boolean)
-              : selfState?.remainingBlockers || null,
-          }
+        ? deriveCuratedSelfState(selfState, {
+            mastered: curated.masteredConcepts,
+            struggle: curated.struggleConcepts,
+            fallbackConcept: task?.title || null,
+          })
         : selfState;
       await writeProfileConceptsAfterLesson(session.userId, knowledgePoints, {
         source: 'blackbox',
         selfState: effectiveSelfState,
+        curatedConcepts: curated
+          ? { mastered: curated.masteredConcepts.map((m) => m.name), struggling: curated.struggleConcepts.map((s) => s.name) }
+          : null,
       });
       await recordCompletedArtifact({
         userId: session.userId,
@@ -1758,8 +1757,9 @@ export class BlackboxVirtualLearnerRunner {
         milestoneTitle: (task as any)?.milestones?.title || null,
         memoryDelta: curated?.memoryDelta || null,
         memoryCurated: curated ? {
-          mastered: curatedMastered,
-          struggling: curatedStruggle,
+          // P2-32：evidence/confidence/severity 随名单落库（不再只留 name）
+          mastered: curated.masteredConcepts,
+          struggling: curated.struggleConcepts,
           selfCalibration: curated.selfCalibration,
         } : undefined,
       });
@@ -1796,14 +1796,19 @@ export class BlackboxVirtualLearnerRunner {
         learningGoal: profile.learningGoal,
       };
       // 从私有轨迹构建回合压缩序列（只取 teaching 阶段）
-      const turnSequence = (trace || [])
-        .filter((entry) => entry?.stage === 'teaching')
+      const teachingEntries = (trace || []).filter((entry) => entry?.stage === 'teaching');
+      // P2-32：turn 用轨迹里的**绝对序号**（sequence），slice 窗口内序号落库会误导回溯
+      const absoluteStart = Math.max(0, teachingEntries.length - 24);
+      const turnSequence = teachingEntries
         .slice(-24)
         .map((entry, index) => {
           const s = (entry?.state && typeof entry.state === 'object' ? entry.state : {}) as Record<string, any>;
           const f = (s.learnerFeedback && typeof s.learnerFeedback === 'object' ? s.learnerFeedback : {}) as Record<string, any>;
+          const absoluteTurn = Number.isFinite(Number(entry?.sequence))
+            ? Number(entry.sequence)
+            : absoluteStart + index + 1;
           return {
-            turn: index + 1,
+            turn: absoluteTurn,
             reply: typeof s.reply === 'string' ? s.reply : '',
             emotion: typeof s.emotion === 'string' ? s.emotion : null,
             learnerState: {
@@ -1821,7 +1826,11 @@ export class BlackboxVirtualLearnerRunner {
           };
         });
       // 若轨迹无 teaching 回合（异常），回退 teaching session 消息
-      const effectiveTurns = turnSequence.length > 0 ? turnSequence : this.buildFallbackTurnSequence(teachingSessionId);
+      // （buildFallbackTurnSequence 是 async——必须 await，否则传下去的是 Promise 而非数组，
+      //  projectSimulatorPayload 的 Array.isArray 守卫会把它当空序列，回退路径静默失效）
+      const effectiveTurns = turnSequence.length > 0
+        ? turnSequence
+        : await this.buildFallbackTurnSequence(teachingSessionId);
       const existing = await buildLearnerMemorySnapshot(session.userId, { limit: 30 }).catch(() => null);
       const result = await executeSkill(virtualLearnerMemoryCuratorDefinition, {
         persona,
@@ -1834,8 +1843,10 @@ export class BlackboxVirtualLearnerRunner {
         existingKnown: existing?.mastered.map((m) => m.name) || [],
         existingStruggle: existing?.struggling.map((m) => m.name) || [],
       });
-      if (!result.success || !result.output) return null;
-      const output = result.output as any;
+      // P1-1：executeSkill 已解包（skills/index.ts:296-301 return result.output），
+      // 返回值就是 output 本身——不能再检查 result.success（恒 undefined → 恒 return null）。
+      const output = result as any;
+      if (!output || typeof output !== 'object') return null;
       return {
         masteredConcepts: Array.isArray(output.masteredConcepts) ? output.masteredConcepts : [],
         struggleConcepts: Array.isArray(output.struggleConcepts) ? output.struggleConcepts : [],
@@ -1861,8 +1872,11 @@ export class BlackboxVirtualLearnerRunner {
         : Array.isArray(raw)
           ? raw
           : [];
-      return messages.slice(-24).map((m: any, index: number) => ({
-        turn: index + 1,
+      // P2-32：与主路径同口径，turn 用 messages 里的绝对序号（不是 slice 窗口内序号）
+      const fallbackWindow = messages.slice(-24);
+      const fallbackOffset = Math.max(0, messages.length - fallbackWindow.length);
+      return fallbackWindow.map((m: any, index: number) => ({
+        turn: fallbackOffset + index + 1,
         reply: typeof m.content === 'string' ? m.content : '',
         emotion: null,
         learnerState: undefined,

@@ -2652,4 +2652,102 @@ describe('BlackboxVirtualLearnerRunner', () => {
       immediateSetTimeout.mockRestore()
     }
   })
+
+  it('P1-1/P1-2/P2-32/P2-33：记忆提炼输出不带 success 仍落库；全量名单 + 跨表去重 + 绝对轮号 + 否定句不误判', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const session = sessionWith(
+      { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
+      { teaching: { phaseFocus: 'trying' } }
+    )
+    const state = JSON.parse(session.stageResults)
+    state.blackbox.learnerPrivateStateTrace = [{
+      sequence: 23,
+      stage: 'teaching',
+      taskId: 't1',
+      state: {
+        reply: '我自己剪了一段，节奏能对上',
+        phaseFocus: 'trying',
+        conceptualMastery: 0.7,
+        learnerFeedback: { selfReportedTaskDone: null, confidence: 0.6 }
+      }
+    }]
+    session.stageResults = JSON.stringify(state)
+
+    const profileRow = {
+      id: 'vp1', userId: 'u1', learningGoal: '学会剪辑',
+      profile: JSON.stringify({ learningStyle: 'doing' }),
+      knownConcepts: '[]', struggleConcepts: '[]'
+    }
+    ;(prisma.virtual_learner_profiles.findUnique as jest.Mock).mockImplementation(async ({ where }: any) =>
+      where.id ? profileRow : { ...profileRow }
+    )
+    ;(prisma.virtual_learner_profiles.update as jest.Mock).mockResolvedValue({})
+    ;(prisma as any).teaching_sessions = { findUnique: jest.fn(async () => ({ knowledgeState: [] })) }
+    ;(prisma as any).subtasks = {
+      findUnique: jest.fn(async () => ({
+        id: 't1', title: '探店视频初剪', taskType: 'project', acceptanceCriteria: '剪出 30 秒卡点', milestones: null
+      }))
+    }
+    // 关键：output 上没有 success —— 正是 executeSkill 解包后的真实返回形状
+    ;(executeSkill as jest.Mock).mockResolvedValue({
+      masteredConcepts: [{ name: '剪辑节奏', evidence: '我自己剪了一段，节奏能对上', confidence: 0.9 }],
+      struggleConcepts: [
+        { name: '剪辑节奏', blocker: '同名混入 struggle（应被去重）', severity: 'medium' },
+        { name: '调色', blocker: '白平衡搞不定', severity: 'high' }
+      ],
+      selfCalibration: '本课未见高估',
+      memoryDelta: '这课我掌握了剪辑节奏。'
+    })
+
+    await runner.persistLearnerMemoryAfterTask(session, 't1', 'teach1', state)
+
+    // P1-1：提炼结果被消费（旧代码 .success 误检 → 整体丢弃，update 一次都不会发生）
+    expect(executeSkill).toHaveBeenCalledTimes(1)
+    const curatorInput = (executeSkill as jest.Mock).mock.calls[0][1]
+    // P2-32：证据轮号用轨迹绝对序号，不是窗口内序号
+    expect(curatorInput.turnSequence[0].turn).toBe(23)
+
+    const updates = (prisma.virtual_learner_profiles.update as jest.Mock).mock.calls
+    expect(updates.length).toBeGreaterThanOrEqual(2)
+    const conceptsWrite = JSON.parse(updates[0][0].data.profile)
+    // P1-2：curator 全量名单写回；同名概念不得双表共存（pcl_f9826524 同名双表实录）
+    expect(conceptsWrite.knownConcepts).toEqual(['剪辑节奏'])
+    expect(conceptsWrite.struggleConcepts).toEqual(['调色'])
+    expect(conceptsWrite.struggleConcepts).not.toContain('剪辑节奏')
+
+    const artifactWrite = JSON.parse(updates[updates.length - 1][0].data.profile)
+    const entry = artifactWrite.recentCompleted[0]
+    // P2-32：evidence/severity 随名单落库（不再只留 name）
+    expect(entry.masteredEvidence[0]).toEqual(expect.objectContaining({
+      name: '剪辑节奏', evidence: '我自己剪了一段，节奏能对上', confidence: 0.9
+    }))
+    expect(entry.struggleEvidence[0]).toEqual(expect.objectContaining({
+      name: '调色', blocker: '白平衡搞不定', severity: 'high'
+    }))
+    expect(entry.struggleConcepts).toEqual(['调色'])
+    // P2-33：「本课未见高估」不得判 overconfident（否定句误翻）
+    expect(artifactWrite.selfAssessmentAccuracy).toBeUndefined()
+  })
+
+  it('P2-32：轨迹缺失时的 fallback 回合序列同样用绝对序号（不是 slice 窗口内序号）', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const session = sessionWith(
+      { conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 7 },
+      { teaching: { phaseFocus: 'trying' } }
+    )
+    ;(prisma.virtual_learner_profiles.findUnique as jest.Mock).mockResolvedValue({
+      id: 'vp1', userId: 'u1', learningGoal: 'g', profile: '{}',
+      knownConcepts: '[]', struggleConcepts: '[]'
+    })
+    const messages = Array.from({ length: 30 }, (_, i) => ({ role: 'user', content: `第${i + 1}条` }))
+    ;(prisma as any).teaching_sessions = { findUnique: jest.fn(async () => ({ messages: JSON.stringify(messages) })) }
+    ;(executeSkill as jest.Mock).mockResolvedValue({ masteredConcepts: [], struggleConcepts: [] })
+
+    // trace 无 teaching 条目 → 走 buildFallbackTurnSequence
+    await runner.runMemoryCurator(session, {}, 'teach1', { title: 't' }, [])
+
+    const input = (executeSkill as jest.Mock).mock.calls[0][1]
+    expect(input.turnSequence[0].turn).toBe(7)
+    expect(input.turnSequence.at(-1).turn).toBe(30)
+  })
 })

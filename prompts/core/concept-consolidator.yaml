@@ -18,6 +18,9 @@ rules:
   - confidence 是「这俩是不是同一个东西」的把握度（0-1），不是掌握度；低于 0.8 的建议一律放进 ambiguous
   - 同一概念族只输出一条 merge；canonical 选最完整、最能自我解释的那个名字，不要选最短的
   - 只有当两条名字字面高度接近（包含关系、少量增删字、换引号/标点）时才给 merges；纯语义远距离的推测请放 ambiguous
+  - 输入可能带 canonicalWhitelist（上一轮**尚未执行**的待办规范键名单，均为 candidates 里出现过的 conceptKey）：给 merges 时优先从它里面挑 canonical（延续上轮判断、避免同一族反复换规范名），但它不是强制来源——候选里更完整、更能自我解释的名字仍可作 canonical
+  - 输入可能带 aliasMap（已知「别名 → 规范名」映射，键值均为 candidates 里的 conceptKey）：出现某别名时**优先按该映射给出 merges**（canonical 取映射的规范名）；映射只作先验，若与候选实际词面明显冲突则如实放 ambiguous 并说明
+  - 已执行过归并的规范键（服务端会在本轮不再重复注入为待办）不需要你再提；只对 candidates 里仍并存的候选给建议
   - dropCandidates 只放「命名残缺到无法判断指向」或「已被更完整条目完全覆盖」的名字；不确定就不放
 fields:
   - name: merges

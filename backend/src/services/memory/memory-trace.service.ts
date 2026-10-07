@@ -21,6 +21,7 @@ import {
   fsrsStateFromLegacy,
   fsrsEmptyState,
   fsrsRetrievability,
+  fsrsGradeFromOutcome,
   type FsrsGradeCode,
   type FsrsMemoryState,
 } from './fsrs';
@@ -294,7 +295,18 @@ class MemoryTraceService {
     });
   }
 
-  /** endSession 后按知识看板状态确定性回写内化强度 */
+  /**
+   * endSession 后按知识看板状态确定性回写内化强度。
+   *
+   * FSRS 通电（2026-10-07，P1-10 根因）：看板项带证据时**同时**传 `fsrsGrade`，
+   * 经现有 `fsrsSchedule` 写原生四元组（fsrsStability/Difficulty/Lapses/Reps + FSRS dueAt）。
+   * 此前只写掌握度 → derived 源的 4909 条痕迹仅 4 条有原生 fsrsStability，
+   * 预测侧被迫用 `fsrsStateFromLegacy` 代理（R4 §3-4）。
+   *
+   * 宁缺勿滥：证据门与映射表见 `fsrsGradeFromOutcome`（fsrs.ts）——无状态（非法/缺失）、
+   * pending、review、以及无进度（progress≤0）的项一律不传 grade，行为与旧实现逐字一致
+   * （recordExtraction 的「无 grade 路径」= preserveDueAt，单测钉死）。
+   */
   async recordSessionOutcome(
     userId: string,
     items: SessionKnowledgeOutcome[],
@@ -306,6 +318,8 @@ class MemoryTraceService {
     for (const item of items) {
       if (!item?.name || !String(item.name).trim()) continue;
       const { masteryScore, stability } = mapKnowledgeStatusToMastery(item.status, item.progress, calibrationBias);
+      // 证据门：有证据 → 原生 FSRS 排程；无证据 → 不传 grade（走 recordExtraction 既有无 grade 路径）
+      const fsrsGrade = fsrsGradeFromOutcome(item.status, item.progress);
       await this.recordExtraction({
         userId,
         conceptKey: String(item.name).trim(),
@@ -314,6 +328,8 @@ class MemoryTraceService {
         stability,
         source,
         pathId,
+        // 键存在性即语义：无证据时不写 fsrsGrade 键（undefined 会走 legacy 分支）
+        ...(fsrsGrade !== null ? { fsrsGrade } : {}),
       });
       count += 1;
     }

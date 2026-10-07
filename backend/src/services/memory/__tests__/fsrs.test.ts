@@ -1,5 +1,6 @@
 import {
   fsrsGradeFromStatus,
+  fsrsGradeFromOutcome,
   fsrsEmptyState,
   fsrsStateFromLegacy,
   fsrsSchedule,
@@ -22,6 +23,35 @@ describe('fsrs grade 映射', () => {
   it('learning / pending → Again', () => {
     expect(fsrsGradeFromStatus('learning', 30)).toBe(Rating.Again)
     expect(fsrsGradeFromStatus('pending', 0)).toBe(Rating.Again)
+  })
+})
+
+/**
+ * 课末看板项 → FSRS 成绩（FSRS 通电 2026-10-07）：证据门语义表钉死。
+ * 有证据 → 复用 fsrsGradeFromStatus 四档；无证据 → null（调用方保持「无 grade 路径」）。
+ */
+describe('fsrsGradeFromOutcome（课末看板项：宁缺勿滥的证据门）', () => {
+  it('有证据（learning/mastered 且 progress>0）→ 与 fsrsGradeFromStatus 同档', () => {
+    expect(fsrsGradeFromOutcome('mastered', 100)).toBe(Rating.Easy)
+    expect(fsrsGradeFromOutcome('mastered', 60)).toBe(Rating.Good)
+    expect(fsrsGradeFromOutcome('learning', 40)).toBe(Rating.Again)
+  })
+
+  it('无状态证据：pending（本节课未开始）→ null，不写 Again 误伤', () => {
+    expect(fsrsGradeFromOutcome('pending', 0)).toBeNull()
+    expect(fsrsGradeFromOutcome('pending', 60)).toBeNull()
+  })
+
+  it('review（到期复习点）→ null：复习成绩由 ReviewCompletedConsumer 单一写入', () => {
+    expect(fsrsGradeFromOutcome('review', 50)).toBeNull()
+    expect(fsrsGradeFromOutcome('review', 0)).toBeNull()
+  })
+
+  it('无进度变化（progress≤0 / 非法 progress）→ null', () => {
+    expect(fsrsGradeFromOutcome('mastered', 0)).toBeNull()
+    expect(fsrsGradeFromOutcome('learning', 0)).toBeNull()
+    expect(fsrsGradeFromOutcome('learning', -10)).toBeNull()
+    expect(fsrsGradeFromOutcome('learning', Number.NaN)).toBeNull()
   })
 })
 

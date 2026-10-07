@@ -270,12 +270,6 @@ import { executeSkillHandler } from './executor';
 import type { SkillExecutionOptions } from './protocol';
 
 /**
- * 执行 Skill
- * @param definition - Skill 定义
- * @param input - 输入数据
- * @returns 执行结果
- */
-/**
  * 执行 Skill 并返回完整结果（含 quality/debug/runtimeEnvelope）。
  * 需要区分 model/fallback 质量或读取 prompt 调试信息的调用方使用本入口。
  */
@@ -293,6 +287,18 @@ export async function executeSkillWithResult(
   return executeSkillHandler(definition, input, handler, options);
 }
 
+/**
+ * 执行 Skill，返回**已解包的 output 本身**（不是 SkillExecutionResult）。
+ *
+ * ⚠️ 返回值形状：本函数 `return result.output`——调用方拿到的是 skill 的输出对象，
+ * 其上**没有** `success` / `quality` / `debug` 字段（历史缺陷：三处消费方误检
+ * `output.success`，恒 undefined → 恒判失败 → 记忆增量 100% 未落库）。
+ * 需要成功/失败与质量信息时改用 {@link executeSkillWithResult}。
+ *
+ * @param definition - Skill 定义
+ * @param input - 输入数据
+ * @returns skill 的输出对象（output），失败时按 definition.failurePolicy 抛错或走兜底
+ */
 export async function executeSkill(
   definition: SkillDefinition | { id?: string; name?: string },
   input: any,

@@ -584,6 +584,20 @@ export function resolveLearnerPhase(learnerState: LearnerLatentState | null | un
   return inferLearningPhase(state);
 }
 
+/**
+ * P1-12/GD-1：显式拒绝判定——模型明示不愿继续时应尊重自评，代码的任何钳制/终态收敛
+ * 都不得把它翻转为「同意」。
+ *
+ * 只认显式位（=== false / === true），缺省值不算拒绝：
+ * - willingToTry === false   （明确不愿先试）
+ * - readyToProceed === false （明确不愿继续让系统生成正式路径）
+ * - wantsClarification === true（仍要求澄清，尚未同意）
+ */
+export function hasExplicitGoalRefusal(learnerState: Partial<LearnerLatentState> | null | undefined): boolean {
+  const state = learnerState || {};
+  return state.willingToTry === false || state.readyToProceed === false || state.wantsClarification === true;
+}
+
 export function mergeLearnerState(
   profile: VirtualLearnerProfile,
   learnerState: Partial<LearnerLatentState> | undefined,
@@ -601,7 +615,15 @@ export function mergeLearnerState(
       merged.goalReadiness = buildDefaultLearnerState(profile, currentStage).goalReadiness;
     }
 
-    if (merged.goalReadiness >= 0.78 && merged.wantsClarification === false && merged.readyToAdvance !== false) {
+    // P1-12/GD-1：显式拒绝优先——readyToProceed===false / willingToTry===false /
+    // wantsClarification===true 时数值钳制不得升 readyToAdvance 为 true
+    // （旧实现只看 readyToAdvance!==false，可把 readyToProceed=false 的明示不同意翻转）。
+    if (
+      !hasExplicitGoalRefusal(merged) &&
+      merged.goalReadiness >= 0.78 &&
+      merged.wantsClarification === false &&
+      merged.readyToAdvance !== false
+    ) {
       merged.readyToAdvance = true;
     }
 
@@ -676,6 +698,15 @@ export function finalizeGoalLearnerState(
   const merged = mergeLearnerState(profile, learnerState, 'goal', storyContext);
 
   if (finalStage === 'ready' || finalStage === 'completed') {
+    // P1-12/GD-1：状态机 final 阶段的强制收敛改为「仅当无显式拒绝」。
+    // 是否拒绝只看模型显式位（raw learnerState，缺省/默认值不算）：明示 false 的
+    // readyToAdvance/readyToProceed、明示 true 的 wantsClarification、明示不愿先试。
+    // 命中时原样保留模型自评（不改写 readyToAdvance/remainingUnknowns/goalReadiness），
+    // 阶段收敛语义由 goal 阶段机（isGoalConverged）独立承载，不代签「同意」。
+    const explicitRefusal = hasExplicitGoalRefusal(learnerState) || learnerState?.readyToAdvance === false;
+    if (explicitRefusal) {
+      return merged;
+    }
     return {
       ...merged,
       goalReadiness: Math.max(typeof merged.goalReadiness === 'number' ? merged.goalReadiness : 0.28, 0.86),
@@ -686,6 +717,25 @@ export function finalizeGoalLearnerState(
   }
 
   return merged;
+}
+
+/**
+ * P1-12/GD-1：代发 confirmProposal 的诚实判据。
+ *
+ * 此前协调器直接以 `learnerState.readyToAdvance === true` 代发确认，而该字段被
+ * 数值钳制/终态收敛改写，可把「明示不同意」翻成同意 → 平台替学习者代签。
+ * 现在只认模型显式同意位，并要求无任何显式拒绝信号：
+ * - readyToAdvance 必须为 true（缺省/非 true 一律不代发）
+ * - readyToProceed 不得为 false
+ * - wantsClarification 不得为 true
+ * 防卡死由 goal agent 侧轮次上限承担（见 execution.ts 注释），不伪造学习者同意。
+ */
+export function shouldAutoConfirmGoalProposal(learnerState: LearnerLatentState | null | undefined): boolean {
+  const state = learnerState || {};
+  if (state.readyToAdvance !== true) return false;
+  if (state.readyToProceed === false) return false;
+  if (state.wantsClarification === true) return false;
+  return true;
 }
 
 export function inferDisclosedGoalConcerns(reply: string, concernPool: GoalConcernPool, disclosed: string[]): string[] {

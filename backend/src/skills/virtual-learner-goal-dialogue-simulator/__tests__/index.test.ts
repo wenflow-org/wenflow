@@ -65,6 +65,50 @@ describe('virtual-learner-goal-dialogue-simulator normalize', () => {
     expect(output.debug?.normalizedFallback?.fieldCount).toBe(GOAL_STATE_FIELDS.length)
     expect(output.learnerState.remainingUnknowns.length).toBeGreaterThan(0)
   })
+
+  // P1-12/GD-1 回归：DB 实证矛盾组合 pcl_1a58b16c（readyToProceed=false 但
+  // goalReadiness=0.8、wantsClarification=false，reply 明说时间约束）
+  it('矛盾组合 readyToProceed=false + goalReadiness=0.8：readyToAdvance 不得被翻转为 true', () => {
+    const output = normalizeOutput({
+      reply: '时间不好说，我还在上夜班……能稳定挤出来的也就每周三四个小时',
+      emotion: 'neutral',
+      learnerState: {
+        phaseFocus: 'understanding',
+        feltUnderstood: 0.85,
+        proposalFit: 0.75,
+        taskRelevance: 0.8,
+        executionConcern: 0.6,
+        willingToTry: true,
+        readyToProceed: false,
+        wantsClarification: false,
+        readyToAdvance: true, // 模型自评矛盾
+        goalReadiness: 0.8,
+        remainingUnknowns: ['每周三四个小时零碎时间够不够'],
+      },
+    }, input)
+
+    expect(output.learnerState.readyToProceed).toBe(false)
+    expect(output.learnerState.readyToAdvance).toBe(false)
+    // 未被抬到「已同意」档，也未清空剩余未知
+    expect(output.learnerState.goalReadiness).toBeLessThan(0.82)
+    expect(output.learnerState.remainingUnknowns).toEqual(['每周三四个小时零碎时间够不够'])
+  })
+
+  it('显式同意（readyToProceed=true 且 readyToAdvance=true）仍被保留', () => {
+    const output = normalizeOutput({
+      reply: '行，就按这个来',
+      learnerState: {
+        phaseFocus: 'proposal_evaluation',
+        willingToTry: true,
+        readyToProceed: true,
+        wantsClarification: false,
+        readyToAdvance: true,
+        goalReadiness: 0.8,
+      },
+    }, input)
+    expect(output.learnerState.readyToAdvance).toBe(true)
+    expect(output.learnerState.goalReadiness).toBeGreaterThanOrEqual(0.82)
+  })
 })
 
 describe('virtual-learner-goal-dialogue-simulator 失败显式传播', () => {

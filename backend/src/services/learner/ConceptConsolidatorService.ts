@@ -13,8 +13,13 @@
  *   也不改 `label` 展示（只收敛调度键）。
  *
  * 纪律（照抄 learner-state-review）：LLM 只出**可证伪建议**，合并由代码执行，全程审计可回滚。
- * 分两档：P1 观察（默认，只记录建议、一个字节都不动）；P2 执行（需要显式开关，且只执行
- * `autoApplicable`——词面高度接近的那些）。
+ * 分两档：P1 观察（默认，只记录建议、一个字节都不动）；P2 执行（需要显式开关）。
+ *
+ * 词面闸门（P2-24 修复，2026-10-06 审计）：yaml rule 7 声明「字面高度接近才给 merges」——
+ * 该闸门现在在 `validateConsolidation` 里**决定 merges 成员资格**（词面远距的猜测降级进
+ * ambiguous，不再以 confidence>0.8 混进可执行建议）。因此进入 `proposals` 的都是词面已过的，
+ * `autoApplicable` 恒为 true；需人工确认的语义远距项不再出现在 proposals，`applyProposals`
+ * 也就无法对其执行。
  */
 import { createHash } from 'crypto';
 import prisma from '../../config/database';
@@ -272,18 +277,30 @@ export function candidateFingerprint(candidates: ConceptCandidate[]): string {
 }
 
 /**
- * 校验模型建议：① canonical/aliases 必须来自候选 ② 把握度闸门 ③ 词面闸门（决定能否自动执行）。
- * 未过闸门的建议不丢弃——降级记进 ambiguous（P1 观察期的正是这些）。
+ * 校验模型建议：① canonical/aliases 必须来自候选 ② 把握度闸门 ③ 词面闸门（决定能否自动执行）
+ * ④ 已执行 canonical 过滤（P1-17）。
+ *
+ * - 词面闸门（P2-24 修复）：yaml rule 7 声明「字面高度接近才给 merges」，此前只赋给 autoApplicable、
+ *   不决定 merges 成员资格 → 语义远距的猜测凭 confidence>0.8 留在建议里（DB pcl_4f95acb2）。
+ *   现在 lexicalSimilarity < MIN_LEXICAL_SIMILARITY 的建议**降级进 ambiguous**（与 confidence 闸门并列），
+ *   merges 成员资格与 yaml 声明对齐。
+ * - `appliedCanonicals`（P1-17）：上一次已执行（apply）的 canonical，本轮不再重复建议——
+ *   服务注释原称「whitelist 已写入 payload 防重复建议」但代码里没有这层过滤，此处补上。
  */
 export function validateConsolidation(input: {
   candidates: ConceptCandidate[];
   parsed: { merges?: any[]; ambiguous?: any[]; dropCandidates?: any[] } | null | undefined;
+  /** 已执行的 canonical（不再重复建议） */
+  appliedCanonicals?: Iterable<string>;
 }): {
   proposals: ConceptMergeProposal[];
   ambiguous: Array<{ a: string; b: string; reason: string }>;
   dropCandidates: Array<{ conceptKey: string; reason: string }>;
 } {
   const known = new Set(input.candidates.map((item) => item.conceptKey));
+  const applied = new Set<string>(
+    Array.from(input.appliedCanonicals ?? []).map((item) => String(item || '').trim()).filter(Boolean),
+  );
   const ambiguous: Array<{ a: string; b: string; reason: string }> = [];
   const proposals: ConceptMergeProposal[] = [];
 
@@ -298,6 +315,11 @@ export function validateConsolidation(input: {
       logger.warn('[concept-consolidator] 丢弃越界建议（概念名不在候选里）', { canonical, aliases });
       continue;
     }
+    // P1-17：已执行的 canonical 不再重复建议（whitelist 过滤的代码落点）
+    if (applied.has(canonical)) {
+      ambiguous.push({ a: canonical, b: aliases[0], reason: '该规范键已执行过归并，本轮不重复建议' });
+      continue;
+    }
     const confidence = typeof raw?.confidence === 'number' ? Math.max(0, Math.min(1, raw.confidence)) : 0;
     const rationale = String(raw?.rationale || '').trim();
     const lexical = aliases.reduce((max, alias) => Math.max(max, lexicalSimilarity(canonical, alias)), 0);
@@ -306,13 +328,18 @@ export function validateConsolidation(input: {
       ambiguous.push({ a: canonical, b: aliases[0], reason: `把握度 ${confidence} 低于阈值（${rationale || '未说明'}）` });
       continue;
     }
+    // P2-24：词面闸门决定 merges 成员资格（与 yaml rule 7 对齐），不再只影响 autoApplicable
+    if (lexical < MIN_LEXICAL_SIMILARITY) {
+      ambiguous.push({ a: canonical, b: aliases[0], reason: `词面相似度 ${lexical} 低于阈值（语义远距，需人工确认；${rationale || '未说明'}）` });
+      continue;
+    }
     proposals.push({
       canonical,
       aliases,
       confidence,
       rationale,
       lexicalSimilarity: lexical,
-      autoApplicable: lexical >= MIN_LEXICAL_SIMILARITY,
+      autoApplicable: true,
     });
   }
 
@@ -562,7 +589,15 @@ class ConceptConsolidatorService {
       return previous ?? null;
     }
 
-    const validated = validateConsolidation({ candidates, parsed });
+    const validated = validateConsolidation({
+      candidates,
+      parsed,
+      // P1-17：上一轮已执行的 canonical 不再重复建议（此前只在注释里声称「防重复」，无代码落点）
+      appliedCanonicals: [
+        ...(previous?.appliedMerges ?? []).map((item) => item.canonical),
+        ...(previous?.appliedAliasMerges ?? []).map((item) => item.canonical),
+      ],
+    });
     // 执行策略：alias（默认，非破坏：登记别名 + 改指 conceptId）/ merge（历史破坏性归并，仅用于回滚旧凭据）
     const strategy = options.strategy ?? 'alias';
     const appliedAlias = mode === 'apply' && strategy === 'alias'
@@ -610,7 +645,11 @@ class ConceptConsolidatorService {
       deleted: audit.stats.deleted,
     });
 
-    // 执行过的规范键：后续建议里不再重复出现（whitelist 已写入 payload）
+    // 执行过的规范键：后续建议里不再重复出现。
+    // P1-17 修正（2026-10-06 审计）：此前的注释声称「whitelist 已写入 payload 防重复建议」，
+    // 但代码里既没有 whitelist 过滤，payload 里的 canonicalWhitelist/aliasMap 也取自
+    // previous.proposals（待办建议）而非已执行 canonical——注释与实现不符。实际过滤落在
+    // validateConsolidation(appliedCanonicals) 里（见该函数注释与 consolidate 调用点）。
     if (appliedKeys.size > 0) {
       logger.info('[concept-consolidator] 已执行归并', { userId, canonicalKeys: Array.from(appliedKeys) });
     }

@@ -135,9 +135,19 @@ export function buildMemoryCuratorFallback(input: MemoryCuratorInput): MemoryCur
     blocker: selfState?.remainingBlockers?.[0] || '自评掌握度低或仍有卡点',
     severity: 'medium' as const,
   }))
-  const calibration = input.persona?.selfAssessmentAccuracy
-    ? `画像显示该学习者自评${typeof input.persona.selfAssessmentAccuracy === 'string' ? input.persona.selfAssessmentAccuracy : '存在偏差'}，记忆按此校准。`
-    : '未提供画像自评校准信息。'
+  // P2-33：fallback 文案必须自带**明确方向**，不能只写「按此校准」——下游是确定性解析器，
+  // 无方向的 meta 句（旧文案一律含「校准」二字）会被判成『自评准确』并覆盖画像，
+  // 等于把「LLM 失败」变成「把画像改写成 accurate」。
+  const accuracy = typeof input.persona?.selfAssessmentAccuracy === 'string'
+    ? input.persona.selfAssessmentAccuracy
+    : ''
+  const calibration = /overconfident|高估|偏高/.test(accuracy)
+    ? '画像显示该学习者自评倾向高估，记忆按打折处理。'
+    : /underconfident|低估|偏低/.test(accuracy)
+      ? '画像显示该学习者自评倾向低估，记忆可适度上修。'
+      : /accurate|准确|较准/.test(accuracy)
+        ? '画像显示该学习者自评基本准确。'
+        : '本课未获得可用的自评校准信息，不作校准结论。'
   const memoryDelta = taskName
     ? masteredConcepts.length > 0
       ? `这课我掌握了 ${masteredConcepts.map((m) => m.name).join('、')}。`

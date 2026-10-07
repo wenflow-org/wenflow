@@ -1,9 +1,16 @@
 import type { TeachingTurnOutput } from '../../skills/teaching-turn';
 import type { TeachingSessionRecord } from './TeachingSessionRepository';
-import { peerTriggerConfig } from '../../config/pedagogy.config';
+import {
+  peerTriggerConfig,
+  hasHelpSignal,
+  detectAwaitingLearnerWork,
+} from '../../config/pedagogy.config';
 import { logger } from '../../utils/logger';
 
 export type PeerTriggerReason = 'model-control' | 'help-keyword' | 'low-understanding-window';
+
+/** 复出口（供 engine 的 retryStrategy/策略层与单测共用同一判据源；判据实现在 config/pedagogy.config.ts）。 */
+export { hasHelpSignal, detectAwaitingLearnerWork };
 
 export class PeerTriggerService {
   shouldTrigger(
@@ -40,7 +47,20 @@ export class PeerTriggerService {
       return null;
     }
 
-    if (peerTriggerConfig.helpKeywords.some((keyword) => studentMessage.includes(keyword))) {
+    // 等待作答态（P1-14 修复②）：老师本轮正在布置独立作业/等学生自己作答时，自动触发一律让路——
+    // 学生尚未作答，此时递出的"类比/反例/边界追问"就是解题钥匙（生产实证：独立证明题被递关键步骤）。
+    // model-control 不受限（上方已返回）：那是教学模型本轮的显式要求，与冷却口径一致。
+    const awaiting = detectAwaitingLearnerWork(teachingOutput.reply);
+    if (awaiting.awaiting) {
+      logger.debug('[peer-trigger] suppressed: awaiting-learner-work', {
+        reason: awaiting.reason,
+        sessionId: session.id,
+      });
+      return null;
+    }
+
+    // 关键词路径（P1-14 修复①）：词边界/语境判据，反问语气的嵌套子串不命中。
+    if (hasHelpSignal(studentMessage)) {
       return 'help-keyword';
     }
 

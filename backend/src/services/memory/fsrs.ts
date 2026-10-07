@@ -63,6 +63,39 @@ export function fsrsGradeFromStatus(
   }
 }
 
+/**
+ * 知识看板项 → FSRS 成绩（记录会话结果专用，**带证据门**，零 LLM）。
+ *
+ * 与 `fsrsGradeFromStatus` 同源（复用其四档语义），前置一道确定性证据门：
+ * 只有"本节课确实产生结果"的看板项才返回成绩，其余返回 `null`——调用方
+ * （`MemoryTraceService.recordSessionOutcome`）据此保持 recordExtraction 的
+ * 「无 grade 路径」逐字不变（preserveDueAt：不重排既有 FSRS 间隔）。
+ *
+ * 语义依据（实测库内 20336 条看板项分布，见 2026-10-07 FSRS 通电批）：
+ * | 看板状态 | 证据 | 返回 |
+ * |---|---|---|
+ * | pending | **无**：本节课未开始该概念（12911 条 pending 中 12854 条 progress≤0）。写 Again 等于把"没学"记成"复习失败"（Review 态还会 lapses+1） | null |
+ * | review | **无**：到期复习点的成绩由复习事件链单一写入（ReviewCompletedConsumer，见 memory-trace.service.ts 末尾注释）；仍停留在 review 的点=未响应的待办，不是"复习过但困难" | null |
+ * | learning，progress>0 | 有：本节课有进度 | Again（尚未掌握） |
+ * | mastered，progress>0 | 有：本节课判定掌握 | progress≥100 → Easy，否则 Good |
+ * | learning / mastered，progress≤0 | **无**：无进度变化 | null |
+ * | 其他（缺失/非法） | 无状态 | null |
+ *
+ * 与 `mapKnowledgeStatusToMastery` 的掌握度映射同源对齐：两者都由 status/progress
+ * 决定，grade 与 masteryScore 在同一批看板项上保持一致。
+ */
+export function fsrsGradeFromOutcome(
+  status: 'pending' | 'learning' | 'mastered' | 'review',
+  progress: number,
+): FsrsGradeCode | null {
+  const p = Number.isFinite(progress) ? progress : 0;
+  // 无证据：未开始 / 待复习（复习链单一写入者）
+  if (status !== 'learning' && status !== 'mastered') return null;
+  // 无进度变化：仅有状态而无进度推进 → 不评级
+  if (p <= 0) return null;
+  return fsrsGradeFromStatus(status, p);
+}
+
 /** 空状态（新概念，从未复习） */
 export function fsrsEmptyState(): FsrsMemoryState {
   return { stability: 0, difficulty: 0, reps: 0, lapses: 0, lastReviewAt: null };

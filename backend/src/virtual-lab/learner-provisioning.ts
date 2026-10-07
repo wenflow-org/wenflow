@@ -150,7 +150,9 @@ export async function generateAndApplyPersona(
   const result = await executeSkill(virtualLearnerPersonaDesignerDefinition, {
     preferredLevels: opts.preferredLevels || (profile.knowledgeLevel ? [profile.knowledgeLevel] : undefined),
     existingPersonaSeed,
-    ...(opts.studentHints?.length ? { recentScenarioHints: opts.studentHints } : {}),
+    // P2-26：键名必须是 recentPersonaHints——persona designer 只读该键（index.ts buildUserPayload），
+    // 旧实现挂 recentScenarioHints 被静默丢弃，sampleType='student' 的批量实验指令永不生效。
+    ...(opts.studentHints?.length ? { recentPersonaHints: opts.studentHints } : {}),
   });
 
   const personaSeed = result?.personaSeed || result?.profile || result;

@@ -684,6 +684,37 @@ export async function fetchLatestPriorSessionEndTime(params: {
 }
 
 /**
+ * 复盘要点双形读取（P1-8 修复，2026-10-06 审计）：
+ *
+ * `session-wrapup` 产物把 topicSummary / knowledgeItems / actionPlan 嵌在 `wrapup.summary.*` 下
+ * （DB 实测顶层键无这三样：129/129 条 recap 全空），但历史产物/别处写入仍可能走顶层结构。
+ * 因此「嵌套优先、顶层兜底」两态都读——与 `teaching-session-lifecycle.ts:243` 的双形读取同款。
+ */
+export function readWrapupSummaryFields(wrapup: any): {
+  topicSummary: string | null;
+  actionPlan: string[];
+  knowledgeItems: any[];
+  unresolvedPoints: string[];
+} {
+  const summary = wrapup && typeof wrapup === 'object' && wrapup.summary && typeof wrapup.summary === 'object'
+    ? wrapup.summary
+    : null;
+  const rawTopicSummary = summary?.topicSummary ?? wrapup?.topicSummary;
+  const topicSummary = typeof rawTopicSummary === 'string' && rawTopicSummary.trim() ? rawTopicSummary.trim() : null;
+  const rawActionPlan = summary?.actionPlan ?? wrapup?.actionPlan;
+  const actionPlan = Array.isArray(rawActionPlan)
+    ? rawActionPlan.filter((item: any) => typeof item === 'string' && item.trim())
+    : [];
+  const rawKnowledgeItems = summary?.knowledgeItems ?? wrapup?.knowledgeItems;
+  const knowledgeItems = Array.isArray(rawKnowledgeItems) ? rawKnowledgeItems : [];
+  const unresolvedPoints = knowledgeItems
+    .filter((item: any) => item && typeof item.name === 'string' && item.name.trim() && item.status !== 'mastered')
+    .map((item: any) => String(item.name).trim())
+    .slice(0, 3);
+  return { topicSummary, actionPlan, knowledgeItems, unresolvedPoints };
+}
+
+/**
  * 拉取前序课程摘要（跨节承接数据源），按路径位置选择：
  * 1) 同 milestone 前一任务（同阶段内顺序接续）
  * 2) 上一 milestone 最近完成课（跨阶段接续）
@@ -747,33 +778,18 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
     });
     const sameTaskLatest = sameTaskSessions[0] || null;
     const sameTaskWrapup = sameTaskLatest ? parseJsonSafe(sameTaskLatest.wrapup as any) : null;
-    const sameTaskUnresolved = sameTaskWrapup
-      ? (Array.isArray(sameTaskWrapup.knowledgeItems)
-          ? (sameTaskWrapup.knowledgeItems as any[])
-              .filter((item: any) => item && typeof item.name === 'string' && item.name.trim() && item.status !== 'mastered')
-              .map((item: any) => String(item.name).trim())
-              .slice(0, 3)
-          : [])
-      : [];
-    const sameTaskActionPlan = sameTaskWrapup && Array.isArray(sameTaskWrapup.actionPlan)
-      ? sameTaskWrapup.actionPlan.filter((item: any) => typeof item === 'string' && item.trim()).slice(0, 3)
-      : [];
+    const sameTaskFields = sameTaskWrapup ? readWrapupSummaryFields(sameTaskWrapup) : null;
+    const sameTaskUnresolved = sameTaskFields?.unresolvedPoints ?? [];
+    const sameTaskActionPlan = sameTaskFields ? sameTaskFields.actionPlan.slice(0, 3) : [];
 
     // 从教学会话里提取 recap 数据
     const toRecap = (session: any, relation: TeachingScenarioContext['lastLessonRecap']['relation']) => {
       const wrapup = session.wrapup ? parseJsonSafe(session.wrapup) : null;
       if (!wrapup) return null;
-      const actionPlan = Array.isArray(wrapup.actionPlan)
-        ? wrapup.actionPlan.filter((item: any) => typeof item === 'string' && item.trim())
-        : [];
-      const knowledgeItems = Array.isArray(wrapup.knowledgeItems) ? wrapup.knowledgeItems : [];
-      const unresolvedPoints = knowledgeItems
-        .filter((item: any) => item && typeof item.name === 'string' && item.name.trim() && item.status !== 'mastered')
-        .map((item: any) => String(item.name).trim())
-        .slice(0, 3);
+      const { topicSummary, actionPlan, unresolvedPoints } = readWrapupSummaryFields(wrapup);
       return {
         sourceTopic: typeof session.topic === 'string' && session.topic.trim() ? session.topic.trim() : null,
-        topicSummary: typeof wrapup.topicSummary === 'string' && wrapup.topicSummary.trim() ? wrapup.topicSummary.trim() : null,
+        topicSummary,
         retrievalCue: actionPlan[0] || null,
         unresolvedPoints,
         relation,
@@ -782,7 +798,7 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
               attemptCount: sameTaskSessions.length,
               lastStatus: sameTaskLatest?.status || '',
               lastEndTime: sameTaskLatest?.endTime?.toISOString?.() || null,
-              lastSummary: (typeof wrapup.topicSummary === 'string' && wrapup.topicSummary.trim()) ? wrapup.topicSummary.trim() : null,
+              lastSummary: topicSummary,
               lastUnresolvedPoints: unresolvedPoints,
               lastActionPlan: actionPlan.slice(0, 3),
             }

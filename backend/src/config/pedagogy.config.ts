@@ -11,8 +11,24 @@
 export const peerTriggerConfig = {
   /** 学生消息中包含以下任一关键词时触发同伴。
    *  2026-09-25 口径收紧：删「为什么」「怎么」——中文提问几乎必带这两个词，等于"逢问必弹"（真课实测两轮两弹）。
-   *  保留显式求助词；泛化困惑交给 low-understanding-window 与 model-control 两条路。 */
+   *  保留显式求助词；泛化困惑交给 low-understanding-window 与 model-control 两条路。
+   *  2026-10-07（P1-14 修复①）：不再裸子串匹配——只排除「X不X」正反问框架（会不会/懂不懂/明白不明白），
+   *  判据见 hasHelpSignal。**刻意不做更宽的"反问框字"排除**（2026-10-07 复核实测：按 会/要/能/是/该
+   *  前缀排除会把「需要帮助」「能帮助我吗」「我还是不懂」「还是不会」等 164/427 条真求助静默丢弃）。 */
   helpKeywords: ['不懂', '不会', '帮助', '不明白', '搞不懂'],
+  /** 老师「布置独立作业 / 等待学生自己作答」意图的回复特征（P1-14 修复②）。
+   *  命中即认为本轮老师在等学生作答 → 伴学不再自动触发（model-control 除外），策略层降级为鼓励式。
+   *  方向刻意是「宁误判为等待，不误发解题钥匙」：出现明确的独立完成/不给提示/等你交答案信号即命中。
+   *  注意：**不**把"回复里有问号"当等待——那会退回 2026-09-25 的"逢问必弹"反面（逢问必封）。 */
+  awaitingLearnerWorkPatterns: [
+    { reason: 'no-hint-instruction', source: '不给(任何)?(提示|线索|答案|示范)' },
+    { reason: 'independent-attempt', source: '(你|自己)自己?(从头|独立|先)(写|做|试|推|想|答)' },
+    { reason: 'independent-attempt', source: '(自己|独立)(写|做|试|推|答)一(遍|下|次)?' },
+    { reason: 'waiting-for-response', source: '(把|将)[^。！？\\n]{0,20}(发给我|写给我|给我看|告诉我)' },
+    { reason: 'waiting-for-response', source: '(等|看看|看下)你[^。！？\\n]{0,12}(写|答|做|试|推|说)' },
+    { reason: 'attempt-first', source: '(先|你)(别|不要|不用)(急着)?(看|问|告诉)' },
+    { reason: 'independent-attempt', source: '你来(写|做|试|推|答|说)' },
+  ] as Array<{ reason: string; source: string }>,
   /** 最近 N 条助手消息的理解度平均值低于此阈值时触发 */
   understandingThreshold: 0.4,
   /** 参与平均值计算的最新助手消息条数 */
@@ -20,6 +36,64 @@ export const peerTriggerConfig = {
   /** 会话内冷却：最近 N 条助手消息已带过伴学插话（peerMessage）则本轮不再自动触发
    *  （model-control 仍可越过——那是教学模型本轮的显式要求）。2026-09-25 新增。 */
   cooldownAssistantTurns: 2,
+}
+
+/**
+ * 求助词命中判定（P1-14 修复①，2026-10-07）：不再裸 `includes`。
+ *
+ * 生产实证（prompt_call_logs.createdAt=1791288425961）：学生消息「你看我会**不会**又把三行挤成一行」
+ * 的裸子串「不会」命中 helpKeywords，伴学被误触发；同轮老师正明言
+ * 「下一题我完全不给提示，你自己从头写」——伴学把独立证明题的关键步骤递给了学生。
+ *
+ * 判据（确定性、只排除正反问框架）：对关键词的每一次出现，若关键词形如「不X」，
+ * 且其左侧紧邻的整段恰好是 X（关键词去掉开头「不」后的整段），则是「X不X」正反问，
+ * 本次出现作废（会不会 / 懂不懂 / 明白不明白）。其余出现一律算求助。
+ * 刻意不做更宽的前缀排除：需要帮助、能帮助我吗、我还是不懂、还是不会都是常见真求助，
+ * 不能因为左邻单字恰好是会/要/能/是/该就静默丢弃。
+ */
+export function hasHelpSignal(
+  studentMessage: string,
+  config: typeof peerTriggerConfig = peerTriggerConfig,
+): boolean {
+  const text = String(studentMessage || '');
+  if (!text) return false;
+  for (const keyword of config.helpKeywords) {
+    if (!keyword) continue;
+    const negatedRest = keyword.startsWith('不') ? keyword.slice(1) : '';
+    let from = 0;
+    while (from <= text.length - keyword.length) {
+      const at = text.indexOf(keyword, from);
+      if (at === -1) break;
+      const isAnotAFrame = negatedRest.length > 0
+        && at >= negatedRest.length
+        && text.slice(at - negatedRest.length, at) === negatedRest;
+      if (!isAnotAFrame) return true;
+      from = at + 1;
+    }
+  }
+  return false;
+}
+
+/**
+ * 老师本轮是否在「布置独立作业 / 等学生自己作答」（P1-14 修复②，2026-10-07）。
+ *
+ * 教学语境：老师把作答权交给学生时，伴学递出的类比/反例/边界追问都是替学生思考——
+ * 生产实证里伴学输出的正是「AD⊥BC→直角→与全等判定的关系」+去条件追问，即该题解题钥匙。
+ *
+ * 判据确定性、可测：teacher reply 命中 awaitingLearnerWorkPatterns 任一正则即判等待。
+ * 触发层命中 → 自动触发让路（model-control 不受限）；策略/载荷层命中 → 【策略要求】降级为鼓励式。
+ * 方向刻意是「宁误判为等待，不误发答案」（与关键词的宁漏不误方向相反，因为两侧代价不对称）。
+ */
+export function detectAwaitingLearnerWork(
+  tutorLatestReply: string | null | undefined,
+  config: typeof peerTriggerConfig = peerTriggerConfig,
+): { awaiting: boolean; reason: string | null } {
+  const text = String(tutorLatestReply || '');
+  if (!text) return { awaiting: false, reason: null };
+  for (const { reason, source } of config.awaitingLearnerWorkPatterns || []) {
+    if (new RegExp(source).test(text)) return { awaiting: true, reason };
+  }
+  return { awaiting: false, reason: null };
 }
 
 // ============================================================

@@ -4,7 +4,8 @@
  * 固定当前行为：
  *  - 无 goalConversationId → 开场分支：模拟者 skill 以「空可见上下文」调用，
  *    由 profile.learningGoal 组织开场诉求，startConversation 落库 conversationId；
- *    开场分支不写 stageResults.goal；
+ *    开场分支落 stageResults.goal.learnerState（P1-12/GD-2：接回 previousLearnerState 链，
+ *    reply 仍旁路、description 固定用 storyDemand.text）；
  *  - 有 goalConversationId → 回复分支：模拟者 skill 只拿 sanitize 后的可见上下文
  *    （history / lastGoalAgentMessage），并把 learnerState / concernPool 写回 stageResults.goal；
  *  - goalReady 来自 isGoalConverged(goal stage)：ready/completed → true，
@@ -213,8 +214,30 @@ describe('SimulationOrchestrator.executeSingleStep Goal 阶段', () => {
     expect(sessionRecord.goalConversationId).toBe('conv-1')
     expect(sessionRecord.currentStage).toBe('goal')
     expect(sessionRecord.status).toBe('running')
-    // 开场分支不落 stageResults.goal
-    expect(JSON.parse(sessionRecord.stageResults).goal).toBeUndefined()
+    // P1-12/GD-2：开场轮 learnerState 落 stageResults.goal，下一轮 previousLearnerState 不断链
+    const openingGoal = JSON.parse(sessionRecord.stageResults).goal
+    expect(openingGoal.learnerState).toBeTruthy()
+    expect(typeof openingGoal.learnerState.goalReadiness).toBe('number')
+  })
+
+  it('P1-12/GD-2：开场轮后下一轮 previousLearnerState 非 null（链路接回）', async () => {
+    // 第一轮：开场（无 goalConversationId），落 stageResults.goal.learnerState
+    await coordinator.executeSingleStep({ sessionId: 'simulation-1', userId: 'user-1', mode: 'single-step' })
+    expect(JSON.parse(sessionRecord.stageResults).goal.learnerState).toBeTruthy()
+
+    // 第二轮：回复分支，模拟者应收到上一轮 learnerState（不再 undefined）
+    sessionRecord.goalConversationId = 'conv-1'
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'conv-1',
+      collectedData: JSON.stringify({ stage: 'understanding', messages: [], understanding: {} })
+    })
+
+    await coordinator.executeSingleStep({ sessionId: 'simulation-1', userId: 'user-1', mode: 'single-step' })
+
+    // mockExecuteSkill 的第二次调用即回复分支：previousLearnerState 必须非 null
+    const replyCall = mockExecuteSkill.mock.calls[1][1]
+    expect(replyCall.previousLearnerState).toBeTruthy()
+    expect(replyCall.previousLearnerState).toEqual(expect.objectContaining({ goalReadiness: expect.any(Number) }))
   })
 
   it('回复分支：skill 只收到 sanitize 后的可见上下文，goal 状态写回 stageResults', async () => {
@@ -267,6 +290,96 @@ describe('SimulationOrchestrator.executeSingleStep Goal 阶段', () => {
       disclosedConcerns: expect.any(Array)
     }))
     expect(sessionRecord.currentStage).toBe('goal')
+  })
+
+  it('P1-12 回归：矛盾组合（readyToProceed=false + goalReadiness=0.8）不代发确认', async () => {
+    // DB 实证 pcl_1a58b16c：learner 明说「时间不好说…每周三四个小时」，
+    // goalReadiness=0.8/readyToProceed=false/wantsClarification=false。
+    // 旧实现可在数值钳制/终态收敛后据改写值代发 confirmProposal（平台代签）。
+    sessionRecord.goalConversationId = 'conv-1'
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'conv-1',
+      collectedData: JSON.stringify({
+        stage: 'proposing',
+        messages: [
+          { role: 'user', content: '时间不好说，我还在上夜班' },
+          { role: 'assistant', content: '那我们先看方案' }
+        ],
+        understanding: { real_problem: '考证转岗', background: {}, motivation: '' }
+      })
+    })
+    mockExecuteSkill.mockResolvedValue({
+      reply: '时间不好说，我还在上夜班，下班补觉、家里还有事，能稳定挤出来的也就每周三四个小时，还是零碎的。',
+      learnerState: {
+        phaseFocus: 'proposal_evaluation',
+        feltUnderstood: 0.85,
+        proposalFit: 0.75,
+        taskRelevance: 0.8,
+        executionConcern: 0.6,
+        willingToTry: true,
+        readyToProceed: false,
+        wantsClarification: false,
+        readyToAdvance: false,
+        goalReadiness: 0.8,
+        remainingUnknowns: ['每周三四个小时零碎时间够不够支撑考证和转岗准备']
+      },
+      runtimeEnvelope: null
+    })
+
+    await coordinator.executeSingleStep({ sessionId: 'simulation-1', userId: 'user-1', mode: 'single-step' })
+
+    expect(mockContinueConversation).toHaveBeenCalledWith(
+      'conv-1',
+      '时间不好说，我还在上夜班，下班补觉、家里还有事，能稳定挤出来的也就每周三四个小时，还是零碎的。',
+      'user-1',
+      { systemPromptOverrides: undefined, confirmProposal: false }
+    )
+    const goal = JSON.parse(sessionRecord.stageResults).goal
+    expect(goal.learnerState.readyToAdvance).toBe(false)
+    // 顾虑未被清空（旧实现会在终态收敛时清掉）
+    expect(goal.learnerState.remainingUnknowns).toEqual(['每周三四个小时零碎时间够不够支撑考证和转岗准备'])
+  })
+
+  it('P1-12 回归：goal 阶段已 ready 但学习者显式拒绝时，不强制收敛、不代发确认', async () => {
+    sessionRecord.goalConversationId = 'conv-1'
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'conv-1',
+      collectedData: JSON.stringify({ stage: 'ready', messages: [], understanding: {} })
+    })
+    mockExecuteSkill.mockResolvedValue({
+      reply: '我还是想再问问时间安排',
+      learnerState: {
+        phaseFocus: 'proposal_evaluation',
+        willingToTry: true,
+        readyToProceed: false,
+        wantsClarification: false,
+        readyToAdvance: false,
+        goalReadiness: 0.8,
+        remainingUnknowns: ['时间安排没定']
+      },
+      runtimeEnvelope: null
+    })
+    mockContinueConversation.mockResolvedValue({
+      userVisible: '路径生成中',
+      internal: {
+        core: { conversationId: 'conv-1', stage: 'ready', confidence: 0.9 },
+        ext: { goalConversation: { quickReplies: [] } }
+      }
+    })
+    mockGoalFindUnique.mockResolvedValue({ id: 'conv-1', learningPathId: 'path-1' })
+
+    await coordinator.executeSingleStep({ sessionId: 'simulation-1', userId: 'user-1', mode: 'single-step' })
+
+    expect(mockContinueConversation).toHaveBeenCalledWith(
+      'conv-1',
+      '我还是想再问问时间安排',
+      'user-1',
+      { systemPromptOverrides: undefined, confirmProposal: false }
+    )
+    const goal = JSON.parse(sessionRecord.stageResults).goal
+    expect(goal.learnerState.readyToAdvance).toBe(false)
+    expect(goal.learnerState.remainingUnknowns).toEqual(['时间安排没定'])
+    expect(goal.learnerState.goalReadiness).toBeLessThan(0.86)
   })
 
   it('回复分支收敛（stage=ready）：goalReady=true、同步 path 与 finalStage，confirmProposal=true', async () => {

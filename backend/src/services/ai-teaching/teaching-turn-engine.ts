@@ -70,7 +70,7 @@ import {
   normalizeKnowledgePoints,
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
-import { buildDeterministicOpening, pickPeerStrategy, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
+import { buildDeterministicOpening, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
 import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
@@ -519,11 +519,19 @@ export async function processStudentMessage(
   let peerRuntimeEnvelope: any = null;
 
   if (peerTriggered) {
+    // P2-11 修复（审计 §2.2）：伴学历史主路径此前从不转发——引擎 peerInput 无 peerHistory，
+    // 伴学每次触发都看不到自己说过什么，规则 11「连续 3 问无进展即收手」的 3 问预算不可达
+    // （DB：4879 条中 userPayload 含【此前伴学对话】0 条）。与聊天路径（teaching-session-ops.ts:638-641）
+    // 对齐取法：从已落库消息恢复（peer 标记消息 + 内嵌在老师消息里的 peerMessage 插话，见 collectPeerHistory）。
+    const peerHistory = collectPeerHistory(session.messages);
     const peerInput = {
       topic: session.topic,
       // 策略由代码按认知层级选定（prompt 规则 38 只负责"怎么说"）：
       // 此前硬编码 'feynman'，使「understand→类比 / apply→反例 / analyze+→辩论」永不触发（§3.19 P0②）。
-      strategy: pickPeerStrategy(teachingOutput.analysis.cognitiveLevel),
+      // P1-14 修复③：同时读老师本轮回复——老师布置独立作业/等作答时降级为鼓励式，不给解题钥匙。
+      strategy: pickPeerStrategy(teachingOutput.analysis.cognitiveLevel, {
+        tutorLatestReply: teachingOutput.reply,
+      }),
       studentMessage: message,
       // 老师本轮回复原文（2026-09-25 对齐调整）：让伴学看见老师刚说了什么——
       // 老师刚提问等学生答 → 不代答不提前给提示；老师搁置某话题 → 不再追。此前只埋在 6 条窗口里，压不过【学生消息】的锚定。
@@ -537,6 +545,7 @@ export async function processStudentMessage(
       // 规则 41 的"高负荷/受挫"分支需要这两个字段才可达（此前未提供）
       loadIndex: teachingOutput.analysis.loadIndex ?? null,
       emotionalState: teachingOutput.analysis.emotionalState ?? null,
+      peerHistory,
     };
     try {
       const peerResult = await executeSkill(peerAgentDefinition, {

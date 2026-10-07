@@ -63,12 +63,15 @@ const runsUpdate = jest.fn(async ({ data }: any) => {
   return memoryRun
 })
 const runsUpdateMany = jest.fn(async () => ({ count: 0 }))
+const profilesUpdate = jest.fn(async () => ({}))
+const teachingSessionFindUnique = jest.fn(async () => ({ knowledgeState: [] }))
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
   default: {
-    virtual_learner_profiles: { findUnique: profileFindUnique },
+    virtual_learner_profiles: { findUnique: profileFindUnique, update: profilesUpdate },
     subtasks: { findUnique: subtaskFindUnique },
+    teaching_sessions: { findUnique: teachingSessionFindUnique },
     milestones: { findMany: milestoneFindMany },
     domain_event_outbox: { findFirst: outboxFindFirst },
     domain_event_inbox: { findFirst: inboxFindFirst },
@@ -586,6 +589,64 @@ describe('QuickLearnService', () => {
           data: expect.objectContaining({ status: 'interrupted' }),
         })
       )
+    })
+  })
+
+  describe('P1-1/P1-2/P2-32：记忆提炼输出不带 success 仍被消费', () => {
+    it('quick-learn 链：curator output 无 success 字段时仍返回提炼结果', async () => {
+      const run = { id: 'run-1', userId: 'u1', profileId: 'p1', taskId: 't1' }
+      const task = { title: 'SELECT 基础', linkedConcept: 'SELECT', acceptanceCriteria: '写出查询', taskType: 'exercise' }
+      const transcript = [{ turn: 1, learner: '我试试', teacher: '好的', isCompletion: false }]
+
+      // 关键：不带 success —— executeSkill 解包后的真实返回形状
+      executeSkillMock.mockResolvedValue({
+        masteredConcepts: [{ name: 'SELECT', evidence: '自己写出来了', confidence: 0.8 }],
+        struggleConcepts: [],
+        selfCalibration: '较准',
+        memoryDelta: '掌握了 SELECT。',
+      })
+
+      const curated = await (quickLearnService as any).runQuickLearnMemoryCurator(run, transcript, task)
+
+      expect(curated).not.toBeNull()
+      expect(curated.masteredConcepts.map((m: any) => m.name)).toEqual(['SELECT'])
+      expect(curated.memoryDelta).toContain('SELECT')
+    })
+
+    it('quick-learn 链：全量名单写回 + 跨表去重，mastery 取 curator confidence（非 0.85）', async () => {
+      const run = { id: 'run-1', userId: 'u1', profileId: 'p1', taskId: 't1' }
+      const task = { title: 'SELECT 基础', linkedConcept: 'SELECT', acceptanceCriteria: '写出查询', taskType: 'exercise' }
+      executeSkillMock.mockResolvedValue({
+        masteredConcepts: [{ name: 'SELECT', evidence: '自己写出来了', confidence: 0.55 }],
+        struggleConcepts: [
+          { name: 'SELECT', blocker: '同名混入', severity: 'medium' },
+          { name: 'WHERE', blocker: '条件写不对', severity: 'high' },
+        ],
+        selfCalibration: '本课未见高估',
+        memoryDelta: '勉强会 SELECT。',
+      })
+
+      await (quickLearnService as any).persistLearnerMemoryAfterQuickLearn(
+        run, 'ts-1', task,
+        { conceptName: 'SELECT', conceptualMastery: 0.3, selfReportedTaskDone: null },
+        [{ turn: 1, learner: '我试试', teacher: '好的', isCompletion: false }]
+      )
+
+      const updates = profilesUpdate.mock.calls as any[][]
+      expect(updates.length).toBeGreaterThanOrEqual(2)
+      const conceptsWrite = JSON.parse(updates[0][0].data.profile)
+      expect(conceptsWrite.knownConcepts).toEqual(['SELECT'])
+      expect(conceptsWrite.struggleConcepts).toEqual(['WHERE'])
+      // P2-32：证据/严重度落库
+      const artifactWrite = JSON.parse(updates[updates.length - 1][0].data.profile)
+      expect(artifactWrite.recentCompleted[0].masteredEvidence[0]).toEqual(expect.objectContaining({
+        name: 'SELECT', evidence: '自己写出来了', confidence: 0.55,
+      }))
+      expect(artifactWrite.recentCompleted[0].struggleEvidence[0]).toEqual(expect.objectContaining({
+        name: 'WHERE', blocker: '条件写不对', severity: 'high',
+      }))
+      // P2-33：「本课未见高估」不得判 overconfident
+      expect(artifactWrite.selfAssessmentAccuracy).toBeUndefined()
     })
   })
 })

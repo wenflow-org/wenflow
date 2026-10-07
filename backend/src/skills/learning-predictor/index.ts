@@ -31,8 +31,10 @@ export const learningPredictorDefinition: SkillDefinition = {
     type: 'object',
     properties: {
       stallRisk: { type: 'number', description: '卡壳风险 0-1' },
-      predictedTone: { type: 'string', description: 'smooth|struggle|fatigue' },
-      suggestedDepth: { type: 'string', description: 'shallow|standard|deep' },
+      predictedTone: { type: 'string', description: '机器判定枚举 smooth|struggle|fatigue（由原始自由描述收敛/推断而来）' },
+      toneDetail: { type: 'string', description: '模型原始 predictedTone 自由描述（枚举仅作机器判定，原文透传给教学层）' },
+      suggestedDepth: { type: 'string', description: '机器判定枚举 shallow|standard|deep（由原始自由描述收敛/推断而来）' },
+      depthDetail: { type: 'string', description: '模型原始 suggestedDepth 自由描述（原文透传给教学层）' },
       focusConcepts: { type: 'array', description: '建议聚焦概念（≤3）' },
       rationale: { type: 'string', description: '一句话预测依据' }
     }
@@ -53,8 +55,14 @@ export interface LearningPredictorInput {
 
 export interface LearningPredictorOutput {
   stallRisk: number;
+  /** 机器判定枚举（由原始自由描述收敛/推断而来，供下游阈值判定） */
   predictedTone: 'smooth' | 'struggle' | 'fatigue';
+  /** 模型原始 predictedTone 自由描述（枚举仅作机器判定；原文透传给教学层，P1-13）。
+   *  可选：DB 复用路径（TeachingContextBuilder 从 prediction_records 重建）无此列。 */
+  toneDetail?: string | null;
   suggestedDepth: 'shallow' | 'standard' | 'deep';
+  /** 模型原始 suggestedDepth 自由描述（原文透传给教学层，P1-13）。可选同 toneDetail。 */
+  depthDetail?: string | null;
   focusConcepts: string[];
   rationale: string;
 }
@@ -63,8 +71,47 @@ function clamp(value: unknown, fallback: number): number {
   return Number.isFinite(Number(value)) ? Math.max(0, Math.min(1, Number(value))) : fallback;
 }
 
-function pick<T extends string>(value: unknown, allowed: T[], fallback: T): T {
-  return allowed.includes(value as T) ? (value as T) : fallback;
+/**
+ * 自由描述 → 机器判定枚举的语义推断（P1-13）。
+ *
+ * 提示词鼓励模型给自由描述（如「预计在材料/工具栏位区分环节反复卡壳，其余部分较顺畅」），
+ * 旧实现 `pick()` 只认严格枚举，非枚举值静默落兜底 'smooth'——把「反复卡壳」这类调速信号
+ * 在进入开场策略前就抹平（DB：最近 100 条 98 条为自由描述）。此处按关键词推断枚举，
+ * 让信号进入机器判定；原文另存 toneDetail 透传给教学层。
+ *
+ * 优先级：疲劳 > 吃力/卡壳 > 顺畅（混合描述取非乐观侧，避免「其余部分较顺畅」盖住主卡点）。
+ */
+const STRUGGLE_NEGATION = /无障碍|无困难|无问题|无卡壳|没什么(?:困难|障碍|问题|卡壳)|不(?:太)?(?:困难|卡壳|卡住|吃力|费劲|费力|受阻|挣扎|慢|难)|不会(?:卡壳|卡住|受阻)|不容易(?:卡壳|卡住|受阻)|没(?:有)?(?:困难|障碍|问题|卡壳|卡住)/g;
+
+export function inferToneEnum(value: unknown): 'smooth' | 'struggle' | 'fatigue' | null {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  if (lower === 'smooth' || lower === 'struggle' || lower === 'fatigue') return lower as 'smooth' | 'struggle' | 'fatigue';
+  // 疲劳（最优先）：精力/状态类信号
+  if (/疲劳|疲惫|疲倦|乏力|精力不足|精力差|状态不佳|状态差|睡眠不足|熬夜|困乏/.test(text)) return 'fatigue';
+  // 吃力/卡壳：主卡点信号（含「反复卡壳/反复出错/受阻/放慢/偏难」）。
+  // 先剥离「否定式轻松表达」（无障碍/不困难/没卡壳…），否则 struggle 分支会先命中「障碍/困难」，
+  // 把明确的顺畅语义误判成吃力（复核反例：无障碍→struggle、不困难→struggle）。
+  const stripped = text.replace(STRUGGLE_NEGATION, '');
+  if (/卡壳|卡住|吃力|费劲|困难|受阻|挣扎|不畅|不顺|挫败|瓶颈|障碍|放慢|放缓|反复出错|偏难|太难|很难|有点难|较难|难度高/.test(stripped)) {
+    return 'struggle';
+  }
+  // 顺畅：无未否定的卡点信号时才认（混合描述已被上面截获）
+  if (/顺畅|顺利|流畅|轻松|无障碍|良好|不困难|不卡壳|不容易(?:卡壳|卡住|受阻)|没问题|没什么(?:困难|障碍|问题|卡壳)|偏简单|较简单|太简单/.test(text)) return 'smooth';
+  return null;
+}
+
+/** 自由描述 → 深度枚举的语义推断（P1-13）：deep/shallow 关键词，未命中回落中性 'standard'。 */
+export function inferDepthEnum(value: unknown): 'shallow' | 'standard' | 'deep' | null {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  if (lower === 'shallow' || lower === 'standard' || lower === 'deep') return lower as 'shallow' | 'standard' | 'deep';
+  if (/深挖|深入|原理|对比练习|系统讲|彻底|细节|推导|为什么|难度高|偏难/.test(text)) return 'deep';
+  if (/轻量|简单|带过|基础复习|快速|略讲|浅|入门|复习即可/.test(text)) return 'shallow';
+  if (/常规|标准|适中|正常/.test(text)) return 'standard';
+  return null;
 }
 
 export async function learningPredictor(
@@ -76,18 +123,69 @@ export async function learningPredictor(
     defaultSystemPrompt: LEARNING_PREDICTOR_PROMPT,
     requireActivePrompt: true,
     caller: { skillId: 'learning-predictor' },
-    buildUserPayload: (payload) => payload,
+    // 稳定键前置：payload-stability 声明 fatigueSignal/knowledgeStateSummary 稳定、taskContext 后置。
+    // 旧实现直接透传调用方键序，调用方只传 taskContext（或键序不同）时首键漂移，
+    // 打乱可缓存前缀并触发 prompts:payload-prefix:check:strict 违规。此处统一收敛为声明顺序并补默认值。
+    buildUserPayload: (payload) => {
+      const p = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
+      const ordered: Record<string, unknown> = {
+        fatigueSignal: typeof p.fatigueSignal === 'string' && p.fatigueSignal ? p.fatigueSignal : 'low',
+        knowledgeStateSummary:
+          typeof p.knowledgeStateSummary === 'string' && p.knowledgeStateSummary.trim()
+            ? p.knowledgeStateSummary
+            : '无历史摘要',
+      };
+      if (p.taskContext && typeof p.taskContext === 'object') ordered.taskContext = p.taskContext;
+      // 保留声明外的额外键（不丢信息），置于稳定段之后
+      for (const key of Object.keys(p)) {
+        if (!(key in ordered)) ordered[key] = p[key];
+      }
+      return ordered;
+    },
     normalizeOutput: (parsed) => {
       const obj = parsed && typeof parsed === 'object' ? parsed : {};
       const stallRisk = clamp(obj.stallRisk, 0.5);
-      const tone = pick(obj.predictedTone, ['smooth', 'struggle', 'fatigue'], 'smooth');
-      const depth = pick(obj.suggestedDepth, ['shallow', 'standard', 'deep'], 'standard');
+
+      // P1-13：枚举仅作机器判定，模型自由描述原文透传为 toneDetail/depthDetail。
+      // 旧实现 pick() 严格枚举过滤 → 98/100 条自由描述被静默抹成兜底 'smooth'，
+      // 「反复卡壳」类调速信号在下发前丢失（teaching-turn 只读 normalized 值）。
+      const rawTone = typeof obj.predictedTone === 'string' ? obj.predictedTone.trim() : '';
+      const rawDepth = typeof obj.suggestedDepth === 'string' ? obj.suggestedDepth.trim() : '';
+      const explicitToneDetail = typeof obj.toneDetail === 'string' ? obj.toneDetail.trim() : '';
+      const explicitDepthDetail = typeof obj.depthDetail === 'string' ? obj.depthDetail.trim() : '';
+      const TONES = ['smooth', 'struggle', 'fatigue'] as const;
+      const DEPTHS = ['shallow', 'standard', 'deep'] as const;
+
+      const toneExact = TONES.includes(rawTone as (typeof TONES)[number])
+        ? (rawTone as (typeof TONES)[number])
+        : null;
+      // 新契约把自由描述放 toneDetail；兼容旧契约时才从 predictedTone 读取自由文本。
+      const toneText = explicitToneDetail || rawTone;
+      const toneInferred = inferToneEnum(toneText);
+      // 语义可分类 → 用推断枚举（「反复卡壳」不再落 smooth）；纯无法分类/缺失 → 保持历史兜底 smooth，
+      // 但原文经 toneDetail 透传（不再静默抹掉）。显式 smooth 与 detail 的负向语义冲突时取非乐观侧。
+      const tone: (typeof TONES)[number] =
+        toneExact === 'smooth' && (toneInferred === 'struggle' || toneInferred === 'fatigue')
+          ? toneInferred
+          : toneExact ?? toneInferred ?? 'smooth';
+
+      const depthExact = DEPTHS.includes(rawDepth as (typeof DEPTHS)[number])
+        ? (rawDepth as (typeof DEPTHS)[number])
+        : null;
+      const depth: (typeof DEPTHS)[number] = depthExact ?? inferDepthEnum(explicitDepthDetail || rawDepth) ?? 'standard';
+
+      // 新契约字段优先；旧契约的自由文本仍兼容透传，枚举 token 不重复占位。
+      const toneDetail = explicitToneDetail || (rawTone && !toneExact ? rawTone : null);
+      const depthDetail = explicitDepthDetail || (rawDepth && !depthExact ? rawDepth : null);
+
       // 自洽约束：高风险不应是顺畅基调
       const finalTone = stallRisk >= 0.7 && tone === 'smooth' ? 'struggle' : tone;
       return {
         stallRisk,
         predictedTone: finalTone,
+        toneDetail,
         suggestedDepth: depth,
+        depthDetail,
         focusConcepts: Array.isArray(obj.focusConcepts)
           ? obj.focusConcepts.map((c: unknown) => String(c || '').trim()).filter(Boolean).slice(0, 3)
           : [],

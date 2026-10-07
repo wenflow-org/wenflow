@@ -174,3 +174,102 @@ describe('fetchPriorLearningRecap（按路径位置接续前序）', () => {
     expect(lastSourceEndTime).toBeNull();
   });
 });
+
+// P1-8（2026-10-06 审计）：session-wrapup 真实产物把三样嵌在 wrapup.summary.* 下，
+// 顶层恒无（129/129 recap 全空）。以下锁定「嵌套优先、顶层兜底」两态都读得到。
+describe('fetchPriorLearningRecap（复盘要点双形读取 · P1-8）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.milestones.findMany.mockReset();
+    prisma.subtasks.findMany.mockReset();
+    prisma.teaching_sessions.findMany.mockReset();
+    prisma.teaching_sessions.findFirst.mockReset();
+  });
+
+  const base = {
+    userId: 'user-1',
+    learningPathId: 'path-1',
+    currentMilestoneId: 'ms-2',
+    currentTaskId: 'task-b',
+    currentStageNumber: 2,
+    milestoneTitle: '第二阶段',
+  };
+
+  function mockMilestones() {
+    prisma.milestones.findMany.mockResolvedValue([
+      { id: 'ms-1', stageNumber: 1, title: '第一阶段' },
+      { id: 'ms-2', stageNumber: 2, title: '第二阶段' },
+    ]);
+  }
+
+  /** DB 实存形态：三样都在 wrapup.summary.* 下，顶层没有 */
+  function nestedWrapup(summary: string, knowledgeItems: any[] = [], actionPlan: string[] = []) {
+    return {
+      status: 'complete',
+      sources: {},
+      summary: { topicSummary: summary, knowledgeItems, actionPlan },
+      evaluation: {},
+    };
+  }
+
+  it('嵌套形态（DB 实存）：summary.* 的 topicSummary/unresolvedPoints/retrievalCue 被读出', async () => {
+    mockMilestones();
+    prisma.subtasks.findMany.mockResolvedValue([
+      { id: 'task-a', title: '任务A' },
+      { id: 'task-b', title: '任务B' },
+    ]);
+    prisma.teaching_sessions.findMany.mockResolvedValue([]); // 同任务历史为空
+    prisma.teaching_sessions.findFirst.mockResolvedValue({
+      topic: '任务A',
+      wrapup: JSON.stringify(nestedWrapup('任务A总结', [
+        { name: '概念X', status: 'learning', progress: 60, evidence: '' },
+        { name: '概念Y', status: 'mastered', progress: 100, evidence: '' },
+      ], ['继续完成练习'])),
+    });
+
+    const { recap } = await fetchPriorLearningRecap(base);
+    expect(recap?.topicSummary).toBe('任务A总结');
+    expect(recap?.unresolvedPoints).toEqual(['概念X']);
+    expect(recap?.retrievalCue).toBe('继续完成练习');
+  });
+
+  it('顶层形态（历史产物）：行为与改造前一致', async () => {
+    mockMilestones();
+    prisma.subtasks.findMany.mockResolvedValue([
+      { id: 'task-a', title: '任务A' },
+      { id: 'task-b', title: '任务B' },
+    ]);
+    prisma.teaching_sessions.findMany.mockResolvedValue([]);
+    prisma.teaching_sessions.findFirst.mockResolvedValue({
+      topic: '任务A',
+      wrapup: JSON.stringify({ topicSummary: '顶层总结', knowledgeItems: [{ name: '概念Z', status: 'learning' }], actionPlan: ['顶层动作'] }),
+    });
+
+    const { recap } = await fetchPriorLearningRecap(base);
+    expect(recap?.topicSummary).toBe('顶层总结');
+    expect(recap?.unresolvedPoints).toEqual(['概念Z']);
+    expect(recap?.retrievalCue).toBe('顶层动作');
+  });
+
+  it('同任务重学（same-task）：嵌套形态下 sameTaskHistory.lastSummary/lastActionPlan 也被读出', async () => {
+    mockMilestones();
+    prisma.subtasks.findMany.mockResolvedValue([{ id: 'task-b', title: '任务B' }]);
+    prisma.teaching_sessions.findMany.mockResolvedValue([
+      {
+        topic: '任务B',
+        status: 'completed',
+        endTime: new Date('2026-09-01T10:00:00Z'),
+        wrapup: JSON.stringify(nestedWrapup('上次学到这里', [
+          { name: '难点Z', status: 'learning', progress: 40, evidence: '' },
+        ], ['下次先复习难点Z'])),
+      },
+    ]);
+    prisma.teaching_sessions.findFirst.mockResolvedValue(null);
+
+    const { recap } = await fetchPriorLearningRecap(base);
+    expect(recap?.relation).toBe('same-task');
+    expect(recap?.sameTaskHistory?.lastSummary).toBe('上次学到这里');
+    expect(recap?.sameTaskHistory?.lastUnresolvedPoints).toEqual(['难点Z']);
+    expect(recap?.sameTaskHistory?.lastActionPlan).toEqual(['下次先复习难点Z']);
+  });
+});

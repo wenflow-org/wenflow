@@ -75,6 +75,31 @@ export async function buildTeachingTurnInput(
       : [],
   };
 
+  // P1-13：learning-predictor 的自由描述原文透传（toneDetail/depthDetail）。
+  // 枚举 predictedTone/suggestedDepth 仅作机器判定；without 透传，模型说的「反复卡壳」
+  // 到达开场策略时已被 pick() 抹成 'smooth'（audit LP-1）。字段类型声明在
+  // TeachingContextBuilder/TeachingTurnInput（本次授权面外），此处按运行时形状读取——
+  // 概率: withReliability 的 {...prediction} 会把两字段原样带到 context.learnerPrediction。
+  const learnerPredictionDetail = (context.learnerPrediction ?? null) as
+    | (NonNullable<TeachingScenarioContext['learnerPrediction']> & {
+        toneDetail?: string | null;
+        depthDetail?: string | null;
+      })
+    | null;
+  const learnerPredictionPayload = context.learnerPrediction
+    ? {
+        stallRisk: context.learnerPrediction.stallRisk,
+        predictedTone: context.learnerPrediction.predictedTone,
+        suggestedDepth: context.learnerPrediction.suggestedDepth,
+        focusConcepts: context.learnerPrediction.focusConcepts,
+        rationale: context.learnerPrediction.rationale,
+        reliability: context.learnerPrediction.reliability,
+        // 有原文才携带（缺失时不注入该键，旧行为不变）
+        ...(learnerPredictionDetail?.toneDetail ? { toneDetail: learnerPredictionDetail.toneDetail } : {}),
+        ...(learnerPredictionDetail?.depthDetail ? { depthDetail: learnerPredictionDetail.depthDetail } : {}),
+      }
+    : undefined;
+
   const scenario: TeachingTurnInput['scenario'] = {
     subject: context.subject,
     topic: context.topic,
@@ -103,16 +128,8 @@ export async function buildTeachingTurnInput(
     // 检查点历史（写侧 2026-09-17 起补 title/type）：让模型知道哪些点没通过，换表征再确认
     checkpointHistory: summarizeCheckpointHistory(teachingState.checkpointHistory),
     memoryWarmup: pendingWarmupForModel(context.memoryWarmup),
-    learnerPrediction: context.learnerPrediction
-      ? {
-          stallRisk: context.learnerPrediction.stallRisk,
-          predictedTone: context.learnerPrediction.predictedTone,
-          suggestedDepth: context.learnerPrediction.suggestedDepth,
-          focusConcepts: context.learnerPrediction.focusConcepts,
-          rationale: context.learnerPrediction.rationale,
-          reliability: context.learnerPrediction.reliability,
-        }
-      : undefined,
+    // P1-13：含 toneDetail/depthDetail 的完整预测载荷（枚举仅作机器判定，原文供开场策略读语义）
+    learnerPrediction: learnerPredictionPayload,
     interactionProfile: context.interactionProfile
       ? {
           current: (context.interactionProfile.current ?? null) as Record<string, number> | null,

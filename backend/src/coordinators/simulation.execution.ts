@@ -34,6 +34,7 @@ import {
   getSessionFrictionBudget,
   finalizeGoalLearnerState,
   resolveSimLearnerState,
+  shouldAutoConfirmGoalProposal,
   isGoalConverged,
   mapGoalStageToLearnerPhase,
   inferDisclosedGoalConcerns,
@@ -351,6 +352,17 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
         })
       );
 
+      // P1-12/GD-2：opening 轮也落 stageResults.goal.learnerState，否则下一轮
+      // previousLearnerState（下方回复分支读取 stageResults.goal?.learnerState）断链为
+      // undefined，学习者失去上一轮主观状态。reply 仍旁路（description 固定用
+      // storyDemand.text），砍调用属产品决策，此处不改。
+      const openingLearnerState = finalizeGoalLearnerState(
+        profile,
+        resolveSimLearnerState(openingResult.output, openingResult.learnerStateFromEnvelope || {}),
+        storyContext,
+        'understanding'
+      );
+
       logs.push({
         timestamp: new Date().toISOString(),
         phase: 'virtual-reply',
@@ -359,12 +371,7 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
           output: {
             reply: openingReply,
             thoughtProcess: openingResult.output?.debug?.stateChangeReason,
-            learnerState: finalizeGoalLearnerState(
-              profile,
-              resolveSimLearnerState(openingResult.output, openingResult.learnerStateFromEnvelope || {}),
-              storyContext,
-              'understanding'
-            ),
+            learnerState: openingLearnerState,
             emotion: openingResult.output?.emotion,
             runtimeEnvelope: openingResult.runtimeEnvelope || openingResult.output?.runtimeEnvelope || null,
             opening: true,
@@ -402,7 +409,16 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
         'goal',
         goalResult.internal.core.conversationId
       );
-      
+
+      // P1-12/GD-2：把开场轮 learnerState 落 stageResults.goal，接回
+      // previousLearnerState 链（下一轮回复分支据此恢复上一轮主观状态）。
+      await ctx.updateStageResults(input.sessionId, 'goal', {
+        ...((initialStageResults.goal as Record<string, unknown> | undefined) || {}),
+        learnerState: openingLearnerState,
+        opening: true,
+        conversationId: goalResult.internal.core.conversationId,
+      });
+
       logs.push({
         timestamp: new Date().toISOString(),
         phase: 'goal-response',
@@ -535,7 +551,10 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
           // 平台硬规则：proposing 阶段只有显式确认动作才会收束并触发 Path 生成。
           // 黑盒有 confirm_proposal 动作映射；辅助模式由协调器根据虚拟学习者
           // 自评的 readyToAdvance 代发确认，否则 Goal 会永远停在 proposing。
-          confirmProposal: currentGoalLearnerState.readyToAdvance === true
+          // P1-12/GD-1：代发依据诚实状态——readyToAdvance 必须是模型显式同意位，
+          // 且 readyToProceed!==false / wantsClarification!==true（显式拒绝不得代签）。
+          // 防卡死由 goal agent 侧轮次上限承担，不伪造学习者同意。
+          confirmProposal: shouldAutoConfirmGoalProposal(currentGoalLearnerState)
         }
       )
     );

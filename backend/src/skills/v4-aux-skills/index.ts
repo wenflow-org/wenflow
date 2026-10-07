@@ -482,11 +482,13 @@ async function conceptConsolidatorHandler(input: any) {
     // 2026-09-22 实测：此前未声明重试（callPrompt 默认不重试），一次跑偏即整轮失败。
     // 与 kc-mapper 对齐，先给整轮重试；2026-09-23 补 onValidationFail——只有 maxAttempts 时
     // 重试等于把同样的 prompt 再发一遍，实测仍有 42/197 次非 JSON 失败。
+    // 2026-10-06（P2-25）：原回灌语「不要输出解释文字或 markdown 代码块之外的内容」按汉语句法读
+    // 是「解释文字和代码块是允许的输出类别」，恰把 core 约束反着教一遍。改为与 core 同口径的正面指令。
     retryStrategy: {
       maxAttempts: 2,
       onValidationFail: ({ failureReason }) =>
-        `请只输出一个 JSON 对象（顶层字段：merges、ambiguous、dropCandidates，前两个必须是数组），`
-        + `不要输出解释文字或 markdown 代码块之外的内容。上次失败原因：${failureReason}`,
+        `只输出一个 JSON 对象，第一个字符必须是 {，不要任何解释文字、不要 markdown 代码块围栏；`
+        + `merges、ambiguous、dropCandidates 三个顶层字段均为数组（可为空 []）。上次失败原因：${failureReason}`,
     },
   });
 }

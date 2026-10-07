@@ -47,7 +47,19 @@ describe('virtual-learner-memory-curator', () => {
       expect(fallback.masteredConcepts.map((m) => m.name)).toEqual(['剪辑节奏']);
       expect(fallback.struggleConcepts).toEqual([]);
       expect(fallback.memoryDelta).toContain('剪辑节奏');
-      expect(fallback.selfCalibration).toContain('偏高估');
+      // P2-33：fallback 文案自带明确方向（不再是「按此校准」这类无方向 meta 句）
+      expect(fallback.selfCalibration).toContain('高估');
+      expect(fallback.selfCalibration).not.toContain('按此校准');
+    });
+
+    it('P2-33：fallback 文案可被确定性解析器判出方向；无 persona 字段不下判决', () => {
+      const { parseSelfCalibrationVerdict } = require('../../../virtual-lab/learner-memory');
+      const over = buildMemoryCuratorFallback({ ...baseInput, persona: { selfAssessmentAccuracy: 'overconfident' } });
+      expect(parseSelfCalibrationVerdict(over.selfCalibration)).toBe('overconfident');
+      const under = buildMemoryCuratorFallback({ ...baseInput, persona: { selfAssessmentAccuracy: 'underconfident' } });
+      expect(parseSelfCalibrationVerdict(under.selfCalibration)).toBe('underconfident');
+      const none = buildMemoryCuratorFallback({ ...baseInput, persona: {} });
+      expect(parseSelfCalibrationVerdict(none.selfCalibration)).toBeNull();
     });
 
     it('收束轮自评低 / 有卡点 → struggle', () => {

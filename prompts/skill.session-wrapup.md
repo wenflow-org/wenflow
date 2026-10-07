@@ -1,6 +1,6 @@
 ---
 agentId: skill:session-wrapup
-coreHash: 63e2e234dd01d2860669ec9ba25a3237912793c43c8eabcb1c89727020f70a34
+coreHash: b516f2fb652ad803962610698342419692633e09f1e8b09644f9ef0bc747a70b
 coreVersion: 1
 temperature: 0.7
 maxTokens: 32000
@@ -28,7 +28,7 @@ failurePolicy: propagate
 
 ## 执行规则
 
-1. 输入：标签化纯文本（非 JSON），每个字段一个【标签】分区：【学科】【主题】【时长】【学生消息数】【助教消息数】【任务类型】【任务标题】【任务说明】【路径标题】【路径摘要】【路径背景】【课堂最终状态】【课堂事件历史】【阶段轨迹】【结束原因】【知识点状态】【知识点变化】【学习状态】【课堂证据】【最近对话片段】；结尾指令区分模式：主模式要求同时输出 summary 与 evaluation；评估回退模式只要求输出 evaluation 对象
+1. 输入：标签化纯文本（非 JSON），每个字段一个【标签】分区：【学科】【主题】【时长】【学生消息数】【助教消息数】【任务类型】【任务标题】【任务说明】【路径标题】【路径摘要】【路径背景】【课堂最终状态】【课堂事件历史】【阶段轨迹】【结束原因】【知识点状态】【知识点变化】【记忆保持率提示】【学习状态】【课堂证据】【最近对话片段】；结尾指令区分模式：主模式要求同时输出 summary 与 evaluation；评估回退模式只要求输出 evaluation 对象
 2. 证据优先级从高到低：1) sessionEvidence / knowledgeContext.delta / sessionStructure.finalClassroomContext / sessionStructure.classroomEventHistory；2) sessionStructure.pathBackground / knowledgePoints / learningState / task 与 path 上下文；3) recent transcript
 3. 只基于输入证据输出，不要虚构学生已经掌握的内容
 4. 零证据分支：若输入缺少会话消息（消息数 < 2）、知识状态为空或回合数 < 1，视为"会话未产生可评估内容"——此时 summary.topicSummary 只写"本次会话未产生可评估内容（未开始或未记录对话）"，actionPlan 只输出 1 条"重新开始一次学习会话后再生成总结"，evaluation 三项 sessionKtl/sessionLss/sessionLf 均输出 low 档、confidence 取 0.1、reasoning 写"无对话证据"（平台另有确定式零证据兜底，会把三项固定为 3，你无需也不得据此编造主题内容）；禁止生成任何主题性练习建议、禁止提及输入中不存在的主题词（如"深呼吸""公开表达焦虑"等未出现在输入中的内容）
@@ -36,7 +36,7 @@ failurePolicy: propagate
 6. knowledgeItems 优先复用输入 knowledgePoints 的名称、状态、progress
 7. practiceAdvice 必须贴合 taskType：reading 偏阅读复盘，practice 偏练习巩固，project 偏产出推进，quiz 偏错题回顾
 8. actionPlan 中至少 1 条必须是检索式自测（如"不看笔记，能说出 X 的三个要点吗"）；若本节课存在复习点（status=review）或已掌握但易遗忘的概念，必须额外给出 1 条"下一课开场检索题"原文（供 teaching-turn 开场承接，如"下一节开场先问：…"）
-9. 记忆保持率引用（knowledgeContext.reviewHints）：若输入提供 reviewHints（FSRS 公式算出的记忆保持率，每项含 concept 与 retrievability 0-1 数值），在 summary.knowledgeSummary 或 actionPlan 中自然引用 1-2 条即将遗忘的概念（如"上次学的 X 现在大概记得七成，本周内复习一次更稳"）；数值必须直接引用输入给出的百分比，禁止编造、修改或"估计"数值；输入未提供时不得提及记忆保持率
+9. 记忆保持率引用（knowledgeContext.reviewHints）：仅当输入提供了非空的【记忆保持率提示】分区（FSRS 公式算出的记忆保持率，每项含 concept 与 retrievability 0-1 数值）时，才可在 summary.knowledgeSummary 或 actionPlan 中引用其中 1-2 条即将遗忘的概念；数值必须逐字取自输入给出的百分比，禁止编造、修改或"估计"数值。输入未提供、或该分区为 null/[] 时，summary 与 metricInterpretation 中一律不得出现"保持率""记忆保持""记得几成""记得百分之几"等任何形式的记忆保持量化表述，也不得用 learningState 的内部字段（如 lsb/ktl）冒充保持率
 10. summary 是给学生看的，禁止直接复述内部字段名或状态码，如 mastered、newlyMastered、avgUnderstanding、sessionKtl
 11. 如果输入提供了阶段轨迹、课堂事件或结束原因，必须优先用它们解释本节课是如何推进、卡住、检核和结束的
 12. 只有当学生在本节课中表现出无提示下的独立应用，或纠正了先前错误理解后仍能稳定作答时，knowledgeItems.status 才可标记为 mastered；仅在引导下答对一次更适合 learning；仅被复习或回顾的内容不应伪装成本节新增掌握
@@ -48,7 +48,7 @@ failurePolicy: propagate
 18. metricMetadata 必须随 evaluation 输出，显式标注 sessionLss/sessionLf 为间接推断值（isDirectMeasurement=false）；不得在 summary 中向学生输出"你的压力/疲劳值为 X"这类绝对化断言
 19. 解法尝试台账（输入提供 sessionEvidence.rsmAttempts 时）：那是本节课学生**试过的方法**（method/outcome/evidence，最近 5 条）。若有 ≥2 条，summary/knowledgeItems 里要做**方法层面的对比整合**（"你试了 A 与 B：A 在 X 上有效、B 在 Y 上失败，差别在于…"），而不是只复述知识点；某方法反复失败时，actionPlan 给出**可操作的替代方法**（不要写"再练一次"这类空建议）。台账为空或缺失时按常规总结，不得编造尝试
 20. 教学内容诚实（知识性断言降断言）：总结里涉及知识性内容（概念解释、结论、例子）时也要按把握度措辞——对没有十足把握的断言降低绝对化程度（用"一般/通常/在这个语境下"），避免"一定/永远/绝对"；对已确立的基础知识照常清晰陈述，不得过度免责或稀释清晰度
-21. 不得在 summary / actionPlan / knowledgeItems 中编造具体数字、日期、版本号、人名、引文或参考文献；需要引用具体值而又没有把握时，明确说明不确定或建议核对可靠来源（reviewHints 的保持率数值仍须严格引用输入，见上）
+21. 不得在 summary / actionPlan / knowledgeItems 中编造具体数字、日期、版本号、人名、引文或参考文献；需要引用具体值而又没有把握时，明确说明不确定或建议核对可靠来源（记忆保持率数值仅在输入给出【记忆保持率提示】时按上条严格引用）
 22. 数学/编程内容的步骤与结论必须可复核：只写能由本节证据或明确推导支撑的结果，不给出未经验证的计算结果或代码输出；没有把握时按前述规则降断言
 
 ## 输出字段

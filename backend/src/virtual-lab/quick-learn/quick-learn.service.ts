@@ -39,6 +39,7 @@ import {
 } from './propagation-report';
 import {
   buildLearnerMemorySnapshot,
+  deriveCuratedSelfState,
   recordCompletedArtifact,
   writeProfileConceptsAfterLesson,
   type LessonKnowledgePoint,
@@ -718,19 +719,21 @@ export class QuickLearnService {
       }
       // 记忆提炼 skill（LLM 主路径，失败走确定性 fallback）
       const curated = await this.runQuickLearnMemoryCurator(run, transcript, task);
+      // P1-2：mastery 取 curator confidence（不再写死 0.85）；taskDone 尊重学习者原话
       const effectiveSelfState: SelfReportedLearnerState | null = curated
-        ? {
-            ...(selfState || {}),
-            conceptName: curated.masteredConcepts[0]?.name || curated.struggleConcepts[0]?.name
-              || selfState?.conceptName || task?.title || null,
-            conceptualMastery: curated.masteredConcepts.length > 0 ? 0.85 : selfState?.conceptualMastery ?? null,
-            selfReportedTaskDone: curated.masteredConcepts.length > 0 ? true : selfState?.selfReportedTaskDone ?? null,
-            remainingBlockers: curated.struggleConcepts.length > 0
-              ? curated.struggleConcepts.map((s) => s.blocker).filter(Boolean)
-              : selfState?.remainingBlockers || null,
-          }
+        ? deriveCuratedSelfState(selfState, {
+            mastered: curated.masteredConcepts,
+            struggle: curated.struggleConcepts,
+            fallbackConcept: task?.title || null,
+          })
         : selfState;
-      await writeProfileConceptsAfterLesson(run.userId, knowledgePoints, { source: 'quick-learn', selfState: effectiveSelfState });
+      await writeProfileConceptsAfterLesson(run.userId, knowledgePoints, {
+        source: 'quick-learn',
+        selfState: effectiveSelfState,
+        curatedConcepts: curated
+          ? { mastered: curated.masteredConcepts.map((m) => m.name), struggling: curated.struggleConcepts.map((s) => s.name) }
+          : null,
+      });
       await recordCompletedArtifact({
         userId: run.userId,
         taskId: run.taskId,
@@ -741,8 +744,9 @@ export class QuickLearnService {
         selfState: effectiveSelfState,
         memoryDelta: curated?.memoryDelta || null,
         memoryCurated: curated ? {
-          mastered: curated.masteredConcepts.map((m) => m.name),
-          struggling: curated.struggleConcepts.map((s) => s.name),
+          // P2-32：evidence/confidence/severity 随名单落库（不再只留 name）
+          mastered: curated.masteredConcepts,
+          struggling: curated.struggleConcepts,
           selfCalibration: curated.selfCalibration,
         } : undefined,
       });
@@ -772,12 +776,11 @@ export class QuickLearnService {
         ...parseJson<Record<string, any>>(profile.profile, {}),
         learningGoal: profile.learningGoal,
       };
+      // P1-3：本链只有正文转录，没有 learnerState/learnerFeedback/emotion 数据——
+      // 不再写死 null/undefined 承诺（模型会对不存在的字段断言校准结论）。
       const turnSequence = (Array.isArray(transcript) ? transcript : []).slice(-24).map((entry) => ({
         turn: entry.turn,
         reply: entry.learner || '',
-        emotion: null,
-        learnerState: undefined,
-        learnerFeedback: undefined,
         teacherReply: entry.teacher || '',
       }));
       const existing = await buildLearnerMemorySnapshot(run.userId, { limit: 30 }).catch(() => null);
@@ -792,8 +795,10 @@ export class QuickLearnService {
         existingKnown: existing?.mastered.map((m) => m.name) || [],
         existingStruggle: existing?.struggling.map((m) => m.name) || [],
       });
-      if (!result.success || !result.output) return null;
-      const output = result.output as any;
+      // P1-1：executeSkill 已解包（skills/index.ts:296-301 return result.output），
+      // 返回值就是 output 本身——不能再检查 result.success（恒 undefined → 恒 return null）。
+      const output = result as any;
+      if (!output || typeof output !== 'object') return null;
       return {
         masteredConcepts: Array.isArray(output.masteredConcepts) ? output.masteredConcepts : [],
         struggleConcepts: Array.isArray(output.struggleConcepts) ? output.struggleConcepts : [],

@@ -8,6 +8,7 @@
  * 自 coordinator re-export 维持既有 import 路径。
  */
 import prisma from '../../config/database';
+import { detectAwaitingLearnerWork } from '../../config/pedagogy.config';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { cloneKnowledgePoints } from './teaching-knowledge-state';
 import { parseSessionArtifacts } from './checkpoint-shared';
@@ -201,15 +202,56 @@ export async function commitSessionLoadMetric(session: TeachingSessionRecord): P
 }
 
 /**
+ * 伴学策略枚举（P1-14 修复③新增 'encourage'：老师本轮在等学生作答时的鼓励式降级，不给解题线索）。
+ */
+export type PeerStrategy = 'analogy' | 'counterexample' | 'debate' | 'encourage';
+
+/**
+ * 伴学历史收集（P2-11 修复，2026-10-07，纯函数供单测）。
+ *
+ * 审计实证：引擎主路径 peerInput 无 peerHistory —— 4879 条伴学调用中 userPayload 含
+ * 【此前伴学对话】0 条，规则 11「连续 3 问无进展即收手」的 3 问预算在主路径永不可达。
+ * 取法对齐聊天路径（teaching-session-ops.ts:638-641 的 peer 标记消息），并补上引擎专有形态：
+ * 引擎触发的伴学插话内嵌在老师消息的 peerMessage 旁挂字段里（见 engine 的 assistantMessage 构造）——
+ * 按"伴学伙伴"单边恢复（老师原文不进伴学历史，否则会被当成伴学说过的话）。
+ */
+export function collectPeerHistory(
+  messages: Array<{ role?: unknown; content?: unknown; peer?: unknown; peerMessage?: unknown }>
+): Array<{ role: string; content: string }> {
+  const history: Array<{ role: string; content: string }> = [];
+  for (const item of messages || []) {
+    if (!item) continue;
+    if (item.peer === true) {
+      history.push({ role: String(item.role), content: String(item.content || '') });
+      continue;
+    }
+    if (item.role === 'assistant' && typeof item.peerMessage === 'string' && item.peerMessage.trim()) {
+      history.push({ role: 'assistant', content: item.peerMessage });
+    }
+  }
+  return history;
+}
+
+/**
  * 伴学策略（peer-reinforcement 规则的"手法"）由**代码**按认知层级选定。
  *
  * 断链修复（审计 §3.19 P0②）：此前两处调用都硬编码 `strategy: 'feynman'`，
  * 使 skill 规则 38「understand→类比 / apply→反例边界 / analyze+→辩论费曼」永不触发。
  * 分工与全仓一致：代码给档位/枚举，prompt 负责"怎么说"。
+ *
+ * P1-14 修复③（2026-10-07）：加「独立作业进行中不得给解题钥匙」代码门——
+ * 老师本轮在布置独立作业/等学生作答时（判据见 config/pedagogy.config.ts
+ * detectAwaitingLearnerWork），策略一律降级为 'encourage'（纯鼓励式），
+ * 不再按 cognitiveLevel 派 counterexample/debate（那正是生产实证里被递出去的解题钥匙：
+ * 学生独立证明题上伴学输出「AD⊥BC→直角→与全等判定的关系」+去条件追问）。
  */
 export function pickPeerStrategy(
   cognitiveLevel: unknown,
-): 'analogy' | 'counterexample' | 'debate' {
+  options?: { tutorLatestReply?: string | null },
+): PeerStrategy {
+  // 独立作业进行中：不给解题钥匙——类比是"搭桥"、反例是"边界提示"、辩论是"高阶追问"，
+  // 三者都在替学生思考；只有鼓励式不触碰解法。
+  if (detectAwaitingLearnerWork(options?.tutorLatestReply).awaiting) return 'encourage';
   const level = String(cognitiveLevel || '').trim().toLowerCase();
   if (level === 'analyze' || level === 'evaluate' || level === 'create') return 'debate';
   if (level === 'apply') return 'counterexample';

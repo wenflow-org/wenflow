@@ -132,6 +132,10 @@ export interface LearnLearnerSimulationOutput {
       learnerState: string[];
       learnerFeedback: string[];
     };
+    /** P1-5：认知判决完成门拦截原因（判决缺失/放行时不写） */
+    judgeCompletionBlock?: string;
+    /** P1-4：判错轮 mastery 上界钳制的字段（无钳制时不写） */
+    judgeMasteryClampedFields?: string[];
   };
   /**
    * 对 `pendingCheckpoint` 的作答草案（仅在有检查点时产出）。
@@ -293,10 +297,29 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
     readyForNextTask: safeBool(rawState.readyForNextTask, fallback.learnerState.readyForNextTask),
     remainingBlockers: normalizeStringArray(rawState.remainingBlockers).length ? normalizeStringArray(rawState.remainingBlockers) : fallback.learnerState.remainingBlockers,
   };
+  // P1-4：判错轮硬钳制掌握度上界——与 learn-phase 的主链防线同口径，避免
+  // simulator 输出/blackbox 私有状态先保存了高于 masteryProb 的自评。
+  const judgeMasteryClampedFields: string[] = [];
+  const judge = input.epistemicGrounding;
+  if (judge?.sampledCorrectness === false && typeof judge.masteryProb === 'number' && Number.isFinite(judge.masteryProb)) {
+    for (const field of ['conceptualMastery', 'proceduralMastery'] as const) {
+      if (learnerState[field] > judge.masteryProb) {
+        learnerState[field] = judge.masteryProb;
+        judgeMasteryClampedFields.push(field);
+      }
+    }
+  }
   const fallbackFeedback = buildFeedbackFromState(learnerState, fallback.learnerFeedback.reason);
   const feedbackBlockers = normalizeStringArray(rawFeedback.remainingBlockers);
   const wantsMoreHelp = safeBool(rawFeedback.wantsMoreHelp, fallbackFeedback.wantsMoreHelp);
-  const selfReportedTaskDone = safeBool(rawFeedback.selfReportedTaskDone, fallbackFeedback.selfReportedTaskDone) && !wantsMoreHelp && feedbackBlockers.length === 0;
+  // P1-5：认知判决接入完成门——判决缺失时保持现状（宁松勿误伤，兼容 blackbox/quick-learn 无判决调用）；
+  // 判错（sampledCorrectness=false）或 masteryProb 低于阈值时强制 selfReportedTaskDone=false，
+  // 避免「判 0.3 掌握也能结课」。
+  const judgeGate = evaluateJudgeCompletionGate(input.epistemicGrounding);
+  const selfReportedTaskDone = safeBool(rawFeedback.selfReportedTaskDone, fallbackFeedback.selfReportedTaskDone)
+    && !wantsMoreHelp
+    && feedbackBlockers.length === 0
+    && judgeGate.allowsCompletion;
   const checkpointAnswer = normalizeCheckpointAnswer(parsed?.checkpointAnswer, input.pendingCheckpoint);
 
   return {
@@ -317,9 +340,40 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
       stateChangeReason: sanitizeVisibleContent(parsed?.debug?.stateChangeReason || ''),
       // 归一化补齐检测：LLM 未输出的状态字段由代码用 fallback 默认值填充，供审计区分
       normalizedFallback,
+      // P1-5：判决完成门拦截留痕（判决缺失/放行时为 undefined，不写盘）
+      ...(judgeGate.reason ? { judgeCompletionBlock: judgeGate.reason } : {}),
+      // P1-4：判错轮掌握度钳制留痕（供 session evidence/blackbox 审计）
+      ...(judgeMasteryClampedFields.length ? { judgeMasteryClampedFields } : {}),
     },
     ...(checkpointAnswer ? { checkpointAnswer } : {}),
   };
+}
+
+/**
+ * 认知判决的完成门阈值（P1-5）：masteryProb 低于该值视为未掌握，不得结课。
+ * 与 coordinators/simulation.learn.steps.ts 的同口径常量保持一致（两处均在授权面内）。
+ */
+export const LEARN_JUDGE_COMPLETION_MASTERY_THRESHOLD = 0.5;
+
+/**
+ * 判决完成门：判决缺失 → 放行（保持现状，宁松勿误伤）；判错或掌握概率低于阈值 → 拦截。
+ * 与 computeClosureDecision 的判决条款同口径，构成完成链的两道防线。
+ */
+export function evaluateJudgeCompletionGate(
+  grounding: EpistemicGrounding | null | undefined,
+  threshold = LEARN_JUDGE_COMPLETION_MASTERY_THRESHOLD
+): { allowsCompletion: boolean; reason: string | null } {
+  if (!grounding || typeof grounding !== 'object') return { allowsCompletion: true, reason: null };
+  if (grounding.sampledCorrectness === false) {
+    return { allowsCompletion: false, reason: 'judge-sampled-correctness-false' };
+  }
+  const mastery = typeof grounding.masteryProb === 'number' && Number.isFinite(grounding.masteryProb)
+    ? grounding.masteryProb
+    : null;
+  if (mastery !== null && mastery < threshold) {
+    return { allowsCompletion: false, reason: 'judge-mastery-below-threshold' };
+  }
+  return { allowsCompletion: true, reason: null };
 }
 
 const LEARN_STATE_FIELDS = [

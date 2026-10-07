@@ -86,7 +86,7 @@ describe('validateConsolidation（护栏：模型建议必须落在候选内）'
     expect(result.proposals[0].lexicalSimilarity).toBeGreaterThanOrEqual(0.5);
   });
 
-  it('把握度足但词面远（语义近义）→ 记录但 autoApplicable=false（跨 path 同词异义的真风险）', () => {
+  it('把握度足但词面远（语义近义）→ P2-24：降级进 ambiguous，不进 merges（yaml rule 7 对齐）', () => {
     const result = validateConsolidation({
       candidates,
       parsed: {
@@ -98,8 +98,36 @@ describe('validateConsolidation（护栏：模型建议必须落在候选内）'
         }],
       },
     });
-    expect(result.proposals).toHaveLength(1);
-    expect(result.proposals[0].autoApplicable).toBe(false);
+    expect(result.proposals).toHaveLength(0);
+    expect(result.ambiguous[0]).toMatchObject({ a: '回来后的第一眼第一手交给已翻开的书' });
+    expect(result.ambiguous[0].reason).toContain('词面相似度');
+  });
+
+  it('P2-24：词面远但 confidence 高（0.82 语义猜测）也不再混进可执行建议', () => {
+    const result = validateConsolidation({
+      candidates: [candidate('识别损失不可逆程度'), candidate('按能否挽回排序风险')],
+      parsed: {
+        merges: [{
+          canonical: '识别损失不可逆程度',
+          aliases: ['按能否挽回排序风险'],
+          confidence: 0.82,
+          rationale: '语义相近',
+        }],
+      },
+    });
+    expect(result.proposals).toHaveLength(0);
+    expect(result.ambiguous).toHaveLength(1);
+  });
+
+  it('P1-17：已执行的 canonical 本轮不再重复建议（appliedCanonicals 过滤）', () => {
+    const result = validateConsolidation({
+      candidates,
+      appliedCanonicals: ['离开前翻页立好'],
+      parsed: { merges: [{ canonical: '离开前翻页立好', aliases: ['离开前翻页立好：动作先于评价'], confidence: 0.9, rationale: '同一动作' }] },
+    });
+    expect(result.proposals).toHaveLength(0);
+    expect(result.ambiguous[0]).toMatchObject({ a: '离开前翻页立好' });
+    expect(result.ambiguous[0].reason).toContain('已执行');
   });
 
   it('ambiguous / dropCandidates 里的越界名字被过滤', () => {
@@ -280,10 +308,10 @@ describe('ConceptConsolidatorService', () => {
   }
 
   describe('alias 策略（S3 升格：非破坏归并）', () => {
-    // 夹具要点：两个候选在**机械归一化后仍是不同键**（真近义），否则 alias 模式无可归并——
-    // 冒号从句变体（'X：解释'）会被 normalizeConceptKey 剥成 'X'，与 canonical 同键，属"已同身份"。
+    // 夹具要点（P2-24 后）：两候选需同时满足 ①机械归一化后仍是不同键（真近义，否则 alias 无可归并）
+    // ②词面相似度 ≥ 0.5（否则会被词面闸门降级进 ambiguous，不进 proposals）。
     const ALIAS_CANONICAL = '离开前翻页立好';
-    const ALIAS_NEAR = '走之前把书翻开并停在该页';
+    const ALIAS_NEAR = '离开前翻页立好书';
     const aliasProjection = [
       { id: 'r1', conceptKey: ALIAS_CANONICAL, label: ALIAS_CANONICAL, source: 'derived', extractionCount: 7, masteryScore: 0.6, lastSeenAt: new Date('2026-09-10'), dueAt: new Date('2026-09-16'), ktMasteryEma: 0.5, fsrsStability: 3, fsrsDifficulty: 5 },
       { id: 'r2', conceptKey: ALIAS_NEAR, label: null, source: 'derived', extractionCount: 2, masteryScore: 0.5, lastSeenAt: new Date('2026-09-12'), dueAt: new Date('2026-09-14'), ktMasteryEma: 0.7, fsrsStability: null, fsrsDifficulty: null },
@@ -438,8 +466,8 @@ describe('ConceptConsolidatorService', () => {
     expect(result.audit?.appliedMerges).toHaveLength(1);
   });
 
-  it('applyProposals：需人工确认的（autoApplicable=false）默认拒绝执行', async () => {
-    const { service, writes } = await buildWithAudit({
+  it('applyProposals：词面远距的语义猜测不进 proposals，includeNeedsReview 也无法对其执行（P2-24）', async () => {
+    const { service, writes, audit } = await buildWithAudit({
       findTraces: jest.fn().mockResolvedValue([
         { id: 's1', conceptKey: '回来后的第一眼第一手交给已翻开的书', label: 'a', source: 'derived', extractionCount: 5, masteryScore: 0.5, lastSeenAt: new Date(), dueAt: null },
         { id: 's2', conceptKey: '回来后第一手落到哪里', label: 'b', source: 'derived', extractionCount: 5, masteryScore: 0.5, lastSeenAt: new Date(), dueAt: null },
@@ -458,13 +486,19 @@ describe('ConceptConsolidatorService', () => {
         },
       }),
     });
+    // 词面闸门决定 merges 成员资格：远距项只进 ambiguous，审计里没有这条待办
+    expect(audit?.proposals).toHaveLength(0);
+    expect(audit?.ambiguous.some((item) => item.a === '回来后的第一眼第一手交给已翻开的书')).toBe(true);
+
     const denied = await service.applyProposals('u1', ['回来后的第一眼第一手交给已翻开的书'], { strategy: 'merge' });
     expect(denied.applied).toBe(0);
     expect(denied.skipped).toContain('回来后的第一眼第一手交给已翻开的书');
     expect(writes.deleteTraces).not.toHaveBeenCalled();
 
+    // includeNeedsReview 只对审计里真实存在的 proposals 生效；远距猜测已不在其中，无法执行
     const forced = await service.applyProposals('u1', ['回来后的第一眼第一手交给已翻开的书'], { includeNeedsReview: true, strategy: 'merge' });
-    expect(forced.applied).toBe(1);
+    expect(forced.applied).toBe(0);
+    expect(writes.deleteTraces).not.toHaveBeenCalled();
   });
 
   it('rollbackMerge：胜出者还原 + 被删行按整行快照重建', async () => {

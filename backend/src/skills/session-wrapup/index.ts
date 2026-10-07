@@ -56,6 +56,13 @@ export interface SessionWrapupInput {
       stillLearning: string[];
       unchangedMastered: string[];
     };
+    /**
+     * FSRS 记忆保持率提示（P1-10 断链修复）：编排层 `loadRetrievabilityHints`
+     * （teaching-session-lifecycle.ts:1137）产出、随 `knowledgeContext` 注入；
+     * 每项 { concept, retrievability 0-1 }，仅含 <0.8 的即将遗忘点（≤5 条）。
+     * 缺失/空 = 无数据：模型不得提及记忆保持率（yaml 规则 9），输出侧另有确定性校验兜底。
+     */
+    reviewHints?: Array<{ concept: string; retrievability: number }>;
   };
   sessionEvidence?: {
     turnCount: number;
@@ -247,6 +254,135 @@ function parseContent(content: string): Record<string, unknown> | null {
   return null;
 }
 
+/**
+ * P1-11 输出保真：输入未提供 reviewHints 时的「保持率 / 记得几成 + 数值」话术检测。
+ *
+ * 实证违规样本（pcl_b863d7d9，2026-09-23，success=1）：
+ *   summary.metricInterpretation.longTerm = 「学生长期记忆保持率良好（lsb 4.6）…」
+ * ——把 learningState 的内部字段（lsb，0-10）包装成"长期记忆保持率"渲染给真学生，
+ * 同时违反 yaml 规则 9（无数据不得提及）/ 规则 10（不得复述内部字段名）/ 规则 21（不得编造数值）。
+ * 合规样本（pcl_ca05e333）：明确声明"本次输入未提供长期记忆保持率的数值，因此不引用具体百分比"——
+ * 无带数值的断言，本检测**不得**误伤该类声明（不命中）。
+ *
+ * 触发条件 = 同一小句内「保持率/记忆保持/记得N成/记得N% 话术」+「数值」并存。
+ * 以逗号级小句为最小单位（而非整句）：违规的量化断言与其后的合理建议常同句，
+ * 小句粒度既能命中又能只剥离违规部分。
+ */
+const RETENTION_CLAIM_RE = /保持率|记忆保持|(?:记得|记住)[^，,；;。！？\n]{0,6}(?:[0-9零一二三四五六七八九十两]+\s*成|[0-9]+\s*%|百分之[0-9零一二三四五六七八九十百两]+)/;
+const NUMERIC_VALUE_RE = /[0-9]|[零一二三四五六七八九十百两]+成|百分之/;
+
+/** 无 reviewHints 时，被整段剥离字段的确定性替代文案（本身不含保持率话术与数值） */
+const RETENTION_FREE_NEUTRAL_TEXT = '本节未提供长期记忆相关数据，此处不引用具体数值。';
+
+/** 是否具备可引用的记忆保持率输入（空数组/缺失 = 无数据） */
+export function hasReviewHints(input: SessionWrapupInput | undefined | null): boolean {
+  const hints = input?.knowledgeContext?.reviewHints;
+  return Array.isArray(hints) && hints.length > 0;
+}
+
+/** 按小句切分（保留分隔符），用于逐小句判定与剥离 */
+function splitClauses(text: string): string[] {
+  return String(text).match(/[^，,、；;。！？\n]*[，,、；;。！？\n]?/g)?.filter((part) => part !== '') || [];
+}
+
+function isUnsupportedRetentionClaim(clause: string): boolean {
+  return RETENTION_CLAIM_RE.test(clause) && NUMERIC_VALUE_RE.test(clause);
+}
+
+/** summary 内所有学生可见文本（P1-11 检测面；不含内部字段 evaluation） */
+function collectSummaryTexts(summary: unknown): string[] {
+  const record = (summary || {}) as Record<string, unknown>;
+  const texts: string[] = [];
+  const pushText = (value: unknown) => {
+    if (typeof value === 'string') texts.push(value);
+  };
+  pushText(record.topicSummary);
+  pushText(record.knowledgeSummary);
+  pushText(record.practiceAdvice);
+  pushText(record.learningEvaluation);
+  if (Array.isArray(record.keyTakeaways)) (record.keyTakeaways as unknown[]).forEach(pushText);
+  if (Array.isArray(record.actionPlan)) (record.actionPlan as unknown[]).forEach(pushText);
+  const highlights = record.evaluationHighlights as Record<string, unknown> | undefined;
+  if (Array.isArray(highlights?.strengths)) (highlights?.strengths as unknown[]).forEach(pushText);
+  if (Array.isArray(highlights?.improvements)) (highlights?.improvements as unknown[]).forEach(pushText);
+  const metric = record.metricInterpretation as Record<string, unknown> | undefined;
+  pushText(metric?.session);
+  pushText(metric?.longTerm);
+  if (Array.isArray(record.knowledgeItems)) {
+    (record.knowledgeItems as Array<Record<string, unknown>>).forEach((item) => pushText(item?.evidence));
+  }
+  return texts;
+}
+
+/** 找出无数据支撑的保持率数值断言（返回命中句，供校验失败原因/日志引用） */
+export function findUnsupportedRetentionClaims(summary: unknown, hasHints: boolean): string[] {
+  if (hasHints) return [];
+  const hits: string[] = [];
+  for (const text of collectSummaryTexts(summary)) {
+    for (const clause of splitClauses(text)) {
+      const trimmed = clause.trim();
+      if (trimmed && isUnsupportedRetentionClaim(trimmed)) hits.push(trimmed);
+    }
+  }
+  return hits;
+}
+
+/**
+ * 确定性剥离（corrective retry 失效后的兜底）：把无数据支撑的保持率断言按小句移除，
+ * 不重写语义；整字段被清空时补一句中性文案。返回新的 summary（浅拷贝），入参不被修改。
+ */
+export function stripUnsupportedRetentionClaims(
+  summary: SessionWrapupSummary,
+  hasHints: boolean,
+): { summary: SessionWrapupSummary; removed: string[] } {
+  const removed: string[] = [];
+  if (hasHints) return { summary, removed };
+  // emptyFallback：整段被清空时的替代——长文本字段补中性文案；数组项留空（调用方丢弃该项，
+  // 避免 actionPlan/keyTakeaways 里剩一条无信息量的占位句）
+  const clean = (text: string, emptyFallback: string): string => {
+    const kept = splitClauses(text).filter((clause) => {
+      const trimmed = clause.trim();
+      if (!trimmed) return false;
+      const hit = isUnsupportedRetentionClaim(trimmed);
+      if (hit) removed.push(trimmed);
+      return !hit;
+    });
+    const joined = kept.join('').replace(/^[，,、；;\s]+/, '').trim();
+    if (joined) return joined;
+    return String(text).trim() ? emptyFallback : text;
+  };
+  const cleanArray = (items: string[]): string[] =>
+    items
+      .map((item) => clean(String(item), ''))
+      .filter((item) => item.trim() !== '');
+
+  const metric = summary.metricInterpretation;
+  return {
+    summary: {
+      ...summary,
+      topicSummary: clean(summary.topicSummary, RETENTION_FREE_NEUTRAL_TEXT),
+      knowledgeSummary: clean(summary.knowledgeSummary, RETENTION_FREE_NEUTRAL_TEXT),
+      practiceAdvice: clean(summary.practiceAdvice, RETENTION_FREE_NEUTRAL_TEXT),
+      learningEvaluation: clean(summary.learningEvaluation, RETENTION_FREE_NEUTRAL_TEXT),
+      keyTakeaways: cleanArray(summary.keyTakeaways),
+      actionPlan: cleanArray(summary.actionPlan),
+      evaluationHighlights: {
+        strengths: cleanArray(summary.evaluationHighlights.strengths),
+        improvements: cleanArray(summary.evaluationHighlights.improvements),
+      },
+      knowledgeItems: summary.knowledgeItems.map((item) => ({
+        ...item,
+        evidence: clean(item.evidence, RETENTION_FREE_NEUTRAL_TEXT),
+      })),
+      metricInterpretation: {
+        session: clean(metric.session, RETENTION_FREE_NEUTRAL_TEXT),
+        longTerm: clean(metric.longTerm, RETENTION_FREE_NEUTRAL_TEXT),
+      },
+    },
+    removed,
+  };
+}
+
 function requireNumber(value: unknown, min: number, max: number): number | null {
   if (typeof value !== 'number' || Number.isNaN(value)) return null;
   if (value < min || value > max) return null;
@@ -380,8 +516,12 @@ export function isZeroEvidenceSessionInput(input: SessionWrapupInput): boolean {
  * The primary prompt promises both blocks. Validate that raw contract before
  * normalization so malformed model output gets one corrective retry instead
  * of silently bypassing the model result and falling back immediately.
+ *
+ * P1-11 追加确定性校验：输入无 reviewHints 时，summary 不得出现
+ * 「保持率/记得几成 + 数值」话术（编造量化记忆状态）→ 触发 corrective retry。
+ * `input` 省略时跳过该检查（保持既有单参调用点/历史测试行为不变）。
  */
-export function validateSessionWrapupParsedOutput(parsed: unknown) {
+export function validateSessionWrapupParsedOutput(parsed: unknown, input?: SessionWrapupInput) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return { valid: false as const, failureReason: 'SESSION_WRAPUP_OUTPUT_NOT_OBJECT' };
   }
@@ -393,6 +533,18 @@ export function validateSessionWrapupParsedOutput(parsed: unknown) {
 
   if (!extractEvaluation(record.evaluation)) {
     return { valid: false as const, failureReason: 'SESSION_WRAPUP_EVALUATION_INVALID' };
+  }
+
+  if (input) {
+    const unsupported = findUnsupportedRetentionClaims(record.summary, hasReviewHints(input));
+    if (unsupported.length > 0) {
+      return {
+        valid: false as const,
+        failureReason:
+          'SESSION_WRAPUP_UNSUPPORTED_RETENTION_CLAIM: 输入未提供记忆保持率（reviewHints），'
+          + `summary 不得出现带数值的保持率/记得成数表述，请删除后重写。命中：${unsupported.slice(0, 3).join(' ｜ ')}`,
+      };
+    }
   }
 
   return { valid: true as const };
@@ -460,6 +612,7 @@ function buildWrapupUserPrompt(input: SessionWrapupInput, mode: 'primary' | 'eva
 【结束原因】${input.sessionStructure?.endReason || '无'}
 【知识点状态】${JSON.stringify(input.knowledgePoints)}
 【知识点变化】${JSON.stringify(input.knowledgeContext?.delta || null)}
+【记忆保持率提示】${JSON.stringify(input.knowledgeContext?.reviewHints || null)}
 【课堂证据】${JSON.stringify(input.sessionEvidence || null)}
 【最近对话片段】${transcript}
 
@@ -492,6 +645,7 @@ tier 只能取 low | mid | high（档位定义见 system prompt 的评分参考�
 【结束原因】${input.sessionStructure?.endReason || '无'}
 【知识点状态】${JSON.stringify(input.knowledgePoints)}
 【知识点变化】${JSON.stringify(input.knowledgeContext?.delta || null)}
+【记忆保持率提示】${JSON.stringify(input.knowledgeContext?.reviewHints || null)}
 【学习状态】${input.learningState ? JSON.stringify(input.learningState) : '无'}
 【课堂证据】${JSON.stringify(input.sessionEvidence || null)}
 【最近对话片段】${transcript}
@@ -539,7 +693,7 @@ const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string,
   },
   buildUserPayload: (input) => buildWrapupUserPrompt(input, 'primary'),
   normalizeOutput: (parsed) => (parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null),
-  validateParsedOutput: (parsed) => validateSessionWrapupParsedOutput(parsed),
+  validateParsedOutput: (parsed, input) => validateSessionWrapupParsedOutput(parsed, input),
   mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
     contract: runtimeContract,
     artifact: output,
@@ -555,7 +709,10 @@ const sessionWrapupPromptSpec: PromptCallSpec<SessionWrapupInput, Record<string,
   }),
     retryStrategy: {
     maxAttempts: 2,
-    onValidationFail: ({ failureReason }) => `请只输出完整的课后总结 JSON，必须同时包含符合规格的 summary 和 evaluation。上次失败原因：${failureReason}`,
+    onValidationFail: ({ failureReason }) => failureReason.startsWith('SESSION_WRAPUP_UNSUPPORTED_RETENTION_CLAIM')
+      // P1-11 纠偏语：只改这一件事，避免模型把 summary/evaluation 整体重写跑偏
+      ? '本次输入未提供记忆保持率数据（reviewHints 为空/缺失），summary 中不得出现"保持率""记得几成/记得百分之几"这类带数值的记忆断言（含 metricInterpretation）。请仅删除该类表述，重新输出完整 JSON（同时包含符合规格的 summary 与 evaluation）。'
+      : `请只输出完整的课后总结 JSON，必须同时包含符合规格的 summary 和 evaluation。上次失败原因：${failureReason}`,
   },
 };
 
@@ -621,9 +778,22 @@ export class SessionWrapupAgent {
       const parsedSummary = parsed?.summary;
       const parsedEvaluation = parsed?.evaluation;
 
-      const summary = isSummary(parsedSummary)
+      const rawSummary = isSummary(parsedSummary)
         ? parsedSummary
         : buildFallbackSummary(input);
+      // P1-11 确定性剥离兜底：corrective retry 用尽后仍带无数据支撑的保持率断言时，
+      // 按小句剥离（不落回 fallback，尽量保住其余内容），保证"编造量化记忆状态"不渲染给学生。
+      let summary = rawSummary;
+      if (!hasReviewHints(input)) {
+        const stripped = stripUnsupportedRetentionClaims(rawSummary, false);
+        if (stripped.removed.length > 0) {
+          summary = stripped.summary;
+          logger.warn('[SessionWrapupAgent] 剥离无数据支撑的记忆保持率断言（P1-11 输出保真）', {
+            removedCount: stripped.removed.length,
+            samples: stripped.removed.slice(0, 3),
+          });
+        }
+      }
       // 纯重试+明确失败：主 prompt 重试后仍缺 evaluation → 不补全、不保守评分，
       // 直接 evaluation=null + evaluationSource='unavailable'（下游全链 null 容忍，与 M1 兜底同形态）。
       const parsedEvaluationResult = extractEvaluation(parsedEvaluation);

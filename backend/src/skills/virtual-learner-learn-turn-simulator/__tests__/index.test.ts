@@ -8,6 +8,8 @@ import {
   VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED,
   LEARN_STATE_FIELDS,
   LEARN_FEEDBACK_FIELDS,
+  LEARN_JUDGE_COMPLETION_MASTERY_THRESHOLD,
+  evaluateJudgeCompletionGate,
 } from '../index'
 import type { LearnLearnerSimulationInput } from '../index'
 
@@ -191,5 +193,69 @@ describe('virtual-learner-learn-turn-simulator · 检查点作答（P1-3）', ()
   it('草案无效（选项 id 全不存在）→ 不产出，交给 runner 兜底', () => {
     const output = normalizeOutput({ reply: '……', checkpointAnswer: { selectedOptionIds: ['ZZZ'] } }, withCheckpoint)
     expect(output.checkpointAnswer).toBeUndefined()
+  })
+})
+
+describe('virtual-learner-learn-turn-simulator · 判决完成门（P1-5 / VL-1）', () => {
+  const doneRaw = {
+    reply: '这一步我会了。',
+    learnerState: { phaseFocus: 'ready_to_close', taskUnderstanding: 0.9, conceptualMastery: 0.85, proceduralMastery: 0.86 },
+    learnerFeedback: { selfReportedTaskDone: true, wantsMoreHelp: false, stopAsking: true, remainingBlockers: [] },
+  }
+
+  it('判决缺失 → 保持现状（宁松勿误伤）：selfReportedTaskDone 照常为 true', () => {
+    const output = normalizeOutput(doneRaw, input)
+    expect(output.learnerFeedback.selfReportedTaskDone).toBe(true)
+    expect(output.debug?.judgeCompletionBlock).toBeUndefined()
+  })
+
+  it('sampledCorrectness=false → 强制 selfReportedTaskDone=false，并留拦截原因', () => {
+    const output = normalizeOutput(doneRaw, {
+      ...input,
+      epistemicGrounding: { sampledCorrectness: false, blockedConcept: '执行停—绕—留钩子降级', errorPattern: null, masteryProb: 0.3 },
+    })
+    expect(output.learnerFeedback.selfReportedTaskDone).toBe(false)
+    expect(output.learnerFeedback.stopAsking).toBe(false)
+    expect(output.debug?.judgeCompletionBlock).toBe('judge-sampled-correctness-false')
+  })
+
+  it('判对但 masteryProb 低于阈值 → 拦截（判 0.3 掌握不得结课）', () => {
+    const output = normalizeOutput(doneRaw, {
+      ...input,
+      epistemicGrounding: { sampledCorrectness: true, blockedConcept: null, errorPattern: null, masteryProb: 0.3 },
+    })
+    expect(output.learnerFeedback.selfReportedTaskDone).toBe(false)
+    expect(output.debug?.judgeCompletionBlock).toBe('judge-mastery-below-threshold')
+  })
+
+  it('判对且 masteryProb 达标 → 放行完成', () => {
+    const output = normalizeOutput(doneRaw, {
+      ...input,
+      epistemicGrounding: { sampledCorrectness: true, blockedConcept: null, errorPattern: null, masteryProb: 0.78 },
+    })
+    expect(output.learnerFeedback.selfReportedTaskDone).toBe(true)
+    expect(output.debug?.judgeCompletionBlock).toBeUndefined()
+  })
+
+  it('evaluateJudgeCompletionGate 阈值边界：等于阈值放行、低于阈值拦截、null 放行', () => {
+    expect(evaluateJudgeCompletionGate(null).allowsCompletion).toBe(true)
+    expect(evaluateJudgeCompletionGate({ sampledCorrectness: true, blockedConcept: null, errorPattern: null, masteryProb: LEARN_JUDGE_COMPLETION_MASTERY_THRESHOLD }).allowsCompletion).toBe(true)
+    expect(evaluateJudgeCompletionGate({ sampledCorrectness: true, blockedConcept: null, errorPattern: null, masteryProb: LEARN_JUDGE_COMPLETION_MASTERY_THRESHOLD - 0.01 }).allowsCompletion).toBe(false)
+  })
+
+  it('判错 + masteryProb=0.3 → 掌握度硬钳到 0.3，并留钳制字段（P1-4）', () => {
+    const output = normalizeOutput(doneRaw, {
+      ...input,
+      epistemicGrounding: { sampledCorrectness: false, blockedConcept: '执行停—绕—留钩子降级', errorPattern: null, masteryProb: 0.3 },
+    })
+    expect(output.learnerState.conceptualMastery).toBe(0.3)
+    expect(output.learnerState.proceduralMastery).toBe(0.3)
+    expect(output.debug?.judgeMasteryClampedFields).toEqual(['conceptualMastery', 'proceduralMastery'])
+  })
+
+  it('判决缺失 → 掌握度不钳制（宁松勿误伤）', () => {
+    const output = normalizeOutput(doneRaw, input)
+    expect(output.learnerState.conceptualMastery).toBe(0.85)
+    expect(output.debug?.judgeMasteryClampedFields).toBeUndefined()
   })
 })

@@ -66,11 +66,36 @@ describe('session-wrapup payload snapshot parity', () => {
     expect(payload).toContain('【结束原因】task-completed')
     expect(payload).toContain('【知识点状态】')
     expect(payload).toContain('【知识点变化】')
+    expect(payload).toContain('【记忆保持率提示】')
     expect(payload).toContain('【学习状态】')
     expect(payload).toContain('【课堂证据】')
     expect(payload).toContain('【最近对话片段】')
     expect(payload).toContain('请同时输出 summary 与 evaluation')
     expect(payload).toMatchSnapshot()
+  })
+
+  it('reviewHints 缺失 → 【记忆保持率提示】渲染 null（模型无从引用）', async () => {
+    await sessionWrapupAgent.generate(MINIMAL_INPUT as any)
+    const [spec] = mockCallPrompt.mock.calls[0]
+    const payload = spec.buildUserPayload(MINIMAL_INPUT, {})
+    expect(payload).toContain('【记忆保持率提示】null')
+  })
+
+  it('reviewHints 在场 → 【记忆保持率提示】携带 concept/retrievability（P1-10 管道打通）', async () => {
+    const input = {
+      ...MINIMAL_INPUT,
+      knowledgeContext: {
+        ...MINIMAL_INPUT.knowledgeContext,
+        reviewHints: [
+          { concept: '词法作用域', retrievability: 0.72 },
+          { concept: '闭包', retrievability: 0.41 },
+        ],
+      },
+    }
+    await sessionWrapupAgent.generate(input as any)
+    const [spec] = mockCallPrompt.mock.calls[0]
+    const payload = spec.buildUserPayload(input, {})
+    expect(payload).toContain('【记忆保持率提示】[{"concept":"词法作用域","retrievability":0.72},{"concept":"闭包","retrievability":0.41}]')
   })
 
   it('transcript numbers messages and maps roles to 学生/教师', async () => {
