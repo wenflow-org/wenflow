@@ -7,6 +7,7 @@ import { logger } from '../../utils/logger';
 import { extractSessionJti } from '../../middleware/admin.middleware';
 import {
   listAdminSessions,
+  countAdminSessionsByAdmin,
   findAdminSessionById,
   revokeAdminSession,
   revokeAdminSessions,
@@ -27,15 +28,19 @@ const revokeAllBodySchema = z.object({
 }).strict();
 
 // 会话列表：adminId / status（active=未吊销且未过期，revoked=已吊销，expired=未吊销但过期）过滤
+// 行窗口（limit）与统计口径分离：counts/adminCounts 恒为作用域（adminId）全量，
+// 不受 status 过滤与 limit 裁剪；window 描述本次行窗口，供前端显式标注「仅显示最近 N 条」。
 router.get('/', async (req, res, next) => {
   try {
     const query = listQuerySchema.parse(req.query);
     const now = new Date();
 
-    const where: Record<string, unknown> = {};
+    const scopeWhere: Record<string, unknown> = {};
     if (query.adminId) {
-      where.adminId = query.adminId;
+      scopeWhere.adminId = query.adminId;
     }
+
+    const where: Record<string, unknown> = { ...scopeWhere };
     if (query.status === 'active') {
       where.revokedAt = null;
       where.expiresAt = { gt: now };
@@ -46,7 +51,10 @@ router.get('/', async (req, res, next) => {
       where.expiresAt = { lte: now };
     }
 
-    const sessions = await listAdminSessions(where, query.limit);
+    const [sessions, countsByAdmin] = await Promise.all([
+      listAdminSessions(where, query.limit),
+      countAdminSessionsByAdmin(scopeWhere, now),
+    ]);
 
     const adminNames = await resolveAdminNames([...new Set(sessions.map(session => session.adminId))]);
     const data = sessions.map(session => ({
@@ -55,7 +63,28 @@ router.get('/', async (req, res, next) => {
       adminEmail: adminNames.get(session.adminId)?.email ?? null,
     }));
 
-    res.json({ success: true, data: { sessions: data } });
+    const adminCounts = [...countsByAdmin.entries()]
+      .map(([adminId, counts]) => ({ adminId, ...counts }))
+      .sort((a, b) => a.adminId.localeCompare(b.adminId));
+    const counts = adminCounts.reduce(
+      (acc, c) => ({
+        total: acc.total + c.total,
+        active: acc.active + c.active,
+        expired: acc.expired + c.expired,
+        revoked: acc.revoked + c.revoked,
+      }),
+      { total: 0, active: 0, expired: 0, revoked: 0 },
+    );
+
+    res.json({
+      success: true,
+      data: {
+        sessions: data,
+        counts,
+        adminCounts,
+        window: { limit: query.limit, returned: data.length },
+      },
+    });
   } catch (error) {
     next(error);
   }

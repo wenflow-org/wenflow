@@ -5,6 +5,7 @@ type RouteHandler = (...args: any[]) => any
 
 const routes: Record<string, RouteHandler[]> = {}
 const sessionsFindMany = jest.fn()
+const sessionsGroupBy = jest.fn()
 const sessionsFindUnique = jest.fn()
 const sessionsUpdate = jest.fn()
 const sessionsUpdateMany = jest.fn()
@@ -28,6 +29,7 @@ jest.mock('../../config/database', () => ({
     users: { findMany: usersFindMany },
     admin_sessions: {
       findMany: sessionsFindMany,
+      groupBy: sessionsGroupBy,
       findUnique: sessionsFindUnique,
       update: sessionsUpdate,
       updateMany: sessionsUpdateMany
@@ -103,6 +105,7 @@ describe('GET /api/admin/sessions', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     sessionsFindMany.mockResolvedValue([baseSession])
+    sessionsGroupBy.mockResolvedValue([])
     usersFindMany.mockResolvedValue([{ id: 'admin-1', name: '管理员甲', email: 'admin@example.com' }])
   })
 
@@ -151,6 +154,41 @@ describe('GET /api/admin/sessions', () => {
 
     expect(sessionsFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { adminId: 'admin-9' }
+    }))
+  })
+
+  /* B13 F6-1：行窗口（limit）与全量统计口径分离——counts/adminCounts/window 恒按作用域全量，
+     不受 limit 裁剪，供前端把「100 行窗口」与「真实全量」区分开。 */
+  it('返回全量 counts + adminCounts + window（行窗口只约束 sessions）', async () => {
+    sessionsFindMany.mockResolvedValue([baseSession])
+    // 三次 groupBy 依次为 active / expired / revoked
+    sessionsGroupBy
+      .mockResolvedValueOnce([{ adminId: 'admin-1', _count: { _all: 467 } }])
+      .mockResolvedValueOnce([{ adminId: 'admin-1', _count: { _all: 33 } }])
+      .mockResolvedValueOnce([{ adminId: 'admin-1', _count: { _all: 5 } }])
+
+    const { res } = await run('GET', '/', adminReq())
+
+    expect(res.body.data.counts).toEqual({ total: 505, active: 467, expired: 33, revoked: 5 })
+    expect(res.body.data.adminCounts).toEqual([
+      { adminId: 'admin-1', total: 505, active: 467, expired: 33, revoked: 5 }
+    ])
+    expect(res.body.data.window).toEqual({ limit: 100, returned: 1 })
+    // 统计查询不带 status 过滤（作用域全量），且不受 limit 影响
+    expect(sessionsGroupBy).toHaveBeenCalledWith(expect.objectContaining({
+      by: ['adminId'],
+      where: { revokedAt: null, expiresAt: { gt: expect.any(Date) } }
+    }))
+  })
+
+  it('adminId 作用域同时约束行与统计（统计不叠加 status 过滤）', async () => {
+    await run('GET', '/', adminReq({ query: { adminId: 'admin-9', status: 'active' } }))
+
+    expect(sessionsFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { adminId: 'admin-9', revokedAt: null, expiresAt: { gt: expect.any(Date) } }
+    }))
+    expect(sessionsGroupBy).toHaveBeenCalledWith(expect.objectContaining({
+      where: { adminId: 'admin-9', revokedAt: { not: null } }
     }))
   })
 })

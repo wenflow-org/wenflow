@@ -321,6 +321,11 @@ router.get('/:userId', async (req, res) => {
         dueAt: trace.dueAt,
         lastSeenAt: trace.lastSeenAt,
         source: trace.source,
+        /* 强度来源标注（B5-F3-3）：true = 显式落库 fsrsStability，retention 为 FSRS 可提取率；
+           false = 旧痕迹（无 FSRS 状态），retentionOf 走 fsrsStateFromLegacy 回退估算。
+           与 summary.withFsrsState 同口径判断——两处数字来源不同，界面据此各自标注，
+           避免「有 FSRS 状态 1」与「20 行都带记忆强度」读起来自相矛盾。 */
+        fsrsScheduled: trace.fsrsStability !== null && trace.fsrsStability !== undefined,
       }))
       .sort((a, b) => a.retention - b.retention);
 
@@ -359,6 +364,12 @@ router.get('/:userId', async (req, res) => {
           duplicatedTraces: duplicatedFamilies.reduce((sum, family) => sum + family.size, 0),
           neverExtracted: traces.filter((trace) => trace.extractionCount === 0).length,
           withFsrsState: traces.filter((trace) => trace.fsrsStability !== null).length,
+          /* B5-F3-3：无 FSRS 状态、但看过（lastSeenAt 非空）→ 记忆强度由 fsrsStateFromLegacy
+             回退估算的痕迹数。与 withFsrsState 是两种来源，界面各自标注，
+             避免「有 FSRS 状态 1」与到期预览 20 行都带记忆强度读起来自相矛盾。 */
+          strengthFromLegacy: traces.filter(
+            (trace) => (trace.fsrsStability === null || trace.fsrsStability === undefined) && trace.lastSeenAt !== null
+          ).length,
         },
         reviewPlan: plan,
         duePreview: dueTraces.slice(0, 20),

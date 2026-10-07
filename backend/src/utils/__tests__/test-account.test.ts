@@ -34,12 +34,38 @@ describe('isTestAccountUser', () => {
     expect(isTestAccountUser({ id: 'u1', name: 'qa_delete_test_879', email: 'qa_delete_test_879@wenflow.local' })).toBe(true);
   });
 
+  it('2026-10-07 F3-4 运营走查补收：uitest/uxtest/ui_audit_/audit_tester/eval/simb_/vqa_/vizcheck/logocheck/pe-finalverify', () => {
+    // 这批账号在「仅真实」311 行里 isTestAccount 全为 false（行内无徽章），KPI 因此高估
+    for (const [name, email] of [
+      ['uitest0jrs9', 'uitest0jrs9@wenflow.local'],
+      ['uitest0925', 'uitest0925@wenflow.local'],
+      ['uxtest0923', 'uxtest0923@wenflow.local'],
+      ['ui_audit_20260815231831', 'ui_audit_20260815231831@wenflow.local'],
+      ['audit_tester', 'audit_tester@wenflow.local'],
+      ['EvalRound2', 'EvalRound2@wenflow.local'],
+      ['EvalRound3', 'EvalRound3@wenflow.local'],
+      ['EvalNight1', 'EvalNight1@wenflow.local'],
+      ['eval082612426', 'eval082612426@wenflow.local'],
+      ['simB_luowen', 'simB_luowen@wenflow.local'],
+      ['vqa_1789051985', 'vqa_1789051985@wenflow.local'],
+      ['vizcheck01', 'vizcheck01@wenflow.local'],
+      ['logocheck2', 'logocheck2@wenflow.local'],
+      ['pe-finalverify', 'pe-finalverify@wenflow.local'],
+    ] as [string, string][]) {
+      expect(isTestAccountUser({ id: 'u1', name, email })).toBe(true);
+    }
+  });
+
   it('真实用户不误伤', () => {
     expect(isTestAccountUser({ id: 'u1', name: '陈晓', email: 'chenxiao@example.com' })).toBe(false);
     expect(isTestAccountUser({ id: 'u1', name: 'admin', email: 'admin@wenflow.local' })).toBe(false);
     expect(isTestAccountUser({ id: 'u1', name: 'review', email: 'motion@example.com' })).toBe(false);
     expect(isTestAccountUser({ id: 'u1', name: '123', email: '123@123.com' })).toBe(false);
     expect(isTestAccountUser({ id: 'u1', name: 'aaa', email: 'aaa@wenflow.local' })).toBe(false);
+    // 短前缀不能误吞相近人名：Eva/Evan 不命中 eval，Simba 不命中 simb_
+    expect(isTestAccountUser({ id: 'u1', name: 'Eva', email: 'eva@example.com' })).toBe(false);
+    expect(isTestAccountUser({ id: 'u1', name: 'Evan Li', email: 'evan@example.com' })).toBe(false);
+    expect(isTestAccountUser({ id: 'u1', name: 'Simba', email: 'simba@example.com' })).toBe(false);
   });
 
   it('空值不误伤', () => {

@@ -523,7 +523,7 @@ export interface CardDetail {
   email: string | null;
   notes: string | null;
   createdAt: Date;
-  /** 人设（personaSeed 去 scenarioCard/nickname 后的键值面） */
+  /** 人设键值面（profile 根字段优先、personaSeed 兜底；去 scenarioCard/nickname/元数据键） */
   personaFacts: Array<{ label: string; value: string }>;
   nickname: string | null;
   nameHint: string | null;
@@ -559,6 +559,7 @@ const PERSONA_FACT_LABELS: Record<string, string> = {
   gender: '性别',
   location: '所在地',
   corePersona: '核心人设',
+  corePersonality: '核心性格',
   emotionalBaseline: '情绪基线',
   helpSeekingPattern: '求助模式',
   adversarialPattern: '抗辩模式',
@@ -574,37 +575,73 @@ const PERSONA_FACT_LABELS: Record<string, string> = {
   resiliencePattern: '复原力模式',
 };
 
+/**
+ * 人设键值面不入的键：展示位单列（scenarioCard/nickname/nameHint）、故事池，以及卡库元数据。
+ * 元数据含 scenarioCard 的根级扁平镜像（domain/intentType/schoolAnchor/sourceRef/scenarioOrigin
+ * ——批量导入族把故事卡字段平铺在根级）与导入时间戳：这些在「概览」「故事池」已有专属展示位，
+ * 混进人设面只会重复且淹没真正的人设字段。learningGoal 同样剔除：卡详情的「学习目标」行
+ * （goal=profile 列）已是更完整版本（列带期限后缀，如「…（自定义期限）」），seed 内嵌版本更短。
+ */
+const PERSONA_FACT_SKIP_KEYS = new Set([
+  'scenarioCard', 'nickname', 'nameHint', 'storyPool',
+  'cardKey', 'cardVersion', 'importedAt', 'isSyntheticSource', 'personaSeed',
+  'domain', 'intentType', 'schoolAnchor', 'sourceRef', 'scenarioOrigin', 'learningGoal',
+]);
+
+/**
+ * 人设键值面取数（2026-10-07 F4-1）：根字段优先、personaSeed 兜底——画像页
+ * （VirtualProfile.vue 读 profile 根级 background/corePersonality/…）与本页必须给同一事实。
+ * 存量卡两族形状：批量导入卡整套人设写在 profile 根（personaSeed 仅 {nickname}）；
+ * 卡库导入卡（cardToProfile 经 normalizeProfileShape）落在 personaSeed。两族都读才不丢人设。
+ * 兜底只补根级缺失的键，根级已有值优先。
+ */
+function buildPersonaFacts(
+  profile: Record<string, unknown>,
+  seed: Record<string, unknown>,
+): CardDetail['personaFacts'] {
+  const merged: Array<[string, unknown]> = [];
+  const seen = new Set<string>();
+  for (const [k, v] of Object.entries(profile)) {
+    if (PERSONA_FACT_SKIP_KEYS.has(k)) continue;
+    seen.add(k);
+    merged.push([k, v]);
+  }
+  for (const [k, v] of Object.entries(seed)) {
+    if (seen.has(k) || PERSONA_FACT_SKIP_KEYS.has(k)) continue;
+    merged.push([k, v]);
+  }
+  const facts: CardDetail['personaFacts'] = [];
+  for (const [k, v] of merged) {
+    if (v == null || typeof v === 'object') continue;
+    const value = String(v).trim();
+    if (!value) continue;
+    facts.push({ label: PERSONA_FACT_LABELS[k] || k, value: value.length > 200 ? `${value.slice(0, 200)}…` : value });
+  }
+  return facts;
+}
+
 /** 卡详情聚合（GET /cards/:profileId/detail 数据源）：卡墙点卡后的全字段可视 */
 export async function getCardDetail(profileId: string): Promise<CardDetail | null> {
   const rows = await findProfilesForCardWall();
   const row = rows.find((x) => x.id === profileId);
   if (!row) return null;
   const [entry] = buildCardWallEntries([row]);
-  const seed = (() => {
+  const root = (() => {
     try {
-      const p = JSON.parse(row.profile || '{}') as Record<string, unknown>;
-      return (p.personaSeed || {}) as Record<string, unknown>;
+      return JSON.parse(row.profile || '{}') as Record<string, unknown>;
     } catch {
       return {} as Record<string, unknown>;
     }
   })();
+  const seed = (root.personaSeed || {}) as Record<string, unknown>;
   const sc = (seed.scenarioCard || {}) as Record<string, unknown>;
-  const pool = (() => {
-    try {
-      const p = JSON.parse(row.profile || '{}') as Record<string, unknown>;
-      return (p.storyPool as Array<Record<string, unknown>> | undefined) || [];
-    } catch {
-      return [] as Array<Record<string, unknown>>;
-    }
-  })();
-  // 人设键值面：已知字段给中文标签，未知字段保留原键；scenarioCard/nickname 单列不入键值面
-  const personaFacts: CardDetail['personaFacts'] = [];
-  for (const [k, v] of Object.entries(seed)) {
-    if (k === 'scenarioCard' || k === 'nickname' || k === 'nameHint' || v == null || typeof v === 'object') continue;
-    const value = String(v).trim();
-    if (!value) continue;
-    personaFacts.push({ label: PERSONA_FACT_LABELS[k] || k, value: value.length > 200 ? `${value.slice(0, 200)}…` : value });
-  }
+  const pool = (root.storyPool as Array<Record<string, unknown>> | undefined) || [];
+  // 人设键值面：根字段优先、personaSeed 兜底（见 buildPersonaFacts）
+  const personaFacts = buildPersonaFacts(root, seed);
+  // 背景同样两处读：卡库导入卡落 seed.background，批量导入卡落根级（画像页读的就是根级）
+  const background =
+    (typeof root.background === 'string' && root.background.trim() ? root.background.trim() : null)
+    || (typeof seed.background === 'string' && seed.background.trim() ? seed.background.trim() : null);
   const materials = ((sc.materials as Array<{ kind?: string; title?: string }> | undefined) || [])
     .map((m) => ({ kind: String(m.kind || 'note'), title: String(m.title || '') }))
     .filter((m) => m.title);
@@ -625,7 +662,7 @@ export async function getCardDetail(profileId: string): Promise<CardDetail | nul
     personaFacts,
     nickname: (seed.nickname as string) || null,
     nameHint: (seed.nameHint as string) || null,
-    background: (seed.background as string) || null,
+    background,
     stories: pool.map((s) => {
       const gs = (s.goalSeed as Record<string, unknown> | undefined) || {};
       return {

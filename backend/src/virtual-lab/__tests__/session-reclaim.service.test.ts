@@ -4,7 +4,8 @@ import {
   resolveFastStaleThresholdMs,
   resolveReclaimIntervalMs,
   DEFAULT_STALE_SESSION_HOURS,
-  DEFAULT_FAST_STALE_MINUTES
+  DEFAULT_FAST_STALE_MINUTES,
+  RECLAIM_BATCH_SIZE
 } from '../session-reclaim.service'
 import { logger } from '../../utils/logger'
 
@@ -272,7 +273,47 @@ describe('VirtualSessionReclaimService', () => {
     const result = await service.runReclaimOnce({ now: NOW })
 
     expect(result).toMatchObject({ scanned: 1, reclaimed: 0, skippedHeld: 1 })
+    // B8-F4-2：豁免候选必须带原因逐条回传——干跑清单与页头角标（超阈值候选数）同源同数
+    expect(result.skippedSessions).toEqual([
+      expect.objectContaining({ id: 'vs-held', skipReason: 'held', currentStage: 'teaching' })
+    ])
+    expect(result.batchLimit).toBe(RECLAIM_BATCH_SIZE)
     expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('豁免明细逐条带原因：hold / 活跃租约 / 暂停 / 在途自动化 四类可区分（B8-F4-2 同源）', async () => {
+    mockFindMany.mockResolvedValue([
+      staleSession({ id: 'vs-held', stageResults: JSON.stringify({ hold: true }) }),
+      staleSession({ id: 'vs-lease', stageResults: '{}' }),
+      staleSession({ id: 'vs-paused', stageResults: JSON.stringify({ teaching: { paused: true } }) }),
+      staleSession({ id: 'vs-autopilot', stageResults: JSON.stringify({ autopilot: { status: 'running' } }) }),
+      staleSession({ id: 'vs-reclaimable', stageResults: '{}' })
+    ])
+    // 租约查询只对 vs-lease 命中（其余返回 null）
+    mockFindFirst.mockImplementation(async (args: { where: { sessionId: string } }) =>
+      args.where.sessionId === 'vs-lease' ? { sessionId: 'vs-lease' } : null)
+    mockUpdate.mockResolvedValue({})
+    mockAuditCreate.mockResolvedValue({})
+    const service = new VirtualSessionReclaimService({ database: mockDatabase, thresholdMs: 24 * 60 * 60 * 1000 })
+
+    const result = await service.runReclaimOnce({ now: NOW, dryRun: true })
+
+    expect(result).toMatchObject({
+      scanned: 5,
+      reclaimed: 1,
+      skippedHeld: 1,
+      skippedActiveLease: 1,
+      skippedPaused: 1,
+      skippedActiveAutopilot: 1
+    })
+    // scanned 必须等于「可回收 + 全部豁免」，否则角标与清单又会分叉
+    expect(result.sessions.length + result.skippedSessions.length).toBe(result.scanned)
+    expect(Object.fromEntries(result.skippedSessions.map((s) => [s.id, s.skipReason]))).toEqual({
+      'vs-held': 'held',
+      'vs-lease': 'active-lease',
+      'vs-paused': 'paused',
+      'vs-autopilot': 'active-autopilot'
+    })
   })
 
   it('带 until 的 hold 到期后不再豁免（自动失效，防遗忘的永久 hold）', async () => {

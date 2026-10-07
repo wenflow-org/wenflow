@@ -51,6 +51,7 @@ jest.mock('../../../services/learning/goal-conversation.service', () => ({
 import platformRouter from '../platform';
 import goalConversationsRouter from '../goal-conversations';
 import usersRouter from '../users';
+import { TEST_ACCOUNT_PREFIXES } from '../../../utils/test-account';
 
 function getRouteHandler(router: any, path: string, method: string): RouteHandler {
   const layer = router.stack.find(
@@ -80,7 +81,10 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-const REAL_NOT_LENGTH = 26; // email virtual_ + @test.local 结尾 + 12 前缀 email + 12 前缀 name（REAL_USER_WHERE.NOT 全长）
+// email virtual_ + @test.local 结尾 + 前缀 email + 前缀 name（REAL_USER_WHERE.NOT 全长）。
+// 从 TEST_ACCOUNT_PREFIXES 派生而非写死数字：前缀清单是活的（2026-10-07 F3-4 又补了 10 个），
+// 写死数字只会让每次扩清单都要来改这里。
+const REAL_NOT_LENGTH = 2 + TEST_ACCOUNT_PREFIXES.length * 2;
 
 describe('数据隔离（A3）：教学会话列表 GET /teaching-sessions', () => {
   const sessionRow = (over: Record<string, any> = {}) => ({

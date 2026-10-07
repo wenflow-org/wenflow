@@ -47,6 +47,18 @@ export interface StaleSessionReclaimEntry {
   updatedAt: string;
 }
 
+/** 候选被豁免（本轮不会回收）的原因，与 runReclaimOnce 保护链一一对应 */
+export type StaleSessionReclaimSkipReason =
+  | 'live-generation'
+  | 'active-lease'
+  | 'held'
+  | 'paused'
+  | 'active-autopilot';
+
+export interface StaleSessionReclaimSkippedEntry extends StaleSessionReclaimEntry {
+  skipReason: StaleSessionReclaimSkipReason;
+}
+
 export interface StaleSessionReclaimResult {
   dryRun: boolean;
   thresholdMs: number;
@@ -62,6 +74,12 @@ export interface StaleSessionReclaimResult {
   /** 本进程代际启动后仍有写入的会话：写入时存在活着的进程代际，非孤儿 */
   skippedLiveGeneration: number;
   sessions: StaleSessionReclaimEntry[];
+  /** 被豁免候选明细（与 skipped* 计数同源）。干跑清单必须能逐条列出豁免项——
+   *  否则页头角标（超阈值候选数）与弹窗清单（仅可回收）会摆出「35 vs 0」两套数字，
+   *  运营无法判断到底要不要清理（B8-F4-2）。 */
+  skippedSessions: StaleSessionReclaimSkippedEntry[];
+  /** 单次扫描上限：scanned 达到它说明还有未扫到的候选（可分批多次执行） */
+  batchLimit: number;
 }
 
 export function resolveStaleSessionThresholdMs(value: string | undefined): number {
@@ -226,13 +244,14 @@ export class VirtualSessionReclaimService {
     const threshold = new Date(now.getTime() - thresholdMs);
     const profileIds = Array.isArray(options.profileIds) && options.profileIds.length ? options.profileIds : null;
     const emptySessions: StaleSessionReclaimEntry[] = [];
+    const skippedSessions: StaleSessionReclaimSkippedEntry[] = [];
     // 无存活进程代际登记：无法区分「上一代孤儿」和「别处的活工作」→ 本轮全跳过（硬档 24h 仍会兜底）
     if (bootFloor === null) {
       logger.info('[session-reclaim] 无存活进程代际登记，快档本轮跳过', { thresholdMs });
       return {
         dryRun, thresholdMs, scanned: 0, reclaimed: 0,
         skippedActiveLease: 0, skippedPaused: 0, skippedHeld: 0, skippedActiveAutopilot: 0, skippedLiveGeneration: 0,
-        sessions: emptySessions
+        sessions: emptySessions, skippedSessions, batchLimit: RECLAIM_BATCH_SIZE
       };
     }
     const sessions = await this.database.virtual_sessions.findMany({
@@ -256,7 +275,9 @@ export class VirtualSessionReclaimService {
       skippedHeld: 0,
       skippedActiveAutopilot: 0,
       skippedLiveGeneration: 0,
-      sessions: emptySessions
+      sessions: emptySessions,
+      skippedSessions,
+      batchLimit: RECLAIM_BATCH_SIZE
     };
 
     for (const session of sessions) {
@@ -272,6 +293,7 @@ export class VirtualSessionReclaimService {
       // 确证孤儿判据（快档）：写入发生在「所有存活后端代际启动」之后 → 有活代际可能是它的作者，非孤儿
       if (bootFloor instanceof Date && session.updatedAt.getTime() >= bootFloor.getTime()) {
         result.skippedLiveGeneration += 1;
+        skippedSessions.push({ ...entry, skipReason: 'live-generation' });
         continue;
       }
       const activeLease = await this.database.virtual_experiment_leases.findFirst({
@@ -280,6 +302,7 @@ export class VirtualSessionReclaimService {
       });
       if (activeLease) {
         result.skippedActiveLease += 1;
+        skippedSessions.push({ ...entry, skipReason: 'active-lease' });
         continue;
       }
       // 显式 hold（外部驱动申报的「故意停留」）：与暂停同等豁免；带 until 且已到期则不再豁免
@@ -296,6 +319,7 @@ export class VirtualSessionReclaimService {
       }
       if (holdActive) {
         result.skippedHeld += 1;
+        skippedSessions.push({ ...entry, skipReason: 'held' });
         continue;
       }
       // 管理员主动暂停的会话没有写入是预期行为，不应被当作僵尸回收
@@ -308,6 +332,7 @@ export class VirtualSessionReclaimService {
       }
       if (teachingPaused) {
         result.skippedPaused += 1;
+        skippedSessions.push({ ...entry, skipReason: 'paused' });
         continue;
       }
       // 仍有在途自动化（autopilot running/queued）→ 有驱动，跳过（短周期收敛尤其需要这层保护）
@@ -320,6 +345,7 @@ export class VirtualSessionReclaimService {
       }
       if (autopilotActive) {
         result.skippedActiveAutopilot += 1;
+        skippedSessions.push({ ...entry, skipReason: 'active-autopilot' });
         continue;
       }
       // path-accepted 卡死自愈：路径已接受但没人触发 startLearning —— 回收前先推进一次，
