@@ -321,9 +321,11 @@ onUnmounted(() => {
   opacity: 0;
   transform: translateY(-6px) scale(0.97);
 }
-/* 菜单头（原型 wf-popover__title）：名字 + 身份，替代旧顶栏常显用户名 */
+/* 菜单头（原型 wf-popover__title）：名字 + 身份，替代旧顶栏常显用户名。
+   左右内边距与下面各菜单项一致（12），名字左缘才能落在图标列那条竖线上
+   （原为 10，比图标列左缘还靠左 2px）。 */
 .v2nav__menu-head {
-  padding: 8px 10px 6px;
+  padding: 8px 12px 6px;
   display: flex; align-items: baseline; gap: 6px;
   border-bottom: 1px solid var(--line);
   margin-bottom: 4px;
@@ -357,6 +359,11 @@ onUnmounted(() => {
   color: var(--muted);
   flex-shrink: 0;
 }
+/* 图标列统一 22px：主题项是 22px 的键帽芯片（.v2nav__menu-theme-icon），其余是 15px 线图标。
+   不补这 3.5px 边距，那四行的文字会比「切换到亮色模式」左移 7px（390 实测 235.7 vs 242.7）。
+   用 > svg 只取行内直接子图标，芯片自己的 14px 图标不受影响。 */
+.v2nav__menu a > svg,
+.v2nav__menu button > svg { margin: 0 3.5px; }
 .v2nav__menu button.v2nav__menu-danger svg {
   color: var(--red-ink);
 }
