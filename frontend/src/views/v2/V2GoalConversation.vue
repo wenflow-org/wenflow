@@ -2183,17 +2183,25 @@ function shuffleScenes() {
   }
   /* 目标信息：不再占一整行（原 43px 横条 + 8px gap），触发按钮挪到 chat 头部行的右上角
      （该行移动端只剩阶段导航，右侧是空的）。aside 绝对定位成「零占位锚点」：
-     盒子与 .chat__head 同一水平带（47px 高、等高即可对齐），悬浮层从它的下沿展开。
+     盒子与 .chat__head 同一水平带（等高即中线重合，高度随 .panel__head 的 min-height 走，
+     不写死），悬浮层从它的下沿展开。
      空白区 pointer-events:none，否则会盖住下面阶段导航的点击。
      展开态原先是流内限高 45dvh，380px 面板把 chat 压到 311px、消息区只剩 160px。 */
   .panel {
     position: absolute;
-    /* 与 chat 同框：top/left/right 就是 .work 的内边距（8/10/10），
-       height 47 对齐 .chat__head 那一条头部带（两者差 1px 不可见）。 */
+    /* 与 chat 同框：top/left/right 就是 .work 的内边距（8/10/10）。
+       头部带高度**不能写死**：.chat__head = 上下 padding 10 + .stage-nav__item
+       min-height 40 = 60px。此前写死 47（早于「阶段导航抬到 40px 触控下限」那次改动），
+       两条带各自 align-items:center → 药丸中心实测 96.2、阶段导航中心 102.7，
+       药丸比它该在的那一行高 6.5px，看起来是「浮」在阶段导航上方的孤立小卡。
+       改成与 .chat__head 同一条上下 padding（10），两条带的中线自动重合。 */
     top: 8px; left: 10px; right: 10px;
-    height: 47px;
+    height: auto;
     display: flex; flex-direction: row; align-items: center; justify-content: flex-end;
-    padding: 0;
+    /* 与 .chat__head 同一条上下 padding（10）。配合下方 .panel__head 的 min-height 40
+       （= .stage-nav__item 的 min-height），两条带的高度都是 10+40+10=60，
+       align-items:center 后药丸中心与阶段导航中心严格重合。 */
+    padding: 10px 0;
     border: 0;
     background: none;
     /* 桌面档给 .panel 上了 shadow-sm（对齐原型 .wf-goalinfo）：移动端这里是零占位锚点带，
@@ -2211,9 +2219,10 @@ function shuffleScenes() {
     display: inline-flex; align-items: center; gap: 5px;
     margin-right: 16px;
     padding: 7px 8px;
-    /* EG20（2026-10-05 复测）：触屏下该药丸实测 81×34，低于 36px 触控下限 →
-       抬到 min-height 38（≥36），横向 padding 与阶段导航共处一行不变 */
-    min-height: 38px;
+    /* EG20（2026-10-05 复测）：触屏下该药丸实测 81×34，低于 36px 触控下限 → 抬到 38。
+       2026-10-07：再抬到 40，与 .stage-nav__item 的 min-height 严格同高 —— 两条头部带
+       （.chat__head / .panel 锚点带）都由 10+40+10=60 组成，药丸中线才与阶段导航重合。 */
+    min-height: 40px;
     border: 1px solid var(--line);
     border-radius: var(--mk-radius-pill);
     background: var(--surface);
@@ -2222,18 +2231,28 @@ function shuffleScenes() {
     box-shadow: var(--wf-shadow-raised); /* 悬浮档 */
   }
   .panel__head strong { font-size: 12px; }
-  .panel__caret { display: inline; font-size: 12px; }
-  /* 计数改角标：绝对定位不吃宽度（右上角那一条带要和阶段导航挤在同一行），
-     「已收集」三字省掉只留「3 / 7」 */
+  /* 展开箭头是 9px 的字形「▸」，12px 字号下渲染成一个几乎认不出的小点
+     （2026-10-07 放大核对：它和「息」字之间还隔着 5px，读起来像个孤立标点）。
+     抬到 13px，让「目标信息 ▸」读成一个整体。 */
+  .panel__caret { display: inline; font-size: 13px; }
+  /* 计数角标：绝对定位不吃宽度（右上角那一条带要和阶段导航挤在同一行），
+     「已收集」三字省掉只留「3 / 7」。
+     2026-10-07 收形：原来是实心蓝底白字（--blue + --text-on-primary），在 40px 白药丸的
+     右上角读作一块「压上去的蓝色补丁」——它和药丸描边互相切角，比药丸本身还抢眼，
+     而它承载的只是一个次要计数。改成柔和的蓝底蓝字，并加一圈 surface 描边（用
+     box-shadow 而非 border，不占布局尺寸），让角标与药丸之间有一道干净的呼吸缝。 */
   .panel__count-k { display: none; }
   .panel__count {
-    position: absolute; top: -5px; right: -6px;
-    min-width: 18px; padding: 0 4px;
+    position: absolute; top: -6px; right: -5px;
+    min-width: 17px; padding: 0 5px;
     border-radius: 999px;
-    background: var(--blue);
-    color: var(--text-on-primary);
+    background: color-mix(in srgb, var(--blue) 14%, var(--surface));
+    color: var(--blue-deep);
+    /* 字号必须留 12：mobile:spec 的 fonts 口径统计 <12px 的文本，goal 页预算为 0
+       （见 frontend/scripts/check-mobile-spec.mjs）。收形只动底色与描边，不动字号。 */
     font-size: 12px; font-weight: 800; line-height: 16px;
     text-align: center;
+    box-shadow: 0 0 0 2px var(--surface);
   }
   .panel--collapsed .panel__body { display: none; }
   .panel:not(.panel--collapsed) .panel__body {
