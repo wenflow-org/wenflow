@@ -5,7 +5,7 @@
  * 用户回「就按这个来，确认」（快捷选项文本）推不动——修复后必须命中。
  * 精度优先：误确认 = 生成用户没要的路径，所以改需求/否决/疑问尾缀一律不认。
  */
-import { isProposalConfirmationText } from '../goal-conversation.confirm-text';
+import { isProposalConfirmationText, isExplicitRefusalText } from '../goal-conversation.confirm-text';
 
 describe('isProposalConfirmationText（自然语言确认探测）', () => {
   it('真实缺陷样本：快捷选项文本「就按这个来，确认」命中', () => {
@@ -52,5 +52,30 @@ describe('isProposalConfirmationText（自然语言确认探测）', () => {
     expect(isProposalConfirmationText('这个阶段为什么要学语法？')).toBe(false);
     expect(isProposalConfirmationText('')).toBe(false);
     expect(isProposalConfirmationText(null)).toBe(false);
+  });
+});
+
+describe('isExplicitRefusalText（显式拒绝探测，2026-10-08 真人面守门）', () => {
+  it('C 轨探针样本：犹豫/拒绝命中（压过 confirmProposal flag）', () => {
+    expect(isExplicitRefusalText('再想想吧')).toBe(true);
+    expect(isExplicitRefusalText('先不用了')).toBe(true);
+    expect(isExplicitRefusalText('我还没想好')).toBe(true);
+    expect(isExplicitRefusalText('等等，有点犹豫')).toBe(true);
+    expect(isExplicitRefusalText('换个方向吧')).toBe(true);
+    expect(isExplicitRefusalText('取消')).toBe(true);
+  });
+
+  it('确认文本不误判为拒绝（守门不拦正常确认）', () => {
+    expect(isExplicitRefusalText('就按这个来，确认')).toBe(false);
+    expect(isExplicitRefusalText('确认生成学习路径')).toBe(false);
+    expect(isExplicitRefusalText('好的')).toBe(false);
+    expect(isExplicitRefusalText('没问题，生成吧')).toBe(false);
+    expect(isExplicitRefusalText('')).toBe(false);
+    expect(isExplicitRefusalText(null)).toBe(false);
+  });
+
+  it('改需求尾缀不算拒绝（走普通回合，模型接住调整诉求）', () => {
+    expect(isExplicitRefusalText('时间改成每周 3 天')).toBe(false);
+    expect(isExplicitRefusalText('想先看看大纲')).toBe(false);
   });
 });

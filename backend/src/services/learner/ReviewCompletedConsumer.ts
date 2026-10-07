@@ -204,7 +204,10 @@ export class ReviewCompletedConsumer {
         });
 
         // 2) 调度数据源 → memory_traces（FSRS-6 DSR 调度：按成绩更新稳定性/难度/到期时间）
-        const now = new Date();
+        // C4 时钟漏点（架构审计 2026-10-07）：调度基准必须是**事件发生时刻**而非处理时刻——
+        // 本消费者跑在 outbox.worker 进程级 setInterval 下，ALS 模拟时钟结构性不可达；
+        // 事件 occurredAt 由生产侧（warmup-writeback）带模拟时入队，elapsedDays 守卫同源。
+        const now = event.occurredAt;
         const grade = RATING_TO_GRADE[item.rating];
         const prev: FsrsMemoryState | null = existing
           ? (existing.fsrsStability !== null && existing.fsrsStability !== undefined

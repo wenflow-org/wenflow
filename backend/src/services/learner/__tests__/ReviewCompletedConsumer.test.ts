@@ -128,6 +128,20 @@ describe('ReviewCompletedConsumer 稳定键去重', () => {
     expect(tx.domain_event_inbox.create).toHaveBeenCalledTimes(1)
   })
 
+  it('FSRS 调度基准 = 事件 occurredAt 而非处理时刻（C4 时钟漏点：模拟日历下 dueAt 不漂移）', async () => {
+    // 事件发生在 2023-11-14（固定历史时刻）；若调度误用墙钟，lastSeenAt 会落到处理当天
+    await new ReviewCompletedConsumer().handle(event('evt-clock', 1_700_000_000_000))
+
+    const upsert = tx.memory_traces.upsert.mock.calls[0][0]
+    expect(upsert.create.lastSeenAt.toISOString()).toBe(new Date(1_700_000_000_000).toISOString())
+    expect(upsert.update.lastSeenAt.toISOString()).toBe(new Date(1_700_000_000_000).toISOString())
+    // dueAt 从事件时刻起算（首个 good/hard 间隔约 1-5 天量级，必须晚于事件时刻、
+    // 且远早于「墙钟 + 间隔」的错误值——用 10 天硬帽把漂移钉死）
+    const dueAtMs = upsert.create.dueAt.getTime()
+    expect(dueAtMs).toBeGreaterThan(1_700_000_000_000)
+    expect(dueAtMs).toBeLessThan(1_700_000_000_000 + 10 * 24 * 3600 * 1000)
+  })
+
   it('同会话同概念的第二个事件（不同 eventId，模拟 end_only 后再 complete_task 二次收束）只应用一次', async () => {
     const consumer = new ReviewCompletedConsumer()
     await consumer.handle(event('evt-1', 1_700_000_000_000))

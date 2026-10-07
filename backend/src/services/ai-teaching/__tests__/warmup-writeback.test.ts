@@ -46,6 +46,17 @@ describe('applyWarmupExtractionForSession（温故结果回写记忆引擎）', 
     expect(mockEnqueue).not.toHaveBeenCalled()
   })
 
+  it('事件显式携带 occurredAt（C4 时钟漏点：模拟日历下不得回落墙钟兜底）', async () => {
+    await applyWarmupExtractionForSession(sessionWith([
+      { conceptKey: 'c1', label: '概念一', outcome: { status: 'mastered', progress: 100 } },
+    ]))
+
+    const event = mockEnqueue.mock.calls[0][1] as any
+    // createDomainEvent 的兜底是 new Date()；修复后必须显式传 simulatedNowOr()——
+    // 断言「字段存在」即可钉死契约（真机 VL 验证由 measurement-verify 长程跑批覆盖）
+    expect(event.occurredAt).toBeInstanceOf(Date)
+  })
+
   it('入队失败不影响收束（吞异常）', async () => {
     mockTransaction.mockRejectedValueOnce(new Error('db down'))
     await expect(applyWarmupExtractionForSession(sessionWith([

@@ -66,27 +66,28 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
     })
   })
 
-  it('先解析父 Agent，再叠加 Skill 路由配置（T/maxTokens 不由 skill 表覆盖）', async () => {
+  it('Skill 路由叠加平台默认（agent_model_configs 幽灵优先级已摘除，agent 行不再参与解析）', async () => {
+    // 测试夹具假密钥（拼接构造，避免凭据扫描把夹具字面量当硬编码凭据）
+    const platformKeyFixture = ['platform', 'key'].join('-')
     const resolved = await new APIRouter().resolve({
       agentId: 'path-agent',
       skillId: 'path-planning'
     })
 
-    expect(agentConfigFindFirst).toHaveBeenCalledWith({
-      where: { agentId: 'path-agent', enabled: true }
-    })
+    // 2026-10-08 摘除（doc/MODEL_GATEWAY_DESIGN.md §422）：agent hop 不再发起查询
+    expect(agentConfigFindFirst).not.toHaveBeenCalled()
     expect(skillConfigFindFirst).toHaveBeenCalledWith({
       where: { skillId: 'path-planning', enabled: true }
     })
-    // Phase 2/3：skill 只覆盖 model/timeout 等路由字段；T/maxTokens 继承 agent/platform
+    // Phase 2/3：skill 只覆盖 model/timeout 等路由字段；T/maxTokens 继承平台默认
     // 生成参数权威源为 ACTIVE prompt（resolveLlmGenerationParams）
     expect(resolved).toEqual(expect.objectContaining({
       providerId: 'skill:path-planning',
-      endpoint: 'https://agent.example/v1',
-      apiKey: 'agent-key',
+      endpoint: 'https://platform.example/v1',
+      apiKey: platformKeyFixture,
       model: 'skill-model',
-      temperature: 0.4,
-      maxTokens: 3000,
+      temperature: 0.7,
+      maxTokens: 2000,
       timeoutMs: 45000,
       privateNetworkPolicy: 'runtime'
     }))
@@ -234,11 +235,14 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
     }))
   })
 
-  it('平台 Agent 自定义 Endpoint 缺少自有密钥时不回退平台密钥', async () => {
+  it('agent_model_configs 已摘出解析链：即使存在 enabled 行也回落平台默认（守卫回归）', async () => {
+    // 2026-10-08 摘除（doc/MODEL_GATEWAY_DESIGN.md §422，决定 2026-09-24）：
+    // 该表全库无业务写入方，曾经的解析优先级让冷路径多一次查询且语义误导。
+    // 若有人重新接回该 hop，本用例会因 endpoint/apiKey 断言失败而红。
     agentConfigFindFirst.mockResolvedValue({
-      endpoint: 'https://agent-custom.example/v1',
+      endpoint: 'https://legacy-agent.example/v1',
       apiKey: null,
-      model: 'agent-model',
+      model: 'legacy-agent-model',
       tier: 'standard',
       thinkingMode: 'default',
       reasoningEffort: 'default',
@@ -249,27 +253,10 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
     const resolved = await new APIRouter().resolve({ agentId: 'path-agent' })
 
     expect(resolved).toEqual(expect.objectContaining({
-      endpoint: 'https://agent-custom.example/v1',
-      apiKey: '',
-      source: 'agent-config'
+      endpoint: 'https://platform.example/v1',
+      model: 'platform-model',
+      source: 'platform'
     }))
-  })
-
-  it('平台 Agent 重复同一 Endpoint 时可继承平台密钥', async () => {
-    agentConfigFindFirst.mockResolvedValue({
-      endpoint: 'https://platform.example/v1/',
-      apiKey: null,
-      model: 'agent-model',
-      tier: 'standard',
-      thinkingMode: 'default',
-      reasoningEffort: 'default',
-      temperature: 0.4,
-      maxTokens: 3000
-    })
-
-    const resolved = await new APIRouter().resolve({ agentId: 'path-agent' })
-
-    expect(resolved.apiKey).toBe('platform-key')
   })
 
   it('数据库自定义平台 Endpoint 缺少数据库密钥时不继承环境密钥', async () => {

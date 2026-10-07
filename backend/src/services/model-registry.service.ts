@@ -262,11 +262,12 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     }
   }
 
-  // 隐藏真源可见性:agent 级覆盖优先于平台默认路由,遗留行会让平台级模型切换对部分 agent 失效
+  // 遗留表检测:agent_model_configs 已于 2026-10-08 摘出路由解析链（doc/MODEL_GATEWAY_DESIGN.md
+  // §422 决定），遗留行不再影响路由——只提示清理，不再说「优先级高于平台默认」。
   try {
     const agentOverrideCount = await systemPrisma.agent_model_configs.count({ where: { enabled: true } });
     if (agentOverrideCount > 0) {
-      warnings.push(`${agentOverrideCount} 个 agent 存在模型级覆盖（agent_model_configs，优先级高于平台默认路由）。若平台默认模型切换未生效，请先检查这些覆盖。`);
+      warnings.push(`${agentOverrideCount} 行 agent_model_configs 遗留数据（已不参与路由解析，可清理）。`);
     }
   } catch { /* 总览是诊断页:统计失败不阻塞其余信息 */ }
 

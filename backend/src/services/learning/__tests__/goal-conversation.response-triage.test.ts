@@ -279,6 +279,54 @@ describe('advisory 默认仍推进路径生成（零行为变化）', () => {
   });
 });
 
+describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜像）', () => {
+  it('flag=true 但文本明示犹豫 → 不生成路径，走普通模型回合', async () => {
+    seedConversation({
+      stage: 'proposing',
+      collectedData: JSON.stringify({
+        messages: [],
+        understanding: { real_problem: '不知道复盘要回答哪几个问题' },
+        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+      }),
+    });
+    mockExecuteSkill.mockResolvedValue(buildAiResponse({
+      userVisible: '好，我们不着急，你想先调整哪部分？',
+      stage: 'proposing',
+    }));
+
+    const result = await goalConversationService.continueConversation(
+      'conv-1',
+      '再想想吧',
+      'user-1',
+      { confirmProposal: true }
+    );
+
+    // C 轨探针 C 实锤过的路径：旧代码当轮生成路径；现在拒绝文本压过 flag
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(result.internal.core.stage).toBe('proposing');
+  });
+
+  it('flag=true 且确认文本 → 照常生成（首选通道不受影响）', async () => {
+    seedConversation({
+      stage: 'proposing',
+      collectedData: JSON.stringify({
+        messages: [],
+        understanding: { real_problem: '不知道复盘要回答哪几个问题' },
+        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+      }),
+    });
+
+    await goalConversationService.continueConversation(
+      'conv-1',
+      '就按这个来',
+      'user-1',
+      { confirmProposal: true }
+    );
+
+    expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('gated 模式：非学习路径不自动推进', () => {
   it('mode !== learning_path 时改为待确认项，不调用 runGoalAsync', async () => {
     mockPlatformSettingFindUnique.mockResolvedValue({ key: 'responseTriageMode', value: 'gated' });

@@ -15,6 +15,7 @@ import { withTransaction } from '../../utils/with-transaction';
 import { logger } from '../../utils/logger';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
+import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { mapReviewStatusToRating } from '../learner/ReviewCompletedConsumer';
 import type { TeachingSessionRecord } from './TeachingSessionRepository';
 
@@ -94,6 +95,11 @@ export async function enqueueReviewCompletedEvent(
       aggregateId: session.id,
       userId: session.userId,
       source: 'session-finalization',
+      // C4 时钟漏点（架构审计 2026-10-07）：入队必须显式带 occurredAt——
+      // contracts 兜底是墙钟，VL 模拟日历下复习事件会拿到真实时间，
+      // 消费侧 FSRS 的 dueAt/elapsedDays 全部失真。收束链跑在
+      // runWithSimulatedClock 上下文内，simulatedNowOr 对真人返回墙钟、对 VL 返回模拟时。
+      occurredAt: simulatedNowOr(),
       data: {
         sessionId: session.id,
         mode: session.mode || 'review',

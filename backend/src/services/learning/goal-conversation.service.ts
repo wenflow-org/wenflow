@@ -22,7 +22,7 @@ import {
   resolvePrerequisiteCheckResultsFromUnderstanding,
 } from './learner-load-profile';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
-import { isProposalConfirmationText } from './goal-conversation.confirm-text';
+import { isProposalConfirmationText, isExplicitRefusalText } from './goal-conversation.confirm-text';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
 import systemPrisma from '../../config/system-database';
 import {
@@ -614,7 +614,18 @@ async continueConversation(
         // 重复"请在下面点一下确认"而用户回「就按这个来，确认」永远推不动（confidence 卡 0.88）。
         // 文本探测是高精度白名单（只认最后一个语义段的纯确认短语，否决/改需求尾缀一律不认，
         // 见 goal-conversation.confirm-text.ts 文件头），误确认面收得很窄。
-        const confirmProposal = options?.confirmProposal === true || isProposalConfirmationText(userReply);
+        // 显式拒绝不得代签（2026-10-08，R6 P1-12 真人面镜像）：标志仍首选，但文本明示
+        // 拒绝/犹豫时（C 轨探针实锤「再想想吧」+ flag=true 当轮生成路径）不再代签，
+        // 按普通回复推进由模型接住犹豫——误确认生成没人要的路径，比不确认伤。
+        let confirmProposal = options?.confirmProposal === true || isProposalConfirmationText(userReply);
+        if (options?.confirmProposal === true && isExplicitRefusalText(userReply)) {
+          confirmProposal = false;
+          logger.info('[goal-conversation] 显式拒绝文本压过 confirmProposal 标志，按普通回复推进', {
+            conversationId,
+            userId,
+            replyPreview: userReply.slice(0, 40),
+          });
+        }
 
         if (conversation.stage === 'proposing' && confirmProposal) {
           if (options?.confirmProposal !== true) {

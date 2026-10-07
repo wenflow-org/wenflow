@@ -61,3 +61,44 @@ export function isProposalConfirmationText(text: string | null | undefined): boo
   if (!normalized) return false;
   return CONFIRM_SEGMENT_PATTERNS.some((pattern) => pattern.test(normalized));
 }
+
+/**
+ * 显式拒绝探测（2026-10-08，架构审计/宽域 C 轨后补真人面守门）。
+ *
+ * 背景：R6 P1-12 给 VL 仿真协调器加了「显式拒绝不得代签」（shouldAutoConfirmGoalProposal
+ * 三闸），但真人服务边界的 confirmProposal UI 标志仍可压过拒绝文本（C 轨探针 C 实锤：
+ * 犹豫文本 + flag=true → 当轮生成路径）。UI 标志=确认按钮点击，是首选通道不假；
+ * 但文本**明示拒绝**时点击不再代签——误确认=生成一条用户没要的路径，比不确认伤。
+ *
+ * 精度优先：只认「最后一个语义段是纯拒绝/犹豫短语」，与确认白名单同构（整段匹配、
+ * ≤12 字、礼貌尾缀跳过）；否则按普通回复推进，模型自然接住犹豫。确认快捷按钮的
+ * 自带文案（「确认生成…」）不含拒绝词，不受影响。
+ */
+const REFUSAL_SEGMENT_PATTERNS: RegExp[] = [
+  /^(不|不用|不要|不行|不好|先不|先别|别|暂不|暂时不|还没|还没有|没想好|没准备好)$/,
+  /^(再想想|再考虑|再看看|考虑一下|考虑下|想想|等等|等一下|等会儿|慢点)$/,
+  /^(换个|换一个|换下|重新|重新来|重新规划|重新想想|不对|不对吧|有问题|有疑问|我质疑)$/,
+  /^(不要了|不确认|不生成|先不生成|先不确认|取消)$/,
+];
+
+/**
+ * 用户回复是否**明示拒绝/犹豫**（与 isProposalConfirmationText 同构：只看最后一个语义段）。
+ * 命中时即使带 confirmProposal 标志也不代签（调用方按普通回复处理）。
+ */
+export function isExplicitRefusalText(text: string | null | undefined): boolean {
+  const value = String(text ?? '');
+  if (!value || value.length > 120) return false;
+  const segments = value
+    .split(/[。.!！?？,，;；、\n\r]+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (!segments.length) return false;
+  let index = segments.length - 1;
+  while (index >= 0 && COURTESY_TAIL.test(segments[index])) index--;
+  if (index < 0) return false;
+  const segment = segments[index];
+  if (segment.length > CONFIRM_SEGMENT_MAX_CHARS) return false;
+  const normalized = normalizeSegment(segment);
+  if (!normalized) return false;
+  return REFUSAL_SEGMENT_PATTERNS.some((pattern) => pattern.test(normalized));
+}

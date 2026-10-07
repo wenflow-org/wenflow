@@ -9,7 +9,6 @@ import { selectModelForAlias } from './model-alias';
 import { reloadLlmProvidersIfChanged, resolveModelRef } from '../../config/models.config';
 
 const PLATFORM_KEY_CONTEXT = 'system.platform_api_configs.apiKey';
-const AGENT_KEY_CONTEXT = 'system.agent_model_configs.apiKey';
 const SKILL_KEY_CONTEXT = 'system.skill_model_configs.apiKey';
 const USER_KEY_CONTEXT = 'main.user_api_configs.apiKey';
 const USER_AGENT_KEY_CONTEXT = 'main.user_agent_model_configs.apiKey';
@@ -27,17 +26,6 @@ interface Config {
   /** 通道级结构化输出默认（user-provider 继承 platform 通道设置；skill paramOverrides 仍可覆盖） */
   responseFormat?: 'none' | 'json_object';
   privateNetworkPolicy: ResolvedRoute['privateNetworkPolicy'];
-}
-
-interface AgentConfigRecord {
-  endpoint: string | null;
-  apiKey: string | null;
-  model: string | null;
-  tier: string | null;
-  thinkingMode?: string | null;
-  reasoningEffort?: string | null;
-  temperature: number | null;
-  maxTokens: number | null;
 }
 
 /**
@@ -232,17 +220,9 @@ export class APIRouter {
       }
     }
 
-    if (caller.agentId) {
-      const agentConfig = await this.getAgentConfig(caller.agentId);
-      if (agentConfig) {
-        return this.withRequestTimeout({
-          ...agentConfig,
-          providerType: 'openai-compatible',
-          source: 'agent-config'
-        }, caller.agentId);
-      }
-    }
-
+    // agent_model_configs 幽灵优先级已于 2026-10-08 摘除（决定 2026-09-24 落笔，
+    // doc/MODEL_GATEWAY_DESIGN.md §422）：全库无业务写入方（仅历史迁移脚本），
+    // 该 hop 让路由冷路径多一次查询且语义误导。表与迁移脚本保留，仅摘解析链。
     const platformDefault = await this.getPlatformDefault();
     return this.withRequestTimeout(platformDefault, caller.agentId);
   }
@@ -435,30 +415,6 @@ export class APIRouter {
     }
   }
 
-  private async getAgentConfig(agentId: string): Promise<Config | null> {
-    try {
-      const config = await systemPrisma.agent_model_configs.findFirst({
-        where: {
-          agentId,
-          enabled: true
-        }
-      });
-
-      if (!config) {
-        return null;
-      }
-
-      return this.buildAgentConfig(agentId, config);
-    } catch (error) {
-      logger.error('[api-gateway] fetch agent config failed', {
-        agentId,
-        errorMessage: error instanceof Error ? error.message : String(error)
-      });
-      if (error instanceof SecretCryptoError) throw error;
-      return null;
-    }
-  }
-
   private async getPlatformConfigRecord() {
     return systemPrisma.platform_api_configs.findFirst({
       where: { id: 'platform' },
@@ -501,43 +457,6 @@ export class APIRouter {
       return configuredApiKey;
     }
     return endpointsMatch(target, this.resolveBaseEndpoint()) ? process.env.AI_API_KEY || '' : '';
-  }
-
-  private async buildAgentConfig(agentId: string, config: AgentConfigRecord): Promise<Config> {
-    const platformConfig = await this.getPlatformConfigRecord();
-    const tier = (config.tier || '').toLowerCase();
-    const isReasoning = tier === 'reasoning';
-    const configuredEndpoint = (config.endpoint || '').trim();
-    const inheritedEndpoint = (isReasoning ? platformConfig?.reasoningEndpoint : undefined)
-      || platformConfig?.apiUrl
-      || this.resolveBaseEndpoint();
-    const endpoint = configuredEndpoint || inheritedEndpoint;
-    const configuredApiKey = configuredEndpoint
-      ? decryptSecret(config.apiKey, AGENT_KEY_CONTEXT) || ''
-      : '';
-    const apiKey = configuredEndpoint
-      ? configuredApiKey
-        || (endpointsMatch(configuredEndpoint, inheritedEndpoint)
-          ? this.resolvePlatformApiKey(platformConfig, inheritedEndpoint)
-          : '')
-      : this.resolvePlatformApiKey(platformConfig, inheritedEndpoint);
-
-    const overrides = platformConfig ? this.platformAliasOverrides(platformConfig) : null;
-    const model = isReasoning
-      ? this.resolveReasoningModel(config.model || platformConfig?.defaultReasoningModel, overrides)
-      : this.resolveModel(config.model || platformConfig?.defaultModel, overrides);
-
-    return {
-      providerId: `agent:${agentId}`,
-      endpoint,
-      apiKey,
-      model,
-      thinkingMode: this.normalizeThinkingMode(config.thinkingMode),
-      reasoningEffort: this.normalizeReasoningEffort(config.reasoningEffort),
-      temperature: config.temperature ?? platformConfig?.defaultTemperature ?? 0.7,
-      maxTokens: config.maxTokens ?? platformConfig?.defaultMaxTokens ?? 2000,
-      privateNetworkPolicy: 'runtime'
-    };
   }
 
   private normalizeThinkingMode(value?: string | null): 'default' | 'enabled' | 'disabled' {
