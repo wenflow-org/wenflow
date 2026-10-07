@@ -1423,12 +1423,13 @@ function shuffleScenes() {
   box-shadow: var(--mk-focus-ring);
 }
 /* 资料附件：输入框左下回形针入口（主流附件模式），角标显示已传份数。
-   与右侧首行文字中线对齐：首行中心 = textarea 上内边距 10 + 行高一半 10.5 = 20.5，
-   按钮 32 高、中线偏 16，故 margin-top: 4.5px 顶到行首。autogrow 只改高度，首行位置恒定。 */
+   与首行文字中线对齐：按钮 44 高是盒内最高子项，flex-start 顶到内容上缘后其中心 22
+   恰好等于首行中心（textarea 居中于同一内容区 → 0.75 + 上内边距 10 + 半行高 11.25 = 22）。
+   原先靠 margin-top: 4.5px 硬顶，那是按「按钮 32 高」算的陈旧偏移；按钮早已 44，
+   这 4.5px 反而把回形针压低 2px，还把输入盒从 57 撑到 61。autogrow 只改高度，首行位置恒定。 */
 .composer__attach {
   position: relative;
   align-self: flex-start;
-  margin-top: 4.5px;
   flex: 0 0 auto;
   display: inline-flex; align-items: center; justify-content: center;
   width: 44px; height: 44px;
@@ -2348,15 +2349,24 @@ function shuffleScenes() {
   /* iOS Safari 聚焦 <16px 的输入框会触发视口自动放大，打完字还要 pinch 收回——
      textarea 必须留 16px；想让空态看着轻一点只能压 placeholder（占位符字号不影响聚焦判定）。
      盒内继续收紧：外内边距左 12→8、gap 10→8、textarea 上下 10→8、发送键 40→36，盒高 62→54。
-     回形针与首行文字中线对齐：上内边距 8 + 半行高 12 = 20，按钮 32 高 → margin-top 4。
-     左右内边距都收到 6：回形针/发送键的图标视觉内缩 ≈14.5 / 16.5px，两侧基本对称且贴边。 */
+     左右内边距都收到 6：回形针/发送键的图标视觉内缩 ≈14.5 / 16.5px，两侧基本对称且贴边。
+     回形针不再写 margin-top：按钮与内容区等高时 flex-start 的中心本就落在首行中线上。 */
   .composer__box { padding: 6px; gap: 8px; }
   .composer__textarea { font-size: 16px; padding: 8px 0; }
   .composer__textarea::placeholder { font-size: 15px; }
-  .composer__attach { margin-top: 4px; }
   .composer__attach svg { width: 14px; height: 14px; }
   .composer__send { width: 44px; height: 44px; }
   .composer__send:not(.composer__send--stop) svg { width: 15px; height: 15px; }
+  /* 会话态底条比入口态更紧凑：入口态是首屏 hero 输入，保留 44 触控档（它也是 mobile:spec
+     的量测态，改动会动到门禁口径）；会话态是常驻底条，控件收到 36 后输入盒由 61 收到 ≈49，
+     盒子贴着单行文字，不再被回形针撑出一圈死白，红色停止键也不再是整条最重的一块。 */
+  .chat > .composer .composer__box { min-height: 48px; }
+  .chat > .composer .composer__attach { width: 36px; height: 36px; }
+  .chat > .composer .composer__send { width: 36px; height: 36px; }
+  .chat > .composer .composer__textarea { padding: 6px 0; }
+  /* 图标随按钮同档放大到 16：14px 图标落在 36 的键里会显得更小、与发送键不同权重 */
+  .chat > .composer .composer__attach svg,
+  .chat > .composer .composer__send:not(.composer__send--stop) svg { width: 16px; height: 16px; }
   /* 方案确认卡（三段 head/body/foot，body 内部滚动、foot 已贴底固定）：
      窄屏收紧三段内边距（24/28 在 320 下只剩 250px 内容宽）。
      旧的 `.proposal { padding }` + `.proposal__actions { position:sticky }` 补丁已废——
