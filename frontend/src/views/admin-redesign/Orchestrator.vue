@@ -757,7 +757,11 @@ const govMetaTitle = computed(() =>
 /* 治理徽章随行：真 <button> 复用 .mk-badge 皮（审核 #96）——只补按钮默认字族与手型，
    不再对 span 手写 cursor 补丁；与阶段 id 对之间留 6px */
 .orch-handoff__pair .mk-badge { margin-left: 6px; }
-.orch-handoff__badge-btn { font-family: inherit; cursor: pointer; }
+/* WCAG 2.5.8（Target Size, AA）要求触控目标 ≥ 24×24。本钮 1080/2K 档实测只有 20–22px 高
+   （.mk-badge--sm 的 padding 1px + line-height），同排徽章间距又只有 4px，
+   「相邻目标间距足够」的豁免也不成立——只有 4K 档字号放大后才到 37px。
+   .mk-badge 本身已是 inline-flex + align-items:center，补 min-height 即可居中撑到 24。 */
+.orch-handoff__badge-btn { font-family: inherit; cursor: pointer; min-height: 24px; }
 /* 传递字段 = 逐枚徽章（mk-badge--sm），格内 flex 换行；不再用点号长串（独吞 65% 列宽） */
 .orch-handoff__fields { white-space: normal; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 /* P2-12（设计评审 4.2）：上/下游 Agent 列仅 115px，simulation-agent 词中断成 simulatio/n-agent
