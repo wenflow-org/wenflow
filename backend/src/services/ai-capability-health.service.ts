@@ -33,13 +33,20 @@ const CAPABILITIES: Array<{ id: string; caller: CallerInfo }> = [
 ];
 
 const STALE_AFTER_MS = 5 * 60_000;
-const DEGRADED_LATENCY_MS = 8_000;
+/**
+ * 「降级」延迟阈值。2026-10-08 从 8s 放宽到 30s：切换 dsv4.1+本地 newapi 后
+ * 真实调用 P50 ≈ 20-30s（长课 60-90s 也正常），8s 阈值让健康页恒挂「降级」=假警报。
+ */
+const DEGRADED_LATENCY_MS = 30_000;
 /**
  * 金丝雀探测超时预算。2026-08-30 从 10s 放宽到 25s：
  * 实测上游 deepseek-v4-flash 正常响应 5-9s（并发时更慢），10s 预算频繁击穿，
  * 导致启动金丝雀 14 次超时被误判为 UPSTREAM_UNAVAILABLE 并写坏 connectionStatus。
+ * 2026-10-08 从 25s 放宽到 60s：dsv4.1+本地 newapi（三国/环旭池）延迟画像再次抬高
+ * （微小探针在 VL 跑批并发下也观测到排队 >25s 全体 CALLER_ABORTED）——同族假警报。
  */
-const CANARY_TIMEOUT_MS = 25_000;
+const CANARY_TIMEOUT_MS = 60_000;
+export { CANARY_TIMEOUT_MS };
 
 function initialHealth(id: string): AICapabilityHealth {
   return {

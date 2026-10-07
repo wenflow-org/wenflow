@@ -18,7 +18,7 @@ jest.mock('../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
 }))
 
-import { AICapabilityHealthService } from '../ai-capability-health.service'
+import { AICapabilityHealthService, CANARY_TIMEOUT_MS } from '../ai-capability-health.service'
 
 const route = {
   providerType: 'openai-compatible' as const,
@@ -52,7 +52,7 @@ describe('AICapabilityHealthService', () => {
     expect(mockResolveRoute).toHaveBeenCalledTimes(5)
     expect(mockExecute).toHaveBeenCalledTimes(1)
     expect(mockExecute).toHaveBeenCalledWith(
-      expect.objectContaining({ endpoint: route.endpoint, model: route.model, timeoutMs: 25_000 }),
+      expect.objectContaining({ endpoint: route.endpoint, model: route.model, timeoutMs: CANARY_TIMEOUT_MS }),
       expect.objectContaining({ max_tokens: 64, temperature: 0 }),
       expect.objectContaining({ sourceEntry: 'system-canary', callerAgent: 'system-canary' })
     )
@@ -139,7 +139,7 @@ describe('AICapabilityHealthService', () => {
     }))
   })
 
-  it('单次探测总时长到二十五秒时主动取消并归类为探测超时', async () => {
+  it('单次探测到 CANARY_TIMEOUT_MS 时主动取消并归类为探测超时', async () => {
     jest.useFakeTimers()
     try {
       const service = new AICapabilityHealthService()
@@ -148,7 +148,7 @@ describe('AICapabilityHealthService', () => {
       }))
 
       const refresh = service.refresh()
-      await jest.advanceTimersByTimeAsync(25_000)
+      await jest.advanceTimersByTimeAsync(CANARY_TIMEOUT_MS)
       const snapshot = await refresh
 
       expect(snapshot.capabilities[0]).toEqual(expect.objectContaining({
@@ -171,10 +171,10 @@ describe('AICapabilityHealthService', () => {
 
       // 连续两次探测超时：不置 unavailable（PROBE_TIMEOUT 不计入 streak）
       const first = service.refresh()
-      await jest.advanceTimersByTimeAsync(25_000)
+      await jest.advanceTimersByTimeAsync(CANARY_TIMEOUT_MS)
       await first
       const second = service.refresh()
-      await jest.advanceTimersByTimeAsync(25_000)
+      await jest.advanceTimersByTimeAsync(CANARY_TIMEOUT_MS)
       const snapshot = await second
 
       expect(snapshot.capabilities[0]).toEqual(expect.objectContaining({
