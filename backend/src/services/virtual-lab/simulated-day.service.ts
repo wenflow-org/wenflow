@@ -18,7 +18,6 @@ import {
   endOfDay,
   addDaysToDayKey,
   normalizeTimeZone,
-  formatLocal,
 } from '../time/day-boundary';
 import learningStateService, { type AggregatedLearningState } from '../learning/learning-state.service';
 import { derivePacing } from '../learner/LearnerSnapshotService';
@@ -291,25 +290,11 @@ export async function buildDayEntry(
   tz: string = getAppTimeZone(),
 ): Promise<SimulatedDayEntry> {
   const win = resolveDayWindow(baseDate, dayIndex, tz);
-  // P0 护栏：模拟读不得越过真实"现在"（防把真实历史卷进聚合）；未来日直接返回空（不读）
-  const asOf = new Date(Math.min(win.asOf.getTime(), now.getTime()));
-  const isFuture = win.dayStart.getTime() > now.getTime();
-  if (isFuture) {
-    return {
-      dayIndex,
-      simulatedDay: win.simulatedDay,
-      asOf: asOf.toISOString(),
-      dayLoad: null,
-      metrics: null,
-      pacing: null,
-      perPath: [],
-      signals: [],
-      tasks: [],
-      difficultyAdjustments: [],
-      reviewQuota: { limitLoad: 0, usedLoad: 0, remainingLoad: 0, usedCount: 0 },
-      memory: { traceCount: 0, dueCount: 0, fragileCount: 0, stableCount: 0, avgRetention: null },
-    };
-  }
+  // 模拟时间线独立于真实时钟：asOf 取该模拟日的窗口末端，**不**与真实 now 取小。
+  // 未来日（相对真实现在）同样正常构建——其日窗口内的任务/会话/证据天然为空，
+  // 累计类指标按 asOf 口径读取（= 截至该模拟日的状态），不会把真实历史错记成该日产出。
+  // 原「未来日直接返回空且不读」护栏已按产品要求移除（2026-10-07）。
+  const asOf = win.asOf;
   const degraded: DegradationTelemetry[] = [];
   const degradeTo = <T>(dimension: string, fallback: T, mitigation: string) => (error: unknown): T => {
     degraded.push(recordDegradation({
@@ -450,9 +435,10 @@ export function planClockAdvance(
 ): { indexes: number[]; nextClock: Record<string, any> } | null {
   const want = Math.max(1, Math.trunc(days) || 1);
   const indexes = collectCourseDayIndexes(clock.baseDate, clock.dayIndex, clock.courseWeekdays, want, clock.timezone)
-    .filter((index) => index <= clock.maxSimulatedDays)
-    // P0 护栏：不推进到"未来日"（避免 asOf 越过真实现在、把真实历史卷进聚合）
-    .filter((index) => resolveDayWindow(clock.baseDate, index, clock.timezone).dayStart.getTime() <= now.getTime());
+    // 上限只受模拟自身的天数约束（maxSimulatedDays），**不受真实时钟约束**：
+    // 虚拟学习者的时间线独立于物理世界（可跨日推进以便观察/校准），
+    // 原「未来日」护栏（dayStart > 真实 now 即拒绝）已按产品要求移除（2026-10-07）。
+    .filter((index) => index <= clock.maxSimulatedDays);
   if (!indexes.length) return null;
 
   const history = Array.isArray(rawClock?.history) ? [...rawClock!.history] : [];
@@ -487,7 +473,7 @@ export function planClockAdvance(
 export function explainPlanFailure(
   clock: SimulationClockView,
   days: number,
-  now: Date = new Date(),
+  _now: Date = new Date(),
 ): { reason: 'empty_schedule' | 'day_limit' | 'future_day' | 'none'; message: string; nextCourseDay?: string } {
   const want = Math.max(1, Math.trunc(days) || 1);
   const candidates = collectCourseDayIndexes(clock.baseDate, clock.dayIndex, clock.courseWeekdays, want, clock.timezone);
@@ -505,16 +491,12 @@ export function explainPlanFailure(
     };
   }
   const next = resolveDayWindow(clock.baseDate, withinCap[0], clock.timezone);
-  if (next.dayStart.getTime() <= now.getTime()) {
-    // 候选日已开始但 plan 仍为 null:状态自相矛盾,多半是调用方传参不一致;不猜原因
-    return { reason: 'none', nextCourseDay: next.simulatedDay, message: `未发现可解释的失败:下一个上课日(${next.simulatedDay})按当前口径应可推进` };
-  }
+  // 时间线独立于真实时钟：候选日是否"已按真实时间开始"不再影响可推进性，
+  // 原 future_day 失败因已移除（2026-10-07，虚拟学习者可跨日推进）。此分支恒为 none。
   return {
-    reason: 'future_day',
+    reason: 'none',
     nextCourseDay: next.simulatedDay,
-    message: `下一上课日(${next.simulatedDay})尚未开始:模拟日不可越过真实当前时间(P0 护栏)。`
-      + `该日按 ${clock.timezone} 日界生效（${formatLocal(next.dayStart, clock.timezone)}）`
-      + `,到点后再推进,或将 baseDate 调整为已开始的日期`,
+    message: `未发现可解释的失败:下一个上课日(${next.simulatedDay})按当前口径应可推进`,
   };
 }
 
@@ -554,6 +536,15 @@ export function shouldAdvanceSimulationClock(input: {
 }): boolean {
   if (!input.runTasks) return true;
   return input.learning?.started === true;
+}
+
+/** 自动推进的真实时间节流判定（仅**自动**路径调用；手动 advance-day 跨日推进不受此限）：
+ * 计划的最末模拟日是否已按真实时间开始。planClockAdvance 解除真实时钟约束后，
+ * 自动路径靠它保留「每真实日最多推进一个模拟日」的节拍。 */
+export function isAutoAdvancePaced(clock: SimulationClockView, indexes: number[], now: Date): boolean {
+  const last = indexes[indexes.length - 1];
+  if (last === undefined) return false;
+  return resolveDayWindow(clock.baseDate, last, clock.timezone).dayStart.getTime() <= now.getTime();
 }
 
 export function summarizeDayLearning(

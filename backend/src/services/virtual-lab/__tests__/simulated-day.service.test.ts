@@ -8,6 +8,7 @@ import {
   collectCourseDayIndexes,
   previousCourseDayGap,
   planClockAdvance,
+  isAutoAdvancePaced,
   explainPlanFailure,
   resolutionEnteredLearn,
   summarizeDayLearning,
@@ -214,14 +215,16 @@ describe('buildDayEntry / buildDayTimeline（注入 deps）', () => {
     expect(clamped.days.map((d) => d.dayIndex)).toEqual([1, 2]);
   });
 
-  it('P0 护栏：未来日返回空且不读（防把真实历史卷进聚合）', async () => {
+  it('时间线独立：未来日（相对真实时间）正常构建，asOf 取该模拟日末端而非真实 now', async () => {
     const deps = makeDeps();
-    // baseDate 2026-09-16，dayIndex 3 = 2026-09-19；now=2026-09-17 → 未来日
+    // baseDate 2026-09-16，dayIndex 3 = 2026-09-19；now=2026-09-17 → 相对真实时间仍在未来
     const entry = await buildDayEntry('u1', '2026-09-16', 3, deps, new Date('2026-09-17T00:00:00Z'));
-    expect(entry.dayLoad).toBeNull();
-    expect(entry.tasks).toEqual([]);
-    expect(entry.memory.traceCount).toBe(0);
-    expect(deps.getAggregatedState).not.toHaveBeenCalled();
+    expect(entry.simulatedDay).toBe('2026-09-19');
+    // 模拟时间线独立：asOf = 该模拟日末端（本地 09-19 23:59:59.999 = 15:59:59.999Z），不被真实 now 钳制
+    expect(entry.asOf).toBe('2026-09-19T15:59:59.999Z');
+    expect(deps.getAggregatedState).toHaveBeenCalled(); // 正常构建（不再短路返回空）
+    // 倒灌护栏仍在：lastSeenAt > asOf 的痕迹不参与保持率统计（fixture 里 09-30 那条被排除）
+    expect(entry.memory.avgRetention).toBeCloseTo(0.675, 3);
   });
 
   it('某路读取失败 → 该维度保底且 entry.degraded 打标（不再静默）', async () => {
@@ -301,30 +304,45 @@ describe('课表与推进（isCourseDay / collectCourseDayIndexes / planClockAdv
     expect(planClockAdvance(atLimit, { baseDate: '2026-09-14', dayIndex: 3 }, 1, new Date('2026-09-20T12:00:00Z'))).toBeNull();
   });
 
-  it('P0 护栏：planClockAdvance 不推进到未来日', () => {
+  it('时间线独立：planClockAdvance 可推进到相对真实时间仍在未来的模拟日（仅受 maxSimulatedDays 约束）', () => {
     const clock = resolveSimulationClock({
       stageResultsClock: { baseDate: '2026-09-14', dayIndex: 0 },
       profileClock: { enabled: true },
       settings: { ...SETTINGS, courseWeekdays: WEEK },
       sessionCreatedAt: new Date('2026-09-14T00:00:00Z'),
     });
-    // now = 09-14 当天：下一个上课日 09-15 的 dayStart 已 > now → 无可推进
-    expect(planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, new Date('2026-09-14T12:00:00Z'))).toBeNull();
-    // now = 09-15：第 1 天可推进
+    // now = 09-14 当天：下一个上课日 09-15 相对真实时间仍是未来——按新口径可推进（时间线独立）
+    expect(planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, new Date('2026-09-14T12:00:00Z'))?.indexes).toEqual([1]);
+    // now = 09-15：同样可推进（真实时间不参与判定）
     expect(planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, new Date('2026-09-15T12:00:00Z'))?.indexes).toEqual([1]);
   });
 
-  it('P0 护栏按**应用时区日界**：本地 00:30 就能推进当日（旧 UTC 口径要等本地 08:00）', () => {
+  it('时间线独立：不再有真实时间日界——本地未开始的次日同样可推进', () => {
     const clock = resolveSimulationClock({
       stageResultsClock: { baseDate: '2026-09-14', dayIndex: 0, timezone: 'Asia/Shanghai' },
       profileClock: { enabled: true },
       settings: { ...SETTINGS, courseWeekdays: WEEK, timezone: 'Asia/Shanghai' },
       sessionCreatedAt: new Date('2026-09-14T00:00:00Z'),
     });
-    // 本地 09-15 00:30 = 2026-09-14T16:30Z：新口径下 09-15 的本地日已开始 → 可推进
+    // 本地 09-15 00:30 = 2026-09-14T16:30Z：可推进
     expect(planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, new Date('2026-09-14T16:30:00Z'))?.indexes).toEqual([1]);
-    // 本地 09-14 23:30 = 2026-09-14T15:30Z：09-15 还没开始 → 仍拒绝
-    expect(planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, new Date('2026-09-14T15:30:00Z'))).toBeNull();
+    // 本地 09-14 23:30 = 2026-09-14T15:30Z：09-15 尚未开始——旧口径拒绝，新口径同样可推进（时间线独立）
+    expect(planClockAdvance(clock, { baseDate: '2026-09-14', dayIndex: 0 }, 1, new Date('2026-09-14T15:30:00Z'))?.indexes).toEqual([1]);
+  });
+
+  it('isAutoAdvancePaced：自动推进节流——最末模拟日已按真实时间开始才放行（手动路径不调用）', () => {
+    const clock = resolveSimulationClock({
+      stageResultsClock: { baseDate: '2026-09-14', dayIndex: 0 },
+      profileClock: { enabled: true },
+      settings: { ...SETTINGS, courseWeekdays: WEEK },
+      sessionCreatedAt: new Date('2026-09-14T00:00:00Z'),
+    });
+    // 计划推进到第 1 天（09-15）：真实 09-15 12:00 已开始 → 放行
+    expect(isAutoAdvancePaced(clock, [1], new Date('2026-09-15T12:00:00Z'))).toBe(true);
+    // 真实 09-14 12:00：09-15 未开始 → 节流（不放行，防 5min tick 冲成跑马机）
+    expect(isAutoAdvancePaced(clock, [1], new Date('2026-09-14T12:00:00Z'))).toBe(false);
+    // 空计划 → 不放行
+    expect(isAutoAdvancePaced(clock, [], new Date('2026-09-15T12:00:00Z'))).toBe(false);
   });
 });
 
@@ -339,30 +357,20 @@ describe('explainPlanFailure: advance-day null 计划三分类', () => {
       sessionCreatedAt: new Date('2026-09-14T00:00:00Z'),
     });
 
-  it('future_day: 下一上课日尚未开始(2026-09-21 现场事故的还原)', () => {
+  it('时间线独立：explainPlanFailure 不再把"真实未来日"当失败（原 future_day 分支已移除）', () => {
     const clock = clockOf();
     const why = explainPlanFailure(clock, 1, new Date('2026-09-14T12:00:00Z'));
-    expect(why.reason).toBe('future_day');
+    expect(why.reason).toBe('none');
     expect(why.nextCourseDay).toBe('2026-09-15');
-    expect(why.message).toContain('尚未开始');
+    expect(why.message).toContain('应可推进');
   });
 
-  it('future_day 文案带应用时区日界：到点时刻按配置时区展示（Asia/Shanghai 本地 00:00）', () => {
-    const clock = clockOf({ settings: { timezone: 'Asia/Shanghai' } });
-    const why = explainPlanFailure(clock, 1, new Date('2026-09-14T12:00:00Z'));
-    expect(why.reason).toBe('future_day');
-    expect(why.message).toContain('按 Asia/Shanghai 日界生效');
-    expect(why.message).toContain('2026/09/15 00:00'); // 该本地日起点
-  });
-
-  it('future_day 文案容错：时区缺失/非法时不阻断报错', () => {
+  it('时间线独立：时区配置不影响"可推进"结论（原 future_day 文案容错场景）', () => {
     const noTz = explainPlanFailure(clockOf({ settings: { timezone: undefined } }), 1, new Date('2026-09-14T12:00:00Z'));
-    expect(noTz.reason).toBe('future_day');
-    expect(noTz.message).toContain('尚未开始');
+    expect(noTz.reason).toBe('none');
 
     const badTz = explainPlanFailure(clockOf({ settings: { timezone: 'Not/AZone' } }), 1, new Date('2026-09-14T12:00:00Z'));
-    expect(badTz.reason).toBe('future_day');
-    expect(badTz.message).toContain('尚未开始'); // 非法时区回落应用时区，不抛错
+    expect(badTz.reason).toBe('none'); // 非法时区回落应用时区，不抛错
   });
 
   it('day_limit: dayIndex 已到上限,候选日全部越界(与 planClockAdvance 的 atLimit 同口径)', () => {

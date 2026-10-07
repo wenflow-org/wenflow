@@ -13,7 +13,7 @@ import { logger } from '../../utils/logger';
 import { safeJsonParse } from '../../utils/safe-json';
 import simulationCoordinator from '../../coordinators/simulation.coordinator';
 import { getVirtualLabSettings, DEFAULT_VIRTUAL_LAB_SETTINGS } from '../virtual-lab-settings.service';
-import { resolveSimulationClock, planClockAdvance } from './simulated-day.service';
+import { resolveSimulationClock, planClockAdvance, isAutoAdvancePaced } from './simulated-day.service';
 
 /** 在会话租约内推进单个会话 1 个上课日；返回是否推进成功。 */
 async function advanceOne(sessionId: string, now: Date): Promise<boolean> {
@@ -40,6 +40,10 @@ async function advanceOne(sessionId: string, now: Date): Promise<boolean> {
     });
     const plan = planClockAdvance(clock, rawClock, 1, now);
     if (!plan) return false;
+    // 自动推进的真实时间节流（2026-10-07）：planClockAdvance 已按产品要求解除真实时钟约束
+    //（手动 advance-day 可跨日推进以便观察/校准），但**自动**路径保留「每真实日最多推进一个
+    // 模拟日」的节拍——否则 5min tick 会把时钟冲成跑马机（90 天上限 7.5 小时内耗尽）。
+    if (!isAutoAdvancePaced(clock, plan.indexes, now)) return false;
 
     await prisma.virtual_sessions.update({
       where: { id: session.id },
