@@ -1303,7 +1303,14 @@ function shuffleScenes() {
 /* 最近会话列表（D14）：入口页回访入口；与 hero 同栏限宽，条目 ≥44px 触控带 */
 .recent { width: 100%; max-width: 640px; margin: 4px auto 0; }
 .recent__title { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 800; letter-spacing: 0.04em; color: var(--faint); }
-.recent__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+/* minmax(0, 1fr) 不能省成隐式 auto 轨（2026-10-07 实测 390 视口）：
+   grid 的 auto 轨按**内容最小宽**撑开，而 .recent__preview 是 nowrap —— 标题整句的
+   min-content 有 525px，轨道于是被撑到 525px，比 358px 的容器宽出 167px：
+   行尾的「昨天/10月5日」与「›」被推到 x≈529（视口 390，完全在屏外不可点），
+   标题也在行右缘被切掉半字。li 上没写 min-width:0，行内那套
+   `flex:1 + min-width:0 + ellipsis` 因此全程没生效（它只作用于行内，管不住轨宽）。
+   显式声明 minmax(0,1fr) 后轨道跟随容器，行内省略号才真正起作用。 */
+.recent__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .recent__item {
   display: flex; align-items: center; gap: 10px;
   min-height: 44px; padding: 9px 12px;
