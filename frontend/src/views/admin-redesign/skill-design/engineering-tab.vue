@@ -11,7 +11,13 @@
           <tr v-if="overview.file?.hash"><th title="file.hash">文件哈希</th><td><code class="mono" :title="overview.file.hash">{{ shortHash(overview.file.hash) }}</code></td></tr>
           <tr v-if="overview.db?.id"><th title="db.id">生效记录 ID</th><td><code class="mono">{{ overview.db.id }}</code></td></tr>
           <tr v-if="overview.db?.version"><th title="db.version">生效版本</th><td><code class="mono">v{{ overview.db.version }}</code></td></tr>
-          <tr v-if="overview.db?.useCount !== undefined"><th>调用次数</th><td>{{ overview.db.useCount }}</td></tr>
+          <!-- B19-F7-3：本行是生效 Prompt 版本记录自身的计数列（agent_prompts.useCount），
+               与状态条按调用日志聚合的窗口统计口径不同；标签必须带限定词，否则同屏两个
+               「调用次数」会被读成同一事实的两种值。 -->
+          <tr v-if="overview.db?.useCount !== undefined">
+            <th title="agent_prompts.useCount">本版本累计调用</th>
+            <td :title="`生效 Prompt 记录 v${overview.db?.version ?? '?'} 自身的调用计数；与状态条的调用日志窗口统计口径不同`">{{ overview.db.useCount }}</td>
+          </tr>
           <tr v-if="overview.db?.model"><th>默认模型</th><td><code class="mono">{{ overview.db.model }}</code></td></tr>
           <tr v-if="overview.db?.publishedAt"><th>发布时间</th><td>{{ fmtTime(String(overview.db.publishedAt)) }}</td></tr>
           <tr v-if="overview.drift">

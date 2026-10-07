@@ -20,8 +20,15 @@
           :title="`${overview.agentId}${overview.file ? ' · ' + overview.file.path : ''}`"
         >{{ overview.agentId }}<template v-if="overview.file"> · {{ shortFilePath(overview.file.path) }}</template></span>
         <span v-if="overview.db?.version" class="mk-status__meta">DB ACTIVE <b class="mono">v{{ overview.db.version }}</b></span>
-        <span v-if="workbenchMeta?.stats" class="mk-status__meta">
-          调用 <b class="mono">{{ workbenchMeta.stats.totalCalls }}</b>
+        <!-- B19-F7-3：调用/成功率/均耗来自 workbench-meta 的调用日志聚合（range 默认 all）。
+             窗口词必须随数字一起出现，否则与工程页签「本版本累计调用」（agent_prompts.useCount）
+             同一屏两个数会被读成同一事实。 -->
+        <span
+          v-if="workbenchMeta?.stats"
+          class="mk-status__meta"
+          :title="`调用日志聚合统计 · 窗口：${statsRangeLabel}；与工程页签「本版本累计调用」口径不同`"
+        >
+          {{ statsRangeLabel }}调用 <b class="mono">{{ workbenchMeta.stats.totalCalls }}</b>
           · 成功率 <b class="mono">{{ workbenchMeta.stats.successRate ?? '—' }}%</b>
           · 均耗 <b class="mono">{{ fmtMs(workbenchMeta.stats.avgDuration || 0) }}</b>
         </span>
@@ -186,7 +193,8 @@ interface WorkbenchMeta {
   skill?: { id: string; name: string; description: string }
   parentAgent?: { id: string; name: string } | null
   modelConfig?: { temperature?: number } | null
-  stats?: { totalCalls: number; successRate: number | null; avgDuration: number }
+  /** range：后端 workbench-meta 回显的统计窗口（'24h' | '7d' | '30d' | 'all'，缺省 all） */
+  stats?: { totalCalls: number; successRate: number | null; avgDuration: number; range?: string }
 }
 
 const loading = ref(false)
@@ -202,6 +210,12 @@ const healthBadgeCls = computed(() =>
 const statusToneCls = computed(() =>
   overview.value?.health === 'good' ? 'mk-status--ok' : overview.value?.health === 'warn' ? 'mk-status--warn' : 'mk-status--bad'
 )
+
+/** B19-F7-3：统计窗口词（workbench-meta stats.range 回显；本页固定 all，与 Skills/SkillDetail 同套词表）。
+    状态条「调用」是窗口内的调用日志聚合，工程页签「本版本累计调用」是 agent_prompts.useCount——
+    两者口径不同，数字前必须带窗口词，读者才判得出 Skill 有没有在被调用。 */
+const STATS_RANGE_LABELS: Record<string, string> = { '24h': '近 24 小时', '7d': '近 7 天', '30d': '近 30 天', all: '全量' }
+const statsRangeLabel = computed(() => STATS_RANGE_LABELS[workbenchMeta.value?.stats?.range || 'all'] || '全量')
 
 /* ---------- Tabs ---------- */
 type TabKey = 'protocol' | 'trial' | 'versions' | 'runtime' | 'engineering' | 'routing'

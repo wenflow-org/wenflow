@@ -11,13 +11,15 @@ import ApiConfig from '../ApiConfig.vue';
 import { dataSource } from '../store';
 import { liveApiConfig } from '../live';
 
-const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSettingsMock, getReliabilityMock, getModelRegistryMock } = vi.hoisted(() => ({
+const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSettingsMock, getReliabilityMock, getModelRegistryMock, testConnectionMock, updateConfigMock } = vi.hoisted(() => ({
   getConfigMock: vi.fn(),
   getCapabilitiesMock: vi.fn(),
   probeCapabilitiesMock: vi.fn(),
   getProbeSettingsMock: vi.fn(),
   getReliabilityMock: vi.fn(),
   getModelRegistryMock: vi.fn(),
+  testConnectionMock: vi.fn(),
+  updateConfigMock: vi.fn(),
 }));
 
 function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
@@ -65,7 +67,9 @@ vi.mock('@/api/adminApi', () => ({
   adminLearnerModelsApi: apiObject(),
   adminApiConfigApi: apiObject({
     getConfig: getConfigMock,
-    getModelRegistry: getModelRegistryMock
+    getModelRegistry: getModelRegistryMock,
+    testConnection: testConnectionMock,
+    updateConfig: updateConfigMock
   }),
   adminAgentsApi: apiObject(),
   adminAgentTopologyApi: apiObject(),
@@ -115,6 +119,8 @@ describe('ApiConfig P1 修复批', () => {
     getProbeSettingsMock.mockReset();
     getReliabilityMock.mockReset();
     getModelRegistryMock.mockReset();
+    testConnectionMock.mockReset();
+    updateConfigMock.mockReset();
     getModelRegistryMock.mockResolvedValue({
       data: {
         data: {
@@ -353,6 +359,78 @@ describe('ApiConfig P1 修复批', () => {
     await nextTick();
     // 输入即标脏 → 出现分段保存入口
     expect(wrapper.text()).toContain('保存路由');
+    wrapper.unmount();
+  });
+
+  /** F8-2（运营走查）：「连通性验证」拉取结果只写本页内存——
+   *  ① 已保存过清单时下拉应直接可用（不要求进页先拉一次）；
+   *  ② 未保存的本次拉取必须显式说明「仅本页有效，保存后其他页面/下次进入才可见」；
+   *  ③ 保存连接后说明消失（清单已落盘，且请求携带 availableModels）。 */
+  it('F8-2：已保存清单下拉直接可用；拉取未保存给出「仅本页有效」说明，保存后消失', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const savedCfg = {
+      apiUrl: 'https://api.example.com/v1',
+      apiKeyConfigured: true,
+      availableModels: ['model-a', 'model-b'],
+      defaultModel: 'model-a',
+      defaultReasoningModel: 'model-a',
+      defaultEvaluationModel: 'model-b',
+      defaultThinkingMode: 'default' as const,
+      defaultReasoningEffort: 'default' as const,
+      defaultResponseFormat: 'none' as const,
+      connectionStatus: 'connected',
+      lastCheckedAt: '2026-08-13T09:00:00.000Z',
+      networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
+    };
+    // ① 已保存清单（liveApiConfig 播种）：下拉直接可用，无未保存提示
+    liveApiConfig.value = savedCfg;
+    const saved = await mountApiConfig();
+    expect((saved.find('.ac-test__model select').element as HTMLSelectElement).disabled).toBe(false);
+    expect(saved.findAll('.ac-test__model select option').map((o) => o.text())).toEqual(['model-a', 'model-b']);
+    expect(saved.find('.ac-models__hint').exists()).toBe(false);
+    expect(saved.text()).not.toContain('本次拉取未保存');
+    saved.unmount();
+
+    // ② 未保存清单：拉取后出现说明；③ 保存连接后说明消失且请求携带清单
+    liveApiConfig.value = { ...savedCfg, availableModels: [] };
+    let persisted: string[] = [];
+    getConfigMock.mockImplementation(async () => ({
+      data: { data: { ...savedCfg, availableModels: [...persisted] } }
+    }));
+    testConnectionMock.mockResolvedValue({
+      data: { data: { connected: true, modelsCount: 2, models: ['m-1', 'm-2'] } }
+    });
+    updateConfigMock.mockImplementation(async (payload: { availableModels?: string[] }) => {
+      if (payload?.availableModels) persisted = [...payload.availableModels];
+      return { data: { data: {} } };
+    });
+
+    const wrapper = await mountApiConfig();
+    expect((wrapper.find('.ac-test__model select').element as HTMLSelectElement).disabled).toBe(true);
+    expect(wrapper.find('.ac-models__hint').exists()).toBe(false);
+
+    const fetchBtn = wrapper.findAll('.mk-btn').find((b) => b.text().includes('连接并拉取'))!;
+    await fetchBtn.trigger('click');
+    await flushPromises();
+    await nextTick();
+
+    expect(wrapper.findAll('.ac-model').map((e) => e.text())).toEqual(['m-1', 'm-2']);
+    expect(wrapper.text()).toContain('本次拉取未保存');
+    expect(wrapper.find('.ac-models__hint').text()).toContain('仅在本页有效');
+    expect(wrapper.find('.ac-models__hint').text()).toContain('保存后');
+    // 拉取后下拉立即可用（本页内联动不回归）
+    expect((wrapper.find('.ac-test__model select').element as HTMLSelectElement).disabled).toBe(false);
+
+    const saveBtn = wrapper.find('.ac-sec__save');
+    expect(saveBtn.text()).toBe('保存连接');
+    await saveBtn.trigger('click');
+    await flushPromises();
+    await nextTick();
+    await flushPromises();
+
+    expect(updateConfigMock).toHaveBeenCalledWith(expect.objectContaining({ availableModels: ['m-1', 'm-2'] }));
+    expect(wrapper.find('.ac-models__hint').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('本次拉取未保存');
     wrapper.unmount();
   });
 });

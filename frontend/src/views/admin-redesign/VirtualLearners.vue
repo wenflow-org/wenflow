@@ -11,7 +11,7 @@
           type="button"
           class="mk-btn mk-btn--sm"
           :disabled="reclaimRef?.state.busy"
-          :title="'干跑确认清单后批量标记卡死会话为失败'"
+          :title="'角标 = 超阈值卡死候选数（含 hold/租约等豁免项）；点击干跑确认清单，逐条列出可回收与豁免原因后批量标记'"
           @click="openReclaimModal()"
         >
           {{ reclaimRef?.state.busy ? '回收中…' : `回收卡死（${partition.stale}）` }}
@@ -41,12 +41,16 @@
         >
           <span class="mk-minibar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: completionBarPct }"></i></span>
         </MkKpi>
+        <!-- B8-F4-4 口径对齐：本卡值取 systemFailureRate（failed / 全部），原 label「失败率」
+             配 hint 里并列的「人为终止 1096」让 24% 被读成「全部失败占比」（真值 97%）。
+             总览页同事实标作「系统失败率」（Overview.vue:506 同判例），此处跟随；
+             hint 补分母与「人为终止另计，合计 X%」，运营不再低估。 -->
         <MkKpi
-          label="失败率"
+          label="系统失败率"
           :value="statsKpiValue(statsKpiPct(runStats.systemFailureRate))"
           :tone="statsState === 'error' ? 'bad' : (runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''"
-          :hint="statsKpiHint(`系统失败 ${runStats.failed} · 人为终止 ${runStats.abandoned}`)"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : ''"
+          :hint="statsKpiHint(`系统失败 ${runStats.failed} / 全部 ${runStats.totalSessions} · 人为终止 ${runStats.abandoned} 另计（合计 ${statsKpiPct(runStats.failureRate)}）`)"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '本值 = 系统失败率（failed / 全部会话），与总览页「系统失败率」同口径；人为终止（abandoned：管理员止停/批量终止/僵尸回收/学习者放弃）另计，两者合计见 hint（2026-08-21 口径拆分）'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />

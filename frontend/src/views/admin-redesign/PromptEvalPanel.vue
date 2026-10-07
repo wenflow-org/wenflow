@@ -678,6 +678,12 @@ const runsLoading = ref(false)
 const casesFailed = ref(false)
 const runsFailed = ref(false)
 
+/* 评估历史加载窗口（getEvalRuns 上限 30）：KPI「评估历史」卡 title 与 reloadRuns 共用此常量。
+   必须声明在下方 immediate watch 之前：watch 首跑同步调用 reloadRuns，而 reloadRuns 读此常量，
+   声明在其后即触发 TDZ（Cannot access 'RUNS_LIMIT' before initialization）——错误被 reloadRuns
+   自身的 catch 吞成 runsFailed + toast，首屏「评估历史」KPI 卡恒显「0 / 暂无评估记录」，
+   切到历史页签后同一张卡才变 30（那时常量已初始化，故「自愈」） */
+const RUNS_LIMIT = 30
 /* URL ↔ 内层页签双向同步：键用 ?peTab=（宿主 ?tab= 归 Skills 页签所有，不共键）。
    immediate 首跑兼作唯一挂载加载入口（原先 setup 末尾还有一组裸 reload，深链 ?peTab=runs 时会双拉，
    且该 watch 必须放在 cases/runs 等 ref 声明之后，否则 immediate 回调会撞 TDZ） */
@@ -705,8 +711,6 @@ function onAgentFilterChange() {
   void reloadRuns()
 }
 
-/* 评估历史加载窗口（getEvalRuns 上限 30）：KPI「评估历史」卡 title 与 reloadRuns 共用此常量 */
-const RUNS_LIMIT = 30
 /* 最近一次评估的通过率口径（runs[0] 即最新一次，reloadRuns 保持接口倒序）。
    精度/阈值/兜底走 rate-utils 单点：passRate 缺失显「—」+ title「暂无评测数据」（不 ?? 0 伪装 0%）。
    P2（2026-10-04 全站评审）：totalRuns=0（用例全部被跳过）也不是「0% 通过」失败态——红字

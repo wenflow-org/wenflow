@@ -65,8 +65,8 @@ function fakeSession(i: number, opts: { revoked?: boolean; expired?: boolean } =
   };
 }
 
-async function mountSS(sessions: unknown[]) {
-  h.getSessions.mockResolvedValue({ data: { data: { sessions } } });
+async function mountSS(sessions: unknown[], extra: Record<string, unknown> = {}) {
+  h.getSessions.mockResolvedValue({ data: { data: { sessions, ...extra } } });
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/admin/:page?', component: { template: '<div />' } }]
@@ -114,6 +114,55 @@ describe('SessionSecurity 分批渲染（分页器首屏可见）', () => {
     const sessions = Array.from({ length: 8 }, (_, i) => fakeSession(i + 1));
     const w = await mountSS(sessions);
     expect(w.find('.mk-list-more').exists()).toBe(false);
+  });
+
+  /* B13 F6-1：全量口径与行窗口分离。后端 counts/adminCounts 是作用域全量，
+     页面统计/组头/批量下线条数读它；行窗口（sessions）只决定渲染哪些行。 */
+  it('统计条/组头/批量下线条数读后端全量 counts，而非行窗口', async () => {
+    const sessions = Array.from({ length: 30 }, (_, i) => fakeSession(i + 1));
+    const w = await mountSS(sessions, {
+      counts: { total: 100, active: 93, expired: 7, revoked: 0 },
+      adminCounts: [{ adminId: 'admin-1', total: 100, active: 93, expired: 7, revoked: 0 }],
+      window: { limit: 100, returned: 30 }
+    });
+    // 卡头全量口径 + 窗口截断披露（93 活跃 > 窗口内 30 行）
+    expect(w.find('.mk-card__meta').text()).toContain('100 个会话');
+    expect(w.find('.mk-card__meta').text()).toContain('活跃 93');
+    expect(w.find('.mk-card__meta').text()).toContain('行列表仅含最近 30 条');
+    // 组头读 adminCounts（非窗口行数）
+    expect(w.find('.ss-group__count').text()).toContain('100 个会话');
+    expect(w.find('.ss-group__count').text()).toContain('93 个活跃');
+    // 「加载更多」分母仍是窗口行数，但显式标注非全量
+    expect(w.find('.mk-list-more').text()).toContain('后端全量活跃 93');
+  });
+
+  it('「下线全部」条数 = 全量活跃 + 未撤销已过期（后端 revoke-all 真实作用域），当前标签页除外', async () => {
+    const sessions = Array.from({ length: 12 }, (_, i) => fakeSession(i + 1));
+    const w = await mountSS(sessions, {
+      counts: { total: 505, active: 467, expired: 33, revoked: 5 },
+      adminCounts: [{ adminId: 'admin-1', total: 505, active: 467, expired: 33, revoked: 5 }],
+      window: { limit: 100, returned: 12 }
+    });
+    // admin-1 即当前管理员：467 活跃 + 33 过期 - 1 当前标签页 = 499
+    const btn = w.findAll('button').find((b) => b.text().includes('下线全部'));
+    expect(btn?.text()).toContain('499');
+  });
+
+  it('24h 内过期的活跃行给出可读剩余时长（F6-5）', async () => {
+    const soon = fakeSession(1);
+    soon.expiresAt = new Date(Date.now() + 20 * 3600_000).toISOString();
+    const w = await mountSS([soon]);
+    const label = w.find('.ss-expiry-soon');
+    expect(label.exists()).toBe(true);
+    expect(label.text()).toContain('剩 20 小时');
+  });
+
+  it('过期时间列 title 含剩余时长（非仅颜色差）', async () => {
+    const soon = fakeSession(1);
+    soon.expiresAt = new Date(Date.now() + 90 * 60_000).toISOString();
+    const w = await mountSS([soon]);
+    const cell = w.find('.ss-time--soon');
+    expect(cell.attributes('title')).toContain('后过期');
   });
 
   it('过期/已撤销历史收进折叠组（不计入活跃分批）', async () => {

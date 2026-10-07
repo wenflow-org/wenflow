@@ -230,6 +230,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { isLive, intent } from './store'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { adminFeedbackApi } from '@/api/adminApi'
@@ -245,7 +246,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 /** 嵌入模式：作为运营中心「反馈」tab 渲染（仅去掉外层状态条；宿主承载域计数）。
     count 事件：反馈总数上报（宿主「反馈 N」徽章） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
-const emit = defineEmits<{ (e: 'count', total: number): void }>()
+const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'status', status: string): void }>()
 
 type Status = 'new' | 'triaged' | 'resolved' | 'dismissed'
 
@@ -379,6 +380,22 @@ function clearFilters() {
   statusFilter.value = ''
   lowOnly.value = false
 }
+
+/* 状态筛选 ↔ URL（?status=）（F5-3 审核）：URL → 筛选由本组件读取（刷新/后退/复制链接
+   复原「待处理」预筛）；筛选 → URL 交由宿主统一写（emit('status')，见 OpsHub.onFeedbackStatus）——
+   本组件自写会合并尚未落地的旧 route.query.tab，把宿主在途的 ?tab= replace 覆盖掉（实测竞态：
+   地址栏最终停在 ?tab=todo&status=new，内容与地址脱节）。单测可无 router 挂载，访问保持可选 */
+const route = useRoute()
+const FB_STATUS_VALUES = ['new', 'triaged', 'resolved', 'dismissed'] as const
+watch(
+  () => route?.query?.status,
+  (s) => {
+    const v = typeof s === 'string' && (FB_STATUS_VALUES as readonly string[]).includes(s) ? s : ''
+    if (v !== statusFilter.value) statusFilter.value = v
+  },
+  { immediate: true }
+)
+watch(statusFilter, (v) => emit('status', v))
 
 /* 长列表分批渲染：每批 15 行 */
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：

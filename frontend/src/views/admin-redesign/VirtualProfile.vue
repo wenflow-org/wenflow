@@ -2486,8 +2486,10 @@ watch(
   { immediate: true },
 )
 
+/** 行徽章只表达故事生命周期（就绪/草稿），不再兼职「已选」——
+    「已选」只属于卡头勾选计数（selectedStoryKeys）；行选中态由 .is-selected
+    的行底 + 单选点表达，避免同屏同名不同义（走查 F4-3）。 */
 function storyStatusLabel(s: StoryItem): string {
-  if (selectedStoryId.value === (s.id || String(s.index ?? 0))) return '已选'
   if (s.status === 'ready') return '就绪'
   if (s.status === 'draft' || !s.status) return '草稿'
   return s.status

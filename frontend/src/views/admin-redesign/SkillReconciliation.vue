@@ -47,7 +47,10 @@
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !recOnlyAbnormal }" :aria-pressed="!recOnlyAbnormal" @click="recOnlyAbnormal = false">全部</button>
           <button type="button" class="mk-pill" :class="{ 'mk-pill--active': recOnlyAbnormal }" :aria-pressed="recOnlyAbnormal" @click="recOnlyAbnormal = true">仅看异常</button>
         </div>
-        <span class="mk-card__meta" title="异常 = 未注册（配置文件缺失）/ 缺 ACTIVE（无生效版本）/ 未上线（完成度非 live）">异常 = 未注册 / 无生效版本 / 未上线</span>
+        <!-- 2026-10-07 F6-3：异常口径与卡头 pill / 概要「对账异常」KPI 统一为「未注册 / 无生效版本 / 失效注册残留」
+             三项（完成度非 live 属「完成度」页签与第 4 张 KPI 的域，不再并进对账异常——原口径把两域混算，
+             造成 KPI 与筛选行集互斥） -->
+        <span class="mk-card__meta" title="异常 = 未注册（配置声明缺失）/ 无生效版本（缺 ACTIVE）/ 失效注册残留（登记册已删但注册仍残留）">异常 = 未注册 / 无生效版本 / 失效注册残留</span>
       </div>
       <div class="mk-table-scroll">
         <table v-if="recReport.items.length && recPageRows.length" class="mk-table sk-table sk-rec-table mk-table--fixed">
@@ -66,7 +69,7 @@
               <th title="gateway 注册：是否已在系统运行中注册">运行注册</th>
               <th title="ACTIVE prompt：是否有生效版本">生效版本</th>
               <th>完成度</th>
-              <th title="差集：本表只列未注册 / 无生效版本 / 未上线三类异常；登记册成员恒为「已登记」故不再单列">差集</th>
+              <th title="差集：本表只列未注册 / 无生效版本两类异常；登记册成员恒为「已登记」故不再单列。失效注册残留（登记册已删但注册仍在）列在表下「失效注册残留」块，同属对账异常但无户口簿行可挂">差集</th>
             </tr>
           </thead>
           <tbody>
@@ -255,7 +258,10 @@ function matchesRecFilter(row: RecRow): boolean {
   if (recDiff.value === "live") return row.completion.status === "live";
   return true;
 }
-function isRecAbnormal(row: RecRow): boolean { return row.diff !== null || row.completion.status !== "live"; }
+/** 异常口径（2026-10-07 F6-3 与卡头 pill / 概要「对账异常」KPI 单源）：未注册 / 无生效版本（row.diff）
+    + 失效注册残留（表下残留块，无户口簿行可挂）。完成度非 live 属「完成度」页签与第 4 张 KPI 的域，
+    不再并进本筛选——原口径「diff ∪ 非 live」使筛选行集大于 KPI 可定位集，同屏两套互斥口径。 */
+function isRecAbnormal(row: RecRow): boolean { return row.diff !== null; }
 
 const recFlat = computed<RecEntry[]>(() => {
   const out: RecEntry[] = [];
@@ -286,12 +292,15 @@ const recPageRows = computed<RecEntry[]>(() => {
   return out;
 });
 
-/** 筛选后 0 行的空态文案（EG21）：把「空表体」换成可读结论——「无异常技能：N 项全部对账一致」等 */
+/** 筛选后 0 行的空态文案（EG21）：把「空表体」换成可读结论——「无异常技能：N 项全部对账一致」等。
+    F6-3：失效注册残留无户口簿行、不在表内，空态必须如实披露（否则与卡头「失效注册 N」pill 打架） */
 const recEmptyText = computed<string>(() => {
   const total = recReport.value?.summary.total ?? 0;
   if (recDiff.value === "unregistered") return "无未注册 Skill：全部已在配置文件中声明";
   if (recDiff.value === "active-missing") return "无缺生效版本的 Skill：全部有 ACTIVE prompt";
   if (recDiff.value === "live") return "无完成度 live 的 Skill";
+  const orphans = recReport.value?.orphanRegistrations.length ?? 0;
+  if (orphans > 0) return `无异常技能：${total} 项全部对账一致；另有 ${orphans} 条失效注册残留（见下方「失效注册残留」）`;
   return `无异常技能：${total} 项全部对账一致`;
 });
 

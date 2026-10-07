@@ -62,6 +62,11 @@ export interface ReclaimPreviewItem {
   updatedAt: string
 }
 
+/** 干跑清单里被豁免（本轮不回收）的候选，skipReason 与后端保护链一一对应（B8-F4-2） */
+export interface ReclaimSkippedItem extends ReclaimPreviewItem {
+  skipReason: 'live-generation' | 'active-lease' | 'held' | 'paused' | 'active-autopilot' | string
+}
+
 /** 批量创建后台任务（服务端队列，前端轮询推进） */
 export interface BatchTask {
   active: boolean

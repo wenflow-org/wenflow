@@ -411,9 +411,9 @@
               <span class="mk-card__meta">{{ recent.length ? `最近 ${recent.length} 条（近 7 天采样窗口）` : '近 7 天采样窗口' }}</span>
             </div>
             <div class="skd-pad skd-rows">
-              <button v-for="s in recent" :key="s.id" type="button" class="skd-call" :title="`traceId：${s.traceId}`" @click="goTrace(s.traceId)">
+              <button v-for="s in recent" :key="s.id" type="button" class="skd-call" :title="recentRowTitle(s)" @click="goTrace(s.traceId)">
                 <span class="skd-dot" :class="`is-${s.status}`" role="img" :aria-label="statusDotLabel(s.status)" :title="statusDotLabel(s.status)"></span>
-                <span class="skd-call__title">{{ s.title }}</span>
+                <span class="skd-call__title">{{ recentRowText(s) }}</span>
                 <span class="mono skd-call__ms">{{ fmtMs(s.durationMs) }}</span>
               </button>
               <p v-if="!recent.length" class="mk-empty--line">日志窗口内无调用（上方指标同为窗口口径，随 Skill 列表「统计窗口」切换）。</p>
@@ -592,11 +592,12 @@
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { subPage, closeSubPage, setSubPageLabel, skillStatOf, recentSpansOf, openTrace } from './store'
+import { subPage, closeSubPage, setSubPageLabel, skillStatOf, recentSpansOf, openTrace, type TraceSpan } from './store'
 import { liveSkillProfiles, liveExtraProfiles, errMsg, liveSkillStatsRange } from './live'
 /* P2-15（设计评审）：版本状态走共享字典（与设计页 versions-tab 同域同词：ARCHIVED→已归档），
    删本页本地 versionStatusText（只映射 ACTIVE/DRAFT，ARCHIVED 直出英文） */
-import { categoryText, versionStatusText } from './statusText'
+import { categoryText, errorCategoryText, versionStatusText } from './statusText'
+import { errorCodeLabel } from './terms'
 import { successRateText, successRateTone } from './rate-utils'
 import {
   adminSkillsApi,
@@ -703,7 +704,9 @@ interface WorkbenchMeta {
   parentAgent?: { id?: string; name?: string }
   skill?: { id?: string; name?: string; category?: string }
   modelConfig?: { model?: string; tier?: string; llmRequest?: { model?: string; source?: string } }
-  stats?: { source?: string; range?: string }
+  /** stats.source 枚举 = 后端 UnifiedSkillStats.source（skill-runtime-contract.service.ts:27）；
+      'none' 由 skills.ts:975 在无统计行时落为字面量（truthy，非「未返回」） */
+  stats?: { source?: 'prompt_call_logs' | 'agent_call_logs' | 'none' | string; range?: string }
 }
 const meta = ref<WorkbenchMeta | null>(null)
 const liveProfile = computed(() => {
@@ -803,15 +806,15 @@ const modelLabel = computed(() => {
 
 /* ===== 统计口径（运行时页签说明行）：指标数值来自 liveSkillStatsMap（随 Skill 列表「统计窗口」切换），
    此前照抄 meta.stats.range 造成「口径写全量、数字是 7 天窗口」的失真 → 说明对齐真实窗口 ===== */
+/** 来源枚举 → 人话（后端 UnifiedSkillStats.source：prompt_call_logs | agent_call_logs | none）。
+    F8-6：'none' = 窗口内没有可判源的日志（skills.ts:975 落字面量），不是口径名——
+    与未返回同义，一律回落「Skill 执行日志」，绝不把英文枚举印给运营；未知新枚举同样不裸直出。 */
+const STATS_SOURCE_TEXT: Record<string, string> = {
+  prompt_call_logs: 'Prompt 调用日志',
+  agent_call_logs: 'Skill 执行日志'
+}
 const statsNote = computed(() => {
-  const s = meta.value?.stats || {}
-  const src = !s.source
-    ? 'Skill 执行日志'
-    : s.source === 'prompt_call_logs'
-      ? 'Prompt 调用日志'
-      : s.source === 'agent_call_logs'
-        ? 'Skill 执行日志'
-        : String(s.source)
+  const src = STATS_SOURCE_TEXT[String(meta.value?.stats?.source || '')] || 'Skill 执行日志'
   return `${src} · ${statsRangeLabel.value}窗口（与 Skill 列表「统计窗口」同源，随其切换）`
 })
 
@@ -1151,6 +1154,28 @@ function goTrace(traceId: string) {
 /* ===== 最近调用（运行时页签；SkillDrawer 概览迁入） ===== */
 const recent = computed(() => (skillId.value ? recentSpansOf(skillId.value) : []))
 const statusDotLabel = (s: string) => (s === 'ok' ? '成功' : s === 'err' ? '失败' : '超时')
+/** F7-4：失败行的行标题此前直出 span.title（live.ts:193 把引擎异常原文 slice(0,40) 塞进标题），
+    列表里读到的是一串截断代码异常，既不可读也不指向动作。现失败行标题 = 错误类别人话
+    （errorCategoryText 单源；无类别时回落 errorCodeLabel，再回落「执行失败」），
+    原始异常原文与 traceId 一并进 title（详情/tooltip），点行仍跳执行日志 Trace。 */
+function recentRowText(s: TraceSpan): string {
+  if (s.status === 'ok') return s.title || '执行完成'
+  if (s.status === 'warn') return '执行超时'
+  // 兜底类别 'error' 的字典值是「失败」：与前缀重复，按无类别处理（不渲染「执行失败 · 失败」）
+  const cat = errorCategoryText(s.errorCategory)
+  if (cat && cat !== '失败') return `执行失败 · ${cat}`
+  const code = errorCodeLabel(s.errorCode)
+  return code ? `执行失败 · ${code}` : '执行失败'
+}
+function recentRowTitle(s: TraceSpan): string {
+  const parts = [`traceId：${s.traceId}`]
+  if (s.status !== 'ok') {
+    const raw = s.errorMessage || s.detail || ''
+    if (raw) parts.push(raw)
+    if (s.errorCode) parts.push(`错误码：${s.errorCode}`)
+  }
+  return parts.join('\n')
+}
 
 /* ===== 试跑（试跑页签；adminSkillsApi.testSkill 与设计页 trial-tab 同一接口） ===== */
 const trialInput = ref('{\n  "input": "用一句话介绍你自己"\n}')

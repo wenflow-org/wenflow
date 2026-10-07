@@ -21,7 +21,7 @@
         aria-label="每页条数"
         @change="onSizeChange"
       >
-        <option v-for="s in sizes" :key="s" :value="s">{{ s }}条/页</option>
+        <option v-for="s in sizeOptions" :key="s" :value="s">{{ s }}条/页</option>
       </select>
       <div class="mk-pagination__nav">
         <button
@@ -92,6 +92,17 @@ const emit = defineEmits<{
 }>()
 
 const totalPages = computed(() => totalPagesOf(props.total, props.pageSize))
+
+/* 下拉选项 = 预设档位 ∪ 当前 pageSize（有序）。
+   页面若把 pageSize 初始化成不在预设档里的值（如 OpsAchievements / Notifications 的 20），
+   原实现 `:value="pageSize"` 找不到对应 option → 浏览器 selectedIndex=-1，下拉渲染成空白
+   （首选项被显示成"已选"的假象），与表格实际行数/分页器页数三者不一致（F5-2）。
+   补进当前值后：下拉显示真实每页条数，且不改变既有 15/30/50/100 档位口径（ADMIN-OPERATIONS-MANUAL:91）。 */
+const sizeOptions = computed(() => {
+  const set = new Set(props.sizes)
+  set.add(props.pageSize)
+  return [...set].sort((a, b) => a - b)
+})
 
 /* 页码按钮序列（AntD 风格折叠）：≤7 页全显；>7 页显示 1 … p-1 p p+1 … N */
 const pageItems = computed<(number | '…')[]>(() => {

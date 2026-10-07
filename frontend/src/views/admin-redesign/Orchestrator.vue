@@ -16,7 +16,11 @@
            stages 恒空、pageLoading 回落 false，KPI 带把「不知道」渲染成 0（与正文失败空态同屏打架）。
            加载中或失败一律「—」，不按 0 渲染 -->
       <MkKpi label="阶段" :value="kpiUnknown ? '—' : stages.length" />
-      <MkKpi label="Skill" :value="kpiUnknown ? '—' : totalSkills" />
+      <!-- F8-4（2026-10-07 走查）：本页三处 Skill 总数各说各的域——本卡 Σ 阶段挂载的拓扑
+           节点（21）、侧栏「Skill 与提示词」徽章（Skill 目录档案数，31）、治理卡「Skill 定义」
+           （runtime-definitions 条目数，32），此前只有本卡无任何口径说明，运营无从判断信哪个。
+           按「阶段交接」KPI 同一惯例补 hint（可见口径）+ title（三源关系） -->
+      <MkKpi label="Skill" :value="kpiUnknown ? '—' : totalSkills" hint="拓扑内挂载 Skill 数" :title="skillKpiTitle" />
       <MkKpi label="阶段交接" :value="kpiUnknown ? '—' : handoffCount" hint="线性拓扑 = 阶段数 − 1" />
       <MkKpi
         v-if="unresolvedCount > 0"
@@ -660,6 +664,16 @@ watch([pane, stages, flowKey], async () => {
 })
 
 const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + stage.skills.length, 0))
+/** Skill KPI tooltip（F8-4 走查）：本页三处 Skill 总数各有域，本卡须自报口径——
+    本卡 = 编排拓扑内挂载的 Skill 节点数（Σ 各阶段）；治理卡「Skill 定义」= 运行时
+    定义条目数（GET /admin/runtime-definitions）；侧栏「Skill 与提示词」徽章 = Skill
+    目录档案数（不含外挂能力）。三数不必相等，问「平台共多少 Skill」先确认口径。 */
+const skillKpiTitle = computed(
+  () =>
+    `本卡口径：编排拓扑内挂载的 Skill 节点数（Σ 各阶段 skills，当前 ${stages.value.length} 个阶段）。` +
+    '与治理卡「Skill 定义」（运行时定义条目数）及侧栏「Skill 与提示词」徽章（Skill 目录档案数，不含外挂能力）' +
+    '为三个不同口径，数值不必相等'
+)
 const unresolvedCount = computed(() =>
   stages.value.reduce(
     (sum, st) => sum + (st.defSteps || []).filter((d) => d.resolved?.unresolved).length,

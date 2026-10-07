@@ -27,6 +27,28 @@
     <!-- 调用成本 2026-09-29 收编进概览区（原私有 cost-strip 金额条与全站 KPI 语言不一致；
          单价未配置/加载失败态由 KPI 卡 hint + tone 承担）。2026-10-01 成本批：成本升为第一张卡 -->
 
+    <!-- 筛选条常驻（含失败态，F8-3）：窗口/数据范围切换不依赖已加载数据，失败态下运营仍能
+         降档到近 7 天或换窗口重试——此前错误态 v-if 优先整页接管，把唯一换窗口入口一起吞掉，
+         只剩「重试」重放同一个慢请求。首载未出数据时占位用形状化骨架（审核 #131）：原
+         tc-filterbar--skeleton 是空条（有边框底色、零骨架块），读作「筛选条坏了」而非「加载中」。 -->
+    <div class="tc-filterbar">
+      <div v-if="summary || !loading" class="mk-pills tc-pills">
+        <button
+          v-for="p in rangePills"
+          :key="p.days"
+          type="button"
+          class="mk-pill"
+          :class="{ 'mk-pill--active': days === p.days }"
+          :aria-pressed="days === p.days"
+          @click="days = p.days"
+        >
+          {{ p.label }}
+        </button>
+      </div>
+      <MkSkeleton v-else w="320" :h="20" :radius="999" />
+      <DataScopeToggle v-if="isLive && (summary || !loading)" v-model="includeTest" />
+    </div>
+
     <!-- 加载失败（优先于空态）——审核 #113：补 tone="error"（role=alert + 错误配色，全站失败态统一），
          并给重试按钮 actionBusy 反馈（与 ExecLogs 失败态对齐） -->
     <MkEmptyState
@@ -35,7 +57,7 @@
       tone="error"
       min
       title="Token 成本数据加载失败"
-      description="无法从后端拉取用量统计，请重试或稍后再来。"
+      description="无法从后端拉取用量统计；可换一个时间窗重试，或稍后再来。"
       action-text="重试"
       action-busy-text="重试中…"
       :action-busy="loading"
@@ -44,9 +66,9 @@
 
     <!-- 首载骨架：KPI 卡 + 趋势图 + 排行占位（对齐全站 MockSkeleton 语言） -->
     <template v-else-if="!summary && loading">
-      <!-- 筛选条占位用形状化骨架（审核 #131）：原 tc-filterbar--skeleton 是空条（有边框底色、
-           零骨架块），读作「筛选条坏了」而非「加载中」；真 pills 数据到达后立即替换 -->
-      <div class="tc-filterbar"><MkSkeleton w="320" :h="20" :radius="999" /></div>
+      <!-- 冷载反馈（F8-3）：全表聚合冷载可达 20s+，8s 后给一句「仍在计算」，避免长时间只有
+           骨架被读成卡死（热载命中 5min TTL 缓存 <1s，不会触发） -->
+      <p v-if="slowLoad" class="mk-card__note" role="status">首次聚合近 {{ days }} 天调用记录，冷载可能需数十秒，仍在计算…</p>
       <section class="mk-kpi-grid">
         <div v-for="i in 4" :key="i" class="mk-kpi tc-skel-kpi"><MkSkeleton w="60%" :h="26" /><MkSkeleton w="40%" :h="12" /></div>
       </section>
@@ -63,23 +85,6 @@
     <!-- 加载完成（含空窗口）：后端 getSummary 恒返回对象，「!summary」整页空态不可达——空窗口
          改判 summary.totals.calls===0，在筛选条之下渲染一次 MkEmptyState，替掉 4 处零值卡 + 「暂无数据」 -->
     <template v-else>
-      <!-- 筛选条（范围 + 数据范围，独立一行，对齐 TraceWaterfall 筛选条形态）：空窗口同样常驻，窗口切换不被遮 -->
-      <div class="tc-filterbar">
-        <div class="mk-pills tc-pills">
-          <button
-            v-for="p in rangePills"
-            :key="p.days"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': days === p.days }"
-            :aria-pressed="days === p.days"
-            @click="days = p.days"
-          >
-            {{ p.label }}
-          </button>
-        </div>
-        <DataScopeToggle v-if="isLive" v-model="includeTest" />
-      </div>
       <MkEmptyState
         v-if="summaryEmpty"
         min
@@ -299,6 +304,16 @@ const includeTest = computed({
 })
 const loading = ref(false)
 const loadFailed = ref(false)
+/* 冷载反馈（F8-3）：全表聚合冷载实测 11.6s（7 天）/ 21.7s（90 天），后端缓存预热只在
+   20s 后首次进 TTL、且默认 7d 口径——换窗口/冷启动后首访必然吃满一次全表聚合。
+   超过阈值仍在加载时给一句「仍在计算」，避免长时间只有骨架被读成卡死。 */
+const SLOW_LOAD_HINT_MS = 8000
+const slowLoad = ref(false)
+let slowTimer: ReturnType<typeof setTimeout> | null = null
+function clearSlowTimer() {
+  if (slowTimer) { clearTimeout(slowTimer); slowTimer = null }
+  slowLoad.value = false
+}
 
 const summary = ref<Summary | null>(null)
 /* by-skill 条目在后端 RankEntry（= CostBucket）上已带成本字段；
@@ -358,6 +373,7 @@ watch(userQuery, () => {
 })
 onBeforeUnmount(() => {
   if (userQueryTimer) clearTimeout(userQueryTimer)
+  clearSlowTimer()
 })
 
 const rangePills = [
@@ -614,6 +630,8 @@ async function load(force = false) {
   loadFailed.value = false
   costLoading.value = true
   costFailed.value = false
+  clearSlowTimer()
+  slowTimer = setTimeout(() => { slowLoad.value = true }, SLOW_LOAD_HINT_MS)
   try {
     const params = { days: days.value, includeTest: includeTest.value }
     const [sumRes, skillRes, userRes, modelRes] = await Promise.all([
@@ -646,7 +664,7 @@ async function load(force = false) {
     costPricingKnown.value = false
     toast.error(`加载失败：${errMsg(e)}`)
   } finally {
-    if (seq === loadSeq) { loading.value = false; costLoading.value = false }
+    if (seq === loadSeq) { loading.value = false; costLoading.value = false; clearSlowTimer() }
   }
 }
 

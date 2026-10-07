@@ -1,5 +1,5 @@
 <template>
-  <div :class="embedded ? 'oa-embedded' : 'mk-page'">
+  <div :class="embedded ? 'mk-page--fill oa-embedded' : 'mk-page'">
     <div v-if="!embedded" class="mk-status mk-status--ok">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">成就管理</strong>
@@ -502,7 +502,9 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 嵌入模式（运营中心宿主 flex 列内）：占满剩余高度并内滚（对齐 oc-embedded 先例） */
+/* 嵌入模式（运营中心宿主 flex 列内）：根挂 .mk-page--fill（模板）与反馈/公告/通知三页签同形——
+   记录卡 .mk-card--fill 由此拿到确定高度，「卡片内滚动区接管纵向滚动、Pagination 吸底」契约生效。
+   overflow-y 保留 auto：成就定义页签是普通卡（非 fill），内容超出时仍需根级可滚（对齐宿主 .oh-body 判例）。 */
 .oa-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .ac-list { min-height: 120px; }
 .ac-icon { margin-right: 4px; }
@@ -561,9 +563,9 @@ onMounted(() => {
 .ac-card__grant { font-size: var(--mk-fs-micro); }
 
 /* ================= 视图切换（原型 .tabs 下划线页签） =================
-   样式 2026-10-05 CM1 收敛到全局 .tabs/.tab（mk-primitives.css），本页不再私持拷贝。 */
-/* 嵌入模式：宿主页签与本页签之间补 .mk-page 同款 12px 节奏（嵌入根是 block 无 grid gap） */
-.oa-embedded > .tabs { margin-bottom: var(--mk-space-3, 12px); }
+   样式 2026-10-05 CM1 收敛到全局 .tabs/.tab（mk-primitives.css），本页不再私持拷贝。
+   嵌入根已改挂 .mk-page--fill（flex 列 + gap 12px），页签与卡片的节奏由 gap 承担——
+   原 block 布局下补的 margin-bottom 不再需要（否则 12+12 双份间距）。 */
 
 /* 原型 .tbl td：nowrap（长内容由 mk-cell-main/mk-cell-text 全局 max-width 截断兜底）。
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class）。 */

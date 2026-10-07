@@ -5,8 +5,8 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">会话安全</strong>
       <span class="mk-status__sep"></span>
-      <span class="mk-status__meta mono">{{ sessions.length }} 个会话</span>
-      <span v-if="sessions.length" class="mk-status__meta mono">活跃 {{ activeCount }}</span>
+      <span class="mk-status__meta mono">{{ totalCount }} 个会话</span>
+      <span v-if="totalCount" class="mk-status__meta mono">活跃 {{ activeCount }}</span>
       <span v-if="expiredCount" class="mk-status__meta mono">已过期 {{ expiredCount }}</span>
       <span v-if="revokedCount" class="mk-status__meta mono">已撤销 {{ revokedCount }}</span>
       <button type="button" class="mk-status__action" :disabled="loading" @click="applyFilters">
@@ -60,7 +60,7 @@
               class="mk-pill"
               :class="{ 'mk-pill--active': statusFilter === p.id }"
               :aria-pressed="statusFilter === p.id"
-              :title="`只看${p.label}会话`"
+              :title="`只看${p.label}会话（计数为后端全量；筛选只作用于已加载的最近 ${sessions.length} 条行）`"
               @click="statusFilter = statusFilter === p.id ? '' : p.id"
             >
               {{ p.label }}<span v-if="countOf(p.id) > 0" class="mk-pill__count">{{ countOf(p.id) }}</span>
@@ -69,7 +69,7 @@
           <button v-if="statusFilter" type="button" class="mk-link" @click="statusFilter = ''">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
-          <span class="mk-card__meta">{{ sessions.length }} 个会话<template v-if="activeCount"> · 活跃 {{ activeCount }}</template></span>
+          <span class="mk-card__meta" :title="countsTitle">{{ totalCount }} 个会话<template v-if="activeCount"> · 活跃 {{ activeCount }}</template><template v-if="truncated"> · 行列表仅含最近 {{ sessions.length }} 条</template></span>
         </div>
       </div>
 
@@ -82,12 +82,13 @@
           <div class="ss-group__who">
             <strong>{{ g.adminName }}</strong>
             <span v-if="g.adminEmail" class="ss-group__email mono">{{ g.adminEmail }}</span>
-            <span class="ss-group__count">{{ g.sessions.length }} 个会话<template v-if="g.active.length"> · {{ g.active.length }} 个活跃</template></span>
+            <span class="ss-group__count">{{ groupCounts(g).total }} 个会话<template v-if="groupCounts(g).active"> · {{ groupCounts(g).active }} 个活跃</template></span>
           </div>
           <button
             v-if="revokeCount(g)"
             type="button"
             class="mk-btn mk-btn--danger-ghost mk-btn--sm"
+            :title="`吊销「${g.adminName}」全部未吊销会话（后端按管理员全量作用域，含行窗口外的会话）`"
             @click="revokeAll(g)"
           >
             下线全部<template v-if="revokeCount(g) > 1">（{{ revokeCount(g) }}）</template>
@@ -145,8 +146,12 @@
                     <template v-else>—</template>
                   </span>
                 </td>
-                <td class="ss-time mono" :class="{ 'ss-time--soon': expiringSoon(s) }" :title="fmtFull(s.expiresAt)">
-                  {{ fmtDateTime(s.expiresAt) }}
+                <td class="ss-time mono" :class="{ 'ss-time--soon': expiringSoon(s) }" :title="expiryTitle(s)">
+                  <div class="mk-cell-main">
+                    <span>{{ fmtDateTime(s.expiresAt) }}</span>
+                    <!-- F6-5：24h 内过期行给出可读剩余时长（颜色只是辅助，文字才是信号） -->
+                    <span v-if="expiringSoon(s)" class="ss-expiry-soon">剩 {{ remainText(s) }}</span>
+                  </div>
                 </td>
                 <td><span class="mk-badge" :class="statusClass(s)">{{ statusTextOf(s) }}</span></td>
                 <td class="mk-th--right">
@@ -169,8 +174,8 @@
         <!-- 过期/已撤销历史（默认收起；「已撤销」筛选时自动展开）：折叠头走全局 .mk-section__summary -->
         <details v-if="g.historical.length" class="ss-hist" :open="statusFilter !== ''">
           <summary class="mk-section__summary ss-hist__summary">
-            <span class="ss-hist__title">已过期 · 已撤销（{{ g.historical.length }}）</span>
-            <span class="ss-hist__meta">过期 {{ g.expiredCount }} · 已撤销 {{ g.revokedCount }}</span>
+            <span class="ss-hist__title">已过期 · 已撤销（{{ g.historical.length }}<template v-if="fullHistorical(g) > g.historical.length"> / 全量 {{ fullHistorical(g) }}</template>）</span>
+            <span class="ss-hist__meta">过期 {{ groupCounts(g).expired }} · 已撤销 {{ groupCounts(g).revoked }}</span>
           </summary>
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--fixed">
@@ -235,7 +240,7 @@
 
       <!-- 分页：活跃会话每批 12 行（首屏可见） -->
       <div v-if="canMoreActive" class="mk-list-more">
-        <button type="button" class="mk-link" @click="loadMoreActive">加载更多（已显示 {{ shownActive.length }} / {{ activeFlat.length }} 个活跃会话）</button>
+        <button type="button" class="mk-link" @click="loadMoreActive">加载更多（已显示 {{ shownActive.length }} / {{ activeFlat.length }} 个活跃会话<template v-if="truncated">，仅已加载窗口，后端全量活跃 {{ activeCount }}</template>）</button>
       </div>
     </div>
 
@@ -335,19 +340,21 @@ function deviceOf(s: AdminSessionRow): DeviceInfo {
 }
 
 const sessions = ref<AdminSessionRow[]>([])
+/** 后端全量口径计数（非行窗口）：GET /admin/sessions 的 data.counts。
+    行窗口（limit 默认 100）只约束列表行，页面统计/组头/批量下线一律以本组值为准
+    （运营走查 B13 F6-1：原实现把 100 行窗口读成全量）。 */
+const counts = ref<{ total: number; active: number; expired: number; revoked: number } | null>(null)
+/** 每管理员全量计数：adminId → { total, active, expired, revoked } */
+const adminCounts = ref(new Map<string, { total: number; active: number; expired: number; revoked: number }>())
+/** 行窗口是否被后端 limit 截断（全量总数 > 已加载行数）→ 显式披露「仅显示最近 N 条」 */
+const truncated = computed(() => !!counts.value && counts.value.total > sessions.value.length)
+/** 是否至少成功加载过一次（宿主计数的就绪门：未就绪上报 -1，宿主渲染「待访问」而非 0） */
+const loaded = ref(false)
 const loading = ref(false)
 const loadError = ref('')
 const statusFilter = ref<'' | SessionStatus>('')
 const myId = ref('')
 let fetching = false
-
-/** 宿主域计数徽章（embedded 才消费）：会话总数就绪/变化即上报。
-    审核 #175：原实现 immediate 上报空数组的 0，且加载中/加载失败都写 0——宿主注释明确把 0
-    判为「确认无会话」的假信号（只有未访问才显示「待访问」）。加就绪门：仅加载成功上报真实
-    条数，加载中/失败上报 -1，宿主把 <0 也渲染成「待访问」。 */
-watch([sessions, loadError], ([list, err]) => {
-  emit('count', err ? -1 : list.length)
-}, { immediate: true })
 
 const route = useRoute()
 const router = useRouter()
@@ -389,25 +396,60 @@ const currentId = computed(() => {
   return [...mine].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0].id
 })
 
-/** 「下线全部」实际会下线的会话数：后端 excludeCurrent 恒定剔除请求者自己的 jti，
-    当前管理员自己那一组比 g.active.length 少 1（当前标签页）。按钮与确认文案同源。 */
+/** 分组统计读全量口径（后端 adminCounts），缺失时回落窗口内计数。
+    行窗口只决定列表渲染哪些行，组头/折叠头/批量下线按钮的条数一律走这里，
+    否则「100 行窗口」会被读成该管理员的真实会话量（运营走查 B13 F6-1）。 */
+function groupCounts(g: SessionGroup): { total: number; active: number; expired: number; revoked: number } {
+  const full = adminCounts.value.get(g.adminId)
+  if (full) return full
+  return { total: g.sessions.length, active: g.active.length, expired: g.expiredCount, revoked: g.revokedCount }
+}
+
+/** 分组全量历史数（过期 + 已撤销）：行窗口截断时折叠头披露「N / 全量 M」 */
+function fullHistorical(g: SessionGroup): number {
+  const c = groupCounts(g)
+  return c.expired + c.revoked
+}
+
+/** 「下线全部」实际会下线的会话数：后端 revoke-all 的作用域是 `revokedAt: null`（全量、无 limit），
+    即「活跃 + 未撤销但已过期」两类；excludeCurrent 再剔除请求者当前 jti（活跃会话）。
+    按钮与确认文案同源，且与后端真实作用域一致（B13 F6-1：原实现只数活跃行，低估作用域）。 */
 function revokeCount(g: SessionGroup): number {
-  const n = g.active.length
+  const c = groupCounts(g)
+  const n = c.active + c.expired
   if (g.adminId === myId.value && currentId.value) return Math.max(0, n - 1)
   return n
 }
 
-const activeCount = computed(() => sessions.value.filter((s) => statusOf(s) === 'active').length)
-const expiredCount = computed(() => sessions.value.filter((s) => statusOf(s) === 'expired').length)
-const revokedCount = computed(() => sessions.value.filter((s) => statusOf(s) === 'revoked').length)
+/** 卡头口径 title：窗口截断时说明行列表只含最近 N 条，统计仍为全量 */
+const countsTitle = computed(() =>
+  truncated.value
+    ? `统计为后端全量口径；行列表仅含最近 ${sessions.value.length} 条（接口行窗口上限）`
+    : '统计与行列表均为后端全量口径'
+)
+
+/** 全量统计四口径：后端 counts 缺失（旧响应/mock）时回落窗口内计数。
+    有值时统计条 / pills / 组头 / 批量下线按钮都读它，保证「全量」自称成立。 */
+const activeCount = computed(() => (counts.value ? counts.value.active : sessions.value.filter((s) => statusOf(s) === 'active').length))
+const expiredCount = computed(() => (counts.value ? counts.value.expired : sessions.value.filter((s) => statusOf(s) === 'expired').length))
+const revokedCount = computed(() => (counts.value ? counts.value.revoked : sessions.value.filter((s) => statusOf(s) === 'revoked').length))
+const totalCount = computed(() => (counts.value ? counts.value.total : sessions.value.length))
 const statusTone = computed(() => {
   if (loadError.value) return 'bad'
-  if (!sessions.value.length) return 'muted'
+  if (!totalCount.value) return 'muted'
   return activeCount.value ? 'ok' : 'warn'
 })
 function countOf(id: SessionStatus): number {
   return id === 'active' ? activeCount.value : id === 'expired' ? expiredCount.value : revokedCount.value
 }
+
+/** 宿主域计数徽章（embedded 才消费）：会话总数就绪/变化即上报。
+    审核 #175：0 是「确认无会话」的假信号——就绪门：仅加载成功上报真实条数，
+    未就绪/失败上报 -1，宿主把 <0 渲染成「待访问」。
+    B13 F6-1：上报值由窗口行数改全量 totalCount（页签角标不再把 limit=100 的窗口读成全量）。 */
+watch([sessions, counts, loaded, loadError], ([, , ok, err]) => {
+  emit('count', err || !ok ? -1 : totalCount.value)
+}, { immediate: true })
 
 const filtered = computed(() =>
   sessions.value.filter((s) => !statusFilter.value || statusOf(s) === statusFilter.value)
@@ -459,7 +501,9 @@ const visibleGroups = computed(() => {
     .filter((x) => x.active.length || x.g.historical.length)
 })
 
-/** 拉取全量会话（客户端做状态筛选，保证状态条统计恒为全量口径） */
+/** 拉取会话：行（窗口）+ 后端全量统计（counts/adminCounts）。
+    行用于列表渲染与客户端状态筛选；统计用于状态条/组头/批量下线条数——两者口径分离，
+    统计恒为全量（B13 F6-1），行窗口截断时由 truncated 显式披露。 */
 async function applyFilters() {
   if (fetching) return
   fetching = true
@@ -467,7 +511,14 @@ async function applyFilters() {
   loading.value = true
   try {
     const res = await adminSessionsApi.getAdminSessions()
-    sessions.value = res.data?.data?.sessions ?? []
+    const payload = res.data?.data ?? {}
+    sessions.value = payload.sessions ?? []
+    const serverCounts = payload.counts
+    counts.value = serverCounts && typeof serverCounts.total === 'number' ? serverCounts : null
+    const list: Array<{ adminId: string } & { total: number; active: number; expired: number; revoked: number }> =
+      Array.isArray(payload.adminCounts) ? payload.adminCounts : []
+    adminCounts.value = new Map(list.map((c) => [c.adminId, c]))
+    loaded.value = true
   } catch (e) {
     loadError.value = errMsg(e)
   } finally {
@@ -485,6 +536,20 @@ function uaFull(s: AdminSessionRow): string {
 function expiringSoon(s: AdminSessionRow): boolean {
   if (statusOf(s) !== 'active') return false
   return new Date(s.expiresAt).getTime() - Date.now() <= 24 * 60 * 60 * 1000
+}
+/** 剩余时长（F6-5）：安全运维关心「还有多久过期」，给可读文字而非仅颜色差。
+    24h 内按小时、<1h 按分钟（向上取整，最小 1 分钟），避免出现「剩 0 小时」。 */
+function remainText(s: AdminSessionRow): string {
+  const ms = new Date(s.expiresAt).getTime() - Date.now()
+  if (ms <= 0) return '已到期'
+  const mins = Math.ceil(ms / 60_000)
+  if (mins < 60) return `${mins} 分钟`
+  return `${Math.ceil(mins / 60)} 小时`
+}
+/** 过期时间列 title：完整时间 + （即将过期时）剩余时长与高亮原因 */
+function expiryTitle(s: AdminSessionRow): string {
+  const full = fmtFull(s.expiresAt)
+  return expiringSoon(s) ? `${full}（${remainText(s)}后过期）` : full
 }
 /* 批C：最后活跃新鲜度三档（mk-fresh 原语；24h 内=新鲜） */
 function lastSeenFreshTone(s: AdminSessionRow): string {
@@ -514,14 +579,14 @@ async function revoke(s: AdminSessionRow) {
 async function revokeAll(g: SessionGroup) {
   const confirmed = await askConfirm({
     title: '下线该管理员全部会话',
-    message: `将强制下线「${g.adminName}」除当前登录标签页外的全部 ${revokeCount(g)} 个活跃会话，确定吗？`,
+    message: `将强制下线「${g.adminName}」的全部未吊销会话（后端按管理员全量作用域，含未在列表中显示的会话，共 ${revokeCount(g)} 个，当前登录标签页除外），确定吗？`,
     confirmText: '全部下线',
     busy: true,
   })
   if (!confirmed) return
   try {
     const res = await adminSessionsApi.revokeAllAdminSessions({ adminId: g.adminId, excludeCurrent: true })
-    const count = res.data?.data?.count ?? g.active.length
+    const count = res.data?.data?.count ?? revokeCount(g)
     toast.success(`已下线 ${count} 个会话`)
     await applyFilters()
     doneConfirm()
@@ -648,6 +713,14 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .ss-time--soon { color: var(--mk-amber, #b45309); font-weight: 700; }
+/* F6-5：24h 内过期行的可读剩余时长副行（主行仍是绝对时间；颜色 + 文字双通道，
+   不再要求运维对着两个日期心算）。行高与设备列的两行结构同档，不新增撑高。 */
+.ss-expiry-soon {
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  color: var(--mk-amber, #b45309);
+  white-space: nowrap;
+}
 /* LY6（2026-10-05 布局方案 §4）：三列时刻在 ≤1599 档收 176→112（MM-DD HH:mm 预算），
    七列合计 968px，在 1280 内容区 992 内不再横向滚动；≥1600 恢复 token 原值。 */
 .ss-col--time { width: var(--mk-col-datetime); }

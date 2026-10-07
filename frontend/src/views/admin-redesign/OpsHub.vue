@@ -51,7 +51,7 @@
           :key="m.key"
           :label="m.label"
           :value="m.failed ? '—' : m.value"
-          :tone="m.failed ? 'bad' : (m.bad ? 'warn' : '')"
+          :tone="m.tone"
           :hint="m.foot"
           :hint-tone="m.failed ? 'bad' : ''"
         />
@@ -149,7 +149,7 @@
     </template>
 
     <!-- ===== Tab2: 反馈（Feedback embedded） ===== -->
-    <Feedback v-else-if="tab === 'feedback'" id="oh-panel-feedback" role="tabpanel" aria-labelledby="oh-tab-feedback" ref="feedbackRef" embedded @count="onDomainCount('feedback', $event)" />
+    <Feedback v-else-if="tab === 'feedback'" id="oh-panel-feedback" role="tabpanel" aria-labelledby="oh-tab-feedback" ref="feedbackRef" embedded @count="onDomainCount('feedback', $event)" @status="onFeedbackStatus" />
     <!-- ===== Tab3: 成就（OpsAchievements embedded） ===== -->
     <OpsAchievements v-else-if="tab === 'achievements'" id="oh-panel-achievements" role="tabpanel" aria-labelledby="oh-tab-achievements" ref="achievementsRef" embedded @count="onDomainCount('achievements', $event)" />
     <!-- ===== Tab4: 公告（Announcements embedded） =====
@@ -241,9 +241,32 @@ watch(
   },
   { immediate: true }
 )
+/** 切页签 + 写 URL。F5-3 审核：intent 直达必须与点页签同构——URL 才是可刷新/可复制/
+    可后退的权威；原先 intent 路径只改 tab.value 不写 URL，地址栏停在 ?tab=todo
+    （页面与地址栏脱节，刷新/复制链接回落「运营待办」）。单测可无 router 挂载，故访问保持可选 */
 function switchTab(t: OhTab) {
   tab.value = t
   if (route && router && route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
+}
+/** 同场景内的直达：切 tab 且把目的地视图的预筛一并写进 URL（单次 replace）。tab 取显式
+    目标值——不用 route.query.tab，它此刻可能仍是旧值，会把 tab 写回去（F5-3 竞态根因）。 */
+function openTabWith(t: OhTab, extra: Record<string, string>) {
+  tab.value = t
+  if (!route || !router) return
+  const changed = route.query.tab !== t || Object.entries(extra).some(([k, v]) => route.query[k] !== v)
+  if (changed) void router.replace({ query: { ...route.query, ...extra, tab: t } })
+}
+/** 反馈筛选（?status=）→ URL：由宿主统一写（Feedback 上报筛选值），tab 取本层权威的
+    tab.value——子组件自己写会用旧 route.query.tab 覆盖在途的 ?tab= replace（F5-3 竞态）。
+    值未变（URL 已是它、tab 也已对齐）时不重复导航，避免与 openTabWith 的 replace 相扰。 */
+function onFeedbackStatus(v: string) {
+  if (!route || !router) return
+  const cur = typeof route.query.status === 'string' ? route.query.status : ''
+  if (cur === v && route.query.tab === tab.value) return
+  const q: Record<string, string | (string | null)[]> = { ...route.query, tab: tab.value }
+  if (v) q.status = v
+  else delete q.status
+  void router.replace({ query: q })
 }
 
 /* 页签键盘契约（审核 #167）：roving tabindex（仅选中项可 Tab 进入）+ 左右方向键循环切换并移动焦点，
@@ -268,13 +291,18 @@ function onTabKeydown(e: KeyboardEvent) {
   void nextTick(() => tabEls.value[next]?.focus())
 }
 
-/* intent 深链：跨页跳转带 tab（待处理反馈 → feedback / 公告管理 → announce） */
+/* intent 深链：跨页跳转带 tab（待处理反馈 → feedback / 公告管理 → announce）。
+   F5-3：消费时走 switchTab 写 URL（replace，与点页签同历史行为）——原先只改 tab.value，
+   地址栏停在 ?tab=todo、刷新/复制链接回落「运营待办」，与点页签不同构。
+   （反馈的预筛不在此处：goFeedbackPending 与 tab 同一次 replace 落定，见下——
+   两个写入者各写一半会互相覆盖：子组件此刻读到的 route 仍是旧 tab。） */
 watch(
   () => intent.tab,
   (t) => {
     if (t && (OH_TABS as readonly string[]).includes(t)) {
-      tab.value = t as OhTab
+      const v = t as OhTab
       intent.tab = ''
+      switchTab(v)
     }
   },
   { immediate: true }
@@ -284,7 +312,7 @@ watch(
 watch(
   () => intent.quickAction,
   (a) => {
-    if (a === 'create-announcement' && tab.value !== 'announce') tab.value = 'announce'
+    if (a === 'create-announcement' && tab.value !== 'announce') switchTab('announce')
   },
   { immediate: true }
 )
@@ -389,14 +417,23 @@ const todoItems = computed(() => {
  */
 const TODO_METRIC_FOOT: Record<string, string> = { feedback: '等待分流', paths: '需排查重规划', dead: '投递失败待重投', draft: '待发布' }
 const todoMetrics = computed(() =>
-  todoItems.value.map((t) => ({
-    key: t.key,
-    label: t.label,
-    value: t.count,
-    bad: t.severity !== 'muted' && t.count > 0,
-    failed: t.failed,
-    foot: t.failed ? '加载失败，计数不可信' : TODO_METRIC_FOOT[t.key] ?? '',
-  }))
+  todoItems.value.map((t) => {
+    /* F5-4 审核：色调按事项严重度分档，不再把 bad/warn 压成一个布尔——
+       原 `bad: severity !== 'muted' && count > 0` 让「生成失败路径 23」（bad，ranklist 第一位）
+       与「待处理反馈 10」（warn）同为琥珀，颜色不再承载紧急度；同屏「学习路径」面板的
+       「生成失败」已显红（ow-state__bad），同一事实两色。失败态数字显红（加载失败为 bad），
+       muted（草稿公告）/零值维持原样不着色 */
+    const tone: 'bad' | 'warn' | '' =
+      t.failed || (t.count > 0 && t.severity === 'bad') ? 'bad' : t.count > 0 && t.severity === 'warn' ? 'warn' : ''
+    return {
+      key: t.key,
+      label: t.label,
+      value: t.count,
+      tone,
+      failed: t.failed,
+      foot: t.failed ? '加载失败，计数不可信' : TODO_METRIC_FOOT[t.key] ?? '',
+    }
+  })
 )
 
 /* 公告三态计数（live 层共享，与侧栏徽章同源） */
@@ -470,15 +507,16 @@ const annBadge = (s: string) =>
   s === 'critical' ? 'mk-badge--bad' : s === 'warning' ? 'mk-badge--warn' : 'mk-badge--info'
 
 /* ===== 跨页深链（运营组内各页均为独立场景，操作对象页唯一） ===== */
-/** 待处理反馈 → 反馈中心（预筛待处理） */
-/** 待处理反馈 → 反馈中心（预筛「待处理」；Feedback onMounted 消费 intent.statusFilter 后清空）。
-    原先只设 scene、由注释「由 Feedback 页默认筛选待处理」承诺，但 Feedback 从未消费该 intent
-    → 用户点「去处理」看到的是全量列表（审计 附 A #11）。 */
+/** 待处理反馈 → 反馈中心（预筛「待处理」）：tab 与预筛一次写进 URL（F5-3）。
+    原先只设 intent.tab、由 Feedback onMounted 供内存预筛——地址栏不动，刷新/复制链接
+    回落「运营待办」；改由 URL 承载后刷新/后退/复制链接都复原同一视图。
+    intent.statusFilter 仍设：Feedback onMounted 消费它（无 router 的单测/兜底路径），
+    已是同一值时不会二次写 URL（Feedback 对 ?status= 做双向同步，见 Feedback.vue）。 */
 function goFeedbackPending() {
   intent.statusFilter = 'new'
   intent.quickAction = '' // 确保不触发其他快捷动作
-  intent.tab = 'feedback' // 宿主 tab 切换（Feedback onMounted 消费 statusFilter 后清空）
   intent.scene = 'ops-hub'
+  openTabWith('feedback', { status: 'new' })
 }
 /** 生成失败路径 → 学习会话页「学习路径」tab（预筛 failed，宿主消费 intent.statusFilter/tab 后清空） */
 function goFailedPaths() {

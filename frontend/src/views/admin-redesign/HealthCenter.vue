@@ -390,10 +390,15 @@ const extraCapabilityCount = EXTRA_CAPABILITY_SKILLS.length
 /** 只读观测不计入「需处理」：漂移卡仅统计契约漂移 + W4 哈希漂移 */
 const driftActionable = computed(() => (displayReport.value?.drift?.contract || 0) + (displayReport.value?.drift?.hash || 0))
 const driftAny = computed(() => (displayReport.value?.drift?.contract || 0) + (displayReport.value?.drift?.hash || 0) + (displayReport.value?.drift?.runtime || 0) > 0)
-/** 对账异常口径：剔除与健康检查「ACTIVE 检查（W1）」同源的 zombieSkillActive，避免同一条异常计两次 */
+/** 对账异常口径：只计「对账」页签内可定位的异常——登记缺项（表内 diff=unregistered 行）+
+    无生效版本（表内 diff=active-missing 行）+ 失效注册（页内「失效注册残留」块/卡头 pill，同 zombieRegistration）。
+    2026-10-07 F6-3 修正：原口径把 zombieActive（失效生效版本）与 unwired（接线不一致）计入，但这两类
+    对应对账页签内**没有**任何行/pill 可定位（失效生效版本的 skill 已不在户口簿活跃集，对账表不收录），
+    造成 KPI 亮 2 而「仅看异常」0 行、卡头 pill 只写「失效注册 1」的同屏互斥口径。
+    现两类剔出 KPI，改由 title 如实披露并指向各自可定位的健康检查行（w1-active / w3-wiring）。 */
 const reconAbnormal = computed(() => {
-  const r = displayReport.value?.reconciliation
-  return (r?.missingRegistration || 0) + (r?.zombieRegistration || 0) + (r?.missingActive || 0) + (r?.zombieActive || 0) + (r?.unwired || 0)
+  const r = reconciliation.value
+  return r.missingRegistration + r.missingActive + r.zombieRegistration
 })
 const completionLive = computed(() => displayReport.value?.completion?.live || 0)
 /** 第 4 卡（完成度未达标）title：value=未达标数（需处理语义，0=好），达成数（已上线 N/M）下沉 hint；
@@ -413,14 +418,18 @@ const reconCardTitle = computed(() => {
   const r = reconciliation.value
   const parts = [
     `登记缺项 ${r.missingRegistration}`,
-    `失效注册 ${r.zombieRegistration}`,
     `无生效版本 ${r.missingActive}`,
-    `失效生效版本 ${r.zombieActive}`,
-    `接线不一致 ${r.unwired}`,
+    `失效注册 ${r.zombieRegistration}`,
   ]
+  // 2026-10-07 F6-3：未计入本卡的两类如实披露并指路——它们在「对账」页签内没有可定位的行/pill，
+  // 各自的可定位项住在健康检查页签的对应行，不并入本卡以免「KPI 亮 N 而筛选 0 行」
+  const excluded: string[] = []
+  if (r.zombieActive > 0) excluded.push(`失效生效版本 ${r.zombieActive}（户口簿已无此技能，对账表不收录；见健康检查「ACTIVE 检查（W1）」行）`)
+  if (r.unwired > 0) excluded.push(`接线不一致 ${r.unwired}（见健康检查「接线对账（W3）」行）`)
+  const exclNote = excluded.length ? `；另有未计入本卡（对账页签内无可定位行）：${excluded.join('、')}` : ''
   const note = r.zombieSkillActive > 0 ? `（另有 ${r.zombieSkillActive} 条失效 ACTIVE 与健康检查「生效版本检查」同源，不重复计数）` : ''
   const scope = extraCapabilityCount > 0 ? `（对账总数含 ${extraCapabilityCount} 个外挂能力，Skill 运行页不含）` : ''
-  return parts.join(' · ') + note + scope
+  return parts.join(' · ') + exclNote + note + scope
 })
 const skillCountTitle = computed(
   () => `登记总数 ${global.value.total} = Skill 运行 ${global.value.total - extraCapabilityCount} 个 + 外挂能力 ${extraCapabilityCount} 个（数据源 prompts/skills.yaml）`,

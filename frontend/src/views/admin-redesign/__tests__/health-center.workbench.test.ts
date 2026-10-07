@@ -134,7 +134,7 @@ describe('健康中心（G1）', () => {
     expect(cards[0].text()).toContain('健康检查共 13 项');       // 总数下沉 hint
     expect(cards[1].text()).toContain('3');                    // 漂移需处理：契约 1 + W4 2
     expect(cards[1].text()).toContain('契约 1 + 哈希 2');
-    expect(cards[2].text()).toContain('5');                    // 对账异常（value=异常数，非登记总数）
+    expect(cards[2].text()).toContain('3');                    // 对账异常：登记缺项 1 + 无生效版本 2 + 失效注册 0（zombieActive/unwired 不计入）
     expect(cards[2].text()).toContain('登记 8 项');
     expect(cards[3].text()).toContain('2');                    // 完成度未达标
     expect(cards[3].text()).toContain('已上线 2/8');           // 达成数下沉 hint + 用词统一「已上线」

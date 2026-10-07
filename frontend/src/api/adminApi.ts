@@ -4,6 +4,10 @@ import { clearUserLocalState } from '@/utils/sessionCleanup';
 import { AI_REQUEST_TIMEOUT } from '@/utils/api';
 import { createApiClient } from '@/utils/http';
 const ADMIN_SESSION_REQUEST_TIMEOUT_MS = 10000;
+/* token-cost 四个端点是全表聚合慢查询（冷载实测 7 天窗 ~11.6s、90 天窗 ~21.7s；
+   负载下可超默认 30s 被 axios abort——走查 F8-3 的 net::ERR_ABORTED @30007ms）。
+   分析页非操作面，单点放宽到 2min；其余 admin 请求保持 30s 默认不变。 */
+const TOKEN_COST_REQUEST_TIMEOUT_MS = 120000;
 
 /**
  * 管理员会话标记：token 已通过 HttpOnly Cookie 下发，JS 侧只记录"已登录"标记（非敏感）
@@ -972,24 +976,28 @@ export const adminTokenCostApi = {
   getSummary: async (params?: { days?: number; includeTest?: boolean }) => {
     return adminAxios.get('/admin/token-cost/summary', {
       params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
+      timeout: TOKEN_COST_REQUEST_TIMEOUT_MS,
     });
   },
   /** per-agent（skill）token 排行 */
   getBySkill: async (params?: { days?: number; includeTest?: boolean }) => {
     return adminAxios.get('/admin/token-cost/by-skill', {
       params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
+      timeout: TOKEN_COST_REQUEST_TIMEOUT_MS,
     });
   },
   /** per-user token 排行（q=按 用户ID/昵称/邮箱 服务端搜索） */
   getByUser: async (params?: { days?: number; includeTest?: boolean; limit?: number; q?: string }) => {
     return adminAxios.get('/admin/token-cost/by-user', {
       params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
+      timeout: TOKEN_COST_REQUEST_TIMEOUT_MS,
     });
   },
   /** per-model token 排行 */
   getByModel: async (params?: { days?: number; includeTest?: boolean }) => {
     return adminAxios.get('/admin/token-cost/by-model', {
       params: { ...params, includeTest: params?.includeTest ? '1' : undefined },
+      timeout: TOKEN_COST_REQUEST_TIMEOUT_MS,
     });
   },
 };

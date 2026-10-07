@@ -42,6 +42,19 @@
       <!-- 筛选卡片头（关键词 / 时间范围 / 列） -->
       <div class="mk-card__head">
         <div class="mk-filter">
+          <!-- 时间范围常驻回显（B14/F6-2）：timeRange 默认 'today'，而后端按日界
+               （Asia/Shanghai）过滤——选择器只活在「高级筛选」弹层里，卡头原先无任何
+               可见提示，空态/低条数被读成「从未发生过」（实测操作审计默认 3 条、
+               登录审计直接空态；改「全部」后 87474 / 3927）。此 chip 常驻显示当前生效
+               档位（值随 select 单源联动），点击即展开同一弹层改范围。 -->
+          <button
+            type="button"
+            class="mk-pill al-range"
+            :class="{ 'mk-pill--active': timeRange !== 'today' }"
+            :aria-expanded="advOpen"
+            :title="`当前生效时间范围：${timeRangeLabels[timeRange]}（点击展开高级筛选修改）`"
+            @click="advOpen = !advOpen"
+          ><span class="al-range__k">时间范围</span> <b class="al-range__v">{{ timeRangeLabels[timeRange] }}</b></button>
           <MkFilterSearch
             v-model="keyword"
             :placeholder="tab === 'login' ? '用户名 / IP，回车查询' : '关键词，回车查询'"
@@ -323,7 +336,7 @@
       :aria-labelledby="tabId"
       min
       :title="isFiltered ? (tab === 'login' ? '当前筛选无登录记录' : '当前筛选无审计记录') : tab === 'login' ? '暂无登录审计' : '暂无审计记录'"
-      :description="tab === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕'"
+      :description="emptyDescription"
       :action-text="isFiltered ? '清除筛选' : ''"
       @action="clearFilters"
     >
@@ -750,6 +763,15 @@ const { views: savedViews, save: saveViewToStore, remove: removeView } = useSave
 const TIME_RANGES = ['today', 'yesterday', 'week', 'month', 'all'] as const
 const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const
 
+/** 空态副文案（B14/F6-2）：未筛选时补一句时间范围口径——默认「今天」下清空只说明
+    今天无记录，不等于历史从未发生（会话安全页跳登录审计最易误读）。
+    未筛选 ⇒ timeRange 必为默认档（isFiltered 口径已含时间范围）。 */
+const emptyDescription = computed(() => {
+  const base = tab.value === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕'
+  if (isFiltered.value) return base
+  return `${base} · 默认时间范围「${timeRangeLabels[timeRange.value]}」，点卡头「时间范围」可改`
+})
+
 /** 当前筛选快照（仅含非默认值；tab 默认「操作审计」不存） */
 function filterSnapshot(): Record<string, string> {
   const snap: Record<string, string> = {}
@@ -980,6 +1002,11 @@ function exportCurrentPage() {
   text-overflow: ellipsis;
   max-width: 240px;
 }
+/* 时间范围常驻回显 chip（B14/F6-2）：复用 .mk-pill 描边胶囊外观，默认档为中性灰，
+   非默认档（已改范围）走 .mk-pill--active 浅蓝激活态；点击展开高级筛选弹层。 */
+.al-range { display: inline-flex; align-items: center; gap: 5px; }
+.al-range__k { color: var(--mk-faint); font-weight: 600; }
+.al-range__v { font-weight: 800; font-variant-numeric: tabular-nums; }
 /* P2-16：失败 TOP 聚合 chip（点击下钻到该动作的失败记录） */
 .al-fails { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 48%; }
 /* 弹层内档位：不受头部右区 48% 限宽，chip 允许换行铺开 */

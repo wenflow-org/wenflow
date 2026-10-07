@@ -13,6 +13,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import SkillDesignPage from '../SkillDesignPage.vue';
 import { coreEditorState } from '../skill-design/sdp-shared';
+import { confirmState, settleConfirm } from '../useConfirm';
 
 const { apiMocks } = vi.hoisted(() => {
   const fn = (val?: unknown) => vi.fn(async () => (val === undefined ? { data: {} } : val));
@@ -150,6 +151,11 @@ describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {
     apiMocks.publishCore.mockClear();
     apiMocks.saveCoreForm.mockClear();
     apiMocks.compileCore.mockClear();
+    // B17：发布确认走全局单例（本测试只挂页面，Confirm 弹窗由 App.vue 承载）→ 每例复位
+    confirmState.open = false;
+    confirmState.busy = false;
+    confirmState.busyMode = false;
+    confirmState.resolve = null;
     document.body.innerHTML = '';
   });
 
@@ -210,9 +216,14 @@ describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {
     wrapper.unmount();
   });
 
-  it('发布链第 2 步：safe 分类直接发布（无开发确认步），发布后刷新 overview', async () => {
+  it('发布链第 2 步：safe 分类先过确认框，确认后才发布（无开发确认步），发布后刷新 overview', async () => {
     const { wrapper } = await mountPage();
     await wrapper.findAll('button').find((b) => b.text() === '发布')!.trigger('click');
+    await settle();
+    // B17：单击先弹确认框，未确认不发 POST
+    expect(apiMocks.publishCore).not.toHaveBeenCalled();
+    expect(confirmState.open).toBe(true);
+    settleConfirm(true);
     await settle();
     expect(apiMocks.publishCore).toHaveBeenCalledTimes(1);
     const payload = (apiMocks.publishCore.mock.calls[0] as unknown[])[0] as { skillId?: string; confirmUncertain?: boolean; developerApproval?: unknown };
@@ -220,6 +231,17 @@ describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {
     expect(payload.confirmUncertain).toBeUndefined();
     expect(payload.developerApproval).toBeUndefined();
     expect(wrapper.text()).toContain('已发布：skill:test-skill v3');
+    wrapper.unmount();
+  });
+
+  it('发布链第 2 步：确认框取消 → 不发布', async () => {
+    const { wrapper } = await mountPage();
+    await wrapper.findAll('button').find((b) => b.text() === '发布')!.trigger('click');
+    await settle();
+    expect(confirmState.open).toBe(true);
+    settleConfirm(false);
+    await settle();
+    expect(apiMocks.publishCore).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
@@ -232,6 +254,8 @@ describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {
       })());
     const { wrapper } = await mountPage();
     await wrapper.findAll('button').find((b) => b.text() === '发布')!.trigger('click');
+    await settle();
+    settleConfirm(true);
     await settle();
     expect(wrapper.text()).toContain('含义冻结判定不确定');
     const forceBtn = wrapper.findAll('button').find((b) => b.text().includes('强制发布'))!;

@@ -45,9 +45,22 @@
             <span class="mk-field__label">用户 ID</span>
             <input v-model="advance.userId" class="mk-field__input mono" placeholder="留空 = 当前管理员" />
           </label>
-          <label class="mk-field">
+          <!-- 天数校验（F6-4）：越界/空值显式报错并拦截，不再静默 clamp（判例
+               VirtualLearnerBatchCreate 审核 #58「填 999 显 999 实建 20」）。原实现
+               Math.min(365,…) 夹取后结果区显「365 天后」、输入框仍留 999、toast 无提示，
+               会被读成「模拟了 999 天」；label 已有 min/max，原生校验因按钮非 submit 从不触发 -->
+          <label class="mk-field" :class="{ 'mk-field--error': !!advanceDaysError }">
             <span class="mk-field__label">天数（1-365）</span>
-            <input v-model.number="advance.days" type="number" min="1" max="365" class="mk-field__input" />
+            <input
+              v-model.number="advance.days"
+              type="number"
+              min="1"
+              max="365"
+              class="mk-field__input"
+              :aria-invalid="!!advanceDaysError"
+              @input="advanceDaysError = ''"
+            />
+            <span v-if="advanceDaysError" class="mk-field__err">{{ advanceDaysError }}</span>
           </label>
           <label class="mk-field">
             <span class="mk-field__label">路径 ID（可选）</span>
@@ -306,14 +319,40 @@ interface AdvanceTimeResult {
   after: unknown
 }
 const advanceResult = ref<AdvanceTimeResult | null>(null)
+/** 天数内联校验文案（空 = 通过）；上限与后端 devtools.ts:25 的 clamp(1,365) 同源 */
+const advanceDaysError = ref('')
+
+/** 天数取值校验：越界/留空/非整数显式报错，不做静默夹取（口径同 VirtualLearnerBatchCreate，
+    见文件头 F6-4 注释）。后端对越界值同样 clamp 1–365，故前端必须在提交前拦住不一致读数。 */
+function resolveAdvanceDays(): { ok: true; days: number } | { ok: false; error: string } {
+  // v-model.number 在输入框清空时回填 ''（非 number），故按 unknown 收口
+  const raw: unknown = advance.value.days
+  const n = Number(raw)
+  if (raw === '' || raw === null || raw === undefined || !Number.isFinite(n)) {
+    return { ok: false, error: '请填写天数（1–365 的整数）' }
+  }
+  if (!Number.isInteger(n)) {
+    return { ok: false, error: '天数须为整数（1–365）' }
+  }
+  if (n < 1 || n > 365) {
+    return { ok: false, error: '天数须为 1–365 的整数（最大 365 天）' }
+  }
+  return { ok: true, days: n }
+}
 
 async function runAdvance() {
+  const check = resolveAdvanceDays()
+  if (!check.ok) {
+    advanceDaysError.value = check.error
+    return
+  }
+  advanceDaysError.value = ''
   advanceBusy.value = true
   advanceResult.value = null
   try {
     const res = await adminDevtoolsApi.advanceTime({
       userId: advance.value.userId.trim() || undefined,
-      days: Math.max(1, Math.min(365, advance.value.days || 1)),
+      days: check.days,
       pathId: advance.value.pathId.trim() || undefined,
     })
     advanceResult.value = res.data?.data ?? res.data

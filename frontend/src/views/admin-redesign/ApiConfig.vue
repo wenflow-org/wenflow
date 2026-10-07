@@ -114,6 +114,8 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">模型清单</h3>
+        <!-- F8-2：拉取只写本页内存，不说明「需保存才可见」会被读成清单已持久化（刷新回退=丢数据） -->
+        <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">本次拉取未保存</span>
       </div>
       <div class="ac-body">
         <div class="ac-models">
@@ -130,6 +132,9 @@
             <span v-else>模型清单尚未拉取。平台实际在用模型见「模型总览」tab 的解析结果；点击右上角「连接并拉取」获取服务商列表。</span>
           </div>
         </div>
+        <!-- 持久化说明（F8-2）：拉取是连通性验证的本页动作，只有随连接保存落盘，
+             其他页面与下次进入才可见；保存成功后 hasUnsavedModels 归零，本行自动消失 -->
+        <span v-if="hasUnsavedModels" class="ac-models__hint">本次拉取的清单仅在本页有效：点卡头「保存连接」保存后，其他页面与下次进入才可见。</span>
       </div>
     </section>
 
@@ -1078,6 +1083,18 @@ const models = computed(() => fetchedModels.value)
 /** 通道拉取到、但不在模型目录里的 id（历史保存值/通道私有模型），仍保留在候选里 */
 const extraFetchedModels = computed(() => extraIds(models.value))
 
+/**
+ * 当前清单是否已落盘（F8-2）：拉取只写本页内存 ref，只有随「保存连接」进 availableModels 才持久化。
+ * 判定条件与 saveGroups 的归属规则（`fetchedModelsEndpoint === form.apiUrl` 才携带）严格对齐——
+ * 即「下一次保存连接会落盘、但后端现值还不是它」时才提示，避免改地址未拉取时误报。
+ */
+const hasUnsavedModels = computed(() => {
+  if (!models.value.length) return false
+  if (fetchedModelsEndpoint.value !== form.apiUrl.trim()) return false
+  const saved = cfg.value?.availableModels ?? []
+  return models.value.length !== saved.length || models.value.some((m, i) => m !== saved[i])
+})
+
 /** 思考开关 = enabled(强制) 或 default(跟随模型) 视为"开"；disabled 视为"关"。
     关闭时后端仍可被 skill 级配置覆盖；此处仅表达平台默认。 */
 const thinkingOn = computed(() => form.defaultThinkingMode !== 'disabled')
@@ -1138,10 +1155,12 @@ const routeWarnText = computed(() => {
   const names = bad.map((c) => c.message || c.id).slice(0, 2).join('、')
   return `${bad.length} 项能力降级 / 不可用：${names}${bad.length > 2 ? ' 等' : ''}`
 })
-/** 模型清单状态说明：区分「清单未拉取」与「已就绪」，不点「默认路由 3/3」暗示整体就绪 */
+/** 模型清单状态说明：区分「清单未拉取」「本次拉取未保存」「已就绪」，不点「默认路由 3/3」暗示整体就绪 */
 const modelListTitle = computed(() =>
   models.value.length
-    ? `已拉取 ${models.value.length} 个服务商模型`
+    ? hasUnsavedModels.value
+      ? `本次拉取 ${models.value.length} 个服务商模型，尚未保存：仅本页有效，保存连接后其他页面与下次进入才可见`
+      : `已拉取 ${models.value.length} 个服务商模型`
     : '尚未拉取服务商模型清单；平台实际在用模型见「模型总览」tab 的解析结果，切换取值需先拉取清单',
 )
 const routeTitle = computed(
@@ -1561,6 +1580,8 @@ async function saveQuota(enabled: boolean, quota: number) {
   font-weight: 800;
   flex-shrink: 0;
 }
+/* 持久化说明（F8-2）：拉取仅本页有效的提示，比清单胶囊再轻一档；仅未保存时出现 */
+.ac-models__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.55; }
 
 /* 默认思考：开关 + 强度 + 模式，与「路由默认」同一三列网格语言 */
 .ac-think .mk-field--switch { align-self: center; }

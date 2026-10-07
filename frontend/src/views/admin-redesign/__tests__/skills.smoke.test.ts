@@ -1,7 +1,7 @@
 /**
  * Skills.vue P1 修复批冒烟：
  * 1. 目录表完成度列（复用对账 completion：live 渲染五档徽章，demo/无对账显示 —）
- * 2. 对账面板「仅看异常」切换（未注册/缺 ACTIVE/非 live 行过滤，与目录表「仅看需关注」对称）
+ * 2. 对账面板「仅看异常」切换（未注册/缺 ACTIVE 行过滤；完成度非 live 归「完成度」域，不再并入对账异常）
  * 3. 折叠 pill 口径标注（户口簿全量 vs 目录排除外挂能力）
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -196,7 +196,7 @@ describe('Skill 目录 P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('对账面板「仅看异常」：过滤后仅剩异常行（未注册/非 live），live 行隐藏', async () => {
+  it('对账面板「仅看异常」：过滤后仅剩未注册/无生效版本行，live 与草稿行隐藏', async () => {
     getReconciliationMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
     const wrapper = await mountRecon();
     // 整卡折叠已退役（2026-10-05，details 包壳撤）：面板常开，无需展开步骤
@@ -205,7 +205,8 @@ describe('Skill 目录 P1 修复批', () => {
     expect(pills.some((p) => p.text() === '仅看异常')).toBe(true);
     const rowsBefore = wrapper.findAll('.sk-rec-table tbody tr.sk-row').length;
     expect(rowsBefore).toBeGreaterThan(2);
-    // 点击「仅看异常」→ live 行隐藏，异常行（未注册/草稿）保留
+    // 点击「仅看异常」→ 仅保留 diff 行（未注册/无生效版本）；live 行与「非 live 但无差集」的草稿行都隐藏
+    // （2026-10-07 F6-3：完成度非 live 归「完成度」页签/第 4 张 KPI，不再并入对账异常口径）
     await pills.find((p) => p.text() === '仅看异常')!.trigger('click');
     await nextTick();
     await flushPromises();
@@ -213,7 +214,31 @@ describe('Skill 目录 P1 修复批', () => {
     expect(rowsAfter).toBeLessThan(rowsBefore);
     const recRowTexts = wrapper.findAll('.sk-rec-table tbody tr.sk-row').map((r) => r.text());
     expect(recRowTexts.some((t) => t.includes('live-a'))).toBe(false);
+    expect(recRowTexts.some((t) => t.includes('draft-c'))).toBe(false); // 非 live 但无差集 → 不属对账异常
     expect(wrapper.findAll('.sk-rec-table tbody tr.sk-row').some((r) => r.text().includes('未注册'))).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('F6-3：仅剩失效注册残留时，空态如实披露（不写「全部对账一致」）', async () => {
+    // 全部 live 且无 diff 行，只有 1 条失效注册残留（对应真实 /skills/reconciliation：36 行 diff 全 null + triage-judge 残留）
+    const report = makeReport();
+    report.summary = { ...report.summary, total: 2, unregistered: 0, activeMissing: 0, orphanRegistrations: 1 };
+    report.items = [makeRow('live-a'), makeRow('live-b')];
+    report.orphanRegistrations = [{ name: 'triage-judge' }];
+    getReconciliationMock.mockResolvedValue({ data: { success: true, data: report } });
+    const wrapper = await mountRecon();
+    await flushPromises();
+    // 卡头 pill 报「失效注册 1」，残留块可定位
+    expect(wrapper.text()).toContain('失效注册 1');
+    expect(wrapper.find('.sk-rec-orphans').text()).toContain('triage-judge');
+    // 点「仅看异常」→ 0 行（残留无户口簿行），空态必须披露残留而非「全部对账一致」
+    await wrapper.findAll('.sk-rec-tools .mk-pill').find((p) => p.text() === '仅看异常')!.trigger('click');
+    await nextTick();
+    await flushPromises();
+    expect(wrapper.findAll('.sk-rec-table tbody tr.sk-row').length).toBe(0);
+    const empty = wrapper.find('.mk-empty').text();
+    expect(empty).toContain('另有 1 条失效注册残留');
+    expect(empty).not.toMatch(/^无异常技能：2 项全部对账一致$/);
     wrapper.unmount();
   });
 });

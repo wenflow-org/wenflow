@@ -10,7 +10,7 @@
           <button type="button" class="mk-link" :disabled="!coreLoaded || coreSaving || coreCompiling" @click="saveAndCompile">
             {{ coreSaving ? '保存中…' : '保存并编译' }}
           </button>
-          <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="!coreLoaded || corePublishing || coreEditorState.dirty" :title="coreEditorState.dirty ? '有未保存修改，请先保存' : ''" @click="publishCore(false)">
+          <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="!coreLoaded || corePublishing || coreEditorState.dirty" :title="coreEditorState.dirty ? '有未保存修改，请先保存' : ''" @click="requestPublish">
             {{ corePublishing ? '发布中…' : '发布' }}
           </button>
         </span>
@@ -678,7 +678,32 @@ async function saveAndCompile() {
   await previewCore()
 }
 
-/** 发布链第 2 步：发布（保留 developerApproval 门禁 + 语义门 409） */
+/**
+ * 发布链第 2 步：发布（保留 developerApproval 门禁 + 语义门 409）
+ *
+ * 发布写生产 ACTIVE 版本、运行时立即生效（不可逆），与「保存并编译」（只落草稿）不同级，
+ * 故与删除/回滚/重置同待遇：任何路径进入前都先过确认框。
+ * - 页头「发布」→ requestPublish：safe 分类在此确认（非 safe 由下方 developerApproval 框确认）
+ * - 「人工确认无误，强制发布」→ 按钮文案与 409 上下文本身即确认，直连 publishCore（不再叠一层）
+ */
+async function requestPublish() {
+  if (coreEditorState.dirty) {
+    toast.error('有未保存修改，请先「保存并编译」')
+    return
+  }
+  const level = coreClassification.value?.level || 'safe'
+  // 非 safe 分类的确认交给 developerApproval 输入框（含分级原因 + 开发引用），避免连弹两框
+  if (level === 'safe') {
+    const ok = await askConfirm({
+      title: '发布到运行时',
+      message: `确认发布 ${props.skillId} 的 core.yaml？\n发布后确定性编译为五块 Prompt（skill.${props.skillId}.md + 数据库 ACTIVE），运行时立即生效、不可回退。`,
+      confirmText: '发布'
+    })
+    if (!ok) return
+  }
+  await publishCore(false)
+}
+
 async function publishCore(confirmUncertain: boolean) {
   if (!coreLoaded.value || corePublishing.value) return
   let developerApproval: { reference: string } | undefined

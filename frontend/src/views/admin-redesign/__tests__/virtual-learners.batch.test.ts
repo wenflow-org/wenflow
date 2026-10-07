@@ -63,7 +63,11 @@ vi.mock('../store', async () => {
 
 const { terminateMock, reclaimMock, openSubPageMock } = vi.hoisted(() => ({
   terminateMock: vi.fn(async () => ({ data: { data: { dryRun: false, terminated: 2, skippedTerminal: 1 } } })),
-  reclaimMock: vi.fn(async () => ({ data: { data: { dryRun: true, reclaimed: 0, skippedActiveLease: 0, sessions: [] as Array<Record<string, unknown>> } } })),
+  /* 干跑响应形状用 Record<string, unknown> 放宽：B8-F4-2 后新增 scanned/skippedSessions/batchLimit，
+     逐字段标注会让「旧响应缺新字段」的既有用例无法复用同一 mock */
+  reclaimMock: vi.fn(async (): Promise<{ data: { data: Record<string, unknown> } }> => ({
+    data: { data: { dryRun: true, reclaimed: 0, skippedActiveLease: 0, sessions: [] as Array<Record<string, unknown>> } }
+  })),
   openSubPageMock: vi.fn()
 }));
 
@@ -187,7 +191,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
     // 数字不渲染（防 0% 假绿），错误档显「不可用」+ hint 给动作出口
     expect(kpiNum('完成率')).toBe('不可用');
-    expect(kpiNum('失败率')).toBe('不可用');
+    expect(kpiNum('系统失败率')).toBe('不可用');
     expect(kpiNum('今日调用')).toBe('不可用');
     expect(w.text()).toContain('统计不可用 · 点击重试');
     expect(w.find('.mk-kpi--bad').exists()).toBe(true);
@@ -203,7 +207,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const kpiNum = (label: string) =>
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
     expect(kpiNum('完成率')).toBe('…');
-    expect(kpiNum('失败率')).toBe('…');
+    expect(kpiNum('系统失败率')).toBe('…');
     expect(w.text()).toContain('统计加载中');
   });
 
@@ -236,7 +240,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(sub!.attributes('title')).toContain('2026-08-10 10:00');
   });
 
-  it('运行统计展示（A5）：今日调用/完成率/失败率（状态条）', async () => {
+  it('运行统计展示（A5）：今日调用/完成率/系统失败率（状态条）', async () => {
     liveVirtualRunStats.value = {
       profileCount: 3,
       totalSessions: 10,
@@ -264,18 +268,23 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).toContain('200');
     expect(w.text()).toContain('完成率');
     expect(w.text()).toContain('60%');
-    expect(w.text()).toContain('失败率');
+    // B8-F4-4：口径正名「系统失败率」（值与 systemFailureRate 一致，与总览页同标）
+    expect(w.text()).toContain('系统失败率');
     expect(w.text()).toContain('30%');
+    // hint 必须写明分母与「人为终止另计」，并给出合计失败率（40%），运营不再把 30% 读成全部失败占比
+    expect(w.text()).toContain('系统失败 3 / 全部 10');
+    expect(w.text()).toContain('人为终止 1 另计');
+    expect(w.text()).toContain('合计 40%');
   });
 
-  it('无会话数据时完成率/失败率显示 0%（共享 KPI 卡常驻）', async () => {
+  it('无会话数据时完成率/系统失败率显示 0%（共享 KPI 卡常驻）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
     // 按卡片结构断言而非拼接文本（MkKpi 里 label 与数字是相邻元素，text() 无空格）
     const kpiNum = (label: string) =>
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
     expect(kpiNum('完成率')).toBe('0%');
-    expect(kpiNum('失败率')).toBe('0%');
+    expect(kpiNum('系统失败率')).toBe('0%');
     // 防回归：这一页的运行指标必须挂在共享 .mk-kpi-grid 下（2026-09-29 归一，原 MkStatStrip 自由条）
     expect(w.find('.vl-kpi .mk-kpi-grid').exists()).toBe(true);
     expect(w.findAll('.mk-kpi')).toHaveLength(5);
@@ -450,6 +459,47 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const w = await mountPage();
     await w.find('.rs-badge').trigger('click');
     expect(openSubPageMock).toHaveBeenCalledWith('session', 'run-1');
+  });
+
+  it('B8-F4-2 干跑清单同源同数：候选数=角标口径，豁免项逐条列出（不再「按钮 35 / 弹窗 0」）', async () => {
+    // 页头角标读 staleCount（= 超阈值卡死候选，排除暂停）；干跑返回同一批候选：可回收 0 + 豁免 2
+    liveVirtualSessionStats.value = { created: 0, running: 2, failed: 0, abandoned: 0, completed: 0, total: 2 };
+    liveVirtualStaleCount.value = 2;
+    liveVirtuals.value = [makeVirtual(1, { runningCount: 2, stalledCount: 2 })];
+    reclaimMock.mockResolvedValueOnce({
+      data: {
+        data: {
+          dryRun: true, scanned: 2, reclaimed: 0, batchLimit: 50,
+          sessions: [] as Array<Record<string, unknown>>,
+          skippedSessions: [
+            { id: 'held-1', status: 'running', currentStage: 'goal', staleMs: 3600000, updatedAt: 'x', skipReason: 'held' },
+            { id: 'lease-1', status: 'running', currentStage: 'learn', staleMs: 7200000, updatedAt: 'x', skipReason: 'active-lease' }
+          ]
+        }
+      }
+    });
+    const w = await mountPage();
+    findBtn(w, '回收卡死（2）').trigger('click');
+    await flushPromises();
+    const body = document.body.textContent || '';
+    // 弹窗候选数与按钮角标同数（2），并给出豁免分项
+    expect(body).toContain('扫描到 2 个超阈值卡死候选会话（与页头角标同源）');
+    expect(body).toContain('可回收 0 个');
+    expect(body).toContain('豁免 2 个');
+    // 豁免项逐条可见 + 原因标签
+    expect(body).toContain('held-1');
+    expect(body).toContain('lease-1');
+    expect(body).toContain('外部 hold');
+    expect(body).toContain('活跃租约');
+    // 无可回收项 → 确认按钮禁用且文案为 0（数字与清单一致，不再是「35 暗示 / 0 实际」的错位）
+    const confirm = Array.from(document.body.querySelectorAll('button')).find(b => b.textContent?.includes('确认回收')) as HTMLButtonElement | undefined;
+    expect(confirm?.textContent).toContain('确认回收 0 个会话');
+    expect(confirm?.disabled).toBe(true);
+    // 关闭弹窗，避免污染后续用例的 document.body
+    const cancel = Array.from(document.body.querySelectorAll('button')).find(b => b.textContent?.trim() === '取消');
+    cancel?.dispatchEvent(new Event('click'));
+    await flushPromises();
+    w.unmount();
   });
 
   it('卡死/失败会话分列标注（卡死/失败列红数字）', async () => {
