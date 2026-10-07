@@ -158,4 +158,20 @@ describe('输入区底部提示条：只放元数据，不放动作', () => {
       expect(size!, `${sel} 字号 ${size} < 12，会破 fonts 门禁`).toBeGreaterThanOrEqual(12);
     }
   });
+
+  it('计数贴输入框左缘、AI 声明贴右缘（各锚住那条列宽的一端）', () => {
+    const block = mobileBlock();
+    const cluster = ruleOf(block, '.composer__hint-right');
+    // 簇必须撑满列宽，否则没有可分配的空隙，两端锚不住
+    expect(decl(cluster, 'width'), '簇没撑满列宽，两端分布无从谈起').toBe('100%');
+    // 计数靠 margin-right:auto 顶到左端，声明留在 flex-end 的右端
+    expect(
+      decl(ruleOf(block, '.composer__count'), 'margin-right'),
+      '计数没顶到左端：会被 226px 的声明推离输入框左缘（390 实测曾落在 x=81）'
+    ).toBe('auto');
+    expect(
+      decl(cluster, 'justify-content'),
+      '簇不能用 space-between：≤360 计数隐藏后只剩声明一项，会被丢到左端'
+    ).toBe('flex-end');
+  });
 });

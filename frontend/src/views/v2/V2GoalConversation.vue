@@ -2348,10 +2348,17 @@ function shuffleScenes() {
     padding: 0;
   }
   .composer__hint-shortcut { display: none; }
-  /* 计数与 AI 声明同处一条基线、整体靠右（与输入框右缘对齐）。
-     此前用 display:contents 把两者拉到缝的两端，是为了给左侧的「新目标」让位；
-     按钮移除后两端分布只会把一条元数据拉散成两截，改回一个右对齐的簇。 */
-  .composer__hint-right { display: inline-flex; align-items: baseline; gap: 10px; }
+  /* 计数贴输入框左缘、AI 声明贴右缘：两者分别锚住输入框那条列宽的两端。
+     此前把两者并成一个右对齐簇，计数会被 226px 的声明顶到 x=81，在输入框里
+     找不到任何对齐关系（390 实测）。计数是这条里唯一随输入变化的数字，放左端
+     才与输入框左缘成一条竖线；固定文案的声明压到右端，不抢视线。
+     用 margin-right:auto 而不是 space-between：≤360 计数隐藏后只剩声明一项，
+     auto 边距随之失效、声明回落 flex-end 的右端；space-between 会把单项丢到左端。 */
+  .composer__hint-right {
+    display: inline-flex; align-items: baseline; gap: 10px;
+    width: 100%; justify-content: flex-end;
+  }
+  .composer__count { margin-right: auto; }
   /* iOS Safari 聚焦 <16px 的输入框会触发视口自动放大，打完字还要 pinch 收回——
      textarea 必须留 16px；想让空态看着轻一点只能压 placeholder（占位符字号不影响聚焦判定）。
      盒内继续收紧：外内边距左 12→8、gap 10→8、textarea 上下 10→8、发送键 40→36，盒高 62→54。
