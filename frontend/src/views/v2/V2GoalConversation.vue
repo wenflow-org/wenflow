@@ -32,11 +32,12 @@
 
       <!-- 最近会话（D14）：此前目标规划没有任何产品内回访入口——入口页无历史列表，
            其它页面只挂裸 /goal-conversation，深链 /goal-conversation/:id 可达但无处可点。
-           本地记录最近几次会话的 id + 首句摘要，给出可点的深链回访入口。 -->
-      <div v-if="recentGoals.length" class="recent">
+           本地记录最近几次会话的 id + 首句摘要，给出可点的深链回访入口。
+           恢复卡正在显示的那条要从这里剔除：两块入口指向同一会话会让用户以为有两个规划。 -->
+      <div v-if="visibleRecentGoals().length" class="recent">
         <span class="recent__title">最近会话</span>
         <ul class="recent__list">
-          <li v-for="r in recentGoals" :key="r.id">
+          <li v-for="r in visibleRecentGoals()" :key="r.id">
             <a
               :href="`/goal-conversation/${r.id}`"
               class="recent__item"
@@ -551,7 +552,7 @@ import { useIsDark } from '@/composables/useIsDark';
 const isDark = useIsDark();
 import { useRoute, useRouter } from 'vue-router';
 import { useGoalLive, type LiveMessage } from './useGoalLive';
-import { forgetRecentGoalForUser, loadRecentGoalsForUser, rememberRecentGoalForUser, type RecentGoalEntry } from '@/utils/recentGoals';
+import { forgetRecentGoalForUser, loadRecentGoalsForUser, rememberRecentGoalForUser, withoutResumedEntry, type RecentGoalEntry } from '@/utils/recentGoals';
 import { isProbeAnswer, probeAnswerParts } from './probeAnswer';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
@@ -559,7 +560,7 @@ import MessageActions from '@/components/chat/MessageActions.vue';
 import MaterialUploadArea from '@/components/learning/MaterialUploadArea.vue';
 import { hasUserSession } from '@/utils/api';
 import { useUserStore } from '@/stores/user';
-import { currentUserId, dropLegacyRecentGoalsStorage } from '@/utils/sessionCleanup';
+import { currentUserId, dropLegacyRecentGoalsStorage, getGoalConversationCid } from '@/utils/sessionCleanup';
 import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { toast } from '@/utils/toast';
 import { feedbackApi } from '@/api/feedback';
@@ -763,6 +764,11 @@ function rememberGoal(id: string) {
 function forgetRecentGoal(userId: string, id: string) {
   const next = forgetRecentGoalForUser(userId, id);
   if (recentGoalsUserId.value === userId) recentGoals.value = next;
+}
+/** 最近列表剔除恢复卡指向的那条（同一条会话不出现两个入口）。与 live.hasSession() 一样
+    在渲染时现取本地会话 id：它随会话开始/重置变化，不挂在响应式源上，函数调用才是最新值。 */
+function visibleRecentGoals(): RecentGoalEntry[] {
+  return withoutResumedEntry(recentGoals.value, getGoalConversationCid());
 }
 
 watch(recentGoalsUserId, (nextId, previousId) => {

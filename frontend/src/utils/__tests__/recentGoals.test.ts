@@ -8,7 +8,12 @@ import {
   removeRecentGoalsStorage,
   setRecentGoalsStorage,
 } from '../sessionCleanup';
-import { forgetRecentGoalForUser, loadRecentGoalsForUser, rememberRecentGoalForUser } from '../recentGoals';
+import {
+  forgetRecentGoalForUser,
+  loadRecentGoalsForUser,
+  rememberRecentGoalForUser,
+  withoutResumedEntry,
+} from '../recentGoals';
 
 const entryA = { id: 'gc_a', preview: 'A goal', at: 100 };
 const entryB = { id: 'gc_b', preview: 'B goal', at: 200 };
@@ -76,5 +81,23 @@ describe('最近会话缓存按账号隔离', () => {
     expect(getRecentGoalsStorage('user-a')).toBeNull();
     expect(getRecentGoalsStorage('user-b')).toBeNull();
     expect(localStorage.getItem('v2_goal_cid:user-a')).toBeNull();
+  });
+});
+
+describe('最近列表不与「继续上次的规划」重复指向同一会话', () => {
+  it('恢复卡指向的那条从列表里剔除，其余保留', () => {
+    expect(withoutResumedEntry([entryA, entryB], entryA.id)).toEqual([entryB]);
+  });
+
+  it('没有恢复目标时原样返回（本地无会话，列表照常显示）', () => {
+    expect(withoutResumedEntry([entryA, entryB], null)).toEqual([entryA, entryB]);
+  });
+
+  it('列表里只有恢复卡那一条时返回空（调用方据此整块隐藏，不留孤立标题）', () => {
+    expect(withoutResumedEntry([entryA], entryA.id)).toEqual([]);
+  });
+
+  it('恢复目标不在列表里时不做任何改动', () => {
+    expect(withoutResumedEntry([entryA], 'gc_other')).toEqual([entryA]);
   });
 });
