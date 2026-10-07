@@ -7,7 +7,10 @@
  * - LearnerDetail tab 归一化（6 → 3 旧名重定向）
  */
 import { describe, expect, it } from 'vitest';
-import { isTestAccountUser, levelFromXp, levelLabel, levelWordZh, levelBadgeZh, conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, memoryReviewUrl } from '../learner-profile';
+import { mount, flushPromises } from '@vue/test-utils';
+import { defineComponent, h, nextTick, ref } from 'vue';
+import { createMemoryHistory, createRouter } from 'vue-router';
+import { isTestAccountUser, isVirtualLearnerAccount, isRealAccountUser, useListQueryState, levelFromXp, levelLabel, levelWordZh, levelBadgeZh, conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, memoryReviewUrl } from '../learner-profile';
 
 describe('isTestAccountUser（测试/虚拟账号识别，与后端同源）', () => {
   it('虚拟学习者：id 以 virtual_ 开头或邮箱 @test.local / virtual_ 前缀', () => {
@@ -142,5 +145,158 @@ describe('memoryReviewUrl（跨组件深链契约）', () => {
 
   it('空值不抛错（详情页拿不到 id 时按钮不渲染，但函数要稳）', () => {
     expect(memoryReviewUrl('')).toBe('/admin/memory-review?userId=');
+  });
+});
+
+/**
+ * 账号域口径单点（2026-10-07 运营走查 F1-1）：含测试档下「普通用户」pill 曾比同屏 KPI
+ * 「真实用户」多 10——卡库/预置库造出的虚拟学习者（vl-*@cards.local / builtin_*@preset.local）
+ * payload 标了 isVirtualLearner=true，命名约定正则却认不出，于是既被算进「普通用户」、
+ * 又能勾选进批量删除 / 导出。以下锁死「标记优先 ∪ 正则兜底」的判据。
+ */
+describe('账号域口径单点（isVirtualLearnerAccount / isRealAccountUser，F1-1）', () => {
+  const vlCard = { id: '77703637-190c-4e62-9c0f-e4398492447f', name: '研一学生小陈', email: 'vl-mat-book-e2e-01@cards.local', isVirtualLearner: true, isTestAccount: false };
+  const builtinPreset = { id: '569d04fc-29a2-40bc-a6d0-b0d09cba0474', name: '沈舟', email: 'builtin_backend-eng-distributed@preset.local', isVirtualLearner: true, isTestAccount: false };
+  const real = { id: 'user_1', name: '陈晓', email: 'chenxiao@example.com', isVirtualLearner: false, isTestAccount: false };
+  const testAcc = { id: 'user_2', name: 'uitestnldh', email: 'uitestnldh@wenflow.local', isVirtualLearner: false, isTestAccount: true };
+
+  it('卡库 / 预置库虚拟学习者：正则认不出，但 payload 标记必须让它出真实域', () => {
+    for (const u of [vlCard, builtinPreset]) {
+      expect(isVirtualLearnerAccount(u)).toBe(true);
+      expect(isRealAccountUser(u)).toBe(false);
+    }
+  });
+
+  it('payload 标记优先于命名约定（后端说虚拟就是虚拟）', () => {
+    expect(isVirtualLearnerAccount({ ...real, isVirtualLearner: true })).toBe(true);
+    expect(isRealAccountUser({ ...real, isVirtualLearner: true })).toBe(false);
+  });
+
+  it('无标记（mock / 旧响应 / 已删除窗口行）时按创建约定兜底', () => {
+    expect(isVirtualLearnerAccount({ email: 'virtual_93e4c032@test.local' })).toBe(true);
+    expect(isVirtualLearnerAccount({ id: 'virtual_93e4c032' })).toBe(true);
+    expect(isRealAccountUser({ email: 'virtual_93e4c032@test.local' })).toBe(false);
+  });
+
+  it('测试 / 审计账号（payload 标记或命名约定）都不算真实账号', () => {
+    expect(isRealAccountUser(testAcc)).toBe(false);
+    expect(isRealAccountUser({ id: 'u1', name: 'x', email: 'e2e_1@example.com' })).toBe(false);
+    expect(isRealAccountUser({ id: 'u1', name: 'shotsnap547618', email: 's@wenflow.local' })).toBe(false);
+  });
+
+  it('真实用户不误伤（管理员也是真实账号）', () => {
+    expect(isVirtualLearnerAccount(real)).toBe(false);
+    expect(isRealAccountUser(real)).toBe(true);
+    // 传整行（含 isAdmin 等额外字段）也不受影响：判据只看账号性质字段
+    const adminRow = { ...real, isAdmin: true, xp: 860, paths: 3 };
+    expect(isRealAccountUser(adminRow)).toBe(true);
+  });
+});
+
+/**
+ * 列表筛选 / 页码 ↔ URL query（2026-10-07 运营走查 F1-2）：进二级详情时列表组件被整个卸载，
+ * 组件内 ref 清零——返回后筛选必须靠 URL 还原。这里锁「URL 落位 / 变化写回 / 缺省不写 /
+ * 脏值回落 / 无 Router 降级」五条契约。
+ */
+describe('useListQueryState（列表筛选·页码 ↔ URL query，F1-2）', () => {
+  function makeRouter() {
+    return createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/:page', component: { template: '<div />' } }] });
+  }
+
+  async function mountState(initialUrl: string, opts: { bin?: boolean; pageSize?: boolean } = {}) {
+    const router = makeRouter();
+    await router.push(initialUrl);
+    await router.isReady();
+    const pill = ref('all');
+    const keyword = ref('');
+    const page = ref(1);
+    const pageSize = ref(15);
+    const bin = ref<number | null>(null);
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          useListQueryState({
+            pill,
+            keyword,
+            page,
+            pageSize: opts.pageSize ? pageSize : undefined,
+            bin: opts.bin ? bin : undefined,
+            allowedPills: ['all', 'admin', 'user', 'online', 'deleted']
+          });
+          return () => h('div');
+        }
+      }),
+      { global: { plugins: [router] } }
+    );
+    await nextTick();
+    return { router, wrapper, pill, keyword, page, pageSize, bin };
+  }
+
+  it('挂载落位：URL 的 pill / 搜索词 / 页码 / 分段序号写进状态（返回与深链还原）', async () => {
+    const { pill, keyword, page, bin } = await mountState('/admin/people?pill=user&q=uitest&page=2&bin=1', { bin: true });
+    expect(pill.value).toBe('user');
+    expect(keyword.value).toBe('uitest');
+    expect(page.value).toBe(2);
+    expect(bin.value).toBe(1);
+  });
+
+  it('变化写回：筛选与翻页只 replace 自己管的键，其余 query（tab/view/id）原样保留', async () => {
+    const { router, pill, keyword, page } = await mountState('/admin/people?tab=account&view=user&id=u1');
+    pill.value = 'online';
+    keyword.value = '陈';
+    page.value = 3;
+    await nextTick();
+    await flushPromises();
+    expect(router.currentRoute.value.query).toMatchObject({ tab: 'account', view: 'user', id: 'u1', pill: 'online', q: '陈', page: '3' });
+    // 回到缺省：自己管的键被删干净，别人的键不动
+    pill.value = 'all';
+    keyword.value = '';
+    page.value = 1;
+    await nextTick();
+    await flushPromises();
+    expect(router.currentRoute.value.query).toMatchObject({ tab: 'account', view: 'user', id: 'u1' });
+    expect(router.currentRoute.value.query.pill).toBeUndefined();
+    expect(router.currentRoute.value.query.q).toBeUndefined();
+    expect(router.currentRoute.value.query.page).toBeUndefined();
+  });
+
+  it('外部改 URL（浏览器后退 / 手改地址）回写状态；自己写的 URL 不引发回环', async () => {
+    const { router, pill, page } = await mountState('/admin/people?pill=user&page=2');
+    await router.push('/admin/people?pill=deleted');
+    await nextTick();
+    await flushPromises();
+    expect(pill.value).toBe('deleted');
+    expect(page.value).toBe(1);
+    // 再 push 一次相同 query：状态不被清掉（路由回调只在签名变化时才落位）
+    await router.push('/admin/people?pill=deleted');
+    await nextTick();
+    await flushPromises();
+    expect(pill.value).toBe('deleted');
+  });
+
+  it('脏值回落：不在词表里的 pill、非正整数页码不把列表筛空', async () => {
+    const { pill, page, pageSize } = await mountState('/admin/people?pill=nope&page=abc&size=-3', { pageSize: true });
+    expect(pill.value).toBe('all');
+    expect(page.value).toBe(1);
+    expect(pageSize.value).toBe(15);
+  });
+
+  it('无 Router 上下文挂载时降级为纯内存状态（不抛错、不改状态）', async () => {
+    const pill = ref('user');
+    const keyword = ref('x');
+    const page = ref(2);
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          useListQueryState({ pill, keyword, page, allowedPills: ['user'] });
+          return () => h('div');
+        }
+      })
+    );
+    await nextTick();
+    expect(pill.value).toBe('user');
+    expect(keyword.value).toBe('x');
+    expect(page.value).toBe(2);
+    wrapper.unmount();
   });
 });

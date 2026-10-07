@@ -114,7 +114,7 @@
           <!-- 行点击进用户详情；键盘等价：tabindex + Enter 触发（对齐 gc-row/oc-row 判例），
                行内控件已 stopPropagation，聚焦自身即可回车，不产生双份焦点停靠 -->
           <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" tabindex="0" @click="openSubPage('user', u.id)" @keydown.enter="($event.target === $event.currentTarget) && openSubPage('user', u.id)">
-            <td v-if="isLive && showCol('check')"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isTestAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
+            <td v-if="isLive && showCol('check')"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isNonRealAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
               <div class="ul-user">
                 <MkCellAvatar :name="u.name" :tone="avaTone(u)" />
@@ -130,8 +130,8 @@
                 <div class="ul-tags">
                   <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
                   <span v-else-if="isSelf(u)" class="mk-badge mk-badge--sm mk-badge--self">当前管理员</span>
-                  <MkVariantBadge v-else-if="u.isVirtualLearner" kind="virtual" />
-                  <MkVariantBadge v-else-if="isTestAccount(u)" kind="test" />
+                  <MkVariantBadge v-else-if="isVirtualAccount(u)" kind="virtual" />
+                  <MkVariantBadge v-else-if="isNonRealAccount(u)" kind="test" />
                 </div>
               </div>
             </td>
@@ -157,7 +157,7 @@
                     <template v-else>
                       <button type="button" class="mk-menu__item" :disabled="u.busy" @click="menuEdit(u)">编辑</button>
                       <button
-                        v-if="!isSelf(u) && !isTestAccount(u)"
+                        v-if="!isSelf(u) && !isNonRealAccount(u)"
                         type="button"
                         class="mk-menu__item"
                         :class="{ 'mk-menu__item--danger': u.admin }"
@@ -276,15 +276,15 @@ import { adminUsersApi, getDeletedUsers, restoreUser } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useIsNarrow } from './useIsNarrow'
 import { toast } from '@/utils/toast'
-import { isTestAccountUser, levelFromXp, levelBadgeZh } from './learner-profile'
+import { isRealAccountUser, isVirtualLearnerAccount, levelFromXp, levelBadgeZh, useListQueryState } from './learner-profile'
 
 /* ---- 行级设计派生（2026-09-26）：身份 chip 色 / 升级进度 / 登录新鲜度 ---- */
-type UlUserLite = { deleted?: boolean; isVirtualLearner?: boolean; name?: string; email?: string; id?: string; xp?: number }
+type UlUserLite = { deleted?: boolean; isVirtualLearner?: boolean; isTestAccount?: boolean; name?: string; email?: string; id?: string; xp?: number }
 function avaTone(u: UlUserLite): 'default' | 'virtual' | 'test' | 'muted' {
   if (u.deleted) return 'muted'
-  if (u.isVirtualLearner) return 'virtual'
-  if (isTestAccountUser(u)) return 'test'
-  return 'default'
+  // 身份判据单点（learner-profile.ts）：payload 标记 ∪ 命名约定，与 KPI / 构成带同口径
+  if (isRealAccountUser(u)) return 'default'
+  return isVirtualLearnerAccount(u) ? 'virtual' : 'test'
 }
 /** 升级进度：等级公式 floor(sqrt(xp/100))+1 → 当前级下限 100·(n-1)²，下一级门槛 100·n² */
 function xpProgress(xp: number): { pct: number; toNext: number } {
@@ -319,8 +319,14 @@ const currentAdmin = computed(() => {
   }
 })
 const isSelf = (u: UserRow) => !!currentAdmin.value.id && u.id === currentAdmin.value.id
-/** 虚拟学习者与审计/测试账号：不参与管理员提升（无意义且有风险）；识别逻辑单点见 learner-profile.ts */
-const isTestAccount = isTestAccountUser
+/** 虚拟学习者 / 测试账号判定与真实域口径全部走 learner-profile.ts 单点：
+    此前这里直接用命名约定正则，漏掉卡库/预置库造出的虚拟学习者（vl-*@cards.local、
+    builtin_*@preset.local —— payload 标了 isVirtualLearner=true）——含测试档下这类行既进
+    「普通用户」筛选、又能勾选进批量删除/导出（F1-1）。标记优先、正则兜底的口径见该文件。 */
+const isVirtualAccount = isVirtualLearnerAccount
+const isRealAccount = isRealAccountUser
+/** 非真实账号（虚拟学习者 ∪ 测试/审计）：不参与管理员提升与批量删除（无意义且有风险） */
+const isNonRealAccount = (u: UserRow) => !isRealAccountUser(u)
 
 interface UserRow {
   id: string
@@ -452,7 +458,7 @@ const showCol = (key: string) =>
   !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key))
 
 /** 真实用户数（排除测试/虚拟账号；口径标注用，与总览「总用户」对齐——列表已全量加载，仅超上限时截断） */
-const realUsers = computed(() => users.value.filter((u) => !u.deleted && !isTestAccountUser(u)).length)
+const realUsers = computed(() => users.value.filter((u) => !u.deleted && isRealAccount(u)).length)
 
 /** live 用户域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
 const loadFailed = computed(
@@ -471,9 +477,11 @@ const pills = computed<Array<{ id: string; label: string; count: number | string
      KPI 孪生 pill 不再显数（学习状态判例），退为纯筛选开关；普通用户 / 已删除
      别处没有，保留计数。「全部」本就不显数 = 分页器「共 N 条」单源。
      审核 #8（2026-10-06）：「普通用户」改真实域口径（排除虚拟/测试），与同面板 KPI
-     「真实用户」（hint 明写不含虚拟/测试）保持同一口径——此前含测试档下 480 虚拟 + 25 测试
-     全被算成普通用户，与同屏「真实用户 311」自相矛盾。 */
-  const realActive = active.filter((u) => !isTestAccountUser(u))
+     「真实用户」（hint 明写不含虚拟/测试）保持同一口径。
+     走查 F1-1（2026-10-07）：该口径原先只靠命名约定正则，漏掉卡库/预置库的虚拟学习者
+     （vl-*@cards.local / builtin_*@preset.local，含测试档实测 10 行）→ pill 比同屏 KPI 多 10、
+     这些行还能被筛出来勾进批量删除。改走 learner-profile.ts 单点（payload 标记优先）。 */
+  const realActive = active.filter(isRealAccount)
   return [
     { id: 'all', label: '全部', count: active.length },
     { id: 'admin', label: '管理员', count: null },
@@ -492,10 +500,12 @@ const pills = computed<Array<{ id: string; label: string; count: number | string
   ]
 })
 
-/* Phase 2：切到「已删除」pill 时拉取已删列表（live 模式）；恢复/删除后回「全部」保持一致性 */
+/* Phase 2：切到「已删除」pill 时拉取已删列表（live 模式）；恢复/删除后回「全部」保持一致性。
+   immediate：深链 / 返回还原到 ?pill=deleted 时，pill 在挂载前就已是 deleted，非立即的 watch
+   等不到这次变化——已删列表会空着（筛选计数与表格都不出现）。 */
 watch(pill, (p) => {
   if (p === 'deleted' && isLive.value) void loadDeletedUsers()
-})
+}, { immediate: true })
 
 /* 新建 / 编辑用户 */
 const createOpen = ref(false)
@@ -608,7 +618,7 @@ async function saveUser() {
 /* 批量删除（测试/虚拟账号不参与勾选与提交，参照行菜单过滤逻辑） */
 const selected = ref<string[]>([])
 const batchBusy = ref(false)
-const selectable = computed(() => filtered.value.filter((u) => !isTestAccount(u) && !u.deleted))
+const selectable = computed(() => filtered.value.filter((u) => !isNonRealAccount(u) && !u.deleted))
 const allChecked = computed(() => selectable.value.length > 0 && selected.value.length === selectable.value.length)
 /** 审核 #13（2026-10-06）：已选中但不在当前页的条数——表头全选勾的是整个筛选集（跨页），
     批量条据此如实标注「含未显示页 N 行」 */
@@ -624,7 +634,7 @@ function toggleAll() {
 async function batchDelete() {
   const ids = selected.value.filter((id) => {
     const u = users.value.find((x) => x.id === id)
-    return u ? !isTestAccount(u) : false
+    return u ? !isNonRealAccount(u) : false
   })
   if (!ids.length || batchBusy.value) return
   const ok = await askConfirm({
@@ -672,7 +682,7 @@ function exportSelected() {
       `${u.paths} / ${u.sessions}`,
       esc(u.createdAt || ''),
       esc(u.lastLogin || ''),
-      u.deleted ? '已删除' : u.isVirtualLearner ? '虚拟' : isTestAccount(u) ? '测试' : '真实',
+      u.deleted ? '已删除' : isVirtualAccount(u) ? '虚拟' : isNonRealAccount(u) ? '测试' : '真实',
     ].join(',')
   )
   const csv = '\uFEFF' + [header.join(','), ...lines].join('\r\n')
@@ -763,7 +773,7 @@ const activeToday = computed(() => users.value.filter((u) => u.online).length)
 
 /* 客户端排序：数据全量在客户端（live 全量拉取）→ 排序诚实。
    默认保持服务端顺序（注册时间倒序）；点表头切换，状态 localStorage 记忆。 */
-const { toggle: toggleUserSort, sortState: userSortState, sortRows: sortUserRows } = useTableSort<UserRow>({
+const { toggle: toggleUserSort, sortState: userSortState, sortRows: sortUserRows, sortKey: userSortKey, sortDir: userSortDir } = useTableSort<UserRow>({
   accessors: {
     user: (u) => u.name || u.email,
     level: (u) => u.xp,
@@ -778,9 +788,10 @@ const filtered = computed(() =>
   sortUserRows(users.value.filter((u) => {
     if (pill.value === 'deleted' && !u.deleted) return false
     if (pill.value === 'admin' && !u.admin) return false
-    // 审核 #8（2026-10-06）：与 pill 计数同一真实域口径——「普通用户」不含虚拟/测试账号，
-    // 否则含测试档下计数（真实域）与列表（含虚拟/测试）对不上
-    if (pill.value === 'user' && (u.admin || isTestAccount(u))) return false
+    // 审核 #8（2026-10-06）+ 走查 F1-1（2026-10-07）：与 pill 计数同一真实域口径——「普通用户」
+    // 不含虚拟/测试账号；判据走 learner-profile.ts 单点（payload 标记 ∪ 命名约定），
+    // 否则含测试档下 vl-*/builtin_* 形态的虚拟学习者会被筛出来（badge=虚拟却可勾选）
+    if (pill.value === 'user' && (u.admin || !isRealAccount(u))) return false
     if (pill.value === 'online' && !u.online) return false
     const q = keyword.value.trim().toLowerCase()
     if (q && !`${u.name} ${u.email} ${u.id}`.toLowerCase().includes(q)) return false
@@ -790,15 +801,33 @@ const filtered = computed(() =>
 
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
    数据全量在客户端（live 拉取），筛选后按页切片；
-   筛选/数据源变化自动回第 1 页（watch filtered） */
+   页码与筛选一起住进 URL（下方 useListQueryState），挂载时先由它落位 */
 const page = ref(1)
 const pageSize = ref(15)
+
+/* 筛选 / 页码 ↔ URL query（F1-2）：进用户详情时本组件被卸载，返回（面包屑 / 浏览器后退）
+   后按 URL 还原搜索词、pill 与页码，深链 / 刷新同样还原。组合式单点在 learner-profile.ts。
+   必须在下方「筛选变化回第 1 页」的 watch 之前调用：URL 落位要发生在监听建立之前，
+   否则挂载时还原出来的筛选会被当成用户改筛选、把还原的页码打回 1。 */
+useListQueryState({
+  pill,
+  keyword,
+  page,
+  pageSize,
+  allowedPills: ['all', 'admin', 'user', 'online', 'deleted']
+})
+
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch(filtered, () => {
+/* 筛选变化回第 1 页：监听筛选输入而非 filtered 结果（TeachingSessions 判例）——数据域
+   首载 / 重拉（含测试切换、详情返回）也会让 filtered 重算，监听结果会把还原的页码打回 1。
+   数据缩水导致的越界页码由 Pagination 自带的收敛 watch 处理。 */
+watch([pill, keyword, userSortKey, userSortDir], () => {
   page.value = 1
+})
+watch(filtered, () => {
   // 选中集合同步收敛：切 pill / 改搜索后，屏幕上已看不到的行仍留在 selected 里，
   // 批量条却报「已选 N 人」——此时批量删除会删掉不可见的行、导出会静默少导。
   if (!selected.value.length) return

@@ -132,6 +132,10 @@
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
+          <!-- 口径切换/刷新加载反馈（2026-10-06 审核 F2-3）：列表接口实测可滞后数秒，
+               此前全程无加载提示；这里给一处文字化「正在加载」（MkLoading 共享原语，
+               含 role=status）。常驻卡头，切换口径时位置不跳。 -->
+          <MkLoading v-if="refreshing" inline text="加载中…" />
           <MkCols
             :col-defs="tsColDefs"
             storage-key="wf_teaching_hidden_cols"
@@ -345,7 +349,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSubPage } from './store'
 import { useSessionDrill } from './useSessionDrill'
 import { timeAgo, isPageCacheFresh, markPageFetched, shortId, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
-import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone } from './statusText'
+import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone, taskTypeText, taskTypeTitle } from './statusText'
 import type { SessionProgress } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -356,6 +360,7 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
@@ -433,17 +438,25 @@ const totalFromBackend = ref(false)
 const onlyAdvisory = ref(false)
 const truncated = computed(() => rows.value.length >= LIST_LIMIT)
 
+/* 请求代际号（2026-10-06 审核 F2-3，判例 GoalConversations.statsReqSeq）：
+   本页列表接口实测可滞后数秒，且 20s 轮询与口径切换/手动刷新会并发；
+   代际比对确保只有最新一笔写回 rows/总数，迟到的旧口径响应不得覆盖新口径。 */
+let fetchSeq = 0
+
 /* 静默拉取：成功即整表替换；失败保留旧数据（轮询不闪空态），并标记错误条。
    force = true 绕过页面级 TTL 缓存（显式刷新/口径切换/轮询用） */
 async function fetchRows(force = false): Promise<boolean> {
   // 页面级 TTL 缓存：切换页面回来时跳过重复请求（轮询/显式刷新传 force 不受影响）
   if (!force && isPageCacheFresh('teaching-sessions') && rows.value.length) return true
+  const seq = ++fetchSeq
   try {
     const res = await adminTeachingSessionsApi.list({
       limit: LIST_LIMIT,
       includeTest: includeTest.value,
       ...(onlyAdvisory.value ? { onlyWithAdvisory: true } : {})
     })
+    // 已有更新的一笔在途/已回写 → 丢弃本笔（防旧口径覆盖新口径）
+    if (seq !== fetchSeq) return true
     const body = res.data?.data ?? res.data ?? {}
     const items = body.items || []
     rows.value = items.map((s: Record<string, unknown>) => mapRow(s))
@@ -456,7 +469,7 @@ async function fetchRows(force = false): Promise<boolean> {
     markPageFetched('teaching-sessions')
     return true
   } catch {
-    loadFailed.value = true
+    if (seq === fetchSeq) loadFailed.value = true
     return false
   }
 }
@@ -521,11 +534,21 @@ watch(
   { immediate: true }
 )
 
-/* 数据隔离切换：仅真实 ↔ 含虚拟/测试（切换后立即按新口径重拉） */
+/* 数据隔离切换代际号：只由最新一次切换收尾 refreshing（快速连切时旧一笔不得提前撤下骨架） */
+let scopeSwitchSeq = 0
 watch(includeTest, () => {
+  /* 数据隔离切换：仅真实 ↔ 含虚拟/测试。
+     2026-10-06 审核 F2-3：此前只重拉不清行 —— 列表接口实测滞后数秒，滞后期间开关/KPI 已翻到
+     新口径而表格仍是旧口径行，全程无加载反馈（骨架短路条件 refreshing && !rows.length 恒不成立）。
+     改为切换即清行再按新口径重拉（判例：GoalConversations 的 pendingForce 语义）：
+     清后首载骨架（KPI 占位 + 表骨架）立即接管，KPI 与列表读数不再打架。 */
+  const seq = ++scopeSwitchSeq
+  rows.value = []
+  listTotal.value = 0
+  totalFromBackend.value = false
   refreshing.value = true
   void fetchRows(true).finally(() => {
-    refreshing.value = false
+    if (seq === scopeSwitchSeq) refreshing.value = false
   })
 })
 
@@ -765,7 +788,7 @@ const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([pill, statusFilter, dateFilter, keyword, tsSortKey, tsSortDir, abnormalOnly, bandGroup, onlyAdvisory], () => {
+watch([pill, statusFilter, dateFilter, keyword, tsSortKey, tsSortDir, abnormalOnly, bandGroup, onlyAdvisory, includeTest], () => {
   page.value = 1
 })
 
@@ -879,12 +902,7 @@ const statusBadge = (s: string) =>
           : 'mk-badge--muted'
 /* 建议徽章带优先级色（T3）：high=bad / medium=warn / 其余 info */
 const advisoryBadge = (p?: string) => (p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info')
-/* 任务类型字典：未命中枚举回退「—」，原文进 title（不裸直出枚举，也不猜词） */
-const TASK_TYPE_TEXT: Record<string, string> = {
-  reading: '阅读', practice: '练习', project: '项目', quiz: '测验', acquire: '获取', deconstruct: '拆解', model: '建模', execute: '执行', diagnose: '诊断', refine: '打磨', consolidate: '巩固'
-}
-const taskTypeText = (t: string) => TASK_TYPE_TEXT[t] || '—'
-const taskTypeTitle = (t: string) => (t && !TASK_TYPE_TEXT[t] ? `任务类型原文：${t}` : undefined)
+/* 任务类型字典已上收共享单源 statusText.ts（F2-2：路径详情同批枚举不再各自维护一份） */
 /* 时长格式化：分钟向下取整（P3：90 秒显示「1 分钟」而非四舍五入成「2 分钟」） */
 const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.floor(sec / 60)} 分钟` : `${sec} 秒`)
 /** 时间列悬停：本地化绝对时刻（后端原始 ISO 为 UTC 带 Z，直出跨时区读不出真实时刻——审核 #38） */

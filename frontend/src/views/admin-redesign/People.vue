@@ -45,6 +45,7 @@ import MkBuckets from '@/components/mk/MkBuckets.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Users from './Users.vue'
 import { liveUsers, liveUsersTotal, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { isRealAccountUser, isVirtualLearnerAccount } from './learner-profile'
 
 const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
 
@@ -59,12 +60,15 @@ const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(n
    口径：真实用户 = 非虚拟且非测试（两口径开关下都不变）；管理员 = 真实域细分（与旧桶 foot 同源）；
    在线 = 最后登录在 30 分钟内（审核 #9，2026-10-06：与同面板真实用户同域取 realRows，
    不再把含测试档下的虚拟/测试行算进在线）；数据 = live 域已加载行（后端总数在 liveUsersTotal，
-   超上限截断时 title 注明） */
+   超上限截断时 title 注明）。
+   走查 F1-1（2026-10-07）：判据统一收口到 learner-profile.ts 单点——本页 KPI / 构成带与
+   下方 Users 列表 pill 计数必须同一口径（此前本页用 payload 标记、列表用命名约定正则，
+   含测试档下普通用户 pill 比本卡多 10）。 */
 type PpKpiTile = { label: string; value: number; hint: string; tone: '' | 'ok' | 'warn' | 'bad'; title: string }
 const ppKpi = computed<PpKpiTile[]>(() => {
   const rows = liveUsers.value
   if (!rows.length) return []
-  const realRows = rows.filter((u) => !u.isVirtualLearner && !u.isTestAccount)
+  const realRows = rows.filter(isRealAccountUser)
   const admins = realRows.filter((u) => u.isAdmin).length
   const online = realRows.filter((u) => !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 30 * 60000).length
   const scope = `按已加载 ${rows.length} 行统计（后端共 ${liveUsersTotal.value}）`
@@ -100,9 +104,9 @@ const ppBuckets = computed(() => {
   // 审核 #7（2026-10-06）：默认「仅真实」档不出构成带——后端已排除虚拟/测试，三分桶结构性
   // 恒 100/0/0，单桶 100% 是假构成（D18）。未纳入口径由 KPI hint 承载，故此处直接空数组。
   if (!liveIncludeVirtual.value) return []
-  const virtual = rows.filter((u) => u.isVirtualLearner).length
-  const test = rows.filter((u) => !u.isVirtualLearner && u.isTestAccount).length
-  const realRows = rows.filter((u) => !u.isVirtualLearner && !u.isTestAccount)
+  const virtual = rows.filter(isVirtualLearnerAccount).length
+  const test = rows.filter((u) => !isVirtualLearnerAccount(u) && !isRealAccountUser(u)).length
+  const realRows = rows.filter(isRealAccountUser)
   const real = realRows.length
   const admins = realRows.filter((u) => u.isAdmin).length
   const pct = (v: number) => Math.round((v / total) * 100)

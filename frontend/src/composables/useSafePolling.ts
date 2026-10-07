@@ -68,7 +68,9 @@ export function useSafePolling(
 
   async function run() {
     if (!isActive.value || circuitBroken.value) return
-    if (skipWhenHidden && document.hidden) {
+    // 宿主环境无 document（组件卸载后的残留定时器落在 jsdom 已拆除的测试环境）→ 无从判定可见性，直接继续本轮。
+    // 不加此守卫时此处会抛 ReferenceError，被 setTimeout 变成未处理异常并使测试进程退出码非 0（2026-10-07 门禁）。
+    if (skipWhenHidden && typeof document !== 'undefined' && document.hidden) {
       scheduleNext()
       return
     }

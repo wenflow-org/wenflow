@@ -27,7 +27,7 @@
       <template #pills>
         <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
         <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
-        <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">快照 {{ d.snapshot.version }} · {{ d.snapshot.generatedAt }}</span>
+        <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">快照 {{ snapshotLabel }}</span>
       </template>
       <template #actions>
         <button type="button" class="mk-btn" :disabled="recomputing" @click="recompute">
@@ -2007,14 +2007,40 @@ const trendText = computed(() => (d.value?.trend === 'up' ? '↗ 上升' : d.val
 const trendBadge = computed(() => (d.value?.trend === 'up' ? 'mk-badge--ok' : d.value?.trend === 'down' ? 'mk-badge--bad' : 'mk-badge--muted'))
 const fatigueBadge = computed(() => (d.value?.fatigue === '高' ? 'mk-badge--bad' : d.value?.fatigue === '中' ? 'mk-badge--warn' : 'mk-badge--ok'))
 /** 低置信不渲染成风险色：中性→琥珀「证据不足」提示（与 LearnerCenter 同阈值，见 evidence.ts） */
-const snapshotBadge = computed(() => {
-  const v = d.value?.snapshot.version || ''
-  return v.includes('证据不足') ? 'mk-badge--warn' : 'mk-badge--muted'
+/* 快照徽章单源（走查 F1-4）：详情响应自带的 freshness 优先（authoritative），
+   缺失时退回列表行——列表晚到（深链竞态）时本 computed 随 liveLearners 响应自动重算，
+   不再卡死在加载瞬间渲染的「— · 从未」。 */
+const snapshotFresh = computed(() => {
+  const raw = rawDetail.value
+  const model = (raw?.model ?? null) as Record<string, unknown> | null
+  const fr = (raw?.freshness ?? model?.freshness ?? null) as { generatedAt?: unknown; confidence?: unknown } | null
+  if (fr && (fr.generatedAt || fr.confidence != null)) {
+    const conf = fr.confidence == null ? null : Number(fr.confidence)
+    return {
+      version: conf == null ? '置信未知' : `置信 ${(conf * 100).toFixed(0)}%${evidenceLowConfidence(conf) ? ' · 证据不足' : ''}`,
+      generatedAt: fr.generatedAt ? timeAgo(String(fr.generatedAt)) : '从未'
+    }
+  }
+  const id = subPage.value?.id || ''
+  const base = id ? liveLearners.value.find((l) => l.userId === id) : undefined
+  if (base) {
+    return {
+      version: base.confidence == null ? '置信未知' : `置信 ${(base.confidence * 100).toFixed(0)}%${evidenceLowConfidence(base.confidence) ? ' · 证据不足' : ''}`,
+      generatedAt: timeAgo(base.generatedAt)
+    }
+  }
+  return null
 })
-const snapshotHint = computed(() => {
-  const v = d.value?.snapshot.version || ''
-  return v.includes('证据不足') ? '快照置信度低于 50%，证据不足，建议重算' : '快照置信度'
+const snapshotLabel = computed(() => {
+  const f = snapshotFresh.value
+  return f ? `${f.version} · ${f.generatedAt}` : `${d.value?.snapshot.version ?? '—'} · ${d.value?.snapshot.generatedAt ?? '从未'}`
 })
+const snapshotBadge = computed(() =>
+  snapshotLabel.value.includes('证据不足') ? 'mk-badge--warn' : 'mk-badge--muted'
+)
+const snapshotHint = computed(() =>
+  snapshotLabel.value.includes('证据不足') ? '快照置信度低于 50%，证据不足，建议重算' : '快照置信度'
+)
 
 function barToneBadge(tone: ConceptBarTone): string {
   return tone === 'ok' ? 'mk-badge--ok' : tone === 'warn' ? 'mk-badge--warn' : tone === 'bad' ? 'mk-badge--bad' : 'mk-badge--muted'

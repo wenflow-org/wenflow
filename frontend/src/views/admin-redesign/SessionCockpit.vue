@@ -482,10 +482,7 @@
         <section v-if="!isBlackbox && activeTab === 'wrapup'" role="tabpanel" :id="`cp-tabpanel-wrapup`" :aria-labelledby="`cp-tab-wrapup`" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">学习总结</h3>
-            <span class="mk-card__meta">
-              {{ completedTaskCount }}/{{ learnLessons.length }} 课已完成
-              <template v-if="hasWrapup"> · 终局总结已生成</template>
-            </span>
+            <span class="mk-card__meta">{{ wrapupHeadMeta }}</span>
           </div>
 
           <!-- 课时进度概览 -->
@@ -851,7 +848,7 @@ import {
 } from './cockpitPathViews'
 import {
   buildLearnLessons, buildLessonTree, lessonMark, lessonStateLabel, lessonNumberOf,
-  type LearnLesson
+  countDoneLessons, type LearnLesson
 } from './cockpitLessons'
 import { useCockpitStages, stageFlow, type StageKey } from './cockpitStages'
 import RunStatusPanel from './session-cockpit/RunStatusPanel.vue'
@@ -1353,6 +1350,18 @@ const completedTaskCount = computed(() => {
 const hasCompletedTask = computed(() =>
   completedTaskCount.value > 0 || normalized(learningTaskRuntime.value.status) === 'completed'
 )
+/* 课数读数单源（F2-1）：stepper「课程 x/y」/ Learn 卡头 / 学习总结卡头与卡内课时行
+   一律取 learnLessons（Path 任务树 × 教学历史）里的同一份 done 判定，
+   不再让 summary 顶层 completedTasks 与它并排成为第二个口径。
+   summary 的 completedTasks 保留在 hasCompletedTask/hasRunnablePathTask 里做存在性判据。 */
+const doneLessonCount = computed(() => countDoneLessons(learnLessons.value))
+/** 学习总结卡头：课数与卡内课时行同源（learnLessons）；课表未加载时不报 N/0 假读 */
+const wrapupHeadMeta = computed(() => {
+  const parts: string[] = []
+  if (learnLessons.value.length) parts.push(`${doneLessonCount.value}/${learnLessons.value.length} 课已完成`)
+  if (hasWrapup.value) parts.push('终局总结已生成')
+  return parts.join(' · ')
+})
 const hasRunnablePathTask = computed(() => pathMilestones.value.some((milestone) => {
   const tasks = milestone.subtasks || milestone.tasks
   return Array.isArray(tasks) && tasks.some((task) => normalized(asRecord(task).status) !== 'completed')
@@ -1661,10 +1670,18 @@ const statNextStage = computed(() => {
   const next = stageFlow[effectiveStageIndex.value + 1]
   return next ? stageLabel(next) : '—'
 })
-/** 阶段推进读数（MkStatStrip grid 档；「已用回合」= 学习者发言数，与 stepper meta 同源口径） */
+/** 阶段推进读数（MkStatStrip grid 档；「已用回合」= 学习者发言数，与 stepper meta 同源口径）。
+ *  F2-1 口径注明：这是个「对话回合」读数，与同卡「已完成 N/4 阶段」（阶段轴）、
+ *  「x/y 课已完成」（子任务轴）不是同一件事；消息未落库时为 0（见同屏「回合记录」卡），
+ *  不代表未授课。 */
 const stageStatItems = computed<MkStatItem[]>(() => [
   { key: 'current', label: '当前阶段', value: statCurrentStage.value },
-  { key: 'turns', label: '已用回合', value: heroTurnCount.value },
+  {
+    key: 'turns',
+    label: '已用回合',
+    value: heroTurnCount.value,
+    title: '口径：已落库的学习者发言数（Goal + 课堂；不含平台/教师回复）。消息未落库时为 0；与阶段数（N/4 阶段）、课数（x/y 课）不是同一件事'
+  },
   { key: 'next', label: '下一阶段', value: statNextStage.value }
 ])
 

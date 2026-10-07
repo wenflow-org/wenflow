@@ -6,7 +6,7 @@
 import { computed, type ComputedRef } from 'vue'
 import { asRecord, numberValue } from './cockpitFormat'
 import type { PathMilestoneView } from './cockpitPathViews'
-import type { LearnLesson } from './cockpitLessons'
+import { countDoneLessons, type LearnLesson } from './cockpitLessons'
 
 /* 阶段流：后端 currentStage 枚举是 goal/path/teaching，前端归一为 learning */
 export const stageFlow = ['goal', 'path', 'learning', 'wrapup'] as const
@@ -107,10 +107,18 @@ export function useCockpitStages(deps: {
     return ''
   })
   const learnProgressText = computed(() => {
-    const done = learnLessons.value.filter((l) => l.state === 'done').length
+    const done = countDoneLessons(learnLessons.value)
     const total = learnLessons.value.length
     return `课程进度 ${done}/${total}`
   })
+  /** 阶段步点副标：stepper 是「阶段推进」轴，读数是阶段汇总，须显式命名口径。
+      课数单源 = Learn 卡内课时行（见 cockpitLessons.countDoneLessons）：F2-1 前此处写作
+      「课程 0/19」，与同屏「学习总结」卡头「1/19 课已完成」并列，同一事实两个数。 */
+  const learnStageRollupText = computed(() =>
+    learnLessons.value.length
+      ? `${countDoneLessons(learnLessons.value)}/${learnLessons.value.length} 课已完成`
+      : ''
+  )
   function stageProgress(st: string) {
     const key = st as StageKey
     switch (key) {
@@ -119,7 +127,7 @@ export function useCockpitStages(deps: {
       case 'path':
         return pathProgressText.value
       case 'learning':
-        return learnLessons.value.length ? `课程 ${learnLessons.value.filter((l) => l.state === 'done').length}/${learnLessons.value.length}` : ''
+        return learnStageRollupText.value
       case 'wrapup':
         return hasWrapup.value ? '总结已生成' : ''
       default:
@@ -145,7 +153,7 @@ export function useCockpitStages(deps: {
       return pathMilestonesView.value.length ? `${pathMilestonesView.value.length} 个里程碑` : ''
     }
     if (st === 'learning') {
-      const done = learnLessons.value.filter(l => l.state === 'done').length
+      const done = countDoneLessons(learnLessons.value)
       const total = learnLessons.value.length
       return total ? `${done}/${total}` : ''
     }

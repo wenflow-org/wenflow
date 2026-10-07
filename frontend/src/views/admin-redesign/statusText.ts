@@ -255,6 +255,43 @@ export function categoryText(s: string | null | undefined): string {
 }
 
 /**
+ * 任务类型枚举 → 中文（全站单源，2026-10-07 审核 F2-2）。
+ *
+ * 枚举单源 = 后端 `NEW_PATH_TASK_TYPES`（learning.constants.ts:17）+ stage-designer 的 7 类认知弧
+ * （acquire→deconstruct→diagnose→model→execute→refine→consolidate），另含旧 4 类
+ * （reading/practice/project/quiz）与 PathDetail 沿用的 reflection/assessment。
+ * 未命中枚举回退「—」，原文由 taskTypeTitle 进 title（不裸直出英文枚举，也不猜词）。
+ * 消费点：PathDetail（任务副标 + 任务详情弹层「任务类型」）、TeachingSessions（会话列副行）。
+ */
+export const TASK_TYPE_TEXT: Record<string, string> = {
+  reading: '阅读',
+  practice: '练习',
+  project: '项目',
+  quiz: '测验',
+  acquire: '获取',
+  deconstruct: '拆解',
+  model: '建模',
+  execute: '执行',
+  diagnose: '诊断',
+  refine: '打磨',
+  consolidate: '巩固',
+  reflection: '反思',
+  assessment: '评估'
+}
+
+/** 任务类型枚举 → 中文；未知枚举回退「—」（不裸直出英文原值） */
+export function taskTypeText(t: string | null | undefined): string {
+  const key = String(t || '')
+  return TASK_TYPE_TEXT[key] || '—'
+}
+
+/** 任务类型 title 披露：仅未知枚举时给出原文（命中字典不重复标注） */
+export function taskTypeTitle(t: string | null | undefined): string | undefined {
+  const key = String(t || '')
+  return key && !TASK_TYPE_TEXT[key] ? `任务类型原文：${key}` : undefined
+}
+
+/**
  * 执行失败错误类别 → 人话（评审 Overview P2：provider_timeout 等原始枚举不得进首层）。
  * 枚举单源 = 后端 gateway failure-classification.ts（GatewayFailureCategory）。
  * 未知枚举回退原文（不丢排障信息），与 statusText 同策略。

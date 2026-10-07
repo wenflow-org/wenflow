@@ -30,8 +30,10 @@
     </MkPageHead>
     <!-- 页头 KPI 区（2026-09-28）：原「状态条散文 3 数 + 概览卡 880px 构成条 + 四张队列卡」
          三处各说一遍同一批数。现在全站页头统一为 MkKpi 卡栅格（同总览/健康中心/成本分析形态），
-         页级绝对值只在这里出现一次；口径说明进各卡 title，比例条由「占痕迹 N%」副行承担。 -->
-    <section class="mk-kpi-grid">
+         页级绝对值只在这里出现一次；口径说明进各卡 title，比例条由「占痕迹 N%」副行承担。
+         B5-F3-2：取数未落定前显「—」+「取数中…」（不再渲染裸 0 与肯定性副文案），
+         栅格挂 aria-busy 让读屏也能感知加载窗口。 -->
+    <section class="mk-kpi-grid" :aria-busy="kpiPending || undefined">
       <MkKpi
         v-for="card in overviewCards"
         :key="card.label"
@@ -40,6 +42,7 @@
         :hint="card.hint"
         :tone="card.tone"
         :title="card.title"
+        :aria-busy="kpiPending || undefined"
       />
     </section>
 
@@ -68,7 +71,7 @@
         <!-- 口径：totals.users 是后端全量统计，唯一住在页头 KPI「用户」卡；卡头只报本列表的窗口事实
              （页码/页大小、排序键、下钻命中），不再复读全量数（CP6：同屏 KPI 与卡头两处同数）。
              #41：列表已接服务端分页（offset），「暂无分页」自述删除 -->
-        <span class="mk-card__meta" :title="`按待复习（到期）量倒序服务端分页，每页 ${USER_PAGE_SIZE} 位；全量有记忆痕迹用户数见页头 KPI${dueBandFilter ? '。当前按到期档下钻，命中集只含当前窗口内学习者' : ''}`">第 {{ userPage }} 页 · 每页 {{ USER_PAGE_SIZE }} 位 · 按待复习量倒序<template v-if="dueBandFilter"> · 已筛 {{ visibleRows.length }} 位</template></span>
+        <span class="mk-card__meta" :title="`按待复习（到期）量倒序服务端分页，每页 ${userPageSize} 位；全量有记忆痕迹用户数见页头 KPI${dueBandFilter ? '。当前按到期档下钻，命中集只含当前窗口内学习者' : ''}`">第 {{ userPage }} 页 · 每页 {{ userPageSize }} 位 · 按待复习量倒序<template v-if="dueBandFilter"> · 已筛 {{ visibleRows.length }} 位</template></span>
       </div>
       <!-- 取数失败不得渲染成「暂无数据」（R2）：总览失败且无行 → MkEmptyState tone="error" + 重试；
            有旧行时保留旧行并在上方给出带重试的 .mk-alert（失败原因不静默） -->
@@ -159,15 +162,15 @@
               <td>
                 <div class="mk-actions">
                 <button type="button" class="mk-btn mk-btn--sm" :disabled="detailLoading" title="打开该用户的记忆复盘明细" @click.stop="openDetail(row.userId)">明细</button>
-                <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingId === row.userId" title="对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹" @click.stop="recompute(row.userId)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
+                <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingId === row.userId" title="对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹" @click.stop="recompute(row.userId, row.name)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
         <!-- 到期档下钻筛空：两种口径要分开说。下钻命中的是「当前窗口内该档有到期痕迹的学习者」，
-             列表是服务端分页窗口（每页 50）——两者求交集为空时，断言「窗口内没有学习者的到期痕迹」是错的
-             （实测「明天」档窗口内 42 痕 / 12 人，交集 0，界面却报窗口内没有）。 -->
+             列表是服务端分页窗口（每页 N，随分页器条数变化）——两者求交集为空时，断言「窗口内没有
+             学习者的到期痕迹」是错的（实测「明天」档窗口内 42 痕 / 12 人，交集 0，界面却报窗口内没有）。 -->
         <MkEmptyState
           v-else-if="dueBandFilter"
           :title="dueBandEmpty.title"
@@ -176,10 +179,13 @@
       </div>
       <!-- 服务端分页（审核 #41，T1 硬约束「列表必须分页」）：total=后端全量有痕迹用户数
            （totals.users，与页头 KPI 同源）；与 AuditLogs 同一分页器形态，作为 .mk-card--fill
-           的直接子元素吸底 -->
+           的直接子元素吸底。
+           2026-10-07 审核 B5-F3-1：此前只传 :page-size（固定 50）而没接 v-model:pageSize，
+           下拉 emit 的 update:pageSize 无人接 → 选条数只回弹 value、列表不重拉；
+           现接 v-model:pageSize，条数变更回第 1 页并按新条数重查（AuditLogs 判例） -->
       <Pagination
         v-model:page="userPage"
-        :page-size="USER_PAGE_SIZE"
+        v-model:pageSize="userPageSize"
         :total="totals.users"
         :loading="loading"
       />
@@ -198,11 +204,11 @@
         <strong ref="detailTitleEl" class="mk-status__title" tabindex="-1">记忆复盘 · {{ detail.user.name || '未命名' }}</strong>
         <span
           class="mk-status__meta"
-          title="该用户名下记忆痕迹总览：到期 = 到该复习而未复习；同族重复 = 归一化键相同、措辞不同的痕迹（组 / 条）；从未提取 = 一直没被当作复习点接住过。状态点示警阈值：占该用户痕迹 ≥20% 或到期 ≥5 条（阈值内为间隔复习的常态积压，不亮警示）"
-        >痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} · 同族重复 {{ detail.summary.duplicatedFamilies }} 组/{{ detail.summary.duplicatedTraces }} 条 · 从未提取 {{ detail.summary.neverExtracted }} · 有 FSRS 状态 {{ detail.summary.withFsrsState }}</span>
+          title="该用户名下记忆痕迹总览：到期 = 到该复习而未复习；同族重复 = 归一化键相同、措辞不同的痕迹（组 / 条）；从未提取 = 一直没被当作复习点接住过。「有 FSRS 状态」只数显式落库 fsrsStability 的痕迹——到期预览里没有 FSRS 状态的旧痕迹按掌握度回退估算强度（见「到期清单预览」卡头标注），两者来源不同。状态点示警阈值：占该用户痕迹 ≥20% 或到期 ≥5 条（阈值内为间隔复习的常态积压，不亮警示）"
+        >痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} · 同族重复 {{ detail.summary.duplicatedFamilies }} 组/{{ detail.summary.duplicatedTraces }} 条 · 从未提取 {{ detail.summary.neverExtracted }} · 有 FSRS 状态 {{ detail.summary.withFsrsState }}<template v-if="detail.summary.strengthFromLegacy">（另有 {{ detail.summary.strengthFromLegacy }} 条回退估算）</template></span>
         <span class="mk-status__actions">
           <button type="button" class="mk-status__action" title="复制该用户记忆复盘的深链（可分享 / 收藏，打开即落位）" @click="copyDeepLink">复制深链</button>
-          <button type="button" class="mk-status__action" :disabled="recomputingId === selectedId" title="对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹" @click="recompute(selectedId)">{{ recomputingId === selectedId ? '观察中…' : '重新观察' }}</button>
+          <button type="button" class="mk-status__action" :disabled="recomputingId === selectedId" title="对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹" @click="recompute(selectedId, detail.user.name)">{{ recomputingId === selectedId ? '观察中…' : '重新观察' }}</button>
         </span>
       </header>
 
@@ -262,18 +268,18 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">到期清单预览</h3>
-          <span class="mk-card__meta" title="按记忆强度升序：越靠前越该先复习；列表最多前 20 条">前 20 · 记忆强度升序</span>
+          <span class="mk-card__meta" :title="`按记忆强度升序：越靠前越该先复习；列表最多前 20 条。强度来源：有 FSRS 状态的痕迹 = FSRS 可提取率；无 FSRS 状态的旧痕迹按掌握度回退估算${duePreviewLegacyCount ? `（本页 ${duePreviewLegacyCount} 条为回退估算）` : ''}`">前 20 · 记忆强度升序<template v-if="duePreviewLegacyCount"> · 含 {{ duePreviewLegacyCount }} 条回退估算</template></span>
         </div>
         <div v-if="detail.duePreview.length" class="mk-table-scroll">
           <table class="mk-table">
-          <thead><tr><th>概念</th><th class="mk-num">记忆强度</th><th class="mk-num">掌握</th><th class="mk-num">提取次数</th><th>来源</th><th title="相对表达：已逾期 N 天 / 今天 / 明天 / N 天后；绝对到期时刻进悬停">到期</th></tr></thead>
+          <thead><tr><th>概念</th><th class="mk-num" title="有 FSRS 状态的痕迹 = FSRS 可提取率；无 FSRS 状态的旧痕迹按掌握度回退估算（逐格悬停可见来源）">记忆强度</th><th class="mk-num">掌握</th><th class="mk-num">提取次数</th><th>来源</th><th title="相对表达：已逾期 N 天 / 今天 / 明天 / N 天后；绝对到期时刻进悬停">到期</th></tr></thead>
           <tbody>
             <tr v-for="trace in detail.duePreview" :key="trace.conceptKey">
               <!-- 原型记忆明细表首列 = 知识点 strong；同族重复/归并建议首列是裸 key（无人类可读
                    label），维持 mr__sub 降档，不冒充正文 -->
               <td><strong>{{ trace.label }}</strong></td>
               <td class="mk-num">
-                <span class="mr-pct" :class="{ 'mr-pct--warn': trace.retention < 0.7 }" :title="`记忆强度 ${Math.round(trace.retention * 100)}%`">
+                <span class="mr-pct" :class="{ 'mr-pct--warn': trace.retention < 0.7 }" :title="strengthTitle(trace)">
                   <b>{{ Math.round(trace.retention * 100) }}%</b>
                   <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="trace.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(trace.retention * 100) + '%' }"></i></span>
                 </span>
@@ -557,6 +563,8 @@ interface ReviewDetail {
     duplicatedTraces: number
     neverExtracted: number
     withFsrsState: number
+    /** 无 FSRS 状态、强度按掌握度回退估算的痕迹数（B5-F3-3；旧后端无此字段 → 可选） */
+    strengthFromLegacy?: number
   }
   reviewPlan: {
     budget: number
@@ -581,12 +589,24 @@ interface ReviewDetail {
     legacyWindowOnly: AppliedMergeView[]
   }
   duplicatedFamilies: Array<{ family: string; size: number; members: Array<{ conceptKey: string; extractionCount: number; masteryScore: number }> }>
-  duePreview: Array<{ conceptKey: string; label: string; retention: number; masteryScore: number; extractionCount: number; source?: string | null; dueAt?: string | null }>
+  duePreview: Array<{ conceptKey: string; label: string; retention: number; masteryScore: number; extractionCount: number; source?: string | null; dueAt?: string | null; fsrsScheduled?: boolean }>
 }
 
 const rollbackableMerges = computed<AppliedMergeView[]>(() => detail.value?.appliedMerges?.rollbackable ?? [])
 const rolledBackMerges = computed<AppliedMergeView[]>(() => detail.value?.appliedMerges?.rolledBack ?? [])
 const legacyWindowOnlyMerges = computed<AppliedMergeView[]>(() => detail.value?.appliedMerges?.legacyWindowOnly ?? [])
+/** 到期预览中按旧痕迹回退估算强度的条数（B5-F3-3）：头部「有 FSRS 状态」只数显式
+ *  fsrsStability 的痕迹，而预览的强度对无 FSRS 状态的旧痕迹走 fsrsStateFromLegacy 回退——
+ *  两个数字来源不同，这里把回退条数公开给卡头，同屏各自标明来源，不再互相打架。 */
+const duePreviewLegacyCount = computed(() => {
+  const preview = detail.value?.duePreview ?? []
+  if (!preview.length) return 0
+  /* 首选逐行来源标注（新后端 fsrsScheduled）；旧后端无该字段时退回 summary.strengthFromLegacy */
+  if (preview.some((trace) => trace.fsrsScheduled !== undefined)) {
+    return preview.filter((trace) => trace.fsrsScheduled === false).length
+  }
+  return detail.value?.summary.strengthFromLegacy ?? 0
+})
 
 const loading = ref(false)
 const busy = ref(false)
@@ -604,11 +624,21 @@ watch(includeVirtual, () => {
 const rows = ref<OverviewRow[]>([])
 /* 用户列表服务端分页（审核 #41，T1 硬约束「列表必须分页」）：此前后端只接 limit、
    前端固定拉前 50 名，101 位有痕迹用户里第 51 位起不可达也不可搜。页码驱动 offset，
-   totals.users（全量有痕迹用户数）作分页 total；到期档下钻仍是对当前窗口的本地过滤。 */
-const USER_PAGE_SIZE = 50
+   totals.users（全量有痕迹用户数）作分页 total；到期档下钻仍是对当前窗口的本地过滤。
+   B5-F3-1：每页条数由分页器下拉驱动（可选 15/30/50/100，默认 50），不再写死常量。 */
 const userPage = ref(1)
+const userPageSize = ref(50)
 watch(userPage, () => {
   void loadOverview()
+})
+/* 每页条数变更：回第 1 页并按新条数重查（AuditLogs 的 currentPageSize 判例）；
+   已回第 1 页时 page watcher 不触发，必须显式补一次 loadOverview，否则改了条数不重拉。 */
+watch(userPageSize, () => {
+  if (userPage.value !== 1) {
+    userPage.value = 1 // 由 page watcher 触发重查
+  } else {
+    void loadOverview()
+  }
 })
 /** 明细态状态点：与页头 KPI 同一阈值语义（P1#13）——占该用户痕迹 ≥20% 或到期 ≥5 条才亮
  *  需关注；阈值内是间隔复习的常态积压，不着琥珀（否则告警常亮、琥珀失去语义）。 */
@@ -630,6 +660,11 @@ const totals = ref({
   applied: 0,
   deleted: 0
 })
+/** 总览是否已落定一次（B5-F3-2）：首屏取数在途时 totals 还是初值 0，未落定前 KPI
+ *  不得把初值当真实数渲染（与「确实是 0」不可区分）；失败态由 error 另行兜底。 */
+const overviewReady = ref(false)
+/** 首屏 KPI 取数在途（未落定且未失败）：值显 '—'、副文案显「取数中…」，栅格挂 aria-busy */
+const kpiPending = computed(() => !overviewReady.value && !error.value)
 
 /* ---- 页头 KPI 区（2026-09-28 收口后的派生） ---- */
 const duePct = computed(() => (totals.value.traces ? Math.round((totals.value.due / totals.value.traces) * 100) : 0));
@@ -722,6 +757,16 @@ function dueCell(trace: { dueAt?: string | null }): { text: string; overdue: boo
   return { text: `${days} 天后`, overdue: false, title: `到期时刻 ${abs}（${days} 天后到期）` }
 }
 
+/** 到期预览 · 记忆强度格 title（B5-F3-3）：来源随痕迹而异——有 FSRS 状态 = FSRS 可提取率；
+ *  旧痕迹（无 fsrsStability）= 由掌握度/提取次数回退估算。头部「有 FSRS 状态」只数前者，
+ *  两处口径不同，故每格注明来源（后端 fsrsScheduled 字段）。 */
+function strengthTitle(trace: { retention: number; fsrsScheduled?: boolean }): string {
+  const pct = Math.round(trace.retention * 100)
+  return trace.fsrsScheduled === false
+    ? `记忆强度 ${pct}%（该痕迹没有 FSRS 状态，按掌握度回退估算）`
+    : `记忆强度 ${pct}%（FSRS 可提取率）`
+}
+
 /* 枚举中文化（R5：面向运营页主视觉位禁止直出内部标识；2026-10-06 审核 #44）。
    未命中映射时回落原文，原文恒进 title 供排查。 */
 const REASON_ZH: Record<string, string> = {
@@ -802,8 +847,8 @@ const dueBandEmpty = computed(() => {
   const label = band ? (mrDueBins.value.find((b) => b.key === band)?.label ?? band) : ''
   if (inWindow > 0) {
     return {
-      title: '前 50 名里没有该档学习者',
-      desc: `窗口内「${label}」档有 ${inWindow} 位学习者带到期痕迹，但都不在列表前 50 名内（列表只显示前 50 名）。再点一次分布条上的同档分段即可取消筛选。`
+      title: `前 ${userPageSize.value} 名里没有该档学习者`,
+      desc: `窗口内「${label}」档有 ${inWindow} 位学习者带到期痕迹，但都不在列表前 ${userPageSize.value} 名内（列表按当前每页条数取前 N 名）。再点一次分布条上的同档分段即可取消筛选。`
     }
   }
   return {
@@ -820,47 +865,57 @@ interface OverviewCard {
   value: string | number
   hint: string
   title: string
-  tone?: 'ok' | 'warn' | 'bad' | ''
+  tone?: 'ok' | 'warn' | 'bad' | 'muted' | ''
 }
 
 /** 页级绝对值单一来源：用户 / 痕迹 / 到期 / 归并队列都只在 KPI 区出现一次（原状态条散文与
  *  概览卡 legend 各重说一遍）。到期与需人工看是运营可行动项，>0 才抬琥珀；其余保持中性墨色。
- *  取数失败（error 非空）时值一律 '—'，禁止把失败静默归零（R2；2026-10-06 审核 #40）。 */
+ *  取数失败（error 非空）时值一律 '—'，禁止把失败静默归零（R2；2026-10-06 审核 #40）；
+ *  首屏取数未落定（!overviewReady）时同样显 '—'，不把初值 0 当成真实读数
+ *  （B5-F3-2：此前加载中渲染裸 0 + 肯定性副文案「暂无痕迹」，与「确实是 0」不可区分）。 */
 const overviewCards = computed<OverviewCard[]>(() => {
   const t = totals.value;
   const failed = !!error.value
-  const val = (v: number) => (failed ? '—' : v)
+  /* 未落定/失败一律 '—'：加载中用中性 muted，失败用 bad（取数不可信） */
+  const pending = kpiPending.value
+  const na = failed || pending
+  const val = (v: number) => (na ? '—' : v)
+  const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
+  const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : text)
   return [
     {
       label: '用户',
       value: val(t.users),
-      hint: '有记忆痕迹',
+      hint: numHint('有记忆痕迹'),
+      tone: numTone(''),
       title: '后端口径为全量有记忆痕迹用户；是否含虚拟学习者随状态条开关'
     },
     {
       label: '记忆痕迹',
       value: val(t.traces),
-      hint: '跨全部学习路径',
+      hint: numHint('跨全部学习路径'),
+      tone: numTone(''),
       title: '记忆层痕迹总数（用户级、跨该用户全部 path）'
     },
     {
       label: '当前到期',
       value: val(t.due),
-      hint: t.traces ? `占痕迹 ${duePct.value}%` : '暂无痕迹',
-      tone: !failed && dueWarn.value ? 'warn' : '',
+      hint: numHint(t.traces ? `占痕迹 ${duePct.value}%` : '暂无痕迹'),
+      tone: numTone(dueWarn.value ? 'warn' : ''),
       title: dueCardTitle.value
     },
     {
       label: '需人工看',
       value: val(t.ambiguous),
-      hint: '归并候选 · 不自动执行',
-      tone: !failed && t.ambiguous > 0 ? 'warn' : '',
+      hint: numHint('归并候选 · 不自动执行'),
+      tone: numTone(t.ambiguous > 0 ? 'warn' : ''),
       title: '像但不确定的归并候选，需人工确认，不会自动执行'
     },
     {
       label: '待归并建议',
       value: val(t.proposed),
-      hint: `可自动 ${t.autoApplicable} · 已执行 ${t.applied}/${t.deleted}`,
+      hint: numHint(`可自动 ${t.autoApplicable} · 已执行 ${t.applied}/${t.deleted}`),
+      tone: numTone(''),
       title: '模型给出的同义候选；「可自动」= 把握度 + 词面闸门都过；「已执行 / 删除」留快照可回滚'
     }
   ];
@@ -1007,7 +1062,7 @@ async function loadOverview() {
   loading.value = true
   error.value = ''
   try {
-    const res: any = await adminMemoryReviewApi.overview({ limit: USER_PAGE_SIZE, offset: (userPage.value - 1) * USER_PAGE_SIZE, includeVirtual: includeVirtual.value })
+    const res: any = await adminMemoryReviewApi.overview({ limit: userPageSize.value, offset: (userPage.value - 1) * userPageSize.value, includeVirtual: includeVirtual.value })
     if (seq !== overviewSeq) return // 已有更新的概览请求在途/完成：丢弃过期响应
     const body = res.data?.data ?? res.data ?? {}
     rows.value = Array.isArray(body.users) ? body.users : []
@@ -1017,6 +1072,7 @@ async function loadOverview() {
       return
     }
     totals.value = { ...totals.value, ...(body.totals || {}) }
+    overviewReady.value = true
   } catch (e) {
     if (seq !== overviewSeq) return
     error.value = errMsg(e)
@@ -1108,7 +1164,18 @@ async function copyDeepLink() {
 /** 行内「重新观察」进行中标记：只转该行按钮文案，不锁整页 */
 const recomputingId = ref('')
 
-async function recompute(userId: string) {
+async function recompute(userId: string, name?: string | null) {
+  if (recomputingId.value) return
+  /* B5-F3-5：行级写动作补确认——与同后台「学习状态」页的行级「重算」同一口径
+     （LearnerCenter askConfirm 判例）。此前点一下就直接 POST /recompute 并跳明细态，
+     按其它页习惯点击的运营会无感知地触发写操作（服务端 observe 语义，仍写审计投影行）。 */
+  const ok = await askConfirm({
+    title: '重新观察',
+    message: `确认对「${name || shortId(userId)}」重新跑一次记忆复盘？将重新观察其记忆痕迹与归并建议（只记录建议，不改动记忆痕迹），结果实时刷新。`,
+    confirmText: '重新观察',
+    danger: false
+  })
+  if (!ok) return
   busy.value = true
   recomputingId.value = userId
   error.value = ''

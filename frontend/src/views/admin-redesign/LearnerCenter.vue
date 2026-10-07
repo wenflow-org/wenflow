@@ -297,6 +297,7 @@ import MkDistBand from '@/components/mk/MkDistBand.vue'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
 import { useTableSort } from './useTableSort'
+import { useListQueryState } from './learner-profile'
 import { adminNotificationsApi, adminLearnerModelsApi } from '@/api/adminApi'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 
@@ -557,7 +558,7 @@ function toggleConfBand(key: string) {
    （与 Users.vue 同写法：mk-th--sortable + aria-sort + .mk-th__btn）。
    数据完整性：live 学习者域全量拉取（≤500 窗口，窗口截断另有页头状态条如实标注），
    客户端排序口径诚实。 */
-const { sortKey: lcSortKey, toggle: toggleLcSort, sortState: lcSortState, sortRows: sortLcRows } = useTableSort<Row>({
+const { sortKey: lcSortKey, sortDir: lcSortDir, toggle: toggleLcSort, sortState: lcSortState, sortRows: sortLcRows } = useTableSort<Row>({
   accessors: {
     conf: (r) => r.confidence ?? null,
     updated: (r) => r.ts ?? null
@@ -614,15 +615,31 @@ function retryLoad() {
 }
 
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
-   数据全量在客户端（live 拉取），筛选后按页切片；
-   筛选/数据变化自动回第 1 页（watch filtered） */
+   数据全量在客户端（live 拉取），筛选后按页切片 */
 const page = ref(1)
 const pageSize = ref(15)
+
+/* 筛选 / 页码 ↔ URL query（F1-2）：进学习者详情时本组件被整个卸载（AdminConsole 用详情
+   组件替换当前页），组件内 ref 随之清零——返回（面包屑 / 浏览器后退）后靠 URL 还原搜索词、
+   pill、页码与置信分段下钻；深链 / 刷新同样还原。共享单点在 learner-profile.ts；
+   调用必须在下一条「筛选变化回第 1 页」watch 之前：URL 落位要先于监听建立，否则挂载时
+   还原出来的筛选会被当成用户改筛选、把还原的页码打回 1。 */
+useListQueryState({
+  pill,
+  keyword,
+  page,
+  pageSize,
+  bin: confBin,
+  allowedPills: ['all', 'risk', 'watch', 'stale']
+})
+
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch(filtered, () => {
+/* 筛选变化回第 1 页：监听筛选输入而非 filtered 结果（TeachingSessions 判例）——快照重拉 /
+   口径切换同样会让 filtered 重算，监听结果会把还原的页码打回 1；越界页码由 Pagination 收敛 */
+watch([pill, keyword, confBin, lcSortKey, lcSortDir], () => {
   page.value = 1
 })
 

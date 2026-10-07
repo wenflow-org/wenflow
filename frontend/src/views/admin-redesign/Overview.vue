@@ -115,6 +115,13 @@
               <span class="loop__valrow">
                 <span class="loop__val">{{ s.val }}</span>
                 <button
+                  v-if="s.ringFailed"
+                  type="button"
+                  class="mk-badge mk-badge--sm mk-badge--warn loop__fail"
+                  title="该环读数拉取失败 · 点击重试"
+                  @click.stop="retryLoopExtras"
+                >重试</button>
+                <button
                   v-if="s.failN"
                   type="button"
                   class="mk-badge mk-badge--sm mk-badge--bad loop__fail"
@@ -300,8 +307,13 @@ const data = computed<BriefData | null>(() => liveOverviewFull.value);
    教学回合（会话累计）与记忆复习（到期待办）进页拉一次——低频口径不进轮询。 */
 const teachTotal = ref<number | null>(null);
 const memDue = ref<number | null>(null);
+/** 进页两环读数三态（走查 F1-3）：6-10s 的慢请求此前与「无数据」共用「—」，
+ *  失败还静默吞掉。加载中/失败必须有可区分的呈现，失败给可重试的失败态。 */
+type LoopExtraState = 'loading' | 'ready' | 'failed';
+const teachState = ref<LoopExtraState>('loading');
+const memState = ref<LoopExtraState>('loading');
 /** P2 异常→动作闭环：五环各接深链（跳目标页 scene），点击行为与 title 同步披露 */
-interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title: string; scene: string; failN?: number }
+interface LoopStage { name: string; meta: string; val: string; tone: 'active' | 'done' | 'alert'; title: string; scene: string; failN?: number; ringFailed?: boolean }
 const loopStages = computed<LoopStage[]>(() => {
   const d = data.value;
   const evalOk = (d?.wrapup.evaluationModel ?? 0) + (d?.wrapup.evaluationAiFallback ?? 0);
@@ -323,8 +335,16 @@ const loopStages = computed<LoopStage[]>(() => {
     },
     {
       name: '教学回合', meta: '回合式讲解与追问',
-      val: teachTotal.value == null ? '—' : `${teachTotal.value.toLocaleString()} 累计`, tone: 'done',
-      title: '教学会话累计数（教学会话列表 total · 随全站「含测试」口径，进页/切换口径时拉取）· 点击查看教学会话',
+      val: teachState.value === 'loading'
+        ? '加载中…'
+        : teachState.value === 'failed'
+          ? '读数拉取失败'
+          : `${(teachTotal.value ?? 0).toLocaleString()} 累计`,
+      tone: teachState.value === 'failed' ? 'alert' : 'done',
+      ringFailed: teachState.value === 'failed',
+      title: teachState.value === 'failed'
+        ? '教学会话累计数拉取失败 · 点「重试」重拉 · 点击查看教学会话'
+        : '教学会话累计数（教学会话列表 total · 随全站「含测试」口径，进页/切换口径时拉取）· 点击查看教学会话',
       scene: 'teaching-sessions',
     },
     {
@@ -337,9 +357,16 @@ const loopStages = computed<LoopStage[]>(() => {
     },
     {
       name: '记忆复习', meta: '遗忘曲线调度复习',
-      val: memDue.value == null ? '—' : `${memDue.value} 待办`,
-      tone: (memDue.value ?? 0) > 0 ? 'alert' : 'done',
-      title: '到期未复习的记忆条数（记忆与复盘 totals.due · 随全站「含测试」口径，进页/切换口径时拉取）· 点击查看记忆与复盘',
+      val: memState.value === 'loading'
+        ? '加载中…'
+        : memState.value === 'failed'
+          ? '读数拉取失败'
+          : `${memDue.value ?? 0} 待办`,
+      tone: memState.value === 'failed' || (memDue.value ?? 0) > 0 ? 'alert' : 'done',
+      ringFailed: memState.value === 'failed',
+      title: memState.value === 'failed'
+        ? '到期待办数拉取失败 · 点「重试」重拉 · 点击查看记忆与复盘'
+        : '到期未复习的记忆条数（记忆与复盘 totals.due · 随全站「含测试」口径，进页/切换口径时拉取）· 点击查看记忆与复盘',
       scene: 'memory-review',
     },
   ];
@@ -356,16 +383,22 @@ function jumpToFailedPaths() {
   intent.scene = 'learning-paths';
 }
 async function loadLoopExtras() {
+  teachState.value = 'loading';
+  memState.value = 'loading';
   try {
     // 口径随全站「含测试」开关（D12）：此前写死仅真实口径拉取，开关开着时同指标相差约 35 倍
     const r = await adminMemoryReviewApi.overview({ limit: 1, includeVirtual: liveIncludeVirtual.value });
     memDue.value = Number(r.data?.data?.totals?.due ?? 0);
-  } catch { /* 拉不到就留「—」，不阻塞页面 */ }
+    memState.value = 'ready';
+  } catch { memState.value = 'failed'; /* 不阻塞页面：环上呈现可重试的失败态 */ }
   try {
     const r = await adminTeachingSessionsApi.list({ limit: 1, includeTest: liveIncludeVirtual.value });
     teachTotal.value = Number(r.data?.data?.total ?? 0);
-  } catch { /* 同上 */ }
+    teachState.value = 'ready';
+  } catch { teachState.value = 'failed'; /* 同上 */ }
 }
+/** 失败环手动重试（走查 F1-3）：失败不再只能靠切口径或刷整页恢复 */
+function retryLoopExtras() { void loadLoopExtras(); }
 /* 口径切换（全站「含测试」开关）后重拉闭环条两个进页口径，避免与已切口径的其他页同指标不同源 */
 watch(liveIncludeVirtual, () => { void loadLoopExtras() });
 

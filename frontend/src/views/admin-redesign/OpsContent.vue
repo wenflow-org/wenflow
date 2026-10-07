@@ -50,6 +50,11 @@
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
+          <!-- 口径切换加载反馈（2026-10-06 审核 F2-3）：切换后列表与统计同时重拉，列表接口实测
+               可滞后数秒；期间表格走骨架、KPI 显「—」，此处再给一处文字化「正在加载」，
+               让「已切口径但读数未到」有明确反馈（MkLoading 共享原语，含 role=status）。
+               常驻卡头不新增布局跳变。 -->
+          <MkLoading v-if="loading" inline text="加载中…" />
           <MkCols
             :col-defs="colDefs"
             storage-key="wf_paths_hidden_cols"
@@ -453,12 +458,19 @@ function fmtDate(iso?: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/* 请求代际号（2026-10-06 审核 F2-3，判例 GoalConversations.statsReqSeq）：
+   口径切换会同时发起列表与 stats 两笔重拉，且本页 /paths 实测可滞后数秒；
+   代际比对确保只有最新一笔写回，迟到的旧口径响应不得覆盖新口径读数。 */
+let listReqSeq = 0
+let statsReqSeq = 0
+
 async function reload(force = false) {
   /* 页面级 TTL 缓存（与另两 tab 同款模式）：显式刷新/口径切换传 force 绕过。
      注意（2026-10-06 审核 #39）：本组件被 AdminConsole 互斥卸载/重挂载（无 KeepAlive），
      重挂载后 rows 必为 []，此短路条件恒不成立——所以本页每次进入都会重拉一次，
      这也是列表态必须走快照恢复（saveListState/takeSavedListState）的原因。 */
   if (!force && isPageCacheFresh('learning-paths') && rows.value.length) return
+  const seq = ++listReqSeq
   loading.value = true
   failed.value = false
   loadError.value = ''
@@ -469,6 +481,8 @@ async function reload(force = false) {
       limit: 1000,
       includeTest: includeTest.value || undefined,
     })
+    // 已有更新的一笔在途/已回写 → 丢弃本笔（防旧口径覆盖新口径）
+    if (seq !== listReqSeq) return
     const body = res.data?.data ?? res.data ?? {}
     /* 行内测试账号标记（A3 承诺「含测试口径下行内带标记」）：后端 learning-content 列表未产出
        isTestAccount，按 Users.vue:317 同源单点从 user 派生（2026-10-06 审核 #36） */
@@ -481,22 +495,26 @@ async function reload(force = false) {
     // 仅成功后标记缓存：失败不缓存，下次进入自动重拉
     markPageFetched('learning-paths')
   } catch (e) {
+    if (seq !== listReqSeq) return
     failed.value = true
     loadError.value = `加载失败：${errMsg(e)}`
     toast.error(loadError.value)
   } finally {
-    loading.value = false
+    // 只由最新一笔复位：过期响应收尾时不得把在途新请求的 loading 关掉
+    if (seq === listReqSeq) loading.value = false
   }
 }
 
 async function loadStats() {
+  const seq = ++statsReqSeq
   try {
     // 口径与列表同一判据：/stats 已收 includeTest（否则 KPI/里程碑/分布条恒仅真实，
     // 与同屏卡头「含测试」总数相差约 3 倍）
     const res = await adminLearningContentApi.getStats(includeTest.value)
+    if (seq !== statsReqSeq) return
     stats.value = res.data?.data ?? res.data
   } catch {
-    stats.value = null
+    if (seq === statsReqSeq) stats.value = null
   }
 }
 
@@ -594,8 +612,17 @@ onMounted(() => {
   void reload()
   void loadStats()
 })
-/* 数据隔离切换：仅真实 ↔ 含虚拟/测试（口径变化需绕过 TTL 缓存强制重拉；stats 与列表同源齐拉） */
+/* 数据隔离切换：仅真实 ↔ 含虚拟/测试。
+   2026-10-06 审核 F2-3：此前切换只发起重拉、不动旧数据 —— 实测 /paths 响应可滞后 3.5-10s，
+   滞后期间「含测试」已选中、KPI/分布条已按新口径刷新，而表格仍是旧口径的行与分页读数
+   （「路径总数 1021」对「共 341 条」），三处读数互相打架且全程无任何加载提示。
+   改为切换即清列表与统计读数（清后 rows 为空 → 走骨架，两处读数不会同屏打架），再按新口径
+   重拉；页码回第 1 页（新口径是新结果集，避免停在旧口径才有的页码上）。 */
 watch(includeTest, () => {
+  rows.value = []
+  total.value = 0
+  stats.value = null
+  page.value = 1
   void reload(true)
   void loadStats()
 })

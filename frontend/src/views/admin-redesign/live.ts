@@ -356,7 +356,7 @@ export function waterfallSyncFromBoot(): void {
   if (waterfallSpans.value !== null) return
   waterfallSpans.value = liveSpans.value ? [...liveSpans.value] : []
   waterfallPage.value = 1
-  if (liveLogStats.value?.total) waterfallTotal.value = liveLogStats.value.total
+  if (liveBootLogStats.value?.total) waterfallTotal.value = liveBootLogStats.value.total
 }
 
 /** 「加载更多样本」：服务端追加下一页（week 窗口与 boot 同口径） */
@@ -441,7 +441,19 @@ export interface LiveLogStats {
       p90 供延迟分级（琥珀档）用——后端给则优先，缺则样本内取 0.9 分位（2026-10-06 审核 #105）。 */
   latencyPercentiles?: { p50?: number; p90?: number; p99?: number }
 }
+/**
+ * 执行日志页读数的唯一数据源（页首 pills / 成功率 KPI / 告警条 / 「测试 N」入口）：
+ * 只由页面自身的带筛选查询（reloadLiveSpans）写入——与表格行同一次响应、同窗口同源。
+ * B22/F8-1：此前壳层 boot 采样（fetchLiveSpans，week/200 行）与页面查询共写本 ref，
+ * 点一次 Shell「刷新真实数据」就把页面「今天」读数永久翻成周数字（成功率 38%→89%、
+ * 告警条「今天捕获 29634 条」），表格纹丝不动。窗口/筛选变化或查询失败时由 live.ts 置空，
+ * 页首渲染「—」而不是他窗数字或 0。
+ */
 export const liveLogStats = ref<LiveLogStats | null>(null)
+
+/** 壳层 boot 采样（近 7 天 · 200 行）同请求返回的 stats：**只喂瀑布「样本 N / 全量 M」口径**，
+ *  不写 liveLogStats——壳层周数字不得冒充执行日志页的当前窗口读数（B22/F8-1） */
+const liveBootLogStats = ref<LiveLogStats | null>(null)
 
 /* ---------- Prompt 契约维度（prompt_call_logs）----------
  * 与执行日志同 traceId 关联：同一次调用的传输层（agent_call_logs）与契约层（版本/漂移/tokens/JSON） */
@@ -511,7 +523,9 @@ async function fetchLiveSpans(): Promise<TraceSpan[]> {
   const body = res.data?.data ?? res.data ?? {}
   const items: RawLog[] = Array.isArray(body) ? body : body.items || body.logs || []
   const stats = body.stats as LiveLogStats | undefined
-  if (stats) liveLogStats.value = stats
+  /* B22/F8-1：壳层采样的 stats 是「近 7 天 · 200 行」窗口口径，只喂瀑布的全量分母，
+     绝不写 liveLogStats（页面读数 ref）——否则 Shell 刷新会把执行日志页读数翻成周数字 */
+  if (stats) liveBootLogStats.value = stats
   return mapLogsToSpans(items)
 }
 
@@ -574,6 +588,16 @@ let logsQueryPending = false
 let logsQuerySeq = 0
 let logsQueryLatest: { query: SpanQuery; page: number } | null = null
 
+/** 读数口径签名（排序不影响统计口径，剔除 sort/order）：窗口/筛选真正变化才作废旧读数——
+ *  翻页、自动刷新（同查询）不闪「—」，时间范围/筛选一改立即把旧窗口数字作废（B22/F8-1） */
+function logStatsKey(query: SpanQuery): string {
+  const rest: Record<string, unknown> = { ...query }
+  delete rest.sort
+  delete rest.order
+  return JSON.stringify(rest)
+}
+let lastLogStatsKey = ''
+
 /**
  * 执行日志带筛选重查（传统分页方案 A）：
  * - page 缺省/1 = 回第 1 页（筛选/搜索/traceId/sessionId 直达、每页条数变更的语义）
@@ -581,6 +605,15 @@ let logsQueryLatest: { query: SpanQuery; page: number } | null = null
  * - 自动刷新传 liveLogsPage 即保留当前页（10s 刷新不再把页码重置回 1）
  */
 export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void> {
+  /* 读数口径签名（剔除排序）：口径一变（窗口/筛选）立即作废旧读数，页首渲染「—」而不是他窗数字。
+     必须在串行化「推迟」分支之前执行——被推迟的请求同样代表最新口径，在途的旧口径响应
+     此后不得再把旧窗口数字回填（否则慢响应窗口内出现「新标签 + 旧窗口数字」的持续冲突，
+     正是 B22/F8-1 的形态）。翻页/自动刷新（同口径）不置空，避免每次轮询读数闪空。 */
+  const statsKey = logStatsKey(query)
+  if (statsKey !== lastLogStatsKey) {
+    liveLogStats.value = null
+    lastLogStatsKey = statsKey
+  }
   if (logsQuerying) {
     logsQueryLatest = { query, page }
     logsQueryPending = true
@@ -595,7 +628,11 @@ export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void>
     const body = res.data?.data ?? res.data ?? {}
     const items: RawLog[] = Array.isArray(body) ? body : body.items || body.logs || []
     const stats = body.stats as LiveLogStats | undefined
-    if (stats) liveLogStats.value = stats
+    /* 本页查询响应携带的 stats 即当前窗口/筛选口径（后端 statsWhere 与行查询同窗口）——
+       页首 pills/成功率/告警条/「测试 N」入口与表格同源。后端必返 stats（platform.ts
+       日志端点恒带），缺字段时置 null 而非保留旧窗口数字，页首回落「—」。
+       仅在本次响应仍是最新口径时回填：已被更晚口径取代的旧响应不回填（等重拉）。 */
+    if (statsKey === lastLogStatsKey) liveLogStats.value = stats ?? null
     const rawTotal = body.pagination?.total ?? stats?.total ?? items.length
     const total = Number(rawTotal)
     if (Number.isFinite(total)) liveLogsTotal.value = total
@@ -618,6 +655,8 @@ export async function reloadLiveSpans(query: SpanQuery, page = 1): Promise<void>
     liveLogsFiltered.value = []
     liveLogsRowsMerged.value = 0
     liveLogsTotal.value = 0
+    // 读数不可信：置空让页首显示「—」，不留上一窗口的成功率/失败数（失败伪装成「今天 0 条」的反面）
+    liveLogStats.value = null
   } finally {
     logsQuerying = false
     liveLogsLoading.value = false

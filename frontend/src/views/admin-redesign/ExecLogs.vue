@@ -15,9 +15,11 @@
     </MkPageHead>
     <!-- KPI 卡带（2026-10-04 状态条退役）：成功率/耗时分位读数自页头状态条迁入（页头与单卡容器之间），
          保持原「无日志不显数值」语义（v-if="logs.length"）；成功率着色沿用原 statusTone 的 ok/bad 语义，
-         耗时卡 hint 注明口径（仅成功日志），样本回退时如实标注「样本估算」 -->
+         耗时卡 hint 注明口径（仅成功日志），样本回退时如实标注「样本估算」。
+         B22/F8-1：成功率与表格同窗口同源（live.ts 页面查询单源），hint 披露取值来源，
+         查询在途/失败时显示「—」而不是 0 -->
     <section v-if="logs.length" class="mk-kpi-grid">
-      <MkKpi label="成功率" :value="`${successRate}%`" :tone="successKpiTone" title="成功率 = 成功 ÷ 全部（口径同当前查询窗口）；低于 90% 标红，错误详情见下方告警条" />
+      <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" :hint="successHint" title="成功率 = 成功 ÷ 全部（口径同当前查询窗口与筛选，与下方表格同一次响应）；低于 90% 标红，错误详情见下方告警条" />
       <MkKpi label="耗时 P50" :value="latencyP50" :hint="latencyHint" title="延迟分位（仅成功日志）：P50 = 中位耗时" />
       <MkKpi label="耗时 P99" :value="latencyP99" :hint="latencyHint" title="延迟分位（仅成功日志）：P99 = 99% 请求耗时" />
     </section>
@@ -91,7 +93,7 @@
             :aria-pressed="testFilter !== ''"
             :title="testFilter === 'only' ? '仅看测试 → 点击恢复默认视图' : '连通性/探活测试日志（模型接入页产生，默认视图已排除），点击仅看测试'"
             @click="toggleTestFilter"
-          >测试<span class="mk-pill__count">{{ testCount }}</span></button>
+          >测试<span class="mk-pill__count">{{ testCount ?? '—' }}</span></button>
           <!-- 2026-10-05 卡头统一弹层法：时间范围 / 节点 / Trace ID 三件收进右侧「高级筛选」弹层
               （2026-10-04「提上主行」的发现性问题由弹层钮生效计数兜住），主行回到 pills + 搜索 -->
           <!-- 审核 #127：搜索框补 aria-label（MkFilterSearch inheritAttrs:false + v-bind="$attrs"，
@@ -747,7 +749,9 @@ function goHealthCenter() {
 }
 
 /* ===== P1#24 错误摘要条（2026-10-02 人类可读性） ===== */
-/** 窗口文案随 timeRange 联动：liveLogStats 跟随查询窗口聚合（原「近 24h」恒写失真） */
+/** 窗口文案随 timeRange 联动。B22/F8-1：liveLogStats 是页面自身查询的单源读数（live.ts
+ *  只在窗口/筛选变化与失败时置空、响应落地时回填），因此标签与数字恒同窗口；
+ *  live.ts 作废旧读数期间（切档请求在途）页首渲染「—」，不存在标签配他窗数字的相位。 */
 const errWindowLabel = computed(() => {
   const m: Record<string, string> = { '15m': '近 15 分钟', '1h': '近 1 小时', today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部时间' }
   return m[timeRange.value] || timeRangeLabels[timeRange.value] || '当前窗口'
@@ -1039,18 +1043,39 @@ function clearFilterToAll() {
   clearInvestigation()
   void applyServerQuery()
 }
-/* 全量统计来自后端 stats（非 200 行样本） */
+/* 全量统计来自后端 stats（非 200 行样本）。B22/F8-1：liveStats 只由本页查询写入
+   （live.ts reloadLiveSpans 单源），与表格行同一次响应、同窗口同筛选；
+   壳层 week/200 行采样不再写它，页首读数不会因 Shell 刷新翻成周数字。
+   查询在途（读数已作废）/查询失败 → liveStats 为 null，页首回落样本或「—」。 */
 const liveStats = computed(() => liveLogStats.value)
-const errCount = computed(() =>
-  liveStats.value ? liveStats.value.error : logs.value.filter((l) => l.status === 'err').length
-)
+/** 当前窗口读数是否已就绪（stats 到达且与本页查询同源） */
+const statsReady = computed(() => liveStats.value !== null)
+/** 读数作废在途：窗口/筛选刚变化（live.ts 已清空旧读数）且新查询未落地——
+    此间不得用上一窗口的表格样本冒充当前窗口读数（B22/F8-1） */
+const statsPending = computed(() => liveLogsLoading.value && liveStats.value === null)
+const errCount = computed(() => {
+  const st = liveStats.value
+  if (st) return st.error
+  /* 读数在途/失败：不显示 0（会被读成「本窗口 0 条失败」）；告警条隐藏而非给伪数 */
+  if (statsPending.value) return 0
+  return logs.value.filter((l) => l.status === 'err').length
+})
+/* 成功率：stats 就绪 → 全窗口口径；作废在途 → 「—」（骨架语义，不给 0/旧窗数字）；
+   其余（响应缺 stats 的兜底）→ 本页样本估算并在 hint 披露。 */
 const successRate = computed(() => {
   const st = liveStats.value
   if (st) return st.total ? Math.round((st.success / st.total) * 100) : '—'
+  if (statsPending.value) return '—'
   if (!logs.value.length) return '—'
   const ok = logs.value.filter((l) => l.status === 'ok').length
   return Math.round((ok / logs.value.length) * 100)
 })
+/** 成功率取值来源（KPI 卡 hint/title 如实标注）：全窗口 / 本页样本估算 / 读数加载中 */
+const successHint = computed(() =>
+  statsReady.value ? '全窗口口径' : statsPending.value || !logs.value.length ? '读数加载中' : '本页样本估算'
+)
+/** KPI 显示值：数字档补 %；未就绪档直接「—」（不出现「—%」这种残缺读数） */
+const successRateText = computed(() => (successRate.value === '—' ? '—' : `${successRate.value}%`))
 
 /* B3 观测深度：延迟分位（P50/P99，仅成功日志；对标 Langfuse 观测台核心指标）。
    用后端 stats（含 latencyPercentiles 时优先），否则样本计算 */
@@ -1120,10 +1145,12 @@ const successKpiTone = computed(() => {
   return Number.isFinite(rate) && rate < HEALTHY_RATE ? 'bad' : 'ok'
 })
 /** 测试日志计数：默认态读后端 stats.canary（默认视图已排除 canary，行内数不到）；
-    仅看测试态 = 该查询的 total（口径即测试行数） */
-const testCount = computed(() => {
+    仅看测试态 = 该查询的 total（口径即测试行数）。
+    B22/F8-1：默认态 stats 未就绪时返回 null（模板渲染「—」）——0 会被读成
+    「本窗口 0 条测试日志」的伪读数；入口 pill 本身常驻可点不变。 */
+const testCount = computed<number | null>(() => {
   if (testFilter.value === 'only') return liveLogsTotal.value
-  return liveStats.value?.canary ?? 0
+  return liveStats.value ? liveStats.value.canary ?? 0 : null
 })
 /** 测试筛选两态切换：默认（已排除测试）→ 仅看测试 → 默认（重查由 status/agent/test watch 触发） */
 function toggleTestFilter() {
@@ -1146,6 +1173,9 @@ const filterLabel = computed(() =>
     .join(' · ')
 )
 
+/* 状态 pills（失败/超时/成功）：计数来自当前窗口 stats（与表格同源）。B22/F8-1：
+   stats 未就绪（查询在途 / 失败）时不显示 0——0 会被读成「本窗口 0 条失败」的伪读数；
+   置 undefined 使模板不渲染计数角标（与「测试」pill 的常驻入口语义一致）。 */
 const statusPills = computed(() => {
   const st = liveStats.value
   return [

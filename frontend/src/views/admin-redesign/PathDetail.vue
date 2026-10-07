@@ -89,7 +89,7 @@
             <span class="pd-task__box" aria-hidden="true">✓</span>
             <span class="pd-task__main">
               <strong class="pd-task__title">{{ t.title }}</strong>
-              <span class="pd-task__sub">{{ taskSub(t) }}</span>
+              <span class="pd-task__sub" :title="taskSubTitle(t)">{{ taskSub(t) }}</span>
             </span>
             <span class="mk-badge" :class="taskBadge(t.status)">{{ taskText(t.status) }}</span>
           </button>
@@ -124,7 +124,7 @@
               <span class="pd-tk__note mono" :title="taskRef.task.id">{{ shortId(taskRef.task.id, 8, 4) }}</span>
             </div>
             <div class="mk-facts">
-              <div><span>任务类型</span><strong>{{ taskTypeText(taskRef.task.taskType) }}</strong></div>
+              <div><span>任务类型</span><strong :title="taskSubTitle(taskRef.task)">{{ taskTypeText(taskRef.task.taskType) }}</strong></div>
               <div><span>预计用时</span><strong class="mono">{{ taskRef.task.estimatedMinutes }} 分钟</strong></div>
               <div v-if="cognitiveText(taskRef.task.cognitiveLoad)"><span>认知负荷</span><strong>{{ cognitiveText(taskRef.task.cognitiveLoad) }}</strong></div>
               <div v-if="taskRef.task.completedAt"><span>完成时间</span><strong>{{ timeAgo(taskRef.task.completedAt) }}</strong></div>
@@ -183,6 +183,8 @@ import { computed, ref, watch } from 'vue'
 import { subPage, openSubPage, setSubPageLabel } from './store'
 import { timeAgo, errMsg, shortId } from './live'
 import { statusText, statusBadge } from './opsShared'
+/* 任务类型字典单源（F2-2）：与 TeachingSessions 同源，两页同批枚举不得各译一套 */
+import { taskTypeText, taskTypeTitle } from './statusText'
 import { adminLearningContentApi } from '@/api/adminApi'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -363,10 +365,13 @@ const milestoneBadge = (s: string) =>
 const taskText = (s: string) => ({ completed: '已完成', in_progress: '进行中', todo: '未开始' }[s] || s)
 const taskBadge = (s: string) =>
   s === 'completed' ? 'mk-badge--ok' : s === 'in_progress' ? 'mk-badge--info' : 'mk-badge--muted'
-const taskTypeText = (t: string) => ({ practice: '练习', acquire: '习得', reflection: '反思', assessment: '评估' }[t] || t)
+/* 任务类型字典上收共享单源 statusText.ts（F2-2：此前私有表只有 practice/acquire/reflection/
+   assessment 四键，deconstruct/consolidate/model/diagnose/execute 命中不到就 `|| t` 裸出英文枚举，
+   而同系统教学会话页对同批枚举有完整中文映射——两页同枚举两套译名正是本次收口对象） */
 const cognitiveText = (c?: string | null) => ({ low: '低', medium: '中', high: '高' }[String(c || '')] || String(c || ''))
-/** taskrow 副行：真实字段（任务类型 · 预计用时）；原型的「验收点」接口未返回，不硬造 */
+/** taskrow 副行：真实字段（任务类型 · 预计用时）；未知枚举的英文原文进 title，不裸出在主行 */
 const taskSub = (t: PathSubtask) => `${taskTypeText(t.taskType)} · ${t.estimatedMinutes} 分钟`
+const taskSubTitle = (t: PathSubtask) => taskTypeTitle(t.taskType)
 
 function toggleStage(i: number) {
   openStage.value = openStage.value === i ? null : i
