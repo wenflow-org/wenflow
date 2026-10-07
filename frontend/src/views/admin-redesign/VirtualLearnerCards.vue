@@ -290,6 +290,10 @@ onMounted(loadIndex)
 }
 .vlc-card:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
 .vlc-card:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
+/* grid 子项默认 min-width:auto：hash / cardKey / tag 都是长不可断串，会把网格轨道
+   撑出卡宽，内容直接画到卡框外、被下一张卡整块盖住（走查：来源/版本角标被邻卡遮没、
+   hash 条横跨到下一列）。卡片是固定网格轨，子项必须允许收缩，再由各自省略号收尾。 */
+.vlc-card > * { min-width: 0; }
 .vlc-card__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* 首字头像：与虚拟学习者/画像页同 8 色板（--mk-vl-avatar-*，CM3 单源） */
 .vlc-avatar {
@@ -321,7 +325,14 @@ onMounted(loadIndex)
   flex: 1 1 auto;
   min-width: 0;
 }
-.vlc-card__head .mk-badge { flex: none; }
+/* 来源角标可收缩：名字长时 flex:none 的角标会被挤出卡框，允许它收缩并省略 */
+.vlc-card__head .mk-badge {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .vlc-card__key {
   font-family: var(--mk-mono);
   font-size: var(--mk-fs-micro);
@@ -350,7 +361,16 @@ onMounted(loadIndex)
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.vlc-card__tags { display: flex; flex-wrap: wrap; gap: 4px; }
+/* 单个 chip 可能就是一整串 preset:…+hash:…，必须能在卡宽内收缩并省略，
+   否则超出卡宽后画到邻卡上（走查：标签/hash 被邻卡切断且无省略号） */
+.vlc-card__tags { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.vlc-card__tags .mk-badge {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .vlc-card__more { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .vlc-card__foot {
   display: flex;

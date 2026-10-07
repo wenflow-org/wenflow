@@ -708,7 +708,10 @@ const tsBandBins = computed(() => {
   return bins
 })
 const tsBandSub = computed(() =>
-  `点击分段只看该组 · 窗口 ${rows.value.length} 条（最近 ${LIST_LIMIT} 条上限，非后端全量） · 完结率 ${((rows.value.filter((r) => r.status === 'completed').length / (rows.value.length || 1)) * 100).toFixed(2)}%`
+  // 尾部补一句口径区分：下方快筛 chip「进行中」只算 status=active（单状态），
+  // 本分布条的「进行中」是四状态合并档。两者同屏同为「进行中」却数字不同，
+  // 此前只写在 title 悬停里（走查：进行中 0 与 进行中 2 并排、读者判不出哪个为真）。
+  `点击分段只看该组 · 窗口 ${rows.value.length} 条（最近 ${LIST_LIMIT} 条上限，非后端全量） · 完结率 ${((rows.value.filter((r) => r.status === 'completed').length / (rows.value.length || 1)) * 100).toFixed(2)}% · 本档含初始化 / 暂停 / 收尾中，比下方「进行中」快筛更宽（该快筛仅 active）`
 )
 const bandGroup = ref<string | null>(null)
 /** 「其它」段 = 枚举外取值聚合，不能按组内枚举等值判断 */

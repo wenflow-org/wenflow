@@ -186,6 +186,19 @@ describe('AdminConsole 导航冒烟', () => {
     await vi.waitFor(() => expect(wrapper.find('.mk-page.ld').exists()).toBe(true), { timeout: 15000 });
   });
 
+  it('深链 ?view=card-import（无 id）仍打开导入卡二级页', async () => {
+    // 导入卡是纯表单页、本身没有实体 id，CardImportPage 文件头写明的深链就是
+    // ?view=card-import。守卫曾要求 view 与 id 同时非空，这种写法会被判成「无 id →
+    // 关闭二级页」而渲染回卡墙；只有带哨兵 id 才进得去。
+    const { wrapper } = await mountConsole('/admin/virtual-learner-cards?view=card-import');
+    await settle();
+    expect(subPage.value).toMatchObject({ view: 'card-import', id: 'new' });
+    // 断言渲染的是导入表单本身，而不是回退后的卡墙：
+    // 卡墙页只有「卡墙 共 20 张」，不会有导入页的 hero 标题与拖放区
+    await vi.waitFor(() => expect(wrapper.text()).toContain('导入卡文档'), { timeout: 15000 });
+    expect(wrapper.text()).toContain('拖入或点击选择');
+  });
+
   it('侧栏切换场景仍关闭详情（手动切换不受深链守卫影响）', async () => {
     const { wrapper } = await mountConsole('/admin/people?view=user&id=user_abc');
     await settle();

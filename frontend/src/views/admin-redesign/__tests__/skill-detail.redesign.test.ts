@@ -420,7 +420,11 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(w.text()).toContain('运行时限制')
     // 最近调用（SkillDrawer 概览迁入）：无日志窗口数据 → 明确空态
     expect(w.text()).toContain('最近调用')
-    expect(w.text()).toContain('日志窗口内无调用')
+    // 2026-10-08 走查 #3：原空态写「日志窗口内无调用」，与同屏近 7 天统计卡（如 27852 次调用）
+    // 互斥。改为点明两者不同源——列表是本页采样，指标走统计接口由服务端聚合。
+    expect(w.text()).toContain('本页已加载的日志采样里没有该 Skill 的调用')
+    expect(w.text()).toContain('两者不同源')
+    expect(w.text()).toContain('以指标卡为准')
 
     w.unmount()
   })
