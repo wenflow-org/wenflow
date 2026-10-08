@@ -520,7 +520,7 @@
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
                       title="确认这确实是同一概念，按「B 并入 A」执行归并（确认弹层列明迁移表）"
-                      @click="applyOne({ canonicals: [item.a], ambiguous: [{ a: item.a, b: item.b }] }, `「${item.b}」并入「${item.a}」`, { includeNeedsReview: true })"
+                      @click="applyOne({ ambiguous: [{ a: item.a, b: item.b }] }, `「${item.b}」并入「${item.a}」`, { includeNeedsReview: true })"
                     >确认</button>
                     <button
                       type="button"

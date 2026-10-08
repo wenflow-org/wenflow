@@ -376,7 +376,9 @@ const defaultDeps: ConceptConsolidatorDeps = {
   recordAliasMerge: (args) => prisma.learner_evidence.upsert(args as any) as any,
   findAliasMerges: (args) => prisma.learner_evidence.findMany(args as any) as any,
   runTransaction: (<T>(work: (tx: ConsolidationTx) => Promise<T>) =>
-    prisma.$transaction((client: any) => work(consolidationTxFrom(client))) as Promise<T>) as RunTransaction,
+    // 审计 N1（2026-10-08）：applyKeyMerge 跨 5 表 + 胜出者整行迁移，大用户可能超
+    // prisma 交互式事务缺省 5s——显式放宽到 20s（超时整轮回滚的口径不变，只是不再误伤大用户）。
+    prisma.$transaction((client: any) => work(consolidationTxFrom(client)), { timeout: 20_000, maxWait: 10_000 }) as Promise<T>) as RunTransaction,
   updateEvidence: (args) => prisma.learner_evidence.update(args as any) as any,
   createMisconceptionRows: (args) => prisma.misconception_ledger.createMany(args as any) as any,
   writeProjection: (args) => prisma.learner_projections.upsert(args as any) as any,
