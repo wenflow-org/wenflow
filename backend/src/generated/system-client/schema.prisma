@@ -40,45 +40,36 @@ model agent_model_configs {
 }
 
 model agent_prompts {
-  id                   String    @id
-  agentId              String
-  version              Int
-  name                 String
-  description          String?
-  systemPrompt         String
-  /// @deprecated（2026-09-26）二级编译（prompt-compiler 服务）已退役：prompt 调整统一走
-  /// v4 确定性编译链（core.yaml → skill.*.md → 本表 systemPrompt 镜像）。以下 6 列为历史
-  /// 编译产物残留，已无任何读写方；列保留防历史数据丢失，摘除待后续迁移批次统一处理。
-  compiledSystemPrompt String?
-  compileStatus        String?
-  compileError         String?
-  sourceHash           String?
-  compileContextHash   String?
-  compiledAt           DateTime?
+  id            String    @id
+  agentId       String
+  version       Int
+  name          String
+  description   String?
+  systemPrompt  String
   /// v4：编译自核心文件的内容哈希（漂移检测锚点）
-  coreHash             String?
+  coreHash      String?
   /// v4：编译自核心文件的版本号
-  coreVersion          Int?
-  temperature          Float?
-  maxTokens            Int?
+  coreVersion   Int?
+  temperature   Float?
+  maxTokens     Int?
   /// @deprecated 提示词工件**不承载模型绑定**：模型只来自路由层（skill_model_configs → agent → platform）。
   /// 历史 seed 写入的副本已废弃，运行时仅作最后兜底；见 doc/MODEL_GATEWAY_DESIGN.md §4.9。
-  model                String?
-  status               String    @default("draft")
+  model         String?
+  status        String    @default("draft")
   /// A/B 实验变体标签（NULL=基线版本；非空=实验臂，可与基线同时 ACTIVE，按权重分流）。
   /// 不变量更新（2026-10-01）：原「DB 内永远只有一个 ACTIVE」细化为「唯一基线（variant=NULL）+
   /// 若干实验臂」——发布/同步只归档基线，变体行不受影响。
-  variant              String?
+  variant       String?
   /// 变体流量权重（1-99，百分比）；基线恒为剩余流量，基线行该列为 NULL
-  trafficWeight        Int?
-  createdBy            String
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @default(now())
-  metadata             String?
-  useCount             Int       @default(0)
-  avgLatency           Float?
-  successRate          Float?
-  publishedAt          DateTime?
+  trafficWeight Int?
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now())
+  metadata      String?
+  useCount      Int       @default(0)
+  avgLatency    Float?
+  successRate   Float?
+  publishedAt   DateTime?
 
   @@unique([agentId, version])
   @@index([agentId])

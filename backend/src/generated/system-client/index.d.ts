@@ -4014,12 +4014,6 @@ export namespace Prisma {
     name: string | null
     description: string | null
     systemPrompt: string | null
-    compiledSystemPrompt: string | null
-    compileStatus: string | null
-    compileError: string | null
-    sourceHash: string | null
-    compileContextHash: string | null
-    compiledAt: Date | null
     coreHash: string | null
     coreVersion: number | null
     temperature: number | null
@@ -4045,12 +4039,6 @@ export namespace Prisma {
     name: string | null
     description: string | null
     systemPrompt: string | null
-    compiledSystemPrompt: string | null
-    compileStatus: string | null
-    compileError: string | null
-    sourceHash: string | null
-    compileContextHash: string | null
-    compiledAt: Date | null
     coreHash: string | null
     coreVersion: number | null
     temperature: number | null
@@ -4076,12 +4064,6 @@ export namespace Prisma {
     name: number
     description: number
     systemPrompt: number
-    compiledSystemPrompt: number
-    compileStatus: number
-    compileError: number
-    sourceHash: number
-    compileContextHash: number
-    compiledAt: number
     coreHash: number
     coreVersion: number
     temperature: number
@@ -4131,12 +4113,6 @@ export namespace Prisma {
     name?: true
     description?: true
     systemPrompt?: true
-    compiledSystemPrompt?: true
-    compileStatus?: true
-    compileError?: true
-    sourceHash?: true
-    compileContextHash?: true
-    compiledAt?: true
     coreHash?: true
     coreVersion?: true
     temperature?: true
@@ -4162,12 +4138,6 @@ export namespace Prisma {
     name?: true
     description?: true
     systemPrompt?: true
-    compiledSystemPrompt?: true
-    compileStatus?: true
-    compileError?: true
-    sourceHash?: true
-    compileContextHash?: true
-    compiledAt?: true
     coreHash?: true
     coreVersion?: true
     temperature?: true
@@ -4193,12 +4163,6 @@ export namespace Prisma {
     name?: true
     description?: true
     systemPrompt?: true
-    compiledSystemPrompt?: true
-    compileStatus?: true
-    compileError?: true
-    sourceHash?: true
-    compileContextHash?: true
-    compiledAt?: true
     coreHash?: true
     coreVersion?: true
     temperature?: true
@@ -4311,12 +4275,6 @@ export namespace Prisma {
     name: string
     description: string | null
     systemPrompt: string
-    compiledSystemPrompt: string | null
-    compileStatus: string | null
-    compileError: string | null
-    sourceHash: string | null
-    compileContextHash: string | null
-    compiledAt: Date | null
     coreHash: string | null
     coreVersion: number | null
     temperature: number | null
@@ -4361,12 +4319,6 @@ export namespace Prisma {
     name?: boolean
     description?: boolean
     systemPrompt?: boolean
-    compiledSystemPrompt?: boolean
-    compileStatus?: boolean
-    compileError?: boolean
-    sourceHash?: boolean
-    compileContextHash?: boolean
-    compiledAt?: boolean
     coreHash?: boolean
     coreVersion?: boolean
     temperature?: boolean
@@ -4392,12 +4344,6 @@ export namespace Prisma {
     name?: boolean
     description?: boolean
     systemPrompt?: boolean
-    compiledSystemPrompt?: boolean
-    compileStatus?: boolean
-    compileError?: boolean
-    sourceHash?: boolean
-    compileContextHash?: boolean
-    compiledAt?: boolean
     coreHash?: boolean
     coreVersion?: boolean
     temperature?: boolean
@@ -4423,12 +4369,6 @@ export namespace Prisma {
     name?: boolean
     description?: boolean
     systemPrompt?: boolean
-    compiledSystemPrompt?: boolean
-    compileStatus?: boolean
-    compileError?: boolean
-    sourceHash?: boolean
-    compileContextHash?: boolean
-    compiledAt?: boolean
     coreHash?: boolean
     coreVersion?: boolean
     temperature?: boolean
@@ -4458,17 +4398,6 @@ export namespace Prisma {
       name: string
       description: string | null
       systemPrompt: string
-      /**
-       * @deprecated（2026-09-26）二级编译（prompt-compiler 服务）已退役：prompt 调整统一走
-       * v4 确定性编译链（core.yaml → skill.*.md → 本表 systemPrompt 镜像）。以下 6 列为历史
-       * 编译产物残留，已无任何读写方；列保留防历史数据丢失，摘除待后续迁移批次统一处理。
-       */
-      compiledSystemPrompt: string | null
-      compileStatus: string | null
-      compileError: string | null
-      sourceHash: string | null
-      compileContextHash: string | null
-      compiledAt: Date | null
       /**
        * v4：编译自核心文件的内容哈希（漂移检测锚点）
        */
@@ -4902,12 +4831,6 @@ export namespace Prisma {
     readonly name: FieldRef<"agent_prompts", 'String'>
     readonly description: FieldRef<"agent_prompts", 'String'>
     readonly systemPrompt: FieldRef<"agent_prompts", 'String'>
-    readonly compiledSystemPrompt: FieldRef<"agent_prompts", 'String'>
-    readonly compileStatus: FieldRef<"agent_prompts", 'String'>
-    readonly compileError: FieldRef<"agent_prompts", 'String'>
-    readonly sourceHash: FieldRef<"agent_prompts", 'String'>
-    readonly compileContextHash: FieldRef<"agent_prompts", 'String'>
-    readonly compiledAt: FieldRef<"agent_prompts", 'DateTime'>
     readonly coreHash: FieldRef<"agent_prompts", 'String'>
     readonly coreVersion: FieldRef<"agent_prompts", 'Int'>
     readonly temperature: FieldRef<"agent_prompts", 'Float'>
@@ -16401,12 +16324,6 @@ export namespace Prisma {
     name: 'name',
     description: 'description',
     systemPrompt: 'systemPrompt',
-    compiledSystemPrompt: 'compiledSystemPrompt',
-    compileStatus: 'compileStatus',
-    compileError: 'compileError',
-    sourceHash: 'sourceHash',
-    compileContextHash: 'compileContextHash',
-    compiledAt: 'compiledAt',
     coreHash: 'coreHash',
     coreVersion: 'coreVersion',
     temperature: 'temperature',
@@ -16905,12 +16822,6 @@ export namespace Prisma {
     name?: StringFilter<"agent_prompts"> | string
     description?: StringNullableFilter<"agent_prompts"> | string | null
     systemPrompt?: StringFilter<"agent_prompts"> | string
-    compiledSystemPrompt?: StringNullableFilter<"agent_prompts"> | string | null
-    compileStatus?: StringNullableFilter<"agent_prompts"> | string | null
-    compileError?: StringNullableFilter<"agent_prompts"> | string | null
-    sourceHash?: StringNullableFilter<"agent_prompts"> | string | null
-    compileContextHash?: StringNullableFilter<"agent_prompts"> | string | null
-    compiledAt?: DateTimeNullableFilter<"agent_prompts"> | Date | string | null
     coreHash?: StringNullableFilter<"agent_prompts"> | string | null
     coreVersion?: IntNullableFilter<"agent_prompts"> | number | null
     temperature?: FloatNullableFilter<"agent_prompts"> | number | null
@@ -16936,12 +16847,6 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrderInput | SortOrder
     systemPrompt?: SortOrder
-    compiledSystemPrompt?: SortOrderInput | SortOrder
-    compileStatus?: SortOrderInput | SortOrder
-    compileError?: SortOrderInput | SortOrder
-    sourceHash?: SortOrderInput | SortOrder
-    compileContextHash?: SortOrderInput | SortOrder
-    compiledAt?: SortOrderInput | SortOrder
     coreHash?: SortOrderInput | SortOrder
     coreVersion?: SortOrderInput | SortOrder
     temperature?: SortOrderInput | SortOrder
@@ -16971,12 +16876,6 @@ export namespace Prisma {
     name?: StringFilter<"agent_prompts"> | string
     description?: StringNullableFilter<"agent_prompts"> | string | null
     systemPrompt?: StringFilter<"agent_prompts"> | string
-    compiledSystemPrompt?: StringNullableFilter<"agent_prompts"> | string | null
-    compileStatus?: StringNullableFilter<"agent_prompts"> | string | null
-    compileError?: StringNullableFilter<"agent_prompts"> | string | null
-    sourceHash?: StringNullableFilter<"agent_prompts"> | string | null
-    compileContextHash?: StringNullableFilter<"agent_prompts"> | string | null
-    compiledAt?: DateTimeNullableFilter<"agent_prompts"> | Date | string | null
     coreHash?: StringNullableFilter<"agent_prompts"> | string | null
     coreVersion?: IntNullableFilter<"agent_prompts"> | number | null
     temperature?: FloatNullableFilter<"agent_prompts"> | number | null
@@ -17002,12 +16901,6 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrderInput | SortOrder
     systemPrompt?: SortOrder
-    compiledSystemPrompt?: SortOrderInput | SortOrder
-    compileStatus?: SortOrderInput | SortOrder
-    compileError?: SortOrderInput | SortOrder
-    sourceHash?: SortOrderInput | SortOrder
-    compileContextHash?: SortOrderInput | SortOrder
-    compiledAt?: SortOrderInput | SortOrder
     coreHash?: SortOrderInput | SortOrder
     coreVersion?: SortOrderInput | SortOrder
     temperature?: SortOrderInput | SortOrder
@@ -17041,12 +16934,6 @@ export namespace Prisma {
     name?: StringWithAggregatesFilter<"agent_prompts"> | string
     description?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
     systemPrompt?: StringWithAggregatesFilter<"agent_prompts"> | string
-    compiledSystemPrompt?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
-    compileStatus?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
-    compileError?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
-    sourceHash?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
-    compileContextHash?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
-    compiledAt?: DateTimeNullableWithAggregatesFilter<"agent_prompts"> | Date | string | null
     coreHash?: StringNullableWithAggregatesFilter<"agent_prompts"> | string | null
     coreVersion?: IntNullableWithAggregatesFilter<"agent_prompts"> | number | null
     temperature?: FloatNullableWithAggregatesFilter<"agent_prompts"> | number | null
@@ -18396,12 +18283,6 @@ export namespace Prisma {
     name: string
     description?: string | null
     systemPrompt: string
-    compiledSystemPrompt?: string | null
-    compileStatus?: string | null
-    compileError?: string | null
-    sourceHash?: string | null
-    compileContextHash?: string | null
-    compiledAt?: Date | string | null
     coreHash?: string | null
     coreVersion?: number | null
     temperature?: number | null
@@ -18427,12 +18308,6 @@ export namespace Prisma {
     name: string
     description?: string | null
     systemPrompt: string
-    compiledSystemPrompt?: string | null
-    compileStatus?: string | null
-    compileError?: string | null
-    sourceHash?: string | null
-    compileContextHash?: string | null
-    compiledAt?: Date | string | null
     coreHash?: string | null
     coreVersion?: number | null
     temperature?: number | null
@@ -18458,12 +18333,6 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     systemPrompt?: StringFieldUpdateOperationsInput | string
-    compiledSystemPrompt?: NullableStringFieldUpdateOperationsInput | string | null
-    compileStatus?: NullableStringFieldUpdateOperationsInput | string | null
-    compileError?: NullableStringFieldUpdateOperationsInput | string | null
-    sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
-    compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
-    compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     coreHash?: NullableStringFieldUpdateOperationsInput | string | null
     coreVersion?: NullableIntFieldUpdateOperationsInput | number | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
@@ -18489,12 +18358,6 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     systemPrompt?: StringFieldUpdateOperationsInput | string
-    compiledSystemPrompt?: NullableStringFieldUpdateOperationsInput | string | null
-    compileStatus?: NullableStringFieldUpdateOperationsInput | string | null
-    compileError?: NullableStringFieldUpdateOperationsInput | string | null
-    sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
-    compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
-    compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     coreHash?: NullableStringFieldUpdateOperationsInput | string | null
     coreVersion?: NullableIntFieldUpdateOperationsInput | number | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
@@ -18520,12 +18383,6 @@ export namespace Prisma {
     name: string
     description?: string | null
     systemPrompt: string
-    compiledSystemPrompt?: string | null
-    compileStatus?: string | null
-    compileError?: string | null
-    sourceHash?: string | null
-    compileContextHash?: string | null
-    compiledAt?: Date | string | null
     coreHash?: string | null
     coreVersion?: number | null
     temperature?: number | null
@@ -18551,12 +18408,6 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     systemPrompt?: StringFieldUpdateOperationsInput | string
-    compiledSystemPrompt?: NullableStringFieldUpdateOperationsInput | string | null
-    compileStatus?: NullableStringFieldUpdateOperationsInput | string | null
-    compileError?: NullableStringFieldUpdateOperationsInput | string | null
-    sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
-    compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
-    compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     coreHash?: NullableStringFieldUpdateOperationsInput | string | null
     coreVersion?: NullableIntFieldUpdateOperationsInput | number | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
@@ -18582,12 +18433,6 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     systemPrompt?: StringFieldUpdateOperationsInput | string
-    compiledSystemPrompt?: NullableStringFieldUpdateOperationsInput | string | null
-    compileStatus?: NullableStringFieldUpdateOperationsInput | string | null
-    compileError?: NullableStringFieldUpdateOperationsInput | string | null
-    sourceHash?: NullableStringFieldUpdateOperationsInput | string | null
-    compileContextHash?: NullableStringFieldUpdateOperationsInput | string | null
-    compiledAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     coreHash?: NullableStringFieldUpdateOperationsInput | string | null
     coreVersion?: NullableIntFieldUpdateOperationsInput | number | null
     temperature?: NullableFloatFieldUpdateOperationsInput | number | null
@@ -20301,12 +20146,6 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrder
     systemPrompt?: SortOrder
-    compiledSystemPrompt?: SortOrder
-    compileStatus?: SortOrder
-    compileError?: SortOrder
-    sourceHash?: SortOrder
-    compileContextHash?: SortOrder
-    compiledAt?: SortOrder
     coreHash?: SortOrder
     coreVersion?: SortOrder
     temperature?: SortOrder
@@ -20343,12 +20182,6 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrder
     systemPrompt?: SortOrder
-    compiledSystemPrompt?: SortOrder
-    compileStatus?: SortOrder
-    compileError?: SortOrder
-    sourceHash?: SortOrder
-    compileContextHash?: SortOrder
-    compiledAt?: SortOrder
     coreHash?: SortOrder
     coreVersion?: SortOrder
     temperature?: SortOrder
@@ -20374,12 +20207,6 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrder
     systemPrompt?: SortOrder
-    compiledSystemPrompt?: SortOrder
-    compileStatus?: SortOrder
-    compileError?: SortOrder
-    sourceHash?: SortOrder
-    compileContextHash?: SortOrder
-    compiledAt?: SortOrder
     coreHash?: SortOrder
     coreVersion?: SortOrder
     temperature?: SortOrder
