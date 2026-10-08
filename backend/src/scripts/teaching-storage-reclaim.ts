@@ -18,47 +18,40 @@ import { prisma } from '../config/database';
 const DRY_RUN = process.argv.includes('--dry-run');
 const BATCH = 500;
 
-async function bytesOf(sql: string): Promise<number> {
-  const rows = await prisma.$queryRawUnsafe<Array<{ n: number | null }>>(sql);
-  return Number(rows[0]?.n ?? 0);
-}
-
 async function main(): Promise<void> {
-  const debugBytesBefore = await bytesOf(
-    `SELECT COALESCE(SUM(LENGTH(CAST(payload AS BLOB))),0) n FROM teaching_session_messages
-     WHERE payload LIKE '%promptDebug%' OR payload LIKE '%peerDebug%'`
+  // 单次全扫收集目标行（LIKE 无索引，多批重扫 = 每批一次全表扫，57 批要数小时——
+  // 一次扫完把 id/字节装内存，之后全部按 id 索引点更新）
+  console.log('[reclaim] 单次扫描目标行（LIKE 全扫，约 3-8 分钟）…');
+  const scanStart = Date.now();
+  const targets = await prisma.$queryRawUnsafe<Array<{ id: number; n: number }>>(
+    `SELECT id, LENGTH(CAST(payload AS BLOB)) n FROM teaching_session_messages
+     WHERE (payload LIKE '%promptDebug%' OR payload LIKE '%peerDebug%') AND json_valid(payload)
+     ORDER BY id`
   );
-  const columnBytesBefore = await bytesOf(
-    `SELECT COALESCE(SUM(LENGTH(CAST(messages AS BLOB))),0) n FROM teaching_sessions
+  const debugBytesBefore = targets.reduce((sum, row) => sum + Number(row.n || 0), 0);
+  const columnRows = await prisma.$queryRawUnsafe<Array<{ id: string; n: number }>>(
+    `SELECT id, LENGTH(CAST(messages AS BLOB)) n FROM teaching_sessions
      WHERE status='completed' AND messages IS NOT NULL
        AND id IN (SELECT DISTINCT sessionId FROM teaching_session_messages)`
   );
-  console.log(`[reclaim] 清洗前：debug 信封 ${(debugBytesBefore / 1e9).toFixed(2)}GB，完结双存列 ${(columnBytesBefore / 1e9).toFixed(2)}GB，dryRun=${DRY_RUN}`);
+  const columnBytesBefore = columnRows.reduce((sum, row) => sum + Number(row.n || 0), 0);
+  console.log(`[reclaim] 扫描完成（${Math.round((Date.now() - scanStart) / 1000)}s）：debug 信封 ${targets.length} 行 / ${(debugBytesBefore / 1e9).toFixed(2)}GB，完结双存列 ${columnRows.length} 行 / ${(columnBytesBefore / 1e9).toFixed(2)}GB，dryRun=${DRY_RUN}`);
 
-  // ── 1) tsm debug 剥离（分批，避免与在跑业务长时间争写锁）────────────────────
+  // ── 1) tsm debug 剥离（按 id 索引分批）───────────────────────────────────────
   let strippedRows = 0;
-  for (;;) {
-    const batchIds = await prisma.$queryRawUnsafe<Array<{ id: number }>>(
-      `SELECT id FROM teaching_session_messages
-       WHERE (payload LIKE '%promptDebug%' OR payload LIKE '%peerDebug%')
-         AND json_valid(payload) ORDER BY id LIMIT ${BATCH}`
-    );
-    if (batchIds.length === 0) break;
-    if (DRY_RUN) { strippedRows += batchIds.length; continue; }
-    const ids = batchIds.map((r) => r.id);
+  for (let offset = 0; offset < targets.length; offset += BATCH) {
+    const batch = targets.slice(offset, offset + BATCH);
+    if (DRY_RUN) { strippedRows += batch.length; continue; }
+    const ids = batch.map((r) => r.id);
     const result = await prisma.$executeRawUnsafe(
       `UPDATE teaching_session_messages
        SET payload = json_remove(payload, '$.promptDebug', '$.peerDebug')
        WHERE id IN (${ids.join(',')})`
     );
     strippedRows += result;
-    console.log(`  [strip] 已剥离 ${strippedRows} 行…`);
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    if ((offset / BATCH) % 10 === 0) console.log(`  [strip] 已剥离 ${strippedRows}/${targets.length} 行…`);
+    await new Promise((resolve) => setTimeout(resolve, 150));
   }
-  const debugBytesAfter = DRY_RUN ? debugBytesBefore : await bytesOf(
-    `SELECT COALESCE(SUM(LENGTH(CAST(payload AS BLOB))),0) n FROM teaching_session_messages
-     WHERE payload LIKE '%promptDebug%' OR payload LIKE '%peerDebug%'`
-  );
 
   // ── 2) 完结会话大列置 NULL（仅侧表已有行的）────────────────────────────────
   let nulledRows = 0;
@@ -70,21 +63,11 @@ async function main(): Promise<void> {
     );
     nulledRows = result;
   } else {
-    const counted = await prisma.$queryRawUnsafe<Array<{ n: number }>>(
-      `SELECT COUNT(*) n FROM teaching_sessions
-       WHERE status='completed' AND messages IS NOT NULL
-         AND id IN (SELECT DISTINCT sessionId FROM teaching_session_messages)`
-    );
-    nulledRows = Number(counted[0]?.n ?? 0);
+    nulledRows = columnRows.length;
   }
-  const columnBytesAfter = DRY_RUN ? columnBytesBefore : await bytesOf(
-    `SELECT COALESCE(SUM(LENGTH(CAST(messages AS BLOB))),0) n FROM teaching_sessions
-     WHERE status='completed' AND messages IS NOT NULL
-       AND id IN (SELECT DISTINCT sessionId FROM teaching_session_messages)`
-  );
 
-  const savedGb = ((debugBytesBefore - debugBytesAfter) + (columnBytesBefore - columnBytesAfter)) / 1e9;
-  console.log(`[reclaim] 完成：剥离 debug 行=${strippedRows}（${((debugBytesBefore - debugBytesAfter) / 1e9).toFixed(2)}GB），置空完结列=${nulledRows} 行（${((columnBytesBefore - columnBytesAfter) / 1e9).toFixed(2)}GB），合计释放≈${savedGb.toFixed(2)}GB（进入 freelist，由后续写入复用；主库文件体积需 VACUUM 才收缩）。`);
+  const savedGb = (debugBytesBefore + columnBytesBefore) / 1e9;
+  console.log(`[reclaim] 完成：剥离 debug 行=${strippedRows}（${(debugBytesBefore / 1e9).toFixed(2)}GB），置空完结列=${nulledRows} 行（${(columnBytesBefore / 1e9).toFixed(2)}GB），合计释放≈${savedGb.toFixed(2)}GB（进入 freelist，由后续写入复用；主库文件体积需 VACUUM 才收缩）。`);
 }
 
 main()
