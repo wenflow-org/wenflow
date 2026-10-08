@@ -299,19 +299,39 @@ async function runLesson(n) {
     try {
       if (pendingCkpt) {
         const opts = pendingCkpt.options || [];
-        const list = opts.map((o) => `${o.id}. ${o.content || o.text}`).join('\n');
-        const raw = (await gatewayChat([
-          { role: 'system', content: '你是刚上第一节吉他课的零基础新手。下面是一道选择题，凭新手直觉选一个，最后一行只写选项字母（A/B/C…），不要别的字。' },
-          { role: 'user', content: `${pendingCkpt.question || ''}\n${list}` },
-        ], { maxTokens: 600, temperature: 0.2 })).toUpperCase();
-        const hit = opts.find((o) => raw.includes(String(o.id).toUpperCase()));
-        const optId = hit ? hit.id : opts[0]?.id;
-        r = await api('POST', `/api/ai-teaching/sessions/${rec.sessionId}/checkpoints/${pendingCkpt.id}/submit`, { selectedOptionIds: optId ? [optId] : undefined, revision });
-        const d = r.json?.data || {};
-        rec.turns.push({ n: i + 1, kind: 'checkpoint', student: `选择 ${optId}`, teacher: String(d.feedback || d.aiResponse || '').slice(0, 800), correct: d.correct ?? d.judgement?.correct ?? null, peer: peerOf(d) });
-        lastTeacher = String(d.feedback || d.aiResponse || lastTeacher);
-        if (r.json?.data?.revision) revision = r.json.data.revision;
-        pendingCkpt = null;
+        if (opts.length === 0) {
+          // 简答型/无选项检查点：走 skip 出口清 pending（EPOCH2 发现 #4 收尾——此前不检查
+          // r.ok 且无选项时静默空转三连）。skip 是产品协议（CheckpointSubmitPayload.skip）。
+          r = await api('POST', `/api/ai-teaching/sessions/${rec.sessionId}/checkpoints/${pendingCkpt.id}/submit`, { skip: true, revision });
+          if (!r.ok || r.json?.success === false) {
+            rec.error = `checkpoint skip failed: ${r.status} ${JSON.stringify(r.json?.error || '').slice(0, 160)}`;
+            log(`  turn${i + 1} ERR ${rec.error}`);
+            break;
+          }
+          rec.turns.push({ n: i + 1, kind: 'checkpoint-skipped', reason: 'no-options (driver does not answer short-answer)', question: String(pendingCkpt.question || '').slice(0, 120) });
+          if (r.json?.data?.revision) revision = r.json.data.revision;
+          pendingCkpt = null;
+        } else {
+          const list = opts.map((o) => `${o.id}. ${o.content || o.text}`).join('\n');
+          const raw = (await gatewayChat([
+            { role: 'system', content: '你是刚上第一节吉他课的零基础新手。下面是一道选择题，凭新手直觉选一个，最后一行只写选项字母（A/B/C…），不要别的字。' },
+            { role: 'user', content: `${pendingCkpt.question || ''}\n${list}` },
+          ], { maxTokens: 600, temperature: 0.2 })).toUpperCase();
+          const hit = opts.find((o) => raw.includes(String(o.id).toUpperCase()));
+          const optId = hit ? hit.id : opts[0]?.id;
+          r = await api('POST', `/api/ai-teaching/sessions/${rec.sessionId}/checkpoints/${pendingCkpt.id}/submit`, { selectedOptionIds: optId ? [optId] : undefined, revision });
+          // r.ok 检查（EPOCH2 发现 #4）：提交失败（STALE/校验拒）不再被静默吞掉
+          if (!r.ok || r.json?.success === false) {
+            rec.error = `checkpoint submit failed: ${r.status} ${JSON.stringify(r.json?.error || '').slice(0, 160)}`;
+            log(`  turn${i + 1} ERR ${rec.error}`);
+            break;
+          }
+          const d = r.json?.data || {};
+          rec.turns.push({ n: i + 1, kind: 'checkpoint', student: `选择 ${optId}`, teacher: String(d.feedback || d.aiResponse || '').slice(0, 800), correct: d.correct ?? d.judgement?.correct ?? null, peer: peerOf(d) });
+          lastTeacher = String(d.feedback || d.aiResponse || lastTeacher);
+          if (r.json?.data?.revision) revision = r.json.data.revision;
+          pendingCkpt = null;
+        }
       } else {
         const msgs = [
           { role: 'system', content: STUDENT_SYSTEM },

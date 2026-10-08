@@ -1033,9 +1033,12 @@ export async function processStudentMessage(
       // 概念归属（F1 修复轮 a，R1 H2：全库 0/5955 无归属）：普通检查点带上当前教学点的知识身份——
       // 模型输出无键，用当前点名字的确定性派生键并标注 source='derived'。锚题探针不带：
       // 其归属由 anchorConceptKey 承载，且纪律 2 禁止锚题结果改写掌握，不得经本通道进聚合。
+      // 兜底（EPOCH2 发现 #2 收尾）：模型漏报 currentPoint 时用看板首个点名近似——
+      // 此前直接 null，产生无归属检查点（证据无键、无法参与概念聚合）。
       const checkpointConcept = anchorTarget
         ? null
-        : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint);
+        : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint)
+          ?? resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.points[0]?.name);
       teachingState.pendingCheckpoint = {
         id: `cp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: checkpointCandidate.type,

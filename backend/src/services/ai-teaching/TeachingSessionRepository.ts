@@ -418,7 +418,9 @@ export class TeachingSessionRepository {
             status: 'initializing',
             // 业务时间戳：模拟时钟上下文内 = 模拟日（默认 new Date()，现网不变）
             startTime: now,
-            messages: JSON.stringify(input.messages || []),
+            // 老列零写入不变式（EPOCH2 发现 #3 收尾）：无开场消息不再写 '[]' 初始化——
+            // 列可空、读路径 parseJsonSafe(null)→[]，侧表才权威（ensureTeachingMessagesSeeded 同款置 null）
+            messages: input.messages && input.messages.length > 0 ? JSON.stringify(input.messages) : null,
             knowledgeState: JSON.stringify(input.knowledgeState || []),
             teachingState: input.teachingState ? JSON.stringify(input.teachingState) : null,
             openKey,

@@ -391,6 +391,41 @@ describe('检查点同题复问抑制（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺
   })
 })
 
+describe('检查点概念归属兜底（EPOCH2 发现 #2 收尾）', () => {
+  /** currentPoint 缺失、看板首点有名字 → 用首点兜底归属（此前直接 null=证据无键） */
+  async function emitWithKnowledge(knowledge: Record<string, unknown>) {
+    const session = sessionRecord({
+      teachingState: { checkpointHistory: [], classroomContext: { stage: { current: 'teaching' } }, sessionArtifacts: {} },
+    });
+    mockClaimOperation.mockResolvedValue(claim(session));
+    mockTurnSkill.mockResolvedValue({
+      success: true,
+      internal: { ext: { teachingTurnOutcome: { artifact: {
+        reply: '我们把这个要点核对一遍。',
+        analysis: { understanding: 0.8, engagement: 0.7, confusionPoints: [] },
+        knowledge,
+        control: { checkpoint: { type: 'single_choice', question: CANDIDATE_QUESTION, options: [{ id: 'A', content: '复制一份' }, { id: 'B', content: '删掉' }], correctOptionIds: ['A'] } },
+        pedagogy: { strategies: ['feedback'] },
+      } } } } });
+    return processStudentMessage('sess-1', '这道题我想一下再答。', { operationClaim: claim(session) as never });
+  }
+
+  it('currentPoint 缺失 → 看板首点兜底归属', async () => {
+    const result = await emitWithKnowledge({
+      currentPoint: null,
+      points: [{ name: '和弦标记与歌词对齐', status: 'learning', progress: 40 }],
+    });
+    expect(result.checkpoint?.conceptKey).toBeTruthy();
+    expect(result.checkpoint?.conceptName).toBe('和弦标记与歌词对齐');
+    expect(result.checkpoint?.conceptSource).toBe('derived');
+  })
+
+  it('双缺（无 currentPoint 且看板空）→ 无归属（宁缺勿挂占位键）', async () => {
+    const result = await emitWithKnowledge({ currentPoint: null, points: [] });
+    expect(result.checkpoint?.conceptKey).toBeUndefined();
+  })
+})
+
 describe('isDuplicateCheckpointQuestion：同题判据（归一与边界）', () => {
   const question = 'Water Cycle 里 evaporation 与 condensation 的区别是什么？';
 
