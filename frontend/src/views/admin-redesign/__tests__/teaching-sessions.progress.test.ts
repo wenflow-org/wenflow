@@ -60,6 +60,29 @@ async function mountLive() {
   return wrapper;
 }
 
+describe('TeachingSessions 低参与标注（拍板 #1：completed 且用户消息 <2 条，显示口径）', () => {
+  it('completed + messageCount<2 → 状态列出「低参与」badge；≥2 条不出', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          items: [
+            makeItem('low', { status: 'completed', messageCount: 0 }),
+            makeItem('real', { status: 'completed', messageCount: 6 }),
+            makeItem('act', { status: 'active', messageCount: 0 }),
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const rows = wrapper.findAll('tbody tr');
+    expect(rows[0].find('.ts-status').text()).toContain('低参与');
+    expect(rows[1].find('.ts-status').text()).not.toContain('低参与');
+    expect(rows[2].find('.ts-status').text()).not.toContain('低参与');
+    wrapper.unmount();
+  });
+});
+
 beforeEach(() => {
   listMock.mockReset();
   dataSource.value = 'live';

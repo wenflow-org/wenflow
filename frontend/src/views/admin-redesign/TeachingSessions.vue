@@ -261,7 +261,16 @@
                   </div>
                 </div>
               </td>
-              <td v-if="!tsHiddenCols.has('status')" class="ts-status"><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
+              <td v-if="!tsHiddenCols.has('status')" class="ts-status">
+                <span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span>
+                <!-- 低参与标注（拍板 #1，显示口径）：completed 但用户消息 <2 条（与零证据门同阈值）。
+                     状态机语义不动——会话确实终态结束；运营口径单独标注，避免「完成」被读成「真实参与过」。 -->
+                <span
+                  v-if="r.status === 'completed' && (r.messageCount ?? 0) < 2"
+                  class="mk-badge mk-badge--sm mk-badge--muted"
+                  title="低参与：完成时用户消息不足 2 条，无真实学习参与证据"
+                >低参与</span>
+              </td>
               <td v-if="!tsHiddenCols.has('interact')">
                 <!-- 行级设计（批B）：时长主值+档位 tone（≥25 分钟长时标琥珀 / <1 分钟秒退弱化），消息/知识点降 sub 行；
                      长时阈值（duration ≥ 1500 秒）写进 title 披露（P3）。

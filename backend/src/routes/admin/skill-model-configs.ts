@@ -156,6 +156,21 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * 「允许平台默认」白名单（拍板 #9，2026-10-08）：近 30 天调用真 0 的 4 个技能
+ * （skill-author/skill-compiler=入口已下线的工作台元技能；virtual-learner-referee/
+ * virtual-learner-actor-auditor=手动触发的 VL 审计技能），补配置行只会制造
+ * 0 调用的新漂移点，故登记在此、不计入 unconfigured——skills 列表仍完整可见（审计可见性保留）。
+ * 若未来其中某个进入高频主链，应先补配置行再把它移出本名单（09-28「漏配静默落旧通道」
+ * 教训只针对高频主链技能）。
+ */
+const PLATFORM_DEFAULT_ALLOWLIST: readonly string[] = [
+  'skill-author',
+  'skill-compiler',
+  'virtual-learner-referee',
+  'virtual-learner-actor-auditor',
+];
+
+/**
  * 覆盖矩阵：prompts/skill.*.md 注册表（技能全集）× skill_model_configs 实际行。
  * 未配置行 = 走平台默认路由（2026-09-28 教训：7 个课后链技能曾因此静默落到旧 key）。
  */
@@ -189,7 +204,13 @@ router.get('/coverage', async (req, res) => {
       success: true,
       data: {
         total: skills.length,
-        unconfigured: skills.filter(s => s.source === 'platform-default').map(s => s.skillId),
+        unconfigured: skills
+          .filter(s => s.source === 'platform-default' && !PLATFORM_DEFAULT_ALLOWLIST.includes(s.skillId))
+          .map(s => s.skillId),
+        // 白名单中当前确实走平台默认的成员（补了配置行即自然移出）
+        allowlisted: skills
+          .filter(s => s.source === 'platform-default' && PLATFORM_DEFAULT_ALLOWLIST.includes(s.skillId))
+          .map(s => s.skillId),
         skills,
       },
     });

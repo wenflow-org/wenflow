@@ -1,8 +1,10 @@
 const mockGet = jest.fn()
 const mockUpsert = jest.fn()
 const mockDelete = jest.fn()
+const mockGetAll = jest.fn()
 const mockGetPlatformReliability = jest.fn()
 const mockResolveLlmCallParams = jest.fn()
+const mockScanPromptFiles = jest.fn()
 
 jest.mock('../../../services/skillModelConfig.service', () => ({
   __esModule: true,
@@ -10,7 +12,12 @@ jest.mock('../../../services/skillModelConfig.service', () => ({
     get: (...args: any[]) => mockGet(...args),
     upsert: (...args: any[]) => mockUpsert(...args),
     delete: (...args: any[]) => mockDelete(...args),
+    getAll: (...args: any[]) => mockGetAll(...args),
   },
+}))
+
+jest.mock('../../../composers/prompt-files/loader', () => ({
+  scanPromptFiles: (...args: any[]) => mockScanPromptFiles(...args),
 }))
 
 jest.mock('../../../services/reliability-settings.service', () => ({
@@ -195,6 +202,60 @@ describe('skill-model-configs routing-only write path', () => {
         }),
       })
     )
+  })
+})
+
+describe('coverage 覆盖矩阵（拍板 #9：平台默认白名单）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('白名单 4 技能不计入 unconfigured，但 skills 列表保留（审计可见性）；allowlisted 回报实际未配置成员', async () => {
+    mockScanPromptFiles.mockReturnValue({
+      files: [
+        { agentId: 'skill:goal-conversation' },
+        { agentId: 'skill:skill-author' },
+        { agentId: 'skill:skill-compiler' },
+        { agentId: 'skill:virtual-learner-referee' },
+        { agentId: 'skill:virtual-learner-actor-auditor' },
+      ],
+    })
+    // 只有 goal-conversation 有配置行；白名单 4 技能全部 platform-default
+    mockGetAll.mockResolvedValue([
+      { skillId: 'goal-conversation', endpoint: 'http://127.0.0.1:3000/v1', model: 'deepseek-v4.1-flash', tier: 'chat', paramOverrides: null, fallbackChain: null },
+    ])
+
+    const handler = getHandler('get', '/coverage')
+    const res = createRes()
+    await handler({ query: {} }, res)
+
+    const payload = res.json.mock.calls[0][0]
+    expect(payload.success).toBe(true)
+    expect(payload.data.unconfigured).toEqual([])
+    expect(payload.data.allowlisted).toEqual([
+      'skill-author', 'skill-compiler', 'virtual-learner-actor-auditor', 'virtual-learner-referee',
+    ])
+    // skills 列表仍含全部 5 个（白名单成员可见，source 仍如实标 platform-default）
+    const byId = new Map<string, any>(payload.data.skills.map((s: any) => [s.skillId, s]))
+    expect(byId.get('skill-author').source).toBe('platform-default')
+    expect(byId.get('goal-conversation').source).toBe('skill-channel')
+  })
+
+  it('白名单技能一旦补了配置行即移出 allowlisted（名单只登记「确实走平台默认」的成员）', async () => {
+    mockScanPromptFiles.mockReturnValue({
+      files: [{ agentId: 'skill:skill-author' }],
+    })
+    mockGetAll.mockResolvedValue([
+      { skillId: 'skill-author', endpoint: null, model: 'deepseek-v4.1-flash', tier: 'chat', paramOverrides: null, fallbackChain: null },
+    ])
+
+    const handler = getHandler('get', '/coverage')
+    const res = createRes()
+    await handler({ query: {} }, res)
+
+    const payload = res.json.mock.calls[0][0]
+    expect(payload.data.unconfigured).toEqual([]) // 白名单成员不计入未配置
+    expect(payload.data.allowlisted).toEqual([])  // 但已有 model 行 → 不在 allowlisted
   })
 })
 

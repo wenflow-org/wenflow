@@ -260,6 +260,75 @@ export class ReviewCompletedConsumer {
         });
       }
 
+      // B2 memory scope 投影写入器（拍板 #14，2026-10-08）：learner_projections 的 memory scope
+      // 此前全库 0 行——它是唯一没有写入器的 scope，读投影保持率的监测面看到的永远是空
+      // （FORGETTING-CURVE day7-14「投影层断裂」实锤）。复习事件落账后把该学习者的记忆面
+      // 快照写成投影行：痕迹总数/到期数/逐痕迹 FSRS 状态（cap 100，读方可本地复算保持率）。
+      // C4 纪律：generatedAt/lastEventAt 用事件 occurredAt（模拟时），不跟处理墙钟。
+      // upsert 幂等：事件重放/重复收束只刷新同一行。projectionKey 惯例同 learner-snapshot-v1。
+      const [traceRows, traceCount, dueCount] = await Promise.all([
+        tx.memory_traces.findMany({
+          where: { userId: event.userId },
+          orderBy: { lastSeenAt: 'desc' },
+          take: 100,
+          select: {
+            conceptKey: true, label: true, masteryScore: true, stability: true,
+            lastSeenAt: true, dueAt: true, extractionCount: true,
+            fsrsStability: true, fsrsDifficulty: true, fsrsReps: true, fsrsLapses: true,
+            pathId: true,
+          },
+        }),
+        tx.memory_traces.count({ where: { userId: event.userId } }),
+        tx.memory_traces.count({ where: { userId: event.userId, dueAt: { lte: event.occurredAt } } }),
+      ]);
+      const projectionKey = `memory-projection-v1:${event.userId}`;
+      const projectionPayload = JSON.stringify({
+        schemaVersion: 'memory-projection-v1',
+        traceCount,
+        dueCount,
+        traces: traceRows.map((trace) => ({
+          conceptKey: trace.conceptKey,
+          label: trace.label,
+          masteryScore: trace.masteryScore,
+          stability: trace.stability,
+          lastSeenAt: trace.lastSeenAt?.toISOString() ?? null,
+          dueAt: trace.dueAt?.toISOString() ?? null,
+          extractionCount: trace.extractionCount,
+          // FSRS 原生状态随行带出：读方不回查即可复算保持率/排间隔
+          fsrs: {
+            stability: trace.fsrsStability,
+            difficulty: trace.fsrsDifficulty,
+            reps: trace.fsrsReps,
+            lapses: trace.fsrsLapses,
+          },
+          pathId: trace.pathId,
+        })),
+        lastReviewEventId: event.id,
+        lastReviewSessionId: data.sessionId ?? null,
+      });
+      await tx.learner_projections.upsert({
+        where: { projectionKey },
+        create: {
+          id: `lspm_${event.id}`,
+          projectionKey,
+          userId: event.userId,
+          scope: 'memory',
+          pathId: sessionPathId,
+          version: 1,
+          payload: projectionPayload,
+          lastEventId: event.id,
+          lastEventAt: event.occurredAt,
+          generatedAt: event.occurredAt,
+        },
+        update: {
+          version: { increment: 1 },
+          payload: projectionPayload,
+          lastEventId: event.id,
+          lastEventAt: event.occurredAt,
+          generatedAt: event.occurredAt,
+        },
+      });
+
       await tx.domain_event_inbox.create({
         data: {
           id: `inbox_${CONSUMER_ID}_${event.id}`,

@@ -54,7 +54,8 @@ describe('ReviewCompletedConsumer 稳定键去重', () => {
     domain_event_inbox: { findUnique: jest.Mock; create: jest.Mock }
     teaching_sessions: { findUnique: jest.Mock }
     learner_evidence: { findFirst: jest.Mock; create: jest.Mock }
-    memory_traces: { findUnique: jest.Mock; upsert: jest.Mock }
+    memory_traces: { findUnique: jest.Mock; upsert: jest.Mock; findMany: jest.Mock; count: jest.Mock }
+    learner_projections: { upsert: jest.Mock }
   }
 
   let tx: Tx
@@ -90,7 +91,13 @@ describe('ReviewCompletedConsumer 稳定键去重', () => {
         return {}
       }),
     },
-    memory_traces: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
+    memory_traces: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      upsert: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+    },
+    learner_projections: { upsert: jest.fn().mockResolvedValue({}) },
   })
 
   const event = (id: string, occurredAtMs: number) => createDomainEvent({
@@ -284,5 +291,85 @@ describe('ReviewCompletedConsumer 稳定键去重', () => {
     expect(tx.learner_evidence.findFirst).not.toHaveBeenCalled()
     expect(tx.learner_evidence.create).not.toHaveBeenCalled()
     expect(tx.memory_traces.upsert).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * B2 memory scope 投影写入器（拍板 #14，2026-10-08）：learner_projections 的 memory scope
+ * 此前全库 0 行（唯一没有写入器的 scope）——复习事件落账后须写/刷新该学习者的记忆面投影。
+ */
+describe('ReviewCompletedConsumer memory 投影写入（B2）', () => {
+  interface Tx {
+    domain_event_inbox: { findUnique: jest.Mock; create: jest.Mock }
+    teaching_sessions: { findUnique: jest.Mock }
+    learner_evidence: { findFirst: jest.Mock; create: jest.Mock }
+    memory_traces: { findUnique: jest.Mock; upsert: jest.Mock; findMany: jest.Mock; count: jest.Mock }
+    learner_projections: { upsert: jest.Mock }
+  }
+
+  const buildTx = (): Tx => ({
+    domain_event_inbox: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({}),
+    },
+    teaching_sessions: { findUnique: jest.fn().mockResolvedValue({ learningPathId: 'path-1' }) },
+    learner_evidence: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    memory_traces: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      upsert: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([
+        {
+          conceptKey: '光合作用', label: '光合作用', masteryScore: 0.5, stability: 'fragile',
+          lastSeenAt: new Date(1_700_000_000_000), dueAt: new Date(1_700_086_400_000),
+          extractionCount: 1, fsrsStability: 2.5, fsrsDifficulty: 5.2, fsrsReps: 1, fsrsLapses: 0,
+          pathId: 'path-1',
+        },
+      ]),
+      count: jest.fn()
+        .mockResolvedValueOnce(7)   // traceCount
+        .mockResolvedValueOnce(2),  // dueCount
+    },
+    learner_projections: { upsert: jest.fn().mockResolvedValue({}) },
+  })
+
+  const event = createDomainEvent({
+    id: 'evt-mem-1',
+    type: 'review:completed',
+    aggregateType: 'review',
+    aggregateId: 'ts-1',
+    userId: 'user-1',
+    source: 'session-finalization',
+    occurredAt: new Date(1_700_000_060_000),
+    data: {
+      sessionId: 'ts-1',
+      mode: 'review',
+      reviewItems: [{ conceptKey: '光合作用', label: '光合作用', status: 'learning', progress: 40, masteryScore: 0.5, rating: 'hard' }],
+    },
+  })
+
+  it('复习事件落账后 upsert memory scope 投影（scope/memory、键含 schema 前缀、generatedAt=事件时刻）', async () => {
+    const tx = buildTx()
+    transaction.mockImplementation(async (callback: (client: Tx) => Promise<unknown>) => callback(tx))
+    getActiveForConcepts.mockResolvedValue([])
+
+    await new ReviewCompletedConsumer().handle(event)
+
+    expect(tx.learner_projections.upsert).toHaveBeenCalledTimes(1)
+    const call = tx.learner_projections.upsert.mock.calls[0][0]
+    expect(call.where.projectionKey).toBe('memory-projection-v1:user-1')
+    expect(call.create.scope).toBe('memory')
+    expect(call.create.generatedAt.toISOString()).toBe(new Date(1_700_000_060_000).toISOString())
+    expect(call.update.generatedAt.toISOString()).toBe(new Date(1_700_000_060_000).toISOString())
+    const payload = JSON.parse(call.create.payload)
+    expect(payload).toEqual(expect.objectContaining({
+      schemaVersion: 'memory-projection-v1',
+      traceCount: 7,
+      dueCount: 2,
+      lastReviewSessionId: 'ts-1',
+    }))
+    expect(payload.traces[0]).toEqual(expect.objectContaining({
+      conceptKey: '光合作用',
+      fsrs: { stability: 2.5, difficulty: 5.2, reps: 1, lapses: 0 },
+    }))
   })
 })
