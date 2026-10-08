@@ -83,6 +83,46 @@ describe('skills-readiness：W2 注册对账', () => {
   });
 });
 
+/**
+ * 退役名单豁免（2026-10-08）：triage-judge 于 2026-10-06 退役、DB 历史行按「不动历史数据」
+ * 口径保留，但 W1/W2 不看退役名单 → 健康中心永久显示 2 项异常（实测 readiness W1/W2 同时 ok=false）。
+ * 现在名单内的幽灵位单列 retiredExempt，不算异常；名单外的幽灵位照旧告警。
+ */
+describe('skills-readiness：退役名单内的幽灵位豁免（W1/W2）', () => {
+  it('W1：退役技能的 ACTIVE 残留 → ok，进 retiredExempt 不进 zombieActive', () => {
+    const book = makeBook([makeEntry({ skillId: 'goal-conversation' })]);
+    const check = analyzeW1(book, [
+      { agentId: 'skill:goal-conversation' },
+      { agentId: 'skill:triage-judge' },
+    ]);
+    expect(check.ok).toBe(true);
+    expect(check.zombieActive).toEqual([]);
+    expect(check.retiredExempt).toEqual(['triage-judge']);
+    expect(check.items).toEqual([]);
+  });
+
+  it('W2：退役技能的注册行 → ok，进 retiredExempt 不进 zombieRegistration', () => {
+    const book = makeBook([makeEntry({ skillId: 'goal-conversation' })]);
+    const check = analyzeW2(book, [{ name: 'goal-conversation' }, { name: 'triage-judge' }]);
+    expect(check.ok).toBe(true);
+    expect(check.zombieRegistration).toEqual([]);
+    expect(check.retiredExempt).toEqual(['triage-judge']);
+    expect(check.items).toEqual([]);
+  });
+
+  it('名单外的幽灵位照旧告警（豁免不吞掉真问题）', () => {
+    const book = makeBook([makeEntry({ skillId: 'goal-conversation' })]);
+    const w1 = analyzeW1(book, [{ agentId: 'skill:goal-conversation' }, { agentId: 'skill:never-retired' }]);
+    const w2 = analyzeW2(book, [{ name: 'goal-conversation' }, { name: 'never-retired' }]);
+    expect(w1.ok).toBe(false);
+    expect(w1.zombieActive).toEqual(['never-retired']);
+    expect(w1.retiredExempt).toEqual([]);
+    expect(w2.ok).toBe(false);
+    expect(w2.zombieRegistration).toEqual(['never-retired']);
+    expect(w2.retiredExempt).toEqual([]);
+  });
+});
+
 describe('skills-readiness：W3 接线双向', () => {
   const mockDefinitions = [
     {
