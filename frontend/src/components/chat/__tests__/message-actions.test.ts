@@ -16,7 +16,7 @@ import { nextTick } from 'vue';
 
 import MessageActions from '../MessageActions.vue';
 
-const styleSource = readFileSync(resolve(process.cwd(), 'src/components/chat/MessageActions.vue'), 'utf-8');
+const styleSource = readFileSync(resolve(__dirname, '../MessageActions.vue'), 'utf-8');
 
 describe('MessageActions 位置口径', () => {
   it('样式不再是绝对定位浮层（不允许遮住气泡正文）', () => {

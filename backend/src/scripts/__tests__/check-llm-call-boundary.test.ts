@@ -1,4 +1,5 @@
 import fs from 'fs/promises';
+import os from 'os';
 import path from 'path';
 import { findDirectGatewayCallViolations } from '../check-llm-call-boundary';
 
@@ -10,7 +11,7 @@ describe('LLM 调用边界', () => {
   }, 60_000);
 
   it('报告未授权的直接 Gateway 调用位置', async () => {
-    const fixtureDir = path.join(process.cwd(), '.tmp-llm-call-boundary-test');
+    const fixtureDir = path.join(os.tmpdir(), '.tmp-llm-call-boundary-test');
     await fs.mkdir(fixtureDir, { recursive: true });
     const fixturePath = path.join(fixtureDir, 'caller.ts');
     try {
