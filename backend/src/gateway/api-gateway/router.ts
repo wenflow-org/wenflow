@@ -249,7 +249,11 @@ export class APIRouter {
       const endpointChanged = Boolean(configuredEndpoint)
         && !endpointsMatch(configuredEndpoint, inheritedRoute.endpoint);
       const endpoint = configuredEndpoint || inheritedRoute.endpoint;
-      const inheritedUserEndpoint = inheritedRoute.privateNetworkPolicy === 'public-only';
+      // 用户自有端点侦测按 source 判（路由 origin 的权威标记）。2026-10-08 96d9d11b（拍板 #7）
+      // 把用户端点策略从写死 public-only 改 runtime 后，旧的「策略===public-only」嗅探断链——
+      // 学习对话链「用户模型权威」静默失效（router.test 当晚抓到，model 被skill行顶掉）。
+      const inheritedUserEndpoint =
+        inheritedRoute.source === 'user-provider' || inheritedRoute.source === 'user-agent-override';
       const apiKey = endpointChanged
         ? configuredApiKey
         : inheritedUserEndpoint

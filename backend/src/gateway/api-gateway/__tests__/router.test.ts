@@ -105,7 +105,7 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
     }))
   })
 
-  it('Skill 仅覆盖模型时保留用户 Endpoint 的公网策略', async () => {
+  it('Skill 仅覆盖模型时保留用户 Endpoint（策略跟随管理员网络政策，#7 拍板）', async () => {
     userProviderFindUnique.mockResolvedValue({
       endpoint: 'https://user-provider.example/v1',
       apiKey: 'user-key',
@@ -114,7 +114,7 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
     })
 
     // 路径链技能（非学习对话链）：skill 绑定照常生效（ds 好 key，质量锚定），
-    // 用户端点与公网策略保留
+    // 用户端点与网络策略（runtime）保留
     const pathRoute = await new APIRouter().resolve({
       agentId: 'path-agent',
       skillId: 'path-planning'
@@ -122,7 +122,7 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
     expect(pathRoute).toEqual(expect.objectContaining({
       endpoint: 'https://user-provider.example/v1',
       model: 'skill-model',
-      privateNetworkPolicy: 'public-only'
+      privateNetworkPolicy: 'runtime'
     }))
 
     // 学习对话链技能：用户自己的模型即权威（agnes A/B 靶面 = 教学对话本身）
@@ -133,11 +133,11 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
     expect(teachRoute).toEqual(expect.objectContaining({
       endpoint: 'https://user-provider.example/v1',
       model: 'user-model',
-      privateNetworkPolicy: 'public-only'
+      privateNetworkPolicy: 'runtime'
     }))
   })
 
-  it('用户 Agent 覆盖路由始终使用公网策略', async () => {
+  it('用户 Agent 覆盖路由跟随管理员网络策略（#7 拍板后不再写死公网）', async () => {
     userOverrideFindFirst.mockResolvedValue({
       endpoint: 'https://user-agent.example/v1',
       apiKey: 'user-agent-key',
@@ -152,7 +152,7 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
     expect(resolved).toEqual(expect.objectContaining({
       source: 'user-agent-override',
       endpoint: 'https://user-agent.example/v1',
-      privateNetworkPolicy: 'public-only'
+      privateNetworkPolicy: 'runtime'
     }))
   })
 
@@ -171,7 +171,7 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
     expect(resolved).toEqual(expect.objectContaining({
       endpoint: 'https://user-agent.example/v1',
       apiKey: '',
-      privateNetworkPolicy: 'public-only'
+      privateNetworkPolicy: 'runtime'
     }))
   })
 
@@ -201,7 +201,7 @@ describe('APIRouter Agent/Skill 路由叠加', () => {
       endpoint: 'https://user-provider.example/v1',
       apiKey: 'user-key',
       source: 'user-provider',
-      privateNetworkPolicy: 'public-only'
+      privateNetworkPolicy: 'runtime'
     }))
   })
 
