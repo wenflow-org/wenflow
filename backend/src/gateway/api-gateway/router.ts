@@ -346,7 +346,8 @@ export class APIRouter {
         reasoningEffort: 'default',
         temperature: config.temperature ?? platformConfig?.defaultTemperature ?? 0.7,
         maxTokens: config.maxTokens ?? platformConfig?.defaultMaxTokens ?? 2000,
-        privateNetworkPolicy: customEndpoint ? 'public-only' : 'runtime'
+        // 用户自选 agent 端点与平台端点同口径：跟随管理员网络策略（2026-10-08 纪元 2 拍板）
+        privateNetworkPolicy: 'runtime'
       };
     } catch (error) {
       logger.error('[api-gateway] fetch user agent override failed', {
@@ -403,7 +404,10 @@ export class APIRouter {
         temperature: 0.7,
         maxTokens: 2000,
         responseFormat,
-        privateNetworkPolicy: 'public-only'
+        // 用户自有 provider：开发者自选端点（内网/外网都可以），跟随管理员网络策略
+        // （allowPrivateNetwork / privateNetworkHosts 白名单），不再写死 public-only。
+        // 2026-10-08 拍板：模拟真实情景——开发者自己决定走什么网络。
+        privateNetworkPolicy: 'runtime'
       };
     } catch (error) {
       logger.error('[api-gateway] fetch user provider failed', {

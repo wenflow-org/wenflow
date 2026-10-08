@@ -314,3 +314,6 @@ backend/scripts/measurement-probe/out*/
 
 # 纪元重置前的全库归档（epoch-1 备份，6.5GB，严禁入库）
 backend/prisma/archive/
+
+# 原型稿目录（拍板 2026-10-08：不入库，仅本地保留）
+newui/
