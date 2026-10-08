@@ -5,7 +5,7 @@
 > 需要时以 doc/ 根目录现行文档与代码为准。
 > **登记门禁（2026-09-28 起）**：新文档入库三件套 = 白名单 + 本表登记 + 状态头；实现与「不做」声明相悖须同提交改文档。
 
-## 总索引（41 篇 · 全覆盖 · 2026-10-08）
+## 总索引（40 篇 · 全覆盖 · 2026-10-05）
 
 > 每篇文档头部有状态行（📌 类型｜最后核验）。**登记约定**：新增 doc/ 文档须同时 ①加入根 .gitignore 白名单 ②登记本表 ③写状态头；凡实现与文档「不做/待办」声明相悖的改动，须同一提交内更新该文档声明。审计详见 doc/local/DOC-TIMELINESS-AUDIT-2026-09-28（本机）。
 
@@ -44,7 +44,6 @@
 | CONTEXT_MECHANISM_AUDIT.md | 历史审计 | 缓存基线为改造前口径 |
 | LEARNING_SCIENCE_AUDIT.md | 历史审计 | 科学性判断仍有效 |
 | DEV_SCRIPTS.md | 活规范 | 脚本唯一索引（86 条零失效） |
-| MEASUREMENT-BASELINE-PROTOCOL.md | 活规范 | 测量基线协议（世代分界 SSOT 引用 + 快照冻结三规则） |
 | ADMIN_UI_WALKTHROUGH.md | 历史快照 | 已迁 doc/re_test/ |
 | ADMIN_PAGE_AUDIT.md | 历史快照 | 已迁 doc/re_test/ |
 | README.md / README.en.md | 索引 | 本文档 |
@@ -118,9 +117,6 @@
 
 - [`DEV_SCRIPTS.md`](./DEV_SCRIPTS.md)
   - 开发脚本手册：三个脚本目录的定位与命名约定、虚拟学习者跑批链路、可复用工具索引（门禁 / 审计 / 探针 / 回填 / 运维 / 评测）、一次性脚本的识别与归档约定
-- [`MEASUREMENT-BASELINE-PROTOCOL.md`](./MEASUREMENT-BASELINE-PROTOCOL.md)
-  - 测量基线协议：世代分界登记（`backend/config/era-boundaries.json`，行为变更点唯一权威源）+ 快照冻结格式与三条规则（冻结先于对照 / 世代过滤 / 执行前重算）
-  - 适用：审计、复验、跑批读数、存量处置队列、对外报告的「现状判断」；读数脚本自检清单与判例台账在文内
 
 ---
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * forgetting-curve-readout.cjs — 长程遗忘曲线读数（动态发现全部 day 文件）
+ * forgetting-curve-readout.cjs — 长程遗忘曲线读数（day7-14）
  * 主曲线只吃 day10+ 样本（C4 修复后 FSRS 调度才按模拟日历走，day7-9 的间距被墙钟污染）。
  * 输出：①校准分桶（预测保持率带 × 实际回忆率）②间隔分桶（elapsedDays × 回忆率）
  * ③FSRS 原生占比 ④监测面三查。
@@ -13,22 +13,13 @@ const { DatabaseSync } = require('node:sqlite');
 const OUT = path.join(__dirname, 'out');
 const DAY_MS = 86400000;
 
-// ---------- ①② 曲线：动态聚合全部已有 day 文件（按模拟日分 pre/post 组）----------
+// ---------- ①② 曲线：聚合 day10-14（修复后）----------
 const pairs = [];
 const seen = new Set();
-let dayMin = null;
-let dayMax = null;
-for (let d = 1; d <= 60; d++) {
+for (let d = 7; d <= 14; d++) {
   const f = path.join(OUT, `r4-cal-day${d}.json`);
   if (!fs.existsSync(f)) continue;
-  let j;
-  try {
-    j = JSON.parse(fs.readFileSync(f, 'utf8'));
-  } catch {
-    continue; // 文件半写或损坏（跑批进行中），跳过该日
-  }
-  dayMin = dayMin === null ? d : dayMin;
-  dayMax = d;
+  const j = JSON.parse(fs.readFileSync(f, 'utf8'));
   for (const vl of j.vls || []) {
     // 修复后（day10+）模拟日窗口结束点 = 本次复习时刻的近似（±1 天粒度）。
     // pair.occurredAt 是温故点的**原始教学时刻**而非本次复习时刻，不能拿来算间距。
@@ -53,15 +44,8 @@ for (let d = 1; d <= 60; d++) {
     }
   }
 }
-// 世代过滤（权威源 backend/config/era-boundaries.json，2026-10-08 建立）：
-// 主曲线只吃「收集自模拟日 ≥10」的样本——代理映射 = C4 时钟修复（c4-clock-fix 边界，
-// 01:31 提交 / 01:33 重启生效）之后的收集日；修复前事件 occurredAt=墙钟、FSRS 间距失真。
-const ERA = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'config', 'era-boundaries.json'), 'utf8'));
-const C4_BOUNDARY = ERA.boundaries.find((b) => b.id === 'c4-clock-fix');
-const POST_ERA_SIM_DAY = 10;
-const post = pairs.filter((p) => p.day >= POST_ERA_SIM_DAY);
-const pre = pairs.filter((p) => p.day < POST_ERA_SIM_DAY);
-console.log(`[era] 主曲线口径 = ${C4_BOUNDARY.id}（${C4_BOUNDARY.at}，commit ${C4_BOUNDARY.commit}）之后收集的样本（模拟日 ≥${POST_ERA_SIM_DAY}）；此前样本仅存于「修复前」组，不得进现状判断。`);
+const post = pairs.filter((p) => p.day >= 10);
+const pre = pairs.filter((p) => p.day < 10);
 
 const fmt = (arr) => {
   if (!arr.length) return '  （无样本）';
@@ -71,7 +55,7 @@ const fmt = (arr) => {
   return `n=${String(n).padStart(3)}  预测均=${pred.toFixed(2)}  实际回忆率=${recall.toFixed(2)}`;
 };
 
-console.log(`== 总样本：day${dayMin ?? '?'}-${dayMax ?? '?'} 共 ${pairs.length} 对（修复后 day${POST_ERA_SIM_DAY}+ = ${post.length}，修复前 day${dayMin ?? '?'}-${POST_ERA_SIM_DAY - 1} = ${pre.length}）`);
+console.log(`== 总样本：day7-14 共 ${pairs.length} 对（修复后 day10-14 = ${post.length}，修复前 day7-9 = ${pre.length}）`);
 console.log(`\n== 间隔分桶（elapsedDays，修复后样本）——遗忘曲线主读数`);
 for (const [lo, hi] of [[0, 1], [1, 2], [2, 4], [4, 7], [7, 100]]) {
   const b = post.filter((p) => p.elapsed >= lo && p.elapsed < hi);
