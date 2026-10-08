@@ -217,9 +217,9 @@
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">互动<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!tsHiddenCols.has('progress')">进度</th>
               <th v-if="!tsHiddenCols.has('output')">产物</th>
-              <th v-if="!tsHiddenCols.has('attention')">关注</th>
+              <th v-if="!isTableNarrow && !tsHiddenCols.has('attention')">关注</th>
               <th
-                v-if="!tsHiddenCols.has('start')"
+                v-if="!isTableNarrow && !tsHiddenCols.has('start')"
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="tsSortState('start')"
@@ -296,14 +296,14 @@
                   :title="r.advisory ? `${r.advisory.title || '教学建议'}：${r.advisory.text}` : '教学建议'"
                 ><span class="ts-adv-badge__txt">{{ r.advisory?.title || '建议' }}</span></span>
               </td>
-              <td v-if="!tsHiddenCols.has('attention')">
+              <td v-if="!isTableNarrow && !tsHiddenCols.has('attention')">
                 <span
                   class="ts-att"
                   :class="`ts-att--${r.attention}`"
                   :title="r.attention === 'high' ? '高关注：需优先介入' : r.attention === 'medium' ? '中关注' : '低关注'"
                 >{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span>
               </td>
-              <td v-if="!tsHiddenCols.has('start')">
+              <td v-if="!isTableNarrow && !tsHiddenCols.has('start')">
                 <!-- 原型末数据列「时间」.sub mono 形态：相对时间 + title 绝对时间（Users 判例）。
                      悬停给本地化绝对时刻（2026-10-06 审核 #38）：原样直出后端 ISO（UTC 带 Z），
                      跨时区读不出真实时刻 -->
@@ -348,6 +348,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSubPage } from './store'
 import { useSessionDrill } from './useSessionDrill'
+import { useIsNarrow } from './useIsNarrow'
 import { timeAgo, isPageCacheFresh, markPageFetched, shortId, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone, taskTypeText, taskTypeTitle } from './statusText'
 import type { SessionProgress } from './statusText'
@@ -641,6 +642,14 @@ const tsColDefs = [
   { key: 'start', label: '时间', title: '开始时间（相对 · 悬停看绝对时间）' },
 ] as const
 const tsHiddenCols = ref<Set<string>>(new Set())
+/* 窄档（<1440）：9 列塞不下时，auto 布局会把缺口全压给带 ellipsis 的身份列——1280 下
+   「会话」只剩 113px（20 字标题只露 6 字）、「用户」89px（用户名被截），而「产物」拿满
+   215px 只用 124px。给身份列让宽度只能靠减列：窄档默认收起需求最小、信息含量也最低的
+   「时间 / 关注」两列（56+70=126px），1280 实测会话列 113→191px、用户列 89→124px，且不产生横滚。
+   阈值取 1440：全开时该档会话列已有 191px（1366/1400 只有 167/187px，不够），且 1440 本就是
+   项目自己的档位。与 VirtualLearners 的 useIsNarrow 同一先例（窄档勾了「列」也不显，
+   行详情进座舱，信息不丢）；1920/2560/3840 不受影响（会话列 378/523/764px）。 */
+const isTableNarrow = useIsNarrow(1439)
 /* 焦点 chips（2026-10-05：计数升 KPI 面板后本组退为纯筛选开关——学习状态判例：
    KPI 孪生 pill 不再显数）。「进行中」保留计数：它是 active 单状态口径，分布卡
    「进行中」是四状态合并档，两个数互为唯一来源；「全部」不显数 = 卡头 meta 的已加载行数。
@@ -708,7 +717,10 @@ const tsBandBins = computed(() => {
   return bins
 })
 const tsBandSub = computed(() =>
-  `点击分段只看该组 · 窗口 ${rows.value.length} 条（最近 ${LIST_LIMIT} 条上限，非后端全量） · 完结率 ${((rows.value.filter((r) => r.status === 'completed').length / (rows.value.length || 1)) * 100).toFixed(2)}%`
+  // 尾部补一句口径区分：下方快筛 chip「进行中」只算 status=active（单状态），
+  // 本分布条的「进行中」是四状态合并档。两者同屏同为「进行中」却数字不同，
+  // 此前只写在 title 悬停里（走查：进行中 0 与 进行中 2 并排、读者判不出哪个为真）。
+  `点击分段只看该组 · 窗口 ${rows.value.length} 条（最近 ${LIST_LIMIT} 条上限，非后端全量） · 完结率 ${((rows.value.filter((r) => r.status === 'completed').length / (rows.value.length || 1)) * 100).toFixed(2)}% · 本档含初始化 / 暂停 / 收尾中，比下方「进行中」快筛更宽（该快筛仅 active）`
 )
 const bandGroup = ref<string | null>(null)
 /** 「其它」段 = 枚举外取值聚合，不能按组内枚举等值判断 */

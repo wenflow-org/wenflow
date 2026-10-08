@@ -51,7 +51,7 @@
                故行保留 tr 原生语义、不聚焦：整行点击只留给指针（cursor 由 .mk-table--click 提供），
                键盘入口下沉到行内原生按钮（Tab 可达、Enter/Space 原生激活、aria-label 带 skillId 消歧）。 -->
           <tr
-            v-for="item in shownCores"
+            v-for="item in pagedCores"
             :key="item.skillId"
             @click="openDesign(item.skillId)"
           >
@@ -71,11 +71,13 @@
         </tbody>
       </table>
       </div>
-      <div v-if="canMoreCores" class="mk-list-more">
-        <button type="button" class="mk-link" @click="loadMoreCores">
-          加载更多（已显示 {{ shownCores.length }} / {{ cores.length }}）
-        </button>
-      </div>
+      <!-- 分页（标准件 · 卡脚）：清单全量在客户端，页码器切片渲染 -->
+      <Pagination
+        v-if="cores.length"
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total="cores.length"
+      />
       <MkEmptyState
         v-if="!cores.length && !loading"
         :icon="loadError ? '⚠' : '◌'"
@@ -94,11 +96,11 @@ defineProps<{ embedded?: boolean }>()
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { adminPromptWorkbenchApi } from '@/api/adminApi';
-import { useLoadMore } from './useLoadMore';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
 import { errMsg } from './live'
 import { toast } from '@/utils/toast'
+import Pagination from './Pagination.vue';
 import MockSkeletonTable from './SkeletonTable.vue';
 
 interface CoreListItem {
@@ -118,8 +120,11 @@ const cores = ref<CoreListItem[]>([]);
 const loading = ref(false);
 const loadError = ref('');
 
-/* 滚动修复 #8：核心文件表 15 行/页（客户端切片，加载更多翻页） */
-const { shown: shownCores, canMore: canMoreCores, loadMore: loadMoreCores } = useLoadMore(computed(() => cores.value), 15);
+/* 滚动修复 #8：核心文件表 15 行/页（2026-10-07 由累积式「加载更多」改标准页码器：
+   数据全量在客户端，页码器只切片渲染） */
+const page = ref(1);
+const pageSize = ref(15);
+const pagedCores = computed(() => cores.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value));
 
 const syncedCount = computed(() => countBy('synced'));
 const pendingCount = computed(() => countBy('pending-compile'));

@@ -130,9 +130,13 @@
           :title="recEmptyText"
         />
       </div>
-      <div v-if="recCanMore" class="mk-list-more">
-        <button type="button" class="mk-link" @click="recLoadMore">加载更多（已显示 {{ recShown.length }} / {{ recFlat.length }}）</button>
-      </div>
+      <!-- 分页（标准件）：表行/页；total 与页脚「登记册口径 N 条」同源（分组表头不计入条数） -->
+      <Pagination
+        v-if="recRowEntries.length"
+        v-model:page="recPage"
+        v-model:pageSize="recPageSize"
+        :total="recRowEntries.length"
+      />
       <div v-if="recReport.orphanRegistrations.length" class="sk-rec-orphans">
         <strong title="登记册已删除/不存在，但注册记录仍残留">失效注册残留</strong>
         <span v-for="orphan in recReport.orphanRegistrations" :key="orphan.name" class="mk-badge mk-badge--bad">{{ orphan.name }}</span>
@@ -162,7 +166,7 @@ import { useRoute } from "vue-router";
 import { isLive } from "./store";
 import { errMsg } from "./live";
 import { completionMetaOf } from "./glossaryMeta";
-import { useLoadMore } from "./useLoadMore";
+import Pagination from "./Pagination.vue";
 import MkEmptyState from "@/components/mk/MkEmptyState.vue";
 import MkLoading from "@/components/mk/MkLoading.vue";
 import MkSkeleton from "@/components/mk/MkSkeleton.vue";
@@ -273,7 +277,18 @@ const recFlat = computed<RecEntry[]>(() => {
   }
   return out;
 });
-const { shown: recShown, canMore: recCanMore, loadMore: recLoadMore } = useLoadMore(recFlat, 15);
+/* 分页（2026-10-07：累积式「加载更多」→ 标准页码器）。分页单位 = 表行，不含分组表头：
+   页码器「共 N 条」与页脚「技能登记册口径 N 条」同源——若把分组表头也算进条数，
+   同一屏会出现「共 37 条」对「登记册口径 34 条」两套数（分组数随归属而变）。
+   分组表头不进分页，由 recPageRows 按需注入——跨页的行也带着自己的归属头。 */
+const recRowEntries = computed<RecEntry[]>(() => recFlat.value.filter((e) => e.kind === "row"));
+const recPage = ref(1);
+const recPageSize = ref(15);
+const recShown = computed<RecEntry[]>(() =>
+  recRowEntries.value.slice((recPage.value - 1) * recPageSize.value, recPage.value * recPageSize.value)
+);
+/** 筛选/差集定位变化 → 回第 1 页（数据缩水导致的越界由 Pagination 自身收敛） */
+watch([recOnlyAbnormal, recDiff], () => { recPage.value = 1; });
 
 const recPageRows = computed<RecEntry[]>(() => {
   const seen = new Set<string>();

@@ -272,9 +272,14 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).toContain('系统失败率');
     expect(w.text()).toContain('30%');
     // hint 必须写明分母与「人为终止另计」，并给出合计失败率（40%），运营不再把 30% 读成全部失败占比
-    expect(w.text()).toContain('系统失败 3 / 全部 10');
+    // 2026-10-08 走查 #3：分母由裸「全部」改为「全部会话」——同一张卡上方是会话口径、
+    // 下方表格是学习者口径（行数 = 虚拟学习者），裸「全部」会被读成同一个分母。
+    expect(w.text()).toContain('系统失败 3 / 全部会话 10');
     expect(w.text()).toContain('人为终止 1 另计');
     expect(w.text()).toContain('合计 40%');
+    expect(w.text()).toContain('已完成 6 / 全部会话 10');
+    // 表格分页行必须声明自己数的是学习者，与上方会话口径区分
+    expect(w.text()).toContain('行数 = 虚拟学习者');
   });
 
   it('无会话数据时完成率/系统失败率显示 0%（共享 KPI 卡常驻）', async () => {

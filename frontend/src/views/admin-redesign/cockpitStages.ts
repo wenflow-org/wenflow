@@ -57,7 +57,12 @@ export function useCockpitStages(deps: {
     // 同阶段但已有下游证据时，也标完成（如 learning 时 Goal/Path 已完成）
     if (st === 'goal' && (bindings.value.learningPathId || bindings.value.teachingSessionId || cur >= 1)) return true
     if (st === 'path' && (bindings.value.teachingSessionId || cur >= 2)) return true
-    if (st === 'learning' && (isTerminal.value || stageStatus.value.learning?.wrapup)) return true
+    // 终止 ≠ 学完：abandoned / failed 可以在任意阶段终止，不能因为「会话已结束」就把
+    // Learn 标成完成——已放弃的会话停在 Path 时，Learn 会既打勾又写 0/6 课已完成，
+    // 阶段条出现「后一阶段已完成、前一阶段仍进行中」（2026-10-08 走查 d-session-vl）。
+    // 正常完成的情形已由上面的 isTerminal && idx<=cur 与 idx<cur 覆盖，
+    // 这里只保留「确实写出了总结」这一明确证据。
+    if (st === 'learning' && stageStatus.value.learning?.wrapup) return true
     return false
   }
 

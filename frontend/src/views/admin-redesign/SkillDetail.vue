@@ -416,7 +416,7 @@
                 <span class="skd-call__title">{{ recentRowText(s) }}</span>
                 <span class="mono skd-call__ms">{{ fmtMs(s.durationMs) }}</span>
               </button>
-              <p v-if="!recent.length" class="mk-empty--line">日志窗口内无调用（上方指标同为窗口口径，随 Skill 列表「统计窗口」切换）。</p>
+              <p v-if="!recent.length" class="mk-empty--line">本页已加载的日志采样里没有该 Skill 的调用（列表为本页采样窗口内的最近 5 条）。上方指标走统计接口、按 Skill 列表「统计窗口」由服务端聚合，两者不同源：这里没有记录不等于该 Skill 没有调用，以指标卡为准。</p>
             </div>
           </section>
         </template>

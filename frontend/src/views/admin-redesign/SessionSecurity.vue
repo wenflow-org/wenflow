@@ -95,7 +95,7 @@
           </button>
         </div>
 
-        <!-- 活跃会话表（分页：每批 12 行） -->
+        <!-- 活跃会话表（行分页：页码器在卡脚，跨组统一计数） -->
         <div class="mk-table-scroll">
           <table class="mk-table mk-table--fixed">
             <colgroup>
@@ -120,7 +120,9 @@
             </thead>
             <tbody>
               <tr v-if="!active.length" class="ss-tr--empty">
-                <td colspan="7">该管理员当前无活跃会话</td>
+                <td colspan="7">
+                  {{ g.active.length ? `该管理员的 ${g.active.length} 个活跃会话不在本页` : '该管理员当前无活跃会话' }}
+                </td>
               </tr>
               <tr
                 v-for="s in active"
@@ -238,10 +240,6 @@
         </details>
       </div>
 
-      <!-- 分页：活跃会话每批 12 行（首屏可见） -->
-      <div v-if="canMoreActive" class="mk-list-more">
-        <button type="button" class="mk-link" @click="loadMoreActive">加载更多（已显示 {{ shownActive.length }} / {{ activeFlat.length }} 个活跃会话<template v-if="truncated">，仅已加载窗口，后端全量活跃 {{ activeCount }}</template>）</button>
-      </div>
     </div>
 
     <!-- 空态 -->
@@ -253,6 +251,18 @@
       :action-text="statusFilter ? '清除筛选' : ''"
       @action="statusFilter = ''"
     />
+
+    <!-- 分页（标准件 · 卡脚）：只分页活跃会话行，跨管理员统一计数（组头/组数随页变）；
+         历史折叠组不受分页影响。行窗口被截断时用 note 披露口径——
+         页码器读数是「已加载行数」，卡头「活跃 N」是后端全量，两者不同源须各自标明。 -->
+    <Pagination
+      v-if="groups.length && activeFlat.length"
+      v-model:page="page"
+      v-model:pageSize="pageSize"
+      :total="activeFlat.length"
+      :loading="loading"
+      :note="truncated ? `仅行窗口，后端全量活跃 ${activeCount} 条` : ''"
+    />
     </div>
   </div>
 </template>
@@ -262,11 +272,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuthApi, adminSessionsApi } from '@/api/adminApi'
 import { errMsg } from './live'
-import { useLoadMore } from './useLoadMore'
 import { useIsNarrow } from './useIsNarrow'
 import { ipText } from './statusText'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
+import Pagination from './Pagination.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 
@@ -488,18 +498,29 @@ const groups = computed<SessionGroup[]>(() => {
   })
 })
 
-/* 分页（审计 L1）：活跃会话全量平铺 → 每批 12 行；
-   历史组保持 details 折叠不受分页影响 */
+/* 分页（审计 L1；2026-10-07 由「加载更多」改标准页码器）：活跃会话全量平铺 → 按页切片；
+   历史组保持 details 折叠，不参与分页（折叠组不是列表「行」，翻页不藏入口） */
 const activeFlat = computed(() => groups.value.flatMap((g) => g.active))
-const { shown: shownActive, canMore: canMoreActive, loadMore: loadMoreActive } = useLoadMore(activeFlat, 12)
+const page = ref(1)
+const pageSize = ref(15)
+const pagedActive = computed(() =>
+  activeFlat.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value)
+)
 
-/** 分页后的可见分组：表头统计 / 下线全部保持全量口径（g 为完整分组），行渲染只取当批活跃会话 */
+/** 本页可见分组：表头统计 / 下线全部保持全量口径（g 为完整分组），行渲染只取本页活跃会话。
+    有历史会话的组各页都保留（折叠组是历史的唯一入口，翻页不能把它藏掉）；
+    这类组的活跃行不在本页时，活跃表给「不在本页」提示而非「无活跃会话」——
+    组头读的是全量计数，两者对不上会变成同屏数字打架。 */
 const visibleGroups = computed(() => {
-  const shown = new Set(shownActive.value.map((s) => s.id))
+  const shown = new Set(pagedActive.value.map((s) => s.id))
   return groups.value
     .map((g) => ({ g, active: g.active.filter((s) => shown.has(s.id)) }))
     .filter((x) => x.active.length || x.g.historical.length)
 })
+
+/* 筛选/深链切换 → 回第 1 页（新条件下的结果应从头看起）；
+   数据缩小导致的越界由 Pagination 自身收敛（page > 总页数时回落到最后一页） */
+watch([statusFilter, deepLinkUser], () => { page.value = 1 })
 
 /** 拉取会话：行（窗口）+ 后端全量统计（counts/adminCounts）。
     行用于列表渲染与客户端状态筛选；统计用于状态条/组头/批量下线条数——两者口径分离，

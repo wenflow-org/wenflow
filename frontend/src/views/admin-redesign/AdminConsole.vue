@@ -232,6 +232,12 @@ const router = useRouter()
    打开：openSubPage（任意组件）→ subPage 变化 → URL 补 query；
    恢复：整页刷新 /admin/:page?view=virtual&id=xxx → query watch → subPage 恢复 → 详情组件直接渲染。 */
 const SUBPAGE_VIEWS = ['learner', 'virtual', 'user', 'session', 'session-real', 'path', 'skill', 'card', 'card-import']
+/* 没有实体 id 的二级视图：导入卡是纯表单页，本身不带 id（CardImportPage.vue 文件头
+   写明的深链就是 ?view=card-import）。守卫此前要求 view 与 id 同时非空，这种写法会
+   落到下面的「无 id 即关闭二级页」分支、渲染回场景页（卡墙）——导入页只有带哨兵 id
+   才进得去（应用内入口 VirtualLearnerCards 正是 openSubPage('card-import','new')）。
+   给它一个默认 id，让「手敲深链」与「应用内入口」两种写法等价。 */
+const IDLESS_SUBPAGE_VIEWS = ['card-import']
 // URL → subPage（深链/刷新/前进后退）；includeTest 透传（虚拟学习者/测试账号深链可查）
 watch(
   () => [route.query.view, route.query.id, route.query.includeTest] as [unknown, unknown, unknown],
@@ -239,8 +245,9 @@ watch(
     const view = typeof v === 'string' ? v : ''
     const sid = typeof id === 'string' ? id : ''
     const it = String(includeTest || '') === 'true'
-    if (sid && SUBPAGE_VIEWS.includes(view)) {
-      const next: { view: SubPageView; id: string; includeTest?: boolean } = it ? { view: view as SubPageView, id: sid, includeTest: true } : { view: view as SubPageView, id: sid }
+    if ((sid || IDLESS_SUBPAGE_VIEWS.includes(view)) && SUBPAGE_VIEWS.includes(view)) {
+      const nextId = sid || 'new'
+      const next: { view: SubPageView; id: string; includeTest?: boolean } = it ? { view: view as SubPageView, id: nextId, includeTest: true } : { view: view as SubPageView, id: nextId }
       const cur = subPage.value
       if (!cur || cur.view !== next.view || cur.id !== next.id || !!cur.includeTest !== it) {
         subPage.value = next

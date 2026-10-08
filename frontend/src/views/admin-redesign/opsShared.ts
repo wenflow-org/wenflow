@@ -6,6 +6,7 @@
  */
 import { computed } from 'vue'
 import { liveAnnouncements } from './live'
+import { statusText as globalStatusText } from './statusText'
 
 export interface AnnouncementCounts {
   rows: number
@@ -41,7 +42,11 @@ export const PATH_STATUS_BADGE: Record<string, string> = {
   active: 'mk-badge--ok',
   completed: 'mk-badge--info',
   failed: 'mk-badge--bad',
-  archived: 'mk-badge--muted'
+  archived: 'mk-badge--muted',
+  abandoned: 'mk-badge--muted'
 }
-export const statusText = (s: string) => PATH_STATUS_TEXT[s] || s
+/* 路径域文案优先（active 在路径域是「学习中」，与全局字典的「进行中」不同），
+   表里没有的落回全局字典 —— 全局还有 abandoned/stopped 等取值，直接回退原始英文
+   会把未本地化的枚举漏进中文界面（走查发现状态列出现裸 abandoned）。 */
+export const statusText = (s: string) => PATH_STATUS_TEXT[s] || globalStatusText(s)
 export const statusBadge = (s: string) => PATH_STATUS_BADGE[s] || 'mk-badge--muted'

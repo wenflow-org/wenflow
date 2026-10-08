@@ -49,7 +49,7 @@
           label="系统失败率"
           :value="statsKpiValue(statsKpiPct(runStats.systemFailureRate))"
           :tone="statsState === 'error' ? 'bad' : (runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''"
-          :hint="statsKpiHint(`系统失败 ${runStats.failed} / 全部 ${runStats.totalSessions} · 人为终止 ${runStats.abandoned} 另计（合计 ${statsKpiPct(runStats.failureRate)}）`)"
+          :hint="statsKpiHint(`系统失败 ${runStats.failed} / 全部会话 ${runStats.totalSessions} · 人为终止 ${runStats.abandoned} 另计（合计 ${statsKpiPct(runStats.failureRate)}）`)"
           :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '本值 = 系统失败率（failed / 全部会话），与总览页「系统失败率」同口径；人为终止（abandoned：管理员止停/批量终止/僵尸回收/学习者放弃）另计，两者合计见 hint（2026-08-21 口径拆分）'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
@@ -355,6 +355,7 @@
         v-model:pageSize="pageSize"
         :total="filtered.length"
         :showTotal="true"
+        note="行数 = 虚拟学习者；上方「全部会话」为会话口径，两者不同源"
       />
     </div>
 
@@ -789,7 +790,10 @@ const sessionAvgHuman = computed(() => {
   return `${Math.round(ms / 1000)} 秒`
 })
 const completionHint = computed(() => {
-  const parts = [`已完成 ${runStats.value.completed} / 全部 ${runStats.value.totalSessions}`, `活动会话 ${activeSessions.value}`]
+  // 「全部」是分母＝全部会话数，而本页表格与页脚计数的是虚拟学习者行数——
+  // 两个数字同屏且都不写口径，读者会把「全部 10」当成学习者总数（走查：与页脚
+  // 「共 N 条」、侧栏徽标打架）。分母带上「会话」二字，口径落到明面。
+  const parts = [`已完成 ${runStats.value.completed} / 全部会话 ${runStats.value.totalSessions}`, `活动会话 ${activeSessions.value}`]
   if (sessionAvgHuman.value) parts.push(`会话均长 ${sessionAvgHuman.value}`)
   return parts.join(' · ')
 })
