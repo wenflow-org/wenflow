@@ -246,14 +246,19 @@
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('user')">
-                <div class="mk-cell-main">
-                  <strong>{{ r.userName }}</strong>
-                  <span v-if="r.email" class="mk-cell-sub">{{ r.email }}</span>
-                  <span v-else-if="r.userId" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
-                </div>
-                <div class="ts-tags">
-                  <MkVariantBadge v-if="r.isVirtualLearner" kind="virtual" />
-                  <MkVariantBadge v-else-if="r.isTestAccount" kind="test" />
+                <!-- 用户格对齐全站判例（2026-10-08：六个同格页均 MkCellAvatar，本页是遗漏）：
+                     头像 + 主副行 + 右侧身份徽章，同 Users.ul-user / GoalConversations.gc-user -->
+                <div class="ts-user">
+                  <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
+                  <div class="mk-cell-main">
+                    <strong>{{ r.userName }}</strong>
+                    <span v-if="r.email" class="mk-cell-sub">{{ r.email }}</span>
+                    <span v-else-if="r.userId" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
+                  </div>
+                  <div class="ts-tags">
+                    <MkVariantBadge v-if="r.isVirtualLearner" kind="virtual" />
+                    <MkVariantBadge v-else-if="r.isTestAccount" kind="test" />
+                  </div>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('status')" class="ts-status"><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
@@ -364,6 +369,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
+import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkDistBand from '@/components/mk/MkDistBand.vue'
 import { Filter } from 'lucide-vue-next'
@@ -561,6 +567,11 @@ function displayName(s: Record<string, unknown>): string {
   if (email && email.includes('@')) return email.slice(0, email.indexOf('@')) || email
   const uid = String(s.userId || '').trim()
   return uid ? `用户 ·${uid.slice(-4)}` : '用户'
+}
+
+/** 头像 tone（同 GoalConversations 判例；语义与 MkVariantBadge 一致：虚拟=紫 / 测试=琥珀 / 真实=默认蓝） */
+function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtual' | 'test' | 'default' {
+  return r.isVirtualLearner ? 'virtual' : r.isTestAccount ? 'test' : 'default'
 }
 
 function mapRow(s: Record<string, unknown>): Row {
@@ -952,8 +963,11 @@ defineExpose({ refreshNow })
 .ts-summary::before { content: '📝 '; opacity: 0.7; }
 /* 行首关注度色条已撤（2026-10-03 用户拍板：与「关注」列同源冗余、语义不可发现）；
    关注度由「关注」列（高/中/低 色字 + title）单源承载 *//* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
-.ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记） */
-.ts-tags { display: flex; gap: 6px; margin-top: 2px; }/* 高级筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
+.ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }
+/* 用户格（对齐 Users.ul-user / GoalConversations.gc-user 头像判例）：头像 + 主副行 + 右侧身份徽章 */
+.ts-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.ts-user .mk-cell-main { min-width: 0; flex: 1; }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；随头像判例收进用户格右侧） */
+.ts-tags { display: flex; gap: 6px; margin-left: auto; flex: none; }/* 高级筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
    长内容由 .ts-summary-preview / .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底）。

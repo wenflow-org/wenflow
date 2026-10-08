@@ -75,7 +75,18 @@
         <div class="mk-card__head">
           <div class="mk-filter">
             <!-- 状态筛选唯一入口 = 上方分布条（2026-10-04 晚：pills 与构成带同驱一个
-                 statusFilter，同屏两处筛选面收敛一处；「已取消」段与原 pill 同口径取补集） -->
+                 statusFilter，同屏两处筛选面收敛一处；「已取消」段与原 pill 同口径取补集）。
+                 「未生成路径」是复合口径快筛（进行中 ∧ 无路径，运营卡点），不破此约定 -->
+            <div class="mk-pills" role="group" aria-label="路径快筛">
+              <button
+                type="button"
+                class="mk-pill"
+                :class="{ 'mk-pill--active': noPathOnly }"
+                :aria-pressed="noPathOnly"
+                title="状态「进行中」且尚未生成学习路径的会话（运营需先补路径；已完成桶口径 = 已生成路径）。判定 = 行 hasPath 为假，与路径列「—」同口径。与上方分布条筛选可叠加（且），再点取消"
+                @click="noPathOnly = !noPathOnly"
+              >未生成路径</button>
+            </div>
             <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 邮箱 / 目标摘要" />
             <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
             <!-- 排序复位入口（2026-10-06 审核 #51）：默认序是服务端 createdAt 倒序，
@@ -250,8 +261,8 @@
         <MkEmptyState
           v-else
           icon="◌"
-          :title="keyword || statusFilter ? '当前筛选无匹配' : '暂无目标对话'"
-          :description="keyword || statusFilter ? '放宽筛选条件试试。' : (includeTest ? '全量口径下暂无目标对话。' : '默认仅展示真实用户；切换「含测试」可查看全部。')"
+          :title="keyword || statusFilter || noPathOnly ? '当前筛选无匹配' : '暂无目标对话'"
+          :description="keyword || statusFilter || noPathOnly ? '放宽筛选条件试试。' : (includeTest ? '全量口径下暂无目标对话。' : '默认仅展示真实用户；切换「含测试」可查看全部。')"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
@@ -390,6 +401,13 @@ const gcBandBins = computed(() => [
 ])
 const keyword = ref('')
 const statusFilter = ref('')
+/* 「未生成路径」快筛（2026-10-08）：进行中且尚未生成学习路径的运营卡点会话。
+   与分布条状态筛选叠加为 AND；再点取消。不显计数——分布条计数是服务端全量口径
+   （stats），本快筛只能按已加载窗口算，同屏两个口径会数字打架（同 TS 页教训） */
+const noPathOnly = ref(false)
+/** 「未生成路径」谓词：hasPath 与路径列「—」同口径（均由后端 learningPathId 推导）；
+    已完成桶口径 = 已生成学习路径，故「未生成」只拦进行中，两处口径呼应不矛盾 */
+const isPathPendingRow = (r: Row) => r.status === 'active' && !r.hasPath
 
 /* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/阶段/澄清进度/约束条件/路径/创建时间 可隐藏，用户/操作固定 */
 const gcColDefs = [
@@ -576,6 +594,7 @@ const { toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows, sort
 const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase()
   return sortGcRows(rows.value.filter((r) => {
+    if (noPathOnly.value && !isPathPendingRow(r)) return false
     if (statusFilter.value === 'cancelled') {
       // 与「已取消」桶同口径（P1#5）：非 active 且非 completed 全收
       if (!isCancelledBucketRow(r)) return false
@@ -587,10 +606,11 @@ const filtered = computed(() => {
   }))
 })
 
-const isFiltered = computed(() => !!keyword.value.trim() || !!statusFilter.value)
+const isFiltered = computed(() => !!keyword.value.trim() || !!statusFilter.value || noPathOnly.value)
 function clearFilters() {
   keyword.value = ''
   statusFilter.value = ''
+  noPathOnly.value = false
 }
 
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
