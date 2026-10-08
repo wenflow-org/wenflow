@@ -137,6 +137,9 @@ export async function submitCheckpoint(
         checkpointId,
         title: checkpoint.title,
         type: checkpoint.type,
+        // 完整题面留档（TONIGHT-BROAD-2026-10-07 同题复问抑制）：跳过也算"已出过这道题"，
+        // 后续候选同文时被 teaching-turn-engine 的 isDuplicateCheckpointQuestion 抑制。
+        question: checkpoint.question,
         submittedAt: new Date().toISOString(),
         passed: false,
         skipped: true,

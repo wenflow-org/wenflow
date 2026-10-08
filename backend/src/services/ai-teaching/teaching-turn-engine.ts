@@ -33,6 +33,7 @@ import {
   checkpointForMessageResult,
   getPendingCheckpoint,
   inheritTeachingState,
+  isDuplicateCheckpointQuestion,
   recordAnchorProbeResult,
   recordCheckpointAttemptEvidence,
   recordCheckpointResultEvidence,
@@ -963,15 +964,34 @@ export async function processStudentMessage(
 
     // 检查点产生：teaching-turn 可选输出 control.checkpoint，按规则落库为 pendingCheckpoint
     const checkpointCandidate = teachingOutput.control.checkpoint;
-    if (
-      !submittedCheckpoint
+    // 同题复问抑制（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺陷②）：候选题面与本会话**已出过**的题面
+    // 归一后同文（学生已答过/跳过这道题）→ 本回合抑制该检查点，只打遥测；课堂照常继续、绝不阻塞。
+    // 与「答错保留、答对消费」既有语义兼容：只少问第二遍同题，pendingCheckpoint 消费/重答链路不动。
+    const checkpointEmissionEligible = !submittedCheckpoint
       && !completionReady
       && !endIntent.isEndIntent
-      && checkpointCandidate
+      && !!checkpointCandidate
       && !previousTeachingState.pendingCheckpoint
       && (previousTeachingState.lastCheckpointTurn === undefined
-        || updatedMessages.length - previousTeachingState.lastCheckpointTurn >= 4)
-    ) {
+        || updatedMessages.length - previousTeachingState.lastCheckpointTurn >= 4);
+    const duplicateCheckpointQuestion = checkpointEmissionEligible
+      && isDuplicateCheckpointQuestion(previousTeachingState.checkpointHistory, checkpointCandidate.question);
+    if (duplicateCheckpointQuestion) {
+      const duplicatedQuestion = String(checkpointCandidate?.question ?? '');
+      logger.info('[AITeaching] 检查点题面与本会话已出过的题面重复（归一后同文），本回合抑制该检查点', {
+        sessionId: session.id,
+        question: duplicatedQuestion.slice(0, 80),
+      });
+      recordDegradation({
+        source: 'ai-teaching/teaching-turn-checkpoint',
+        faultCategory: 'SCHEMA_VIOLATION',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['checkpoint.question'],
+        mitigationApplied: 'suppress-duplicate-checkpoint',
+        rootCauseMessage: `duplicate checkpoint question (normalized) vs session checkpointHistory: ${duplicatedQuestion.slice(0, 200)}`,
+      });
+    }
+    if (checkpointEmissionEligible && !duplicateCheckpointQuestion) {
       const checkpointTitle = checkpointCandidate.question.length > 20
         ? `${checkpointCandidate.question.slice(0, 20)}…`
         : checkpointCandidate.question;
@@ -1036,6 +1056,9 @@ export async function processStudentMessage(
         // title/type 一并留档（2026-09-17）：此前只记 id/passed，读侧无法知道"没通过的是什么题"
         title: submittedCheckpoint.title,
         type: submittedCheckpoint.type,
+        // 同题复问抑制所需（TONIGHT-BROAD-2026-10-07）：落完整题面供归一比对；
+        // 历史旧行可能只有 ≤20 字 title，判重时 isDuplicateCheckpointQuestion 回退读 title。
+        question: submittedCheckpoint.question,
         submittedAt: new Date().toISOString(),
         passed,
         judgedBy,

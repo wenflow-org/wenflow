@@ -127,6 +127,31 @@ export function resolveCheckpointConsumption(
   return { consume: exhausted, exhausted };
 }
 
+/**
+ * 同题复问检测（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺陷②）：候选题面归一后与本会话
+ * `checkpointHistory` 里**已出过**的题面相同 → 命中「同一道题学生已经答过/跳过了，不要再问第二遍」。
+ *
+ * 为什么需要（纯函数，供单测）：出题闸门（teaching-turn-engine 的检查点产生分支）此前只看
+ * 「无 pendingCheckpoint + 距上次出题 ≥4 条消息」，**不看题面文本**——模型两轮生成完全同文的
+ * 题面即落两条 checkpoint（id 各自新生成），学生被问两遍。提示词侧的 checkpointHistory 摘要
+ * 只是软提醒，不是防护。
+ *
+ * 口径：归一复用判分同源的 `normalizeForKeywordMatch`（小写、去空白与常见标点）——空格/标点/
+ * 大小写异写视为同题；**只拦"完全同文"，不做相似度判断**（换表征的新题不得被误杀）。
+ * 历史行优先读 `question`（本修复起写侧落全文题面），缺省回退 `title`（旧行只有 ≤20 字派生题面，
+ * 短题仍可拦；长题 title 带省略号，归一后不会与完整题面相等 → 不误判）。
+ * 空题面/无题面一律返回 false（不因脏数据误抑制）。
+ */
+export function isDuplicateCheckpointQuestion(history: unknown, question: unknown): boolean {
+  const target = normalizeForKeywordMatch(question);
+  if (!target) return false;
+  const rows = Array.isArray(history) ? history : [];
+  return rows.some((row) => {
+    const asked = normalizeForKeywordMatch(row?.question ?? row?.title);
+    return asked.length > 0 && asked === target;
+  });
+}
+
 export function summarizeCheckpointHistory(raw: unknown): {
   total: number;
   passed: number;
