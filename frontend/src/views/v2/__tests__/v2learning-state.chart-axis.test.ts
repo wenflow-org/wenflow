@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 const here = dirname(fileURLToPath(import.meta.url));
 const source = readFileSync(resolve(here, '../V2LearningState.vue'), 'utf8');
 const css = source.replace(/\/\*[\s\S]*?\*\//g, '');
+const flat = css.replace(/\s+/g, ' ');
 
 function ruleAfter(selector: string): string {
   const start = css.indexOf(selector);
@@ -42,5 +43,36 @@ describe('学习状态趋势图 Y 轴刻度', () => {
     const axis = ruleAfter('.ff-yaxis {');
     expect(decl(axis, 'width')).toBe('6.05%');
     expect(decl(ruleAfter('.ff-yaxis span'), 'right')).toBe('6px');
+  });
+});
+
+describe('学习状态趋势图反挤压（2026-10-08 用户：容易挤压）', () => {
+  it('图区有高度下限：SVG 是 760×240 拉满宽度，390 档自然高度只有 104px', () => {
+    const svg = ruleAfter('.ff-chart svg');
+    const minHeight = Number((decl(svg, 'min-height') ?? '0px').replace('px', ''));
+    expect(minHeight, '图区又被压回宽度 × 0.316 的自然高度').toBeGreaterThanOrEqual(180);
+    expect(decl(svg, 'height')).toBe('auto');
+  });
+
+  it('首尾刻度会向外探半个字高，图区上下必须留白（否则撞上图例/信息行）', () => {
+    const chart = ruleAfter('.ff-chart {');
+    // margin 简写：1 值=四边；2 值=上下/左右；3 值=上/左右/下；4 值=上/右/下/左
+    const parts = (decl(chart, 'margin') ?? '').trim().split(/\s+/).map((v) => parseFloat(v));
+    const top = parts[0] ?? 0;
+    const bottom = parts.length >= 3 ? (parts[2] ?? 0) : (parts[0] ?? 0);
+    expect(top, '图区上方没有留白，首刻度会压到图例').toBeGreaterThanOrEqual(8);
+    expect(bottom, '图区下方没有留白，末刻度会压到信息行').toBeGreaterThanOrEqual(8);
+  });
+
+  it('阈值文字不再浮在图内（自带 surface 底会压住曲线），改为图例里的虚线项', () => {
+    expect(flat, '阈值标签又回到图内浮层了').not.toContain('.ff-zonetag');
+    expect(flat, '阈值标签容器又回到图内浮层了').not.toContain('.ff-zones');
+    expect(flat, '图内不该再有阈值标签节点').not.toContain('class="ff-zonetag"');
+    expect(flat, '图例里缺少阈值项').toContain('.ff-legend__zone');
+    // 分隔符必须是 DOM 真实文本：::before 生成内容不进 DOM，读屏会念成连读
+    expect(flat, '阈值分隔符又退回 ::before 了').not.toContain('b + b::before');
+    expect(flat, '阈值分隔符应该是 DOM 里的真实文本').toContain('ff-legend__sep');
+    // 虚线本体留在图内（保留信息）
+    expect(flat).toContain('ff-zone');
   });
 });

@@ -70,11 +70,21 @@
               </template>
             </div>
 
-            <!-- 图例（批19 术语自然化；2026-09-27 删状态 chip：与上方状态 meta 行重复） -->
+            <!-- 图例（批19 术语自然化；2026-09-27 删状态 chip：与上方状态 meta 行重复。
+                 2026-10-08 走查：两条阈值线原本在图内右侧浮着文字（自带 surface 底「压住曲线」），
+                 窄屏下那段文字正好压在最陡的一段曲线上 —— 文字移到图例，图内只留虚线本体） -->
             <div class="ff-legend">
               <span><i class="ff-dot ff-dot--fitness"></i>掌握趋势</span>
               <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度</span>
               <span><i class="ff-dot ff-dot--lsb"></i>整体状态（掌握 − 疲劳）</span>
+              <span v-if="zoneLines.length" class="ff-legend__zone">
+                <i class="ff-dash"></i>虚线阈值
+                <!-- 分隔符写成真实文本而不是 ::before（2026-10-08）：CSS 生成内容不进 DOM，
+                     读屏只念得到「40 精力充沛20 最优训练区」两声连读。 -->
+                <template v-for="(z, i) in zoneLines" :key="z.v">
+                  <span v-if="i" class="ff-legend__sep">·</span><b>{{ z.v }} {{ z.label }}</b>
+                </template>
+              </span>
             </div>
 
             <div v-if="trendLoading" class="chart__loading"><SkeletonLoader variant="lines" :count="3" /></div>
@@ -108,10 +118,7 @@
                 <div class="ff-yaxis" aria-hidden="true">
                   <span v-for="t in yTicks" :key="t.top" :style="{ top: t.top + '%' }">{{ t.text }}</span>
                 </div>
-                <!-- 阈值区间标签（原型 wf-trend__zonetag）：40 精力充沛 / 20 最优训练区 -->
-                <div class="ff-zones" aria-hidden="true">
-                  <span v-for="z in zoneLines" :key="z.v" class="ff-zonetag" :style="{ top: z.top + '%' }">{{ z.v }} {{ z.label }}</span>
-                </div>
+                <!-- 阈值标签已移入图例（见 .ff-legend__zone）：图内只留虚线本体，不再压曲线 -->
                 <svg :viewBox="`0 0 ${chartW} ${chartH}`" preserveAspectRatio="none" aria-hidden="true">
                   <!-- 横向网格线（2026-09-27 外部评审：原来没有任何坐标参照，曲线悬空感） -->
                   <g class="ff-grid">
@@ -156,7 +163,8 @@
                 <span class="ff-info__fatigue">疲劳 {{ displayDay.lf ?? '—' }}</span>
                 <span>状态 {{ displayDay.lsb ?? '—' }}（{{ displayDay.zone?.label || '暂无' }}）</span>
               </div>
-              <!-- ff-zones 三档阈值行已删（2026-09-27）：口径折进侧栏「指标说明」，图上一行字不占 -->
+              <!-- 三档阈值行已删（2026-09-27）：口径折进侧栏「指标说明」，图上一行字不占。
+                   两条状态阈值线本身保留（图内虚线），文字说明在图例里（.ff-legend__zone）。 -->
             </template>
             </div><!-- /band__body -->
           </section>
@@ -1771,9 +1779,14 @@ function loadGuidance() {
 .ff-dot--fatigue { background: var(--accent); }
 .ff-dot--lsb { background: var(--wf-color-success); }
 
-/* ff-chart 现在承载 y 轴刻度与阈值标签的绝对定位层（原型 wf-trend__chart 757-762）→ 必须是定位上下文 */
-.ff-chart { position: relative; width: 100%; }
-.ff-chart svg { display: block; width: 100%; height: auto; }
+/* ff-chart 承载 y 轴刻度的绝对定位层（原型 wf-trend__chart 757-762）→ 必须是定位上下文。
+   min-height（2026-10-08 走查）：SVG 是 viewBox 760×240 + preserveAspectRatio="none" 拉满宽度，
+   高度 = 宽度 × 0.316 —— 390 档图区只有 104px，五条网格线 + 三条曲线 + 两条阈值线全挤在里面，
+   曲线之间的差距被压到几乎看不出来。给一个高度下限后窄屏把纵向量出来（宽高比仍随宽度走，
+   768/1440 档自然高 223/250px，都不触及这条下限）。刻度与阈值线都按百分比定位，跟着一起对齐。 */
+.ff-chart { position: relative; width: 100%; /* 上下各留 10px：首尾刻度是 translateY(-50%) 居中在 0%/100%，
+   会向外探出半个字高（实测 6px），图例与信息行紧贴时会各撞上 6px（2026-10-08 实测） */ margin: 10px 0; }
+.ff-chart svg { display: block; width: 100%; height: auto; min-height: 190px; }
 /* 键盘聚焦（EG22）：图本身不承担视觉容器，聚焦用圆角描边提示可操作 */
 .ff-chart:focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; border-radius: var(--mk-radius-md); }
 /* y 轴刻度（原型 wf-trend__yaxis）：贴左侧 AXIS_W 留白（46/760 ≈ 6.05%），
@@ -1788,13 +1801,14 @@ function loadGuidance() {
   font-size: 12px; line-height: 1; color: var(--faint); font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-/* 阈值区间标签（原型 wf-trend__zones / __zonetag）：贴右缘、自带 surface 底压住曲线 */
-.ff-zones { position: absolute; inset: 0; pointer-events: none; }
-.ff-zonetag {
-  position: absolute; right: 2px; transform: translateY(-50%);
-  font-size: 12px; font-weight: 700; line-height: 1.1;
-  color: var(--green-ink); background: var(--surface);
-  padding: 0 4px; border-radius: 4px;
+/* 虚线阈值图例项（2026-10-08 走查）：图内那两段文字自带 surface 底，窄屏正好压在最陡的曲线上；
+   文字移到图例这一项，图内只留虚线本体 —— 信息没丢，图面不再被盖。 */
+.ff-legend__zone { display: inline-flex; align-items: center; color: var(--muted); }
+.ff-legend__zone b { font-weight: 700; color: var(--green-ink); }
+.ff-legend__zone .ff-legend__sep { margin: 0 5px; color: var(--faint); font-weight: 400; }
+.ff-dash {
+  width: 12px; height: 0; display: inline-block; margin-right: 5px;
+  border-top: 1px dashed color-mix(in srgb, var(--green) 70%, transparent);
 }
 /* 背景柱 500 条上限的口径说明（见模板 ff-trunc） */
 .ff-trunc { margin: 8px 0 0; font-size: 12px; color: var(--faint); }
