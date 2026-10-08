@@ -100,6 +100,27 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     expect(w.text()).not.toContain('user-op-1-1');
   });
 
+  it('翻页失败：清空上一页行并禁用本页导出', async () => {
+    const w = await mountAudit();
+    h.getLogs.mockImplementationOnce(async () => { throw new Error('page unavailable'); });
+    await findBtn(w, '下一页').trigger('click');
+    await flushPromises();
+    await nextTick();
+    expect(w.text()).toContain('审计日志加载失败');
+    expect(w.text()).not.toContain('user-op-1-1');
+    expect(findBtn(w, '导出本页').attributes('disabled')).toBeDefined();
+  });
+
+  it('统计请求失败：失败 TOP 区显示提示并可重试', async () => {
+    h.getStats.mockRejectedValue(new Error('stats unavailable'));
+    const w = await mountAudit();
+    await flushPromises();
+    await findBtn(w, '高级筛选').trigger('click');
+    await nextTick();
+    expect(w.text()).toContain('失败 TOP 统计不可用，无法判断是否存在失败动作。');
+    expect(findBtn(w, '重试').exists()).toBe(true);
+  });
+
   it('每页条数变更：回第 1 页并按新 limit 重查（378/50 → 8 页）', async () => {
     const w = await mountAudit();
     await findBtn(w, '下一页').trigger('click');

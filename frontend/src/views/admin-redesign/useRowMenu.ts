@@ -18,6 +18,45 @@ const VIEWPORT_MARGIN = 8
  *   触发按钮：:aria-expanded="menuOpen"
  *   弹层     ：:style="popStyle"（fixed 定位；菜单未打开时为空对象，保持默认 CSS）
  */
+
+/** 弹层 fixed 坐标：纯函数，便于确定性单测（DOM 时序不参与） */
+export function popPositionOf(input: {
+  /** 触发钮 rect（物理像素：4K 档 .ac 带 zoom，需按 zoom 换算回逻辑像素） */
+  trigger: { left: number; top: number; right: number; bottom: number }
+  /** 弹层自然宽高（切换 fixed 前测得；宽度另有 CSS min-width 兜底） */
+  popWidth: number
+  popHeight: number
+  /** .ac 的 zoom（默认 1） */
+  zoom: number
+  viewportWidth: number
+  viewportHeight: number
+}): Record<string, string> {
+  const { trigger, popWidth, popHeight, zoom, viewportWidth, viewportHeight } = input
+  const physicalW = popWidth * zoom
+  // 右缘对齐触发钮右缘（.mk-menu__pop 的 right:0 就是这个意思）；越出视口右缘回移，越出左缘贴边
+  let left = trigger.right / zoom - popWidth
+  if (left * zoom + physicalW > viewportWidth - VIEWPORT_MARGIN) {
+    left = (viewportWidth - physicalW - VIEWPORT_MARGIN) / zoom
+  }
+  if (left < VIEWPORT_MARGIN) left = VIEWPORT_MARGIN
+  let top = trigger.bottom / zoom + MENU_GAP
+  if (top * zoom + popHeight * zoom > viewportHeight - VIEWPORT_MARGIN) {
+    top = trigger.top / zoom - popHeight - MENU_GAP
+  }
+  if (top < VIEWPORT_MARGIN) top = VIEWPORT_MARGIN
+  /* right:'auto' 是必需的：CSS 的 .mk-menu__pop { right: 0 } 会与内联 left 同时生效，
+     fixed + width:auto 下拉成两锚点间的横条——实测账号页签 ⋯ 在 x=1037 时菜单宽 871px
+     （应为 148px）；只有触发钮贴视口右缘（表格最右列 x≈1845）时宽度恰好等于 148px，
+     所以这个缺陷长期被掩盖。 */
+  return {
+    position: 'fixed',
+    left: left + 'px',
+    right: 'auto',
+    top: top + 'px',
+    zIndex: 'var(--mk-z-popover, 120)'
+  }
+}
+
 export function useRowMenu() {
   const openMenu = ref('')
   /** 是否有菜单处于打开状态，供触发按钮绑定 aria-expanded */
@@ -103,27 +142,20 @@ export function useRowMenu() {
     if (next) next.focus()
   }
 
-  /** 按触发按钮 rect 计算 fixed 坐标，超出视口右/下边界时回移 */
+  /** 按触发按钮 rect 计算 fixed 坐标，超出视口右/下边界时回移（算法在 popPositionOf，纯函数） */
   function positionPop() {
     if (!openMenu.value || !popEl || !triggerEl) return
     const ac = document.querySelector('.ac')
     const zoom = ac ? parseFloat((getComputedStyle(ac) as any).zoom || '') || 1 : 1
-    const triggerRect = triggerEl.getBoundingClientRect()
-    const height = popEl.offsetHeight || 132
-    // getBoundingClientRect 返回物理像素坐标（4K 时 .ac 有 zoom 1.15/1.3），需按逻辑像素换算统一处理
-    let left = triggerRect.left / zoom
-    let top = triggerRect.bottom / zoom + MENU_GAP
-    if (top * zoom + height * zoom > window.innerHeight - VIEWPORT_MARGIN) {
-      top = triggerRect.top / zoom - height - MENU_GAP
-    }
-    // zoom 档（4K 1.15/1.3）下 fixed 的 left/top 不受 zoom 放大，需按物理像素回推（left×zoom + 菜单物理宽 ≤ 视口）
-    const popPhysicalW = (popEl.offsetWidth || MENU_WIDTH) * zoom
-    if (left * zoom + popPhysicalW > window.innerWidth - VIEWPORT_MARGIN) {
-      left = (window.innerWidth - popPhysicalW - VIEWPORT_MARGIN) / zoom
-    }
-    if (left < VIEWPORT_MARGIN) left = VIEWPORT_MARGIN
-    if (top < VIEWPORT_MARGIN) top = VIEWPORT_MARGIN
-    popStyle.value = { position: 'fixed', left: left + 'px', top: top + 'px', zIndex: 'var(--mk-z-popover, 120)' }
+    popStyle.value = popPositionOf({
+      trigger: triggerEl.getBoundingClientRect(),
+      // 自然宽高必须在切 fixed 之前读：切完之后宽度会受 left/right 约束影响
+      popWidth: popEl.offsetWidth || MENU_WIDTH,
+      popHeight: popEl.offsetHeight || 132,
+      zoom,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight
+    })
   }
 
   function toggleMenu(id: string) {

@@ -21,6 +21,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import yaml from 'js-yaml';
 import { logger } from '../../utils/logger';
+// 直接引用叶子数据模块（无 import），避免 loader ← skills-readiness ← prompt-manifest 的循环
+import { ALL_RETIRED_SKILLS } from '../../skills/retired-skills';
+
+const RETIRED_SKILL_SET = new Set<string>(ALL_RETIRED_SKILLS);
 
 export interface PromptFileMeta {
   /** 权威标识，对应 agent_prompts.agentId */
@@ -265,12 +269,17 @@ export function loadPromptFile(agentId: string): PromptFile | null {
     // 编译产物缺失 = **默认实现**缺失（运行时优先读 DB ACTIVE prompt；DB 也没有 ACTIVE 时才会用到这里的 .md）。
     // 明确告警而非静默：请确认 core.yaml 已 compile + publish。
     // 每个 agentId 只告警一次，避免 20+ skill 在模块顶层同步调用时刷屏。
+    // 已退役技能跳过（2026-10-08）：退役 ≠ 删代码（离线脚本仍调用），其模块顶层照样走这里，
+    // 于是每次启动/jest 都刷一条「DB 无 ACTIVE prompt」——而退役位的 prompt 恰恰留在 DB 里
+    // （见 skills-readiness 的 retiredExempt）。退役名单内的不再告警；若哪天取消退役，名单一变告警自动回来。
     if (!warnedMissingPromptFiles.has(agentId)) {
       warnedMissingPromptFiles.add(agentId);
-      logger.warn('[prompt-files] 编译产物 .md 缺失：DB 无 ACTIVE prompt 时该能力将没有默认提示词（请确认 core.yaml 已 compile + publish）', {
-        agentId,
-        filePath
-      });
+      if (!RETIRED_SKILL_SET.has(agentId.replace(/^skill:/, '').trim())) {
+        logger.warn('[prompt-files] 编译产物 .md 缺失：DB 无 ACTIVE prompt 时该能力将没有默认提示词（请确认 core.yaml 已 compile + publish）', {
+          agentId,
+          filePath
+        });
+      }
     }
     return null;
   }

@@ -129,7 +129,11 @@
               </label>
               <!-- 失败 TOP 快捷下钻（近 2000 条失败内聚合）：点击 = 只看失败 + path 首段关键词，
                    再点已激活 chip 退出；自头部右区迁入（同一机制，只换家不换行为） -->
-              <div v-if="failureByAction.length" class="al-fails al-fails--pop">
+              <div v-if="statsError" class="mk-alert mk-alert--row" role="alert">
+                <span class="mk-alert__msg">失败 TOP 统计不可用，无法判断是否存在失败动作。</span>
+                <button type="button" class="mk-alert__btn" :disabled="statsLoading" @click="fetchStats">{{ statsLoading ? '重试中…' : '重试' }}</button>
+              </div>
+              <div v-else-if="failureByAction.length" class="al-fails al-fails--pop">
                 <span class="al-fails__label" title="失败最多的动作（近 2000 条失败内聚合），点击 chip 下钻只看失败">失败 TOP</span>
                 <!-- P2：span→button。后端 /admin/audit-logs 支持 success=true/false 白名单参数（parseSuccess），
                      点击 = 只看失败 + path 首段关键词；再点已激活的 chip 退出下钻 -->
@@ -504,6 +508,10 @@ const failedOnly = ref(false)
 const failedAction = ref('')
 /** P2-16：失败按动作聚合 TOP（后端 /stats 返回），作为「失败 N」的下钻入口 */
 const failureByAction = ref<Array<{ action: string; count: number }>>([])
+/** /stats 失败时单独标记：空聚合既可能表示「没有失败动作」，也可能表示统计不可用，
+    不区分会让用户把请求故障误读为无失败；该状态在失败 TOP 区提供说明与重试 */
+const statsError = ref('')
+const statsLoading = ref(false)
 /** 当前页（1 基）；筛选/tab/每页条数变化回第 1 页 */
 const page = ref(1)
 /** 每页条数（与执行日志同一分页器形态：15/30/50/100，默认 30） */
@@ -611,7 +619,12 @@ async function fetchPage(nextPage: number): Promise<number> {
     page.value = nextPage
     loadError.value = ''
   } catch (e) {
-    if (seq === fetchSeq) loadError.value = errMsg(e)
+    if (seq === fetchSeq) {
+      // 翻页失败若保留上一页行，界面与「导出本页」会把旧记录冒充为目标页数据，故清空失败页行。
+      if (scope === 'operation') logs.value = []
+      else attempts.value = []
+      loadError.value = errMsg(e)
+    }
   }
   return seq
 }
@@ -630,6 +643,8 @@ async function goPage(p: number) {
 let statsSeq = 0
 async function fetchStats() {
   const seq = ++statsSeq
+  statsLoading.value = true
+  statsError.value = ''
   try {
     const res = await adminAuditApi.getAuditStats(buildParams(1))
     if (seq !== statsSeq) return // 已有更新的统计请求在途/完成：丢弃过期响应
@@ -641,9 +656,12 @@ async function fetchStats() {
     failureByAction.value = Array.isArray(byAction)
       ? byAction.filter((f: { action?: unknown; count?: unknown }) => typeof f?.action === 'string' && Number(f?.count) > 0)
       : []
-  } catch {
+  } catch (e) {
     if (seq !== statsSeq) return
-    failureByAction.value = []
+    // 统计失败不能伪装成零失败动作，否则用户会把不可用误读为「没有失败」。
+    statsError.value = errMsg(e)
+  } finally {
+    if (seq === statsSeq) statsLoading.value = false
   }
 }
 

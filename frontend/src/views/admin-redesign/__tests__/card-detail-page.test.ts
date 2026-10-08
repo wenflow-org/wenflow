@@ -5,13 +5,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-const { openSubPageMock } = vi.hoisted(() => ({ openSubPageMock: vi.fn() }));
+const { openSubPageMock, setSubPageLabelMock } = vi.hoisted(() => ({
+  openSubPageMock: vi.fn(),
+  setSubPageLabelMock: vi.fn()
+}));
 
 vi.mock('../store', async () => {
   const { ref } = await import('vue');
   return {
     subPage: ref({ view: 'card', id: 'p1' }),
     openSubPage: openSubPageMock,
+    setSubPageLabel: setSubPageLabelMock,
     closeSubPage: vi.fn(),
   };
 });
@@ -53,13 +57,18 @@ describe('CardDetailPage（卡详情二级页）', () => {
     expect(t).toContain('人教版必修一');
     expect(t).toContain('c1@vl.local');
     expect(t).toContain('E2E 素材');
+    // 面包屑回填：深链/从卡墙进入时 subPage 只有 id，加载出名字后写回（否则面包屑是裸 UUID）
+    expect(setSubPageLabelMock).toHaveBeenCalledWith('高一学生小陈');
   });
 
-  it('「到虚拟学习者」= openSubPage virtual + profileId（切画像二级页）', async () => {
+  it('「到虚拟学习者」= openSubPage virtual + profileId 且带 from=本卡（双向互链，返回落回卡详情）', async () => {
     const w = mount(CardDetailPage);
     await flushPromises();
     const go = w.findAll('button').find((b) => b.text().includes('到虚拟学习者'))!;
     await go.trigger('click');
-    expect(openSubPageMock).toHaveBeenCalledWith('virtual', 'p1');
+    expect(openSubPageMock).toHaveBeenCalledWith('virtual', 'p1', {
+      // from.label 用视图名：卡与画像同一实体同名，用卡名会拼出「郑凯 / 郑凯」
+      from: { view: 'card', id: 'p1', label: '学习者卡' }
+    });
   });
 });

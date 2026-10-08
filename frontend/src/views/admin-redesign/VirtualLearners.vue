@@ -83,38 +83,62 @@
       </section>
     </div>
 
-    <!-- 压测参数卡（2026-10-05 用户拍板 tab 化，平台 .tabs 下划线页签语言）：
-         速率上限/日期模拟两页签，一次只露当前页签自己的保存（此前展开日期模拟产生
-         490×307 死角 + 双保存各占一角，外部评审命中）；日期模拟开启态以「已开启」徽标
-         上到页签标签（未激活也可见）。EG4 守卫不变：显式「保存」钮 + 「未保存」脏态，回车等价保存 -->
+    <!-- 压测参数卡（2026-10-08 重做）：原先是「无标题卡 + 41px 通栏下划线页签条」——
+         1603px 的线只为两个短标签而画，卡体 90% 空白，输入框连可见字段名都没有
+         （含义只存在于 aria-label 与页签名里），切页签还会让卡高在百来 px 与整张
+         日期表单之间跳；那条 .tabs 也是本页手搓的，缺 roving tabindex/方向键/aria-controls，
+         与平台 tab 契约不符。现在：标题进卡头、视图切换换成分段控件（.mk-seg，宽随内容、贴右），
+         速率行补可见字段名（.mk-field--row）。
+         分组不变（2026-10-05 拍板：两组设置不同屏并排，避免双保存各占一角）；
+         EG4 守卫不变：显式「保存」+「未保存」脏态 + 回车等价保存。 -->
     <div class="mk-card vl-settings">
-      <div class="tabs" role="tablist" aria-label="压测参数">
-        <button type="button" class="tab" role="tab" :aria-selected="settingsTab === 'rate'" @click="settingsTab = 'rate'">速率上限</button>
-        <button type="button" class="tab" role="tab" :aria-selected="settingsTab === 'date'" @click="settingsTab = 'date'">
-          日期模拟<span v-if="dateSimEnabled" class="vl-settings__on">已开启</span>
-        </button>
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">压测参数</h3>
+        <div class="mk-card__head-right">
+          <div class="mk-seg" role="group" aria-label="压测参数视图">
+            <button
+              type="button"
+              class="mk-seg__item"
+              :class="{ 'mk-seg__item--active': settingsTab === 'rate' }"
+              :aria-pressed="settingsTab === 'rate'"
+              @click="settingsTab = 'rate'"
+            >速率上限</button>
+            <button
+              type="button"
+              class="mk-seg__item"
+              :class="{ 'mk-seg__item--active': settingsTab === 'date' }"
+              :aria-pressed="settingsTab === 'date'"
+              @click="settingsTab = 'date'"
+            >
+              日期模拟<span v-if="dateSimEnabled" class="vl-settings__on">已开启</span>
+            </button>
+          </div>
+        </div>
       </div>
       <div v-show="settingsTab === 'rate'" class="vl-settings__pane">
         <label
-          class="vl-rpm__field"
+          class="mk-field mk-field--row"
           title="虚拟学习者专属出站上限（每分钟调用数）；与平台全局速率相互独立，不挤占真实用户额度"
         >
-          <input
-            v-model.number="vlRpm.limit"
-            type="number"
-            min="0"
-            max="100000"
-            step="10"
-            class="mk-filter__input vl-rpm__input"
-            aria-label="虚拟学习者专属出站 RPM 上限"
-            :disabled="vlRpmLoadFailed"
-            :title="vlRpmLoadFailed ? '设置未加载：为避免用错底数覆盖服务端配置，已禁用编辑' : undefined"
-            @focus="vlRpmFocused = true"
-            @blur="vlRpmFocused = false"
-            @input="vlRpmDirty = true"
-            @keydown.enter.prevent="saveVlRpm"
-          />
-          <span class="vl-rpm__unit">/分</span>
+          <span class="mk-field__label">出站速率上限</span>
+          <span class="vl-rpm__ctl">
+            <input
+              v-model.number="vlRpm.limit"
+              type="number"
+              min="0"
+              max="100000"
+              step="10"
+              class="mk-filter__input vl-rpm__input"
+              aria-label="虚拟学习者专属出站 RPM 上限"
+              :disabled="vlRpmLoadFailed"
+              :title="vlRpmLoadFailed ? '设置未加载：为避免用错底数覆盖服务端配置，已禁用编辑' : undefined"
+              @focus="vlRpmFocused = true"
+              @blur="vlRpmFocused = false"
+              @input="vlRpmDirty = true"
+              @keydown.enter.prevent="saveVlRpm"
+            />
+            <span class="vl-rpm__unit">/分</span>
+          </span>
         </label>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="!vlRpmDirty || vlRpmSaving || vlRpmLoadFailed" @click="saveVlRpm">
           {{ vlRpmSaving ? '保存中…' : '保存' }}
@@ -319,8 +343,11 @@
                 <div v-if="isLive" class="mk-menu">
                   <!-- aria-expanded 按行判定（同审核 #168 判例）：menuOpen 是全局布尔，任一行开
                        菜单其余行都报 expanded=true；openMenu 才是「本行是否开」 -->
-                  <button type="button" class="mk-menu__btn" aria-label="更多操作（删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作（来源卡 / 删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：查看来源卡 / 删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                    <!-- 双向互链（卡库 ↔ 虚拟学习者）：卡与本人是同一条档案记录，卡 id 即本行 id -->
+                    <button type="button" class="mk-menu__item" role="menuitem" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="menuOpenSourceCard(s)">查看来源卡</button>
+                    <div class="mk-menu__sep" aria-hidden="true"></div>
                     <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" :disabled="busyId === s.id" title="删除该虚拟学习者（级联删除，不可恢复）" @click="menuRemove(s)">删除</button>
                   </div>
                 </div>
@@ -553,11 +580,17 @@ async function removeSample(s: Sample) {
 /** 正在删除的样本 id（ref 驱动 :disabled，computed map 出的普通对象上写 busy 不触发重渲染） */
 const busyId = ref<string | null>(null)
 
-/* ===== A1 行内 ⋯ 菜单：先关菜单再执行删除 ===== */
+/* ===== A1 行内 ⋯ 菜单：先关菜单再执行 ===== */
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 function menuRemove(s: Sample) {
   closeMenu()
   void removeSample(s)
+}
+/** 来源卡（双向互链）：卡与虚拟学习者同一条档案记录，卡库 id 即本表行 id；
+    跨页导航按本文件与画像页判例收进 ⋯ 菜单，不占行内按钮位。 */
+function menuOpenSourceCard(s: Sample) {
+  closeMenu()
+  openSubPage('card', s.id)
 }
 
 /* 窄屏（≤720）：10 列只保留「名称 / 进行中 / 操作」，次要列（勾选/倾向/故事池/会话/
@@ -901,10 +934,10 @@ function openRunningSession(s: Sample) {
   gap: 8px;
   flex: none;
 }
-/* 压测参数卡（2026-10-05 tab 化）：.tabs 通栏贴卡顶（平台页签原语，页签底线即卡内分隔线），
-   页签体左右与卡 16px 内边距对齐；写控件不进 KPI 数字栅格（读/写分块判例不变） */
+/* 压测参数卡（2026-10-08 重做）：标题与视图切换进 .mk-card__head（分段控件贴右、宽随内容），
+   卡体只放当前设置行；写控件不进 KPI 数字栅格（读/写分块判例不变）。
+   原「.tabs 通栏贴卡顶」的通栏下划线页签条退役——1603px 的线为两个短标签而画，且缺键盘契约。 */
 .vl-settings { flex: none; }
-.vl-settings .tabs { padding: 0 16px; }
 .vl-settings__pane { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px 14px; }
 .vl-settings__on {
   margin-left: 6px;
@@ -912,7 +945,7 @@ function openRunningSession(s: Sample) {
   font-weight: 600;
   color: var(--mk-green);
 }
-.vl-rpm__field { display: inline-flex; align-items: center; gap: 8px; cursor: text; }
+.vl-rpm__ctl { display: inline-flex; align-items: center; gap: 8px; }
 .vl-rpm__input { width: 84px; }
 .vl-rpm__unit {
   font-size: var(--mk-fs-micro);

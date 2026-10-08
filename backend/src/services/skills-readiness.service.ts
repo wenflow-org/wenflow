@@ -34,6 +34,7 @@ import {
   type SkillEntry,
 } from './skill-registry/skills-file';
 import { ORCHESTRATOR_RUNTIME_DEFINITIONS } from '../coordinators/definitions-registry';
+import { ALL_RETIRED_SKILLS } from '../skills/retired-skills';
 import {
   checkCoreHashParity,
   type CoreHashParityActiveRow,
@@ -45,6 +46,21 @@ import {
  * 2026-09-15：course-design / basic-evaluator / goal-alignment-checker 已正式退役（四同步），
  * 名单清空；字段保留供审计计数。 */
 export const ZOMBIE_SKILL_IDS: readonly string[] = [];
+
+/**
+ * 已退役技能（retired-skills.ts：PURGED + RESIDUE_ONLY）。
+ *
+ * 2026-10-08：W1/W2 的「幽灵残留」告警此前不看这份名单，于是 2026-10-06 退役的 triage-judge
+ * 让 W1（DB 有生效 prompt 但户口簿活跃集没有）与 W2（注册表行不在活跃集）长期置异常——
+ * 而退役口径明确是「不动历史数据」（名单里单独一类叫 RESIDUE_ONLY），两条提示语也写着
+ * 「清理残留或纳入退役名单」。检查与既定口径不一致，会让健康中心永久显示 2 项异常，
+ * 真出问题时反而看不出差别。名单内的幽灵位改为单列 retiredExempt：仍可审计，不算异常。
+ */
+const RETIRED_SKILL_SET = new Set<string>(ALL_RETIRED_SKILLS);
+
+export function isRetiredSkill(skillId: string): boolean {
+  return RETIRED_SKILL_SET.has(String(skillId || '').trim());
+}
 
 /** W3-B 免检清单：coordinator.steps=[] 条目（notes 注明 service 侧接线，不进主链 steps） */
 export const W3_STEPS_EMPTY_EXEMPT: Record<string, string> = {
@@ -73,6 +89,8 @@ export interface W1Check {
   zombieActive: string[];
   /** 僵尸技能（保留注册零调用）的 ACTIVE 残留（任务指示单列） */
   zombieSkillActive: string[];
+  /** 退役名单内的幽灵位：DB 历史行按「不动历史数据」口径保留，单列供审计但不算异常 */
+  retiredExempt: string[];
   items: ReadinessWarningItem[];
 }
 
@@ -83,6 +101,8 @@ export interface W2Check {
   missingRegistration: string[];
   /** skill_registrations 行不在户口簿活跃集（幽灵残留） */
   zombieRegistration: string[];
+  /** 退役名单内的幽灵注册行（同上口径：保留历史数据，不计异常） */
+  retiredExempt: string[];
   items: ReadinessWarningItem[];
 }
 
@@ -156,11 +176,14 @@ export function analyzeW1(book: SkillsBook, activeRows: CoreHashParityActiveRow[
     .map((entry) => entry.skillId)
     .sort();
 
-  const zombieActive = [...activePromptIds]
+  const zombieActiveAll = [...activePromptIds]
     .filter((agentId) => agentId.startsWith('skill:'))
     .map(skillIdOf)
     .filter((skillId) => skillId && !activeIds.has(skillId))
     .sort();
+  // 退役名单内的幽灵位：DB 历史行按既定口径保留，单列审计、不计异常
+  const retiredExempt = zombieActiveAll.filter((skillId) => isRetiredSkill(skillId));
+  const zombieActive = zombieActiveAll.filter((skillId) => !isRetiredSkill(skillId));
 
   const zombieSkillActive = book.skills
     .filter((entry) => (ZOMBIE_SKILL_IDS as readonly string[]).includes(entry.skillId) && activePromptIds.has(`skill:${entry.skillId}`))
@@ -191,6 +214,7 @@ export function analyzeW1(book: SkillsBook, activeRows: CoreHashParityActiveRow[
     missingActive,
     zombieActive,
     zombieSkillActive,
+    retiredExempt,
     items,
   };
 }
@@ -210,7 +234,10 @@ export function analyzeW2(book: SkillsBook, registrations: Array<{ name: string 
     .map((entry) => entry.skillId)
     .sort();
 
-  const zombieRegistration = [...registeredNames].filter((name) => !activeIds.has(name)).sort();
+  const zombieRegistrationAll = [...registeredNames].filter((name) => !activeIds.has(name)).sort();
+  // 同 W1：退役名单内的注册行按「不动历史数据」保留，单列审计、不计异常
+  const retiredExempt = zombieRegistrationAll.filter((name) => isRetiredSkill(name));
+  const zombieRegistration = zombieRegistrationAll.filter((name) => !isRetiredSkill(name));
 
   const items: ReadinessWarningItem[] = [
     ...missingRegistration.map((skillId) => ({
@@ -232,6 +259,7 @@ export function analyzeW2(book: SkillsBook, registrations: Array<{ name: string 
     bookCount: book.skills.length,
     missingRegistration,
     zombieRegistration,
+    retiredExempt,
     items,
   };
 }

@@ -60,8 +60,15 @@ const requireAdmin = async (operatorId?: string) => {
 // 获取用户列表
 router.get('/', async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, search, role, status } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
+    const { search, role, status } = req.query;
+    // 数值参数安全解析（2026-10-08 端到端验证：?limit=abc / ?page=abc 曾直接 500）：
+    // 此前 Number(limit) 原样进 Prisma，'abc' → NaN → prisma.users.findMany 抛错，
+    // 500 响应还把 Prisma 调用细节回给了客户端。判例同 memory-traces / memory-review / session-console。
+    const rawLimit = Number(req.query.limit);
+    const limitNum = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.round(rawLimit), 1), 200) : 20;
+    const rawPage = Number(req.query.page);
+    const pageNum = Number.isFinite(rawPage) ? Math.max(Math.round(rawPage), 1) : 1;
+    const skip = (pageNum - 1) * limitNum;
 
     // Phase 2：status=deleted 反转为「仅已删账号」（恢复入口/已删列表）；其余维持默认隐藏
     const where: any = status === 'deleted' ? { deletedAt: { not: null } } : { deletedAt: null };
@@ -91,7 +98,7 @@ router.get('/', async (req, res, next) => {
     }
 
     const [users, total] = await Promise.all([
-      findUsersForAdminList(where, skip, Number(limit)),
+      findUsersForAdminList(where, skip, limitNum),
       countUsersWhere(where)
     ]);
 
@@ -106,8 +113,8 @@ router.get('/', async (req, res, next) => {
         })),
         pagination: {
           total,
-          page: Number(page),
-          limit: Number(limit)
+          page: pageNum,
+          limit: limitNum
         }
       }
     });

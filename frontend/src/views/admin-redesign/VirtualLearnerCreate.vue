@@ -1,15 +1,25 @@
 <template>
-  <!-- 新建虚拟学习者 -->
+  <!-- 新建虚拟学习者 / 平台生产角色卡（同一实体：卡 = 虚拟学习者 = 一条档案记录）。
+       两个入口共用这一份表单，差别只在提交后的落点：learners 语境跳画像页继续走，
+       library 语境留在卡库（建卡入库 + 备好第一个故事）。 -->
   <Teleport v-if="render" to="body">
   <div v-if="createOpen" ref="maskRef" class="mk-modal">
-    <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="新建虚拟学习者">
+    <div ref="panelRef" class="mk-modal__panel" role="dialog" :aria-label="dialogTitle">
       <div class="mk-modal__head">
-        <h3 class="mk-modal__title">新建虚拟学习者</h3>
+        <h3 class="mk-modal__title">{{ dialogTitle }}</h3>
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="createOpen = false">✕</button>
       </div>
       <div class="mk-modal__body">
         <p class="mk-alert mk-alert--info">
-          ① 称呼与背景 → ② AI 补全身份（可选）→ ③ 创建 → ④ 画像页生成故事 → ⑤ 按故事运行
+          <template v-if="isLibrary">① 称呼与背景 → ② AI 补全身份（可选）→ ③ 生产入库（建卡 + 备好第一个故事）→ ④ 到虚拟学习者起跑</template>
+          <template v-else>① 称呼与背景 → ② AI 补全身份（可选）→ ③ 创建 → ④ 画像页生成故事 → ⑤ 按故事运行</template>
+        </p>
+        <!-- 生产两阶段进度（library）：建卡秒回即入库，故事是单次 AI 调用，可能要等一会儿。
+             故事阶段允许先关弹窗——卡已在库，服务端继续生成，完成后仍会刷新卡墙。 -->
+        <p v-if="isLibrary && creating" class="mk-alert mk-alert--info" role="status">
+          {{ phase === 'card'
+            ? '① 正在建卡入库…'
+            : '① 卡已入库 ✓ ② 正在用 AI 备好第一个故事…（可先关闭，故事在服务端继续）' }}
         </p>
         <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
           <span class="mk-field__label">称呼 / 样本名 <em class="mk-field__req">必填</em></span>
@@ -23,7 +33,10 @@
             class="mk-field__textarea"
             placeholder="她是谁、职业处境、性格与长期底色。这里只写稳定身份，不要写某次具体学习事件。"
           ></textarea>
-          <span class="mk-field__hint">{{ form.story.length }} 字 · 建议 ≥ 40 字 · 具体学习需求在画像页用「故事」产生</span>
+          <span class="mk-field__hint">
+            <template v-if="isLibrary">{{ form.story.length }} 字 · 建议 ≥ 40 字 · 学习需求由入库后自动生成的故事定义</template>
+            <template v-else>{{ form.story.length }} 字 · 建议 ≥ 40 字 · 具体学习需求在画像页用「故事」产生</template>
+          </span>
           <span v-if="errors.story" class="mk-field__err">{{ errors.story }}</span>
         </label>
         <div v-if="isLive" class="vl-ai-row">
@@ -70,7 +83,7 @@
       <div class="mk-modal__foot">
         <button type="button" class="mk-btn" @click="createOpen = false">取消</button>
         <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="createSample">
-          {{ creating ? '创建中…' : '创建虚拟学习者' }}
+          {{ creating ? (isLibrary ? phase === 'card' ? '建卡中…' : '故事生成中…' : '创建中…') : isLibrary ? '生产入库' : '创建虚拟学习者' }}
         </button>
       </div>
     </div>
@@ -88,11 +101,21 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 
 /* render=false 时不渲染 Teleport（保持与拆分前一致的 tab 条件渲染语义），弹窗状态仍常驻 */
-withDefaults(defineProps<{ render?: boolean }>(), { render: true })
+const props = withDefaults(defineProps<{ render?: boolean; context?: 'learners' | 'library' }>(), {
+  render: true,
+  context: 'learners'
+})
+/* 语境只改提交后的落点与文案，不改表单本身：
+   learners=虚拟学习者页「新建」（建卡 → 跳画像页生成故事）；library=卡库「平台生产」（建卡即入库 → 备好第一个故事 → 留库） */
+const emit = defineEmits<{ (e: 'produced', id: string): void }>()
+const isLibrary = computed(() => props.context === 'library')
+const dialogTitle = computed(() => (isLibrary.value ? '平台生产 · 角色卡' : '新建虚拟学习者'))
 
 /* 新建：人设优先（学习需求由故事产生，不在创建时必填） */
 const createOpen = ref(false)
 const creating = ref(false)
+/** 生产阶段（library）：card=建卡中（入库前失败＝整体失败）/ story=备故事中（卡已在库，可先关窗） */
+const phase = ref<'idle' | 'card' | 'story'>('idle')
 const form = ref({ name: '', story: '', aspiration: '' })
 const errors = ref<{ name?: string; story?: string }>({})
 
@@ -100,7 +123,28 @@ function open() {
   form.value = { name: '', story: '', aspiration: '' }
   errors.value = {}
   personaSeed.value = null
+  phase.value = 'idle'
   createOpen.value = true
+}
+
+/** 平台生产：① 建卡入库（秒回）→ ② 备好第一个故事（单次 AI 调用，与「导入卡」一张卡一个故事同形状） */
+async function produceCard(name: string, createdId: string) {
+  // 建卡即入库 → 先刷一次卡墙（此时关窗也能在库里看到）
+  emit('produced', createdId)
+  phase.value = 'story'
+  try {
+    await adminVirtualLearnersApi.draftVirtualLearnerStories(
+      createdId,
+      sampleType.value === 'student' ? { sampleType: 'student' } : undefined
+    )
+    toast.success(`已生产「${name}」：卡已入库，第一个故事已备好`)
+  } catch (e) {
+    // 卡已在库：生产算半成，按实情说，别让用户以为整单失败
+    toast.error(`角色卡「${name}」已入库，但故事生成失败：${errMsg(e)}（可在卡详情/画像页重试）`)
+  }
+  createOpen.value = false
+  // 故事落库后再刷一次：卡墙的「开场白」取自故事，需要新数据
+  emit('produced', createdId)
 }
 
 async function createSample() {
@@ -109,14 +153,25 @@ async function createSample() {
   if (form.value.story.trim().length < 20) errors.value.story = '人物背景至少 20 字，稳定人设才有依据'
   if (Object.keys(errors.value).length) return
 
+  const name = form.value.name.trim()
   creating.value = true
+  phase.value = 'card'
   try {
     const createdId = await liveCreateVirtual({
-      name: form.value.name.trim(),
+      name,
       goal: form.value.aspiration.trim(),
       story: form.value.story.trim(),
       personaSeed: personaSeed.value || undefined
     })
+    if (isLibrary.value) {
+      if (createdId) {
+        await produceCard(name, createdId)
+      } else {
+        createOpen.value = false
+        toast.success('角色卡已创建，但列表刷新失败——请手动刷新卡库查看')
+      }
+      return
+    }
     createOpen.value = false
     if (createdId) {
       toast.success('虚拟人已创建。下一步：在画像页生成故事（产生学习需求）')
@@ -125,9 +180,10 @@ async function createSample() {
       toast.success('虚拟人已创建，但列表刷新失败——若列表未出现，请手动刷新查看')
     }
   } catch (e) {
-    toast.error(`创建失败：${errMsg(e)}`)
+    toast.error(isLibrary.value ? `生产失败：${errMsg(e)}` : `创建失败：${errMsg(e)}`)
   } finally {
     creating.value = false
+    phase.value = 'idle'
   }
 }
 
@@ -170,9 +226,11 @@ async function generatePersona() {
 
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
+/** 只有「建卡中」不可关（入库结果未知）；故事阶段卡已在库，允许先关窗（服务端继续生成） */
+const closable = () => phase.value !== 'card'
 useOverlay(computed(() => createOpen.value), panelRef)
-useMaskClose(maskRef, () => { if (!creating.value) createOpen.value = false })
-useEscape(() => createOpen.value, () => { if (!creating.value) createOpen.value = false })
+useMaskClose(maskRef, () => { if (closable()) createOpen.value = false })
+useEscape(() => createOpen.value, () => { if (closable()) createOpen.value = false })
 
 defineExpose({ open })
 </script>

@@ -1,22 +1,5 @@
 <template>
   <div v-if="d" class="ud-root">
-    <!-- 账号头（pane 内联）：状态徽章 + 危险/恢复动作。合并进 LearnerDetail 后
-         本组件不再是整页（hero 归宿主），账号轴的状态与危险操作就地承载 -->
-    <div class="ud-head">
-      <span class="mk-badge" :class="isDeleted ? 'mk-badge--deleted' : 'mk-badge--ok'">
-        {{ isDeleted ? '已删除' : '正常' }}
-      </span>
-      <span class="ud-head__sp"></span>
-      <button v-if="isDeleted" type="button" class="mk-btn" :disabled="restoring" @click="doRestore">
-        {{ restoring ? '恢复中…' : '恢复用户' }}
-      </button>
-      <div v-if="canDelete" class="mk-menu">
-        <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu('hero')">⋯</button>
-        <div v-if="openMenu === 'hero'" class="mk-menu__pop" :style="popStyle" @click.stop>
-          <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留，可在用户列表恢复" @click="menuDelete">删除账户…</button>
-        </div>
-      </div>
-    </div>
     <!-- 状态条（原型 renderLearnerDetail 的 statstrip：hero 与 subtabs 之间的一行四格读数，
          一张卡通栏分格，非 KPI 卡栅格——LearnerDetail 同款模板）。
          2026-10-05（批次五 CM2）：本地 .statstrip 复刻退役，改用共享 MkStatStrip 的 grid 变体。 -->
@@ -34,7 +17,28 @@
            + 最近活动 feed（教学会话与目标对话按时间合并，行可下钻只读座舱） -->
       <div class="ud-pane ud-ov">
         <section class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">账户信息</h3></div>
+          <!-- 账号轴的状态与账户操作归「账户信息」卡头（2026-10-08 重做）：此前是一条
+               28px 高的游离行悬在账号概览卡之上，只放「正常 + ⋯」。那行没有自己的容器
+               样式（`.ud-head` / `.ud-head__sp` 全仓无 CSS 规则），spacer 不生效，⋯ 实际
+               紧贴在徽章右侧而非贴右缘；动作与它作用的账户字段也不在同一块里。
+               归位后沿用全站卡头语法：标题吃剩余宽度、尾部元素贴右（「头内成组」规则）。 -->
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">账户信息</h3>
+            <div class="mk-card__head-right">
+              <span class="mk-badge" :class="isDeleted ? 'mk-badge--deleted' : 'mk-badge--ok'">
+                {{ isDeleted ? '已删除' : '正常' }}
+              </span>
+              <button v-if="isDeleted" type="button" class="mk-btn mk-btn--sm" :disabled="restoring" @click="doRestore">
+                {{ restoring ? '恢复中…' : '恢复用户' }}
+              </button>
+              <div v-if="canDelete" class="mk-menu">
+                <button type="button" class="mk-menu__btn" aria-label="账户操作" aria-haspopup="menu" :aria-expanded="menuOpen" @click.stop="toggleMenu('account')">⋯</button>
+                <div v-if="openMenu === 'account'" class="mk-menu__pop" :style="popStyle" @click.stop>
+                  <button type="button" class="mk-menu__item mk-menu__item--danger" title="软删除：禁止登录，历史数据保留，可在用户列表恢复" @click="menuDelete">删除账户…</button>
+                </div>
+              </div>
+            </div>
+          </div>
           <dl class="ud-kv">
             <dt>邮箱</dt><dd :title="d.email">{{ d.email }}</dd>
             <dt>角色</dt><dd>{{ d.role }}</dd>
@@ -482,7 +486,7 @@ const currentAdminId = computed(() => {
 const canDelete = computed(
   () => !isDeleted.value && !!uid.value && uid.value !== currentAdminId.value
 )
-/* 危险动作收进 hero ⋯ 菜单：先关菜单再走确认弹层（避免菜单残留在确认层之上） */
+/* 危险动作收进「账户信息」卡头的 ⋯ 菜单：先关菜单再走确认弹层（避免菜单残留在确认层之上） */
 const { openMenu, toggleMenu, closeMenu, menuOpen, popStyle } = useRowMenu()
 async function menuDelete() {
   closeMenu()

@@ -18,6 +18,7 @@ import { prisma } from '../config/database';
 import { executeSkill } from '../skills';
 import { virtualLearnerPersonaDesignerDefinition } from '../skills/virtual-learner-persona-designer';
 import { virtualLearnerScenarioDesignerDefinition } from '../skills/virtual-learner-scenario-designer';
+import { ensureCardKey } from '../services/virtual-lab/card-import.service';
 import { logger } from '../utils/logger';
 
 // -------------------------------------------------------
@@ -60,11 +61,14 @@ export async function provisionVirtualProfile(input: ProvisionInput): Promise<Pr
     },
   });
 
+  const profileId = uuid();
+  // 批量创建的自建卡同样要带 cardKey（没有 key 的卡会被「导出卡库」静默跳过）
+  const profileWithCardKey = ensureCardKey(input.profile || {}, profileId, input.tags || []);
   const profile = await prisma.virtual_learner_profiles.create({
     data: {
-      id: uuid(),
+      id: profileId,
       userId: user.id,
-      profile: JSON.stringify(input.profile || {}),
+      profile: JSON.stringify(profileWithCardKey),
       learningGoal: input.learningGoal || '',
       knowledgeLevel: input.knowledgeLevel || 'beginner',
       knownConcepts: input.knownConcepts ? JSON.stringify(input.knownConcepts) : null,

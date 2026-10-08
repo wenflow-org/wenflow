@@ -1,4 +1,4 @@
-import { parseCardDocument, validateCard, resolveCardKey, buildCardWallEntries, cleanDisplayName, deriveCardNickname, stripWaveTags, type LearnerCard } from '../card-import.service';
+import { parseCardDocument, validateCard, resolveCardKey, ensureCardKey, buildCardWallEntries, cleanDisplayName, deriveCardNickname, stripWaveTags, type LearnerCard } from '../card-import.service';
 
 function emptyIndex() {
   return { byKey: new Map<string, string>(), refs: new Map<string, string[]>(), seenInDoc: new Set<string>() };
@@ -156,6 +156,54 @@ describe('card-import：resolveCardKey（历史卡身份回退）', () => {
   it('nameHint 符合 cardKey 形态时才回退', () => {
     expect(resolveCardKey({ personaSeed: { nameHint: 'rw-cook-03' } }, [])).toBe('rw-cook-03');
     expect(resolveCardKey({ personaSeed: { nameHint: '高三学生小张' } }, [])).toBeNull();
+  });
+});
+
+/**
+ * ensureCardKey（2026-10-08）：自建卡不带 key 会被导出静默跳过——端到端验证实测到
+ * 「卡库自建 1 张 / 导出 0 张」，所以创建时就要把 key 写进档案 JSON。
+ */
+describe('card-import：ensureCardKey（自建卡补 key）', () => {
+  const ID = 'ab12cd34-1111-2222-3333-444455556666';
+
+  it('没有任何 key 来源时补 vl-<profileId 前 8 位>', () => {
+    const p = { personaSeed: { nameHint: '夜班便利店店员' } };
+    expect(ensureCardKey(p, ID)).toEqual({
+      personaSeed: { nameHint: '夜班便利店店员' },
+      cardKey: 'vl-ab12cd34',
+    });
+  });
+
+  it('同一 id 恒得同一个 key（导出/回灌的幂等前提）', () => {
+    const a = ensureCardKey({}, ID) as Record<string, unknown>;
+    const b = ensureCardKey({}, ID) as Record<string, unknown>;
+    expect(a.cardKey).toBe(b.cardKey);
+  });
+
+  it('已有显式 cardKey → 原样返回，不覆盖导入卡的 key', () => {
+    const p = { cardKey: 'w6-math-01', personaSeed: {} };
+    expect(ensureCardKey(p, ID)).toBe(p);
+  });
+
+  it('personaId / nameHint / tags 任一能解析出 key → 原样返回', () => {
+    const byPersonaId = { personaSeed: { scenarioCard: { personaId: 'rw-life-01' } } };
+    const byNameHint = { personaSeed: { nameHint: 'rw-cook-03' } };
+    const byTags = { personaSeed: {} };
+    expect(ensureCardKey(byPersonaId, ID)).toBe(byPersonaId);
+    expect(ensureCardKey(byNameHint, ID)).toBe(byNameHint);
+    expect(ensureCardKey(byTags, ID, ['w6', 'rw-school-26'])).toBe(byTags);
+  });
+
+  it('波次标签（w5/w6）不算 key → 照补', () => {
+    const p = { personaSeed: {} };
+    expect(ensureCardKey(p, ID, ['w6', 'w5'])).toEqual({ personaSeed: {}, cardKey: 'vl-ab12cd34' });
+  });
+
+  it('空 profile（批量创建骨架）也能补 key，且不动原对象', () => {
+    const p: Record<string, unknown> = {};
+    const out = ensureCardKey(p, ID);
+    expect(out.cardKey).toBe('vl-ab12cd34');
+    expect(p.cardKey).toBeUndefined();
   });
 });
 

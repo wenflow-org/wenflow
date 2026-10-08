@@ -205,8 +205,10 @@ export const subPage = ref<{ view: SubPageView; id: string; label?: string; incl
 
 export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?: boolean; from?: SubPageFrom }) {
   const base = opts?.includeTest ? { view, id, includeTest: true } : { view, id }
-  // 从二级（virtual/learner）进三级（session）时记忆来源，返回时回到该页
-  if ((view === 'session' || view === 'session-real') && opts?.from) {
+  /* 来源记忆：二级页 → 三级页都可记来源，返回时回原页（不限 session）。
+     原先只对 session/session-real 生效，于是「学习者详情 → 路径详情」返回时 from 被
+     静默丢弃，直接落回一级列表，原详情与页签上下文全丢（2026-10-08 走查确认）。 */
+  if (opts?.from) {
     subPage.value = { ...base, from: opts.from }
   } else {
     subPage.value = base

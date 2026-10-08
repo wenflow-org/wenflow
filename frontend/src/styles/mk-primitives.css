@@ -804,7 +804,9 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .sbl__sw { width: 10px; height: 10px; border-radius: var(--mk-radius-xs); flex: none; }
 .sbl__name { color: var(--mk-muted); }
 .sbl__n { font-weight: 700; font-variant-numeric: tabular-nums; }
-.sbl--link { border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; }
+/* min-height 24：分布条图例是可点筛选入口，实测只有 23px 高（14px 字号 × 行高），
+   低于 WCAG 2.5.8 AA 的 24×24 目标下限；只给可点档补足，只读档 .sbl 不动。 */
+.sbl--link { border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; min-height: 24px; }
 .sbl--link:hover .sbl__name { color: var(--mk-ink); }
 .sbl--on .sbl__name { color: var(--mk-ink); font-weight: 700; }
 

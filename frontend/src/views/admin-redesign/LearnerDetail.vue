@@ -1081,7 +1081,12 @@ function sessPaneBadgeCls(s: string): string {
 
 /** 当前学习路径 → 路径详情二级页（只认真实 pathId；缺 ID 时入口不渲染） */
 function openPathDetail() {
-  if (currentPathId.value) openSubPage('path', currentPathId.value)
+  const sp = subPage.value
+  /* 记来源：从本详情进路径详情后，面包屑返回要回到这个学习者（含原页签），
+     而不是一级列表——同页开真实会话（openSession）的既有做法。 */
+  if (currentPathId.value) {
+    openSubPage('path', currentPathId.value, sp ? { from: { view: sp.view, id: sp.id, label: liveDetail.value?.name } } : undefined)
+  }
 }
 
 async function loadLdSessions(id: string) {

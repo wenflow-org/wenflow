@@ -310,6 +310,11 @@ const pageSize = ref(20)
 const recordsLoading = ref(false)
 const recordsFailed = ref(false)
 const recordSearch = ref('')
+/* 已提交的搜索词：只有「查询」/回车才生效。
+   为什么与输入框分开：翻页读的是当前生效的筛选，若直接读 recordSearch，用户在输入框里
+   改词后点下一页，就会以「未查询过的新词 + 第 N 页」发请求——跳过了新结果的第一页，
+   还可能落在越界页显示空列表（2026-10-08 走查确认）。 */
+const committedSearch = ref('')
 const achIncludeTest = ref(false)
 
 /* 服务端排序：白名单 earnedAt / xpReward，默认解锁时间倒序；变更回第 1 页重查。 */
@@ -346,7 +351,8 @@ async function reloadRecords() {
   try {
     // 搜索语义对齐占位符「按姓名/邮箱」：常规输入作为 q 模糊传给后端（原先误作 userId
     // 精确匹配，搜索恒为空）。q 不在 adminApi 的 params 类型里（该文件本次只读未改），此处收窄一次。
-    const term = recordSearch.value.trim()
+    // 用已提交词而非输入框现值：翻页不改筛选条件（见 committedSearch 注释）。
+    const term = committedSearch.value
     const search: { userId?: string; q?: string } = term
       ? (USER_ID_LIKE.test(term) ? { userId: term } : { q: term })
       : {}
@@ -369,10 +375,13 @@ async function reloadRecords() {
   }
 }
 
-/** 记录页签是否处于筛选态（搜索词 / 含测试账号口径） */
-const isRecordsFiltered = computed(() => !!recordSearch.value.trim() || achIncludeTest.value)
-/** 筛选变化：回第 1 页重查（页码停在越界页会显示空列表） */
+/** 记录页签是否处于筛选态（搜索词 / 含测试账号口径）——按已生效的搜索词判断，
+    输入框里未提交的草稿不算筛选态 */
+const isRecordsFiltered = computed(() => !!committedSearch.value || achIncludeTest.value)
+/** 筛选提交（回车 / 查询 / 清空 / 换页大小）：提交当前搜索词并回第 1 页重查
+    （页码停在越界页会显示空列表） */
 function reloadRecordsFromFirstPage() {
+  committedSearch.value = recordSearch.value.trim()
   recordPage.value = 1
   void reloadRecords()
 }

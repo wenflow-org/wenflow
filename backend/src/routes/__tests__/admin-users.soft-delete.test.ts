@@ -207,6 +207,28 @@ describe('GET /admin/users 列表默认隐藏已删账号', () => {
     expect(usersCount).toHaveBeenCalledWith({ where: expect.objectContaining({ deletedAt: null }) })
   })
 
+  // 2026-10-08 端到端验证抓到的真缺陷：Number('abc') → NaN 直灌 Prisma，
+  // ?limit=abc / ?page=abc 返回 500，且把 prisma.users.findMany 的调用细节回给了客户端。
+  it('非法数值参数不 500：limit=abc / page=abc 回落默认分页', async () => {
+    usersFindMany.mockResolvedValue([])
+    usersCount.mockResolvedValue(0)
+
+    const res = await runHandler('GET /', { query: { limit: 'abc', page: 'abc' } })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body.data.pagination).toEqual({ total: 0, page: 1, limit: 20 })
+  })
+
+  it('越界数值被夹紧：limit=99999 → 200 上限、page=0 → 第 1 页', async () => {
+    usersFindMany.mockResolvedValue([])
+    usersCount.mockResolvedValue(0)
+
+    const res = await runHandler('GET /', { query: { limit: '99999', page: '0' } })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body.data.pagination).toEqual({ total: 0, page: 1, limit: 200 })
+  })
+
   it('status=deleted 反转为仅查已删账号（已删列表/恢复入口）', async () => {
     usersFindMany.mockResolvedValue([])
     usersCount.mockResolvedValue(0)
