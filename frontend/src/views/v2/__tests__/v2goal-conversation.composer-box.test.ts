@@ -90,4 +90,15 @@ describe('会话态移动输入盒：控件贴中线、盒子贴文字', () => {
   it('会话态 textarea 上下内边距与 36 控件档配套（内容 36 → 三者中线重合）', () => {
     expect(decl(ruleOf(mobile, '.chat > .composer .composer__textarea'), 'padding')).toBe('6px 0');
   });
+
+  it('输入盒四边内边距等距（左 16 让回形针一侧多缩进 8px，整条控件重心偏左）', () => {
+    const box = ruleOf(source, '.composer__box');
+    const padding = (decl(box, 'padding') || '').split(/\s+/).filter(Boolean);
+    // 一值形式即四边等距；多值形式必须是四个相同的值
+    const sides = padding.length === 1
+      ? [padding[0], padding[0], padding[0], padding[0]]
+      : padding;
+    expect(sides, `.composer__box padding 不是四边等距：${decl(box, 'padding')}`).toHaveLength(4);
+    expect(new Set(sides).size, `四边取值不一致：${sides.join(' ')}`).toBe(1);
+  });
 });

@@ -226,16 +226,21 @@ function buildOption(): EChartsCoreOption {
   const denseGraph = isDenseLabelGraph(nodes.length, narrow)
   // 力导向总跨度 ≈ 边长·√n；斥力/边长的原值按 ~40 节点校准，故以 40 为基准反比收缩
   const shrink = Math.sqrt(40 / Math.max(1, nodes.length))
-  const perLine = narrow ? 7 : 9
+  // 每行字数与字号配套：字号提到 12（仓库文本下限）后单字更宽，每行相应收一个字，
+  // 两行折行后的整体标签宽度基本不变，不会因放大而把画布挤得更糊。
+  const perLine = narrow ? 6 : 8
   const labelWorthy = new Set<string>()
   if (!denseGraph) {
     for (const node of nodes) labelWorthy.add(node.id)
   } else {
     // 批次四 P2（2026-10-04 全站评审）：枢纽标注 10→6——默认视图密集区标签字压字，
-    // 收紧常显集合让标签碰撞可辨；弱势/脆弱节点仍全标（教学信号优先）
+    // 收紧常显集合让标签碰撞可辨；弱势/脆弱节点仍全标（教学信号优先）。
+    // 2026-10-08：标签字号提到 12 后单字变宽，窄屏那点画布放不下 6 个仍会叠字，
+    // 故窄屏再收到 4——宁少勿叠，其余节点仍可靠悬停/缩放读。
+    const hubCount = narrow ? 4 : 6
     const byDegree = [...nodes]
       .sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0))
-      .slice(0, 6)
+      .slice(0, hubCount)
     for (const node of byDegree) labelWorthy.add(node.id)
     for (const node of nodes) {
       const weak = node.stability === 'fragile' || (node.masteryScore !== null && node.masteryScore !== undefined && node.masteryScore < 0.45)
@@ -281,8 +286,11 @@ function buildOption(): EChartsCoreOption {
           position: 'bottom',
           distance: 5,
           color: textColor,
-          fontSize: narrow ? 10 : 11,
-          lineHeight: narrow ? 12 : 13,
+          // 10/11 → 12：原字号低于仓库文本下限，节点名辨认困难（2026-10-08 用户侧视觉检查
+          // 在桌面与移动两档都报出；画布内文字不受 mobile:spec 的 fonts 门禁覆盖，所以一直没被抓到）。
+          // 行高同步抬起，避免 12px 字挤在 12/13 的行高里。
+          fontSize: 12,
+          lineHeight: narrow ? 15 : 16,
           formatter: (params: { name?: string }) => wrapLabel(params?.name ?? '', perLine)
         },
         labelLayout: { hideOverlap: true },

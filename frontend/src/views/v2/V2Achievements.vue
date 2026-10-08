@@ -32,25 +32,32 @@
           </div>
         </section>
 
-        <!-- 筛选（原型 wf-filters 2078-2082）：全部/已解锁/未解锁 三枚状态 chip 与
-             类型 chip 同走 .wf-filter 胶囊语言，行内不再放竖分隔线（类型筛选降级保留） -->
+        <!-- 筛选（原型 wf-filters 2078-2082）：状态 chip 与类型 chip 同走 .wf-filter 胶囊语言。
+             两组各带一个小标签：它们是正交的两个维度、可叠加生效，一排同款胶囊不加标识会被
+             读成同一组单选（2026-10-08 用户侧视觉检查在 390/1440 两档都确认）。 -->
         <div class="filters">
-          <button
-            v-for="f in statusFilters"
-            :key="f.key"
-            type="button"
-            class="filter"
-            :class="{ 'filter--active': statusFilter === f.key }"
-            @click="statusFilter = f.key"
-          >{{ f.label }}</button>
-          <button
-            v-for="t in typeFilters"
-            :key="t.key"
-            type="button"
-            class="filter"
-            :class="{ 'filter--active': typeFilter === t.key }"
-            @click="typeFilter = typeFilter === t.key ? '' : t.key"
-          >{{ t.label }}</button>
+          <div class="filter-group" role="group" aria-label="按解锁状态筛选">
+            <span class="filter-group__label" aria-hidden="true">状态</span>
+            <button
+              v-for="f in statusFilters"
+              :key="f.key"
+              type="button"
+              class="filter"
+              :class="{ 'filter--active': statusFilter === f.key }"
+              @click="statusFilter = f.key"
+            >{{ f.label }}</button>
+          </div>
+          <div v-if="typeFilters.length" class="filter-group" role="group" aria-label="按成就类型筛选">
+            <span class="filter-group__label" aria-hidden="true">类型</span>
+            <button
+              v-for="t in typeFilters"
+              :key="t.key"
+              type="button"
+              class="filter"
+              :class="{ 'filter--active': typeFilter === t.key }"
+              @click="typeFilter = typeFilter === t.key ? '' : t.key"
+            >{{ t.label }}</button>
+          </div>
         </div>
 
         <!-- 成就网格（原型 wf-ach 2085-2129）：icon → 标题 → 描述 → 一行状态，四行无分隔线 -->
@@ -310,7 +317,10 @@ onMounted(() => {
 .ov-line__bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width 0.4s ease; }
 
 /* 筛选（原型 wf-filters / wf-filter 840-846）：状态 chip 与类型 chip 同一套胶囊语言 */
-.filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.filters { display: flex; gap: 8px 16px; align-items: center; flex-wrap: wrap; }
+/* 两组筛选各成一体：组内 8px、组间 16px，配 12px 小标签（仓库字号下限）区分维度 */
+.filter-group { display: flex; gap: 8px; align-items: center; }
+.filter-group__label { font-size: 12px; color: var(--faint); flex: none; }
 .filter {
   /* P3-47（设计评审）：筛选 chips 是本页唯一筛选交互，36px 低于 44px 移动触控地板——
      抬到 44px 扩热区，视觉字号不动 */
@@ -413,7 +423,9 @@ onMounted(() => {
      同宽卡堆在一列里，内容左缘落在 33/29 两条线上（2026-09-26 对齐走查）。 */
   .ov-line { padding-left: 14px; padding-right: 14px; }
   .ach-card { padding: 12px 14px; }
-  .filters { gap: 6px; }
+  /* 组内 6px、组间 12px：390 下两组合计仍会折行，窄档留出组间区分度 */
+  .filters { gap: 6px 12px; }
+  .filter-group { gap: 6px; }
   /* 筛选药丸 36 → 44（P3-47 触控地板；compact 档也须守住 44，内边距收窄补高度）：
      一行 7 颗在 390 下的总宽预算不变。 */
   .filter { padding: 6px 11px; min-height: 44px; font-size: 12.5px; }

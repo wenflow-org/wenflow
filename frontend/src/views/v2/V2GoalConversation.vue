@@ -1418,7 +1418,10 @@ function shuffleScenes() {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal);
-  padding: 8px 8px 8px 16px;
+  /* 四边等距：原为 8px 8px 8px 16px（左 16 是给回形针单独留的），桌面档实测左右不对称
+     ——回形针一侧比发送键一侧多缩进 8px，整条控件视觉重心偏左（2026-10-08 用户侧视觉检查）。
+     移动档早就是四边 6px，这里对齐同一取法。 */
+  padding: 8px;
   min-height: 54px;
   box-shadow: var(--wf-shadow-raised); /* 悬浮档 */
 }

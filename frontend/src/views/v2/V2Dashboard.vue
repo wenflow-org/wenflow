@@ -72,7 +72,7 @@
                 <span class="action__tag">阶段 {{ stageInfo }} · {{ todayTask?.kind || '任务' }}</span>
               </div>
               <h2 class="action__title">{{ todayTask?.title || '今天没有待办任务' }}</h2>
-              <p v-if="actionDesc" class="action__desc">{{ actionDesc }}</p>
+              <p v-if="actionDesc" class="action__desc action__desc--task">{{ actionDesc }}</p>
               <p v-if="actionReason" class="action__reason">
                 <Sparkles :size="13" :stroke-width="1.75" />
                 <span>{{ actionReason }}</span>
@@ -769,19 +769,19 @@ const todayBarPct = computed(() => {
   return Math.min(100, Math.round((todayMinutes.value / target) * 100));
 });
 
-/* 今日行动描述：标题已说清任务，desc 只保留「怎么做」的第一句（≤64 字），
-   其余进课堂页看完整说明（2026-09-27 信噪比重设计：原 98 字含后段心理按摩） */
+/* 今日行动描述：标题已说清任务，desc 只保留「怎么做」的首句 / 首个分句，
+   其余进课堂页看完整说明（2026-09-27 信噪比重设计：原 98 字含后段心理按摩）。
+   长度不再按字数硬切、只由 CSS 两行截断兜底：按 32 字切会把
+   「…（带时间戳、级别、进程号、消息体的那一…」切在半截、连括号都不闭合
+   （2026-10-08 用户侧视觉检查报出，390/1440 两档都可见）。 */
 const actionDesc = computed(() => {
   const desc = todayTask.value?.desc?.trim();
   if (!desc || desc === todayTask.value?.title) return '';
   const firstSentence = desc.split(/(?<=[。！？!?])/)[0] || desc;
   // 提示条在场时只留首个分句（纯操作说明，2026-09-27 去重规则）：
   // 提示条已承担「今天先做最小的那一步」的语义，卡片不再复述判断入口那半句
-  if (tipVisible.value) {
-    const clause = firstSentence.split(/[，；]/)[0];
-    return clause.length > 32 ? clause.slice(0, 32) + '…' : clause;
-  }
-  return firstSentence.length > 64 ? firstSentence.slice(0, 64) + '…' : firstSentence;
+  if (tipVisible.value) return firstSentence.split(/[，；]/)[0];
+  return firstSentence;
 });
 
 /* 带上 pathId 进课堂：评估页的「返回学习路径」靠它回详情页（缺省只能回列表），
@@ -1370,6 +1370,11 @@ onMounted(loadAll);
 }
 .action__title { margin: 0; font-size: 19px; line-height: 1.35; letter-spacing: -0.01em; }
 .action__desc { margin: 0; font-size: 14px; line-height: 1.7; color: var(--muted); max-width: 56ch; }
+/* 今日行动的说明可能很长（用户自己的任务描述），两行封顶：
+   只在这一处夹，状态类文案（生成中/失败/空态）不夹，别把「你也可以先去别的页面看看」切掉 */
+.action__desc--task {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 /* 行动卡提示行：原型 wf-action__note 纯文字行（图标 + 12.5px 蓝字），无底无框 */
 .action__reason {
   display: flex; align-items: flex-start; gap: 6px;
@@ -1448,7 +1453,10 @@ onMounted(loadAll);
 .badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; }
 .badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .badge--red { color: var(--red-ink); background: color-mix(in srgb, var(--wf-color-danger) 12%, transparent); }
-.path__foot { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; }
+/* 页脚吸底：.dash__grid-main 是 stretch，路径卡会被拉到与左侧行动卡等高；
+   内容都堆在顶部时卡底会留出大片空白（2026-10-08 视觉检查：约三分之一卡高）。
+   让分隔线+进度条沉到卡底，空白变成正常的卡脚留白。 */
+.path__foot { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; margin-top: auto; }
 .path__progress { height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .path__progress i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .path__nums { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }

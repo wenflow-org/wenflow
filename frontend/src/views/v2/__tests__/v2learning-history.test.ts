@@ -7,6 +7,9 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const getMock = vi.hoisted(() => vi.fn());
 
@@ -15,6 +18,30 @@ vi.mock('@/utils/api', () => ({ default: { get: getMock } }));
 vi.mock('@/components/user/CapabilityShell.vue', () => ({ default: { template: '<div><slot /></div>' } }));
 
 import V2LearningHistory from '../V2LearningHistory.vue';
+
+/* 下面这组是样式侧断言（摘要与动作链的可见性/热区），直接读 SFC 文本 */
+const sfcSource = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../V2LearningHistory.vue'), 'utf8');
+const stripCssComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
+/** 取选择器后的声明块。不匹配「选择器 + 空格 + {」：分组选择器会跨行、工作区是 CRLF，
+    换行符写死在断言里会假失败。 */
+function styleRule(selector: string): string {
+  const css = stripCssComments(sfcSource);
+  const start = css.indexOf(selector);
+  expect(start, `样式里没有 ${selector}`).toBeGreaterThan(-1);
+  let depth = 0;
+  for (let i = css.indexOf('{', start); i < css.length; i += 1) {
+    if (css[i] === '{') depth += 1;
+    else if (css[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return css.slice(start, i + 1);
+    }
+  }
+  throw new Error(`${selector} 声明块不配平`);
+}
+function styleDecl(rule: string, prop: string): string | null {
+  const m = new RegExp(`(?:^|[;{\\s])${prop}\\s*:\\s*([^;]+);`).exec(rule);
+  return m ? m[1].trim() : null;
+}
 
 const SESSIONS = [
   { id: 's1', taskId: 't1', taskTitle: '任务一', status: 'completed', startTime: '2026-09-14T09:00:00Z', durationMinutes: 20, wrapup: '{"summary":{}}' },
@@ -97,5 +124,26 @@ describe('V2LearningHistory', () => {
     ]);
     const labels = w.findAll('.history__day-head strong').map((n) => n.text());
     expect(labels).toEqual(['今天']);
+  });
+});
+
+/**
+ * 样式护栏（2026-10-08 用户侧视觉检查）：两条都是「内容在页面上够不够得着」的问题，
+ * 组件测试看不见，只能读样式锁住。
+ */
+describe('V2LearningHistory 样式护栏', () => {
+  it('摘要两行封顶、不再是单行 nowrap（实测内容 651–713px 挤在 210–236px 栏里）', () => {
+    const sub = styleRule('.history__item-sub');
+    expect(styleDecl(sub, '-webkit-line-clamp'), '改成单行就等于把摘要藏掉').toBe('2');
+    expect(styleDecl(sub, 'overflow')).toBe('hidden');
+    expect(styleDecl(sub, 'white-space'), 'nowrap 会让第二行永远不出现').toBeNull();
+    expect(styleDecl(sub, 'text-overflow')).toBeNull();
+  });
+
+  it('动作文字链左右等量外扩热区（「继续」实测宽仅 35px，够高不够宽）', () => {
+    const rule = styleRule('.history__resume');
+    expect(styleDecl(rule, 'padding')).toBe('0 6px');
+    expect(styleDecl(rule, 'margin')).toBe('0 -6px');
+    expect(styleDecl(rule, 'min-height'), '44px 高度地板不能被这次改动带走').toBe('44px');
   });
 });

@@ -124,7 +124,7 @@
                 <!-- 副行（原型 wf-hist__item-main span 882）：时长并入这一行，
                      聚合行多带一段「N 次会话」（类名被回归测试锁定） -->
                 <span class="history__item-meta">{{ metaLine(t) }}</span>
-                <span v-if="summaryOf(t)" class="history__item-sub">{{ summaryOf(t) }}</span>
+                <span v-if="summaryOf(t)" class="history__item-sub" :title="summaryOf(t)">{{ summaryOf(t) }}</span>
                 <!-- 明细：同日同任务的每次会话（时长/状态各自成行）。
                      动作只给「查看反馈」（每次会话各自的反馈页，目标不同）；
                      「继续/重新开始」由聚合行统一给（目标与明细相同的链接不重复渲染）。 -->
@@ -850,13 +850,18 @@ onMounted(async () => {
 .history__sub-time { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .history__sub-min { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
 
-/* 摘要（原型没有，Vue 侧保留）：12px faint，单行省略 */
+/* 摘要（原型没有，Vue 侧保留）：12px faint，两行封顶。
+   原为单行 nowrap+ellipsis，但摘要实测 651–713px 挤在 210–236px 的栏里，
+   触屏没有 hover、页面上也没有别的展开入口，剩下的内容用户全程看不到
+   （2026-10-08 用户侧视觉检查）。两行封顶 + 模板上的 :title 悬停兜底，
+   桌面与触屏各有一条出口。 */
 .history__item-sub {
   font-size: 12px;
   color: var(--faint);
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* 右侧列：状态纯文字 + 动作文字链，右对齐同列 */
@@ -871,14 +876,17 @@ onMounted(async () => {
 
 /* 动作改文字链（原型无动作行，但「继续/查看反馈」是本页主要出口，保留）：
    13px/700 蓝链。触控高 36→44（P2-35：实测 60.7×36px、桌面档 38.9px 同低于 44 地板；
-   基础样式抬齐而非只进移动媒体查询，字号不动、扩的是热区） */
+   基础样式抬齐而非只进移动媒体查询，字号不动、扩的是热区）。
+   左右各外扩 6px 内边距（配等量负外边距，视觉与布局都不动）：像「继续」这种两字链接
+   实测只有 35px 宽，只够高不够宽，横竖都得够才好点（2026-10-08 视觉检查）。 */
 .history__resume,
 .history__feedback,
 .history__restart {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding: 0;
+  padding: 0 6px;
+  margin: 0 -6px;
   border: 0;
   background: none;
   font-size: 13px;

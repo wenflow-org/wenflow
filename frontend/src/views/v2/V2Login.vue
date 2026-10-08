@@ -274,9 +274,11 @@ onMounted(() => {
 .field__pwd .field__input { padding-right: 42px; }
 .field__eye {
   position: absolute;
-  right: 5px; top: 50%;
+  right: 4px; top: 50%;
   transform: translateY(-50%);
-  width: 34px; height: 34px;
+  /* 34→36：低于仓库「可点元素不低于 36px」的硬线；登录/注册不在 mobile:spec 的
+     测量清单里，所以一直没被门禁抓到（2026-10-08 用户侧视觉检查报出）。 */
+  width: 36px; height: 36px;
   border: 0; border-radius: var(--mk-radius-md);
   background: transparent;
   color: var(--faint);
