@@ -106,7 +106,7 @@ import { computed, onMounted, ref } from 'vue'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import { subPage, closeSubPage, openSubPage } from './store'
+import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { errMsg } from './live'
 import { toast } from '@/utils/toast'
@@ -151,6 +151,8 @@ async function load() {
   try {
     const res = await adminVirtualLearnersApi.cardsDetail(profileId.value)
     d.value = (res.data?.data ?? res.data) as CardDetail
+    // 深链/刷新/从卡墙进入时 subPage 只有 id（面包屑退化成裸 ID），加载出名字后回填
+    if (d.value?.name) setSubPageLabel(d.value.name)
   } catch (e) {
     toast.error(errMsg(e) || '卡详情加载失败')
   } finally {
@@ -158,9 +160,13 @@ async function load() {
   }
 }
 
-/** 「到虚拟学习者」：切画像二级页（id=profileId，findProfileDetail 按 profile 主键查） */
+/** 「到虚拟学习者」：切画像二级页（id=profileId，findProfileDetail 按 profile 主键查）；
+    带 from 使画像页面包屑拼出「学习者卡 / 画像名」并可点面包屑回本卡（双向互链）。
+    from.label 用视图名而非卡名——卡与画像同一实体同名，用卡名会拼出「郑凯 / 郑凯」 */
 function goLearner() {
-  openSubPage('virtual', d.value?.profileId || '')
+  const pid = d.value?.profileId
+  if (!pid) return
+  openSubPage('virtual', pid, { from: { view: 'card', id: pid, label: '学习者卡' } })
 }
 
 const heroSubText = computed(() => {

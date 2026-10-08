@@ -343,8 +343,11 @@
                 <div v-if="isLive" class="mk-menu">
                   <!-- aria-expanded 按行判定（同审核 #168 判例）：menuOpen 是全局布尔，任一行开
                        菜单其余行都报 expanded=true；openMenu 才是「本行是否开」 -->
-                  <button type="button" class="mk-menu__btn" aria-label="更多操作（删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作（来源卡 / 删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：查看来源卡 / 删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                    <!-- 双向互链（卡库 ↔ 虚拟学习者）：卡与本人是同一条档案记录，卡 id 即本行 id -->
+                    <button type="button" class="mk-menu__item" role="menuitem" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="menuOpenSourceCard(s)">查看来源卡</button>
+                    <div class="mk-menu__sep" aria-hidden="true"></div>
                     <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" :disabled="busyId === s.id" title="删除该虚拟学习者（级联删除，不可恢复）" @click="menuRemove(s)">删除</button>
                   </div>
                 </div>
@@ -577,11 +580,17 @@ async function removeSample(s: Sample) {
 /** 正在删除的样本 id（ref 驱动 :disabled，computed map 出的普通对象上写 busy 不触发重渲染） */
 const busyId = ref<string | null>(null)
 
-/* ===== A1 行内 ⋯ 菜单：先关菜单再执行删除 ===== */
+/* ===== A1 行内 ⋯ 菜单：先关菜单再执行 ===== */
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 function menuRemove(s: Sample) {
   closeMenu()
   void removeSample(s)
+}
+/** 来源卡（双向互链）：卡与虚拟学习者同一条档案记录，卡库 id 即本表行 id；
+    跨页导航按本文件与画像页判例收进 ⋯ 菜单，不占行内按钮位。 */
+function menuOpenSourceCard(s: Sample) {
+  closeMenu()
+  openSubPage('card', s.id)
 }
 
 /* 窄屏（≤720）：10 列只保留「名称 / 进行中 / 操作」，次要列（勾选/倾向/故事池/会话/

@@ -538,4 +538,22 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(document.body.textContent).toContain('新建虚拟学习者');
     w.unmount();
   });
+
+  it('行 ⋯ 菜单含「查看来源卡」（卡库 ↔ 虚拟学习者双向互链；行内按钮位只留运行/测试）', async () => {
+    liveVirtuals.value = [makeVirtual(7)];
+    const w = await mountPage();
+    const row = w.find('.mk-card--fill tbody tr');
+    expect(row.exists()).toBe(true);
+    // 跨页导航不占行内按钮位（本文件判例：行内 = 运行 / 测试 / ⋯）
+    expect(row.findAll('.mk-actions > .mk-btn').map((b) => b.text())).toEqual(['运行', '测试']);
+    await row.find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    const itemOf = (text: string) => row.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === text);
+    expect(itemOf('查看来源卡'), '列表行缺少进卡库的入口').toBeTruthy();
+    expect(itemOf('删除')).toBeTruthy();
+    await itemOf('查看来源卡')!.trigger('click');
+    // 卡库 id 即本表行 id（同一条档案记录）；列表是一级页 → 无需 from
+    expect(openSubPageMock).toHaveBeenCalledWith('card', 'vl-7');
+    w.unmount();
+  });
 });

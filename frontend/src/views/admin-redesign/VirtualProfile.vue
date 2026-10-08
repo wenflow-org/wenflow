@@ -75,6 +75,10 @@
           <div v-if="lifeControls.length" class="mk-menu__sep" aria-hidden="true"></div>
           <button type="button" class="mk-menu__item" title="账号自动学习：批量自动运行该虚拟人的全部故事/课程（独立于单个故事运行）" @click="closeMenu(); quickLearnOpen = true">账号自动学习</button>
           <button type="button" class="mk-menu__item" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="closeMenu(); editOpen = true">画像与偏好</button>
+          <!-- 双向互链（卡库 ↔ 虚拟学习者）：卡与本人是同一条档案记录。带 from 使卡页
+               面包屑拼出「画像 / 卡」并支持点面包屑回本页（子页返回机制，不自造返回钮） -->
+          <div class="mk-menu__sep" aria-hidden="true"></div>
+          <button type="button" class="mk-menu__item" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="closeMenu(); goSourceCard()">查看来源卡</button>
           <!-- 跨页入口（#74）：该虚拟学习者绑定的真实账号 / 记忆与复习；userId 缺失时隐藏 -->
           <div v-if="d.userId" class="mk-menu__sep" aria-hidden="true"></div>
           <button v-if="d.userId" type="button" class="mk-menu__item" title="查看该虚拟学习者绑定的真实账号与学习者详情" @click="closeMenu(); goRealLearner()">查真实学习者详情</button>
@@ -2200,6 +2204,13 @@ function goRealLearner() {
 function goMemoryReview() {
   const uid = d.value?.userId
   if (uid) void tabRouter.push(memoryReviewUrl(uid))
+}
+
+/** 来源卡（双向互链）：卡库那张卡就是本页档案行，卡 id 即 subPage.id；带 from 供面包屑回跳。
+    from.label 用视图名而非人名——卡与画像同一实体同名，用人名会拼出「郑凯 / 郑凯」 */
+function goSourceCard() {
+  const pid = subPage.value?.id
+  if (pid) openSubPage('card', pid, { from: { view: 'virtual', id: pid, label: '画像' } })
 }
 
 const tabs = computed(() => {
