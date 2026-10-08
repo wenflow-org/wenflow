@@ -366,15 +366,26 @@
           <h3 class="mk-card__title">新用户注册</h3>
         </div>
         <div class="ac-body ac-policy__item">
-          <span class="ac-policy__desc">{{ registrationEnabled ? '任何人可注册' : '仅管理员创建' }}</span>
-          <button
-            type="button"
-            class="mk-seg__item ac-policy__toggle"
-            :disabled="registrationBusy"
-            @click="toggleRegistration"
-          >
-            {{ registrationBusy ? '切换中…' : registrationEnabled ? '关闭注册' : '开放注册' }}
-          </button>
+          <span class="ac-policy__desc">{{ registrationEnabled ? '当前：任何人可注册' : '当前：仅管理员创建' }}</span>
+          <!-- 与紧邻的「单 IP 每日注册配额」同一形态（mk-seg 两段 + 选中态）。
+               原先是「状态文字 + 一个裸的 .mk-seg__item」——借了分段器子项类却没有 .mk-seg
+               父容器，没有轨道底与选中态，渲染出来就是一行字（2026-10-08 反馈）。 -->
+          <div class="mk-seg ac-policy__seg" role="group" aria-label="新用户注册开关">
+            <button
+              type="button"
+              class="mk-seg__item"
+              :class="{ 'mk-seg__item--active': registrationEnabled }"
+              :disabled="registrationBusy"
+              @click="setRegistration(true)"
+            >开放注册</button>
+            <button
+              type="button"
+              class="mk-seg__item"
+              :class="{ 'mk-seg__item--active': !registrationEnabled }"
+              :disabled="registrationBusy"
+              @click="setRegistration(false)"
+            >关闭注册</button>
+          </div>
         </div>
       </section>
       <!-- 单 IP 每日注册配额（live；默认关，避免误伤同一内网/出口的正常注册） -->
@@ -1374,11 +1385,12 @@ function discardAll() {
   toast.info('已放弃未保存的变更')
 }
 
-/* 注册开关：高风险操作，二次确认 */
+/* 注册开关：高风险操作，二次确认。
+   分段器两段各自指定目标值（原为单按钮 toggle，按钮文案在「关闭注册/开放注册」间翻转）。 */
 const registrationBusy = ref(false)
-async function toggleRegistration() {
+async function setRegistration(target: boolean) {
   if (registrationBusy.value || registrationEnabled.value === null) return
-  const target = !registrationEnabled.value
+  if (target === registrationEnabled.value) return
   const ok = await askConfirm({
     title: target ? '开放注册' : '关闭注册',
     message: target
@@ -1474,8 +1486,8 @@ async function saveQuota(enabled: boolean, quota: number) {
 /* 满屏重排（2026-10-05）：mk-narrow 限宽列在宽屏下读作「一张卡悬着」（用户实测截图批注）。
    接入三列（与页首 KPI 三卡垂直对位：密钥→连接 / 清单→模型清单 / 路由→模型路由页签）、
    安全 2×2 策略卡宫格（标题行跨双列），≤1100px 回落单列 */
-.ac-conn-body { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
-.ac-sec-body { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.ac-conn-body { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
+.ac-sec-body { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
 .ac-sec-head { grid-column: 1 / -1; }
 /* 置顶告警（接入域读取失败）横跨全部列，不占卡位把卡片挤换行 */
 .ac-conn-body > .mk-alert { grid-column: 1 / -1; }
@@ -1593,7 +1605,7 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-policy__item { min-width: 0; }
 .ac-policy__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
 .ac-policy__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.55; display: block; }
-.ac-policy__toggle { width: fit-content; }
+.ac-policy__seg { width: fit-content; }
 .ac-policy__warn { font-size: var(--mk-fs-micro); color: var(--mk-red); font-weight: 600; }
 /* 访问来源模式：radio 单选卡片（复刻原型 index.html:1793-1798 .radio-row/.radio，
    原型 .radio[aria-checked="true"] = brand 描边 + brand 底 + brand 字 + 600 字重）。

@@ -9,7 +9,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import ApiConfig from '../ApiConfig.vue';
 import { dataSource } from '../store';
-import { liveApiConfig } from '../live';
+import { liveApiConfig, registrationEnabled } from '../live';
 
 const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSettingsMock, getReliabilityMock, getModelRegistryMock, testConnectionMock, updateConfigMock } = vi.hoisted(() => ({
   getConfigMock: vi.fn(),
@@ -284,6 +284,28 @@ describe('ApiConfig P1 修复批', () => {
     await nextTick();
     expect(wrapper.find('.ac-save').text()).toContain('连接 + 策略 · 2 组未保存变更');
     expect(wrapper.text()).toContain('保存策略');
+    wrapper.unmount();
+  });
+
+  it('新用户注册开关是分段器：曾裸用 .mk-seg__item（无 .mk-seg 父容器）致渲染成一行字', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    // 注册开关卡 v-if 要求 registrationEnabled !== null：它是 live.ts 的模块级 ref，
+    // 由异步 fetchRegistrationSetting 填充，这里直接播种，免得依赖加载时序
+    registrationEnabled.value = false;
+    const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '安全与访问');
+    const seg = wrapper.find('.mk-seg[aria-label="新用户注册开关"]');
+    expect(seg.exists()).toBe(true);
+    const items = seg.findAll('.mk-seg__item');
+    expect(items.map((b) => b.text())).toEqual(['开放注册', '关闭注册']);
+    // beforeEach 播种 registrationEnabled=false → 「关闭注册」段选中，与「单 IP 每日注册配额」同形
+    expect(items[1].classes()).toContain('mk-seg__item--active');
+    expect(items[0].classes()).not.toContain('mk-seg__item--active');
+    // 防回退：本页不允许出现脱离 .mk-seg 父容器的分段器子项（原 bug 就是裸用该类，
+    // 于是没有轨道底与选中态，看着像一行字）
+    for (const b of wrapper.findAll('.mk-seg__item')) {
+      expect(b.element.closest('.mk-seg')).toBeTruthy();
+    }
     wrapper.unmount();
   });
 
