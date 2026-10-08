@@ -6,6 +6,13 @@
     </div>
 
     <div class="completion-body">
+      <!-- 降级档透明化（TONIGHT-BROAD 立刻#4）：summary-only = 完课链只产出简要总结、
+           课堂表现评估未生成。学生看不出来才是问题：卡片其余区块照常渲染，但必须有一行
+           诚实文案说明「这不是一次完整结课产出」。判定字段 wrapup.status 由后端三条落库
+           路径（正常收束 / 超时兜底 / 收束兜底）统一携带并经 /end、/finalization 原样下发。 -->
+      <p v-if="wrapupStatus === 'summary-only'" class="summary-only-notice" role="status">
+        本次结课仅生成简要总结，课堂表现评估未生成。
+      </p>
       <div v-if="advisory?.shouldSuggest" class="completion-section advisory-section" :class="`advisory-section--${advisory.priority}`">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><MagicStick /></span>{{ advisory.ui.title }}</h4>
         <p class="section-content">{{ advisory.ui.body }}</p>
@@ -180,6 +187,8 @@ const emit = defineEmits<{ action: [action: 'end' | 'continue-task' | 'complete-
 const summary = computed(() => props.wrapup.summary);
 const evaluation = computed(() => props.wrapup.evaluation);
 const stateUpdate = computed(() => props.wrapup.stateUpdate || null);
+/* 'complete'（完整收束）| 'summary-only'（仅简要总结的降级档，见模板内说明） */
+const wrapupStatus = computed(() => props.wrapup.status);
 const advisory = computed(() => props.advisory || null);
 const busy = computed(() => props.busy === true);
 const isAdjustmentAction = (action: string) => ['confirm', 'reinforce', 'slow_down', 'resequence', 'accelerate'].includes(action);
@@ -352,6 +361,8 @@ const tagClass = (type: string) => ({
    color-mix(green 8%)：保留「完成=绿」的语义编码，去掉无意义的渐变。
    描边的 30% 绿边是状态识别的主要载体，保留不动。 */
 .completion-card { margin-top: 16px; padding: 20px; background: color-mix(in srgb, var(--green) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--green) 30%, var(--line)); border-radius: var(--mk-radius-xl); }
+/* summary-only 降级档提示：琥珀色系 = 「降级但可用」，与卡内 attribution-tag 同一套 amber token 口径 */
+.summary-only-notice { margin: 0 0 12px; padding: 8px 12px; font-size: 12px; line-height: 1.6; color: var(--amber-deep, var(--mk-amber)); background: color-mix(in srgb, var(--amber, #d97706) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--amber, #d97706) 30%, var(--line)); border-radius: 8px; }
 .completion-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
 .completion-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--green); }
 .completion-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; padding: 12px; background-color: color-mix(in srgb, var(--surface) 82%, transparent); border-radius: 8px; }

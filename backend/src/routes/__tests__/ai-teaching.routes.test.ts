@@ -233,7 +233,6 @@ describe('ai-teaching routes', () => {
     mockCoordinator.submitCheckpoint.mockResolvedValue({
       passed: true,
       feedback: '回答正确',
-      nextAction: 'continue',
     });
 
     const handler = getRouteHandler('/sessions/:sessionId/checkpoints/:checkpointId/submit');
@@ -251,7 +250,7 @@ describe('ai-teaching routes', () => {
     }, 4);
     expect(res.json).toHaveBeenCalledWith({
       success: true,
-      data: { passed: true, feedback: '回答正确', nextAction: 'continue' },
+      data: { passed: true, feedback: '回答正确' },
     });
   });
 
@@ -259,7 +258,6 @@ describe('ai-teaching routes', () => {
     mockCoordinator.submitCheckpoint.mockResolvedValue({
       passed: false,
       feedback: '已跳过这个检查点，我们继续。',
-      nextAction: 'continue',
     });
 
     const handler = getRouteHandler('/sessions/:sessionId/checkpoints/:checkpointId/submit');
@@ -277,7 +275,7 @@ describe('ai-teaching routes', () => {
     }, 4);
     expect(res.json).toHaveBeenCalledWith({
       success: true,
-      data: { passed: false, feedback: '已跳过这个检查点，我们继续。', nextAction: 'continue' },
+      data: { passed: false, feedback: '已跳过这个检查点，我们继续。' },
     });
   });
 

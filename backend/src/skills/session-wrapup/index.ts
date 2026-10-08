@@ -7,6 +7,8 @@ import { PromptCallSpec } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
 import { buildSkillOutcome, type SkillOutcome } from '../outcome';
+import { recordDegradation } from '../degradation-telemetry';
+import { findArithmeticMismatches } from '../../services/ai-teaching/teaching-arithmetic-guard';
 import {
   isSessionEvaluationTier,
   sessionEvaluationTierToValue,
@@ -378,6 +380,38 @@ export function stripUnsupportedRetentionClaims(
         session: clean(metric.session, RETENTION_FREE_NEUTRAL_TEXT),
         longTerm: clean(metric.longTerm, RETENTION_FREE_NEUTRAL_TEXT),
       },
+    },
+    removed,
+  };
+}
+
+/**
+ * 算式自检 · 确定性剥离（内容正确性第二刀，2026-10-08）：summary 的**文本要点**（数组项）
+ * 逐条跑 findArithmeticMismatches，命中即剔除该要点、其余保留。长文本字段（topicSummary 等）
+ * 不整段剔除——它们是 summary 契约的必填字段，整体丢弃破坏远大于保留；数组项剔除后仍为数组，
+ * 契约形状不变。与保持率剥离（stripUnsupportedRetentionClaims）相互独立、可叠加。
+ */
+export function stripArithmeticMismatchItems(
+  summary: SessionWrapupSummary,
+): { summary: SessionWrapupSummary; removed: string[] } {
+  const removed: string[] = [];
+  const cleanArray = (items: string[]): string[] =>
+    (Array.isArray(items) ? items : []).filter((item) => {
+      const hit = typeof item === 'string' && findArithmeticMismatches(item).length > 0;
+      if (hit) removed.push(item);
+      return !hit;
+    });
+  const keyTakeaways = cleanArray(summary.keyTakeaways);
+  const actionPlan = cleanArray(summary.actionPlan);
+  const strengths = cleanArray(summary.evaluationHighlights?.strengths ?? []);
+  const improvements = cleanArray(summary.evaluationHighlights?.improvements ?? []);
+  if (removed.length === 0) return { summary, removed };
+  return {
+    summary: {
+      ...summary,
+      keyTakeaways,
+      actionPlan,
+      evaluationHighlights: { strengths, improvements },
     },
     removed,
   };
@@ -784,8 +818,27 @@ export class SessionWrapupAgent {
       // P1-11 确定性剥离兜底：corrective retry 用尽后仍带无数据支撑的保持率断言时，
       // 按小句剥离（不落回 fallback，尽量保住其余内容），保证"编造量化记忆状态"不渲染给学生。
       let summary = rawSummary;
+      // 内容正确性第二刀：文本要点算式复算，命中要点剔除（其余保留），只打标不阻塞结课。
+      {
+        const arithmeticStripped = stripArithmeticMismatchItems(rawSummary);
+        if (arithmeticStripped.removed.length > 0) {
+          summary = arithmeticStripped.summary;
+          logger.warn('[SessionWrapupAgent] 剥离含算式错误的文本要点（内容正确性自检）', {
+            removedCount: arithmeticStripped.removed.length,
+            samples: arithmeticStripped.removed.slice(0, 3),
+          });
+          recordDegradation({
+            source: 'ai-teaching/session-wrapup',
+            faultCategory: 'MODEL_ARITHMETIC_MISMATCH',
+            severity: 'P2_DEGRADED',
+            impactedDimensions: ['sessionWrapup.summary.items'],
+            mitigationApplied: 'strip-mismatched-items',
+            rootCauseMessage: arithmeticStripped.removed.slice(0, 3).join(' ｜ '),
+          });
+        }
+      }
       if (!hasReviewHints(input)) {
-        const stripped = stripUnsupportedRetentionClaims(rawSummary, false);
+        const stripped = stripUnsupportedRetentionClaims(summary, false);
         if (stripped.removed.length > 0) {
           summary = stripped.summary;
           logger.warn('[SessionWrapupAgent] 剥离无数据支撑的记忆保持率断言（P1-11 输出保真）', {

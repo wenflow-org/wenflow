@@ -5,7 +5,7 @@
  *    且仍答错 → 强制清 pendingCheckpoint（打破同一题逐轮重发）；未到顶 → 保留 pendingCheckpoint 允许重答；
  *    答对 → 消费。
  *  - #15 简答判分样本在真实引擎链上贯通：代码裁决（含同义组「甲|乙」）→ checkpointHistory 留痕
- *    （passed/judgedBy=code）→ 提交回执 passed/nextAction 与裁决一致。
+ *    （passed/judgedBy=code）→ 提交回执 passed 与裁决一致。
  *
  * 只 mock 外部协作者（LLM/上下文/观测），检查点判定与消费决策走真实实现。
  */

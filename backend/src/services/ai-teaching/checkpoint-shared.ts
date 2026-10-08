@@ -39,6 +39,18 @@ export function normalizeConceptName(name: unknown): string {
 }
 
 /**
+ * 简答要点包含判定的归一口径（**唯一来源**）：小写、去空白与常见标点。
+ * 判分侧（teaching-checkpoint.ts#judgeCheckpointAnswer）与答案泄漏检测
+ * （teaching-turn/index.ts#filterAnswerLeakingKeywords）必须共用本函数——
+ * 两边口径一旦漂移，泄漏检测就会误杀合法要点或漏掉真泄漏。
+ */
+export function normalizeForKeywordMatch(text: unknown): string {
+  return String(text ?? '')
+    .toLowerCase()
+    .replace(/[\s，。、；：！？,.;:!?（）()【】[\]"'“”‘’—-]/g, '');
+}
+
+/**
  * 确定性概念键：`cpt_` + sha256(归一名) 前 16 位。无随机会话成分，纯函数可复算——
  * 同一概念名字跨课/跨会话得到同一键，失败证据因此跨课可归位（R2 判定#8 的另一半）。
  */

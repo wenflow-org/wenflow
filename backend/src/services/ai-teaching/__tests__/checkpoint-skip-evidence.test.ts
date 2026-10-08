@@ -98,7 +98,7 @@ describe('skip 路径 H1 留痕', () => {
 
     const result = await submitCheckpoint('sess-1', 'cp-1', { skip: true }, 5)
 
-    expect(result.nextAction).toBe('continue')
+    expect(result.passed).toBe(false)
     const committed = (mockCommitTurnState.mock.calls[0][2] as any).teachingState
     expect(committed.pendingCheckpoint).toBeUndefined()
     expect(committed.sessionArtifacts?.pendingCheckpoint).toBeUndefined()

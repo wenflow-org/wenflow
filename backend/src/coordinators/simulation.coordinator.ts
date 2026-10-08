@@ -281,7 +281,7 @@ export function normalizeProcessTeachingTurn(result: ProcessTeachingTurnResult):
 /**
  * 检查点提交结果 → 归一化结果。
  *
- * `CheckpointSubmitResult` 只暴露 `{ passed, feedback, hint, nextAction, revision }`，
+ * `CheckpointSubmitResult` 只暴露 `{ passed, feedback, hint, revision }`，
  * 没有聊天回合的 `isCompletion` / `autoEnded` / `analysis` 等字段（内部教学回合的这些信号
  * 未透出）。这里如实降为「未收束」并只带代码裁决诊断，绝不伪造教师收束信号——
  * 宁可不在本回合结束 task，也不让检查点提交误触发收束。
@@ -302,7 +302,6 @@ export function normalizeCheckpointSubmitTurn(result: CheckpointSubmitOutcome): 
     promptDebug: {
       checkpoint: {
         passed: result.passed === true,
-        nextAction: result.nextAction,
         hint: result.hint || null,
       }
     },
@@ -312,7 +311,6 @@ export function normalizeCheckpointSubmitTurn(result: CheckpointSubmitOutcome): 
       promptDebug: {
         checkpoint: {
           passed: result.passed === true,
-          nextAction: result.nextAction,
           hint: result.hint || null,
         }
       }

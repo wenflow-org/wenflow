@@ -378,7 +378,7 @@ export class PlatformUserAdapter {
       },
       diagnostic: {
         // 旁路裁判可读，绝不传入下一轮虚拟学习者 Observation。
-        checkpoint: { passed: result?.passed === true, nextAction: result?.nextAction || null }
+        checkpoint: { passed: result?.passed === true }
       }
     }
   }

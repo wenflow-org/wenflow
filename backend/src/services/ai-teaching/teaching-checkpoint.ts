@@ -21,6 +21,7 @@ import {
   CHECKPOINT_MAX_ATTEMPTS,
   CHECKPOINT_MIN_TURNS,
   CHECKPOINT_TRIGGER_MIN_UNDERSTANDING,
+  normalizeForKeywordMatch,
   parseSessionArtifacts,
   type CheckpointConceptAttribution,
 } from './checkpoint-shared';
@@ -86,7 +87,6 @@ export interface CheckpointSubmitResult {
   passed: boolean;
   feedback: string;
   hint?: string;
-  nextAction: 'continue' | 'review' | 'retry';
   revision: number;
 }
 
@@ -221,12 +221,9 @@ function normalizeIdSet(ids: unknown): Set<string> {
     .filter(Boolean));
 }
 
-/** 归一化待比对文本：小写、去空白与常见标点（简答要点的保守包含判定） */
-function normalizeForMatch(text: unknown): string {
-  return String(text ?? '')
-    .toLowerCase()
-    .replace(/[\s，。、；：！？,.;:!?（）()【】[\]"'“”‘’—-]/g, '');
-}
+// 简答要点包含判定的归一口径收敛到 checkpoint-shared（唯一来源）：
+// 泄漏检测（teaching-turn 出口）与本判分必须同口径，漂移即误杀/漏杀。
+const normalizeForMatch = normalizeForKeywordMatch;
 
 /**
  * **代码裁决**检查点作答（2026-09-17，审计 §7 P1-1「独立传感器」）。

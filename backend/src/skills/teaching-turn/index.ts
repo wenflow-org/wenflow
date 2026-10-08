@@ -8,6 +8,9 @@ import { evaluateByCriteria, evaluateByProfile } from '../../skills/acceptance-e
 import { getFallbackStrategies, normalizeStrategy, buildGuidancePrompt } from '../../skills/teaching-strategy-selector';
 import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 import { buildSkillOutcome, type SkillOutcome } from '../outcome';
+import { recordDegradation } from '../degradation-telemetry';
+import { findArithmeticMismatches, type ArithmeticMismatch } from '../../services/ai-teaching/teaching-arithmetic-guard';
+import { normalizeForKeywordMatch } from '../../services/ai-teaching/checkpoint-shared';
 
 const AGENT_ID = 'skill:teaching-turn';
 
@@ -679,6 +682,16 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
   const currentPointRemovedByFilter = normalizedCurrentPoint
     && normalizeConceptName(input.scenario.taskProfile?.coreConcept || input.scenario.taskProfile?.linkedConceptName || '')
     && !normalizedKnowledgePoints.some((point) => point.name === normalizedCurrentPoint);
+  // 与 return 里的 knowledge.currentPoint 同值：检查点概念归属（engine 侧）与泄漏豁免共用
+  const resolvedCurrentPoint = currentPointRemovedByFilter
+    ? normalizedKnowledgePoints[0]?.name || null
+    : normalizedCurrentPoint;
+  // 内容正确性第二刀（2026-10-08）：检查点出口的确定性筛查——题面/选项算式复算（带错题
+  // 放行的伤害大于本轮不出题，命中即整题丢弃）+ 简答答案键泄漏检测（照抄可见文本即可
+  // 骗过判分的要点剔除，全空降级为无标准键）。命中均打遥测，绝不阻塞课堂。
+  const screenedCheckpoint = typeof control.checkpoint?.question === 'string' && control.checkpoint.question.trim()
+    ? screenCheckpointOutput(control.checkpoint, reply, resolvedCurrentPoint)
+    : null;
   // 完成判定（2026-08-30 改为 LLM 语义判定）：
   // 此前用 acceptanceCriteria 关键词硬匹配（evaluateByCriteria/evaluateByProfile）拦截完成信号，
   // 对口语化/创作类任务（如视频剪辑 demo 的 diagnose/refine 任务）产生系统性假阴性，
@@ -735,9 +748,7 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
         : 'absent',
     },
     knowledge: {
-      currentPoint: currentPointRemovedByFilter
-        ? normalizedKnowledgePoints[0]?.name || null
-        : normalizedCurrentPoint,
+      currentPoint: resolvedCurrentPoint,
       points: normalizedKnowledgePoints.slice(0, 5),
       ...(normalizeConfirmCheck(knowledge.confirmCheck)),
     },
@@ -759,9 +770,7 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
             decision: taskCompletionEvidence.matched ? 'accepted' : 'rejected',
             reason: taskCompletionEvidence.reason,
           },
-      ...(typeof control.checkpoint?.question === 'string' && control.checkpoint.question.trim()
-        ? { checkpoint: normalizeCheckpoint(control.checkpoint) }
-        : {}),
+      ...(screenedCheckpoint ? { checkpoint: screenedCheckpoint } : {}),
       ...(normalizeWarmupOutcomes(control.warmupOutcomes) ?? {}),
       ...(normalizeSupplement(control.supplement) ?? {}),
     },
@@ -1051,6 +1060,143 @@ function normalizeCheckpoint(value: Record<string, any>): NonNullable<TeachingTu
     ...(expectedKeywords.length > 0 ? { expectedKeywords } : {}),
     ...(typeof value.hint === 'string' && value.hint.trim() ? { hint: value.hint.trim() } : {}),
   };
+}
+
+/* ─────────────── 检查点出口内容正确性筛查（第二刀，2026-10-08） ───────────────
+ * 宽域 A 轨 3/10 课 P0 的**可确定性检出**形态扩到检查点出口：
+ * ① 题面/选项算式复算（findArithmeticMismatches）——带错题放行会让学生长期记住错误算式，
+ *   伤害大于本轮回退为不出题（与「绝不阻塞课堂」纪律一致：丢检查点，课堂照常）；
+ * ② 简答答案键泄漏（filterAnswerLeakingKeywords）——判分口径（normalizeForKeywordMatch
+ *   + 同义组任一写法包含即命中）下，要点写法出现在作答前可见文本（题干/选项/hint/reply）里
+ *   = 照抄即可骗过代码裁决（全量测试报告 14/15 号结论的病根），该要点剔除；全空则降级为
+ *   无标准键（expectedKeywords 整字段省略 → judgeCheckpointAnswer 返回 null → model-reference）。
+ * 豁免：考点即概念名（每个写法归一后都等于当前教学点名）——「说出概念名」型简答的合法形态。
+ */
+
+/** 题面与每个选项文本的算式复算（纯函数，供单测）；命中清单按出现顺序返回 */
+export function findCheckpointArithmeticMismatches(
+  question: string,
+  options?: Array<{ id: string; text: string }>,
+): ArithmeticMismatch[] {
+  return [
+    ...findArithmeticMismatches(question),
+    ...(options ?? []).flatMap((option) => findArithmeticMismatches(option?.text)),
+  ];
+}
+
+export interface AnswerKeywordLeakScreen {
+  /** 泄漏剔除后仍保留的要点（原始写法，含「|」同义组） */
+  keptKeywords: string[];
+  /** 命中泄漏被剔除的要点（原始写法，供遥测/日志复核） */
+  leakedKeywords: string[];
+}
+
+/**
+ * 简答答案键泄漏检测（纯函数，供单测）。
+ *
+ * 口径与判分（judgeCheckpointAnswer）严格同源：要点按「|」拆同义组、normalizeForKeywordMatch
+ * 归一后做包含判定。**任一**写法出现在**任一**可见文本里 → 整个要点（同义组）剔除——
+ * 判分是「组内任一写法出现即满足」，学生照抄可见文本即可命中该组，留着等于白送。
+ */
+export function filterAnswerLeakingKeywords(params: {
+  expectedKeywords: string[];
+  /** 作答前学生可见文本：question / options 文本 / hint / 本轮 reply */
+  visibleTexts: Array<string | null | undefined>;
+  /** 检查点归属概念名（当前教学点名）：考点即概念名时豁免 */
+  conceptName?: string | null;
+}): AnswerKeywordLeakScreen {
+  const concept = normalizeForKeywordMatch(params.conceptName);
+  const haystacks = (params.visibleTexts || [])
+    .map((text) => normalizeForKeywordMatch(text))
+    .filter(Boolean);
+  const keptKeywords: string[] = [];
+  const leakedKeywords: string[] = [];
+  for (const keyword of params.expectedKeywords || []) {
+    const raw = String(keyword ?? '').trim();
+    if (!raw) continue;
+    const alternatives = raw
+      .split(/[|｜]/)
+      .map(normalizeForKeywordMatch)
+      .filter(Boolean);
+    if (alternatives.length === 0) {
+      keptKeywords.push(raw);
+      continue;
+    }
+    // 概念名豁免（严格版）：每个写法都必须就是概念名本身——「简答要求说出概念名」的
+    // 合法形态，题干/回复提到被考查的概念属正当行为，不得按泄漏误杀。
+    if (concept && alternatives.every((alt) => alt === concept)) {
+      keptKeywords.push(raw);
+      continue;
+    }
+    const leaked = haystacks.some((haystack) => alternatives.some((alt) => haystack.includes(alt)));
+    (leaked ? leakedKeywords : keptKeywords).push(raw);
+  }
+  return { keptKeywords, leakedKeywords };
+}
+
+type NormalizedCheckpoint = NonNullable<TeachingTurnOutput['control']['checkpoint']>;
+
+/**
+ * 检查点出口筛查接线（normalizeOutput 调用；遥测只打标、不阻塞——最坏情况本轮回退为不出题）。
+ * 返回 null = 丢弃检查点（本轮不出题）。
+ */
+export function screenCheckpointOutput(
+  value: Record<string, any>,
+  reply: string,
+  conceptName?: string | null,
+): NormalizedCheckpoint | null {
+  const checkpoint = normalizeCheckpoint(value);
+  const arithmetic = findCheckpointArithmeticMismatches(checkpoint.question, checkpoint.options);
+  if (arithmetic.length > 0) {
+    logger.warn('[TeachingTurnAgent] 检查点题面/选项算式复算不匹配，丢弃检查点（本轮回退为不出题）', {
+      mismatches: arithmetic.map((m) => m.expr),
+    });
+    recordDegradation({
+      source: 'ai-teaching/teaching-turn-checkpoint',
+      faultCategory: 'MODEL_ARITHMETIC_MISMATCH',
+      severity: 'P2_DEGRADED',
+      impactedDimensions: ['checkpoint.question', 'checkpoint.options'],
+      mitigationApplied: 'drop-checkpoint-skip-question-this-turn',
+      rootCauseMessage: arithmetic.map((m) => m.expr).join('; '),
+    });
+    return null;
+  }
+  const keywords = checkpoint.expectedKeywords;
+  if (keywords && keywords.length > 0) {
+    const { keptKeywords, leakedKeywords } = filterAnswerLeakingKeywords({
+      expectedKeywords: keywords,
+      visibleTexts: [
+        checkpoint.question,
+        ...(checkpoint.options ?? []).map((option) => option.text),
+        checkpoint.hint,
+        reply,
+      ],
+      conceptName,
+    });
+    if (leakedKeywords.length > 0) {
+      logger.warn('[TeachingTurnAgent] 简答答案键要点泄漏到学生可见文本，已剔除', {
+        leaked: leakedKeywords,
+        kept: keptKeywords,
+      });
+      recordDegradation({
+        source: 'ai-teaching/teaching-turn-checkpoint',
+        faultCategory: 'MODEL_ANSWER_LEAK',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['checkpoint.expectedKeywords'],
+        mitigationApplied: keptKeywords.length > 0 ? 'strip-leaked-keywords' : 'drop-answer-key-model-reference',
+        rootCauseMessage: leakedKeywords.join('; '),
+      });
+      if (keptKeywords.length === 0) {
+        // 全空 → 无标准键形态：expectedKeywords 整字段省略（judgeCheckpointAnswer 对
+        // 无键返回 null → 调用方标 judgedBy='model-reference'，不冒充独立传感器）
+        const { expectedKeywords: _dropped, ...withoutKey } = checkpoint;
+        void _dropped;
+        return withoutKey;
+      }
+      return { ...checkpoint, expectedKeywords: keptKeywords };
+    }
+  }
+  return checkpoint;
 }
 
 /** 引文逐字核对用的空白归一（与 `material-refs.ts#isQuoteVerbatim` 同口径）。 */

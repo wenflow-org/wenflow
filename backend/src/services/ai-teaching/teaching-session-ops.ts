@@ -158,7 +158,6 @@ export async function submitCheckpoint(
       return {
         passed: false,
         feedback: '已跳过这个检查点，我们继续。',
-        nextAction: 'continue',
         revision: (operationClaim.session.revision ?? 0) + 1,
       };
     }
@@ -205,7 +204,6 @@ export async function submitCheckpoint(
       passed,
       feedback: turn.aiResponse,
       ...(hint ? { hint } : {}),
-      nextAction: passed ? 'continue' : 'review',
       revision: turn.revision,
     };
   } catch (error) {

@@ -161,7 +161,6 @@ describe('normalizeCheckpointSubmitTurn（结果映射）', () => {
       passed: true,
       feedback: '很好，理解正确。',
       hint: undefined,
-      nextAction: 'continue',
       revision: 12
     })
     expect(normalized).toMatchObject({
@@ -197,7 +196,6 @@ describe('SimulationOrchestrator.runTeachingTurn 检查点消费', () => {
     mockSubmitCheckpoint.mockResolvedValue({
       passed: true,
       feedback: '答对了',
-      nextAction: 'continue',
       revision: 42
     })
 

@@ -25,6 +25,8 @@ export type DegradationFaultCategory =
   | 'DB_READ_FAILED'
   | 'PARSE_FAILED'
   | 'MODEL_ARITHMETIC_MISMATCH'
+  /** 模型把答案键（expectedKeywords 要点）写进了学生可见文本（题干/选项/hint/reply）——照抄即可骗过判分 */
+  | 'MODEL_ANSWER_LEAK'
   | 'UNKNOWN';
 
 export type DegradationSeverity = 'P1_CRITICAL' | 'P2_DEGRADED' | 'P3_NOTICE';

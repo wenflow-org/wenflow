@@ -70,7 +70,6 @@ export interface CheckpointSubmitResult {
   passed: boolean;
   feedback: string;
   hint?: string;
-  nextAction: 'continue' | 'review';
   revision: number;
 }
 
