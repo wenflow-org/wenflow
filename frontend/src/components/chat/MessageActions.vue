@@ -5,6 +5,11 @@
  * Positioned as an inline row BELOW the bubble（2026-09-27 用户反馈）：
  * 原绝对定位在气泡右上角，浮层压住正文末行；改为文档流内的独立小行，
  * hover 时在气泡下方展开，永不遮挡消息内容。
+ *
+ * 2026-10-08：四枚按钮统一为纯图标（「重新生成」「复制」的文字去掉）。
+ * 页脚是「meta 左 / 操作条右」同行布局，窄屏消息列只有 ~266px，带文字时四枚
+ * 合计 224px + nowrap 的「问流导师 · 时间」，把时间压成 51px 宽并与按钮叠在一起。
+ * 去文字后合计 ~166px，一行放得下；语义改由 title（悬停提示）+ aria-label（读屏）承载。
  */
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 
@@ -87,20 +92,20 @@ function handleFeedback(thumbsUp: boolean) {
         type="button"
         class="msg-actions__btn"
         title="重新生成"
+        aria-label="重新生成"
         @click.stop="emit('regenerate')"
       >
         <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-        <span>重新生成</span>
       </button>
       <button
         type="button"
         class="msg-actions__btn"
         :title="copied ? '已复制' : '复制'"
+        :aria-label="copied ? '已复制' : '复制'"
         @click.stop="handleCopy"
       >
         <svg v-if="!copied" viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
         <svg v-else viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
-        <span>{{ copied ? '已复制' : '复制' }}</span>
       </button>
     </div>
 </template>
@@ -169,6 +174,9 @@ function handleFeedback(thumbsUp: boolean) {
     position: static;
     justify-content: flex-end;
     margin-top: 4px;
+    /* 纯图标后按钮之间不再需要缝：40px 方盒里图标居中，横向已留足视觉间距。
+       这一行要和「问流导师 · 时间」同处 266px（375 档）的页脚行，省下的每一像素都算数。 */
+    gap: 0;
     box-shadow: none;
     background: transparent;
     backdrop-filter: none;
@@ -176,7 +184,9 @@ function handleFeedback(thumbsUp: boolean) {
   }
   /* EG6/EG20（2026-10-05 复测）：触屏下消息操作按钮实测 29×26（图标钮）/ 81×26（文字钮），
      低于移动端触控目标下限（EG20 <36 / EG6 <40）。触屏档统一抬到 40×40 且图标居中；
-     桌面 hover 档不受影响（信息密度仍按原 4px 8px 小钮）。 */
+     桌面 hover 档不受影响（信息密度仍按原 4px 8px 小钮）。
+     2026-10-08：四枚按钮去掉文字后合计 4×40=160px，与元信息同行放得下（不再需要拆两行），
+     40×40 的触控尺寸保持不变。 */
   .msg-actions__btn {
     min-width: 40px;
     min-height: 40px;

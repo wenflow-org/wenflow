@@ -64,4 +64,26 @@ describe('MessageActions 位置口径', () => {
     expect(labels.some((l) => l.includes('复制'))).toBe(true);
     w.unmount();
   });
+
+  it('四枚按钮都是纯图标：不再有可见文字（「重新生成」「复制」的字样已去掉）', () => {
+    const w = mount(MessageActions, { props: { show: true } });
+    expect(w.findAll('button span'), '按钮里又出现了可见文字').toHaveLength(0);
+    // 去掉可见文字后，语义必须仍由 title（悬停提示）+ aria-label（读屏）承载
+    for (const b of w.findAll('button')) {
+      expect(b.attributes('title'), '按钮缺 title').toBeTruthy();
+      expect(b.attributes('aria-label'), '按钮缺 aria-label').toBeTruthy();
+    }
+    w.unmount();
+  });
+
+  it('触屏档按钮仍走 36px 触控下限，行内不再留按钮间隙（一行放得下的前提）', () => {
+    const touchBlock = styleSource.slice(styleSource.indexOf('@media (hover: none)'));
+    const actionsRule = touchBlock.slice(touchBlock.indexOf('.msg-actions {'), touchBlock.indexOf('}', touchBlock.indexOf('.msg-actions {')));
+    expect(actionsRule, '触屏行又留了按钮间隙').toContain('gap: 0');
+    const btnRule = touchBlock.slice(touchBlock.indexOf('.msg-actions__btn {'), touchBlock.indexOf('}', touchBlock.indexOf('.msg-actions__btn {')));
+    const minWidth = Number(/min-width:\s*(\d+)px/.exec(btnRule)?.[1]);
+    const minHeight = Number(/min-height:\s*(\d+)px/.exec(btnRule)?.[1]);
+    expect(minWidth, '触屏按钮宽度低于 36px 触控下限').toBeGreaterThanOrEqual(36);
+    expect(minHeight, '触屏按钮高度低于 36px 触控下限').toBeGreaterThanOrEqual(36);
+  });
 });
