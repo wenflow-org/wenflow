@@ -77,6 +77,8 @@ jobs:
         working-directory: backend
       - name: Deploy database migrations
         run: npm --prefix backend run prisma:migrate:deploy:all
+      - name: Verify Prisma migrations replay clean (schema/migration drift check)
+        run: npm --prefix backend run prisma:migrate:verify-clean
       - name: Run backend and frontend tests with coverage
         run: npm run check:test
       - name: Upload coverage reports
