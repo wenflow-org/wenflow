@@ -401,9 +401,11 @@ async function runLesson(n) {
     rec.finalizationRecheck = {
       status: f.status,
       taskCompletion: ff.finalization?.taskCompletion || ff.taskCompletion || null,
-      topicSummary: String(ff.summary?.topicSummary || '').slice(0, 300),
-      practiceAdvice: String(ff.summary?.practiceAdvice || '').slice(0, 300),
-      evaluation: ff.evaluation ? { ktl: ff.evaluation.sessionKtl, lss: ff.evaluation.sessionLss, lf: ff.evaluation.sessionLf, tiers: ff.evaluation.metricTiers || null } : null,
+      // 契约：wrapup 挂在 data.wrapup 下（getStatus 无顶层 summary/evaluation）——
+      // 此前读 ff.summary.* 恒空，是被两轮复核证伪的「回读端点返回空」假缺陷的根源
+      topicSummary: String(ff.wrapup?.summary?.topicSummary || '').slice(0, 300),
+      practiceAdvice: String(ff.wrapup?.summary?.practiceAdvice || '').slice(0, 300),
+      evaluation: ff.wrapup?.evaluation ? { ktl: ff.wrapup.evaluation.sessionKtl, lss: ff.wrapup.evaluation.sessionLss, lf: ff.wrapup.evaluation.sessionLf, tiers: ff.wrapup.evaluation.metricTiers || null } : null,
     };
   } catch (e) { rec.finalizationRecheck = { error: String(e).slice(0, 160) }; }
 
