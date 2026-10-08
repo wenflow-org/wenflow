@@ -1433,7 +1433,15 @@ onMounted(loadAll);
 }
 .action__control:hover { border-color: color-mix(in srgb, var(--blue) 50%, transparent); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .action__control > svg { color: var(--amber-ink); flex: 0 0 auto; }
-.action__control-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 两行截断（2026-10-08 用户侧走查）：单行时 390 档这项只有 239px，「去处理」占掉右侧后
+   路径名被切在中间（「AI 建议调整「PyTorch 图像分类论…」」）—— 路径名恰是这句话的信息核心。
+   按「宁可多占一行，也不要把文案压到读不全」的口径放宽到两行，行高随内容长。 */
+.action__control-text {
+  flex: 1; min-width: 0; overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
 .action__control b { color: var(--blue-deep); font-weight: 800; white-space: nowrap; }
 .action__today-bar { flex: 1; min-width: 0; height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .action__today-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }

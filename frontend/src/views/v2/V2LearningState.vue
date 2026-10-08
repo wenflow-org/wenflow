@@ -1779,9 +1779,14 @@ function loadGuidance() {
 /* y 轴刻度（原型 wf-trend__yaxis）：贴左侧 AXIS_W 留白（46/760 ≈ 6.05%），
    与 5 条网格线同位、右对齐，正好落在 grid 的 x1=plotX0 之外的空白里 */
 .ff-yaxis { position: absolute; left: 0; top: 0; bottom: 0; width: 6.05%; pointer-events: none; }
+/* nowrap 必须写（2026-10-08 用户侧走查）：6.05% 在 1440 档约 45px，够放「-85」；窄屏图表只有
+   329px，该列仅 20px（减 right: 6px 后 14px），三字刻度会被折成竖排数字堆（390 实测刻度框
+   14×24~36px），整列读不出来。nowrap 后刻度向左伸进卡片左内边距（band__body 16px）里，
+   不再折行；这是刻度列宽不动、只让它借左侧留白的最省改法。 */
 .ff-yaxis span {
   position: absolute; right: 6px; transform: translateY(-50%);
   font-size: 12px; line-height: 1; color: var(--faint); font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 /* 阈值区间标签（原型 wf-trend__zones / __zonetag）：贴右缘、自带 surface 底压住曲线 */
 .ff-zones { position: absolute; inset: 0; pointer-events: none; }

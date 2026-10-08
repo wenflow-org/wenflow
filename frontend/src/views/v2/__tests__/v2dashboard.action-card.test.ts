@@ -69,4 +69,14 @@ describe('学习台：说明文字与路径卡底边', () => {
   it('路径卡页脚吸底（等高拉伸后空白不再堆在卡底）', () => {
     expect(decl(ruleAfter('.path__foot'), 'margin-top')).toBe('auto');
   });
+
+  it('调控建议标题放宽到两行（单行会把路径名切在中间）', () => {
+    // 390 档这项只有 239px，「去处理」占掉右侧后路径名被切在中间 —— 用户口径是不压窄文案
+    const text = ruleAfter('.action__control-text');
+    expect(decl(text, '-webkit-line-clamp')).toBe('2');
+    expect(decl(text, 'overflow')).toBe('hidden');
+    expect(decl(text, 'white-space'), '还留着 nowrap，两行 clamp 不生效').toBeNull();
+    // 「去处理」自己不折行，否则它会先断成两行
+    expect(decl(ruleAfter('.action__control b'), 'white-space')).toBe('nowrap');
+  });
 });

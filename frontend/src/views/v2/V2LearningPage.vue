@@ -2781,7 +2781,18 @@ onBeforeUnmount(() => {
     padding: 8px 14px;
   }
   .learn__title { grid-column: 1; grid-row: 1; min-width: 0; }
-  .learn__title strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* 窄屏标题放宽到两行（2026-10-08 用户侧走查）：单行截断下 24 字任务名实测需要 390px、
+     只分到 178px，页头只能读到「解剖自己做过的那个功…」，而页头没有别的完整标题入口。
+     用户口径是「宁可多占一行，也不要把文案压到读不全」，故两行后仍读不完才截断。
+     代价是头部 61→80px（约 19px 对话区），换来任务名可读。 */
+  .learn__title strong {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.35;
+  }
   .learn__title small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* 知识点浮窗仅绝对定位，不占用头部/消息区布局高度；窄屏保持视口内滚动。 */
   .kp { width: min(380px, calc(100vw - 28px)); max-height: min(72dvh, 620px); }
