@@ -77,6 +77,8 @@ import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
 import type { TeachingSessionMessage } from './TeachingSessionRepository';
 import type { TeachingTurnOutput } from '../../skills/teaching-turn';
+import { findArithmeticMismatches, describeMismatchesForRepair } from './teaching-arithmetic-guard';
+import { recordDegradation } from '../../skills/degradation-telemetry';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
 import {
   AI_TEACHING_AGENT_ID,
@@ -100,6 +102,13 @@ const SOFT_COMPLETION_PROGRESS_FLOOR = 60;
  * 太紧则单点轻量任务等不到排除。4 轮 = 教师有充足机会触碰范围内任一点。
  */
 export const COMPLETION_SCOPE_OUT_MIN_TURNS = 4;
+
+/**
+ * 算式修复重调预算（2026-10-08 内容正确性专项）：主回合 300s 硬帽内，
+ * 已耗时 <150s 才允许重调，重调自身 90s 超时——总耗时恒不破 300s 帽。
+ */
+const ARITHMETIC_REPAIR_BUDGET_MS = 150_000;
+const ARITHMETIC_REPAIR_TIMEOUT_MS = 90_000;
 
 /**
  * 收束判定的「本课范围」视图（纯函数，供单测）。
@@ -360,6 +369,7 @@ export async function processStudentMessage(
   // 超时走 releaseOperation + 客户端重试路径（revision 未递增，重试安全）。
   // 阈值对齐 platform_settings.aiReliability.defaultRequestTimeoutMs（300s）：
   // 旧值 90s 会误杀正常回合——教学回合含 2 次 LLM 调用（模拟器 + teaching-turn），上游慢时单次即可超 90s。
+  const turnStartedAt = Date.now();
   const turnResult = await withTimeout(
     executeSkill(teachingTurnAgentDefinition, turnInput, {
       contextEnvelope: {
@@ -376,8 +386,60 @@ export async function processStudentMessage(
   }
 
   const turnRuntimeEnvelope = turnResult?.runtimeEnvelope || null;
-  const rawTeachingOutput = extractTeachingOutput(turnResult);
+  let rawTeachingOutput = extractTeachingOutput(turnResult);
   const promptDebug = extractTeachingPromptDebug(turnResult);
+  // 内容正确性第一刀（2026-10-08，宽域 A 轨 3/10 课 P0 的可检出形态）：回复里的算式
+  // 确定性复算，命中即带修复指令重调一次（前缀 KV 缓存使重调远便宜于全新回合）；
+  // 复检仍错→只打遥测放行，绝不阻塞课堂。repairInstruction 的模型侧承接条款见
+  // teaching-turn.yaml「算式正确性」条。
+  {
+    const mismatches = findArithmeticMismatches(rawTeachingOutput?.reply);
+    if (mismatches.length > 0) {
+      logger.warn('[AITeaching] 回复算式复算不匹配，触发修复重调', {
+        userId: context.userId,
+        taskId: context.taskId,
+        mismatches: mismatches.map((m) => m.expr),
+      });
+      let repairedOutput: TeachingTurnOutput | null = null;
+      if (Date.now() - turnStartedAt < ARITHMETIC_REPAIR_BUDGET_MS) {
+        try {
+          // 照 supplementaryMaterial 的既有注入风格：scenario 上挂修复指令（模板条款「若输入
+          // scenario.repairInstruction 存在」承接），重调共享前缀 → KV 缓存命中率高。
+          (turnInput.scenario as Record<string, unknown>).repairInstruction = `你上一条回复中的算式被确定性复算判定有误：${describeMismatchesForRepair(mismatches)}。本轮必须输出修正后的完整回复：只修正上述算式及受其影响的数值与结论表述，其余内容（知识看板、检查点、control 字段、语气、篇幅）原样保留；不得缩短回复或趁机改写无关内容；绝不可向学生提及任何校验或系统检查。`;
+          const repairResult = await withTimeout(
+            executeSkill(teachingTurnAgentDefinition, turnInput, {
+              contextEnvelope: {
+                schemaVersion: 'context-envelope/v1',
+                principal: { userId: session.userId },
+                session: { sessionId: session.id, taskId: session.taskId },
+              },
+            }),
+            ARITHMETIC_REPAIR_TIMEOUT_MS,
+            'ARITHMETIC_REPAIR_TIMEOUT: 算式修复重调超时'
+          );
+          if (repairResult.success) {
+            const candidate = extractTeachingOutput(repairResult);
+            if (candidate?.reply && findArithmeticMismatches(candidate.reply).length === 0) {
+              repairedOutput = candidate;
+            }
+          }
+        } catch (error) {
+          logger.warn('[AITeaching] 算式修复重调失败，按原回复放行', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      recordDegradation({
+        source: 'ai-teaching/teaching-turn-engine',
+        faultCategory: 'MODEL_ARITHMETIC_MISMATCH',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['teachingReply.arithmetic', `task:${context.taskId}`],
+        mitigationApplied: repairedOutput ? 'retry-corrective-instruction' : 'flagged-only',
+        rootCauseMessage: mismatches.map((m) => m.expr).join('; '),
+      });
+      if (repairedOutput) rawTeachingOutput = repairedOutput;
+    }
+  }
   // 课内温故结果回收：**首选**模型的结构化结果 control.warmupOutcomes（2026-09-17 起），
   // 兼容它仍按「计划里的原名字」写进 knowledge.points 的老行为。
   // 必须在 reconcileTeachingKnowledgeState 的 slice(0,5) 截断**之前**从原始输出里摘——

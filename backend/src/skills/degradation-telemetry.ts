@@ -19,6 +19,7 @@ export type DegradationFaultCategory =
   | 'UPSTREAM_EMPTY'
   | 'DB_READ_FAILED'
   | 'PARSE_FAILED'
+  | 'MODEL_ARITHMETIC_MISMATCH'
   | 'UNKNOWN';
 
 export type DegradationSeverity = 'P1_CRITICAL' | 'P2_DEGRADED' | 'P3_NOTICE';
