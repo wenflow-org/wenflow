@@ -755,6 +755,10 @@ export class LearnerKnowledgeMemoryService {
       learningPathId: path.id,
       pathTitle: path.title || path.name || '未命名路径',
       pathSummary: null,
+      // P1.6 落后触发器的时间判据输入：外部截止（L1 硬锚）与路径起点（时间进度分母）。
+      // 无 deadline 的路径 deadline=null，判据整体不启用（行为与原先一致）。
+      deadline: path.deadline ? new Date(path.deadline).toISOString() : null,
+      startedAt: path.createdAt ? new Date(path.createdAt).toISOString() : null,
       progress: {
         totalMilestones: path.milestones.length,
         completedMilestones: milestoneProgress.filter((milestone) => milestone.completedTasks === milestone.totalTasks && milestone.totalTasks > 0).length,

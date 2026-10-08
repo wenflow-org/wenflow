@@ -15,6 +15,7 @@ import { collectBriefsWithDeadline } from '../materials/material-brief.service';
 const GOAL_BRIEF_DEADLINE_MS = 20_000;
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
+import { normalizeDeadlineDate } from './deadline-date';
 import { derivePlannedOutline, type LearnerLoadProfile } from './path-planning-hints';
 import {
   normalizeLearnerLoadProfile,
@@ -73,6 +74,8 @@ interface GoalNormalizedStateV1 {
   constraints: {
     availableTime: string | null;
     deadlineText: string | null;
+    /** P0.1（TIME-TRUST-SCHEME-20261001）：模型解析的外部截止绝对日期（YYYY-MM-DD），可空 */
+    deadlineDate: string | null;
   };
   successCriteria: {
     observableResult: string | null;
@@ -103,6 +106,7 @@ function buildGoalNormalizedState(data: any): GoalNormalizedStateV1 {
     constraints: {
       availableTime: typeof understanding?.background?.available_time === 'string' ? understanding.background.available_time : null,
       deadlineText: typeof understanding?.deadline_text === 'string' ? understanding.deadline_text : null,
+      deadlineDate: normalizeDeadlineDate(understanding?.deadline_date),
     },
     successCriteria: {
       observableResult: typeof understanding?.success_criteria?.observable_result === 'string'

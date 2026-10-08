@@ -18,6 +18,7 @@ import {
 } from '../services/agentConfig.service';
 import type { GoalPathTimeBudgetCadence, GoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
 import { normalizeSchoolAnchorShape } from '../services/learning/goal-path-visible-summary';
+import { normalizeDeadlineDate } from '../services/learning/deadline-date';
 import type { MaterialNeed, MaterialPackResult } from '../skills/material-collector/types';
 
 const COORDINATOR_ID = 'path-agent';
@@ -137,6 +138,8 @@ interface NormalizedPathInputV1 {
     timePerSession: string | null;
     timeHorizon: string | null;
     deadlineText: string | null;
+    /** 绝对日期（P0.1）：goal 模型解析出的外部截止锚（YYYY-MM-DD），可空 */
+    deadlineDate: string | null;
     /**
      * 外部资料采集结果（material-collector Material Pack）。goal 未声明 needsMaterial
      * 或采集失败/未开启时为缺失/not_found 条目，**不阻塞**路径生成。path-planning 读
@@ -326,6 +329,8 @@ class PathCoordinator {
         timePerSession: str('understanding.available_resources.time_per_session', visibleSummary?.resources?.timePerSession),
         timeHorizon: str('understanding.available_resources.time_horizon', visibleSummary?.resources?.timeHorizon),
         deadlineText: str('understanding.deadline_text', visibleSummary?.resources?.deadlineText),
+        // P0.1 绝对日期：模型解析的 deadline_date 优先（handoff 配置式抽取在前，兜底 visibleSummary）
+        deadlineDate: normalizeDeadlineDate(pick('understanding.deadline_date') ?? visibleSummary?.resources?.deadlineDate),
       },
       successCriteria: {
         observableResult: str('understanding.success_criteria.observable_result', visibleSummary?.successCriteria?.observableResult),
@@ -692,12 +697,21 @@ class PathCoordinator {
     let deadline: Date | undefined;
     let deadlineText: string | undefined;
 
+    // P0.1 绝对日期（TIME-TRUST-SCHEME-20261001）：goal 对话模型解析出的外部截止锚
+    // （understanding.deadline_date，YYYY-MM-DD）是 L1 硬锚，优先采用——「三个月后考试」
+    // 由此落成确定日期而不是相对推算。下方 deadlineTextSources + 相对表述正则推算
+    // 保留为「无模型日期时的兜底」，行为与原先一致。
+    const modelDeadlineDate = normalizeDeadlineDate(visibleSummary?.resources?.deadlineDate);
+    if (modelDeadlineDate) {
+      deadline = new Date(`${modelDeadlineDate}T00:00:00`);
+    }
+
     if (deadlineRaw instanceof Date) {
-      deadline = deadlineRaw;
+      deadline = deadline ?? deadlineRaw;
     } else if (typeof deadlineRaw === 'string' && deadlineRaw.trim()) {
       if (/^\d{4}-\d{2}-\d{2}/.test(deadlineRaw)) {
-        deadline = new Date(deadlineRaw);
-      } else {
+        deadline = deadline ?? new Date(deadlineRaw);
+      } else if (!deadline) {
         const monthsMatch = deadlineRaw.match(/(\d+)\s*个月/);
         const weeksMatch = deadlineRaw.match(/(\d+)\s*周/);
         if (monthsMatch) {

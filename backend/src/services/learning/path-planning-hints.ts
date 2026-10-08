@@ -8,6 +8,7 @@
 
 import { paceSignalRangeConfig, timeHorizonPaceMapping, tightBudgetConfig } from '../../config/pedagogy.config';
 import { normalizePathDifficulty } from './path-difficulty';
+import { normalizeDeadlineDate } from './deadline-date';
 
 export type PlanningPaceSignal = 'compact' | 'standard' | 'extended';
 export type TimeBudgetCadence = 'per_day' | 'per_week' | 'per_session' | 'flexible' | 'unclear';
@@ -1007,6 +1008,9 @@ export function buildFramedNormalizedInput(input: any): any {
       timePerSession,
       timeHorizon,
       deadlineText: normalizeString(resources.deadlineText),
+      // P0.1 绝对日期（TIME-TRUST-SCHEME-20261001）：goal 模型解析出的外部截止锚，
+      // 透传给 path-planning（prompt 可见）；缺失时不注入约束。
+      deadlineDate: normalizeDeadlineDate(resources.deadlineDate),
     }),
     successCriteria: passThroughFramedFields(input.successCriteria, {
       observableResult: normalizeString(input.successCriteria?.observableResult),

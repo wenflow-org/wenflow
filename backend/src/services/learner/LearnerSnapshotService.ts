@@ -119,10 +119,66 @@ export function deriveLearningControlState(input: {
   };
 }
 
+/**
+ * P1.6 落后触发器（TIME-TRUST-SCHEME-20261001）的信号码与阈值。
+ *
+ * 判据（工程启发式，标弱证据）：外部截止是高可信锚（方案 L1），把「剩余时间」与
+ * 「剩余体量」对表——时间进度百分位（自路径起点到截止日的线性刻度）与实际完成百分位
+ * 的偏差 ≥ DEADLINE_PACE_BEHIND_THRESHOLD（保守起步 0.2）即视为明显失配。
+ * 只产出建议信号（reasonCode），重排仍走既有 awaiting-confirmation 建议流，
+ * 不自动执行、不做每日排程。
+ */
+export const DEADLINE_PACE_BEHIND_CODE = 'deadline_pace_behind';
+export const DEADLINE_PACE_BEHIND_THRESHOLD = 0.2;
+
+export interface DeadlinePaceJudgement {
+  behind: boolean;
+  /** 时间进度百分位（0..1，已过期取 1） */
+  expectedRatio: number;
+  /** 实际完成百分位（0..1） */
+  actualRatio: number;
+  /** 落后幅度 = expectedRatio - actualRatio（>0 即落后） */
+  gap: number;
+}
+
+/**
+ * deadline × 进度失配判据（纯函数，可注入 now 便于钉边界）。
+ * 返回 null = 判据不适用：无 deadline、无起点、截止窗非法（start ≥ deadline）或无体量（totalTasks=0）。
+ */
+export function judgeDeadlinePace(input: {
+  deadline: Date | string | null | undefined;
+  now: Date;
+  pathStartedAt?: Date | string | null;
+  totalTasks: number;
+  completedTasks: number;
+  threshold?: number;
+}): DeadlinePaceJudgement | null {
+  const deadlineMs = input.deadline ? new Date(input.deadline).getTime() : NaN;
+  const startMs = input.pathStartedAt ? new Date(input.pathStartedAt).getTime() : NaN;
+  const nowMs = new Date(input.now).getTime();
+  if (!Number.isFinite(deadlineMs) || !Number.isFinite(nowMs)) return null;
+  // 起点缺失或窗口非法（start ≥ deadline / start 在未来）时不判——时间刻度没有可信分母
+  if (!Number.isFinite(startMs) || startMs >= deadlineMs || startMs > nowMs) return null;
+  if (!(input.totalTasks > 0)) return null;
+
+  const threshold = input.threshold ?? DEADLINE_PACE_BEHIND_THRESHOLD;
+  const expectedRatio = Math.min(1, Math.max(0, (nowMs - startMs) / (deadlineMs - startMs)));
+  const actualRatio = Math.min(1, Math.max(0, input.completedTasks / input.totalTasks));
+  const gap = expectedRatio - actualRatio;
+  return {
+    behind: gap >= threshold,
+    expectedRatio,
+    actualRatio,
+    gap,
+  };
+}
+
 export function deriveReplanSignal(input: {
   dynamicState: LearnerDynamicState;
   learningControlState: LearnerLearningControlState;
   knowledgeMemory: LearnerKnowledgeMemory;
+  /** 落后判据的时钟（可注入；缺省当前时刻）。测试用它钉 0.2 阈值边界 */
+  now?: Date;
 }): LearnerReplanSignal {
   const { dynamicState, learningControlState, knowledgeMemory } = input;
   const fragileCount = knowledgeMemory.globalSignals.fragileConcepts.length;
@@ -162,6 +218,19 @@ export function deriveReplanSignal(input: {
   if (blockedCount > 0) reasonCodes.push('blocked_foundations');
   if (prerequisiteGapCount > 0) reasonCodes.push('prerequisite_gaps');
   if (pathFullyComplete) reasonCodes.push('path_completed');
+
+  // P1.6 落后触发器：deadline × 进度失配（判据见 judgeDeadlinePace）。只在未完成时判——
+  // 已完成路径提前返回 keep，这里的 reasonCode 供观测（上游通知/决策流消费）。
+  const deadlinePace = !pathFullyComplete && knowledgeMemory.currentPath?.deadline
+    ? judgeDeadlinePace({
+        deadline: knowledgeMemory.currentPath.deadline,
+        now: input.now ?? new Date(),
+        pathStartedAt: knowledgeMemory.currentPath.startedAt ?? null,
+        totalTasks,
+        completedTasks,
+      })
+    : null;
+  if (deadlinePace?.behind) reasonCodes.push(DEADLINE_PACE_BEHIND_CODE);
 
   // highRisk：疲劳/失衡/结构性风险。**路径已完成或接近完成且无结构性风险时，不进入 high**——
   // 此时没有「后续路径」可重排，报 high 只会误导用户去做一次空转的重规划。
@@ -220,6 +289,20 @@ export function deriveReplanSignal(input: {
       recommendation: highAction.recommendation,
       scope: highAction.scope,
       rationale: '当前学习状态和知识风险都提示继续按原路径推进的成本偏高，建议先经过人工确认后再调整后续安排。',
+      reasonCodes,
+    };
+  }
+
+  // P1.6 落后触发器分支：外部截止下进度百分位明显落后于时间百分位（偏差 ≥ 0.2）。
+  // 排在 highRisk 之后（结构性风险/疲劳优先），动作对准触发源——落后该调的是后续安排
+  // （收缩/重切），不是补强单点。保持「建议+确认」，不自动执行。
+  if (deadlinePace?.behind) {
+    return {
+      shouldSuggest: true,
+      priority: 'medium',
+      recommendation: 'resequence',
+      scope: 'downstream_path',
+      rationale: `外部截止前时间进度已走到约 ${Math.round(deadlinePace.expectedRatio * 100)}%，实际完成约 ${Math.round(deadlinePace.actualRatio * 100)}%，进度明显落后于剩余时间；建议确认后续安排（收缩范围或调整节奏），已完成内容不受影响。`,
       reasonCodes,
     };
   }

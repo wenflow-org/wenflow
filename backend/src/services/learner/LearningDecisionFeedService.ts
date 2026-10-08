@@ -14,6 +14,7 @@
 
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
 import type { LearnerStateSummaryOutput } from './LearnerStateSummaryService';
+import { DEADLINE_PACE_BEHIND_CODE } from './LearnerSnapshotService';
 
 export type LearningDecisionKind =
   | 'path-adjust'
@@ -236,6 +237,30 @@ export class LearningDecisionFeedService {
         action: '建议今天轻量学习或休息',
         priority: global.warningLevel === 'critical' ? 'medium' : 'info',
         at: null
+      });
+    }
+
+    // ---------- 6. 截止进度失配（P1.6 落后触发器，TIME-TRUST-SCHEME-20261001） ----------
+    // 快照 replanSignal 带 deadline_pace_behind（判据：judgeDeadlinePace，进度百分位落后
+    // 时间百分位 ≥0.2）时出一张「节奏调控」卡——复用既有卡片形状，前端零改动即可渲染。
+    const replanSignal = input.learnerSnapshot?.replanSignal;
+    if (replanSignal?.reasonCodes?.includes(DEADLINE_PACE_BEHIND_CODE)) {
+      const currentPath = input.learnerSnapshot?.knowledgeMemory?.currentPath;
+      const deadlineDay = currentPath?.deadline ? String(currentPath.deadline).slice(0, 10) : null;
+      cards.push({
+        id: `pace-deadline-${currentPath?.learningPathId || 'current'}`,
+        kind: 'pace',
+        captured: deadlineDay
+          ? `截止日 ${deadlineDay} 前的时间进度，已经跑在当前完成度前面`
+          : '设了截止日的路径，当前进度落后于时间进度',
+        judgment: replanSignal.rationale
+          || '按剩余时间与剩余任务量推算，实际完成百分位已明显落后于时间百分位',
+        action: '建议确认一次后续安排：收缩范围或调整节奏，已完成内容不受影响',
+        priority: replanSignal.priority === 'high' ? 'medium' : 'info',
+        at: null,
+        pathId: currentPath?.learningPathId || null,
+        pathTitle: currentPath?.pathTitle || null,
+        recommendation: replanSignal.recommendation || null
       });
     }
 

@@ -1,6 +1,7 @@
 export type GoalPathTimeBudgetCadence = 'per_day' | 'per_week' | 'per_session' | 'flexible' | 'unclear';
 
 import type { MaterialNeed } from '../../skills/material-collector/types';
+import { normalizeDeadlineDate } from './deadline-date';
 
 export interface GoalPathVisibleSummary {
   surfaceGoal: string | null;
@@ -25,6 +26,11 @@ export interface GoalPathVisibleSummary {
     timePerSession: string | null;
     timeHorizon: string | null;
     deadlineText: string | null;
+    /**
+     * 绝对日期（P0.1，TIME-TRUST-SCHEME-20261001）：goal 对话模型解析出的外部截止锚
+     * （understanding.deadline_date，YYYY-MM-DD）。可空；path.coordinator 以此优先于正则启发式。
+     */
+    deadlineDate: string | null;
   } | null;
   /**
    * 校内锚（2026-09-30，LLM 抽取替代正则）：学习者身处某套教材/考试体系时，由 goal-conversation
@@ -111,6 +117,12 @@ function normalizeNeedsMaterial(value: any): MaterialNeed | MaterialNeed[] | nul
   return typeof value === 'object' && normalizeString(value.title) ? (value as MaterialNeed) : null;
 }
 
+/**
+ * 绝对日期归一化（P0.1）现驻 `./deadline-date`（独立小模块，见该文件头注释）；此处按原位再导出，
+ * 保持「visible-summary 是 goal→path 摘要口径的家」的调用习惯。
+ */
+export { normalizeDeadlineDate } from './deadline-date';
+
 function buildCurrentBaseline(understanding: any) {
   const currentBaseline = understanding?.current_baseline;
   const level = normalizeString(currentBaseline?.level) || normalizeString(understanding?.background?.current_level);
@@ -167,13 +179,15 @@ export function buildGoalPathVisibleSummary(params: {
     || (timeBudgetCadence === 'per_session' ? timeBudget : null);
   const timeHorizon = normalizeString(understanding?.available_resources?.time_horizon);
   const deadlineText = normalizeString(understanding?.deadline_text);
+  // P0.1：模型解析出的绝对日期（understanding.deadline_date）。可空；相对表述不会进这里。
+  const deadlineDate = normalizeDeadlineDate(understanding?.deadline_date);
   const timeDimensions = buildTimeDimensions(understanding?.time_dimensions);
   const scenario = buildScenario(understanding, backgroundExperience, realProblem);
   const currentBaseline = buildCurrentBaseline(understanding);
   const needsMaterial = normalizeNeedsMaterial(understanding?.needsMaterial);
   const schoolAnchor = normalizeSchoolAnchorShape(understanding?.school_anchor);
 
-  const hasResources = !!(timeBudget || timePerSession || timeHorizon || deadlineText);
+  const hasResources = !!(timeBudget || timePerSession || timeHorizon || deadlineText || deadlineDate);
   const observableResult = normalizeString(understanding?.success_criteria?.observable_result);
   const acceptanceCheck = normalizeString(understanding?.success_criteria?.acceptance_check);
   const learningDirection = normalizeString(confirmedProposal?.learning_direction);
@@ -204,6 +218,7 @@ export function buildGoalPathVisibleSummary(params: {
           timePerSession,
           timeHorizon,
           deadlineText,
+          deadlineDate,
         }
       : null,
     successCriteria: observableResult || acceptanceCheck

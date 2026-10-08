@@ -6,6 +6,7 @@
 import prisma from '../../config/database';
 import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
 import { learnerStateSummaryService } from './LearnerStateSummaryService';
+import { notifyDeadlineBehindOnce } from './deadline-notify.service';
 import stateTrackingService from '../learning/learning-state.service';
 import { normalizeSessionDurationMinutes } from '../learning/learning.helpers';
 import { loadTeachingMessagesForIds } from '../ai-teaching/teaching-session-message-store';
@@ -163,6 +164,17 @@ export async function assembleLearningState(
     pathId: pathId ?? primaryPath.id,
     scope: snapshotScope,
   });
+
+  // P1.6 落后触发器（TIME-TRUST-SCHEME-20261001）通知侧：快照带 deadline_pace_behind
+  // 且主路径有外部截止时，发一条站内提醒（同 path 同类型只发一次，内部查重）。
+  // fire-and-forget + fail-open：不 await、不阻断状态聚合；调用点自带缓存（15min），频率可控。
+  void notifyDeadlineBehindOnce({
+    userId,
+    pathId: primaryPath.id,
+    pathTitle: primaryPath.title ?? primaryPath.name ?? null,
+    deadline: primaryPath.deadline ?? null,
+    replanSignal: (learnerSnapshot as any)?.replanSignal ?? null,
+  }).catch(() => undefined);
 
   const latestPathSession = sessions.find((session: any) => session.learningPathId === primaryPath.id) || sessions[0] || null;
   const sessionWrapup = latestPathSession?.wrapup ? parseJsonSafe(latestPathSession.wrapup) : null;

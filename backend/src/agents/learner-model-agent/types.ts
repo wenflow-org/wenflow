@@ -261,6 +261,10 @@ export interface LearnerPathKnowledgeMemory {
   learningPathId: string;
   pathTitle: string;
   pathSummary?: string | null;
+  /** 外部截止锚（P1.6 落后触发器判据输入，ISO 字符串）；无 deadline 的路径为 null */
+  deadline?: string | null;
+  /** 路径起点（createdAt，ISO 字符串）：时间进度百分位的分母起点；缺失时落后判据不启用 */
+  startedAt?: string | null;
   progress: {
     totalMilestones: number;
     completedMilestones: number;
