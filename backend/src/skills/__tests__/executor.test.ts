@@ -170,6 +170,48 @@ describe('统一 Skill Executor', () => {
     ))
   })
 
+  it('envelope 的 session.conversationId 透传为执行上下文会话标识（缓存亲和键依赖，2026-10-08）', async () => {
+    await runWithContext({ userId: 'user-1', sourceEntry: 'user' }, () => executeSkillHandler(
+      { name: 'text-structure-analyzer' },
+      {},
+      async () => {
+        expect(getRequestContext()).toEqual(expect.objectContaining({
+          sessionId: 'tsess-1',
+          conversationId: 'tsess-1',
+          taskId: 'task-1'
+        }))
+        return { success: true, output: 'ok' }
+      },
+      {
+        contextEnvelope: {
+          schemaVersion: 'context-envelope/v1',
+          principal: { userId: 'user-1' },
+          session: { sessionId: 'tsess-1', conversationId: 'tsess-1', taskId: 'task-1' }
+        }
+      }
+    ))
+  })
+
+  it('envelope 缺省 conversationId 时执行上下文保持为空（向后兼容：缓存键退化为 agentId）', async () => {
+    await runWithContext({ userId: 'user-1', sourceEntry: 'user', agentId: 'agent:teaching-turn' }, () => executeSkillHandler(
+      { name: 'text-structure-analyzer' },
+      {},
+      async () => {
+        const ctx = getRequestContext()
+        expect(ctx.conversationId).toBeUndefined()
+        expect(ctx.sessionId).toBe('tsess-legacy')
+        return { success: true, output: 'ok' }
+      },
+      {
+        contextEnvelope: {
+          schemaVersion: 'context-envelope/v1',
+          principal: { userId: 'user-1' },
+          session: { sessionId: 'tsess-legacy' }
+        }
+      }
+    ))
+  })
+
   it('用户显式禁用 Skill 后在统一执行边界拒绝调用', async () => {
     userSkillFindUnique.mockResolvedValue({ enabled: false })
     const handler = jest.fn()

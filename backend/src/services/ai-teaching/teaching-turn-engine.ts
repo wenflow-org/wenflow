@@ -375,7 +375,9 @@ export async function processStudentMessage(
       contextEnvelope: {
         schemaVersion: 'context-envelope/v1',
         principal: { userId: session.userId },
-        session: { sessionId: session.id, taskId: session.taskId },
+        // conversationId 双写教学会话 id（与 goal 链路「会话标识双写」同模式）：
+        // 供 resolveCacheSessionKey 做前缀缓存会话亲和，缺省会退化为 agentId（全体用户共享暖前缀）。
+        session: { sessionId: session.id, conversationId: session.id, taskId: session.taskId },
       },
     }),
     300_000,
@@ -411,7 +413,7 @@ export async function processStudentMessage(
               contextEnvelope: {
                 schemaVersion: 'context-envelope/v1',
                 principal: { userId: session.userId },
-                session: { sessionId: session.id, taskId: session.taskId },
+                session: { sessionId: session.id, conversationId: session.id, taskId: session.taskId },
               },
             }),
             ARITHMETIC_REPAIR_TIMEOUT_MS,
@@ -620,7 +622,7 @@ export async function processStudentMessage(
         contextEnvelope: {
           schemaVersion: 'context-envelope/v1',
           principal: { userId: session.userId },
-          session: { sessionId: session.id, taskId: session.taskId },
+          session: { sessionId: session.id, conversationId: session.id, taskId: session.taskId },
         },
       });
       peerMessage = peerResult.internal?.ext?.peer?.message || peerResult.userVisible || '';

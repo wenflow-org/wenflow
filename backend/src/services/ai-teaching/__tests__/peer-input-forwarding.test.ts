@@ -167,6 +167,35 @@ beforeEach(() => {
   mockReleaseOperation.mockResolvedValue(undefined);
 });
 
+describe('教学链路 contextEnvelope 会话亲和（2026-10-08 缓存键退化修复）', () => {
+  it('teaching-turn 与 peer 的 executeSkill 调用双写 conversationId=教学会话 id', async () => {
+    const session = sessionRecord();
+    mockClaimOperation.mockResolvedValue(claim(session));
+    mockExecuteSkill.mockImplementation(async (definition: any) => {
+      if (definition === mockPeerDefinition) {
+        return { internal: { ext: { peer: { message: '嗯', strategy: 'analogy', followUpQuestions: [] } } } };
+      }
+      return turnSkillResult(PCL_TUTOR_REPLY, { shouldTriggerPeer: true });
+    });
+
+    await processStudentMessage('sess-peer-1', PCL_STUDENT_MESSAGE, {
+      operationClaim: claim(session) as never,
+    });
+
+    // 引擎发出的每个 executeSkill 调用（teaching-turn 主调 + 算式修复重调 + peer），
+    // envelope 的 session 必须同时带 sessionId 与 conversationId（值均为教学会话 id），
+    // 否则 resolveCacheSessionKey 退化为 agentId → 全体用户共享同一暖前缀实例。
+    expect(mockExecuteSkill.mock.calls.length).toBeGreaterThan(0);
+    for (const [, , options] of mockExecuteSkill.mock.calls) {
+      expect((options as any)?.contextEnvelope?.session).toEqual({
+        sessionId: 'sess-peer-1',
+        conversationId: 'sess-peer-1',
+        taskId: 'task-1',
+      });
+    }
+  });
+});
+
 describe('P1-14 实录同型样本：老师布置独立作业 + 学生含「不会」子串', () => {
   it('真实触发判定下引擎不调用伴学（不被误触发）', async () => {
     const session = sessionRecord();

@@ -761,7 +761,7 @@ export async function endSession(
     contextEnvelope: {
       schemaVersion: 'context-envelope/v1',
       principal: { userId: session.userId },
-      session: { sessionId: session.id, taskId: session.taskId },
+      session: { sessionId: session.id, conversationId: session.id, taskId: session.taskId },
     },
       }),
       new Promise<never>((_, reject) => {
