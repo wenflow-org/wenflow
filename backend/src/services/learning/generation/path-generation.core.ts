@@ -650,7 +650,10 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
           leaseExpiresAt: new Date(),
           finishedAt: new Date(),
           errorCode: null,
-          errorMessage: null
+          errorMessage: null,
+          // 数据还债 B3（2026-10-08）：成功 run 落盘即弃 rollbackSnapshot
+          //（快照服务的是「生成失败回滚路径」，成功即死重；存量曾占表 86%）。
+          rollbackSnapshot: null
         }
       });
 

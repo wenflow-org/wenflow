@@ -1,9 +1,41 @@
 import prisma from '../config/database';
+import { createHash } from 'crypto';
 import { logger } from '../utils/logger';
 
 type TelemetryDelegate = {
   create(args: { data: any }): Promise<any>;
 };
+
+/** 成功行大文本的瘦身阈值与 head 截断（字符） */
+const PROMPT_CALL_SLIM_THRESHOLD_CHARS = 4096;
+const PROMPT_CALL_SLIM_HEAD_CHARS = 400;
+
+/**
+ * 成功行写前瘦身：userPayload/rawModelOutput/extractedJson 超 4K 即替换为
+ * `{__slim,bytes,sha256,head}` 标记（normalizedOutput 保留但上限 256K 防离群）。
+ * 失败行原样保留。纯函数，便于单测。
+ */
+export function slimPromptCallRow(data: any): any {
+  if (!data || data.success !== true) return data;
+  const slim = (value: unknown): unknown => {
+    if (typeof value !== 'string' || value.length <= PROMPT_CALL_SLIM_THRESHOLD_CHARS) return value;
+    return JSON.stringify({
+      __slim: true,
+      bytes: Buffer.byteLength(value),
+      sha256: createHash('sha256').update(value).digest('hex').slice(0, 16),
+      head: value.slice(0, PROMPT_CALL_SLIM_HEAD_CHARS)
+    });
+  };
+  const next: any = { ...data };
+  next.userPayload = slim(data.userPayload);
+  next.rawModelOutput = slim(data.rawModelOutput) ?? null;
+  next.extractedJson = slim(data.extractedJson) ?? null;
+  const normalized = data.normalizedOutput;
+  if (typeof normalized === 'string' && normalized.length > 262144) {
+    next.normalizedOutput = normalized.slice(0, 262144);
+  }
+  return next;
+}
 
 /**
  * 遥测写入器。
@@ -33,7 +65,11 @@ class TelemetryWriter {
   }
 
   async createPromptCall(data: any): Promise<boolean> {
-    return this.safeCreate('prompt_call_logs', (prisma as any).prompt_call_logs, data, { background: true });
+    // 写前瘦身（2026-10-08 数据还债 B2）：成功行不再存全文——userPayload 2.65GB +
+    // raw/extracted 双冗余 0.57GB，90 天稳态预期 25GB+（12GB 主库的下一波翻倍主犯）。
+    // 失败行保留全量（排障价值高、占比低）；成功行留 normalizedOutput + 瘦身标记
+    // （bytes/sha256/head 仍可对账前缀稳定性），raw 全文走 llm_execution_attempts 侧证。
+    return this.safeCreate('prompt_call_logs', (prisma as any).prompt_call_logs, slimPromptCallRow(data), { background: true });
   }
 
   async createLlmAttempt(data: any): Promise<boolean> {

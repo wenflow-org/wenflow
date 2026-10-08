@@ -17,7 +17,7 @@
 import 'dotenv/config';
 import fs from 'fs/promises';
 import path from 'path';
-import { snapshotDegradationCounters } from '../skills/degradation-telemetry';
+import { snapshotDegradationCounters, readDegradationEvents } from '../skills/degradation-telemetry';
 
 export interface DegradationLogRecord {
   source: string;
@@ -183,6 +183,25 @@ async function main(): Promise<void> {
     '[dnr] 当前进程计数（独立运行通常为 0；仅同进程消费方有意义）',
   )) {
     console.log(line);
+  }
+
+  // DB 口径优先（2026-10-08 落库后：degradation_events 可跨进程/跨重启回看）
+  const dbEvents = await readDegradationEvents(since);
+  if (dbEvents && dbEvents.length > 0) {
+    const records: DegradationLogRecord[] = dbEvents.map((event) => ({
+      source: event.source,
+      faultCategory: event.faultCategory,
+      severity: event.severity,
+      at: event.at,
+    }));
+    for (const line of formatDegradationReport(
+      aggregateDegradationRecords(records),
+      `[dnr] DB 回看（近 ${days} 天｜degradation_events｜共 ${records.length} 条）`,
+    )) {
+      console.log(line);
+    }
+  } else if (dbEvents) {
+    console.log('[dnr] DB 回看：degradation_events 在时间窗内无记录（落库自 2026-10-08 起）。');
   }
 
   const records = (await readLogRecords(logDir)).filter((record) => withinDays(record, since));

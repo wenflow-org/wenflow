@@ -138,7 +138,11 @@ describe('LogRetentionService', () => {
       'agent_call_logs',
       'llm_execution_attempts',
       'prompt_call_logs',
-      'login_attempts'
+      'login_attempts',
+      // degradation_events（2026-10-08 落库）：raw 表专用清理分支，30 天口径
+      'degradation_events',
+      // domain_event_outbox（2026-10-08 双账本还债）：published>7d 清理，raw SQL 分支
+      'domain_event_outbox'
     ])
     expect(mockAgentFindMany).toHaveBeenCalledTimes(1)
     expect(mockLlmFindMany).toHaveBeenCalledTimes(1)

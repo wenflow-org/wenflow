@@ -85,7 +85,7 @@ interface LogRetentionModel {
 
 type LogRetentionDatabase = Pick<
   PrismaClient,
-  'agent_call_logs' | 'llm_execution_attempts' | 'prompt_call_logs' | 'login_attempts' | '$queryRawUnsafe'
+  'agent_call_logs' | 'llm_execution_attempts' | 'prompt_call_logs' | 'login_attempts' | '$queryRawUnsafe' | '$executeRawUnsafe'
 >;
 
 function isSqliteDatabaseUrl(value: string | undefined): boolean {
@@ -271,6 +271,24 @@ export class LogRetentionService {
       });
     }
 
+    // degradation_events（raw 表，不在 prisma schema）：降级遥测 30 天调查窗足够，
+    // 与 90 天遥测表分开口径（2026-10-08 落库时约定）
+    {
+      const tableStartedAt = Date.now();
+      const degradationCutoff = new Date(Date.now() - 30 * MILLIS_PER_DAY);
+      const deletedRows = await this.cleanupDegradationEvents(degradationCutoff);
+      tables.push({ table: 'degradation_events', deletedRows, durationMs: Date.now() - tableStartedAt });
+    }
+
+    // outbox/inbox 双账本「只进不出」还债（2026-10-08 数据三件套）：published 事件
+    // 7 天调查窗后删除（先删 inbox 回执再删事件；pending/failed 不动——重投语义不变）
+    {
+      const tableStartedAt = Date.now();
+      const outboxCutoff = new Date(Date.now() - 7 * MILLIS_PER_DAY);
+      const deletedRows = await this.cleanupPublishedOutbox(outboxCutoff);
+      tables.push({ table: 'domain_event_outbox', deletedRows, durationMs: Date.now() - tableStartedAt });
+    }
+
     const virtualSessions = await this.trimVirtualSessionLogs();
 
     await this.checkpoint();
@@ -369,8 +387,58 @@ export class LogRetentionService {
   }
 
   /** 分页循环删除：每次取最旧的一批，直到空批；每批独立事务（Prisma 自动） */
-  private async cleanupTable(spec: LogRetentionTableSpec, cutoff: Date): Promise<number> {
-    const model = this.database[spec.table] as unknown as LogRetentionModel;
+  /** domain_event_outbox published 事件清理（raw SQL；先清对应 inbox 回执再删事件） */
+  private async cleanupPublishedOutbox(cutoff: Date): Promise<number> {
+    try {
+      if (this.dryRun) {
+        const counted = await this.database.$queryRawUnsafe<Array<{ n: number }>>(
+          "SELECT COUNT(*) AS n FROM domain_event_outbox WHERE status = 'published' AND createdAt < ?",
+          cutoff.getTime()
+        );
+        return Number(counted[0]?.n ?? 0);
+      }
+      const inbox = await this.database.$executeRawUnsafe(
+        'DELETE FROM domain_event_inbox WHERE eventId IN (SELECT id FROM domain_event_outbox WHERE status = \'published\' AND createdAt < ?)',
+        cutoff.getTime()
+      );
+      const outbox = await this.database.$executeRawUnsafe(
+        "DELETE FROM domain_event_outbox WHERE status = 'published' AND createdAt < ?",
+        cutoff.getTime()
+      );
+      if (inbox > 0) logger.info('[log-retention] inbox 回执随事件清理', { deletedRows: inbox });
+      return outbox;
+    } catch (error) {
+      logger.warn('[log-retention] outbox 清理跳过（表结构不符或不可写）', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return 0;
+    }
+  }
+
+  /** degradation_events 降级遥测清理（raw SQL；表不存在时静默 0——首次落库前的运行周期） */
+  private async cleanupDegradationEvents(cutoff: Date): Promise<number> {
+    try {
+      if (this.dryRun) {
+        const counted = await this.database.$queryRawUnsafe<Array<{ n: number }>>(
+          'SELECT COUNT(*) AS n FROM degradation_events WHERE createdAt < ?',
+          cutoff.getTime()
+        );
+        return Number(counted[0]?.n ?? 0);
+      }
+      const result = await this.database.$executeRawUnsafe(
+        'DELETE FROM degradation_events WHERE createdAt < ?',
+        cutoff.getTime()
+      );
+      return result;
+    } catch (error) {
+      logger.warn('[log-retention] degradation_events 清理跳过（表未创建或不可写）', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return 0;
+    }
+  }
+
+  private async cleanupTable(spec: LogRetentionTableSpec, cutoff: Date): Promise<number> {    const model = this.database[spec.table] as unknown as LogRetentionModel;
     let deletedRows = 0;
     for (;;) {
       const batch = await model.findMany({
