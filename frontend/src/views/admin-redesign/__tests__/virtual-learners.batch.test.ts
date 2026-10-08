@@ -539,6 +539,30 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     w.unmount();
   });
 
+  it('「新建」仍是 learners 语境：提交后跳画像页（与卡库「平台生产」同表单、落点不同）', async () => {
+    liveVirtuals.value = [makeVirtual(1)];
+    const w = await mountPage();
+    await w.findAll('button').find((b) => b.text() === '新建')!.trigger('click');
+    await nextTick();
+    await nextTick();
+    // 弹窗走 Teleport 到 body：字段与按钮都在 document.body 上操作
+    const setField = (sel: string, value: string) => {
+      const el = document.body.querySelector(sel) as HTMLInputElement | HTMLTextAreaElement;
+      el.value = value;
+      el.dispatchEvent(new Event('input'));
+    };
+    expect(document.body.textContent).toContain('新建虚拟学习者');
+    setField('.mk-modal__panel input.mk-field__input', '考研二战的小李');
+    setField('.mk-modal__panel textarea.mk-field__textarea', '二战考研，逻辑还行但总在数学上丢分，晚上效率低。');
+    await nextTick();
+    const submit = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.trim() === '创建虚拟学习者') as HTMLButtonElement;
+    submit.dispatchEvent(new Event('click'));
+    await flushPromises();
+    // learners 语境维护原行为：建完跳画像页去生成故事（库语境才留在卡库）
+    expect(openSubPageMock).toHaveBeenCalledWith('virtual', 'vl-new');
+    w.unmount();
+  });
+
   it('行 ⋯ 菜单含「查看来源卡」（卡库 ↔ 虚拟学习者双向互链；行内按钮位只留运行/测试）', async () => {
     liveVirtuals.value = [makeVirtual(7)];
     const w = await mountPage();
