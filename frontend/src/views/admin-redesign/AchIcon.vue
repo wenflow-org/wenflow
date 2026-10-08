@@ -48,10 +48,14 @@ const meta = computed(
      就落这一档——后台返回任何新成就类型都会命中。改深 slate #64748b（白字实算 4.76:1）。 */
   background: #64748b;
 }
-.ach-icon--info { background: var(--mk-blue); }
+/* 各档一律走 *-fill 实心族（明暗两态都保持深底，配 --mk-on-fill 白字 ≥4.5:1）。
+   2026-10-08 走查实测：info 原用 --mk-blue、mastery 原用 --mk-badge-hidden-fg——
+   前者在暗色档被提亮（供文字用），后者根本是 foreground 令牌，
+   白字实测只剩 3.23:1 与 1.85:1。--muted 的深 slate 是前一轮同族修复留下的，保持。 */
+.ach-icon--info { background: var(--mk-blue-fill, #2f6ae0); }
 .ach-icon--ok { background: var(--mk-green-fill, #15803d); }
 .ach-icon--warn { background: var(--mk-amber-fill, #b45309); }
-.ach-icon--mastery { background: var(--mk-badge-hidden-fg); }
+.ach-icon--mastery { background: var(--mk-violet-fill, #7c3aed); }
 .ach-icon--muted { background: #64748b; }
 .ach-icon--lg {
   width: 26px;

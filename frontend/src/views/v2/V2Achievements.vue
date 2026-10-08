@@ -356,7 +356,12 @@ onMounted(() => {
   font-size: 14px; font-weight: 800;
   letter-spacing: 0.02em;
 }
-.ach-card__icon--neutral { background: color-mix(in srgb, var(--line) 60%, transparent); color: var(--faint); }
+/* 锁定卡图标字原用 --faint(#90949b) 压在 line-60% 中性块上：直接只有 4.44:1，
+   再叠 .ach-card--locked 的 opacity .78 后掉到 3.30:1。该字（里程/连续/完成/掌握）
+   是卡上唯一的类型标识，不是装饰字，14px/800 非大字号，AA 需 4.5:1。
+   改 --muted 并把中性块压深一档（line 60%→30%），实测叠 opacity 后 4.81:1；
+   锁定态仍由整卡 opacity + 「未解锁」徽章表态。 */
+.ach-card__icon--neutral { background: color-mix(in srgb, var(--line) 30%, transparent); color: var(--muted); }
 .ach-card__icon--streak { background: color-mix(in srgb, var(--amber) 15%, transparent); color: var(--amber-ink); }
 .ach-card__icon--complete { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green-ink); }
 .ach-card__icon--mastery { background: color-mix(in srgb, var(--blue) 13%, transparent); color: var(--blue-deep); }
