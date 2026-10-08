@@ -6,11 +6,19 @@
          2026-10-06 二级页化（用户不喜欢抽屉设计）：点卡=卡详情二级页（?view=card&id=<profileId>）、
          导入=卡导入二级页（?view=card-import），本页两个 mk-drawer 全退役，走 SkillDetail/PathDetail
          家族的标准二级页机制（detailComponents 全局渲染，跨 scene 可用）。 -->
-    <MkPageHead v-if="!embedded" title="学习者卡库" sub="结构化卡：账号 + 档案 + 故事池，导入即用（不经编译链）；点卡查看卡详情">
+    <MkPageHead v-if="!embedded" title="学习者卡库" sub="结构化卡：账号 + 档案 + 故事池，导入或平台生产即用（不经编译链）；点卡查看卡详情">
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="exporting" @click="doExport">
           {{ exporting ? '导出中…' : '导出卡库' }}
         </button>
+        <!-- 卡库的两个入卡口：外部导入（文档）/ 平台生产（AI 生成角色卡）。
+             生产完留在本页——卡的运行进度在「虚拟学习者」看板，不把人推过去。 -->
+        <button
+          type="button"
+          class="mk-btn mk-btn--sm"
+          title="平台生产角色卡：AI 生成身份并建卡入库，同时备好第一个故事，可直接到虚拟学习者起跑"
+          @click="openProduce"
+        >平台生产</button>
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openImport">导入卡</button>
       </template>
     </MkPageHead>
@@ -111,6 +119,9 @@
         :showTotal="true"
       />
     </section>
+
+    <!-- 平台生产（同一份表单的 library 语境）：建卡入库 + 备好第一个故事，完成后回刷本页 -->
+    <VirtualLearnerCreate ref="produceRef" context="library" @produced="onProduced" />
   </div>
 </template>
 
@@ -122,6 +133,7 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import Pagination from './Pagination.vue'
+import VirtualLearnerCreate from './VirtualLearnerCreate.vue'
 import { vlAvatarIndexOf } from '@/components/mk/vlAvatar'
 import { openSubPage } from './store'
 import { errMsg } from './live'
@@ -212,6 +224,18 @@ function openCard(c: CardWallEntry) {
 /** 导入卡 → 卡导入二级页（id 为常量占位；返回卡墙时本组件重挂载自动刷新索引） */
 function openImport() {
   openSubPage('card-import', 'new')
+}
+
+/* ===== 平台生产（卡库的第二个入卡口）=====
+   表单复用 VirtualLearnerCreate 的 library 语境；生产 = 建卡入库 + 备好第一个故事。
+   子组件在建卡后与故事落库后各回调一次（故事决定卡墙的「开场白」），这里只负责回刷。 */
+const produceRef = ref<InstanceType<typeof VirtualLearnerCreate> | null>(null)
+
+function openProduce() {
+  produceRef.value?.open()
+}
+function onProduced() {
+  void loadIndex()
 }
 
 function cardName(c: CardWallEntry): string {
