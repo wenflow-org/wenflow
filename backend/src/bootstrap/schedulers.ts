@@ -34,7 +34,7 @@ export function startMaintenanceSchedulers(lifecycle: ApplicationLifecycle): voi
   logRetentionService.start(lifecycle);
   auditCleanupService.start(lifecycle);
   virtualSessionReclaimService.start(lifecycle);
-  startBatchExperimentScheduler();
+  startBatchExperimentScheduler(lifecycle);
   // 日期模拟自动推进（默认关；仅对 simulationClock.autoAdvance=true 的非终态会话生效）
   startSimulatedDayScheduler();
 }

@@ -1,6 +1,8 @@
 /**
  * 拓扑隶属边（`<stage>-agent → skill:<id>`）运行时用量 join —— **纯函数**，不触库、不读盘。
  *
+ * ⚠ 仅 CLI（scripts audit-handoff-edges 等）消费，生产路由已不调用——误接线前先核 routes/admin/platform.ts 注释。
+ *
  * 背景（Q9 后续）：`handoff-edge-usage.ts` 已能把 `agent_call_logs` 聚合成
  * (callerAgent → agentId) 的运行边用量；本模块把该**已聚合**结果按 caller→callee
  * 精确配对，贴到 admin 拓扑的 membership 边上，供前端渲染：

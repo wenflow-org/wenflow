@@ -1299,14 +1299,26 @@ router.put('/:id/stories/:storyIndex', async (req: Request, res) => {
       }
     }
 
-    // 故事级预算覆盖（可选）：单步重试 / 会话总 AI 调用上限；缺省继承角色级
+    // 故事级预算覆盖（可选）：单步重试 / 会话总 AI 调用上限；缺省继承角色级。
+    // 口径与前端一致（VirtualProfile.vue saveStory）：显式传入越界值直接 400 报错中止，
+    // 不再静默 clamp；读侧兜底 clamp 保留在 session-factory/session-budget（未传字段时的缺省口径）。
     if (budget && typeof budget === 'object') {
       const nextBudget: Record<string, unknown> = {};
-      if (Number.isFinite(Number(budget.maxRetriesPerStep))) {
-        nextBudget.maxRetriesPerStep = Math.min(20, Math.max(1, Math.round(Number(budget.maxRetriesPerStep))));
+      const rawStep = budget.maxRetriesPerStep;
+      const rawTotal = budget.maxRetriesTotal;
+      if (rawStep !== undefined && rawStep !== null && String(rawStep).trim() !== '') {
+        const step = Math.round(Number(rawStep));
+        if (!Number.isFinite(step) || step < 1 || step > 20) {
+          return res.status(400).json({ success: false, error: '单步重试须为 1–20 的整数（或留空继承角色级）' });
+        }
+        nextBudget.maxRetriesPerStep = step;
       }
-      if (Number.isFinite(Number(budget.maxRetriesTotal))) {
-        nextBudget.maxRetriesTotal = Math.min(1000, Math.max(1, Math.round(Number(budget.maxRetriesTotal))));
+      if (rawTotal !== undefined && rawTotal !== null && String(rawTotal).trim() !== '') {
+        const total = Math.round(Number(rawTotal));
+        if (!Number.isFinite(total) || total < 1 || total > 1000) {
+          return res.status(400).json({ success: false, error: '会话调用上限须为 1–1000 的整数（或留空继承角色级）' });
+        }
+        nextBudget.maxRetriesTotal = total;
       }
       if (Object.keys(nextBudget).length) nextStory.budget = nextBudget;
       else delete nextStory.budget;

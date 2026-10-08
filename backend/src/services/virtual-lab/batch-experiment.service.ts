@@ -11,6 +11,7 @@
  */
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
+import type { ApplicationLifecycle } from '../application-lifecycle.service';
 import simulationCoordinator from '../../coordinators/simulation.coordinator';
 import { createSessionForProfile, getStoryPool } from '../../virtual-lab/session-factory';
 import {
@@ -502,12 +503,20 @@ export async function manualSnapshot(runId: string) {
   return snap;
 }
 
-/** 定时推进调度器（启动时注册） */
-let schedulerStarted = false;
-export function startBatchExperimentScheduler(): void {
-  if (schedulerStarted) return;
-  schedulerStarted = true;
-  setInterval(async () => {
+/**
+ * 定时推进调度器（启动时注册）：每 30s 扫 active runs 推进。
+ * 挂 application-lifecycle（同 log-retention 等维护调度器）：draining 期跳过 tick、
+ * 优雅关闭时 clearInterval；lifecycle 引用可选——页面/脚本直连 start() 不传参也照常可用。
+ */
+let schedulerTimer: NodeJS.Timeout | null = null;
+let schedulerLifecycle: Pick<ApplicationLifecycle, 'isDraining'> | null = null;
+
+export function startBatchExperimentScheduler(lifecycle?: Pick<ApplicationLifecycle, 'isDraining'>): void {
+  // 幂等：已在跑时仅补充 lifecycle 引用（路由兜底启动不带参，不覆盖已注册引用）
+  if (lifecycle) schedulerLifecycle = lifecycle;
+  if (schedulerTimer) return;
+  schedulerTimer = setInterval(async () => {
+    if (schedulerLifecycle?.isDraining()) return;
     try {
       const runs = await prisma.batch_experiment_runs.findMany({
         where: { status: 'active' },
@@ -525,5 +534,13 @@ export function startBatchExperimentScheduler(): void {
       logger.warn('[batch-experiment] scheduler tick failed', { error: String(e) });
     }
   }, 30_000);
+  schedulerTimer.unref?.();
   logger.info('[batch-experiment] scheduler started (30s interval)');
+}
+
+/** 优雅关闭：清掉定时器（在途 tick 由 prisma $disconnect 兜底） */
+export function stopBatchExperimentScheduler(): void {
+  if (schedulerTimer) clearInterval(schedulerTimer);
+  schedulerTimer = null;
+  schedulerLifecycle = null;
 }

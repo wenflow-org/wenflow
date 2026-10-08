@@ -22,6 +22,7 @@ import { auditCleanupService } from './services/audit-cleanup.service';
 import { refreshAppTimeZoneFromSettings } from './services/time/day-boundary';
 import { autopilotService } from './virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from './virtual-lab/session-reclaim.service';
+import { stopBatchExperimentScheduler } from './services/virtual-lab/batch-experiment.service';
 import { bootstrapEnvironment } from './bootstrap/env';
 import { createHttpApp, registerErrorHandlers } from './bootstrap/http-app';
 import { registerRoutes } from './bootstrap/routers';
@@ -150,6 +151,7 @@ export async function shutdown(signal: string) {
       await logRetentionService.stop();
       await auditCleanupService.stop();
       await virtualSessionReclaimService.stop();
+      stopBatchExperimentScheduler();
       autopilotService.stopReconcileScheduler();
       await aiCapabilityHealthService.stop();
     },

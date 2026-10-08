@@ -1,3 +1,4 @@
+// ⚠ 仅 CLI（scripts audit-handoff-edges 等）消费，生产路由已不调用——误接线前先核 routes/admin/platform.ts 注释。
 import prisma from '../../config/database';
 
 /**

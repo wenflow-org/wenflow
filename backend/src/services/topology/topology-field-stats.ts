@@ -1,6 +1,8 @@
 /**
  * 字段级运行时命中率 → 逻辑图（字段数据旅程）join —— **纯函数**，不触库、不读盘。
  *
+ * ⚠ 仅 CLI（scripts audit-handoff-edges 等）消费，生产路由已不调用——误接线前先核 routes/admin/platform.ts 注释。
+ *
  * 背景（Q9 后半程）：`field-hit-rates.ts` 已能把 `prompt_call_logs` 聚合成每个 skill
  * 的声明 / 观测字段命中率；本模块把该**已聚合**结果贴到 admin 逻辑图（DataFlowGraph）
  * 的字段节点（= routing 行）与 routing 边上，供前端渲染：
