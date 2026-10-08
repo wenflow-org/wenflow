@@ -5,22 +5,23 @@
  * 可空），经 visibleSummary.resources.deadlineDate 透传到 path.coordinator；
  * path.coordinator 侧模型日期优先（L1 硬锚），既有正则启发式（相对表述推算）保留为
  * 「无模型日期时的兜底」。
+ *
+ * 配置口径（2026-10-08 核对）：现网 agent_lab_configs 为空，getPathAgentInputConfig 恒返回
+ * DEFAULT_PATH_AGENT_INPUT_CONFIG，且其 deadlineTextSources 路径与 buildNormalizedGoalInput
+ * 内部 source 形状一致（`visibleSummary.resources.deadlineText` / `visibleSummary.resources.timeHorizon`
+ * / `understanding.available_resources.time_horizon` / `understanding.deadline_text`）。
+ * 所以这里 mock 也直接用 requireActual 真默认配置——路径一旦被改坏（如旧的
+ * `goalFinalPayload.xxx` 文案），本套用例会立刻红。
  */
 import { buildGoalPathVisibleSummary, normalizeDeadlineDate } from '../goal-path-visible-summary';
 
-jest.mock('../../agentConfig.service', () => ({
-  getPathAgentInputConfig: jest.fn(async () => ({
-    normalizedInput: {
-      descriptionSources: ['goalFinalPayload.rawGoal'],
-      subjectSources: [],
-      skillLevelSources: [],
-      timePerDaySources: [],
-      deadlineTextSources: ['visibleSummary.resources.deadlineText'],
-      includeConfirmedProposal: false,
-      includeConversationHistory: false,
-    },
-  })),
-}));
+jest.mock('../../agentConfig.service', () => {
+  const actual = jest.requireActual('../../agentConfig.service');
+  return {
+    DEFAULT_PATH_AGENT_INPUT_CONFIG: actual.DEFAULT_PATH_AGENT_INPUT_CONFIG,
+    getPathAgentInputConfig: jest.fn(async () => actual.DEFAULT_PATH_AGENT_INPUT_CONFIG),
+  };
+});
 
 jest.mock('../../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -142,6 +143,19 @@ describe('path.coordinator · 模型绝对日期优先，正则启发式兜底�
     expect(deadlineMs).toBeLessThanOrEqual(before + 95 * 86_400_000);
   });
 
+  it('无模型日期且无 deadlineText：timeHorizon「2 周」作为默认配置第 2 顺位源兜底', async () => {
+    const result = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'u-deadline-2b',
+      rawGoal: '两周后汇报',
+      visibleSummary: baseVisible({ deadlineText: null, timeHorizon: '2 周', deadlineDate: null }),
+    });
+    expect(result.deadline).toBeTruthy();
+    const days = ((result.deadline as Date).getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(12);
+    expect(days).toBeLessThan(16);
+    expect(result.deadlineText).toBe('2 周');
+  });
+
   it('模型日期非法（相对表述）→ 不阻断，正则兜底仍生效', async () => {
     const result = await pathOrchestrator.previewNormalizedGoalInput({
       userId: 'u-deadline-3',
@@ -154,11 +168,11 @@ describe('path.coordinator · 模型绝对日期优先，正则启发式兜底�
     expect(days).toBeLessThan(18);
   });
 
-  it('完全无截止信号 → deadline 为 undefined', async () => {
+  it('完全无截止信号（deadlineText/timeHorizon/模型日期皆空）→ deadline 与 deadlineText 均缺失', async () => {
     const result = await pathOrchestrator.previewNormalizedGoalInput({
       userId: 'u-deadline-4',
       rawGoal: '随便学学',
-      visibleSummary: baseVisible({ deadlineText: null, deadlineDate: null }),
+      visibleSummary: baseVisible({ deadlineText: null, timeHorizon: null, deadlineDate: null }),
     });
     expect(result.deadline).toBeUndefined();
     expect(result.deadlineText).toBeUndefined();

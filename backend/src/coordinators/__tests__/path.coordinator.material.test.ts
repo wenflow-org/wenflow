@@ -17,19 +17,14 @@ import path from 'path'
 import { buildGoalPathVisibleSummary } from '../../services/learning/goal-path-visible-summary'
 import { writeMaterial } from '../../services/materials/material-store'
 
-jest.mock('../../services/agentConfig.service', () => ({
-  getPathAgentInputConfig: jest.fn(async () => ({
-    normalizedInput: {
-      descriptionSources: ['goalFinalPayload.rawGoal'],
-      subjectSources: ['goalFinalPayload.visibleSummary.surfaceGoal'],
-      skillLevelSources: ['goalFinalPayload.visibleSummary.currentBaseline.level'],
-      timePerDaySources: ['goalFinalPayload.visibleSummary.resources.timeBudget'],
-      deadlineTextSources: ['goalFinalPayload.visibleSummary.resources.deadlineText'],
-      includeConfirmedProposal: true,
-      includeConversationHistory: false,
-    },
-  })),
-}))
+// 2026-10-08：原手写 mock 用 `goalFinalPayload.xxx` 旧路径（与内部 source 形状不匹配，
+// pick() 全落空）；改为 requireActual 真默认配置，与现网（agent_lab_configs 为空）一致。
+jest.mock('../../services/agentConfig.service', () => {
+  const actual = jest.requireActual('../../services/agentConfig.service')
+  return {
+    getPathAgentInputConfig: jest.fn(async () => actual.DEFAULT_PATH_AGENT_INPUT_CONFIG),
+  }
+})
 
 jest.mock('../../services/learning/learning.service', () => ({ __esModule: true, default: {} }))
 

@@ -1,23 +1,22 @@
 /**
  * G2P golden：normalizedInputV1 配置式装配（goalHandoffFields 优先 + visibleSummary 回退）
  * 与既有确定性投影装配的等价性验证。
+ *
+ * 2026-10-08：配置 mock 原为手写的 `goalFinalPayload.xxx` 路径——那是一段从未对齐
+ * `buildNormalizedGoalInput` 内部 `source` 形状的旧文案（现网 agent_lab_configs 为空，
+ * 恒走 DEFAULT_PATH_AGENT_INPUT_CONFIG），导致 pick() 全部落空、本套用例事实上只测了
+ * visibleSummary 回退链，"handoff 优先"分支从未被走到。改为 requireActual 真默认配置：
+ * mock 永不漂移，handoff 分支真实生效。
  */
 
 import pathOrchestrator from '../path.coordinator'
 
-jest.mock('../../services/agentConfig.service', () => ({
-  getPathAgentInputConfig: jest.fn(async () => ({
-    normalizedInput: {
-      descriptionSources: ['goalFinalPayload.rawGoal'],
-      subjectSources: ['goalFinalPayload.visibleSummary.surfaceGoal'],
-      skillLevelSources: ['goalFinalPayload.visibleSummary.currentBaseline.level'],
-      timePerDaySources: ['goalFinalPayload.visibleSummary.resources.timeBudget'],
-      deadlineTextSources: ['goalFinalPayload.visibleSummary.resources.deadlineText'],
-      includeConfirmedProposal: true,
-      includeConversationHistory: false,
-    },
-  })),
-}))
+jest.mock('../../services/agentConfig.service', () => {
+  const actual = jest.requireActual('../../services/agentConfig.service')
+  return {
+    getPathAgentInputConfig: jest.fn(async () => actual.DEFAULT_PATH_AGENT_INPUT_CONFIG),
+  }
+})
 
 jest.mock('../../services/learning/learning.service', () => ({ __esModule: true, default: {} }))
 
