@@ -7,6 +7,23 @@ export const CHECKPOINT_MIN_TURNS = 4;
 /** 触发检查点所需"上一轮确有进展"的理解度门槛 */
 export const CHECKPOINT_TRIGGER_MIN_UNDERSTANDING = 0.6;
 /**
+ * 低理解度出题节奏下限（拍板 #10，2026-10-08 出题时机与自评解耦）：理解度 <0.6 的课堂
+ * 恰是此前 0.6 硬闸造成的测量盲区（候选率 0.71% vs 52.3%，幸存者偏差实锤）——
+ * 低理解度时把最小间隔缩到 2 条消息（优先探测），理解度只调节奏、不再否决出题。
+ */
+export const CHECKPOINT_LOW_UNDERSTANDING_MIN_TURNS = 2;
+
+/**
+ * 按上一轮理解度读数给出出题节奏下限（提示词闸与 engine 事后门共用同一分档，
+ * 防两处数值漂移）；无读数按常规节奏 CHECKPOINT_MIN_TURNS。
+ */
+export function checkpointRhythmMinTurns(understanding: unknown): number {
+  const value = Number(understanding);
+  return Number.isFinite(value) && value < CHECKPOINT_TRIGGER_MIN_UNDERSTANDING
+    ? CHECKPOINT_LOW_UNDERSTANDING_MIN_TURNS
+    : CHECKPOINT_MIN_TURNS;
+}
+/**
  * 同一检查点重答上限（2026-10-03 完结课堂裸审计 P1 实证）：同一道题被逐轮原样重发，最极端
  * 36 次/节、50/60 节课中招，学员每次照合同答同一选项——「答错保留 pendingCheckpoint」缺上限，
  * 课堂在同一个确认点上空转直到 LEARN_AUTO_TURN_CAP=40 才停。达到该次数仍未通过即强制消费

@@ -43,7 +43,7 @@ export {pickPeerStrategy, computeSessionEvidence } from './teaching-session-view
 export {KnowledgePointStatus } from './teaching-knowledge-state';
 import { parseSessionArtifacts } from './checkpoint-shared';
 export {WARMUP_FUZZY_MIN_LENGTH, WARMUP_FUZZY_OVERLAP_MIN } from './teaching-warmup';
-export {CHECKPOINT_MIN_TURNS, CHECKPOINT_TRIGGER_MIN_UNDERSTANDING, parseSessionArtifacts } from './checkpoint-shared';
+export {CHECKPOINT_MIN_TURNS, CHECKPOINT_TRIGGER_MIN_UNDERSTANDING, CHECKPOINT_LOW_UNDERSTANDING_MIN_TURNS, parseSessionArtifacts } from './checkpoint-shared';
 import {
   CheckpointSubmitPayload,
   CheckpointSubmitResult,

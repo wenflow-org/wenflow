@@ -21,6 +21,8 @@ const mockRecordAnchorProbeResult = jest.fn(async () => undefined)
 const mockResolveAnchorTarget = jest.fn(async () => null)
 const mockRecordDegradation = jest.fn()
 
+import { stripAffirmationsOnFailedVerdict } from '../checkpoint-feedback-guard'
+
 jest.mock('../../../config/database', () => ({
   __esModule: true,
   default: { teacher_observations: {}, misconceptions: {}, learner_evidence: {} },
@@ -412,5 +414,114 @@ describe('isDuplicateCheckpointQuestion：同题判据（归一与边界）', ()
   it('旧行只有 title：短题仍可拦；长题 title 带省略号不与完整题面相等', () => {
     expect(isDuplicateCheckpointQuestion([{ title: '水分如何运输？' }], '水分如何运输？')).toBe(true);
     expect(isDuplicateCheckpointQuestion([{ title: `${question.slice(0, 20)}…` }], question)).toBe(false);
+  })
+})
+
+describe('stripAffirmationsOnFailedVerdict：肯定语句子级剥离（拍板 #5 切口1 纯函数）', () => {
+  const strip = (reply: string) => stripAffirmationsOnFailedVerdict(reply);
+
+  it('命中句剥离、纠正句保留', () => {
+    const result = strip('答对了！你的回答完全正确。我们再对照一遍：这道题的关键动作是重填。');
+    expect(result.applied).toBe(true);
+    expect(result.reply).toBe('我们再对照一遍：这道题的关键动作是重填。');
+    expect(result.stripped).toHaveLength(2);
+  })
+
+  it('否定/疑问/接近语不误杀（「不错」是肯定语、「错」是否定语的正则边界钉死）', () => {
+    // 整句全是否定/接近语 → 零命中
+    expect(strip('差一点就答对了，再想想。').applied).toBe(false);
+    expect(strip('答对了吗？我们看看每个要点。').applied).toBe(false);
+    expect(strip('答案不对哦，正确方向是重填一遍。').applied).toBe(false);
+    // 「做得不错」必须命中（(?<!不)错 负向断言不许吞掉它）
+    expect(strip('做得不错。不过流程上还缺一步核对。').applied).toBe(true);
+  })
+
+  it('肯定语开头的短句也算盖章（很好，我们继续）', () => {
+    const result = strip('很好，我们继续下一个要点。这里的关键动作是重填。');
+    expect(result.applied).toBe(true);
+    expect(result.reply).not.toContain('很好');
+  })
+
+  it('整句全中/剥后过短 → flagged-only 放行原文', () => {
+    const allHit = strip('答对了！');
+    expect(allHit.applied).toBe(false);
+    expect(allHit.reply).toBe('答对了！');
+    expect(allHit.stripped).toEqual(['答对了！']);
+    const shortRemain = strip('答对了！重填。');
+    expect(shortRemain.applied).toBe(false);
+    expect(shortRemain.stripped).toHaveLength(1);
+  })
+
+  it('无命中 / 非字符串 → 原样返回零命中', () => {
+    expect(strip('我们再对照一遍：这道题的关键动作是重填。')).toEqual({ reply: '我们再对照一遍：这道题的关键动作是重填。', stripped: [], applied: false });
+    expect(stripAffirmationsOnFailedVerdict(null)).toEqual({ reply: '', stripped: [], applied: false });
+  })
+})
+
+describe('反馈硬门接线（拍板 #5 切口1+2）：code 判错回合的回复剥离 + 遥测', () => {
+  function failingJudgement() {
+    const judgement = judgeCheckpointAnswer(CHECKPOINT, { answerText: '我把表复制一份再填一遍。' });
+    expect(judgement?.passed).toBe(false);
+    return judgement;
+  }
+
+  it('判错 + 回复含肯定语 → 落库与 aiResponse 均已剥离 + MODEL_AFFIRMATION_MISMATCH 遥测', async () => {
+    const session = sessionRecord();
+    mockClaimOperation.mockResolvedValue(claim(session));
+    mockTurnSkill.mockResolvedValue(turnSkillResult('答对了！你的回答完全正确。我们再对照一遍：这道题的关键动作是重填。'));
+
+    const result = await processStudentMessage('sess-1', '理解检查：…我的答案：我把表复制一份再填一遍。', {
+      operationClaim: claim(session) as never,
+      checkpointId: 'cp-1',
+      checkpointJudgement: failingJudgement(),
+      checkpointSubmission: {},
+    });
+
+    expect(result.checkpointResolution).toEqual({ passed: false, understanding: 0.8, judgedBy: 'code' });
+    expect(result.aiResponse).not.toContain('答对了');
+    expect(result.aiResponse).not.toContain('完全正确');
+    expect(result.aiResponse).toContain('再对照一遍');
+    // 落库消息与返回口径一致（同一份筛查后的文本）
+    const committed = mockCommitTurnState.mock.calls[0][2] as any;
+    expect(committed.messages[committed.messages.length - 1].content).toBe(result.aiResponse);
+    expect(mockRecordDegradation).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'ai-teaching/teaching-turn-engine',
+      faultCategory: 'MODEL_AFFIRMATION_MISMATCH',
+      severity: 'P2_DEGRADED',
+      mitigationApplied: 'strip-affirmation-sentences',
+    }));
+  })
+
+  it('判错 + 回复无肯定语 → 原样放行，零遥测', async () => {
+    const session = sessionRecord();
+    mockClaimOperation.mockResolvedValue(claim(session));
+
+    const result = await processStudentMessage('sess-1', '理解检查：…我的答案：我把表复制一份再填一遍。', {
+      operationClaim: claim(session) as never,
+      checkpointId: 'cp-1',
+      checkpointJudgement: failingJudgement(),
+      checkpointSubmission: {},
+    });
+
+    expect(result.aiResponse).toContain('再对照一遍');
+    expect(mockRecordDegradation).not.toHaveBeenCalled();
+  })
+
+  it('判对 → 硬门不触发（肯定语原样保留）', async () => {
+    const session = sessionRecord();
+    mockClaimOperation.mockResolvedValue(claim(session));
+    const judgement = judgeCheckpointAnswer(CHECKPOINT, { answerText: '表复制一份，数字重填一遍，还得再做一次核对。' });
+    expect(judgement?.passed).toBe(true);
+    mockTurnSkill.mockResolvedValue(turnSkillResult('答对了！我们继续下一个要点。'));
+
+    const result = await processStudentMessage('sess-1', '理解检查：…我的答案：表复制一份，数字重填一遍，还得再做一次核对。', {
+      operationClaim: claim(session) as never,
+      checkpointId: 'cp-1',
+      checkpointJudgement: judgement,
+      checkpointSubmission: {},
+    });
+
+    expect(result.aiResponse).toContain('答对了');
+    expect(mockRecordDegradation).not.toHaveBeenCalled();
   })
 })

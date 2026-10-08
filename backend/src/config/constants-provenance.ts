@@ -87,6 +87,7 @@ import {
 import {
   CHECKPOINT_MIN_TURNS,
   CHECKPOINT_TRIGGER_MIN_UNDERSTANDING,
+  CHECKPOINT_LOW_UNDERSTANDING_MIN_TURNS,
   WARMUP_FUZZY_MIN_LENGTH,
   WARMUP_FUZZY_OVERLAP_MIN,
   RECOVERY_WINDOW_MS,
@@ -506,8 +507,15 @@ export const SCIENTIFIC_CONSTANTS: ScientificConstant[] = [
     key: 'checkpoint.minUnderstanding',
     value: 0.6,
     source: '工程启发式',
-    note: '出题前要求"上一轮确有进展"：没进展时先讲，不急着考。',
+    note: '理解度节奏分档阈值（拍板 #10 后不再硬否决出题）：<0.6 用快节奏优先探测，≥0.6 用常规节奏。',
     resolve: () => CHECKPOINT_TRIGGER_MIN_UNDERSTANDING,
+  },
+  {
+    key: 'checkpoint.lowUnderstandingMinTurns',
+    value: 2,
+    source: '工程启发式',
+    note: '拍板 #10（2026-10-08 出题时机与自评解耦）：理解度<0.6 时出题最小间隔缩至 2 条消息——0.6 硬闸曾致低理解度课堂候选率 0.71% vs 52.3% 的幸存者偏差。',
+    resolve: () => CHECKPOINT_LOW_UNDERSTANDING_MIN_TURNS,
   },
 
   // ---------- 课内温故：名称匹配与恢复窗口（AITeachingCoordinator） ----------

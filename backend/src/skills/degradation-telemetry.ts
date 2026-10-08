@@ -27,6 +27,8 @@ export type DegradationFaultCategory =
   | 'MODEL_ARITHMETIC_MISMATCH'
   /** 模型把答案键（expectedKeywords 要点）写进了学生可见文本（题干/选项/hint/reply）——照抄即可骗过判分 */
   | 'MODEL_ANSWER_LEAK'
+  /** 代码裁决判错的作答回合，老师回复仍出现肯定语（话术与判分脱钩，拍板 #5 切口1） */
+  | 'MODEL_AFFIRMATION_MISMATCH'
   | 'UNKNOWN';
 
 export type DegradationSeverity = 'P1_CRITICAL' | 'P2_DEGRADED' | 'P3_NOTICE';

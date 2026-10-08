@@ -19,8 +19,7 @@ import {
 import { simulatedNowOr } from '../../services/virtual-lab/simulation-clock-context';
 import {
   CHECKPOINT_MAX_ATTEMPTS,
-  CHECKPOINT_MIN_TURNS,
-  CHECKPOINT_TRIGGER_MIN_UNDERSTANDING,
+  checkpointRhythmMinTurns,
   normalizeForKeywordMatch,
   parseSessionArtifacts,
   type CheckpointConceptAttribution,
@@ -95,13 +94,19 @@ export function shouldEmitCheckpoint(
   teachingState: Record<string, any> | null | undefined,
 ): boolean {
   if (getPendingCheckpoint(teachingState)) return false;
-  const lastTurn = Number(teachingState?.lastCheckpointTurn);
-  if (Number.isFinite(lastTurn) && session.messages.length - lastTurn < CHECKPOINT_MIN_TURNS) return false;
   const stage = String(teachingState?.classroomContext?.stage?.current ?? '');
   if (stage === 'wrapup') return false;
   const lastAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
   const understanding = Number(lastAnalysis?.understanding);
-  return Number.isFinite(understanding) && understanding >= CHECKPOINT_TRIGGER_MIN_UNDERSTANDING;
+  // 无理解度读数不出题（没有可依据的观测；沿用旧行为）
+  if (!Number.isFinite(understanding)) return false;
+  // 出题时机与自评解耦（拍板 #10，2026-10-08）：理解度只调节奏、不再否决出题——
+  // <0.6 缩到 2 条消息优先探测（恰是此前 0.6 硬闸造成 0.71% vs 52.3% 候选率差的盲区），
+  // ≥0.6 维持 4 条消息常规节奏。
+  const lastTurn = Number(teachingState?.lastCheckpointTurn);
+  if (Number.isFinite(lastTurn)
+    && session.messages.length - lastTurn < checkpointRhythmMinTurns(understanding)) return false;
+  return true;
 }
 
 export function getPendingCheckpoint(teachingState: Record<string, any> | null | undefined): TeachingCheckpoint | null {

@@ -80,15 +80,23 @@ describe('shouldEmitCheckpoint：出题触发由代码给（2026-09-17）', () =
     expect(shouldEmitCheckpoint(session(0.8, 10), { lastCheckpointTurn: 5 })).toBe(true);
   });
 
+  it('低理解度快节奏（拍板 #10：理解度只调节奏不否决出题）', () => {
+    // 无历史检查点 + 有读数 → 直接可探测（0.6 硬闸退役）
+    expect(shouldEmitCheckpoint(session(0.4), {})).toBe(true);
+    // 距上次 2 条消息即可再探测（常规节奏 4 条会被拦）
+    expect(shouldEmitCheckpoint(session(0.4, 10), { lastCheckpointTurn: 8 })).toBe(true);
+    expect(shouldEmitCheckpoint(session(0.4, 10), { lastCheckpointTurn: 9 })).toBe(false);
+  });
+
+  it('无理解度读数 → 不出（没有可依据的观测）', () => {
+    expect(shouldEmitCheckpoint(session(null), {})).toBe(false);
+  });
+
   it('ready_to_close 可以出题（18 号报告 N3：它正是"待收尾确认"的落点）；wrapup 不出', () => {
     expect(shouldEmitCheckpoint(session(0.8), { classroomContext: { stage: { current: 'ready_to_close' } } })).toBe(true);
     expect(shouldEmitCheckpoint(session(0.8), { classroomContext: { stage: { current: 'wrapup' } } })).toBe(false);
   });
 
-  it('上一轮没有进展（understanding < 0.6 或缺失）→ 不出', () => {
-    expect(shouldEmitCheckpoint(session(0.4), {})).toBe(false);
-    expect(shouldEmitCheckpoint(session(null), {})).toBe(false);
-  });
 });
 
 describe('伴学策略由认知层级决定（P0②）', () => {

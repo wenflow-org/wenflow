@@ -20,7 +20,7 @@ import { fenceLearnerMessagesForModel } from './input-fence';
 import { memoryTraceService } from '../memory/memory-trace.service';
 import { recordMisconceptions, rerouteMisconceptionConceptKey } from '../learner/misconception-ledger.service';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
-import { CHECKPOINT_MAX_ATTEMPTS, parseSessionArtifacts, resolveCheckpointConceptAttribution } from './checkpoint-shared';
+import { CHECKPOINT_MAX_ATTEMPTS, checkpointRhythmMinTurns, parseSessionArtifacts, resolveCheckpointConceptAttribution } from './checkpoint-shared';
 import { shouldDeferCompletionForClosure } from './teaching-closure';
 import {
   promoteSupplementSlot,
@@ -79,6 +79,7 @@ import { learningStateService, type LearningStateMetrics } from '../learning/lea
 import type { TeachingSessionMessage } from './TeachingSessionRepository';
 import type { TeachingTurnOutput } from '../../skills/teaching-turn';
 import { findArithmeticMismatches, describeMismatchesForRepair } from './teaching-arithmetic-guard';
+import { stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
 import { recordDegradation } from '../../skills/degradation-telemetry';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
 import {
@@ -441,6 +442,36 @@ export async function processStudentMessage(
         rootCauseMessage: mismatches.map((m) => m.expr).join('; '),
       });
       if (repairedOutput) rawTeachingOutput = repairedOutput;
+    }
+  }
+  // 检查点反馈硬门（拍板 #5 切口1，2026-10-08）：代码判错的作答回合，老师回复不得出现
+  // 肯定语——此前只有提示词软约束（b52576b4 裁决注入），话术与判分脱钩从未被度量与拦截。
+  // 命中即句子级剥离 + 遥测（MODEL_AFFIRMATION_MISMATCH）；切口2 的落库计数=本遥测为分子、
+  // learner_evidence 的 code 失败 checkpoint:result 行为分母。整句全中/剥后过短时
+  // flagged-only 放行原文（回复不能被剥空）。纯函数与样本库见 checkpoint-feedback-guard.ts。
+  if (rawTeachingOutput?.reply && submittedCheckpoint
+    && options.checkpointJudgement?.judgedBy === 'code'
+    && options.checkpointJudgement.passed === false) {
+    const screened = stripAffirmationsOnFailedVerdict(rawTeachingOutput.reply);
+    if (screened.stripped.length > 0) {
+      logger.warn('[AITeaching] 检查点判错但回复含肯定语（反馈硬门）', {
+        sessionId: session.id,
+        checkpointId: submittedCheckpoint.id,
+        strippedCount: screened.stripped.length,
+        applied: screened.applied,
+        samples: screened.stripped.slice(0, 3),
+      });
+      recordDegradation({
+        source: 'ai-teaching/teaching-turn-engine',
+        faultCategory: 'MODEL_AFFIRMATION_MISMATCH',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['teachingReply.affirmation', `task:${context.taskId}`],
+        mitigationApplied: screened.applied ? 'strip-affirmation-sentences' : 'flagged-only',
+        rootCauseMessage: screened.stripped.slice(0, 3).join(' ｜ '),
+      });
+      if (screened.applied) {
+        rawTeachingOutput = { ...rawTeachingOutput, reply: screened.reply };
+      }
     }
   }
   // 课内温故结果回收：**首选**模型的结构化结果 control.warmupOutcomes（2026-09-17 起），
@@ -964,6 +995,9 @@ export async function processStudentMessage(
 
     // 检查点产生：teaching-turn 可选输出 control.checkpoint，按规则落库为 pendingCheckpoint
     const checkpointCandidate = teachingOutput.control.checkpoint;
+    // 出题节奏分档（拍板 #10）：与提示词闸共用同一口径（理解度<0.6 → 2 条消息优先探测），
+    // 防两处数值漂移；理解度取上一轮分析（与 shouldEmitCheckpoint 的 gate 同基准），无读数按常规节奏。
+    const previousTurnAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
     // 同题复问抑制（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺陷②）：候选题面与本会话**已出过**的题面
     // 归一后同文（学生已答过/跳过这道题）→ 本回合抑制该检查点，只打遥测；课堂照常继续、绝不阻塞。
     // 与「答错保留、答对消费」既有语义兼容：只少问第二遍同题，pendingCheckpoint 消费/重答链路不动。
@@ -973,7 +1007,8 @@ export async function processStudentMessage(
       && !!checkpointCandidate
       && !previousTeachingState.pendingCheckpoint
       && (previousTeachingState.lastCheckpointTurn === undefined
-        || updatedMessages.length - previousTeachingState.lastCheckpointTurn >= 4);
+        || updatedMessages.length - previousTeachingState.lastCheckpointTurn
+          >= checkpointRhythmMinTurns(previousTurnAnalysis?.understanding));
     const duplicateCheckpointQuestion = checkpointEmissionEligible
       && isDuplicateCheckpointQuestion(previousTeachingState.checkpointHistory, checkpointCandidate.question);
     if (duplicateCheckpointQuestion) {
