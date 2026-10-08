@@ -302,3 +302,12 @@ scripts/v4-ui-audit-results/
 
 # 测量验证轮次的运行产物（驱动器在 backend/scripts/measurement-verify/，可复跑；快照不入库）
 backend/scripts/measurement-verify/out/
+
+# 临时探针/验证脚本与运行残留（止血挖掘模式⑥：git status 长期脏的根源；周期性垃圾日清理）
+.tmp-*/
+.tmp-batch/
+backend/.tmp-*
+backend/scripts/tmp-*
+*.out.txt
+.tmp-*
+backend/scripts/measurement-probe/out*/
