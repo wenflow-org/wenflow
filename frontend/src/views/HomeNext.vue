@@ -1113,7 +1113,14 @@ main {
   font-weight: 700;
   color: var(--muted);
   text-decoration: none;
-  padding: 7px 2px;
+  /* 触控热区 ≥36×36（2026-10-08 用户侧走查）：原 padding 7px 2px 在 390 触屏档实测 30×34，
+     高度差 2px、两字链接宽度只有 30px。min-height 抬高度、左右 5px 内边距把宽度撑到 ≥36，
+     再用等量负外边距抵消，行内视觉间距与原来一致。 */
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 5px;
+  margin: 0 -5px;
 }
 .hn-foot__links a:hover {
   color: var(--blue-deep);

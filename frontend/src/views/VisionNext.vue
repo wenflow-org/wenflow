@@ -645,7 +645,14 @@ main {
   text-decoration: none;
   font-size: 13px;
   font-weight: 700;
-  padding: 6px 2px;
+  /* 触控热区 ≥36×36（2026-10-08 用户侧走查）：原 padding 6px 2px（窄屏 8px 0）实测 26×36 ——
+     高度够、两字链接宽度只有 26px。min-height 保住高度、左右 5px 内边距把宽度撑到 ≥36，
+     再用等量负外边距抵消，视觉间距与原来一致。 */
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 5px;
+  margin: 0 -5px;
 }
 .vn-foot a:hover {
   color: var(--blue-deep);
@@ -663,14 +670,15 @@ main {
   }
   /* 38px 孤词行问题已由「字号下调 + 逗号后显式换行（原型同款 <br/>）」解决，
      不再需要 text-wrap: balance 抹掉原型的断行控制 */
-  /* 触屏热区：状态区链接 21px、页脚链接 16px、返回首页 20px——宣传页上这些是唯一的外部/返回
-     入口，加纵向内边距抬到 ≥34px（配色不变；块内边距同步收一点，页面不至于变高） */
+  /* 触屏热区：状态区链接 21px、返回首页 20px —— 宣传页上这些是唯一的外部/返回入口，
+     加纵向内边距抬到 ≥36px（配色不变；块内边距同步收一点，页面不至于变高）。
+     页脚链接的窄屏覆写已删（2026-10-08 走查）：它在基础档之上又把横向内边距压回 0，
+     两字链接宽度掉到 26px；高度与宽度现在都由基础档的 min-height + 左右内边距保证。 */
   .vn-status__links { gap: 12px; margin-top: 10px; }
   .vn-status__links a { padding: 8px 0; }
   .vn-end__back { padding: 9px 0; }
   .vn-foot__in { padding: 14px 0; }
   .vn-foot__links { display: flex; gap: 16px; flex-wrap: wrap; }
-  .vn-foot__in a { padding: 8px 0; }
 }
 
 @media (max-width: 640px) {
