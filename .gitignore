@@ -311,3 +311,6 @@ backend/scripts/tmp-*
 *.out.txt
 .tmp-*
 backend/scripts/measurement-probe/out*/
+
+# 纪元重置前的全库归档（epoch-1 备份，6.5GB，严禁入库）
+backend/prisma/archive/
