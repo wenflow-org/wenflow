@@ -141,8 +141,14 @@ function onEmptyAction() {
   void router.push('/goal-conversation')
 }
 
-/** 节点详情「去练习这个知识点」→ 没有按概念直达的练习路由，落到主链路下一步动作页 */
-function onPractice() {
+/** 节点详情「去练习这个知识点」→ 有锚点直达该概念所属里程碑的首个未完成任务；
+ * 无锚点（里程碑未挂概念/全部完成）落主链路下一步动作页（原兜底行为保留） */
+function onPractice(node?: MkGraphNode | null) {
+  const taskId = node?.practice?.taskId
+  if (taskId) {
+    void router.push(`/learn/${taskId}`)
+    return
+  }
   void router.push('/dashboard')
 }
 

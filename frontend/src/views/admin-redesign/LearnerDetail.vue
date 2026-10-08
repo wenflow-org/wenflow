@@ -786,7 +786,7 @@ import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLear
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, memoryReviewUrl, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh, levelBadgeZh } from './learner-profile'
 import { adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
-import { statusText } from './statusText'
+import { statusText, sessionStatusBadgeCls } from './statusText'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -1053,7 +1053,7 @@ const ldSessionRowsFiltered = computed(() => {
 })
 const ldSessLoading = ref(false)
 const ldSessError = ref(false)
-/** 状态徽章降噪（对齐 TeachingSessions.statusBadge）：仅异常态上色，正常态灰 */
+/** 状态徽章降噪（有意域差异，收尾批 C10 登记）：仅异常态上色、正常态全灰——列表降噪视图；全彩版见 statusText.sessionStatusBadgeCls 单源 */
 const sessBadgeCls = (s: string) =>
   s === 'failed' || s === 'timeout' || s === 'discarded' || s === 'finalization_failed'
     ? 'mk-badge--bad'
@@ -1074,13 +1074,9 @@ function formatDuration(sec: number): string {
   return m > 0 ? `${m}分${s}秒` : `${s}秒`
 }
 
-/** 教学会话 pane 状态徽章：完成绿 / 进行中蓝 / 异常红 / 被替代琥珀 / 其余灰（与普通状态文案同字典） */
+/** 教学会话 pane 状态徽章：已上收共享单源 statusText.sessionStatusBadgeCls（收尾批 C10；别名超集逐值等价迁移） */
 function sessPaneBadgeCls(s: string): string {
-  if (s === 'completed' || s === 'done' || s === 'succeeded' || s === 'success') return 'mk-badge--ok'
-  if (s === 'active' || s === 'running' || s === 'in_progress' || s === 'started') return 'mk-badge--info'
-  if (s === 'failed' || s === 'timeout' || s === 'discarded' || s === 'finalization_failed') return 'mk-badge--bad'
-  if (s === 'superseded' || s === 'paused') return 'mk-badge--warn'
-  return 'mk-badge--muted'
+  return sessionStatusBadgeCls(s)
 }
 
 /** 当前学习路径 → 路径详情二级页（只认真实 pathId；缺 ID 时入口不渲染） */

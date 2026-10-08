@@ -97,6 +97,21 @@ export function stageBadgeCls(s: string | null | undefined): string {
   return 'mk-badge--muted'
 }
 
+/* ---------- 教学会话状态徽章单源（收尾批 C10） ----------
+   词汇 = 教学会话状态枚举（initializing/active/finalizing/completed/failed/timeout/
+   finalization_failed/superseded/discarded）+ LearnerDetail 混排 pane 的任务状态别名
+   （done/succeeded/success/running/in_progress/started/paused）。
+   TeachingSessions 列表与 LearnerDetail 明细 pane 共用；语义不同的域不并入：
+   路径域 active=学习中（opsShared.PATH_STATUS_BADGE）、目标对话 cancelled=bad 各自维护。 */
+export function sessionStatusBadgeCls(s: string | null | undefined): string {
+  const key = String(s || '').toLowerCase()
+  if (key === 'completed' || key === 'done' || key === 'succeeded' || key === 'success') return 'mk-badge--ok'
+  if (key === 'failed' || key === 'timeout' || key === 'finalization_failed' || key === 'discarded') return 'mk-badge--bad'
+  if (key === 'active' || key === 'initializing' || key === 'finalizing' || key === 'running' || key === 'in_progress' || key === 'started') return 'mk-badge--info'
+  if (key === 'superseded' || key === 'paused') return 'mk-badge--warn'
+  return 'mk-badge--muted'
+}
+
 /* ---------- 会话域进度单源（ADMIN_DEEP_SESSION_AUDIT 4.3：进度 = 数字 + 迷你条，三页统一） ---------- */
 
 /** Goal 阶段 → 进度序号（0=创建 1=澄清 2=方案 3=完成；失败给中断位 2、取消给中断位 1） */

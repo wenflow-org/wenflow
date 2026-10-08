@@ -27,6 +27,14 @@ export interface MkGraphNode {
   stability?: string | null
   extractionCount?: number
   lastSeenAt?: string | null
+  /** 去练习直达锚点（收尾批 C11：所属里程碑下首个未完成任务；null=无可直达任务，宿主走兜底） */
+  practice?: {
+    taskId: string
+    pathId: string
+    taskTitle: string
+    milestoneTitle: string
+    taskStatus: string
+  } | null
 }
 export interface MkGraphEdge {
   fromConceptId: string

@@ -364,7 +364,7 @@ import { dataSource, openSubPage } from './store'
 import { useSessionDrill } from './useSessionDrill'
 import { useIsNarrow } from './useIsNarrow'
 import { timeAgo, isPageCacheFresh, markPageFetched, shortId, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
-import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone, taskTypeText, taskTypeTitle } from './statusText'
+import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge } from './statusText'
 import type { SessionProgress } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -919,19 +919,7 @@ function closeDetail() {
 const { goTrace, goConsole } = useSessionDrill(closeDetail)
 
 /* 状态映射统一走共享字典（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
-/* 状态徽章（P0-5 降噪后回补两档语义色）：异常态红 / 已被替代琥珀 / 已废弃中性；
-   completed 回绿（与同页分布条「已完成」段同色）、active 系回蓝（与「进行中」段同色），
-   消除「徽章全灰 vs 分布条绿蓝」的同页自相矛盾（对齐 GoalConversations 两档映射） */
-const statusBadge = (s: string) =>
-  s === 'failed' || s === 'timeout' || s === 'finalization_failed'
-    ? 'mk-badge--bad'
-    : s === 'completed'
-      ? 'mk-badge--ok'
-      : s === 'active' || s === 'initializing' || s === 'finalizing'
-        ? 'mk-badge--info'
-        : s === 'superseded'
-          ? 'mk-badge--warn'
-          : 'mk-badge--muted'
+/* 状态徽章已上收共享单源 statusText.sessionStatusBadgeCls（收尾批 C10，import 别名 statusBadge——语义逐值等价迁移） */
 /* 建议徽章带优先级色（T3）：high=bad / medium=warn / 其余 info */
 const advisoryBadge = (p?: string) => (p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info')
 /* 任务类型字典已上收共享单源 statusText.ts（F2-2：路径详情同批枚举不再各自维护一份） */
