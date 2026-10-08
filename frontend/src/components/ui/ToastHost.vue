@@ -49,40 +49,45 @@ const dismissToast = (item: ToastItem) => {
 </script>
 
 <style scoped>
-/* 原型 .wf-toasts（newui/用户侧/index.html）：底部居中浮层，深底白字胶囊。
-   注意：本组件 Teleport 到 body，脱离 .v2-page 作用域，所以只引 --mk-* / --wf-* 全局 token
+/* 通知悬浮层：右上角浅底卡片 + 语义色圆底图标（2026-10-08 用户侧：「以前右上角彩色那版
+   我更习惯」）。历史：25112eb6 按 newui/用户侧 原型 .wf-toasts 改成「底部居中深底胶囊」，
+   本次按用户明确偏好改回右上角形态 —— 「彩色」的识别点就是这四枚圆底图标（绿/红/琥珀/蓝），
+   所以底色回到 --mk-surface 卡片、图标加回 50% 圆底与语义色 tint。
+   注意：本组件 Teleport 到 body，脱离 .v2-page 作用域，所以只引全局 --mk-* token
    （勿用 v2 的 --surface/--line/--ink 别名层：别名层一旦按需加载/移除，暗色下会白底 toast）；
    focus 环用全站唯一一圈 --mk-focus-ring。 */
 .toast-host {
   position: fixed;
-  left: 50%;
-  bottom: 26px;
-  transform: translateX(-50%);
+  /* + env(safe-area-inset-top)：刘海机动效区不吃掉卡片上沿；无名机型该值为 0 */
+  top: calc(20px + env(safe-area-inset-top, 0px));
+  right: 20px;
   /* 层级走全站 token（2026-10-06 审核）：原为硬编码 9999，脱离 --mk-z-* 词汇表；
      toast 应压在所有业务覆盖层之上、critical 兜底层之下。 */
   z-index: var(--mk-z-toast, 450);
   display: flex;
   flex-direction: column;
+  /* 贴右缘：多张卡片向左伸展，右边缘始终对齐 20px 锚点 */
+  align-items: flex-end;
   gap: 10px;
-  /* 原型：width: min(92vw, 430px)（原为右上 340px 定宽） */
-  width: min(92vw, 430px);
-  pointer-events: none;
-  max-height: calc(100vh - 52px);
+  max-height: calc(100vh - 40px);
   overflow: hidden;
+  pointer-events: none;
 }
 
 .toast-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
+  /* 右上角锚点：100vw-40px 保证 ≤360px 窄屏不被裁切（原固定 340 会溢出） */
+  width: min(340px, calc(100vw - 40px));
   padding: 12px 14px;
-  /* toast = 弹层 → 卡片·弹层档 16（§0.5） */
+  /* toast = 弹层 → 卡片·弹层档 16（§0.5 圆角阶梯） */
   border-radius: var(--mk-radius-xl);
-  /* 深底浅字胶囊：底色/文字色走 --mk-toast-* 成对 token，不随主题翻转
-     （原 background:var(--mk-ink) + color:var(--wf-text-inverse) 在暗色下会翻成亮底暗字） */
-  background: var(--mk-toast-bg);
-  color: var(--mk-toast-fg);
+  /* 浅底卡片：底色/描边/文字走 --mk-* 成对 token，暗色主题随 token 一起翻转
+     （底部深底胶囊那版的 --mk-toast-bg/-fg 成对口径随之退役） */
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-line);
+  color: var(--mk-ink);
   font-size: 13.5px;
   line-height: 1.5;
   /* toast → 模态阴影档（§0.5 阴影表：模态/抽屉/toast/登录壳） */
@@ -90,15 +95,14 @@ const dismissToast = (item: ToastItem) => {
   pointer-events: auto;
 }
 
+/* 错误档：浅底上只把描边点红（深红实底是底部胶囊那版的口径，浅底卡片上不成立） */
 .toast-item--error {
-  /* 原型字面值（.wf-toast--err）：固定深红底——文字必须固定浅红，
-     否则暗色下 --wf-text-inverse(近黑) 压深红仅 2.14:1（亮色 8.59:1）。 */
-  background: var(--mk-toast-error-bg);
-  color: var(--mk-toast-error-fg);
+  border-color: color-mix(in srgb, var(--mk-red) 34%, var(--mk-line));
 }
 
 /* 「友好而平」：hover 不抬升不加投影，悬停反馈只走背景/文字（§0.5 阴影） */
 
+/* 语义色圆底图标：底=同色轻铺，字形=深色语义色（暗色档 token 自带提亮） */
 .toast-icon {
   flex-shrink: 0;
   width: 20px;
@@ -109,23 +113,27 @@ const dismissToast = (item: ToastItem) => {
   font-size: 13px;
   line-height: 1;
   font-weight: 700;
+  border-radius: 50%;
 }
 
-/* 深底上的图标：原型只着色不铺底（成功 #5fe0a0 / 错误 #ffc2cb —— 原型字面值，无对应令牌，保留登记） */
 .toast-icon--success {
-  color: #5fe0a0;
+  color: var(--mk-green);
+  background: color-mix(in srgb, var(--mk-green) 14%, transparent);
 }
 
 .toast-icon--error {
-  color: #ffc2cb;
+  color: var(--mk-red);
+  background: color-mix(in srgb, var(--mk-red) 14%, transparent);
 }
 
 .toast-icon--warning {
-  color: color-mix(in srgb, var(--mk-amber) 45%, #ffffff);
+  color: var(--mk-amber);
+  background: color-mix(in srgb, var(--mk-amber) 16%, transparent);
 }
 
 .toast-icon--info {
-  color: color-mix(in srgb, var(--mk-blue) 55%, #ffffff);
+  color: var(--mk-blue);
+  background: color-mix(in srgb, var(--mk-blue) 14%, transparent);
 }
 
 .toast-message {
@@ -134,7 +142,7 @@ const dismissToast = (item: ToastItem) => {
   font-size: 13.5px;
   font-weight: 500;
   line-height: 1.5;
-  /* 继承胶囊前/底色对应的成对文字色（错误档 .toast-item--error 已改浅红） */
+  /* 继承卡片文字色（--mk-ink，暗色随 token 翻转） */
   color: inherit;
   word-break: break-word;
 }
@@ -148,7 +156,7 @@ const dismissToast = (item: ToastItem) => {
   justify-content: center;
   border: none;
   background: transparent;
-  color: color-mix(in srgb, var(--mk-toast-fg) 72%, transparent);
+  color: var(--mk-faint);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
@@ -157,8 +165,8 @@ const dismissToast = (item: ToastItem) => {
 }
 
 .toast-close:hover {
-  color: var(--mk-toast-fg);
-  background: color-mix(in srgb, var(--mk-toast-fg) 12%, transparent);
+  color: var(--mk-muted);
+  background: color-mix(in srgb, var(--mk-ink) 6%, transparent);
 }
 
 .toast-close:focus-visible {
@@ -166,7 +174,7 @@ const dismissToast = (item: ToastItem) => {
   box-shadow: var(--mk-focus-ring);
 }
 
-/* 底部浮层：入场上推、离场下沉（原型 wf-toast-in/out，.22s --mk-ease-out） */
+/* 右上角浮层：入场上滑 + 自右，离场上滑淡出（.22s --mk-ease-out） */
 .toast-slide-enter-active {
   transition: opacity 0.22s var(--mk-ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
     transform 0.22s var(--mk-ease-out, cubic-bezier(0.16, 1, 0.3, 1));
@@ -179,24 +187,16 @@ const dismissToast = (item: ToastItem) => {
 
 .toast-slide-enter-from {
   opacity: 0;
-  transform: translateY(10px);
+  transform: translateY(-12px) translateX(8px);
 }
 
 .toast-slide-leave-to {
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateY(-8px);
 }
 
 .toast-slide-move {
   transition: transform 0.2s var(--mk-ease-out, cubic-bezier(0.16, 1, 0.3, 1));
-}
-
-/* ≤1023（底部 dock 出现的档位）：抬到 84px 让开底部导航（原型同款断点） */
-@media (max-width: 1023.98px) {
-  .toast-host {
-    bottom: 84px;
-    max-height: calc(100vh - 110px);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
