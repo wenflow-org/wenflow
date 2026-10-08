@@ -74,11 +74,16 @@ export interface TeachingSessionMessage {
   strategies?: string[];
   knowledgePoint?: string | null;
   knowledgePoints?: TeachingKnowledgePointState[];
+  // promptDebug/peerDebug 已停写（2026-10-08 数据还债 B1：调试信封占 tsm payload 99.75%、
+  // 日增 465MB，且与 prompt_call_logs 冗余）——存量行由 teaching-storage-reclaim.ts 清洗，
+  // 字段保留为可选以兼容历史 payload 反序列化，新消息不再携带。
+  /** @deprecated 仅历史数据兼容，勿写入 */
   promptDebug?: Record<string, any> | null;
   peerTriggered?: boolean;
   peerMessage?: string | null;
   peerStrategy?: string | null;
   peerFollowUpQuestions?: string[];
+  /** @deprecated 仅历史数据兼容，勿写入 */
   peerDebug?: Record<string, any> | null;
   /** 检查点合成消息标记：不参与学生行为证据统计 */
   checkpoint?: boolean;
@@ -452,7 +457,8 @@ export class TeachingSessionRepository {
       },
       data: {
         status: 'active',
-        messages: JSON.stringify(payload.messages),
+        // 数据还债 B1（2026-10-08）：开场基线不再经 messages 大列中转（原先写列、
+        // 首回合惰性播种搬侧表）——直接落侧表，列保持 reserve 时的空数组不动。
         knowledgeState: JSON.stringify(payload.knowledgeState),
         teachingState: JSON.stringify(payload.teachingState),
         operationId: null,
@@ -464,6 +470,9 @@ export class TeachingSessionRepository {
     });
     if (updated.count !== 1) {
       throw new TeachingSessionConflictError('课堂启动状态已变化，请重试', 'TEACHING_SESSION_STATE_CHANGED');
+    }
+    if (payload.messages.length > 0) {
+      await appendTeachingMessages(sessionId, payload.messages);
     }
 
     const session = await this.getById(sessionId);
@@ -1385,7 +1394,9 @@ export class TeachingSessionRepository {
           status: 'completed',
           endTime: simulatedNowOr(),
           duration: payload.duration ?? null,
-          messages: JSON.stringify(payload.messages),
+          // 数据还债 B1（2026-10-08）：不再完结时全量回写 messages 大列——
+          // 实测 722 个完结会话与侧表逐字节双存 1.67GB（侧表为准，读路径双读已就绪）；
+          // 老会话回退仍读列（teaching-storage-reclaim.ts 只清「有侧表行」的完结会话）。
           knowledgeState: JSON.stringify(payload.knowledgeState),
           teachingState: JSON.stringify(updateSessionFinalizationState(
             payload.teachingState,

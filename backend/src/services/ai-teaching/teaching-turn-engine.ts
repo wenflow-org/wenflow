@@ -732,38 +732,12 @@ export async function processStudentMessage(
     },
   );
 
-  const learnDebug = {
-    input: {
-      pathBackgroundContext: buildPathBackgroundContext(context),
-      classroomContext,
-      learnerStateContext,
-      classroomEventContext: {
-        recentEvents: classroomEvents.slice(-5),
-      },
-      visibleDialogueContext: session.messages.map((item) => ({
-        role: item.role,
-        content: item.content,
-      })).concat(isResumeContinue ? [] : [{ role: 'user', content: message }]),
-      teachingControlContext,
-    },
-    output: {
-      stageDecision: nextStageDecision,
-      classroomContext,
-      learnerStateContext,
-      knowledgeState: normalizeKnowledgePoints(mergedKnowledge),
-      auxiliaryActions: {
-        peerTriggered,
-        completionCandidate: completionReady,
-        autoEndRequested: endIntent.isEndIntent,
-      },
-      completionCandidateEvidence: teachingOutput.control.completionCandidateEvidence || null,
-    },
-  };
+  // learnDebug 调试包已随 tsm debug 停写一并移除（B1）：其唯一消费者是
+  // `promptDebug.learnDebug`（随消息落库的调试信封），观测走 llm_execution_attempts。
 
-  if (promptDebug && typeof promptDebug === 'object') {
-    promptDebug.learnDebug = learnDebug;
-  }
-
+  // 数据还债 B1（2026-10-08）：promptDebug/peerDebug 不再随消息落 tsm——
+  // 实测它们占 tsm payload 99.75%（3.45GB/日增 465MB），且与 prompt_call_logs
+  // 的 userPayload/attemptTrace 冗余。调试观测走 llm_execution_attempts（traceId 可关联）。
   const assistantMessage: TeachingSessionMessage = {
     role: 'assistant',
     content: teachingOutput.reply,
@@ -772,12 +746,10 @@ export async function processStudentMessage(
     strategies: teachingOutput.pedagogy.strategies,
     knowledgePoint: teachingOutput.knowledge.currentPoint,
     knowledgePoints: normalizeKnowledgePoints(mergedKnowledge),
-    promptDebug,
     peerTriggered,
     peerMessage: peerMessage || null,
     peerStrategy,
     peerFollowUpQuestions,
-    peerDebug,
   };
 
   // 教学配图（owner 口径 2026-09-23「图片是一种特殊的文字」）：老师临场请求 → 代码闸门 → 画一张，
