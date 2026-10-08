@@ -171,7 +171,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     // 会话口径：活动 = running 2 + created 3 → 完成率卡 hint（同一会话漏斗）
     expect(w.text()).toContain('活动会话 5');
     // 画像口径分区筛选计数（P2：「需关注」已正名「曾失败」，口径=累计失败）→ 卡头工具栏 chips
-    const head = w.find('.mk-card__head');
+    // 按卡定位到列表卡（.mk-card--fill）：页内还有压测参数等其它卡头，取「第一个 .mk-card__head」会取错
+    const head = w.find('.mk-card--fill .mk-card__head');
     const countOf = (label: string) =>
       head.findAll('.mk-pill').find((p) => p.text().replace(/\s/g, '').startsWith(label))?.find('.mk-pill__count').text();
     expect(countOf('进行中')).toBe('1');
@@ -295,22 +296,27 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.findAll('.mk-kpi')).toHaveLength(5);
   });
 
-  it('压测参数卡（2026-10-05 tab 化）：速率上限/日期模拟两页签，写控制不进 KPI 数字栅格', async () => {
+  it('压测参数卡（2026-10-08 重做）：标题进卡头、视图切换为分段控件，写控制不进 KPI 数字栅格', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
     const card = w.find('.vl-settings');
     expect(card.exists()).toBe(true);
-    const tabs = card.findAll('.tab');
-    expect(tabs.map((t) => t.text().trim())).toEqual(['速率上限', '日期模拟']);
-    // 默认速率页签：输入框+保存可见；页签 aria-selected 契约（平台 .tabs 语言）
-    expect(tabs[0].attributes('aria-selected')).toBe('true');
+    // 卡头有可见标题（原设计是一张无标题卡，视图切换靠通栏下划线页签条承担）
+    expect(card.find('.mk-card__head .mk-card__title').text()).toBe('压测参数');
+    // 视图切换：分段控件（aria-pressed，宽随内容），不再是手搓 .tabs/.tab（那版缺 roving tabindex/方向键）
+    const seg = card.findAll('.mk-seg__item');
+    expect(seg.map((s) => s.text().trim())).toEqual(['速率上限', '日期模拟']);
+    expect(seg[0].attributes('aria-pressed')).toBe('true');
+    expect(card.find('.tabs').exists()).toBe(false);
+    // 速率行有可见字段名（原先只有 aria-label，人看不到这个 0 是什么）
+    expect(card.find('.mk-field__label').text()).toContain('出站速率上限');
     expect(card.find('.vl-rpm__input').exists()).toBe(true);
     expect(card.text()).toContain('保存');
     // 日期页签体隐藏（v-show 落在 pane 元素上），切换后可见
     const panes = card.findAll('.vl-settings__pane');
     expect((panes[1].element as HTMLElement).style.display).toBe('none');
-    await tabs[1].trigger('click');
-    expect(tabs[1].attributes('aria-selected')).toBe('true');
+    await seg[1].trigger('click');
+    expect(seg[1].attributes('aria-pressed')).toBe('true');
     expect((panes[1].element as HTMLElement).style.display).not.toBe('none');
     expect(card.find('.sd-settings').exists()).toBe(true);
     // 读/写分块判例：写控制不进 KPI 数字栅格
