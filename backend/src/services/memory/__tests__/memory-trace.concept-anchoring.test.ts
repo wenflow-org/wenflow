@@ -19,6 +19,7 @@ jest.mock('../../../config/database', () => ({
   __esModule: true,
   default: {
     memory_traces: { findUnique: mockFindUnique, upsert: mockUpsert, updateMany: mockUpdateMany, create: mockCreate },
+    learner_evidence: { createMany: jest.fn(async () => ({ count: 0 })) },
   },
 }))
 jest.mock('../../../utils/logger', () => ({

@@ -22,7 +22,8 @@ import {
   type DeclaredPromptRuntimeContractIdentity,
 } from './seed-core-agent-prompts';
 
-const MANIFESTS_DIR = path.join(process.cwd(), '../prompts/manifests');
+// __dirname 锚定（收尾批 C8）：原 cwd 相对路径隐含 cwd=backend/，换 cwd 启动即断
+const MANIFESTS_DIR = path.resolve(__dirname, '../../../../prompts/manifests');
 
 export interface ActivePromptRuntimeContractMetadataRow {
   id: string;

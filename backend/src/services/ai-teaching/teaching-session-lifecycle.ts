@@ -1086,6 +1086,8 @@ export async function endSession(
       calibrationBias,
       // 记忆条目的来源路径：用于温故解释"这是你在《X》里学过的"，以及按路径看待办
       session.learningPathId ?? null,
+      // B2 证据补齐（收尾批 C6）：session:outcome 证据挂会话，测量面可追溯直写来源
+      sessionId,
     ).catch((error) => {
       logger.warn('[AITeaching] 记忆痕迹回写失败', {
         sessionId,

@@ -91,7 +91,9 @@ export function getFieldLineageWithDeclarations(skillId: string): FieldLineageEn
   return Array.from(merged.values());
 }
 
-const LINEAGE_FILE = path.join(process.cwd(), '../prompts/field-lineage.yaml');
+// __dirname 锚定（收尾批 C8）：原 process.cwd()+'../prompts/…' 隐含 cwd=backend/，
+// 测试/服务从其他 cwd 启动即断；仓库根 = 本文件上溯 4 级（与 composers/prompt-files/loader 同法）
+const LINEAGE_FILE = path.resolve(__dirname, '../../../../prompts/field-lineage.yaml');
 let lineageCache: { mtimeMs: number; entries: FieldLineageEntry[] } | null = null;
 
 function isValidEntry(value: unknown): value is FieldLineageEntry {

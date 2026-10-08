@@ -49,7 +49,9 @@ export interface MaterialRecord {
 
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** 上传资料根目录（可用 MATERIAL_UPLOAD_DIR 覆盖；默认落在进程工作目录的 data/ 下，已被 .gitignore 覆盖）。 */
+/** 上传资料根目录（可用 MATERIAL_UPLOAD_DIR 覆盖；默认落在进程工作目录的 data/ 下，已被 .gitignore 覆盖）。
+ * 收尾批 C8 登记：此处的 cwd 依赖是**部署约定**（数据目录跟运行目录），与 prompt-lab 系
+ * 「cwd 相对路径读仓库文件」的脆弱形态不同类，有意保留不改 __dirname。 */
 export function resolveMaterialsRoot(): string {
   const configured = process.env.MATERIAL_UPLOAD_DIR;
   if (configured && configured.trim()) return path.resolve(configured.trim());

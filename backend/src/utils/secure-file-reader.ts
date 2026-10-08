@@ -29,6 +29,8 @@ export async function readFileWithinRoots(options: {
     throw new Error('文件大小上限配置无效');
   }
   const maxFileSize = hasConfiguredMax ? configuredMax : DEFAULT_MAX_FILE_SIZE;
+  // 收尾批 C8 登记：cwd 缺省是**API 语义**（调用方未指定 baseDirectory 时以进程根为沙箱），
+  // 生产调用方均显式传入；与 prompt-lab 系「cwd 相对路径读仓库文件」的脆弱形态不同类，保留。
   const baseDirectory = resolve(options.baseDirectory || process.cwd());
   const requestedPath = isAbsolute(options.filePath)
     ? resolve(options.filePath)

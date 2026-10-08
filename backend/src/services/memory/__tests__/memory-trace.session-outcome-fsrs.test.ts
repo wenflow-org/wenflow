@@ -13,7 +13,7 @@ let nowIso = '2026-10-07T02:00:00.000Z'
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
-  default: { memory_traces: { findUnique: mockFindUnique, upsert: mockUpsert } },
+  default: { memory_traces: { findUnique: mockFindUnique, upsert: mockUpsert }, learner_evidence: { createMany: jest.fn(async () => ({ count: 0 })) } },
 }))
 jest.mock('../../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -115,6 +115,60 @@ describe('recordSessionOutcome：有证据项写原生 FSRS 四元组（P1-10）
       // 无 grade 路径：首次创建仍写 legacy dueAt；已有 FSRS 排程时不覆盖（见下一 describe）
       expect(args.create).toHaveProperty('dueAt')
     }
+  })
+})
+
+describe('recordSessionOutcome：session:outcome 证据补齐（B2 第二步，收尾批 C6）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockFindUnique.mockResolvedValue(null)
+    mockUpsert.mockResolvedValue({})
+  })
+
+  it('逐项落证据（去重同名、confidence 0.6、挂 sessionId/pathId、payload 带 grade）', async () => {
+    const createMany = jest.fn(async () => ({ count: 2 }))
+    const db = (jest.requireMock('../../../config/database') as any).default
+    db.learner_evidence.createMany = createMany
+    mockFindUnique.mockResolvedValue(null)
+    mockUpsert.mockResolvedValue({})
+
+    const count = await memoryTraceService.recordSessionOutcome(
+      'u1',
+      [
+        { name: '闭包', status: 'mastered', progress: 100 },
+        { name: '闭包', status: 'mastered', progress: 100 }, // 同名去重
+        { name: '词法作用域', status: 'pending', progress: 0 },
+      ],
+      'derived', 'accurate', 'path-1', 'sess-9',
+    )
+    expect(count).toBe(3)
+    expect(createMany).toHaveBeenCalledTimes(1)
+    const firstCall = createMany.mock.calls[0] as unknown as [{ data: any[] }] | undefined
+    const rows = firstCall![0].data
+    expect(rows).toHaveLength(2) // 同名概念只留一行
+    const closure = rows.find((r: any) => r.evidenceKey === 'session:outcome:闭包')
+    expect(closure).toEqual(expect.objectContaining({
+      evidenceType: 'session:outcome',
+      userId: 'u1',
+      pathId: 'path-1',
+      sessionId: 'sess-9',
+      confidence: 0.6,
+    }))
+    const payload = JSON.parse(closure.payload)
+    expect(payload).toEqual(expect.objectContaining({ conceptKey: '闭包', status: 'mastered', fsrsGrade: 4 }))
+    const pending = rows.find((r: any) => r.evidenceKey === 'session:outcome:词法作用域')
+    expect(JSON.parse(pending.payload).fsrsGrade).toBeNull() // 无证据项 grade=null（宁缺勿滥镜像）
+  })
+
+  it('证据落库失败不阻断痕迹回写（返回 count 照常）', async () => {
+    const db = (jest.requireMock('../../../config/database') as any).default
+    db.learner_evidence.createMany = jest.fn(async () => { throw new Error('db busy') })
+    mockFindUnique.mockResolvedValue(null)
+    mockUpsert.mockResolvedValue({})
+
+    const count = await memoryTraceService.recordSessionOutcome('u1', [{ name: '闭包', status: 'mastered', progress: 100 }], 'derived')
+    expect(count).toBe(1)
+    expect(mockUpsert).toHaveBeenCalledTimes(1)
   })
 })
 

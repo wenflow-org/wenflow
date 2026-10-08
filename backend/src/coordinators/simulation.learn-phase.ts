@@ -925,7 +925,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           epistemicGrounding
         );
         // 记忆引擎：教学回合后增量写 memory_traces（知识看板状态 → 内化强度）
-        persistKnowledgeState(session.userId, boardReconciliation.points as Array<{ name: string; status: string; progress: number }>);
+        persistKnowledgeState(session.userId, boardReconciliation.points as Array<{ name: string; status: string; progress: number }>, sessionId);
         // 画像回写：掌握 → knownConcepts，仍在学/需复习 → struggleConcepts
         await persistProfileConcepts(sessionId, session.userId, boardReconciliation.points as Array<{ name: string; status: string; progress: number }>);
         // P1-6 闭环：persistProfileConcepts 对 knownConcepts 是 union-only（不移除），单把当前点改成

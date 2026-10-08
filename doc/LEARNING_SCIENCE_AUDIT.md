@@ -65,7 +65,7 @@
 | 环 | 内容 | 延迟 | 触发方式 | 代码可证状态 |
 |---|---|---|---|---|
 | **R1** | 回合内教学适应（analysis → 下一步/追问/支架） | 同回合~下一回合 | 自动 | ✅ **路径闭合**（每回合都回灌上次 analysis） |
-| **R2** | **课内温故**（计划 → 检索 → 结果 → FSRS/预算） | 同课 | 自动 | ❌ **环断电**（三处断点，见 §3.2） |
+| **R2** | **课内温故**（计划 → 检索 → 结果 → FSRS/预算） | 同课 | 自动 | ✅ **已修复**（2026-10-05 复核：计划保留/回合回填/结果双通道三断点全通；§3.2 为历史诊断存档，行号基于拆分前 HEAD 已失效） |
 | **R3** | 复习课（到期点 → 检索 → `review:completed` → FSRS） | 次日 | 自动 | ⚠️ 代码通，**实测 0 条**（未跑过） |
 | **R4** | 跨课（wrapup/行为画像/ktMasteryEma → 下节课） | 下节课 | 自动 | ✅ 在跑 |
 | **R5** | 难度档位（学习者状态 → `taskDifficulty.adjusted` → 提示词） | 同课/下节课 | 自动 | ✅ 已接线，**但无生产锚点 → 效果不可审计** |
@@ -88,15 +88,17 @@
 | wrapup → 下节课回顾 | 上节 wrapup | `fetchPriorLearningRecap` | 下节课 | 自动 | ✅ |
 | 难度档位 → 提示词 | 快照 | `decideTaskDifficulty` → prompt | 同/下节课 | 自动 | ✅（未持久化，无法审计执行） |
 | 预测 → 提示词；结果回填 → 可靠性 | predictor | prompt / `task:completed` | 下条任务 | 自动 | ✅ |
-| **课内温故 → 模型** | `buildReviewPlan` | 提示词规则 | 同课 | 自动 | ❌ **计划被覆盖，模型从未看到** |
-| **温故结果 → FSRS/预算** | 模型 `knowledge.points` | `applyWarmupExtraction` | 结算 | 自动 | ❌ **从未触发** |
-| **`session_load` 指标** | 回合 `loadIndex` 聚合 | **无消费者** | 意图下节课 | 自动 | ❌ 写了 54 条没人读 |
-| **`checkpointHistory`** | 检查点通过/理解 | **无消费者** | 同回合 | 自动 | ❌ 只进响应 |
-| `helpSeekingType` / `rsmAttempts` | analysis | **无消费者**（且被裁剪出手模型上下文） | — | — | ❌ |
+| **课内温故 → 模型** | `buildReviewPlan` | 提示词规则 | 同课 | 自动 | ✅ 已修复（2026-10-05 复核：计划随 completeInitialization 保留、每回合回填模型可见） |
+| **温故结果 → FSRS/预算** | 模型 `knowledge.points` | `applyWarmupExtraction` | 结算 | 自动 | ✅ 已修复（2026-10-05 复核：结果摘取双通道 + review:completed 事件链） |
+| **`session_load` 指标** | 回合 `loadIndex` 聚合 | wrapup 聚合 | 结算 | 自动 | ✅ 已修复（2026-10-05 复核：wrapup loadIndex 接线；本行旧文「写了 54 条没人读」为当时实况） |
+| **`checkpointHistory`** | 检查点通过/理解 | 提示词摘要 + 同题守卫 + 掌握聚合仲裁 | 同回合/收束 | 自动 | ✅ 已修复（2026-10-05 复核：多消费者接线） |
+| `helpSeekingType` / `rsmAttempts` | analysis | `computeSessionEvidence` | 结算（wrapup） | 自动 | ✅ 已修复（2026-10-05 复核：wrapup 证据消费） |
 | 难度调整效果度量 | `task:difficulty:adjustment` | 台账对账 | 下一条任务 | 自动 | ❌ **锚点只有模拟脚本在写** |
 | 路径重排 | advisory + 快照 | UI 确认 → `requestPathReplan` | 下条路径 | **人工** | ✅（确认制） |
 
 ### 3.2 断点一：课内温故闭环（三处，环完全断电）
+
+> **2026-10-05 复核：本节三断点已全部修复**——计划在 `completeInitialization` 保留（teaching-session-lifecycle）、每回合回填（teaching-turn-engine → buildTeachingTurnInput）、结果摘取双通道（teaching-warmup + warmup-writeback → review:completed 事件）。下文为**历史诊断存档**，行号基于 AITeachingCoordinator 拆分前的 HEAD，已全部失效（现按模块名索引：teaching-turn-engine / teaching-checkpoint / teaching-session-lifecycle / teaching-session-views）。
 
 这是本次调查**最重要**的发现，也解释了此前"成功率恒为 `-`、预算恒停 2.0"的现象。
 
@@ -623,6 +625,7 @@ verdict 权重、predictor 的 `stallRisk` clamp 与 tone 自洽……**这是�
 5. `stage-designer` 规则 39 依赖 `milestone.loadTarget`，代码从不注入 → 死规则。
 6. `path-reviewer`：`successCriteria` 未传；yaml 的 input ref（`sandbox:path.normalizedInput.prerequisiteTree`）与代码实传（`analysis.cognitiveCore.prerequisiteTree`）不符。
 7. **replan 召回两套阈值并存**：`LearnerSnapshotService.deriveReplanSignal`（7 reasonCodes）vs `ReplanAdvisoryService.build`（另含 lss≥6 / movedToReview / ktl≥7）→ skill 收到的 `reasonCodes` 与实际召回方向可能不一致。
+   → **2026-10-05 复核（表述如实化）**：归因与动作已同源收口一半（ReplanAdvisoryService 的归因口径与动作建议同源），但 `deriveReplanSignal` 与 `ReplanAdvisoryService.build` 两套体系仍在，本条如实保留。
 8. 4 个 skill 的 yaml **没有 `inputs:` 契约段**（`teaching-opening-generator` / `adaptive-guidance-copy` / `learner-progress-report` / `replan-attribution`）→ 契约只在代码里，迁移风险。
    → **已补（2026-09-17），但第一版被 CI 抓到缺陷**：我最初按"代码 payload 字段"写了 `sandbox:teaching.openingMode` 这类路径，
    而沙盘路径注册表（`agent-contract-view`：输入通道 / 输出字段 / `SANDBOX_EXTRA_KEYS`）里**没有这些键** ⇒

@@ -261,7 +261,7 @@ export class AgentConfigService {
    *
    * systemPrompt 即生效文本：prompt 调整统一走 v4 File-as-Truth 链
    * （core.yaml → 确定性编译 skill.*.md → DB 镜像）。二级编译（compiledSystemPrompt
-   * 产物优先）已于 2026-09 退役删除，历史编译列见 system schema @deprecated 注记。
+   * 产物优先）已于 2026-09 退役删除，历史编译 6 列已随 20261008210000 迁移摘除。
    * A/B 变体（2026-10-01）：ACTIVE 行集合 = 唯一基线（variant=NULL）+ 若干实验臂；
    * 不传 selection 时行为与旧版完全一致（取最新基线）。
    */

@@ -38,6 +38,16 @@ export const SOURCE_PREREQUISITE_PROJECTION = 'prerequisite-projection';
 export type ConceptLevel = 'concept' | 'kc';
 export type EdgeDirection = 'in' | 'out' | 'both';
 
+/** 概念的直达练习锚点（去练习按钮的落点：该概念所属里程碑下首个未完成任务） */
+export interface PracticeAnchor {
+  conceptId: string;
+  pathId: string;
+  taskId: string;
+  taskTitle: string;
+  milestoneTitle: string;
+  taskStatus: string;
+}
+
 /** kcAnnotation 的最小视图（容忍 prompt 演进） */
 export interface KcGraphLike {
   nodes?: Array<{ kcId?: unknown; name?: unknown; taxonomy?: unknown }>;
@@ -80,6 +90,12 @@ export interface ConceptGraphDeps {
   }>>;
   /** 图视图：路径标题（供"按路径筛选"下拉） */
   listPathTitles(pathIds: string[]): Promise<Array<{ id: string; title: string | null }>>;
+  /**
+   * 图视图：概念 → 可直达练习锚点（收尾批 C11「去练习」直达）。
+   * join 键 = milestones.conceptId（canonical 概念 id，跨表列）；每概念取首个**未完成**任务。
+   * 可选依赖：缺省时节点不带 practice（旧测试 fake 与调用方零改动）。
+   */
+  listPracticeAnchors?(conceptIds: string[]): Promise<PracticeAnchor[]>;
 }
 
 const defaultDeps: ConceptGraphDeps = {
@@ -145,6 +161,35 @@ const defaultDeps: ConceptGraphDeps = {
     where: { id: { in: pathIds } },
     select: { id: true, title: true },
   }),
+  // 去练习直达（收尾批 C11）：里程碑表自带 canonical conceptId 列，直接 join 首个未完成任务
+  listPracticeAnchors: async (conceptIds) => {
+    if (conceptIds.length === 0) return [];
+    const milestones = await prisma.milestones.findMany({
+      where: { conceptId: { in: conceptIds } },
+      select: {
+        conceptId: true, learningPathId: true, title: true, stageNumber: true, order: true,
+        subtasks: { select: { id: true, title: true, status: true, order: true } },
+      },
+    });
+    const rows: PracticeAnchor[] = [];
+    for (const ms of milestones) {
+      if (!ms.conceptId) continue;
+      const next = (ms.subtasks || [])
+        .filter((task) => task.status !== 'completed')
+        .sort((a, b) => a.order - b.order)[0];
+      if (next) {
+        rows.push({
+          conceptId: ms.conceptId,
+          pathId: ms.learningPathId,
+          taskId: next.id,
+          taskTitle: next.title,
+          milestoneTitle: ms.title,
+          taskStatus: next.status,
+        });
+      }
+    }
+    return rows;
+  },
 };
 
 const newId = (): string => `ced_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -443,9 +488,27 @@ export class ConceptGraphService {
       .map((id) => ({ id, title: titleById.get(id) ?? null }))
       .sort((a, b) => String(a.title ?? a.id).localeCompare(String(b.title ?? b.id)));
 
+    // 去练习直达（收尾批 C11）：节点带首个未完成任务锚点；同概念跨路径时优先其首次出现路径
+    const practiceByConcept = new Map<string, PracticeAnchor>();
+    if (this.deps.listPracticeAnchors) {
+      const anchors = await this.deps.listPracticeAnchors(ranked.map((concept) => concept.id));
+      const grouped = new Map<string, PracticeAnchor[]>();
+      for (const anchor of anchors) {
+        const list = grouped.get(anchor.conceptId) ?? [];
+        list.push(anchor);
+        grouped.set(anchor.conceptId, list);
+      }
+      for (const concept of ranked) {
+        const candidates = grouped.get(concept.id) ?? [];
+        const pick = candidates.find((row) => row.pathId === concept.originPathId) ?? candidates[0];
+        if (pick) practiceByConcept.set(concept.id, pick);
+      }
+    }
+
     return {
       nodes: ranked.map((concept) => {
         const mastery = masteryByConcept.get(concept.id);
+        const practice = practiceByConcept.get(concept.id) ?? null;
         return {
           id: concept.id,
           label: concept.canonicalLabel,
@@ -455,6 +518,15 @@ export class ConceptGraphService {
           stability: mastery?.stability ?? null,
           extractionCount: mastery?.extractionCount ?? 0,
           lastSeenAt: mastery?.lastSeenAt ?? null,
+          practice: practice
+            ? {
+                taskId: practice.taskId,
+                pathId: practice.pathId,
+                taskTitle: practice.taskTitle,
+                milestoneTitle: practice.milestoneTitle,
+                taskStatus: practice.taskStatus,
+              }
+            : null,
         };
       }),
       // 只保留两端都在节点集里的边（截断后不产生悬空边）
@@ -481,6 +553,14 @@ export interface ConceptGraphView {
     stability: string | null;
     extractionCount: number;
     lastSeenAt: string | null;
+    /** 去练习直达锚点（首个未完成任务；无未完成任务/里程碑未挂概念 = null） */
+    practice: {
+      taskId: string;
+      pathId: string;
+      taskTitle: string;
+      milestoneTitle: string;
+      taskStatus: string;
+    } | null;
   }>;
   edges: Array<{ fromConceptId: string; toConceptId: string; relation: string }>;
   meta: {

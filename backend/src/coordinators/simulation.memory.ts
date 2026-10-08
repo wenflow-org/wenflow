@@ -20,7 +20,11 @@ import type { SimulationMilestone, SimulationTask, VirtualSessionWithProfile } f
  * 记忆引擎 M2：教学回合后按知识看板状态增量写 memory_traces。
  * best-effort——失败不阻断教学回合；修复「卡死任务期间 learner 状态零落库」。
  */
-export function persistKnowledgeState(userId: string, knowledgePoints: Array<{ name: string; status: string; progress: number }>): void {
+export function persistKnowledgeState(
+  userId: string,
+  knowledgePoints: Array<{ name: string; status: string; progress: number }>,
+  sessionId: string | null = null,
+): void {
   if (!userId || !Array.isArray(knowledgePoints) || !knowledgePoints.length) return;
   const outcomes = knowledgePoints
     .filter((kp) => kp && String(kp.name || '').trim())
@@ -32,7 +36,8 @@ export function persistKnowledgeState(userId: string, knowledgePoints: Array<{ n
       progress: Number.isFinite(Number(kp.progress)) ? Number(kp.progress) : 0,
     }));
   if (!outcomes.length) return;
-  memoryTraceService.recordSessionOutcome(userId, outcomes, 'derived').catch((error) => {
+  // B2 证据补齐（收尾批 C6）：VL 逐回合直写同样带 sessionId 落 session:outcome 证据
+  memoryTraceService.recordSessionOutcome(userId, outcomes, 'derived', 'accurate', null, sessionId).catch((error) => {
     logger.warn('[simulation-coordinator] 教学回合记忆痕迹回写失败', {
       userId,
       error: error instanceof Error ? error.message : String(error),

@@ -330,6 +330,13 @@ class MemoryTraceService {
    * 宁缺勿滥：证据门与映射表见 `fsrsGradeFromOutcome`（fsrs.ts）——无状态（非法/缺失）、
    * pending、review、以及无进度（progress≤0）的项一律不传 grade，行为与旧实现逐字一致
    * （recordExtraction 的「无 grade 路径」= preserveDueAt，单测钉死）。
+   *
+   * B2 第二步·证据补齐（收尾批 C6，2026-10-08）：直写路径此前完全无证据痕迹
+   * （FORGETTING-CURVE day7-14「55 对真实作答 vs learner_evidence 仅 19 行」的直写侧残缺，
+   * 测量面只见温故不见普通课）——逐项落 `session:outcome` 证据（confidence 0.6=看板派生
+   * 非独立信号，与 model-reference 同档；sessionId 由调用方透传）。落库失败只告警不阻断
+   * 痕迹回写。注意这不是完全事件链化（直写仍是单一写入者，无 outbox 事件）——那一步
+   * 动 FSRS 时序，风险大，仍挂下版本。
    */
   async recordSessionOutcome(
     userId: string,
@@ -337,16 +344,26 @@ class MemoryTraceService {
     source = 'derived',
     calibrationBias: 'overconfident' | 'accurate' | 'underconfident' = 'accurate',
     pathId: string | null = null,
+    sessionId: string | null = null,
   ): Promise<number> {
     let count = 0;
+    const at = simulatedNowOr();
+    const outcomeEventId = `session-outcome:${userId}:${at.getTime()}:${Math.random().toString(36).slice(2, 8)}`;
+    // 同一调用内同名概念去重（recordExtraction 靠 upsert 幂等；证据的唯一键是 (eventId, evidenceKey)）
+    const evidenceRows = new Map<string, {
+      id: string; eventId: string; evidenceKey: string; userId: string;
+      pathId: string | null; sessionId: string | null; evidenceType: string;
+      payload: string; confidence: number; occurredAt: Date;
+    }>();
     for (const item of items) {
       if (!item?.name || !String(item.name).trim()) continue;
+      const conceptKey = String(item.name).trim();
       const { masteryScore, stability } = mapKnowledgeStatusToMastery(item.status, item.progress, calibrationBias);
       // 证据门：有证据 → 原生 FSRS 排程；无证据 → 不传 grade（走 recordExtraction 既有无 grade 路径）
       const fsrsGrade = fsrsGradeFromOutcome(item.status, item.progress);
       await this.recordExtraction({
         userId,
-        conceptKey: String(item.name).trim(),
+        conceptKey,
         label: String(item.name).trim(),
         masteryScore,
         stability,
@@ -356,6 +373,37 @@ class MemoryTraceService {
         ...(fsrsGrade !== null ? { fsrsGrade } : {}),
       });
       count += 1;
+      evidenceRows.set(conceptKey, {
+        id: `lev_out_${at.getTime()}_${conceptKey.slice(0, 32)}_${evidenceRows.size}`,
+        eventId: outcomeEventId,
+        evidenceKey: `session:outcome:${conceptKey}`,
+        userId,
+        pathId: pathId ?? null,
+        sessionId: sessionId ?? null,
+        evidenceType: 'session:outcome',
+        payload: JSON.stringify({
+          conceptKey,
+          status: item.status,
+          progress: item.progress,
+          masteryScore,
+          fsrsGrade: fsrsGrade ?? null,
+          calibrationBias,
+          source,
+        }),
+        confidence: 0.6,
+        occurredAt: at,
+      });
+    }
+    if (evidenceRows.size > 0) {
+      try {
+        await prisma.learner_evidence.createMany({ data: [...evidenceRows.values()] });
+      } catch (error) {
+        logger.warn('[memory-trace] session:outcome 证据落库失败（不阻断痕迹回写）', {
+          userId,
+          rows: evidenceRows.size,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
     return count;
   }

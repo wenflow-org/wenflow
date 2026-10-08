@@ -302,7 +302,7 @@ Q9 的产出是 admin 的**「字段数据旅程（逻辑图 · 字段血缘）�
 2. **无 per-skill 长期状态聚合**：长期状态键是 `conceptKey`，不是 skill（§2.1）。
 3. **掌握判定仍大量依赖 LLM 自述**：先修/后测/迁移测缺位；只有检查点是弱独立。
 4. **结果测量是观测层，非因果**：无随机实验（MRT/E1–E3），保持率曲线不能读因果（§4.5）。
-5. **锚题只标记不改写**：`falsified` 不会自动触发重学/降级——需要人工或独立流程，且投放在真实模型长跑中未大规模验证。
+5. **锚题只标记不改写**：`falsified` 不直接改 masteryScore/信念/难度；但 anchor:result 证据经 `LearnerStateReviewService`（truth-discovery 加权融合，code 0.95 > llm 0.5）**间接**回流 BKT 与 relearnSuggestions（2026-10-05 复核已接线）——「完全无下游」为旧表述；真实模型长跑中仍未大规模验证。
 6. **BKT 参数未拟合**：只是有人工档位的可调先验，`pKnowL` 不驱动间隔/难度。
 7. **D_floor / 成功率带 / 归并阈值都是政策常量**，不是拟合结果（`TaskDifficultyAdjustmentService.ts:28-35`、`independent-success-band.service.ts:20-27`、`ConceptConsolidatorService.ts:26-35`）。
 8. **未建模维度**：SDT 归属/自主/胜任、成长型思维、OLM 自述仲裁、标准化量表（§1.1）。
