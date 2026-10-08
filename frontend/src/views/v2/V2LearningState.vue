@@ -248,11 +248,19 @@
               </article>
             </div>
 
-            <!-- 主次双按钮（原型 wf-advisory__actions）：采用建议 = primary 蓝渐变，保持原计划 = ghost -->
+            <!-- 主次双按钮（原型 wf-advisory__actions）：采用建议 = primary 蓝渐变，保持原计划 = ghost。
+                 调整策略禁用 replan 时「采用建议」禁用并在下方给原因 -->
             <div class="advisory__actions">
-              <button type="button" class="adv-btn adv-btn--primary" :disabled="replanBusy" @click="adoptSuggestion">采用建议</button>
+              <button
+                type="button"
+                class="adv-btn adv-btn--primary"
+                :disabled="replanBusy || !!adoptBlockReason"
+                :title="adoptBlockReason || undefined"
+                @click="adoptSuggestion"
+              >采用建议</button>
               <button type="button" class="adv-btn adv-btn--ghost" :disabled="replanBusy" @click="keepSuggestion">保持原计划</button>
             </div>
+            <p v-if="adoptBlockReason" class="advisory__blocked" role="note">{{ adoptBlockReason }}，「采用建议」暂不可用。</p>
             <!-- 回执行（原型 wf-advisory__done）：采用 / 保持成功后就地播报，不靠 toast 一次性带过 -->
             <p v-if="advisoryDone" class="advisory__done" role="status">{{ advisoryDone }}</p>
 
@@ -277,14 +285,26 @@
                   </header>
                   <p class="ctl-card__body">{{ card.body || card.judgment }}</p>
                   <p class="ctl-card__evidence">依据：{{ card.captured }}</p>
+                  <p v-if="cardAdjustBlockReason(card)" class="ctl-card__blocked" role="note">{{ cardAdjustBlockReason(card) }}，暂不可确认调整。</p>
                   <div v-if="confirmingId !== card.id" class="ctl-card__actions">
-                    <button type="button" class="ctl-btn ctl-btn--primary" :disabled="replanBusy" @click="confirmingId = card.id">确认调整</button>
+                    <button
+                      type="button"
+                      class="ctl-btn ctl-btn--primary"
+                      :disabled="replanBusy || !!cardAdjustBlockReason(card)"
+                      :title="cardAdjustBlockReason(card) || undefined"
+                      @click="confirmingId = card.id"
+                    >确认调整</button>
                     <button type="button" class="ctl-btn" :disabled="!card.pathId" @click="jumpToAdjust(card)">查看建议</button>
                     <button type="button" class="ctl-btn ctl-btn--ghost" @click="dismissDecision(card)">保持原计划</button>
                   </div>
                   <div v-else class="ctl-card__confirm">
                     <span>这会调整该路径的后续阶段安排，已完成内容保留不变。</span>
-                    <button type="button" class="ctl-btn ctl-btn--primary" :disabled="replanBusy" @click="confirmAdjust(card)">{{ replanBusy ? '正在调整…' : '确认' }}</button>
+                    <button
+                      type="button"
+                      class="ctl-btn ctl-btn--primary"
+                      :disabled="replanBusy || !!cardAdjustBlockReason(card)"
+                      @click="confirmAdjust(card)"
+                    >{{ replanBusy ? '正在调整…' : '确认' }}</button>
                     <button type="button" class="ctl-btn ctl-btn--ghost" @click="confirmingId = ''">取消</button>
                   </div>
                 </article>
@@ -451,11 +471,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import request from '@/utils/api';
 import { toast } from '@/utils/toast';
 import { metricsAPI } from '@/api/metrics';
+import { learningAPI } from '@/api/learning';
+import { adjustmentModeBlockReason, type PathAdjustmentPolicyLike } from '@/utils/replanSignal';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
@@ -1096,6 +1118,33 @@ function dismissDecision(card: DecisionCard) {
 const pendingAdjust = computed(() =>
   decisions.value.filter((d) => d.kind === 'path-adjust' && !dismissedAdvisories.value.includes(d.id))
 );
+
+/* 调整策略门控：「采用建议 / 确认调整」最终都走 replan（mode=overwrite 重排后续阶段 → 策略模式 replan）。
+   路径 adjustmentPolicy.allowedModes 不含 replan 时禁用入口并给原因；拉不到策略时 fail-open（=不限制，与旧路径无策略同口径）。 */
+const pathPolicies = ref<Record<string, PathAdjustmentPolicyLike | null>>({});
+const pathPoliciesLoaded = ref(false);
+async function ensurePathPolicies() {
+  if (pathPoliciesLoaded.value) return;
+  pathPoliciesLoaded.value = true;
+  try {
+    const paths = await learningAPI.getPaths();
+    const map: Record<string, PathAdjustmentPolicyLike | null> = {};
+    for (const p of paths) map[p.id] = p.adjustmentPolicy ?? null;
+    pathPolicies.value = map;
+  } catch { /* 拉不到策略不门控（fail-open） */ }
+}
+watch(pendingAdjust, (cards) => { if (cards.length) void ensurePathPolicies(); });
+
+/** 单卡对应路径的策略禁用原因；未禁用返回空串（「采用建议/确认调整」最终都执行 replan，按策略模式 replan 校验） */
+function cardAdjustBlockReason(card: DecisionCard): string {
+  const policy = card.pathId ? pathPolicies.value[card.pathId] : undefined;
+  return adjustmentModeBlockReason(policy ?? null, 'replan');
+}
+/** 建议卡主按钮「采用建议」的禁用原因（落在第一条待确认调整上） */
+const adoptBlockReason = computed(() => {
+  const card = pendingAdjust.value[0];
+  return card ? cardAdjustBlockReason(card) : '';
+});
 const autoHandled = computed(() =>
   decisions.value.filter((d) => d.kind === 'kp-carryover' || d.kind === 'concept-watch' || d.kind === 'pace')
 );
@@ -1116,6 +1165,12 @@ const REPLAN_REASON: Record<string, string> = {
 
 async function confirmAdjust(card: DecisionCard) {
   if (!card.pathId || replanBusy.value) return;
+  // 策略禁用时统一拦下（「采用建议」按钮已 disabled，这里是卡内确认入口的兜底）
+  const blocked = cardAdjustBlockReason(card);
+  if (blocked) {
+    toast.info(`${blocked}，这次调整暂不能执行`);
+    return;
+  }
   replanBusy.value = true;
   try {
     await request.post(`/learning/paths/${card.pathId}/replan`, {
@@ -1499,6 +1554,8 @@ function loadGuidance() {
 .advisory__body { display: grid; gap: 11px; }
 .advisory__actions { display: flex; gap: 9px; flex-wrap: wrap; }
 .advisory__done { margin: 0; font-size: 12.5px; font-weight: 700; color: var(--green-ink); }
+/* 调整策略禁用「采用建议」的原因行（amber 一档，与预警同色语言） */
+.advisory__blocked { margin: 0; font-size: 12.5px; color: var(--amber-ink, #b45309); }
 /* 次级区块（学习调控）：与正文之间用分隔线分层，卡内再分一层，避免与建议正文糊在一起 */
 .advisory__sub {
   display: grid; gap: 12px;
@@ -1644,6 +1701,8 @@ function loadGuidance() {
 .ctl-card__merged { font-size: 12px; color: var(--amber-ink); }
 .ctl-card__body { margin: 0; font-size: 13px; line-height: 1.65; color: var(--ink); }
 .ctl-card__evidence { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+/* 调整策略禁用该卡确认入口的原因行 */
+.ctl-card__blocked { margin: 0; font-size: 12px; color: var(--amber-ink, #b45309); line-height: 1.6; }
 .ctl-card__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ctl-card__confirm {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;

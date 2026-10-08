@@ -315,6 +315,34 @@
                 </div>
               </div>
             </section>
+
+            <!-- 调整历史（replanLineage，单跳链）：本次路径来自哪次调整；旧路径无 lineage 不渲染（不出空态卡） -->
+            <section v-if="lineageRows.length || lineageSourcePathId" class="card sidecard">
+              <button
+                type="button"
+                class="sidecard__head"
+                :aria-expanded="lineageOpen"
+                @click="lineageOpen = !lineageOpen"
+              >
+                <span class="kicker">调整历史</span>
+                <span class="sidecard__chev" :class="{ 'sidecard__chev--open': lineageOpen }">▾</span>
+              </button>
+              <div v-show="lineageOpen" class="sidecard__body">
+                <dl v-if="lineageRows.length" class="sidecard__rows">
+                  <div v-for="row in lineageRows" :key="row.label" class="sidecard__row">
+                    <dt>{{ row.label }}</dt>
+                    <dd>{{ row.value }}</dd>
+                  </div>
+                </dl>
+                <router-link
+                  v-if="lineageSourcePathId"
+                  :to="`/learning-path/${lineageSourcePathId}`"
+                  class="lineage-link"
+                >查看调整前的路径</router-link>
+                <!-- 与快照回退区（hero 的「回退上次调整」）互相指引：历史在这里看，回退在那边做 -->
+                <p v-if="rollbackAvailable" class="lineage-note">每次调整前的安排都会自动留存，可用页面上方「回退上次调整」退回。</p>
+              </div>
+            </section>
           </aside>
         </div>
       </template>
@@ -375,29 +403,51 @@
           <p class="clear-sessions__hint">按「结束」会把未完成的课堂标记为放弃：不计入学习进度，对话内容仍保留在学习历史中。</p>
         </div>
 
-        <!-- 场景选择 -->
+        <!-- 场景选择：按 adjustmentPolicy.allowedModes 门控（禁用 + 原因），推荐场景带引导标记 -->
         <div v-else-if="!adjustMode" class="adjust-modes">
-          <button type="button" class="adjust-mode" :class="{ 'adjust-mode--warn': hasLearningProgress }" @click="selectAdjustMode('rebuild')">
+          <button
+            type="button"
+            class="adjust-mode"
+            :class="{ 'adjust-mode--warn': hasLearningProgress }"
+            :disabled="!adjustEntryAllowed('rebuild')"
+            :title="adjustEntryBlockReason('rebuild') || undefined"
+            @click="selectAdjustMode('rebuild')"
+          >
             <span class="adjust-mode__icon" aria-hidden="true">↺</span>
             <span class="adjust-mode__body">
-              <strong>学得不好，想重新来一遍</strong>
+              <strong>学得不好，想重新来一遍<span v-if="isRecommendedEntry('rebuild')" class="adjust-mode__rec">推荐</span></strong>
               <small>整条路径按新说明重新规划，从头开始；已学部分会保留在历史记录里作参考。</small>
+              <small v-if="!adjustEntryAllowed('rebuild')" class="adjust-mode__blocked">{{ adjustEntryBlockReason('rebuild') }}</small>
             </span>
             <span class="adjust-mode__arrow" aria-hidden="true">›</span>
           </button>
-          <button type="button" class="adjust-mode" @click="selectAdjustMode('reshape')">
+          <button
+            type="button"
+            class="adjust-mode"
+            :disabled="!adjustEntryAllowed('reshape')"
+            :title="adjustEntryBlockReason('reshape') || undefined"
+            @click="selectAdjustMode('reshape')"
+          >
             <span class="adjust-mode__icon" aria-hidden="true">⇄</span>
             <span class="adjust-mode__body">
-              <strong>学了一些，想调整剩余部分</strong>
+              <strong>学了一些，想调整剩余部分<span v-if="isRecommendedEntry('reshape')" class="adjust-mode__rec">推荐</span></strong>
               <small>已完成的阶段/任务原样保留；可只调当前阶段，或从某个未学阶段起把后面的课程一起按新说明调整。</small>
+              <small v-if="!adjustEntryAllowed('reshape')" class="adjust-mode__blocked">{{ adjustEntryBlockReason('reshape') }}</small>
             </span>
             <span class="adjust-mode__arrow" aria-hidden="true">›</span>
           </button>
-          <button type="button" class="adjust-mode" @click="selectAdjustMode('auto')">
+          <button
+            type="button"
+            class="adjust-mode"
+            :disabled="!adjustEntryAllowed('auto')"
+            :title="adjustEntryBlockReason('auto') || undefined"
+            @click="selectAdjustMode('auto')"
+          >
             <span class="adjust-mode__icon" aria-hidden="true">✦</span>
             <span class="adjust-mode__body">
-              <strong>让 AI 看我的学习情况来建议</strong>
+              <strong>让 AI 看我的学习情况来建议<span v-if="isRecommendedEntry('auto')" class="adjust-mode__rec">推荐</span></strong>
               <small>结合你的掌握度、节奏与卡点，由 AI 判断该补基础、放缓还是换路径。</small>
+              <small v-if="!adjustEntryAllowed('auto')" class="adjust-mode__blocked">{{ adjustEntryBlockReason('auto') }}</small>
             </span>
             <span class="adjust-mode__arrow" aria-hidden="true">›</span>
           </button>
@@ -409,7 +459,10 @@
             <template v-if="adjustMode === 'rebuild'">整条重建 · 从头开始学</template>
             <template v-else-if="adjustMode === 'reshape'">调整剩余部分 · 保留已学（可只调当前阶段，或从指定阶段起调整到末尾）</template>
             <template v-else>AI 学习情况诊断 · 建议调整</template>
-            <button type="button" class="adjust-form__back" @click="adjustMode = null">← 换一种方式</button>
+            <span class="adjust-form__hint-group">
+              <span v-if="isRecommendedEntry(adjustMode)" class="adjust-form__rec">按你的情况推荐</span>
+              <button type="button" class="adjust-form__back" @click="adjustMode = null">← 换一种方式</button>
+            </span>
           </div>
           <p v-if="adjustMode === 'rebuild' && hasLearningProgress" class="adjust-form__warn">
             这条路径已有学习进度。整条重建会把当前规划替换为全新版本，已完成的课堂记录仍保存在学习历史中，但新路径不会延续旧任务。
@@ -550,11 +603,16 @@ import { readMaterial, readMaterialSection } from '@/api/materials';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { pickCurrentTask } from '@/composables/useCurrentTask';
 import {
+  adjustEntryAllowedByPolicy,
+  adjustPolicyBlockReason,
   getReplanActionText,
   getReplanPriorityText,
   getReplanRecommendationText,
   getReplanReasonCodeLabels,
   getReplanScopeText,
+  recommendedAdjustEntry,
+  type LearnerAdjustEntry,
+  type PathAdjustmentPolicyLike,
 } from '@/utils/replanSignal';
 import V2Nav from './V2Nav.vue';
 import V2Footer from './V2Footer.vue';
@@ -719,10 +777,10 @@ async function load(silent = false) {
     // 回退可用性：有重排快照才显示「回退上次调整」（静默，失败不拦截页面）
     void refreshRollbackAvailability();
     // 学习状态页调控卡「查看建议」直达（2026-09-27）：?adjust=ai 打开调整弹窗的 AI 诊断场景，
-    // 用完即清，避免刷新时再次弹出
+    // 用完即清，避免刷新时再次弹出。策略禁用 auto 时不直落诊断步，留在场景选择页看原因。
     if (route.query.adjust === 'ai') {
       adjustDialogOpen.value = true;
-      adjustMode.value = 'auto';
+      adjustMode.value = adjustEntryAllowed('auto') ? 'auto' : null;
       void router.replace({ query: { ...route.query, adjust: undefined } }).catch(() => {});
     }
     nextTick(measureClampedText);
@@ -781,6 +839,43 @@ async function confirmRollback() {
   }
 }
 
+/* ---------- 调整历史（replanLineage） ----------
+   后端只投影上一跳（sourcePathId/replanMode/triggerSource[/reason]），非链状 → 单条行展示；
+   旧路径无 lineage（null/全空）时整卡不渲染，不出空态卡。 */
+const lineageOpen = ref(false);
+const lineage = computed(() => (path.value?.replanLineage ?? null) as Record<string, any> | null);
+const REPLAN_MODE_LABELS: Record<string, string> = {
+  overwrite: '覆盖原路径（在原路径上重排）',
+  new_version: '新版本路径',
+};
+const REPLAN_TRIGGER_LABELS: Record<string, string> = {
+  'goal-conversation': '目标对话',
+  'learner-model-agent': '学习者模型建议',
+  'ai-teaching': 'AI 教学建议',
+  'learner-model': '学习者模型建议',
+  admin: '管理员',
+  system: '系统',
+  api: '页面操作',
+  learn: '学习侧',
+};
+const lineageRows = computed(() => {
+  const ln = lineage.value;
+  if (!ln) return [];
+  const rows: Array<{ label: string; value: string }> = [];
+  const mode = typeof ln.replanMode === 'string' && ln.replanMode ? (REPLAN_MODE_LABELS[ln.replanMode] || ln.replanMode) : '';
+  if (mode) rows.push({ label: '调整方式', value: mode });
+  const trigger = typeof ln.triggerSource === 'string' && ln.triggerSource ? (REPLAN_TRIGGER_LABELS[ln.triggerSource] || ln.triggerSource) : '';
+  if (trigger) rows.push({ label: '触发来源', value: trigger });
+  const reason = typeof ln.reason === 'string' ? ln.reason.trim() : '';
+  if (reason) rows.push({ label: '调整原因', value: reason.length > 60 ? `${reason.slice(0, 60)}…` : reason });
+  return rows;
+});
+/** 覆盖式重建（overwrite）的 sourcePathId 就是当前路径自身，自指时不出「查看来源」链接 */
+const lineageSourcePathId = computed(() => {
+  const src = typeof lineage.value?.sourcePathId === 'string' ? String(lineage.value.sourcePathId) : '';
+  return src && src !== path.value?.id ? src : '';
+});
+
 /* ---------- 生成轮询 ---------- */
 let pollTimer = 0;
 /** 状态查询连续失败计数：超过阈值熔断，停止空转轮询（对齐列表页断路器） */
@@ -830,6 +925,24 @@ async function doRetry() {
 
 /* ---------- 调整路径（三场景） ---------- */
 type AdjustMode = 'rebuild' | 'reshape' | 'auto' | null;
+
+/** 调整策略门控：后端随路径下发 adjustmentPolicy（旧路径无此字段 = 不限制，全放行）。
+    口径照抄后端动作语义：rebuild/auto 落 replan，reshape 落 expand/compress（详见 replanSignal.ts）。 */
+const adjustPolicy = computed(() => (path.value?.adjustmentPolicy ?? null) as PathAdjustmentPolicyLike | null);
+const recommendedEntry = computed(() => recommendedAdjustEntry(adjustPolicy.value));
+
+function adjustEntryAllowed(entry: LearnerAdjustEntry): boolean {
+  return adjustEntryAllowedByPolicy(adjustPolicy.value, entry);
+}
+/** 禁用原因（一行副文案 + title tooltip）；未禁用返回空串 */
+function adjustEntryBlockReason(entry: LearnerAdjustEntry): string {
+  return adjustPolicyBlockReason(adjustPolicy.value, entry);
+}
+/** 策略推荐入口（含放行校验）：弹窗默认选中 + 场景卡「推荐」引导标记 */
+function isRecommendedEntry(entry: LearnerAdjustEntry | null): boolean {
+  return !!entry && recommendedEntry.value === entry && adjustEntryAllowed(entry);
+}
+
 const adjustDialogOpen = ref(false);
 const adjustDialogRef = ref<HTMLElement | null>(null);
 /* Esc 关闭调整弹窗（批18）：此前只能点遮罩/关闭钮 */
@@ -908,6 +1021,7 @@ const adjustConfirmText = computed(() => {
 });
 
 function selectAdjustMode(mode: NonNullable<AdjustMode>) {
+  if (!adjustEntryAllowed(mode)) return; // 策略禁用的入口不响应（按钮已 disabled，这里兜底键盘/程序调用）
   adjustMode.value = mode;
   adjustText.value = '';
   aiAdvice.value = null;
@@ -927,6 +1041,9 @@ function openAdjustDialog() {
   blockingSessions.value = [];
   pendingAdjustRetry.value = null;
   clearedSessionIds.value = [];
+  // recommendedMode 默认选中：直接落到推荐场景的填写步（场景选择页仍可「换一种方式」改选）
+  const rec = recommendedEntry.value;
+  if (rec && adjustEntryAllowed(rec)) adjustMode.value = rec;
   adjustDialogOpen.value = true;
 }
 
@@ -1675,6 +1792,9 @@ onBeforeUnmount(() => {
 .sidecard__row dt { font-size: 12px; font-weight: 800; color: var(--faint); letter-spacing: 0.03em; }
 .sidecard__row dd { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
 .sidecard__bg { border-top: 1px dashed var(--line); padding-top: 8px; }
+/* 调整历史卡：来源路径链接 + 与快照回退区的互引说明 */
+.lineage-link { font-size: 12px; font-weight: 600; color: var(--blue); text-decoration: underline; }
+.lineage-note { margin: 0; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 12px; line-height: 1.6; color: var(--faint); }
 .sidecard__bg-head {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 12px; font-weight: 800; letter-spacing: 0.03em; color: var(--faint);
@@ -1816,6 +1936,23 @@ onBeforeUnmount(() => {
 .adjust-mode__body strong { font-size: 13.5px; color: var(--ink); }
 .adjust-mode__body small { font-size: 12px; line-height: 1.55; color: var(--mk-faint); }
 .adjust-mode__arrow { color: var(--faint); font-size: 16px; }
+/* 策略禁用的场景入口：压暗 + 原因副文案（amber 一档，与整建警示同色语言） */
+.adjust-mode:disabled { opacity: 0.55; cursor: not-allowed; }
+.adjust-mode:disabled:hover { border-color: var(--line); background: var(--surface); box-shadow: none; }
+.adjust-mode__blocked { color: var(--amber-ink); }
+/* 策略推荐引导标记：场景卡标题角标 + 填写步提示条内文案 */
+.adjust-mode__rec {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: var(--mk-radius-pill);
+  font-size: 11px; font-weight: 800;
+  color: var(--blue-deep);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
+  vertical-align: 1px;
+}
+.adjust-form__hint-group { display: inline-flex; align-items: center; gap: 10px; }
+.adjust-form__rec { font-size: 12px; font-weight: 700; opacity: 0.9; }
 /* 选中场景后的头部提示 */
 .adjust-form__mode-hint {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
