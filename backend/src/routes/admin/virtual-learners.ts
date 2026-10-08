@@ -79,6 +79,7 @@ import {
   validateCards as validateCardDocument,
   importCards as importCardDocument,
   exportCards as exportCardLibrary,
+  ensureCardKey,
   getCardWallIndex,
   getCardDetail,
   attachMaterialsToLearner,
@@ -1411,6 +1412,10 @@ router.post('/', async (req: Request, res) => {
     // ⇒ 收紧静默失效。此处把 personaSeed 里的这两个字段抬到顶层（顶层已有则不覆盖），
     // 使两种写法都生效，避免"看起来配了低耐受、实际从未收紧"。
     const normalizedProfile = normalizeVirtualLearnerProfileShape(profile);
+    const profileId = uuidv4();
+    // 自建卡也要带 cardKey：没有 key 的卡会被「导出卡库」静默跳过（见 ensureCardKey 注释）。
+    // 先定 id 再算 key，保证 key 与档案同生，且同一学习者恒得同一个 key。
+    const profileWithCardKey = ensureCardKey(normalizedProfile, profileId, Array.isArray(tags) ? (tags as string[]) : []);
 
     const email = `virtual_${uuidv4().substring(0, 8)}@test.local`;
     // 虚拟学习者仅供系统编排使用，不提供可共享的登录凭据。
@@ -1435,9 +1440,9 @@ router.post('/', async (req: Request, res) => {
     
     const virtualProfile = await createVirtualLearnerProfile({
       data: {
-        id: uuidv4(),
+        id: profileId,
         userId: user.id,
-        profile: JSON.stringify(normalizedProfile),
+        profile: JSON.stringify(profileWithCardKey),
         learningGoal: normalizedLearningGoal,
         knowledgeLevel: normalizedKnowledgeLevel,
         knownConcepts: knownConcepts ? JSON.stringify(knownConcepts) : null,

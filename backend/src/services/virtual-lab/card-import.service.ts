@@ -403,6 +403,26 @@ export function resolveCardKey(profile: Record<string, unknown>, tags: string[])
   return null;
 }
 
+/**
+ * 自建卡也必须带 cardKey。
+ *
+ * 为什么：`exportCards` 以 cardKey 作回灌幂等键，没有 key 的卡会被 `continue` 静默跳过——
+ * 于是「卡库自建 N 张」与「导出 N 张」对不上（2026-10-08 端到端验证实测：自建 1 张、导出 0 张），
+ * 迁移/回灌会丢卡。此前只有导入的卡带 key，「平台生产」与批量创建的自建卡都没有。
+ *
+ * 已有 key（显式 cardKey / scenarioCard.personaId / nameHint / tags）的画像原样返回，不覆盖。
+ * 新增 key 取 `vl-<profileId 前 8 位>`：与随卡资料 materialId 的既有约定一致
+ * （attachMaterialsToLearner 同样用 vl-<id8>），且同一学习者恒得同一个 key。
+ */
+export function ensureCardKey<T extends Record<string, unknown>>(
+  profile: T,
+  profileId: string,
+  tags: string[] = []
+): T {
+  if (resolveCardKey(profile, tags)) return profile;
+  return { ...profile, cardKey: `vl-${profileId.slice(0, 8)}` } as T;
+}
+
 /** 收集库内已存在卡的查重索引 */
 async function buildExistingIndex(): Promise<{ byKey: Map<string, string>; refs: Map<string, string[]> }> {  const rows = await findAllProfilesForCardIndex();
   const byKey = new Map<string, string>();
