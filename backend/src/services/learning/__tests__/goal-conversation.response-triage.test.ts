@@ -377,3 +377,27 @@ describe('gated 模式：非学习路径不自动推进', () => {
     expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('executeSkill 会话 envelope（非流式路径 conversationId 双写）', () => {
+  it('第三参 contextEnvelope 带 session.conversationId（缓存亲和/遥测口径统一）', async () => {
+    seedConversation({
+      stage: 'understanding',
+      collectedData: JSON.stringify({
+        messages: [],
+        understanding: { real_problem: '想学吉他', primaryBlockType: 'capability', blockTypeEvidence: '不会' },
+      }),
+    });
+    mockExecuteSkill.mockResolvedValue(buildAiResponse({
+      userVisible: '好的。',
+      understanding: { real_problem: '想学吉他', primaryBlockType: 'capability', blockTypeEvidence: '不会' },
+    }));
+
+    await goalConversationService.continueConversation('conv-1', '继续', 'user-1');
+
+    const call = mockExecuteSkill.mock.calls[mockExecuteSkill.mock.calls.length - 1];
+    expect(call[2]?.contextEnvelope?.session).toEqual(expect.objectContaining({
+      sessionId: 'conv-1',
+      conversationId: 'conv-1',
+    }));
+  });
+});

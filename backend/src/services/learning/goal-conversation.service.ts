@@ -980,6 +980,15 @@ async continueConversation(
         // 已上传资料清单（元信息 + 理解摘要）：让 goal-agent 知道用户提供了什么、资料讲什么，
         // 避免答出「没有收到文件」这类与事实不符的话；无上传=空数组=payload 无该键
         uploadedMaterials: await this.collectUploadedMaterialSummaries(userId)
+      }, {
+        // 会话标识进 envelope（与教学链 A6 同模式）：此前只有 SSE 流式路由在 ALS 注入
+        // conversationId，非流式路径（API 直连/驱动）恒 null → prompt_call_logs 缺值、
+        // 缓存亲和退化为 agentId。接口层统一双写后两条路径口径一致（父上下文已有时优先）。
+        contextEnvelope: {
+          schemaVersion: 'context-envelope/v1',
+          principal: { userId: userId || 'anonymous' },
+          session: { sessionId: conversationId, conversationId },
+        },
       });
 
         logger.debug('AI响应', {
