@@ -2,10 +2,12 @@
   <V2AuthLayout>
     <div class="head">
       <h2>欢迎回来</h2>
-      <p>登录后，从上次停下的地方继续。</p>
+      <p>{{ subtitle }}</p>
     </div>
 
     <form class="form" :aria-busy="loading" @submit.prevent="handleLogin">
+      <!-- 被登录拦下时说明「为什么到了这里」（走查 2026-10-08 #5） -->
+      <div v-if="redirectNotice" class="notice">{{ redirectNotice }}</div>
       <div v-if="formError" class="errorbar" role="alert">{{ formError }}</div>
 
       <label class="field" :class="{ 'field--error': errors.name }">
@@ -80,6 +82,9 @@ const userStore = useUserStore();
 const loading = ref(false);
 
 const LAST_NAME_KEY = 'v2_last_username';
+/** 本机存着用户名 = 这台设备上登录过；否则按首次到访对待，文案不预设「上次」（走查 2026-10-08 #31）。
+    刻意取挂载时的快照，不跟着输入框走：否则用户刚敲第一个字符，副标题就会跳成「上次停下的地方」。 */
+const returningUser = Boolean(localStorage.getItem(LAST_NAME_KEY));
 
 const form = reactive({
   name: localStorage.getItem(LAST_NAME_KEY) || '',
@@ -106,6 +111,29 @@ const safeRedirect = computed(() => {
     return null;
   }
 });
+
+/** 回跳目标的页面名（取路由 meta.title，如 /dashboard → 学习台），取不到就退回中性说法 */
+const redirectTitle = computed(() => {
+  if (!safeRedirect.value) return null;
+  const title = router.resolve(safeRedirect.value).meta.title;
+  return typeof title === 'string' && title ? title : null;
+});
+
+/* 副标题要经得起「没账号、没记录的路人」：原句「登录后，从上次停下的地方继续。」对他是假的
+   —— 本页没有任何读取历史的逻辑，无论有无历史都显示同一句（走查 2026-10-08 #31）。 */
+const subtitle = computed(() => {
+  if (safeRedirect.value) {
+    return redirectTitle.value ? `登录后继续前往${redirectTitle.value}。` : '登录后继续前往你刚才要去的页面。';
+  }
+  if (returningUser) return '登录后，从上次停下的地方继续。';
+  return '登录后，开始你的学习。';
+});
+
+/* 只说「为什么到这里」（去哪由副标题的落点说明负责，不重复）。被守卫弹回来时
+   redirect 一定在 query 里；同页的会话失效还有 toast 兜底（V2Login.vue onMounted）。 */
+const redirectNotice = computed(() =>
+  safeRedirect.value ? '你刚才要去的页面需要登录后才能访问。' : ''
+);
 
 async function handleLogin() {
   touch('name');
@@ -165,6 +193,17 @@ onMounted(() => {
 .head { display: grid; gap: 5px; }
 .head h2 { margin: 0; font-size: 20px; }
 .head p { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* 提示条：为什么被弹到登录页（走查 2026-10-08 #5）。底色用蓝色胶囊底 + 蓝字，
+   与 .errorbar 的语义色分家；文字色走 --blue-deep（有暗色档），不写死颜色。 */
+.notice {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--blue-deep);
+  background: var(--mk-blue-bg);
+  border-radius: var(--mk-radius-md);
+  padding: 9px 12px;
+}
 
 .form { display: grid; gap: 14px; }
 .field { display: grid; gap: 6px; }
@@ -249,7 +288,11 @@ onMounted(() => {
   width: 24px;
   height: 24px;
   flex: 0 0 auto;
-  border: 1.5px solid var(--line);
+  /* 深色下 --line(#36373c) 对卡面 #202124 只有 1.36:1，勾选框里没有任何内容、
+     边界就是它全部的可见信息，于是几乎看不见（走查 2026-10-08 #28）。
+     改用 --ink 与灰阶的派生：亮 2.61:1 / 暗 3.91:1，与 main.css 的卡片描边补丁
+     （--mk-card-line 3.25:1）同一层级；不写死颜色，两档自动翻转。 */
+  border: 1.5px solid color-mix(in srgb, var(--ink) 30%, var(--wf-border-dark));
   border-radius: 7px;
   background: var(--surface);
   cursor: pointer;

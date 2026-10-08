@@ -173,7 +173,11 @@
       <section class="chat">
         <div class="chat__head">
           <ol class="stage-nav">
-            <li class="stage-nav__item" :class="stageCls(1)"><i>1</i>澄清问题</li>
+            <!-- 第 1 步与左栏 7 项清单的对应关系：澄清期在此直接给出「已收集 N/7」，
+                 否则步骤条只说「澄清问题」、面板只说「继续澄清中」，读不出两者是同一步
+                 （2026-10-08 用户侧走查）。窄屏该行与右上「目标信息」按钮共处一行、余量紧张，
+                 ≤1100 隐藏（见文件末样式块），移动端计数由面板角标承担。 -->
+            <li class="stage-nav__item" :class="stageCls(1)"><i>1</i>澄清问题<span v-if="live.stageIndex === 1" class="stage-nav__sub">已收集 {{ live.filledCount }}/{{ live.totalFields }}</span></li>
             <li class="stage-nav__item" :class="stageCls(2)"><i>2</i>确认方案</li>
             <li class="stage-nav__item" :class="stageCls(3)"><i>3</i>生成路径</li>
           </ol>
@@ -968,9 +972,17 @@ function messageHtml(m: LiveMessage): string {
 }
 
 const stageLabel = computed(() => {
+  /* generating 与 stageIndex 无关：stageIndex 只在 stage 落库时翻转（proposing→ready），
+     而「确认，生成我的路径」按下时 stageIndex 仍是 3 —— 此时面板顶还写「可生成路径」，
+     与屏幕上正在转的生成浮层互相矛盾，读起来像还停在「等你点确认」。 */
+  if (phase.value === 'generating') return '生成中…';
   if (live.stageIndex === 3) return '可生成路径';
   if (live.stageIndex === 2) return '方案确认中';
-  return '继续澄清中';
+  /* 澄清期状态字由 7 项清单**推导**，不再恒为「继续澄清中」：
+     1/7、4/7、5/7 三屏原先同字，用户读不出「还差什么、什么时候进下一步」。
+     还差 N 项直接对得上左栏计数器与进度条，收满即说明该轮到「确认方案」。 */
+  const remain = Math.max(0, live.totalFields - live.filledCount);
+  return remain > 0 ? `还差 ${remain} 项关键信息` : '关键信息已收齐';
 });
 
 /** Escape 关闭方案浮层（状态保留，对话可继续）；新提案到达时重新显示。
@@ -1346,7 +1358,10 @@ function shuffleScenes() {
 }
 .entry__hero-text { display: grid; gap: 10px; }
 .entry__hero h1 { margin: 0; /* 桌面档 goal 页登记上限 20（check-mobile-spec）：原 clamp(22,3.6vw,30) 越阈 */ font-size: clamp(18px, 2vw, 20px); font-weight: 800; letter-spacing: -0.012em; }
-.entry__hero p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 52ch; line-height: 1.7; }
+/* 副标题与同列的卡片/输入框共用 640 这条列宽（.entry__cards / .entry .composer--entry 同值）。
+   原 52ch ≈412px @13.5px，比卡片窄 228px：整句被挤成两行，第二行只剩「段安排。」4 字，
+   还把「第一阶段安排」拆到两行（2026-10-08 用户侧走查实测）。 */
+.entry__hero p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 640px; line-height: 1.7; }
 
 .errorbar {
   display: flex; align-items: center; gap: 8px;
@@ -1686,6 +1701,8 @@ function shuffleScenes() {
 /* done 态：原型 .wf-stagenav__item.is-done —— 浅绿字 + 浅绿底圆（非实绿底白字） */
 .stage-nav__item--done { color: var(--green-ink); }
 .stage-nav__item--done i { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green-ink); }
+/* 第 1 步右侧的「已收集 N/7」：把步骤条与左栏 7 项清单的对应关系写在同一步里 */
+.stage-nav__sub { font-size: 12px; font-weight: 600; color: var(--faint); }
 .chat__clear { font-size: 12px; font-weight: 600; color: var(--faint); cursor: pointer; }
 .chat__clear:hover { color: var(--red-ink); }
 
@@ -2493,5 +2510,16 @@ function shuffleScenes() {
      会比输入框右缘多出 (列宽−760)/2 —— 1920 实测 26px，看起来像多伸出来一截。
      width:100% + 同款左右 auto 让两端都与输入框对齐（与课堂页 .composer__hint 同法）。 */
   .composer__hint { max-width: 760px; width: 100%; margin-left: auto; margin-right: auto; }
+  /* 完成态浮层只有「查看我的路径」一个下一步：动作行撑满卡片宽、主按钮独占余宽。
+     原先动作行按内容宽（247px）居中在 620px 卡片里，主钮 142、次钮 93，左右各空 ~187px，
+     下一步在视觉上没有重心（2026-10-08 用户侧走查 1440 实测）。桌面专属——窄屏浮层本就窄。 */
+  .proposal__actions--center { width: 100%; }
+  .proposal__actions--center .btn-primary { flex: 1; justify-content: center; }
+}
+
+@media (max-width: 1100px) {
+  /* 窄屏阶段导航一行放不下「澄清问题 + 已收集 5/7」（390 实测该行只有 ~11px 余量，
+     与右上「目标信息」按钮共享）。移动端计数已由面板角标承担，这里隐藏随行计数。 */
+  .stage-nav__sub { display: none; }
 }
 </style>

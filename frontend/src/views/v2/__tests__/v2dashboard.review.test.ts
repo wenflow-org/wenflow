@@ -109,7 +109,14 @@ describe('V2Dashboard 今日复习区（信噪比重设计）', () => {
 
   it('主口径：下节课开头会先复习 N 个（以课内温故计划为准；「回捞」口语已改「复习」）', async () => {
     const w = await mountDashboard();
-    expect(w.find('.review__plan-body strong').text()).toBe('下节课开头会先复习 3 个旧知识点');
+    // 走查 2026-10-08 #74：到期 7 个但本节计划只接 3 个，正文补一句交代其余 4 个的去向
+    // （卡头数字不再与正文数字打架）。
+    expect(w.find('.review__plan-body strong').text()).toBe('下节课开头会先复习 3 个旧知识点，其余 4 个按今日额度排队');
+  });
+
+  it('#74：卡头「N 个知识点到期」带量词，与正文计划数量差有交代', async () => {
+    const w = await mountDashboard();
+    expect(w.find('.agenda__meta').text()).toContain('7 个知识点到期');
   });
 
   it('温故计划拿不到时回退到偏弱计数（不显示 0/空）', async () => {

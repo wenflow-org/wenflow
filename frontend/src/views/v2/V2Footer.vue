@@ -59,6 +59,8 @@ const version = appVersion;
   align-items: center;
   gap: 10px;
   min-width: 0;
+  /* 触控热区 ≥36px（2026-10-08 走查）：logo 30 + 文字两行实测仅 31px 高 */
+  min-height: 36px;
   text-decoration: none;
 }
 .v2footer__logo {
@@ -75,6 +77,13 @@ const version = appVersion;
 .v2footer__links { display: inline-flex; align-items: center; gap: 12px; }
 .v2footer__link {
   position: relative;
+  /* 触控热区 ≥36×36（2026-10-08 走查）：原 padding 8px 3px 实测「愿景」31×35，
+     低于仓库 36px 硬线；min-height 补高、min-width 把两字链接补到 36 宽。 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 36px;
   font-size: 12.5px; color: var(--muted);
   text-decoration: none;
   padding: 8px 3px;

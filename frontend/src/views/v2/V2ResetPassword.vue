@@ -140,8 +140,8 @@ async function submit() {
       await router.replace('/login');
     } else {
       await authAPI.forgotPassword(form.name.trim());
-      // 中性回执：不承诺「发送链接」，也不提示后端日志（终端用户拿不到，走查 2026-09-27 P1）
-      notice.value = '若该账号存在，重置方式已生成。';
+      // 后端当前通过注册邮箱发送重置链接；保留账号存在条件以避免账号枚举。
+      notice.value = '若该账号存在，重置链接已发送到注册邮箱，请查收（含垃圾邮件箱）。';
     }
   } catch (error: unknown) {
     const message = error && typeof error === 'object' && 'message' in error
@@ -175,7 +175,8 @@ function goLogin() {
 .field__label { font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .field__input {
   width: 100%;
-  border: 1px solid var(--line);
+  /* 输入框描边用比 --line 实一档的专用档（走查 2026-10-08：发丝线在白卡面/暗卡面上都读不出控件范围） */
+  border: 1px solid var(--mk-input-line);
   border-radius: var(--mk-radius-xl);
   padding: 11px 14px;
   font: inherit; font-size: 14px;

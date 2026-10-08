@@ -1416,7 +1416,11 @@ function loadGuidance() {
   display: flex; justify-content: center;
   padding: 10px 28px 4px;
 }
-.state__ai-note :deep(.ai-note) { font-size: 12px; opacity: 0.75; }
+/* 走查 2026-10-08 #8：原来这行 12px 灰字又叠了 opacity .75，
+   --faint(#5f6f8c) 被抬成有效色 rgb(133,145,168)，对页面底 #f7f8fa 仅 2.98:1
+   （暗色同算法 3.93:1），低于 AA 正文 4.5:1；同页其他 12px 灰字（如「系统建议」）都没叠透明度、5.07:1。
+   去掉透明度后回到 --faint 本色，与本页其余 12px 灰字同档，字号维持 12px 下限。 */
+.state__ai-note :deep(.ai-note) { font-size: 12px; }
 
 /* 原型 924：非学习台屏幕统一 880px 居中。原 1080px + `1fr + 300px` 侧栏栅格已撤——
    原型该屏是单列流，侧栏卡并入主列（见模板 .side 注释） */
@@ -1534,6 +1538,11 @@ function loadGuidance() {
 .sug__body strong { font-size: 13.5px; }
 .sug__body p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 .sug__cta {
+  /* 走查 2026-10-08 #79：这枚「继续」此前只有 7px 上下内边距，桌面实测约 45×30，
+     比同页「查看学习历史」（107×44）小一截，是触控热区不达标的可点元素。
+     抬到 36px 触控底线，宽度随文案（inline-flex 居中），不改变它在卡内的次级观感。 */
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 36px;
   font-size: 12px; font-weight: 800; color: var(--blue-deep);
   border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
@@ -1802,7 +1811,11 @@ function loadGuidance() {
   white-space: nowrap;
 }
 /* 虚线阈值图例项（2026-10-08 走查）：图内那两段文字自带 surface 底，窄屏正好压在最陡的曲线上；
-   文字移到图例这一项，图内只留虚线本体 —— 信息没丢，图面不再被盖。 */
+   文字移到图例这一项，图内只留虚线本体 —— 信息没丢，图面不再被盖。
+   2026-10-09 #78：窄屏（390）两条阈值虚线只相距约 19px，「12」刻度就贴在下线下方约 9px
+   （像素实测两线在 y≈544/563、刻度中心 y≈572），孤立看刻度栏容易把「12」当成阈值标注。
+   修法落在下面 .ff-zone / .ff-grid line：阈值线加粗提实、网格线压淡，拉开两者层级；
+   不改刻度取值（取整避开 20/40 会破坏 5 条等分网格线与曲线纵坐标的对应）。 */
 .ff-legend__zone { display: inline-flex; align-items: center; color: var(--muted); }
 .ff-legend__zone b { font-weight: 700; color: var(--green-ink); }
 .ff-legend__zone .ff-legend__sep { margin: 0 5px; color: var(--faint); font-weight: 400; }
@@ -1813,11 +1826,15 @@ function loadGuidance() {
 /* 背景柱 500 条上限的口径说明（见模板 ff-trunc） */
 .ff-trunc { margin: 8px 0 0; font-size: 12px; color: var(--faint); }
 .ff-bar { fill: color-mix(in srgb, var(--blue) 14%, transparent); }
-.ff-grid line { stroke: var(--line); stroke-width: 1; opacity: 0.6; }
-/* 状态阈值参考线（原型 wf-trend__zone 766）：绿 55% 透明 + 4/4 虚线，与实线曲线分层 */
+/* 网格刻度线：压得比阈值线更淡（0.6 → 0.45），把「刻度」和「阈值参考线」的层级拉开（走查 2026-10-08 #78） */
+.ff-grid line { stroke: var(--line); stroke-width: 1; opacity: 0.45; }
+/* 状态阈值参考线（原型 wf-trend__zone 766）：绿色 + 4/4 虚线，与实线曲线分层；
+   2026-10-09 #78：窄屏刻度「12」紧贴下线（详见 .ff-legend__zone 注释），把线加粗到 1.5
+   并从 55% 提到 70% 不透明，让「阈值虚线 = 绿色较实」和「刻度 = 灰色很淡」一眼分得开
+   （非缩放描边，两个主题同此粗细） */
 .ff-zone {
-  stroke: color-mix(in srgb, var(--green) 55%, transparent);
-  stroke-width: 1; stroke-dasharray: 4 4;
+  stroke: color-mix(in srgb, var(--green) 70%, transparent);
+  stroke-width: 1.5; stroke-dasharray: 4 4;
   vector-effect: non-scaling-stroke;
 }
 .ff-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }

@@ -547,6 +547,10 @@ main {
   font-weight: 800;
   color: var(--blue-deep);
   text-decoration: none;
+  /* 触控热区 ≥36（2026-10-08 用户侧走查）：纵向内边距原来只写在 ≤900 档，
+     1440 档实测 51×21 / 42×21，而同页页脚链接是 36 —— 同页两套标准。
+     现在基础档就给足，全档位与 .vn-foot a 同标准（配色不变）。 */
+  padding: 8px 0;
 }
 .vn-status__links a:hover {
   text-decoration: underline;
@@ -594,6 +598,8 @@ main {
   font-weight: 700;
   color: var(--blue-deep);
   text-decoration: none;
+  /* 同上：尾屏「← 返回首页」1440 档实测 69×20，纵向内边距提到基础档 */
+  padding: 9px 0;
 }
 .vn-end__back:hover {
   text-decoration: underline;
@@ -668,15 +674,12 @@ main {
     padding: 52px 0 40px;
     gap: 28px;
   }
-  /* 38px 孤词行问题已由「字号下调 + 逗号后显式换行（原型同款 <br/>）」解决，
-     不再需要 text-wrap: balance 抹掉原型的断行控制 */
-  /* 触屏热区：状态区链接 21px、返回首页 20px —— 宣传页上这些是唯一的外部/返回入口，
-     加纵向内边距抬到 ≥36px（配色不变；块内边距同步收一点，页面不至于变高）。
+  /* 38px 孤词行问题已由「显式换行 + ≤640 档 balance」解决（见本文件最后一个 style 块） */
+  /* 触屏热区：状态区链接与「返回首页」的纵向内边距已提到基础档
+     （2026-10-08 用户侧走查：只在 ≤900 档生效会留下 1440 档 20–21px 的洞）。
      页脚链接的窄屏覆写已删（2026-10-08 走查）：它在基础档之上又把横向内边距压回 0，
      两字链接宽度掉到 26px；高度与宽度现在都由基础档的 min-height + 左右内边距保证。 */
   .vn-status__links { gap: 12px; margin-top: 10px; }
-  .vn-status__links a { padding: 8px 0; }
-  .vn-end__back { padding: 9px 0; }
   .vn-foot__in { padding: 14px 0; }
   .vn-foot__links { display: flex; gap: 16px; flex-wrap: wrap; }
 }
@@ -777,5 +780,17 @@ main {
   .vn-bridge__box { padding: 22px 18px; }
   .vn-btn--lg { min-height: 44px; padding: 0 20px; }
   .vn-hero__seal em { font-size: 12px; }
+}
+
+/* 窄屏首屏标题与尾屏副文案的孤字行（2026-10-08 用户侧走查 #26）：390 档 h1 原来被模板里的
+   显式 <br/> 折成「答案越来越多时，」/「更值得练的是提问与判」/「断。」，尾屏 p 折出末行「事。」。
+   这里只动换行策略、不动字号（.vn-hero h1 没有可覆写的字号 token，改 clamp 会造出半档字面量）：
+   窄屏放掉这条原型断行，与 .vn-end p 一起交给 balance 均分。Chromium 实测 390 档
+   h1 由 3 行（末行 2 字）变 2 行（末行 6 字）、尾屏 p 由 2 行（末行 1 字）变 2 行（末行 11 字）；
+   641 档以上仍保留原型的逗号后换行。 */
+@media (max-width: 640px) {
+  .vn-hero h1 br { display: none; }
+  .vn-hero h1 { text-wrap: balance; }
+  .vn-end p { text-wrap: balance; }
 }
 </style>

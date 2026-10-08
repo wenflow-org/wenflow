@@ -176,6 +176,10 @@
   --mk-card-foot-bg: #fafbfe;
   --mk-card-foot-line: var(--mk-line); /* 暗色档独立于 --mk-line（原补丁值 #2f3239） */
   --mk-card-line: var(--mk-line);      /* 卡片描边（VS4）：暗色档独立提亮，见下 dark 块 */
+  /* 输入框描边（VS6）：--mk-line 对白卡面仅 1.19:1，控件范围读不出来（走查 2026-10-08）。
+     输入框单独提深一档到 #d7dde8（对 #ffffff ≈1.36:1，比 1.19:1 的发丝线实一档；
+     再深会与聚焦蓝环抢层级，且整片描边一起变亮会压掉卡片边界）。暗色档见下 dark 块。 */
+  --mk-input-line: #d7dde8;
   /* （--mk-batchbar-bg / --mk-batchbar-line 零消费已删：.mk-batchbar 类实际用的是
      var(--mk-surface) 与手写 rgba 边框色，从未引用这两枚。） */
   --mk-batchbar-danger-fg: #ffffff;
@@ -498,6 +502,9 @@ html[data-theme='dark'] {
      独立提亮到 #6e7075（对 #202124 ≈3.25:1，过非文字 UI ≥3:1）。
      只改卡片描边，不动 --mk-line（表内分隔线/输入框维持原层级，避免整片描边一起变亮）。 */
   --mk-card-line: #6e7075;
+  /* 输入框描边暗色档（VS6）：--mk-line(#36373c) 对卡面 #202124 仅 1.19:1。
+     与卡片描边同深度（复用 --mk-card-line 的值），只提输入框，不动 --mk-line。 */
+  --mk-input-line: var(--mk-card-line);
   /* 表头条带在暗色下"比卡片更亮"（亮色档是"比卡片更暗"）。
      暗色里比卡片更暗就贴近页面底色，读成"卡片上破了个洞"而不是"表头条带"；
      同一 ΔL* 在暗端也不如亮端看得出来，故条带取 6 级台阶。 */

@@ -199,6 +199,24 @@ function wrapLabel(text: string, perLine: number): string {
   return `${first}\n${rest.slice(0, perLine - 1)}…`
 }
 
+/**
+ * 画布上标签的底衬色 = 卡片表面色（`--mk-surface`）随主题切换。
+ *
+ * 病根（2026-10-08 手机走查 #24，用户在手机图区放大 3 倍能看到「定唯」压在一个节点方块上）：
+ * ECharts 的 `labelLayout.hideOverlap` 只比较「标签↔标签」，看不到**节点圆/方块**。
+ * 密集图里某个节点的两行标签会落在相邻节点的符号上，判定为「值得常显」的枢纽标签
+ * 因此互相压字，且省略号截断后没法点（移动端没有 hover）。
+ * 给标签铺一层与画布同色的底衬（= 把压住的节点「镂空」），文字即清晰；底衬色与画布同色，
+ * 不新增视觉元素。色值取运行时 token（不新增硬编码），取不到时回退本文件已用的表面近似值。
+ */
+function labelSurface(dark: boolean): string {
+  if (typeof window !== 'undefined' && typeof getComputedStyle === 'function') {
+    const v = getComputedStyle(document.documentElement).getPropertyValue('--mk-surface').trim()
+    if (v) return v
+  }
+  return dark ? '#2a2c30' : '#ffffff'
+}
+
 /** tooltip formatter 输出的是 HTML：label 来自概念名（课程/用户数据），
  *  不转义会把名字里的 & <> 直接吃进标记——既毁排版也是注入面 */
 function escapeHtml(text: string): string {
@@ -291,8 +309,17 @@ function buildOption(): EChartsCoreOption {
           // 行高同步抬起，避免 12px 字挤在 12/13 的行高里。
           fontSize: 12,
           lineHeight: narrow ? 15 : 16,
+          // 与画布同色的底衬（见 labelSurface 注释）：hideOverlap 看不见节点符号，
+          // 密集区枢纽标签会压在邻节点上，铺底衬后文字不再被节点色块吃掉。
+          backgroundColor: labelSurface(dark),
+          padding: [2, 3],
+          borderRadius: 2,
           formatter: (params: { name?: string }) => wrapLabel(params?.name ?? '', perLine)
         },
+        // hideOverlap 只比较「标签↔标签」，管不到节点符号（评审建议的 forceLayout 键在
+        // ECharts 6.1 的 labelLayout 里并不存在，只有 hideOverlap / moveOverlap）；压在
+        // 节点上的情况交给上面的同色底衬。moveOverlap 是一维推移，会为了不同行的标签把
+        // 标签整体推离自己的节点，故不启用。
         labelLayout: { hideOverlap: true },
         emphasis: { focus: 'adjacency', label: { show: true, fontWeight: 'bold' } },
         select: { label: { show: true }, itemStyle: { borderWidth: 2 } },

@@ -117,7 +117,8 @@ function handleFeedback(thumbsUp: boolean) {
      与 meta 行（左）形成对角平衡，也更贴近常见的聊天操作位 */
   display: flex;
   justify-content: flex-end;
-  gap: 2px;
+  /* 36px 方盒之间留一点缝，避免相邻图标误点（原 2px 过挤） */
+  gap: 4px;
   padding: 2px 0;
   margin-top: -2px;
 }
@@ -136,8 +137,14 @@ function handleFeedback(thumbsUp: boolean) {
 .msg-actions__btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   padding: 4px 8px;
+  /* 桌面 hover 档也抬到 36×36 点击盒（图标仍 13px，视觉不变）：
+     原 4px 8px + 12px 微字实测只有 29×21px，是屏幕上最小的可点元素，
+     低于项目 36px 口径与 WCAG 2.5.8 的 24px 目标下限（2026-10-08 走查 #63）。 */
+  min-width: 36px;
+  min-height: 36px;
   border-radius: var(--mk-radius-sm);
   /* 字号下限 12px（§9 偏离 1） */
   font-size: var(--mk-fs-micro);
@@ -184,9 +191,8 @@ function handleFeedback(thumbsUp: boolean) {
   }
   /* EG6/EG20（2026-10-05 复测）：触屏下消息操作按钮实测 29×26（图标钮）/ 81×26（文字钮），
      低于移动端触控目标下限（EG20 <36 / EG6 <40）。触屏档统一抬到 40×40 且图标居中；
-     桌面 hover 档不受影响（信息密度仍按原 4px 8px 小钮）。
      2026-10-08：四枚按钮去掉文字后合计 4×40=160px，与元信息同行放得下（不再需要拆两行），
-     40×40 的触控尺寸保持不变。 */
+     40×40 的触控尺寸保持不变。桌面 hover 档现已同样抬到 36×36（见上），此处只加码到 40。 */
   .msg-actions__btn {
     min-width: 40px;
     min-height: 40px;

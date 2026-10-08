@@ -40,7 +40,7 @@
                 </template>
               </div>
               <span class="profile-identity__role">学习者 · Lv.{{ user.level || 1 }} · {{ user.xp || 0 }} XP</span>
-              <p class="profile-meta">{{ user.email || '未绑定邮箱' }} · 注册于 {{ formatDateShort(user.createdAt) }} · 最近登录 {{ formatDateShort(user.lastLoginAt) }}</p>
+              <p class="profile-meta">{{ user.email || '未绑定邮箱' }} · 注册于 <span class="profile-meta__date">{{ formatDateShort(user.createdAt) }}</span> · 最近登录 <span class="profile-meta__date">{{ formatDateShort(user.lastLoginAt) }}</span></p>
             </div>
           </div>
         </article>
@@ -322,6 +322,13 @@ async function handleSaveName() {
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 日期片段（2026-10-08）整体不可断：窄屏 .profile-meta 放成 normal 后，浏览器会在
+   连字符处把日期切成「2026-10-」/「08」两截（2026-10-08 走查 #50）。只锁日期片段，
+   行整体仍可在「 · 注册于 / · 最近登录」这些分隔处换行，不会退回省略号截断。 */
+.profile-meta__date {
   white-space: nowrap;
 }
 

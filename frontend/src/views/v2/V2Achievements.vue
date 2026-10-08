@@ -141,13 +141,14 @@ const loadError = ref(false);
     这条路走过两轮：P3-48（设计评审）指出单字「里」无法解码、读作占位噪音，
     当时只把单字改成可解码双字（里程/连续/完成/掌握）；2026-10-08 用户反馈
     「logo 图没了，怎么成字体了」——字再可解码也仍是字，遂换真图标。
-    色块由 .ach-card__icon--* 系列 token 色给底（未解锁同色相、压淡一档，见 iconCls）。 */
+    色块由 .ach-card__icon--* 系列 token 色给底（未解锁同色相，标签转墨色，见 iconCls）。 */
 function achIconOf(a: Achievement) {
   return achIconMeta(a.type).icon;
 }
 
 /** 图标 42×42 的类型色块（原型 wf-ach__icon--streak/complete/mastery/milestone/social 858-862）；
-    未解锁保持同一色相、压淡一档（.ach-card__icon--locked），「未解锁」由卡整体 opacity 表态。 */
+    未解锁保留同一色相底色，「未解锁」由卡整体 opacity 表态，标签文字转墨色保证可读
+    （见 .ach-card__icon--locked）。 */
 const ACH_TYPE_TONE: Record<string, string> = {
   milestone: 'milestone',
   streak: 'streak',
@@ -158,8 +159,8 @@ const ACH_TYPE_TONE: Record<string, string> = {
 function iconCls(a: Achievement): string {
   const tone = ACH_TYPE_TONE[a.type] || 'neutral';
   // 未解锁不再整块灰掉（2026-10-08 用户侧走查）：类型图标要能靠语义色区分，14 张未解锁卡
-  // 全灰会让四种类型在锁定态不可分。改成同色相 + 压淡一档，「未解锁」由卡整体 opacity 与
-  // 状态行文案表态，不再靠抹掉颜色。
+  // 全灰会让四种类型在锁定态不可分。改成保留同色相底色（色相承担类型区分），
+  // 标签文字转墨色（可读性），「未解锁」由卡整体 opacity 与状态行文案表态。
   return a.unlocked ? `ach-card__icon--${tone}` : `ach-card__icon--${tone} ach-card__icon--locked`;
 }
 const statusFilter = ref<'all' | 'unlocked' | 'locked'>('all');
@@ -374,9 +375,12 @@ onMounted(() => {
 .ach-card__icon--mastery { background: color-mix(in srgb, var(--blue) 13%, transparent); color: var(--blue-deep); }
 .ach-card__icon--milestone { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
 .ach-card__icon--social { background: color-mix(in srgb, var(--cyan) 16%, transparent); color: var(--cyan-ink); }
-/* 未解锁：保留类型色相、只压淡一档（叠在 .ach-card--locked 的 0.78 之上）。
-   2026-10-08 用户侧走查：原来未解锁一律 ach-card__icon--neutral，14 张卡的类型色全被抹平。 */
-.ach-card__icon--locked { opacity: 0.75; }
+/* 未解锁：色块底色保留类型色相（被 .ach-card--locked 的 0.78 整体压淡），
+   标签文字改用墨色。此处不能再用带色相的 token、也不能再叠一层透明度：
+   整卡 0.78 会把中明度彩色文字拉向浅画布，实测浅色档 --accent 2.39 / --purple-ink 2.98 /
+   --green-ink 3.49，均达不到 4.5:1；墨色标签则与卡内标题同级（约 6.4:1 浅 / 7.6:1 深）。
+   「类型」由色块底色区分，「可读性」由墨色文字承担（2026-10-08 用户侧走查）。 */
+.ach-card__icon--locked { color: var(--ink); }
 
 .ach-card__name { font-size: 14px; font-weight: 700; color: var(--ink); }
 .ach-card__desc { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.55; }

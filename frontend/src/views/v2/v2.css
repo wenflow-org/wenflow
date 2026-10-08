@@ -360,7 +360,7 @@ html, body {
   /* 主按钮纯色 --blue（原 135deg 蓝→深蓝渐变已退役）：
      「友好而平」规定主操作是实色，渐变制造的高光感与暖平基调相冲。 */
   background: var(--blue);
-  color: #fff;
+  color: var(--wf-text-on-primary);
   font-size: 14px;
   font-family: inherit;
   font-weight: 700;

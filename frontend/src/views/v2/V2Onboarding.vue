@@ -133,9 +133,12 @@
             <h1 class="ob__title">每天打开学习台，只盯今天这一步</h1>
             <p class="ob__sub">今天该做的一步已经排好；边学边问，听不懂就让问流换一种讲法，节奏也会按你的状态调整。</p>
 
+            <!-- 这整块是写给所有新用户的静态样例（不是本人的学习台数据：真实学习台此时是空态），
+                 故卡头带「示例」角标、指标只给不带具体数值的说明（走查 2026-10-08 #7） -->
             <div class="ob__demo" aria-hidden="true">
               <div class="ob__demo-bar">
                 <span>学习台</span>
+                <span class="ob__sample">示例</span>
                 <span class="ob__chip ob__chip--green">今日行动</span>
               </div>
               <div class="ob__demo-action">
@@ -143,8 +146,8 @@
                 <span class="ob__demo-action__body"><b>跑通第一版数据读取</b><small>来自「Excel 周报自动化」· 约 25 分钟</small></span>
               </div>
               <div class="ob__demo-metrics">
-                <span><small>健康度</small><b>14</b></span>
-                <span><small>疲劳度</small><b>33</b></span>
+                <span><small>健康度</small><b>良好</b></span>
+                <span><small>疲劳度</small><b>适中</b></span>
                 <span><small>状态</small><b class="is-good">最优训练区</b></span>
               </div>
               <div class="ob__demo-tip">边学边问 · 听不懂就换一种讲法 · 节奏可调</div>
@@ -411,6 +414,17 @@ async function goDashboard() {
   color: var(--ink);
 }
 .ob__demo-bar span:first-child { flex: 1; }
+/* 「示例」角标（走查 2026-10-08 #7）：演示卡里的数据是静态样例，
+   必须一眼看出不是本人的学习台数据（真实学习台此刻还是空态） */
+.ob__sample {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--faint);
+  border: 1px solid var(--line);
+  padding: 2px 8px;
+  border-radius: var(--mk-radius-pill);
+}
 .ob__chip {
   font-size: 12px;
   font-weight: 700;
@@ -481,10 +495,12 @@ async function goDashboard() {
   display: grid;
   gap: 2px;
   padding: 9px 10px;
-  border: 1px solid var(--line);
+  /* 非当前阶段的弱化只落在边框/图标上，不整卡降透明度（走查 2026-10-08 #6）：
+     原 opacity:.72 会把卡内 12px 的「已完成 / 待开始」一起压到 2.93:1（< 4.5:1），
+     比当前阶段同名文字（5.07:1）淡一大截；边框仍按原 72% 合成值保持原有轻重。 */
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
   border-radius: var(--mk-radius-xl);
   background: var(--surface);
-  opacity: 0.72;
 }
 .ob__stage i {
   font-style: normal;
@@ -495,6 +511,7 @@ async function goDashboard() {
   display: grid; place-items: center;
   border: 1px solid var(--line);
   border-radius: 50%;
+  opacity: 0.72; /* 纯装饰图标照旧弱化；文字不参与这条透明度 */
 }
 .ob__stage b { font-size: 12px; color: var(--ink); }
 .ob__stage small { font-size: 12px; color: var(--faint); }
@@ -509,6 +526,7 @@ async function goDashboard() {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 8%, transparent);
 }
 .ob__stage.is-on i {
+  opacity: 1;
   color: var(--text-on-primary);
   border-color: var(--blue);
   background: var(--blue);

@@ -332,6 +332,8 @@ const selected = ref<MkGraphNode | null>(null)
 const RAIL_VISIBLE_PATHS = 3
 /** 溢出到「更多」的路径少于 2 条时不值得开浮层：多铺一枚 chip 比多一次点击便宜 */
 const RAIL_MIN_OVERFLOW = 2
+/** 轨自身两端留白（.mk-ge__rail 的 padding: 4px 2px）—— 与 scroll-margin 保持同一口径 */
+const RAIL_PAD = 2
 
 type PathOption = { value: string | null; label: string }
 /** 路径条目（value 必为 id）：可见集合与「更多」浮层都只装路径，不含「全部路径」 */
@@ -502,21 +504,52 @@ const railVisible = computed(
 )
 
 /**
- * 选中 chip 滚到轨道可视区中央（P2-24 2026-10-04 全站评审 adjusted）：
+ * 选中 chip 滚进轨道可视区（P2-24 2026-10-04 全站评审 adjusted，2026-10-09 #23 修正）：
  * 轨道 overflow-x:auto 但 scrollbar-width:none，组件此前没有任何滚动定位——
  * 程序化选中末枚 chip 后 scrollLeft 恒 0，「轨上还有 N 条路径」零 affordance。
  * 初始加载（rail 刚挂载，nextTick 等 DOM 就绪）与 pathId 变化（selectPath/键盘换选/
- * 宿主程序化切路径后 props 同步）统一走这里；block:'nearest' 只做横向滚动，
- * 不纵向拽动页面，避免「选个 chip 页面跳一下」。
+ * 宿主程序化切路径后 props 同步）统一走这里。
  *
- * 有界轨道（2026-10-05）之后这条规则通常无事可做（选中项已被钉进可见集合，轨上放得下），
- * 保留是为了两个残留场景：① 路径数刚好卡在阈值边缘、② 窄视口下「全部 + 3 条」也放不下
- * （390 视口轨仅 250px 宽，实测仍要横滚 571px）。它同时兼作「轨上还有内容」的兜底定位。
+ * 为什么不用裸 chip.scrollIntoView()（#23 实测）：它滚动的是**所有可滚祖先**，
+ * 页面级祖先也在其中。390×844 实测选中第 2 枚 chip 后
+ * 轨被推到 scrollLeft=125，「全部路径（10 条）」落在 x=-111..30（140px 的 chip 有 111px
+ * 在视口外），而它是「看全貌」的出口——既不在「更多」浮层里、也不在轨的另一端，推出去
+ * 就回不来（探针实测：点它聚焦后连按 6 次 ←，scrollLeft 恒 101 不动，落在轨外的部分根本滚不回来）。
+ *
+ * 所以这里只滚**轨自身**，且只在目标 chip **完全**不在轨的可视区内时才滚——
+ * 只要它还有一部分露在可视区里（构造上选中项不会落在视口左侧），就一像素都不动。
+ * 390×844 实测：选中第 2 枚 chip 时它右缘超出轨右缘 97px，仍露着「按字段边界写」这一截
+ * 且带选中蓝底，够认出是它；而若为了让它整条可见（哪怕只是靠右对齐）都要把轨推到
+ * scrollLeft=101，恒定第一枚「全部路径（10 条）」又只剩 42px 露头——权衡之下宁可让
+ * 选中项停在左端、也不能把唯一的出口推出视口。真正需要滚动的是「宿主在轨尾钉进一枚
+ * 新 chip」：那时它整枚落在可视区外，才把它的右缘对齐到轨右缘。
+ *
+ * 向左让位由 CSS 的 scroll-margin-inline-start 负责——只在「切到轨外路径后被钉进来」的
+ * 那一帧生效（新 chip 排在最左却因视图停在尾部而落在视口左侧），且它同样把目标左缘
+ * 对齐到轨的左缘（scrollLeft 归零），永远不推出任何内容。
  */
 function scrollSelectedChip() {
   void nextTick(() => {
-    const chip = railEl.value?.querySelector<HTMLElement>('[aria-checked="true"]')
-    chip?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
+    const rail = railEl.value
+    const chip = rail?.querySelector<HTMLElement>('[aria-checked="true"]')
+    const target = chip ?? rail?.querySelector<HTMLElement>('.mk-ge__chip')
+    if (rail && target) {
+      const railBox = rail.getBoundingClientRect()
+      const chipBox = target.getBoundingClientRect()
+      const left = chipBox.left - railBox.left
+      const gapL = RAIL_PAD
+      const gapR = RAIL_PAD
+      const visible = rail.clientWidth - gapL - gapR
+      const boxRight = gapL + visible
+      if (left >= boxRight) {
+        // 整枚落在可视区右侧之外：只做「把它带回来」的最小滚动（右缘对齐轨右缘）
+        const nextLeft = Math.max(
+          0,
+          Math.min(rail.scrollLeft + left + chipBox.width - boxRight, rail.scrollWidth - rail.clientWidth)
+        )
+        rail.scrollTo({ left: Math.round(nextLeft), behavior: 'smooth' })
+      }
+    }
     // 键盘换选/浮层选路径的落焦点时机到了（父组件已把 pathId 同步过来）
     if (pendingFocusPathId.value !== undefined && (props.pathId ?? null) === pendingFocusPathId.value) {
       pendingFocusPathId.value = undefined
@@ -1248,5 +1281,11 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   /* 路径 chip 桌面 38px（原型档）；触屏抬到 44 —— 轨道里 chip 数量 = 路径数 +1，
      每个 <44 都吃 mobile:spec 的 lt44 预算（kmap 页预算 7，旧 select 是 44 不占额度） */
   .mk-ge__chip { min-height: 44px; }
+  /* 与 script 的 scrollSelectedChip 配套：chip 被**平台**自动滚进视口时（焦点落在一张卡片上，
+     平台会把它滚到光标处；或宿主在轨尾钉进一枚新 chip），把落点边界设在 chip 的左缘
+     + 轨自身 2px 内边距处——目标整枚带进来、且只露出它左侧的内容，不会把恒定第一枚
+     「全部路径」继续往左推。scroll-margin 只影响自动滚动的对齐，本身不产生位移。
+     注意：这条 ≤900 覆盖必须留在本文件**最后一个** style 块里，写进中间会被后面的桌面规则盖成死代码。 */
+  .mk-ge__chip { scroll-margin-inline: 2px; }
 }
 </style>

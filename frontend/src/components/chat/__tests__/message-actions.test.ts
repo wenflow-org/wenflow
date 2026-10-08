@@ -86,4 +86,16 @@ describe('MessageActions 位置口径', () => {
     expect(minWidth, '触屏按钮宽度低于 36px 触控下限').toBeGreaterThanOrEqual(36);
     expect(minHeight, '触屏按钮高度低于 36px 触控下限').toBeGreaterThanOrEqual(36);
   });
+
+  it('桌面 base 档也把点击盒抬到 36px（走查 #63：原 4px 8px + 12px 字实测仅 29×21）', () => {
+    // 取第一个 .msg-actions__btn {（base 规则；@media 内的同名规则在其后）
+    const base = styleSource.slice(styleSource.indexOf('.msg-actions__btn {'));
+    const rule = base.slice(0, base.indexOf('}'));
+    const minWidth = Number(/min-width:\s*(\d+)px/.exec(rule)?.[1]);
+    const minHeight = Number(/min-height:\s*(\d+)px/.exec(rule)?.[1]);
+    expect(minWidth, '桌面按钮宽度低于 36px 口径').toBeGreaterThanOrEqual(36);
+    expect(minHeight, '桌面按钮高度低于 36px 口径').toBeGreaterThanOrEqual(36);
+    // 图标不因此放大：仍是 13px
+    expect(styleSource).toContain('width="13" height="13"');
+  });
 });

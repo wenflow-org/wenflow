@@ -292,6 +292,17 @@ const pollFailCount = ref(0);
 
 const deleteBusy = ref(false);
 
+/** 生成中卡片的进度文案（唯一来源）：首屏渲染（normalize）与轮询刷新（pollOnce）必须一字不差。
+    2026-10-08 走查 #15：这两处原先各写一份，轮询一跑就把「主结构生成中，一般 1-2 分钟内完成…」
+    换成「主结构生成中…」，那句用户最需要的时长承诺整段消失（手机档实测只剩短句，
+    且本屏 docH=视口高、没有滚动可达的后半段）。抽成一处后不可能再各自漂移。 */
+const CORE_PHASE_TEXT = '主结构生成中，一般 1-2 分钟内完成…';
+function phaseTextOf(lc: { phase?: string | null; completedStages?: number | null; totalStages?: number | null }) {
+  return lc.phase === 'core'
+    ? CORE_PHASE_TEXT
+    : `阶段任务准备中（${lc.completedStages ?? 0}/${lc.totalStages ?? '?'}）…`;
+}
+
 /** 原型副行（wf-pathitem__sub）：「已备好 24 节课 · 约 24 小时」；
     数据不全回退「共 N 阶段」，一个字段都没有就留空（不编造「目标日期」——后端无此字段） */
 function buildSub(stages: number, lessons?: number, hours?: number) {
@@ -319,9 +330,7 @@ function normalize(p: Record<string, any>): PathCard {
         phaseText: '', errorText: lc.errorMessage || ''
       };
     }
-    const phaseText = lc.phase === 'core'
-      ? '主结构生成中，一般 1-2 分钟内完成…'
-      : `阶段任务准备中（${lc.completedStages ?? 0}/${lc.totalStages ?? '?'}）…`;
+    const phaseText = phaseTextOf(lc);
     return {
       id: p.id, title, desc, sub: buildSub(stages), kind: 'generating', stages, stageDone: lc.completedStages ?? 0,
       percent: 0, hours, retryType: null, retryLabel: '', phaseText, errorText: ''
@@ -401,7 +410,8 @@ async function pollOnce() {
   }
   for (const r of settled) {
     const { card, lc } = r.value;
-    card.phaseText = lc.phase === 'core' ? '主结构生成中…' : `阶段任务准备中（${lc.completedStages ?? 0}/${lc.totalStages ?? '?'}）…`;
+    // 与首屏 normalize 共用同一处文案（走查 #15：两处各写一份时轮询会吞掉时长承诺）
+    card.phaseText = phaseTextOf(lc);
   }
   const failCount = results.length - settled.length;
   // 单条失败静默累计;连续失败过多说明状态接口异常,停止空转轮询
@@ -664,7 +674,11 @@ onBeforeUnmount(() => {
   display: flex; justify-content: center;
   padding: 10px 28px 4px;
 }
-.paths__ai-note :deep(.ai-note) { font-size: 12px; opacity: 0.75; }
+/* 走查 2026-10-08 #14：这行 12px 灰字是 .pcard__sub 的邻座（同一屏底部的元信息行），
+   原来又叠了 opacity .75，把 --faint(#5f6f8c) 抬成有效色 rgb(133,145,168)，
+   对页面底 #f7f8fa 只有 2.98:1（本会话探针 lp-fixcheck 实测同值）——低于 AA 正文 4.5:1。
+   与学习状态页同一处修法（V2LearningState.vue 的 #8）：去掉透明度，回到 --faint 本色 4.77:1。 */
+.paths__ai-note :deep(.ai-note) { font-size: 12px; }
 .kicker {
   font-size: 12px; font-weight: 800; letter-spacing: .06em;
   color: var(--blue-deep);
@@ -730,12 +744,24 @@ onBeforeUnmount(() => {
 .pcard__badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; flex: 0 0 auto; }
 .pcard__badge--green { color: var(--green-ink); background: color-mix(in srgb, var(--green) 12%, transparent); }
 .pcard__badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 11%, transparent); }
-.pcard__badge--cyan { color: var(--cyan-ink); background: color-mix(in srgb, var(--cyan) 14%, transparent); }
+/* 走查 2026-10-08 #13：「生成中」徽章原先用通用墨色 --cyan-ink（cyan 75% 混 ink），
+   浅色档实测 fg rgb(57,143,179) 对徽章底 rgb(222,240,247) 只有 3.11:1，12px/800 属小字
+   （本仓判据 ADMIN_VISUAL_LAYER_SPEC §7.5：小字按 AA 正文 4.5:1），比同排「进行中」蓝徽章
+   （5.52:1）还弱——而状态正是这张卡第一顺位要传达的信息。
+   同行的蓝徽章（下一行）刻意不用 --blue-ink 而用最深的 --blue-deep 才拿到 5.52；cyan 没有
+   对应深档，故这里把 ink 混合比提到 58%（cyan 42%）：浅色 5.6:1、深色 8.9:1，与蓝徽章同档。
+   不动 v2.css 的 --cyan-ink 本体：它另有 5 处消费（V2Dashboard/V2LearningPathDetail/
+   V2Achievements），那是各自屏幕的走查项，避免一次改动波及无关页面。 */
+.pcard__badge--cyan { color: color-mix(in srgb, var(--cyan) 42%, var(--ink)); background: color-mix(in srgb, var(--cyan) 14%, transparent); }
 .pcard__badge--red { color: var(--red-ink); background: color-mix(in srgb, var(--red) 12%, transparent); }
-/* 2026-09-27 防误触：⋯ 从裸文本字形升级成实体幽灵按钮——有边界、有 hover/open 态，
-   32×32（移动 36 + 伪元素热区 52+），误触概率与「看起来能不能按」同时收敛 */
+/* 2026-09-27 防误触：⋯ 从裸文本字形升级成实体幽灵按钮——有边界、有 hover/open 态。
+   2026-10-08 走查 #59/#71：原来桌面档 32×32，低于仓库自设的 36px 触控硬线
+   （frontend/scripts/check-mobile-spec.mjs「lt36 阈值一律 0——任何可点元素都不许低于 36px」），
+   而它一按就弹「删除路径」，是本屏唯一的破坏性入口，却比同屏同类按钮小一圈。
+   两档统一 36×36（视觉盒给足，自动化量测读到的就是可点区）；窄屏再叠 ::before 外扩。 */
 .pcard__more {
-  width: 32px; height: 32px; padding: 0;
+  position: relative;
+  width: 36px; height: 36px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   border: 0; border-radius: var(--mk-radius-md, 10px);
   background: none; color: var(--faint); cursor: pointer;
@@ -836,9 +862,8 @@ onBeforeUnmount(() => {
   .paths__search input { min-height: 44px; }
   .paths__sort select { min-height: 44px; }
   .cards { grid-template-columns: 1fr; }
-  /* ⋯ 触发器 36×36（mobile:spec lt36=0 预算），伪元素把热区再外扩到 50+：
+  /* ⋯ 触发器桌面档已是 36×36（见基座规则），窄屏只在 36 的盒上再外扩热区到 50+：
      它贴在卡片右上角、周边没有别的手势目标，扩热区无副作用 */
-  .pcard__more { position: relative; width: 36px; height: 36px; }
   .pcard__more::before { content: ''; position: absolute; inset: -8px -7px; }
 }
 </style>

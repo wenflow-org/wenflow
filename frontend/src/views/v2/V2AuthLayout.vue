@@ -19,7 +19,7 @@
             <div class="demo__chat">
               <div class="demo__msg demo__msg--user anim-msg" style="--d: 400ms">每周英文周会发言总是磕绊，想练职场英语</div>
               <div class="demo__msg demo__msg--ai anim-msg" style="--d: 900ms">
-                <span class="demo__avatar"><img src="/favicon.png" alt="问流" /></span>
+                <span class="demo__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
                 <div>
                   <p>先确定你最需要练的场景——是听懂讨论，还是开口汇报？</p>
                   <div class="demo__chips">

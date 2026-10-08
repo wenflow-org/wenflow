@@ -83,7 +83,7 @@ const adminSession = hasAdminSession();
 
 .nf-btn--primary {
   background: var(--color-primary, #2f6ae0);
-  color: #fff;
+  color: var(--wf-text-on-primary);
 }
 
 .nf-btn--ghost {

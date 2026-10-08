@@ -1566,7 +1566,9 @@ onBeforeUnmount(() => {
   display: grid; gap: 16px;
 }
 .crumbs { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--faint); min-width: 0; }
-.crumbs__back { font-weight: 600; color: var(--muted); cursor: pointer; padding: 5px 0; }
+/* 电脑档热区 36px（2026-10-08 走查 #64）：padding 5px 0 实测 61×30，低于仓库 36px 硬线；
+   手机档已由文末媒体查询抬到 44px，两档不一致。补 min-height，配色/字号不动。 */
+.crumbs__back { font-weight: 600; color: var(--muted); cursor: pointer; padding: 5px 0; display: inline-flex; align-items: center; min-height: 36px; }
 .crumbs__back:hover { color: var(--blue-deep); }
 .crumbs__current { color: var(--ink); font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crumbs__toggle { flex: 0 0 auto; margin-left: auto; }
@@ -1711,7 +1713,9 @@ onBeforeUnmount(() => {
   border: 1px solid transparent;
 }
 .task--current { background: color-mix(in srgb, var(--blue) 6%, transparent); border-color: color-mix(in srgb, var(--blue) 20%, transparent); }
-.task--locked { opacity: .62; }
+/* 锁定态（2026-10-08 走查 #65）：原 `.task--locked { opacity: .62 }` 把整行连文字一起压暗，
+   --faint 对卡面只剩 2.45:1（亮）/ 2.91:1（暗），任务名与「待解锁」读不清；
+   改为弱化只做在图标上，正文保持 token 原色（--faint 亮 5.07:1 / 暗 5.29:1）。 */
 .task__icon {
   width: 20px; height: 20px; border-radius: 50%;
   display: grid; place-items: center;
@@ -1719,7 +1723,7 @@ onBeforeUnmount(() => {
 .task--completed .task__icon { background: var(--green); color: var(--text-on-primary); }
 .task--current .task__icon { border: 2px solid var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 14%, transparent); }
 .task--todo .task__icon { border: 2px dashed color-mix(in srgb, var(--blue) 15%, var(--line)); }
-.task--locked .task__icon { color: var(--faint); background: var(--canvas); }
+.task--locked .task__icon { color: var(--faint); background: var(--canvas); opacity: .62; }
 .task__body strong { display: block; font-size: 13.5px; }
 .task__body small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
 .task__cta {
@@ -1748,7 +1752,9 @@ onBeforeUnmount(() => {
   color: inherit; cursor: pointer; text-align: left;
 }
 .sidecard__chev { display: inline-block; color: var(--faint); transition: transform 0.16s ease; }
-.sidecard__chev--open { transform: rotate(90deg); }
+/* 展开方向与阶段卡（.stage__chev--open）一致：rotate(180deg) 朝上；
+   原 rotate(90deg) 把「▾」转成朝左，看不出是展开态（2026-10-08 走查 #77）。 */
+.sidecard__chev--open { transform: rotate(180deg); }
 .sidecard__body { display: grid; gap: 10px; align-content: start; }
 /* 卡内子分区（接下来 / 原文预览）：与主 kicker 同语言、低一档 */
 .sidecard__sub { display: grid; gap: 6px; align-content: start; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 2px; }
@@ -2210,7 +2216,9 @@ onBeforeUnmount(() => {
 /* 触屏热区（放在文件末尾：这几个控件的基础规则散在后面的 style 块里，同权重下先出现会被覆盖）：
    它们在桌面是「一行小字 + 光标」，触屏上却是主要入口，实测高度只有 17–24px——
    「问题背景」17、「展开全文 / 更多意图」19、视图切换 24、面包屑返回 30。加纵向 padding
-   抬到 32–40，文字与配色不变；这几处背景都透明，加 padding 不产生视觉变化。 */
+   抬到 32–40，文字与配色不变；这几处背景都透明，加 padding 不产生视觉变化。
+   #64（2026-10-08）：面包屑返回键的基础规则也补了 min-height: 36px（电脑档），这里保持
+   44px 的触屏档更宽松，两档均 ≥36。 */
 @media (max-width: 1100px) {
   .crumbs__back { padding: 9px 0; min-height: 44px; display: inline-flex; align-items: center; }
   .hero__desc-toggle,

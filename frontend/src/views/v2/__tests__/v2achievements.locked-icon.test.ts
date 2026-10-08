@@ -48,15 +48,29 @@ describe('成就页未解锁图标', () => {
     expect(body).toContain('ACH_TYPE_TONE[a.type]');
   });
 
-  it('未解锁靠 --locked 压淡表态，且不改变色块尺寸', () => {
+  it('锁定态标签文字用墨色，且不再自带透明度', () => {
+    // 整卡 .ach-card--locked 的 0.78 已把带色相文字压到 4.5:1 以下（实测浅色档
+    // --accent 2.39 / --purple-ink 2.98 / --green-ink 3.49），标签改用与卡内标题同级的墨色；
+    // 类型区分交给色块底色。另：0.75 的重复压暗必须保持撤销。
     const locked = ruleFor('.ach-card__icon--locked');
-    const opacity = Number(decl(locked, 'opacity'));
-    expect(opacity).toBeGreaterThan(0);
-    expect(opacity, '压得太狠等于又灰掉了').toBeLessThan(1);
-    // 色块本体尺寸仍是 42×42（压淡不该顺手改尺寸）
+    expect(decl(locked, 'opacity'), '锁定标签不该再自带透明度').toBeNull();
+    const color = decl(locked, 'color');
+    expect(color, '--locked 必须显式给出文字色').not.toBeNull();
+    expect(color, '锁定标签必须用墨色').toMatch(/var\(--ink\)/);
+    for (const tone of ['--accent', '--amber-ink', '--green-ink', '--blue-deep', '--cyan-ink']) {
+      expect(color, `锁定标签不该用带色相的 ${tone}`).not.toContain(tone);
+    }
+    // 色块本体尺寸仍是 42×42（改文字色不该顺手改尺寸）
     const base = ruleFor('.ach-card__icon {');
     expect(decl(base, 'width')).toBe('42px');
     expect(decl(base, 'height')).toBe('42px');
+  });
+
+  it('未解锁的类型色相由色块底色保留（文字转墨色后，底色就是类型编码）', () => {
+    for (const tone of ['streak', 'complete', 'mastery', 'milestone', 'social']) {
+      const rule = ruleFor(`.ach-card__icon--${tone} {`);
+      expect(decl(rule, 'background'), `${tone} 类型底色丢了`).toContain('color-mix(');
+    }
   });
 
   it('五种类型色相都还在（压淡不等于删色）', () => {

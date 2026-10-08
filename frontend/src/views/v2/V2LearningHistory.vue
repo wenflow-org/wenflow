@@ -992,22 +992,10 @@ onMounted(async () => {
   border-radius: var(--mk-radius-xs);
   display: inline-block;
 }
-/* 热力四档：只走 token 派生（h3 用 --mk-on-fill = 饱和深底上的白字） */
-.lg--0, .mday--h0 { background: var(--canvas); color: var(--muted); }
-.lg--1, .mday--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); }
-.lg--2, .mday--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep); }
-.lg--3, .mday--h3 { background: color-mix(in srgb, var(--blue) 85%, transparent); color: var(--mk-on-fill); }
-
-.month__grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
-}
-.month__wd {
-  text-align: center;
-  font-size: 12px;
-  color: var(--faint);
-}
+/* 热力四档（2026-10-09 修复顺序）：.mday 的 background:none 与 .mday--h* 特异性相同（scoped 后各带一个
+   [data-v-*]），后写者胜。这些档位原先排在下面 .mday 之前，底色被整体清零——日历四档全无底色，
+   浅色档 h3 的白字直接压在白卡上（对比 1:1，今天那个数字看不见），整张「整月节奏」在说假话。
+   所以顺序固定为：.mday 基座 → 四档覆盖 → 外部/未来日重置（同为双类，靠后写生效）。 */
 .mday {
   min-height: 36px;
   border-radius: var(--mk-radius-lg);
@@ -1021,11 +1009,31 @@ onMounted(async () => {
   cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease;
 }
+/* 热力四档：只走 token 派生（h3 用 --mk-on-fill = 白字，明暗同值；它要求底是「饱和深底」，
+   故 h3 底取 --mk-blue-fill(#2f6ae0，明暗同值的实心蓝) 而非 --blue：--blue 暗色档是
+   #5b8def，白字压上去只有 3.2:1（2026-10-09 用户侧走查：暗色下 h3 被中和成中性灰底 + 近白字，
+   与同行的灰日期文字撞色，>60 分档读不出；实测探针 .mday--h3 bg=rgb(107,107,107)）。
+   --mk-blue-fill 明暗同值，白字 5.75:1，两档都不掉。 */
+.lg--0, .mday--h0 { background: var(--canvas); color: var(--muted); }
+.lg--1, .mday--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); }
+.lg--2, .mday--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep); }
+.lg--3, .mday--h3 { background: var(--mk-blue-fill); color: var(--mk-on-fill); }
 .mday--outside, .mday--future {
   background: none;
   color: var(--faint);
   font-weight: 500;
   cursor: default;
+}
+
+.month__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+.month__wd {
+  text-align: center;
+  font-size: 12px;
+  color: var(--faint);
 }
 .mday--today { border-color: var(--blue); }
 .mday--selected { border-color: var(--blue-deep); box-shadow: inset 0 0 0 1px var(--blue-deep); }

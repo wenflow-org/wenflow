@@ -21,8 +21,12 @@
              提醒单源留给 week__note（streakNote 逻辑保留），徽章只报天数 -->
         <div class="streak" :class="{ 'streak--off': streakDays === 0 }" title="连续学习天数">
           <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/></svg>
+          <!-- 走查 2026-10-08 #56：0 态原文案「点亮连续记录」是动词短语，药丸外形 + 动宾
+               结构读作可点操作，实际是不可点的状态徽章（无 click、cursor:auto）。
+               改成与有天数档同构的陈述句「连续 0 天」，不再冒充按钮；
+               真正的行动提示在本周节奏卡的 streakNote（「今天学 10 分钟，开始连续记录」）。 -->
           <template v-if="streakDays > 0">连续 {{ streakDays }} 天</template>
-          <template v-else>点亮连续记录</template>
+          <template v-else>连续 0 天</template>
         </div>
       </div>
 
@@ -481,7 +485,15 @@ const reviewPlan = ref<{
     回捞是带在下一节课开头做的，原文案会让人以为要另上一节复习课 */
 const reviewHeadline = computed(() => {
   const planned = reviewPlan.value?.items?.length ?? 0;
-  if (planned > 0) return `下节课开头会先复习 ${planned} 个旧知识点`;
+  if (planned > 0) {
+    // 走查 2026-10-08 #74：卡头报「N 个知识点到期」（到期总数），正文报「先复习 M 个」，
+    // 两个数字量不同却无交代，读起来像互相打架。补一句说明其余去向（今日额度裁剪后排队），
+    // 两个数字才自洽；note 仍在正文、不复读卡头数字。
+    const backlog = Math.max(reviewDue.value.length - planned, 0);
+    return backlog > 0
+      ? `下节课开头会先复习 ${planned} 个旧知识点，其余 ${backlog} 个按今日额度排队`
+      : `下节课开头会先复习 ${planned} 个旧知识点`;
+  }
   const weak = reviewDue.value.filter((item) => item.reason === 'below-threshold').length;
   if (weak > 0) return `${weak} 个知识点记忆偏弱，课开头会优先复习`;
   return `${reviewDue.value.length} 个知识点到期，上课时会带`;
@@ -882,7 +894,12 @@ const nearestAchievement = computed(() => {
     iconUrl: typeof nearest.icon === 'string' && nearest.icon.startsWith('http') ? nearest.icon : '',
     name: nearest.name,
     achieved: (nearest.progress?.current ?? 0) >= (nearest.progress?.total ?? 1),
-    hint: nearest.description ? `目标 ${nearest.description} · 进度 ${prog}` : `进度 ${prog}`
+    // 走查 2026-10-08 #75：服务端成就条件含内部缩写 KTL，直出会与成就页
+    // 「知识掌握度（KTL）」（V2Achievements.descText）口径不一致且本页无处可查。
+    // 这里做同样的展开，两页文案对齐。
+    hint: nearest.description
+      ? `目标 ${String(nearest.description).replace(/KTL/g, '知识掌握度（KTL）')} · 进度 ${prog}`
+      : `进度 ${prog}`
   };
 });
 
@@ -918,9 +935,11 @@ const agendaMeta = computed(() => {
   const parts: string[] = [];
   if (todaySchedule.value?.activeGoals?.length) parts.push(`预算 ${todaySchedule.value.totalPlanned} 分钟`);
   if (reviewDue.value.length) {
-    // 「课上带 N」（预算裁剪后的计划数）由下方复习主句独占，卡头只报「到期 N」：
-    // 同卡同屏双报同一 reviewPlan.items.length 属复读（2026-10-05 去重；拍板豁免的是异屏，不含同卡）
-    parts.push(`到期 ${reviewDue.value.length}`);
+    // 「课上带 N」（预算裁剪后的计划数）由下方复习主句独占，卡头只报到期总数：
+    // 同卡同屏双报同一 reviewPlan.items.length 属复读（2026-10-05 去重；拍板豁免的是异屏，不含同卡）。
+    // 走查 2026-10-08 #74：裸数字「到期 9」缺量词（易被读成 9 分钟），补「个知识点」；
+    // 与正文计划数的量差由 reviewHeadline 补一句交代。
+    parts.push(`${reviewDue.value.length} 个知识点到期`);
   }
   return parts.join(' · ');
 });
@@ -1219,7 +1238,10 @@ onMounted(loadAll);
   padding: 7px 11px; border-radius: var(--mk-radius-pill);
 }
 .streak--off {
-  color: var(--faint);
+  /* 走查 2026-10-08 #56：0 态 12px 文字原用 --faint，叠在 10% 药丸底上仅 4.22:1
+     （<AA 4.5:1）。改用更深的次级文字令牌 --muted（同底 ≥4.88:1），层级仍靠
+     灰 vs 琥珀的色相与实底药丸外形区分。 */
+  color: var(--muted);
   background: color-mix(in srgb, var(--faint) 10%, transparent);
   border-color: color-mix(in srgb, var(--faint) 28%, transparent);
 }
@@ -1258,7 +1280,10 @@ onMounted(loadAll);
   display: flex; justify-content: center;
   padding: 10px 28px 4px;
 }
-.dash__ai-note :deep(.ai-note) { font-size: 12px; opacity: 0.75; }
+/* 走查 2026-10-08 #53：原来在这行 12px 灰字上又叠了 opacity:0.75，把 --faint(#5f6f8c)
+   抬成有效色 rgb(133,145,168)，对页面底 #f7f8fa 只有 2.99:1（深色档 3.93:1），低于
+   AA 4.5:1。去掉这层透明度即回到 --faint 原色（浅色档 ≈4.77:1），字号维持 12px 下限。 */
+.dash__ai-note :deep(.ai-note) { font-size: 12px; }
 
 /* ---------- 卡片基座 ---------- */
 .card {
@@ -1268,8 +1293,12 @@ onMounted(loadAll);
   box-shadow: var(--shadow-sm);
 }
 .card-head { display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
-/* .link-muted 全页唯一基础定义：多个 router-link 渲染成 <a>，须自带去下划线 */
-.link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; text-decoration: none; padding: 5px 0; transition: color 0.15s ease; }
+/* .link-muted 全页唯一基础定义：多个 router-link 渲染成 <a>，须自带去下划线。
+   走查 2026-10-08 #54：基础样式此前只有 padding 5px 0（内容高约 29.5px），桌面档
+   可点热区不足 36px；手机档靠 ≤1100 的 min-height:40 兜底，两档标准不一（桌面更差）。
+   把 min-height:36 + inline-flex 居中提进基础样式，桌面/手机口径一致（手机仍由
+   后面的 40px 档覆盖）。 */
+.link-muted { font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; text-decoration: none; padding: 5px 0; min-height: 36px; display: inline-flex; align-items: center; transition: color 0.15s ease; }
 .link-muted:hover { color: var(--blue-deep); }
 
 /* ---------- 今日预算（多目标调度台账） ---------- */
@@ -1454,16 +1483,20 @@ onMounted(loadAll);
 }
 
 /* ---------- 路径进度卡 ---------- */
-.path { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+/* 走查 2026-10-08 #73：.dash__grid-main 是 align-items:stretch 的等高双列，路径卡
+   内容比左侧行动卡短，被拉到同高后中部留出 130–158px 纯空白，读起来像没加载完。
+   align-self:start 让本卡按内容定高，不再被左卡撑高（.path__foot 的 margin-top:auto
+   在自然高下不再产生内部空档）。 */
+.path { padding: 16px; display: flex; flex-direction: column; gap: 14px; align-self: start; }
 .path__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .path__title strong { font-size: 16px; }
 .path__sub { display: block; margin-top: 3px; font-size: 12px; color: var(--faint); }
 .badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; }
 .badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .badge--red { color: var(--red-ink); background: color-mix(in srgb, var(--wf-color-danger) 12%, transparent); }
-/* 页脚吸底：.dash__grid-main 是 stretch，路径卡会被拉到与左侧行动卡等高；
-   内容都堆在顶部时卡底会留出大片空白（2026-10-08 视觉检查：约三分之一卡高）。
-   让分隔线+进度条沉到卡底，空白变成正常的卡脚留白。 */
+/* 页脚吸底：.path 已用 align-self:start 按内容定高（走查 2026-10-08 #73），正常情况下
+   margin-top:auto 无余量可吸；保留它作为「若哪天去掉 align-self、卡片又被拉伸」时的兜底，
+   避免分隔线+进度条重新悬在半空。 */
 .path__foot { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; margin-top: auto; }
 .path__progress { height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .path__progress i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }

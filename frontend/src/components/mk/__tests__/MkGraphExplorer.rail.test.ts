@@ -16,6 +16,9 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 vi.mock('../MkGraph.vue', () => ({
   default: {
@@ -30,9 +33,11 @@ vi.mock('../../ui/V2ResultState.vue', () => ({ default: { template: '<div />' } 
 
 import MkGraphExplorer from '../MkGraphExplorer.vue';
 
-/** jsdom 不实现 scrollIntoView；组件里选中 chip 会调它（浏览器里的「居中」兜底定位） */
+/** jsdom 不实现 Element.scrollTo / scrollIntoView：组件里选中 chip 会调 scrollTo（轨自身定位），
+    缺失时 nextTick 回调会在落焦点之前抛错——「方向键换选后焦点仍在 chip 上」会假失败 */
 beforeEach(() => {
   Element.prototype.scrollIntoView = () => undefined;
+  Element.prototype.scrollTo = () => undefined;
 });
 
 const NODES = [{ id: 'c1', label: '概念一' }];
@@ -195,5 +200,44 @@ describe('MkGraphExplorer 路径轨的有界化', () => {
     expect(selected?.text()).toBe('路径标题 6');
     expect(document.activeElement).toBe(selected?.element);
     w.unmount();
+  });
+});
+
+/**
+ * #23 走查护栏（2026-10-09 手机·浅色）：路径轨的滚动定位不能把「全部路径」出口推出视口。
+ *
+ * 病根：原实现裸调 `chip.scrollIntoView({ inline: 'center' })`，滚动容器是**所有可滚祖先**，
+ * 390×844 实测把轨推到 scrollLeft=125，「全部路径（10 条）」只剩 x=-111..30（140px 里 111px
+ * 在视口外）；而它是「看全貌」的唯一出口，既不在「更多」浮层里、也不在轨的另一端。探针复测：
+ * 点它聚焦后连按 6 次 ←，scrollLeft 恒 101 不动，落在轨外那截根本滚不回来。
+ * 组件测试摸不到布局（jsdom 没有 clientWidth），所以这里锁源码，锁住「只滚轨自身、
+ * 只在整枚落在右侧之外时才滚」这两条，以及与之配套的 scroll-margin 落在最后一个 <style> 块。
+ */
+const sfcSource = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), '../MkGraphExplorer.vue'),
+  'utf8'
+);
+/** 去注释后再断言「源码里没有 X」：注释里点名「为什么弃用某 API」是允许的 */
+const stripComments = (src: string): string =>
+  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+
+describe('MkGraphExplorer 路径轨滚动定位（#23）', () => {
+  it('不再用 chip.scrollIntoView（滚动容器含页面级祖先，会把出口推出视口）', () => {
+    expect(stripComments(sfcSource)).not.toContain('scrollIntoView');
+  });
+
+  it('只滚轨自身：从 railEl 取 rect 算 scrollLeft，并钳制在轨两端内', () => {
+    expect(sfcSource).toContain('rail.scrollTo');
+    expect(sfcSource).toContain('rail.scrollWidth - rail.clientWidth');
+    // 只在目标整枚落在可视区右侧之外时才滚——左侧一律不动（出口不会被回推）
+    expect(sfcSource).toContain('left >= boxRight');
+  });
+
+  it('配套的 scroll-margin-inline 写在 ≤900 覆盖里（最后一个 <style> 块，否则被后面规则盖成死代码）', () => {
+    const blocks = [...sfcSource.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
+    const scoped = blocks[blocks.length - 1];
+    const mediaIdx = scoped.indexOf('@media (max-width: 900px)');
+    expect(mediaIdx, '最后一个 <style> 块里没有 ≤900 覆盖').toBeGreaterThan(-1);
+    expect(scoped.slice(mediaIdx)).toContain('scroll-margin-inline');
   });
 });

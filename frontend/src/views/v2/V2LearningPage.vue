@@ -4,7 +4,7 @@
     <header class="learn__head">
       <button type="button" class="learn__back" @click="goBack">‹ 返回路径详情</button>
       <div class="learn__title">
-        <strong>{{ taskTitle || '学习会话' }}</strong>
+        <strong>{{ taskTitle || '课堂' }}</strong>
         <small>{{ pathName }}</small>
       </div>
       <div class="learn__head-right">
@@ -14,12 +14,22 @@
           ref="kpBtn"
           type="button"
           class="learn__kpbtn"
+          :aria-label="`知识点 ${masteredCount}/${knowledgePoints.length}，${kpOpen ? '收起' : '打开'}知识点面板`"
           :aria-expanded="kpOpen"
           aria-controls="learn-kp-panel"
           @click="toggleKp"
         >知识点 <b>{{ masteredCount }}/{{ knowledgePoints.length }}</b></button>
-        <span class="learn__live" :class="{ 'learn__live--err': !!initError }">{{ liveState }}</span>
+        <span class="learn__live learn__live--head" :class="{ 'learn__live--err': !!initError }">{{ liveState }}</span>
         <ImmersiveMenu>
+          <!-- 窄屏把连接态收进 ⋯ 菜单（2026-10-08 用户侧走查：头部「学习中」与标题抢宽度，
+               12 字任务名被挤成「11 字 + 末字孤行」）。桌面仍在头部常驻，见 .learn__live--head。 -->
+          <div class="learn__menu-status">
+            <div class="learn__menu-group">
+              <span class="learn__menu-label">本节课状态</span>
+              <span class="learn__menu-state" :class="{ 'learn__live--err': !!initError }">{{ liveState }}</span>
+            </div>
+            <div class="learn__menu-sep"></div>
+          </div>
           <div class="learn__menu-group">
               <span class="learn__menu-label">结束本节课</span>
               <button type="button" class="learn__menu-item learn__menu-item--primary" @click="completeAndSettle">
@@ -130,7 +140,7 @@
       <div class="stage-card">
         <span class="spinner"></span>
         <h2>正在准备本节内容…</h2>
-        <p>问流正在为「{{ taskTitle || '当前任务' }}」组织讲解和练习，一般几秒到十几秒。</p>
+        <p>问流正在为{{ taskTitle ? '「' + taskTitle + '」' : '这节课' }}组织讲解和练习，通常十几秒，偶尔要半分钟；超过 20 秒可以点下方「重新尝试」。</p>
         <div class="stage-card__skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
         <!-- 返回常驻（移动端头部返回键被隐藏）；长时间无响应再亮出重试，页面不无出口 -->
         <div class="stage-card__actions">
@@ -356,9 +366,11 @@
           <div v-if="checkpoint && !completed" class="checkpoint">
           <div class="checkpoint__head">
             <span class="checkpoint__badge">检查点</span>
-            <strong>{{ checkpoint.title || checkpoint.question }}</strong>
-            <!-- 模型偶发把 title 与 question 填成同一句：重复渲染成"检查点出现两次"，同文去重 -->
-            <p v-if="checkpoint.title && checkpoint.question && checkpoint.title !== checkpoint.question">{{ checkpoint.question }}</p>
+            <strong>{{ checkpointHeading }}</strong>
+            <!-- 服务端下发的 title 是「题干截 20 字 + 省略号」（teaching-turn-engine.ts），
+                 与紧随其后的完整题干重复；只在 title 不是题干前缀时才单独渲染（见 checkpointTitlePair）。
+                 否则用户第一眼看到的是「日志里秒数写成一位数时（如 14:23:…」这样断了半截的一句话。 -->
+            <p v-if="checkpointDetail">{{ checkpointDetail }}</p>
           </div>
           <template v-if="checkpoint.options?.length">
             <label
@@ -384,9 +396,12 @@
             </label>
           </template>
           <textarea v-else v-model="answerText" class="checkpoint__input" rows="3" :disabled="checkpointPending || checkpointSubmitting" placeholder="写下你的答案…"></textarea>
-          <div v-if="checkpointFeedback" class="checkpoint__feedback" :class="{ 'checkpoint__feedback--ok': checkpointPassed }">
-            {{ checkpointFeedback }}
-          </div>
+          <div
+            v-if="checkpointFeedback"
+            class="checkpoint__feedback"
+            :class="{ 'checkpoint__feedback--ok': checkpointPassed }"
+            v-html="checkpointFeedbackHtml"
+          ></div>
           <div class="checkpoint__actions">
             <span
               v-if="!checkpointSubmitting"
@@ -883,6 +898,28 @@ function cpOptionMark(id: string): 'ok' | 'wrong' | '' {
   if (!selectedOptions.value.includes(id)) return '';
   return checkpointPassed.value ? 'ok' : 'wrong';
 }
+/**
+ * 检查点标题去重（2026-10-08 用户侧走查 #18）：
+ * 服务端把题干截到 20 字 + 省略号当 title（teaching-turn-engine.ts），再原样带上完整 question。
+ * 只按「完全相同」去重的旧逻辑会让两个版本同时上屏：大标题是断了半截的
+ * 「日志里秒数写成一位数时（如 14:23:…」，其下紧接完整题干。改成「title 去掉尾部省略号后
+ * 是 question 的前缀」即视为同源，只渲染完整题干；title 确为独立短文案时才分两行。
+ */
+function checkpointTitlePair(): { heading: string; detail: string } {
+  const cp = checkpoint.value;
+  const question = (cp?.question || '').trim();
+  const title = (cp?.title || '').trim();
+  if (!question) return { heading: title, detail: '' };
+  if (!title || title === question) return { heading: question, detail: '' };
+  const stem = title.replace(/[.…]+$/, '').trim();
+  if (stem && question.startsWith(stem)) return { heading: question, detail: '' };
+  return { heading: title, detail: question };
+}
+const checkpointHeading = computed(() => checkpointTitlePair().heading);
+const checkpointDetail = computed(() => checkpointTitlePair().detail);
+/** 判错讲解复用 AI 气泡的 markdown 管线：模型返回的 `\d{2}` / **加粗** 此前按纯文本插值，
+ *  反引号与双星号会原样落在关键结论上（2026-10-08 用户侧走查 #19）。 */
+const checkpointFeedbackHtml = computed(() => formatMessage(checkpointFeedback.value));
 /** 恢复会话提示条：mode=resumed 且回填到历史时显示「已恢复上次进度」，附重新开始出口 */
 const resumedNotice = ref(false);
 
@@ -1105,6 +1142,14 @@ async function boot() {
       .get(`/learning/tasks/${taskId}`)
       .then((t) => unwrap<Record<string, any>>(t))
       .catch(() => null);
+    // 开课请求本身可能等十几秒（LLM）。任务详情并行返回后立刻回填标题，
+    // 准备卡就不必再用「本节课」占位——用户刚点的任务名当屏可见
+    // （2026-10-08 用户侧走查 #66）。
+    void taskPromise.then((task) => {
+      if (!initing.value || !task) return;
+      taskTitle.value = task?.title || task?.displayLabel || '';
+      pathName.value = task?.pathTitle || task?.learningPathTitle || task?.learningPath?.title || '';
+    });
 
     const s = (isReviewMode.value
       ? await aiTeachingAPI.startReviewSession(taskId)
@@ -1807,7 +1852,9 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 50;
 }
-.learn__back { font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; background: none; border: 0; padding: 0; font-family: inherit; }
+/* min-height 36：返回路径详情是这一屏唯一的鼠标出口，13px 字行高下热区只有 87×20
+   （2026-10-08 用户侧走查 #62/#70）。文字仍垂直居中，页头高度由 44px 的 ⋯ 决定、不受影响。 */
+.learn__back { font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; background: none; border: 0; padding: 0; min-height: 36px; display: inline-flex; align-items: center; font-family: inherit; }
 .learn__back:hover { color: var(--blue-deep); }
 .learn__title { display: grid; gap: 3px; min-width: 0; }
 .learn__title strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1831,6 +1878,9 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--blue) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 26%, transparent);
   padding: 5px 11px; border-radius: var(--mk-radius-pill);
+  /* min-height 36：这是知识点浮窗的唯一入口，实测胶囊只有 82×26 / 86×28，
+     低于 36px 触控地板（2026-10-08 用户侧走查 #17/#21/#22/#70）。 */
+  min-height: 36px;
   cursor: pointer; white-space: nowrap;
   transition: background 0.14s ease, border-color 0.14s ease;
 }
@@ -1840,10 +1890,12 @@ onBeforeUnmount(() => {
 .learn__live {
   font-size: 12px; font-weight: 700; color: var(--green-ink);
 }
-/* boot 失败态（P2-25 核查 2026-10-04）：红字显式失败——正文已显「本节暂时开不了课」，
+.learn__menu-status { display: none; }
+.learn__menu-state { display: block; padding: 6px 12px; font-size: 13px; font-weight: 700; color: var(--green-ink); }
+.learn__head-right :deep(.imm-menu__btn:active) { background: color-mix(in srgb, var(--blue) 10%, var(--surface)); transform: scale(.97); }
+/* boot 失败态 (P2-25 核查 2026-10-04)：红字显式失败——正文已显「本节暂时开不了课」，
    顶栏不再绿显「连接中」假装还在连接 */
 .learn__live--err { color: var(--red-ink); }
-
 /* ---------- 布局（原型 .wf-screen：单列、gap 14、≥1024 定宽 880 居中） ----------
    原型的课堂屏没有左侧栏：知识点从常驻列降级成「头部入口 + 浮窗」。 */
 .learn__body {
@@ -2651,6 +2703,11 @@ onBeforeUnmount(() => {
   padding: 7px 0; max-height: 120px; align-self: center;
 }
 .composer__count { font-size: 12px; color: var(--faint); align-self: center; font-variant-numeric: tabular-nums; }
+/* 输入框自身的 :focus-visible 硬描边退役（2026-10-08 用户侧走查 #69）：v2.css 的全局焦点环是
+   直角 2px outline，套在 16px 圆角输入盒里叠成「两个框」。焦点提示只保留外层
+   .composer__box:focus-within 的那一圈 --mk-focus-ring。两级类是为了压过
+   .v2-page :is(...):focus-visible 的 (0,3,0)。 */
+.composer__box .composer__textarea:focus-visible { outline: none; }
 .composer__send {
   width: 42px; height: 42px; border-radius: 12px; /* 原型 .wf-composer__send 42×42/r12，与 54px 盒的内高对齐 */
   display: grid; place-items: center;
@@ -2912,6 +2969,16 @@ onBeforeUnmount(() => {
   border-radius: var(--mk-radius-lg); padding: 9px 12px;
 }
 .checkpoint__feedback--ok { color: var(--green-ink); background: var(--wf-color-success-bg); }
+/* 反馈正文走 markdown（2026-10-08 用户侧走查 #19）：段/列表间距对齐 AI 气泡，
+   行内 code 用 currentColor 淡底（琥珀/绿两态自动跟随），不再把 `\d{2}` 原样露出。 */
+.checkpoint__feedback :deep(p) { margin: 0 0 8px; }
+.checkpoint__feedback :deep(p:last-child) { margin-bottom: 0; }
+.checkpoint__feedback :deep(ul), .checkpoint__feedback :deep(ol) { margin: 4px 0; padding-left: 18px; }
+.checkpoint__feedback :deep(code) {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  padding: 1px 5px; border-radius: var(--mk-radius-sm); font-size: 12.5px;
+}
+.checkpoint__feedback :deep(strong) { font-weight: 800; }
 .msg__retry { margin-left: 8px; color: var(--red-ink); font-weight: 800; text-decoration: underline; cursor: pointer; border: 0; background: none; padding: 0; font: inherit; }
 .msg__bubble--html :deep(p) { margin: 0 0 8px; }
 .msg__bubble--html :deep(p:last-child) { margin-bottom: 0; }
@@ -3207,6 +3274,15 @@ onBeforeUnmount(() => {
 @media (max-width: 900px) {
   /* 知识点浮窗绝对定位，不占用头部/消息区布局高度；对话卡无需预留单独头部带。 */
   .composer { gap: 4px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  /* 窄屏头部三件套改两件（2026-10-08 用户侧走查 #61）：连接态「学习中」常驻时和标题抢宽度，
+     12 字任务名被挤成「11 字 + 末字孤行」（墨迹实测第一行 x15..177、第二行只剩一个字形）。
+     窄屏把状态文字收进 ⋯ 菜单（模板里的 .learn__menu-status），标题独占剩余宽度。
+     写在文件末尾：同权重下后出现者胜，早写会被上面的 ≤900 块盖掉。 */
+  .learn__live--head { display: none; }
+  .learn__menu-status { display: block; }
+  /* 知识点入口的 36px 命中区在窄屏同样保留——窄屏 padding 4px 9px 只能给到 26px 高
+     （2026-10-08 用户侧走查 #17/#21）。 */
+  .learn__kpbtn { padding: 4px 9px; min-height: 36px; }
 }
 
 /* 桌面阅读宽度：>1100（全局列宽收窄不生效的区段）把消息/卡片限在 ~760px 居中，

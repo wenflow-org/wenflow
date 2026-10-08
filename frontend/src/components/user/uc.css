@@ -130,6 +130,12 @@
   padding: 6px 12px;
   font-size: 12.5px;
   border-radius: var(--mk-radius-lg);
+  /* 桌面档触控下沿（走查 2026-10-08 发现 #49）：6px 上下内边距 + 12.5px 字只有 32px 高，
+     调用日志页头的「导出 JSON / 导出 CSV / 复制排查信息」与筛选区的「查询 / 重置」
+     实测 88×32 / 79×32 / 99×32 / 49×31 / 50×32，低于仓库「可点元素不得低于 36px」硬线。
+     .uc-btn 已是 inline-flex + align-items:center，补 min-height 后文字仍居中，
+     横向内边距与配色不变，视觉不变；窄屏媒体查询里的 padding 覆盖继续生效。 */
+  min-height: 36px;
 }
 
 .uc-btn--link {
@@ -139,6 +145,11 @@
   padding: 4px 8px;
   border-radius: var(--mk-radius-md);
   font-size: 12.5px;
+  /* 桌面档触控下沿：4px 上下内边距 + 12.5px 字只有 ~27px 高，
+     是全页最小的可点元素（走查 2026-10-08 发现 #48：账户页「编辑」41×27）。
+     .uc-btn 基座已是 inline-flex + align-items:center，补 min-height 后文字仍居中，
+     横向内边距与配色不动，视觉不变；窄屏媒体查询里的 padding 覆盖继续生效。 */
+  min-height: 36px;
 }
 
 .uc-btn--link:hover:not(:disabled) {
@@ -554,21 +565,13 @@ table.uc-table {
   to { transform: rotate(360deg); }
 }
 
-/* 触屏：.uc-btn--link（「编辑」这类文字按钮）在桌面上是 4px 内边距的一行小字（27px 高），
-   手机上同样是主要入口，抬到 34px；.uc-btn--sm 顺带补到 36px。
-   只加纵向内边距，配色与视觉不变。 */
+/* 触屏：.uc-btn--link（「编辑」这类文字按钮）与 .uc-btn--sm 的 36px 高度下限都已提到
+   各自基座规则（2026-10-08 发现 #48 / #49），这里只保留触屏专属的内边距微调。
+   纵向内边距 4→9px（link）/ 6→8px（sm），让文字的垂直呼吸更贴近触屏手感，配色不变。 */
 @media (max-width: 1100px) {
   .uc-btn--link { padding: 9px 10px; }
-  /* 高度补到 36（mobile:spec 的 lt36 门禁）：8px 上下内边距 + 12.5px 字 = 33px，
-     而且 .uc-btn--primary 变体少一层边框（32）、.actions > * 又各写一份 padding，
-     同一排按钮高矮不齐。min-height 一下全齐，横向内边距不动。 */
-  .uc-btn--sm {
-    padding: 8px 12px;
-    min-height: 36px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
+  /* sm 纵向 6 → 8px；高度下限在基座，这一块只调内边距。 */
+  .uc-btn--sm { padding: 8px 12px; }
 
   /* 移动端卡片密度：内边距 20/22 → 14px、标题块下间距 14 → 10px。
      个人中心一页三张卡，仅这一项就是 ~120px。 */

@@ -146,4 +146,17 @@ describe('V2LearningHistory 样式护栏', () => {
     expect(styleDecl(rule, 'margin')).toBe('0 -6px');
     expect(styleDecl(rule, 'min-height'), '44px 高度地板不能被这次改动带走').toBe('44px');
   });
+
+  /**
+   * 热力 >60 分档（class 尾缀 h3）：2026-10-09 用户侧走查实测暗色下
+   * 探针 `.mday--h3` 的 background 是 rgb(107,107,107)——`color-mix(var(--blue) 85%, transparent)`
+   * 配 `--mk-on-fill` 白字，在暗色里既与同行的灰日期文字撞色，白字压 --blue 暗色档
+   * (#5b8def) 也只有 3.2:1。改走 --mk-blue-fill（明暗同值的实心蓝 #2f6ae0，白字 5.75:1）。
+   */
+  it('热力 >60 分档底色走明暗同值的实心蓝 token，不用 --blue 派生', () => {
+    const rule = styleRule('.lg--3, .mday--h3');
+    expect(styleDecl(rule, 'background')).toBe('var(--mk-blue-fill)');
+    expect(styleDecl(rule, 'color')).toBe('var(--mk-on-fill)');
+    expect(rule, '--blue 暗色档是亮蓝，配白字对比不足且被透明混合中和成灰').not.toContain('var(--blue)');
+  });
 });

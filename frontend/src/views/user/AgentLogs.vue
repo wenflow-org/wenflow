@@ -81,11 +81,11 @@
       </div>
       <div class="stat-card">
         <span>成功率（本页）</span>
-        <strong>{{ successRate }}%</strong>
+        <strong>{{ hasPageSamples ? successRate + '%' : '—' }}</strong>
       </div>
       <div class="stat-card">
         <span>平均耗时（本页）</span>
-        <strong>{{ avgDuration }}ms</strong>
+        <strong>{{ hasPageSamples ? avgDuration + 'ms' : '—' }}</strong>
       </div>
       <div class="stat-card">
         <span>Token（本页）</span>
@@ -338,6 +338,11 @@ const displayLogs = computed(() => {
     ? logs.value.filter((log) => getCapabilityType(log.agentId) === filters.capabilityType)
     : logs.value;
 });
+
+// 本页无样本时不能把「无样本」写成 0 分：成功率 / 平均耗时是「0%」「0ms」会被读成
+// 「全部失败 / 零耗时」（走查 2026-10-08 #51，本页空态与「总调用 0」并排）。
+// 无样本时模板显示「—」，只在有日志时才给百分比与耗时。
+const hasPageSamples = computed(() => displayLogs.value.length > 0);
 const detailMetadata = computed(() => parseMetadata(currentLog.value?.metadata));
 
 /* 竞态守卫代际号：last-wins，快速翻页/连点详情时丢弃过期响应 */

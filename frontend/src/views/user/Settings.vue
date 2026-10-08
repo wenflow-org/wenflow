@@ -3,8 +3,9 @@
        页内容含密码/注销/MCP）；「API 接入」降为第一个分区的 H3 名 -->
   <CapabilityShell title="设置">
     <div class="user-settings-page">
-      <!-- 状态条（P3-45，设计评审）：撤「已启用/未启用」徽章——徽章 + switch + 「禁用」标签
-           三重表达同一状态；状态词随 switch 单源随动（「使用平台默认模型服务」等） -->
+      <!-- 状态条（P3-45，设计评审）：撤「已启用/未启用」徽章——标题是唯一状态句。
+           开关绑的是 apiConfig.enabled（自定义模型服务是否启用），标签必须写明它真正控制的对象，
+           不再用裸「启用/禁用」贴在标题右侧（会被读成「平台默认模型服务 禁用」）——走查 2026-10-08 #10 -->
       <div class="settings-status">
         <div class="settings-status__left">
           <div>
@@ -20,7 +21,7 @@
             @change="handleEnabledChange"
           />
           <span class="uc-switch__track"></span>
-          <span class="uc-switch__label">{{ apiConfig.enabled ? '启用' : '禁用' }}</span>
+          <span class="uc-switch__label">自定义模型服务：{{ apiConfig.enabled ? '开' : '关' }}</span>
         </label>
       </div>
 
