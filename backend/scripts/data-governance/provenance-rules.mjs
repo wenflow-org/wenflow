@@ -30,10 +30,10 @@
  *  边界更新为纪元 2 起点（=2026-10-08T18:40:00+08），此后新产生的数据不再封条。 */
 export const MEASUREMENT_FIX_BOUNDARY_MS = 1791456000000; // 2026-10-08T18:40:00+08:00（纪元 2 起点）
 
-/** 实测窗口起点（epoch ms）= 纪元 2 起点。原 2026-10-05 启发式已随纪元重置失效——
- *  它曾把该时刻后注册的账号一律标 test-round；纪元 2 起新注册账号默认 real，
- *  测量夹具请用显式 email glob / 账号名规则命中。 */
-export const ROUND_WINDOW_START_MS = 1791456000000; // 2026-10-08T18:40:00+08:00
+/** epoch-1 实测窗口起点（epoch ms）= 2026-10-05T00:00:00+08:00（历史值，不改）。
+ *  双侧窗口语义：注册时间 ∈ [本值, MEASUREMENT_FIX_BOUNDARY_MS) 的未知账号判 test-round；
+ *  纪元 2（≥边界）新注册账号不再被该启发式命中——测量夹具改用显式命名/glob。 */
+export const ROUND_WINDOW_START_MS = 1791129600000; // 2026-10-04T16:00:00Z
 
 /** R2 实测轨开跑时刻（epoch ms）= 2026-10-05T20:00:00Z（R2 seq/ad 两轨当晚开跑）。
  *  仅用于标注 vl 账号的「R2 复用状态」，不改变 provenance 分类。 */
@@ -165,7 +165,10 @@ export function classifyProvenance(email, opts = {}) {
     if (globToRegExp(g).test(e)) return { provenance: PROVENANCE.HUMAN, matchedBy: `human:${g}` };
   }
   const createdAt = Number(opts.userCreatedAtMs);
-  if (Number.isFinite(createdAt) && createdAt >= ROUND_WINDOW_START_MS) {
+  // 双侧窗口（纪元重置后语义）：仅「epoch-1 实测窗（10-05）至纪元 2 起点」之间注册的
+  // 未知账号才按启发式判 test-round。纪元 2 起新注册账号不再被此启发式吞掉——
+  // 测量夹具请用显式 glob/命名规则命中（见 TEST_ROUND globs）。
+  if (Number.isFinite(createdAt) && createdAt >= ROUND_WINDOW_START_MS && createdAt < MEASUREMENT_FIX_BOUNDARY_MS) {
     return { provenance: PROVENANCE.TEST_ROUND, matchedBy: 'round-window' };
   }
   return { provenance: PROVENANCE.HUMAN_CANDIDATE, matchedBy: 'fallback' };
@@ -210,9 +213,9 @@ export function classifyVlBatch(opts = {}) {
   if (hasR1b) {
     batch = 'r1b';
     label = 'R1 对比组（vl-r1b-*）';
-  } else if (Number.isFinite(createdAt) && createdAt >= ROUND_WINDOW_START_MS) {
+  } else if (Number.isFinite(createdAt) && createdAt >= ROUND_WINDOW_START_MS && createdAt < MEASUREMENT_FIX_BOUNDARY_MS) {
     batch = 'r1-measure';
-    label = 'R1 测量 VL（本轮窗口新建，未打 r1b 标签）';
+    label = 'R1 测量 VL（epoch-1 实测窗新建，未打 r1b 标签）';
   } else {
     batch = 'campaign';
     label = '旧版批量战役批次';
@@ -245,7 +248,7 @@ export function buildProvenanceSqlCase(emailExpr, createdAtExpr) {
     arms.push(`WHEN lower(${emailExpr}) GLOB ${q(g.toLowerCase())} THEN ${q(PROVENANCE.HUMAN)}`);
   }
   arms.push(
-    `WHEN ${createdAtExpr} IS NOT NULL AND ${createdAtExpr} >= ${ROUND_WINDOW_START_MS} THEN ${q(PROVENANCE.TEST_ROUND)}`,
+    `WHEN ${createdAtExpr} IS NOT NULL AND ${createdAtExpr} >= ${ROUND_WINDOW_START_MS} AND ${createdAtExpr} < ${MEASUREMENT_FIX_BOUNDARY_MS} THEN ${q(PROVENANCE.TEST_ROUND)}`,
   );
   arms.push(`ELSE ${q(PROVENANCE.HUMAN_CANDIDATE)}`);
   return `CASE\n    ${arms.join('\n    ')}\n  END`;
