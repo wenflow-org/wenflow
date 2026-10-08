@@ -123,6 +123,58 @@ describe('V2LearningPage 挂载回归', () => {
     expect(w.find('.kp__list').text()).toContain('已掌握');
     expect(w.find('.kp__list').text()).toContain('学习中 · 40%');
 
+    // 知识点从左侧遮罩抽屉改为头部下方非模态浮窗：入口仍切换展示，面板内可再次收起
+    const kpButton = w.find('.learn__kpbtn');
+    const kpPanel = w.find('#learn-kp-panel');
+    expect(kpPanel.classes()).not.toContain('kp--open');
+    await kpButton.trigger('click');
+    expect(kpPanel.classes()).toContain('kp--open');
+    expect(kpButton.attributes('aria-expanded')).toBe('true');
+    await kpPanel.find('.kp__head').trigger('click');
+    expect(kpPanel.classes()).not.toContain('kp--open');
+
+    w.unmount();
+  });
+
+  it('知识点浮窗点外面收起：不再有遮罩，点浮窗内部不收、点聊天区即收', async () => {
+    api.startSession.mockResolvedValue({
+      sessionId: 's_kp',
+      revision: 2,
+      mode: 'new',
+      opening: { message: '我们开始吧。', question: '准备好了吗？', quickReplies: [{ text: '开始' }] },
+      knowledgePoints: [
+        { id: 'k1', name: '函数定义', status: 'mastered' },
+        { id: 'k2', name: '变量作用域', status: 'learning', progress: 40 },
+      ],
+    });
+    // 文档层点击监听要真实冒泡到 document → 必须挂到文档树（其余用例不需要 DOM 事件冒泡）
+    const w = mount(V2LearningPage, { attachTo: document.body, global: { stubs: { 'router-link': true } } });
+    await flushPromises();
+    await flushPromises();
+
+    const panel = w.find('#learn-kp-panel');
+    expect(w.find('.kp-scrim').exists(), '遮罩层又回来了').toBe(false);
+
+    await w.find('.learn__kpbtn').trigger('click');
+    expect(panel.classes()).toContain('kp--open');
+
+    // 点浮窗内部（面板头以外的地方）：不收
+    panel.element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPromises();
+    expect(panel.classes()).toContain('kp--open');
+
+    // 点聊天输入区（浮窗之外）：收起 —— 浮窗非模态，对话区本来就可点
+    w.find('textarea').element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPromises();
+    expect(panel.classes()).not.toContain('kp--open');
+
+    // Esc 同样收起（焦点不在输入控件内时）
+    await w.find('.learn__kpbtn').trigger('click');
+    expect(panel.classes()).toContain('kp--open');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await flushPromises();
+    expect(panel.classes()).not.toContain('kp--open');
+
     w.unmount();
   });
 

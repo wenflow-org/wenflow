@@ -8,9 +8,10 @@
         <small>{{ pathName }}</small>
       </div>
       <div class="learn__head-right">
-        <!-- 知识点入口：原型单列无侧栏 → 常驻左栏降级为浮层抽屉的开关（功能不删） -->
+        <!-- 知识点入口：原型单列无侧栏 → 常驻左栏降级为头部入口 + 浮窗（功能不删） -->
         <button
           v-if="knowledgePoints.length"
+          ref="kpBtn"
           type="button"
           class="learn__kpbtn"
           :aria-expanded="kpOpen"
@@ -44,6 +45,78 @@
               </button>
             </div>
         </ImmersiveMenu>
+        <!-- 知识点浮窗：锚在头部入口下方的非模态浮窗（不再是从左侧压满全高的抽屉）。
+             放在 .learn__head-right 内 —— 该容器 position:relative，浮窗以它为定位框右对齐，
+             宽度按视口收敛，移动端也不会从左侧溢出屏幕。 -->
+        <aside v-if="knowledgePoints.length" id="learn-kp-panel" ref="kpPanel" class="kp" :class="{ 'kp--open': kpOpen }">
+          <button type="button" class="kp__head" :aria-expanded="kpOpen" @click="toggleKp">
+            <span class="kp__head-main">
+              <svg class="kp__ring" viewBox="0 0 20 20" aria-hidden="true">
+                <circle class="kp__ring-track" cx="10" cy="10" r="8" />
+                <circle class="kp__ring-val" :class="{ 'kp__ring-val--none': !masteredCount }" cx="10" cy="10" r="8" :stroke-dasharray="kpRingDash" />
+              </svg>
+              <strong>本节知识点</strong>
+            </span>
+            <span class="kp__head-meta">
+              <span
+                class="kp__chip kp__chip--mastered"
+                :class="{ 'kp__chip--empty': !masteredCount, 'kp__chip--none': !knowledgePoints.length }"
+              >{{ masteredCount }}/{{ knowledgePoints.length }} 已掌握</span>
+              <span class="kp__caret" aria-hidden="true">{{ kpOpen ? '▾' : '▸' }}</span>
+            </span>
+          </button>
+          <div class="kp__body">
+            <div class="kp__bar"><i :style="{ width: weightedProgressPct + '%' }"></i></div>
+            <!-- 视图切换：列表（默认）/ 图谱。图谱按需加载——只在切过去时才发请求 -->
+            <div class="kp__views" role="tablist" aria-label="知识点视图">
+              <button
+                type="button" role="tab" class="kp__view"
+                :class="{ 'kp__view--on': kpView === 'list' }"
+                :aria-selected="kpView === 'list'"
+                @click="kpView = 'list'"
+              >列表</button>
+              <button
+                type="button" role="tab" class="kp__view"
+                :class="{ 'kp__view--on': kpView === 'graph' }"
+                :aria-selected="kpView === 'graph'"
+                @click="switchKpToGraph"
+              >图谱</button>
+            </div>
+            <template v-if="kpView === 'graph'">
+              <p v-if="graphError" class="kp__hint kp__hint--err">{{ graphError }}</p>
+              <MkLoading v-else-if="graphLoading" inline />
+              <p v-else-if="!graphNodes.length" class="kp__hint">这条路径还没有概念图数据——路径生成完成后会出现在这里。</p>
+              <MkGraph
+                v-else
+                :nodes="graphNodes"
+                :edges="graphEdges"
+                :theme="kpGraphTheme"
+                height="320px"
+                @select="kpSelected = $event"
+              />
+              <p v-if="graphMeta" class="kp__hint">
+                {{ graphMeta.nodeCount }} 个概念 · {{ graphMeta.edgeCount }} 条关系
+                <router-link to="/knowledge-map" class="kp__more">全部路径 →</router-link>
+              </p>
+              <p v-if="kpSelected" class="kp__hint">
+                选中：{{ kpSelected.label }} ·
+                {{ kpSelected.masteryScore === null || kpSelected.masteryScore === undefined ? '未评估' : Math.round(kpSelected.masteryScore * 100) + '%' }}
+              </p>
+            </template>
+            <ol v-else class="kp__list">
+              <li v-for="(kp, i) in knowledgePoints" :key="kp.id || i" class="kp__item" :class="kpCls(kp)">
+                <span class="kp__mark">
+                  <svg v-if="isMastered(kp)" viewBox="0 0 24 24" width="10" height="10"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+                  <i v-else></i>
+                </span>
+                <div class="kp__name">
+                  <strong>{{ kp.name || kp.title }}</strong>
+                  <small>{{ kpStatusText(kp) }}</small>
+                </div>
+              </li>
+            </ol>
+          </div>
+        </aside>
       </div>
     </header>
 
@@ -82,83 +155,7 @@
     </div>
 
     <div v-else class="learn__body">
-      <!-- 知识点抽屉（原型单列无侧栏 → 由头部「知识点 N/M」入口开合的浮层；功能全保留） -->
-      <div v-if="knowledgePoints.length && kpOpen" class="kp-scrim" @click="closeKp"></div>
-      <aside v-if="knowledgePoints.length" id="learn-kp-panel" class="kp" :class="{ 'kp--open': kpOpen }">
-        <button type="button" class="kp__head" :aria-expanded="kpOpen" @click="toggleKp">
-          <span class="kp__head-main">
-            <svg class="kp__ring" viewBox="0 0 20 20" aria-hidden="true">
-              <circle class="kp__ring-track" cx="10" cy="10" r="8" />
-              <circle class="kp__ring-val" :class="{ 'kp__ring-val--none': !masteredCount }" cx="10" cy="10" r="8" :stroke-dasharray="kpRingDash" />
-            </svg>
-            <strong>本节知识点</strong>
-          </span>
-          <span class="kp__head-meta">
-            <span
-              class="kp__chip kp__chip--mastered"
-              :class="{ 'kp__chip--empty': !masteredCount, 'kp__chip--none': !knowledgePoints.length }"
-            >{{ masteredCount }}/{{ knowledgePoints.length }} 已掌握</span>
-            <span class="kp__caret" aria-hidden="true">{{ kpOpen ? '▾' : '▸' }}</span>
-          </span>
-        </button>
-        <div class="kp__body">
-          <div class="kp__bar"><i :style="{ width: weightedProgressPct + '%' }"></i></div>
-          <!-- 视图切换：列表（默认）/ 图谱。图谱按需加载——只在切过去时才发请求 -->
-          <div class="kp__views" role="tablist" aria-label="知识点视图">
-            <button
-              type="button" role="tab" class="kp__view"
-              :class="{ 'kp__view--on': kpView === 'list' }"
-              :aria-selected="kpView === 'list'"
-              @click="kpView = 'list'"
-            >列表</button>
-            <button
-              type="button" role="tab" class="kp__view"
-              :class="{ 'kp__view--on': kpView === 'graph' }"
-              :aria-selected="kpView === 'graph'"
-              @click="switchKpToGraph"
-            >图谱</button>
-          </div>
-          <template v-if="kpView === 'graph'">
-            <p v-if="graphError" class="kp__hint kp__hint--err">{{ graphError }}</p>
-            <MkLoading v-else-if="graphLoading" inline />
-            <p v-else-if="!graphNodes.length" class="kp__hint">这条路径还没有概念图数据——路径生成完成后会出现在这里。</p>
-            <MkGraph
-              v-else
-              :nodes="graphNodes"
-              :edges="graphEdges"
-              :theme="kpGraphTheme"
-              height="320px"
-              @select="kpSelected = $event"
-            />
-            <p v-if="graphMeta" class="kp__hint">
-              {{ graphMeta.nodeCount }} 个概念 · {{ graphMeta.edgeCount }} 条关系
-              <router-link to="/knowledge-map" class="kp__more">全部路径 →</router-link>
-            </p>
-            <p v-if="kpSelected" class="kp__hint">
-              选中：{{ kpSelected.label }} ·
-              {{ kpSelected.masteryScore === null || kpSelected.masteryScore === undefined ? '未评估' : Math.round(kpSelected.masteryScore * 100) + '%' }}
-            </p>
-          </template>
-          <ol v-else class="kp__list">
-            <li v-for="(kp, i) in knowledgePoints" :key="kp.id || i" class="kp__item" :class="kpCls(kp)">
-              <span class="kp__mark">
-                <svg v-if="isMastered(kp)" viewBox="0 0 24 24" width="10" height="10"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
-                <i v-else></i>
-              </span>
-              <div class="kp__name">
-                <strong>{{ kp.name || kp.title }}</strong>
-                <small>{{ kpStatusText(kp) }}</small>
-              </div>
-            </li>
-          </ol>
-        </div>
-      </aside>
-
-      <!-- 中：导师对话。
-           这里原有一条「本节课知识点 N / M 已掌握 + 8px 进度条」的通栏卡：它与头部
-           「知识点 N/M」入口完全重复（计数与加权进度在抽屉面板里也各有一份，见 .kp__chip
-           与 .kp__bar），却白占对话区上方约 79px（390 实测）。按目标规划页的做法——进度留在
-           头部带里，正文只留对话（2026-10-08 用户侧走查）。 -->
+      <!-- 中：导师对话。知识点浮窗相对页头定位，绝对定位不占用对话区高度。 -->
       <section class="tutor">
         <!-- 恢复进度横幅：续上历史时可见，明确「已恢复到上次进度」并提供重新开始出口 -->
         <div v-if="resumedNotice" class="tutor__resume">
@@ -646,14 +643,18 @@ const taskId = String(route.params.taskId || '');
 const isReviewMode = computed(() => route.query.mode === 'review');
 const interactionMeta = useInteractionMeta();
 
-/* 知识点面板：原型是单列 880 无侧栏 → 常驻左栏降级为「头部入口 + 浮层抽屉」
-   （功能不删：列表/图谱、掌握度、进度条全在抽屉里；桌面与移动端同一套开合逻辑） */
+/* 知识点面板：原型是单列 880 无侧栏 → 头部入口打开非模态浮窗
+   （列表/图谱、掌握度、进度条保留；浮窗独立滚动，不压缩消息区） */
 const kpOpen = ref(false);
-/** 收起抽屉并把焦点还给头部入口（模态浮层不吞键盘焦点） */
+/** 浮窗本体与入口按钮：点外收起要在「点面板/点入口」之外判定，用模板 ref 而不是 document 查询，
+    组件未挂到文档树（单测）时同样成立。 */
+const kpPanel = ref<HTMLElement | null>(null);
+const kpBtn = ref<HTMLElement | null>(null);
+/** 收起知识点浮窗并把焦点还给头部入口 */
 function closeKp() {
   if (!kpOpen.value) return;
   kpOpen.value = false;
-  document.querySelector<HTMLElement>('.learn__kpbtn')?.focus();
+  kpBtn.value?.focus();
 }
 function toggleKp() {
   if (kpOpen.value) {
@@ -661,11 +662,23 @@ function toggleKp() {
     return;
   }
   kpOpen.value = true;
-  // 打开后焦点跟进抽屉头（有列表/图谱两个 tab 与收起键），键盘用户不会停在被遮住的头部按钮上
+  // 打开后焦点跟进浮窗头（有列表/图谱两个 tab 与收起键）；浮窗非模态，聊天区照常可用
   void nextTick(() => {
-    document.querySelector<HTMLElement>('#learn-kp-panel .kp__head')?.focus();
+    if (!kpOpen.value) return;
+    kpPanel.value?.querySelector<HTMLElement>('.kp__head')?.focus();
   });
 }
+/* 浮窗没有遮罩层了（原抽屉靠 scrim 接外部点击），点入口与浮窗之外自行收起。
+   不用 focusout/blur：点聊天输入框也应收起，而输入框获得焦点时 blur 的 relatedTarget 为空。 */
+function onKpDocClick(e: MouseEvent) {
+  if (!kpOpen.value) return;
+  const target = e.target as Node | null;
+  if (!target) return;
+  if (kpPanel.value?.contains(target)) return;
+  if (kpBtn.value?.contains(target)) return;
+  kpOpen.value = false;
+}
+
 
 /* ---------- 键盘快捷键 ---------- */
 /* Esc 由页面自管 window keydown（不走 useKeyboardShortcuts）：处理器需要拿到事件目标——
@@ -683,7 +696,7 @@ function onPageKeydown(e: KeyboardEvent) {
   // 目标守卫：焦点在输入控件内 → 交给元素自身（如编辑框的 @keydown.esc 退出编辑）
   const t = e.target as HTMLElement | null;
   if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) return;
-  // 知识点抽屉开着：Esc 收起（抽屉是本页浮层，优先于停止生成/跳过检查点这类有副作用的动作）
+  // 知识点浮窗开着：Esc 收起（优先于停止生成/跳过检查点这类有副作用的动作）
   if (kpOpen.value) {
     closeKp();
     return;
@@ -1764,6 +1777,7 @@ onMounted(() => {
   window.addEventListener('keydown', onPageKeydown);
   window.addEventListener('pagehide', onPageHide);
   document.addEventListener('visibilitychange', onVisibilityChange);
+  document.addEventListener('click', onKpDocClick);
 });
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onPageKeydown);
@@ -1773,6 +1787,7 @@ onBeforeUnmount(() => {
   disposeCheckpoint();
   window.removeEventListener('pagehide', onPageHide);
   document.removeEventListener('visibilitychange', onVisibilityChange);
+  document.removeEventListener('click', onKpDocClick);
   if (session.value && !completed.value) {
     aiTeachingAPI.pauseSession(session.value.sessionId, 'pagehide', session.value.revision).catch(() => {});
   }
@@ -1797,7 +1812,7 @@ onBeforeUnmount(() => {
 .learn__title { display: grid; gap: 3px; min-width: 0; }
 .learn__title strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .learn__title small { font-size: 12px; color: var(--faint); }
-.learn__head-right { display: flex; align-items: center; gap: 10px; }
+.learn__head-right { display: flex; align-items: center; gap: 10px; position: relative; }
 .learn__state-link {
   font-size: 12px; font-weight: 700;
   color: var(--muted);
@@ -1830,7 +1845,7 @@ onBeforeUnmount(() => {
 .learn__live--err { color: var(--red-ink); }
 
 /* ---------- 布局（原型 .wf-screen：单列、gap 14、≥1024 定宽 880 居中） ----------
-   原型的课堂屏没有左侧栏：知识点从常驻列降级成「头部入口 + 浮层抽屉」，正文只剩一列。 */
+   原型的课堂屏没有左侧栏：知识点从常驻列降级成「头部入口 + 浮窗」。 */
 .learn__body {
   flex: 1;
   min-height: 0;
@@ -1846,37 +1861,37 @@ onBeforeUnmount(() => {
   .learn__body { padding: 22px 30px 36px; }
 }
 
-/* ---------- 知识点抽屉（原型单列无侧栏 → 头部「知识点 N/M」开合的左侧浮层） ----------
-   z-index：抽屉整体盖过头部（header 50）——抽屉自带标题与收起键，压住头部才不会出现
-   「面板头被半透明顶栏遮住」的重影；遮罩 60 / 抽屉 61，其余浮层（补充资料弹层 90）仍在其上。 */
-.kp-scrim {
-  position: fixed; inset: 0;
-  z-index: 60;
-  background: var(--wf-overlay);
-  animation: kp-fade-in 0.2s ease both;
-}
-@keyframes kp-fade-in { from { opacity: 0; } to { opacity: 1; } }
+/* ---------- 知识点浮窗（锚在头部入口下方，不占对话布局高度） ---------- */
 .kp {
-  position: fixed;
-  top: 0; left: 0; bottom: 0;
-  width: min(340px, 86vw);
-  z-index: 61;
-  background: var(--surface);
-  border-right: 1px solid var(--line);
-  border-radius: 0;
-  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
-  display: flex; flex-direction: column; gap: 12px;
-  overflow-y: auto;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 70;
+  width: min(380px, calc(100vw - 28px));
+  max-height: min(72dvh, 620px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  overflow: auto;
   overscroll-behavior: contain;
-  box-shadow: var(--mk-shadow-modal); /* 抽屉 = 模态档 */
-  transform: translateX(-102%);
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-modal);
+  background: var(--surface);
+  box-shadow: var(--mk-shadow-modal);
+  opacity: 0;
   visibility: hidden;
-  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0.28s;
+  transform: translateY(-6px) scale(.985);
+  transform-origin: top right;
+  pointer-events: none;
+  transition: opacity .16s ease, transform .16s ease, visibility 0s linear .16s;
 }
 .kp.kp--open {
-  transform: none;
+  opacity: 1;
   visibility: visible;
-  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s;
+  transform: none;
+  pointer-events: auto;
+  transition: opacity .16s ease, transform .16s ease, visibility 0s;
 }
 .kp__head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -2768,7 +2783,9 @@ onBeforeUnmount(() => {
   .learn__title { grid-column: 1; grid-row: 1; min-width: 0; }
   .learn__title strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .learn__title small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .learn__head-right { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  /* 知识点浮窗仅绝对定位，不占用头部/消息区布局高度；窄屏保持视口内滚动。 */
+  .kp { width: min(380px, calc(100vw - 28px)); max-height: min(72dvh, 620px); }
+  .learn__head-right { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 6px; flex-shrink: 0; position: relative; }
   .learn__live, .learn__state-link { white-space: nowrap; flex-shrink: 0; }
   .learn__live { font-size: 12px; }
   /* 窄屏头部三件套（知识点入口 / 连接态 / ⋯）：入口与状态压到最小占位，⋯ 保持 44 触区 */
@@ -3174,12 +3191,10 @@ onBeforeUnmount(() => {
 <style scoped>
 /* ===== 课堂布局重排（2026-09-28 对齐真源原型 newui/用户侧/index.html 学习屏）=====
    单列 880：.learn__body 不再是 280+1fr 双列网格 —— 原型 .wf-screen 没有侧栏，
-   知识点由常驻列降级为「头部入口 + fixed 抽屉」，正文只剩对话卡一列
-   （2026-10-08 起连进度卡也去掉，正文唯一内容就是对话）。
-   1100 以下不再预留 44px kp 头部带、也不再有 absolute 下拉面板（见下）。 */
+   知识点由常驻列降级为「头部入口 + 浮窗」，正文只剩对话卡一列
+   （2026-10-08 起连进度卡也去掉，正文唯一内容就是对话）。 */
 @media (max-width: 900px) {
-  /* 知识点已是 fixed 抽屉（头部「知识点 N/M」开合）：对话卡不再预留 44px 头部带，
-     展开态也不再需要 absolute 下拉面板 —— 抽屉自带滚动与遮罩。 */
+  /* 知识点浮窗绝对定位，不占用头部/消息区布局高度；对话卡无需预留单独头部带。 */
   .composer { gap: 4px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
 }
 
