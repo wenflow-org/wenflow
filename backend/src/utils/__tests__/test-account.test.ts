@@ -3,7 +3,17 @@
  * - isTestAccountUser：与前端 Users.vue isTestAccount 命名约定对齐（virtual_ / @test.local / TEST_ACCOUNT_PREFIXES）
  * - REAL_USER_WHERE：email 条件与 admin/platform.ts 等价，供 listForAdmin excludeTest 复用
  */
-import { isTestAccountUser, REAL_USER_WHERE, TEST_ACCOUNT_PREFIXES } from '../test-account';
+import { isTestAccountUser } from '../test-account';
+
+// findTestAccountUserIds / findRealUserIds / buildRealUserWhere 会查库，这里用 mock 提供行集
+const usersFindMany = jest.fn();
+jest.mock('../../config/database', () => ({
+  __esModule: true,
+  default: { users: { findMany: (...args: unknown[]) => usersFindMany(...args) } },
+}));
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { findTestAccountUserIds, findRealUserIds, buildRealUserWhere } = require('../test-account');
 
 describe('isTestAccountUser', () => {
   it('虚拟学习者：id 以 virtual_ 开头', () => {
@@ -74,30 +84,48 @@ describe('isTestAccountUser', () => {
   });
 });
 
-describe('REAL_USER_WHERE（Prisma 过滤单点）', () => {
-  it('排除 isVirtualLearner，且 NOT 包含全部测试账号命名模式（email + name）', () => {
-    expect(REAL_USER_WHERE.isVirtualLearner).toBe(false);
-    const emails = REAL_USER_WHERE.NOT.filter((c: any) => c.email).map((c: any) => Object.keys(c.email)[0]);
-    expect(emails).toEqual(
-      expect.arrayContaining(['startsWith', 'endsWith', 'startsWith', 'startsWith', 'startsWith', 'startsWith', 'startsWith'])
-    );
-    const names = REAL_USER_WHERE.NOT.filter((c: any) => c.name);
-    expect(names.length).toBeGreaterThanOrEqual(4);
+describe('真实用户过滤单点（buildRealUserWhere / findRealUserIds）', () => {
+  const rows = [
+    { id: 'u-real', name: '陈晓', email: 'chenxiao@example.com', isVirtualLearner: false },
+    { id: 'u-dot', name: '[e2e-del] a', email: 'e2e.del.587389.a@example.com', isVirtualLearner: false },
+    { id: 'u-underscore', name: 'e2e_ms0fz3yx', email: 'e2e_ms0fz3yx@example.com', isVirtualLearner: false },
+    { id: 'u-eval', name: 'EvalRound2', email: 'EvalRound2@wenflow.local', isVirtualLearner: false },
+    { id: 'u-simb', name: 'simB_luowen', email: 'simB_luowen@wenflow.local', isVirtualLearner: false },
+    { id: 'u-virtual', name: '虚拟', email: 'virtual_1@test.local', isVirtualLearner: true },
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    usersFindMany.mockResolvedValue(rows);
   });
 
-  it('TEST_ACCOUNT_PREFIXES 全量同步进 NOT（email + name 各一份）', () => {
-    const emails = REAL_USER_WHERE.NOT.filter((c: any) => c.email && c.email.startsWith).map((c: any) => c.email.startsWith);
-    const names = REAL_USER_WHERE.NOT.filter((c: any) => c.name).map((c: any) => c.name.startsWith);
-    for (const prefix of TEST_ACCOUNT_PREFIXES) {
-      expect(emails).toContain(prefix);
-      expect(names).toContain(prefix);
-    }
+  it('按 isTestAccountUser 判定 id 集合：虚拟、下划线前缀、无下划线前缀都排除', async () => {
+    const excluded = await findTestAccountUserIds();
+    expect(excluded.sort()).toEqual(['u-eval', 'u-simb', 'u-underscore', 'u-virtual'].sort());
   });
 
-  it('实测账号模式可被 NOT 排除（shotsnap / verify / vcheck / vqa_audit / align）', () => {
-    const emails = REAL_USER_WHERE.NOT.filter((c: any) => c.email && c.email.startsWith).map((c: any) => c.email.startsWith);
-    for (const prefix of ['shotsnap', 'verify_real_user', 'vcheck', 'vqa_audit', 'align_', 'qa_delete_test_']) {
-      expect(emails).toContain(prefix);
-    }
+  it('下划线与「点」不能混为一谈：e2e.del@… 是真实账号，必须留在列表里', async () => {
+    // 这正是 2026-10-09 修的 bug：Prisma 的 startsWith('e2e_') 在 SQLite 上编译成
+    // LIKE 'e2e_%'，`_` 当通配符把 e2e.del@… 也吃掉了。新口径必须保留它。
+    const real = await findRealUserIds();
+    expect(real).toContain('u-dot');
+    expect(real).not.toContain('u-underscore');
+  });
+
+  it('实测测试账号（Eval*/simB_*）仍被排除，且判定不依赖 SQL 的大小写不敏感', async () => {
+    const real = await findRealUserIds();
+    expect(real).not.toContain('u-eval');
+    expect(real).not.toContain('u-simb');
+  });
+
+  it('buildRealUserWhere 产出 id 排除式，且 extra 可覆盖同名键', async () => {
+    const where = await buildRealUserWhere({ deletedAt: null });
+    expect(where.isVirtualLearner).toBe(false);
+    expect((where.id as { notIn: string[] }).notIn).toContain('u-underscore');
+    expect((where.id as { notIn: string[] }).notIn).not.toContain('u-dot');
+    expect(where.deletedAt).toBeNull();
+    // extra 覆盖：显式传入的 isVirtualLearner 生效
+    const overridden = await buildRealUserWhere({ isVirtualLearner: true });
+    expect(overridden.isVirtualLearner).toBe(true);
   });
 });

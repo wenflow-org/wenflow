@@ -1,5 +1,9 @@
+import prisma from '../config/database';
+
 /**
  * 测试/虚拟账号识别单点（管理端风险队列/统计口径/登录守卫共用）。
+ * 判据只有一处：`isTestAccountUser`（JS 正则/字面判断）；SQL 侧一律经
+ * `buildRealUserWhere` / `findRealUserIds` 复用同一判据，避免出现第二套匹配实现。
  *
  * 命名约定（前端 admin-redesign learner-profile.ts isTestAccountUser 与此保持同步）：
  * - 虚拟学习者：id 以 virtual_ 开头，或 email 形如 virtual_xxx@test.local（virtual-learners.ts:1129 生成）
@@ -25,7 +29,7 @@
 
 /**
  * 测试/审计账号命名前缀（email 或 name 命中即视为测试账号）。
- * 注意：不能 as const —— Prisma 的 usersWhereInput.NOT 要求可变数组。
+ * 前缀一律按**字面**匹配（`TEST_ACCOUNT_PREFIX_PATTERN` 的正则已转义），不交给 SQL 的 LIKE。
  */
 export const TEST_ACCOUNT_PREFIXES: string[] = [
   'e2e_',
@@ -58,7 +62,9 @@ export const TEST_ACCOUNT_PREFIXES: string[] = [
   'gw-upload-probe', // gw-upload-probe / gw-upload-probe2
 ];
 
-const TEST_ACCOUNT_PREFIX_PATTERN = new RegExp(`^(${TEST_ACCOUNT_PREFIXES.join('|')})`, 'i');
+/** 前缀按字面拼进正则（当前清单只有字母/数字/`_`/`-`，仍显式转义，避免以后加前缀踩坑）。 */
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const TEST_ACCOUNT_PREFIX_PATTERN = new RegExp(`^(${TEST_ACCOUNT_PREFIXES.map(escapeRegExp).join('|')})`, 'i');
 
 export function isTestAccountUser(u: { id?: string; name?: string | null; email?: string | null }): boolean {
   const id = String(u.id || '');
@@ -74,18 +80,48 @@ export function isTestAccountUser(u: { id?: string; name?: string | null; email?
 
 /**
  * Prisma where：排除虚拟学习者与测试/审计账号。
- * email 条件与 admin/platform.ts 统计口径等价；name 条件与前端 Users.vue 命名约定对齐。
- * 注意：不能 as const —— Prisma 的 usersWhereInput.NOT 要求可变数组。
+ *
+ * ⚠ 2026-10-09 起**不再用 Prisma 的 startsWith 表达前缀**，改为按 id 排除（见下方
+ * findTestAccountUserIds / buildRealUserWhere）。原因：Prisma 在 SQLite 上把 startsWith
+ * 编译成 LIKE，且**不转义 LIKE 元字符**，`_` 会被当成「任意一个字符」——
+ * `startsWith: 'e2e_'` 实际是 `LIKE 'e2e_%'`，会把 `e2e.del.587389.a@example.com`
+ * 这类真实账号一起排除掉（实测：该账号在列表/KPI/导出里静默消失，而同一个模块的
+ * isTestAccountUser 用字面正则判定它「不是测试账号」，两半口径分叉）。
+ * 也不能改用 `gte/lt` 区间去模拟「字面前缀」：LIKE 对 ASCII 大小写不敏感，而区间比较是
+ * 大小写敏感的，`simB_luowen` / `EvalRound2` 这类账号会因此漏进统计。
+ * 结论：SQL 侧一律以 isTestAccountUser 为唯一判据（取回 id/email/name 后过滤），
+ * 从结构上保证两半不会再分叉。
+ *
+ * 性能：这些调用点都在管理端/KPI 查询里，且库内 users 规模有限；同一请求内请只算一次
+ * 并把结果传下去（platform-overview.service.ts 就是这么做的）。
  */
-export const REAL_USER_WHERE: {
-  isVirtualLearner: boolean;
-  NOT: ({ email: { startsWith: string } | { endsWith: string } } | { name: { startsWith: string } })[];
-} = {
-  isVirtualLearner: false,
-  NOT: [
-    { email: { startsWith: 'virtual_' } },
-    { email: { endsWith: '@test.local' } },
-    ...TEST_ACCOUNT_PREFIXES.map((prefix) => ({ email: { startsWith: prefix } })),
-    ...TEST_ACCOUNT_PREFIXES.map((prefix) => ({ name: { startsWith: prefix } })),
-  ],
-};
+export async function findTestAccountUserIds(): Promise<string[]> {
+  const rows = await prisma.users.findMany({
+    select: { id: true, email: true, name: true, isVirtualLearner: true },
+  });
+  return rows.filter((row) => row.isVirtualLearner || isTestAccountUser(row)).map((row) => row.id);
+}
+
+/** 真实（非虚拟、非测试/审计）账号 id 清单，供「按用户聚合」的统计口径复用。 */
+export async function findRealUserIds(): Promise<string[]> {
+  const rows = await prisma.users.findMany({
+    select: { id: true, email: true, name: true, isVirtualLearner: true },
+  });
+  return rows.filter((row) => !row.isVirtualLearner && !isTestAccountUser(row)).map((row) => row.id);
+}
+
+/**
+ * 真实用户 where 片段（单点入口）：排除虚拟学习者与测试/审计账号。
+ * extra 会覆盖同名键（例如统计口径要补 `deletedAt: null`）。
+ */
+export async function buildRealUserWhere(
+  extra?: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const excludedIds = await findTestAccountUserIds();
+  return {
+    isVirtualLearner: false,
+    // 空集时省掉 id 条件：既省一条无用条件，也不依赖 `notIn: []` 的语义
+    ...(excludedIds.length ? { id: { notIn: excludedIds } } : {}),
+    ...(extra || {}),
+  };
+}

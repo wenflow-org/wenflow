@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import { Prisma } from '@prisma/client';
-import { REAL_USER_WHERE as REAL_USER_WHERE_UTILS } from '../../utils/test-account';
+import { buildRealUserWhere } from '../../utils/test-account';
 
 /**
  * Admin · Token 成本统计 DB 查询单点。
@@ -14,15 +14,12 @@ import { REAL_USER_WHERE as REAL_USER_WHERE_UTILS } from '../../utils/test-accou
  * calledAt 索引）——纯 IO 查询返回聚合结果，JS 只做装配。
  */
 
-/** 真实用户过滤：虚拟/测试账号排除 + 软删排除（与 platform.ts 同口径） */
-const REAL_USER_WHERE = {
-  ...REAL_USER_WHERE_UTILS,
-  deletedAt: null,
-};
-
-/** 真实用户 id 集合（includeTest=false 时的 userId 过滤源） */
+/** 真实用户 id 集合（includeTest=false 时的 userId 过滤源）
+ *  判据单点在 utils/test-account.ts（isTestAccountUser），不用 Prisma startsWith：
+ *  SQLite 的 LIKE 把前缀里的 `_` 当通配符，会把 `e2e.del@…` 这类真实账号一并滤掉。 */
 export async function resolveRealUserIds(): Promise<string[]> {
-  const ids = (await prisma.users.findMany({ where: REAL_USER_WHERE, select: { id: true } })).map((u) => u.id);
+  const where = await buildRealUserWhere({ deletedAt: null });
+  const ids = (await prisma.users.findMany({ where: where as Prisma.usersWhereInput, select: { id: true } })).map((u) => u.id);
   return ids;
 }
 

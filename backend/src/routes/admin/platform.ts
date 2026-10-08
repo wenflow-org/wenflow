@@ -1387,7 +1387,7 @@ router.get('/teaching-sessions', async (req: Request, res: Response) => {
     const status = (req.query.status as string) || undefined;
     const onlyWithAdvisory = String(req.query.onlyWithAdvisory || '') === 'true';
     const onlyMissingWrapup = String(req.query.onlyMissingWrapup || '') === 'true';
-    // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 REAL_USER_WHERE）；
+    // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 buildRealUserWhere）；
     // includeTest=true 时显式包含（切换后前端对虚拟/测试行做灰标标记）
     const includeTest = String(req.query.includeTest || '') === 'true';
 

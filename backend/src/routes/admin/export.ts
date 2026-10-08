@@ -14,7 +14,7 @@ import {
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { createAuditLog } from '../../services/audit-log.service';
 import { logger } from '../../utils/logger';
-import { REAL_USER_WHERE } from '../../utils/test-account';
+import { buildRealUserWhere } from '../../utils/test-account';
 
 const router = express.Router();
 
@@ -101,12 +101,12 @@ router.get('/users', async (req: Request, res: Response) => {
 
     const includeTest = String(req.query.includeTest || '') === 'true';
     // 审核 #157：脚注承诺「排除虚拟学习者与测试账号」，但原实现只排 isVirtualLearner——
-    // e2e_/shotsnap/@test.local 等测试账号照进 CSV，而文件顶部的 REAL_USER_WHERE 全文件
-    // 未被使用（意图明显是排测试账号）。改用 REAL_USER_WHERE（含 NOT 前缀/域名排除）与
-    // admin/platform.ts 统计口径同源；deletedAt 叠加在外层。
+    // e2e_/shotsnap/@test.local 等测试账号照进 CSV，而文件顶部的过滤条件全文件未被使用
+    // （意图明显是排测试账号）。改用单点 buildRealUserWhere() 与统计口径同源；
+    // deletedAt 叠加在外层。
     const where: any = includeTest
       ? { deletedAt: null }
-      : { ...REAL_USER_WHERE, deletedAt: null };
+      : await buildRealUserWhere({ deletedAt: null });
 
     const users = await listExportUsers(where, MAX_ROWS);
 

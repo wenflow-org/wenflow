@@ -9,6 +9,10 @@ export {}
 
 type RouteHandler = (...args: any[]) => any
 
+// 真实用户口径的 id 扫描（utils/test-account 按 isTestAccountUser 判定）会先查一次 users：
+// 与业务侧列表查询共用同一个 findMany mock，按入参形状分流，业务断言仍取 mock.calls[0]
+let mockTestAccountRows: any[] = []
+
 const tsCount = jest.fn()
 const tsFindMany = jest.fn()
 const gcCount = jest.fn()
@@ -26,7 +30,13 @@ jest.mock('../../../config/database', () => ({
     milestones: { findMany: jest.fn().mockResolvedValue([]) },
     subtasks: { findMany: jest.fn().mockResolvedValue([]) },
     goal_conversations: { count: gcCount, findMany: gcFindMany },
-    users: { count: usersCount, findMany: usersFindMany },
+    users: {
+      count: (...args: any[]) => usersCount(...args),
+      findMany: (args: any) =>
+        args?.select?.isVirtualLearner === true && !args?.where
+          ? Promise.resolve(mockTestAccountRows)
+          : usersFindMany(args),
+    },
   },
 }));
 
@@ -51,7 +61,6 @@ jest.mock('../../../services/learning/goal-conversation.service', () => ({
 import platformRouter from '../platform';
 import goalConversationsRouter from '../goal-conversations';
 import usersRouter from '../users';
-import { TEST_ACCOUNT_PREFIXES } from '../../../utils/test-account';
 
 function getRouteHandler(router: any, path: string, method: string): RouteHandler {
   const layer = router.stack.find(
@@ -79,12 +88,12 @@ async function run(handler: RouteHandler, req: any): Promise<any> {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // 默认给一个测试账号，保证排除式非空（口径生效可见）
+  mockTestAccountRows = [
+    { id: 'u-test', name: 'e2e_ms0fz3yx', email: 'e2e_ms0fz3yx@example.com', isVirtualLearner: false },
+  ];
 });
 
-// email virtual_ + @test.local 结尾 + 前缀 email + 前缀 name（REAL_USER_WHERE.NOT 全长）。
-// 从 TEST_ACCOUNT_PREFIXES 派生而非写死数字：前缀清单是活的（2026-10-07 F3-4 又补了 10 个），
-// 写死数字只会让每次扩清单都要来改这里。
-const REAL_NOT_LENGTH = 2 + TEST_ACCOUNT_PREFIXES.length * 2;
 
 describe('数据隔离（A3）：教学会话列表 GET /teaching-sessions', () => {
   const sessionRow = (over: Record<string, any> = {}) => ({
@@ -117,7 +126,7 @@ describe('数据隔离（A3）：教学会话列表 GET /teaching-sessions', () 
     const where = tsFindMany.mock.calls[0][0].where;
     expect(where.users).toBeDefined();
     expect(where.users.isVirtualLearner).toBe(false);
-    expect(where.users.NOT.length).toBeGreaterThan(0);
+    expect(where.users.id).toEqual({ notIn: expect.any(Array) });
     const countWhere = tsCount.mock.calls[0][0].where;
     expect(countWhere.users.isVirtualLearner).toBe(false);
 
@@ -171,7 +180,7 @@ describe('数据隔离（A3）：目标对话列表 GET /goal-conversations', ()
     expect(where.users).toBeDefined();
     expect(where.users.isVirtualLearner).toBe(false);
     expect(where.users.deletedAt).toBeNull();
-    expect(where.users.NOT.length).toBeGreaterThan(0);
+    expect(where.users.id).toEqual({ notIn: expect.any(Array) });
     expect(gcCount.mock.calls[0][0].where.users).toBeDefined();
   });
 
@@ -208,14 +217,16 @@ describe('数据隔离（A3）：用户列表 GET /users', () => {
     ...over,
   });
 
-  it('默认（无 includeTest）：where 含 isVirtualLearner:false 与 NOT 命名模式，响应带回 isTestAccount 标记', async () => {
+  it('默认（无 includeTest）：where 含 isVirtualLearner:false 与 id 排除式，响应带回 isTestAccount 标记', async () => {
     const handler = getRouteHandler(usersRouter, '/', 'get');
     usersFindMany.mockResolvedValue([userRow()]);
     const res = await run(handler, { query: { limit: '50' } });
 
     const where = usersFindMany.mock.calls[0][0].where;
     expect(where.isVirtualLearner).toBe(false);
-    expect(where.NOT.length).toBe(REAL_NOT_LENGTH);
+    // 2026-10-09：真实用户口径改为「按 id 排除」（SQLite 的 LIKE 会把前缀里的 `_` 当通配符，
+    // `startsWith('e2e_')` 曾把 `e2e.del@…` 这类真实账号一起滤掉）
+    expect(where.id).toEqual({ notIn: expect.any(Array) });
     expect(usersCount.mock.calls[0][0].where.isVirtualLearner).toBe(false);
 
     expect(res.body.data.users[0].isTestAccount).toBe(false);
@@ -230,7 +241,7 @@ describe('数据隔离（A3）：用户列表 GET /users', () => {
 
     const where = usersFindMany.mock.calls[0][0].where;
     expect(where.isVirtualLearner).toBeUndefined();
-    expect(where.NOT).toBeUndefined();
+    expect(where.id).toBeUndefined();
     expect(res.body.data.users[0].isVirtualLearner).toBe(true);
     expect(res.body.data.users[0].isTestAccount).toBe(true);
   });
@@ -243,6 +254,6 @@ describe('数据隔离（A3）：用户列表 GET /users', () => {
     const where = usersFindMany.mock.calls[0][0].where;
     expect(where.deletedAt).toEqual({ not: null });
     expect(where.isVirtualLearner).toBeUndefined();
-    expect(where.NOT).toBeUndefined();
+    expect(where.id).toBeUndefined();
   });
 });

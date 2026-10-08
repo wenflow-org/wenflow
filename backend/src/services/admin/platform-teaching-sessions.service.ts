@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/database';
 import { isTestAccountUser } from '../../utils/test-account';
-import { REAL_USER_WHERE } from './real-user-where';
+import { buildRealUserWhere } from '../../utils/test-account';
 import { deriveTeachingSessionProgress } from '../teaching-session-progress.service';
 
 /**
@@ -67,7 +67,7 @@ export async function listTeachingSessionsDebug(params: {
     ...(onlyMissingWrapup
       ? { OR: [{ wrapup: null }, { NOT: { wrapup: { contains: 'topicSummary' } } }] }
       : {}),
-    ...(includeTest ? {} : { users: REAL_USER_WHERE }),
+    ...(includeTest ? {} : { users: await buildRealUserWhere() }),
   };
 
   const [total, sessions] = await Promise.all([

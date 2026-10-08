@@ -14,7 +14,7 @@ import {
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { logger } from '../../utils/logger';
-import { REAL_USER_WHERE } from '../../utils/test-account';
+import { buildRealUserWhere } from '../../utils/test-account';
 import { ACHIEVEMENTS } from '../../services/achievements/achievement-system';
 import achievementService from '../../services/achievements/achievement.service';
 import { withTransaction } from '../../utils/with-transaction';
@@ -82,7 +82,8 @@ router.get('/records', async (req: Request, res: Response) => {
     }
     if (!includeTest) {
       // 与模糊条件共存时用 AND 合并，避免直接覆盖丢失过滤
-      where.users = where.users ? { AND: [where.users, REAL_USER_WHERE] } : REAL_USER_WHERE;
+      const realUserWhere = await buildRealUserWhere();
+      where.users = where.users ? { AND: [where.users, realUserWhere] } : realUserWhere;
     }
 
     /* 服务端排序：白名单（earnedAt / xpReward）+ 方向；非法 400。

@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import { learnerSnapshotService } from './LearnerSnapshotService';
-import { isTestAccountUser, REAL_USER_WHERE } from '../../utils/test-account';
+import { buildRealUserWhere, isTestAccountUser } from '../../utils/test-account';
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
 
 export interface LearnerSnapshotRefreshInput {
@@ -110,8 +110,7 @@ export class LearnerSnapshotRefreshService {
     // includeTest=true 时显式包含（管理需要查看虚拟数据，不删数据只改默认视图）。
     const excludeTest = params?.includeTest ? false : (params?.excludeTest ?? true);
     const userWhere = {
-      deletedAt: null,
-      ...(excludeTest ? { isVirtualLearner: false, NOT: REAL_USER_WHERE.NOT } : {}),
+      ...(excludeTest ? await buildRealUserWhere({ deletedAt: null }) : { deletedAt: null }),
       ...(params?.userId ? { id: params.userId } : {}),
     };
     const total = await prisma.users.count({ where: userWhere });
