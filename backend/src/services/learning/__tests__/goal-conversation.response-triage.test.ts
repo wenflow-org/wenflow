@@ -304,9 +304,44 @@ describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜�
     // C 轨探针 C 实锤过的路径：旧代码当轮生成路径；现在拒绝文本压过 flag
     expect(mockRunGoalAsync).not.toHaveBeenCalled();
     expect(result.internal.core.stage).toBe('proposing');
+    // 同意计量落库（拍板 #2）：否决事件可查询（channel=flag-vetoed-by-text + refusalVetoed）
+    const persisted = JSON.parse(conversationRecord.collectedData);
+    expect(persisted.lastConfirmation).toEqual(expect.objectContaining({
+      channel: 'flag-vetoed-by-text',
+      refusalVetoed: true,
+      replyPreview: '再想想吧',
+    }));
+    expect(persisted.confirmationLog).toHaveLength(1);
   });
 
-  it('flag=true 且确认文本 → 照常生成（首选通道不受影响）', async () => {
+  it('C 轨探针原文「再让我考虑一下。今天先不生成。」→ 全段扫描命中否决（此前末段锚定被打穿）', async () => {
+    seedConversation({
+      stage: 'proposing',
+      collectedData: JSON.stringify({
+        messages: [],
+        understanding: { real_problem: '不知道复盘要回答哪几个问题' },
+        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+      }),
+    });
+    mockExecuteSkill.mockResolvedValue(buildAiResponse({
+      userVisible: '好，我们不着急，你想先调整哪部分？',
+      stage: 'proposing',
+    }));
+
+    const result = await goalConversationService.continueConversation(
+      'conv-1',
+      '再让我考虑一下。今天先不生成。',
+      'user-1',
+      { confirmProposal: true }
+    );
+
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(result.internal.core.stage).toBe('proposing');
+    const persisted = JSON.parse(conversationRecord.collectedData);
+    expect(persisted.lastConfirmation.channel).toBe('flag-vetoed-by-text');
+  });
+
+  it('flag=true 且确认文本 → 照常生成（首选通道不受影响）+ 计量 channel=flag', async () => {
     seedConversation({
       stage: 'proposing',
       collectedData: JSON.stringify({
@@ -324,6 +359,31 @@ describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜�
     );
 
     expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
+    const persisted = JSON.parse(conversationRecord.collectedData);
+    expect(persisted.lastConfirmation).toEqual(expect.objectContaining({
+      channel: 'flag',
+      refusalVetoed: false,
+    }));
+  });
+
+  it('自然语言确认（无 flag）→ 照常生成 + 计量 channel=text', async () => {
+    seedConversation({
+      stage: 'proposing',
+      collectedData: JSON.stringify({
+        messages: [],
+        understanding: { real_problem: '不知道复盘要回答哪几个问题' },
+        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+      }),
+    });
+
+    await goalConversationService.continueConversation('conv-1', '就按这个来，确认', 'user-1');
+
+    expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
+    const persisted = JSON.parse(conversationRecord.collectedData);
+    expect(persisted.lastConfirmation).toEqual(expect.objectContaining({
+      channel: 'text',
+      refusalVetoed: false,
+    }));
   });
 });
 

@@ -78,4 +78,19 @@ describe('isExplicitRefusalText（显式拒绝探测，2026-10-08 真人面守�
     expect(isExplicitRefusalText('时间改成每周 3 天')).toBe(false);
     expect(isExplicitRefusalText('想先看看大纲')).toBe(false);
   });
+
+  it('全段扫描 + 时间前缀（拍板 #2，2026-10-08）：C 轨探针原文此前被打穿', () => {
+    // 探针原文：末段「今天先不生成」因「今天」前缀 + 非末段位置双重打穿旧口径
+    expect(isExplicitRefusalText('再让我考虑一下。今天先不生成。')).toBe(true);
+    expect(isExplicitRefusalText('今天先不生成')).toBe(true);
+    expect(isExplicitRefusalText('明天再说吧')).toBe(true);
+    expect(isExplicitRefusalText('还是算了')).toBe(true);
+    expect(isExplicitRefusalText('暂时不做')).toBe(true);
+  });
+
+  it('全段扫描不误伤：含拒绝形字样但语义是确认/调整的长段不算', () => {
+    expect(isExplicitRefusalText('之前想换个方向，现在就按这个来')).toBe(false);
+    expect(isExplicitRefusalText('就按这个来，确认。对了，我只有晚上有空')).toBe(false);
+    expect(isExplicitRefusalText('好，但预算改成每天 1 小时')).toBe(false);
+  });
 });

@@ -391,6 +391,30 @@ class GoalConversationService {
     throw error;
   }
 
+  /**
+   * 同意计量（拍板 #2，2026-10-08）：确认/否决事件写进 collectedData——
+   * `lastConfirmation`（最近一次，json_extract 单键可查）+ `confirmationLog`（环形 5 条）。
+   * channel ∈ flag（按钮）| text（自然语言白名单）| flag-vetoed-by-text（flag 被拒绝文本压过）；
+   * 假同意率分子 = channel='flag' 且 refusalVetoed=false 但用户实际未生成/后悔的复核数（人工口径），
+   * 分母 = channel 计数。全程只写 collectedData，不另建表。
+   */
+  private recordConfirmationMetering(
+    currentData: Record<string, any>,
+    channel: 'flag' | 'text' | 'flag-vetoed-by-text',
+    refusalVetoed: boolean,
+    userReply: string
+  ): void {
+    const entry = {
+      channel,
+      refusalVetoed,
+      at: new Date().toISOString(),
+      replyPreview: String(userReply ?? '').slice(0, 40),
+    };
+    currentData.lastConfirmation = entry;
+    const log = Array.isArray(currentData.confirmationLog) ? currentData.confirmationLog : [];
+    currentData.confirmationLog = [...log.slice(-4), entry];
+  }
+
   private async updateConversationLifecycle(
     conversationId: string,
     stage: 'understanding' | 'proposing' | 'ready' | 'completed',
@@ -629,6 +653,13 @@ async continueConversation(
             userId,
             replyPreview: userReply.slice(0, 40),
           });
+          // 同意计量落库（拍板 #2，2026-10-08）：否决事件可查询、可计数（口径见 lastConfirmation）。
+          // 只 mutate 不 appendMessage——用户消息由下方普通回合链路落库，避免双写。
+          await this.updateConversationLifecycle(conversationId, conversation.stage as 'understanding' | 'proposing' | 'ready', {
+            mutateCollectedData: (currentData) => {
+              this.recordConfirmationMetering(currentData, 'flag-vetoed-by-text', true, userReply);
+            },
+          });
         }
 
         if (conversation.stage === 'proposing' && confirmProposal) {
@@ -731,7 +762,17 @@ async continueConversation(
               learningPathId: placeholderPath.id,
               learningPath: { id: placeholderPath.id, status: 'generating' },
               appendMessage: { role: 'user', content: userReply },
-              expectedRevision: conversation.revision
+              expectedRevision: conversation.revision,
+              // 同意计量落库（拍板 #2，2026-10-08）：flag=按钮通道 / text=自然语言确认；
+              // 计数口径 SELECT json_extract(collectedData,'$.lastConfirmation.channel'), COUNT(*)
+              mutateCollectedData: (currentData) => {
+                this.recordConfirmationMetering(
+                  currentData,
+                  options?.confirmProposal === true ? 'flag' : 'text',
+                  false,
+                  userReply
+                );
+              }
             });
 
             if (!confirmed) {

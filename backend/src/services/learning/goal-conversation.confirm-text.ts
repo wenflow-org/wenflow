@@ -76,15 +76,25 @@ export function isProposalConfirmationText(text: string | null | undefined): boo
  */
 const REFUSAL_SEGMENT_PATTERNS: RegExp[] = [
   /^(不|不用|不要|不行|不好|先不|先不用|先别|别|暂不|暂时不|还没|还没有|没想好|没准备好|我还没想好)$/,
-  /^(再想想|再考虑|再看看|考虑一下|考虑下|想想|等等|等一下|等会儿|慢点|我想想|我再想想|我考虑一下|我再看看)$/,
+  /^(再想想|再考虑|再看看|考虑一下|考虑下|想想|等等|等一下|等会儿|慢点|我想想|我再想想|我考虑一下|我再看看|再让我想想|再让我考虑|再让我考虑一下|让我再想想|让我考虑一下)$/,
   /^(换个|换一个|换下|换个方向|换个思路|重新|重新来|重新规划|重新想想|不对|不对吧|有问题|有疑问|我质疑)$/,
   /^(不要了|不确认|不生成|先不生成|先不确认|取消)$/,
-  /^(有点犹豫|犹豫|犹豫一下|拿不定|拿不准|定不下来)$/,
+  /^(有点犹豫|犹豫|犹豫一下|拿不定|拿不准|定不下来|(?:还是|那|先)?算)$/,
+  // 时间/语气前缀的推迟（C 轨探针原文「再让我考虑一下，今天先不生成。」的末段曾因
+  // 「今天」前缀打穿锚定匹配）：前缀 +（先）+ 否定/推迟短语。注意段归一会剥「吧/了」
+  // 尾缀（「还是算了」→「还是算」，由上一行的 算 族兜住），本行只管未剥离形态。
+  /^(?:今天|明天|今晚|这次|暂时|我|还是)+(?:先)?(?:不生成|不确认|不弄|不做|不用了|不要了|不考虑|再说|再想想|再考虑(?:一下)?|再等等|等等|看看|缓一缓|缓缓|算了)(?:吧|呗)?$/,
 ];
 
 /**
- * 用户回复是否**明示拒绝/犹豫**（与 isProposalConfirmationText 同构：只看最后一个语义段）。
- * 命中时即使带 confirmProposal 标志也不代签（调用方按普通回复处理）。
+ * 用户回复是否**明示拒绝/犹豫**（拍板 #2 改全段扫描：任一语义段是纯拒绝/犹豫短语即判拒绝）。
+ * 命中时即使带 confirmProposal 标志也不代签（调用方按普通回复处理），并落否决计量
+ * （collectedData.lastConfirmation.refusalVetoed，见 goal-conversation.service.ts）。
+ *
+ * 为什么从「只看最后一段」改全段（2026-10-08）：C 轨探针原文「再让我考虑一下，今天先不生成。」
+ * 的否决不在末段措辞预期内（「今天先不生成」因「今天」前缀打穿锚定匹配）——否决词可以落在
+ * 任何一段，而 flag 代签的误确认代价（生成一条没人要的路径）远大于误拦（按普通回复推进，
+ * 模型自然接住）。每段仍须**整段匹配**锚定模式（≤12 字、非纯拒绝段一律不算），误拦面依旧很窄。
  */
 export function isExplicitRefusalText(text: string | null | undefined): boolean {
   const value = String(text ?? '');
@@ -94,12 +104,10 @@ export function isExplicitRefusalText(text: string | null | undefined): boolean 
     .map((segment) => segment.trim())
     .filter(Boolean);
   if (!segments.length) return false;
-  let index = segments.length - 1;
-  while (index >= 0 && COURTESY_TAIL.test(segments[index])) index--;
-  if (index < 0) return false;
-  const segment = segments[index];
-  if (segment.length > CONFIRM_SEGMENT_MAX_CHARS) return false;
-  const normalized = normalizeSegment(segment);
-  if (!normalized) return false;
-  return REFUSAL_SEGMENT_PATTERNS.some((pattern) => pattern.test(normalized));
+  return segments.some((segment) => {
+    if (segment.length > CONFIRM_SEGMENT_MAX_CHARS) return false;
+    const normalized = normalizeSegment(segment);
+    if (!normalized) return false;
+    return REFUSAL_SEGMENT_PATTERNS.some((pattern) => pattern.test(normalized));
+  });
 }
