@@ -18,6 +18,50 @@ function readDb<T>(dbPath: string, sql: string, params: unknown[] = []): Promise
   });
 }
 
+function readAll<T>(dbPath: string, sql: string, params: unknown[] = []): Promise<T[]> {
+  return new Promise((resolve) => {
+    const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY);
+    db.all(sql, params, (error: Error | null, rows: T[]) => {
+      db.close();
+      resolve(error ? [] : rows || []);
+    });
+  });
+}
+
+/**
+ * 双读（同口径 teaching-session-message-store.loadTeachingMessages）：
+ * 侧表 teaching_session_messages 有行即权威（回灌后老列已置 NULL），ORDER BY id ASC；
+ * 空则回退解析 teaching_sessions.messages 老列。解析失败按空处理。
+ */
+async function readSessionMessages(dbPath: string, sessionId: string): Promise<Array<{ role: string; content: string }>> {
+  const sideRows = await readAll<{ payload: string }>(
+    dbPath,
+    'SELECT payload FROM teaching_session_messages WHERE sessionId = ? ORDER BY id ASC',
+    [sessionId],
+  );
+  if (sideRows.length > 0) {
+    return sideRows
+      .map((row) => {
+        try {
+          const parsed = JSON.parse(row.payload);
+          return parsed && typeof parsed === 'object' ? parsed as { role: string; content: string } : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter((m): m is { role: string; content: string } => m !== null);
+  }
+  const sess = await readDb<{ messages: string }>(dbPath, 'SELECT messages FROM teaching_sessions WHERE id = ?', [sessionId]);
+  try {
+    const parsed = JSON.parse(sess?.messages || '[]');
+    return Array.isArray(parsed)
+      ? parsed.filter((m): m is { role: string; content: string } => m && typeof m === 'object')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 async function main(): Promise<void> {
   const endpoint = (process.env.AI_API_URL || '').trim();
   const apiKey = (process.env.AI_API_KEY || '').trim();
@@ -31,12 +75,15 @@ async function main(): Promise<void> {
   if (!log) { console.error('no log'); process.exitCode = 1; return; }
   const payload = log.userPayload as string;
 
-  // 该课的会话消息（真实历史）
-  const sess = await readDb<{ messages: string }>(
+  // 该课的会话消息（真实历史）：候选会话 = 侧表有行或老列非空（双读前的选会话口径同步放宽）
+  const sess = await readDb<{ id: string }>(
     'prisma/dev.db',
-    `SELECT messages FROM teaching_sessions WHERE json_extract(messages,'$') IS NOT NULL ORDER BY createdAt DESC LIMIT 1`,
+    `SELECT s.id FROM teaching_sessions s
+     WHERE EXISTS(SELECT 1 FROM teaching_session_messages m WHERE m.sessionId = s.id)
+        OR json_extract(s.messages,'$') IS NOT NULL
+     ORDER BY s.createdAt DESC LIMIT 1`,
   );
-  const msgs = JSON.parse(sess?.messages || '[]') as Array<{ role: string; content: string }>;
+  const msgs = sess ? await readSessionMessages('prisma/dev.db', sess.id) : [];
   const history = msgs.slice(-8).map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }));
 
   const system = await readSystemPrompt();

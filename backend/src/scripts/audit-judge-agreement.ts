@@ -18,6 +18,7 @@
  */
 import 'dotenv/config';
 import prisma from '../config/database';
+import { loadTeachingMessages } from '../services/ai-teaching/teaching-session-message-store';
 
 function arg(name: string): string | null {
   const hit = process.argv.find((item) => item.startsWith(`--${name}=`));
@@ -80,14 +81,21 @@ async function main() {
     if (!sessionId) continue;
 
     if (!sessionCache.has(sessionId)) {
-      const session = await prisma.teaching_sessions.findUnique({ where: { id: sessionId }, select: { messages: true } });
-      let parsed: unknown = [];
-      try {
-        parsed = JSON.parse(String(session?.messages ?? '[]'));
-      } catch {
-        parsed = [];
+      // 双读（同 teaching-session-message-store 口径）：侧表有行即权威
+      //（回灌后老列已置 NULL，直读老列会静默读空），空则回退老列解析。
+      const fromSide = await loadTeachingMessages(sessionId);
+      if (fromSide !== null) {
+        sessionCache.set(sessionId, fromSide as never);
+      } else {
+        const session = await prisma.teaching_sessions.findUnique({ where: { id: sessionId }, select: { messages: true } });
+        let parsed: unknown = [];
+        try {
+          parsed = JSON.parse(String(session?.messages ?? '[]'));
+        } catch {
+          parsed = [];
+        }
+        sessionCache.set(sessionId, Array.isArray(parsed) ? parsed as never : []);
       }
-      sessionCache.set(sessionId, Array.isArray(parsed) ? parsed as never : []);
     }
 
     results.push({

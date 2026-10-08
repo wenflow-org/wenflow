@@ -19,6 +19,50 @@ function readDb<T>(dbPath: string, sql: string, params: unknown[] = []): Promise
   });
 }
 
+function readAll<T>(dbPath: string, sql: string, params: unknown[] = []): Promise<T[]> {
+  return new Promise((resolve) => {
+    const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY);
+    db.all(sql, params, (error: Error | null, rows: T[]) => {
+      db.close();
+      resolve(error ? [] : rows || []);
+    });
+  });
+}
+
+/**
+ * 双读（同口径 teaching-session-message-store.loadTeachingMessages）：
+ * 侧表 teaching_session_messages 有行即权威（回灌后老列已置 NULL），ORDER BY id ASC；
+ * 空则回退解析 teaching_sessions.messages 老列。解析失败按空处理。
+ */
+async function readSessionMessages(dbPath: string, sessionId: string): Promise<Array<{ role: string; content: string }>> {
+  const sideRows = await readAll<{ payload: string }>(
+    dbPath,
+    'SELECT payload FROM teaching_session_messages WHERE sessionId = ? ORDER BY id ASC',
+    [sessionId],
+  );
+  if (sideRows.length > 0) {
+    return sideRows
+      .map((row) => {
+        try {
+          const parsed = JSON.parse(row.payload);
+          return parsed && typeof parsed === 'object' ? parsed as { role: string; content: string } : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter((m): m is { role: string; content: string } => m !== null);
+  }
+  const sess = await readDb<{ messages: string }>(dbPath, 'SELECT messages FROM teaching_sessions WHERE id = ?', [sessionId]);
+  try {
+    const parsed = JSON.parse(sess?.messages || '[]');
+    return Array.isArray(parsed)
+      ? parsed.filter((m): m is { role: string; content: string } => m && typeof m === 'object')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 async function main(): Promise<void> {
   const callId = process.argv[2];
   if (!callId) { console.error('usage: probe-replay-call.ts <promptCallId>'); process.exitCode = 1; return; }
@@ -35,13 +79,19 @@ async function main(): Promise<void> {
   const payload = JSON.parse(log.userPayload);
   const latest = String(payload.latestLearnerMessage || '');
 
-  // 找到该课会话，截取到 latestLearnerMessage 为止的历史
-  const sess = await readDb<{ messages: string; taskId: string }>(
+  // 找到该课会话，截取到 latestLearnerMessage 为止的历史：侧表 payload 与老列双路匹配
+  const needle = `%${latest.slice(0, 20).replace(/[%_]/g, '')}%`;
+  const sess = await readDb<{ id: string; taskId: string }>(
     'prisma/dev.db',
-    "SELECT messages, taskId FROM teaching_sessions WHERE userId = ? AND messages LIKE ? ORDER BY createdAt DESC LIMIT 1",
-    [log.userId, `%${latest.slice(0, 20).replace(/[%_]/g, '')}%`],
+    `SELECT s.id, s.taskId FROM teaching_sessions s
+     WHERE s.userId = ? AND (
+       EXISTS(SELECT 1 FROM teaching_session_messages m WHERE m.sessionId = s.id AND m.payload LIKE ?)
+       OR s.messages LIKE ?
+     )
+     ORDER BY s.createdAt DESC LIMIT 1`,
+    [log.userId, needle, needle],
   );
-  const msgs = JSON.parse(sess?.messages || '[]') as Array<{ role: string; content: string }>;
+  const msgs = sess ? await readSessionMessages('prisma/dev.db', sess.id) : [];
   const cutIdx = msgs.findIndex((m) => m.content.includes(latest.slice(0, 20)));
   const history = (cutIdx >= 0 ? msgs.slice(0, cutIdx + 1) : msgs).map((m) => ({
     role: m.role === 'assistant' ? 'assistant' : 'user',
