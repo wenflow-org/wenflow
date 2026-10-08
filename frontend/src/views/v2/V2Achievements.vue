@@ -73,7 +73,7 @@
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
             </button>
 
-            <span class="ach-card__icon" :class="iconCls(a)" aria-hidden="true">{{ achMark(a) }}</span>
+            <span class="ach-card__icon" :class="iconCls(a)" aria-hidden="true"><component :is="achIconOf(a)" /></span>
             <strong class="ach-card__name">{{ a.name }}</strong>
             <p class="ach-card__desc">{{ descText(a) }}</p>
             <span class="ach-card__state" :class="{ 'ach-card__state--on': a.unlocked }">
@@ -108,6 +108,7 @@ import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import { unwrapArray } from './unwrap';
+import { achIconMeta } from '@/views/admin-redesign/achievementIcons';
 import { useUserStore } from '@/stores/user';
 
 interface Achievement {
@@ -128,20 +129,14 @@ const items = ref<Achievement[]>([]);
 const loading = ref(true);
 const loadError = ref(false);
 
-/** 成就图标：按类型给「色块 + 字标」，与管理端 AchIcon.vue 同一类型域。
-    P3-48（设计评审）：单字「里」单独无法解码、读作占位噪音——用户侧改可解码双字
-    （里→里程 / 连→连续 / 完→完成 / 掌→掌握，社→社交 同步对齐；管理端 AchIcon 保持单字紧凑档）。
-    色块由 .ach-card__icon--* 系列 token 色给底（未解锁一律中性灰）。
-    替代原来的 emoji——各系统渲染不一致，且与全站的线性图标 + 色块徽标语言不搭。 */
-const ACH_TYPE_MARK: Record<string, string> = {
-  milestone: '里程',
-  streak: '连续',
-  completion: '完成',
-  mastery: '掌握',
-  social: '社交',
-};
-function achMark(a: Achievement): string {
-  return ACH_TYPE_MARK[a.type] || '成';
+/** 成就图标：按类型给「色块 + 线性图标」，与管理端 AchIcon.vue 共用
+    @/views/admin-redesign/achievementIcons 的同一份映射。
+    这条路走过两轮：P3-48（设计评审）指出单字「里」无法解码、读作占位噪音，
+    当时只把单字改成可解码双字（里程/连续/完成/掌握）；2026-10-08 用户反馈
+    「logo 图没了，怎么成字体了」——字再可解码也仍是字，遂换真图标。
+    色块由 .ach-card__icon--* 系列 token 色给底（未解锁一律中性灰）。 */
+function achIconOf(a: Achievement) {
+  return achIconMeta(a.type).icon;
 }
 
 /** 图标 42×42 的类型色块（原型 wf-ach__icon--streak/complete/mastery/milestone/social 858-862）；
@@ -353,14 +348,12 @@ onMounted(() => {
   border-radius: 12px;
   margin-bottom: 4px;
   display: grid; place-items: center;
-  font-size: 14px; font-weight: 800;
-  letter-spacing: 0.02em;
 }
-/* 锁定卡图标字原用 --faint(#90949b) 压在 line-60% 中性块上：直接只有 4.44:1，
-   再叠 .ach-card--locked 的 opacity .78 后掉到 3.30:1。该字（里程/连续/完成/掌握）
-   是卡上唯一的类型标识，不是装饰字，14px/800 非大字号，AA 需 4.5:1。
-   改 --muted 并把中性块压深一档（line 60%→30%），实测叠 opacity 后 4.81:1；
-   锁定态仍由整卡 opacity + 「未解锁」徽章表态。 */
+/* 图标尺寸：42px 块里放 20px 线稿（lucide 默认 24 偏满） */
+.ach-card__icon svg { width: 20px; height: 20px; }
+/* 图标墨色：换成线性图标后按非文本图形算（WCAG 1.4.11 只要 3:1），
+   不再要求 4.5:1；中性档仍取 --muted（实测叠 .ach-card--locked 的 opacity .78 后 4.81:1）。
+   墨色对比的是 15% 淡色块（几乎等于卡底），所以按卡底算即可。 */
 .ach-card__icon--neutral { background: color-mix(in srgb, var(--line) 30%, transparent); color: var(--muted); }
 .ach-card__icon--streak { background: color-mix(in srgb, var(--amber) 15%, transparent); color: var(--amber-ink); }
 .ach-card__icon--complete { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green-ink); }
