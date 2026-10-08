@@ -21,21 +21,29 @@ const { apiObject, getUserDetail, listSessions } = vi.hoisted(() => {
         return vi.fn(async () => ({ data: {} }));
       }
     });
-  // 详情接口：带 _count（会话总数 40）与 XP/层级（等级词汇断言用）
-  const getUserDetail = vi.fn(async () => ({
-    data: {
+  // 详情接口：带 _count（会话总数 40）与 XP/层级（等级词汇断言用）；
+  // deletedAt 是「账号已软删」的唯一信号，默认 null。显式标注 string|null——
+  // 写成字面量 null 会把 mock 的载荷类型锁死，已删除态用例就覆写不进时间戳
+  const getUserDetail = vi.fn<() => Promise<{
+    data: { data: { deletedAt: string | null; user: Record<string, unknown> } }
+  }>>(async () => {
+    const deletedAt: string | null = null
+    return {
       data: {
-        user: {
-          name: '测试用户',
-          email: 't@x.com',
-          createdAt: '2026-08-01T00:00:00Z',
-          xp: 120,
-          currentLevel: 'intermediate',
-          _count: { teaching_sessions: 40, learning_paths: 3 }
+        data: {
+          deletedAt,
+          user: {
+            name: '测试用户',
+            email: 't@x.com',
+            createdAt: '2026-08-01T00:00:00Z',
+            xp: 120,
+            currentLevel: 'intermediate',
+            _count: { teaching_sessions: 40, learning_paths: 3 }
+          }
         }
       }
     }
-  }));
+  })
   // 会话列表：limit=5 窗口返回 5 条（角标应为「最近 5 / 共 40」而非裸 5）
   const listSessions = vi.fn(async () => ({
     data: {
@@ -228,5 +236,108 @@ describe('UserAccountPane 账号轴口径（人员详情合并后）', () => {
     expect(kv).not.toContain('从未');
     w.unmount();
     liveLearners.value = [];
+  });
+});
+
+/**
+ * 账号状态与账户操作归位（2026-10-08 用户判例「这个设计的不好，重新设计」）：
+ * 原来 pane 顶部是一条 28px 游离行（`.ud-head`：只有状态徽章 + 贴错位的 ⋯），
+ * 与它作用的账户字段不在同一块里。现在归「账户信息」卡头，走全站 `.mk-card__head` /
+ * `.mk-card__head-right` 语法（标题吃剩余宽度、尾部元素贴右）。
+ */
+describe('UserAccountPane 账户信息卡头（状态与账户操作归位）', () => {
+  /** 详情载荷：deletedAt 显式给 null —— 它是「未删除」的唯一信号，
+      也让下面的已删除态用例能共用同一个 mock 载荷类型 */
+  const aliveDetail = () => ({
+    data: {
+      data: {
+        deletedAt: null,
+        user: {
+          name: '测试用户',
+          email: 't@x.com',
+          createdAt: '2026-08-01T00:00:00Z',
+          xp: 120,
+          currentLevel: 'intermediate',
+          _count: { teaching_sessions: 40, learning_paths: 3 }
+        }
+      }
+    }
+  });
+
+  beforeEach(() => {
+    liveLearners.value = [learner({ userId: 'u1', name: '测试用户' })];
+    getUserDetail.mockResolvedValue(aliveDetail());
+    localStorage.removeItem('admin_user');
+  });
+
+  async function mountPane() {
+    const w = mount(UserAccountPane, { props: { userId: 'u1' } });
+    await settle();
+    return w;
+  }
+
+  /** 账户信息卡的卡头（标题 + 状态 + 账户操作所在的那一行） */
+  const accountHead = (w: ReturnType<typeof mount>) =>
+    w.findAll('.mk-card__head').find((h) => h.text().includes('账户信息'))!;
+
+  it('游离的 .ud-head 行已退役，状态与账户操作落在「账户信息」卡头内', async () => {
+    const w = await mountPane();
+    expect(w.find('.ud-head').exists()).toBe(false);
+    expect(w.find('.ud-head__sp').exists()).toBe(false);
+    const head = accountHead(w);
+    expect(head.exists()).toBe(true);
+    // 状态徽章与动作同排：都在卡头右侧组里，而不是散在卡外
+    expect(head.find('.mk-badge').text()).toBe('正常');
+    expect(head.find('.mk-card__head-right').exists()).toBe(true);
+    expect(head.find('.mk-menu__btn').exists()).toBe(true);
+    // 动作与它作用的账户字段同卡
+    expect(head.element.closest('.mk-card')).toBe(w.find('.ud-kv').element.closest('.mk-card'));
+    w.unmount();
+  });
+
+  it('删除入口仍是低频/危险收进 ⋯ 的约定：菜单项为「删除账户…」，且带软删说明', async () => {
+    const w = await mountPane();
+    const head = accountHead(w);
+    await head.find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    const item = w.find('.mk-menu__pop .mk-menu__item--danger');
+    expect(item.exists()).toBe(true);
+    expect(item.text()).toContain('删除账户');
+    expect(item.attributes('title')).toContain('软删除');
+    w.unmount();
+  });
+
+  it('已删除态：徽章翻「已删除」、恢复入口顶替 ⋯（不出现删除项）', async () => {
+    getUserDetail.mockResolvedValue({
+      data: {
+        data: {
+          deletedAt: '2026-10-01T00:00:00Z',
+          user: {
+            name: '测试用户',
+            email: 't@x.com',
+            createdAt: '2026-08-01T00:00:00Z',
+            xp: 0,
+            currentLevel: 'beginner',
+            _count: { teaching_sessions: 0, learning_paths: 0 }
+          }
+        }
+      }
+    });
+    const w = await mountPane();
+    const head = accountHead(w);
+    expect(head.find('.mk-badge').text()).toBe('已删除');
+    expect(head.findAll('button').some((b) => b.text().includes('恢复用户'))).toBe(true);
+    expect(head.find('.mk-menu__btn').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('自保护口径不变：查看自己的账号时不出现 ⋯ 删除入口', async () => {
+    localStorage.setItem('admin_user', JSON.stringify({ id: 'u1' }));
+    const w = await mountPane();
+    expect(accountHead(w).find('.mk-menu__btn').exists()).toBe(false);
+    // 状态徽章与该看的事实仍在（自保护只收动作，不收读数）
+    expect(accountHead(w).find('.mk-badge').text()).toBe('正常');
+    w.unmount();
+    localStorage.removeItem('admin_user');
   });
 });
