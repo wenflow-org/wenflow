@@ -110,7 +110,7 @@
                   <i class="nt-read__dot" aria-hidden="true"></i>{{ n.isRead ? '已读' : '未读' }}
                 </span>
               </td>
-              <td :title="fmtDate(n.createdAt)">{{ timeAgo(n.createdAt) }}</td>
+              <td :title="fmtDate(n.createdAt)">{{ notifTimeAgo(n.createdAt) }}</td>
               <td>
                 <div class="mk-actions">
                   <button type="button" class="mk-link mk-link--danger" :disabled="n.busy" @click="remove(n)">删除</button>
@@ -336,6 +336,22 @@ function fmtDate(iso?: string): string {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** F5-5：时间列口径统一为相对时间。共享 live.timeAgo 对 ≥30 天回退 toLocaleDateString，
+ *  同列出现「1 小时前 / 昨天 / 2026/8/30」混排；此处把 ≥30 天续接为相对语义
+ *  （N 个月前 / N 年前），绝对时间仍走 title 悬停（fmtDate）。仅本页包装、不动共享
+ *  timeAgo——它被 20+ 页面消费，且 live-utils.test.ts 已把「>30 天 → 本地化日期」钉为契约。 */
+function notifTimeAgo(iso?: string | null): string {
+  const raw = timeAgo(iso)
+  const t = iso ? new Date(iso).getTime() : NaN
+  // 空值/非法 → 沿用「从未」；未来时间 diff<0 → d<30 走共享口径「刚刚」，容错不变
+  if (!t || Number.isNaN(t)) return raw
+  const d = Math.floor((Date.now() - t) / 86400000)
+  if (d < 30) return raw // 刚刚/分钟/小时/天 分级与共享口径一致
+  const months = Math.floor(d / 30)
+  if (months < 12) return `${months} 个月前`
+  return `${Math.floor(months / 12)} 年前`
 }
 
 async function reload() {
