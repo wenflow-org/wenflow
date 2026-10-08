@@ -154,13 +154,11 @@
         </div>
       </aside>
 
-      <!-- 通栏进度卡（原型 .wf-learn__progress：知识点 + 8px 进度条，位于对话区上方） -->
-      <div v-if="knowledgePoints.length" class="lessonbar">
-        <div class="lessonbar__head"><span>本节课知识点</span><strong>{{ masteredCount }} / {{ knowledgePoints.length }} 已掌握</strong></div>
-        <div class="lessonbar__track"><i :style="{ width: weightedProgressPct + '%' }"></i></div>
-      </div>
-
-      <!-- 中：导师对话 -->
+      <!-- 中：导师对话。
+           这里原有一条「本节课知识点 N / M 已掌握 + 8px 进度条」的通栏卡：它与头部
+           「知识点 N/M」入口完全重复（计数与加权进度在抽屉面板里也各有一份，见 .kp__chip
+           与 .kp__bar），却白占对话区上方约 79px（390 实测）。按目标规划页的做法——进度留在
+           头部带里，正文只留对话（2026-10-08 用户侧走查）。 -->
       <section class="tutor">
         <!-- 恢复进度横幅：续上历史时可见，明确「已恢复到上次进度」并提供重新开始出口 -->
         <div v-if="resumedNotice" class="tutor__resume">
@@ -1944,22 +1942,6 @@ onBeforeUnmount(() => {
 .kp__item--current .kp__name small { color: var(--blue-deep); font-weight: 700; }
 .kp__time { font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px; }
 
-/* ---------- 通栏进度卡（原型 .wf-learn__progress：卡壳 + 12.5/13.5 两行 + 8px 进度条） ---------- */
-.lessonbar {
-  flex: 0 0 auto;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-modal);
-  box-shadow: var(--shadow-sm);
-  padding: 14px 16px;
-  display: grid; gap: 11px;
-}
-.lessonbar__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.lessonbar__head span { font-size: 12.5px; color: var(--muted); }
-.lessonbar__head strong { font-size: 13.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.lessonbar__track { height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--line) 60%, transparent); overflow: hidden; }
-.lessonbar__track i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
-
 /* ---------- 导师对话 ---------- */
 .tutor {
   position: relative;
@@ -1968,8 +1950,8 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal);
   overflow: hidden;
-  /* 单列布局：tutor 吃掉 .learn__body 的全部剩余高度（进度卡 + gap 之外），
-     高度由 flex 决定 —— 不再写死 vh 上限，避免「有/无进度卡」两套高度口径。 */
+  /* 单列布局：tutor 吃掉 .learn__body 的全部高度（2026-10-08 起正文只剩它一个），
+     高度由 flex 决定 —— 不再写死 vh 上限。 */
   flex: 1 1 auto;
   min-height: 560px;
 }
@@ -3192,12 +3174,12 @@ onBeforeUnmount(() => {
 <style scoped>
 /* ===== 课堂布局重排（2026-09-28 对齐真源原型 newui/用户侧/index.html 学习屏）=====
    单列 880：.learn__body 不再是 280+1fr 双列网格 —— 原型 .wf-screen 没有侧栏，
-   知识点由常驻列降级为「头部入口 + fixed 抽屉」，正文只剩进度卡 + 对话卡一列。
+   知识点由常驻列降级为「头部入口 + fixed 抽屉」，正文只剩对话卡一列
+   （2026-10-08 起连进度卡也去掉，正文唯一内容就是对话）。
    1100 以下不再预留 44px kp 头部带、也不再有 absolute 下拉面板（见下）。 */
 @media (max-width: 900px) {
   /* 知识点已是 fixed 抽屉（头部「知识点 N/M」开合）：对话卡不再预留 44px 头部带，
      展开态也不再需要 absolute 下拉面板 —— 抽屉自带滚动与遮罩。 */
-  .lessonbar { padding: 12px 14px; }
   .composer { gap: 4px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
 }
 
