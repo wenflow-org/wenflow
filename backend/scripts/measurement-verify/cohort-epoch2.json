@@ -1,0 +1,78 @@
+[
+ {
+  "key": "preset:nurse-career-transition",
+  "userId": "115b3cb6-cd50-4385-a913-93c194450a6c"
+ },
+ {
+  "key": "preset:primary-xsc-cram",
+  "userId": "1448bbf8-f5f5-4a6a-a858-9b1de5407dc3"
+ },
+ {
+  "key": "preset:backend-eng-distributed",
+  "userId": "569d04fc-29a2-40bc-a6d0-b0d09cba0474"
+ },
+ {
+  "key": "preset:student-geo-essay",
+  "userId": "80c2378e-c620-49c0-81be-3894d635db72"
+ },
+ {
+  "key": "preset:gaokao-science",
+  "userId": "8ae4c8b1-e375-4c57-b14f-a3e1384409b3"
+ },
+ {
+  "key": "preset:vocational-electrician-exam",
+  "userId": "8e51dc07-feb0-4675-8be1-589e22296489"
+ },
+ {
+  "key": "preset:kaoyan-retake",
+  "userId": "9fdb225c-68db-4092-bfd3-284b007e4296"
+ },
+ {
+  "key": "preset:zhongkao-streaming",
+  "userId": "c3ea1246-32fe-4711-b169-693b536fae4a"
+ },
+ {
+  "key": "preset:civil-service-onsite",
+  "userId": "dea5b5e4-8b08-47b3-ad59-eb52810aeb08"
+ },
+ {
+  "key": "rw-school-15",
+  "userId": "00fc34be-3957-4df7-a7b4-9e1a925bf56a"
+ },
+ {
+  "key": "rw-wild-02",
+  "userId": "012a34a9-83c6-471c-82c9-26e0b0657c4d"
+ },
+ {
+  "key": "rw-life5-20",
+  "userId": "021e7712-da03-4624-b3e8-57eae6d94a77"
+ },
+ {
+  "key": "rw-school5-51",
+  "userId": "02aca999-2a58-488e-b204-2e1a2ee26d2b"
+ },
+ {
+  "key": "rw-career5-39",
+  "userId": "0313c889-7849-44ae-ac50-0360b40b5f14"
+ },
+ {
+  "key": "rw-life5-05",
+  "userId": "068e564c-f25f-4596-82d7-102fd1f29ed7"
+ },
+ {
+  "key": "rw-career6-01",
+  "userId": "069aab3b-c634-4946-aa24-b5a12983eeb8"
+ },
+ {
+  "key": "rw-school-41",
+  "userId": "0710d78b-1a40-4f37-a55d-638af3148ca4"
+ },
+ {
+  "key": "rw-career5-29",
+  "userId": "0744cffd-90d7-4474-9cbd-567226f37b7a"
+ },
+ {
+  "key": "rw-school5-21",
+  "userId": "08021ac7-4eb7-4ce8-9110-196af8ab4df0"
+ }
+]

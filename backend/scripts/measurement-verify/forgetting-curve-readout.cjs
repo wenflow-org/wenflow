@@ -12,6 +12,10 @@ const { DatabaseSync } = require('node:sqlite');
 
 const OUT = path.join(__dirname, 'out');
 const DAY_MS = 86400000;
+// --tag=<tag>：只读 r4-cal-day<N>-<tag>.json（并行分组/新 cohort 批次）；不带 tag = 旧单轨文件
+const TAG_ARG = process.argv.find((a) => a.startsWith('--tag=')) || '';
+const TAG = TAG_ARG ? TAG_ARG.slice('--tag='.length) : '';
+const dayFile = (d) => path.join(OUT, TAG ? `r4-cal-day${d}-${TAG}.json` : `r4-cal-day${d}.json`);
 
 // ---------- ①② 曲线：动态聚合全部已有 day 文件（主曲线 = day10+，见下）----------
 const pairs = [];
@@ -19,7 +23,7 @@ const seen = new Set();
 let dayMin = null;
 let dayMax = null;
 for (let d = 1; d <= 60; d++) {
-  const f = path.join(OUT, `r4-cal-day${d}.json`);
+  const f = dayFile(d);
   if (!fs.existsSync(f)) continue;
   let j;
   try {
@@ -53,8 +57,9 @@ for (let d = 1; d <= 60; d++) {
     }
   }
 }
-const post = pairs.filter((p) => p.day >= 10);
-const pre = pairs.filter((p) => p.day < 10);
+// tag 批（纪元 2 等）的 day 标签是本批新计数，全部视为有效样本；无 tag（纪元 1 存档）保留 day10+ 分组
+const post = pairs.filter((p) => (TAG ? true : p.day >= 10));
+const pre = pairs.filter((p) => (TAG ? false : p.day < 10));
 
 const fmt = (arr) => {
   if (!arr.length) return '  （无样本）';
@@ -64,7 +69,7 @@ const fmt = (arr) => {
   return `n=${String(n).padStart(3)}  预测均=${pred.toFixed(2)}  实际回忆率=${recall.toFixed(2)}`;
 };
 
-console.log(`== 总样本：day${dayMin ?? '?'}-${dayMax ?? '?'} 共 ${pairs.length} 对（主曲线 day10+ = ${post.length}，此前 = ${pre.length}）`);
+console.log(`== 总样本：day${dayMin ?? '?'}-${dayMax ?? '?'} 共 ${pairs.length} 对${TAG ? `（tag=${TAG}，全样本入主曲线）` : `（主曲线 day10+ = ${post.length}，此前 = ${pre.length}）`}`);
 console.log(`\n== 间隔分桶（elapsedDays，修复后样本）——遗忘曲线主读数`);
 for (const [lo, hi] of [[0, 1], [1, 2], [2, 4], [4, 7], [7, 100]]) {
   const b = post.filter((p) => p.elapsed >= lo && p.elapsed < hi);
@@ -85,16 +90,20 @@ if (hiPred.length && loPred.length) {
 console.log(`\n== 评分分布（修复后）：`, JSON.stringify(post.reduce((m, p) => { m[p.rating] = (m[p.rating] || 0) + 1; return m; }, {})));
 console.log(`== 预测公式路径：`, JSON.stringify(post.reduce((m, p) => { m[p.predPath] = (m[p.predPath] || 0) + 1; return m; }, {})));
 
-// ---------- ③ FSRS 原生占比（全 7 VL 现状）----------
+// ---------- ③ FSRS 原生占比（监测面按 cohort 清单 cohort-<tag>.json，缺省=旧 R4 名单）----------
 console.log(`\n== 监测面①：memory_traces FSRS 原生占比（现库）`);
 const db = new DatabaseSync(path.resolve(__dirname, '..', '..', 'prisma', 'dev.db'), { readOnly: true });
 db.exec('PRAGMA busy_timeout=5000');
-const UIDS = {
+let UIDS = {
   'rw-school6-01': '109d5d76-41e7-4d3d-aac3-6f3b7ea6ee60', 'rw-school6-09': 'a3a4f770-655c-4c7f-b624-cfe7f7d9fa94',
   'rw-school6-21': 'f17d03c0-c976-4986-933a-e0124f57cfec', 'rw-exam6-08': 'eac48271-1275-4f8f-8a82-4429b389a4f3',
   'rw-acad6-03': '4b7d8df6-a894-47d2-8bb6-bed2d54348f6', 'rw-career6-05': 'a595a2f7-c788-438a-8708-81b6c259b4a9',
   'rw-life6-06': '32eee25a-2a0c-44b9-b1fe-45ee1262dbd3',
 };
+const manifestFile = path.join(__dirname, `cohort-${TAG || 'r4'}.json`);
+if (fs.existsSync(manifestFile)) {
+  UIDS = Object.fromEntries(JSON.parse(fs.readFileSync(manifestFile, 'utf8')).map((e) => [e.key, e.userId]));
+}
 for (const [key, uid] of Object.entries(UIDS)) {
   const r = db.prepare('SELECT COUNT(*) n, SUM(fsrsStability IS NOT NULL) native, SUM(dueAt IS NOT NULL) withDue FROM memory_traces WHERE userId = ?').get(uid);
   console.log(`  ${key}: traces=${r.n} 原生FSRS=${r.native} 有dueAt=${r.withDue}`);

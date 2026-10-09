@@ -27,6 +27,8 @@ const arg = (k, d) => { const hit = process.argv.find((a) => a.startsWith(`--${k
 // 不传 tag 时保持旧文件名（单进程串行用法零变化）。
 const TAG = arg('tag', '');
 const SUFFIX = TAG ? `-${TAG}` : '';
+// --replan：每日 advance 前无条件重建会话（温故计划生成时点校正；见 cmdDay 内注释）
+const REPLAN = process.argv.includes('--replan');
 const LOG = path.join(OUT, `r4-cal-run${SUFFIX}.log`);
 const dayFile = (n) => path.join(OUT, `r4-cal-day${n}${SUFFIX}.json`);
 fs.mkdirSync(OUT, { recursive: true });
@@ -62,13 +64,16 @@ const VLS = {
 
 function resolveTargets() {
   const only = arg('vl', null);
-  const keys = only ? only.split(',') : Object.keys(VLS);
+  const vlsFile = arg('vls-file', null);
+  // --vls-file=<json>：[{key,userId}] 名单（VLS 之外的批次，如纪元 2 cohort；key 可含冒号 preset:xxx）
+  const manual = vlsFile ? JSON.parse(fs.readFileSync(path.resolve(vlsFile), 'utf8')) : null;
+  const keys = only ? only.split(',') : (manual ? manual.map((e) => e.key) : Object.keys(VLS));
   const d = db();
   const out = [];
   try {
     for (const key of keys) {
-      const v = VLS[key];
-      if (!v) throw new Error(`未知 VL: ${key}`);
+      const v = manual ? manual.find((e) => e.key === key) : VLS[key];
+      if (!v) throw new Error(`未知 VL: ${key}${manual ? '（vls-file 内无此 key）' : ''}`);
       const prof = d.prepare('SELECT id FROM virtual_learner_profiles WHERE userId = ?').get(v.userId);
       const sess = d.prepare('SELECT id, status, currentStage, createdAt FROM virtual_sessions WHERE userId = ? ORDER BY createdAt DESC LIMIT 1').get(v.userId);
       const traceCount = d.prepare('SELECT COUNT(*) AS n FROM memory_traces WHERE userId = ?').get(v.userId).n;
@@ -199,6 +204,14 @@ async function advanceDay(vl) {
 
 // ---------- 成对样本抽取（温故 outcome） ----------
 const EXPECTED_IDX = { 1: 1, 2: 4, 3: 5 };
+// --expected=1:3,2:4,…：标签→期望 dayIndex 覆盖（换 baseDate 时日历相位不同；advance-day 一跳到下一个上课日）
+const EXPECTED_OVERRIDE = (() => {
+  const s = arg('expected', '');
+  if (!s) return null;
+  const m = {};
+  for (const p of s.split(',')) { const [k, v] = p.split(':'); m[Number(k)] = Number(v); }
+  return m;
+})();
 function mapReviewStatusToRating(status, progress) {
   switch (status) {
     case 'mastered': return { rating: Number(progress) >= 100 ? 'easy' : 'good', masteryScore: Number(progress) >= 100 ? 0.9 : 0.85 };
@@ -353,7 +366,7 @@ async function cmdDay(day, targets) {
       rec.preTraceCount = pre.rows.length;
       rec.preTraces = Object.fromEntries(Object.entries(pre.map).map(([k, v]) => [k, compactTrace(v)]));
 
-      const expectedIdx = EXPECTED_IDX[day];
+      const expectedIdx = EXPECTED_OVERRIDE && EXPECTED_OVERRIDE[day] !== undefined ? EXPECTED_OVERRIDE[day] : EXPECTED_IDX[day];
       if ((c.clock?.dayIndex ?? 0) >= expectedIdx) {
         rec.advanceAttempts = [{ attempt: 1, skipped: `clock already at dayIndex ${c.clock.dayIndex} (>= expected ${expectedIdx})` }];
         log(`  advance: skipped（dayIndex 已 ${c.clock.dayIndex} ≥ 目标 ${expectedIdx}）`);
@@ -361,7 +374,15 @@ async function cmdDay(day, targets) {
         const d1 = db();
         let st = null;
         try { st = d1.prepare('SELECT status FROM virtual_sessions WHERE id = ?').get(vl.vsessionId); } finally { d1.close(); }
-        if (st && ['failed', 'abandoned'].includes(st.status)) {
+        // --replan：每日 advance 前无条件重建会话——温故计划在 reserve（开课）时刻按当时模拟钟生成
+        // （buildReviewPlan: dueAt<=simulatedNowOr()），失败会话的 restart 若发生在到期日之前，
+        // 计划为空且整节沿用（pilot 3 人 0 对根因）；每日 replan 让计划总在「已越过到期日」的钟上生成。
+        if (REPLAN) {
+          const rp = await restartLearning(vl);
+          rec.replan = { http: rp.http, ok: rp.ok, error: rp.error ? String(rp.error).slice(0, 400) : null, priorStatus: st?.status ?? null };
+          log(`  replan(restart): http=${rp.http} ok=${rp.ok} prior=${st?.status ?? '-'}`);
+          await sleep(8000);
+        } else if (st && ['failed', 'abandoned'].includes(st.status)) {
           const rs = await restartLearning(vl);
           rec.restart = { http: rs.http, ok: rs.ok, error: rs.error ? String(rs.error).slice(0, 400) : null };
           log(`  restart: http=${rs.http} ok=${rs.ok}`);
