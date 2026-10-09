@@ -58,7 +58,9 @@ export async function runAdminSeed(assertActive: AssertActive): Promise<void> {
 
 /**
  * 内置预制虚拟学习者同步（File-as-Truth：virtual-learners/presets.yaml → DB 实例）
- * 幂等（按 presetKey upsert，保留运行时产物）；失败不阻断启动。
+ * 幂等（按 presetKey upsert，保留运行时产物）。
+ * ⚠ 2026-10-09 起不再随启动执行（架构改版：卡库选角，空白项目零 VL 起步）——
+ * 本函数保留为显式入口（工具/脚本按需调用），开机自跑已从 index.ts 摘除。
  */
 export async function runBuiltinVirtualLearnersSeed(assertActive: AssertActive): Promise<void> {
   try {

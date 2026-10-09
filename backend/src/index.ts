@@ -31,7 +31,6 @@ import {
   runPromptFileSeed,
   runFieldRoutingSeed,
   runAdminSeed,
-  runBuiltinVirtualLearnersSeed,
   runSkillModelConfigSeed,
 } from './bootstrap/seeds';
 import { auditSensitiveStoragePermissions, refreshNetworkPolicyBootstrap } from './bootstrap/runtime-policy';
@@ -94,7 +93,8 @@ export async function startServer() {
     await runPromptFileSeed(assertStartupActive);
     await runFieldRoutingSeed(assertStartupActive);
     await runAdminSeed(assertStartupActive);
-    await runBuiltinVirtualLearnersSeed(assertStartupActive);
+    // 预制 VL 启动播种已退役（2026-10-09 架构改版：卡库选角，空白项目零 VL 起步；
+    // 需要时显式调 runBuiltinVirtualLearnersSeed，见 bootstrap/seeds.ts）
 
     await purgeRetiredSkills();
     await runSkillModelConfigSeed();
