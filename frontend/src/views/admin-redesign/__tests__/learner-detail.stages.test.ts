@@ -83,7 +83,11 @@ vi.mock('@/api/adminApi', () => ({
   // 必须给 resolved 值：loadDetail 对它 .then，undefined 会在 try 内同步抛 TypeError 炸掉后续 loadLdSessions
   getUserIncludingDeleted: vi.fn().mockResolvedValue({ data: { data: {} } }),
 }));
-vi.mock('../statusText', () => ({ statusText: (s: string) => s }));
+vi.mock('../statusText', () => ({
+  statusText: (s: string) => s,
+  // C10 上收后教学 pane 徽章走 sessionStatusBadgeCls；本 mock 只需可调用返回空串（断言不涉及配色）
+  sessionStatusBadgeCls: () => '',
+}));
 vi.mock('../useConfirm', () => ({ askConfirm: vi.fn() }));
 vi.mock('@/utils/toast', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
 
