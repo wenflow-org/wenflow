@@ -35,3 +35,7 @@ describe('concept-consolidator 契约字段语义（P1-17）', () => {
     expect(mdText).toContain('待办规范键')
   })
 })
+
+// 本文件无 import/export：声明为模块，避免 ts-jest --runInBand 单进程下与同目录
+// 其他全局脚本测试（teaching-opening-empty-recap.test.ts）的 const fs/path 顶层声明互相重声明（TS2451）
+export {}

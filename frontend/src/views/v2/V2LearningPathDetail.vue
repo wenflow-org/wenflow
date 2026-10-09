@@ -1951,7 +1951,7 @@ onBeforeUnmount(() => {
   margin-left: 6px;
   padding: 1px 7px;
   border-radius: var(--mk-radius-pill);
-  font-size: 11px; font-weight: 800;
+  font-size: var(--mk-fs-micro); font-weight: 800;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);

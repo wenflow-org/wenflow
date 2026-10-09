@@ -34,3 +34,7 @@ describe('teaching-opening-generator 空数据承接出路（P1-9）', () => {
     expect(mdText).toContain('不得从任务标题外推出成就')
   })
 })
+
+// 本文件无 import/export：声明为模块，避免 ts-jest --runInBand 单进程下与同目录
+// 其他全局脚本测试的顶层 const 声明互相重声明（TS2451）
+export {}
