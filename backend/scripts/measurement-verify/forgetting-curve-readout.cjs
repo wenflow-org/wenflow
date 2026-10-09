@@ -12,10 +12,18 @@ const { DatabaseSync } = require('node:sqlite');
 
 const OUT = path.join(__dirname, 'out');
 const DAY_MS = 86400000;
-// --tag=<tag>：只读 r4-cal-day<N>-<tag>.json（并行分组/新 cohort 批次）；不带 tag = 旧单轨文件
+// --tag=<tag>：读 r4-cal-day<N>-<tag>*.json（并行分组/新 cohort 批次；同 tag 前缀的多组文件合并，
+// 成对样本按 conceptKey|occurredAt|teachingSessionId 去重）；不带 tag = 旧单轨文件
 const TAG_ARG = process.argv.find((a) => a.startsWith('--tag=')) || '';
 const TAG = TAG_ARG ? TAG_ARG.slice('--tag='.length) : '';
-const dayFile = (d) => path.join(OUT, TAG ? `r4-cal-day${d}-${TAG}.json` : `r4-cal-day${d}.json`);
+const dayFiles = (d) => {
+  if (!TAG) {
+    const f = path.join(OUT, `r4-cal-day${d}.json`);
+    return fs.existsSync(f) ? [f] : [];
+  }
+  const re = new RegExp(`^r4-cal-day${d}-${TAG}[A-Za-z0-9_-]*\\.json$`);
+  try { return fs.readdirSync(OUT).filter((f) => re.test(f)).sort().map((f) => path.join(OUT, f)); } catch { return []; }
+};
 
 // ---------- ①② 曲线：动态聚合全部已有 day 文件（主曲线 = day10+，见下）----------
 const pairs = [];
@@ -23,17 +31,18 @@ const seen = new Set();
 let dayMin = null;
 let dayMax = null;
 for (let d = 1; d <= 60; d++) {
-  const f = dayFile(d);
-  if (!fs.existsSync(f)) continue;
-  let j;
-  try {
-    j = JSON.parse(fs.readFileSync(f, 'utf8'));
-  } catch {
-    continue; // 文件半写或损坏（跑批进行中），跳过该日
-  }
+  const files = dayFiles(d);
+  if (!files.length) continue;
   dayMin = dayMin === null ? d : dayMin;
   dayMax = d;
-  for (const vl of j.vls || []) {
+  for (const f of files) {
+    let j;
+    try {
+      j = JSON.parse(fs.readFileSync(f, 'utf8'));
+    } catch {
+      continue; // 文件半写或损坏（跑批进行中），跳过该文件
+    }
+    for (const vl of j.vls || []) {
     // 修复后（day10+）模拟日窗口结束点 = 本次复习时刻的近似（±1 天粒度）。
     // pair.occurredAt 是温故点的**原始教学时刻**而非本次复习时刻，不能拿来算间距。
     const asOfMs = vl.window?.asOf ? Date.parse(vl.window.asOf) : (j.generatedAt ? Date.parse(j.generatedAt) : NaN);
@@ -54,6 +63,7 @@ for (let d = 1; d <= 60; d++) {
         rating: p.actualRating,
         recalled: p.actualRating && p.actualRating !== 'again' ? 1 : 0,
       });
+      }
     }
   }
 }
