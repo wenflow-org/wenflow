@@ -36,6 +36,31 @@ describe('LearningDecisionFeedService', () => {
     expect(cards[0].at).toBe('2026-07-26T09:00:00.000Z')
   })
 
+  it('超过 3 个知识点时「等 N 个」带单位，不留下「等 7 个」这种没有指代对象的断句', () => {
+    const input = baseInput()
+    input.sessions = [{
+      endTime: new Date('2026-07-26T09:00:00Z'),
+      advisory: JSON.stringify({
+        shouldSuggest: true,
+        priority: 'high',
+        rationale: '当前阶段仍有关键知识点不够稳定。'
+      }),
+      wrapup: JSON.stringify({
+        progress: {
+          stillLearning: ['广播下逐轴比较长度', '列表索引', '循环边界', '字典遍历'],
+          movedToReview: ['切片步长', '异常捕获', '文件读写']
+        }
+      })
+    }]
+
+    const cards = service.build(input)
+    const card = cards.find((c) => c.kind === 'path-adjust')
+    expect(card).toBeDefined()
+    // 前 3 个名字 + 总数 7：只说「等 7 个」读者不知道在数什么（2026-10-08 用户侧视觉检查报出）
+    expect(card!.captured).toContain('等 7 个知识点')
+    expect(card!.captured).toContain('广播下逐轴比较长度、列表索引、循环边界')
+  })
+
   it('路径有 replanReason 时产出 path-replanned 卡', () => {
     const input = baseInput()
     input.paths = [{

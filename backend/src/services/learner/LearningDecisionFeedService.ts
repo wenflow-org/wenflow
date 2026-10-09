@@ -85,13 +85,18 @@ function toIso(value: unknown): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function joinNames(names: unknown[], limit = 3): string {
+/**
+ * 把名称列表拼成一行；超过 limit 时写「A、B、C 等 N 个知识点」。
+ * unit 必填且不给默认值：原来固定拼「等 N 个」，句子到「个」就断了、读者不知道在数什么
+ * （2026-10-08 用户侧视觉检查在桌面与移动两档都报出）。让每个调用点自己说清数的是什么。
+ */
+function joinNames(names: unknown[], unit: string, limit = 3): string {
   const list = (names || [])
     .map((item) => String(item || '').trim())
     .filter(Boolean);
   if (!list.length) return '';
   const head = list.slice(0, limit).join('、');
-  return list.length > limit ? `${head} 等 ${list.length} 个` : head;
+  return list.length > limit ? `${head} 等 ${list.length} ${unit}` : head;
 }
 
 const PRIORITY_ORDER: Record<LearningDecisionCard['priority'], number> = {
@@ -134,7 +139,7 @@ export class LearningDecisionFeedService {
       const focus = joinNames([
         ...(wrapup?.progress?.stillLearning || []),
         ...(wrapup?.progress?.movedToReview || [])
-      ]);
+      ], '个知识点');
       pathAdjustCards.push({
         id: `path-adjust-${sessionAt || pathAdjustCards.length}`,
         kind: 'path-adjust',
@@ -190,7 +195,7 @@ export class LearningDecisionFeedService {
     const watchNames = joinNames([
       ...(signals?.fragileConcepts || []),
       ...(signals?.strugglingConcepts || [])
-    ]);
+    ], '个知识点');
     if (watchNames) {
       cards.push({
         id: 'concept-watch',
@@ -211,7 +216,7 @@ export class LearningDecisionFeedService {
       });
       if (latest) {
         const wrapup = parseJsonSafe<any>(latest.wrapup);
-        const names = joinNames(wrapup?.progress?.stillLearning || []);
+        const names = joinNames(wrapup?.progress?.stillLearning || [], '个知识点');
         if (names) {
           cards.push({
             id: `kp-carryover-${toIso(latest.endTime) || toIso(latest.updatedAt) || 'latest'}`,
