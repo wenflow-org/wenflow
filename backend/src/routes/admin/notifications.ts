@@ -15,7 +15,6 @@ import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { randomUUID as uuidv4 } from 'crypto';
 import { logger } from '../../utils/logger';
-import { REAL_USER_WHERE } from '../../utils/test-account';
 
 const router = express.Router();
 

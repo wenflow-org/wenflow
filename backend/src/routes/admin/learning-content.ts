@@ -18,7 +18,7 @@ import {
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { logger } from '../../utils/logger';
-import { REAL_USER_WHERE } from '../../utils/test-account';
+import { buildRealUserWhere } from '../../utils/test-account';
 
 const router = express.Router();
 
@@ -52,7 +52,7 @@ router.get('/paths', async (req: Request, res: Response) => {
       ];
     }
     // 内容治理默认仅真实用户；includeTest=1 时含虚拟/测试
-    if (!includeTest) where.users = REAL_USER_WHERE;
+    if (!includeTest) where.users = await buildRealUserWhere();
 
     const [paths, total] = await Promise.all([
       findLearningPathsForAdmin(where, skip, limit),

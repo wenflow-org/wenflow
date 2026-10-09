@@ -10,11 +10,13 @@ const notifFindMany = jest.fn()
 const notifCount = jest.fn()
 const achFindMany = jest.fn()
 const achCount = jest.fn()
+// 成就列表默认走「仅真实用户」口径：会先扫一次 users 拿排除 id（2026-10-09 起为 id 排除式）
+const usersFindMany = jest.fn()
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
   default: {
-    users: { findUnique: jest.fn(async () => ({ isAdmin: true })) },
+    users: { findUnique: jest.fn(async () => ({ isAdmin: true })), findMany: usersFindMany },
     notifications: { findMany: notifFindMany, count: notifCount },
     achievements: { findMany: achFindMany, count: achCount },
   },
@@ -44,6 +46,14 @@ function getRouteHandler(router: any, path: string, method: string): RouteHandle
   if (!layer) throw new Error(`Route not found: ${method.toUpperCase()} ${path}`)
   return layer.route.stack[layer.route.stack.length - 1].handle
 }
+
+beforeEach(() => {
+  jest.clearAllMocks()
+  // 身份扫描（select 含 isVirtualLearner、无 where）→ 一行测试账号，保证排除式非空
+  usersFindMany.mockResolvedValue([
+    { id: 'u-test', name: 'e2e_ms0fz3yx', email: 'e2e_ms0fz3yx@example.com', isVirtualLearner: false },
+  ])
+})
 
 function createResponse() {
   const res: any = { statusCode: 200, body: undefined }

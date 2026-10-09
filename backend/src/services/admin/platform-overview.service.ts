@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import { hourKeyOf, startOfHour, dayKeyOf, addDaysToDayKey, startOfDay } from '../time/day-boundary';
-import { REAL_USER_WHERE } from './real-user-where';
+import { buildRealUserWhere, findRealUserIds } from '../../utils/test-account';
 import { classifyFailureCategory, isTimeoutLog } from './failure-classification';
 
 /**
@@ -161,7 +161,13 @@ type SevenDayScans = {
 let sevenDayScanCache: { payload: SevenDayScans; cachedAt: number } | null = null;
 let sevenDayScanInflight: Promise<SevenDayScans> | null = null;
 
-async function getSevenDayScans(realUserIds: string[], sevenDaysAgo: Date, force = false): Promise<SevenDayScans> {
+async function getSevenDayScans(
+  realUserIds: string[],
+  sevenDaysAgo: Date,
+  force = false,
+  /** 与 realUserIds 同一快照派生的真实用户 where（users 表上用「小排除集」而非全量 IN） */
+  realUserWhere: Record<string, unknown> = { deletedAt: null },
+): Promise<SevenDayScans> {
   if (!force && sevenDayScanCache && Date.now() - sevenDayScanCache.cachedAt < SEVEN_DAY_SCAN_CACHE_TTL_MS) {
     return sevenDayScanCache.payload;
   }
@@ -203,13 +209,13 @@ async function getSevenDayScans(realUserIds: string[], sevenDaysAgo: Date, force
 
     // G2 总览「用户增长」：近 7 天新增注册（真实用户）
     const newUsers7dRows = await prisma.users.findMany({
-      where: { ...REAL_USER_WHERE, createdAt: { gte: sevenDaysAgo } },
+      where: { ...realUserWhere, createdAt: { gte: sevenDaysAgo } },
       select: { createdAt: true },
     });
 
     // G3 总览「用户增长」：近 7 天活跃用户（教学会话 startTime 按天去重）
     const activeUsers7dRows = await prisma.teaching_sessions.findMany({
-      where: { users: REAL_USER_WHERE, startTime: { gte: sevenDaysAgo } },
+      where: { users: realUserWhere, startTime: { gte: sevenDaysAgo } },
       select: { startTime: true, userId: true },
     });
 
@@ -237,15 +243,13 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
     // 保证「24h 总数 = 各小时之和」恒成立；活跃 Agent 统计仍用严格 24h 滚动窗口。
     const trendWindowStart = new Date(startOfHour(new Date()).getTime() - 23 * 3600000);
 
-    // 生产统计排除虚拟学习者与测试/审计账号：见模块级 REAL_USER_WHERE
-
-    // 调用/token 口径（R5）：agent_call_logs / llm_execution_attempts 按 userId 归属过滤，
-    // 只统计真实用户（虚拟/测试账号 userId 不在集合内 → 自动剔除；空 userId 孤儿行同样剔除）。
-    // 全量口径保留为 *All 副指标，前端标注「含虚拟/测试」，保证诚实展示且可对比。
-    // 性能批 2026-10-01：扫描合并后 real/virtual 分桶改端内 Set 判定（行级单扫无法带 SQL in 过滤）
-    const realUserSet = new Set(
-      (await prisma.users.findMany({ where: REAL_USER_WHERE, select: { id: true } })).map((u) => u.id)
-    );
+    // 生产统计排除虚拟学习者与测试/审计账号：判据单点在 utils/test-account.ts
+    // （findRealUserIds 内部用 isTestAccountUser，不用 Prisma startsWith——SQLite 的 LIKE
+    //  会把前缀里的 `_` 当通配符，把 `e2e.del@…` 这类真实账号一并滤掉）。
+    const realUserIds = await findRealUserIds();
+    const realUserSet = new Set(realUserIds);
+    /** 统计用的真实用户 where（同一请求内复用，避免重复扫描 users 表） */
+    const statRealUserWhere = await buildRealUserWhere({ deletedAt: null });
     // 虚拟/测试账号 = 全部用户 − 真实用户（差集互补，口径严格无遗漏），供「虚拟调用」独立指标；
     // userId 为 NULL 的孤儿行不落入任何口径的「今日虚拟」计数（与原 SQL in 语义一致）
     const virtualUserSet = new Set(
@@ -274,13 +278,13 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
     ] = await Promise.all([
       // 总用户数（不含虚拟学习者）
       prisma.users.count({
-        where: REAL_USER_WHERE,
+        where: statRealUserWhere,
       }),
       
       // 今日新增用户（不含虚拟学习者）
       prisma.users.count({
         where: {
-          ...REAL_USER_WHERE,
+          ...statRealUserWhere,
           createdAt: {
             gte: today,
             lt: tomorrow,
@@ -291,7 +295,7 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       // 今日活跃用户（有学习会话，不含虚拟学习者）
       prisma.teaching_sessions.findMany({
         where: {
-          users: REAL_USER_WHERE,
+          users: statRealUserWhere,
           startTime: {
             gte: today,
             lt: tomorrow,
@@ -303,18 +307,18 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       
       // 总学习路径数（不含虚拟学习者/测试账号）
       prisma.learning_paths.count({
-        where: { users: REAL_USER_WHERE },
+        where: { users: statRealUserWhere },
       }),
 
       // 生成失败的学习路径数（断点归因用，不含虚拟学习者/测试账号）
       prisma.learning_paths.count({
-        where: { users: REAL_USER_WHERE, status: 'failed' },
+        where: { users: statRealUserWhere, status: 'failed' },
       }),
       
       // 活跃学习路径（有未完成的任务，不含虚拟学习者）
       prisma.learning_paths.findMany({
         where: {
-          users: REAL_USER_WHERE,
+          users: statRealUserWhere,
           milestones: {
             some: {
               subtasks: {
@@ -347,18 +351,18 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       
       // 总对话数（不含虚拟学习者/测试账号）
       prisma.goal_conversations.count({
-        where: { users: REAL_USER_WHERE },
+        where: { users: statRealUserWhere },
       }),
 
       // 完成澄清的对话数（漏斗"目标"口径，不含虚拟学习者/测试账号）
       prisma.goal_conversations.count({
-        where: { users: REAL_USER_WHERE, status: 'completed' },
+        where: { users: statRealUserWhere, status: 'completed' },
       }),
       
       // 活跃对话（不含虚拟学习者）
       prisma.goal_conversations.count({
         where: {
-          users: REAL_USER_WHERE,
+          users: statRealUserWhere,
           status: 'active',
         },
       }),
@@ -367,7 +371,7 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
       computeAllTimeCallStats([...realUserSet], force),
 
       // 近 7 天两次大扫描（长缓存子层：10 分钟 TTL，见 getSevenDayScans）
-      getSevenDayScans([...realUserSet], sevenDaysAgo, force)
+      getSevenDayScans([...realUserSet], sevenDaysAgo, force, statRealUserWhere)
     ]);
 
     const { agentScan7d, llmScan7d, wrapupLogs, newUsers7dRows, activeUsers7dRows } = sevenDayScans;

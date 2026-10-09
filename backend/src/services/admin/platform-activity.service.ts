@@ -1,5 +1,5 @@
 import prisma from '../../config/database';
-import { REAL_USER_WHERE } from './real-user-where';
+import { buildRealUserWhere } from '../../utils/test-account';
 import { classifyFailureCategory } from './failure-classification';
 
 /**
@@ -11,8 +11,10 @@ export async function getPlatformActivityFeed(params: {
   excludeTest: boolean;
 }): Promise<unknown> {
   const { limit, excludeTest } = params;
+  // excludeTest 时用单点口径排除虚拟学习者与测试/审计账号（判据见 utils/test-account.ts，
+  // 不能交给 Prisma startsWith：SQLite 的 LIKE 不转义 `_`，`e2e_` 会连 `e2e.` 一起滤掉）
   const ACTIVITY_USER_WHERE = excludeTest
-    ? REAL_USER_WHERE
+    ? await buildRealUserWhere()
     : { isVirtualLearner: false };
   // 动态时间窗：仅近 24h（前端卡片标注「近 24h」；7 天前旧条目不再混入）
   const activityWindowStart = new Date(Date.now() - 24 * 3600000);
@@ -58,7 +60,7 @@ export async function getPlatformActivityFeed(params: {
     take: 20,
     orderBy: { createdAt: 'desc' },
     where: {
-      ...(excludeTest ? REAL_USER_WHERE : { deletedAt: null }),
+      ...(excludeTest ? await buildRealUserWhere() : { deletedAt: null }),
       createdAt: { gte: activityWindowStart },
     },
     select: {

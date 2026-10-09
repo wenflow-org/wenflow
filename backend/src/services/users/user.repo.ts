@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import type { Prisma } from '@prisma/client';
-import { REAL_USER_WHERE } from '../../utils/test-account';
+import { findRealUserIds } from '../../utils/test-account';
 
 /**
  * 用户表仓储（routes/users.ts 自助域 + routes/admin/users.ts 管理域的取数层）。
@@ -284,7 +284,8 @@ export function findUserIdOnly(userId: string) {
   return prisma.users.findUnique({ where: { id: userId }, select: { id: true } });
 }
 
-/** 全部真实用户 id（全员通知等批量目标；排除虚拟学习者与测试/审计账号） */
+/** 全部真实用户 id（全员通知等批量目标；排除虚拟学习者与测试/审计账号）。
+ *  判据单点在 utils/test-account.ts，不用 Prisma startsWith（SQLite LIKE 的 `_` 是通配符）。 */
 export function listRealUserIds() {
-  return prisma.users.findMany({ where: REAL_USER_WHERE, select: { id: true } });
+  return findRealUserIds().then((ids) => ids.map((id) => ({ id })));
 }

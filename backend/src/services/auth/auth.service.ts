@@ -166,7 +166,7 @@ class AuthService {
       );
 
       // 测试/审计账号（qa_audit_/e2e_/@test.local 等命名约定）不允许登录用户侧：
-      // 与 admin 侧 REAL_USER_WHERE 同源识别（utils/test-account.ts），返回与凭据错误一致的 401，防枚举。
+      // 与 admin 侧真实账号口径同源识别（utils/test-account.ts），返回与凭据错误一致的 401，防枚举。
       if (!user || !isValidPassword || isTestAccount) {
         throw new InvalidCredentialsError();
       }

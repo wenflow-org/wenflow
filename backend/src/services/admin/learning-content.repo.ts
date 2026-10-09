@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import type { Prisma } from '@prisma/client';
-import { REAL_USER_WHERE } from '../../utils/test-account';
+import { buildRealUserWhere } from '../../utils/test-account';
 
 /**
  * 学习内容治理仓储（routes/admin/learning-content.ts 的取数层）。
@@ -89,9 +89,9 @@ export function deleteLearningPath(id: string) {
 
 /** 内容统计（治理页顶部：总数 / 按状态 / 按学科 / 里程碑与任务总量）。
  *  口径随列表页「含测试」开关联动：默认仅真实用户；includeTest=true 时不过滤 users，
- *  与 GET /paths 的 REAL_USER_WHERE 分支同一判据（否则卡头开关切换后 KPI/分布条与列表不同源）。 */
-export function getLearningContentStats(includeTest = false) {
-  const userWhere = includeTest ? {} : { users: REAL_USER_WHERE };
+ *  与 GET /paths 的 buildRealUserWhere() 分支同一判据（否则卡头开关切换后 KPI/分布条与列表不同源）。 */
+export async function getLearningContentStats(includeTest = false) {
+  const userWhere = includeTest ? {} : { users: await buildRealUserWhere() };
   return Promise.all([
     prisma.learning_paths.count({ where: userWhere }),
     prisma.learning_paths.groupBy({ by: ['status'], _count: { _all: true }, where: userWhere }),

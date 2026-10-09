@@ -25,7 +25,7 @@ import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { randomUUID as uuidv4 } from 'crypto';
 import { logger } from '../../utils/logger';
-import { isTestAccountUser, REAL_USER_WHERE } from '../../utils/test-account';
+import { buildRealUserWhere, isTestAccountUser } from '../../utils/test-account';
 
 const router = express.Router();
 
@@ -78,8 +78,9 @@ router.get('/', async (req, res, next) => {
     // 已删除视图不适用（回收站需展示全量账号以恢复）
     const includeTest = String(req.query.includeTest || '') === 'true';
     if (!includeTest && status !== 'deleted') {
-      where.isVirtualLearner = false;
-      where.NOT = REAL_USER_WHERE.NOT;
+      // 判据用 isTestAccountUser 取 id 排除，不用 Prisma startsWith：SQLite 的 LIKE 会把
+      // 前缀里的 `_` 当通配符，`e2e_` 会连 `e2e.` 开头的真实账号一起滤掉（2026-10-09 修）。
+      Object.assign(where, await buildRealUserWhere());
     }
 
     // 搜索条件

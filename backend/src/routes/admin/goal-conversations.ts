@@ -13,18 +13,17 @@ import {
   countDistinctGoalConversationUsers,
 } from '../../services/admin/goal-conversation-admin.repo';
 import { generateLearningPathFromConversation } from '../../services/learning/goal-conversation.service';
-import { REAL_USER_WHERE, isTestAccountUser } from '../../utils/test-account';
+import { buildRealUserWhere, isTestAccountUser } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
 
 const router = express.Router();
 
 /**
  * 统计口径与漏斗/KPI 一致：排除虚拟/测试账号（单点 utils/test-account.ts）+ 软删。
+ * 判据取 isTestAccountUser（buildRealUserWhere 内部），不交给 Prisma startsWith——
+ * SQLite 的 LIKE 不转义 `_`，前缀 `e2e_` 会连 `e2e.` 开头的真实账号一起滤掉。
  */
-const STATS_USER_WHERE = {
-  ...REAL_USER_WHERE,
-  deletedAt: null,
-};
+const resolveStatsUserWhere = () => buildRealUserWhere({ deletedAt: null });
 
 /**
  * 获取所有目标对话列表（分页）
@@ -53,7 +52,7 @@ router.get('/', async (req: any, res) => {
     }
 
     if (!includeTest) {
-      where.users = STATS_USER_WHERE;
+      where.users = await resolveStatsUserWhere();
     }
 
     const [conversations, total] = await Promise.all([
@@ -232,7 +231,7 @@ router.get('/stats/overview', async (req: any, res) => {
     // 口径随列表「含测试」开关联动：默认仅真实用户；includeTest=true 时不过滤 users
     // （与 GET / 的 includeTest 分支同一判据，否则分布条/完成率与列表不同源）
     const includeTest = String(req.query.includeTest || '') === 'true';
-    const userWhere = includeTest ? {} : STATS_USER_WHERE;
+    const userWhere = includeTest ? {} : await resolveStatsUserWhere();
     const [[total, active, completed, cancelled], distinctUsers] = await Promise.all([
       getGoalConversationStatusCounts(userWhere),
       countDistinctGoalConversationUsers(userWhere)

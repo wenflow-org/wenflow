@@ -305,13 +305,22 @@ describe('GET /overview/stats 脉搏全量聚合（路由级，无 50 条截断�
     mockAgentCallLogs.findMany.mockImplementation((args: any) =>
       args?.select?.output ? Promise.resolve([]) : Promise.resolve(rows)
     );
-    // 真实用户 id 集合：两次调用——REAL_USER_WHERE 过滤版（real1/real2）→
-    // 全部用户版（额外带虚拟 virt1/virt2，差集构成虚拟口径）
-    mockPrisma.users.findMany.mockImplementation((args: any) =>
-      args?.where?.NOT
-        ? Promise.resolve([{ id: 'real1' }, { id: 'real2' }])
-        : Promise.resolve([{ id: 'real1' }, { id: 'real2' }, { id: 'virt1' }, { id: 'virt2' }])
-    );
+    // 用户口径：2026-10-09 起真实/虚拟集合改为「全表取回 → 按 isTestAccountUser + isVirtualLearner 判定」。
+    // 两次扫描都不带 where：① 身份扫描（select 含 isVirtualLearner）→ 真实 id 集合；
+    // ② 全部 id（select 只有 id）→ 与①差集构成虚拟口径（故②需带 virt2）。
+    mockPrisma.users.findMany.mockImplementation((args: any) => {
+      if (args?.select?.isVirtualLearner) {
+        return Promise.resolve([
+          { id: 'real1', email: 'r1@example.com', name: '甲', isVirtualLearner: false },
+          { id: 'real2', email: 'r2@example.com', name: '乙', isVirtualLearner: false },
+          { id: 'virt1', email: 'virtual_1@test.local', name: '虚拟', isVirtualLearner: true },
+        ]);
+      }
+      if (!args?.where) {
+        return Promise.resolve([{ id: 'real1' }, { id: 'real2' }, { id: 'virt1' }, { id: 'virt2' }]);
+      }
+      return Promise.resolve([]);
+    });
     // 全量累计（10 分钟长缓存子层）：2026-10-04 性能批后不再 groupBy（Prisma 对
     // userId IN + GROUP BY success 会退化成 success 索引全表扫），改为 6 笔等值 count 相减：
     // 真实业务 = 真实全量 − 真实 gateway；全量业务 = 全量 − gateway。
