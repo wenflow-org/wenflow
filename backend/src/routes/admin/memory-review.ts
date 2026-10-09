@@ -207,6 +207,10 @@ router.get('/', async (req, res) => {
       const rows = traceAggRows.filter((t) => t.userId === userId);
       if (rows.length > 0) fragByUser.set(userId, computeFragmentationMetrics(rows));
     }
+    // 跨用户合计的碎片率（2026-10-09 从零走查 F1：前端 KPI 行按 totals.fragmentation 契约绑定，
+    // 此前只平铺 pendingReview/unattachedScatterKeys 两个值 → 三格 KPI 恒显「—」）。
+    // duplicateLabelRatio 为痕迹加权全局比率（Σ重复痕迹/Σ痕迹），与前端 tooltip 的「痕迹占比」口径一致。
+    const globalFrag = computeFragmentationMetrics(traceAggRows);
 
     const totals = {
       users: ranked.length,
@@ -220,15 +224,22 @@ router.get('/', async (req, res) => {
       deleted: 0,
       rollbackableMerges: 0,
       rolledBackMerges: 0,
-      // outlet(D)：跨用户合计只暴露两个可全量聚合的口径（重复 label 比率按用户粒度暴露，见各用户行）
+      // outlet(D)：平铺两个可全量聚合的口径（既有消费方保留）；
+      // 前端 KPI 行消费的 totals.fragmentation 三字段（F1 修复，与前端契约命名对齐）
       pendingReview: 0,
       unattachedScatterKeys: 0,
+      fragmentation: {
+        duplicateLabelRatio: globalFrag.duplicateLabelRatio,
+        unattachedKeys: globalFrag.unattachedScatterKeys,
+        pendingReview: 0,
+      },
     };
     for (const row of ranked) {
       totals.rollbackableMerges += row.merges.rollbackable;
       totals.rolledBackMerges += row.merges.rolledBack;
       totals.pendingReview += row.pendingReviewQueueDepth;
       totals.unattachedScatterKeys += row.unattachedScatterKeys;
+      totals.fragmentation.pendingReview += row.pendingReviewQueueDepth;
       if (!row.audit) continue;
       totals.proposed += row.audit.proposed;
       totals.autoApplicable += row.audit.autoApplicable;

@@ -716,9 +716,9 @@ interface AppliedAliasMergeView {
 }
 
 /** 碎片率指标（R7 outlet 域契约 D：暴露在 memory-review 接口里）。
- *  ⚠ 假设字段名（outlet 路由本批并行开发、尚未落地，按任务书契约先绑定）：
- *  overview.totals.fragmentation = { duplicateLabelRatio, unattachedKeys, pendingReview }。
- *  字段缺失 → KPI 显 '—'（不把缺失当 0），等 outlet 落地后对齐实际字段名。 */
+ *  2026-10-09 对齐实际字段名：后端 totals.fragmentation = { duplicateLabelRatio, unattachedKeys, pendingReview }
+ *  （duplicateLabelRatio 为痕迹加权全局比率；此前后端只有平铺两值，本行 KPI 曾恒显 '—'）。
+ *  字段缺失 → KPI 显 '—'（不把缺失当 0）。 */
 interface FragmentationMetrics {
   /** 重复 label 比率（0-1）：措辞重复的痕迹占比 */
   duplicateLabelRatio?: number

@@ -395,7 +395,9 @@ const driftAny = computed(() => (displayReport.value?.drift?.contract || 0) + (d
     2026-10-07 F6-3 修正：原口径把 zombieActive（失效生效版本）与 unwired（接线不一致）计入，但这两类
     对应对账页签内**没有**任何行/pill 可定位（失效生效版本的 skill 已不在户口簿活跃集，对账表不收录），
     造成 KPI 亮 2 而「仅看异常」0 行、卡头 pill 只写「失效注册 1」的同屏互斥口径。
-    现两类剔出 KPI，改由 title 如实披露并指向各自可定位的健康检查行（w1-active / w3-wiring）。 */
+    现两类剔出 KPI，改由 title 如实披露并指向各自可定位的健康检查行（w1-active / w3-wiring）。
+    2026-10-09 从零走查 F2 收口：对账接口的 orphanRegistrations 补上与 zombieRegistration 同源的
+    退役豁免（isRetiredSkill），两处失效注册口径现已一致（退役行单列 orphanRetiredExempt 注记）。 */
 const reconAbnormal = computed(() => {
   const r = reconciliation.value
   return r.missingRegistration + r.missingActive + r.zombieRegistration

@@ -19,7 +19,9 @@
           <span v-if="recReport.summary.unregistered" class="mk-badge mk-badge--bad">未注册 {{ recReport.summary.unregistered }}</span>
           <span v-if="recReport.summary.activeMissing" class="mk-badge mk-badge--warn" title="缺 ACTIVE：无生效版本">无生效版本 {{ recReport.summary.activeMissing }}</span>
           <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="登记册已删除/不存在，但注册记录仍残留（幽灵注册）">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
-          <span v-else class="mk-pill">失效注册 0</span>
+          <span v-else class="mk-pill" :title="recReport.summary.orphanRetiredExempt ? `退役技能 ${recReport.summary.orphanRetiredExempt} 项注册行按「不动历史数据」保留、不计异常（与页头 KPI 同口径）` : '无失效注册'">
+            失效注册 0<span v-if="recReport.summary.orphanRetiredExempt">（退役豁免 {{ recReport.summary.orphanRetiredExempt }}）</span>
+          </span>
         </div>
         <!-- 常驻手刷钮撤（审核 #83）：对账数据不随 60s 轮询，进入本页签即挂载重拉；
              轮询家族规则「轮询页不放刷新钮」，失败/空态仍保留重试逃生动作 -->

@@ -1305,9 +1305,12 @@ export interface SkillReconciliationReport {
     unregistered: number;
     activeMissing: number;
     orphanRegistrations: number;
+    /** 退役技能注册行（「不动历史数据」保留、不计异常，与健康中心 zombieRegistration 同口径） */
+    orphanRetiredExempt?: number;
   };
   items: SkillReconciliationRow[];
   orphanRegistrations: Array<{ name: string }>;
+  orphanRetiredExempt?: Array<{ name: string }>;
 }
 
 export const adminVirtualLearnersApi = {

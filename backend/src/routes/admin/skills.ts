@@ -30,7 +30,7 @@ import { VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT } from '../../skills/virtual-learn
 import { GOAL_UNDERSTANDING_COMPOSER_PROMPT } from '../../skills/goal-understanding-composer';
 import { ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT } from '../../skills/acceptance-evidence-evaluator';
 import { checkSkillsReadinessFromSystemDb } from '../../services/skills-readiness.service';
-import { analyzeW2 } from '../../services/skills-readiness.service';
+import { analyzeW2, isRetiredSkill } from '../../services/skills-readiness.service';
 import { loadSkillsBookRaw } from '../../services/skill-registry/skills-file';
 import { getSkillCompletion } from '../../services/skill-registry/skill-completion.service';
 import { listSkillRegistrationNames } from '../../services/skill-registry/skill-registration.service';
@@ -1012,10 +1012,14 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
     const w2 = analyzeW2(book, registrations);
     const exemptRegistrationPoints = new Set(['agents', 'platform-direct']);
     const unregisteredSet = new Set(w2.missingRegistration);
-    const orphanRegistrations = registrations
+    // 退役名单内的注册行按「不动历史数据」保留：与健康中心 zombieRegistration（readiness 侧
+    // retiredExempt 拆分）同一口径，单列审计、不计异常——两数同屏曾互相矛盾（2026-10-09 F2）
+    const orphanAll = registrations
       .map((row) => row.name)
       .filter((name) => !book.skills.some((entry) => entry.skillId === name))
       .sort();
+    const orphanRetiredExempt = orphanAll.filter((name) => isRetiredSkill(name));
+    const orphanRegistrations = orphanAll.filter((name) => !isRetiredSkill(name));
 
     const orchestrationStages = loadOrchestrationFiles();
     const items: Array<Record<string, unknown>> = [];
@@ -1069,9 +1073,11 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
           unregistered: unregisteredSet.size,
           activeMissing: items.filter((item) => item.diff === 'active-missing').length,
           orphanRegistrations: orphanRegistrations.length,
+          orphanRetiredExempt: orphanRetiredExempt.length,
         },
         items,
         orphanRegistrations: orphanRegistrations.map((name) => ({ name })),
+        orphanRetiredExempt: orphanRetiredExempt.map((name) => ({ name })),
       },
     });
   } catch (error: any) {
