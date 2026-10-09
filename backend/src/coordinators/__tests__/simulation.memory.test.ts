@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * 记忆回写接线包（审计 P1-1/P1-2/P1-3 + P2-32）单元测试
  *

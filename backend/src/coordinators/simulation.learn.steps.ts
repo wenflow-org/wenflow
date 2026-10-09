@@ -274,6 +274,8 @@ function replyClaimsSuccess(reply: string): boolean {
  * 继续以 0.9 的自评掌握度进入后续状态。判决缺失/判对 → 原样（宁松勿误伤）。
  * 返回新对象（不改入参）与被钳制字段名（供证据链留痕）。
  */
+// 学习态是键集开放的动态 JSON 记录，此处 any 为契约本身（收窄成 unknown 会在调用面要求逐字段守卫，无收益）
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function clampLearnerStateToJudgment<T extends Record<string, any> | null | undefined>(
   learnerState: T,
   grounding: JudgeGroundingLike
@@ -287,6 +289,7 @@ export function clampLearnerStateToJudgment<T extends Record<string, any> | null
   if (!judgeFalse || bound === null) return { learnerState, clampedFields: [] };
 
   const clampedFields: string[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 同上：动态学习态记录
   const next: Record<string, any> = { ...learnerState };
   for (const field of ['conceptualMastery', 'proceduralMastery'] as const) {
     const value = next[field];

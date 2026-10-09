@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * P1-11 输出保真：输入未提供 reviewHints 时，summary 不得出现
  * 「保持率 / 记忆保持 / 记得几成 + 数值」话术（编造量化记忆状态渲染给学生）。

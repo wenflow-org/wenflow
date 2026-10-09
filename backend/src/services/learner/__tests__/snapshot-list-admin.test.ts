@@ -6,7 +6,7 @@ export {}
 
 // 风险队列默认视图会先按单点口径扫一次 users 拿排除 id（utils/test-account），
 // 与列表查询共用 mock：按入参形状分流，业务断言仍取 usersFindMany.mock.calls[0]
-let mockTestAccountRows: any[] = [
+const mockTestAccountRows: any[] = [
   { id: 'u-test', name: 'e2e_ms0fz3yx', email: 'e2e_ms0fz3yx@example.com', isVirtualLearner: false },
 ];
 

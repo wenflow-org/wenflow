@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * 认知判决器 payload 注入（审计 P1-7 / EG-1）单元测试
  *

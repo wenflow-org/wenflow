@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * PUT /:id/stories/:storyIndex 故事级预算校验：
  * 显式传入的越界值返回 400（中文错误说明允许区间），不再静默 clamp；

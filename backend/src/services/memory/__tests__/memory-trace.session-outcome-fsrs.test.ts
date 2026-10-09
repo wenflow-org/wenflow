@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * FSRS 通电（2026-10-07，P1-10 根因）：
  * - `recordSessionOutcome` 对有证据的看板项传 `fsrsGrade` → 经 `fsrsSchedule` 写原生四元组；
