@@ -2,14 +2,39 @@ export {}
 
 process.env.JWT_SECRET = 'test-jwt-secret-with-at-least-thirty-two-characters'
 
+import crypto from 'node:crypto'
 import jwt from 'jsonwebtoken'
 import {
   ADMIN_TOKEN_AUDIENCE,
   SESSION_TOKEN_ISSUER,
   USER_TOKEN_AUDIENCE,
+  signRefreshToken,
   signSessionToken,
+  verifyRefreshToken,
   verifySessionToken
 } from '../session-token'
+
+const sha256 = (value: string): string =>
+  crypto.createHash('sha256').update(value).digest('hex')
+
+describe('signRefreshToken 同秒双签发去重（部署从零验收 2026-10-09 P1）', () => {
+  it('同一用户同一秒内两次签发的 token 字符串与 tokenHash 互不相同（否则撞 user_sessions.tokenHash 唯一约束）', () => {
+    const a = signRefreshToken('user-1', 1)
+    const b = signRefreshToken('user-1', 1)
+    expect(a).not.toBe(b)
+    expect(sha256(a)).not.toBe(sha256(b))
+  })
+
+  it('新签发的 refresh token 仍通过验证，且 jti 每次不同', () => {
+    const a = verifyRefreshToken(signRefreshToken('user-1', 1))
+    const b = verifyRefreshToken(signRefreshToken('user-1', 1))
+    expect(a.userId).toBe('user-1')
+    expect(a.purpose).toBe('refresh')
+    expect(a.jti).toBeTruthy()
+    expect(b.jti).toBeTruthy()
+    expect(a.jti).not.toBe(b.jti)
+  })
+})
 
 describe('session token domain isolation', () => {
   it('签发带有明确 type、issuer 和 audience 的用户与 Admin Token', () => {

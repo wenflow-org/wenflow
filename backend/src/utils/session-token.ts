@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken';
 
 export type SessionTokenType = 'user' | 'admin';
@@ -137,13 +138,17 @@ export const signAccessToken = (
     ACCESS_TOKEN_EXPIRES_IN
   );
 
-/** Sign a long-lived refresh token (30 days). */
+/** Sign a long-lived refresh token (30 days).
+ *  jti 每次签发必带随机值：payload 若只有 userId/tokenVersion/purpose，iat 以秒计，
+ *  同用户同秒双签发（注册后立即登录、双设备同秒登录）会产出逐字节相同的 token，
+ *  sha256 后撞 user_sessions.tokenHash 唯一约束（P2002 被登记侧吞掉 → 后签设备共享
+ *  前一设备的会话行，登出/吊销互相影响）。部署从零验收 2026-10-09 P1 实证。 */
 export const signRefreshToken = (
   userId: string,
   tokenVersion: number
 ): string =>
   signSessionToken(
-    { userId, tokenVersion, purpose: 'refresh' },
+    { userId, tokenVersion, purpose: 'refresh', jti: randomUUID() },
     'user',
     REFRESH_TOKEN_EXPIRES_IN
   );

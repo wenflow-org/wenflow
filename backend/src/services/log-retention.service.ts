@@ -431,9 +431,12 @@ export class LogRetentionService {
       );
       return result;
     } catch (error) {
-      logger.warn('[log-retention] degradation_events 清理跳过（表未创建或不可写）', {
-        error: error instanceof Error ? error.message : String(error)
-      });
+      const message = error instanceof Error ? error.message : String(error);
+      // 全新库的预期路径：degradation_events 是 raw 表、首次落库时才自建（degradation-telemetry.ts），
+      // 首个降级事件前每次保留清理都会撞 no such table——按设计静默 0，不算告警。
+      if (!/no such table/i.test(message)) {
+        logger.warn('[log-retention] degradation_events 清理跳过（表未创建或不可写）', { error: message });
+      }
       return 0;
     }
   }
