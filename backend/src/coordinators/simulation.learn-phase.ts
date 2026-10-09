@@ -1297,6 +1297,37 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
   }
 }
 
+/**
+ * F5：manualStop 收口——凡检测到停止标志且会话尚未终态（completed/failed/abandoned），
+ * 就地终态化为 abandoned（人为终止拍板 2026-08-21，不计入系统失败率）并补一条停止日志。
+ * 幂等：非悬挂态调用一律零写入；返回停止原因（未触发返回 null）。
+ *
+ * 背景：requestStopLearning 的 deferred 路径把收口承诺交给「运行中的学习循环」，但
+ * executeAutoLearning 旧实现只在循环顶兑现——停止落在最后一次迭代的步骤内、或两次
+ * executeAutoLearning 调用之间（advance-day 一日多课）时，会话带着 manualStop 永久停在
+ * running（runDayLearning 见「已停止」即回滚该日，不再有任何人收口）。收口点因此下沉为
+ * 本函数，并在入口与全部出口调用。
+ */
+async function finalizeManualStopIfNeeded(
+  ctx: SimulationOrchestrator,
+  sessionId: string,
+  latest?: { status: unknown; stageResults: string }
+): Promise<string | null> {
+  const session = latest ?? (await ctx.getVirtualSession(sessionId));
+  const stageResults = parseStageResultsPayload(session.stageResults);
+  const teaching = stageResults.teaching;
+  if (teaching?.manualStop !== true) return null;
+  const status = String(session.status);
+  if (status === 'completed' || status === 'failed' || status === 'abandoned') return null;
+  await ctx.updateSessionStatus(sessionId, 'abandoned', 'teaching').catch(() => {});
+  await ctx.addSessionLog(sessionId, {
+    timestamp: new Date().toISOString(),
+    phase: 'error',
+    details: { error: `EMERGENCY_STOP:${teaching.stoppedReason || 'admin-emergency-stop'}` }
+  }).catch(() => {});
+  return String(teaching.stoppedReason || 'admin-emergency-stop');
+}
+
 export async function executeAutoLearning(
   ctx: SimulationOrchestrator,
   sessionId: string,
@@ -1320,6 +1351,9 @@ export async function executeAutoLearning(
 
     const initialStageResults = parseStageResultsPayload(session.stageResults)
     if (initialStageResults.teaching?.manualStop || session.status === 'failed' || session.status === 'abandoned') {
+      // F5：入口命中停止标志不能只返回错误——deferred 收口承诺在「停止落在最后一次迭代/
+      // 两次调用之间」时不兑现，此处补终态化，任何后续学习尝试都能把悬挂态收口（幂等）。
+      await finalizeManualStopIfNeeded(ctx, sessionId, session);
       return {
         success: false,
         error: initialStageResults.teaching?.stoppedReason ? `学习已停止: ${initialStageResults.teaching.stoppedReason}` : `学习已停止（${session.status}）`
@@ -1354,19 +1388,19 @@ export async function executeAutoLearning(
         // 旁路紧急停止（requestStopLearning deferred 路径）：循环退出时就地终态化——
         // 此刻仍持有会话租约，是安全的收口点；避免会话停留在 running + manualStop 的悬挂态。
         // 人为终止记 abandoned（拍板 2026-08-21），不计入系统失败率
-        if (latestSession.status !== 'failed' && latestSession.status !== 'abandoned') {
-          await ctx.updateSessionStatus(sessionId, 'abandoned', 'teaching').catch(() => {});
-          await ctx.addSessionLog(sessionId, {
-            timestamp: new Date().toISOString(),
-            phase: 'error',
-            details: { error: `EMERGENCY_STOP:${latestStageResults.teaching?.stoppedReason || 'admin-emergency-stop'}` }
-          }).catch(() => {});
+        const stoppedReason = await finalizeManualStopIfNeeded(ctx, sessionId, latestSession);
+        if (stoppedReason) {
+          return {
+            success: false,
+            totalSteps: steps,
+            error: `学习已停止: ${stoppedReason}`
+          };
         }
         return {
           success: false,
           totalSteps: steps,
           error: latestStageResults.teaching?.stoppedReason ? `学习已停止: ${latestStageResults.teaching.stoppedReason}` : '学习已停止'
-        }
+        };
       }
       // 自动驾驶停止请求（autopilot.stopRequested）：管理员在驾驶舱点了「停止自动驾驶」，
       // 与 teaching.manualStop 不同源（前者在 stageResults.autopilot，后者在 teaching），
@@ -1394,6 +1428,16 @@ export async function executeAutoLearning(
         const doneSession = await ctx.getVirtualSession(sessionId);
         const doneTeaching = parseStageResultsPayload(doneSession.stageResults).teaching || {};
         const actualMilestones = Number((doneTeaching as Record<string, unknown>).totalMilestones) || maxMilestones;
+
+        // F5：停止若落在最后一步内，路径已完成的成功出口也要收口（已 completed 时 helper 幂等零写）
+        const pathStopReason = await finalizeManualStopIfNeeded(ctx, sessionId, doneSession);
+        if (pathStopReason) {
+          return {
+            success: false,
+            totalSteps: steps,
+            error: `学习已停止: ${pathStopReason}`
+          };
+        }
 
         return {
           success: true,
@@ -1440,6 +1484,16 @@ export async function executeAutoLearning(
 
       // “自动完成本课”以课界为终点：本课完成即返回；状态机已自动开下一课，但不代跑。
       if (stepResult.taskCompleted) {
+        // F5：停止落在收尾步骤内时，成功出口同样收口（否则会话带着 manualStop 停在 running，
+        // 直到下一次学习入口才被入口检查补收）
+        const taskStopReason = await finalizeManualStopIfNeeded(ctx, sessionId);
+        if (taskStopReason) {
+          return {
+            success: false,
+            totalSteps: steps,
+            error: `学习已停止: ${taskStopReason}`
+          };
+        }
         return {
           success: true,
           totalSteps: steps,
@@ -1452,6 +1506,15 @@ export async function executeAutoLearning(
           sessionId,
           totalSteps: steps
         });
+
+        const taskStopReason = await finalizeManualStopIfNeeded(ctx, sessionId);
+        if (taskStopReason) {
+          return {
+            success: false,
+            totalSteps: steps,
+            error: `学习已停止: ${taskStopReason}`
+          };
+        }
 
         return {
           success: true,
@@ -1468,6 +1531,16 @@ export async function executeAutoLearning(
     // 回合上限耗尽 ≠ 完成：诚实返回失败，不再虚报 completedMilestones
     // 注意：会话仍为 running、本课教学对话仍 active——恢复动作是「调高上限后再次自动推进」或「手动推进对话」，
     // 不应引导「重试」（重试=重开本课教学会话，会丢本课已推进的对话轮次）
+    // F5：停止若落在最后一次迭代的步骤内，循环顶不会再执行——此处补收口，避免悬挂在 running+manualStop
+    const exhaustedStopReason = await finalizeManualStopIfNeeded(ctx, sessionId);
+    if (exhaustedStopReason) {
+      return {
+        success: false,
+        totalSteps: steps,
+        completedMilestones: 0,
+        error: `学习已停止: ${exhaustedStopReason}`
+      };
+    }
     return {
       success: false,
       totalSteps: steps,
@@ -1551,7 +1624,8 @@ export async function emergencyStopLearning(ctx: SimulationOrchestrator, session
  * 阻塞到自然结束——紧急语义要求立即生效。
  * 流程：① 旁路合并写入 manualStop 标志（循环每轮开头检查后自行退出）；
  * ② 尝试无排队获取 DB 租约：拿到说明没有活跃循环，就地复用 emergencyStopLearning 终态化；
- *    拿不到说明循环在跑，返回 deferred，由循环退出时就地终态化（见 executeAutoLearning）。
+ *    拿不到说明循环在跑，返回 deferred，由循环出口或后续学习入口就地终态化
+ *    （见 finalizeManualStopIfNeeded；F5 修复前只在循环顶收口，停止落在最后一次迭代/节间会悬挂）。
  */
 export async function requestStopLearning(ctx: SimulationOrchestrator, sessionId: string, reason = 'admin-emergency-stop'): Promise<{
   success: boolean;

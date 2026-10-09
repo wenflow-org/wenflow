@@ -265,4 +265,17 @@ describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {
     expect(((apiMocks.publishCore.mock.calls[1] as unknown[])[0] as { confirmUncertain?: boolean }).confirmUncertain).toBe(true);
     wrapper.unmount();
   });
+
+  it('F3 回归：路由离开（卸载）复位 coreEditorState.dirty——重入不产生幽灵未保存确认', async () => {
+    const { wrapper } = await mountPage();
+    // 模拟协议编辑器存在未保存修改后用户确认离开（组件卸载）
+    coreEditorState.dirty = true;
+    wrapper.unmount();
+    expect(coreEditorState.dirty).toBe(false);
+    // 重入：卸载无残留 → anyDirty 从零开始（守卫不会带出上一次的脏标记）
+    const { wrapper: reentry } = await mountPage();
+    coreEditorState.dirty = true; // 本轮即便置脏，离开语义也由本轮守卫负责
+    reentry.unmount();
+    expect(coreEditorState.dirty).toBe(false);
+  });
 });

@@ -93,6 +93,7 @@ jest.mock('../../services/virtual-lab/simulated-day.service', () => ({
 }))
 
 import { SimulationOrchestrator } from '../simulation.coordinator'
+import { resolveLearnTurnBudget } from '../simulation.helpers'
 
 describe('SimulationOrchestrator durable task completion recovery', () => {
   let sessionRecord: any
@@ -599,4 +600,49 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     // 会话不标失败：进度保留（真实多课场景推进下一课保持 running）
     expect(sessionRecord.status).not.toBe('failed')
   })
+
+  it('F5：入口命中 manualStop 的悬挂会话就地终态化——不再永久停留在 running', async () => {
+    // 复现：requestStopLearning deferred 承诺「循环退出时收口」未兑现，会话带着 manualStop 停在 running，
+    // 之后每次 executeAutoLearning 入口只返回「已停止」不再有人写终态 → 永久悬挂。
+    // 旧实现：status 保持 running；新实现：入口检查补终态化（abandoned）。
+    setLearningState({ ...buildLearningState(), manualStop: true, stoppedReason: 'admin-emergency-stop' })
+
+    const stepSpy = jest.fn()
+    ;(coordinator as any).executeLearningStep = stepSpy
+
+    const result = await coordinator.executeAutoLearning('simulation-1', { maxTurns: 40 })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('学习已停止')
+    expect(sessionRecord.status).toBe('abandoned')
+    // 已终态化：不再进入学习步骤
+    expect(stepSpy).not.toHaveBeenCalled()
+  })
+
+  it('F5：停止落在最后一次迭代内——回合耗尽出口也要收口（旧实现返回 auto_turn_cap_exhausted 且悬挂）', async () => {
+    const maxTurns = 1
+    const loopLimit = resolveLearnTurnBudget(JSON.parse(sessionRecord.stageResults), maxTurns) + 1
+
+    let stepCalls = 0
+    ;(coordinator as any).executeLearningStep = jest.fn(async () => {
+      stepCalls += 1
+      if (stepCalls === loopLimit) {
+        // 最后一次迭代的步骤执行期间，管理员点了「停止学习」（旁路写标志）——
+        // 之后循环不再有下一轮循环顶检查，只能靠出口收口
+        const parsed = JSON.parse(sessionRecord.stageResults)
+        parsed.teaching.manualStop = true
+        parsed.teaching.stoppedReason = 'admin-emergency-stop'
+        sessionRecord.stageResults = JSON.stringify(parsed)
+      }
+      return { success: true } // 未完成/未收束：循环继续
+    })
+
+    const result = await coordinator.executeAutoLearning('simulation-1', { maxTurns })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('学习已停止')
+    expect(result.error).not.toContain('auto_turn_cap_exhausted')
+    expect(sessionRecord.status).toBe('abandoned')
+    expect(stepCalls).toBe(loopLimit)
+  }, 20000)
 })

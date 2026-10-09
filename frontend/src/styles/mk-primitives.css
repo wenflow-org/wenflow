@@ -1042,8 +1042,11 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
    `.tabs/.tab/.tab__count` 类名，测试与各页模板零改动）。与 MkSubTabs（.mk-subtab）
    同视觉（12px/600、激活蓝字 + 2px 蓝下划线、通栏底线），区别在用途：本类是宿主页
    顶层视图/分区切换；MkSubTabs 是详情页 hero 下的分区页签。
-   HTML 契约：<div class="tabs" role="tablist"> + <button class="tab" role="tab" aria-selected> */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); }
+   HTML 契约：<div class="tabs" role="tablist"> + <button class="tab" role="tab" aria-selected>
+   窄视口（≤390px 运营中心实测）页签溢出裁切 → flex-wrap: wrap 收行（与 .mk-subtabs 同配方）。
+   勿改 overflow-x:auto 横滚：定高 grid 页（.mk-page）的 auto 行轨按「最小贡献」收缩，
+   overflow 非 visible 会把贡献清零 → 组件被压成 1px、页签被裁剪到点不到（MkSubTabs.vue 同注）。 */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mk-line); flex-wrap: wrap; }
 .tab {
   border: 0;
   background: transparent;

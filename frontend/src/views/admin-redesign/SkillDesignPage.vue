@@ -409,7 +409,14 @@ onMounted(() => {
   void loadAll()
   window.addEventListener('beforeunload', onPageBeforeUnload)
 })
-onBeforeUnmount(() => window.removeEventListener('beforeunload', onPageBeforeUnload))
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', onPageBeforeUnload)
+  /* #F3：coreEditorState 是模块级单例——路由离开经确认后组件卸载，但单例的 dirty 不会被任何
+     路径复位（[skillId, reloadTick] watcher 只在页内切换时跑），下次进入设计页会带出上一次的
+     脏标记，产生幽灵「有未保存的修改」确认。离开即放弃：卸载时显式复位。
+     tabDirty 随组件实例销毁，无需处理。 */
+  coreEditorState.dirty = false
+})
 </script>
 
 <style scoped>
