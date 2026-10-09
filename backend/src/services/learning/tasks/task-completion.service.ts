@@ -10,7 +10,8 @@
 import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
 import { withTransaction } from '../../../utils/with-transaction';
-import { dayKeyOf, parseDayKeyStart, dayDiffInDays } from '../../time/day-boundary';
+import { dayKeyOf } from '../../time/day-boundary';
+import { advanceStreak } from './streak';
 import achievementService from '../../achievements/achievement.service';
 import { dashboardGuidanceSnapshotService } from '../../learner/DashboardGuidanceSnapshotService';
 import { learnerStateReviewService } from '../../learner/LearnerStateReviewService';
@@ -465,36 +466,29 @@ export async function completeTask(data: CompleteTaskData) {
       const today = data.asOf ?? new Date();
       // 连击按**应用时区本地日**（与课量/配额/衰减同口径）：此前 toISOString 是 UTC 切日，
       // UTC+8 用户 00:00–08:00 的学习会被算进"昨天"，连击判定错一天。
-      const todayStr = dayKeyOf(today);
-
+      // 推进规则抽在 ./streak.ts（纯函数，跨日边界有独立测试）
       const user = await prisma.users.findUnique({
         where: { id: data.userId },
         select: { streakDays: true, streakLastDate: true, longestStreak: true }
       });
 
       if (user) {
-        let newStreak = user.streakDays;
-        const lastDate = user.streakLastDate ? dayKeyOf(user.streakLastDate) : undefined;
+        const next = advanceStreak(
+          {
+            streakDays: user.streakDays,
+            streakLastDate: user.streakLastDate,
+            longestStreak: user.longestStreak,
+          },
+          today,
+        );
 
-        if (lastDate !== todayStr) {
-          if (!lastDate) {
-            newStreak = 1;
-          } else {
-            const diffDays = dayDiffInDays(parseDayKeyStart(lastDate), parseDayKeyStart(todayStr));
-            if (diffDays === 1) {
-              newStreak = user.streakDays + 1;
-            } else {
-              newStreak = 1;
-            }
-          }
-
-          const newLongest = Math.max(newStreak, user.longestStreak);
+        if (next.changed) {
           await prisma.users.update({
             where: { id: data.userId },
             data: {
-              streakDays: newStreak,
-              streakLastDate: today,
-              longestStreak: newLongest
+              streakDays: next.streakDays,
+              streakLastDate: next.streakLastDate,
+              longestStreak: next.longestStreak,
             }
           });
         }
