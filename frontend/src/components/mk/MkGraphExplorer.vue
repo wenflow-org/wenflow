@@ -925,7 +925,9 @@ function onPractice() {
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: var(--mk-fs-13);
+  /* 走角色 token（2026-10-06 审核 §主题 6 同批先例：--mk-fs-13 档外字面量已删，
+     同屏不出现第 4 个文本档），与筛选芯片同档。 */
+  font-size: var(--mk-fs-micro);
   font-weight: 600;
   text-align: left;
   cursor: pointer;
