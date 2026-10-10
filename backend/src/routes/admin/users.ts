@@ -64,8 +64,12 @@ router.get('/', async (req, res, next) => {
     // 数值参数安全解析（2026-10-08 端到端验证：?limit=abc / ?page=abc 曾直接 500）：
     // 此前 Number(limit) 原样进 Prisma，'abc' → NaN → prisma.users.findMany 抛错，
     // 500 响应还把 Prisma 调用细节回给了客户端。判例同 memory-traces / memory-review / session-console。
+    // 上限 1000 对齐前端全量加载契约（live.ts LIVE_LIST_FULL_LIMIT）：前端传 1000 做全量
+    // 拉取 + 客户端分页/搜索，此前钳在 200 时请求 1000 静默只回 200 行——页头「共 N 人」
+    // 变成「已载行数」，第 201 名之后的用户在列表/搜索里不可达（2026-10-10 走查实锤：
+    // 真实集合 269 人显示「共 200 人」）。管理端路由 + 仍有界（1000），外行防御不变。
     const rawLimit = Number(req.query.limit);
-    const limitNum = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.round(rawLimit), 1), 200) : 20;
+    const limitNum = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.round(rawLimit), 1), 1000) : 20;
     const rawPage = Number(req.query.page);
     const pageNum = Number.isFinite(rawPage) ? Math.max(Math.round(rawPage), 1) : 1;
     const skip = (pageNum - 1) * limitNum;

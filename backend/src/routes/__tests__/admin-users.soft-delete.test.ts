@@ -219,14 +219,17 @@ describe('GET /admin/users 列表默认隐藏已删账号', () => {
     expect(res.body.data.pagination).toEqual({ total: 0, page: 1, limit: 20 })
   })
 
-  it('越界数值被夹紧：limit=99999 → 200 上限、page=0 → 第 1 页', async () => {
+  // 上限值 2026-10-10 由 200 抬到 1000：前端 live.ts 按 LIVE_LIST_FULL_LIMIT=1000
+  // 做全量拉取 + 客户端分页/搜索，钳在 200 时请求 1000 静默只回 200 行（走查实锤：
+  // 真实集合 269 人页头显示「共 200 人」，第 201 名之后在列表/搜索里不可达）。
+  it('越界数值被夹紧：limit=99999 → 1000 上限、page=0 → 第 1 页', async () => {
     usersFindMany.mockResolvedValue([])
     usersCount.mockResolvedValue(0)
 
     const res = await runHandler('GET /', { query: { limit: '99999', page: '0' } })
 
     expect(res.statusCode).toBe(200)
-    expect(res.body.data.pagination).toEqual({ total: 0, page: 1, limit: 200 })
+    expect(res.body.data.pagination).toEqual({ total: 0, page: 1, limit: 1000 })
   })
 
   it('status=deleted 反转为仅查已删账号（已删列表/恢复入口）', async () => {

@@ -4,8 +4,12 @@
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">用户</strong>
       <span class="mk-status__sep"></span>
+      <!-- 2026-10-10 走查修：可见文字此前直接打 users.length（已载行数）当「共 N 人」，
+           后端钳制截断时（曾 200，后修至 1000）真总数只在 title 里，与学习状态页
+           「学习者账号 N」可见口径打架（269 vs 200）。现按 LearnerCenter 同款句式：
+           截断时显「共 TOTAL 人 · 已载 M」，未截断时维持单数。 -->
       <span class="mk-status__meta" :title="isLive ? (liveUsersTotal > users.length ? '后端共 ' + liveUsersTotal + ' 人，列表仅加载前 ' + users.length + ' 行' : '后端共 ' + liveUsersTotal + ' 人') : undefined">
-        共 {{ users.length }} 人
+        共 {{ isLive && liveUsersTotal > users.length ? liveUsersTotal + ' 人 · 已载 ' + users.length : users.length }} 人
       </span>
       <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅真实用户（不含测试/虚拟账号）；切换「含测试」后显示全量并灰标测试/虚拟行">
         真实 {{ realUsers }}
