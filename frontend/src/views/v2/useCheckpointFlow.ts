@@ -24,6 +24,10 @@ export function useCheckpointFlow(
   const checkpointSubmitting = ref(false);
   /** 代码裁决已出、导师讲解仍在流式到达（期间不给「继续」，避免讲解被截断） */
   const checkpointStreaming = ref(false);
+  /** 本轮裁决/讲解全文待落聊天流（F-W 2026-10-10 新人走查：此前该文本只活在卡片里，
+      答对 3 秒自动收起后连同「下一问」一起消失，聊天流不追加、刷新才在历史里见到。
+      页面在卡片关闭/被下一个检查点替换时消费它补一条导师消息，保证所见即所存） */
+  const lastSettledReply = ref<{ checkpointId: string; text: string } | null>(null);
   /** 检查点通过后的自动关闭 timer（提交/卸载时清理，防竞态） */
   let checkpointCloseTimer = 0;
 
@@ -105,9 +109,9 @@ export function useCheckpointFlow(
             // 立即上锁：代码已判定，不再允许重交（重交必然 404，见走查 P2）
             checkpointSubmitting.value = true;
             checkpointStreaming.value = true;
-            checkpointFeedback.value = j.passed
-              ? '回答正确。导师接着讲…'
-              : '这道没答对，导师正在给你讲…';
+            // feedback 只报对错判定；「讲解中」由操作行的「导师正在讲解…」独占——
+            // 此前这里写「导师接着讲…」，与状态行同屏语义重复（2026-10-09 用户反馈）
+            checkpointFeedback.value = j.passed ? '回答正确' : '这道没答对';
           },
           onDelta: (t: string) => {
             streamed += t;
@@ -127,6 +131,10 @@ export function useCheckpointFlow(
       checkpointPassed.value = r.passed === true;
       // 后端把整段导师回复放在 feedback（答错时即纠正正文），需要留足阅读时间
       checkpointFeedback.value = r.feedback || (r.passed ? '回答正确' : r.hint || '再想想');
+      // F-W：完整导师回复挂起，待卡片关闭时由页面补进聊天流（仅成功路径；降级提示文案不入流）
+      if (r.feedback && session.value === sessionAtSubmit) {
+        lastSettledReply.value = { checkpointId, text: String(r.feedback) };
+      }
       checkpointStreaming.value = false;
       // 提交成功后服务端已消费该检查点：一律上锁。
       // 答错时旧实现保持可提交（nextAction='review'），用户重交必然 404（走查 P2）
@@ -198,7 +206,7 @@ export function useCheckpointFlow(
 
   return {
     checkpoint, selectedOptions, answerText, checkpointFeedback, checkpointPassed,
-    checkpointPending, checkpointSubmitting, checkpointStreaming,
+    checkpointPending, checkpointSubmitting, checkpointStreaming, lastSettledReply,
     toggleOption, dismissCheckpoint, submitCheckpoint, skipCheckpoint, disposeCheckpoint
   };
 }

@@ -4,14 +4,16 @@
     <OfflineBanner />
     <AnnouncementBanner />
     <div id="app-main" tabindex="-1">
+      <!-- 2026-10-10 走查修复（b25ff5d6/780dfd27 族未治净的残余）：
+           旧实现是 Vue <transition mode="out-in" :duration="200">。显式 duration 只除掉了
+           transitionend 依赖；Vue 的进入/离开类推进本身排在 double-rAF 里，whenTransitionEnds
+           也在那个 rAF 回调里才被排定——渲染停帧（窗口遮挡/后台化、IAB 失焦面板）时 rAF 不
+           出帧，out-in 的"旧页面先离场"永远不 done，新页面永不挂载：URL 已变、视图不换、
+           后续导航全死。且停帧时进入类残留（enter-from 常驻）。
+           现改为纯 CSS 关键帧入场动画：组件在路由变化时立即挂载，动画只作视觉装饰，
+           不参与任何"挂载时机"门控；停帧时最坏只是省掉动画，导航永不冻结。 -->
       <RouterView v-slot="{ Component }">
-        <!-- 显式 duration：Vue 改用定时器收尾，不依赖 transitionend 事件。
-             页面失焦/后台化时浏览器停帧会导致 transitionend 永不触发，
-             out-in 过渡随即永久冻结（URL 已变内容不换、后续导航全死，
-             与课堂页 b25ff5d6 修过的 rAF 陷阱同族）。200ms 略大于 CSS 的 140ms。 -->
-        <transition name="route-fade" mode="out-in" :duration="200">
-          <component :is="Component" />
-        </transition>
+        <component :is="Component" class="route-fade-in" />
       </RouterView>
     </div>
     <ToastHost />
@@ -79,31 +81,25 @@ userStore.initFromStorage();
 </style>
 
 <style>
-/* 路由切换 fade-in 微动效 */
-.route-fade-enter-active,
-.route-fade-leave-active {
-  transition: opacity 140ms ease, transform 140ms ease;
+/* 路由切换 fade-in 微动效（2026-10-10 起为纯 CSS 关键帧：不参与挂载门控，见模板注释） */
+.route-fade-in {
+  animation: route-fade-in 140ms ease;
 }
 
-.route-fade-enter-from {
-  opacity: 0;
-  transform: translateY(4px);
-}
-
-.route-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-2px);
+@keyframes route-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .route-fade-enter-active,
-  .route-fade-leave-active {
-    transition: none;
-  }
-  .route-fade-enter-from,
-  .route-fade-leave-to {
-    opacity: 1;
-    transform: none;
+  .route-fade-in {
+    animation: none;
   }
 }
 </style>

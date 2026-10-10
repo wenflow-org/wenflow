@@ -591,7 +591,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useIsDark } from '@/composables/useIsDark';
 
 const isDark = useIsDark();
@@ -881,9 +881,21 @@ const shouldAskSelfAssess = computed(() => {
 const completed = ref(false);
 const {
   checkpoint, selectedOptions, answerText, checkpointFeedback, checkpointPassed,
-  checkpointPending, checkpointSubmitting, checkpointStreaming,
+  checkpointPending, checkpointSubmitting, checkpointStreaming, lastSettledReply,
   toggleOption, dismissCheckpoint, submitCheckpoint, skipCheckpoint, disposeCheckpoint
 } = useCheckpointFlow(session, typing, completed)
+/* F-W（2026-10-10 新人走查实锤）：检查点裁决+讲解此前只渲染在卡片内——答对后卡片 3 秒自动收起，
+   整段回复（含「下一问」）随之消失，聊天流不追加该回合（刷新才在历史里见到），新人会以为
+   答完没反应、也不知道下一问是什么。现于卡片关闭（或仍待落流时被下一个检查点替换）时，
+   把本轮导师回复补进聊天流，与刷新后的历史视图一致。跳过/降级提示不入流（lastSettledReply 仅
+   成功路径挂起）。 */
+watch(checkpoint, (now) => {
+  const pending = lastSettledReply.value
+  if (!pending) return
+  if (now && now.id === pending.checkpointId) return // 同一卡片仍在展示：等真正关闭再落流
+  lastSettledReply.value = null
+  pushMsg({ role: 'ai', text: pending.text, time: nowTime() })
+})
 /** 检查点选项前缀（A/B/C/D…）：原型 .wf-cp__opt 里是字母小方块 + 文本两段 */
 function optionLetter(i: number): string {
   return String.fromCharCode(65 + Math.max(0, Math.min(25, i)));

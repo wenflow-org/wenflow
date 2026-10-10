@@ -4,6 +4,7 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
 import { vReveal } from './directives/reveal';
+import { installRafStallFallback } from './utils/raf-stall-fallback';
 import {
   ADMIN_SESSION_CLEAR_EVENT_KEY,
   adminAuthApi,
@@ -15,6 +16,10 @@ import {
 import './styles/main.css';
 import './styles/admin-theme.css';
 import './views/v2/v2.css';          // V2 设计系统（全局加载，防止路由切换闪烁）
+
+// rAF 停帧兜底必须在任何 Vue 过渡/动画挂载前安装（遮挡/失焦面板下 rAF 不出帧时，
+// Transition 的挂载门控靠它放行；详见 utils/raf-stall-fallback.ts）
+installRafStallFallback();
 
 function currentRouteRequiresAdminAuth(): boolean {
   const currentRoute = router.currentRoute.value;
