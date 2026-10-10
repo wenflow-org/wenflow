@@ -35,7 +35,7 @@
     "markdown-it-texmath": "^1.0.0",
     "mermaid": "^11.16.1",
     "pinia": "^2.1.7",
-    "vue": "^3.4.15",
+    "vue": "^3.5.43",
     "vue-router": "^4.2.5"
   },
   "devDependencies": {
