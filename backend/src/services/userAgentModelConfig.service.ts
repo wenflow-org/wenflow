@@ -64,7 +64,14 @@ class UserAgentModelConfigService {
         where: { userId_agentId: { userId, agentId } }
       });
       getAPIGateway().invalidateCache(userId, agentId);
-    } catch (error) {
+    } catch (error: any) {
+      // 幂等删除（2026-10-10 权限批实弹）：无自定义行时 Prisma 抛 P2025——「恢复使用系统
+      // 默认配置」的目标态已达成，按成功返回（此前落 500「恢复默认配置失败」）。userId 恒取
+      // 会话主体，跨用户删除结构上不可能（复合键 userId_agentId）。
+      if (error?.code === 'P2025') {
+        getAPIGateway().invalidateCache(userId, agentId);
+        return;
+      }
       logger.error(`Failed to delete user config: ${userId}/${agentId}`, error);
       throw error;
     }
