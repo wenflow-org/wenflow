@@ -106,7 +106,8 @@ router.get('/paths/:id', async (req: Request, res: Response) => {
   }
 });
 
-/** 下线路径（内容治理：用户端不可继续学习；status=archived。注：无前置状态校验——已归档再 archive 仍 200，MIMOSA C3，补 guard 属行为变更待决策） */
+/** 下线路径（内容治理：用户端不可继续学习；status=archived）。
+    状态机守卫（2026-10-10 权限批运行时实锤后补齐，MIMOSA C3）：已归档 → 409。 */
 router.post('/paths/:id/archive', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
@@ -114,6 +115,9 @@ router.post('/paths/:id/archive', async (req: Request, res: Response) => {
 
     const path = await findLearningPathById(req.params.id);
     if (!path) return res.status(404).json({ success: false, error: { message: '路径不存在' } });
+    if (path.status === 'archived') {
+      return res.status(409).json({ success: false, error: { message: '路径已是下线状态，无需重复下线', status: 409 } });
+    }
 
     const before = { status: path.status };
     await archiveLearningPath(req.params.id);
@@ -129,7 +133,7 @@ router.post('/paths/:id/archive', async (req: Request, res: Response) => {
   }
 });
 
-/** 恢复路径（archived → active。注：无前置状态校验——非 archived 路径 restore 仍 200，MIMOSA C3） */
+/** 恢复路径（archived → active）。状态机守卫（2026-10-10，MIMOSA C3）：非 archived → 409。 */
 router.post('/paths/:id/restore', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
@@ -137,6 +141,9 @@ router.post('/paths/:id/restore', async (req: Request, res: Response) => {
 
     const path = await findLearningPathById(req.params.id);
     if (!path) return res.status(404).json({ success: false, error: { message: '路径不存在' } });
+    if (path.status !== 'archived') {
+      return res.status(409).json({ success: false, error: { message: '仅已下线的路径可恢复', status: 409 } });
+    }
 
     const before = { status: path.status };
     await restoreLearningPath(req.params.id);

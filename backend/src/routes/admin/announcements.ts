@@ -96,11 +96,17 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-/** PUT /:id/publish — 发布（注：无状态机前置校验——重复发布/已归档再发布均 200 并刷新 publishedAt，MIMOSA C2；补 guard 属行为变更待决策） */
+/** PUT /:id/publish — 发布。状态机守卫（2026-10-10 权限批运行时实锤后补齐，MIMOSA C2）：
+    已在发布态 → 409（重复发布此前 200 并刷新 publishedAt，纯审计噪声）。
+    草稿与已下线都可再发布（重发是有意流程，前端发布钮在非 published 均可见）。 */
 router.put('/:id/publish', async (req: Request, res: Response) => {
   try {
-    // 操作审计：发布前快照旧实体
     const existing = await findAnnouncementById(req.params.id);
+    if (!existing) return res.status(404).json({ success: false, error: '公告不存在' });
+    if (existing.status === 'published') {
+      return res.status(409).json({ success: false, error: '公告已在发布状态，无需重复发布' });
+    }
+    // 操作审计：发布前快照旧实体
     setAuditAction(res, 'announcement-publish', { targetType: 'announcement', targetId: req.params.id });
     setAuditBefore(res, existing);
 
@@ -116,11 +122,16 @@ router.put('/:id/publish', async (req: Request, res: Response) => {
   }
 });
 
-/** PUT /:id/archive — 下线（注：同上，无状态机前置校验——重复下线幂等覆盖，MIMOSA C2） */
+/** PUT /:id/archive — 下线。状态机守卫（2026-10-10，MIMOSA C2）：仅发布中可下线，
+    其余（已下线重复操作/草稿）→ 409；前端下线钮本就只在 published 行可见。 */
 router.put('/:id/archive', async (req: Request, res: Response) => {
   try {
-    // 操作审计：下线前快照旧实体
     const existing = await findAnnouncementById(req.params.id);
+    if (!existing) return res.status(404).json({ success: false, error: '公告不存在' });
+    if (existing.status !== 'published') {
+      return res.status(409).json({ success: false, error: '仅发布中的公告可下线' });
+    }
+    // 操作审计：下线前快照旧实体
     setAuditAction(res, 'announcement-archive', { targetType: 'announcement', targetId: req.params.id });
     setAuditBefore(res, existing);
 

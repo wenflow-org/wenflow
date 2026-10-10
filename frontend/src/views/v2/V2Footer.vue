@@ -18,7 +18,7 @@
       </nav>
       <div class="v2footer__meta">
         <span>© {{ year }} 问流</span>
-        <span class="v2footer__divider">·</span>
+        <span class="v2footer__divider" aria-hidden="true">·</span>
         <span>v{{ version }}</span>
       </div>
     </div>
@@ -102,7 +102,10 @@ const version = appVersion;
   font-size: 12px; color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
-.v2footer__divider { opacity: 0.5; }
+/* 2026-10-10 暗色全页扫描：opacity 0.5 时暗色下「·」有效对比 2.43:1（--faint × 0.5
+   再混暗底），肉眼近不可见。0.7 档实测 ≈3.7:1（装饰符按非文本 3:1 线）；顺带补
+   aria-hidden——它是视觉分隔符，读屏不应念出来。 */
+.v2footer__divider { opacity: 0.7; }
 /* 移动端不放页脚：品牌块/链接/版权在 ≤900px 整体收起，导航职能交给底部 tab，
    省下的 ~30px 还给内容（滚动页底部少一层 chrome）。断点取 900 而非 720 的原因：
    底部导航 ≤1100px 就出现，但 901–1100 平板段顶部链接已折叠，愿景/开发者文档的
