@@ -61,12 +61,14 @@ describe('LearningDecisionFeedService', () => {
     expect(card!.captured).toContain('广播下逐轴比较长度、列表索引、循环边界')
   })
 
-  it('路径有 replanReason 时产出 path-replanned 卡', () => {
+  it('路径有真重排三件套（reason+mode/trigger）时产出 path-replanned 卡', () => {
     const input = baseInput()
     input.paths = [{
       id: 'p1',
       title: 'Excel 自动化',
       replanReason: '掌握证据显示前置缺口',
+      replanMode: 'overwrite',
+      replanTriggerSource: 'learner-model-agent',
       updatedAt: new Date('2026-07-25T10:00:00Z')
     }]
 
@@ -75,6 +77,21 @@ describe('LearningDecisionFeedService', () => {
     expect(card).toBeDefined()
     expect(card!.judgment).toBe('掌握证据显示前置缺口')
     expect(card!.action).toContain('调整后续阶段安排')
+  })
+
+  // 2026-10-10 走查 W8：路径生成曾无条件把 description 写进 replanReason，
+  // 只看 replanReason 的旧判据让每条新路径凭空多一条「已执行的调整」。
+  it('只有 replanReason（无 mode/trigger）不产出 path-replanned 卡：生成污染形态', () => {
+    const input = baseInput()
+    input.paths = [{
+      id: 'p1',
+      title: '幼儿园数学观察',
+      replanReason: '做括号前是减号的递等式，孩子去括号时没变号……（路径描述文本）',
+      updatedAt: new Date('2026-07-25T10:00:00Z')
+    }]
+
+    const cards = service.build(input)
+    expect(cards.find((c) => c.kind === 'path-replanned')).toBeUndefined()
   })
 
   it('学习者快照有脆弱概念时产出 concept-watch 卡', () => {

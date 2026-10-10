@@ -525,8 +525,11 @@
         <span class="done-ring">
           <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
         </span>
-        <h2 class="proposal__title">路径已生成</h2>
-        <p class="proposal__generating-note">可以进入「我的路径」查看阶段与任务的准备进度。</p>
+        <!-- 2026-10-10 走查 W7：此处原写「路径已生成」，与「我的路径」页紧接的
+             「主结构生成中，一般 1-2 分钟内完成…」并置矛盾（实为主结构已创建、生成刚启动）。
+             改为与事实一致的「已创建 + 正在生成」两段式。 -->
+        <h2 class="proposal__title">路径已创建</h2>
+        <p class="proposal__generating-note">主结构正在生成，可以进入「我的路径」查看阶段与任务的准备进度。</p>
         <div class="proposal__actions proposal__actions--center">
           <button type="button" class="btn-primary btn-primary--lg" @click="goPaths">查看我的路径</button>
           <!-- 只在方案还在（stage=proposing）时给「返回方案」：否则点了只是关浮层，无路可回 -->

@@ -268,8 +268,14 @@
     <!-- ============ 画像：认知 + 偏好情绪 + 行为历史 + 课程控制 + 派生 + 记忆 + 教学建议 ============ -->
     <div v-else-if="tab === 'profile'" class="ld-tabpage" id="ld-panel-profile" role="tabpanel" aria-labelledby="ld-tab-profile">
       <template v-if="profile">
+        <!-- 2026-10-10 走查（低危登记转修）：零证据账号的三张画像卡直渲先验常量
+             （自评准确度=准确 / 平均响应=10s…），逐卡阅读易把先验当实测；页级「证据不足」
+             徽章兜底之外，卡内再挂一枚「初始先验」标注。判据=证据列表为空（本页同源数据）。 -->
         <section class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">认知特征</h3></div>
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">认知特征</h3>
+            <span v-if="!evidence.length" class="mk-card__meta" title="以下为学习者模型的初始先验值（该账号尚无学习证据落库），随学习证据累积更新；不是实测结论">初始先验 · 暂无学习证据</span>
+          </div>
           <div class="ld-kv">
             <div v-for="kv in cognitiveRows" :key="kv.label" class="ld-kv__row">
               <span>{{ kv.label }}</span>
@@ -278,7 +284,10 @@
           </div>
         </section>
         <section class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">偏好与情绪</h3></div>
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">偏好与情绪</h3>
+            <span v-if="!evidence.length" class="mk-card__meta" title="以下为学习者模型的初始先验值（该账号尚无学习证据落库），随学习证据累积更新；不是实测结论">初始先验 · 暂无学习证据</span>
+          </div>
           <div class="ld-kv">
             <div v-for="kv in preferenceRows" :key="kv.label" class="ld-kv__row">
               <span>{{ kv.label }}</span>
@@ -287,7 +296,10 @@
           </div>
         </section>
         <section v-if="behaviorRows.length" class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">学习行为基线</h3></div>
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">学习行为基线</h3>
+            <span v-if="!evidence.length" class="mk-card__meta" title="以下为学习者模型的初始先验值（该账号尚无学习证据落库），随学习证据累积更新；不是实测结论">初始先验 · 暂无学习证据</span>
+          </div>
           <div class="ld-kv">
             <div v-for="kv in behaviorRows" :key="kv.label" class="ld-kv__row">
               <span>{{ kv.label }}</span>

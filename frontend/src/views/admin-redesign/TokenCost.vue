@@ -108,7 +108,8 @@
       <section class="mk-kpi-grid">
         <!-- hint = 原型 metricCard 的一短句口径；长解释收进卡 title 悬停（复刻调整 2026-10-02：
              此前 28px 数字下拖整句「待补单价模型 3 个：deepseek-v4-flash、…」小字，非原型节奏）。
-             P1#25：单价未配置态可点直达「模型与接入」补单价（决策就近，不再只留一句提示）。 -->
+             P1#25：单价未配置态可点直达「模型与接入」；W6（2026-10-10 走查）核实该页
+             无单价编辑入口，补价真实路径=llm-providers.json 的 pricing 块（文案已改，点击去看待补清单）。 -->
         <MkKpi
           label="调用成本"
           :value="costLoading ? '…' : costFailed ? '加载失败' : costUsd !== null ? `≈ $${fmtCostUsd(costUsd)}` : (costPricedCalls === 0 && costMissingCalls === 0) ? '无调用' : '单价未配置'"
@@ -452,9 +453,13 @@ const costHint = computed(() => {
   }
   if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `${window}没有带 token 的 LLM 调用`
   const missing = missingPricingModels.value
+  // 2026-10-10 走查 W6：原文案「点击本卡直达『模型与接入』补单价」是死胡同——
+  // 该页只读展示 pricingConfigured，全站没有单价编辑入口；单价唯一注入点=
+  // backend/config/llm-providers.json 各模型的 pricing 块（File-as-Truth，保存即热重载）。
+  // 文案改为指向真实补价路径，点击仍去模型配置页看哪些模型待补。
   return missing.length
-    ? `${window} · 暂不展示金额 · 待补单价模型 ${missing.length} 个：${missing.join('、')}；点击本卡直达「模型与接入」补单价`
-    : `${window} · models.config.ts 的 pricing 尚未填权威单价，暂不展示金额；点击本卡直达「模型与接入」补单价`
+    ? `${window} · 暂不展示金额 · 待补单价模型 ${missing.length} 个：${missing.join('、')}；单价经 backend/config/llm-providers.json 的 pricing 块注入（File-as-Truth，保存即热重载）；点击查看模型配置`
+    : `${window} · models.config.ts 的 pricing 尚未填权威单价，暂不展示金额；单价经 backend/config/llm-providers.json 的 pricing 块注入（保存即热重载）；点击查看模型配置`
 })
 
 /* KPI hint 短口径（原型 metricCard 的 hint 是一短句）：长解释走卡 title 悬停 */
@@ -465,7 +470,7 @@ const costHintShort = computed(() => {
   if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `近 ${days.value} 天无调用`
   const n = missingPricingModels.value.length
   // P2（2026-10-04 全站评审）：「单价未配置」已在卡值位出现，hint 不再复读同一状态词
-  return `近 ${days.value} 天${n > 0 ? ` · 待补 ${n} 个模型单价` : ''} · 点击去模型接入`
+  return `近 ${days.value} 天${n > 0 ? ` · 待补 ${n} 个模型单价` : ''} · 查看模型配置`
 })
 const perCallHintShort = computed(() => {
   if (costLoading.value) return '金额统计中'

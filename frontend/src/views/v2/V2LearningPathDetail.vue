@@ -857,6 +857,7 @@ const REPLAN_TRIGGER_LABELS: Record<string, string> = {
   system: '系统',
   api: '页面操作',
   learn: '学习侧',
+  'path-reviewer': '系统自动评审',
 };
 const lineageRows = computed(() => {
   const ln = lineage.value;

@@ -175,8 +175,16 @@ export class LearningDecisionFeedService {
     );
 
     // ---------- 2. 路径调整（replan 已发生的决策） ----------
+    // 判据三件套：replanReason 非空「且」有 mode/trigger。真重排必带二者（path-replan.service
+    // 固定写三件套；rebuild/regenerate 流经 userProfile.replan 至少带 mode 或 triggerSource）。
+    // 2026-10-10 走查 W8：此前只看 replanReason，而路径生成曾把 description 写进该字段 →
+    // 每条新路径凭空多一条「已执行的调整」。写入侧已修（path-generation.core），此守卫
+    // 兜住存量污染行与未来单写 reason 的旁路。
     const replanned = (input.paths || [])
-      .filter((path) => path.replanReason && String(path.replanReason).trim())
+      .filter((path) =>
+        path.replanReason && String(path.replanReason).trim() &&
+        (path.replanMode || path.replanTriggerSource)
+      )
       .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
     for (const path of replanned.slice(0, 1)) {
       cards.push({

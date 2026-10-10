@@ -555,7 +555,11 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
           sourcePathId: (data.userProfile as any)?.replan?.sourcePathId || null,
           replanMode: (data.userProfile as any)?.replan?.mode || null,
           replanTriggerSource: (data.userProfile as any)?.replan?.triggerSource || null,
-          replanReason: data.description || null,
+          // replanReason 只记真重排的 reason。2026-10-10 走查 W8 实锤：此前无条件写
+          // data.description，全库 258 条 replanReason 全是生成污染（triggerSource 0 条），
+          // 每条新路径都被 LearningDecisionFeedService 标成「已执行的调整」。真重排的
+          // reason 由 replan 元数据携带（rebuild 流 / learning.ts regenerate / 评审回流）。
+          replanReason: (data.userProfile as any)?.replan?.reason || null,
           aiGenerated: true,
           aiPromptTemplate: JSON.stringify(promptTemplatePayload),
           updatedAt: new Date()
@@ -595,7 +599,11 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
           sourcePathId: (data.userProfile as any)?.replan?.sourcePathId || null,
           replanMode: (data.userProfile as any)?.replan?.mode || null,
           replanTriggerSource: (data.userProfile as any)?.replan?.triggerSource || null,
-          replanReason: data.description || null,
+          // replanReason 只记真重排的 reason。2026-10-10 走查 W8 实锤：此前无条件写
+          // data.description，全库 258 条 replanReason 全是生成污染（triggerSource 0 条），
+          // 每条新路径都被 LearningDecisionFeedService 标成「已执行的调整」。真重排的
+          // reason 由 replan 元数据携带（rebuild 流 / learning.ts regenerate / 评审回流）。
+          replanReason: (data.userProfile as any)?.replan?.reason || null,
           aiGenerated: true,
           aiPromptTemplate: JSON.stringify(promptTemplatePayload),
           status: 'active',
