@@ -8,13 +8,13 @@
            后端钳制截断时（曾 200，后修至 1000）真总数只在 title 里，与学习状态页
            「学习者账号 N」可见口径打架（269 vs 200）。现按 LearnerCenter 同款句式：
            截断时显「共 TOTAL 人 · 已载 M」，未截断时维持单数。 -->
-      <span class="mk-status__meta" :title="isLive ? (liveUsersTotal > users.length ? '后端共 ' + liveUsersTotal + ' 人，列表仅加载前 ' + users.length + ' 行' : '后端共 ' + liveUsersTotal + ' 人') : undefined">
-        共 {{ isLive && liveUsersTotal > users.length ? liveUsersTotal + ' 人 · 已载 ' + users.length : users.length }} 人
+      <span class="mk-status__meta" :title="isLive ? (liveUsersTotal > users.length ? '共 ' + liveUsersTotal + ' 人，当前显示前 ' + users.length + ' 人' : '共 ' + liveUsersTotal + ' 人') : undefined">
+        共 {{ isLive && liveUsersTotal > users.length ? liveUsersTotal + ' 人 · 当前显示 ' + users.length : users.length }} 人
       </span>
-      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅真实用户（不含测试/虚拟账号）；切换「含测试」后显示全量并灰标测试/虚拟行">
+      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅统计真实用户（不含虚拟 / 测试账号）；切「测试」只看虚拟学习者与测试账号">
         真实 {{ realUsers }}
       </span>
-      <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" title="全量口径：含虚拟学习者与测试/审计账号（行内带标记）">测试/虚拟 {{ users.length - realUsers }}</span>
+      <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" title="含虚拟学习者与测试账号（行内带标记）">测试/虚拟 {{ users.length - realUsers }}</span>
       <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="`管理员 ${adminCount} · 当前在线 ${activeToday}${registrationEnabled !== null ? ' · 注册' + (registrationEnabled ? '开放' : '关闭') : ''}`">
         在线 {{ activeToday }}
       </span>
@@ -29,23 +29,24 @@
         <div class="mk-filter">
           <!-- 列表卡头统一语法（2026-10-05 教学组六页同一槽位序）：
                左 = 快筛 chips → 搜索 → 清除筛选（激活时）；右 = 页级动作 → 列 → 高级筛选(仅有次级筛选时) → 计数 meta(仅说独有事实时)。
-               本页无次级筛选（口径开关在页头），「高级筛选」弹层随之退役——搜索回到行内，
-               「N / N 人」meta 维持不渲染（与分页器「共 N 条」复读，计数唯一住在 pills 上） -->
+               计数判例（2026-10-11 用户拍板全站统一）：筛选 pill 一律显命中数，唯「全部」不显
+               （总数单源=分页器「共 N 条」）——取代旧「KPI 孪生 pill 不显数」判例，忽隐忽现的计数消失。
+               本页无次级筛选（口径开关在页头），「高级筛选」弹层随之退役——搜索回到行内；
+               「N / N 人」meta 维持不渲染（与分页器复读）。 -->
           <div class="mk-pills">
-            <button
-              v-for="p in pills"
-              :key="p.id"
-              type="button"
-              class="mk-pill"
-              :class="{ 'mk-pill--active': pill === p.id }"
-              :aria-pressed="pill === p.id"
-              :title="p.title"
-              @click="pill = p.id"
-            >
-              <!-- P3（2026-10-04 全站评审）：「全部」不显计数——分页器「共 N 条」是总数单源；
-                   下方注释的「计数唯一住在 pills 上」判例指筛选命中数（管理员/在线等 pills 独有事实） -->
-              {{ p.label }}<span v-if="p.count != null && p.id !== 'all'" class="mk-pill__count">{{ p.count }}</span>
-            </button>
+            <template v-for="p in pills" :key="p.id">
+              <!-- 「已删除」是生命周期维度（独立数据源），与角色/活跃 pills 之间加分隔，
+                   视觉语法与真实语义对齐（2026-10-11 用户走查） -->
+              <span v-if="p.id === 'deleted'" class="ul-pills__sep" aria-hidden="true"></span>
+              <button
+                type="button"
+                class="mk-pill"
+                :class="{ 'mk-pill--active': pill === p.id }"
+                :aria-pressed="pill === p.id"
+                :title="p.title"
+                @click="pill = p.id"
+              >{{ p.label }}<span v-if="p.count != null && p.id !== 'all'" class="mk-pill__count">{{ p.count }}</span></button>
+            </template>
           </div>
           <MkFilterSearch v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
@@ -69,7 +70,7 @@
         tone="error"
         icon="◌"
         title="数据加载失败"
-        description="无法从后端拉取用户列表。"
+        description="无法加载用户列表，请稍后重试。"
         action-text="重试"
         @action="retryLoad"
       />
@@ -80,7 +81,7 @@
           <thead>
             <tr>
               <th v-if="isLive && showCol('check')" scope="col">
-                <input type="checkbox" aria-label="全选" :checked="allChecked" @change="toggleAll" />
+                <input type="checkbox" aria-label="全选当前页" title="全选/清空当前页的账号" :indeterminate="headerIndeterminate" :checked="allChecked" @change="toggleAll" />
               </th>
               <th
                 scope="col"
@@ -117,8 +118,9 @@
         <tbody>
           <!-- 行点击进用户详情；键盘等价：tabindex + Enter 触发（对齐 gc-row/oc-row 判例），
                行内控件已 stopPropagation，聚焦自身即可回车，不产生双份焦点停靠 -->
-          <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" tabindex="0" @click="openSubPage('user', u.id)" @keydown.enter="($event.target === $event.currentTarget) && openSubPage('user', u.id)">
-            <td v-if="isLive && showCol('check')"><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isNonRealAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
+          <!-- 口径透传：测试视角下点虚拟/测试账号，详情接口需按全量口径查询，否则 404（与行点击/详情钮同参） -->
+          <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" tabindex="0" @click="openSubPage('user', u.id, includeTest ? { includeTest: true } : undefined)" @keydown.enter="($event.target === $event.currentTarget) && openSubPage('user', u.id, includeTest ? { includeTest: true } : undefined)">
+            <td v-if="isLive && showCol('check')" @click.stop><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isNonRealAccount(u)" :aria-label="`选择 ${u.name}`" @click.stop /></td>
             <td>
               <div class="ul-user">
                 <MkCellAvatar :name="u.name" :tone="avaTone(u)" />
@@ -153,7 +155,7 @@
             <td>
               <div class="mk-actions">
                 <!-- 原型操作列：文字「详情」描边小钮（.btn--sm 形态），行级管理动作留在 ⋯ 菜单 -->
-                <button type="button" class="mk-btn mk-btn--sm" @click.stop="openSubPage('user', u.id)">详情</button>
+                <button type="button" class="mk-btn mk-btn--sm" @click.stop="openSubPage('user', u.id, includeTest ? { includeTest: true } : undefined)">详情</button>
                 <div v-if="isLive" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === u.id" @click.stop="toggleMenu(u.id)">⋯</button>
                   <div v-if="openMenu === u.id" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -202,8 +204,9 @@
 
     <!-- 批量操作条（全局 mk-batchbar） -->
     <div v-if="isLive && selected.length" class="mk-batchbar">
-      <!-- 审核 #13（2026-10-06）：表头全选勾的是整个筛选集（跨页），批量条如实标注未显示页行数，
-           否则「已选 304 人」在只看得见 15 行的屏上会被读成「全在眼前」 -->
+      <!-- 审核 #13（2026-10-06）：手动跨页勾选时批量条如实标注未显示页行数，
+           否则「已选 304 人」在只看得见 15 行的屏上会被读成「全在眼前」
+           （2026-10-11 起表头全选只管当前页，跨页集合只能来自手动逐个勾） -->
       <span>已选 {{ selected.length }} 人<template v-if="selectedOffPage">（含未显示页 {{ selectedOffPage }} 行）</template></span>
       <button type="button" class="mk-link" @click="selected = []">取消选择</button>
       <button type="button" class="mk-link" :disabled="batchBusy" @click="exportSelected">导出 CSV</button>
@@ -398,6 +401,9 @@ async function loadDeletedUsers() {
   }
 }
 
+/** 近 7 天活跃（2026-10-11 与宿主 KPI「近 7 天活跃」同窗同词；原 30 分钟窗口恒 0 无区分度） */
+const recentLogin = (t: string | null) => !!t && Date.now() - new Date(t).getTime() < 7 * 86400000
+
 const users = computed<UserRow[]>(() => {
   if (pill.value === 'deleted') return deletedUsers.value
   return liveUsers.value.map((u) => ({
@@ -405,7 +411,7 @@ const users = computed<UserRow[]>(() => {
     name: u.name,
     email: u.email,
     admin: u.isAdmin,
-    online: !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 30 * 60000,
+    online: recentLogin(u.lastLoginAt),
     isVirtualLearner: u.isVirtualLearner,
     isTestAccount: u.isTestAccount,
     createdAt: timeAgo(u.createdAt),
@@ -473,24 +479,32 @@ function retryLoad() {
 }
 /* 宿主刷新联动（用户与学习者合并宿主「刷新」按钮 → 重拉 live 用户域） */
 defineExpose({ refresh: () => { void loadLiveData() }, openCreate })
-/* 筛选 pill（角色 / 活跃 / 生命周期单源；已去掉原「全部角色」下拉，避免与「管理员」pill 语义冲突）。
-   计数取自全量 liveUsers；「已删除」为独立数据源，切过去才拉取，未加载时不显示计数。 */
+/* 筛选 pill（角色 / 活跃 / 生命周期；已去掉原「全部角色」下拉，避免与「管理员」pill 语义冲突）。
+   计数取自全量 liveUsers（统一判例：除「全部」外一律显命中数）；
+   「已删除」为独立数据源，切过去才拉取，未加载时不显示计数。 */
 const pills = computed<Array<{ id: string; label: string; count: number | string | null; title?: string }>>(() => {
   const active = liveUsers.value
-  /* 2026-10-05：管理员 / 30 分钟在线计数升宿主 People 的 KPI 面板（统一面板设计），
-     KPI 孪生 pill 不再显数（学习状态判例），退为纯筛选开关；普通用户 / 已删除
-     别处没有，保留计数。「全部」本就不显数 = 分页器「共 N 条」单源。
-     审核 #8（2026-10-06）：「普通用户」改真实域口径（排除虚拟/测试），与同面板 KPI
+  /* 审核 #8（2026-10-06）：「普通用户」用真实域口径（排除虚拟/测试），与同面板 KPI
      「真实用户」（hint 明写不含虚拟/测试）保持同一口径。
      走查 F1-1（2026-10-07）：该口径原先只靠命名约定正则，漏掉卡库/预置库的虚拟学习者
      （vl-*@cards.local / builtin_*@preset.local，含测试档实测 10 行）→ pill 比同屏 KPI 多 10、
      这些行还能被筛出来勾进批量删除。改走 learner-profile.ts 单点（payload 标记优先）。 */
   const realActive = active.filter(isRealAccount)
+  /* 三枚角色/活跃 pill 一律真实域，且**计数与筛选同谓词**（2026-10-11 走查实测）：
+     含测试档下「管理员」badge 0 而点开出现 1 行测试管理员、「近 7 天活跃」badge 0 而点开
+     出 3 行——同一控件两套分母（计数取 realActive、筛选取全量行）。现两者都走真实域，
+     title 明写口径：含测试档下列表本身含虚拟/测试行，但角色/活跃 pill 不把它们算作「用户」。 */
+  const pillDomainTitle = '仅统计真实账号（不含虚拟学习者 / 测试账号）'
   return [
     { id: 'all', label: '全部', count: active.length },
-    { id: 'admin', label: '管理员', count: null },
-    { id: 'user', label: '普通用户', count: realActive.filter((u) => !u.isAdmin).length },
-    { id: 'online', label: '30 分钟在线', count: null },
+    { id: 'admin', label: '管理员', count: realActive.filter((u) => u.isAdmin).length, title: pillDomainTitle },
+    { id: 'user', label: '普通用户', count: realActive.filter((u) => !u.isAdmin).length, title: pillDomainTitle },
+    {
+      id: 'online',
+      label: '近 7 天活跃',
+      count: realActive.filter((u) => recentLogin(u.lastLoginAt)).length,
+      title: `近 7 天内有登录；${pillDomainTitle}`
+    },
     /* 审核 #14（2026-10-06）：已删除列表取自单次 limit 窗口，超过窗口时计数会小于真实值——
        到顶显示「50+」并在 title 标注截断，界面不再把窗口当全量。 */
     {
@@ -499,7 +513,7 @@ const pills = computed<Array<{ id: string; label: string; count: number | string
       count: deletedUsers.value.length
         ? (deletedUsers.value.length >= DELETED_WINDOW ? `${DELETED_WINDOW}+` : deletedUsers.value.length)
         : null,
-      title: `最多加载最近 ${DELETED_WINDOW} 条已删除账号（接口窗口上限）；计数到顶显示「${DELETED_WINDOW}+」`
+      title: `最多保留最近 ${DELETED_WINDOW} 条已删除账号记录；超过时计数显示「${DELETED_WINDOW}+」`
     }
   ]
 })
@@ -622,9 +636,12 @@ async function saveUser() {
 /* 批量删除（测试/虚拟账号不参与勾选与提交，参照行菜单过滤逻辑） */
 const selected = ref<string[]>([])
 const batchBusy = ref(false)
-const selectable = computed(() => filtered.value.filter((u) => !isNonRealAccount(u) && !u.deleted))
-const allChecked = computed(() => selectable.value.length > 0 && selected.value.length === selectable.value.length)
-/** 审核 #13（2026-10-06）：已选中但不在当前页的条数——表头全选勾的是整个筛选集（跨页），
+/* 表头全选 = 当前页全选（2026-10-11 用户拍板：跨页全量勾选对批量删除这类动作太易误伤）。
+   再点一次只清当前页；跨页仍可手动逐个勾（selected 保留），批量条据此标注未显示页行数。 */
+const pageSelectable = computed(() => paged.value.filter((u) => !isNonRealAccount(u) && !u.deleted))
+const allChecked = computed(() => pageSelectable.value.length > 0 && pageSelectable.value.every((u) => selected.value.includes(u.id)))
+const headerIndeterminate = computed(() => !allChecked.value && pageSelectable.value.some((u) => selected.value.includes(u.id)))
+/** 审核 #13（2026-10-06）：已选中但不在当前页的条数——手动跨页勾选时，
     批量条据此如实标注「含未显示页 N 行」 */
 const selectedOffPage = computed(() => {
   const onPage = new Set(paged.value.map((u) => u.id))
@@ -632,7 +649,14 @@ const selectedOffPage = computed(() => {
 })
 
 function toggleAll() {
-  selected.value = allChecked.value ? [] : selectable.value.map((u) => u.id)
+  const pageIds = pageSelectable.value.map((u) => u.id)
+  const allOn = pageIds.length > 0 && pageIds.every((id) => selected.value.includes(id))
+  if (allOn) {
+    const drop = new Set(pageIds)
+    selected.value = selected.value.filter((id) => !drop.has(id))
+  } else {
+    selected.value = [...new Set([...selected.value, ...pageIds])]
+  }
 }
 
 async function batchDelete() {
@@ -791,12 +815,14 @@ const { toggle: toggleUserSort, sortState: userSortState, sortRows: sortUserRows
 const filtered = computed(() =>
   sortUserRows(users.value.filter((u) => {
     if (pill.value === 'deleted' && !u.deleted) return false
-    if (pill.value === 'admin' && !u.admin) return false
+    /* 角色 / 活跃三枚 pill 与计数同一真实域口径（2026-10-11 走查：计数取 realActive 而筛选
+       只看该轴，含测试档下 badge 与结果打架）。 */
+    if (pill.value === 'admin' && (!u.admin || !isRealAccount(u))) return false
     // 审核 #8（2026-10-06）+ 走查 F1-1（2026-10-07）：与 pill 计数同一真实域口径——「普通用户」
     // 不含虚拟/测试账号；判据走 learner-profile.ts 单点（payload 标记 ∪ 命名约定），
     // 否则含测试档下 vl-*/builtin_* 形态的虚拟学习者会被筛出来（badge=虚拟却可勾选）
     if (pill.value === 'user' && (u.admin || !isRealAccount(u))) return false
-    if (pill.value === 'online' && !u.online) return false
+    if (pill.value === 'online' && (!u.online || !isRealAccount(u))) return false
     const q = keyword.value.trim().toLowerCase()
     if (q && !`${u.name} ${u.email} ${u.id}`.toLowerCase().includes(q)) return false
     return true
@@ -850,6 +876,9 @@ function clearFilters() {
 <style scoped>
 /* 嵌入模式（宿主 People 页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
 .u-embedded { flex: 1; min-height: 0; overflow: hidden; }
+/* pill 组维度分隔（角色/活跃 | 生命周期「已删除」）：细竖线，弱于 pill 边界。
+   类名走页面前缀 ul-（design:check 规则 1：mk- 前缀属全局原语，页面 scoped 内禁定义）。 */
+.ul-pills__sep { width: 1px; align-self: stretch; margin: 7px 6px 7px 2px; background: color-mix(in srgb, currentColor 18%, transparent); }
 /* 路径/会话数字列（原型列语言：mono 文本） */
 .ul-ps { font-variant-numeric: tabular-nums; }
 .ul-ps b { font-weight: 600; }

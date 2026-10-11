@@ -227,6 +227,18 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
+  it('未知档卡头用「待确认」并与汇总角标同词（2026-10-11 走查：原「状态确认中」谎称进行中）', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot({ overall: 'unknown' }) } });
+    const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '调用与健康');
+    expect(wrapper.text()).not.toContain('状态确认中');
+    // 卡头徽章（整值即「待确认」；汇总角标是「N 能力 · M 待确认」复合串，不匹配整值）
+    const badge = wrapper.findAll('.mk-badge').find((b) => b.text() === '待确认');
+    expect(badge, '卡头应渲染「待确认」档').toBeTruthy();
+    expect(badge!.attributes('title')).toContain('能力探针关闭或尚未探测');
+    wrapper.unmount();
+  });
+
   it('页面进入自动探测：探针开启且快照 stale → 自动补一次探测（含时间语义文案）', async () => {
     getProbeSettingsMock.mockResolvedValue({ data: { data: { enabled: true, intervalMs: 120000, minIntervalMs: 10000, maxIntervalMs: 86400000 } } });
     getCapabilitiesMock.mockResolvedValue({
@@ -240,14 +252,14 @@ describe('ApiConfig P1 修复批', () => {
     expect(getCapabilitiesMock).toHaveBeenCalled();
     expect(probeCapabilitiesMock).toHaveBeenCalledTimes(1);
     // stale 语义：上次探测时间 + 已过期提示 + 探测中
-    expect(wrapper.text()).toContain('快照已过期');
+    expect(wrapper.text()).toContain('结果已过期');
     expect(wrapper.text()).toContain('探测中…');
     // 探测完成 → 快照刷新、角标更新、过期提示消失
     resolveProbe({ data: { data: makeSnapshot() } });
     await flushPromises();
     await nextTick();
     expect(wrapper.text()).toContain('5 能力 · 1 异常');
-    expect(wrapper.text()).not.toContain('快照已过期');
+    expect(wrapper.text()).not.toContain('结果已过期');
     wrapper.unmount();
   });
 
@@ -260,8 +272,8 @@ describe('ApiConfig P1 修复批', () => {
     await gotoTab(wrapper, '调用与健康');
     expect(getCapabilitiesMock).toHaveBeenCalled();
     expect(probeCapabilitiesMock).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('快照已过期');
-    expect(wrapper.text()).toContain('关闭时快照不自动刷新');
+    expect(wrapper.text()).toContain('结果已过期');
+    expect(wrapper.text()).toContain('关闭后不自动探测');
     wrapper.unmount();
   });
 
@@ -361,7 +373,7 @@ describe('ApiConfig P1 修复批', () => {
     expect(kpiTexts).toHaveLength(2);
     expect(kpiTexts[0]).toContain('注册模型');
     expect(kpiTexts[0]).toContain('2');
-    expect(kpiTexts[0]).toContain('能力注册表只读视图');
+    expect(kpiTexts[0]).toContain('来自能力注册表');
     expect(kpiTexts[1]).toContain('漂移提示');
     expect(kpiTexts[1]).toContain('1');
     // 漂移 > 0 → warn 档；总览仍无保存按钮（只读语义不变）

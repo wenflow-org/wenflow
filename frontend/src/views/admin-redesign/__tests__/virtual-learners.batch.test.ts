@@ -180,7 +180,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(countOf('曾失败')).toBe('1');
     expect(w.text()).not.toContain('需关注');
     // 截断提示迁卡头 meta（与行数同格）
-    expect(w.text()).toContain('已截断 · 共 80 人');
+    expect(w.text()).toContain('共 80 人 · 当前显示前');
     expect(w.text()).toContain('回收卡死（2）');
   });
 
@@ -210,6 +210,36 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(kpiNum('完成率')).toBe('…');
     expect(kpiNum('系统失败率')).toBe('…');
     expect(w.text()).toContain('统计加载中');
+  });
+
+  it('完成率非整数比取整（2026-10-11 走查：原样插值渲染出 3.8461538461538463%）', async () => {
+    liveVirtuals.value = [makeVirtual(1)];
+    liveVirtualRunStats.value = {
+      ...liveVirtualRunStats.value,
+      totalSessions: 26,
+      completed: 1,
+      failed: 5,
+      abandoned: 13,
+      systemFailureRate: 19,
+      failureRate: 69
+    };
+    const w = await mountPage();
+    const kpiNum = (label: string) =>
+      w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
+    // 1/26 = 3.846… → 4%；系统失败率 / 合计同为整数百分号
+    expect(kpiNum('完成率')).toBe('4%');
+    expect(kpiNum('系统失败率')).toBe('19%');
+    expect(w.text()).toContain('合计 69%');
+    expect(w.text()).not.toMatch(/3\.8461538/);
+  });
+
+  it('完成率 0<rate<1 仍显「<1%」（取整不得把 0.44% 压成 0% 假零）', async () => {
+    liveVirtuals.value = [makeVirtual(1)];
+    liveVirtualRunStats.value = { ...liveVirtualRunStats.value, totalSessions: 685, completed: 3 };
+    const w = await mountPage();
+    const kpiNum = (label: string) =>
+      w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)?.find('.mk-kpi__num').text();
+    expect(kpiNum('完成率')).toBe('<1%');
   });
 
   it('P2 并发「已满」：琥珀（资源状态非故障），不再红档', async () => {
@@ -280,7 +310,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).toContain('合计 40%');
     expect(w.text()).toContain('已完成 6 / 全部会话 10');
     // 表格分页行必须声明自己数的是学习者，与上方会话口径区分
-    expect(w.text()).toContain('行数 = 虚拟学习者');
+    expect(w.text()).toContain('行数为虚拟学习者数');
   });
 
   it('无会话数据时完成率/系统失败率显示 0%（共享 KPI 卡常驻）', async () => {

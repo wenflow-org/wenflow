@@ -30,7 +30,7 @@
     </section>
     <!-- 「只读」不再独占一格：并进注册模型卡 hint（2026-10-04 状态条退役，同一句语义不占整格） -->
     <section v-else-if="tab === 'overview'" class="mk-kpi-grid">
-      <MkKpi label="注册模型" :value="registryCount.models" hint="能力注册表只读视图" title="后端能力注册表（唯一写源）中的模型数" />
+      <MkKpi label="注册模型" :value="registryCount.models" hint="来自能力注册表" title="能力注册表中的模型数" />
       <MkKpi
         label="漂移提示"
         :value="registryCount.warnings"
@@ -68,7 +68,7 @@
     <div class="ac-tab-body ac-conn-body" id="ac-panel-connection" role="tabpanel" aria-labelledby="ac-tab-connection">
       <!-- 接入域（live 层）读取失败：表单全空不得伪装成「未配置」，显式失败 + 重试（置顶一次，管三张卡） -->
       <div v-if="apiConfigFailed" class="mk-alert mk-alert--row" role="alert">
-        <span class="mk-alert__msg">配置读取失败，表单为空是读取失败而非未配置</span>
+        <span class="mk-alert__msg">配置读取失败：下方为空不代表未配置，请重试</span>
         <button type="button" class="mk-alert__btn" @click="retryApiConfigLoad">重试</button>
       </div>
       <section class="mk-card">
@@ -436,7 +436,7 @@
       <section v-if="isLive && (reliability || probe.loaded || configLoadFailed)" class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">AI 调用与健康</h3>
-        <span class="mk-badge" :class="healthBadgeCls">{{ healthLabel }}</span>
+        <span class="mk-badge" :class="healthBadgeCls" :title="healthLabelTip || undefined">{{ healthLabel }}</span>
       </div>
 
       <div v-if="configLoadFailed && !reliability && !probe.loaded" class="mk-alert mk-alert--row ac-config-error" role="alert">
@@ -457,7 +457,7 @@
             />
             <span class="mk-field__label" style="margin:0">能力探针</span>
           </label>
-          <em class="ac-probe__desc">{{ probe.enabled ? `每 ${probe.intervalSec}s 自动探测 5 项核心能力，保持健康快照不过期` : '关闭时快照不自动刷新，可手动「立即探测」' }}</em>
+          <em class="ac-probe__desc">{{ probe.enabled ? `每 ${probe.intervalSec}s 自动探测 5 项核心能力并更新结果` : '关闭后不自动探测，可手动「立即探测」' }}</em>
         </div>
         <div class="ac-probe__ctrl">
           <label v-if="probe.enabled" class="mk-field ac-probe__interval">
@@ -560,7 +560,7 @@
             能力健康
             <span v-if="healthSummaryText" class="mk-badge" :class="healthSummaryBadge">{{ healthSummaryText }}</span>
             <span class="ac-sec__sub">
-              <span v-if="health?.stale" class="ac-health__stale">上次探测 {{ timeAgo(health.checkedAt) }} · 快照已过期</span>
+              <span v-if="health?.stale" class="ac-health__stale">上次探测 {{ timeAgo(health.checkedAt) }} · 结果已过期</span>
               <span v-else-if="health?.checkedAt" class="ac-health__stale">最近探测 {{ timeAgo(health.checkedAt) }}</span>
               <span v-else-if="health" class="ac-health__stale">尚未探测</span>
             </span>
@@ -582,13 +582,13 @@
             </div>
           </div>
           <div v-else-if="healthFailed" class="ac-rel__note ac-rel__error">
-            健康快照不可用
+            探测结果不可用
             <button type="button" class="mk-link" :disabled="healthProbing" @click="probeHealth">{{ healthProbing ? '探测中…' : '重试' }}</button>
           </div>
-          <MkLoading v-else inline text="健康快照加载中…" />
+          <MkLoading v-else inline text="探测结果加载中…" />
           <div class="ac-health__foot">
-            <span v-if="health?.stale" class="ac-health__stale">快照已过期 · 使用上方「立即探测」或开启能力探针自动刷新</span>
-            <span v-else-if="health?.checkedAt" class="ac-health__stale">快照有效 · 最近 {{ timeAgo(health.checkedAt) }} 更新</span>
+            <span v-if="health?.stale" class="ac-health__stale">结果已过期 · 可点上方「立即探测」或开启自动刷新</span>
+            <span v-else-if="health?.checkedAt" class="ac-health__stale">探测正常 · 更新于 {{ timeAgo(health.checkedAt) }}</span>
           </div>
         </div>
         </div><!-- /ac-cols -->
@@ -768,11 +768,19 @@ const healthSummaryBadge = computed(() => {
    同页时间源统一纪律保留：badge 与能力行「最近探测」同源（健康快照 checkedAt），
    DB lastCheckedAt 仅在快照不可用时兜底——消除「8 分钟前 vs 9 小时前」双写分叉 */
 
+/* 未知档统一用「待确认」（与同页汇总角标 healthSummaryText 同词，2026-10-11 走查：
+   原卡头「状态确认中」与角标「待确认」同屏两词，且「确认中」谎称进行中——探针关闭时
+   不会自动探测，该档会一直挂着） */
 const healthLabel = computed(
   () =>
-    ({ operational: '全部正常', degraded: '部分降级', unavailable: '存在不可用', unknown: '状态确认中' })[
+    ({ operational: '全部正常', degraded: '部分降级', unavailable: '存在不可用', unknown: '待确认' })[
       health.value?.overall || 'unknown'
     ]
+)
+const healthLabelTip = computed(() =>
+  !health.value?.overall || health.value.overall === 'unknown'
+    ? '未知档：能力探针关闭或尚未探测，可点「立即探测」获取各能力状态'
+    : ''
 )
 const healthBadgeCls = computed(
   () =>

@@ -97,6 +97,19 @@ describe('Addons 外挂能力列（P1：51px 截断修复）', () => {
     }
     wrapper.unmount();
   });
+
+  it('模型 kv 带「模型」标签：未配置模型时显「模型 继承全局」（2026-10-11 走查：原无标签，与类型徽标连读成「MCP 继承全局」）', async () => {
+    configsMock.mockResolvedValue({
+      data: { data: { configs: [{ skillId: 'mcp-tool', displayName: 'MCP 工具调用' }] } }
+    });
+    const wrapper = await mountLive();
+    const kvs = wrapper.findAll('tbody .ac-cap-card__kv').map((s) => s.text());
+    expect(kvs).toContain('模型 继承全局');
+    expect(kvs).not.toContain('继承全局');
+    expect(kvs.some((t) => t.startsWith('超时'))).toBe(true);
+    expect(kvs.some((t) => t.startsWith('最近'))).toBe(true);
+    wrapper.unmount();
+  });
 });
 
 describe('Addons MCP 服务（transport 支持）', () => {

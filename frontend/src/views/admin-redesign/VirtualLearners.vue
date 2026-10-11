@@ -16,6 +16,7 @@
         >
           {{ reclaimRef?.state.busy ? '回收中…' : `回收卡死（${partition.stale}）` }}
         </button>
+        <button type="button" class="mk-btn mk-btn--sm" title="清理旧账号：按建号时间批量删除旧虚拟学习者（进行中与保留名单自动豁免，先预览再执行）" @click="cleanupRef?.open()">清理旧账号</button>
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" title="新建虚拟学习者：填写名称/目标/故事，生成后可运行实验会话" @click="openCreate">新建</button>
         <button type="button" class="mk-btn mk-btn--sm" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="openBatchCreate">批量新建</button>
       </template>
@@ -35,7 +36,7 @@
           :value="statsKpiValue(statsKpiPct(completionPct))"
           :tone="statsState === 'error' ? 'bad' : ''"
           :hint="statsKpiHint(completionHint)"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '活动会话 = 当前进行中 + 创建中会话数（含卡死），全库口径；会话均长 = 终态会话「创建→结束」的平均墙钟时长（非单次调用延迟，2026-10-05 口径纠偏：原挂「今日调用」卡下标「平均耗时」）'"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '完成率按会话统计；「会话均长」为会话从创建到结束的平均时长，非单次调用耗时；活动会话 = 进行中 + 创建中的会话数'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         >
@@ -50,7 +51,7 @@
           :value="statsKpiValue(statsKpiPct(runStats.systemFailureRate))"
           :tone="statsState === 'error' ? 'bad' : (runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''"
           :hint="statsKpiHint(`系统失败 ${runStats.failed} / 全部会话 ${runStats.totalSessions} · 人为终止 ${runStats.abandoned} 另计（合计 ${statsKpiPct(runStats.failureRate)}）`)"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '本值 = 系统失败率（failed / 全部会话），与总览页「系统失败率」同口径；人为终止（abandoned：管理员止停/批量终止/僵尸回收/学习者放弃）另计，两者合计见 hint（2026-08-21 口径拆分）'"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '按全部会话计算的失败率，与总览页「系统失败率」一致；管理员止停等人为终止另行统计，合计见下方说明'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />
@@ -66,8 +67,8 @@
         <MkKpi
           label="今日调用"
           :value="statsKpiValue(String(runStats.todayCalls ?? 0))"
-          :hint="statsKpiHint('虚拟/测试账号口径')"
-          title="今日虚拟/测试账号出站调用数（仿真看板口径；总览页「今日调用」为真实用户口径，两者相加为全平台）。2026-10-05 口径纠偏：原 hint「平均耗时」实为终态会话平均墙钟时长（最长以天计），已迁完成率卡改标「会话均长」"
+          :hint="statsKpiHint('仅统计虚拟 / 测试账号')"
+          title="今日虚拟 / 测试账号的调用次数（总览页「今日调用」统计真实用户）"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />
@@ -171,9 +172,10 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
-          <!-- 生命周期筛选（原页头状态条的 meta-link 迁入，2026-10-04）：这三个计数在本页
-               仅此一处；点选筛选 / 再点取消，胶囊形态对齐全站工具条 chips（同 TeachingSessions） -->
+          <!-- 生命周期筛选（原页头状态条的 meta-link 迁入，2026-10-04）：点选筛选 / 再点取消，
+               胶囊形态对齐全站工具条 chips（同 TeachingSessions）。计数判例（2026-10-11 全站统一）：
+               筛选 pill 一律显命中数，唯「全部」不显（总数单源=分页器「共 N 条」）；
+               搜索槽位归一：pills 之后（2026-10-11 卡头走查） -->
           <button
             v-for="o in statePillOptions"
             :key="o.key"
@@ -183,7 +185,8 @@
             :aria-pressed="stateFilter === o.key"
             :title="o.hint ? `${o.label}（${o.hint}）· 点击筛选` : `点击筛选「${o.label}」虚拟学习者`"
             @click="stateFilter = stateFilter === o.key ? '' : o.key"
-          >{{ o.label }}<span class="mk-pill__count">{{ o.count }}</span></button>
+          >{{ o.label }}<span v-if="o.key !== ''" class="mk-pill__count">{{ o.count }}</span></button>
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
@@ -192,8 +195,8 @@
           <!-- 2026-10-05 卡头统一：补「列」按钮（此前全站唯一没有列控制的列表页）；
                窄屏档（isNarrow）仍按视口折叠，列勾选在桌面档生效 -->
           <MkCols :col-defs="vlColDefs" storage-key="wf_vl_hidden_cols_v1" v-model:hidden="hiddenCols" />
-          <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-card__meta vl-truncated" :title="`后端共 ${liveVirtualsTotal} 人，列表仅加载前 ${samples.length} 行`">
-            已截断 · 共 {{ liveVirtualsTotal }} 人
+          <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-card__meta vl-truncated" :title="`共 ${liveVirtualsTotal} 人，当前显示前 ${samples.length} 人`">
+            共 {{ liveVirtualsTotal }} 人 · 当前显示前 {{ samples.length }} 人
           </span>
         </div>
       </div>
@@ -208,7 +211,7 @@
         <thead>
           <tr>
             <th v-if="isLive && !isNarrow" scope="col">
-              <input type="checkbox" aria-label="全选（含跨页）" title="全选/清空当前筛选下的全部虚拟学习者（含跨页，不只当前页）" :checked="allChecked" @change="toggleAll" />
+              <input type="checkbox" aria-label="全选当前页" title="全选/清空当前页的虚拟学习者" :indeterminate="headerIndeterminate" :checked="allChecked" @change="toggleAll" />
             </th>
             <th
               scope="col"
@@ -382,7 +385,7 @@
         v-model:pageSize="pageSize"
         :total="filtered.length"
         :showTotal="true"
-        note="行数 = 虚拟学习者；上方「全部会话」为会话口径，两者不同源"
+        note="行数为虚拟学习者数；「全部会话」为会话数，两者含义不同"
       />
     </div>
 
@@ -394,8 +397,9 @@
       @reclaim="onBatchReclaim"
     />
 
-    <!-- 一键回收 / 新建 / 启动 / 批量新建 / 单步测试：拆分为独立子组件（各自 Teleport 到 body）。 -->
+    <!-- 一键回收 / 清理旧账号 / 新建 / 启动 / 批量新建 / 单步测试：拆分为独立子组件（各自 Teleport 到 body）。 -->
     <VirtualLearnerReclaim ref="reclaimRef" @done="onReclaimDone" />
+    <VirtualLearnerCleanup ref="cleanupRef" :samples="samples" @done="onReclaimDone" />
     <VirtualLearnerCreate ref="createRef" />
     <VirtualLearnerLaunch ref="launchRef" />
     <VirtualLearnerBatchCreate ref="batchCreateRef" />
@@ -428,6 +432,7 @@ import RunStageBar from './RunStageBar.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import VirtualLearnerRunningBar from './VirtualLearnerRunningBar.vue'
 import VirtualLearnerReclaim from './VirtualLearnerReclaim.vue'
+import VirtualLearnerCleanup from './VirtualLearnerCleanup.vue'
 import VirtualLearnerCreate from './VirtualLearnerCreate.vue'
 import VirtualLearnerLaunch from './VirtualLearnerLaunch.vue'
 import VirtualLearnerBatchCreate from './VirtualLearnerBatchCreate.vue'
@@ -453,9 +458,13 @@ const samples = computed<Sample[]>(() =>
     failedCount: Number(v.failedCount || 0),
     stalledCount: Number(v.stalledCount || 0),
     runningSessionIds: v.runningSessionIds,
+    /* G2（2026-10-10）：已暂停会话 id 必须随行带出——否则 openRunningSession 的
+       pausedSessionIds 回退恒 undefined，已暂停行的「进行中」徽章点击静默无响应 */
+    pausedSessionIds: v.pausedSessionIds,
     currentStage: v.currentStage || null,
     createdAt: String(v.createdAt || ''),
-    created: timeAgo(v.createdAt)
+    created: timeAgo(v.createdAt),
+    tags: Array.isArray(v.tags) ? v.tags : []
   }))
 )
 
@@ -474,9 +483,9 @@ const stateFilterOptions = computed(() => {
     { key: 'running', label: '进行中', count: n(count((s) => s.runningCount > 0)), hint: '' },
     // P1-3（2026-10-04 全站评审）：计数谓词与 filtered 的筛选谓词（runningCount===0 && pausedCount>0）同式，
     // 否则 pill「已暂停 2」点进去只筛出 1 条（同时在跑的学习者被计入却被筛掉）
-    { key: 'paused', label: '已暂停', count: n(count((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0)), hint: '口径：当前无进行中会话、有暂停会话的学习者' },
+    { key: 'paused', label: '已暂停', count: n(count((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0)), hint: '当前无进行中会话、有暂停会话的学习者' },
     // P2（2026-10-02 人类可读性）：原名「需关注」读作当前异常，实为累计曾失败/被终止——正名 + 口径入 title
-    { key: 'failed', label: '曾失败', count: n(count((s) => s.failedCount > 0)), hint: '口径：累计有失败/终止会话的虚拟学习者，非当前异常' },
+    { key: 'failed', label: '曾失败', count: n(count((s) => s.failedCount > 0)), hint: '累计有失败/终止会话的虚拟学习者，非当前异常' },
   ]
 })
 /** live 虚拟人域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
@@ -521,15 +530,17 @@ function clearFilters() {
 
 /* 长列表分批渲染：每批 15 行 */
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
-   数据全量在客户端（live 拉取），筛选后按页切片；
-   筛选/数据变化自动回第 1 页（watch filtered） */
+   数据全量在客户端（live 拉取），筛选后按页切片。
+   回第 1 页只监听筛选输入（G9，2026-10-10，对齐 TeachingSessions/OpsContent 判例）：
+   此前监听 filtered 结果——10s 轮询回填数据/删除行也会把页码拽回第 1 页，
+   用户正看第 3 页时被无故弹回；越界收敛由 Pagination 自带 watcher 兜底 */
 const page = ref(1)
 const pageSize = ref(15)
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch(filtered, () => {
+watch([keyword, stateFilter], () => {
   page.value = 1
 })
 
@@ -537,6 +548,7 @@ watch(filtered, () => {
 const createRef = ref<InstanceType<typeof VirtualLearnerCreate> | null>(null)
 const launchRef = ref<InstanceType<typeof VirtualLearnerLaunch> | null>(null)
 const reclaimRef = ref<InstanceType<typeof VirtualLearnerReclaim> | null>(null)
+const cleanupRef = ref<InstanceType<typeof VirtualLearnerCleanup> | null>(null)
 const batchCreateRef = ref<InstanceType<typeof VirtualLearnerBatchCreate> | null>(null)
 const promptRef = ref<InstanceType<typeof VirtualLearnerPromptTest> | null>(null)
 
@@ -757,10 +769,12 @@ function statsKpiValue(ready: string): string {
   return ready
 }
 /** P3（2026-10-04 全站评审）：0<rate<1 显「<1%」——3/685≈0.44% 整数舍入成「0%」会被读成
-    「没有任何完成」（假零）；真 0（无分母/无完成）照常显 0% */
+    「没有任何完成」（假零）；真 0（无分母/无完成）照常显 0%。
+    2026-10-11 走查：一般值原样插值，前端现算的完成率（completed/totalSessions 不是整数比）
+    渲染成「3.8461538461538463%」——统一取整，与后端整数百分号 / 全站 Math.round 判例一致。 */
 function statsKpiPct(rate: number | null | undefined): string {
   const v = rate ?? 0
-  return v > 0 && v < 1 ? '<1%' : `${v}%`
+  return v > 0 && v < 1 ? '<1%' : `${Math.round(v)}%`
 }
 /** 三态 hint：error 档给出动作出口 */
 function statsKpiHint(ready: string): string {
@@ -845,8 +859,11 @@ const concurrencyBarPct = computed(() => {
 
 /* ===== A1 批量操作：复选框（批量条拆分为 VirtualLearnerBatchBar 子组件） ===== */
 const selected = ref<string[]>([])
-const selectable = computed(() => filtered.value)
-const allChecked = computed(() => selectable.value.length > 0 && selected.value.length === selectable.value.length)
+/* 表头全选 = 当前页全选（2026-10-11 用户拍板，与用户页同规则：跨页全量勾选对批量
+   终止/删除太易误伤）。再点一次只清当前页；跨页仍可手动逐个勾（selected 保留）。 */
+const pageSelectable = computed(() => paged.value)
+const allChecked = computed(() => pageSelectable.value.length > 0 && pageSelectable.value.every((s) => selected.value.includes(s.id)))
+const headerIndeterminate = computed(() => !allChecked.value && pageSelectable.value.some((s) => selected.value.includes(s.id)))
 
 /* 选中集合随筛选与数据刷新收敛（审核 #57）：先勾选再筛掉后，批量条不得继续按
    视口外的旧集合执行批量终止/删除/自动驾驶——筛选条件一变即清空选中。 */
@@ -862,7 +879,14 @@ watch(samples, (list) => {
 })
 
 function toggleAll() {
-  selected.value = allChecked.value ? [] : selectable.value.map((s) => s.id)
+  const pageIds = pageSelectable.value.map((s) => s.id)
+  const allOn = pageIds.length > 0 && pageIds.every((id) => selected.value.includes(id))
+  if (allOn) {
+    const drop = new Set(pageIds)
+    selected.value = selected.value.filter((id) => !drop.has(id))
+  } else {
+    selected.value = [...new Set([...selected.value, ...pageIds])]
+  }
 }
 
 /** 批量条子组件请求清理卡死：打开回收弹窗（dryRun 清单） */
@@ -872,10 +896,16 @@ function onBatchReclaim(ids: string[]) {
 
 /** 「进行中」列点击直达会话座舱（画像页入口保持：行点击/画像按钮）。
  *  仅暂停行（无进行中 id）回退到已暂停会话 id：徽章 title 承诺「点击进入会话座舱」，
- *  否则该行点击无响应，等于一个说了不做的交互承诺 */
+ *  否则该行点击无响应，等于一个说了不做的交互承诺。
+ *  G2（2026-10-10）兜底：running/paused 会话 id 都拿不到时（会话样本窗口外的旧行等），
+ *  退而进画像页——保证点击必有落点，不静默 return。 */
 function openRunningSession(s: Sample) {
   const id = s.runningSessionIds[0] || s.pausedSessionIds?.[0]
-  if (id) openSubPage('session', id)
+  if (id) {
+    openSubPage('session', id)
+    return
+  }
+  openSubPage('virtual', s.id)
 }
 </script>
 

@@ -31,7 +31,9 @@
                 </div>
                 <div class="ac-cap-card__meta">
                   <span class="mk-badge" :class="r.id === 'mcp-tool' ? 'mk-badge--info' : 'mk-badge--muted'">{{ r.id === 'mcp-tool' ? 'MCP' : '能力 Skill' }}</span>
-                  <span v-if="r.ready" class="mono ac-cap-card__kv" :title="r.model">{{ r.model }}</span>
+                  <!-- 模型 kv 与「超时 / 最近」同带标签：未配置模型时值为「继承全局」，
+                       无标签会与前面的类型徽标连读成「MCP 继承全局」（2026-10-11 走查） -->
+                  <span v-if="r.ready" class="mono ac-cap-card__kv" :title="r.model">模型 {{ r.model }}</span>
                   <span v-if="r.ready" class="ac-cap-card__kv">超时 {{ r.timeout }}</span>
                   <span v-if="r.ready" class="ac-cap-card__kv">最近 {{ r.last }}</span>
                 </div>

@@ -162,12 +162,12 @@ describe('Users 客户端分页（mk-pagination）', () => {
 
   it('筛选强化：pill 计数 + 搜索清空 × + 过滤态「清除筛选」', async () => {
     const w = await mountUsers();
-    // pill 计数（2026-10-05）：「全部」不显计数（总数单源=分页器）；管理员 / 30 分钟在线
-    // 计数升宿主 People KPI 面板后去计数（KPI 孪生 pill 退纯开关）；普通用户 36 别处没有，保留
+    // pill 计数（2026-10-11 全站统一判例）：筛选 pill 一律显命中数，唯「全部」不显（总数单源=分页器）；
+    // 「30 分钟在线」已随宿主 KPI 换窗为「近 7 天活跃」
     const pills = w.findAll('.mk-pill');
     expect(pills.find((p) => p.text().includes('全部'))?.find('.mk-pill__count').exists()).toBe(false);
-    expect(pills.find((p) => p.text().includes('管理员'))?.find('.mk-pill__count').exists()).toBe(false);
-    expect(pills.find((p) => p.text().includes('30 分钟在线'))?.find('.mk-pill__count').exists()).toBe(false);
+    expect(pills.find((p) => p.text().includes('管理员'))?.find('.mk-pill__count').exists()).toBe(true);
+    expect(pills.find((p) => p.text().includes('近 7 天活跃'))?.find('.mk-pill__count').exists()).toBe(true);
     // 计数徽章在用户数据到达后才渲染（CI 时序下 pill 先行、count 后至 → 空 DOMWrapper 竞态）——waitFor 轮询
     const normalPill = pills.find((p) => p.text().includes('普通用户'));
     await vi.waitFor(() => expect(normalPill?.find('.mk-pill__count').text()).toBe('36'));
@@ -185,5 +185,70 @@ describe('Users 客户端分页（mk-pagination）', () => {
     await nextTick();
     expect((input.element as HTMLInputElement).value).toBe('');
     expect(w.find('.mk-search__clear').exists()).toBe(false);
+  });
+});
+
+describe('Users 角色 / 活跃 pill：计数与筛选同谓词（2026-10-11 走查）', () => {
+  /* 走查实测缺陷：计数取真实域（realActive）而筛选取全量行——含测试档下
+     「管理员」badge 0 却点出 1 行测试管理员、「近 7 天活跃」badge 0 却点出 3 行。
+     本组用例把两套分母钉在同一谓词上：badge 数字必须等于点开后的行数。 */
+  const recent = () => new Date(Date.now() - 86400000).toISOString();
+  const old = '2026-01-01T10:00:00.000Z';
+
+  function mixedRows() {
+    return [
+      { ...makeUser(1), isAdmin: true, lastLoginAt: recent() }, // 真实 · 管理员 · 7 天内登录
+      { ...makeUser(2), isAdmin: false, lastLoginAt: old }, // 真实 · 普通用户 · 久未登录
+      { ...makeUser(3), isTestAccount: true, isAdmin: true, lastLoginAt: recent() }, // 测试管理员 · 近 7 天
+      { ...makeUser(4), isVirtualLearner: true, isAdmin: false, lastLoginAt: recent() } // 虚拟学习者 · 近 7 天
+    ];
+  }
+
+  function pillOf(w: ReturnType<typeof mount>, label: string) {
+    const p = w.findAll('.mk-pill').find((x) => x.text().includes(label));
+    if (!p) throw new Error(`pill not found: ${label}`);
+    return p;
+  }
+
+  async function badgeOf(w: ReturnType<typeof mount>, label: string) {
+    const p = pillOf(w, label);
+    await vi.waitFor(() => expect(p.find('.mk-pill__count').exists()).toBe(true));
+    return p.find('.mk-pill__count').text();
+  }
+
+  beforeEach(() => {
+    liveUsers.value = mixedRows();
+  });
+
+  it('管理员：badge 只数真实管理员，点开行数与之相等（测试管理员不入列）', async () => {
+    const w = await mountUsers();
+    expect(await badgeOf(w, '管理员')).toBe('1');
+    await pillOf(w, '管理员').trigger('click');
+    await nextTick();
+    const rows = w.findAll('tbody tr');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].text()).toContain('用户1');
+    expect(w.text()).not.toContain('用户3'); // 测试管理员被挡在真实域之外
+  });
+
+  it('近 7 天活跃：badge 只数真实账号，点开行数与之相等（虚拟 / 测试行不入列）', async () => {
+    const w = await mountUsers();
+    expect(await badgeOf(w, '近 7 天活跃')).toBe('1');
+    await pillOf(w, '近 7 天活跃').trigger('click');
+    await nextTick();
+    const rows = w.findAll('tbody tr');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].text()).toContain('用户1');
+    expect(w.text()).not.toContain('用户3');
+    expect(w.text()).not.toContain('用户4');
+  });
+
+  it('全部：含虚拟 / 测试行（4 行），且「管理员」行 badge 与「测试」行的管理员徽章不矛盾', async () => {
+    const w = await mountUsers();
+    await nextTick();
+    expect(w.findAll('tbody tr')).toHaveLength(4);
+    // 行内徽章仍如实显「管理员」（那是行的事实）；pill 的是「真实域有几个管理员」，title 已披露口径
+    expect(await badgeOf(w, '管理员')).toBe('1');
+    expect(pillOf(w, '管理员').attributes('title')).toContain('仅统计真实账号');
   });
 });
