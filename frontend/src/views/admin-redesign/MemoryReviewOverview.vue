@@ -17,26 +17,14 @@
         <DataScopeToggle v-model="includeVirtual" />
       </template>
     </MkPageHead>
-    <!-- 页头 KPI 区（2026-09-28）：页级绝对值只在这里出现一次；口径说明进各卡 title。
-         B5-F3-2：取数未落定前显「—」+「取数中…」（不渲染裸 0），栅格挂 aria-busy。 -->
+    <!-- 页头 KPI 带（2026-09-28）：页级绝对值只在这里出现一次；口径说明进各卡 title。
+         B5-F3-2：取数未落定前显「—」+「取数中…」（不渲染裸 0），栅格挂 aria-busy。
+         2026-10-12 用户走查「怎么双 kpi」：原为两段栅格（量值五卡 + 碎片率三卡），1920 下
+         两段卡宽不一致（5 卡 ~310px vs 3 卡 ~530px），读作两套 KPI——并为一条单带。
+         两域取数语义各自保留：碎片域（fragmentation）缺失仍显 '—' +「指标未取到」，不当 0。 -->
     <section class="mk-kpi-grid" :aria-busy="kpiPending || undefined">
       <MkKpi
-        v-for="card in overviewCards"
-        :key="card.label"
-        :label="card.label"
-        :value="card.value"
-        :hint="card.hint"
-        :tone="card.tone"
-        :title="card.title"
-        :aria-busy="kpiPending || undefined"
-      />
-    </section>
-
-    <!-- 碎片率 KPI 行（R7 概念本体治理批）：重复 label 比率 / 未挂靠散键 / 待审队列深度。
-         后端未部署该指标 → 字段缺失显 '—'（不把缺失当 0） -->
-    <section class="mk-kpi-grid" :aria-busy="kpiPending || undefined">
-      <MkKpi
-        v-for="card in fragmentationCards"
+        v-for="card in headKpiCards"
         :key="card.label"
         :label="card.label"
         :value="card.value"
@@ -446,6 +434,11 @@ const fragmentationCards = computed<OverviewCard[]>(() => {
     }
   ];
 });
+
+/** 页头 KPI 单带（2026-10-12 用户走查「怎么双 kpi」）：量值五卡 + 治理碎片三卡合成一条，
+    不再两段栅格——1920 下两段卡宽不一致（5 卡 ~310px vs 3 卡 ~530px），读作两套 KPI。
+    两域取数语义各自保留：fragmentation 缺失仍由 fragmentationCards 出 '—' +「指标未取到」 */
+const headKpiCards = computed<OverviewCard[]>(() => [...overviewCards.value, ...fragmentationCards.value])
 
 /** 到期压力档：0=安静；占痕迹 ≥50% 或绝对数 ≥12 = 重压（红）；其余 = 提醒（琥珀） */
 function dueTone(row: OverviewRow): 'none' | 'warn' | 'high' {

@@ -172,4 +172,13 @@ describe('MemoryReviewOverview：到期时间轴（2026-10-12 恢复跨用户总
     expect(dueCard2.attributes('title')).toContain('标为需关注');
     expect(dueCard2.attributes('title')).toContain('达到 20%');
   });
+
+  /** 2026-10-12 用户走查「怎么双 kpi」：量值五卡 + 碎片率三卡两段栅格并为一条单带 */
+  it('页头 KPI 并为单带：一条栅格 8 卡（5 量值 + 3 治理碎片），不再两段', async () => {
+    const w = await mountWithRows(ROWS);
+    const grids = w.findAll('.mk-kpi-grid');
+    expect(grids).toHaveLength(1);
+    const labels = grids[0].findAll('.mk-kpi__label').map((x) => x.text());
+    expect(labels).toEqual(['用户', '记忆痕迹', '当前到期', '需人工看', '待归并建议', '措辞重复率', '未挂靠散键', '待审队列']);
+  });
 });
