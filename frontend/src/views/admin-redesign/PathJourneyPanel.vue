@@ -2,8 +2,9 @@
   <!-- ===== 路径内容面板（嵌在会话座舱 Path 页签内） =====
        2026-10-12 用户拍板：路径不再有独立详情页（?view=path 退役为深链适配层），
        路径内容统一长在座舱的阶段页签里。本组件 = 原 PathDetail.vue 的内容体
-       （总体进度 meter + 技术细节 + 阶段手风琴 + 任务弹层 + 治理动作），
-       去 hero / 学习者下钻（座舱本身就是该学习者的上下文），类名沿用 pd- 域。 -->
+       （阶段手风琴 + 任务弹层 + 治理动作），去 hero / 学习者下钻（座舱本身就是
+       该学习者的上下文）；「总体进度」「技术细节」随拍板一并撤（同日走查），
+       类名沿用 pd- 域。 -->
   <div class="pjp">
     <!-- 首载失败：错误态 + 重试（MkEmptyState tone=error，判例 UserDetail） -->
     <MkEmptyState
@@ -35,32 +36,9 @@
         <span v-if="d.status !== 'active'" class="mk-badge" :class="statusBadge(d.status)">{{ statusText(d.status) }}</span>
       </div>
 
-      <!-- 总体进度（原型 meterrow：label + mono % + 8px meter 条）+ 右侧任务完成数。
-           双分母口径常显（2026-10-06 审核 #75）：阶段 % vs 任务 X/Y，歧义不进 title -->
-      <section class="pd-progress">
-        <div class="pd-meterrow">
-          <span class="pd-meterrow__label" title="口径：按阶段（已完成阶段数 / 总阶段数）；右侧「任务 X / Y」按子任务口径，两者分母不同">总体进度（按阶段）</span>
-          <span class="pd-meterrow__right">
-            <span v-if="taskTotals.total" class="pd-meterrow__tasks" title="已完成子任务数 / 子任务总数（按详情接口 subtasks 统计；与本条 % 的阶段口径分母不同）">任务 {{ taskTotals.done }} / {{ taskTotals.total }}</span>
-            <span class="pd-meterrow__num mono">{{ overallPct }}%</span>
-          </span>
-        </div>
-        <span class="mk-minibar pd-meter"><i class="mk-minibar__fill" :style="{ width: overallPct + '%' }"></i></span>
-        <p class="pd-note">% 为阶段进度（{{ stageDone }}/{{ stageTotal }} 阶段）；「任务 X / Y」为子任务进度（{{ taskTotals.done }}/{{ taskTotals.total }}），两者分母不同</p>
-      </section>
-
-      <!-- 技术细节（R5：工程标识降级收 details；生成运行 id 是「为何被归档/为何停滞」的唯一线索） -->
-      <details class="pd-tech">
-        <summary>技术细节</summary>
-        <span class="pd-tech__row">
-          <span class="mono">{{ pathId }}</span>
-          <span>· 状态 {{ d.status }}</span>
-          <span>· 最近更新 {{ d.updatedAt ? fmtFull(d.updatedAt) : '—' }}</span>
-          <span v-if="d.activeGenerationRunId">· 生成运行 <span class="mono" :title="d.activeGenerationRunId">{{ d.activeGenerationRunId }}</span></span>
-        </span>
-      </details>
-
-      <!-- stagecard 手风琴（原型：单开、点击阶段头切换展开；默认展开「当前阶段」——2026-10-06 审核 #80） -->
+      <!-- stagecard 手风琴（原型：单开、点击阶段头切换展开；默认展开「当前阶段」——2026-10-06 审核 #80）。
+           2026-10-12 用户拍板撤「总体进度」与「技术细节」两块：各阶段头自带「N / M 任务」，
+           总进度 % 与双分母口径注释是重复噪音；工程标识（路径 id / 生成运行 id）不进运营页面。 -->
       <MkEmptyState
         v-if="!stages.length"
         icon="◌"
@@ -290,22 +268,7 @@ watch(
   { immediate: true }
 )
 
-/* ===== 阶段/任务统计（全部由真实 milestones/subtasks 派生，不用行上反规范化计数；
-   审核记录见 PathDetail 时代 #79：总数取实际 milestones 长度，不读行上旧计数） ===== */
-const stageDone = computed(() => stages.value.filter((m) => m.status === 'completed').length)
-const stageTotal = computed(() => stages.value.length)
-const overallPct = computed(() =>
-  stageTotal.value ? Math.round((stageDone.value / stageTotal.value) * 100) : 0
-)
-const taskTotals = computed(() => {
-  let done = 0
-  let total = 0
-  for (const m of stages.value) {
-    total += m.subtasks.length
-    done += m.subtasks.filter((t) => t.status === 'completed').length
-  }
-  return { done, total }
-})
+/* ===== 阶段/任务统计：各阶段头自带「N / M 任务」，总体 % 不再单算（2026-10-12 用户拍板撤） ===== */
 const doneTasks = (m: PathMilestone) => m.subtasks.filter((t) => t.status === 'completed').length
 
 /* ===== 状态映射（与列表页 opsShared 同一套；子任务/里程碑为详情域映射） ===== */
@@ -384,10 +347,6 @@ const retryTitle = computed(() => {
   if (v?.status === 'failed') return '该路径生成失败：守卫自动判「重建主结构」或「补齐阶段任务」'
   return `active 超过 ${PATH_STALL_HOURS}h 无更新：通常为生成链停滞，可补齐阶段任务`
 })
-function fmtFull(iso: string): string {
-  const t = new Date(iso)
-  return Number.isFinite(t.getTime()) ? t.toLocaleString('zh-CN') : iso
-}
 async function retryGeneration() {
   const v = d.value
   if (!v || busy.value || !props.pathId) return
@@ -428,22 +387,6 @@ async function retryGeneration() {
 
 /* 动作行（原 hero actions 收敛成一行；弱化不与页签头抢层级） */
 .pjp-acts { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
-
-/* 总体进度（原型 meterrow + height:8px meter；右侧 = 任务完成数 + 百分比）。
-   座舱页签本身是卡，这里不再套 mk-card，直接铺内容 */
-.pd-progress { display: grid; gap: 6px; }
-.pd-meterrow { display: flex; align-items: center; gap: 8px; }
-.pd-meterrow__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.pd-meterrow__right { margin-left: auto; display: flex; align-items: baseline; gap: 12px; }
-.pd-meterrow__tasks { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-family: var(--mk-mono); }
-.pd-meterrow__num { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.pd-meter { height: 8px; }
-.pd-note { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-
-/* 技术细节（R5：工程标识默认收起、faint 微字；id 走 mono，完整值在 title） */
-.pd-tech { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.pd-tech summary { cursor: pointer; width: fit-content; }
-.pd-tech__row { display: inline-flex; flex-wrap: wrap; gap: 4px 8px; padding-top: 4px; }
 
 /* stagecard 手风琴（原型 .stagecard：整卡描边、头浅底、体下沉任务行） */
 .pd-stack { display: grid; gap: 12px; }

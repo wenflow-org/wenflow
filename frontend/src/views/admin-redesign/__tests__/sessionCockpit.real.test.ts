@@ -446,15 +446,15 @@ describe('SessionCockpit 双模式', () => {
     const pane = wrapper.find('#cp-tabpanel-path');
     expect(pane.exists()).toBe(true);
     expect(pane.find('.mk-card__title').text()).toBe('关联学习路径');
-    // 面板内容体：总体进度（阶段口径 1/2 → 50%）+ 子任务 2/3（双分母口径常显）
-    expect(pane.text()).toContain('总体进度');
-    expect(pane.text()).toContain('任务 2 / 3');
-    expect(pane.text()).toContain('50%');
-    // 阶段手风琴在页签内（默认展开当前阶段「作用域」，含阶段目标/核心概念）
+    // 面板内容体 = 阶段手风琴（默认展开当前阶段「作用域」，含阶段目标/核心概念）+ 治理动作；
+    // 「总体进度」与「技术细节」2026-10-12 用户拍板撤（各阶段头自带 N / M 任务，工程标识不进运营页面）
+    expect(pane.text()).not.toContain('总体进度');
+    expect(pane.text()).not.toContain('技术细节');
     const stageTitles = pane.findAll('.pd-stage__title').map((s) => s.text());
     expect(stageTitles).toEqual(['函数基础', '作用域']);
     expect(pane.text()).toContain('目标掌握词法作用域');
     expect(pane.text()).toContain('核心概念：作用域');
+    expect(pane.text()).toContain('2 / 2 任务'); // 阶段头自带完成数
     // 旧出口退役：stepper 的 Path 步点即唯一入口，不再有「打开路径详情页」按钮
     expect(pane.text()).not.toContain('打开路径详情页');
     // 治理动作保留（真实能力：下线路径）
