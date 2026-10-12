@@ -130,4 +130,26 @@ describe('MemoryReview 面板（学习者详情页签内）', () => {
     await flushPromises();
     expect(toast.error).toHaveBeenCalledWith('重新观察失败：复盘引擎超时');
   });
+
+  /** 2026-10-12 用户走查「这个地方再优化一下」：两族全空时两个幽灵标题（h4+「没有可回滚的…」×2）
+      收成一行留痕；任一族有记录（默认夹具）则两段式保留，单族空态承担对照语义 */
+  it('已执行历史两族全空：收成一行；任一族有记录：两段式与单族空态保留', async () => {
+    const empty = await mountPanels(makeDetail({
+      appliedMerges: { rollbackable: [], rolledBack: [], legacyWindowOnly: [] },
+      appliedAliasMerges: { rollbackable: [], rolledBack: [], legacyWindowOnly: [] },
+    }));
+    const et = empty.find('.mr__detail').text();
+    expect(et).toContain('已执行的归并 / 别名归并：暂无记录');
+    expect(et).not.toContain('没有可回滚的归并。');
+    expect(et).not.toContain('没有可回滚的别名归并。');
+    empty.unmount();
+
+    const filled = await mountPanels(makeDetail());
+    const ft = filled.find('.mr__detail').text();
+    expect(ft).toContain('已执行归并（可回滚 · 按次留档）');
+    // 别名族空但主族有记录：别名标题与其空态保留（对照语义）
+    expect(ft).toContain('别名归并（不删除记录：登记别名并改指向）');
+    expect(ft).toContain('没有可回滚的别名归并。');
+    filled.unmount();
+  });
 });

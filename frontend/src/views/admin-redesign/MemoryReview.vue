@@ -353,8 +353,12 @@
           <p v-else class="mr__sub">没有待清理的散键。</p>
 
           <!-- 已执行历史（R7 任务书 B：mode=apply 审计一个入口可见——卡头「已执行历史」开关；
-               默认展开保持既有可达性）。含破坏性归并凭据与 alias 式归并凭据两族 -->
+               默认展开保持既有可达性）。含破坏性归并凭据与 alias 式归并凭据两族。
+               2026-10-12 用户走查「这个地方再优化一下」：两族全空时不再铺两个幽灵标题
+               （两个 h4 + 两句「没有可回滚的…」共 166px 死区，且卡头开关此时也不渲染），
+               收成一行留痕；有任一族记录才展开两段式——单族空态在另一族有数据时保留，承担对照语义 -->
           <template v-if="historyOpen">
+          <template v-if="appliedHistoryCount > 0">
           <h4 class="mr__h4">已执行归并（可回滚 · 按次留档）</h4>
           <div v-if="rollbackableMerges.length" class="mk-table-scroll">
           <table class="mk-table">
@@ -408,6 +412,8 @@
             已回滚 {{ appliedAliasRolledBack.length }} 条 alias 归并（保留凭据痕迹，不再重复回滚）：
             {{ appliedAliasRolledBack.map((m) => m.canonical).slice(0, 3).join('、') }}
           </p>
+          </template>
+          <p v-else class="mr__sub">已执行的归并 / 别名归并：暂无记录（执行后在此按次留档、可回滚）。</p>
           </template>
         </template>
       </section>
