@@ -11,9 +11,10 @@ const router = useRouter()
 onMounted(() => {
   const userId = typeof route.query.userId === 'string' ? route.query.userId : ''
   if (userId) {
-    // 旧链上的其余参数（includeTest 等）原样透传，学习详情页按自身口径消费
+    // 旧链上的其余参数（includeTest 等）原样透传，学习详情页按自身口径消费；
+    // 落「记忆调度」页签（旧页主体=调度与治理，2026-10-12 拆分后归该页签）
     const { userId: _drop, ...rest } = route.query
-    router.replace({ path: '/admin/learner-state', query: { ...rest, view: 'learner', id: userId, tab: 'memory' } })
+    router.replace({ path: '/admin/learner-state', query: { ...rest, view: 'learner', id: userId, tab: 'memory-ops' } })
   } else {
     router.replace({ path: '/admin/learner-state' })
   }

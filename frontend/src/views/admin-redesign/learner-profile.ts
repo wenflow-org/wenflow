@@ -168,10 +168,11 @@ export function normalizeLearnerTab(tab: unknown): LearnerTab {
  * 「记忆与复习」的跨页深链。
  *
  * 2026-10-12 用户拍板「合并过去，保留详情页一个」：独立页 /admin/memory-review 退役
- * （场景挂重定向 shim 接旧深链），本函数直发学习者详情「记忆与复习」页签。
+ * （场景挂重定向 shim 接旧深链）。同日二拍「滚动太长拆两个 tab」：调用方（画像菜单的
+ * 归并凭据/回滚意图）落「记忆调度」页签。
  */
 export function memoryReviewUrl(userId: string): string {
-  return `/admin/learner-state?view=learner&id=${encodeURIComponent(String(userId || ''))}&tab=memory`
+  return `/admin/learner-state?view=learner&id=${encodeURIComponent(String(userId || ''))}&tab=memory-ops`
 }
 
 /* ================= 列表筛选 / 页码 ↔ URL query 双向同步 ================= */

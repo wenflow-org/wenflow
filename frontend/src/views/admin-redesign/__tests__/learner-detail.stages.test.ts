@@ -292,16 +292,21 @@ describe('LearnerDetail 记忆与复习 pane（2026-10-11 深设计）', () => {
     getMemoryTraces.mockReset();
   });
 
-  it('操作列已撤（无单点复习接口）；列方言=知识点/记忆强度/复习到期/提取史/状态；跨页链接被嵌入面板取代（2026-10-12 拍板合并）', async () => {
+  it('操作列已撤（无单点复习接口）；列方言=知识点/记忆强度/复习到期/提取史/状态；调度面板拆到「记忆调度」页签（2026-10-12 拍板）', async () => {
     const w = await mountMemory([trace({})]);
     expect(w.findAll('#ld-panel-memory thead th').map((t) => t.text())).toEqual([
       '知识点', '记忆强度', '复习到期', '提取史', '状态',
     ]);
-    // 深链入口已随独立页退役：不跳页，调度面板（温故计划/归并审计/回滚）直接嵌在本页签
-    // （本夹具的 review-detail mock 返回 null → 面板显示暂无兜底，容器必须在）
+    // 记忆与复习页签 = FSRS 普查（读数）；调度面板（温故计划/归并审计/回滚）在「记忆调度」页签
     expect(w.findAll('#ld-panel-memory tbody button').length).toBe(0);
     expect(w.find('#ld-panel-memory .mk-card__head .mk-link').exists()).toBe(false);
-    expect(w.find('#ld-panel-memory .mr-panels').exists()).toBe(true);
+    expect(w.find('#ld-panel-memory .mr-panels').exists()).toBe(false);
+
+    routeQuery.tab = 'memory-ops';
+    const ops = await mountMemory([trace({})]);
+    expect(ops.find('#ld-panel-memory-ops .mr-panels').exists(), '记忆调度页签应渲染调度面板').toBe(true);
+    // 本夹具的 review-detail mock 返回 null → 面板显示暂无兜底（栏与卡片按明细有无渲染）
+    expect(ops.find('#ld-panel-memory-ops .mr-panels').text()).toContain('暂无可复盘的记忆数据');
   });
 
   it('排序：待复习（逾期最久在前）→ 有痕迹未到期 → 未初始化压尾', async () => {

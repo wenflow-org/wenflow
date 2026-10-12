@@ -802,9 +802,12 @@
         </div>
       </section>
       <MkEmptyState v-else icon="◌" title="暂无记忆数据" description="该学习者还没有 FSRS 记忆痕迹；完成教学回合后自动生成。" />
-      <!-- 记忆调度与治理（2026-10-12 用户拍板「合并过去，保留详情页一个」）：原 /admin/memory-review
-           独立页退役，课内温故计划 / 到期清单预览 / 同族重复 / 概念归并审计 / 散键清理 / 回滚
-           整体并入本页签；旧深链由路由 shim 重定向到本页 -->
+      <!-- 调度与治理（温故计划/归并审计/回滚）已拆到「记忆调度」页签（2026-10-12 拍板） -->
+    </div>
+
+    <!-- ============ 记忆调度：温故计划 / 到期清单 / 同族重复 / 归并审计 / 回滚 ============ -->
+    <div v-else-if="tab === 'memory-ops'" class="ld-tabpage" id="ld-panel-memory-ops" role="tabpanel" aria-labelledby="ld-tab-memory-ops">
+      <!-- 原独立页 2026-10-12 先并入本页、同日拆分：面板组件 userId 驱动，详见 MemoryReview.vue 头注 -->
       <MemoryReview :user-id="subPage?.id || ''" />
     </div>
 
@@ -899,11 +902,13 @@ const recomputing = ref(false)
 /**
  * 页签（原型 renderLearnerDetail 2159-2163：subtabs 由 4 项扩到 8 项）。
  * 名称对齐原型：总览→概览、知识图谱→图谱；新增 学习路径/教学会话/记忆与复习/操作记录。
- * 其后两轮裁并：学习路径（审核 #22）与学习事件（2026-10-11）撤除，现 7 项。
+ * 其后两轮裁并：学习路径（审核 #22）与学习事件（2026-10-11）撤除；
+ * 2026-10-12 用户拍板「页面滚动太长，拆成两个 tab」：记忆与复习拆出「记忆调度」
+ * （温故计划/归并审计/回滚——调度与治理动作台），本页签留 FSRS 普查表（读数）。
  * 新增 id 只在本页扩展——共享的 learner-profile.ts `LearnerTab` 仍是 4 项联合（未改动），
- * 本地 normalizeLdTab 先识别本地 7 项，再回落共享 normalizeLearnerTab 处理旧 6-tab 深链重定向。
+ * 本地 normalizeLdTab 先识别本地项，再回落共享 normalizeLearnerTab 处理旧 6-tab 深链重定向。
  */
-const LD_TAB_IDS = ['overview', 'profile', 'evidence', 'graph', 'sessions', 'memory', 'account'] as const
+const LD_TAB_IDS = ['overview', 'profile', 'evidence', 'graph', 'sessions', 'memory', 'memory-ops', 'account'] as const
 type LdTab = (typeof LD_TAB_IDS)[number] | LearnerTab
 /** 撤页签后的旧深链兼容落点（判例=审核 #22 的 ?tab=paths）：
  *  paths→overview（路径读数归「当前进度」卡）；audit→evidence（学习事件流水与证据时间线
@@ -929,6 +934,8 @@ const tabs = [
   { id: 'graph' as const, label: '图谱' },
   { id: 'sessions' as const, label: '教学会话' },
   { id: 'memory' as const, label: '记忆与复习' },
+  // 2026-10-12 用户拍板「滚动太长，拆成两个 tab」：FSRS 普查（读数）与调度治理（动作）分页签
+  { id: 'memory-ops' as const, label: '记忆调度' },
   // 审核 #21（2026-10-06）：原「操作记录」语义暗示管理侧审计流水，实际渲染的是与「证据」
   // 同源的学习事件（liveEvidence）——页签名改「学习事件」，口径写进卡头 title，名实一致。
   // 审核 #22（2026-10-06）：原「学习路径」单卡栅格与页级 statstrip +「当前进度」卡高度重合，
