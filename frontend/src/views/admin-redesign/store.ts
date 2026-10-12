@@ -194,6 +194,15 @@ export function intentQueryParams(scene: string): Record<string, string> {
 /* ---------- 二级页面（drill-in） ---------- */
 export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real' | 'path' | 'skill' | 'card' | 'card-import'
 
+/** 会话座舱的落点页签（2026-10-12 走查拍板：路径不再有独立详情页，统一在座舱的阶段页签打开；
+ *  从学习路径列表进来 = 打开座舱并落在 Path 页签）。只对 session/session-real 有意义；
+ *  path 视图是深链适配层，解析出对话后原样带走。 */
+export type SubPageStage = 'goal' | 'path' | 'learning' | 'wrapup'
+const SUBPAGE_STAGES: ReadonlySet<string> = new Set(['goal', 'path', 'learning', 'wrapup'])
+export function asSubPageStage(v: unknown): SubPageStage | undefined {
+  return typeof v === 'string' && SUBPAGE_STAGES.has(v) ? (v as SubPageStage) : undefined
+}
+
 /** 来源记忆：从二级（画像）进三级（会话）后，返回时回到来源页而非直接回一级列表 */
 export interface SubPageFrom {
   view: SubPageView
@@ -201,10 +210,12 @@ export interface SubPageFrom {
   label?: string
 }
 
-export const subPage = ref<{ view: SubPageView; id: string; label?: string; includeTest?: boolean; from?: SubPageFrom } | null>(null)
+export const subPage = ref<{ view: SubPageView; id: string; label?: string; includeTest?: boolean; stage?: SubPageStage; from?: SubPageFrom } | null>(null)
 
-export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?: boolean; from?: SubPageFrom }) {
-  const base = opts?.includeTest ? { view, id, includeTest: true } : { view, id }
+export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?: boolean; stage?: SubPageStage; from?: SubPageFrom }) {
+  const base: { view: SubPageView; id: string; includeTest?: boolean; stage?: SubPageStage } =
+    opts?.includeTest ? { view, id, includeTest: true } : { view, id }
+  if (opts?.stage) base.stage = opts.stage
   /* 来源记忆：二级页 → 三级页都可记来源，返回时回原页（不限 session）。
      原先只对 session/session-real 生效，于是「学习者详情 → 路径详情」返回时 from 被
      静默丢弃，直接落回一级列表，原详情与页签上下文全丢（2026-10-08 走查确认）。 */
@@ -242,18 +253,6 @@ export const overviewHealth = computed(() => {
     subline: '总览统计加载中或后端不可达；健康结论以健康中心检查清单为准。',
   }
 })
-
-/* ================= 页面数据缓存新鲜度（避免切 tab 重复拉取） ================= */
-const pageFetchedAt = new Map<string, number>()
-/** 页面数据在 ttl 内视为新鲜（无需重拉） */
-export function isPageCacheFresh(key: string, ttlMs = 60_000): boolean {
-  const at = pageFetchedAt.get(key)
-  return typeof at === 'number' && Date.now() - at < ttlMs
-}
-/** 标记页面数据已拉取 */
-export function markPageFetched(key: string) {
-  pageFetchedAt.set(key, Date.now())
-}
 
 /* ================= 成本页筛选（跨组件同源） =================
    金额条（ExecLogs 成本 tab）与成本聚合卡（TokenCost）共用同一份筛选，

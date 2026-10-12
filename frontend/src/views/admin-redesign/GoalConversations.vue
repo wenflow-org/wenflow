@@ -22,33 +22,33 @@
       <MkKpi
         label="会话总数"
         :value="stats?.total ?? '—'"
-        :hint="includeTest ? '含虚拟学习者与测试账号' : '仅真实用户口径'"
-        :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户（不含测试账号）；切换页头「含测试」后显示全量并灰标模拟行'"
+        :hint="includeTest ? '含虚拟学习者与测试账号' : '仅真实用户'"
+        :title="includeTest ? '只统计虚拟学习者与测试账号' : '只统计真实用户'"
       />
       <MkKpi
         label="参与用户"
         :value="stats?.distinctUsers ?? '—'"
         hint="发起过目标对话的去重用户"
-        title="至少发起过一次目标对话的去重用户数（口径随页头「含测试」开关）"
+        title="至少发起过一次目标对话的用户数（随页头「真实 / 测试」开关变化）"
       />
       <MkKpi
         label="近 7 日新增"
         :value="recentCreated7d ?? '—'"
         hint="按创建日归集"
-        title="最近 7 天创建的目标对话数（服务端按创建日 UTC 日历日归集；完成数按完成日归集，不影响本口径）"
+        title="最近 7 天创建的目标对话数（按创建日期统计）"
       />
     </section>
     <!-- stats 三态（P1#6）：失败显错误条 + 重试（原错误桶随构成带退役，2026-10-04 晚贴表分布条） -->
     <div v-if="statsError" class="mk-status mk-status--bad">
       <span class="mk-status__dot"></span>
-      <span class="mk-status__meta">统计暂不可用（KPI 面板与状态分布同源）</span>
+      <span class="mk-status__meta">统计暂不可用</span>
       <button type="button" class="mk-status__meta mk-status__meta-link" @click="load(true)">重试</button>
     </div>
 
     <!-- ===== 目标对话列表 ===== -->
     <MkEmptyState
       v-if="!rows.length && !loading && !loadError"
-      title="暂无 Goal 会话数据"
+      title="暂无目标对话"
       description="学习者发起目标对话后自动呈现。"
     />
 
@@ -62,7 +62,7 @@
       card
       class="gc-distband"
         title="目标对话状态分布"
-        :sub="`点击分段只看该状态 · 服务端按状态 group-by 全平台计数（非本页窗口，口径：${includeTest ? '含测试全量' : '仅真实用户'}） · 完结率 ${stats.completionRate ?? 0}%`"
+        :sub="`点击分段可筛选对应状态 · 完结率 ${stats.completionRate ?? 0}%`"
         unit="条"
         aria-label="按目标对话状态筛选"
         :bins="gcBandBins"
@@ -83,9 +83,9 @@
                 class="mk-pill"
                 :class="{ 'mk-pill--active': noPathOnly }"
                 :aria-pressed="noPathOnly"
-                title="状态「进行中」且尚未生成学习路径的会话（运营需先补路径；已完成桶口径 = 已生成路径）。判定 = 行 hasPath 为假，与路径列「—」同口径。与上方分布条筛选可叠加（且），再点取消"
+                title="进行中且尚未生成学习路径的会话，需先补路径；可与上方分布条筛选叠加，再点取消"
                 @click="noPathOnly = !noPathOnly"
-              >未生成路径</button>
+              >未生成路径<span class="mk-pill__count">{{ pathPendingCount }}</span></button>
             </div>
             <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 邮箱 / 目标摘要" />
             <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
@@ -100,7 +100,7 @@
               :default-hidden="['constraints']"
               v-model:hidden="gcHiddenCols"
             />
-            <span class="mk-card__meta" :title="`${includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'}${truncated ? `；排序与搜索仅覆盖已加载的最近 ${LIST_LIMIT} 条` : ''}`">（{{ includeTest ? '含测试' : '仅真实' }}口径）<template v-if="truncated"> · 后端共 {{ listTotal }} 条，仅显示最近 {{ rows.length }} 条（排序/搜索仅覆盖该窗口）</template></span>
+            <span class="mk-card__meta" :title="`${includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'}${truncated ? `；排序与搜索仅覆盖已加载的最近 ${LIST_LIMIT} 条` : ''}`">（{{ includeTest ? '测试' : '真实' }}）<template v-if="truncated"> · 共 {{ listTotal }} 条，当前显示最近 {{ rows.length }} 条</template></span>
           </div>
         </div>
 
@@ -227,8 +227,8 @@
                 <span v-else class="mk-na">—</span>
               </td>
               <td v-if="showCol('path')">
-                <!-- 原型 open-path 习惯：生成过的路径成跳转（路径详情二级页）；后端未回 pathId 时回落徽章 -->
-                <button v-if="r.pathId" type="button" class="mk-btn mk-btn--sm" title="查看该目标生成的路径详情" @click.stop="openPathPage(r)">查看路径</button>
+                <!-- 原型 open-path 习惯：生成过的路径成跳转（2026-10-12 起落会话座舱 Path 页签）；后端未回 pathId 时回落徽章 -->
+                <button v-if="r.pathId" type="button" class="mk-btn mk-btn--sm" title="在会话座舱的 Path 阶段页签查看该目标的路径" @click.stop="openPathPage(r)">查看路径</button>
                 <span v-else-if="r.hasPath" class="mk-badge mk-badge--info">已生成</span>
                 <span v-else class="mk-na">—</span>
               </td>
@@ -262,7 +262,7 @@
           v-else
           icon="◌"
           :title="keyword || statusFilter || noPathOnly ? '当前筛选无匹配' : '暂无目标对话'"
-          :description="keyword || statusFilter || noPathOnly ? '放宽筛选条件试试。' : (includeTest ? '全量口径下暂无目标对话。' : '默认仅展示真实用户；切换「含测试」可查看全部。')"
+          :description="keyword || statusFilter || noPathOnly ? '放宽筛选条件试试。' : (includeTest ? '当前范围（虚拟学习者与测试账号）暂无目标对话。' : '当前只显示真实用户；切「测试」可查看虚拟 / 测试账号的对话。')"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
@@ -279,6 +279,24 @@
 
   </div>
 </template>
+
+<script lang="ts">
+/* G3a（2026-10-10）：列表态快照必须活过组件卸载——行点击「查看路径」进 PathDetail 二级页时
+   AdminConsole 互斥卸载本组件（<component :is> 无 KeepAlive，OpsContent.vue #39 同款场景），
+   <script setup> 作用域的变量随实例销毁，故快照放模块级（本 <script> 块每模块只执行一次），
+   才能跨「下钻 → 返回」存活。
+   为什么不走 openSubPage 的 from：from.view 必须是 SubPageView 二级页类型，目标对话是
+   一级列表页没有合法值可填。consume-once：只服务「路径格下钻 → 返回列表」一个场景，
+   不落 localStorage（防跨会话残留旧筛选）；下钻后经侧栏去别的场景再回来的窄边角
+   会消费一次旧快照，与 OpsContent 先例同口径，可接受。 */
+interface GcSavedListState {
+  page: number
+  keyword: string
+  statusFilter: string
+  noPathOnly: boolean
+}
+let gcSavedListState: GcSavedListState | null = null
+</script>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
@@ -387,7 +405,7 @@ const gcBandBins = computed(() => [
     tone: 'var(--mk-blue)',
     n: stats.value?.active ?? 0,
     hint: rows.value.length
-      ? `澄清中或待确认 · 其中 ${staleActiveCount.value} 条超 ${STALLED_DAYS} 天未更新（停滞口径：状态「进行中」且最近 ${STALLED_DAYS} 天无更新，按加载窗口估算，非全量）`
+      ? `澄清中或待确认 · 其中 ${staleActiveCount.value} 条超过 ${STALLED_DAYS} 天未更新`
       : '澄清中或待确认'
   },
   { key: 'completed', label: '已完成', tone: 'var(--mk-green)', n: stats.value?.completed ?? 0, hint: '已生成学习路径' },
@@ -396,18 +414,28 @@ const gcBandBins = computed(() => [
     label: '已取消',
     tone: 'var(--mk-red)',
     n: gcCancelledCount.value,
-    hint: '取消 / 中断 / 回收合计 = 总数 − 进行中 − 已完成：含用户取消（cancelled）、失败中断（failed）与无心跳回收（abandoned）'
+    hint: '含用户取消、失败中断与长时间无操作自动回收的会话'
   }
 ])
-const keyword = ref('')
-const statusFilter = ref('')
+/* G3a（2026-10-10）：挂载时一次性读回「路径格下钻前」存下的列表态（consume-once，
+   存储见文件顶 <script> 块）；未下钻过的普通进入读回 null，一切走初值 */
+function takeSavedListState(): GcSavedListState | null {
+  const s = gcSavedListState
+  gcSavedListState = null
+  return s
+}
+const restoredListState = takeSavedListState()
+const keyword = ref(restoredListState?.keyword || '')
+const statusFilter = ref(restoredListState?.statusFilter || '')
 /* 「未生成路径」快筛（2026-10-08）：进行中且尚未生成学习路径的运营卡点会话。
    与分布条状态筛选叠加为 AND；再点取消。不显计数——分布条计数是服务端全量口径
    （stats），本快筛只能按已加载窗口算，同屏两个口径会数字打架（同 TS 页教训） */
-const noPathOnly = ref(false)
+const noPathOnly = ref(restoredListState?.noPathOnly || false)
 /** 「未生成路径」谓词：hasPath 与路径列「—」同口径（均由后端 learningPathId 推导）；
     已完成桶口径 = 已生成学习路径，故「未生成」只拦进行中，两处口径呼应不矛盾 */
 const isPathPendingRow = (r: Row) => r.status === 'active' && !r.hasPath
+/** pill 命中数（2026-10-11 统一判例：筛选 pill 一律显命中数；按当前已加载窗口计） */
+const pathPendingCount = computed(() => rows.value.filter(isPathPendingRow).length)
 
 /* P1-3 列显隐（公共组件 MkCols）：目标摘要/状态/阶段/澄清进度/约束条件/路径/创建时间 可隐藏，用户/操作固定 */
 const gcColDefs = [
@@ -514,7 +542,7 @@ function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtua
  *  列表里给一句解释，避免「会话莫名停下」；不新增后端字段，仅是文案。 */
 const statusHint = (s: string | null | undefined) => {
   const k = String(s || '').toLowerCase()
-  if (k === 'abandoned') return '会话已中止：通常因长时间无心跳被自动回收；可从故事行重新启动'
+  if (k === 'abandoned') return '会话已中止：因长时间无操作被自动回收，可在对应学习中重新发起'
   if (k === 'failed') return '会话失败：可在会话座舱查看失败原因与日志'
   return ''
 }
@@ -614,15 +642,18 @@ function clearFilters() {
 }
 
 /* 客户端分页（P2：替代「加载更多」——统一 mk-pagination 页码器）：
-   列表为客户端全量数据（limit:LIST_LIMIT 拉取后本地筛选），按页切片；
-   筛选/数据变化自动回第 1 页（watch filtered） */
-const page = ref(1)
+   列表为客户端全量数据（limit:LIST_LIMIT 拉取后本地筛选），按页切片。
+   回第 1 页只监听筛选输入（G3b，2026-10-10，对齐 TeachingSessions/OpsContent 判例）：
+   此前监听 filtered 结果——删除行/口径切换回填数据也会把页码拽回第 1 页；
+   且快照恢复的页码会被「重挂载后 rows 回填」触发的 filtered watch 打回初值，
+   G3a 的 page 恢复就永远无效。越界收敛由 Pagination 自带 watcher 兜底 */
+const page = ref(restoredListState?.page || 1)
 const pageSize = ref(15)
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch(filtered, () => {
+watch([keyword, statusFilter, noPathOnly], () => {
   page.value = 1
 })
 
@@ -632,7 +663,7 @@ const LIST_LIMIT = 1000
 /* 截断口径披露（2026-10-06 审核 #35）：触 LIST_LIMIT 时表头排序与关键词搜索只覆盖已加载窗口，
    可排序表头 title 与卡头 meta 都须如实说明，不能读起来像全量 */
 const sortWindowTitle = computed(() =>
-  truncated.value ? `排序与搜索仅覆盖已加载的最近 ${LIST_LIMIT} 条（后端共 ${listTotal.value} 条），非全量` : ''
+  truncated.value ? `排序与搜索覆盖当前显示的 ${LIST_LIMIT} 条（全部共 ${listTotal.value} 条）` : ''
 )
 
 /* force = true 绕过页面级 TTL 缓存（显式刷新/口径切换用），保证用户操作必然重拉 */
@@ -655,8 +686,13 @@ async function load(force = false) {
   loading.value = true
   loadError.value = ''
   try {
-    // 首屏主体是会话列表：只 await 列表接口，页面就绪时间不再被 stats 拖住
-    const listRes = await adminGoalConversationsApi.list({ limit: LIST_LIMIT, includeTest: includeTest.value })
+    // 首屏主体是会话列表：只 await 列表接口，页面就绪时间不再被 stats 拖住；
+    // 测试视角（2026-10-10「真实/测试」互斥视角）带 testOnly 只回虚拟 + 测试账号的对话
+    const listRes = await adminGoalConversationsApi.list({
+      limit: LIST_LIMIT,
+      includeTest: includeTest.value,
+      testOnly: includeTest.value || undefined,
+    })
     const body = listRes.data?.data ?? listRes.data ?? {}
     rows.value = ((body.conversations as Record<string, unknown>[]) || []).map(mapRow)
     listTotal.value = Number(body.pagination?.total ?? rows.value.length)
@@ -679,7 +715,7 @@ async function load(force = false) {
   /* stats 非阻塞后台拉取：到达后回填 KPI 面板（总量/参与用户/近 7 日新增）与状态分布带。
      三态（P1#6）：失败时置 statsError（错误条 + 重试，KPI 卡显「—」），
      绝不回滚列表、不阻塞首屏；代际不符（已发起新一轮 load）的迟到响应直接丢弃 */
-  void adminGoalConversationsApi.getStats(includeTest.value)
+  void adminGoalConversationsApi.getStats(includeTest.value, includeTest.value)
     .then((statsRes) => {
       if (seq !== statsReqSeq) return
       const s = statsRes?.data?.data ?? statsRes?.data
@@ -718,12 +754,23 @@ const { goTrace, goConsole } = useSessionDrill(closeDetail)
 const gcScopeSub = computed(() =>
   includeTest.value
     ? '与学习者澄清真实目标 · 约束条件与澄清轮次（含虚拟学习者与测试账号）'
-    : '与学习者澄清真实目标 · 约束条件与澄清轮次（仅真实用户口径）'
+    : '与学习者澄清真实目标 · 约束条件与澄清轮次（仅真实用户）'
 )
 
-/** 路径格 → 路径详情二级页（原型 open-path 习惯） */
+/** 路径格 → 会话座舱的 Path 阶段页签（2026-10-12 拍板：路径不再有独立详情页）。
+ *  行本身就是目标对话（r.id），直接开座舱并落 Path 页签，无需 id 反查。
+ *  G3a（2026-10-10）：目标对话是一级列表页，from.view 无合法 SubPageView 可填，
+ *  改走列表态快照（判例 OpsContent.vue #39）：出站前存 page/筛选，返回重挂载时
+ *  一次性读回——此前返回直接落「第 1 页 + 无筛选」的初值列表，翻页/筛选全丢。 */
 function openPathPage(r: Row) {
-  if (r.pathId) openSubPage('path', r.pathId)
+  if (!r.pathId) return
+  gcSavedListState = {
+    page: page.value,
+    keyword: keyword.value,
+    statusFilter: statusFilter.value,
+    noPathOnly: noPathOnly.value,
+  }
+  openSubPage('session-real', r.id, { stage: 'path' })
 }
 
 async function regenerate(r: Row) {
@@ -754,7 +801,7 @@ async function regenerate(r: Row) {
 async function remove(r: Row) {
   const ok = await askConfirm({
     title: '删除目标对话',
-    message: `确认删除「${r.userName}」的这条 Goal 会话？\n该操作不可撤销。`,
+    message: `确认删除「${r.userName}」的这条目标对话？\n该操作不可撤销。`,
     confirmText: '删除',
     busy: true
   })

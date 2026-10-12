@@ -9,6 +9,7 @@ import {
   countLearningPathsWhere,
   findLearningPathDetail,
   findLearningPathById,
+  findPathConversationId,
   archiveLearningPath,
   restoreLearningPath,
   findLearningPathWithMilestoneCount,
@@ -18,7 +19,9 @@ import {
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { logger } from '../../utils/logger';
-import { buildRealUserWhere } from '../../utils/test-account';
+import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
+import prisma from '../../config/database';
+import simulationCoordinator from '../../coordinators/simulation.coordinator';
 
 const router = express.Router();
 
@@ -51,8 +54,10 @@ router.get('/paths', async (req: Request, res: Response) => {
         { users: { name: { contains: keyword } } },
       ];
     }
-    // 内容治理默认仅真实用户；includeTest=1 时含虚拟/测试
-    if (!includeTest) where.users = await buildRealUserWhere();
+    // 内容治理默认仅真实用户；includeTest=1 时含虚拟/测试；
+    // testOnly=1（2026-10-10 用户拍板「真实/测试」互斥视角）→ 只看虚拟 + 测试账号
+    if (String(req.query.testOnly || '') === 'true') where.users = await buildTestUserWhere();
+    else if (!includeTest) where.users = await buildRealUserWhere();
 
     const [paths, total] = await Promise.all([
       findLearningPathsForAdmin(where, skip, limit),
@@ -90,7 +95,9 @@ router.get('/paths', async (req: Request, res: Response) => {
   }
 });
 
-/** 路径详情（含 milestones + subtasks，供治理页查看内容结构） */
+/** 路径详情（含 milestones + subtasks，供治理页查看内容结构）。
+ *  附带 conversationId 反查（2026-10-12 走查拍板：路径不再有独立详情页，统一在会话座舱
+ *  的 Path 阶段页签打开 —— 前端凭它把 ?view=path 深链换开 ?view=session-real&stage=path）。 */
 router.get('/paths/:id', async (req: Request, res: Response) => {
   try {
     const allowed = await ensureAdmin(req.user?.userId);
@@ -99,7 +106,9 @@ router.get('/paths/:id', async (req: Request, res: Response) => {
     const path = await findLearningPathDetail(req.params.id);
     if (!path) return res.status(404).json({ success: false, error: { message: '路径不存在' } });
 
-    res.json({ success: true, data: path });
+    // 反查失败不挡详情：conversationId 为 null 时前端走「未关联对话」空态
+    const conversationId = await findPathConversationId(path.id).catch(() => null);
+    res.json({ success: true, data: { ...path, conversationId } });
   } catch (error: any) {
     logger.error('[admin-learning-content] 获取路径详情失败', { error });
     res.status(500).json({ success: false, error: { message: error.message || '获取路径详情失败', status: 500 } });
@@ -159,6 +168,41 @@ router.post('/paths/:id/restore', async (req: Request, res: Response) => {
   }
 });
 
+/** 重试路径生成（failed/生成停滞路径的运营救援，2026-10-10 跑批实锤：53 条终态死重靠该口子救回 48 条）。
+ *  复用会话级 retry-path-generation（virtual-learners.ts）的同一守卫与租约语义：
+ *  getPathGenerationRetry 自动判 core=重建主结构 / stageDesign=补齐阶段任务；拒绝时 HTTP 200 +
+ *  success:false 透传中文原因。path 不直挂会话 → 按 learningPathId 取最新虚拟会话代发。 */
+router.post('/paths/:id/retry-generation', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+
+    const path = await findLearningPathById(req.params.id);
+    if (!path) return res.status(404).json({ success: false, error: { message: '路径不存在' } });
+
+    const session = await prisma.virtual_sessions.findFirst({
+      where: { learningPathId: path.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!session) {
+      return res.status(409).json({ success: false, error: { message: '该路径没有关联的虚拟学习会话，无法重试生成', status: 409 } });
+    }
+
+    const result = await simulationCoordinator.runLeasedExclusive(session.id, async (assertLeaseOwned) => {
+      await assertLeaseOwned();
+      return simulationCoordinator.retryPathGeneration(session.id);
+    });
+
+    setAuditAction(res, 'learning-content.retry-generation', { targetType: 'learning-path', targetId: path.id });
+    setAuditAfter(res, { pathId: path.id, title: path.title, sessionId: session.id, retryType: result.retryType ?? null, runId: result.runId ?? null, success: result.success });
+
+    res.json({ success: result.success, data: result, error: result.error });
+  } catch (error: any) {
+    logger.error('[admin-learning-content] 重试路径生成失败', { error });
+    res.status(500).json({ success: false, error: { message: error.message || '重试路径生成失败', status: 500 } });
+  }
+});
+
 /** 删除路径（级联删除 milestones/subtasks/会话引用；危险操作，审计留痕） */
 router.delete('/paths/:id', async (req: Request, res: Response) => {
   try {
@@ -190,7 +234,10 @@ router.get('/stats', async (req: Request, res: Response) => {
 
     // 口径与 /paths 同一判据：默认仅真实用户；includeTest=true 时含虚拟/测试账号
     const includeTest = String(req.query.includeTest || '') === 'true';
-    const [total, byStatus, bySubject, totalMilestones, totalTasks] = await getLearningContentStats(includeTest);
+    const [total, byStatus, bySubject, totalMilestones, totalTasks] = await getLearningContentStats(
+      includeTest,
+      String(req.query.testOnly || '') === 'true'
+    );
 
     res.json({
       success: true,

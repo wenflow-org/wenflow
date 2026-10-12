@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import type { Prisma } from '@prisma/client';
-import { buildRealUserWhere } from '../../utils/test-account';
+import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
 
 /**
  * 学习内容治理仓储（routes/admin/learning-content.ts 的取数层）。
@@ -59,6 +59,21 @@ export function findLearningPathById(id: string) {
   return prisma.learning_paths.findUnique({ where: { id } });
 }
 
+/**
+ * 路径 → 来源目标对话（管理台「路径在会话座舱打开」的反查）。
+ * learning_paths 表没有 conversationId 列；指针由路径生成链维护在
+ * goal_conversations.learningPathId（simulation.path-phase.ts 生成/重建后回写，带索引）。
+ * 取最近一条：重规划/重建会先后产生指向记录，最新一条才是当前生效的对话。
+ */
+export async function findPathConversationId(id: string): Promise<string | null> {
+  const conv = await prisma.goal_conversations.findFirst({
+    where: { learningPathId: id },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true },
+  });
+  return conv?.id ?? null;
+}
+
 /** 下线路径（内容治理：用户端不可继续学习；status=archived） */
 export function archiveLearningPath(id: string) {
   return prisma.learning_paths.update({
@@ -88,10 +103,13 @@ export function deleteLearningPath(id: string) {
 }
 
 /** 内容统计（治理页顶部：总数 / 按状态 / 按学科 / 里程碑与任务总量）。
- *  口径随列表页「含测试」开关联动：默认仅真实用户；includeTest=true 时不过滤 users，
- *  与 GET /paths 的 buildRealUserWhere() 分支同一判据（否则卡头开关切换后 KPI/分布条与列表不同源）。 */
-export async function getLearningContentStats(includeTest = false) {
-  const userWhere = includeTest ? {} : { users: await buildRealUserWhere() };
+ *  口径随列表页「真实/测试」视角开关联动（2026-10-10 用户拍板互斥视角）：
+ *  默认真实视角（buildRealUserWhere）；测试视角（testOnly）= buildTestUserWhere，
+ *  与 GET /paths 的分支同一判据（否则 KPI/分布条与列表不同源）。 */
+export async function getLearningContentStats(includeTest = false, testOnly = false) {
+  const userWhere = testOnly
+    ? { users: await buildTestUserWhere() }
+    : includeTest ? {} : { users: await buildRealUserWhere() };
   return Promise.all([
     prisma.learning_paths.count({ where: userWhere }),
     prisma.learning_paths.groupBy({ by: ['status'], _count: { _all: true }, where: userWhere }),

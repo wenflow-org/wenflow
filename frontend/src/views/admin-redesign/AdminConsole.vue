@@ -8,6 +8,8 @@
         <div class="ac-error__actions">
           <button type="button" class="mk-btn mk-btn--primary" @click="boot">重试</button>
           <button type="button" class="mk-btn" @click="copyDiagnostics">复制诊断信息</button>
+          <!-- 长故障兜底：会话可能已失效（否则重试应能恢复），退出重登不困在错误页 -->
+          <button type="button" class="mk-btn" @click="logoutFromError">退出登录</button>
         </div>
         <details class="ac-error__diag">
           <summary>诊断信息</summary>
@@ -16,16 +18,17 @@
       </div>
     </div>
 
-    <Shell
-      :current="scene"
-      :crumb="crumbLabel"
-      :crumb-title="crumbTitle"
-      :crumb-clickable="!!subPage"
-      release
-      @navigate="navigate"
-      @glossary="glossaryOpen = true"
-      @crumb-click="closeSubPage"
-    >
+      <!-- 面包屑回总览/上级由 crumb-click 承担；帮助按钮跳运营术语表整页（2026-10-10 抽屉退役） -->
+      <Shell
+        :current="scene"
+        :crumb="crumbLabel"
+        :crumb-title="crumbTitle"
+        :crumb-clickable="!!subPage"
+        release
+        @navigate="navigate"
+        @glossary="navigate('glossary')"
+        @crumb-click="closeSubPage"
+      >
       <!-- 骨架补 .mk-page 容器（2026-10-06 审核）：骨架卡本身无 margin/padding，
            直接贴在内容区左上角；正式页面走 .mk-page 的 20/20 留白 —— 从加载态切到
            正式页面的瞬间整页内容会右移/下移 20px。包一层同款容器即对齐同一条竖线。 -->
@@ -38,8 +41,6 @@
            仅 key=id 时 includeTest 变化不会重建组件，旧取数（不含测试数据）残留 -->
       <component v-else :is="detailComponent || currentComponent" :key="pageKey" />
     </Shell>
-
-    <AdminGlossaryDrawer :open="glossaryOpen" @close="glossaryOpen = false" />
   </section>
 </template>
 
@@ -105,6 +106,8 @@ const TokenCost = asyncPage(() => import('./TokenCost.vue'));
 const AuditLogs = asyncPage(() => import('./AuditLogs.vue'));
 const ApiConfig = asyncPage(() => import('./ApiConfig.vue'));
 const PromptWorkbench = asyncPage(() => import('./PromptWorkbench.vue'));
+// 运营术语表（2026-10-10 抽屉退役改整页）：壳层帮助按钮跳转的隐藏场景，不进侧栏
+const AdminGlossary = asyncPage(() => import('./AdminGlossary.vue'));
 const OpsHub = asyncPage(() => import('./OpsHub.vue'));
 const OpsCenter = asyncPage(() => import('./OpsCenter.vue'));
 const LearnerDetail = asyncPage(() => import('./LearnerDetail.vue'));
@@ -150,6 +153,8 @@ const components: Record<string, unknown> = {
   // 隐藏场景（不在 manifest 侧栏）：PromptWorkbench 是「新建 Skill」骨架生成的唯一入口，
   // 健康中心 hash/yaml 跳转深链至此，勿删注册
   'skill-workbench': PromptWorkbench,
+  // 运营术语表（manifest hidden: true）：壳层帮助按钮 → /admin/glossary 整页
+  'glossary': AdminGlossary,
   'ops-hub': OpsHub,
   'ops-center': OpsCenter
 };
@@ -161,7 +166,7 @@ const detailComponents: Record<string, unknown> = {
   user: LearnerDetail,
   session: SessionCockpit,
   'session-real': SessionCockpit,
-  // 路径详情二级页（原型 renderPathDetail 落点；列表行/学习者进度卡下钻）
+  // 路径深链适配层（2026-10-12 拍板：路径不再有独立详情页；由它反查对话后换开座舱 Path 页签）
   path: PathDetail,
   // 技能详情二级页（原型 renderSkillDetail 落点；Skill 目录行/编排图节点下钻，替代 SkillDrawer 打开）
   skill: SkillDetail,
@@ -183,16 +188,20 @@ export const DETAIL_COMPONENTS: Readonly<Record<string, unknown>> = detailCompon
 import { computed, defineAsyncComponent, h, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Shell from './Shell.vue';
-import AdminGlossaryDrawer from './AdminGlossaryDrawer.vue';
 import HealthCenter from './HealthCenter.vue';
 import MockSkeletonTable from './SkeletonTable.vue';
-import { intent, intentQueryParams, subPage, closeSubPage, type SubPageView } from './store';
+import { intent, intentQueryParams, subPage, closeSubPage, liveSpans, asSubPageStage, type SubPageView, type SubPageStage } from './store';
 import { loadLiveData } from './live';
+import { clearAdminSession } from '@/api/adminApi';
+import { useEscape } from './useEscape';
 import { toast } from '@/utils/toast';
 import '@/styles/mk-primitives.css';
 
+/* 整页二级详情（?view=&id=）也走全站统一的 Esc 关浮层通道：LIFO 栈保证盖在详情上的
+   抽屉/弹层先关，再按一次 Esc 才退出详情（与面包屑返回/浏览器后退同一出口语义） */
+useEscape(() => !!subPage.value, closeSubPage);
+
 const scene = ref('overview');
-const glossaryOpen = ref(false);
 const booting = ref(true);
 const bootError = ref('');
 
@@ -239,17 +248,21 @@ const SUBPAGE_VIEWS = ['learner', 'virtual', 'user', 'session', 'session-real', 
    给它一个默认 id，让「手敲深链」与「应用内入口」两种写法等价。 */
 const IDLESS_SUBPAGE_VIEWS = ['card-import']
 // URL → subPage（深链/刷新/前进后退）；includeTest 透传（虚拟学习者/测试账号深链可查）
+// stage 透传（2026-10-12）：座舱落点页签（?view=session-real&id=..&stage=path），刷新/深链保持落点
 watch(
-  () => [route.query.view, route.query.id, route.query.includeTest] as [unknown, unknown, unknown],
-  ([v, id, includeTest]) => {
+  () => [route.query.view, route.query.id, route.query.includeTest, route.query.stage] as [unknown, unknown, unknown, unknown],
+  ([v, id, includeTest, stage]) => {
     const view = typeof v === 'string' ? v : ''
     const sid = typeof id === 'string' ? id : ''
     const it = String(includeTest || '') === 'true'
+    const st = asSubPageStage(stage)
     if ((sid || IDLESS_SUBPAGE_VIEWS.includes(view)) && SUBPAGE_VIEWS.includes(view)) {
       const nextId = sid || 'new'
-      const next: { view: SubPageView; id: string; includeTest?: boolean } = it ? { view: view as SubPageView, id: nextId, includeTest: true } : { view: view as SubPageView, id: nextId }
+      const next: { view: SubPageView; id: string; includeTest?: boolean; stage?: SubPageStage } =
+        it ? { view: view as SubPageView, id: nextId, includeTest: true } : { view: view as SubPageView, id: nextId }
+      if (st) next.stage = st
       const cur = subPage.value
-      if (!cur || cur.view !== next.view || cur.id !== next.id || !!cur.includeTest !== it) {
+      if (!cur || cur.view !== next.view || cur.id !== next.id || !!cur.includeTest !== it || cur.stage !== next.stage) {
         subPage.value = next
       }
     } else if (!sid) {
@@ -274,6 +287,8 @@ watch(
       const q: Record<string, string | (string | null)[]> = { ...route.query, view: sp.view, id: sp.id } as Record<string, string | (string | null)[]>
       if (sp.includeTest) q.includeTest = 'true'
       else delete q.includeTest
+      if (sp.stage) q.stage = sp.stage
+      else delete q.stage
       if (curView !== sp.view || curId !== sp.id || (sp.includeTest ? route.query.includeTest !== 'true' : route.query.includeTest != null)) {
         void router.push({ query: q })
       }
@@ -286,6 +301,7 @@ watch(
         delete q.view
         delete q.id
         delete q.includeTest
+        delete q.stage
         void router.replace({ query: q })
       }
     }
@@ -382,9 +398,11 @@ async function boot() {
   bootError.value = '';
   await loadLiveData();
   booting.value = false;
-  // loadLiveData 内部已做局部容错；仅核心域（日志）失败才提示整页错误
+  // loadLiveData 内部已做局部容错；仅核心域（日志）失败才提示整页错误。
+  // 判定与数据层对齐（loadLiveData 同款「有旧数据即放行」）：spans 请求失败但此前已有
+  // 旧样本在手（TTL 内重进/局部重试场景）不锁整页，避免无谓的全屏死路。
   const { liveFailures } = await import('./live');
-  if (liveFailures.value.spans) {
+  if (liveFailures.value.spans && !(liveSpans.value && liveSpans.value.length)) {
     bootError.value = liveFailures.value.spans;
   }
 }
@@ -399,6 +417,12 @@ async function copyDiagnostics() {
   } catch {
     toast.error('复制失败，请手动选中诊断信息');
   }
+}
+
+/** 错误卡「退出登录」：清会话后回登录页（长故障时不至于死路） */
+function logoutFromError() {
+  clearAdminSession();
+  void router.push('/admin/login');
 }
 
 onMounted(() => {

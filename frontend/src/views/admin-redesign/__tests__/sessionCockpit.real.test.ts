@@ -173,8 +173,15 @@ const { stableVirtualApi } = vi.hoisted(() => {
   return { stableVirtualApi };
 });
 
+/* 路径内容面板（PathJourneyPanel）的取数：Path 页签 2026-10-12 起内嵌完整路径内容 */
+const { stableContentApi } = vi.hoisted(() => {
+  const stableContentApi = { getPathDetail: vi.fn() };
+  return { stableContentApi };
+});
+
 vi.mock('@/api/adminApi', () => ({
   adminVirtualLearnersApi: stableVirtualApi,
+  adminLearningContentApi: stableContentApi,
   adminAuthApi: apiObject(),
   adminTeachingSessionsApi: apiObject(),
   adminGoalConversationsApi: apiObject(),
@@ -190,6 +197,7 @@ vi.mock('@/api/adminApi', () => ({
 const getRealSessionConsole = stableVirtualApi.getRealSessionConsole as ReturnType<typeof vi.fn>
 const getVirtualSession = stableVirtualApi.getVirtualSession as ReturnType<typeof vi.fn>
 const getVirtualSessionLogs = stableVirtualApi.getVirtualSessionLogs as ReturnType<typeof vi.fn>
+const getPathDetailMock = stableContentApi.getPathDetail as ReturnType<typeof vi.fn>
 
 async function settle() {
   await flushPromises();
@@ -216,10 +224,13 @@ describe('SessionCockpit 双模式', () => {
 
     const wrapper = await mountCockpit('session-real', 'ts_real_1');
 
-    // 顶栏 + 模式标识（标题已由「会话座舱」更名为「会话监控」）
-    expect(wrapper.text()).toContain('会话监控');
-    expect(wrapper.text()).toContain('真实会话');
-    expect(wrapper.find('.mk-back').text()).toContain('会话列表');
+    // 顶栏不渲染（2026-10-11 走查：真实会话的顶栏 ID/刷新与壳层+hero 重复）；
+    // 只读声明与出口迁进 hero（模式 badge + 动作区「← 会话列表」）
+    expect(wrapper.find('.cp-topbar').exists()).toBe(false);
+    expect(wrapper.text()).toContain('真实会话 · 只读监控');
+    const heroActions = wrapper.find('.mk-hero__actions');
+    expect(heroActions.text()).toContain('会话列表');
+    expect(heroActions.text()).toContain('刷新');
 
     // 阶段推进 stepper：4 步 + meta 副标（Path 1/2 里程碑、Goal 学习者发言数）
     // （口径 2026-10-06 审核 §主题 4：原「对话 N 轮」含平台回复，与同卡「已用回合」打架）
@@ -259,6 +270,220 @@ describe('SessionCockpit 双模式', () => {
     // 只读提示（2026-10-04 批次五 P3#13：「只读监控」声明并入顶栏模式 chip 单源，
     // 控制台条不再对真实会话复读——断言同步新契约：全角间隔号形态）
     expect(wrapper.text()).toContain('真实会话 · 只读监控');
+
+    wrapper.unmount();
+  });
+
+  it('目标对话控制台：默认落 Goal 页签，不跟随下游流水线的 wrapup（2026-10-11 走查）', async () => {
+    // 该学习者末课已完成且有总结 ⇒ 后端 goal 控制台 currentStage 报 'wrapup'（buildGoalConsole 按路径流水线算）；
+    // 但本页主语是这条 Goal 对话，页签默认值必须按「本页对象自己的通道」取，否则点进来先看到那节课的终局总结。
+    const payload = realTeachingPayload();
+    payload.data.kind = 'goal';
+    payload.data.runtime.currentStage = 'wrapup';
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'gc_1');
+
+    expect(wrapper.find('#cp-tabpanel-goal').exists()).toBe(true);
+    expect(wrapper.find('#cp-tabpanel-wrapup').exists()).toBe(false);
+    const selected = wrapper.find('.cp-stp[aria-selected="true"]');
+    expect(selected.attributes('id')).toBe('cp-tab-goal');
+
+    wrapper.unmount();
+  });
+
+  it('课堂会话控制台：仍跟随 currentStage（课已结束 → 落总结页签）', async () => {
+    getRealSessionConsole.mockResolvedValue(realTeachingPayload()); // kind=teaching + currentStage=wrapup
+
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+
+    expect(wrapper.find('#cp-tabpanel-wrapup').exists()).toBe(true);
+    expect(wrapper.find('.cp-stp[aria-selected="true"]').attributes('id')).toBe('cp-tab-wrapup');
+
+    wrapper.unmount();
+  });
+
+  it('阶段推进卡：下游直达入口（2026-10-12 收敛——Path 出口撤，stepper 步点即唯一入口；课堂会话不给自指）', async () => {
+    const goalPayload = realTeachingPayload();
+    goalPayload.data.kind = 'goal';
+    getRealSessionConsole.mockResolvedValue(goalPayload);
+    const goalConsole = await mountCockpit('session-real', 'gc_1');
+    // Path 页签自 2026-10-12 起就是路径内容本体：「查看学习路径」按钮与 Path 步点同目标，已撤；
+    // 只保留课堂会话出口（那是另一个对象）
+    expect(goalConsole.findAll('.cp-stepjumps button').map((b) => b.text())).toEqual(['查看课堂会话']);
+    expect(goalConsole.find('.cp-stepjumps button').attributes('title')).toContain('课堂');
+
+    goalConsole.unmount();
+
+    // 课堂会话控制台的对象就是那一课：再给「查看课堂会话」是自指 → 一条直达都不给
+    getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+    const teachingConsole = await mountCockpit('session-real', 'ts_real_1');
+    expect(teachingConsole.find('.cp-stepjumps').exists()).toBe(false);
+
+    teachingConsole.unmount();
+  });
+
+  it('落点页签：subPage.stage 显式提示优先（2026-10-12——从学习路径进来落 Path，深链 ?stage= 同源）', async () => {
+    const goalPayload = realTeachingPayload();
+    goalPayload.data.kind = 'goal';
+    getRealSessionConsole.mockResolvedValue(goalPayload);
+    // 默认落点：目标对话控制台落 goal（2026-10-11 走查）
+    const goalConsole = await mountCockpit('session-real', 'gc_1');
+    expect(goalConsole.find('.cp-stp[aria-selected="true"]').attributes('id')).toBe('cp-tab-goal');
+    goalConsole.unmount();
+
+    // 带 stage 提示（学习路径列表/深链进来）→ 落 Path，即使该会话 currentStage 报别的
+    subPage.value = { view: 'session-real', id: 'gc_1', stage: 'path' };
+    getRealSessionConsole.mockResolvedValue(goalPayload);
+    const pathLanding = mount(SessionCockpit, { attachTo: document.body });
+    await settle();
+    expect(pathLanding.find('.cp-stp[aria-selected="true"]').attributes('id')).toBe('cp-tab-path');
+    pathLanding.unmount();
+  });
+
+  it('学习者资料卡：上传 / 联网两类来源 + 理解摘要（brief）呈现，无资料不渲染', async () => {
+    const payload = realTeachingPayload();
+    payload.data.kind = 'goal';
+    payload.data.materials = [
+      {
+        id: 'mat-1',
+        name: '指南-抽取.txt',
+        origin: 'upload',
+        charCount: 22284,
+        headingCount: 0,
+        anchorCount: 0,
+        warningCount: 0,
+        createdAt: '2026-09-22T14:44:00.648Z',
+        fetchedAt: null,
+        sourceUrl: null,
+        brief: { docType: '指南', subject: '3-6岁儿童学习与发展指南', audience: '教师', overview: '本文件为《3-6岁儿童学习与发展指南》，指导幼儿园与家庭实施科学保育教育。', coreConcepts: ['五大领域', '学习品质'], naturalDivisions: ['按五大领域'], tocCount: 18 }
+      },
+      {
+        id: 'mat-2',
+        name: '如何阅读一本书',
+        origin: 'web',
+        charCount: 100035,
+        headingCount: 0,
+        anchorCount: 0,
+        warningCount: 1,
+        createdAt: '2026-09-26T00:06:24.026Z',
+        fetchedAt: '2026-09-26T00:06:24.026Z',
+        sourceUrl: 'https://example.org/books/how-to-read.pdf',
+        brief: null
+      }
+    ];
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const w = await mountCockpit('session-real', 'gc_1');
+
+    const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '学习者资料');
+    expect(card).toBeTruthy();
+    expect(card!.find('.mk-card__meta').text()).toContain('2 份');
+    expect(card!.find('.mk-card__meta').text()).toContain('上传 1');
+    expect(card!.find('.mk-card__meta').text()).toContain('联网 1');
+    expect(card!.find('.mk-card__meta').text()).toContain('含理解摘要 1');
+
+    const rows = card!.findAll('.cp-mat');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].find('.mk-badge').text()).toBe('学习者上传');
+    expect(rows[0].find('.cp-mat__name').text()).toBe('指南-抽取.txt');
+    expect(rows[0].find('.cp-mat__subject').text()).toContain('学习与发展指南');
+    expect(rows[0].find('.cp-mat__overview').text()).toContain('科学保育教育');
+    expect(rows[0].find('.cp-mat__chips').text()).toContain('五大领域');
+    // 联网资料：来源链接 + 未生成摘要时明示（不伪造摘要）
+    expect(rows[1].find('.mk-badge').text()).toBe('联网采集');
+    const link = rows[1].find('.cp-mat__src');
+    expect(link.attributes('href')).toBe('https://example.org/books/how-to-read.pdf');
+    expect(link.attributes('rel')).toContain('noopener');
+    expect(rows[1].find('.cp-mat__none').text()).toContain('尚未生成资料理解摘要');
+    expect(rows[1].find('.cp-mat__foot').text()).toContain('example.org');
+
+    w.unmount();
+
+    // 无资料 → 整卡不渲染（与知识状态更新同口径）
+    getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+    const empty = await mountCockpit('session-real', 'ts_real_1');
+    expect(empty.text()).not.toContain('学习者资料');
+    empty.unmount();
+  });
+
+  it('Path 页签 = 路径内容本体（2026-10-12 拍板）：内嵌 PathJourneyPanel，不再有「打开路径详情页」出口', async () => {
+    const payload = realTeachingPayload(); // path: M1 全完成 / M2 有未完任务，当前任务 task_2
+    // 真实载荷里 stageResults.path 与 path 同构（都含 milestones）；fixture 按同构补齐，供里程碑视图取任务态
+    payload.data.stageResults.path = payload.data.path;
+    getRealSessionConsole.mockResolvedValue(payload);
+    // 面板自取 getPathDetail 全量行（与退役的路径详情页同一接口、同一内容面）
+    getPathDetailMock.mockResolvedValue({
+      data: {
+        data: {
+          title: 'Python 入门学习路径',
+          status: 'active',
+          updatedAt: '2026-08-12T12:00:00.000Z',
+          milestones: [
+            {
+              id: 'm1', stageNumber: 1, title: '函数基础', status: 'completed', description: '参数与返回值',
+              subtasks: [
+                { id: 't1', title: '函数定义', status: 'completed', taskType: 'acquire', estimatedMinutes: 15 },
+                { id: 't2', title: '参数与返回值', status: 'completed', taskType: 'practice', estimatedMinutes: 20 }
+              ]
+            },
+            {
+              id: 'm2', stageNumber: 2, title: '作用域', status: 'in_progress', description: '局部与全局',
+              goal: '掌握词法作用域', coreConceptName: '作用域', estimatedHours: 6,
+              subtasks: [
+                { id: 't3', title: '作用域练习', status: 'in_progress', taskType: 'practice', estimatedMinutes: 25 }
+              ]
+            }
+          ]
+        }
+      }
+    });
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    await wrapper.findAll('.cp-stp')[1].trigger('click'); // Path 页签
+    await settle();
+    expect(getPathDetailMock).toHaveBeenCalledWith('lp_1');
+
+    const pane = wrapper.find('#cp-tabpanel-path');
+    expect(pane.exists()).toBe(true);
+    expect(pane.find('.mk-card__title').text()).toBe('关联学习路径');
+    // 面板内容体：总体进度（阶段口径 1/2 → 50%）+ 子任务 2/3（双分母口径常显）
+    expect(pane.text()).toContain('总体进度');
+    expect(pane.text()).toContain('任务 2 / 3');
+    expect(pane.text()).toContain('50%');
+    // 阶段手风琴在页签内（默认展开当前阶段「作用域」，含阶段目标/核心概念）
+    const stageTitles = pane.findAll('.pd-stage__title').map((s) => s.text());
+    expect(stageTitles).toEqual(['函数基础', '作用域']);
+    expect(pane.text()).toContain('目标掌握词法作用域');
+    expect(pane.text()).toContain('核心概念：作用域');
+    // 旧出口退役：stepper 的 Path 步点即唯一入口，不再有「打开路径详情页」按钮
+    expect(pane.text()).not.toContain('打开路径详情页');
+    // 治理动作保留（真实能力：下线路径）
+    expect(pane.text()).toContain('下线路径');
+
+    wrapper.unmount();
+  });
+
+  it('Learn 课表：真实会话下「从该课开始学习」是虚拟专属 → 只读行，不给假入口', async () => {
+    const payload = realTeachingPayload();
+    payload.data.stageResults.path = payload.data.path; // 同构补齐（里程碑视图取任务态）
+    // 追加一节未开始的课，覆盖「未开始」分支（fixture 原本只有已完成 + 当前课）
+    payload.data.stageResults.path.milestones[1].tasks.push({ id: 'task_9', title: '未开始的课', status: 'pending', completed: false });
+    getRealSessionConsole.mockResolvedValue(payload);
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    await wrapper.findAll('.cp-stp')[2].trigger('click'); // Learn 页签
+    await settle();
+
+    const rows = wrapper.findAll('.cp-learn-tree__lesson');
+    expect(rows.length).toBeGreaterThan(0);
+    // 实测（2026-10-11）：点未开始的课 → 确认框 → 「启动失败：模拟会话不存在」（该接口只认 virtual_sessions）
+    // 故真实会话下不给这个动作，按总结页既有先例渲染只读行（FN4 同款）；有课堂会话的课仍可点开对话。
+    const titles = rows.map((r) => r.attributes('title') || '');
+    expect(titles.some((t) => t.includes('点击可从该课开始学习'))).toBe(false);
+    const enabled = rows.filter((r) => r.attributes('disabled') === undefined);
+    expect(enabled.every((r) => r.attributes('title') === '查看课堂对话')).toBe(true);
+    const readonly = rows.filter((r) => r.attributes('disabled') !== undefined);
+    expect(readonly.length).toBeGreaterThan(0);
+    expect(readonly.map((r) => r.attributes('title') || '')).toContain('真实会话不可从后台启动学习；仅在虚拟学习者会话下可从该课开始');
 
     wrapper.unmount();
   });

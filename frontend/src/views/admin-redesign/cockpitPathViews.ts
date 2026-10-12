@@ -5,6 +5,9 @@
  */
 import { asRecord, firstText, normalized, numberValue } from './cockpitFormat'
 
+/** 难度枚举中文化（照 2026-10-11 学习路径列表页先例）：unknown 是「无数据」不是档位名，别直出英文 */
+const PATH_DIFFICULTY_ZH: Record<string, string> = { unknown: '未知', beginner: '入门', intermediate: '进阶', advanced: '高阶' }
+
 export function collectPathMilestones(
   pathStatusPath: Record<string, unknown>,
   pathStatus: Record<string, unknown> | null,
@@ -83,11 +86,6 @@ export function buildPathDetailTitle(pathStatusPath: Record<string, unknown>, st
     || '学习路径'
 }
 
-export function buildPathDetailSummary(pathStatusPath: Record<string, unknown>, stageResultsPath: unknown) {
-  return firstText(pathStatusPath.summary, pathStatusPath.description)
-    || firstText(asRecord(stageResultsPath).summary, asRecord(stageResultsPath).description)
-}
-
 export function buildPathDetailMeta(
   hasPathValue: boolean,
   pathStatusPath: Record<string, unknown>,
@@ -102,7 +100,7 @@ export function buildPathDetailMeta(
   const total = numberValue(pathStatusPath.totalMilestones)
     ?? numberValue(srPath.totalMilestones)
     ?? milestonesCount
-  if (difficulty) parts.push(`难度 ${difficulty}`)
+  if (difficulty) parts.push(`难度 ${PATH_DIFFICULTY_ZH[difficulty.toLowerCase()] || difficulty}`)
   if (hours !== null) parts.push(`约 ${hours} 小时`)
   if (total) parts.push(`${total} 个里程碑`)
   return parts.join(' · ')

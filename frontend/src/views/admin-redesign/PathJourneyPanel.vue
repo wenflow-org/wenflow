@@ -1,0 +1,562 @@
+<template>
+  <!-- ===== 路径内容面板（嵌在会话座舱 Path 页签内） =====
+       2026-10-12 用户拍板：路径不再有独立详情页（?view=path 退役为深链适配层），
+       路径内容统一长在座舱的阶段页签里。本组件 = 原 PathDetail.vue 的内容体
+       （总体进度 meter + 技术细节 + 阶段手风琴 + 任务弹层 + 治理动作），
+       去 hero / 学习者下钻（座舱本身就是该学习者的上下文），类名沿用 pd- 域。 -->
+  <div class="pjp">
+    <!-- 首载失败：错误态 + 重试（MkEmptyState tone=error，判例 UserDetail） -->
+    <MkEmptyState
+      v-if="loadError && !d"
+      icon="◌"
+      tone="error"
+      title="路径内容加载失败"
+      :description="loadError"
+      action-text="重试"
+      @action="load(true)"
+    />
+    <div v-else-if="!d" class="pd-skel" aria-hidden="true">
+      <MkSkeleton variant="cards" :count="1" :h="56" :cols="1" :radius="12" />
+      <MkSkeleton variant="cards" :count="4" :h="64" :cols="1" :radius="12" />
+    </div>
+    <template v-else>
+      <!-- 治理动作（原 hero actions 的真实能力子集：重试生成 / 下线·恢复 / 刷新；
+           「查看学习者」不搬——座舱页头已是该学习者）。changed 事件让宿主刷新路径状态 -->
+      <div class="pjp-acts">
+        <button v-if="canRetry" type="button" class="mk-btn mk-btn--sm" :disabled="busy" :title="retryTitle" @click="retryGeneration">
+          重试生成
+        </button>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" @click="toggleArchive">
+          {{ d.status === 'archived' ? '恢复路径' : '下线路径' }}
+        </button>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="load(true)">
+          {{ loading ? '刷新中…' : '刷新' }}
+        </button>
+        <span v-if="d.status !== 'active'" class="mk-badge" :class="statusBadge(d.status)">{{ statusText(d.status) }}</span>
+      </div>
+
+      <!-- 总体进度（原型 meterrow：label + mono % + 8px meter 条）+ 右侧任务完成数。
+           双分母口径常显（2026-10-06 审核 #75）：阶段 % vs 任务 X/Y，歧义不进 title -->
+      <section class="pd-progress">
+        <div class="pd-meterrow">
+          <span class="pd-meterrow__label" title="口径：按阶段（已完成阶段数 / 总阶段数）；右侧「任务 X / Y」按子任务口径，两者分母不同">总体进度（按阶段）</span>
+          <span class="pd-meterrow__right">
+            <span v-if="taskTotals.total" class="pd-meterrow__tasks" title="已完成子任务数 / 子任务总数（按详情接口 subtasks 统计；与本条 % 的阶段口径分母不同）">任务 {{ taskTotals.done }} / {{ taskTotals.total }}</span>
+            <span class="pd-meterrow__num mono">{{ overallPct }}%</span>
+          </span>
+        </div>
+        <span class="mk-minibar pd-meter"><i class="mk-minibar__fill" :style="{ width: overallPct + '%' }"></i></span>
+        <p class="pd-note">% 为阶段进度（{{ stageDone }}/{{ stageTotal }} 阶段）；「任务 X / Y」为子任务进度（{{ taskTotals.done }}/{{ taskTotals.total }}），两者分母不同</p>
+      </section>
+
+      <!-- 技术细节（R5：工程标识降级收 details；生成运行 id 是「为何被归档/为何停滞」的唯一线索） -->
+      <details class="pd-tech">
+        <summary>技术细节</summary>
+        <span class="pd-tech__row">
+          <span class="mono">{{ pathId }}</span>
+          <span>· 状态 {{ d.status }}</span>
+          <span>· 最近更新 {{ d.updatedAt ? fmtFull(d.updatedAt) : '—' }}</span>
+          <span v-if="d.activeGenerationRunId">· 生成运行 <span class="mono" :title="d.activeGenerationRunId">{{ d.activeGenerationRunId }}</span></span>
+        </span>
+      </details>
+
+      <!-- stagecard 手风琴（原型：单开、点击阶段头切换展开；默认展开「当前阶段」——2026-10-06 审核 #80） -->
+      <MkEmptyState
+        v-if="!stages.length"
+        icon="◌"
+        title="该路径尚未拆解出阶段"
+        description="目标对话生成路径后，阶段与任务会出现在这里。"
+      />
+      <div v-else class="pd-stack">
+        <section
+          v-for="(m, i) in stages"
+          :key="m.id"
+          class="pd-stage"
+          :class="{ 'pd-stage--idle': m.status !== 'in_progress' && m.status !== 'completed' }"
+        >
+          <button
+            type="button"
+            class="pd-stage__head"
+            :aria-expanded="openStage === i"
+            @click="toggleStage(i)"
+          >
+            <span class="pd-stage__n" aria-hidden="true">{{ m.stageNumber || i + 1 }}</span>
+            <strong class="pd-stage__title" :title="m.title">{{ m.title }}</strong>
+            <span class="pd-stage__meta">{{ doneTasks(m) }} / {{ m.subtasks.length }} 任务</span>
+            <span class="mk-badge" :class="milestoneBadge(m.status)">{{ milestoneText(m.status) }}</span>
+            <span class="pd-stage__caret" aria-hidden="true">{{ openStage === i ? '▾' : '▸' }}</span>
+          </button>
+          <div v-if="openStage === i" class="pd-stage__body">
+            <!-- 阶段内容层（2026-10-06 审核 #54）：描述/目标/核心概念/预计学时，无值不渲染、不硬造 -->
+            <div v-if="m.description || m.goal || m.coreConceptName || m.estimatedHours" class="pd-stage__brief">
+              <p v-if="m.description" class="pd-stage__desc">{{ m.description }}</p>
+              <p v-if="m.goal" class="pd-stage__goal"><span class="pd-stage__brief-label">目标</span>{{ m.goal }}</p>
+              <div class="pd-stage__brief-meta">
+                <span v-if="m.coreConceptName" class="mk-badge mk-badge--muted" title="该阶段的核心概念">核心概念：{{ m.coreConceptName }}</span>
+                <span v-if="m.estimatedHours" class="pd-stage__hours" title="预计时长为估算值">预计 ~{{ m.estimatedHours }}h</span>
+              </div>
+            </div>
+            <button
+              v-for="t in m.subtasks"
+              :key="t.id"
+              type="button"
+              class="pd-task"
+              :class="{ 'pd-task--done': t.status === 'completed', 'pd-task--active': t.status === 'in_progress' }"
+              @click="openTask(m, t)"
+            >
+              <span class="pd-task__box" aria-hidden="true">✓</span>
+              <span class="pd-task__main">
+                <strong class="pd-task__title">{{ t.title }}</strong>
+                <span class="pd-task__sub" :title="taskSubTitle(t)">{{ taskSub(t) }}</span>
+              </span>
+              <span class="mk-badge" :class="taskBadge(t.status)">{{ taskText(t.status) }}</span>
+            </button>
+            <!-- .pd-none 仅作既有单测钩子保留（样式由共享 .mk-empty--line 承担，审核 #76） -->
+            <p v-if="!m.subtasks.length" class="mk-empty mk-empty--line pd-none">该阶段暂无任务</p>
+          </div>
+        </section>
+      </div>
+    </template>
+
+    <!-- 任务详情弹层（原型 openTaskDetail 三段式；验收点等原型字段后端未返回，不硬造） -->
+    <Teleport to="body">
+      <div v-if="taskRef" ref="maskRef" class="mk-modal">
+        <div ref="panelRef" class="mk-modal__panel pd-tk" role="dialog" aria-modal="true" aria-label="任务详情">
+          <div class="mk-modal__head">
+            <div class="pd-tk__head">
+              <span class="pd-tk__num" aria-hidden="true">{{ taskRef.stage.stageNumber || 1 }}</span>
+              <div class="pd-tk__meta">
+                <h2 class="mk-modal__title">{{ taskRef.task.title }}</h2>
+                <span class="pd-tk__sub">{{ taskRef.stage.title }}</span>
+              </div>
+            </div>
+            <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeTask">✕</button>
+          </div>
+          <div class="mk-modal__body">
+            <div class="pd-tk__row">
+              <span class="mk-badge" :class="taskBadge(taskRef.task.status)">{{ taskText(taskRef.task.status) }}</span>
+              <span class="pd-tk__grow"></span>
+              <span class="pd-tk__note mono" :title="taskRef.task.id">{{ shortId(taskRef.task.id, 8, 4) }}</span>
+            </div>
+            <div class="mk-facts">
+              <div><span>任务类型</span><strong :title="taskSubTitle(taskRef.task)">{{ taskTypeText(taskRef.task.taskType) }}</strong></div>
+              <div><span>预计用时</span><strong class="mono">{{ taskRef.task.estimatedMinutes }} 分钟</strong></div>
+              <div v-if="cognitiveText(taskRef.task.cognitiveLoad)"><span>认知负荷</span><strong>{{ cognitiveText(taskRef.task.cognitiveLoad) }}</strong></div>
+              <div v-if="taskRef.task.completedAt"><span>完成时间</span><strong>{{ timeAgo(taskRef.task.completedAt) }}</strong></div>
+            </div>
+          </div>
+          <div class="mk-modal__foot">
+            <button type="button" class="mk-btn" @click="closeTask">关闭</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+  </div>
+</template>
+
+<script setup lang="ts">
+/**
+ * 路径内容面板（会话座舱 Path 页签的内容体，2026-10-12 自 PathDetail.vue 移植）。
+ * 数据口径不变：全部来自 adminLearningContentApi.getPathDetail 的真实字段，
+ * 原型有而接口没有的字段（验收点/关联产出/学习证据）不渲染，绝不硬造。
+ * 动作口径：重试生成（failed/停滞 active 的运营救援，守卫自动判 core/stageDesign）、
+ * 下线/恢复（恢复文案按状态分支，2026-10-06 审核 #55）、刷新。成功后 emit('changed')
+ * 让宿主（座舱）重拉路径状态，页签 meta 与 stepper 不留旧值。
+ */
+import { computed, ref, watch } from 'vue'
+import { adminLearningContentApi } from '@/api/adminApi'
+import { timeAgo, errMsg, shortId } from './live'
+import { subPage, setSubPageLabel } from './store'
+import { statusText, statusBadge, isPathStalled, pathRetryTypeText, PATH_STALL_HOURS } from './opsShared'
+/* 任务类型字典单源（F2-2）：与 TeachingSessions 同源，两页同批枚举不得各译一套 */
+import { taskTypeText, taskTypeTitle } from './statusText'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkSkeleton from '@/components/mk/MkSkeleton.vue'
+import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
+import { useOverlay, useMaskClose } from './useOverlay'
+import { useEscape } from './useEscape'
+import { toast } from '@/utils/toast'
+
+const props = defineProps<{ pathId: string }>()
+const emit = defineEmits<{ (e: 'changed'): void }>()
+
+/* 契约与 PathDetail 时代一致（详情接口返回 prisma 原行） */
+interface PathSubtask {
+  id: string
+  title: string
+  status: string
+  taskType: string
+  estimatedMinutes: number
+  completedAt?: string | null
+  cognitiveLoad?: string | null
+}
+interface PathMilestone {
+  id: string
+  stageNumber: number
+  title: string
+  status: string
+  estimatedHours?: number | null
+  description?: string | null
+  goal?: string | null
+  coreConceptName?: string | null
+  subtasks: PathSubtask[]
+}
+interface PathDetailData {
+  title: string
+  status: string
+  updatedAt?: string | null
+  milestones: PathMilestone[]
+  activeGenerationRunId?: string | null
+}
+
+const d = ref<PathDetailData | null>(null)
+const loading = ref(false)
+const loadError = ref('')
+const busy = ref(false)
+/* 初值 null：真实展开项由 load() 按数据派生（审核 #80） */
+const openStage = ref<number | null>(null)
+
+/* subtasks 兜底成数组：阶段/任务计数与模板都直接读 .length，缺列时面板不应炸 */
+const stages = computed<PathMilestone[]>(() =>
+  (d.value?.milestones ?? []).map((m) => ({ ...m, subtasks: Array.isArray(m.subtasks) ? m.subtasks : [] }))
+)
+
+/* 任务详情弹层状态（声明在 watch 之前：watch 带 immediate，setup 期同步调用 closeTask） */
+const taskRef = ref<{ stage: PathMilestone; task: PathSubtask } | null>(null)
+const maskRef = ref<HTMLElement | null>(null)
+const panelRef = ref<HTMLElement | null>(null)
+function closeTask() {
+  taskRef.value = null
+}
+
+/* 加载序号：刷新/换路径时旧响应丢弃（判例 UserDetail last-wins 守卫） */
+let loadSeq = 0
+
+/* 面包屑名（2026-10-12）：座舱的 subPage 不再由（已退役的）路径详情页回写可读名，
+   深链/列表进来会露裸会话 id。面板持有详情接口的真标题，成功后回写——仅当本面板
+   所属座舱仍是当前二级页，且现有名为空或座舱 watch 写入的泛型兜底「学习路径」。 */
+const ownerSubPageId = subPage.value?.id || ''
+function writeBreadcrumbLabel(title: string) {
+  const sp = subPage.value
+  if (!title || !sp || sp.id !== ownerSubPageId) return
+  if (sp.label && sp.label !== '学习路径') return
+  setSubPageLabel(title)
+}
+
+function defaultOpenStage(list: PathMilestone[]): number | null {
+  if (!list.length) return null
+  const subs = (m: PathMilestone) => (Array.isArray(m.subtasks) ? m.subtasks : [])
+  const pending = list.findIndex((m) => subs(m).some((t) => t.status !== 'completed'))
+  if (pending >= 0) return pending
+  return list.some((m) => subs(m).length) ? list.length - 1 : 0
+}
+
+async function load(force = false) {
+  const pid = props.pathId
+  if (!pid) return
+  if (loading.value && !force) return
+  const seq = ++loadSeq
+  loading.value = true
+  if (!d.value) loadError.value = ''
+  try {
+    const res = await adminLearningContentApi.getPathDetail(pid)
+    if (seq !== loadSeq || props.pathId !== pid) return
+    const body = (res.data?.data ?? res.data ?? null) as PathDetailData | null
+    if (!body) throw new Error('详情数据为空')
+    d.value = body
+    loadError.value = ''
+    openStage.value = defaultOpenStage(body.milestones || [])
+    if (body.title) writeBreadcrumbLabel(String(body.title))
+  } catch (e) {
+    if (seq !== loadSeq || props.pathId !== pid) return
+    /* 刷新失败保留旧数据（面板不白屏），首载失败走错误态 */
+    if (!d.value) loadError.value = `暂时无法获取该路径的完整信息：${errMsg(e)}`
+    else toast.error(`刷新失败：${errMsg(e)}`)
+  } finally {
+    if (seq === loadSeq) loading.value = false
+  }
+}
+
+watch(
+  () => props.pathId,
+  (pid) => {
+    loadSeq += 1
+    d.value = null
+    loadError.value = ''
+    openStage.value = null
+    closeTask()
+    if (pid) void load()
+  },
+  { immediate: true }
+)
+
+/* ===== 阶段/任务统计（全部由真实 milestones/subtasks 派生，不用行上反规范化计数；
+   审核记录见 PathDetail 时代 #79：总数取实际 milestones 长度，不读行上旧计数） ===== */
+const stageDone = computed(() => stages.value.filter((m) => m.status === 'completed').length)
+const stageTotal = computed(() => stages.value.length)
+const overallPct = computed(() =>
+  stageTotal.value ? Math.round((stageDone.value / stageTotal.value) * 100) : 0
+)
+const taskTotals = computed(() => {
+  let done = 0
+  let total = 0
+  for (const m of stages.value) {
+    total += m.subtasks.length
+    done += m.subtasks.filter((t) => t.status === 'completed').length
+  }
+  return { done, total }
+})
+const doneTasks = (m: PathMilestone) => m.subtasks.filter((t) => t.status === 'completed').length
+
+/* ===== 状态映射（与列表页 opsShared 同一套；子任务/里程碑为详情域映射） ===== */
+const milestoneText = (s: string) => ({ completed: '已完成', in_progress: '进行中', locked: '未解锁' }[s] || s)
+const milestoneBadge = (s: string) =>
+  s === 'completed' ? 'mk-badge--ok' : s === 'in_progress' ? 'mk-badge--info' : 'mk-badge--muted'
+const taskText = (s: string) => ({ completed: '已完成', in_progress: '进行中', todo: '未开始' }[s] || s)
+const taskBadge = (s: string) =>
+  s === 'completed' ? 'mk-badge--ok' : s === 'in_progress' ? 'mk-badge--info' : 'mk-badge--muted'
+const cognitiveText = (c?: string | null) => ({ low: '低', medium: '中', high: '高' }[String(c || '')] || String(c || ''))
+const taskSub = (t: PathSubtask) => `${taskTypeText(t.taskType)} · ${t.estimatedMinutes} 分钟`
+const taskSubTitle = (t: PathSubtask) => taskTypeTitle(t.taskType)
+
+function toggleStage(i: number) {
+  openStage.value = openStage.value === i ? null : i
+}
+
+/* ===== 任务详情弹层（开合行为四件套：Esc/遮罩/焦点陷阱/滚动锁） ===== */
+useOverlay(computed(() => !!taskRef.value), panelRef)
+useMaskClose(maskRef, () => closeTask())
+useEscape(() => !!taskRef.value, () => closeTask())
+
+function openTask(stage: PathMilestone, task: PathSubtask) {
+  taskRef.value = { stage, task }
+}
+
+/* ===== 治理动作（真实能力：下线 / 恢复 / 重试生成；成功后通知宿主刷新路径状态） ===== */
+async function toggleArchive() {
+  const v = d.value
+  if (!v || busy.value || !props.pathId) return
+  const archiving = v.status !== 'archived'
+  const ok = await askConfirm({
+    title: archiving ? '下线路径' : '恢复路径',
+    message: archiving
+      ? `确认下线「${v.title}」？\n用户端将无法继续学习该路径。`
+      : restoreMessage(v.status, v.title),
+    confirmText: archiving ? '下线' : '恢复',
+    danger: archiving,
+    /* 破坏性动作（下线）接 busy 模式（全站约定，判例 OpsContent.vue:450-467） */
+    busy: archiving
+  })
+  if (!ok) return
+  busy.value = true
+  try {
+    if (archiving) await adminLearningContentApi.archivePath(props.pathId)
+    else await adminLearningContentApi.restorePath(props.pathId)
+    /* 恢复态按真实返回值刷新：completed/failed 路径恢复后后端恒置 active，
+       前端不得乐观写死（否则完成/失败态被静默抹掉，2026-10-06 审核 #55） */
+    await load(true)
+    toast.success(archiving ? '路径已下线' : '路径已恢复')
+    emit('changed')
+    if (archiving) doneConfirm()
+  } catch (e) {
+    toast.error(`${archiving ? '下线' : '恢复'}失败：${errMsg(e)}`)
+    if (archiving) failConfirm()
+  } finally {
+    busy.value = false
+  }
+}
+
+/** 恢复确认文案按当前状态分支（审核 #55：固定文案在 completed/failed 态不成立） */
+function restoreMessage(status: string, title: string): string {
+  if (status === 'completed') return `确认恢复「${title}」？\n恢复后路径重新开放，已有完成记录保留。`
+  if (status === 'failed') return `确认恢复「${title}」？\n恢复后该路径重新进入学习中，可继续推进未完成阶段。`
+  return `确认恢复「${title}」？恢复后用户端立即可见并继续学习该路径。`
+}
+
+/* ===== 重试生成（failed / 停滞 active 的运营救援；与列表页 OpsContent 同一后端口子） ===== */
+const canRetry = computed(() => {
+  const v = d.value
+  if (!v) return false
+  return v.status === 'failed' || isPathStalled(v.status, v.updatedAt || '')
+})
+const retryTitle = computed(() => {
+  const v = d.value
+  if (v?.status === 'failed') return '该路径生成失败：守卫自动判「重建主结构」或「补齐阶段任务」'
+  return `active 超过 ${PATH_STALL_HOURS}h 无更新：通常为生成链停滞，可补齐阶段任务`
+})
+function fmtFull(iso: string): string {
+  const t = new Date(iso)
+  return Number.isFinite(t.getTime()) ? t.toLocaleString('zh-CN') : iso
+}
+async function retryGeneration() {
+  const v = d.value
+  if (!v || busy.value || !props.pathId) return
+  const ok = await askConfirm({
+    title: '重试路径生成',
+    message: `确认对「${v.title}」重新发起生成？\n后台异步执行，完成后路径自动更新。`,
+    confirmText: '重试',
+    danger: false,
+    busy: true,
+  })
+  if (!ok) return
+  busy.value = true
+  try {
+    const res = await adminLearningContentApi.retryGeneration(props.pathId)
+    const body = res.data
+    if (body?.success && body.data?.success) {
+      toast.success(`已提交重试（${pathRetryTypeText(body.data.retryType)}）`)
+      doneConfirm()
+      await load(true)
+      emit('changed')
+    } else {
+      toast.error(`无法重试：${body?.data?.error || body?.error || '原因未知'}`)
+      failConfirm()
+    }
+  } catch (e) {
+    toast.error(`重试失败：${errMsg(e)}`)
+    failConfirm()
+  } finally {
+    busy.value = false
+  }
+}
+</script>
+
+<style scoped>
+.pjp { display: grid; gap: 12px; }
+/* 骨架版式（形状）走 MkSkeleton；本类只管外层堆叠 */
+.pd-skel { display: grid; gap: 14px; }
+
+/* 动作行（原 hero actions 收敛成一行；弱化不与页签头抢层级） */
+.pjp-acts { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* 总体进度（原型 meterrow + height:8px meter；右侧 = 任务完成数 + 百分比）。
+   座舱页签本身是卡，这里不再套 mk-card，直接铺内容 */
+.pd-progress { display: grid; gap: 6px; }
+.pd-meterrow { display: flex; align-items: center; gap: 8px; }
+.pd-meterrow__label { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.pd-meterrow__right { margin-left: auto; display: flex; align-items: baseline; gap: 12px; }
+.pd-meterrow__tasks { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-family: var(--mk-mono); }
+.pd-meterrow__num { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.pd-meter { height: 8px; }
+.pd-note { margin: 0; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+
+/* 技术细节（R5：工程标识默认收起、faint 微字；id 走 mono，完整值在 title） */
+.pd-tech { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.pd-tech summary { cursor: pointer; width: fit-content; }
+.pd-tech__row { display: inline-flex; flex-wrap: wrap; gap: 4px 8px; padding-top: 4px; }
+
+/* stagecard 手风琴（原型 .stagecard：整卡描边、头浅底、体下沉任务行） */
+.pd-stack { display: grid; gap: 12px; }
+.pd-stage {
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-xl);
+  overflow: hidden;
+  background: var(--mk-surface);
+}
+.pd-stage__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 0;
+  background: var(--mk-surface-2);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pd-stage__n {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; flex: none;
+  font-size: var(--mk-fs-micro); font-weight: 700;
+  background: var(--mk-blue); color: var(--mk-on-fill, #ffffff);
+}
+.pd-stage--idle .pd-stage__n { background: var(--mk-surface-3); color: var(--mk-muted); }
+/* 阶段头悬停反馈（审核 #78）：与任务行的 hover 语言一致（spec §4：只允许变背景/边框/文字色） */
+@media (hover: hover) {
+  .pd-stage__head:hover { background: var(--mk-surface-3); }
+}
+.pd-stage__title {
+  flex: 1; min-width: 0;
+  font-size: var(--mk-fs-body);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pd-stage__meta { color: var(--mk-muted); font-size: var(--mk-fs-micro); white-space: nowrap; }
+.pd-stage__caret { color: var(--mk-faint); flex: none; width: 12px; text-align: center; }
+.pd-stage__body {
+  display: grid; gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--mk-line);
+}
+/* 阶段内容层（#54）：描述/目标/核心概念/预计学时；与任务行同栏，底部分隔开 */
+.pd-stage__brief { display: grid; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--mk-line); }
+.pd-stage__desc { margin: 0; color: var(--mk-muted); font-size: var(--mk-fs-body); }
+.pd-stage__goal { margin: 0; color: var(--mk-ink); font-size: var(--mk-fs-body); }
+.pd-stage__brief-label { margin-right: 6px; color: var(--mk-faint); font-size: var(--mk-fs-micro); font-weight: 600; }
+.pd-stage__brief-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pd-stage__hours { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-family: var(--mk-mono); }
+
+/* taskrow（原型 .taskrow：✓ 框 + 任务名/副行 + 状态 pill；--done/--active 修饰） */
+.pd-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .pd-task:hover { border-color: color-mix(in srgb, var(--mk-blue) 34%, var(--mk-line)); }
+}
+.pd-task__box {
+  width: 18px; height: 18px; flex: none; margin-top: 1px;
+  border: 2px solid var(--mk-line);
+  border-radius: var(--mk-radius-xs);
+  display: grid; place-items: center;
+  font-size: var(--mk-fs-micro); color: transparent;
+}
+.pd-task--done .pd-task__box { background: var(--mk-green); border-color: var(--mk-green); color: var(--mk-on-fill, #ffffff); }
+.pd-task--active .pd-task__box { border-color: var(--mk-blue); }
+.pd-task__main { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.pd-task__title { font-size: var(--mk-fs-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-task__sub { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* .pd-none 仅作单测钩子保留（样式由共享 .mk-empty--line 承担，审核 #76） */
+
+/* 任务详情弹层（原型 .ovl__ 三段式内容物；外壳走共享 .mk-modal 原语） */
+.pd-tk__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pd-tk__num {
+  width: 24px; height: 24px; border-radius: 999px; flex: none;
+  display: grid; place-items: center;
+  font-size: var(--mk-fs-micro); font-weight: 700;
+  background: var(--mk-blue); color: var(--mk-on-fill, #ffffff);
+}
+.pd-tk__meta { display: grid; gap: 2px; min-width: 0; }
+.pd-tk__sub { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.pd-tk__row { display: flex; align-items: center; gap: 8px; }
+.pd-tk__grow { flex: 1; }
+.pd-tk__note { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+
+/* ===== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ===== */
+@media (min-width: 2000px) {
+  .pd-stage__title { font-size: var(--mk-fs-emphasis); }
+  .pd-task__title { font-size: var(--mk-fs-emphasis); }
+  .pd-task__sub { font-size: var(--mk-fs-body); }
+}
+@media (min-width: 2800px) {
+  .pd-stage__title { font-size: var(--mk-fs-emphasis); }
+  .pd-task__title { font-size: var(--mk-fs-emphasis); }
+  .pd-task__sub { font-size: var(--mk-fs-body); }
+}
+@media (min-width: 3600px) {
+  .pd-stage__title { font-size: var(--mk-fs-emphasis); }
+  .pd-task__title { font-size: var(--mk-fs-emphasis); }
+  .pd-task__sub { font-size: var(--mk-fs-emphasis); }
+}
+</style>

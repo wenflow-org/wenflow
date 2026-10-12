@@ -5,7 +5,7 @@
       icon="◌"
       tone="error"
       title="详情加载失败"
-      description="暂时无法获取该学习者的完整快照。"
+      description="暂时无法获取该学习者的完整档案。"
       action-text="重试"
       @action="loadDetail(subPage?.id)"
     />
@@ -27,32 +27,19 @@
       <template #pills>
         <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
         <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
-        <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">快照 {{ snapshotLabel }}</span>
+        <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">档案 {{ snapshotLabel }}</span>
       </template>
       <template #actions>
         <button type="button" class="mk-btn" :disabled="recomputing" @click="recompute">
-          {{ recomputing ? '重算中…' : '重算快照' }}
+          {{ recomputing ? '重算中…' : '重算档案' }}
         </button>
       </template>
     </MkDetailHero>
 
-    <!-- 状态条（原型 renderLearnerDetail 的 statstrip：hero 与 subtabs 之间的一行四格读数）。
-         全部来自已加载的 Detail：进度/阶段/任务/最近动态窗口。 -->
-    <!-- P2（2026-10-04 全站评审）：页级学习轴 statstrip 在「账号与许可」页签下不渲染——
-         路径进度/阶段/任务是学习轴词汇，与账号轴无关；且该页签下它与账号条同屏叠两条同形统计条 -->
-    <!-- 2026-10-05（批次五 CM2）：本地 .statstrip 复刻退役，改用共享 MkStatStrip 的 grid 变体 -->
-    <section v-if="tab !== 'account'" class="mk-card">
-      <MkStatStrip
-        layout="grid"
-        aria-label="学习者概览"
-        :items="[
-          { label: '路径进度', value: `${d.pct}%`, title: pctTitle },
-          { label: '当前阶段', value: d.stage || '—', title: d.stage },
-          { label: '当前任务', value: d.task || '—', title: d.task },
-          { label: '最近动态', value: `最近 ${d.sessions.length} 条`, title: recentSessionsHint },
-        ]"
-      />
-    </section>
+    <!-- 页级 statstrip 已撤（2026-10-11 用户走查「拿掉不要了」）：四格读数的实体都在归属页签
+         （路径进度→概览当前进度卡、知识信号→证据信号卡、复习到期→记忆与复习、最近会话→教学会话），
+         常驻条整条成为纯复读；跨页签定位由页签栏本身承担。历史：P2（2026-10-04）曾按账号轴隐藏、
+         2026-10-05 收敛共享 MkStatStrip、2026-10-11 上午重设计为四格可点条，同日整体撤除 -->
 
     <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向）。
          形态换 MkSubTabs（newui/admin 下划线式，替换胶囊 mk-pill） -->
@@ -137,14 +124,14 @@
             <span class="mk-card__meta">
               <MkLoading v-if="ldSessLoading" inline min text="加载中…" />
               <template v-else-if="ldSessError">加载失败</template>
-              <!-- 「最近」语义恒在：左栏只取窗口前 5 条，裸「N 条」会被读成总量 -->
-              <template v-else>{{ ldSessionRows.length > recentSessionRows.length ? `最近 ${recentSessionRows.length} 条 · 共 ${ldSessionRows.length}` : `最近 ${recentSessionRows.length} 条` }}</template>
+              <!-- 「最近」语义恒在：左栏只取有效会话窗口前 5 条，裸「N 条」会被读成总量 -->
+              <template v-else>{{ sessionPreviewMeta }}</template>
             </span>
           </div>
           <!-- 审核 #23（2026-10-06）：原卡头 MkLoading + MkRowList :loading 同时出两个转圈——
                卡头文案保留为全卡唯一加载信号，列表 loading 撤；同时把空态挂起条件补上
                ldSessLoading，避免加载中先闪「暂无教学会话」 -->
-          <MkRowList :empty="!recentSessionRows.length && !ldSessLoading" empty-text="暂无教学会话" empty-hint="该学习者上课后，这里会出现会话列表。">
+          <MkRowList :empty="!recentSessionRows.length && !ldSessLoading" :empty-text="discardedHiddenCount ? '暂无有效教学会话' : '暂无教学会话'" empty-hint="该学习者上课后，这里会出现会话列表。">
             <MkRow
               v-for="s in recentSessionRows"
               :key="s.id"
@@ -185,19 +172,8 @@
           </div>
         </section>
 
-        <!-- 学习者画像 kv（原型 2190）：邮箱/层级/路径数/最近活跃（注册来源无后端字段，不硬造） -->
-        <section v-if="portraitRows.length" class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">学习者画像</h3>
-            <span class="mk-card__meta">账号与路径概要</span>
-          </div>
-          <div class="ld-kv">
-            <div v-for="kv in portraitRows" :key="kv.label" class="ld-kv__row">
-              <span>{{ kv.label }}</span>
-              <strong>{{ kv.value }}</strong>
-            </div>
-          </div>
-        </section>
+        <!-- 「学习者画像」kv 卡已撤（2026-10-11 走查）：邮箱与 hero 重复、层级/路径数/注册时间
+             与「账号与许可」页签三重覆盖；概览左列以学习状态追踪收尾 -->
       </div>
 
       <div class="ld-col">
@@ -207,13 +183,13 @@
           <div class="mk-card__head">
             <!-- 更名「最近动态」：卡内取的是合并时间线前 6 条（教学/目标/路径域事件，不只 session） -->
             <h3 class="mk-card__title">最近动态</h3>
-            <span class="mk-card__meta">人类化证据</span>
+            <span class="mk-card__meta">最近 {{ d.sessions.length }} 条事件</span>
           </div>
           <div class="ld-sessions">
-            <div v-for="(s, i) in d.sessions" :key="i" class="ld-session">
+            <div v-for="(s, i) in recentActivityMerged" :key="i" class="ld-session">
               <span class="ld-session__dot" :class="`is-${s.tone}`"></span>
               <div class="ld-session__main">
-                <strong>{{ evidenceTypeZh(s.title) }}</strong>
+                <strong>{{ s.titles.map((t) => evidenceTypeZh(t)).join(' + ') }}<span v-if="s.count > s.titles.length" class="ld-session__x">×{{ s.count }}</span></strong>
                 <span>{{ s.result }}</span>
                 <span v-if="s.concepts && s.concepts.length" class="ld-chips">
                   <span v-for="c in s.concepts.slice(0, 3)" :key="c" class="ld-chip">{{ c }}</span>
@@ -231,37 +207,40 @@
             <span class="mk-card__meta">教学建议摘要</span>
           </div>
           <div class="ld-actions">
-            <p v-if="teachingHints.recommendedApproach"><span class="ld-actions__k">方式</span>{{ teachingHints.recommendedApproach }}</p>
-            <p v-if="teachingHints.promptEnhancement"><span class="ld-actions__k">Prompt</span>{{ teachingHints.promptEnhancement }}</p>
-            <p v-if="riskFactors.length"><span class="ld-actions__k ld-actions__k--warn">风险</span>{{ riskFactors.join('；') }}</p>
+            <p v-if="teachingHints.recommendedApproach"><span class="ld-actions__k">方式</span>{{ cleanHint(teachingHints.recommendedApproach) }}</p>
+            <!-- 个性化要求（原标签「Prompt」）：后端文本每句自带句号、拼接处出「。。」——
+                 显示层归一句读并按句拆行（2026-10-11 走查） -->
+            <p v-if="promptHintLines.length">
+              <span class="ld-actions__k">个性化要求</span><span class="ld-actions__body">
+                <span v-for="(line, i) in promptHintLines" :key="i" class="ld-actions__line">{{ line }}</span>
+              </span>
+            </p>
+            <p v-if="riskFactors.length"><span class="ld-actions__k ld-actions__k--warn">风险</span>{{ cleanHint(riskFactors.join('；')) }}</p>
+            <!-- 教学控制信号 + 强调/避免（2026-10-11 走查自画像页签迁入）：只读信号与行动建议同卡；
+                 控制项只列命中（on）的，强调/避免列表空则整块不出现 -->
+            <p v-if="controlFlags.some((f) => f.on)" class="ld-actions__ctrl">
+              <span class="ld-actions__k ld-actions__k--warn">控制</span>
+              <span v-for="f in controlFlags.filter((f) => f.on)" :key="f.text" class="mk-badge mk-badge--warn">{{ f.text }}</span>
+            </p>
+            <div v-if="emphasizeList.length || avoidList.length" class="ld-actions__lists">
+              <div v-if="emphasizeList.length">
+                <span class="ld-concept-label ld-concept-label--ok">强调</span>
+                <div class="ld-concept-list">
+                  <span v-for="c in emphasizeList" :key="c" class="ld-concept ld-concept--ok">{{ c }}</span>
+                </div>
+              </div>
+              <div v-if="avoidList.length">
+                <span class="ld-concept-label ld-concept-label--bad">避免</span>
+                <div class="ld-concept-list">
+                  <span v-for="c in avoidList" :key="c" class="ld-concept ld-concept--bad">{{ c }}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
-        <!-- 关联实体（P1：HubSpot/SF 侧栏关联卡模式；跨实体跳转记忆来源） -->
-        <section class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">关联实体</h3>
-            <span class="mk-card__meta">相关记录</span>
-          </div>
-          <div class="ld-related">
-            <button type="button" class="ld-related__item" @click="goUser">
-              <span class="ld-related__icon" aria-hidden="true">人</span>
-              <span class="ld-related__main">
-                <strong>用户账号</strong>
-                <span>查看该用户的账号与角色</span>
-              </span>
-              <i class="ld-related__go">→</i>
-            </button>
-            <button type="button" class="ld-related__item" @click="switchTab('evidence')">
-              <span class="ld-related__icon" aria-hidden="true">证</span>
-              <span class="ld-related__main">
-                <strong>学习证据</strong>
-                <span>查看该学习者的证据明细</span>
-              </span>
-              <i class="ld-related__go">→</i>
-            </button>
-          </div>
-        </section>
+        <!-- 「关联实体」卡已撤（2026-10-11 用户走查）：两个入口分别是本页「账号与许可」「证据」
+             页签的跳转——同一实体的自有页签不该以"关联记录"形态复读页签栏 -->
       </div>
     </div>
 
@@ -270,156 +249,103 @@
       <template v-if="profile">
         <!-- 2026-10-10 走查（低危登记转修）：零证据账号的三张画像卡直渲先验常量
              （自评准确度=准确 / 平均响应=10s…），逐卡阅读易把先验当实测；页级「证据不足」
-             徽章兜底之外，卡内再挂一枚「初始先验」标注。判据=证据列表为空（本页同源数据）。 -->
+             徽章兜底之外，卡内再挂一枚「初始先验」标注。判据=证据列表为空（本页同源数据）。
+             2026-10-11 走查：六张 kv 卡改双列栅格——单列竖排时每卡 5 行内容占满全宽，右半屏全空。 -->
+        <!-- 2026-10-10 走查（低危登记转修）：零证据账号的画像卡直渲先验常量
+             （自评准确度=准确 / 平均响应=10s…），逐卡阅读易把先验当实测；页级「证据不足」
+             徽章兜底之外，卡内再挂一枚「初始先验」标注。判据=证据列表为空（本页同源数据）。
+             2026-10-11 走查重构：六张散卡并为三张（卡内 .ld-pf-sub 双列子组），叙述洞察为第四卡；
+             FSRS 表撤（记忆与复习页签单源）；全局信号与背景迁证据页签；教学控制/强调避免迁概览建议行动。 -->
+        <div class="ld-pf-grid">
         <section class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">认知特征</h3>
+            <h3 class="mk-card__title">认知与偏好</h3>
             <span v-if="!evidence.length" class="mk-card__meta" title="以下为学习者模型的初始先验值（该账号尚无学习证据落库），随学习证据累积更新；不是实测结论">初始先验 · 暂无学习证据</span>
           </div>
-          <div class="ld-kv">
-            <div v-for="kv in cognitiveRows" :key="kv.label" class="ld-kv__row">
-              <span>{{ kv.label }}</span>
-              <strong>{{ kv.value }}</strong>
+          <div class="ld-pf-sub">
+            <div>
+              <h4 class="ld-pf-sub__h">认知特征</h4>
+              <div class="ld-kv">
+                <div v-for="kv in cognitiveRows" :key="kv.label" class="ld-kv__row">
+                  <span>{{ kv.label }}</span>
+                  <strong>{{ kv.value }}</strong>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h4 class="ld-pf-sub__h">偏好与情绪</h4>
+              <div class="ld-kv">
+                <div v-for="kv in preferenceRows" :key="kv.label" class="ld-kv__row">
+                  <span>{{ kv.label }}</span>
+                  <strong>{{ kv.value }}</strong>
+                </div>
+              </div>
             </div>
           </div>
         </section>
-        <section class="mk-card">
+        <section v-if="behaviorRows.length || historyRows.length" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">偏好与情绪</h3>
+            <h3 class="mk-card__title">行为基线与互动</h3>
             <span v-if="!evidence.length" class="mk-card__meta" title="以下为学习者模型的初始先验值（该账号尚无学习证据落库），随学习证据累积更新；不是实测结论">初始先验 · 暂无学习证据</span>
           </div>
-          <div class="ld-kv">
-            <div v-for="kv in preferenceRows" :key="kv.label" class="ld-kv__row">
-              <span>{{ kv.label }}</span>
-              <strong>{{ kv.value }}</strong>
+          <div class="ld-pf-sub">
+            <div v-if="behaviorRows.length">
+              <h4 class="ld-pf-sub__h">学习行为基线</h4>
+              <div class="ld-kv">
+                <div v-for="kv in behaviorRows" :key="kv.label" class="ld-kv__row">
+                  <span>{{ kv.label }}</span>
+                  <strong>{{ kv.value }}</strong>
+                </div>
+              </div>
+            </div>
+            <div v-if="historyRows.length">
+              <h4 class="ld-pf-sub__h">互动历史</h4>
+              <div class="ld-kv">
+                <div v-for="kv in historyRows" :key="kv.label" class="ld-kv__row">
+                  <span>{{ kv.label }}</span>
+                  <strong>{{ kv.value }}</strong>
+                </div>
+              </div>
             </div>
           </div>
         </section>
-        <section v-if="behaviorRows.length" class="mk-card">
+        <section v-if="curriculumRows.length || derivedRows.length" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">学习行为基线</h3>
-            <span v-if="!evidence.length" class="mk-card__meta" title="以下为学习者模型的初始先验值（该账号尚无学习证据落库），随学习证据累积更新；不是实测结论">初始先验 · 暂无学习证据</span>
+            <h3 class="mk-card__title">课程控制与派生洞察</h3>
           </div>
-          <div class="ld-kv">
-            <div v-for="kv in behaviorRows" :key="kv.label" class="ld-kv__row">
-              <span>{{ kv.label }}</span>
-              <strong>{{ kv.value }}</strong>
+          <div class="ld-pf-sub">
+            <div v-if="curriculumRows.length">
+              <h4 class="ld-pf-sub__h">课程控制</h4>
+              <div class="ld-kv">
+                <div v-for="kv in curriculumRows" :key="kv.label" class="ld-kv__row">
+                  <span>{{ kv.label }}</span>
+                  <strong>{{ kv.value }}</strong>
+                </div>
+              </div>
+            </div>
+            <div v-if="derivedRows.length">
+              <h4 class="ld-pf-sub__h">派生洞察</h4>
+              <div class="ld-kv">
+                <div v-for="kv in derivedRows" :key="kv.label" class="ld-kv__row">
+                  <span>{{ kv.label }}</span>
+                  <strong>{{ kv.value }}</strong>
+                </div>
+              </div>
             </div>
           </div>
         </section>
-        <section v-if="historyRows.length" class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">互动历史</h3></div>
-          <div class="ld-kv">
-            <div v-for="kv in historyRows" :key="kv.label" class="ld-kv__row">
-              <span>{{ kv.label }}</span>
-              <strong>{{ kv.value }}</strong>
-            </div>
-          </div>
-        </section>
-        <section v-if="curriculumRows.length" class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">课程控制</h3></div>
-          <div class="ld-kv">
-            <div v-for="kv in curriculumRows" :key="kv.label" class="ld-kv__row">
-              <span>{{ kv.label }}</span>
-              <strong>{{ kv.value }}</strong>
-            </div>
-          </div>
-        </section>
-        <section v-if="derivedRows.length" class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">派生洞察</h3></div>
-          <div class="ld-kv">
-            <div v-for="kv in derivedRows" :key="kv.label" class="ld-kv__row">
-              <span>{{ kv.label }}</span>
-              <strong>{{ kv.value }}</strong>
-            </div>
-          </div>
-        </section>
-        <section v-if="narrativeInsights.length" class="mk-card">
+        <!-- 叙述洞察通栏卡（2026-10-11 走查：长文本与参数卡解耦——上排三张参数卡收成等高水平带，
+             叙述独占通栏按语义分区 + 两栏文本流，不再把同行参数卡拉出半屏空洞） -->
+        <section v-if="narrativeSections.length" class="mk-card ld-pf-narr">
           <div class="mk-card__head"><h3 class="mk-card__title">叙述洞察</h3></div>
-          <div class="ld-insights">
-            <p v-for="(n, i) in narrativeInsights" :key="i">{{ n }}</p>
-          </div>
-        </section>
-        <section v-if="memoryRows.length || foundations.reusable.length || foundations.blocked.length" class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">全局信号与背景</h3></div>
-          <div class="ld-kv">
-            <div v-for="kv in memoryRows" :key="kv.label" class="ld-kv__row">
-              <span>{{ kv.label }}</span>
-              <strong>{{ kv.value }}</strong>
-            </div>
-          </div>
-          <div class="ld-found">
-            <div>
-              <span class="ld-concept-label ld-concept-label--ok">可复用基础 {{ foundations.reusable.length }}</span>
-              <div class="ld-concept-list">
-                <span v-for="c in foundations.reusable" :key="c" class="ld-concept ld-concept--ok">{{ c }}</span>
-                <span v-if="!foundations.reusable.length" class="ld-none">—</span>
-              </div>
-            </div>
-            <div>
-              <span class="ld-concept-label ld-concept-label--bad">被阻塞基础 {{ foundations.blocked.length }}</span>
-              <div class="ld-concept-list">
-                <span v-for="c in foundations.blocked" :key="c" class="ld-concept ld-concept--bad">{{ c }}</span>
-                <span v-if="!foundations.blocked.length" class="ld-none">—</span>
-              </div>
+          <div class="ld-insights ld-insights--cols">
+            <div v-for="g in narrativeSections" :key="g.label" class="ld-insights__sec">
+              <h4 v-if="g.label" class="ld-insights__h">{{ g.label }}</h4>
+              <p v-for="(t, i) in g.items" :key="i">{{ t }}</p>
             </div>
           </div>
         </section>
-        <section v-if="memoryTraces.length" class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">记忆痕迹与保持率（FSRS）</h3>
-            <button type="button" class="mk-link" @click="goMemoryReview">记忆与复习 →</button>
-          </div>
-          <table class="mk-table">
-            <thead>
-              <tr><th>概念</th><th>掌握度</th><th>稳定性（天）</th><th>难度</th><th>保持率</th><th>到期</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="t in memoryTraces" :key="t.conceptKey">
-                <td>{{ t.label || t.conceptKey }}</td>
-                <td>{{ Math.round((t.masteryScore || 0) * 100) }}%</td>
-                <td>{{ t.fsrsStability != null ? t.fsrsStability.toFixed(1) : '—' }}</td>
-                <td>{{ t.fsrsDifficulty != null ? t.fsrsDifficulty.toFixed(1) : '—' }}</td>
-                <td>
-                  <!-- 记忆强度列（原型 memory pane 的 meterrow 词汇：meter 条 + mono %） -->
-                  <span v-if="t.retrievability != null" class="ld-mt">
-                    <span class="mk-minibar ld-mt__bar"><i class="mk-minibar__fill" :data-tone="t.retrievability < 0.5 ? 'bad' : t.retrievability < 0.8 ? 'warn' : 'ok'" :style="{ width: Math.round(t.retrievability * 100) + '%' }"></i></span>
-                    <em>{{ Math.round(t.retrievability * 100) }}%</em>
-                  </span>
-                  <span v-else class="ld-none">未初始化</span>
-                </td>
-                <td :title="t.dueAt ? new Date(t.dueAt).toLocaleString() : undefined">{{ t.dueAt ? dueText(t.dueAt) : '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
-        <section v-if="controlFlags.length" class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">教学控制信号</h3></div>
-          <div class="ld-flags">
-            <span v-for="f in controlFlags" :key="f.text" class="mk-badge" :class="f.on ? 'mk-badge--warn' : 'mk-badge--muted'">
-              {{ f.text }}：{{ f.on ? '是' : '否' }}
-            </span>
-          </div>
-        </section>
-        <section v-if="teachingHints" class="mk-card">
-          <div class="mk-card__head"><h3 class="mk-card__title">强调 / 避免</h3></div>
-          <div class="ld-two">
-            <div>
-              <span class="ld-concept-label ld-concept-label--ok">强调</span>
-              <div class="ld-concept-list">
-                <span v-for="c in teachingHints.emphasize || []" :key="c" class="ld-concept ld-concept--ok">{{ c }}</span>
-                <span v-if="!(teachingHints.emphasize || []).length" class="ld-none">—</span>
-              </div>
-            </div>
-            <div>
-              <span class="ld-concept-label ld-concept-label--bad">避免</span>
-              <div class="ld-concept-list">
-                <span v-for="c in teachingHints.avoid || []" :key="c" class="ld-concept ld-concept--bad">{{ c }}</span>
-                <span v-if="!(teachingHints.avoid || []).length" class="ld-none">—</span>
-              </div>
-            </div>
-          </div>
-        </section>
+        </div>
       </template>
       <MkEmptyState
         v-else
@@ -432,41 +358,86 @@
       />
     </div>
 
-    <!-- ============ 证据：指标卡横排 + 左时间线 / 右曲线·建议·密度 两栏 ============ -->
+    <!-- ============ 证据：全局信号 + 左时间线 / 右曲线·建议·密度 两栏 ============ -->
     <div v-else-if="tab === 'evidence'" class="ld-tabpage" id="ld-panel-evidence" role="tabpanel" aria-labelledby="ld-tab-evidence">
-      <template v-if="dynamicState">
-        <div class="ld-metrics">
-          <MkKpi
-            v-for="m in metricCards"
-            :key="m.label"
-            :label="m.label"
-            :value="m.value"
-            :hint="m.hint"
-            :tone="m.tone"
-          />
+      <!-- 指标卡横排已撤（2026-10-11 用户走查）：LSS/KTL/LF/LSB 与「学习压力记录」曲线同族指标，
+           当前值并入曲线卡头部读数行（.ld-load__hits），不再占页宽一整排 -->
+
+      <!-- 全局信号与背景（2026-10-11 用户走查三修）：撤堆条与折叠，三组全部常驻可见——
+           组一概念信号（学没学会）、组二教学基础（能不能踩）、组三反复困惑（在哪跌倒，此前只有计数没实体）。
+           原始句子无「概念名|诊断」字段结构，标签化方案维持否决 -->
+      <section v-if="signalTierRows.some((t) => t.n > 0) || foundations.reusable.length || foundations.blocked.length || recurringConfusions.length" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">全局信号与背景</h3>
+          <span class="mk-card__meta" title="跨全部学习路径汇总；账本=概念底账规模">{{ sigHeadMeta }}</span>
         </div>
-      </template>
+        <div class="ld-sigbody">
+          <div class="ld-sig-sec">
+            <h4 class="ld-sig-sec__h">概念信号</h4>
+            <div class="ld-sig-tiers">
+              <p v-for="t in signalTierRows" :key="t.key" class="ld-sig-tier">
+                <span class="ld-sig-tier__head">
+                  <i class="ld-sig-tier__dot" :class="`is-${t.key}`" aria-hidden="true"></i>
+                  <strong>{{ t.label }} {{ t.n }}</strong>
+                </span>
+                <span class="ld-sig-tier__names">{{ t.names.length ? t.names.join('、') : '—' }}</span>
+              </p>
+            </div>
+          </div>
+          <div class="ld-sig-sec">
+            <h4 class="ld-sig-sec__h">教学基础</h4>
+            <div class="ld-pf-sub">
+              <div>
+                <span class="ld-concept-label ld-concept-label--ok">可复用基础 {{ foundations.reusable.length }}</span>
+                <ul class="ld-fnd">
+                  <li v-for="c in foundations.reusable" :key="c" class="ld-fnd__item ld-fnd__item--ok">{{ c }}</li>
+                </ul>
+              </div>
+              <div>
+                <span class="ld-concept-label ld-concept-label--bad">被阻塞基础 {{ foundations.blocked.length }}</span>
+                <ul class="ld-fnd">
+                  <li v-for="c in foundations.blocked" :key="c" class="ld-fnd__item ld-fnd__item--bad">{{ c }}</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="ld-sig-sec">
+            <h4 class="ld-sig-sec__h">反复困惑 {{ recurringConfusions.length }}</h4>
+            <ul class="ld-fnd ld-fnd--rc">
+              <li v-for="rc in recurringConfusions" :key="rc.label" class="ld-fnd__item ld-fnd__item--warn">
+                <span class="ld-rc__main">
+                  <strong class="ld-rc__label">{{ rc.label }}</strong>
+                  <span class="ld-rc__pattern">{{ rc.pattern }}</span>
+                </span>
+                <em class="ld-rc__count">{{ rc.count }} 次</em>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
 
       <div class="ld-ev-grid">
         <!-- 左栏：证据时间线（主内容） -->
         <section class="mk-card ld-ev-main">
           <div class="mk-card__head">
             <h3 class="mk-card__title">证据时间线</h3>
-            <!-- 标注「仅最近 20 条」：接口侧 limit=20（live.ts liveGetLearnerEvidence），列表非全量，防「共 N 条」误读 -->
-            <span class="mk-card__meta">{{ evidence.length }} 条学习事件（仅最近 20 条）· 点色=信号，条=置信</span>
+            <!-- 教学域 items 接口侧 limit=20，learner_evidence 域事件全量并入（见 loadDetail 合并处）
+                 ——渲染条数=响应条数，口径写「教学域仅近 20 条」防「共 N 条」误读（2026-10-11 走查修正：
+                 域合并后「仅最近 20 条」已失实） -->
+            <!-- 卡头 meta 只留图形编码图例——条数/低置信计数归结论行（2026-10-11 用户走查：两处复读） -->
+            <span class="mk-card__meta">点色=信号，条=置信</span>
           </div>
           <!-- T2 硬约束 2「结论与细节分层」：结论行常驻可见，明细折叠。
                结论文字完全取自本卡已有数据（条数 + 卡片里本来就标的「证据不足」），未新增判断。
                P2 口径：「共 N 条」改「最近 N 条」——接口侧 limit=20，列表不是全量 -->
           <p v-if="evidence.length" class="mk-section__conclusion">
-            最近 {{ evidence.length }} 条学习事件（接口窗口上限 20），其中
+            最近 {{ evidence.length }} 条学习事件（教学域仅近 20 条），其中
             {{ evidence.filter((e) => evidenceLowConfidence(e.score) && !isDomainEvidence(e.title)).length }} 条置信度低于 50%（仅供参照）。
           </p>
-          <!-- T2「结论与细节分层」：结论行常驻，明细可折叠；默认展开——
-               折着的时间线让左栏只剩一行结论、主视区大面积空白（实测 19 条事件全收在折叠里）。
+          <!-- 明细常驻（2026-10-11 用户走查「折叠干嘛」）：监控窗改内滚后折叠失去职责——
+               它挡住的正是视口内的滚动容器，结论行本就常驻其上；撤 details 直接渲染。
                P2：带 sessionId 的行可点下钻只读座舱（与教学会话 pane 同一 openSessionCockpit） -->
-          <details v-if="evidence.length" class="ld-ev-details" open>
-            <summary class="mk-section__summary">逐条明细</summary>
+          <div v-if="evidence.length" class="ld-ev-details">
             <div class="ld-evidence">
             <div
               v-for="(e, i) in evidence"
@@ -511,7 +482,7 @@
               <span class="ld-ev__time">{{ e.time }}</span>
             </div>
           </div>
-          </details>
+          </div>
           <p v-else class="ld-none">
             {{ '暂无证据记录' }}
             <span class="ld-none__hint">学习事件累积后自动生成。</span>
@@ -529,6 +500,14 @@
                   <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': loadRange === 42 }" @click="loadRange = 42">42 天</button>
                   <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': loadRange === 90 }" @click="loadRange = 90">90 天</button>
                 </div>
+              </div>
+            </div>
+            <!-- 当前读数行（2026-10-11 用户走查）：四张 KPI 卡与曲线卡同族指标合流——当前值并入
+                 曲线卡头部，撤页宽 KPI 横排；四个读数全缺省时整行不出现（曲线/空态自足） -->
+            <div v-if="metricCards.some((m) => m.value !== '—')" class="ld-load__hits">
+              <div v-for="m in metricCards" :key="m.label" class="ld-load__hit" :title="m.hint">
+                <span>{{ m.label }}</span>
+                <strong :class="{ 'is-good': m.tone === 'ok', 'is-bad': m.tone === 'bad' }">{{ m.value }}</strong>
               </div>
             </div>
             <div v-if="hasLoad" class="ld-load__body">
@@ -573,7 +552,7 @@
           <section v-if="conceptStats.length" class="mk-card">
             <div class="mk-card__head">
               <h3 class="mk-card__title">概念证据密度</h3>
-              <span class="mk-card__meta">各概念关联的学习事件数</span>
+              <span class="mk-card__meta">条长=证据条数 · 颜色=迁移风险（红 高 / 琥珀 中 / 绿 低）</span>
             </div>
             <div class="ld-bars ld-bars--dense">
               <div v-for="c in conceptStats" :key="c.label" class="ld-bar" :class="{ 'ld-bar--empty': c.count === 0 }">
@@ -647,7 +626,7 @@
         <div class="mk-card__head">
           <h3 class="mk-card__title">知识图谱</h3>
           <span v-if="graphMeta" class="mk-card__meta">
-            <template v-if="graphMeta.truncated">已截断，共 {{ graphMeta.totalConcepts }} 个概念 · </template>
+            <template v-if="graphMeta.truncated">仅显示部分概念，共 {{ graphMeta.totalConcepts }} 个 · </template>
             默认展示全部路径的聚合图
           </span>
         </div>
@@ -659,97 +638,165 @@
           :theme="graphTheme"
           :loading="graphLoading"
           :error="graphError"
-          height="560px"
+          height="var(--ld-graph-h)"
           empty-hint="这位学习者还没有概念图数据——路径生成后 kc-mapper 会产出前置依赖，随概念身份注册表物化进图。"
           @update:path-id="onGraphPathChange"
         />
       </section>
     </div>
 
-    <!-- ============ 教学会话（原型 2172-2177）：7 列表格，行点击进会话座舱 ============ -->
+    <!-- ============ 教学会话（2026-10-11 深设计）：列方言对齐平台「教学会话」页 ============ -->
     <div v-else-if="tab === 'sessions'" class="ld-tabpage" id="ld-panel-sessions" role="tabpanel" aria-labelledby="ld-tab-sessions">
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">教学会话</h3>
-          <!-- 审核 #24（2026-10-06）：条数是「最近 20 条窗口」的截断值，达窗口上限时把口径写进
-               可见文案（与证据页签「仅最近 20 条」同写法），不再只藏在 title -->
-          <span class="mk-card__meta" title="口径：该学习者最近 20 条教学会话窗口；阶段=后端按里程碑归因">
+          <!-- 头部读数=窗口口径 + 有效/废弃分档（原「最近 20 条（窗口上限）」只有截断值，
+               读不出窗口里哪些是真实教学事件；口径与定义进 title） -->
+          <span class="mk-card__meta" :title="ldSessionMetaTitle">
             <MkLoading v-if="ldSessLoading" inline min text="加载中…" />
-            <template v-else>{{ ldSessError ? '加载失败' : (ldStageFilter === 'all' ? ldSessionMetaText : `${ldSessionRowsFiltered.length} / ${ldSessionRows.length} 条`) }}</template>
+            <template v-else>{{ ldSessError ? '加载失败' : ldSessionMetaText }}</template>
           </span>
         </div>
-        <!-- 阶段切换器：档位与计数从会话窗口派生（见 ldStageChips）；单阶段不渲染 -->
-        <div v-if="!ldSessLoading && !ldSessError && ldStageChips.length > 1" class="ld-stagechips" role="group" aria-label="按阶段筛选会话">
-          <button
-            type="button" class="mk-pill" :class="{ 'mk-pill--active': ldStageFilter === 'all' }"
-            :aria-pressed="ldStageFilter === 'all'" @click="ldStageFilter = 'all'"
-          >全部 · {{ ldSessionRows.length }}</button>
-          <button
-            v-for="c in ldStageChips" :key="c.key" type="button" class="mk-pill"
-            :class="{ 'mk-pill--active': ldStageFilter === c.key }" :aria-pressed="ldStageFilter === c.key"
-            @click="ldStageFilter = c.key"
-          >{{ c.label }} · {{ c.count }}</button>
+        <!-- 工具栏：视角（有效/废弃重试/窗口全部）+ 阶段（>1 阶段才出）。视角默认「有效」——
+             仿真驱动的 1 秒废弃重试是驱动产物，不是教学事件（与概览「最近会话」预览同一口径） -->
+        <div v-if="!ldSessLoading && !ldSessError && ldSessionRows.length" class="ld-filtbar">
+          <div class="ld-filtbar__grp" role="group" aria-label="会话视角">
+            <button
+              v-for="v in ldSessViews" :key="v.key" type="button" class="mk-pill"
+              :class="{ 'mk-pill--active': ldSessView === v.key }" :aria-pressed="ldSessView === v.key"
+              :title="v.title" @click="ldSessView = v.key"
+            >{{ v.label }} · {{ v.count }}</button>
+          </div>
+          <div v-if="ldStageChips.length > 1" class="ld-filtbar__grp" role="group" aria-label="按阶段筛选会话">
+            <button
+              type="button" class="mk-pill" :class="{ 'mk-pill--active': ldStageFilter === 'all' }"
+              :aria-pressed="ldStageFilter === 'all'" @click="ldStageFilter = 'all'"
+            >全部阶段 · {{ ldSessViewRows.length }}</button>
+            <button
+              v-for="c in ldStageChips" :key="c.key" type="button" class="mk-pill"
+              :class="{ 'mk-pill--active': ldStageFilter === c.key }" :aria-pressed="ldStageFilter === c.key"
+              @click="ldStageFilter = c.key"
+            >{{ c.label }} · {{ c.count }}</button>
+          </div>
         </div>
-        <div v-if="ldSessionRows.length" class="mk-table-scroll">
+        <div v-if="ldSessionRowsFiltered.length" class="mk-table-scroll">
           <table class="mk-table">
             <thead>
-              <!-- P2 列序纠偏：主题是人读的行身份，裸 UUID 首列没有判读价值——主题置首，
-                   会话 ID 缩短为末列（title 保留全 ID） -->
-              <tr><th>主题</th><th>Skill</th><th>阶段</th><th>回合</th><th>时长</th><th>状态</th><th>时间</th><th>会话 ID</th></tr>
+              <!-- 列方言对齐平台页（2026-10-06 审核 #39「三行并两行」同法），并按用户走查
+                   把「阶段」拆回独立列（里程碑是被 阶段切换器 直接筛选的维度，混在身份副行里
+                   既读不出可筛性、也让副行变成两件事的拼盘）：会话身份=主题+路径，阶段单列。
+                   列序按「读一条会话的叙事」重排（2026-10-11）：身份 → 课程位置（阶段→进度，
+                   两级位置相邻）→ 结果状态 → 过程量（互动）→ 产出（产物）→ 元信息（时间/ID） -->
+              <tr><th>会话</th><th>阶段</th><th>进度</th><th>状态</th><th>互动</th><th>产物</th><th>时间</th><th>会话 ID</th></tr>
             </thead>
             <tbody>
               <tr v-for="s in ldSessionRowsFiltered" :key="s.id" class="ld-pane-row" @click="openSessionCockpit(s.id)">
-                <!-- 审核 #20（2026-10-06）：整行可点（鼠标）但完全不可聚焦，键盘用户打不开任何会话。
-                     主题格给出行级真按钮入口（原生 button，Enter/Space/焦点环天然可用）。 -->
-                <td class="ld-strong" :title="s.topic">
-                  <button type="button" class="mk-link ld-strong" :title="`打开只读座舱：${s.topic}`" @click.stop="openSessionCockpit(s.id)">{{ s.topic }}</button>
+                <td>
+                  <!-- 审核 #20（2026-10-06）：整行可点（鼠标）但完全不可聚焦，键盘用户打不开任何会话。
+                       主题格给出行级真按钮入口（原生 button，Enter/Space/焦点环天然可用）。 -->
+                  <div class="mk-cell-main">
+                    <strong :title="s.topic">
+                      <button type="button" class="ld-topic-btn" :title="`打开只读座舱：${s.topic}`" @click.stop="openSessionCockpit(s.id)">{{ s.topic }}</button>
+                    </strong>
+                    <span class="mk-cell-sub" :title="s.skill">{{ s.skill }}</span>
+                  </div>
                 </td>
-                <td>{{ s.skill }}</td>
-                <td><span class="mk-badge mk-badge--info">{{ s.stage }}</span></td>
-                <td class="ld-mono" title="口径：用户消息条数（后端无独立回合计数）">{{ s.turns }}</td>
-                <td class="ld-mono">{{ s.duration }}</td>
-                <td><span class="mk-badge" :class="sessPaneBadgeCls(s.status)">{{ statusText(s.status) || '—' }}</span></td>
-                <td class="ld-mono ld-sub">{{ s.startAgo }}</td>
+                <td>
+                  <span v-if="s.stage !== '—'" class="mk-badge mk-badge--info" :title="`按里程碑归属：${s.stage}（后端 deriveTeachingSessionProgress 推导）`">{{ s.stage }}</span>
+                  <span v-else class="ld-sub">—</span>
+                </td>
+                <td>
+                  <!-- 进度优先于「已完成」字样（2026-10-11 深设计）：状态列已写状态，
+                       这里再写一次是同屏复读；有进度数据就出真实行程（完成态给绿条+绿字数），
+                       完成后本节只推进到路径的 x/y 这本就是要点（原先被「已完成」盖掉） -->
+                  <span v-if="sessionProgressPct(s.progress) !== null" class="ld-prog" :title="ldProgTitle(s)">
+                    <span class="ld-prog__num">{{ sessionProgressText(s.progress, s.status) }}</span>
+                    <span class="mk-minibar ld-prog__bar">
+                      <i class="mk-minibar__fill" :data-tone="sessionProgressTone(s.status) || undefined" :style="{ width: (sessionProgressPct(s.progress) ?? 0) + '%' }"></i>
+                    </span>
+                  </span>
+                  <span v-else-if="sessionProgressDone(s.status)" class="ld-prog ld-prog--done" :title="ldProgTitle(s)">已完成</span>
+                  <span v-else class="ld-sub">—</span>
+                </td>
+                <td>
+                  <span class="mk-badge" :class="sessPaneBadgeCls(s.status)">{{ statusText(s.status) || '—' }}</span>
+                  <!-- 低参与标注（平台页拍板 #1 判例）：completed 但用户消息 <2 条——状态机确属终态，
+                       运营口径单独标注，避免「完成」被读成真实参与过 -->
+                  <span
+                    v-if="s.lowPart" class="mk-badge mk-badge--sm mk-badge--muted"
+                    title="低参与：完成时用户消息不足 2 条，无真实学习参与证据"
+                  >低参与</span>
+                </td>
+                <td>
+                  <div class="ld-ia" :title="ldInteractTitle(s)">
+                    <b class="ld-ia__dur" :class="{ 'ld-ia__dur--long': s.durationSec >= LD_IDLE_LONG_SECONDS, 'ld-ia__dur--brief': s.durationSec > 0 && s.durationSec < 60 }">{{ s.duration }}</b>
+                    <span class="mk-cell-sub">{{ s.turns }} 回合 · 知识 {{ s.kpCount }} 点</span>
+                  </div>
+                </td>
+                <td>
+                  <span class="mk-badge" :class="ldWrapupBadgeCls(s)" :title="ldWrapupTitle(s)">{{ ldWrapupText(s) }}</span>
+                  <span
+                    v-if="s.advisory" class="mk-badge ld-adv" :class="ldAdvisoryBadgeCls(s.advisory.priority)"
+                    :title="`${s.advisory.title || '教学建议'}：${s.advisory.text}`"
+                  ><span class="ld-adv__txt">{{ s.advisory.title || '建议' }}</span></span>
+                </td>
+                <td class="ld-mono ld-sub" :title="s.startAbs || undefined">{{ s.startAgo }}</td>
                 <td class="ld-mono ld-sub" :title="s.id">{{ shortId(s.id) }}</td>
               </tr>
             </tbody>
           </table>
         </div>
-        <MkEmptyState v-else icon="◌" title="暂无教学会话" description="该学习者还没有产生回合记录。" />
+        <MkEmptyState
+          v-else-if="!ldSessLoading && !ldSessError" icon="◌"
+          :title="ldSessEmptyTitle" :description="ldSessEmptyDesc"
+        />
       </section>
     </div>
 
-    <!-- ============ 记忆与复习（原型 2178-2183）：6 列表格（FSRS 单源） ============ -->
+    <!-- ============ 记忆与复习（FSRS）：调度状态表（2026-10-11 深设计） ============ -->
     <div v-else-if="tab === 'memory'" class="ld-tabpage" id="ld-panel-memory" role="tabpanel" aria-labelledby="ld-tab-memory">
       <section v-if="memoryPaneRows.length" class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">记忆与复习（FSRS）</h3>
+          <span class="mk-card__meta" :title="memMetaTitle">{{ memMetaText }}</span>
           <button type="button" class="mk-link" @click="goMemoryReview">打开记忆与复习 →</button>
+        </div>
+        <!-- 视角（按复习状态分档）：把「待复习」这一档单独拎出来看，是这张表唯一的可动作子集。
+             操作列已撤（2026-10-11）：后端无单点复习接口，每行按钮都是同一个学习者级深链、
+             不携带该行身份——逐行重复按钮等于暗示不存在的单点复习功能，入口收归卡头单链接。 -->
+        <div class="ld-filtbar" role="group" aria-label="按复习状态筛选">
+          <div class="ld-filtbar__grp">
+            <button
+              v-for="v in memViews" :key="v.key" type="button" class="mk-pill"
+              :class="{ 'mk-pill--active': memView === v.key }" :aria-pressed="memView === v.key"
+              :title="v.title" @click="memView = v.key"
+            >{{ v.label }} · {{ v.count }}</button>
+          </div>
         </div>
         <div class="mk-table-scroll">
           <table class="mk-table">
             <thead>
-              <tr><th>知识点</th><th>记忆强度</th><th>复习到期</th><th>来源</th><th>状态</th><th>操作</th></tr>
+              <!-- 「来源」列名与取值不符（值是提取次数与最近提取时间，不是来源）→ 更名「提取史」，
+                   并把 lastSeenAt 一并消费（原先只出计数，最近提取时间被 title 藏着） -->
+              <tr><th>知识点</th><th>记忆强度</th><th>复习到期</th><th>提取史</th><th>状态</th></tr>
             </thead>
             <tbody>
-              <tr v-for="r in memoryPaneRows" :key="r.key">
+              <!-- 降透明度只标「未初始化」（无任何记忆痕迹），不标「无强度读数」：
+                   待复习行可能同样没有 retrievability（FSRS 未算出），但它恰恰是最该看的一行 -->
+              <tr v-for="r in memoryRowsFiltered" :key="r.key" :class="{ 'ld-memrow--uninit': r.uninit }">
                 <td class="ld-strong">{{ r.label }}</td>
                 <td>
-                  <span v-if="r.strength != null" class="ld-mt">
+                  <span v-if="r.strength != null" class="ld-mt" :title="r.strengthTitle">
                     <span class="mk-minibar ld-mt__bar">
-                      <i class="mk-minibar__fill" :data-tone="r.tone === 'info' ? undefined : r.tone" :style="{ width: r.strength + '%' }"></i>
+                      <i class="mk-minibar__fill" :data-tone="r.barTone" :style="{ width: r.strength + '%' }"></i>
                     </span>
                     <em>{{ r.strength }}%</em>
                   </span>
-                  <span v-else class="ld-none">未初始化</span>
+                  <span v-else class="ld-none">—</span>
                 </td>
-                <td class="ld-sub" :title="r.dueAbs || undefined">{{ r.due }}</td>
-                <td class="ld-sub" title="后端无出处字段，以提取次数/最近提取时间近似标注">{{ r.source }}</td>
+                <td class="ld-sub" :class="{ 'ld-due--overdue': r.overdue }" :title="r.dueAbs || undefined">{{ r.due }}</td>
+                <td class="ld-sub" :title="r.seenAbs || undefined">{{ r.extract }}</td>
                 <td><span class="mk-badge" :class="`mk-badge--${r.tone}`">{{ r.stateText }}</span></td>
-                <td>
-                  <!-- 后端无单点复习接口 → 深链记忆与复习页（userId 契约见 memoryReviewUrl） -->
-                  <button type="button" class="mk-btn mk-btn--sm" @click="goMemoryReview">复习</button>
-                </td>
               </tr>
             </tbody>
           </table>
@@ -764,29 +811,8 @@
     </div>
 
     <!-- ============ 操作记录（原型 2184-2187）：feed/feedrow；口径见注释 ============ -->
-    <div v-else-if="tab === 'audit'" class="ld-tabpage" id="ld-panel-audit" role="tabpanel" aria-labelledby="ld-tab-audit">
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <!-- 审核 #21（2026-10-06）：原「操作记录」名实不符（内容是与「证据」同源的学习事件，
-               非管理侧审计流水）——卡题/页签名统一改「学习事件」，口径说明从卡尾段落提到卡头 title -->
-          <h3 class="mk-card__title">学习事件</h3>
-          <span
-            class="mk-card__meta"
-            title="口径：后台暂未提供管理侧审计流水接口，本页以学习者学习事件（learner_evidence，与「证据」页签同源）如实渲染，语义为「学习事件」而非「管理员操作审计」"
-          >学习事件时间线 · 最近 {{ auditRows.length }} 条</span>
-        </div>
-        <div v-if="auditRows.length" class="ld-feed">
-          <div v-for="(a, i) in auditRows" :key="i" class="ld-feedrow">
-            <span class="ld-feedrow__time">{{ a.time }}</span>
-            <div class="ld-feedrow__main">
-              <span class="ld-feedrow__action">{{ a.action }}</span>
-              <span class="ld-feedrow__detail">{{ a.detail }}</span>
-            </div>
-          </div>
-        </div>
-        <MkEmptyState v-else icon="◌" title="暂无学习事件" description="该学习者还没有学习事件流水。" />
-      </section>
-    </div>
+    <!-- 「学习事件」页签已撤（2026-10-11 用户拍板）：与「证据」时间线同源同量（liveEvidence 单源），
+         贫化流水副本零独有信息；旧深链 ?tab=audit 由 normalizeLdTab 回落证据页签 -->
   </div>
 </template>
 
@@ -796,9 +822,17 @@ import { useRoute, useRouter } from 'vue-router'
 import { subPage, openSubPage, setSubPageLabel } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
-import { conceptBarTone, conceptBarWidth, memoryReviewUrl, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh, levelBadgeZh } from './learner-profile'
+import { conceptBarTone, conceptBarWidth, memoryReviewUrl, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
 import { adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
-import { statusText, sessionStatusBadgeCls } from './statusText'
+import {
+  statusText,
+  sessionStatusBadgeCls,
+  sessionProgressPct,
+  sessionProgressText,
+  sessionProgressTone,
+  sessionProgressDone
+} from './statusText'
+import type { SessionProgress } from './statusText'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -806,13 +840,11 @@ import type { EChartsCoreOption } from 'echarts/core'
 import MkChart from '@/components/mk/MkChart.vue'
 import MkGraphExplorer from '@/components/mk/MkGraphExplorer.vue'
 import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
-import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
-import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import UserAccountPane from './UserAccountPane.vue'
 import MkRowList from '@/components/mk/MkRowList.vue'
 import MkRow from '@/components/mk/MkRow.vue'
@@ -863,14 +895,16 @@ const recomputing = ref(false)
 /**
  * 页签（原型 renderLearnerDetail 2159-2163：subtabs 由 4 项扩到 8 项）。
  * 名称对齐原型：总览→概览、知识图谱→图谱；新增 学习路径/教学会话/记忆与复习/操作记录。
+ * 其后两轮裁并：学习路径（审核 #22）与学习事件（2026-10-11）撤除，现 7 项。
  * 新增 id 只在本页扩展——共享的 learner-profile.ts `LearnerTab` 仍是 4 项联合（未改动），
- * 本地 normalizeLdTab 先识别 8 项，再回落共享 normalizeLearnerTab 处理旧 6-tab 深链重定向。
+ * 本地 normalizeLdTab 先识别本地 7 项，再回落共享 normalizeLearnerTab 处理旧 6-tab 深链重定向。
  */
-const LD_TAB_IDS = ['overview', 'profile', 'evidence', 'graph', 'sessions', 'memory', 'audit', 'account'] as const
+const LD_TAB_IDS = ['overview', 'profile', 'evidence', 'graph', 'sessions', 'memory', 'account'] as const
 type LdTab = (typeof LD_TAB_IDS)[number] | LearnerTab
-/** 审核 #22（2026-10-06）：撤「学习路径」页签后旧深链 ?tab=paths 的兼容落点
-    （概览的「当前进度」卡已承载路径读数与下钻入口） */
-const LD_TAB_ALIAS: Record<string, (typeof LD_TAB_IDS)[number]> = { paths: 'overview' }
+/** 撤页签后的旧深链兼容落点（判例=审核 #22 的 ?tab=paths）：
+ *  paths→overview（路径读数归「当前进度」卡）；audit→evidence（学习事件流水与证据时间线
+ *  同源同量——liveEvidence 单源富渲染，贫化副本零独有信息，2026-10-11 用户拍板撤除） */
+const LD_TAB_ALIAS: Record<string, (typeof LD_TAB_IDS)[number]> = { paths: 'overview', audit: 'evidence' }
 function isLdTab(v: unknown): v is (typeof LD_TAB_IDS)[number] {
   return typeof v === 'string' && (LD_TAB_IDS as readonly string[]).includes(v)
 }
@@ -880,8 +914,8 @@ function normalizeLdTab(v: unknown): LdTab {
   return isLdTab(s) ? s : normalizeLearnerTab(s)
 }
 
-// ?view=user 深链别名（原 UserDetail 入口：用户列表行点击等）默认落「账号与许可」；
-// ?view=learner（学习轴入口）维持概览落点
+// 默认落点统一「概览」（2026-10-11 用户拍板，两轴入口一致）；无学习数据的账号轴入口
+// 由 loadDetail 兜底切「账号与许可」（见该处注释）
 const tab = ref<LdTab>('overview')
 
 const tabs = [
@@ -896,8 +930,9 @@ const tabs = [
   // 审核 #22（2026-10-06）：原「学习路径」单卡栅格与页级 statstrip +「当前进度」卡高度重合，
   // 下钻入口在概览卡头也已有一条（同页复读）——撤该页签，里程碑分母/路径状态并进「当前进度」卡；
   // 旧深链 ?tab=paths 由 normalizeLdTab 回落概览。
+  // 2026-10-11 用户拍板：撤「学习事件」页签（审核 #21 曾只改名未去重）——与「证据」时间线
+  // 同源同量的贫化副本（每行仅 类型+结果 两词），独有信息为零；旧深链 ?tab=audit 回落证据。
   // 人员详情合并（2026-10-03 用户拍板）：账号轴并入本页，?view=user 深链别名默认落本页签
-  { id: 'audit' as const, label: '学习事件' },
   { id: 'account' as const, label: '账号与许可' }
 ]
 
@@ -973,7 +1008,7 @@ watch(tab, (t) => {
   if (cur !== target) void tabRouter.replace({ query: { ...tabRoute.query, ...(target ? { tab: target } : {}) } })
 })
 
-/** 深链兼容：旧 6-tab 名（cognitive/dynamic/memory/teaching）重定向到新 tab（本地 8 项优先） */
+/** 深链兼容：旧 6-tab 名（cognitive/dynamic/memory/teaching）重定向到新 tab（本地页签优先，撤除项走别名回落） */
 function switchTab(id: string) {
   tab.value = normalizeLdTab(id)
 }
@@ -1026,43 +1061,136 @@ interface LdSessionRow {
   subText: string
   status: string
   startAgo: string
-  /** 教学会话 pane：Skill 列（后端 subject / taskType） */
+  /** 时间列 title：本地化绝对时刻（后端 ISO 是 UTC，直读会差时区） */
+  startAbs: string
+  /** 会话身份副行（后端 subject = 学习路径名）／阶段标签（progress 里程碑，同格并副行） */
   skill: string
-  /** 教学会话 pane：阶段列（后端 progress 里程碑序号，deriveTeachingSessionProgress 推导） */
   stage: string
   /** 阶段切换器用数值序号（stage 展示串之外的原始 milestoneIndex；缺省 null 不入档） */
   msIndex: number | null
-  /** 教学会话 pane：回合列（口径=用户消息条数，后端无独立回合计数） */
+  /** 互动列副行：回合（口径=用户消息条数，后端无独立回合计数） */
   turns: string
-  /** 教学会话 pane：时长列（后端 duration，秒） */
+  /** 互动列主值：时长（后端 duration 秒 → mm 分 ss 秒） */
   duration: string
+  /** 时长原值（互动列档位：<60s 秒退弱化 / ≥1500s 长时琥珀，与平台页同阈值） */
+  durationSec: number
+  /** 消息条数（互动列副行 + 低参与判定同源） */
+  msgCount: number
+  /** 教学产出知识点数（后端 knowledgePointCount，现成字段原先未消费） */
+  kpCount: number
+  /** 任务级进度（进度列 minibar；与平台页同源 statusText.sessionProgress*） */
+  progress: SessionProgress | null
+  /** 收尾总结档（同平台页 wrapupTier 语义：complete / missing / pending） */
+  wrapupTier: 'complete' | 'missing' | 'pending'
+  wrapupDegraded: boolean
+  /** 重规划建议（后端 ReplanAdvisory 降维，平台页同款；无有效建议为 null） */
+  advisory: { title: string; text: string; priority: string } | null
+  /** 低参与标注（completed 且用户消息 <2：与平台页拍板 #1、零证据门同阈值） */
+  lowPart: boolean
 }
 const ldSessionRows = ref<LdSessionRow[]>([])
 /** 概览左栏「最近会话」卡只取前 5 条；教学会话 pane 用全量（同源） */
-const recentSessionRows = computed(() => ldSessionRows.value.slice(0, 5))
+/* 概览「最近会话」预览默认排除已废弃（2026-10-11 走查：仿真跑批的废弃会话把真实记录顶出
+   预览，5 条里 4 条同名废弃）；教学会话页签仍看全量窗口。meta 如实标注隐藏了多少条。 */
+const activeSessionRows = computed(() => ldSessionRows.value.filter((r) => r.status !== 'discarded'))
+const recentSessionRows = computed(() => activeSessionRows.value.slice(0, 5))
+const discardedHiddenCount = computed(() => ldSessionRows.value.length - activeSessionRows.value.length)
+const sessionPreviewMeta = computed(() => {
+  const shown = recentSessionRows.value.length
+  if (discardedHiddenCount.value) return `最近 ${shown} 条有效 · 已隐藏废弃 ${discardedHiddenCount.value}`
+  return ldSessionRows.value.length > shown ? `最近 ${shown} 条 · 共 ${ldSessionRows.value.length}` : `最近 ${shown} 条`
+})
+/** statstrip「最近会话」格已随定位条撤除（2026-10-11）；有效/总数口径仍由预览 meta 承载 */
 /** 教学会话窗口上限（loadLdSessions 请求 limit 与此同源）：达上限时 meta 可见文案改
     「最近 20 条（窗口上限）」，不再让截断值被读成总量（审核 #24，2026-10-06） */
 const LD_SESSION_WINDOW = 20
-const ldSessionMetaText = computed(() =>
-  ldSessionRows.value.length >= LD_SESSION_WINDOW
-    ? `最近 ${LD_SESSION_WINDOW} 条（窗口上限）`
-    : `${ldSessionRows.value.length} 条`
+
+/* ---------- 会话视角（2026-10-11 深设计）----------
+   窗口里过半是「已废弃」会话（实测 20 条中 14 条），真教学事件被顶出视线。
+   语义核准（后端）：discarded 的唯一写入点是 resetSession（POST /sessions/:id/reset），
+   即**学习者点「重新开始」后作废的旧会话**；users.ts 注释明确其时长按真实有效时长保留、
+   仍属学习记录（不是可丢的脏数据）。口径与概览「最近会话」预览一致（废弃 = discarded）；
+   超时/失败仍算有效（有教学过程与产出，是要看的信号）。 */
+const ldSessView = ref<'active' | 'discarded' | 'all'>('active')
+/* 有效行复用概览「最近会话」的同一过滤（activeSessionRows，本文件下方定义） */
+const ldSessDiscardedRows = computed(() => ldSessionRows.value.filter((r) => r.status === 'discarded'))
+const ldSessViews = computed(() => [
+  { key: 'active' as const, label: '有效', count: activeSessionRows.value.length, title: '有教学内容的会话（含超时/失败的信号会话；不含重置作废的旧会话）' },
+  { key: 'discarded' as const, label: '已废弃', count: ldSessDiscardedRows.value.length, title: '学习者点「重新开始」后作废的旧会话；时长按真实有效时长保留，仍属学习记录' },
+  { key: 'all' as const, label: '窗口全部', count: ldSessionRows.value.length, title: `最近 ${LD_SESSION_WINDOW} 条窗口内的全部会话（含已废弃）` }
+])
+const ldSessViewRows = computed(() =>
+  ldSessView.value === 'active'
+    ? activeSessionRows.value
+    : ldSessView.value === 'discarded'
+      ? ldSessDiscardedRows.value
+      : ldSessionRows.value
+)
+const ldSessionMetaText = computed(() => {
+  const all = ldSessionRows.value.length
+  if (!all) return '暂无'
+  const win = all >= LD_SESSION_WINDOW ? `近 ${LD_SESSION_WINDOW} 条窗口` : `${all} 条`
+  return `${win} · 有效 ${activeSessionRows.value.length} · 废弃 ${ldSessDiscardedRows.value.length}`
+})
+const ldSessionMetaTitle = computed(() =>
+  `该学习者最近 ${LD_SESSION_WINDOW} 条教学会话（窗口上限）；有效=有教学内容，已废弃=学习者点「重新开始」后作废的旧会话`
 )
 
 /* ---------- 阶段切换器（用户诉求「切换学习者不同阶段」）----------
    档位从会话行的 milestoneIndex 派生（后端 deriveTeachingSessionProgress 已归因，零新契约）；
-   只有一个阶段时不渲染切换器（单档即全部，无筛选价值）。 */
+   只在当前视角内有 >1 阶段时渲染（单档即全部，无筛选价值）。计数随视角走，避免跨视角误读。 */
 const ldStageFilter = ref<string>('all')
 const ldStageChips = computed(() => {
   const counts = new Map<number, number>()
-  for (const r of ldSessionRows.value) if (r.msIndex != null) counts.set(r.msIndex, (counts.get(r.msIndex) || 0) + 1)
+  for (const r of ldSessViewRows.value) if (r.msIndex != null) counts.set(r.msIndex, (counts.get(r.msIndex) || 0) + 1)
   return [...counts.keys()].sort((a, b) => a - b).map((i) => ({ key: String(i), label: `里程碑 ${i}`, count: counts.get(i) as number }))
 })
 const ldSessionRowsFiltered = computed(() => {
-  if (ldStageFilter.value === 'all') return ldSessionRows.value
+  if (ldStageFilter.value === 'all') return ldSessViewRows.value
   const idx = Number(ldStageFilter.value)
-  return ldSessionRows.value.filter((r) => r.msIndex === idx)
+  return ldSessViewRows.value.filter((r) => r.msIndex === idx)
 })
+/* 空态分流：窗口空 / 当前视角空（提示切视角） / 视角内阶段筛选空 */
+const ldSessEmptyTitle = computed(() => (ldSessionRows.value.length ? '当前视角无会话' : '暂无教学会话'))
+const ldSessEmptyDesc = computed(() => {
+  if (!ldSessionRows.value.length) return '该学习者还没有产生回合记录。'
+  if (!ldSessViewRows.value.length) {
+    return ldSessView.value === 'active'
+      ? `窗口内 ${ldSessDiscardedRows.value.length} 条均已被重置（学习者点「重新开始」后作废），切「已废弃」或「窗口全部」查看。`
+      : '当前视角内没有会话，换个视角看看。'
+  }
+  return '当前阶段档位下没有会话，切回「全部阶段」。'
+})
+
+/* 产物列（总结 / 建议）——文案与档位照抄平台「教学会话」页，跨页同读法 */
+function ldWrapupText(r: LdSessionRow): string {
+  if (r.wrapupTier === 'complete') return '有总结'
+  if (r.wrapupTier === 'missing') return r.wrapupDegraded ? '降级总结' : '缺总结'
+  return '未生成'
+}
+function ldWrapupBadgeCls(r: LdSessionRow): string {
+  return r.wrapupTier === 'complete' ? 'mk-badge--ok' : r.wrapupTier === 'missing' ? 'mk-badge--warn' : 'mk-badge--muted'
+}
+function ldWrapupTitle(r: LdSessionRow): string {
+  if (r.wrapupTier === 'complete') return '收尾总结完整生成'
+  if (r.wrapupTier === 'pending') return '会话未到终态，总结尚未生成'
+  return r.wrapupDegraded ? '总结来自兜底/仅摘要路径（降级来源）' : '终态会话缺少收尾总结'
+}
+function ldAdvisoryBadgeCls(p: string): string {
+  return p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info'
+}
+/* 互动列 title：长时/秒退都是信号注记而非故障（与平台页 IDLE_LONG_SECONDS 同阈值） */
+const LD_IDLE_LONG_SECONDS = 1500
+function ldInteractTitle(r: LdSessionRow): string {
+  const base = `${r.turns} 回合 · 知识 ${r.kpCount} 点`
+  if (r.durationSec >= LD_IDLE_LONG_SECONDS) return `${base} · 时长 ≥ 25 分钟按长时标注（信号，非故障）`
+  if (r.durationSec > 0 && r.durationSec < 60) return `${base} · 不足 1 分钟：多为驱动中断的短会话`
+  return base
+}
+function ldProgTitle(r: LdSessionRow): string {
+  if (!r.progress) return '无任务级进度数据'
+  return `路径任务进度：第 ${r.progress.taskIndex}/${r.progress.totalTasks} 个任务（里程碑 ${r.progress.milestoneIndex}/${r.progress.totalMilestones}）`
+}
 const ldSessLoading = ref(false)
 const ldSessError = ref(false)
 /** 状态徽章降噪（有意域差异，收尾批 C10 登记）：仅异常态上色、正常态全灰——列表降噪视图；全彩版见 statusText.sessionStatusBadgeCls 单源 */
@@ -1091,10 +1219,11 @@ function sessPaneBadgeCls(s: string): string {
   return sessionStatusBadgeCls(s)
 }
 
-/** 当前学习路径 → 路径详情二级页（只认真实 pathId；缺 ID 时入口不渲染） */
+/** 当前学习路径 → 会话座舱 Path 阶段页签（2026-10-12 拍板：路径不再有独立详情页；
+ *  view=path 是深链适配层，解析出对话后带本页 from 换开座舱，返回键回到这个学习者） */
 function openPathDetail() {
   const sp = subPage.value
-  /* 记来源：从本详情进路径详情后，面包屑返回要回到这个学习者（含原页签），
+  /* 记来源：从本详情进路径后，面包屑返回要回到这个学习者（含原页签），
      而不是一级列表——同页开真实会话（openSession）的既有做法。 */
   if (currentPathId.value) {
     openSubPage('path', currentPathId.value, sp ? { from: { view: sp.view, id: sp.id, label: liveDetail.value?.name } } : undefined)
@@ -1113,18 +1242,48 @@ async function loadLdSessions(id: string) {
     if (stale()) return
     const body = res.data?.data ?? res.data ?? {}
     ldSessionRows.value = ((body.items as Record<string, unknown>[]) || []).map((s) => {
-      const progress = (s.progress || null) as { milestoneIndex?: number; totalMilestones?: number } | null
+      const progress = (s.progress || null) as SessionProgress | null
+      /* 产物列两条来源（降维口径照抄平台「教学会话」页 mapRow，保证跨页同读法）：
+         wrapup.status/sources → 总结档；advisory.ui/{shouldSuggest,priority} → 有效建议 */
+      const wrapup = (s.wrapup || null) as Record<string, unknown> | null
+      const summary = (wrapup?.summary || null) as Record<string, unknown> | null
+      const sources = (wrapup?.sources || {}) as Record<string, string>
+      const rawAdvisory = (s.advisory || null) as Record<string, unknown> | null
+      const advUi = (rawAdvisory?.ui || {}) as Record<string, unknown>
+      const advisory = rawAdvisory
+        ? {
+            title: String(advUi.title || ''),
+            text: String(advUi.body || rawAdvisory.rationale || ''),
+            priority: String(rawAdvisory.priority || '')
+          }
+        : null
+      const advisoryRelevant = !!advisory && rawAdvisory?.shouldSuggest !== false && !['none', ''].includes(advisory.priority)
+      const status = String(s.status || '')
+      const msgCount = Number(s.messageCount || 0)
+      const durationSec = Number(s.duration || 0)
+      const terminal = ['completed', 'succeeded', 'failed', 'timeout', 'finalization_failed', 'discarded', 'superseded'].includes(status)
       return {
         id: String(s.id),
         topic: String(s.topic || s.taskId || '未命名会话'),
-        subText: `${String(s.subject || '—')} · ${Number(s.messageCount || 0)} 条消息`,
-        status: String(s.status || ''),
+        subText: `${String(s.subject || '—')} · ${msgCount} 条消息`,
+        status,
         startAgo: timeAgo(String(s.startTime || '')),
+        startAbs: s.startTime ? new Date(String(s.startTime)).toLocaleString() : '',
         skill: String(s.subject || s.taskType || '—'),
         stage: progress && progress.totalMilestones ? `里程碑 ${progress.milestoneIndex || 0}/${progress.totalMilestones}` : '—',
         msIndex: progress && typeof progress.milestoneIndex === 'number' && progress.milestoneIndex > 0 ? progress.milestoneIndex : null,
-        turns: String(Number(s.messageCount || 0)),
-        duration: formatDuration(Number(s.duration || 0))
+        turns: String(msgCount),
+        duration: formatDuration(durationSec),
+        durationSec,
+        msgCount,
+        kpCount: Number(s.knowledgePointCount || 0),
+        progress,
+        wrapupTier: wrapup?.status === 'complete' ? 'complete' : terminal ? 'missing' : 'pending',
+        wrapupDegraded: wrapup?.status === 'summary-only'
+          || String(sources.summary || '').includes('fallback')
+          || /重新开始本节|重新完成一次完整的学习/.test(String(summary?.practiceAdvice || '')),
+        advisory: advisoryRelevant ? advisory : null,
+        lowPart: (status === 'completed' || status === 'succeeded') && msgCount < 2
       }
     })
     // 换人/重载后旧筛选档可能已不存在（阶段集合随会话窗口变化）→ 回到「全部」
@@ -1146,14 +1305,9 @@ async function loadDetail(id: string | undefined) {
   // （此前无条件置 'overview'，会把 ?tab=profile/evidence/graph 的深链与刷新全部冲掉——
   //  与上方「P0-2 tab 路由化：?tab= 深链/刷新保持」的约定相矛盾，实测发现。）
   const urlTab = typeof tabRoute.query.tab === 'string' ? tabRoute.query.tab.trim() : ''
-  // 无 ?tab= 时的默认落点：?view=user 深链别名（原 UserDetail 入口）落「账号与许可」，
-  // 学习轴入口（?view=learner）维持概览——loadDetail 是挂载即跑的 sync watch，
-  // 初始 ref 在这里会被覆盖，别名落点必须放在本处（实测 ?view=user 曾落回概览）
-  tab.value = urlTab
-    ? normalizeLdTab(urlTab)
-    : subPage.value?.view === 'user'
-      ? 'account'
-      : 'overview'
+  // 默认落点统一「概览」（2026-10-11 用户拍板）：列表行已展示账号事实，点「详情」的动机是看
+  // 学习侧；两轴入口落点一致，心智模型简单。?tab= 深链/刷新仍优先。
+  tab.value = urlTab ? normalizeLdTab(urlTab) : 'overview'
   const base = liveLearners.value.find((l) => l.userId === id)
   const pathId = base?.pathId
   // 从用户详情显式进入学习者画像时携带 includeTest（虚拟/测试账号可查，默认视图仍排除）
@@ -1191,8 +1345,14 @@ async function loadDetail(id: string | undefined) {
     // 「该用户不存在或已被删除」错误态；且软删用户需在此恢复（列表域不含软删行），
     // 故该页签不置页级错误，避免挡住恢复入口。
     if (tab.value !== 'account' && !base && !model.userName && !totalTasks) {
-      detailError.value = true
-      return
+      // 账号轴入口（用户与学习者）且无任何学习侧数据（虚拟/测试账号常态）：落「账号与许可」
+      // ——UserAccountPane 自取用户记录、自带错误态与软删恢复入口（原 ?view=user 默认落点语义）
+      if (subPage.value?.view === 'user') {
+        tab.value = 'account'
+      } else {
+        detailError.value = true
+        return
+      }
     }
     const completedTasks = Number(progress.completedTasks || 0)
     const pct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
@@ -1339,17 +1499,6 @@ async function loadDetail(id: string | undefined) {
   }
 }
 
-/** 关联实体（P1）：查看该学习者的用户账号（记忆返回来源）。
- *  审核 #16（2026-10-06）：壳层 pageKey（AdminConsole.vue:191 只含 id:includeTest）不含 view，
- *  view=learner→user 同 key 同组件不重建，只改 URL 时页签仍停在原处，点「用户账号」看着没反应。
- *  「?view=user 默认落账号页签」是既有约定（loadDetail 的别名落点），页内跳转同样兑现。 */
-function goUser() {
-  const id = subPage.value?.id
-  if (!id) return
-  openSubPage('user', id, { includeTest: subPage.value?.includeTest })
-  switchTab('account')
-}
-
 /**
  * 记忆与复习（归并凭据 / 回滚 / 到期明细）：跨页深链到 `/admin/memory-review?userId=…`。
  * 该页已支持 `userId` 深链（见 MemoryReview.vue 的 onMounted 注释），此前缺的正是"从学习者详情进去"这一环。
@@ -1396,16 +1545,8 @@ async function recompute() {
 
 const loading = computed(() => !liveDetail.value && !detailError.value)
 
-/** 进度口径（P2 双分母标注）：statstrip % 按路径全部任务折算；「当前里程碑」行是里程碑内任务分母 */
-const pctTitle = computed(() => {
-  const v = d.value
-  if (!v) return ''
-  return v.taskTotal > 0
-    ? `路径进度 ${v.pct}%：按路径全部任务折算（任务 ${v.taskDone}/${v.taskTotal}）；下方「当前里程碑」行用的是里程碑内分母`
-    : `路径进度 ${v.pct}%：按路径全部任务折算（暂无任务分母）`
-})
-/** statstrip「最近动态」口径：d.sessions 是最近学习事件前 6 条（与「最近动态」卡同源），非会话 */
-const recentSessionsHint = '口径：最近学习事件前 6 条（非会话）；完整教学会话列表见「教学会话」页签'
+/** statstrip 已整体撤除（2026-10-11 用户走查）：pctTitle/sessionStrip* 随之退役；
+ *  四格读数各由归属页签承载，页签间定位交给页签栏 */
 
 const d = computed<Detail | null>(() => {
   if (detailError.value) return null
@@ -1424,6 +1565,33 @@ interface TeachingHintsShape {
 }
 
 const teachingHints = computed(() => (rawDetail.value?.teachingHints || null) as TeachingHintsShape | null)
+/** 后端建议文本每句自带句号、拼接处出「。。」，且原文自带「【个性化要求】」头与卡内标签重复：
+    显示层归一句读、剥重复头（2026-10-11 走查） */
+const cleanHint = (s: string) => s.replace(/^\s*【个性化要求】\s*/, '').replace(/。。+/g, '。').replace(/。，/g, '。')
+/** 「个性化要求」按句拆行（原四句连排一坨，读感差） */
+const promptHintLines = computed(() =>
+  cleanHint(teachingHints.value?.promptEnhancement || '')
+    .split('。')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => `${s}。`)
+)
+/** 最近动态连续合并（2026-10-11 用户拍板）：相邻且同概念+同结果的事件折叠为一条——
+    每轮课会成对产出「教学会话」+「总结」两条事件，逐条列出读感重复；合并后类型并排
+    「教学会话 + 总结」，×N 为组内条数。只合并相邻条目，交叉出现仍各占一行。 */
+const recentActivityMerged = computed(() => {
+  const out: Array<{ time: string; titles: string[]; result: string; tone: 'ok' | 'warn' | 'bad' | 'muted'; concepts?: string[]; count: number }> = []
+  for (const s of d.value?.sessions || []) {
+    const prev = out[out.length - 1]
+    if (prev && prev.result === s.result && (prev.concepts || []).join('|') === (s.concepts || []).join('|')) {
+      if (!prev.titles.includes(s.title)) prev.titles.push(s.title)
+      prev.count++
+      continue
+    }
+    out.push({ time: s.time, titles: [s.title], result: s.result, tone: s.tone, concepts: s.concepts, count: 1 })
+  }
+  return out
+})
 const knowledgeMemory = computed(() => (rawDetail.value?.knowledgeMemory || null) as Record<string, unknown> | null)
 const controlState = computed(() => (rawDetail.value?.learningControlState || null) as Record<string, unknown> | null)
 /** 证据记录：后端 learner-models 证据接口 */
@@ -1471,9 +1639,15 @@ function isDomainEvidence(type: string): boolean {
 
 function kvRows(obj: Record<string, unknown> | null, labels: Record<string, string>) {
   if (!obj) return [] as { label: string; value: string }[]
+  /* 后端原始浮点直出（23.06896551724138 / 0.9266399999999999）显示层收敛：
+     小数 ≥5 位 → 四舍五入到 2 位（2026-10-11 走查） */
+  const tidy = (v: unknown) => {
+    const s = zh(v)
+    return /^-?\d+\.\d{5,}$/.test(s) ? Number(s).toFixed(2) : s
+  }
   return Object.entries(labels)
     .filter(([key]) => obj[key] != null && obj[key] !== '')
-    .map(([key, label]) => ({ label, value: zh(obj[key]) }))
+    .map(([key, label]) => ({ label, value: tidy(obj[key]) }))
 }
 
 const cognitiveRows = computed(() =>
@@ -1556,11 +1730,29 @@ const derivedRows = computed(() => {
   return rows
 })
 
-const narrativeInsights = computed(() => {
+/** 叙述洞察分区：后端 narrativeInsights 是带语义字段名的对象（此前 Object.values 展平丢键，
+ *  五段长文挤一卡无可读层级）。按业务维度归五组打小标、空字段不渲染（2026-10-11 走查采纳外部评审）。
+ *  数组形态（旧快照）回退为无标单组平铺 */
+const NARRATIVE_GROUPS: { label: string; keys: string[] }[] = [
+  { label: '目标与动机', keys: ['goalNarrative', 'motivationNarrative'] },
+  { label: '背景与现状', keys: ['backgroundContextNote'] },
+  { label: '时间与自述', keys: ['timeConstraintNote', 'selfAssessmentNote'] },
+  { label: '学习偏好', keys: ['contentReceptionPattern', 'practicePreferenceNote'] },
+  { label: '卡点与教学适配', keys: ['frictionPatternNote', 'effectiveTeachingPattern', 'supportStyleNote', 'taskGranularityNote'] }
+]
+const narrativeSections = computed<{ label: string; items: string[] }[]>(() => {
   const n = profile.value?.narrativeInsights
-  if (!n) return [] as string[]
-  if (Array.isArray(n)) return n.map(String)
-  return Object.values(n as Record<string, unknown>).flatMap((v) => (Array.isArray(v) ? v.map(String) : [String(v)])).slice(0, 6)
+  if (!n) return []
+  if (Array.isArray(n)) {
+    const items = n.map(String).filter((s) => s.trim())
+    return items.length ? [{ label: '', items }] : []
+  }
+  const o = n as Record<string, unknown>
+  const val = (k: string) => {
+    const v = o[k]
+    return v == null ? '' : String(v).trim()
+  }
+  return NARRATIVE_GROUPS.map((g) => ({ label: g.label, items: g.keys.map(val).filter((s) => s) })).filter((g) => g.items.length)
 })
 
 const metricCards = computed(() => {
@@ -1626,32 +1818,47 @@ const controlFlags = computed(() => {
   ]
 })
 
-/** 全局信号与背景摘要（globalBackground 对象不做全量 JSON 倾倒，出摘要 + 可复用/被阻塞 chip 区） */
-const memoryRows = computed(() => {
-  const km = knowledgeMemory.value
-  if (!km) return [] as { label: string; value: string }[]
-  const rows: { label: string; value: string }[] = []
-  const gs = km.globalSignals
-  if (gs != null) {
-    if (typeof gs === 'string') {
-      rows.push({ label: '全局信号', value: gs })
-    } else {
-      const o = gs as Record<string, unknown>
-      const arr = (v: unknown) => (Array.isArray(v) ? v.length : 0)
-      rows.push({ label: '全局信号', value: `已掌握 ${arr(o.masteredConcepts)} · 挣扎 ${arr(o.strugglingConcepts)} · 脆弱 ${arr(o.fragileConcepts)}` })
-    }
+/** 卡头一行：账本规模（三档信号在「概念信号」组、反复困惑在第三组各有实体，不再复读进卡头） */
+const sigHeadMeta = computed<string | null>(() => {
+  const gb = (knowledgeMemory.value as Record<string, unknown> | null)?.globalBackground
+  if (!gb || typeof gb !== 'object') return null
+  const o = gb as Record<string, unknown>
+  const ledger = Array.isArray(o.conceptLedger) ? o.conceptLedger.length : 0
+  return ledger ? `概念账本 ${ledger} 项` : null
+})
+
+/** 信号三档原始数组（globalSignals 三组概念名） */
+const signalTiers = computed<Record<'mastered' | 'struggling' | 'fragile', string[]>>(() => {
+  const gs = (knowledgeMemory.value as Record<string, unknown> | null)?.globalSignals
+  const o = (gs && typeof gs === 'object' ? gs : {}) as Record<string, unknown>
+  const arr = (k: string): string[] => {
+    const v: unknown = o[k]
+    return Array.isArray(v) ? v.map(String) : []
   }
-  const gb = km.globalBackground
-  if (gb != null && typeof gb !== 'string') {
-    const o = gb as Record<string, unknown>
-    const ledgerCount = Array.isArray(o.conceptLedger) ? o.conceptLedger.length : 0
-    const confusionCount = Array.isArray(o.recurringConfusions) ? o.recurringConfusions.length : 0
-    rows.push({
-      label: '全局背景',
-      value: `概念账本 ${ledgerCount} 项 · 反复困惑 ${confusionCount} 项 · 可复用基础 ${Array.isArray(o.reusableFoundations) ? o.reusableFoundations.length : 0} · 被阻塞基础 ${Array.isArray(o.blockedFoundations) ? o.blockedFoundations.length : 0}`
-    })
-  }
-  return rows
+  return { mastered: arr('masteredConcepts'), struggling: arr('strugglingConcepts'), fragile: arr('fragileConcepts') }
+})
+
+/** 信号三档（学没学会）：已掌握=stable/mastered，脆弱=fragile/待复习，挣扎=learning 且掌握度<55%。
+ *  分档依据是 performance 信号，与概览概念条的迁移准备度分档不同维 */
+const signalTierRows = computed(() => [
+  { key: 'mastered', label: '已掌握', n: signalTiers.value.mastered.length, names: signalTiers.value.mastered },
+  { key: 'struggling', label: '挣扎', n: signalTiers.value.struggling.length, names: signalTiers.value.struggling },
+  { key: 'fragile', label: '脆弱', n: signalTiers.value.fragile.length, names: signalTiers.value.fragile }
+])
+
+/** 反复困惑（在哪跌倒）：对话证据提炼的重复误解，概念+复发次数+模式说明 */
+const recurringConfusions = computed<{ label: string; count: number; pattern: string }[]>(() => {
+  const gb = (knowledgeMemory.value as Record<string, unknown> | null)?.globalBackground
+  if (!gb || typeof gb !== 'object') return []
+  const o = gb as Record<string, unknown>
+  const rc = o.recurringConfusions
+  return Array.isArray(rc)
+    ? (rc as Record<string, unknown>[]).map((x) => ({
+        label: String(x.label || x.conceptKey || ''),
+        count: Number(x.count || 0),
+        pattern: String(x.pattern || '')
+      }))
+    : []
 })
 
 const foundations = computed<{ reusable: string[]; blocked: string[] }>(() => {
@@ -1663,6 +1870,10 @@ const foundations = computed<{ reusable: string[]; blocked: string[] }>(() => {
     blocked: Array.isArray(o.blockedFoundations) ? o.blockedFoundations.map(String) : []
   }
 })
+
+/** 概览建议行动卡的强调/避免 chips（2026-10-11 走查自画像页签迁入） */
+const emphasizeList = computed(() => teachingHints.value?.emphasize || [])
+const avoidList = computed(() => teachingHints.value?.avoid || [])
 
 /* ---------- 概念掌握图形化（conceptLedger 单源，旧快照回退三组列表） ---------- */
 interface ConceptBar {
@@ -1940,25 +2151,6 @@ const learningStateRows = computed(() => {
   ]
 })
 
-/* ---------- 概览：学习者画像 kv（原型 2190） ----------
-   后端用户详情无「注册来源」字段 → 不渲染该行（不硬造）；路径数取 _count.learning_paths，
-   层级取 levelBadgeZh(xp, currentLevel)（等级词汇单点，L 公式与后端 level.util 同源）。 */
-const portraitRows = computed(() => {
-  const rows: { label: string; value: string }[] = []
-  if (d.value?.email) rows.push({ label: '邮箱', value: d.value.email })
-  const u = userRecord.value
-  if (u) {
-    // 等级词汇单点（learner-profile.ts）：统一「L2 · 进阶」并存格式
-    const lvlBadge = levelBadgeZh(u.xp, u.currentLevel)
-    if (lvlBadge) rows.push({ label: '学习层级', value: lvlBadge })
-    rows.push({ label: '路径数', value: `${u.pathCount} 条` })
-    if (u.createdAt) rows.push({ label: '注册时间', value: timeAgo(u.createdAt) })
-  }
-  const lastActive = recentSessionRows.value[0]?.startAgo || d.value?.sessions[0]?.time
-  if (lastActive) rows.push({ label: '最近活跃', value: lastActive })
-  return rows
-})
-
 /* ---------- 学习路径 pane：路径卡（原型 2165-2171） ---------- */
 const pathStatus = computed<{ text: string; tone: 'ok' | 'info' | 'muted' }>(() => {
   const p = pathInfo.value
@@ -1981,6 +2173,13 @@ function dueText(dueAt: string): string {
   return days >= 1 ? `${days} 天后` : '今天到期'
 }
 
+/* ---------- 记忆与复习 pane（2026-10-11 深设计）----------
+   两处口径修正：
+   ① 状态判定保持后端语义（逾期=待复习 / 无痕迹=未初始化 / <50 薄弱 / <80 学习中 / ≥80 稳固），
+      但「记忆强度」条的语气改按**数值档**上色（<40 红 / <80 琥珀 / ≥80 绿），不再跟着状态走——
+      3% 且逾期原先是琥珀，读数本身该是红的；
+   ② 排序显式化：待复习（逾期最久在前）→ 有痕迹未到期（按到期升序）→ 未初始化压尾。
+      此前直接透传接口顺序，口径不可读。 */
 const memoryPaneRows = computed(() =>
   memoryTraces.value.map((t) => {
     const strength = t.retrievability != null ? Math.round(t.retrievability * 100) : null
@@ -1991,30 +2190,84 @@ const memoryPaneRows = computed(() =>
     else if (strength < 50) state = { text: '薄弱', tone: 'bad' }
     else if (strength < 80) state = { text: '学习中', tone: 'info' }
     else state = { text: '稳固', tone: 'ok' }
-    const source = t.extractionCount > 0 ? `累计提取 ${t.extractionCount} 次` : t.lastSeenAt ? `最近提取 ${timeAgo(t.lastSeenAt)}` : '—'
+    const barTone: 'ok' | 'warn' | 'bad' | undefined =
+      strength == null ? undefined : strength < 40 ? 'bad' : strength < 80 ? 'warn' : 'ok'
+    /* 强度格 title 带出 FSRS 内部量（后端 stability/difficulty 一直有值但从未消费）：
+       可提取率是「现在能想起来多大概率」，稳定性/难度是模型内部参数，解释间隔为何这么排 */
+    const fsrsBits: string[] = []
+    if (strength != null) fsrsBits.push(`可提取率 ${strength}%`)
+    if (t.fsrsStability != null) fsrsBits.push(`稳定性 ${t.fsrsStability} 天`)
+    if (t.fsrsDifficulty != null) fsrsBits.push(`难度 ${t.fsrsDifficulty}`)
+    const strengthTitle = fsrsBits.length
+      ? `FSRS 记忆强度（可提取率）：${fsrsBits.join(' · ')}`
+      : 'FSRS 尚未算出该知识点的可提取率'
+    const extract = t.extractionCount > 0
+      ? `${t.extractionCount} 次${t.lastSeenAt ? ` · 最近 ${timeAgo(t.lastSeenAt)}` : ''}`
+      : t.lastSeenAt
+        ? `最近 ${timeAgo(t.lastSeenAt)}`
+        : '—'
+    const stateKey = overdue ? 'due' : strength == null ? 'uninit' : strength < 50 ? 'weak' : strength < 80 ? 'learning' : 'ok'
     return {
       key: t.conceptKey,
       label: t.label || t.conceptKey,
       strength,
+      barTone,
+      strengthTitle,
       tone: state.tone,
       stateText: state.text,
+      stateKey,
+      /** 仅「未初始化」压暗（无任何痕迹）；待复习行可能同样没有强度读数，但恰恰最该被看见 */
+      uninit: stateKey === 'uninit',
+      overdue,
       due: t.dueAt ? dueText(t.dueAt) : '—',
       dueAbs: t.dueAt ? new Date(t.dueAt).toLocaleString() : '',
-      source
+      dueTs: t.dueAt ? new Date(t.dueAt).getTime() : null,
+      extract,
+      seenAbs: t.lastSeenAt ? new Date(t.lastSeenAt).toLocaleString() : ''
     }
   })
 )
-
-/* ---------- 操作记录 pane（原型 2184-2187）：feed/feedrow ----------
-   口径差异：后台暂无管理侧审计流水接口（无 admin action log 端点）；此处以学习者学习事件
-   时间线（liveEvidence，learner_evidence 合并域事件）如实渲染——语义是「学习事件」，非「管理员操作审计」。 */
-const auditRows = computed(() =>
-  liveEvidence.value.map((e) => ({
-    time: e.time,
-    action: evidenceTypeZh(e.title),
-    detail: e.detail || evidenceSignalZh(e.signal, e.title) || '—'
-  }))
+/** 排序档位：待复习 0 / 有痕迹未到期 1 / 未初始化 2；同档按到期升序（无到期压尾） */
+const memoryRank = (r: { stateKey: string }) => (r.stateKey === 'due' ? 0 : r.stateKey === 'uninit' ? 2 : 1)
+const memorySortedRows = computed(() =>
+  [...memoryPaneRows.value].sort((a, b) => {
+    const d = memoryRank(a) - memoryRank(b)
+    if (d) return d
+    if (a.dueTs == null && b.dueTs == null) return a.label.localeCompare(b.label, 'zh-Hans-CN')
+    if (a.dueTs == null) return 1
+    if (b.dueTs == null) return -1
+    return a.dueTs - b.dueTs
+  })
 )
+/* 视角：分档计数从行派生；只有出现的档位才给 chips（+ 全部） */
+const memView = ref<'all' | 'due' | 'ok' | 'weak' | 'learning' | 'uninit'>('all')
+const MEM_STATE_ORDER: Array<{ key: Exclude<typeof memView.value, 'all'>; label: string; title: string }> = [
+  { key: 'due', label: '待复习', title: '已到复习期（含此前提取过、FSRS 未算出可提取率的点）' },
+  { key: 'ok', label: '稳固', title: '可提取率 ≥ 80% 且未到复习期' },
+  { key: 'learning', label: '学习中', title: '可提取率 50-79%，仍在形成期' },
+  { key: 'weak', label: '薄弱', title: '可提取率 < 50%，临近遗忘' },
+  { key: 'uninit', label: '未初始化', title: '尚无 FSRS 记忆痕迹（未产生提取记录）' }
+]
+const memViews = computed(() => {
+  const counts = new Map<string, number>()
+  for (const r of memoryPaneRows.value) counts.set(r.stateKey, (counts.get(r.stateKey) || 0) + 1)
+  return [
+    { key: 'all' as const, label: '全部', count: memoryPaneRows.value.length, title: '全部有记忆痕迹的知识点' },
+    ...MEM_STATE_ORDER.filter((s) => (counts.get(s.key) || 0) > 0).map((s) => ({ ...s, count: counts.get(s.key) as number }))
+  ]
+})
+const memoryRowsFiltered = computed(() =>
+  memView.value === 'all' ? memorySortedRows.value : memorySortedRows.value.filter((r) => r.stateKey === memView.value)
+)
+/** 卡头读数：状态分档（剔除全零档），口径写进 title */
+const memMetaText = computed(() => {
+  const parts = memViews.value.filter((v) => v.key !== 'all').map((v) => `${v.label} ${v.count}`)
+  return parts.length ? parts.join(' · ') : `共 ${memoryPaneRows.value.length} 点`
+})
+const memMetaTitle = computed(() => {
+  const overdue = memoryPaneRows.value.filter((r) => r.overdue).length
+  return `记忆强度=FSRS 可提取率；待复习=已到复习期（${overdue} 条）；稳固≥80% 且未到期；未初始化=尚无记忆痕迹。`
+})
 
 const trendText = computed(() => (d.value?.trend === 'up' ? '↗ 上升' : d.value?.trend === 'down' ? '↘ 下降' : '→ 稳定'))
 const trendBadge = computed(() => (d.value?.trend === 'up' ? 'mk-badge--ok' : d.value?.trend === 'down' ? 'mk-badge--bad' : 'mk-badge--muted'))
@@ -2052,7 +2305,7 @@ const snapshotBadge = computed(() =>
   snapshotLabel.value.includes('证据不足') ? 'mk-badge--warn' : 'mk-badge--muted'
 )
 const snapshotHint = computed(() =>
-  snapshotLabel.value.includes('证据不足') ? '快照置信度低于 50%，证据不足，建议重算' : '快照置信度'
+  snapshotLabel.value.includes('证据不足') ? '档案可信度低于 50%，证据不足，建议重算' : '档案可信度'
 )
 
 function barToneBadge(tone: ConceptBarTone): string {
@@ -2083,6 +2336,33 @@ function barToneBadge(tone: ConceptBarTone): string {
   align-items: start;
 }
 .ld-col { display: grid; gap: 14px; align-content: start; }
+/* 画像 tab 栅格（2026-10-11 走查再设计）：上排三张参数卡三列收成等高水平带，
+   叙述洞察 .ld-pf-narr 通栏独占一行——长文本不再把同行参数卡拉出半屏空洞。
+   不设 align-items:start——同行卡拉伸等高，矮卡不留洞 */
+.ld-pf-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.ld-pf-narr { grid-column: 1 / -1; }
+/* 合并卡内双子组（2026-10-11 走查：六散卡并三卡后的卡内左右分栏）。
+   再设计（用户走查「认知特征」子标题）：子组标题升为分区头——细线衬底与卡头同语法，
+   字色回前景（此前 0.72 透明度与字段标签混同层）；两子组间加竖分隔线；
+   kv 在子组内去自带内边距（左缘与分区头对齐）并放开标签列宽（max-content），
+   「平均会话时长（分）」这类带单位标签不再折行 */
+.ld-pf-sub { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 0; align-content: start; padding: 12px 16px 14px; }
+.ld-pf-sub > div + div { border-left: 1px solid var(--mk-line); padding-left: 18px; }
+/* 1080~2K 三列档：参数卡约 535px 放不下卡内双子栏——纵向堆叠并撤销竖分隔线；
+   ≥2000px 宽卡恢复双子栏（见 4K 媒体块） */
+.ld-pf-grid .ld-pf-sub { grid-template-columns: 1fr; gap: 12px; }
+.ld-pf-grid .ld-pf-sub > div + div { border-left: 0; padding-left: 0; }
+.ld-pf-sub__h {
+  margin: 0 0 9px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--mk-line);
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--mk-ink);
+  opacity: 0.88;
+}
+.ld-pf-sub .ld-kv { padding: 0; --kv-label: max-content; }
 
 .ld-progress { padding: 16px; display: grid; gap: 8px; }
 .ld-progress strong { font-size: var(--mk-fs-emphasis); }
@@ -2095,15 +2375,24 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-concept-label--ok { color: var(--mk-green); }
 .ld-concept-label--bad { color: var(--mk-red); }
 .ld-concept-list { display: flex; gap: 6px; flex-wrap: wrap; }
-/* 概念徽章（原型 .pill--ok/--bad 词汇：胶囊 + tone 底） */
+/* 概念徽章（原型 .pill--ok/--bad 词汇）。2026-10-11 外部评审降噪：高饱和实底 →
+   低透明底 + 彩边彩字，多枚并排时不再抢视觉焦点 */
 .ld-concept {
   padding: 2px 9px;
   border-radius: 999px;
   font-size: var(--mk-fs-micro);
-  font-weight: 600;
+  font-weight: 500;
 }
-.ld-concept--ok { background: var(--mk-green-bg); color: var(--mk-green); }
-.ld-concept--bad { background: var(--mk-red-bg); color: var(--mk-red); }
+.ld-concept--ok {
+  background: color-mix(in srgb, var(--mk-green) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mk-green) 26%, transparent);
+  color: var(--mk-green);
+}
+.ld-concept--bad {
+  background: color-mix(in srgb, var(--mk-red) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mk-red) 26%, transparent);
+  color: var(--mk-red);
+}
 
 /* 概念掌握条（conceptLedger 图形化） */
 .ld-bars { padding: 14px 16px 16px; display: grid; gap: 12px; }
@@ -2127,11 +2416,17 @@ function barToneBadge(tone: ConceptBarTone): string {
   border-radius: 6px;
   padding: 1px 6px;
   cursor: help;
+  /* 计数列纵向对齐：min-width 固定胶囊宽 + tabular 数字（2026-10-11 走查采纳外部评审） */
+  min-width: 46px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .ld-bar__ev--zero { background: var(--mk-surface-2); color: var(--mk-faint); }
 /* 分布条统一走 .mk-minibar + data-tone（原为 4 套渐变，属 §4 点名的违规）；
    muted 档原语没有，保留本页一个色调类 */
 .ld-bar__fill--muted { background: var(--mk-faint); }
+/* 密度条在本卡是主视觉，6px 原语高度升到 8px（2026-10-11 外部评审：过细难读） */
+.ld-bar__track { height: 8px; }
 
 /* （.ld-trend* 柱图样式已随「7 天活跃趋势」假卡移除） */
 /* 最近动态行（原型 .feedrow 词汇：行间 1px line 分隔 + mono 时间列） */
@@ -2145,6 +2440,8 @@ function barToneBadge(tone: ConceptBarTone): string {
 }
 .ld-session:last-child { border-bottom: none; }
 .ld-session__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+/* 连续同事件折叠计数（2026-10-11 走查）：弱化小字缀在类型名后 */
+.ld-session__x { margin-left: 6px; font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); }
 .ld-session__dot.is-ok { background: var(--mk-green); }
 .ld-session__dot.is-warn { background: var(--mk-amber); }
 .ld-session__dot.is-bad { background: var(--mk-red); }
@@ -2156,30 +2453,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 /* 建议行动卡 */
 .ld-actions { padding: 14px 16px; display: grid; gap: 9px; }
-/* 关联实体卡（P1）：HubSpot/SF 关联卡模式 */
-.ld-related { padding: 10px 12px; display: grid; gap: 6px; }
-.ld-related__item {
-  display: flex; align-items: center; gap: 10px;
-  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface); padding: 9px 12px;
-  font: inherit; text-align: left; cursor: pointer;
-  transition: border-color 0.12s var(--mk-ease-out);
-}
-/* 悬停只换描边，不位移（批次 D，2026-10-02）：相关学习是竖排列表，
-   抬 1px 会让整列在鼠标经过时「跳一下」。同批把硬编码 rgba(47,106,224,.5)
-   改成 var(--mk-blue) 的 color-mix —— 交互蓝只有一个来源。 */
-.ld-related__item:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
-.ld-related__item:active { transform: scale(0.98); }
-.ld-related__icon {
-  width: 30px; height: 30px; border-radius: var(--mk-radius-sm); flex-shrink: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: color-mix(in srgb, var(--mk-blue) 10%, transparent); color: var(--mk-blue); font-size: var(--mk-fs-body);
-}
-.ld-related__main { display: grid; gap: 1px; flex: 1; min-width: 0; }
-.ld-related__main strong { font-size: var(--mk-fs-micro); color: var(--mk-ink); }
-.ld-related__main span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.ld-related__go { font-style: normal; color: var(--mk-faint); font-weight: 700; }
-.ld-related__item:hover .ld-related__go { color: var(--mk-blue); }
 .ld-actions p { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.7; }
 .ld-actions__k {
   display: inline-block;
@@ -2192,7 +2465,14 @@ function barToneBadge(tone: ConceptBarTone): string {
   font-weight: 700;
 }
 .ld-actions__k--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
+/* 「个性化要求」逐句拆行：句块独立成行，行间微间距（2026-10-11 走查） */
+.ld-actions__body { display: block; }
+.ld-actions__line { display: block; }
 .ld-actions .mk-status__action { justify-self: start; }
+/* 控制信号行（只列命中项）+ 强调/避免 chips（2026-10-11 自画像页签迁入） */
+.ld-actions__ctrl { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.ld-actions__lists { display: grid; gap: 9px; }
+.ld-actions__lists > div { display: grid; gap: 6px; justify-items: start; }
 
 /* 概念 chip（会话/证据行内；原型 .chip 词汇：胶囊描边、surface 底、muted 字） */
 .ld-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
@@ -2205,10 +2485,6 @@ function barToneBadge(tone: ConceptBarTone): string {
   border-radius: 999px;
   padding: 0 8px;
 }
-
-/* 可复用/被阻塞基础 */
-.ld-found { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px 16px; }
-.ld-found > div { display: grid; gap: 7px; align-content: start; }
 
 /* Tab 通用 */
 /* 键值对排版（原型 dl.kv：96px 标签列网格、行间不画线、标签 12px muted、值 body 常规字重）；
@@ -2229,6 +2505,9 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-mt { display: inline-flex; align-items: center; gap: 8px; }
 .ld-mt__bar { width: 72px; flex: none; }
 .ld-mt em { font-style: normal; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+/* FSRS 表：未初始化行整行降噪（状态列徽章已说明原因）；逾期到期日琥珀色呼应「待复习」pill */
+.ld-memrow--uninit > td { opacity: 0.55; }
+.ld-due--overdue { color: var(--mk-amber); font-weight: 600; }
 
 /* 学习状态追踪（lsm，原型 517-522）：label / track / val / hint 四列 */
 .ld-lsm { padding: 14px 16px; display: grid; gap: 12px; }
@@ -2243,32 +2522,142 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 /* 表格 pane（教学会话 / 记忆与复习）：行可点击 + 等宽列 */
 .ld-pane-row { cursor: pointer; }
-/* 阶段切换器：chips 行夹在卡头与表格之间（mk-pill 描边胶囊原语，激活态见原语层） */
-.ld-stagechips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 16px 0; }
+/* 表头筛选工具栏（会话页签的视角/阶段、记忆页签的复习状态共用一套形态）：
+   两组 chips 同排、以竖分隔线分域；默认档（有效 / 全部）把噪声挡在默认视野外。
+   下内边距不可省：实测 0 间距时胶囊底边与表头上边线贴合（用户走查「和下面重叠了」），
+   给 12px 与区块节奏一致 */
+.ld-filtbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 12px 16px; }
+/* 表格不做全出血：末行底边此前贴死卡底（实测仅剩 1px 边框），补 12px 收尾（同卡头下节奏） */
+#ld-panel-sessions .mk-table-scroll,
+#ld-panel-memory .mk-table-scroll { padding-bottom: 12px; }
+.ld-filtbar__grp { display: flex; flex-wrap: wrap; gap: 6px; }
+.ld-filtbar__grp + .ld-filtbar__grp { padding-left: 14px; border-left: 1px solid var(--mk-line); }
+/* 会话身份真按钮（审核 #20 键盘可达）：mk-cell-main strong 的截断对 inline-block 按钮不生效，
+   故按钮自带 block + 省略号，hover 用链接蓝（同 mk-link 语义，但不吃全局下划线） */
+.ld-topic-btn {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.ld-topic-btn:hover { color: var(--mk-blue); }
+/* 互动列：时长主值 + 副行（回合 · 知识点）——档位与平台页同阈值（<60s 秒退弱化 / ≥1500s 长时琥珀） */
+.ld-ia { display: grid; gap: 1px; min-width: 0; }
+.ld-ia__dur { font-size: var(--mk-fs-micro); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ld-ia__dur--brief { color: var(--mk-muted); font-weight: 400; }
+.ld-ia__dur--long { color: var(--mk-amber); }
+/* 进度列：任务 x/y + minibar（口径与平台页共享 statusText.sessionProgress*） */
+.ld-prog { display: inline-flex; align-items: center; gap: 6px; }
+.ld-prog__num { font-size: var(--mk-fs-micro); white-space: nowrap; }
+.ld-prog__bar { width: 56px; }
+.ld-prog--done { color: var(--mk-green); font-size: var(--mk-fs-micro); font-weight: 600; }
+/* 产物列的建议徽章：截断必须落在**内层 span**（平台页 .ts-adv-badge__txt 同法）——
+   加在徽章本体上时 overflow 会先吃掉圆角内边距，长标题还会把末字竖切（用户走查
+   「pill 字体尾部被压缩」）；内层截断则只会出干净省略号，徽章 padding 始终完整。
+   横向内边距抬到 10px（compact 档 .mk-badge 默认 7）：CJK 字形墨迹左右各外扩 1px（侧边距），
+   10 字标题会占满胶囊约 88% 宽度，实测末字墨迹离帽仅 6px → 观感「尾巴贴帽」。
+   选择器带 #ld-panel-sessions 前缀：compact 密度规则 `html[data-density] .mk-badge`(0,2,1)
+   比 scoped 类选择器(0,2,0) 高，不加 id 抬不动 */
+#ld-panel-sessions .ld-adv { margin-left: 4px; max-width: 168px; padding-inline: 10px; }
+.ld-adv__txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ld-mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); }
 .ld-sub { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .ld-strong { font-weight: 600; }
 
 /* 操作记录 feed（原型 .feed/.feedrow 297-304：62px mono 时间列 + 动作/详情） */
-.ld-feed { display: grid; padding: 4px 16px; }
-.ld-feedrow { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--mk-line); }
-.ld-feedrow:last-child { border-bottom: 0; }
-.ld-feedrow__time { width: 62px; flex: none; font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.ld-feedrow__main { min-width: 0; display: grid; gap: 2px; }
-.ld-feedrow__action { font-size: var(--mk-fs-micro); font-weight: 600; }
-.ld-feedrow__detail { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 
-.ld-metrics {
+/* 学习压力曲线卡头部当前读数行（2026-10-11 自页宽 KPI 横排合流）：四格 mini hit，
+   语气色沿用 is-good/is-bad（与预测校准 hit 同词汇），口径进 title */
+.ld-load__hits {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
+  padding: 12px 14px 0;
 }
+.ld-load__hit { display: grid; gap: 2px; min-width: 0; }
+.ld-load__hit span { font-size: var(--mk-fs-micro); color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ld-load__hit strong { font-size: var(--mk-fs-emphasis); font-variant-numeric: tabular-nums; }
+.ld-load__hit strong.is-good { color: var(--mk-green); }
+.ld-load__hit strong.is-bad { color: var(--mk-red); }
 
-.ld-flags { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 16px; }
 .ld-insights { padding: 12px 16px; display: grid; gap: 8px; }
 .ld-insights p { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.7; }
-.ld-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px 16px; }
-.ld-two > div { display: grid; gap: 7px; align-content: start; }
+/* 通栏叙述卡：语义分区 + 多栏文本流（栏内行长维持可扫读宽度）；分区不跨栏断开；
+   ≤1100px 回退单栏（见窄屏媒体块），≥2000px 升三栏（见 4K 媒体块） */
+.ld-insights--cols { display: block; columns: 2; column-gap: 32px; padding-top: 14px; }
+.ld-insights__sec { break-inside: avoid; display: grid; gap: 8px; margin-bottom: 14px; }
+.ld-insights__sec:last-child { margin-bottom: 0; }
+.ld-insights__h { margin: 0 0 2px; font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.06em; color: var(--mk-ink); opacity: 0.88; }
+
+/* 全局信号与背景（证据页签）：三档分段占比条 + 基础清单（清单式降噪，外部评审采纳项） */
+.ld-sigbody { padding: 14px 16px 16px; display: grid; gap: 14px; }
+/* 三组常驻（2026-10-11 用户走查：撤堆条与折叠）——组标题沿用分区头语法（细线衬底） */
+.ld-sig-sec { display: grid; gap: 8px; }
+.ld-sig-sec__h {
+  margin: 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--mk-line);
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--mk-ink);
+  opacity: 0.88;
+}
+/* 信号三档行：色点 + 档名计数 + 概念名连排 */
+/* 信号三档：三列并排压缩通栏（2026-10-11 外部评审二轮），窄屏回退单列 */
+.ld-sig-tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 18px; }
+.ld-sig-tier { margin: 0; display: grid; gap: 3px; font-size: var(--mk-fs-micro); }
+.ld-sig-tier__head { display: flex; align-items: center; gap: 6px; }
+.ld-sig-tier__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ld-sig-tier__dot.is-mastered { background: var(--mk-green); }
+.ld-sig-tier__dot.is-struggling { background: var(--mk-amber); }
+.ld-sig-tier__dot.is-fragile { background: var(--mk-red); }
+.ld-sig-tier strong { font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; }
+.ld-sig-tier__names { color: var(--mk-muted); line-height: 1.6; min-width: 0; }
+/* 反复困惑行（2026-10-11 外部评审二轮）：概念加粗句首、说明降一档灰、频次改右侧轻徽标 */
+.ld-fnd--rc .ld-fnd__item { display: flex; align-items: baseline; gap: 10px; }
+.ld-fnd__item--warn::before { content: '↻'; color: var(--mk-amber); }
+.ld-rc__main { flex: 1; min-width: 0; }
+.ld-rc__label { font-weight: 600; color: var(--mk-ink); opacity: 0.9; margin-right: 8px; }
+.ld-rc__count {
+  flex: none;
+  font-style: normal;
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  color: var(--mk-muted);
+  background: var(--mk-surface-2);
+  border-radius: 6px;
+  padding: 1px 7px;
+  font-variant-numeric: tabular-nums;
+}
+.ld-rc__pattern { color: var(--mk-faint); }
+/* 长句清单双栏排布（multicol，窄屏回退单栏见媒体块）；行条化：长短句参差时裸文本像文字墙，
+   微底行条给出扫读节拍 */
+/* 基础清单（2026-10-11 外部评审二轮）：单列大栏 + 行分隔线（不再是双栏碎片/行条小卡）；
+   悬挂缩进保留——✓/✕ 绝对定位，换行后文字对齐 27px 基线 */
+.ld-fnd { margin: 0; padding: 0; list-style: none; }
+.ld-fnd__item {
+  position: relative;
+  padding: 7px 4px 7px 27px;
+  break-inside: avoid;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  line-height: 1.6;
+  border-bottom: 1px solid var(--mk-line);
+}
+.ld-fnd__item:last-child { border-bottom: 0; }
+.ld-fnd__item::before { position: absolute; left: 10px; top: 8px; font-weight: 700; }
+.ld-fnd__item--ok::before { content: '✓'; color: var(--mk-green); }
+.ld-fnd__item--bad::before { content: '✕'; color: var(--mk-red); }
 
 /* 证据时间线：竖线时间轴 + 信号徽章 + 置信度条 + 来源 */
 .ld-evidence { display: grid; }
@@ -2377,14 +2766,48 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-ev-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  /* 双栏等高监控窗（2026-10-11 走查，外部评审「左右平齐」采纳）：高度锚定视口
+     （页头+hero+页签栏约占 300px），行高锁 minmax(0,1fr)——左时间线与
+     右曲线·趋势·密度各自内滚，两侧卡片框永远等高，任一侧内容多寡都不再拖出黑洞。
+     4K zoom 档（≥2800→1.15 / ≥3600→1.3）内 100vh 会被 zoom 放大，须 ÷zoom 换算回
+     逻辑坐标（与 admin-theme.css 的 .mshell 同一处理），否则卡片底越出视口 */
+  grid-template-rows: minmax(0, 1fr);
+  height: calc(100vh - 300px);
+  min-height: 560px;
   gap: 14px;
-  align-items: start;
 }
-.ld-ev-main { min-width: 0; }
-/* 时间线限高内滚：50+ 条不撑爆页面，右栏随视口露出 */
-.ld-ev-main .ld-evidence { max-height: 640px; overflow-y: auto; }
-.ld-ev-main .ld-evidence::-webkit-scrollbar { width: 6px; }
-.ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #d5dce8; border-radius: var(--mk-radius-xs); }
+@media (min-width: 2800px) {
+  .ld-ev-grid { height: calc((100vh - 300px) / 1.15); }
+}
+@media (min-width: 3600px) {
+  .ld-ev-grid { height: calc((100vh - 300px) / 1.3); }
+}
+
+/* 图谱画布高度（2026-10-11 走查：固定 560px 在 4K 下卡下方留大块空 → 视口锚定；
+   zoom 档 ÷zoom 换算同 .ld-ev-grid——壳内 100vh 会被 zoom 等比放大，且页头/hero/
+   页签/卡头这些 chrome 同被放大，故常数随 zoom 抬升（4K 实测 420 档溢出 141px）；
+   再统一留 ~29px 页底呼吸，与页侧边距同档） */
+/* 卡体 padding 由页面自管（mk-card 本体无 padding，mk-card__head 自带 12px 16px）：
+   此前漏给 mk-ge 体补边距——统计行/底注/图例 1px 贴卡缘，与卡头 16px 缩进同卡错位
+   （4K zoom 放大后尤其扎眼）。横向对齐卡头 16px；画布随体内缩，节点不再顶到卡框。
+   下方三档高度常数含这笔 12+14 竖向 padding（466/546/616 = 贴边修正 440/520/590 +26） */
+#ld-panel-graph .mk-ge { padding: 12px 16px 14px; }
+#ld-panel-graph {
+  --ld-graph-h: calc(100vh - 466px);
+}
+@media (min-width: 2800px) {
+  #ld-panel-graph { --ld-graph-h: calc((100vh - 546px) / 1.15); }
+}
+@media (min-width: 3600px) {
+  #ld-panel-graph { --ld-graph-h: calc((100vh - 616px) / 1.3); }
+}
+.ld-ev-main { min-width: 0; display: flex; flex-direction: column; }
+/* 左卡随窗拉伸，时间线在卡内弹性内滚（flex-basis 0 + min-height 0 链路） */
+.ld-ev-main .ld-ev-details { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ld-ev-main .ld-evidence { flex: 1; min-height: 0; overflow-y: auto; }
+.ld-ev-side { display: grid; gap: 14px; min-width: 0; align-content: start; min-height: 0; overflow-y: auto; }
+/* 滚动条不再局部覆盖（2026-10-11 用户走查：硬编码浅色 thumb 在暗色主题下成亮条）——
+   回归 design-system.css 全站规范（8px、主题 token），左侧时间线与右侧栏同规 */
 .ld-ev-side { display: grid; gap: 14px; min-width: 0; }
 
 /* ---------- 学习压力曲线（健康度/疲劳度 EWMA，风格对齐用户侧 V2LearningState） ---------- */
@@ -2431,15 +2854,23 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 @media (max-width: 1100px) {
   .ld-grid { grid-template-columns: 1fr; }
-  .ld-metrics { grid-template-columns: repeat(2, 1fr); }
-  .ld-two { grid-template-columns: 1fr; }
-  .ld-found { grid-template-columns: 1fr; }
-  .ld-ev-grid { grid-template-columns: 1fr; }
+  .ld-pf-grid { grid-template-columns: 1fr; }
+  .ld-pf-sub { grid-template-columns: 1fr; gap: 12px; }
+  .ld-pf-sub > div + div { border-left: 0; padding-left: 0; }
+  .ld-insights--cols { columns: 1; }
+  .ld-sig-tiers { grid-template-columns: 1fr; }
+  .ld-load__hits { grid-template-columns: repeat(2, 1fr); }
+  .ld-ev-grid { grid-template-columns: 1fr; grid-template-rows: none; height: auto; min-height: 0; }
   .ld-ev-main .ld-evidence { max-height: none; overflow: visible; }
+  .ld-ev-side { overflow: visible; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
+  /* 4K 档：三列栅格不变（上排三参数卡 + 叙述通栏）；参数卡内双子栏恢复并排、叙述升三栏 */
+  .ld-pf-grid .ld-pf-sub { grid-template-columns: 1fr 1fr; }
+  .ld-pf-grid .ld-pf-sub > div + div { border-left: 1px solid var(--mk-line); padding-left: 18px; }
+  .ld-insights--cols { columns: 3; }
   .ld-none { font-size: var(--mk-fs-body); }
   .mk-row__sub { font-size: var(--mk-fs-body); }
   .ld-progress strong { font-size: var(--mk-fs-emphasis); }
@@ -2467,14 +2898,10 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-concept { padding: 4px 12px; }
   .ld-bars { padding: 16px 18px 18px; }
   .ld-actions { padding: 16px 18px; }
-  .ld-found { padding: 16px 18px; }
   .ld-session { padding: 13px 18px; gap: 14px; }
   .ld-session__dot { width: 9px; height: 9px; }
   .ld-kv { --kv-label: 112px; padding: 16px 18px; }
-  .ld-metrics { gap: 14px; }
-  .ld-flags { padding: 16px 18px; }
   .ld-insights { padding: 14px 18px; }
-  .ld-two { padding: 16px 18px; }
   .ld-ev { padding: 12px 18px; gap: 14px; }
   .ld-ev__dot { width: 9px; height: 9px; }
 }
@@ -2506,14 +2933,10 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-concept { padding: 4px 14px; }
   .ld-bars { padding: 19px 21px 21px; }
   .ld-actions { padding: 19px 21px; }
-  .ld-found { padding: 19px 21px; }
   .ld-session { padding: 15px 21px; gap: 16px; }
   .ld-session__dot { width: 11px; height: 11px; }
   .ld-kv { --kv-label: 128px; padding: 18px 21px; }
-  .ld-metrics { gap: 16px; }
-  .ld-flags { padding: 19px 21px; }
   .ld-insights { padding: 16px 21px; }
-  .ld-two { padding: 19px 21px; }
   .ld-ev { padding: 14px 21px; gap: 16px; }
   .ld-ev__dot { width: 11px; height: 11px; }
 }
@@ -2545,14 +2968,10 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-concept { padding: 5px 16px; }
   .ld-bars { padding: 22px 25px 25px; }
   .ld-actions { padding: 22px 25px; }
-  .ld-found { padding: 22px 25px; }
   .ld-session { padding: 17px 25px; gap: 19px; }
   .ld-session__dot { width: 13px; height: 13px; }
   .ld-kv { --kv-label: 152px; padding: 21px 25px; }
-  .ld-metrics { gap: 19px; }
-  .ld-flags { padding: 22px 25px; }
   .ld-insights { padding: 19px 25px; }
-  .ld-two { padding: 22px 25px; }
   .ld-ev { padding: 16px 25px; gap: 19px; }
   .ld-ev__dot { width: 13px; height: 13px; }
 }
@@ -2568,9 +2987,6 @@ html[data-theme='dark'] {
   .ld-ev__signal.is-muted,
   .ld-bar__ev { border-bottom-color: var(--wf-border-light); }
   .ld-bar__ev { background: var(--wf-bg-hover); }
-  /* 滚动条 thumb 与行分隔线是两种语义：此前误共用一条规则，
-     把 .ld-kv__row 整行背景也涂成了 thumb 灰（#393a3c），已拆开 */
-  .ld-ev-main .ld-evidence::-webkit-scrollbar-thumb { background: #393a3c; }
   /* 补漏：操作提示标签/置信条/加载分段（chip/kv 已 token 化） */
   .ld-actions__k { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--wf-color-primary-light); }
   .ld-ev__confbar { background: var(--wf-bg-hover); }

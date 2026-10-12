@@ -15,11 +15,11 @@
       <MkKpi
         label="路径总数"
         :value="stats?.total ?? '—'"
-        :hint="includeTest ? '含虚拟学习者与测试账号' : '仅真实用户口径'"
-        :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户（不含测试账号）；切换页头「含测试」后显示全量并灰标模拟行'"
+        :hint="includeTest ? '含虚拟学习者与测试账号' : '仅真实用户'"
+        :title="includeTest ? '只统计虚拟学习者与测试账号' : '只统计真实用户'"
       />
-      <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" hint="跨全部已生成路径" title="已生成路径的里程碑总数（口径随页头「含测试」开关）" />
-      <MkKpi label="任务" :value="stats?.totalTasks ?? '—'" hint="挂在里程碑下" title="已生成路径的任务总数（口径随页头「含测试」开关）" />
+      <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" hint="跨全部已生成路径" title="已生成路径的里程碑总数（随页头「真实 / 测试」开关变化）" />
+      <MkKpi label="任务" :value="stats?.totalTasks ?? '—'" hint="挂在里程碑下" title="已生成路径的任务总数（随页头「真实 / 测试」开关变化）" />
     </section>
 
     <!-- 路径状态分布：教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」——回到卡上方
@@ -31,7 +31,7 @@
       card
       class="oc-distband"
       title="路径状态分布"
-      :sub="`点击分段只看该状态 · 服务端按状态 group-by 全平台计数（非本页窗口，口径：${includeTest ? '含测试全量' : '仅真实用户'}）`"
+      :sub="`点击分段可筛选对应状态的路径`"
       unit="条"
       aria-label="按路径状态筛选"
       :bins="pathBandBins"
@@ -61,7 +61,7 @@
             v-model:hidden="hiddenCols"
           />
           <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">
-            （{{ includeTest ? '含测试' : '仅真实' }}口径）<template v-if="total > rows.length"> · 后端共 {{ total }} 条，仅显示最近 {{ rows.length }} 条</template>
+            （{{ includeTest ? '测试' : '真实' }}）<template v-if="total > rows.length"> · 共 {{ total }} 条，当前显示最近 {{ rows.length }} 条</template>
           </span>
         </div>
       </div>
@@ -186,19 +186,30 @@
                   <span class="oc-progress__count mk-cell-sub">{{ p.completedMilestones }}/{{ p.totalMilestones }}</span>
                 </div>
               </td>
-              <td v-if="!hiddenCols.has('updated')" :title="fmtDate(p.updatedAt)"><span class="mk-cell-sub mono">{{ timeAgo(p.updatedAt) }}</span></td>
+              <td v-if="!hiddenCols.has('updated')" :title="stallTitle(p)">
+                <span class="mk-cell-sub mono">{{ timeAgo(p.updatedAt) }}</span>
+                <!-- 停滞标记（2026-10-10 跑批实锤：active 且长时间无更新=生成链停滞，可「重试生成」补齐；
+                     真实用户数日不学属正常，只提示不强判死，amber=需关注可行动） -->
+                <span v-if="isStalled(p)" class="mk-badge mk-badge--warn mk-badge--sm" title="长时间无更新，可「重试生成」补齐阶段任务">停滞</span>
+              </td>
               <td>
                 <!-- 操作列文字钮（原型 renderPaths 操作列 btn--sm「详情/下线」+ ⋯ 菜单）；
                      右对齐与 mk-th--right 表头对齐（同 GoalConversations/Users 判例） -->
                 <div class="mk-actions">
-                  <!-- 失败行（P2 顺手）：「去详情」替代「详情」——重规划端点在后端不做（登记），
-                       详情页已有重规划动作，按钮就地改名+title 指路，不再让失败行与普通行同貌 -->
+                  <!-- 失败行：「重试生成」就地重发（守卫自动判 core/stageDesign），「去详情」看结构 -->
                   <button
                     type="button"
                     class="mk-btn mk-btn--sm"
-                    :title="p.status === 'failed' ? '该路径生成失败：详情页可重规划' : undefined"
+                    :title="p.status === 'failed' ? '该路径生成失败，可「重试生成」' : undefined"
                     @click.stop="openPath(p)"
                   >{{ p.status === 'failed' ? '去详情' : '详情' }}</button>
+                  <button
+                    v-if="p.status === 'failed' || isStalled(p)"
+                    type="button"
+                    class="mk-btn mk-btn--sm mk-btn--primary"
+                    :disabled="p.busy"
+                    @click.stop="retryGeneration(p)"
+                  >重试生成</button>
                   <button v-if="p.status !== 'archived'" type="button" class="mk-btn mk-btn--sm" :disabled="p.busy" @click.stop="archive(p)">下线</button>
                   <button v-else type="button" class="mk-btn mk-btn--sm" :disabled="p.busy" @click.stop="restore(p)">恢复</button>
                   <div class="mk-menu">
@@ -239,8 +250,28 @@
   </div>
 </template>
 
+<script lang="ts">
+/* 列表态快照必须活过组件卸载（G 轮走查补正）：行点击进 PathDetail 二级页时 AdminConsole
+   互斥卸载本组件（<component :is> 无 KeepAlive），<script setup> 作用域的变量随实例销毁——
+   #39 引入的快照此前声明在 setup 里，实际从未真正恢复过。搬进模块级 <script> 块
+   （每模块只执行一次）才能跨「下钻 → 返回」存活；consume-once 语义不变（GoalConversations
+   gcSavedListState 同款）。 */
+interface OcSavedListState {
+  page: number
+  keyword: string
+  statusFilter: string
+}
+let ocSavedListState: OcSavedListState | null = null
+function takeOcSavedListState() {
+  const s = ocSavedListState
+  ocSavedListState = null
+  return s
+}
+</script>
+
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { timeAgo, errMsg, shortId, isPageCacheFresh, markPageFetched, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { intent, openSubPage } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
@@ -260,7 +291,7 @@ import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkDistBand from '@/components/mk/MkDistBand.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
-import { statusText, statusBadge } from './opsShared'
+import { statusText, statusBadge, isPathStalled, pathRetryTypeText, PATH_STALL_HOURS } from './opsShared'
 import { isTestAccountUser } from './learner-profile'
 
 /** 嵌入模式：作为「目标对话」页内「学习路径」tab 渲染（隐藏页面壳与状态条，筛选/表格/抽屉保留）；
@@ -272,17 +303,11 @@ type PathRow = LearningPathRow & { busy?: boolean; isTestAccount?: boolean }
 
 const rows = ref<PathRow[]>([])
 const total = ref(0)
-/* 列表态快照（2026-10-06 审核 #39）：行点击进 PathDetail 二级页会互斥卸载本组件
-   （AdminConsole <component :is> 无 KeepAlive），返回后筛选/关键字/页码此前全部回初值。
-   在「行内下钻」出站时把当前状态存进模块级快照，挂载时一次性读回（consume-once：
-   只服务「进详情再返回」这一个场景，不用 localStorage，避免跨会话残留旧筛选）。 */
-let savedListState: { page: number; keyword: string; statusFilter: string } | null = null
-function takeSavedListState() {
-  const s = savedListState
-  savedListState = null
-  return s
-}
-const restoredListState = takeSavedListState()
+/* 列表态快照（2026-10-06 审核 #39，存储见文件顶 <script> 块）：行点击进 PathDetail 二级页
+   会互斥卸载本组件，返回后筛选/关键字/页码此前全部回初值。在「行内下钻」出站时把当前
+   状态存进模块级快照，挂载时一次性读回（consume-once：只服务「进详情再返回」这一个
+   场景，不用 localStorage，避免跨会话残留旧筛选）。 */
+const restoredListState = takeOcSavedListState()
 const page = ref(restoredListState?.page || 1)
 const pageSize = ref(15)
 const loading = ref(false)
@@ -301,7 +326,7 @@ const stats = ref<LearningContentStats | null>(null)
 /* 列显隐（与同页其他列表一致）：路径/操作固定，其余可隐藏 */
 const colDefs = [
   { key: 'difficulty', label: '难度', title: '路径难度：由目标对话里的水平自述归一（入门/进阶/高阶）；无法判断时为未知' },
-  { key: 'hours', label: '时长', title: '预计学习时长（后端 estimatedHours 估算值，带 ~ 表示近似）' },
+  { key: 'hours', label: '时长', title: '预计学习时长（约数，带 ~ 表示近似）' },
   { key: 'user', label: '用户', title: '所属用户' },
   { key: 'status', label: '状态', title: '路径状态' },
   { key: 'progress', label: '进度', title: '里程碑完成进度' },
@@ -350,7 +375,7 @@ const pathBandBins = computed(() =>
     label: e.name,
     n: e.n,
     tone: e.tone,
-    hint: e.key === 'failed' ? '行内「去详情」进详情页可重规划' : undefined
+    hint: e.key === 'failed' ? '行内「重试生成」可就地重发（详情页同入口）' : undefined
   }))
 )
 /** 分布条点击 = 单状态筛选（与原 pills 同一 statusFilter）；再点取消 */
@@ -406,7 +431,7 @@ watch([keyword, statusFilter, ocSortKey, ocSortDir], () => {
 /* 出站下钻时把当前列表态存进快照（#39）：只在下钻路径调用，不在每次筛选变化时写，
    避免污染其它场景；返回时由 takeSavedListState 一次性读回 */
 function saveListState() {
-  savedListState = { page: page.value, keyword: keyword.value, statusFilter: statusFilter.value }
+  ocSavedListState = { page: page.value, keyword: keyword.value, statusFilter: statusFilter.value }
 }
 
 const paged = computed(() => {
@@ -447,7 +472,7 @@ const difficultyTitle = (d?: string | null): string => {
   if (e !== 'unknown') return `路径难度：${DIFF_TEXT[e]}（来源：目标对话中的水平自述）`
   const raw = String(d || '').trim()
   return raw && raw !== 'unknown'
-    ? `无法归一到难度枚举，原始记录：${raw}`
+    ? `无法识别的难度记录：${raw}`
     : '目标对话里没有可判断水平的自述，未归入任何难度档'
 }
 
@@ -480,6 +505,8 @@ async function reload(force = false) {
       page: 1,
       limit: 1000,
       includeTest: includeTest.value || undefined,
+      // 测试视角（2026-10-10「真实/测试」互斥视角）：只回虚拟学习者与测试账号的路径
+      testOnly: includeTest.value || undefined,
     })
     // 已有更新的一笔在途/已回写 → 丢弃本笔（防旧口径覆盖新口径）
     if (seq !== listReqSeq) return
@@ -508,9 +535,8 @@ async function reload(force = false) {
 async function loadStats() {
   const seq = ++statsReqSeq
   try {
-    // 口径与列表同一判据：/stats 已收 includeTest（否则 KPI/里程碑/分布条恒仅真实，
-    // 与同屏卡头「含测试」总数相差约 3 倍）
-    const res = await adminLearningContentApi.getStats(includeTest.value)
+    // 口径与列表同一判据：/stats 收 includeTest + testOnly（否则 KPI/里程碑/分布条与列表不同视角）
+    const res = await adminLearningContentApi.getStats(includeTest.value, includeTest.value)
     if (seq !== statsReqSeq) return
     stats.value = res.data?.data ?? res.data
   } catch {
@@ -586,9 +612,56 @@ async function remove(p: PathRow) {
   }
 }
 
-/* 行点击进路径详情二级页（原型 renderPaths 行 data-action="open-path" → renderPathDetail；
-   2026-10-01 结构详情抽屉随行点击改造整体退役，与教学会话行点击进座舱同一交互习惯）。
-   出站前存列表态（#39）：返回时组件重挂载可恢复筛选/关键字/页码，不再回初值 */
+/* 生成停滞（active 且 updatedAt 超 PATH_STALL_HOURS 无更新）：提醒可「重试生成」补齐 */
+function isStalled(p: PathRow) {
+  return isPathStalled(p.status, p.updatedAt)
+}
+function stallTitle(p: PathRow) {
+  const full = `完整时间 ${fmtDate(p.updatedAt)}`
+  return isStalled(p)
+    ? `${full}；超过 ${PATH_STALL_HOURS} 小时无更新，可「重试生成」补齐`
+    : full
+}
+
+/* 重试路径生成（failed / 停滞 active 的运营救援）：后端按 learningPathId 找最新虚拟会话
+   代发 retry-path-generation，守卫自动判 core=重建主结构 / stageDesign=补齐阶段任务；
+   拒绝时 HTTP 200 + success:false，原因透传 toast（家法：修复类确认显式 danger:false） */
+async function retryGeneration(p: PathRow) {
+  const ok = await askConfirm({
+    title: '重试路径生成',
+    message: `确认对「${p.title}」重新发起生成？\n后台异步执行，完成后路径自动更新。`,
+    confirmText: '重试',
+    danger: false,
+    busy: true,
+  })
+  if (!ok) return
+  p.busy = true
+  try {
+    const res = await adminLearningContentApi.retryGeneration(p.id)
+    const body = res.data
+    if (body?.success && body.data?.success) {
+      toast.success(`已提交重试（${pathRetryTypeText(body.data.retryType)}）`)
+      doneConfirm()
+      /* G6（2026-10-10）：必须 force——reload() 非 force 时 60s TTL 内直接短路 return，
+         重试提交后列表纹丝不动（行还挂在「停滞/失败」上，用户以为点了没生效） */
+      void reload(true)
+      void loadStats()
+    } else {
+      toast.error(`无法重试：${body?.data?.error || body?.error || '原因未知'}`)
+      failConfirm()
+    }
+  } catch (e) {
+    toast.error(`重试失败：${errMsg(e)}`)
+    failConfirm()
+  } finally {
+    p.busy = false
+  }
+}
+
+/* 行点击 → 会话座舱 Path 阶段页签（2026-10-12 拍板：路径不再有独立详情页）。
+   本页只有路径 id：openSubPage('path') 落到深链适配层（PathDetail.vue），由它反查
+   目标对话后带 stage=path 换开座舱。出站前存列表态（#39）：返回时组件重挂载可恢复
+   筛选/关键字/页码，不再回初值 */
 function openPath(p: PathRow) {
   closeMenu()
   saveListState()
@@ -600,11 +673,20 @@ function menuDetail(p: PathRow) { closeMenu(); openPath(p) }
 function menuDelete(p: PathRow) { closeMenu(); void remove(p) }
 
 /* 深链：独立场景形态（嵌入时由宿主 GoalConversations 消费 intent 并传 initialStatus 预筛）：
-   工作台「生成失败路径」→ 预筛 failed（消费后清空，避免菜单直达被残留筛选污染） */
+   工作台「生成失败路径」→ 预筛 failed（消费后清空，避免菜单直达被残留筛选污染）。
+   URL 还原（只读一次，F5-3 判例：URL 是可刷新/可复制/可后退的权威）：OpsHub 待办卡带
+   ?status=failed 直达后，刷新/复制链接复原同一筛选；写入权在发起方（OpsHub push），本页
+   不做筛选→URL 回写。「行内下钻返回」走 ocSavedListState（已消费），不吃 URL——避免把用户
+   在列表里手动清掉的筛选又顶回来。单测可无 router 挂载，route 访问保持可选。 */
+const route = useRoute()
 onMounted(() => {
   if (!props.embedded && ['active', 'completed', 'failed', 'archived'].includes(intent.statusFilter)) {
     statusFilter.value = intent.statusFilter
     intent.statusFilter = ''
+  }
+  if (!props.embedded && !restoredListState) {
+    const qs = typeof route?.query?.status === 'string' ? route.query.status : ''
+    if (['active', 'completed', 'failed', 'archived'].includes(qs)) statusFilter.value = qs
   }
   if (props.embedded && ['active', 'completed', 'failed', 'archived'].includes(props.initialStatus)) {
     statusFilter.value = props.initialStatus
