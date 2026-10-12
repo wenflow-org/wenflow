@@ -9,34 +9,35 @@
         <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
       </template>
     </MkPageHead>
-    <!-- 告警条（2026-10-12 用户走查拍板撤 KPI 带）：无警时整条不占位，画布净赚 ~100px；
-         有警才有此行——告警独立成条反而更醒目。原「阶段 / Skill / 阶段交接」三张纯读数卡撤：
-         阶段数画布五列即在眼前（窄屏时 chips/meta 兜底）、「阶段交接 = 阶段数 − 1」是恒等式
-         （其 hint 自述如此，零独立信息）、「Skill 总数」是本页唯一非显然读数 → 收进
-         「管线总览」卡头 meta（卡头计数语法）。
-         红卡语义不变：未解析 → 页内切「字段旅程」面板并定位首个含未解析步骤的阶段；
-         哈希漂移 → 健康中心（W4 coreHash 检查归属页，本页治理面板 DriftAuditPanel 只覆盖契约漂移）。
-         评审 P1#27「异常→动作→证据断链」：红字必须可点，保留 clickable + 可读 title -->
-    <section v-if="unresolvedCount > 0 || w4Drifted.length" class="mk-kpi-grid">
-      <MkKpi
-        v-if="unresolvedCount > 0"
-        label="未解析"
-        :value="unresolvedCount"
-        tone="bad"
-        clickable
-        title="点击切到「字段旅程」面板：红「未解析」徽章即名单（定位到首个含未解析步骤的阶段）"
-        @click="goUnresolved"
-      />
-      <MkKpi
-        v-if="w4Drifted.length"
-        :label="TERMS.driftHashQualified"
-        :value="w4Drifted.length"
-        tone="bad"
-        clickable
-        title="W4 core 哈希漂移名单在健康中心的健康检查（w4-corehash）；点击跳转"
-        @click="goHashDrift"
-      />
-    </section>
+    <!-- 告警条（2026-10-12 用户走查二拍：红卡不再以 KPI 形态出现——单卡在 flex 栅格内被
+         拉满整条 1612px，读作一张巨大 KPI 卡，而它本是告警不是读数）。
+         无警时整条不渲染（画布净赚一个带高）；有警走共享行式告警（.mk-alert--row，role=alert），
+         消息 + 动作同排。评审 P1#27「异常→动作→证据断链」：动作必须可点且点名去向——
+         未解析 → 页内切「字段旅程」面板并定位首个含未解析步骤的阶段；
+         哈希漂移 → 健康中心（W4 coreHash 检查归属页，本页治理面板 DriftAuditPanel 只覆盖契约漂移）。 -->
+    <div v-if="unresolvedCount > 0 || w4Drifted.length" class="mk-alert mk-alert--row orch-alert" role="alert">
+      <span class="mk-alert__msg">
+        <template v-if="unresolvedCount > 0">字段未解析 {{ unresolvedCount }} 处</template>
+        <template v-if="unresolvedCount > 0 && w4Drifted.length"> · </template>
+        <template v-if="w4Drifted.length">{{ TERMS.driftHashQualified }} {{ w4Drifted.length }} 处</template>
+      </span>
+      <span class="mk-alert__act">
+        <button
+          v-if="unresolvedCount > 0"
+          type="button"
+          class="mk-alert__btn"
+          title="步骤的输入/输出未对上字段契约；点击切「字段旅程」面板并定位首个含未解析步骤的阶段"
+          @click="goUnresolved()"
+        >查看未解析名单</button>
+        <button
+          v-if="w4Drifted.length"
+          type="button"
+          class="mk-alert__btn"
+          title="W4 core 哈希漂移名单在健康中心的健康检查（w4-corehash）；点击跳转"
+          @click="goHashDrift()"
+        >去健康中心查看</button>
+      </span>
+    </div>
 
     <!-- 子面板页签（原型 .tabs 下划线页签：2026-10-01 由 mk-pills 胶囊迁入——
          胶囊只做筛选 chips，视图/分区切换归页签）：四个面板统一可达——
@@ -275,7 +276,6 @@ import DataFlowGraph from './DataFlowGraph.vue'
 import DriftAuditPanel from './DriftAuditPanel.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
-import MkKpi from '@/components/mk/MkKpi.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 
@@ -775,6 +775,10 @@ const govMetaTitle = computed(() =>
 /* 折叠头走 .mk-section__summary（shared.css） */
 
 /* 沙盘（深链次要入口）顶部条 */
+
+/* 告警条（2026-10-12）：共享 .mk-alert--row 只保证动作区不收缩（.mk-alert__act flex-shrink:0），
+   两枚动作钮的间距由本页给（未解析与哈希漂移可能同排出现） */
+.orch-alert .mk-alert__act { display: inline-flex; align-items: center; gap: 14px; }
 
 /* ================= 暗色模式（D1 补完）：编排图 ================= */
 html[data-theme='dark'] {

@@ -221,16 +221,21 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).toContain('openSkillFromOverview(sk.id)')
   })
 
-  it('编排图页首 KPI 带已撤（2026-10-12 用户走查）：纯读数进总览卡头 meta，红卡改条件告警条', () => {
-    // 三张纯读数卡（阶段/Skill/阶段交接）不再渲染
+  it('编排图页首 KPI 带已撤（2026-10-12 用户走查）：纯读数进总览卡头 meta，告警改行式告警条', () => {
+    // 三张纯读数卡（阶段/Skill/阶段交接）不再渲染，本页不再有 KPI 卡
     expect(OrchestratorSource).not.toContain('label="阶段"')
     expect(OrchestratorSource).not.toContain('label="阶段交接"')
-    // 无警整条不占位：告警条仅在有警时渲染（画布净赚高度）
+    expect(OrchestratorSource).not.toContain('<MkKpi')
+    expect(OrchestratorSource).not.toContain('import MkKpi')
+    // 无警整条不占位：告警条仅在有警时渲染（画布净赚一个带高）
     expect(OrchestratorSource).toContain('v-if="unresolvedCount > 0 || w4Drifted.length"')
-    // 红卡入口保留且可点（评审 P1#27：异常红字必须可点）
-    expect(OrchestratorSource).toContain('@click="goUnresolved"')
-    expect(OrchestratorSource).toContain('@click="goHashDrift"')
-    // 阶段数/Skill 总数收进总览卡头 meta（F8-4 三源口径 title 随行）
+    // 有警走共享行式告警（不是 KPI 卡：单卡在 flex 栅格里会被拉满整条）
+    expect(OrchestratorSource).toContain('mk-alert mk-alert--row')
+    expect(OrchestratorSource).toContain('role="alert"')
+    // 动作入口保留且可点（评审 P1#27：异常红字必须可点）
+    expect(OrchestratorSource).toContain('@click="goUnresolved()"')
+    expect(OrchestratorSource).toContain('@click="goHashDrift()"')
+    // 阶段数/Skill 总数收进总览卡头右组 meta（F8-4 三源口径 title 随行）
     expect(OrchestratorSource).toContain('个 Skill（拓扑内挂载）')
     expect(OrchestratorSource).toContain(':title="skillKpiTitle"')
   })
