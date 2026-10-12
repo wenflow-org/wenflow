@@ -975,8 +975,9 @@ async function recompute() {
    归并建议表与已执行归并表均受影响；非单元格场景（p / small）仍按块渲染。 */
 td.mr__sub { display: table-cell; }
 /* 卡内说明段（非表格单元格里的 sub 文本）：补 16px 内边距与卡头文字对齐 —— 原来贴着卡左缘，
-   看起来像漏排；表格仍按设计通边（单元格自带 padding） */
-.mr p.mr__sub { margin: 0; padding: 10px 16px 14px; }
+   看起来像漏排；表格仍按设计通边（单元格自带 padding）。
+   祖先类用 .mr-panels（2026-10-12 组件化改根类后，旧 .mr 前缀选择器失配 → 文字贴边） */
+.mr-panels p.mr__sub { margin: 0; padding: 10px 16px 14px; }
 /* 明细区错误条（形态走共享 .mk-alert，页私有只留外边距） */
 .mr__detail-error { margin: 8px 16px 0; }
 
