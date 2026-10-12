@@ -1,36 +1,26 @@
 /**
- * 记忆与复习页 redesign 结构契约（newui 原型 renderMemory 1963-2045 移植）：
- * - 到期时间轴：贴表分布条 MkDistBand（2026-10-04 晚，原独立卡移入表格卡）——
- *   .stageband 六档（零值段跳过、图例恒六行）+ .sbl 色块/名/数，分段/图例可点下钻筛用户行
- * - 记忆强度直方图已退役（2026-10-05 用户令「柱状图不要了」）；无 retrievability 条目不进任何分母的纪律保留
- * - 窗口口径：adminMemoryTracesApi.list（limit 200、includeVirtual 随作用域开关）
- * - 既有功能不丢：用户行点击 → openSubPage('learner', userId)
+ * 记忆与复习面板 redesign 契约（原独立页 2026-10-12 用户拍板并入学习者详情页签；
+ * 列表态——到期时间轴 MkDistBand / 用户列表 / 跨用户 KPI——随页退役，相关用例一并撤除）：
+ * - 挂载即按 userId 取明细；明细缺失给「暂无可复盘」兜底
+ * - 到期清单预览：到期列「已逾期 N 天 / N 天后」相对表达，逾期着色，绝对时刻进 title
+ * - P1#12：apply / rollback / recompute 失败不再静默——toast + 明细区 error 双出口
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-const overview = vi.hoisted(() => vi.fn());
 const detail = vi.hoisted(() => vi.fn());
 const recompute = vi.hoisted(() => vi.fn());
 const apply = vi.hoisted(() => vi.fn());
 const rollback = vi.hoisted(() => vi.fn());
-const traceList = vi.hoisted(() => vi.fn());
-const openSubPage = vi.hoisted(() => vi.fn());
+const reject = vi.hoisted(() => vi.fn());
 
 vi.mock('@/api/adminApi', () => ({
-  adminMemoryReviewApi: { overview, detail, recompute, apply, rollback },
-  adminMemoryTracesApi: { list: traceList },
+  adminMemoryReviewApi: { detail, recompute, apply, rollback, reject },
 }));
-vi.mock('../store', () => ({ openSubPage }));
+vi.mock('../store', () => ({ openSubPage: vi.fn(), subPage: { value: null } }));
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 // P1#12：明细态动作失败测试需要 askConfirm 直接放行（真实实现要人工点确认）
 vi.mock('../useConfirm', () => ({ askConfirm: vi.fn(async () => true) }));
-const routerReplace = vi.hoisted(() => vi.fn());
-const routeQuery = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
-vi.mock('vue-router', () => ({
-  useRoute: () => ({ get query() { return routeQuery.value }, path: '/admin/memory-review' }),
-  useRouter: () => ({ replace: routerReplace }),
-}));
 
 import MemoryReview from '../MemoryReview.vue';
 import { toast } from '@/utils/toast';
@@ -46,44 +36,8 @@ const at = (dayOffset: number) => {
   d.setHours(12, 0, 0, 0);
   return d.toISOString();
 };
-const row = (over: Partial<{ id: string; userId: string; extractionCount: number; dueAt: string | null; retrievability: number | null }>) => ({
-  id: 't0',
-  userId: 'u1',
-  conceptKey: 'k0',
-  label: null,
-  extractionCount: 1,
-  dueAt: null,
-  retrievability: null,
-  ...over,
-});
 
-// 覆盖六档边界与强度桶边界：0.2 归 20–39%、0.8 归 80–99%；+4 天归「3天后」档；从未提取（t7）不进队列
-const ROWS = [
-  row({ id: 't1', dueAt: at(-1), extractionCount: 2, retrievability: 0.19 }), // 已逾期 · 0–19%
-  row({ id: 't2', dueAt: at(0), retrievability: 0.2 }),                       // 今天 · 20–39%
-  row({ id: 't3', dueAt: at(0), retrievability: null }),                      // 今天 · 无强度 → 不进分母
-  row({ id: 't4', dueAt: at(1), retrievability: 0.5 }),                       // 明天 · 40–59%
-  row({ id: 't5', dueAt: at(2), retrievability: 0.8 }),                       // 2天后 · 80–99%
-  row({ id: 't6', dueAt: at(4), retrievability: 0.9 }),                       // 3–4 天后档 · 80–99%
-  row({ id: 't7', extractionCount: 0, dueAt: null, retrievability: null }),   // 从未提取 → 不进队列
-];
-
-async function mountWithRows(rows: unknown[], totalsOver: Record<string, unknown> = {}) {
-  overview.mockResolvedValue({
-    data: {
-      data: {
-        totals: { users: 1, traces: rows.length, due: 1, usersWithAudit: 0, proposed: 0, autoApplicable: 0, ambiguous: 0, applied: 0, deleted: 0, ...totalsOver },
-        users: [{ userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: rows.length, due: 1, audit: null, weak: 1, avgStrength: 0.52, lastReviewedAt: new Date().toISOString() }],
-      },
-    },
-  });
-  traceList.mockResolvedValue({ data: { data: { total: rows.length, rows } } });
-  const w = mount(MemoryReview);
-  await flushPromises();
-  return w;
-}
-
-/** 明细响应夹具（P1#12/#13）：audit 带 1 条可自动 proposal（默认勾选）+ 1 条可回滚归并 */
+/** 明细响应夹具：audit 带 1 条可自动 proposal（默认勾选）+ 1 条可回滚归并 */
 const makeDetail = (over: Record<string, unknown> = {}) => ({
   user: { name: '小明' },
   summary: { traces: 7, due: 2, duplicatedFamilies: 0, duplicatedTraces: 0, neverExtracted: 0, withFsrsState: 5 },
@@ -105,116 +59,41 @@ const makeDetail = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-async function openDetailOf(w: ReturnType<typeof mount>) {
-  await w.findAll('button').find((b) => b.text() === '明细')!.trigger('click');
+async function mountPanels(detailBody: Record<string, unknown>) {
+  detail.mockResolvedValue({ data: { data: detailBody } });
+  const w = mount(MemoryReview, { props: { userId: 'u1' } });
   await flushPromises();
+  return w;
 }
 
-describe('MemoryReview redesign：到期时间轴（强度直方图已退役）', () => {
+describe('MemoryReview 面板（学习者详情页签内）', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('到期带：零值段跳过、图例恒六行（色块+名+数），分桶按 dueAt 日差', async () => {
-    const w = await mountWithRows(ROWS);
+  it('挂载即按 userId 拉明细；取数失败在面板顶层亮错误条（不冒充「暂无数据」）', async () => {
+    const w = await mountPanels(makeDetail());
+    expect(detail).toHaveBeenCalledWith('u1');
+    expect(w.find('.mr__detail').exists()).toBe(true);
 
-    // 桶计数：已逾期 1 · 今天 2 · 明天 1 · 2天后 1 · 3天后(3–4 天) 1 · 5天后 0
-    const legend = w.findAll('.stageband__legend .sbl');
-    expect(legend.map((el) => el.find('.sbl__name').text())).toEqual(['已逾期', '今天', '明天', '2天后', '3天后', '5天后']);
-    expect(legend.map((el) => el.find('.sbl__n').text())).toEqual(['1', '2', '1', '1', '1', '0']);
-
-    // 5天后 = 0 → 段不渲染，其余 5 段渲染（原型 distBand 口径；组件 v-if，隐藏段不留 DOM）
-    const segments = w.findAll('.mk-distband__seg');
-    expect(segments).toHaveLength(5);
-    expect(segments[0].attributes('title')).toBe('已逾期：1 个 · 点击只看');
-  });
-
-  it('贴表到期带可点下钻：点「已逾期」→ 只剩窗口内该档有到期痕迹的学习者；再点取消', async () => {
-    // 两名学习者：u1 有逾期痕迹（t1），u2 只有明天到期（t8）→ 逾期档下钻应只剩 u1
-    overview.mockResolvedValue({
-      data: { data: {
-        totals: { users: 2, traces: 2, due: 2, usersWithAudit: 0, proposed: 0, autoApplicable: 0, ambiguous: 0, applied: 0, deleted: 0 },
-        users: [
-          { userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: 1, due: 1, audit: null, weak: 1, avgStrength: 0.19, lastReviewedAt: new Date().toISOString() },
-          { userId: 'u2', name: '小红', email: null, isVirtualLearner: false, traces: 1, due: 1, audit: null, weak: 0, avgStrength: 0.5, lastReviewedAt: new Date().toISOString() },
-        ],
-      } },
-    });
-    traceList.mockResolvedValue({
-      data: { data: { total: 2, rows: [
-        row({ id: 't1', userId: 'u1', dueAt: at(-1), extractionCount: 2, retrievability: 0.19 }),
-        row({ id: 't8', userId: 'u2', dueAt: at(1), retrievability: 0.5 }),
-      ] } },
-    });
-    const w = mount(MemoryReview);
+    detail.mockRejectedValueOnce(new Error('学习者不存在'));
+    const failed = mount(MemoryReview, { props: { userId: 'u2' } });
     await flushPromises();
-    expect(w.findAll('tbody tr')).toHaveLength(2);
-
-    const overdueBtn = w.findAll('.stageband__legend .sbl').find((b) => b.text().includes('已逾期'))!;
-    await overdueBtn.trigger('click');
-    await flushPromises();
-    const rowsText = w.findAll('tbody tr').map((r) => r.text());
-    expect(rowsText).toHaveLength(1);
-    expect(rowsText[0]).toContain('小明');
-    expect(rowsText[0]).not.toContain('小红');
-    expect(w.text()).toContain('已筛 1 位');
-
-    await overdueBtn.trigger('click');
-    await flushPromises();
-    expect(w.findAll('tbody tr')).toHaveLength(2);
-    w.unmount();
-  });
-
-  it('窗口口径：list 带 limit 200 与作用域开关；窗口为空时整块隐藏', async () => {
-    const w = await mountWithRows(ROWS);
-    expect(traceList).toHaveBeenCalledWith({ limit: 200, includeVirtual: false });
-
-    // 切「含测试」（2026-10-04 整组统一 DataScopeToggle，原包含虚拟学习者 checkbox 退役）→ 窗口随作用域重拉
-    const scopePills = w.findAll('.ds-toggle .mk-pill');
-    await scopePills.find((p) => p.text() === '含测试')!.trigger('click');
-    await flushPromises();
-    expect(traceList).toHaveBeenLastCalledWith({ limit: 200, includeVirtual: true });
-    // 还原共享口径（整组状态是模块级，别泄漏给后续用例）
-    await scopePills.find((p) => p.text() === '仅真实')!.trigger('click');
-    await flushPromises();
-
-    // 空窗口 → 到期带整块隐藏，不留空卡（强度直方图已退役）
-    const empty = await mountWithRows([]);
-    expect(empty.find('.stageband').exists()).toBe(false);
-  });
-
-  it('既有功能不丢：用户行点击仍跳学习者页（open-learner 判例）', async () => {
-    const w = await mountWithRows(ROWS);
-    await w.find('tbody tr').trigger('click');
-    expect(openSubPage).toHaveBeenCalledWith('learner', 'u1');
-  });
-
-  /** P1#13（2026-10-02）：「当前到期」due>0 即琥珀 → 阈值化（占痕迹 ≥20% 或人均 ≥5），阈值写进 title */
-  it('KPI「当前到期」阈值化：占比 <20% 且人均 <5 保持中性；达阈值才抬琥珀且 title 披露阈值', async () => {
-    // due 1 / traces 7 ≈ 14%，人均 1 → 常态积压，不着警示色
-    const w = await mountWithRows(ROWS);
-    const dueCard = w.findAll('.mk-kpi')[2];
-    expect(dueCard.classes()).not.toContain('mk-kpi--warn');
-
-    // due 2 / traces 7 ≈ 28.6% ≥ 20% → 抬琥珀，title 披露阈值
-    const w2 = await mountWithRows(ROWS, { due: 2 });
-    const dueCard2 = w2.findAll('.mk-kpi')[2];
-    expect(dueCard2.classes()).toContain('mk-kpi--warn');
-    expect(dueCard2.attributes('title')).toContain('示警阈值');
-    expect(dueCard2.attributes('title')).toContain('≥20%');
+    expect(failed.find('.mr__detail').exists()).toBe(false);
+    expect(failed.find('.mr__detail-error').exists()).toBe(true);
+    expect(failed.find('.mr__detail-error').text()).toContain('学习者不存在');
+    failed.unmount();
   });
 
   /** P1#13：到期清单预览的到期列改相对表达 + 逾期着色（绝对时刻进 title） */
   it('到期清单预览：到期列「已逾期 N 天 / N 天后」相对表达，逾期着色，绝对时刻进 title', async () => {
-    detail.mockResolvedValue({ data: { data: makeDetail({
+    const w = await mountPanels(makeDetail({
       duePreview: [
         { conceptKey: 'k1', label: '逾期点', retention: 0.5, masteryScore: 0.6, extractionCount: 2, source: null, dueAt: at(-3) },
         { conceptKey: 'k2', label: '未来点', retention: 0.5, masteryScore: 0.6, extractionCount: 2, source: null, dueAt: at(4) },
         { conceptKey: 'k3', label: '无到期', retention: 0.5, masteryScore: 0.6, extractionCount: 2, source: null, dueAt: null },
       ],
-    }) } });
-    const w = await mountWithRows(ROWS);
-    await openDetailOf(w);
+    }));
 
     const detailRoot = w.find('.mr__detail');
     expect(detailRoot.text()).toContain('已逾期 3 天');
@@ -227,9 +106,7 @@ describe('MemoryReview redesign：到期时间轴（强度直方图已退役）'
 
   /** P1#12：明细态 apply / rollback / recompute 失败不再静默——toast + 明细区 error 双出口 */
   it('明细态动作失败：apply / rollback / recompute 失败弹 toast 且 error 渲染到明细区', async () => {
-    detail.mockResolvedValue({ data: { data: makeDetail() } });
-    const w = await mountWithRows(ROWS);
-    await openDetailOf(w);
+    const w = await mountPanels(makeDetail());
     expect(w.find('.mr__detail').exists()).toBe(true);
 
     // apply 失败（proposal 默认勾选，直接点「执行选中」）
@@ -247,7 +124,7 @@ describe('MemoryReview redesign：到期时间轴（强度直方图已退役）'
     await flushPromises();
     expect(toast.error).toHaveBeenCalledWith('回滚失败：快照缺失');
 
-    // recompute 失败（明细页头「重新观察」）
+    // recompute 失败（面板栏「重新观察」）
     recompute.mockRejectedValueOnce(new Error('复盘引擎超时'));
     await w.findAll('button').find((b) => b.text() === '重新观察')!.trigger('click');
     await flushPromises();

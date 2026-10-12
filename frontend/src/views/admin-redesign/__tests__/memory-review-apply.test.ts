@@ -1,5 +1,6 @@
 /**
- * 记忆与复习观测：归并「勾选 → 执行 → 回滚」的交互契约
+ * 记忆与复习面板（原独立页 2026-10-12 并入学习者详情页签）：归并「勾选 → 执行 → 回滚」契约
+ * - 组件以 userId prop 驱动，挂载即取明细（不再有列表态「明细」按钮）
  * - 默认只勾选「可自动执行」的建议（需人工确认的默认不勾）
  * - 执行参数必须带上勾选的规范键；勾了需确认项才带 includeNeedsReview
  * - 回滚按规范键调用
@@ -7,28 +8,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-const overview = vi.hoisted(() => vi.fn());
 const detail = vi.hoisted(() => vi.fn());
 const recompute = vi.hoisted(() => vi.fn());
 const apply = vi.hoisted(() => vi.fn());
 const rollback = vi.hoisted(() => vi.fn());
-// 到期带/强度直方图数据窗口（本文件用例不涉及时回空数组 → 对应卡静默隐藏）
-const traceList = vi.hoisted(() => vi.fn());
+const reject = vi.hoisted(() => vi.fn());
 
 vi.mock('@/api/adminApi', () => ({
-  adminMemoryReviewApi: { overview, detail, recompute, apply, rollback },
-  adminMemoryTracesApi: { list: traceList },
+  adminMemoryReviewApi: { detail, recompute, apply, rollback, reject },
 }));
 const askConfirm = vi.hoisted(() => vi.fn());
 vi.mock('../useConfirm', () => ({ askConfirm }));
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-const routerReplace = vi.hoisted(() => vi.fn());
-const routeQuery = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
-vi.mock('vue-router', () => ({
-  // query 用 getter：真实路由里 replace 之后组件读到的就是新 query（按值捕获会永远是旧的）
-  useRoute: () => ({ get query() { return routeQuery.value }, path: '/admin/memory-review' }),
-  useRouter: () => ({ replace: routerReplace }),
-}));
+vi.mock('../store', () => ({ openSubPage: vi.fn(), subPage: { value: null } }));
 
 import MemoryReview from '../MemoryReview.vue';
 
@@ -79,38 +71,26 @@ const DETAIL = {
   audit: AUDIT,
 };
 
-async function mountPage() {
-  overview.mockResolvedValue({
-    data: {
-      data: {
-        totals: { users: 1, traces: 4, due: 2, usersWithAudit: 1, proposed: 2, autoApplicable: 1, ambiguous: 0, applied: 0, deleted: 0 },
-        users: [
-          {
-            userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: 4, due: 2,
-            audit: { mode: 'observe', generatedAt: AUDIT.generatedAt, candidates: 3, proposed: 2, autoApplicable: 1, ambiguous: 0, drops: 0, applied: 0, deleted: 0 },
-          },
-        ],
-      },
-    },
-  });
+async function mountPanels() {
   detail.mockResolvedValue({ data: { data: DETAIL } });
-  traceList.mockResolvedValue({ data: { data: { total: 0, rows: [] } } });
-  const w = mount(MemoryReview);
+  const w = mount(MemoryReview, { props: { userId: 'u1' } });
   await flushPromises();
   return w;
 }
 
-describe('MemoryReview 归并执行交互', () => {
+describe('MemoryReview 归并执行交互（页签内面板）', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     askConfirm.mockResolvedValue(true);
   });
 
-  it('默认只勾选「可自动执行」的建议', async () => {
-    const w = await mountPage();
-    await w.findAll('button').find((b) => b.text() === '明细')!.trigger('click');
-    await flushPromises();
+  it('挂载即按 userId 取明细', async () => {
+    await mountPanels();
+    expect(detail).toHaveBeenCalledWith('u1');
+  });
 
+  it('默认只勾选「可自动执行」的建议', async () => {
+    const w = await mountPanels();
     const boxes = w.findAll('.mk-table input[type="checkbox"]');
     expect(boxes).toHaveLength(2);
     expect((boxes[0].element as HTMLInputElement).checked).toBe(true);
@@ -119,9 +99,7 @@ describe('MemoryReview 归并执行交互', () => {
   });
 
   it('执行只传勾选的规范键；勾了需人工确认项才带 includeNeedsReview', async () => {
-    const w = await mountPage();
-    await w.findAll('button').find((b) => b.text() === '明细')!.trigger('click');
-    await flushPromises();
+    const w = await mountPanels();
 
     apply.mockResolvedValue({ data: { data: { applied: 1, skipped: [], audit: AUDIT } } });
     await w.findAll('button').find((b) => b.text().startsWith('执行选中'))!.trigger('click');
@@ -140,9 +118,7 @@ describe('MemoryReview 归并执行交互', () => {
 
   it('取消确认则不调用接口', async () => {
     askConfirm.mockResolvedValue(false);
-    const w = await mountPage();
-    await w.findAll('button').find((b) => b.text() === '明细')!.trigger('click');
-    await flushPromises();
+    const w = await mountPanels();
     await w.findAll('button').find((b) => b.text().startsWith('执行选中'))!.trigger('click');
     await flushPromises();
     expect(apply).not.toHaveBeenCalled();
@@ -150,18 +126,16 @@ describe('MemoryReview 归并执行交互', () => {
 
   it('回滚按规范键调用', async () => {
     rollback.mockResolvedValue({ data: { data: { rolledBack: 1, skipped: [], audit: AUDIT } } });
-    const w = await mountPage();
-    // 明细接口在「明细」点击时才取，覆盖要放在 mount 之后
+    // 审计滚动窗口里**已经没有**这条归并（被挤掉了），但按次留档仍有凭据 → 界面必须还能回滚
     detail.mockResolvedValue({
       data: {
         data: {
           ...DETAIL,
-          // 审计滚动窗口里**已经没有**这条归并（被挤掉了），但按次留档仍有凭据 → 界面必须还能回滚
           audit: { ...AUDIT, mode: 'apply', proposals: [], appliedMerges: [] },
         },
       },
     });
-    await w.findAll('button').find((b) => b.text() === '明细')!.trigger('click');
+    const w = mount(MemoryReview, { props: { userId: 'u1' } });
     await flushPromises();
 
     const rollbackBtn = w.findAll('button').find((b) => b.text() === '回滚');
@@ -169,21 +143,5 @@ describe('MemoryReview 归并执行交互', () => {
     await rollbackBtn!.trigger('click');
     await flushPromises();
     expect(rollback).toHaveBeenCalledWith('u1', ['离开前翻页立好']);
-  });
-
-  it('深链：选中写入 URL、返回清掉参数（可收藏/分享）', async () => {
-    routeQuery.value = {};
-    const w = await mountPage();
-    await w.findAll('button').find((b) => b.text() === '明细')!.trigger('click');
-    await flushPromises();
-    expect(routerReplace).toHaveBeenCalledWith({ query: { userId: 'u1' } });
-
-    // 真实路由里 replace 之后 query 会变成 { userId }，这里同步模拟
-    routeQuery.value = { userId: 'u1' };
-    routerReplace.mockClear();
-    // 明细态是二级页：退出口是返回栏的「← 用户列表」（原卡头「收起」，2026-09-28 重设计）
-    await w.findAll('button').find((b) => b.text().includes('用户列表'))!.trigger('click');
-    await flushPromises();
-    expect(routerReplace).toHaveBeenCalledWith({ query: {} });
   });
 });

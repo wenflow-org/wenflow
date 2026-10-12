@@ -80,7 +80,8 @@ vi.mock('../learner-profile', () => ({
 }));
 vi.mock('@/api/adminApi', () => ({
   adminTeachingSessionsApi: { list: listSessions },
-  adminMemoryReviewApi: {},
+  // 记忆页签嵌入的 MemoryReview 面板会在挂载时拉明细：给 resolved 值防空 catch 炸响
+  adminMemoryReviewApi: { detail: vi.fn().mockResolvedValue({ data: { data: null } }), recompute: vi.fn(), apply: vi.fn(), reject: vi.fn(), rollback: vi.fn() },
   // 必须给 resolved 值：loadDetail 对它 .then，undefined 会在 try 内同步抛 TypeError 炸掉后续 loadLdSessions
   getUserIncludingDeleted: vi.fn().mockResolvedValue({ data: { data: {} } }),
 }));
@@ -291,14 +292,16 @@ describe('LearnerDetail 记忆与复习 pane（2026-10-11 深设计）', () => {
     getMemoryTraces.mockReset();
   });
 
-  it('操作列已撤（无单点复习接口）；列方言=知识点/记忆强度/复习到期/提取史/状态', async () => {
+  it('操作列已撤（无单点复习接口）；列方言=知识点/记忆强度/复习到期/提取史/状态；跨页链接被嵌入面板取代（2026-10-12 拍板合并）', async () => {
     const w = await mountMemory([trace({})]);
     expect(w.findAll('#ld-panel-memory thead th').map((t) => t.text())).toEqual([
       '知识点', '记忆强度', '复习到期', '提取史', '状态',
     ]);
-    // 深链入口收归卡头单链接，行内不再逐行重复按钮
+    // 深链入口已随独立页退役：不跳页，调度面板（温故计划/归并审计/回滚）直接嵌在本页签
+    // （本夹具的 review-detail mock 返回 null → 面板显示暂无兜底，容器必须在）
     expect(w.findAll('#ld-panel-memory tbody button').length).toBe(0);
-    expect(w.find('#ld-panel-memory .mk-card__head .mk-link').text()).toContain('打开记忆与复习');
+    expect(w.find('#ld-panel-memory .mk-card__head .mk-link').exists()).toBe(false);
+    expect(w.find('#ld-panel-memory .mr-panels').exists()).toBe(true);
   });
 
   it('排序：待复习（逾期最久在前）→ 有痕迹未到期 → 未初始化压尾', async () => {

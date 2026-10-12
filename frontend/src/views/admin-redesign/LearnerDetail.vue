@@ -759,7 +759,6 @@
         <div class="mk-card__head">
           <h3 class="mk-card__title">记忆与复习（FSRS）</h3>
           <span class="mk-card__meta" :title="memMetaTitle">{{ memMetaText }}</span>
-          <button type="button" class="mk-link" @click="goMemoryReview">打开记忆与复习 →</button>
         </div>
         <!-- 视角（按复习状态分档）：把「待复习」这一档单独拎出来看，是这张表唯一的可动作子集。
              操作列已撤（2026-10-11）：后端无单点复习接口，每行按钮都是同一个学习者级深链、
@@ -803,6 +802,10 @@
         </div>
       </section>
       <MkEmptyState v-else icon="◌" title="暂无记忆数据" description="该学习者还没有 FSRS 记忆痕迹；完成教学回合后自动生成。" />
+      <!-- 记忆调度与治理（2026-10-12 用户拍板「合并过去，保留详情页一个」）：原 /admin/memory-review
+           独立页退役，课内温故计划 / 到期清单预览 / 同族重复 / 概念归并审计 / 散键清理 / 回滚
+           整体并入本页签；旧深链由路由 shim 重定向到本页 -->
+      <MemoryReview :user-id="subPage?.id || ''" />
     </div>
 
     <!-- ============ 账号与许可（人员详情合并）：整块由原 UserDetail 抽为 UserAccountPane ============ -->
@@ -822,7 +825,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { subPage, openSubPage, setSubPageLabel } from './store'
 import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
-import { conceptBarTone, conceptBarWidth, memoryReviewUrl, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
+import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
 import { adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
 import {
   statusText,
@@ -846,6 +849,7 @@ import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import UserAccountPane from './UserAccountPane.vue'
+import MemoryReview from './MemoryReview.vue'
 import MkRowList from '@/components/mk/MkRowList.vue'
 import MkRow from '@/components/mk/MkRow.vue'
 import { useIsDark } from '@/composables/useIsDark'
@@ -1503,12 +1507,6 @@ async function loadDetail(id: string | undefined) {
  * 记忆与复习（归并凭据 / 回滚 / 到期明细）：跨页深链到 `/admin/memory-review?userId=…`。
  * 该页已支持 `userId` 深链（见 MemoryReview.vue 的 onMounted 注释），此前缺的正是"从学习者详情进去"这一环。
  */
-function goMemoryReview() {
-  const id = subPage.value?.id
-  if (!id) return
-  void tabRouter.push(memoryReviewUrl(id))
-}
-
 watch(
   () => subPage.value?.id,
   (id) => {

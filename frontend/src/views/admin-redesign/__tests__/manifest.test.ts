@@ -21,7 +21,8 @@ describe('AdminConsole 页面注册表', () => {
     const manifestIds = new Set(MOCK_SCENES.map((s) => s.id));
     // HIDDEN_SCENE_IDS：有意不在侧栏展示的隐藏场景（深链直达），豁免孤儿检查。
     // skill-workbench = Skill 工作台（PromptWorkbench），历史设计为深链访问的二级页面。
-    const HIDDEN_SCENE_IDS = new Set(['skill-workbench']);
+    // memory-review = 2026-10-12 独立页退役（并入学习者详情页签），场景只挂重定向 shim 接旧深链。
+    const HIDDEN_SCENE_IDS = new Set(['skill-workbench', 'memory-review']);
     for (const id of Object.keys(SCENE_COMPONENTS)) {
       if (HIDDEN_SCENE_IDS.has(id)) continue;
       expect(manifestIds.has(id), `注册表含孤儿组件「${id}」（manifest 无此场景）`).toBe(true);
@@ -39,22 +40,28 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('导航（2026-09 拆页 + 健康中心独立；2026-10-01 学习者卡库；2026-10-04 学习状态拆页 + 批量实验下线 + Prompt 评估折入 skills）：7 分组 / 18 场景与目标 IA 完全一致', () => {
+  it('导航（2026-09 拆页 + 健康中心独立；2026-10-01 学习者卡库；2026-10-04 学习状态拆页 + 批量实验下线 + Prompt 评估折入 skills；2026-10-10 术语表改隐藏场景；2026-10-12 记忆与复习退役）：7 分组 / 17 可见场景与目标 IA 完全一致', () => {
+    // 隐藏场景（hidden: true，如运营术语表）不占侧栏席位：由顶栏帮助按钮跳转，单独断言
+    const visible = MOCK_SCENES.filter((s) => !s.hidden);
     expect(MOCK_SCENES).toHaveLength(18);
+    expect(visible).toHaveLength(17);
     // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
-    const groups = MOCK_SCENES.map((s) => s.group);
+    const groups = visible.map((s) => s.group);
     expect([...new Set(groups)]).toEqual(['总览', '教学', '虚拟学习者', 'Skill', '观测', '系统', '运营']);
     const byGroup: Record<string, string[]> = {};
-    for (const s of MOCK_SCENES) (byGroup[s.group] ||= []).push(s.id);
+    for (const s of visible) (byGroup[s.group] ||= []).push(s.id);
     expect(byGroup).toEqual({
       总览: ['overview'],
-      教学: ['people', 'learner-state', 'teaching-sessions', 'goal-conversations', 'learning-paths', 'memory-review'],
+      // 排列＝学习流程（2026-10-11 走查「重新排序」）：Goal 目标对话 → Path 学习路径 → Learn 教学会话
+      // （「记忆与复习」2026-10-12 退役并入学习者详情页签，侧栏项撤除）
+      教学: ['people', 'learner-state', 'goal-conversations', 'learning-paths', 'teaching-sessions'],
       虚拟学习者: ['virtual-learners', 'virtual-learner-cards'],
       Skill: ['orchestrator', 'skills'],
       观测: ['execution-logs', 'token-cost', 'audit-logs'],
       系统: ['health-center', 'api-config', 'ops-center'],
       运营: ['ops-hub']
     });
+    expect(MOCK_SCENES.filter((s) => s.hidden).map((s) => s.id)).toEqual(['glossary']);
   });
 
   it('退役场景（已折入宿主 tab / 已下线）不再出现在侧栏清单', () => {
@@ -62,7 +69,8 @@ describe('AdminConsole 页面注册表', () => {
     // health-center 2026-09-29 回归侧栏（系统组独立场景），故不在退役名单；
     // batch-experiments 2026-10-04 整体下线（运行态并入 virtual-learners、资产输入归卡库，URL 重定向）
     // prompt-eval 2026-10-04 折入 skills 宿主「Prompt 评估」页签（旧 URL 重定向）
-    for (const retired of ['feedback', 'ops-achievements', 'messages', 'addons', 'session-security', 'batch-experiments', 'prompt-eval']) {
+    // memory-review 2026-10-12 并入学习者详情「记忆与复习」页签（场景注册保留为重定向 shim）
+    for (const retired of ['feedback', 'ops-achievements', 'messages', 'addons', 'session-security', 'batch-experiments', 'prompt-eval', 'memory-review']) {
       expect(ids.has(retired), `退役场景「${retired}」不应在侧栏清单`).toBe(false);
     }
   });

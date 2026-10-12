@@ -134,17 +134,17 @@ describe('normalizeLearnerTab（6 tab → 3 tab 深链重定向）', () => {
   });
 });
 
-describe('memoryReviewUrl（跨组件深链契约）', () => {
-  it('参数名与 MemoryReview 约定一致（userId）', () => {
-    expect(memoryReviewUrl('u-123')).toBe('/admin/memory-review?userId=u-123');
+describe('memoryReviewUrl（跨组件深链契约，2026-10-12 独立页退役后直发学习者详情页签）', () => {
+  it('落学习者详情记忆页签（view=learner + id + tab=memory）', () => {
+    expect(memoryReviewUrl('u-123')).toBe('/admin/learner-state?view=learner&id=u-123&tab=memory');
   });
 
   it('特殊字符要转义（学习者 id 里出现过冒号/中文）', () => {
-    expect(memoryReviewUrl('a b:c')).toBe('/admin/memory-review?userId=a%20b%3Ac');
+    expect(memoryReviewUrl('a b:c')).toBe('/admin/learner-state?view=learner&id=a%20b%3Ac&tab=memory');
   });
 
   it('空值不抛错（详情页拿不到 id 时按钮不渲染，但函数要稳）', () => {
-    expect(memoryReviewUrl('')).toBe('/admin/memory-review?userId=');
+    expect(memoryReviewUrl('')).toBe('/admin/learner-state?view=learner&id=&tab=memory');
   });
 });
 

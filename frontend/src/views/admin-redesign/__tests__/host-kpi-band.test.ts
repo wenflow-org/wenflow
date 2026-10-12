@@ -15,7 +15,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import People from '../People.vue';
 import GoalConversations from '../GoalConversations.vue';
-import MemoryReview from '../MemoryReview.vue';
+
 import TeachingSessions from '../TeachingSessions.vue';
 
 const overview = vi.hoisted(() => vi.fn());
@@ -122,39 +122,21 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
     const meta = w.find('.mk-card__meta');
     // 卡头 meta 只留分页器没有的事实（口径开关；命中数/总数交分页器单源）
-    expect(meta.text()).toContain('（仅真实口径）');
+    expect(meta.text()).toContain('（真实）');
     // 本用例 0 行未触上限：不出现截断口径（触限时 meta 追加「后端共 N 条，仅显示最近 1000 条」）
     expect(meta.text()).not.toContain('仅显示最近');
     // P1#4 兜底诚实化：后端未回 total（mock 空响应）时，meta title 不得声称全量
-    expect(meta.attributes('title')).toContain('非全量');
+    expect(meta.attributes('title')).toContain('总数未知');
     expect(meta.attributes('title')).not.toContain('全量口径');
     // 计数升 KPI 后 chips 全部去计数（学习状态判例：KPI 孪生 pill 退为纯筛选开关）；
     // 0 行时异常 chip 不出现
     expect(w.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
       '全部', '进行中', '待关注', '缺总结'
     ]);
-    expect(w.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').map((c) => c.text())).toEqual(['有建议']);
+    expect(w.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').map((c) => c.text())).toEqual(['有建议0']);
     w.unmount();
   });
 
-  it('MemoryReview：页级绝对值只住 KPI 卡，作用域开关在页头，旧概览带与折叠说明卡都不在', async () => {
-    const { router, ready } = mockRouter('/admin/memory-review');
-    await ready;
-    const w = mount(MemoryReview, { global: { plugins: [router] } });
-    await settle();
-    expect(kpiLabels(w)).toEqual([
-      '用户', '记忆痕迹', '当前到期', '需人工看', '待归并建议',
-      // R7 碎片率 KPI 行（outlet 域指标，独立第二条 .mk-kpi-grid）：
-      // overview mock 未带 fragmentation 字段 → 三卡值显 '—'，但标签恒在（行不消失）
-      '重复 label 比率', '未挂靠散键', '待审队列'
-    ]);
-    // 页头为 pagehead 形态（newui/admin），数据范围开关（整组统一 DataScopeToggle，2026-10-04）在页头动作区
-    expect(w.find('.mk-pagehead').exists()).toBe(true);
-    expect(w.find('.mk-pagehead .ds-toggle').exists()).toBe(true);
-    // 旧形态回归护栏：概览带 / 口径与术语折叠卡 / 状态条散文计数
-    expect(w.find('.mr-summary').exists()).toBe(false);
-    expect(w.find('.mk-section__summary').exists()).toBe(false);
-    expect(w.find('.mk-status__meta').exists()).toBe(false);
-    w.unmount();
-  });
+  // 「MemoryReview：页级 KPI 卡」用例随独立页退役（2026-10-12 并入学习者详情页签；
+  // 页签内面板无页级 KPI 栅格，面板契约见 memory-review.redesign/outlet/apply 三件套）
 });

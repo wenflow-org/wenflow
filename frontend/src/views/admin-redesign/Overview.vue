@@ -96,7 +96,7 @@
       <div class="ov-card__body">
         <div class="loop">
           <template v-for="(s, i) in loopStages" :key="s.name">
-            <span v-if="i" class="loop__arrow" aria-hidden="true">→</span>
+            <span v-if="i" class="loop__arrow" aria-hidden="true"></span>
             <div
               class="loop__step"
               :class="`loop__step--${s.tone}`"
@@ -125,7 +125,7 @@
                   v-if="s.failN"
                   type="button"
                   class="mk-badge mk-badge--sm mk-badge--bad loop__fail"
-                  title="该阶段生成失败的路径数（服务端全量口径）· 点击只看失败路径"
+                  title="该阶段生成失败的路径总数 · 点击只看失败路径"
                   @click.stop="jumpToFailedPaths"
                 >失败 {{ s.failN }}</button>
               </span>
@@ -141,10 +141,19 @@
       <div class="mk-card">
         <div class="mk-card__head">
           <span class="mk-card__title">Skill 调用量 Top 5</span>
-          <span class="mk-card__meta">近 7 天 · 真实账号口径（含 admin 发起的仿真跑批）· 每行：调用量 · 失败数</span>
+          <span class="mk-card__meta">近 7 天 · 仅真实账号（含管理员发起的仿真任务）</span>
         </div>
         <div class="ov-card__body">
           <div class="ranklist">
+            <!-- 列头（评审 2026-10-10）：调用/失败拆成右对齐两列后补表头，
+                 用户不用再靠 meta 文案猜「4497 · 683」哪段是哪口径 -->
+            <div v-if="data.topSkills.length" class="rankrow rankrow--head" aria-hidden="true">
+              <span class="rankrow__idx"></span>
+              <span class="rankrow__grow">Skill</span>
+              <span class="rankrow__bar"></span>
+              <span class="rankrow__val rankrow__calls rankrow__val--col">调用</span>
+              <span class="rankrow__val rankrow__col-failed">失败</span>
+            </div>
             <div
               v-for="(s, i) in data.topSkills"
               :key="s.agentId"
@@ -161,7 +170,10 @@
               <!-- 占比条（mk-minibar 共享原语）：名次数字只给序，条给「梯队差距」一眼可读；
                    无金银铜——排序徽章是装饰不编码信息 -->
               <span class="mk-minibar rankrow__bar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: topBarPct(Number(s.calls)) }"></i></span>
-              <span class="rankrow__val mono">{{ s.calls }}<template v-if="s.failed"> · {{ s.failed }}</template></span>
+              <!-- 调用/失败拆两列右对齐（评审 2026-10-10）：原先「4497 · 683」挤一格，
+                   无列对齐也无表头，分不清哪段是失败数；零失败给「–」保列形 -->
+              <span class="rankrow__val mono rankrow__calls">{{ s.calls }}</span>
+              <span class="rankrow__val mono rankrow__failed" :class="{ 'rankrow__failed--zero': !s.failed }">{{ s.failed || '–' }}</span>
             </div>
           </div>
           <p v-if="!data.topSkills.length" class="note">近 7 天暂无调用，无排行。</p>
@@ -171,8 +183,10 @@
       <div class="mk-card">
         <div class="mk-card__head">
           <span class="mk-card__title">待处理事项</span>
-          <!-- 口径副文（#4）：动作来自 200 条日志采样窗口的 Top 失败，与状态条的「今日失败」不同源 -->
-          <span class="mk-card__meta">近 7 天 · 200 条采样窗口 · 按失败数取前 2</span>
+          <!-- 口径副文（#4）：动作来自 200 条日志采样窗口的 Top 失败，与状态条的「今日失败」不同源。
+               不写「取前 2」（评审 2026-10-10）：句尾数字与右侧计数徽章连读成「两个 2」，
+               条数语义由徽章独占，口径只说排序规则 -->
+          <span class="mk-card__meta">近 7 天 · 按失败数排序</span>
           <span v-if="todoItems.length" class="pill pill--warn"><span class="pill__dot"></span>{{ todoItems.length }}</span>
         </div>
         <div class="ov-card__body">
@@ -183,7 +197,9 @@
                 <span class="todo-text" :title="t.text">{{ t.main }}</span>
                 <span v-if="t.note" class="todo-note">{{ t.note }}</span>
               </div>
-              <button type="button" class="mk-btn mk-btn--sm" @click="t.action()">{{ t.actLabel }} →</button>
+              <!-- 动作默认文字链态（评审 2026-10-10）：整排同款胶囊按钮是视觉噪声，
+                   降为蓝字轻链、悬浮再起底色 -->
+              <button type="button" class="todo-act" @click="t.action()">{{ t.actLabel }} →</button>
             </div>
           </div>
           <p v-if="!todoItems.length" class="note">没有待处理的事项。</p>
@@ -210,7 +226,7 @@
           <p v-else class="note">近 7 天暂无活跃数据。</p>
         </div>
       </div>
-      <div class="mk-card">
+      <div class="mk-card ov-card--feed">
         <div class="mk-card__head">
           <span class="mk-card__title">最近事件</span>
           <span class="mk-card__meta">近 24h</span>
@@ -226,7 +242,7 @@
               :key="`f${i}`"
               class="feedrow"
               :class="{ 'feedrow--bad': f.tone === 'bad', 'feedrow--link': f.tone === 'bad' || f.tone === 'warn' }"
-              :title="(f.tone === 'bad' || f.tone === 'warn') ? '点击查看日志' : undefined"
+              :title="feedTitle(f)"
               :role="(f.tone === 'bad' || f.tone === 'warn') ? 'button' : undefined"
               :tabindex="(f.tone === 'bad' || f.tone === 'warn') ? 0 : undefined"
               @click="feedJump(f)"
@@ -256,7 +272,7 @@
     min
     tone="error"
     title="真实数据暂不可用，请刷新或稍后重试。"
-    description="总览接口未返回数据，可能是后端未启动或网络不可达。"
+    description="无法加载总览数据，可能是服务未启动或网络不可达。"
     action-text="重试"
     @action="retryOverview"
   />
@@ -322,7 +338,7 @@ const loopStages = computed<LoopStage[]>(() => {
     {
       name: '目标对话', meta: '澄清真实目标与约束',
       val: `${d?.loop.conversationsActive ?? 0} 进行中`, tone: 'active',
-      title: '进行中的目标对话（overview/stats · 随轮询刷新）· 点击查看目标对话',
+      title: '进行中的目标对话数 · 点击查看目标对话',
       scene: 'goal-conversations',
     },
     {
@@ -330,7 +346,7 @@ const loopStages = computed<LoopStage[]>(() => {
       name: '路径规划', meta: '生成阶段化学习路径',
       val: `${d?.loop.pathsActive ?? 0} 进行中`, tone: pathsFailed > 0 ? 'alert' : 'done',
       failN: pathsFailed > 0 ? pathsFailed : undefined,
-      title: `进行中路径 ${d?.loop.pathsActive ?? 0} · 失败 ${pathsFailed}（overview/stats · 随轮询刷新）· 点击查看学习路径`,
+      title: `进行中路径 ${d?.loop.pathsActive ?? 0} · 失败 ${pathsFailed} · 点击查看学习路径`,
       scene: 'learning-paths',
     },
     {
@@ -344,15 +360,15 @@ const loopStages = computed<LoopStage[]>(() => {
       ringFailed: teachState.value === 'failed',
       title: teachState.value === 'failed'
         ? '教学会话累计数拉取失败 · 点「重试」重拉 · 点击查看教学会话'
-        : '教学会话累计数（教学会话列表 total · 随全站「含测试」口径，进页/切换口径时拉取）· 点击查看教学会话',
+        : '教学会话累计数（随页头「真实 / 测试」开关变化）· 点击查看教学会话',
       scene: 'teaching-sessions',
     },
     {
       // 口径（#3）：evalOk 是「最近 sampleSize 条 wrapup 日志」里的成功条数（结构上 ≤ sampleSize），
       // 与另外四环的全量口径不同源——数值必须带分母，否则与「320 待办 / 208 累计」并排会被读成漏斗塌陷
       name: '课后评估', meta: '产出与掌握度评估',
-      val: `${evalOk}/${d?.wrapup.sampleSize ?? 0} 样本`, tone: 'done',
-      title: `评估产出 ${evalOk} 份 / 最近 ${d?.wrapup.sampleSize ?? 0} 次课后总结样本 · 失败 ${d?.wrapup.evaluationFailed ?? 0}（wrapup 样本口径，非全量评估总数 · 随轮询刷新）· 点击查看教学会话`,
+      val: `${evalOk}/${d?.wrapup.sampleSize ?? 0} 次完成`, tone: 'done',
+      title: `最近 ${d?.wrapup.sampleSize ?? 0} 次课后总结中 ${evalOk} 次评估完成 · 失败 ${d?.wrapup.evaluationFailed ?? 0}（仅统计最近 ${d?.wrapup.sampleSize ?? 0} 次总结）· 点击查看教学会话`,
       scene: 'teaching-sessions',
     },
     {
@@ -364,10 +380,12 @@ const loopStages = computed<LoopStage[]>(() => {
           : `${memDue.value ?? 0} 待办`,
       tone: memState.value === 'failed' || (memDue.value ?? 0) > 0 ? 'alert' : 'done',
       ringFailed: memState.value === 'failed',
+      // 记忆与复习独立页 2026-10-12 退役（并入学习者详情页签）：总览是跨用户口径，
+      // 落到学习状态列表挑人，进详情后看「记忆与复习」页签
       title: memState.value === 'failed'
-        ? '到期待办数拉取失败 · 点「重试」重拉 · 点击查看记忆与复盘'
-        : '到期未复习的记忆条数（记忆与复盘 totals.due · 随全站「含测试」口径，进页/切换口径时拉取）· 点击查看记忆与复盘',
-      scene: 'memory-review',
+        ? '到期待办数拉取失败 · 点「重试」重拉 · 点击查看学习状态'
+        : '到期未复习的记忆条数（随页头「真实 / 测试」开关变化）· 点击打开学习状态（记忆与复习在学习者详情）',
+      scene: 'learner-state',
     },
   ];
 });
@@ -387,7 +405,8 @@ async function loadLoopExtras() {
   memState.value = 'loading';
   try {
     // 口径随全站「含测试」开关（D12）：此前写死仅真实口径拉取，开关开着时同指标相差约 35 倍
-    const r = await adminMemoryReviewApi.overview({ limit: 1, includeVirtual: liveIncludeVirtual.value });
+    // 口径随全站「真实/测试」视角联动（D12 判例）：测试视角下到期待办只数虚拟/测试账号
+    const r = await adminMemoryReviewApi.overview({ limit: 1, includeVirtual: liveIncludeVirtual.value, testOnly: liveIncludeVirtual.value || undefined });
     memDue.value = Number(r.data?.data?.totals?.due ?? 0);
     memState.value = 'ready';
   } catch { memState.value = 'failed'; /* 不阻塞页面：环上呈现可重试的失败态 */ }
@@ -540,7 +559,7 @@ const simHeadline = computed(() => {
   return '仿真运行平稳'
 })
 const simTitle = computed(() => {
-  const parts: string[] = ['虚拟学习者 / 仿真通道健康度（仅虚拟/测试账号，与真实用户口径互斥）']
+  const parts: string[] = ['虚拟学习者 / 仿真运行情况（仅统计虚拟学习者与测试账号）']
   if (liveVirtualStatsError.value) {
     parts.push(`统计加载失败：${liveVirtualStatsError.value}`, '进入「虚拟学习者」页可重试')
   } else if (!liveVirtualStatsLoaded.value) {
@@ -677,6 +696,12 @@ function feedDesc(f: BriefData['feed'][number]): string {
 function feedJump(f: { tone: string; errorCategory?: string }) {
   if (f.tone !== 'bad' && f.tone !== 'warn') return
   jumpToFailures(f.errorCategory || '')
+}
+/** 悬浮看全文（评审 2026-10-10）：标题/副行截断后原文进 title；
+ *  可点行保留「点击查看日志」提示，缀在原文之后 */
+function feedTitle(f: { text: string; desc: string; tone: string }) {
+  const full = f.desc ? `${f.text} ${f.desc}` : f.text
+  return f.tone === 'bad' || f.tone === 'warn' ? `${full} · 点击查看日志` : full
 }
 
 /* 底部渐隐只在「确有下文被裁」时挂（审核 #0，2026-10-06）：
@@ -860,8 +885,21 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
    原页内 .kpigrid/.card--kpi/.kpi* 自搓家族退役：暗色卡片描边误用 --mk-line（1.36:1）、
    可点 KPI 缺 :active、role=button 只绑 Enter。现由共享原语承担（MkKpi clickable=真 button）。 */
 
-/* ---- 卡片体（共享 .mk-card 无 .mk-card__body 原语，衬距用本页局部类，SessionCockpit 同判例）---- */
-.ov-card__body { padding: 16px; }
+/* ---- 卡片体（共享 .mk-card 无 .mk-card__body 原语，衬距用本页局部类，SessionCockpit 同判例）----
+   16 → 18（评审 2026-10-10「整体过度紧凑」）：卡内呼吸感加半档，页 grid gap 同步 16 → 18 */
+.ov-card__body { padding: 18px; }
+
+/* ---- 警示状态条减重（评审 2026-10-10「大面积琥珀底显脏」）----
+   共享 .mk-status--warn/--bad 是 2026-10-04「全站统一染底」的拍板口径，不动共享原语；
+   本页把染底降为 7% 弱填充 + 细描边——保留「这条是预警」的信号，去掉色块的压迫感 */
+.ov-status--stack.mk-status--warn {
+  background: color-mix(in srgb, var(--mk-amber) 7%, transparent);
+  border-color: color-mix(in srgb, var(--mk-amber) 38%, var(--mk-line));
+}
+.ov-status--stack.mk-status--bad {
+  background: color-mix(in srgb, var(--mk-red) 7%, transparent);
+  border-color: color-mix(in srgb, var(--mk-red) 38%, var(--mk-line));
+}
 
 /* ---- 胶囊（原型 .pill：卡头 tools 徽标）---- */
 .pill {
@@ -874,8 +912,24 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
 .pill__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
 /* ---- 闭环条（原型 .loop）---- */
-.loop { display: flex; align-items: stretch; gap: 8px; overflow-x: auto; padding: 4px 0; }
-.loop__arrow { display: grid; place-items: center; flex: none; color: var(--mk-faint); font-size: var(--mk-fs-emphasis); }
+.loop { display: flex; align-items: stretch; gap: 10px; overflow-x: auto; padding: 4px 0; }
+/* 流程指向增强（评审 2026-10-10「箭头微弱」）：文字箭头 → 线段 + 实心三角，
+   线贯通两卡间隙、颜色提到 muted 级，指向性一眼可读 */
+.loop__arrow { position: relative; width: 22px; flex: none; }
+.loop__arrow::before {
+  content: '';
+  position: absolute; left: 3px; right: 8px; top: 50%;
+  height: 2px; margin-top: -1px;
+  background: color-mix(in srgb, var(--mk-muted) 60%, transparent);
+}
+.loop__arrow::after {
+  content: '';
+  position: absolute; right: 2px; top: 50%;
+  transform: translateY(-50%);
+  border-left: 7px solid color-mix(in srgb, var(--mk-muted) 60%, transparent);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
 .loop__step {
   flex: 1 1 0; min-width: 138px; display: grid; gap: 5px;
   padding: 12px 14px; border: 1px solid var(--mk-line);
@@ -905,23 +959,38 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 /* ---- Row A：图（1.6fr）+ 事件（1fr）----
    等高（2026-10-03 用户指出左右卡底边错位 69px）：撤 align-items:start，
    两卡由 grid 拉齐到同一行高；差值给柱图消化（ov-card--chart 的卡体转 flex 列，
-   OvBars 自带 flex:1 自适应长高），不再留中空 */
-.row2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
-.ov-card--chart .ov-card__body { display: flex; flex-direction: column; min-height: 0; }
+   OvBars 自带 flex:1 自适应长高），不再留中空。
+   gap 16 → 18（评审 2026-10-10「过度紧凑」） */
+.row2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 18px; align-items: stretch; }
+/* 图卡也转 flex 列（补齐 2026-10-03「差值给柱图消化」的缺失一环）：.mk-card 原语是块布局，
+   grid 拉高卡壳后卡体不跟随——事件卡（feed 两行折行后自然更高）把整行撑高时，
+   柱图下方漏出大片卡片底空白（2026-10-10 实拍）。卡体 flex:1 后 OvBars 自身 flex:1 才有母高可撑 */
+.mk-card.ov-card--chart { display: flex; flex-direction: column; }
+.ov-card--chart .ov-card__body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* 最近事件卡（评审 2026-10-10「右侧大段留白」）：卡体转 flex 列，feed 撑满剩余高度
+   （行高随柱图列拉齐），不再被 236px 定高吊在半空 */
+.mk-card.ov-card--feed { display: flex; flex-direction: column; }
+.ov-card--feed .ov-card__body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 /* 最近事件（原型 .feed--capped：时间列 + 标题/描述，限高滚动）。
    底部 22px 渐隐（mask）提示「下面还有」：内滚区边界落在条目中间时会把最后可见条的
    副标题切半行，不加暗示会被读成「内容坏了」（裸评审 2026-10-03）。浅/深色均走 alpha 遮罩。
    审核 #0（2026-10-06）：mask 只在确有溢出（scrollHeight > clientHeight，见 feedOverflow）
-   时挂——条目不足一屏时渐隐会画在没有下文的地方。 */
+   时挂——条目不足一屏时渐隐会画在没有下文的地方。
+   评审 2026-10-10：max-height 236 撤——改 flex 撑满所在卡（与柱图等高），
+   限高转由 min-height:0 + overflow 承担。 */
 .feed--capped {
-  display: grid; gap: 2px; max-height: 236px; overflow-y: auto; overscroll-behavior: contain;
+  flex: 1;
+  min-height: 0;
+  display: grid; gap: 2px; overflow-y: auto; overscroll-behavior: contain;
+  align-content: start;
 }
 .feed--capped--overflow {
   -webkit-mask-image: linear-gradient(180deg, black calc(100% - 22px), transparent);
   mask-image: linear-gradient(180deg, black calc(100% - 22px), transparent);
 }
-.feedrow { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--mk-line); }
+.feedrow { display: flex; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--mk-line); }
 .feedrow:last-child { border-bottom: 0; }
 .feedrow--bad .t { color: var(--mk-red); }
 .feedrow--link { cursor: pointer; border-radius: var(--mk-radius-sm); }
@@ -931,21 +1000,32 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
   font-size: var(--mk-fs-micro); font-family: var(--mk-mono);
   font-variant-numeric: tabular-nums;
 }
-.feedrow__grow { min-width: 0; display: grid; gap: 2px; }
+.feedrow__grow { min-width: 0; display: grid; gap: 2px; align-content: start; }
 .feedrow__grow .t {
   font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* 副行两行截断（评审 2026-10-10「强行截断/省略号重叠」）：长 skill 名折两行而非硬切一行，
+   原文始终在行 title 里悬浮可读 */
 .feedrow__grow .d {
   color: var(--mk-muted); font-size: var(--mk-fs-micro);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
-/* ---- Row B：auto-fit 280 三小卡 ---- */
-.row3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-.ranklist { display: grid; gap: 2px; }
-.rankrow { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--mk-line); }
+/* ---- Row B：auto-fit 280 三小卡（gap 同页级 18，评审 2026-10-10 呼吸感）---- */
+.row3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+/* 轨道必须钳在容器宽（minmax(0,1fr)）：grid auto 列按 max-content 定尺，
+   长 skill 名会把行撑出卡片右缘（1280 实测溢出 28px），行内 ellipsis 也永不生效 */
+.ranklist { display: grid; gap: 2px; grid-template-columns: minmax(0, 1fr); }
+.rankrow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--mk-line); }
 .rankrow:last-child { border-bottom: 0; }
+/* 列头行（评审 2026-10-10）：调用/失败拆列后补表头，列语义一眼可读。
+   列头复用数据列的定宽类（calls/failed）保证像素级对齐，仅覆字色 */
+.rankrow--head { padding: 0 0 6px; border-bottom: 0; }
+.rankrow--head .rankrow__grow { color: var(--mk-faint); }
+.rankrow--head .rankrow__val--col { color: var(--mk-faint); font-weight: 600; }
 .rankrow__idx { width: 20px; flex: none; font-family: var(--mk-mono); color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .rankrow__grow {
   flex: 1; min-width: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted);
@@ -955,6 +1035,13 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 .rankrow--link:hover .rankrow__grow { color: var(--mk-blue); }
 .rankrow__bar { width: 64px; flex: none; }
 .rankrow__val { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--mk-fs-micro); color: var(--mk-ink); }
+/* 调用/失败两列（评审 2026-10-10）：右对齐定宽成列；失败非零红字提示，零给「–」保列形 */
+.rankrow__calls { width: 56px; text-align: right; }
+.rankrow__failed { width: 44px; text-align: right; }
+.rankrow__failed:not(.rankrow__failed--zero) { color: var(--mk-red); }
+.rankrow__failed--zero { color: var(--mk-faint); font-weight: 500; }
+/* 列头「失败」用独立类：不挂 .rankrow__failed 以免吃红字规则（表头保持中性 faint） */
+.rankrow__col-failed { width: 44px; text-align: right; color: var(--mk-faint); font-weight: 600; }
 /* 待处理事项行（密度优化 2026-10-03）：主句 + 口径副行两行堆叠，动作钮跨两行右对齐 */
 .rankrow--todo { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 12px; }
 .todo-main { display: grid; gap: 1px; min-width: 0; }
@@ -963,6 +1050,15 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .todo-note { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 待办动作文字链（评审 2026-10-10）：默认轻链，悬浮再起操作底色——
+   替代整排同款「去排查 →」胶囊的视觉噪声 */
+.todo-act {
+  border: 0; background: none; padding: 4px 8px;
+  border-radius: var(--mk-radius-sm);
+  font: inherit; font-size: var(--mk-fs-micro); font-weight: 700;
+  color: var(--mk-blue); cursor: pointer; white-space: nowrap;
+}
+.todo-act:hover { background: var(--mk-blue-bg); }
 
 /* 空态/说明行（原型 .note） */
 .note {
@@ -972,11 +1068,10 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
   font-size: var(--mk-fs-micro);
 }
 
-/* 响应式（原型：≤768 图高 132 / feed 限高同步收窄） */
+/* 响应式（原型：≤768 图高 132 / feed 限高同步收窄）
+   ≤1100 单列后 feed 失去柱图列定高，重新给它上限防长事件流无限拉高 */
 @media (max-width: 1100px) {
   .row2 { grid-template-columns: 1fr; }
-}
-@media (max-width: 768px) {
-  .feed--capped { max-height: 132px; }
+  .feed--capped { max-height: 300px; }
 }
 </style>

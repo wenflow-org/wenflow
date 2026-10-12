@@ -165,13 +165,13 @@ export function normalizeLearnerTab(tab: unknown): LearnerTab {
 }
 
 /**
- * 学习者详情 → 「记忆与复习」的跨页深链。
+ * 「记忆与复习」的跨页深链。
  *
- * 契约：参数名必须是 `userId`（`MemoryReview.vue` 的 onMounted 读的就是 `route.query.userId`）。
- * 抽成纯函数是为了把这条**跨组件契约**钉进测试——两侧各自改参数名是这类跳转最常见的静默失效。
+ * 2026-10-12 用户拍板「合并过去，保留详情页一个」：独立页 /admin/memory-review 退役
+ * （场景挂重定向 shim 接旧深链），本函数直发学习者详情「记忆与复习」页签。
  */
 export function memoryReviewUrl(userId: string): string {
-  return `/admin/memory-review?userId=${encodeURIComponent(String(userId || ''))}`
+  return `/admin/learner-state?view=learner&id=${encodeURIComponent(String(userId || ''))}&tab=memory`
 }
 
 /* ================= 列表筛选 / 页码 ↔ URL query 双向同步 ================= */
