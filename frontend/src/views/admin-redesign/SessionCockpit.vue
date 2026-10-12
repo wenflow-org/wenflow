@@ -299,6 +299,73 @@
           </div>
         </section>
 
+        <!-- 回合记录（仅虚拟会话，Goal 页）：Goal + 课堂按序合并的旅程表。真实会话的阶段面板
+             已各自承载转录，同屏再列一张同样的表就是重复（2026-10-11「goal 阶段对话记录会和记录
+             会不会重复了」）。2026-10-12 四页拆分：会话级卡片归位到所属阶段页，不再全页签复读。 -->
+        <section v-if="!isRealMode && activeTab === 'goal'" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">回合记录</h3>
+            <!-- 加载中 meta 留空（骨架已在下方承担加载态；不写「暂无对话记录」假空文案） -->
+            <span class="mk-card__meta">{{ turnMeta }}</span>
+          </div>
+          <!-- 会话未加载（首载/切换会话）先给骨架：不得把「尚未加载」渲染成「暂无对话记录」（2026-10-06 审核 #47） -->
+          <div v-if="!session" class="cp-cardbody"><MkSkeleton variant="rows" :count="4" :h="12" :radius="4" /></div>
+          <!-- 列序对齐原型（# / 类型 / 内容 / …）：Token/耗时/解答分接口没有，不硬造，以真实「时间」列收尾 -->
+          <div v-else-if="turnRows.length" class="mk-table-scroll">
+            <table class="mk-table cp-turns">
+              <thead>
+                <tr>
+                  <th scope="col" class="cp-turns__num">#</th>
+                  <th scope="col">类型</th>
+                  <th scope="col" class="cp-turns__wrap">内容</th>
+                  <th scope="col">时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in turnRows" :key="row.key">
+                  <td class="mono cp-turns__num">{{ row.index }}</td>
+                  <td><span class="mk-badge" :class="row.tone">{{ row.type }}</span></td>
+                  <td class="cp-turns__wrap">{{ row.content }}</td>
+                  <td class="mono cp-turns__time">{{ row.time }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else class="cp-none cp-turns-empty">该会话暂无已落库的对话回合。</p>
+        </section>
+
+        <!-- 学习者资料（Goal 页，2026-10-12 四页拆分归位）：goal 阶段把学习者**携带的资料**（上传附件）
+             与**系统联网采集**的资料一起纳入上下文，path 生成复用同一份理解摘要 —— 归属 Goal 阶段页。
+             后端只在目标对话控制台载荷里给（列表级字段 + brief 摘要，正文不进载荷），无资料整卡不渲染。 -->
+        <section v-if="activeTab === 'goal' && realMaterials.length" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">学习者资料</h3>
+            <span class="mk-card__meta">{{ materialMetaText }}</span>
+          </div>
+          <div class="cp-cardbody">
+            <article v-for="m in realMaterials" :key="m.id" class="cp-mat">
+              <header class="cp-mat__head">
+                <span class="mk-badge" :class="m.origin === 'web' ? 'mk-badge--info' : 'mk-badge--muted'">{{ m.originLabel }}</span>
+                <strong class="cp-mat__name" :title="m.name">{{ m.name }}</strong>
+                <span class="cp-mat__meta mono">{{ m.sizeText }}</span>
+              </header>
+              <p v-if="m.subject" class="cp-mat__subject">{{ m.subject }}</p>
+              <p v-if="m.overview" class="cp-mat__overview">{{ m.overview }}</p>
+              <p v-else-if="!m.hasBrief" class="cp-mat__none">尚未生成资料理解摘要（brief 惰性生成，goal / path 首次用到时产出）</p>
+              <div v-if="m.concepts.length" class="cp-mat__chips">
+                <span v-for="c in m.concepts" :key="c" class="mk-badge mk-badge--sm mk-badge--muted">{{ c }}</span>
+              </div>
+              <footer class="cp-mat__foot">
+                <span v-if="m.docType" class="cp-mat__fact">{{ m.docType }}</span>
+                <span v-if="m.tocCount" class="cp-mat__fact">目录 {{ m.tocCount }} 条</span>
+                <span v-for="d in m.divisions" :key="d" class="cp-mat__fact">{{ d }}</span>
+                <a v-if="m.sourceUrl" class="cp-mat__src" :href="m.sourceUrl" target="_blank" rel="noopener noreferrer" :title="`联网来源：${m.sourceUrl}`">来源 {{ m.sourceHost }}</a>
+                <span class="cp-mat__time mono" :title="m.timeTitle">{{ m.timeText }}</span>
+              </footer>
+            </article>
+          </div>
+        </section>
+
         <!-- Learn 课堂 -->
         <section v-if="!isBlackbox && activeTab === 'learning'" role="tabpanel" :id="`cp-tabpanel-learning`" :aria-labelledby="`cp-tab-learning`" class="mk-card">
           <div class="mk-card__head">
@@ -446,6 +513,23 @@
           </div>
         </section>
 
+        <!-- 知识状态更新（Learn 页，2026-10-12 四页拆分归位）：课堂数据不进别的阶段页 -->
+        <section v-if="activeTab === 'learning' && knowledgeRows.length" class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">知识状态更新</h3>
+            <span class="mk-card__meta" :title="knowledgeSourceTitle">{{ knowledgeSourceLabel }}</span>
+          </div>
+          <div class="cp-cardbody">
+            <div class="cp-ranklist">
+              <div v-for="k in knowledgeRows" :key="k.name" class="cp-ranklist__row">
+                <span class="cp-ranklist__name">{{ k.name }}</span>
+                <span v-if="k.statusLabel" class="cp-ranklist__state" :data-tone="k.statusTone">{{ k.statusLabel }}</span>
+                <span class="cp-ranklist__val mono">{{ k.value }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- 总结 -->
         <section v-if="!isBlackbox && activeTab === 'wrapup'" role="tabpanel" :id="`cp-tabpanel-wrapup`" :aria-labelledby="`cp-tab-wrapup`" class="mk-card">
           <div class="mk-card__head">
@@ -534,90 +618,9 @@
 
         <!-- 终局评估面板已随裁判独立面移除（2026-09-27）：报告仍在会话数据里，独立评审面为 /api/admin/session-audits -->
 
-        <!-- ===== 会话级证据（原型双栏 1.5fr/1fr）：回合记录 / 学习者资料 / 知识状态更新。
-             位置在阶段面板之后（2026-10-11 走查）：都不随阶段页签变化，此前放在阶段面板之上，导致点页签时前 861px 原样不动、
-             终局总结被顶到 1534px 之外——「既然有状态，为什么下面都堆着数据呢」。阶段区因此只管本阶段。
-             回合记录只在虚拟会话给（一个会话即完整旅程，Goal+课堂两通道合并才有增量）；真实会话的阶段面板
-             已各自承载转录，同屏再列一张同样的表就是重复（2026-10-11「goal 阶段对话记录会和记录会不会重复了」）。 ===== -->
-        <div class="cp-detail-grid" :class="{ 'cp-detail-grid--single': detailGridSingle }">
-          <section v-if="!isRealMode" class="mk-card">
-            <div class="mk-card__head">
-              <h3 class="mk-card__title">回合记录</h3>
-              <!-- 加载中 meta 留空（骨架已在下方承担加载态；不写「暂无对话记录」假空文案） -->
-              <span class="mk-card__meta">{{ turnMeta }}</span>
-            </div>
-            <!-- 会话未加载（首载/切换会话）先给骨架：不得把「尚未加载」渲染成「暂无对话记录」（2026-10-06 审核 #47） -->
-            <div v-if="!session" class="cp-cardbody"><MkSkeleton variant="rows" :count="4" :h="12" :radius="4" /></div>
-            <!-- 列序对齐原型（# / 类型 / 内容 / …）：Token/耗时/解答分接口没有，不硬造，以真实「时间」列收尾 -->
-            <div v-else-if="turnRows.length" class="mk-table-scroll">
-              <table class="mk-table cp-turns">
-                <thead>
-                  <tr>
-                    <th scope="col" class="cp-turns__num">#</th>
-                    <th scope="col">类型</th>
-                    <th scope="col" class="cp-turns__wrap">内容</th>
-                    <th scope="col">时间</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in turnRows" :key="row.key">
-                    <td class="mono cp-turns__num">{{ row.index }}</td>
-                    <td><span class="mk-badge" :class="row.tone">{{ row.type }}</span></td>
-                    <td class="cp-turns__wrap">{{ row.content }}</td>
-                    <td class="mono cp-turns__time">{{ row.time }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <p v-else class="cp-none cp-turns-empty">该会话暂无已落库的对话回合。</p>
-          </section>
-          <!-- 学习者资料（2026-10-11 走查）：goal 阶段会把学习者**携带的资料**（上传附件）与**系统联网采集**
-               的资料一起纳入上下文，path 生成复用同一份理解摘要 —— 结果此前在任何管理页都看不到。
-               后端只在目标对话控制台载荷里给（列表级字段 + brief 摘要，正文不进载荷），无资料整卡不渲染。 -->
-          <section v-if="realMaterials.length" class="mk-card">
-            <div class="mk-card__head">
-              <h3 class="mk-card__title">学习者资料</h3>
-              <span class="mk-card__meta">{{ materialMetaText }}</span>
-            </div>
-            <div class="cp-cardbody">
-              <article v-for="m in realMaterials" :key="m.id" class="cp-mat">
-                <header class="cp-mat__head">
-                  <span class="mk-badge" :class="m.origin === 'web' ? 'mk-badge--info' : 'mk-badge--muted'">{{ m.originLabel }}</span>
-                  <strong class="cp-mat__name" :title="m.name">{{ m.name }}</strong>
-                  <span class="cp-mat__meta mono">{{ m.sizeText }}</span>
-                </header>
-                <p v-if="m.subject" class="cp-mat__subject">{{ m.subject }}</p>
-                <p v-if="m.overview" class="cp-mat__overview">{{ m.overview }}</p>
-                <p v-else-if="!m.hasBrief" class="cp-mat__none">尚未生成资料理解摘要（brief 惰性生成，goal / path 首次用到时产出）</p>
-                <div v-if="m.concepts.length" class="cp-mat__chips">
-                  <span v-for="c in m.concepts" :key="c" class="mk-badge mk-badge--sm mk-badge--muted">{{ c }}</span>
-                </div>
-                <footer class="cp-mat__foot">
-                  <span v-if="m.docType" class="cp-mat__fact">{{ m.docType }}</span>
-                  <span v-if="m.tocCount" class="cp-mat__fact">目录 {{ m.tocCount }} 条</span>
-                  <span v-for="d in m.divisions" :key="d" class="cp-mat__fact">{{ d }}</span>
-                  <a v-if="m.sourceUrl" class="cp-mat__src" :href="m.sourceUrl" target="_blank" rel="noopener noreferrer" :title="`联网来源：${m.sourceUrl}`">来源 {{ m.sourceHost }}</a>
-                  <span class="cp-mat__time mono" :title="m.timeTitle">{{ m.timeText }}</span>
-                </footer>
-              </article>
-            </div>
-          </section>
-          <section v-if="knowledgeRows.length && knowledgeStageScoped" class="mk-card">
-            <div class="mk-card__head">
-              <h3 class="mk-card__title">知识状态更新</h3>
-              <span class="mk-card__meta" :title="knowledgeSourceTitle">{{ knowledgeSourceLabel }}</span>
-            </div>
-            <div class="cp-cardbody">
-              <div class="cp-ranklist">
-                <div v-for="k in knowledgeRows" :key="k.name" class="cp-ranklist__row">
-                  <span class="cp-ranklist__name">{{ k.name }}</span>
-                  <span v-if="k.statusLabel" class="cp-ranklist__state" :data-tone="k.statusTone">{{ k.statusLabel }}</span>
-                  <span class="cp-ranklist__val mono">{{ k.value }}</span>
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
+        <!-- 会话级卡片已按「四页拆分」归位到所属阶段页（2026-10-12 用户拍板「拆成四个页面，独立的」）：
+             回合记录（虚拟）与学习者资料 → Goal 页；知识状态更新 → Learn 页。
+             原共享 .cp-detail-grid（四页签底下复读同一坨 1371px 卡片）随之退役。 -->
 
         <!-- 调试：原始 JSON -->
         <!-- rawJson 惰性计算：仅展开时序列化（见脚本 rawJsonOpen），折叠态 pre 渲染空串 -->
@@ -1910,18 +1913,7 @@ const materialMetaText = computed(() => {
   return parts.join(' · ')
 })
 
-/** 知识点掌握度的阶段归属（2026-10-11 走查「goal path 页面也都有他」）：它取自最近一节**课堂**
-    （真实）或当前课课时总结（虚拟），是课堂数据 —— 摆在 Goal / Path 页签下既是错位也让同屏与
-    Goal 对话并列成「会话级证据」。只在它所属的阶段页签渲染。 */
-const knowledgeStageScoped = computed(() => activeTab.value === 'learning' || activeTab.value === 'wrapup')
-
-/** 会话级证据栅格是否收成单栏：按当前页签实际渲染的卡数算 */
-const detailGridSingle = computed(() => {
-  const cards = (isRealMode.value ? 0 : 1)
-    + (realMaterials.value.length ? 1 : 0)
-    + (knowledgeRows.value.length && knowledgeStageScoped.value ? 1 : 0)
-  return cards <= 1
-})
+/* 知识状态更新卡已归位 Learn 页（2026-10-12 四页拆分）；来源点名判据保留在 knowledgeSourceLabel */
 
 /** 卡头来源名（2026-10-11 走查）：原写「会话知识状态」里的"会话"指课堂会话，摆在目标对话控制台上
     极易被读成"这条目标对话的知识状态"。点名它实际来自哪一节课。 */
@@ -2699,9 +2691,7 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-stp__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .cp-stp--active .cp-stp__meta { color: var(--mk-blue); font-weight: 600; }
 
-/* 原型双栏：回合记录 1.5fr + 知识状态更新 1fr（无知识数据时收单栏） */
-.cp-detail-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-.cp-detail-grid--single { grid-template-columns: minmax(0, 1fr); }
+/* 会话级卡片已归位各阶段页（2026-10-12 四页拆分），原 .cp-detail-grid 双栏栅格退役 */
 .cp-turns td { vertical-align: top; }
 .cp-turns__num { width: 48px; white-space: nowrap; }
 .cp-turns__wrap { white-space: pre-wrap; min-width: 220px; word-break: break-word; }
@@ -3511,7 +3501,6 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 @media (max-width: 1100px) {
   .cp-body { grid-template-columns: 1fr; }
   .cp-sidebar { position: static; max-height: none; }
-  .cp-detail-grid { grid-template-columns: 1fr; }
 }
 @media (min-width: 2000px) {
   .cp-body { grid-template-columns: minmax(0, 1fr) 380px; }

@@ -356,9 +356,11 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     w.unmount();
   });
 
-  it('回合记录：虚拟会话保持 Goal + 课堂按序合并（那边一个会话就是完整旅程）', async () => {
+  it('回合记录：虚拟会话保持 Goal + 课堂按序合并（那边一个会话就是完整旅程；卡归位 Goal 页）', async () => {
     stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
     const w = await mountCockpit('session', 'vs_1');
+    await w.findAll('.cp-stp')[0].trigger('click'); // Goal 页签（2026-10-12 四页拆分：回合记录归位 Goal 页）
+    await settle();
 
     const rows = w.findAll('.cp-turns tbody tr');
     expect(rows).toHaveLength(3); // 1 条 Goal + 2 条课堂
@@ -373,6 +375,8 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
   it('知识状态更新：真实 knowledgeState 渲染 ranklist（progress 缺失回退状态词，不硬造 ±Δ）', async () => {
     stableVirtualApi.getRealSessionConsole.mockResolvedValue(realTeachingPayload());
     const w = await mountCockpit('session-real', 'ts_re_1');
+    await w.findAll('.cp-stp')[2].trigger('click'); // Learn 页签（2026-10-12 四页拆分：卡归位 Learn 页）
+    await settle();
 
     const rows = w.findAll('.cp-ranklist__row');
     expect(rows.map((r) => r.find('.cp-ranklist__name').text())).toEqual(['变量与赋值', '函数参数', '作用域']);
@@ -383,7 +387,7 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     w.unmount();
   });
 
-  it('知识状态更新：只在其所属阶段页签渲染 + 进度与状态两维并列（100% 不再单独代表掌握）', async () => {
+  it('知识状态更新：只渲染在 Learn 页（2026-10-12 四页拆分：课堂数据不进别的阶段页）+ 进度与状态两维并列', async () => {
     const payload = realTeachingPayload(); // kind=teaching + currentStage=wrapup ⇒ 默认落总结页签
     payload.data.teaching.knowledgeState = [
       { name: '定位与列式环节', status: 'learning', progress: 100 },
@@ -392,6 +396,13 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     stableVirtualApi.getRealSessionConsole.mockResolvedValue(payload);
     const w = await mountCockpit('session-real', 'ts_re_1');
 
+    // Goal 页不渲染
+    await w.findAll('.cp-stp')[0].trigger('click');
+    await settle();
+    expect(w.text()).not.toContain('知识状态更新');
+
+    await w.findAll('.cp-stp')[2].trigger('click'); // Learn 页签
+    await settle();
     const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '知识状态更新');
     expect(card).toBeTruthy();
     const rows = card!.findAll('.cp-ranklist__row');
@@ -403,8 +414,8 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     // 卡头点名来源课（原「会话知识状态」里的"会话"指课堂会话，摆在目标对话控制台上易误读）
     expect(card!.find('.mk-card__meta').text()).toContain('最近一节课堂');
 
-    // 切到 Goal 页签 → 整卡退场（课堂数据不在目标阶段页签下并列）
-    await w.findAll('.cp-stp')[0].trigger('click');
+    // 切到 总结 页 → 整卡退场（课堂数据不进总结页）
+    await w.findAll('.cp-stp')[3].trigger('click');
     await settle();
     expect(w.text()).not.toContain('知识状态更新');
 
@@ -418,7 +429,8 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     const w = await mountCockpit('session', 'vs_1');
 
     expect(w.text()).not.toContain('知识状态更新');
-    expect(w.find('.cp-detail-grid--single').exists()).toBe(true);
+    // 2026-10-12 四页拆分：共享 .cp-detail-grid 退役（会话级卡片归位各阶段页）
+    expect(w.find('.cp-detail-grid').exists()).toBe(false);
 
     expect(w.find('.mk-hero__sub').text()).toContain('学习者 王小明');
 
