@@ -535,6 +535,9 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">学习总结</h3>
             <span class="mk-card__meta">{{ wrapupHeadMeta }}</span>
+            <!-- 跨页指引（2026-10-12 走查「为啥资料看不到」）：四页拆分后资料归 Goal 页，
+                 本页不留正文，给一颗确定性出口——点 stepper 也能到，这里免找 -->
+            <button v-if="realMaterials.length" type="button" class="mk-link" title="学习者资料归 Goal 阶段页；点击切换" @click="selectStageTab('goal')">学习者资料在 Goal 页 →</button>
           </div>
 
           <!-- 课时进度概览：这棵树是 Learn 阶段的课表（同一份 68 课清单在「Path 内容」页签也渲染），

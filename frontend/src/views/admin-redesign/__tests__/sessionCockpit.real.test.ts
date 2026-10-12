@@ -399,6 +399,16 @@ describe('SessionCockpit 双模式', () => {
     expect(rows[1].find('.cp-mat__none').text()).toContain('尚未生成资料理解摘要');
     expect(rows[1].find('.cp-mat__foot').text()).toContain('example.org');
 
+    // 跨页指引（2026-10-12 走查「为啥资料看不到」）：总结页不留资料正文，卡头给切回 Goal 页的出口
+    await w.findAll('.cp-stp')[3].trigger('click'); // 总结页
+    await settle();
+    const pointer = w.findAll('button').find((b) => (b.text() || '').includes('学习者资料在 Goal 页'));
+    expect(pointer, '总结页应给资料所在页的指引').toBeTruthy();
+    await pointer!.trigger('click');
+    await settle();
+    expect(w.find('#cp-tabpanel-goal').exists()).toBe(true);
+    expect(w.text()).toContain('学习者资料');
+
     w.unmount();
 
     // 无资料 → 整卡不渲染（与知识状态更新同口径）
