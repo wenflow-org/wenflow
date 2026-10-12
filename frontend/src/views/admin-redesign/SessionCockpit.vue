@@ -618,6 +618,9 @@
           <!-- 会话未加载先骨架；空态仅在确实加载完（session 存在）后给（2026-10-06 审核 #47） -->
           <div v-if="!session" class="cp-cardbody"><MkSkeleton variant="rows" :count="3" :h="12" :radius="4" /></div>
           <p v-else-if="!hasWrapup && !lessonTree.length" class="cp-none" style="padding: 24px 16px;">{{ wrapupEmptyHint }}</p>
+          <!-- 中途课（有课表、未结课）：终局总结必然缺席，单课总结是本页签唯一的「总结」——
+               说清两件事，免得「看不到总结」再问一遍（2026-10-12 走查） -->
+          <p v-else-if="!hasWrapup" class="cp-none" style="padding: 14px 16px 4px;">终局总结在全部课程完成后生成；已完成课的单课总结，点该课的「查看总结」。</p>
         </section>
 
         <!-- 终局评估面板已随裁判独立面移除（2026-09-27）：报告仍在会话数据里，独立评审面为 /api/admin/session-audits -->
@@ -3135,6 +3138,10 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
   max-height: max(420px, calc(100dvh - 510px));
   overscroll-behavior: contain;
   display: grid;
+  /* 行轨显式 max-content：auto 轨按最小贡献定尺，课时总结卡（overflow:hidden 项的自动
+     最小尺寸为 0）整行被压到 2px——「查看总结」后只见对话不见总结（2026-10-12 真机实测：
+     默认 2px ↔ max-content 679px；判例同编排图 578aaff1 一族） */
+  grid-auto-rows: max-content;
   gap: 10px;
   align-content: start;
 }
