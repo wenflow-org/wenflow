@@ -45,7 +45,9 @@
 
         <!-- 温故计划整块按 detail.reviewPlan 有无渲染：reviewPlan=null 时原来只剩一个裸标题 -->
         <template v-if="detail.reviewPlan">
-          <div class="mr__strip"><MkStatStrip :items="planKpiItems" /></div>
+          <!-- 指标条走 grid 档（读数条，与虚拟学习者页头同构）：2026-10-11 用户走查「都挤在
+               左侧」——inline 档自由宽度在 1.5k 宽的卡里左侧聚堆，grid 档 auto-fit 等宽格撑满 -->
+          <div class="mr__strip"><MkStatStrip :items="planKpiItems" layout="grid" aria-label="课内温故计划指标" /></div>
 
           <div v-if="detail.reviewPlan?.items.length" class="mk-table-scroll">
           <table class="mk-table">
@@ -1020,8 +1022,9 @@ td.mr__sub { display: table-cell; }
 /* 明细容器：嵌入态不做内部滚动（列表态的 flex:1 + overflow-y:auto 随独立页退役） */
 .mr__detail { display: grid; gap: 12px; align-content: start; }
 .mr__detail--embed { flex: 0 0 auto; overflow: visible; }
-/* 温故计划指标条：MkStatStrip 首格 padding-left:0，放进卡里需自备横向内边距 */
-.mr__strip { padding: 8px 16px 10px; border-bottom: 1px solid var(--mk-line); }
+/* 温故计划指标条：grid 档（读数条）格自带 12px 16px 内边距、auto-fit 等宽摊满卡宽，
+   外层不再叠 padding（原 inline 档首格 padding-left:0 的 16px 补偿随之退役） */
+.mr__strip { padding: 0; border-bottom: 1px solid var(--mk-line); }
 /* 明细区百分比列（批E）：数字+色阶条，与概览带/用户表同一语言 */
 .mr-pct { display: inline-grid; justify-items: end; gap: 2px; }
 .mr-pct b { font-variant-numeric: tabular-nums; font-weight: 700; }
