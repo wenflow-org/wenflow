@@ -221,18 +221,17 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).toContain('openSkillFromOverview(sk.id)')
   })
 
-  it('编排图页首 KPI 带已撤（2026-10-12 用户走查）：纯读数进总览卡头 meta，告警改行式告警条', () => {
-    // 三张纯读数卡（阶段/Skill/阶段交接）不再渲染，本页不再有 KPI 卡
+  it('编排图页首 KPI 带与告警条已撤（2026-10-12 用户走查）：读数进卡头 meta，页级告警迁健康中心', () => {
+    // 三张纯读数卡 + 两枚告警卡都不再渲染：本页无 KPI、无页级告警条（告警迁健康中心
+    // 检查项 orchestration-steps / w4-corehash）
     expect(OrchestratorSource).not.toContain('label="阶段"')
     expect(OrchestratorSource).not.toContain('label="阶段交接"')
     expect(OrchestratorSource).not.toContain('<MkKpi')
     expect(OrchestratorSource).not.toContain('import MkKpi')
-    // 无警整条不占位：告警条仅在有警时渲染（画布净赚一个带高）
-    expect(OrchestratorSource).toContain('v-if="unresolvedCount > 0 || w4Drifted.length"')
-    // 有警走共享行式告警（不是 KPI 卡：单卡在 flex 栅格里会被拉满整条）
-    expect(OrchestratorSource).toContain('mk-alert mk-alert--row')
-    expect(OrchestratorSource).toContain('role="alert"')
-    // 动作入口保留且可点（评审 P1#27：异常红字必须可点）
+    expect(OrchestratorSource).not.toContain('mk-alert')
+    expect(OrchestratorSource).not.toContain('unresolvedCount')
+    // 行级证据仍在：交接明细表的未解析/哈希漂移徽章可点（评审 P1#27 异常→动作不断链）
+    expect(OrchestratorSource).toContain('orch-handoff__badge-btn')
     expect(OrchestratorSource).toContain('@click="goUnresolved()"')
     expect(OrchestratorSource).toContain('@click="goHashDrift()"')
     // 阶段数/Skill 总数收进总览卡头右组 meta（F8-4 三源口径 title 随行）

@@ -72,6 +72,7 @@ import {
   type OrchestrationStage,
 } from './field-routing/orchestration-file';
 import { SKILL_RUNTIME_DEFINITIONS } from '../coordinators/definitions-registry';
+import { collectUnresolvedOrchestrationSteps } from './orchestration-steps.service';
 import type { CoreAgentPromptEnsureResult } from './prompt-manifest/seed-core-agent-prompts';
 
 // ============================================================
@@ -458,6 +459,9 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
     return `${table} ${String(key)}`;
   });
 
+  // 编排步骤解析（编排定义 steps → Agent manifest，单一实现见 orchestration-steps.service.ts）
+  const unresolvedSteps = collectUnresolvedOrchestrationSteps();
+
   const items: HealthCenterItem[] = [
     // ============ baseline-drift（基准漂移，单向，可一键修复或人工） ============
     buildItem('w4-corehash', {
@@ -514,6 +518,21 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
       action: 'manual',
       fixHint: '需开发处理：定位差异后执行契约同步（DB 从 manifest 收敛），或经 w4 一键修复的数据库同步后复查',
       source: 'check-prompt-runtime-contract-metadata-parity.ts',
+    }),
+    buildItem('orchestration-steps', {
+      label: '步骤解析（编排步骤 ↔ Agent 名册）',
+      base: 'file:orchestration',
+      semantics: 'consistency',
+      severity: unresolvedSteps.length > 0 ? 'error' : 'ok',
+      status: unresolvedSteps.length > 0 ? 'unresolved' : 'clean',
+      count: unresolvedSteps.length,
+      detail: unresolvedSteps
+        .slice(0, 20)
+        .map((s) => `${s.orchestratorName} 第 ${s.step} 步 agentId=${s.agentId}${s.role ? `（${s.role}）` : ''}`),
+      cause: '编排定义里的步骤引用的 agent 或技能，在 Agent 名册与辅助技能表里都查不到：该步骤运行时不可路由——通常是引用了未注册的 agent，或 agent 改名后编排没同步（服务类步骤与 v4 辅助技能按约定不计入本项）',
+      action: 'manual',
+      fixHint: '需开发处理：把该 agent/技能注册进名册，或把编排步骤改指到已注册的参与方；编排图页「字段旅程」可定位到具体阶段',
+      source: 'orchestration-steps.service.ts（与 runtime-definitions orchestrators 端点同口径，排除服务步骤与辅助技能）',
     }),
     buildItem('snapshots', {
       label: '沙盘说明书（agent-snapshots.md）',

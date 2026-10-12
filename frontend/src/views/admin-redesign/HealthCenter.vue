@@ -118,7 +118,7 @@
       </div>
 
       <div v-if="hcTab === 'health'" id="hc-panel-health" role="tabpanel" aria-labelledby="hc-tab-health" class="hc-panel">
-      <!-- 服务卡组（复刻 newui 原型 .service/.tile「服务卡」）：13 项检查按基准真源归域成卡
+      <!-- 服务卡组（复刻 newui 原型 .service/.tile「服务卡」）：全部检查项按基准真源归域成卡
            （分组字段 = item.base，后端 health-center.service.ts buildItem 逐项标注「谁是真源」）。
            状态点取域内最高严重度（有 error 红 / 有 warn 琥珀 / 全正常绿），计数全部来自真实检查项。
            卡壳沿用本页统一的 mk-card（原型里 .tile 也只是 .card 的内容网格，.service 承载网格与内边距）。 -->
@@ -218,7 +218,7 @@
         <div class="hc-checks">
             <!-- 报告为空守卫（审核 #104）：items=[] 时卡体只剩卡头一行「无异常」，读不出是真没问题
                  还是后端没给数据；一行式内联空态（SPEC §6 CM7）说明现状与下一步，不占最小高度 -->
-            <p v-if="!sortedHealthItems.length" :class="LINE_EMPTY">后端未返回任何检查项：报告为空，请稍后重试或查看服务日志。</p>
+            <p v-if="!sortedHealthItems.length" :class="LINE_EMPTY">暂无检查项数据，请稍后重试。</p>
             <!-- 异常/关注项：默认展开 -->
             <div v-for="item in healthHighlight" :id="`hc-check-${item.id}`" :key="item.id" class="hc-check" :class="`hc-check--${item.severity}`">
               <button type="button" class="hc-check__row" :aria-expanded="detailOpen(item.id)" @click="toggleDetail(item.id)">
@@ -306,9 +306,9 @@
             </div>
             <div class="hc-drift__item" v-if="drift.runtime">
               <strong title="线上实际调用使用的提示词版本与当前配置不一致">{{ TERMS.driftRuntime }}</strong>
-              <span class="mk-badge mk-badge--info" :title="`所有调用中 prompt 与数据库 ACTIVE 不一致的历史记录（最近 ${drift.runtime} 条采样）`">{{ drift.runtime }}</span>
+              <span class="mk-badge mk-badge--info" :title="`线上调用使用的提示词与当前配置不一致的历史记录（最近 ${drift.runtime} 条）`">{{ drift.runtime }}</span>
               <button type="button" class="mk-link" @click="goDrift('runtime')">执行日志 →</button>
-              <span class="hc-drift__hint">只读观测记录：若确认线上行为正常可忽略；配置同步后不再新增。</span>
+              <span class="hc-drift__hint">仅供参考：确认线上行为正常可忽略；配置同步后不再新增。</span>
             </div>
           </div>
       </section>
@@ -373,7 +373,7 @@ import SkillReconciliation from './SkillReconciliation.vue'
 
 /* ---------- 独立场景（2026-09-29 用户拍板：合一 + 独立 + 归系统组） ----------
    此前它是 skills 宿主的 3 个 tab（健康检查 / 漂移 / 对账），靠 view prop 单选渲染。
-   那三个 tab 本就是同一份报表的三刀（后端一次返回 13 项检查 + 漂移分维度 + 对账 + 完成度），
+   那三个 tab 本就是同一份报表的三刀（后端一次返回全量检查项 + 漂移分维度 + 对账 + 完成度），
    且刀口切错：当时唯一的 error 项「参数一致性」被归为 baseline-drift 却不在漂移分维度里，
    造成「漂移 0 项需处理」与「1 异常」并存。现已收口（同日）：该项语义重分类为 consistency
    （core↔definition 镜像的对等比对，非「配置改了没生效」），19 处镜像滞后按 b905880c 的
@@ -407,7 +407,7 @@ const completionLive = computed(() => displayReport.value?.completion?.live || 0
     阈值/口径在 title 披露——live 为完成度最高档，登记总数含外挂能力 */
 const completionCardTitle = computed(() => {
   const total = reconciliation.value.total
-  return `完成度未达 live 档的技能 ${global.value.abnormalSkills} 个（0 = 全部达标）；已上线 ${completionLive.value}/${total}（登记总数含外挂能力，live 为完成度最高档）`
+  return `未完成上线的技能 ${global.value.abnormalSkills} 个（0 = 全部上线）；已上线 ${completionLive.value}/${total}（含外挂能力）`
 })
 
 /** 概要卡 tooltip：解释口径，避免红色数字误读 */
@@ -426,7 +426,7 @@ const reconCardTitle = computed(() => {
   // 2026-10-07 F6-3：未计入本卡的两类如实披露并指路——它们在「对账」页签内没有可定位的行/pill，
   // 各自的可定位项住在健康检查页签的对应行，不并入本卡以免「KPI 亮 N 而筛选 0 行」
   const excluded: string[] = []
-  if (r.zombieActive > 0) excluded.push(`失效生效版本 ${r.zombieActive}（户口簿已无此技能，对账表不收录；见健康检查「ACTIVE 检查（W1）」行）`)
+  if (r.zombieActive > 0) excluded.push(`失效生效版本 ${r.zombieActive}（该技能已不在平台注册档案中，不计入完成度统计；见健康检查「ACTIVE 检查（W1）」行）`)
   if (r.unwired > 0) excluded.push(`接线不一致 ${r.unwired}（见健康检查「接线对账（W3）」行）`)
   const exclNote = excluded.length ? `；另有未计入本卡（对账页签内无可定位行）：${excluded.join('、')}` : ''
   const note = r.zombieSkillActive > 0 ? `（另有 ${r.zombieSkillActive} 条失效 ACTIVE 与健康检查「生效版本检查」同源，不重复计数）` : ''
@@ -434,7 +434,7 @@ const reconCardTitle = computed(() => {
   return parts.join(' · ') + exclNote + note + scope
 })
 const skillCountTitle = computed(
-  () => `登记总数 ${global.value.total} = Skill 运行 ${global.value.total - extraCapabilityCount} 个 + 外挂能力 ${extraCapabilityCount} 个（数据源 prompts/skills.yaml）`,
+  () => `登记总数 ${global.value.total} = Skill 运行 ${global.value.total - extraCapabilityCount} 个 + 外挂能力 ${extraCapabilityCount} 个（来源：平台提示词配置）`,
 )
 /** 页头注记（2026-10-04 状态条退役）：「更新于 X」自状态条并入——加载期「检测中…」、
     有报告带更新时间、报告未就绪维持「60s 自动检测」；报告覆盖口径（skillCountTitle）挂注记 title。
@@ -442,7 +442,7 @@ const skillCountTitle = computed(
 const refreshNote = computed(() => {
   if (loading.value) return '检测中…'
   // 对账页签数据不随 60s 轮询（进入页签时拉取一次）：注记在「对账」页签如实切口径（审核 #83）
-  if (hcTab.value === 'recon') return '对账进入本页签时刷新（健康报告仍 60s 自动检测）'
+  if (hcTab.value === 'recon') return '进入本页签时刷新；健康报告每 60 秒自动检测'
   const iso = displayReport.value?.generatedAt
   return iso ? `60s 自动检测 · 更新于 ${timeAgo(iso)}` : '60s 自动检测'
 })
@@ -539,7 +539,7 @@ const distribution = computed(() => displayReport.value?.completion.distribution
 const healthAbnormal = computed(() => displayReport.value?.health.abnormal ?? 0)
 /** 检查异常卡悬停：只给增量口径（值/总数已在 value/hint 可见，title 不再复读——CP2/CP9） */
 const healthAbnormalTitle = computed(
-  () => '异常 = error / warn 检查项；info 为只读观测，不计入异常。点击切到「健康检查」页签'
+  () => '异常为 error / warn 检查项；info 仅供参考，不计入异常。点击切到「健康检查」页签'
 )
 
 const completionTiers = COMPLETION_META
@@ -595,7 +595,7 @@ function serviceBadge(tone: string): { cls: string; label: string } {
   if (tone === 'info') return { cls: 'mk-badge--info', label: '观测' }
   return { cls: 'mk-badge--ok', label: '正常' }
 }
-/** 13 项检查 → 每基准域一张服务卡：状态点取域内最高严重度，计数为域内检查项的真实分布。
+/** 全部检查项 → 每基准域一张服务卡：状态点取域内最高严重度，计数为域内检查项的真实分布。
     卡序按 tone 严重度降序（error → warn → ok，P2）：异常域排前，10 秒内先看到哪里出事 */
 const SERVICE_TONE_ORDER: Record<string, number> = { error: 0, warn: 1, ok: 2, info: 3 }
 const serviceCards = computed(() => {
@@ -651,7 +651,14 @@ function feedDesc(item: HealthCenterItem): string {
 
 /** 行内明细展开状态（默认：异常/关注项展开，正常项收起） */
 const detailOpenIds = ref<Set<string>>(new Set())
+/* G4（2026-10-10）：只播种一次。此前 watch 对每份新 items 数组都重播种——本页 60s 轮询
+   每轮替换 report（health.items 新数组引用），把用户手动收起/展开的明细打回默认态
+   （外部评审命中）。取舍：轮询后新出现的异常项不再自动展开——服务卡红点/告警事件流
+   仍会突出它，?check= 深链（下方 watch）也仍可展开定位目标行；两相权衡保用户态优先。 */
+let detailSeeded = false
 function seedDetailOpen(items: HealthCenterItem[]) {
+  if (detailSeeded) return
+  detailSeeded = true
   const s = new Set<string>()
   for (const i of items) if (isHealthAbnormal(i)) s.add(i.id)
   detailOpenIds.value = s
@@ -792,6 +799,9 @@ function goDrift(kind: keyof HealthDriftSummary) {
     2026-09-29 抽出后那条路径只会绕一圈回到本页（Skills 侧还会把退役 tab 改投回来）。 */
 function jump(id: HealthCenterItemId) {
   if (id === 'field-routing' || id === 'field-routing-contract' || id === 'fields-sync') void router.push('/admin/orchestrator?tab=drift')
+  // 编排步骤解析（2026-10-12 从编排图页告警条搬进健康中心）：原页级告警的落点在此复现——
+  // 编排图「字段旅程」面板里红「未解析」徽章即名单（切面板后按阶段 chips 逐段核对）
+  else if (id === 'orchestration-steps') void router.push('/admin/orchestrator?tab=journey')
   else if (id === 'yaml-crosscheck' || id === 'params-consistency') void router.push(workbenchPath(id))
   else {
     // 域内定位（2026-10-04 平铺改页签）：先切到健康检查页签，再展开目标行并滚动定位

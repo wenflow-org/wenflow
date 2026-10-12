@@ -799,6 +799,7 @@ export type HealthCenterItemId =
   | 'field-routing-contract'
   | 'field-routing'
   | 'contract-parity'
+  | 'orchestration-steps'
   | 'snapshots'
   | 'yaml-crosscheck'
   | 'params-consistency'

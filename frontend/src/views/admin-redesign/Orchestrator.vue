@@ -9,35 +9,12 @@
         <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
       </template>
     </MkPageHead>
-    <!-- 告警条（2026-10-12 用户走查二拍：红卡不再以 KPI 形态出现——单卡在 flex 栅格内被
-         拉满整条 1612px，读作一张巨大 KPI 卡，而它本是告警不是读数）。
-         无警时整条不渲染（画布净赚一个带高）；有警走共享行式告警（.mk-alert--row，role=alert），
-         消息 + 动作同排。评审 P1#27「异常→动作→证据断链」：动作必须可点且点名去向——
-         未解析 → 页内切「字段旅程」面板并定位首个含未解析步骤的阶段；
-         哈希漂移 → 健康中心（W4 coreHash 检查归属页，本页治理面板 DriftAuditPanel 只覆盖契约漂移）。 -->
-    <div v-if="unresolvedCount > 0 || w4Drifted.length" class="mk-alert mk-alert--row orch-alert" role="alert">
-      <span class="mk-alert__msg">
-        <template v-if="unresolvedCount > 0">字段未解析 {{ unresolvedCount }} 处</template>
-        <template v-if="unresolvedCount > 0 && w4Drifted.length"> · </template>
-        <template v-if="w4Drifted.length">{{ TERMS.driftHashQualified }} {{ w4Drifted.length }} 处</template>
-      </span>
-      <span class="mk-alert__act">
-        <button
-          v-if="unresolvedCount > 0"
-          type="button"
-          class="mk-alert__btn"
-          title="步骤的输入/输出未对上字段契约；点击切「字段旅程」面板并定位首个含未解析步骤的阶段"
-          @click="goUnresolved()"
-        >查看未解析名单</button>
-        <button
-          v-if="w4Drifted.length"
-          type="button"
-          class="mk-alert__btn"
-          title="W4 core 哈希漂移名单在健康中心的健康检查（w4-corehash）；点击跳转"
-          @click="goHashDrift()"
-        >去健康中心查看</button>
-      </span>
-    </div>
+    <!-- 页级告警已撤（2026-10-12 用户拍板「这个应该放到健康中心」）：拓扑完整性的页级信号
+         （未解析步骤 / W4 哈希漂移）统一归健康中心检查项（orchestration-steps / w4-corehash，
+         本页删去告警条后不再有 KPI 或告警条；健康中心那两项可深链回本页「字段旅程」）。
+         本页保留行级证据：交接明细表的「未解析 N / 哈希漂移 N」徽章（点徽章切面板 / 跳健康中心）。
+         原告警条的实现历史：2026-10-04 状态条退役 → 页首 KPI 带（阶段/Skill/交接 + 两枚红卡）
+         → 2026-10-12 三张纯读数卡撤、红卡改行式告警条 → 同日告警整体迁健康中心。 -->
 
     <!-- 子面板页签（原型 .tabs 下划线页签：2026-10-01 由 mk-pills 胶囊迁入——
          胶囊只做筛选 chips，视图/分区切换归页签）：四个面板统一可达——
@@ -148,8 +125,8 @@
                   {{ h.from }} → {{ h.to }}
                   <!-- 治理信号随行（口径与页首告警条两枚红卡同源，2026-10-04 状态条退役）；点跳转复用红卡落点。
                        审核 #96：徽章入口原是无 role/tabindex 的 span + @click，键盘不可达；改真 <button> -->
-                  <button v-if="h.unresolvedN" type="button" class="mk-badge mk-badge--sm mk-badge--warn orch-handoff__badge-btn" title="该交接上游阶段存在未解析步骤（末段含下游阶段，四行合计 = 页首读数） · 点击切「字段旅程」定位" @click="goUnresolved()">未解析 {{ h.unresolvedN }}</button>
-                  <button v-if="h.driftN" type="button" class="mk-badge mk-badge--sm mk-badge--bad orch-handoff__badge-btn" title="该交接上游 Agent 命中 W4 core 哈希漂移名单（末段含下游 Agent，四行合计 = 页首读数） · 点击跳健康中心" @click="goHashDrift()">哈希漂移 {{ h.driftN }}</button>
+                  <button v-if="h.unresolvedN" type="button" class="mk-badge mk-badge--sm mk-badge--warn orch-handoff__badge-btn" title="该交接上游阶段存在未解析步骤（末段含下游阶段，四行合计 = 全量；页级读数与名单在健康中心「步骤解析」项） · 点击切「字段旅程」定位" @click="goUnresolved()">未解析 {{ h.unresolvedN }}</button>
+                  <button v-if="h.driftN" type="button" class="mk-badge mk-badge--sm mk-badge--bad orch-handoff__badge-btn" title="该交接上游 Agent 命中 W4 core 哈希漂移名单（末段含下游 Agent，四行合计 = 全量；名单在健康中心 w4-corehash） · 点击跳健康中心" @click="goHashDrift()">哈希漂移 {{ h.driftN }}</button>
                 </td>
                 <td class="mono orch-handoff__agent">{{ h.fromAgent }}</td>
                 <td class="mono orch-handoff__agent">{{ h.toAgent }}</td>
@@ -601,8 +578,9 @@ const stageHandoffs = computed(() => {
       fields: contractOf(down.id).ins,
       loaded: contractOf(down.id).loaded === true,
       // 阶段归属不重复计（审核 #101）：与未解析同纪律——上游阶段记进本交接，末阶段（无下游交接）
-      // 回记到最后一段，四行合计 === 页首 KPI 的 w4Drifted.length（每阶段恰计一次）。
-      // 原 driftOf(up)+driftOf(down) 把中间阶段各计两次，合计大于页首读数，两处同源治理口径互相冲突。
+      // 回记到最后一段，四行合计 === w4Drifted.length（每阶段恰计一次）。
+      // 原 driftOf(up)+driftOf(down) 把中间阶段各计两次，合计大于全量，两处同源治理口径互相冲突。
+      // （页级读数 2026-10-12 迁健康中心，本页只留这四行行级证据）
       unresolvedN: unresolvedOf(up) + (i === stages.value.length - 2 ? unresolvedOf(down) : 0),
       driftN: driftOf(up.agentId) + (i === stages.value.length - 2 ? driftOf(down.agentId) : 0),
     })
@@ -670,12 +648,8 @@ const skillKpiTitle = computed(
   () =>
     `编排图内挂载的 Skill 数（各阶段合计，当前 ${stages.value.length} 个阶段）。治理卡「Skill 定义」与侧栏徽章的统计范围不同，数值不必相等`
 )
-const unresolvedCount = computed(() =>
-  stages.value.reduce(
-    (sum, st) => sum + (st.defSteps || []).filter((d) => d.resolved?.unresolved).length,
-    0
-  )
-)
+/* 页级「未解析」读数（原告警条用）已随告警迁健康中心（检查项 orchestration-steps）删除；
+   行级未解析仍在交接明细的徽章里（unresolvedOf 按阶段计数，末段含下游阶段，四行合计恰为全量）。 */
 // 空拓扑时 current 为 undefined，模板由 v-if="current" 保护
 const current = computed<Stage | undefined>(() => stages.value.find((s) => s.id === active.value) || stages.value[0])
 // 首屏加载中（live boot 未完成且尚无阶段数据）：用于抑制「0 阶段 / 暂无数据」的假空态
@@ -776,9 +750,7 @@ const govMetaTitle = computed(() =>
 
 /* 沙盘（深链次要入口）顶部条 */
 
-/* 告警条（2026-10-12）：共享 .mk-alert--row 只保证动作区不收缩（.mk-alert__act flex-shrink:0），
-   两枚动作钮的间距由本页给（未解析与哈希漂移可能同排出现） */
-.orch-alert .mk-alert__act { display: inline-flex; align-items: center; gap: 14px; }
+/* 告警条样式（.orch-alert）随页级告警迁健康中心一并删除（2026-10-12） */
 
 /* ================= 暗色模式（D1 补完）：编排图 ================= */
 html[data-theme='dark'] {

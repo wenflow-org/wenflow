@@ -3,8 +3,8 @@ import { listActiveAgentPrompts } from '../../services/agent-prompt.service';
 import { listPromptCallLogs } from '../../services/prompt-call-log.service';
 import {
   listAgentManifest,
-  getAgentManifest,
 } from '../../services/agent-manifest.service';
+import { resolveStepAgent } from '../../services/orchestration-steps.service';
 import {
   SKILL_RUNTIME_DEFINITIONS,
   ORCHESTRATOR_RUNTIME_DEFINITIONS,
@@ -36,28 +36,9 @@ function parseJson(value: string | null | undefined) {
 
 const skillDefMap = new Map(SKILL_RUNTIME_DEFINITIONS.map((def) => [def.id, def]));
 
-/**
- * 实时编译：编排 steps 的 agentId → manifest 解析（displayName/kind）
- * 服务节点（kind: 'service'）不在 manifest，保留原 id 并标注 service
- */
-function resolveStepAgent(agentId: string, step?: { kind?: string }) {
-  const entry = getAgentManifest(agentId);
-  if (entry) {
-    return {
-      agentId: entry.id,
-      displayName: entry.name,
-      kind: entry.kind,
-      nodeKind: step?.kind || entry.kind,
-    };
-  }
-  return {
-    agentId,
-    displayName: agentId,
-    kind: step?.kind || 'unknown',
-    nodeKind: step?.kind || 'unknown',
-    unresolved: true,
-  };
-}
+/* resolveStepAgent（编排 steps 的 agentId → manifest 解析）已提升到
+   services/orchestration-steps.service.ts 单一实现：健康中心「步骤解析」检查项与本端点
+   同口径复用（health-center.service.ts 头注：禁止复制逻辑）。 */
 
 function compileOrchestrator(def: (typeof ORCHESTRATOR_RUNTIME_DEFINITIONS)[number]) {
   return {

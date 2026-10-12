@@ -127,9 +127,9 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   { term: '类型不一致', category: 'status', def: '同一个字段在 core 与编排两边的类型声明不一致（如 string vs number）' },
 
   // ---- 健康中心（health） ----
-  { term: '健康中心', category: 'health', def: '13 项系统健康检查的聚合清单，位于编排结构页顶部"健康区"；每项带严重度与修复动作', where: '编排结构页顶部' },
-  { term: '健康分', category: 'health', def: '总览页的"今日调用成功率"评分（0-100），与"健康区"（13 项系统检查）是两套不同口径；页面已改名为「今日成功率」' },
-  { term: '检查项', category: 'health', def: '健康区里的每一项系统检查（共 13 项），每项带严重度、状态与修复动作' },
+  { term: '健康中心', category: 'health', def: '14 项系统健康检查的聚合清单（侧栏「健康中心」）；每项带严重度与修复动作', where: '侧栏 → 健康中心' },
+  { term: '健康分', category: 'health', def: '总览页的"今日调用成功率"评分（0-100），与健康中心（14 项系统检查）是两套不同口径；页面已改名为「今日成功率」' },
+  { term: '检查项', category: 'health', def: '健康中心里的每一项系统检查（共 14 项），每项带严重度、状态与修复动作' },
   { term: 'W1 注册对账', category: 'health', def: '户口簿活跃技能 ↔ ACTIVE prompt 的双向核对：谁缺 ACTIVE、谁是多出来的残留' },
   { term: 'W2 注册表对账', category: 'health', def: '户口簿 ↔ 系统注册表（skill_registrations）的双向核对：谁没注册、谁是多出来的幽灵' },
   { term: 'W3 接线对账', category: 'health', def: '运行时定义的执行步骤 ↔ 户口簿 coordinator 声明是否一致' },
@@ -142,6 +142,7 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   { term: 'override-record', category: 'health', def: 'admin 手工覆盖行的清单（覆盖权高于文件基准，只读展示）' },
   { term: 'runtime-prompt', category: 'health', def: '运行时遥测：每次 LLM 调用时比对代码侧 prompt 与 DB ACTIVE 是否一致' },
   { term: 'snapshots', category: 'health', def: '自动生成的沙盘说明书（agent-snapshots.md）与声明是否逐字节一致' },
+  { term: 'orchestration-steps', category: 'health', def: '编排步骤解析：编排定义里的步骤引用的 agent 是否都在 Agent 名册里——查不到即该步骤运行时不可路由（显示名/类型无从解析）', where: '健康中心 → 健康检查' },
 ];
 
 // ============================================================

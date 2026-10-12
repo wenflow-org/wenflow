@@ -53,6 +53,7 @@ const EXPECTED_BASE_BY_ID: Record<string, string> = {
   'field-routing-contract': 'file:manifest',
   'field-routing': 'file:orchestration',
   'contract-parity': 'file:manifest',
+  'orchestration-steps': 'file:orchestration',
   snapshots: 'file:orchestration',
   'yaml-crosscheck': 'file:core.yaml',
   'params-consistency': 'file:core.yaml',
@@ -69,6 +70,9 @@ const EXPECTED_SEMANTICS_BY_ID: Record<string, string> = {
   'field-routing-contract': 'baseline-drift',
   'field-routing': 'baseline-drift',
   'contract-parity': 'baseline-drift',
+  // 2026-10-12：编排步骤解析（编排定义 steps ↔ Agent 名册）——无单方基准可自动修
+  // （要么注册 agent，要么改编排指向），归 consistency + manual
+  'orchestration-steps': 'consistency',
   snapshots: 'baseline-drift',
   'yaml-crosscheck': 'baseline-drift',
   // 2026-09-29 语义重分类：参数一致性是「core ↔ definition.ts 镜像」的对等比对（core 唯一写源），
@@ -92,9 +96,9 @@ describe('健康中心聚合（基准体系版）', () => {
 
     expect(report.generatedAt).toBeTruthy();
     expect(report.summary.total).toBe(report.items.length);
-    expect(report.summary.total).toBeGreaterThanOrEqual(13);
+    expect(report.summary.total).toBeGreaterThanOrEqual(14);
     expect(report.summary.baselineDrift).toBe(6);
-    expect(report.summary.consistency).toBe(5);
+    expect(report.summary.consistency).toBe(6);
     expect(report.summary.overrideRecord).toBe(1);
     expect(typeof report.summary.fixable).toBe('number');
 
@@ -160,6 +164,18 @@ describe('健康中心聚合（基准体系版）', () => {
     expect(overrideRecord.count).toBe(0);
     expect(overrideRecord.status).toBe('none');
     expect(overrideRecord.action).toBe('none');
+
+    // 编排步骤解析（2026-10-12 从编排图页告警条搬来）：只报真正查不到参与方的步骤。
+    // 编排图页的「未解析 N」是显示口径（服务步骤 + v4 辅助技能按约定不在 Agent 名册，
+    // 属注解不是故障）——本项排除这两类，故当前应为 0（真缺陷 = 引用了不存在的 agent/技能）。
+    const orchSteps = byId.get('orchestration-steps')!;
+    expect(orchSteps.semantics).toBe('consistency');
+    expect(orchSteps.base).toBe('file:orchestration');
+    expect(orchSteps.action).toBe('manual');
+    expect(orchSteps.count).toBe(0);
+    expect(orchSteps.severity).toBe('ok');
+    expect(orchSteps.status).toBe('clean');
+    expect(orchSteps.detail.length).toBe(Math.min(orchSteps.count, 20));
 
     const runtime = byId.get('runtime-prompt')!;
     expect(runtime.semantics).toBe('runtime-info');
