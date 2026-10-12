@@ -18,6 +18,8 @@ export interface TeachHistoryItem {
   id: string
   taskId: string
   taskTitle: string
+  /** 会话终态（completed/discarded/...）：同课多会话时用于挑选有总结的那条 */
+  status?: string
 }
 
 export function buildLearnLessons(
@@ -25,9 +27,22 @@ export function buildLearnLessons(
   history: TeachHistoryItem[],
   current: { currentTaskId: string; currentTeachingId: string; runtimeStatus: string }
 ): LearnLesson[] {
+  /* 同课多会话（2026-10-12 真机：一节课 10 条历史，9 条 discarded + 1 条 timeout）：
+     last-write-wins 会把课映射到无总结的废弃会话。分级取优——completed（全量总结）>
+     timeout / finalization_failed（课堂发生过，常有 summary-only 降级总结）> 其余
+     （discarded=中断重试，无总结）；同分保持先到（后端历史新→旧，先到=最新）。 */
+  const rankOf = (status: string) =>
+    status === 'completed' ? 0 : status === 'timeout' || status === 'finalization_failed' ? 1 : 2
   const historyByTask = new Map<string, string>()
+  const rankByTask = new Map<string, number>()
   for (const item of history) {
-    if (item.taskId) historyByTask.set(item.taskId, item.id)
+    if (!item.taskId || !item.id) continue
+    const rank = rankOf(item.status || '')
+    const prevRank = rankByTask.get(item.taskId)
+    if (prevRank === undefined || rank < prevRank) {
+      historyByTask.set(item.taskId, item.id)
+      rankByTask.set(item.taskId, rank)
+    }
   }
   const lessons: LearnLesson[] = []
   for (const m of milestones) {

@@ -586,20 +586,21 @@ describe('SessionCockpit 双模式', () => {
     await row!.trigger('click');
     await settle();
     expect(getRealSessionConsole).toHaveBeenCalledWith('ts_arch_1');
-    // 转录与单课总结就地切换（不跳页）
+    // 转录就地切换（不跳页）；单课总结不在此渲染（2026-10-12 二次拍板「总结就单独总结」——总结只住总结页签）
     expect(wrapper.find('.cp-lesson-head').text()).toContain('参数与返回值');
     expect(wrapper.text()).toContain('第二课的课堂记录标记');
-    expect(wrapper.text()).toContain('第二课小结');
+    expect(wrapper.text()).not.toContain('第二课小结');
 
-    // 总结页签：已完成且有关课堂的行可点（真实模式不再整表只读）
+    // 总结页签：单课总结列表就地展开（不再跳 Learn；2026-10-12 二次拍板）
     await wrapper.findAll('.cp-stp')[3].trigger('click'); // 总结页签
     await settle();
-    const summaryBtn = wrapper.findAll('.cp-wrapup-lesson').find((b) => b.element.tagName === 'BUTTON' && (b.text() || '').includes('参数与返回值'));
-    expect(summaryBtn, '总结页签第 2 课应为可点按钮').toBeTruthy();
+    const summaryBtn = wrapper.findAll('.cp-wrapup-sum__row').find((b) => (b.text() || '').includes('参数与返回值'));
+    expect(summaryBtn, '总结页签应有第 2 课的单课总结行').toBeTruthy();
     await summaryBtn!.trigger('click');
     await settle();
-    expect(wrapper.find('#cp-tabpanel-learning').exists()).toBe(true);
-    expect(wrapper.text()).toContain('第二课的课堂记录标记');
+    expect(wrapper.find('#cp-tabpanel-wrapup').exists()).toBe(true);
+    expect(getRealSessionConsole).toHaveBeenCalledWith('ts_arch_1');
+    expect(wrapper.find('.cp-wrapup-sum__body').text()).toContain('第二课小结');
 
     wrapper.unmount();
   });

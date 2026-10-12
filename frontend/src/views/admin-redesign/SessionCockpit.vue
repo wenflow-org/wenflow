@@ -413,94 +413,8 @@
               </div>
               <!-- 加载态用骨架，禁止纯文字（T2 硬约束；2026-10-06 审核 #47） -->
               <MkSkeleton v-if="teachingDetailLoading" variant="rows" :count="3" :h="12" :radius="4" />
-              <!-- 课时总结卡片 -->
-              <div v-if="hasLessonWrapup && lessonWrapup" class="cp-lesson-wrapup" :class="{ 'is-degraded': lessonWrapup.degraded }">
-                <div class="cp-lesson-wrapup__head">
-                  <span class="cp-lesson-wrapup__badge" :class="{ 'is-degraded': lessonWrapup.degraded }">
-                    {{ lessonWrapup.degraded ? '⚠ 降级总结 · 本课未完整结束' : '✓ 本课总结' }}
-                  </span>
-                  <span class="cp-lesson-wrapup__scores">
-                    <span v-if="lessonWrapup.duration" class="cp-lesson-wrapup__score">{{ lessonWrapup.duration }} 分钟</span>
-                    <span v-if="lessonWrapup.turnCount" class="cp-lesson-wrapup__score">{{ lessonWrapup.turnCount }} 轮对话</span>
-                    <span v-if="lessonWrapup.avgUnderstanding !== null" class="cp-lesson-wrapup__score">理解 {{ Math.round(lessonWrapup.avgUnderstanding * 100) }}%</span>
-                    <span v-if="lessonWrapup.avgEngagement !== null" class="cp-lesson-wrapup__score">参与 {{ Math.round(lessonWrapup.avgEngagement * 100) }}%</span>
-                    <span v-if="lessonWrapup.lss !== null" class="cp-lesson-wrapup__score cp-lesson-wrapup__score--primary">LSS {{ scoreText(lessonWrapup.lss) }}</span>
-                    <span v-if="lessonWrapup.ktl !== null" class="cp-lesson-wrapup__score cp-lesson-wrapup__score--primary">KTL {{ scoreText(lessonWrapup.ktl) }}</span>
-                  </span>
-                </div>
-                <div class="cp-lesson-wrapup__body">
-                  <p v-if="lessonWrapup.degraded" class="cp-lesson-wrapup__notice">
-                    本节课未完整结束（超时或提前中断），以下仅保留基础学习记录；完整练习建议与课堂评价未生成。
-                  </p>
-                  <!-- 主题摘要 / 学习评估（2026-10-12 走查）：门槛读这两个字段、卡身却从未渲染——
-                       真实课堂的 wrapup 恰好只有这几项，此前卡显示「✓ 本课总结」但正文空空 -->
-                  <div v-if="lessonWrapup.topicSummary" class="cp-lesson-wrapup__section">
-                    <span class="cp-lesson-wrapup__section-title">主题摘要</span>
-                    <p class="cp-lesson-wrapup__text">{{ lessonWrapup.topicSummary }}</p>
-                  </div>
-                  <div v-if="lessonWrapup.learningEvaluation" class="cp-lesson-wrapup__section">
-                    <span class="cp-lesson-wrapup__section-title">学习评估</span>
-                    <p class="cp-lesson-wrapup__text">{{ lessonWrapup.learningEvaluation }}</p>
-                  </div>
-                  <!-- 知识点掌握 -->
-                  <div v-if="lessonWrapup.knowledgeItems.length" class="cp-lesson-wrapup__section">
-                    <span class="cp-lesson-wrapup__section-title">知识点掌握</span>
-                    <div v-for="k in lessonWrapup.knowledgeItems" :key="k.name" class="cp-lesson-wrapup__kp">
-                      <span class="cp-lesson-wrapup__kp-name">{{ k.name }}</span>
-                      <span class="cp-lesson-wrapup__kp-status" :class="`is-${k.status}`">{{ { mastered: '✓ 已掌握', learning: '学习中', review: '待复习' }[k.status] || k.status }}</span>
-                      <!-- 单值进度条走共享原语 .mk-minibar（原 .cp-lesson-wrapup__kp-bar 是它的逐字重写：
-                           同 6px / 999px / --mk-minibar-bg，只是没挂原语类） -->
-                      <span class="mk-minibar"><i class="mk-minibar__fill" data-tone="ok" :style="{ width: (k.progress || 0) + '%' }"></i></span>
-                    </div>
-                  </div>
-
-                  <!-- 关键收获 -->
-                  <div v-if="lessonWrapup.keyTakeaways.length" class="cp-lesson-wrapup__section">
-                    <span class="cp-lesson-wrapup__section-title">关键收获</span>
-                    <ul class="cp-lesson-wrapup__takeaways">
-                      <li v-for="(t, i) in lessonWrapup.keyTakeaways" :key="i">{{ t }}</li>
-                    </ul>
-                  </div>
-
-                  <!-- 练习建议 -->
-                  <div v-if="lessonWrapup.practiceAdvice" class="cp-lesson-wrapup__section">
-                    <span class="cp-lesson-wrapup__section-title">练习建议</span>
-                    <p class="cp-lesson-wrapup__text">{{ lessonWrapup.practiceAdvice }}</p>
-                  </div>
-
-                  <!-- 困惑点 -->
-                  <div v-if="lessonWrapup.confusionPoints.length" class="cp-lesson-wrapup__section">
-                    <span class="cp-lesson-wrapup__section-title">困惑点</span>
-                    <ul class="cp-lesson-wrapup__takeaways">
-                      <li v-for="(c, i) in lessonWrapup.confusionPoints" :key="i">{{ c }}</li>
-                    </ul>
-                  </div>
-
-                  <!-- 评估亮点 -->
-                  <div v-if="lessonWrapup.strengths.length || lessonWrapup.improvements.length" class="cp-lesson-wrapup__section">
-                    <span class="cp-lesson-wrapup__section-title">评估</span>
-                    <div v-if="lessonWrapup.strengths.length" class="cp-lesson-wrapup__eval-item">
-                      <span class="cp-lesson-wrapup__eval-label cp-lesson-wrapup__eval-label--good">优势</span>
-                      <ul class="cp-lesson-wrapup__eval-list">
-                        <li v-for="s in lessonWrapup.strengths" :key="s">{{ s }}</li>
-                      </ul>
-                    </div>
-                    <div v-if="lessonWrapup.improvements.length" class="cp-lesson-wrapup__eval-item">
-                      <span class="cp-lesson-wrapup__eval-label cp-lesson-wrapup__eval-label--warn">改进</span>
-                      <ul class="cp-lesson-wrapup__eval-list">
-                        <li v-for="s in lessonWrapup.improvements" :key="s">{{ s }}</li>
-                      </ul>
-                    </div>
-                  </div>
-
-                  <!-- 情绪 & 认知 -->
-                  <div v-if="lessonWrapup.dominantCognitiveLevel" class="cp-lesson-wrapup__meta-row">
-                    <span v-if="lessonWrapup.dominantCognitiveLevel">认知: {{ lessonWrapup.dominantCognitiveLevel }} → {{ lessonWrapup.lastCognitiveLevel }}</span>
-                    <span>情绪: 😊{{ lessonWrapup.positiveEmotions }} 😐{{ lessonWrapup.neutralEmotions }} 😤{{ lessonWrapup.frustratedEmotions }} 😕{{ lessonWrapup.confusedEmotions }}</span>
-                    <span v-if="lessonWrapup.fatigueRisk">疲劳风险: {{ lessonWrapup.fatigueRisk }}</span>
-                  </div>
-                </div>
-              </div>
+              <!-- 单课总结不在此渲染（2026-10-12 二次拍板「总结就单独总结」）：总结只住总结页签，
+                   本列只放课堂对话；要总结去总结页点对应课。 -->
               <template v-if="learnConversationMessages.length">
                 <article v-for="(message, index) in learnConversationMessages" :key="`learn-${index}`" class="cp-transcript__message" :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'">
                   <span>{{ message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
@@ -541,45 +455,7 @@
             <button v-if="realMaterials.length" type="button" class="mk-link" title="学习者资料归 Goal 阶段页；点击切换" @click="selectStageTab('goal')">学习者资料在 Goal 页 →</button>
           </div>
 
-          <!-- 课时进度概览：这棵树是 Learn 阶段的课表（同一份 68 课清单在「Path 内容」页签也渲染），
-               展开时占 2600+px 会把终局总结本身挤出首屏——终局总结已生成时收成折叠块（2026-10-11 走查
-               「既然有状态，为什么下面都堆着数据呢，各个阶段的」）。未生成总结时它是本页签唯一内容，保持展开。
-               折叠惯例同页内「里程碑 · N 个」。 -->
-          <details class="cp-wrapup-lessons" v-if="lessonTree.length" :open="!hasWrapup">
-            <summary class="cp-wrapup-lessons__summary">
-              课时进度
-              <span class="cp-wrapup-lessons__meta">{{ lessonTree.length }} 个里程碑 · {{ learnLessons.length }} 节课</span>
-            </summary>
-            <div v-for="group in lessonTree" :key="group.milestone" class="cp-wrapup-ms">
-              <div class="cp-wrapup-ms__head">
-                <span class="cp-wrapup-ms__title">{{ group.milestone }}</span>
-                <span class="cp-wrapup-ms__count">{{ group.doneCount }}/{{ group.lessons.length }}</span>
-              </div>
-              <!-- 行即 button（原 div+click 键盘不可达）：已完成且有关课堂的课可点（两个模式同权——
-                   真实单课数据自 2026-10-12 走会话控制台端点解锁，见 loadTeachingDetail）；
-                   无课堂会话的行（未开始 / 未落课堂）渲染只读行，不给恒 disabled 的假入口（FN4）。 -->
-              <template v-for="l in group.lessons" :key="l.taskId">
-                <button
-                  v-if="l.state === 'done' && l.teachingSessionId"
-                  type="button"
-                  class="cp-wrapup-lesson is-done"
-                  @click="viewLessonSummary(l)"
-                >
-                  <span class="cp-wrapup-lesson__mark">{{ lessonMark(l.state) }}</span>
-                  <span class="cp-wrapup-lesson__num">第{{ lessonNumber(l.taskId) }}课</span>
-                  <span class="cp-wrapup-lesson__title">{{ l.title }}</span>
-                  <span class="cp-wrapup-lesson__action">查看总结 →</span>
-                </button>
-                <div v-else class="cp-wrapup-lesson is-readonly" :class="{ 'is-done': l.state === 'done', 'is-active': l.state === 'active' }">
-                  <span class="cp-wrapup-lesson__mark">{{ lessonMark(l.state) }}</span>
-                  <span class="cp-wrapup-lesson__num">第{{ lessonNumber(l.taskId) }}课</span>
-                  <span class="cp-wrapup-lesson__title">{{ l.title }}</span>
-                </div>
-              </template>
-            </div>
-          </details>
-
-          <!-- 终局总结（已生成时） -->
+          <!-- 终局总结（已生成时；总在前、单课分列在后） -->
           <template v-if="hasWrapup">
             <div class="cp-wrapup-stats" v-if="pathDetailTitle || wrapupSourceBadge">
               <div class="cp-wrapup-stats__goal" v-if="pathDetailTitle">
@@ -615,12 +491,125 @@
             </div>
           </template>
 
+          <!-- 单课总结（2026-10-12 二次拍板「总结就单独总结，不再和课程混在一起」）：课表归 Learn
+               （同一棵树不在总结页重复出现），本页签只放总结——已完成且落了课堂的课就地展开，
+               不再跳 Learn；终局总结生成后在其上方。手风琴单开：lessonWrapup 是单课计算值。 -->
+          <div v-if="wrapupLessonRows.length" class="cp-wrapup-sums">
+            <div class="cp-wrapup-sums__head">
+              <span class="cp-wrapup-sums__title">单课总结</span>
+              <span class="cp-wrapup-sums__meta">{{ wrapupLessonRows.length }} 节已完成<template v-if="!hasWrapup"> · 终局总结在全部课程完成后生成</template></span>
+            </div>
+            <div v-for="l in wrapupLessonRows" :key="l.taskId" class="cp-wrapup-sum">
+              <button
+                type="button"
+                class="cp-wrapup-sum__row"
+                :class="{ 'is-open': expandedWrapupTaskId === l.taskId }"
+                :aria-expanded="expandedWrapupTaskId === l.taskId"
+                @click="toggleWrapupLesson(l)"
+              >
+                <span class="cp-wrapup-sum__mark">✓</span>
+                <span class="cp-wrapup-sum__num">第{{ lessonNumber(l.taskId) }}课</span>
+                <span class="cp-wrapup-sum__title">{{ l.title }}</span>
+                <span class="cp-wrapup-sum__caret" aria-hidden="true">{{ expandedWrapupTaskId === l.taskId ? '▾' : '▸' }}</span>
+              </button>
+              <div v-if="expandedWrapupTaskId === l.taskId" class="cp-wrapup-sum__body">
+                <!-- 加载态用骨架，禁止纯文字（T2 硬约束；2026-10-06 审核 #47） -->
+                <MkSkeleton v-if="teachingDetailLoading" variant="rows" :count="3" :h="12" :radius="4" />
+                <div v-else-if="hasLessonWrapup && lessonWrapup" class="cp-lesson-wrapup" :class="{ 'is-degraded': lessonWrapup.degraded }">
+                  <div class="cp-lesson-wrapup__head">
+                    <span class="cp-lesson-wrapup__badge" :class="{ 'is-degraded': lessonWrapup.degraded }">
+                      {{ lessonWrapup.degraded ? '⚠ 降级总结 · 本课未完整结束' : '✓ 本课总结' }}
+                    </span>
+                    <span class="cp-lesson-wrapup__scores">
+                      <span v-if="lessonWrapup.duration" class="cp-lesson-wrapup__score">{{ lessonWrapup.duration }} 分钟</span>
+                      <span v-if="lessonWrapup.turnCount" class="cp-lesson-wrapup__score">{{ lessonWrapup.turnCount }} 轮对话</span>
+                      <span v-if="lessonWrapup.avgUnderstanding !== null" class="cp-lesson-wrapup__score">理解 {{ Math.round(lessonWrapup.avgUnderstanding * 100) }}%</span>
+                      <span v-if="lessonWrapup.avgEngagement !== null" class="cp-lesson-wrapup__score">参与 {{ Math.round(lessonWrapup.avgEngagement * 100) }}%</span>
+                      <span v-if="lessonWrapup.lss !== null" class="cp-lesson-wrapup__score cp-lesson-wrapup__score--primary">LSS {{ scoreText(lessonWrapup.lss) }}</span>
+                      <span v-if="lessonWrapup.ktl !== null" class="cp-lesson-wrapup__score cp-lesson-wrapup__score--primary">KTL {{ scoreText(lessonWrapup.ktl) }}</span>
+                    </span>
+                  </div>
+                  <div class="cp-lesson-wrapup__body">
+                    <p v-if="lessonWrapup.degraded" class="cp-lesson-wrapup__notice">
+                      本节课未完整结束（超时或提前中断），以下仅保留基础学习记录；完整练习建议与课堂评价未生成。
+                    </p>
+                    <!-- 主题摘要 / 学习评估（2026-10-12 走查）：门槛读这两个字段、卡身却从未渲染——
+                         真实课堂的 wrapup 恰好只有这几项，此前卡显示「✓ 本课总结」但正文空空 -->
+                    <div v-if="lessonWrapup.topicSummary" class="cp-lesson-wrapup__section">
+                      <span class="cp-lesson-wrapup__section-title">主题摘要</span>
+                      <p class="cp-lesson-wrapup__text">{{ lessonWrapup.topicSummary }}</p>
+                    </div>
+                    <div v-if="lessonWrapup.learningEvaluation" class="cp-lesson-wrapup__section">
+                      <span class="cp-lesson-wrapup__section-title">学习评估</span>
+                      <p class="cp-lesson-wrapup__text">{{ lessonWrapup.learningEvaluation }}</p>
+                    </div>
+                    <!-- 知识点掌握 -->
+                    <div v-if="lessonWrapup.knowledgeItems.length" class="cp-lesson-wrapup__section">
+                      <span class="cp-lesson-wrapup__section-title">知识点掌握</span>
+                      <div v-for="k in lessonWrapup.knowledgeItems" :key="k.name" class="cp-lesson-wrapup__kp">
+                        <span class="cp-lesson-wrapup__kp-name">{{ k.name }}</span>
+                        <span class="cp-lesson-wrapup__kp-status" :class="`is-${k.status}`">{{ { mastered: '✓ 已掌握', learning: '学习中', review: '待复习' }[k.status] || k.status }}</span>
+                        <!-- 单值进度条走共享原语 .mk-minibar（原 .cp-lesson-wrapup__kp-bar 是它的逐字重写：
+                             同 6px / 999px / --mk-minibar-bg，只是没挂原语类） -->
+                        <span class="mk-minibar"><i class="mk-minibar__fill" data-tone="ok" :style="{ width: (k.progress || 0) + '%' }"></i></span>
+                      </div>
+                    </div>
+
+                    <!-- 关键收获 -->
+                    <div v-if="lessonWrapup.keyTakeaways.length" class="cp-lesson-wrapup__section">
+                      <span class="cp-lesson-wrapup__section-title">关键收获</span>
+                      <ul class="cp-lesson-wrapup__takeaways">
+                        <li v-for="(t, i) in lessonWrapup.keyTakeaways" :key="i">{{ t }}</li>
+                      </ul>
+                    </div>
+
+                    <!-- 练习建议 -->
+                    <div v-if="lessonWrapup.practiceAdvice" class="cp-lesson-wrapup__section">
+                      <span class="cp-lesson-wrapup__section-title">练习建议</span>
+                      <p class="cp-lesson-wrapup__text">{{ lessonWrapup.practiceAdvice }}</p>
+                    </div>
+
+                    <!-- 困惑点 -->
+                    <div v-if="lessonWrapup.confusionPoints.length" class="cp-lesson-wrapup__section">
+                      <span class="cp-lesson-wrapup__section-title">困惑点</span>
+                      <ul class="cp-lesson-wrapup__takeaways">
+                        <li v-for="(c, i) in lessonWrapup.confusionPoints" :key="i">{{ c }}</li>
+                      </ul>
+                    </div>
+
+                    <!-- 评估亮点 -->
+                    <div v-if="lessonWrapup.strengths.length || lessonWrapup.improvements.length" class="cp-lesson-wrapup__section">
+                      <span class="cp-lesson-wrapup__section-title">评估</span>
+                      <div v-if="lessonWrapup.strengths.length" class="cp-lesson-wrapup__eval-item">
+                        <span class="cp-lesson-wrapup__eval-label cp-lesson-wrapup__eval-label--good">优势</span>
+                        <ul class="cp-lesson-wrapup__eval-list">
+                          <li v-for="s in lessonWrapup.strengths" :key="s">{{ s }}</li>
+                        </ul>
+                      </div>
+                      <div v-if="lessonWrapup.improvements.length" class="cp-lesson-wrapup__eval-item">
+                        <span class="cp-lesson-wrapup__eval-label cp-lesson-wrapup__eval-label--warn">改进</span>
+                        <ul class="cp-lesson-wrapup__eval-list">
+                          <li v-for="s in lessonWrapup.improvements" :key="s">{{ s }}</li>
+                        </ul>
+                      </div>
+                    </div>
+
+                    <!-- 情绪 & 认知 -->
+                    <div v-if="lessonWrapup.dominantCognitiveLevel" class="cp-lesson-wrapup__meta-row">
+                      <span v-if="lessonWrapup.dominantCognitiveLevel">认知: {{ lessonWrapup.dominantCognitiveLevel }} → {{ lessonWrapup.lastCognitiveLevel }}</span>
+                      <span>情绪: 😊{{ lessonWrapup.positiveEmotions }} 😐{{ lessonWrapup.neutralEmotions }} 😤{{ lessonWrapup.frustratedEmotions }} 😕{{ lessonWrapup.confusedEmotions }}</span>
+                      <span v-if="lessonWrapup.fatigueRisk">疲劳风险: {{ lessonWrapup.fatigueRisk }}</span>
+                    </div>
+                  </div>
+                </div>
+                <p v-else class="cp-none">该课暂无可显示的总结。</p>
+              </div>
+            </div>
+          </div>
+
           <!-- 会话未加载先骨架；空态仅在确实加载完（session 存在）后给（2026-10-06 审核 #47） -->
           <div v-if="!session" class="cp-cardbody"><MkSkeleton variant="rows" :count="3" :h="12" :radius="4" /></div>
-          <p v-else-if="!hasWrapup && !lessonTree.length" class="cp-none" style="padding: 24px 16px;">{{ wrapupEmptyHint }}</p>
-          <!-- 中途课（有课表、未结课）：终局总结必然缺席，单课总结是本页签唯一的「总结」——
-               说清两件事，免得「看不到总结」再问一遍（2026-10-12 走查） -->
-          <p v-else-if="!hasWrapup" class="cp-none" style="padding: 14px 16px 4px;">终局总结在全部课程完成后生成；已完成课的单课总结，点该课的「查看总结」。</p>
+          <p v-else-if="!hasWrapup && !wrapupLessonRows.length" class="cp-none" style="padding: 24px 16px;">{{ wrapupEmptyHint }}</p>
         </section>
 
         <!-- 终局评估面板已随裁判独立面移除（2026-09-27）：报告仍在会话数据里，独立评审面为 /api/admin/session-audits -->
@@ -1239,12 +1228,14 @@ const goalConversationMessages = computed(() => conversationMessages(asRecord(co
 const fallbackLearnConversationMessages = computed(() => conversationMessages(asRecord(conversations.value.learning).messages))
 const teachingSessionHistory = computed(() => {
   const history = learningResult.value.teachingSessionHistory
-  if (!Array.isArray(history)) return [] as Array<{ id: string; taskId: string; taskTitle: string }>
+  if (!Array.isArray(history)) return [] as Array<{ id: string; taskId: string; taskTitle: string; status: string }>
   const seen = new Set<string>()
   return history.map(asRecord).map((item) => ({
     id: firstText(item.teachingSessionId),
     taskId: firstText(item.taskId),
-    taskTitle: firstText(item.taskTitle)
+    taskTitle: firstText(item.taskTitle),
+    // 终态随行（completed/discarded/...）：同课多会话时 buildLearnLessons 挑有总结的那条
+    status: normalized(item.status)
   })).filter((item) => item.id && !seen.has(item.id) && !!seen.add(item.id))
 })
 const teachingDetailMessages = computed(() => conversationMessages(teachingDetail.value?.messages))
@@ -2013,10 +2004,24 @@ const knowledgeSourceTitle = computed(() => {
 })
 
 
-/** 从总结页点击课时 → 跳转到 Learn 标签并打开该课时的总结 */
-function viewLessonSummary(lesson: LearnLesson) {
-  activeTab.value = 'learning'
-  nextTick(() => openLesson(lesson))
+/** 总结页单课总结行（2026-10-12 二次拍板「总结就单独总结，不再和课程混在一起」）：
+    课表是 Learn 的（同一棵树不在总结页重复），这里只列**有总结可看**的课——已完成且落了
+    课堂会话，按课序。 */
+const wrapupLessonRows = computed(() =>
+  learnLessons.value.filter((l) => l.state === 'done' && !!l.teachingSessionId)
+)
+
+/** 总结页就地展开单课总结：复用 Learn 的取数链（openLesson → teachingDetail → lessonWrapup），
+    不切页签。手风琴单开是硬约束：lessonWrapup 是「当前加载课」的单课计算值，多开双行
+    会渲染同一份数据张冠李戴。 */
+const expandedWrapupTaskId = ref<string | null>(null)
+function toggleWrapupLesson(lesson: LearnLesson) {
+  if (expandedWrapupTaskId.value === lesson.taskId) {
+    expandedWrapupTaskId.value = null
+    return
+  }
+  expandedWrapupTaskId.value = lesson.taskId
+  openLesson(lesson)
 }
 
 /** 会话状态简短标签（顶栏点 / hero pill / 卡 meta 同源；2026-10-06 审核 #48：
@@ -3340,117 +3345,47 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 
 
 
-/* ===== Wrapup 学习报告 ===== */
-.cp-wrapup-lessons {
-  display: grid;
-  gap: 0;
-  border-bottom: 1px solid var(--mk-line);
-}
-/* 树头即 summary（折叠态只留这一条）：与里程碑条同款面-2 头，展开标记走伪元素 */
-.cp-wrapup-lessons__summary {
+/* ===== 总结页：单课总结手风琴（2026-10-12 二次拍板「总结就单独总结」；原课时进度树退役，
+   课表归 Learn，本页只放总结） ===== */
+.cp-wrapup-sums { display: grid; }
+.cp-wrapup-sums__head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
-  padding: 10px 20px;
-  font-size: var(--mk-fs-micro);
-  font-weight: 800;
-  color: var(--mk-ink);
+  padding: 10px 20px 6px;
   background: var(--mk-surface-2);
   border-bottom: 1px solid var(--mk-line);
-  cursor: pointer;
-  list-style: none;
 }
-.cp-wrapup-lessons__summary::-webkit-details-marker { display: none; }
-.cp-wrapup-lessons__summary::before { content: '▸'; color: var(--mk-faint); }
-.cp-wrapup-lessons[open] > .cp-wrapup-lessons__summary::before { content: '▾'; }
-.cp-wrapup-lessons__meta { font-weight: 600; color: var(--mk-muted); font-variant-numeric: tabular-nums; }
-.cp-wrapup-ms {
-  padding: 0;
-}
-.cp-wrapup-ms + .cp-wrapup-ms {
-  border-top: 1px solid var(--mk-line);
-}
-.cp-wrapup-ms__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 20px 6px;
-  font-size: var(--mk-fs-micro);
-  font-weight: 800;
-  color: var(--mk-ink);
-  background: var(--mk-surface-2);
-}
-.cp-wrapup-ms__count {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  background: var(--mk-surface);
-  padding: 1px 6px;
-  border-radius: 999px;
-}
-.cp-wrapup-lesson {
-  /* 行即 button（键盘可达）：重置 button 默认外观，保持原行布局 */
+.cp-wrapup-sums__title { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-ink); }
+.cp-wrapup-sums__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+.cp-wrapup-sum + .cp-wrapup-sum { border-top: 1px solid var(--mk-line); }
+.cp-wrapup-sum__row {
+  /* 行即 button（键盘可达）：重置 button 默认外观 */
   display: flex;
   width: 100%;
   align-items: center;
   gap: 8px;
-  padding: 8px 20px 8px 32px;
+  padding: 9px 20px;
   border: none;
   background: transparent;
   font: inherit;
   font-size: var(--mk-fs-micro);
   text-align: left;
   color: var(--mk-muted);
-  cursor: default;
-  border-left: 3px solid transparent;
+  cursor: pointer;
   transition: background 0.1s ease;
 }
-.cp-wrapup-lesson:disabled { cursor: default; }
-.cp-wrapup-lesson.is-done {
-  color: var(--mk-green);
-  cursor: pointer;
-}
-.cp-wrapup-lesson.is-done:hover {
-  background: var(--mk-green-bg);
-}
-/* 真实会话只读行（FN4）：无单课总结可下钻，不给手型与 hover 假反馈 */
-.cp-wrapup-lesson.is-readonly,
-.cp-wrapup-lesson.is-readonly.is-done { cursor: default; }
-.cp-wrapup-lesson.is-readonly.is-done:hover { background: transparent; }
-/* Learn 课表的只读行（真实会话）：与总结页同款，不给"可点=可操作"的视觉暗示 */
+.cp-wrapup-sum__row:hover { background: var(--mk-surface-2); }
+.cp-wrapup-sum__row.is-open { color: var(--mk-ink); font-weight: 700; background: var(--mk-surface-2); }
+.cp-wrapup-sum__mark { color: var(--mk-green); width: 14px; text-align: center; flex-shrink: 0; }
+.cp-wrapup-sum__num { color: var(--mk-faint); font-weight: 600; flex-shrink: 0; }
+.cp-wrapup-sum__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-wrapup-sum__caret { color: var(--mk-faint); flex-shrink: 0; }
+.cp-wrapup-sum__body { padding: 12px 20px 14px; border-top: 1px dashed var(--mk-line); }
+.cp-wrapup-sum__body .cp-lesson-wrapup { margin-bottom: 0; }
+/* Learn 课表的只读行（真实会话）：不给"可点=可操作"的视觉暗示 */
 .cp-learn-tree__lesson.is-readonly,
 .cp-learn-tree__lesson.is-readonly:hover { cursor: default; background: transparent; }
-.cp-wrapup-lesson.is-active {
-  color: var(--mk-blue);
-  font-weight: 700;
-  background: var(--mk-blue-bg);
-  border-left-color: var(--mk-blue);
-}
-.cp-wrapup-lesson__mark {
-  font-size: var(--mk-fs-micro);
-  width: 14px;
-  text-align: center;
-  flex-shrink: 0;
-}
-.cp-wrapup-lesson__num {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  font-weight: 600;
-  flex-shrink: 0;
-}
-.cp-wrapup-lesson__title {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cp-wrapup-lesson__action {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-blue);
-  font-weight: 600;
-  flex-shrink: 0;
-}
 .cp-wrapup-stats {
   display: flex;
   align-items: flex-start;
@@ -3732,8 +3667,8 @@ html[data-theme='dark'] {
   .cp-wrapup-section,
   .cp-trace-panel { background: #19191a; border-color: var(--wf-border-light); }
   .cp-trace-list__body { background: #202122; }
-  .cp-wrapup-lesson.is-active { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--mk-ghost-fg); }
-  .cp-wrapup-lesson.is-done:hover { background: rgba(74, 222, 128, 0.1); }
+  .cp-wrapup-sum__row.is-open { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--mk-ghost-fg); }
+  .cp-wrapup-sum__row:hover { background: rgba(74, 222, 128, 0.1); }
   .cp-timeline__kind[data-kind='referee'] { background: color-mix(in srgb, var(--wf-color-danger) 14%, transparent); color: var(--wf-color-danger); }
   .cp-timeline__kind[data-kind='private'] { background: color-mix(in srgb, var(--mk-purple) 16%, transparent); color: var(--wf-color-accent-light); }
   .cp-timeline__kind[data-kind='log'] { background: rgba(129, 140, 248, 0.14); color: #a5b4fc; }
@@ -3746,7 +3681,7 @@ html[data-theme='dark'] {
 
   .cp-learn-tree__ms { background: #19191a; }
   .cp-lesson-head { background: #19191a; }
-  .cp-wrapup-ms__head { background: #19191a; }
+  .cp-wrapup-sums__head { background: #19191a; }
   .cp-wrapup-card__icon { background: #252627; }
   /* 补漏 2：课时总结渐变底/stats/骨架屏/eval/trace 徽章/预算条文字 */
   .cp-trace-list > li { background: #19191a; }
