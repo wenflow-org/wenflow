@@ -2939,7 +2939,9 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-degrade .mk-link { font-size: var(--mk-fs-micro); }
 
 /* Transcripts */
-.cp-transcripts { display: grid; gap: 10px; padding: 12px 16px 16px; }
+/* 内滚动上限（2026-10-12 走查）：Goal 转录与课堂对话都随内容长到两千 px 把整页拉长、
+   控制台侧栏滚出视口——与左邻课树（max-height 520 + contain）同规则收进视口内自滚 */
+.cp-transcripts { display: grid; gap: 10px; padding: 12px 16px 16px; overflow-y: auto; max-height: 520px; overscroll-behavior: contain; }
 .cp-transcript {
   display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl);
 }
@@ -3047,6 +3049,10 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-learn-chat {
   padding: 12px 16px 16px;
   overflow-y: auto;
+  /* 内滚动上限与左邻课树同高（2026-10-12 走查：无上限时对话列长到 2000px+ 撑长整页）；
+     嵌套滚动隔离（#72）：滚到底不把滚动链传给外层侧栏/页面 */
+  max-height: 520px;
+  overscroll-behavior: contain;
   display: grid;
   gap: 10px;
   align-content: start;
@@ -3054,6 +3060,7 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 @media (max-width: 900px) {
   .cp-learn-grid { grid-template-columns: 1fr; }
   .cp-learn-tree { border-right: none; border-bottom: 1px solid var(--mk-line); max-height: 200px; }
+  .cp-learn-chat { max-height: 560px; }
 }
 
 /* Lesson head */
