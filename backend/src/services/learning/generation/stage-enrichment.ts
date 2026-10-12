@@ -15,6 +15,7 @@ import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
 import { buildStageFillNote } from './stage-fill-note';
+import { sanitizeUserFacingText } from '../user-facing-text';
 import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
 import { buildSupplementRequest, mergeSupplementTasks, needsLessonSupplement } from './stage-task-supplement';
 import { schoolAnchorCoverage, type PathSchoolAnchor } from './school-anchor';
@@ -718,13 +719,25 @@ async function enrichLearningPathWithAndersonInner(
               .filter((hint: { conceptKey: string; label: string }) => hint.conceptKey && hint.label)
               .slice(0, 2);
           }
+          // 用户可见文本收口（2026-10-12）：任务标题/描述不得含内部流程术语（如「回捞」）——
+          // 任务标题在学习路径页直接渲染，实测「回捞学科全景框架并校准理论映射」漏出过
+          const taskTitle = sanitizeUserFacingText(taskData.title || `任务${j + 1}`);
+          const taskDescription = sanitizeUserFacingText(taskData.description || '');
+          if (taskTitle.replaced.length > 0 || taskDescription.replaced.length > 0) {
+            logger.warn('[stage-enrichment] 任务文本含内部流程术语，已替换为学习者语言', {
+              pathId: learningPath.id,
+              stageNumber: milestone.stageNumber,
+              title: taskData.title,
+              replaced: [...new Set([...taskTitle.replaced, ...taskDescription.replaced])],
+            });
+          }
           await tx.subtasks.create({
             data: {
               id: subtaskId,
               milestoneId: milestone.id,
               userId: data.userId,
-              title: taskData.title || `任务${j + 1}`,
-              description: taskData.description || '',
+              title: taskTitle.text || `任务${j + 1}`,
+              description: taskDescription.text,
               taskType: normalizePathTaskType(taskData.type),
               estimatedMinutes: taskData.estimatedMinutes || 30,
               acceptanceCriteria: taskData.acceptanceHint || '',

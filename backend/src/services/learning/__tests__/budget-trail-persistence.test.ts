@@ -48,8 +48,8 @@ describe('I6-2 守恒决策留痕：skill 产出 → analysis → 生成记录',
     for (const key of ['clampReason', 'perStageCapHours', 'perStage']) {
       expect(SKILL).toContain(key);
     }
-    // 四类来源齐全：容量 / 1.8× 上限 / 0.6× 下限 / 未动
-    expect(SKILL).toMatch(/'capacity' \| 'ceiling' \| 'floor' \| 'none'/);
+    // 五类来源齐全：容量 / 1.8× 上限 / 0.6× 下限 / 单阶段上界夹 / 未动
+    expect(SKILL).toMatch(/'capacity' \| 'ceiling' \| 'floor' \| 'perStageCap' \| 'none'/);
   });
 
   it('analysis 透传该字段（否则落库断在第二跳）', () => {

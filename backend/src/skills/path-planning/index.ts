@@ -153,11 +153,12 @@ export interface BudgetConservationReport {
   scaled: boolean;
   /**
    * 夹的来源：capacity=结构容量顶住（装不下）；ceiling=1.8× 上限；floor=0.6× 下限；
+   * perStageCap=单阶段容量上界夹（某阶段学时 > perStageCap 被压到上界）；
    * none=**未触发校正**（落带内）。
    * ⚠ 读法：`none` 不等于「容量够」。本字段只回答「谁动了学时」，容量是否装得下要看
    * hints.capacityDeficit（实测 1.3h 目标 / 1h 容量：缺口 25% 但 before 落带内 → none）。
    */
-  clampReason: 'capacity' | 'ceiling' | 'floor' | 'none';
+  clampReason: 'capacity' | 'ceiling' | 'floor' | 'perStageCap' | 'none';
   /** 每阶段容量上界（小时）= 每阶段任务上界 × 单任务分钟上界 / 60 */
   perStageCapHours: number;
   /** 逐阶段夹前→夹后（一位小数），用于核对「哪几个阶段被顶到容量」 */
@@ -223,6 +224,12 @@ export function enforceBudgetConservation(
     clampReason = 'ceiling';
   }
   const after = work.map((h: number) => round1(Math.max(0.5, Math.min(perStageCap, h))));
+  // 逐阶段上界夹（上方 Math.min(perStageCap, h)）此前不计入 clampReason——实测
+  // lp_1791817016486_mot0ov1：stage4 14h→12h 被夹、总量 60→58，clampReason 却是 'none'
+  // （记账失真）。总量原因已有判定时保留（更强），仅在未触发时补记逐阶段夹。
+  if (clampReason === 'none' && hours.some((h: number) => h > perStageCap + 0.05)) {
+    clampReason = 'perStageCap';
+  }
   milestones.forEach((m: any, i: number) => {
     if (m && typeof m === 'object') m.estimatedHours = after[i];
   });

@@ -21,9 +21,11 @@ export function buildStageFillNote(
   const actual = Number(stageHours);
   if (!Number.isFinite(anchor) || anchor <= 0) return null;
   if (!Number.isFinite(actual) || actual <= 0) return null;
-  // 幂等：追加/渐进模式下 milestone 可能已带声明，不重复追加
-  if (existingDescription && /容量说明/.test(existingDescription)) return null;
+  // 幂等：追加/渐进模式下 milestone 可能已带声明，不重复追加（兼容存量「容量说明」旧文案）
+  if (existingDescription && /(容量说明|时间说明)/.test(existingDescription)) return null;
   if (actual >= anchor * STAGE_FILL_DECLARE_RATIO) return null;
-  const note = `容量说明：本阶段按你的时间预算约 ${Math.round(anchor)} 小时，当前拆出的学习任务合计约 ${Math.round(actual)} 小时；如需更完整的练习量，可在补充说明里要求加密。`;
+  // 面向学习者的措辞（2026-10-12 走查）：原句「可在补充说明里要求加密」引用了目标对话的
+  // 内部字段名（补充说明）且「加密」歧义（指加任务密度），学习者读不懂——改成可执行的自然话。
+  const note = `时间说明：这一阶段按你的时间预算约 ${Math.round(anchor)} 小时规划，目前拆出的学习任务合计约 ${Math.round(actual)} 小时；如果想让这一阶段练得更充分，可以在学习过程中告诉我，我会再补充任务。`;
   return existingDescription ? `${existingDescription}\n\n${note}` : note;
 }

@@ -148,6 +148,9 @@
                 <span class="stage__title">
                   <strong>阶段 {{ stageNo(stage, si) }} · {{ stage.title }}</strong>
                   <small>{{ stage.goal || stage.description }}</small>
+                  <!-- 时间说明（2026-10-12）：生成期的诚实声明此前只追加进 description，而本行取 goal 优先
+                       ⇒ 学习者永远看不到。显式提到阶段头（折叠态即可见），披露才真正到达学习者。 -->
+                  <small v-if="stageCapacityNote(stage)" class="stage__capacity">{{ stageCapacityNote(stage) }}</small>
                 </span>
                 <span class="stage__prog">{{ stageDoneCount(stage) }} / {{ stageTasks(stage).length }}</span>
                 <span class="stage__chev" :class="{ 'stage__chev--open': openStages.includes(si) }">⌄</span>
@@ -1373,6 +1376,13 @@ function objectivesOf(stage: Record<string, any>): string[] {
   return [];
 }
 
+/** 阶段时间说明（生成期诚实声明，2026-10-12）：从 description 提取，折叠态在阶段头直接展示 */
+function stageCapacityNote(stage: Record<string, any>): string {
+  const desc = typeof stage?.description === 'string' ? stage.description : '';
+  const matched = desc.match(/(?:容量说明|时间说明)[：:][^\n]*/);
+  return matched ? matched[0].trim() : '';
+}
+
 function toggleStage(si: number) {
   const i = openStages.value.indexOf(si);
   if (i >= 0) openStages.value.splice(i, 1);
@@ -1687,6 +1697,14 @@ onBeforeUnmount(() => {
 .stage__no--current { background: var(--blue); color: var(--text-on-primary); box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 13%, transparent); }
 .stage__title strong { display: block; font-size: 15px; }
 .stage__title small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
+/* 时间说明（生成期诚实声明）：与常规副行区分——左边一条浅色竖线 + 略深字色，提示"这是口径说明" */
+.stage__title .stage__capacity {
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+  line-height: 1.5;
+}
 .stage__prog { font-size: 12px; font-weight: 800; color: var(--muted); }
 .stage--current .stage__prog { color: var(--blue-deep); }
 .stage__chev { color: var(--faint); font-size: 15px; transition: transform .18s ease; justify-self: end; }

@@ -887,6 +887,12 @@ async continueConversation(
     const understanding = this.getGoalExt(aiResponse.internal).understanding || {};
     const realGoal = understanding.real_problem || conversation.description;
     const subject = this.inferSubject(realGoal);
+    // description 面向学习者（生成失败时这条占位会长期留在列表/学习台）：
+    // real_problem 是第三人称内部分析（实测「…他都拿不准…本人…」），学习者口径取 surface_goal
+    // （用户原话），无则退回对话描述（2026-10-12 走查）
+    const learnerFacingDescription = typeof understanding.surface_goal === 'string' && understanding.surface_goal.trim()
+      ? understanding.surface_goal.trim()
+      : conversation.description;
     // 占位标题用中性文案（2026-09-27 用户端走查）：真名由路径生成落地时写入；
     // 生成期间列表/学习台引用的都是这条占位——拼问题原句会出现「……无学习路径学习路径」式怪标题，
     // 且生成失败时占位名会长期留在列表里。状态语义交给 status 字段（列表有「生成中/待重试」筛选），
@@ -901,7 +907,7 @@ async continueConversation(
         userId: conversation.userId,
         title,
         name: title,
-        description: realGoal,
+        description: learnerFacingDescription,
         subject,
         status: 'generating',
         difficulty: 'beginner',

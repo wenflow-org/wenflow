@@ -6,12 +6,19 @@
 import { buildStageFillNote, STAGE_FILL_DECLARE_RATIO } from '../stage-fill-note';
 
 describe('buildStageFillNote', () => {
-  it('欠 fill（实付 < 70% 锚）追加容量说明', () => {
+  it('欠 fill（实付 < 70% 锚）追加时间说明', () => {
     const note = buildStageFillNote(6.3, 2.5, '认识函数三要素');
-    expect(note).toContain('容量说明');
+    expect(note).toContain('时间说明');
     expect(note).toContain('约 6 小时');
     expect(note).toContain('约 3 小时');
     expect(note).toContain('认识函数三要素'); // 原描述保留在前
+  });
+
+  it('文案面向学习者：不引用内部字段名（补充说明）、不含歧义词（加密）', () => {
+    const note = buildStageFillNote(12, 8, null) as string;
+    expect(note).not.toContain('补充说明');
+    expect(note).not.toContain('加密');
+    expect(note).toContain('告诉我');
   });
 
   it('达标（实付 ≥ 70% 锚）不声明', () => {
@@ -30,14 +37,16 @@ describe('buildStageFillNote', () => {
     expect(buildStageFillNote(6, 0)).toBeNull();
   });
 
-  it('幂等：已有容量说明不重复追加', () => {
-    const existing = '阶段描述\n\n容量说明：本阶段按你的时间预算约 6 小时……';
-    expect(buildStageFillNote(6, 2, existing)).toBeNull();
+  it('幂等：已有容量说明（存量旧文案）或时间说明（新文案）均不重复追加', () => {
+    const legacy = '阶段描述\n\n容量说明：本阶段按你的时间预算约 6 小时……';
+    expect(buildStageFillNote(6, 2, legacy)).toBeNull();
+    const fresh = '阶段描述\n\n时间说明：这一阶段按你的时间预算约 6 小时……';
+    expect(buildStageFillNote(6, 2, fresh)).toBeNull();
   });
 
   it('无原描述时声明自包含（不被覆盖丢失）', () => {
     const note = buildStageFillNote(8, 3, null);
-    expect(note).toContain('容量说明');
+    expect(note).toContain('时间说明');
     expect(note).toContain('约 8 小时');
   });
 });

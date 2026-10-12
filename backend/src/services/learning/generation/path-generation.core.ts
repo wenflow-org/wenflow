@@ -18,6 +18,7 @@ import type { AgentInput } from '../../../agents/protocol';
 import { normalizeAgentOutput } from '../../../agents/output-normalizer';
 import { buildFramedNormalizedInput } from '../path-planning-hints';
 import { normalizePathDifficulty } from '../path-difficulty';
+import { sanitizeUserFacingText, detectBoilerplateClause } from '../user-facing-text';
 import { buildPathReviewerGoalContext } from '../path-reviewer-context';
 import {
   assertGenerationRunFence,
@@ -524,6 +525,16 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
   }
   const pathSubject = resolvePathSubject(analysis.subject, pathTitle);
 
+  // 持久化 description 面向学习者（列表/详情在缺 summary 时回退渲染它）：优先路径 summary
+  // （学习者口径文案）；生成输入的 data.description 可能是第三人称问题陈述（realProblem），
+  // 落进用户可见字段会漏「他都拿不准…本人…」式内部分析（2026-10-12 走查）
+  const persistedDescription = (() => {
+    const summaryText = typeof analysis.summary === 'string' ? analysis.summary.trim() : '';
+    if (summaryText && !summaryText.includes('\uFFFD')) return summaryText;
+    if (data.description && !data.description.includes('\uFFFD')) return data.description;
+    return normalizedMilestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || '';
+  })();
+
   const learningPath = await withTransaction(async (tx) => {
     let path;
     if (data.existingPathId) {
@@ -542,9 +553,7 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
         data: {
           title: pathTitle,
           name: pathTitle,
-          description: (data.description && !data.description.includes('\uFFFD'))
-            ? data.description
-            : (normalizedMilestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
+          description: persistedDescription,
           subject: pathSubject,
           status: 'active',
           difficulty: normalizePathDifficulty(analysis.difficulty),
@@ -587,9 +596,7 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
           userId: data.userId,
           title: pathTitle,
           name: pathTitle,
-          description: (data.description && !data.description.includes('\uFFFD'))
-            ? data.description
-            : (normalizedMilestonesData.map((m: any) => m.goal || m.name).join('; ') || data.description || ''),
+          description: persistedDescription,
           subject: pathSubject,
           difficulty: normalizePathDifficulty(analysis.difficulty),
           totalMilestones: normalizedMilestonesData.length || 1,
@@ -616,14 +623,42 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
       const milestoneData = normalizedMilestonesData[i];
       const stageNum = milestoneData.stage || i + 1;
 
+      // 用户可见文本收口（2026-10-12）：内部流程术语（如「回捞」）不得进阶段标题/描述；
+      // 「回捞…关系」模板复读句留可观测信号（prompt 已禁，violated 时我们读得到）
+      const milestoneTitle = sanitizeUserFacingText(milestoneData.name || `里程碑${stageNum}`);
+      const milestoneDescription = sanitizeUserFacingText(milestoneData.description || '');
+      const milestoneGoal = sanitizeUserFacingText(milestoneData.goal || '');
+      const boilerplateClause = detectBoilerplateClause(milestoneData.description);
+      for (const [field, result] of [
+        ['title', milestoneTitle],
+        ['description', milestoneDescription],
+        ['goal', milestoneGoal],
+      ] as const) {
+        if (result.replaced.length > 0) {
+          logger.warn('[path-generation] 阶段文本含内部流程术语，已替换为学习者语言', {
+            pathId: path.id,
+            stageNumber: stageNum,
+            field,
+            replaced: result.replaced,
+          });
+        }
+      }
+      if (boilerplateClause) {
+        logger.warn('[path-generation] 阶段描述命中「回捞…关系」模板复读句（prompt 已禁止，提示词合规信号）', {
+          pathId: path.id,
+          stageNumber: stageNum,
+          clause: boilerplateClause,
+        });
+      }
+
       const milestone = await (tx.milestones as any).create({
         data: {
           id: `ms_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${i}`,
           learningPathId: path.id,
           stageNumber: stageNum,
-          title: milestoneData.name || `里程碑${stageNum}`,
-          description: milestoneData.description || '',
-          goal: milestoneData.goal || '',
+          title: milestoneTitle.text || `里程碑${stageNum}`,
+          description: milestoneDescription.text,
+          goal: milestoneGoal.text,
           coreConceptId: typeof milestoneData.coreConcept === 'string' ? milestoneData.coreConcept : null,
           coreConceptName: resolveMilestoneConcept(
             typeof milestoneData.coreConcept === 'string' ? milestoneData.coreConcept : null,
