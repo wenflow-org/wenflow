@@ -119,10 +119,10 @@ const SkillDetail = asyncPage(() => import('./SkillDetail.vue'));
 const CardDetailPage = asyncPage(() => import('./CardDetailPage.vue'));
 const CardImportPage = asyncPage(() => import('./CardImportPage.vue'));
 const SessionCockpit = asyncPage(() => import('./SessionCockpit.vue'));
-/* 记忆与复习独立页退役（2026-10-12 用户拍板「合并过去，保留详情页一个」）：
-   明细能力并入学习者详情「记忆与复习」页签（MemoryReview.vue 瘃身为页签内面板），
-   本场景只挂重定向 shim 接住旧深链 */
-const MemoryReview = asyncPage(() => import('./MemoryReviewRedirect.vue'));
+/* 记忆与复习（2026-10-12 两段拍板）：独立页先退役并入学习者详情页签，同日恢复**跨用户总览**
+ * （MemoryReviewOverview：按待复习量排序的用户列表 + 到期时间轴）；单用户明细留在
+ * 学习者详情「记忆与复习 / 记忆调度」页签，?userId= 旧深链由总览页转发过去 */
+const MemoryReview = asyncPage(() => import('./MemoryReviewOverview.vue'));
 
 const components: Record<string, unknown> = {
   'overview': Overview,

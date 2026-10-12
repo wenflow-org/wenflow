@@ -32,7 +32,7 @@
 
 import type { Component } from 'vue'
 import {
-  Activity, BookOpen, Coins, FlaskConical, HeartPulse, IdCard, LayoutDashboard,
+  Activity, BookOpen, Coins, FlaskConical, HeartPulse, History, IdCard, LayoutDashboard,
   Megaphone, MessagesSquare, Plug, Route, ScrollText, ShieldCheck, Sparkles,
   Target, Users, Workflow, Wrench,
 } from 'lucide-vue-next'
@@ -72,6 +72,9 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'goal-conversations', label: '目标对话', group: '教学', glyph: '话', icon: Target },
   { id: 'learning-paths', label: '学习路径', group: '教学', glyph: '径', icon: Route },
   { id: 'teaching-sessions', label: '教学会话', group: '教学', glyph: '教', icon: MessagesSquare },
+  // 「记忆与复习」2026-10-12 一度随独立页退役，同日恢复跨用户总览（按待复习量排序的用户
+  // 列表 + 到期时间轴）；单用户明细在学习者详情「记忆与复习 / 记忆调度」页签
+  { id: 'memory-review', label: '记忆与复习', group: '教学', glyph: '忆', icon: History },
   // 虚拟学习者组：运行态（虚拟学习者）+ 配置态（学习者卡库）；「批量实验」2026-10-04 下线
   { id: 'virtual-learners', label: '虚拟学习者', group: '虚拟学习者', glyph: '拟', icon: FlaskConical },
   { id: 'virtual-learner-cards', label: '学习者卡库', group: '虚拟学习者', glyph: '卡', icon: IdCard },

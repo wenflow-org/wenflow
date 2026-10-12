@@ -380,12 +380,10 @@ const loopStages = computed<LoopStage[]>(() => {
           : `${memDue.value ?? 0} 待办`,
       tone: memState.value === 'failed' || (memDue.value ?? 0) > 0 ? 'alert' : 'done',
       ringFailed: memState.value === 'failed',
-      // 记忆与复习独立页 2026-10-12 退役（并入学习者详情页签）：总览是跨用户口径，
-      // 落到学习状态列表挑人，进详情后看「记忆与复习」页签
       title: memState.value === 'failed'
-        ? '到期待办数拉取失败 · 点「重试」重拉 · 点击查看学习状态'
-        : '到期未复习的记忆条数（随页头「真实 / 测试」开关变化）· 点击打开学习状态（记忆与复习在学习者详情）',
-      scene: 'learner-state',
+        ? '到期待办数拉取失败 · 点「重试」重拉 · 点击查看记忆与复盘'
+        : '到期未复习的记忆条数（随页头「真实 / 测试」开关变化）· 点击查看记忆与复习',
+      scene: 'memory-review',
     },
   ];
 });
