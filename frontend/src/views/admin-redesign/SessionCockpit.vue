@@ -364,6 +364,16 @@
                   <p v-if="lessonWrapup.degraded" class="cp-lesson-wrapup__notice">
                     本节课未完整结束（超时或提前中断），以下仅保留基础学习记录；完整练习建议与课堂评价未生成。
                   </p>
+                  <!-- 主题摘要 / 学习评估（2026-10-12 走查）：门槛读这两个字段、卡身却从未渲染——
+                       真实课堂的 wrapup 恰好只有这几项，此前卡显示「✓ 本课总结」但正文空空 -->
+                  <div v-if="lessonWrapup.topicSummary" class="cp-lesson-wrapup__section">
+                    <span class="cp-lesson-wrapup__section-title">主题摘要</span>
+                    <p class="cp-lesson-wrapup__text">{{ lessonWrapup.topicSummary }}</p>
+                  </div>
+                  <div v-if="lessonWrapup.learningEvaluation" class="cp-lesson-wrapup__section">
+                    <span class="cp-lesson-wrapup__section-title">学习评估</span>
+                    <p class="cp-lesson-wrapup__text">{{ lessonWrapup.learningEvaluation }}</p>
+                  </div>
                   <!-- 知识点掌握 -->
                   <div v-if="lessonWrapup.knowledgeItems.length" class="cp-lesson-wrapup__section">
                     <span class="cp-lesson-wrapup__section-title">知识点掌握</span>
@@ -457,32 +467,22 @@
                 <span class="cp-wrapup-ms__title">{{ group.milestone }}</span>
                 <span class="cp-wrapup-ms__count">{{ group.doneCount }}/{{ group.lessons.length }}</span>
               </div>
-              <!-- 行即 button（原 div+click 键盘不可达）：仅可查看总结的课可聚焦，其余行 disabled 出 tab 序。
-                   真实会话（isRealMode）载荷无 teachingSessionHistory、且 teaching-detail 端点仅服务虚拟会话，
-                   单课总结结构性不可达——此分支渲染只读行，不给恒 disabled 的假入口（FN4）。 -->
-              <template v-if="!isRealMode">
+              <!-- 行即 button（原 div+click 键盘不可达）：已完成且有关课堂的课可点（两个模式同权——
+                   真实单课数据自 2026-10-12 走会话控制台端点解锁，见 loadTeachingDetail）；
+                   无课堂会话的行（未开始 / 未落课堂）渲染只读行，不给恒 disabled 的假入口（FN4）。 -->
+              <template v-for="l in group.lessons" :key="l.taskId">
                 <button
-                  v-for="l in group.lessons"
-                  :key="l.taskId"
+                  v-if="l.state === 'done' && l.teachingSessionId"
                   type="button"
-                  class="cp-wrapup-lesson"
-                  :class="{ 'is-done': l.state === 'done', 'is-active': l.state === 'active' }"
-                  :disabled="!(l.state === 'done' && l.teachingSessionId)"
+                  class="cp-wrapup-lesson is-done"
                   @click="viewLessonSummary(l)"
                 >
                   <span class="cp-wrapup-lesson__mark">{{ lessonMark(l.state) }}</span>
                   <span class="cp-wrapup-lesson__num">第{{ lessonNumber(l.taskId) }}课</span>
                   <span class="cp-wrapup-lesson__title">{{ l.title }}</span>
-                  <span v-if="l.state === 'done' && l.teachingSessionId" class="cp-wrapup-lesson__action">查看总结 →</span>
+                  <span class="cp-wrapup-lesson__action">查看总结 →</span>
                 </button>
-              </template>
-              <template v-else>
-                <div
-                  v-for="l in group.lessons"
-                  :key="l.taskId"
-                  class="cp-wrapup-lesson is-readonly"
-                  :class="{ 'is-done': l.state === 'done', 'is-active': l.state === 'active' }"
-                >
+                <div v-else class="cp-wrapup-lesson is-readonly" :class="{ 'is-done': l.state === 'done', 'is-active': l.state === 'active' }">
                   <span class="cp-wrapup-lesson__mark">{{ lessonMark(l.state) }}</span>
                   <span class="cp-wrapup-lesson__num">第{{ lessonNumber(l.taskId) }}课</span>
                   <span class="cp-wrapup-lesson__title">{{ l.title }}</span>
@@ -969,6 +969,8 @@ const {
 const pathStatus = ref<Record<string, unknown> | null>(null)
 const pathStatusFailed = ref(false)
 const teachingDetail = ref<Record<string, unknown> | null>(null)
+/* 真实单课载荷缓存（键 = 课堂会话 id；随本座舱实例存亡）：课程树来回切换不重复打接口 */
+const realLessonCache = new Map<string, Record<string, unknown>>()
 const teachingDetailFailed = ref(false)
 const teachingDetailLoading = ref(false)
 /** 当前查看课时的 wrapup 总结数据 */
@@ -2119,13 +2121,14 @@ async function loadPathStatus() {
 
 async function loadTeachingDetail(teachingSessionId = selectedTeachingSessionId.value, options: { silent?: boolean } = {}) {
   const id = sessionId.value
-  if (!id || isBlackbox.value || isRealMode.value) {
+  if (!id || isBlackbox.value) {
     teachingDetail.value = null
     return
   }
 
   const currentTeachingSessionId = firstText(bindings.value.teachingSessionId)
-  if (!teachingSessionId && !currentTeachingSessionId) {
+  const target = teachingSessionId || currentTeachingSessionId
+  if (!target) {
     teachingDetail.value = null
     return
   }
@@ -2133,9 +2136,35 @@ async function loadTeachingDetail(teachingSessionId = selectedTeachingSessionId.
   // 轮询走静默刷新：不闪「正在读取」占位，避免页面高度变化导致滚动跳动。
   if (!options.silent) teachingDetailLoading.value = true
   try {
-    const res = await adminVirtualLearnersApi.getVirtualSessionTeachingDetail(id, teachingSessionId || undefined)
-    if (sessionId.value !== id) return
-    teachingDetail.value = asRecord(res.data?.data ?? res.data)
+    if (isRealMode.value) {
+      /* 真实单课数据走会话控制台端点（教学控制台本体就是它，天然按课堂会话服务），
+         归一成 teachingDetail 形状（id / messages / wrapup）供同一套消费方渲染。
+         旧判例「teaching-detail 端点仅服务虚拟会话，真实单课总结结构性不可达」（FN4）
+         自真实控制台端点上线后已过时——真实课堂的就地切换与单课总结由此解锁（2026-10-12 走查）。
+         缓存只喂归档课：当前课的转录还在长（轮询每拍静默刷新），缓存会把它冻住。 */
+      const isCurrentLesson = target === firstText(bindings.value.teachingSessionId)
+      const cached = isCurrentLesson ? undefined : realLessonCache.get(target)
+      if (cached) {
+        teachingDetail.value = cached
+        teachingDetailFailed.value = false
+        return
+      }
+      const res = await adminVirtualLearnersApi.getRealSessionConsole(target)
+      if (sessionId.value !== id) return
+      const payload = asRecord(res.data?.data ?? res.data)
+      const teaching = asRecord(payload.teaching)
+      const normalized: Record<string, unknown> = {
+        id: firstText(payload.sessionId, teaching.teachingSessionId, target),
+        messages: teaching.messages ?? asRecord(payload.conversations).learning,
+        wrapup: teaching.wrapup ?? null
+      }
+      if (!isCurrentLesson) realLessonCache.set(target, normalized)
+      teachingDetail.value = normalized
+    } else {
+      const res = await adminVirtualLearnersApi.getVirtualSessionTeachingDetail(id, teachingSessionId || undefined)
+      if (sessionId.value !== id) return
+      teachingDetail.value = asRecord(res.data?.data ?? res.data)
+    }
     teachingDetailFailed.value = false
   } catch {
     // 失败保留旧记录，标记降级（避免把「获取失败」误读成「该课堂暂未记录」）

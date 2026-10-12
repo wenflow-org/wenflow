@@ -17,6 +17,7 @@ import {
 } from '../../services/admin/session-console.repo';
 import { logger } from '../../utils/logger';
 import { hydrateTeachingSessionMessages } from '../../services/ai-teaching/teaching-session-message-store';
+import { listMaterials } from '../../services/materials/material-store';
 
 const router = Router();
 
@@ -42,9 +43,17 @@ function normalizeRole(role: string | null | undefined): 'user' | 'assistant' {
   return value === 'assistant' || value === 'ai' || value === 'teacher' ? 'assistant' : 'user';
 }
 
-/** teaching_sessions.messages → {role,content,time}（只保留最近 limit 条） */
-function teachingMessages(raw: string | null | undefined, limit = 60): ConsoleMessage[] {
-  const messages = parseJsonSafe<any[]>(raw, []);
+/** teaching_sessions.messages → {role,content,time}（只保留最近 limit 条）
+ *
+ *  两种形态都要吃（2026-10-11 走查）：本文件两个 builder 都先调 hydrateTeachingSessionMessages，
+ *  侧表有行时 messages 已被覆写成**解析好的数组**，旧会话仍是 JSON 字符串。
+ *  只按字符串解析时 `JSON.parse(数组)` 抛错并被兜底吞成 []，于是侧表权威的会话课堂消息恒为 0 条：
+ *  监控页「Learn 课堂」恒显示「该课堂暂未记录可展示消息」、回合记录只剩 Goal 半边、时间线缺课堂条目。
+ *  全库 827/827 会话都有侧表行（10788 条消息），即修复前这条读法对**所有**有消息的会话都是假的。 */
+function teachingMessages(raw: unknown, limit = 60): ConsoleMessage[] {
+  const messages = Array.isArray(raw)
+    ? (raw as any[])
+    : parseJsonSafe<any[]>(raw as string | null | undefined, []);
   return messages
     .filter((m: any) => typeof m?.content === 'string' && m.content.trim())
     .slice(-limit)
@@ -288,6 +297,43 @@ function buildTimeline(params: {
     .slice(-200);
 }
 
+/** 学习者资料投影（上传附件 + 联网采集）：列表级字段 + brief 摘要节点，正文不进载荷。
+ *  brief 是资料理解的一次性结构化产物（Document Summary Index），goal 与 path 生成复用同一份。 */
+function materialSummaries(userId: string | null | undefined) {
+  if (!userId) return [];
+  try {
+    return listMaterials(userId).map((m) => {
+      const brief = m.brief || null;
+      return {
+        id: m.id,
+        name: m.name,
+        origin: m.origin === 'web' ? ('web' as const) : ('upload' as const),
+        charCount: m.charCount || 0,
+        headingCount: m.structure?.headingCount || 0,
+        anchorCount: Array.isArray(m.anchors) ? m.anchors.length : 0,
+        warningCount: Array.isArray(m.warnings) ? m.warnings.length : 0,
+        createdAt: m.createdAt || null,
+        fetchedAt: m.fetchedAt || null,
+        sourceUrl: m.sourceUrl || null,
+        brief: brief
+          ? {
+              docType: brief.docType || null,
+              subject: brief.subject || null,
+              audience: brief.audience || null,
+              overview: brief.overview || null,
+              coreConcepts: Array.isArray(brief.coreConcepts) ? brief.coreConcepts : [],
+              naturalDivisions: Array.isArray(brief.naturalDivisions) ? brief.naturalDivisions : [],
+              tocCount: Array.isArray(brief.toc) ? brief.toc.length : 0,
+            }
+          : null,
+      };
+    });
+  } catch (error) {
+    logger.warn('[admin-session-console] 学习者资料读取失败，控制台按无资料渲染', { userId, error });
+    return [];
+  }
+}
+
 /** teaching_sessions → 控制台同构载荷 */
 async function buildTeachingConsole(session: any) {
   // 消息子表水合：侧表权威的会话覆写内存 messages 字段（旧会话原样读列）
@@ -406,6 +452,12 @@ async function buildTeachingConsole(session: any) {
         currentTaskId: session.taskId,
         wrapup,
         taskRuntime: { status: session.status },
+        /* 同路径课堂清单（2026-10-12 走查：Learn 页签要能就地切换课堂看）：
+           前端课程树凭它把每节课映射到课堂会话 id（teachingSessionHistory 契约，
+           与虚拟会话 stageResults.teaching 同形）。 */
+        teachingSessionHistory: teachingSessionHistoryOf(
+          session.learningPathId ? await findTeachingSessionsByPathId(session.learningPathId) : []
+        ),
       },
       blackbox: null,
     },
@@ -413,6 +465,18 @@ async function buildTeachingConsole(session: any) {
 }
 
 /** goal_conversations → 控制台同构载荷 */
+
+/** 同路径课堂清单 → 前端 teachingSessionHistory 契约（课程树把每节课映射到课堂会话 id）。
+ *  只取定位所需字段：单课正文不进清单（点开时由 /:sessionId 按需取）。 */
+function teachingSessionHistoryOf(sessions: any[]) {
+  return (sessions || []).map((s: any) => ({
+    teachingSessionId: s.id,
+    taskId: s.taskId,
+    taskTitle: null,
+    status: s.status,
+  }));
+}
+
 async function buildGoalConsole(conversation: any) {
   const [path, teachingSessions, evidence] = await Promise.all([
     conversation.learningPathId
@@ -464,6 +528,11 @@ async function buildGoalConsole(conversation: any) {
     sessionId: conversation.id,
     goal: goalBlock,
     path: pathView,
+    /* 学习者资料（2026-10-11 走查）：goal 阶段会把学习者**携带的资料**（上传附件）与**系统联网采集**
+       的资料一起纳入上下文，path 生成也复用它们。这些结果此前在任何管理页都看不到 —— 落盘在
+       data/uploads/materials/<userId>/，只在管线内部被读。此处按用户投影一份列表级摘要（不含正文：
+       单份正文可达 100k 字符）。取数失败不阻断控制台（fail-open 空列表）。 */
+    materials: materialSummaries(conversation.userId),
     teaching: latestTeaching
       ? {
           teachingSessionId: latestTeaching.id,
@@ -536,6 +605,8 @@ async function buildGoalConsole(conversation: any) {
             currentTaskId: latestTeaching.taskId,
             wrapup,
             taskRuntime: { status: latestTeaching.status },
+            /* 同路径课堂清单：前端课程树据此映射每节课的课堂会话 id（Learn 就地切换 / 单课总结） */
+            teachingSessionHistory: teachingSessionHistoryOf(teachingSessions),
           }
         : { teachingSessionId: null, currentTaskId: null, wrapup: null },
       blackbox: null,

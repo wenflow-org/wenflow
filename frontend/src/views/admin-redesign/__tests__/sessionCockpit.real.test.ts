@@ -492,6 +492,57 @@ describe('SessionCockpit 双模式', () => {
     wrapper.unmount();
   });
 
+  it('Learn 就地切换课堂（2026-10-12 走查）：点已完成课 → 按其课堂会话取转录与单课总结，不再只能看一节课', async () => {
+    const payload = realTeachingPayload();
+    payload.data.stageResults.path = payload.data.path;
+    // 课历史：task_1（已完成）→ ts_arch_1；当前课 task_2 → ts_real_1（同 bindings）
+    payload.data.stageResults.teaching.teachingSessionHistory = [
+      { teachingSessionId: 'ts_real_1', taskId: 'task_2', taskTitle: null, status: 'completed' },
+      { teachingSessionId: 'ts_arch_1', taskId: 'task_1', taskTitle: null, status: 'completed' }
+    ];
+    getRealSessionConsole.mockImplementation(async (id: string) => {
+      if (id === 'ts_arch_1') {
+        return { data: { data: {
+          kind: 'teaching',
+          sessionId: 'ts_arch_1',
+          teaching: {
+            teachingSessionId: 'ts_arch_1',
+            status: 'completed',
+            messages: [{ role: 'assistant', content: '第二课的课堂记录标记' }],
+            wrapup: { status: 'complete', summary: { topicSummary: '第二课小结' } }
+          }
+        } } };
+      }
+      return payload;
+    });
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    await wrapper.findAll('.cp-stp')[2].trigger('click'); // Learn 页签
+    await settle();
+
+    // 点第 2 课（task_1 → ts_arch_1）
+    const row = wrapper.findAll('.cp-learn-tree__lesson').find((r) => (r.text() || '').includes('参数与返回值'));
+    expect(row, '第 2 课行应存在').toBeTruthy();
+    await row!.trigger('click');
+    await settle();
+    expect(getRealSessionConsole).toHaveBeenCalledWith('ts_arch_1');
+    // 转录与单课总结就地切换（不跳页）
+    expect(wrapper.find('.cp-lesson-head').text()).toContain('参数与返回值');
+    expect(wrapper.text()).toContain('第二课的课堂记录标记');
+    expect(wrapper.text()).toContain('第二课小结');
+
+    // 总结页签：已完成且有关课堂的行可点（真实模式不再整表只读）
+    await wrapper.findAll('.cp-stp')[3].trigger('click'); // 总结页签
+    await settle();
+    const summaryBtn = wrapper.findAll('.cp-wrapup-lesson').find((b) => b.element.tagName === 'BUTTON' && (b.text() || '').includes('参数与返回值'));
+    expect(summaryBtn, '总结页签第 2 课应为可点按钮').toBeTruthy();
+    await summaryBtn!.trigger('click');
+    await settle();
+    expect(wrapper.find('#cp-tabpanel-learning').exists()).toBe(true);
+    expect(wrapper.text()).toContain('第二课的课堂记录标记');
+
+    wrapper.unmount();
+  });
+
   it('真实模式：无映射数据时优雅降级（goal/path 空态明示数据边界）', async () => {
     const payload = realTeachingPayload();
     payload.data.goal = null;
