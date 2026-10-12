@@ -326,8 +326,10 @@
             <td v-if="!isNarrow && !hiddenCols.has('created')"><span class="mk-cell-sub" :title="s.createdAt ? `创建于 ${fmtDateTime(s.createdAt)}` : undefined">{{ s.created }}</span></td>
             <td>
               <div class="mk-actions mk-actions--left">
-                <!-- live：入口在名称格（画像页），此处只留真正的行内操作（运行 / 测试 / 更多）
-                     —— 原型 .btn--sm 文字钮词汇（原 mk-icon-btn--text 是图标钮套文字的混搭） -->
+                <!-- live：入口在名称格（画像页），此处行内只留主操作「运行」——原型 .btn--sm 文字钮词汇
+                     （原 mk-icon-btn--text 是图标钮套文字的混搭）。
+                     2026-10-12 外部批评采纳（操作密度）：低频诊断「测试」收进 ⋯ 菜单，
+                     与 mk-primitives「行内 ⋯ 菜单：低频/危险操作收进菜单，避免与高频操作平铺」判例一致 -->
                 <button
                   v-if="isLive"
                   type="button"
@@ -336,18 +338,13 @@
                   :title="s.storyCount === 0 ? '需先生成故事才能运行' : '运行：启动一次新的实验会话（不影响已有会话）'"
                   @click.stop="openLaunch(s)"
                 ><Play :size="14" :stroke-width="1.75" /><span>{{ s.storyCount === 0 ? '需故事' : '运行' }}</span></button>
-                <button
-                  v-if="isLive"
-                  type="button"
-                  class="mk-btn mk-btn--sm"
-                  :title="`单步测试：用「${s.name}」的人设和故事直接跑一次 Prompt 对话，看字段产出是否符合预期（不创建用例、不影响正式会话）`"
-                  @click.stop="openPromptTest(s)"
-                ><SquareCheckBig :size="14" :stroke-width="1.75" /><span>测试</span></button>
                 <div v-if="isLive" class="mk-menu">
                   <!-- aria-expanded 按行判定（同审核 #168 判例）：menuOpen 是全局布尔，任一行开
                        菜单其余行都报 expanded=true；openMenu 才是「本行是否开」 -->
-                  <button type="button" class="mk-menu__btn" aria-label="更多操作（来源卡 / 删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：查看来源卡 / 删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
+                  <button type="button" class="mk-menu__btn" aria-label="更多操作（测试 / 来源卡 / 删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：单步测试 / 查看来源卡 / 删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                    <!-- 低频诊断：用人设和故事直接跑一次 Prompt 对话（不创建用例、不影响正式会话） -->
+                    <button type="button" class="mk-menu__item" role="menuitem" title="单步测试：用该人设和故事直接跑一次 Prompt 对话，看字段产出是否符合预期（不创建用例、不影响正式会话）" @click="openPromptTest(s)">单步测试</button>
                     <!-- 双向互链（卡库 ↔ 虚拟学习者）：卡与本人是同一条档案记录，卡 id 即本行 id -->
                     <button type="button" class="mk-menu__item" role="menuitem" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="menuOpenSourceCard(s)">查看来源卡</button>
                     <div class="mk-menu__sep" aria-hidden="true"></div>
@@ -409,7 +406,7 @@
 
 <script setup lang="ts">
 import { computed, ref, reactive, watch, nextTick, onUnmounted } from 'vue'
-import { Play, SquareCheckBig } from 'lucide-vue-next'
+import { Play } from 'lucide-vue-next'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'

@@ -6,7 +6,7 @@
          2026-10-06 二级页化（用户不喜欢抽屉设计）：点卡=卡详情二级页（?view=card&id=<profileId>）、
          导入=卡导入二级页（?view=card-import），本页两个 mk-drawer 全退役，走 SkillDetail/PathDetail
          家族的标准二级页机制（detailComponents 全局渲染，跨 scene 可用）。 -->
-    <MkPageHead v-if="!embedded" title="学习者卡库" sub="结构化卡：账号 + 档案 + 故事池，导入或平台生产即用（不经编译链）；点卡查看卡详情">
+    <MkPageHead v-if="!embedded" title="学习者卡库" sub="账号、档案与故事池合为一张卡，导入或由平台生成即可使用；点卡查看详情">
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="exporting" @click="doExport">
           {{ exporting ? '导出中…' : '导出卡库' }}
@@ -26,7 +26,7 @@
     <!-- 卡库总量 KPI（全站家法：label + 28px 值 + hint 一短句口径，长解释收 title） -->
     <section class="mk-kpi-grid" aria-label="卡库总量">
       <MkKpi label="卡总数" :value="summary?.total ?? '—'" :hint="summary ? `预置 ${summary.builtin} · 自建 ${summary.custom}` : '按创建时间倒序'" title="卡库全部卡数（预置 + 自建）；一张卡 = 一个虚拟学习者账号 + 档案 + 故事池" />
-      <MkKpi label="预置卡" :value="summary?.builtin ?? '—'" hint="仓库预置随部署同步" title="presetKey 幂等同步的仓库预置角色（presets.yaml），导出不包含" />
+      <MkKpi label="预置卡" :value="summary?.builtin ?? '—'" hint="仓库预置随部署同步" title="平台预置角色，随版本更新自动同步；不包含在「导出卡库」内" />
       <MkKpi label="自建卡" :value="summary?.custom ?? '—'" hint="导入与 AI 创建" title="卡文档导入与后台/AI 创建的卡；「导出卡库」仅导出这部分" />
     </section>
 
@@ -100,7 +100,9 @@
           <p class="vlc-card__goal" :title="c.goal">{{ c.goal }}</p>
           <p v-if="c.opening" class="vlc-card__opening" :title="c.opening">{{ c.opening }}</p>
           <div v-if="c.tags.length" class="vlc-card__tags">
-            <span v-for="t in c.tags.slice(0, 3)" :key="t" class="mk-badge mk-badge--muted">{{ t }}</span>
+            <!-- 2026-10-12 外部批评采纳：hash 指纹（46 字符）原样整串铺满卡宽、被 CSS 腰斩且
+                 无处看全值——显示截为 hash: + 前 8 位（够核对），完整值进 title；其余标签原样 -->
+            <span v-for="t in c.tags.slice(0, 3)" :key="t" class="mk-badge mk-badge--muted" :title="t">{{ tagText(t) }}</span>
             <span v-if="c.tags.length > 3" class="vlc-card__more" :title="c.tags.join(' · ')">+{{ c.tags.length - 3 }}</span>
           </div>
           <footer class="vlc-card__foot">
@@ -253,7 +255,7 @@ function sourceBadge(c: Pick<CardWallEntry, 'preset' | 'sourceKind'>): string {
   return 'mk-badge--muted'
 }
 function sourceTitle(c: Pick<CardWallEntry, 'preset' | 'sourceKind'>): string {
-  if (c.preset) return '仓库预置角色（部署时按 presetKey 幂等同步）'
+  if (c.preset) return '平台预置角色（随版本自动同步）'
   if (c.sourceKind === 'web') return '来源：网络采集卡'
   if (c.sourceKind === 'synthetic') return '来源：合成生成卡'
   return '后台手动 / AI 创建'
@@ -261,6 +263,12 @@ function sourceTitle(c: Pick<CardWallEntry, 'preset' | 'sourceKind'>): string {
 function levelText(level: string): string {
   const map: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高阶' }
   return map[level] || level || '—'
+}
+
+/** 标签显示文本（2026-10-12 外部批评采纳）：hash 散键指纹整串 46 字符，卡内既不折行也无处
+    看全值（CSS 腰斩）。显示取 `hash:` + 前 8 位十六进制（够核对），完整值走 title。 */
+function tagText(t: string): string {
+  return /^hash:/.test(t) ? `${t.slice(0, 13)}…` : t
 }
 
 /* ===== 导出（卡库级动作，留在本页）===== */

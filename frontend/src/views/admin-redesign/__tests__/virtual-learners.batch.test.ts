@@ -593,20 +593,29 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     w.unmount();
   });
 
-  it('行 ⋯ 菜单含「查看来源卡」（卡库 ↔ 虚拟学习者双向互链；行内按钮位只留运行/测试）', async () => {
+  it('行 ⋯ 菜单含「单步测试 / 查看来源卡」（低频操作收进菜单，行内只留主操作「运行」）', async () => {
     liveVirtuals.value = [makeVirtual(7)];
     const w = await mountPage();
     const row = w.find('.mk-card--fill tbody tr');
     expect(row.exists()).toBe(true);
-    // 跨页导航不占行内按钮位（本文件判例：行内 = 运行 / 测试 / ⋯）
-    expect(row.findAll('.mk-actions > .mk-btn').map((b) => b.text())).toEqual(['运行', '测试']);
+    // 2026-10-12 外部批评采纳（操作密度）：行内 = 运行 / ⋯；测试（低频诊断）与跨页导航都进 ⋯ 菜单
+    expect(row.findAll('.mk-actions > .mk-btn').map((b) => b.text())).toEqual(['运行']);
     await row.find('.mk-menu__btn').trigger('click');
     await nextTick();
     const itemOf = (text: string) => row.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === text);
+    expect(itemOf('单步测试'), '菜单缺少单步测试入口').toBeTruthy();
     expect(itemOf('查看来源卡'), '列表行缺少进卡库的入口').toBeTruthy();
     expect(itemOf('删除')).toBeTruthy();
-    await itemOf('查看来源卡')!.trigger('click');
-    // 卡库 id 即本表行 id（同一条档案记录）；列表是一级页 → 无需 from
+    // 单步测试：点击后关菜单 + 弹出 Prompt 测试面板（Teleport 到 body）
+    await itemOf('单步测试')!.trigger('click');
+    await nextTick();
+    const titles = [...document.body.querySelectorAll('.mk-modal__title')].map((el) => el.textContent || '');
+    expect(titles.some((t) => t.includes('单步测试')), '单步测试未弹出面板').toBe(true);
+    expect(row.find('.mk-menu__pop').exists()).toBe(false);
+    // 查看来源卡仍走原行为（卡库 id 即本表行 id，同一条档案记录；列表是一级页 → 无需 from）
+    await row.find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    await row.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '查看来源卡')!.trigger('click');
     expect(openSubPageMock).toHaveBeenCalledWith('card', 'vl-7');
     w.unmount();
   });
