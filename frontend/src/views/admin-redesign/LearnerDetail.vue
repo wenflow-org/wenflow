@@ -1314,12 +1314,24 @@ async function loadDetail(id: string | undefined) {
   tab.value = urlTab ? normalizeLdTab(urlTab) : 'overview'
   const base = liveLearners.value.find((l) => l.userId === id)
   const pathId = base?.pathId
-  // 从用户详情显式进入学习者画像时携带 includeTest（虚拟/测试账号可查，默认视图仍排除）
-  const includeTest = subPage.value?.includeTest
   // 面包屑先以列表兜底名回写（详情加载成功后覆盖为详情名）
   if (base?.name) setSubPageLabel(base.name)
   // 竞态守卫：任一 await 之后 id 已变（或已触发更新的加载）→ 丢弃本响应
   const stale = () => seq !== detailLoadSeq || subPage.value?.id !== id
+  // 用户记录先查一步（单行主键查询）：详情页是**用户作用域**页面，虚拟/测试口径从账号自身
+  // 身份来，不取决于入口——2026-10-12 记忆页签合并后深链（重定向/总览 KPI/画像菜单）都不带
+  // includeTest，虚拟账号的 traces/evidence 被全局口径拒成空（普查表「暂无记忆数据」与调度
+  // 面板 46 条同屏矛盾，实测证据端点直接 404「需显式包含」）。
+  let accountIsTest = !!base?.isVirtualLearner || /^virtual_/.test(id)
+  let userRow: Record<string, unknown> | null = null
+  try {
+    const rec: any = await getUserIncludingDeleted(id)
+    if (stale()) return
+    userRow = (rec?.data?.data ?? rec?.data ?? null) as Record<string, unknown> | null
+    if (userRow && (userRow as Record<string, unknown>).isVirtualLearner === true) accountIsTest = true
+  } catch { /* 用户记录失败按入口旗标走（原行为），详情照常 */ }
+  // 从用户详情显式进入学习者画像时携带 includeTest（虚拟/测试账号可查，默认视图仍排除）
+  const includeTest = subPage.value?.includeTest || accountIsTest
   try {
     // 详情与证据并行（此前串行 await：两个独立接口白等一趟 RTT）
     const [raw, evidenceRes] = await Promise.all([
@@ -1443,27 +1455,23 @@ async function loadDetail(id: string | undefined) {
     }
     // 面包屑回写详情名（内部 ID → 中文名；title 仍保留全 ID）
     setSubPageLabel(liveDetail.value.name)
-    // 用户记录：原先仅在列表兜底缺失时拉取（补真实姓名/邮箱）。现恒拉一次，
-    // 一并为「学习者画像」kv 卡取层级/路径数/注册时间（后端 findUserDetailForAdmin 的 xp/_count.createdAt）；
-    // 深链直达时它同时负责 h1 姓名回填（快照里没存昵称的账号，否则 h1 是裸 user_id）。
-    void getUserIncludingDeleted(id)
-      .then((res) => {
-        if (stale()) return
-        const u = ((res.data?.data ?? res.data ?? {}) as Record<string, unknown>)
-        const counts = (u._count || {}) as Record<string, unknown>
-        userRecord.value = {
-          currentLevel: String(u.currentLevel || ''),
-          xp: Number(u.xp || 0),
-          pathCount: Number(counts.learning_paths || 0),
-          createdAt: String(u.createdAt || '')
-        }
-        const nm = String(u.name || '')
-        if (nm && liveDetail.value && liveDetail.value.name === id) {
-          liveDetail.value = { ...liveDetail.value, name: nm, email: String(u.email || liveDetail.value.email) }
-          setSubPageLabel(nm)
-        }
-      })
-      .catch(() => { /* 用户记录失败不阻塞详情页 */ })
+    // 用户记录：主流程前段已取（含 isVirtualLearner 定虚拟/测试口径），此处仅回填
+    // 「学习者画像」kv 卡的层级/路径数/注册时间与 h1 姓名（快照里没存昵称的账号，否则 h1 是裸 user_id）
+    if (userRow) {
+      const u = userRow as Record<string, unknown>
+      const counts = (u._count || {}) as Record<string, unknown>
+      userRecord.value = {
+        currentLevel: String(u.currentLevel || ''),
+        xp: Number(u.xp || 0),
+        pathCount: Number(counts.learning_paths || 0),
+        createdAt: String(u.createdAt || '')
+      }
+      const nm = String(u.name || '')
+      if (nm && liveDetail.value && liveDetail.value.name === id) {
+        liveDetail.value = { ...liveDetail.value, name: nm, email: String(u.email || liveDetail.value.email) }
+        setSubPageLabel(nm)
+      }
+    }
     // 总览左栏「最近会话」：独立接口，失败不影响主详情
     void loadLdSessions(id)
   } catch (e) {

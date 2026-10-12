@@ -174,6 +174,9 @@ export function findUserDetailForAdmin(userId: string, includeDeleted: boolean) 
       id: true,
       name: true,
       email: true,
+      /** 虚拟/测试账号标记（2026-10-12）：学习者详情页是用户作用域，虚拟/测试口径从账号
+       *  自身身份来（isVirtualLearner → 数据取数带 includeTest），不取决于入口是否携带旗标 */
+      isVirtualLearner: true,
       currentLevel: true,
       xp: true,
       isAdmin: true,
