@@ -65,11 +65,23 @@
       </section>
 
       <template v-else-if="sessionDetail">
-        <section v-if="evaluationDegraded" class="evaluation-degraded" role="status">
+        <section v-if="evaluationDegraded || wrapupSummaryDegraded" class="evaluation-degraded" role="status">
           <strong v-if="!sessionDetail?.wrapup">本次会话未正常结束，未生成课堂总结</strong>
           <strong v-else-if="isTimeoutFallback">本次会话未正常结束，已为你保留基础学习记录</strong>
+          <strong v-else-if="wrapupSummaryDegraded">本次课堂总结为简化版本，可重新生成完整版</strong>
           <strong v-else>课堂总结已生成，详细表现分析暂不可用</strong>
           <p>不影响你保存进度、完成任务或查看本次对话。</p>
+          <!-- 降级 ≠ 终点（2026-10-12）：重试守卫与管理端同源（完结+退化+冷却），后台执行立即返回，
+               前端按 regeneratedAt 变化轮询收结果，不挂长请求 -->
+          <div v-if="canRetryWrapup" class="evaluation-degraded__actions">
+            <button
+              type="button"
+              class="evaluation-degraded__retry"
+              :disabled="regenBusy || regenPolling"
+              @click="retryWrapup"
+            >{{ regenPolling ? '正在重新生成…' : '重新生成完整总结' }}</button>
+            <span v-if="regenNotice" class="evaluation-degraded__notice" role="status">{{ regenNotice }}</span>
+          </div>
         </section>
 
         <CompletionCard
@@ -244,6 +256,20 @@ const evaluationDegraded = computed(() => {
     || currentWrapup?.sources?.evaluation === 'unavailable';
 });
 const isTimeoutFallback = computed(() => sessionDetail.value?.wrapup?.sources?.summary === 'timeout-fallback');
+/** 总结本体退化（占位/兜底文案）：与 evaluation 降级并列的横幅触发条件 */
+const wrapupSummaryDegraded = computed(() => {
+  const w = sessionDetail.value?.wrapup;
+  if (!w) return false;
+  return w.status === 'summary-only'
+    || w.sources?.summary === 'fallback'
+    || w.summarySource === 'fallback';
+});
+/** 重试入口：仅完结会话且产物确实退化时给出（守卫在后端还有一层同源判定） */
+const canRetryWrapup = computed(() => {
+  const detail = sessionDetail.value;
+  if (!detail?.wrapup) return false;
+  return detail.status === 'completed' && (wrapupSummaryDegraded.value || evaluationDegraded.value);
+});
 const canSubmitSessionFeedback = computed(() => !isProjectionMode());
 const mainDialogueMessages = computed(() => (sessionDetail.value?.messages || []).filter((message) => message.role === 'user' || message.role === 'assistant'));
 
@@ -378,6 +404,10 @@ const handleVisibilityChange = () => {
         pollTimer.value = null;
       }
     }
+    if (regenTimer) {
+      clearTimeout(regenTimer);
+      regenTimer = null;
+    }
     return;
   }
 
@@ -385,6 +415,98 @@ const handleVisibilityChange = () => {
     if (pollHiddenAt) pollStartedAt += Date.now() - pollHiddenAt;
     pollHiddenAt = 0;
     schedulePoll(0);
+  }
+  if (regenPolling.value) scheduleRegenPoll(0);
+};
+
+/* 降级总结手动重试（2026-10-12）：后端守卫同步应答、重活后台执行（硬帽 480s+240s），
+   这里触发后按 regeneratedAt 变化轮询收结果，不挂长请求；超时上限对齐后端硬帽留余量 */
+const regenBusy = ref(false);
+const regenPolling = ref(false);
+const regenNotice = ref('');
+const REGEN_POLL_INTERVAL_MS = 15000;
+const REGEN_POLL_TIMEOUT_MS = 15 * 60 * 1000;
+let regenTimer: number | null = null;
+let regenStartedAt = 0;
+let regenBaselineAt = '';
+
+const stopRegenPolling = () => {
+  if (regenTimer) {
+    clearTimeout(regenTimer);
+    regenTimer = null;
+  }
+  regenPolling.value = false;
+};
+
+const isWrapupDegradedState = (value: string | undefined) => value === 'failed' || value === 'unavailable';
+
+const wrapupStillDegraded = (detail: SessionDetail | null) => {
+  const w = detail?.wrapup;
+  if (!w) return false;
+  return w.status === 'summary-only'
+    || w.sources?.summary === 'fallback'
+    || w.summarySource === 'fallback'
+    || isWrapupDegradedState(w.sources?.evaluation)
+    || isWrapupDegradedState(w.evaluationSource);
+};
+
+const scheduleRegenPoll = (delay = REGEN_POLL_INTERVAL_MS) => {
+  if (!regenPolling.value || componentUnmounted || document.hidden || regenTimer) return;
+  regenTimer = window.setTimeout(() => {
+    regenTimer = null;
+    void pollRegenStatus();
+  }, delay);
+};
+
+const pollRegenStatus = async () => {
+  if (!regenPolling.value || componentUnmounted || document.hidden) return;
+  if (Date.now() - regenStartedAt >= REGEN_POLL_TIMEOUT_MS) {
+    stopRegenPolling();
+    regenNotice.value = '重试耗时较长，可稍后刷新页面查看结果';
+    return;
+  }
+  try {
+    const detail = await aiTeachingAPI.getSessionDetail(sessionId.value);
+    if (componentUnmounted || !regenPolling.value) return;
+    if (detail) sessionDetail.value = detail;
+    // regeneratedAt 出现/变化 = 后端一轮重生成已落库（时钟无关的落库信号），按产物质量收口
+    const regenAt = String(detail?.wrapup?.regeneratedAt || '');
+    if (regenAt && regenAt !== regenBaselineAt) {
+      stopRegenPolling();
+      if (wrapupStillDegraded(detail)) {
+        regenNotice.value = '这次重试仍未生成完整总结，可再试一次';
+      } else {
+        regenNotice.value = '';
+        toast.success('学习总结已重新生成');
+      }
+      return;
+    }
+    scheduleRegenPoll();
+  } catch {
+    // 网络抖动跳过本轮继续等（重生成在后台跑），超时分支负责终止
+    scheduleRegenPoll();
+  }
+};
+
+const retryWrapup = async () => {
+  if (regenBusy.value || regenPolling.value || !sessionId.value) return;
+  regenBusy.value = true;
+  regenNotice.value = '';
+  try {
+    regenBaselineAt = String(sessionDetail.value?.wrapup?.regeneratedAt || '');
+    const result = await aiTeachingAPI.regenerateWrapup(sessionId.value);
+    if (result.started) {
+      regenPolling.value = true;
+      regenStartedAt = Date.now();
+      // 首查走常规间隔：重生成硬帽 8 分钟起步，0ms 立即查必然拿到旧产物
+      scheduleRegenPoll();
+    } else {
+      regenNotice.value = result.skipped || result.error || '暂时无法重试，请稍后再试';
+    }
+  } catch (err: any) {
+    regenNotice.value = err?.message || '重试请求失败，请稍后再试';
+  } finally {
+    regenBusy.value = false;
   }
 };
 
@@ -651,6 +773,7 @@ onMounted(() => {
 onUnmounted(() => {
   componentUnmounted = true;
   stopPolling();
+  stopRegenPolling();
   document.removeEventListener('visibilitychange', handleVisibilityChange);
   window.removeEventListener('scroll', onTocScroll);
 });
@@ -721,6 +844,41 @@ onUnmounted(() => {
   margin: 0;
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+/* 降级横幅重试行（2026-10-12）：按钮对齐卡内次级动作节奏，窄屏允许换行防撑爆 */
+.evaluation-degraded__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.evaluation-degraded__retry {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  /* 文字用 dark 档：#f4aa46 在 warning-bg 上对比度不足（learning-components 同场景口径） */
+  color: var(--color-warning-dark);
+  background: transparent;
+  border: 1px solid var(--color-warning-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.evaluation-degraded__retry:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+}
+
+.evaluation-degraded__retry:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.evaluation-degraded__notice {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .evaluation-head {

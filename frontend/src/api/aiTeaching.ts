@@ -253,6 +253,8 @@ export interface WrapupArtifact {
   duration?: number;
   summarySource?: 'model' | 'fallback';
   evaluationSource?: 'model' | 'ai-fallback' | 'failed' | 'unavailable';
+  /** 重生成留痕（重试通道写入）：前端据此判定「一轮重生成已落库」 */
+  regeneratedAt?: string;
 }
 
 export interface ReplanAdvisory {
@@ -641,6 +643,15 @@ export const aiTeachingAPI = {
 
   async getFinalization(sessionId: string): Promise<FinalizationResult> {
     const result = await api.get(`/ai-teaching/sessions/${sessionId}/finalization`);
+    return result.data || result;
+  },
+
+  /**
+   * 降级总结手动重生成：后端守卫同步判定（仅完结+已退化+冷却），重活后台执行立即返回。
+   * started=true 后由调用方轮询 getSessionDetail 观察 sources 升级 / regeneratedAt 变化。
+   */
+  async regenerateWrapup(sessionId: string): Promise<{ started: boolean; skipped?: string; error?: string }> {
+    const result = await api.post(`/ai-teaching/sessions/${sessionId}/wrapup/regenerate`, {});
     return result.data || result;
   },
 

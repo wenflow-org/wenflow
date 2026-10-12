@@ -25,6 +25,10 @@ const mockLearningService = {
   assertTaskReadyForLearning: jest.fn(),
 };
 
+const mockWrapupRegen = {
+  startWrapupRegeneration: jest.fn(),
+};
+
 jest.mock('../../services/ai-teaching/AITeachingCoordinator', () => ({
   __esModule: true,
   default: mockCoordinator,
@@ -35,6 +39,10 @@ jest.mock('../../services/ai-teaching/TeachingSessionRepository', () => ({
 }));
 jest.mock('../../services/ai-teaching/SessionFinalizationService', () => ({
   sessionFinalizationService: mockSessionFinalizationService,
+}));
+jest.mock('../../services/ai-teaching/teaching-wrapup-regen', () => ({
+  __esModule: true,
+  startWrapupRegeneration: mockWrapupRegen.startWrapupRegeneration,
 }));
 jest.mock('../../middleware/auth.middleware', () => ({
   authMiddleware: (_req: any, _res: any, next: () => void) => next(),
@@ -698,6 +706,45 @@ describe('ai-teaching routes', () => {
       await handler({ user: { userId: 'user-2' }, params: { sessionId: 'session-1' }, body: { action: 'preview' } }, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
+    });
+  });
+
+  describe('降级总结手动重生成（学习者侧 2026-10-12）', () => {
+    it('校验归属并透传 started，操作者标记为 learner:<id>', async () => {
+      mockWrapupRegen.startWrapupRegeneration.mockResolvedValue({ started: true });
+      const handler = getRouteHandler('/sessions/:sessionId/wrapup/regenerate');
+      const res = createResponse();
+
+      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: {} }, res);
+
+      expect(mockTeachingSessionRepository.assertOwnership).toHaveBeenCalledWith('session-1', 'user-1');
+      expect(mockWrapupRegen.startWrapupRegeneration).toHaveBeenCalledWith('session-1', {
+        adminId: null,
+        adminName: 'learner:user-1',
+      });
+      expect(res.json).toHaveBeenCalledWith({ success: true, data: { started: true } });
+    });
+
+    it('守卫拒绝（非完结/未退化/冷却中）→ 409 与中文原因', async () => {
+      mockWrapupRegen.startWrapupRegeneration.mockResolvedValue({ started: false, error: '仅完结会话可重生成（当前 active）' });
+      const handler = getRouteHandler('/sessions/:sessionId/wrapup/regenerate');
+      const res = createResponse();
+
+      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({ success: false, error: '仅完结会话可重生成（当前 active）' });
+    });
+
+    it('冷却中 skipped 不算错误，200 透传给前端展示', async () => {
+      mockWrapupRegen.startWrapupRegeneration.mockResolvedValue({ started: false, skipped: '刚刚重试过，请稍候再试' });
+      const handler = getRouteHandler('/sessions/:sessionId/wrapup/regenerate');
+      const res = createResponse();
+
+      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: {} }, res);
+
+      expect(res.status).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith({ success: true, data: { started: false, skipped: '刚刚重试过，请稍候再试' } });
     });
   });
 });

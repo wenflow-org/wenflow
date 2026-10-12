@@ -19,6 +19,7 @@ import {
   teachingSessionRepository
 } from '../services/ai-teaching/TeachingSessionRepository';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
+import { startWrapupRegeneration } from '../services/ai-teaching/teaching-wrapup-regen';
 import { reviewPlanService } from '../services/memory/review-plan.service';
 import { learnerExitService } from '../services/learner/LearnerExitService';
 import { PromptStreamEvent, setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
@@ -986,6 +987,31 @@ router.get('/sessions/:sessionId/finalization', async (req: any, res) => {
   } catch (error: any) {
     logger.error('查询 Finalization 状态失败:', error);
     return sendTeachingError(res, error, '查询课堂结束状态失败');
+  }
+});
+
+/**
+ * 降级 wrapup 手动重生成（学习者侧，2026-10-12）：总结页对降级产物（summary-only/fallback/
+ * evaluation unavailable）开放「重新生成总结」。守卫与管理端口同源（仅完结+已退化+2 分钟冷却），
+ * 重活后台执行立即应答（重生成硬帽 480s+240s，不能挂 HTTP），前端轮询 detail 收结果。
+ * POST /api/ai-teaching/sessions/:sessionId/wrapup/regenerate
+ */
+router.post('/sessions/:sessionId/wrapup/regenerate', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return sendUnauthorized(res);
+
+    const { sessionId } = req.params;
+    await teachingSessionRepository.assertOwnership(sessionId, userId);
+
+    const result = await startWrapupRegeneration(sessionId, { adminId: null, adminName: `learner:${userId}` });
+    if (result.error) {
+      return res.status(409).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error('触发 wrapup 重生成失败:', error);
+    return sendTeachingError(res, error, '触发总结重生成失败');
   }
 });
 
