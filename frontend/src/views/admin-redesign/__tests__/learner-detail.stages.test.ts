@@ -10,6 +10,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 const listSessions = vi.hoisted(() => vi.fn());
 const getMemoryTraces = vi.hoisted(() => vi.fn());
+const getLearnerEvidence = vi.hoisted(() => vi.fn().mockResolvedValue({ items: [], domain: [], loadCurve: [] }));
 
 const routeQuery = vi.hoisted(() => ({ tab: 'sessions' } as Record<string, string>));
 
@@ -43,7 +44,7 @@ vi.mock('../live', async () => {
       },
     },
   }),
-  liveGetLearnerEvidence: vi.fn().mockResolvedValue({ items: [], domain: [], loadCurve: [] }),
+  liveGetLearnerEvidence: getLearnerEvidence,
   liveGetLearnerPredictions: vi.fn().mockResolvedValue(null),
   liveRecomputeLearner: vi.fn(),
   liveGetMemoryTraces: getMemoryTraces,
@@ -87,18 +88,25 @@ vi.mock('../statusText', () => ({
   statusText: (s: string) => s,
   // C10 上收后教学 pane 徽章走 sessionStatusBadgeCls；本 mock 只需可调用返回空串（断言不涉及配色）
   sessionStatusBadgeCls: () => '',
+  // 2026-10-11 深设计：进度列复用共享 statusText.sessionProgress* 四件套
+  sessionProgressPct: (p: { taskIndex: number; totalTasks: number } | null) =>
+    p && p.totalTasks > 0 ? Math.round((p.taskIndex / p.totalTasks) * 100) : null,
+  sessionProgressText: (p: { taskIndex: number; totalTasks: number } | null) =>
+    p && p.totalTasks > 0 ? `任务 ${p.taskIndex}/${p.totalTasks}` : '—',
+  sessionProgressTone: () => null,
+  sessionProgressDone: (s: string) => s === 'completed' || s === 'succeeded',
 }));
 vi.mock('../useConfirm', () => ({ askConfirm: vi.fn() }));
 vi.mock('@/utils/toast', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
 
 import LearnerDetail from '../LearnerDetail.vue';
 
-function sessionRow(id: string, milestoneIndex: number | null) {
+function sessionRow(id: string, milestoneIndex: number | null, status = 'completed') {
   return {
     id,
     topic: `会话 ${id}`,
     subject: 'concept-teaching',
-    status: 'completed',
+    status,
     startTime: new Date().toISOString(),
     messageCount: 4,
     duration: 300,
@@ -111,7 +119,8 @@ async function mountLd(sessions: ReturnType<typeof sessionRow>[]) {
   const w = mount(LearnerDetail, {
     global: {
       stubs: {
-        MkChart: { template: '<div class="stub-chart" />' },
+        // 命名 + 接 props：压力曲线用例要读 option.xAxis.data 断言轴域
+        MkChart: { name: 'MkChart', props: ['option'], template: '<div class="stub-chart" />' },
         MkGraphExplorer: { template: '<div class="stub-graph" />' },
         RouterLink: { template: '<a><slot /></a>' },
         Teleport: { template: '<teleport to="body"><slot /></teleport>' },
@@ -122,22 +131,33 @@ async function mountLd(sessions: ReturnType<typeof sessionRow>[]) {
   return w;
 }
 
-describe('LearnerDetail 教学会话 pane：阶段切换器', () => {
+describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
+  /** 工具栏两组 chips 的选择器（2026-10-11 深设计：视角组与阶段组同排分域） */
+  const stageChips = (w: ReturnType<typeof mount>) =>
+    w.findAll('.ld-filtbar__grp[aria-label="按阶段筛选会话"] .mk-pill');
+  const viewChips = (w: ReturnType<typeof mount>) =>
+    w.findAll('.ld-filtbar__grp[aria-label="会话视角"] .mk-pill');
+
   beforeEach(() => {
     setActivePinia(createPinia());
     listSessions.mockReset();
     getMemoryTraces.mockReset().mockResolvedValue([]);
   });
 
-  it('多阶段：chips 按里程碑升序带计数，点击筛选且 meta 显示 N / M 条', async () => {
+  it('多阶段：阶段 chips 按里程碑升序带计数，点击筛选', async () => {
     const w = await mountLd([
       sessionRow('s1', 1),
       sessionRow('s2', 1),
       sessionRow('s3', 2),
-      sessionRow('s4', null), // 无归因行不进档位，但留在「全部」
+      sessionRow('s4', null), // 无归因行不进档位，但留在「全部阶段」
     ]);
-    const chips = w.findAll('.ld-stagechips .mk-pill');
-    expect(chips.length).toBe(3); // 全部 + 里程碑1 + 里程碑2
+    // 列方言回归（2026-10-11 用户走查：阶段从身份副行拆成独立列；列序按叙事重排）
+    expect(w.findAll('#ld-panel-sessions thead th').map((t) => t.text())).toEqual([
+      '会话', '阶段', '进度', '状态', '互动', '产物', '时间', '会话 ID',
+    ]);
+    const chips = stageChips(w);
+    expect(chips.length).toBe(3); // 全部阶段 + 里程碑1 + 里程碑2
+    expect(chips[0].text()).toContain('全部阶段 · 4');
     expect(chips[1].text()).toContain('里程碑 1 · 2');
     expect(chips[2].text()).toContain('里程碑 2 · 1');
 
@@ -146,23 +166,188 @@ describe('LearnerDetail 教学会话 pane：阶段切换器', () => {
     const rows = w.findAll('tbody .ld-pane-row');
     expect(rows.length).toBe(1);
     expect(rows[0].text()).toContain('s3');
-    expect(w.find('.mk-card__meta').text()).toContain('1 / 4 条');
+    // 阶段独立成列，身份副行只留路径
+    expect(rows[0].findAll('td')[1].text()).toContain('里程碑 2/3');
+    expect(rows[0].findAll('td')[0].text()).not.toContain('里程碑');
   });
 
-  it('回到「全部」恢复全量；切人/重载后失效档位自动复位', async () => {
+  it('回到「全部阶段」恢复全量；切人/重载后失效档位自动复位', async () => {
     const w = await mountLd([sessionRow('s1', 1), sessionRow('s2', 2)]);
-    await w.findAll('.ld-stagechips .mk-pill')[2].trigger('click');
+    await stageChips(w)[2].trigger('click');
     await flushPromises();
     expect(w.findAll('tbody .ld-pane-row').length).toBe(1);
 
-    await w.findAll('.ld-stagechips .mk-pill')[0].trigger('click');
+    await stageChips(w)[0].trigger('click');
     await flushPromises();
     expect(w.findAll('tbody .ld-pane-row').length).toBe(2);
   });
 
-  it('单阶段：不渲染切换器（单档即全部）', async () => {
+  it('单阶段：不渲染阶段切换器（单档即全部）', async () => {
     const w = await mountLd([sessionRow('s1', 1), sessionRow('s2', 1)]);
-    expect(w.find('.ld-stagechips').exists()).toBe(false);
+    expect(w.find('.ld-filtbar__grp[aria-label="按阶段筛选会话"]').exists()).toBe(false);
+  });
+
+  it('视角默认「有效」：隐藏废弃重试；头部读数给 有效/废弃 分档', async () => {
+    const w = await mountLd([
+      sessionRow('s1', 1),
+      sessionRow('s2', 1, 'discarded'),
+      sessionRow('s3', 1, 'discarded'),
+    ]);
+    expect(viewChips(w).map((c) => c.text())).toEqual(['有效 · 1', '已废弃 · 2', '窗口全部 · 3']);
+    expect(w.find('.mk-card__meta').text()).toContain('有效 1 · 废弃 2');
+    const rows = w.findAll('tbody .ld-pane-row');
+    expect(rows.length).toBe(1);
+    expect(rows[0].text()).toContain('s1');
+  });
+
+  it('切「已废弃」只看废弃；「窗口全部」恢复全量', async () => {
+    const w = await mountLd([
+      sessionRow('s1', 1),
+      sessionRow('s2', 1, 'discarded'),
+      sessionRow('s3', 1, 'timeout'),
+    ]);
+    await viewChips(w)[1].trigger('click');
+    await flushPromises();
+    let rows = w.findAll('tbody .ld-pane-row');
+    expect(rows.length).toBe(1);
+    expect(rows[0].text()).toContain('s2');
+
+    // 超时/失败属有效信号会话（有教学过程），只有 discarded 算废弃
+    await viewChips(w)[0].trigger('click');
+    await flushPromises();
+    rows = w.findAll('tbody .ld-pane-row');
+    expect(rows.map((r) => r.text().match(/s\d/)?.[0])).toEqual(['s1', 's3']);
+
+    await viewChips(w)[2].trigger('click');
+    await flushPromises();
+    expect(w.findAll('tbody .ld-pane-row').length).toBe(3);
+  });
+
+  it('有效视角为空时给切视角提示（不显示"暂无会话"）', async () => {
+    const w = await mountLd([sessionRow('s1', 1, 'discarded'), sessionRow('s2', 1, 'discarded')]);
+    expect(w.findAll('tbody .ld-pane-row').length).toBe(0);
+    expect(w.text()).toContain('均已被重置');
+    expect(w.text()).toContain('切「已废弃」或「窗口全部」查看');
+  });
+
+  it('互动/产物列消费接口现成字段：知识点数、总结档、建议徽章', async () => {
+    listSessions.mockResolvedValue({
+      data: {
+        data: {
+          items: [
+            {
+              ...sessionRow('s1', 1),
+              knowledgePointCount: 3,
+              wrapup: { status: 'complete', summary: {} },
+              advisory: { shouldSuggest: true, priority: 'high', ui: { title: '建议重排', body: '理由' } },
+            },
+            {
+              ...sessionRow('s2', 1, 'timeout'),
+              knowledgePointCount: 1,
+              wrapup: { status: 'summary-only', summary: {} },
+            },
+          ],
+        },
+      },
+    });
+    const w = mount(LearnerDetail, {
+      global: {
+        stubs: {
+          MkChart: { template: '<div class="stub-chart" />' },
+          MkGraphExplorer: { template: '<div class="stub-graph" />' },
+          RouterLink: { template: '<a><slot /></a>' },
+          Teleport: { template: '<teleport to="body"><slot /></teleport>' },
+        },
+      },
+    });
+    await flushPromises();
+    const rows = w.findAll('tbody .ld-pane-row');
+    expect(rows[0].text()).toContain('知识 3 点');
+    expect(rows[0].text()).toContain('有总结');
+    expect(rows[0].text()).toContain('建议重排');
+    expect(rows[1].text()).toContain('降级总结');
+  });
+});
+
+describe('LearnerDetail 记忆与复习 pane（2026-10-11 深设计）', () => {
+  const day = 86400000;
+  const trace = (over: Record<string, unknown>) => ({
+    conceptKey: 'kc-x', label: '知识点', masteryScore: 0.5, stability: 'developing',
+    extractionCount: 1, lastSeenAt: new Date(Date.now() - 2 * day).toISOString(),
+    fsrsStability: 0.5, fsrsDifficulty: 6.4, ktMasteryEma: 0.8,
+    dueAt: new Date(Date.now() + day).toISOString(), retrievability: 0.9,
+    updatedAt: new Date().toISOString(), ...over
+  });
+  const mountMemory = async (rows: ReturnType<typeof trace>[]) => {
+    getMemoryTraces.mockResolvedValue(rows);
+    const w = await mountLd([]);
+    return w;
+  };
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    routeQuery.tab = 'memory';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    getMemoryTraces.mockReset();
+  });
+
+  it('操作列已撤（无单点复习接口）；列方言=知识点/记忆强度/复习到期/提取史/状态', async () => {
+    const w = await mountMemory([trace({})]);
+    expect(w.findAll('#ld-panel-memory thead th').map((t) => t.text())).toEqual([
+      '知识点', '记忆强度', '复习到期', '提取史', '状态',
+    ]);
+    // 深链入口收归卡头单链接，行内不再逐行重复按钮
+    expect(w.findAll('#ld-panel-memory tbody button').length).toBe(0);
+    expect(w.find('#ld-panel-memory .mk-card__head .mk-link').text()).toContain('打开记忆与复习');
+  });
+
+  it('排序：待复习（逾期最久在前）→ 有痕迹未到期 → 未初始化压尾', async () => {
+    const w = await mountMemory([
+      trace({ conceptKey: 'k-ok', label: '稳固点', retrievability: 1, dueAt: new Date(Date.now() + day).toISOString() }),
+      trace({ conceptKey: 'k-uninit', label: '未初始化点', retrievability: null, dueAt: null, extractionCount: 0, lastSeenAt: null }),
+      trace({ conceptKey: 'k-due2', label: '逾期两点', retrievability: 0.3, dueAt: new Date(Date.now() - 2 * day).toISOString() }),
+      trace({ conceptKey: 'k-due7', label: '逾期七点', retrievability: 0.31, dueAt: new Date(Date.now() - 7 * day).toISOString() }),
+    ]);
+    const labels = w.findAll('#ld-panel-memory tbody tr').map((tr) => tr.find('td').text());
+    expect(labels).toEqual(['逾期七点', '逾期两点', '稳固点', '未初始化点']);
+  });
+
+  it('压暗只标「未初始化」：待复习行即使没有强度读数也不压暗', async () => {
+    const w = await mountMemory([
+      trace({ conceptKey: 'k-due-null', label: '逾期无读数', retrievability: null, dueAt: new Date(Date.now() - day).toISOString(), extractionCount: 1 }),
+      trace({ conceptKey: 'k-uninit', label: '未初始化点', retrievability: null, dueAt: null, extractionCount: 0, lastSeenAt: null }),
+    ]);
+    const rows = w.findAll('#ld-panel-memory tbody tr');
+    expect(rows[0].classes()).not.toContain('ld-memrow--uninit');
+    expect(rows[1].classes()).toContain('ld-memrow--uninit');
+  });
+
+  it('卡头读数给出状态分档；提取史输出「N 次 · 最近 时间」', async () => {
+    const w = await mountMemory([
+      trace({ conceptKey: 'k-a', label: '甲', retrievability: 0.3, dueAt: new Date(Date.now() - day).toISOString(), extractionCount: 15 }),
+      trace({ conceptKey: 'k-b', label: '乙', retrievability: 1, dueAt: new Date(Date.now() + day).toISOString(), extractionCount: 4 }),
+      trace({ conceptKey: 'k-c', label: '丙', retrievability: null, dueAt: null, extractionCount: 0, lastSeenAt: null }),
+    ]);
+    const meta = w.find('#ld-panel-memory .mk-card__meta');
+    expect(meta.text()).toContain('待复习 1');
+    expect(meta.text()).toContain('稳固 1');
+    expect(meta.text()).toContain('未初始化 1');
+    expect(w.find('#ld-panel-memory tbody tr').text()).toContain('15 次 · 最近');
+  });
+
+  it('视角 chips：分档计数从行派生，点击只看该档', async () => {
+    const w = await mountMemory([
+      trace({ conceptKey: 'k-a', label: '甲', retrievability: 0.3, dueAt: new Date(Date.now() - day).toISOString() }),
+      trace({ conceptKey: 'k-b', label: '乙', retrievability: 1, dueAt: new Date(Date.now() + day).toISOString() }),
+      trace({ conceptKey: 'k-c', label: '丙', retrievability: null, dueAt: null, extractionCount: 0, lastSeenAt: null }),
+    ]);
+    const chips = w.findAll('.ld-filtbar[aria-label="按复习状态筛选"] .mk-pill');
+    expect(chips.map((c) => c.text())).toEqual(['全部 · 3', '待复习 · 1', '稳固 · 1', '未初始化 · 1']);
+    await chips[1].trigger('click');
+    await flushPromises();
+    const rows = w.findAll('#ld-panel-memory tbody tr');
+    expect(rows.length).toBe(1);
+    expect(rows[0].text()).toContain('甲');
   });
 });
 
@@ -186,5 +371,64 @@ describe('LearnerDetail FSRS 到期三态（timeAgo 未来时间失真修复）'
     expect(html).toContain('3 天后');
     expect(html).toContain('已逾期 2 天');
     expect(html).not.toContain('>刚刚<');
+  });
+});
+
+describe('LearnerDetail 压力曲线 x 轴贴合数据（2026-10-12 走查「尺度42天那么大，放得下吗」）', () => {
+  const dayKey = (offset: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const labelOf = (key: string) => {
+    const [, m, d] = key.split('-');
+    return `${Number(m)}月${Number(d)}日`;
+  };
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    routeQuery.tab = 'evidence';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    getMemoryTraces.mockReset().mockResolvedValue([]);
+    getLearnerEvidence.mockReset();
+  });
+
+  it('起点取最早「有值」日并留约 1/4 引入空档：28 天前的空值行不再把轴拉满', async () => {
+    getLearnerEvidence.mockResolvedValue({
+      items: [],
+      domain: [],
+      loadCurve: [
+        // 旧行整行空值：旧判据 map.has 命中它，轴从 28 天前起、曲线挤成最右一条缝
+        { date: dayKey(28), lss: null, lf: null, lsb: null },
+        ...[4, 3, 2, 1, 0].map((o) => ({ date: dayKey(o), lss: 40 + o, lf: 41 + o, lsb: 20 + o })),
+      ],
+    });
+    const w = await mountLd([]);
+    const chart = w.findComponent({ name: 'MkChart' });
+    expect(chart.exists(), 'evidence 页签应渲染压力曲线').toBe(true);
+    const labels = (chart.props('option') as { xAxis: { data: string[] } }).xAxis.data;
+    // 6 档：1 天引入空档 + 5 个有值日；曲线起点落在 ~1/6（中间偏左），不再贴右缘
+    expect(labels).toHaveLength(6);
+    expect(labels[0]).toBe(labelOf(dayKey(5)));
+    expect(labels[1]).toBe(labelOf(dayKey(4)));
+    expect(labels).not.toContain(labelOf(dayKey(28)));
+  });
+
+  it('整窗都有值时不引入空档（起点贴窗口起点）；全空值回落空态', async () => {
+    getLearnerEvidence.mockResolvedValue({
+      items: [],
+      domain: [],
+      loadCurve: [41, 40, 39].map((o) => ({ date: dayKey(o), lss: 30 + (41 - o), lf: 30, lsb: 20 })),
+    });
+    let w = await mountLd([]);
+    let labels = (w.findComponent({ name: 'MkChart' }).props('option') as { xAxis: { data: string[] } }).xAxis.data;
+    // 最早有值日=41（贴 42 天窗起点），无余量给空档 → 轴=窗口本身
+    expect(labels[0]).toBe(labelOf(dayKey(41)));
+    expect(labels).toHaveLength(42);
+
+    getLearnerEvidence.mockResolvedValue({ items: [], domain: [], loadCurve: [{ date: dayKey(9), lss: null, lf: null, lsb: null }] });
+    w = await mountLd([]);
+    expect(w.findComponent({ name: 'MkChart' }).exists()).toBe(false);
+    expect(w.text()).toContain('暂无压力记录');
   });
 });

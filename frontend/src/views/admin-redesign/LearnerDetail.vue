@@ -1973,12 +1973,21 @@ const loadSeries = computed<LoadPoint[]>(() => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
   const map = new Map(loadCurveRaw.value.map((p) => [p.date, p]))
-  const out: Omit<LoadPoint, 'x' | 'ylss' | 'ylf' | 'ylsb'>[] = []
-  // 压力曲线从最早有记录的那天开始画（避免一大段空数据）；无记录时回退到窗口起点
-  let start = 0
+  const hasVal = (p?: { lss: number | null; lf: number | null; lsb: number | null }) =>
+    !!p && (p.lss != null || p.lf != null || p.lsb != null)
+  /* 起点三修（2026-10-12 走查「数据能靠近中间一点…尺度42天那么大放得下吗」）：
+     ① 判据从「有行」改「有值」——空值行（map.has 命中）会把轴拉满 42/90 天，左边全空、
+        曲线挤成最右一条缝；
+     ② 最早有值日之前留约 1/4 跨度作引入空档，曲线从中间偏左起步，不贴左缘也不贴右缘；
+     ③ 引入空档受窗口起点约束，不越出所选范围。 */
+  let firstValued = -1
   for (let i = days - 1; i >= 0; i--) {
-    if (map.has(keyOf(i))) { start = i; break }
+    if (hasVal(map.get(keyOf(i)))) { firstValued = i; break }
   }
+  if (firstValued < 0) return []
+  const lead = Math.min(days - 1 - firstValued, Math.max(1, Math.round((firstValued + 1) * 0.25)))
+  const start = firstValued + lead
+  const out: Omit<LoadPoint, 'x' | 'ylss' | 'ylf' | 'ylsb'>[] = []
   for (let i = start; i >= 0; i--) {
     const key = keyOf(i)
     const p = map.get(key)
