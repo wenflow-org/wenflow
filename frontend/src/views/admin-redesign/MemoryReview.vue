@@ -95,78 +95,7 @@
         <p v-else class="mr__sub">暂无温故计划：该用户名下还没有可安排的记忆痕迹。</p>
       </section>
 
-      <!-- 2. 到期清单预览：到期积压的证据（谁先到期、掌握多少） -->
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">到期清单预览</h3>
-          <span class="mk-card__meta" :title="`按记忆强度从低到高：越靠前越该先复习，最多显示前 20 条；旧记录的强度按掌握度回退估算${duePreviewLegacyCount ? `（本页 ${duePreviewLegacyCount} 条为回退估算）` : ''}`">前 20 · 记忆强度升序<template v-if="duePreviewLegacyCount"> · 含 {{ duePreviewLegacyCount }} 条回退估算</template></span>
-        </div>
-        <div v-if="detail.duePreview.length" class="mk-table-scroll">
-          <table class="mk-table">
-          <thead><tr><th>概念</th><th class="mk-num" title="由记忆模型计算的记住概率；旧记录按掌握度回退估算（悬停可见来源）">记忆强度</th><th class="mk-num">掌握</th><th class="mk-num">提取次数</th><th>来源</th><th title="相对表达：已逾期 N 天 / 今天 / 明天 / N 天后；绝对到期时刻进悬停">到期</th></tr></thead>
-          <tbody>
-            <tr v-for="trace in detail.duePreview" :key="trace.conceptKey">
-              <!-- 原型记忆明细表首列 = 知识点 strong；同族重复/归并建议首列是裸 key（无人类可读
-                   label），维持 mr__sub 降档，不冒充正文 -->
-              <td><strong>{{ trace.label }}</strong></td>
-              <td class="mk-num">
-                <span class="mr-pct" :class="{ 'mr-pct--warn': trace.retention < 0.7 }" :title="strengthTitle(trace)">
-                  <b>{{ Math.round(trace.retention * 100) }}%</b>
-                  <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="trace.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(trace.retention * 100) + '%' }"></i></span>
-                </span>
-              </td>
-              <td class="mk-num">
-                <span class="mr-pct" :title="`掌握 ${Math.round(trace.masteryScore * 100)}%`">
-                  <b>{{ Math.round(trace.masteryScore * 100) }}%</b>
-                  <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: Math.round(trace.masteryScore * 100) + '%' }"></i></span>
-                </span>
-              </td>
-              <td class="mk-num">{{ trace.extractionCount }}</td>
-              <td class="mr__sub" :title="trace.source ? `原始标记：${trace.source}` : undefined">{{ sourceText(trace.source) }}</td>
-              <!-- 到期列（P1#13）：裸绝对时刻读不出「急不急」，改相对表达（已逾期 N 天 / N 天后）
-                   并给逾期着色；绝对时刻进 title（P2 到期带判例同源） -->
-              <td>
-                <span
-                  v-if="dueCell(trace).text !== '—'"
-                  :class="{ 'mr__overdue': dueCell(trace).overdue }"
-                  :title="dueCell(trace).title"
-                >{{ dueCell(trace).text }}</span>
-                <span v-else class="mk-na" title="该痕迹没有到期时间">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
-        <MkEmptyState v-else title="当前没有到期点" description="该用户的记忆痕迹都还没到复习时间；到期后会按记忆强度升序列在这里（前 20 条）。" />
-      </section>
-
-      <!-- 3. 同族重复：措辞不同、说的是同一件事（归并的输入） -->
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">同族重复</h3>
-          <span class="mk-card__meta" title="措辞不同但含义相同的记录，可用下方归并收拢">措辞不同、含义相同的记录</span>
-        </div>
-        <p v-if="!detail.duplicatedFamilies.length" class="mr__sub">没有同族重复。</p>
-        <div v-else class="mk-table-scroll">
-          <table class="mk-table">
-          <thead><tr><th>重复组</th><th class="mk-num">条数</th><th>成员</th></tr></thead>
-          <tbody>
-            <tr v-for="family in detail.duplicatedFamilies" :key="family.family">
-              <!-- 归一化键没有人类可读 label（后端只回 key）→ 同 负担因子 口径降为 sub，不冒充正文 -->
-              <td class="mr__sub">{{ family.family }}</td>
-              <td class="mk-num">{{ family.size }}</td>
-              <td class="mr__sub">
-                <div v-for="member in family.members" :key="member.conceptKey">
-                  {{ member.conceptKey }}（提取 {{ member.extractionCount }} · 掌握 {{ Math.round(member.masteryScore * 100) }}%）
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
-      </section>
-
-      <!-- 4. 概念归并审计：可写动作（勾选执行 / 单条确认 / 驳回 / 回滚），默认观察模式。
+      <!-- 2. 概念归并审计：可写动作（勾选执行 / 单条确认 / 驳回 / 回滚），默认观察模式。
            R7 概念本体治理批：三组建议（归并 / 需人工看 / 散键清理）全部给出入口——
            此前 dropCandidates 只在类型里声明计数（审计 CC-2）、ambiguous 无操作位； -->
       <section class="mk-card">
@@ -454,6 +383,78 @@
           </p>
           </template>
         </template>
+      </section>
+
+      <!-- 3. 到期清单预览：到期积压的证据（谁先到期、掌握多少）。排在审计卡之后（2026-10-12
+           外部批评采纳：审计是本页签主动作，证据卡放后面，不再把它挤到首屏之下） -->
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">到期清单预览</h3>
+          <span class="mk-card__meta" :title="`按记忆强度从低到高：越靠前越该先复习，最多显示前 20 条；旧记录的强度按掌握度回退估算${duePreviewLegacyCount ? `（本页 ${duePreviewLegacyCount} 条为回退估算）` : ''}`">前 20 · 记忆强度升序<template v-if="duePreviewLegacyCount"> · 含 {{ duePreviewLegacyCount }} 条回退估算</template></span>
+        </div>
+        <div v-if="detail.duePreview.length" class="mk-table-scroll">
+          <table class="mk-table">
+          <thead><tr><th>概念</th><th class="mk-num" title="由记忆模型计算的记住概率；旧记录按掌握度回退估算（悬停可见来源）">记忆强度</th><th class="mk-num">掌握</th><th class="mk-num">提取次数</th><th>来源</th><th title="相对表达：已逾期 N 天 / 今天 / 明天 / N 天后；绝对到期时刻进悬停">到期</th></tr></thead>
+          <tbody>
+            <tr v-for="trace in detail.duePreview" :key="trace.conceptKey">
+              <!-- 原型记忆明细表首列 = 知识点 strong；同族重复/归并建议首列是裸 key（无人类可读
+                   label），维持 mr__sub 降档，不冒充正文 -->
+              <td><strong>{{ trace.label }}</strong></td>
+              <td class="mk-num">
+                <span class="mr-pct" :class="{ 'mr-pct--warn': trace.retention < 0.7 }" :title="strengthTitle(trace)">
+                  <b>{{ Math.round(trace.retention * 100) }}%</b>
+                  <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="trace.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(trace.retention * 100) + '%' }"></i></span>
+                </span>
+              </td>
+              <td class="mk-num">
+                <span class="mr-pct" :title="`掌握 ${Math.round(trace.masteryScore * 100)}%`">
+                  <b>{{ Math.round(trace.masteryScore * 100) }}%</b>
+                  <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: Math.round(trace.masteryScore * 100) + '%' }"></i></span>
+                </span>
+              </td>
+              <td class="mk-num">{{ trace.extractionCount }}</td>
+              <td class="mr__sub" :title="trace.source ? `原始标记：${trace.source}` : undefined">{{ sourceText(trace.source) }}</td>
+              <!-- 到期列（P1#13）：裸绝对时刻读不出「急不急」，改相对表达（已逾期 N 天 / N 天后）
+                   并给逾期着色；绝对时刻进 title（P2 到期带判例同源） -->
+              <td>
+                <span
+                  v-if="dueCell(trace).text !== '—'"
+                  :class="{ 'mr__overdue': dueCell(trace).overdue }"
+                  :title="dueCell(trace).title"
+                >{{ dueCell(trace).text }}</span>
+                <span v-else class="mk-na" title="该痕迹没有到期时间">—</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+        <MkEmptyState v-else title="当前没有到期点" description="该用户的记忆痕迹都还没到复习时间；到期后会按记忆强度升序列在这里（前 20 条）。" />
+      </section>
+
+      <!-- 4. 同族重复：措辞不同、说的是同一件事（归并的输入） -->
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">同族重复</h3>
+          <span class="mk-card__meta" title="措辞不同但含义相同的记录，可用下方归并收拢">措辞不同、含义相同的记录</span>
+        </div>
+        <p v-if="!detail.duplicatedFamilies.length" class="mr__sub">没有同族重复。</p>
+        <div v-else class="mk-table-scroll">
+          <table class="mk-table">
+          <thead><tr><th>重复组</th><th class="mk-num">条数</th><th>成员</th></tr></thead>
+          <tbody>
+            <tr v-for="family in detail.duplicatedFamilies" :key="family.family">
+              <!-- 归一化键没有人类可读 label（后端只回 key）→ 同 负担因子 口径降为 sub，不冒充正文 -->
+              <td class="mr__sub">{{ family.family }}</td>
+              <td class="mk-num">{{ family.size }}</td>
+              <td class="mr__sub">
+                <div v-for="member in family.members" :key="member.conceptKey">
+                  {{ member.conceptKey }}（提取 {{ member.extractionCount }} · 掌握 {{ Math.round(member.masteryScore * 100) }}%）
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
       </section>
       </div>
     </template>
@@ -1014,4 +1015,14 @@ td.mr__sub { display: table-cell; }
 .mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
 .mr__bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 16px 10px; }
 .mr__warn-inline { color: var(--mk-amber); font-size: var(--mk-fs-micro); }
+
+/* ===== 行内确认/驳回降噪（2026-10-12 外部批评采纳）：审计三表 42 行 × 2 颗按钮 = 84 颗
+   常驻灰框，视觉噪声压过建议内容本身。悬停/键盘聚焦所在行才显现（按钮仍在 DOM、可达），
+   触屏（hover:none）常显；顶部批量执行栏不受影响、常驻。 ===== */
+.mr-panels tr .mk-actions { opacity: 0; transition: opacity 0.12s ease; }
+.mr-panels tr:hover .mk-actions,
+.mr-panels tr:focus-within .mk-actions { opacity: 1; }
+@media (hover: none) {
+  .mr-panels tr .mk-actions { opacity: 1; }
+}
 </style>
