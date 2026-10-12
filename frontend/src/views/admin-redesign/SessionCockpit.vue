@@ -195,11 +195,13 @@
       </div>
     </section>
 
-    <!-- ===== 阶段推进（原型 .stepper 三态 + statstrip 三读数；原顶栏阶段轴收敛至此，步点即阶段页签导航） ===== -->
+    <!-- ===== 阶段推进（2026-10-12 重设计：卡 = 标题 + 完成计数 + 出口按钮的头部 + 步点阵本体。
+         原下方 MkStatStrip 三读数撤——「当前阶段/下一阶段」步点阵自身已表达、「已用回合」与
+         Goal 步点的「学习者发言 N」近重复且历史上两次被误读（含/不含平台回复）；头部
+         「回合状态机」黑话 meta 同步撤。步点即阶段页签导航。） ===== -->
     <section class="mk-card cp-stepcard">
       <div class="mk-card__head">
         <h3 class="mk-card__title">阶段推进</h3>
-        <span class="mk-card__meta">回合状态机</span>
         <span class="cp-stepcard__spacer"></span>
         <span class="mk-card__meta">已完成 <b class="mono">{{ stageDoneCount }}</b> / {{ stageFlow.length }} 阶段</span>
         <!-- 下游直达（2026-10-11 走查）：Path / Learn 的数据本卡已摆在页签里，但下钻到它们自己的页面
@@ -238,9 +240,6 @@
             <span class="cp-stp__meta">{{ stepMeta(st) }}</span>
           </button>
         </div>
-        <!-- 阶段推进读数：收敛到共享原语 MkStatStrip grid 档（2026-10-06 审核 #50：
-             页私有 .statstrip 复刻已删，值 22px → 原语 18px，与另三页对齐） -->
-        <MkStatStrip layout="grid" class="cp-stepstrip" aria-label="阶段推进读数" :items="stageStatItems" />
       </div>
     </section>
 
@@ -880,8 +879,6 @@ import { toast } from '@/utils/toast'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import MkStatStrip from '@/components/mk/MkStatStrip.vue'
-import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'
 import { runHealthTone, statusText } from './statusText'
 import { parseLogEntry } from './sessionLog'
 // 评分助手（evalScore）原供终局评估面板使用；面板已随裁判独立面移除（2026-09-27），本组件不再引用
@@ -1714,12 +1711,6 @@ const heroStatusTone = computed(() => {
   }
 })
 
-/* 回合计数（真实数据）：Goal + 课堂对话里学习者发言数 = 已发生的对话回合 */
-const heroTurnCount = computed(() => {
-  const userTurns = (messages: Array<{ role: string }>) => messages.filter((m) => m.role === 'user').length
-  return userTurns(goalConversationMessages.value) + userTurns(fallbackLearnConversationMessages.value)
-})
-
 /* 教学闭环定位：五环状态由真实阶段状态机派生（2026-10-06 审核 #46）。
    四环映射 stageFlow（目标对话/路径规划/教学回合/课后评估），记忆复习无对应阶段恒「未进入」；
    done/active/idle 复用 stepper 的同一 stageDone/stageActive 判据，两处不再互相矛盾。 */
@@ -1776,29 +1767,6 @@ const stageJumpTargets = computed<Array<{ key: string; label: string; title: str
   }
   return jumps
 })
-const statCurrentStage = computed(() => {
-  if (isTerminal.value) return statusText(terminalStatus.value) || stageLabel(currentStage.value)
-  return stageLabel(currentStage.value)
-})
-const statNextStage = computed(() => {
-  if (isTerminal.value) return '—'
-  const next = stageFlow[effectiveStageIndex.value + 1]
-  return next ? stageLabel(next) : '—'
-})
-/** 阶段推进读数（MkStatStrip grid 档；「已用回合」= 学习者发言数，与 stepper meta 同源口径）。
- *  F2-1 口径注明：这是个「对话回合」读数，与同卡「已完成 N/4 阶段」（阶段轴）、
- *  「x/y 课已完成」（子任务轴）不是同一件事；消息未落库时为 0（见同屏「回合记录」卡），
- *  不代表未授课。 */
-const stageStatItems = computed<MkStatItem[]>(() => [
-  { key: 'current', label: '当前阶段', value: statCurrentStage.value },
-  {
-    key: 'turns',
-    label: '已用回合',
-    value: heroTurnCount.value,
-    title: '学习者发言条数（Goal 与课堂，不含平台 / 教师回复）；与「N/4 阶段」「x/y 课」统计的不是同一件事'
-  },
-  { key: 'next', label: '下一阶段', value: statNextStage.value }
-])
 
 /* 回合记录行：Goal → 课堂按序合并的真实消息（conversationMessages 只留 role/content，这里连带时间一起取） */
 interface TurnRow { key: string; index: number; type: string; tone: string; content: string; time: string }
@@ -2701,10 +2669,6 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-stp--idle .cp-stp__name { color: var(--mk-faint); }
 .cp-stp__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .cp-stp--active .cp-stp__meta { color: var(--mk-blue); font-weight: 600; }
-
-/* 阶段推进读数：共享原语 MkStatStrip grid 档（页私有 .statstrip 复刻已删，2026-10-06 审核 #50）；
-   本类只留与上方 stepper 的分隔 */
-.cp-stepstrip { margin-top: 14px; border-top: 1px solid var(--mk-line); }
 
 /* 原型双栏：回合记录 1.5fr + 知识状态更新 1fr（无知识数据时收单栏） */
 .cp-detail-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; }

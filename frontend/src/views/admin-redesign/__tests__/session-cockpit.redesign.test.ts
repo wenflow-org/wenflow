@@ -231,10 +231,14 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     const pills = w.findAll('.mk-hero__pills .mk-badge').map((b) => b.text());
     expect(pills[0]).toBe('进行中');
     expect(pills[1]).toBe('Learn');
-    expect(pills).toHaveLength(2);
+    // 只读声明（原顶栏 meta 迁入，2026-10-11 走查：真实会话不再渲染 .cp-topbar）
+    expect(pills[2]).toBe('真实会话 · 只读监控');
+    expect(pills).toHaveLength(3);
 
-    // 真实会话只读：hero 动作区无按钮；原型假钮（导出日志）与危险动作（中断会话）不出现
-    expect(w.findAll('.mk-hero__actions button')).toHaveLength(0);
+    // 真实会话只读：hero 动作区只有本页动作（刷新 + 返回），无生命周期控制、
+    // 原型假钮（导出日志）与危险动作（中断会话）不出现
+    const acts = w.findAll('.mk-hero__actions button').map((b) => b.text());
+    expect(acts).toEqual(['刷新', '← 会话列表']);
     expect(w.text()).not.toContain('导出日志');
     expect(w.text()).not.toContain('中断会话');
 
@@ -325,11 +329,10 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(w.find('.cp-stepcard').text()).toContain('已完成');
     expect(w.find('.cp-stepcard').text()).toContain('/ 4 阶段');
 
-    // 阶段推进读数（2026-10-06 审核 #50）：页私有 .statstrip 复刻已迁共享 MkStatStrip grid 档
-    const labels = w.findAll('.mk-stat__label').map((e) => e.text());
-    const values = w.findAll('.mk-stat__value').map((e) => e.text());
-    expect(labels).toEqual(['当前阶段', '已用回合', '下一阶段']);
-    expect(values).toEqual(['Learn', '2', '总结']);
+    // 2026-10-12 重设计：卡下方的 MkStatStrip 三读数（当前阶段/已用回合/下一阶段）撤——
+    // 前两者步点阵自身已表达，「已用回合」与 Goal 步点「学习者发言 N」近重复且两次被误读
+    expect(w.find('.cp-stepstrip').exists()).toBe(false);
+    expect(w.findAll('.cp-stepcard .mk-stat')).toHaveLength(0);
 
     // stepper 步点即阶段页签（原 cp-stage tab 导航收敛至此）：点击 Goal → Goal 对话卡出现
     await steps[0].trigger('click');
@@ -340,26 +343,29 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     w.unmount();
   });
 
-  it('回合记录：列序对齐原型（#/类型/内容），无真数据的 Token/耗时/解答分不硬造；Goal+课堂按序合并', async () => {
+  it('回合记录：真实会话不渲染（阶段面板已承载同一份转录，同屏再列一张是重复）', async () => {
     stableVirtualApi.getRealSessionConsole.mockResolvedValue(realTeachingPayload());
     const w = await mountCockpit('session-real', 'ts_re_1');
 
-    const headTexts = w.findAll('.cp-turns thead th').map((th) => th.text());
-    expect(headTexts).toEqual(['#', '类型', '内容', '时间']);
-    expect(w.text()).not.toContain('Token');
-    expect(w.text()).not.toContain('耗时');
-    expect(w.text()).not.toContain('解答分');
+    // 2026-10-11 走查「goal 阶段对话记录会和记录会不会重复了」：真实控制台的阶段面板就是转录本体，
+    // 回合记录曾是它的表格翻版（也曾把 Goal 段错拼进来），故真实模式整卡不渲染。
+    expect(w.find('.cp-turns').exists()).toBe(false);
+    expect(w.text()).not.toContain('回合记录');
+    expect(w.text()).not.toContain('Goal + 课堂按序合并');
+
+    w.unmount();
+  });
+
+  it('回合记录：虚拟会话保持 Goal + 课堂按序合并（那边一个会话就是完整旅程）', async () => {
+    stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
+    const w = await mountCockpit('session', 'vs_1');
 
     const rows = w.findAll('.cp-turns tbody tr');
-    expect(rows).toHaveLength(4);
-    expect(rows[0].find('.cp-turns__num').text()).toBe('1');
-    expect(rows[0].find('.mk-badge').text()).toBe('学习者');
-    expect(rows[0].find('.cp-turns__wrap').text()).toBe('我想学 Python');
-    expect(rows[1].find('.mk-badge').text()).toBe('平台 Goal');
-    expect(rows[2].find('.mk-badge').text()).toBe('学习者');
-    expect(rows[3].find('.mk-badge').text()).toBe('教师');
-    // 时间列 = 消息真实 timestamp
-    expect(rows[0].find('.cp-turns__time').text()).not.toBe('—');
+    expect(rows).toHaveLength(3); // 1 条 Goal + 2 条课堂
+    expect(rows[0].find('.mk-badge').text()).toBe('虚拟学习者');
+    expect(rows[1].find('.mk-badge').text()).toBe('虚拟学习者');
+    expect(rows[2].find('.mk-badge').text()).toBe('教师');
+    expect(w.text()).toContain('3 条对话 · Goal + 课堂按序合并');
 
     w.unmount();
   });
@@ -373,6 +379,34 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(rows.map((r) => r.find('.cp-ranklist__val').text())).toEqual(['92%', '46%', '待复习']);
     // 原型的 ±百分比增量为假数据：后端无增量字段，页面不得出现 ± 值
     expect(w.find('.cp-ranklist').text()).not.toMatch(/[+-]\d+%/);
+
+    w.unmount();
+  });
+
+  it('知识状态更新：只在其所属阶段页签渲染 + 进度与状态两维并列（100% 不再单独代表掌握）', async () => {
+    const payload = realTeachingPayload(); // kind=teaching + currentStage=wrapup ⇒ 默认落总结页签
+    payload.data.teaching.knowledgeState = [
+      { name: '定位与列式环节', status: 'learning', progress: 100 },
+      { name: '估算耗时判断', status: 'mastered', progress: 100 }
+    ];
+    stableVirtualApi.getRealSessionConsole.mockResolvedValue(payload);
+    const w = await mountCockpit('session-real', 'ts_re_1');
+
+    const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '知识状态更新');
+    expect(card).toBeTruthy();
+    const rows = card!.findAll('.cp-ranklist__row');
+    // 2026-10-11 走查：进度与状态是两维，原先只显进度，100% + status=learning 被读成「已掌握」
+    expect(rows[0].find('.cp-ranklist__val').text()).toBe('100%');
+    expect(rows[0].find('.cp-ranklist__state').text()).toBe('学习中');
+    expect(rows[0].find('.cp-ranklist__state').attributes('data-tone')).toBe('info');
+    expect(rows[1].find('.cp-ranklist__state').text()).toBe('已掌握');
+    // 卡头点名来源课（原「会话知识状态」里的"会话"指课堂会话，摆在目标对话控制台上易误读）
+    expect(card!.find('.mk-card__meta').text()).toContain('最近一节课堂');
+
+    // 切到 Goal 页签 → 整卡退场（课堂数据不在目标阶段页签下并列）
+    await w.findAll('.cp-stp')[0].trigger('click');
+    await settle();
+    expect(w.text()).not.toContain('知识状态更新');
 
     w.unmount();
   });
