@@ -1,27 +1,23 @@
 ﻿<template>
   <div class="mk-page mk-page--fill">
-    <!-- 页头（newui/admin pagehead）：页名 + 刷新上移；2026-10-04 状态条退役，读数迁页首 KPI 带 -->
+    <!-- 页头（newui/admin pagehead）：页名 + 刷新上移；2026-10-04 状态条退役，读数迁页首
+         KPI 带；2026-10-12 按用户走查再收一层：三张纯读数卡撤（阶段/Skill 进总览卡头 meta），
+         无警时页头直接接页签（详见下方告警条注释） -->
     <MkPageHead title="编排图" sub="顶层 Agent 数据流转逻辑图 · 字段血缘与阶段交接">
       <template #actions>
         <!-- 刷新此前只重拉 definitions， stages / 对账仍是旧值（治理面板数字对不上）→ 三个域全拉 -->
         <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
       </template>
     </MkPageHead>
-    <!-- KPI 带（2026-10-04 状态条退役）：阶段/Skill/交接三张读数卡；未解析/哈希漂移为条件红卡，
-         保留可点跳转（红字必须可点，评审「异常→动作→证据断链」+ P1#27）：未解析 → 页内切「字段旅程」
-         面板并定位首个含未解析步骤的阶段；哈希漂移 → 健康中心（W4 coreHash 检查归属页，本页
-         治理面板 DriftAuditPanel 只覆盖契约漂移）。加载中显「—」不按 0 渲染 -->
-    <section class="mk-kpi-grid">
-      <!-- 审核 #113：失败态 KPI 也走「—」三态——原式 pageLoading 只在加载窗口成立，拓扑失败后
-           stages 恒空、pageLoading 回落 false，KPI 带把「不知道」渲染成 0（与正文失败空态同屏打架）。
-           加载中或失败一律「—」，不按 0 渲染 -->
-      <MkKpi label="阶段" :value="kpiUnknown ? '—' : stages.length" />
-      <!-- F8-4（2026-10-07 走查）：本页三处 Skill 总数各说各的域——本卡 Σ 阶段挂载的拓扑
-           节点（21）、侧栏「Skill 与提示词」徽章（Skill 目录档案数，31）、治理卡「Skill 定义」
-           （runtime-definitions 条目数，32），此前只有本卡无任何口径说明，运营无从判断信哪个。
-           按「阶段交接」KPI 同一惯例补 hint（可见口径）+ title（三源关系） -->
-      <MkKpi label="Skill" :value="kpiUnknown ? '—' : totalSkills" hint="拓扑内挂载 Skill 数" :title="skillKpiTitle" />
-      <MkKpi label="阶段交接" :value="kpiUnknown ? '—' : handoffCount" hint="线性拓扑 = 阶段数 − 1" />
+    <!-- 告警条（2026-10-12 用户走查拍板撤 KPI 带）：无警时整条不占位，画布净赚 ~100px；
+         有警才有此行——告警独立成条反而更醒目。原「阶段 / Skill / 阶段交接」三张纯读数卡撤：
+         阶段数画布五列即在眼前（窄屏时 chips/meta 兜底）、「阶段交接 = 阶段数 − 1」是恒等式
+         （其 hint 自述如此，零独立信息）、「Skill 总数」是本页唯一非显然读数 → 收进
+         「管线总览」卡头 meta（卡头计数语法）。
+         红卡语义不变：未解析 → 页内切「字段旅程」面板并定位首个含未解析步骤的阶段；
+         哈希漂移 → 健康中心（W4 coreHash 检查归属页，本页治理面板 DriftAuditPanel 只覆盖契约漂移）。
+         评审 P1#27「异常→动作→证据断链」：红字必须可点，保留 clickable + 可读 title -->
+    <section v-if="unresolvedCount > 0 || w4Drifted.length" class="mk-kpi-grid">
       <MkKpi
         v-if="unresolvedCount > 0"
         label="未解析"
@@ -54,6 +50,7 @@
 
     <!-- 阶段选择 chips（2026-10-05 阶段导航大卡退役）：大卡与页首 KPI 带对同一批数字数两遍
          （KPI「阶段 5 · Skill 21」 vs 五卡各带「N Skill」），且总览画布本身就是五阶段——撤。
+         （2026-10-12 页首纯读数本身也已收进总览卡头 meta，同判例再收一层。）
          选择职能下沉为轻量 chips，只在单阶段视图（字段旅程/字段路由/治理）出现；总览/沙盘
          不出现（总览画布即五阶段全貌，沙盘与阶段无关）。阶段是范围选择，按 2026-10-01 约定
          归胶囊语言（胶囊=筛选 chips、页签=视图切换） -->
@@ -85,8 +82,12 @@
         <!-- 卡题 2026-10-05 改名：原「字段数据旅程」与「字段旅程」页签撞车（两处都自称旅程）——
              本卡是五阶段全貌，归属「总览」；单阶段旅程图归「字段旅程」页签 -->
         <h3 class="mk-card__title">管线总览 · 五阶段字段血缘</h3>
-        <!-- 图例（原型 card__tools：卡头右侧只放工具/图例，title 独占左侧） -->
+        <!-- 2026-10-12：原页首「阶段 / Skill」两张读数卡收进卡头右组（列表卡头统一语法：
+             计数 meta 归 head-right）——单行不占画布高度。阶段数画布五列可见这里点明（窄屏
+             画布横向滚动时兜底）；Skill 总数是本页唯一非显然读数，title 保留 F8-4 三源口径 -->
         <div class="mk-card__head-right">
+          <span v-if="stages.length" class="mk-card__meta" :title="skillKpiTitle">{{ stages.length }} 阶段 · {{ totalSkills }} 个 Skill（拓扑内挂载）</span>
+          <!-- 图例（原型 card__tools：卡头右侧只放工具/图例，title 独占左侧） -->
           <span class="orch-odg-chip orch-odg-chip--in">阶段入参</span>
           <span class="orch-odg-chip orch-odg-chip--out">阶段产出</span>
         </div>
@@ -144,7 +145,7 @@
               <tr v-for="(h, i) in stageHandoffs" :key="i">
                 <td class="mono orch-handoff__pair">
                   {{ h.from }} → {{ h.to }}
-                  <!-- 治理信号随行（口径与页首 KPI 带两枚红卡同源，2026-10-04 状态条退役）；点跳转复用红卡落点。
+                  <!-- 治理信号随行（口径与页首告警条两枚红卡同源，2026-10-04 状态条退役）；点跳转复用红卡落点。
                        审核 #96：徽章入口原是无 role/tabindex 的 span + @click，键盘不可达；改真 <button> -->
                   <button v-if="h.unresolvedN" type="button" class="mk-badge mk-badge--sm mk-badge--warn orch-handoff__badge-btn" title="该交接上游阶段存在未解析步骤（末段含下游阶段，四行合计 = 页首读数） · 点击切「字段旅程」定位" @click="goUnresolved()">未解析 {{ h.unresolvedN }}</button>
                   <button v-if="h.driftN" type="button" class="mk-badge mk-badge--sm mk-badge--bad orch-handoff__badge-btn" title="该交接上游 Agent 命中 W4 core 哈希漂移名单（末段含下游 Agent，四行合计 = 页首读数） · 点击跳健康中心" @click="goHashDrift()">哈希漂移 {{ h.driftN }}</button>
@@ -186,7 +187,7 @@
       <MkEmptyState
         v-else
         title="暂无编排阶段数据"
-        description="后端未登记任何阶段：编排文件与拓扑 Agent 均为空。"
+        description="暂无编排阶段：请先在编排文件中配置阶段与 Agent。"
       />
     </div>
 
@@ -226,7 +227,7 @@
              37 含外挂能力（skill-catalog 口径）、32 是运行时 Skill 定义数，两数不同源不冲突，
              但必须自解释才不像「数字对不上」 -->
         <span class="mk-card__meta" :title="govMetaTitle">
-          编辑后核对文件与库一致 · 编排定义 {{ orchCount }} · Skill 定义 {{ skillDefCount }}<template v-if="recReport"> · 对账 live {{ recLiveCount }}/{{ recTotalCount }}（口径含外挂能力）</template>
+          编辑后核对文件与库一致 · 编排定义 {{ orchCount }} · Skill 定义 {{ skillDefCount }}<template v-if="recReport"> · 已上线 {{ recLiveCount }}/{{ recTotalCount }}（含外挂能力）</template>
         </span>
       </div>
       <!-- 定义明细（definitionNotes 调试转储）2026-10-05 撤：Skill 行名称字段全空
@@ -256,7 +257,7 @@
       <MkEmptyState
         v-else
         title="暂无编排阶段数据"
-        description="后端未登记任何阶段：编排文件与拓扑 Agent 均为空。"
+        description="暂无编排阶段：请先在编排文件中配置阶段与 Agent。"
       />
     </div>
   </div>
@@ -609,9 +610,6 @@ const stageHandoffs = computed(() => {
   return out
 })
 
-/** 「N 处阶段交接」：拓扑为线性列时 = 阶段数 - 1（原状态条 meta 口径，2026-10-04 迁 KPI 交接卡 hint） */
-const handoffCount = computed(() => Math.max(stages.value.length - 1, 0))
-
 /** 画布重算：列位置量出后画三次贝塞尔连线（仅箭头；字段明细不在边上渲染，
      见总览卡头注释——边标签曾压住相邻列节点文字，2026-10-04 撤） */
 function layoutOrch() {
@@ -670,9 +668,7 @@ const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + sta
     目录档案数（不含外挂能力）。三数不必相等，问「平台共多少 Skill」先确认口径。 */
 const skillKpiTitle = computed(
   () =>
-    `本卡口径：编排拓扑内挂载的 Skill 节点数（Σ 各阶段 skills，当前 ${stages.value.length} 个阶段）。` +
-    '与治理卡「Skill 定义」（运行时定义条目数）及侧栏「Skill 与提示词」徽章（Skill 目录档案数，不含外挂能力）' +
-    '为三个不同口径，数值不必相等'
+    `编排图内挂载的 Skill 数（各阶段合计，当前 ${stages.value.length} 个阶段）。治理卡「Skill 定义」与侧栏徽章的统计范围不同，数值不必相等`
 )
 const unresolvedCount = computed(() =>
   stages.value.reduce(
@@ -685,15 +681,14 @@ const current = computed<Stage | undefined>(() => stages.value.find((s) => s.id 
 // 首屏加载中（live boot 未完成且尚无阶段数据）：用于抑制「0 阶段 / 暂无数据」的假空态
 const pageLoading = computed(() => liveLoading.value && !stages.value.length)
 // 2026-10-04 状态条退役：随条删除的 statusTone（概览绿点基调）无其余消费方，
-// 告警语义由 KPI 带两张条件红卡（未解析/哈希漂移）直接承载
+// 告警语义由条件告警条两枚红卡（未解析/哈希漂移）直接承载（2026-10-12 起无警整条不渲染，
+// 原 kpiUnknown「—」三态随之退役——三张纯读数卡已撤，红卡只在计数 >0 时出现，不涉未知态）
 
 /* ================= 失败态：接口失败 ≠ 没有数据 =================
    阶段清单依赖 live boot 的 topology 域（liveFailures.topology）。
    该域失败时 liveTopoNodes 为空 → stages 为空，此前与「后端本就没数据」
    同落「暂无编排阶段数据」，把接口失败伪装成空态；这里区分并给重试。 */
 const topoFailure = computed(() => liveFailures.value.topology || '')
-/** KPI 带未知态（审核 #113）：加载中或拓扑失败时三张读数卡显「—」，不把未知渲染成 0 */
-const kpiUnknown = computed(() => pageLoading.value || !!topoFailure.value)
 
 async function retryStages() {
   await Promise.all([

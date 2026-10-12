@@ -220,6 +220,20 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     // 节点定位参数 = 真实 skill id（与 Skills 目录 / 抽屉同一id 口径）
     expect(OrchestratorSource).toContain('openSkillFromOverview(sk.id)')
   })
+
+  it('编排图页首 KPI 带已撤（2026-10-12 用户走查）：纯读数进总览卡头 meta，红卡改条件告警条', () => {
+    // 三张纯读数卡（阶段/Skill/阶段交接）不再渲染
+    expect(OrchestratorSource).not.toContain('label="阶段"')
+    expect(OrchestratorSource).not.toContain('label="阶段交接"')
+    // 无警整条不占位：告警条仅在有警时渲染（画布净赚高度）
+    expect(OrchestratorSource).toContain('v-if="unresolvedCount > 0 || w4Drifted.length"')
+    // 红卡入口保留且可点（评审 P1#27：异常红字必须可点）
+    expect(OrchestratorSource).toContain('@click="goUnresolved"')
+    expect(OrchestratorSource).toContain('@click="goHashDrift"')
+    // 阶段数/Skill 总数收进总览卡头 meta（F8-4 三源口径 title 随行）
+    expect(OrchestratorSource).toContain('个 Skill（拓扑内挂载）')
+    expect(OrchestratorSource).toContain(':title="skillKpiTitle"')
+  })
 })
 
 describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
@@ -404,7 +418,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(cards.length).toBe(4)
     const values = cards.map((v) => v.find('.mk-kpi__num').text())
     expect(values).toEqual(['100', '0', '100%', '2.2s'])
-    expect(w.text()).toContain('统计口径')
+    expect(w.text()).toContain('统计来源')
     // 统计口径对齐真实窗口（liveSkillStatsMap 默认近 7 天）：不再照抄 meta.stats 的「全量」
     expect(w.text()).toContain('近 7 天')
 
@@ -422,8 +436,8 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(w.text()).toContain('最近调用')
     // 2026-10-08 走查 #3：原空态写「日志窗口内无调用」，与同屏近 7 天统计卡（如 27852 次调用）
     // 互斥。改为点明两者不同源——列表是本页采样，指标走统计接口由服务端聚合。
-    expect(w.text()).toContain('本页已加载的日志采样里没有该 Skill 的调用')
-    expect(w.text()).toContain('两者不同源')
+    expect(w.text()).toContain('近 7 天暂无该 Skill 的调用记录')
+    expect(w.text()).toContain('统计范围与列表不同')
     expect(w.text()).toContain('以指标卡为准')
 
     w.unmount()
