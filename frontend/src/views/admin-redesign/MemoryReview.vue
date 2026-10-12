@@ -165,6 +165,17 @@
           </div>
           <div v-if="detail.audit.proposals.length" class="mk-table-scroll">
           <table class="mk-table">
+            <!-- 列宽契约（2026-10-12 外部批评采纳：归并目标列 301px 概念名折行）：A/B 与散键列
+                 给保底宽，证据列不写 width 独吞余量（948px 案判例：留一列不写 = 它吸收余量） -->
+            <colgroup>
+              <col style="width: 40px" />
+              <col style="width: 22%" />
+              <col />
+              <col style="width: 96px" />
+              <col style="width: 116px" />
+              <col style="width: 96px" />
+              <col style="width: 132px" />
+            </colgroup>
             <thead>
               <tr>
                 <th class="mr__th-check">选择</th>
@@ -238,6 +249,14 @@
           </h4>
           <div v-if="detail.audit.ambiguous.length" class="mk-table-scroll">
           <table class="mk-table">
+            <!-- 列宽契约同归并建议表：A/B 保底宽防概念名折行，证据列吞余量 -->
+            <colgroup>
+              <col style="width: 40px" />
+              <col style="width: 21%" />
+              <col style="width: 19%" />
+              <col />
+              <col style="width: 132px" />
+            </colgroup>
             <!-- 表头补明「候选 A / B 是概念键」（2026-10-06 审核 #62）：原表头只写 A / B
                  两个单字母；A/B 两列是无人类可读 label 的裸 conceptKey，与另三表同降 .mr__sub 档。
                  R7：补 选择/操作 两列——此前这组建议只可看不可动（审计 CC-2） -->
@@ -287,6 +306,12 @@
           <!-- R7 任务书 B：dropCandidates 此前只在类型里声明计数、从不渲染（审计 CC-2）——补第三组建议列表 -->
           <div v-if="mrDropCount" class="mk-table-scroll">
           <table class="mk-table">
+            <colgroup>
+              <col style="width: 40px" />
+              <col style="width: 24%" />
+              <col />
+              <col style="width: 132px" />
+            </colgroup>
             <thead><tr><th class="mr__th-check">选择</th><th>散键（概念键）</th><th>证据（理由）</th><th class="mk-th--right">操作</th></tr></thead>
             <tbody>
               <tr v-for="(drop, index) in detail.audit.dropCandidates" :key="`${drop.conceptKey}-${index}`">
