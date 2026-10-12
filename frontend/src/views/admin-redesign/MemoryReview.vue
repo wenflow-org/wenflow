@@ -19,7 +19,7 @@
     <MkPageHead
       title="记忆与复习观测"
       sub="遗忘曲线调度 · 到期积压、课内温故与概念归并审计"
-      hint="记忆层（用户级、跨 path）：到期积压 · 课内温故配额 · 概念归并审计；归并默认观察模式，只记录建议，不动 memory_traces"
+      hint="记忆层数据（用户级、跨学习路径）：到期积压 · 课内温故 · 概念归并审计；归并默认只记录建议，不改动数据"
     >
       <template #actions>
         <!-- 口径开关收在页头（原在「记忆层概览」卡头 → 原生 checkbox；2026-10-04 整组统一为
@@ -72,7 +72,7 @@
       card
       class="mr-distband"
       title="到期时间轴"
-      :sub="`点击分段只看该档学习者 · 窗口内 ${queueRows.length} 个复习点（最近 ${traceRows.length} 条痕迹，非全量）`"
+      :sub="`点击分段可筛选对应到期时间的学习者 · 共 ${queueRows.length} 个复习点（基于最近 ${traceRows.length} 条记忆记录）`"
       unit="个"
       aria-label="按到期时间筛选学习者"
       :bins="mrDueBins"
@@ -88,7 +88,7 @@
         <!-- 口径：totals.users 是后端全量统计，唯一住在页头 KPI「用户」卡；卡头只报本列表的窗口事实
              （页码/页大小、排序键、下钻命中），不再复读全量数（CP6：同屏 KPI 与卡头两处同数）。
              #41：列表已接服务端分页（offset），「暂无分页」自述删除 -->
-        <span class="mk-card__meta" :title="`按待复习（到期）量倒序服务端分页，每页 ${userPageSize} 位；全量有记忆痕迹用户数见页头 KPI${dueBandFilter ? '。当前按到期档下钻，命中集只含当前窗口内学习者' : ''}`">第 {{ userPage }} 页 · 每页 {{ userPageSize }} 位 · 按待复习量倒序<template v-if="dueBandFilter"> · 已筛 {{ visibleRows.length }} 位</template></span>
+        <span class="mk-card__meta" :title="`按待复习量从多到少排序，每页 ${userPageSize} 位；全部用户数见页首「用户」卡${dueBandFilter ? '。当前按到期时间筛选，仅显示对应学习者' : ''}`">第 {{ userPage }} 页 · 每页 {{ userPageSize }} 位 · 按待复习量倒序<template v-if="dueBandFilter"> · 已筛 {{ visibleRows.length }} 位</template></span>
       </div>
       <!-- 取数失败不得渲染成「暂无数据」（R2）：总览失败且无行 → MkEmptyState tone="error" + 重试；
            有旧行时保留旧行并在上方给出带重试的 .mk-alert（失败原因不静默） -->
@@ -100,14 +100,14 @@
         v-if="error && !rows.length"
         tone="error"
         :title="error"
-        description="总览取数失败，页面数字不可信。"
+        description="统计数据加载失败，页面数字可能不完整。"
         action-text="重试"
         :action-busy="loading"
         action-busy-text="重试中…"
         @action="refreshAll"
       />
       <MockSkeletonTable v-else-if="loading && !rows.length" :cols="7" :rows="8" />
-      <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" description="当前口径内还没有用户产生记忆痕迹。等学习者开始学习并完成概念提取后，这里会按待复习量倒序列出用户。" />
+      <MkEmptyState v-else-if="!loading && !rows.length" title="暂无记忆痕迹数据" description="还没有用户产生记忆记录。学习者开始学习并完成概念提取后，这里会按待复习量从多到少列出用户。" />
       <!-- 用户列表（列集 = 原型 renderMemory：学习者 | 待复习 | 薄弱项 | 平均记忆强度 | 最近复习 | 操作；
            2026-10-02 用户拍板「这个列表的列按新UI来」：撤痕迹列（排序键改到期量，与原型
            「按待复习量排序」同口径），补薄弱/平均强度 meter/最近复习三列；类型列不设——
@@ -137,8 +137,8 @@
               :data-mr-row="row.userId"
               :class="{ 'mr__row--active': row.userId === selectedId }"
               tabindex="0"
-              @click="openSubPage('learner', row.userId)"
-              @keydown.enter.self.prevent="openSubPage('learner', row.userId)"
+              @click="openSubPage('learner', row.userId, includeVirtual ? { includeTest: true } : undefined)"
+              @keydown.enter.self.prevent="openSubPage('learner', row.userId, includeVirtual ? { includeTest: true } : undefined)"
             >
               <td>
                 <div class="mr__user">
@@ -221,8 +221,8 @@
         <strong ref="detailTitleEl" class="mk-status__title" tabindex="-1">记忆复盘 · {{ detail.user.name || '未命名' }}</strong>
         <span
           class="mk-status__meta"
-          title="该用户名下记忆痕迹总览：到期 = 到该复习而未复习；同族重复 = 归一化键相同、措辞不同的痕迹（组 / 条）；从未提取 = 一直没被当作复习点接住过。「有 FSRS 状态」只数显式落库 fsrsStability 的痕迹——到期预览里没有 FSRS 状态的旧痕迹按掌握度回退估算强度（见「到期清单预览」卡头标注），两者来源不同。状态点示警阈值：占该用户痕迹 ≥20% 或到期 ≥5 条（阈值内为间隔复习的常态积压，不亮警示）"
-        >痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} · 同族重复 {{ detail.summary.duplicatedFamilies }} 组/{{ detail.summary.duplicatedTraces }} 条 · 从未提取 {{ detail.summary.neverExtracted }} · 有 FSRS 状态 {{ detail.summary.withFsrsState }}<template v-if="detail.summary.strengthFromLegacy">（另有 {{ detail.summary.strengthFromLegacy }} 条回退估算）</template></span>
+          title="该用户的记忆记录总览：到期 = 到该复习而未复习；同族重复 = 含义相同、措辞不同的记录（组 / 条）；从未提取 = 从未被安排复习过。「有强度数据」只统计带完整记忆模型参数的记录——旧记录的强度按掌握度回退估算（见「到期清单预览」卡头说明），两者来源不同。示警阈值：到期占该用户记录 ≥20% 或 ≥5 条（以内属正常积压，不警示）"
+        >痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} · 同族重复 {{ detail.summary.duplicatedFamilies }} 组/{{ detail.summary.duplicatedTraces }} 条 · 从未提取 {{ detail.summary.neverExtracted }} · 有强度数据 {{ detail.summary.withFsrsState }}<template v-if="detail.summary.strengthFromLegacy">（另有 {{ detail.summary.strengthFromLegacy }} 条回退估算）</template></span>
         <span class="mk-status__actions">
           <button type="button" class="mk-status__action" title="复制该用户记忆复盘的深链（可分享 / 收藏，打开即落位）" @click="copyDeepLink">复制深链</button>
           <button type="button" class="mk-status__action" :disabled="recomputingId === selectedId" title="对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹" @click="recompute(selectedId, detail.user.name)">{{ recomputingId === selectedId ? '观察中…' : '重新观察' }}</button>
@@ -238,7 +238,7 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">课内温故计划</h3>
-          <span class="mk-card__meta" title="负担单位由后端按学习者状态动态校准；排队中 = 还没排进本节队列的到期痕迹">本节该接几个 · 按负担预算排队</span>
+          <span class="mk-card__meta" title="负担单位按学习者状态动态校准；排队中 = 尚未排进本节队列的到期记录">本节该接几个 · 按负担预算排队</span>
         </div>
 
         <!-- 温故计划整块按 detail.reviewPlan 有无渲染：reviewPlan=null 时原来只剩一个裸标题 -->
@@ -261,10 +261,21 @@
                     <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="item.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
                   </span>
                 </td>
-                <td :title="item.reason ? `后端枚举：${item.reason}` : undefined">{{ reasonText(item.reason) }}</td>
+                <td :title="item.reason ? `原始标记：${item.reason}` : undefined">{{ reasonText(item.reason) }}</td>
                 <td class="mk-num">{{ item.load }}</td>
                 <td class="mr__sub">{{ item.loadFactors.join('、') || '—' }}</td>
-                <td>{{ item.originPathTitle || '—' }}</td>
+                <td>
+                  <!-- 来源路径可点（2026-10-12 走查「记忆与复习的跳转」）：记忆的出处此前是死文本，
+                       openSubPage('path') 走适配层反查会话进路径座舱；跳转不丢本页深链（closeSubPage 回来 userId 还在） -->
+                  <button
+                    v-if="item.originPathId && item.originPathTitle"
+                    type="button"
+                    class="mk-link"
+                    :title="`打开来源路径：${item.originPathTitle}`"
+                    @click="openSubPage('path', item.originPathId)"
+                  >{{ item.originPathTitle }}</button>
+                  <template v-else>{{ item.originPathTitle || '—' }}</template>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -285,11 +296,11 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">到期清单预览</h3>
-          <span class="mk-card__meta" :title="`按记忆强度升序：越靠前越该先复习；列表最多前 20 条。强度来源：有 FSRS 状态的痕迹 = FSRS 可提取率；无 FSRS 状态的旧痕迹按掌握度回退估算${duePreviewLegacyCount ? `（本页 ${duePreviewLegacyCount} 条为回退估算）` : ''}`">前 20 · 记忆强度升序<template v-if="duePreviewLegacyCount"> · 含 {{ duePreviewLegacyCount }} 条回退估算</template></span>
+          <span class="mk-card__meta" :title="`按记忆强度从低到高：越靠前越该先复习，最多显示前 20 条；旧记录的强度按掌握度回退估算${duePreviewLegacyCount ? `（本页 ${duePreviewLegacyCount} 条为回退估算）` : ''}`">前 20 · 记忆强度升序<template v-if="duePreviewLegacyCount"> · 含 {{ duePreviewLegacyCount }} 条回退估算</template></span>
         </div>
         <div v-if="detail.duePreview.length" class="mk-table-scroll">
           <table class="mk-table">
-          <thead><tr><th>概念</th><th class="mk-num" title="有 FSRS 状态的痕迹 = FSRS 可提取率；无 FSRS 状态的旧痕迹按掌握度回退估算（逐格悬停可见来源）">记忆强度</th><th class="mk-num">掌握</th><th class="mk-num">提取次数</th><th>来源</th><th title="相对表达：已逾期 N 天 / 今天 / 明天 / N 天后；绝对到期时刻进悬停">到期</th></tr></thead>
+          <thead><tr><th>概念</th><th class="mk-num" title="由记忆模型计算的记住概率；旧记录按掌握度回退估算（悬停可见来源）">记忆强度</th><th class="mk-num">掌握</th><th class="mk-num">提取次数</th><th>来源</th><th title="相对表达：已逾期 N 天 / 今天 / 明天 / N 天后；绝对到期时刻进悬停">到期</th></tr></thead>
           <tbody>
             <tr v-for="trace in detail.duePreview" :key="trace.conceptKey">
               <!-- 原型记忆明细表首列 = 知识点 strong；同族重复/归并建议首列是裸 key（无人类可读
@@ -308,7 +319,7 @@
                 </span>
               </td>
               <td class="mk-num">{{ trace.extractionCount }}</td>
-              <td class="mr__sub" :title="trace.source ? `后端枚举：${trace.source}` : undefined">{{ sourceText(trace.source) }}</td>
+              <td class="mr__sub" :title="trace.source ? `原始标记：${trace.source}` : undefined">{{ sourceText(trace.source) }}</td>
               <!-- 到期列（P1#13）：裸绝对时刻读不出「急不急」，改相对表达（已逾期 N 天 / N 天后）
                    并给逾期着色；绝对时刻进 title（P2 到期带判例同源） -->
               <td>
@@ -330,12 +341,12 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">同族重复</h3>
-          <span class="mk-card__meta" title="归一化键相同、措辞不同的痕迹：是「过多过杂」的直接证据，可用下方归并收拢">「过多过杂」的直接证据</span>
+          <span class="mk-card__meta" title="措辞不同但含义相同的记录，可用下方归并收拢">措辞不同、含义相同的记录</span>
         </div>
         <p v-if="!detail.duplicatedFamilies.length" class="mr__sub">没有同族重复。</p>
         <div v-else class="mk-table-scroll">
           <table class="mk-table">
-          <thead><tr><th>族（归一化键）</th><th class="mk-num">条数</th><th>成员</th></tr></thead>
+          <thead><tr><th>重复组</th><th class="mk-num">条数</th><th>成员</th></tr></thead>
           <tbody>
             <tr v-for="family in detail.duplicatedFamilies" :key="family.family">
               <!-- 归一化键没有人类可读 label（后端只回 key）→ 同 负担因子 口径降为 sub，不冒充正文 -->
@@ -360,7 +371,7 @@
           <h3 class="mk-card__title">概念归并审计</h3>
           <!-- 来源（任务书 B：每条建议可见来源——同组建议同源，来源挂在卡头不逐行复读） -->
           <span class="mk-card__meta">
-            <template v-if="detail.audit">来源：概念归并观察（{{ detail.audit.mode }} 模式）· {{ timeAgo(detail.audit.generatedAt) }}</template>
+            <template v-if="detail.audit">来源：概念归并观察（{{ detail.audit.mode === 'apply' ? '自动执行' : '观察' }}模式）· {{ timeAgo(detail.audit.generatedAt) }}</template>
             <template v-else>尚未观察（点「重新观察」跑一次）</template>
           </span>
           <!-- 已执行历史入口（R7 任务书 B：mode=apply 审计一个入口可见）：默认展开保持既有可达性，
@@ -370,7 +381,7 @@
             type="button"
             class="mk-btn mk-btn--sm"
             :aria-expanded="historyOpen"
-            title="本用户已执行过的归并（mode=apply 审计 + 按次留档凭据，含 alias 式归并），可回滚"
+            title="该用户已执行过的归并记录（含别名归并），可回滚"
             @click="historyOpen = !historyOpen"
           >已执行历史（{{ appliedHistoryCount }}）</button>
         </div>
@@ -398,10 +409,10 @@
 
         <template v-if="detail.audit">
           <h4 class="mr__h4">
-            归并建议（canonical ← aliases）
+            归并建议（将别名并入主概念）
             <span class="mr__sub-inline">
-              勾选后「执行选中」批量执行（确认弹层列明迁移哪些表）；默认只勾选「可自动执行」的（把握度 + 词面闸门都过）。
-              执行会改动该用户的记忆痕迹，但留整行快照，可回滚。
+              勾选后点「执行选中」批量执行；默认只勾选可自动执行的。
+              执行会改动该用户的记忆记录，但保留完整备份，可回滚。
             </span>
           </h4>
           <div v-if="detail.audit && hasSuggestions" class="mr__bulk">
@@ -425,7 +436,7 @@
             <thead>
               <tr>
                 <th class="mr__th-check">选择</th>
-                <th>归并目标</th><th>证据（别名 · 理由）</th><th class="mk-num">置信度</th><th class="mk-num">词面相似</th>
+                <th>归并目标</th><th>证据（别名 · 理由）</th><th class="mk-num">置信度</th><th class="mk-num">名称相似度</th>
                 <th>可自动执行</th><th class="mk-th--right">操作</th>
               </tr>
             </thead>
@@ -452,7 +463,7 @@
                   </span>
                 </td>
                 <td class="mk-num">
-                  <span class="mr-pct" :class="{ 'mr-pct--warn': !proposal.autoApplicable }" :title="`词面相似 ${Math.round(proposal.lexicalSimilarity * 100)}%${proposal.autoApplicable ? '' : '（未过词面闸门）'}`">
+                  <span class="mr-pct" :class="{ 'mr-pct--warn': !proposal.autoApplicable }" :title="`名称相似度 ${Math.round(proposal.lexicalSimilarity * 100)}%${proposal.autoApplicable ? '' : '（相似度不足，需人工确认）'}`">
                     <b>{{ Math.round(proposal.lexicalSimilarity * 100) }}%</b>
                     <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="proposal.autoApplicable ? undefined : 'warn'" :style="{ width: Math.round(proposal.lexicalSimilarity * 100) + '%' }"></i></span>
                   </span>
@@ -462,7 +473,7 @@
                   <span
                     class="mk-badge"
                     :class="proposal.autoApplicable ? 'mk-badge--ok' : 'mk-badge--warn'"
-                    :title="proposal.autoApplicable ? '把握度 + 词面闸门都过，默认已勾选' : '未过词面闸门或把握度不足，勾选后需人工确认'"
+                    :title="proposal.autoApplicable ? '系统有把握且名称足够相似，默认已勾选' : '名称相似度或把握度不足，勾选后需人工确认'"
                   >{{ proposal.autoApplicable ? '可自动' : '需人工确认' }}</span>
                 </td>
                 <td>
@@ -490,8 +501,8 @@
           <p v-else class="mr__sub">本次没有达到把握度阈值的归并建议。</p>
 
           <h4 class="mr__h4">
-            需人工看（ambiguous，不会被执行）
-            <span class="mr__sub-inline">语义远距 / 把握度不足落进人审队列；「确认」= 按 候选 B → 候选 A 执行归并（弹层列明迁移表）</span>
+            需人工看（不会自动执行）
+            <span class="mr__sub-inline">含义差异较大或把握度不足，需人工确认；点「确认」将候选 B 并入候选 A</span>
           </h4>
           <div v-if="detail.audit.ambiguous.length" class="mk-table-scroll">
           <table class="mk-table">
@@ -538,7 +549,7 @@
           <p v-else class="mr__sub">没有待人工确认项。</p>
 
           <h4 class="mr__h4">
-            散键清理（dropCandidates）
+            散键清理（误提取的无用概念）
             <span class="mr__sub-inline">判定为误提取 / 无效的散概念键；「确认」= 清理该键（弹层列明迁移表），不会自动执行</span>
           </h4>
           <!-- R7 任务书 B：dropCandidates 此前只在类型里声明计数、从不渲染（审计 CC-2）——补第三组建议列表 -->
@@ -604,7 +615,7 @@
           </div>
           <p v-else class="mr__sub">没有可回滚的归并。</p>
           <p v-if="legacyWindowOnlyMerges.length" class="mr__sub">
-            另有 {{ legacyWindowOnlyMerges.length }} 条早期归并：凭据只在审计窗口内（没有长期留档，页面内暂不支持回滚，如需回滚请联系管理员）——
+            另有 {{ legacyWindowOnlyMerges.length }} 条早期归并：已超出可回滚保留期，页面内暂不支持回滚，如需回滚请联系管理员——
             {{ legacyWindowOnlyMerges.map((m) => m.canonical).slice(0, 3).join('、') }}
           </p>
           <p v-if="rolledBackMerges.length" class="mr__sub">
@@ -613,10 +624,10 @@
           </p>
 
           <!-- alias 式归并（S3 非破坏策略，现行默认）：凭据同样按次留档；此前前端从未渲染（detail 里一直有） -->
-          <h4 class="mr__h4">alias 式归并（非破坏：别名登记 + 行重指向）</h4>
+          <h4 class="mr__h4">别名归并（不删除记录：登记别名并改指向）</h4>
           <div v-if="appliedAliasRollbackable.length" class="mk-table-scroll">
           <table class="mk-table">
-            <thead><tr><th>归并目标</th><th>别名</th><th class="mk-num">重指向行数</th><th>执行时间</th><th></th></tr></thead>
+            <thead><tr><th>归并目标</th><th>别名</th><th class="mk-num">改指向记录数</th><th>执行时间</th><th></th></tr></thead>
             <tbody>
               <tr v-for="merge in appliedAliasRollbackable" :key="merge.aliasMergeId || `${merge.canonical}-${merge.appliedAt}`">
                 <td class="mr__sub">{{ merge.canonical }}</td>
@@ -624,15 +635,15 @@
                 <td class="mk-num">{{ merge.repointedRows }}</td>
                 <td><span class="mk-cell-sub mono" :title="merge.appliedAt">{{ fmtDateTime(merge.appliedAt) }}</span></td>
                 <td>
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" title="按规范键回滚：删别名并还原 conceptId 指向" @click="rollbackOne(merge.canonical)">回滚</button>
+                  <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" title="回滚该归并：删除别名并还原记录指向" @click="rollbackOne(merge.canonical)">回滚</button>
                 </td>
               </tr>
             </tbody>
           </table>
           </div>
-          <p v-else class="mr__sub">没有可回滚的 alias 归并。</p>
+          <p v-else class="mr__sub">没有可回滚的别名归并。</p>
           <p v-if="appliedAliasLegacy.length" class="mr__sub">
-            另有 {{ appliedAliasLegacy.length }} 条早期 alias 归并：凭据只在审计窗口内，页面内暂不支持回滚。
+            另有 {{ appliedAliasLegacy.length }} 条早期别名归并：已超出可回滚保留期，页面内暂不支持回滚。
           </p>
           <p v-if="appliedAliasRolledBack.length" class="mr__sub">
             已回滚 {{ appliedAliasRolledBack.length }} 条 alias 归并（保留凭据痕迹，不再重复回滚）：
@@ -737,6 +748,8 @@ interface ReviewPlanItem {
   load: number
   loadFactors: string[]
   originPathTitle?: string | null
+  /** 来源路径 id（2026-10-12 走查「记忆与复习的跳转」）：标题从死文本升级为可点进路径座舱；旧后端无此字段 */
+  originPathId?: string | null
   consecutiveAgain?: number
 }
 
@@ -894,7 +907,7 @@ const dueWarn = computed(() => {
 })
 const dueCardTitle = computed(() => {
   const t = totals.value
-  return `到该复习而未复习 ${t.due} 条，占全部痕迹 ${duePct.value}%；示警阈值：占痕迹 ≥${DUE_WARN_PCT}% 或人均 ≥${DUE_WARN_PER_USER} 条（阈值内为间隔复习的常态积压，不着警示色）`
+  return `到该复习而未复习 ${t.due} 条，占全部记录 ${duePct.value}%；达到 ${DUE_WARN_PCT}% 或人均 ${DUE_WARN_PER_USER} 条以上时标为需关注`
 })
 
 /* ===== 到期时间轴（newui 原型 renderMemory dueBand/distBand 移植；强度直方图 2026-10-05 用户令退役）=====
@@ -922,7 +935,8 @@ async function loadTraceWindow() {
   const seq = ++traceSeq
   traceFailed.value = false
   try {
-    const res: any = await adminMemoryTracesApi.list({ limit: 200, includeVirtual: includeVirtual.value })
+    // 测试视角（2026-10-10「真实/测试」互斥视角）：testOnly 只回虚拟学习者 + 测试/审计账号
+    const res: any = await adminMemoryTracesApi.list({ limit: 200, includeVirtual: includeVirtual.value, testOnly: includeVirtual.value || undefined })
     if (seq !== traceSeq) return // 已有更新的窗口请求在途/完成：丢弃过期响应
     const body = res.data?.data ?? res.data ?? {}
     traceRows.value = Array.isArray(body.rows) ? body.rows : []
@@ -1059,7 +1073,7 @@ const dueBandEmpty = computed(() => {
   if (inWindow > 0) {
     return {
       title: `前 ${userPageSize.value} 名里没有该档学习者`,
-      desc: `窗口内「${label}」档有 ${inWindow} 位学习者带到期痕迹，但都不在列表前 ${userPageSize.value} 名内（列表按当前每页条数取前 N 名）。再点一次分布条上的同档分段即可取消筛选。`
+      desc: `最近记录中有 ${inWindow} 位学习者的到期时间落在「${label}」档，但都不在当前列表前 ${userPageSize.value} 位内。再点一次分布条上的同档分段可取消筛选。`
     }
   }
   return {
@@ -1099,14 +1113,14 @@ const overviewCards = computed<OverviewCard[]>(() => {
       value: val(t.users),
       hint: numHint('有记忆痕迹'),
       tone: numTone(''),
-      title: '后端口径为全量有记忆痕迹用户；是否含虚拟学习者随状态条开关'
+      title: '全部有记忆记录的用户数；是否含虚拟学习者随页头开关'
     },
     {
       label: '记忆痕迹',
       value: val(t.traces),
       hint: numHint('跨全部学习路径'),
       tone: numTone(''),
-      title: '记忆层痕迹总数（用户级、跨该用户全部 path）'
+      title: '记忆记录总数（用户级、跨全部学习路径）'
     },
     {
       label: '当前到期',
@@ -1127,7 +1141,7 @@ const overviewCards = computed<OverviewCard[]>(() => {
       value: val(t.proposed),
       hint: numHint(`可自动 ${t.autoApplicable} · 已执行 ${t.applied}/${t.deleted}`),
       tone: numTone(''),
-      title: '模型给出的同义候选；「可自动」= 把握度 + 词面闸门都过；「已执行 / 删除」留快照可回滚'
+      title: '模型给出的同义概念候选；「可自动」指系统有把握且名称足够相似；执行后保留备份，可回滚'
     }
   ];
 });
@@ -1150,18 +1164,18 @@ const fragmentationCards = computed<OverviewCard[]>(() => {
   const pendingReview = frag?.pendingReview
   return [
     {
-      label: '重复 label 比率',
+      label: '措辞重复率',
       value: na || ratio == null ? '—' : `${Math.round(ratio * 100)}%`,
       hint: numHint('措辞重复的痕迹占比'),
       tone: numTone(!na && ratio != null && ratio >= 0.2 ? 'warn' : ''),
-      title: '同一口径内措辞重复（归一化后同键 / 同 label）的记忆痕迹占比，越高说明概念越碎；≥20% 建议先进「概念归并审计」收拢。后端计算（overview.totals.fragmentation），是否含虚拟学习者随页头开关'
+      title: '含义相同、措辞重复的记忆记录占比，越高说明概念越碎；≥20% 建议先在「概念归并审计」中收拢。是否含虚拟学习者随页头开关'
     },
     {
       label: '未挂靠散键',
       value: na || unattached == null ? '—' : unattached,
-      hint: numHint('解析不到 KC 本体的键'),
+      hint: numHint('未关联到标准概念的键'),
       tone: numTone(!na && unattached != null && unattached > 0 ? 'warn' : ''),
-      title: '自由措辞、解析不到 KC 本体（conceptId 为空）的概念键数量——无法按本体自动收拢，只能靠归并/清理建议逐条治理；写入侧 kcId 键控上线后新增散键会趋零'
+      title: '自由填写的、未关联到标准概念的概念键数量——无法自动收拢，只能通过归并 / 清理建议逐条治理'
     },
     {
       label: '待审队列',
@@ -1195,7 +1209,7 @@ const planKpiItems = computed<MkStatItem[]>(() => {
       key: 'success',
       label: '检索成功率',
       value: plan.successRate === null ? '—' : `${Math.round(plan.successRate * 100)}%`,
-      title: '<70% 收缩预算 / >90% 扩张'
+      title: '低于 70% 时收缩安排，高于 90% 时扩大安排'
     },
     { key: 'relearn', label: '需回路径重学', value: plan.relearnSuggestions.length, tone: plan.relearnSuggestions.length > 0 ? 'warn' : '', title: '连续没接上，已退出队列' },
     {
@@ -1439,7 +1453,7 @@ async function loadOverview() {
   loading.value = true
   error.value = ''
   try {
-    const res: any = await adminMemoryReviewApi.overview({ limit: userPageSize.value, offset: (userPage.value - 1) * userPageSize.value, includeVirtual: includeVirtual.value })
+    const res: any = await adminMemoryReviewApi.overview({ limit: userPageSize.value, offset: (userPage.value - 1) * userPageSize.value, includeVirtual: includeVirtual.value, testOnly: includeVirtual.value || undefined })
     if (seq !== overviewSeq) return // 已有更新的概览请求在途/完成：丢弃过期响应
     const body = res.data?.data ?? res.data ?? {}
     rows.value = Array.isArray(body.users) ? body.users : []

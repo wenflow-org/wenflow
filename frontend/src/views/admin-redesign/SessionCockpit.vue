@@ -954,7 +954,9 @@ const FROM_BACK_LABEL: Record<string, string> = { virtual: '画像', learner: '�
 const SCENE_BACK_LABEL: Record<string, string> = {
   'learning-paths': '路径列表',
   'goal-conversations': '目标对话',
-  'teaching-sessions': '会话列表'
+  'teaching-sessions': '会话列表',
+  /* 2026-10-12 走查「记忆与复习的跳转」：记忆复盘的来源路径点进座舱，返回钮原兜底成「会话列表」 */
+  'memory-review': '记忆复盘'
 }
 const route = useRoute()
 const backLabel = computed(() => {

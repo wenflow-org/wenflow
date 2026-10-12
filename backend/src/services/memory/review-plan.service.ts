@@ -163,6 +163,8 @@ export interface ReviewPlanItem {
   loadFactors: string[];
   /** 该概念最早出现的来源路径标题（跨 path 场景下给用户一句解释；未知为 null） */
   originPathTitle: string | null;
+  /** 来源路径 id：管理台「来源路径」点击进路径座舱；未知为 null（与 originPathTitle 同源） */
+  originPathId?: string | null;
   /** 本堂课内温故的实测结果（教学回合报告，收束时回写记忆引擎）；未温故为 undefined */
   outcome?: { status: string; progress: number; reviewedAt: string };
   /**
@@ -338,13 +340,14 @@ export function consecutiveSuccesses(outcomes: WarmupOutcome[]): Map<string, num
   return streak;
 }
 
-/** 到期点 → 教学场景里给学生的「这是什么」一句来源（跨 path 时避免困惑） */
+/** 到期点 → 教学场景里给学生的「这是什么」一句来源（跨 path 时避免困惑）。
+ * 值带 pathId：管理台「来源路径」要能点进路径座舱（2026-10-12 走查，标题是死文本） */
 async function resolveOriginPathTitles(
   userId: string,
   picked: Array<{ conceptKey: string; pathId?: string | null }>,
   deps: ReviewPlanDeps,
-): Promise<Map<string, string>> {
-  const result = new Map<string, string>();
+): Promise<Map<string, { pathId: string; title: string }>> {
+  const result = new Map<string, { pathId: string; title: string }>();
   if (picked.length === 0) return result;
   try {
     const pathIdByKey = new Map<string, string>();
@@ -393,7 +396,7 @@ async function resolveOriginPathTitles(
     const titleByPath = new Map(paths.map((row) => [row.id, row.title]));
     for (const [key, pathId] of pathIdByKey) {
       const title = titleByPath.get(pathId);
-      if (title) result.set(key, title);
+      if (title) result.set(key, { pathId, title });
     }
   } catch {
     // 来源解析失败不影响复习计划
@@ -579,7 +582,8 @@ export async function buildReviewPlan(
       masteryScore: trace.masteryScore,
       load: estimate.load,
       loadFactors: estimate.factors,
-      originPathTitle: origins.get(family) ?? null,
+      originPathId: origins.get(family)?.pathId ?? null,
+      originPathTitle: origins.get(family)?.title ?? null,
     };
   });
 
