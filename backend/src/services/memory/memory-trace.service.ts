@@ -9,6 +9,7 @@
  */
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
+import { findTestAccountUserIds } from '../../utils/test-account';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { conceptRegistryService } from '../learner/concept-registry.service';
 import {
@@ -396,7 +397,27 @@ class MemoryTraceService {
     }
     if (evidenceRows.size > 0) {
       try {
-        await prisma.learner_evidence.createMany({ data: [...evidenceRows.values()] });
+        // 幂等键控（2026-10-13 真机实锤）：证据 id 是确定性构造（at+conceptKey+序），同一会话
+        // 结果被重处理（restart-learning 复活后续跑/重放）时部分 id 已存在。此前**一条冲突会让
+        // createMany 整批失败**（8 条证据静默全丢，只留一条 warn），新概念的证据被旧冲突连坐。
+        // 先剔除已存在的 id 再插，保住「已存在=跳过、新证据=落库」的语义。
+        const rows = [...evidenceRows.values()];
+        const existing = await prisma.learner_evidence.findMany({
+          where: { id: { in: rows.map((row) => row.id) } },
+          select: { id: true },
+        });
+        const existingIds = new Set(existing.map((row) => row.id));
+        const fresh = rows.filter((row) => !existingIds.has(row.id));
+        if (fresh.length > 0) {
+          await prisma.learner_evidence.createMany({ data: fresh });
+        }
+        if (fresh.length < rows.length) {
+          logger.info('[memory-trace] session:outcome 证据去重（已存在跳过）', {
+            userId,
+            skipped: rows.length - fresh.length,
+            inserted: fresh.length,
+          });
+        }
       } catch (error) {
         logger.warn('[memory-trace] session:outcome 证据落库失败（不阻断痕迹回写）', {
           userId,
@@ -585,6 +606,8 @@ class MemoryTraceService {
 export interface AdminMemoryTraceListQuery {
   userId?: string;
   includeVirtual: boolean;
+  /** 测试视角：只看虚拟学习者 + 测试/审计账号（优先于 includeVirtual 的排除逻辑） */
+  testOnly?: boolean;
   limit: number;
 }
 
@@ -595,6 +618,12 @@ export interface AdminMemoryTraceListQuery {
  * 默认排除虚拟学习者：先取虚拟 id 集合，再用 userId.notIn；与指定 userId 用 AND 组合（避免键覆盖）。
  */
 export async function listAdminMemoryTraces(query: AdminMemoryTraceListQuery) {
+  /* 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：testOnly=true 时只看
+     虚拟学习者 + 测试/审计账号的痕迹（正向 in，判据同源 findTestAccountUserIds） */
+  let testOnlyIds: string[] | null = null;
+  if (query.testOnly) {
+    testOnlyIds = await findTestAccountUserIds();
+  }
   const virtualIds = query.includeVirtual
     ? []
     : (await prisma.users.findMany({
@@ -606,7 +635,11 @@ export async function listAdminMemoryTraces(query: AdminMemoryTraceListQuery) {
     where: {
       AND: [
         ...(query.userId ? [{ userId: query.userId }] : []),
-        ...(virtualIds.length ? [{ userId: { notIn: virtualIds } }] : []),
+        ...(testOnlyIds
+          ? [testOnlyIds.length ? { userId: { in: testOnlyIds } } : { userId: { in: ['__none__'] } }]
+          : virtualIds.length
+            ? [{ userId: { notIn: virtualIds } }]
+            : []),
       ],
     },
     orderBy: { updatedAt: 'desc' },

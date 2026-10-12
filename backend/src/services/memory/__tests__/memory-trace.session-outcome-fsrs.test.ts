@@ -14,7 +14,8 @@ let nowIso = '2026-10-07T02:00:00.000Z'
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
-  default: { memory_traces: { findUnique: mockFindUnique, upsert: mockUpsert }, learner_evidence: { createMany: jest.fn(async () => ({ count: 0 })) } },
+  // findMany：证据幂等预查（2026-10-13 修「一条冲突整批丢」）默认无已存在行
+  default: { memory_traces: { findUnique: mockFindUnique, upsert: mockUpsert }, learner_evidence: { findMany: jest.fn(async () => []), createMany: jest.fn(async () => ({ count: 0 })) } },
 }))
 jest.mock('../../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -159,6 +160,30 @@ describe('recordSessionOutcome：session:outcome 证据补齐（B2 第二步，�
     expect(payload).toEqual(expect.objectContaining({ conceptKey: '闭包', status: 'mastered', fsrsGrade: 4 }))
     const pending = rows.find((r: any) => r.evidenceKey === 'session:outcome:词法作用域')
     expect(JSON.parse(pending.payload).fsrsGrade).toBeNull() // 无证据项 grade=null（宁缺勿滥镜像）
+  })
+
+  it('已存在证据 id 跳过且不连坐整批（2026-10-13 真机实锤：一条冲突曾让 8 条全丢）', async () => {
+    const createMany = jest.fn(async () => ({ count: 1 }))
+    const findMany = jest.fn(async (args: any) => [{ id: args.where.id.in[0] }]) // 第一行已存在
+    const db = (jest.requireMock('../../../config/database') as any).default
+    db.learner_evidence.createMany = createMany
+    db.learner_evidence.findMany = findMany
+    mockFindUnique.mockResolvedValue(null)
+    mockUpsert.mockResolvedValue({})
+
+    await memoryTraceService.recordSessionOutcome(
+      'u1',
+      [
+        { name: '闭包', status: 'mastered', progress: 100 },
+        { name: '词法作用域', status: 'pending', progress: 0 },
+      ],
+      'derived', 'accurate', 'path-1', 'sess-9',
+    )
+    expect(findMany).toHaveBeenCalledTimes(1)
+    expect(createMany).toHaveBeenCalledTimes(1)
+    const rows = (createMany.mock.calls[0] as unknown as [{ data: any[] }])[0].data
+    expect(rows).toHaveLength(1) // 已存在的跳过，新证据仍落库（旧行为：整批失败）
+    expect(rows[0].evidenceKey).toBe('session:outcome:词法作用域')
   })
 
   it('证据落库失败不阻断痕迹回写（返回 count 照常）', async () => {
