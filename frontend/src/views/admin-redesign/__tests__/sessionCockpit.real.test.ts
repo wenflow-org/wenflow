@@ -232,8 +232,9 @@ describe('SessionCockpit 双模式', () => {
     expect(heroActions.text()).toContain('会话列表');
     expect(heroActions.text()).toContain('刷新');
 
-    // 阶段推进 stepper：4 步 + meta 副标（Path 1/2 里程碑、Goal 学习者发言数）
-    // （口径 2026-10-06 审核 §主题 4：原「对话 N 轮」含平台回复，与同卡「已用回合」打架）
+    // 阶段推进 stepper：4 步 + meta 副标。本夹具 stageResults.path 只给里程碑计数（无任务明细）
+    // → 走后端计数兜底「1/2 里程碑」；有任务明细时 Path 步点走子任务动态读数（见 Path 页签用例：
+    // 2026-10-12 走查判死「整阶段收齐才动」的口径，明明完成了 2/13 任务却恒显 0/4）
     expect(wrapper.findAll('.cp-stp')).toHaveLength(4);
     expect(wrapper.text()).toContain('1/2 里程碑');
     expect(wrapper.text()).toContain('学习者发言 1');
@@ -442,6 +443,9 @@ describe('SessionCockpit 双模式', () => {
     await wrapper.findAll('.cp-stp')[1].trigger('click'); // Path 页签
     await settle();
     expect(getPathDetailMock).toHaveBeenCalledWith('lp_1');
+    // 步点副标走子任务动态读数（M1 2 任务完成 + M2 1 任务进行中 = 2/3），
+    // 不再是「整阶段收齐才 +1」的里程碑口径（2026-10-12 走查：恒 0 读作没进展）
+    expect(wrapper.find('#cp-tab-path .cp-stp__meta').text()).toBe('任务 2/3');
 
     const pane = wrapper.find('#cp-tabpanel-path');
     expect(pane.exists()).toBe(true);

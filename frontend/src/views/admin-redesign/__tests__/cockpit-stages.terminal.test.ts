@@ -55,8 +55,8 @@ describe('useCockpitStages 终态语义', () => {
     });
 
     expect(s.stageDone('learning')).toBe(false);
-    // 副标仍是真实的 0/6，只是不再与勾同时出现
-    expect(s.stageProgress('learning')).toBe('0/6 课已完成');
+    // 副标仍是真实的 0/6（2026-10-12 起读课堂覆盖「已开始 N/M 课」，不与 Path 步点的内容完成数同义），只是不再与勾同时出现
+    expect(s.stageProgress('learning')).toBe('已开始 0/6 课');
   });
 
   it('已放弃、停在 Path：已走过的 Goal 仍判完成（不误伤）', () => {

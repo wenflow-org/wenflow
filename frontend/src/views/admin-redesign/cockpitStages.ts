@@ -96,18 +96,28 @@ export function useCockpitStages(deps: {
     return ''
   })
   const pathProgressText = computed(() => {
+    /* 2026-10-12 用户走查：整阶段收齐才 +1 的「0/4 里程碑」读作死的（走查原话「为什么不动态」
+       ——明明已完成 2/13 个任务）。步点副标优先走子任务动态读数「任务 d/t」（与 Learn 课树
+       同源）；载荷只给概要时退后端计数，里程碑视图/计数是最后兜底（终态会话保持旧读数）。 */
+    const tasks = pathMilestonesView.value.flatMap((m) => m.tasks)
+    if (tasks.length) return `任务 ${tasks.filter((t) => t.completed).length}/${tasks.length}`
     const srPath = asRecord(stageResults.value.path)
-    const completed = numberValue(srPath.completedMilestones)
-      ?? numberValue(pathStatusPath.value.completedMilestones)
+    const doneTasks = numberValue(pathStatusPath.value.completedTasks) ?? numberValue(srPath.completedTasks)
+      ?? numberValue(stageStatus.value.path?.completedTasks)
+    const totalTasks = numberValue(pathStatusPath.value.totalTasks) ?? numberValue(srPath.totalTasks)
+      ?? numberValue(stageStatus.value.path?.totalTasks)
+    if (doneTasks !== null && totalTasks) return `任务 ${doneTasks}/${totalTasks}`
+    const completedMilestones = numberValue(pathStatusPath.value.completedMilestones)
+      ?? numberValue(srPath.completedMilestones)
       ?? numberValue(stageStatus.value.path?.completedMilestones)
-    const total = numberValue(srPath.totalMilestones)
-      ?? numberValue(pathStatusPath.value.totalMilestones)
+    const totalMilestones = numberValue(pathStatusPath.value.totalMilestones)
+      ?? numberValue(srPath.totalMilestones)
       ?? numberValue(stageStatus.value.path?.totalMilestones)
-    if (completed !== null && total) return `${completed}/${total} 里程碑`
+    if (completedMilestones !== null && totalMilestones) return `${completedMilestones}/${totalMilestones} 里程碑`
     const milestones = pathMilestonesView.value
     if (milestones.length) {
-      const done = milestones.filter((m) => m.tasks.length && m.tasks.every((t) => t.completed)).length
-      return `${done}/${milestones.length} 里程碑`
+      const doneMilestones = milestones.filter((m) => m.tasks.length && m.tasks.every((t) => t.completed)).length
+      return `${doneMilestones}/${milestones.length} 里程碑`
     }
     return ''
   })
@@ -117,13 +127,15 @@ export function useCockpitStages(deps: {
     return `课程进度 ${done}/${total}`
   })
   /** 阶段步点副标：stepper 是「阶段推进」轴，读数是阶段汇总，须显式命名口径。
-      课数单源 = Learn 卡内课时行（见 cockpitLessons.countDoneLessons）：F2-1 前此处写作
-      「课程 0/19」，与同屏「学习总结」卡头「1/19 课已完成」并列，同一事实两个数。 */
-  const learnStageRollupText = computed(() =>
-    learnLessons.value.length
-      ? `${countDoneLessons(learnLessons.value)}/${learnLessons.value.length} 课已完成`
-      : ''
-  )
+      2026-10-12：Path 步点已改读子任务完成数（内容轴，同源同数），本格若仍读
+      「课已完成」就与 Path 步点同数同义（同屏两个 2/13）——改读**课堂覆盖**：
+      实际开始过的课（有课堂会话或已完成），对应 Learn 页签「课堂对话」的身份。 */
+  const learnStageRollupText = computed(() => {
+    const list = learnLessons.value
+    if (!list.length) return ''
+    const started = list.filter((l) => l.teachingSessionId || l.state === 'done').length
+    return `已开始 ${started}/${list.length} 课`
+  })
   function stageProgress(st: string) {
     const key = st as StageKey
     switch (key) {
