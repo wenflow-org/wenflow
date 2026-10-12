@@ -23,6 +23,15 @@ jest.mock('../../config/system-database', () => ({
   default: { $executeRawUnsafe: jest.fn().mockResolvedValue([]), $disconnect: jest.fn() },
 }));
 
+// 资料仓库落盘在 data/uploads/materials/<userId>/（fs），测试按空仓对待，需要时逐例注入
+const mockListMaterials = jest.fn().mockReturnValue([]);
+const mockReadMaterial = jest.fn().mockReturnValue(null);
+jest.mock('../../services/materials/material-store', () => ({
+  __esModule: true,
+  listMaterials: (...args: unknown[]) => mockListMaterials(...args),
+  readMaterial: (...args: unknown[]) => mockReadMaterial(...args),
+}));
+
 import router, { buildTimeline } from '../admin/session-console';
 
 function getRouteHandler(path: string, method: 'get' | 'post') {
@@ -311,6 +320,161 @@ describe('GET /api/admin/session-console/:sessionId', () => {
     expect(data2.teaching).toBeNull();
     expect(data2.runtime.currentStage).toBe('goal');
     expect(data2.runtime.stageStatus.goal.ready).toBe(false);
+  });
+
+  // 2026-10-11 走查回归：侧表权威的会话（全库 827/827 都有侧表行）课堂消息一度恒为 0 条
+  // —— 水合把 messages 列覆写成数组后，teachingMessages 仍按 JSON 字符串解析，parse 抛错被兜底吞成 []。
+  it('侧表有行（messages 列已置 null）→ 水合后的数组仍被读成课堂消息', async () => {
+    mockPrisma.teaching_sessions.findUnique.mockResolvedValue(teachingSessionRow({ messages: null, status: 'discarded' }));
+    mockPrisma.goal_conversations.findFirst.mockResolvedValue(goalConversationRow());
+    mockPrisma.learning_paths.findUnique.mockResolvedValue(null);
+    mockPrisma.milestones.findMany.mockResolvedValue([]);
+    mockPrisma.subtasks.findUnique.mockResolvedValue(null);
+    mockPrisma.learner_evidence.findMany.mockResolvedValue([]);
+    mockPrisma.teaching_session_messages.findMany.mockResolvedValue([
+      { id: 1, payload: JSON.stringify({ role: 'user', content: '产业园选址题怎么从材料里找点？', timestamp: '2026-08-12T14:00:00.000Z' }) },
+      { id: 2, payload: JSON.stringify({ role: 'assistant', content: '先逐段圈依据，再按设问归类。', timestamp: '2026-08-12T14:00:05.000Z' }) },
+      { id: 3, payload: JSON.stringify({ role: 'user', content: '图表里的信息也算依据吗？', timestamp: '2026-08-12T14:01:00.000Z' }) },
+    ]);
+
+    const handler = getRouteHandler('/:sessionId', 'get');
+    const res = createResponse();
+    await handler({ params: { sessionId: 'ts_real_1' } }, res);
+    const data = res.json.mock.calls[0][0].data;
+
+    expect(data.conversations.learning.messages).toHaveLength(3);
+    expect(data.teaching.messageCount).toBe(2); // 侧表内 user 角色条数
+    expect(data.teaching.messages[0].content).toContain('产业园选址');
+    // 时间线：课堂消息按 teaching 源进入（修复前这一源断供）；末尾那条是 wrapup 的「会话总结已生成」
+    const teachingEntries = data.timeline.filter((t: any) => t.kind === 'teaching');
+    expect(teachingEntries).toHaveLength(4);
+    expect(teachingEntries[0].detail).toContain('产业园选址');
+    expect(teachingEntries[2].title).toBe('学习者消息');
+  });
+
+  // 2026-10-11 走查：goal 阶段会把学习者携带的资料与系统联网采集的资料纳入上下文，结果要在监控页可见
+  it('目标对话控制台：学习者资料投影（上传 / 联网两类 + brief 理解摘要，正文不进载荷）', async () => {
+    const conversation = goalConversationRow({ learningPathId: null });
+    mockPrisma.goal_conversations.findUnique.mockResolvedValue(conversation);
+    mockListMaterials.mockReturnValue([
+      {
+        id: 'mat_1',
+        userId: 'user_1',
+        name: '指南-抽取.txt',
+        charCount: 22284,
+        structure: { headingCount: 3 },
+        anchors: [{ heading: '健康', location: '1', preview: 'x' }],
+        warnings: ['占位告警'],
+        createdAt: '2026-09-22T14:44:00.648Z',
+        origin: 'upload',
+        brief: { docType: '指南', subject: '学习与发展指南', audience: '教师', overview: '本文件为指导纲要…', coreConcepts: ['五大领域'], naturalDivisions: ['按五大领域'], toc: [{ title: 'A', gist: 'a' }] },
+      },
+      {
+        id: 'mat_2',
+        userId: 'user_1',
+        name: '如何阅读一本书',
+        charCount: 100035,
+        structure: { headingCount: 0 },
+        anchors: [],
+        warnings: [],
+        createdAt: '2026-09-26T00:06:24.026Z',
+        fetchedAt: '2026-09-26T00:06:24.026Z',
+        origin: 'web',
+        sourceUrl: 'https://example.org/books/how-to-read.pdf',
+        brief: null,
+      },
+    ]);
+
+    const handler = getRouteHandler('/:sessionId', 'get');
+    const res = createResponse();
+    await handler({ params: { sessionId: 'gc_1' } }, res);
+    const data = res.json.mock.calls[0][0].data;
+
+    expect(mockListMaterials).toHaveBeenCalledWith('user_1');
+    expect(data.kind).toBe('goal');
+    expect(data.materials).toHaveLength(2);
+    expect(data.materials[0]).toMatchObject({
+      name: '指南-抽取.txt',
+      origin: 'upload',
+      charCount: 22284,
+      headingCount: 3,
+      anchorCount: 1,
+      warningCount: 1,
+      sourceUrl: null,
+      brief: { docType: '指南', subject: '学习与发展指南', tocCount: 1 },
+    });
+    expect(data.materials[1]).toMatchObject({ origin: 'web', sourceUrl: 'https://example.org/books/how-to-read.pdf', brief: null });
+    // 正文/大字段不进载荷（单份正文可达 100k 字符）
+    expect(JSON.stringify(data.materials)).not.toContain('markdown');
+  });
+
+  it('资料读取失败不阻断控制台（fail-open 空列表）', async () => {
+    mockPrisma.goal_conversations.findUnique.mockResolvedValue(goalConversationRow({ learningPathId: null }));
+    mockListMaterials.mockImplementation(() => { throw new Error('disk down'); });
+
+    const handler = getRouteHandler('/:sessionId', 'get');
+    const res = createResponse();
+    await handler({ params: { sessionId: 'gc_1' } }, res);
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json.mock.calls[0][0].data.materials).toEqual([]);
+  });
+});
+
+describe('GET /api/admin/session-console/material/:sessionId/:materialId（资料全文，点开才取）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPrisma.teaching_sessions.findUnique.mockResolvedValue(null);
+    mockPrisma.goal_conversations.findUnique.mockResolvedValue(null);
+    mockReadMaterial.mockReturnValue(null);
+  });
+
+  it('未知会话 → 404；资料读权限收在会话边界（不接 userId 入参）', async () => {
+    const handler = getRouteHandler('/material/:sessionId/:materialId', 'get');
+    const res = createResponse();
+    await handler({ params: { sessionId: 'nope', materialId: 'mat_1' } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(mockReadMaterial).not.toHaveBeenCalled();
+  });
+
+  it('goal 会话 → 按会话反查归属用户读盘返回全文；非该学习者资料 → 404', async () => {
+    mockPrisma.goal_conversations.findUnique.mockResolvedValue(goalConversationRow());
+    const handler = getRouteHandler('/material/:sessionId/:materialId', 'get');
+
+    mockReadMaterial.mockReturnValue({
+      record: { id: 'mat_1', userId: 'user_1', name: '指南-抽取.txt', origin: 'upload', charCount: 6, structure: {}, anchors: [], warnings: [], createdAt: '2026-09-22T14:44:00.648Z' },
+      markdown: '正文全文内容',
+    });
+    const res = createResponse();
+    await handler({ params: { sessionId: 'gc_1', materialId: 'mat_1' } }, res);
+
+    expect(mockReadMaterial).toHaveBeenCalledWith('user_1', 'mat_1');
+    const data = res.json.mock.calls[0][0].data;
+    expect(data.name).toBe('指南-抽取.txt');
+    expect(data.markdown).toBe('正文全文内容');
+    expect(data.truncated).toBe(false);
+
+    mockReadMaterial.mockReturnValue(null);
+    const res2 = createResponse();
+    await handler({ params: { sessionId: 'gc_1', materialId: 'mat_other' } }, res2);
+    expect(res2.status).toHaveBeenCalledWith(404);
+  });
+
+  it('teaching 会话同样可取；超长正文截断并标记（20 万字封顶）', async () => {
+    mockPrisma.teaching_sessions.findUnique.mockResolvedValue(teachingSessionRow());
+    const long = 'x'.repeat(200_001);
+    mockReadMaterial.mockReturnValue({
+      record: { id: 'mat_big', userId: 'user_1', name: '大书.md', origin: 'web', charCount: 200_001, structure: {}, anchors: [], warnings: [], createdAt: '2026-09-26T00:06:24.026Z' },
+      markdown: long,
+    });
+    const handler = getRouteHandler('/material/:sessionId/:materialId', 'get');
+    const res = createResponse();
+    await handler({ params: { sessionId: 'ts_real_1', materialId: 'mat_big' } }, res);
+
+    const data = res.json.mock.calls[0][0].data;
+    expect(data.truncated).toBe(true);
+    expect(data.markdown).toHaveLength(200_000);
   });
 });
 

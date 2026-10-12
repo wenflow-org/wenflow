@@ -151,6 +151,7 @@ const { stableVirtualApi } = vi.hoisted(() => {
     getVirtualSessionPathStatus: vi.fn(),
     getVirtualSessionTeachingDetail: vi.fn(),
     getRealSessionConsole: vi.fn(),
+    getRealSessionMaterial: vi.fn(),
     updateSessionSimulationConfig: vi.fn(),
     deleteVirtualSession: vi.fn(),
     virtualSessionStep: vi.fn(),
@@ -416,6 +417,56 @@ describe('SessionCockpit 双模式', () => {
     const empty = await mountCockpit('session-real', 'ts_real_1');
     expect(empty.text()).not.toContain('学习者资料');
     empty.unmount();
+  });
+
+  it('资料全文弹层（2026-10-12 走查「只能看到简介吗」）：查看全文懒加载存档正文，Esc 关闭', async () => {
+    const payload = realTeachingPayload();
+    payload.data.kind = 'goal';
+    payload.data.materials = [
+      {
+        id: 'mat-1',
+        name: '指南-抽取.txt',
+        origin: 'upload',
+        charCount: 22284,
+        headingCount: 0,
+        anchorCount: 0,
+        warningCount: 0,
+        createdAt: '2026-09-22T14:44:00.648Z',
+        fetchedAt: null,
+        sourceUrl: null,
+        brief: null
+      }
+    ];
+    getRealSessionConsole.mockResolvedValue(payload);
+    stableVirtualApi.getRealSessionMaterial.mockResolvedValue({
+      data: {
+        success: true,
+        data: { id: 'mat-1', name: '指南-抽取.txt', origin: 'upload', charCount: 22284, markdown: '第一部分　健康\n（存档正文）', truncated: false }
+      }
+    });
+
+    const w = await mountCockpit('session-real', 'gc_1');
+
+    const row = w.findAll('.cp-mat')[0];
+    const btn = row.findAll('button').find((b) => b.text() === '查看全文');
+    expect(btn, '资料卡应有查看全文入口').toBeTruthy();
+    await btn!.trigger('click');
+    await flushPromises();
+    expect(stableVirtualApi.getRealSessionMaterial).toHaveBeenCalledWith('gc_1', 'mat-1');
+
+    // 弹层 Teleport 到 body：正文直读存档 markdown（不是 brief 摘要）
+    const dialog = document.body.querySelector('.cp-matview');
+    expect(dialog, '全文弹层应挂在 body').toBeTruthy();
+    expect(dialog!.textContent).toContain('指南-抽取.txt');
+    expect(dialog!.textContent).toContain('存档正文');
+    expect(dialog!.textContent).not.toContain('仅展示前 20 万字');
+
+    // Esc 关闭（useEscape 走 window 全局监听）
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await nextTick();
+    expect(document.body.querySelector('.cp-matview')).toBeNull();
+
+    w.unmount();
   });
 
   it('Path 页签 = 路径内容本体（2026-10-12 拍板）：内嵌 PathJourneyPanel，不再有「打开路径详情页」出口', async () => {

@@ -17,7 +17,7 @@ import {
 } from '../../services/admin/session-console.repo';
 import { logger } from '../../utils/logger';
 import { hydrateTeachingSessionMessages } from '../../services/ai-teaching/teaching-session-message-store';
-import { listMaterials } from '../../services/materials/material-store';
+import { listMaterials, readMaterial } from '../../services/materials/material-store';
 
 const router = Router();
 
@@ -613,6 +613,54 @@ async function buildGoalConsole(conversation: any) {
     },
   };
 }
+
+// GET /api/admin/session-console/material/:sessionId/:materialId —— 单份学习者资料全文。
+// 列表载荷刻意不含正文（单份可达 10 万字），全文点开才读：按会话反查归属用户后再读盘，
+// 不接受任意 userId 入参（资料读权限收在会话边界内）；store 内已有 userId 清洗与资料 id
+// UUID 校验（防目录穿越）。超长截断并标记，前端提示。
+router.get('/material/:sessionId/:materialId', async (req: any, res) => {
+  try {
+    const { sessionId, materialId } = req.params;
+    const [teachingSession, goalConversation] = await Promise.all([
+      findTeachingSessionWithUser(sessionId),
+      findGoalConversationWithUser(sessionId),
+    ]);
+    const owner = teachingSession || goalConversation;
+    if (!owner) {
+      return res.status(404).json({
+        success: false,
+        error: { message: '会话不存在（非教学会话或目标对话）', status: 404 },
+      });
+    }
+    const found = readMaterial(String(owner.userId || ''), String(materialId || ''));
+    if (!found) {
+      return res.status(404).json({
+        success: false,
+        error: { message: '资料不存在或不属于该会话的学习者', status: 404 },
+      });
+    }
+    const MAX_MATERIAL_CHARS = 200_000;
+    const full = found.markdown;
+    const truncated = full.length > MAX_MATERIAL_CHARS;
+    return res.json({
+      success: true,
+      data: {
+        id: found.record.id,
+        name: found.record.name,
+        origin: found.record.origin === 'web' ? 'web' : 'upload',
+        charCount: found.record.charCount || full.length,
+        markdown: truncated ? full.slice(0, MAX_MATERIAL_CHARS) : full,
+        truncated,
+      },
+    });
+  } catch (error: any) {
+    logger.error('[admin-session-console] 读取学习者资料全文失败', { error });
+    return res.status(500).json({
+      success: false,
+      error: { message: error.message || '读取学习者资料全文失败', status: 500 },
+    });
+  }
+});
 
 router.get('/:sessionId', async (req: any, res) => {
   try {

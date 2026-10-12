@@ -348,6 +348,7 @@
                 <span class="mk-badge" :class="m.origin === 'web' ? 'mk-badge--info' : 'mk-badge--muted'">{{ m.originLabel }}</span>
                 <strong class="cp-mat__name" :title="m.name">{{ m.name }}</strong>
                 <span class="cp-mat__meta mono">{{ m.sizeText }}</span>
+                <button type="button" class="mk-link" title="读取存档全文" @click="openMaterialView(m)">查看全文</button>
               </header>
               <p v-if="m.subject" class="cp-mat__subject">{{ m.subject }}</p>
               <p v-if="m.overview" class="cp-mat__overview">{{ m.overview }}</p>
@@ -864,6 +865,37 @@
         </div>
       </aside>
     </div>
+
+    <!-- 资料全文弹层（2026-10-12 走查「只能看到简介吗」）：控制台列表载荷刻意不含正文
+         （单份可达 10 万字），全文点开才取。外壳走共享 .mk-modal 原语，开合四件套
+         （Esc/遮罩/焦点陷阱/滚动锁）同 PathJourneyPanel 任务弹层。 -->
+    <Teleport to="body">
+      <div v-if="materialView" ref="materialMaskRef" class="mk-modal">
+        <div ref="materialPanelRef" class="mk-modal__panel cp-matview" role="dialog" aria-modal="true" aria-label="资料全文">
+          <div class="mk-modal__head">
+            <div class="cp-matview__head">
+              <h2 class="mk-modal__title" :title="materialView.name">{{ materialView.name }}</h2>
+              <span class="cp-matview__meta mono">{{ materialView.sizeText }}</span>
+            </div>
+            <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeMaterialView">✕</button>
+          </div>
+          <div class="mk-modal__body">
+            <p v-if="materialView.loading" class="cp-none">正在读取全文…</p>
+            <p v-else-if="materialView.error" class="cp-degrade">
+              {{ materialView.error }}
+              <button type="button" class="mk-link" @click="retryMaterialView">重试</button>
+            </p>
+            <template v-else>
+              <pre class="cp-matview__text">{{ materialView.markdown }}</pre>
+              <p v-if="materialView.truncated" class="cp-matview__trunc">全文超长，仅展示前 20 万字；完整正文仍在服务端存档。</p>
+            </template>
+          </div>
+          <div class="mk-modal__foot">
+            <button type="button" class="mk-btn" @click="closeMaterialView">关闭</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -873,6 +905,8 @@ import { useRoute } from 'vue-router'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
 import { errMsg, liveApiConfig } from './live'
 import { askConfirm } from './useConfirm'
+import { useMaskClose, useOverlay } from './useOverlay'
+import { useEscape } from './useEscape'
 import {
   VS_CONTROL_DEFS,
   vlabControlsFor,
@@ -1916,6 +1950,49 @@ const materialMetaText = computed(() => {
   return parts.join(' · ')
 })
 
+/* ===== 资料全文弹层（2026-10-12 走查「只能看到简介吗」）：控制台列表载荷刻意不含正文
+   （单份可达 10 万字），全文点开才取。last-wins 守卫：点开另一份后旧响应不回填。 ===== */
+const materialView = ref<{
+  id: string
+  name: string
+  sizeText: string
+  loading: boolean
+  error: string
+  markdown: string
+  truncated: boolean
+} | null>(null)
+const materialMaskRef = ref<HTMLElement | null>(null)
+const materialPanelRef = ref<HTMLElement | null>(null)
+function closeMaterialView() {
+  materialView.value = null
+}
+async function openMaterialView(m: RealMaterial) {
+  const sid = sessionId.value
+  if (!sid) return
+  materialView.value = { id: m.id, name: m.name, sizeText: m.sizeText, loading: true, error: '', markdown: '', truncated: false }
+  try {
+    const res = await adminVirtualLearnersApi.getRealSessionMaterial(sid, m.id)
+    if (materialView.value?.id !== m.id) return
+    const payload = asRecord((res.data as Record<string, unknown>)?.data)
+    materialView.value.markdown = typeof payload.markdown === 'string' ? payload.markdown : ''
+    materialView.value.truncated = payload.truncated === true
+    materialView.value.loading = false
+  } catch {
+    if (materialView.value?.id !== m.id) return
+    materialView.value.loading = false
+    materialView.value.error = '资料全文读取失败'
+  }
+}
+function retryMaterialView() {
+  const view = materialView.value
+  const m = view ? realMaterials.value.find((x) => x.id === view.id) : null
+  if (m) void openMaterialView(m)
+}
+/* 开合行为四件套：Esc/遮罩/焦点陷阱/滚动锁（同 PathJourneyPanel 任务弹层） */
+useOverlay(computed(() => !!materialView.value), materialPanelRef)
+useMaskClose(materialMaskRef, closeMaterialView)
+useEscape(() => !!materialView.value, closeMaterialView)
+
 /* 知识状态更新卡已归位 Learn 页（2026-10-12 四页拆分）；来源点名判据保留在 knowledgeSourceLabel */
 
 /** 卡头来源名（2026-10-11 走查）：原写「会话知识状态」里的"会话"指课堂会话，摆在目标对话控制台上
@@ -2734,6 +2811,17 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-mat__src { color: var(--mk-blue); text-decoration: none; }
 .cp-mat__src:hover { text-decoration: underline; }
 .cp-mat__time { margin-left: auto; flex: none; }
+
+/* ===== 资料全文弹层：宽面板读长文（共享 .mk-modal 外壳，只调宽度变量与正文排版） ===== */
+.cp-matview { --mk-modal-w: min(880px, 94vw); }
+.cp-matview__head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.cp-matview__head .mk-modal__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-matview__meta { flex: none; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.cp-matview__text {
+  margin: 0; font-size: var(--mk-fs-micro); line-height: 1.8; color: var(--mk-ink);
+  font-family: var(--mk-mono); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.cp-matview__trunc { margin: 10px 0 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* ===== Body: main + sidebar ===== */
 .cp-body {
