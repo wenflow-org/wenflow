@@ -102,18 +102,19 @@
           </div>
         </div>
       </div>
-      </section>
 
-      <!-- 阶段交接明细（原型 1624-1629 独立卡，5 列）：交接 = 相邻阶段 id 对（mono 小写）、
-           上/下游 Agent（mono）；传递字段口径 = 下游阶段的必填入参（stageFieldContract.ins，
-           字段路由 hard-required），即原型 s.in（1651 行）的真实数据对应物——本页 stages 拓扑
-           只有 consumes/produces 汇总、无原型式 in/outs；字段数 = 传递字段条数。
+      <!-- 阶段交接明细（原型 1624-1629 独立卡，5 列；2026-10-13 自独立卡折入画布卡底部）：
+           交接 = 相邻阶段 id 对（mono 小写）、上/下游 Agent（mono）；传递字段口径 = 下游阶段的
+           必填入参（stageFieldContract.ins，字段路由 hard-required），字段数 = 传递字段条数。
+           原独立卡按 55% 封顶仍把五阶段画布压成滚动缝（P1-4/2026-10-04）；折成卡内折叠区后
+           默认收起——画布独占一屏，展开时表格区内滚、画布仍保 ≥1 条完整泳道。
            空值三态（与画布 chips 同一原则）：无必填入参显「无必填入参」、契约未加载显「…」，
            不按 0/— 渲染——「真无必填」与「没加载」不可分辨即是编造 -->
-      <section class="mk-card orch-handoff">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">阶段交接明细</h3>
-        </div>
+      <details class="orch-odg-handoff">
+        <summary class="mk-section__summary orch-odg-handoff__summary">
+          <span class="orch-odg-handoff__title">阶段交接明细</span>
+          <span v-if="stageHandoffs.length" class="orch-odg-handoff__count">{{ stageHandoffs.length }} 段交接</span>
+        </summary>
         <div class="mk-table-scroll">
           <table class="mk-table">
             <thead>
@@ -145,6 +146,7 @@
             </tbody>
           </table>
         </div>
+      </details>
       </section>
     </div>
     <div v-else-if="pane === 'overview'" id="orch-pane-overview" role="tabpanel" aria-labelledby="orch-tab-overview" class="orch-pane orch-pane--center">
@@ -702,25 +704,18 @@ const govMetaTitle = computed(() =>
 .orch-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .orch-pane--scroll { overflow-y: auto; }
 .orch-pane--center { justify-content: center; }
-/* 总览双卡（原型：odg 画布卡 + margin-top 的交接明细卡）：画布卡弹性填满、交接卡自然高度贴底 */
+/* 总览单卡（2026-10-13）：交接明细折入画布卡底部后不再有第二张卡，画布独占一屏 */
 .orch-overview { gap: 12px; }
-/* P1-4（2026-10-04 全站评审）：fill 布局下交接明细卡自然高度（4 行 ≈394px）把上方
-   「字段数据旅程」画布压成 84px 滚动缝（clientHeight=84/scrollHeight=754，五条泳道
-   首行全部拦腰切断）。按本页 .frt__scroll 判例给交接卡设上限、表格区内滚，
-   画布保住首屏至少一条完整泳道。
-   LY5（2026-10-05 布局方案 §3）：45%→55%——1440 起让 4 行明细全见（现末行底 1032>880），
-   1280 从 1.5 行提升到 2~3 行；画布仍保 ≥1 条完整泳道。不给画布加 max-height，
-   4K 可见性由全局壳层（§0）修复保证，本页不加 4K 专用补丁。
-   报告 §六 列为可选否决项（默认即本值）：若「画布优先、明细表可只留 1 行」是硬口径，
-   按 §六 处理回 45% 即可（一行回退）。 */
-.orch-overview .orch-handoff {
-  flex: 0 1 auto;
-  min-height: 0;
-  max-height: 55%;
-  display: flex;
-  flex-direction: column;
-}
-.orch-overview .orch-handoff .mk-table-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* 阶段交接明细折叠区（原独立卡 .orch-handoff，2026-10-13 折入画布卡）：
+   默认收起 → 画布卡内 .orch-odg-scroll 的 flex:1 独占整屏；
+   展开时表格区内滚并封顶 55%（沿用原独立卡封顶值），画布仍保 ≥1 条完整泳道。
+   P1-4（2026-10-04）：原独立卡自然高度把画布压成 84px 滚动缝，折叠区默认收起是根治。 */
+.orch-odg-handoff { flex: none; border-top: 1px solid var(--mk-line, #e6ebf4); }
+.orch-odg-handoff__summary { display: flex; align-items: center; gap: 10px; }
+.orch-odg-handoff__title { font-weight: 700; }
+.orch-odg-handoff__count { margin-left: auto; color: var(--mk-faint); font-weight: 500; }
+.orch-odg-handoff[open] { display: flex; flex-direction: column; min-height: 0; max-height: 55%; }
+.orch-odg-handoff[open] > .mk-table-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* 阶段交接明细（原型 .tbl 的 mono/sub/wrap 形态）：交接列 id 对弱化 mono；传递字段可换行 */
 .orch-handoff__pair { color: var(--mk-muted); white-space: nowrap; }
 /* 治理徽章随行：真 <button> 复用 .mk-badge 皮（审核 #96）——只补按钮默认字族与手型，
