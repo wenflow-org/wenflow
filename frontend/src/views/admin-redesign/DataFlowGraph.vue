@@ -1424,6 +1424,11 @@ function stepHue(step: FlowStep): string {
   scrollbar-gutter: stable;
   overflow: auto; /* 放大后两轴都要能滚（原先 overflow-x: hidden，因为 100% 时内容不超栏宽） */
   cursor: grab;
+  /* 内容整体居中（2026-10-13 用户：默认以左上角为原点，希望整体视觉居中）：
+     视口改 flex，内容层 .dfg-pipe 用 margin:auto 吃两侧/上下余量——
+     margin:auto 同时解决两件事：① 余量存在时居中；② 内容超出视口时 auto 边距塌成 0、
+     回到左上角起点，滚动条能从第一格开始滚（justify-content:center 做不到后者，会把开头裁掉）。 */
+  display: flex;
 }
 .dfg-view.is-panning, .dfg-view.is-panning * { cursor: grabbing; }
 .dfg-pipe {
@@ -1431,6 +1436,10 @@ function stepHue(step: FlowStep): string {
   padding: 16px 20px 28px;
   /* 三段并列的排布在 .dfg-cols；本层只管内边距 + 定位（SVG/量测都以本层为基准） */
   transition: opacity 0.15s ease;
+  /* flex:none 必给：视口已是 flex，默认 flex-shrink:1 会为塞进视口而压缩内容层，
+     放大（zoom>1）就压不出滚动条、缩没；margin:auto 见 .dfg-view 上的注释 */
+  flex: none;
+  margin: auto;
 }
 /* 三段并列：上游 | 本阶段 | 下游（2026-10-13 用户：核心是让运营可视化看到配合关系）。
    列间距 96 = 连线走廊（同列 Bus 与跨列贝塞尔都走这里，busX 最远到卡右缘 +40）。 */

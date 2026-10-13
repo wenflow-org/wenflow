@@ -167,6 +167,15 @@ describe('字段旅程画布缩放接线（2026-10-13 用户：这里也要支�
     expect(DataFlowGraphSource).toContain('width: 100%;')
   })
 
+  it('内容整体居中（2026-10-13 用户：默认在左上角，希望视觉居中）：视口 flex + 内容层 margin:auto', () => {
+    // 视口 flex 化，内容层用 margin:auto 吃余量：居中与「溢出时从左上角起滚」两者都要成立
+    // （justify-content:center 会把溢出内容的开头裁掉，故不用）
+    expect(DataFlowGraphSource).toContain('display: flex;')
+    expect(DataFlowGraphSource).toContain('margin: auto;')
+    // flex 子项默认 flex-shrink:1 会为塞进视口而压缩内容层 → 放大压不出滚动条，必须 flex:none
+    expect(DataFlowGraphSource).toContain('flex: none;')
+  })
+
   it('滚轮直缩 + 拖动平移；量测基准与 SVG 同在层自有坐标（÷zoom，且不再加滚动量）', () => {
     expect(DataFlowGraphSource).toContain('@wheel.prevent="onDfgWheelZoom"')
     expect(DataFlowGraphSource).not.toContain('DFG_ZOOM_STEP')

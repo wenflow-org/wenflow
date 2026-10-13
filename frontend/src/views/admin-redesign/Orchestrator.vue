@@ -105,6 +105,9 @@
               >
                 <span class="orch-odg-idx mono">{{ i + 1 }}.{{ j + 1 }}</span>
                 <span class="orch-odg-nodename">{{ sk.name }}</span>
+                <!-- Skill 名称（id）：中文是平台显示名，运营要拿它去对 Skill 目录 / 执行日志，
+                     少了对不上号（2026-10-13 用户：现在用的还是中文，希望加上 skill 名称） -->
+                <span class="orch-odg-slug mono">{{ sk.id }}</span>
               </button>
             </div>
             <footer class="orch-odg-foot">
@@ -889,6 +892,13 @@ html[data-theme='dark'] {
 .orch-odg-node:hover { border-color: var(--mk-blue, #2f6ae0); box-shadow: var(--mk-shadow-sm, 0 1px 3px rgba(15, 23, 42, 0.1)); }
 .orch-odg-idx { font-family: var(--mk-mono, Consolas, monospace); font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
 .orch-odg-nodename { font-size: var(--mk-fs-micro, 12px); font-weight: 600; color: var(--mk-ink); }
+/* Skill id（英文名）：与中文显示名分行。允许折行而不是省略号——运营要照着这枚 id
+   去对 Skill 目录 / 执行日志，截断了反而对不上（长 id 如 virtual-learner-* 会占两行）。 */
+.orch-odg-slug {
+  font-family: var(--mk-mono, Consolas, monospace);
+  font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint);
+  overflow-wrap: anywhere;
+}
 /* 审核 #117：.orch-odg-nodemeta 规则随节点内重复 agentId 一起删（列头已承接，类无消费者） */
 .orch-odg-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-top: 2px; }
 .orch-odg-chip {

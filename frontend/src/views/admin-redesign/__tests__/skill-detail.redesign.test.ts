@@ -219,6 +219,9 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).toContain("openSubPage('skill'")
     // 节点定位参数 = 真实 skill id（与 Skills 目录 / 抽屉同一id 口径）
     expect(OrchestratorSource).toContain('openSkillFromOverview(sk.id)')
+    // 节点同时显示中文显示名与 Skill id（2026-10-13 用户：现在用的还是中文，希望加上 skill 名称）
+    expect(OrchestratorSource).toContain('class="orch-odg-nodename"')
+    expect(OrchestratorSource).toContain('class="orch-odg-slug mono">{{ sk.id }}')
   })
 
   it('编排图页首 KPI 带与告警条已撤（2026-10-12 用户走查）：读数进卡头 meta，页级告警迁健康中心', () => {
