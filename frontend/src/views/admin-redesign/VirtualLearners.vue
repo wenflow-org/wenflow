@@ -57,10 +57,12 @@
         />
         <MkKpi
           label="并发"
-          :value="concurrencyText"
-          :tone="concurrencyTone === 'ok' ? 'ok' : 'warn'"
-          hint="自动驾驶并发配额"
-          title="并发 = 自动驾驶同时在跑的会话数占配额比；「已满」是资源占满（后续请求排队），不是故障"
+          :value="statsKpiValue(concurrencyText)"
+          :tone="concurrencyTone"
+          :hint="statsState === 'error' ? '统计不可用 · 点击重试' : '自动驾驶并发配额'"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '并发 = 自动驾驶同时在跑的会话数占配额比；「已满」是资源占满（后续请求排队），不是故障'"
+          :clickable="statsState === 'error'"
+          @click="onStatsRetry"
         >
           <span class="mk-minibar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: concurrencyBarPct }"></i></span>
         </MkKpi>
@@ -591,8 +593,14 @@ const concurrency = computed(() => ({
 }))
 const concurrencyPct = computed(() => Math.min(100, Math.round((concurrency.value.used / concurrency.value.limit) * 100)))
 /* P2（2026-10-02 人类可读性）：并发「已满」从红改琥珀——资源占满是容量状态（后续请求排队），
-   不是故障；红色留给真实失败信号。≥70% 与已满同档琥珀。 */
-const concurrencyTone = computed(() => {
+   不是故障；红色留给真实失败信号。≥70% 与已满同档琥珀。
+   2026-10-14（KPI 审计）：补失败态。liveAutopilotConcurrency 由**列表** GET 写入
+   （live.ts:1642 在列表请求里赋值），列表失败时它保持初值 {used:0,limit:10} →
+   不判三态会把「没拉到」画成 0/10 的 ok 绿调（假健康）。statsState 已并入
+   liveFailures.virtuals 正是为这一类兜底，这里接上它，与同页其余四卡同口径。
+   注：tone 原写作 `concurrencyTone === 'ok' ? 'ok' : 'warn'`，等于把 bad 一档吃掉，一并放开。 */
+const concurrencyTone = computed<'ok' | 'warn' | 'bad'>(() => {
+  if (statsState.value === 'error') return 'bad'
   const pct = concurrencyPct.value
   if (pct >= 70) return 'warn'
   return 'ok'
@@ -758,6 +766,7 @@ const completionHint = computed(() => {
 /* 卡内进度槽（.mk-minibar 家族原语）：完成率宏观推进比 / 并发配额利用率 */
 const completionBarPct = computed(() => `${Math.min(Math.max(completionPct.value, 0), 100)}%`)
 const concurrencyBarPct = computed(() => {
+  if (statsState.value === 'error') return '0%'
   const c = concurrency.value
   return c.limit > 0 ? `${Math.min((c.used / c.limit) * 100, 100)}%` : '0%'
 })

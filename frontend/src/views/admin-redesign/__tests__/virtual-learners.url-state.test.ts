@@ -111,4 +111,22 @@ describe('VirtualLearners · 筛选 ↔ URL', () => {
     expect(router.currentRoute.value.query.q).toBe('备考');
     wrapper.unmount();
   });
+})
+
+describe('VirtualLearners · KPI 三态（2026-10-14 KPI 审计：失败不得伪装成健康）', () => {
+  it('列表拉取失败时「并发」显不可用 + bad 调，不把初值画成 0/10 的 ok 绿', async () => {
+    // 并发数由**列表** GET 写入（live.ts:1642），列表失败时它保持初值 {used:0,limit:10}；
+    // 若该卡不判三态，就会渲染成「0/10」+ ok 绿调 = 假健康。statsState 已并入
+    // liveFailures.virtuals 正是为这一类兜底，本用例锁住「卡确实接上了它」。
+    const live = await import('../live');
+    (live.liveFailures as { value: Record<string, string> }).value = { virtuals: 'boom' };
+    const { wrapper } = await mountVl('/admin/virtual-learners');
+    const kpi = wrapper.findAll('.mk-kpi').find((k) => k.text().includes('并发'));
+    expect(kpi, '并发 KPI 未渲染').toBeTruthy();
+    expect(kpi!.text()).toContain('不可用');
+    expect(kpi!.text()).not.toContain('0/10');
+    expect(kpi!.classes()).toContain('mk-kpi--bad');
+    (live.liveFailures as { value: Record<string, string> }).value = {};
+    wrapper.unmount();
+  });
 });
