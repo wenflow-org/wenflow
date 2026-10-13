@@ -175,7 +175,19 @@
               <span class="mshell__search-hit-label">{{ hit.label }}</span>
               <span class="mshell__search-hit-group">{{ hit.group }}</span>
             </button>
-            <div v-if="!searchHits.length" class="mshell__search-empty">没有匹配的页面</div>
+            <div v-if="!searchHits.length" class="mshell__search-empty">
+              <p class="mshell__search-empty-title">没有匹配的页面</p>
+              <p class="mshell__search-empty-hint">
+                顶栏搜索只索引页面名称（如「成本分析」「用户与学习者」）。找人 / 路径 / 调用记录请到列表页搜，关键词会带过去：
+              </p>
+              <button
+                v-for="f in searchFallbacks"
+                :key="f.label"
+                type="button"
+                class="mshell__search-fallback"
+                @click="searchTo(f)"
+              >{{ f.label }}：搜「{{ searchQuery.trim() }}」</button>
+            </div>
           </div>
         </div>
         <!-- 工具钮：刷新 / 术语表 / 密度（原型侧栏底部只有「收起导航」一行，
@@ -268,9 +280,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ChevronLeft, CircleHelp, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, RotateCw, Search, Sun } from 'lucide-vue-next'
 import { MOCK_SCENES, type MockSceneDef } from './manifest'
+import type { Router } from 'vue-router'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live'
 import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
 import { askConfirm } from './useConfirm'
@@ -330,6 +343,9 @@ const userMenuRef = ref<HTMLElement | null>(null)
 const searchRef = ref<HTMLElement | null>(null)
 const searchQuery = ref('')
 const searchOpen = ref(false)
+/* 转搜出口要 push 深链；无 Router 上下文（单测直接 mount 本组件）时整体降级为不发导航，
+   不调 useRouter()（那会往控制台打注入告警）。 */
+const router = getCurrentInstance()?.appContext.config.globalProperties.$router as Router | undefined
 
 const currentScene = computed(() => MOCK_SCENES.find((s) => s.id === props.current))
 /* 详情页（有 crumb）：主标题=子页实体名；副行=父页名（原型：如「用户与学习者」）。
@@ -380,6 +396,22 @@ function searchMove(delta: number) {
 function searchGo(scene: MockSceneDef) {
   closeSearch()
   go(scene)
+}
+
+/** 无页面命中时的转搜出口（2026-10-13 运营走查 O1）：运营最常搜的是实体（人 / 路径 / 调用），
+    而本搜索只索引页面名——搜「孙浩」得到「没有匹配的页面」，容易被读成「平台上没有这个人」。
+    给三条实体列表页的深链：这些页的搜索词住进 URL（?q=，见 learner-profile useListQueryState），
+    落地即是筛好的结果。 */
+const searchFallbacks = [
+  { label: '用户与学习者', path: (q: string) => `/admin/people?q=${encodeURIComponent(q)}` },
+  { label: '学习路径', path: (q: string) => `/admin/learning-paths?q=${encodeURIComponent(q)}` },
+  { label: '执行日志', path: (q: string) => `/admin/execution-logs?q=${encodeURIComponent(q)}` }
+]
+function searchTo(f: { label: string; path: (q: string) => string }) {
+  const q = searchQuery.value.trim()
+  if (!q) return
+  closeSearch()
+  if (router) void router.push(f.path(q))
 }
 /* Enter：落到当前高亮项；无高亮（未用方向键）时回落到第一条，保持既有手感 */
 function searchGoActive() {
@@ -1016,6 +1048,15 @@ watch(
 .mshell__search-hit--active { background: var(--mk-hover-surface); }
 .mshell__search-hit-group { margin-left: auto; color: var(--mk-faint); font-weight: 500; }
 .mshell__search-empty { padding: 10px; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
+/* 无页面命中时的转搜出口（走查 O1）：说清搜索范围 + 三条实体列表页深链 */
+.mshell__search-empty-title { margin: 0 0 4px; font-weight: 600; color: var(--mk-ink); }
+.mshell__search-empty-hint { margin: 0 0 8px; line-height: 1.5; }
+.mshell__search-fallback {
+  display: block; width: 100%; margin-top: 4px; padding: 6px 8px; text-align: left;
+  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm, 6px);
+  background: var(--mk-surface); color: var(--mk-ink); font-size: var(--mk-fs-micro, 12px); cursor: pointer;
+}
+.mshell__search-fallback:hover { background: var(--mk-hover-surface); }
 
 /* 账户菜单（userchip）：头像 + 名字 → 退出登录。
    顶栏账户区定位（原侧栏底部的 .mshell__user 规则随底部改版删除——

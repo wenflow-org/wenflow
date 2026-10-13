@@ -54,3 +54,21 @@ describe('运营中心：学习路径构成条（回归）', () => {
     w.unmount()
   })
 })
+
+describe('运营中心：页签角标未加载占位（2026-10-13 运营走查 O7）', () => {
+  it('未访问页签角标显「未加载」，不再写「待访问」（角标位不该被读成待处理量）', async () => {
+    const w = mount(OpsHub);
+    await flushPromises();
+
+    const tabsText = w.findAll('[role="tab"]').map((t) => t.text()).join(' ');
+    expect(tabsText).toContain('未加载');
+    expect(tabsText).not.toContain('待访问');
+
+    // 说明仍在 title 里（只说「计数还没拉」，不是「有东西等我处理」）
+    const badge = w.findAll('.tab__count').find((b) => b.text() === '未加载');
+    expect(badge).toBeTruthy();
+    expect(badge!.attributes('title')).toContain('进入该页签后加载计数');
+
+    w.unmount();
+  });
+});

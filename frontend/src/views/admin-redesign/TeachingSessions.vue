@@ -104,7 +104,7 @@
               :class="{ 'mk-pill--active': pill === p.id }"
               :aria-pressed="pill === p.id"
               :title="p.title"
-              @click="pill = p.id"
+              @click="pill = pill === p.id && p.id !== 'all' ? 'all' : p.id"
             >
               {{ p.label }}<span v-if="p.count != null" class="mk-pill__count">{{ p.count }}</span>
             </button>
@@ -329,8 +329,20 @@
                 <div class="mk-actions">
                   <!-- 链路/详情都须有 id 守卫（2026-10-06 审核 #41）：id 缺失时 goTrace 会带空
                        sessionId 跳执行日志的无效筛选态，与「详情」的 v-if="r.id" 对齐 -->
-                  <button v-if="r.id" type="button" class="mk-btn mk-btn--sm" @click.stop="goTrace(r)">链路</button>
-                  <button v-if="r.id" type="button" class="mk-btn mk-btn--sm" @click.stop="goConsole(r)">详情</button>
+                  <button
+                    v-if="r.id"
+                    type="button"
+                    class="mk-btn mk-btn--sm"
+                    title="链路：这次会话的模型调用瀑布（执行日志 · 按会话归组）"
+                    @click.stop="goTrace(r)"
+                  >链路</button>
+                  <button
+                    v-if="r.id"
+                    type="button"
+                    class="mk-btn mk-btn--sm"
+                    title="详情：只读会话座舱（这节课的对话、阶段进度与产物）"
+                    @click.stop="goConsole(r)"
+                  >详情</button>
                 </div>
               </td>
             </tr>
@@ -363,6 +375,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSubPage } from './store'
 import { useSessionDrill } from './useSessionDrill'
 import { useIsNarrow } from './useIsNarrow'
+import { useListQueryState } from './learner-profile'
 import { timeAgo, isPageCacheFresh, markPageFetched, shortId, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge } from './statusText'
 import type { SessionProgress } from './statusText'
@@ -640,7 +653,7 @@ function mapRow(s: Record<string, unknown>): Row {
 }
 
 /* 筛选 */
-const pill = ref<'all' | 'active' | 'attention' | 'missing'>('all')
+const pill = ref('all')
 const keyword = ref('')
 const statusFilter = ref('')
 const dateFilter = ref('')
@@ -816,6 +829,42 @@ function clearFilters() {
    若监听 filtered 会把用户所在页打回第 1 页（P2）——故监听筛选输入与排序而非结果 */
 const page = ref(1)
 const pageSize = ref(15)
+
+/* 筛选 / 页码 ↔ URL query（2026-10-13 运营走查 O2）：本页是「逐条排查异常会话」的主页面，
+   而筛选此前只活在内存里——实测点「异常18」→ 进详情 → 返回（或刷新）都回到全部 167 条，
+   逐条看要重筛一遍，也没法把「这批异常」的链接发给同事。与 用户与学习者 / 学习状态 /
+   虚拟学习者 / 学习路径 同一组合式单点（learner-profile.ts useListQueryState）。
+   焦点 chip、状态组、异常开关、高级筛选（状态/时间）、有建议开关全部进 URL：
+   缺省值不写（URL 短且人可读），空结果也不怕深链缺失。
+   必须在下方「筛选变化回第 1 页」的 watch 之前调用：URL 落位要发生在监听建立之前，
+   否则挂载时还原出来的筛选会被当成用户改筛选、把还原的页码打回 1（Users.vue 判例）。 */
+useListQueryState(
+  {
+    pill,
+    keyword,
+    page,
+    pageSize,
+    allowedPills: ['all', 'active', 'attention', 'missing'],
+    extra: [
+      {
+        key: 'band',
+        get: () => bandGroup.value || '',
+        set: (v) => (bandGroup.value = v || null),
+        allowed: ['running', 'completed', 'abnormal', 'retired', 'other']
+      },
+      { key: 'abn', get: () => (abnormalOnly.value ? '1' : ''), set: (v) => (abnormalOnly.value = v === '1'), allowed: ['1'] },
+      {
+        key: 'adv',
+        get: () => statusFilter.value,
+        set: (v) => (statusFilter.value = v),
+        allowed: statusOptions.map((o) => o.value)
+      },
+      { key: 'date', get: () => dateFilter.value, set: (v) => (dateFilter.value = v) },
+      { key: 'advisory', get: () => (onlyAdvisory.value ? '1' : ''), set: (v) => (onlyAdvisory.value = v === '1'), allowed: ['1'] }
+    ]
+  }
+)
+
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)

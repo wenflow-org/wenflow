@@ -358,7 +358,7 @@ const counts = ref<{ total: number; active: number; expired: number; revoked: nu
 const adminCounts = ref(new Map<string, { total: number; active: number; expired: number; revoked: number }>())
 /** 行窗口是否被后端 limit 截断（全量总数 > 已加载行数）→ 显式披露「仅显示最近 N 条」 */
 const truncated = computed(() => !!counts.value && counts.value.total > sessions.value.length)
-/** 是否至少成功加载过一次（宿主计数的就绪门：未就绪上报 -1，宿主渲染「待访问」而非 0） */
+/** 是否至少成功加载过一次（宿主计数的就绪门：未就绪上报 -1，宿主渲染「未加载」而非 0） */
 const loaded = ref(false)
 const loading = ref(false)
 const loadError = ref('')
@@ -455,7 +455,7 @@ function countOf(id: SessionStatus): number {
 
 /** 宿主域计数徽章（embedded 才消费）：会话总数就绪/变化即上报。
     审核 #175：0 是「确认无会话」的假信号——就绪门：仅加载成功上报真实条数，
-    未就绪/失败上报 -1，宿主把 <0 渲染成「待访问」。
+    未就绪/失败上报 -1，宿主把 <0 渲染成「未加载」。
     B13 F6-1：上报值由窗口行数改全量 totalCount（页签角标不再把 limit=100 的窗口读成全量）。 */
 watch([sessions, counts, loaded, loadError], ([, , ok, err]) => {
   emit('count', err || !ok ? -1 : totalCount.value)

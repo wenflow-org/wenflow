@@ -17,10 +17,10 @@
          各视图计数以角标随页签呈现，形态同共享 MkSubTabs 的 count 角标） -->
     <div class="tabs" role="tablist" aria-label="运营中心视图切换" @keydown="onTabKeydown">
       <button type="button" class="tab" role="tab" id="oh-tab-todo" :ref="(el) => setTabRef(el, 0)" :tabindex="tab === 'todo' ? 0 : -1" aria-controls="oh-panel-todo" :aria-selected="tab === 'todo'" @click="switchTab('todo')">运营待办</button>
-      <button type="button" class="tab" role="tab" id="oh-tab-feedback" :ref="(el) => setTabRef(el, 1)" :tabindex="tab === 'feedback' ? 0 : -1" aria-controls="oh-panel-feedback" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span class="tab__count" :title="domainCount.feedback === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.feedback === null ? '待访问' : domainCount.feedback }}</span></button>
-      <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span class="tab__count" :title="domainCount.achievements === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : '成就解锁人次（含虚拟学习者）；解锁记录列表默认仅统计真实用户，可在页签内用「数据范围」切换对齐'">{{ domainCount.achievements === null ? '待访问' : domainCount.achievements }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-feedback" :ref="(el) => setTabRef(el, 1)" :tabindex="tab === 'feedback' ? 0 : -1" aria-controls="oh-panel-feedback" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span class="tab__count" :title="domainCount.feedback === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.feedback === null ? '未加载' : domainCount.feedback }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span class="tab__count" :title="domainCount.achievements === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : '成就解锁人次（含虚拟学习者）；解锁记录列表默认仅统计真实用户，可在页签内用「数据范围」切换对齐'">{{ domainCount.achievements === null ? '未加载' : domainCount.achievements }}</span></button>
       <button type="button" class="tab" role="tab" id="oh-tab-announce" :ref="(el) => setTabRef(el, 3)" :tabindex="tab === 'announce' ? 0 : -1" aria-controls="oh-panel-announce" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告<span class="tab__count" :title="announcePillTitle">{{ announcePillCount }}</span></button>
-      <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span class="tab__count" :title="domainCount.inapp === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.inapp === null ? '待访问' : domainCount.inapp }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span class="tab__count" :title="domainCount.inapp === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.inapp === null ? '未加载' : domainCount.inapp }}</span></button>
     </div>
 
     <!-- ===== Tab1: 运营待办（原运营中心全量内容） ===== -->
@@ -201,7 +201,7 @@ const route = useRoute()
 const router = useRouter()
 
 /** 宿主域计数（由激活子视图上报）：反馈总数 / 解锁数 / 公告数 / 通知数。
-    null = 该子页签尚未访问、计数未拉取 → 页签角标显「待访问」弱灰字，
+    null = 该子页签尚未访问、计数未拉取 → 页签角标显「未加载」弱灰字，
     不显 0（EG10：0 会被读成「确认无数据」，是假信号；对照 OpsCenter 会话安全页签判例）。 */
 const domainCount = ref<{ feedback: number | null; achievements: number | null; announce: number | null; inapp: number | null }>({
   feedback: null,
@@ -447,9 +447,11 @@ const ann = announcementCounts
  * 嵌入门 @count 仅作覆盖刷新（进入 tab 后仍以其上报为准）。
  */
 const announcePillCount = computed(() => {
-  /* 加载失败：与「待访问」同形占位（审核 #171——同排页签角标统一为「数字 / 待访问」两态，
-     不再出现第三种「—」形态；失败语义由 title 说明） */
-  if (annFailed.value) return '待访问'
+  /* 加载失败：与「未加载」同形占位（审核 #171——同排页签角标统一为「数字 / 未加载」两态，
+     不再出现第三种「—」形态；失败语义由 title 说明）。
+     措辞从「待访问」改「未加载」（2026-10-13 运营走查 O7）：角标位天然被读成「待处理量」，
+     「待访问」在中文里更像「有东西等我访问」，恰好读反——它只说计数还没拉。 */
+  if (annFailed.value) return '未加载'
   const embedded = domainCount.value.announce
   if (embedded !== null && embedded > 0) return embedded
   return ann.value.rows

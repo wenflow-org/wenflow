@@ -155,7 +155,7 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
   })
 
   /* EG10 护栏：宿主页签角标未访问时不得显假 0（0 会被读成「确认无数据」）。 */
-  it('未访问的页签角标显「待访问」而非 0（反馈/成就/站内通知）', async () => {
+  it('页签计数未拉取时角标显「未加载」而非 0（反馈/成就/站内通知）', async () => {
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [], pagination: { total: 0 } } })
     h.contentStats.mockResolvedValue({ data: { data: { byStatus: { failed: 0 } } } })
     h.outboxDead.mockResolvedValue({ data: { data: { deadCount: 0 } } })
@@ -165,9 +165,9 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
 
     const tabCountText = (label: string) =>
       w.findAll('.tabs .tab').find((t) => t.text().includes(label))!.find('.tab__count').text()
-    expect(tabCountText('反馈')).toBe('待访问')
-    expect(tabCountText('成就')).toBe('待访问')
-    expect(tabCountText('站内通知')).toBe('待访问')
+    expect(tabCountText('反馈')).toBe('未加载')
+    expect(tabCountText('成就')).toBe('未加载')
+    expect(tabCountText('站内通知')).toBe('未加载')
 
     w.unmount()
   })

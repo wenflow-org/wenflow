@@ -19,11 +19,12 @@
       <div class="tabs oc-tabs" role="tablist" aria-label="系统工具视图切换" @keydown="onTabKeydown">
         <button id="oc-tab-tools" :ref="(el) => setTabRef(el, 0)" type="button" role="tab" class="tab" :aria-selected="tab === 'tools'" aria-controls="oc-panel-tools" :tabindex="tab === 'tools' ? 0 : -1" @click="switchTab('tools')">运维工具</button>
         <button id="oc-tab-export" :ref="(el) => setTabRef(el, 1)" type="button" role="tab" class="tab" :aria-selected="tab === 'export'" aria-controls="oc-panel-export" :tabindex="tab === 'export' ? 0 : -1" @click="switchTab('export')">数据导出</button>
-        <!-- P3-34（设计评审）：未知态角标由孤悬「—」改「待访问」弱灰小字——「—」像渲染残留、
+        <!-- P3-34（设计评审）：未知态角标由孤悬「—」改弱灰小字——「—」像渲染残留、
              与「外挂能力 0」真计数并读语义无法区分；title 保留「未访问≠0」语义。
              2026-10-06 审核 #175：SessionSecurity 加载中/失败上报 -1（原来 immediate 写 0 是
-             「确认无会话」的假信号），负数与 null 一并渲染「待访问」。 -->
-        <button id="oc-tab-security" :ref="(el) => setTabRef(el, 2)" type="button" role="tab" class="tab" :aria-selected="tab === 'security'" aria-controls="oc-panel-security" :tabindex="tab === 'security' ? 0 : -1" @click="switchTab('security')">会话安全<span class="tab__count" :title="securityCount === null || securityCount < 0 ? '尚未访问该页签，或计数未拉取成功（待访问 ≠ 0）' : undefined">{{ securityCount === null || securityCount < 0 ? '待访问' : securityCount }}</span></button>
+             「确认无会话」的假信号），负数与 null 一并渲染「未加载」（2026-10-13 运营走查 O7：
+             原「待访问」在角标位被读成「有东西待我处理」，实际只说计数还没拉）。 -->
+        <button id="oc-tab-security" :ref="(el) => setTabRef(el, 2)" type="button" role="tab" class="tab" :aria-selected="tab === 'security'" aria-controls="oc-panel-security" :tabindex="tab === 'security' ? 0 : -1" @click="switchTab('security')">会话安全<span class="tab__count" :title="securityCount === null || securityCount < 0 ? '尚未访问该页签，或计数未拉取成功（待访问 ≠ 0）' : undefined">{{ securityCount === null || securityCount < 0 ? '未加载' : securityCount }}</span></button>
       </div>
       <div class="oc-card__body">
 
@@ -260,7 +261,7 @@ const tab = ref<OcTab>('tools')
 const route = useRoute()
 const router = useRouter()
 /** 会话安全域计数（SessionSecurity embedded 上报）；null = 尚未访问该 tab，
-    此时页签角标显「待访问」弱灰小字而非 0（0 会被读成「确认无会话」，是另一种假信号；
+    此时页签角标显「未加载」弱灰小字而非 0（0 会被读成「确认无会话」，是另一种假信号；
     原「—」孤悬破折号像渲染残留，P3-34 改词） */
 const securityCount = ref<number | null>(null)
 const securityRef = ref<{ refresh?: () => void } | null>(null)

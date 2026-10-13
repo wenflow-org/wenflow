@@ -4,7 +4,8 @@
  * → 单张卡内「.tabs 页签 + 页签体」；数据导出页签 = 范围 chips 多选 + 右对齐「开始导出」。
  * 后端导出接口不支持时间范围 / JSONL 格式，对应控件不得渲染（不暗示不存在的功能）。
  * 2026-10-04 修订（P3-33/34，全站设计评审 4.3）：页头「导出数据」主钮做的是 tab 导航、
- * 与页签栏完全重复入口 → 撤（页签即唯一入口）；页签「会话安全」未知态角标「—」→「待访问」。
+ * 与页签栏完全重复入口 → 撤（页签即唯一入口）；页签「会话安全」未知态角标「—」→「未加载」
+ *（2026-10-13 运营走查 O7：原「待访问」在角标位被读成「有东西待我处理」）。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -60,10 +61,10 @@ describe('系统工具页原型对齐', () => {
     expect(w.find('.mk-status').exists(), '本页无状态条（信息各归其位）').toBe(false)
   })
 
-  it('页签「会话安全」未访问角标显「待访问」弱灰小字（P3-34：原「—」孤悬破折号像渲染残留）', async () => {
+  it('页签「会话安全」未访问角标显「未加载」弱灰小字（P3-34：原「—」孤悬破折号像渲染残留）', async () => {
     const w = await mountPage()
     const tab = w.findAll('.tabs .tab').find((t) => t.text().includes('会话安全'))
-    expect(tab?.text()).toContain('待访问')
+    expect(tab?.text()).toContain('未加载')
     expect(tab?.text()).not.toContain('—')
   })
 
