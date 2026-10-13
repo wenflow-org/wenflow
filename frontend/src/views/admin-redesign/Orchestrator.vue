@@ -12,7 +12,8 @@
     <!-- 页级告警已撤（2026-10-12 用户拍板「这个应该放到健康中心」）：拓扑完整性的页级信号
          （未解析步骤 / W4 哈希漂移）统一归健康中心检查项（orchestration-steps / w4-corehash，
          本页删去告警条后不再有 KPI 或告警条；健康中心那两项可深链回本页「字段旅程」）。
-         本页保留行级证据：交接明细表的「未解析 N / 哈希漂移 N」徽章（点徽章切面板 / 跳健康中心）。
+         行级证据（交接明细表的「未解析 N / 哈希漂移 N」徽章）2026-10-13 随该表整体删除——
+         该表与「字段旅程」页签同源重复，且两处字段数互相打架（7 vs 25）；治理信号现只在健康中心。
          原告警条的实现历史：2026-10-04 状态条退役 → 页首 KPI 带（阶段/Skill/交接 + 两枚红卡）
          → 2026-10-12 三张纯读数卡撤、红卡改行式告警条 → 同日告警整体迁健康中心。 -->
 
@@ -50,8 +51,8 @@
 
     <!-- ===== 总览：全旅程 odg 画布（newui/admin odg-canvas 形态）=====
          五阶段并列列（阶段头 + Skill 节点 + 入/出参 chip + 产出字段），
-         列间 SVG 三次贝塞尔连线（仅箭头：字段明细由列脚 outs 行 + 交接明细表 +
-         「字段旅程」页签三处承载，边标签曾以 6 行字段名画在 120px 间隙里压住
+         列间 SVG 三次贝塞尔连线（仅箭头：字段明细由列脚 outs 行 +
+         「字段旅程」页签两处承载，边标签曾以 6 行字段名画在 120px 间隙里压住
          相邻列节点文字——实测四条边全相交，2026-10-04 撤），layoutOrch 在
          渲染/窗口 resize 时重算；点 Skill 节点进入该技能详情二级页（原型 open-skill）。 -->
     <div v-if="stages.length" v-show="pane === 'overview'" id="orch-pane-overview" role="tabpanel" aria-labelledby="orch-tab-overview" class="orch-pane orch-overview">
@@ -112,50 +113,6 @@
         </div>
       </div>
 
-      <!-- 阶段交接明细（原型 1624-1629 独立卡，5 列；2026-10-13 自独立卡折入画布卡底部）：
-           交接 = 相邻阶段 id 对（mono 小写）、上/下游 Agent（mono）；传递字段口径 = 下游阶段的
-           必填入参（stageFieldContract.ins，字段路由 hard-required），字段数 = 传递字段条数。
-           原独立卡按 55% 封顶仍把五阶段画布压成滚动缝（P1-4/2026-10-04）；折成卡内折叠区后
-           默认收起——画布独占一屏，展开时表格区内滚、画布仍保 ≥1 条完整泳道。
-           空值三态（与画布 chips 同一原则）：无必填入参显「无必填入参」、契约未加载显「…」，
-           不按 0/— 渲染——「真无必填」与「没加载」不可分辨即是编造 -->
-      <details class="orch-odg-handoff">
-        <summary class="mk-section__summary orch-odg-handoff__summary">
-          <span class="orch-odg-handoff__title">阶段交接明细</span>
-          <span v-if="stageHandoffs.length" class="orch-odg-handoff__count">{{ stageHandoffs.length }} 段交接</span>
-        </summary>
-        <div class="mk-table-scroll">
-          <table class="mk-table">
-            <thead>
-              <tr><th>交接</th><th>上游 Agent</th><th>下游 Agent</th><th>传递字段</th><th class="mk-th--right">字段数</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="(h, i) in stageHandoffs" :key="i">
-                <td class="mono orch-handoff__pair">
-                  {{ h.from }} → {{ h.to }}
-                  <!-- 治理信号随行（口径与页首告警条两枚红卡同源，2026-10-04 状态条退役）；点跳转复用红卡落点。
-                       审核 #96：徽章入口原是无 role/tabindex 的 span + @click，键盘不可达；改真 <button> -->
-                  <button v-if="h.unresolvedN" type="button" class="mk-badge mk-badge--sm mk-badge--warn orch-handoff__badge-btn" title="该交接上游阶段存在未解析步骤（末段含下游阶段，四行合计 = 全量；页级读数与名单在健康中心「步骤解析」项） · 点击切「字段旅程」定位" @click="goUnresolved()">未解析 {{ h.unresolvedN }}</button>
-                  <button v-if="h.driftN" type="button" class="mk-badge mk-badge--sm mk-badge--bad orch-handoff__badge-btn" title="该交接上游 Agent 命中 W4 core 哈希漂移名单（末段含下游 Agent，四行合计 = 全量；名单在健康中心 w4-corehash） · 点击跳健康中心" @click="goHashDrift()">哈希漂移 {{ h.driftN }}</button>
-                </td>
-                <td class="mono orch-handoff__agent">{{ h.fromAgent }}</td>
-                <td class="mono orch-handoff__agent">{{ h.toAgent }}</td>
-                <td class="orch-handoff__fields">
-                  <!-- 点号长串 → 徽章列表（2026-10-03 反馈「字段密集堆叠」）：7 个键名连成
-                       一句独吞 65% 列宽，键名边界只能靠 · 猜；逐枚徽章可数可扫，列宽随之收回。
-                       空值三态：loaded 且无必填 →「无必填入参」；未加载 →「…」（不编造 0） -->
-                  <template v-if="h.fields.length">
-                    <span v-for="f in h.fields" :key="f" class="mk-badge mk-badge--sm mono">{{ f }}</span>
-                  </template>
-                  <span v-else-if="h.loaded" class="mk-na" title="该阶段字段契约无必填入参（hard-required），交接不设准入字段">无必填入参</span>
-                  <span v-else class="mk-na" title="字段契约加载中…">…</span>
-                </td>
-                <td class="mk-num">{{ h.loaded ? h.fields.length : '…' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </details>
       </section>
     </div>
 
@@ -184,7 +141,7 @@
         <h3 class="mk-card__title">字段路由与编排文件</h3>
         <!-- meta 换同源口径（2026-10-05 页签重设计）：原「输入 0/0 · 输出 0/0」来自
              liveSkillCatalog 的阶段级变量流——catalog 对多数阶段为空，出假零，与表内
-             25 行字段同页打架。改用字段契约 stageFieldContract（与画布 chips/交接明细
+             25 行字段同页打架。改用字段契约 stageFieldContract（与画布 chips
              同源同数）：必填入参 = hard-required，产出 = 三产出角色；未加载显「…」 -->
         <span class="mk-card__meta" :title="routingMetaTitle">
           <!-- 未加载显「…」（与画布 chips 同一三态约定；规则 5 禁内联「加载中」文案，
@@ -349,22 +306,18 @@ const orchCount = ref(0)
 const skillDefCount = ref(0)
 const orchDefs = ref<Array<Record<string, any>>>([])
 
-/* ================= 完成度对账（reconciliation + readiness W4，live-only） ================= */
+/* ================= 完成度对账（reconciliation，live-only） =================
+   注：原 /readiness W4 拉取随「阶段交接明细」的哈希漂移徽章一并删除（2026-10-13）——
+   该请求此前只为那一列徽章供数。W4 coreHash 名单与检查项仍在健康中心 w4-corehash。 */
 const recReport = ref<SkillReconciliationReport | null>(null)
-const w4Drifted = ref<string[]>([])
 /** 对账拉取中（供「刷新」按钮统一忙碌态） */
 const recLoading = ref(false)
 
 async function loadReconciliation() {
   recLoading.value = true
   try {
-    const [rec, read] = await Promise.all([
-      adminSkillsApi.getReconciliation().catch(() => null),
-      adminSkillsApi.getReadiness(false).catch(() => null),
-    ])
+    const rec = await adminSkillsApi.getReconciliation().catch(() => null)
     recReport.value = rec?.data?.data ?? null
-    const checks = (read?.data?.data as { checks?: { W4?: { drifted?: string[] } } } | undefined)?.checks
-    w4Drifted.value = checks?.W4?.drifted || []
   } finally {
     recLoading.value = false
   }
@@ -548,51 +501,6 @@ function contractOf(id: string): StageFieldContract {
   return stageFieldContract.value[id] ?? { ins: [], outs: [], loaded: false }
 }
 
-/** KPI「未解析」红卡落地（可点，2026-10-04 状态条退役自条上红字迁入）：切 journey 面板 +
-    定位首个含未解析步骤的阶段；?stage=&tab= 回写由下方既有 watch 承接（:369-377 先例），刷新/分享可还原 */
-function goUnresolved() {
-  const hit = stages.value.find((s) => (s.defSteps || []).some((d) => d.resolved?.unresolved))
-  if (hit) active.value = hit.id
-  pane.value = 'journey'
-}
-/** KPI「哈希漂移」红卡落地（可点，2026-10-04 状态条退役自条上红字迁入）：W4 coreHash 检查归属健康中心
-    （本页治理面板 DriftAuditPanel 只覆盖契约漂移，hash 名单在那边） */
-function goHashDrift() {
-  // ?check= 定位到 w4-corehash 检查行（健康中心深链展开+滚动）
-  void router.push({ path: '/admin/health-center', query: { check: 'w4-corehash' } })
-}
-
-/** 相邻阶段交接（原型 1624-1629 五列）：交接列用阶段 id（原型 s.id，本页 id 本就小写 mono）；
- *  传递字段口径 = 下游阶段的必填入参（stageFieldContract.ins，字段路由 hard-required），
- *  即原型 s.in 的真实数据对应物——本页 stages 拓扑只有 consumes/produces 汇总，无独立 in/outs；
- *  loaded 随行带出：空值三态（无必填入参 / 未加载 …）不与「字段数 0」混渲染 */
-const stageHandoffs = computed(() => {
-  const out: Array<{ from: string; to: string; fromAgent: string; toAgent: string; fields: string[]; loaded: boolean; unresolvedN: number; driftN: number }> = []
-  for (let i = 0; i < stages.value.length - 1; i++) {
-    const up = stages.value[i]
-    const down = stages.value[i + 1]
-    // 治理信号落到行（2026-10-03 反馈：页首「未解析/哈希漂移」读数与具体交接脱钩）：
-    // 未解析 = 两端阶段 defSteps 里 resolved.unresolved 的步骤数；哈希漂移 = 两端 Agent 命中 W4 coreHash 漂移名单
-    const unresolvedOf = (s: typeof up) => (s.defSteps || []).filter((d) => d.resolved?.unresolved).length
-    const driftOf = (agentId: string) => (w4Drifted.value || []).filter((id) => id === agentId).length
-    out.push({
-      from: up.id,
-      to: down.id,
-      fromAgent: up.agentId,
-      toAgent: down.agentId,
-      fields: contractOf(down.id).ins,
-      loaded: contractOf(down.id).loaded === true,
-      // 阶段归属不重复计（审核 #101）：与未解析同纪律——上游阶段记进本交接，末阶段（无下游交接）
-      // 回记到最后一段，四行合计 === w4Drifted.length（每阶段恰计一次）。
-      // 原 driftOf(up)+driftOf(down) 把中间阶段各计两次，合计大于全量，两处同源治理口径互相冲突。
-      // （页级读数 2026-10-12 迁健康中心，本页只留这四行行级证据）
-      unresolvedN: unresolvedOf(up) + (i === stages.value.length - 2 ? unresolvedOf(down) : 0),
-      driftN: driftOf(up.agentId) + (i === stages.value.length - 2 ? driftOf(down.agentId) : 0),
-    })
-  }
-  return out
-})
-
 /** 画布重算：列位置量出后画三次贝塞尔连线（仅箭头；字段明细不在边上渲染，
      见总览卡头注释——边标签曾压住相邻列节点文字，2026-10-04 撤） */
 function layoutOrch() {
@@ -730,14 +638,14 @@ const skillKpiTitle = computed(
     `编排图内挂载的 Skill 数（各阶段合计，当前 ${stages.value.length} 个阶段）。治理卡「Skill 定义」与侧栏徽章的统计范围不同，数值不必相等`
 )
 /* 页级「未解析」读数（原告警条用）已随告警迁健康中心（检查项 orchestration-steps）删除；
-   行级未解析仍在交接明细的徽章里（unresolvedOf 按阶段计数，末段含下游阶段，四行合计恰为全量）。 */
+   行级读数曾挂在「阶段交接明细」表的徽章上（unresolvedOf/哈希漂移），该表 2026-10-13 整体删除。 */
 // 空拓扑时 current 为 undefined，模板由 v-if="current" 保护
 const current = computed<Stage | undefined>(() => stages.value.find((s) => s.id === active.value) || stages.value[0])
 // 首屏加载中（live boot 未完成且尚无阶段数据）：用于抑制「0 阶段 / 暂无数据」的假空态
 const pageLoading = computed(() => liveLoading.value && !stages.value.length)
-// 2026-10-04 状态条退役：随条删除的 statusTone（概览绿点基调）无其余消费方，
-// 告警语义由条件告警条两枚红卡（未解析/哈希漂移）直接承载（2026-10-12 起无警整条不渲染，
-// 原 kpiUnknown「—」三态随之退役——三张纯读数卡已撤，红卡只在计数 >0 时出现，不涉未知态）
+// 2026-10-04 状态条退役：随条删除的 statusTone（概览绿点基调）无其余消费方；
+// 告警语义（未解析/哈希漂移）2026-10-12 整体迁健康中心，本页条件告警条与随后的
+// 交接明细行级徽章均已撤（后者 2026-10-13），本页不再持有任何治理读数。
 
 /* ================= 失败态：接口失败 ≠ 没有数据 =================
    阶段清单依赖 live boot 的 topology 域（liveFailures.topology）。
@@ -761,11 +669,11 @@ function stageTabTitle(s: Stage): string {
   return `${s.name}：${s.skills.length} 个 Skill`
 }
 
-/** 字段路由卡头 tooltip：与画布 chips / 阶段交接明细同一份字段契约（同页同数纪律） */
+/** 字段路由卡头 tooltip：与画布 chips 同一份字段契约（同页同数纪律） */
 const routingMetaTitle = computed(() => {
   const c = contractOf(active.value)
   if (!c.loaded) return '字段契约加载中（GET /admin/field-routings/stages/:id）'
-  return `口径与画布 chips / 阶段交接明细同源：必填入参 = hard-required ${c.ins.length} 项；产出 = 方案产出/公开回复/派生展示 ${c.outs.length} 项`
+  return `口径与画布 chips 同源：必填入参 = hard-required ${c.ins.length} 项；产出 = 方案产出/公开回复/派生展示 ${c.outs.length} 项`
 })
 
 /** 治理卡头 tooltip：定义与对账口径说明 */
@@ -783,35 +691,9 @@ const govMetaTitle = computed(() =>
 .orch-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .orch-pane--scroll { overflow-y: auto; }
 .orch-pane--center { justify-content: center; }
-/* 总览单卡（2026-10-13）：交接明细折入画布卡底部后不再有第二张卡，画布独占一屏 */
+/* 总览单卡（2026-10-13）：画布独占一屏。阶段交接明细（含折叠区与治理徽章）当日整体删除
+   （与「字段旅程」页签同源重复且字段数打架），.orch-odg-handoff* / .orch-handoff__* 样式随之退役。 */
 .orch-overview { gap: 12px; }
-/* 阶段交接明细折叠区（原独立卡 .orch-handoff，2026-10-13 折入画布卡）：
-   默认收起 → 画布卡内 .orch-odg-scroll 的 flex:1 独占整屏；
-   展开时表格区内滚并封顶 55%（沿用原独立卡封顶值），画布仍保 ≥1 条完整泳道。
-   P1-4（2026-10-04）：原独立卡自然高度把画布压成 84px 滚动缝，折叠区默认收起是根治。 */
-.orch-odg-handoff { flex: none; border-top: 1px solid var(--mk-line, #e6ebf4); }
-.orch-odg-handoff__summary { display: flex; align-items: center; gap: 10px; }
-.orch-odg-handoff__title { font-weight: 700; }
-.orch-odg-handoff__count { margin-left: auto; color: var(--mk-faint); font-weight: 500; }
-.orch-odg-handoff[open] { display: flex; flex-direction: column; min-height: 0; max-height: 55%; }
-.orch-odg-handoff[open] > .mk-table-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-/* 阶段交接明细（原型 .tbl 的 mono/sub/wrap 形态）：交接列 id 对弱化 mono；传递字段可换行 */
-.orch-handoff__pair { color: var(--mk-muted); white-space: nowrap; }
-/* 治理徽章随行：真 <button> 复用 .mk-badge 皮（审核 #96）——只补按钮默认字族与手型，
-   不再对 span 手写 cursor 补丁；与阶段 id 对之间留 6px */
-.orch-handoff__pair .mk-badge { margin-left: 6px; }
-/* WCAG 2.5.8（Target Size, AA）要求触控目标 ≥ 24×24。本钮 1080/2K 档实测只有 20–22px 高
-   （.mk-badge--sm 的 padding 1px + line-height），同排徽章间距又只有 4px，
-   「相邻目标间距足够」的豁免也不成立——只有 4K 档字号放大后才到 37px。
-   .mk-badge 本身已是 inline-flex + align-items:center，补 min-height 即可居中撑到 24。 */
-.orch-handoff__badge-btn { font-family: inherit; cursor: pointer; min-height: 24px; }
-/* 传递字段 = 逐枚徽章（mk-badge--sm），格内 flex 换行；不再用点号长串（独吞 65% 列宽） */
-.orch-handoff__fields { white-space: normal; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-/* P2-12（设计评审 4.2）：上/下游 Agent 列仅 115px，simulation-agent 词中断成 simulatio/n-agent
-   （body 全局 overflow-wrap:anywhere 所致）。两列回 nowrap 单行，并回 overflow-wrap:normal
-   让长词 min-content 恢复整词宽度——auto 布局才能把列宽增量分给「传递字段」徽章换行列，
-   不溢出容器（本表无 fixed 布局 / colgroup，无需调列宽比例）。 */
-.orch-handoff__agent { white-space: nowrap; overflow-wrap: normal; }
 /* 字段路由：卡头 + 工具条吸顶，仅表格区内滚（.frt__scroll 自带 .mk-table-scroll 横向滚动） */
 .orch-routing .frt { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
 .orch-routing .frt__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
@@ -840,8 +722,8 @@ html[data-theme='dark'] {
 <style>
 /* ===== 总览 odg 画布（newui/admin odg-canvas）：连线和字段标签由 layoutOrch 以
    innerHTML 注入，不带 scoped 属性，因此样式放在非 scoped 块并统一 .orch-odg 前缀命名空间 ===== */
-/* 交接明细拆出独立卡后，画布滚动区接管画布卡的剩余高度（否则卡底留白）；
-   2026-10-13 拖动平移：空白处起手即抓手，平移中保持抓手并盖过节点指针态 */
+/* 2026-10-13 起总览只有这一张卡：画布滚动区接管卡片剩余高度（否则卡底留白）；
+   同日拖动平移：空白处起手即抓手，平移中保持抓手并盖过节点指针态 */
 .orch-odg-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 12px 16px; cursor: grab; }
 .orch-odg-scroll.is-panning,
 .orch-odg-scroll.is-panning .orch-odg-node { cursor: grabbing; }

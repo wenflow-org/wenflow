@@ -230,10 +230,12 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).not.toContain('import MkKpi')
     expect(OrchestratorSource).not.toContain('mk-alert')
     expect(OrchestratorSource).not.toContain('unresolvedCount')
-    // 行级证据仍在：交接明细表的未解析/哈希漂移徽章可点（评审 P1#27 异常→动作不断链）
-    expect(OrchestratorSource).toContain('orch-handoff__badge-btn')
-    expect(OrchestratorSource).toContain('@click="goUnresolved()"')
-    expect(OrchestratorSource).toContain('@click="goHashDrift()"')
+    // 行级证据（交接明细表的徽章）2026-10-13 随该表整体删除：与「字段旅程」页签同源重复
+    // 且两处字段数打架（7 vs 25）；治理信号现只在健康中心，本页不再持有任何治理读数
+    expect(OrchestratorSource).not.toContain('orch-handoff__badge-btn')
+    expect(OrchestratorSource).not.toContain('goUnresolved')
+    expect(OrchestratorSource).not.toContain('goHashDrift')
+    expect(OrchestratorSource).not.toContain('stageHandoffs')
     // 阶段数/Skill 总数收进总览卡头右组 meta（F8-4 三源口径 title 随行）
     expect(OrchestratorSource).toContain('个 Skill（拓扑内挂载）')
     expect(OrchestratorSource).toContain(':title="skillKpiTitle"')
