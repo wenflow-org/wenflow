@@ -205,14 +205,17 @@ function normalizePhase(value: any): LearnLearnerPhase {
 
 /** 句子终止符（收尾时保留）：切断在此处即是完整一句，不再补省略号。 */
 const SENTENCE_END_CHARS = '。！？!?';
-/** 子句分隔符（收尾时丢弃）：在此处切断属自然停顿，丢弃标点后不留悬空逗号。 */
+/** 子句分隔符：只作为「未完」的收尾点——切断时补省略号，不得冒充完整句。 */
 const CLAUSE_BREAK_CHARS = '，、；：,;:';
 
 /**
- * 超限时按标点边界收尾（A/B 报告 D1）：原实现把 48/80/96 当硬上限直接 slice，会把学习者
- * 发言拦腰截断成「我时间紧，要…」这类没说完的半句——教师随后只能替她补全一个她从未说完的
- * 问题（答非所问的来源之一）。改为在限额内最后一个标点边界处收尾：句子终止符保留（完整句），
- * 子句分隔符丢弃（自然停顿）；确实找不到边界才退回硬切并加省略号示意未完。
+ * 超限时按标点边界收尾（A/B 报告 D1；2026-10-13 复评再修 lesson 13）。
+ * 初版把 48/80/96 当硬上限直接 slice → 半句；二次修复改「句末保留、子句分隔符丢弃」，
+ * 但子句分支**丢掉标点直接返回**，会产出无标点的半句（如「…可如果学生本来就爱琢磨题」），
+ * 教师据它当完整发言脑补后半句（复评实证）。本版规则：
+ *  ① 窗口内存在句末标点 → 收在句末（完整句，无省略号）；
+ *  ② 只有子句分隔符 → 收在子句边界并**补省略号**（明示未完，不再冒充完整句）；
+ *  ③ 通篇无标点 → 硬截断 + 省略号。
  */
 function cropReply(reply: string, phase: LearnLearnerPhase) {
   const normalized = sanitizeVisibleContent(reply);
@@ -223,16 +226,12 @@ function cropReply(reply: string, phase: LearnLearnerPhase) {
   const shortened = parts.slice(0, sentenceLimit).join(' ');
   if (shortened.length <= charLimit) return shortened;
   const head = shortened.slice(0, charLimit);
-  const boundary = Math.max(
-    ...SENTENCE_END_CHARS.split('').map((char) => head.lastIndexOf(char)),
-    ...CLAUSE_BREAK_CHARS.split('').map((char) => head.lastIndexOf(char)),
-  );
-  if (boundary >= Math.max(16, Math.floor(charLimit * 0.5))) {
-    const char = head[boundary];
-    const cut = SENTENCE_END_CHARS.includes(char) ? head.slice(0, boundary + 1) : head.slice(0, boundary);
-    return cut.trim();
-  }
-  return `${head.slice(0, Math.max(24, charLimit - 1)).trim()}…`;
+  const MIN_CUT = 16;
+  const sentenceBoundary = Math.max(...SENTENCE_END_CHARS.split('').map((char) => head.lastIndexOf(char)));
+  if (sentenceBoundary >= MIN_CUT) return head.slice(0, sentenceBoundary + 1).trim();
+  const clauseBoundary = Math.max(...CLAUSE_BREAK_CHARS.split('').map((char) => head.lastIndexOf(char)));
+  const cutAt = clauseBoundary >= MIN_CUT ? head.slice(0, clauseBoundary) : head.slice(0, Math.max(24, charLimit - 1));
+  return `${cutAt.trim()}…`;
 }
 
 function buildFallback(input: LearnLearnerSimulationInput): LearnLearnerSimulationOutput {

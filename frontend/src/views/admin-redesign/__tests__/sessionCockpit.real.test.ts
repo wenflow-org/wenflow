@@ -59,6 +59,9 @@ function realTeachingPayload(): any {
         messages: [
           { role: 'user', content: '我不理解作用域', time: '2026-08-12T14:00:00.000Z' },
           { role: 'assistant', content: '作用域是变量可见的范围…', time: '2026-08-12T14:00:05.000Z' }
+        ],
+        checkpoints: [
+          { checkpointId: 'cp_1', type: 'short_answer', question: '针对「完成5道错题重做」这条建议，它预设的动机状态是什么？', passed: false, judgedBy: 'code', understanding: 0.75, conceptName: '识别隐含动机假设' }
         ]
       },
       evaluation: { total: 3, types: [{ type: 'lesson:completed', count: 3, avgConfidence: 0.9 }], avgConfidence: 0.8 },
@@ -704,6 +707,28 @@ describe('SessionCockpit 双模式', () => {
     const traceText = wrapper.find('.cp-trace-panel').text();
     expect(traceText).toContain('curious');
     expect(traceText).toContain('virtual-reply');
+
+    wrapper.unmount();
+  });
+
+  it('检查点题目可查（2026-10-13 走查「教学会话看不到检查点题目」：检查点走结构化通道不进聊天逐字稿）', async () => {
+    getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    // 切到存课堂转录的 Learn 页签（默认落 wrapup）
+    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.text().includes('Learn'));
+    await learnTab!.trigger('click');
+    await nextTick();
+
+    // 聊天逐字稿消息里没有题干（检查点单独渲染，不混进对话气泡）
+    const q = '针对「完成5道错题重做」这条建议，它预设的动机状态是什么？';
+    expect(wrapper.findAll('.cp-transcript__message').some((m) => m.text().includes(q))).toBe(false);
+    const block = wrapper.find('.cp-checkpoints');
+    expect(block.exists()).toBe(true);
+    expect(block.text()).toContain('检查点');
+    expect(block.text()).toContain(q);
+    expect(block.text()).toContain('未通过');
+    expect(block.text()).toContain('理解度 75%');
+    expect(block.text()).toContain('识别隐含动机假设');
 
     wrapper.unmount();
   });

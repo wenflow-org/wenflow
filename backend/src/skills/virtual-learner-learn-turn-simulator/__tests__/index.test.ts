@@ -48,8 +48,9 @@ describe('virtual-learner-learn-turn-simulator normalize', () => {
     expect(noPrefix.reply).toBe('我试着写了一下三行默写。')
   })
 
-  // D1（A/B 报告 2026-10-13）：旧实现按字符上限硬切（48/80/96）再补"…"，学生发言被拦腰截断，
-  // 教师随后在补全一个学习者从未说完的问题。修法=按标点边界收尾：句末保留、子句分隔符丢弃。
+  // D1（A/B 报告 2026-10-13）：初版按字符上限硬切（48/80/96）补"…"，学生发言被拦腰截断。
+  // 二次修复改「句末保留、子句分隔符丢弃」，但子句分支丢掉标点直接返回 → 产出无标点半句，
+  // 教师当完整发言脑补（2026-10-13 复评 lesson 13 实证）。本版：子句收尾必须补"…"明示未完。
   it('长回复按句末边界收尾：整句保留、无省略号（A/B 报告 D1）', () => {
     const first = `${'甲'.repeat(59)}。`  // 60 字
     const second = `${'乙'.repeat(59)}。` // 60 字，两句合计 120 > 96 上限
@@ -59,11 +60,10 @@ describe('virtual-learner-learn-turn-simulator normalize', () => {
     expect(out.reply).not.toContain('…')
   })
 
-  it('长回复在子句边界收尾时丢弃悬空标点（A/B 报告 D1）', () => {
+  it('长回复只有子句边界时收尾并补省略号（D1 复评：不得用无标点半句冒充完整句）', () => {
     const out = normalizeOutput({ reply: `${'甲'.repeat(60)}，${'乙'.repeat(100)}` }, input)
-    expect(out.reply).toBe('甲'.repeat(60))
-    expect(out.reply.endsWith('，')).toBe(false)
-    expect(out.reply).not.toContain('…')
+    expect(out.reply).toBe(`${'甲'.repeat(60)}…`)
+    expect(out.reply.endsWith('…')).toBe(true)
   })
 
   it('通篇无标点的超长回复才回退硬截断加省略号（A/B 报告 D1）', () => {

@@ -424,6 +424,25 @@
               <p v-else-if="teachingDetailFailed && !learnConversationMessages.length" class="cp-degrade">教学记录获取失败 <button type="button" class="mk-link" @click="loadTeachingDetail(selectedTeachingSessionId)">重试</button></p>
               <p v-else-if="!viewedLesson" class="cp-none">点击左侧课程查看对话。</p>
               <p v-else-if="!learnConversationMessages.length" class="cp-none">{{ learnEmptyHint }}</p>
+              <!-- 检查点：题目/作答/判分（2026-10-13 走查「教学会话看不到检查点题目」）。检查点走结构化
+                   通道（pendingCheckpoint → checkpointAnswer），题目**不进聊天逐字稿**，故单独渲染；
+                   否则只看到老师反复喊「接下来出检查题」而看不到题本身。 -->
+              <div v-if="lessonCheckpoints.length" class="cp-checkpoints">
+                <div class="cp-checkpoints__head">
+                  <span class="cp-checkpoints__title">检查点</span>
+                  <span class="cp-checkpoints__meta">{{ lessonCheckpoints.length }} 次作答 · 题目不走聊天，此处显示</span>
+                </div>
+                <div v-for="(cp, i) in lessonCheckpoints" :key="`cp-${i}`" class="cp-checkpoint">
+                  <p class="cp-checkpoint__q">{{ cp.question || cp.title || '（无题干）' }}</p>
+                  <div class="cp-checkpoint__meta">
+                    <span class="mk-badge" :class="cp.passed === true ? 'mk-badge--ok' : cp.passed === false ? 'mk-badge--warn' : 'mk-badge--muted'">{{ cp.passed === true ? '通过' : cp.passed === false ? '未通过' : '未判分' }}</span>
+                    <span class="cp-checkpoint__tag">{{ checkpointTypeLabel(cp.type) }}</span>
+                    <span v-if="cp.judgedBy" class="cp-checkpoint__tag">判分 {{ cp.judgedBy }}</span>
+                    <span v-if="cp.understanding != null" class="cp-checkpoint__tag" title="AI 对本次作答的理解度估计">理解度 {{ Math.round(cp.understanding * 100) }}%</span>
+                    <span v-if="cp.conceptName" class="cp-checkpoint__concept">{{ cp.conceptName }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -1242,6 +1261,35 @@ const teachingDetailMessages = computed(() => conversationMessages(teachingDetai
 const learnConversationMessages = computed(() =>
   teachingDetailMessages.value.length ? teachingDetailMessages.value : fallbackLearnConversationMessages.value
 )
+/** 检查点记录（题目/判分/理解度）。检查点是结构化通道，题目不进聊天逐字稿——
+ *  真实模式经 /admin/session-console 的 teaching.checkpoints，虚拟模式在 state.checkpointHistory。 */
+interface CockpitCheckpoint {
+  checkpointId?: string | null
+  title?: string | null
+  type?: string | null
+  question?: string | null
+  passed?: boolean | null
+  judgedBy?: string | null
+  understanding?: number | null
+  conceptName?: string | null
+  submittedAt?: string | null
+}
+const lessonCheckpoints = computed<CockpitCheckpoint[]>(() => {
+  // 真实模式：session（/admin/session-console）随首帧加载、始终可用 → 优先；
+  // 虚拟模式：teaching-detail 的 state.checkpointHistory 兜底。
+  const fromSession = asRecord(asRecord(session.value).teaching).checkpoints
+  if (Array.isArray(fromSession)) return fromSession as CockpitCheckpoint[]
+  const direct = teachingDetail.value?.checkpoints
+  if (Array.isArray(direct)) return direct as CockpitCheckpoint[]
+  const hist = asRecord(teachingDetail.value?.state).checkpointHistory
+  return Array.isArray(hist) ? (hist as CockpitCheckpoint[]) : []
+})
+const CHECKPOINT_TYPE_LABEL: Record<string, string> = {
+  short_answer: '简答', single_choice: '单选', multiple_choice: '多选', choice: '选择', true_false: '判断'
+}
+function checkpointTypeLabel(t: string | null | undefined) {
+  return (t && CHECKPOINT_TYPE_LABEL[t]) || t || '检查点'
+}
 const displayedTeachingSessionId = computed(() => firstText(
   teachingDetail.value?.id,
   selectedTeachingSessionId.value,
@@ -2236,7 +2284,8 @@ async function loadTeachingDetail(teachingSessionId = selectedTeachingSessionId.
       const normalized: Record<string, unknown> = {
         id: firstText(payload.sessionId, teaching.teachingSessionId, target),
         messages: teaching.messages ?? asRecord(payload.conversations).learning,
-        wrapup: teaching.wrapup ?? null
+        wrapup: teaching.wrapup ?? null,
+        checkpoints: Array.isArray(teaching.checkpoints) ? teaching.checkpoints : []
       }
       if (!isCurrentLesson) realLessonCache.set(target, normalized)
       teachingDetail.value = normalized
@@ -3042,6 +3091,21 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-transcript__message.is-learner { border-left-color: var(--mk-teal); background: rgba(45, 212, 191, 0.1); }
 .cp-transcript__message span { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); }
 .cp-transcript__message p { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+
+/* 检查点（题目不走聊天逐字稿，单独渲染；2026-10-13 走查 lesson 13） */
+.cp-checkpoints {
+  display: grid; gap: 8px; margin-top: 10px; padding: 10px 12px;
+  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); background: var(--mk-surface-2);
+}
+.cp-checkpoints__head { display: flex; align-items: baseline; gap: 8px; }
+.cp-checkpoints__title { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-ink); }
+.cp-checkpoints__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.cp-checkpoint { display: grid; gap: 5px; padding-top: 8px; border-top: 1px solid var(--mk-line); }
+.cp-checkpoint:first-of-type { padding-top: 0; border-top: none; }
+.cp-checkpoint__q { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.6; color: var(--mk-ink); word-break: break-word; }
+.cp-checkpoint__meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cp-checkpoint__tag { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.cp-checkpoint__concept { font-size: var(--mk-fs-micro); color: var(--mk-accent-deep); }
 
 /* Review */
 .cp-review { display: grid; gap: 8px; padding: 8px 10px; border-radius: var(--mk-radius-sm); background: var(--mk-surface-2); }

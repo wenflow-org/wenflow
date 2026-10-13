@@ -111,6 +111,27 @@ function wrapupView(raw: string | null | undefined) {
   };
 }
 
+/** teachingState.checkpointHistory → 控制台视图。检查点是结构化通道（pendingCheckpoint →
+ *  checkpointAnswer），题目**不进聊天逐字稿**——不单独带出来，运营就只能看到老师喊「接下来出检查题」
+ *  却永远看不到那道题（2026-10-13 走查 lesson 13）。同一题多次作答各留一条，按提交时间序。 */
+function checkpointHistoryView(raw: string | null | undefined) {
+  const state = parseJsonSafe<any>(raw, null);
+  const hist = state && Array.isArray(state.checkpointHistory) ? state.checkpointHistory : [];
+  return hist
+    .filter((cp: any) => cp && typeof cp === 'object')
+    .map((cp: any) => ({
+      checkpointId: cp.checkpointId ?? null,
+      title: cp.title ?? null,
+      type: cp.type ?? null,
+      question: cp.question ?? null,
+      passed: typeof cp.passed === 'boolean' ? cp.passed : null,
+      judgedBy: cp.judgedBy ?? null,
+      understanding: typeof cp.understanding === 'number' ? cp.understanding : null,
+      conceptName: cp.conceptName ?? null,
+      submittedAt: cp.submittedAt ?? null,
+    }));
+}
+
 /** 里程碑/子任务 → 与虚拟 path-status 对齐的里程碑视图 */
 function buildMilestonesView(milestones: any[]): Array<Record<string, unknown>> {
   return milestones
@@ -402,6 +423,7 @@ async function buildTeachingConsole(session: any) {
       duration: session.duration,
       messageCount: messages.filter((m) => m.role === 'user').length,
       knowledgeState,
+      checkpoints: checkpointHistoryView(session.teachingState),
       wrapup,
       advisory: parseJsonSafe<any>(session.advisory, null),
       messages,
