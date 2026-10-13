@@ -192,6 +192,21 @@ export interface ListQueryState {
   allowedPills?: readonly string[]
   /** 页码默认 1；页大小默认值（与调用方 Pagination 初值一致才不误写 URL） */
   defaultPageSize?: number
+  /**
+   * 附加筛选轴（pill / keyword / page 之外的开关或自定义枚举）。教学会话的
+   * 「异常状态组」与「状态分布条分段」、虚拟学习者的运行态 pill 都走这里，
+   * 免得为每个开关各加一个具名槽位。
+   */
+  extra?: readonly ListQueryExtra[]
+}
+
+/** 附加筛选轴：key = URL 参数名；get 返回 '' 表示缺省（不写 URL） */
+export interface ListQueryExtra {
+  key: string
+  get: () => string
+  set: (v: string) => void
+  /** 白名单：URL 值不在其中（脏深链 / 旧参数名）→ 按缺省处理 */
+  allowed?: readonly string[]
 }
 
 /** URL 参数名（同页多列表可覆盖；默认见下） */
@@ -242,8 +257,9 @@ export function useListQueryState(state: ListQueryState, keys: ListQueryKeys = {
   }
   const allowedPills = state.allowedPills
   const defaultSize = state.defaultPageSize ?? 15
+  const extras = state.extra ?? []
   const managed = (): string[] =>
-    [K.pill, K.keyword, K.page, ...(state.pageSize ? [K.pageSize] : []), ...(state.bin ? [K.bin] : [])]
+    [K.pill, K.keyword, K.page, ...(state.pageSize ? [K.pageSize] : []), ...(state.bin ? [K.bin] : []), ...extras.map((e) => e.key)]
   const str = (v: unknown): string => (typeof v === 'string' ? v : '')
   const posInt = (v: unknown, fallback: number): number => {
     const n = Number(str(v))
@@ -258,6 +274,10 @@ export function useListQueryState(state: ListQueryState, keys: ListQueryKeys = {
     if (state.page.value > 1) d[K.page] = String(state.page.value)
     if (state.pageSize && state.pageSize.value !== defaultSize) d[K.pageSize] = String(state.pageSize.value)
     if (state.bin && state.bin.value != null) d[K.bin] = String(state.bin.value)
+    for (const e of extras) {
+      const v = e.get()
+      if (v) d[e.key] = v
+    }
     return d
   }
 
@@ -278,6 +298,10 @@ export function useListQueryState(state: ListQueryState, keys: ListQueryKeys = {
       const n = Number(rawBin)
       state.bin.value = rawBin !== '' && Number.isInteger(n) && n >= 0 ? n : null
     }
+    for (const e of extras) {
+      const raw = str(q[e.key])
+      e.set(e.allowed && raw && !e.allowed.includes(raw) ? '' : raw)
+    }
     lastSig = sig((k) => str(q[k]))
   }
 
@@ -290,7 +314,14 @@ export function useListQueryState(state: ListQueryState, keys: ListQueryKeys = {
     }
   )
   watch(
-    () => [state.pill.value, state.keyword.value, state.page.value, state.pageSize?.value, state.bin?.value],
+    () => [
+      state.pill.value,
+      state.keyword.value,
+      state.page.value,
+      state.pageSize?.value,
+      state.bin?.value,
+      ...extras.map((e) => e.get())
+    ],
     () => {
       const d = desired()
       const nextSig = sig((k) => d[k] || '')

@@ -57,9 +57,14 @@
         <!-- 结论行的 __sep 已撤（明细项搬到第二行后，分隔线右侧无内容可分隔——
              裸评审 2026-10-03 实测为悬空 1×13px 竖线残留） -->
         <!-- subline（今日调用/失败）与 KPI 前两卡完全重复，不进状态条——
-             1280 实测它会把「查看健康中心」动作挤换行（2026-10-01 视觉回顾） -->
+             1280 实测它会把结论行动作挤换行（2026-10-01 视觉回顾） -->
         <div class="mk-status__actions">
-          <button type="button" class="mk-status__action" @click="jump('health-center')">查看健康中心</button>
+          <button
+            type="button"
+            class="mk-status__action"
+            :title="statusAction.title"
+            @click="statusAction.run()"
+          >{{ statusAction.label }}</button>
         </div>
       </div>
       <!-- 明细行 = 纯「通道状态」（健康/仿真），不带动作项——去冗余（2026-10-03 用户反馈
@@ -280,7 +285,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue';
-import { overviewHealth, investigateAgent, intent, dataSource, openSubPage } from './store';
+import { overviewHealth, investigateAgent, investigateTodayFailures, statusActionOf, intent, dataSource, openSubPage } from './store';
 import {
   liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing,
   liveVirtualRunStats, liveVirtualStatsError, liveVirtualStatsLoaded,
@@ -516,6 +521,22 @@ function healthChipClick() {
   if (healthState.value === 'error') { void loadHealth(); return; }
   jump('health-center');
 }
+
+/** 结论行右端动作：按结论自己的口径派生。
+    此前硬编码「查看健康中心」——结论写「需要关注：今日失败 17 次」时，右端按钮却把人
+    送到系统检查清单（14 项系统检查），在那里找不到这 17 条失败（2026-10-13 运营走查 O3）。
+    讲调用（今日失败 / 今日成功率）→ 去执行日志按「失败 + 今天」排查；其余（运行平稳 /
+    空闲 / 统计未就绪）→ 维持健康中心入口。健康项本身在明细行「健康 · N 项异常」另有链接。 */
+const statusAction = computed(() => {
+  if (statusActionOf(health.value?.headline || '') === 'investigate-today') {
+    return {
+      label: '去排查',
+      title: '打开执行日志（级别 = 失败 · 今天），看这批失败调用',
+      run: investigateTodayFailures
+    }
+  }
+  return { label: '查看健康中心', title: healthTitle.value, run: () => jump('health-center') }
+})
 async function loadHealth() {
   try {
     const res = await adminHealthCenterApi.get()

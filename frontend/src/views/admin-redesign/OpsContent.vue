@@ -35,7 +35,7 @@
       unit="条"
       aria-label="按路径状态筛选"
       :bins="pathBandBins"
-      :active-key="statusFilter || null"
+      :active-key="statusFilter === 'all' ? null : statusFilter"
       @select="toggleStatusBand"
     />
 
@@ -229,8 +229,8 @@
       <MkEmptyState
         v-else
         icon="◌"
-        :title="keyword || statusFilter ? '当前筛选无匹配' : '没有学习路径'"
-        :description="keyword || statusFilter ? '放宽筛选条件试试。' : '用户的目标对话生成路径后，会出现在这里。'"
+        :title="keyword || statusFilter !== 'all' ? '当前筛选无匹配' : '没有学习路径'"
+        :description="keyword || statusFilter !== 'all' ? '放宽筛选条件试试。' : '用户的目标对话生成路径后，会出现在这里。'"
         :action-text="isFiltered ? '清除筛选' : ''"
         @action="clearFilters"
       />
@@ -251,27 +251,10 @@
 </template>
 
 <script lang="ts">
-/* 列表态快照必须活过组件卸载（G 轮走查补正）：行点击进 PathDetail 二级页时 AdminConsole
-   互斥卸载本组件（<component :is> 无 KeepAlive），<script setup> 作用域的变量随实例销毁——
-   #39 引入的快照此前声明在 setup 里，实际从未真正恢复过。搬进模块级 <script> 块
-   （每模块只执行一次）才能跨「下钻 → 返回」存活；consume-once 语义不变（GoalConversations
-   gcSavedListState 同款）。 */
-interface OcSavedListState {
-  page: number
-  keyword: string
-  statusFilter: string
-}
-let ocSavedListState: OcSavedListState | null = null
-function takeOcSavedListState() {
-  const s = ocSavedListState
-  ocSavedListState = null
-  return s
-}
 </script>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
 import { timeAgo, errMsg, shortId, isPageCacheFresh, markPageFetched, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { intent, openSubPage } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
@@ -292,7 +275,7 @@ import MkDistBand from '@/components/mk/MkDistBand.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import { statusText, statusBadge, isPathStalled, pathRetryTypeText, PATH_STALL_HOURS } from './opsShared'
-import { isTestAccountUser } from './learner-profile'
+import { isTestAccountUser, useListQueryState } from './learner-profile'
 
 /** 嵌入模式：作为「目标对话」页内「学习路径」tab 渲染（隐藏页面壳与状态条，筛选/表格/抽屉保留）；
     initialStatus：宿主深链预筛（如工作台「生成失败路径」→ 'failed'），挂载时应用。
@@ -303,19 +286,15 @@ type PathRow = LearningPathRow & { busy?: boolean; isTestAccount?: boolean }
 
 const rows = ref<PathRow[]>([])
 const total = ref(0)
-/* 列表态快照（2026-10-06 审核 #39，存储见文件顶 <script> 块）：行点击进 PathDetail 二级页
-   会互斥卸载本组件，返回后筛选/关键字/页码此前全部回初值。在「行内下钻」出站时把当前
-   状态存进模块级快照，挂载时一次性读回（consume-once：只服务「进详情再返回」这一个
-   场景，不用 localStorage，避免跨会话残留旧筛选）。 */
-const restoredListState = takeOcSavedListState()
-const page = ref(restoredListState?.page || 1)
+const page = ref(1)
 const pageSize = ref(15)
 const loading = ref(false)
 const failed = ref(false)
 /** 失败原因（R2：错误态要显示失败原因，不能只进 toast） */
 const loadError = ref('')
-const keyword = ref(restoredListState?.keyword || '')
-const statusFilter = ref(restoredListState?.statusFilter || '')
+const keyword = ref('')
+/** 状态筛选（'' 退役，哨兵 'all' 与 useListQueryState 的 pill 约定一致） */
+const statusFilter = ref('all')
 /* 口径整组统一（2026-10-04 用户拍板）：get/set 走 live.ts 共享态（页头开关同源），本页 watch 只负责重拉 */
 const includeTest = computed({
   get: () => liveIncludeVirtual.value,
@@ -380,7 +359,7 @@ const pathBandBins = computed(() =>
 )
 /** 分布条点击 = 单状态筛选（与原 pills 同一 statusFilter）；再点取消 */
 function toggleStatusBand(key: string) {
-  statusFilter.value = statusFilter.value === key ? '' : key
+  statusFilter.value = statusFilter.value === key ? 'all' : key
 }
 /** 「其它」段 = 四枚举之外取值的聚合，不能按单状态等值比较（点了要真能筛出那些行） */
 function pathStatusMatch(status: string, key: string): boolean {
@@ -412,27 +391,34 @@ const { toggle: toggleOcSort, sortState: ocSortState, sortRows: sortOcRows, sort
 const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase()
   return sortOcRows(rows.value.filter((p) => {
-    if (statusFilter.value && !pathStatusMatch(p.status, statusFilter.value)) return false
+    if (statusFilter.value !== 'all' && !pathStatusMatch(p.status, statusFilter.value)) return false
     if (!k) return true
     return `${p.title} ${p.user?.name || ''} ${p.user?.email || ''} ${p.subject || ''}`.toLowerCase().includes(k)
   }))
 })
-const isFiltered = computed(() => !!keyword.value.trim() || !!statusFilter.value)
+const isFiltered = computed(() => !!keyword.value.trim() || statusFilter.value !== 'all')
 function clearFilters() {
   keyword.value = ''
-  statusFilter.value = ''
+  statusFilter.value = 'all'
 }
+/* 筛选 / 页码 ↔ URL query（2026-10-13 运营走查 O2）：本页原为「只读 URL 不回写」（写入权在
+   发起方）——手动筛选在刷新 / 分享 / 收藏里全部丢失。改为双向同步（缺省值不写 URL，所以
+   「手动清掉的筛选被 URL 顶回来」不会发生）；URL 参数名沿用既有的 ?status=（OpsHub 待办卡
+   深链已经在用），关键词/页码复用 q/page/size。组合式单点在 learner-profile.ts。
+   必须在下方「筛选变化回第 1 页」的 watch 之前调用：URL 落位要发生在监听建立之前，
+   否则挂载时还原出来的筛选会被当成用户改筛选、把还原的页码打回 1（Users.vue 判例）。 */
+useListQueryState(
+  { pill: statusFilter, keyword, page, pageSize, allowedPills: ['all', 'active', 'completed', 'failed', 'archived'] },
+  { pill: 'status' }
+)
 /* 回第 1 页只监听筛选输入与排序（TeachingSessions 判例）：监听 filtered 会让数据回填
-   （重挂载恢复列表态后的装载）也把页码打回第 1 页，快照里的 page 就永远无效。
-   越界收敛由 Pagination 自带 watcher 兜底。 */
+   （重挂载恢复列表态后的装载）也把页码打回第 1 页。越界收敛由 Pagination 自带 watcher 兜底。 */
 watch([keyword, statusFilter, ocSortKey, ocSortDir], () => {
   page.value = 1
 })
-/* 出站下钻时把当前列表态存进快照（#39）：只在下钻路径调用，不在每次筛选变化时写，
-   避免污染其它场景；返回时由 takeSavedListState 一次性读回 */
-function saveListState() {
-  ocSavedListState = { page: page.value, keyword: keyword.value, statusFilter: statusFilter.value }
-}
+/* 出站下钻不再存快照：筛选/页码已住进 URL（上方 useListQueryState），
+   详情 URL 由 AdminConsole 以 {...route.query, view, id} 拼出、返回时去掉 view/id，
+   列表态自然随之还原，无需第二套机制。 */
 
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
@@ -492,8 +478,7 @@ let statsReqSeq = 0
 async function reload(force = false) {
   /* 页面级 TTL 缓存（与另两 tab 同款模式）：显式刷新/口径切换传 force 绕过。
      注意（2026-10-06 审核 #39）：本组件被 AdminConsole 互斥卸载/重挂载（无 KeepAlive），
-     重挂载后 rows 必为 []，此短路条件恒不成立——所以本页每次进入都会重拉一次，
-     这也是列表态必须走快照恢复（saveListState/takeSavedListState）的原因。 */
+     重挂载后 rows 必为 []，此短路条件恒不成立——所以本页每次进入都会重拉一次。 */
   if (!force && isPageCacheFresh('learning-paths') && rows.value.length) return
   const seq = ++listReqSeq
   loading.value = true
@@ -660,11 +645,9 @@ async function retryGeneration(p: PathRow) {
 
 /* 行点击 → 会话座舱 Path 阶段页签（2026-10-12 拍板：路径不再有独立详情页）。
    本页只有路径 id：openSubPage('path') 落到深链适配层（PathDetail.vue），由它反查
-   目标对话后带 stage=path 换开座舱。出站前存列表态（#39）：返回时组件重挂载可恢复
-   筛选/关键字/页码，不再回初值 */
+   目标对话后带 stage=path 换开座舱。列表态由 URL 承载，返回时自动还原。 */
 function openPath(p: PathRow) {
   closeMenu()
-  saveListState()
   openSubPage('path', p.id)
 }
 
@@ -674,19 +657,12 @@ function menuDelete(p: PathRow) { closeMenu(); void remove(p) }
 
 /* 深链：独立场景形态（嵌入时由宿主 GoalConversations 消费 intent 并传 initialStatus 预筛）：
    工作台「生成失败路径」→ 预筛 failed（消费后清空，避免菜单直达被残留筛选污染）。
-   URL 还原（只读一次，F5-3 判例：URL 是可刷新/可复制/可后退的权威）：OpsHub 待办卡带
-   ?status=failed 直达后，刷新/复制链接复原同一筛选；写入权在发起方（OpsHub push），本页
-   不做筛选→URL 回写。「行内下钻返回」走 ocSavedListState（已消费），不吃 URL——避免把用户
-   在列表里手动清掉的筛选又顶回来。单测可无 router 挂载，route 访问保持可选。 */
-const route = useRoute()
+   URL 的读与写统一在 useListQueryState（上方）：?status= 既是 OpsHub 待办卡的入口，
+   也是本页筛选的出口——刷新/复制/后退都能复原。 */
 onMounted(() => {
   if (!props.embedded && ['active', 'completed', 'failed', 'archived'].includes(intent.statusFilter)) {
     statusFilter.value = intent.statusFilter
     intent.statusFilter = ''
-  }
-  if (!props.embedded && !restoredListState) {
-    const qs = typeof route?.query?.status === 'string' ? route.query.status : ''
-    if (['active', 'completed', 'failed', 'archived'].includes(qs)) statusFilter.value = qs
   }
   if (props.embedded && ['active', 'completed', 'failed', 'archived'].includes(props.initialStatus)) {
     statusFilter.value = props.initialStatus

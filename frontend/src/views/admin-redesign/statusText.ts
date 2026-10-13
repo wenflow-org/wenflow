@@ -177,6 +177,16 @@ function fmtShortDate(iso?: string | null): string {
 }
 
 /**
+ * 单元格副行的日期写法：'MM-DD' → 'M月D日'。
+ * 时间线串（「创建 08-12 → 澄清中 08-13」）里 MM-DD 紧跟阶段词，读得出是日期；但阶段列
+ * 副行只有裸日期一个 token，`10-13` 单看像数字区间（2026-10-13 运营走查 F2）。非该形状原样返回。
+ */
+export function monthDayText(shortDate: string): string {
+  const m = /^(\d{2})-(\d{2})$/.exec(shortDate || '')
+  return m ? `${Number(m[1])}月${Number(m[2])}日` : shortDate || ''
+}
+
+/**
  * Goal 会话轻量阶段时间线（用 goal_conversations 现表字段推导，不新增后端字段）：
  * 创建(createdAt) → 当前阶段(updatedAt) → 终态(completedAt/updatedAt)。
  * 同日相邻条目收敛为最晚一条（如「创建 08-12 → 澄清中 08-12」只留「澄清中 08-12」）。

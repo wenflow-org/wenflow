@@ -184,8 +184,8 @@
             :class="{ 'mk-pill--active': stateFilter === o.key }"
             :aria-pressed="stateFilter === o.key"
             :title="o.hint ? `${o.label}（${o.hint}）· 点击筛选` : `点击筛选「${o.label}」虚拟学习者`"
-            @click="stateFilter = stateFilter === o.key ? '' : o.key"
-          >{{ o.label }}<span v-if="o.key !== ''" class="mk-pill__count">{{ o.count }}</span></button>
+            @click="stateFilter = stateFilter === o.key ? 'all' : o.key"
+          >{{ o.label }}<span v-if="o.key !== 'all'" class="mk-pill__count">{{ o.count }}</span></button>
           <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
@@ -329,7 +329,7 @@
                 <!-- live：入口在名称格（画像页），此处行内只留主操作「运行」——原型 .btn--sm 文字钮词汇
                      （原 mk-icon-btn--text 是图标钮套文字的混搭）。
                      2026-10-12 外部批评采纳（操作密度）：低频诊断「测试」收进 ⋯ 菜单，
-                     与 mk-primitives「行内 ⋯ 菜单：低频/危险操作收进菜单，避免与高频操作平铺」判例一致 -->
+                     与「行内 ⋯ 菜单：低频/危险操作收进菜单，避免与高频操作平铺」的原语判例一致 -->
                 <button
                   v-if="isLive"
                   type="button"
@@ -424,6 +424,7 @@ import { vlAvatarIndexOf } from '@/components/mk/vlAvatar'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import SimulatedDaySettings from './SimulatedDaySettings.vue'
 import { useTableSort } from './useTableSort'
+import { useListQueryState } from './learner-profile'
 import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -466,8 +467,9 @@ const samples = computed<Sample[]>(() =>
 )
 
 const keyword = ref('')
-/** 状态过滤（轴 A 生命周期）：'' = 全部 / running / paused / queued / failed / created */
-const stateFilter = ref('')
+/** 状态过滤（轴 A 生命周期）：'all' = 全部 / running / paused / queued / failed / created
+    （哨兵用 'all' 与 useListQueryState 的 pill 约定一致；URL 承载见下方 useListQueryState） */
+const stateFilter = ref('all')
 /** 状态过滤 chips 计数（与 samples 联动）；hint 进 title（P2 2026-10-02：口径随名披露）。
     2026-10-04 状态条退役后由卡头工具栏 chips 消费（该计数唯一来源） */
 const stateFilterOptions = computed(() => {
@@ -476,7 +478,7 @@ const stateFilterOptions = computed(() => {
   const failed = statsState.value === 'error'
   const n = (v: number) => (failed ? '—' : v)
   return [
-    { key: '', label: '全部', count: n(samples.value.length), hint: '' },
+    { key: 'all', label: '全部', count: n(samples.value.length), hint: '' },
     { key: 'running', label: '进行中', count: n(count((s) => s.runningCount > 0)), hint: '' },
     // P1-3（2026-10-04 全站评审）：计数谓词与 filtered 的筛选谓词（runningCount===0 && pausedCount>0）同式，
     // 否则 pill「已暂停 2」点进去只筛出 1 条（同时在跑的学习者被计入却被筛掉）
@@ -519,10 +521,10 @@ const filtered = computed(() => {
   return sortVlRows(list)
 })
 
-const isFiltered = computed(() => !!keyword.value.trim() || !!stateFilter.value)
+const isFiltered = computed(() => !!keyword.value.trim() || stateFilter.value !== 'all')
 function clearFilters() {
   keyword.value = ''
-  stateFilter.value = ''
+  stateFilter.value = 'all'
 }
 
 /* 长列表分批渲染：每批 15 行 */
@@ -533,6 +535,20 @@ function clearFilters() {
    用户正看第 3 页时被无故弹回；越界收敛由 Pagination 自带 watcher 兜底 */
 const page = ref(1)
 const pageSize = ref(15)
+
+/* 筛选 / 页码 ↔ URL query（2026-10-13 运营走查 O2）：本页数据全在客户端，筛选后
+   刷新 / 分享 / 收藏都还原不了（URL 只有一个裸路径）。与 用户与学习者 / 学习状态
+   同一组合式单点（learner-profile.ts useListQueryState）。
+   必须在下方「筛选变化回第 1 页」的 watch 之前调用：URL 落位要发生在监听建立之前，
+   否则挂载时还原出来的筛选会被当成用户改筛选、把还原的页码打回 1（Users.vue 判例）。 */
+useListQueryState({
+  pill: stateFilter,
+  keyword,
+  page,
+  pageSize,
+  allowedPills: ['all', 'running', 'paused', 'failed']
+})
+
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)

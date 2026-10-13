@@ -304,7 +304,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { isLive, openSubPage } from './store'
 import { useSessionDrill } from './useSessionDrill'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
-import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, stageTimeline, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS, statusText } from './statusText'
+import { stageText, stageBadgeCls, stageProgressIndex, stageTimelineText, stageTimeline, monthDayText, GOAL_STAGE_TOTAL, GOAL_STAGE_STEP_LABELS, statusText } from './statusText'
 import { useRowMenu } from './useRowMenu'
 import { useIsNarrow } from './useIsNarrow'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -566,6 +566,13 @@ function summaryOf(c: Record<string, unknown>): string {
 function mapRow(c: Record<string, unknown>): Row {
   const u = (c.users as Record<string, unknown>) || {}
   const stage = String(c.stage || '')
+  const stageTl = stageTimeline({
+    stage,
+    status: String(c.status || ''),
+    createdAt: String(c.createdAt || ''),
+    updatedAt: String(c.updatedAt || ''),
+    completedAt: String(c.completedAt || '')
+  })
   return {
     id: String(c.id),
     userId: String(c.userId || ''),
@@ -595,13 +602,9 @@ function mapRow(c: Record<string, unknown>): Row {
       updatedAt: String(c.updatedAt || ''),
       completedAt: String(c.completedAt || '')
     }),
-    timelineDate: stageTimeline({
-      stage,
-      status: String(c.status || ''),
-      createdAt: String(c.createdAt || ''),
-      updatedAt: String(c.updatedAt || ''),
-      completedAt: String(c.completedAt || '')
-    }).at(-1)?.date || '',
+    // 副行只留日期（阶段词由徽章单源承载），写法用「10月13日」而非裸「10-13」——
+    // 单看不再是数字区间的形状（2026-10-13 运营走查 F2）
+    timelineDate: monthDayText(stageTl.at(-1)?.date || ''),
   }
 }
 

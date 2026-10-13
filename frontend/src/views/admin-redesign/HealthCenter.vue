@@ -833,9 +833,11 @@ async function fix(id: HealthCenterItemId) {
   // 安全审计 K-M1：一键修复执行前二次确认，注明检查项。审核 #82：fixHint（修复会做什么）此前
   // 只在列表行 300px 截断 + title 悬停可见，键盘/触屏确认前读不到影响范围；现整段并入 confirm
   // message（.mk-confirm__msg 已 white-space:pre-wrap 支持换行），列表内保留作预览。
+  // 末行补角色与后果（2026-10-13 运营走查 O8）：修复说明里的「需提交代码」此前是光秃秃一句，
+  // 运营读作「我提交到哪？不提交是不是白修了」——说清「修复已生效 / 提交是工程同学的收尾」。
   const ok = await askConfirm({
     title: '一键修复',
-    message: `将执行「${item?.label || id}」的自动修复：${item?.fixHint || '（该项未提供修复说明）'}\n执行前自动备份，结果写入审计日志可回溯。`,
+    message: `将执行「${item?.label || id}」的自动修复：${item?.fixHint || '（该项未提供修复说明）'}\n执行前自动备份，结果写入审计日志可回溯。\n产物若是代码库跟踪文件：修复即刻在线上生效，把产物固化进代码库由工程同学提交完成（未提交前下次部署可能回退）。`,
     confirmText: '执行修复',
     danger: false,
   })

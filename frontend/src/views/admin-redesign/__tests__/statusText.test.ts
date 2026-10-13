@@ -15,6 +15,7 @@ import {
   stageProgress,
   stageTimeline,
   stageTimelineText,
+  monthDayText,
   sessionProgressPct,
   sessionProgressText,
   sessionProgressTone,
@@ -328,5 +329,19 @@ describe('结果态方言收敛（统一走字典单源）', () => {
     expect(statusText('interrupted')).toBe('已中断');
     expect(statusText('stopped')).toBe('已停止'); // 停止态枚举（会话/运维处置）
     expect(statusText('done')).toBe('已完成');
+  });
+});
+
+describe('monthDayText（阶段列副行日期写法）', () => {
+  it("'MM-DD' → 'M月D日'：裸日期不再读成数字区间（走查 F2）", () => {
+    expect(monthDayText('10-13')).toBe('10月13日');
+    expect(monthDayText('01-05')).toBe('1月5日');
+    expect(monthDayText('12-31')).toBe('12月31日');
+  });
+
+  it('空串 / 非该形状原样返回（不编造日期）', () => {
+    expect(monthDayText('')).toBe('');
+    expect(monthDayText('10/13')).toBe('10/13');
+    expect(monthDayText('已下线')).toBe('已下线');
   });
 });

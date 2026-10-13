@@ -1,7 +1,8 @@
 /**
  * GoalConversations 阶段时间线冒烟（遗留项「目标对话阶段时间线」）：
  * 1. 阶段徽章 + 四步过程点条（创建→澄清→方案→完成，statusText 单源）
- * 2. 轻量时间线文本「创建 08-12 → 澄清中 08-13」（goal_conversations 现表字段推导，无后端改动）
+ * 2. 轻量时间线文本「创建 08-12 → 澄清中 08-13」（goal_conversations 现表字段推导，无后端改动）；
+ *    单元格副行只留日期且写成「M月D日」（裸 'MM-DD' 单看像数字区间，2026-10-13 走查 F2）
  * 3. 已完成会话：创建 → 完成（completedAt）；取消：终态标签
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -79,7 +80,7 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     const cell = wrapper.find('.gc-stage-cell');
     expect(cell.text()).toContain('澄清中');
     // 2026-10-03 去重：副行只显日期（阶段词由徽章单源），完整时间线退 title
-    expect(cell.text()).toContain('08-13');
+    expect(cell.text()).toContain('8月13日');
     expect(cell.text()).not.toContain('澄清中 08-13');
     expect(cell.find('.mk-cell-sub').attributes('title')).toContain('创建 08-12 → 澄清中 08-13');
     const dots = cell.findAll('.gc-stage-cell__dot');
@@ -108,7 +109,7 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     const cell = wrapper.find('.gc-stage-cell');
     // P3（2026-10-04 全站评审）：完成态阶段词与状态列同词，徽章不再出词——点条 + 日期承载
     expect(cell.text()).not.toContain('已完成');
-    expect(cell.text()).toContain('08-14');
+    expect(cell.text()).toContain('8月14日');
     expect(cell.find('.mk-cell-sub').attributes('title')).toContain('创建 08-12 → 已完成 08-14');
     expect(cell.findAll('.gc-stage-cell__dot.is-on')).toHaveLength(4);
     wrapper.unmount();
@@ -135,7 +136,7 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     // 「已取消」语义由独立的「状态」列徽章承载（旧实现时间线复读，同词出现两遍）
     const row = wrapper.find('tbody tr');
     expect(row.find('td .mk-badge').text()).toBe('已取消');
-    expect(cell.text()).toContain('08-13');
+    expect(cell.text()).toContain('8月13日');
     expect(cell.find('.mk-cell-sub').attributes('title')).toContain('创建 08-12 → 已取消 08-13');
     wrapper.unmount();
   });

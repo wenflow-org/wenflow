@@ -129,7 +129,9 @@ export const intent = reactive<InvestigationIntent>({
   tab: ''
 })
 
-/** 总览事故卡 → 执行日志（已过滤该节点 + 失败） */
+/** 总览事故卡 → 执行日志（已过滤该节点 + 失败 + 近 7 天）。
+    时间窗必须显式给：执行日志默认窗是「今天」，而事故卡的口径是「近 7 天 · 200 条采样」，
+    只带 agent+status 落过去会得到一页空态（2026-10-13 走查 F4 实测）。 */
 export function investigateAgent(agentId: string) {
   intent.agentFilter = agentId
   intent.statusFilter = 'err'
@@ -137,8 +139,30 @@ export function investigateAgent(agentId: string) {
   intent.sessionId = ''
   intent.traceFocus = false
   intent.errorCategory = ''
-  intent.timeRange = ''
+  intent.timeRange = 'week'
+  intent.tab = ''
   intent.scene = 'execution-logs'
+}
+
+/** 总览状态条结论（今日失败 / 今日成功率）→ 执行日志（级别=失败 + 今天）。
+    结论讲的是「今日」，动作就按今日落；与 investigateAgent（近 7 天事故卡）各对齐自己的口径。 */
+export function investigateTodayFailures() {
+  intent.agentFilter = ''
+  intent.statusFilter = 'err'
+  intent.traceId = ''
+  intent.sessionId = ''
+  intent.traceFocus = false
+  intent.errorCategory = ''
+  intent.timeRange = 'today'
+  intent.tab = ''
+  intent.scene = 'execution-logs'
+}
+
+/** 总览状态条结论行的动作归属（纯函数，便于单测）：
+    结论讲调用（今日失败 / 今日成功率）→ 去执行日志排查；其余（运行平稳 / 空闲 / 未就绪）
+    → 健康中心入口。此前动作硬编码健康中心，与「今日失败 17 次」的结论不同源（走查 O3）。 */
+export function statusActionOf(headline: string): 'investigate-today' | 'health' {
+  return /今日失败|今日成功率/.test(headline || '') ? 'investigate-today' : 'health'
 }
 
 /** 任意位置点 Trace → 执行日志页的 Trace tab（预填该链路） */
