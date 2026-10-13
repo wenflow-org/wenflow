@@ -192,4 +192,21 @@ describe('字段旅程画布缩放接线（2026-10-13 用户：这里也要支�
     // 暗色档不得再用 border-color 盖掉对端色调（0,2,1 特异性，源序压不住）
     expect(DataFlowGraphSource).not.toContain('background: var(--mk-surface); border-color: var(--mk-line);')
   })
+
+  it('三段并列（上游 | 本阶段 | 下游）：列容器 + 连线按列自适配 + 容器查询折档', () => {
+    // 三列：上下游两列按内容定宽、本阶段列吃剩余；窄档折回单列栈（列容器 display: contents）
+    expect(DataFlowGraphSource).toContain('class="dfg-cols"')
+    expect(DataFlowGraphSource).toContain('class="dfg-col dfg-col--up"')
+    expect(DataFlowGraphSource).toContain('class="dfg-col dfg-col--main"')
+    expect(DataFlowGraphSource).toContain('class="dfg-col dfg-col--down"')
+    // 折档判据 = 容器宽度，不是视口宽度（面板宽随侧栏展开/折叠差 220px）
+    expect(DataFlowGraphSource).toContain('container-type: inline-size')
+    expect(DataFlowGraphSource).toContain('@container (max-width: 1100px)')
+    expect(DataFlowGraphSource).not.toContain('@media (max-width: 1180px)')
+    // 连线分派：同列 → 右走廊 Bus；跨列 → 源右缘到目标左缘的水平贝塞尔（箭头朝卡内）
+    expect(DataFlowGraphSource).toContain('const sameCol = Math.abs(srcCard.left - dstCard.left) < 2')
+    expect(DataFlowGraphSource).toContain('const dstAnchorLeft = !sameCol && dstIsRight')
+    // far 只对同列成立：跨列边线不该被「纵向跨度大」降级成端口徽标
+    expect(DataFlowGraphSource).toContain('const mode: EdgeMode = sameCol && spanY > FAR_SPAN ? \'far\' : \'near\'')
+  })
 })

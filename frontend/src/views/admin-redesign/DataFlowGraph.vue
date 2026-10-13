@@ -152,6 +152,12 @@
           </g>
         </svg>
 
+        <!-- 三段并列（2026-10-13 用户：核心是让运营可视化看到「本阶段和上下游的配合」）：
+             上游（入口交接）｜ 本阶段（闸口 + 步骤链）｜ 下游（出口移交）。
+             连线按「同列 → 右侧走廊 Bus、跨列 → 水平贝塞尔」自适配（见 renderEdges），
+             所以窄档折回单列栈时不用另写一套路由。 -->
+        <div class="dfg-cols">
+        <div v-if="entryVisible.length" class="dfg-col dfg-col--up">
         <!-- ===== ① 入口交接（跨阶段输入） ===== -->
         <section v-if="flow && entryVisible.length" data-card-key="__entry__" class="dfg-gate dfg-gate--entry" :class="{ 'is-flash': flashKey === '__entry__' }" :style="{ '--hz': toneOf(flow.entryFrom?.stageId || '').hue }">
           <header class="dfg-gate__head">
@@ -189,8 +195,10 @@
             </button>
           </div>
         </section>
+        </div><!-- /上游列 -->
 
         <!-- ===== 中间：Agent 内部步骤链 ===== -->
+        <div v-if="flowSteps.length" class="dfg-col dfg-col--main">
         <template v-for="step in flowSteps" :key="step.index">
           <!-- 桥接闸口（入口整装 / 分发） -->
           <section v-if="step.kind === 'bridge-entry' && step.outputChips.length" :data-card-key="step.agentId" class="dfg-step dfg-step--gate" :class="{ 'is-flash': flashKey === step.agentId }" :style="{ '--hz': toneOf(flow!.stageId).hue }">
@@ -343,8 +351,10 @@
             </div>
           </section>
         </template>
+        </div><!-- /本阶段列 -->
 
         <!-- ===== ② 出口移交（跨阶段输出） ===== -->
+        <div v-if="flow && flow.exit.length" class="dfg-col dfg-col--down">
         <section v-if="flow && flow.exit.length" data-card-key="__exit__" class="dfg-gate dfg-gate--exit" :class="{ 'is-flash': flashKey === '__exit__' }" :style="{ '--hz': toneOf(flow.exitTo?.stageId || '').hue }">
           <header class="dfg-gate__head">
             <span class="dfg-gate__icon">⇢</span>
@@ -382,6 +392,8 @@
             </button>
           </div>
         </section>
+        </div><!-- /下游列 -->
+        </div><!-- /三段并列 -->
 
         <!-- 空态：原型 .empty 词表（图标 + 结论 + 说明 + 行动入口），不再裸一句话 -->
         <MkEmptyState
@@ -1078,10 +1090,17 @@ function renderEdges() {
     const srcCard = srcCardKey ? cardRects.get(srcCardKey) : undefined
     const dstCard = dstCardKey ? cardRects.get(dstCardKey) : undefined
     if (!srcCard || !dstCard) continue
-    // 端口锚点：宿主卡「右缘」，y = 芯片中线（钳制在卡内）——线不进入卡片内部
+    /* 锚点与走线按「两卡是不是同一列」分派（2026-10-13 三段并列后新增）：
+       - 同列（本阶段列内部的步骤间/闸口→步骤）：源右缘 → 列右走廊竖走 → 目标右缘（原 Bus 折线）
+       - 跨列（上游→本阶段 / 本阶段→下游）：源右缘 → 目标左缘的水平三次贝塞尔（与总览画布同一语汇）。
+         目的卡锚点在左缘，箭头随之朝右（指向卡内）。
+       列归属直接从实测 rect 推：同列卡片 left 相同；无需新加 data 属性，窄档折回单列时自动全部走同列分支。 */
+    const sameCol = Math.abs(srcCard.left - dstCard.left) < 2
+    const dstIsRight = dstCard.left > srcCard.left + 2
+    const dstAnchorLeft = !sameCol && dstIsRight
     const x1 = srcCard.right
     const y1 = clamp(srcChip.top + srcChip.height / 2, srcCard.top + 4, srcCard.bottom - 4)
-    const x2 = dstCard.right
+    const x2 = dstAnchorLeft ? dstCard.left : dstCard.right
     const y2 = clamp(dstChip.top + dstChip.height / 2, dstCard.top + 4, dstCard.bottom - 4)
     const linked = relatedIds.value.has(e.from) && relatedIds.value.has(e.to)
     const highlight = linked
@@ -1089,7 +1108,9 @@ function renderEdges() {
       || (!!familyFocus.value && e.fieldId.startsWith(`${familyFocus.value}.`))
     const dimmed = (!!focusId.value || !!familyFocus.value || !!hoverChip.value) && !linked
     const spanY = Math.abs(y2 - y1)
-    const mode: EdgeMode = spanY > FAR_SPAN ? 'far' : 'near'
+    /* far 只对同列成立：跨列边线是横向贝塞尔（永远贴着走廊横向走，不沿卡片栈竖排），
+       不该被「纵向跨度大」降级成端口徽标——那是把「交给下游」这条主线藏起来。 */
+    const mode: EdgeMode = sameCol && spanY > FAR_SPAN ? 'far' : 'near'
     const baseOp = edgeFaded.value ? 0.22 : 0
     const op = highlight ? 0.95 : dimmed ? 0.05 : baseOp
     const dotOp = highlight ? 0.95 : dimmed ? 0.08 : edgeFaded.value ? 0.4 : 0.15
@@ -1101,27 +1122,37 @@ function renderEdges() {
       farAgg.get(dstCardKey!)!.set(srcCardKey!, 'in')
       continue
     }
-    // Bus 正交折线：卡右缘 → 走廊竖走 → 目标卡右缘，Q 圆角
-    const busX = x1 + 40 - laneOf(lane++) * 9
     let d: string
-    if (Math.abs(y2 - y1) < 1) {
-      d = `M ${x1} ${y1} L ${x2} ${y2}` // 同高兜底
+    if (!sameCol) {
+      // 跨列：水平贝塞尔（控制点落在两端中点 → 曲线整体只在中点带内起伏，不会插回卡片内容）
+      const dx = Math.max(24, Math.round(Math.abs(x2 - x1) / 2))
+      d = dstAnchorLeft
+        ? `M ${x1} ${y1} C ${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`
+        : `M ${x1} ${y1} C ${x1 - dx} ${y1} ${x2 + dx} ${y2} ${x2} ${y2}`
     } else {
-      const r = Math.min(6, Math.abs(y2 - y1) / 2)
-      const dir = y2 > y1 ? 1 : -1
-      d = [
-        `M ${x1} ${y1}`,
-        `L ${busX} ${y1}`,
-        `Q ${busX} ${y1} ${busX} ${y1 + dir * r}`,
-        `L ${busX} ${y2 - dir * r}`,
-        `Q ${busX} ${y2} ${x2} ${y2}`,
-      ].join(' ')
+      // Bus 正交折线：卡右缘 → 走廊竖走 → 目标卡右缘，Q 圆角
+      const busX = x1 + 40 - laneOf(lane++) * 9
+      if (Math.abs(y2 - y1) < 1) {
+        d = `M ${x1} ${y1} L ${x2} ${y2}` // 同高兜底
+      } else {
+        const r = Math.min(6, Math.abs(y2 - y1) / 2)
+        const dir = y2 > y1 ? 1 : -1
+        d = [
+          `M ${x1} ${y1}`,
+          `L ${busX} ${y1}`,
+          `Q ${busX} ${y1} ${busX} ${y1 + dir * r}`,
+          `L ${busX} ${y2 - dir * r}`,
+          `Q ${busX} ${y2} ${x2} ${y2}`,
+        ].join(' ')
+      }
     }
     outs.push({
       d,
       hue: e.hue,
       x1, y1, x2, y2,
-      arrow: `M ${x2 + 7} ${y2 - 4.2} L ${x2} ${y2} L ${x2 + 7} ${y2 + 4.2} Z`,
+      arrow: dstAnchorLeft
+        ? `M ${x2 - 7} ${y2 - 4.2} L ${x2} ${y2} L ${x2 - 7} ${y2 + 4.2} Z`
+        : `M ${x2 + 7} ${y2 - 4.2} L ${x2} ${y2} L ${x2 + 7} ${y2 + 4.2} Z`,
       op,
       dotOp,
       highlight,
@@ -1496,6 +1527,8 @@ function stepHue(step: FlowStep): string {
      画布独自内缩 262×2 反而与上下元素错位；字段芯片是流式网格，宽了就是每行多放几枚、
      少滚几屏。width: 100% 保留（margin:auto 会让交叉轴失去 stretch，宽度跟内容缩）。 */
   width: 100%;
+  /* 三段并列的折档判据挂在本层（容器查询，见 .dfg-cols 上方注释） */
+  container-type: inline-size;
   /* 画布底：亮色无底（none）、暗色纵向渐变；此前只有暗色档、亮色缺配对 */
   background: var(--mk-graph-pipe-bg);
   /* 滚动条槽位常驻：缩放让滚动条出现/消失，否则 clientWidth 会跳，基准宽（= clientWidth）
@@ -1508,15 +1541,26 @@ function stepHue(step: FlowStep): string {
 .dfg-pipe {
   position: relative;
   padding: 16px 20px 28px;
-  padding-right: 84px; /* 右侧走廊：Bus 连线在此垂直走线，不穿卡片 */
-  display: grid;
-  /* 行轨必须 max-content：auto 轨的基准尺寸取 item 的最小贡献，而步骤卡 overflow:hidden
-     使其最小贡献=0（仅剩边框 2px）——定高网格里 9 张步骤卡全部塌成细条，内容被裁剪，
-     页面看起来「只剩入口/出口两张卡 + 一堆细线」。max-content 让行轨按卡片内容取尺寸。 */
-  grid-auto-rows: max-content;
-  gap: 14px;
-  align-content: start;
+  /* 三段并列的排布在 .dfg-cols；本层只管内边距 + 定位（SVG/量测都以本层为基准） */
   transition: opacity 0.15s ease;
+}
+/* 三段并列：上游 | 本阶段 | 下游（2026-10-13 用户：核心是让运营可视化看到配合关系）。
+   列间距 96 = 连线走廊（同列 Bus 与跨列贝塞尔都走这里，busX 最远到卡右缘 +40）。 */
+.dfg-cols { display: flex; align-items: flex-start; gap: 96px; }
+.dfg-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+/* 上下游两列按字段名宽度给（芯片名 nowrap 省略号，列太窄会截断名字，运营要看到全名）；
+   本阶段列吃剩余宽度（步骤卡里的芯片最多）。都可压缩，窄了先压两侧。 */
+.dfg-col--up, .dfg-col--down { flex: 0 1 400px; }
+.dfg-col--main { flex: 1 1 520px; }
+/* 收窄档折回单列栈（= 改动前的形态）：列容器退场，卡片直接按 DOM 序排进单列，
+   走廊回到右侧内边距 84。连线无需分档——renderEdges 按「是不是同一列」自适配。
+   用**容器查询**而不是媒体查询：本布局的可用宽度取决于面板（侧栏展开/折叠差 220px），
+   视口断点会在 1280 视口下把三列压成 231px 宽还不折（实测）。容器 = .dfg-view，
+   容器尺寸取的是未缩放的视口宽，所以滚轮缩放不影响这条断点。 */
+@container (max-width: 1100px) {
+  .dfg-pipe { padding-right: 84px; }
+  .dfg-cols { flex-direction: column; gap: 14px; }
+  .dfg-col { display: contents; }
 }
 .dfg-pipe.is-dimmed { opacity: 1; }
 /* 缩放读数（工具栏右端）：定宽 + 等宽数字，比例变化时按钮与左邻元素不跳 */
