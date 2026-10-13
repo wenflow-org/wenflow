@@ -14,6 +14,7 @@
  * 用法：
  *   npx ts-node --transpile-only src/scripts/backfill-concept-graph.ts --dry-run
  *   npx ts-node --transpile-only src/scripts/backfill-concept-graph.ts --scope=virtual
+ *   npx ts-node --transpile-only src/scripts/backfill-concept-graph.ts --path-ids=lp_a,lp_b   # 定点物化（如克隆路径）
  */
 import 'dotenv/config';
 import prisma from '../config/database';
@@ -21,15 +22,16 @@ import { logger } from '../utils/logger';
 import { conceptGraphService } from '../services/learner/concept-graph.service';
 import { parsePathPromptTemplate } from '../services/learning/learning.helpers';
 
-interface Args { scope: 'virtual' | 'all'; dryRun: boolean; limit: number | null; }
+interface Args { scope: 'virtual' | 'all'; dryRun: boolean; limit: number | null; pathIds: string[]; }
 
 function parseArgs(): Args {
-  const out: Args = { scope: 'virtual', dryRun: false, limit: null };
+  const out: Args = { scope: 'virtual', dryRun: false, limit: null, pathIds: [] };
   for (const raw of process.argv.slice(2)) {
     const [k, v] = raw.replace(/^--/, '').split('=');
     if (k === 'scope' && (v === 'all' || v === 'virtual')) out.scope = v;
     if (k === 'dry-run') out.dryRun = true;
     if (k === 'limit' && v && Number.isFinite(Number(v))) out.limit = Number(v);
+    if (k === 'path-ids' && v) out.pathIds = v.split(',').map((s) => s.trim()).filter(Boolean);
   }
   return out;
 }
@@ -38,7 +40,9 @@ async function loadPaths(args: Args) {
   return prisma.learning_paths.findMany({
     where: {
       aiPromptTemplate: { contains: 'kcAnnotation' },
-      ...(args.scope === 'virtual' ? { users: { isVirtualLearner: true } } : {}),
+      // 定点物化优先：给定 path-ids 时按其取（不受 scope 限制，克隆路径也能定点补）
+      ...(args.pathIds.length ? { id: { in: args.pathIds } } : {}),
+      ...(!args.pathIds.length && args.scope === 'virtual' ? { users: { isVirtualLearner: true } } : {}),
     },
     select: { id: true, userId: true, aiPromptTemplate: true },
     ...(args.limit ? { take: args.limit } : {}),

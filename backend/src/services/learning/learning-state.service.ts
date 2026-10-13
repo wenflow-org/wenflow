@@ -1666,8 +1666,17 @@ export class LearningStateService {
         ? new Date(registeredAt)
         : new Date(Math.max(requestedStartDate.getTime(), registeredAt.getTime()));
 
-      const actualDays = Math.max(1, Math.floor((today.getTime() - startDate.getTime()) / DAY_BOUNDARY_DAY_MS) + 1);
       const metrics = await this.getTrendsSince(userId, startDate);
+      // 跨日模拟（虚拟学习者）：课的业务时间（calculatedAt → metric.timestamp）可能落在「真实今天」之后
+      // ——模拟时间线独立于物理世界。窗口上界不能只看 today，否则这些**已记录**的模拟日会被循环裁掉
+      // （admin 证据接口无模拟钟上下文、today=真实今天 时尤其明显：整条压力曲线消失，只剩真实日的点）。
+      // 上界取 max(真实今天, 最新指标日)：真实用户不受影响（其指标不会晚于今天）。
+      const latestMetricMs = metrics.reduce((mx, m) => {
+        const t = m.timestamp instanceof Date ? m.timestamp.getTime() : new Date(m.timestamp as unknown as string).getTime();
+        return Number.isFinite(t) && t > mx ? t : mx;
+      }, today.getTime());
+      const windowEnd = latestMetricMs > today.getTime() ? startOfDay(new Date(latestMetricMs)) : today;
+      const actualDays = Math.max(1, Math.floor((windowEnd.getTime() - startDate.getTime()) / DAY_BOUNDARY_DAY_MS) + 1);
       const currentState = await this.getCurrentState(userId);
       const latestMetricBeforeWindow = await this.getLatestCommittedMetricBefore(userId, startDate);
 
@@ -1738,7 +1747,7 @@ export class LearningStateService {
           actualDays,
           registeredAt: registeredAt.toISOString(),
           startDate: new Date(startDate).toISOString(),
-          endDate: new Date(today).toISOString(),
+          endDate: new Date(windowEnd).toISOString(),
         },
       };
     } catch (error) {

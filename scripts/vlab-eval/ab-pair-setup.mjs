@@ -23,6 +23,7 @@ import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { spawnSync } from 'node:child_process';
 import { adminLoginOnce, getAdminCookie } from './admin-session.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -260,6 +261,18 @@ function clonePath(db, sourceId, targetUserId, targetName) {
   return newPathId;
 }
 
+/** 克隆后补跑概念图物化（走平台服务 backfill→materializePathGraph）。克隆直写 DB 会漏掉这一步，
+ *  copy 了 aiPromptTemplate.kcGraph 却没写 concept_edges → 学习者图谱 0 关系、全是散点（2026-10-13 复现）。 */
+function materializeClonedPaths(pathIds) {
+  const ids = pathIds.filter(Boolean);
+  if (!ids.length) return;
+  const r = spawnSync(process.execPath, [
+    'node_modules/ts-node/dist/bin.js', '--transpile-only',
+    'src/scripts/backfill-concept-graph.ts', `--path-ids=${ids.join(',')}`,
+  ], { cwd: path.join(ROOT, 'backend'), stdio: 'inherit' });
+  if (r.status !== 0) log(`[warn] 概念图物化失败（exit ${r.status}）：克隆路径无关系边，图谱显示为散点`);
+}
+
 /* ---------------- 主流程 ---------------- */
 
 async function main() {
@@ -277,6 +290,7 @@ async function main() {
   const list = await api('GET', '/api/admin/virtual-learners?page=1&pageSize=200');
   const existing = (list?.data?.profiles || []);
   const manifest = { source: SOURCE, sourceTitle: source.title, base: BASE, createdAt: new Date().toISOString(), pair: [] };
+  const clonedPathIds = [];
 
   for (const ident of IDENTITIES) {
     let vl = existing.find((p) => p.name === ident.name || p.profile?.nameHint === ident.name);
@@ -305,6 +319,7 @@ async function main() {
       log(`复用已复刻路径 ${pathId}（${ident.name}）`);
     } else if (APPLY) {
       pathId = clonePath(db, SOURCE, vl.userId, ident.name);
+      clonedPathIds.push(pathId);
     } else {
       log(`[dry-run] 将为「${ident.name}」复刻路径 ${SOURCE}`);
       continue;
@@ -329,6 +344,7 @@ async function main() {
     });
   }
 
+  materializeClonedPaths(clonedPathIds);
   fs.writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2), 'utf8');
   console.log(JSON.stringify(manifest, null, 2));
   db.close();
@@ -429,7 +445,25 @@ async function runGrind(db) {
         // 本课循环：逐步 teaching-step（每课 75 分钟上限）
         const lessonDeadline = Date.now() + 75 * 60 * 1000;
         let turns = 0, restarts = 0, stepRetries = 0, completed = false;
+        let upstreamPauses = 0;
+        let lastProbeAt = Date.now();
         while (Date.now() < lessonDeadline) {
+          // 每 90s 探一次会话本体：会话被池抖动打成 failed 后 teaching-step 会**快速空转**
+          // （2026-10-13 夜跑实锤：一晚 4 个窗口各 1700-2200「轮」，多数是死会话空耗 75 分钟）。
+          // 死会话必须立刻退出换轮复活，而不是把窗口烧完。
+          if (Date.now() - lastProbeAt > 90000) {
+            lastProbeAt = Date.now();
+            const probe = await sessionInfo(p.sessionId);
+            if (['failed', 'abandoned'].includes(String(probe.status || ''))) {
+              write(`课中探测到会话 ${probe.status}（第 ${turns} 步）→ 提前退出，复活后换轮`);
+              break;
+            }
+            // 健康课 20-60 步内完课；步数高且无完课信号 = 停滞空转（消息不涨），提前换轮
+            if (turns >= 200) {
+              write(`本课 ${turns} 步无完课信号（判定停滞）→ 提前换轮`);
+              break;
+            }
+          }
           let r;
           try {
             r = await api('POST', `/api/admin/virtual-learners/sessions/${p.sessionId}/teaching-step`, {}, 300000);
@@ -453,6 +487,15 @@ async function runGrind(db) {
           stepRetries = 0;
           const d = r?.data || {};
           turns += 1;
+          // 上游暂停（池轮换/禁用窗口；后端已改为非终局暂停）：不再 2 秒一锤——30s 退避重推同一回合；
+          // 连续 10 次判窗口未恢复，提前换轮（由外层 revive 循环接管）
+          if (d.success === false && /已暂停本回合|教学回合暂时未能生成/.test(String(d.aiResponse || ''))) {
+            upstreamPauses += 1;
+            if (upstreamPauses >= 10) { write(`上游连续 ${upstreamPauses} 次暂停 → 判定窗口未恢复，提前换轮`); break; }
+            if (upstreamPauses === 1) write(`上游暂停本回合（${String(d.error || '').slice(0, 60)}）→ 30s 退避重推`);
+            await sleep(30000);
+            continue;
+          }
           const s = d.status || d.sessionStatus || d.phase || '';
           if (
             d.taskCompleted === true || d.isPathCompleted === true || d.firstTaskCompleted === true
