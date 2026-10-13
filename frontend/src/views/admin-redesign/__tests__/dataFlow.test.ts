@@ -180,17 +180,20 @@ describe('字段旅程画布缩放接线（2026-10-13 用户：这里也要支�
     expect(DataFlowGraphSource).toContain('Math.abs(rr.width / z - dfgBaseW.value) > 1')
   })
 
-  it('配合头（本阶段 ↔ 上下游）：对端带 agent + 字段数 + 可点跳转，并与入口/出口卡同色调', () => {
-    // 三件事齐全：对端是谁（stage + agent）、交接多少字段、点了能过去看
-    expect(DataFlowGraphSource).toContain('{{ flow.entryFrom.stageId }}-agent')
-    expect(DataFlowGraphSource).toContain('{{ flow.exitTo.stageId }}-agent')
+  it('对端跳转收在入口/出口卡题上：卡题即「切到对端阶段」，与卡本身同色调', () => {
+    // 2026-10-13 删掉顶部「配合头」概览条——它与这两张卡是同一条事实的复读；
+    // 唯一不能丢的能力=切到对端，收进卡题（.dfg-gate__src 按钮）。
+    expect(DataFlowGraphSource).toContain('class="dfg-gate__src"')
     expect(DataFlowGraphSource).toContain('@click="switchStage(flow.entryFrom!.stageId)"')
     expect(DataFlowGraphSource).toContain('@click="switchStage(flow.exitTo!.stageId)"')
-    // 同色调配对：--hz = 对端阶段色，与画布入口/出口卡的 --hz 同源
-    expect(DataFlowGraphSource).toContain("'--hz': toneOf(flow.entryFrom.stageId).hue")
-    expect(DataFlowGraphSource).toContain("'--hz': toneOf(flow.exitTo.stageId).hue")
-    // 暗色档不得再用 border-color 盖掉对端色调（0,2,1 特异性，源序压不住）
-    expect(DataFlowGraphSource).not.toContain('background: var(--mk-surface); border-color: var(--mk-line);')
+    // 对端是谁：title 里带 stageName + `<stageId>-agent`
+    expect(DataFlowGraphSource).toContain('${flow.entryFrom?.stageId}-agent')
+    expect(DataFlowGraphSource).toContain('${flow.exitTo?.stageId}-agent')
+    // 同色调配对：卡身 --hz = 对端阶段色（与对面那张卡同源）
+    expect(DataFlowGraphSource).toContain("'--hz': toneOf(flow.entryFrom?.stageId || '').hue")
+    expect(DataFlowGraphSource).toContain("'--hz': toneOf(flow.exitTo?.stageId || '').hue")
+    // 顶部概览条整套（模板 + 样式 + 暗色档 border 覆盖）彻底退役
+    expect(DataFlowGraphSource).not.toContain('dfg-journey')
   })
 
   it('三段并列（上游 | 本阶段 | 下游）：列容器 + 连线按列自适配 + 容器查询折档', () => {
