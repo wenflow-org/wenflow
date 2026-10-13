@@ -1465,20 +1465,20 @@ function stepHue(step: FlowStep): string {
 }
 
 /* 流水线画布（2026-10-13 拆成两层：视口 + 内容层，见模板注释）：
-   视口 = 滚动 + 阅读栏宽（1060 居中）+ 画布底；内容层 = 网格排版 + zoom（缩放）。 */
+   视口 = 滚动 + 满宽 + 画布底；内容层 = 网格排版 + zoom（缩放）。 */
 .dfg-view {
   flex: 1 1 auto;
   min-height: 0;
-  /* width: 100% 必须显式给：margin:0 auto 会让本元素在交叉轴**失去 stretch**，
-     于是宽度跟着内容走——缩小时（内容变窄）视口跟着缩，缩放基准也跟着缩（实测 86% 时
-     视口只有 779px，且基准宽被改写成 905）。给满 + max-width 收成阅读栏才是稳定视口。 */
+  /* 满宽（2026-10-13 用户问「为什么没做全窗口，左右还有空白」）：
+     原 `max-width: 1060px + margin: 0 auto` 是 2026-09-03 重构时手挑的「阅读栏」宽
+     （无注释、无别处依赖），但同一张卡里的工具条 / 图性质说明 / 底部图例都是满宽，
+     画布独自内缩 262×2 反而与上下元素错位；字段芯片是流式网格，宽了就是每行多放几枚、
+     少滚几屏。width: 100% 保留（margin:auto 会让交叉轴失去 stretch，宽度跟内容缩）。 */
   width: 100%;
-  max-width: 1060px;
-  margin: 0 auto;
   /* 画布底：亮色无底（none）、暗色纵向渐变；此前只有暗色档、亮色缺配对 */
   background: var(--mk-graph-pipe-bg);
-  /* 滚动条槽位常驻：缩放让滚动条出现/消失，否则 clientWidth 会在 1052/1060 之间跳，
-     基准宽（= clientWidth）跟着抖，画布宽度与量测基准都要重算一遍 */
+  /* 滚动条槽位常驻：缩放让滚动条出现/消失，否则 clientWidth 会跳，基准宽（= clientWidth）
+     跟着抖，画布宽度与量测基准都要重算一遍 */
   scrollbar-gutter: stable;
   overflow: auto; /* 放大后两轴都要能滚（原先 overflow-x: hidden，因为 100% 时内容不超栏宽） */
   cursor: grab;
