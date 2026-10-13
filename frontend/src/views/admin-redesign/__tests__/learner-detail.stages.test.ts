@@ -382,7 +382,7 @@ describe('LearnerDetail FSRS 到期三态（timeAgo 未来时间失真修复）'
   });
 });
 
-describe('LearnerDetail 压力曲线 x 轴贴合数据（2026-10-12 走查「尺度42天那么大，放得下吗」）', () => {
+describe('LearnerDetail 压力曲线 x 轴（B 案固定跨度：42/90 档真正控制轴宽，2026-10-13 用户拍板）', () => {
   const dayKey = (offset: number) => {
     const d = new Date();
     d.setDate(d.getDate() - offset);
@@ -401,12 +401,11 @@ describe('LearnerDetail 压力曲线 x 轴贴合数据（2026-10-12 走查「尺
     getLearnerEvidence.mockReset();
   });
 
-  it('起点取最早「有值」日并留约 1/4 引入空档：28 天前的空值行不再把轴拉满', async () => {
+  it('B 案固定跨度：轴宽恒等于所选档位（42 天），右端锚到今天、左侧留空', async () => {
     getLearnerEvidence.mockResolvedValue({
       items: [],
       domain: [],
       loadCurve: [
-        // 旧行整行空值：旧判据 map.has 命中它，轴从 28 天前起、曲线挤成最右一条缝
         { date: dayKey(28), lss: null, lf: null, lsb: null },
         ...[4, 3, 2, 1, 0].map((o) => ({ date: dayKey(o), lss: 40 + o, lf: 41 + o, lsb: 20 + o })),
       ],
@@ -415,22 +414,21 @@ describe('LearnerDetail 压力曲线 x 轴贴合数据（2026-10-12 走查「尺
     const chart = w.findComponent({ name: 'MkChart' });
     expect(chart.exists(), 'evidence 页签应渲染压力曲线').toBe(true);
     const labels = (chart.props('option') as { xAxis: { data: string[] } }).xAxis.data;
-    // 6 档：1 天引入空档 + 5 个有值日；曲线起点落在 ~1/6（中间偏左），不再贴右缘
-    expect(labels).toHaveLength(6);
-    expect(labels[0]).toBe(labelOf(dayKey(5)));
-    expect(labels[1]).toBe(labelOf(dayKey(4)));
-    expect(labels).not.toContain(labelOf(dayKey(28)));
+    // 轴宽=42（默认档），右端=today；数据落在右侧 5 天，左侧按档位留空
+    expect(labels).toHaveLength(42);
+    expect(labels[labels.length - 1]).toBe(labelOf(dayKey(0)));
+    expect(labels[0]).toBe(labelOf(dayKey(41)));
   });
 
-  it('整窗都有值时不引入空档（起点贴窗口起点）；全空值回落空态', async () => {
+  it('有值时轴宽=档位；全空值回落空态', async () => {
     getLearnerEvidence.mockResolvedValue({
       items: [],
       domain: [],
       loadCurve: [41, 40, 39].map((o) => ({ date: dayKey(o), lss: 30 + (41 - o), lf: 30, lsb: 20 })),
     });
     let w = await mountLd([]);
-    let labels = (w.findComponent({ name: 'MkChart' }).props('option') as { xAxis: { data: string[] } }).xAxis.data;
-    // 最早有值日=41（贴 42 天窗起点），无余量给空档 → 轴=窗口本身
+    const labels = (w.findComponent({ name: 'MkChart' }).props('option') as { xAxis: { data: string[] } }).xAxis.data;
+    // B 案：轴宽=42（默认档），起点恒为窗口起点
     expect(labels[0]).toBe(labelOf(dayKey(41)));
     expect(labels).toHaveLength(42);
 
@@ -453,7 +451,8 @@ describe('LearnerDetail 压力曲线 x 轴贴合数据（2026-10-12 走查「尺
     });
     const w = await mountLd([]);
     const labels = (w.findComponent({ name: 'MkChart' }).props('option') as { xAxis: { data: string[] } }).xAxis.data;
-    // 轴末 = 最新模拟日（今天 +7）；未来点不被丢弃
+    // 轴宽=42（默认档），轴末 = 最新模拟日（今天 +7）；未来点不被丢弃
+    expect(labels).toHaveLength(42);
     expect(labels[labels.length - 1]).toBe(labelOf(dayKey(-7)));
     expect(labels).toContain(labelOf(dayKey(-3)));
     expect(labels).toContain(labelOf(dayKey(0)));

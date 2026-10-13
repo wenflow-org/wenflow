@@ -1984,37 +1984,23 @@ const loadSeries = computed<LoadPoint[]>(() => {
   const map = new Map(loadCurveRaw.value.map((p) => [p.date, p]))
   const hasVal = (p?: { lss: number | null; lf: number | null; lsb: number | null }) =>
     !!p && (p.lss != null || p.lf != null || p.lsb != null)
-  /* 轴末锚点 = max(真实今天, 曲线里最新有值日)（2026-10-13 走查「还是空」）：
-     跨日模拟下 learning_metrics 的业务日期（calculatedAt）可落在真实今天之后——若轴固定收在
-     真实今天，这些**已记录**的模拟日会被下面的 keyOf 区间整条丢弃，曲线只剩真实日两个点。
-     真实用户不受影响（其指标不会晚于今天）。 */
+  if (!loadCurveRaw.value.some(hasVal)) return []
+  /* B 案固定跨度（2026-10-13 用户拍板「42/90 切了没作用」）：x 轴宽度**恒等于所选档位**，
+     开关真正控制跨度、永远可见地变宽变窄（不再自动贴合数据——那会让两档在数据不足 42 天时一模一样）。
+     代价：学习史不足档位时，左侧留空（原 10-12「别拉满」的观感取舍，用户已知并选择）。
+     右端锚点 = max(真实今天, 曲线里最新有值日)：跨日模拟下 learning_metrics 的业务日期
+     （calculatedAt）可落在真实今天之后，锚在真实今天会把模拟日整条丢出窗口；真实用户不受影响。 */
   let endKey = fmtKey(new Date())
   for (const p of loadCurveRaw.value) {
     if (hasVal(p) && p.date > endKey) endKey = p.date
   }
   const end = new Date(endKey + 'T00:00:00')
-  const keyOf = (offset: number) => {
-    const d = new Date(end)
-    d.setDate(d.getDate() - offset)
-    return fmtKey(d)
-  }
-  /* 起点三修（2026-10-12 走查「数据能靠近中间一点…尺度42天那么大放得下吗」）：
-     ① 判据从「有行」改「有值」——空值行（map.has 命中）会把轴拉满 42/90 天，左边全空、
-        曲线挤成最右一条缝；
-     ② 最早有值日之前留约 1/4 跨度作引入空档，曲线从中间偏左起步，不贴左缘也不贴右缘；
-     ③ 引入空档受窗口起点约束，不越出所选范围。 */
-  let firstValued = -1
-  for (let i = days - 1; i >= 0; i--) {
-    if (hasVal(map.get(keyOf(i)))) { firstValued = i; break }
-  }
-  if (firstValued < 0) return []
-  const lead = Math.min(days - 1 - firstValued, Math.max(1, Math.round((firstValued + 1) * 0.25)))
-  const start = firstValued + lead
   const out: Omit<LoadPoint, 'x' | 'ylss' | 'ylf' | 'ylsb'>[] = []
-  for (let i = start; i >= 0; i--) {
-    const key = keyOf(i)
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(end)
+    d.setDate(d.getDate() - i)
+    const key = fmtKey(d)
     const p = map.get(key)
-    const d = new Date(key + 'T00:00:00')
     out.push({
       date: key,
       label: `${d.getMonth() + 1}月${d.getDate()}日`,
