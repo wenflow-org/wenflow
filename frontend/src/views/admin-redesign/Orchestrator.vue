@@ -95,7 +95,7 @@
                 :key="sk.id"
                 type="button"
                 class="orch-odg-node"
-                :title="`查看「${sk.name}」（${s.agentId}）详情`"
+                :title="skillNodeTitle(sk, s)"
                 @click="openSkillFromOverview(sk.id)"
               >
                 <span class="orch-odg-idx mono">{{ i + 1 }}.{{ j + 1 }}</span>
@@ -108,8 +108,8 @@
             <footer class="orch-odg-foot">
               <!-- 字段契约三态：未加载显「…」（不按 0 渲染——加载完成前「入 0」与「真无必填」不可分辨；
                    部分阶段确无必填入参，加载后「入 0」属实） -->
-              <span class="orch-odg-chip orch-odg-chip--in" :title="contractOf(s.id).loaded ? `必填入参 ${contractOf(s.id).ins.length} 个` : '字段契约加载中…'">入 {{ contractOf(s.id).loaded ? contractOf(s.id).ins.length : '…' }}</span>
-              <span class="orch-odg-chip orch-odg-chip--out" :title="contractOf(s.id).loaded ? `产出字段 ${contractOf(s.id).outs.length} 个` : '字段契约加载中…'">出 {{ contractOf(s.id).loaded ? contractOf(s.id).outs.length : '…' }}</span>
+              <span class="orch-odg-chip orch-odg-chip--in" :title="contractOf(s.id).loaded ? contractTitle('in', contractOf(s.id).ins.length) : '字段契约加载中…'">入 {{ contractOf(s.id).loaded ? contractOf(s.id).ins.length : '…' }}</span>
+              <span class="orch-odg-chip orch-odg-chip--out" :title="contractOf(s.id).loaded ? contractTitle('out', contractOf(s.id).outs.length) : '字段契约加载中…'">出 {{ contractOf(s.id).loaded ? contractOf(s.id).outs.length : '…' }}</span>
               <span class="orch-odg-fields" :title="contractOf(s.id).outs.join(' · ')">{{ contractOf(s.id).outs.slice(0, 4).join(' · ') }}<template v-if="contractOf(s.id).outs.length > 4">…</template></span>
             </footer>
           </div>
@@ -522,14 +522,32 @@ interface StageFieldContract {
 }
 const OUT_ROLES = ['proposal-output', 'public-reply', 'derived-presentation']
 const stageFieldContract = ref<Record<string, StageFieldContract>>({})
+/** promptRole 人话（后端 yaml-vocabulary 单源下发；前端不写第二份）——悬停时把「入/出」的
+    口径连同「缺了会怎样 / 由谁派生」一起摆出来，让数字自带解释（2026-10-14 用户：悬停信息兼顾业务与技术查验） */
+const roleMetaById = ref<Record<string, { label: string; hint: string }>>({})
+/** hard-required 的判定口径 = 阶段自身字段定义里 promptRole 为 hard-required 的条数；
+    教学/画像/仿真三阶段入参被归为隐式推断，故「入 0」属实而非未加载（详见卡头注释） */
+function contractTitle(kind: 'in' | 'out', n: number): string {
+  if (kind === 'in') {
+    const m = roleMetaById.value['hard-required']
+    return `必填入参 ${n} 个 · hard-required${m ? `：${m.hint}` : ''}`
+  }
+  const roles = OUT_ROLES.map((r) => roleMetaById.value[r]?.label || r).join(' / ')
+  return `产出字段 ${n} 个 · 口径：${roles}`
+}
 async function loadStageFieldContracts(ids: string[]) {
   const results = await Promise.allSettled(
     ids.map((id) => adminFieldRoutingsApi.getStageDetail(id)),
   )
   const map: Record<string, StageFieldContract> = {}
+  let meta: Array<{ id: string; label: string; hint: string }> = []
   results.forEach((r, i) => {
     if (r.status !== 'fulfilled') return
-    const fields = (r.value.data?.data?.fields ?? []) as Array<{ promptRole?: string; camelName?: string | null; fieldId: string }>
+    const data = r.value.data?.data
+    const fields = (data?.fields ?? []) as Array<{ promptRole?: string; camelName?: string | null; fieldId: string }>
+    if (!meta.length && Array.isArray(data?.promptRoleMeta) && data.promptRoleMeta.length) {
+      meta = data.promptRoleMeta
+    }
     map[ids[i]] = {
       ins: fields.filter((f) => f.promptRole === 'hard-required').map((f) => f.camelName || f.fieldId),
       outs: fields.filter((f) => OUT_ROLES.includes(f.promptRole || '')).map((f) => f.camelName || f.fieldId),
@@ -537,6 +555,9 @@ async function loadStageFieldContracts(ids: string[]) {
     }
   })
   stageFieldContract.value = map
+  if (meta.length) {
+    roleMetaById.value = Object.fromEntries(meta.map((m) => [m.id, { label: m.label, hint: m.hint }]))
+  }
 }
 watch(
   stages,
@@ -812,11 +833,23 @@ async function retryStages() {
 
 /** 阶段页签 tooltip：skills=0 时说明去向（计数只显「0」，无从判断是真空还是没拉到）；
     末尾缀上回程提示——字段旅程不再有自己的页签，「点当前阶段」是唯一回程入口 */
+/** 阶段页签的悬停信息：双层结构（首行中文阶段名，其后 Agent / Skill 数 / 操作提示）。
+    末尾缀上回程提示——字段旅程不再有自己的页签，「点当前阶段」是唯一回程入口 */
 function stageTabTitle(s: Stage): string {
-  const base = !s.skills.length
-    ? '该阶段下辖 0 个 Skill：可能调度树未登记，或拓扑 / 目录尚未拉取成功'
-    : `${s.name}：${s.skills.length} 个 Skill`
-  return `${base} · 点开即该阶段的字段旅程；已在子视图时再点一次回到字段旅程`
+  const lines = [s.name, `Agent: ${s.agentId}`]
+  lines.push(s.skills.length
+    ? `Skill: ${s.skills.length} 个`
+    : '该阶段下辖 0 个 Skill：可能调度树未登记，或拓扑 / 目录尚未拉取成功')
+  lines.push('点开即该阶段的字段旅程；已在子视图时再点一次回到字段旅程')
+  return lines.join('\n')
+}
+
+/** 总览 Skill 节点的悬停信息：同样双层（中文名 / Skill id / Agent / 产出数 / 点击提示） */
+function skillNodeTitle(sk: Stage['skills'][number], s: Stage): string {
+  const lines = [sk.name, `Skill: ${sk.id}`, `Agent: ${s.agentId}`]
+  if (sk.produces.length) lines.push(`产出字段: ${sk.produces.length} 个`)
+  lines.push('点击查看该 Skill 详情')
+  return lines.join('\n')
 }
 
 /** 字段路由卡头 tooltip：与画布 chips 同一份字段契约（同页同数纪律） */

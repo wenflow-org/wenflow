@@ -225,4 +225,16 @@ describe('字段旅程画布缩放接线（2026-10-13 用户：这里也要支�
     expect(DataFlowGraphSource).toContain('.dfg-col--main { flex: 1 1 520px; max-width: 720px; }')
     expect(DataFlowGraphSource).toContain('justify-content: center;')
   })
+
+  it('字段芯片 tooltip 双层结构（2026-10-14 用户：业务名 + 技术查验）', () => {
+    // 第一层：中文业务名（与 fieldId 相同时不重复占行）
+    expect(DataFlowGraphSource).toContain('if (c.description && c.description !== c.fieldId) lines.push(c.description)')
+    // 第二层：字段 / 类型 · 角色（角色人话走后端词表 roleLabel，前端不写第二份）
+    expect(DataFlowGraphSource).toContain('字段: ${c.fieldId}')
+    expect(DataFlowGraphSource).toContain('类型: ${typeBits.join')
+    expect(DataFlowGraphSource).toContain('roleLabel(c.role)')
+    // 拿不到的项整行不出，不写假占位（此前会留下「未标注类型 · 」这种残行）
+    expect(DataFlowGraphSource).not.toContain('未标注类型')
+    expect(DataFlowGraphSource).toContain('if (typeBits.length)')
+  })
 })

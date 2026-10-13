@@ -1207,12 +1207,25 @@ watch(familyFocus, () => { if (nodeRects.value.size) renderEdges() })
 watch(edgeFaded, () => { if (nodeRects.value.size) renderEdges() })
 
 /* ================= 抽屉 ================= */
+/** 字段芯片的悬停信息：**双层结构**（2026-10-14 用户：兼顾业务与技术查验）——
+    第一行中文业务名（运营一眼知道这是什么），其后逐行键值（工程照着它核对 schema）：
+    字段 / 类型 · 角色 / 说明 / 移交 / 抽取路径 / 落库键。
+    没拿到的项整行不出现（比如该字段不在本阶段字段定义里时 description/valueType 为空，
+    就只剩「字段:」一行），不写「未标注」这类假占位、也不留孤零零的分隔符。
+    角色人话来自后端词表（roleLabel），本处不写第二份。 */
 function chipTitle(c: FlowChip) {
-  const parts = [c.description || c.fieldId]
-  if (c.handoffTargets.length) parts.push(`移交 → ${c.handoffTargets.join(', ')}`)
-  if (c.pathInRawOutput) parts.push(`抽取路径：${c.pathInRawOutput}`)
-  if (c.persistKey && c.persistKey !== c.fieldId) parts.push(`落库键：${c.persistKey}`)
-  return parts.join('\n')
+  const lines: string[] = []
+  if (c.description && c.description !== c.fieldId) lines.push(c.description)
+  lines.push(`字段: ${c.fieldId}`)
+  const typeBits = [c.valueType, roleLabel(c.role)].filter(Boolean)
+  if (c.internal) typeBits.push('内部信令')
+  if (c.accumulate) typeBits.push('累积')
+  if (typeBits.length) lines.push(`类型: ${typeBits.join(' · ')}`)
+  if (c.notes) lines.push(`说明: ${c.notes}`)
+  if (c.handoffTargets.length) lines.push(`移交: ${c.handoffTargets.join(', ')}`)
+  if (c.pathInRawOutput) lines.push(`抽取路径: ${c.pathInRawOutput}`)
+  if (c.persistKey && c.persistKey !== c.fieldId) lines.push(`落库键: ${c.persistKey}`)
+  return lines.join('\n')
 }
 
 function openField(c: FlowChip) {

@@ -286,6 +286,21 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).toContain("pane.value = 'journey'")
     expect(OrchestratorSource).toContain('function selectStageTab(id: string)')
   })
+
+  it('编排图悬停信息双层结构（2026-10-14 用户：业务名 + 技术查验）', () => {
+    // 阶段页签：首行阶段名，其后 Agent / Skill 数 / 操作提示
+    expect(OrchestratorSource).toContain('function stageTabTitle(s: Stage): string')
+    expect(OrchestratorSource).toContain('Agent: ${s.agentId}')
+    expect(OrchestratorSource).toContain('Skill: ${s.skills.length} 个')
+    // 总览 Skill 节点：中文名 / Skill id / Agent / 产出数 / 点击提示
+    expect(OrchestratorSource).toContain(':title="skillNodeTitle(sk, s)"')
+    expect(OrchestratorSource).toContain('Skill: ${sk.id}')
+    expect(OrchestratorSource).toContain('产出字段: ${sk.produces.length} 个')
+    // 入/出口径自带解释（promptRole 人话仍取后端单源，不写第二份）
+    expect(OrchestratorSource).toContain('function contractTitle(kind: \'in\' | \'out\', n: number): string')
+    expect(OrchestratorSource).toContain("roleMetaById.value['hard-required']")
+    expect(OrchestratorSource).toContain('口径：${roles}')
+  })
 })
 
 describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
