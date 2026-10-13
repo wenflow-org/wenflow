@@ -240,6 +240,25 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).toContain('个 Skill（拓扑内挂载）')
     expect(OrchestratorSource).toContain(':title="skillKpiTitle"')
   })
+
+  it('总览画布：居中 + 可拖动 + 可放大（2026-10-13 用户）', () => {
+    // 居中：滚动区做单 flex 项容器 + 画布 margin:auto（溢出时 auto 边距归 0，
+    // 不会像 justify-content:center 那样把起始边裁到滚动区外够不着）
+    expect(OrchestratorSource).toContain('display: flex; align-items: flex-start;')
+    expect(OrchestratorSource).toContain('flex: none; margin: auto;')
+    // 缩放：zoom 参与布局（放大后出真实滚动范围），宽度由 JS 给 px——
+    // zoom 的百分比语义会把 width:100% 钉死在容器宽，缩小时看不出变化
+    expect(OrchestratorSource).toContain('zoom: String(odgZoom.value)')
+    expect(OrchestratorSource).toContain('width: odgBaseW.value ?')
+    expect(OrchestratorSource).toContain('ODG_ZOOM_MIN = 0.5')
+    expect(OrchestratorSource).toContain('ODG_ZOOM_MAX = 2')
+    // 控件：− / 百分比（一键回 100%）/ ＋，Ctrl+滚轮以指针为锚点
+    expect(OrchestratorSource).toContain('class="orch-odg-zoom"')
+    expect(OrchestratorSource).toContain('@click="stepOdgZoom(')
+    expect(OrchestratorSource).toContain('@wheel.ctrl.prevent="onOdgWheelZoom"')
+    // 拖动平移仍是原实现（缩放后才有可平移的滚动范围）
+    expect(OrchestratorSource).toContain('@pointerdown="onOdgPointerDown"')
+  })
 })
 
 describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
