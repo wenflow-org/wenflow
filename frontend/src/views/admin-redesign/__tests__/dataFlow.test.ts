@@ -179,4 +179,17 @@ describe('字段旅程画布缩放接线（2026-10-13 用户：这里也要支�
     // 布局未落地前量到的是中间态：等到层自有宽 === 基准宽再画
     expect(DataFlowGraphSource).toContain('Math.abs(rr.width / z - dfgBaseW.value) > 1')
   })
+
+  it('配合头（本阶段 ↔ 上下游）：对端带 agent + 字段数 + 可点跳转，并与入口/出口卡同色调', () => {
+    // 三件事齐全：对端是谁（stage + agent）、交接多少字段、点了能过去看
+    expect(DataFlowGraphSource).toContain('{{ flow.entryFrom.stageId }}-agent')
+    expect(DataFlowGraphSource).toContain('{{ flow.exitTo.stageId }}-agent')
+    expect(DataFlowGraphSource).toContain('@click="switchStage(flow.entryFrom!.stageId)"')
+    expect(DataFlowGraphSource).toContain('@click="switchStage(flow.exitTo!.stageId)"')
+    // 同色调配对：--hz = 对端阶段色，与画布入口/出口卡的 --hz 同源
+    expect(DataFlowGraphSource).toContain("'--hz': toneOf(flow.entryFrom.stageId).hue")
+    expect(DataFlowGraphSource).toContain("'--hz': toneOf(flow.exitTo.stageId).hue")
+    // 暗色档不得再用 border-color 盖掉对端色调（0,2,1 特异性，源序压不住）
+    expect(DataFlowGraphSource).not.toContain('background: var(--mk-surface); border-color: var(--mk-line);')
+  })
 })

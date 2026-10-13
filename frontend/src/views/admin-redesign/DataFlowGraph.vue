@@ -59,17 +59,23 @@
         <strong>字段数据旅程（逻辑图 · 字段血缘）</strong>——按字段流转组织，展示编排定义的字段交接结构
       </p>
 
-      <!-- 旅程概览条：上一阶段 ⇣ 本 Agent ⇣ 下一阶段（一眼看清跨越边界） -->
+      <!-- 旅程概览条 = 本页的「配合头」（2026-10-13 用户：「核心是这个阶段和上下游的配合」）：
+           上一阶段 ⇣ 本 Agent ⇣ 下一阶段。三件事必须齐全——对端是谁（阶段 + agent）、
+           交接了多少字段、点了能过去看——所以对端节点带上 `stageId-agent` 与可点跳转，
+           并用与画布「入口 / 出口」卡同一枚色调（--hz = 对端阶段色）把两侧配对起来：
+           同一枚颜色 = 同一家对端，配合关系一眼对上。 -->
       <div v-if="flow" class="dfg-journey">
         <button
           v-if="flow.entryFrom"
           type="button"
           class="dfg-journey__node dfg-journey__node--up"
+          :style="{ '--hz': toneOf(flow.entryFrom.stageId).hue }"
+          :title="`切到 ${flow.entryFrom.stageName}（${flow.entryFrom.stageId}-agent）：看这些字段在那边是怎么产出的`"
           @click="switchStage(flow.entryFrom!.stageId)"
         >
           <span class="dfg-journey__dir">↑ 来自</span>
           <strong>{{ flow.entryFrom.stageName }}</strong>
-          <span class="dfg-journey__meta">{{ flow.entry.length }} 字段交接</span>
+          <span class="dfg-journey__meta"><span class="mono">{{ flow.entryFrom.stageId }}-agent</span> <b>{{ flow.entry.length }}</b> 字段交接</span>
         </button>
         <span v-else-if="flow.stageId === 'goal'" class="dfg-journey__node dfg-journey__node--up is-start">
           <span class="dfg-journey__dir">↑ 数据起点</span>
@@ -90,11 +96,13 @@
           v-if="flow.exitTo"
           type="button"
           class="dfg-journey__node dfg-journey__node--down"
+          :style="{ '--hz': toneOf(flow.exitTo.stageId).hue }"
+          :title="`切到 ${flow.exitTo.stageName}（${flow.exitTo.stageId}-agent）：看这些字段在那边是怎么被消费的`"
           @click="switchStage(flow.exitTo!.stageId)"
         >
           <span class="dfg-journey__dir">↓ 交给</span>
           <strong>{{ flow.exitTo.stageName }}</strong>
-          <span class="dfg-journey__meta">{{ flow.exit.length }} 字段移交</span>
+          <span class="dfg-journey__meta"><span class="mono">{{ flow.exitTo.stageId }}-agent</span> <b>{{ flow.exit.length }}</b> 字段移交</span>
         </button>
         <span v-else class="dfg-journey__node dfg-journey__node--down is-end">
           <span class="dfg-journey__dir">↓ 数据终点</span>
@@ -1446,14 +1454,21 @@ function stepHue(step: FlowStep): string {
   border-style: dashed;
 }
 .dfg-journey__node.is-end .dfg-journey__dir { color: var(--fam-classroom); }
-.dfg-journey__node--up { border-color: color-mix(in srgb, var(--fam-understanding) 30%, var(--mk-line)); }
-.dfg-journey__node--down { border-color: color-mix(in srgb, var(--mk-graph-down) 45%, var(--mk-line)); }
+/* 配合头：对端节点用与画布「入口 / 出口」卡**同一枚色调**（--hz = 对端阶段色）——
+   同一枚颜色 = 同一家对端，配合关系一眼对上。--hz 只由可点的对端节点给，
+   起点 / 终点 / 无上游三种态走 fam 兜底色（var 的第二参）。
+   注：不要指望「源序在后」能盖住暗色档——暗色档写的是 `html[data-theme='dark'] .dfg-journey__node`
+   （特异性 0,2,1），故暗色档里已把那条冗余的 `border-color: var(--mk-line)` 删掉（--mk-line 自己随主题变）。 */
+.dfg-journey__node--up { border-color: color-mix(in srgb, var(--hz, var(--fam-understanding)) 30%, var(--mk-line)); }
+.dfg-journey__node--down { border-color: color-mix(in srgb, var(--hz, var(--mk-graph-down)) 45%, var(--mk-line)); }
 .dfg-journey__dir { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); letter-spacing: 0.04em; }
 .dfg-journey__node strong {
   font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .dfg-journey__meta { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+/* 交接/移交字段数：节奏主读数，压成 ink 深色 + 加粗（与 agent 名同行的弱化副文形成对比） */
+.dfg-journey__meta b { color: var(--mk-ink); font-weight: 800; }
 /* 中间管道：横向 hub 胶囊 + 上下短竖线（不再竖排 agentId） */
 .dfg-journey__pipe {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
@@ -1747,7 +1762,11 @@ html[data-theme='dark'] {
   .dfg-search__clear { background: var(--mk-line); color: var(--mk-muted); }
   .dfg-search__clear:hover { background: var(--mk-graph-clear-bg-hover); color: var(--mk-ink); }
   .dfg-journey { background: var(--mk-graph-journey-b); border-bottom-color: var(--mk-graph-line); }
-  .dfg-journey__node { background: var(--mk-surface); border-color: var(--mk-line); }
+  .dfg-journey__node { background: var(--mk-surface); }
+  /* 注（2026-10-13）：这里原本还有一条 `border-color: var(--mk-line)`，把
+     `.dfg-journey__node--up/--down`（对端色调）在深色下整条盖掉——本块是
+     `html[data-theme='dark'] .dfg-journey__node`（特异性 0,2,1），源序再靠后也压不住。
+     该行本就冗余（--mk-line 自己随主题变，浅色档已给），删掉后两档同一表现。 */
   
   .dfg-journey__node.is-empty { background: var(--mk-graph-canvas-2); }
   .dfg-journey__node.is-start { background: var(--mk-graph-start-b); border-color: color-mix(in srgb, var(--fam-path) 36%, var(--mk-line)); }
@@ -1815,7 +1834,7 @@ html[data-theme='dark'] {
    收窄右侧连线走廊（≥44px 保证 bus 折线 busX=卡右缘+40 仍在画布内），
    并给步骤头 agent 设最小宽度，避免被 flex 压成 0（原 flex:1;min-width:0 在 @820 塌成 2px）。 */
 @media (max-width: 1024px) {
-  .dfg-pipe { max-width: none; padding: 14px 16px 24px; padding-right: 56px; }
+  .dfg-pipe { padding: 14px 16px 24px; padding-right: 56px; }
 }
 @media (max-width: 860px) {
   .dfg-pipe { padding: 12px 14px 20px; padding-right: 48px; gap: 12px; }
