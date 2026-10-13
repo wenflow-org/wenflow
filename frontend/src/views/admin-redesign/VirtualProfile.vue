@@ -695,7 +695,7 @@
           </label>
           <label class="mk-field">
             <span class="mk-field__label">长期倾向（可选，非故事目标）</span>
-            <input v-model="editForm.goal" class="mk-field__input" placeholder="可留空；当次需求来自故事" />
+            <input v-model="editForm.goal" class="mk-field__input" placeholder="留空 = 当次需求来自故事" />
           </label>
           <label class="mk-field">
             <span class="mk-field__label">知识水平</span>

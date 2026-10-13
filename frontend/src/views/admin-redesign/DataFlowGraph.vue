@@ -34,7 +34,7 @@
               v-model="query"
               type="search"
               class="dfg-search__input"
-              placeholder="搜索字段 / 数据族 / Skill…"
+              placeholder="搜索字段 / 数据族 / Skill"
               spellcheck="false"
               @input="onQueryInput"
             />
@@ -476,7 +476,7 @@
                 </div>
                 <div class="dfg-field">
                   <label class="dfg-field__label" for="dfg-handoff">移交（handoff）</label>
-                  <input id="dfg-handoff" v-model="editDraft.handoffText" class="dfg-edit__input mono" placeholder="阶段名 / skill:id / agent，逗号分隔；空 = 不转交" spellcheck="false" />
+                  <input id="dfg-handoff" v-model="editDraft.handoffText" class="dfg-edit__input mono" placeholder="阶段名 / skill:id / agent，逗号分隔；留空 = 不转交" spellcheck="false" />
                 </div>
                 <div class="dfg-field">
                   <span class="dfg-field__label">累积</span>

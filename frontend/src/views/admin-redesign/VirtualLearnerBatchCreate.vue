@@ -28,11 +28,11 @@
         </div>
         <label class="mk-field">
           <span class="mk-field__label">想要哪类人群？ <em class="mk-field__opt">可选，留空 AI 自由发挥</em></span>
-          <textarea v-model="batchCohort" class="mk-field__textarea" rows="2" placeholder="例如：25-35 岁职场人，最近想系统补 Excel/数据分析；或 高三学生，备考压力大。AI 会据此为每人生成差异化身份" />
+          <textarea v-model="batchCohort" class="mk-field__textarea" rows="2" placeholder="例如：25-35 岁职场人，想系统补 Excel/数据分析（AI 据此生成差异化身份）" />
         </label>
         <label class="mk-field">
           <span class="mk-field__label">批次备注 <em class="mk-field__opt">可选</em></span>
-          <input v-model="batchNote" class="mk-field__input" placeholder="这批学习者用于什么实验 / 验收，方便以后识别" />
+          <input v-model="batchNote" class="mk-field__input" placeholder="这批学习者用于什么实验 / 验收" />
         </label>
         <div v-if="batchError" class="mk-alert" role="alert">{{ batchError }}</div>
       </div>

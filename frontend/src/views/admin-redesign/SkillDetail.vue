@@ -319,7 +319,7 @@
                   </label>
                   <label class="skd-field">
                     <span>模型<em>Prompt 声明 model 时不生效</em></span>
-                    <input v-model="rtForm.model" class="mk-input mono" :disabled="!rtForm.enabled" placeholder="留空继承默认" spellcheck="false" />
+                    <input v-model="rtForm.model" class="mk-input mono" :disabled="!rtForm.enabled" placeholder="留空 = 继承默认" spellcheck="false" />
                   </label>
                   <label class="skd-field">
                     <span>思考模式</span>

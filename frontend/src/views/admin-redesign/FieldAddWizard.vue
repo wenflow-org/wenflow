@@ -41,7 +41,7 @@
           <div class="faw__grid">
             <label class="mk-field faw__full">
               <span class="mk-field__label">字段名 <em class="mk-field__req">*</em>（kebab-case 或点分路径；首段 = core 顶层字段）</span>
-              <input v-model="form.name" type="text" class="mk-input mono" placeholder="如 summary / understanding.motivation" spellcheck="false" :disabled="mode === 'edit'" @input="checkName" />
+              <input v-model="form.name" type="text" class="mk-input mono" placeholder="例如：summary / understanding.motivation" spellcheck="false" :disabled="mode === 'edit'" @input="checkName" />
               <span v-if="mode === 'edit'" class="mk-field__hint">编辑模式：字段名即身份标识，不可修改</span>
               <span v-else class="mk-field__hint" :class="nameHintCls">{{ nameHint }}</span>
             </label>
@@ -97,7 +97,7 @@
 
             <label class="mk-field">
               <span class="mk-field__label">落库键（persistKey，别名时填）</span>
-              <input v-model="form.persistKey" type="text" class="mk-input mono" placeholder="缺省 = 与字段名一致" spellcheck="false" />
+              <input v-model="form.persistKey" type="text" class="mk-input mono" placeholder="留空 = 与字段名一致" spellcheck="false" />
             </label>
 
             <label class="mk-field">
@@ -108,7 +108,7 @@
 
             <label class="mk-field faw__full">
               <span class="mk-field__label">desc（生成指令 / 含义） <em class="mk-field__req">*</em></span>
-              <textarea v-model="form.desc" class="mk-input faw__desc" rows="3" placeholder="说明字段语义与生成要求（core 与编排共用）"></textarea>
+              <textarea v-model="form.desc" class="mk-input faw__desc" rows="3" placeholder="字段语义与生成要求（core / 编排共用）"></textarea>
             </label>
           </div>
 

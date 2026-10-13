@@ -284,7 +284,7 @@
                         <option value="assistant">助手</option>
                       </select>
                       <input v-model="m.content" class="mk-input pe-msg__content"
-                        :placeholder="m.role === 'user' ? '例如：我想考英语，帮帮我' : '助手的历史回复（可选，模拟多轮）'" />
+                        :placeholder="m.role === 'user' ? '例如：我想考英语，帮帮我' : '助手历史回复（可选，模拟多轮）'" />
                       <button type="button" class="mk-link mk-link--danger" :disabled="form.messages.length <= 1" @click="form.messages.splice(i, 1)">✕</button>
                     </div>
                   </div>
@@ -296,7 +296,7 @@
                   <div class="mk-field" :class="{ 'mk-field--error': errors.scenario }">
                     <span class="mk-field__label">学生场景 <em class="mk-field__req">*</em></span>
                     <textarea v-model="form.scenario" class="mk-field__textarea" rows="2"
-                      placeholder="例如：我想考英语，时间不多，每周只能挤两次一小时" />
+                      placeholder="例如：我想考英语，每周只能挤两次一小时" />
                     <span v-if="errors.scenario" class="mk-field__err">{{ errors.scenario }}</span>
                     <span class="mk-field__hint">一句话描述学生是谁、想干什么。跑评估时虚拟学习者按此扮演学生，说得更真实。</span>
                   </div>
@@ -381,7 +381,7 @@
               </details>
               <label class="mk-field">
                 <span class="mk-field__label">备注（可选）</span>
-                <textarea v-model="form.description" class="mk-field__textarea" rows="2" placeholder="这个用例想验证什么，比如：学生只说一句话时，助手也要能引导出学习目标" />
+                <textarea v-model="form.description" class="mk-field__textarea" rows="2" placeholder="这个用例想验证什么（例如：学生只说一句话也要能引导出目标）" />
               </label>
             </details>
 

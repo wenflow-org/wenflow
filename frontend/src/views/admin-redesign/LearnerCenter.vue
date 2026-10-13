@@ -257,11 +257,11 @@
             </div>
             <label class="mk-field">
               <span class="mk-field__label">发送站内提醒 <em class="mk-field__req">*</em></span>
-              <input v-model="interveneTitle" class="mk-field__input" placeholder="提醒标题，如：学习状态提醒" />
+              <input v-model="interveneTitle" class="mk-field__input" placeholder="例如：学习状态提醒" />
             </label>
             <label class="mk-field">
               <span class="mk-field__label">提醒内容</span>
-              <textarea v-model="interveneBody" class="mk-field__textarea" rows="3" placeholder="如：检测到疲劳度偏高，建议休息后继续学习。"></textarea>
+              <textarea v-model="interveneBody" class="mk-field__textarea" rows="3" placeholder="例如：检测到疲劳度偏高，建议休息后继续学习"></textarea>
             </label>
             <p class="lc-iv__hint">提醒将出现在该学习者的站内通知中。</p>
           </div>

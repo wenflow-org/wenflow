@@ -100,7 +100,7 @@
             <input
               v-model="fixtureSourcePathId"
               class="mk-field__input"
-              placeholder="源学习路径 ID（复制后成为该账号自己的路径）"
+              placeholder="源学习路径 ID（复制为该账号自己的路径）"
             />
             <button
               type="button"

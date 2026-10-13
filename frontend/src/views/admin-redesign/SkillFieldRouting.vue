@@ -92,7 +92,7 @@
 
       <!-- 搜索 -->
       <div class="mk-filter sfr__filter">
-        <MkFilterSearch v-model="keyword" type="search" placeholder="搜索字段名 / 含义 / 角色 / render / 移交…" />
+        <MkFilterSearch v-model="keyword" type="search" placeholder="搜索字段 / 含义 / 角色 / 移交" />
         <select v-model="roleFilter" class="mk-filter__select" aria-label="按角色过滤">
           <option value="">全部角色</option>
           <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>

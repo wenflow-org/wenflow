@@ -18,7 +18,7 @@
                口径在 title 里写明，不把「当前页内过滤」读成全量搜索 -->
           <MkFilterSearch
             v-model="keyword"
-            placeholder="搜索通知标题 / 用户姓名 / 邮箱"
+            placeholder="搜索标题 / 姓名 / 邮箱"
             title="在当前页内过滤（后端列表接口暂不支持关键词参数；翻页可查看其它页）"
           />
           <select v-model="kindFilter" class="mk-filter__select" @change="reloadFromFirstPage">
@@ -174,7 +174,7 @@
             </label>
             <label class="mk-field">
               <span class="mk-field__label">正文（可选）</span>
-              <textarea v-model="form.body" class="mk-field__textarea" rows="3" placeholder="通知正文…" />
+              <textarea v-model="form.body" class="mk-field__textarea" rows="3" placeholder="通知正文" />
             </label>
             <label class="mk-field">
               <span class="mk-field__label">类型</span>
@@ -206,7 +206,7 @@
             </div>
             <div v-if="form.scope === 'user'" class="mk-field">
               <span class="mk-field__label">选择用户</span>
-              <input v-model="targetSearch" class="mk-field__input" placeholder="搜索姓名 / 邮箱（至少 2 字符）…" @input="searchTarget" />
+              <input v-model="targetSearch" class="mk-field__input" placeholder="搜索姓名 / 邮箱（至少 2 字符）" @input="searchTarget" />
               <div v-if="targetResults.length" class="nt-candidates">
                 <button
                   v-for="u in targetResults"

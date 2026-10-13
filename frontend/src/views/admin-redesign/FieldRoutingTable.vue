@@ -116,7 +116,7 @@
 
     <!-- 搜索 / 角色过滤 -->
     <div class="mk-filter frt__filter">
-      <MkFilterSearch v-model="keyword" type="search" placeholder="搜索字段名 / 含义 / 角色 / 可见性 / 移交…" />
+      <MkFilterSearch v-model="keyword" type="search" placeholder="搜索字段 / 含义 / 角色 / 移交" />
       <select v-model="roleFilter" class="mk-filter__select" aria-label="按角色过滤">
         <option value="">全部角色</option>
         <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
@@ -289,7 +289,7 @@
             class="frt__orch-textarea mono"
             rows="26"
             spellcheck="false"
-            placeholder="编排文件 YAML 原文…"
+            placeholder="编排文件 YAML 原文"
           ></textarea>
           <p v-if="orchMsg" class="note note--info frt__orch-msg">{{ orchMsg }}</p>
         </div>

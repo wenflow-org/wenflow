@@ -226,7 +226,7 @@
         <div class="mk-modal__body">
           <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
             <span class="mk-field__label">昵称 <em class="mk-field__req">*</em></span>
-            <input v-model="form.name" class="mk-field__input" placeholder="例如 陈晓" />
+            <input v-model="form.name" class="mk-field__input" placeholder="例如：陈晓" />
             <span v-if="errors.name" class="mk-field__err">{{ errors.name }}</span>
           </label>
           <label class="mk-field" :class="{ 'mk-field--error': errors.email }">
@@ -236,7 +236,7 @@
           </label>
           <label v-if="isLive" class="mk-field" :class="{ 'mk-field--error': errors.password }">
             <span class="mk-field__label">{{ editTarget ? '重置密码' : '初始密码' }} <em class="mk-field__req">*</em></span>
-            <input v-model="form.password" type="password" class="mk-field__input" :placeholder="editTarget ? '留空则不修改' : '至少 8 位，含字母和数字'" />
+            <input v-model="form.password" type="password" class="mk-field__input" :placeholder="editTarget ? '留空 = 不修改' : '至少 8 位，含字母和数字'" />
             <span v-if="errors.password" class="mk-field__err">{{ errors.password }}</span>
           </label>
           <label v-if="isLive && !editTarget" class="mk-field" :class="{ 'mk-field--error': errors.confirmPassword }">

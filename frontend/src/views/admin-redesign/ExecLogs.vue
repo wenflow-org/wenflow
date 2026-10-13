@@ -98,7 +98,7 @@
               （2026-10-04「提上主行」的发现性问题由弹层钮生效计数兜住），主行回到 pills + 搜索 -->
           <!-- 审核 #127：搜索框补 aria-label（MkFilterSearch inheritAttrs:false + v-bind="$attrs"，
                属性直达内层 input），与同工具栏 Trace ID / 会话输入的显式标签口径一致 -->
-          <MkFilterSearch v-model="keyword" placeholder="关键词搜索" aria-label="关键词搜索（回车查询）" @keydown.enter="applyServerQuery()" />
+          <MkFilterSearch v-model="keyword" placeholder="搜索关键词" aria-label="关键词搜索（回车查询）" @keydown.enter="applyServerQuery()" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
           <SavedViewsBar
@@ -144,7 +144,7 @@
               </label>
               <label class="mk-adv__field">
                 <span class="mk-cell-sub">Trace ID（链路 ID）</span>
-                <input v-model="traceId" class="mk-filter__input" placeholder="按调用链路 ID 精确查询" aria-label="Trace ID（链路 ID）" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery()" />
+                <input v-model="traceId" class="mk-filter__input" placeholder="调用链路 ID（精确匹配）" aria-label="Trace ID（链路 ID）" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery()" />
               </label>
               <label class="mk-adv__field">
                 <span class="mk-cell-sub">会话 sessionId</span>

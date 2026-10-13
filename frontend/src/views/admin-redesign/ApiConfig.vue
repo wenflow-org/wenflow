@@ -94,7 +94,7 @@
                 :type="keyVisible ? 'text' : 'password'"
                 v-model="form.apiKey"
                 autocomplete="new-password"
-                :placeholder="keySet ? '已配置，留空沿用' : '输入 API Key'"
+                :placeholder="keySet ? '留空 = 沿用已配置' : '输入 API Key'"
                 @input="markDirty('conn')"
               />
               <button

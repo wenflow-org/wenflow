@@ -23,7 +23,7 @@
         </p>
         <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
           <span class="mk-field__label">称呼 / 样本名 <em class="mk-field__req">必填</em></span>
-          <input v-model="form.name" class="mk-field__input" placeholder="例如 焦虑的转行者、自由职业写作者" />
+          <input v-model="form.name" class="mk-field__input" placeholder="例如：焦虑的转行者 / 自由职业写作者" />
           <span v-if="errors.name" class="mk-field__err">{{ errors.name }}</span>
         </label>
         <label class="mk-field" :class="{ 'mk-field--error': errors.story }">
@@ -31,7 +31,7 @@
           <textarea
             v-model="form.story"
             class="mk-field__textarea"
-            placeholder="她是谁、职业处境、性格与长期底色。这里只写稳定身份，不要写某次具体学习事件。"
+            placeholder="稳定身份：职业处境、性格与长期底色（不写某次学习事件）"
           ></textarea>
           <span class="mk-field__hint">
             <template v-if="isLibrary">{{ form.story.length }} 字 · 建议 ≥ 40 字 · 学习需求由入库后自动生成的故事定义</template>
@@ -74,7 +74,7 @@
             <input
               v-model="form.aspiration"
               class="mk-field__input"
-              placeholder="例如 总想补职场工具；可留空，由故事 goalSeed 定义当次需求"
+              placeholder="例如：总想补职场工具（留空则由故事 goalSeed 定义）"
             />
             <span class="mk-field__hint">写入画像备用字段；真正驱动 Path 的是故事里的学习需求</span>
           </label>

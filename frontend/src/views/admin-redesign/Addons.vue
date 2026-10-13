@@ -140,12 +140,12 @@
         <div class="mk-modal__body">
           <label class="mk-field" :class="{ 'mk-field--error': toolErrors.id }">
             <span class="mk-field__label">工具 ID</span>
-            <input v-model="toolForm.id" class="mk-field__input" placeholder="如 web-search / text-to-image" :disabled="!!toolEditingId" />
+            <input v-model="toolForm.id" class="mk-field__input" placeholder="例如：web-search / text-to-image" :disabled="!!toolEditingId" />
             <span v-if="toolErrors.id" class="mk-field__err">{{ toolErrors.id }}</span>
           </label>
           <label class="mk-field" :class="{ 'mk-field--error': toolErrors.name }">
             <span class="mk-field__label">名称</span>
-            <input v-model="toolForm.name" class="mk-field__input" placeholder="如 网页搜索" />
+            <input v-model="toolForm.name" class="mk-field__input" placeholder="例如：网页搜索" />
             <span v-if="toolErrors.name" class="mk-field__err">{{ toolErrors.name }}</span>
           </label>
           <div class="ac-mcp__formrow ac-mcp__formrow--three">

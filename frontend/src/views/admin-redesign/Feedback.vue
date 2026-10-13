@@ -211,7 +211,7 @@
 
             <section class="fb-section">
               <header class="mk-section__head"><h4>内部备注</h4></header>
-              <textarea v-model="noteDraft" class="fb-note" rows="3" placeholder="处理记录、归因、跟进结论…"></textarea>
+              <textarea v-model="noteDraft" class="fb-note" rows="3" placeholder="处理记录 / 归因 / 跟进结论"></textarea>
             </section>
           </div>
           <!-- 底部动作（原型 .ovl__foot：取消/忽略在左、主钮最右、常驻滚动区外；同 gc-detail__foot 判例） -->

@@ -148,7 +148,7 @@
             aria-controls="mshell-search-list"
             aria-autocomplete="list"
             :aria-activedescendant="searchActiveId || undefined"
-            placeholder="搜索页面…"
+            placeholder="搜索页面"
             aria-label="搜索页面，按 / 聚焦"
             @focus="searchOpen = true"
             @input="onSearchInput"

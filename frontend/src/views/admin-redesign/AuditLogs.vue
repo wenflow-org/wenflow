@@ -57,7 +57,7 @@
           ><span class="al-range__k">时间范围</span> <b class="al-range__v">{{ timeRangeLabels[timeRange] }}</b></button>
           <MkFilterSearch
             v-model="keyword"
-            :placeholder="tab === 'login' ? '用户名 / IP，回车查询' : '关键词，回车查询'"
+            :placeholder="tab === 'login' ? '用户名 / IP' : '关键词'"
             @keydown.enter="applyFilters"
           />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>

@@ -170,7 +170,7 @@
           </label>
           <label class="mk-field" :class="{ 'mk-field--error': errors.body }">
             <span class="mk-field__label">正文 <em class="mk-field__req">*</em></span>
-            <textarea v-model="form.body" class="mk-field__textarea" rows="4" maxlength="3000" placeholder="给用户看的内容，说清楚时间、影响和建议动作。"></textarea>
+            <textarea v-model="form.body" class="mk-field__textarea" rows="4" maxlength="3000" placeholder="给用户看的内容：说清时间、影响与建议动作"></textarea>
             <span class="mk-field__hint">{{ form.body.length }} / 3000 字</span>
             <span v-if="errors.body" class="mk-field__err">{{ errors.body }}</span>
           </label>

@@ -90,7 +90,7 @@ describe('成就记录页：搜索提交与翻页语义', () => {
     await gotoTab(w);
     h.getRecords.mockClear();
     // 直接在搜索框输入新词（不回车、不点查询）
-    const input = w.find('input[placeholder="搜索用户姓名 / 邮箱…"]');
+    const input = w.find('input[placeholder="搜索姓名 / 邮箱"]');
     await input.setValue('张三');
     await nextTick();
     // 翻到第 2 页
@@ -107,7 +107,7 @@ describe('成就记录页：搜索提交与翻页语义', () => {
   it('点「查询」提交当前词并回第 1 页', async () => {
     const w = await mountPane();
     await gotoTab(w);
-    const input = w.find('input[placeholder="搜索用户姓名 / 邮箱…"]');
+    const input = w.find('input[placeholder="搜索姓名 / 邮箱"]');
     await input.setValue('张三');
     await nextTick();
     const search = w.findAll('button').find((b) => b.text().trim() === '查询')!;

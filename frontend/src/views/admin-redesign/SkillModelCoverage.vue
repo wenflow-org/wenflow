@@ -15,7 +15,7 @@
       <div class="skc__apply">
         <input v-model="bulk.endpoint" class="mk-input mono" placeholder="endpoint（必填，http://host:30001）" :class="{ 'is-err': bulkErr }" />
         <input v-model="bulk.apiKey" class="mk-input mono" type="password" placeholder="apiKey（必填）" :class="{ 'is-err': bulkErr }" />
-        <input v-model="bulk.model" class="mk-input mono" placeholder="model（留空=不覆盖）" list="skc-model-options" />
+        <input v-model="bulk.model" class="mk-input mono" placeholder="model（留空 = 不覆盖）" list="skc-model-options" />
         <button type="button" class="mk-btn mk-btn--primary" :disabled="bulkSaving || !selected.length" @click="applyBulk">
           {{ bulkSaving ? '套用中…' : `套用到 ${selected.length} 个技能` }}
         </button>
