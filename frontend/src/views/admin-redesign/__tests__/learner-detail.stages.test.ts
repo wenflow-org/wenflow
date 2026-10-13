@@ -439,4 +439,23 @@ describe('LearnerDetail 压力曲线 x 轴贴合数据（2026-10-12 走查「尺
     expect(w.findComponent({ name: 'MkChart' }).exists()).toBe(false);
     expect(w.text()).toContain('暂无压力记录');
   });
+
+  it('跨日模拟：曲线含真实今天之后的有值日时，轴末锚到最新模拟日而非截断在真实今天', async () => {
+    getLearnerEvidence.mockResolvedValue({
+      items: [],
+      domain: [],
+      // 真实今天有值 + 两个未来模拟日有值（calculatedAt 落在未来）
+      loadCurve: [
+        { date: dayKey(0), lss: 50, lf: 20, lsb: 30 },
+        { date: dayKey(-3), lss: 52, lf: 22, lsb: 30 },
+        { date: dayKey(-7), lss: 55, lf: 25, lsb: 30 },
+      ],
+    });
+    const w = await mountLd([]);
+    const labels = (w.findComponent({ name: 'MkChart' }).props('option') as { xAxis: { data: string[] } }).xAxis.data;
+    // 轴末 = 最新模拟日（今天 +7）；未来点不被丢弃
+    expect(labels[labels.length - 1]).toBe(labelOf(dayKey(-7)));
+    expect(labels).toContain(labelOf(dayKey(-3)));
+    expect(labels).toContain(labelOf(dayKey(0)));
+  });
 });

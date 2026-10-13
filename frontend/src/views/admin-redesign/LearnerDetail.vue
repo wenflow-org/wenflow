@@ -1979,15 +1979,25 @@ type LoadPoint = {
 }
 const loadSeries = computed<LoadPoint[]>(() => {
   const days = loadRange.value
-  const now = new Date()
-  const keyOf = (offset: number) => {
-    const d = new Date(now)
-    d.setDate(d.getDate() - offset)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }
+  const fmtKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   const map = new Map(loadCurveRaw.value.map((p) => [p.date, p]))
   const hasVal = (p?: { lss: number | null; lf: number | null; lsb: number | null }) =>
     !!p && (p.lss != null || p.lf != null || p.lsb != null)
+  /* 轴末锚点 = max(真实今天, 曲线里最新有值日)（2026-10-13 走查「还是空」）：
+     跨日模拟下 learning_metrics 的业务日期（calculatedAt）可落在真实今天之后——若轴固定收在
+     真实今天，这些**已记录**的模拟日会被下面的 keyOf 区间整条丢弃，曲线只剩真实日两个点。
+     真实用户不受影响（其指标不会晚于今天）。 */
+  let endKey = fmtKey(new Date())
+  for (const p of loadCurveRaw.value) {
+    if (hasVal(p) && p.date > endKey) endKey = p.date
+  }
+  const end = new Date(endKey + 'T00:00:00')
+  const keyOf = (offset: number) => {
+    const d = new Date(end)
+    d.setDate(d.getDate() - offset)
+    return fmtKey(d)
+  }
   /* 起点三修（2026-10-12 走查「数据能靠近中间一点…尺度42天那么大放得下吗」）：
      ① 判据从「有行」改「有值」——空值行（map.has 命中）会把轴拉满 42/90 天，左边全空、
         曲线挤成最右一条缝；
