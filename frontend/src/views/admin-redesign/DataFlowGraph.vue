@@ -1406,15 +1406,21 @@ function stepHue(step: FlowStep): string {
 .dfg-caption strong { color: var(--mk-muted); font-weight: 800; }
 
 
-/* 旅程概览条 */
+/* 旅程概览条（2026-10-13 优化）：三节点是「上一步 → 本 Agent → 下一步」的管道，
+   卡片本身只该有一句话的宽度。原先 __node 吃 flex:1，在满宽画布下每张被拉到 ~730px，
+   内容左对齐 → 右侧一大片空、管道读不成一条线。
+   现在：节点按内容定宽（flex:0 1 auto，可压缩，超出走省略号），整条管道与工具条 /
+   图性说明 / 画布卡片共用同一条左基线（不居中——居中会让管道「浮」在空带中间，
+   与同卡其它元素对不齐）；条的底色/分隔线仍满宽，分区边界不丢。 */
 .dfg-journey {
   display: flex; align-items: stretch; gap: 10px;
-  padding: 10px 14px;
+  padding: 10px 20px;
   background: var(--mk-graph-journey-b); /* 渐变退役（材质一律平面） */
   border-bottom: 1px solid var(--mk-line);
 }
 .dfg-journey__node {
-  flex: 1; min-width: 0;
+  flex: 0 1 auto;
+  min-width: 0;
   display: grid; gap: 1px; align-content: center;
   padding: 7px 12px;
   border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl);
