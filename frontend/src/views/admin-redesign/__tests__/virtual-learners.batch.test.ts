@@ -326,31 +326,18 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.findAll('.mk-kpi')).toHaveLength(5);
   });
 
-  it('压测参数卡（2026-10-08 重做）：标题进卡头、视图切换为分段控件，写控制不进 KPI 数字栅格', async () => {
+  it('压测参数卡已迁出（2026-10-13）：本页不再有写控件，只留只读读数', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    const card = w.find('.vl-settings');
-    expect(card.exists()).toBe(true);
-    // 卡头有可见标题（原设计是一张无标题卡，视图切换靠通栏下划线页签条承担）
-    expect(card.find('.mk-card__head .mk-card__title').text()).toBe('压测参数');
-    // 视图切换：分段控件（aria-pressed，宽随内容），不再是手搓 .tabs/.tab（那版缺 roving tabindex/方向键）
-    const seg = card.findAll('.mk-seg__item');
-    expect(seg.map((s) => s.text().trim())).toEqual(['速率上限', '日期模拟']);
-    expect(seg[0].attributes('aria-pressed')).toBe('true');
-    expect(card.find('.tabs').exists()).toBe(false);
-    // 速率行有可见字段名（原先只有 aria-label，人看不到这个 0 是什么）
-    expect(card.find('.mk-field__label').text()).toContain('出站速率上限');
-    expect(card.find('.vl-rpm__input').exists()).toBe(true);
-    expect(card.text()).toContain('保存');
-    // 日期页签体隐藏（v-show 落在 pane 元素上），切换后可见
-    const panes = card.findAll('.vl-settings__pane');
-    expect((panes[1].element as HTMLElement).style.display).toBe('none');
-    await seg[1].trigger('click');
-    expect(seg[1].attributes('aria-pressed')).toBe('true');
-    expect((panes[1].element as HTMLElement).style.display).not.toBe('none');
-    expect(card.find('.sd-settings').exists()).toBe(true);
-    // 读/写分块判例：写控制不进 KPI 数字栅格
-    expect(w.find('.vl-kpi .vl-settings').exists()).toBe(false);
+    // 卡片连同写控件（速率/最高并发/日期模拟）整体迁往「模型与接入 → 虚拟学习者」页签，
+    // 卡内结构回归见 virtual-lab-load-settings.test.ts
+    expect(w.find('.vl-settings').exists()).toBe(false);
+    expect(w.find('.vl-rpm__input').exists()).toBe(false);
+    expect(w.find('.sd-settings').exists()).toBe(false);
+    // 只读读数保留：并发 / 速率 仍在 KPI 带里（运营仍可任意启动，上限由设置页统一管控）
+    const kpiText = w.find('.vl-kpi').text();
+    expect(kpiText).toContain('并发');
+    expect(kpiText).toContain('速率');
     expect(w.findAll('.vl-kpi .mk-kpi')).toHaveLength(5);
   });
 

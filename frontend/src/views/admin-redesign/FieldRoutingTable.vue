@@ -162,19 +162,22 @@
           <div v-if="rowsOf(agent.agentId).length" class="frt__scroll mk-table-scroll">
             <!-- 审核 #98：原自动布局（去 mk-table--fixed 与 <colgroup>）导致 5 张并列分组表同名列
                  跨组不同宽（字段列 153/107/50/136/125px），最窄组字段名被截成 2 字符。改 fixed + colgroup
-                 固定列宽契约（字段/移交/落库键 --mk-col-id、含义 --mk-col-text、类型 --mk-col-model、
-                 角色/可见性/内部/累积/锁定 --mk-col-badge），五组同名列像素级对齐，基准合计 1140 ≤ 1182。 -->
+                 固定列宽契约（字段/落库键 --frt-col-key、移交 --frt-col-hop、含义 --frt-col-text、
+                 类型 --frt-col-type、角色/可见性/内部/累积/锁定 --mk-col-badge），五组同名列像素级对齐。
+                 2026-10-13 列宽重配（走查 1080p）：原三列共用共享 --mk-col-id(128)，实测只剩 179px，
+                 而字段名/落库键最长 ~300px → 68 处截断。含义列会换行（.frt__wrap），收窄不丢内容，
+                 把宽度让给会截断的标识列；移交列内容短（阶段名），同步收窄。合计 1575 ≤ 容器 1592。 -->
             <table class="mk-table mk-table--dense mk-table--fixed frt__table">
               <colgroup>
-                <col style="width:var(--mk-col-id)" />
-                <col style="width:var(--mk-col-text)" />
-                <col style="width:var(--mk-col-model)" />
+                <col style="width:var(--frt-col-key)" />
+                <col style="width:var(--frt-col-text)" />
+                <col style="width:var(--frt-col-type)" />
                 <col style="width:var(--mk-col-badge)" />
                 <col style="width:var(--mk-col-badge)" />
-                <col style="width:var(--mk-col-id)" />
+                <col style="width:var(--frt-col-hop)" />
                 <col style="width:var(--mk-col-badge)" />
                 <col style="width:var(--mk-col-badge)" />
-                <col style="width:var(--mk-col-id)" />
+                <col style="width:var(--frt-col-key)" />
                 <col style="width:var(--mk-col-badge)" />
               </colgroup>
               <thead>
@@ -950,6 +953,15 @@ html[data-theme='dark'] .frt-syncbar__title { color: var(--mk-badge-info-fg); }
 /* 描述作为 sub：单行截断，不与右侧行数徽章抢位 */
 .frt__agentdesc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 表格本体已并入 mk-table mk-table--dense：仅保留滚动容器（限高 + 粘性表头生效） */
+/* 本表列宽（2026-10-13 走查重配）：标识列（字段/落库键）需要宽度——它们单行 ellipsis，
+   窄了就丢字；含义列会换行（.frt__wrap），收窄只增行数不丢内容。移交列内容短（阶段名）。
+   用表内私有变量而不是改共享 --mk-col-id/--mk-col-text：那两个 token 全站表格共用。 */
+.frt__table {
+  --frt-col-key: 300px;
+  --frt-col-hop: 130px;
+  --frt-col-text: 250px;
+  --frt-col-type: 150px;
+}
 /* 横向+纵向滚动容器（滚动修复 #1）：表头 sticky 吸顶，容器限高内部滚动，页面本体不被撑长 */
 .frt__scroll { overflow: auto; max-height: 62vh; }
 /* 原型 .tbl td nowrap：自动布局下单元格单行，列按内容自然分宽 */

@@ -1571,7 +1571,15 @@ useEscape(
   min-width: 0;
 }
 .skd-vrow:last-child { border-bottom: 0; }
-.skd-vrow__name { font-weight: 700; flex: none; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 字段名（行的标识）：原 max-width 220 + 单行 ellipsis，1080p 实测 23 处读不全
+   （最长 understanding.available_resources.time_budget 需 ~420px）。改 300 宽 + 最多两行折行
+   （line-clamp 判例见 MkStatStrip/SessionCockpit）：≤300 的仍单行，更长的折两行不截断。
+   描述列让出 80px——描述本就像句子会换行、且带 title，属次要信息。 */
+.skd-vrow__name {
+  font-weight: 700; flex: none; max-width: 300px;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere;
+}
 .skd-vrow__desc { flex: 1; min-width: 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .skd-vrow__desc--strong { color: var(--mk-ink); font-weight: 600; }
 .skd-vrow__type { flex: none; color: var(--mk-muted); font-size: var(--mk-fs-micro); }

@@ -42,6 +42,25 @@ describe('VirtualLabLoadSettings（压测参数卡）', () => {
     updateSettingsMock.mockResolvedValue({ data: { data: { settings: {}, rpm: {} } } });
   });
 
+  it('卡头：标题「压测参数」+ 三段视图切换；未选中的 pane 收起', async () => {
+    const w = await mountCard();
+    expect(w.find('.mk-card__head .mk-card__title').text()).toBe('压测参数');
+    const seg = w.findAll('.mk-seg__item');
+    expect(seg.map((s) => s.text())).toEqual(['速率上限', '最高并发', '日期模拟']);
+    expect(seg[0].attributes('aria-pressed')).toBe('true');
+    // 三段 pane 常驻（v-show），未选中的 display:none；切换后可见
+    const panes = w.findAll('.vl-settings__pane');
+    expect(panes).toHaveLength(3);
+    expect((panes[0].element as HTMLElement).style.display).not.toBe('none');
+    expect((panes[1].element as HTMLElement).style.display).toBe('none');
+    await seg[1].trigger('click');
+    expect(seg[1].attributes('aria-pressed')).toBe('true');
+    expect((panes[1].element as HTMLElement).style.display).not.toBe('none');
+    // 速率行有可见字段名（写控件不是裸输入框）
+    expect(w.find('.mk-field__label').text()).toContain('出站速率上限');
+    expect(w.text()).toContain('保存');
+  });
+
   it('加载：速率上限与最高并发分别回填对应输入框', async () => {
     const w = await mountCard();
     const rpm = w.find('input[aria-label="虚拟学习者专属出站 RPM 上限"]').element as HTMLInputElement;

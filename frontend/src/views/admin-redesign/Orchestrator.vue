@@ -54,7 +54,7 @@
          「字段旅程」页签三处承载，边标签曾以 6 行字段名画在 120px 间隙里压住
          相邻列节点文字——实测四条边全相交，2026-10-04 撤），layoutOrch 在
          渲染/窗口 resize 时重算；点 Skill 节点进入该技能详情二级页（原型 open-skill）。 -->
-    <div v-if="pane === 'overview' && stages.length" id="orch-pane-overview" role="tabpanel" aria-labelledby="orch-tab-overview" class="orch-pane orch-overview">
+    <div v-if="stages.length" v-show="pane === 'overview'" id="orch-pane-overview" role="tabpanel" aria-labelledby="orch-tab-overview" class="orch-pane orch-overview">
       <section class="mk-card mk-card--fill orch-odg-page">
       <div class="mk-card__head">
         <!-- 卡题 2026-10-05 改名：原「字段数据旅程」与「字段旅程」页签撞车（两处都自称旅程）——
@@ -158,32 +158,18 @@
       </details>
       </section>
     </div>
-    <div v-else-if="pane === 'overview'" id="orch-pane-overview" role="tabpanel" aria-labelledby="orch-tab-overview" class="orch-pane orch-pane--center">
-      <!-- 总览无数据：走与既有一致的加载/空态（stages 为空时 current 也为空） -->
-      <template v-if="pageLoading">
-        <MockSkeletonTable :cols="6" :rows="8" />
-        <MkLoading text="编排数据加载中…" />
-      </template>
-      <MkEmptyState
-        v-else-if="topoFailure"
-        tone="error"
-        icon="⚠"
-        title="编排阶段数据加载失败"
-        :description="topoFailure"
-        action-text="重试"
-        @action="retryStages"
-      />
-      <MkEmptyState
-        v-else
-        title="暂无编排阶段数据"
-        description="暂无编排阶段：请先在编排文件中配置阶段与 Agent。"
-      />
-    </div>
 
     <!-- 阶段工作区：占满剩余视高（fill 布局，底部不再有空白）。
-         旅程图 = 卡内画布滚动（工具条/旅程条吸顶）；路由/治理 = 面板内滚；页面本身不滚 -->
+         旅程图 = 卡内画布滚动（工具条/旅程条吸顶）；路由/治理 = 面板内滚；页面本身不滚。
+
+         2026-10-13 页签保活（修「切页签重复请求」）：原先四页签是 v-else-if 互斥，
+         每次切回都重新挂载 → 旅程 7 个请求 / 路由 2 个 / 治理 2 个各发一遍（实测）。
+         现改「首访挂载 + v-show 切换」：visited 里的页签挂载后常驻，切回零请求；
+         未访问过的页签仍不挂载（不在首屏白拉数据）。阶段切换仍按原契约重取
+         （DataFlowGraph 的 :key 与 FieldRoutingTable/DriftAuditPanel 的 watch(stage)）。 -->
     <DataFlowGraph
-      v-else-if="current && pane === 'journey'"
+      v-if="current && visitedPanes.has('journey')"
+      v-show="pane === 'journey'"
       id="orch-pane-journey"
       role="tabpanel"
       aria-labelledby="orch-tab-journey"
@@ -193,7 +179,7 @@
       @changed="onRoutingChanged"
       @stage="onStageChange"
     />
-    <section v-else-if="current && pane === 'routing'" id="orch-pane-routing" role="tabpanel" aria-labelledby="orch-tab-routing" class="mk-card mk-card--fill orch-pane orch-routing">
+    <section v-if="current && visitedPanes.has('routing')" v-show="pane === 'routing'" id="orch-pane-routing" role="tabpanel" aria-labelledby="orch-tab-routing" class="mk-card mk-card--fill orch-pane orch-routing">
       <div class="mk-card__head">
         <h3 class="mk-card__title">字段路由与编排文件</h3>
         <!-- meta 换同源口径（2026-10-05 页签重设计）：原「输入 0/0 · 输出 0/0」来自
@@ -209,7 +195,7 @@
       </div>
       <FieldRoutingTable :stage="active" @changed="onRoutingChanged" />
     </section>
-    <section v-else-if="current && pane === 'governance'" id="orch-pane-governance" role="tabpanel" aria-labelledby="orch-tab-governance" class="mk-card mk-card--fill orch-pane orch-pane--scroll">
+    <section v-if="current && visitedPanes.has('governance')" v-show="pane === 'governance'" id="orch-pane-governance" role="tabpanel" aria-labelledby="orch-tab-governance" class="mk-card mk-card--fill orch-pane orch-pane--scroll">
       <div class="mk-card__head">
         <h3 class="mk-card__title">治理：{{ TERMS.driftContract }}报告 + 变更审计</h3>
         <!-- 口径摆面上（2026-10-05）：原「对账已上线 37/37」与「Skill 定义 32」表面打架——
@@ -224,9 +210,9 @@
            为此白拉——治理回归三折叠本体（新建字段/漂移报告/最近变更） -->
       <DriftAuditPanel :stage="active" />
     </section>
-    <!-- 无阶段数据兜底：id/aria-labelledby 随当前 pane 动态给出，保证 journey/routing/governance
-         的 aria-controls 在此状态下仍指向真实面板（v-else 与上面各分支互斥，无重复 id） -->
-    <div v-else :id="`orch-pane-${pane}`" role="tabpanel" :aria-labelledby="`orch-tab-${pane}`" class="orch-pane orch-pane--center">
+    <!-- 无阶段数据兜底：id/aria-labelledby 随当前 pane 动态给出，保证各页签的
+         aria-controls 在此状态下仍指向真实面板（与上面各页签互斥：stages 为空才渲染） -->
+    <div v-if="!stages.length" :id="`orch-pane-${pane}`" role="tabpanel" :aria-labelledby="`orch-tab-${pane}`" class="orch-pane orch-pane--center">
       <!-- 首屏骨架：此前是居中小 spinner，4K 下整页空白只挂一行字 -->
       <template v-if="pageLoading">
         <MockSkeletonTable :cols="6" :rows="8" />
@@ -303,6 +289,14 @@ function onPaneTabKeydown(e: KeyboardEvent) {
 /** 单阶段视图（字段旅程/字段路由/治理）才需要阶段选择 chips——总览画布即五阶段全貌
      （原阶段导航大卡的显示条件同此，2026-10-05 大卡退役后沿用） */
 const stageScoped = computed(() => ['journey', 'routing', 'governance'].includes(pane.value))
+
+/** 已访问过的页签（2026-10-13 保活）：首访才挂载，之后 v-show 常驻——切回不重取数据。
+    未访问的页签不挂载，避免首屏把三个面板的数据一起白拉。 */
+const visitedPanes = ref<Set<OrchPane>>(new Set<OrchPane>(['overview']))
+watch(pane, (p) => {
+  if (visitedPanes.value.has(p)) return
+  visitedPanes.value = new Set<OrchPane>([...visitedPanes.value, p])
+}, { immediate: true })
 
 /** 字段流转图数据版本：行级编辑/字段路由变更后 +1 触发重挂载刷新 */
 const flowKey = ref(0)
@@ -605,6 +599,9 @@ function layoutOrch() {
   const svg = odgSvgEl.value
   const canvas = odgCanvasEl.value
   if (!svg || !canvas) return
+  /* 隐藏态（v-show → display:none）尺寸为 0：跳过，待可见时由 ResizeObserver 重算，
+     避免把 SVG 宽高写成 0 后不再自愈 */
+  if (!odgScrollEl.value?.clientWidth) return
   const cols = Array.from(canvas.querySelectorAll<HTMLElement>('.orch-odg-col'))
   if (cols.length < 2) return
   const W = canvas.scrollWidth
@@ -689,17 +686,33 @@ function onOdgClickCapture(e: MouseEvent) {
   e.preventDefault()
 }
 
-let odgRaf = 0
+/* 重算连线：原先经 requestAnimationFrame 延迟，实测遮挡/后台窗口下 rAF 会被节流甚至停摆，
+   于是容器宽度变了连线仍停在旧坐标（走查：resize 后箭头错位）。改为直接重算——一次布局只读
+   五列的 offsetLeft/offsetWidth 再写一次 SVG innerHTML，开销可忽略。 */
 function onOdgResize() {
-  cancelAnimationFrame(odgRaf)
-  odgRaf = requestAnimationFrame(layoutOrch)
+  layoutOrch()
+}
+/* 画布列宽随容器变化（侧栏折叠、页签 v-show 切换、4K 舒展档）→ 连线必须跟着重算。
+   原先只监听 window resize：容器变宽而窗口没变时会留下错位连线。按 clientWidth 去重防抖。 */
+let odgRo: ResizeObserver | null = null
+let odgLastW = 0
+function onOdgBoxResize() {
+  const w = odgScrollEl.value?.clientWidth ?? 0
+  if (!w || w === odgLastW) return
+  odgLastW = w
+  onOdgResize()
 }
 onMounted(() => {
   window.addEventListener('resize', onOdgResize)
+  if (typeof ResizeObserver !== 'undefined' && odgScrollEl.value) {
+    odgRo = new ResizeObserver(onOdgBoxResize)
+    odgRo.observe(odgScrollEl.value)
+  }
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onOdgResize)
-  cancelAnimationFrame(odgRaf)
+  odgRo?.disconnect()
+  odgRo = null
 })
 watch([pane, stages, flowKey], async () => {
   if (pane.value !== 'overview') return
@@ -834,21 +847,22 @@ html[data-theme='dark'] {
 .orch-odg-scroll.is-panning .orch-odg-node { cursor: grabbing; }
 .orch-odg-canvas {
   position: relative; display: flex; align-items: flex-start; gap: 100px;
-  /* LY13（4K 实测）：画布容器被撑到视口宽 3798，但五列固定 232 + gap100 只到 ~1560，
-     右侧空 33%（节点区右缘停在 33% 处）。改为内容宽度 + 水平居中：
-     宽屏下节点组居中留白两侧均分；窄屏（内容 > 容器）margin auto 归 0，overflow 正常左对齐横滚，
-     offsetLeft/offsetWidth 与 SVG 坐标系不变（连线布局不受影响）。 */
-  width: max-content; margin-inline: auto;
-  min-width: max-content;
+  /* 2026-10-13 宽屏舒展：原「width: max-content + margin-inline: auto」在 4K 上五列只占
+     ~1560（卡宽实测 3440 视觉 px），两侧各空约 700px。改为撑满滚动区，富余宽度由
+     .orch-odg-col 的 flex-grow 摊给各列，节点与字段行随之变宽、更好读。
+     min-width 用显式地板（= 5×列地板 + 4×gap，1584/1172）而不是 max-content：
+     max-content 会被列脚 nowrap 的字段长串当成「想要的宽度」，一旦列设 max-width 就顶出
+     横向滚动（4K 实测 2700 > 可用 2548）；显式地板下窄屏仍是原样左对齐横滚。 */
+  width: 100%; min-width: 1584px;
 }
 .orch-odg-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
 .orch-odg-edge { fill: none; stroke: var(--mk-blue, #2f6ae0); stroke-width: 1.6; opacity: 0.85; }
 .orch-odg-svg marker path { fill: var(--mk-blue, #2f6ae0); }
-/* min-width:0 必须显式：flex 项默认 min-width:auto 的内容地板会被列脚 nowrap 的
-   outs 长串（.orch-odg-fields）顶开——实测五列被顶到 411–1066px、画布总宽 4457px，
-   1920 档只见 2/5 列（2026-10-04 注入实验：仅此一行即全部回 232px）；
-   gap 100 = 5×232 + 4×100 + 卡内边距 24 ≈ 1584，1920 档五列全收 */
-.orch-odg-col { flex: 0 0 232px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+/* 列宽地板必须显式：flex 项默认 min-width:auto 的内容地板会被列脚 nowrap 的 outs 长串
+   （.orch-odg-fields）顶开——实测五列被顶到 411–1066px、画布总宽 4457px，1920 档只见 2/5 列
+   （2026-10-04 注入实验）。固定地板 232px 后 flex-grow 才敢分富余宽度；不设 max-width——
+   flex 只摊「可用」宽度，天然不会超出容器（设上限反而在 4K 顶出横滚）。 */
+.orch-odg-col { flex: 1 1 232px; min-width: 232px; display: flex; flex-direction: column; gap: 8px; }
 .orch-odg-colhead {
   display: flex; align-items: center; gap: 8px; padding: 8px 10px;
   border: 1px solid var(--mk-line, #e6ebf4); border-radius: var(--mk-radius-lg, 10px);
@@ -894,8 +908,10 @@ html[data-theme='dark'] {
    （5×196 + 4×48 + 24 ≈ 1196，接近卡宽；仍略超则保留少量内横滚）。1920 起沿用原全展开档。
    必须放在 .orch-odg-col 基规则之后：同特异性下按源序后者胜，否则 flex-basis 被 232px 覆盖 */
 @media (max-width: 1599px) {
-  .orch-odg-canvas { gap: 48px; }
-  .orch-odg-col { flex-basis: 196px; }
+  .orch-odg-canvas { gap: 48px; min-width: 1172px; }
+  /* min 同步收窄（2026-10-13）：基规则的地板 232 会把本档的 flex-basis 架空，
+     列在 1280–1599 反而放不下仍要横滚；收窄后列按可用宽度摊（不溢出、不截断） */
+  .orch-odg-col { flex-basis: 196px; min-width: 196px; }
 }
 </style>
 
