@@ -972,8 +972,19 @@ defineExpose({ refresh })
 .hc-check__sem { font-size: var(--mk-fs-micro); color: var(--mk-muted); background: var(--mk-line); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
 .hc-check__caret { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .hc-check__actions { display: flex; align-items: center; gap: 8px; }
-/* fixHint 常驻（P1#28）：修复钮旁的一句话说明，超长省略、悬停看全文 */
-.hc-check__fixhint { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* fixHint 常驻（P1#28）：修复钮旁的一句话说明。原 `max-width:300px + 单行省略` 走查实测
+   只显示 46%（44/96px 被裁）；改 360 宽 + 最多两行（line-clamp 判例同 MkStatStrip），
+   title 仍兜全文。行是 align-items:center，两行时按钮居中，不影响动作列对齐。 */
+.hc-check__fixhint {
+  max-width: 360px;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
 
 /* 最近修复（P1#29）：会话内修复证据列表 */
 .hc-fixlog { display: grid; padding: 4px 16px 10px; }
