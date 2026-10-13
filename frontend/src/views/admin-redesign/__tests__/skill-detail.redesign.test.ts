@@ -266,6 +266,26 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     // 拖动平移仍是原实现（缩放后才有可平移的滚动范围）
     expect(OrchestratorSource).toContain('@pointerdown="onOdgPointerDown"')
   })
+
+  it('编排图导航两级页签（2026-10-13 用户：阶段选择解散成 tab，去掉「字段旅程」页签）', () => {
+    // 一级 = 总览 + 阶段；原来的「阶段选择」胶囊行退役（同一屏两套导航）
+    expect(OrchestratorSource).toContain('class="tabs orch-top-tabs"')
+    expect(OrchestratorSource).toContain('@click="goOverview"')
+    expect(OrchestratorSource).toContain('@click="selectStageTab(s.id)"')
+    expect(OrchestratorSource).not.toContain('class="orch-stage-pills"')
+    expect(OrchestratorSource).not.toContain('stageScoped')
+    // 「字段旅程」不再是一枚页签：阶段页签点开即它（SUB_PANES 里没有 journey）
+    expect(OrchestratorSource).toContain("const SUB_PANES: Array<{ id: OrchSubPane; label: string }> = [")
+    expect(OrchestratorSource).toContain("{ id: 'routing', label: '字段路由' }")
+    expect(OrchestratorSource).toContain("{ id: 'governance', label: '治理' }")
+    expect(OrchestratorSource).not.toContain("{ id: 'journey', label: '字段旅程' }")
+    // 二级页签与阶段内容同壳（一级页签 aria-controls 指向它）
+    expect(OrchestratorSource).toContain('id="orch-stage-view"')
+    expect(OrchestratorSource).toContain('class="tabs orch-subtabs"')
+    // 点阶段页签落在该阶段的字段旅程；已在其中时再点一次 = 从子视图回程
+    expect(OrchestratorSource).toContain("pane.value = 'journey'")
+    expect(OrchestratorSource).toContain('function selectStageTab(id: string)')
+  })
 })
 
 describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {

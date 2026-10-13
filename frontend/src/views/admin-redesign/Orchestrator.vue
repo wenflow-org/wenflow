@@ -17,36 +17,31 @@
          原告警条的实现历史：2026-10-04 状态条退役 → 页首 KPI 带（阶段/Skill/交接 + 两枚红卡）
          → 2026-10-12 三张纯读数卡撤、红卡改行式告警条 → 同日告警整体迁健康中心。 -->
 
-    <!-- 子面板页签（原型 .tabs 下划线页签：2026-10-01 由 mk-pills 胶囊迁入——
-         胶囊只做筛选 chips，视图/分区切换归页签）：四个面板统一可达——
-         总览（全旅程 odg 画布，缺省）/字段旅程/字段路由/治理/沙盘。
-         键盘契约（审核 #97）：role=tablist/tab 兑现 roving tabindex + 左右方向键循环切换，
-         每页签 aria-controls 到对应 role=tabpanel 内容容器 -->
-    <div class="tabs orch-pane-tabs" role="tablist" aria-label="编排图子面板" @keydown="onPaneTabKeydown">
-      <button v-for="(pt, i) in ORCH_PANES" :key="pt.id" :id="`orch-tab-${pt.id}`" :ref="(el) => setPaneTabRef(el, i)" type="button" role="tab" class="tab"
-        :aria-selected="pane === pt.id" :aria-controls="`orch-pane-${pt.id}`" :tabindex="pane === pt.id ? 0 : -1" @click="pane = pt.id">{{ pt.label }}</button>
-    </div>
-
-    <!-- 阶段选择 chips（2026-10-05 阶段导航大卡退役）：大卡与页首 KPI 带对同一批数字数两遍
-         （KPI「阶段 5 · Skill 21」 vs 五卡各带「N Skill」），且总览画布本身就是五阶段——撤。
-         （2026-10-12 页首纯读数本身也已收进总览卡头 meta，同判例再收一层。）
-         选择职能下沉为轻量 chips，只在单阶段视图（字段旅程/字段路由/治理）出现；总览/沙盘
-         不出现（总览画布即五阶段全貌，沙盘与阶段无关）。阶段是范围选择，按 2026-10-01 约定
-         归胶囊语言（胶囊=筛选 chips、页签=视图切换） -->
-    <div v-if="stageScoped" class="orch-stage-pills" role="group" aria-label="阶段选择">
+    <!-- 一级页签（2026-10-13 用户拍板）：总览 + 五个阶段。
+         阶段此前是与页签并排的**第二条**控制条（「阶段选择」胶囊行），一屏两套导航重复；
+         现合成一条：阶段升为一级页签，点开即该阶段的「字段旅程」内容，
+         「字段路由 / 治理」降为该阶段内的二级页签（见下方 orch-stage-view）。
+         键盘契约（审核 #97）：role=tablist/tab 兑现 roving tabindex + 左右方向键循环切换。 -->
+    <div class="tabs orch-top-tabs" role="tablist" aria-label="编排图视图" @keydown="onTopTabKeydown">
+      <button
+        id="orch-tab-overview"
+        type="button" role="tab" class="tab"
+        :aria-selected="pane === 'overview'"
+        aria-controls="orch-pane-overview"
+        :tabindex="pane === 'overview' ? 0 : -1"
+        @click="goOverview"
+      >总览</button>
       <button
         v-for="s in stages"
         :key="s.id"
-        type="button"
-        class="mk-pill"
-        :class="{ 'mk-pill--active': active === s.id }"
-        :aria-pressed="active === s.id"
+        :id="`orch-tab-${s.id}`"
+        type="button" role="tab" class="tab"
+        :aria-selected="pane !== 'overview' && active === s.id"
+        aria-controls="orch-stage-view"
+        :tabindex="pane !== 'overview' && active === s.id ? 0 : -1"
         :title="stageTabTitle(s)"
-        @click="selectStage(s.id)"
-      >
-        {{ s.name.replace(/阶段$/, '') }}
-        <span class="mk-pill__count">{{ s.skills.length }}</span>
-      </button>
+        @click="selectStageTab(s.id)"
+      >{{ s.name.replace(/阶段$/, '') }}<span class="tab__count">{{ s.skills.length }}</span></button>
     </div>
 
     <!-- ===== 总览：全旅程 odg 画布（newui/admin odg-canvas 形态）=====
@@ -132,12 +127,28 @@
          现改「首访挂载 + v-show 切换」：visited 里的页签挂载后常驻，切回零请求；
          未访问过的页签仍不挂载（不在首屏白拉数据）。阶段切换仍按原契约重取
          （DataFlowGraph 的 :key 与 FieldRoutingTable/DriftAuditPanel 的 watch(stage)）。 -->
+    <div v-if="pane !== 'overview'" id="orch-stage-view" role="tabpanel" :aria-labelledby="`orch-tab-${active}`" class="orch-stage-view">
+    <!-- 二级页签（阶段内）：字段旅程是该阶段页签的**默认视图**，不再单独占一枚页签
+         （2026-10-13 用户：字段旅程这个页签不要了，阶段页签点开就是它）；这里只列另两种子视图。
+         回到字段旅程 = 再点一次当前阶段页签（阶段页签的 title 已注明）。 -->
+    <div class="tabs orch-subtabs" role="tablist" aria-label="阶段视图" @keydown="onSubTabKeydown">
+      <button
+        v-for="sp in SUB_PANES"
+        :key="sp.id"
+        :id="`orch-tab-${sp.id}`"
+        type="button" role="tab" class="tab"
+        :aria-selected="pane === sp.id"
+        :aria-controls="`orch-pane-${sp.id}`"
+        :tabindex="pane === sp.id ? 0 : -1"
+        @click="pane = sp.id"
+      >{{ sp.label }}</button>
+    </div>
     <DataFlowGraph
       v-if="current && visitedPanes.has('journey')"
       v-show="pane === 'journey'"
       id="orch-pane-journey"
       role="tabpanel"
-      aria-labelledby="orch-tab-journey"
+      aria-label="字段旅程"
       class="orch-pane orch-pane--journey"
       :key="`${active}-${flowKey}`"
       :stage="active"
@@ -175,9 +186,13 @@
            为此白拉——治理回归三折叠本体（新建字段/漂移报告/最近变更） -->
       <DriftAuditPanel :stage="active" />
     </section>
-    <!-- 无阶段数据兜底：id/aria-labelledby 随当前 pane 动态给出，保证各页签的
-         aria-controls 在此状态下仍指向真实面板（与上面各页签互斥：stages 为空才渲染） -->
-    <div v-if="!stages.length" :id="`orch-pane-${pane}`" role="tabpanel" :aria-labelledby="`orch-tab-${pane}`" class="orch-pane orch-pane--center">
+    </div><!-- /orch-stage-view -->
+
+    <!-- 无阶段数据兜底：id/aria-label 随当前 pane 动态给出，保证各页签的
+         aria-controls 在此状态下仍指向真实面板（与上面各页签互斥：stages 为空才渲染）。
+         2026-10-13 两级页签改造后「字段旅程」不再有自己的 tab 元素，故这里由 aria-labelledby
+         改为 aria-label（不再是「指向某枚页签」，而是面板自报其名） -->
+    <div v-if="!stages.length" :id="`orch-pane-${pane}`" role="tabpanel" :aria-label="paneLabel" class="orch-pane orch-pane--center">
       <!-- 首屏骨架：此前是居中小 spinner，4K 下整页空白只挂一行字 -->
       <template v-if="pageLoading">
         <MockSkeletonTable :cols="6" :rows="8" />
@@ -218,42 +233,72 @@ import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 
-/** 阶段工作区子面板:总览(全旅程 odg 画布,缺省)/字段旅程/字段路由/治理。
+/** 阶段工作区子面板：总览（五阶段全貌，缺省）+ 阶段内两枚子视图（字段路由 / 治理）。
      沙盘契约 2026-10-05 下线（内容被 总览列脚 + 字段旅程 + 字段路由 三处覆盖，
-     自我定位即「深链次要入口」）；旧深链 ?tab=sandbox 落总览 */
-type OrchPane = 'overview' | 'journey' | 'routing' | 'governance'
-const ORCH_PANES: Array<{ id: OrchPane; label: string }> = [
-  { id: 'overview', label: '总览' },
-  { id: 'journey', label: '字段旅程' },
+     自我定位即「深链次要入口」）；旧深链 ?tab=sandbox 落总览。
+     2026-10-13 两级页签改造（用户拍板）：阶段升为一级页签、点开即该阶段的「字段旅程」，
+     故 journey 仍是合法 pane（默认视图），但不再有自己的页签。 */
+type OrchSubPane = 'journey' | 'routing' | 'governance'
+type OrchPane = 'overview' | OrchSubPane
+const SUB_PANES: Array<{ id: OrchSubPane; label: string }> = [
   { id: 'routing', label: '字段路由' },
   { id: 'governance', label: '治理' },
 ]
 const pane = ref<OrchPane>('overview')
+/** 当前 pane 的可读名（无阶段数据兜底面板的 aria-label 用——字段旅程没有自己的页签可指） */
+const paneLabel = computed(() => {
+  if (pane.value === 'overview') return '总览'
+  return SUB_PANES.find((p) => p.id === pane.value)?.label ?? '字段旅程'
+})
 /* 页签键盘契约（审核 #97）：roving tabindex（仅选中项可 Tab 进入）+ 左右方向键循环切换并移动焦点，
-   兑现 role=tablist/role=tab 的 ARIA tabs 语义（此前四页签全在 Tab 序、方向键无反应，属半套契约） */
-const paneTabEls = ref<(HTMLButtonElement | null)[]>([])
-function setPaneTabRef(el: unknown, i: number) {
-  paneTabEls.value[i] = (el as HTMLButtonElement) || null
-}
-function onPaneTabKeydown(e: KeyboardEvent) {
+   兑现 role=tablist/role=tab 的 ARIA tabs 语义。两级页签行（一级=总览+阶段、二级=阶段内子视图）
+   共用一份实现：按各自行内 role=tab 的 DOM 顺序走，选中项由 activate 回调落到状态上。 */
+function onTabRowKeydown(e: KeyboardEvent, activate: (index: number) => void) {
   const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
   if (!keys.includes(e.key)) return
-  const n = ORCH_PANES.length
-  const cur = ORCH_PANES.findIndex((p) => p.id === pane.value)
-  const from = cur >= 0 ? cur : 0
-  let next = from
-  if (e.key === 'ArrowRight') next = (from + 1) % n
-  else if (e.key === 'ArrowLeft') next = (from - 1 + n) % n
-  else if (e.key === 'Home') next = 0
-  else next = n - 1
+  const row = e.currentTarget as HTMLElement
+  const btns = Array.from(row.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+  const cur = btns.findIndex((b) => b === document.activeElement)
+  if (cur < 0 || !btns.length) return
   e.preventDefault()
-  pane.value = ORCH_PANES[next].id
+  const n = btns.length
+  const next = e.key === 'ArrowRight' ? (cur + 1) % n
+    : e.key === 'ArrowLeft' ? (cur - 1 + n) % n
+      : e.key === 'Home' ? 0 : n - 1
+  activate(next)
   // 切换后焦点跟随新页签（ARIA tabs 惯例）；等 tabindex 更新后再聚焦
-  void nextTick(() => paneTabEls.value[next]?.focus())
+  void nextTick(() => btns[next]?.focus())
 }
-/** 单阶段视图（字段旅程/字段路由/治理）才需要阶段选择 chips——总览画布即五阶段全貌
-     （原阶段导航大卡的显示条件同此，2026-10-05 大卡退役后沿用） */
-const stageScoped = computed(() => ['journey', 'routing', 'governance'].includes(pane.value))
+function onTopTabKeydown(e: KeyboardEvent) {
+  onTabRowKeydown(e, (i) => {
+    if (i === 0) goOverview()
+    else {
+      const s = stages.value[i - 1]
+      if (s) selectStageTab(s.id)
+    }
+  })
+}
+function onSubTabKeydown(e: KeyboardEvent) {
+  onTabRowKeydown(e, (i) => {
+    const sp = SUB_PANES[i]
+    if (sp) pane.value = sp.id
+  })
+}
+function goOverview() {
+  pane.value = 'overview'
+}
+/** 阶段页签：点别的阶段 → 切过去并落在该阶段默认视图（字段旅程）；
+    点当前阶段 → 从子视图（字段路由/治理）回到字段旅程（字段旅程不再有自己的页签，
+    回程只能靠这一下，故 title 里写明了）。 */
+function selectStageTab(id: string) {
+  if (pane.value !== 'overview' && active.value === id) {
+    pane.value = 'journey'
+    return
+  }
+  active.value = id
+  pane.value = 'journey'
+  flowKey.value++
+}
 
 /** 已访问过的页签（2026-10-13 保活）：首访才挂载，之后 v-show 常驻——切回不重取数据。
     未访问的页签不挂载，避免首屏把三个面板的数据一起白拉。 */
@@ -297,11 +342,6 @@ function applyStageQuery() {
     q.stage = active.value
     void router.replace({ query: q })
   }
-}
-
-function selectStage(id: string) {
-  active.value = id
-  flowKey.value++
 }
 
 
@@ -770,10 +810,13 @@ async function retryStages() {
   ])
 }
 
-/** 阶段 chip tooltip：skills=0 时说明去向（chip 计数只显「0」，无从判断是真空还是没拉到） */
+/** 阶段页签 tooltip：skills=0 时说明去向（计数只显「0」，无从判断是真空还是没拉到）；
+    末尾缀上回程提示——字段旅程不再有自己的页签，「点当前阶段」是唯一回程入口 */
 function stageTabTitle(s: Stage): string {
-  if (!s.skills.length) return '该阶段下辖 0 个 Skill：可能调度树未登记，或拓扑 / 目录尚未拉取成功'
-  return `${s.name}：${s.skills.length} 个 Skill`
+  const base = !s.skills.length
+    ? '该阶段下辖 0 个 Skill：可能调度树未登记，或拓扑 / 目录尚未拉取成功'
+    : `${s.name}：${s.skills.length} 个 Skill`
+  return `${base} · 点开即该阶段的字段旅程；已在子视图时再点一次回到字段旅程`
 }
 
 /** 字段路由卡头 tooltip：与画布 chips 同一份字段契约（同页同数纪律） */
@@ -791,9 +834,16 @@ const govMetaTitle = computed(() =>
   ].join('；')
 )
 </script><style scoped>
-/* 子面板页签（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局
+/* 一级页签（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局
    .tabs/.tab（mk-primitives.css），本页只留容器间距修饰。 */
-.orch-pane-tabs { margin-bottom: 2px; }
+.orch-top-tabs { margin-bottom: 2px; }
+/* 二级页签（阶段内：字段路由 / 治理）：与一级同语言、弱一档（字号更小 + 不占满行宽）。
+   字段旅程是阶段页签的默认视图，不在此列（见模板注释）。 */
+.orch-subtabs { margin-bottom: 2px; }
+.orch-subtabs .tab { font-weight: 600; }
+/* 阶段视图容器：一级页签的 aria-controls 指向它，内部再分二级页签 + 内容。
+   与 .orch-pane 同构（flex 列 + 弹性填满），保证套一层后各面板几何不变。 */
+.orch-stage-view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
 /* ===== 阶段工作区（fill 布局：占满剩余视高，底部不再留空白；面板各自内滚，页面不滚） ===== */
 .orch-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .orch-pane--scroll { overflow-y: auto; }
@@ -807,9 +857,7 @@ const govMetaTitle = computed(() =>
 /* 字段路由：卡头 + 工具条吸顶，仅表格区内滚（.frt__scroll 自带 .mk-table-scroll 横向滚动） */
 .orch-routing .frt { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
 .orch-routing .frt__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-/* 阶段选择 chips（2026-10-05 阶段导航大卡退役）：样式走 .mk-pill 全局原语，这里只管行布局；
-   页面 mk-page--fill 的 flex gap（12px）接管与页签/内容区的间距 */
-.orch-stage-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+/* 阶段选择：2026-10-13 胶囊行并入一级页签（用户拍板），.orch-stage-pills 随之退役 */
 
 /* 折叠层（字段路由 / 治理）：阶段工作区的查阅层，默认收起 */
 /* 折叠头走 .mk-section__summary（shared.css） */
