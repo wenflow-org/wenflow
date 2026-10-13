@@ -847,8 +847,6 @@ export interface LiveOverviewFull {
     evaluationAiFallback: number
     evaluationFailed: number
   }
-  funnel: { label: string; value: string; idle: boolean }[]
-  rates: string[]
   pulse: { label?: string; calls: number; issue: number }[]
   totalCalls: number
   /** 全量副口径：24h 调用总数（含虚拟/测试账号） */
@@ -993,24 +991,9 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
      避免历史失败永久粘住"需要关注"，也避免低流量单次失败误报 */
   const head = buildOverviewHead({ todayCalls, todaySuccessRate, todayFailed, activeUsers, todayCallsAll })
 
-  /* 漏斗：目标=完成澄清的对话数（非记录数）；路径保留总量、失败数单列用于断点归因 */
-  const completedConversations = Number(conv.completed || 0)
-  const totalPaths = Number(learning.totalPaths || 0)
-  const funnelRaw = [
-    { label: '用户', value: Number(users.total || 0) },
-    { label: '目标对话', value: completedConversations },
-    { label: '路径', value: totalPaths },
-    { label: '任务', value: Number(learning.totalTasks || 0) },
-    { label: '完成', value: Number(learning.completedTasks || 0) }
-  ]
-  const funnel = funnelRaw.map((f) => ({ label: f.label, value: String(f.value), idle: f.value === 0 }))
-  const rates = funnelRaw.slice(1).map((f, i) => {
-    const prev = funnelRaw[i].value
-    if (!prev || !f.value) return '—'
-    // 下游可大于上游（一人多目标/一目标多任务），超过 100% 用倍数展示，避免 517% 这种误导
-    if (f.label === '任务' || f.value > prev) return `×${(f.value / prev).toFixed(1)}`
-    return `${Math.round((f.value / prev) * 100)}%`
-  })
+  /* 旧「学习漏斗」funnel / rates 已删（2026-10-14 KPI 审计）：全仓无消费方——它们算出的
+     五段漏斗与逐段比率没有任何模板/脚本读取，属死数据；首页读数现走 Overview.vue 的
+     「教学闭环」五段 + KPI 卡带，不经过本 ref。 */
   /* 24h 脉搏（后端已按小时聚合的滚动窗口：index 0 = 23h 前，每桶带 label 'HH:00'）；
      空数据不回退全量累计，避免时间口径错位；demo 模式另走壁钟数组，与本块无关 */
   const last24h: { label?: string; total?: number; error?: number; timeout?: number }[] = agents.last24h || []
@@ -1111,7 +1094,12 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       value: fmt(todayCalls),
       trend: callsTrend,
       foot: [todayTimeoutsN > 0 ? `超时 ${todayTimeoutsN}` : null, baseNote(!!callsTrend)].filter(Boolean).join(' · '),
-      hint: todayCallsAll > todayCalls ? `真实用户口径 · 全量（含虚拟/测试）${fmt(todayCallsAll)} 次` : '真实用户口径 · 今日 00:00 起',
+      // 「N 个 Skill 近 24h 有调用」从「进行中对话」卡迁来（2026-10-14 KPI 审计）：它是平台活跃面
+      // 的事实，挂在本卡（平台用量）才算同域；原来挂在「进行中对话」（目标对话快照）属跨域副文错配。
+      hint: [
+        todayCallsAll > todayCalls ? `真实用户口径 · 全量（含虚拟/测试）${fmt(todayCallsAll)} 次` : '真实用户口径 · 今日 00:00 起',
+        `${fmt(Number(agents.activeAgents24h || 0))} 个 Skill 近 24h 有调用`,
+      ].join(' · '),
     },
     {
       label: TERMS.healthScore,
@@ -1128,10 +1116,12 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     },
     {
       // P2 文案纠偏：原「系统活跃」与值错位（值=进行中目标对话数快照），名实相符改为「进行中对话」
+      // 2026-10-14（KPI 审计）：副文当时仍是「系统活跃」时代的残留（N Skill 近 24h 有调用），
+      // 与「目标对话」跨域；该事实已迁到「今日调用」悬停说明，此处换回同域读数。
       label: '进行中对话',
       value: fmt(Number(conv.active || 0)),
-      foot: `${fmt(Number(agents.activeAgents24h || 0))} Skill 近 24h 有调用`,
-      hint: '进行中目标对话（快照口径，无同时刻对照）',
+      foot: `累计完成 ${fmt(Number(conv.completed || 0))} 个`,
+      hint: '进行中目标对话（快照口径，无同时刻对照）· 副文为累计完成数',
     },
   ]
 
@@ -1177,8 +1167,6 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     ...head,
     kpis,
     wrapup,
-    funnel,
-    rates,
     pulse,
     // 脉搏卡展示 24h 汇总；与健康分（今日窗口）分离，避免时间口径混用
     totalCalls: pulseCalls24h,

@@ -90,10 +90,12 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     (toast.error as unknown as ReturnType<typeof vi.fn>).mockClear();
   });
 
-  it('KPI 三卡（卡总数/预置卡/自建卡）+ 卡墙渲染全部卡与来源徽章', async () => {
+  it('KPI 两卡（预置卡/自建卡；卡总数 2026-10-14 并入卡墙卡头）+ 卡墙渲染全部卡与来源徽章', async () => {
     const w = await mountPage();
     const labels = w.findAll('.mk-kpi .mk-kpi__label').map((x) => x.text());
-    expect(labels).toEqual(['卡总数', '预置卡', '自建卡']);
+    // 卡总数不再立卡：它恒等于下方卡墙行数，卡头「共 N 张」已自报（计数单源在列表）
+    expect(labels).toEqual(['预置卡', '自建卡']);
+    expect(w.find('.mk-card__meta').text()).toContain('共 2 张');
     const wall = w.findAll('.vlc-card');
     expect(wall).toHaveLength(2);
     expect(wall[0].text()).toContain('高一学生小陈');

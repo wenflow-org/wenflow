@@ -23,9 +23,11 @@
       </template>
     </MkPageHead>
 
-    <!-- 卡库总量 KPI（全站家法：label + 28px 值 + hint 一短句口径，长解释收 title） -->
-    <section class="mk-kpi-grid" aria-label="卡库总量">
-      <MkKpi label="卡总数" :value="summary?.total ?? '—'" :hint="summary ? `预置 ${summary.builtin} · 自建 ${summary.custom}` : '按创建时间倒序'" title="卡库全部卡数（预置 + 自建）；一张卡 = 一个虚拟学习者账号 + 档案 + 故事池" />
+    <!-- 卡库构成 KPI（全站家法：label + 28px 值 + hint 一短句口径，长解释收 title）。
+         2026-10-14 KPI 审计：原「卡总数」卡删除——那个数与下方「卡墙」卡头「共 N 张」同屏复读，
+         且它的 hint 又把「预置 / 自建」两个数说了一遍（就是右边这两张卡）。按计数单源家法，
+         列表长度交给列表卡头自报，KPI 只说列表说不出的构成拆分。 -->
+    <section class="mk-kpi-grid" aria-label="卡库构成">
       <MkKpi label="预置卡" :value="summary?.builtin ?? '—'" hint="仓库预置随部署同步" title="平台预置角色，随版本更新自动同步；不包含在「导出卡库」内" />
       <MkKpi label="自建卡" :value="summary?.custom ?? '—'" hint="导入与 AI 创建" title="卡文档导入与后台/AI 创建的卡；「导出卡库」仅导出这部分" />
     </section>
@@ -36,8 +38,9 @@
         <div>
           <h3 class="mk-card__title">卡墙</h3>
           <!-- 计数 meta 只说独有事实（卡头计数语法）：无关键词 = 卡库总量，
-               有关键词 = 命中/总量（此前第一段也用 filtered.length，与「命中 N/M」的分子复读） -->
-          <span class="mk-card__meta" title="点卡查看卡详情（人设 / 故事池 / 自带资料）">
+               有关键词 = 命中/总量（此前第一段也用 filtered.length，与「命中 N/M」的分子复读）。
+               卡总数从 KPI 卡迁来这里自报（2026-10-14），原卡上「一张卡 = …」的解释随之下沉到本行。 -->
+          <span class="mk-card__meta" title="点卡查看卡详情（人设 / 故事池 / 自带资料）；一张卡 = 一个虚拟学习者账号 + 档案 + 故事池">
             <template v-if="keyword">命中 {{ filtered.length }} / 共 {{ cards.length }} 张</template>
             <template v-else>共 {{ cards.length }} 张</template>
           </span>
