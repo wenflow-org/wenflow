@@ -5,6 +5,8 @@
 import { describe, expect, it } from 'vitest'
 import { buildStageFlow, familyOf, familyHue } from '../dataFlow'
 import { fixtureDetails } from './fixture-details'
+// ?raw 读源码：缩放接线断言（视口/内容层分工、量测坐标基准）对源文本做白盒校验
+import DataFlowGraphSource from '../DataFlowGraph.vue?raw'
 
 const detailsById = fixtureDetails as Record<string, unknown>
 const stageNames = { goal: 'Goal 阶段', path: 'Path 阶段', teaching: '教学阶段' }
@@ -149,4 +151,32 @@ describe('数据族', () => {
 it('类型导出', () => {
   const f: import('../dataFlow').StageFlow = flowOf('path')
   expect(f.stageId).toBe('path')
+})
+
+describe('字段旅程画布缩放接线（2026-10-13 用户：这里也要支持缩放）', () => {
+  it('视口与内容层分开：zoom 在内容层、滚动在视口；宽度由 JS 给基准宽 px', () => {
+    // 两者必须分开：直接 zoom 滚动容器会让视口跟着内容一起放大，永远没有可平移的余量
+    expect(DataFlowGraphSource).toContain('ref="viewRef"')
+    expect(DataFlowGraphSource).toContain('class="dfg-view"')
+    expect(DataFlowGraphSource).toContain(':style="dfgZoomStyle"')
+    expect(DataFlowGraphSource).toContain('zoom: String(dfgZoom.value)')
+    expect(DataFlowGraphSource).toContain('width: dfgBaseW.value ?')
+    // 视口宽必须显式给满 + 滚动条槽位常驻：margin:0 auto 会让交叉轴失去 stretch，
+    // 宽度跟内容缩；滚动条出现/消失会让「基准宽 = clientWidth」抖
+    expect(DataFlowGraphSource).toContain('scrollbar-gutter: stable')
+    expect(DataFlowGraphSource).toContain('width: 100%;')
+  })
+
+  it('滚轮直缩 + 拖动平移；量测基准与 SVG 同在层自有坐标（÷zoom，且不再加滚动量）', () => {
+    expect(DataFlowGraphSource).toContain('@wheel.prevent="onDfgWheelZoom"')
+    expect(DataFlowGraphSource).not.toContain('DFG_ZOOM_STEP')
+    expect(DataFlowGraphSource).toContain('@pointerdown="onDfgPointerDown"')
+    expect(DataFlowGraphSource).toContain('@click.capture="onDfgClickCapture"')
+    expect(DataFlowGraphSource).toContain('DFG_ZOOM_WHEEL_K')
+    // 层自有坐标：rect 差值 ÷zoom（层随滚动移动，差值已含滚动量，再加一次就是双计）
+    expect(DataFlowGraphSource).toContain('pipeW.value = rr.width / z')
+    expect(DataFlowGraphSource).not.toContain('view.scrollLeft / z')
+    // 布局未落地前量到的是中间态：等到层自有宽 === 基准宽再画
+    expect(DataFlowGraphSource).toContain('Math.abs(rr.width / z - dfgBaseW.value) > 1')
+  })
 })

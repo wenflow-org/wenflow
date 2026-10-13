@@ -48,6 +48,9 @@
             <input type="checkbox" v-model="edgeFaded" />
             <span>连线</span>
           </label>
+          <!-- 缩放读数（2026-10-13）：滚轮在画布上直接连续缩放（指针为锚点），拖动可平移；
+               这里只显示当前比例，点它回 100% -->
+          <button type="button" class="mk-btn mk-btn--sm dfg-zoom__val" title="当前缩放比例 · 点击回到 100%（滚轮可直接缩放，拖动可平移）" @click="dfgZoom = 1">{{ Math.round(dfgZoom * 100) }}%</button>
         </div>
       </div>
 
@@ -100,10 +103,27 @@
         </span>
       </div>
 
+      <!-- 缩放视口 + 内容层（2026-10-13 用户：字段旅程也要支持缩放）：
+           视口（.dfg-view）承担滚动与阅读栏宽度，内容层（.dfg-pipe）承担网格排版并吃 zoom ——
+           两者必须分开：直接 zoom 滚动容器会让视口跟着内容一起放大，永远没有可平移的余量
+           （实测 150% 时视口可视宽 = 内容可视宽 = 1590，右侧直接溢出卡片）。
+           滚轮缩放 / 拖动平移挂在视口上（指针所在的元素）。 -->
+      <div
+        ref="viewRef"
+        class="dfg-view"
+        :class="{ 'is-panning': dfgPanning }"
+        @wheel.prevent="onDfgWheelZoom"
+        @pointerdown="onDfgPointerDown"
+        @pointermove="onDfgPointerMove"
+        @pointerup="onDfgPointerUp"
+        @pointercancel="onDfgPointerUp"
+        @click.capture="onDfgClickCapture"
+      >
       <div
         ref="pipeRef"
         class="dfg-pipe"
         :class="{ 'is-dimmed': !!focusKey }"
+        :style="dfgZoomStyle"
       >
         <!-- 连线层（Bus 总线：卡右缘 → 右侧走廊 → 目标卡右缘，不穿卡片内容） -->
         <svg class="dfg-edges" :width="pipeW" :height="pipeH" aria-hidden="true">
@@ -365,6 +385,7 @@
           compact
           @action="load"
         />
+      </div>
       </div>
     </div>
 
@@ -827,10 +848,97 @@ function toggleFamily(name: string) {
 }
 
 /* ================= 轨道线（SVG：实测 DOM 位置，Bus 总线端口路由） ================= */
-const pipeRef = ref<HTMLElement | null>(null)
+const viewRef = ref<HTMLElement | null>(null)   // 滚动视口（缩放/平移的宿主）
+const pipeRef = ref<HTMLElement | null>(null)   // 内容层（网格排版 + zoom）
 const pipeW = ref(0)
 const pipeH = ref(0)
 const edgeGeoms = ref<EdgeGeom[]>([])
+
+/* ===== 画布缩放（2026-10-13 用户：字段旅程也要支持缩放）=====
+   zoom 套在**内容层**（.dfg-pipe）而不是滚动视口上：zoom 参与布局，套在视口上会让视口可视宽
+   跟着内容一起放大（实测 150% 时视口 1590 = 内容 1590），右侧溢出卡片且没有可平移余量。
+   语义同总览画布（见 Orchestrator.vue）：**指定 px = 层自有宽，肉眼宽 = 自有宽 × zoom**，
+   所以内容层的宽度必须由 JS 给「基准宽」的 px（width:auto / 100% 会被父级可视宽钉住，
+   放大时卡片文字涨、卡片框不涨 → 文字溢框）。
+   坐标换算（measure）：实测 rect 是**视口可视 px**，而 SVG 与列坐标都在层自有 px 里，
+   所以整套量测除以 zoom；滚动量也在视口 px 里，同除。 */
+const DFG_ZOOM_MIN = 0.25
+const DFG_ZOOM_MAX = 3
+const DFG_ZOOM_WHEEL_K = 0.0015
+const dfgZoom = ref(1)
+/** 内容层基准宽（= 100% 时视口内容宽）；只在量得到宽度时更新 */
+const dfgBaseW = ref(0)
+const dfgZoomStyle = computed(() => ({
+  zoom: String(dfgZoom.value),
+  width: dfgBaseW.value ? `${dfgBaseW.value}px` : undefined,
+}))
+function sampleDfgBaseW() {
+  const view = viewRef.value
+  if (!view || !view.clientWidth) return
+  const cs = getComputedStyle(view)
+  const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0)
+  dfgBaseW.value = Math.max(0, Math.round(view.clientWidth - pad))
+}
+/** 滚轮缩放：连续无档位，以指针为锚点（锚点用「视口滚动量 + 层自有坐标」换算，
+    缩放前后让指针下的那一点停在原地） */
+async function onDfgWheelZoom(e: WheelEvent) {
+  const view = viewRef.value
+  if (!view) return
+  const raw = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY
+  const before = dfgZoom.value
+  dfgZoom.value = Math.min(DFG_ZOOM_MAX, Math.max(DFG_ZOOM_MIN, before * Math.exp(-raw * DFG_ZOOM_WHEEL_K)))
+  const next = dfgZoom.value
+  if (next === before) return
+  const r0 = view.getBoundingClientRect()
+  const px = (e.clientX - r0.left + view.scrollLeft) / before
+  const py = (e.clientY - r0.top + view.scrollTop) / before
+  await nextTick()
+  const r1 = view.getBoundingClientRect()
+  view.scrollLeft = px * next - (e.clientX - r1.left)
+  view.scrollTop = py * next - (e.clientY - r1.top)
+}
+
+/* 抓取式拖动平移：放大后视口两轴都有滚动范围（overflow: auto 由视口给） */
+const dfgPanning = ref(false)
+let dfgPanStart: { x: number; y: number; left: number; top: number; id: number; moved: boolean } | null = null
+/* 拖动后浏览器仍会补发一次 click（落点可能在某枚字段芯片上）→ 捕获阶段吞掉，避免误开字段抽屉 */
+let dfgSuppressClick = false
+function onDfgPointerDown(e: PointerEvent) {
+  const view = viewRef.value
+  if (!view || e.button !== 0 || e.pointerType === 'touch') return
+  dfgPanStart = { x: e.clientX, y: e.clientY, left: view.scrollLeft, top: view.scrollTop, id: e.pointerId, moved: false }
+}
+function onDfgPointerMove(e: PointerEvent) {
+  const view = viewRef.value
+  if (!view || !dfgPanStart || e.pointerId !== dfgPanStart.id) return
+  const dx = e.clientX - dfgPanStart.x
+  const dy = e.clientY - dfgPanStart.y
+  if (!dfgPanStart.moved) {
+    if (Math.abs(dx) + Math.abs(dy) < 4) return
+    dfgPanStart.moved = true
+    dfgPanning.value = true
+    window.getSelection()?.removeAllRanges()
+  }
+  view.scrollLeft = dfgPanStart.left - dx
+  view.scrollTop = dfgPanStart.top - dy
+  e.preventDefault()
+}
+function onDfgPointerUp(e: PointerEvent) {
+  if (!dfgPanStart || e.pointerId !== dfgPanStart.id) return
+  const moved = dfgPanStart.moved
+  dfgPanStart = null
+  dfgPanning.value = false
+  if (moved) {
+    dfgSuppressClick = true
+    window.setTimeout(() => { dfgSuppressClick = false }, 0)
+  }
+}
+function onDfgClickCapture(e: MouseEvent) {
+  if (!dfgSuppressClick) return
+  dfgSuppressClick = false
+  e.stopPropagation()
+  e.preventDefault()
+}
   /**
    * 边几何（Bus 总线路由：不穿卡片内容）
    * - 端口锚点位于「卡片外缘」：源=所在卡右缘、目标=所在卡左缘（芯片中线高度，钳制在卡内）
@@ -865,35 +973,45 @@ const nodeRects = ref(new Map<string, DOMRect>())
 let slotCard = new Map<string, string>()
 let cardRects = new Map<string, DOMRect>()
 
-function measure() {
+function measure(attempt = 0) {
   const root = pipeRef.value
-  if (!root) return
+  const view = viewRef.value
+  if (!root || !view) return
+  const z = dfgZoom.value || 1
   const rr = root.getBoundingClientRect()
-  pipeW.value = root.scrollWidth
-  pipeH.value = root.scrollHeight
-  // pipe 是内部滚动容器：卡片/芯片 rect 是视口坐标，加回滚动量才是画布内容坐标，
-  // 否则滚动后重测（resize/聚焦）连线会整体漂移
-  const offX = root.scrollLeft
-  const offY = root.scrollTop
+  /* 先等「布局吃进当前 zoom」再量：写 zoom/宽度之后，布局要等到下一次绘制才刷新
+     （离屏渲染实测 ~60ms），其间量到的是中间态，连线与卡片当场错位。
+     判据 = 层自有宽（rect ÷ zoom）回到基准宽（两者在同一趟布局里生效）；
+     最多等 ~160ms 就照画，绝不死等。 */
+  if (dfgBaseW.value && Math.abs(rr.width / z - dfgBaseW.value) > 1 && attempt < 8) {
+    window.setTimeout(() => measure(attempt + 1), 20)
+    return
+  }
+  /* pipe 现在是**内容层**（滚动视口是外层 .dfg-view）：
+     ① 层的自有尺寸 = 实测尺寸 ÷ zoom（SVG 与卡片都在层自有 px 里）；
+     ② 卡片/芯片 rect 相对**内容层** rect 的差值本身就含滚动量（层随滚动一起移动），
+        所以**不再加回 scrollLeft/Top**——原实现参照物是滚动容器自身（容器边界不随自身滚动
+        移动），才需要加回滚动量。这里再加一次就是双计（实测 135% 时坐标整体偏大 1.107 倍）。 */
+  pipeW.value = rr.width / z
+  pipeH.value = rr.height / z
   const map = new Map<string, DOMRect>()
   const slotMap = new Map<string, string>()
   const cardMap = new Map<string, DOMRect>()
+  const rect = (r: DOMRect) =>
+    new DOMRect((r.left - rr.left) / z, (r.top - rr.top) / z, r.width / z, r.height / z)
   for (const el of root.querySelectorAll<HTMLElement>('[data-card-key]')) {
     const key = el.getAttribute('data-card-key') || ''
-    const r = el.getBoundingClientRect()
-    cardMap.set(key, new DOMRect(r.left - rr.left + offX, r.top - rr.top + offY, r.width, r.height))
+    cardMap.set(key, rect(el.getBoundingClientRect()))
   }
   for (const el of root.querySelectorAll<HTMLElement>('[data-chip-id][data-chip-role]')) {
     const id = `${el.getAttribute('data-chip-id')}|${el.getAttribute('data-chip-role')}`
-    const r = el.getBoundingClientRect()
-    map.set(id, new DOMRect(r.left - rr.left + offX, r.top - rr.top + offY, r.width, r.height))
+    map.set(id, rect(el.getBoundingClientRect()))
     const card = el.closest<HTMLElement>('[data-card-key]')
     if (card) slotMap.set(id, card.getAttribute('data-card-key') || '')
   }
   for (const el of root.querySelectorAll<HTMLElement>('[data-gate-anchor]')) {
     const id = `gate|${el.getAttribute('data-gate-anchor')}`
-    const r = el.getBoundingClientRect()
-    map.set(id, new DOMRect(r.left - rr.left + offX, r.top - rr.top + offY, r.width, r.height))
+    map.set(id, rect(el.getBoundingClientRect()))
     const card = el.closest<HTMLElement>('[data-card-key]')
     if (card) slotMap.set(id, card.getAttribute('data-card-key') || '')
   }
@@ -1040,6 +1158,9 @@ function scheduleMeasure() {
     measurePending = false
     window.clearTimeout(measureTimer)
     await nextTick()
+    /* 基准宽在每次重测入口兜一次：面板首次可见时 onMounted 早于布局（clientWidth 仍为 0），
+       只有 RO 那一拍可能也量不到；放这里任何触发重测的事件都能把基准宽补上 */
+    sampleDfgBaseW()
     measure()
   }
   measureRaf = requestAnimationFrame(run)
@@ -1050,9 +1171,14 @@ function scheduleMeasure() {
 
 let resizeObserver: ResizeObserver | null = null
 onMounted(() => {
+  sampleDfgBaseW()
   scheduleMeasure()
-  resizeObserver = new ResizeObserver(() => scheduleMeasure())
-  if (pipeRef.value) resizeObserver.observe(pipeRef.value)
+  resizeObserver = new ResizeObserver(() => {
+    sampleDfgBaseW()
+    scheduleMeasure()
+  })
+  // 观察**视口**：内容层宽度由 zoom × 基准宽算出来，视口尺寸才是布局变化的来源
+  if (viewRef.value) resizeObserver.observe(viewRef.value)
   window.addEventListener('resize', scheduleMeasure)
 })
 onBeforeUnmount(() => {
@@ -1069,6 +1195,12 @@ watch(expandedEntry, scheduleMeasure)
 watch(expandedExit, scheduleMeasure)
 watch(expandedSteps, scheduleMeasure, { deep: true })
 watch(() => flow.value?.stageId, scheduleMeasure)
+/* 缩放变化：内容层宽度与整套坐标基准都变（measure 里有 ÷zoom），必须重测；
+   先 sampleDfgBaseW 是兜底——视口滚动条随缩放出现/消失会改 clientWidth */
+watch(dfgZoom, () => {
+  sampleDfgBaseW()
+  scheduleMeasure()
+})
 // hover / 数据族聚焦只影响边的高亮态（无需重测 DOM），轻量重算几何
 watch(hoverChip, () => { if (nodeRects.value.size) renderEdges() })
 watch(familyFocus, () => { if (nodeRects.value.size) renderEdges() })
@@ -1332,15 +1464,30 @@ function stepHue(step: FlowStep): string {
   border: 1px solid color-mix(in srgb, var(--fam-core) 18%, transparent);
 }
 
-/* 流水线画布：占满 frame 剩余高度并内部滚动（工具条/旅程条吸顶，页面本身不滚） */
-.dfg-pipe {
-  position: relative;
-  padding: 16px 20px 28px;
-  padding-right: 84px; /* 右侧走廊：Bus 连线在此垂直走线，不穿卡片 */
+/* 流水线画布（2026-10-13 拆成两层：视口 + 内容层，见模板注释）：
+   视口 = 滚动 + 阅读栏宽（1060 居中）+ 画布底；内容层 = 网格排版 + zoom（缩放）。 */
+.dfg-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* width: 100% 必须显式给：margin:0 auto 会让本元素在交叉轴**失去 stretch**，
+     于是宽度跟着内容走——缩小时（内容变窄）视口跟着缩，缩放基准也跟着缩（实测 86% 时
+     视口只有 779px，且基准宽被改写成 905）。给满 + max-width 收成阅读栏才是稳定视口。 */
+  width: 100%;
   max-width: 1060px;
   margin: 0 auto;
   /* 画布底：亮色无底（none）、暗色纵向渐变；此前只有暗色档、亮色缺配对 */
   background: var(--mk-graph-pipe-bg);
+  /* 滚动条槽位常驻：缩放让滚动条出现/消失，否则 clientWidth 会在 1052/1060 之间跳，
+     基准宽（= clientWidth）跟着抖，画布宽度与量测基准都要重算一遍 */
+  scrollbar-gutter: stable;
+  overflow: auto; /* 放大后两轴都要能滚（原先 overflow-x: hidden，因为 100% 时内容不超栏宽） */
+  cursor: grab;
+}
+.dfg-view.is-panning, .dfg-view.is-panning * { cursor: grabbing; }
+.dfg-pipe {
+  position: relative;
+  padding: 16px 20px 28px;
+  padding-right: 84px; /* 右侧走廊：Bus 连线在此垂直走线，不穿卡片 */
   display: grid;
   /* 行轨必须 max-content：auto 轨的基准尺寸取 item 的最小贡献，而步骤卡 overflow:hidden
      使其最小贡献=0（仅剩边框 2px）——定高网格里 9 张步骤卡全部塌成细条，内容被裁剪，
@@ -1349,12 +1496,10 @@ function stepHue(step: FlowStep): string {
   gap: 14px;
   align-content: start;
   transition: opacity 0.15s ease;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 .dfg-pipe.is-dimmed { opacity: 1; }
+/* 缩放读数（工具栏右端）：定宽 + 等宽数字，比例变化时按钮与左邻元素不跳 */
+.dfg-zoom__val { min-width: 56px; font-variant-numeric: tabular-nums; }
 .dfg-edges { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3; }
 
 .dfg-edges path.is-hot { stroke-dasharray: 5 4; animation: dfg-flow 0.7s linear infinite; }
