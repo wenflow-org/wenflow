@@ -164,6 +164,42 @@ export function detectExerciseLeakInReply(reply: string | null | undefined): boo
   return EXERCISE_LEAK_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+/**
+ * 指向「图」的显式引用（A/B 报告 D10，2026-10-13）：回复里出现"（见图）/（如下图）/我画了一个结构示意"
+ * 这类指向本轮附图的指引，但消息实际不带任何图（images/diagrams/figures 全空）→ 学生看到的是一句指向虚空的话。
+ *
+ * 判据取紧（宁漏不误，只剥真悬空）：① 括号里的图指引（见图/如下图/详见下图…）；
+ * ② 第一人称"我（给你）画了…图/示意"的落笔声称——只认"我…画了"，不碰祈使句
+ * （"你可以画一张""自己画一条"是布置练习，不是声称已画）。
+ */
+const DANGLING_FIGURE_PARENTHETICAL = /[（(]\s*(?:详见|参见|见|如|如下图|见下图)?\s*(?:上|下|左|右|本)?图(?:示|解|表)?\s*[）)]/g;
+const DANGLING_FIGURE_CLAIM = /我(?:给(?:你|您))?画(?:了|好|上)(?:[一二两三四五几]|张|幅|个)?[^，。；！？\n]{0,8}?(?:示意图|结构图|结构示意|示意图|图|示意)/g;
+
+/** 回复里是否存在指向「本轮并不存在的图」的悬空引用。 */
+export function hasDanglingFigureReference(reply: string | null | undefined): boolean {
+  const text = String(reply ?? '');
+  if (!text) return false;
+  DANGLING_FIGURE_PARENTHETICAL.lastIndex = 0;
+  DANGLING_FIGURE_CLAIM.lastIndex = 0;
+  return DANGLING_FIGURE_PARENTHETICAL.test(text) || DANGLING_FIGURE_CLAIM.test(text);
+}
+
+/**
+ * 剥离指向「不存在的图」的悬空引用，并清理删除括号后遗留的空标点/多余空格。
+ * 仅在消息确认不带图时调用（见 teaching-turn-engine 调用点）。
+ */
+export function stripDanglingFigureReferences(reply: string | null | undefined): string {
+  const text = String(reply ?? '');
+  if (!text) return text;
+  return text
+    .replace(DANGLING_FIGURE_PARENTHETICAL, '')
+    .replace(DANGLING_FIGURE_CLAIM, '')
+    .replace(/\s+([，。；！？、：])/g, '$1')
+    .replace(/([，。；！？、：])\1+/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 /** ASCII 结构图特征字符：箭头 / 方框 / 圆点 / 长横线 —— 老师"用字符硬画结构"的痕迹。 */
 const ASCII_STRUCTURE_CHARS = /[→←↑↓─━│┃┌┐└┘├┤┬┴┼●○■□▲▼◆◇]/g;
 

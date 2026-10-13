@@ -82,6 +82,26 @@ describe('virtual-learner-persona-designer validate/normalize', () => {
     expect(output.personaSeed.communicationStyle).toBeNull()
     expect(output.personaSeed.behaviorBoundaries).toEqual([])
   })
+
+  // D13（A/B 报告 2026-10-13）：同一概念不得同时出现在 known 与 struggle。
+  it('normalize 去重：known 与 struggle 重合的概念从 known 侧剔除', () => {
+    const output = normalizePersonaOutput({
+      personaSeed: { ...validPersonaSeed(), knownConcepts: ['信度与效度', '皮亚杰'], struggleConcepts: ['信度与效度', '能力推断'] },
+    })
+    const p = output.personaSeed
+    expect(p.knownConcepts).toContain('皮亚杰')
+    expect(p.knownConcepts).not.toContain('信度与效度')
+    expect(p.struggleConcepts).toContain('信度与效度')
+    expect(p.knownConcepts.filter((c) => p.struggleConcepts.includes(c))).toEqual([])
+  })
+
+  it('normalize 去重后 known 为空 → 走默认兜底而非留空', () => {
+    const output = normalizePersonaOutput({
+      personaSeed: { ...validPersonaSeed(), knownConcepts: ['信度与效度'], struggleConcepts: ['信度与效度'] },
+    })
+    expect(output.personaSeed.knownConcepts.length).toBeGreaterThan(0)
+    expect(output.personaSeed.knownConcepts).not.toContain('信度与效度')
+  })
 })
 
 /**

@@ -186,7 +186,9 @@ export async function submitCheckpoint(
 
     const turn = await processStudentMessage(
       sessionId,
-      `理解检查：${checkpoint.question}\n我的答案：${answer}`,
+      // 不回显「理解检查：」模板前缀（2026-10-10 真课审计：24 条学生消息带此 harness 工件）。
+      // 题干已随 pendingCheckpoint 进入本回合模型输入，落库学生消息只保留作答本身。
+      `我的答案：${answer}`,
       {
         operationClaim,
         checkpointId,
@@ -538,11 +540,19 @@ export async function applyTimeoutWrapupFallback(sessionId: string): Promise<voi
         knowledgeSummary: mastered.length > 0 ? `已掌握：${mastered.join('、')}。` : '暂未确认掌握的知识点。',
         practiceAdvice: '重新开始本节，完成一次完整的学习后这里会给出完整建议。',
         learningEvaluation: '未生成学习评价。',
-        knowledgeItems: knowledgePoints.map((p) => ({
-          name: p.name,
-          status: p.status,
-          evidence: p.status === 'mastered' ? '会话中确认掌握' : '会话中未完成确认',
-        })),
+        knowledgeItems: knowledgePoints.map((p) => {
+          // D9（A/B 报告 2026-10-13）：超时兜底同样没有课堂证据，不得把看板 mastered
+          // 原样搬出来宣称"会话中确认掌握"——降级为待复习，evidence 如实点明是看板快照。
+          const claimMastered = p.status === 'mastered';
+          return {
+            name: p.name,
+            status: claimMastered ? 'review' : p.status,
+            progress: claimMastered ? Math.min(p.progress ?? 0, 90) : (p.progress ?? 0),
+            evidence: claimMastered
+              ? '本次会话未生成课堂证据，此为知识看板快照，建议课后自测确认。'
+              : '本次会话未完成确认，此条仍需通过练习确认。',
+          };
+        }),
         keyTakeaways: [] as string[],
         actionPlan: [] as string[],
         evaluationHighlights: null,

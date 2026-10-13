@@ -273,8 +273,13 @@ function normalizePersonaOutput(raw: any) {
   const memoryRepairPattern = normalizeString(personaSeed.memoryRepairPattern) || '学过的东西容易忘，需要结合实例反复练习';
   const behavioralProfileSummary = normalizeString(personaSeed.behavioralProfileSummary)
     || `${occupation}，${corePersonality}；遇到${struggleRaw.length ? struggleRaw.join('、') : '学习困难'}时${adversarialPattern}。`;
-  const knownConcepts = normalizeConceptArray(personaSeed.knownConcepts);
+  // D13（A/B 报告 2026-10-13）：同一概念不得同时出现在 known 与 struggle——画像对同一概念的
+  // 掌握状态自相矛盾，会污染 analysis.helpSeekingType 一类判断。struggle 是教学摩擦的操作事实，
+  // 优先保留：从 known 中剔除与 struggle 重合的概念（去重后 known 可能为空，走下方默认兜底）。
   const struggleConcepts = normalizeConceptArray(personaSeed.struggleConcepts);
+  const struggleSet = new Set(struggleConcepts);
+  const knownConcepts = normalizeConceptArray(personaSeed.knownConcepts)
+    .filter((concept) => !struggleSet.has(concept));
   const learningStyle = isAllowedEnum(personaSeed.learningStyle, ['reading', 'watching', 'doing', 'listening']) ? personaSeed.learningStyle : 'doing';
   const availableTime = isAllowedEnum(personaSeed.availableTime, ['minimal', 'moderate', 'abundant']) ? personaSeed.availableTime : 'moderate';
   const techComfort = isAllowedEnum(personaSeed.techComfort, ['low', 'medium', 'high']) ? personaSeed.techComfort : 'medium';

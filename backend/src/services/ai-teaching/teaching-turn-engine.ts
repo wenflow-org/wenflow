@@ -72,7 +72,7 @@ import {
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
 import { buildDeterministicOpening, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
-import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply } from './teaching-visual.service';
+import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
@@ -830,6 +830,25 @@ export async function processStudentMessage(
     }
   }
 
+  // D10（A/B 报告 2026-10-13）：回复里出现"（见图）/我画了一个结构示意"这类指向附图的指引，
+  // 但本轮实际没有任何 images/diagrams/figures（老师声称画了、图上却没有）→ 悬空引用，学生
+  // 看到的是一句指向虚空的话。此时剥离该引用（回退到"文本脱离图仍成立"的原则，不阻断课堂）。
+  {
+    const hasAnyVisual = !!assistantMessage.images?.length
+      || !!assistantMessage.diagrams?.length
+      || !!assistantMessage.figures?.length;
+    if (!hasAnyVisual && hasDanglingFigureReference(assistantMessage.content)) {
+      const stripped = stripDanglingFigureReferences(assistantMessage.content);
+      if (stripped && stripped !== assistantMessage.content) {
+        logger.info('[AITeaching] 回复引用配图但本轮无图，剥离悬空图引用（D10）', {
+          sessionId,
+          taskId: session.taskId,
+        });
+        assistantMessage.content = stripped;
+      }
+    }
+  }
+
   if (!completionReady && hasPrematureNextStepLanguage(assistantMessage.content)) {
     logger.warn('[AITeaching] 教学回复越界，尚未满足结束条件却提到下一环节', {
       sessionId,
@@ -1136,6 +1155,20 @@ export async function processStudentMessage(
         const nextSessionArtifacts = { ...parseSessionArtifacts(teachingState) };
         delete nextSessionArtifacts.pendingCheckpoint;
         teachingState.sessionArtifacts = nextSessionArtifacts;
+      }
+      if (!consumeCheckpoint) {
+        // 表征切换指令（2026-10-10 逐字稿评审）：答错保留待重答时，向下一轮模型可见的最近课堂
+        // 事件（teaching-turn-shared recentEvents 取尾 5 条）注入换表征指令——原样重发同一道
+        // 选择题是评审实测的复读形态（同一题干连出 8 轮才换问法）。
+        const retryEventHistory = Array.isArray(teachingState.classroomEventHistory)
+          ? [...teachingState.classroomEventHistory]
+          : [];
+        retryEventHistory.push(buildClassroomEvent('checkpoint-retry', '理解检查作答未通过，保留待重答', {
+          checkpointId: submittedCheckpoint.id,
+          attempts: sameCheckpointAttempts,
+          instruction: '学员这次理解检查答错了：下一轮先用一两句话点拨关键区分，再换一种提问形式重问（填空、口述推理、排序、情境应用均可），不要原样重复同一道选择题。',
+        }));
+        teachingState.classroomEventHistory = retryEventHistory.slice(-40);
       }
       if (attemptsExhausted) {
         logger.info('[teaching-turn] 检查点重答到顶，强制消费 pendingCheckpoint（打破同一题循环）', {

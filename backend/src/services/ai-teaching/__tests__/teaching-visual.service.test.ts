@@ -15,12 +15,14 @@ import {
   detectPositionDescription,
   detectExerciseLeakInReply,
   generateTeachingVisual,
+  hasDanglingFigureReference,
   hasIdenticalVisualPrompt,
   isTeachingVisualEnabled,
   isUsableVisualPrompt,
   resolveTeachingVisualMaxPerSession,
   resolveTeachingVisualMaxPerTask,
   resolveTeachingVisualSpec,
+  stripDanglingFigureReferences,
 } from '../teaching-visual.service';
 import { ImageError } from '../../image/types';
 import type { TeachingSessionMessage } from '../TeachingSessionRepository';
@@ -419,5 +421,30 @@ describe('防答案泄漏硬闸门（detectExerciseLeakInReply，2026-09-24 配�
     expect(detectExerciseLeakInReply('这就是整件事的根子——没人记它什么时候从"整袋"变成了"半袋"。')).toBe(false);
     expect(detectExerciseLeakInReply('')).toBe(false);
     expect(detectExerciseLeakInReply(null)).toBe(false);
+  });
+});
+
+describe('悬空图引用剥离（hasDanglingFigureReference / stripDanglingFigureReferences，A/B 报告 D10）', () => {
+  it('识别指向不存在的图的引用：括号指引 + 第一人称"我画了…"声称', () => {
+    expect(hasDanglingFigureReference('我画了一个结构示意（见图），你对照一下。')).toBe(true);
+    expect(hasDanglingFigureReference('这一步看（见下图）就明白了。')).toBe(true);
+    expect(hasDanglingFigureReference('我画好了结构图，你可以对照。')).toBe(true);
+  });
+
+  it('不误伤：祈使句/正常讲解/无图引用词 → 判假', () => {
+    expect(hasDanglingFigureReference('你可以自己画一张流程图试试。')).toBe(false);
+    expect(hasDanglingFigureReference('这里的关键是把顺序理清楚，从进货到卖出。')).toBe(false);
+    expect(hasDanglingFigureReference('')).toBe(false);
+    expect(hasDanglingFigureReference(null)).toBe(false);
+  });
+
+  it('剥离后不留悬空括号/重复标点（D10 逐字稿样本）', () => {
+    const sample = '为了帮你把这张图看得更清楚，我画了一个结构示意（见图），你对照一下自己刚填好的三条线。';
+    const out = stripDanglingFigureReferences(sample);
+    expect(out).not.toContain('（见图）');
+    expect(out).not.toContain('我画了');
+    expect(out).not.toContain('，，');
+    expect(out).not.toContain(' 。');
+    expect(out).toContain('你对照一下自己刚填好的三条线');
   });
 });

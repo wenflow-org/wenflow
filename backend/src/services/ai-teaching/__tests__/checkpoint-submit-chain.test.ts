@@ -76,6 +76,8 @@ jest.mock('../teaching-visual.service', () => ({
   generateTeachingVisual: jest.fn(async () => null),
   buildVisualOpportunity: jest.fn(() => null),
   detectExerciseLeakInReply: jest.fn(() => false),
+  hasDanglingFigureReference: jest.fn(() => false),
+  stripDanglingFigureReferences: jest.fn((text: string) => text),
 }))
 jest.mock('../../../services/learning/learning-state.service', () => ({
   learningStateService: {

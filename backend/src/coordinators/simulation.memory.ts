@@ -287,7 +287,12 @@ export async function persistProfileConcepts(sessionId: string, userId: string, 
     }
     const profileData = safeJsonParse<Record<string, unknown>>(profile.profile, {});
     const knownConcepts = [...new Set([...((profileData.knownConcepts || []) as unknown[]), ...mastered])];
-    const struggleConcepts = [...new Set([...((profileData.struggleConcepts || []) as unknown[]), ...struggling].filter((c) => !mastered.has(c as string)))];
+    // D13（A/B 报告 2026-10-13）：knownConcepts 是 union-only（永不移除），但 struggle 此前只按
+    // 「本轮 mastered」过滤——于是已在 known 里的概念（历史掌握/人设种子）若本轮不是 mastered，
+    // 会同时留在 struggle，画像对同一概念自相矛盾。改为按完整 known 集合过滤，顺带自愈存量脏数据。
+    const knownSet = new Set(knownConcepts.map((c) => String(c)));
+    const struggleConcepts = [...new Set([...((profileData.struggleConcepts || []) as unknown[]), ...struggling])]
+      .filter((c) => !knownSet.has(String(c)));
     if (knownConcepts.length || struggleConcepts.length) {
       await prisma.virtual_learner_profiles.update({
         where: { userId },

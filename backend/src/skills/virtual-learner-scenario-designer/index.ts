@@ -158,10 +158,14 @@ function normalizeDisclosurePlan(raw: any) {
 
 function normalizeProblemKnowledge(raw: any) {
   const data = raw && typeof raw === 'object' ? raw : {}
+  // D13（A/B 报告 2026-10-13）：同一概念不得同时出现在 known 与 struggle（struggle 优先，
+  // 与 persona-designer 同口径）。story.problemKnowledge 会直接落库为画像的 known/struggle 列。
+  const struggleConcepts = normalizeStringArray(data.struggleConcepts)
+  const struggleSet = new Set(struggleConcepts)
   return {
     domainFamiliarity: isAllowedEnum(data.domainFamiliarity, ['low', 'medium', 'high']) ? data.domainFamiliarity : null,
-    knownConcepts: normalizeStringArray(data.knownConcepts),
-    struggleConcepts: normalizeStringArray(data.struggleConcepts),
+    knownConcepts: normalizeStringArray(data.knownConcepts).filter((c) => !struggleSet.has(c)),
+    struggleConcepts,
     selfAssessment: normalizeString(data.selfAssessment),
     hiddenGaps: normalizeStringArray(data.hiddenGaps)
   }
@@ -293,11 +297,15 @@ export function validateScenarioStageAge(seed: any): { valid: boolean; failureRe
   return { valid: true };
 }
 
-function normalizeScenarioOutput(raw: any) {
+export function normalizeScenarioOutput(raw: any) {
   const storyRaw = raw?.story && typeof raw?.story === 'object' ? raw.story : null;
   const personaSeed = raw?.personaSeed && typeof raw.personaSeed === 'object' ? raw.personaSeed : {};
 
   const normalizedStory = normalizeStory(storyRaw || {});
+
+  // D13（A/B 报告 2026-10-13）：personaSeed 同一概念不得同时出现在 known 与 struggle（struggle 优先）。
+  const struggleConcepts = normalizeStringArray(personaSeed.struggleConcepts);
+  const struggleSet = new Set(struggleConcepts);
 
   return {
     personaSeed: {
@@ -310,8 +318,8 @@ function normalizeScenarioOutput(raw: any) {
       occupation: normalizeString(personaSeed.occupation),
       education: normalizeString(personaSeed.education),
       background: normalizeString(personaSeed.background),
-      knownConcepts: normalizeStringArray(personaSeed.knownConcepts),
-      struggleConcepts: normalizeStringArray(personaSeed.struggleConcepts),
+      knownConcepts: normalizeStringArray(personaSeed.knownConcepts).filter((c) => !struggleSet.has(c)),
+      struggleConcepts,
       learningStyle: isAllowedEnum(personaSeed.learningStyle, ['reading', 'watching', 'doing', 'listening']) ? personaSeed.learningStyle : null,
       motivationType: isAllowedEnum(personaSeed.motivationType, ['career', 'interest', 'necessity', 'social']) ? personaSeed.motivationType : null,
       availableTime: isAllowedEnum(personaSeed.availableTime, ['minimal', 'moderate', 'abundant']) ? personaSeed.availableTime : null,

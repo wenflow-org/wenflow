@@ -32,6 +32,45 @@ describe('virtual-learner-learn-turn-simulator normalize', () => {
     expect(output.debug?.normalizedFallback?.learnerState).toContain('taskUnderstanding')
     expect(typeof output.learnerState.taskUnderstanding).toBe('number')
   })
+
+  it('「理解检查：」模板前缀剥离（2026-10-10 评审：作答回显工件不进学生可见消息）', () => {
+    const echo = normalizeOutput(
+      { reply: '理解检查：默写：静止的箱子，支持力成因核心词是？\n我的答案：B. 形变恢复' },
+      input
+    )
+    expect(echo.reply.startsWith('理解检查')).toBe(false)
+    expect(echo.reply).toContain('我的答案：B. 形变恢复')
+
+    const echoColon = normalizeOutput({ reply: '理解检查: 支持力的施力方是谁？我的答案：地面' }, input)
+    expect(echoColon.reply.startsWith('理解检查')).toBe(false)
+
+    const noPrefix = normalizeOutput({ reply: '我试着写了一下三行默写。' }, input)
+    expect(noPrefix.reply).toBe('我试着写了一下三行默写。')
+  })
+
+  // D1（A/B 报告 2026-10-13）：旧实现按字符上限硬切（48/80/96）再补"…"，学生发言被拦腰截断，
+  // 教师随后在补全一个学习者从未说完的问题。修法=按标点边界收尾：句末保留、子句分隔符丢弃。
+  it('长回复按句末边界收尾：整句保留、无省略号（A/B 报告 D1）', () => {
+    const first = `${'甲'.repeat(59)}。`  // 60 字
+    const second = `${'乙'.repeat(59)}。` // 60 字，两句合计 120 > 96 上限
+    const out = normalizeOutput({ reply: first + second }, input)
+    expect(out.reply).toBe(first)
+    expect(out.reply.endsWith('。')).toBe(true)
+    expect(out.reply).not.toContain('…')
+  })
+
+  it('长回复在子句边界收尾时丢弃悬空标点（A/B 报告 D1）', () => {
+    const out = normalizeOutput({ reply: `${'甲'.repeat(60)}，${'乙'.repeat(100)}` }, input)
+    expect(out.reply).toBe('甲'.repeat(60))
+    expect(out.reply.endsWith('，')).toBe(false)
+    expect(out.reply).not.toContain('…')
+  })
+
+  it('通篇无标点的超长回复才回退硬截断加省略号（A/B 报告 D1）', () => {
+    const out = normalizeOutput({ reply: '丙'.repeat(200) }, input)
+    expect(out.reply.endsWith('…')).toBe(true)
+    expect(out.reply.length).toBeLessThanOrEqual(96)
+  })
 })
 
 describe('virtual-learner-learn-turn-simulator 失败显式传播', () => {

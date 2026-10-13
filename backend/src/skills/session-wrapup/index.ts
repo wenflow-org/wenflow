@@ -585,7 +585,6 @@ export function validateSessionWrapupParsedOutput(parsed: unknown, input?: Sessi
 }
 
 function buildFallbackSummary(input: SessionWrapupInput): SessionWrapupSummary {
-  const mastered = input.knowledgePoints.filter((kp) => kp.status === 'mastered').length;
   const total = input.knowledgePoints.length;
   const taskType = input.sessionInfo.taskType || 'practice';
 
@@ -599,20 +598,33 @@ function buildFallbackSummary(input: SessionWrapupInput): SessionWrapupSummary {
 
   return {
     topicSummary: `本节课围绕"${input.sessionInfo.topic}"进行了学习，时长${input.sessionInfo.durationMinutes}分钟。`,
-    knowledgeSummary: `本节共涉及${total}个知识点，其中${mastered}个已经学会。`,
+    // D9（A/B 报告 2026-10-13）：兜底总结没有任何课堂证据，不得把知识看板的 mastered/100
+    // 原样搬出来当"已学会"——那等于无证据宣称掌握。如实陈述"以看板快照为准，需课后自测确认"。
+    knowledgeSummary: total > 0
+      ? `本节共涉及${total}个知识点，系统未能从课堂记录生成证据，条目状态以知识看板快照为准。`
+      : '本节未记录可评估的知识点。',
     practiceAdvice,
     learningEvaluation: '本节课的学习回顾已整理完成，建议根据当前掌握情况继续推进下一步学习。',
-    knowledgeItems: input.knowledgePoints.map((kp) => ({
-      name: kp.name,
-      status: kp.status,
-      progress: kp.progress,
-      evidence: kp.status === 'mastered' ? '从这节课的表达和应用来看，这个点已经比较稳了。' : '这个点还可以继续练习，再通过例子或复盘加深理解。',
-    })),
+    // 兜底路径无课堂证据（A/B 报告 D9）：mastered 降级为 review（待确认），progress 收口到
+    // 不足以宣称掌握的上限，避免"没学也标已掌握"；evidence 同时点明这是看板快照。
+    knowledgeItems: input.knowledgePoints.map((kp) => {
+      const claimMastered = kp.status === 'mastered';
+      return {
+        name: kp.name,
+        status: claimMastered ? 'review' : kp.status,
+        progress: claimMastered ? Math.min(kp.progress ?? 0, 90) : (kp.progress ?? 0),
+        // fallback 总结不做课堂证据证词（2026-10-10 评审）：此路径本就没能从课堂记录取证，
+        // 旧文案「从这节课的表达和应用来看…」属编造证词；如实标注为看板快照。
+        evidence: claimMastered
+          ? '系统未能从课堂记录生成证据，此为知识看板快照，建议课后自测确认。'
+          : '系统未能生成课堂证据，此条仍需通过练习确认。',
+      };
+    }),
     keyTakeaways: ['完成本节学习回顾', '已整理知识点掌握情况'],
     actionPlan: ['继续完成下一步练习', '对不稳知识点做针对性复盘'],
     evaluationHighlights: {
-      strengths: mastered > 0 ? ['本节课已有明确知识点推进或掌握证据'] : ['课堂内容已被系统整理，已形成后续复盘基础'],
-      improvements: ['仍需结合本节证据继续判断哪些知识点只是巩固、哪些已真正掌握'],
+      strengths: ['课堂内容已被系统整理，已形成后续复盘基础'],
+      improvements: ['本次未能从课堂记录生成掌握证据，建议课后自测确认各知识点状态'],
     },
     metricInterpretation: {
       session: '本节课总结已生成。',
@@ -801,7 +813,18 @@ export class SessionWrapupAgent {
     let result: SessionWrapupResult | null = null;
 
     try {
-      const promptResult = await callPrompt(sessionWrapupPromptSpec, input);
+      // 网关瞬时不可用重试（2026-10-10 评审 + 真课实测）：callPrompt 内部重试预算耗尽即抛
+      // GatewayExecutionError（实测上游 503 间歇形态，教学回合可用而 wrapup 撞上即中招）——
+      // 此前直接落 fallback 占位总结，一节真课的总结就地退化。技能层再给一次完整重试，两败才降级。
+      let promptResult;
+      try {
+        promptResult = await callPrompt(sessionWrapupPromptSpec, input);
+      } catch (firstAttemptError) {
+        logger.warn('[SessionWrapupAgent] 首次生成调用失败，重试一次后再降级', {
+          firstAttemptError: firstAttemptError instanceof Error ? firstAttemptError.message : String(firstAttemptError),
+        });
+        promptResult = await callPrompt(sessionWrapupPromptSpec, input);
+      }
 
       // A failed raw-contract retry still retains the final extracted JSON in
       // debug. Keep the existing partial-model fallback behavior: a valid

@@ -194,10 +194,26 @@ function sanitizeVisibleContent(text: string): string {
     .trim();
 }
 
+/** 剥离学生回复开头的「理解检查：」模板前缀（检查点作答被整段回显的 harness 工件，评审 2026-10-10）。 */
+function stripCheckpointEchoPrefix(reply: string): string {
+  return String(reply || '').replace(/^\s*理解检查\s*[:：]\s*/, '');
+}
+
 function normalizePhase(value: any): LearnLearnerPhase {
   return value === 'blocked' || value === 'verifying' || value === 'ready_to_close' ? value : 'trying';
 }
 
+/** 句子终止符（收尾时保留）：切断在此处即是完整一句，不再补省略号。 */
+const SENTENCE_END_CHARS = '。！？!?';
+/** 子句分隔符（收尾时丢弃）：在此处切断属自然停顿，丢弃标点后不留悬空逗号。 */
+const CLAUSE_BREAK_CHARS = '，、；：,;:';
+
+/**
+ * 超限时按标点边界收尾（A/B 报告 D1）：原实现把 48/80/96 当硬上限直接 slice，会把学习者
+ * 发言拦腰截断成「我时间紧，要…」这类没说完的半句——教师随后只能替她补全一个她从未说完的
+ * 问题（答非所问的来源之一）。改为在限额内最后一个标点边界处收尾：句子终止符保留（完整句），
+ * 子句分隔符丢弃（自然停顿）；确实找不到边界才退回硬切并加省略号示意未完。
+ */
 function cropReply(reply: string, phase: LearnLearnerPhase) {
   const normalized = sanitizeVisibleContent(reply);
   if (!normalized) return '';
@@ -206,7 +222,17 @@ function cropReply(reply: string, phase: LearnLearnerPhase) {
   const charLimit = phase === 'ready_to_close' ? 48 : phase === 'blocked' ? 80 : 96;
   const shortened = parts.slice(0, sentenceLimit).join(' ');
   if (shortened.length <= charLimit) return shortened;
-  return `${shortened.slice(0, Math.max(24, charLimit - 1)).trim()}…`;
+  const head = shortened.slice(0, charLimit);
+  const boundary = Math.max(
+    ...SENTENCE_END_CHARS.split('').map((char) => head.lastIndexOf(char)),
+    ...CLAUSE_BREAK_CHARS.split('').map((char) => head.lastIndexOf(char)),
+  );
+  if (boundary >= Math.max(16, Math.floor(charLimit * 0.5))) {
+    const char = head[boundary];
+    const cut = SENTENCE_END_CHARS.includes(char) ? head.slice(0, boundary + 1) : head.slice(0, boundary);
+    return cut.trim();
+  }
+  return `${head.slice(0, Math.max(24, charLimit - 1)).trim()}…`;
 }
 
 function buildFallback(input: LearnLearnerSimulationInput): LearnLearnerSimulationOutput {
@@ -323,7 +349,9 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
   const checkpointAnswer = normalizeCheckpointAnswer(parsed?.checkpointAnswer, input.pendingCheckpoint);
 
   return {
-    reply: cropReply(parsed?.reply || fallback.reply, phaseFocus),
+    // 「理解检查：」模板前缀剥离（2026-10-10 逐字稿评审）：作答检查点时模型会整段回显题面
+    // 模板，该前缀属 harness 工件，不应出现在学生可见消息里（评审 6 节逐字稿中 3 节可见）。
+    reply: cropReply(stripCheckpointEchoPrefix(parsed?.reply || fallback.reply), phaseFocus),
     emotion: safeText(parsed?.emotion) || fallback.emotion,
     learnerState,
     learnerFeedback: {
