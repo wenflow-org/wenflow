@@ -40,13 +40,28 @@ export interface VirtualLabDateSimulationSettings {
 export interface VirtualLabSettings {
   /** 虚拟学习者专属出站 LLM 请求速率上限（RPM）；0 = 不限 */
   virtualLearnerRpmLimit: number;
+  /**
+   * 自动驾驶全局最高并发：同时在跑的自动驾驶会话数上限（内存 runningSessions），
+   * 超过即排队（FIFO），有槽位腾出自动拉起。未配置时回落 env AUTOPILOT_CONCURRENCY_LIMIT（默认 10）。
+   */
+  autopilotConcurrencyLimit: number;
   /** 虚拟侧日期模拟设置（默认关） */
   dateSimulation: VirtualLabDateSimulationSettings;
 }
 
+/**
+ * 自动驾驶并发上限的兜底默认值：env AUTOPILOT_CONCURRENCY_LIMIT 可覆盖（默认 10）。
+ * 运营在「模型与接入 → 虚拟学习者」页签改设置后即覆盖它；此值仅在设置未配置/读取失败时兜底。
+ */
+export const DEFAULT_AUTOPILOT_CONCURRENCY_LIMIT = Math.max(
+  1,
+  Math.min(200, Number(process.env.AUTOPILOT_CONCURRENCY_LIMIT) || 10)
+);
+
 export const DEFAULT_VIRTUAL_LAB_SETTINGS: VirtualLabSettings = {
   // 默认不限，避免未配置时改变现网行为
   virtualLearnerRpmLimit: 0,
+  autopilotConcurrencyLimit: DEFAULT_AUTOPILOT_CONCURRENCY_LIMIT,
   dateSimulation: {
     enabled: false,
     timezone: 'Asia/Shanghai',
@@ -141,6 +156,12 @@ export function normalizeVirtualLabSettings(
       DEFAULT_VIRTUAL_LAB_SETTINGS.virtualLearnerRpmLimit,
       0,
       100_000
+    ),
+    autopilotConcurrencyLimit: clampInteger(
+      input?.autopilotConcurrencyLimit,
+      DEFAULT_VIRTUAL_LAB_SETTINGS.autopilotConcurrencyLimit,
+      1,
+      200
     ),
     dateSimulation: normalizeDateSimulation(input?.dateSimulation),
   };

@@ -17,6 +17,7 @@ import simulationCoordinator from '../coordinators/simulation.coordinator'
 import blackboxVirtualLearnerRunner from './blackbox-runner'
 import { safeJsonParse } from '../utils/safe-json'
 import { resolveSessionBudget, computeLearnProgressSignature } from './session-budget'
+import { getRuntimeVirtualLabSettings, DEFAULT_AUTOPILOT_CONCURRENCY_LIMIT } from '../services/virtual-lab-settings.service'
 import type { VirtualSessionWithProfile } from './vlab-types'
 
 const AUTOPILOT_GOAL_MAX_ROUNDS = 20
@@ -33,14 +34,16 @@ const AUTOPILOT_OBSERVE_REFRESH_INTERVAL_MS = 15 * 1000
 /** 迭代间最小间隔（防止热循环打满数据库） */
 const AUTOPILOT_LOOP_PAUSE_MS = 1500
 /**
- * 自动驾驶全局并发上限（env AUTOPILOT_CONCURRENCY_LIMIT 可覆盖）。
- * 同时进行的自动驾驶会话数（内存 runningSessions）超过该值即拒绝新启动（QUEUE_FULL），
- * 防止大量会话并发打爆 LLM 上游。前端通过列表接口 autopilotConcurrency 展示配额条。
+ * 自动驾驶全局并发上限。既可由运营在「模型与接入 → 虚拟学习者」页签配置（存 platform_settings.virtualLab），
+ * 未配置时回落 env AUTOPILOT_CONCURRENCY_LIMIT（默认 10）。
+ * 同时进行的自动驾驶会话数（内存 runningSessions）超过该值即排队（FIFO），防止大量会话并发打爆 LLM 上游。
+ * 前端通过列表接口 autopilotConcurrency 展示配额条。
+ *
+ * 实例内缓存当前生效值：getConcurrencyStats 是同步只读展示，用缓存；
+ * 闸门在 start/drainQueue 前 await refreshConcurrencyLimit() 拉最新设置（30s 缓存），
+ * 设置保存后路由再调 setConcurrencyLimit() 立即回填，保证「改完即时生效」。
  */
-const AUTOPILOT_CONCURRENCY_LIMIT = Math.max(
-  1,
-  Math.min(200, Number(process.env.AUTOPILOT_CONCURRENCY_LIMIT) || 10)
-)
+const AUTOPILOT_CONCURRENCY_LIMIT_FALLBACK = DEFAULT_AUTOPILOT_CONCURRENCY_LIMIT
 
 export type AutopilotMode = 'assisted' | 'blackbox'
 
@@ -165,8 +168,30 @@ export class AutopilotService {
   /** drainQueue 防重入 */
   private draining = false
 
+  /** 当前生效的并发上限（同步只读展示用；由 refreshConcurrencyLimit / setConcurrencyLimit 维护） */
+  private concurrencyLimit = AUTOPILOT_CONCURRENCY_LIMIT_FALLBACK
+
   /** 周期对账定时器（启动自愈 + 运行期状态错位收敛） */
   private reconcileTimer: NodeJS.Timeout | null = null
+
+  /** 从虚拟实验设置拉取最新上限（30s 缓存）；失败保留上次值。返回生效值。 */
+  async refreshConcurrencyLimit(): Promise<number> {
+    try {
+      const settings = await getRuntimeVirtualLabSettings()
+      this.setConcurrencyLimit(settings.autopilotConcurrencyLimit)
+    } catch {
+      /* 读取失败保留上次值（不因设置读取故障改变并发闸门） */
+    }
+    return this.concurrencyLimit
+  }
+
+  /** 直接设定生效上限（设置保存后由路由调用，立即回填，免等 30s 缓存） */
+  setConcurrencyLimit(limit: unknown): void {
+    const n = Number(limit)
+    this.concurrencyLimit = Number.isFinite(n)
+      ? Math.min(200, Math.max(1, Math.round(n)))
+      : AUTOPILOT_CONCURRENCY_LIMIT_FALLBACK
+  }
 
   /** 读取会话的 autopilot 状态（stageResults.autopilot） */
   static readState(session: { stageResults: string | null }): AutopilotState {
@@ -225,7 +250,8 @@ export class AutopilotService {
     }
 
     // 全局并发闸门：满则排队（不再直接拒绝）
-    if (this.runningSessions.size >= AUTOPILOT_CONCURRENCY_LIMIT) {
+    await this.refreshConcurrencyLimit()
+    if (this.runningSessions.size >= this.concurrencyLimit) {
       this.pendingQueue.push({
         sessionId,
         options: { target, ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}) }
@@ -248,7 +274,7 @@ export class AutopilotService {
         sessionId,
         position,
         used: this.runningSessions.size,
-        limit: AUTOPILOT_CONCURRENCY_LIMIT
+        limit: this.concurrencyLimit
       })
       return { runId: `queued_${sessionId.slice(0, 8)}_${Date.now()}`, mode, target, queued: true, position }
     }
@@ -415,7 +441,8 @@ export class AutopilotService {
     if (this.draining) return
     this.draining = true
     try {
-      while (this.pendingQueue.length > 0 && this.runningSessions.size < AUTOPILOT_CONCURRENCY_LIMIT) {
+      await this.refreshConcurrencyLimit()
+      while (this.pendingQueue.length > 0 && this.runningSessions.size < this.concurrencyLimit) {
         const next = this.pendingQueue.shift() as { sessionId: string; options: { target: AutopilotTarget; maxTurns?: number } }
         await this.refreshQueuePositions()
         const session = await prisma.virtual_sessions.findUnique({ where: { id: next.sessionId } })
@@ -468,11 +495,11 @@ export class AutopilotService {
     return { accepted: true }
   }
 
-  /** 全局自动驾驶并发统计（used=内存中正在运行的会话数；queued=排队数；limit=env 可配上限） */
+  /** 全局自动驾驶并发统计（used=内存中正在运行的会话数；queued=排队数；limit=运营可配上限） */
   getConcurrencyStats(): { used: number; limit: number; queued: number } {
     return {
       used: this.runningSessions.size,
-      limit: AUTOPILOT_CONCURRENCY_LIMIT,
+      limit: this.concurrencyLimit,
       queued: this.pendingQueue.length,
     }
   }

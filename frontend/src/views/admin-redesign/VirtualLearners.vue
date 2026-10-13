@@ -78,80 +78,15 @@
           :tone="vlRpmLoadFailed ? 'bad' : ''"
           :hint="rateHint"
           :clickable="vlRpmLoadFailed"
-          :title="vlRpmLoadFailed ? '设置未加载：点击重试' : '在途 = 正在出站的调用数；上限 = 已保存的 VL RPM 配置（不含输入框未保存的改动）'"
+          :title="vlRpmLoadFailed ? '设置未加载：点击重试' : '在途 = 正在出站的调用数；上限 = 已保存的 VL RPM 配置（在「模型与接入 → 虚拟学习者」页签修改）'"
           @click="vlRpmLoadFailed && loadVlRpm()"
         />
       </section>
     </div>
 
-    <!-- 压测参数卡（2026-10-08 重做）：原先是「无标题卡 + 41px 通栏下划线页签条」——
-         1603px 的线只为两个短标签而画，卡体 90% 空白，输入框连可见字段名都没有
-         （含义只存在于 aria-label 与页签名里），切页签还会让卡高在百来 px 与整张
-         日期表单之间跳；那条 .tabs 也是本页手搓的，缺 roving tabindex/方向键/aria-controls，
-         与平台 tab 契约不符。现在：标题进卡头、视图切换换成分段控件（.mk-seg，宽随内容、贴右），
-         速率行补可见字段名（.mk-field--row）。
-         分组不变（2026-10-05 拍板：两组设置不同屏并排，避免双保存各占一角）；
-         EG4 守卫不变：显式「保存」+「未保存」脏态 + 回车等价保存。 -->
-    <div class="mk-card vl-settings">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">压测参数</h3>
-        <div class="mk-card__head-right">
-          <div class="mk-seg" role="group" aria-label="压测参数视图">
-            <button
-              type="button"
-              class="mk-seg__item"
-              :class="{ 'mk-seg__item--active': settingsTab === 'rate' }"
-              :aria-pressed="settingsTab === 'rate'"
-              @click="settingsTab = 'rate'"
-            >速率上限</button>
-            <button
-              type="button"
-              class="mk-seg__item"
-              :class="{ 'mk-seg__item--active': settingsTab === 'date' }"
-              :aria-pressed="settingsTab === 'date'"
-              @click="settingsTab = 'date'"
-            >
-              日期模拟<span v-if="dateSimEnabled" class="vl-settings__on">已开启</span>
-            </button>
-          </div>
-        </div>
-      </div>
-      <div v-show="settingsTab === 'rate'" class="vl-settings__pane">
-        <label
-          class="mk-field mk-field--row"
-          title="虚拟学习者专属出站上限（每分钟调用数）；与平台全局速率相互独立，不挤占真实用户额度"
-        >
-          <span class="mk-field__label">出站速率上限</span>
-          <span class="vl-rpm__ctl">
-            <input
-              v-model.number="vlRpm.limit"
-              type="number"
-              min="0"
-              max="100000"
-              step="10"
-              class="mk-filter__input vl-rpm__input"
-              aria-label="虚拟学习者专属出站 RPM 上限"
-              :disabled="vlRpmLoadFailed"
-              :title="vlRpmLoadFailed ? '设置未加载：为避免用错底数覆盖服务端配置，已禁用编辑' : undefined"
-              @focus="vlRpmFocused = true"
-              @blur="vlRpmFocused = false"
-              @input="vlRpmDirty = true"
-              @keydown.enter.prevent="saveVlRpm"
-            />
-            <span class="vl-rpm__unit">/分</span>
-          </span>
-        </label>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="!vlRpmDirty || vlRpmSaving || vlRpmLoadFailed" @click="saveVlRpm">
-          {{ vlRpmSaving ? '保存中…' : '保存' }}
-        </button>
-        <span v-if="vlRpmDirty" class="vl-rpm__dirty">未保存</span>
-        <span v-if="vlRpmLoadFailed" class="vl-rpm__failed" role="alert">设置未加载，保存已禁用（请刷新重试）</span>
-        <span v-else class="vl-rpm__hint">虚拟学习者专属 · 0 = 不限 · 不占真实用户额度</span>
-      </div>
-      <div v-show="settingsTab === 'date'" class="vl-settings__pane">
-        <SimulatedDaySettings @enabled="dateSimEnabled = $event" />
-      </div>
-    </div>
+    <!-- 压测参数卡（速率上限 / 最高并发 / 日期模拟）已迁往「模型与接入 → 虚拟学习者」页签
+         （2026-10-13）：最高并发属上游容量治理，与其余接入设置同处管理；本页只保留
+         并发 / 速率两个只读 KPI（上方运行指标带），运营在此仍可任意启动任意数量。 -->
 
     <!-- 学习者列表（「批量实验」2026-10-04 下线：批量发起与运行监控统一收在本页，
          资产输入归「学习者卡库」；旧 /admin/batch-experiments 深链重定向到本页） -->
@@ -422,7 +357,6 @@ import MkCols from '@/components/mk/MkCols.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import { vlAvatarIndexOf } from '@/components/mk/vlAvatar'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
-import SimulatedDaySettings from './SimulatedDaySettings.vue'
 import { useTableSort } from './useTableSort'
 import { useListQueryState } from './learner-profile'
 import RunStateBadge from './RunStateBadge.vue'
@@ -664,23 +598,12 @@ const concurrencyTone = computed(() => {
   return 'ok'
 })
 
-/* 虚拟学习者专属出站速率（RPM）：设置 + 运行态。与平台全局速率相互独立。 */
-const vlRpm = reactive({ limit: 0, inFlight: 0, queued: 0, rpm: 0 })
-/* 压测参数卡页签（2026-10-05 tab 化）：默认速率上限（轻页签日常位）；日期模拟开启态徽标 */
-const settingsTab = ref<'rate' | 'date'>('rate')
-const dateSimEnabled = ref(false)
-/** 已保存的 RPM 上限（P1#20）：速率卡「上限」分母只认服务端已保存值/保存成功回执，
-    不吃输入框脏值——管理员改到一半的数字不该出现在只读 KPI 里 */
+/* 虚拟学习者专属出站速率（RPM）：仅保留只读运行态读数——「速率」KPI 读 inFlight/queued 与已保存上限；
+   速率上限 / 最高并发 / 日期模拟的写控件已迁往「模型与接入 → 虚拟学习者」页签（2026-10-13）。 */
+const vlRpm = reactive({ inFlight: 0, queued: 0, rpm: 0 })
+/** 已保存的 RPM 上限：速率卡「上限」分母只认服务端已保存值（写入已在设置页，本页只读展示） */
 const vlRpmSavedLimit = ref(0)
-/* 轮询回填保护：limit 是输入框 v-model（写控件），若 10s 轮询无条件覆写，
-   会冲掉管理员正在输入/未保存的值 → 仅在非聚焦且无未保存编辑时回填 limit，
-   rpm/inFlight/queued 是只读展示字段，始终照常刷新 */
-const vlRpmFocused = ref(false)
-const vlRpmDirty = ref(false)
-/** 保存中位（EG4）：显式保存钮的忙碌态，防重复提交 */
-const vlRpmSaving = ref(false)
-/** 设置未加载位（#59）：getVirtualLabSettings 失败时置位——速率卡改显「不可用」、
-   保存钮与输入框禁用，禁止管理员拿初始 0 当底数覆盖服务端配置（对齐 SimulatedDaySettings.loadFailed） */
+/** 设置未加载位：getVirtualLabSettings 失败时置位——速率卡改显「不可用」，不把「没拉到」说成「0 / 不限」 */
 const vlRpmLoadFailed = ref(false)
 async function loadVlRpm() {
   try {
@@ -689,9 +612,6 @@ async function loadVlRpm() {
     const s = d.settings ?? {}
     const r = d.rpm ?? {}
     vlRpmSavedLimit.value = Number(s.virtualLearnerRpmLimit ?? 0)
-    if (!vlRpmFocused.value && !vlRpmDirty.value) {
-      vlRpm.limit = Number(s.virtualLearnerRpmLimit ?? 0)
-    }
     vlRpm.rpm = Number(r.rpm ?? 0)
     vlRpm.inFlight = Number(r.inFlight ?? 0)
     vlRpm.queued = Number(r.queued ?? 0)
@@ -699,28 +619,6 @@ async function loadVlRpm() {
   } catch {
     /* 保留上次值（若有）；首访失败置 loadFailed，速率卡不把「没拉到」说成「0 / 不限」 */
     vlRpmLoadFailed.value = true
-  }
-}
-async function saveVlRpm() {
-  if (vlRpmSaving.value || !vlRpmDirty.value || vlRpmLoadFailed.value) return
-  const value = Math.max(0, Math.min(100000, Math.round(Number(vlRpm.limit) || 0)))
-  vlRpm.limit = value
-  vlRpmSaving.value = true
-  try {
-    const res = await adminVirtualLearnersApi.updateVirtualLabSettings({ virtualLearnerRpmLimit: value })
-    vlRpmDirty.value = false /* 已保存：服务端值与输入一致，恢复轮询回填 */
-    vlRpmSavedLimit.value = value /* 保存成功：速率卡「上限」分母随之更新（回执口径） */
-    const r = res.data?.data?.rpm
-    if (r) {
-      vlRpm.rpm = Number(r.rpm ?? value)
-      vlRpm.inFlight = Number(r.inFlight ?? 0)
-      vlRpm.queued = Number(r.queued ?? 0)
-    }
-    toast.success(value > 0 ? `虚拟学习者 RPM 上限已设为 ${value}` : '虚拟学习者 RPM 已设为不限')
-  } catch (e) {
-    toast.error(errMsg(e) || '保存失败')
-  } finally {
-    vlRpmSaving.value = false
   }
 }
 const vlRpmPolling = useSafePolling(() => loadVlRpm(), {
@@ -826,7 +724,7 @@ const concurrencyText = computed(() => {
 /** 速率文案（P1#20）：值与口径分栏——比值「在途 / 上限」进 value、单位与「已保存值」口径进 hint。
     原写法把「在途 N · 上限 X/分」整串塞进 value，183px 卡宽下必换行成两行，把整排 KPI
     拉伸到 180px（连带 220px 的 KPI 带吃掉列表卡高度，裸评审 2026-10-03）；拆开后各占一行。
-    上限读已保存值（vlRpmSavedLimit），不用输入框脏值 */
+    上限读已保存值（vlRpmSavedLimit），本页无写控件（改配置在「模型与接入 → 虚拟学习者」页签） */
 const rateValue = computed(() => {
   // #59：设置未加载时不把初始 0 断言成「0 / 不限」，显式「不可用」
   if (vlRpmLoadFailed.value) return '不可用'
@@ -977,44 +875,7 @@ function openRunningSession(s: Sample) {
   gap: 8px;
   flex: none;
 }
-/* 压测参数卡（2026-10-08 重做）：标题与视图切换进 .mk-card__head（分段控件贴右、宽随内容），
-   卡体只放当前设置行；写控件不进 KPI 数字栅格（读/写分块判例不变）。
-   原「.tabs 通栏贴卡顶」的通栏下划线页签条退役——1603px 的线为两个短标签而画，且缺键盘契约。 */
-.vl-settings { flex: none; }
-.vl-settings__pane { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px 14px; }
-.vl-settings__on {
-  margin-left: 6px;
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  color: var(--mk-green);
-}
-.vl-rpm__ctl { display: inline-flex; align-items: center; gap: 8px; }
-.vl-rpm__input { width: 84px; }
-.vl-rpm__unit {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  white-space: nowrap;
-}
-.vl-rpm__dirty {
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  color: var(--mk-amber);
-  white-space: nowrap;
-}
-/* 设置未加载提示（#59）：失败态红字，与「未保存」脏态区分 */
-.vl-rpm__failed {
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  color: var(--mk-red);
-  white-space: nowrap;
-}
-.vl-rpm__hint {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* 压测参数卡的 .vl-settings/.vl-rpm 样式已随卡片迁往 VirtualLabLoadSettings.vue（2026-10-13） */
 /* 表格已换自动布局（原型 .tbl 词汇），fixed/colgroup 的列宽变量覆写随之删除；
    长内容截断上限收敛到共享原语（.mk-cell-text / .mk-cell-main strong） */
 .vl-truncated { color: var(--mk-amber); font-weight: 700; }

@@ -1391,6 +1391,7 @@ export const adminVirtualLearnersApi = {
 
   updateVirtualLabSettings: async (data: {
     virtualLearnerRpmLimit?: number;
+    autopilotConcurrencyLimit?: number;
     dateSimulation?: {
       enabled?: boolean;
       timezone?: string;

@@ -48,8 +48,9 @@
          · 路由与降级 = 「模型路由」（对话/推理/评估默认路由 + 默认思考）
                        + 「调用与健康」（重试超时 / 降级守卫 / 能力健康）
          · 外挂能力   = 「外挂能力」
-         现状 6 页签是能力扩展：原型把「连接与安全」「路由与降级」各压成一页，
-         本页按可独立保存的配置域拆成四页（连接/路由/运行时/策略），页签数量不改。 -->
+         现状 7 页签是能力扩展：原型把「连接与安全」「路由与降级」各压成一页，
+         本页按可独立保存的配置域拆成四页（连接/路由/运行时/策略）；「虚拟学习者」
+         （压测参数：速率上限 / 最高并发 / 日期模拟）为 2026-10-13 新增，原型无此页。 -->
     <MkSubTabs
       class="ac-tabs"
       :tabs="acTabs"
@@ -613,6 +614,13 @@
          id/role/aria-labelledby 走组件根元素透传，与 MkSubTabs 的 id-base="ac" 成对（审核 #161） -->
     <ModelRegistryOverview v-else-if="tab === 'overview'" id="ac-panel-overview" role="tabpanel" aria-labelledby="ac-tab-overview" ref="registryRef" @count="registryCount = $event" @aliases="aliasOptions = $event" />
 
+    <!-- ===== 虚拟学习者（压测参数：速率上限 / 最高并发 / 日期模拟） =====
+         2026-10-13 自「虚拟学习者」页迁入：最高并发属上游容量治理，与接入/路由设置同处管理；
+         虚拟学习者页只保留只读读数，运营仍可在该页任意启动数量，上限由本页统一管控。 -->
+    <div v-else-if="tab === 'virtual-learners'" class="ac-tab-body" id="ac-panel-virtual-learners" role="tabpanel" aria-labelledby="ac-tab-virtual-learners">
+      <VirtualLabLoadSettings />
+    </div>
+
     <!-- ===== Tab3: 外挂能力（Addons embedded） ===== -->
     <Addons v-else id="ac-panel-addons" role="tabpanel" aria-labelledby="ac-tab-addons" ref="addonsRef" embedded @count="onAddonsCount" />
   </div>
@@ -627,6 +635,7 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { dataSource, isLive } from './store'
 import Addons from './Addons.vue'
 import ModelRegistryOverview from './ModelRegistryOverview.vue'
+import VirtualLabLoadSettings from './VirtualLabLoadSettings.vue'
 import {
   liveApiConfig as cfg,
   liveFetchModels,
@@ -661,7 +670,7 @@ import { toast } from '@/utils/toast'
 /* ---------- 宿主：接入与模型 · 模型总览 · 外挂能力 ----------
    ?tab=model|overview|addons 双向同步；模型总览嵌入只读 ModelRegistryOverview，
    外挂能力嵌入 Addons（embedded，域计数上报宿主） */
-const AC_TABS = ['connection', 'routing', 'runtime', 'security', 'overview', 'addons'] as const
+const AC_TABS = ['connection', 'routing', 'runtime', 'security', 'virtual-learners', 'overview', 'addons'] as const
 type AcTab = (typeof AC_TABS)[number]
 /** 旧页签键别名归一：站内「配置 →」与量测脚本曾用 ?tab=model / ?tab=registry / ?tab=model-routing；
     这些键不在白名单，watcher 原会静默把用户送到「接入与验证」，深链/书签永远落不到目标页签 */
@@ -690,6 +699,7 @@ const acTabs = computed(() => [
   { key: 'routing', label: '模型路由' },
   { key: 'runtime', label: '调用与健康' },
   { key: 'security', label: '安全与访问' },
+  { key: 'virtual-learners', label: '虚拟学习者' },
   { key: 'overview', label: '模型总览' },
   { key: 'addons', label: '外挂能力', count: addonsCountReady.value ? addonsCount.value : undefined },
 ])

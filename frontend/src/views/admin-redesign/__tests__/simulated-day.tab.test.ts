@@ -1,8 +1,10 @@
 /**
- * 日期模拟页签体（虚拟学习者页·压测参数卡）回归：
- * 2026-10-05 tab 化（用户拍板）：披露职责归 .tabs 页签，原折叠头（标题/▸/收起摘要/v-show）
+ * 日期模拟页签体（压测参数卡）回归：
+ * 2026-10-05 tab 化（用户拍板）：披露职责归页签，原折叠头（标题/▸/收起摘要/v-show）
  * 退役——表单在页签体内常驻；「启用日期模拟」开关升页签体首行；enabled 状态上抛宿主
  * （页签「已开启」徽标数据源）。loadFailed 守卫（ui-guard.test.ts）不变。
+ * 2026-10-13：压测参数卡（含本组件）自「虚拟学习者」页迁至「模型与接入 → 虚拟学习者」页签，
+ * 组件本体与契约不变，本测试只挂载 SimulatedDaySettings 自身，不受搬迁影响。
  */
 import { describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';

@@ -1785,8 +1785,13 @@ router.put('/settings', async (req: Request, res) => {
     if (body.virtualLearnerRpmLimit !== undefined && !Number.isInteger(body.virtualLearnerRpmLimit)) {
       return res.status(400).json({ success: false, error: 'virtualLearnerRpmLimit 必须是整数' });
     }
+    if (body.autopilotConcurrencyLimit !== undefined && !Number.isInteger(body.autopilotConcurrencyLimit)) {
+      return res.status(400).json({ success: false, error: 'autopilotConcurrencyLimit 必须是整数' });
+    }
     const settings = await updateVirtualLabSettings(body);
     await applyRpmLimitsFromSettings().catch(() => undefined);
+    // 并发上限立即回填自动驾驶闸门（免等 30s 设置缓存，运营改完即时生效）
+    autopilotService.setConcurrencyLimit(settings.autopilotConcurrencyLimit);
     const stats = getRpmLimitStats();
     res.json({ success: true, data: { settings, rpm: stats.virtualLearner } });
   } catch (error) {

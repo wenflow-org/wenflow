@@ -382,6 +382,21 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
+  it('虚拟学习者 tab（2026-10-13 新增）：切换后渲染压测参数卡，含速率上限/最高并发/日期模拟三块', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const wrapper = await mountApiConfig();
+    const tab = wrapper.findAll('.mk-subtab').find((b) => b.text().includes('虚拟学习者'));
+    expect(tab, '应存在「虚拟学习者」tab').toBeTruthy();
+    await tab!.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.vl-settings').exists()).toBe(true);
+    const labels = wrapper.findAll('.vl-settings .mk-seg__item').map((b) => b.text());
+    expect(labels.some((t) => t.includes('速率上限'))).toBe(true);
+    expect(labels.some((t) => t.includes('最高并发'))).toBe(true);
+    expect(labels.some((t) => t.includes('日期模拟'))).toBe(true);
+    wrapper.unmount();
+  });
+
   it('路由默认支持逻辑别名：输入框可填 chat（不再受模型清单未拉取限制）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();

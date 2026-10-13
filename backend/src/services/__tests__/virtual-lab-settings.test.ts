@@ -71,3 +71,39 @@ describe('virtual-lab-settings · dateSimulation（默认关）', () => {
     expect(afterDate.dateSimulation.maxSimulatedDays).toBe(30);
   });
 });
+
+describe('virtual-lab-settings · autopilotConcurrencyLimit（最高并发，可配）', () => {
+  it('未配置 → 回落 env 兜底默认（默认 10）', () => {
+    const settings = normalizeVirtualLabSettings(undefined);
+    expect(settings.autopilotConcurrencyLimit).toBe(DEFAULT_VIRTUAL_LAB_SETTINGS.autopilotConcurrencyLimit);
+    expect(settings.autopilotConcurrencyLimit).toBeGreaterThanOrEqual(1);
+    expect(settings.autopilotConcurrencyLimit).toBeLessThanOrEqual(200);
+  });
+
+  it('越界被夹紧到 1..200；非法值回落默认', () => {
+    expect(normalizeVirtualLabSettings({ autopilotConcurrencyLimit: 999 } as any).autopilotConcurrencyLimit).toBe(200);
+    expect(normalizeVirtualLabSettings({ autopilotConcurrencyLimit: 0 } as any).autopilotConcurrencyLimit).toBe(1);
+    expect(normalizeVirtualLabSettings({ autopilotConcurrencyLimit: -5 } as any).autopilotConcurrencyLimit).toBe(1);
+    expect(normalizeVirtualLabSettings({ autopilotConcurrencyLimit: 'abc' } as any).autopilotConcurrencyLimit).toBe(
+      DEFAULT_VIRTUAL_LAB_SETTINGS.autopilotConcurrencyLimit,
+    );
+  });
+
+  it('merge：只发并发上限不重置 rpm / dateSimulation；只发 rpm 不重置并发上限', () => {
+    const existing = normalizeVirtualLabSettings({
+      virtualLearnerRpmLimit: 300,
+      autopilotConcurrencyLimit: 25,
+      dateSimulation: { enabled: true },
+    } as any);
+
+    const afterLimit = normalizeVirtualLabSettings(mergeVirtualLabSettings(existing, { autopilotConcurrencyLimit: 40 }));
+    expect(afterLimit.autopilotConcurrencyLimit).toBe(40);
+    expect(afterLimit.virtualLearnerRpmLimit).toBe(300);
+    expect(afterLimit.dateSimulation.enabled).toBe(true);
+
+    const afterRpm = normalizeVirtualLabSettings(mergeVirtualLabSettings(existing, { virtualLearnerRpmLimit: 500 }));
+    expect(afterRpm.autopilotConcurrencyLimit).toBe(25);
+    expect(afterRpm.virtualLearnerRpmLimit).toBe(500);
+  });
+});
+
