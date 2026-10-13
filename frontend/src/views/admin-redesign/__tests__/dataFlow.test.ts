@@ -220,5 +220,9 @@ describe('字段旅程画布缩放接线（2026-10-13 用户：这里也要支�
     expect(DataFlowGraphSource).toContain('const dstAnchorLeft = !sameCol && dstIsRight')
     // far 只对同列成立：跨列边线不该被「纵向跨度大」降级成端口徽标
     expect(DataFlowGraphSource).toContain('const mode: EdgeMode = sameCol && spanY > FAR_SPAN ? \'far\' : \'near\'')
+    // 本阶段列封顶 + 整组居中（2026-10-13 用户：步骤卡「不那么宽，高一些」）——
+    // 无上限的 flex-grow 会把单卡拉成 1064px 扁条，芯片只铺 3 行
+    expect(DataFlowGraphSource).toContain('.dfg-col--main { flex: 1 1 520px; max-width: 720px; }')
+    expect(DataFlowGraphSource).toContain('justify-content: center;')
   })
 })

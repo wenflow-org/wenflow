@@ -1427,7 +1427,8 @@ function stepHue(step: FlowStep): string {
   /* 内容整体居中（2026-10-13 用户：默认以左上角为原点，希望整体视觉居中）：
      视口改 flex，内容层 .dfg-pipe 用 margin:auto 吃两侧/上下余量——
      margin:auto 同时解决两件事：① 余量存在时居中；② 内容超出视口时 auto 边距塌成 0、
-     回到左上角起点，滚动条能从第一格开始滚（justify-content:center 做不到后者，会把开头裁掉）。 */
+     回到左上角起点，滚动条能从第一格开始滚（在**滚动容器**上用 justify-content:center
+     做不到后者，会把开头裁掉）。 */
   display: flex;
 }
 .dfg-view.is-panning, .dfg-view.is-panning * { cursor: grabbing; }
@@ -1442,13 +1443,18 @@ function stepHue(step: FlowStep): string {
   margin: auto;
 }
 /* 三段并列：上游 | 本阶段 | 下游（2026-10-13 用户：核心是让运营可视化看到配合关系）。
-   列间距 96 = 连线走廊（同列 Bus 与跨列贝塞尔都走这里，busX 最远到卡右缘 +40）。 */
-.dfg-cols { display: flex; align-items: flex-start; gap: 96px; }
+   列间距 96 = 连线走廊（同列 Bus 与跨列贝塞尔都走这里，busX 最远到卡右缘 +40）。
+   整组居中：宽视口下三列未必铺满，居中后左右留白对称（内容仍可压缩，不会顶出滚动条）。 */
+.dfg-cols { display: flex; align-items: flex-start; justify-content: center; gap: 96px; }
 .dfg-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 /* 上下游两列按字段名宽度给（芯片名 nowrap 省略号，列太窄会截断名字，运营要看到全名）；
    本阶段列吃剩余宽度（步骤卡里的芯片最多）。都可压缩，窄了先压两侧。 */
 .dfg-col--up, .dfg-col--down { flex: 0 1 400px; }
-.dfg-col--main { flex: 1 1 520px; }
+/* 本阶段列吃剩余宽但要封顶（2026-10-13 用户：单看步骤卡「不那么宽，高一些」）：
+   原先 flex-grow 无上限，goal 档单卡被拉到 1064px 的扁条、芯片只铺 3 行；
+   封顶后卡变窄、芯片多铺几行 → 卡片变方（与右侧窄高的出口列也协调些）。
+   720 是权衡值：再窄（~570，教学档五列挤压后的实际宽）芯片名会频繁截断。 */
+.dfg-col--main { flex: 1 1 520px; max-width: 720px; }
 /* 收窄档折回单列栈（= 改动前的形态）：列容器退场，卡片直接按 DOM 序排进单列，
    走廊回到右侧内边距 84。连线无需分档——renderEdges 按「是不是同一列」自适配。
    用**容器查询**而不是媒体查询：本布局的可用宽度取决于面板（侧栏展开/折叠差 220px），
@@ -1572,7 +1578,11 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-step__badge--svc { background: var(--mk-graph-tag-bg); color: var(--mk-muted); }
 .dfg-step__badge--cross { background: var(--mk-graph-badge-cross-bg); color: var(--fam-classroom); }
 .dfg-step__badge--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
-.dfg-step__agent { font-size: var(--mk-fs-micro); color: var(--mk-faint); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 卡变窄后这里不能再当「被压缩的那个」（2026-10-13）：原先 flex:1 + min-width:0 会把
+   skill id 直接截成「sk…」——而 skill id 正是运营要对号入座的东西。改 0 1 auto + max-width:100%：
+   卡头本就 flex-wrap，放不下时整枚 id 折到下一行（下一行独占约整卡宽，不再截断）；
+   只有 id 长过整卡时才落回省略号。spacer 仍把触发/循环条件推到行尾。 */
+.dfg-step__agent { font-size: var(--mk-fs-micro); color: var(--mk-faint); flex: 0 1 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dfg-step__spacer { flex: 1; }
 .dfg-step__cond {
   flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-amber);
