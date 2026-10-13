@@ -69,14 +69,10 @@
           <!-- 图例（原型 card__tools：卡头右侧只放工具/图例，title 独占左侧） -->
           <span class="orch-odg-chip orch-odg-chip--in">阶段入参</span>
           <span class="orch-odg-chip orch-odg-chip--out">阶段产出</span>
-          <!-- 画布缩放（2026-10-13 用户：居中 / 可拖动 / 可放大）。100% = 撑满可视宽（默认，
-               也是「适应」态）；百分比钮即一键回到 100%。Ctrl/⌘ + 滚轮（含触控板双指捏合）
-               在画布区同样缩放，指针处为锚点 -->
-          <div class="orch-odg-zoom" role="group" aria-label="画布缩放">
-            <button type="button" class="mk-btn mk-btn--sm" :disabled="odgZoom <= ODG_ZOOM_MIN" aria-label="缩小画布" title="缩小画布（Ctrl/⌘ + 滚轮）" @click="stepOdgZoom(-ODG_ZOOM_STEP)">−</button>
-            <button type="button" class="mk-btn mk-btn--sm orch-odg-zoom__val" title="恢复 100%：画布撑满可视宽" @click="odgZoom = 1">{{ Math.round(odgZoom * 100) }}%</button>
-            <button type="button" class="mk-btn mk-btn--sm" :disabled="odgZoom >= ODG_ZOOM_MAX" aria-label="放大画布" title="放大画布（Ctrl/⌘ + 滚轮）" @click="stepOdgZoom(ODG_ZOOM_STEP)">＋</button>
-          </div>
+          <!-- 画布缩放（2026-10-13 用户：居中 / 可拖动 / 可放大）：**滚轮直接缩放**，连续无档位
+               （触控板双指捏合走同一条，浏览器把它合成 ctrlKey 的 wheel）；指针处为锚点。
+               这里只留一枚读数 —— 当前比例，点它回到 100%（默认态 = 撑满可视宽） -->
+          <button type="button" class="mk-btn mk-btn--sm orch-odg-zoom__val" title="当前缩放比例 · 点击回到 100%（滚轮可直接缩放，拖动可平移）" @click="odgZoom = 1">{{ Math.round(odgZoom * 100) }}%</button>
         </div>
       </div>
       <div
@@ -88,7 +84,7 @@
         @pointerup="onOdgPointerUp"
         @pointercancel="onOdgPointerUp"
         @click.capture="onOdgClickCapture"
-        @wheel.ctrl.prevent="onOdgWheelZoom"
+        @wheel.prevent="onOdgWheelZoom"
       >
         <div ref="odgCanvasEl" class="orch-odg-canvas" :style="odgCanvasStyle">
           <svg ref="odgSvgEl" class="orch-odg-svg" aria-hidden="true" />
@@ -550,28 +546,27 @@ function openSkillFromOverview(id: string) {
    用 zoom 而不是 transform: scale —— zoom 参与布局，放大后滚动区出现**真实**滚动范围
    （transform 只是视觉放大，滚不到被"放大到框外"的部分）；且实测列的自有坐标
    （offsetLeft/offsetWidth）不随 zoom 变，连线与列不会错位，无需随缩放重算 SVG。
-   宽度必须由 JS 给 px：zoom 把「指定长度」按父级可视 px 解释，`width: 100%` 于是被钉死
-   在容器宽（实测 50%~150% 下画布可视宽恒为容器宽，缩小时根本看不出变小）。
-   这里给「可视宽 × zoom」，两个方向都成立，且 z=1 时逐字等价于改动前的 width: 100%。 */
-const ODG_ZOOM_MIN = 0.5
-const ODG_ZOOM_MAX = 2
-const ODG_ZOOM_STEP = 0.25
+   宽度必须由 JS 给 px（见 odgCanvasStyle 注释）。 */
+/* 缩放范围只做安全夹逼，**不设档位**：滚轮连续缩放（用户拍板「不要固定比例」）。
+   下限 0.25 保证五列仍肉眼看得出结构，上限 3 之后画布已远超一屏、再放大只增滚动量。 */
+const ODG_ZOOM_MIN = 0.25
+const ODG_ZOOM_MAX = 3
+/** 滚轮 → 缩放比：指数曲线（每格 deltaY=100 ≈ ×1.16），手感与地图/画布类工具一致 */
+const ODG_ZOOM_WHEEL_K = 0.0015
 const odgZoom = ref(1)
 /** 画布基准宽 = 滚动区内容宽（clientWidth − 左右 padding），zoom=1 时的可视宽 */
 const odgBaseW = ref(0)
 /* 宽度为什么必须显式给 px：zoom 的百分比语义会把 `width: 100%` 钉死在容器宽
    （实测 50%~200% 下画布可视宽恒为容器宽，缩小时根本看不出变小）。撤掉画布级
    min-width 后语义变得干净：**指定 px = 画布自有宽，肉眼宽 = 自有宽 × zoom**——
-   于是给「基准宽」的定值即可，每个缩放档的列自有坐标都等于 100% 那套（连线因此不用重算）。 */
+   于是给「基准宽」的定值即可，任何缩放比例的列自有坐标都等于 100% 那套（连线因此不用重算）。 */
 const odgCanvasStyle = computed(() => ({
   zoom: String(odgZoom.value),
   width: odgBaseW.value ? `${odgBaseW.value}px` : undefined,
 }))
+/** 缩放比例安全夹逼（滚轮连续缩放，只夹上下限、不吸附档位） */
 function setOdgZoom(z: number) {
-  odgZoom.value = Math.min(ODG_ZOOM_MAX, Math.max(ODG_ZOOM_MIN, Math.round(z * 100) / 100))
-}
-function stepOdgZoom(delta: number) {
-  setOdgZoom(odgZoom.value + delta)
+  odgZoom.value = Math.min(ODG_ZOOM_MAX, Math.max(ODG_ZOOM_MIN, z))
 }
 /** 基准宽从容器算（自动扣掉 scoped 样式里的左右内边距，不留魔法数），
     只在量得到宽度时更新——隐藏态（v-show → display:none）clientWidth 为 0，不能把它写成 0 */
@@ -582,15 +577,18 @@ function sampleOdgBaseW() {
   const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0)
   odgBaseW.value = Math.max(0, Math.round(el.clientWidth - pad))
 }
-/** Ctrl/⌘ + 滚轮（触控板双指捏合同样上报 ctrlKey=true 的 wheel）：以指针为锚点缩放——
-    缩放前后让指针下的那一点停在原地，否则放大后视野会一路漂向左上角 */
+/** 滚轮缩放（触控板双指捏合同样派发 wheel，Chrome 会带上 ctrlKey）：以指针为锚点——
+    缩放前后让指针下的那一点停在原地，否则放大后视野会一路漂向左上角。
+    连续缩放：比例按 deltaY 指数变化，不吸附任何档位。 */
 async function onOdgWheelZoom(e: WheelEvent) {
   const el = odgScrollEl.value
   const canvas = odgCanvasEl.value
   if (!el || !canvas) return
+  /* deltaMode 归一：0=像素（多数鼠标/触控板），1=行（Firefox 鼠标），2=页 */
+  const raw = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY
   const before = odgZoom.value
-  const step = e.deltaY < 0 ? ODG_ZOOM_STEP : -ODG_ZOOM_STEP
-  const next = Math.min(ODG_ZOOM_MAX, Math.max(ODG_ZOOM_MIN, Math.round((before + step) * 100) / 100))
+  setOdgZoom(before * Math.exp(-raw * ODG_ZOOM_WHEEL_K))
+  const next = odgZoom.value
   if (next === before) return
   const r0 = canvas.getBoundingClientRect()
   const ax = (e.clientX - r0.left) / r0.width
@@ -662,18 +660,31 @@ function onOdgClickCapture(e: MouseEvent) {
 /* 连线重算：原先经 requestAnimationFrame 延迟，实测遮挡/后台窗口下 rAF 会被节流甚至停摆，
    于是容器宽度变了连线仍停在旧坐标（走查：resize 后箭头错位）→ 改直接重算：一次布局只读
    五列的 offsetLeft/offsetWidth 再写一次 SVG innerHTML，开销可忽略。
-   重算统一出口 scheduleOdgLayout：延一个宏任务再量几何，确保 Vue 已经把新宽度写进
-   canvas.style（宽度由基准宽 × zoom 算出来，写样式在微任务里）。去抖：一次缩放/窗口拖动/
-   折叠只算一次几何。
-   取证提示（别被这个坑误导）：内置浏览器是离屏不绘制的，写 canvas.style.width 后连
-   offsetWidth 都读不到新值（同步读、0ms 宏任务读都是旧几何，约 60ms 后才刷新），
-   所以在那里做对齐探针必须留 settle 时间——曾据此误判成「Vue 与浏览器不同拍」。 */
+   统一出口 scheduleOdgLayout：0ms 宏任务去抖 + **等到布局吃进新宽度再量**。
+   为什么不能量一次就算：写 `canvas.style.width` 之后，布局（以及列的最终位置）要等到下一次
+   绘制才刷新——离屏/内置渲染下实测 ~60ms，其间读 offsetWidth 拿到的是旧几何，连线就滞后一档
+   （症状：末条边差 2–6px，且此后没有事件再触发重算，看着像"永久错位"）。判据用
+   「画布自有宽 === 基准宽」（两者在同一趟布局里生效，是"新宽度已落地"的可靠信号），
+   最多等 ~160ms 就照常画，绝不死等。 */
 let odgLayoutTimer: ReturnType<typeof setTimeout> | null = null
+function layoutOrchWhenSettled(attempt = 0) {
+  const canvas = odgCanvasEl.value
+  const want = odgBaseW.value
+  const settled = !canvas || !want || Math.abs(canvas.offsetWidth - want) < 1
+  if (settled || attempt >= 8) {
+    layoutOrch()
+    return
+  }
+  odgLayoutTimer = setTimeout(() => {
+    odgLayoutTimer = null
+    layoutOrchWhenSettled(attempt + 1)
+  }, 20)
+}
 function scheduleOdgLayout() {
   if (odgLayoutTimer) clearTimeout(odgLayoutTimer)
   odgLayoutTimer = setTimeout(() => {
     odgLayoutTimer = null
-    layoutOrch()
+    layoutOrchWhenSettled()
   }, 0)
 }
 function onOdgResize() {
@@ -787,9 +798,8 @@ const govMetaTitle = computed(() =>
 /* 总览单卡（2026-10-13）：画布独占一屏。阶段交接明细（含折叠区与治理徽章）当日整体删除
    （与「字段旅程」页签同源重复且字段数打架），.orch-odg-handoff* / .orch-handoff__* 样式随之退役。 */
 .orch-overview { gap: 12px; }
-/* 画布缩放控件（卡头右组，2026-10-13 用户「可放大」）：− / 百分比 / ＋ 三枚，
-   百分比钮即「回到 100%（撑满可视宽）」。定宽让数字变化时按钮不跳（等宽数字） */
-.orch-odg-zoom { display: flex; align-items: center; gap: 4px; }
+/* 画布缩放读数（卡头右组，2026-10-13 用户「可放大」，同日改滚轮连续缩放后只剩这一枚）：
+   显示当前比例、点击回 100%。定宽 + 等宽数字 = 比例变化时按钮不跳、附近元素不动 */
 .orch-odg-zoom__val { min-width: 56px; font-variant-numeric: tabular-nums; }
 /* 字段路由：卡头 + 工具条吸顶，仅表格区内滚（.frt__scroll 自带 .mk-table-scroll 横向滚动） */
 .orch-routing .frt { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }

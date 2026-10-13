@@ -241,7 +241,7 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).toContain(':title="skillKpiTitle"')
   })
 
-  it('总览画布：居中 + 可拖动 + 可放大（2026-10-13 用户）', () => {
+  it('总览画布：居中 + 可拖动 + 滚轮连续缩放（2026-10-13 用户）', () => {
     // 居中：滚动区做单 flex 项容器 + 画布 margin:auto（溢出时 auto 边距归 0，
     // 不会像 justify-content:center 那样把起始边裁到滚动区外够不着）
     expect(OrchestratorSource).toContain('display: flex; align-items: flex-start;')
@@ -250,12 +250,16 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     // zoom 的百分比语义会把 width:100% 钉死在容器宽，缩小时看不出变化
     expect(OrchestratorSource).toContain('zoom: String(odgZoom.value)')
     expect(OrchestratorSource).toContain('width: odgBaseW.value ?')
-    expect(OrchestratorSource).toContain('ODG_ZOOM_MIN = 0.5')
-    expect(OrchestratorSource).toContain('ODG_ZOOM_MAX = 2')
-    // 控件：− / 百分比（一键回 100%）/ ＋，Ctrl+滚轮以指针为锚点
-    expect(OrchestratorSource).toContain('class="orch-odg-zoom"')
-    expect(OrchestratorSource).toContain('@click="stepOdgZoom(')
-    expect(OrchestratorSource).toContain('@wheel.ctrl.prevent="onOdgWheelZoom"')
+    // 滚轮直缩（不带修饰键）+ 连续无档位：比例走指数曲线，只夹上下限
+    expect(OrchestratorSource).toContain('@wheel.prevent="onOdgWheelZoom"')
+    expect(OrchestratorSource).not.toContain('ODG_ZOOM_STEP')
+    expect(OrchestratorSource).not.toContain('stepOdgZoom')
+    expect(OrchestratorSource).toContain('ODG_ZOOM_WHEEL_K')
+    expect(OrchestratorSource).toContain('ODG_ZOOM_MIN = 0.25')
+    expect(OrchestratorSource).toContain('ODG_ZOOM_MAX = 3')
+    // 只留读数（点它回 100%），不再有 − / ＋ 固定档按钮
+    expect(OrchestratorSource).toContain('orch-odg-zoom__val')
+    expect(OrchestratorSource).not.toContain('orch-odg-zoom"')
     // 拖动平移仍是原实现（缩放后才有可平移的滚动范围）
     expect(OrchestratorSource).toContain('@pointerdown="onOdgPointerDown"')
   })
