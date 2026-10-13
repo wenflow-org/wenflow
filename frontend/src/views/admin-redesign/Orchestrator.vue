@@ -70,7 +70,16 @@
           <span class="orch-odg-chip orch-odg-chip--out">阶段产出</span>
         </div>
       </div>
-      <div class="orch-odg-scroll">
+      <div
+        ref="odgScrollEl"
+        class="orch-odg-scroll"
+        :class="{ 'is-panning': odgPanning }"
+        @pointerdown="onOdgPointerDown"
+        @pointermove="onOdgPointerMove"
+        @pointerup="onOdgPointerUp"
+        @pointercancel="onOdgPointerUp"
+        @click.capture="onOdgClickCapture"
+      >
         <div ref="odgCanvasEl" class="orch-odg-canvas">
           <svg ref="odgSvgEl" class="orch-odg-svg" aria-hidden="true" />
           <div v-for="(s, i) in stages" :key="s.id" class="orch-odg-col">
@@ -623,6 +632,63 @@ function openSkillFromOverview(id: string) {
   openSubPage('skill', id)
 }
 
+/* ===== 总览画布抓取式拖动平移（2026-10-13）=====
+   五列在窄档（<1600：5×196 + 4×48 = 1172）超出卡宽，原先只能拨横滚条才见第 4-5 列。
+   补「按住拖动」平移：空白与节点上都能起手，位移 ≤ 4px 仍按点击处理（节点点击进 Skill
+   详情不受影响）；触摸指针交还原生滚动，不抢手势。 */
+const odgScrollEl = ref<HTMLElement | null>(null)
+const odgPanning = ref(false)
+let odgPanStart: { x: number; y: number; left: number; top: number; id: number; moved: boolean } | null = null
+/* 拖动后浏览器仍会补发一次 click（落点可能在节点上）→ 捕获阶段吞掉，避免误进详情 */
+let odgSuppressClick = false
+
+function onOdgPointerDown(e: PointerEvent) {
+  const el = odgScrollEl.value
+  if (!el || e.button !== 0 || e.pointerType === 'touch') return
+  odgPanStart = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop, id: e.pointerId, moved: false }
+}
+
+function onOdgPointerMove(e: PointerEvent) {
+  const el = odgScrollEl.value
+  if (!el || !odgPanStart || e.pointerId !== odgPanStart.id) return
+  const dx = e.clientX - odgPanStart.x
+  const dy = e.clientY - odgPanStart.y
+  if (!odgPanStart.moved) {
+    if (Math.abs(dx) + Math.abs(dy) < 4) return
+    odgPanStart.moved = true
+    odgPanning.value = true
+    /* 指针捕获失败不致命（合成事件/指针已释放时浏览器会抛 NotFoundError）——平移本身照走 */
+    try { el.setPointerCapture(e.pointerId) } catch { /* noop */ }
+    /* 起手那一下 mousedown 已触发文本选择：进平移态时清掉，避免拖动拖出满屏蓝 */
+    window.getSelection()?.removeAllRanges()
+  }
+  el.scrollLeft = odgPanStart.left - dx
+  el.scrollTop = odgPanStart.top - dy
+  e.preventDefault()
+}
+
+function onOdgPointerUp(e: PointerEvent) {
+  if (!odgPanStart || e.pointerId !== odgPanStart.id) return
+  const moved = odgPanStart.moved
+  const el = odgScrollEl.value
+  if (el?.hasPointerCapture?.(e.pointerId)) {
+    try { el.releasePointerCapture(e.pointerId) } catch { /* noop */ }
+  }
+  odgPanStart = null
+  odgPanning.value = false
+  if (moved) {
+    odgSuppressClick = true
+    setTimeout(() => { odgSuppressClick = false }, 0)
+  }
+}
+
+function onOdgClickCapture(e: MouseEvent) {
+  if (!odgSuppressClick) return
+  odgSuppressClick = false
+  e.stopPropagation()
+  e.preventDefault()
+}
+
 let odgRaf = 0
 function onOdgResize() {
   cancelAnimationFrame(odgRaf)
@@ -761,8 +827,11 @@ html[data-theme='dark'] {
 <style>
 /* ===== 总览 odg 画布（newui/admin odg-canvas）：连线和字段标签由 layoutOrch 以
    innerHTML 注入，不带 scoped 属性，因此样式放在非 scoped 块并统一 .orch-odg 前缀命名空间 ===== */
-/* 交接明细拆出独立卡后，画布滚动区接管画布卡的剩余高度（否则卡底留白） */
-.orch-odg-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 12px 16px; }
+/* 交接明细拆出独立卡后，画布滚动区接管画布卡的剩余高度（否则卡底留白）；
+   2026-10-13 拖动平移：空白处起手即抓手，平移中保持抓手并盖过节点指针态 */
+.orch-odg-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 12px 16px; cursor: grab; }
+.orch-odg-scroll.is-panning,
+.orch-odg-scroll.is-panning .orch-odg-node { cursor: grabbing; }
 .orch-odg-canvas {
   position: relative; display: flex; align-items: flex-start; gap: 100px;
   /* LY13（4K 实测）：画布容器被撑到视口宽 3798，但五列固定 232 + gap100 只到 ~1560，
