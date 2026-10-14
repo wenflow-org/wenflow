@@ -242,15 +242,17 @@
 
     </div>
 
-    <!-- 空态 -->
+    <!-- 空态：图标由锁形 emoji 改为 lucide 线性图标（2026-10-14 管理端去 emoji 同批）——
+         MkEmptyState 的 icon 属性只吃字符，SVG 走 #icon 具名插槽（组件注释里的既定分工） -->
     <MkEmptyState
       v-else
-      icon="🔐"
       :title="statusFilter ? '当前筛选无会话' : '暂无会话记录'"
       description="管理员登录后会话会显示在这里，可随时强制下线"
       :action-text="statusFilter ? '清除筛选' : ''"
       @action="statusFilter = ''"
-    />
+    >
+      <template #icon><Lock :size="22" aria-hidden="true" /></template>
+    </MkEmptyState>
 
     <!-- 分页（标准件 · 卡脚）：只分页活跃会话行，跨管理员统一计数（组头/组数随页变）；
          历史折叠组不受分页影响。行窗口被截断时用 note 披露口径——
@@ -276,6 +278,7 @@ import { useIsNarrow } from './useIsNarrow'
 import { ipText } from './statusText'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
+import { Lock } from 'lucide-vue-next'
 import Pagination from './Pagination.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'

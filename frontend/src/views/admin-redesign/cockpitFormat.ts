@@ -2,6 +2,7 @@
  * 会话座舱纯格式化函数组（SessionCockpit.vue 拆分）：
  * 无响应式依赖的值归一 / 文本提取 / 时间与标签格式化，供 SFC 与同域子模块共用
  */
+import { BarChart3, BookOpen, Brain, ClipboardList, Lightbulb } from 'lucide-vue-next'
 
 export function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -54,13 +55,20 @@ export function stageLabel(st: string) {
   }[st] || st
 }
 
-/** Wrapup 卡片图标映射 */
-export function wrapupCardIcon(label: string) {
-  const map: Record<string, string> = {
-    '主题摘要': '📖',
-    '知识总结': '🧠',
-    '练习建议': '💡',
-    '学习评估': '📊',
+/**
+ * Wrapup 卡片图标映射（2026-10-14 撤 emoji：主题摘要 / 知识总结 / 练习建议 / 学习评估
+ * 四张卡原先各挂一个 emoji 图标）。
+ *
+ * 替代物按 AchIcon 的**终态**做法走：色块 + lucide 线性图标。AchIcon 的注释记着两段判例——
+ * 2026-09-14 先去 emoji 改「色块 + 首字标」，2026-10-08 又收到「logo 图没了，怎么成字体了」
+ * 的反馈，于是把字标换回真图标。所以这里直接给组件，不再绕「首字标」那一版。
+ */
+export function wrapupCardIcon(label: string): unknown {
+  const map: Record<string, unknown> = {
+    '主题摘要': BookOpen,
+    '知识总结': Brain,
+    '练习建议': Lightbulb,
+    '学习评估': BarChart3,
   }
-  return map[label] || '📋'
+  return map[label] || ClipboardList
 }

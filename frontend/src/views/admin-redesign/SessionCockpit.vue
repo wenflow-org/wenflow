@@ -490,7 +490,7 @@
             </div>
             <div class="cp-wrapup-cards" v-if="wrapupFieldCards.length">
               <div v-for="card in wrapupFieldCards" :key="card.label" class="cp-wrapup-card">
-                <div class="cp-wrapup-card__icon">{{ wrapupCardIcon(card.label) }}</div>
+                <div class="cp-wrapup-card__icon"><component :is="wrapupCardIcon(card.label)" :size="18" aria-hidden="true" /></div>
                 <div class="cp-wrapup-card__body">
                   <span class="cp-wrapup-card__label">{{ card.label }}</span>
                   <p class="cp-wrapup-card__text">{{ card.value }}</p>
@@ -616,7 +616,10 @@
                     <!-- 情绪 & 认知 -->
                     <div v-if="lessonWrapup.dominantCognitiveLevel" class="cp-lesson-wrapup__meta-row">
                       <span v-if="lessonWrapup.dominantCognitiveLevel">认知: {{ lessonWrapup.dominantCognitiveLevel }} → {{ lessonWrapup.lastCognitiveLevel }}</span>
-                      <span>情绪: 😊{{ lessonWrapup.positiveEmotions }} 😐{{ lessonWrapup.neutralEmotions }} 😤{{ lessonWrapup.frustratedEmotions }} 😕{{ lessonWrapup.confusedEmotions }}</span>
+                      <!-- 情绪计数：原为四个表情前缀（对应正面/中性/受挫/困惑四档），2026-10-14 与自动驾驶
+                           状态行同批撤除——同行「认知」「疲劳风险」都是纯文字，表情只重复了后面的数字
+                           含义；改词表后读者不必先认表情再对号。 -->
+                      <span>情绪: 正面 {{ lessonWrapup.positiveEmotions }} · 中性 {{ lessonWrapup.neutralEmotions }} · 受挫 {{ lessonWrapup.frustratedEmotions }} · 困惑 {{ lessonWrapup.confusedEmotions }}</span>
                       <span v-if="lessonWrapup.fatigueRisk">疲劳风险: {{ lessonWrapup.fatigueRisk }}</span>
                     </div>
                   </div>
@@ -3483,7 +3486,9 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 }
 .cp-wrapup-card:hover { border-color: rgba(47, 106, 224, 0.25); }
 .cp-wrapup-card__icon {
-  font-size: var(--mk-fs-20);
+  /* 图标从 emoji 字（font-size 20px）改为 lucide 线性图标：色块尺寸不变，
+     字色改蓝档（--mk-blue 压 --mk-blue-bg 实测 4.4:1，非文本图形需 3:1） */
+  color: var(--mk-blue);
   width: 36px;
   height: 36px;
   display: flex;
