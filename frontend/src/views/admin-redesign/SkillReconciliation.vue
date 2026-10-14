@@ -57,12 +57,18 @@
       <div class="mk-table-scroll">
         <table v-if="recReport.items.length && recPageRows.length" class="mk-table sk-table sk-rec-table mk-table--fixed">
           <colgroup>
-            <col style="width:var(--mk-col-text)">
+            <!-- Skill 列宽收敛（2026-10-14 用户评审「中间三列全是孤零零的小绿勾、像撒芝麻」）：
+                 原首尾两列都吃 --mk-col-text（372px 起），实测名称列 355px 只装 ~150px 文字，
+                 首个 ✓ 落在 x=616、与名称末端隔 205px 空转，视线接不上。改取 --mk-cell-main-max
+                 （260px，与主行 id 自身的截断上限同值——不多截任何一个 id）+ 末列不写宽度由它吸收
+                 余量（判例：<col> 的 min/max-width 无效，留一个不写 width 的列=独吞余量）。 -->
+            <col style="width:var(--mk-cell-main-max)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-badge)">
-            <col style="width:var(--mk-col-text)">
+            <!-- 差集列不写宽度：内容恒为一个徽章或「—」，余量归它（整表不再等分、名称列也不再被撑宽） -->
+            <col>
           </colgroup>
           <thead>
             <tr>
@@ -86,7 +92,12 @@
               <tr
                 v-else
                 class="sk-row"
-                :class="{ 'sk-rec-flash': recDiff && e.row.diff === recDiff }"
+                :class="{
+                  'sk-rec-flash': recDiff && e.row.diff === recDiff,
+                  /* 异常行整行弱告警底（2026-10-14 用户评审）：全表最有价值的信息 = 那几行 ✗，
+                     此前混在一大片绿「已上线」胶囊里（实测 learner-model 行与健康行同底色）。 */
+                  'sk-rec-row--flagged': recRowFlagged(e.row),
+                }"
                 tabindex="0"
                 @click="$emit('openSkill', e.row.skillId)"
                 @keydown.enter.prevent="$emit('openSkill', e.row.skillId)"
@@ -327,6 +338,11 @@ function recDotTone(row: RecRow) {
   if (row.completion.status === "live") return "ok";
   return "idle";
 }
+/** 行级异常判据（2026-10-14）：三源任一为 ✗ 即整行弱告警底——与三列 ✓/✗ 的取值同源，
+    避免「列上有红 ✗ 但整行看着跟健康行一样」 */
+function recRowFlagged(row: RecRow): boolean {
+  return !row.manifest || !row.registered || !row.active;
+}
 function recGateDetail(completion: SkillCompletion): string {
   const gates: Array<[string, string]> = [
     ["draft", "技能登记册"], ["handlerReady", "handler 注册"], ["coreReady", "core 文件"],
@@ -351,6 +367,11 @@ defineExpose({ refresh, recReport, recDiff });
 .sk-rec-flash { animation: sk-rec-flash 1.4s ease 2; }
 /* 差集定位闪烁：琥珀底走 token（暗色自动翻转，亮色档硬编码与暗色补丁已删） */
 @keyframes sk-rec-flash { 0%,100% { background: transparent; } 50% { background: var(--mk-amber-bg); } }
+
+/* 异常行弱告警底（2026-10-14）：三源任缺一项即整行染色——用户实测该行与健康行同底色，
+   ✗ 只躲在三列 ✓ 中间。用 alpha 合成（不新造 token），hover 底色仍由 .mk-table 的
+   tr:hover 覆盖在上；不额外加左色条（判例 47c66bc2「色条撤销」）。 */
+.sk-rec-row--flagged { background: color-mix(in srgb, var(--mk-red) 6%, transparent); }
 
 .sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; align-items: center; }
 /* 同行里 mk-pill（中性口径）与 mk-badge（异常语气）统一到同一档尺寸，避免高矮不齐 */

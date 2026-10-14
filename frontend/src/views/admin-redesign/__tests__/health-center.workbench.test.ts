@@ -141,7 +141,7 @@ describe('健康中心（G1）', () => {
     // 2026-10-06 审核 #102：本卡 hint 的「共 N 个技能」与相邻对账卡 hint「登记 N 项」同值同屏
     // 复读且两种叫法，已撤（登记总数单源住在页头注记 title 与对账卡 title）。
     expect(cards[3].text()).not.toContain('共 8 个技能');
-    expect(cards[3].attributes('title')).toContain('未达 live');
+    expect(cards[3].attributes('title')).toContain('未完成上线');
 
     // 健康检查 13 行全部渲染；异常/关注项默认展开，正常项收进折叠组
     const rows = wrapper.findAll('.hc-check__row');
@@ -154,38 +154,42 @@ describe('健康中心（G1）', () => {
     expect(okSummary).toContain('其余 9 项无异常');
     expect(okSummary).toContain('点击展开');
 
-    // 四域页签（2026-10-04 平铺改页签）：四枚与概要 KPI 一一对应，默认落在健康检查
+    // 两域页签（2026-10-14 收敛：原四页签与 KPI 四卡一一对应，实测漂移/完成度两页只有
+    // 一卡孤行 + 半屏死区；漂移并入健康检查、完成度并入对账，深链旧键走别名）
     const tabs = wrapper.findAll('.hc-tabs .tab');
-    expect(tabs.map((t) => t.text())).toEqual(['健康检查', '漂移', '对账', '完成度']);
+    expect(tabs.map((t) => t.text())).toEqual(['健康与漂移', '对账与完成度']);
     expect(tabs[0].attributes('aria-selected')).toBe('true');
 
-    // 漂移页签：点概要卡「漂移」切入（原锚点滚动改为切页签）；契约/W4 红标，运行时遥测为信息蓝标
+    // 漂移入口落到检查行（原漂移页签撤除）：W4 行给「去发布 →」，运行时遥测行给「执行日志 →」；
+    // 契约漂移两项本就有「查看 →」跳编排图漂移面板，故不重复出现跳转钮
+    const jumpLabels = wrapper.findAll('.hc-check__actions .mk-link').map((b) => b.text());
+    expect(jumpLabels).toContain('去发布 →');
+    expect(jumpLabels).toContain('执行日志 →');
+    expect(wrapper.find('.hc-drift__item').exists(), '漂移页签卡片已撤').toBe(false);
+    expect(wrapper.find('#hc-feed').exists(), '告警与事件卡已撤（与健康检查逐字重复）').toBe(false);
+
+    // 点概要卡「漂移」→ 落在健康与漂移页（卡片与页签多对一）
     await cards[1].trigger('click');
     await nextTick();
-    expect(wrapper.find('.hc-tabs .tab[aria-selected="true"]').text()).toBe('漂移');
-    const driftItems = wrapper.findAll('.hc-drift__item');
-    expect(driftItems.length).toBe(3);
-    expect(wrapper.find('.hc-drift .mk-badge--info').exists()).toBe(true);
+    expect(wrapper.find('.hc-tabs .tab[aria-selected="true"]').text()).toBe('健康与漂移');
 
     // 对账卡 tooltip 说明同源不重复计数
     expect(cards[2].attributes('title')).toContain('同源');
   });
 
-  it('漂移页签空态：无漂移时显「全部一致」ok 卡（页签常驻，不再整段隐匿）', async () => {
+  it('无漂移时不给跨页跳转钮（入口只在真有数时出现，不悬空）', async () => {
     getSummaryMock.mockResolvedValue({
       data: { success: true, data: makeReport({ drift: { contract: 0, hash: 0, runtime: 0 } }) },
     });
     const wrapper = await mountWorkbench();
-    await wrapper.findAll('.hc-tabs .tab').find((t) => t.text() === '漂移')!.trigger('click');
-    await nextTick();
-    expect(wrapper.find('.hc-drift-none').exists()).toBe(true);
-    expect(wrapper.text()).toContain('全部一致');
+    const jumpLabels = wrapper.findAll('.hc-check__actions .mk-link').map((b) => b.text());
+    expect(jumpLabels).not.toContain('去发布 →');
+    expect(jumpLabels).not.toContain('执行日志 →');
     wrapper.unmount();
   });
 
-  it('?tab= 深链直达对应域页签（刷新/分享可还原）', async () => {
+  it('完成度构成带（MkStageband）+ 对账表同页：段宽按登记总数算，图例五档全给（含 0 档）', async () => {
     getSummaryMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
-    dataSource.value = 'live';
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
@@ -195,8 +199,36 @@ describe('健康中心（G1）', () => {
     const wrapper = mount(HealthCenter, { global: { plugins: [router] } });
     await flushPromises();
     await nextTick();
-    expect(wrapper.find('.hc-tabs .tab[aria-selected="true"]').text()).toBe('对账');
+    expect(wrapper.find('#hc-completion .stageband').exists()).toBe(true);
+    // 图例五档逐条给数（0 档也在，段宽 0% 但计数不藏）
+    const legend = wrapper.findAll('#hc-completion .sbl').map((n) => n.text());
+    expect(legend.length).toBe(5);
+    expect(legend.join(' ')).toContain('已上线');
+    // 完成度与对账表同页签（用户评审：原独立页签只有一卡 196px + 234px 死区）
+    expect(wrapper.find('#hc-panel-recon .sk-rec').exists()).toBe(true);
     wrapper.unmount();
+  });
+
+  it('?tab= 深链直达对应域页签（刷新/分享可还原）+ 旧键 drift/completion 走别名', async () => {
+    getSummaryMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
+    dataSource.value = 'live';
+    for (const [q, expected] of [
+      ['recon', '对账与完成度'],
+      ['completion', '对账与完成度'], // 旧键（2026-10-14 前是独立页签）
+      ['drift', '健康与漂移'],        // 旧键
+    ] as const) {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
+      });
+      await router.push(`/admin/health-center?tab=${q}`);
+      await router.isReady();
+      const wrapper = mount(HealthCenter, { global: { plugins: [router] } });
+      await flushPromises();
+      await nextTick();
+      expect(wrapper.find('.hc-tabs .tab[aria-selected="true"]').text(), `?tab=${q}`).toBe(expected);
+      wrapper.unmount();
+    }
   });
 
   it('P2 顺手 + P1#28：服务卡按 tone 排序（error→warn→ok）；fixHint 常驻在检查行动作区', async () => {
