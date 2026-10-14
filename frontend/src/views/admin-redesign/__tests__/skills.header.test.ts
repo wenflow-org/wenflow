@@ -123,8 +123,8 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     const rate = kpiOf(w, '成功率')!
     expect(rate.find('.mk-kpi__num').text()).toBe('76.7%')
     expect(rate.find('.mk-kpi__hint').text()).toContain('115/150')
-    expect(rate.attributes('title')).toContain('<90% 红')
-    expect(rate.attributes('title')).toContain('<97% 琥珀')
+    expect(rate.attributes('title')).toContain('低于 90% 标红')
+    expect(rate.attributes('title')).toContain('低于 97% 标黄')
     // 空闲（skill:c 0 调用）/ 平均耗时卡在
     expect(kpiOf(w, '空闲')!.find('.mk-kpi__num').text()).toBe('1')
     expect(kpiOf(w, '平均耗时')!.find('.mk-kpi__num').text()).toBeTruthy()
@@ -164,7 +164,7 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
 
   it('liveCount 三态：对账就绪且为 0 → 红 0（全 draft 是真异常，不再静默隐藏）', async () => {
     const w = await mountSkills()
-    const live = kpiOf(w, 'live')!
+    const live = kpiOf(w, '已上线')!
     expect(live.find('.mk-kpi__num').text()).toBe('0')
     expect(live.classes()).toContain('mk-kpi--bad')
     w.unmount()
@@ -173,7 +173,7 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
   it('liveCount 三态：对账加载中 → 「…」', async () => {
     getReconciliationMock.mockReturnValue(new Promise(() => {}))
     const w = await mountSkills()
-    const live = kpiOf(w, 'live')!
+    const live = kpiOf(w, '已上线')!
     expect(live.find('.mk-kpi__num').text()).toBe('…')
     expect(live.classes()).not.toContain('mk-kpi--bad')
     w.unmount()
@@ -182,7 +182,7 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
   it('liveCount 三态：对账加载失败 → 「?」（读不到 ≠ 0）', async () => {
     getReconciliationMock.mockRejectedValue(new Error('recon boom'))
     const w = await mountSkills()
-    const live = kpiOf(w, 'live')!
+    const live = kpiOf(w, '已上线')!
     expect(live.find('.mk-kpi__num').text()).toBe('?')
     expect(live.classes()).not.toContain('mk-kpi--bad')
     expect(live.attributes('title')).toContain('recon boom')

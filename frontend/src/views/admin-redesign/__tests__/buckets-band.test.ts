@@ -14,7 +14,7 @@ import { nextTick } from 'vue';
 import TeachingSessions from '../TeachingSessions.vue';
 import OpsContent from '../OpsContent.vue';
 import People from '../People.vue';
-import { liveUsers, liveUsersTotal, liveIncludeVirtual } from '../live';
+import { liveUsers, liveUsersTotal, liveIncludeVirtual, liveVirtuals } from '../live';
 
 const { tsList, pathStats, lcApi, tsApi, apiObject } = vi.hoisted(() => {
   const apiObject = (): Record<string, unknown> =>
@@ -83,9 +83,6 @@ async function settle() {
 function bucketLabels(w: ReturnType<typeof mount>): string[] {
   return w.findAll('.buckets .bucket .bucket__l').filter((el) => !el.classes().includes('bucket__foot')).map((el) => el.text().trim());
 }
-function bucketValues(w: ReturnType<typeof mount>): string[] {
-  return w.findAll('.buckets .bucket .bucket__v').map((el) => el.text().trim());
-}
 
 describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
   beforeEach(() => {
@@ -137,9 +134,9 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     // chip 不显计数（同一数字不两处渲染），点击可穿
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
     const abnormalBtn = w.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').find((b) => b.text().startsWith('异常'));
-    expect(abnormalBtn?.text()).toBe('异常');
-    // 右组另一枚 = 有建议（2026-10-05 计数升 KPI 面板后去计数，学习状态判例）
-    expect(w.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').text()).toBe('有建议');
+    expect(abnormalBtn?.text()).toContain('异常');
+    // 右组另一枚 = 有建议（2026-10-11 统一判例：chip 显命中数）
+    expect(w.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').text()).toContain('有建议');
     w.unmount();
   });
 
@@ -161,7 +158,7 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     w.unmount();
   });
 
-  it('用户与学习者：默认「仅真实」KPI 面板无构成带（2026-10-05 统一面板设计）；含测试后 KPI 常驻 + 三桶互斥构成，管理员作真实桶 foot', async () => {
+  it('用户与学习者：默认「仅真实」KPI 两卡（真实/近 7 天活跃，管理员并入 hint）；含测试后四卡（运行中仿真/虚拟/测试/活跃）', async () => {
     const { router, ready } = mockRouter('/admin/people');
     await ready;
     liveIncludeVirtual.value = false;
@@ -169,40 +166,40 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     await settle();
     // 空数据不出空带
     expect(w.find('.buckets').exists()).toBe(false);
-    // 播种 live 域（加载后注入，避免 boot 拉取覆盖）
+    // 播种 live 域（加载后注入，避免 boot 拉取覆盖）；u2/u3 近 7 天内登录过
     liveUsers.value = [
       { id: 'u1', name: '管理员', email: 'a@x.com', isAdmin: true, isVirtualLearner: false, isTestAccount: false, xp: 0, currentLevel: 'L1', lastLoginAt: null, createdAt: '2026-10-01T00:00:00Z', paths: 0, sessions: 0 },
-      { id: 'u2', name: '真实用户', email: 'b@x.com', isAdmin: false, isVirtualLearner: false, isTestAccount: false, xp: 10, currentLevel: 'L1', lastLoginAt: null, createdAt: '2026-10-01T00:00:00Z', paths: 1, sessions: 1 },
-      { id: 'u3', name: '虚拟甲', email: 'v@x.com', isAdmin: false, isVirtualLearner: true, isTestAccount: true, xp: 5, currentLevel: 'L1', lastLoginAt: null, createdAt: '2026-10-01T00:00:00Z', paths: 0, sessions: 0 },
+      { id: 'u2', name: '真实用户', email: 'b@x.com', isAdmin: false, isVirtualLearner: false, isTestAccount: false, xp: 10, currentLevel: 'L1', lastLoginAt: new Date().toISOString(), createdAt: '2026-10-01T00:00:00Z', paths: 1, sessions: 1 },
+      { id: 'u3', name: '虚拟甲', email: 'v@x.com', isAdmin: false, isVirtualLearner: true, isTestAccount: true, xp: 5, currentLevel: 'L1', lastLoginAt: new Date().toISOString(), createdAt: '2026-10-01T00:00:00Z', paths: 0, sessions: 0 },
       { id: 'u4', name: '测试乙', email: 't@x.com', isAdmin: false, isVirtualLearner: false, isTestAccount: true, xp: 0, currentLevel: 'L1', lastLoginAt: null, createdAt: '2026-10-01T00:00:00Z', paths: 0, sessions: 0 }
     ];
     liveUsersTotal.value = 4;
     await nextTick();
     // D18：默认「仅真实」口径下虚拟 / 测试结构性为 0，是死档 → 单桶假构成撤，改 KPI 面板承载
     expect(bucketLabels(w)).toEqual([]);
+    // 2026-10-11 换读数：管理员卡退役并入真实卡 hint；30 分钟在线（恒 0 死读数）→ 近 7 天活跃
     const tiles = w.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['真实用户', '管理员', '30 分钟在线']);
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['2', '1', '0']);
-    expect(tiles[0].find('.mk-kpi__hint').text()).toContain('虚拟 / 测试账号未纳入');
-    expect(tiles[1].find('.mk-kpi__hint').text()).toContain('占真实用户 50%');
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['真实用户', '近 7 天活跃']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['2', '1']);
+    expect(tiles[0].find('.mk-kpi__hint').text()).toContain('不含虚拟 / 测试账号');
+    expect(tiles[0].find('.mk-kpi__hint').text()).toContain('其中管理员 1');
+    expect(tiles[1].find('.mk-kpi__hint').text()).toContain('最后登录在 7 天内');
     w.unmount();
 
-    // 含测试口径 → KPI 常驻 + 三桶互斥构成（管理员数作真实桶 foot；口径悬停给行数与后端总数）
+    // 含测试口径 → 四卡：「真实用户」在测试视角结构性恒 0，换虚拟域「运行中仿真」
     liveIncludeVirtual.value = true;
+    liveVirtuals.value = [{ runningCount: 1 }] as unknown as typeof liveVirtuals.value;
     const w2 = mount(People, { global: { plugins: [router] } });
     await settle();
     await nextTick();
-    expect(w2.findAll('.mk-kpi-grid .mk-kpi')).toHaveLength(3);
-    expect(bucketLabels(w2)).toEqual(['真实用户', '虚拟学习者', '测试账号']);
-    expect(bucketValues(w2)).toEqual(['2', '1', '1']);
-    const feet = w2.findAll('.bucket__foot').map((f) => f.text());
-    expect(feet).toContain('其中管理员 1');
-    const vt = w2.find('.bucket__v').attributes('title');
-    expect(vt).toContain('按已加载 4 行统计');
-    expect(vt).toContain('后端共 4');
+    const tiles2 = w2.findAll('.mk-kpi-grid .mk-kpi');
+    expect(tiles2.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['运行中仿真', '虚拟学习者', '测试账号', '近 7 天活跃']);
+    expect(tiles2.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '1', '2']);
+    expect(tiles2[1].attributes('title')).toContain('当前显示 4 个账号');
     w2.unmount();
 
     liveIncludeVirtual.value = false;
     liveUsers.value = [];
+    liveVirtuals.value = [];
   });
 });

@@ -43,6 +43,8 @@ export interface VirtualLearnerRow {
   /** 原始创建时间（ISO），仅供排序；显示文案见 created */
   createdAt: string
   created: string
+  /** 画像 tags（persona id / cohort key 即 tag）——清理向导保留名单匹配用；旧缓存可能缺 */
+  tags?: string[]
 }
 
 /** 启动实验弹窗里的故事条目 */

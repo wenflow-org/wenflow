@@ -127,9 +127,11 @@ describe('AdminConsole 导航冒烟', () => {
   it('manifest 每个菜单项点击后：路由跳转 + 对应组件渲染', async () => {
     const { wrapper, router } = await mountConsole('/admin/overview');
     const items = wrapper.findAll('.mshell__item');
-    expect(items).toHaveLength(MOCK_SCENES.length);
+    // 隐藏场景（hidden: true，如运营术语表）不进侧栏，由顶栏帮助按钮跳转——不计入菜单遍历
+    const sidebarScenes = MOCK_SCENES.filter((s) => !s.hidden);
+    expect(items).toHaveLength(sidebarScenes.length);
 
-    for (const scene of MOCK_SCENES) {
+    for (const scene of sidebarScenes) {
       const item = wrapper.findAll('.mshell__item').find((n) => n.text().includes(scene.label));
       expect(item, `菜单项缺失：${scene.label}`).toBeDefined();
       await item!.trigger('click');

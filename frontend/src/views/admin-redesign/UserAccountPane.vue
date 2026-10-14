@@ -1,29 +1,16 @@
 <template>
   <div v-if="d" class="ud-root">
-    <!-- 状态条（原型 renderLearnerDetail 的 statstrip：hero 与 subtabs 之间的一行四格读数，
-         一张卡通栏分格，非 KPI 卡栅格——LearnerDetail 同款模板）。
-         2026-10-05（批次五 CM2）：本地 .statstrip 复刻退役，改用共享 MkStatStrip 的 grid 变体。 -->
-    <section class="mk-card">
-      <MkStatStrip layout="grid" aria-label="账号概览" :items="accountStatItems" />
-      <!-- P2（2026-10-04 全站评审）：原 P1#15「学习状态」格撤——趋势/疲劳/置信三事实同屏
-           已由 hero pills 逐项承载，格内是原样复读；学习轴读数也已随页级 statstrip
-           在本页签下不渲染（LearnerDetail）而归位各页签 -->
-    </section>
-
-    <!-- 主卡（原型 renderLearnerDetail 主区结构）：subtabs 置卡顶、pane 在同一张卡内，
-         默认页签=概览。此前页签裸置页 + 每页签独立卡，与原型「一张卡承载全部分区」的
-         详情页设计不一致（2026-10-02 用户指正「和新UI的详情页设计不一样」）。 -->
-      <!-- 概览（默认页签，原型 overview 卡网格）：账户信息 kv（hero 副文会截断，这里给全量字段）
-           + 最近活动 feed（教学会话与目标对话按时间合并，行可下钻只读座舱） -->
-      <div class="ud-pane ud-ov">
+    <!-- 页签重排（2026-10-11）：①账号轴统计带整条撤除（四个事实各归其主：
+         会话→教学会话页签头部读数、XP 与等级→画像、路径→概览当前进度）；
+         ②账户信息与许可合并为一张卡（外部评审 #3 成立：许可原独占一卡，
+         卡体只有一句灰字，与左卡等高后下半张全空）；
+         ③最近活动仍全宽（行内含标题+详情+类型，窄列会挤）。 -->
+    <div class="ud-pane ud-ov">
         <section class="mk-card">
-          <!-- 账号轴的状态与账户操作归「账户信息」卡头（2026-10-08 重做）：此前是一条
-               28px 高的游离行悬在账号概览卡之上，只放「正常 + ⋯」。那行没有自己的容器
-               样式（`.ud-head` / `.ud-head__sp` 全仓无 CSS 规则），spacer 不生效，⋯ 实际
-               紧贴在徽章右侧而非贴右缘；动作与它作用的账户字段也不在同一块里。
-               归位后沿用全站卡头语法：标题吃剩余宽度、尾部元素贴右（「头内成组」规则）。 -->
+          <!-- 账号轴的状态与账户操作归「账户信息」卡头（2026-10-08 重做）：沿用全站卡头语法，
+               标题吃剩余宽度、尾部元素贴右（「头内成组」规则）。 -->
           <div class="mk-card__head">
-            <h3 class="mk-card__title">账户信息</h3>
+            <h3 class="mk-card__title">账户与许可</h3>
             <div class="mk-card__head-right">
               <span class="mk-badge" :class="isDeleted ? 'mk-badge--deleted' : 'mk-badge--ok'">
                 {{ isDeleted ? '已删除' : '正常' }}
@@ -39,78 +26,82 @@
               </div>
             </div>
           </div>
-          <dl class="ud-kv">
+          <!-- 两列 kv（外部评审 #2 采纳）：单列时字段只占左半、右半空着；两列并排把
+               六个事实压成三行，卡高与信息量匹配 -->
+          <dl class="ud-kv ud-kv--2col">
             <dt>邮箱</dt><dd :title="d.email">{{ d.email }}</dd>
             <dt>角色</dt><dd>{{ d.role }}</dd>
+            <dt>账号类型</dt><dd>{{ acctType }}</dd>
             <dt>加入时间</dt><dd :title="d.joinedAbs || undefined">{{ d.joined || '—' }}</dd>
             <dt>最后登录</dt><dd :title="d.lastLoginAbs || undefined">{{ d.lastLogin || '—' }}</dd>
+            <!-- 支持排查要对齐 ID（会话/座舱/日志里的引用都是它）：列短号，全文进 title -->
+            <dt>用户 ID</dt><dd class="ud-kv__mono" :title="uid">{{ shortId(uid) }}</dd>
+            <!-- 许可按「账户属性的一行」收编（外部评审 #2 原建议）：标签 + 徽章 + 说明 + 右端动作
+                 同处一行——比另起一个带分隔线的许可块更紧凑，也避免徽章与动作之间拉出长空档 -->
+            <dt>开发视角许可</dt>
+            <dd class="ud-kv__wide">
+              <span class="mk-badge" :class="grantBadgeCls">{{ grantStatusLabel }}</span>
+              <span class="ud-grant-row__meta" :title="grantStatus === 'active' ? grantNoteLabel : undefined">
+                <template v-if="grantStatus === 'active'">
+                  {{ grantScopeLabel }}<template v-if="projectionGrant?.expiresAt"> · 至 {{ grantExpiresLabel }}</template><template v-if="projectionTokenExpiryLabel"> · {{ projectionTokenExpiryLabel }}</template>
+                </template>
+                <template v-else>用户授予协助许可后，可打开开发调试站进入其视角排查问题</template>
+              </span>
+              <span class="ud-grant-row__acts">
+                <button type="button" class="mk-btn mk-btn--sm" :disabled="grantLoading" @click="loadGrant">
+                  {{ grantLoading ? '刷新中…' : '刷新' }}
+                </button>
+                <button
+                  v-if="grantStatus === 'active'"
+                  type="button" class="mk-btn mk-btn--primary mk-btn--sm"
+                  :disabled="grantOpening"
+                  @click="openDebugStation"
+                >
+                  {{ grantOpening ? '打开中…' : '打开开发调试站' }}
+                </button>
+              </span>
+            </dd>
           </dl>
+          <!-- 区块级提示：走全局 .mk-alert（原型 .alert 词汇），仅错误态展示 -->
+          <div v-if="grantMsgTone === 'error'" class="mk-alert ud-grant-row__notice">{{ grantMessage }}</div>
         </section>
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">最近活动</h3>
-            <span class="mk-card__meta">会话 + 目标 · 最近 {{ feedRows.length }} 条</span>
+            <span class="mk-card__meta">{{ feedMetaText }}</span>
           </div>
           <div v-if="feedRows.length" class="ud-feed">
-            <div
-              v-for="f in feedRows"
-              :key="f.key"
-              class="ud-feed__row"
-              :class="{ 'ud-feed__row--link': !!f.sessionId }"
-              :role="f.sessionId ? 'button' : undefined"
-              :tabindex="f.sessionId ? 0 : undefined"
-              @click="f.sessionId && openSession(f.sessionId)"
-              @keydown.enter="f.sessionId && openSession(f.sessionId)"
-              @keydown.space.prevent="f.sessionId && openSession(f.sessionId)"
-            >
-              <span class="ud-feed__time">{{ f.time }}</span>
-              <div class="ud-feed__grow">
-                <span class="ud-feed__t" :title="f.title">{{ f.title }}</span>
-                <span class="ud-feed__d" :title="f.detail">{{ f.detail }}</span>
-              </div>
-              <span class="mk-badge mk-badge--sm mk-badge--muted">{{ f.kind }}</span>
+          <!-- 行结构（2026-10-11 外部评审 #2 采纳）：时间列 → 类型徽章 → 内容两行。
+               原先是单行 nowrap 拉满全宽（长 prompt 一路顶到卡缘、右侧只剩一个孤悬徽章），
+               现标题最多两行折行 + 文本列设可读宽度上限，类型徽章贴内容而非钉在最右 -->
+          <div class="ud-feed__row"
+            v-for="f in feedRows"
+            :key="f.key"
+            :class="{ 'ud-feed__row--link': !!f.sessionId }"
+            :role="f.sessionId ? 'button' : undefined"
+            :tabindex="f.sessionId ? 0 : undefined"
+            @click="f.sessionId && openSession(f.sessionId)"
+            @keydown.enter="f.sessionId && openSession(f.sessionId)"
+            @keydown.space.prevent="f.sessionId && openSession(f.sessionId)"
+          >
+            <span class="ud-feed__time">{{ f.time }}</span>
+            <span class="mk-badge mk-badge--sm mk-badge--muted ud-feed__kind">{{ f.kind }}</span>
+            <div class="ud-feed__grow">
+              <span class="ud-feed__t" :title="f.title">{{ f.title }}</span>
+              <!-- 状态点（2026-10-11 外部评审 #3）：副行状态文案前加 tone 圆点，
+                   一行扫下来就能看出成功/异常，不必逐字读 -->
+              <span class="ud-feed__d" :title="f.detail">
+                <i class="ud-feed__dot" :data-tone="f.tone" aria-hidden="true"></i>{{ f.detail }}
+              </span>
             </div>
+            <!-- 行尾点击暗示（纯视觉，整行才是点击目标，不做嵌套可聚焦控件）：
+               宽屏下文本列限宽后右端原本是死区，这里给出行可点的信号 -->
+            <span v-if="f.sessionId" class="ud-feed__go" aria-hidden="true">详情 ›</span>
+          </div>
           </div>
           <p v-else class="ud-feed__empty">暂无活动记录 —— 该用户上课或发起目标对话后，这里会出现时间线。</p>
         </section>
-      </div>
-
-      <!-- 列表去重（2026-10-03 用户拍板「收到一起」）：教学会话/目标对话独立 tab 退役——
-           两 tab 的数据本就是 limit 5 的切片（比概览 feed 的 8 条还少），与 feed 纯重复；
-           每人全量列表的所有权归 LearnerDetail（学习轴 8 tab）与三个主列表页（支持 userId 过滤）。
-           feed 行点击仍直达只读座舱，排查路径不变 -->
-      <!-- 开发视角许可：一行条（原型 .statusbar 词汇：徽章 + 说明 + 右侧动作；按钮走 mk-btn 层级） -->
-      <!-- 许可与接入（开发视角许可一行条 + 投影 token 生命周期） -->
-      <section class="mk-card">
-        <div class="mk-card__head"><h3 class="mk-card__title">许可与接入</h3></div>
-        <div class="ud-pane">
-        <div class="ud-grant__bar">
-          <span class="mk-badge" :class="grantBadgeCls">开发视角许可 · {{ grantStatusLabel }}</span>
-          <span class="ud-grant__meta" :title="grantStatus === 'active' ? grantNoteLabel : undefined">
-            <template v-if="grantStatus === 'active'">
-              {{ grantScopeLabel }}<template v-if="projectionGrant?.expiresAt"> · 至 {{ grantExpiresLabel }}</template><template v-if="projectionTokenExpiryLabel"> · {{ projectionTokenExpiryLabel }}</template>
-            </template>
-            <template v-else>用户授予协助许可后，可打开开发调试站进入其视角排查问题</template>
-          </span>
-          <span class="ud-grant__bar-actions">
-            <button type="button" class="mk-btn mk-btn--sm" :disabled="grantLoading" @click="loadGrant">
-              {{ grantLoading ? '刷新中…' : '刷新' }}
-            </button>
-            <button
-              v-if="grantStatus === 'active'"
-              type="button"
-              class="mk-btn mk-btn--primary mk-btn--sm"
-              :disabled="grantOpening"
-              @click="openDebugStation"
-            >
-              {{ grantOpening ? '打开中…' : '打开开发调试站' }}
-            </button>
-          </span>
-        </div>
-        <!-- 区块级提示：走全局 .mk-alert（原型 .alert 词汇），仅错误态展示 -->
-        <div v-if="grantMsgTone === 'error'" class="mk-alert ud-grant__notice">{{ grantMessage }}</div>
-        </div>
-      </section>
+    </div>
   </div>
 
   <div v-else-if="detailError" class="ud-root">
@@ -139,11 +130,9 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { subPage, openSubPage } from './store'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
-import MkStatStrip from '@/components/mk/MkStatStrip.vue'
-import { liveUsers, timeAgo, errMsg } from './live'
+import { liveUsers, timeAgo, errMsg, shortId } from './live'
 import { adminUsersApi, adminTeachingSessionsApi, adminGoalConversationsApi, getUserIncludingDeleted, restoreUser } from '@/api/adminApi'
 import { statusText } from './statusText'
-import { levelBadgeZh } from './learner-profile'
 import { getProjectionGrantStatus, normalizeProjectionGrant, type ProjectionGrant } from '@/api/userCustom'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { toast } from '@/utils/toast'
@@ -167,7 +156,6 @@ interface Detail {
   /** 最后登录（仅列表兜底数据有；详情接口不回该字段） */
   lastLogin: string
   lastLoginAbs: string
-  stats: { label: string; value: string; hint?: string }[]
 }
 
 const liveDetail = ref<Detail | null>(null)
@@ -175,12 +163,6 @@ const liveDetail = ref<Detail | null>(null)
  *  user._count.teaching_sessions 取；null = 无总数来源，角标退化为「最近 N」 */
 const tsTotal = ref<number | null>(null)
 
-/** XP 项的升级语境（批E，公式与后端 level.util.ts 同源） */
-function xpHintOf(xp: number): string {
-  const n = Math.floor(Math.sqrt(Math.max(0, xp) / 100)) + 1
-  const toNext = Math.max(100 * n * n - xp, 0)
-  return toNext > 0 ? `距 L${n + 1} 还需 ${toNext} XP` : '已达最高档'
-}
 /** 绝对时间（概览 kv 的 title；timeAgo 的相对文案不带完整时刻） */
 function fmtAbs(iso?: string | null): string {
   if (!iso) return ''
@@ -201,6 +183,8 @@ interface SessionRow {
 interface GoalRow {
   id: string
   stage: string
+  /** 原始状态机值（statusText 只出中文，状态点语气要用原值；2026-10-11 外部评审 #3） */
+  status: string
   summary: string
   subText: string
   createdAgo: string
@@ -223,13 +207,34 @@ interface FeedItem {
   title: string
   detail: string
   sessionId: string
+  /** 副行状态点语气 */
+  tone: 'ok' | 'warn' | 'info' | 'muted'
+}
+/** 会话/目标状态 → 活动行状态点语气（ok 绿 / warn 琥珀 / info 蓝 / muted 灰） */
+function statusTone(status: string): 'ok' | 'warn' | 'info' | 'muted' {
+  const s = String(status || '').toLowerCase()
+  if (s === 'completed' || s === 'succeeded') return 'ok'
+  if (['failed', 'timeout', 'finalization_failed', 'discarded'].includes(s)) return 'warn'
+  if (['active', 'running', 'paused', 'initializing', 'finalizing'].includes(s)) return 'info'
+  return 'muted'
 }
 const feedRows = computed<FeedItem[]>(() => {
+  /* 已废弃（学习者点「重新开始」后作废的旧会话）不进活动时间线（2026-10-11）：
+     口径与概览「最近会话」预览、教学会话页签的「有效」档一致——否则时间线会被
+     驱动重开的 1 秒会话顶满。隐藏条数在卡头 meta 如实标注。 */
   const items: FeedItem[] = [
-    ...tsRows.value.map((s) => ({ key: `ts-${s.id}`, kind: '会话' as const, ts: s.startTs, time: s.startAgo, title: s.topic, detail: s.subText, sessionId: s.id })),
-    ...gcRows.value.map((g) => ({ key: `gc-${g.id}`, kind: '目标' as const, ts: g.createdTs, time: g.createdAgo, title: g.summary, detail: g.subText, sessionId: g.id }))
+    ...tsRows.value
+      .filter((s) => s.status !== 'discarded')
+      .map((s) => ({ key: `ts-${s.id}`, kind: '会话' as const, ts: s.startTs, time: s.startAgo, title: s.topic, detail: s.subText, sessionId: s.id, tone: statusTone(s.status) })),
+    ...gcRows.value.map((g) => ({ key: `gc-${g.id}`, kind: '目标' as const, ts: g.createdTs, time: g.createdAgo, title: g.summary, detail: g.subText, sessionId: g.id, tone: statusTone(g.status) }))
   ]
   return items.sort((a, b) => b.ts - a.ts).slice(0, 8)
+})
+/** feed 卡头口径：隐藏的废弃条数不静默（同概览「最近会话」预览写法） */
+const feedMetaText = computed(() => {
+  const hidden = tsRows.value.filter((s) => s.status === 'discarded').length
+  const base = `会话 + 目标 · 最近 ${feedRows.value.length} 条`
+  return hidden ? `${base} · 已隐藏废弃 ${hidden}` : base
 })
 
 /** goal 摘要（对齐 GoalConversations.summaryOf：description 优先，兜底解析 collectedData） */
@@ -280,6 +285,7 @@ async function loadActivity(id: string) {
       gcRows.value = ((body.conversations as Record<string, unknown>[]) || []).map((c) => ({
         id: String(c.id),
         stage: String(c.stage || ''),
+        status: String(c.status || ''),
         summary: goalSummaryOf(c),
         subText: `${statusText(String(c.status || '')) || '—'}${c.learningPathId ? ' · 已生成学习路径' : ''}`,
         createdAgo: timeAgo(String(c.createdAt || '')),
@@ -561,10 +567,8 @@ async function loadDetail() {
     const raw = (res.data?.data ?? res.data ?? {}) as Record<string, unknown>
     isDeleted.value = !!raw.deletedAt
     const user = (raw.user as Record<string, unknown>) || raw
-    // 后端不返回 learning_paths 明细：路径计数用 _count 兜底，与统计条口径一致
+    // 详情 _count：会话总数优先它，其次列表兜底（live.ts fetchLiveUsers 的 sessions 即 _count.teaching_sessions）
     const counts = (user._count as Record<string, number>) || {}
-    const pathCount = Number(counts.learningPaths ?? counts.learning_paths ?? base?.paths ?? 0)
-    // P1#14：会话总数优先详情 _count，其次列表兜底（live.ts fetchLiveUsers 的 sessions 即 _count.teaching_sessions）
     const detailSessions = counts.teaching_sessions ?? counts.teachingSessions
     tsTotal.value =
       detailSessions != null
@@ -579,15 +583,7 @@ async function loadDetail() {
       joined: timeAgo(String(user.createdAt || base?.createdAt || '')),
       joinedAbs: fmtAbs(String(user.createdAt || base?.createdAt || '')),
       lastLogin: base?.lastLoginAt ? timeAgo(String(base.lastLoginAt)) : '',
-      lastLoginAbs: base?.lastLoginAt ? fmtAbs(String(base.lastLoginAt)) : '',
-      stats: [
-        { label: '路径', value: String(base?.paths ?? pathCount) },
-        // 列表兜底缺失时不臆造 0：无数据显示 '—'
-        { label: '会话', value: base?.sessions != null ? String(base.sessions) : '—' },
-        { label: 'XP', value: String(user.xp ?? 0), hint: xpHintOf(Number(user.xp ?? 0)) },
-        // 等级词汇单点（learner-profile.ts levelBadgeZh）：统一「L2 · 进阶」格式
-        { label: '等级', value: levelBadgeZh(Number(user.xp ?? 0), user.currentLevel ? String(user.currentLevel) : base?.currentLevel || ''), hint: '按 XP 推导 · 词汇=模型评估层级' }
-      ]
+      lastLoginAbs: base?.lastLoginAt ? fmtAbs(String(base.lastLoginAt)) : ''
     }
   } catch (e) {
     if (seq !== detailLoadSeq || uid.value !== id) return
@@ -601,13 +597,7 @@ async function loadDetail() {
         joined: timeAgo(base.createdAt),
         joinedAbs: fmtAbs(base.createdAt),
         lastLogin: base.lastLoginAt ? timeAgo(String(base.lastLoginAt)) : '',
-        lastLoginAbs: base.lastLoginAt ? fmtAbs(String(base.lastLoginAt)) : '',
-        stats: [
-          { label: '路径', value: String(base.paths) },
-          { label: '会话', value: String(base.sessions) },
-          { label: 'XP', value: String(base.xp), hint: xpHintOf(Number(base.xp)) },
-          { label: '等级', value: levelBadgeZh(Number(base.xp), base.currentLevel), hint: '按 XP 推导 · 词汇=模型评估层级' }
-        ]
+        lastLoginAbs: base.lastLoginAt ? fmtAbs(String(base.lastLoginAt)) : ''
       }
     } else {
       // 404 = 用户不存在/已删除（includeDeleted 也未放行），与网络/服务异常区分开
@@ -621,11 +611,15 @@ async function loadDetail() {
 
 const d = computed<Detail | undefined>(() => liveDetail.value || undefined)
 
-/* 账号概览读数 → 共享 MkStatStrip（grid 变体）所需条目（title 承接原 statstrip 格的 hint） */
-const accountStatItems = computed(() => (d.value?.stats || []).map((s) => ({ label: s.label, value: s.value, title: s.hint })))
-
-/* P1#15 的「学习状态」格已撤（P2 2026-10-04 全站评审）：趋势/疲劳/置信与同屏 hero pills
-   逐项复读；学习者轴读数归位 LearnerDetail 页级 statstrip（仅学习轴页签渲染）。 */
+/* 账号类型（2026-10-11 深设计）：这一页的主语标签——数据隔离/排查先要知道看的是谁。
+   口径与列表徽章（MkVariantBadge 判例）、live.ts 的 isVirtualLearner/isTestAccount 一致 */
+const acctType = computed(() => {
+  const base = liveUsers.value.find((u) => u.id === uid.value)
+  if (!base) return '—'
+  if (base.isVirtualLearner) return '虚拟学习者'
+  if (base.isTestAccount) return '测试账号'
+  return '正式账号'
+})
 </script>
 
 <style scoped>
@@ -638,70 +632,91 @@ const accountStatItems = computed(() => (d.value?.stats || []).map((s) => ({ lab
 /* 状态条已在 2026-10-05（批次五 CM2）收敛为共享 MkStatStrip 的 grid 变体：
    原本地 .statstrip 复刻（18px 数值档/两行换行）整块退役，样式归组件。 */
 
-/* 主卡（原型详情页主区结构）：subtabs 在卡顶，pane 在卡内。
-   pane 内边距 = 原型 .subpane（--sp-4 → 16px）；列表 pane 贴卡边（原型 sessions pane 表格同款） */
+/* pane 内边距 = 16px；单列堆叠（2026-10-11 修）：合卡后本行只剩一张卡，
+   两列网格会让它占半宽、右半张留黑（实测 782/1612）。窄档自适应由卡片自身 min-width 保证。 */
 .ud-pane { display: grid; gap: 16px; padding: 16px; }
-/* 概览 pane（原型 overview）：卡网格；嵌套卡沿 mk-card 描边形态 */
-.ud-ov { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.ud-ov { grid-template-columns: minmax(0, 1fr); align-content: start; }
 
-/* 账户信息 kv（原型 .kv：96px 标签列；hero 副文会截断，这里给全量字段） */
+/* 基础 kv（96px 标签列）；两列变体把六个字段压成三行（宽卡里单列会右半空着） */
 .ud-kv {
   display: grid; grid-template-columns: 96px minmax(0, 1fr);
   gap: 8px 14px; align-items: baseline;
   padding: 0 16px 16px; margin: 0;
+}
+.ud-kv--2col { grid-template-columns: 96px minmax(0, 1fr) 96px minmax(0, 1fr); }
+@media (max-width: 900px) {
+  .ud-kv--2col { grid-template-columns: 96px minmax(0, 1fr); }
+}
+/* 许可行的值格跨到行尾：徽章 + 说明（自动占满中间）+ 动作贴右；
+   取消 dd 默认的单行截断（这里要放三个元素并允许换行） */
+.ud-kv__wide {
+  grid-column: 2 / -1;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  overflow: visible; white-space: normal; text-overflow: clip;
 }
 .ud-kv dt { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .ud-kv dd {
   margin: 0; font-size: var(--mk-fs-body); min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* 用户 ID 等标识符单元格：mono + 稍弱（同全站 mono 判例） */
+.ud-kv__mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 
-/* 最近活动 feed（原型 .feedrow：62px 时间列 + 标题/详情两行；会话与目标行可下钻座舱） */
+/* 最近活动 feed：时间列 → 类型徽章 → 内容两行。
+   标题最多两行（-webkit-line-clamp），文本列设可读宽度上限——长 prompt 原先是
+   nowrap 单行拉满卡宽（4K 下单行 3000+px），横读极累；两行折行 + 限宽后读起来是段落。 */
 .ud-feed { display: grid; padding: 0 8px 8px; }
-.ud-feed__row { display: flex; gap: 10px; align-items: center; padding: 9px 8px; border-bottom: 1px solid var(--mk-line); }
+.ud-feed__row {
+  /* 四列：时间 | 类型 | 内容（限宽） | 行尾暗示——末列必须有，否则 go 会掉到下一行 */
+  display: grid; grid-template-columns: 84px auto minmax(0, 1fr) auto;
+  gap: 4px 10px; align-items: start; padding: 10px 8px;
+  border-bottom: 1px solid var(--mk-line);
+}
 .ud-feed__row:last-child { border-bottom: 0; }
 .ud-feed__row--link { cursor: pointer; border-radius: var(--mk-radius-md); }
 .ud-feed__row--link:hover { background: var(--mk-surface-2); }
 .ud-feed__row--link:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }
-.ud-feed__time { flex: none; width: 62px; color: var(--mk-faint); font-size: var(--mk-fs-micro); font-family: var(--mk-mono); }
-.ud-feed__grow { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.ud-feed__t { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ud-feed__d { color: var(--mk-muted); font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ud-feed__time {
+  /* 列宽按最长文案（「14 小时前」在最大字号档 ≈66px）留余量 + nowrap：
+     固定列宽是「类型徽章永远同一条竖线」的前提，nowrap 防折行（68px 时实测折成两行） */
+  width: 84px; padding-top: 1px; padding-right: 4px; white-space: nowrap;
+  /* 右对齐（2026-10-11 外部评审 #2）：时间文案长短不一（「14 小时前」/「昨天」），
+     左对齐时文字尾端参差、到类型徽章的空档忽大忽小；右对齐后整列成列 */
+  text-align: right;
+  color: var(--mk-muted); font-size: var(--mk-fs-micro); font-family: var(--mk-mono);
+}
+.ud-feed__kind { margin-top: -1px; }
+/* 内容列吃满剩余宽度（2026-10-11 用户走查「右边空那多」）：
+   原 640px 限宽把宽卡里每行右半截留成死区；标题仍是两行封顶，
+   行内文本因此能整段读完（实测 1080 下 160 字的目标描述两行放得下），不再半途省略 */
+.ud-feed__grow { display: grid; gap: 3px; min-width: 0; }
+.ud-feed__t {
+  font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink);
+  /* 行高 1.6（外部评审 #2「偏小偏紧」）：两行折行 + 限宽后可读性优先 */
+  line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ud-feed__d { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* 状态点：8px 圆点，语气色同全站语义（ok 绿 / warn 琥珀 / info 蓝 / muted 灰） */
+.ud-feed__dot {
+  display: inline-block; width: 7px; height: 7px; margin-right: 6px;
+  border-radius: var(--mk-radius-pill); background: var(--mk-line); vertical-align: middle;
+}
+.ud-feed__dot[data-tone='ok'] { background: var(--mk-green); }
+.ud-feed__dot[data-tone='warn'] { background: var(--mk-amber); }
+.ud-feed__dot[data-tone='info'] { background: var(--mk-blue); }
 .ud-feed__empty { padding: 2px 16px 14px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+/* 行尾点击暗示：弱色小字，行 hover 转蓝（整行才是点击目标，它是视觉信号不是控件） */
+.ud-feed__go { align-self: center; color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
+.ud-feed__row--link:hover .ud-feed__go { color: var(--mk-blue); }
 
-/* 开发视角许可：一行条（pane 内，不再自带卡壳内边距） */
-.ud-grant__bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.ud-grant__meta {
-  flex: 1;
-  min-width: 0;
-  color: var(--mk-faint);
-  font-size: var(--mk-fs-micro);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ud-grant__bar-actions { display: flex; gap: 8px; margin-left: auto; }
+/* 许可行的说明小字（辅助层级，不随正文放大）；按内容收宽，
+   避免 flex:1 把它拉成整行宽（会读成一条长灰带） */
+.ud-grant-row__meta { margin: 0; flex: 0 1 auto; min-width: 0; max-width: 640px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.ud-grant-row__acts { display: flex; gap: 8px; margin-left: auto; }
 /* 区块级提示走全局 .mk-alert（阴影/圆角/配色由原语负责），留白由 pane 栅格负责 */
-.ud-grant__notice { margin: 0; }
+.ud-grant-row__notice { margin: 0 16px 12px; }
 
-/* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
-@media (min-width: 2000px) {
-  .mk-row__sub { font-size: var(--mk-fs-body); }
-  .ud-grant__meta { font-size: var(--mk-fs-body); }
-}
-@media (min-width: 2800px) {
-  /* zoom 1.15 档：字号升到 2800 级（17px 级） */
-  .mk-row__sub { font-size: var(--mk-fs-body); }
-  .ud-grant__meta { font-size: var(--mk-fs-body); }
-}
-@media (min-width: 3600px) {
-  /* zoom 1.3 档：4K 屏幕字号继续放大（≈2800 档的 1.17×，对齐 19-20px 级） */
-  .mk-row__sub { font-size: var(--mk-fs-emphasis); }
-  .ud-grant__meta { font-size: var(--mk-fs-emphasis); }
-}
+/* 大屏/4K 适配：本 pane 的字号全部走全站 token（壳层 zoom 档统一放大），
+   无页私有档位需要覆盖；许可说明是辅助小字，不随正文放大参与层级竞争。 */
 </style>

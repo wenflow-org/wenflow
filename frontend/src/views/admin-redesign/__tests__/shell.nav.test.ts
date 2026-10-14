@@ -28,9 +28,10 @@ function mountShell(props: { current: string; crumb?: string; release?: boolean 
 describe('Shell 导航', () => {
   it('渲染 manifest 全部菜单项（label 齐全）', () => {
     const wrapper = mountShell();
+    const visibleScenes = MOCK_SCENES.filter((s) => !s.hidden);
     const labels = wrapper.findAll('.mshell__item-label').map((n) => n.text());
-    expect(labels).toHaveLength(MOCK_SCENES.length);
-    for (const scene of MOCK_SCENES) {
+    expect(labels).toHaveLength(visibleScenes.length);
+    for (const scene of visibleScenes) {
       expect(labels).toContain(scene.label);
     }
   });

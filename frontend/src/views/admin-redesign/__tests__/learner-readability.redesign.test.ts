@@ -103,7 +103,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     subPage.value = null;
   });
 
-  it('需关注收窄（不含疲劳=中）；「观察」pill 单列疲劳中且可筛选；pill 计数只留无 KPI 孪生的「观察」', async () => {
+  it('需关注收窄（不含疲劳=中）；「观察」pill 单列疲劳中且可筛选；pill 计数全显（2026-10-11 统一判例）', async () => {
     const w = mount(LearnerCenter);
     await settle();
     const pillCount = (label: string) => {
@@ -111,9 +111,9 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
       const c = pill?.find('.mk-pill__count');
       return c && c.exists() ? c.text() : undefined;
     };
-    // P2（2026-10-04 全站评审）：pill 计数只留在「观察」上（无 KPI 孪生）；需关注/低置信数字由 KPI 卡单源
+    // 2026-10-11 统一判例：筛选 pill 一律显命中数（需关注与 KPI 卡同源同数）
     expect(pillCount('观察')).toBe('1'); // 甲（疲劳中）
-    expect(pillCount('需关注')).toBeUndefined();
+    expect(pillCount('需关注')).toBe('3');
     const riskKpi = w.findAll('.mk-kpi').find((c) => c.text().includes('需关注'));
     expect(riskKpi!.text()).toContain('3'); // 乙（趋势降）/ 丙（疲劳高）/ 丁（风险摘要）；甲（疲劳中）不再计入
 
@@ -136,7 +136,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     };
     expect(kpi('学习者账号')).toContain('已加载 4');
     // P2（2026-10-04 全站评审）：「快照单次最多加载 50 条」不再进 hint（单源=本页状态条，拆页后住学习状态页头）
-    expect(kpi('学习者账号')).toContain('口径：不含测试账号');
+    expect(kpi('学习者账号')).toContain('含虚拟学习者与测试账号');
     // 审核 #13：hint 补「与用户页『共 N 人』同集合 + 含未开始学习的账号」
     expect(kpi('学习者账号')).toContain('含未开始学习的账号');
     expect(kpi('学习者账号')).not.toContain('50 条');
@@ -145,21 +145,21 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     const { liveLearnersTotal } = await import('../live');
     (liveLearnersTotal as unknown as { value: number | null }).value = 137;
     await nextTick();
-    expect(kpi('学习者账号')).toContain('137 · 已载 4');
+    expect(kpi('学习者账号')).toContain('137 · 已加载 4');
     expect(kpi('需关注')).toContain('疲劳高');
     w.unmount();
   });
 
-  it('风险摘要带量级「X 等 2 个概念挣扎」；平均置信度 hint 带 n=', async () => {
+  it('风险摘要带量级「X 等 2 个概念掌握薄弱」；平均置信度 hint 带基数', async () => {
     // 审核 #12：风险摘要列不再默认隐藏（默认集变更同时升键 v2→v3）；本用例播种「全列显示」
     // 的列偏好，仍锁行内量级文案的渲染契约
     localStorage.setItem('wf_learner_hidden_cols_v3', JSON.stringify([]));
     const w = mount(LearnerCenter);
     await settle();
     const dingRow = w.findAll('tbody tr').find((r) => r.text().includes('丁'));
-    expect(dingRow!.text()).toContain('「X」等 2 个概念挣扎');
+    expect(dingRow!.text()).toContain('「X」等 2 个概念掌握薄弱');
     const avg = w.findAll('.mk-kpi').find((c) => c.text().includes('平均置信度'));
-    expect(avg!.text()).toContain(`n=${4}`); // 四人都有任务，全部入均值
+    expect(avg!.text()).toContain('基于 4 位'); // 四人都有任务，全部入均值
     w.unmount();
     localStorage.removeItem('wf_learner_hidden_cols_v3');
     liveLearners.value = [];
@@ -182,11 +182,11 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
       return card!;
     };
     expect(kpiCard('低置信').find('.mk-kpi__num').text()).toBe('2'); // 丙/丁；无任务的戊不计（旧口径=3）
-    expect(kpiCard('低置信').find('.mk-kpi__hint').text()).toContain('n=4'); // 基数=有任务的快照
+    expect(kpiCard('低置信').find('.mk-kpi__hint').text()).toContain('共 4 位'); // 基数=有学习任务的学习者
 
     const sub = w.find('.mk-distband__sub').text();
-    expect(sub).toContain('共 4 个有任务的快照');
-    expect(sub).toContain('另 1 位无任务/无快照不计');
+    expect(sub).toContain('共 4 位有学习任务的学习者');
+    expect(sub).toContain('另 1 位无学习任务');
 
     // 「低置信」pill 过滤与 KPI 同口径：戊不出现，行数=KPI 读数（否则计数/过滤再打架）
     await w.findAll('.mk-pill').find((p) => p.text().includes('低置信'))!.trigger('click');
@@ -212,28 +212,54 @@ describe('UserAccountPane 账号轴口径（人员详情合并后）', () => {
     return w;
   }
 
-  it('tab 收敛守卫已随合并迁移：pane 含 账户信息/最近活动/许可与接入 三块且 feed 仍在', async () => {
+  it('tab 收敛守卫：账户与许可合并为一卡（2026-10-11 外部评审 #2）+ 最近活动 feed 仍在', async () => {
     const w = await mountPane();
     const titles = w.findAll('.mk-card__title').map((t) => t.text());
-    expect(titles).toContain('账户信息');
+    // 许可不再独占卡片（原卡体只有一句说明 + 两个动作），按外部评审 #2 原建议收编为
+    // 账户 kv 里的一行属性（.ud-kv__wide：徽章 + 说明 + 右端动作）
+    expect(titles).toContain('账户与许可');
     expect(titles).toContain('最近活动');
-    expect(titles).toContain('许可与接入');
+    expect(titles).not.toContain('许可与接入');
+    expect(w.find('.ud-kv').text()).toContain('开发视角许可');
+    expect(w.find('.ud-kv__wide').exists()).toBe(true);
     expect(w.find('.ud-feed').exists()).toBe(true);
     w.unmount();
   });
 
-  it('统计条「学习状态」格已撤（P2 2026-10-04 全站评审）：趋势/疲劳/置信与同屏 hero pills 逐项复读', async () => {
+  it('账号轴统计带整条已撤（2026-10-11 用户走查「这个不要了，页面重新设计」）', async () => {
     const w = await mountPane();
-    const cell = w.findAll('.mk-stat').find((s) => s.text().includes('学习状态'));
-    expect(cell).toBeUndefined();
+    // 路径/会话/XP/等级四格各归其主（会话→教学会话页签、XP 与等级→画像、路径→概览）
+    expect(w.find('.mk-stat-strip').exists()).toBe(false);
+    expect(w.findAll('.mk-stat').length).toBe(0);
     w.unmount();
   });
 
-  it('等级读数用单点词汇「L2 · 进阶」；最后登录无兜底显「—」不显「从未」', async () => {
+  it('账号域字段补全（账号类型 / 用户 ID）；最后登录无兜底显「—」不显「从未」', async () => {
     const w = await mountPane();
-    expect(w.find('.mk-stat-strip').text()).toContain('L2 · 进阶');
     const kv = w.find('.ud-kv').text();
+    expect(kv).toContain('账号类型');
+    expect(kv).toContain('用户 ID');
     expect(kv).not.toContain('从未');
+    w.unmount();
+    liveLearners.value = [];
+  });
+
+  it('活动时间线排除已废弃会话，并在卡头如实标注隐藏条数', async () => {
+    listSessions.mockResolvedValueOnce({
+      data: {
+        data: {
+          items: [
+            { id: 's-keep', topic: '有效会话', subject: 'concept-teaching', status: 'completed', startTime: '2026-09-30T10:00:00Z', messageCount: 4, duration: 60 },
+            { id: 's-drop', topic: '废弃会话', subject: 'concept-teaching', status: 'discarded', startTime: '2026-09-30T09:00:00Z', messageCount: 1, duration: 1 }
+          ]
+        }
+      }
+    });
+    const w = await mountPane();
+    const feed = w.find('.ud-feed').text();
+    expect(feed).toContain('有效会话');
+    expect(feed).not.toContain('废弃会话');
+    expect(w.text()).toContain('已隐藏废弃 1');
     w.unmount();
     liveLearners.value = [];
   });
@@ -276,11 +302,11 @@ describe('UserAccountPane 账户信息卡头（状态与账户操作归位）', 
     return w;
   }
 
-  /** 账户信息卡的卡头（标题 + 状态 + 账户操作所在的那一行） */
+  /** 账户卡的卡头（标题 + 状态 + 账户操作所在的那一行；2026-10-11 合卡后标题为「账户与许可」） */
   const accountHead = (w: ReturnType<typeof mount>) =>
-    w.findAll('.mk-card__head').find((h) => h.text().includes('账户信息'))!;
+    w.findAll('.mk-card__head').find((h) => h.text().includes('账户与许可'))!;
 
-  it('游离的 .ud-head 行已退役，状态与账户操作落在「账户信息」卡头内', async () => {
+  it('游离的 .ud-head 行已退役，状态与账户操作落在账户卡头内', async () => {
     const w = await mountPane();
     expect(w.find('.ud-head').exists()).toBe(false);
     expect(w.find('.ud-head__sp').exists()).toBe(false);

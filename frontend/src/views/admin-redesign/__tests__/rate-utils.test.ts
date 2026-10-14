@@ -21,13 +21,12 @@ import {
 } from '../rate-utils'
 
 describe('rate-utils 阈值常量（四页收敛后的唯一口径）', () => {
-  it('阈值 = <90 红 / <97 琥珀，精度 1 位小数，且披露文案携带三档', () => {
+  it('阈值 = <90 红 / <97 琥珀，精度 1 位小数，且披露文案为白话两档', () => {
     expect(RATE_BAD_BELOW).toBe(90)
     expect(RATE_WARN_BELOW).toBe(97)
     expect(RATE_DECIMALS).toBe(1)
-    expect(RATE_THRESHOLD_NOTE).toContain('<90% 红')
-    expect(RATE_THRESHOLD_NOTE).toContain('<97% 琥珀')
-    expect(RATE_THRESHOLD_NOTE).toContain('1 位小数')
+    expect(RATE_THRESHOLD_NOTE).toContain('低于 90% 标红')
+    expect(RATE_THRESHOLD_NOTE).toContain('低于 97% 标黄')
   })
 })
 

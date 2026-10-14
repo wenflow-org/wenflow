@@ -218,7 +218,7 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     const cell = w.find('.exec-tok');
     expect(cell.find('.exec-tok__num').text()).toBe('1,064');
     expect(cell.find('.mk-cell-sub').text()).toBe('输入 860 · 输出 204');
-    expect(cell.attributes('title')).toContain('传输层统计');
+    expect(cell.attributes('title')).toContain('网关记录');
     expect(cell.attributes('title')).not.toContain('agent_call_logs');
   });
 
@@ -324,10 +324,10 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
   });
 });
 
-/* ---------- P1#24（2026-10-02 人类可读性）：错误摘要条窗口联动 + Top 归因 chip；
-   2026-10-04 外部评审拍板：撤「只看失败」次按钮（与失败 pill 同源），时间/节点筛选提上主行，
-   时间档补 15m/1h 自定义窗 ---------- */
-describe('P1#24：错误摘要条（窗口随 timeRange / Top chip 下钻 / 失败 pill 单源）', () => {
+/* ---------- P1#24（2026-10-02 人类可读性）：时间/节点筛选提上主行，时间档补 15m/1h 自定义窗；
+   2026-10-04 外部评审拍板：撤「只看失败」次按钮（与失败 pill 同源）；
+   2026-10-11 用户拍板：错误摘要条（红条 + Top 归因 chip）整体退役，失败分布走健康中心 ---------- */
+describe('P1#24：执行日志筛选（15m/1h 自定义窗 / 失败 pill 单源 / 摘要条已退役）', () => {
   beforeEach(() => {
     h.reload.mockClear();
     liveLogsPage.value = 1;
@@ -355,7 +355,7 @@ describe('P1#24：错误摘要条（窗口随 timeRange / Top chip 下钻 / 失�
     return { w, router };
   }
 
-  it('stats error>0 → 摘要条出现；默认窗口文案「今天」（不再恒写「近 24h」）', async () => {
+  it('错误摘要条已退役：有失败也不渲染红条与归因 chip', async () => {
     liveLogStats.value = { total: 100, success: 90, timeout: 2, error: 8, canary: 0 };
     liveLogsTotal.value = 2;
     liveLogsFiltered.value = [
@@ -364,19 +364,8 @@ describe('P1#24：错误摘要条（窗口随 timeRange / Top chip 下钻 / 失�
     ];
     const { w } = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    expect(w.text()).toContain('今天捕获 8 条错误级日志');
-    expect(w.text()).not.toContain('近 24h');
-  });
-
-  it('切「近 7 天」→ 摘要条文案随查询窗口联动（时间筛选已提上卡头主行，无需开高级）', async () => {
-    liveLogStats.value = { total: 700, success: 690, timeout: 2, error: 8, canary: 0 };
-    liveLogsTotal.value = 1;
-    liveLogsFiltered.value = [errSpan(1)];
-    const { w } = await mountExecAt('/admin/execution-logs');
-    await nextTick();
-    await w.find('select[aria-label="时间范围筛选"]').setValue('week');
-    await flushPromises();
-    expect(w.text()).toContain('近 7 天捕获 8 条错误级日志');
+    expect(w.find('.exec-alert').exists()).toBe(false);
+    expect(w.findAll('.exec-err-chip').length).toBe(0);
   });
 
   it('小时级自定义窗（15m/1h）：不传 timeRange（后端枚举会 400），换算 startTime 下发', async () => {
@@ -398,61 +387,6 @@ describe('P1#24：错误摘要条（窗口随 timeRange / Top chip 下钻 / 失�
     await flushPromises();
     const q2 = h.reload.mock.calls.at(-1)![0] as Record<string, unknown>;
     expect(q.startTime).toBe(q2.startTime);
-  });
-
-  it('Top 错误类别 chip：点击即设 errorCategory 服务端重查（title 披露口径），再点取消', async () => {
-    liveLogStats.value = { total: 100, success: 90, timeout: 0, error: 10, canary: 0 };
-    liveLogsTotal.value = 3;
-    liveLogsFiltered.value = [
-      errSpan(1, { errorCategory: 'provider_timeout', agent: 'skill:a' }),
-      errSpan(2, { errorCategory: 'provider_timeout', agent: 'skill:b' }),
-      errSpan(3, { errorCategory: 'auth', agent: 'skill:a' }),
-    ];
-    const { w } = await mountExecAt('/admin/execution-logs');
-    await nextTick();
-    const chip = w.findAll('.exec-err-chip').find((c) => c.text().includes('provider_timeout'))!;
-    expect(chip).toBeTruthy();
-    expect(chip.attributes('title')).toContain('当前页失败行聚合');
-    await chip.trigger('click');
-    await flushPromises();
-    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ errorCategory: 'provider_timeout' });
-    await w.findAll('.exec-err-chip').find((c) => c.text().includes('provider_timeout'))!.trigger('click');
-    await flushPromises();
-    expect((h.reload.mock.calls.at(-1)![0] as Record<string, unknown>).errorCategory).toBeUndefined();
-  });
-
-  it('Top Skill chip：点击设 agentFilter（服务端 agentId 参数，watch 触发重查）', async () => {
-    liveLogStats.value = { total: 100, success: 90, timeout: 0, error: 10, canary: 0 };
-    liveLogsTotal.value = 2;
-    liveLogsFiltered.value = [
-      errSpan(1, { errorCategory: 'provider_timeout', agent: 'skill:a' }),
-      errSpan(2, { errorCategory: 'provider_timeout', agent: 'skill:a' }),
-    ];
-    const { w } = await mountExecAt('/admin/execution-logs');
-    await nextTick();
-    const chip = w.findAll('.exec-err-chip').find((c) => c.text().includes('skill:a'))!;
-    expect(chip).toBeTruthy();
-    await chip.trigger('click');
-    await flushPromises();
-    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ agentId: 'skill:a' });
-  });
-
-  it('FN1: 无 errorCategory 的失败行 chip 显示「其他」但下钻传派生口径 internal（不再查 0 行空态）', async () => {
-    liveLogStats.value = { total: 100, success: 90, timeout: 0, error: 10, canary: 0 };
-    liveLogsTotal.value = 2;
-    liveLogsFiltered.value = [
-      errSpan(1, { agent: 'skill:a' }), // 无 errorCategory → 兜底派生
-      errSpan(2, { agent: 'skill:b' }),
-    ];
-    const { w } = await mountExecAt('/admin/execution-logs');
-    await nextTick();
-    const chip = w.findAll('.exec-err-chip').find((c) => c.text().includes('其他'))!;
-    expect(chip).toBeTruthy();
-    expect(chip.text()).toContain('2');
-    await chip.trigger('click');
-    await flushPromises();
-    // label=「其他」但查询值必须是后端支持的 internal（此前直传「其他」→ buildErrorCategoryWhere 无匹配 → 空）
-    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ errorCategory: 'internal' });
   });
 
   it('「只看失败」次按钮已撤（与失败 pill 同源重复）：失败 pill 承担 status=err 过滤，再点恢复', async () => {

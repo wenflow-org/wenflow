@@ -197,7 +197,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     const w = await mountGoals();
     // 段值 = 5 − 1 − 1 = 3；口径披露随分段悬停 hint（title 属性，不再是「用户取消或中断」文案）
     const cancelSeg = w.findAll('.gc-distband .mk-distband__seg').find((x) => (x.attributes('title') || '').startsWith('已取消'))!;
-    expect(cancelSeg.attributes('title')).toContain('取消 / 中断 / 回收合计');
+    expect(cancelSeg.attributes('title')).toContain('含用户取消、失败中断');
     expect(w.text()).not.toContain('用户取消或中断');
     expect(cancelSeg.attributes('title')).toContain('点击只看');
     // 图例点击「已取消」→ 与段计数同口径（补集聚合），点进去对得上
@@ -231,9 +231,9 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     const w = await mountGoals();
     // 口径披露随「进行中」段悬停 hint（title 属性，原桶 foot 文案迁移）
     const activeSeg = w.findAll('.gc-distband .mk-distband__seg').find((el) => (el.attributes('title') || '').startsWith('进行中'))!;
-    expect(activeSeg.attributes('title')).toContain('其中 1 条超 7 天未更新');
-    expect(activeSeg.attributes('title')).toContain('按加载窗口估算');
-    expect(activeSeg.attributes('title')).toContain('非全量');
+    expect(activeSeg.attributes('title')).toContain('其中 1 条超过 7 天未更新');
+    expect(activeSeg.attributes('title')).toContain('澄清中或待确认');
+    expect(activeSeg.attributes('title')).toContain('点击只看');
   });
 
   it('P1#6 stats 拉取失败 → 错误条「统计暂不可用 · 重试」，不再整组静默消失（2026-10-05 起 KPI 面板与分布带同源，错误条措辞随域扩展）', async () => {
@@ -242,7 +242,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     const strip = w.find('.mk-status--bad');
     expect(strip.exists()).toBe(true);
     expect(strip.text()).toContain('统计暂不可用');
-    expect(strip.text()).toContain('KPI 面板与状态分布同源');
+    expect(strip.text()).not.toContain('KPI');
     const retry = strip.findAll('button').find((b) => b.text() === '重试');
     expect(retry).toBeTruthy();
     expect(w.find('.gc-distband').exists()).toBe(false);
@@ -296,13 +296,13 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
 
   it('页头副题随 includeTest 切换如实：默认「仅真实用户口径」，切「含测试」后改为含虚拟与测试账号（2026-10-04 批次五族语统一，原「含模拟」）', async () => {
     const w = await mountGoals();
-    expect(w.text()).toContain('仅真实用户口径');
+    expect(w.text()).toContain('（仅真实用户）');
     // .ds-toggle 是 DataScopeToggle 的稳定测试钩子（见组件注释）
     const toggle = w.find('.ds-toggle');
     expect(toggle.exists()).toBe(true);
     await toggle.findAll('button')[1].trigger('click'); // 含测试
     await nextTick();
     expect(w.text()).toContain('含虚拟学习者与测试账号');
-    expect(w.text()).not.toContain('仅真实用户口径');
+    expect(w.text()).not.toContain('（仅真实用户）');
   });
 });

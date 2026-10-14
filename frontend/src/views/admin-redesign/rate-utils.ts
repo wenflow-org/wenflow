@@ -21,7 +21,7 @@ export const RATE_WARN_BELOW = 97
 export const RATE_DECIMALS = 1
 
 /** 阈值披露文案（各着色处 title 拼接用：着色必须带条件阈值且 title 披露） */
-export const RATE_THRESHOLD_NOTE = `成功率着色阈值：<${RATE_BAD_BELOW}% 红 / <${RATE_WARN_BELOW}% 琥珀 / 其余正常；保留 ${RATE_DECIMALS} 位小数`
+export const RATE_THRESHOLD_NOTE = `成功率低于 ${RATE_BAD_BELOW}% 标红、低于 ${RATE_WARN_BELOW}% 标黄`
 
 export type RateTone = 'ok' | 'warn' | 'bad' | 'muted'
 

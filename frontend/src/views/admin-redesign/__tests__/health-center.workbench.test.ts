@@ -157,7 +157,7 @@ describe('健康中心（G1）', () => {
     // 两域页签（2026-10-14 收敛：原四页签与 KPI 四卡一一对应，实测漂移/完成度两页只有
     // 一卡孤行 + 半屏死区；漂移并入健康检查、完成度并入对账，深链旧键走别名）
     const tabs = wrapper.findAll('.hc-tabs .tab');
-    expect(tabs.map((t) => t.text())).toEqual(['健康与漂移', '对账与完成度']);
+    expect(tabs.map((t) => t.text())).toEqual(['健康检查', '一致性核查与完成度']);
     expect(tabs[0].attributes('aria-selected')).toBe('true');
 
     // 漂移入口落到检查行（原漂移页签撤除）：W4 行给「去发布 →」，运行时遥测行给「执行日志 →」；
@@ -171,10 +171,10 @@ describe('健康中心（G1）', () => {
     // 点概要卡「漂移」→ 落在健康与漂移页（卡片与页签多对一）
     await cards[1].trigger('click');
     await nextTick();
-    expect(wrapper.find('.hc-tabs .tab[aria-selected="true"]').text()).toBe('健康与漂移');
+    expect(wrapper.find('.hc-tabs .tab[aria-selected="true"]').text()).toBe('健康检查');
 
-    // 对账卡 tooltip 说明同源不重复计数
-    expect(cards[2].attributes('title')).toContain('同源');
+    // 对账卡 tooltip 说明同一批数据不重复计数（2026-10-14 读者视角批次：「同源」改人话）
+    expect(cards[2].attributes('title')).toContain('是同一批数据');
   });
 
   it('无漂移时不给跨页跳转钮（入口只在真有数时出现，不悬空）', async () => {
@@ -224,9 +224,9 @@ describe('健康中心（G1）', () => {
     getSummaryMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
     dataSource.value = 'live';
     for (const [q, expected] of [
-      ['recon', '对账与完成度'],
-      ['completion', '对账与完成度'], // 旧键（2026-10-14 前是独立页签）
-      ['drift', '健康与漂移'],        // 旧键
+      ['recon', '一致性核查与完成度'],
+      ['completion', '一致性核查与完成度'], // 旧键（2026-10-14 前是独立页签）
+      ['drift', '健康检查'],        // 旧键
     ] as const) {
       const router = createRouter({
         history: createMemoryHistory(),
@@ -249,8 +249,8 @@ describe('健康中心（G1）', () => {
     // 夹具插入序里 ok 卡（双向对账，items[3]）先于 warn 卡（运行时遥测，items[11]）；
     // 排序后 warn 卡必须排在 ok 卡之前（修复前服务卡按 base 首次出现序渲染）
     const names = wrapper.findAll('.hc-services .service__name').map((el) => el.text());
-    expect(names[0]).toBe('契约清单（manifest）');
-    expect(names.indexOf('运行时遥测')).toBeLessThan(names.indexOf('双向对账'));
+    expect(names[0]).toBe('契约清单');
+    expect(names.indexOf('运行时遥测')).toBeLessThan(names.indexOf('双向一致性核查'));
 
     // fixHint 常驻（P1#28）：修复说明渲染在检查行动作区（此前只在 409 错误 toast 里透出）
     const hints = wrapper.findAll('.hc-check__fixhint');

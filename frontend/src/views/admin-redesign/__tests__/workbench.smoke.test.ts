@@ -101,8 +101,8 @@ describe('Skill 工作台冒烟（轻运营定位）', () => {
     const btns = wrapper.findAll('button').map((b) => b.text());
     expect(btns.some((t) => t.includes('新建 Skill'))).toBe(false);
     expect(btns.some((t) => t.includes('生成骨架'))).toBe(false);
-    // 指引文案：从 0 新建走 CLI
-    expect(wrapper.text()).toContain('scaffold-skill.ts');
+    // 指引文案：新建为开发操作
+    expect(wrapper.text()).toContain('新建 Skill 为开发操作');
     wrapper.unmount();
   });
 });

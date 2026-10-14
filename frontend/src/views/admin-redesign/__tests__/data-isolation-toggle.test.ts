@@ -170,7 +170,7 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
     await nextTick();
     await flushPromises();
     expect(tsListMock).toHaveBeenCalledWith({ limit: 1000, includeTest: false });
-    expect(wrapper.text()).toContain('仅真实');
+    expect(wrapper.text()).toContain('（真实）');
     expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
     wrapper.unmount();
   });
@@ -193,11 +193,11 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
         }
       }
     });
-    await findBtn(wrapper, '含测试').trigger('click');
+    await findBtn(wrapper, '测试').trigger('click');
     await flushPromises();
     await nextTick();
-    expect(tsListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true });
-    expect(wrapper.text()).toContain('含测试');
+    expect(tsListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true, testOnly: true });
+    expect(wrapper.text()).toContain('（测试）');
     const tags = wrapper.findAll('.mk-badge--sm');
     expect(tags).toHaveLength(2);
     expect(tags[0].text()).toBe('虚拟');
@@ -216,7 +216,7 @@ describe('GoalConversations 数据隔离切换（A3）', () => {
     await flushPromises();
     await flushPromises();
     expect(gcListMock).toHaveBeenCalledWith({ limit: 1000, includeTest: false });
-    expect(wrapper.text()).toContain('仅真实');
+    expect(wrapper.text()).toContain('（真实）');
     expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
 
     gcListMock.mockResolvedValue({
@@ -234,11 +234,11 @@ describe('GoalConversations 数据隔离切换（A3）', () => {
         }
       }
     });
-    await findBtn(wrapper, '含测试').trigger('click');
+    await findBtn(wrapper, '测试').trigger('click');
     await flushPromises();
     await nextTick();
-    expect(gcListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true });
-    expect(wrapper.text()).toContain('含测试');
+    expect(gcListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true, testOnly: true });
+    expect(wrapper.text()).toContain('（测试）');
     const tag = wrapper.find('.mk-badge--virtual');
     expect(tag.exists()).toBe(true);
     expect(tag.text()).toBe('虚拟');

@@ -54,3 +54,10 @@ export function useEscape(active: () => boolean, close: () => void) {
     if (i >= 0) escapeStack.splice(i, 1)
   })
 }
+
+/** 只读查询：当前是否有任一激活中的 Esc 层。
+ *  供 Shell 顶层 document 级 Esc 兜底让位用——document 监听先于 window（useEscape 的
+ *  全局监听）触发，兜底若不查栈就无条件关自己的浮层，会抢在栈顶层之前吃掉这次 Esc。 */
+export function hasActiveEscapeLayer(): boolean {
+  return escapeStack.some((e) => e.active())
+}
