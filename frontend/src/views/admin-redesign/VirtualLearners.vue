@@ -192,7 +192,7 @@
               v-if="!isNarrow && !hiddenCols.has('stalled')"
               scope="col"
               class="mk-th--right mk-th--sortable"
-              title="超过回收阈值无写入且无活跃租约的会话数（可在状态条一键回收）"
+              title="超过回收阈值无写入的卡死会话数（用页头「回收卡死」处理）"
               :aria-sort="vlSortState('stalled')"
               @click="toggleVlSort('stalled')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('stalled')">卡死<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -257,7 +257,7 @@
               >{{ s.failedCount }}</button>
             </td>
             <td v-if="!isNarrow && !hiddenCols.has('stalled')" class="mk-num">
-              <span v-if="s.stalledCount > 0" class="vl-num--bad" :title="`${s.stalledCount} 个进行中会话已卡死（超过回收阈值无写入），可在状态条一键回收`">{{ s.stalledCount }}</span>
+              <span v-if="s.stalledCount > 0" class="vl-num--bad" :title="`${s.stalledCount} 个进行中会话已卡死（超过回收阈值无写入），用页头「回收卡死」处理`">{{ s.stalledCount }}</span>
               <span v-else class="mk-na" title="无卡死会话">—</span>
             </td>
             <td v-if="!isNarrow && !hiddenCols.has('created')"><span class="mk-cell-sub" :title="s.createdAt ? `创建于 ${fmtDateTime(s.createdAt)}` : undefined">{{ s.created }}</span></td>
@@ -567,7 +567,7 @@ const vlColDefs = [
   { key: 'story', label: '故事池', title: '已生成故事条数（0 表示未生成，需先生成才能运行）' },
   { key: 'sessions', label: '会话', title: '累计会话数（全部会话，含终态）' },
   { key: 'failed', label: '失败', title: '已失败/已终止会话数（全量聚合）' },
-  { key: 'stalled', label: '卡死', title: '超过回收阈值无写入且无活跃租约的会话数（可在状态条一键回收）' },
+  { key: 'stalled', label: '卡死', title: '超过回收阈值无写入的卡死会话数（用页头「回收卡死」处理）' },
   { key: 'created', label: '创建' },
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())

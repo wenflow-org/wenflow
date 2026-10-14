@@ -19,7 +19,7 @@
          B22/F8-1：成功率与表格同窗口同源（live.ts 页面查询单源），hint 披露取值来源，
          查询在途/失败时显示「—」而不是 0 -->
     <section v-if="logs.length" class="mk-kpi-grid">
-      <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" :hint="successHint" title="成功率 = 成功 ÷ 全部（口径同当前查询窗口与筛选，与下方表格同一次响应）；低于 90% 标红，错误详情见下方告警条" />
+      <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" :hint="successHint" title="成功率 = 成功 ÷ 全部（口径同当前查询窗口与筛选，与下方表格同一次响应）；低于 90% 标红" />
       <MkKpi label="耗时 P50" :value="latencyP50" :hint="latencyHint" title="延迟分位（仅成功日志）：P50 = 中位耗时" />
       <MkKpi label="耗时 P99" :value="latencyP99" :hint="latencyHint" title="延迟分位（仅成功日志）：P99 = 99% 请求耗时" />
     </section>
