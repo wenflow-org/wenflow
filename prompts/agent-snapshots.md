@@ -247,14 +247,6 @@ sandbox:path-agent.supplementRequest
 | `evaluation.sessionLf` | number | teaching-agent |
 | `evaluation.confidence` | number | teaching-agent |
 | `evaluation.reasoning` | string | teaching-agent |
-| `headline` | string | teaching-agent |
-| `subtitle` | string | teaching-agent |
-| `todayActions` | object[] | teaching-agent |
-| `nextStep` | string | teaching-agent |
-| `pathHint` | string | teaching-agent |
-| `paceHint` | string | teaching-agent |
-| `emptyStateCopy` | string | teaching-agent |
-| `warningCopy` | string | teaching-agent |
 
 ### 合法沙盘键（sandbox: 对账注册表）
 
@@ -308,6 +300,14 @@ sandbox:teaching-agent.visibleDialogueContext
 | `snapshot.knowledgeMemory.currentPath` | object | profile-agent |
 | `snapshot.knowledgeMemory.globalSignals` | object | profile-agent |
 | `profile.curriculumControls` | object | profile-agent |
+| `headline` | string | profile-agent |
+| `subtitle` | string | profile-agent |
+| `todayActions` | object[] | profile-agent |
+| `nextStep` | string | profile-agent |
+| `pathHint` | string | profile-agent |
+| `paceHint` | string | profile-agent |
+| `emptyStateCopy` | string | profile-agent |
+| `warningCopy` | string | profile-agent |
 
 ### 合法沙盘键（sandbox: 对账注册表）
 
