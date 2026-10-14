@@ -81,10 +81,25 @@
         </section>
 
         <aside class="auth__demo-side">
-          <!-- 2026-10-14 用户拍板「保持用户侧一样」：右侧与用户侧认证页同款产品演示
-               （目标对话 demo，AuthGoalDemo 共享组件），此前的自创「安全机制」三条面板
-               （审核 #26，原型硬编码看板的替代方案）整层退役——不造第二套。 -->
-          <AuthGoalDemo />
+          <!-- 2026-10-15 用户拍板「结合设计语言设计属于 admin 的登录页，不照搬用户侧」：
+               右侧改为管理控制台导览——分组/图标取自侧栏清单（manifest），排版沿用管理端
+               设计语言（大写小字分组标签 + 线性图标条目 + --mk-* 令牌），不是用户侧
+               目标对话演示的复制品，也不携带任何运行期数字。 -->
+          <div class="cpreview">
+            <p class="cpreview__cap">管理控制台</p>
+            <h2 class="cpreview__title">真实学习者与虚拟学习者的教学观测台</h2>
+            <ul class="cpreview__list">
+              <li v-for="d in DOMAINS" :key="d.label" class="cpreview__row">
+                <span class="cpreview__ico" aria-hidden="true">
+                  <component :is="d.icon" :size="17" :stroke-width="1.75" />
+                </span>
+                <span class="cpreview__text">
+                  <strong>{{ d.label }}</strong>
+                  <small>{{ d.sub }}</small>
+                </span>
+              </li>
+            </ul>
+          </div>
         </aside>
       </div>
     </main>
@@ -97,14 +112,26 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, type Component } from 'vue'
 /* 密码显隐图标：模板用了 <Eye>/<EyeOff> 却从未 import → 按钮点得动但图标空白
    （同 EyeOff 幽灵图标一类，2026-09-29 修） */
-import { Eye, EyeOff } from 'lucide-vue-next'
-import AuthGoalDemo from '@/components/ui/AuthGoalDemo.vue'
+import {
+  Eye, EyeOff, FlaskConical, HeartPulse, Megaphone, ScrollText, Sparkles, Users,
+} from 'lucide-vue-next'
 import { useIsDark } from '@/composables/useIsDark';
 
 const isDark = useIsDark();
+
+/* 右侧导览的域清单：分组名与图标与侧栏清单（manifest.ts）同源，是「控制台里有什么」的
+   静态事实，不含任何运行期计数——登录页不展示会过期的数字。 */
+const DOMAINS: { label: string; sub: string; icon: Component }[] = [
+  { label: '教学', sub: '用户、路径、会话与复习的日常运营', icon: Users },
+  { label: '虚拟学习者', sub: '模拟学习者的运行与学习者卡库', icon: FlaskConical },
+  { label: 'Skill 与提示词', sub: '编排图与提示词的版本管理', icon: Sparkles },
+  { label: '观测', sub: '执行日志、成本分析与审计', icon: ScrollText },
+  { label: '系统', sub: '健康中心、模型接入与运维工具', icon: HeartPulse },
+  { label: '运营', sub: '运营待办、反馈、成就与公告', icon: Megaphone }
+]
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuthApi, markAdminSession } from '@/api/adminApi'
 import { toast } from '../../utils/toast'
@@ -134,11 +161,11 @@ const submitted = ref(false)
 const nameInput = ref<HTMLInputElement | null>(null)
 const passwordInput = ref<HTMLInputElement | null>(null)
 
-/* 审核 #26：侧栏三条安全机制已退役（2026-10-14 用户拍板「保持用户侧一样」，
-   右侧改用共享组件 AuthGoalDemo 的产品演示）。原 securityFacts 数组随之删除；
-   三条机制的「可核实性」仍由实现保证：HttpOnly Cookie（adminApi.ts 会话标记）、
-   429 限流（本页 handleLogin 分支）、跨标签广播（adminApi.ts clearAdminSession），
-   只是不再在登录页上自成一牌。 */
+/* 侧栏右侧面板的两次迭代留痕：审核 #26 的自创「安全机制」三牌（2026-10-14 退役）→
+   用户侧目标对话演示的复制（同日）→ 2026-10-15 用户拍板「设计属于 admin 的登录页，
+   不照搬」回收为控制台导览。三条机制的「可核实性」一直由实现保证、与面板无关：
+   HttpOnly Cookie（adminApi.ts 会话标记）、429 限流（本页 handleLogin 分支）、
+   跨标签广播（adminApi.ts clearAdminSession）。 */
 
 function touch(key: 'name' | 'password') {
   // 审核 #23（2026-10-06）：首次提交前的 blur 不该报错——只是从账号框点到密码框，
@@ -486,13 +513,72 @@ onMounted(() => {
 }
 
 .auth__demo-side {
-  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
-  border-left: 1px solid var(--line);
+  /* 管理端「次级表面」令牌做右侧分区底：亮色 #eef2fa / 暗色 #27282c，明暗自动翻转，
+     与白色表单侧形成两色卡片（管理端侧栏与内容区的分色语言）。 */
+  background: var(--mk-surface-2);
+  border-left: 1px solid var(--mk-line);
   padding: 26px 26px 28px;
   display: grid;
   align-content: center;
 }
-/* .demo 子树样式在共享组件 AuthGoalDemo 内（2026-10-14 与用户侧认证页同款） */
+
+/* ---------- 控制台导览（右侧）：管理端设计语言的大写小字分组标签 + 线性图标条目 ---------- */
+.cpreview {
+  display: grid;
+  gap: 14px;
+}
+.cpreview__cap {
+  margin: 0;
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--mk-faint);
+  user-select: none;
+}
+.cpreview__title {
+  margin: 0;
+  font-size: var(--mk-fs-emphasis);
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.cpreview__list {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 11px;
+}
+.cpreview__row {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+.cpreview__ico {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+.cpreview__ico svg { display: block; }
+.cpreview__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.cpreview__text strong {
+  font-size: var(--mk-fs-body);
+  font-weight: 600;
+  color: var(--ink);
+}
+.cpreview__text small {
+  font-size: var(--mk-fs-micro);
+  color: var(--muted);
+  line-height: 1.55;
+}
 
 .auth__footer {
   position: relative;
@@ -514,10 +600,8 @@ onMounted(() => {
   opacity: 0.8;
 }
 
-/* ===== 深色模式（data-theme=dark）：统计卡/页脚随变量反转 ===== */
-[data-theme='dark'] .auth__demo-side {
-  background: color-mix(in srgb, var(--blue) 9%, var(--surface));
-}
+/* ===== 深色模式（data-theme=dark）：卡片阴影随变量反转（.auth__demo-side 底色走
+   --mk-surface-2，明暗自动翻转，无需覆写） ===== */
 [data-theme='dark'] .auth__card {
   box-shadow: var(--mk-shadow-pop);
 }
