@@ -27,8 +27,11 @@
       </span>
     </div>
 
-    <!-- 筛选工具条（独立一行：模式/仅失败/排序/搜索，从状态条移出对齐全站筛选卡形态） -->
+    <!-- 筛选工具条（全站卡头语法：左组吃剩余宽度＝视图模式 + 快筛 + 排序 + 搜索；
+         右组贴右缘＝动作 + 计数 + 选择器。2026-10-14 用户评审「一行挤 7 个控件」——
+         原来 7 个控件平铺一行、无主次，按语法分两组后左侧可折行、右侧稳定贴右） -->
     <div class="wf-tracepick">
+      <div class="wf-tracepick__left">
       <span v-if="sessionIds.length" class="mk-pills wf-mode">
         <button
           type="button"
@@ -59,6 +62,19 @@
           <option value="dur-desc">耗时 ↓</option>
           <option value="dur-asc">耗时 ↑</option>
         </select>
+      </span>
+        <!-- 链路 ID 搜索属左组（全站卡头语法：快筛 chips → 搜索框） -->
+        <input
+          v-if="viewMode === 'trace'"
+          v-model="traceKeyword"
+          class="wf-tracepick__search mono"
+          placeholder="筛选链路 ID"
+          title="按链路 ID 片段过滤（回车直达该链路）"
+          @keydown.enter.prevent="searchTrace"
+        />
+      </div>
+      <!-- 右组：贴右缘的动作 + 计数 + 选择器 -->
+      <div class="wf-tracepick__right">
         <!-- 嵌入态（执行日志「Trace 链路」tab）不渲染整条状态条：失败定位入口随状态条一起消失，
              空瀑布时用户没有任何「去看失败链路」的抓手，故在筛选条上补回同一入口 -->
         <button
@@ -70,30 +86,18 @@
         >
           {{ failedTraceIds.length }} 条链路含失败，定位 →
         </button>
-      </span>
-      <template v-if="viewMode === 'session'">
-        <span class="wf-tracepick__count">{{ sessionIds.length }} 个会话</span>
-        <select class="wf-tracepick__select mono" v-model="activeSession" aria-label="选择会话">
-          <option v-for="s in sessionIds" :key="s" :value="s">
+        <span class="wf-tracepick__count">{{ viewMode === 'session' ? `${sessionIds.length} 个会话` : `${traceIds.length} 条链路` }}</span>
+        <select v-if="viewMode === 'session'" class="wf-tracepick__select mono" v-model="activeSession" aria-label="选择会话">
+          <option v-for="s in sessionIds" :key="s" :value="s" :title="s">
             {{ sessionLabel(s) }}
           </option>
         </select>
-      </template>
-      <template v-else>
-        <span class="wf-tracepick__count">{{ traceIds.length }} 条链路</span>
-        <input
-          v-model="traceKeyword"
-          class="wf-tracepick__search mono"
-          placeholder="筛选链路 ID"
-          title="按链路 ID 片段过滤"
-          @keydown.enter.prevent="searchTrace"
-        />
-        <select class="wf-tracepick__select mono" v-model="activeTrace" aria-label="选择链路">
-          <option v-for="t in traceIds" :key="t" :value="t">
+        <select v-else class="wf-tracepick__select mono" v-model="activeTrace" aria-label="选择链路">
+          <option v-for="t in traceIds" :key="t" :value="t" :title="t">
             {{ traceLabel(t) }}
           </option>
         </select>
-      </template>
+      </div>
     </div>
 
     <!-- 跳转目标不在当前加载样本内时的提示（trace/session 通用） -->
@@ -137,7 +141,7 @@
     <div v-if="activeSpans.length" class="wf" ref="wfRoot">
       <!-- 时间刻度 -->
       <div class="wf-ruler">
-        <span class="wf-ruler__label">{{ viewMode === 'session' ? '会话内 span' : '阶段 / span' }}</span>
+        <span class="wf-ruler__label">{{ viewMode === 'session' ? '会话内 span' : '分组 / Skill' }}</span>
         <div class="wf-ruler__track" :style="rulerTrackW ? { width: rulerTrackW } : undefined">
           <span v-for="tick in ticks" :key="tick" class="wf-ruler__tick" :style="{ left: tickLeft(tick) }">
             {{ fmtTick(tick) }}
@@ -156,7 +160,7 @@
           <span class="wf-row__stage">
             <span class="wf-row__kind" :class="`wf-row__kind--${span.kind}`">{{ span.kind === 'flow' ? '流程' : '调用' }}</span>
             <span class="wf-row__stage-body">
-              <span class="wf-row__stage-name" :title="`${span.stage} · ${span.agent}`">{{ span.stage }}</span>
+              <span class="wf-row__stage-name" :title="`监控分组 ${span.stage} · Skill ${span.agent}`">{{ monitoringGroupText(span.stage) }}</span>
               <span class="wf-row__stage-id mono" :title="span.agent">{{ span.agent }}</span>
             </span>
           </span>
@@ -304,7 +308,7 @@ import {
   type LogDetail,
   type PromptMetaRow
 } from './live'
-import { statusText } from './statusText'
+import { monitoringGroupText, statusText } from './statusText'
 /* shortTrace 单源自 ./terms（2026-10-06 审核 #121，与日志页签同规则）；import 有提升，
    上方 immediate watch 引用它不再有 TDZ 顾虑 */
 import { TERMS, errorCodeLabel, shortTrace } from './terms'
@@ -341,6 +345,8 @@ interface TraceAgg {
   errs: number
   /** 链路内最大 end 偏移 = max(startMs + durationMs)（原 pickTrace/traceLabel 的 total 口径） */
   maxEndMs: number
+  /** 链路起点 = min(ts)（样本无 ts 时保持 +∞，选择器据此不显示时间标签） */
+  startTs: number
 }
 interface SessionAgg {
   spanCount: number
@@ -358,11 +364,12 @@ const traceAggMap = computed<Map<string, TraceAgg>>(() => {
   for (const s of baseSpans.value) {
     let a = m.get(s.traceId)
     if (!a) {
-      a = { count: 0, errs: 0, maxEndMs: 0 }
+      a = { count: 0, errs: 0, maxEndMs: 0, startTs: Number.POSITIVE_INFINITY }
       m.set(s.traceId, a)
     }
     a.count++
     if (s.status === 'err') a.errs++
+    if (s.ts != null && s.ts < a.startTs) a.startTs = s.ts
     const end = s.startMs + s.durationMs
     if (end > a.maxEndMs) a.maxEndMs = end
   }
@@ -598,7 +605,8 @@ watch(
 )
 function sessionLabel(id: string) {
   const m = sessionOf(id)
-  return `${shortTrace(id)} · ${m.spanCount} span · ${m.traceCount} trace${m.errs ? ` · ${m.errs} 失败` : ''}`
+  const at = clockOf(sessionAggMap.value.get(id)?.startTs)
+  return `${at ? `${at} · ` : ''}${m.spanCount} span · ${m.traceCount} trace${m.errs ? ` · ${m.errs} 失败` : ''} · ${shortTrace(id)}`
 }
 
 const maxEnd = computed(() => Math.max(1, ...activeSpans.value.map((s) => s.startMs + s.durationMs)))
@@ -747,13 +755,22 @@ const fmtTokens = (n: number) => (n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` 
 const badgeOf = (s: string) => (s === 'err' ? 'mk-badge--bad' : s === 'warn' ? 'mk-badge--warn' : 'mk-badge--ok')
 
 /* 长 trace ID 在下拉与标题中截断显示（shortTrace 单源自 ./terms，审核 #121） */
+/** 起点时刻 HH:MM:SS（本地时区）：链路/会话选择器里最好认的键——原来只有 ID 尾巴 +
+    计数，48 条链路里找目标只能靠 ID 片段搜索（2026-10-14 用户评审）。无 ts 记空串。 */
+function clockOf(ts: number | undefined): string {
+  if (ts == null || !Number.isFinite(ts)) return ''
+  const d = new Date(ts)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('zh-CN', { hour12: false })
+}
+
 function traceLabel(t: string) {
   /* 读预聚合 traceAggMap（此前每个下拉选项渲染都全量 filter/reduce 一次） */
   const a = traceAggMap.value.get(t)
   const count = a?.count ?? 0
   const errs = a?.errs ?? 0
   const total = a?.maxEndMs ?? 0
-  return `${shortTrace(t)} · ${count} span · ${fmtMs(total)}${errs ? ` · ${errs} 失败` : ''}`
+  const at = clockOf(a?.startTs)
+  return `${at ? `${at} · ` : ''}${count} span · ${fmtMs(total)}${errs ? ` · ${errs} 失败` : ''} · ${shortTrace(t)}`
 }
 
 /* 样本内失败总数（「仅失败」按钮角标） */
@@ -946,6 +963,9 @@ const verdictText = computed(() => {
   max-width: 100%;
 }
 .wf-tracepick__count { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
+/* 卡头语法分组：左组吃剩余宽度（窄屏可折行），右组贴右缘不参与折行 */
+.wf-tracepick__left { display: flex; align-items: center; gap: 10px; flex: 1 1 420px; min-width: 0; flex-wrap: wrap; }
+.wf-tracepick__right { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; margin-left: auto; }
 .wf-tracepick__search {
   width: 120px;
   padding: 6px 10px;

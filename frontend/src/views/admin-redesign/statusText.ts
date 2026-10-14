@@ -82,6 +82,24 @@ const STAGE_TEXT: Record<string, string> = {
   cancelled: '已取消'
 }
 
+/* 监控分组（后端 agent-manifest 的 monitoringGroup）：执行日志行把它当 agentName 下发，
+   原名是英文（Goal / Path / Profile / Simulation / Teaching / Tool，见 agent-manifest.service
+   getMonitoringGroupMappings）。执行日志瀑布的「分组」列直接渲染这个值 → 中文界面里冒出
+   一个英文词（2026-10-14 用户评审）。未收录的新分组按原值显示，不静默变空白、也不猜。 */
+const MONITORING_GROUP_TEXT: Record<string, string> = {
+  Goal: '目标',
+  Path: '路径',
+  Profile: '画像',
+  Simulation: '仿真',
+  Teaching: '教学',
+  Tool: '工具'
+}
+
+export function monitoringGroupText(g: string | null | undefined): string {
+  const raw = String(g || '').trim()
+  return MONITORING_GROUP_TEXT[raw] || raw
+}
+
 export function stageText(s: string | null | undefined): string {
   const key = String(s || '').toLowerCase()
   return STAGE_TEXT[key] || String(s || '')

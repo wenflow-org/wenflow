@@ -128,6 +128,53 @@ describe('Trace 链路概要卡（读数带）', () => {
   });
 });
 
+describe('分组名与选择器标签（2026-10-14 第二批：英文分组 / 一行 7 控件 / 链路难辨认）', () => {
+  it('行首分组名中文化（原文 English 进 title），列头不再自称「阶段」', async () => {
+    const w = mountWith(GATEWAY_ONLY);
+    await w.vm.$nextTick();
+    expect(w.find('.wf-ruler__label').text()).toBe('分组 / Skill');
+    const name = w.find('.wf-row__stage-name');
+    expect(name.text()).toBe('仿真');                                  // Simulation → 仿真
+    expect(name.attributes('title')).toContain('监控分组 Simulation');  // 原文可查
+    w.unmount();
+  });
+
+  it('未收录的分组名按原值显示（不静默变空白、也不猜）', async () => {
+    const w = mountWith([span({ id: 'a', stage: 'SessionWrapup' })]);
+    await w.vm.$nextTick();
+    expect(w.find('.wf-row__stage-name').text()).toBe('SessionWrapup');
+    w.unmount();
+  });
+
+  it('链路选择器标签带起点时刻（48 条链路里能靠时间认人）', async () => {
+    const w = mountWith([
+      span({ id: 'a', ts: new Date('2026-10-14T09:22:31+08:00').getTime(), durationMs: 7700 }),
+      span({ id: 'b', ts: new Date('2026-10-14T09:22:31+08:00').getTime(), startMs: 7700, durationMs: 2000 })
+    ]);
+    await w.vm.$nextTick();
+    const opt = w.find('.wf-tracepick__select option');
+    const label = opt.text();
+    expect(label).toMatch(/\d{2}:\d{2}:\d{2}/);
+    expect(label).toContain('2 span');
+    expect(opt.attributes('title')).toBe('tr-1');   // 完整链路 ID 落在 title（可复制核对）
+    w.unmount();
+  });
+
+  it('工具条按卡头语法分左右组：左组＝模式/仅失败/排序/搜索，右组＝动作/计数/选择器', async () => {
+    const w = mountWith(GATEWAY_ONLY);
+    await w.vm.$nextTick();
+    const left = w.find('.wf-tracepick__left');
+    const right = w.find('.wf-tracepick__right');
+    expect(left.exists() && right.exists()).toBe(true);
+    expect(left.text()).toContain('仅失败');
+    expect(left.find('.wf-tracepick__search').exists()).toBe(true);   // 搜索框归左组
+    expect(right.find('.wf-tracepick__count').exists()).toBe(true);   // 计数归右组
+    expect(right.find('.wf-tracepick__select').exists()).toBe(true);
+    expect(left.find('.wf-tracepick__select').exists()).toBe(false);
+    w.unmount();
+  });
+});
+
 describe('瀑布行行尾耗时', () => {
   it('网关耗时与总耗时同值时不显示（避免同一数字写两遍）', async () => {
     const w = mountWith(GATEWAY_ONLY);
