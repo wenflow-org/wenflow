@@ -835,7 +835,8 @@ import { subPage, openSubPage, setSubPageLabel } from './store'
 import { liveLearners, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
-import { learnerMetric, loadCaliber, LEARNER_METRIC_CODES, type LearnerMetricKey } from './learnerMetrics'
+import { learnerMetric, LEARNER_METRIC_CODES, type LearnerMetricKey } from '@/utils/learnerMetrics'
+import { loadCaliber } from './opsShared'
 import { adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
 import {
   statusText,

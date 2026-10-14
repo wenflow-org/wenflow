@@ -1,17 +1,20 @@
 /**
- * 四读数口径单点（LearnerDetail 两处渲染点 + VirtualProfile 两处共用）。
+ * 四读数口径单点（LearnerDetail 两处渲染点 + VirtualProfile 两处 + 学习端完课卡共用）。
  * 本用例锁三件事：
  *  ① 参考带只有一份（此前 LearnerDetail「0-10，越高越累」vs VirtualProfile「参考 4–7」两套并存）；
- *  ② 色调阈值两页一致（负荷类高=坏、低=好；LF ≥6 警戒；LSB 正=好）；
+ *  ② 色调阈值各处一致（负荷类高=坏、低=好；LF ≥6 警戒；LSB 正=好）；
  *  ③ 出处文案说清「单次会话快照 ≠ 学习者级聚合」，并带上取样时刻。
+ * 定义在 @/utils/learnerMetrics（纯定义，学习端组件也能引）；出处文案在 ../opsShared。
  */
 import { describe, expect, it, vi } from 'vitest';
-import { LEARNER_METRICS, LEARNER_METRIC_CODES, learnerMetric, loadCaliber } from '../learnerMetrics';
+import { LEARNER_METRICS, LEARNER_METRIC_CODES, learnerMetric } from '@/utils/learnerMetrics';
+import { loadCaliber } from '../opsShared';
 
 describe('四读数共享口径', () => {
   it('四键齐全、标签无别名分叉（LF 不再一处「学习疲劳」一处「疲劳度」）', () => {
     expect(LEARNER_METRICS.map((m) => m.key)).toEqual(['lss', 'ktl', 'lf', 'lsb']);
     expect(learnerMetric('lf').label).toBe('LF 学习疲劳');
+    expect(learnerMetric('ktl').label).toBe('KTL 训练负荷');
     expect(LEARNER_METRIC_CODES).toBe('LSS · KTL · LF · LSB');
   });
 

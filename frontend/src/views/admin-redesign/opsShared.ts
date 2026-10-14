@@ -5,7 +5,7 @@
  * - PATH_STATUS_*：学习路径状态 文案/徽章 唯一映射（内容管理页使用）
  */
 import { computed } from 'vue'
-import { liveAnnouncements } from './live'
+import { liveAnnouncements, timeAgo } from './live'
 import { statusText as globalStatusText } from './statusText'
 
 export interface AnnouncementCounts {
@@ -50,3 +50,54 @@ export const PATH_STATUS_BADGE: Record<string, string> = {
    会把未本地化的枚举漏进中文界面（走查发现状态列出现裸 abandoned）。 */
 export const statusText = (s: string) => PATH_STATUS_TEXT[s] || globalStatusText(s)
 export const statusBadge = (s: string) => PATH_STATUS_BADGE[s] || 'mk-badge--muted'
+
+/* 生成停滞判定（内容管理页/详情页共用）：active 且 updatedAt 超过阈值 → 需关注（可「重试生成」补齐）。
+   24h 口径：跑批 cohort 每日推进理应日更；真实用户数日不学属正常，只提示不强判死。 */
+export const PATH_STALL_HOURS = 24
+
+export function isPathStalled(status: string, updatedAt: string | Date | number, now: number = Date.now()): boolean {
+  if (status !== 'active') return false
+  const t = typeof updatedAt === 'string' || typeof updatedAt === 'number' ? new Date(updatedAt).getTime() : updatedAt.getTime()
+  if (!Number.isFinite(t)) return false
+  return now - t > PATH_STALL_HOURS * 3600_000
+}
+
+/* ---------- 四读数出处（LSS/KTL/LF/LSB 在两个详情页各有一套来源） ----------
+   读数的 label/参考带/色调在 @/utils/learnerMetrics；来源标注只在管理端有意义，故放这里。 */
+
+/** 读数来源两分：学习者级聚合快照 vs 单次会话的运行时快照。 */
+export type LoadCaliber = 'aggregate' | 'session-snapshot'
+
+export interface LoadCaliberNote {
+  /** 可见短标（进卡头 mk-card__meta） */
+  label: string
+  /** 悬停长释：说清来源与「为什么另一页的数字不一样」 */
+  title: string
+}
+
+export function loadCaliber(kind: LoadCaliber, at?: string | null): LoadCaliberNote {
+  const hasStamp = !!at && !Number.isNaN(new Date(at).getTime())
+  const stamp = hasStamp ? timeAgo(at) : ''
+  const stampLine = hasStamp ? `\n取样时刻：${stamp}。` : ''
+  if (kind === 'aggregate') {
+    return {
+      label: hasStamp ? `学习者级聚合 · 快照 ${stamp}` : '学习者级聚合',
+      title:
+        `LSS/KTL/LF/LSB 取自**学习者级聚合快照**（learning-state.service 按路径保守聚合 + 当日课量疲劳加成），` +
+        `不是某一次会话的读数。${stampLine}\n同一学习者在「虚拟学习者档案」页看到的同名读数取自单次会话的运行时快照，数值天然不同——那是两套来源，不是其中一处算错。`,
+    }
+  }
+  return {
+    label: hasStamp ? `单次会话快照 · ${stamp}` : '单次会话快照',
+    title:
+      `LSS/KTL/LF/LSB 取自**最近一次带读数的教学会话**的运行时快照（该会话 teachingState 的 currentState），` +
+      `不是学习者级聚合。${stampLine}\n同一学习者在「学习者详情」页看到的同名读数是学习者级聚合态，数值天然不同——那是两套来源，不是其中一处算错。`,
+  }
+}
+
+/* retryPathGeneration 的 retryType 文案（守卫自动判定，页面透传不二次解释） */
+export const PATH_RETRY_TYPE_TEXT: Record<string, string> = {
+  core: '重建主结构',
+  stageDesign: '补齐阶段任务'
+}
+export const pathRetryTypeText = (t?: string | null) => (t && PATH_RETRY_TYPE_TEXT[t]) || '已提交重试'

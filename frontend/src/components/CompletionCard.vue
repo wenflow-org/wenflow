@@ -169,6 +169,7 @@ const VideoPlay = icon('VideoPlay');
 const ArrowLeft = icon('ArrowLeft');
 import MarkdownRenderer from './MarkdownRenderer.vue';
 import type { ReplanAdvisory, WrapupArtifact } from '@/api/aiTeaching';
+import { learnerMetric } from '@/utils/learnerMetrics';
 
 const props = defineProps<{
   topic: string;
@@ -262,6 +263,9 @@ const sessionMetricCards = computed(() => {
   const k = Number(evaluation.value.sessionKtl ?? evaluation.value.ktl);
   const s = Number(evaluation.value.sessionLss ?? evaluation.value.lss);
   const f = Number(evaluation.value.sessionLf ?? evaluation.value.lf);
+  // 会话级 KTL = 后端 evaluation.sessionKtl = **本节知识获得质量**（high = 学生能独立完成核心任务）。
+  // 高=好在这里是对的，别照着下面「长期 KTL=训练负荷（高=坏）」把它一起反过来——
+  // 两者同名不同义，判据见 prompts/skill.session-wrapup.md 的「评分参考」。
   const kl = getSimpleLevel(k, 7, 4);
   const sl = getStress(s * 10);
   const fl = getStress(f * 10);
@@ -275,12 +279,15 @@ const sessionMetricCards = computed(() => {
 const longTermMetricCards = computed(() => {
   if (!stateUpdate.value) return [];
   const { ktl, lsb, lf, lss } = stateUpdate.value;
-  const kl = getSimpleLevel(Number(ktl || 0), 7, 4);
+  // 长期态 KTL = 训练负荷（LearningStateMetrics.ktl，LSS 的慢 EWMA，高=负荷重）。
+  // 此前用 getSimpleLevel(ktl,7,4)（高=好）并叫它「知识掌握」，与管理端（按后端语义判高=坏、
+  // 显示为红）结论相反。现与 LSS/LF 同向走 getStress，标签取自 @/utils/learnerMetrics 单点。
+  const kl = getStress(Number(ktl || 0) * 10);
   const bl = getBalance(Number(lsb || 0));
   const fl = getStress(Number(lf || 0) * 10);
   const sl = getStress(Number(lss || 0) * 10);
   return [
-    { key: 'ktl', label: 'KTL 知识掌握', value: toFixed(ktl), raw: Number(ktl || 0), level: kl.level, tone: kl.tone, desc: '长期累计学习收益，反映稳定掌握趋势。' },
+    { key: 'ktl', label: learnerMetric('ktl').label, value: toFixed(ktl), raw: Number(ktl || 0), level: kl.level, tone: kl.tone, desc: '长期累积的训练负荷，偏高说明学习压力在堆积，宜适时降强度。' },
     { key: 'lsb', label: 'LSB 状态平衡', value: toFixed(lsb), raw: Number(lsb || 0), level: bl.level, tone: bl.tone, desc: '掌握与疲劳差值，越接近正值越理想。' },
     { key: 'lf', label: 'LF 学习疲劳', value: toFixed(lf), raw: Number(lf || 0), level: fl.level, tone: fl.tone, desc: '短期疲劳累计，偏高时建议降强度。' },
     { key: 'lss', label: 'LSS 学习压力', value: toFixed(lss), raw: Number(lss || 0), level: sl.level, tone: sl.tone, desc: '整体学习压力水平，持续偏高需节奏调整。' },
