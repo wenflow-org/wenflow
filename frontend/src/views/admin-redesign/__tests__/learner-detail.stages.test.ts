@@ -9,6 +9,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
 const listSessions = vi.hoisted(() => vi.fn());
+const listPaths = vi.hoisted(() => vi.fn());
 const getMemoryTraces = vi.hoisted(() => vi.fn());
 const getLearnerEvidence = vi.hoisted(() => vi.fn().mockResolvedValue({ items: [], domain: [], loadCurve: [] }));
 
@@ -82,6 +83,8 @@ vi.mock('../learner-profile', () => ({
 }));
 vi.mock('@/api/adminApi', () => ({
   adminTeachingSessionsApi: { list: listSessions },
+  // 路径视角开关的选项来源（GET /paths?userId=）
+  adminLearningContentApi: { listPaths },
   // 记忆页签嵌入的 MemoryReview 面板会在挂载时拉明细：给 resolved 值防空 catch 炸响
   adminMemoryReviewApi: { detail: vi.fn().mockResolvedValue({ data: { data: null } }), recompute: vi.fn(), apply: vi.fn(), reject: vi.fn(), rollback: vi.fn() },
   // 必须给 resolved 值：loadDetail 对它 .then，undefined 会在 try 内同步抛 TypeError 炸掉后续 loadLdSessions
@@ -126,7 +129,8 @@ async function mountLd(sessions: ReturnType<typeof sessionRow>[]) {
       stubs: {
         // 命名 + 接 props：压力曲线用例要读 option.xAxis.data 断言轴域
         MkChart: { name: 'MkChart', props: ['option'], template: '<div class="stub-chart" />' },
-        MkGraphExplorer: { template: '<div class="stub-graph" />' },
+        // 命名 + 接 props：路径视角用例要断言页级作用域已接管（show-path-rail=false）
+        MkGraphExplorer: { name: 'MkGraphExplorer', props: ['nodes', 'edges', 'paths', 'pathId', 'showPathRail'], template: '<div class="stub-graph" />' },
         RouterLink: { template: '<a><slot /></a>' },
         Teleport: { template: '<teleport to="body"><slot /></teleport>' },
       },
@@ -516,5 +520,147 @@ describe('四读数出处标注 + 虚拟档案互跳', () => {
       'p1',
       expect.objectContaining({ from: expect.objectContaining({ view: 'learner', id: 'u1' }) })
     );
+  });
+});
+
+/**
+ * 路径视角（页级作用域开关，2026-10-14 第二步）：
+ * 一个学习者可并存多条路径，此前页面焊死在「当前路径」上（只有图谱自带路径轨）。
+ * 现由开关驱动 概念掌握/证据/图谱/教学会话；记忆与行为基线不随它走。
+ */
+describe('LearnerDetail 路径视角（页级作用域开关）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    routeQuery.tab = 'sessions';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    getMemoryTraces.mockReset().mockResolvedValue([]);
+    listPaths.mockReset().mockResolvedValue({
+      data: {
+        data: {
+          paths: [
+            { id: 'lp1', title: '测试路径', status: 'active', updatedAt: '2026-10-14T00:00:00Z' },
+            { id: 'lp2', title: '另一条路径', status: 'archived', updatedAt: '2026-10-01T00:00:00Z' },
+          ],
+        },
+      },
+    });
+  });
+
+  it('选择器列出名下每条路径，当前路径被标出', async () => {
+    const w = await mountLd([]);
+    const sel = w.find('#ld-scope-path');
+    expect(sel.exists()).toBe(true);
+    const opts = sel.findAll('option').map((o) => o.text());
+    expect(opts[0]).toContain('测试路径');
+    expect(opts[0]).toContain('学习中'); // 路径域文案，不是全局字典的「进行中」
+    expect(opts[0]).toContain('当前');
+    expect(opts[1]).toContain('另一条路径');
+    expect(opts[1]).toContain('已下线');
+    expect(opts[1]).not.toContain('当前');
+    // 选项按学习者收窄取得（不是拉全库再前端过滤）
+    expect(listPaths).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1' }));
+  });
+
+  it('不给「全部路径」档：学习者模型快照没有跨路径聚合口径（不传 pathId 是回落到当前路径）', async () => {
+    const w = await mountLd([]);
+    const texts = w.find('#ld-scope-path').findAll('option').map((o) => o.text());
+    expect(texts.some((t) => t.includes('全部路径'))).toBe(false);
+  });
+
+  it('默认作用域 = 该学习者的当前路径（与改动前行为一致）', async () => {
+    await mountLd([]);
+    expect(listSessions).toHaveBeenCalledWith(expect.objectContaining({ pathId: 'lp1' }));
+  });
+
+  it('作用域未定（名单里查不到该学习者）时：详情请求不带 pathId，读数在响应回来后写实为「当前路径」', async () => {
+    // liveLearners 里没有这个人（虚拟/测试账号不在默认视角）→ base 为空 → 无 pathId 可传
+    const learners = (await import('../live')).liveLearners as unknown as { value: unknown[] };
+    const detailMock = vi.mocked(liveGetLearnerDetail as unknown as ReturnType<typeof vi.fn>);
+    const backup = learners.value;
+    learners.value = [];
+    detailMock.mockClear();
+    try {
+      const w = await mountLd([]);
+      // 首次详情请求确实没带 pathId（后端按当前 active 路径回落）
+      expect(detailMock.mock.calls[0][1]).toBeUndefined();
+      // 响应里的 currentPath 把作用域写实 → 后续（会话）请求带上该路径，且不产生第二次详情重读
+      expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ pathId: 'lp1' }));
+      expect(detailMock.mock.calls.length).toBe(1);
+      expect(w.find('#ld-panel-sessions .mk-card__meta').text()).toContain('当前路径');
+    } finally {
+      learners.value = backup;
+    }
+  });
+
+  it('切到非当前路径：标注用所选路径名（不说「当前路径」），请求带该 pathId', async () => {
+    const w = await mountLd([]);
+    await w.find('#ld-scope-path').setValue('lp2');
+    await flushPromises();
+    expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ pathId: 'lp2' }));
+    const meta = w.find('#ld-panel-sessions .mk-card__meta');
+    expect(meta.text()).toContain('路径 另一条路径');
+    expect(meta.attributes('title')).toContain('不是该学习者的「当前路径」');
+    // 单条路径下串档告警不再出现（档位天然同源）
+    expect(meta.attributes('title')).not.toContain('同序号里程碑会合到同一档');
+  });
+
+  it('切到非当前路径后，「· 当前」标记仍留在该学习者自己的当前路径上', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail as unknown as ReturnType<typeof vi.fn>);
+    const original = detailMock.getMockImplementation();
+    // 按路径取值时快照的 currentPath 就是所选路径（后端语义）——用它暴露「拿 currentPath 判当前」这种错法
+    detailMock.mockImplementation(async (_id: string, pathId?: string) => ({
+      model: {
+        name: '测试学习者',
+        knowledgeMemory: {
+          currentPath: {
+            learningPathId: pathId || 'lp1',
+            pathTitle: pathId === 'lp2' ? '另一条路径' : '测试路径',
+            progress: { totalTasks: 4, completedTasks: 1, totalMilestones: 2, completedMilestones: 1 },
+            conceptStates: [],
+          },
+          globalSignals: {},
+        },
+      },
+    }));
+    try {
+      const w = await mountLd([]);
+      await w.find('#ld-scope-path').setValue('lp2');
+      await flushPromises();
+      const opts = w.find('#ld-scope-path').findAll('option').map((o) => o.text());
+      expect(opts[0]).toContain('· 当前');
+      expect(opts[1]).not.toContain('· 当前');
+      // 读数也必须说这是「所选路径」而不是「当前路径」
+      expect(w.find('#ld-panel-sessions .mk-card__meta').text()).toContain('路径 另一条路径');
+    } finally {
+      if (original) detailMock.mockImplementation(original);
+    }
+  });
+
+  it('记忆块不随开关走：标注恒为跨全部路径，并给出结构性原因', async () => {
+    routeQuery.tab = 'memory';
+    // 卡体 v-if="memoryPaneRows.length"：无痕迹时整卡不渲染
+    getMemoryTraces.mockResolvedValue([
+      {
+        conceptKey: 'kc-x', label: '知识点', masteryScore: 0.5, stability: 'developing',
+        extractionCount: 1, lastSeenAt: new Date().toISOString(), fsrsStability: 0.5,
+        fsrsDifficulty: 6, ktMasteryEma: null, dueAt: new Date(Date.now() + 86400000).toISOString(),
+        retrievability: 0.9, updatedAt: new Date().toISOString(),
+      },
+    ]);
+    const w = await mountLd([]);
+    await w.find('#ld-scope-path').setValue('lp2');
+    await flushPromises();
+    const meta = w.find('#ld-panel-memory .mk-card__meta');
+    expect(meta.text()).toContain('跨全部路径');
+    expect(meta.attributes('title')).toContain('(userId, conceptKey)');
+  });
+
+  it('图谱不吃自带的路径轨（作用域已由页级接管，避免一屏两个同义控件）', async () => {
+    routeQuery.tab = 'graph';
+    const w = await mountLd([]);
+    const graph = w.findComponent({ name: 'MkGraphExplorer' });
+    expect(graph.exists()).toBe(true);
+    expect(graph.props('showPathRail')).toBe(false);
+    expect(graph.props('pathId')).toBe('lp1'); // 取值仍由页级作用域决定
   });
 });

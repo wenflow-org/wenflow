@@ -497,6 +497,8 @@ export const adminTeachingSessionsApi = {
     page?: number;
     limit?: number;
     userId?: string;
+    /** 按路径收窄（学习者详情页的路径作用域选择器）：teaching_sessions.learningPathId 单列直连 */
+    pathId?: string;
     status?: string;
     onlyWithAdvisory?: boolean;
     onlyMissingWrapup?: boolean;
@@ -2190,6 +2192,8 @@ export const adminLearningContentApi = {
     status?: string;
     subject?: string;
     keyword?: string;
+    /** 按学习者收窄（学习者详情页的路径作用域选择器要列出「这个人名下的路径」） */
+    userId?: string;
     includeTest?: boolean;
     /** 测试视角（2026-10-10「真实/测试」互斥视角）：只回虚拟学习者与测试账号的路径 */
     testOnly?: boolean;

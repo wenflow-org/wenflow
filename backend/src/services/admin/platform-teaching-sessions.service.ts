@@ -53,14 +53,17 @@ export async function listTeachingSessionsDebug(params: {
   page: number;
   limit: number;
   userId?: string;
+  /** 按路径收窄（学习者详情页的路径作用域选择器）：teaching_sessions.learningPathId 单列直连，无需 join */
+  pathId?: string;
   status?: string;
   onlyWithAdvisory: boolean;
   onlyMissingWrapup: boolean;
   includeTest: boolean;
 }): Promise<unknown> {
-  const { page, limit, userId, status, onlyWithAdvisory, onlyMissingWrapup, includeTest } = params;
+  const { page, limit, userId, pathId, status, onlyWithAdvisory, onlyMissingWrapup, includeTest } = params;
   const where: any = {
     ...(userId ? { userId } : {}),
+    ...(pathId ? { learningPathId: pathId } : {}),
     ...(status ? { status } : {}),
     ...(onlyWithAdvisory ? { advisory: { not: null } } : {}),
     // wrapup 为 JSON 文本列：缺失 = 无记录或内容中不含 topicSummary

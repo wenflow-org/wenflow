@@ -34,7 +34,7 @@
            role="radiogroup" + roving tabindex：Tab 只落当前选中项，方向键/Home/End 在轨道内换选。
            轨道**有界**（见 RAIL_VISIBLE_PATHS）：路径多了收进右侧「更多（N）」浮层，
            「更多」在轨外不参与横滚，永远停在最右可达。 -->
-      <div v-if="paths.length > 1" class="mk-ge__railrow">
+      <div v-if="showPathRail && paths.length > 1" class="mk-ge__railrow">
         <div
           ref="railEl"
           class="mk-ge__rail"
@@ -266,6 +266,9 @@ const props = withDefaults(
     paths?: Array<{ id: string; title: string | null }>
     /** 当前路径筛选（空 = 全部路径）。由父组件负责重新请求 */
     pathId?: string | null
+    /** 是否渲染内置路径轨。false = 作用域已由父级（如学习者详情的页级「路径视角」）接管，
+     *  此时仍可传 paths/pathId 控制取值，只是不再画一套同义控件 */
+    showPathRail?: boolean
     /** 主题：不传则跟随 <html data-theme>（与 MkGraph/MkChart 同款） */
     theme?: 'light' | 'dark'
     height?: string
@@ -282,6 +285,7 @@ const props = withDefaults(
   {
     paths: () => [],
     pathId: null,
+    showPathRail: true,
     theme: undefined,
     height: '520px',
     loading: false,

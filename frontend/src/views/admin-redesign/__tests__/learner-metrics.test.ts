@@ -78,7 +78,7 @@ describe('读数出处（口径透明化）', () => {
   });
 });
 
-describe('面板作用域标注（一屏混三种作用域，各块自述）', () => {
+describe('面板作用域标注（一屏混多种作用域，各块自述 + 页级开关可切）', () => {
   it('当前路径：带上路径名，并说清其它路径不在这里 + 当前路径怎么选', () => {
     const note = panelScopeNote('current-path', { pathTitle: '幼儿园指南五大领域归位速通' });
     expect(note.label).toBe('当前路径');
@@ -106,9 +106,24 @@ describe('面板作用域标注（一屏混三种作用域，各块自述）', (
     expect(note.title).not.toContain('路径');
   });
 
-  it('三种作用域标签互不相同（同屏并排时可直接分辨）', () => {
-    const labels = (['current-path', 'all-paths', 'all-stories', 'single-conversation'] as const).map(
-      (s) => panelScopeNote(s).label
+  it('所选路径：标签带路径名，且明说它不是「当前路径」（页级开关可切到非当前路径）', () => {
+    const note = panelScopeNote('path', { pathTitle: '产业园选址题材料提点与分类作答' });
+    expect(note.label).toBe('路径 产业园选址题材料提点与分…');
+    expect(note.title).toContain('所选路径');
+    expect(note.title).toContain('产业园选址题材料提点与分类作答');
+    expect(note.title).toContain('不是该学习者的「当前路径」');
+  });
+
+  it('所选路径：名字很短不截断，无名字时不留空标签也不留空括号', () => {
+    expect(panelScopeNote('path', { pathTitle: '线代' }).label).toBe('路径 线代');
+    const blank = panelScopeNote('path', { pathTitle: '' });
+    expect(blank.label).toBe('路径 —');
+    expect(blank.title).not.toContain('（）');
+  });
+
+  it('五种作用域标签互不相同（同屏并排时可直接分辨）', () => {
+    const labels = (['current-path', 'path', 'all-paths', 'all-stories', 'single-conversation'] as const).map(
+      (s) => panelScopeNote(s, { pathTitle: '某路径' }).label
     );
     expect(new Set(labels).size).toBe(labels.length);
   });

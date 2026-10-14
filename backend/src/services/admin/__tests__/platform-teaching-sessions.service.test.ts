@@ -93,3 +93,39 @@ describe('教学会话列表：大 JSON 列不得进查询', () => {
     expect(result.items[0].knowledgePointCount).toBe(2);
   });
 });
+
+/**
+ * 路径收窄（2026-10-14，学习者详情页的页级「路径视角」开关）。
+ * teaching_sessions.learningPathId 实测 248/248 非空（单列直连，无需 join）；
+ * 不传即跨全部路径 = 本改动前的行为。
+ */
+describe('教学会话列表：按路径收窄', () => {
+  const callWithPath = (pathId?: string) =>
+    listTeachingSessionsDebug({
+      page: 1,
+      limit: 20,
+      userId: 'u1',
+      pathId,
+      onlyWithAdvisory: false,
+      onlyMissingWrapup: false,
+      includeTest: true,
+    });
+
+  it('pathId 落 where.learningPathId（单列，不 join subtasks/milestones）', async () => {
+    await callWithPath('p9');
+    const where = mockPrisma.teaching_sessions.findMany.mock.calls[0][0].where;
+    expect(where.learningPathId).toBe('p9');
+    expect(where.userId).toBe('u1');
+  });
+
+  it('不传 pathId 时不加 learningPathId 条件（跨全部路径 = 原行为）', async () => {
+    await callWithPath(undefined);
+    const where = mockPrisma.teaching_sessions.findMany.mock.calls[0][0].where;
+    expect(where.learningPathId).toBeUndefined();
+  });
+
+  it('列表行回带 learningPathId（前端据此校对作用域是否真的生效）', async () => {
+    const result = (await callWithPath('p1')) as unknown as { items: Array<{ learningPathId: string | null }> };
+    expect(result.items[0].learningPathId).toBe('p1');
+  });
+});

@@ -100,9 +100,14 @@ export function loadCaliber(kind: LoadCaliber, at?: string | null): LoadCaliberN
    只取**当前路径**，「教学会话/记忆与复习」取**全部路径**，「LSS/KTL/LF/LSB」是**跨路径聚合**，
    而此前只有图谱一处有作用域开关、其余静默；「全局信号与背景」卡头还自称「跨全部学习路径汇总」
    （实测其数据源是当前路径的会话与证据 + 该学习者全部记忆痕迹，不是跨全部路径）。
-   文案单点在此，各卡头取用，避免各写一套说法。 */
+   文案单点在此，各卡头取用，避免各写一套说法。
 
-export type PanelScope = 'current-path' | 'all-paths' | 'all-stories' | 'single-conversation'
+   2026-10-14 第二步：路径作用域升为**页级开关**（LearnerDetail 的 ld-scope），
+   「概念掌握/证据/当前进度/图谱/教学会话」随选择走 → 新增 'path' 档（读者选中的那条，
+   可能不是当前路径）。「记忆与复习」「行为基线」不随开关走（前者结构性不可分区，
+   后者本就用户级），仍标 all-paths。 */
+
+export type PanelScope = 'current-path' | 'path' | 'all-paths' | 'all-stories' | 'single-conversation'
 
 export interface PanelScopeNote {
   /** 可见短标（进卡头 mk-card__meta / 页头 pill） */
@@ -119,6 +124,14 @@ export function panelScopeNote(scope: PanelScope, opts: { pathTitle?: string | n
       title:
         `本块取自**当前路径**${named ? `（${named}）` : ''}的会话与学习证据，并并入该学习者的全部记忆痕迹；其它路径不在这里。` +
         `\n当前路径 = 该学习者 status=active 且 updatedAt 最新的一条（快照 currentPath 口径）；已归档/失败的路径不参与。`,
+    }
+  }
+  if (scope === 'path') {
+    return {
+      label: `路径 ${named.length > 12 ? `${named.slice(0, 12)}…` : named || '—'}`,
+      title:
+        `本块取自**所选路径**${named ? `（${named}）` : ''}的会话与学习证据，并并入该学习者的全部记忆痕迹；其它路径不在这里。` +
+        `\n这不是该学习者的「当前路径」——当前路径由 status=active 且 updatedAt 最新的一条定义，与这里的筛选无关。`,
     }
   }
   if (scope === 'all-paths') {

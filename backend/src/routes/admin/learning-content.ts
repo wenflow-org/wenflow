@@ -43,10 +43,14 @@ router.get('/paths', async (req: Request, res: Response) => {
     const subject = typeof req.query.subject === 'string' && req.query.subject.trim() ? String(req.query.subject).trim() : undefined;
     const keyword = typeof req.query.keyword === 'string' && req.query.keyword.trim() ? String(req.query.keyword).trim() : undefined;
     const includeTest = String(req.query.includeTest || '') === 'true';
+    // 按学习者收窄（学习者详情页的路径作用域选择器要列出「这个人名下的路径」——
+    // 此前只能拉全库再前端过滤，治理面越大越不成立）
+    const userId = typeof req.query.userId === 'string' && req.query.userId.trim() ? String(req.query.userId).trim() : undefined;
 
     const where: any = {};
     if (status) where.status = status;
     if (subject) where.subject = subject;
+    if (userId) where.userId = userId;
     if (keyword) {
       where.OR = [
         { title: { contains: keyword } },

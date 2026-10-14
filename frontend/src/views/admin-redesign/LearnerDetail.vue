@@ -25,9 +25,6 @@
     <!-- 详情页头（newui/admin hero 形态，MkDetailHero）：返回钮在壳层顶栏，页内不重复 -->
     <MkDetailHero :avatar="d.name.charAt(0)" :title="d.name" :sub="d.email">
       <template #pills>
-        <!-- 当前路径常驻：概念掌握/证据/当前进度 都只取这一条，而学习者可有多条路径并存——
-             此前只有「当前进度」卡正文带路径名，切到别的页签就无从判断在读哪条 -->
-        <span class="mk-badge mk-badge--muted" :title="currentPathScope.title">路径 {{ currentPathShort }}</span>
         <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
         <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
         <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">档案 {{ snapshotLabel }}</span>
@@ -46,6 +43,36 @@
          （路径进度→概览当前进度卡、知识信号→证据信号卡、复习到期→记忆与复习、最近会话→教学会话），
          常驻条整条成为纯复读；跨页签定位由页签栏本身承担。历史：P2（2026-10-04）曾按账号轴隐藏、
          2026-10-05 收敛共享 MkStatStrip、2026-10-11 上午重设计为四格可点条，同日整体撤除 -->
+
+    <!-- 路径作用域（页级开关）：一个学习者可并存多条路径，原先页面焊死在「当前路径」上——
+         读者既看不见还有别的路径、也切不过去（只有图谱一处自带路径轨）。现升为页级，
+         驱动「概念掌握 / 证据 / 当前进度 / 图谱 / 教学会话」；记忆与行为基线不随它走（见 title）。
+
+         不提供「全部路径」档：学习者模型快照**没有跨路径聚合口径**——不传 pathId 时后端自动回落到
+         「该学习者 status=active 且 updatedAt 最新的那条」（LearnerKnowledgeMemoryService.build 的
+         path 解析：`input.learningPathId ? findUnique : findFirst(active, updatedAt desc)`），是回落不是求和。
+         给一个做不出区别的档位等于假动作，故只做「选哪一条」。 -->
+    <div class="ld-scope" role="group" aria-label="路径作用域">
+      <label class="ld-scope__label" for="ld-scope-path">路径视角</label>
+      <select
+        id="ld-scope-path"
+        class="mk-filter__select ld-scope__select"
+        :value="scopePathId"
+        :disabled="pathOptionsLoading || !pathOptions.length"
+        :title="scopeNote.title"
+        @change="scopePathId = ($event.target as HTMLSelectElement).value"
+      >
+        <option v-if="pathOptionsLoading" value="" disabled>加载中…</option>
+        <option v-else-if="!pathOptions.length" value="" disabled>该学习者暂无学习路径</option>
+        <option v-for="p in pathOptions" :key="p.id" :value="p.id">
+          {{ p.title }}（{{ pathStatusText(p.status) }}）{{ p.id === learnerCurrentPathId ? ' · 当前' : '' }}
+        </option>
+      </select>
+      <span
+        class="ld-scope__hint"
+        title="「记忆与复习」不随本开关走：memory_traces 以 (userId, conceptKey) 唯一，一个概念只有一条痕迹（pathId 记的是最后写入的那条），按路径切会静默吞掉在另一条路径学过的概念。「行为基线与互动」本就是用户级先验，不含路径概念。要看跨全部路径的教学会话，走平台「教学会话」页（那里不按路径收窄）。"
+      >作用于 概念掌握 · 证据 · 图谱 · 教学会话；记忆与行为基线不受影响</span>
+    </div>
 
     <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向）。
          形态换 MkSubTabs（newui/admin 下划线式，替换胶囊 mk-pill） -->
@@ -89,7 +116,7 @@
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">概念掌握</h3>
-            <span class="mk-card__meta" :title="currentPathScope.title">{{ conceptBars.length }} 个概念 · {{ currentPathScope.label }}</span>
+            <span class="mk-card__meta" :title="scopeNote.title">{{ conceptBars.length }} 个概念 · {{ scopeNote.label }}</span>
           </div>
           <!-- T2 硬约束 2：结论行常驻（数字全部由现有 conceptBars 的 tone 派生，未新增判断） -->
           <p v-if="conceptBars.length" class="mk-section__conclusion">
@@ -381,7 +408,7 @@
           <h3 class="mk-card__title">全局信号与背景</h3>
           <!-- 口径纠错：原 title 写「跨全部学习路径汇总」，实测数据源是当前路径的会话与学习证据
                （sessions/learner_evidence 均按 pathId 过滤）+ 该学习者全部记忆痕迹，不是跨全部路径 -->
-          <span class="mk-card__meta" :title="`${currentPathScope.title}\n账本=概念底账规模`">{{ sigHeadMeta }} · {{ currentPathScope.label }}</span>
+          <span class="mk-card__meta" :title="`${scopeNote.title}\n账本=概念底账规模`">{{ sigHeadMeta }} · {{ scopeNote.label }}</span>
         </div>
         <div class="ld-sigbody">
           <div class="ld-sig-sec">
@@ -637,22 +664,22 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">知识图谱</h3>
-          <span v-if="graphMeta" class="mk-card__meta">
+          <span v-if="graphMeta" class="mk-card__meta" :title="scopeNote.title">
             <template v-if="graphMeta.truncated">仅显示部分概念，共 {{ graphMeta.totalConcepts }} 个 · </template>
-            默认展示全部路径的聚合图
+            {{ scopeNote.label }}
           </span>
         </div>
         <MkGraphExplorer
           :nodes="graphNodes"
           :edges="graphEdges"
           :paths="graphMeta?.paths ?? []"
-          :path-id="graphPathId"
+          :path-id="scopePathId || null"
+          :show-path-rail="false"
           :theme="graphTheme"
           :loading="graphLoading"
           :error="graphError"
           height="var(--ld-graph-h)"
           empty-hint="这位学习者还没有概念图数据——路径生成后 kc-mapper 会产出前置依赖，随概念身份注册表物化进图。"
-          @update:path-id="onGraphPathChange"
         />
       </section>
     </div>
@@ -842,8 +869,10 @@ import { liveLearners, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidenc
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
 import { learnerMetric, LEARNER_METRIC_CODES, type LearnerMetricKey } from '@/utils/learnerMetrics'
-import { loadCaliber, panelScopeNote } from './opsShared'
-import { adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
+// pathStatusText：路径域状态文案（active → 「学习中」；全局字典是「进行中」）。本文件已从
+// './statusText' 引入同名 statusText（会话域），故此处显式改名，避免两条文案链混用。
+import { loadCaliber, panelScopeNote, statusText as pathStatusText } from './opsShared'
+import { adminLearningContentApi, adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
 import {
   statusText,
   sessionStatusBadgeCls,
@@ -967,28 +996,60 @@ const graphEdges = ref<MkGraphEdge[]>([])
 const graphMeta = ref<{ nodeCount: number; edgeCount: number; totalConcepts: number; truncated: boolean; paths: Array<{ id: string; title: string | null }> } | null>(null)
 const graphLoading = ref(false)
 const graphError = ref('')
-/** 路径筛选：空 = 全部路径（用户级聚合图）。切换要重新请求——后端按 pathId 收敛节点与边 */
-const graphPathId = ref<string | null>(null)
-/** 当前学习路径 ID（currentPath.learningPathId / 列表兜底 base.pathId）：路径详情下钻用 */
+/** 当前学习路径 ID（currentPath.learningPathId / 列表兜底 base.pathId）：路径详情下钻用。
+ *  注意它**随作用域走**（选哪条就是哪条）——「查看路径结构」要打开当前在读的那条。 */
 const currentPathId = ref<string | null>(null)
+/** 该学习者**自己的**当前路径（status=active 且 updatedAt 最新），不随上方的筛选变。
+ *  用途：路径下拉的「· 当前」标记、作用域读数里「所选是不是当前路径」的判据。
+ *  与 currentPathId 分开是必须的——后者在按路径取值时会被快照回写成所选路径，
+ *  拿它判断「当前」会让刚选中的陌生路径自称「当前路径」（实测踩到）。 */
+const learnerCurrentPathId = ref<string>('')
 /**
  * 学习路径 pane 的卡数据（原型 2165-2171）：直接来自快照 currentPath 与列表兜底，
  * 不复用「当前进度」卡 DOM——它已是该学习者能拿到的全部路径信息（快照只存当前路径）。
  */
 const pathInfo = ref<{ id: string | null; title: string; stage: string; task: string; done: number; total: number; pct: number } | null>(null)
 
-/* ---------- 作用域标注（一屏混三种作用域，各块自述）----------
-   单路径块（当前进度/概念掌握/证据/全局信号）与跨路径块（行为基线/教学会话/记忆与复习）并排，
-   此前只有图谱有作用域开关、其余静默；「全局信号与背景」还自称「跨全部学习路径汇总」。
+/* ---------- 路径作用域（页级开关：单路径 / 全部路径）----------
+   一个学习者可并存多条路径，而详情页原先焊死在「当前路径」上——读者既看不见还有别的路径、
+   也切不过去（只有图谱一处自带路径轨）。现升为页级开关，驱动「当前进度 / 概念掌握 / 证据 /
+   图谱 / 教学会话」；「记忆与复习」「行为基线」不随它走：
+   · 记忆块结构性不可分区——memory_traces 以 (userId, conceptKey) 唯一，一个概念只有一条痕迹
+     （pathId 记的是最后写入的那条），按路径切会静默吞掉在另一条路径学过的概念；
+   · 行为基线本就按用户聚合（证据先验），不含路径概念。
    词汇与长释单点在 opsShared.ts 的 panelScopeNote()。 */
-const currentPathScope = computed(() => panelScopeNote('current-path', { pathTitle: pathInfo.value?.title || d.value?.path }))
-const allPathsScope = computed(() => panelScopeNote('all-paths'))
-/** 页头 pill 用的短路径名（全名进 title，避免把 pills 行撑开） */
-const currentPathShort = computed(() => {
-  const t = String(pathInfo.value?.title || d.value?.path || '').trim()
-  if (!t) return '—'
-  return t.length > 14 ? `${t.slice(0, 14)}…` : t
+const scopePathId = ref<string>('')   // '' = 未定（后端按当前 active 路径回落）；选中即按该路径收窄
+/** 「换学习者时复位作用域」的抑制旗标：那种赋值不是读者在切作用域，不该触发一次重读 */
+let applyingScopeDefault = false
+const pathOptions = ref<Array<{ id: string; title: string; status: string; updatedAt: string }>>([])
+const pathOptionsLoading = ref(false)
+/** 学习者名下的路径清单（选择器选项）。
+ *  includeTest 恒开：这里已按 userId 收窄，「真实/测试」闸门只会把虚拟学习者的路径整批滤空。 */
+async function loadPathOptions(userId: string) {
+  pathOptionsLoading.value = true
+  try {
+    const res = await adminLearningContentApi.listPaths({ userId, limit: 100, includeTest: true })
+    const rows = res?.data?.data?.paths || []
+    pathOptions.value = rows.map((p) => ({
+      id: String(p.id),
+      title: String(p.title || p.id),
+      status: String(p.status || ''),
+      updatedAt: String(p.updatedAt || '')
+    }))
+  } catch {
+    pathOptions.value = []
+  } finally {
+    pathOptionsLoading.value = false
+  }
+}
+/** 作用域读数：'' = 未定（后端按「当前 active 路径」回落，不是跨路径聚合）→ 也标「当前路径」 */
+const scopeNote = computed(() => {
+  const title = pathOptions.value.find((p) => p.id === scopePathId.value)?.title || ''
+  return !scopePathId.value || scopePathId.value === learnerCurrentPathId.value
+    ? panelScopeNote('current-path', { pathTitle: title || pathInfo.value?.title || '' })
+    : panelScopeNote('path', { pathTitle: title })
 })
+const allPathsScope = computed(() => panelScopeNote('all-paths'))
 /** 学习者画像 kv 卡：用户详情补充的层级/路径数/注册时间（后端 findUserDetailForAdmin） */
 const userRecord = ref<{ currentLevel: string; xp: number; pathCount: number; createdAt: string } | null>(null)
 /** 跟随 admin 主题（暗色用同族配色，见 MkGraph 的 colorOf）。
@@ -996,7 +1057,7 @@ const userRecord = ref<{ currentLevel: string; xp: number; pathCount: number; cr
  *  无响应依赖 → 运行时切主题时图谱 Edge/画布配色停在亮色。复用响应式 isDark
  *  （useIsDark 的 MutationObserver 跟随 data-theme），与同文件图表同源。 */
 const graphTheme = computed<'light' | 'dark'>(() => (isDark.value ? 'dark' : 'light'))
-async function loadConceptGraph(userId: string, pathId: string | null = graphPathId.value) {
+async function loadConceptGraph(userId: string, pathId: string | null = scopePathId.value || null) {
   if (!userId) return
   graphLoading.value = true
   graphError.value = ''
@@ -1015,16 +1076,10 @@ async function loadConceptGraph(userId: string, pathId: string | null = graphPat
     graphLoading.value = false
   }
 }
-/** 路径下拉：切路径即重新拉取（不清空旧图，避免闪白） */
-function onGraphPathChange(pathId: string | null) {
-  graphPathId.value = pathId
-  const id = subPage.value?.id
-  if (id) void loadConceptGraph(String(id), pathId)
-}
+/** 路径轨已上移到页级（ld-scope）：同一个作用域同时管图与「概念掌握/证据/教学会话」，
+ *  故图内不再自带路径轨（避免一屏两个同义控件）——作用域变化由 watch(scopePathId) 统一重拉。 */
 // 进入图 tab 时按需加载（同一学习者只加载一次；切走不清空，回来即见）
-watch([tab, () => subPage.value?.id], ([t, id], [, prevId]) => {
-  // 换学习者：路径筛选与选中态都要复位，否则会带着上一个人的 pathId 去查
-  if (prevId && prevId !== id) graphPathId.value = null
+watch([tab, () => subPage.value?.id], ([t, id]) => {
   if (t === 'graph' && id && !graphNodes.value.length && !graphLoading.value) void loadConceptGraph(String(id))
 })
 
@@ -1088,7 +1143,6 @@ function resetDerivedState(id: string) {
     graphNodes.value = []
     graphEdges.value = []
     graphMeta.value = null
-    graphPathId.value = null
   }
 }
 
@@ -1166,15 +1220,19 @@ const ldSessViewRows = computed(() =>
 )
 const ldSessionMetaText = computed(() => {
   const all = ldSessionRows.value.length
-  const scope = allPathsScope.value.label
+  const scope = scopeNote.value.label
   if (!all) return scope
   const win = all >= LD_SESSION_WINDOW ? `近 ${LD_SESSION_WINDOW} 条窗口` : `${all} 条`
   return `${win} · 有效 ${activeSessionRows.value.length} · 废弃 ${ldSessDiscardedRows.value.length} · ${scope}`
 })
-const ldSessionMetaTitle = computed(() =>
-  `${allPathsScope.value.title}\n该学习者最近 ${LD_SESSION_WINDOW} 条教学会话（窗口上限）；有效=有教学内容，已废弃=学习者点「重新开始」后作废的旧会话。` +
-  `\n注意：「里程碑 N」档位按各会话自己的里程碑序号归并，跨路径时不同路径的同序号里程碑会合到同一档——本页暂不能按路径收窄。`
-)
+const ldSessionMetaTitle = computed(() => {
+  const base =
+    `${scopeNote.value.title}\n该学习者最近 ${LD_SESSION_WINDOW} 条教学会话（窗口上限）；有效=有教学内容，已废弃=学习者点「重新开始」后作废的旧会话。`
+  // 里程碑串档只在跨路径时存在：切到单条路径后档位天然同源，不必再告警
+  return scopePathId.value
+    ? base
+    : `${base}\n注意：「里程碑 N」档位按各会话自己的里程碑序号归并，跨路径时不同路径的同序号里程碑会合到同一档（用上方「路径视角」切到单条路径即无此串档）。`
+})
 
 /* ---------- 阶段切换器（用户诉求「切换学习者不同阶段」）----------
    档位从会话行的 milestoneIndex 派生（后端 deriveTeachingSessionProgress 已归因，零新契约）；
@@ -1277,7 +1335,13 @@ async function loadLdSessions(id: string) {
   const stale = () => seq !== detailLoadSeq || subPage.value?.id !== id
   try {
     // limit 20：教学会话 pane 需要更完整列表（原概览卡只展示 5 条，由 recentSessionRows 截取）
-    const res = await adminTeachingSessionsApi.list({ userId: id, limit: LD_SESSION_WINDOW, includeTest: subPage.value?.includeTest })
+    // pathId：随页级路径作用域走（空 = 跨全部路径）；teaching_sessions.learningPathId 单列直连
+    const res = await adminTeachingSessionsApi.list({
+      userId: id,
+      limit: LD_SESSION_WINDOW,
+      includeTest: subPage.value?.includeTest,
+      ...(scopePathId.value ? { pathId: scopePathId.value } : {})
+    })
     // 竞态守卫与 loadDetail 同款：换人/重载后丢弃旧响应
     if (stale()) return
     const body = res.data?.data ?? res.data ?? {}
@@ -1335,10 +1399,13 @@ async function loadLdSessions(id: string) {
   }
 }
 
-async function loadDetail(id: string | undefined) {
+async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {}) {
   if (!id) return
   const seq = ++detailLoadSeq
-  resetDerivedState(id)
+  // soft = 同一学习者换路径作用域的重读：不撤 liveDetail（loading 是 computed(!liveDetail)，
+  // 撤了整页骨架会闪一次），也不清派生态——下方各赋值本就全量覆盖，且路径作用域只改数据的
+  // 取值范围、不改页面结构，用骨架遮住整页是过度反应。
+  if (!opts.soft) resetDerivedState(id)
   lastLoadedId = id
   detailError.value = false
   // 深链保持：URL 明确带 ?tab= 时尊重它，否则回落总览。
@@ -1349,7 +1416,9 @@ async function loadDetail(id: string | undefined) {
   // 学习侧；两轴入口落点一致，心智模型简单。?tab= 深链/刷新仍优先。
   tab.value = urlTab ? normalizeLdTab(urlTab) : 'overview'
   const base = liveLearners.value.find((l) => l.userId === id)
-  const pathId = base?.pathId
+  // 路径作用域：取页级开关的值（'' = 全部路径 → 不传 pathId，后端走 global 聚合）。
+  // 开关的默认值在「换学习者」watch 里置为该学习者的当前路径（= 本改动前的行为）。
+  const pathId = scopePathId.value || undefined
   // 面包屑先以列表兜底名回写（详情加载成功后覆盖为详情名）
   if (base?.name) setSubPageLabel(base.name)
   // 竞态守卫：任一 await 之后 id 已变（或已触发更新的加载）→ 丢弃本响应
@@ -1384,6 +1453,17 @@ async function loadDetail(id: string | undefined) {
     const currentPath = (km.currentPath || {}) as Record<string, unknown>
     // 路径详情下钻的真实 ID：优先快照里的 currentPath.learningPathId，列表兜底 base.pathId
     currentPathId.value = String(currentPath.learningPathId || base?.pathId || '') || null
+    // 开关读数落定：名单里查不到该学习者（虚拟/测试账号不在默认视角）时 scopePathId 仍是 ''，
+    // 而本次响应的数据就是「当前路径」那份 → 把作用域写实成这条路径。
+    // 不触发重读：加载用的就是同一份数据，只是把「隐式回落」标成显式的路径。
+    if (!scopePathId.value && currentPathId.value) {
+      applyingScopeDefault = true
+      scopePathId.value = currentPathId.value
+      applyingScopeDefault = false
+      // 本次是「不带 pathId」的请求，故快照的 currentPath 就是该学习者自己的当前路径。
+      // 按路径取值时不覆盖——那时 currentPath 反映的是所选路径，不是「当前路径」。
+      if (!learnerCurrentPathId.value) learnerCurrentPathId.value = currentPathId.value
+    }
     const progress = (currentPath.progress || {}) as Record<string, number>
     const globalSignals = (km.globalSignals || {}) as Record<string, unknown>
     const conceptStates = Array.isArray(currentPath.conceptStates)
@@ -1554,10 +1634,37 @@ async function loadDetail(id: string | undefined) {
 watch(
   () => subPage.value?.id,
   (id) => {
+    // 换学习者：路径作用域复位到该学习者的当前路径（= 本改动前的默认行为），并载入路径清单。
+    // 置旗标抑制下面那个 watch——复位是「随换人重来」，不是读者切作用域，别重复发起一次重读。
+    const base = liveLearners.value.find((l) => l.userId === id)
+    applyingScopeDefault = true
+    scopePathId.value = base?.pathId || ''
+    applyingScopeDefault = false
+    // 学习者自己的当前路径（不随筛选变）：名单口径优先，名单里没有（虚拟/测试账号不在默认视角）
+    // 时留空，由首份快照回填（见 loadDetail）
+    learnerCurrentPathId.value = base?.pathId || ''
+    if (id) void loadPathOptions(String(id))
     void loadDetail(id)
   },
   { immediate: true, flush: 'sync' }
 )
+
+/* 路径作用域切换（页级开关的唯一副作用点）：同一学习者按所选路径重读。
+   soft=1 不闪整页骨架；图缓存同步失效（旧图是另一条路径的，留着就是串数据）。
+   「教学会话」随 loadDetail 一起重拉（pathId 已进该请求）。
+   flush:'sync' 是必需的——复位/写实那两处靠 applyingScopeDefault 抑制本 watch，
+   而默认的 'pre' 会把回调推到下一 tick，那时旗标早已复位，抑制就失效了（实测多发一次重读）。 */
+watch(scopePathId, (next) => {
+  if (applyingScopeDefault) return
+  const id = subPage.value?.id
+  if (!id) return
+  graphNodes.value = []
+  graphEdges.value = []
+  graphMeta.value = null
+  graphError.value = ''
+  void loadDetail(id, { soft: true })
+  if (tab.value === 'graph') void loadConceptGraph(String(id), next || null)
+}, { flush: 'sync' })
 
 async function recompute() {
   const id = subPage.value?.id
@@ -2335,8 +2442,9 @@ const memMetaText = computed(() => {
 })
 const memMetaTitle = computed(() => {
   const overdue = memoryPaneRows.value.filter((r) => r.overdue).length
-  return `${allPathsScope.value.title}\n记忆强度=FSRS 可提取率；待复习=已到复习期（${overdue} 条）；稳固≥80% 且未到期；未初始化=尚无记忆痕迹。` +
-    `\n另：部分历史痕迹写入时未带路径（实测同账号 18 条里 9 条 pathId 为空），故本块即使想按路径收窄也收不干净。`
+  return `记忆强度=FSRS 可提取率；待复习=已到复习期（${overdue} 条）；稳固≥80% 且未到期；未初始化=尚无记忆痕迹。` +
+    `\n本块与页头「路径视角」开关无关，按学习者聚合：memory_traces 以 (userId, conceptKey) 唯一，` +
+    `一个概念只有一条痕迹、pathId 只记最后写入的那条路径，按路径切会静默吞掉在另一条路径学过的概念。`
 })
 
 const trendText = computed(() => (d.value?.trend === 'up' ? '↗ 上升' : d.value?.trend === 'down' ? '↘ 下降' : '→ 稳定'))
@@ -2626,6 +2734,12 @@ function barToneBadge(tone: ConceptBarTone): string {
    下内边距不可省：实测 0 间距时胶囊底边与表头上边线贴合（用户走查「和下面重叠了」），
    给 12px 与区块节奏一致 */
 .ld-filtbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 12px 16px; }
+/* 路径视角（页级作用域开关）：夹在 hero 与页签栏之间的一行，形态沿用筛选条方言
+   （mk-filter__select + 竖分隔 + 灰字 hint），不新造控件样式 */
+.ld-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 4px 0 10px; }
+.ld-scope__label { font-size: 12px; color: var(--mk-faint); }
+.ld-scope__select { max-width: 340px; }
+.ld-scope__hint { font-size: 12px; color: var(--mk-faint); padding-left: 10px; border-left: 1px solid var(--mk-line); }
 /* 表格不做全出血：末行底边此前贴死卡底（实测仅剩 1px 边框），补 12px 收尾（同卡头下节奏） */
 #ld-panel-sessions .mk-table-scroll,
 #ld-panel-memory .mk-table-scroll { padding-bottom: 12px; }
