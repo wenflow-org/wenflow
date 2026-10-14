@@ -21,7 +21,7 @@
           v-if="waterfallCapReached"
           type="button"
           class="mk-status__action"
-          :title="'为保持流畅已停止追加；全量数据见左侧计数'"
+          :title="'为保持流畅已停止追加'"
           @click="notice = '已达本地样本上限，全量数据见左侧计数'"
         >已达上限 {{ WATERFALL_MAX_SPANS }} 条</button>
       </span>
@@ -85,7 +85,7 @@
           v-model="traceKeyword"
           class="wf-tracepick__search mono"
           placeholder="筛选链路 ID"
-          title="按链路 ID 片段过滤；输入完整 ID 后回车可服务端直达"
+          title="按链路 ID 片段过滤"
           @keydown.enter.prevent="searchTrace"
         />
         <select class="wf-tracepick__select mono" v-model="activeTrace" aria-label="选择链路">
@@ -163,7 +163,7 @@
           <span class="wf-row__tail">
             <span v-if="span.errorCode" class="wf-row__errcode mono" :title="span.errorMessage">{{ errorCodeLabel(span.errorCode) ?? `[${span.errorCategory || 'err'}] ${span.errorCode}` }}</span>
             <span v-if="promptOf(span)?.drift" class="wf-row__drift">{{ TERMS.driftRuntime }}</span>
-            <span v-if="span.gatewayDurMs" class="wf-row__gw mono" :title="`网关层 ${fmtMs(span.gatewayDurMs)}（已合并同一调用记录）`">网关 {{ fmtMs(span.gatewayDurMs) }}</span>
+            <span v-if="span.gatewayDurMs" class="wf-row__gw mono">网关 {{ fmtMs(span.gatewayDurMs) }}</span>
             <span class="wf-row__dur mono">{{ fmtMs(span.durationMs) }}</span>
             <span class="wf-row__arrow" aria-hidden="true">▸</span>
           </span>

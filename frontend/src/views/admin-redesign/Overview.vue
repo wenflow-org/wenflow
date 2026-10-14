@@ -163,7 +163,7 @@
               v-for="(s, i) in data.topSkills"
               :key="s.agentId"
               class="rankrow rankrow--link"
-              :title="`${skillIdOf(s.agentId)}：${s.calls} 次调用 · ${s.failed} 次失败 · 点击查看 Skill 运行`"
+              :title="`${skillIdOf(s.agentId)}：${s.calls} 次调用 · ${s.failed} 次失败`"
               role="button"
               tabindex="0"
               @click="openSubPage('skill', skillIdOf(s.agentId))"
@@ -261,7 +261,7 @@
               </div>
             </div>
           </div>
-          <p v-if="!feedRows.length && data.feed.length" class="note">近期动态均为测试/模拟/探针账号（默认隐藏）。</p>
+          <p v-if="!feedRows.length && data.feed.length" class="note">近期动态均来自测试 / 模拟账号，已按当前视角隐藏。</p>
           <p v-else-if="!feedRows.length" class="note">近 24h 暂无动态。</p>
         </div>
       </div>

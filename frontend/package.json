@@ -19,6 +19,9 @@
     "design:tokens:diff": "node scripts/wf-token-probe.mjs --diff",
     "design:dead-class": "node scripts/dead-class-scan.mjs",
     "design:fix-tokens": "node scripts/fix-bad-tokens.mjs",
+    "copy:check": "node scripts/check-ui-copy.mjs",
+    "copy:list": "node scripts/check-ui-copy.mjs --list",
+    "copy:baseline": "node scripts/check-ui-copy.mjs --update",
     "mobile:spec": "node scripts/check-mobile-spec.mjs",
     "format": "prettier --write src/"
   },

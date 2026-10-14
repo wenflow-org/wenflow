@@ -25,7 +25,7 @@
         <button
           type="button"
           class="mknav__icon"
-          :aria-label="isDark ? '切换到亮色模式' : '切换到暗色模式'"
+          :aria-label="isDark ? '切换为亮色模式' : '切换为暗色模式'"
           @click="toggleTheme"
         >
           <Sun v-if="isDark" :size="19" :stroke-width="1.75" aria-hidden="true" />

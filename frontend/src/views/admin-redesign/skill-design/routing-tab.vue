@@ -2,10 +2,10 @@
   <!-- 字段路由（skill 维度 · 加字段向导闭环）+ 字段血缘（原协议 pill 并入，折叠块） -->
   <div class="sdp-pane sdp-routing">
     <details class="sdp-routing__lineage" @toggle="onLineageToggle">
-      <summary>字段血缘（产出字段 → 下游消费者 / 爆炸半径）</summary>
-      <MkLoading v-if="lineageLoading" inline text="血缘加载中…" />
+      <summary>字段影响范围（产出字段 → 下游消费者）</summary>
+      <MkLoading v-if="lineageLoading" inline text="影响范围加载中…" />
       <table v-else-if="lineage.length" class="sdp-routing__table">
-        <thead><tr><th>字段</th><th>消费者（爆炸半径）</th></tr></thead>
+        <thead><tr><th>字段</th><th>消费者</th></tr></thead>
         <tbody>
           <tr v-for="(entry, i) in lineage" :key="i">
             <td class="mono">{{ entry.field }}</td>
@@ -15,10 +15,10 @@
       </table>
       <!-- 失败 ≠「确实没有登记」：失败态显式报错 + 重试（失败后 lineageLoaded 复位，收起再展开可重拉） -->
       <p v-else-if="lineageError" class="sdp-none sdp-bad-text">
-        血缘加载失败：{{ lineageError }}
+        影响范围加载失败：{{ lineageError }}
         <button type="button" class="mk-link" @click="retryLineage">重试</button>
       </p>
-      <p v-else class="sdp-none">该 skill 暂无血缘注册（后台消费或未登记）</p>
+      <p v-else class="sdp-none">该 skill 暂无影响范围登记（后台消费或未登记）</p>
     </details>
 
     <SkillFieldRouting :key="skillId" :skill-id="skillId" />

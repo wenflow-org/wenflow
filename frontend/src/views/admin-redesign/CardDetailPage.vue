@@ -6,7 +6,7 @@
     <MkDetailHero :avatar="d.name.slice(0, 1)" :title="d.name" :sub="heroSubText">
       <template #pills>
         <span class="mk-badge" :class="sourceBadge(d)" :title="sourceTitle(d)">{{ sourceText(d) }}</span>
-        <span class="mk-badge mk-badge--muted" :title="`知识水平：${d.knowledgeLevel}`">{{ levelText(d.knowledgeLevel) }}</span>
+        <span class="mk-badge mk-badge--muted">{{ levelText(d.knowledgeLevel) }}</span>
         <span v-for="t in d.tags.slice(0, 4)" :key="t" class="mk-badge mk-badge--muted">{{ t }}</span>
         <span v-if="d.tags.length > 4" class="mk-badge mk-badge--muted" :title="d.tags.join(' · ')">+{{ d.tags.length - 4 }}</span>
       </template>
@@ -84,7 +84,7 @@
       </div>
       <div class="cd-pad cd-sec">
         <div v-if="d.materials.length" class="cd-mats">
-          <span v-for="m in d.materials" :key="m.title" class="mk-badge mk-badge--muted" :title="`类型：${m.kind}`">{{ materialIcon(m.kind) }} {{ m.title }}</span>
+          <span v-for="m in d.materials" :key="m.title" class="mk-badge mk-badge--muted">{{ materialIcon(m.kind) }} {{ m.title }}</span>
         </div>
         <p v-if="d.notes" class="cd-bg">{{ d.notes }}</p>
       </div>

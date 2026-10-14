@@ -19,8 +19,8 @@ export const AGENT_LABEL: Record<string, string> = {
   'skill:teaching-turn': '课堂互动处理',
   'skill:peer-reinforcement': '伴学回应',
   'skill:session-wrapup': '生成课后总结',
-  'skill:learner-model': '更新学习画像',
-  'skill:stage-designer': '设计阶段任务',
+  'skill:learner-model': '更新学习记录',
+  'skill:stage-designer': '设计课程',
   'skill:path-reviewer': '评审路径',
   'skill:kc-mapper': '整理知识组件',
   'skill:teaching-opening-generator': '生成教学开场',
@@ -28,13 +28,13 @@ export const AGENT_LABEL: Record<string, string> = {
   'ai-teaching-agent': '课堂处理',
   'ai-tutor': '伴学回应',
   'system-canary': '系统自检',
-  'learner-model-agent': '更新学习画像',
+  'learner-model-agent': '更新学习记录',
 };
 
 /** path-agent 阶段流水 phase → 用户可读的阶段名 */
 export const PATH_PHASE_LABEL: Record<string, string> = {
-  core: '主结构生成',
-  stageDesign: '阶段任务设计',
+  core: '路径规划',
+  stageDesign: '课程设计',
   started: '启动',
   succeeded: '完成',
   failed: '失败',

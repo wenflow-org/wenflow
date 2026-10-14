@@ -19,7 +19,7 @@
           v-if="simClock"
           class="mk-status__meta cp-simday"
           :title="simClock.enabled
-            ? `日期模拟：起点 ${simClock.baseDate}；已推进 ${simClock.dayIndex}/${simClock.maxSimulatedDays} 天；课表 ${simClock.courseWeekdays.join('/')} · 每天 ${simClock.lessonsPerDay} 节${simClock.autoAdvance ? ' · 自动推进已开' : ''}`
+            ? `日期模拟：起点 ${simClock.baseDate}。已推进 ${simClock.dayIndex}/${simClock.maxSimulatedDays} 天。课表 ${simClock.courseWeekdays.join('/')} · 每天 ${simClock.lessonsPerDay} 节${simClock.autoAdvance ? ' · 自动推进已开' : ''}`
             : '日期模拟未开启（可在「日期模拟」设置开启）'"
         >
           模拟 {{ simClock.enabled ? `第 ${simClock.dayIndex} 天` : '未开启' }}
@@ -31,8 +31,8 @@
           class="cp-budget"
           :class="`is-${budgetTone}`"
           :title="budgetUsage.unlimited
-            ? `本会话累计 AI 调用 ${budgetUsage.used}（含重试）；当前未设置成本上限（不限）。可在画像/故事预算中设置上限`
-            : `本会话累计 AI 调用 ${budgetUsage.used}/${budgetUsage.limit}（含重试）；可在画像/故事预算中调整上限`"
+            ? `本会话累计 AI 调用 ${budgetUsage.used}（含重试）。当前未设置成本上限（不限）。可在画像/故事预算中设置上限`
+            : `本会话累计 AI 调用 ${budgetUsage.used}/${budgetUsage.limit}（含重试）。可在画像/故事预算中调整上限`"
         >
           <span class="cp-budget__label">AI 调用</span>
           <!-- 进度量化统一走 .mk-minibar：预算三档（默认 / warn / full）与 ok/warn/bad 语义一一对应 -->
@@ -76,7 +76,7 @@
              壳层「刷新真实数据」刷的是全站 live 数据、不含本会话载荷，两者不是同一件事
              （2026-10-11 走查：同屏两个「刷新」易混，故本页这颗明确写成刷新会话数据）。 -->
         <template v-if="isRealMode">
-          <button type="button" class="mk-btn" :disabled="busy" :title="busy ? '刷新中…' : '刷新本页会话数据（会话载荷 / 日志 / 证据）'" @click="refresh">{{ busy ? '刷新中…' : '刷新' }}</button>
+          <button type="button" class="mk-btn" :disabled="busy" :title="busy ? '刷新中…' : '刷新本页会话数据'" @click="refresh">{{ busy ? '刷新中…' : '刷新' }}</button>
           <button type="button" class="mk-btn" :title="backTip" @click="goBack">← {{ backLabel }}</button>
         </template>
         <!-- 动作区只放真实能力（原型「导出日志」假钮不搬）：会话生命周期控制（vlab-controls 统一模型）
@@ -130,23 +130,23 @@
         <!-- ② 阶段操作（随当前页签切换） -->
         <template v-if="!isRealMode && !isBlackbox && activeTab === 'goal'">
           <button type="button" class="cp-btn" :disabled="goalStepDisabled" :title="goalStepTitle" @click="act('step')">推进一步</button>
-          <button type="button" class="cp-btn" :disabled="goalAutoDisabled" :title="goalAutoTitle" @click="act('auto')">自动推进 Goal</button>
-          <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
-          <button v-if="goalConverged" type="button" class="cp-btn" @click="selectStageTab('path')">前往 Path →</button>
+          <button type="button" class="cp-btn" :disabled="goalAutoDisabled" :title="goalAutoTitle" @click="act('auto')">自动推进目标</button>
+          <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成路径</button>
+          <button v-if="goalConverged" type="button" class="cp-btn" @click="selectStageTab('path')">前往路径 →</button>
         </template>
         <template v-if="!isRealMode && !isBlackbox && activeTab === 'path'">
-          <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成 Path</button>
-          <button type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
-          <button type="button" class="cp-btn" :disabled="resetPathDisabled" :title="resetPathTitle" @click="act('resetPath')">重建 Path</button>
+          <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成路径</button>
+          <button type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动教学</button>
+          <button type="button" class="cp-btn" :disabled="resetPathDisabled" :title="resetPathTitle" @click="act('resetPath')">重建路径</button>
         </template>
         <template v-if="!isRealMode && !isBlackbox && activeTab === 'learning'">
-          <button v-if="!hasLearningProgress" type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动 Learn</button>
+          <button v-if="!hasLearningProgress" type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动教学</button>
           <template v-else>
             <button type="button" class="cp-btn" :disabled="learnStepDisabled" :title="learnStepTitle" @click="act('step')">推进一步</button>
             <button type="button" class="cp-btn cp-btn--primary" :disabled="learnAutoDisabled" :title="learnAutoTitle" @click="act('auto')">自动推进本课</button>
-            <label class="cp-turn-cap-label" title="每课自动推进的回合预算：『自动推进本课』与『自动驾驶』共用；复杂课程可调高到 100；超出 1–100 会按边界值执行">
+            <label class="cp-turn-cap-label" title="每课自动推进的回合预算：『自动推进本课』与『自动驾驶』共用，复杂课程可调高到 100。超出 1–100 会按边界值执行">
               每课回合上限
-              <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="每课自动推进的最大对话轮数（自动推进本课与自动驾驶共用）；输入超出 1–100 会回写为边界值" aria-label="每课回合上限" @change="learnAutoTurnCap = clampLearnAutoTurnCap()" />
+              <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="每课自动推进的最大对话轮数（自动推进本课与自动驾驶共用）。输入超出 1–100 会回写为边界值" aria-label="每课回合上限" @change="learnAutoTurnCap = clampLearnAutoTurnCap()" />
             </label>
             <!-- 进行中重开本课（失败后的「重试」由生命周期区统一承载，不重复） -->
             <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重开本课</button>
@@ -167,7 +167,7 @@
         <!-- 黑盒模式声明（2026-10-04 全站评审 P3#13）：真实会话的「只读监控」声明已并入
              顶栏模式 chip（modeText 单源），此处不再对真实会话重复一遍 -->
         <span v-if="isBlackbox" class="cp-console__note">
-          黑盒模式：由黑盒执行器驱动，辅助控制不可用
+          黑盒模式：辅助控制不可用
         </span>
       </div>
     </div>
@@ -258,14 +258,14 @@
         <section v-if="!isBlackbox && activeTab === 'path'" role="tabpanel" :id="`cp-tabpanel-path`" :aria-labelledby="`cp-tab-path`" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">关联学习路径</h3>
-            <span class="mk-card__meta">{{ pathDetailMeta || '等待 Path 生成' }}</span>
+            <span class="mk-card__meta">{{ pathDetailMeta || '等待路径生成' }}</span>
           </div>
           <div class="cp-cardbody">
             <MkSkeleton v-if="!session" variant="rows" :count="2" :h="40" :radius="8" />
             <template v-else>
               <PathJourneyPanel v-if="hasPath && pathId" :path-id="pathId" @changed="loadPathStatus" />
-              <p v-if="!hasPath && pathStatusFailed" class="cp-degrade">Path 状态获取失败 <button type="button" class="mk-link" @click="loadPathStatus">重试</button></p>
-              <p v-else-if="!hasPath && pathGenerationInProgress" class="cp-none">Path 阶段任务仍在生成，稍后自动刷新。</p>
+              <p v-if="!hasPath && pathStatusFailed" class="cp-degrade">路径状态获取失败 <button type="button" class="mk-link" @click="loadPathStatus">重试</button></p>
+              <p v-else-if="!hasPath && pathGenerationInProgress" class="cp-none">路径课程仍在生成，稍后自动刷新。</p>
               <p v-else-if="!hasPath" class="cp-none">{{ pathEmptyHint }}</p>
             </template>
           </div>
@@ -274,10 +274,10 @@
         <!-- Goal 对话 -->
         <section v-if="!isBlackbox && activeTab === 'goal'" role="tabpanel" :id="`cp-tabpanel-goal`" :aria-labelledby="`cp-tab-goal`" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">Goal 对话</h3>
+            <h3 class="mk-card__title">目标对话</h3>
             <span class="mk-card__meta">
-              {{ !session ? '' : goalConversationMessages.length ? `${goalConversationMessages.length} 条已落库` : '暂无记录' }}
-              <template v-if="session && goalConverged"> · 已收敛</template>
+              {{ !session ? '' : goalConversationMessages.length ? `${goalConversationMessages.length} 条已记录` : '暂无记录' }}
+              <template v-if="session && goalConverged"> · 已确认</template>
             </span>
           </div>
           <div class="cp-transcripts">
@@ -285,15 +285,15 @@
             <MkSkeleton v-if="!session" variant="rows" :count="3" :h="36" :radius="8" />
             <template v-else>
               <article v-for="(message, index) in goalConversationMessages" :key="`goal-${index}`" class="cp-transcript__message" :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'">
-                <span>{{ message.role === 'assistant' ? '平台 Goal' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
+                <span>{{ message.role === 'assistant' ? '平台目标' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
                 <p>{{ message.content }}</p>
               </article>
               <MkEmptyState
                 v-if="!goalConversationMessages.length"
                 compact
                 icon="◌"
-                title="尚未产生 Goal 对话"
-                description="学习者澄清从零开始；在上方控制台点「推进一步」或「自动推进 Goal」启动。"
+                title="尚未产生目标对话"
+                description="学习者澄清从零开始，可在控制台用「推进一步」或「自动推进目标」启动。"
               />
             </template>
           </div>
@@ -331,7 +331,7 @@
               </tbody>
             </table>
           </div>
-          <p v-else class="cp-none cp-turns-empty">该会话暂无已落库的对话回合。</p>
+          <p v-else class="cp-none cp-turns-empty">该会话暂无已记录的对话回合。</p>
         </section>
 
         <!-- 学习者资料（Goal 页，2026-10-12 四页拆分归位）：goal 阶段把学习者**携带的资料**（上传附件）
@@ -360,7 +360,7 @@
                 <span v-if="m.docType" class="cp-mat__fact">{{ m.docType }}</span>
                 <span v-if="m.tocCount" class="cp-mat__fact">目录 {{ m.tocCount }} 条</span>
                 <span v-for="d in m.divisions" :key="d" class="cp-mat__fact">{{ d }}</span>
-                <a v-if="m.sourceUrl" class="cp-mat__src" :href="m.sourceUrl" target="_blank" rel="noopener noreferrer" :title="`联网来源：${m.sourceUrl}`">来源 {{ m.sourceHost }}</a>
+                <a v-if="m.sourceUrl" class="cp-mat__src" :href="m.sourceUrl" target="_blank" rel="noopener noreferrer" :title="m.sourceUrl">来源 {{ m.sourceHost }}</a>
                 <span class="cp-mat__time mono" :title="m.timeTitle">{{ m.timeText }}</span>
               </footer>
             </article>
@@ -370,7 +370,7 @@
         <!-- Learn 课堂 -->
         <section v-if="!isBlackbox && activeTab === 'learning'" role="tabpanel" :id="`cp-tabpanel-learning`" :aria-labelledby="`cp-tab-learning`" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">Learn 课堂</h3>
+            <h3 class="mk-card__title">教学课堂</h3>
             <span class="mk-card__meta">
               <template v-if="learnLessons.length">{{ learnProgressText }}</template>
               <template v-if="!learnLessons.length">暂无记录</template>
@@ -401,7 +401,7 @@
                 </button>
               </div>
             </nav>
-            <p v-else class="cp-none">尚未生成课程，请先生成 Path 并启动 Learn。</p>
+            <p v-else class="cp-none">尚未生成课程，请先生成路径并启动教学。</p>
             <!-- 右侧：对话区 -->
             <div class="cp-learn-chat">
               <div v-if="viewedLesson" class="cp-lesson-head">
@@ -422,7 +422,7 @@
                 </article>
               </template>
               <p v-else-if="teachingDetailFailed && !learnConversationMessages.length" class="cp-degrade">教学记录获取失败 <button type="button" class="mk-link" @click="loadTeachingDetail(selectedTeachingSessionId)">重试</button></p>
-              <p v-else-if="!viewedLesson" class="cp-none">点击左侧课程查看对话。</p>
+              <p v-else-if="!viewedLesson" class="cp-none">尚未选择课程。</p>
               <p v-else-if="!learnConversationMessages.length" class="cp-none">{{ learnEmptyHint }}</p>
               <!-- 检查点：题目/作答/判分（2026-10-13 走查「教学会话看不到检查点题目」）。检查点走结构化
                    通道（pendingCheckpoint → checkpointAnswer），题目**不进聊天逐字稿**，故单独渲染；
@@ -471,7 +471,7 @@
             <span class="mk-card__meta">{{ wrapupHeadMeta }}</span>
             <!-- 跨页指引（2026-10-12 走查「为啥资料看不到」）：四页拆分后资料归 Goal 页，
                  本页不留正文，给一颗确定性出口——点 stepper 也能到，这里免找 -->
-            <button v-if="realMaterials.length" type="button" class="mk-link" title="学习者资料归 Goal 阶段页；点击切换" @click="selectStageTab('goal')">学习者资料在 Goal 页 →</button>
+            <button v-if="realMaterials.length" type="button" class="mk-link" title="学习者资料在目标页" @click="selectStageTab('goal')">学习者资料在目标页 →</button>
           </div>
 
           <!-- 终局总结（已生成时；总在前、单课分列在后） -->
@@ -537,7 +537,7 @@
                 <div v-else-if="hasLessonWrapup && lessonWrapup" class="cp-lesson-wrapup" :class="{ 'is-degraded': lessonWrapup.degraded }">
                   <div class="cp-lesson-wrapup__head">
                     <span class="cp-lesson-wrapup__badge" :class="{ 'is-degraded': lessonWrapup.degraded }">
-                      {{ lessonWrapup.degraded ? '⚠ 降级总结 · 本课未完整结束' : '✓ 本课总结' }}
+                      {{ lessonWrapup.degraded ? '降级总结 · 本课未完整结束' : '本课总结' }}
                     </span>
                     <span class="cp-lesson-wrapup__scores">
                       <span v-if="lessonWrapup.duration" class="cp-lesson-wrapup__score">{{ lessonWrapup.duration }} 分钟</span>
@@ -550,7 +550,7 @@
                   </div>
                   <div class="cp-lesson-wrapup__body">
                     <p v-if="lessonWrapup.degraded" class="cp-lesson-wrapup__notice">
-                      本节课未完整结束（超时或提前中断），以下仅保留基础学习记录；完整练习建议与课堂评价未生成。
+                      本节课未完整结束（超时或提前中断），以下仅保留基础学习记录。完整练习建议与课堂评价未生成。
                     </p>
                     <!-- 主题摘要 / 学习评估（2026-10-12 走查）：门槛读这两个字段、卡身却从未渲染——
                          真实课堂的 wrapup 恰好只有这几项，此前卡显示「✓ 本课总结」但正文空空 -->
@@ -653,33 +653,33 @@
         <!-- Goal 阶段卡：预生成 Path（左对话 / 右提案 两列语义） -->
         <section v-if="!isRealMode && !isBlackbox && activeTab === 'goal'" class="mk-card">
           <div class="mk-card__head">
-            <h4 class="mk-card__title">预生成 Path <span class="cp-aside-dot" :class="hasPath ? 'is-ok' : pathGenerationFailed ? 'is-bad' : goalConverged ? 'is-warn' : 'is-muted'"></span></h4>
-            <span class="mk-card__meta">{{ hasPath ? `已生成 ${pathMilestonesView.length} 个里程碑 · ${learnLessons.length || '—'} 节课` : goalConverged ? '目标已收敛，待生成' : '未生成（目标未收敛）' }}</span>
+            <h4 class="mk-card__title">预生成路径 <span class="cp-aside-dot" :class="hasPath ? 'is-ok' : pathGenerationFailed ? 'is-bad' : goalConverged ? 'is-warn' : 'is-muted'"></span></h4>
+            <span class="mk-card__meta">{{ hasPath ? `已生成 ${pathMilestonesView.length} 个里程碑 · ${learnLessons.length || '—'} 节课` : goalConverged ? '目标已确认，待生成' : '未生成（目标未确认）' }}</span>
           </div>
           <div class="cp-aside-body">
             <template v-if="hasPath">
               <div class="cp-aside-state cp-aside-state--ok">
-                <strong>✓ Path 方案已生成</strong>
+                <strong>路径方案已生成</strong>
                 <p>包含 {{ pathMilestonesView.length }} 个里程碑 · {{ learnLessons.length || '—' }} 节课。</p>
-                <button type="button" class="cp-btn cp-btn--sm cp-btn--primary" @click="selectStageTab('path')">查看 Path →</button>
+                <button type="button" class="cp-btn cp-btn--sm cp-btn--primary" @click="selectStageTab('path')">查看路径 →</button>
               </div>
             </template>
             <template v-else-if="pathGenerationInProgress">
               <div class="cp-aside-state cp-aside-state--busy">
                 <span class="cp-aside-state__spin" aria-hidden="true"></span>
-                <strong>正在生成 Path 方案…</strong>
-                <p>里程碑与课程树生成中，稍后自动刷新；也可前往 Path 页签查看进度。</p>
+                <strong>正在生成路径方案…</strong>
+                <p>里程碑与课程树生成中，稍后自动刷新。也可前往路径页签查看进度。</p>
               </div>
             </template>
             <template v-else>
               <div class="cp-aside-state" :class="goalConverged ? 'cp-aside-state--warn' : 'cp-aside-state--empty'">
                 <span class="cp-aside-state__icon" aria-hidden="true">{{ goalConverged ? '◎' : '◌' }}</span>
-                <strong>{{ goalConverged ? 'Path 尚未生成' : 'Goal 尚未收敛' }}</strong>
+                <strong>{{ goalConverged ? '路径尚未生成' : '目标尚未确认' }}</strong>
                 <p>{{ goalConverged
-                  ? 'Goal 澄清已完成，点击「生成 Path」产出学习路径方案。'
-                  : '继续「推进一步」或点「自动推进 Goal」，澄清完成后自动进入 Path 生成。' }}</p>
-                <button v-if="!advancePathDisabled" type="button" class="cp-btn cp-btn--sm" @click="act('advancePath')">生成 Path</button>
-                <button v-else type="button" class="cp-btn cp-btn--sm cp-btn--primary" @click="act('auto')">自动推进 Goal</button>
+                  ? '目标澄清已完成，可生成学习路径方案。'
+                  : '继续「推进一步」或「自动推进目标」，澄清完成后自动进入路径生成。' }}</p>
+                <button v-if="!advancePathDisabled" type="button" class="cp-btn cp-btn--sm" @click="act('advancePath')">生成路径</button>
+                <button v-else type="button" class="cp-btn cp-btn--sm cp-btn--primary" @click="act('auto')">自动推进目标</button>
               </div>
             </template>
           </div>
@@ -688,8 +688,8 @@
         <!-- Path 阶段卡：Path 评审（左方案 / 右评审 两列语义） -->
         <section v-if="!isRealMode && !isBlackbox && activeTab === 'path'" class="mk-card">
           <div class="mk-card__head">
-            <h4 class="mk-card__title">Path 评审 <span class="cp-aside-dot" :class="pathReviewStatus ? 'is-ok' : 'is-muted'"></span></h4>
-            <span class="mk-card__meta">{{ pathReviewStatus ? pathReviewDecisionLabel : '未评审 — 评审只是质量检查，可直接启动 Learn' }}</span>
+            <h4 class="mk-card__title">路径评审 <span class="cp-aside-dot" :class="pathReviewStatus ? 'is-ok' : 'is-muted'"></span></h4>
+            <span class="mk-card__meta">{{ pathReviewStatus ? pathReviewDecisionLabel : '未评审 — 评审只是质量检查，可直接启动教学' }}</span>
           </div>
           <div class="cp-aside-body">
             <div class="cp-review-panel__actions">
@@ -707,7 +707,7 @@
               <ul v-if="pathReviewChanges.length" class="cp-review__changes"><li v-for="(c, i) in pathReviewChanges" :key="i">{{ c }}</li></ul>
               <p v-if="pathReviewReplan" class="cp-review__replan">{{ pathReviewReplan }}</p>
             </div>
-            <p v-else class="cp-none">尚未评审。评审只是质量检查，可直接启动 Learn。</p>
+            <p v-else class="cp-none">尚未评审。评审只是质量检查，可直接启动教学。</p>
           </div>
         </section>
 
@@ -747,15 +747,15 @@
         <section v-if="!isRealMode && !isBlackbox && activeTab === 'wrapup'" class="mk-card">
           <div class="mk-card__head">
             <h4 class="mk-card__title">总结状态 <span class="cp-aside-dot" :class="hasWrapup ? 'is-ok' : 'is-muted'"></span></h4>
-            <span class="mk-card__meta">{{ hasWrapup ? '详情见左侧「学习总结」' : '学习完成后生成' }}</span>
+            <span class="mk-card__meta">{{ hasWrapup ? '详情见「学习总结」' : '学习完成后生成' }}</span>
           </div>
           <div class="cp-aside-body">
             <div class="cp-aside-state" :class="hasWrapup ? 'cp-aside-state--ok' : 'cp-aside-state--empty'">
               <span class="cp-aside-state__icon" aria-hidden="true">{{ hasWrapup ? '✓' : '◌' }}</span>
               <strong>{{ hasWrapup ? '总结已就绪' : '尚未生成总结' }}</strong>
-              <p v-if="hasWrapup">完整总结（学习目标 / 评估 / 知识掌握）见左侧「学习总结」卡。</p>
+              <p v-if="hasWrapup">完整总结（学习目标 / 评估 / 知识掌握）见「学习总结」卡。</p>
               <p v-else-if="lessonTree.length">全部课程完成后，可在控制台生成终局总结（学习目标、评估、知识掌握）。</p>
-              <p v-else>尚未开始学习，生成 Path 并启动 Learn 后这里会展示进度。</p>
+              <p v-else>尚未开始学习，生成路径并启动教学后这里会展示进度。</p>
             </div>
           </div>
         </section>
@@ -901,7 +901,7 @@
             </p>
             <template v-else>
               <pre class="cp-matview__text">{{ materialView.markdown }}</pre>
-              <p v-if="materialView.truncated" class="cp-matview__trunc">全文超长，仅展示前 20 万字；完整正文仍在服务端存档。</p>
+              <p v-if="materialView.truncated" class="cp-matview__trunc">全文超长，仅展示前 20 万字。完整正文仍在服务端存档。</p>
             </template>
           </div>
           <div class="mk-modal__foot">
@@ -1052,7 +1052,7 @@ const healthStrip = computed(() => {
 })
 const healthStripTitle = computed(() => {
   const w = lessonWrapup.value
-  return `当前课时的总结读数（单课，非全会话汇总）；LSS 为学习压力评分，KTL 为知识训练负荷，困惑点为本课主要混淆点${w?.degraded ? '；本课为降级总结（未完整结束）' : ''}`
+  return `当前课时的总结读数（单课，非全会话汇总）。LSS 为学习压力评分，KTL 为知识训练负荷，困惑点为本课主要混淆点${w?.degraded ? '。本课为降级总结（未完整结束）' : ''}`
 })
 const hasLessonWrapup = computed(() => !!lessonWrapup.value && (!!lessonWrapup.value.topicSummary || !!lessonWrapup.value.knowledgeSummary))
 const selectedTeachingSessionId = ref('')
@@ -1341,8 +1341,8 @@ function isLessonReadonly(l: LearnLesson): boolean {
 function lessonActionTitle(l: LearnLesson): string {
   if (l.teachingSessionId) return '查看课堂对话'
   if (l.state === 'done') return isRealMode.value ? '该课时未关联可查看的课堂会话' : '已完成'
-  if (isRealMode.value) return '真实会话不可从后台启动学习；仅在虚拟学习者会话下可从该课开始'
-  return '尚未开始；点击可从该课开始学习（跳过当前卡住的课）'
+  if (isRealMode.value) return '真实会话不可从后台启动学习。仅在虚拟学习者会话下可从该课开始'
+  return '尚未开始（跳过当前卡住的课）'
 }
 async function onLessonClick(l: LearnLesson) {
   if (l.teachingSessionId) {
@@ -1379,9 +1379,9 @@ const learnEmptyHint = computed(() => {
   }
   if (teachingDetailFailed.value) return '教学记录获取失败，请重试。'
   if (teachingSessionHistory.value.length) return '该课堂暂未记录可展示消息。'
-  if (!hasPath.value) return '尚未启动 Learn。'
-  if (learningBlockedReason.value) return `尚未启动 Learn：${learningBlockedReason.value}`
-  return '尚未启动 Learn。'
+  if (!hasPath.value) return '尚未启动教学。'
+  if (learningBlockedReason.value) return `尚未启动教学：${learningBlockedReason.value}`
+  return '尚未启动教学。'
 })
 const pathStatusPath = computed(() => asRecord(pathStatus.value?.path))
 const pathGenerationStatus = computed(() => {
@@ -1463,14 +1463,14 @@ const pathReviewTime = computed(() => {
 const pathReviewReplan = computed(() => {
   const replan = asRecord(pathReview.value.replan)
   if (!Object.keys(replan).length) return ''
-  if (pathReviewStatus.value === 'replanning') return '正在根据评审意见重新规划 Path…'
-  if (pathReviewStatus.value === 'replanned') return '已根据评审意见生成新版 Path，请再次评审。'
+  if (pathReviewStatus.value === 'replanning') return '正在根据评审意见重新规划路径…'
+  if (pathReviewStatus.value === 'replanned') return '已根据评审意见生成新版路径，请再次评审。'
   return ''
 })
 /* Path 空态同样只反映状态，不写跨阶段操作引导；真实模式明示数据边界 */
 const pathEmptyHint = computed(() => {
-  if (isRealMode.value) return '该真实会话尚未生成 Path（无关联学习路径）。'
-  return goalConverged.value ? '尚无 Path。' : '尚无 Path：Goal 未收敛。'
+  if (isRealMode.value) return '该真实会话尚未生成路径（无关联学习路径）。'
+  return goalConverged.value ? '尚无路径。' : '尚无路径：目标未确认。'
 })
 
 const currentStage = computed(() => {
@@ -1590,7 +1590,7 @@ const stepTitle = computed(() => {
   if (!session.value) return '会话仍在加载'
   if (busy.value) return '操作执行中'
   if (isTerminal.value) return '会话已终态，不能继续推进'
-  return isBlackbox.value ? '执行一条黑盒实验轨迹' : '推进一步：当前阶段前进一轮（Goal=对话一轮 / Learn=教学对话一轮），结果即时可见'
+  return isBlackbox.value ? '执行一条黑盒实验轨迹' : '推进一步：当前阶段前进一轮（目标=对话一轮 / 教学=教学对话一轮），结果即时可见'
 })
 const autoDisabled = computed(() => !session.value || busy.value || isTerminal.value || isBlackbox.value)
 const autoTitle = computed(() => {
@@ -1598,43 +1598,43 @@ const autoTitle = computed(() => {
   if (busy.value) return '操作执行中'
   if (isBlackbox.value) return '黑盒模式仅支持单步推进'
   if (isTerminal.value) return '会话已终态，不能继续推进'
-  return '自动推进当前阶段直到收敛或回合上限（Goal=跑到收敛转 Path；Learn=跑完当前课）'
+  return '自动推进当前阶段直到完成或回合上限（目标=跑到完成转路径，教学=跑完当前课）'
 })
 
 /* 分页内的阶段操作：除通用禁用外，还要求后端 currentStage 匹配，防止在错误阶段误推 */
 function stageMismatchTitle(stage: StageKey, action: string) {
   return currentStage.value !== stage
-    ? `当前阶段是「${stageLabel(currentStage.value)}」，请切换到对应分页再${action}`
+    ? `当前阶段是「${stageLabel(currentStage.value)}」，请先进入对应分页再${action}`
     : ''
 }
 const goalStepDisabled = computed(() => stepDisabled.value || currentStage.value !== 'goal')
-const goalStepTitle = computed(() => stageMismatchTitle('goal', '推进 Goal') || stepTitle.value)
+const goalStepTitle = computed(() => stageMismatchTitle('goal', '推进目标') || stepTitle.value)
 const goalAutoDisabled = computed(() => autoDisabled.value || currentStage.value !== 'goal')
-const goalAutoTitle = computed(() => stageMismatchTitle('goal', '自动推进 Goal') || autoTitle.value)
+const goalAutoTitle = computed(() => stageMismatchTitle('goal', '自动推进目标') || autoTitle.value)
 const learnStepDisabled = computed(() => stepDisabled.value || currentStage.value !== 'learning')
-const learnStepTitle = computed(() => stageMismatchTitle('learning', '推进 Learn') || stepTitle.value)
+const learnStepTitle = computed(() => stageMismatchTitle('learning', '推进教学') || stepTitle.value)
 const learnAutoDisabled = computed(() => autoDisabled.value || currentStage.value !== 'learning')
-const learnAutoTitle = computed(() => stageMismatchTitle('learning', '自动推进对话直至本课收束') || autoTitle.value)
+const learnAutoTitle = computed(() => stageMismatchTitle('learning', '自动推进对话直至本课完成') || autoTitle.value)
 const advancePathDisabled = computed(() =>
   !!assistedControlBlockReason.value || !goalConverged.value || hasPath.value
 )
 const advancePathTitle = computed(() => {
   if (assistedControlBlockReason.value) return assistedControlBlockReason.value
-  if (!goalConverged.value) return 'Goal 对话尚未收敛，不能生成 Path'
-  if (hasPath.value) return '已有 Path，不能重复生成'
-  return '根据已收敛的 Goal 生成 Path'
+  if (!goalConverged.value) return '目标对话尚未确认，不能生成路径'
+  if (hasPath.value) return '已有路径，不能重复生成'
+  return '根据已确认的目标生成路径'
 })
 const reviewPathDisabled = computed(() =>
   !!assistedControlBlockReason.value || !pathGeneratedOrReady.value || pathReviewAccepted.value || reviewAwaitingDecision.value
 )
 const reviewPathTitle = computed(() => {
   if (assistedControlBlockReason.value) return assistedControlBlockReason.value
-  if (pathReviewAccepted.value) return '当前 Path 已通过评审'
+  if (pathReviewAccepted.value) return '当前路径已通过评审'
   if (reviewAwaitingDecision.value) return '已有评审结论待处理：接受或按意见重规划'
-  if (pathGenerationFailed.value) return 'Path 生成失败，请重新生成 Path'
-  if (pathGenerationInProgress.value) return 'Path 正在生成或补全阶段任务'
-  if (!pathGeneratedOrReady.value) return '请先生成并等待 Path 就绪'
-  return '以虚拟学习者视角评审当前 Path'
+  if (pathGenerationFailed.value) return '路径生成失败，请重新生成路径'
+  if (pathGenerationInProgress.value) return '路径正在生成或补全课程'
+  if (!pathGeneratedOrReady.value) return '请先生成并等待路径就绪'
+  return '以虚拟学习者视角评审当前路径'
 })
 
 /* 评审后的两个人工动作：接受（仅 decision=accept）或按意见重规划（decision=modify/reject） */
@@ -1650,24 +1650,24 @@ const acceptPathDisabled = computed(() => !!assistedControlBlockReason.value)
 const acceptPathTitle = computed(() => {
   if (assistedControlBlockReason.value) return assistedControlBlockReason.value
   return pathReviewDecision.value === 'accept'
-    ? '确认接受评审结论；之后仍需手动启动 Learn'
-    : '强制接受当前 Path（评审为独立旁路，不阻塞 Learn）；之后仍需手动启动 Learn'
+    ? '确认接受评审结论。之后仍需手动启动教学'
+    : '强制接受当前路径（评审为独立旁路，不阻塞教学）。之后仍需手动启动教学'
 })
 const replanPathVisible = computed(() =>
   reviewAwaitingDecision.value && ['modify', 'reject'].includes(pathReviewDecision.value)
 )
 const replanPathDisabled = computed(() => !!assistedControlBlockReason.value)
 const replanPathTitle = computed(() =>
-  assistedControlBlockReason.value || '把评审反应和修改意见交给 Goal 重新生成 Path，完成后需再次评审'
+  assistedControlBlockReason.value || '把评审反应和修改意见交给目标重新生成路径，完成后需再次评审'
 )
 const startLearningDisabled = computed(() =>
   !!assistedControlBlockReason.value || !pathStartable.value || learningActive.value
 )
 const startLearningTitle = computed(() => {
   if (assistedControlBlockReason.value) return assistedControlBlockReason.value
-  if (learningActive.value) return 'Learn 已在进行中'
-  if (!pathStartable.value) return learningBlockedReason.value || 'Path 尚未准备好启动 Learn'
-  return '启动 Learn：从第一个可运行课程开始（评审不是前置条件，可直接启动）'
+  if (learningActive.value) return '教学已在进行中'
+  if (!pathStartable.value) return learningBlockedReason.value || '路径尚未准备好启动教学'
+  return '启动教学：从第一个可运行课程开始（评审不是前置条件，可直接启动）'
 })
 const wrapupDisabled = computed(() => {
   if (!session.value || busy.value || isBlackbox.value || isFailedTerminal.value) return true
@@ -1680,23 +1680,23 @@ const wrapupTitle = computed(() => {
   if (isFailedTerminal.value) return '会话已失败或终止，不能生成学习总结'
   if (hasWrapup.value) return '学习总结已生成'
   if (!wrapupAvailable.value && !wrapupTaskSettled.value && learningActive.value) return '课堂总结在课程完成后才会生成：当前任务尚未结算完成'
-  if (!wrapupAvailable.value) return '请先启动 Learn 并产生消息或学习进度'
-  return '根据当前 Learn 记录生成总结'
+  if (!wrapupAvailable.value) return '请先启动教学并产生消息或学习进度'
+  return '根据当前教学记录生成总结'
 })
 const resetPathDisabled = computed(() =>
   !!assistedControlBlockReason.value || !hasPath.value || hasLearnHistoryOrProgress.value
 )
 const resetPathTitle = computed(() => {
-  if (hasLearnHistoryOrProgress.value) return '已有 Learn 历史或进度，为保留历史不能重建 Path'
+  if (hasLearnHistoryOrProgress.value) return '已有教学历史或进度，为保留历史不能重建路径'
   if (assistedControlBlockReason.value) return assistedControlBlockReason.value
-  if (!hasPath.value) return '尚无 Path 可重建'
-  return '删除当前 Path 并重新生成'
+  if (!hasPath.value) return '尚无路径可重建'
+  return '删除当前路径并重新生成'
 })
 const resetLearningBlockReason = computed(() => {
   if (!session.value) return '会话仍在加载'
   if (busy.value) return '操作执行中'
   if (isBlackbox.value) return '黑盒模式不支持此辅助控制'
-  if (isTerminal.value && !isFailedTerminal.value) return '会话已完成，不能重启 Learn'
+  if (isTerminal.value && !isFailedTerminal.value) return '会话已完成，不能重启教学'
   return ''
 })
 const canRestartFromFailedLearn = computed(() => isFailedTerminal.value && hasRunnablePathTask.value)
@@ -1707,9 +1707,9 @@ const resetLearningDisabled = computed(() =>
 )
 const resetLearningTitle = computed(() => {
   if (resetLearningBlockReason.value) return resetLearningBlockReason.value
-  if (!pathStartable.value && !canRestartFromFailedLearn.value) return learningBlockedReason.value || 'Path 尚未准备好启动 Learn'
-  if (!hasRunnablePathTask.value) return 'Path 中没有可重启的学习任务'
-  return isFailedTerminal.value ? '从当前可运行任务恢复失败的 Learn' : '以可运行任务重新启动 Learn（评审为独立旁路）'
+  if (!pathStartable.value && !canRestartFromFailedLearn.value) return learningBlockedReason.value || '路径尚未准备好启动教学'
+  if (!hasRunnablePathTask.value) return '路径中没有可重启的学习任务'
+  return isFailedTerminal.value ? '从当前可运行任务恢复失败的教学' : '以可运行任务重新启动教学（评审为独立旁路）'
 })
 const showPathReadiness = computed(() =>
   !isBlackbox.value && !isRealMode.value && (pathStatusFailed.value || goalConverged.value || hasPath.value || ['path', 'learning', 'wrapup'].includes(currentStage.value))
@@ -1722,14 +1722,14 @@ const pathReadinessTone = computed(() => {
   return 'muted'
 })
 const pathReadinessText = computed(() => {
-  if (pathStatusFailed.value) return 'Path 状态获取失败，请重试。'
-  if (!hasPath.value) return goalConverged.value ? 'Goal 已收敛，等待生成 Path。' : '等待 Goal 对话收敛后生成 Path。'
-  if (pathGenerationFailed.value) return learningBlockedReason.value || 'Path 生成失败，请重新生成。'
-  if (pathGenerationInProgress.value) return learningBlockedReason.value || 'Path 正在生成或补全阶段任务，请稍候。'
+  if (pathStatusFailed.value) return '路径状态获取失败，请重试。'
+  if (!hasPath.value) return goalConverged.value ? '目标已确认，等待生成路径。' : '等待目标对话确认后生成路径。'
+  if (pathGenerationFailed.value) return learningBlockedReason.value || '路径生成失败，请重新生成。'
+  if (pathGenerationInProgress.value) return learningBlockedReason.value || '路径正在生成或补全课程，请稍候。'
   if (pathStartable.value) return pathReviewAccepted.value
-    ? 'Path 已就绪，可启动或重启 Learn。'
-    : 'Path 已就绪，可启动 Learn；评审为独立旁路，不阻塞启动。'
-  return learningBlockedReason.value || 'Path 已生成，正在确认 Learn 启动条件。'
+    ? '路径已就绪，可启动或重启教学。'
+    : '路径已就绪，可启动教学。评审为独立旁路，不阻塞启动。'
+  return learningBlockedReason.value || '路径已生成，正在确认教学启动条件。'
 })
 
 const {
@@ -1870,7 +1870,7 @@ const turnRows = computed<TurnRow[]>(() => {
       rows.push({
         key: `${phase}-${i}`,
         index: rows.length + 1,
-        type: role === 'assistant' ? (phase === 'goal' ? '平台 Goal' : '教师') : (isRealMode.value ? '学习者' : '虚拟学习者'),
+        type: role === 'assistant' ? (phase === 'goal' ? '平台目标' : '教师') : (isRealMode.value ? '学习者' : '虚拟学习者'),
         tone: role === 'assistant' ? 'mk-badge--info' : 'mk-badge--muted',
         content: firstText(m.content, m.text, m.message),
         time: time ? formatTime(time) : '—'
@@ -1890,7 +1890,7 @@ const turnRows = computed<TurnRow[]>(() => {
 const turnMeta = computed(() => {
   if (!session.value) return ''
   if (!turnRows.value.length) return '暂无对话记录'
-  if (!isRealMode.value) return `${turnRows.value.length} 条对话 · Goal + 课堂按序合并`
+  if (!isRealMode.value) return `${turnRows.value.length} 条对话 · 目标 + 课堂按序合并`
   return realKind.value === 'goal'
     ? `${turnRows.value.length} 条对话 · 本目标对话`
     : `${turnRows.value.length} 条对话 · 本课课堂转录`
@@ -2473,8 +2473,8 @@ async function act(kind: string) {
     if (kind === 'resetPath') {
       const ok = await askConfirm({
         title: '重建学习路径',
-        message: '将删除当前 Path 方案并重新生成（Goal 上下文保留）。\n已有 Learn 历史或进度时会拒绝执行。确认？',
-        confirmText: '重建 Path',
+        message: '将删除当前路径方案并重新生成（目标上下文保留）。\n已有教学历史或进度时会拒绝执行。确认？',
+        confirmText: '重建路径',
         danger: false
       })
       if (!ok) return
@@ -2482,7 +2482,7 @@ async function act(kind: string) {
     if (kind === 'replanPath') {
       const ok = await askConfirm({
         title: '按评审意见重规划',
-        message: '将按当前评审意见重新规划 Path 方案，替换现有方案（Goal 上下文保留）。\n确认？',
+        message: '将按当前评审意见重新规划路径方案，替换现有方案（目标上下文保留）。\n确认？',
         confirmText: '重新规划',
         danger: false
       })
@@ -2512,7 +2512,7 @@ async function act(kind: string) {
         if (payload?.queued) {
           toast.info(`自动驾驶并发已满，已排队（第 ${payload.position ?? 1} 位），有空位会自动启动`)
         } else {
-          toast.info('全自动模式已启动：将以最终目标（Path 全部完成）为终点持续运行，每课回合上限随「回合上限」设置')
+          toast.info('全自动模式已启动：将以最终目标（路径全部完成）为终点持续运行，每课回合上限随「回合上限」设置')
         }
         break
       }
@@ -2562,11 +2562,11 @@ async function act(kind: string) {
         const d = res.data?.data ?? res.data ?? {}
         const newId = String(d.id || d.sessionId || '')
         if (!newId) {
-          toast.info('已按原输入重跑，但未返回新会话 ID；已刷新当前会话')
+          toast.info('已按原输入重跑，但未返回新会话 ID。已刷新当前会话')
           await refresh()
           return
         }
-        toast.info('已按原输入重跑，正在切换到新会话')
+        toast.info('已按原输入重跑，正在打开新会话')
         openSubPage('session', newId, subPage.value?.from ? { from: subPage.value.from } : undefined)
         return
       }

@@ -119,7 +119,7 @@
               <li><strong>密钥安全</strong><span>API Key 加密存储，仅用于平台调用你的模型服务</span></li>
             </ul>
             <div class="help-tip">
-              需要帮助？将配置问题反馈给开发者，可附上调用日志。
+              需要帮助？先核对端点与 API Key 是否正确。
             </div>
           </article>
         </aside>
@@ -163,7 +163,7 @@
           <div class="uc-card__head">
             <div>
               <h3>注销账号</h3>
-              <p>注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销（可联系管理员恢复）。</p>
+              <p>注销后账号将不可用，学习数据无法再访问。此操作不可自行撤销（可联系管理员恢复）。</p>
             </div>
           </div>
           <div class="danger-form">
@@ -194,7 +194,7 @@
           加载 MCP 工具…
         </div>
         <p v-else-if="!mcpTools.length" class="mcp-empty">
-          还没有配置 MCP 工具。新增一个 MCP 服务后，它的工具会由服务端自动发现。
+          还没有配置 MCP 工具。
         </p>
         <ul v-else class="mcp-list">
           <li v-for="t in mcpTools" :key="t.id" class="mcp-item">
@@ -212,7 +212,7 @@
               v-if="t.transport === 'mcp'"
               v-model="mcpToolName[t.id]"
               class="uc-field__input mcp-item__toolname"
-              placeholder="工具名，如 tavily_search"
+              placeholder="工具名，如 search"
               :disabled="mcpTestingId === t.id"
             />
             <div class="mcp-item__actions">
@@ -271,7 +271,7 @@
             />
           </label>
           <p v-if="mcpForm.transport === 'mcp'" class="mcp-hint">
-            MCP 服务的工具由服务端 <code>tools/list</code> 自动发现，无需逐个登记；测试与调用时以
+            MCP 服务的工具由服务端 <code>tools/list</code> 自动发现，无需逐个登记。测试与调用时以
             <code>{{ mcpForm.id || 'id' }}:&lt;toolName&gt;</code> 寻址。
           </p>
           <div class="action-buttons">

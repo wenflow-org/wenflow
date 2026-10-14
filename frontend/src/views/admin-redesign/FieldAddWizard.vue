@@ -11,23 +11,23 @@
 
         <!-- systemLocked 只读提示（编辑模式；平台派生/代码消费字段禁止在本向导修改） -->
         <p v-if="mode === 'edit' && form.systemLocked" class="faw__warn faw__warn--err">
-          ⚠ {{ props.fieldName }} 为 systemLocked（平台派生 / 代码消费，锁原因见编排文件 systemLocked 声明）：
+          {{ props.fieldName }} 为平台锁定（平台自动生成，锁原因见编排文件）：
           只读字段，本向导不可编辑，需走编排文件编辑。
         </p>
         <p v-else-if="mode === 'edit' && form.structureLocked" class="faw__warn">
-          ⚠ 结构锁字段（structureLocked）：修改需谨慎，保存将同步改 core 声明与编排路由。
+          平台锁定字段：修改需谨慎，保存将同步改 core 声明与编排路由。
         </p>
 
         <!-- 成功结果态 -->
         <div v-if="result" class="faw__result">
           <strong class="faw__result-title">{{ resultTitle }}</strong>
           <ul class="faw__result-list">
-            <li v-if="result.changed === false">无变化（字段现状与提交内容一致，未写盘未同步）</li>
+            <li v-if="result.changed === false">无变化（字段现状与提交内容一致，未保存未同步）</li>
             <template v-else>
               <li>core.yaml <b>{{ result.coreWritten ? '已写入' : '未写入' }}</b> · 编排文件 <b>{{ result.orchestrationWritten ? '已写入' : '未写入' }}</b></li>
               <li v-if="mode === 'add'">{{ TERMS.syncToDb }} <b :class="result.synced ? 'faw__ok' : 'faw__err'">{{ result.synced ? TERMS.driftInSync : '失败' }}</b>
                 <span class="faw__result-hint">{{ result.syncHint }}</span></li>
-              <li v-else>同步对账：fields 更新 <b>{{ result.dbSync?.fieldsUpdated ?? 0 }}</b> · routings 更新 <b>{{ result.dbSync?.routingsUpdated ?? 0 }}</b>
+              <li v-else>同步一致性核查：fields 更新 <b>{{ result.dbSync?.fieldsUpdated ?? 0 }}</b> · routings 更新 <b>{{ result.dbSync?.routingsUpdated ?? 0 }}</b>
                 <span v-if="result.dbSync?.skippedAdminRows?.length" class="faw__result-hint">
                   跳过受保护行 {{ result.dbSync.skippedAdminRows.length }}（{{ result.dbSync.skippedAdminRows.map((r) => r.key).join('，') }}；admin 覆盖行需在编排弹窗手动改）</span></li>
               <li v-if="result.syncCheck">字段同步复检：缺项 <b>{{ result.syncCheck.missing.length }}</b> · 孤儿 <b>{{ result.syncCheck.orphan.length }}</b> · 类型不一致 <b>{{ result.syncCheck.typeMismatch.length }}</b></li>
@@ -41,7 +41,7 @@
           <div class="faw__grid">
             <label class="mk-field faw__full">
               <span class="mk-field__label">字段名 <em class="mk-field__req">*</em>（kebab-case 或点分路径，首段为 core 顶层字段）</span>
-              <input v-model="form.name" type="text" class="mk-input mono" placeholder="例如：summary / understanding.motivation" spellcheck="false" :disabled="mode === 'edit'" @input="checkName" />
+              <input v-model="form.name" type="text" class="mk-input mono" placeholder="例如：summary / understanding" spellcheck="false" :disabled="mode === 'edit'" @input="checkName" />
               <span v-if="mode === 'edit'" class="mk-field__hint">编辑模式：字段名即身份标识，不可修改</span>
               <span v-else class="mk-field__hint" :class="nameHintCls">{{ nameHint }}</span>
             </label>
@@ -56,7 +56,7 @@
             </label>
 
             <label class="mk-field">
-              <span class="mk-field__label">角色（promptRole） <em class="mk-field__req">*</em></span>
+              <span class="mk-field__label">字段角色 <em class="mk-field__req">*</em></span>
               <select v-model="form.role" class="mk-input">
                 <option v-for="m in roleMeta" :key="m.id" :value="m.id">{{ m.label }}（{{ m.id }}）</option>
               </select>
@@ -64,21 +64,21 @@
             </label>
 
             <label class="mk-field">
-              <span class="mk-field__label">render（可见性）</span>
+              <span class="mk-field__label">可见性</span>
               <select v-model="form.render" class="mk-input">
-                <option value="visible">visible 可见（对外交付）</option>
-                <option value="hidden">hidden 隐藏（仅内部流转）</option>
+                <option value="visible">可见（对外交付）</option>
+                <option value="hidden">隐藏（仅内部流转）</option>
               </select>
             </label>
 
             <label class="mk-field">
-              <span class="mk-field__label">handoff（流转目标）</span>
+              <span class="mk-field__label">移交去向</span>
               <input v-model="form.handoff" type="text" class="mk-input mono" placeholder="goal-agent, path, skill:xxx" spellcheck="false" />
               <span class="mk-field__hint">合法目标：阶段名（{{ STAGE_NAMES.join('/') }}）/ agent / skill:；逗号分隔</span>
             </label>
 
             <label class="mk-field">
-              <span class="mk-field__label">visibilityPreset（可见性预设）</span>
+              <span class="mk-field__label">可见性预设</span>
               <select v-model="form.visibilityPreset" class="mk-input">
                 <option value="">缺省（不声明）</option>
                 <option value="user-clarification">user-clarification</option>
@@ -87,23 +87,23 @@
             </label>
 
             <label class="mk-field">
-              <span class="mk-field__label">locked（锁定）</span>
+              <span class="mk-field__label">锁定</span>
               <select v-model="form.locked" class="mk-input">
                 <option value="">不锁定</option>
-                <option value="system">system 系统锁（平台派生/代码消费）</option>
-                <option value="structure">structure 结构锁（结构约束锁定）</option>
+                <option value="system">平台锁定（平台自动生成）</option>
+                <option value="structure">平台锁定（结构约束）</option>
               </select>
             </label>
 
             <label class="mk-field">
-              <span class="mk-field__label">落库键（persistKey，别名时填）</span>
+              <span class="mk-field__label">存储字段名（别名时填）</span>
               <input v-model="form.persistKey" type="text" class="mk-input mono" placeholder="留空则与字段名一致" spellcheck="false" />
             </label>
 
             <label class="mk-field">
-              <span class="mk-field__label">抽取路径（pathInRawOutput）</span>
+              <span class="mk-field__label">抽取路径</span>
               <input v-model="form.pathInRawOutput" type="text" class="mk-input mono" placeholder="internal.ext.xxx.…" spellcheck="false" />
-              <span class="mk-field__hint">嵌套字段建议填；声明字段在产出原始输出里的物理路径</span>
+              <span class="mk-field__hint">声明字段在产出原始输出里的物理路径（嵌套字段建议填）</span>
             </label>
 
             <label class="mk-field faw__full">
@@ -117,11 +117,11 @@
             <label class="faw__check"><input v-model="form.optional" type="checkbox" /> optional（core type 加 ?，仅顶层）</label>
             <!-- title 挂 label 而非 input：disabled 的 checkbox 在部分浏览器不触发自身 title -->
             <label class="faw__check" :title="isNested ? 'turn 仅顶层字段可配：嵌套字段随顶层声明回合输出' : ''"><input v-model="form.turn" type="checkbox" :disabled="isNested" /> turn（回合输出，仅顶层）</label>
-            <label class="faw__check"><input v-model="form.internal" type="checkbox" /> internal（内部标记，与 handoff 互斥）</label>
-            <label class="faw__check"><input v-model="form.accumulate" type="checkbox" /> accumulate（累积进学习者状态）</label>
+            <label class="faw__check"><input v-model="form.internal" type="checkbox" /> 内部标记（与移交互斥）</label>
+            <label class="faw__check"><input v-model="form.accumulate" type="checkbox" /> 累积进学习者状态</label>
           </div>
-          <p v-if="form.internal && handoffList.length" class="faw__warn">⚠ internal 与 handoff 互斥：建议留空 handoff（control-signal 除外）</p>
-          <p v-if="isNested" class="faw__warn">⚠ 嵌套字段：core 侧挂到顶层 object 的 desc 子字段说明，编排 fieldId 原样点分；turn 仅顶层直配</p>
+          <p v-if="form.internal && handoffList.length" class="faw__warn">内部标记与移交互斥：建议留空移交去向（控制信号除外）</p>
+          <p v-if="isNested" class="faw__warn">嵌套字段：core 侧挂到顶层 object 的 desc 子字段说明，编排 fieldId 原样点分，turn 仅顶层直配</p>
 
           <!-- 双文件 YAML 预览（只读） -->
           <div class="faw__preview">
@@ -273,20 +273,20 @@ const subText = computed(() =>
     : '一次填写会同时写入 core 与编排两个文件'
 )
 const resultTitle = computed(() => {
-  if (result.value?.changed === false) return '无变化（幂等）'
+  if (result.value?.changed === false) return '无变化'
   // add 模式 synced=false：文件已写但落库同步失败，标题同步降级（与结果列表的红色失败行一致）
-  if (!isEdit.value && result.value?.synced === false) return '已写入文件但落库同步失败'
+  if (!isEdit.value && result.value?.synced === false) return '已写入文件但保存同步失败'
   return isEdit.value ? '已更新并回填路由 ✓' : '已保存并回填路由 ✓'
 })
 const resultNote = computed(() => {
-  if (result.value?.changed === false) return '字段现状与提交内容一致，未写盘 / 未同步 / 未记审计。'
+  if (result.value?.changed === false) return '字段现状与提交内容一致，未保存 / 未同步 / 未记审计。'
   if (!isEdit.value && result.value?.synced === false) {
-    return '新字段已写入双文件，但落库同步失败（DB 尚无该字段）。请按失败提示排查后重试同步；发布 core 变更前先确认 DB 对账恢复。'
+    return '新字段已写入双文件，但保存同步失败（数据库尚无该字段）。请按失败提示排查后重试同步；发布 core 变更前先确认 DB 一致性核查恢复。'
   }
   if (isEdit.value) {
-    return '字段修改已生效（core 声明 + 编排路由 + DB 对账）；记得去「协议」tab 编译预览 → 发布 core 变更（发布需 developerApproval 治理，不并入本次保存）。'
+    return '字段修改已生效（core 声明 + 编排路由 + DB 一致性核查）；记得去「协议」tab 编译预览 → 发布 core 变更（发布需开发审批，不并入本次保存）。'
   }
-  return '新字段已登记路由并同步；记得去「协议」tab 编译预览 → 发布 core 变更（发布需 developerApproval 治理，不并入本次保存）。'
+  return '新字段已登记路由并同步；记得去「协议」tab 编译预览 → 发布 core 变更（发布需开发审批，不并入本次保存）。'
 })
 const previewMeta = computed(() => (isEdit.value ? 'core.yaml fields + 编排 fields/routings 将更新为' : 'core.yaml fields + 编排 fields/routings 各追加 1 行'))
 
@@ -367,7 +367,7 @@ const roleHint = computed(() => {
 
 const formProblems = computed(() => {
   const list: string[] = []
-  if (form.value.systemLocked) list.push('平台锁定字段只读（平台派生 / 代码消费），需在编排文件里改')
+  if (form.value.systemLocked) list.push('平台锁定字段只读（平台自动生成），需在编排文件里改')
   const n = nameProblems.value
   if (n) list.push(n)
   if (form.value.type === 'enum') list.push('这个类型只能在核心文件里声明，编排侧没有对应写法：请改用其它类型或人工登记（否则提交会被拒绝）')
@@ -431,18 +431,18 @@ function errText(e: unknown): string {
   const map: Record<string, string> = {
     FIELD_EXISTS: '字段已存在（核心声明或编排 fieldId 重复），如需调整请走既有编辑面',
     FIELD_NOT_FOUND: '字段不存在：核心声明与编排登记需同名（可能已被删除或仅存在于一侧）',
-    FIELD_SYSTEM_LOCKED: '该字段由平台锁定（平台派生 / 代码消费）：此处只读，请改编排文件',
+    FIELD_SYSTEM_LOCKED: '该字段由平台锁定（平台自动生成）：此处只读，请改编排文件',
     FIELD_CONSUMED: '字段仍被下游引用（其他 Agent 路由 或 其他 Skill 的输入声明），禁止删除；请先解除引用',
     FIELD_NAME_REQUIRED: '字段名校验失败',
     FIELD_NAME_INVALID: '字段名校验失败',
     FIELD_NAME_PLATFORM: '字段名是平台包装字段（success/quality/stage/raw），禁止出现在字段表',
     FIELD_TYPE_REQUIRED: '类型（core 侧）必填',
-    FIELD_TYPE_UNKNOWN: '类型不在受控词表',
+    FIELD_TYPE_UNKNOWN: '类型不在可选值列表',
     FIELD_TYPE_INVALID: '类型非法（? 只能作后缀）',
     VALUE_TYPE_UNMAPPABLE: '这个类型只能在核心文件里声明，编排侧没有对应写法：请改用其它类型，或人工登记编排侧',
-    ROLE_UNKNOWN: '角色不在受控词表',
-    RENDER_UNKNOWN: '「对外可见性」取值不在受控词表',
-    VISIBILITY_PRESET_UNKNOWN: '「可见性预设」取值不在受控词表',
+    ROLE_UNKNOWN: '角色不在可选值列表',
+    RENDER_UNKNOWN: '「对外可见性」取值不在可选值列表',
+    VISIBILITY_PRESET_UNKNOWN: '「可见性预设」取值不在可选值列表',
     LOCKED_UNKNOWN: 'locked 非法（可选 system | structure）',
     FIELD_DESC_REQUIRED: 'desc（生成指令/含义）必填',
     SKILL_NOT_FOUND: 'skills.yaml 无该 skill 登记',
@@ -453,13 +453,13 @@ function errText(e: unknown): string {
     ORCHESTRATION_FILE_INVALID: '编排文件解析失败',
     NESTED_ROOT_NOT_OBJECT: '嵌套字段的顶层不是对象（object）',
     HANDOFF_SELF_LOOP: '流转去向指向自身（自环）',
-    HANDOFF_TARGET_UNKNOWN: '流转目标不在清单（manifest）中，也不是阶段名',
+    HANDOFF_TARGET_UNKNOWN: '流转目标不在清单中，也不是阶段名',
     RENDER_INTERNAL_CONFLICT: '「对外可见」与「仅内部流转」不能同时为真，仅控制信号字段允许',
     ROUTING_NO_FLOW: '缺少流转去向：请设置移交目标（公开回复 / 画像终点除外）',
     CORE_VALIDATION_FAILED: '修改后核心文件未通过校验',
     ORCHESTRATION_VALIDATION_FAILED: '修改后编排文件未通过校验',
     FIELDS_SYNC_RECHECK_FAILED: '同步复检未通过，已回滚双文件（恢复原内容）',
-    ORCHESTRATION_WRITE_FAILED: '编排文件写盘失败，core 已回滚原内容'
+    ORCHESTRATION_WRITE_FAILED: '编排文件保存失败，core 已回滚原内容'
   }
   const title = code ? (map[code] || (isEdit.value ? '改字段被拒绝' : '加字段被拒绝')) : (isEdit.value ? '改字段失败' : '加字段失败')
   return raw ? `${title}：${raw}` : title
@@ -497,16 +497,16 @@ async function submit() {
       const res = await adminPromptWorkbenchApi.updateSkillField(props.skillId, props.fieldName ?? '', buildPayload())
       result.value = (res.data?.data || {}) as SaveResult
       if (result.value.changed === false) {
-        toast.info('字段无变化（幂等返回）')
+        toast.info('字段无变化（重复提交返回）')
       } else {
-        toast.success('字段已更新：core 声明 + 编排路由 + DB 对账已同步')
+        toast.success('字段已更新：core 声明 + 编排路由 + DB 一致性核查已同步')
       }
     } else {
       const payload = { name: form.value.name.trim(), ...buildPayload() }
       const res = await adminPromptWorkbenchApi.addSkillField(props.skillId, payload)
       result.value = (res.data?.data || {}) as SaveResult
       // synced=false 时文件已写但落库同步失败，成功文案会误导（结果列表同帧已标红失败行）
-      if (result.value.synced === false) toast.warning('已写入文件但落库同步失败')
+      if (result.value.synced === false) toast.warning('已写入文件但保存同步失败')
       else toast.success('新字段已登记路由并同步')
     }
     emit('saved')

@@ -15,8 +15,8 @@
         <button type="button" class="mk-badge skd-badge-btn" :class="healthBadge.cls" :title="healthBadge.title" @click="goRuntimeTab">{{ healthBadge.text }}</button>
         <!-- 类别人话（Skills.vue:194 同字段判例）：裸枚举 teaching → 「教学」，title 保留原值备查 -->
         <span class="mk-badge mk-badge--muted" :title="`类别：${view.category}（来源：${view.categorySource}）`">{{ categoryText(view.category) }}</span>
-        <span v-if="modelLabel" class="mk-badge mk-badge--muted mono" :title="'生效模型（skill_model_configs 覆盖或 ACTIVE Prompt 声明）'">{{ modelLabel }}</span>
-        <span v-if="promptVersionText" class="mk-badge mk-badge--info">ACTIVE {{ promptVersionText }}</span>
+        <span v-if="modelLabel" class="mk-badge mk-badge--muted mono" :title="'生效模型（来自模型配置或线上生效 Prompt 声明）'">{{ modelLabel }}</span>
+        <span v-if="promptVersionText" class="mk-badge mk-badge--info">线上生效 {{ promptVersionText }}</span>
       </template>
       <template #actions>
         <button type="button" class="mk-btn" :disabled="loading" @click="load(true)">
@@ -182,7 +182,7 @@
                 </div>
                 <!-- P3-23：未跑态显统一占位灰块（成句的「尚未试跑」已收敛到样例输入卡脚注）；
                      跑过但无逐步链路的说明保留（与占位态不同事实） -->
-                <div v-if="!trialSteps.length" class="skd-tbd" :title="trialResult ? '本次试跑仅返回最终输出' : '尚未试跑'">{{ trialResult ? '本次试跑仅返回最终输出；逐步执行链路等待后端下发（testSkill 暂只回最终输出）。' : '—' }}</div>
+                <div v-if="!trialSteps.length" class="skd-tbd" :title="trialResult ? '本次试跑仅返回最终输出' : '尚未试跑'">{{ trialResult ? '本次试跑仅返回最终输出，暂无逐步明细。' : '—' }}</div>
               </div>
             </section>
           </div>
@@ -215,11 +215,11 @@
                 </div>
                 <!-- #130：原「试跑在隔离沙箱执行，不写入生产数据」与实现相反——testSkill 走真实 handler，
                      写 agent_call_logs / prompt_call_logs，并计入本页调用次数/成功率/最近调用 -->
-                <p class="mk-card__note">试跑 = 真实执行：会写入 agent_call_logs / prompt_call_logs，并计入本页的调用次数、成功率与最近调用窗口；失败的试跑同样产出一条失败记录。</p>
+                <p class="mk-card__note">试跑为真实执行，会计入本页调用统计。失败的试跑同样产生一条失败记录。</p>
               </div>
             </section>
           </div>
-          <p class="mk-card__note">试跑直接调用该 Skill 的真实 handler 执行；重跑日志、ACTIVE Prompt 参照等完整诊断在设计页「试跑」页签。</p>
+          <p class="mk-card__note">试跑会真实执行该 Skill。完整诊断见设计页「试跑」页签。</p>
         </template>
 
         <!-- ========== 版本（原型 versions：.tbl 表格；日期/作者/变更说明有字段才补列，回滚投设计页） ========== -->
@@ -283,7 +283,7 @@
             <MkKpi label="成功率" :value="successRate" :tone="rateTone" />
             <MkKpi label="平均耗时" :value="stat.calls ? fmtMs(stat.avgMs) : '—'" />
           </section>
-          <p v-if="statsNote" class="mk-card__note">统计口径：{{ statsNote }}</p>
+          <p v-if="statsNote" class="mk-card__note">统计来源：{{ statsNote }}</p>
           <!-- 运行时限制：原型 renderSkillDetail 2355-2357（dl.kv）；后端逐 skill 仅 requestTimeoutMs 可得，其余空态 -->
           <section class="mk-card">
             <div class="mk-card__head">
@@ -297,7 +297,7 @@
                   <span class="mono skd-kv__v">{{ r.v }}</span>
                 </div>
               </div>
-              <p v-else class="mk-empty--line">后端未返回该 Skill 的独立运行时限制（仅 skill_model_configs.requestTimeoutMs 一项可得）。</p>
+              <p v-else class="mk-empty--line">暂无该 Skill 的独立运行时限制数据。</p>
             </div>
           </section>
           <div class="skd-grid">
@@ -354,14 +354,14 @@
                     {{ rtSaving ? '保存中…' : '保存配置' }}
                   </button>
                 </div>
-                <p class="mk-card__note">模型仅当该 Skill 的 ACTIVE Prompt 未声明 model 时生效；生成参数（含 model）以 ACTIVE Prompt 为准。</p>
+                <p class="mk-card__note">模型仅当该 Skill 的线上生效 Prompt 未声明 model 时生效。生成参数（含 model）以线上生效 Prompt 为准。</p>
               </div>
             </section>
             <!-- 模型测试（SkillDrawer「模型测试」页签整体迁入：model-probe 直发上游，不落库） -->
             <section class="mk-card">
               <div class="mk-card__head">
                 <h3 class="mk-card__title">模型测试</h3>
-                <span class="mk-card__meta">直发上游 · 不落库</span>
+                <span class="mk-card__meta">直发上游 · 不留记录</span>
               </div>
               <div class="skd-pad skd-stack">
                 <div class="skd-fgrid">
@@ -401,7 +401,7 @@
                   </div>
                   <pre v-if="probeResult.contentPreview" class="skd-code skd-code--short mono">{{ probeResult.contentPreview }}</pre>
                 </div>
-                <p class="mk-card__note">探测用 ACTIVE Prompt + 当前路由直发上游，测「改档位后真实延迟 / JSON / token」；先验证再保存配置。</p>
+                <p class="mk-card__note">探测用线上生效 Prompt + 当前路由直发上游，测「改档位后真实延迟 / JSON / token」。先验证再保存配置。</p>
               </div>
             </section>
           </div>
@@ -411,7 +411,7 @@
               <h3 class="mk-card__title">最近调用</h3>
               <!-- #150：有数据时也带窗口口径——列表是日志采样窗口内的最近 5 条（store.recentSpansOf
                    默认 limit=5），裸「N 条」会被读成全量（同屏指标卡可能显示 27852 次调用） -->
-              <span class="mk-card__meta">{{ recent.length ? `最近 ${recent.length} 条（近 7 天采样窗口）` : '近 7 天采样窗口' }}</span>
+              <span class="mk-card__meta">{{ recent.length ? `最近 ${recent.length} 条（近 7 天）` : '近 7 天记录' }}</span>
             </div>
             <div class="skd-pad skd-rows">
               <button v-for="s in recent" :key="s.id" type="button" class="skd-call" :title="recentRowTitle(s)" @click="goTrace(s.traceId)">
@@ -419,7 +419,7 @@
                 <span class="skd-call__title">{{ recentRowText(s) }}</span>
                 <span class="mono skd-call__ms">{{ fmtMs(s.durationMs) }}</span>
               </button>
-              <p v-if="!recent.length" class="mk-empty--line">本页已加载的日志采样里没有该 Skill 的调用（列表为本页采样窗口内的最近 5 条）。上方指标走统计接口、按 Skill 列表「统计窗口」由服务端聚合，两者不同源：这里没有记录不等于该 Skill 没有调用，以指标卡为准。</p>
+              <p v-if="!recent.length" class="mk-empty--line">近 7 天暂无该 Skill 的调用记录。指标由统计接口聚合，统计范围与列表不同，以指标卡为准。</p>
             </div>
           </section>
         </template>
@@ -453,7 +453,7 @@
                 </div>
                 <p v-else class="mk-empty--line" title="core YAML 未声明 inputs 的 skill:/sandbox: 引用">该 Skill 未声明输入依赖。</p>
                 <!-- 四段发布流（草稿/评审/灰度/回滚）后端无阶段状态接口 → 空态；本系统发布链见设计页「协议」页签 -->
-                <p class="mk-card__note" title="后端未提供草稿 / 评审 / 灰度 / 回滚阶段状态接口">发布链：保存并编译 → 发布（暂无草稿 / 评审 / 灰度阶段状态）。</p>
+                <p class="mk-card__note" title="草稿 / 评审 / 灰度 / 回滚状态暂未提供">发布链：保存并编译 → 发布（暂无草稿 / 评审 / 灰度阶段状态）。</p>
                 <div class="skd-actions">
                   <button type="button" class="mk-btn mk-btn--primary" @click="goDesign('engineering')">打开工程视图 →</button>
                 </div>
@@ -511,7 +511,7 @@
               </div>
             </div>
             <div class="skd-pad">
-              <p class="mk-card__note">字段路由决定 Skill 与上下游 Agent 之间传递的结构化字段；标注「内部」的字段不进入用户可见回复。</p>
+              <p class="mk-card__note">字段路由决定 Skill 与上下游 Agent 之间传递的结构化字段。标注「内部」的字段不进入用户可见回复。</p>
             </div>
           </section>
         </template>
@@ -539,7 +539,7 @@
             <label class="skd-field">
               <span>变更说明</span>
               <input v-model="pmNote" class="mk-input" placeholder="例如：优化诊断追问策略" />
-              <em class="skd-hint">Prompt 内容以 core 文件为单源（File-as-Truth）：此处供查看与起草，草稿保存与发布在设计页「协议」页签完成。</em>
+              <em class="skd-hint">Prompt 内容以源文件为准：此处供查看与起草，草稿保存与发布在设计页「协议」页签完成。</em>
             </label>
           </div>
           <div class="mk-modal__foot">
@@ -819,7 +819,7 @@ const STATS_SOURCE_TEXT: Record<string, string> = {
 }
 const statsNote = computed(() => {
   const src = STATS_SOURCE_TEXT[String(meta.value?.stats?.source || '')] || 'Skill 执行日志'
-  return `${src} · ${statsRangeLabel.value}窗口（与 Skill 列表「统计窗口」同源，随其切换）`
+  return `${src} · ${statsRangeLabel.value}（与 Skill 列表「统计窗口」一致）`
 })
 
 /* ===== 指标（运行时页签 KPI 卡；0 与未知分开；阈值/精度走 rate-utils 单点） ===== */

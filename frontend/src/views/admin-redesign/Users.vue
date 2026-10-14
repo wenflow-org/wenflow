@@ -11,7 +11,7 @@
       <span class="mk-status__meta" :title="isLive ? (liveUsersTotal > users.length ? '共 ' + liveUsersTotal + ' 人，当前显示前 ' + users.length + ' 人' : '共 ' + liveUsersTotal + ' 人') : undefined">
         共 {{ isLive && liveUsersTotal > users.length ? liveUsersTotal + ' 人 · 当前显示 ' + users.length : users.length }} 人
       </span>
-      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅统计真实用户（不含虚拟 / 测试账号）；切「测试」只看虚拟学习者与测试账号">
+      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅统计真实用户（不含虚拟 / 测试账号）">
         真实 {{ realUsers }}
       </span>
       <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" title="含虚拟学习者与测试账号（行内带标记）">测试/虚拟 {{ users.length - realUsers }}</span>

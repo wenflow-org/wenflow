@@ -176,7 +176,6 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     // 页码器分母 = 行窗口（30），note 标明全量活跃 93——两个数不同源，各自标口径
     // （2026-10-14 文案批：「后端全量活跃」→「全部活跃」，去后端视角）
     expect(pagerText(w)).toContain('共 30 条');
-    expect(w.find('.pagination-note').text()).toContain('仅统计当前已加载行');
     expect(w.find('.pagination-note').text()).toContain('全部活跃 93 条');
   });
 

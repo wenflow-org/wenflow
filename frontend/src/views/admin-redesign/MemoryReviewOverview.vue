@@ -46,7 +46,7 @@
       collapsible
       class="mr-distband"
       title="到期时间轴"
-      :sub="`点击分段可筛选对应到期时间的学习者 · 共 ${queueRows.length} 个复习点（基于最近 ${traceRows.length} 条记忆记录）`"
+      :sub="`共 ${queueRows.length} 个复习点 · 按到期时间分档`"
       unit="个"
       aria-label="按到期时间筛选学习者"
       :bins="mrDueBins"
@@ -58,7 +58,7 @@
       <div class="mk-card__head">
         <h3 class="mk-card__title">用户列表</h3>
         <!-- 口径：totals.users 是后端全量统计，唯一住在页头 KPI「用户」卡；卡头只报本列表的窗口事实 -->
-        <span class="mk-card__meta" :title="`按待复习量从多到少排序，每页 ${userPageSize} 位；全部用户数见页首「用户」卡${dueBandFilter ? '。当前按到期时间筛选，仅显示对应学习者' : ''}`">第 {{ userPage }} 页 · 每页 {{ userPageSize }} 位 · 按待复习量倒序<template v-if="dueBandFilter"> · 已筛 {{ visibleRows.length }} 位</template></span>
+        <span class="mk-card__meta" :title="`按待复习量从多到少排序，每页 ${userPageSize} 位。全部用户数见页首「用户」卡${dueBandFilter ? '。当前按到期时间筛选，仅显示对应学习者' : ''}`">第 {{ userPage }} 页 · 每页 {{ userPageSize }} 位 · 按待复习量倒序<template v-if="dueBandFilter"> · 已筛 {{ visibleRows.length }} 位</template></span>
       </div>
       <!-- 取数失败不得渲染成「暂无数据」（R2）：有旧行时保留旧行并给带重试的 .mk-alert -->
       <div v-if="error && rows.length" class="mk-alert mk-alert--row" role="alert">
@@ -118,18 +118,18 @@
                 <span v-else class="mk-na" title="没有跌破 40% 的痕迹">—</span>
               </td>
               <td class="mk-num">
-                <span v-if="row.avgStrength != null" class="mr__strength" :title="`全部有强度痕迹的 FSRS 可提取率均值 ${Math.round(row.avgStrength * 100)}%`">
+                <span v-if="row.avgStrength != null" class="mr__strength" title="有强度痕迹的平均记忆强度">
                   <span class="mk-minibar mr__bar"><i class="mk-minibar__fill" :style="{ width: Math.round(row.avgStrength * 100) + '%' }"></i></span>
                   <span class="mono">{{ Math.round(row.avgStrength * 100) }}%</span>
                 </span>
-                <span v-else class="mk-na" title="该用户的痕迹都还没有 FSRS 强度数据">—</span>
+                <span v-else class="mk-na" title="该用户的痕迹都还没有记忆强度数据">—</span>
               </td>
               <td :title="row.lastReviewedAt ? new Date(row.lastReviewedAt).toLocaleString('zh-CN', { hour12: false }) : undefined">
                 <span class="mk-cell-sub mono">{{ row.lastReviewedAt ? timeAgo(row.lastReviewedAt) : '—' }}</span>
               </td>
               <td>
                 <div class="mk-actions">
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingId === row.userId" title="对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹" @click.stop="recompute(row.userId, row.name)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
+                  <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingId === row.userId" title="重新跑一次该用户的记忆复盘，结果实时刷新" @click.stop="recompute(row.userId, row.name)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
                 </div>
               </td>
             </tr>
@@ -272,7 +272,7 @@ const dueWarn = computed(() => {
 })
 const dueCardTitle = computed(() => {
   const t = totals.value
-  return `到该复习而未复习 ${t.due} 条，占全部记录 ${duePct.value}%；达到 ${DUE_WARN_PCT}% 或人均 ${DUE_WARN_PER_USER} 条以上时标为需关注`
+  return `到该复习而未复习 ${t.due} 条，占全部记录 ${duePct.value}%。达到 ${DUE_WARN_PCT}% 或人均 ${DUE_WARN_PER_USER} 条以上时标为需关注`
 })
 
 /* ===== 到期时间轴：窗口 = adminMemoryTracesApi.list（上限 200 条、updatedAt 倒序）=====
@@ -364,12 +364,12 @@ const dueBandEmpty = computed(() => {
   if (inWindow > 0) {
     return {
       title: `前 ${userPageSize.value} 名里没有该档学习者`,
-      desc: `最近记录中有 ${inWindow} 位学习者的到期时间落在「${label}」档，但都不在当前列表前 ${userPageSize.value} 位内。再点一次分布条上的同档分段可取消筛选。`
+      desc: `最近记录中有 ${inWindow} 位学习者的到期时间落在「${label}」档，但都不在当前列表前 ${userPageSize.value} 位内。`
     }
   }
   return {
     title: '该到期档暂无学习者',
-    desc: '窗口内没有学习者的到期痕迹落在这个时间档。再点一次分布条上的同档分段即可取消筛选。'
+    desc: '窗口内没有学习者的到期痕迹落在这个时间档。'
   }
 })
 
@@ -393,11 +393,11 @@ const overviewCards = computed<OverviewCard[]>(() => {
   const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
   const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : text)
   return [
-    { label: '用户', value: val(t.users), hint: numHint('有记忆痕迹'), tone: numTone(''), title: '全部有记忆记录的用户数；是否含虚拟学习者随页头开关' },
+    { label: '用户', value: val(t.users), hint: numHint('有记忆痕迹'), tone: numTone(''), title: '全部有记忆记录的用户数。是否含虚拟学习者随页头开关' },
     { label: '记忆痕迹', value: val(t.traces), hint: numHint('跨全部学习路径'), tone: numTone(''), title: '记忆记录总数（用户级、跨全部学习路径）' },
     { label: '当前到期', value: val(t.due), hint: numHint(t.traces ? `占痕迹 ${duePct.value}%` : '暂无痕迹'), tone: numTone(dueWarn.value ? 'warn' : ''), title: dueCardTitle.value },
     { label: '需人工看', value: val(t.ambiguous), hint: numHint('归并候选 · 不自动执行'), tone: numTone(t.ambiguous > 0 ? 'warn' : ''), title: '像但不确定的归并候选，需人工确认，不会自动执行' },
-    { label: '待归并建议', value: val(t.proposed), hint: numHint(`可自动 ${t.autoApplicable} · 已执行 ${t.applied}/${t.deleted}`), tone: numTone(''), title: '模型给出的同义概念候选；「可自动」指系统有把握且名称足够相似；执行后保留备份，可回滚' }
+    { label: '待归并建议', value: val(t.proposed), hint: numHint(`可自动 ${t.autoApplicable} · 已执行 ${t.applied}/${t.deleted}`), tone: numTone(''), title: '模型给出的同义概念候选。「可自动」指系统有把握且名称足够相似。执行后保留备份，可回滚' }
   ];
 });
 
@@ -423,14 +423,14 @@ const fragmentationCards = computed<OverviewCard[]>(() => {
       value: na || ratio == null ? '—' : `${Math.round(ratio * 100)}%`,
       hint: numHint('措辞重复的痕迹占比'),
       tone: numTone(!na && ratio != null && ratio >= 0.2 ? 'warn' : ''),
-      title: '含义相同、措辞重复的记忆记录占比，越高说明概念越碎；≥20% 建议先在「概念归并审计」中收拢。是否含虚拟学习者随页头开关'
+      title: '含义相同、措辞重复的记忆记录占比，越高说明概念越碎，达到 20% 时标为需关注。是否含虚拟学习者随页头开关'
     },
     {
       label: '未挂靠散键',
       value: na || unattached == null ? '—' : unattached,
       hint: numHint('未关联到标准概念的键'),
       tone: numTone(!na && unattached != null && unattached > 0 ? 'warn' : ''),
-      title: '自由填写的、未关联到标准概念的概念键数量——无法自动收拢，只能通过归并 / 清理建议逐条治理'
+      title: '自由填写的、未关联到标准概念的概念标识数量——无法自动收拢，只能通过归并 / 清理建议逐条治理'
     },
     {
       label: '待审队列',
@@ -440,7 +440,7 @@ const fragmentationCards = computed<OverviewCard[]>(() => {
          「需人工看」就在和里，另两项为 0 时两卡同数，7 与 7 并排读作矛盾数字。 */
       hint: numHint(pendingReview != null && ambiguous > 0 ? `含需人工看 ${ambiguous}` : '人审队列中的建议数'),
       tone: numTone(!na && pendingReview != null && pendingReview > 0 ? 'warn' : ''),
-      title: '待审队列深度 = 人审档归并建议 + 需人工看 + 散键清理建议之和（同一带上的「需人工看」已含在此数内，不是另一个口径）。不会自动执行——进具体学习者的「记忆调度」页签逐条确认或驳回'
+      title: '待审队列深度：归并建议、需人工看与散键清理建议之和（「需人工看」已含在此数内）。不会自动执行'
     }
   ];
 });

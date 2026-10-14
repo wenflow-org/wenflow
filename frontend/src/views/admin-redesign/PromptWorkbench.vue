@@ -8,9 +8,9 @@
       <!-- 三态合计口径：此前全量 no-prompt 时只显示「同步 0 / 待编译发布 0」，
            与「核心文件 N」对不上，用户以为数据没加载 -->
       <span class="mk-status__meta" :title="coreCountTitle">核心文件 {{ cores.length }}</span>
-      <span class="mk-status__meta pw-ok" :title="`已同步：编译产物与 core.yaml 一致（${syncedCount} 个）`">同步 {{ syncedCount }}</span>
-      <span class="mk-status__meta pw-warn" :title="`待编译发布：core.yaml 有改动但未重新编译（${pendingCount} 个）`">待编译发布 {{ pendingCount }}</span>
-      <span v-if="noPromptCount" class="mk-status__meta pw-na" :title="`无 Prompt：尚未创建 core.yaml，不参与编译（${noPromptCount} 个）`">无 Prompt {{ noPromptCount }}</span>
+      <span class="mk-status__meta pw-ok" :title="`已同步：编译产物与核心文件一致（${syncedCount} 个）`">同步 {{ syncedCount }}</span>
+      <span class="mk-status__meta pw-warn" :title="`待编译发布：核心文件有改动但未重新编译（${pendingCount} 个）`">待编译发布 {{ pendingCount }}</span>
+      <span v-if="noPromptCount" class="mk-status__meta pw-na" :title="`无 Prompt：尚未创建核心文件，不参与编译（${noPromptCount} 个）`">无 Prompt {{ noPromptCount }}</span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action" :disabled="loading" @click="loadList">
           <MkLoading v-if="loading" inline text="刷新中…" /><span v-else>刷新</span>
@@ -21,7 +21,7 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">核心文件</h3>
-        <span class="mk-card__meta">改提示词与发布在 Skill 设计页「协议」页签；从 0 新建是代码级动作，走 CLI：backend/scripts/scaffold-skill.ts（见 doc/SKILL_DEVELOPMENT_GUIDE.md）</span>
+        <span class="mk-card__meta">改提示词与发布在 Skill 设计页「协议」页签。新建 Skill 为开发操作，需由开发人员创建</span>
       </div>
       <!-- 刷新失败但已有清单（2026-10-06 审核 #139）：保留已渲染表格，行内 alert 说明数据可能过期 + 重试入口；
            无数据（首载失败）时才由下方 MkEmptyState 走整页错误态（口径同 MemoryReview / DayTimeline） -->
@@ -40,7 +40,7 @@
             <th>Skill</th>
             <th>结构</th>
             <th>输出</th>
-            <th title="coreHash">核心哈希</th>
+            <th title="核心文件哈希">核心哈希</th>
             <th>状态</th>
             <th class="mk-th--right">操作</th>
           </tr>

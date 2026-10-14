@@ -34,7 +34,7 @@
         <span class="dt-status__meta">已推进 {{ clock.dayIndex }} / {{ clock.maxSimulatedDays }} 天</span>
         <span class="dt-status__meta">{{ clock.timezone }}</span>
         <span v-if="!readonly" class="dt-status__act">
-          <button type="button" class="mk-link mk-link--danger" :disabled="resetting" title="重置推进进度（dayIndex=0、清空 history；不回改已写时间戳）" @click="resetClock">
+          <button type="button" class="mk-link mk-link--danger" :disabled="resetting" title="清空推进记录，回到初始日期" @click="resetClock">
             {{ resetting ? '重置中…' : '重置进度' }}
           </button>
         </span>
@@ -44,10 +44,10 @@
            readonly（#67）：嵌入只读视图（画像·日程 tab）时只留课表元信息，不渲染写操作 -->
       <div class="dt-controls">
         <span class="dt-status__meta">课表 {{ weekdaysLabel(clock.courseWeekdays) }} · 每天 {{ clock.lessonsPerDay }} 节</span>
-        <button v-if="!readonly" type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 1 个上课日（跳过非上课日）' : '请先开启日期模拟'" @click="advance(1)">推进 1 天</button>
-        <button v-if="!readonly" type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '按课表推进 5 个上课日' : '请先开启日期模拟'" @click="advance(5)">推进 5 天</button>
-        <button v-if="!readonly" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="advancing || !clock.enabled" :title="clock.enabled ? '推进 1 天并真实跑当天课程（业务时间戳落在模拟日；每节消耗 AI 调用）' : '请先开启日期模拟'" @click="advance(1, true)">推进并上课</button>
-        <label v-if="!readonly" class="dt-auto" :title="clock.enabled ? '开启后由后台按课表自动推进（仅时钟簿记；当天任务重放归系统层）' : '请先开启日期模拟'">
+        <button v-if="!readonly" type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" title="按课表推进 1 个上课日" @click="advance(1)">推进 1 天</button>
+        <button v-if="!readonly" type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" title="按课表推进 5 个上课日" @click="advance(5)">推进 5 天</button>
+        <button v-if="!readonly" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="advancing || !clock.enabled" title="推进 1 天并真实上课" @click="advance(1, true)">推进并上课</button>
+        <label v-if="!readonly" class="dt-auto" title="按课表自动推进日期">
           <input
             type="checkbox"
             :checked="clock.autoAdvance"
@@ -59,7 +59,7 @@
       </div>
 
       <p v-if="!clock.enabled" class="dt-hint">
-        日期模拟默认关闭。下方按天读数是该会话既有历史的自然日聚合（以会话创建日为第 1 天），可直接用于负担/干预观测。
+        日期模拟默认关闭。按天读数是该会话既有历史的自然日聚合（以会话创建日为第 1 天），可直接用于负担/干预观测。
       </p>
 
       <!-- 操作类失败（推进/自动推进/重置）走行内 alert：error ref 只留给 load() 整页失败，
@@ -290,7 +290,7 @@ async function resetClock() {
   /* 全站统一确认框（原原生 window.confirm 是最后一处离类：无 busy/焦点管理、样式断裂） */
   const ok = await askConfirm({
     title: '重置日期模拟进度',
-    message: '确定重置该会话的日期模拟推进进度？dayIndex 归零、清空 history；不回改已写时间戳。',
+    message: '确定重置该会话的日期模拟推进进度？回到初始日期，不回改已写的时间戳。',
     confirmText: '重置',
   })
   if (!ok) return

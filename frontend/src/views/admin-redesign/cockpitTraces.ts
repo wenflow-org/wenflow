@@ -94,7 +94,7 @@ export function verdictLabel(verdict?: string) {
 
 export function scoreItems(scores: Record<string, number | null>, kind: 'referee' | 'actor') {
   const labels = kind === 'referee'
-    ? [['goalExperience', 'Goal 体验'], ['pathExperience', 'Path 体验'], ['teachingExperience', 'Teaching 体验'], ['controlConsistency', '控制一致'], ['boundaryIntegrity', '边界完整'], ['evidenceSufficiency', '证据充分']]
+    ? [['goalExperience', '目标体验'], ['pathExperience', '路径体验'], ['teachingExperience', '教学体验'], ['controlConsistency', '控制一致'], ['boundaryIntegrity', '边界完整'], ['evidenceSufficiency', '证据充分']]
     : [['personaConsistency', '画像一致'], ['storyConsistency', '故事一致'], ['disclosureDiscipline', '披露节奏'], ['frictionCalibration', '摩擦校准'], ['stateContinuity', '状态连续'], ['behaviorPlausibility', '行为可信'], ['evidenceSufficiency', '证据充分']]
   return labels.map(([key, label]) => ({ label, value: scores[key] ?? null }))
 }

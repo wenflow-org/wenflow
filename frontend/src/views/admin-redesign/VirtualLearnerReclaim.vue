@@ -2,7 +2,7 @@
   <!-- 一键回收卡死：dryRun 先展示清单再确认执行（复用 reclaim-stale dryRun 语义） -->
   <Teleport v-if="render" to="body">
   <div v-if="state.open" ref="reclaimMaskRef" class="mk-modal">
-    <div ref="reclaimPanelRef" class="mk-modal__panel" role="dialog" :aria-label="state.profileIds ? '批量清理卡死会话' : '一键回收卡死会话'">
+    <div ref="reclaimPanelRef" class="mk-modal__panel" role="dialog" :aria-label="state.profileIds ? '批量清理无响应会话' : '一键回收无响应会话'">
       <div class="mk-modal__head">
         <h3 class="mk-modal__title">{{ state.profileIds ? `批量清理卡死会话（选中 ${state.profileIds.length} 人）` : '一键回收卡死会话' }}</h3>
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="state.open = false">✕</button>
@@ -26,7 +26,7 @@
                原先的 mk-alert--ok 只有一句状态文案、没有下一步 -->
           <MkEmptyState
             v-if="!candidateCount"
-            title="没有可回收的卡死会话"
+            title="没有可回收的无响应会话"
             description="当前没有超过回收阈值的卡死候选会话，无需清理。"
             action-text="关闭"
             compact

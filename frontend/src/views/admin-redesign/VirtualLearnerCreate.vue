@@ -76,7 +76,7 @@
               class="mk-field__input"
               placeholder="例如：总想补职场工具（留空则由故事的学习需求定义）"
             />
-            <span class="mk-field__hint">写入画像备用，真正驱动 Path 的是故事里的学习需求</span>
+            <span class="mk-field__hint">写入画像备用，真正驱动学习路径的是故事里的学习需求</span>
           </label>
         </details>
       </div>

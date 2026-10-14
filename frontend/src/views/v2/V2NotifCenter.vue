@@ -364,8 +364,8 @@ async function collectBusy(): Promise<void> {
         key: `path-${busyPath.id}`,
         title: '正在生成学习路径',
         detail: lc.phase === 'stage_design' && lc.totalStages
-          ? `阶段任务（${lc.completedStages ?? 0}/${lc.totalStages}）`
-          : '主结构生成中'
+          ? `课程（${lc.completedStages ?? 0}/${lc.totalStages}）`
+          : '路径生成中'
       });
     }
   } catch { /* 忽略 */ }

@@ -11,7 +11,7 @@
           type="button"
           class="mk-btn mk-btn--sm"
           :disabled="reclaimRef?.state.busy"
-          :title="'角标为超阈值卡死候选数（含豁免项）；点击预览清单后批量标记'"
+          :title="'角标为超阈值无响应候选数（含豁免项）'"
           @click="openReclaimModal()"
         >
           {{ reclaimRef?.state.busy ? '回收中…' : `回收卡死（${partition.stale}）` }}
@@ -36,7 +36,7 @@
           :value="statsKpiValue(statsKpiPct(completionPct))"
           :tone="statsState === 'error' ? 'bad' : ''"
           :hint="statsKpiHint(completionHint)"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '完成率按会话统计；「会话均长」为会话从创建到结束的平均时长，非单次调用耗时；活动会话含进行中与创建中'"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '完成率按会话统计。「会话均长」为会话从创建到结束的平均时长，非单次调用耗时。活动会话含进行中与创建中'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         >
@@ -51,7 +51,7 @@
           :value="statsKpiValue(statsKpiPct(runStats.systemFailureRate))"
           :tone="statsState === 'error' ? 'bad' : (runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''"
           :hint="statsKpiHint(`系统失败 ${runStats.failed} / 全部会话 ${runStats.totalSessions} · 人为终止 ${runStats.abandoned} 另计（合计 ${statsKpiPct(runStats.failureRate)}）`)"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '按全部会话计算的失败率，与总览页「系统失败率」一致；管理员止停等人为终止另行统计，合计见下方说明'"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '按全部会话计算的失败率，与总览页「系统失败率」一致。管理员止停等人为终止另行统计'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />
@@ -60,7 +60,7 @@
           :value="statsKpiValue(concurrencyText)"
           :tone="concurrencyTone"
           :hint="statsState === 'error' ? '统计不可用 · 点击重试' : '自动驾驶并发配额'"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '并发为自动驾驶同时在跑的会话数占配额比；「已满」是资源占满（后续请求排队），不是故障'"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '并发为自动驾驶同时在跑的会话数占配额比。「已满」是资源占满（后续请求排队），不是故障'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         >
@@ -80,7 +80,7 @@
           :tone="vlRpmLoadFailed ? 'bad' : ''"
           :hint="rateHint"
           :clickable="vlRpmLoadFailed"
-          :title="vlRpmLoadFailed ? '设置未加载：点击重试' : '在途为正在出站的调用数；上限为已保存的速率配置（在「模型与接入 → 虚拟学习者」页签修改）'"
+          :title="vlRpmLoadFailed ? '设置未加载：点击重试' : '在途为正在出站的调用数。上限为已保存的速率配置（在「模型与接入 → 虚拟学习者」页签修改）'"
           @click="vlRpmLoadFailed && loadVlRpm()"
         />
       </section>
@@ -132,7 +132,7 @@
           <!-- 2026-10-05 卡头统一：补「列」按钮（此前全站唯一没有列控制的列表页）；
                窄屏档（isNarrow）仍按视口折叠，列勾选在桌面档生效 -->
           <MkCols :col-defs="vlColDefs" storage-key="wf_vl_hidden_cols_v1" v-model:hidden="hiddenCols" />
-          <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-card__meta vl-truncated" :title="`共 ${liveVirtualsTotal} 人，当前显示前 ${samples.length} 人`">
+          <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-card__meta vl-truncated">
             共 {{ liveVirtualsTotal }} 人 · 当前显示前 {{ samples.length }} 人
           </span>
         </div>
@@ -192,10 +192,10 @@
               v-if="!isNarrow && !hiddenCols.has('stalled')"
               scope="col"
               class="mk-th--right mk-th--sortable"
-              title="超过回收阈值无写入的卡死会话数（用页头「回收卡死」处理）"
+              title="超过回收阈值无写入的无响应会话数"
               :aria-sort="vlSortState('stalled')"
               @click="toggleVlSort('stalled')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('stalled')">卡死<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('stalled')">无响应<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
               v-if="!isNarrow && !hiddenCols.has('created')"
               scope="col"
@@ -232,7 +232,7 @@
                 <template v-if="s.runningCount > 0 || (s.pausedCount ?? 0) > 0">
                   <RunStateBadge
                     :status="s.runningCount > 0 ? 'running' : 'paused'"
-                    :hint="`${s.runningCount} 个会话进行中 / ${s.pausedCount ?? 0} 个已暂停 · 点击进入会话座舱`"
+                    :hint="`${s.runningCount} 个会话进行中 / ${s.pausedCount ?? 0} 个已暂停`"
                     clickable
                     @click.stop="openRunningSession(s)"
                   />
@@ -252,13 +252,13 @@
                 type="button"
                 class="vl-faillink mk-num"
                 :class="{ 'vl-num--bad': s.failedCount > 0 }"
-                :title="s.failedCount > 0 ? `${s.failedCount} 个会话已失败/已终止；点击进入画像页，可对失败会话重试（续传保留进度）` : '无失败/终止会话'"
+                :title="s.failedCount > 0 ? `${s.failedCount} 个会话已失败/已终止` : '无失败/终止会话'"
                 @click.stop="openSubPage('virtual', s.id)"
               >{{ s.failedCount }}</button>
             </td>
             <td v-if="!isNarrow && !hiddenCols.has('stalled')" class="mk-num">
-              <span v-if="s.stalledCount > 0" class="vl-num--bad" :title="`${s.stalledCount} 个进行中会话已卡死（超过回收阈值无写入），用页头「回收卡死」处理`">{{ s.stalledCount }}</span>
-              <span v-else class="mk-na" title="无卡死会话">—</span>
+              <span v-if="s.stalledCount > 0" class="vl-num--bad" :title="`${s.stalledCount} 个进行中会话无响应（超过回收阈值无写入）`">{{ s.stalledCount }}</span>
+              <span v-else class="mk-na" title="当前没有无响应会话">—</span>
             </td>
             <td v-if="!isNarrow && !hiddenCols.has('created')"><span class="mk-cell-sub" :title="s.createdAt ? `创建于 ${fmtDateTime(s.createdAt)}` : undefined">{{ s.created }}</span></td>
             <td>
@@ -319,7 +319,7 @@
         v-model:pageSize="pageSize"
         :total="filtered.length"
         :showTotal="true"
-        note="行数为虚拟学习者数；「全部会话」为会话数，两者含义不同"
+        note="行数为虚拟学习者数，「全部会话」为会话数，两者含义不同"
       />
     </div>
 
@@ -567,7 +567,7 @@ const vlColDefs = [
   { key: 'story', label: '故事池', title: '已生成故事条数（0 表示未生成，需先生成才能运行）' },
   { key: 'sessions', label: '会话', title: '累计会话数（全部会话，含终态）' },
   { key: 'failed', label: '失败', title: '已失败/已终止会话数（全量聚合）' },
-  { key: 'stalled', label: '卡死', title: '超过回收阈值无写入的卡死会话数（用页头「回收卡死」处理）' },
+  { key: 'stalled', label: '无响应', title: '超过回收阈值无写入的卡死会话数（用页头「回收卡死」处理）' },
   { key: 'created', label: '创建' },
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())

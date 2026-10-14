@@ -8,7 +8,7 @@
       <div class="login-gate">
         <img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" class="login-gate__logo" />
         <h1>登录后体验真实对话</h1>
-        <p>登录后，和问流聊聊你最近想解决的事。两三分钟的对话，就能收敛出你的第一版学习计划。</p>
+        <p>登录后，和问流聊聊你最近想解决的事。两三分钟的对话，就能梳理出你的第一版学习计划。</p>
         <a class="btn-primary btn-primary--lg" href="/login?redirect=/goal-conversation">去登录</a>
       </div>
     </main>
@@ -18,7 +18,7 @@
       <div class="entry__hero">
         <div class="entry__hero-text">
           <h1>从一件真实的小事开始</h1>
-          <p>不用整理、不用说得很准。聊 2 分钟，问流帮你收敛出目标和第一阶段安排。</p>
+          <p>不用整理、不用说得很准。聊 2 分钟，问流帮你梳理出目标和第一阶段安排。</p>
         </div>
         <button v-if="live.hasSession()" type="button" class="resume" @click="doResume">
           <span class="resume__dot"></span>
@@ -165,7 +165,7 @@
 
           <!-- 说明属于左侧信息面板（它描述的就是这份清单的整理机制）：
                短版贴清单底部，不做整块 tip（2026-09-27 用户反馈二改） -->
-          <div class="panel__tip">信息由问流从对话中自动整理，够用时就会收敛方案。</div>
+          <div class="panel__tip">聊到的内容会自动整理成这份清单。</div>
         </div>
       </aside>
 
@@ -529,7 +529,7 @@
              「主结构生成中，一般 1-2 分钟内完成…」并置矛盾（实为主结构已创建、生成刚启动）。
              改为与事实一致的「已创建 + 正在生成」两段式。 -->
         <h2 class="proposal__title">路径已创建</h2>
-        <p class="proposal__generating-note">主结构正在生成，可以进入「我的路径」查看阶段与任务的准备进度。</p>
+        <p class="proposal__generating-note">路径正在生成，可以进入「我的路径」查看阶段与任务的准备进度。</p>
         <div class="proposal__actions proposal__actions--center">
           <button type="button" class="btn-primary btn-primary--lg" @click="goPaths">查看我的路径</button>
           <!-- 只在方案还在（stage=proposing）时给「返回方案」：否则点了只是关浮层，无路可回 -->

@@ -54,7 +54,7 @@ describe('statusText', () => {
 describe('stageText（Goal 会话阶段）', () => {
   it('五阶段映射', () => {
     expect(stageText('understanding')).toBe('澄清中');
-    expect(stageText('proposal')).toBe('方案收敛中');
+    expect(stageText('proposal')).toBe('方案确认中');
     expect(stageText('planning')).toBe('规划中');
     expect(stageText('completed')).toBe('已完成');
     expect(stageText('failed')).toBe('失败');
@@ -113,7 +113,7 @@ describe('actionText（审计动作）', () => {
     expect(actionText('virtual-story-delete')).toBe('删除故事');
     expect(actionText('virtual-session-start')).toBe('启动虚拟实验');
     expect(actionText('virtual-session-delete')).toBe('删除虚拟会话');
-    expect(actionText('virtual-session-stale-reclaim')).toBe('回收卡死会话');
+    expect(actionText('virtual-session-stale-reclaim')).toBe('回收无响应会话');
     expect(actionText('virtual-session-batch-terminate')).toBe('批量终止虚拟会话');
     expect(actionText('virtual-cascade-delete')).toBe('级联删除虚拟数据');
     expect(actionText('Virtual-Session-Start')).toBe('启动虚拟实验');
@@ -321,7 +321,7 @@ describe('结果态方言收敛（统一走字典单源）', () => {
   it('原页面私有写法一律改由 statusText 给出', () => {
     // 曾散落在 VirtualProfile.formatRunResult / QuickLearnPanel.statusLabel / 终止确认文案
     expect(statusText('created')).toBe('已创建'); // 页内曾写「创建中」
-    expect(statusText('incomplete')).toBe('未收束');
+    expect(statusText('incomplete')).toBe('未完成');
     expect(statusText('failed')).toBe('失败'); // 页内曾写「已失败」/「未完成」
     expect(statusText('error')).toBe('失败'); // 失败族统一（error/err/failed/fail 同词）
     expect(statusText('abandoned')).toBe('已放弃'); // 页内曾写「已终止」

@@ -406,7 +406,7 @@ describe('SessionCockpit 双模式', () => {
     // 跨页指引（2026-10-12 走查「为啥资料看不到」）：总结页不留资料正文，卡头给切回 Goal 页的出口
     await w.findAll('.cp-stp')[3].trigger('click'); // 总结页
     await settle();
-    const pointer = w.findAll('button').find((b) => (b.text() || '').includes('学习者资料在 Goal 页'));
+    const pointer = w.findAll('button').find((b) => (b.text() || '').includes('学习者资料在目标页'));
     expect(pointer, '总结页应给资料所在页的指引').toBeTruthy();
     await pointer!.trigger('click');
     await settle();
@@ -574,7 +574,7 @@ describe('SessionCockpit 双模式', () => {
     expect(enabled.every((r) => r.attributes('title') === '查看课堂对话')).toBe(true);
     const readonly = rows.filter((r) => r.attributes('disabled') !== undefined);
     expect(readonly.length).toBeGreaterThan(0);
-    expect(readonly.map((r) => r.attributes('title') || '')).toContain('真实会话不可从后台启动学习；仅在虚拟学习者会话下可从该课开始');
+    expect(readonly.map((r) => r.attributes('title') || '')).toContain('真实会话不可从后台启动学习。仅在虚拟学习者会话下可从该课开始');
 
     wrapper.unmount();
   });
@@ -655,7 +655,7 @@ describe('SessionCockpit 双模式', () => {
     const stages = wrapper.findAll('.cp-stp');
     await stages.find((s) => s.text().includes('Path'))!.trigger('click');
     await settle();
-    expect(wrapper.text()).toContain('该真实会话尚未生成 Path');
+    expect(wrapper.text()).toContain('该真实会话尚未生成路径');
 
     // Learn tab：真实模式无教学记录空态
     await wrapper.findAll('.cp-stp').find((s) => s.text().includes('Learn'))!.trigger('click');

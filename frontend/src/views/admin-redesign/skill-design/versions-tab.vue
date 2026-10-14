@@ -16,8 +16,8 @@
             <tr>
               <th>变体</th>
               <th>版本</th>
-              <th title="占在线流量百分比；基线=剩余流量">权重</th>
-              <th class="mk-num" title="近 7 天按版本归因（prompt_call_logs）">近7天调用</th>
+              <th title="占在线流量百分比，基线=剩余流量">权重</th>
+              <th class="mk-num" title="近 7 天按版本归因">近7天调用</th>
               <th class="mk-num">成功率</th>
               <th class="mk-num">均耗时</th>
               <th class="mk-th--right mk-col--actions-wide">操作</th>
@@ -70,7 +70,7 @@
               <td colspan="7"><MkLoading inline text="变体加载中…" /></td>
             </tr>
             <tr v-else-if="!variantBaseline && !variantArms.length">
-              <td colspan="7"><span class="mk-na">该 skill 暂无 ACTIVE 版本，先在协议页签发布一次</span></td>
+              <td colspan="7"><span class="mk-na">该 skill 暂无线上生效版本，先在协议页签发布一次</span></td>
             </tr>
           </tbody>
         </table>
@@ -101,25 +101,25 @@
           type="button"
           class="mk-btn mk-btn--sm"
           :disabled="variantCorePublishing || !variantNewKey"
-          title="需先在协议页签保存 core.yaml；发布守门检查照常执行，但不替换基线、不写 skill.md"
+          title="需先在协议页签保存声明源文件。发布守门检查照常执行，但不替换基线、不写技能源文件"
           @click="publishCoreAsVariant"
         >
-          {{ variantCorePublishing ? '发布中…' : '把当前 core.yaml 改动发布为变体' }}
+          {{ variantCorePublishing ? '发布中…' : '把当前声明源改动发布为变体' }}
         </button>
-        <span class="mk-na">评测钉变体：调用侧带 promptRuntimeOverride.variantOverride（虚拟学习者试跑）</span>
+        <span class="mk-na">评测钉变体：虚拟学习者试跑时可指定按某个变体执行</span>
       </div>
     </section>
     <section class="sdp-eng">
       <header class="mk-section__head">
         <h4>核心文件版本（协议发布）</h4>
-        <span class="sdp-sec-meta">{{ coreVersions.length }} 个 · 回滚会替换磁盘文件与 ACTIVE</span>
+        <span class="sdp-sec-meta">{{ coreVersions.length }} 个 · 回滚会替换磁盘文件与线上生效版本</span>
       </header>
       <div class="sdp-table-wrap">
         <!-- #121：改用共享 .mk-table（原私有 .sdp-pw__table padding 6px 8px 无 hover、
              操作列空表头，行高 34px 低于 40px 下限）——同页三张表统一语汇 -->
         <table class="mk-table">
           <thead>
-            <tr><th>版本</th><th title="coreHash">核心哈希</th><th title="coreVer">核心版本</th><th>状态</th><th>发布者</th><th class="mk-th--right mk-col--actions-wide">操作</th></tr>
+            <tr><th>版本</th><th title="核心文件哈希值">核心哈希</th><th title="核心文件版本号">核心版本</th><th>状态</th><th>发布者</th><th class="mk-th--right mk-col--actions-wide">操作</th></tr>
           </thead>
           <tbody>
             <tr v-for="v in coreVersions" :key="v.version" :class="{ 'sdp-pw__table-active': v.status === 'ACTIVE' }">
@@ -137,7 +137,7 @@
                     :disabled="coreRollbacking"
                     @click="rollbackCore(v.version)"
                   >回滚</button>
-                  <span v-else-if="v.status !== 'ACTIVE'" class="sdp-pw__audit" title="该历史版本没有可验证的 core 快照，只保留审计用途">仅审计</span>
+                  <span v-else-if="v.status !== 'ACTIVE'" class="sdp-pw__audit" title="该历史版本没有可验证的声明源快照，只保留审计用途">仅审计</span>
                 </div>
               </td>
             </tr>

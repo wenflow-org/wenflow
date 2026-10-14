@@ -59,7 +59,6 @@
         <section v-if="shows('aliases')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">别名映射</h3>
-            <span class="mk-card__meta">配置里填别名，系统自动选具体模型</span>
           </div>
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense">
@@ -78,13 +77,13 @@
                   <td class="mono">{{ alias.selected ?? '—' }}</td>
                   <td>
                     <span class="mono">{{ alias.selectedWhenRequiringThinking ?? '—' }}</span>
-                    <span v-if="alias.degradedWhenRequiringThinking" class="mk-badge mk-badge--warn ac-mr-badge" title="没有成员支持思考，已退化为该别名第一位成员；请求侧会自动裁掉思考参数">降级</span>
+                    <span v-if="alias.degradedWhenRequiringThinking" class="mk-badge mk-badge--warn ac-mr-badge" title="没有成员支持思考，已退化为该别名第一位成员。请求侧会自动裁掉思考参数">降级</span>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p v-if="data.aliases.some((a) => a.dbMembers)" class="ac-mr-note" title="DB 覆盖声明（platform_api_configs.chatModels / reasoningModels / lightModels）">
+          <p v-if="data.aliases.some((a) => a.dbMembers)" class="ac-mr-note" title="DB 覆盖声明">
             平台覆盖的别名：
             <span v-for="alias in data.aliases.filter((a) => a.dbMembers)" :key="`db-${alias.alias}`" class="mono ac-mr-note__item">
               {{ alias.alias }} = {{ alias.dbMembers?.join(', ') }}
@@ -99,7 +98,7 @@
         <section v-if="shows('providers')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">模型供应商</h3>
-            <span class="mk-card__meta" title="唯一写源 = File-as-Truth 模型目录（config/llm-providers.json，改动热重载）；继承通道沿用平台路由解析，自带端点的供应商在路由时整体切换 endpoint/key">
+            <span class="mk-card__meta" title="唯一写源 = 以源文件为准的模型目录（改动后自动生效）。继承通道沿用平台路由解析，自带端点的供应商在路由时整体切换 endpoint/key">
               只读 · 配置文件托管
             </span>
           </div>
@@ -144,7 +143,7 @@
         <section v-if="shows('limits')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">模型能力与限额</h3>
-            <span class="mk-card__meta" title="唯一写源 = File-as-Truth 模型目录（llm-providers.json）；此表只读。降级仅切换模型名，网关与密钥沿用主调用">只读 · 降级仅换模型名</span>
+            <span class="mk-card__meta" title="唯一写源 = 以源文件为准的模型目录。此表只读。降级仅切换模型名，网关与密钥沿用主调用">只读 · 降级仅换模型名</span>
           </div>
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense">
@@ -230,7 +229,7 @@
               <span class="mk-alert__msg">{{ warning }}</span>
             </div>
           </div>
-          <MkEmptyState v-else compact title="没有发现配置漂移。" />
+          <MkEmptyState v-else compact title="没有发现配置不一致。" />
         </section>
       </section>
     </template>

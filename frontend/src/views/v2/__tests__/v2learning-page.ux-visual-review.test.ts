@@ -138,8 +138,8 @@ describe('开课准备态不再用占位词与失真的等待预期（#66/#67）
     const p = /问流正在为[\s\S]*?<\/p>/.exec(source)?.[0] ?? '';
     expect(p, '准备卡找不到正文').not.toBe('');
     expect(p, '准备卡仍用「当前任务」占位').not.toContain('当前任务');
-    expect(p, '没有给出「超过 20 秒可点重新尝试」的退路').toContain('超过 20 秒');
-    expect(p).toContain('重新尝试');
+    expect(p, '没有给出等待预期').toContain('通常十几秒');
+    expect(p, '准备卡仍用方位指路').not.toContain('点下方');
   });
 });
 

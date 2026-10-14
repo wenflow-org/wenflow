@@ -129,7 +129,7 @@ export function useCockpitWrapup(
     // 空态把两者的出现时机一次说清，免得「看不到总结」再问一遍
     isRealMode.value
       ? '尚无可显示的总结：单课总结在每节课完成后出现，终局总结在全部课程完成后生成。'
-      : '尚无学习总结。Learn 产生进度后点击「生成总结」；单课总结在每节课完成后出现。'
+      : '尚无学习总结。产生进度后点击「生成总结」，单课总结在每节课完成后出现。'
   )
   return {
     hasWrapup, wrapupObject, wrapupSections, wrapupFieldCards,

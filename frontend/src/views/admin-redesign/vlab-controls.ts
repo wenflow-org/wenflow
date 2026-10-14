@@ -56,13 +56,13 @@ export interface VsControlDef {
 
 /** 状态呈现元数据（唯一来源） */
 export const VS_STATE_META: Record<VsLifecycleState, VsStateMeta> = {
-  idle:      { label: '无活动会话', hint: '尚无会话或全部会话已终态；可用「运行」启动新会话', tone: 'muted' },
-  created:   { label: '创建中', hint: '会话已创建，尚未开始推进（Goal 阶段起点）', tone: 'warn' },
-  running:   { label: '进行中', hint: '学习推进中（Goal/Path/Learn）；可暂停或进入座舱', tone: 'ok' },
-  paused:    { label: '已暂停', hint: '管理员冻结：自动推进已停止，无写入不算卡死，可继续或终止', tone: 'warn' },
+  idle:      { label: '无活动会话', hint: '尚无会话或全部会话已终态。可用「运行」启动新会话', tone: 'muted' },
+  created:   { label: '创建中', hint: '会话已创建，尚未开始推进（目标阶段起点）', tone: 'warn' },
+  running:   { label: '进行中', hint: '学习推进中（目标 / 路径 / 教学）。可暂停或进入座舱', tone: 'ok' },
+  paused:    { label: '已暂停', hint: '管理员冻结：自动推进已停止，暂停期间无写入属预期，可继续或终止', tone: 'warn' },
   failed:    { label: '已失败', hint: '可重试：从第一个未完成课程续传，已完成进度保留', tone: 'bad' },
-  abandoned: { label: '已终止', hint: '已被终止/回收；可重试续传或删除', tone: 'bad' },
-  completed: { label: '已完成', hint: '学习路径全部完成；可进入座舱查看', tone: 'ok' }
+  abandoned: { label: '已终止', hint: '已被终止或回收。可重试续传或删除', tone: 'bad' },
+  completed: { label: '已完成', hint: '学习路径全部完成。可进入座舱查看', tone: 'ok' }
 }
 
 /** 操作定义（唯一来源；页面按状态过滤后渲染） */
@@ -76,12 +76,12 @@ export const VS_CONTROL_DEFS: Record<VsControlKey, VsControlDef> = {
   pause: {
     key: 'pause',
     label: '暂停',
-    hint: '冻结 Learn 学习（仅教学阶段可用；暂停期间不会被自动回收）',
+    hint: '暂停学习推进（仅教学阶段可用，不会被自动回收）',
   },
   resume: {
     key: 'resume',
     label: '继续',
-    hint: '解除冻结；需再次触发「自动」才会继续推进',
+    hint: '解除冻结。需再次触发「自动」才会继续推进',
     tone: 'primary'
   },
   step: {
@@ -98,7 +98,7 @@ export const VS_CONTROL_DEFS: Record<VsControlKey, VsControlDef> = {
   stop: {
     key: 'stop',
     label: '终止',
-    hint: '终止当前学习（终态 abandoned；不删除数据但不可恢复；与「停止自动驾驶」不同——那只停后台循环）',
+    hint: '终止当前学习（不可恢复，数据保留）。与「停止自动驾驶」不同——那只停后台循环',
     tone: 'danger',
     confirm: {
       title: '终止学习',
@@ -109,7 +109,7 @@ export const VS_CONTROL_DEFS: Record<VsControlKey, VsControlDef> = {
   retry: {
     key: 'retry',
     label: '重试',
-    hint: '从第一个未完成课程续传（已完成课程与 Path 进度保留，本课重开）',
+    hint: '从第一个未完成课程续传（已完成课程与路径进度保留，本课重开）',
     tone: 'primary',
     confirm: {
       title: '重新开始学习',

@@ -35,20 +35,20 @@
         :value="attentionCount"
         :tone="attentionCount ? 'warn' : ''"
         hint="关注度 高 / 中"
-        title="关注度低不计；最近加载窗口计数，非全量。同源筛选 = 列表卡「待关注」chip"
+        title="统计当前列表中的会话"
       />
       <MkKpi
         label="缺总结"
         :value="missingWrapupCount"
         :tone="missingWrapupCount ? 'warn' : ''"
         hint="终态会话缺课后总结"
-        title="终态 = 已完成 / 失败 / 超时 / 废弃 / 收尾失败，非终态缺失是过程态不计；最近加载窗口计数，非全量。同源筛选 = 列表卡「缺总结」chip"
+        title="仅统计已结束的会话，进行中的会话总结尚未生成，不计入"
       />
       <MkKpi
         label="有建议"
         :value="advisoryCount"
         hint="含完课调整 / 复习建议"
-        title="最近加载窗口计数，非全量。同源筛选 = 列表卡「有建议」chip（服务端过滤）"
+        title="统计当前列表中的会话"
       />
     </section>
 
@@ -123,18 +123,18 @@
               class="mk-pill"
               :class="{ 'mk-pill--active': onlyAdvisory }"
               :aria-pressed="onlyAdvisory"
-              title="含教学建议（完课调整 / 复习建议）的会话数见 KPI「有建议」；最近加载窗口计数。点击 = 服务端过滤只看有建议（再点取消）"
+              title="只看含教学建议（完课调整 / 复习建议）的会话"
               @click="toggleOnlyAdvisory"
-            >有建议</button>
+            >有建议<span class="mk-pill__count">{{ advisoryCount }}</span></button>
             <button
               v-if="abnormalSessionCount"
               type="button"
               class="mk-pill ts-abn-chip"
               :class="{ 'mk-pill--active': abnormalOnly, 'ts-abn-chip--heap': abnormalHeap && !abnormalOnly }"
               :aria-pressed="abnormalOnly"
-              :title="`失败 / 收尾失败 / 超时合计 ${abnormalSessionCount}（${abnormalHeap ? `≥ ${TS_BAD_THRESHOLD}，异常堆积` : '需排查'}）；数字见上方「异常终态」桶。点击只看异常会话（状态多选），再点取消`"
+              :title="`失败 / 收尾失败 / 超时合计 ${abnormalSessionCount}${abnormalHeap ? `（≥ ${TS_BAD_THRESHOLD}，异常堆积）` : ''}`"
               @click="abnormalOnly = !abnormalOnly"
-            >异常</button>
+            >异常<span class="mk-pill__count">{{ abnormalSessionCount }}</span></button>
           </div>
           <MkFilterSearch v-model="keyword" placeholder="搜索主题 / 用户 / 邮箱 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
@@ -179,7 +179,7 @@
               </label>
             </div>
           </div>
-          <span class="mk-card__meta" :title="`${includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'}；${totalTitle}`">（{{ includeTest ? '含测试' : '仅真实' }}口径）<template v-if="truncated"> · 后端共 {{ listTotal }} 条，仅显示最近 {{ LIST_LIMIT }} 条</template></span>
+          <span class="mk-card__meta" :title="`${includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'} · ${totalTitle}`">（{{ includeTest ? '测试' : '真实' }}）<template v-if="truncated"> · 共 {{ listTotal }} 条，当前显示最近 {{ LIST_LIMIT }} 条</template></span>
         </div>
       </div>
 
@@ -220,7 +220,7 @@
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="tsSortState('interact')"
-                title="互动：时长 / 消息数 / 知识点；时长 ≥ 25 分钟按长时标琥珀（信号，非故障）"
+                title="互动：时长 / 消息数 / 知识点，时长 ≥ 25 分钟按长时标琥珀（信号，非故障）"
                 @click="toggleTsSort('interact')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">互动<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!tsHiddenCols.has('progress')">进度</th>
@@ -360,7 +360,7 @@
         <MkEmptyState
           v-else-if="!loadFailed"
           :title="onlyAdvisory ? '「有建议」过滤下无会话' : rows.length ? '当前筛选无会话' : '暂无教学会话'"
-          :description="onlyAdvisory ? '服务端过滤口径下没有含教学建议的会话；可清除筛选查看全部。' : rows.length ? '放宽筛选条件试试。' : '学习者开始上课后，会话记录将自动出现在这里。'"
+          :description="onlyAdvisory ? '没有含教学建议的会话，可清除筛选查看全部。' : rows.length ? '放宽筛选条件试试。' : '学习者开始上课后，会话记录将自动出现在这里。'"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
@@ -525,10 +525,10 @@ async function toggleOnlyAdvisory() {
 /** 「共 N」口径 title（P1#4）：后端真返回 total 才可声称全量；
     「只看有建议」过滤生效时 total 是过滤口径，同样要说明 */
 const totalTitle = computed(() => {
-  if (onlyAdvisory.value) return `「只看有建议」服务端过滤生效：此处为该过滤口径的总数；列表按最近 ${LIST_LIMIT} 条窗口展示`
+  if (onlyAdvisory.value) return `当前只显示有教学建议的会话，此处为符合条件的总数；列表最多显示最近 ${LIST_LIMIT} 条`
   return totalFromBackend.value
-    ? '后端全量口径；上方构成带与列表按最近加载窗口展示'
-    : `后端未返回总数：此处为最近加载窗口内已加载行数（≤ ${LIST_LIMIT} 条），非全量`
+    ? `总数为全部会话；上方分布条与列表最多显示最近 ${LIST_LIMIT} 条`
+    : `总数未知，此处为已加载的会话数（最多 ${LIST_LIMIT} 条）`
 })
 
 async function refreshNow() {
@@ -680,7 +680,7 @@ const tsColDefs = [
   { key: 'progress', label: '进度', title: '学习进度' },
   { key: 'output', label: '产物', title: '课后总结 / 建议' },
   { key: 'attention', label: '关注', title: '关注度' },
-  { key: 'start', label: '时间', title: '开始时间（相对 · 悬停看绝对时间）' },
+  { key: 'start', label: '时间', title: '开始时间' },
 ] as const
 const tsHiddenCols = ref<Set<string>>(new Set())
 /* 窄档（<1440）：9 列塞不下时，auto 布局会把缺口全压给带 ellipsis 的身份列——1280 下
@@ -704,10 +704,10 @@ const pills = computed(() => {
       id: 'active' as const,
       label: '进行中',
       count: all.filter((r) => r.status === 'active').length,
-      title: '仅 status=active；上方分布卡「进行中」含初始化 / 暂停 / 收尾中，口径更宽'
+      title: '只含进行中单一状态；上方分布条「进行中」还含初始化 / 暂停 / 收尾中，范围更宽'
     },
-    { id: 'attention' as const, label: '待关注', count: undefined as number | undefined, title: '关注度高 / 中的会话数见 KPI「需关注」；点击只看该组' },
-    { id: 'missing' as const, label: '缺总结', count: undefined as number | undefined, title: '缺总结数见 KPI「缺总结」；点击只看该组' }
+    { id: 'attention' as const, label: '待关注', count: attentionCount, title: '点击只看该组，再点取消' },
+    { id: 'missing' as const, label: '缺总结', count: missingWrapupCount, title: '点击只看该组，再点取消' }
   ]
 })
 /* 状态筛选选项（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
@@ -761,7 +761,7 @@ const tsBandSub = computed(() =>
   // 尾部补一句口径区分：下方快筛 chip「进行中」只算 status=active（单状态），
   // 本分布条的「进行中」是四状态合并档。两者同屏同为「进行中」却数字不同，
   // 此前只写在 title 悬停里（走查：进行中 0 与 进行中 2 并排、读者判不出哪个为真）。
-  `点击分段只看该组 · 窗口 ${rows.value.length} 条（最近 ${LIST_LIMIT} 条上限，非后端全量） · 完结率 ${((rows.value.filter((r) => r.status === 'completed').length / (rows.value.length || 1)) * 100).toFixed(2)}% · 本档含初始化 / 暂停 / 收尾中，比下方「进行中」快筛更宽（该快筛仅 active）`
+  `点击分段可筛选对应状态组 · 共 ${rows.value.length} 条（最多显示最近 ${LIST_LIMIT} 条） · 完结率 ${((rows.value.filter((r) => r.status === 'completed').length / (rows.value.length || 1)) * 100).toFixed(2)}% · 「进行中」含初始化 / 暂停 / 收尾中，比下方「进行中」快筛更宽`
 )
 const bandGroup = ref<string | null>(null)
 /** 「其它」段 = 枚举外取值聚合，不能按组内枚举等值判断 */
@@ -903,7 +903,7 @@ const wrapupBadge = (r: Row) =>
 /** 产物徽章悬停（#40）：降级总结说明来源；口径与「缺总结」同档（KPI 计数不含本档差异） */
 const wrapupTitle = (r: Row): string | undefined =>
   wrapupTier(r) === 'missing' && r.wrapupDegraded
-    ? '降级总结：summary-only / fallback 兜底来源，非完整课后总结（与「缺总结」同档计数）'
+    ? '降级总结：由系统生成的简要总结，非完整课后总结'
     : undefined
 const isMissingWrapup = (r: Row) => wrapupTier(r) === 'missing'
 
@@ -918,8 +918,8 @@ const tsSubNote = (r: Row): { text: string; title?: string } | null => {
   if (!ABNORMAL_STATUSES.has(r.status) || !summary.includes(ABNORMAL_SUMMARY_MARK)) {
     return { text: summary, title: summary }
   }
-  if (r.duration > 0) return { text: `时长 ${fmtDuration(r.duration)}`, title: '异常会话：降级总结与状态徽章同义已省略，此处显示会话时长' }
-  if (r.startAt) return { text: `开始于 ${r.startAt}`, title: '异常会话：降级总结与状态徽章同义已省略，此处显示开始时间' }
+  if (r.duration > 0) return { text: `时长 ${fmtDuration(r.duration)}`, title: '异常会话：此处显示会话时长' }
+  if (r.startAt) return { text: `开始于 ${r.startAt}`, title: '异常会话：此处显示开始时间' }
   return null
 }
 

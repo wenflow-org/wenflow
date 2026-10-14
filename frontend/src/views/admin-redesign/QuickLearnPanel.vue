@@ -45,7 +45,7 @@
             {{ tasksLoading ? '刷新中…' : '刷新' }}
           </button>
         </div>
-        <p class="ql-section__hint">只列出这个虚拟账号名下的路径和任务；需要复用别人的路径时，先复制到该账号名下。</p>
+        <p class="ql-section__hint">只列出这个虚拟账号名下的路径和任务。需要复用别人的路径时，先复制到该账号名下。</p>
         <!-- 原生 select：EP 的 filterable 无法一对一映射（原生下拉不支持搜索），列表按路径分组后规模可控 -->
         <select v-model="selectedTaskId" class="mk-field__select ql-task-select">
           <option value="" disabled>选择该虚拟账号名下的任务</option>
@@ -141,7 +141,7 @@
               <MkLoading inline text="" />
               <div>
                 <div class="ql-status__title">虚拟账号正在上这节课</div>
-                <div class="ql-status__desc">真实 Teaching Session 正在生成课堂记录；完成后直接进入前台视角验收。</div>
+                <div class="ql-status__desc">真实 Teaching Session 正在生成课堂记录。完成后直接进入前台视角验收。</div>
               </div>
             </div>
             <button type="button" class="mk-btn mk-btn--danger-ghost mk-btn--sm" @click="abortRun">中止</button>

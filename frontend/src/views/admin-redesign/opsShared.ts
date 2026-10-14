@@ -83,7 +83,7 @@ export function loadCaliber(kind: LoadCaliber, at?: string | null): LoadCaliberN
     return {
       label: hasStamp ? `学习者级聚合 · 快照 ${stamp}` : '学习者级聚合',
       title:
-        `LSS/KTL/LF/LSB 取自**学习者级聚合快照**（learning-state.service 按路径保守聚合 + 当日课量疲劳加成），` +
+        `LSS/KTL/LF/LSB 取自**学习者级聚合快照**（平台按路径保守聚合 + 当日课量疲劳加成），` +
         `不是某一次会话的读数。${stampLine}\n同一学习者在「虚拟学习者档案」页看到的同名读数取自单次会话的运行时快照，数值天然不同——那是两套来源，不是其中一处算错。`,
     }
   }
@@ -122,7 +122,7 @@ export function panelScopeNote(scope: PanelScope, opts: { pathTitle?: string | n
     return {
       label: '当前路径',
       title:
-        `本块取自**当前路径**${named ? `（${named}）` : ''}的会话与学习证据，并并入该学习者的全部记忆痕迹；其它路径不在这里。` +
+        `本块取自**当前路径**${named ? `（${named}）` : ''}的会话与学习证据，并并入该学习者的全部记忆痕迹。其它路径不在这里。` +
         `\n当前路径 = 该学习者 status=active 且 updatedAt 最新的一条（快照 currentPath 口径）；已归档/失败的路径不参与。`,
     }
   }
@@ -130,7 +130,7 @@ export function panelScopeNote(scope: PanelScope, opts: { pathTitle?: string | n
     return {
       label: `路径 ${named.length > 12 ? `${named.slice(0, 12)}…` : named || '—'}`,
       title:
-        `本块取自**所选路径**${named ? `（${named}）` : ''}的会话与学习证据，并并入该学习者的全部记忆痕迹；其它路径不在这里。` +
+        `本块取自**所选路径**${named ? `（${named}）` : ''}的会话与学习证据，并并入该学习者的全部记忆痕迹。其它路径不在这里。` +
         `\n这不是该学习者的「当前路径」——当前路径由 status=active 且 updatedAt 最新的一条定义，与这里的筛选无关。`,
     }
   }
@@ -154,7 +154,7 @@ export function panelScopeNote(scope: PanelScope, opts: { pathTitle?: string | n
 
 /* retryPathGeneration 的 retryType 文案（守卫自动判定，页面透传不二次解释） */
 export const PATH_RETRY_TYPE_TEXT: Record<string, string> = {
-  core: '重建主结构',
-  stageDesign: '补齐阶段任务'
+  core: '重建路径',
+  stageDesign: '补齐课程任务'
 }
 export const pathRetryTypeText = (t?: string | null) => (t && PATH_RETRY_TYPE_TEXT[t]) || '已提交重试'

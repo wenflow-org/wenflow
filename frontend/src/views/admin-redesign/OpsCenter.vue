@@ -24,7 +24,7 @@
              2026-10-06 审核 #175：SessionSecurity 加载中/失败上报 -1（原来 immediate 写 0 是
              「确认无会话」的假信号），负数与 null 一并渲染「未加载」（2026-10-13 运营走查 O7：
              原「待访问」在角标位被读成「有东西待我处理」，实际只说计数还没拉）。 -->
-        <button id="oc-tab-security" :ref="(el) => setTabRef(el, 2)" type="button" role="tab" class="tab" :aria-selected="tab === 'security'" aria-controls="oc-panel-security" :tabindex="tab === 'security' ? 0 : -1" @click="switchTab('security')">会话安全<span class="tab__count" :title="securityCount === null || securityCount < 0 ? '尚未访问该页签，或计数未拉取成功（待访问 ≠ 0）' : undefined">{{ securityCount === null || securityCount < 0 ? '未加载' : securityCount }}</span></button>
+        <button id="oc-tab-security" :ref="(el) => setTabRef(el, 2)" type="button" role="tab" class="tab" :aria-selected="tab === 'security'" aria-controls="oc-panel-security" :tabindex="tab === 'security' ? 0 : -1" @click="switchTab('security')">会话安全<span class="tab__count" :title="securityCount === null || securityCount < 0 ? '进入该页签后加载计数' : undefined">{{ securityCount === null || securityCount < 0 ? '未加载' : securityCount }}</span></button>
       </div>
       <div class="oc-card__body">
 
@@ -98,8 +98,8 @@
     <!-- Outbox 死信 -->
     <section class="mk-card">
       <div class="mk-card__head">
-        <h4 class="mk-card__title">事件 Outbox 死信</h4>
-        <span class="mk-card__meta">dead 为无出口终态，worker 不再拾取；修复根因后可人工重放</span>
+        <h4 class="mk-card__title">事件投递死信</h4>
+        <span class="mk-card__meta">投递失败的事件可在此人工重放</span>
         <!-- 死信告警（原状态条语义迁入卡头）：失败显式降 bad，积压 >0 显式 warn——
              零值与加载中不得伪装成「确认无死信」 -->
         <span v-if="deadFailed" class="mk-badge mk-badge--bad">加载失败</span>
@@ -168,7 +168,7 @@
         tone="error"
         icon="!"
         title="死信清单加载失败"
-        description="可重试；先重试再决定是否重放。"
+        description="请先重试加载，再决定是否重放。"
         action-text="重试"
         compact
         @action="loadDead"
@@ -176,7 +176,7 @@
       <MkEmptyState
         v-else
         title="没有死信事件"
-        description="outbox 全部正常投递，worker 无积压。"
+        description="事件投递全部正常，无待处理积压。"
         compact
       />
     </section>
@@ -222,12 +222,12 @@
         >{{ exporting !== '' ? '导出中…' : '开始导出' }}</button>
       </div>
       <ul class="oc-export__notes">
-        <li>执行日志默认导出最近 1000 行，可切换上限；其余业务表导出最近 20000 条。</li>
+        <li>执行日志默认导出最近 1000 行，可切换上限。其余业务表导出最近 20000 条。</li>
         <!-- 文案与实现同口径（#157）：后端 users 导出已接 REAL_USER_WHERE（排虚拟学习者 +
              e2e_/shotsnap/@test.local 等测试账号前缀/域名），脚注承诺与实现一致。
              本页导出表单不提供 includeTest 开关（后端接口保留该参数供深链/脚本用）。 -->
-        <li>用户导出默认排除虚拟学习者与测试账号（e2e_ / shotsnap / @test.local 等前缀或域名）。</li>
-        <li>导出为只读操作，不产生审计记录；敏感字段（密码哈希、API Key）一律不包含。</li>
+        <li>用户导出默认排除虚拟学习者与测试账号。</li>
+        <li>导出为只读操作，不含敏感字段。</li>
       </ul>
     </div>
     </template>

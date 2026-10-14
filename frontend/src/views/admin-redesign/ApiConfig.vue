@@ -54,7 +54,7 @@
     <div class="ac-tab-body ac-conn-body" id="ac-panel-access" role="tabpanel" aria-labelledby="ac-tab-access">
       <!-- 接入域（live 层）读取失败：表单全空不得伪装成「未配置」，显式失败 + 重试（置顶一次，管三张卡） -->
       <div v-if="apiConfigFailed" class="mk-alert mk-alert--row" role="alert">
-        <span class="mk-alert__msg">配置读取失败：下方为空不代表未配置，请重试</span>
+        <span class="mk-alert__msg">配置读取失败：为空不代表未配置，请重试</span>
         <button type="button" class="mk-alert__btn" @click="retryApiConfigLoad">重试</button>
       </div>
       <section class="mk-card">
@@ -91,7 +91,7 @@
               ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
                 <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
             </span>
-            <em v-if="keyHintNeeded" class="ac-keyhint">⚠ 更换服务地址需重新输入密钥</em>
+            <em v-if="keyHintNeeded" class="ac-keyhint">更换服务地址需重新输入密钥</em>
           </span>
         </label>
       </div>
@@ -112,11 +112,11 @@
             <span class="ac-models__empty-icon" aria-hidden="true">﹢</span>
             <!-- fetchError 人话化（P2）：裸 errMsg（HTTP 枚举/堆栈词）对运营不可读——
                  人话一句给动作，错误原文进 title 供排查贴单 -->
-            <span v-if="fetchError" :title="`错误原文：${fetchError}`">模型清单拉取失败：请检查服务地址与密钥是否正确、服务商是否可访问，然后点右上角「重新拉取」。</span>
+            <span v-if="fetchError" :title="`错误原文：${fetchError}`">模型清单拉取失败：请检查服务地址与密钥是否正确、服务商是否可访问。</span>
             <!-- P3（2026-10-04 全站评审）：括号内连接状态复读撤——「连接」卡 40px 左侧 badge
                  已承载「连接正常 · N 前」，空态句只说自己没拉清单。
                  2026-10-14：原句把读者指去「模型总览」页签，该页签同日已并入本页签（指针失效），改指本页下方注册表。 -->
-            <span v-else>模型清单尚未拉取，点右上角「连接并拉取」获取服务商列表；平台实际在用的模型见下方注册表。</span>
+            <span v-else>尚未拉取模型清单。</span>
           </div>
         </div>
         <!-- 持久化说明（F8-2）：拉取是连通性验证的本页动作，只有随连接保存落盘，
@@ -237,7 +237,7 @@
 
             <!-- 结构化输出：平台级默认（json 媒介 Skill 的请求附 response_format，上游解码层强制 JSON；
                  需渠道支持——2026-10-02 对本渠道直连实测为真强制；skill 级 paramOverrides.responseFormat 可覆盖/显式关闭） -->
-            <div class="ac-sec__title">结构化输出<span class="ac-sec__hint" title="对输出 JSON 的 Skill 由上游强制 JSON，防「自然停止但吐散文」类失败">对输出 JSON 的 Skill 强制 JSON（需渠道支持 response_format）</span></div>
+            <div class="ac-sec__title">结构化输出<span class="ac-sec__hint" title="对输出 JSON 的 Skill 由上游强制 JSON，防「自然停止但吐散文」类失败">对输出 JSON 的 Skill 强制 JSON</span></div>
             <!-- 与上方「思考模式 / 思考强度」同宽（同列里同类控件两种宽度是偶然差异，不是层级） -->
             <div class="ac-row ac-row--2">
               <label class="mk-field">
@@ -248,7 +248,7 @@
                   @change="form.defaultResponseFormat = ($event.target as HTMLSelectElement).value as 'none' | 'json_object'; markDirty('route')"
                 >
                   <option value="none">关闭（默认行为）</option>
-                  <option value="json_object">JSON 对象（json_object）</option>
+                  <option value="json_object">JSON 对象</option>
                 </select>
               </label>
             </div>
@@ -418,7 +418,7 @@
           </div>
           <MkLoading v-else inline text="探测结果加载中…" />
           <div class="ac-health__foot">
-            <span v-if="health?.stale" class="ac-health__stale">结果已过期 · 可点上方「立即探测」或开启自动刷新</span>
+            <span v-if="health?.stale" class="ac-health__stale">结果已过期</span>
             <span v-else-if="health?.checkedAt" class="ac-health__stale">探测正常 · 更新于 {{ timeAgo(health.checkedAt) }}</span>
           </div>
         </div>
@@ -477,7 +477,7 @@
             </span>
           </div>
           <span class="ac-policy__hint">保存后立即生效（优先级高于环境变量）。</span>
-          <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">⚠ 公网开放 · 入口无访问限制</span>
+          <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">公网开放 · 入口无访问限制</span>
           <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
             <span class="mk-field__label">额外允许的客户端 IP（每行一个，可留空）</span>
             <textarea

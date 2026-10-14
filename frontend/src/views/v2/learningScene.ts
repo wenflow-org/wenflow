@@ -20,7 +20,7 @@ export function useOpeningSceneViews(openingScene: Ref<Record<string, any> | nul
     if (k === 'resume') return '继续这节课，从上次离开的地方接着学';
     if (k === 'continuation') return '接着上一课往下学';
     if (k === 'relearn') return '重新学这一课，把上次没掌握的补上';
-    if (k === 'review') return '今日复习：回捞快忘的知识点';
+    if (k === 'review') return '今日复习：巩固快忘记的知识点';
     return '开始这节课';
   });
   /** 副文案：依据 kind 给一句人话引导。
@@ -38,7 +38,7 @@ export function useOpeningSceneViews(openingScene: Ref<Record<string, any> | nul
       return '上一课刚结束，这节课接着往下推进。';
     }
     if (k === 'relearn') return sc.attempt && sc.attempt > 1 ? `这是你第 ${sc.attempt} 次学这节课，重点补上次没掌握的。` : '从头再学一遍这节课。';
-    if (k === 'review') return '把快到遗忘点的知识先捞回来，再继续新内容。';
+    if (k === 'review') return '先巩固快忘记的知识点，再继续新内容。';
     return '';
   });
   const sceneUnresolved = computed<string[]>(() => {

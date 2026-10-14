@@ -10,7 +10,7 @@
         <strong>契约 · 阶段 {{ data.stage }}</strong>
         <span class="mk-badge mk-badge--muted">产出行 {{ data.routings.length }} 行</span>
         <template v-if="syncReport">
-          <span v-if="syncReport.state === 'ok'" class="mk-badge mk-badge--ok">{{ TERMS.fieldsSynced }} ✓</span>
+          <span v-if="syncReport.state === 'ok'" class="mk-badge mk-badge--ok">{{ TERMS.fieldsSynced }}</span>
           <span v-else-if="syncReport.state === 'no-core'" class="mk-badge mk-badge--bad">core 缺失</span>
           <span v-else-if="syncReport.state === 'no-routings'" class="mk-badge mk-badge--muted">无产出行</span>
           <template v-else>
@@ -28,7 +28,7 @@
 
       <!-- 与协议 tab 的 core 对账摘要（analyzeCoreFieldsSync 单 skill 投影）：原型 .note 语义 -->
       <div v-if="syncReport && (syncReport.missing.length || syncReport.orphan.length || syncReport.typeMismatch.length)" class="note sfr__sync">
-        <strong class="sfr__sync-title">与协议 tab 的 core 对账</strong>
+        <strong class="sfr__sync-title">与协议 tab 的 core 一致性核查</strong>
         <span v-for="m in syncReport.missing" :key="'m' + m.fieldId" class="sfr__sync-item sfr__sync-item--err" :title="m.detail">
           {{ TERMS.statusMissing }}：<code class="mono">{{ m.fieldId }}</code>
         </span>
@@ -48,10 +48,10 @@
       <!-- 图例：角色 / render / 流转 / 落库键 / 锁定（与编排图页同源人话表） -->
       <details class="sfr__legend" @toggle="legendOpen = ($event.target as HTMLDetailsElement).open">
         <!-- 折叠头走 .mk-section__summary（shared.css，与 FieldRoutingTable / DriftAuditPanel 同款） -->
-        <summary class="mk-section__summary mk-section__summary--muted">图例：字段角色 / render / 锁定 / 流转</summary>
+        <summary class="mk-section__summary mk-section__summary--muted">图例：字段角色 / 可见性 / 锁定 / 流转</summary>
         <div class="sfr__legend-body">
           <div class="sfr__legend-group sfr__legend-group--roles">
-            <h5 class="sfr__legend-title">字段角色（promptRole）</h5>
+            <h5 class="sfr__legend-title">字段角色</h5>
             <ul v-if="roleMeta.length" class="sfr__legend-list">
               <li v-for="m in roleMeta" :key="m.id" class="sfr__legend-item">
                 <span class="mk-badge" :class="`mk-badge--role-${m.id}`">{{ m.label }}</span>
@@ -62,29 +62,29 @@
             <p v-else class="sfr__legend-hint">角色词表待后端下发…</p>
           </div>
           <div class="sfr__legend-group">
-            <h5 class="sfr__legend-title">render（是否对外可见）</h5>
+            <h5 class="sfr__legend-title">可见性</h5>
             <ul class="sfr__legend-list">
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--render-visible" title="render: visible">可见</span><span class="sfr__legend-hint">会出现在对外交付（用户 / 界面）</span></li>
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--render-hidden" title="render: hidden">隐藏</span><span class="sfr__legend-hint">仅内部流转，不对外展示</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--render-visible" title="可见性：可见">可见</span><span class="sfr__legend-hint">可见：会出现在对外交付（用户 / 界面）</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--render-hidden" title="可见性：隐藏">隐藏</span><span class="sfr__legend-hint">隐藏：仅内部流转，不对外展示</span></li>
             </ul>
-            <h5 class="sfr__legend-title">流转（handoff / internal / accumulate）</h5>
+            <h5 class="sfr__legend-title">流转（移交 / 内部 / 累积）</h5>
             <ul class="sfr__legend-list">
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-handoff">handoff</span><span class="sfr__legend-hint">移交：字段产完后交给下一阶段（path / agent / skill），留空则不转交</span></li>
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-internal">internal</span><span class="sfr__legend-hint">内部信令：仅供平台内部 / UI 控制使用，不进业务状态</span></li>
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-accumulate">accumulate</span><span class="sfr__legend-hint">累积：值会累积进学习者状态（画像 / 上下文），供后续阶段持续使用</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-handoff">移交</span><span class="sfr__legend-hint">移交：字段产完后交给下一阶段（path / agent / skill），留空则不转交</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-internal">内部</span><span class="sfr__legend-hint">内部：仅供平台内部使用，不进业务状态</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-accumulate">累积</span><span class="sfr__legend-hint">累积：值会累积进学习者状态（画像 / 上下文），供后续阶段持续使用</span></li>
             </ul>
-            <h5 class="sfr__legend-title">落库键（persistKey）</h5>
+            <h5 class="sfr__legend-title">存储字段名</h5>
             <ul class="sfr__legend-list">
-              <li class="sfr__legend-item"><span class="sfr__legend-hint">字段值的实际落库位置，与字段名不同时单独标注</span></li>
+              <li class="sfr__legend-item"><span class="sfr__legend-hint">字段值实际保存的键路径，与字段名不一致时单独标注（一致时默认显示字段名）</span></li>
             </ul>
             <h5 class="sfr__legend-title">锁定 / core 状态</h5>
             <ul class="sfr__legend-list">
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--lock-system">系统锁</span><span class="sfr__legend-hint">平台派生 / 代码消费，admin 不可直接改（需改编排文件）</span></li>
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--lock-structure">结构锁</span><span class="sfr__legend-hint">结构约束锁定，修改需谨慎</span></li>
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--core-declared">✓ 已声明</span><span class="sfr__legend-hint">编排路由首段在 core fields 中且有声明</span></li>
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--core-missing">⚠ {{ TERMS.statusMissing }}</span><span class="sfr__legend-hint">编排路由首段不在 core fields（error 级，阻断字段同步）</span></li>
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--core-mismatch">⚠ 类型不一致</span><span class="sfr__legend-hint">core type ↔ 编排 valueType 不一致（warn）</span></li>
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--core-orphan">{{ TERMS.statusOrphan }}</span><span class="sfr__legend-hint">core 字段未出现在任何产出路由行首段（warn，见上方对账条）</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--lock-system">平台锁定</span><span class="sfr__legend-hint">平台自动生成，admin 不可直接改（需改编排文件）</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--lock-structure">平台锁定</span><span class="sfr__legend-hint">结构约束锁定，修改需谨慎</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--core-declared">已声明</span><span class="sfr__legend-hint">编排路由首段在 core fields 中且有声明</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--core-missing">{{ TERMS.statusMissing }}</span><span class="sfr__legend-hint">编排路由首段不在 core fields（error 级，阻断字段同步）</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--core-mismatch">类型不一致</span><span class="sfr__legend-hint">core type ↔ 编排 valueType 不一致（warn）</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--core-orphan">{{ TERMS.statusOrphan }}</span><span class="sfr__legend-hint">core 字段未出现在任何产出路由行首段（warn）</span></li>
             </ul>
           </div>
         </div>
@@ -121,7 +121,7 @@
                 <th scope="col">移交</th>
                 <th scope="col">内部</th>
                 <th scope="col">累积</th>
-                <th scope="col">落库键</th>
+                <th scope="col">存储字段名</th>
                 <th scope="col">锁定</th>
                 <th scope="col">core 状态</th>
                 <th scope="col" class="mk-th--right">操作</th>
@@ -131,7 +131,7 @@
               <tr v-for="row in rows" :key="row.fieldId">
                 <td class="sfr__fieldcell">
                   <span class="mono sfr__field" :title="row.fieldId">{{ row.fieldId }}</span>
-                  <span v-if="row.pathInRawOutput" class="sfr__fieldpath" :title="`抽取路径（pathInRawOutput）：${row.pathInRawOutput}`">抽取 → {{ String(row.pathInRawOutput).split('.').pop() }}</span>
+                  <span v-if="row.pathInRawOutput" class="sfr__fieldpath" :title="`抽取路径：${row.pathInRawOutput}`">抽取 → {{ String(row.pathInRawOutput).split('.').pop() }}</span>
                 </td>
                 <td class="sfr__meaning">
                   <span class="sfr__meaning-text" :title="row.desc">{{ row.desc || '—' }}</span>
@@ -148,13 +148,13 @@
                 <td>{{ row.internal ? '是' : '否' }}</td>
                 <td>{{ row.accumulate ? '是' : '否' }}</td>
                 <td>
-                  <span class="mono sfr__persist" :class="{ 'sfr__persist--alias': row.persistKey !== row.fieldId }" :title="row.persistKey === row.fieldId ? '落库键与字段名一致' : `值实际写入 ${row.persistKey}`">{{ row.persistKey === row.fieldId ? '同字段名' : '别名' }}</span>
+                  <span class="mono sfr__persist" :class="{ 'sfr__persist--alias': row.persistKey !== row.fieldId }" :title="row.persistKey === row.fieldId ? '存储字段名与字段名一致' : `值实际保存到 ${row.persistKey}`">{{ row.persistKey === row.fieldId ? '同字段名' : '别名' }}</span>
                 </td>
                 <td><span class="mk-badge" :class="`mk-badge--lock-${row.lockLevel}`" :title="lockHintOf(row.lockLevel)">{{ lockLabelOf(row.lockLevel) }}</span></td>
                 <td>
-                  <span v-if="row.coreState === 'missing'" class="mk-badge mk-badge--core-missing" :title="row.coreStateTitle">⚠ {{ TERMS.statusMissing }}</span>
-                  <span v-else-if="row.coreState === 'mismatch'" class="mk-badge mk-badge--core-mismatch" :title="row.coreStateTitle">⚠ 类型不一致</span>
-                  <span v-else class="mk-badge mk-badge--core-declared" :title="row.coreStateTitle">✓ 已声明</span>
+                  <span v-if="row.coreState === 'missing'" class="mk-badge mk-badge--core-missing" :title="row.coreStateTitle">{{ TERMS.statusMissing }}</span>
+                  <span v-else-if="row.coreState === 'mismatch'" class="mk-badge mk-badge--core-mismatch" :title="row.coreStateTitle">类型不一致</span>
+                  <span v-else class="mk-badge mk-badge--core-declared" :title="row.coreStateTitle">已声明</span>
                 </td>
                 <td class="sfr__ops">
                   <button type="button" class="mk-btn mk-btn--sm" :disabled="!canEditRow(row)" :title="editTitleOf(row)" @click="openEdit(row)">编辑</button>
@@ -347,13 +347,13 @@ function lockLevelOf(field: FieldRow | undefined): string {
   return structure ? 'structure-locked' : 'editable'
 }
 function lockLabelOf(level: string) {
-  if (level === 'system-locked') return '系统锁'
-  if (level === 'structure-locked') return '结构锁'
+  if (level === 'system-locked') return '平台锁定'
+  if (level === 'structure-locked') return '平台锁定'
   return '可编辑'
 }
 function lockHintOf(level: string) {
-  if (level === 'system-locked') return '系统锁：平台派生 / 代码消费，admin 不可直接改（需改编排文件）'
-  if (level === 'structure-locked') return '结构锁：结构约束锁定，修改需谨慎'
+  if (level === 'system-locked') return '平台锁定：平台自动生成，admin 不可直接改（需改编排文件）'
+  if (level === 'structure-locked') return '平台锁定：结构约束锁定，修改需谨慎'
   return '可编辑：可自由调整（仍走编排文件入口）'
 }
 
@@ -532,7 +532,7 @@ function canEditRow(row: Record<string, any>): boolean {
   return true
 }
 function editTitleOf(row: Record<string, any>): string {
-  if (row.lockLevel === 'system-locked') return '平台锁定字段只读（平台派生 / 代码消费），请改编排文件'
+  if (row.lockLevel === 'system-locked') return '平台锁定字段只读（平台自动生成），请改编排文件'
   if (row.coreState === 'missing') return '核心缺项：无法编辑核心侧（先在协议 tab 补声明，或走编排弹窗）'
   return '编辑字段：核心声明、编排路由与数据库一次性原子修改'
 }
@@ -540,7 +540,7 @@ function canDeleteRow(row: Record<string, any>): boolean {
   return row.lockLevel !== 'system-locked'
 }
 function deleteTitleOf(row: Record<string, any>): string {
-  if (row.lockLevel === 'system-locked') return '平台锁定字段禁止删除（平台派生 / 代码消费，锁原因见编排文件）'
+  if (row.lockLevel === 'system-locked') return '平台锁定字段禁止删除（平台自动生成，锁原因见编排文件）'
   return '删除字段：同时移除核心声明、编排字段/路由与数据库行；若仍被下游引用，后端会拦截'
 }
 
@@ -552,7 +552,7 @@ function deleteErrText(e: unknown): string {
   const code = d?.code || ''
   const map: Record<string, string> = {
     FIELD_NOT_FOUND: '字段不存在（可能已被删除，或仅声明于一侧）',
-    FIELD_SYSTEM_LOCKED: '该字段由平台锁定（平台派生 / 代码消费），禁止删除',
+    FIELD_SYSTEM_LOCKED: '该字段由平台锁定（平台自动生成），禁止删除',
     FIELD_CONSUMED: '该字段仍被下游引用（其他 Agent 路由 / 其他 Skill），已拒绝删除'
   }
   const title = code ? (map[code] || '删除被拒绝') : '删除失败'
@@ -563,7 +563,7 @@ async function onDelete(row: Record<string, any>) {
   if (deleting.value) return
   const ok = await askConfirm({
     title: `删除字段 ${row.fieldId}？`,
-    message: `将同时删除该字段的核心声明、编排字段/路由与数据库落库行（原文件会自动备份，可恢复）。\n\n删除前请确认没有下游引用：若其他 Agent 路由或 Skill 仍引用它，后端会拒绝删除并列出引用方。`,
+    message: `将同时删除该字段的核心声明、编排字段/路由与数据库记录（原文件会自动备份，可恢复）。\n\n删除前请确认没有下游引用：若其他 Agent 路由或 Skill 仍引用它，后端会拒绝删除并列出引用方。`,
     confirmText: '确认删除（不可恢复）'
   })
   if (!ok) return
@@ -573,7 +573,7 @@ async function onDelete(row: Record<string, any>) {
     const d = res.data?.data
     toast.success(`已删除字段 ${row.fieldId}（双文件与 DB 均已清理）`)
     if (d?.protectedRows?.length) {
-      toast.warning(`受保护行未删：${d.protectedRows.map((p: any) => p.key).join('，')}（admin 覆盖行需走编排弹窗处理）`)
+      toast.warning(`受保护行未删：${d.protectedRows.map((p: any) => p.key).join('，')}（平台覆盖的字段需走编排弹窗处理）`)
     }
     await load()
   } catch (e: any) {

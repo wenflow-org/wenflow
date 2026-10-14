@@ -26,7 +26,7 @@
       <div class="docs-hero__chips">
         <span class="hero-chip">Node.js ≥ 18</span>
         <span class="hero-chip">后端 3001 · 前端 5173</span>
-        <span class="hero-chip">Prompt = File-as-Truth</span>
+        <span class="hero-chip">Prompt 以源文件为准</span>
       </div>
     </section>
 
@@ -58,7 +58,7 @@
         <!-- ================= 快速开始 ================= -->
         <section id="quickstart" class="docs-sec">
           <h2>快速开始</h2>
-          <p class="docs-lead">Windows + PowerShell 是一等开发环境；Node.js ≥ 18。全部命令在项目根目录执行。</p>
+          <p class="docs-lead">Windows + PowerShell 是一等开发环境，Node ≥ 18。全部命令在项目根目录执行。</p>
 
           <div class="code">
             <div class="code__head"><span>终端</span><button @click="copy($event)">复制</button></div>
@@ -93,7 +93,7 @@ npm run dev</code></pre>
             <div class="mini">
               <span class="mini__k mono">SQLite</span>
               <strong>数据库</strong>
-              <p>首次运行由 Prisma 自动建库；<code>npm run prisma:studio</code> 可视浏览。</p>
+              <p>首次运行由 Prisma 自动建库，<code>npm run prisma:studio</code> 可视浏览。</p>
             </div>
           </div>
         </section>
@@ -117,12 +117,12 @@ npm run dev</code></pre>
             <div class="mini">
               <span class="mini__k">前端</span>
               <strong>Vue 3 + TS + Vite 5</strong>
-              <p>Element Plus + Pinia；学习者前台（v2）与 Admin 控制台（admin-redesign）两套界面。</p>
+              <p>Element Plus + Pinia。学习者前台（v2）与 Admin 控制台（admin-redesign）两套界面。</p>
             </div>
             <div class="mini">
               <span class="mini__k">后端</span>
               <strong>Express + Prisma</strong>
-              <p>TypeScript；业务库 + 系统库双 SQLite；strict 模式关闭，注意可空性。</p>
+              <p>TypeScript。业务库 + 系统库双 SQLite。strict 模式关闭，注意可空性。</p>
             </div>
             <div class="mini">
               <span class="mini__k">网关</span>
@@ -132,7 +132,7 @@ npm run dev</code></pre>
             <div class="mini">
               <span class="mini__k">AI</span>
               <strong>OpenAI SDK</strong>
-              <p>指向 DeepSeek 兼容 API；模型与密钥走后台「连接与安全」，不入库源码。</p>
+              <p>指向 DeepSeek 兼容 API。模型与密钥走后台「连接与安全」，不入库源码。</p>
             </div>
           </div>
 
@@ -152,7 +152,7 @@ npm run dev</code></pre>
             </div>
             <div class="table__row"><code class="mono">JWT_SECRET</code><span>≥ 32 字符，启动校验，缺失即崩</span></div>
             <div class="table__row"><code class="mono">DATABASE_URL</code><span>开发默认 <code>file:./dev.db</code></span></div>
-            <div class="table__row"><code class="mono">AI_API_URL / AI_API_KEY / AI_MODEL</code><span>DeepSeek 兼容服务；也可在控制台「连接与安全」页在线改</span></div>
+            <div class="table__row"><code class="mono">AI_API_URL / AI_API_KEY / AI_MODEL</code><span>DeepSeek 兼容服务，也可在控制台「连接与安全」页在线改</span></div>
             <div class="table__row"><code class="mono">INIT_ADMIN_PASSWORD</code><span>首次启动播种管理员（≥12 位强密码）</span></div>
           </div>
         </section>
@@ -173,7 +173,7 @@ npm run dev</code></pre>
 └── …                        # 共 30+ 个 Skill 目录（含检索、网页、图片等外挂能力）
 
 prompts/                     # 仓库根，与 backend/ 同级
-├── skill.&lt;skillId&gt;.md      # Prompt 源文件（File-as-Truth）
+├── skill.&lt;skillId&gt;.md      # Prompt 源文件（以源文件为准）
 └── core/&lt;skillId&gt;.yaml      # v4 核心定义（业务 SSOT）</code></pre>
           </div>
 
@@ -186,7 +186,7 @@ prompts/                     # 仓库根，与 backend/ 同级
             <div class="mini">
               <span class="mini__k mono">skillHandlers</span>
               <strong>注册表</strong>
-              <p><code>skills/index.ts</code> 的 <code>skillHandlers</code> map 把 skillId 映射到 handler；未注册即不存在。</p>
+              <p><code>skills/index.ts</code> 的 <code>skillHandlers</code> map 把 skillId 映射到 handler，未注册即不存在。</p>
             </div>
           </div>
         </section>
@@ -201,7 +201,7 @@ prompts/                     # 仓库根，与 backend/ 同级
             <span class="flow__arrow">→</span>
             <div class="flow__node">同步<br /><span class="flow__sub">seed / 部署</span></div>
             <span class="flow__arrow">→</span>
-            <div class="flow__node flow__node--hot">DB agent_prompts<br /><span class="flow__sub">ACTIVE 版本</span></div>
+            <div class="flow__node flow__node--hot">DB 生效 Prompt<br /><span class="flow__sub">生效版本</span></div>
             <span class="flow__arrow">→</span>
             <div class="flow__node">运行时生效</div>
           </div>
@@ -210,7 +210,7 @@ prompts/                     # 仓库根，与 backend/ 同级
             <div class="mini">
               <span class="mini__k">五块结构</span>
               <strong>编译产物</strong>
-              <p>v4 协议：<code>prompts/core/&lt;skillId&gt;.yaml</code> 是业务 SSOT，经 core-compiler 编译为五块 Prompt；frontmatter 携带 <code>coreHash</code> 防漂移。</p>
+              <p>v4 协议：<code>prompts/core/&lt;skillId&gt;.yaml</code> 是业务 SSOT，经 core-compiler 编译为五块 Prompt。frontmatter 携带 <code>coreHash</code> 防不一致。</p>
             </div>
             <div class="mini">
               <span class="mini__k">archetype</span>
@@ -220,7 +220,7 @@ prompts/                     # 仓库根，与 backend/ 同级
             <div class="mini">
               <span class="mini__k mono">prompts:lint</span>
               <strong>静态检查</strong>
-              <p>v2/v4 双轨校验；<code>prompts:core:check</code> 检测 core 与产物漂移，发布前必过。</p>
+              <p>v2/v4 双轨校验，<code>prompts:core:check</code> 检测 core 与产物不一致，发布前必过。</p>
             </div>
             <div class="mini">
               <span class="mini__k">只读线上</span>
@@ -247,7 +247,7 @@ prompts/                     # 仓库根，与 backend/ 同级
               <span class="steps__no">2</span>
               <div>
                 <strong>写 handler</strong>
-                <p>在 <code>backend/src/skills/</code> 建模块，导出符合 <code>SkillHandler</code> 签名的函数；LLM 调用走 <code>executeSkill</code>。</p>
+                <p>在 <code>backend/src/skills/</code> 建模块，导出符合 <code>SkillHandler</code> 签名的函数，LLM 调用走 <code>executeSkill</code>。</p>
               </div>
             </li>
             <li>
@@ -261,21 +261,21 @@ prompts/                     # 仓库根，与 backend/ 同级
               <span class="steps__no">4</span>
               <div>
                 <strong>同步 Prompt 到 DB</strong>
-                <p>通过部署同步（启动时自动执行 seed-core / 手动 sync）让源文件成为 ACTIVE 版本。</p>
+                <p>通过部署同步（启动时自动执行 seed-core / 手动 sync）让源文件成为生效版本。</p>
               </div>
             </li>
             <li>
               <span class="steps__no">5</span>
               <div>
                 <strong>接入业务链</strong>
-                <p>在 routes / services / orchestrators 中调用；保持 <code>routes → services → executeSkill → LLM</code> 链路。</p>
+                <p>在 routes / services / orchestrators 中调用，保持 <code>routes → services → executeSkill → LLM</code> 链路。</p>
               </div>
             </li>
             <li>
               <span class="steps__no">6</span>
               <div>
                 <strong>控制台验证</strong>
-                <p><a href="/admin/console" target="_blank" rel="noopener noreferrer">/admin/console</a>：字段数据旅程（逻辑图）看字段流转与调用用量 → Skill 抽屉试跑 → <code>/admin/skills/my-skill</code> 设计页看生效 Prompt 与版本。</p>
+                <p><a href="/admin/console" target="_blank" rel="noopener noreferrer">/admin/console</a>：字段流转图看字段流转与调用用量 → Skill 抽屉试跑 → <code>/admin/skills/my-skill</code> 设计页看生效 Prompt 与版本。</p>
               </div>
             </li>
           </ol>
@@ -288,12 +288,12 @@ prompts/                     # 仓库根，与 backend/ 同级
 
           <div class="mini-grid">
             <div class="mini"><strong>平台总览</strong><p>健康简报、24h 调用脉搏、待办。</p></div>
-            <div class="mini"><strong>字段数据旅程（逻辑图）</strong><p>五阶段流水线图：字段流转、调用用量边宽、hover 联动、时间范围切换；Skill 卡 ↗ 直达设计页。</p></div>
+            <div class="mini"><strong>字段流转图</strong><p>五阶段流水线图：字段流转、调用用量边宽、hover 联动、时间范围切换，Skill 卡 ↗ 直达设计页。</p></div>
             <div class="mini"><strong>Skill 目录 / 抽屉</strong><p>统计排序、运行配置（路由/重试/超时）、试跑、协议规则、生效 Prompt。</p></div>
             <div class="mini"><strong>Prompt 设计页</strong><p><code>/admin/skills/:id</code>：工作台（Prompt + 试跑 + 最近调用一键重跑）、版本对比与发布、运行时、工程信息。</p></div>
             <div class="mini"><strong>Prompt Dry Run</strong><p>候选编译三视图（产物/候选/diff）+ 字段契约编辑。</p></div>
             <div class="mini"><strong>日志三件套</strong><p>执行日志（重试时间线/导出）、Prompt 调用、事件中心 + Trace 瀑布。</p></div>
-            <div class="mini"><strong>虚拟学习者</strong><p>白盒/黑盒仿真、Quick Learn 一键代学、传播报告。</p></div>
+            <div class="mini"><strong>虚拟学习者</strong><p>辅助模拟/仿真、一键快速代学、传播报告。</p></div>
             <div class="mini"><strong>连接与安全</strong><p>模型接入、网络策略、可靠性预算、能力健康探测。</p></div>
           </div>
         </section>
@@ -301,7 +301,7 @@ prompts/                     # 仓库根，与 backend/ 同级
         <!-- ================= API 参考 ================= -->
         <section id="api" class="docs-sec">
           <h2>API 参考</h2>
-          <p class="docs-lead">以 <code>backend/src/routes/</code> 为最终口径；以下为高频端点。Admin 端点需要管理员会话。</p>
+          <p class="docs-lead">以 <code>backend/src/routes/</code> 为最终口径，以下为高频端点。Admin 端点需要管理员会话。</p>
 
           <h3>用户态</h3>
           <div class="api">

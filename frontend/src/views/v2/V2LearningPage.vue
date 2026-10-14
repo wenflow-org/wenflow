@@ -109,7 +109,7 @@
                 <router-link to="/knowledge-map" class="kp__more">全部路径 →</router-link>
               </p>
               <p v-if="kpSelected" class="kp__hint">
-                选中：{{ kpSelected.label }} ·
+                {{ kpSelected.label }} ·
                 {{ kpSelected.masteryScore === null || kpSelected.masteryScore === undefined ? '未评估' : Math.round(kpSelected.masteryScore * 100) + '%' }}
               </p>
             </template>
@@ -140,7 +140,7 @@
       <div class="stage-card">
         <span class="spinner"></span>
         <h2>正在准备本节内容…</h2>
-        <p>问流正在为{{ taskTitle ? '「' + taskTitle + '」' : '这节课' }}组织讲解和练习，通常十几秒，偶尔要半分钟；超过 20 秒可以点下方「重新尝试」。</p>
+        <p>问流正在为{{ taskTitle ? '「' + taskTitle + '」' : '这节课' }}组织讲解和练习，通常十几秒，偶尔要半分钟。</p>
         <div class="stage-card__skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
         <!-- 返回常驻（移动端头部返回键被隐藏）；长时间无响应再亮出重试，页面不无出口 -->
         <div class="stage-card__actions">
@@ -283,7 +283,7 @@
                 >
                   <span class="msg__supplement-tag">补充资料</span>
                   <span class="msg__supplement-title">{{ m.supplement.title }}</span>
-                  <span class="msg__supplement-topic">关于「{{ m.supplement.topic }}」· 点开看原文</span>
+                  <span class="msg__supplement-topic">关于「{{ m.supplement.topic }}」</span>
                 </button>
                 <!-- streaming 复用为「不可重生成」口径：MessageActions 以 streaming 隐藏「重新生成」，
                      非最后一条 AI 消息一律不可重生成（避免历史中段重生成导致顺序错乱） -->
@@ -294,7 +294,7 @@
                   @copy="copyMessage(m.text)"
                   @feedback="(up) => sendMessageFeedback(m, up)"
                 />
-                <span v-if="confusionDeltas[mi]?.length" class="msg__chip msg__chip--confuse">捕获到卡点「{{ confusionDeltas[mi]?.join('、') }}」· 导师会在这里多做确认</span>
+                <span v-if="confusionDeltas[mi]?.length" class="msg__chip msg__chip--confuse">捕获到卡点「{{ confusionDeltas[mi]?.join('、') }}」</span>
                 <div class="msg__meta">
                   问流导师 · {{ m.time }}
                   <button v-if="m.failed" type="button" class="msg__retry" @click="retryLast">重试</button>
@@ -365,7 +365,7 @@
         <Transition name="cp">
           <div v-if="checkpoint && !completed" class="checkpoint">
           <div class="checkpoint__head">
-            <span class="checkpoint__badge">检查点</span>
+            <span class="checkpoint__badge">小测</span>
             <strong>{{ checkpointHeading }}</strong>
             <!-- 服务端下发的 title 是「题干截 20 字 + 省略号」（teaching-turn-engine.ts），
                  与紧随其后的完整题干重复；只在 title 不是题干前缀时才单独渲染（见 checkpointTitlePair）。
@@ -1024,7 +1024,7 @@ async function continueFromScene() {
   } catch (e) {
     if ((e as { cancelled?: boolean })?.cancelled) return;
     if (streamingBubbleIndex.value >= 0) msgs.value.splice(streamingBubbleIndex.value, 1);
-    pushMsg({ role: 'ai', text: '恢复续讲失败了，你可以直接输入消息继续，或点下方「重试」。', time: nowTime(), failed: true });
+    pushMsg({ role: 'ai', text: '恢复续讲失败了，你可以直接输入消息继续。', time: nowTime(), failed: true });
   } finally {
     streamingBubbleIndex.value = -1;
     typing.value = false;
@@ -1418,7 +1418,7 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
       await doSend(text, false, true);
       return;
     }
-    pushMsg({ role: 'ai', text: '这次回复失败了，点下方「重试」。', time: nowTime(), failed: true });
+    pushMsg({ role: 'ai', text: '这次回复失败了。', time: nowTime(), failed: true });
   } finally {
     streamingBubbleIndex.value = -1;
     typing.value = false;

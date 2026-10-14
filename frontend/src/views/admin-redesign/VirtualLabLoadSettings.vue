@@ -38,7 +38,7 @@
     <div v-show="settingsTab === 'rate'" class="vl-settings__pane">
       <label
         class="mk-field mk-field--row"
-        title="虚拟学习者专属出站上限（每分钟调用数）；与平台全局速率相互独立，不挤占真实用户额度"
+        title="虚拟学习者专属出站上限（每分钟调用数）。与平台全局速率相互独立，不挤占真实用户额度"
       >
         <span class="mk-field__label">出站速率上限</span>
         <span class="vl-rpm__ctl">
@@ -69,7 +69,7 @@
     <div v-show="settingsTab === 'concurrency'" class="vl-settings__pane">
       <label
         class="mk-field mk-field--row"
-        title="同时在跑的自动驾驶会话数上限；超出即排队（先到先服务），有空位自动拉起。与「速率上限」相互独立"
+        title="同时在跑的自动驾驶会话数上限。超出即排队（先到先服务），有空位自动拉起。与「速率上限」相互独立"
       >
         <span class="mk-field__label">最高并发</span>
         <span class="vl-rpm__ctl">

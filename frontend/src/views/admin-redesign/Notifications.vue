@@ -19,7 +19,7 @@
           <MkFilterSearch
             v-model="keyword"
             placeholder="搜索标题 / 姓名 / 邮箱"
-            title="只过滤当前页，翻页可查看其它页"
+            title="在当前页内搜索"
           />
           <select v-model="kindFilter" class="mk-filter__select" @change="reloadFromFirstPage">
             <option value="">全部类型</option>
@@ -152,7 +152,7 @@
         v-model:pageSize="pageSize"
         :total="total"
         :loading="loading"
-        :note="keyword.trim() ? '关键词仅过滤当前页' : ''"
+        :note="keyword.trim() ? '在当前页内搜索' : ''"
         show-total
         @update:page="reload"
       />
@@ -206,7 +206,7 @@
             </div>
             <div v-if="form.scope === 'user'" class="mk-field">
               <span class="mk-field__label">选择用户</span>
-              <input v-model="targetSearch" class="mk-field__input" placeholder="搜索姓名 / 邮箱（至少 2 字符）" @input="searchTarget" />
+              <input v-model="targetSearch" class="mk-field__input" placeholder="搜索姓名 / 邮箱" @input="searchTarget" />
               <div v-if="targetResults.length" class="nt-candidates">
                 <button
                   v-for="u in targetResults"

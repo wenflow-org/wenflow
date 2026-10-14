@@ -3,7 +3,7 @@
     <!-- 页头（newui/admin pagehead）：页名 + 刷新上移；2026-10-04 状态条退役，读数迁页首
          KPI 带；2026-10-12 按用户走查再收一层：三张纯读数卡撤（阶段/Skill 进总览卡头 meta），
          无警时页头直接接页签（详见下方告警条注释） -->
-    <MkPageHead title="编排图" sub="顶层 Agent 数据流转逻辑图 · 字段血缘与阶段交接">
+    <MkPageHead title="编排图" sub="顶层 Agent 数据流转逻辑图 · 字段影响范围与阶段交接">
       <template #actions>
         <!-- 刷新此前只重拉 definitions， stages / 对账仍是旧值（治理面板数字对不上）→ 三个域全拉 -->
         <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
@@ -55,7 +55,7 @@
       <div class="mk-card__head">
         <!-- 卡题 2026-10-05 改名：原「字段数据旅程」与「字段旅程」页签撞车（两处都自称旅程）——
              本卡是五阶段全貌，归属「总览」；单阶段旅程图归「字段旅程」页签 -->
-        <h3 class="mk-card__title">管线总览 · 五阶段字段血缘</h3>
+        <h3 class="mk-card__title">管线总览 · 五阶段字段影响范围</h3>
         <!-- 2026-10-12：原页首「阶段 / Skill」两张读数卡收进卡头右组（列表卡头统一语法：
              计数 meta 归 head-right）——单行不占画布高度。阶段数画布五列可见这里点明（窄屏
              画布横向滚动时兜底）；Skill 总数是本页唯一非显然读数，title 保留 F8-4 三源口径 -->
@@ -67,7 +67,7 @@
           <!-- 画布缩放（2026-10-13 用户：居中 / 可拖动 / 可放大）：**滚轮直接缩放**，连续无档位
                （触控板双指捏合走同一条，浏览器把它合成 ctrlKey 的 wheel）；指针处为锚点。
                这里只留一枚读数 —— 当前比例，点它回到 100%（默认态 = 撑满可视宽） -->
-          <button type="button" class="mk-btn mk-btn--sm orch-odg-zoom__val" title="当前缩放比例 · 点击回到 100%（滚轮可直接缩放，拖动可平移）" @click="odgZoom = 1">{{ Math.round(odgZoom * 100) }}%</button>
+          <button type="button" class="mk-btn mk-btn--sm orch-odg-zoom__val" title="当前缩放比例" @click="odgZoom = 1">{{ Math.round(odgZoom * 100) }}%</button>
         </div>
       </div>
       <div

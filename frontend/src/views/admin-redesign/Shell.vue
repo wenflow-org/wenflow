@@ -48,7 +48,6 @@
           <div
             class="mshell__caption"
             :class="{ 'mshell__caption--active': groupContainsCurrent(group.title) }"
-            :title="`${group.title}（${group.items.length} 页）`"
           >
             {{ group.title }}
           </div>
@@ -215,8 +214,8 @@
           v-if="release"
           type="button"
           class="mshell__top-btn"
-          :title="density === 'compact' ? '当前紧凑密度 · 点击切换标准' : '当前标准密度 · 点击切换紧凑'"
-          :aria-label="density === 'compact' ? '切换到标准密度' : '切换到紧凑密度'"
+          :title="density === 'compact' ? '当前紧凑密度' : '当前标准密度'"
+          :aria-label="density === 'compact' ? '切换至标准密度' : '切换至紧凑密度'"
           @click="toggleDensity"
         >
           <!-- 标准密度：四条均匀行线；紧凑密度：上两行收紧、下两行疏（形似压缩） -->
@@ -226,8 +225,8 @@
         <button
           type="button"
           class="mshell__top-btn"
-          :title="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
-          :aria-label="theme === 'dark' ? '切换到浅色模式' : '切换到暗色模式'"
+          :title="theme === 'dark' ? '切换至浅色模式' : '切换至暗色模式'"
+          :aria-label="theme === 'dark' ? '切换至浅色模式' : '切换至暗色模式'"
           @click="toggleTheme"
         >
           <Sun v-if="theme === 'dark'" :size="16" :stroke-width="1.75" aria-hidden="true" />

@@ -43,7 +43,7 @@
               <th scope="col">路由来源</th>
               <th scope="col">model</th>
               <th scope="col">参数覆盖</th>
-              <th scope="col" class="skc__wrap">兜底链</th>
+              <th scope="col" class="skc__wrap">备用模型</th>
             </tr>
           </thead>
           <tbody>
@@ -57,7 +57,7 @@
               </td>
               <td class="mono">{{ s.model || '继承' }}</td>
               <td class="mono skc__wrap" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ s.paramOverrides ? JSON.stringify(s.paramOverrides) : '—' }}</td>
-              <td class="mono skc__wrap" :title="s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined">{{ s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : 'registry默认' }}</td>
+              <td class="mono skc__wrap" :title="s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined">{{ s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : '注册表默认' }}</td>
             </tr>
           </tbody>
         </table>

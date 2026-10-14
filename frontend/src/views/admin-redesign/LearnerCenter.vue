@@ -13,7 +13,7 @@
     <!-- 后端学习者域窗口截断口径（2026-10-04 解锁 50→500，窗口内不提示；单源仍一处） -->
     <div v-if="liveLearners.length >= 500" class="mk-status mk-status--muted">
       <span class="mk-status__dot"></span>
-      <span class="mk-status__meta" title="学习者快照接口单次窗口上限（live.ts liveLearners 域）">仅加载前 500 位，搜索限已加载 500 人</span>
+      <span class="mk-status__meta" title="学习者列表单次加载有上限，搜索仅覆盖已加载部分">仅加载前 500 位，搜索限已加载 500 人</span>
     </div>
     <!-- 审核 #17（2026-10-06）：已有旧行时刷新失败此前无任何呈现（loadFailed 要求列表为空），
          页面继续把上次结果当当前值——补一条行内告警 + 重试出口（对照 Feedback.vue 行内告警判例） -->
@@ -32,7 +32,7 @@
       <MkKpi
         label="学习者账号"
         :value="learnerTotalText"
-        :hint="`口径：${includeTest ? '含测试账号' : '不含测试账号'} · =「用户」页「共 N 人」同口径；含未开始学习的账号${learnerTotal == null ? '；全量总数接口未返回' : ''}`"
+        :hint="`含虚拟学习者与测试账号 · 含未开始学习的账号`"
       />
       <!-- P1#17：需关注收窄为真异常（趋势降 ∨ 疲劳高 ∨ 有风险摘要）；
            常态档「疲劳=中」拆到 pills 的「观察」，不再把需关注撑爆 -->
@@ -118,7 +118,7 @@
         tone="error"
         icon="◌"
         title="学习者快照加载失败"
-        description="无法从后端拉取学习者状态。"
+        description="无法加载学习者状态，请稍后重试。"
         action-text="重试"
         :action-busy="liveLoading"
         action-busy-text="重试中…"
@@ -145,7 +145,7 @@
               v-if="!lcHiddenCols.has('conf')"
               scope="col"
               class="mk-th--sortable"
-              title="快照置信度：模型对该学习者状态的把握程度，低于 50% 为低置信"
+              title="当前读数置信度（<50% 为低置信）"
               :aria-sort="lcSortState('conf')"
               @click="toggleLcSort('conf')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('conf')">置信<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -158,7 +158,7 @@
               :aria-sort="lcSortState('updated')"
               @click="toggleLcSort('updated')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th class="mk-th--right" title="默认排序：风险优先 → 更新时间新→旧；点「置信」「更新」表头可切换">操作</th>
+            <th class="mk-th--right" title="默认排序：风险优先 → 更新时间新→旧">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -229,7 +229,7 @@
         <MkEmptyState
           v-else
           :title="isFiltered ? '没有匹配的学习者' : '暂无学习者快照'"
-          :description="isFiltered ? '当前搜索 / 筛选条件没有命中任何学习者，可清除筛选或换个关键词。' : '学习者产生学习行为后，快照将自动生成。'"
+          :description="isFiltered ? '当前搜索 / 筛选条件没有命中任何学习者，可清除筛选或换个关键词。' : '学习者产生学习行为后，状态将自动生成。'"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />
@@ -348,7 +348,7 @@ const lcColDefs = [
   { key: 'progress', label: '当前进度', title: '当前任务 + 路径' },
   { key: 'trend', label: '趋势', title: '近况趋势' },
   { key: 'fatigue', label: '疲劳', title: '疲劳度' },
-  { key: 'conf', label: '置信', title: '快照置信度' },
+  { key: 'conf', label: '置信', title: '当前读数置信度' },
   { key: 'risk', label: '风险摘要', title: '风险原因' },
   { key: 'updated', label: '更新', title: '快照更新时间' },
 ] as const
@@ -432,7 +432,7 @@ async function sendIntervene() {
 const learnerTotal = computed(() => liveLearnersTotal.value)
 const learnerTotalText = computed(() => {
   const t = learnerTotal.value
-  if (t != null) return t === rows.value.length ? String(t) : `${t} · 已载 ${rows.value.length}`
+  if (t != null) return t === rows.value.length ? String(t) : `${t} · 已加载 ${rows.value.length}`
   return rows.value.length ? `已加载 ${rows.value.length}` : '0'
 })
 const rows = computed<Row[]>(() =>
@@ -447,7 +447,7 @@ const rows = computed<Row[]>(() =>
     trend: m.trend,
     fatigue: m.fatigue as Row['fatigue'],
     risk: m.struggling.length
-      ? `「${m.struggling[0]}」等 ${m.struggling.length} 个概念挣扎`
+      ? `「${m.struggling[0]}」等 ${m.struggling.length} 个概念掌握薄弱`
       : m.fatigue === '高'
         ? '疲劳风险高'
         : m.fragile.length
@@ -495,8 +495,8 @@ const confRows = computed(() => rows.value.filter((r) => r.task && r.confidence 
     否则「卡 1 的 281」与「分档条的 241」同屏会被读成数字打架（2026-10-04 外部评审误读台账） */
 const excludedFromConf = computed(() => rows.value.length - confRows.value.length)
 const confBaseNote = computed(() =>
-  `点击分段只看该区间 · 共 ${confRows.value.length} 个有任务的快照` +
-  (excludedFromConf.value ? `（另 ${excludedFromConf.value} 位无任务/无快照不计）` : '')
+  `点击分段可筛选对应置信区间 · 共 ${confRows.value.length} 位有学习任务的学习者` +
+  (excludedFromConf.value ? `（另 ${excludedFromConf.value} 位无学习任务，未计入）` : '')
 )
 /** 低置信 KPI 与分档条/均值同一口径（有任务的快照）：无任务行在表里置信列本显「—」，
     计入会与紧邻方的分布对不上（分布合计里数不出它）——外部评审「274 vs 高分区 7 人」的
@@ -505,8 +505,8 @@ const lowConfCount = computed(() => confRows.value.filter((r) => evidenceLowConf
 /** 低置信 hint 带基数（与平均置信度同判例：数字要能对上分母） */
 const lowConfHint = computed(() =>
   confRows.value.length
-    ? `有任务的快照中置信度低于 50% · n=${confRows.value.length}`
-    : '暂无有任务的快照'
+    ? `置信度低于 50% 的有学习任务的学习者 · 共 ${confRows.value.length} 位`
+    : '暂无有学习任务的学习者'
 )
 const avgConfText = computed(() => {
   if (!confRows.value.length) return '—'
@@ -516,8 +516,8 @@ const avgConfText = computed(() => {
 /** 平均值必须带基数：n= 之外的行（无任务/无快照）不进均值，读数才知道它代表谁 */
 const avgConfHint = computed(() =>
   confRows.value.length
-    ? `有学习任务的快照 · n=${confRows.value.length}（其余无任务/无快照不入均值） · 全体口径`
-    : '暂无有学习任务的快照'
+    ? `基于 ${confRows.value.length} 位有学习任务的学习者计算`
+    : '暂无有学习任务的学习者'
 )
 /** 直方图五档（原型 .histo bad→ok 自左向右）：阈值锚定产品既定的 50% 低置信线，
     <50 区按严重度再分 <25（红）/ 25–49（琥珀）两档；柱高 = n / maxBin（6px 下限，原型同款） */

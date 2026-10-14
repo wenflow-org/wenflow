@@ -7,7 +7,7 @@
       </summary>
       <div class="fdp__guide">
         <p class="fdp__guide-text">
-          新建字段请直接编辑编排文件，保存后立即生效（已有行修改见下方漂移报告）。
+          新建字段请直接编辑编排文件，保存后立即生效（已有行修改见「不一致报告」）。
         </p>
         <p class="fdp__guide-file"><span class="mono">prompts/orchestration/{{ stage }}.yaml</span></p>
         <p class="fdp__guide-text">入口：<strong>「字段路由」页顶部「编排文件」按钮</strong>，在文本框中按现有结构追加
@@ -18,14 +18,14 @@
     <!-- 漂移报告 -->
     <details class="mk-card fdp__box" open>
       <summary class="mk-card__head mk-section__summary">
-        <span class="mk-card__title">漂移报告</span>
+        <span class="mk-card__title">不一致报告</span>
         <span class="mk-card__meta">{{ TERMS.driftContractQualified }}：编排文件 vs 数据库 · admin 编辑行豁免</span>
       </summary>
-      <div v-if="driftLoading" class="fdp__loading"><MkLoading text="漂移检测中…" inline /></div>
+      <div v-if="driftLoading" class="fdp__loading"><MkLoading text="不一致检测中…" inline /></div>
       <MkEmptyState
         v-else-if="driftFailed"
         tone="error"
-        title="漂移检测失败"
+        title="不一致检测失败"
         description="无法连接字段路由服务，请稍后重试。"
         action-text="重试"
         compact
@@ -35,7 +35,7 @@
       <MkEmptyState
         v-else-if="drift.items.length === 0"
         icon="✓"
-        title="无漂移"
+        title="无不一致"
         description="编排文件与数据库一致"
         compact
       />

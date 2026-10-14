@@ -129,7 +129,7 @@
             <h2 class="action__title">这版路径没生成出来，重试一般能好</h2>
             <p class="action__desc">{{ primaryPath?.errorText || '生成失败。你的目标和已确认信息都保留着，不会丢。' }}</p>
             <div class="action__meta">
-              <span class="tag tag--red">{{ primaryPath?.retryType === 'stage_design' ? '阶段任务失败' : '主结构失败' }}</span>
+              <span class="tag tag--red">{{ primaryPath?.retryType === 'stage_design' ? '部分阶段生成失败' : '路径生成失败' }}</span>
               <span class="tag">信息已保留</span>
             </div>
             <div class="action__footer">
@@ -721,7 +721,7 @@ const stageInfo = computed(() => {
   return `${(idx >= 0 ? idx : 0) + 1} / ${primaryPath.value.stages.length || '?'}`;
 });
 
-const guidanceEmptyText = computed(() => guidanceCopy.value?.emptyStateCopy || '不用整理、不用说得很准。讲讲最近想解决的事，问流会帮你收敛成目标和阶段安排。');
+const guidanceEmptyText = computed(() => guidanceCopy.value?.emptyStateCopy || '不用整理、不用说得很准。讲讲最近想解决的事，问流会帮你梳理成目标和阶段安排。');
 
 /* skill 今日行动（todayActions 语义跳转解析） */
 interface SkillAction { label: string; to: string; primary: boolean }
@@ -841,8 +841,8 @@ const tipTone = computed(() => {
 });
 
 const tipText = computed(() => {
-  if (pageState.value === 'attention') return '路径生成失败通常是暂时的。已确认的信息都会保留，点「重新生成路径」手动重试。';
-  if (pageState.value === 'generating') return '路径正在生成中，一般需要 1-2 分钟，完成后这一页会自动更新。';
+  if (pageState.value === 'attention') return '路径生成失败通常是暂时的。已确认的信息都会保留。';
+  if (pageState.value === 'generating') return '路径正在生成中，一般需要 1-2 分钟。';
   const copy = guidanceCopy.value;
   const warning = copy?.warningCopy;
   if (warning && warning !== '当前没有明显风险。') return warning;
@@ -898,7 +898,7 @@ const nearestAchievement = computed(() => {
     // 「知识掌握度（KTL）」（V2Achievements.descText）口径不一致且本页无处可查。
     // 这里做同样的展开，两页文案对齐。
     hint: nearest.description
-      ? `目标 ${String(nearest.description).replace(/KTL/g, '知识掌握度（KTL）')} · 进度 ${prog}`
+      ? `目标 ${String(nearest.description).replace(/KTL/g, '知识掌握度')} · 进度 ${prog}`
       : `进度 ${prog}`
   };
 });

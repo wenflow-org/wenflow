@@ -15,24 +15,24 @@
 export const TERMS = {
   // ---- 漂移族（三义区分，禁止合并） ----
   /** 主叫法：文件↔DB 不一致（字段路由契约维度） */
-  driftContract: '漂移',
+  driftContract: '不一致',
   /** 限定词：编排契约 ↔ DB 台账 */
-  driftContractQualified: '契约漂移',
+  driftContractQualified: '文件与线上不一致',
   /** W4：核心文件 ↔ 编译产物 ↔ DB 三方哈希不一致 */
-  driftHash: 'W4 漂移',
-  driftHashQualified: '哈希漂移',
+  driftHash: '编译产物不一致',
+  driftHashQualified: '哈希不一致',
   /** 运行时遥测：每次 LLM 调用比对代码侧 prompt 与 DB ACTIVE 发现不一致 */
-  driftRuntime: '运行时漂移',
-  driftTab: '漂移与审计',
+  driftRuntime: '运行时不一致',
+  driftTab: '不一致与审计',
   driftInSync: '已同步',
-  driftValueMismatch: '漂移（文件与数据库不一致）',
+  driftValueMismatch: '文件与数据库不一致',
 
   // ---- 同步族（文件→DB 生效动作统一「同步」） ----
   syncToDb: '同步到 DB',
   syncDone: '同步完成',
   saveToFile: '保存到编排文件',
   publish: '发布',
-  reconcile: '对账',
+  reconcile: '一致性核查',
 
   // ---- 状态族 ----
   statusMissing: '缺项',
@@ -47,15 +47,15 @@ export const TERMS = {
 
   // ---- 对账族（W1-W5 编码人话；与 backend glossary-content.ts 词条同语义） ----
   /** W1：户口簿活跃技能 ↔ ACTIVE prompt 双向核对 */
-  reconActive: 'ACTIVE 对账',
+  reconActive: '生效版本一致性核查',
   /** W2：户口簿 ↔ 系统注册表（skill_registrations）双向核对 */
-  reconRegistration: '注册对账',
+  reconRegistration: '注册一致性核查',
   /** W3：运行时定义执行步骤 ↔ 户口簿 coordinator 声明 */
-  reconWiring: '接线对账',
+  reconWiring: '接线一致性核查',
   /** W4：核心文件 ↔ 编译产物 ↔ DB 三方哈希对账 */
-  reconHash: '哈希对账',
+  reconHash: '哈希一致性核查',
   /** W5：dataSource 声明三通道校验（db 声明 / sandbox / 例外账） */
-  reconDataSource: '数据源声明对账',
+  reconDataSource: '数据源声明一致性核查',
 
   // ---- 生命周期族 ----
   completion: '完成度',

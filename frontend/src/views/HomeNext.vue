@@ -9,7 +9,7 @@
           <span class="hn-pill">问流 · 从问题到学习路径</span>
           <h1>先说清你想解决的事，<br />再开始学习。</h1>
           <p>
-            不用整理成完美目标。聊几分钟，问流帮你收敛方向、生成路径——学习台直接给出今天能动手的一步。
+            不用整理成完美目标。聊几分钟，问流帮你理清方向、生成路径——学习台直接给出今天能动手的一步。
           </p>
           <div class="hn-hero__cta">
             <router-link :to="primaryPath" class="hn-btn hn-btn--primary hn-btn--lg">{{ primaryLabel }}</router-link>
@@ -124,7 +124,7 @@
       <section class="hn-desk hn-shell">
         <div class="hn-desk__copy" v-reveal>
           <h2>每天打开学习台，只盯今天这一步。</h2>
-          <p>路径生成后，「今日行动」直接告诉你学什么、学多久；也可以随时规划新目标。</p>
+          <p>路径生成后，「今日行动」直接告诉你学什么、学多久。也可以随时规划新目标。</p>
           <ul>
             <li>今日行动 · 清楚今天学什么</li>
             <li>学习路径 · 阶段与任务可继续</li>

@@ -18,8 +18,8 @@
         :hint="includeTest ? '含虚拟学习者与测试账号' : '仅真实用户'"
         :title="includeTest ? '只统计虚拟学习者与测试账号' : '只统计真实用户'"
       />
-      <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" hint="跨全部已生成路径" title="已生成路径的里程碑总数（随页头「真实 / 测试」开关变化）" />
-      <MkKpi label="任务" :value="stats?.totalTasks ?? '—'" hint="挂在里程碑下" title="已生成路径的任务总数（随页头「真实 / 测试」开关变化）" />
+      <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" hint="跨全部已生成路径" title="已生成路径的里程碑总数" />
+      <MkKpi label="任务" :value="stats?.totalTasks ?? '—'" hint="挂在里程碑下" title="已生成路径的任务总数" />
     </section>
 
     <!-- 路径状态分布：教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」——回到卡上方
@@ -34,7 +34,7 @@
       collapsible
       class="oc-distband"
       title="路径状态分布"
-      :sub="`点击分段可筛选对应状态的路径`"
+      
       unit="条"
       aria-label="按路径状态筛选"
       :bins="pathBandBins"
@@ -193,7 +193,7 @@
                 <span class="mk-cell-sub mono">{{ timeAgo(p.updatedAt) }}</span>
                 <!-- 停滞标记（2026-10-10 跑批实锤：active 且长时间无更新=生成链停滞，可「重试生成」补齐；
                      真实用户数日不学属正常，只提示不强判死，amber=需关注可行动） -->
-                <span v-if="isStalled(p)" class="mk-badge mk-badge--warn mk-badge--sm" title="长时间无更新，可「重试生成」补齐阶段任务">停滞</span>
+                <span v-if="isStalled(p)" class="mk-badge mk-badge--warn mk-badge--sm" title="长时间无更新，可「重试生成」补齐课程任务">停滞</span>
               </td>
               <td>
                 <!-- 操作列文字钮（原型 renderPaths 操作列 btn--sm「详情/下线」+ ⋯ 菜单）；

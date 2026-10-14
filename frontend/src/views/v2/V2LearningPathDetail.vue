@@ -18,7 +18,7 @@
 
       <!-- 失败 -->
       <div v-else-if="loadError" class="errorbar">
-        路径详情加载失败（可能服务正在启动）。<button type="button" class="errorbar__retry" @click="load()">重试</button>
+        路径详情加载失败。<button type="button" class="errorbar__retry" @click="load()">重试</button>
       </div>
 
       <template v-else-if="path">
@@ -26,19 +26,19 @@
         <section v-if="lifecycle && lifecycle.phase !== 'ready'" class="genbar card" :class="`genbar--${lifecycleFailed ? 'failed' : 'working'}`">
           <template v-if="lifecycleFailed">
             <div class="genbar__text">
-              <strong>{{ lifecycle.retryType === 'stage_design' ? '阶段任务准备失败' : '路径主结构生成失败' }}</strong>
+              <strong>{{ lifecycle.retryType === 'stage_design' ? '课程准备失败' : '路径生成失败' }}</strong>
               <p>{{ lifecycle.errorMessage || '目标和已确认信息已保留，重试一般能成功。' }}</p>
             </div>
             <button type="button" class="btn-primary" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
               <span v-if="retrying" class="spinner spinner--sm"></span>
-              {{ retrying ? '正在重新生成…' : (lifecycle.retryType === 'stage_design' ? '重新准备阶段任务' : '重新生成主结构') }}
+              {{ retrying ? '正在重新生成…' : (lifecycle.retryType === 'stage_design' ? '重新准备课程' : '重新生成路径') }}
             </button>
           </template>
           <template v-else>
             <span class="spinner"></span>
             <div class="genbar__text">
-              <strong>{{ lifecycle.phase === 'core' ? '正在生成路径主结构…' : `正在准备阶段任务（${lifecycle.completedStages}/${lifecycle.totalStages}）…` }}</strong>
-              <p>页面会自动刷新，你也可以先去别的页面看看。</p>
+              <strong>{{ lifecycle.phase === 'core' ? '正在生成路径…' : `正在准备课程（${lifecycle.completedStages}/${lifecycle.totalStages}）…` }}</strong>
+              <p>你也可以先去别的页面看看。</p>
             </div>
           </template>
         </section>
@@ -343,7 +343,7 @@
                   class="lineage-link"
                 >查看调整前的路径</router-link>
                 <!-- 与快照回退区（hero 的「回退上次调整」）互相指引：历史在这里看，回退在那边做 -->
-                <p v-if="rollbackAvailable" class="lineage-note">每次调整前的安排都会自动留存，可用页面上方「回退上次调整」退回。</p>
+                <p v-if="rollbackAvailable" class="lineage-note">每次调整前的安排都会自动留存。</p>
               </div>
             </section>
           </aside>
@@ -369,7 +369,7 @@
         <div v-if="blockingSessions.length" class="clear-sessions">
           <div class="clear-sessions__head">
             <span class="clear-sessions__tag">还需要一步</span>
-            <p>要调整的范围内还有未结束的课堂。结束它们后我们会自动继续刚才的调整；已结束的课堂不会受影响。</p>
+            <p>要调整的范围内还有未结束的课堂。结束它们后我们会自动继续刚才的调整。已结束的课堂不会受影响。</p>
           </div>
           <ul class="clear-sessions__list">
             <li v-for="(s, si) in blockingSessions" :key="s.sessionId || si" class="clear-sessions__item">
@@ -419,7 +419,7 @@
             <span class="adjust-mode__icon" aria-hidden="true">↺</span>
             <span class="adjust-mode__body">
               <strong>学得不好，想重新来一遍<span v-if="isRecommendedEntry('rebuild')" class="adjust-mode__rec">推荐</span></strong>
-              <small>整条路径按新说明重新规划，从头开始；已学部分会保留在历史记录里作参考。</small>
+              <small>整条路径按新说明重新规划，从头开始。已学部分会保留在历史记录里作参考。</small>
               <small v-if="!adjustEntryAllowed('rebuild')" class="adjust-mode__blocked">{{ adjustEntryBlockReason('rebuild') }}</small>
             </span>
             <span class="adjust-mode__arrow" aria-hidden="true">›</span>
@@ -434,7 +434,7 @@
             <span class="adjust-mode__icon" aria-hidden="true">⇄</span>
             <span class="adjust-mode__body">
               <strong>学了一些，想调整剩余部分<span v-if="isRecommendedEntry('reshape')" class="adjust-mode__rec">推荐</span></strong>
-              <small>已完成的阶段/任务原样保留；可只调当前阶段，或从某个未学阶段起把后面的课程一起按新说明调整。</small>
+              <small>已完成的阶段/任务原样保留。可只调当前阶段，或从某个未学阶段起把后面的课程一起按新说明调整。</small>
               <small v-if="!adjustEntryAllowed('reshape')" class="adjust-mode__blocked">{{ adjustEntryBlockReason('reshape') }}</small>
             </span>
             <span class="adjust-mode__arrow" aria-hidden="true">›</span>
@@ -1545,7 +1545,7 @@ async function viewFeedback(task: Record<string, any>) {
   // 降级：无当堂评估记录时给出可操作的替代入口（回看历史；或用户自行重新进入任务学习）
   const go = await askConfirm({
     title: '暂无当堂评估记录',
-    message: '这节课还没有生成学习反馈，可能是结算尚未完成。你可以回看学习历史；想继续学这个任务，也可以直接点任务卡片重新进入。',
+    message: '这节课还没有生成学习反馈，可能还在结算中。你可以回看学习历史，也可以直接打开这个任务重新进入。',
     confirmText: '回看学习历史',
     danger: false,
   });

@@ -18,13 +18,13 @@
          走全局 .mk-alert--info（原型 .alert--info 词汇），本地只补行内布局 -->
     <div v-if="deepLinkUser" class="mk-alert mk-alert--info ss-deeplink">
       <strong>来自审计日志 · 查看「{{ deepLinkUser }}」的登录会话</strong>
-      <span>仅列登录成功产生的会话（可强制下线）；登录事件完整历史（含失败尝试）见</span>
+      <span>仅列登录成功产生的会话（可强制下线），登录事件完整历史（含失败尝试）见</span>
       <button type="button" class="mk-link" @click="goAuditLogs">审计日志 · 登录审计 →</button>
       <button type="button" class="mk-link ss-deeplink__clear" @click="clearDeepLink">× 清除筛选</button>
     </div>
     <!-- 常驻分工说明（无深链时） -->
     <div v-else class="ss-note">
-      <span>展示登录成功产生的会话（可管理/强制下线）；登录事件的完整历史（含失败尝试）见</span>
+      <span>展示登录成功产生的会话（可管理/强制下线），登录事件的完整历史（含失败尝试）见</span>
       <button type="button" class="mk-link" @click="goAuditLogs">审计日志 · 登录审计 →</button>
     </div>
 
@@ -60,7 +60,7 @@
               class="mk-pill"
               :class="{ 'mk-pill--active': statusFilter === p.id }"
               :aria-pressed="statusFilter === p.id"
-              :title="`只看${p.label}会话（计数为全部；筛选仅作用于当前已加载的 ${sessions.length} 条行）`"
+              :title="`只看${p.label}会话`"
               @click="statusFilter = statusFilter === p.id ? '' : p.id"
             >
               {{ p.label }}<span v-if="countOf(p.id) > 0" class="mk-pill__count">{{ countOf(p.id) }}</span>
@@ -88,7 +88,7 @@
             v-if="revokeCount(g)"
             type="button"
             class="mk-btn mk-btn--danger-ghost mk-btn--sm"
-            :title="`吊销「${g.adminName}」全部未吊销会话（含当前未显示的会话）`"
+            :title="`下线「${g.adminName}」的全部会话`"
             @click="revokeAll(g)"
           >
             下线全部<template v-if="revokeCount(g) > 1">（{{ revokeCount(g) }}）</template>
@@ -263,7 +263,7 @@
       v-model:pageSize="pageSize"
       :total="activeFlat.length"
       :loading="loading"
-      :note="truncated ? `仅统计当前已加载行；全部活跃 ${activeCount} 条` : ''"
+      :note="truncated ? `全部活跃 ${activeCount} 条` : ''"
     />
     </div>
   </div>

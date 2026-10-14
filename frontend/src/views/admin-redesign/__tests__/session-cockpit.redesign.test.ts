@@ -338,7 +338,7 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     await steps[0].trigger('click');
     await settle();
     expect(w.find('[role="tabpanel"][aria-labelledby="cp-tab-goal"]').exists()).toBe(true);
-    expect(w.text()).toContain('Goal 对话');
+    expect(w.text()).toContain('目标对话');
 
     w.unmount();
   });
@@ -351,7 +351,7 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     // 回合记录曾是它的表格翻版（也曾把 Goal 段错拼进来），故真实模式整卡不渲染。
     expect(w.find('.cp-turns').exists()).toBe(false);
     expect(w.text()).not.toContain('回合记录');
-    expect(w.text()).not.toContain('Goal + 课堂按序合并');
+    expect(w.text()).not.toContain('目标 + 课堂按序合并');
 
     w.unmount();
   });
@@ -367,7 +367,7 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(rows[0].find('.mk-badge').text()).toBe('虚拟学习者');
     expect(rows[1].find('.mk-badge').text()).toBe('虚拟学习者');
     expect(rows[2].find('.mk-badge').text()).toBe('教师');
-    expect(w.text()).toContain('3 条对话 · Goal + 课堂按序合并');
+    expect(w.text()).toContain('3 条对话 · 目标 + 课堂按序合并');
 
     w.unmount();
   });

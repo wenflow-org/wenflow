@@ -8,8 +8,8 @@
     <!-- 批量创建后台进度：创建秒回，AI 身份 + 故事后台推进 -->
     <button v-if="task?.active" type="button" class="vl-running__chip vl-running__chip--batch" :class="`is-${task.status}`" :title="batchTaskStatusTitle" @click="emit('toggleDetail')">
       <span class="vl-running__dot" aria-hidden="true"></span>
-      <template v-if="task.status === 'done'">✓ 批量创建完成</template>
-      <template v-else-if="task.status === 'error'">✕ 批量生成有失败</template>
+      <template v-if="task.status === 'done'">批量创建完成</template>
+      <template v-else-if="task.status === 'error'">批量生成有失败</template>
       <template v-else>批量生成中</template>
       <template v-if="task.status === 'running'"> · 身份 {{ task.total - task.personaLeft }}/{{ task.total }}<template v-if="task.totalStories"> · 故事 {{ task.storiesDone }}/{{ task.totalStories }}</template></template>
     </button>
@@ -24,7 +24,7 @@
       @select="toggleStage"
     />
     <!-- 已暂停：autopilot 已停（会话保留），灰色 chip 点击进画像页（超 4 个截断，进列表「已暂停」筛选看全量） -->
-    <button v-for="s in visiblePausedChips" :key="`p-${s.id}`" type="button" class="vl-running__chip vl-running__chip--paused" :title="`${s.pausedCount} 个会话已暂停自动驾驶（进度保留）；点击进入画像页`" @click="openSubPage('virtual', s.id)">
+    <button v-for="s in visiblePausedChips" :key="`p-${s.id}`" type="button" class="vl-running__chip vl-running__chip--paused" :title="`${s.pausedCount} 个会话已暂停自动驾驶（进度保留）`" @click="openSubPage('virtual', s.id)">
       <span class="vl-running__dot" aria-hidden="true"></span>
       {{ s.name }} · 已暂停{{ s.pausedCount > 1 ? ` ${s.pausedCount}` : '' }}
     </button>
@@ -48,7 +48,7 @@
         </span>
       </span>
       <button v-if="task.status === 'error'" type="button" class="mk-btn mk-btn--sm" @click="emit('retry')">重试失败</button>
-      <button v-if="task.status === 'done' || task.status === 'error'" type="button" class="mk-link" @click="emit('dismiss')">✕ 关闭</button>
+      <button v-if="task.status === 'done' || task.status === 'error'" type="button" class="mk-link" @click="emit('dismiss')">关闭</button>
     </div>
   </div>
 </template>
@@ -137,7 +137,7 @@ const activeChips = computed(() => {
   return props.runningSamples.filter((s) => stageKeyOf(s) === activeStage.value)
 })
 function chipTitle(s: Sample): string {
-  return `${s.runningCount} 个会话进行中 · 点击进入会话座舱`
+  return `${s.runningCount} 个会话进行中`
 }
 const visiblePausedChips = computed(() => props.pausedSamples.slice(0, PAUSED_CHIPS_LIMIT))
 

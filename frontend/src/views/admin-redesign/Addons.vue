@@ -94,7 +94,7 @@
               type="button"
               class="mk-link"
               :disabled="discoveringId === t.id"
-              :title="discoveredMap[t.id]?.join(', ') || '连接该 MCP 服务并发现其工具'"
+              :title="discoveredMap[t.id]?.join(', ')"
               @click="discoverTools(t)"
             >
               {{ discoveringId === t.id ? '发现中…' : (discoveredMap[t.id] ? `工具 ${discoveredMap[t.id].length}` : '发现工具') }}
@@ -183,7 +183,7 @@
             <input
               v-model="toolForm.endpoint"
               class="mk-field__input"
-              :placeholder="toolForm.transport === 'mcp' ? 'https://…/mcp' : 'https://… 或 local / ${ENV_VAR}'"
+              :placeholder="toolForm.transport === 'mcp' ? 'https://…/mcp' : 'https://…'"
             />
             <span v-if="toolErrors.endpoint" class="mk-field__err">{{ toolErrors.endpoint }}</span>
           </label>

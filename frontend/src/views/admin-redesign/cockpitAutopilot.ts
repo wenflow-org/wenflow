@@ -41,7 +41,7 @@ export function useCockpitAutopilot(
     if (!session.value) return '会话仍在加载'
     if (isTerminal.value) return '会话已终态，无需启动全自动'
     if (autopilotRunning.value) return '全自动正在进行中'
-    return '自动驾驶：后台持续推进，直达 Path 全部任务完成（每课回合数受「每课回合上限」约束；可随时「停止自动驾驶」暂停，进度保留）'
+    return '持续跑到全部任务完成，可随时停止，进度保留'
   })
   /* 状态前缀已撤（2026-10-14 与教学会话/虚拟画像/Prompt 评估同批）：原先每条前缀一个 emoji
      （完成/失败/未完成/已停止/已排队各一个），而句子本身就写着状态、行级 tone
@@ -49,11 +49,11 @@ export function useCockpitAutopilot(
      管理端不用 emoji（判例 AchIcon）。 */
   const autopilotResultText = computed(() => {
     const st = autopilot.value.status
-    if (st === 'completed') return '全部完成：Path 所有任务已跑完'
+    if (st === 'completed') return '全部完成：所有任务已跑完'
     if (st === 'failed') return `运行失败：${firstText(autopilot.value.lastError) || '未知原因'}`
-    if (st === 'incomplete') return `未完成（疑似教学卡死）：${firstText(autopilot.value.lastError) || '无进展'}`
+    if (st === 'incomplete') return `未完成：${firstText(autopilot.value.lastError) || '无进展'}`
     if (st === 'stopped') return '已停止自动驾驶'
-    if (st === 'queued') return `已排队等待并发槽位（第 ${autopilot.value.queuePosition || 1} 位），有空位自动启动`
+    if (st === 'queued') return `已排队（第 ${autopilot.value.queuePosition || 1} 位），有空位自动启动`
     if (st === 'running' && autopilot.value.stopRequested === true) return '已请求停止自动驾驶（等待确认）'
     return ''
   })

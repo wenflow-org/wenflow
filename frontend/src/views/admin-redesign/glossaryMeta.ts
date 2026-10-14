@@ -21,11 +21,11 @@ export interface CompletionMeta {
 }
 
 export const COMPLETION_META: CompletionMeta[] = [
-  { status: 'draft', label: '草稿', short: '草稿', hint: '仅在户口簿登记，还没开始搭建' },
-  { status: 'handler-ready', label: 'handler 就绪', short: 'handler', hint: '入口处理（handler）已注册，可被调用' },
-  { status: 'core-ready', label: 'core 就绪', short: 'core', hint: '核心 prompt 文件已就绪' },
-  { status: 'fields-synced', label: '字段已同步', short: '同步', hint: '字段路由声明已对账，数据流已打通' },
-  { status: 'live', label: '已上线', short: 'live', hint: 'ACTIVE prompt 生效，运行时正在使用' },
+  { status: 'draft', label: '草稿', short: '草稿', hint: '仅在登记册登记，还没开始搭建' },
+  { status: 'handler-ready', label: '入口已接入', short: 'handler', hint: '入口处理（handler）已注册，可被调用' },
+  { status: 'core-ready', label: '核心内容已就绪', short: 'core', hint: '核心 prompt 文件已就绪' },
+  { status: 'fields-synced', label: '字段已同步', short: '同步', hint: '字段路由声明已通过一致性核查，数据流已打通' },
+  { status: 'live', label: '已上线', short: 'live', hint: '线上生效 Prompt 正在被运行时使用' },
 ]
 
 export const completionMetaOf = (status: string): CompletionMeta | undefined =>
@@ -36,7 +36,7 @@ export const completionMetaOf = (status: string): CompletionMeta | undefined =>
 // ============================================================
 
 export const SEMANTICS_META: Array<{ id: string; label: string; hint: string }> = [
-  { id: 'baseline-drift', label: '基准漂移', hint: '有一份唯一"真源"文件，其他位置偏离了它；方向确定，可一键修复' },
+  { id: 'baseline-drift', label: '基准不一致', hint: '有一份唯一"基准文件"，其他位置偏离了它。方向确定，可一键修复' },
   { id: 'consistency', label: '一致性偏差', hint: '两边对等、没有单方基准，需要人工决策以哪边为准' },
   { id: 'override-record', label: '覆盖记录', hint: 'admin 手工改过的行，覆盖权高于文件基准，只读展示' },
   { id: 'runtime-info', label: '运行时观测', hint: '运行时遥测信息，只读观察，不涉及修复' },

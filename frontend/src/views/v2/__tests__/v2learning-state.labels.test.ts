@@ -82,7 +82,7 @@ describe('V2LearningState 中文指标标签（P3-3）', () => {
     const legend = w.find('.ff-legend');
     expect(legend.text()).toContain('掌握趋势');
     expect(legend.text()).toContain('疲劳度');
-    expect(legend.text()).toContain('整体状态（掌握 − 疲劳）');
+    expect(legend.text()).toContain('整体状态');
   });
 
   it('有数据时状态图例为「状态」中文（非 form）', async () => {

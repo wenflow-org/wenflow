@@ -338,7 +338,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(pills[0]).toBe('健康') // 窗口内 100 调用 0 失败
     expect(pills[1]).toBe('教学')
     expect(pills.join('|')).toContain('gpt-5.2')
-    expect(pills.join('|')).toContain('ACTIVE v2')
+    expect(pills.join('|')).toContain('线上生效 v2')
 
     // 动作 = 真实能力（刷新 + 设计页跳转），不搬原型的假评测/发布钮
     const actions = w.findAll('.mk-hero__actions button').map((b) => b.text())

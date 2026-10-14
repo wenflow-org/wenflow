@@ -2,7 +2,7 @@
   <Transition name="offline-bar">
     <div v-if="!online" class="offline-bar" role="status">
       <WifiOff :size="14" :stroke-width="2" aria-hidden="true" />
-      <span>网络已断开，页面可能不是最新内容；恢复后可继续操作。</span>
+      <span>网络已断开，页面可能不是最新内容。恢复后可继续操作。</span>
     </div>
   </Transition>
 </template>

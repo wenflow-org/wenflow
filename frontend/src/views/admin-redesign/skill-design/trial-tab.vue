@@ -33,7 +33,7 @@
         </span>
         <span class="sdp-chip">耗时 <b class="mono">{{ trialResult.duration ?? '—' }}ms</b></span>
         <span class="sdp-chip">{{ trialResult.cached ? '缓存' : '实时' }}</span>
-        <button type="button" class="mk-link" title="保留上方输入，仅清除本次运行结果" @click="clearTrial">清除结果</button>
+        <button type="button" class="mk-link" title="保留已填输入，仅清除本次运行结果" @click="clearTrial">清除结果</button>
       </div>
       <div v-if="trialError" class="sdp-error">{{ trialError }}</div>
       <pre v-if="trialOutputText" class="sdp-output mono">{{ trialOutputText }}</pre>

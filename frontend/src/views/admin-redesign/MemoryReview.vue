@@ -24,13 +24,13 @@
         <strong class="mr-panels__title">记忆调度与治理</strong>
         <span
           class="mr-panels__meta"
-          title="该用户的记忆记录总览：到期 = 到该复习而未复习；同族重复 = 含义相同、措辞不同的记录（组 / 条）；从未提取 = 从未被安排复习过。「有强度数据」只统计带完整记忆模型参数的记录——旧记录的强度按掌握度回退估算（见「到期清单预览」卡头说明），两者来源不同。示警阈值：到期占该用户记录 ≥20% 或 ≥5 条（以内属正常积压，不警示）"
+          title="到期 = 到该复习而未复习。同族重复 = 含义相同、措辞不同的记录。从未提取 = 从未被安排复习过。有强度数据 = 带完整记忆模型参数的记录，旧记录按掌握度回退估算。到期占比 ≥20% 或 ≥5 条时标为需关注"
         >痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} · 同族重复 {{ detail.summary.duplicatedFamilies }} 组/{{ detail.summary.duplicatedTraces }} 条 · 从未提取 {{ detail.summary.neverExtracted }} · 有强度数据 {{ detail.summary.withFsrsState }}<template v-if="detail.summary.strengthFromLegacy">（另有 {{ detail.summary.strengthFromLegacy }} 条回退估算）</template></span>
         <button
           type="button"
           class="mk-btn mk-btn--sm"
           :disabled="recomputing"
-          title="对该用户手动跑一次记忆复盘，结果实时刷新；数据源为该用户全部学习路径下的记忆痕迹"
+          title="重新跑一次该用户的记忆复盘，结果实时刷新"
           @click="recompute"
         >{{ recomputing ? '观察中…' : '重新观察' }}</button>
       </div>
@@ -40,7 +40,7 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">课内温故计划</h3>
-          <span class="mk-card__meta" title="负担单位按学习者状态动态校准；排队中 = 尚未排进本节队列的到期记录">本节该接几个 · 按负担预算排队</span>
+          <span class="mk-card__meta" title="负担单位按学习者状态动态校准。排队中 = 尚未排进本节队列的到期记录">本节该接几个 · 按负担预算排队</span>
         </div>
 
         <!-- 温故计划整块按 detail.reviewPlan 有无渲染：reviewPlan=null 时原来只剩一个裸标题 -->
@@ -65,7 +65,7 @@
                     <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="item.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
                   </span>
                 </td>
-                <td :title="item.reason ? `原始标记：${item.reason}` : undefined">{{ reasonText(item.reason) }}</td>
+                <td>{{ reasonText(item.reason) }}</td>
                 <td class="mk-num">{{ item.load }}</td>
                 <td class="mr__sub">{{ item.loadFactors.join('、') || '—' }}</td>
                 <td>
@@ -76,7 +76,6 @@
                     v-if="item.originPathId && item.originPathTitle"
                     type="button"
                     class="mk-link"
-                    :title="`打开来源路径：${item.originPathTitle}`"
                     @click="openPath(item.originPathId)"
                   >{{ item.originPathTitle }}</button>
                   <template v-else>{{ item.originPathTitle || '—' }}</template>
@@ -145,8 +144,8 @@
           <h4 class="mr__h4">
             归并建议（将别名并入主概念）
             <span class="mr__sub-inline">
-              勾选后点「执行选中」批量执行；默认只勾选可自动执行的。
-              执行会改动该用户的记忆记录，但保留完整备份，可回滚。
+              默认只勾选可自动执行的。
+              执行后保留备份，可回滚。
             </span>
           </h4>
           <div v-if="detail.audit && hasSuggestions" class="mr__bulk">
@@ -202,7 +201,7 @@
                   <div>{{ proposal.rationale || '—' }}</div>
                 </td>
                 <td class="mk-num">
-                  <span class="mr-pct" :title="`把握度 ${Math.round(proposal.confidence * 100)}%`">
+                  <span class="mr-pct" :title="`置信度 ${Math.round(proposal.confidence * 100)}%`">
                     <b>{{ Math.round(proposal.confidence * 100) }}%</b>
                     <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: Math.round(proposal.confidence * 100) + '%' }"></i></span>
                   </span>
@@ -218,7 +217,6 @@
                   <span
                     class="mk-badge"
                     :class="proposal.autoApplicable ? 'mk-badge--ok' : 'mk-badge--warn'"
-                    :title="proposal.autoApplicable ? '系统有把握且名称足够相似，默认已勾选' : '名称相似度或把握度不足，勾选后需人工确认'"
                   >{{ proposal.autoApplicable ? '可自动' : '需人工确认' }}</span>
                 </td>
                 <td>
@@ -227,14 +225,14 @@
                       type="button"
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
-                      :title="proposal.autoApplicable ? '确认执行这条归并（确认弹层列明迁移表）' : '确认并强行执行这条需人工确认的归并（确认弹层列明迁移表）'"
+                      title="确认执行这条归并"
                       @click="applyOne({ canonicals: [proposal.canonical] }, `归并「${proposal.aliases.join('、')}」→「${proposal.canonical}」`, { includeNeedsReview: !proposal.autoApplicable })"
                     >确认</button>
                     <button
                       type="button"
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
-                      title="驳回这条建议：服务端留痕后不再重复给出（不改动记忆痕迹）"
+                      title="驳回后不再提示，不影响学习记录"
                       @click="rejectOne({ canonicals: [proposal.canonical] }, `归并建议「${proposal.canonical}」`)"
                     >驳回</button>
                   </div>
@@ -243,11 +241,11 @@
             </tbody>
           </table>
           </div>
-          <p v-else class="mr__sub">本次没有达到把握度阈值的归并建议。</p>
+          <p v-else class="mr__sub">本次没有达到置信度阈值的归并建议。</p>
 
           <h4 class="mr__h4">
             需人工看（不会自动执行）
-            <span class="mr__sub-inline">含义差异较大或把握度不足，需人工确认；点「确认」将候选 B 并入候选 A</span>
+            <span class="mr__sub-inline">置信度不足，需人工确认</span>
           </h4>
           <div v-if="detail.audit.ambiguous.length" class="mk-table-scroll">
           <table class="mk-table">
@@ -283,14 +281,14 @@
                       type="button"
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
-                      title="确认这确实是同一概念，按「B 并入 A」执行归并（确认弹层列明迁移表）"
+                      title="确认这确实是同一概念，执行归并"
                       @click="applyOne({ ambiguous: [{ a: item.a, b: item.b }] }, `「${item.b}」并入「${item.a}」`, { includeNeedsReview: true })"
                     >确认</button>
                     <button
                       type="button"
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
-                      title="驳回这条建议：服务端留痕后不再重复给出（不改动记忆痕迹）"
+                      title="驳回后不再提示，不影响学习记录"
                       @click="rejectOne({ ambiguous: [{ a: item.a, b: item.b }] }, `人工确认对「${item.a} ← ${item.b}」`)"
                     >驳回</button>
                   </div>
@@ -303,7 +301,7 @@
 
           <h4 class="mr__h4">
             散键清理（误提取的无用概念）
-            <span class="mr__sub-inline">判定为误提取 / 无效的散概念键。点「确认」清理该键（弹层列明迁移表），不会自动执行</span>
+            <span class="mr__sub-inline">误提取的无用概念，确认后清理</span>
           </h4>
           <!-- R7 任务书 B：dropCandidates 此前只在类型里声明计数、从不渲染（审计 CC-2）——补第三组建议列表 -->
           <div v-if="mrDropCount" class="mk-table-scroll">
@@ -314,7 +312,7 @@
               <col />
               <col style="width: 132px" />
             </colgroup>
-            <thead><tr><th class="mr__th-check">选择</th><th>散键（概念键）</th><th>证据（理由）</th><th class="mk-th--right">操作</th></tr></thead>
+            <thead><tr><th class="mr__th-check">选择</th><th>散键（概念标识）</th><th>证据（理由）</th><th class="mk-th--right">操作</th></tr></thead>
             <tbody>
               <tr v-for="(drop, index) in detail.audit.dropCandidates" :key="`${drop.conceptKey}-${index}`">
                 <td>
@@ -334,14 +332,14 @@
                       type="button"
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
-                      title="确认清理该散键（确认弹层列明迁移表）"
+                      title="确认清理该散键"
                       @click="applyOne({ drops: [drop.conceptKey] }, `清理散键「${drop.conceptKey}」`)"
                     >确认</button>
                     <button
                       type="button"
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
-                      title="驳回这条建议：服务端留痕后不再重复给出（不改动记忆痕迹）"
+                      title="驳回后不再提示，不影响学习记录"
                       @click="rejectOne({ drops: [drop.conceptKey] }, `散键清理「${drop.conceptKey}」`)"
                     >驳回</button>
                   </div>
@@ -423,11 +421,11 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">到期清单预览</h3>
-          <span class="mk-card__meta" :title="`按记忆强度从低到高：越靠前越该先复习，最多显示前 20 条；旧记录的强度按掌握度回退估算${duePreviewLegacyCount ? `（本页 ${duePreviewLegacyCount} 条为回退估算）` : ''}`">前 20 · 记忆强度升序<template v-if="duePreviewLegacyCount"> · 含 {{ duePreviewLegacyCount }} 条回退估算</template></span>
+          <span class="mk-card__meta" :title="`按记忆强度从低到高：越靠前越该先复习，最多显示前 20 条。旧记录的强度按掌握度回退估算${duePreviewLegacyCount ? `（本页 ${duePreviewLegacyCount} 条为回退估算）` : ''}`">前 20 · 记忆强度升序<template v-if="duePreviewLegacyCount"> · 含 {{ duePreviewLegacyCount }} 条回退估算</template></span>
         </div>
         <div v-if="detail.duePreview.length" class="mk-table-scroll">
           <table class="mk-table">
-          <thead><tr><th>概念</th><th class="mk-num" title="由记忆模型计算的记住概率；旧记录按掌握度回退估算（悬停可见来源）">记忆强度</th><th class="mk-num">掌握</th><th class="mk-num">提取次数</th><th>来源</th><th title="相对表达：已逾期 N 天 / 今天 / 明天 / N 天后；绝对到期时刻进悬停">到期</th></tr></thead>
+          <thead><tr><th>概念</th><th class="mk-num" title="由记忆模型计算的记住概率，旧记录按掌握度回退估算">记忆强度</th><th class="mk-num">掌握</th><th class="mk-num">提取次数</th><th>来源</th><th title="相对表达：已逾期 N 天 / 今天 / 明天 / N 天后">到期</th></tr></thead>
           <tbody>
             <tr v-for="trace in detail.duePreview" :key="trace.conceptKey">
               <!-- 原型记忆明细表首列 = 知识点 strong；同族重复/归并建议首列是裸 key（无人类可读
@@ -446,7 +444,7 @@
                 </span>
               </td>
               <td class="mk-num">{{ trace.extractionCount }}</td>
-              <td class="mr__sub" :title="trace.source ? `原始标记：${trace.source}` : undefined">{{ sourceText(trace.source) }}</td>
+              <td class="mr__sub">{{ sourceText(trace.source) }}</td>
               <!-- 到期列（P1#13）：裸绝对时刻读不出「急不急」，改相对表达（已逾期 N 天 / N 天后）
                    并给逾期着色；绝对时刻进 title（P2 到期带判例同源） -->
               <td>
@@ -468,7 +466,7 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">同族重复</h3>
-          <span class="mk-card__meta" title="措辞不同但含义相同的记录，可用下方归并收拢">措辞不同、含义相同的记录</span>
+          <span class="mk-card__meta" title="措辞不同但含义相同的记录">措辞不同、含义相同的记录</span>
         </div>
         <p v-if="!detail.duplicatedFamilies.length" class="mr__sub">没有同族重复。</p>
         <div v-else class="mk-table-scroll">
@@ -798,10 +796,10 @@ function openPath(pathId: string) {
  *  服务端以其实际合并语义为准，这里列进确认弹层——任务书 D：批量 apply 是破坏性操作，
  *  二次确认弹层必须列明将迁移哪些表）。 */
 const MERGE_MIGRATED_TABLES = [
-  'memory_traces（记忆痕迹行）',
-  'learner_evidence（学习证据）',
-  'learner_projections（概念台账投影）',
-  'misconception_ledger（误解台账）'
+  '记忆记录',
+  '学习证据',
+  '概念掌握情况',
+  '误解记录'
 ].join('\n')
 
 /** 批量执行选中项（三组建议同一入口）：确认弹层列明迁移表 → apply（确认列表 = 勾选的规范键 + 对 + 散键） */
@@ -819,7 +817,7 @@ async function applySelected() {
   ].filter(Boolean).join(' · ')
   const ok = await askConfirm({
     title: '执行概念归并',
-    message: `将执行 ${total} 项（${parts}）${needsReview > 0 ? `，其中 ${needsReview} 项属于「需人工确认」` : ''}。\n将迁移以下按「用户 × 概念键」键控的表：\n${MERGE_MIGRATED_TABLES}\n执行后可回滚（留整行前后快照），但请先确认这些确实是同一个概念。`,
+    message: `将执行 ${total} 项（${parts}）${needsReview > 0 ? `，其中 ${needsReview} 项属于「需人工确认」` : ''}。\n会同时整理该用户的：\n${MERGE_MIGRATED_TABLES}\n执行后可回滚，但请先确认这些确实是同一个概念。`,
     confirmText: '执行归并',
     danger: true,
   })
@@ -852,7 +850,7 @@ async function applyOne(
 ) {
   const ok = await askConfirm({
     title: '执行概念归并',
-    message: `将执行：${summary}。\n将迁移以下按「用户 × 概念键」键控的表：\n${MERGE_MIGRATED_TABLES}\n执行后可回滚（留整行前后快照）。`,
+    message: `将执行：${summary}。\n会同时整理该用户的：\n${MERGE_MIGRATED_TABLES}\n执行后可回滚。`,
     confirmText: '执行归并',
     danger: true,
   })
@@ -906,7 +904,7 @@ async function rejectOne(
 async function rollbackOne(canonical: string) {
   const ok = await askConfirm({
     title: '回滚归并',
-    message: `将「${canonical}」还原成合并前状态：胜出者恢复原字段，被删除的重复痕迹按快照重建。`,
+    message: `将「${canonical}」恢复合并前的记录状态。`,
     confirmText: '回滚',
     danger: true,
   })

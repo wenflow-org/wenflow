@@ -40,23 +40,23 @@
             />
             <button v-if="query" type="button" class="dfg-search__clear" title="清除" @click="clearQuery">✕</button>
           </div>
-          <label class="dfg-switch" title="显示管线中的隐藏字段（render=hidden，含内部信令与累积字段）">
+          <label class="dfg-switch" title="显示管线中的隐藏字段（对外不可见，含内部字段与累积字段）">
             <input type="checkbox" v-model="showHidden" />
             <span>隐藏字段</span>
           </label>
-          <label class="dfg-switch" title="默认淡化连线，仅悬停/聚焦时点亮；关闭则不显示步间连线">
+          <label class="dfg-switch" title="显示步间连线（默认淡显，聚焦时点亮）">
             <input type="checkbox" v-model="edgeFaded" />
             <span>连线</span>
           </label>
           <!-- 缩放读数（2026-10-13）：滚轮在画布上直接连续缩放（指针为锚点），拖动可平移；
                这里只显示当前比例，点它回 100% -->
-          <button type="button" class="mk-btn mk-btn--sm dfg-zoom__val" title="当前缩放比例 · 点击回到 100%（滚轮可直接缩放，拖动可平移）" @click="dfgZoom = 1">{{ Math.round(dfgZoom * 100) }}%</button>
+          <button type="button" class="mk-btn mk-btn--sm dfg-zoom__val" title="当前缩放比例" @click="dfgZoom = 1">{{ Math.round(dfgZoom * 100) }}%</button>
         </div>
       </div>
 
       <!-- 图性质说明：本图是字段数据旅程（逻辑图·字段血缘），非拓扑图 -->
       <p class="dfg-caption">
-        <strong>字段数据旅程（逻辑图 · 字段血缘）</strong>
+        <strong>字段路由与流转</strong>
       </p>
 
 
@@ -117,13 +117,13 @@
               <button
                 type="button"
                 class="dfg-gate__src"
-                :title="`切到 ${flow.entryFrom?.stageName}（${flow.entryFrom?.stageId}-agent）：看这些字段在那边是怎么产出的`"
+                :title="`前往 ${flow.entryFrom?.stageName}（${flow.entryFrom?.stageId}-agent），看这些字段在那边是怎么产出的`"
                 @click="switchStage(flow.entryFrom!.stageId)"
               >入口 · 来自 {{ flow.entryFrom?.stageName }}<span class="dfg-gate__jump">↗</span></button>
               <span class="dfg-gate__sub">{{ entryVisible.length }} 个字段经 {{ flow.entryFrom?.stageId }}-agent 移交进入本阶段</span>
             </div>
             <span class="dfg-gate__count">{{ entryVisible.length }} 字段</span>
-            <span v-for="p in farPorts['__entry__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)" :title="`长程字段流入 ${p.peerLabel}（点击定位）`">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
+            <span v-for="p in farPorts['__entry__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
           </header>
           <div class="dfg-chips">
             <button
@@ -165,7 +165,7 @@
               <span class="dfg-step__agent mono">{{ step.agentId }}</span>
               <span class="dfg-step__spacer"></span>
               <span class="dfg-step__count">{{ step.outputChips.length }} 字段</span>
-              <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)" :title="`长程字段${p.dir === 'out' ? '流向' : '来自'} ${p.peerLabel}（点击定位）`">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
+              <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
             </header>
             <div class="dfg-step__body">
               <p class="dfg-step__note">上游字段在此重命名后分发给内部 Skill</p>
@@ -186,7 +186,7 @@
                 >
                   <i class="dfg-chip__dot" :style="{ background: c.hue }"></i>
                   <span class="dfg-chip__name mono">{{ c.short }}</span>
-                  <span v-if="c.internal" class="dfg-chip__flag" title="内部信令">内</span>
+                  <span v-if="c.internal" class="dfg-chip__flag" title="内部字段">内</span>
                   <span v-if="c.handoffTargets.length" class="dfg-chip__to mono">{{ c.toTags.length ? c.toTags[0].label : c.handoffTargets[0] }}<template v-if="c.handoffTargets.length > 1"> +{{ c.handoffTargets.length - 1 }}</template></span>
                 </button>
                 <button v-if="stepOverflow(step, 'out')" type="button" class="dfg-chip dfg-chip--more" @click="toggleStep(step)">
@@ -215,9 +215,9 @@
               </template>
               <span class="dfg-step__spacer"></span>
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
-              <span v-if="step.loopOver" class="dfg-step__cond" :title="`循环 ${step.loopOver}`">循环：{{ step.loopOver }}</span>
+              <span v-if="step.loopOver" class="dfg-step__cond">循环：{{ step.loopOver }}</span>
               <span v-if="step.kind === 'orphan'" class="dfg-step__count" title="该 Skill 无字段路由行，不参与阶段内数据流转">无字段流转</span>
-              <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)" :title="`长程字段${p.dir === 'out' ? '流向' : '来自'} ${p.peerLabel}（点击定位）`">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
+              <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
             </header>
           </section>
 
@@ -231,9 +231,9 @@
               <span class="dfg-step__agent mono">{{ step.agentId }}</span>
               <span class="dfg-step__spacer"></span>
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
-              <span v-if="step.loopOver" class="dfg-step__cond" :title="`循环 ${step.loopOver}`">循环：{{ step.loopOver }}</span>
+              <span v-if="step.loopOver" class="dfg-step__cond">循环：{{ step.loopOver }}</span>
               <span class="dfg-step__count">{{ step.outputChips.length }} 产出</span>
-              <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)" :title="`长程字段${p.dir === 'out' ? '流向' : '来自'} ${p.peerLabel}（点击定位）`">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
+              <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
             </header>
             <div class="dfg-step__body">
               <!-- 流入 -->
@@ -257,7 +257,7 @@
                     >
                       <i class="dfg-chip__dot" :style="{ background: c.hue }"></i>
                       <span class="dfg-chip__name mono">{{ c.short }}</span>
-                      <span v-if="c.internal" class="dfg-chip__flag" title="内部信令">内</span>
+                      <span v-if="c.internal" class="dfg-chip__flag" title="内部字段">内</span>
                       <span v-if="c.accumulate" class="dfg-chip__flag dfg-chip__flag--accum" title="累积进学习者状态">累</span>
                     </button>
                     <button v-if="stepOverflow(step, 'in')" type="button" class="dfg-chip dfg-chip--more" @click="toggleStep(step)">
@@ -287,7 +287,7 @@
                     >
                       <i class="dfg-chip__dot" :style="{ background: c.hue }"></i>
                       <span class="dfg-chip__name mono">{{ c.short }}</span>
-                      <span v-if="c.internal" class="dfg-chip__flag" title="内部信令">内</span>
+                      <span v-if="c.internal" class="dfg-chip__flag" title="内部字段">内</span>
                       <span v-if="c.accumulate" class="dfg-chip__flag dfg-chip__flag--accum" title="累积进学习者状态">累</span>
                       <template v-if="c.toTags.length">
                         <span
@@ -318,13 +318,13 @@
               <button
                 type="button"
                 class="dfg-gate__src"
-                :title="`切到 ${flow.exitTo?.stageName}（${flow.exitTo?.stageId}-agent）：看这些字段在那边是怎么被消费的`"
+                :title="`前往 ${flow.exitTo?.stageName}（${flow.exitTo?.stageId}-agent），看这些字段在那边是怎么被消费的`"
                 @click="switchStage(flow.exitTo!.stageId)"
               >出口 · 交给 {{ flow.exitTo?.stageName }}<span class="dfg-gate__jump">↗</span></button>
               <span class="dfg-gate__sub">{{ flow.agentId }} 汇总 {{ flow.exit.length }} 个字段，整体移交下一阶段</span>
             </div>
             <span class="dfg-gate__count">{{ flow.exit.length }} 字段</span>
-            <span v-for="p in farPorts['__exit__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)" :title="`长程字段来自 ${p.peerLabel}（点击定位）`">来自 {{ p.peerLabel }}<b>{{ p.count }}</b></span>
+            <span v-for="p in farPorts['__exit__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">来自 {{ p.peerLabel }}<b>{{ p.count }}</b></span>
           </header>
           <div class="dfg-chips">
             <button
@@ -344,7 +344,7 @@
               <i class="dfg-chip__dot" :style="{ background: c.hue }"></i>
               <span class="dfg-chip__name mono">{{ c.short }}</span>
               <span v-if="c.valueType" class="dfg-chip__type">{{ c.valueType }}</span>
-              <span v-if="c.internal" class="dfg-chip__flag" title="内部信令">内</span>
+              <span v-if="c.internal" class="dfg-chip__flag" title="内部字段">内</span>
               <span v-if="c.accumulate" class="dfg-chip__flag dfg-chip__flag--accum" title="累积进学习者状态">累</span>
             </button>
             <!-- 折叠开关常显（审核 #99）：此前 v-if 只在折叠中渲染，展开后按钮消失 → 无法收起 -->
@@ -378,14 +378,12 @@
         type="button"
         class="dfg-legend__item"
         :class="{ 'is-on': familyFocus === f.name }"
-        :title="`高亮数据族 ${f.name}（${f.count} 个字段）`"
         @click="toggleFamily(f.name)"
         @mouseenter="hoverFamily = f.name"
         @mouseleave="hoverFamily = ''"
       >
         <i :style="{ background: f.hue }"></i>{{ f.name }}<b>{{ f.count }}</b>
       </button>
-      <span class="dfg-legend__hint">点色块字段 / 族名可高亮「同一条数据的旅程」</span>
     </div>
 
     <!-- 字段详情抽屉（含行级编辑，同步回写编排文件） -->
@@ -410,7 +408,7 @@
               <span class="mk-badge" :class="`mk-badge--role-${selected.role}`">{{ roleLabel(selected.role) }}（{{ selected.role }}）</span>
               <span class="mk-badge" :class="`mk-badge--render-${selected.render}`">{{ selected.render }}</span>
               <span class="mk-badge" :class="`mk-badge--lock-${selected.lockLevel}`">{{ lockLabel(selected.lockLevel) }}</span>
-              <span v-if="selected.internal" class="mk-badge dfg-badge--internal">内部信令</span>
+              <span v-if="selected.internal" class="mk-badge dfg-badge--internal">内部字段</span>
               <span v-if="selected.accumulate" class="mk-badge dfg-badge--accum">累积进学习者状态</span>
             </div>
 
@@ -431,7 +429,7 @@
                 <dd class="mono">{{ selected.valueType || '—' }}</dd>
               </div>
               <div>
-                <span>落库键</span>
+                <span>存储字段名</span>
                 <strong class="mono">{{ selected.persistKey || selected.fieldId }}</strong>
               </div>
               <div v-if="selected.pathInRawOutput">
@@ -475,16 +473,16 @@
                   </span>
                 </div>
                 <div class="dfg-field">
-                  <label class="dfg-field__label" for="dfg-handoff">移交（handoff）</label>
+                  <label class="dfg-field__label" for="dfg-handoff">移交</label>
                   <input id="dfg-handoff" v-model="editDraft.handoffText" class="dfg-edit__input mono" placeholder="阶段名 / skill:id / agent，逗号分隔，留空则不转交" spellcheck="false" />
                 </div>
                 <div class="dfg-field">
                   <span class="dfg-field__label">累积</span>
-                  <label class="dfg-check"><input type="checkbox" v-model="editDraft.accumulate" /><span>accumulate（累积进学习者状态）</span></label>
+                  <label class="dfg-check"><input type="checkbox" v-model="editDraft.accumulate" /><span>累积进学习者状态</span></label>
                 </div>
                 <div class="dfg-field">
                   <span class="dfg-field__label">内部</span>
-                  <label class="dfg-check"><input type="checkbox" v-model="editDraft.internal" /><span>internal（仅供 UI / 平台内部消费）</span></label>
+                  <label class="dfg-check"><input type="checkbox" v-model="editDraft.internal" /><span>仅供平台内部消费</span></label>
                 </div>
                 <div class="dfg-field">
                   <label class="dfg-field__label" for="dfg-edit-notes">备注</label>
@@ -494,7 +492,7 @@
               </div>
             </section>
             <!-- 锁定字段：原型 .note 语气（只读说明，不给编辑表单） -->
-            <p v-else class="dfg-note">该字段为系统锁/结构锁：属性由编排文件或代码派生，请使用「编排文件」入口修改。</p>
+            <p v-else class="dfg-note">该字段为平台锁定：属性由编排文件或平台自动生成，请使用「编排文件」入口修改。</p>
           </div>
 
           <!-- 底部动作（原型 .ovl__foot：取消在左、主钮右、常驻滚动区外）：编辑动作自表单尾部上提，
@@ -667,8 +665,8 @@ function roleLabel(role: string) {
   return m?.label || role
 }
 function lockLabel(level?: string) {
-  if (level === 'system-locked') return '系统锁'
-  if (level === 'structure-locked') return '结构锁'
+  if (level === 'system-locked') return '平台锁定'
+  if (level === 'structure-locked') return '平台锁定'
   return '可编辑'
 }
 function stageNameOf(id: string) {
@@ -1218,13 +1216,13 @@ function chipTitle(c: FlowChip) {
   if (c.description && c.description !== c.fieldId) lines.push(c.description)
   lines.push(`字段: ${c.fieldId}`)
   const typeBits = [c.valueType, roleLabel(c.role)].filter(Boolean)
-  if (c.internal) typeBits.push('内部信令')
+  if (c.internal) typeBits.push('内部字段')
   if (c.accumulate) typeBits.push('累积')
   if (typeBits.length) lines.push(`类型: ${typeBits.join(' · ')}`)
   if (c.notes) lines.push(`说明: ${c.notes}`)
   if (c.handoffTargets.length) lines.push(`移交: ${c.handoffTargets.join(', ')}`)
   if (c.pathInRawOutput) lines.push(`抽取路径: ${c.pathInRawOutput}`)
-  if (c.persistKey && c.persistKey !== c.fieldId) lines.push(`落库键: ${c.persistKey}`)
+  if (c.persistKey && c.persistKey !== c.fieldId) lines.push(`存储字段名: ${c.persistKey}`)
   return lines.join('\n')
 }
 
@@ -1280,7 +1278,7 @@ function journeyHint() {
   if (!c) return ''
   const consumers = (journeyOf('consumers') as string[]).filter(Boolean)
   if (consumers.length) return `同名字段在管线中以轨道线相连：由上方步骤产出后，流转到 ${consumers.join('、')} 继续消费。`
-  if (flow.value?.exit.some((x) => x.fieldId === c.fieldId)) return `该字段已汇总到出口闸口，整体移交下一阶段。`
+  if (flow.value?.exit.some((x) => x.fieldId === c.fieldId)) return `该字段已汇总到汇入出口，整体移交下一阶段。`
   if (c.accumulate) return '该字段不向下游移交，累积进学习者状态（画像/上下文）。'
   return '该字段为阶段内信息，不参与跨阶段流转。'
 }
@@ -1688,7 +1686,6 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-legend__item b { font-weight: 800; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 .dfg-legend__item:hover { background: var(--mk-blue-bg); }
 .dfg-legend__item.is-on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }
-.dfg-legend__hint { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 空态走 MkEmptyState（原型 .empty 词表），此处无本地样式 */
 

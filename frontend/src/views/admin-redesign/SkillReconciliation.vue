@@ -4,12 +4,12 @@
   <section ref="recPanelRef" class="mk-card sk-rec">
     <div class="mk-card__head">
       <div class="sk-rec__title">
-        <h3 class="mk-card__title">技能对账</h3>
-        <span class="mk-card__meta" title="核对四个来源的登记是否一致：配置文件清单（manifest）、系统运行注册（gateway）、生效版本（ACTIVE prompt）、技能登记册">配置文件 × 运行注册 × 生效版本 × 登记册</span>
+        <h3 class="mk-card__title">技能一致性核查</h3>
+        <span class="mk-card__meta" title="核对四个来源的登记是否一致：配置文件清单、系统运行注册、线上生效 Prompt、技能登记册">配置文件 × 运行注册 × 生效版本 × 登记册</span>
         <!-- 口径说明（审核 #83）：对账数据不在页面 60s 轮询内，进入本页签时拉取一次；
              手刷钮仅在自取模式出现（宿主下发报告时数据归宿主，刷新由宿主承担） -->
-        <span class="mk-card__meta" title="对账报告不随健康中心 60s 轮询，切换进入本页签时拉取一次，失败可重试">进入时自动刷新</span>
-        <button v-if="recDiff" type="button" class="mk-link sk-rec__clear" @click="clearRecDiff">✕ 清除差集定位</button>
+        <span class="mk-card__meta" title="一致性核查报告不随健康中心 60s 轮询，切换进入本页签时拉取一次，失败可重试">进入时自动刷新</span>
+        <button v-if="recDiff" type="button" class="mk-link sk-rec__clear" @click="clearRecDiff">清除差集定位</button>
       </div>
       <MkLoading v-if="recLoading" inline />
       <template v-else-if="recReport">
@@ -17,9 +17,9 @@
         <div class="sk-rec__pills">
           <span class="mk-pill" :title="`技能登记册全量（含外挂能力）vs 目录`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
           <span v-if="recReport.summary.unregistered" class="mk-badge mk-badge--bad">未注册 {{ recReport.summary.unregistered }}</span>
-          <span v-if="recReport.summary.activeMissing" class="mk-badge mk-badge--warn" title="缺 ACTIVE：无生效版本">无生效版本 {{ recReport.summary.activeMissing }}</span>
+          <span v-if="recReport.summary.activeMissing" class="mk-badge mk-badge--warn" title="缺少线上生效 Prompt">无生效版本 {{ recReport.summary.activeMissing }}</span>
           <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="登记册已删除/不存在，但注册记录仍残留（幽灵注册）">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
-          <span v-else class="mk-pill" :title="recReport.summary.orphanRetiredExempt ? `退役技能 ${recReport.summary.orphanRetiredExempt} 项注册行按「不动历史数据」保留、不计异常（与页头 KPI 同口径）` : '无失效注册'">
+          <span v-else class="mk-pill" :title="recReport.summary.orphanRetiredExempt ? `退役技能 ${recReport.summary.orphanRetiredExempt} 项注册行按「不动历史数据」保留、不计异常` : '无失效注册'">
             失效注册 0<span v-if="recReport.summary.orphanRetiredExempt">（退役豁免 {{ recReport.summary.orphanRetiredExempt }}）</span>
           </span>
         </div>
@@ -30,7 +30,7 @@
 
     <MkEmptyState
       v-if="recError"
-      title="对账数据加载失败"
+      title="一致性核查数据加载失败"
       :description="recError"
       action-text="重试"
       @action="refresh"
@@ -52,7 +52,7 @@
         <!-- 2026-10-07 F6-3：异常口径与卡头 pill / 概要「对账异常」KPI 统一为「未注册 / 无生效版本 / 失效注册残留」
              三项（完成度非 live 属「完成度」页签与第 4 张 KPI 的域，不再并进对账异常——原口径把两域混算，
              造成 KPI 与筛选行集互斥） -->
-        <span class="mk-card__meta" title="异常三类：未注册（配置声明缺失）· 无生效版本（缺 ACTIVE）· 失效注册残留（登记册已删但注册仍残留）">对账异常：未注册 · 无生效版本 · 失效注册残留</span>
+        <span class="mk-card__meta" title="异常三类：未注册（配置声明缺失）· 无生效版本（缺少线上生效 Prompt）· 失效注册残留（登记册已删但注册仍残留）">核查异常：未注册 · 无生效版本 · 失效注册残留</span>
       </div>
       <div class="mk-table-scroll">
         <table v-if="recReport.items.length && recPageRows.length" class="mk-table sk-table sk-rec-table mk-table--fixed">
@@ -73,11 +73,11 @@
           <thead>
             <tr>
               <th>Skill</th>
-              <th title="manifest：是否在配置文件中声明">配置声明</th>
-              <th title="gateway 注册：是否已在系统运行中注册">运行注册</th>
-              <th title="ACTIVE prompt：是否有生效版本">生效版本</th>
+              <th title="是否在配置文件中声明">配置声明</th>
+              <th title="是否已在系统运行中注册">运行注册</th>
+              <th title="线上生效 Prompt：是否有生效版本">生效版本</th>
               <th>完成度</th>
-              <th title="只列未注册 / 无生效版本两类异常，失效注册残留见下方「失效注册残留」块">差集</th>
+              <th title="只列未注册 / 无生效版本两类异常，失效注册残留在表末单独列出">差集</th>
             </tr>
           </thead>
           <tbody>
@@ -128,7 +128,7 @@
                 </td>
                 <td>
                   <span v-if="e.row.diff === 'unregistered'" class="mk-badge mk-badge--bad">未注册</span>
-                  <span v-else-if="e.row.diff === 'active-missing'" class="mk-badge mk-badge--warn" title="缺 ACTIVE：无生效版本">无生效版本</span>
+                  <span v-else-if="e.row.diff === 'active-missing'" class="mk-badge mk-badge--warn" title="缺少线上生效 Prompt">无生效版本</span>
                   <span v-else class="mk-na">—</span>
                 </td>
               </tr>
@@ -158,13 +158,13 @@
         <span v-for="s in recStatusOrder" :key="s" class="sk-rec-legend__item">
           <i class="mk-badge" :class="`mk-badge--rec-${s}`"></i>{{ recStatusText(s) }}
         </span>
-        <span class="mk-card__meta">技能登记册口径 {{ recReport.summary.total }} 条 · {{ recReport.generatedAt ? '对账于 ' + new Date(recReport.generatedAt).toLocaleString() : '' }}</span>
+        <span class="mk-card__meta">技能登记册口径 {{ recReport.summary.total }} 条 · {{ recReport.generatedAt ? '核查于 ' + new Date(recReport.generatedAt).toLocaleString() : '' }}</span>
       </div>
     </template>
     <MkEmptyState
       v-else
-      title="暂无对账数据"
-      description="技能尚未登记，或对账报告暂不可用。可点击「刷新」重试。"
+      title="暂无一致性核查数据"
+      description="技能尚未登记，或一致性核查报告暂不可用。可点击「刷新」重试。"
       action-text="刷新"
       :action-busy="recLoading"
       action-busy-text="刷新中…"
@@ -326,10 +326,10 @@ const recEmptyText = computed<string>(() => {
   const total = recReport.value?.summary.total ?? 0;
   if (recDiff.value === "unregistered") return "无未注册 Skill：全部已声明";
   if (recDiff.value === "active-missing") return "无缺生效版本的 Skill：全部已生效";
-  if (recDiff.value === "live") return "无完成度 live 的 Skill";
+  if (recDiff.value === "live") return "无完成度已上线的 Skill";
   const orphans = recReport.value?.orphanRegistrations.length ?? 0;
-  if (orphans > 0) return `无异常技能：${total} 项全部对账一致，另有 ${orphans} 条失效注册残留（见下方）`;
-  return `无异常技能：${total} 项全部对账一致`;
+  if (orphans > 0) return `无异常技能：${total} 项全部核查一致，另有 ${orphans} 条失效注册残留`;
+  return `无异常技能：${total} 项全部核查一致`;
 });
 
 const recKindText = (kind: string) => ({ mainline: "主线", aux: "辅助", "handler-only": "纯函数" })[kind] || kind;

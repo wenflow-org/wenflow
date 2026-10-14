@@ -18,7 +18,7 @@
     <div class="tabs" role="tablist" aria-label="运营中心视图切换" @keydown="onTabKeydown">
       <button type="button" class="tab" role="tab" id="oh-tab-todo" :ref="(el) => setTabRef(el, 0)" :tabindex="tab === 'todo' ? 0 : -1" aria-controls="oh-panel-todo" :aria-selected="tab === 'todo'" @click="switchTab('todo')">运营待办</button>
       <button type="button" class="tab" role="tab" id="oh-tab-feedback" :ref="(el) => setTabRef(el, 1)" :tabindex="tab === 'feedback' ? 0 : -1" aria-controls="oh-panel-feedback" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span class="tab__count" :title="domainCount.feedback === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.feedback === null ? '未加载' : domainCount.feedback }}</span></button>
-      <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span class="tab__count" :title="domainCount.achievements === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : '成就解锁人次（含虚拟学习者）；解锁记录列表默认仅统计真实用户，可在页签内用「数据范围」切换对齐'">{{ domainCount.achievements === null ? '未加载' : domainCount.achievements }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span class="tab__count" :title="domainCount.achievements === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : '含虚拟学习者'">{{ domainCount.achievements === null ? '未加载' : domainCount.achievements }}</span></button>
       <button type="button" class="tab" role="tab" id="oh-tab-announce" :ref="(el) => setTabRef(el, 3)" :tabindex="tab === 'announce' ? 0 : -1" aria-controls="oh-panel-announce" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告<span class="tab__count" :title="announcePillTitle">{{ announcePillCount }}</span></button>
       <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span class="tab__count" :title="domainCount.inapp === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.inapp === null ? '未加载' : domainCount.inapp }}</span></button>
     </div>
@@ -39,7 +39,7 @@
         <h4 class="mk-card__title">运营待办</h4>
         <!-- 2026-10-04 状态条退役：结论句（原页头状态条 strong）并入卡头 meta，不另占一条。
              三态纪律：首屏三请求未回来前不得渲染「全部已清零」（取不到 ≠ 没事） -->
-        <span class="mk-card__meta">{{ wbLoading && !stats ? '正在拉取待办…' : `${todoConclusion} · 按优先级排序 · 点击直达` }}</span>
+        <span class="mk-card__meta">{{ wbLoading && !stats ? '正在拉取待办…' : `${todoConclusion}` }}</span>
       </div>
       <!-- 首屏加载态：三个待办请求在途且尚无 stats 时渲染骨架，不落定 0 值指标卡 -->
       <MockSkeletonTable v-if="wbLoading && !stats" :cols="4" :rows="1" />

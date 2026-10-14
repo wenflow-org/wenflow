@@ -28,8 +28,8 @@
          且它的 hint 又把「预置 / 自建」两个数说了一遍（就是右边这两张卡）。按计数单源家法，
          列表长度交给列表卡头自报，KPI 只说列表说不出的构成拆分。 -->
     <section class="mk-kpi-grid" aria-label="卡库构成">
-      <MkKpi label="预置卡" :value="summary?.builtin ?? '—'" hint="仓库预置随部署同步" title="平台预置角色，随版本更新自动同步；不包含在「导出卡库」内" />
-      <MkKpi label="自建卡" :value="summary?.custom ?? '—'" hint="导入与 AI 创建" title="卡文档导入与后台/AI 创建的卡；「导出卡库」仅导出这部分" />
+      <MkKpi label="预置卡" :value="summary?.builtin ?? '—'" hint="仓库预置随部署同步" title="平台预置角色，随版本更新自动同步。不包含在「导出卡库」内" />
+      <MkKpi label="自建卡" :value="summary?.custom ?? '—'" hint="导入与 AI 创建" title="卡文档导入与后台/AI 创建的卡。「导出卡库」仅导出这部分" />
     </section>
 
     <!-- 卡墙：全部卡的可视清单（搜名称/Key/目标/标签/邮箱）；点卡 = 卡详情二级页 -->
@@ -89,7 +89,7 @@
           class="vlc-card"
           role="button"
           tabindex="0"
-          :title="`${cardName(c)}（${c.cardKey || '无 Key'}）`"
+          :title="`${cardName(c)}（${c.cardKey || '无卡号'}）`"
           @click="openCard(c)"
           @keydown.enter.prevent="openCard(c)"
           @keydown.space.prevent="openCard(c)"
@@ -99,7 +99,7 @@
             <strong class="vlc-card__name" :title="cardName(c)">{{ cardName(c) }}</strong>
             <span class="mk-badge" :class="sourceBadge(c)" :title="sourceTitle(c)">{{ sourceText(c) }}</span>
           </header>
-          <div class="vlc-card__key">{{ c.cardKey || '（无 cardKey）' }}</div>
+          <div class="vlc-card__key">{{ c.cardKey || '（无卡号）' }}</div>
           <p class="vlc-card__goal" :title="c.goal">{{ c.goal }}</p>
           <p v-if="c.opening" class="vlc-card__opening" :title="c.opening">{{ c.opening }}</p>
           <div v-if="c.tags.length" class="vlc-card__tags">

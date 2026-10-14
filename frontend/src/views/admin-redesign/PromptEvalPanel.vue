@@ -244,7 +244,7 @@
             <!-- 一行引导 -->
             <div class="pe-guide">
               <span class="pe-guide__title">评估用例 = 学生说的话 + 期望助手怎么回</span>
-              <span class="pe-guide__steps">改 prompt 后一键重跑防退化；期望可不填，填好直接「保存并立即试跑」。</span>
+              <span class="pe-guide__steps">改 prompt 后一键重跑防退化。期望可不填，填好直接「保存并立即试跑」。</span>
             </div>
 
             <!-- 能力 + 名称 -->

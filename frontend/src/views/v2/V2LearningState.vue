@@ -34,7 +34,7 @@
           <section class="card band">
             <div class="band__head">
               <div class="band__title">
-                <strong>健康度 · 疲劳 · 状态</strong>
+                <strong>掌握趋势 · 疲劳度 · 整体状态</strong>
                 <span class="band__meta">{{ drawnSpanLabel }}</span>
               </div>
               <!-- 窗口选择器只在真的有更长历史可看时出现（数据不足 42 天时两档是同一条图，
@@ -76,7 +76,7 @@
             <div class="ff-legend">
               <span><i class="ff-dot ff-dot--fitness"></i>掌握趋势</span>
               <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度</span>
-              <span><i class="ff-dot ff-dot--lsb"></i>整体状态（掌握 − 疲劳）</span>
+              <span><i class="ff-dot ff-dot--lsb"></i>整体状态</span>
               <span v-if="zoneLines.length" class="ff-legend__zone">
                 <i class="ff-dash"></i>虚线阈值
                 <!-- 分隔符写成真实文本而不是 ::before（2026-10-08）：CSS 生成内容不进 DOM，
@@ -215,7 +215,7 @@
                 <template v-if="skillCopy.nextStep && skillCopy.paceHint"> · </template>
                 <template v-if="skillCopy.paceHint">节奏：{{ skillCopy.paceHint }}</template>
               </p>
-              <p v-if="evidenceHint" class="guide__evidence">依据：{{ evidenceHint }}（详见下方「学习调控」）</p>
+              <p v-if="evidenceHint" class="guide__evidence">依据：{{ evidenceHint }}</p>
             </template>
 
             <!-- 状态评审（AI 诊断书）已移至「学习调控」区第三层「诊断依据」（2026-09-27）：
@@ -432,8 +432,8 @@
         <aside class="side">
           <!-- P1 修复：learnerCenter 失败提示 -->
           <section v-if="learnerCenterLoadFailed" class="card sidecard" role="alert">
-            <span class="kicker">学习画像</span>
-            <p class="chart__empty">画像数据加载失败，请刷新页面重试。</p>
+            <span class="kicker">学习记录</span>
+            <p class="chart__empty">学习记录加载失败，请刷新页面重试。</p>
           </section>
           <section v-if="preferenceItems.length && hasAnyLoad" class="card band sidecard">
             <div class="band__head">
@@ -457,10 +457,10 @@
             </div>
             <div class="band__body">
             <ul class="legend">
-              <li><b class="dot dot--blue"></b>掌握趋势：长期学习积累的掌握水平，变化平缓（曲线里的 KTL）</li>
-              <li><b class="dot dot--purple"></b>疲劳度：近期学习压力的累积，变化较快（曲线里的 LF）</li>
-              <li><b class="dot dot--green"></b>整体状态＝掌握 − 疲劳（曲线里的 LSB）：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
-              <li><b class="dot dot--amber"></b>保持规律学习让掌握趋势稳步上升；疲劳偏高时安排休息，避免长期处于低状态区</li>
+              <li><b class="dot dot--blue"></b>掌握趋势：长期学习积累的掌握水平，变化平缓</li>
+              <li><b class="dot dot--purple"></b>疲劳度：近期学习压力的累积，变化较快</li>
+              <li><b class="dot dot--green"></b>整体状态＝掌握 − 疲劳：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
+              <li><b class="dot dot--amber"></b>保持规律学习让掌握趋势稳步上升。疲劳偏高时安排休息，避免长期处于低状态区</li>
             </ul>
             </div><!-- /band__body -->
           </section>
@@ -1063,8 +1063,8 @@ const reviewCalibration = computed(() => guidance.value?.review?.calibration || 
 const reviewReliabilityText = computed(() => {
   const c = reviewCalibration.value;
   if (!c || !c.n) return '';
-  if (c.hitRate == null) return `历史核对 ${c.n} 条 · 样本不足`;
-  return `历史核对 ${c.n} 条 · 命中 ${Math.round(c.hitRate * 100)}%`;
+  if (c.hitRate == null) return `AI 诊断 · 参考过往 ${c.n} 次判断（样本偏少）`;
+  return `AI 诊断 · 参考过往 ${c.n} 次判断`;
 });
 
 /* ---------- 学习调控（2026-09-27 重构）：待确认 / 已自动处理 / 已执行的调整 ----------

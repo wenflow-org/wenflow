@@ -16,12 +16,12 @@
                「调用次数」会被读成同一事实的两种值。 -->
           <tr v-if="overview.db?.useCount !== undefined">
             <th title="agent_prompts.useCount">本版本累计调用</th>
-            <td :title="`生效 Prompt 记录 v${overview.db?.version ?? '?'} 自身的调用计数；与状态条的调用日志窗口统计口径不同`">{{ overview.db.useCount }}</td>
+            <td :title="`本版本自启用以来的累计调用次数`">{{ overview.db.useCount }}</td>
           </tr>
           <tr v-if="overview.db?.model"><th>默认模型</th><td><code class="mono">{{ overview.db.model }}</code></td></tr>
           <tr v-if="overview.db?.publishedAt"><th>发布时间</th><td>{{ fmtTime(String(overview.db.publishedAt)) }}</td></tr>
           <tr v-if="overview.drift">
-            <th>漂移状态</th>
+            <th>不一致状态</th>
             <td>
               <code class="mono" :class="overview.drift === 'in-sync' ? 'sdp-ok' : 'sdp-warn'">{{ driftLabel(overview.drift) }}</code>
             </td>

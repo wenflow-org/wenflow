@@ -171,7 +171,7 @@ function toTagsOf(targets: string[], stageId: string): FlowChip['toTags'] {
   const out: FlowChip['toTags'] = []
   for (const t of targets) {
     if (t === `${stageId}-agent`) {
-      out.push({ label: '出口闸口', target: t, kind: 'bridge' })
+      out.push({ label: '汇入出口', target: t, kind: 'bridge' })
       continue
     }
     if (t.startsWith('skill:')) {
@@ -266,7 +266,7 @@ export function buildStageFlow(
   if (!exitTo) {
     for (const c of allRoutings) {
       for (const t of c.toTags) {
-        if (t.kind === 'bridge') t.label = '链尾累积'
+        if (t.kind === 'bridge') t.label = '累积到学习者状态'
       }
     }
   }

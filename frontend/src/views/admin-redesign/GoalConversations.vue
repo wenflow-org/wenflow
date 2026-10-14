@@ -29,7 +29,7 @@
         label="参与用户"
         :value="stats?.distinctUsers ?? '—'"
         hint="发起过目标对话的去重用户"
-        title="至少发起过一次目标对话的用户数（随页头「真实 / 测试」开关变化）"
+        title="至少发起过一次目标对话的用户数"
       />
       <MkKpi
         label="近 7 日新增"
@@ -65,7 +65,7 @@
         collapsible
         class="gc-distband"
         title="目标对话状态分布"
-        :sub="`点击分段可筛选对应状态 · 完结率 ${stats.completionRate ?? 0}%`"
+        :sub="`完结率 ${stats.completionRate ?? 0}%`"
         unit="条"
         aria-label="按目标对话状态筛选"
         :bins="gcBandBins"
@@ -86,7 +86,7 @@
                 class="mk-pill"
                 :class="{ 'mk-pill--active': noPathOnly }"
                 :aria-pressed="noPathOnly"
-                title="进行中且尚未生成学习路径的会话，可与上方分布条叠加筛选"
+                title="进行中且尚未生成路径"
                 @click="noPathOnly = !noPathOnly"
               >未生成路径<span class="mk-pill__count">{{ pathPendingCount }}</span></button>
             </div>
@@ -231,7 +231,7 @@
               </td>
               <td v-if="showCol('path')">
                 <!-- 原型 open-path 习惯：生成过的路径成跳转（2026-10-12 起落会话座舱 Path 页签）；后端未回 pathId 时回落徽章 -->
-                <button v-if="r.pathId" type="button" class="mk-btn mk-btn--sm" title="在会话座舱的 Path 阶段页签查看该目标的路径" @click.stop="openPathPage(r)">查看路径</button>
+                <button v-if="r.pathId" type="button" class="mk-btn mk-btn--sm" title="查看该目标的学习路径" @click.stop="openPathPage(r)">查看路径</button>
                 <span v-else-if="r.hasPath" class="mk-badge mk-badge--info">已生成</span>
                 <span v-else class="mk-na">—</span>
               </td>

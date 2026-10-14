@@ -15,7 +15,7 @@ const STATUS_TEXT: Record<string, string> = {
   running: '进行中',
   processing: '处理中',
   timeout: '超时',
-  stalled: '卡死',
+  stalled: '无响应',
   /* 失败族统一「失败」：error/err/failed/fail 曾各译（错误/失败），同色调徽章文案却不同 */
   error: '失败',
   err: '失败',
@@ -38,7 +38,7 @@ const STATUS_TEXT: Record<string, string> = {
   stopped: '已停止',
   done: '已完成',
   // 结果态（虚拟会话试跑 / 课程执行的既有枚举，词沿用页面现状）
-  incomplete: '未收束',
+  incomplete: '未完成',
   aborted: '已中止',
   interrupted: '已中断',
   finalizing: '收尾中',
@@ -74,8 +74,8 @@ export function versionStatusText(s: string | null | undefined): string {
 /** Goal 会话阶段枚举 → 中文 */
 const STAGE_TEXT: Record<string, string> = {
   understanding: '澄清中',
-  proposal: '方案收敛中',
-  proposing: '方案收敛中', // UI 复查补充：阶段枚举 proposing 此前不在字典里，被原样直出
+  proposal: '方案确认中',
+  proposing: '方案确认中', // UI 复查补充：阶段枚举 proposing 此前不在字典里，被原样直出
   planning: '规划中',
   completed: '已完成',
   failed: '失败',
@@ -144,7 +144,7 @@ export function stageProgress(s: string | null | undefined): { index: number; to
 }
 
 /** 当前步的中文标签（0 起，与 GOAL_STAGE_STEP_LABELS 对齐） */
-const STAGE_STEP_TEXT = ['创建', '澄清中', '方案收敛中', '已完成'] as const
+const STAGE_STEP_TEXT = ['创建', '澄清中', '方案确认中', '已完成'] as const
 
 export interface StageTimelineInput {
   stage?: string | null
@@ -367,7 +367,7 @@ const ACTION_TEXT: Record<string, string> = {
   'virtual-story-delete': '删除故事',
   'virtual-session-start': '启动虚拟实验',
   'virtual-session-delete': '删除虚拟会话',
-  'virtual-session-stale-reclaim': '回收卡死会话',
+  'virtual-session-stale-reclaim': '回收无响应会话',
   'virtual-session-batch-terminate': '批量终止虚拟会话',
   'virtual-cascade-delete': '级联删除虚拟数据',
   // P2-16：配置/观测类高频接口语义名（避免动作列显示原始 HTTP 串）
@@ -418,7 +418,7 @@ const PATH_ACTION_RULES: Array<[RegExp, string]> = [
   [/\/virtual-learners\/batch-delete$/, '批量删除虚拟学习者'],
   [/\/virtual-learners\/batch-create$/, '批量创建虚拟学习者'],
   // 虚拟学习者 · 会话
-  [/\/virtual-learners\/sessions\/reclaim-stale$/, '回收卡死会话'],
+  [/\/virtual-learners\/sessions\/reclaim-stale$/, '回收无响应会话'],
   [/\/virtual-learners\/sessions\/terminate$/, '批量终止虚拟会话'],
   [/\/virtual-learners\/sessions\/[^/]+\/teaching-step$/, '推进虚拟会话'],
   [/\/virtual-learners\/sessions\/[^/]+\/wrapup$/, '结束虚拟会话'],

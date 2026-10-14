@@ -25,7 +25,7 @@
         <span class="sdp-chip">{{ generationParams?.model || '继承路由模型' }}</span>
       </div>
       <div class="sdp-chiprow">
-        <span class="sdp-chiprow__label">兜底链</span>
+        <span class="sdp-chiprow__label">备用模型</span>
         <span v-if="fallbackChain.length" class="sdp-chip">{{ fallbackChain.join(' → ') }}</span>
         <span v-else class="sdp-chip">未配置（用模型注册表默认链）</span>
         <button type="button" class="mk-link" :disabled="probing || !rtForm.enabled" @click="probeChannel">
@@ -68,7 +68,7 @@
           </select>
         </label>
         <label class="sdp-field">
-          <span>模型（留空继承）<em>可填模型 id、provider/model 限定式或别名；候选来自模型目录</em></span>
+          <span>模型（留空继承）<em>可填模型 ID 或别名，输入时会提示候选</em></span>
           <input v-model="rtForm.model" class="mk-input mono" :disabled="!rtForm.enabled" placeholder="继承 Agent / 平台默认" list="rt-model-options" />
         </label>
         <label class="sdp-field">
@@ -95,15 +95,15 @@
       </div>
 
       <div class="sdp-divider">
-        <strong>参数覆盖（覆盖 ACTIVE Prompt 默认值）</strong>
-        <span>每字段三选：继承（File-as-Truth 默认）/ 覆盖（写入本表，即时生效）。清空全部覆盖=恢复继承。</span>
+        <strong>参数覆盖（覆盖当前 Prompt 默认值）</strong>
+        <span>未覆盖的字段继承默认值，覆盖后立即生效。</span>
       </div>
 
       <div class="sdp-form__grid">
         <label class="sdp-field">
           <span>temperature</span>
           <select v-model="paramT.mode" class="mk-input" :disabled="!rtForm.enabled">
-            <option value="inherit">继承 ACTIVE Prompt</option>
+            <option value="inherit">继承当前 Prompt</option>
             <option value="override">覆盖</option>
           </select>
         </label>
@@ -114,7 +114,7 @@
         <label class="sdp-field">
           <span>topP</span>
           <select v-model="paramTopP.mode" class="mk-input" :disabled="!rtForm.enabled">
-            <option value="inherit">继承（ACTIVE Prompt 无此字段时不发送）</option>
+            <option value="inherit">继承（当前 Prompt 无此字段时不发送）</option>
             <option value="override">覆盖</option>
           </select>
         </label>
@@ -125,7 +125,7 @@
         <label class="sdp-field">
           <span>maxTokens（输出预算）</span>
           <select v-model="paramMax.mode" class="mk-input" :disabled="!rtForm.enabled">
-            <option value="inherit">继承 ACTIVE Prompt</option>
+            <option value="inherit">继承当前 Prompt</option>
             <option value="override">覆盖</option>
           </select>
         </label>
@@ -137,7 +137,7 @@
 
       <div class="sdp-divider">
         <strong>失败处理与模型兜底</strong>
-        <span>逻辑重试独立于模型覆盖；传输重试由平台统一管理；兜底链最多 2 跳、同 tier、同供应商（降级不换端点），保存时校验通道可用性。</span>
+        <span>备用模型最多 2 个，需与主模型同层级、同供应商。</span>
       </div>
 
       <div class="sdp-form__grid">
@@ -154,7 +154,7 @@
           <input v-model.number="customLogicalRetries" type="number" :min="1" :max="platformLogicalRetries" step="1" class="mk-input" />
         </label>
         <div class="sdp-field">
-          <span>兜底链（最多 2 个候选）<em>留空=用模型注册表默认链；空数组保存=显式无链</em></span>
+          <span>备用模型（最多 2 个）<em>留空则使用平台默认备用模型</em></span>
           <div class="sdp-fallback-editor">
             <span v-for="m in fallbackChain" :key="m" class="sdp-chip">{{ m }}<button type="button" class="mk-link mk-link--danger" :disabled="!rtForm.enabled" @click="removeFallback(m)">×</button></span>
             <input v-model="newFallback" class="mk-input mono" placeholder="模型 id，回车添加" list="rt-model-options" :disabled="!rtForm.enabled || fallbackChain.length >= 2" @keydown.enter.prevent="addFallback" />
@@ -179,7 +179,7 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">模型测试</h3>
-        <span class="mk-card__meta">ACTIVE Prompt + 当前路由直发上游 · 不落库</span>
+        <span class="mk-card__meta">用当前生效 Prompt 与路由真实调用一次，不写入记录</span>
       </div>
       <div class="sdp-secbody">
         <div class="sdp-form__grid">

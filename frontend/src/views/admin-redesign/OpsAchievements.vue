@@ -167,7 +167,7 @@
             </div>
             <label class="mk-field" :class="{ 'mk-field--error': errors.user }">
               <span class="mk-field__label">用户</span>
-              <input v-model="grantSearch" class="mk-field__input" placeholder="搜索姓名 / 邮箱（至少 2 字符）" @input="searchGrantUser" />
+              <input v-model="grantSearch" class="mk-field__input" placeholder="搜索姓名 / 邮箱" @input="searchGrantUser" />
               <span v-if="errors.user" class="mk-field__err">{{ errors.user }}</span>
             </label>
             <div v-if="grantResults.length" class="ac-candidates">

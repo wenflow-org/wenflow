@@ -28,10 +28,10 @@
         <code class="mono">{{ s.skillId }}</code>
         <template v-if="s.sync">
           <span v-if="s.sync.missing.length" class="frt-syncbar__count">{{ TERMS.statusMissing }} {{ s.sync.missing.length }}</span>
-          <span v-else-if="s.sync.state === 'ok'">✓ {{ TERMS.fieldsSynced }}</span>
+          <span v-else-if="s.sync.state === 'ok'">{{ TERMS.fieldsSynced }}</span>
           <span v-else-if="s.sync.state === 'no-core'">core 缺失</span>
           <span v-else-if="s.sync.state === 'no-routings'">无产出行</span>
-          <span v-else>✓ 已声明</span>
+          <span v-else>已声明</span>
           <span v-if="s.sync.orphan.length" class="frt-syncbar__count">{{ TERMS.statusOrphan }} {{ s.sync.orphan.length }}</span>
           <span v-if="s.sync.typeMismatch.length" class="frt-syncbar__count">类型不一致 {{ s.sync.typeMismatch.length }}</span>
         </template>
@@ -49,7 +49,7 @@
       <summary class="mk-section__summary mk-section__summary--muted">图例：字段角色 / 对外可见性 / 锁定 / 流转 —— 不懂就看这里</summary>
       <div class="frt__legend-body">
         <div class="frt__legend-group frt__legend-group--roles">
-          <h5 class="frt__legend-title">字段角色（promptRole）</h5>
+          <h5 class="frt__legend-title">字段角色</h5>
           <ul v-if="roleMeta.length" class="frt__legend-list">
             <li v-for="m in roleMeta" :key="m.id" class="frt__legend-item">
               <span class="mk-badge" :class="`mk-badge--role-${m.id}`">{{ m.label }}</span>
@@ -60,46 +60,46 @@
           <p v-else class="frt__legend-loading">角色词表待后端下发…</p>
         </div>
         <div class="frt__legend-group">
-          <h5 class="frt__legend-title">render（是否对外可见）</h5>
+          <h5 class="frt__legend-title">可见性</h5>
           <ul class="frt__legend-list">
             <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--render-visible" title="render: visible">可见</span>
+              <span class="mk-badge mk-badge--render-visible" title="可见性：可见">可见</span>
               <span class="frt__legend-hint">可见：会出现在对外交付（用户 / 界面）</span>
             </li>
             <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--render-hidden" title="render: hidden">隐藏</span>
+              <span class="mk-badge mk-badge--render-hidden" title="可见性：隐藏">隐藏</span>
               <span class="frt__legend-hint">隐藏：仅内部流转，不对外展示</span>
             </li>
           </ul>
-          <h5 class="frt__legend-title">流转（handoff / internal / accumulate）</h5>
+          <h5 class="frt__legend-title">流转（移交 / 内部 / 累积）</h5>
           <ul class="frt__legend-list">
             <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--flow-handoff">handoff</span>
-              <span class="frt__legend-hint">移交：字段产完后交给谁——下一阶段名（如 path）/ agent / skill；空 = 不转交</span>
+              <span class="mk-badge mk-badge--flow-handoff">移交</span>
+              <span class="frt__legend-hint">移交：字段产完后交给下一阶段（path / agent / skill），留空则不转交</span>
             </li>
             <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--flow-internal">internal</span>
-              <span class="frt__legend-hint">内部信令：仅供平台内部 / UI 控制使用，不进业务状态</span>
+              <span class="mk-badge mk-badge--flow-internal">内部</span>
+              <span class="frt__legend-hint">内部：仅供平台内部使用，不进业务状态</span>
             </li>
             <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--flow-accumulate">accumulate</span>
+              <span class="mk-badge mk-badge--flow-accumulate">累积</span>
               <span class="frt__legend-hint">累积：值会累积进学习者状态（画像 / 上下文），供后续阶段持续使用</span>
             </li>
           </ul>
-          <h5 class="frt__legend-title">落库键（persistKey）</h5>
+          <h5 class="frt__legend-title">存储字段名</h5>
           <ul class="frt__legend-list">
             <li class="frt__legend-item">
-              <span class="frt__legend-hint">字段值最终写入主库的键路径；与字段名不一致的字段（如 reply → 消息正文）单独标注，一致时默认显示字段名</span>
+              <span class="frt__legend-hint">字段值实际保存的键路径，与字段名不一致时单独标注（一致时默认显示字段名）</span>
             </li>
           </ul>
           <h5 class="frt__legend-title">锁定</h5>
           <ul class="frt__legend-list">
             <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--lock-system">系统锁</span>
-              <span class="frt__legend-hint">平台派生 / 代码消费，admin 不可直接改（需改编排文件）</span>
+              <span class="mk-badge mk-badge--lock-system">平台锁定</span>
+              <span class="frt__legend-hint">平台自动生成，admin 不可直接改（需改编排文件）</span>
             </li>
             <li class="frt__legend-item">
-              <span class="mk-badge mk-badge--lock-structure">结构锁</span>
+              <span class="mk-badge mk-badge--lock-structure">平台锁定</span>
               <span class="frt__legend-hint">结构约束锁定，修改需谨慎</span>
             </li>
             <li class="frt__legend-item">
@@ -133,7 +133,7 @@
         type="button"
         class="mk-btn mk-btn--sm"
         :disabled="!sortKey"
-        :title="sortDir === 'asc' ? '当前升序，点击切换为降序' : '当前降序，点击切换为升序'"
+        :title="sortDir === 'asc' ? '当前升序' : '当前降序'"
         @click="toggleDir"
       >{{ sortDir === 'asc' ? '升序' : '降序' }}</button>
       <button v-if="filterActive" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
@@ -147,7 +147,7 @@
       <MkEmptyState
         v-if="!agents.length"
         title="该阶段暂无字段路由"
-        description="编排文件未声明字段路由，或接口暂不可用。可点击「重试」重新拉取。"
+        description="编排文件未声明字段路由，或接口暂不可用。"
         action-text="重试"
         @action="loadStage"
       />
@@ -190,7 +190,7 @@
                   <th scope="col">移交</th>
                   <th scope="col">内部</th>
                   <th scope="col">累积</th>
-                  <th scope="col">落库键</th>
+                  <th scope="col">存储字段名</th>
                   <th scope="col">锁定</th>
                 </tr>
               </thead>
@@ -199,7 +199,7 @@
                   <td class="frt__fieldcell">
                     <span class="mono frt__field" :title="row.fieldId">{{ row.fieldId }}</span>
                     <span v-if="pathParts(row.fieldId).length > 1" class="frt__fieldpath" :title="row.fieldId">{{ pathParts(row.fieldId).join(' · ') }}</span>
-                    <span v-if="pathOf(row.fieldId)" class="frt__fieldpath" :title="`抽取路径（pathInRawOutput）：${pathOf(row.fieldId)}`">抽取 → {{ String(pathOf(row.fieldId)).split('.').pop() }}</span>
+                    <span v-if="pathOf(row.fieldId)" class="frt__fieldpath" :title="`抽取路径：${pathOf(row.fieldId)}`">抽取 → {{ String(pathOf(row.fieldId)).split('.').pop() }}</span>
                   </td>
                   <td class="frt__meaning">
                     <span class="frt__meaning-text" :title="meaningTitle(row)">{{ descOf(row.fieldId) || '—' }}</span>
@@ -229,8 +229,8 @@
                       class="mono frt__persist"
                       :class="{ 'frt__persist--alias': persistKeyOf(row) !== row.fieldId }"
                       :title="persistKeyOf(row) === row.fieldId
-                        ? '落库键与字段名一致'
-                        : `值实际写入 ${persistKeyOf(row)}`"
+                        ? '存储字段名与字段名一致'
+                        : `值实际保存到 ${persistKeyOf(row)}`"
                     >{{ persistKeyOf(row) }}</span>
                   </td>
                   <td><span class="mk-badge" :class="`mk-badge--lock-${row.locks?.level || 'editable'}`" :title="lockHint(row.locks?.level)">{{ lockLabel(row.locks?.level) }}</span></td>
@@ -279,10 +279,10 @@
           <!-- 值域速查条：编辑时对照填写（原型 .note--info） -->
           <div class="note note--info frt__orch-quick">
             <span class="frt__orch-quick-title">值域速查：</span>
-            <span class="frt__orch-quick-item"><b>字段角色</b>{{ roleNames }}（promptRole）</span>
+            <span class="frt__orch-quick-item"><b>字段角色</b>{{ roleNames }}</span>
             <span class="frt__orch-quick-item"><b>对外可见性</b>可见 / 隐藏（render）</span>
-            <span class="frt__orch-quick-item"><b>流转去向</b>阶段名（goal/path/teaching/profile/simulation）或 agent / skill:（handoff）</span>
-            <span class="frt__orch-quick-item"><b>落库键</b>仅落库键与 fieldId 不一致时标注（persistKey）</span>
+            <span class="frt__orch-quick-item"><b>流转去向</b>阶段名（goal/path/teaching/profile/simulation）或 agent / skill:</span>
+            <span class="frt__orch-quick-item"><b>存储字段名</b>仅存储字段名与字段名不一致时标注</span>
           </div>
           <textarea
             v-model="orchContent"
@@ -515,17 +515,17 @@ function renderHint(row: RoutingItem) {
     ? '隐藏：仅内部流转，不对外展示'
     : row.render === 'visible'
       ? '可见：会出现在对外交付（用户 / 界面）'
-      : `render 取值不在受控词表：${row.render}`;
+      : `可见性取值不在可选值列表：${row.render}`;
   return row.visibilityPreset ? `${base}\n可见性预设：${row.visibilityPreset}` : base;
 }
 function lockLabel(level?: string) {
-  if (level === 'system-locked') return '系统锁';
-  if (level === 'structure-locked') return '结构锁';
+  if (level === 'system-locked') return '平台锁定';
+  if (level === 'structure-locked') return '平台锁定';
   return '可编辑';
 }
 function lockHint(level?: string) {
-  if (level === 'system-locked') return '系统锁：平台派生 / 代码消费，admin 不可直接改（需改编排文件）';
-  if (level === 'structure-locked') return '结构锁：结构约束锁定，修改需谨慎';
+  if (level === 'system-locked') return '平台锁定：平台自动生成，admin 不可直接改（需改编排文件）';
+  if (level === 'structure-locked') return '平台锁定：结构约束锁定，修改需谨慎';
   return '可编辑：可自由调整（仍走编排文件入口）';
 }
 
@@ -711,7 +711,7 @@ async function runPrune(apply: boolean) {
       pruneConfirming.value = false;
     }
     if (protectedCount) {
-      msg += `；admin 覆盖行跳过 ${protectedCount} 条（只报告不删）`;
+      msg += `；平台覆盖的字段跳过 ${protectedCount} 条（只报告不删）`;
     }
     orchMsg.value = msg;
 
@@ -737,7 +737,7 @@ async function saveOrchestration() {
   // 写盘前轻量确认：保存即覆写磁盘上的字段路由唯一声明源（对齐 forceSync 的二次确认；落库另走「同步到 DB」）
   const ok = await askConfirm({
     title: TERMS.saveToFile,
-    message: `将以当前编辑内容覆写 prompts/orchestration/${props.stage}.yaml。此操作只写编排文件，不影响数据库；落库需再点「${TERMS.syncToDb}」。`,
+    message: `将以当前编辑内容覆写 prompts/orchestration/${props.stage}.yaml。此操作只写编排文件，不影响数据库；保存需再点「${TERMS.syncToDb}」。`,
     confirmText: '保存到文件',
     danger: false,
   });
@@ -767,7 +767,7 @@ async function forceSync() {
   // 安全审计 K-M1：同步（全量对账覆写三表）执行前二次确认，注明影响范围
   const ok = await askConfirm({
     title: TERMS.syncToDb,
-    message: `将对「${props.stage}」阶段执行全量对账：以编排 YAML 为唯一声明源，覆写 agent_contracts / field_definitions / agent_field_routings 三表；admin 覆盖行跳过（只报告不改）。`,
+    message: `将对「${props.stage}」阶段执行全量一致性核查：以编排 YAML 为唯一声明源，覆写 agent_contracts / field_definitions / agent_field_routings 三表；平台覆盖的字段跳过（只报告不改）。`,
     confirmText: '执行同步',
     danger: false,
   })
@@ -781,9 +781,9 @@ async function forceSync() {
     let msg = `${TERMS.reconcile}完成：契约 ${data.contractsUpdated ?? 0} · 字段 ${data.fieldsUpdated ?? 0} · 路由 ${data.routingsUpdated ?? 0} · 新建 ${data.createdCount ?? 0}`;
     if (skipped.length) {
       const sample = skipped.slice(0, 5).map((s) => `${s.table}:${s.key}`).join('、');
-      msg += `；跳过 admin 覆盖行 ${skipped.length} 条（${sample}${skipped.length > 5 ? '…' : ''}）`;
+      msg += `；跳过平台覆盖的字段 ${skipped.length} 条（${sample}${skipped.length > 5 ? '…' : ''}）`;
     } else {
-      msg += '；无 admin 覆盖行被跳过';
+      msg += '；无平台覆盖的字段被跳过';
     }
     orchMsg.value = msg;
     toast.success(TERMS.syncDone);

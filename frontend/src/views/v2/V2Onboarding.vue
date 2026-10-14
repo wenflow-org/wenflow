@@ -94,7 +94,7 @@
           <div v-else-if="step === 3" key="s3" class="ob__page">
             <span class="ob__kicker">第二步 · 生成路径</span>
             <h1 class="ob__title">聊几句，得到能执行的路径</h1>
-            <p class="ob__sub">问流把目标拆成阶段和任务——每一步都知道学什么，今天就能动手；学到一半想改，也可以随时调整。</p>
+            <p class="ob__sub">问流把目标拆成阶段和任务——每一步都知道学什么，今天就能动手。学到一半想改，也可以随时调整。</p>
 
             <div class="ob__demo" aria-hidden="true">
               <div class="ob__demo-bar">
@@ -131,7 +131,7 @@
           <div v-else key="s4" class="ob__page">
             <span class="ob__kicker">第三步 · 学习</span>
             <h1 class="ob__title">每天打开学习台，只盯今天这一步</h1>
-            <p class="ob__sub">今天该做的一步已经排好；边学边问，听不懂就让问流换一种讲法，节奏也会按你的状态调整。</p>
+            <p class="ob__sub">今天该做的一步已经排好。边学边问，听不懂就让问流换一种讲法，节奏也会按你的状态调整。</p>
 
             <!-- 这整块是写给所有新用户的静态样例（不是本人的学习台数据：真实学习台此时是空态），
                  故卡头带「示例」角标、指标只给不带具体数值的说明（走查 2026-10-08 #7） -->

@@ -930,7 +930,7 @@ export function buildOverviewHead(input: {
   const badByRate = todaySuccessRate < 80 && todayFailed >= 3
   if (todayCalls === 0) {
     if (todayOnlySimulated) {
-      return { tone: 'muted', score: null, headline: '真实用户暂无调用', subline: '今日无真实用户调用；虚拟/模拟仿真请见「虚拟学习者」页。' }
+      return { tone: 'muted', score: null, headline: '真实用户暂无调用', subline: '今日无真实用户调用。虚拟/模拟仿真请见「虚拟学习者」页。' }
     }
     return activeUsers === 0
       ? { tone: 'muted', score: null, headline: '系统空闲', subline: '今日尚无调用，等待学习者开始。' }

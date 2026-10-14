@@ -332,7 +332,7 @@
               <span class="mk-field__label">会话 AI 调用上限</span>
               <input v-model.number="budgetForm.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" @input="budgetDirty = true" />
               <span v-if="budgetErrors.maxRetriesTotal" class="mk-field__err">{{ budgetErrors.maxRetriesTotal }}</span>
-              <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止，防止无限跑下去；故事可单独覆盖</span>
+              <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止，防止无限跑下去。故事可单独覆盖</span>
             </label>
             <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.turnCapPerLesson }">
               <span class="mk-field__label">每课回合上限</span>
@@ -493,7 +493,7 @@
                   <span>已选 {{ selectedStoryKeys.size }}</span>
                 </label>
                 <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" title="为每个勾选的故事启动一次新的实验会话" @click="batchRunStories">批量运行</button>
-                <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm" :disabled="storyBusy" title="对勾选故事的最新会话开启自动驾驶（不新建会话；已运行的自动跳过）" @click="batchAutopilotStories('start')">批量启动</button>
+                <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm" :disabled="storyBusy" title="对勾选故事的最新会话开启自动驾驶（不新建会话，已运行的自动跳过）" @click="batchAutopilotStories('start')">批量启动</button>
                 <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm" :disabled="storyBusy" title="停止勾选故事最新会话的自动驾驶（学习进度保留）" @click="batchAutopilotStories('stop')">批量停止</button>
                 <button v-if="selectedStoryKeys.size" type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="storyBusy" title="删除勾选的故事（不可恢复）" @click="batchRemoveStories">批量删除</button>
               </template>
@@ -552,7 +552,7 @@
                       role="button"
                       tabindex="0"
                       :aria-pressed="selectedStoryId === (s.id || String(i))"
-                      :title="s.latestRun?.sessionId ? '进入该故事最新会话座舱' : '选中该故事；尚无会话，可点击「运行」启动'"
+                      :title="s.latestRun?.sessionId ? '进入该故事最新会话座舱' : '选中该故事。尚无会话，可点击「运行」启动'"
                       @click="selectStory(s, i)"
                       @keydown.enter.prevent="selectStory(s, i)"
                       @keydown.space.prevent="selectStory(s, i)"
@@ -560,7 +560,7 @@
                     <span class="mk-badge" :class="s.status === 'ready' ? 'mk-badge--ok' : 'mk-badge--muted'">
                       {{ storyStatusLabel(s) }}
                     </span>
-                    <span v-if="storyBudgetBadge(s)" class="vp-story__budget-badge" :title="'故事级预算：' + storyBudgetBadge(s) + '；留空字段继承角色级'">预算自定义</span>
+                    <span v-if="storyBudgetBadge(s)" class="vp-story__budget-badge" :title="'故事级预算：' + storyBudgetBadge(s) + '。留空字段继承角色级'">预算自定义</span>
                   </div>
                   <p class="vp-story__outline" :title="s.outline">{{ s.outline || '暂无故事概述' }}</p>
                   <div class="vp-story__stats">
@@ -798,7 +798,7 @@
               <span class="mk-field__label">会话 AI 调用上限</span>
               <input v-model="editStoryForm.budget.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" placeholder="留空即继承角色级（默认 600）" />
               <span v-if="storyBudgetErrors.maxRetriesTotal" class="mk-field__err">{{ storyBudgetErrors.maxRetriesTotal }}</span>
-              <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止；防本故事无限跑</span>
+              <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止，防本故事无限跑</span>
             </label>
           </div>
         </div>

@@ -4,7 +4,7 @@
     <div v-if="bootError" class="ac-error">
       <div class="ac-error__card">
         <strong>控制台暂时无法打开</strong>
-        <span>数据服务返回异常，所有页面受影响。可直接重试；若仍失败，请复制下方诊断信息发给研发。</span>
+        <span>数据服务返回异常，所有页面受影响。可直接重试，若仍失败请复制诊断信息发给研发。</span>
         <div class="ac-error__actions">
           <button type="button" class="mk-btn mk-btn--primary" @click="boot">重试</button>
           <button type="button" class="mk-btn" @click="copyDiagnostics">复制诊断信息</button>
@@ -68,7 +68,7 @@ function asyncPage(loader: () => Promise<any>) {
           h('div', { class: 'mk-alert mk-alert--row' }, [
             h('div', { class: 'mk-alert__msg' }, [
               h('strong', { style: 'margin-right: 8px' }, '页面加载失败'),
-              h('span', '资源加载失败（部署更新或网络异常）'),
+              h('span', '资源加载失败（可能是网络异常或平台刚更新）'),
             ]),
             h('div', { class: 'mk-alert__act' }, [
               h('button', { type: 'button', class: 'mk-btn mk-btn--sm', onClick: () => window.location.reload() }, '刷新页面'),

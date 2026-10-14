@@ -6,7 +6,7 @@
     <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" :title="'为每个选中的虚拟学习者启动其全部故事的实验会话（一个故事一个会话）'" @click="batchLaunchAllStories">
       {{ batchActionBusy ? `处理中${batchProgress}…` : '启动全部故事' }}
     </button>
-    <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" :title="'对选中虚拟人全部故事的最新会话开启自动驾驶（不新建会话；已运行的自动跳过）'" @click="batchAutopilotStart">
+    <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" :title="'对选中虚拟人全部故事的最新会话开启自动驾驶（不新建会话，已运行的自动跳过）'" @click="batchAutopilotStart">
       {{ batchActionBusy ? `处理中${batchProgress}…` : '批量启动自动驾驶' }}
     </button>
     <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" :title="'停止选中虚拟人全部故事最新会话的自动驾驶（学习进度保留，可随时再启动）'" @click="batchAutopilotStop">

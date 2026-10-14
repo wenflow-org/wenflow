@@ -72,7 +72,7 @@
       <span
         class="ld-scope__hint"
         title="「记忆与复习」不随本开关走：一个概念只保留一条记忆痕迹（记的是最后写入的那条路径），按路径切会漏掉在另一条路径学过的概念。「行为基线与互动」本就是用户级先验，不含路径概念。要看跨全部路径的教学会话，走平台「教学会话」页（那里不按路径收窄）。"
-      >作用于 概念掌握 · 证据 · 图谱 · 教学会话；记忆与行为基线不受影响</span>
+      >作用于 概念掌握 · 证据 · 图谱 · 教学会话，记忆与行为基线不受影响</span>
     </div>
 
     <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向）。
@@ -95,13 +95,13 @@
             <span
               v-if="pathInfo && pathInfo.total"
               class="mk-card__meta"
-              :title="`里程碑完成 ${pathInfo.done}/${pathInfo.total}（快照 currentPath.progress 口径）`"
+              :title="`里程碑完成 ${pathInfo.done}/${pathInfo.total}`"
             >里程碑 {{ pathInfo.done }}/{{ pathInfo.total }}</span>
             <span
               v-if="pathInfo"
               class="mk-badge"
               :class="`mk-badge--${pathStatus.tone}`"
-              :title="`路径状态：${pathStatus.text}（按快照进度百分比判定）`"
+              :title="`路径状态：${pathStatus.text}`"
             >{{ pathStatus.text }}</span>
             <!-- P2（2026-10-04 全站评审）：卡头 0% badge 与阶段/「正在做」两行撤——正上方 statstrip
                  已逐项承载同三个事实（0% / 阶段 / 任务），卡内只留增量：路径名 + 里程碑分母 + 进度条 -->
@@ -146,7 +146,7 @@
             </div>
           </details>
           <p v-else class="ld-none">
-            {{ '暂无概念账本数据' }}
+            {{ '暂无概念掌握数据' }}
             <span class="ld-none__hint">重算快照后自动生成。</span>
           </p>
         </section>
@@ -409,7 +409,7 @@
           <h3 class="mk-card__title">全局信号与背景</h3>
           <!-- 口径纠错：原 title 写「跨全部学习路径汇总」，实测数据源是当前路径的会话与学习证据
                （sessions/learner_evidence 均按 pathId 过滤）+ 该学习者全部记忆痕迹，不是跨全部路径 -->
-          <span class="mk-card__meta" :title="`${scopeNote.title}\n账本为概念底账规模`">{{ sigHeadMeta }} · {{ scopeNote.label }}</span>
+          <span class="mk-card__meta" :title="`${scopeNote.title}\n掌握情况为概念掌握规模`">{{ sigHeadMeta }} · {{ scopeNote.label }}</span>
         </div>
         <div class="ld-sigbody">
           <div class="ld-sig-sec">
@@ -471,7 +471,7 @@
                结论文字完全取自本卡已有数据（条数 + 卡片里本来就标的「证据不足」），未新增判断。
                P2 口径：「共 N 条」改「最近 N 条」——接口侧 limit=20，列表不是全量 -->
           <p v-if="evidence.length" class="mk-section__conclusion">
-            最近 {{ evidence.length }} 条学习事件（教学域仅近 20 条），其中
+            最近 {{ evidence.length }} 条学习事件（教学事件仅取近 20 条），其中
             {{ evidence.filter((e) => evidenceLowConfidence(e.score) && !isDomainEvidence(e.title)).length }} 条置信度低于 50%（仅供参照）。
           </p>
           <!-- 明细常驻（2026-10-11 用户走查「折叠干嘛」）：监控窗改内滚后折叠失去职责——
@@ -486,7 +486,7 @@
               :class="{ 'ld-ev--link': !!e.sessionId }"
               :role="e.sessionId ? 'button' : undefined"
               :tabindex="e.sessionId ? 0 : undefined"
-              :title="e.sessionId ? '点击打开该事件的会话座舱' : undefined"
+              :title="e.sessionId ? '打开该事件的会话座舱' : undefined"
               @click="e.sessionId && openSessionCockpit(e.sessionId)"
               @keydown.enter="e.sessionId && openSessionCockpit(e.sessionId)"
               @keydown.space.prevent="e.sessionId && openSessionCockpit(e.sessionId)"
@@ -742,7 +742,7 @@
                   </div>
                 </td>
                 <td>
-                  <span v-if="s.stage !== '—'" class="mk-badge mk-badge--info" :title="`按里程碑归属：${s.stage}（后端 deriveTeachingSessionProgress 推导）`">{{ s.stage }}</span>
+                  <span v-if="s.stage !== '—'" class="mk-badge mk-badge--info" :title="`按里程碑归属：${s.stage}`">{{ s.stage }}</span>
                   <span v-else class="ld-sub">—</span>
                 </td>
                 <td>
@@ -841,7 +841,7 @@
           </table>
         </div>
       </section>
-      <MkEmptyState v-else icon="◌" title="暂无记忆数据" description="该学习者还没有 FSRS 记忆痕迹；完成教学回合后自动生成。" />
+      <MkEmptyState v-else icon="◌" title="暂无记忆数据" description="该学习者还没有记忆记录，完成教学回合后自动生成。" />
       <!-- 调度与治理（温故计划/归并审计/回滚）已拆到「记忆调度」页签（2026-10-12 拍板） -->
     </div>
 
@@ -1273,7 +1273,7 @@ function ldWrapupBadgeCls(r: LdSessionRow): string {
 function ldWrapupTitle(r: LdSessionRow): string {
   if (r.wrapupTier === 'complete') return '收尾总结完整生成'
   if (r.wrapupTier === 'pending') return '会话未到终态，总结尚未生成'
-  return r.wrapupDegraded ? '总结来自兜底/仅摘要路径（降级来源）' : '终态会话缺少收尾总结'
+  return r.wrapupDegraded ? '总结不完整' : '终态会话缺少收尾总结'
 }
 function ldAdvisoryBadgeCls(p: string): string {
   return p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info'
@@ -1283,7 +1283,7 @@ const LD_IDLE_LONG_SECONDS = 1500
 function ldInteractTitle(r: LdSessionRow): string {
   const base = `${r.turns} 回合 · 知识 ${r.kpCount} 点`
   if (r.durationSec >= LD_IDLE_LONG_SECONDS) return `${base} · 时长 ≥ 25 分钟按长时标注（信号，非故障）`
-  if (r.durationSec > 0 && r.durationSec < 60) return `${base} · 不足 1 分钟：多为驱动中断的短会话`
+  if (r.durationSec > 0 && r.durationSec < 60) return `${base} · 不足 1 分钟`
   return base
 }
 function ldProgTitle(r: LdSessionRow): string {
@@ -1996,7 +1996,7 @@ const sigHeadMeta = computed<string | null>(() => {
   if (!gb || typeof gb !== 'object') return null
   const o = gb as Record<string, unknown>
   const ledger = Array.isArray(o.conceptLedger) ? o.conceptLedger.length : 0
-  return ledger ? `概念账本 ${ledger} 项` : null
+  return ledger ? `概念掌握 ${ledger} 项` : null
 })
 
 /** 信号三档原始数组（globalSignals 三组概念名） */
@@ -2422,7 +2422,7 @@ const MEM_STATE_ORDER: Array<{ key: Exclude<typeof memView.value, 'all'>; label:
   { key: 'ok', label: '稳固', title: '可提取率 ≥ 80% 且未到复习期' },
   { key: 'learning', label: '学习中', title: '可提取率 50-79%，仍在形成期' },
   { key: 'weak', label: '薄弱', title: '可提取率 < 50%，临近遗忘' },
-  { key: 'uninit', label: '未初始化', title: '尚无 FSRS 记忆痕迹（未产生提取记录）' }
+  { key: 'uninit', label: '未初始化', title: '尚无记忆记录（未产生提取记录）' }
 ]
 const memViews = computed(() => {
   const counts = new Map<string, number>()

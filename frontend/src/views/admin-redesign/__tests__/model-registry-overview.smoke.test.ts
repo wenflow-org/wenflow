@@ -133,7 +133,7 @@ describe('ModelRegistryOverview（只读模型总览）', () => {
     });
     const wrapper = await mountOverview();
     expect(wrapper.text()).toContain('当前没有冷却中的部署');
-    expect(wrapper.text()).toContain('没有发现配置漂移');
+    expect(wrapper.text()).toContain('没有发现配置不一致');
     wrapper.unmount();
   });
 

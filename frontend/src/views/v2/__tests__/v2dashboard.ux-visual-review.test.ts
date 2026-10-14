@@ -112,6 +112,6 @@ describe('学习台到期/复习口径（走查 2026-10-08 #74）', () => {
 
 describe('学习台成就提示 KTL 释义（走查 2026-10-08 #75）', () => {
   it('直出前补全中文释义，与成就页口径一致', () => {
-    expect(source).toContain("replace(/KTL/g, '知识掌握度（KTL）')");
+    expect(source).toContain("replace(/KTL/g, '知识掌握度')");
   });
 });

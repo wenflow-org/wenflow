@@ -126,7 +126,7 @@
 
     <div class="completion-actions">
       <!-- 三个动作的后果写清楚：用户反馈「又是继续、又是返回、又是完成，不知道什么意思」 -->
-      <p class="completion-actions__hint">完成任务计入路径进度；继续练习再开一轮课、不推进任务；返回则暂不决定。</p>
+      <p class="completion-actions__hint">完成任务计入路径进度。继续练习再开一轮课，不推进任务。返回则暂不决定。</p>
       <div class="completion-actions__row">
         <button type="button" class="completion-btn completion-btn--action completion-btn--default" :disabled="busy" @click="emit('action', 'continue-task')"><span class="completion-icon" aria-hidden="true"><VideoPlay /></span>继续练习</button>
         <button type="button" class="completion-btn completion-btn--action completion-btn--link" :disabled="busy" @click="emit('action', 'end')"><span class="completion-icon" aria-hidden="true"><ArrowLeft /></span>返回学习路径</button>
@@ -288,9 +288,9 @@ const longTermMetricCards = computed(() => {
   const sl = getStress(Number(lss || 0) * 10);
   return [
     { key: 'ktl', label: learnerMetric('ktl').label, value: toFixed(ktl), raw: Number(ktl || 0), level: kl.level, tone: kl.tone, desc: '长期累积的训练负荷，偏高说明学习压力在堆积，宜适时降强度。' },
-    { key: 'lsb', label: 'LSB 状态平衡', value: toFixed(lsb), raw: Number(lsb || 0), level: bl.level, tone: bl.tone, desc: '掌握与疲劳差值，越接近正值越理想。' },
-    { key: 'lf', label: 'LF 学习疲劳', value: toFixed(lf), raw: Number(lf || 0), level: fl.level, tone: fl.tone, desc: '短期疲劳累计，偏高时建议降强度。' },
-    { key: 'lss', label: 'LSS 学习压力', value: toFixed(lss), raw: Number(lss || 0), level: sl.level, tone: sl.tone, desc: '整体学习压力水平，持续偏高需节奏调整。' },
+    { key: 'lsb', label: '整体状态', value: toFixed(lsb), raw: Number(lsb || 0), level: bl.level, tone: bl.tone, desc: '掌握与疲劳差值，越接近正值越理想。' },
+    { key: 'lf', label: '学习疲劳', value: toFixed(lf), raw: Number(lf || 0), level: fl.level, tone: fl.tone, desc: '短期疲劳累计，偏高时建议降强度。' },
+    { key: 'lss', label: '学习压力', value: toFixed(lss), raw: Number(lss || 0), level: sl.level, tone: sl.tone, desc: '整体学习压力水平，持续偏高需节奏调整。' },
   ];
 });
 

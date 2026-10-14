@@ -72,7 +72,7 @@
             @click="toggleDay(c)"
           >{{ c.dayNum }}</button>
         </div>
-        <p v-if="selectedDate" class="month__filter">只看 {{ dayDate(selectedDate) }} 的记录，再点一次格子或「查看全部」恢复。</p>
+        <p v-if="selectedDate" class="month__filter">只看 {{ dayDate(selectedDate) }} 的记录。</p>
       </section>
 
       <!-- 错误 -->

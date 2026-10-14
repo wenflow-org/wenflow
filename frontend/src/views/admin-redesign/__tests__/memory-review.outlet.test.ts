@@ -90,7 +90,7 @@ describe('MemoryReview R7 页出口：三组建议列表', () => {
       audit: { ...DETAIL_FULL().audit as Record<string, unknown>, proposals: [], ambiguous: [], dropCandidates: [] },
     });
     const text = w.find('.mr__detail').text();
-    expect(text).toContain('本次没有达到把握度阈值的归并建议。');
+    expect(text).toContain('本次没有达到置信度阈值的归并建议。');
     expect(text).toContain('没有待人工确认项。');
     expect(text).toContain('没有待清理的散键。');
   });
@@ -120,7 +120,7 @@ describe('MemoryReview R7 页出口：三组建议列表', () => {
     expect(reject).toHaveBeenCalledWith('u1', { drops: ['k-stray'] });
   });
 
-  it('单条确认（散键清理）：确认弹层列明迁移表并调用 apply', async () => {
+  it('单条确认（散键清理）：确认弹层列明将整理的内容并调用 apply', async () => {
     const w = await mountPanels();
     const dropConfirm = w.find('.mr__detail').findAll('button').find((b) => b.text() === '确认' && b.attributes('title')?.includes('清理'))!;
     await dropConfirm.trigger('click');
@@ -128,7 +128,7 @@ describe('MemoryReview R7 页出口：三组建议列表', () => {
     expect(askConfirm).toHaveBeenCalledWith(expect.objectContaining({
       title: '执行概念归并',
       danger: true,
-      message: expect.stringContaining('将迁移以下按「用户 × 概念键」键控的表'),
+      message: expect.stringContaining('会同时整理该用户的'),
     }));
     expect(apply).toHaveBeenCalledWith('u1', [], { includeNeedsReview: false, drops: ['k-stray'] });
   });
@@ -139,7 +139,7 @@ describe('MemoryReview R7：批量确认调用 API（任务书 D）', () => {
     vi.clearAllMocks();
   });
 
-  it('跨三组勾选 → 执行选中：确认弹层列明迁移的表（memory_traces / learner_evidence / learner_projections / misconception_ledger）', async () => {
+  it('跨三组勾选 → 执行选中：确认弹层列明将整理的内容（记忆记录 / 学习证据 / 概念掌握情况 / 误解记录）', async () => {
     const w = await mountPanels();
 
     // 可自动归并默认勾选；再勾上 需人工看对 与 散键清理
@@ -155,14 +155,14 @@ describe('MemoryReview R7：批量确认调用 API（任务书 D）', () => {
     await bulkBtn.trigger('click');
     await flushPromises();
 
-    // 二次确认弹层（危险档）必须列明将迁移哪些表
+    // 二次确认弹层（危险档）必须列明将整理的内容
     expect(askConfirm).toHaveBeenCalledWith(expect.objectContaining({
       title: '执行概念归并',
       danger: true,
     }));
     const message = vi.mocked(askConfirm).mock.calls.at(-1)![0].message as string;
-    for (const table of ['memory_traces', 'learner_evidence', 'learner_projections', 'misconception_ledger']) {
-      expect(message).toContain(table);
+    for (const item of ['记忆记录', '学习证据', '概念掌握情况', '误解记录']) {
+      expect(message).toContain(item);
     }
     expect(message).toContain('人工确认对 1 条');
     expect(message).toContain('散键清理 1 条');

@@ -19,7 +19,7 @@
          B22/F8-1：成功率与表格同窗口同源（live.ts 页面查询单源），hint 披露取值来源，
          查询在途/失败时显示「—」而不是 0 -->
     <section v-if="logs.length" class="mk-kpi-grid">
-      <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" :hint="successHint" title="成功率 = 成功 ÷ 全部（口径同当前查询窗口与筛选，与下方表格同一次响应）；低于 90% 标红" />
+      <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" :hint="successHint" title="当前筛选范围内的成功率，低于 90% 标红" />
       <MkKpi label="耗时 P50" :value="latencyP50" :hint="latencyHint" title="延迟分位（仅成功日志）：P50 = 中位耗时" />
       <MkKpi label="耗时 P99" :value="latencyP99" :hint="latencyHint" title="延迟分位（仅成功日志）：P99 = 99% 请求耗时" />
     </section>
@@ -91,7 +91,7 @@
             class="mk-pill"
             :class="{ 'mk-pill--active': testFilter !== '' }"
             :aria-pressed="testFilter !== ''"
-            :title="testFilter === 'only' ? '仅看测试 → 点击恢复默认视图' : '连通性/探活测试日志（模型接入页产生，默认视图已排除），点击仅看测试'"
+            :title="testFilter === 'only' ? '仅看测试' : '连通性/探活测试日志（模型接入页产生，默认视图已排除）'"
             @click="toggleTestFilter"
           >测试<span class="mk-pill__count">{{ testCount ?? '—' }}</span></button>
           <!-- 2026-10-05 卡头统一弹层法：时间范围 / 节点 / Trace ID 三件收进右侧「高级筛选」弹层
@@ -220,7 +220,7 @@
                 <td v-if="!hiddenCols.has('agent')"><span class="mono exec-stage" :title="log.agent" role="button" tabindex="0" :aria-label="`查看 ${log.agent} 详情`" @click.stop="openSkillDrawer(log.agent)" @keydown.enter.stop.prevent="openSkillDrawer(log.agent)" @keydown.space.stop.prevent="openSkillDrawer(log.agent)">{{ log.agent }}</span></td>
                 <td v-if="!hiddenCols.has('trace')">
                   <span class="exec-tracecell">
-                    <span class="mono exec-trace" :title="`${log.traceId} · 点击查看完整链路`" role="button" tabindex="0" :aria-label="`查看链路 ${shortTrace(log.traceId)}`" @click.stop="showTrace(log.traceId)" @keydown.enter.stop.prevent="showTrace(log.traceId)" @keydown.space.stop.prevent="showTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
+                    <span class="mono exec-trace" :title="log.traceId" role="button" tabindex="0" :aria-label="`查看链路 ${shortTrace(log.traceId)}`" @click.stop="showTrace(log.traceId)" @keydown.enter.stop.prevent="showTrace(log.traceId)" @keydown.space.stop.prevent="showTrace(log.traceId)">{{ shortTrace(log.traceId) }}</span>
                     <button
                       type="button"
                       class="exec-copy-btn"
@@ -1072,7 +1072,7 @@ const successRate = computed(() => {
 })
 /** 成功率取值来源（KPI 卡 hint/title 如实标注）：全窗口 / 本页样本估算 / 读数加载中 */
 const successHint = computed(() =>
-  statsReady.value ? '全窗口口径' : statsPending.value || !logs.value.length ? '读数加载中' : '本页样本估算'
+  statsReady.value ? '按当前筛选范围统计' : statsPending.value || !logs.value.length ? '读数加载中' : '按本页记录估算'
 )
 /** KPI 显示值：数字档补 %；未就绪档直接「—」（不出现「—%」这种残缺读数） */
 const successRateText = computed(() => (successRate.value === '—' ? '—' : `${successRate.value}%`))
@@ -1100,7 +1100,7 @@ const latencySampled = computed(
   () => !(liveStats.value?.latencyPercentiles?.p50 != null) && logs.value.some((l) => l.status === 'ok')
 )
 /* 耗时分位卡 hint（2026-10-04 状态条退役迁入）：口径「仅成功日志」；回退样本估算时如实标注 */
-const latencyHint = computed(() => (latencySampled.value ? '仅成功日志 · 样本估算' : '仅成功日志'))
+const latencyHint = computed(() => (latencySampled.value ? '仅成功日志 · 按本页记录估算' : '仅成功日志'))
 function percentileMsOf(durations: unknown[], q: number): number | null {
   const arr = durations.filter((d): d is number => typeof d === 'number' && d >= 0).sort((a, b) => a - b)
   if (!arr.length) return null

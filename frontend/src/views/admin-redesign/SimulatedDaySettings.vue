@@ -42,13 +42,13 @@
         <span class="mk-field__label">每天安排几节</span>
         <input v-model.number="form.lessonsPerDay" type="number" min="1" max="10" class="mk-field__input" @input="dirty = true" />
       </label>
-      <label class="sd-switch" title="开启后由后台调度按课表自动推进（仅时钟簿记；当天任务重放归系统层）">
+      <label class="sd-switch" title="开启后按课表自动推进">
         <input v-model="form.autoAdvanceEnabled" type="checkbox" @change="dirty = true" />
         <span>允许自动推进</span>
       </label>
     </div>
     <div class="sd-settings__foot">
-      <span v-if="loadFailed" class="sd-settings__hint sd-settings__hint--bad" title="设置加载失败，当前展示的是默认值；为避免用默认值覆盖服务端配置，保存已禁用，请刷新页面重试">设置未加载，保存已禁用（请刷新重试）</span>
+      <span v-if="loadFailed" class="sd-settings__hint sd-settings__hint--bad" title="设置加载失败，当前展示的是默认值。为避免用默认值覆盖服务端配置，保存已禁用，请刷新页面重试">设置未加载，保存已禁用（请刷新重试）</span>
       <span v-else class="sd-settings__hint">默认关闭，只对虚拟学习者生效，不影响真实用户。</span>
       <button type="button" class="mk-btn mk-btn--primary" :disabled="!dirty || saving || loadFailed" @click="save">
         {{ saving ? '保存中…' : '保存日期模拟设置' }}
