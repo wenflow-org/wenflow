@@ -114,6 +114,19 @@ export interface LearnerModelProfile {
   curriculumControls: LearnerCurriculumControls;
   /** 有目标对话数据时存在；无则为 undefined（读取侧需可选链） */
   narratives?: LearnerGoalNarratives;
+
+  /**
+   * 画像叙述的出处。目标对话是「一个目标一条」，叙述洞察里的背景与现状/目标与动机/
+   * 时间与自述只反映**最近一次**已完成目标对话，不是跨目标聚合——同一学习者在不同
+   * 目标下的背景与卡点互不相干（实测同一账号可并存「幼师考指南」「AI 教育平台」
+   * 「和猫沟通」三个目标，并集只会串味）。带上出处，读「背景与现状」时才不会误读成
+   * 该学习者的全部背景。
+   */
+  narrativeSource?: {
+    conversationId: string;
+    goalTitle: string;
+    completedAt: string | null;
+  } | null;
   
   derivedInsights: {
     learningVelocity: number;

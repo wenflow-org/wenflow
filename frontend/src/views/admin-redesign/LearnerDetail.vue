@@ -337,7 +337,10 @@
         <!-- 叙述洞察通栏卡（2026-10-11 走查：长文本与参数卡解耦——上排三张参数卡收成等高水平带，
              叙述独占通栏按语义分区 + 两栏文本流，不再把同行参数卡拉出半屏空洞） -->
         <section v-if="narrativeSections.length" class="mk-card ld-pf-narr">
-          <div class="mk-card__head"><h3 class="mk-card__title">叙述洞察</h3></div>
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">叙述洞察</h3>
+            <span v-if="narrativeSource" class="mk-card__meta" :title="narrativeSourceTitle">{{ narrativeSourceLabel }}</span>
+          </div>
           <div class="ld-insights ld-insights--cols">
             <div v-for="g in narrativeSections" :key="g.label" class="ld-insights__sec">
               <h4 v-if="g.label" class="ld-insights__h">{{ g.label }}</h4>
@@ -1332,7 +1335,7 @@ async function loadDetail(id: string | undefined) {
   let accountIsTest = !!base?.isVirtualLearner || /^virtual_/.test(id)
   let userRow: Record<string, unknown> | null = null
   try {
-    const rec: any = await getUserIncludingDeleted(id)
+    const rec = await getUserIncludingDeleted(id)
     if (stale()) return
     userRow = (rec?.data?.data ?? rec?.data ?? null) as Record<string, unknown> | null
     if (userRow && (userRow as Record<string, unknown>).isVirtualLearner === true) accountIsTest = true
@@ -1766,6 +1769,29 @@ const narrativeSections = computed<{ label: string; items: string[] }[]>(() => {
     return v == null ? '' : String(v).trim()
   }
   return NARRATIVE_GROUPS.map((g) => ({ label: g.label, items: g.keys.map(val).filter((s) => s) })).filter((g) => g.items.length)
+})
+
+/** 叙述洞察的出处：这一卡取自「最近一次已完成目标对话」，不是跨目标聚合——同一学习者可有
+ *  多个互不相干的目标（实测同账号并存「幼师考指南」「AI 教育平台」「和猫沟通」），不标出处
+ *  会被读成「该学习者的全部背景」。可见短标 + 长解释收 title（家法：hint 短口径、长释悬停）。 */
+const narrativeSource = computed(() => {
+  const s = (profile.value?.narrativeSource || null) as { goalTitle?: string; completedAt?: string | null } | null
+  return s && s.goalTitle ? s : null
+})
+const narrativeSourceLabel = computed(() => {
+  const at = narrativeSource.value?.completedAt ? new Date(narrativeSource.value.completedAt) : null
+  if (!at || Number.isNaN(at.getTime())) return '源自最近一次目标对话'
+  return `源自 ${at.getMonth() + 1}-${String(at.getDate()).padStart(2, '0')} 那次目标对话`
+})
+const narrativeSourceTitle = computed(() => {
+  const s = narrativeSource.value
+  if (!s) return ''
+  const at = s.completedAt ? new Date(s.completedAt) : null
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const stamp = at && !Number.isNaN(at.getTime())
+    ? `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`
+    : '完成时间未知'
+  return `「${s.goalTitle}」· ${stamp} 完成\n背景与现状等叙述只反映该次目标对话，不是该学习者的全部背景（同一学习者可有多个目标）。`
 })
 
 const metricCards = computed(() => {

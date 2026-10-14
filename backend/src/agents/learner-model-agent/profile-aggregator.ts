@@ -22,14 +22,71 @@ import {
   ProfileAggregationResult,
   MetacognitionLevel,
   ThinkingStyle,
+  ConfusionPattern,
   PreferredStyle,
   TheoryVsPractice,
-  SessionLength
+  SessionLength,
+  MotivationTrigger,
+  UrgencyLevel,
+  ConfidenceLevel
 } from './types';
 import { logger } from '../../utils/logger';
 
 function mergeStringArrays(...values: Array<Array<string> | undefined>): string[] {
   return Array.from(new Set(values.flatMap((items) => Array.isArray(items) ? items.filter(Boolean) : [])));
+}
+
+/**
+ * 互动历史里主题/概念列表的服务端上限（前端再截 8 条展示）。
+ */
+const MAX_HISTORY_LABELS = 8;
+/** 「已掌握概念」判定阈值（memory_traces.masteryScore 0-1；实测 >=0.8 与 stability=stable 数量相当）。 */
+const MASTERED_SCORE_THRESHOLD = 0.8;
+
+type LooseJson = Record<string, unknown>;
+
+/** 目标对话 understanding 载荷中本聚合器实际读取的字段。 */
+interface GoalUnderstandingPayload {
+  cognitive_profile?: {
+    metacognition_level?: string;
+    thinking_style?: string;
+    confusion_pattern?: string;
+    prior_knowledge_structure?: string;
+    self_assessment_accuracy?: string;
+  };
+  learning_style?: { preferred_format?: string; theory_vs_practice?: string };
+  emotional_profile?: { motivation_trigger?: string; urgency_level?: string; confidence_level?: string };
+  available_resources?: { time_budget?: string; time_horizon?: string };
+  background?: { current_level?: string; available_time?: string };
+  current_baseline?: { level?: string };
+  real_problem?: string;
+  surface_goal?: string;
+  motivation?: string;
+  background_experience?: string | string[];
+  pain_points?: string[];
+  learning_signal?: unknown;
+}
+
+/** JSON 字符串安全解析（凭证/脏数据不抛）。 */
+function safeParseJson<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** 旧列 messages 的数组长度（非数组/解析失败按 0，口径同会话列表侧表回退）。 */
+function legacyMessageCount(raw: string | null | undefined): number {
+  if (!raw) return 0;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
 }
 
 const DEFAULT_COGNITIVE: CognitiveProfile = {
@@ -172,6 +229,8 @@ export class ProfileAggregator {
       // 目标对话原文留存：learningSignal 等字段的教学侧读取依赖 profile.narratives（此前只进
       // narrativeInsights 摘要，原文被丢弃，导致 TeachingContextBuilder 的 learningSignal 恒为 null）
       ...(goalConversation?.narratives ? { narratives: goalConversation.narratives } : {}),
+      // 叙述出处：让「背景与现状」这类单对话观测在界面上可溯源，不被误读成该学习者的全部背景
+      narrativeSource: goalConversation?.source ?? null,
       derivedInsights
     };
     
@@ -190,32 +249,47 @@ export class ProfileAggregator {
     };
     narratives?: LearnerGoalNarratives;
     learnerBackground?: any;
+    source?: LearnerModelProfile['narrativeSource'];
   } | null> {
     try {
-      const goalEvidence = await prisma.learner_evidence.findFirst({
-        where: { userId, evidenceType: 'goal:understanding:updated' },
-        orderBy: { occurredAt: 'desc' }
-      });
-      const conversation = await prisma.goal_conversations.findFirst({
-        where: { userId, status: 'completed' },
-        orderBy: { createdAt: 'desc' }
-      });
+      const [goalEvidence, conversation] = await Promise.all([
+        prisma.learner_evidence.findFirst({
+          where: { userId, evidenceType: 'goal:understanding:updated' },
+          orderBy: { occurredAt: 'desc' }
+        }),
+        prisma.goal_conversations.findFirst({
+          where: { userId, status: 'completed' },
+          orderBy: { createdAt: 'desc' }
+        })
+      ]);
       if (!goalEvidence && !conversation) return null;
 
-      const evidenceData = goalEvidence ? JSON.parse(goalEvidence.payload || '{}') : null;
-      const data = conversation ? JSON.parse(conversation.collectedData || '{}') : {};
-      const understanding = evidenceData?.understanding || data.understanding || {};
+      const evidenceData = goalEvidence
+        ? safeParseJson<LooseJson>(goalEvidence.payload, {})
+        : null;
+      const data = conversation ? safeParseJson<LooseJson>(conversation.collectedData, {}) : {};
+      // 只取「最近一次已完成目标对话」——不做跨对话并集：同一学习者的不同目标背景互不相干
+      // （实测同一账号并存「幼师考指南」「AI 教育平台」「和猫沟通」），并集只会串味。
+      // 单对话的局限由 narrativeSource 透明化，见 LearnerModelProfile.narrativeSource。
+      const understanding = (evidenceData?.understanding || data.understanding || {}) as GoalUnderstandingPayload;
       const learnerBackground = data.learner_background && typeof data.learner_background === 'object'
         ? data.learner_background
+        : null;
+      const source = conversation
+        ? {
+            conversationId: conversation.id,
+            goalTitle: String(conversation.description || '').trim() || '（该次目标对话未填写描述）',
+            completedAt: conversation.completedAt ? new Date(conversation.completedAt).toISOString() : null
+          }
         : null;
       
       return {
         cognitive: {
           metacognitionLevel: understanding.cognitive_profile?.metacognition_level as MetacognitionLevel,
           thinkingStyle: understanding.cognitive_profile?.thinking_style as ThinkingStyle,
-          confusionPattern: understanding.cognitive_profile?.confusion_pattern,
-          priorKnowledgeStructure: understanding.cognitive_profile?.prior_knowledge_structure,
-          selfAssessmentAccuracy: understanding.cognitive_profile?.self_assessment_accuracy
+          confusionPattern: understanding.cognitive_profile?.confusion_pattern as ConfusionPattern,
+          priorKnowledgeStructure: understanding.cognitive_profile?.prior_knowledge_structure as CognitiveProfile['priorKnowledgeStructure'],
+          selfAssessmentAccuracy: understanding.cognitive_profile?.self_assessment_accuracy as CognitiveProfile['selfAssessmentAccuracy']
         },
         preferences: {
           preferredStyle: understanding.learning_style?.preferred_format as PreferredStyle,
@@ -227,9 +301,9 @@ export class ProfileAggregator {
           )
         },
         emotional: {
-          motivationTrigger: understanding.emotional_profile?.motivation_trigger,
-          urgencyLevel: understanding.emotional_profile?.urgency_level,
-          confidenceLevel: understanding.emotional_profile?.confidence_level
+          motivationTrigger: understanding.emotional_profile?.motivation_trigger as MotivationTrigger,
+          urgencyLevel: understanding.emotional_profile?.urgency_level as UrgencyLevel,
+          confidenceLevel: understanding.emotional_profile?.confidence_level as ConfidenceLevel
         },
         background: {
           currentLevel: understanding.current_baseline?.level || understanding.background?.current_level,
@@ -252,6 +326,7 @@ export class ProfileAggregator {
             || understanding.background?.available_time
         },
         learnerBackground,
+        source,
       };
     } catch (error) {
       logger.error('[profile-aggregator] failed to fetch goal conversation data', { userId, error });
@@ -298,30 +373,92 @@ export class ProfileAggregator {
     }
   }
 
+  /**
+   * 互动历史：会话数/消息数/时长按 teaching_sessions 聚合；主题取实际课程 topic；
+   * 两个概念列表分别走误观念台账与记忆痕迹。旧实现 totalMessages 恒写 0、三个数组恒空
+   * （前端 LearnerDetail.vue 的 historyRows 有渲染位，但永远因空而不显示）。
+   */
   private async fetchSessionData(userId: string): Promise<InteractionHistory | null> {
     try {
       const sessions = await prisma.teaching_sessions.findMany({
         where: { userId },
         orderBy: { startTime: 'desc' },
-        take: 50
+        take: 50,
+        select: { id: true, duration: true, topic: true }
       });
-      
+
       if (sessions.length === 0) return null;
-      
+
       const totalDuration = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
-      
+      const [totalMessages, conceptsStruggled, conceptsMastered] = await Promise.all([
+        this.countSessionMessages(sessions.map((s) => s.id)),
+        this.fetchStruggledConcepts(userId),
+        this.fetchMasteredConcepts(userId)
+      ]);
+
       return {
         totalSessions: sessions.length,
-        totalMessages: 0,
+        totalMessages,
         avgSessionDuration: sessions.length > 0 ? totalDuration / sessions.length : 0,
-        topicsExplored: [],
-        conceptsStruggled: [],
-        conceptsMastered: []
+        topicsExplored: Array.from(new Set(sessions.map((s) => (s.topic || '').trim()).filter(Boolean))).slice(0, MAX_HISTORY_LABELS),
+        conceptsStruggled,
+        conceptsMastered
       };
     } catch (error) {
       logger.error('[profile-aggregator] failed to fetch session data', { userId, error });
       return null;
     }
+  }
+
+  /**
+   * 会话消息真实条数（全部角色）：侧表优先，无侧表行的历史会话回退 messages 旧列。
+   * 口径与 platform-teaching-sessions.service 的按会话计数同源，区别仅在本处计全部角色而非仅 user。
+   */
+  private async countSessionMessages(sessionIds: string[]): Promise<number> {
+    if (!sessionIds.length) return 0;
+    const grouped = await prisma.teaching_session_messages.groupBy({
+      by: ['sessionId'],
+      where: { sessionId: { in: sessionIds } },
+      _count: { _all: true }
+    });
+    const side = new Set<string>();
+    let total = 0;
+    for (const row of grouped) {
+      side.add(row.sessionId);
+      total += Number(row._count?._all ?? 0);
+    }
+    // 侧表无行 = 尚未迁移的历史会话，条数活在 messages 旧列
+    const missing = sessionIds.filter((id) => !side.has(id));
+    if (missing.length) {
+      const legacyRows = await prisma.teaching_sessions.findMany({
+        where: { id: { in: missing } },
+        select: { messages: true }
+      });
+      for (const row of legacyRows) total += legacyMessageCount(row.messages);
+    }
+    return total;
+  }
+
+  /** 挣扎过概念：误观念台账里尚未消解（suspected/confirmed）的高频项。 */
+  private async fetchStruggledConcepts(userId: string): Promise<string[]> {
+    const rows = await prisma.misconception_ledger.findMany({
+      where: { userId, status: { in: ['suspected', 'confirmed'] } },
+      orderBy: { occurrenceCount: 'desc' },
+      take: MAX_HISTORY_LABELS,
+      select: { canonicalLabel: true }
+    });
+    return Array.from(new Set(rows.map((r) => (r.canonicalLabel || '').trim()).filter(Boolean)));
+  }
+
+  /** 已掌握概念：记忆痕迹中掌握度达阈值的项，按掌握度与最近接触排序。 */
+  private async fetchMasteredConcepts(userId: string): Promise<string[]> {
+    const rows = await prisma.memory_traces.findMany({
+      where: { userId, masteryScore: { gte: MASTERED_SCORE_THRESHOLD } },
+      orderBy: [{ masteryScore: 'desc' }, { lastSeenAt: 'desc' }],
+      take: MAX_HISTORY_LABELS,
+      select: { label: true }
+    });
+    return Array.from(new Set(rows.map((r) => (r.label || '').trim()).filter(Boolean)));
   }
   
   private mergeCognitive(
