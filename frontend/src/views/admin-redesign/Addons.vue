@@ -32,9 +32,13 @@
                 <div class="ac-cap-card__meta">
                   <span class="mk-badge" :class="r.id === 'mcp-tool' ? 'mk-badge--info' : 'mk-badge--muted'">{{ r.id === 'mcp-tool' ? 'MCP' : '能力 Skill' }}</span>
                   <!-- 模型 kv 与「超时 / 最近」同带标签：未配置模型时值为「继承全局」，
-                       无标签会与前面的类型徽标连读成「MCP 继承全局」（2026-10-11 走查） -->
-                  <span v-if="r.ready" class="mono ac-cap-card__kv" :title="r.model">模型 {{ r.model }}</span>
-                  <span v-if="r.ready" class="ac-cap-card__kv">超时 {{ r.timeout }}</span>
+                       无标签会与前面的类型徽标连读成「MCP 继承全局」（2026-10-11 走查）。
+                       2026-10-14 用户评审：四张卡各自复读「超时 继承 · 模型 继承全局」——
+                       这类「继承默认值」不是用户要读的读数，是「本卡没单独配」的缺省态，
+                       逐卡常显只会把关键信息（类型徽标 + 最近调用）淹掉。改为只显非继承值，
+                       继承情况在「详情 / 配置」抽屉里看完整配置。 -->
+                  <span v-if="r.ready && !isInherited(r.model)" class="mono ac-cap-card__kv" :title="r.model">模型 {{ r.model }}</span>
+                  <span v-if="r.ready && !isInherited(r.timeout)" class="ac-cap-card__kv" title="本服务单独设置的超时（未单独设置时不显示，表示继承全局）">超时 {{ r.timeout }}</span>
                   <span v-if="r.ready" class="ac-cap-card__kv">最近 {{ r.last }}</span>
                 </div>
                 <div class="ac-cap-card__foot">
@@ -245,6 +249,10 @@ function formatTimeout(ms: unknown): string {
   const n = Number(ms)
   if (!ms || Number.isNaN(n)) return '继承'
   return `${Math.round(n / 1000)}s`
+}
+/** 「继承…」= 未单独配置的缺省值（不逐卡常显，见卡片注释） */
+function isInherited(v: string | null | undefined): boolean {
+  return !v || v.startsWith('继承')
 }
 
 /** 环境变量占位符（${ENV_VAR} 未替换）判定：直出原文会误导为真实地址，统一显示「未配置」 */

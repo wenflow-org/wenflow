@@ -146,7 +146,7 @@ async function batchAutopilotStart() {
   }
   const ok = await askConfirm({
     title: '批量启动自动驾驶',
-    message: `将为选中的 ${ids.length} 个虚拟学习者、约 ${candidates} 个最新会话开启自动驾驶（target=final 直达 Path 全部完成）。\n已在运行自动驾驶的会话会自动跳过，不会重复启动。确认启动？`,
+    message: `将为选中的 ${ids.length} 个虚拟学习者、约 ${candidates} 个最新会话开启自动驾驶（直达 Path 全部完成）。\n已在运行自动驾驶的会话会自动跳过，不会重复启动。确认启动？`,
     confirmText: `启动 ${candidates} 个会话的自动驾驶`,
     danger: false
   })
@@ -253,7 +253,7 @@ async function batchTerminate() {
   }, 0)
   const ok = await askConfirm({
     title: '批量终止会话',
-    message: `确认终止选中的 ${ids.length} 个虚拟学习者全部非终态会话（进行中 ${runningSum} + 创建中）？\n会话将被标记为「已放弃」（abandoned），数据保留，该操作不可撤销。`,
+    message: `确认终止选中的 ${ids.length} 个虚拟学习者全部非终态会话（进行中 ${runningSum} + 创建中）？\n会话将被标记为「已放弃」，数据保留，该操作不可撤销。`,
     confirmText: `终止 ${ids.length} 人`,
     busy: true
   })

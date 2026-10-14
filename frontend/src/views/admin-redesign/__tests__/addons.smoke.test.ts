@@ -98,16 +98,34 @@ describe('Addons 外挂能力列（P1：51px 截断修复）', () => {
     wrapper.unmount();
   });
 
-  it('模型 kv 带「模型」标签：未配置模型时显「模型 继承全局」（2026-10-11 走查：原无标签，与类型徽标连读成「MCP 继承全局」）', async () => {
+  /* 2026-10-14 评审：四张能力卡各自复读「模型 继承全局 · 超时 继承」——继承是「本卡没单独配」
+     的缺省态，不是读数；常显会把类型徽标与最近调用淹掉。改为只显非继承值（继承态去抽屉看）。 */
+  it('继承默认值的 kv 不常显：未单独配置模型/超时时只留类型徽标 + 最近调用', async () => {
     configsMock.mockResolvedValue({
       data: { data: { configs: [{ skillId: 'mcp-tool', displayName: 'MCP 工具调用' }] } }
     });
     const wrapper = await mountLive();
     const kvs = wrapper.findAll('tbody .ac-cap-card__kv').map((s) => s.text());
-    expect(kvs).toContain('模型 继承全局');
-    expect(kvs).not.toContain('继承全局');
-    expect(kvs.some((t) => t.startsWith('超时'))).toBe(true);
+    expect(kvs.some((t) => t.startsWith('模型'))).toBe(false);
+    expect(kvs.some((t) => t.startsWith('超时'))).toBe(false);
     expect(kvs.some((t) => t.startsWith('最近'))).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('单独配置的模型与超时仍带标签常显（只有继承态隐藏）', async () => {
+    configsMock.mockResolvedValue({
+      data: {
+        data: {
+          configs: [
+            { skillId: 'mcp-tool', displayName: 'MCP 工具调用', model: 'dsv4.1', requestTimeoutMs: 60000 }
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const kvs = wrapper.findAll('tbody .ac-cap-card__kv').map((s) => s.text());
+    expect(kvs).toContain('模型 dsv4.1');
+    expect(kvs.some((t) => t.startsWith('超时'))).toBe(true);
     wrapper.unmount();
   });
 });

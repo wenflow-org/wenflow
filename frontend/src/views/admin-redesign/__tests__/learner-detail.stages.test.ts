@@ -652,7 +652,10 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
     await flushPromises();
     const meta = w.find('#ld-panel-memory .mk-card__meta');
     expect(meta.text()).toContain('跨全部路径');
-    expect(meta.attributes('title')).toContain('(userId, conceptKey)');
+    /* title 里的人话化（2026-10-14 文案批）：库表元组 (userId, conceptKey) 已换成
+       「一个概念只保留一条记忆痕迹」，但要保留的语义是「按路径切会漏掉」这条结构性原因 */
+    expect(meta.attributes('title')).toContain('一个概念只保留一条记忆痕迹');
+    expect(meta.attributes('title')).toContain('按路径切会漏掉');
   });
 
   it('图谱不吃自带的路径轨（作用域已由页级接管，避免一屏两个同义控件）', async () => {

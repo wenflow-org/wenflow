@@ -245,11 +245,6 @@
         <p>{{ verdictText }}</p>
       </div>
 
-      <!-- 底部加载提示（审核 #109）：原常驻「滚动到底部加载更早的 Trace…」承诺了未实现的
-           无限滚动（滚到底不发请求、行数不变），骨架行也在暗示会自动加载——改为与下方按钮
-           一致的点击式文案，删骨架行，不再让用户滚动等待 -->
-      <p v-if="waterfallHasMore" class="wf-skel-hint">点击下方「加载更多样本」查看更早的 Trace…</p>
-
       <!-- 翻页：追加下一页样本（统一 mk-list-more 页脚形态，与全局加载更多页脚同构） -->
       <div v-if="canLoadMoreWaterfall" class="mk-list-more">
         <button
@@ -1181,16 +1176,6 @@ const verdictText = computed(() => {
   word-break: break-all;
 }
 .wf-row__detail-actions { display: flex; justify-content: flex-end; }
-
-/* 底部加载提示（原型 renderObserve trace 页签 .skelrow + 居中 faint 文案；骨架行随
-   审核 #109 撤——文案改点击式，不再暗示自动加载）：只留与瀑布行对齐的水平内边距 */
-.wf-skel-hint {
-  margin: 0;
-  padding: 0 16px 12px;
-  text-align: center;
-  color: var(--mk-faint);
-  font-size: var(--mk-fs-micro);
-}
 
 .wf-verdict {
   margin: 12px 16px 14px;

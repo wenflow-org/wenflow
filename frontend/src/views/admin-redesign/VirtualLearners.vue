@@ -11,7 +11,7 @@
           type="button"
           class="mk-btn mk-btn--sm"
           :disabled="reclaimRef?.state.busy"
-          :title="'角标 = 超阈值卡死候选数（含 hold/租约等豁免项）；点击干跑确认清单，逐条列出可回收与豁免原因后批量标记'"
+          :title="'角标为超阈值卡死候选数（含豁免项）；点击预览清单后批量标记'"
           @click="openReclaimModal()"
         >
           {{ reclaimRef?.state.busy ? '回收中…' : `回收卡死（${partition.stale}）` }}
@@ -36,7 +36,7 @@
           :value="statsKpiValue(statsKpiPct(completionPct))"
           :tone="statsState === 'error' ? 'bad' : ''"
           :hint="statsKpiHint(completionHint)"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '完成率按会话统计；「会话均长」为会话从创建到结束的平均时长，非单次调用耗时；活动会话 = 进行中 + 创建中的会话数'"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '完成率按会话统计；「会话均长」为会话从创建到结束的平均时长，非单次调用耗时；活动会话含进行中与创建中'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         >
@@ -60,7 +60,7 @@
           :value="statsKpiValue(concurrencyText)"
           :tone="concurrencyTone"
           :hint="statsState === 'error' ? '统计不可用 · 点击重试' : '自动驾驶并发配额'"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '并发 = 自动驾驶同时在跑的会话数占配额比；「已满」是资源占满（后续请求排队），不是故障'"
+          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '并发为自动驾驶同时在跑的会话数占配额比；「已满」是资源占满（后续请求排队），不是故障'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         >
@@ -80,7 +80,7 @@
           :tone="vlRpmLoadFailed ? 'bad' : ''"
           :hint="rateHint"
           :clickable="vlRpmLoadFailed"
-          :title="vlRpmLoadFailed ? '设置未加载：点击重试' : '在途 = 正在出站的调用数；上限 = 已保存的 VL RPM 配置（在「模型与接入 → 虚拟学习者」页签修改）'"
+          :title="vlRpmLoadFailed ? '设置未加载：点击重试' : '在途为正在出站的调用数；上限为已保存的速率配置（在「模型与接入 → 虚拟学习者」页签修改）'"
           @click="vlRpmLoadFailed && loadVlRpm()"
         />
       </section>
@@ -161,14 +161,14 @@
               v-if="!isNarrow && !hiddenCols.has('story')"
               scope="col"
               class="mk-th--right mk-th--sortable"
-              title="已生成故事条数（0 = 未生成，需先生成才能运行）"
+              title="已生成故事条数（0 表示未生成，需先生成才能运行）"
               :aria-sort="vlSortState('story')"
               @click="toggleVlSort('story')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('story')">故事池<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
               scope="col"
               class="mk-th--sortable"
-              title="当前进行中/创建中的会话数及最近阶段；点击进入会话座舱"
+              title="当前进行中/创建中的会话数及最近阶段"
               :aria-sort="vlSortState('running')"
               @click="toggleVlSort('running')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('running')">进行中<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -564,7 +564,7 @@ const isNarrow = useIsNarrow()
    勾选——窄屏档勾了也不显（行详情进画像页，信息不丢） */
 const vlColDefs = [
   { key: 'tendency', label: '长期倾向' },
-  { key: 'story', label: '故事池', title: '已生成故事条数（0 = 未生成，需先生成才能运行）' },
+  { key: 'story', label: '故事池', title: '已生成故事条数（0 表示未生成，需先生成才能运行）' },
   { key: 'sessions', label: '会话', title: '累计会话数（全部会话，含终态）' },
   { key: 'failed', label: '失败', title: '已失败/已终止会话数（全量聚合）' },
   { key: 'stalled', label: '卡死', title: '超过回收阈值无写入且无活跃租约的会话数（可在状态条一键回收）' },

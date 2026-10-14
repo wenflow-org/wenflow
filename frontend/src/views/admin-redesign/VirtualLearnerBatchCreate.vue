@@ -9,7 +9,7 @@
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeBatch">✕</button>
       </div>
       <div class="mk-modal__body">
-        <p class="mk-alert mk-alert--info">设置人数与故事数，点击创建后立即返回——AI 会在后台为每人生成身份与故事，页面顶部状态条可查看进度。</p>
+        <p class="mk-alert mk-alert--info">设置人数与故事数，点击创建后立即返回，AI 会在后台为每人生成身份与故事，可在页面顶部状态条查看进度。</p>
         <div class="vl-batch-config">
           <label class="mk-field vl-batch-config__count" :class="{ 'mk-field--error': !batchCountValid }">
             <span class="mk-field__label">人数</span>

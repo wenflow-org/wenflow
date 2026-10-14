@@ -86,7 +86,7 @@
                 class="mk-pill"
                 :class="{ 'mk-pill--active': noPathOnly }"
                 :aria-pressed="noPathOnly"
-                title="进行中且尚未生成学习路径的会话，需先补路径；可与上方分布条筛选叠加，再点取消"
+                title="进行中且尚未生成学习路径的会话，可与上方分布条叠加筛选"
                 @click="noPathOnly = !noPathOnly"
               >未生成路径<span class="mk-pill__count">{{ pathPendingCount }}</span></button>
             </div>
@@ -103,7 +103,7 @@
               :default-hidden="['constraints']"
               v-model:hidden="gcHiddenCols"
             />
-            <span class="mk-card__meta" :title="`${includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'}${truncated ? `；排序与搜索仅覆盖已加载的最近 ${LIST_LIMIT} 条` : ''}`">（{{ includeTest ? '测试' : '真实' }}）<template v-if="truncated"> · 共 {{ listTotal }} 条，当前显示最近 {{ rows.length }} 条</template></span>
+            <span class="mk-card__meta" :title="`${includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'}${truncated ? `，排序与搜索仅覆盖最近 ${LIST_LIMIT} 条` : ''}`">（{{ includeTest ? '测试' : '真实' }}）<template v-if="truncated"> · 共 {{ listTotal }} 条，当前显示最近 {{ rows.length }} 条</template></span>
           </div>
         </div>
 

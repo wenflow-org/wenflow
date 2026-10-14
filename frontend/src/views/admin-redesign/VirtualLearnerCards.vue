@@ -6,7 +6,7 @@
          2026-10-06 二级页化（用户不喜欢抽屉设计）：点卡=卡详情二级页（?view=card&id=<profileId>）、
          导入=卡导入二级页（?view=card-import），本页两个 mk-drawer 全退役，走 SkillDetail/PathDetail
          家族的标准二级页机制（detailComponents 全局渲染，跨 scene 可用）。 -->
-    <MkPageHead v-if="!embedded" title="学习者卡库" sub="账号、档案与故事池合为一张卡，导入或由平台生成即可使用；点卡查看详情">
+    <MkPageHead v-if="!embedded" title="学习者卡库" sub="账号、档案与故事池合为一张卡，导入或由平台生成即可使用">
       <template #actions>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="exporting" @click="doExport">
           {{ exporting ? '导出中…' : '导出卡库' }}
@@ -40,7 +40,7 @@
           <!-- 计数 meta 只说独有事实（卡头计数语法）：无关键词 = 卡库总量，
                有关键词 = 命中/总量（此前第一段也用 filtered.length，与「命中 N/M」的分子复读）。
                卡总数从 KPI 卡迁来这里自报（2026-10-14），原卡上「一张卡 = …」的解释随之下沉到本行。 -->
-          <span class="mk-card__meta" title="点卡查看卡详情（人设 / 故事池 / 自带资料）；一张卡 = 一个虚拟学习者账号 + 档案 + 故事池">
+          <span class="mk-card__meta" title="点卡查看卡详情（人设 / 故事池 / 自带资料）">
             <template v-if="keyword">命中 {{ filtered.length }} / 共 {{ cards.length }} 张</template>
             <template v-else>共 {{ cards.length }} 张</template>
           </span>
@@ -89,7 +89,7 @@
           class="vlc-card"
           role="button"
           tabindex="0"
-          :title="`${cardName(c)}（${c.cardKey || '无 Key'}）· 点击查看卡详情`"
+          :title="`${cardName(c)}（${c.cardKey || '无 Key'}）`"
           @click="openCard(c)"
           @keydown.enter.prevent="openCard(c)"
           @keydown.space.prevent="openCard(c)"

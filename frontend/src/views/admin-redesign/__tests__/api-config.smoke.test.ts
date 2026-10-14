@@ -9,7 +9,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import ApiConfig from '../ApiConfig.vue';
 import { dataSource } from '../store';
-import { liveApiConfig, registrationEnabled } from '../live';
+import { liveApiConfig, registrationEnabled, registerIpQuotaEnabled } from '../live';
 
 const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSettingsMock, getReliabilityMock, getModelRegistryMock, testConnectionMock, updateConfigMock } = vi.hoisted(() => ({
   getConfigMock: vi.fn(),
@@ -299,22 +299,26 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('新用户注册开关是分段器：曾裸用 .mk-seg__item（无 .mk-seg 父容器）致渲染成一行字', async () => {
+  it('新用户注册 / 注册配额是开关（MkSwitch）：布尔配置不再用并排双按钮', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     // 注册开关卡 v-if 要求 registrationEnabled !== null：它是 live.ts 的模块级 ref，
     // 由异步 fetchRegistrationSetting 填充，这里直接播种，免得依赖加载时序
     registrationEnabled.value = false;
+    // 配额开关卡同款 v-if 要求 !== null：同一个模块级 ref，一并播种
+    registerIpQuotaEnabled.value = false;
     const wrapper = await mountApiConfig();
     await gotoTab(wrapper, '安全与访问');
-    const seg = wrapper.find('.mk-seg[aria-label="新用户注册开关"]');
-    expect(seg.exists()).toBe(true);
-    const items = seg.findAll('.mk-seg__item');
-    expect(items.map((b) => b.text())).toEqual(['开放注册', '关闭注册']);
-    // beforeEach 播种 registrationEnabled=false → 「关闭注册」段选中，与「单 IP 每日注册配额」同形
-    expect(items[1].classes()).toContain('mk-seg__item--active');
-    expect(items[0].classes()).not.toContain('mk-seg__item--active');
-    // 防回退：本页不允许出现脱离 .mk-seg 父容器的分段器子项（原 bug 就是裸用该类，
-    // 于是没有轨道底与选中态，看着像一行字）
+    // 2026-10-14 用户评审：原「开放注册 / 关闭注册」并排两段读不出是分段视图还是动作钮
+    // （两枚都像按钮、都带选中态，语义靠猜）→ 改 MkSwitch：一枚 role=switch + 一个状态词
+    const sw = wrapper.find('[role="switch"][aria-label="允许新用户自助注册"]');
+    expect(sw.exists()).toBe(true);
+    expect(sw.attributes('aria-checked')).toBe('false');
+    expect(sw.text()).toContain('仅管理员创建');
+    // 关态不得再出现「开放注册」那对双按钮
+    expect(wrapper.text()).not.toContain('开放注册');
+    // 同页另一个布尔设置（配额）同形
+    expect(wrapper.find('[role="switch"][aria-label="单 IP 每日注册配额"]').exists()).toBe(true);
+    // 防回退：本页不允许出现脱离 .mk-seg 父容器的分段器子项（原 bug 就是裸用该类）
     for (const b of wrapper.findAll('.mk-seg__item')) {
       expect(b.element.closest('.mk-seg')).toBeTruthy();
     }
@@ -370,13 +374,12 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('虚拟学习者 tab（2026-10-13 新增）：切换后渲染压测参数卡，含速率上限/最高并发/日期模拟三块', async () => {
+  it('压测参数卡并入「路由与调用」（2026-10-14 页签收敛：原独立页签实测 ~85% 死区）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    const tab = wrapper.findAll('.mk-subtab').find((b) => b.text().includes('虚拟学习者'));
-    expect(tab, '应存在「虚拟学习者」tab').toBeTruthy();
-    await tab!.trigger('click');
-    await flushPromises();
+    // 收敛后不再有「虚拟学习者」页签，限流设置随「路由与调用」渲染
+    expect(wrapper.findAll('.mk-subtab').map((b) => b.text()).some((t) => t.includes('虚拟学习者'))).toBe(false);
+    await gotoTab(wrapper, '路由与调用');
     expect(wrapper.find('.vl-settings').exists()).toBe(true);
     const labels = wrapper.findAll('.vl-settings .mk-seg__item').map((b) => b.text());
     expect(labels.some((t) => t.includes('速率上限'))).toBe(true);
@@ -454,7 +457,7 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.findAll('.ac-model').map((e) => e.text())).toEqual(['m-1', 'm-2']);
     expect(wrapper.text()).toContain('本次拉取未保存');
     expect(wrapper.find('.ac-models__hint').text()).toContain('仅在本页有效');
-    expect(wrapper.find('.ac-models__hint').text()).toContain('保存后');
+    expect(wrapper.find('.ac-models__hint').text()).toContain('保存连接');
     // 拉取后下拉立即可用（本页内联动不回归）
     expect((wrapper.find('.ac-test__model select').element as HTMLSelectElement).disabled).toBe(false);
 

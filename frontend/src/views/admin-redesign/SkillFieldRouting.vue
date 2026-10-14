@@ -48,7 +48,7 @@
       <!-- 图例：角色 / render / 流转 / 落库键 / 锁定（与编排图页同源人话表） -->
       <details class="sfr__legend" @toggle="legendOpen = ($event.target as HTMLDetailsElement).open">
         <!-- 折叠头走 .mk-section__summary（shared.css，与 FieldRoutingTable / DriftAuditPanel 同款） -->
-        <summary class="mk-section__summary mk-section__summary--muted">图例：字段角色 / render / 锁定 / 流转 —— 不懂就看这里</summary>
+        <summary class="mk-section__summary mk-section__summary--muted">图例：字段角色 / render / 锁定 / 流转</summary>
         <div class="sfr__legend-body">
           <div class="sfr__legend-group sfr__legend-group--roles">
             <h5 class="sfr__legend-title">字段角色（promptRole）</h5>
@@ -69,13 +69,13 @@
             </ul>
             <h5 class="sfr__legend-title">流转（handoff / internal / accumulate）</h5>
             <ul class="sfr__legend-list">
-              <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-handoff">handoff</span><span class="sfr__legend-hint">移交：字段产完后交给谁——下一阶段名（如 path）/ agent / skill；空 = 不转交</span></li>
+              <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-handoff">handoff</span><span class="sfr__legend-hint">移交：字段产完后交给下一阶段（path / agent / skill），留空则不转交</span></li>
               <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-internal">internal</span><span class="sfr__legend-hint">内部信令：仅供平台内部 / UI 控制使用，不进业务状态</span></li>
               <li class="sfr__legend-item"><span class="mk-badge mk-badge--flow-accumulate">accumulate</span><span class="sfr__legend-hint">累积：值会累积进学习者状态（画像 / 上下文），供后续阶段持续使用</span></li>
             </ul>
             <h5 class="sfr__legend-title">落库键（persistKey）</h5>
             <ul class="sfr__legend-list">
-              <li class="sfr__legend-item"><span class="sfr__legend-hint">字段值最终写入主库的键路径；与字段名不一致的字段单独标注，一致时默认显示字段名</span></li>
+              <li class="sfr__legend-item"><span class="sfr__legend-hint">字段值的实际落库位置，与字段名不同时单独标注</span></li>
             </ul>
             <h5 class="sfr__legend-title">锁定 / core 状态</h5>
             <ul class="sfr__legend-list">

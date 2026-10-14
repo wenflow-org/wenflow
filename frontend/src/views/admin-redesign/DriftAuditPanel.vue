@@ -4,11 +4,10 @@
     <details class="mk-card fdp__box">
       <summary class="mk-card__head mk-section__summary">
         <span class="mk-card__title">新建字段（编辑编排文件）</span>
-        <span class="mk-card__meta">唯一声明源</span>
       </summary>
       <div class="fdp__guide">
         <p class="fdp__guide-text">
-          新建字段请直接编辑编排文件，保存后新字段/新路由立即进入数据库（已有行修改见下方漂移报告）。
+          新建字段请直接编辑编排文件，保存后立即生效（已有行修改见下方漂移报告）。
         </p>
         <p class="fdp__guide-file"><span class="mono">prompts/orchestration/{{ stage }}.yaml</span></p>
         <p class="fdp__guide-text">入口：<strong>「字段路由」页顶部「编排文件」按钮</strong>，在文本框中按现有结构追加

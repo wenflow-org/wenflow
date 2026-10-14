@@ -430,7 +430,7 @@
               <div v-if="lessonCheckpoints.length" class="cp-checkpoints">
                 <div class="cp-checkpoints__head">
                   <span class="cp-checkpoints__title">检查点</span>
-                  <span class="cp-checkpoints__meta">{{ lessonCheckpoints.length }} 次作答 · 题目不走聊天，此处显示</span>
+                  <span class="cp-checkpoints__meta">{{ lessonCheckpoints.length }} 次作答 · 题目不计入聊天记录</span>
                 </div>
                 <div v-for="(cp, i) in lessonCheckpoints" :key="`cp-${i}`" class="cp-checkpoint">
                   <p class="cp-checkpoint__q">{{ cp.question || cp.title || '（无题干）' }}</p>
@@ -1052,7 +1052,7 @@ const healthStrip = computed(() => {
 })
 const healthStripTitle = computed(() => {
   const w = lessonWrapup.value
-  return `当前课时的总结读数（单课，非全会话汇总）；LSS=学习压力评分，KTL=知识训练负荷，困惑点=本课主要混淆点${w?.degraded ? '；本课为降级总结（未完整结束）' : ''}`
+  return `当前课时的总结读数（单课，非全会话汇总）；LSS 为学习压力评分，KTL 为知识训练负荷，困惑点为本课主要混淆点${w?.degraded ? '；本课为降级总结（未完整结束）' : ''}`
 })
 const hasLessonWrapup = computed(() => !!lessonWrapup.value && (!!lessonWrapup.value.topicSummary || !!lessonWrapup.value.knowledgeSummary))
 const selectedTeachingSessionId = ref('')

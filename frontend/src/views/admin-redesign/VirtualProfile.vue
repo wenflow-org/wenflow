@@ -283,7 +283,7 @@
             <MkEmptyState
               v-else
               title="暂无能力维度评分"
-              description="画像接口未提供数值化能力维度（现有字段为知识水平与性格偏好枚举，无可计量评分）。"
+              description="暂无数值化能力维度（现有画像只有知识水平与性格偏好，无可计量评分）。"
               compact
             />
           </div>
@@ -364,7 +364,7 @@
         <section v-if="activeTab === 'memory'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">记忆池 · {{ memoryPoolRows.length }} 个概念<template v-if="memoryCount"> / 共 {{ memoryCount }} 条</template></h3>
-            <span class="mk-card__meta" :title="allStoriesScope.title">课后沉淀 · 记忆强度＝当前保留率（遗忘曲线调度）· {{ allStoriesScope.label }}</span>
+            <span class="mk-card__meta" :title="allStoriesScope.title">课后沉淀 · 记忆强度为当前保留率 · {{ allStoriesScope.label }}</span>
             <!-- 刷新已上移至统一操作台「主动作」槽 -->
           </div>
 
@@ -435,7 +435,7 @@
             <div v-if="memoryCurveConcepts.length" class="vp-memory__group">
               <div class="vp-memory__group-head">
                 <h4 class="vp-memory__group-title">记忆保持曲线</h4>
-                <span class="mk-card__meta">横轴＝距上次复习天数 · 纵轴＝预计还记得的比例</span>
+                <span class="mk-card__meta">横轴为距上次复习天数 · 纵轴为预计还记得的比例</span>
               </div>
               <p class="vp-memory__curve-hint">
                 老师下次会先带你回捞这些点：曲线越陡、当前保留越低，越优先回捞。
@@ -627,7 +627,7 @@
             <span class="mk-badge mk-badge--muted">{{ timelineSessionOptions.length }} 个会话</span>
           </div>
           <p class="vp-timeline__hint">
-            按自然日聚合该会话的学习负担、学习状态、系统干预与难度调整（只读；数据源为已落地的学习状态聚合 / 温故配额 / 难度调整留痕）。日期模拟默认关闭，此处展示的是既有历史的自然日读数。
+            按自然日聚合该会话的学习负担、学习状态、系统干预与难度调整（只读）。日期模拟默认关闭，这里显示的是既有历史读数。
           </p>
           <p v-if="!timelineSessionOptions.length" class="vp-timeline__empty">
             暂无可查看的会话：该虚拟人还没有历史会话，先运行一次故事或账号自动学习。
@@ -651,7 +651,7 @@
             <span
               v-if="runsTruncated"
               class="mk-card__meta"
-              :title="`会话记录较多，此处显示最近 ${RUNS_TAB_WINDOW} 次`"
+              :title="`会话记录较多，仅显示最近 ${RUNS_TAB_WINDOW} 次`"
             >显示最近 {{ RUNS_TAB_WINDOW }} 次</span>
           </div>
           <MkEmptyState v-if="!allRuns.length" :class="LINE_EMPTY" title="还没有运行记录" />
@@ -704,7 +704,7 @@
           </label>
           <label class="mk-field">
             <span class="mk-field__label">长期倾向（可选，非故事目标）</span>
-            <input v-model="editForm.goal" class="mk-field__input" placeholder="留空 = 当次需求来自故事" />
+            <input v-model="editForm.goal" class="mk-field__input" placeholder="留空表示当次需求来自故事" />
           </label>
           <label class="mk-field">
             <span class="mk-field__label">知识水平</span>
@@ -744,23 +744,23 @@
             <input v-model="editStoryForm.title" class="mk-field__input" placeholder="故事标题（启动实验时展示）" />
           </label>
           <label class="mk-field">
-            <span class="mk-field__label">场景（storyOutline）</span>
+            <span class="mk-field__label">场景</span>
             <textarea v-model="editStoryForm.storyOutline" class="mk-field__textarea" rows="3" placeholder="故事发生场景：时间、处境、触发的事件"></textarea>
           </label>
           <label class="mk-field">
-            <span class="mk-field__label">触发事件（storyTriggerEvent）</span>
+            <span class="mk-field__label">触发事件</span>
             <input v-model="editStoryForm.storyTriggerEvent" class="mk-field__input" placeholder="会话开始时描述给学习者的可见开场事件" />
           </label>
           <label class="mk-field">
-            <span class="mk-field__label">可见开场（visibleOpening）</span>
+            <span class="mk-field__label">可见开场</span>
             <textarea v-model="editStoryForm.visibleOpening" class="mk-field__textarea" rows="3" placeholder="学习者可见的开场白（黑盒链路使用）"></textarea>
           </label>
           <label class="mk-field">
-            <span class="mk-field__label">对抗点（pressurePoints，每行一条）</span>
+            <span class="mk-field__label">对抗点（每行一条）</span>
             <textarea v-model="editStoryForm.pressurePoints" class="mk-field__textarea" rows="3" placeholder="压力点列表：每条一行"></textarea>
           </label>
           <div class="vp-pk">
-            <span class="mk-field__label">问题知识（problemKnowledge）</span>
+            <span class="mk-field__label">问题知识</span>
             <label class="mk-field">
               <span class="mk-field__label">领域熟悉度</span>
               <select v-model="editStoryForm.problemKnowledge.domainFamiliarity" class="mk-field__select">
@@ -791,12 +791,12 @@
             <span class="mk-field__label">故事级预算（可选，留空继承角色级）</span>
             <label class="mk-field" :class="{ 'mk-field--error': storyBudgetErrors.maxRetriesPerStep }">
               <span class="mk-field__label">单步最大重试</span>
-              <input v-model="editStoryForm.budget.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" placeholder="留空 = 继承角色级（默认 8）" />
+              <input v-model="editStoryForm.budget.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" placeholder="留空即继承角色级（默认 8）" />
               <span v-if="storyBudgetErrors.maxRetriesPerStep" class="mk-field__err">{{ storyBudgetErrors.maxRetriesPerStep }}</span>
             </label>
             <label class="mk-field" :class="{ 'mk-field--error': storyBudgetErrors.maxRetriesTotal }">
               <span class="mk-field__label">会话 AI 调用上限</span>
-              <input v-model="editStoryForm.budget.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" placeholder="留空 = 继承角色级（默认 600）" />
+              <input v-model="editStoryForm.budget.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" placeholder="留空即继承角色级（默认 600）" />
               <span v-if="storyBudgetErrors.maxRetriesTotal" class="mk-field__err">{{ storyBudgetErrors.maxRetriesTotal }}</span>
               <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止；防本故事无限跑</span>
             </label>

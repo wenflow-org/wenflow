@@ -70,7 +70,7 @@
       </select>
       <span
         class="ld-scope__hint"
-        title="「记忆与复习」不随本开关走：memory_traces 以 (userId, conceptKey) 唯一，一个概念只有一条痕迹（pathId 记的是最后写入的那条），按路径切会静默吞掉在另一条路径学过的概念。「行为基线与互动」本就是用户级先验，不含路径概念。要看跨全部路径的教学会话，走平台「教学会话」页（那里不按路径收窄）。"
+        title="「记忆与复习」不随本开关走：一个概念只保留一条记忆痕迹（记的是最后写入的那条路径），按路径切会漏掉在另一条路径学过的概念。「行为基线与互动」本就是用户级先验，不含路径概念。要看跨全部路径的教学会话，走平台「教学会话」页（那里不按路径收窄）。"
       >作用于 概念掌握 · 证据 · 图谱 · 教学会话；记忆与行为基线不受影响</span>
     </div>
 
@@ -146,7 +146,7 @@
           </details>
           <p v-else class="ld-none">
             {{ '暂无概念账本数据' }}
-            <span class="ld-none__hint">重算快照后由知识记忆服务生成。</span>
+            <span class="ld-none__hint">重算快照后自动生成。</span>
           </p>
         </section>
 
@@ -293,7 +293,7 @@
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">认知与偏好</h3>
-            <span v-if="!evidence.length" class="mk-card__meta" title="以下为学习者模型的初始先验值（该账号尚无学习证据落库），随学习证据累积更新；不是实测结论">初始先验 · 暂无学习证据</span>
+            <span v-if="!evidence.length" class="mk-card__meta" title="该账号尚无学习证据，以下为初始先验值，随证据累积更新，不是实测结论">初始先验 · 暂无学习证据</span>
           </div>
           <div class="ld-pf-sub">
             <div>
@@ -319,7 +319,7 @@
         <section v-if="behaviorRows.length || historyRows.length" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">行为基线与互动</h3>
-            <span v-if="!evidence.length" class="mk-card__meta" title="以下为学习者模型的初始先验值（该账号尚无学习证据落库），随学习证据累积更新；不是实测结论">初始先验 · 暂无学习证据</span>
+            <span v-if="!evidence.length" class="mk-card__meta" title="该账号尚无学习证据，以下为初始先验值，随证据累积更新，不是实测结论">初始先验 · 暂无学习证据</span>
             <span class="mk-card__meta" :title="allPathsScope.title">{{ allPathsScope.label }}</span>
           </div>
           <div class="ld-pf-sub">
@@ -388,7 +388,7 @@
         v-else
         icon="◌"
         title="暂无认知画像数据"
-        description="重算快照后由知识记忆服务生成；画像/派生洞察等卡将随快照一起更新。"
+        description="重算快照后自动生成，画像/派生洞察等卡将随快照一起更新。"
         action-text="重算快照"
         :action-busy="recomputing"
         @action="recompute"
@@ -408,7 +408,7 @@
           <h3 class="mk-card__title">全局信号与背景</h3>
           <!-- 口径纠错：原 title 写「跨全部学习路径汇总」，实测数据源是当前路径的会话与学习证据
                （sessions/learner_evidence 均按 pathId 过滤）+ 该学习者全部记忆痕迹，不是跨全部路径 -->
-          <span class="mk-card__meta" :title="`${scopeNote.title}\n账本=概念底账规模`">{{ sigHeadMeta }} · {{ scopeNote.label }}</span>
+          <span class="mk-card__meta" :title="`${scopeNote.title}\n账本为概念底账规模`">{{ sigHeadMeta }} · {{ scopeNote.label }}</span>
         </div>
         <div class="ld-sigbody">
           <div class="ld-sig-sec">
@@ -464,7 +464,7 @@
                  ——渲染条数=响应条数，口径写「教学域仅近 20 条」防「共 N 条」误读（2026-10-11 走查修正：
                  域合并后「仅最近 20 条」已失实） -->
             <!-- 卡头 meta 只留图形编码图例——条数/低置信计数归结论行（2026-10-11 用户走查：两处复读） -->
-            <span class="mk-card__meta">点色=信号，条=置信</span>
+            <span class="mk-card__meta">点色表示信号，条长表示置信</span>
           </div>
           <!-- T2 硬约束 2「结论与细节分层」：结论行常驻可见，明细折叠。
                结论文字完全取自本卡已有数据（条数 + 卡片里本来就标的「证据不足」），未新增判断。
@@ -568,7 +568,7 @@
               <div class="ld-load__zones">
                 <span><i class="ld-load__dot is-lss"></i>LSS 学习压力（0-100，越高越累）</span>
                 <span><i class="ld-load__dot is-lf"></i>LF 疲劳度（0-100，≥60 警戒）</span>
-                <span><i class="ld-load__dot is-lsb"></i>LSB 状态平衡（KTL-LF，负=状态差）</span>
+                <span><i class="ld-load__dot is-lsb"></i>LSB 状态平衡（KTL-LF，负值表示状态差）</span>
               </div>
             </div>
             <div v-else class="ld-none">
@@ -591,7 +591,7 @@
           <section v-if="conceptStats.length" class="mk-card">
             <div class="mk-card__head">
               <h3 class="mk-card__title">概念证据密度</h3>
-              <span class="mk-card__meta">条长=证据条数 · 颜色=迁移风险（红 高 / 琥珀 中 / 绿 低）</span>
+              <span class="mk-card__meta">条长表示证据条数 · 颜色表示迁移风险（红 高 / 琥珀 中 / 绿 低）</span>
             </div>
             <div class="ld-bars ld-bars--dense">
               <div v-for="c in conceptStats" :key="c.label" class="ld-bar" :class="{ 'ld-bar--empty': c.count === 0 }">
@@ -679,7 +679,7 @@
           :loading="graphLoading"
           :error="graphError"
           height="var(--ld-graph-h)"
-          empty-hint="这位学习者还没有概念图数据——路径生成后 kc-mapper 会产出前置依赖，随概念身份注册表物化进图。"
+          empty-hint="这位学习者还没有概念图数据，路径生成后会自动补齐前置依赖并生成图谱。"
         />
       </section>
     </div>
@@ -1227,7 +1227,7 @@ const ldSessionMetaText = computed(() => {
 })
 const ldSessionMetaTitle = computed(() => {
   const base =
-    `${scopeNote.value.title}\n该学习者最近 ${LD_SESSION_WINDOW} 条教学会话（窗口上限）；有效=有教学内容，已废弃=学习者点「重新开始」后作废的旧会话。`
+    `${scopeNote.value.title}\n该学习者最近 ${LD_SESSION_WINDOW} 条教学会话（窗口上限）；有效表示有教学内容，已废弃表示学习者点「重新开始」后作废的旧会话。`
   // 里程碑串档只在跨路径时存在：切到单条路径后档位天然同源，不必再告警
   return scopePathId.value
     ? base
@@ -2442,9 +2442,9 @@ const memMetaText = computed(() => {
 })
 const memMetaTitle = computed(() => {
   const overdue = memoryPaneRows.value.filter((r) => r.overdue).length
-  return `记忆强度=FSRS 可提取率；待复习=已到复习期（${overdue} 条）；稳固≥80% 且未到期；未初始化=尚无记忆痕迹。` +
-    `\n本块与页头「路径视角」开关无关，按学习者聚合：memory_traces 以 (userId, conceptKey) 唯一，` +
-    `一个概念只有一条痕迹、pathId 只记最后写入的那条路径，按路径切会静默吞掉在另一条路径学过的概念。`
+  return `记忆强度为 FSRS 可提取率；待复习为已到复习期（${overdue} 条）；稳固≥80% 且未到期；未初始化为尚无记忆痕迹。` +
+    `\n本块与页头「路径视角」开关无关，按学习者聚合：` +
+    `一个概念只保留一条记忆痕迹（记的是最后写入的那条路径），按路径切会漏掉在另一条路径学过的概念。`
 })
 
 const trendText = computed(() => (d.value?.trend === 'up' ? '↗ 上升' : d.value?.trend === 'down' ? '↘ 下降' : '→ 稳定'))

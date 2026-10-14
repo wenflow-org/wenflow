@@ -173,9 +173,11 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     // 组头读 adminCounts（非窗口行数）
     expect(w.find('.ss-group__count').text()).toContain('100 个会话');
     expect(w.find('.ss-group__count').text()).toContain('93 个活跃');
-    // 页码器分母 = 行窗口（30），note 标明后端全量活跃 93——两个数不同源，各自标口径
+    // 页码器分母 = 行窗口（30），note 标明全量活跃 93——两个数不同源，各自标口径
+    // （2026-10-14 文案批：「后端全量活跃」→「全部活跃」，去后端视角）
     expect(pagerText(w)).toContain('共 30 条');
-    expect(w.find('.pagination-note').text()).toContain('后端全量活跃 93 条');
+    expect(w.find('.pagination-note').text()).toContain('仅统计当前已加载行');
+    expect(w.find('.pagination-note').text()).toContain('全部活跃 93 条');
   });
 
   it('未截断时不出现口径 note（避免同屏复读）', async () => {

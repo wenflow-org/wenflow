@@ -63,7 +63,7 @@
       </button>
       <span v-if="rpmDirty" class="vl-rpm__dirty">未保存</span>
       <span v-if="loadFailed" class="vl-rpm__failed" role="alert">设置未加载，保存已禁用（请刷新重试）</span>
-      <span v-else class="vl-rpm__hint">虚拟学习者专属 · 0 = 不限 · 不占真实用户额度</span>
+      <span v-else class="vl-rpm__hint">虚拟学习者专属 · 0 为不限 · 不占真实用户额度</span>
     </div>
 
     <div v-show="settingsTab === 'concurrency'" class="vl-settings__pane">

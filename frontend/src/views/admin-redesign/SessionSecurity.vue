@@ -18,7 +18,7 @@
          走全局 .mk-alert--info（原型 .alert--info 词汇），本地只补行内布局 -->
     <div v-if="deepLinkUser" class="mk-alert mk-alert--info ss-deeplink">
       <strong>来自审计日志 · 查看「{{ deepLinkUser }}」的登录会话</strong>
-      <span>这里展示登录成功产生的会话（可强制下线）；登录事件完整历史（含失败尝试）见</span>
+      <span>仅列登录成功产生的会话（可强制下线）；登录事件完整历史（含失败尝试）见</span>
       <button type="button" class="mk-link" @click="goAuditLogs">审计日志 · 登录审计 →</button>
       <button type="button" class="mk-link ss-deeplink__clear" @click="clearDeepLink">× 清除筛选</button>
     </div>
@@ -60,7 +60,7 @@
               class="mk-pill"
               :class="{ 'mk-pill--active': statusFilter === p.id }"
               :aria-pressed="statusFilter === p.id"
-              :title="`只看${p.label}会话（计数为后端全量；筛选只作用于已加载的最近 ${sessions.length} 条行）`"
+              :title="`只看${p.label}会话（计数为全部；筛选仅作用于当前已加载的 ${sessions.length} 条行）`"
               @click="statusFilter = statusFilter === p.id ? '' : p.id"
             >
               {{ p.label }}<span v-if="countOf(p.id) > 0" class="mk-pill__count">{{ countOf(p.id) }}</span>
@@ -88,7 +88,7 @@
             v-if="revokeCount(g)"
             type="button"
             class="mk-btn mk-btn--danger-ghost mk-btn--sm"
-            :title="`吊销「${g.adminName}」全部未吊销会话（后端按管理员全量作用域，含行窗口外的会话）`"
+            :title="`吊销「${g.adminName}」全部未吊销会话（含当前未显示的会话）`"
             @click="revokeAll(g)"
           >
             下线全部<template v-if="revokeCount(g) > 1">（{{ revokeCount(g) }}）</template>
@@ -263,7 +263,7 @@
       v-model:pageSize="pageSize"
       :total="activeFlat.length"
       :loading="loading"
-      :note="truncated ? `仅行窗口，后端全量活跃 ${activeCount} 条` : ''"
+      :note="truncated ? `仅统计当前已加载行；全部活跃 ${activeCount} 条` : ''"
     />
     </div>
   </div>
@@ -437,8 +437,8 @@ function revokeCount(g: SessionGroup): number {
 /** 卡头口径 title：窗口截断时说明行列表只含最近 N 条，统计仍为全量 */
 const countsTitle = computed(() =>
   truncated.value
-    ? `统计为后端全量口径；行列表仅含最近 ${sessions.value.length} 条（接口行窗口上限）`
-    : '统计与行列表均为后端全量口径'
+    ? `统计为全部会话；列表仅含最近 ${sessions.value.length} 条`
+    : '统计与列表均为全部会话'
 )
 
 /** 全量统计四口径：后端 counts 缺失（旧响应/mock）时回落窗口内计数。

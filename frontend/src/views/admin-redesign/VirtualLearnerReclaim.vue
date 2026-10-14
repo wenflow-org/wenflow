@@ -9,7 +9,7 @@
       </div>
       <div class="mk-modal__body">
         <p class="mk-alert mk-alert--info">
-          将把{{ state.profileIds ? '选中虚拟人' : '全部' }}超过回收阈值（{{ reclaimThresholdLabel }}）无写入、且无活跃租约的会话标记为失败（failed, reason=stale）。只改状态，不删除任何数据。
+          将把{{ state.profileIds ? '选中虚拟人' : '全部' }}超过回收阈值（{{ reclaimThresholdLabel }}）无写入、且无活跃租约的会话标记为失败。只改状态，不删除任何数据。
         </p>
         <p v-if="state.loading" class="mk-alert mk-alert--info">正在扫描可回收会话…</p>
         <template v-else>

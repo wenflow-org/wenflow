@@ -92,7 +92,7 @@
             {{ starting ? '开始中…' : '让账号开始学习' }}
           </button>
         </div>
-        <p class="ql-section__hint">故事可选：选中后单课会带有故事情境（非空时学习者有背景）；摩擦控制本课行为弧线（none=纯合作，normal=真实人物常态）。</p>
+        <p class="ql-section__hint">故事可选：选中后单课会带有故事情境（非空时学习者有背景）。摩擦控制本课行为弧线（none 纯合作，normal 真实人物常态）。</p>
 
         <details class="ql-fixture">
           <summary class="mk-section__summary">没有可学任务？把已有路径复制到该虚拟账号</summary>
@@ -169,7 +169,7 @@
         <template v-if="!running">
           <div class="ql-entries">
             <div class="ql-section__title">平台账号验收入口</div>
-            <p class="ql-entries__hint">下面打开的都是普通前台页面，只是通过投影 token 切到这个虚拟学习者账号。</p>
+            <p class="ql-entries__hint">下面打开的都是普通前台页面，以该虚拟学习者身份查看。</p>
             <div class="ql-entries__actions">
               <button
                 type="button"

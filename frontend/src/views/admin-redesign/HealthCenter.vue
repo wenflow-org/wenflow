@@ -335,7 +335,7 @@ const completionLive = computed(() => displayReport.value?.completion?.live || 0
     阈值/口径在 title 披露——live 为完成度最高档，登记总数含外挂能力 */
 const completionCardTitle = computed(() => {
   const total = reconciliation.value.total
-  return `未完成上线的技能 ${global.value.abnormalSkills} 个（0 = 全部上线）；已上线 ${completionLive.value}/${total}（含外挂能力）`
+  return `未完成上线的技能 ${global.value.abnormalSkills} 个（0 即全部上线），已上线 ${completionLive.value}/${total}（含外挂能力）`
 })
 
 /** 概要卡 tooltip：解释口径，避免红色数字误读 */
@@ -370,13 +370,13 @@ const skillCountTitle = computed(
 const refreshNote = computed(() => {
   if (loading.value) return '检测中…'
   // 对账页签数据不随 60s 轮询（进入页签时拉取一次）：注记在「对账」页签如实切口径（审核 #83）
-  if (hcTab.value === 'recon') return '进入本页签时刷新；健康报告每 60 秒自动检测'
+  if (hcTab.value === 'recon') return '进入时刷新，健康报告每 60 秒自动检测'
   const iso = displayReport.value?.generatedAt
   return iso ? `60s 自动检测 · 更新于 ${timeAgo(iso)}` : '60s 自动检测'
 })
 /** 页头注记 title：健康报告 60s 轮询 + 对账数据的刷新口径分别说明（审核 #83 消除「60s 自动检测」的歧义） */
 const refreshNoteTitle = computed(() =>
-  `${displayReport.value ? skillCountTitle.value : '健康报告每 60s 自动检测'}；对账数据不随轮询，进入「对账」页签时刷新`
+  `${displayReport.value ? skillCountTitle.value : '健康报告每 60s 自动检测'}，对账数据不随轮询，进入「对账」页签时刷新`
 )
 
 /** 概要卡跳转：= 切到对应域页签（2026-10-14 页签收敛后 4 卡 → 2 页签，卡到页签多对一） */
@@ -474,7 +474,7 @@ const distribution = computed(() => displayReport.value?.completion.distribution
 const healthAbnormal = computed(() => displayReport.value?.health.abnormal ?? 0)
 /** 检查异常卡悬停：只给增量口径（值/总数已在 value/hint 可见，title 不再复读——CP2/CP9） */
 const healthAbnormalTitle = computed(
-  () => '异常为 error / warn 检查项；info 仅供参考，不计入异常。点击切到「健康与漂移」页签'
+  () => '异常为 error / warn 检查项，info 仅供参考，不计入异常。点击切到「健康与漂移」页签'
 )
 
 const completionTiers = COMPLETION_META
@@ -528,13 +528,13 @@ const SERVICE_GROUP_NAMES: Record<HealthCenterItem['base'], string> = {
 /** 服务卡 sub 行（原型 .sub）：一句话说明该服务域是什么。域语义与后端 health-center.service.ts
     buildItem 的 base 分组同源（各基准域的检查项 cause/fixHint 口径），非虚构；计数在 serviceDesc 用真实检查项数拼装 */
 const SERVICE_GROUP_DESC: Record<HealthCenterItem['base'], string> = {
-  'file:core.yaml': '以 core.yaml 为基准真源：哈希链与参数声明核对',
-  'file:manifest': '以 manifest 契约为基准真源：与数据库契约登记比对',
-  'file:orchestration': '以编排文件为基准真源：字段/路由登记比对',
-  'file:skills.yaml': '以 skills.yaml 为基准真源：注册与 ACTIVE 版本对账',
-  bidirectional: '双向对等比对：两侧独立维护的声明互相对账',
-  'db:managed': '数据库托管域：admin 手工覆盖行清单（只读观测）',
-  runtime: '运行时遥测：线上调用行为的只读观测记录',
+  'file:core.yaml': '核心文件哈希与参数声明核对',
+  'file:manifest': '契约清单与数据库登记比对',
+  'file:orchestration': '编排声明与字段路由登记比对',
+  'file:skills.yaml': '技能户口簿注册与生效版本对账',
+  bidirectional: '两侧独立维护的声明互相对账',
+  'db:managed': '管理员手工覆盖行清单（只读观测）',
+  runtime: '线上调用行为的只读观测记录',
 }
 /** 服务卡 sub 行文案：域描述 + 真实检查项数（同原型「后端 API · 检查项 N 个」形态） */
 function serviceDesc(card: { base: HealthCenterItem['base']; total: number }): string {

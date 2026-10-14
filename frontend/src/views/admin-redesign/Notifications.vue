@@ -19,7 +19,7 @@
           <MkFilterSearch
             v-model="keyword"
             placeholder="搜索标题 / 姓名 / 邮箱"
-            title="在当前页内过滤（后端列表接口暂不支持关键词参数；翻页可查看其它页）"
+            title="只过滤当前页，翻页可查看其它页"
           />
           <select v-model="kindFilter" class="mk-filter__select" @change="reloadFromFirstPage">
             <option value="">全部类型</option>
@@ -183,7 +183,7 @@
                 <option value="announcement">公告提醒（站内信）</option>
                 <option value="achievement">成就</option>
               </select>
-              <span class="mk-field__hint">全站横幅公告请在「公告」页管理；此处「公告提醒」是站内信形态的公告类通知</span>
+              <span class="mk-field__hint">全站横幅公告在「公告」页管理</span>
             </label>
             <div class="mk-field">
               <span class="mk-field__label">发送范围</span>

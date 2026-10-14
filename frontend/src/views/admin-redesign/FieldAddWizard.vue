@@ -40,7 +40,7 @@
           <!-- 表单 -->
           <div class="faw__grid">
             <label class="mk-field faw__full">
-              <span class="mk-field__label">字段名 <em class="mk-field__req">*</em>（kebab-case 或点分路径；首段 = core 顶层字段）</span>
+              <span class="mk-field__label">字段名 <em class="mk-field__req">*</em>（kebab-case 或点分路径，首段为 core 顶层字段）</span>
               <input v-model="form.name" type="text" class="mk-input mono" placeholder="例如：summary / understanding.motivation" spellcheck="false" :disabled="mode === 'edit'" @input="checkName" />
               <span v-if="mode === 'edit'" class="mk-field__hint">编辑模式：字段名即身份标识，不可修改</span>
               <span v-else class="mk-field__hint" :class="nameHintCls">{{ nameHint }}</span>
@@ -97,7 +97,7 @@
 
             <label class="mk-field">
               <span class="mk-field__label">落库键（persistKey，别名时填）</span>
-              <input v-model="form.persistKey" type="text" class="mk-input mono" placeholder="留空 = 与字段名一致" spellcheck="false" />
+              <input v-model="form.persistKey" type="text" class="mk-input mono" placeholder="留空则与字段名一致" spellcheck="false" />
             </label>
 
             <label class="mk-field">
@@ -269,8 +269,8 @@ const isEdit = computed(() => props.mode === 'edit')
 const dialogTitle = computed(() => (isEdit.value ? `编辑字段 · ${props.fieldName}` : `加字段 · ${props.skillId}`))
 const subText = computed(() =>
   isEdit.value
-    ? '一次保存 → 双文件联动修改（core.yaml fields + 编排 fields/routings）→ 原子保存（写盘 / 全量对账同步 / 复检）；字段名不可改'
-    : '一次填写 → 双文件生成（core.yaml fields + 编排 fields/routings）→ 原子保存（写入/同步/复检）'
+    ? '一次保存会同时更新 core 与编排两个文件，字段名不可改'
+    : '一次填写会同时写入 core 与编排两个文件'
 )
 const resultTitle = computed(() => {
   if (result.value?.changed === false) return '无变化（幂等）'

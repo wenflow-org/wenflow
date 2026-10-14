@@ -56,7 +56,7 @@
 
       <!-- 图性质说明：本图是字段数据旅程（逻辑图·字段血缘），非拓扑图 -->
       <p class="dfg-caption">
-        <strong>字段数据旅程（逻辑图 · 字段血缘）</strong>——按字段流转组织，展示编排定义的字段交接结构
+        <strong>字段数据旅程（逻辑图 · 字段血缘）</strong>
       </p>
 
 
@@ -168,7 +168,7 @@
               <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)" :title="`长程字段${p.dir === 'out' ? '流向' : '来自'} ${p.peerLabel}（点击定位）`">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
             </header>
             <div class="dfg-step__body">
-              <p class="dfg-step__note">上游字段在阶段闸口完成整装重命名，再分发给内部 Skill（字段带 → 目标 标签）</p>
+              <p class="dfg-step__note">上游字段在此重命名后分发给内部 Skill</p>
               <div class="dfg-chips" :data-gate-anchor="step.agentId">
                 <button
                   v-for="c in stepShown(step, 'out')"
@@ -476,7 +476,7 @@
                 </div>
                 <div class="dfg-field">
                   <label class="dfg-field__label" for="dfg-handoff">移交（handoff）</label>
-                  <input id="dfg-handoff" v-model="editDraft.handoffText" class="dfg-edit__input mono" placeholder="阶段名 / skill:id / agent，逗号分隔；留空 = 不转交" spellcheck="false" />
+                  <input id="dfg-handoff" v-model="editDraft.handoffText" class="dfg-edit__input mono" placeholder="阶段名 / skill:id / agent，逗号分隔，留空则不转交" spellcheck="false" />
                 </div>
                 <div class="dfg-field">
                   <span class="dfg-field__label">累积</span>

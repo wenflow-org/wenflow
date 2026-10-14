@@ -18,7 +18,7 @@
         <input v-model.number="form.defaultDailyMinutesCap" type="number" min="5" max="480" class="mk-field__input" @input="dirty = true" />
       </label>
       <label class="mk-field">
-        <span class="mk-field__label">每周学习天数（0=不限）</span>
+        <span class="mk-field__label">每周学习天数（0 为不限）</span>
         <input v-model.number="form.defaultDaysPerWeek" type="number" min="0" max="7" class="mk-field__input" @input="dirty = true" />
       </label>
       <label class="mk-field">
@@ -49,7 +49,7 @@
     </div>
     <div class="sd-settings__foot">
       <span v-if="loadFailed" class="sd-settings__hint sd-settings__hint--bad" title="设置加载失败，当前展示的是默认值；为避免用默认值覆盖服务端配置，保存已禁用，请刷新页面重试">设置未加载，保存已禁用（请刷新重试）</span>
-      <span v-else class="sd-settings__hint">默认关闭；只对虚拟学习者生效，不影响真实用户。</span>
+      <span v-else class="sd-settings__hint">默认关闭，只对虚拟学习者生效，不影响真实用户。</span>
       <button type="button" class="mk-btn mk-btn--primary" :disabled="!dirty || saving || loadFailed" @click="save">
         {{ saving ? '保存中…' : '保存日期模拟设置' }}
       </button>

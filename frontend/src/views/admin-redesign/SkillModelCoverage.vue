@@ -4,18 +4,18 @@
     <!-- 原型 .card__head（title + sub）：卡头统一走 mk-card 词表 -->
     <div class="mk-card__head">
       <h3 class="mk-card__title">Skill × 模型 × 参数 × 兜底</h3>
-      <span class="mk-card__meta">技能全集（prompts 注册表）× 实际路由</span>
+      <span class="mk-card__meta">全部技能 × 实际路由</span>
     </div>
     <div class="skc__body">
       <!-- 原型 .note：说明文字走 surface-2 底 + muted 小字（不再自搓提示样式） -->
-      <p class="note">
-        <b>未配置 = 走平台默认</b>（2026-09-28 曾因此把 7 个课后技能静默漏到旧通道）。
+      <p class="note" title="2026-09-28 曾因此把 7 个课后技能静默漏到旧通道">
+        <b>未配置的技能会走平台默认</b>。
         对多个技能套用同一份通道/模型/参数/兜底配置：
       </p>
       <div class="skc__apply">
         <input v-model="bulk.endpoint" class="mk-input mono" placeholder="endpoint（必填，http://host:30001）" :class="{ 'is-err': bulkErr }" />
         <input v-model="bulk.apiKey" class="mk-input mono" type="password" placeholder="apiKey（必填）" :class="{ 'is-err': bulkErr }" />
-        <input v-model="bulk.model" class="mk-input mono" placeholder="model（留空 = 不覆盖）" list="skc-model-options" />
+        <input v-model="bulk.model" class="mk-input mono" placeholder="model（留空则不覆盖）" list="skc-model-options" />
         <button type="button" class="mk-btn mk-btn--primary" :disabled="bulkSaving || !selected.length" @click="applyBulk">
           {{ bulkSaving ? '套用中…' : `套用到 ${selected.length} 个技能` }}
         </button>
@@ -73,7 +73,7 @@
       <MkEmptyState
         v-else-if="!loading"
         title="暂无技能覆盖数据"
-        description="技能目录为空（该 skill 未登记 skill-model-config）。可点击「刷新」重新拉取。"
+        description="技能目录为空。可点击「刷新」重新拉取。"
         action-text="刷新"
         @action="load"
       />

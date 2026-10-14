@@ -19,14 +19,14 @@
           class="mk-status__meta mono sdp-ellipsis"
           :title="`${overview.agentId}${overview.file ? ' · ' + overview.file.path : ''}`"
         >{{ overview.agentId }}<template v-if="overview.file"> · {{ shortFilePath(overview.file.path) }}</template></span>
-        <span v-if="overview.db?.version" class="mk-status__meta">DB ACTIVE <b class="mono">v{{ overview.db.version }}</b></span>
+        <span v-if="overview.db?.version" class="mk-status__meta">已发布 <b class="mono">v{{ overview.db.version }}</b></span>
         <!-- B19-F7-3：调用/成功率/均耗来自 workbench-meta 的调用日志聚合（range 默认 all）。
              窗口词必须随数字一起出现，否则与工程页签「本版本累计调用」（agent_prompts.useCount）
              同一屏两个数会被读成同一事实。 -->
         <span
           v-if="workbenchMeta?.stats"
           class="mk-status__meta"
-          :title="`调用日志聚合统计 · 窗口：${statsRangeLabel}；与工程页签「本版本累计调用」口径不同`"
+          :title="`调用日志聚合统计，窗口：${statsRangeLabel}（与工程页签口径不同）`"
         >
           {{ statsRangeLabel }}调用 <b class="mono">{{ workbenchMeta.stats.totalCalls }}</b>
           · 成功率 <b class="mono">{{ workbenchMeta.stats.successRate ?? '—' }}%</b>
@@ -59,8 +59,8 @@
       <strong>{{ TERMS.driftContractQualified }}</strong>
       <span>源文件与运行中的 Prompt 不一致</span>
       <code class="mono" :title="overview.file?.path || 'prompts/skill.*.md'">{{ overview.file?.path || 'prompts/skill.*.md' }}</code>
-      <span>DB ACTIVE v{{ overview.db?.version || '?' }}</span>
-      <span>请修改文件并通过部署同步处理</span>
+      <span>已发布 v{{ overview.db?.version || '?' }}</span>
+      <span>请修改源文件后重新发布</span>
     </div>
 
     <MkEmptyState

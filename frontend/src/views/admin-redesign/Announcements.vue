@@ -177,7 +177,7 @@
           <label class="mk-field">
             <span class="mk-field__label">过期时间（可选）</span>
             <input v-model="form.expiresAt" type="datetime-local" class="mk-field__input" />
-            <span class="mk-field__hint">留空 = 不过期，直到手动下线</span>
+            <span class="mk-field__hint">留空表示不过期，需手动下线</span>
           </label>
           <!-- 仅新建态显示：编辑走「保存修改」，saveEdit 不读 publishNow（发布由行内「发布」按钮负责），
                编辑态留着会是看得见、改了没用的控件 -->

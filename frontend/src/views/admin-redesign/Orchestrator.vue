@@ -60,7 +60,7 @@
              计数 meta 归 head-right）——单行不占画布高度。阶段数画布五列可见这里点明（窄屏
              画布横向滚动时兜底）；Skill 总数是本页唯一非显然读数，title 保留 F8-4 三源口径 -->
         <div class="mk-card__head-right">
-          <span v-if="stages.length" class="mk-card__meta" :title="skillKpiTitle">{{ stages.length }} 阶段 · {{ totalSkills }} 个 Skill（拓扑内挂载）</span>
+          <span v-if="stages.length" class="mk-card__meta" :title="skillKpiTitle">{{ stages.length }} 阶段 · {{ totalSkills }} 个 Skill</span>
           <!-- 图例（原型 card__tools：卡头右侧只放工具/图例，title 独占左侧） -->
           <span class="orch-odg-chip orch-odg-chip--in">阶段入参</span>
           <span class="orch-odg-chip orch-odg-chip--out">阶段产出</span>
@@ -178,7 +178,7 @@
              37 含外挂能力（skill-catalog 口径）、32 是运行时 Skill 定义数，两数不同源不冲突，
              但必须自解释才不像「数字对不上」 -->
         <span class="mk-card__meta" :title="govMetaTitle">
-          编辑后核对文件与库一致 · 编排定义 {{ orchCount }} · Skill 定义 {{ skillDefCount }}<template v-if="recReport"> · 已上线 {{ recLiveCount }}/{{ recTotalCount }}（含外挂能力）</template>
+          编排定义 {{ orchCount }} · Skill 定义 {{ skillDefCount }}<template v-if="recReport"> · 已上线 {{ recLiveCount }}/{{ recTotalCount }}（含外挂能力）</template>
         </span>
       </div>
       <!-- 定义明细（definitionNotes 调试转储）2026-10-05 撤：Skill 行名称字段全空

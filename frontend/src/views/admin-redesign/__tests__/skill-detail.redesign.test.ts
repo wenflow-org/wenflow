@@ -246,7 +246,7 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).not.toContain('goHashDrift')
     expect(OrchestratorSource).not.toContain('stageHandoffs')
     // 阶段数/Skill 总数收进总览卡头右组 meta（F8-4 三源口径 title 随行）
-    expect(OrchestratorSource).toContain('个 Skill（拓扑内挂载）')
+    expect(OrchestratorSource).toContain('}} 阶段 · {{ totalSkills }} 个 Skill')
     expect(OrchestratorSource).toContain(':title="skillKpiTitle"')
   })
 

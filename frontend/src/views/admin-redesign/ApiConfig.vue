@@ -24,14 +24,16 @@
 
     <!-- 视图切换（原型 .tabs 下划线页签）：2026-10-05 CM1 收敛到共享 MkSubTabs（原页内 .tabs/.tab
          本地拷贝退役）；外挂能力计数走 MkSubTabs 的 count 角标，形态与其余二级页签一致。
-         2026-10-14 用户拍板重设计：7 页签 → 5（实测 7 个里有 4 个只装一张卡，碎得过细）——
+         2026-10-14 用户拍板重设计：7 页签 → 4 ——
          · 接入与模型 = 原「接入与验证」（连接 / 模型清单 / 连通性验证）+ 原「模型总览」（注册表只读）
            两张卡本就在互相指路（模型清单空态句写「平台实际在用模型见『模型总览』tab」），
            合成一页后「拉取 → 看注册表解析结果」是一条动线。
          · 路由与调用 = 原「模型路由」（对话/推理/评估默认路由 + 默认思考）+ 原「调用与健康」
-           （调用参数 / 降级守卫 / 能力健康）——同属「调用怎么走、挂了怎么办」。
-         · 安全与访问 / 虚拟学习者 / 外挂能力 原样保留（各 4 卡 / 压测参数 / 能力目录，自成域）。
-         旧键 ?tab=connection / overview / runtime 全部走 TAB_ALIAS 归一，书签与站内深链不失效。 -->
+           （调用参数 / 降级守卫 / 能力健康）+ 注册表的路由两分区（默认路由解析结果 / 别名映射）
+           + 原「虚拟学习者」页签的压测参数卡——全属「调用怎么走、上游容量多少、挂了怎么办」。
+         · 安全与访问（4 张策略卡）、外挂能力（能力目录）自成域，原样保留。
+         旧键 ?tab=connection / overview / runtime / virtual-learners 全部走 TAB_ALIAS 归一，
+         书签与站内深链不失效。 -->
     <MkSubTabs
       class="ac-tabs"
       :tabs="acTabs"
@@ -57,7 +59,7 @@
       </div>
       <section class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">连接</h3>
+        <h3 class="mk-card__title">连接与模型清单</h3>
         <!-- connBadge 附「N 前」（P1#32 子集）：连接状态是上次拉取/探测落库的结果，
              无时间的「连接正常」会把陈旧快照读成实时健康，误导熔断判断 -->
         <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
@@ -93,15 +95,15 @@
           </span>
         </label>
       </div>
-    </section>
-
-    <section class="mk-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">模型清单</h3>
-        <!-- F8-2：拉取只写本页内存，不说明「需保存才可见」会被读成清单已持久化（刷新回退=丢数据） -->
-        <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">本次拉取未保存</span>
-      </div>
-      <div class="ac-body">
+      <!-- 模型清单（2026-10-14 用户评审并入本卡）：原独立成卡，未拉取时整卡只有一句引导文字，
+           占着首屏黄金位却零信息量。清单是「连接并拉取」的产物、也随「保存连接」落盘，
+           收进连接卡内是同一条动线（拉取 → 看清单 → 保存）。 -->
+      <div class="ac-body ac-models-body">
+        <div class="ac-sec__title">
+          模型清单
+          <!-- F8-2：拉取只写本页内存，不说明「需保存才可见」会被读成清单已持久化（刷新回退=丢数据） -->
+          <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">本次拉取未保存</span>
+        </div>
         <div class="ac-models">
           <template v-if="models.length">
             <span v-for="m in models" :key="m" class="ac-model" :title="m">{{ m }}</span>
@@ -112,13 +114,14 @@
                  人话一句给动作，错误原文进 title 供排查贴单 -->
             <span v-if="fetchError" :title="`错误原文：${fetchError}`">模型清单拉取失败：请检查服务地址与密钥是否正确、服务商是否可访问，然后点右上角「重新拉取」。</span>
             <!-- P3（2026-10-04 全站评审）：括号内连接状态复读撤——「连接」卡 40px 左侧 badge
-                 已承载「连接正常 · N 前」，空态句只说自己没拉清单 -->
-            <span v-else>模型清单尚未拉取。平台实际在用模型见「模型总览」tab 的解析结果；点击右上角「连接并拉取」获取服务商列表。</span>
+                 已承载「连接正常 · N 前」，空态句只说自己没拉清单。
+                 2026-10-14：原句把读者指去「模型总览」页签，该页签同日已并入本页签（指针失效），改指本页下方注册表。 -->
+            <span v-else>模型清单尚未拉取，点右上角「连接并拉取」获取服务商列表；平台实际在用的模型见下方注册表。</span>
           </div>
         </div>
         <!-- 持久化说明（F8-2）：拉取是连通性验证的本页动作，只有随连接保存落盘，
              其他页面与下次进入才可见；保存成功后 hasUnsavedModels 归零，本行自动消失 -->
-        <span v-if="hasUnsavedModels" class="ac-models__hint">本次拉取的清单仅在本页有效：点卡头「保存连接」保存后，其他页面与下次进入才可见。</span>
+        <span v-if="hasUnsavedModels" class="ac-models__hint">本次拉取的清单仅在本页有效，点卡头「保存连接」后其它页面与下次进入才可见。</span>
       </div>
     </section>
 
@@ -150,8 +153,11 @@
     </section>
     <!-- 原「模型总览」页签（2026-10-14 并入）：注册表只读面板排在三卡下方、跨全宽；
          「拉取清单 → 看注册表解析结果」是一条动线（原空态句还得把读者引到另一个页签）。
-         不再自带 role=tabpanel——它是本页签内部的第二段，a11y 归属由外层面板承担。 -->
-    <ModelRegistryOverview class="ac-registry" ref="registryRef" @aliases="aliasOptions = $event" />
+         不再自带 role=tabpanel——它是本页签内部的第二段，a11y 归属由外层面板承担。
+         当日再收一刀：其中「默认路由（解析结果）」「别名映射」两分区是路由域事实（配置填了
+         什么 → 解析成什么），归到「路由与调用」页签紧贴可编辑的三条角色行；本页只留
+         供应商 / 能力限额 / 冷却 / 配置提示（parts 切片，见 ModelRegistryOverview）。 -->
+    <ModelRegistryOverview class="ac-registry" ref="registryRef" :parts="['providers', 'limits', 'cooldown', 'tips']" @aliases="aliasOptions = $event" />
 
     </div>
     </template>
@@ -199,7 +205,7 @@
                  开关只是 `defaultThinkingMode !== 'disabled'` 的派生态（关闭 ⇔ 下拉的「关闭」档），
                  且它表达不了「强制开启」，勾上只能落到「跟随模型默认」，是有损视图。
                  同屏一处事实两个控件，还带来「强度灰了、模式没灰」的不一致。现只留真字段那一个控件。 -->
-            <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖<span v-if="dirty.has('route')"> · 保存见卡头「保存路由」</span></span></div>
+            <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认，可在 Skill 设计页「运行时」覆盖</span></div>
             <div class="ac-row ac-row--2 ac-think">
               <label class="mk-field">
                 <span class="mk-field__label">思考模式</span>
@@ -231,7 +237,7 @@
 
             <!-- 结构化输出：平台级默认（json 媒介 Skill 的请求附 response_format，上游解码层强制 JSON；
                  需渠道支持——2026-10-02 对本渠道直连实测为真强制；skill 级 paramOverrides.responseFormat 可覆盖/显式关闭） -->
-            <div class="ac-sec__title">结构化输出<span class="ac-sec__hint">对输出 JSON 的 Skill 由上游强制 JSON（防「自然停止但吐散文」类失败）；仅支持 OpenAI 风格 response_format 的渠道可开<span v-if="dirty.has('route')"> · 保存见卡头「保存路由」</span></span></div>
+            <div class="ac-sec__title">结构化输出<span class="ac-sec__hint" title="对输出 JSON 的 Skill 由上游强制 JSON，防「自然停止但吐散文」类失败">对输出 JSON 的 Skill 强制 JSON（需渠道支持 response_format）</span></div>
             <!-- 与上方「思考模式 / 思考强度」同宽（同列里同类控件两种宽度是偶然差异，不是层级） -->
             <div class="ac-row ac-row--2">
               <label class="mk-field">
@@ -329,7 +335,7 @@
           </div>
           <div class="ac-groups">
             <div v-if="reliability" class="ac-group">
-              <div class="ac-group__title">尝试与降级</div>
+              <div class="ac-group__title" title="降级触发条件：1 + 传输重试 ＜ 上游最大尝试（例：3 次尝试、1 次传输重试时仍留一次降级机会）">尝试与降级</div>
               <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">上游最大尝试</span>
@@ -344,7 +350,6 @@
                   <input v-model.number="reliability.maxLogicalRetries" type="number" min="0" :max="limMax('maxLogicalRetries', 5)" class="mk-field__input" @input="markDirty('reliability')" />
                 </label>
               </div>
-              <div class="ac-group__note">模型降级触发条件：1 + 传输重试 ＜ 上游最大尝试（例如 3 次尝试、1 次传输重试时仍留一次降级机会）</div>
             </div>
             <div v-if="reliability" class="ac-group">
               <div class="ac-group__title">退避与超时</div>
@@ -373,7 +378,7 @@
                 <label class="mk-field">
                   <span class="mk-field__label">平台全局 RPM 上限（0=不限）</span>
                   <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input" @input="markDirty('reliability')" />
-                  <span class="mk-field__hint">真实用户与平台自身调用的出站 LLM 请求速率上限；虚拟学习者走独立通道，不计入此处</span>
+                  <span class="mk-field__hint">真实用户与平台自身的出站上限（不含虚拟学习者）</span>
                 </label>
               </div>
             </div>
@@ -420,6 +425,17 @@
         </div><!-- /ac-cols -->
         </div><!-- /ac-body -->
       </section>
+
+      <!-- 压测参数（速率上限 / 最高并发 / 日期模拟）：2026-10-13 自「虚拟学习者」页迁入本页，
+           2026-10-14 随该页签撤除再并进本页签——它是「调用怎么走、上游容量多少」的一环，
+           与上方「出站速率（平台全局）」同族（那条管真实用户与平台自身，这条管虚拟学习者通道，
+           两条各自带范围说明，不合并成一组以免两种保存链打架）。组件自带卡头/分段视图/保存钮。 -->
+      <VirtualLabLoadSettings />
+
+      <!-- 注册表切片：默认路由「配置值 → 实际使用」与别名映射（2026-10-14 自「接入与模型」迁入）——
+           上方三条角色行是「配置填了什么」，本表是「平台实际解析成哪个模型」，同一事实的两面同屏；
+           归属路由域后，接入页只剩供应商/能力限额/冷却/配置提示这类观测面。 -->
+      <ModelRegistryOverview class="ac-registry ac-registry--routing" :parts="['routes', 'aliases']" @aliases="aliasOptions = $event" />
     </div>
     </template>
     <template v-else-if="tab === 'security'">
@@ -460,7 +476,7 @@
               </span>
             </span>
           </div>
-          <span class="ac-policy__hint">策略持久化到 System DB 并热生效；环境变量仅作默认值。</span>
+          <span class="ac-policy__hint">保存后立即生效（优先级高于环境变量）。</span>
           <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">⚠ 公网开放 · 入口无访问限制</span>
           <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
             <span class="mk-field__label">额外允许的客户端 IP（每行一个，可留空）</span>
@@ -517,26 +533,17 @@
           <h3 class="mk-card__title">新用户注册</h3>
         </div>
         <div class="ac-body ac-policy__item">
-          <span class="ac-policy__desc">{{ registrationEnabled ? '当前：任何人可注册' : '当前：仅管理员创建' }}</span>
-          <!-- 与紧邻的「单 IP 每日注册配额」同一形态（mk-seg 两段 + 选中态）。
-               原先是「状态文字 + 一个裸的 .mk-seg__item」——借了分段器子项类却没有 .mk-seg
-               父容器，没有轨道底与选中态，渲染出来就是一行字（2026-10-08 反馈）。 -->
-          <div class="mk-seg ac-policy__seg" role="group" aria-label="新用户注册开关">
-            <button
-              type="button"
-              class="mk-seg__item"
-              :class="{ 'mk-seg__item--active': registrationEnabled }"
-              :disabled="registrationBusy"
-              @click="setRegistration(true)"
-            >开放注册</button>
-            <button
-              type="button"
-              class="mk-seg__item"
-              :class="{ 'mk-seg__item--active': !registrationEnabled }"
-              :disabled="registrationBusy"
-              @click="setRegistration(false)"
-            >关闭注册</button>
-          </div>
+          <!-- 2026-10-14 用户评审：原「开放注册 / 关闭注册」并排双按钮读不出是分段视图还是动作钮
+               （两枚都像按钮、都带选中态，语义靠猜）。布尔配置改用 MkSwitch：一个控件 + 一个状态词。
+               「当前：任何人可注册」那句状态文字随之下沉成开关的状态词（同一事实不再两处）。 -->
+          <MkSwitch
+            :model-value="registrationEnabled"
+            :busy="registrationBusy"
+            aria-label="允许新用户自助注册"
+            :state-text="registrationEnabled ? '任何人均可注册' : '仅管理员创建'"
+            :title="registrationEnabled ? '关闭后新账号只能由管理员手动创建' : '开放后任何人可自助注册账号'"
+            @update:model-value="setRegistration"
+          />
         </div>
       </section>
       <!-- 单 IP 每日注册配额（live；默认关，避免误伤同一内网/出口的正常注册） -->
@@ -545,24 +552,14 @@
           <h3 class="mk-card__title">单 IP 每日注册配额</h3>
         </div>
         <div class="ac-body ac-policy__item">
-          <span class="ac-policy__desc">{{ quotaEnabledText }}，超过后该 IP 当天无法再创建账号</span>
           <div class="ac-quota-row">
-            <div class="mk-seg ac-quota-seg" role="group" aria-label="单 IP 每日注册配额开关">
-              <button
-                type="button"
-                class="mk-seg__item"
-                :class="{ 'mk-seg__item--active': registerIpQuotaEnabled }"
-                :disabled="quotaBusy"
-                @click="setQuotaEnabled(true)"
-              >启用</button>
-              <button
-                type="button"
-                class="mk-seg__item"
-                :class="{ 'mk-seg__item--active': !registerIpQuotaEnabled }"
-                :disabled="quotaBusy"
-                @click="setQuotaEnabled(false)"
-              >关闭</button>
-            </div>
+            <MkSwitch
+              :model-value="registerIpQuotaEnabled"
+              :busy="quotaBusy"
+              aria-label="单 IP 每日注册配额"
+              :state-text="quotaEnabledText"
+              @update:model-value="setQuotaEnabled"
+            />
             <label v-if="registerIpQuotaEnabled" class="ac-quota-field">
               <span class="mk-field__label">每日上限</span>
               <input
@@ -577,7 +574,7 @@
               <em>个 / IP</em>
             </label>
           </div>
-          <span class="ac-policy__hint">默认关闭。启用后，同一公网出口 IP 24 小时内最多注册 {{ quotaInput || 5 }} 个账号，适合在批量注册风险显现时开启。</span>
+          <span class="ac-policy__hint">同一公网出口 IP 24 小时内最多注册 {{ quotaInput || 5 }} 个账号（批量注册风险出现时再开）</span>
         </div>
       </section>
     </div>
@@ -595,17 +592,7 @@
     </template>
 
 
-    <!-- ===== Tab2: 模型总览（只读；消费 /api/admin/model-registry） =====
-         id/role/aria-labelledby 走组件根元素透传，与 MkSubTabs 的 id-base="ac" 成对（审核 #161） -->
-
-    <!-- ===== 虚拟学习者（压测参数：速率上限 / 最高并发 / 日期模拟） =====
-         2026-10-13 自「虚拟学习者」页迁入：最高并发属上游容量治理，与接入/路由设置同处管理；
-         虚拟学习者页只保留只读读数，运营仍可在该页任意启动数量，上限由本页统一管控。 -->
-    <div v-else-if="tab === 'virtual-learners'" class="ac-tab-body" id="ac-panel-virtual-learners" role="tabpanel" aria-labelledby="ac-tab-virtual-learners">
-      <VirtualLabLoadSettings />
-    </div>
-
-    <!-- ===== Tab3: 外挂能力（Addons embedded） ===== -->
+    <!-- ===== Tab2: 外挂能力（Addons embedded） ===== -->
     <Addons v-else id="ac-panel-addons" role="tabpanel" aria-labelledby="ac-tab-addons" ref="addonsRef" embedded @count="onAddonsCount" />
   </div>
 </template>
@@ -647,16 +634,20 @@ import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
+import MkSwitch from '@/components/mk/MkSwitch.vue'
 import { toast } from '@/utils/toast'
 
-/* ---------- 宿主：接入与模型 · 模型总览 · 外挂能力 ----------
-   ?tab=model|overview|addons 双向同步；模型总览嵌入只读 ModelRegistryOverview，
+/* ---------- 宿主：接入与模型 · 路由与调用 · 安全与访问 · 外挂能力 ----------
+   ?tab=model|overview|addons 双向同步；只读 ModelRegistryOverview 按分区切片嵌两个页签
+   （接入：供应商/能力限额/冷却/配置提示；路由：默认路由解析结果/别名映射），
    外挂能力嵌入 Addons（embedded，域计数上报宿主） */
-const AC_TABS = ['access', 'routing', 'security', 'virtual-learners', 'addons'] as const
+const AC_TABS = ['access', 'routing', 'security', 'addons'] as const
 type AcTab = (typeof AC_TABS)[number]
 /** 旧页签键别名归一：站内「配置 →」与量测脚本曾用 ?tab=model / ?tab=registry / ?tab=model-routing；
     这些键不在白名单，watcher 原会静默把用户送到「接入与验证」，深链/书签永远落不到目标页签。
-    2026-10-14 合并页签后追加：connection/overview→access、runtime→routing（旧书签继续可用） */
+    2026-10-14 合并页签后追加：connection/overview→access、runtime→routing（旧书签继续可用）；
+    同日再收一刀——「虚拟学习者」页签撤除（只装一张压测参数卡，实测页内 ~85% 死区，且该卡的
+    限流是「调用怎么走」的一部分）→ virtual-learners→routing。 */
 const TAB_ALIAS: Record<string, AcTab> = {
   model: 'access',
   registry: 'access',
@@ -664,6 +655,7 @@ const TAB_ALIAS: Record<string, AcTab> = {
   overview: 'access',
   runtime: 'routing',
   'model-routing': 'routing',
+  'virtual-learners': 'routing',
 }
 const tab = ref<AcTab>('access')
 /** 底部保存条挂载的 tab（脏位跨 tab 不丢）：接入与模型（接入三卡可写）+ 路由与调用 + 安全与访问 */
@@ -680,12 +672,12 @@ function onAddonsCount(n: number) {
   addonsCountReady.value = true
 }
 /** 页签定义（CM1：收敛到 MkSubTabs；count 只在已加载时给出，见上）。
-    2026-10-14 五页签：接入与模型 / 路由与调用 / 安全与访问 / 虚拟学习者 / 外挂能力 */
+    2026-10-14 四页签：接入与模型 / 路由与调用 / 安全与访问 / 外挂能力
+    （「虚拟学习者」页签同日撤除，压测参数卡并入「路由与调用」）。 */
 const acTabs = computed(() => [
   { key: 'access', label: '接入与模型' },
   { key: 'routing', label: '路由与调用' },
   { key: 'security', label: '安全与访问' },
-  { key: 'virtual-learners', label: '虚拟学习者' },
   { key: 'addons', label: '外挂能力', count: addonsCountReady.value ? addonsCount.value : undefined },
 ])
 function onTabChange(key: string) {
@@ -696,7 +688,8 @@ const registryRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
 
 /** 逻辑别名候选（来自后端只读总览，避免前端硬编码与注册表漂移）。
     不再进页即拉：与总览 tab 的 getModelRegistry 是同一份接口，重复请求；
-    改由 ModelRegistryOverview 首次挂载（首次切到总览 tab）加载后经 @aliases 回传 */
+    改由 ModelRegistryOverview 挂载后经 @aliases 回传：接入与路由两个切片各自回传一次，
+    谁先挂载谁填（同一份接口数据，不额外请求） */
 const aliasOptions = ref<string[]>([])
 watch(
   () => route?.query?.tab,
@@ -1479,6 +1472,10 @@ async function saveQuota(enabled: boolean, quota: number) {
    2026-10-14 页首 KPI 带撤除后，三列不再有「与 KPI 垂直对位」的对象；注册表只读面板
    作为本网格第四项跨全宽（.ac-registry）。 */
 .ac-conn-body { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
+/* 路由与调用页签内的注册表切片（默认路由解析结果 / 别名映射）：外层页签已承担网格与滚动节奏，
+   这里让分区直接成为父网格的子项（display: contents 去掉自身的 .ac-tab-body 盒子），
+   与上方「出站速率」「压测参数」同一条 12px 节奏堆叠，不出现内外双滚动容器。 */
+.ac-registry--routing { display: contents; }
 .ac-sec-body { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
 .ac-sec-head { grid-column: 1 / -1; }
 /* 置顶告警（接入域读取失败）横跨全部列，不占卡位把卡片挤换行 */
@@ -1596,9 +1593,7 @@ async function saveQuota(enabled: boolean, quota: number) {
 /* 策略域（2026-10-05 满屏重排）：四条策略各自成卡排 2×2（.ac-sec-body 宫格），
    本类只剩卡体内容栅格语义 + 测试选择器钩子（原 dashed 宫格边框随 ac-policy 宫格退役） */
 .ac-policy__item { min-width: 0; }
-.ac-policy__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
 .ac-policy__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.55; display: block; }
-.ac-policy__seg { width: fit-content; }
 .ac-policy__warn { font-size: var(--mk-fs-micro); color: var(--mk-red); font-weight: 600; }
 /* 访问来源模式：radio 单选卡片（复刻原型 index.html:1793-1798 .radio-row/.radio，
    原型 .radio[aria-checked="true"] = brand 描边 + brand 底 + brand 字 + 600 字重）。
@@ -1629,7 +1624,6 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-radio__sub { color: var(--mk-muted); font-weight: 500; }
 .ac-radio[aria-checked='true'] .ac-radio__sub { color: inherit; opacity: 0.82; }
 .ac-quota-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.ac-quota-seg { width: fit-content; }
 .ac-quota-field {
   display: flex;
   align-items: center;
@@ -1803,8 +1797,6 @@ async function saveQuota(enabled: boolean, quota: number) {
   letter-spacing: 0.04em;
   color: var(--mk-faint);
 }
-/* 组内驻留说明（如降级触发条件）：比副标题再轻一档，常驻不抢读 */
-.ac-group__note { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 开关控件：统一走全站 mk-field--switch（原生 checkbox + label + accent-color 蓝），
    不再使用自定义 iOS 滑块（2026-09 与全站 admin 视觉对齐） */
 .mk-field--switch { align-content: start; }
@@ -1879,7 +1871,6 @@ async function saveQuota(enabled: boolean, quota: number) {
   .mk-field__label { font-size: var(--mk-fs-micro); }
   .ac-model { font-size: var(--mk-fs-micro); padding: 5px 12px; }
 
-  .ac-policy__desc { font-size: var(--mk-fs-micro); }
   .ac-policy__warn { font-size: var(--mk-fs-micro); }
   .mk-seg { border-radius: 12px; }
   .mk-seg__item { font-size: var(--mk-fs-micro); padding: 8px 14px; }
@@ -1906,7 +1897,6 @@ async function saveQuota(enabled: boolean, quota: number) {
   .mk-field__label { font-size: var(--mk-fs-micro); }
   .ac-model { font-size: var(--mk-fs-micro); padding: 6px 14px; border-radius: var(--mk-radius-xl); }
 
-  .ac-policy__desc { font-size: var(--mk-fs-micro); }
   .ac-policy__warn { font-size: var(--mk-fs-micro); }
   .mk-seg__item { font-size: var(--mk-fs-micro); padding: 9px 16px; }
   .ac-textarea { font-size: var(--mk-fs-micro); }
@@ -1932,7 +1922,6 @@ async function saveQuota(enabled: boolean, quota: number) {
   .mk-field__label { font-size: var(--mk-fs-body); }
   .ac-model { font-size: var(--mk-fs-body); padding: 7px 16px; }
 
-  .ac-policy__desc { font-size: var(--mk-fs-body); }
   .ac-policy__warn { font-size: var(--mk-fs-body); }
   .mk-seg__item { font-size: var(--mk-fs-body); padding: 11px 19px; }
   .ac-textarea { font-size: var(--mk-fs-body); }

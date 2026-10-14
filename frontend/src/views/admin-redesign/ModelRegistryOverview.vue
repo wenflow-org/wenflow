@@ -17,10 +17,9 @@
            分区由卡头分隔线承担；表内数据语义不变 -->
       <section class="mk-card">
         <!-- ① 默认路由：配置值 → 解析结果（回答"改成别名后到底用哪个模型"） -->
-        <section class="ac-mr-sect">
+        <section v-if="shows('routes')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">默认路由（解析结果）</h3>
-            <span class="mk-card__meta">平台配置可写具体模型，也可写逻辑别名；此处展示解析后的实际模型</span>
           </div>
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense">
@@ -57,10 +56,10 @@
         </section>
 
         <!-- ② 别名映射：一处切换的落点 -->
-        <section class="ac-mr-sect">
+        <section v-if="shows('aliases')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">别名映射</h3>
-            <span class="mk-card__meta">业务/配置只写别名，由模型层按顺序与能力展开为具体部署</span>
+            <span class="mk-card__meta">配置里填别名，系统自动选具体模型</span>
           </div>
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense">
@@ -85,8 +84,8 @@
               </tbody>
             </table>
           </div>
-          <p v-if="data.aliases.some((a) => a.dbMembers)" class="ac-mr-note">
-            DB 覆盖声明（platform_api_configs.chatModels / reasoningModels / lightModels）：
+          <p v-if="data.aliases.some((a) => a.dbMembers)" class="ac-mr-note" title="DB 覆盖声明（platform_api_configs.chatModels / reasoningModels / lightModels）">
+            平台覆盖的别名：
             <span v-for="alias in data.aliases.filter((a) => a.dbMembers)" :key="`db-${alias.alias}`" class="mono ac-mr-note__item">
               {{ alias.alias }} = {{ alias.dbMembers?.join(', ') }}
             </span>
@@ -97,11 +96,11 @@
              形态对齐原型 index.html:345-357 .mlist/.mrow 与 1819-1823 供应商行：
              38px badge 方块（名前 2 字）+ 主行「名 · 用途」+ 副行「id · 承载 N 个模型 · 端点/密钥」
              + 右侧 ok/warn/off 状态徽标。原型 mrow 的 QPS/成本目录未下发，按「缺字段省略」不硬造 -->
-        <section class="ac-mr-sect">
+        <section v-if="shows('providers')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">模型供应商</h3>
-            <span class="mk-card__meta">
-              唯一写源 = File-as-Truth 模型目录（config/llm-providers.json，改动热重载）；继承通道沿用平台路由解析，自带端点的供应商在路由时整体切换 endpoint/key
+            <span class="mk-card__meta" title="唯一写源 = File-as-Truth 模型目录（config/llm-providers.json，改动热重载）；继承通道沿用平台路由解析，自带端点的供应商在路由时整体切换 endpoint/key">
+              只读 · 配置文件托管
             </span>
           </div>
           <p v-if="data.registry?.source === 'embedded-fallback'" class="ac-mr-note">
@@ -142,10 +141,10 @@
         </section>
 
         <!-- ③ 模型能力与限额：目录文件 = 唯一写源 -->
-        <section class="ac-mr-sect">
+        <section v-if="shows('limits')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">模型能力与限额</h3>
-            <span class="mk-card__meta">唯一写源 = File-as-Truth 模型目录（llm-providers.json）；此表只读。降级仅切换模型名，网关与密钥沿用主调用</span>
+            <span class="mk-card__meta" title="唯一写源 = File-as-Truth 模型目录（llm-providers.json）；此表只读。降级仅切换模型名，网关与密钥沿用主调用">只读 · 降级仅换模型名</span>
           </div>
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense">
@@ -197,10 +196,10 @@
         </section>
 
         <!-- ④ 部署冷却（进程内快照，只有真的触发过降级/限流时才有内容） -->
-        <section class="ac-mr-sect">
+        <section v-if="shows('cooldown')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">部署冷却</h3>
-            <span class="mk-card__meta">按 provider + 端点 + 模型隔离；冷却中的部署在降级时会被跳过</span>
+            <span class="mk-card__meta">冷却中的部署在降级时会被跳过</span>
           </div>
           <div v-if="data.cooldowns.length" class="mk-table-scroll">
             <table class="mk-table mk-table--dense">
@@ -219,7 +218,7 @@
         </section>
 
         <!-- ⑤ 配置漂移告警 -->
-        <section class="ac-mr-sect">
+        <section v-if="shows('tips')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">配置提示</h3>
             <span class="mk-card__meta">未注册模型 / 别名为空 / 模型未被引用 / 废弃的 prompt 模型副本</span>
@@ -318,6 +317,17 @@ interface ModelRegistryOverviewData {
   warnings: string[]
   deprecatedPromptModelCount: number
 }
+
+/* 分区裁剪（2026-10-14 用户拍板）：宿主按域挂本组件的不同切片——
+   「默认路由（解析结果）/ 别名映射」是路由域事实，归「路由与调用」页签；供应商 /
+   能力限额 / 冷却 / 配置提示留在「接入与模型」。切片只裁剪渲染范围，数据仍是一次
+   getModelRegistry（同一时刻只有一个页签的实例挂载，不产生重复请求）。 */
+type MrPart = 'routes' | 'aliases' | 'providers' | 'limits' | 'cooldown' | 'tips'
+/* 默认值就地写死（不能引用本地常量：defineProps 会被提升到 setup 之外，编译器会拦下） */
+const props = withDefaults(defineProps<{ parts?: MrPart[] }>(), {
+  parts: () => ['routes', 'aliases', 'providers', 'limits', 'cooldown', 'tips']
+})
+const shows = (p: MrPart) => props.parts.includes(p)
 
 const emit = defineEmits<{
   count: [payload: { models: number; warnings: number }]

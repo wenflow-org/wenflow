@@ -303,7 +303,7 @@
 
           <h4 class="mr__h4">
             散键清理（误提取的无用概念）
-            <span class="mr__sub-inline">判定为误提取 / 无效的散概念键；「确认」= 清理该键（弹层列明迁移表），不会自动执行</span>
+            <span class="mr__sub-inline">判定为误提取 / 无效的散概念键。点「确认」清理该键（弹层列明迁移表），不会自动执行</span>
           </h4>
           <!-- R7 任务书 B：dropCandidates 此前只在类型里声明计数、从不渲染（审计 CC-2）——补第三组建议列表 -->
           <div v-if="mrDropCount" class="mk-table-scroll">

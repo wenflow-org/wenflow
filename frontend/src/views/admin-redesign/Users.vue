@@ -15,8 +15,8 @@
         真实 {{ realUsers }}
       </span>
       <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" title="含虚拟学习者与测试账号（行内带标记）">测试/虚拟 {{ users.length - realUsers }}</span>
-      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="`管理员 ${adminCount} · 当前在线 ${activeToday}${registrationEnabled !== null ? ' · 注册' + (registrationEnabled ? '开放' : '关闭') : ''}`">
-        在线 {{ activeToday }}
+      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="`管理员 ${adminCount} · 近 7 天活跃 ${activeToday}${registrationEnabled !== null ? ' · 注册' + (registrationEnabled ? '开放' : '关闭') : ''}`">
+        近 7 天活跃 {{ activeToday }}
       </span>
       <span class="mk-status__actions">
         <button type="button" class="mk-status__action mk-status__action--primary" @click="openCreate">新建用户</button>
@@ -236,7 +236,7 @@
           </label>
           <label v-if="isLive" class="mk-field" :class="{ 'mk-field--error': errors.password }">
             <span class="mk-field__label">{{ editTarget ? '重置密码' : '初始密码' }} <em class="mk-field__req">*</em></span>
-            <input v-model="form.password" type="password" class="mk-field__input" :placeholder="editTarget ? '留空 = 不修改' : '至少 8 位，含字母和数字'" />
+            <input v-model="form.password" type="password" class="mk-field__input" :placeholder="editTarget ? '留空表示不修改' : '至少 8 位，含字母和数字'" />
             <span v-if="errors.password" class="mk-field__err">{{ errors.password }}</span>
           </label>
           <label v-if="isLive && !editTarget" class="mk-field" :class="{ 'mk-field--error': errors.confirmPassword }">
