@@ -2,7 +2,7 @@
   <div class="mk-page sdp">
     <!-- 顶部：返回 + 状态条（与 console 统一的运维简报语言） -->
     <header class="sdp-head">
-      <button type="button" class="mk-back" @click="goConsole">← 控制台</button>
+      <button type="button" class="mk-back" @click="goConsole">← Skill 与提示词</button>
       <div v-if="overview" class="mk-status" :class="statusToneCls">
         <span class="mk-status__dot"></span>
         <strong class="mk-status__title">{{ overview.displayName || skillId }}</strong>
@@ -150,9 +150,10 @@ const agentIdParam = computed(() => {
 })
 const skillId = computed(() => agentIdParam.value.replace(/^skill:/, ''))
 
-/** 返回控制台：优先回 SPA 来源页（设计页通常从 Skill 列表/抽屉进入，旧实现固定回
-    /admin/console → 经重定向永远落在总览，丢失来源上下文）；直接深链进来（无站内
-    上一页）时回 Skill 列表兜底。onBeforeRouteLeave 的未保存确认对 back 同样生效 */
+/** 返回来源页（2026-10-14 方案 B 后列表行是主入口，按钮文案随之从「← 控制台」改为
+    去向名「← Skill 与提示词」——两类落地都在 Skill 域，旧文案指向的「控制台」与真实
+    目的地不符）：优先回 SPA 来源页（从 Skill 列表行 / 抽屉 / 字段路由表进入均可）；
+    直接深链进来（无站内上一页）时回 Skill 列表兜底。onBeforeRouteLeave 的未保存确认对 back 同样生效 */
 function goConsole() {
   const back = (window.history.state as { back?: string } | null)?.back
   if (back && back.startsWith('/admin/')) router.back()

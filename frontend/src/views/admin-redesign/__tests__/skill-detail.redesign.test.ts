@@ -2,8 +2,9 @@
  * SkillDetail 技能详情二级页（原型 renderSkillDetail / openPromptModal 的落点，2026-10-01 新建）。
  *
  * 断言 = 原型版式的每一块 + 接线正确性 + 数据诚实性：
- *  - 接线：AdminConsole DETAIL_COMPONENTS 含 skill；Skills.vue 行点击 openSubPage('skill')；
- *    Orchestrator.vue 编排图节点点击 openSubPage('skill')；两者均不再引用 SkillDrawer
+ *  - 接线：AdminConsole DETAIL_COMPONENTS 含 skill；Skills.vue 行点击直达设计页
+ *    （2026-10-14 方案 B：原「设计」小钮撤除、行不再开 skill 二级页）；Orchestrator.vue
+ *    编排图节点点击 openSubPage('skill')；两者均不再引用 SkillDrawer
  *  - hero：S 头像 / 技能名 / 归属 Agent · 类别副文 / 健康+类别+模型+版本 pills / 真实动作
  *  - 6 页签（运行时 / 协议 / 试跑 / 版本 / 工程 / 字段路由；2026-10 运行时置首：健康+证据先于配置；
  *    页签写/读 ?tab=，深链/刷新可寻址）
@@ -192,14 +193,19 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(DETAIL_COMPONENTS.skill).toBeTruthy()
   })
 
-  it('Skills.vue 行点击 openSubPage("skill")，且不再引用 SkillDrawer', async () => {
-    // 源文本白盒：SkillDrawer 引用清零、openSubPage('skill') 在位
+  it('Skills.vue 行点击直达设计页（2026-10-14 方案 B），且不再引用 SkillDrawer / openSubPage', async () => {
+    // 源文本白盒：SkillDrawer 引用清零；行点击改走 openDesign（原「设计」小钮撤除）
     expect(SkillsSource).not.toContain('SkillDrawer')
-    expect(SkillsSource).toContain("openSubPage('skill'")
-    // 行为黑盒：真实点击目录行 → store.subPage 变为 skill 二级页
+    expect(SkillsSource).not.toContain('openSubPage')
+    expect(SkillsSource).not.toContain('>设计</button>')
+    expect(SkillsSource).toContain('@click="openDesign(')
+    // 行为黑盒：真实点击目录行 → 路由落到设计页「协议」页签
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }]
+      routes: [
+        { path: '/admin/:page?', component: { template: '<div />' } },
+        { path: '/admin/skills/:agentId+', component: { template: '<div />' } }
+      ]
     })
     await router.push('/admin/skills')
     await router.isReady()
@@ -209,8 +215,8 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     const row = w.find('.sk-row')
     expect(row.exists()).toBe(true)
     await row.trigger('click')
-    expect(subPage.value?.view).toBe('skill')
-    expect(subPage.value?.id).toBe('skill-a')
+    await settle()
+    expect(router.currentRoute.value.fullPath).toBe('/admin/skills/skill-a?tab=protocol')
     w.unmount()
   })
 

@@ -205,7 +205,9 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`查看 ${s.name} 详情`" @click="openSubPage('skill', s.id)" @keydown.enter.self.prevent="openSubPage('skill', s.id)" @keydown.space.self.prevent="openSubPage('skill', s.id)">
+            <!-- 2026-10-14 方案 B：行点击直达 Skill 设计页（原「设计」小钮的同一落点）。
+                 此前行点击进详情二级页、行内小钮进设计页，两页同套六页签看着像同一个页面。 -->
+            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`打开 ${s.name} 设计页`" @click="openDesign(s.id)" @keydown.enter.self.prevent="openDesign(s.id)" @keydown.space.self.prevent="openDesign(s.id)">
               <td>
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
@@ -253,9 +255,9 @@
               <td v-if="showCol('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
               <td>
                 <div class="mk-actions">
-                  <!-- 轻运营直达：跳过抽屉一跳，直接进设计页「协议」页签改提示词
-                       （原型操作列：文字小钮 .btn--sm 形态，对齐 Users 判例） -->
-                  <button type="button" class="mk-btn mk-btn--sm" @click.stop="openDesign(s.id)">设计</button>
+                  <!-- 2026-10-14 用户拍板方案 B：行点击即进设计页，原「设计」小钮撤除——
+                       同一落点两个入口，且它与行点击的「查看详情」在读者眼里是两页同一物。
+                       排障入口「查失败」（异常→动作→证据）保留。 -->
                   <!-- 失败行直达证据（评审「异常→动作→证据断链」：排障从 4 跳压到 1 跳）：
                        复用 store.investigateAgent（agent+status=err intent 深链执行日志）；
                        行级拿不到错误类别，errorCategory 置空交日志页自筛 -->
@@ -349,8 +351,8 @@
             </tr>
           </thead>
           <tbody>
-            <!-- 原型行 data-action="open-skill"：本页行点击同样进 Skill 详情 -->
-            <tr v-for="s in cards" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`查看 ${s.name} 详情`" @click="openSubPage('skill', s.id)" @keydown.enter.self.prevent="openSubPage('skill', s.id)" @keydown.space.self.prevent="openSubPage('skill', s.id)">
+            <!-- 原型行 data-action="open-skill"：行点击与表格视图同落点（设计页） -->
+            <tr v-for="s in cards" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`打开 ${s.name} 设计页`" @click="openDesign(s.id)" @keydown.enter.self.prevent="openDesign(s.id)" @keydown.space.self.prevent="openDesign(s.id)">
               <td><strong class="sk-name-main mk-ellipsis" :title="s.name">{{ s.name }}</strong></td>
               <td><span class="mono sk-routing__sub" :title="s.agentId || '工具类'">{{ agentLabelOf(s) }}</span></td>
               <td><span class="mono" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
@@ -398,7 +400,7 @@ import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
-import { skillStatOf, openSubPage, isLive, intent, investigateAgent } from './store'
+import { skillStatOf, isLive, intent, investigateAgent } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
 import { COMPLETION_META, completionMetaOf } from './glossaryMeta'
@@ -429,7 +431,8 @@ const router = useRouter()
 interface PromptEvalPanelExpose { running: boolean; canRunBatch: boolean; runBatch: () => Promise<void> }
 const pePanel = ref<PromptEvalPanelExpose | null>(null)
 const PromptEvalPanel = defineAsyncComponent(() => import('./PromptEvalPanel.vue'))
-/** 轻运营直达：列表行「设计」→ 设计页「协议」页签（改提示词的唯一编辑点） */
+/** 列表两个视图的共同落点：Skill 设计页「协议」页签（改提示词的唯一编辑点）。
+ *  2026-10-14 方案 B：行点击直接走这里，列表侧不再单设「设计」小钮（同落点两入口冗余）。 */
 function openDesign(id: string) {
   void router.push(`/admin/skills/${encodeURIComponent(id)}?tab=protocol`)
 }
