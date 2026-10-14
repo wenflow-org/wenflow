@@ -12,7 +12,7 @@
 
     <!-- 原型骨架：单张卡内「.tabs 页签 + 页签体」（Users 卡内页签判例）。状态条退役——
          死信计数在死信卡头、会话计数在页签角标、CSV 说明在导出表单脚注，不再三处投影 -->
-    <section class="mk-card oc-card">
+    <section class="mk-card oc-card" :class="{ 'oc-card--fill': tab === 'security' }">
       <!-- 键盘契约（审核 #182）：role=tablist/tab 兑现 roving tabindex + 左右/Home/End 方向键
            循环切换并移动焦点，每枚页签 aria-controls 到对应 role=tabpanel 的页签体
            （判例 AuditLogs.vue:701-721） -->
@@ -541,11 +541,17 @@ watch(tab, (t) => {
 <style scoped>
 /* ================= 宿主布局（原型骨架：页头 → 单卡「页签+页签体」） ================= */
 .oc-card {
-  flex: 1 1 auto;
-  min-height: 0;
+  /* 贴内容而非撑满（2026-10-14 用户实测「卡怎么这么大」）：三个页签里只有「会话安全」需要
+     卡体高度（内嵌表格靠它内滚），运维工具 373px / 数据导出 251px 的内容却被撑成 825px 的
+     空框。默认 flex: 0 1 auto + max-height: 100%——高内容仍封顶在可用高度内、由 .oc-card__body
+     内滚接管（.mk-page--fill 是 height:100% + overflow:hidden，只贴内容不加封顶会被裁掉）。 */
+  flex: 0 1 auto;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
 }
+/* 会话安全页签：嵌进的 SessionSecurity 是 .mk-page--fill（靠父高内滚），这一档必须占满剩余高度 */
+.oc-card--fill { flex: 1 1 auto; min-height: 0; }
 /* 页签体在卡内独立滚动；会话安全嵌入组件（.mk-page--fill.ss-embedded）占满剩余高度内滚 */
 .oc-card__body {
   flex: 1 1 auto;
