@@ -28,7 +28,8 @@ const states = computed<Record<RunStageName, RunStageState>>(() =>
 )
 const taskText = computed(() => (props.showTaskText ? runTaskProgressText(props.taskProgress) : ''))
 
-const LABEL: Record<RunStageName, string> = { goal: 'Goal', path: 'Path', learn: 'Learn' }
+/* 显示名与座舱 stageLabel 同词表（2026-10-14 统一：同一条流水线不两套名字） */
+const LABEL: Record<RunStageName, string> = { goal: '目标', path: '路径', learn: '学习' }
 </script>
 
 <template>
