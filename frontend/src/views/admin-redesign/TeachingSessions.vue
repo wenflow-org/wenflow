@@ -1012,9 +1012,12 @@ defineExpose({ refreshNow })
 /* 首载占位（#44）：等比 MkKpi 卡（16px 内边距 + 三行内容 ≈ 114px）与 MkDistBand 卡（≈ 120px） */
 .ts-skel-kpi { height: 114px; border-radius: var(--mk-radius-xl); }
 .ts-skel-distband { height: 120px; border-radius: var(--mk-radius-xl); }
-.ts-embedded { flex: 1; min-height: 0; overflow: hidden; }/* 总结预览行（P1-2）：副行语义走 .mk-cell-sub（截断/灰阶原语承担）；页私有只留 help 悬停 + emoji 前缀 */
+.ts-embedded { flex: 1; min-height: 0; overflow: hidden; }/* 总结预览行（P1-2）：副行语义走 .mk-cell-sub（截断/灰阶原语承担）；页私有只留 help 悬停。
+   2026-10-14 用户质询「怎么会有 emoji」：原 ::before 给副行加了个记事本 emoji 前缀，且对所有带
+   topicSummary 的行生效——包括异常会话那条降级替代文案（显示的是兜底读数「开始于 …」，加总结
+   前缀更不符）。管理端不用 emoji（判例 AchIcon：2026-09-14 摘除后端成就图标那批，改色块 + 首字标）。
+   去掉前缀，信息由文案本身与 title 承担。 */
 .ts-summary { cursor: help; }
-.ts-summary::before { content: '📝 '; opacity: 0.7; }
 /* 行首关注度色条已撤（2026-10-03 用户拍板：与「关注」列同源冗余、语义不可发现）；
    关注度由「关注」列（高/中/低 色字 + title）单源承载 *//* 关注度列：小色点 + 文字（从徽章降级，不占徽章位） */
 .ts-att { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); white-space: nowrap; }.ts-att--high { color: var(--mk-red); }.ts-att--medium { color: var(--mk-amber); }.ts-att--low { color: var(--mk-faint); }

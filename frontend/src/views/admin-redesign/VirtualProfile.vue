@@ -555,8 +555,8 @@
                   </div>
                   <p class="vp-story__outline" :title="s.outline">{{ s.outline || '暂无故事概述' }}</p>
                   <div class="vp-story__stats">
-                    <span v-if="(s.runCount || 0) > 0" class="vp-story__stats-item vp-story__stats-item--runs" title="共运行的会话次数">运行 {{ s.runCount }} 次</span>
-                    <span v-if="stageCountsText(s)" class="vp-story__stats-item vp-story__stats-item--stages" title="会话进度：目标对话 / 路径规划 / 教学回合 的累计会话数（0 段省略）">{{ stageCountsText(s) }}</span>
+                    <span v-if="(s.runCount || 0) > 0" class="vp-story__stats-item" title="共运行的会话次数">运行 {{ s.runCount }} 次</span>
+                    <span v-if="stageCountsText(s)" class="vp-story__stats-item" title="会话进度：目标对话 / 路径规划 / 教学回合 的累计会话数（0 段省略）">{{ stageCountsText(s) }}</span>
                     <!-- 双轴状态：生命周期徽章（轴 A）+ 阶段条（轴 B）；与一级页同源组件 -->
                     <template v-if="s.latestRun?.sessionId">
                       <RunStateBadge :status="storyRunState(s)" :hint="`${formatRunResult(s.latestRun?.status || '')} · ${timeAgo(String(s.latestRun?.updatedAt || s.latestRun?.createdAt || ''))}`" :pulse="false" />
@@ -3022,16 +3022,9 @@ async function quietReload(id: string) {
   font-weight: 600;
   white-space: nowrap;
 }
-/* 统计项图标：显式修饰类（不用 :nth-child / :first-child）——runCount=0 时「运行」项不渲染，
-   位置选择器会把图标粘到状态徽章上（表情错位） */
-.vp-story__stats-item--runs::before {
-  content: '🕐 ';
-  font-size: var(--mk-fs-micro);
-}
-.vp-story__stats-item--stages::before {
-  content: '📈 ';
-  font-size: var(--mk-fs-micro);
-}
+/* 统计项图标已撤（2026-10-14 用户质询「怎么会有 emoji」）：原 --runs/--stages 两个修饰类只为挂
+   时钟 / 折线 emoji 前缀，而文案本身已写明「运行 N 次」与「会话进度」，前缀纯装饰。管理端不用
+   emoji（判例 AchIcon：2026-09-14 摘除后端成就图标那批）；修饰类随之从模板摘掉，不留空类。 */
 /* 最近结果占位（仅「未运行」文案在用；is-ok/is-bad/is-warn/is-running/is-none 等修饰类
    从未在模板里绑定，属死 CSS 已删） */
 .vp-story__latest {
