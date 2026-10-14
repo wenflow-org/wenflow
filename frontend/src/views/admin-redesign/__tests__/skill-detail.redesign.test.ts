@@ -287,6 +287,19 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).toContain('function selectStageTab(id: string)')
   })
 
+  it('编排图阶段页签一律英文（2026-10-14 用户：除「总览」外）', () => {
+    // 阶段 id 本身就是流水线英文名（与 <stage>-agent 同源），中文 displayName 只在中文语境用；
+    // 此前页签直接剥 displayName 的「阶段」二字 → Goal/Path（后端名自带英文）与
+    // 教学/画像/仿真（后端名是中文）半中半英并排。
+    expect(OrchestratorSource).toContain('{{ stageTabLabel(s) }}')
+    expect(OrchestratorSource).toContain('const STAGE_TAB_LABEL: Record<string, string> = {')
+    expect(OrchestratorSource).toContain("teaching: 'Teaching'")
+    expect(OrchestratorSource).toContain("profile: 'Profile'")
+    expect(OrchestratorSource).toContain("simulation: 'Simulation'")
+    // 未登记的阶段回退中文显示名：不裸出 id、也不留空
+    expect(OrchestratorSource).toContain('STAGE_TAB_LABEL[s.id] || s.name.replace(/阶段$/, \'\')')
+  })
+
   it('编排图悬停信息双层结构（2026-10-14 用户：业务名 + 技术查验）', () => {
     // 阶段页签：首行阶段名，其后 Agent / Skill 数 / 操作提示
     expect(OrchestratorSource).toContain('function stageTabTitle(s: Stage): string')

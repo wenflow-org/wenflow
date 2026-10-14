@@ -41,7 +41,7 @@
         :tabindex="pane !== 'overview' && active === s.id ? 0 : -1"
         :title="stageTabTitle(s)"
         @click="selectStageTab(s.id)"
-      >{{ s.name.replace(/阶段$/, '') }}<span class="tab__count">{{ s.skills.length }}</span></button>
+      >{{ stageTabLabel(s) }}<span class="tab__count">{{ s.skills.length }}</span></button>
     </div>
 
     <!-- ===== 总览：全旅程 odg 画布（newui/admin odg-canvas 形态）=====
@@ -835,6 +835,20 @@ async function retryStages() {
     末尾缀上回程提示——字段旅程不再有自己的页签，「点当前阶段」是唯一回程入口 */
 /** 阶段页签的悬停信息：双层结构（首行中文阶段名，其后 Agent / Skill 数 / 操作提示）。
     末尾缀上回程提示——字段旅程不再有自己的页签，「点当前阶段」是唯一回程入口 */
+/** 阶段页签英文名（2026-10-14 用户：除「总览」外一律英文）。
+ *  阶段 id 本身就是流水线里的英文名（goal/path/teaching/profile/simulation，与 `<stage>-agent` 同源），
+ *  中文 displayName（「教学阶段」…）是同一对象的展示名——此前页签直接剥「阶段」二字，
+ *  于是 Goal/Path（后端名自带英文）与教学/画像/仿真（后端名是中文）半中半英地并排。
+ *  这里按 id 取英文名，未登记的阶段回退中文显示名（不裸出 id、也不留空）。 */
+const STAGE_TAB_LABEL: Record<string, string> = {
+  goal: 'Goal',
+  path: 'Path',
+  teaching: 'Teaching',
+  profile: 'Profile',
+  simulation: 'Simulation'
+}
+const stageTabLabel = (s: Stage) => STAGE_TAB_LABEL[s.id] || s.name.replace(/阶段$/, '')
+
 function stageTabTitle(s: Stage): string {
   const lines = [s.name, `Agent: ${s.agentId}`]
   lines.push(s.skills.length
