@@ -10,10 +10,11 @@
         <DataScopeToggle v-model="includeTest" />
       </template>
     </MkPageHead>
-    <!-- 后端学习者域窗口截断口径（2026-10-04 解锁 50→500，窗口内不提示；单源仍一处） -->
-    <div v-if="liveLearners.length >= 500" class="mk-status mk-status--muted">
+    <!-- 后端学习者域窗口截断口径（2026-10-04 解锁 50→500；2026-10-10 窗口 500→2000，
+         有多少加载多少）：只在真截断（total > 已载）时出现并给真实数字，全量加载后整条消失 -->
+    <div v-if="learnerTotal != null && learnerTotal > liveLearners.length" class="mk-status mk-status--muted">
       <span class="mk-status__dot"></span>
-      <span class="mk-status__meta" title="学习者列表单次加载有上限，搜索仅覆盖已加载部分">仅加载前 500 位，搜索限已加载 500 人</span>
+      <span class="mk-status__meta" title="学习者列表单次加载有上限，搜索仅覆盖已显示的学习者">共 {{ learnerTotal }} 位学习者，当前显示前 {{ liveLearners.length }} 位</span>
     </div>
     <!-- 审核 #17（2026-10-06）：已有旧行时刷新失败此前无任何呈现（loadFailed 要求列表为空），
          页面继续把上次结果当当前值——补一条行内告警 + 重试出口（对照 Feedback.vue 行内告警判例） -->
@@ -76,10 +77,9 @@
               :aria-pressed="pill === p.id"
               @click="pill = p.id"
             >
-              {{ p.label }}<span v-if="p.id === 'watch'" class="mk-pill__count">{{ p.count }}</span>
-              <!-- P2（2026-10-04 全站评审）：pill 计数只留在没有 KPI 孪生的「观察」上（判例=Users：
-                   筛选命中数是 pills 独有事实才保留）；需关注/低置信/全部的数字已由分析层 KPI 卡
-                   与「学习者」卡承载，pill 退为纯筛选开关，同组数字不再同屏念两遍 -->
+              {{ p.label }}<span v-if="p.id !== 'all' && p.count != null" class="mk-pill__count">{{ p.count }}</span>
+              <!-- 计数判例（2026-10-11 用户拍板全站统一）：筛选 pill 一律显命中数，唯「全部」不显
+                   （总数单源=分页器）——取代旧「KPI 孪生 pill 不显数」判例（P2 2026-10-04），忽隐忽现消失 -->
             </button>
           </div>
           <!-- 搜索框走共享默认宽（2026-10-05 卡头统一语法：页内不再私定宽度） -->

@@ -14,7 +14,7 @@
       <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" title="仅统计真实用户（不含虚拟 / 测试账号）">
         真实 {{ realUsers }}
       </span>
-      <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" title="含虚拟学习者与测试账号（行内带标记）">测试/虚拟 {{ users.length - realUsers }}</span>
+      <span v-if="isLive && pill !== 'deleted' && includeTest" class="mk-status__meta" title="含虚拟学习者与测试账号">测试/虚拟 {{ users.length - realUsers }}</span>
       <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="`管理员 ${adminCount} · 近 7 天活跃 ${activeToday}${registrationEnabled !== null ? ' · 注册' + (registrationEnabled ? '开放' : '关闭') : ''}`">
         近 7 天活跃 {{ activeToday }}
       </span>

@@ -68,10 +68,8 @@
       aria-hidden="true"
     ></div>
 
-    <!-- 深链未命中提示：?session= 存在但当前列表（最近 LIST_LIMIT 条）中找不到 -->
-    <div v-if="deepLinkMiss" class="mk-alert" role="alert">
-      未能定位该会话：它可能不在当前列表范围内（最近 {{ LIST_LIMIT }} 条），或已被删除。
-    </div>
+    <!-- G5（2026-10-10）：深链未命中提示由常驻 alert 横幅改为一次性 toast（见 script 区 watch），
+         此前横幅无关闭出口、?session= 不清就永久挂着 -->
 
     <!-- 会话状态分布（教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」：回到卡上方
          页面级，与旧构成带同位）：十状态按收束语义归四组 + 完结率（组内合并口径在分段悬停披露，
@@ -403,6 +401,7 @@ import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkDistBand from '@/components/mk/MkDistBand.vue'
 import { Filter } from 'lucide-vue-next'
+import { toast } from '@/utils/toast'
 import { useEscape } from './useEscape'
 
 /** 嵌入模式：作为「学习会话」页「教学会话」tab 渲染（宿主状态条承载域计数，本组件不上状态条）。
@@ -490,6 +489,8 @@ async function fetchRows(force = false): Promise<boolean> {
     const res = await adminTeachingSessionsApi.list({
       limit: LIST_LIMIT,
       includeTest: includeTest.value,
+      // 测试视角（2026-10-10「真实/测试」互斥视角）：只回虚拟学习者与测试账号的会话
+      testOnly: includeTest.value || undefined,
       ...(onlyAdvisory.value ? { onlyWithAdvisory: true } : {})
     })
     // 已有更新的一笔在途/已回写 → 丢弃本笔（防旧口径覆盖新口径）
@@ -945,8 +946,11 @@ const abnormalHeap = computed(() => abnormalSessionCount.value >= TS_BAD_THRESHO
 
 const route = useRoute()
 const router = useRouter()
-/** 深链存在但列表加载后仍未命中（超出最近 LIST_LIMIT 条 / 已删除） */
-const deepLinkMiss = ref(false)
+/* G5（2026-10-10）：深链未命中由常驻 alert 横幅改为一次性 toast——判例 GoalConversations
+   ?goal= 未命中（toast.warning），两页行为归一；此前横幅无关闭出口，?session= 不清就永久挂着。
+   missToasted 仅作去重：本 watch 同时监听 rows.length，翻页/轮询回填会重复进未命中分支，
+   不能每次都弹；?session= 被清或命中后复位，下次深链未命中可再提示。 */
+let missToasted = false
 /* ?session= 语义（2026-10-01 对齐原型习惯：会话行 → 二级详情页，不再开抽屉）：
    深链直达座舱只读监控（session-real），随后清掉查询参数避免与座舱返回冲突 */
 watch(
@@ -954,15 +958,17 @@ watch(
   [() => route.query.session, () => rows.value.length],
   ([sid]) => {
     const id = typeof sid === 'string' ? sid : ''
-    if (!id) { deepLinkMiss.value = false; return }
+    if (!id) { missToasted = false; return }
     const r = rows.value.find((x) => x.id === id)
     if (r) {
-      deepLinkMiss.value = false
+      missToasted = false
       openSubPage('session-real', id)
       const q = { ...route.query }; delete q.session
       void router.replace({ query: q })
-    } else {
-      deepLinkMiss.value = rows.value.length > 0
+    } else if (rows.value.length > 0 && !missToasted) {
+      missToasted = true
+      // 明示而非静默忽略：可能超出最近 LIST_LIMIT 条或已被删除（文案对齐 GoalConversations）
+      toast.warning(`未能定位该会话：可能不在最近 ${LIST_LIMIT} 条内，或已被删除`)
     }
   },
   { immediate: true }

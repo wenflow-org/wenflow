@@ -83,7 +83,7 @@
         :icon="loadError ? '⚠' : '◌'"
         :tone="loadError ? 'error' : 'neutral'"
         :title="loadError ? '清单加载失败' : '未发现核心文件'"
-        :description="loadError || '编辑与发布入口在 Skill 设计页的「协议」页签。'"
+        :description="loadError || ''"
         :action-text="loadError ? '重试' : ''"
         @action="loadList"
       />

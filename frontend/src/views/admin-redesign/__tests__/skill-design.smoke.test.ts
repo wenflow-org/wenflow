@@ -246,7 +246,7 @@ describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {
     expect(wrapper.find('.sdp-pw__pills').exists()).toBe(false);
     const protocolPane = wrapper.findAll('.sdp-pane')[0];
     expect(protocolPane.text()).not.toContain('版本历史');
-    expect(protocolPane.text()).not.toContain('影响范围');
+    expect(protocolPane.text()).not.toContain('字段血缘');
     // 编译预览块直接内嵌在协议 tab
     expect(wrapper.text()).toContain('编译预览');
     expect(wrapper.text()).toContain('保存并编译');

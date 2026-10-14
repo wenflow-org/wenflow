@@ -146,13 +146,15 @@ const loading = ref(true)
 const profileId = computed(() => (subPage.value?.view === 'card' ? subPage.value.id || '' : ''))
 
 async function load() {
-  if (!profileId.value) return
+  const pid = profileId.value
+  if (!pid) return
   loading.value = true
   try {
-    const res = await adminVirtualLearnersApi.cardsDetail(profileId.value)
+    const res = await adminVirtualLearnersApi.cardsDetail(pid)
     d.value = (res.data?.data ?? res.data) as CardDetail
-    // 深链/刷新/从卡墙进入时 subPage 只有 id（面包屑退化成裸 ID），加载出名字后回填
-    if (d.value?.name) setSubPageLabel(d.value.name)
+    // 深链/刷新/从卡墙进入时 subPage 只有 id（面包屑退化成裸 ID），加载出名字后回填。
+    // id 守卫：慢响应返回时用户可能已切到别的实体详情，不能把别家的面包屑改名。
+    if (d.value?.name && subPage.value?.id === pid) setSubPageLabel(d.value.name)
   } catch (e) {
     toast.error(errMsg(e) || '卡详情加载失败')
   } finally {
@@ -170,7 +172,7 @@ function goLearner() {
 }
 
 const heroSubText = computed(() => {
-  return d.value?.preset ? '仓库预置角色 · 部署时幂等同步' : '学习者卡 · 导入即用'
+  return d.value?.preset ? '平台预置角色（随版本自动同步）' : '学习者卡 · 导入即用'
 });
 function sourceText(c: Pick<CardDetail, 'preset' | 'sourceKind'>): string {
   if (c.preset) return '预置'
@@ -184,7 +186,7 @@ function sourceBadge(c: Pick<CardDetail, 'preset' | 'sourceKind'>): string {
   return 'mk-badge--muted'
 }
 function sourceTitle(c: Pick<CardDetail, 'preset' | 'sourceKind'>): string {
-  if (c.preset) return '仓库预置角色（部署时按 presetKey 幂等同步）'
+  if (c.preset) return '平台预置角色（随版本自动同步）'
   if (c.sourceKind === 'web') return '来源：网络采集卡'
   if (c.sourceKind === 'synthetic') return '来源：合成生成卡'
   return '后台手动 / AI 创建'

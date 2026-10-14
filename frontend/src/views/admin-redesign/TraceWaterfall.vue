@@ -115,7 +115,7 @@
       <div class="wf-summary__item"><b>{{ fmtMs(traceSummary.total) }}</b><span>总耗时</span></div>
       <div class="wf-summary__item" :class="{ 'wf-summary__item--bad': traceSummary.errorCount }"><b>{{ traceSummary.errorCount }}</b><span>失败</span></div>
       <div class="wf-summary__item"><b>{{ fmtMs(traceSummary.avg) }}</b><span>平均耗时</span></div>
-      <div class="wf-summary__item" :title="'链路内 span 延迟分位：P50 = 中位耗时 · P99 = 99% span 耗时'">
+      <div class="wf-summary__item" :title="'链路内 span 延迟分位'">
         <b class="mono">P50 {{ fmtMs(traceSummary.p50) }} · P99 {{ fmtMs(traceSummary.p99) }}</b><span>延迟分位</span>
       </div>
       <div class="wf-summary__item" :title="`输入 ${traceSummary.promptTokens.toLocaleString()} · 输出 ${traceSummary.completionTokens.toLocaleString()}`">

@@ -24,7 +24,7 @@
           <span class="resume__dot"></span>
           <span class="resume__body">
             <strong>继续上次的规划</strong>
-            <small>{{ live.failed === 'resume' ? '恢复失败，点这里重试' : '会话已保存在本地，点这里恢复' }}</small>
+            <small>{{ live.failed === 'resume' ? '上次恢复失败' : '会话已保存在本地' }}</small>
           </span>
           <span class="resume__go">继续 ›</span>
         </button>
@@ -2518,6 +2518,13 @@ function shuffleScenes() {
      下一步在视觉上没有重心（2026-10-08 用户侧走查 1440 实测）。桌面专属——窄屏浮层本就窄。 */
   .proposal__actions--center { width: 100%; }
   .proposal__actions--center .btn-primary { flex: 1; justify-content: center; }
+}
+
+/* 4K zoom 档（≥2000，zoom 1.15/1.3）动作行收回对话框比例：flex:1 撑满 620 卡
+   再叠 zoom，主钮渲染出 650px+ 的色块（2026-10-09 用户反馈「按钮太大了」）。
+   行宽封顶 460 设计 px（随 zoom 等比、与卡片保持同倍率），主钮在行内仍 flex:1 保重心。 */
+@media (min-width: 2000px) {
+  .proposal__actions--center { max-width: 460px; margin-inline: auto; }
 }
 
 @media (max-width: 1100px) {

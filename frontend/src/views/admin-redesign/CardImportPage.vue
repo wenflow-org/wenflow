@@ -252,7 +252,16 @@ async function doValidate() {
 
 async function doImport() {
   if (!hasText.value) return
+  /* G7a（2026-10-10）导入闸门：未校验先校验，且必须看校验结论——此前 `await doValidate()`
+     后不看结果，0 张可导入（全部错误）也照发导入请求。可导入数 = ok + exists（同 canImport
+     口径）；校验请求本身失败时 report 仍为 null（doValidate 已 toast 失败原因），同样中止。 */
   if (!report.value) await doValidate()
+  const vs = report.value?.summary
+  if (!vs) return
+  if (vs.ok + vs.exists <= 0) {
+    toast.error('没有可导入的卡：全部卡片校验未通过，请先修正文档再导入')
+    return
+  }
   importing.value = true
   try {
     const res = await adminVirtualLearnersApi.cardsImport({
@@ -266,7 +275,9 @@ async function doImport() {
     if (s.failed > 0) toast.warning(`导入完成：新建 ${s.created} · 失败 ${s.failed}`)
     else toast.success(`导入完成：新建 ${s.created} · 覆盖 ${s.updated} · 跳过 ${s.skipped}`)
     report.value = null
-    imported.value = s.created > 0
+    /* G7b（2026-10-10）：覆盖也算导入成功——此前仅覆盖不新建（created=0, updated>0）时
+       imported=false，「导入完成 · 返回卡墙」完成引导不出现，用户导入成功却找不到出口 */
+    imported.value = s.created + s.updated > 0
   } catch (e) {
     toast.error(errMsg(e) || '导入失败')
   } finally {

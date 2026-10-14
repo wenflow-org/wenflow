@@ -17,10 +17,10 @@
          各视图计数以角标随页签呈现，形态同共享 MkSubTabs 的 count 角标） -->
     <div class="tabs" role="tablist" aria-label="运营中心视图切换" @keydown="onTabKeydown">
       <button type="button" class="tab" role="tab" id="oh-tab-todo" :ref="(el) => setTabRef(el, 0)" :tabindex="tab === 'todo' ? 0 : -1" aria-controls="oh-panel-todo" :aria-selected="tab === 'todo'" @click="switchTab('todo')">运营待办</button>
-      <button type="button" class="tab" role="tab" id="oh-tab-feedback" :ref="(el) => setTabRef(el, 1)" :tabindex="tab === 'feedback' ? 0 : -1" aria-controls="oh-panel-feedback" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span class="tab__count" :title="domainCount.feedback === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.feedback === null ? '未加载' : domainCount.feedback }}</span></button>
-      <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span class="tab__count" :title="domainCount.achievements === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : '含虚拟学习者'">{{ domainCount.achievements === null ? '未加载' : domainCount.achievements }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-feedback" :ref="(el) => setTabRef(el, 1)" :tabindex="tab === 'feedback' ? 0 : -1" aria-controls="oh-panel-feedback" :aria-selected="tab === 'feedback'" @click="switchTab('feedback')">反馈<span class="tab__count" :title="domainCount.feedback === null ? '进入该页签后加载计数' : undefined">{{ domainCount.feedback === null ? '未加载' : domainCount.feedback }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span class="tab__count" :title="domainCount.achievements === null ? '进入该页签后加载计数' : '含虚拟学习者'">{{ domainCount.achievements === null ? '未加载' : domainCount.achievements }}</span></button>
       <button type="button" class="tab" role="tab" id="oh-tab-announce" :ref="(el) => setTabRef(el, 3)" :tabindex="tab === 'announce' ? 0 : -1" aria-controls="oh-panel-announce" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告<span class="tab__count" :title="announcePillTitle">{{ announcePillCount }}</span></button>
-      <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span class="tab__count" :title="domainCount.inapp === null ? '尚未访问该页签，计数未拉取（待访问 ≠ 0）' : undefined">{{ domainCount.inapp === null ? '未加载' : domainCount.inapp }}</span></button>
+      <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span class="tab__count" :title="domainCount.inapp === null ? '进入该页签后加载计数' : undefined">{{ domainCount.inapp === null ? '未加载' : domainCount.inapp }}</span></button>
     </div>
 
     <!-- ===== Tab1: 运营待办（原运营中心全量内容） ===== -->
@@ -157,7 +157,7 @@
          由宿主提供工具行并调用其暴露的 openCreate()（defineExpose），不再重复按钮。 -->
     <template v-else-if="tab === 'announce'">
       <div class="oh-tabbar">
-        <span class="oh-tabbar__sub">面向学习者的公告、站内信与推送</span>
+        <span class="oh-tabbar__sub">面向学习者的公告</span>
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="announceRef?.openCreate?.()">新建公告</button>
       </div>
       <Announcements id="oh-panel-announce" role="tabpanel" aria-labelledby="oh-tab-announce" ref="announceRef" embedded @count="onDomainCount('announce', $event)" />
@@ -520,8 +520,15 @@ function goFeedbackPending() {
   intent.scene = 'ops-hub'
   openTabWith('feedback', { status: 'new' })
 }
-/** 生成失败路径 → 学习会话页「学习路径」tab（预筛 failed，宿主消费 intent.statusFilter/tab 后清空） */
+/** 生成失败路径 → 学习路径页（预筛 failed）：与 goFeedbackPending 同构——预筛进 URL，
+    刷新/复制链接/前进后退都复原同一视图（OpsContent onMounted 读 ?status= 还原）。
+    intent.statusFilter 不再走（URL 已是唯一通道，双通道会互相覆盖）；无 router 的单测
+    兜底保留 intent 既有通道（Overview 路径失败 pill 仍走它）。 */
 function goFailedPaths() {
+  if (router) {
+    void router.push({ path: '/admin/learning-paths', query: { status: 'failed' } })
+    return
+  }
   intent.statusFilter = 'failed'
   intent.scene = 'learning-paths'
 }
@@ -529,8 +536,12 @@ function goFailedPaths() {
 function goDeadLetters() {
   intent.scene = 'ops-center'
 }
-/** 学习路径管理 → 学习会话页「学习路径」tab */
+/** 学习路径管理 → 学习路径页（URL 直达，与 goFailedPaths 同构） */
 function goContent() {
+  if (router) {
+    void router.push('/admin/learning-paths')
+    return
+  }
   intent.scene = 'learning-paths'
 }
 /** 公告管理（运营中心 · 公告 tab） */

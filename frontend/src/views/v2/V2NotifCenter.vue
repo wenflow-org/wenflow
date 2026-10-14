@@ -109,7 +109,6 @@
                 <div class="nc__task-content">
                   <div class="nc__task-row">
                     <strong>{{ item.title }}</strong>
-                    <span class="nc__task-status nc__task-status--running">运行中</span>
                   </div>
                   <span v-if="item.detail" class="nc__task-detail">{{ item.detail }}</span>
                   <div class="nc__task-progress"><i></i></div>
@@ -180,7 +179,7 @@
                 <svg viewBox="0 0 24 24" width="28" height="28"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M9 7h6M9 12h6M9 17h3"/><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
               </span>
               <p>暂无 AI 任务</p>
-              <span>AI 处理任务时会在这里显示进度</span>
+              <span>AI 处理任务时会在这里显示进度。可以先去学习台或路径页开始一次学习。</span>
             </div>
           </template>
         </div>
@@ -713,15 +712,6 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 .nc__task-time { margin-left: auto; font-size: 12px; color: var(--faint); flex-shrink: 0; }
-.nc__task-status {
-  /* 原为 11px.5px（非法值回落 16px）——「运行中」徽章因此比任务名还大 */
-  font-size: 12px; font-weight: 700;
-  color: var(--blue);
-  background: color-mix(in srgb, var(--blue) 12%, transparent);
-  padding: 2px 7px;
-  border-radius: var(--mk-radius-pill);
-  flex-shrink: 0;
-}
 .nc__task-detail { font-size: 12px; color: var(--muted); }
 .nc__task-progress {
   height: 3px;

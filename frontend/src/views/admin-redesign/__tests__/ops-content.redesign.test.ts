@@ -9,7 +9,9 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import OpsContent from '../OpsContent.vue';
+import Confirm from '../Confirm.vue';
 import { intent, subPage, closeSubPage } from '../store';
+import { toast } from '@/utils/toast';
 
 const mkPath = (id: string, over: Record<string, unknown> = {}) => ({
   id,
@@ -22,7 +24,8 @@ const mkPath = (id: string, over: Record<string, unknown> = {}) => ({
   completedMilestones: 1,
   aiGenerated: true,
   createdAt: '2026-09-01T00:00:00Z',
-  updatedAt: '2026-09-04T00:00:00Z',
+  // 基线行 = fresh（非停滞）：停滞标记是 2026-10-10 新增语义，用近期时间避免基线行误标
+  updatedAt: new Date().toISOString(),
   deadline: null,
   user: { id: 'u1', name: '张三', email: 'zs@wenflow.local', isVirtualLearner: false },
   milestoneStatuses: ['completed', 'in_progress', 'todo', 'todo'],
@@ -32,6 +35,11 @@ const mkPath = (id: string, over: Record<string, unknown> = {}) => ({
 
 const listMock = vi.hoisted(() => vi.fn());
 const statsMock = vi.hoisted(() => vi.fn());
+const retryMock = vi.hoisted(() =>
+  vi.fn(async (): Promise<{ data: { success: boolean; data?: { success: boolean; retryType?: string; runId?: string; error?: string }; error?: string } }> => ({
+    data: { success: true, data: { success: true, retryType: 'core', runId: 'pgr_1' } },
+  }))
+);
 
 vi.mock('@/api/adminApi', () => ({
   adminLearningContentApi: {
@@ -41,6 +49,7 @@ vi.mock('@/api/adminApi', () => ({
     archivePath: vi.fn(async () => ({ data: {} })),
     restorePath: vi.fn(async () => ({ data: {} })),
     deletePath: vi.fn(async () => ({ data: {} })),
+    retryGeneration: retryMock,
   },
   adminTeachingSessionsApi: { list: vi.fn(async () => ({ data: {} })) },
   adminGoalConversationsApi: { list: vi.fn(async () => ({ data: {} })), getStats: vi.fn(async () => ({ data: {} })) },
@@ -114,7 +123,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(w.find('.ds-toggle').exists()).toBe(false);
     expect(w.find('.mk-cols').exists()).toBe(true);
     // 卡头 meta 只留分页器没有的事实（口径开关；命中数/总数交分页器单源）
-    expect(w.text()).toContain('（仅真实口径）');
+    expect(w.text()).toContain('（真实）');
 
     // 表头：路径/用户/状态/进度/更新/操作——「主题」独立列已退役（P2-6 2026-10-04 全站评审：
     // 91% 行与路径列同文），subject≠title 时作路径列副行
@@ -204,7 +213,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     // 未知态把原因/原文放进 title，不把半句自述当难度展示
     const diffTitles = w.findAll('.oc-diff').map((e) => e.attributes('title') || '');
     expect(diffTitles[1]).toContain('未归入任何难度档');
-    expect(diffTitles[2]).toContain('原始记录');
+    expect(diffTitles[2]).toContain('无法识别的难度记录');
 
     // 时长：有值带 ~，无值给 —
     expect(w.findAll('td.mk-num').map((e) => e.text())).toEqual(['~21h', '—', '~9h']);
@@ -264,25 +273,108 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await flushPromises();
     await nextTick();
 
-    // 口径单源迁分布条副标（pills 已退役）：全平台计数口径就地披露
-    expect(w.find('.mk-distband__sub').text()).toContain('全平台计数');
+    // 分布条副标已在文案批移除「点击分段可筛选」说明书（分段自带可供性）；分布条仍是唯一状态筛选面
+    expect(w.find('.oc-distband').exists()).toBe(true);
+    expect(w.find('.mk-distband__sub').exists()).toBe(false);
 
     // 进度条三态：100% = 绿（ok）/ 进行中 = 默认中性（无 warn 琥珀）/ 失败 = 红（bad）
     const tones = w.findAll('tbody .mk-minibar__fill').map((el) => el.attributes('data-tone') || '');
     expect(tones).toEqual(['ok', '', 'bad']);
 
-    // 失败行：动作钮改「去详情」并在 title 指路详情页重规划（重规划端点在后端不做）
+    // 失败行：动作钮改「去详情」（title 指向行内「重试生成」）+ 重试入口就地重发（2026-10-10）
     const failRow = w.findAll('tbody tr').find((r) => r.text().includes('路径lp_fail'))!;
     expect(failRow.find('.mk-actions .mk-btn').text()).toBe('去详情');
-    expect(failRow.find('.mk-actions .mk-btn').attributes('title')).toContain('重规划');
+    expect(failRow.find('.mk-actions .mk-btn').attributes('title')).toContain('重试生成');
+    const retryBtn = failRow.findAll('.mk-actions .mk-btn').find((b) => b.text() === '重试生成');
+    expect(retryBtn).toBeTruthy();
+    expect(retryBtn!.classes()).toContain('mk-btn--primary');
 
     // 状态条已退役（2026-10-04）：失败抬红由分布条红段单源承载；总量读数迁 MkKpi 卡带
     expect(w.find('.mk-status').exists()).toBe(false);
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
     const failSeg = w.findAll('.mk-distband__seg').find((seg) => (seg.attributes('title') || '').includes('生成失败'))!;
-    expect(failSeg.attributes('title')).toContain('重规划');
+    expect(failSeg.attributes('title')).toContain('重试生成');
     expect(failSeg.attributes('title')).toContain('点击只看');
 
+    w.unmount();
+  });
+
+  /** 生成停滞（2026-10-10 跑批实锤）：active 且 updatedAt 超 24h → 「停滞」warn 标记 + 行内重试入口；
+   *  fresh 行不标（真实用户数日不学属正常，只提示不强判死） */
+  it('生成停滞：active 超 24h 无更新 → 「停滞」标记 + 行内「重试生成」；fresh 行不标', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        data: {
+          paths: [mkPath('lp_fresh'), mkPath('lp_stall', { updatedAt: '2026-09-01T00:00:00Z' })],
+          pagination: { total: 2, page: 1, limit: 100 },
+        },
+      },
+    });
+    const w = mount(OpsContent, { props: { embedded: true } });
+    await flushPromises();
+    await nextTick();
+    const trs = w.findAll('tbody tr');
+    expect(trs[0].find('.mk-badge--warn').exists()).toBe(false);
+    expect(trs[0].text()).not.toContain('重试生成');
+    expect(trs[1].find('.mk-badge--warn').text()).toBe('停滞');
+    expect(trs[1].find('.mk-badge--warn').attributes('title')).toContain('重试生成');
+    expect(trs[1].text()).toContain('重试生成');
+    w.unmount();
+  });
+
+  it('failed 行「重试生成」：busy 确认 → 调用成功 → toast + 列表刷新', async () => {
+    // 真实挂载确认框（页面只负责 askConfirm；弹窗由全局单例 Confirm 承载，Teleport 到 body）
+    const dialog = mount(Confirm, { attachTo: document.body });
+    listMock.mockResolvedValue({
+      data: { data: { paths: [mkPath('lp_fail2', { status: 'failed' })], pagination: { total: 1, page: 1, limit: 100 } } },
+    });
+    const w = mount(OpsContent, { props: { embedded: true } });
+    await flushPromises();
+    await nextTick();
+    const callsBefore = listMock.mock.calls.length;
+
+    const btn = w.findAll('tbody tr')[0].findAll('.mk-actions .mk-btn').find((b) => b.text() === '重试生成')!;
+    await btn.trigger('click');
+    await nextTick();
+    const btns = [...document.querySelectorAll<HTMLButtonElement>('.mk-confirm button')];
+    expect(btns.length).toBe(2); // [0] 取消 / [1] 确认
+    btns[1].click();
+    await flushPromises();
+    await nextTick();
+
+    expect(retryMock).toHaveBeenCalledWith('lp_fail2');
+    const last = toast.toasts[toast.toasts.length - 1];
+    expect(last?.type).toBe('success');
+    expect(last?.message).toContain('已提交重试');
+    // 成功后列表刷新 + 弹窗关闭（busy 模式 doneConfirm 收尾）
+    expect(listMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    expect(document.querySelector('.mk-confirm')).toBeNull();
+    dialog.unmount();
+    w.unmount();
+  });
+
+  it('守卫拒绝：HTTP 200 + success:false → 中文原因透传 toast.error（假按钮禁令的对偶：拒因如实上报）', async () => {
+    retryMock.mockResolvedValue({ data: { success: false, error: '当前生成任务未失败或未过期，不能重试' } });
+    const dialog = mount(Confirm, { attachTo: document.body });
+    listMock.mockResolvedValue({
+      data: { data: { paths: [mkPath('lp_fail3', { status: 'failed' })], pagination: { total: 1, page: 1, limit: 100 } } },
+    });
+    const w = mount(OpsContent, { props: { embedded: true } });
+    await flushPromises();
+    await nextTick();
+
+    const btn = w.findAll('tbody tr')[0].findAll('.mk-actions .mk-btn').find((b) => b.text() === '重试生成')!;
+    await btn.trigger('click');
+    await nextTick();
+    const btns = [...document.querySelectorAll<HTMLButtonElement>('.mk-confirm button')];
+    btns[1].click();
+    await flushPromises();
+    await nextTick();
+
+    const last = toast.toasts[toast.toasts.length - 1];
+    expect(last?.type).toBe('error');
+    expect(last?.message).toContain('未失败或未过期');
+    dialog.unmount();
     w.unmount();
   });
 });

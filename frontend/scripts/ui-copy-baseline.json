@@ -1,5 +1,95 @@
 {
-  "generatedAt": "2026-10-14T11:24:38.517Z",
-  "rules": {},
-  "files": {}
+  "generatedAt": "2026-10-14T11:35:50.672Z",
+  "rules": {
+    "R6": 46
+  },
+  "files": {
+    "views/admin-redesign/ApiConfig.vue": {
+      "R6": 1
+    },
+    "views/admin-redesign/DataFlowGraph.vue": {
+      "R6": 1
+    },
+    "views/admin-redesign/ExecLogs.vue": {
+      "R6": 1
+    },
+    "views/admin-redesign/LearnerDetail.vue": {
+      "R6": 2
+    },
+    "views/admin-redesign/live.ts": {
+      "R6": 2
+    },
+    "views/admin-redesign/MemoryReview.vue": {
+      "R6": 1
+    },
+    "views/admin-redesign/Notifications.vue": {
+      "R6": 2
+    },
+    "views/admin-redesign/OpsHub.vue": {
+      "R6": 1
+    },
+    "views/admin-redesign/opsShared.ts": {
+      "R6": 1
+    },
+    "views/admin-redesign/SessionSecurity.vue": {
+      "R6": 2
+    },
+    "views/admin-redesign/Shell.vue": {
+      "R6": 2
+    },
+    "views/admin-redesign/skill-design/protocol-tab.vue": {
+      "R6": 1
+    },
+    "views/admin-redesign/skill-design/runtime-tab.vue": {
+      "R6": 2
+    },
+    "views/admin-redesign/SkillDetail.vue": {
+      "R6": 2
+    },
+    "views/admin-redesign/SkillReconciliation.vue": {
+      "R6": 1
+    },
+    "views/admin-redesign/Skills.vue": {
+      "R6": 3
+    },
+    "views/admin-redesign/statusText.ts": {
+      "R6": 6
+    },
+    "views/admin-redesign/TeachingSessions.vue": {
+      "R6": 1
+    },
+    "views/admin-redesign/terms.ts": {
+      "R6": 1
+    },
+    "views/admin-redesign/TokenCost.vue": {
+      "R6": 1
+    },
+    "views/admin-redesign/VirtualLabLoadSettings.vue": {
+      "R6": 2
+    },
+    "views/admin-redesign/VirtualLearners.vue": {
+      "R6": 1
+    },
+    "views/admin-redesign/VirtualProfile.vue": {
+      "R6": 1
+    },
+    "views/DeveloperDocs.vue": {
+      "R6": 1
+    },
+    "views/LearningEvaluationPage.vue": {
+      "R6": 1
+    },
+    "views/user/Settings.vue": {
+      "R6": 1
+    },
+    "views/v2/V2GoalConversation.vue": {
+      "R6": 3
+    },
+    "views/v2/V2LearningPaths.vue": {
+      "R6": 1
+    },
+    "views/v2/V2LearningState.vue": {
+      "R6": 1
+    }
+  }
 }

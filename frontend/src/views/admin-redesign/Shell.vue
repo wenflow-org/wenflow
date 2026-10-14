@@ -122,7 +122,7 @@
           v-if="crumb && crumbClickable !== false"
           type="button"
           class="mshell__top-back mshell__square-btn"
-          :title="`返回${topTitle}`"
+          title="返回上一级"
           aria-label="返回上一级"
           @click="$emit('crumb-click')"
         >
@@ -286,7 +286,7 @@ import type { Router } from 'vue-router'
 import { liveNavBadges, alarmNavBadges, loadLiveData, liveLoading } from './live'
 import { adminAuthApi, clearAdminSession } from '@/api/adminApi'
 import { askConfirm } from './useConfirm'
-import { useEscape } from './useEscape'
+import { useEscape, hasActiveEscapeLayer } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { readTheme, writeTheme, applyDocumentTheme } from '@/utils/theme'
 
@@ -425,6 +425,10 @@ function closeSearch() {
 /** `/` 全局聚焦页面搜索（输入态不抢焦点） */
 function onGlobalKey(e: KeyboardEvent) {
   if (e.key === 'Escape') {
+    // useEscape 栈上有激活中的浮层/详情时让位：本监听在 document（冒泡先于 window 上的
+    // useEscape 全局监听），无条件关 userMenu/mobileNav 会抢在栈顶层之前吃掉 Esc，
+    // 一次按键连关两层（详情页+搜索弹层同开场景）。栈顶层会 stopPropagation，不会落到这里。
+    if (hasActiveEscapeLayer()) return
     userMenuOpen.value = false
     mobileNavOpen.value = false
     return
@@ -633,6 +637,8 @@ const groupedScenes = computed(() => {
   const groups: Array<{ title: string; items: MockSceneDef[] }> = []
   for (const scene of MOCK_SCENES) {
     if (scene.pinned) continue // 置顶项不进分组
+    // 隐藏场景（manifest hidden: true，如运营术语表）不进侧栏：入口是顶栏帮助按钮跳转
+    if (scene.hidden) continue
     let g = groups.find((x) => x.title === scene.group)
     if (!g) {
       g = { title: scene.group, items: [] }
@@ -646,11 +652,13 @@ const groupedScenes = computed(() => {
 /* 当前页所在组：仅用于给所在组的「标签」上强调色（分组已恒展开，不再有折叠状态机
    —— 走查 2026-09-27 用户反馈「组名比组大」：组头降级为纯文字标签，见模板注释） */
 const groupContainsCurrent = (title: string) => groupedScenes.value.find((g) => g.title === title)?.items.some((i) => i.id === props.current) ?? false
-/* 告警平息口径：进入告警场景即视为已读（侧栏 go() 之外，TabBar/深链直达也应平息；
-   用 props.current watch 而非仅 Shell 点击，保证各导航路径一致） */
+/* 告警平息口径：进入告警场景即视为已读（侧栏 go() 之外，TabBar/深链直达也应平息）。
+   组合监听 [current, liveNavBadges]：冷启动深链时 props.current 先到而 spans 未到，
+   只看 current 会漏掉「boot 完成后计数才就绪」的瞬间 → 红徽章亮在用户正站着的页面；
+   计数源变化时补判一次。markAlarmRead 内部只在新计数时写入，「计数增长才再脉冲」语义不变。 */
 watch(
-  () => props.current,
-  (cur) => {
+  [() => props.current, liveNavBadges],
+  ([cur]) => {
     const item = MOCK_SCENES.find((s) => s.id === cur)
     if (item && alarmNavBadges.has(item.id)) markAlarmRead(item)
   },

@@ -26,7 +26,7 @@
       v-else
       icon="◌"
       title="该路径没有关联的目标对话"
-      description="该路径没有关联的目标对话，无法在会话座舱中打开。可回到列表用「下线 / 删除」治理。"
+      description="返回列表后可下线或删除该路径。"
       action-text="返回列表"
       @action="closeSubPage"
     />

@@ -161,9 +161,8 @@ export function useCheckpointFlow(
         // （子代理回归走查发现的边界）。对错已由代码裁决得到，保留它即可。
         if (checkpointStreaming.value) {
           checkpointStreaming.value = false;
-          checkpointFeedback.value = checkpointPassed.value
-            ? '回答正确（导师讲解未能送达，可继续）。'
-            : '这道没答对（导师讲解未能送达，可继续）。';
+          // 卡片只报判定结果；「导师讲解没能送达」这件事由 toast 单说一次，不再两处复读
+          checkpointFeedback.value = checkpointPassed.value ? '回答正确，可继续。' : '这道没答对，可继续。';
           toast.info('导师讲解没能送达，对错判定不受影响，可继续。');
         } else {
           checkpointFeedback.value = '提交失败，再试一次';

@@ -20,8 +20,8 @@
          查询在途/失败时显示「—」而不是 0 -->
     <section v-if="logs.length" class="mk-kpi-grid">
       <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" :hint="successHint" title="当前筛选范围内的成功率，低于 90% 标红" />
-      <MkKpi label="耗时 P50" :value="latencyP50" :hint="latencyHint" title="延迟分位（仅成功日志）：P50 = 中位耗时" />
-      <MkKpi label="耗时 P99" :value="latencyP99" :hint="latencyHint" title="延迟分位（仅成功日志）：P99 = 99% 请求耗时" />
+      <MkKpi label="耗时 P50" :value="latencyP50" :hint="latencyHint" title="仅统计成功日志" />
+      <MkKpi label="耗时 P99" :value="latencyP99" :hint="latencyHint" title="仅统计成功日志" />
     </section>
 
     <!-- 视图切换（2026-10-14 用户评审：此前贴在表格卡顶、通栏一条下划线，读起来像表格的表头）：
@@ -48,38 +48,6 @@
            旧实现把渲染条件挂在卡片外壳（v-else-if="filtered.length"），空列表时状态 pills / 搜索 /
            高级筛选 / 列设置 / 保存视图 / 页码器整组消失，只剩一页没有任何筛选出口的死路空态 -->
       <div v-if="elTab === 'logs'" id="el-panel-logs" role="tabpanel" aria-labelledby="el-tab-logs" class="exec-tabpanel">
-      <!-- 错误摘要条（原型 renderObserve 的 alert--error）：errCount>0 时红底提示 + 直达健康中心。
-           走全局 .mk-alert（红底红字，全局错误通道②「区块级提示」），外层留卡头同款内边距。
-           P1#24（2026-10-02 人类可读性）：① 窗口文案随 timeRange 联动（原恒写「近 24h」，而
-           stats 实际跟随查询窗口，切 7 天后文案与数字口径冲突）；② 内联 Top 错误类别/Skill chip
-           （当前页失败样本聚合，点击即设 errorCategory/agentFilter 下钻），判例 = AuditLogs 失败 TOP chip。
-           2026-10-04 外部评审拍板：撤「只看失败」次按钮（与卡头失败 pill 同源重复），
-           失败筛选单源留在 pill。 -->
-      <div v-if="errCount > 0" class="exec-alertwrap">
-        <!-- 区块级错误通道（原语判据：区块级失败/降级 → .mk-alert，必须 role=alert）：
-             审核 #106 补 role=alert；轮询/筛选会让计数反复变化，用 aria-live=polite 避免打断式播报 -->
-        <div class="mk-alert mk-alert--row exec-alert" role="alert" aria-live="polite">
-          <span class="mk-alert__msg">
-            {{ errWindowLabel }}捕获 <b>{{ errCount }}</b> 条错误级日志
-            <button
-              v-for="c in errTopChips"
-              :key="c.key"
-              type="button"
-              class="exec-err-chip"
-              :class="{ 'exec-err-chip--on': c.active }"
-              :aria-pressed="c.active"
-              :title="c.title"
-              @click="c.apply()"
-            >{{ c.label }} {{ c.count }}</button>
-            <!-- 审核 #124：窗口级错误总数与 chip（本页失败行聚合）并列时口径不同却只藏在 title，
-                 可见处补一句样本口径，避免读成「3 万条里只有 1 条属于该类别」 -->
-            <span class="exec-alert__caliber">归因样本＝本页 {{ logs.length }} 行</span>
-          </span>
-          <span class="exec-alert__ops">
-            <button type="button" class="mk-btn mk-btn--sm" @click="goHealthCenter">查看健康中心</button>
-          </span>
-        </div>
-      </div>
       <div class="mk-card__head">
         <!-- 左侧筛选组（对齐 Users：pills + 搜索框） -->
         <div class="mk-filter">
@@ -93,7 +61,7 @@
             class="mk-pill"
             :class="{ 'mk-pill--active': testFilter !== '' }"
             :aria-pressed="testFilter !== ''"
-            :title="testFilter === 'only' ? '仅看测试' : '连通性/探活测试日志（模型接入页产生，默认视图已排除）'"
+            :title="testFilter === 'only' ? '仅看测试' : '测试日志'"
             @click="toggleTestFilter"
           >测试<span class="mk-pill__count">{{ testCount ?? '—' }}</span></button>
           <!-- 2026-10-05 卡头统一弹层法：时间范围 / 节点 / Trace ID 三件收进右侧「高级筛选」弹层
@@ -155,6 +123,7 @@
             </div>
           </div>
           <span class="mk-card__meta" v-if="errorCategory">类别「{{ errorCategory }}」<button type="button" class="mk-link" @click="errorCategory = ''; applyServerQuery()">×</button></span>
+          <span class="mk-card__meta" v-if="agentFilter">Skill「{{ agentFilter }}」<button type="button" class="mk-link" @click="agentFilter = ''; applyServerQuery()">×</button></span>
           <span v-if="listRefreshing" class="mk-card__meta exec-updating" role="status" aria-live="polite">更新中…</span>
         </div>
       </div>
@@ -745,64 +714,8 @@ function exportJson() {
   URL.revokeObjectURL(url)
 }
 
-/** 错误摘要条入口：健康中心（2026-09-29 起为独立场景 /admin/health-center） */
-function goHealthCenter() {
-  void router.push('/admin/health-center')
-}
-
-/* ===== P1#24 错误摘要条（2026-10-02 人类可读性） ===== */
-/** 窗口文案随 timeRange 联动。B22/F8-1：liveLogStats 是页面自身查询的单源读数（live.ts
- *  只在窗口/筛选变化与失败时置空、响应落地时回填），因此标签与数字恒同窗口；
- *  live.ts 作废旧读数期间（切档请求在途）页首渲染「—」，不存在标签配他窗数字的相位。 */
-const errWindowLabel = computed(() => {
-  const m: Record<string, string> = { '15m': '近 15 分钟', '1h': '近 1 小时', today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部时间' }
-  return m[timeRange.value] || timeRangeLabels[timeRange.value] || '当前窗口'
-})
-
-/** Top 错误归因 chip：错误类别 + Skill 各取失败行聚合的前 2，按次数合并取前 3。
-    口径 = 当前页失败行样本（服务端分页 30 行），非全量 TOP——title 就地披露。
-    chip 聚合键 = 下钻查询值（与后端 buildErrorCategoryWhere 同源）：
-    无 errorCategory 的行后端已派生为 'internal'（启发式兜底桶），显示文案走
-    CATEGORY_LABEL_OVERRIDE 映射成中文「其他」——label 与查询值分离，防止
-    「点 chip 传『其他』→ 后端无此类别 → 0 行空态」的回归。 */
-const CATEGORY_LABEL_OVERRIDE: Record<string, string> = { internal: '其他' }
-const categoryLabel = (cat: string) => CATEGORY_LABEL_OVERRIDE[cat] || cat
-const errTopChips = computed(() => {
-  const catMap = new Map<string, number>()
-  const agentMap = new Map<string, number>()
-  for (const l of logs.value) {
-    if (l.status !== 'err') continue
-    const cat = l.errorCategory || 'internal'
-    catMap.set(cat, (catMap.get(cat) || 0) + 1)
-    if (l.agent) agentMap.set(l.agent, (agentMap.get(l.agent) || 0) + 1)
-  }
-  const topOf = (m: Map<string, number>, n: number) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n)
-  const catChips = topOf(catMap, 2).map(([cat, count]) => ({
-    key: `cat:${cat}`,
-    label: categoryLabel(cat),
-    count,
-    active: errorCategory.value === cat,
-    title: `错误类别「${categoryLabel(cat)}」· 当前页失败行聚合（非全量 TOP）· 点击只看该类别，再点取消`,
-    apply: () => {
-      errorCategory.value = errorCategory.value === cat ? '' : cat
-      void applyServerQuery()
-    },
-  }))
-  const agentChips = topOf(agentMap, 2).map(([agent, count]) => ({
-    key: `agent:${agent}`,
-    label: agent,
-    count,
-    active: agentFilter.value === agent,
-    title: `Skill「${agent}」· 当前页失败行聚合（非全量 TOP）· 点击只看该 Skill，再点取消`,
-    apply: () => {
-      agentFilter.value = agentFilter.value === agent ? '' : agent
-    },
-  }))
-  return [...catChips, ...agentChips].sort((a, b) => b.count - a.count).slice(0, 3)
-})
-
-/* 「只看失败」次按钮已撤（2026-10-04 外部评审拍板）：与卡头失败 pill 完全同源
-   （statusFilter=err），同一动作两个入口徒增交互歧义；失败筛选单源留在 pill。 */
+/* 「只看失败」次按钮与错误摘要条均已撤（2026-10-04 外部评审 / 2026-10-11 用户拍板）：
+   失败筛选单源留在卡头失败 pill；错误分布与健康入口走健康中心页。 */
 
 /* live 模式：展开行时拉真实 input/output + 重试时间线 */
 const DETAIL_CACHE_MAX = 50
@@ -845,15 +758,26 @@ watch(openId, (id) => {
   if (id) void loadDetail(id)
 })
 
-// 从排查意图进入时应用过滤（含失败归因跳转的错误类别与时间范围）
+// 从排查意图进入时应用过滤（含失败归因跳转的错误类别与时间范围）。
+// 消费即清（防幽灵重放）：intent 是模块级单例，应用后若保留，之后从侧栏普通点进
+// 执行日志会被 AdminConsole 的 intentQueryParams 再次带上旧 agent/status。
+// 筛选本体已落在本地 ref + URL query，清 intent 不影响当前视图；
+// clearInvestigation 会再触发本 watch 一次，consuming 标志跳过该次回环。
+let consumingIntent = false
 watch(
   () => [intent.agentFilter, intent.statusFilter, intent.errorCategory, intent.timeRange],
   () => {
+    if (consumingIntent) {
+      consumingIntent = false
+      return
+    }
     agentFilter.value = intent.agentFilter
     statusFilter.value = intent.statusFilter
     if (intent.errorCategory) errorCategory.value = intent.errorCategory
     const TR = ['today', 'yesterday', 'week', 'month', 'all', '15m', '1h'] as const
     if ((TR as readonly string[]).includes(intent.timeRange)) timeRange.value = intent.timeRange as typeof timeRange.value
+    consumingIntent = true
+    clearInvestigation()
   },
   { immediate: true }
 )
@@ -868,11 +792,19 @@ const EL_TIME_RANGES = ['today', 'yesterday', 'week', 'month', 'all', '15m', '1h
 const queryVal = (v: unknown): string => (typeof v === 'string' ? v : '')
 /* 上次 URL 筛选签名：route watch 对比完整查询签名，任一筛选变化即重查。
    此前仅 status/agent/test 的 ref watch 触发重查，前进/后退/深链改
-   q/trace/session/cat/range 时只改 URL 列表不刷新 */
+   q/trace/session 时只改 URL 列表不刷新 */
 let lastUrlSig = FILTER_QUERY_KEYS.map((k) => queryVal(route.query[k])).join('\u0001')
+/* G1（2026-10-10）：q/trace/session 是「回车查询」语义（placeholder/aria-label 均注明回车查询，
+   输入项不在 applyServerQuery 的 ref watch 内），但筛选→URL 回写 watch 会把每次键入 router.replace
+   成 ?q=，环回触发本 watch → applyServerQuery，退化成逐键打服务端查询。
+   修法：非首次触发（oldVals 存在）且新旧 query 差异仅在 q/trace/session 三键（其余键全等）时，
+   只把三个输入 ref 同步成 URL 值、不调 applyServerQuery——输入项的查询触发只留 Enter/显式控件。
+   取舍：浏览器后退改了 q 的场景同样只同步不重查（列表仍是旧关键词结果），用户按 Enter 再查；
+   immediate 首跑保持现行为（深链 ?q= 仍全量应用，刷新/分享可还原不受影响）。 */
+const INPUT_ONLY_QUERY_KEYS = new Set(['q', 'trace', 'session'])
 watch(
   () => FILTER_QUERY_KEYS.map((k) => route.query[k]),
-  (vals) => {
+  (vals, oldVals) => {
     const [agent, status, cat, range, q, trace, session, test] = vals.map(queryVal)
     agentFilter.value = agent
     statusFilter.value = ['err', 'warn', 'ok'].includes(status) ? status : ''
@@ -887,6 +819,11 @@ watch(
     const sig = vals.map(queryVal).join('\u0001')
     if (sig === lastUrlSig) return
     lastUrlSig = sig
+    /* 仅回车查询三键变化：ref 已同步为 URL 值（上方赋值），此处不再触发服务端重查 */
+    if (oldVals) {
+      const changed = FILTER_QUERY_KEYS.filter((_, i) => queryVal(vals[i]) !== queryVal(oldVals[i]))
+      if (changed.length > 0 && changed.every((k) => INPUT_ONLY_QUERY_KEYS.has(k))) return
+    }
     void applyServerQuery()
   },
   { immediate: true }
@@ -1055,13 +992,6 @@ const statsReady = computed(() => liveStats.value !== null)
 /** 读数作废在途：窗口/筛选刚变化（live.ts 已清空旧读数）且新查询未落地——
     此间不得用上一窗口的表格样本冒充当前窗口读数（B22/F8-1） */
 const statsPending = computed(() => liveLogsLoading.value && liveStats.value === null)
-const errCount = computed(() => {
-  const st = liveStats.value
-  if (st) return st.error
-  /* 读数在途/失败：不显示 0（会被读成「本窗口 0 条失败」）；告警条隐藏而非给伪数 */
-  if (statsPending.value) return 0
-  return logs.value.filter((l) => l.status === 'err').length
-})
 /* 成功率：stats 就绪 → 全窗口口径；作废在途 → 「—」（骨架语义，不给 0/旧窗数字）；
    其余（响应缺 stats 的兜底）→ 本页样本估算并在 hint 披露。 */
 const successRate = computed(() => {
@@ -1243,35 +1173,6 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 /* 日志页签体（审核 #122 补 role=tabpanel 的容器）：display:contents 保持原布局
    （其子元素仍是 .mk-card--fill 的 flex 子项，与嵌入态 TraceWaterfall 根节点同法） */
 .exec-tabpanel { display: contents; }
-
-/* 错误摘要条（原型 renderObserve 的 alert--error）：外形走全局 .mk-alert--row（红底红字 +
-   消息/按钮两端排布），本页只补卡头同款内边距（.mk-card 无 padding）与按钮不缩（窄屏换行时按钮保完整） */
-.exec-alertwrap { padding: 12px 16px 0; }
-.exec-alert .mk-btn { flex-shrink: 0; }
-/* P1#24 摘要条内联归因 chip（判例 = AuditLogs 失败 TOP chip）：透明底描边胶囊，
-   激活反白；红系沿用告警条自身的红变量，不新增视觉档 */
-.exec-err-chip {
-  display: inline-flex;
-  align-items: center;
-  margin: 0 0 0 6px;
-  padding: 1px 8px;
-  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
-  border-radius: 999px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.exec-err-chip:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
-.exec-err-chip--on { background: var(--mk-red); border-color: var(--mk-red); color: var(--mk-on-fill); }
-/* 归因样本口径（审核 #124）：弱化小字，紧跟在 chip 后 */
-.exec-alert__caliber { margin-left: 8px; font-size: var(--mk-fs-micro); font-weight: 400; opacity: 0.8; }
-/* 右侧动作组：与消息端拉开（mk-alert--row 已两端排布，这里只管组内间距） */
-.exec-alert__ops { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 /* 状态条筛选徽章 / 清除按钮已随 2026-10-04 状态条退役删除，本页不再保留其字号覆写（全局类定义见 shared.css） */
 

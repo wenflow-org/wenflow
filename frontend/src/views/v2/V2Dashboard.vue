@@ -285,7 +285,7 @@
                 <span class="day__min">{{ d.minutes ? d.minutes + '分' : '—' }}</span>
               </button>
             </div>
-            <div v-else class="week__empty">完成第一次学习后，这里会点亮你的节奏。</div>
+            <div v-else class="week__empty">完成第一次学习后，这里会按天记录学习时长。</div>
             <div v-if="hasAnyMinutes" class="week__stats">
               <span>本周 <b>{{ weekTotal }}</b> 分钟</span>
               <span><b>{{ weekActiveDays }}</b> 天有学习</span>
@@ -304,7 +304,7 @@
                  归学习历史页，这里只留一行 month-summary；「全部历史 ›」入口从被删的当日明细面板
                  迁到本行，避免唯一入口随卡一起消失 -->
             <div v-if="monthOpen && hasAnyMinutes" class="month-summary">
-              本月节奏：{{ monthTotals.minutes }} 分钟 · {{ monthTotals.days }} 天有学习 · {{ monthTotals.sessions }} 次<template v-if="streakDays > 0"> · 连续 {{ streakDays }} 天</template>
+              本月节奏：{{ monthTotals.minutes }} 分钟 · {{ monthTotals.days }} 天有学习 · {{ monthTotals.sessions }} 次
               <router-link to="/user/learning-history" class="month-summary__more">全部历史 ›</router-link>
             </div>
           </section>
@@ -841,8 +841,7 @@ const tipTone = computed(() => {
 });
 
 const tipText = computed(() => {
-  if (pageState.value === 'attention') return '路径生成失败通常是暂时的。已确认的信息都会保留。';
-  if (pageState.value === 'generating') return '路径正在生成中，一般需要 1-2 分钟。';
+  // 失败 / 生成中的说明已由「今日行动」卡承载（标题+描述+标签），提示条不复读
   const copy = guidanceCopy.value;
   const warning = copy?.warningCopy;
   if (warning && warning !== '当前没有明显风险。') return warning;

@@ -17,7 +17,7 @@
           {{ reclaimRef?.state.busy ? '回收中…' : `回收卡死（${partition.stale}）` }}
         </button>
         <button type="button" class="mk-btn mk-btn--sm" title="清理旧账号：按建号时间批量删除旧虚拟学习者（进行中与保留名单自动豁免，先预览再执行）" @click="cleanupRef?.open()">清理旧账号</button>
-        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" title="新建虚拟学习者：填写名称/目标/故事，生成后可运行实验会话" @click="openCreate">新建</button>
+        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" title="新建虚拟学习者" @click="openCreate">新建</button>
         <button type="button" class="mk-btn mk-btn--sm" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="openBatchCreate">批量新建</button>
       </template>
     </MkPageHead>
@@ -70,7 +70,7 @@
           label="今日调用"
           :value="statsKpiValue(String(runStats.todayCalls ?? 0))"
           :hint="statsKpiHint('仅统计虚拟 / 测试账号')"
-          title="今日虚拟 / 测试账号的调用次数（总览页「今日调用」统计真实用户）"
+          title="今日虚拟 / 测试账号的调用次数"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />

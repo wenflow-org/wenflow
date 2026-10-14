@@ -274,7 +274,7 @@ const subText = computed(() =>
 )
 const resultTitle = computed(() => {
   if (result.value?.changed === false) return '无变化'
-  // add 模式 synced=false：文件已写但落库同步失败，标题同步降级（与结果列表的红色失败行一致）
+  // add 模式 synced=false：文件已写但保存同步失败，标题同步降级（与结果列表的红色失败行一致）
   if (!isEdit.value && result.value?.synced === false) return '已写入文件但保存同步失败'
   return isEdit.value ? '已更新并回填路由 ✓' : '已保存并回填路由 ✓'
 })
@@ -505,7 +505,7 @@ async function submit() {
       const payload = { name: form.value.name.trim(), ...buildPayload() }
       const res = await adminPromptWorkbenchApi.addSkillField(props.skillId, payload)
       result.value = (res.data?.data || {}) as SaveResult
-      // synced=false 时文件已写但落库同步失败，成功文案会误导（结果列表同帧已标红失败行）
+      // synced=false 时文件已写但保存同步失败，成功文案会误导（结果列表同帧已标红失败行）
       if (result.value.synced === false) toast.warning('已写入文件但保存同步失败')
       else toast.success('新字段已登记路由并同步')
     }

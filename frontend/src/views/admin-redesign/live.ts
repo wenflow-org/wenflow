@@ -1054,7 +1054,8 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
   }
 
   /* 待办：失败最多的节点。P1#1 口径诚实化：liveSpans 是「近 7 天 · 200 条采样」窗口
-     （后端暂无全量 by-agent 失败聚合），文案必须带采样口径，不得写成「近 7 天 N 次失败」暗示全量 */
+     （后端暂无全量 by-agent 失败聚合），数字不得暗示全量——但写法走标准后台文案
+     （「按最近 N 条调用统计」放副行），不再把「采样窗口/条采样」等实现词亮在界面上 */
   const byAgent = new Map<string, number>()
   for (const s of liveSpans.value || []) {
     if (s.status === 'err') byAgent.set(s.agent, (byAgent.get(s.agent) || 0) + 1)
@@ -1063,7 +1064,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
     .map(([agentId, count]) => ({
-      text: `${agentId} 采样窗口 ${count} 次失败（近 7 天 · ${LIVE_SPANS_SAMPLE_LIMIT} 条采样）`,
+      text: `${agentId} 近 7 天失败 ${count} 次（按最近 ${LIVE_SPANS_SAMPLE_LIMIT} 条调用统计）`,
       link: '排查执行日志',
       tone: 'bad' as const,
       agentId
@@ -1121,7 +1122,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       label: '进行中对话',
       value: fmt(Number(conv.active || 0)),
       foot: `累计完成 ${fmt(Number(conv.completed || 0))} 个`,
-      hint: '进行中目标对话（快照口径，无同时刻对照）· 副文为累计完成数',
+      hint: '进行中目标对话',
     },
   ]
 
@@ -1220,7 +1221,9 @@ const LIVE_LIST_FULL_LIMIT = 1000
  * includeTest=true 时显式包含全量并带回行标记
  */
 async function fetchLiveUsers(includeTest = false): Promise<void> {
-  const res = await adminUsersApi.getUsers({ limit: LIVE_LIST_FULL_LIMIT, ...(includeTest ? { includeTest: true } : {}) })
+  // 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：includeTest 档同时带 testOnly，
+  // 后端只回虚拟 + 测试账号；真实档不带任何参数（后端默认排除）
+  const res = await adminUsersApi.getUsers({ limit: LIVE_LIST_FULL_LIMIT, ...(includeTest ? { includeTest: true, testOnly: true } : {}) })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.users || body.items || []
   liveUsersTotal.value = Number(body.pagination?.total || items.length)
@@ -1296,7 +1299,8 @@ export interface LiveLearner {
 }
 
 export const liveLearners = ref<LiveLearner[]>([])
-/** 学习者域总数（后端分页 total；前端拉取窗口 limit 500——2026-10-04 用户拍板解锁 50 截断，P1#16 的数据层根修） */
+/** 学习者域总数（后端分页 total；前端拉取窗口 limit 500 → 2000——
+ *  2026-10-10 用户反馈「有多少加载多少」，842 账号不再被 500 截断） */
 export const liveLearnersTotal = ref<number | null>(null)
 
 function mapTrend(t?: string): 'up' | 'down' | 'flat' {
@@ -1310,7 +1314,8 @@ function mapFatigue(f?: string): string {
 }
 
 async function fetchLiveLearners(includeTest = false): Promise<void> {
-  const res = await adminLearnerModelsApi.list({ limit: 500, ...(includeTest ? { includeTest: true } : { excludeTest: true }) })
+  // 测试视角带 testOnly：后端只回虚拟 + 测试账号（互斥视角，见 DataScopeToggle）
+  const res = await adminLearnerModelsApi.list({ limit: 2000, ...(includeTest ? { includeTest: true, testOnly: true } : { excludeTest: true }) })
   const body = res.data?.data ?? res.data ?? {}
   const items = body.items || []
   // P1#16 数据层：接住分页 total（此前被丢弃，KPI 只能显示「已加载 N」）
@@ -1484,6 +1489,8 @@ export interface LiveVirtual {
   /** 最近一个运行中会话的阶段（无运行中会话时回退最近会话阶段） */
   currentStage: string | null
   createdAt: string
+  /** 画像 tags（persona id / cohort key 即 tag）——清理向导保留名单匹配用；旧缓存可能缺 */
+  tags?: string[]
   raw: Record<string, unknown>
 }
 
@@ -1673,6 +1680,8 @@ async function fetchLiveVirtuals(): Promise<void> {
         .filter(Boolean),
       currentStage: String(p.currentStage ?? runningSessions[0]?.currentStage ?? sessionSample[0]?.currentStage ?? '') || null,
       createdAt: String(p.createdAt || ''),
+      /* 清理向导（2026-10-10）的保留名单按画像 tag 匹配（persona id / cohort key 即 tag），透传不解析 */
+      tags: (Array.isArray(p.tags) ? p.tags : []).map(String),
       stageProgress: (p.stageProgress as LiveVirtual['stageProgress']) || null,
       raw: p
     }
@@ -2181,6 +2190,11 @@ export function liveSetIncludeVirtual(v: boolean): void {
   liveIncludeVirtual.value = v
   try { localStorage.setItem('wf_include_virtual', v ? '1' : '0') } catch { /* 隐私模式下仅内存态 */ }
   clearPageCache()
+  /* 口径变了，域级缓存同样作废：users/learners 的 boot 拉取结果按旧口径缓存（liveFetchAt），
+     只清页面级 TTL 的话域级 ready 判定仍过关 → 切「测试」后跨页导航不触发重拉，
+     页头显示新口径而表格停留在旧口径数据。spans/skills 等域与本口径无关，不动。 */
+  delete liveFetchAt.users
+  delete liveFetchAt.learners
 }
 /** 各域「已有数据」判定：null 型 ref 以非 null 为准，数组型以非空为准（空列表视为未就绪，下次重拉） */
 const liveDomainReady: Record<string, () => boolean> = {
@@ -2263,7 +2277,12 @@ export async function loadLiveData(force = false) {
   ])
   // TTL 时间戳只在真实拉取后刷新：命中缓存跳过时保留原时间戳，否则缓存会被无限续期
   if (!spansSkippable) {
-    if (spansResult.status === 'fulfilled') liveFetchAt.spans = Date.now()
+    if (spansResult.status === 'fulfilled') {
+      liveFetchAt.spans = Date.now()
+      /* boot 样本已更新 → 瀑布的初始样本快照作废（仅 null 时同步的对齐语义会把
+         Shell 强刷后的新 boot 数据挡在门外），置空强制瀑布下次挂载重新对齐 */
+      waterfallSpans.value = null
+    }
     else liveFailures.value.spans = errMsg(spansResult.reason)
   }
   if (!overviewSkippable) {

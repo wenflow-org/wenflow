@@ -108,7 +108,7 @@
         tone="error"
         icon="!"
         title="公告加载失败"
-        description="无法从服务读取公告列表。"
+        description="公告列表加载失败，请重试。"
         action-text="重试"
         action-busy-text="重试中…"
         :action-busy="liveRetrying"

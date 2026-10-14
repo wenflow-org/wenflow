@@ -34,7 +34,6 @@
       collapsible
       class="oc-distband"
       title="路径状态分布"
-      
       unit="条"
       aria-label="按路径状态筛选"
       :bins="pathBandBins"

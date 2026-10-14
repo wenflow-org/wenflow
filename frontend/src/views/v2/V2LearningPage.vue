@@ -95,7 +95,7 @@
             <template v-if="kpView === 'graph'">
               <p v-if="graphError" class="kp__hint kp__hint--err">{{ graphError }}</p>
               <MkLoading v-else-if="graphLoading" inline />
-              <p v-else-if="!graphNodes.length" class="kp__hint">这条路径还没有概念图数据——路径生成完成后会出现在这里。</p>
+              <p v-else-if="!graphNodes.length" class="kp__hint">这条路径还没有概念图数据——路径生成完成后会出现在这里。也可以先用「列表」查看已收录的知识点。</p>
               <MkGraph
                 v-else
                 :nodes="graphNodes"
@@ -167,10 +167,14 @@
     <div v-else class="learn__body">
       <!-- 中：导师对话。知识点浮窗相对页头定位，绝对定位不占用对话区高度。 -->
       <section class="tutor">
-        <!-- 恢复进度横幅：续上历史时可见，明确「已恢复到上次进度」并提供重新开始出口 -->
+        <!-- 恢复进度横幅：续上历史时可见（短中断刷新场景取代大卡），「接着讲」触发无输入续讲回合 -->
         <div v-if="resumedNotice" class="tutor__resume">
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M13 2 4.5 13.5H11L9.5 22 19 9.5h-6.5L13 2z"/></svg>
           <span class="tutor__resume-text">已恢复上次学习进度，接着继续</span>
+          <button type="button" class="tutor__resume-go" :disabled="typing || actionBusy" @click="resumeFromBanner">
+            <span v-if="typing" class="spinner spinner--sm"></span>
+            接着讲
+          </button>
           <button type="button" class="tutor__resume-restart" @click="restart">重新开始</button>
           <button type="button" class="tutor__resume-close" aria-label="关闭提示" @click="resumedNotice = false">
             <svg viewBox="0 0 24 24" width="10" height="10"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
@@ -195,19 +199,20 @@
               <span v-if="typing" class="spinner spinner--sm"></span>
               {{ scenePrimaryText }}
             </button>
-            <button
-              v-if="openingScene.kind === 'resume'"
-              type="button"
-              class="btn-ghost"
-              :disabled="typing || actionBusy"
-              @click="restart"
-            >重新开始</button>
-            <button type="button" class="btn-ghost" :disabled="typing || actionBusy" @click="openingSceneDone = true">先看看</button>
           </div>
+          <!-- 破坏性出口降级为角落小字链接：不与主行动并排抢点击（确认弹窗仍兜底，2026-10-09 用户反馈）。
+               「先看看」已删：卡片非模态，历史与快选在其后本来可见，不点主按钮的自然状态就是先看看 -->
+          <button
+            v-if="openingScene.kind === 'resume'"
+            type="button"
+            class="oscene__restart"
+            :disabled="typing || actionBusy"
+            @click="restart"
+          >重新开始（清空当前进度）</button>
         </div>
 
         <div ref="scrollEl" class="tutor__scroll" @scroll="updateNearBottom">
-          <!-- 消息空态（批20）：跳过开场（「先看看」）或会话被清空时不再是纯白滚动区 -->
+          <!-- 消息空态（批20）：开场卡收起或会话被清空时不再是纯白滚动区 -->
           <div v-if="!msgs.length" class="tutor__empty">
             <strong>准备开始</strong>
             <p>发一条消息，或点下面的选项告诉老师你的情况。</p>
@@ -957,6 +962,13 @@ function startFromScene() {
   void sendDirect(sendText);
 }
 
+/** 短中断条幅的「接着讲」：与 resume 卡主按钮同一条无输入续讲链路，只是入口更轻 */
+function resumeFromBanner() {
+  if (typing.value || actionBusy.value || !session.value) return;
+  resumedNotice.value = false;
+  void continueFromScene();
+}
+
 /**
  * 恢复续讲（resume-continue）：无学生输入的教学回合。
  * 不 push 用户气泡、不收集交互 meta；流式渲染 AI 接续开场白，响应应用与 doSend 共用。
@@ -1253,8 +1265,21 @@ async function boot() {
             }
             restorePeerHistory(peerRestored);
           }
-          // 有可续历史才显示恢复横幅（附「重新开始」出口）；全新无历史则不必打扰。
-          // 有开场景卡片时横幅让位给卡片（卡片已含恢复信息与重新开始出口），避免重复提示
+          // 恢复提示分级（2026-10-09 用户反馈：刷新/几分钟内重进也弹三选一大卡是纯摩擦）：
+          // 短中断（<30min）意图无歧义就是继续——不弹大卡，静默恢复历史走细条幅（附「接着讲」，
+          // 不自动触发续讲回合：用户可能只是看看，自动开讲费 token 且可能打断节奏）；
+          // 长回归（≥30min）才出重定向卡，recap 那时才有真实价值。取不到最后消息时间时
+          // 保持原行为（出卡），不做猜测。
+          if (openingScene.value && restoredCount > 0 && Array.isArray(detail.messages)) {
+            const RESUME_SILENT_GAP_MS = 30 * 60 * 1000;
+            const lastMsg = [...detail.messages].reverse().find((m) => m?.timestamp);
+            const gapMs = lastMsg ? Date.now() - new Date(String(lastMsg.timestamp)).getTime() : NaN;
+            if (Number.isFinite(gapMs) && gapMs >= 0 && gapMs < RESUME_SILENT_GAP_MS) {
+              openingScene.value = null;
+            }
+          }
+          // 有可续历史才显示恢复横幅（附「接着讲」与「重新开始」出口）；全新无历史则不必打扰。
+          // 大卡在场时横幅仍让位（长回归场景卡片已含恢复信息与重新开始出口），避免重复提示
           resumedNotice.value = restoredCount > 0 && !openingScene.value;
           if (detail.pendingCheckpoint) {
             checkpoint.value = detail.pendingCheckpoint;
@@ -2070,6 +2095,14 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
 }
 .tutor__resume-text { flex: 1; font-weight: 600; }
+.tutor__resume-go {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 0; background: var(--blue); color: var(--text-on-primary);
+  font: inherit; font-size: 12px; font-weight: 700;
+  padding: 5px 14px; border-radius: var(--mk-radius-pill); cursor: pointer;
+}
+.tutor__resume-go:hover { background: color-mix(in srgb, var(--blue-deep) 85%, var(--blue)); }
+.tutor__resume-go:disabled { opacity: 0.6; cursor: default; }
 .tutor__resume-restart {
   border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
   background: var(--surface);
@@ -2128,8 +2161,16 @@ onBeforeUnmount(() => {
 }
 .oscene__warn { font-size: 12px; line-height: 1.6; color: var(--amber); }
 .oscene__warn span { font-weight: 700; }
+.oscene__restart {
+  justify-self: start;
+  margin-top: 2px;
+  border: 0; background: transparent; color: var(--faint);
+  font: inherit; font-size: 12px; cursor: pointer;
+  padding: 2px 0;
+}
+.oscene__restart:hover { color: var(--red-ink); }
+.oscene__restart:disabled { opacity: 0.6; cursor: default; }
 .oscene__actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
-.oscene__actions .btn-ghost { font-size: 12.5px; }
 /* 暗色：底色/描边已全部令牌化，自动翻转，原逐条暗色字面量覆写退役 */
 .tutor__jump-bottom {
   position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
@@ -3269,12 +3310,11 @@ onBeforeUnmount(() => {
   .tutor__scroll { padding: 14px; }
   .oscene { padding: 12px 14px; }
   .learn__live { font-size: 12px; }
-  /* 续课卡三按钮收小（2026-09-26 用户「从这继续/重新开始/先看看按钮还很大」）：
-     卡内选项按触诊分级取紧凑档——主 40 / 次 36（非页级主 CTA，不占 44）；
-     align-items:center 防 flex stretch 把次钮拉到与主钮同高 */
+  /* 续课卡主按钮收小（2026-09-26 用户「从这继续按钮还很大」；2026-10-09 起卡内只剩
+     主按钮一个选项，「重新开始」已降级为 .oscene__restart 小字链接）：
+     非页级主 CTA，按触诊分级取紧凑档 40；align-items:center 防 flex stretch */
   .oscene__actions { align-items: center; }
   .oscene__actions .btn-primary { padding: 8px 15px; font-size: 13px; min-height: 40px; }
-  .oscene__actions .btn-ghost { padding: 5px 12px; min-height: 36px; }
 }
 </style>
 

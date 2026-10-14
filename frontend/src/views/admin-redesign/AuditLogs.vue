@@ -111,7 +111,7 @@
                   :value="activeActionValue"
                   class="mk-filter__select"
                   aria-label="按动作筛选"
-                  title="按动作快筛（当前页动作聚合；搜索词写入关键词框，可再叠加其他关键词）"
+                  title="按本页动作快筛"
                   @change="applyActionFilter(($event.target as HTMLSelectElement).value)"
                 >
                   <option value="">全部动作</option>
@@ -135,7 +135,7 @@
                 <button type="button" class="mk-alert__btn" :disabled="statsLoading" @click="fetchStats">{{ statsLoading ? '重试中…' : '重试' }}</button>
               </div>
               <div v-else-if="failureByAction.length" class="al-fails al-fails--pop">
-                <span class="al-fails__label" title="失败最多的动作（近 2000 条失败内聚合），点击 chip 下钻只看失败">失败 TOP</span>
+                <span class="al-fails__label" title="失败最多的动作（基于最近 2000 条失败记录），点击 chip 下钻只看失败">失败 TOP</span>
                 <!-- P2：span→button。后端 /admin/audit-logs 支持 success=true/false 白名单参数（parseSuccess），
                      点击 = 只看失败 + path 首段关键词；再点已激活的 chip 退出下钻 -->
                 <button

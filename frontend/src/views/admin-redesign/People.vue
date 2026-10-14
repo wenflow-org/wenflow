@@ -15,10 +15,10 @@
       </template>
     </MkPageHead>
 
-    <!-- 账号 KPI（2026-10-05 用户纠偏「用户与学习者也没做 kpi 版，只做了一个」）：
-         三口径升 MkKpi 卡带（全站统一面板设计，hint 可见短口径 + title 长释）；
-         构成带只在「含测试」档出现（D18：仅真实档三分桶结构性恒 100/0/0，
-         单桶假构成不再渲染——它的信息由 KPI hint 承载） -->
+    <!-- 账号 KPI（2026-10-05 用户纠偏升 MkKpi 卡带；2026-10-10 统一两档卡型；
+         2026-10-11 用户拍板换读数：测试视角「真实用户」结构性恒 0 → 换「运行中仿真」，
+         两档「30 分钟在线」→「近 7 天活跃」，真实视角管理员卡并入真实卡 hint。
+         MkBuckets 构成带已退役（与教学组卡带两套视觉语言） -->
     <section v-if="ppKpi.length" class="mk-kpi-grid" aria-label="账号概览">
       <MkKpi
         v-for="k in ppKpi"
@@ -30,7 +30,6 @@
         :title="k.title"
       />
     </section>
-    <MkBuckets v-if="ppBuckets.length > 1" label="账号构成" :items="ppBuckets" />
 
     <Users ref="usersRef" embedded />
   </div>
@@ -41,10 +40,9 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
-import MkBuckets from '@/components/mk/MkBuckets.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import Users from './Users.vue'
-import { liveUsers, liveUsersTotal, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
+import { liveUsers, liveUsersTotal, liveIncludeVirtual, liveSetIncludeVirtual, liveVirtuals } from './live'
 import { isRealAccountUser, isVirtualLearnerAccount } from './learner-profile'
 
 const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
@@ -56,75 +54,94 @@ const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(n
    审核 #7（2026-10-06）：默认档不出构成带（下方 return []，原页内单桶分支是死代码：
    卡带 gate 为 length > 1，且 D18 明确「单桶假构成不再渲染」）；未纳入口径由 KPI hint
    「虚拟 / 测试账号未纳入」承载，切到「含测试」后才展示三桶互斥构成。 */
-/* 账号 KPI（2026-10-05 统一面板设计）：真实用户 / 管理员 / 30 分钟在线。
-   口径：真实用户 = 非虚拟且非测试（两口径开关下都不变）；管理员 = 真实域细分（与旧桶 foot 同源）；
-   在线 = 最后登录在 30 分钟内（审核 #9，2026-10-06：与同面板真实用户同域取 realRows，
-   不再把含测试档下的虚拟/测试行算进在线）；数据 = live 域已加载行（后端总数在 liveUsersTotal，
-   超上限截断时 title 注明）。
-   走查 F1-1（2026-10-07）：判据统一收口到 learner-profile.ts 单点——本页 KPI / 构成带与
-   下方 Users 列表 pill 计数必须同一口径（此前本页用 payload 标记、列表用命名约定正则，
-   含测试档下普通用户 pill 比本卡多 10）。 */
+/* 账号 KPI（2026-10-05 统一面板设计；2026-10-11 用户拍板换读数）：
+   真实视角 2 张：真实用户（管理员数在 hint）/ 近 7 天活跃；
+   测试视角 4 张：运行中仿真 / 虚拟学习者 / 测试账号 / 近 7 天活跃
+   （「真实用户」在测试视角结构性恒 0，换虚拟域的「运行中仿真」）。
+   口径：真实用户 = 非虚拟且非测试（两口径开关下都不变）；活跃 = lastLoginAt 在 7 天内，
+   按各档自己的集合算（真实档 realRows / 测试档 = 已加载行）；数据 = live 域已加载行
+   （后端总数在 liveUsersTotal，超上限截断时 title 注明）。
+   走查 F1-1（2026-10-07）：判据统一收口到 learner-profile.ts 单点——本页 KPI 与
+   下方 Users 列表 pill 计数同一口径。 */
 type PpKpiTile = { label: string; value: number; hint: string; tone: '' | 'ok' | 'warn' | 'bad'; title: string }
+/** 近 7 天活跃：lastLoginAt 在 7 天内（7 天窗口是运营常态读数，原 30 分钟窗口恒 0 无区分度） */
+const active7dOf = (rows: Array<{ lastLoginAt: string | null }>) =>
+  rows.filter((u) => !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 7 * 86400000).length
+/** 运行中仿真：仿真会话数 ≥1 的虚拟学习者账号（virtuals 域 boot 后台加载，runningCount 后端全量聚合） */
+const runningSims = computed(() => liveVirtuals.value.filter((v) => v.runningCount > 0).length)
 const ppKpi = computed<PpKpiTile[]>(() => {
   const rows = liveUsers.value
   if (!rows.length) return []
   const realRows = rows.filter(isRealAccountUser)
   const admins = realRows.filter((u) => u.isAdmin).length
-  const online = realRows.filter((u) => !!u.lastLoginAt && Date.now() - new Date(u.lastLoginAt).getTime() < 30 * 60000).length
-  const scope = `按已加载 ${rows.length} 行统计（后端共 ${liveUsersTotal.value}）`
+  const scope = `当前显示 ${rows.length} 个账号 · 全部共 ${liveUsersTotal.value} 个`
+  const adminsHint = realRows.length ? `其中管理员 ${admins}` : '—'
+  /* 两档统一 MkKpi 卡带（2026-10-10 统一卡型；2026-10-11 换读数）：
+     测试 4 张（运行中仿真/虚拟/测试/活跃）——「真实用户」在测试视角恒 0，换虚拟域读数；
+     仅真实 2 张（真实/活跃）——管理员数并入真实卡 hint，不再单独立卡 */
+  if (liveIncludeVirtual.value) {
+    const virtual = rows.filter(isVirtualLearnerAccount).length
+    const test = rows.length - realRows.length - virtual
+    return [
+      {
+        label: '运行中仿真',
+        value: runningSims.value,
+        hint: '正在运行仿真会话的账号',
+        tone: '',
+        title: '仿真会话数 ≥ 1 的虚拟学习者账号（随虚拟学习者数据刷新）',
+      },
+      {
+        label: '虚拟学习者',
+        value: virtual,
+        hint: '模拟数据账号',
+        tone: '',
+        title: `${scope}；系统生成的模拟学习账号`,
+      },
+      {
+        label: '测试账号',
+        value: test,
+        // 2026-10-14（KPI 审计）：原 hint「默认统计不含，切「测试」后计入」在测试视角自相矛盾——
+        // 这张卡本来就只在切到「测试」后才渲染，等于叫用户做一件已经做完的事。改为只描述账号类别；
+        // 「默认统计不含」那句说明留在「真实用户」卡（真实视角）的 title 里。
+        hint: '用于测试与审计的账号',
+        tone: '',
+        title: scope,
+      },
+      {
+        label: '近 7 天活跃',
+        value: active7dOf(rows),
+        hint: '最后登录在 7 天内',
+        tone: '',
+        title: `${scope}；统计当前显示的账号（虚拟学习者与测试账号）`,
+      },
+    ]
+  }
   return [
     {
       label: '真实用户',
       value: realRows.length,
-      hint: liveIncludeVirtual.value ? '不含虚拟 / 测试' : '虚拟 / 测试账号未纳入',
+      hint: `不含虚拟 / 测试账号 · ${adminsHint}`,
       tone: '',
-      title: `${scope}；切换页头「含测试」后下方出现完整账号构成带`,
+      title: `${scope}；切换页头「测试」后计入虚拟 / 测试账号`,
     },
     {
-      label: '管理员',
-      value: admins,
-      hint: realRows.length ? `占真实用户 ${Math.round((admins / realRows.length) * 100)}%` : '—',
+      label: '近 7 天活跃',
+      value: active7dOf(realRows),
+      hint: '最后登录在 7 天内',
       tone: '',
-      title: '真实用户中的管理员数（角色属真实域细分，不与虚拟/测试混算）',
-    },
-    {
-      label: '30 分钟在线',
-      value: online,
-      hint: '最后登录在 30 分钟内',
-      tone: '',
-      title: `${scope}；真实域口径（不含虚拟 / 测试账号），与「真实用户」同集合`,
+      title: `${scope}；仅统计真实用户（不含虚拟 / 测试账号）`,
     },
   ]
 })
 
-const ppBuckets = computed(() => {
-  const rows = liveUsers.value
-  const total = rows.length
-  if (!total) return []
-  // 审核 #7（2026-10-06）：默认「仅真实」档不出构成带——后端已排除虚拟/测试，三分桶结构性
-  // 恒 100/0/0，单桶 100% 是假构成（D18）。未纳入口径由 KPI hint 承载，故此处直接空数组。
-  if (!liveIncludeVirtual.value) return []
-  const virtual = rows.filter(isVirtualLearnerAccount).length
-  const test = rows.filter((u) => !isVirtualLearnerAccount(u) && !isRealAccountUser(u)).length
-  const realRows = rows.filter(isRealAccountUser)
-  const real = realRows.length
-  const admins = realRows.filter((u) => u.isAdmin).length
-  const pct = (v: number) => Math.round((v / total) * 100)
-  const scopeNote = `按已加载 ${total} 行统计（后端共 ${liveUsersTotal.value}）`
-  const realBucket = {
-    value: real,
-    label: '真实用户',
-    pct: pct(real),
-    tone: 'var(--mk-blue)',
-    foots: [{ text: `其中管理员 ${admins}` }],
-  }
-  const calibre = `${scopeNote}；三分桶为同一整体（已加载账号）的互斥构成`
-  return [
-    { ...realBucket, valueTitle: calibre },
-    { value: virtual, label: '虚拟学习者', pct: pct(virtual), tone: 'var(--mk-amber)', valueTitle: calibre, foots: [{ text: '模拟数据账号' }] },
-    { value: test, label: '测试账号', pct: pct(test), tone: 'var(--mk-faint)', valueTitle: calibre, foots: [{ text: '统计口径默认排除' }] }
-  ]
-})
+/* 账号构成桶（MkBuckets）已退役（2026-10-10 用户反馈「这个面板和学习组其他面板设计都不一样」）：
+   含测试档的三分构成改为 MkKpi 卡带 4 张（运行中仿真/虚拟学习者/测试账号/近 7 天活跃），
+   与教学组各页同款面板。
+   历史沿革：2026-10-04 教学组统一 buckets 引入三分桶（真实/虚拟/测试互斥构成，
+   徽章同款判据：虚拟 > 测试 > 其余真实，判据单点 learner-profile.ts 不变）；
+   2026-10-05 KPI 升卡带后与 buckets 上下双面板；10-10 先收敛单带、再统一卡型；
+   10-11 换读数（真实用户死卡 → 运行中仿真；30 分钟在线 → 近 7 天活跃；管理员并 hint）。
+   占比条（32%/59%/9%）随退役消失——管理场景读的是绝对数与口径，不是构成比例。 */
 
 const route = useRoute()
 const router = useRouter()

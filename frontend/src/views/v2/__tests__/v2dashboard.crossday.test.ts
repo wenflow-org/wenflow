@@ -175,8 +175,8 @@ describe('跨月边界：本月摘要只含当前自然月', () => {
     const summary = await openMonth(w);
     expect(summary.text()).toContain('本月节奏：30 分钟');
     expect(summary.text()).toContain('1 天有学习');
-    // 连续天数从今天（11/1）往前数：今天 + 昨天 = 2
-    expect(summary.text()).toContain('连续 2 天');
+    // 连续天数从今天（11/1）往前数：今天 + 昨天 = 2（连续天数唯一出处：问候栏药丸）
+    expect(w.find('.streak').text()).toContain('连续 2 天');
   });
 
   it('闰年 2/29 的学习计入 2028 年 2 月，不落到 3 月', async () => {
@@ -195,8 +195,8 @@ describe('跨月边界：本月摘要只含当前自然月', () => {
     freezeAt(2026, 10, 7, 12);
     const w = await mountDash([session('y', at(2026, 10, 6, 20), 30)]);
     const summary = await openMonth(w);
-    expect(summary.text()).toContain('连续 1 天');
-    // 今天 0 分钟，但连续不断
+    // 今天 0 分钟，但连续不断（连续天数唯一出处：问候栏药丸）
+    expect(w.find('.streak').text()).toContain('连续 1 天');
     expect(w.text()).toContain('今日已学 0 /');
   });
 });

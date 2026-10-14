@@ -8,6 +8,7 @@
  *   R3 交互说明书：点击…可 / 点此 / 悬停 / 再点一次 …
  *   R4 实现外露：内部词、英文枚举、下划线键名、点分路径、接口路径（词典见 ui-copy-terms.json）
  *   R5 emoji：界面文案不使用 emoji（替代=色块+字标 / 线性图标）
+ *   R6 同文件重复：同一句文案在同一文件出现 ≥2 次（复读）
  *
  * 用法：
  *   node scripts/check-ui-copy.mjs            # 与基线比对，新增即失败
@@ -126,6 +127,8 @@ function candidates(line, isVue) {
 function scan() {
   const findings = [];
   const tsSet = new Set(TS_COPY.map((p) => path.join(SRC, p).replace(/\\/g, '/')));
+  /* R6 用：同一文件内同一句文案出现的行号（AP8「同页复读」的机械代理） */
+  const perFile = new Map();
   for (const file of walk(SRC)) {
     const rel = path.relative(SRC, file).replace(/\\/g, '/');
     const isVue = file.endsWith('.vue');
@@ -145,12 +148,23 @@ function scan() {
       for (const text of candidates(line, isVue)) {
         if (seen.has(text)) continue;
         seen.add(text);
+        if (!perFile.has(rel)) perFile.set(rel, new Map());
+        const m = perFile.get(rel);
+        if (!m.has(text)) m.set(text, []);
+        m.get(text).push(i + 1);
         for (const [rule, fn] of Object.entries(RULES)) {
           const why = fn(text);
           if (why) findings.push({ file: rel, line: i + 1, rule, why, text: text.slice(0, 120) });
         }
       }
     });
+  }
+  /* R6：同文件内同一句（≥10 字、含中文）出现 ≥2 次 → 复读嫌疑，取第二次出现处报一条 */
+  for (const [rel, m] of perFile) {
+    for (const [text, lines] of m) {
+      if (lines.length < 2 || text.length < 10) continue;
+      findings.push({ file: rel, line: lines[1], rule: 'R6', why: `同文件重复 ${lines.length} 次（行 ${lines.join(' / ')}）`, text: text.slice(0, 120) });
+    }
   }
   return findings;
 }

@@ -22,7 +22,7 @@
       compact
       icon="◌"
       title="暂无模拟时钟数据"
-      description="该会话尚未初始化日期模拟时钟。"
+      description="该会话尚未开启日期模拟，可在「日期模拟」设置中开启。"
     />
 
     <template v-else>

@@ -689,7 +689,7 @@
         <section v-if="!isRealMode && !isBlackbox && activeTab === 'path'" class="mk-card">
           <div class="mk-card__head">
             <h4 class="mk-card__title">路径评审 <span class="cp-aside-dot" :class="pathReviewStatus ? 'is-ok' : 'is-muted'"></span></h4>
-            <span class="mk-card__meta">{{ pathReviewStatus ? pathReviewDecisionLabel : '未评审 — 评审只是质量检查，可直接启动教学' }}</span>
+            <span class="mk-card__meta">{{ pathReviewStatus ? pathReviewDecisionLabel : '未评审' }}</span>
           </div>
           <div class="cp-aside-body">
             <div class="cp-review-panel__actions">
@@ -707,7 +707,7 @@
               <ul v-if="pathReviewChanges.length" class="cp-review__changes"><li v-for="(c, i) in pathReviewChanges" :key="i">{{ c }}</li></ul>
               <p v-if="pathReviewReplan" class="cp-review__replan">{{ pathReviewReplan }}</p>
             </div>
-            <p v-else class="cp-none">尚未评审。评审只是质量检查，可直接启动教学。</p>
+            <p v-else class="cp-none">尚未评审。</p>
           </div>
         </section>
 

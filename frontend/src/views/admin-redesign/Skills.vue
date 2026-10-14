@@ -27,24 +27,24 @@
       <!-- live 三态（评审「状态三态缺失」）：对账加载中 → 「…」；加载失败 → 「?」（读不到 ≠ 0）；
            就绪且为 0 → 红 0（全 draft 是真异常，必须显性报警而非静默消失） -->
       <MkKpi
-        label="live"
+        label="已上线"
         :value="recLoading ? '…' : recError ? '?' : liveCount"
         :tone="!recLoading && !recError && liveCount === 0 ? 'bad' : ''"
-        hint="ACTIVE prompt 生效"
+        hint="提示词已生效"
         :title="recLoading
           ? '完成度对账加载中，live 计数暂不可用'
           : recError
-            ? `完成度对账加载失败：${recError}；读不到对账 ≠ 0 个 live`
+            ? `上线状态加载失败：${recError}；加载失败不代表没有已上线的 Skill`
             : liveCount === 0
-              ? '对账已就绪且 status=live 的 Skill 数为 0：所有 Skill 均未走完上线门槛（draft → live），属真异常'
-              : '完成度对账 status=live（ACTIVE prompt 生效）的 Skill 数'"
+              ? '已上线的 Skill 数为 0：所有 Skill 均未完成上线流程，请检查发布状态'
+              : '已完成上线（提示词已生效）的 Skill 数'"
       />
       <MkKpi
         label="成功率"
         :value="rangeRefreshing ? '…' : (overallRateText ?? '—')"
         :tone="overallRateTone"
         :hint="totalCalls ? `${okCalls}/${totalCalls} · ${rangeLabel}` : rangeLabel"
-        :title="`窗口内成功率 = ${RATE_MEANING}；${RATE_THRESHOLD_NOTE}`"
+        :title="`窗口内成功率 = ${RATE_MEANING}。${RATE_THRESHOLD_NOTE}`"
       />
       <MkKpi
         label="平均耗时"
@@ -207,7 +207,7 @@
               <!-- 版本：/admin/skills 的 definition.version（原型「版本」列） -->
               <th v-if="showCol('version')" scope="col">版本</th>
               <!-- 路由模型：skill-model-configs/coverage 的生效 model；未配置 → 「平台默认」 -->
-              <th v-if="showCol('routing')" scope="col" title="skill-model-configs 生效模型；未单独配置 = 平台默认；无覆盖行 = —">路由模型</th>
+              <th v-if="showCol('routing')" scope="col" title="该 Skill 生效的模型，未单独配置时使用平台默认">路由模型</th>
               <!-- 原型「24h 调用」：本页窗口由「统计窗口」下拉决定（默认近 7 天），故列名取中性「调用」，口径随窗口 -->
               <th
                 v-if="showCol('calls')"
@@ -218,14 +218,14 @@
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('calls')" title="统计窗口内调用次数（随「统计窗口」下拉切换，默认近 7 天）">调用<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- P95 占位：后端仅日志聚合提供 p50/p99，无技能级 P95；不编造数字。
                    整列恒「—」无信息量（评审 P3）→ 默认隐藏，「列」菜单可手动开启 -->
-              <th v-if="showCol('p95')" scope="col" class="mk-th--right" title="接口未提供技能级 P95（后端仅日志聚合 p50/p99）→ 恒「—」；默认隐藏，可在「列」菜单开启">P95</th>
+              <th v-if="showCol('p95')" scope="col" class="mk-th--right" title="暂无单 Skill 的 P95 耗时数据，该列默认隐藏，可在「列」菜单开启">P95</th>
               <th
                 v-if="showCol('rate')"
                 scope="col"
                 class="mk-th--right mk-th--sortable"
                 :aria-sort="sortState('rate')"
                 @click="toggleSort('rate')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')" :title="`窗口内成功率（= ${RATE_MEANING}）；${RATE_THRESHOLD_NOTE}`">成功率<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('rate')" :title="`窗口内成功率（= ${RATE_MEANING}）。${RATE_THRESHOLD_NOTE}`">成功率<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- 完成度 = 对账 completion status（draft → live）；原列名「状态」与行首健康点双语义 → 更名 -->
               <th
                 v-if="showCol('status')"
@@ -233,7 +233,7 @@
                 class="mk-th--sortable"
                 :aria-sort="sortState('status')"
                 @click="toggleSort('status')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('status')" title="完成度对账 status（draft → live）">完成度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('status')" title="完成度：草稿 → 已上线">完成度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('cat')"
                 scope="col"
@@ -270,7 +270,7 @@
               <td v-if="showCol('version')"><span class="mono">{{ versionOf(s.id) }}</span></td>
               <td v-if="showCol('routing')"><span class="mono sk-model" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
               <td v-if="showCol('calls')"><span class="mono">{{ s.calls }}</span></td>
-              <td v-if="showCol('p95')"><span class="mk-na" title="接口未提供技能级 P95（后端仅日志聚合 p50/p99）">—</span></td>
+              <td v-if="showCol('p95')"><span class="mk-na" title="暂无单 Skill 的 P95 耗时数据">—</span></td>
               <td v-if="showCol('rate')">
                 <!-- 行级设计（批C）：数字+比例条（与网格卡 sk-card__rate 同语言，消灭同页双形态）；
                      精度/阈值/兜底走 rate-utils 单点（99.9% 不再显示 100%，无调用显「—」不显 0%） -->
@@ -288,9 +288,9 @@
                   :class="completionBadgeOf(s.id)!.cls"
                   :title="completionBadgeOf(s.id)!.title"
                 >{{ completionBadgeOf(s.id)!.text }}</span>
-                <span v-else-if="recLoading" class="mk-na" title="对账报告加载中，状态暂不可用">…</span>
-                <span v-else-if="recError" class="mk-na sk-rec-fail" :title="`对账加载失败：${recError}`">对账失败</span>
-                <span v-else class="mk-na" title="对账报告中无此 Skill（外挂能力等不在对账口径内）">—</span>
+                <span v-else-if="recLoading" class="mk-na" title="上线状态加载中，暂不可用">…</span>
+                <span v-else-if="recError" class="mk-na sk-rec-fail" :title="`上线状态加载失败：${recError}`">状态未知</span>
+                <span v-else class="mk-na" title="该 Skill 未纳入上线评估（多为外挂能力）">—</span>
               </td>
               <td v-if="showCol('cat')"><span class="mk-badge mk-badge--muted" :title="s.category">{{ categoryText(s.category) }}</span></td>
               <td v-if="showCol('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
@@ -320,7 +320,7 @@
       <MkEmptyState
         v-else-if="!filtered.length"
         :title="onlyAttention ? '没有需关注的 Skill' : keyword ? '当前筛选无 Skill' : '暂无运行数据'"
-        :description="onlyAttention ? '窗口内没有成功率低于 90% 的节点（需关注 = 健康点红档）。' : keyword ? '换个关键词试试。' : ''"
+        :description="onlyAttention ? '当前窗口内没有成功率低于 90% 的 Skill。' : keyword ? '换个关键词试试。' : ''"
         :action-text="isFiltered ? '清除筛选' : ''"
         @action="clearFilters"
       />
@@ -366,11 +366,11 @@
               <td><span class="mono sk-routing__sub" :title="fallbackTitleOf(s.id)">{{ fallbackOf(s.id) }}</span></td>
               <td>
                 <span v-if="completionBadgeOf(s.id)" class="mk-badge" :class="completionBadgeOf(s.id)!.cls" :title="completionBadgeOf(s.id)!.title">{{ completionBadgeOf(s.id)!.text }}</span>
-                <span v-else-if="recLoading" class="mk-na" title="对账报告加载中，状态暂不可用">…</span>
+                <span v-else-if="recLoading" class="mk-na" title="上线状态加载中，暂不可用">…</span>
                 <!-- 三态对齐 run 表（Skills.vue:238）：对账加载失败 ≠「对账报告中无此 Skill」，
                      此前失败与无数据同显「—」，把故障说成正常无数据 -->
-                <span v-else-if="recError" class="mk-na sk-rec-fail" :title="`对账加载失败：${recError}`">对账失败</span>
-                <span v-else class="mk-na" title="对账报告中无此 Skill（外挂能力等不在对账口径内）">—</span>
+                <span v-else-if="recError" class="mk-na sk-rec-fail" :title="`上线状态加载失败：${recError}`">状态未知</span>
+                <span v-else class="mk-na" title="该 Skill 未纳入上线评估（多为外挂能力）">—</span>
               </td>
             </tr>
           </tbody>
@@ -527,7 +527,7 @@ const skColDefs = [
   { key: 'version', label: '版本', title: 'registry definition.version' },
   { key: 'routing', label: '路由模型', title: '生效模型；未配置=平台默认；无覆盖行=—' },
   { key: 'calls', label: '调用', title: '统计窗口内调用次数（随窗口筛选）' },
-  { key: 'p95', label: 'P95', title: '接口未提供技能级 P95，恒「—」；默认隐藏' },
+  { key: 'p95', label: 'P95', title: '暂无单 Skill 的 P95 耗时数据；该列默认隐藏' },
   { key: 'rate', label: '成功率', title: '窗口内成功率' },
   { key: 'status', label: '完成度', title: '完成度对账 status（draft→live）' },
   { key: 'cat', label: '类别', title: 'Skill 类别' },
@@ -595,8 +595,8 @@ const RATE_MEANING = '成功调用 / 总调用'
 
 /** 成功率单元格 title：比例 + 全站统一阈值披露；无分母说明兜底口径（不按 0% 计） */
 function rowRateTitle(s: { calls: number; errors: number }): string {
-  if (!s.calls) return '窗口内无调用：无分母不显示成功率（不按 0% 计）'
-  return `成功率 ${s.calls - s.errors}/${s.calls}；${RATE_THRESHOLD_NOTE}`
+  if (!s.calls) return '该窗口内暂无调用，暂无成功率'
+  return `成功率 ${s.calls - s.errors}/${s.calls}。${RATE_THRESHOLD_NOTE}`
 }
 
 /** tone → 本页 sk-rate 类名（显式映射，rate-utils 只产语义 tone；ok/muted 不着色） */
@@ -880,11 +880,11 @@ function completionBadgeOf(skillId: string): { cls: string; text: string; title:
 /** 完成度徽标 tooltip：首个失败档的依据文本 */
 function recGateDetail(completion: SkillCompletion): string {
   const gates: Array<[string, string]> = [
-    ['draft', '户口簿'],
+    ['draft', '基础档案'],
     ['handlerReady', 'handler 注册'],
     ['coreReady', 'core 文件'],
     ['fieldsSynced', '字段路由'],
-    ['live', 'ACTIVE prompt'],
+    ['live', '生效提示词'],
   ]
   for (const [key, label] of gates) {
     const gate = completion.gates[key as keyof typeof completion.gates]
@@ -1055,13 +1055,13 @@ function fallbackTitleOf(skillId: string): string {
   const row = coverageById.value.get(skillId)
   if (!row) return '覆盖矩阵无此 Skill 行（未登记 skill-model-config）'
   if (row.fallbackChain && row.fallbackChain.length) return `Skill 自定义兜底链：${row.fallbackChain.join(' → ')}`
-  if (!registryReady.value) return '无自定义兜底链；registry 默认链未加载（模型总览拉取失败或未就绪）'
+  if (!registryReady.value) return '无自定义兜底链；平台默认链未加载（模型总览拉取失败或未就绪）'
   const modelId = row.model || (row.tier === 'reasoning' ? registryDefaultReasoningModel.value : registryDefaultModel.value)
   const chain = registryChainOf(skillId)
   if (chain === null) return `无自定义兜底链；模型「${modelId || '未知'}」不在 registry，默认链无法解析`
   return chain.length
-    ? `无自定义兜底链；registry 默认（${modelId}）：${chain.join(' → ')}`
-    : `无自定义兜底链；registry 默认（${modelId}）的 fallbacks 为显式空数组 → 调用失败不切换模型`
+    ? `无自定义兜底链；平台默认（${modelId}）：${chain.join(' → ')}`
+    : `无自定义兜底链；平台默认（${modelId}）未配置备用模型，调用失败时不会自动切换`
 }
 
 /** 归属 Agent 文案（路由表 mono 副行） */
@@ -1135,8 +1135,8 @@ const fallbackPolicyText = computed(() => {
 })
 const fallbackPolicyHint = computed(() => {
   if (!coverageReady.value || !registryReady.value) return ''
-  if (fallbackConfigured.value > 0) return registryChainText.value ? `其余走 registry 默认：${registryChainText.value}` : '其余走 registry 默认'
-  return 'registry 默认'
+  if (fallbackConfigured.value > 0) return registryChainText.value ? `其余走平台默认链：${registryChainText.value}` : '其余走平台默认链'
+  return '平台默认链'
 })
 const fallbackPolicyTitle = computed(() => {
   const head = '模型重试耗尽后按兜底链自动切换；降级仅换模型名，网关与密钥沿用主调用'
@@ -1145,24 +1145,24 @@ const fallbackPolicyTitle = computed(() => {
     return `${head}；当前 ${fallbackConfigured.value} 个 Skill 配了自定义兜底链`
   }
   if (!registryReady.value) {
-    return `${head}；无自定义兜底链：走 registry 默认，但模型总览未加载（/admin/model-registry 拉取失败或未就绪），默认链暂不可解析`
+    return `${head}；无自定义兜底链：走平台默认链，但平台默认模型数据暂未加载，默认链暂不可解析`
   }
   const chain = primaryRegistryChain.value
   const model = primaryModelId.value
   if (!model) return `${head}；无自定义兜底链：暂无可解析的主模型`
   if (chain === null) return `${head}；无自定义兜底链：模型「${model}」不在 registry，默认链无法解析`
   return chain.length
-    ? `${head}；无自定义兜底链：registry 默认（${model}）= ${chain.join(' → ')}`
-    : `${head}；无自定义兜底链：registry 默认（${model}）的 fallbacks 为显式空数组 = 无（空链），调用失败不切换模型`
+    ? `${head}；无自定义兜底链：平台默认（${model}）= ${chain.join(' → ')}`
+    : `${head}；无自定义兜底链：平台默认（${model}）未配置备用模型，调用失败时不会自动切换`
 })
 /** 路由表头提示（F7-5）：「备用模型」列的口径写在表头，运营不必猜「registry 默认」是什么 */
 const routingMetaText = computed(() => {
   if (!coverageReady.value) return '备用模型：Skill 自定义兜底链；模型覆盖数据未加载'
-  if (!registryReady.value) return '备用模型：Skill 自定义兜底链；registry 默认链未加载'
+  if (!registryReady.value) return '备用模型：Skill 自定义兜底链；平台默认链未加载'
   const text = registryChainText.value
   return text
-    ? `备用模型：自定义链优先；无则按 registry 默认链解析（主模型 ${primaryModelId.value || '平台默认'}：${text}）`
-    : '备用模型：自定义链优先；无则按 registry 默认链解析'
+    ? `备用模型：自定义链优先；未配置时按平台默认链解析（主模型 ${primaryModelId.value || '平台默认'}：${text}）`
+    : '备用模型：自定义链优先；未配置时按平台默认链解析'
 })
 </script>
 

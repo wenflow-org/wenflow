@@ -3,7 +3,7 @@
     <!-- 页头（newui/admin pagehead）：页名 + 刷新上移；2026-10-04 状态条退役，读数迁页首
          KPI 带；2026-10-12 按用户走查再收一层：三张纯读数卡撤（阶段/Skill 进总览卡头 meta），
          无警时页头直接接页签（详见下方告警条注释） -->
-    <MkPageHead title="编排图" sub="顶层 Agent 数据流转逻辑图 · 字段影响范围与阶段交接">
+    <MkPageHead title="编排图" sub="顶层 Agent 数据流转逻辑图 · 字段影响范围">
       <template #actions>
         <!-- 刷新此前只重拉 definitions， stages / 对账仍是旧值（治理面板数字对不上）→ 三个域全拉 -->
         <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>

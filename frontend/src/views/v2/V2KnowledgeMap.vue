@@ -9,7 +9,8 @@
           <p>把你所有学习路径里的概念汇成一张图，颜色是掌握程度。</p>
           <!-- 「怎么看这张图」折叠图例已删（2026-09-27）：图谱卡底部的 mk-ge__legend
                常驻覆盖同一套语义（线型/颜色/形状），顶部那份是重复教学 -->
-          <!-- hero 里的「查看学习状态」文字链已下移（2026-09-30 对齐原型）：改图卡下方通栏 ghost -->
+          <!-- 「查看学习状态」通栏 ghost 已删（2026-10-09 用户反馈）：PC 顶导航与移动端底部
+               dock 都常驻「学习状态」入口，页尾整宽跳转是第三份重复；省下的纵向空间给图区 -->
         </div>
       </div>
 
@@ -27,7 +28,7 @@
           :theme="theme"
           :loading="loading"
           :error="error"
-          height="560px"
+          height="clamp(560px, 72vh, 720px)"
           empty-hint="还没有可展示的概念图。学完一节课、或生成一条学习路径后，概念与关系会自动出现在这里。"
           error-action-text="重试"
           empty-action-text="开始学习"
@@ -38,12 +39,6 @@
           @practice="onPractice"
         />
       </section>
-      <!-- 查看学习状态：图卡下方通栏 ghost（原型态）。图在加载/出错/为空时不占位 -->
-      <router-link
-        v-if="!loading && !error && nodes.length"
-        to="/learning-state"
-        class="btn-ghost km__state-link"
-      >查看学习状态</router-link>
     </main>
   </div>
 </template>
@@ -106,7 +101,9 @@ async function load(nextPathId: string | null = pathId.value) {
     edges.value = Array.isArray(data?.edges) ? data!.edges! : []
     paths.value = Array.isArray(data?.meta?.paths) ? data!.meta!.paths! : []
   } catch (e) {
-    error.value = `知识图谱加载失败：${e instanceof Error ? e.message : String(e)}`
+    // 原始报错只进控制台；对外给固定人话（AP7：不把实现细节漏给用户）
+    console.error('[knowledge-map] 概念图加载失败', e instanceof Error ? e.message : e)
+    error.value = '知识图谱加载失败，请稍后重试。'
     nodes.value = []
     edges.value = []
     paths.value = []
@@ -215,17 +212,9 @@ onMounted(async () => {
   box-shadow: var(--mk-shadow-sm);
   background: var(--surface);
 }
-/* 「查看学习状态」：hero 右上文字链 → 图卡下方通栏 ghost（原型 .wf-btn--ghost 通栏）。
-   高度靠 .btn-ghost 自带档（移动端 v2.css 抬到 44px），这里只补齐通栏与链接去下划线。 */
-.km__state-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-height: 44px;
-  margin-top: var(--mk-space-3);
-  text-decoration: none;
-}
+/* 「查看学习状态」通栏 ghost 已删（2026-10-09）：入口由顶导航/底部 dock 承担。
+   图高随视口走高（clamp 下限 560 保底，上限 720 防超大屏失控），移动端 ≤720px
+   档 MkGraph 会自动减半，不受影响。 */
 
 /* ===== 移动端密度（2026-09-24 / 2026-09-30 对齐原型后复核）=====
    判据：整页上下留白 ≤40px。本页通篇用 --mk-space-* token，这里继续用 token。

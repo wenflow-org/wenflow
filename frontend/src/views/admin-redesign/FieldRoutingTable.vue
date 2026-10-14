@@ -110,7 +110,7 @@
         </div>
       </div>
       <p class="frt__legend-foot">
-        机制说明见仓库 <span class="mono">prompts/orchestration/_README.md</span> · 术语查「这是什么」抽屉
+        机制说明见仓库 <span class="mono">prompts/orchestration/_README.md</span> · 术语查顶栏「这是什么」→ 运营术语表
       </p>
     </details>
 
@@ -133,7 +133,7 @@
         type="button"
         class="mk-btn mk-btn--sm"
         :disabled="!sortKey"
-        :title="sortDir === 'asc' ? '当前升序' : '当前降序'"
+        title="切换排序方向"
         @click="toggleDir"
       >{{ sortDir === 'asc' ? '升序' : '降序' }}</button>
       <button v-if="filterActive" type="button" class="mk-link" @click="clearFilter">清除筛选</button>

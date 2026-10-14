@@ -737,7 +737,8 @@ main {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   gap: 22px;
-  align-items: center;
+  /* stretch 让两张对比卡等高（4K 档左卡 h2 换行时右卡不再矮一截） */
+  align-items: stretch;
 }
 .hn-band__side {
   display: grid;
@@ -772,6 +773,8 @@ main {
   color: var(--muted);
 }
 .hn-band__arrow {
+  /* 卡片改 stretch 等高后，圆形徽章自身保持垂直居中（固定高不被拉伸） */
+  align-self: center;
   width: 48px;
   height: 48px;
   border-radius: 50%;

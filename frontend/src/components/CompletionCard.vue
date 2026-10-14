@@ -6,13 +6,6 @@
     </div>
 
     <div class="completion-body">
-      <!-- 降级档透明化（TONIGHT-BROAD 立刻#4）：summary-only = 完课链只产出简要总结、
-           课堂表现评估未生成。学生看不出来才是问题：卡片其余区块照常渲染，但必须有一行
-           诚实文案说明「这不是一次完整结课产出」。判定字段 wrapup.status 由后端三条落库
-           路径（正常收束 / 超时兜底 / 收束兜底）统一携带并经 /end、/finalization 原样下发。 -->
-      <p v-if="wrapupStatus === 'summary-only'" class="summary-only-notice" role="status">
-        本次结课仅生成简要总结，课堂表现评估未生成。
-      </p>
       <div v-if="advisory?.shouldSuggest" class="completion-section advisory-section" :class="`advisory-section--${advisory.priority}`">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><MagicStick /></span>{{ advisory.ui.title }}</h4>
         <p class="section-content">{{ advisory.ui.body }}</p>
@@ -126,7 +119,7 @@
 
     <div class="completion-actions">
       <!-- 三个动作的后果写清楚：用户反馈「又是继续、又是返回、又是完成，不知道什么意思」 -->
-      <p class="completion-actions__hint">完成任务计入路径进度。继续练习再开一轮课，不推进任务。返回则暂不决定。</p>
+      <p class="completion-actions__hint">完成任务会推进路径进度，其余不会。</p>
       <div class="completion-actions__row">
         <button type="button" class="completion-btn completion-btn--action completion-btn--default" :disabled="busy" @click="emit('action', 'continue-task')"><span class="completion-icon" aria-hidden="true"><VideoPlay /></span>继续练习</button>
         <button type="button" class="completion-btn completion-btn--action completion-btn--link" :disabled="busy" @click="emit('action', 'end')"><span class="completion-icon" aria-hidden="true"><ArrowLeft /></span>返回学习路径</button>
@@ -188,8 +181,6 @@ const emit = defineEmits<{ action: [action: 'end' | 'continue-task' | 'complete-
 const summary = computed(() => props.wrapup.summary);
 const evaluation = computed(() => props.wrapup.evaluation);
 const stateUpdate = computed(() => props.wrapup.stateUpdate || null);
-/* 'complete'（完整收束）| 'summary-only'（仅简要总结的降级档，见模板内说明） */
-const wrapupStatus = computed(() => props.wrapup.status);
 const advisory = computed(() => props.advisory || null);
 const busy = computed(() => props.busy === true);
 const isAdjustmentAction = (action: string) => ['confirm', 'reinforce', 'slow_down', 'resequence', 'accelerate'].includes(action);
@@ -319,7 +310,7 @@ const progressHighlights = computed(() => {
   const result: Array<{ title: string; label: string; text: string; type: string }> = [];
   if (props.wrapup.progress.newlyMastered.length > 0) {
     result.push({
-      title: '本节新收获',
+      title: '已学会',
       label: '进步',
       text: props.wrapup.progress.newlyMastered.join('、'),
       type: 'success',
@@ -327,7 +318,7 @@ const progressHighlights = computed(() => {
   }
   if (props.wrapup.progress.movedToReview.length > 0) {
     result.push({
-      title: '需要回看',
+      title: '建议回看',
       label: '提醒',
       text: props.wrapup.progress.movedToReview.join('、'),
       type: 'danger',
@@ -335,7 +326,7 @@ const progressHighlights = computed(() => {
   }
   if (props.wrapup.progress.stillLearning.length > 0) {
     result.push({
-      title: '仍在推进中',
+      title: '继续练习',
       label: '继续巩固',
       text: props.wrapup.progress.stillLearning.join('、'),
       type: 'warning',

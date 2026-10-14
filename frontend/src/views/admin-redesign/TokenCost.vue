@@ -57,7 +57,7 @@
       tone="error"
       min
       title="Token 成本数据加载失败"
-      description="无法从后端拉取用量统计；可换一个时间窗重试，或稍后再来。"
+      description="用量统计加载失败。可更换时间范围重试，或稍后再来。"
       action-text="重试"
       action-busy-text="重试中…"
       :action-busy="loading"
@@ -145,7 +145,7 @@
         <div class="mk-card__head">
           <!-- 卡头 = 原型形态（title + 单位 sub）；口径细节收 title 悬停，右侧只留跨页跳转。
                P1#25：「接口未提供金额」暴露实现细节 → 「暂无分日金额」（原因留 title） -->
-          <div class="tc-card-head__main" title="本页为 token-cost 端点精确聚合（含重试后终态失败）· 口径：本地自然日；趋势接口暂无分日金额，无法画金额柱；总览「LLM 用量」卡为近 7 天汇总 hero">
+          <div class="tc-card-head__main" title="金额按本地自然日汇总，含重试后仍失败的调用。趋势图暂无分日金额，仅展示 Token 量">
             <h3 class="mk-card__title">近 {{ days }} 天用量趋势</h3>
             <span class="mk-card__meta">单位：Token（暂无分日金额）</span>
           </div>
@@ -175,7 +175,7 @@
              （窗口头部不足一日的行只进总量）下同屏两值（7 天窗 224218 vs KPI 224298）。
              改为与 KPI 同源的 totals 渲染，全页同一事实只用一个数据源。 -->
         <p v-if="trend.length" class="mk-card__note">
-          合计 {{ fmtTokens(summary?.totals.tokens ?? 0) }} token · {{ summary?.totals.calls ?? 0 }} 次调用 · 失败 {{ summary?.totals.failed ?? 0 }} 次<template v-if="summary && trendCallsShortfall > 0">（与图中逐日合计差 {{ trendCallsShortfall }} 次：窗口头部不足一日的行只计入总量）</template>
+          合计 {{ fmtTokens(summary?.totals.tokens ?? 0) }} token · {{ summary?.totals.calls ?? 0 }} 次调用 · 失败 {{ summary?.totals.failed ?? 0 }} 次<template v-if="summary && trendCallsShortfall > 0">（其中 {{ trendCallsShortfall }} 次未计入逐日合计）</template>
         </p>
         <p v-else class="mk-card__note">近 {{ days }} 天暂无调用记录。</p>
       </section>
@@ -252,6 +252,12 @@
               <!-- D13：中小用户此前不可见——加按 用户ID/昵称/邮箱 的服务端搜索（不改动 summary/趋势） -->
               <MkFilterSearch v-model="userQuery" placeholder="搜索用户 ID / 昵称 / 邮箱" />
               <span class="mk-card__meta">{{ userQuery ? `匹配 ${byUser.length}` : `Top ${byUser.length}` }}<template v-if="!userAll && byUser.length > userLimit"> · 显示前 {{ userLimit }}</template></span>
+              <!-- G8（2026-10-10）：搜索失败静默保留旧列表时的行内 stale 提示——此前失败无任何反馈，
+                   meta「匹配 N」仍按输入框实时读数，与表格脱源（N 是旧结果的行数）。对齐 Skills.vue
+                   liveSkillsError 行内告警判例：辅助数据失败不弹遮主表的 toast，但必须指认数据来源 -->
+              <span v-if="byUserStale" class="mk-card__meta tc-user-stale">
+                上次搜索失败，显示的是{{ byUserSource ? `「${byUserSource}」` : '默认 Top 榜' }}的结果
+              </span>
               <button
                 v-if="byUser.length > userLimit"
                 type="button"
@@ -356,6 +362,11 @@ const userFetchLimit = 100
 const userQuery = ref('')
 let userSeq = 0
 let userQueryTimer: ReturnType<typeof setTimeout> | null = null
+/* G8（2026-10-10）：用户排行搜索失败 stale 提示——失败保留旧 byUser 时置位（成功清空），
+   卡头渲染「上次搜索失败，显示的是「X」的结果」弱化小字；byUserSource 记录当前列表
+   对应的查询（''=默认 Top 榜），供文案如实指认数据来源。 */
+const byUserStale = ref(false)
+const byUserSource = ref('')
 
 /** by-user 参数装配：q 仅在有关键词时带出（避免空串污染后端过滤） */
 function fetchByUser() {
@@ -376,8 +387,14 @@ async function loadByUser() {
     if (seq !== userSeq) return
     byUser.value = (res.data?.data?.items ?? []) as RankRow[]
     userAll.value = false
+    // G8：成功即清 stale 并记录数据来源（当前查询；''=默认 Top 榜）
+    byUserStale.value = false
+    byUserSource.value = userQuery.value.trim()
   } catch {
-    /* 排行属辅助信息：失败保留旧值，不弹错遮挡主表 */
+    /* 排行属辅助信息：失败保留旧值，不弹错遮挡主表；但必须置 stale 行内提示——
+       此前完全静默，卡头 meta「匹配 N」与表格脱源无感知（G8）。过期响应（已有更新一笔
+       在途）不置位，由新一笔的结果决定最终状态 */
+    if (seq === userSeq) byUserStale.value = true
   }
 }
 watch(userQuery, () => {
@@ -419,7 +436,7 @@ const perCallHint = computed(() => {
   if (costLoading.value) return '金额统计中'
   if (costFailed.value) return '金额统计拉取失败，可刷新重试'
   if (costUsd.value === null) return '无已定价调用，暂不可算'
-  return `近 ${days.value} 天 · 按 ${costPricedCalls.value} 次已定价调用折算（接口无会话维度）`
+  return `近 ${days.value} 天 · 按 ${costPricedCalls.value} 次已定价调用折算`
 })
 
 /* Skill 明细表占比分母：优先已定价金额合计；全未定价时退回 Token 占比（并在表尾注明） */
@@ -598,7 +615,7 @@ const failedCallsText = computed(() =>
 )
 const failedHint = computed(() => {
   const win = `近 ${days.value} 天${includeTest.value ? '（含测试）' : ''}`
-  const base = `口径：${win} · 失败/总调用 = ${failedCalls.value}/${totalCalls.value}；重试后仍失败才计入（终态口径）`
+  const base = `${win}内失败 ${failedCalls.value} / 共 ${totalCalls.value} 次；重试后仍失败才计入`
   return failedCalls.value > 0
     ? `${base}；逐条失败可在「按 Skill 成本明细」点对应行直达执行日志`
     : base
@@ -634,6 +651,9 @@ watch([days, includeTest], () => {
     bySkill.value = []
     byUser.value = []
     byModel.value = []
+    // G8：列表清空进骨架态，stale 提示一并复位（来源随数据清空，避免空表挂着旧提示）
+    byUserStale.value = false
+    byUserSource.value = ''
     loadedKey.value = null
     userSeq += 1 // 作废在途的用户搜索响应，避免旧窗口结果覆盖新窗口
     // 金额卡与主数据同一响应驱动（审核 #110）：一并清空，保证数值与窗口标签一致，不留旧窗口读数
@@ -684,7 +704,12 @@ async function load(force = false) {
     costMissingCalls.value = totals?.callsMissingPricing ?? 0
     missingPricingModels.value = sumRes.data?.pricingStatus?.missingPricingModels ?? []
     bySkill.value = (skillRes.data?.data?.items ?? []) as SkillCostRow[]
-    if (uSeq === userSeq) byUser.value = (userRes.data?.data?.items ?? []) as RankRow[]
+    if (uSeq === userSeq) {
+      byUser.value = (userRes.data?.data?.items ?? []) as RankRow[]
+      // G8：窗口主数据成功回写 byUser = 新鲜数据，清 stale 并记录来源
+      byUserStale.value = false
+      byUserSource.value = userQuery.value.trim()
+    }
     byModel.value = (modelRes.data?.data?.items ?? []) as RankRow[]
     loadedKey.value = key
     markPageFetched(key)
@@ -799,6 +824,10 @@ const trendCols = computed(() => trend.value.map((d) => ({
 }
 .tc-more:hover { background: color-mix(in srgb, var(--mk-blue) 8%, transparent); }
 
+/* G8：用户排行 stale 提示（卡头弱化小字）——基类 .mk-card__meta，amber 提示色区分常态读数
+   （同 VirtualLearners .vl-truncated 卡头弱告警判例：meta 基类 + 单色强调，不新造告警形态） */
+.tc-user-stale { color: var(--mk-amber); font-weight: 600; }
+
 /* 卡头「标题 + 单位副题」成组（原型 .card__head：card__title + card__sub 同排左侧）：
    单独并列时 .mk-card__head > :first-child 会独占剩余宽度把副题推右，故包一层 */
 .tc-card-head__main {
@@ -821,6 +850,19 @@ const trendCols = computed(() => trend.value.map((d) => ({
 .tc-skilltable__head,
 .tc-skilltable__row {
   display: grid;
+  /* 列宽收敛（2026-10-14 用户评审）：原五列纯 fr（1.4/.5/.9/.8/1）在宽屏把每个数值摊到
+     各自列的最右——996px 卡里 Skill 列拿 282px 只装 85px 文字（Skill↔调用 空 197px），
+     1480px 卡里更到 ~340px 空转。现按内容给上下限（Skill 是唯一文本列，其余数字列 ~100px），
+     补 Prompt/Completion/均次 Token 三列把横向空间填成数据（用户的「要么补列填满、
+     要么别让列间空 500px」），余量由末列「占比」吸收——进度条是量表（轨道长度=刻度），
+     不制造空转白区。
+     下限合计 613 + 7×10 间隙 = 683：admin 最窄档 1280 视口的内容宽 996（表宽 968）富余，
+     八列在 ~1024 视口（表宽 ~712）仍不成行溢出（溢出=最右列被 .mk-card overflow:clip 静默裁掉）。
+     各列下限不低于表头文字宽（表头右对齐，窄列会让「Completion」折行）。 */
+  /* 上限刻意压紧：grid 的「maximize tracks」先于 fr 展开，若上限留得宽，窄屏下 7 个受限列
+     会先把余量吃光、末列只剩下限（实测 996px 卡里占比条塌到 39px，比改前 149px 更差）。
+     上限合计 691 + 7×10 间隙：996px 卡（可用 896）下受限列刚好到顶、占列拿 ~135（条 ~113px），
+     宽屏（内容 ≥1470）余量全归占列——条变长但不留空转白区。 */
   grid-template-columns:
     minmax(130px, 175px)
     minmax(44px, 62px)
@@ -853,19 +895,6 @@ const trendCols = computed(() => trend.value.map((d) => ({
 }
 .tc-skilltable__row:last-child { border-bottom: none; }
 .tc-skilltable__row:hover { background: var(--mk-table-row-hover-bg); }
-  /* 列宽收敛（2026-10-14 用户评审）：原五列纯 fr（1.4/.5/.9/.8/1）在宽屏把每个数值摊到
-     各自列的最右——996px 卡里 Skill 列拿 282px 只装 85px 文字（Skill↔调用 空 197px），
-     1480px 卡里更到 ~340px 空转。现按内容给上下限（Skill 是唯一文本列，其余数字列 ~100px），
-     补 Prompt/Completion/均次 Token 三列把横向空间填成数据（用户的「要么补列填满、
-     要么别让列间空 500px」），余量由末列「占比」吸收——进度条是量表（轨道长度=刻度），
-     不制造空转白区。
-     下限合计 613 + 7×10 间隙 = 683：admin 最窄档 1280 视口的内容宽 996（表宽 968）富余，
-     八列在 ~1024 视口（表宽 ~712）仍不成行溢出（溢出=最右列被 .mk-card overflow:clip 静默裁掉）。
-     各列下限不低于表头文字宽（表头右对齐，窄列会让「Completion」折行）。 */
-  /* 上限刻意压紧：grid 的「maximize tracks」先于 fr 展开，若上限留得宽，窄屏下 7 个受限列
-     会先把余量吃光、末列只剩下限（实测 996px 卡里占比条塌到 39px，比改前 149px 更差）。
-     上限合计 691 + 7×10 间隙：996px 卡（可用 896）下受限列刚好到顶、占列拿 ~135（条 ~113px），
-     宽屏（内容 ≥1470）余量全归占列——条变长但不留空转白区。 */
 /* EG19：行可键盘聚焦，补可见焦点环（与 vl-cell--click:focus-visible 同判例） */
 .tc-skilltable__row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .tc-st__name { min-width: 0; }
@@ -889,11 +918,17 @@ const trendCols = computed(() => trend.value.map((d) => ({
   text-align: right;
   white-space: nowrap;
 }
+/* Prompt / Completion / 均次 Token 是 Token 总量的拆分与派生，弱一档避免与三个主数值抢层级 */
+.tc-st__num--dim { color: var(--mk-muted); font-weight: 600; }
+/* 未定价占位：暗灰（2026-10-14 用户评审——此前「单价未配置」五个亮白字逐行复读） */
+.tc-st__cost--none { color: var(--mk-faint); font-weight: 600; }
 .tc-st__share {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 44px;
   align-items: center;
   gap: 8px;
+  /* 与左侧金额列的分隔 = 列间距 10 + 14 = 24px（同一诉求：金额文字不要贴着占比条） */
+  padding-left: 14px;
 }
 .tc-st__pct { color: var(--mk-muted); }
 
@@ -910,9 +945,3 @@ html[data-theme='dark'] {
 /* 骨架内边距（形状由 MkSkeleton 提供） */
 .tc-skel-pad { padding: 12px 16px 16px; }
 </style>
-/* Prompt / Completion / 均次 Token 是 Token 总量的拆分与派生，弱一档避免与三个主数值抢层级 */
-.tc-st__num--dim { color: var(--mk-muted); font-weight: 600; }
-/* 未定价占位：暗灰（2026-10-14 用户评审——此前「单价未配置」五个亮白字逐行复读） */
-.tc-st__cost--none { color: var(--mk-faint); font-weight: 600; }
-  /* 与左侧金额列的分隔 = 列间距 10 + 14 = 24px（同一诉求：金额文字不要贴着占比条） */
-  padding-left: 14px;

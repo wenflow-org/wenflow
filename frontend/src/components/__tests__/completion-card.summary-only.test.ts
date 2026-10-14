@@ -1,8 +1,8 @@
 /**
- * CompletionCard 的 summary-only 降级档透明化（TONIGHT-BROAD 立刻#4）
- * 背景：完课大多数落在 summary-only 降级档（仅简要总结、课堂表现评估未生成），
- * 但完课卡此前照常渲染，学生看不出这不是一次完整结课产出。
- * 契约：wrapup.status === 'summary-only' 时显示一行诚实文案；'complete' 时不渲染（不出现空提示）。
+ * CompletionCard 不再重复渲染 summary-only 降级提示（2026-10-14 文案收敛）。
+ * 背景：页级横幅（LearningEvaluationPage 的 .evaluation-degraded）已承载 summary-only
+ * 的诚实说明并带重试入口，卡片内再写一遍属复读。契约：卡片任何 status 下都不渲染
+ * .summary-only-notice；该提示的唯一出处是页级横幅。
  */
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
@@ -47,16 +47,13 @@ function mountCard(status: WrapupArtifact['status']) {
   });
 }
 
-describe('CompletionCard summary-only 降级档透明化', () => {
-  it('summary-only 时显示诚实文案（不用 emoji）', () => {
+describe('CompletionCard summary-only 降级提示已收敛到页级横幅', () => {
+  it('summary-only 时卡片内不再重复渲染提示（唯一出处是页级横幅）', () => {
     const wrapper = mountCard('summary-only');
-    const notice = wrapper.find('.summary-only-notice');
-    expect(notice.exists()).toBe(true);
-    expect(notice.text()).toContain('本次结课仅生成简要总结');
-    expect(notice.text()).not.toMatch(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
+    expect(wrapper.find('.summary-only-notice').exists()).toBe(false);
   });
 
-  it('complete 时不渲染提示（不能出现空提示）', () => {
+  it('complete 时同样不渲染提示', () => {
     const wrapper = mountCard('complete');
     expect(wrapper.find('.summary-only-notice').exists()).toBe(false);
   });

@@ -364,8 +364,8 @@ const loopStages = computed<LoopStage[]>(() => {
       tone: teachState.value === 'failed' ? 'alert' : 'done',
       ringFailed: teachState.value === 'failed',
       title: teachState.value === 'failed'
-        ? '教学会话累计数拉取失败 · 点「重试」重拉 · 点击查看教学会话'
-        : '教学会话累计数（随页头「真实 / 测试」开关变化）· 点击查看教学会话',
+        ? '教学会话累计数拉取失败'
+        : '教学会话累计数',
       scene: 'teaching-sessions',
     },
     {
@@ -373,7 +373,7 @@ const loopStages = computed<LoopStage[]>(() => {
       // 与另外四环的全量口径不同源——数值必须带分母，否则与「320 待办 / 208 累计」并排会被读成漏斗塌陷
       name: '课后评估', meta: '产出与掌握度评估',
       val: `${evalOk}/${d?.wrapup.sampleSize ?? 0} 次完成`, tone: 'done',
-      title: `最近 ${d?.wrapup.sampleSize ?? 0} 次课后总结中 ${evalOk} 次评估完成 · 失败 ${d?.wrapup.evaluationFailed ?? 0}（仅统计最近 ${d?.wrapup.sampleSize ?? 0} 次总结）· 点击查看教学会话`,
+      title: `最近 ${d?.wrapup.sampleSize ?? 0} 次课后总结中 ${evalOk} 次评估完成 · 失败 ${d?.wrapup.evaluationFailed ?? 0}`,
       scene: 'teaching-sessions',
     },
     {

@@ -28,7 +28,7 @@
       v-if="loadFailed && !rows.length"
       icon="◌"
       title="反馈数据加载失败"
-      description="无法从后端拉取反馈列表。"
+      description="反馈列表加载失败，请重试。"
       action-text="重试"
       min
       @action="() => load(true)"
@@ -39,7 +39,7 @@
       <div class="mk-card mk-card--fill">
         <div class="mk-card__head">
           <div class="mk-filter">
-            <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 评论 / 任务" />
+            <!-- 搜索槽位归一（2026-10-11 卡头走查）：pills 之后，对齐卡头统一语法 -->
             <div class="mk-pills">
               <button
                 v-for="p in statusPills"
@@ -64,6 +64,7 @@
                 仅低分 ≤2<span class="mk-pill__count">{{ lowCount }}</span>
               </button>
             </div>
+            <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 评论 / 任务" />
             <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           </div>
           <span class="mk-card__head-right">
