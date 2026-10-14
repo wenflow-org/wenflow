@@ -71,4 +71,27 @@ describe('CardDetailPage（卡详情二级页）', () => {
       from: { view: 'card', id: 'p1', label: '学习者卡' }
     });
   });
+
+  it('#16：hero 的 hash: 标签走 shortHashTag 截断、完整值进 title（不再整串溢出被裁）', async () => {
+    const HASH = 'hash:f6c06c0a45c595c1572dc3106721f65b0593f16b8';
+    const { adminVirtualLearnersApi } = await import('@/api/adminApi');
+    vi.mocked(adminVirtualLearnersApi.cardsDetail).mockResolvedValueOnce({
+      data: {
+        data: {
+          profileId: 'p1', userId: 'u1', cardKey: 'k1', name: '高一学生小陈', goal: '函数补差',
+          knowledgeLevel: 'beginner', tags: [HASH, '数学'], preset: false, sourceKind: 'web',
+          sourceRef: null, email: null, notes: null, createdAt: '2026-10-05T00:00:00Z',
+          personaFacts: [], nickname: null, nameHint: null, background: null, stories: [], materials: [],
+        },
+      },
+    } as never);
+    const w = mount(CardDetailPage);
+    await flushPromises();
+    const chip = w.findAll('.mk-hero__pills .mk-badge').find((c) => c.text().startsWith('hash:'))!;
+    expect(chip).toBeTruthy();
+    expect(chip.text()).toBe('hash:f6c06c0a…');
+    expect(chip.attributes('title')).toBe(HASH);
+    // 短标签原样
+    expect(w.findAll('.mk-hero__pills .mk-badge').some((c) => c.text() === '数学')).toBe(true);
+  });
 });

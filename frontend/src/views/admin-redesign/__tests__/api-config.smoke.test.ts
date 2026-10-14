@@ -10,8 +10,9 @@ import { nextTick } from 'vue';
 import ApiConfig from '../ApiConfig.vue';
 import { dataSource } from '../store';
 import { liveApiConfig, registrationEnabled, registerIpQuotaEnabled } from '../live';
+import { confirmState, settleConfirm } from '../useConfirm';
 
-const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSettingsMock, getReliabilityMock, getModelRegistryMock, testConnectionMock, updateConfigMock } = vi.hoisted(() => ({
+const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSettingsMock, getReliabilityMock, getModelRegistryMock, testConnectionMock, updateConfigMock, resetConfigMock } = vi.hoisted(() => ({
   getConfigMock: vi.fn(),
   getCapabilitiesMock: vi.fn(),
   probeCapabilitiesMock: vi.fn(),
@@ -20,6 +21,7 @@ const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSetti
   getModelRegistryMock: vi.fn(),
   testConnectionMock: vi.fn(),
   updateConfigMock: vi.fn(),
+  resetConfigMock: vi.fn(),
 }));
 
 function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
@@ -69,7 +71,8 @@ vi.mock('@/api/adminApi', () => ({
     getConfig: getConfigMock,
     getModelRegistry: getModelRegistryMock,
     testConnection: testConnectionMock,
-    updateConfig: updateConfigMock
+    updateConfig: updateConfigMock,
+    resetConfig: resetConfigMock
   }),
   adminAgentsApi: apiObject(),
   adminAgentTopologyApi: apiObject(),
@@ -121,6 +124,8 @@ describe('ApiConfig P1 修复批', () => {
     getModelRegistryMock.mockReset();
     testConnectionMock.mockReset();
     updateConfigMock.mockReset();
+    resetConfigMock.mockReset();
+    resetConfigMock.mockResolvedValue({ data: { success: true } });
     getModelRegistryMock.mockResolvedValue({
       data: {
         data: {
@@ -498,6 +503,68 @@ describe('ApiConfig P1 修复批', () => {
     expect(updateConfigMock).toHaveBeenCalledWith(expect.objectContaining({ availableModels: ['m-1', 'm-2'] }));
     expect(wrapper.find('.ac-models__hint').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('本次拉取未保存');
+    wrapper.unmount();
+  });
+
+  /* #13：后端 POST /admin/api-config/reset 能力早已存在却无前端入口——补「重置为默认」入口 + 二次确认 */
+  it('#13：配置 tab 有「重置为默认」入口，确认后调用 reset API；取消则不调用', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const wrapper = await mountApiConfig();
+    const btn = wrapper.findAll('button').find((b) => b.text() === '重置为默认');
+    expect(btn, '配置 tab 页头应有重置入口').toBeTruthy();
+
+    // 取消 → 不触发
+    await btn!.trigger('click');
+    await nextTick();
+    expect(confirmState.open).toBe(true);
+    expect(confirmState.title).toContain('重置');
+    settleConfirm(false);
+    await flushPromises();
+    expect(resetConfigMock).not.toHaveBeenCalled();
+
+    // 确认 → 调用 reset
+    await btn!.trigger('click');
+    await nextTick();
+    settleConfirm(true);
+    await flushPromises();
+    await nextTick();
+    expect(resetConfigMock).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+  });
+
+  it('#13：外挂能力 tab 不出现重置入口（重置是配置域动作）', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '外挂能力');
+    expect(wrapper.findAll('button').some((b) => b.text() === '重置为默认')).toBe(false);
+    wrapper.unmount();
+  });
+
+  /* #18：探测失败此前被旧快照吃掉（失败分支排在 v-if="health" 之后成死代码），页面无任何失败提示 */
+  it('#18：探测失败可见——失败条优先于旧快照 + 「重试」入口', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '路由与调用');
+    // 旧快照已渲染；探测 reject；失败后静默补拉返回带 failureCode 的服务端快照
+    probeCapabilitiesMock.mockRejectedValue(new Error('timeout of 310000ms exceeded'));
+    getCapabilitiesMock.mockResolvedValue({
+      data: {
+        data: {
+          overall: 'unknown', checkedAt: null, stale: true,
+          capabilities: [
+            { id: 'stage-designer', status: 'unknown', checkedAt: new Date().toISOString(), latencyMs: null, message: '能力状态正在确认', failureCode: 'PROBE_TIMEOUT', retryable: true, lastSuccessAt: null }
+          ]
+        }
+      }
+    });
+    const probeBtn = wrapper.findAll('button').find((b) => b.text().includes('立即探测'))!;
+    await probeBtn.trigger('click');
+    await flushPromises();
+    await nextTick();
+    expect(wrapper.text()).toContain('上次探测失败');
+    // 服务端记下的失败码在页面上可见（不再只剩泛化的「能力状态正在确认」）
+    expect(wrapper.text()).toContain('PROBE_TIMEOUT');
+    expect(wrapper.findAll('button').some((b) => b.text() === '重试')).toBe(true);
     wrapper.unmount();
   });
 });

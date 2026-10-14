@@ -22,7 +22,7 @@
           rows="7"
           wrap="off"
           spellcheck="false"
-          placeholder='{"input": "…"}'
+          placeholder='{}'
           @input="syncTrialHlScroll()"
           @scroll="syncTrialHlScroll"
         ></textarea>
@@ -144,10 +144,11 @@ import json from 'highlight.js/lib/languages/json'
 import 'highlight.js/styles/github-dark.css'
 import {
   adminAgentsApi,
+  adminPromptWorkbenchApi,
   adminSkillsApi
 } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
-import { fmtMs, errText } from './sdp-shared'
+import { fmtMs, errText, buildTrialInputFromContract, type TrialInputDecl } from './sdp-shared'
 import { humanizeHttpError } from '../terms'
 import { openTrace } from '../store'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -177,8 +178,10 @@ async function loadInspect() {
 }
 
 /* ---------- 试跑 ---------- */
-const TRIAL_INPUT_DEFAULT = '{\n  "input": "用一句话介绍你自己"\n}'
-const trialInput = ref(TRIAL_INPUT_DEFAULT)
+/* 默认载荷由该 Skill 的输入契约（core.yaml inputs）生成，见 loadTrialDefault（#15）：
+   此前硬编码 {"input": "用一句话介绍你自己"}，与契约不符的 Skill 点「运行预览」必然失败。 */
+const EMPTY_TRIAL_INPUT = '{}'
+const trialInput = ref(EMPTY_TRIAL_INPUT)
 const trialRunning = ref(false)
 const trialResult = ref<{ success?: boolean; duration?: number; cached?: boolean; output?: unknown; data?: unknown } | null>(null)
 const trialError = ref('')
@@ -427,18 +430,25 @@ watch(
   { immediate: true }
 )
 
+/** 按该 Skill 输入契约生成默认载荷（#15）：契约不可读时回落空对象 `{}`，绝不再塞无关的 input 键 */
+async function loadTrialDefault(id: string) {
+  const res = await adminPromptWorkbenchApi.getCore(id).catch(() => null)
+  if (id !== props.skillId) return
+  const inputs = (res?.data?.core?.inputs ?? []) as TrialInputDecl[]
+  const next = buildTrialInputFromContract(inputs)
+  trialInput.value = next
+  trialBase = next
+  emit('dirty', { dirty: false, label: '试跑输入' })
+}
+
 /* #118：试跑输入改动上报宿主脏态（此前切 Skill/离开页面会静默丢弃）。
-   基线 = 默认样例；每次成功运行或切换 skill 后视为已消费，复位。 */
-let trialBase = TRIAL_INPUT_DEFAULT
+   基线 = 该 Skill 的契约默认载荷；切换 skill 时重新生成并复位。 */
+let trialBase = EMPTY_TRIAL_INPUT
 function reportTrialDirty() {
   emit('dirty', { dirty: trialInput.value !== trialBase, label: '试跑输入' })
 }
 watch(trialInput, reportTrialDirty)
-watch(() => props.skillId, () => {
-  trialInput.value = TRIAL_INPUT_DEFAULT
-  trialBase = TRIAL_INPUT_DEFAULT
-  emit('dirty', { dirty: false, label: '试跑输入' })
-})
+watch(() => props.skillId, (id) => { void loadTrialDefault(id) }, { immediate: true })
 </script>
 
 <style scoped>

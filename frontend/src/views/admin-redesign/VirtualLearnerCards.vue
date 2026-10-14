@@ -144,6 +144,7 @@ import { openSubPage } from './store'
 import { errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
+import { shortHashTag } from '@/utils/shortHash'
 
 /** 一行式内联空态修饰（筛选后 0 行的卡内列表场景）。
     用常量而非模板里的字面类串：design:check 规则 4 的检测正则匹配任何含独立
@@ -269,10 +270,9 @@ function levelText(level: string): string {
 }
 
 /** 标签显示文本（2026-10-12 外部批评采纳）：hash 散键指纹整串 46 字符，卡内既不折行也无处
-    看全值（CSS 腰斩）。显示取 `hash:` + 前 8 位十六进制（够核对），完整值走 title。 */
-function tagText(t: string): string {
-  return /^hash:/.test(t) ? `${t.slice(0, 13)}…` : t
-}
+    看全值（CSS 腰斩）。显示取 `hash:` + 前 8 位十六进制（够核对），完整值走 title。
+    2026-10-14 #16：抽到 @/utils/shortHash 单源，卡详情 hero 同口径复用。 */
+const tagText = shortHashTag
 
 /* ===== 导出（卡库级动作，留在本页）===== */
 const exporting = ref(false)

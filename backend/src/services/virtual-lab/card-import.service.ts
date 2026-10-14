@@ -45,8 +45,10 @@ export interface LearnerCard {
   enabled?: boolean;
   /**
    * 昵称（2026-10-05 卡库 demo 化）：卡面主名——人设化短语（如「想啃西瓜书的研究生」），
-   * 与 cardKey（稳定 ID，可含批次代号）分离。展示链：nickname → story.title →
-   * persona.nameHint → users.name 清理版 → cardKey。导入写 personaSeed.nickname，
+   * 与 cardKey（稳定 ID，可含批次代号）分离。
+   * 展示链以 buildCardWallEntries 为准：nickname → persona.nameHint → users.name 清理版 →
+   * cardKey → email（富化路径 enrichProfile 同样保留显式 nickname——2026-10-14 #14 修正，
+   * 此前注释误写 story.title 进链、且富化会丢 nickname）。导入写 personaSeed.nickname，
    * 导出带回，YAML demo 面貌完整。
    */
   nickname?: string;
@@ -788,6 +790,23 @@ export async function importCards(content: string, format: 'yaml' | 'json', opts
   return { parseError: null, results, summary };
 }
 
+/**
+ * 富化合并（#14，纯函数可单测）：用 persona-designer 产物替换 personaSeed 补全人设，
+ * 但保留卡作者显式写的 nickname——它承载卡面展示名（buildCardWallEntries 的第一优先），
+ * 不应被富化产物（通常只带 nameHint/background）冲掉，否则卡面回退成背景派生短语。
+ */
+export function mergeEnrichedPersonaSeed(
+  enriched: Record<string, unknown>,
+  baseSeed: Record<string, unknown>,
+): Record<string, unknown> {
+  const nickname = typeof baseSeed.nickname === 'string' && baseSeed.nickname.trim() ? baseSeed.nickname : undefined;
+  return {
+    ...enriched,
+    ...(nickname ? { nickname } : {}),
+    scenarioCard: baseSeed.scenarioCard,
+  };
+}
+
 /** 可选富化：情景强制 grounding（2026-10-01 实证：不锁情景会生成张冠李戴的人设） */
 async function enrichProfile(card: LearnerCard, profile: Record<string, unknown>): Promise<Record<string, unknown>> {
   const persona = (card.persona || {}) as Record<string, unknown>;
@@ -801,8 +820,7 @@ async function enrichProfile(card: LearnerCard, profile: Record<string, unknown>
     existingPersonaSeed: { nameHint: card.cardKey, background: String(persona.background || scenario.domain), intentType: scenario.intentType },
   }) as { personaSeed?: Record<string, unknown> } | undefined;
   if (!result?.personaSeed) return profile;
-  const merged = { ...result.personaSeed, scenarioCard: seed.scenarioCard };
-  return { ...profile, personaSeed: merged };
+  return { ...profile, personaSeed: mergeEnrichedPersonaSeed(result.personaSeed, seed) };
 }
 
 /** 导出当前卡库（自建档案，cardKey 由 resolveCardKey 解析）为卡文档 */

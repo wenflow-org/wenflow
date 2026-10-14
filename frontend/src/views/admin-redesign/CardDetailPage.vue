@@ -7,7 +7,7 @@
       <template #pills>
         <span class="mk-badge" :class="sourceBadge(d)" :title="sourceTitle(d)">{{ sourceText(d) }}</span>
         <span class="mk-badge mk-badge--muted">{{ levelText(d.knowledgeLevel) }}</span>
-        <span v-for="t in d.tags.slice(0, 4)" :key="t" class="mk-badge mk-badge--muted">{{ t }}</span>
+        <span v-for="t in d.tags.slice(0, 4)" :key="t" class="mk-badge mk-badge--muted" :title="t">{{ shortHashTag(t) }}</span>
         <span v-if="d.tags.length > 4" class="mk-badge mk-badge--muted" :title="d.tags.join(' · ')">+{{ d.tags.length - 4 }}</span>
       </template>
       <template #actions>
@@ -110,6 +110,7 @@ import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { errMsg } from './live'
 import { toast } from '@/utils/toast'
+import { shortHashTag } from '@/utils/shortHash'
 
 /* 文案单源（R6 复读单源化）：hero 副文与来源徽章悬停释共用一份 */
 const PRESET_SYNC_NOTE = '平台预置角色（随版本自动同步）'

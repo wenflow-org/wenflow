@@ -14,6 +14,9 @@
              tab 的读取失败重试走卡内 mk-alert「重试」，页头不放无效刷新（此前 v-else 落到
              addonsRef 空引用） -->
         <button v-else-if="tab === 'addons'" type="button" class="mk-btn mk-btn--sm" @click="addonsRef?.refresh?.()">刷新</button>
+        <!-- 重置为默认（#13）：后端 POST /admin/api-config/reset 此前无前端入口。高风险不可撤销，
+             二次确认在 resetConfig 内；三个配置 tab 常驻，与「分组保存」并列但语义是整页级 -->
+        <button v-if="isConfigTab" type="button" class="mk-btn mk-btn--sm" :disabled="resetting" @click="resetConfig">{{ resetting ? '重置中…' : '重置为默认' }}</button>
       </template>
     </MkPageHead>
     <!-- 页首 KPI 带已撤（2026-10-14 用户拍板「模型与接入的 kpi 也不要了」）：原两处带
@@ -313,7 +316,7 @@
             :disabled="healthProbing"
             @click="probeHealth"
           >
-            {{ healthProbing ? '探测中…' : '立即探测' }}
+            {{ healthProbing ? `探测中… ${probeElapsedSec}s` : '立即探测' }}
           </button>
         </div>
       </div>
@@ -396,6 +399,13 @@
               <span v-else-if="health" class="ac-health__stale">尚未探测</span>
             </span>
           </div>
+          <!-- 失败态必须优先于旧快照可见（2026-10-14 #18）：此前失败分支排在 v-if="health" 之后，
+               页面已加载过快照时永远走旧表 → 失败提示成死代码。现失败条独立渲染（置表前），
+               旧快照若有仍在下表展示（含服务端记下的 failureCode），不吞掉任何信号。 -->
+          <div v-if="healthFailed" class="ac-rel__note ac-rel__error" role="alert">
+            上次探测失败{{ healthFailText ? `：${healthFailText}` : '，结果不可用' }}
+            <button type="button" class="mk-link" :disabled="healthProbing" @click="probeHealth">{{ healthProbing ? '探测中…' : '重试' }}</button>
+          </div>
           <div v-if="health" class="ac-health" role="table" aria-label="模型能力健康探测">
             <div class="ac-health__head" role="row">
               <span role="columnheader"><span aria-hidden="true"></span></span>
@@ -407,16 +417,16 @@
             <div v-for="c in health.capabilities" :key="c.id" class="ac-health__row" role="row">
               <span class="ac-health__dot" :class="`is-${c.status}`" role="cell" :aria-label="c.status"></span>
               <span class="ac-health__id mono" role="cell">{{ c.id }}</span>
-              <span class="ac-health__msg" role="cell">{{ c.message }}</span>
+              <!-- failureCode 可见（2026-10-14 #18）：探测超时/认证失败等由服务端记下，此前只在 message 里
+                   泛化成「能力状态正在确认」，失败原因在页面上完全不可见 -->
+              <span class="ac-health__msg" role="cell" :title="c.failureCode ? `${c.message} · ${c.failureCode}` : c.message">
+                {{ c.message }}<code v-if="c.failureCode" class="ac-health__code mono">{{ c.failureCode }}</code>
+              </span>
               <span class="ac-health__lat mono" role="cell">{{ c.latencyMs != null ? `${c.latencyMs}ms` : '—' }}</span>
               <span class="ac-health__time" role="cell">{{ c.checkedAt ? timeAgo(c.checkedAt) : '未探测' }}</span>
             </div>
           </div>
-          <div v-else-if="healthFailed" class="ac-rel__note ac-rel__error">
-            探测结果不可用
-            <button type="button" class="mk-link" :disabled="healthProbing" @click="probeHealth">{{ healthProbing ? '探测中…' : '重试' }}</button>
-          </div>
-          <MkLoading v-else inline text="探测结果加载中…" />
+          <MkLoading v-else-if="!healthFailed" inline text="探测结果加载中…" />
           <div class="ac-health__foot">
             <span v-if="health?.stale" class="ac-health__stale">结果已过期</span>
             <span v-else-if="health?.checkedAt" class="ac-health__stale">探测正常 · 更新于 {{ timeAgo(health.checkedAt) }}</span>
@@ -623,7 +633,7 @@ import {
   updateRegistrationSetting,
   updateRegisterIpQuotaSetting
 } from './live'
-import { adminPlatformSettingsApi, adminCapabilityProbeApi, adminSystemApi } from '@/api/adminApi'
+import { adminPlatformSettingsApi, adminCapabilityProbeApi, adminSystemApi, adminApiConfigApi } from '@/api/adminApi'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 
 // 模型目录候选（File-as-Truth llm-providers.json）：与通道拉取清单合并进路由 datalist；
@@ -724,6 +734,8 @@ interface CapHealth {
   checkedAt: string | null
   latencyMs: number | null
   message: string
+  /** 失败码（PROBE_TIMEOUT / AUTH_INVALID / QUOTA_EXHAUSTED…）：服务端已记下，前端不可吞掉 */
+  failureCode?: string | null
 }
 interface CapSnapshot {
   overall: CapHealth['status']
@@ -733,7 +745,12 @@ interface CapSnapshot {
 }
 const health = ref<CapSnapshot | null>(null)
 const healthFailed = ref(false)
+/** 最近一次探测失败原因（客户端异常原文：超时 / 网络 / 5xx）——失败态可见时同显 */
+const healthFailText = ref('')
 const healthProbing = ref(false)
+/** 探测进行中的已用秒数（探测最长可达数分钟，纯「探测中…」读不出是否还在跑） */
+const probeElapsedSec = ref(0)
+let probeTimer: ReturnType<typeof setInterval> | null = null
 
 /** 汇总角标：「5 能力 · 1 异常」——异常 = degraded/unavailable；unknown 归「待确认」，不假装实时 */
 const healthSummaryText = computed(() => {
@@ -805,17 +822,36 @@ async function loadHealth() {
   }
 }
 
+/** 静默刷新快照（不改 healthFailed）：探测失败后拉一次，取服务端已记下的 failureCode */
+async function refreshHealthSnapshot() {
+  try {
+    const res = await adminSystemApi.getCapabilities()
+    const snap = (res.data?.data ?? res.data ?? null) as CapSnapshot | null
+    if (snap) health.value = snap
+  } catch {
+    /* 保留旧快照 */
+  }
+}
+
 async function probeHealth() {
   if (healthProbing.value) return
   healthProbing.value = true
+  healthFailText.value = ''
+  probeElapsedSec.value = 0
+  if (probeTimer) clearInterval(probeTimer)
+  probeTimer = setInterval(() => { probeElapsedSec.value += 1 }, 1000)
   try {
     const res = await adminSystemApi.probeCapabilities()
     health.value = res.data?.data ?? res.data ?? null
     healthFailed.value = false
-  } catch {
+  } catch (e) {
     healthFailed.value = true
+    healthFailText.value = errMsg(e)
+    // 客户端失败（超时/网络）时，服务端可能已落盘结构化失败码——拉一次快照补齐
+    void refreshHealthSnapshot()
   } finally {
     healthProbing.value = false
+    if (probeTimer) { clearInterval(probeTimer); probeTimer = null }
   }
 }
 
@@ -1087,7 +1123,10 @@ function onBeforeUnloadHandler(e: BeforeUnloadEvent) {
   }
 }
 window.addEventListener('beforeunload', onBeforeUnloadHandler)
-onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnloadHandler))
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', onBeforeUnloadHandler)
+  if (probeTimer) { clearInterval(probeTimer); probeTimer = null }
+})
 
 const models = computed(() => fetchedModels.value)
 /** 通道拉取到、但不在模型目录里的 id（历史保存值/通道私有模型），仍保留在候选里 */
@@ -1359,6 +1398,34 @@ function saveAll() {
   return saveGroups([...dirty.value])
 }
 
+/* 重置为默认配置（#13）：后端 POST /admin/api-config/reset 能力早已存在却无前端入口。
+   重置会删除已保存配置行（服务地址 / 密钥 / 模型路由 / 调用参数全回默认）——高风险不可撤销，
+   故走二次确认；成功后强制重拉 live 配置（绕过 TTL）+ 可靠性/探针 + 健康快照，并清空脏位。 */
+const resetting = ref(false)
+async function resetConfig() {
+  if (resetting.value) return
+  const ok = await askConfirm({
+    title: '重置为默认配置',
+    message: '将清空已保存的服务地址、API Key、模型路由与调用参数，恢复出厂默认。此操作不可撤销。',
+    confirmText: '确认重置'
+  })
+  if (!ok) return
+  resetting.value = true
+  try {
+    await adminApiConfigApi.resetConfig()
+    await loadLiveData(true)
+    await loadReliability()
+    await loadProbe()
+    dirty.value = new Set()
+    void loadHealth()
+    toast.success('配置已重置为默认值')
+  } catch (e) {
+    toast.error(`重置失败：${errMsg(e)}`)
+  } finally {
+    resetting.value = false
+  }
+}
+
 function discardAll() {
   /* 配置域读取失败（cfg 为空）时 applyLiveConfig 直接 return：脏位不清、表单不回滚，
      不能假报「已放弃」——否则用户以为改动已撤。显式提示先重试。 */
@@ -1371,7 +1438,6 @@ function discardAll() {
   void loadProbe()
   toast.info('已放弃未保存的变更')
 }
-
 /* 注册开关：高风险操作，二次确认。
    分段器两段各自指定目标值（原为单按钮 toggle，按钮文案在「关闭注册/开放注册」间翻转）。 */
 const registrationBusy = ref(false)
@@ -1703,6 +1769,15 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-health__dot.is-unknown { background: var(--mk-faint); }
 .ac-health__id { font-size: var(--mk-fs-micro); color: var(--mk-ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-health__msg { color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 失败码（#18）：与信息同格内联，微字 + 弱底，不喧宾夺主但可核对 */
+.ac-health__code {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-red-bg);
+  color: var(--mk-red);
+  font-size: var(--mk-fs-micro);
+}
 .ac-health__lat { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
 /* 默认路由角色行（2026-10-05 重设计：原 ranklist 概览 + 三列输入合并为行式
    label | input | badge；ac-body 已有 14px 栅格，此处不用再加外距） */

@@ -1,4 +1,4 @@
-import { parseCardDocument, validateCard, resolveCardKey, ensureCardKey, buildCardWallEntries, cleanDisplayName, deriveCardNickname, stripWaveTags, type LearnerCard } from '../card-import.service';
+import { parseCardDocument, validateCard, resolveCardKey, ensureCardKey, buildCardWallEntries, cleanDisplayName, deriveCardNickname, stripWaveTags, mergeEnrichedPersonaSeed, type LearnerCard } from '../card-import.service';
 
 function emptyIndex() {
   return { byKey: new Map<string, string>(), refs: new Map<string, string[]>(), seenInDoc: new Set<string>() };
@@ -301,5 +301,39 @@ describe('card-import：存量卡规范化（deriveCardNickname / stripWaveTags�
 
   it('波次标签剔除：w0/w5/w6 全剔，普通标签与 cardKey 锚保留', () => {
     expect(stripWaveTags(['k-1', 'w0', 'w5', 'w6', '数学', 'W12'])).toEqual(['k-1', '数学']);
+  });
+});
+
+describe('card-import：富化合并保留显式 nickname（#14）', () => {
+  it('显式 nickname 不被富化产物覆盖；scenarioCard 原样带回', () => {
+    const enriched = { nameHint: '24岁广告公司文案', background: '某广告公司文案' };
+    const seed = { nickname: '想啃西瓜书的研究生', scenarioCard: { cardKey: 'k1', opening: 'x' } };
+    const merged = mergeEnrichedPersonaSeed(enriched, seed);
+    expect(merged.nickname).toBe('想啃西瓜书的研究生');
+    expect(merged.nameHint).toBe('24岁广告公司文案');
+    expect(merged.scenarioCard).toEqual({ cardKey: 'k1', opening: 'x' });
+  });
+
+  it('无显式 nickname 时维持富化产物（不凭空回填），并仍带 scenarioCard', () => {
+    const merged = mergeEnrichedPersonaSeed({ nameHint: '高一学生' }, { scenarioCard: { cardKey: 'k2' } });
+    expect(merged.nickname).toBeUndefined();
+    expect((merged as { nameHint?: string }).nameHint).toBe('高一学生');
+    expect(merged.scenarioCard).toEqual({ cardKey: 'k2' });
+  });
+
+  it('空白 nickname 视为未提供', () => {
+    expect(mergeEnrichedPersonaSeed({}, { nickname: '   ' }).nickname).toBeUndefined();
+  });
+
+  it('导入卡展示名：nickname 经富化保留后仍是卡面名，而不是背景派生的 nameHint', () => {
+    const merged = mergeEnrichedPersonaSeed(
+      { nameHint: '县城重点高中高一在读，函数基础薄弱' },
+      { nickname: '想补函数的高一学生', scenarioCard: { cardKey: 'k3' } },
+    );
+    const [entry] = buildCardWallEntries([{
+      id: 'p9', userId: 'u9', profile: JSON.stringify({ personaSeed: merged }), tags: null,
+      learningGoal: '高中数学', knowledgeLevel: 'beginner', presetKey: null, users: { name: null, email: null },
+    }]);
+    expect(entry.name).toBe('想补函数的高一学生');
   });
 });
