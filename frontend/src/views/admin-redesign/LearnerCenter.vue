@@ -43,10 +43,16 @@
 
     <!-- 置信度分段分布条（教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」：移出表格卡，
          回到卡上方页面级，与教学组其余页同位）——段与图例均可点下钻；偏态保护 min-width 14px +
-         3% 宽度下限在组件内单源 -->
+         3% 宽度下限在组件内单源。
+         2026-10-14 用户：这一条「做成可以折叠展开的区域，默认折叠」——它占了首屏 117px 而表格才是
+         本页主体；折叠态仍露标题与口径副文（共 N 位 / 另 M 位未计入），展开才见分段与图例。
+         折叠走共享 .mk-section__summary 原语（原生 details/summary，键盘天然可用）；
+         蒙层筛选激活时不可见的问题由本页既有「清除筛选」出口兜住（isFiltered → 卡头出该链）。
+         仅本页开折叠（collapsible 默认关），其余五处调用方不受影响。 -->
     <MkDistBand
       v-if="rows.length && confRows.length && !loadFailed"
       card
+      collapsible
       title="置信度分布"
       :sub="confBaseNote"
       unit="人"

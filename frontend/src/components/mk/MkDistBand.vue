@@ -1,9 +1,19 @@
 <template>
-  <div class="mk-distband" :class="{ 'mk-distband--card mk-card': card }">
-    <div v-if="title || sub" class="mk-distband__head" :class="{ 'mk-card__head': card }">
+  <component
+    :is="collapsible ? 'details' : 'div'"
+    class="mk-distband"
+    :class="{ 'mk-distband--card mk-card': card, 'mk-distband--fold': collapsible }"
+    :open="collapsible && defaultOpen ? true : undefined"
+  >
+    <component
+      :is="collapsible ? 'summary' : 'div'"
+      v-if="collapsible || title || sub"
+      class="mk-distband__head"
+      :class="{ 'mk-card__head': card, 'mk-section__summary': collapsible }"
+    >
       <span v-if="title" class="mk-distband__title" :class="{ 'mk-card__title': card }">{{ title }}</span>
       <span v-if="sub" class="mk-distband__sub" :class="{ 'mk-card__meta': card }">{{ sub }}</span>
-    </div>
+    </component>
     <div class="mk-distband__cardbody">
       <div class="stageband mk-distband__band" role="group" :aria-label="ariaLabel || title || '状态分布'">
         <!-- 分段条是装饰层（2026-10-06 审核 #194）：此前每段 role=button + tabindex=0，
@@ -36,7 +46,7 @@
         </button>
       </div>
     </div>
-  </div>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -69,8 +79,15 @@ const props = withDefaults(
      *  的独立分布卡）：true 时套 mk-card 壳，标题/口径升入 mk-card__head，分段+图例进卡体。
      *  页面级摆放用 card，裸条模式保留给嵌在卡内的场景 */
     card?: boolean
+    /** 可折叠（2026-10-14 用户：学习状态页置信度分布「做成可以折叠展开的区域，默认折叠」）。
+     *  头改成 <summary>（复用共享 .mk-section__summary 的 ▸ 指示与键盘行为）、卡体收进 <details>；
+     *  折叠态仍露出标题与口径副文，展开才见分段与图例。默认关——其余五处调用方（教学会话 /
+     *  目标对话 / 记忆复习 / 学习路径 / 虚拟学习者运行条）不受影响 */
+    collapsible?: boolean
+    /** 可折叠时的初始展开态（仅 collapsible 生效）。默认折叠；只作初始值，之后由原生 details 管状态 */
+    defaultOpen?: boolean
   }>(),
-  { activeKey: null, title: '', sub: '', unit: '条', ariaLabel: '', minPercent: 3, card: false }
+  { activeKey: null, title: '', sub: '', unit: '条', ariaLabel: '', minPercent: 3, card: false, collapsible: false, defaultOpen: false }
 )
 
 const emit = defineEmits<{ (e: 'select', key: string): void }>()
@@ -107,4 +124,8 @@ function segTitle(b: MkDistBin): string {
    分布条只承载状态比例，不因页面缺 KPI 而改版（2026-10-05 撤销当日的卡内大值档试验） */
 .mk-distband--card { gap: 0; }
 .mk-distband--card .mk-distband__cardbody { display: grid; gap: 8px; padding: 16px; }
+/* 折叠档（collapsible，2026-10-14 用户：学习状态页置信度分布默认折叠）：
+   根是 <details>、头是 <summary>（同用 .mk-card__head，排版归后者），收起时卡体由原生行为隐藏。
+   收起态要去掉头的分隔线——否则卡片底边悬着一条没有下文的横线。 */
+.mk-distband--fold:not([open]) > .mk-distband__head { border-bottom: 0; }
 </style>
