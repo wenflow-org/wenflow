@@ -59,8 +59,11 @@
         <em class="tc-c__sub">prompt {{ fmtTokens(r.promptTokens) }}<template v-if="(r.completionTokens ?? 0) > 0"> · comp {{ fmtTokens(r.completionTokens) }}</template></em>
       </div>
 
-      <!-- 成本（审核 #112）：照抄 SkillCostRow 取值口径——已定价 ≈$x / 单价未配置 / — -->
-      <span class="tc-c tc-c--cost tc-cost" role="cell" :title="costTitle(r)">{{ costText(r) }}</span>
+      <!-- 成本（审核 #112）：照抄 SkillCostRow 取值口径——已定价 ≈$x，其余一律暗灰 — 占位。
+           2026-10-14 用户评审：此前未定价行逐行打「单价未配置」（用户榜 5 行 + 模型榜 2 行），
+           五个亮白字把占比条挤在 140px 列里，且同一状态在三个表里复读——状态词不再上行内，
+           原因收进行 title（costTitle）与页顶「调用成本」卡 hint。 -->
+      <span class="tc-c tc-c--cost tc-cost" :class="{ 'tc-cost--none': !hasCost(r) }" role="cell" :title="costTitle(r)">{{ costText(r) }}</span>
 
       <!-- 占比：迷你进度条（mk-minibar 原语，替代页内自搓渐变条）+ 百分比 -->
       <div class="tc-c tc-c--share" role="cell">
@@ -139,27 +142,36 @@ function failRate(r: RankRow): string {
   return `${Math.round((r.failed / r.calls) * 100)}%`
 }
 
-/* 成本取值口径（审核 #112）：照抄 TokenCost 的 skillRowCost——已定价 ≈$x / 单价未配置 / — */
+/* 成本取值口径（审核 #112）：只有已定价金额才显金额，其余暗灰 — 占位。
+   2026-10-14 用户评审：未定价行原显「单价未配置」五个字（亮白、挤在 140px 列里接着占比条），
+   现在是占位符——原因走行 title 与页顶卡 hint（同一状态不在三张表里各念一遍）。 */
 function fmtCostUsd(v: number): string {
   if (!Number.isFinite(v) || v <= 0) return '0'
   if (v >= 1) return v.toFixed(2)
   if (v >= 0.01) return v.toFixed(4)
   return v.toFixed(6)
 }
+function hasCost(r: RankRow): boolean {
+  return typeof r.usd === 'number'
+}
 function costText(r: RankRow): string {
-  if (typeof r.usd === 'number') return `≈ $${fmtCostUsd(r.usd)}`
-  if ((r.callsMissingPricing ?? 0) > 0) return '单价未配置'
-  return '—'
+  return hasCost(r) ? `≈ $${fmtCostUsd(r.usd as number)}` : '—'
+}
+/** 成本口径全称（行 title / 读屏用）：占位符本身不带原因，原因必须另有出口 */
+function costDesc(r: RankRow): string {
+  if (hasCost(r)) return `≈ $${fmtCostUsd(r.usd as number)}`
+  if ((r.callsMissingPricing ?? 0) > 0) return `单价未配置（${r.callsMissingPricing} 次调用未定价）`
+  return '无已定价调用'
 }
 function costTitle(r: RankRow): string {
-  if (typeof r.usd === 'number') return `已定价 ${r.pricedCalls ?? 0} 次调用金额合计（USD）`
+  if (hasCost(r)) return `已定价 ${r.pricedCalls ?? 0} 次调用金额合计（USD）`
   if ((r.callsMissingPricing ?? 0) > 0) return `${r.callsMissingPricing} 次调用未配置模型单价，不计入金额`
   return '本行无已定价调用'
 }
 
 function rowTitle(r: RankRow): string {
   const label = props.variant === 'user' ? (r.name || r.key) : (r.display || r.key)
-  const parts = [label, `${r.calls} 次调用`, `失败 ${r.failed}`, `成本 ${costText(r)}`]
+  const parts = [label, `${r.calls} 次调用`, `失败 ${r.failed}`, `成本 ${costDesc(r)}`]
   if (r.promptTokens || r.completionTokens) {
     parts.push(`prompt ${fmtTokens(r.promptTokens)} · completion ${fmtTokens(r.completionTokens)}`)
   }
@@ -236,6 +248,9 @@ function rowTitle(r: RankRow): string {
   grid-template-columns: minmax(0, 1fr) 40px;
   align-items: center;
   gap: 8px;
+  /* 与左侧金额列的分隔 = 列间距 10 + 14 = 24px（2026-10-14 用户实测：金额文字右缘
+     与占比条左缘只隔 10px，读成「贴在一起」） */
+  padding-left: 14px;
 }
 
 /* 排名徽章 */
@@ -291,7 +306,8 @@ function rowTitle(r: RankRow): string {
   white-space: nowrap;
   font-size: var(--mk-fs-micro);
 }
-/* 成本列（审核 #112）：等宽数字右对齐，未定价走弱化色 */
+/* 成本列（审核 #112）：等宽数字右对齐，未定价走暗灰占位（2026-10-14 用户评审：
+   占位符不该是亮白字——那是「有值」的着装） */
 .tc-cost {
   font-family: var(--mk-mono);
   font-variant-numeric: tabular-nums;
@@ -301,6 +317,7 @@ function rowTitle(r: RankRow): string {
   text-align: right;
   white-space: nowrap;
 }
+.tc-cost--none { color: var(--mk-faint); }
 
 /* 失败列 */
 .tc-fail--bad { color: var(--mk-red); font-weight: 800; font-size: var(--mk-fs-micro); }

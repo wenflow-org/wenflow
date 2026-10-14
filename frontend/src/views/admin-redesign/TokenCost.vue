@@ -109,11 +109,13 @@
         <!-- hint = 原型 metricCard 的一短句口径；长解释收进卡 title 悬停（复刻调整 2026-10-02：
              此前 28px 数字下拖整句「待补单价模型 3 个：deepseek-v4-flash、…」小字，非原型节奏）。
              P1#25：单价未配置态可点直达「模型与接入」；W6（2026-10-10 走查）核实该页
-             无单价编辑入口，补价真实路径=llm-providers.json 的 pricing 块（文案已改，点击去看待补清单）。 -->
+             无单价编辑入口，补价真实路径=llm-providers.json 的 pricing 块（文案已改，点击去看待补清单）。
+             2026-10-14 用户评审：状态词此前占着 28px 数值位（「调用成本 / 单价未配置」），
+             被读成主数值——数值位改为暗灰占位「—」，原因与动作由 hint 一行承担（该卡仍可点）。 -->
         <MkKpi
           label="调用成本"
-          :value="costLoading ? '…' : costFailed ? '加载失败' : costUsd !== null ? `≈ $${fmtCostUsd(costUsd)}` : (costPricedCalls === 0 && costMissingCalls === 0) ? '无调用' : '单价未配置'"
-          :tone="costFailed ? 'warn' : ''"
+          :value="costLoading ? '…' : costFailed ? '加载失败' : costUsd !== null ? `≈ $${fmtCostUsd(costUsd)}` : '—'"
+          :tone="costFailed ? 'warn' : pricingMissing ? 'muted' : ''"
           :hint="costHintShort"
           :title="costHint"
           :clickable="pricingMissing"
@@ -180,12 +182,16 @@
 
       <!-- 按 Skill 成本明细（原型 renderCost 1778-1784：Skill/调用/Token 用量/成本/占比 五列，
            占比 = meter + mono%）。后端 by-skill 条目已带成本桶（usd/pricedCalls/callsMissingPricing），
-           故补真实金额列；单价未配置的 Skill 显式写「单价未配置」且不计入占比（不拿 0 冒充金额）。 -->
+           故补真实金额列；单价未配置的 Skill 显式写「单价未配置」且不计入占比（不拿 0 冒充金额）。
+           2026-10-14 用户评审两处改：① 成本列不再逐行复读「单价未配置」（状态词污染整页），
+           行内一律暗灰 —，原因收进行 title 与卡头；② 原五列纯 fr 在宽屏把每个数值摊到
+           自己列的最右（实测 996px 卡里 Skill 列 282px 只放 85px 文字），补 prompt/completion/均次
+           Token 三列把横向空间填成数据（用户的「要么补列填满、要么别让列间空 500px」）。 -->
       <section class="mk-card tc-card tc-card--skill">
         <div class="mk-card__head">
           <h3 class="mk-card__title">按 Skill 成本明细</h3>
           <div class="mk-card__head-right">
-            <span class="mk-card__meta">{{ bySkill.length }} 个<template v-if="skillAllUnpriced"> · 均未配置单价（成本列以 — 表示）</template><template v-else-if="!skillAll && bySkill.length > skillLimit"> · 显示前 {{ skillLimit }}</template></span>
+            <span class="mk-card__meta">{{ bySkill.length }} 个<template v-if="skillAllUnpriced"> · 均未配置单价（成本列以 — 表示）</template><template v-else-if="skillUnpriced > 0"> · {{ skillUnpriced }} 个未配置单价（成本列以 — 表示）</template><template v-else-if="!skillAll && bySkill.length > skillLimit"> · 显示前 {{ skillLimit }}</template></span>
             <button
               v-if="bySkill.length > skillLimit"
               type="button"
@@ -201,6 +207,9 @@
             <span role="columnheader">Skill</span>
             <span role="columnheader">调用</span>
             <span role="columnheader">Token 用量</span>
+            <span role="columnheader">Prompt</span>
+            <span role="columnheader">Completion</span>
+            <span role="columnheader">均次 Token</span>
             <span role="columnheader">成本</span>
             <span role="columnheader">占比</span>
           </div>
@@ -219,7 +228,10 @@
             <span class="tc-st__name" role="cell"><strong :title="r.display || r.key">{{ r.display || r.key }}</strong></span>
             <span class="tc-st__num" role="cell">{{ r.calls }}</span>
             <span class="tc-st__num" role="cell">{{ fmtTokens(r.tokens) }}</span>
-            <span class="tc-st__cost" role="cell">{{ skillAllUnpriced ? '—' : skillRowCost(r) }}</span>
+            <span class="tc-st__num tc-st__num--dim" role="cell">{{ fmtTokens(r.promptTokens ?? 0) }}</span>
+            <span class="tc-st__num tc-st__num--dim" role="cell">{{ fmtTokens(r.completionTokens ?? 0) }}</span>
+            <span class="tc-st__num tc-st__num--dim" role="cell">{{ perCallTokens(r) }}</span>
+            <span class="tc-st__cost" :class="{ 'tc-st__cost--none': !hasCost(r) }" role="cell">{{ skillRowCost(r) }}</span>
             <span class="tc-st__share" role="cell">
               <span class="mk-minibar"><span class="mk-minibar__fill" :style="{ width: skillShareW(r) }"></span></span>
               <span class="tc-st__pct">{{ skillSharePct(r) }}</span>
@@ -227,7 +239,7 @@
           </div>
         </div>
         <p v-if="skillRows.length" class="mk-card__note">
-          成本＝已定价调用金额合计（USD）· 单价未配置的 Skill 不计入占比 · 点击行可到执行日志看该 Skill 逐调用明细<template v-if="skillCostTotal <= 0">（当前无已定价调用，占比按 Token 计）</template>
+          成本＝已定价调用金额合计（USD）· — 表示该行未配置单价（不计入占比）· 点击行可到执行日志看该 Skill 逐调用明细<template v-if="skillCostTotal <= 0">（当前无已定价调用，占比按 Token 计）</template>
         </p>
         <p v-else class="mk-card__note">暂无数据。</p>
       </section>
@@ -415,9 +427,19 @@ const skillCostTotal = computed(() =>
   bySkill.value.reduce((acc, r) => acc + (typeof r.usd === 'number' ? r.usd : 0), 0)
 )
 function skillRowCost(r: SkillCostRow): string {
-  if (typeof r.usd === 'number') return `≈ $${fmtCostUsd(r.usd)}`
-  if ((r.callsMissingPricing ?? 0) > 0) return '单价未配置'
-  return '—'
+  return typeof r.usd === 'number' ? `≈ $${fmtCostUsd(r.usd)}` : '—'
+}
+/** 有无已定价金额（决定成本列占位色：无 → 暗灰） */
+function hasCost(r: SkillCostRow): boolean {
+  return typeof r.usd === 'number'
+}
+/** 未配置单价的 Skill 数（卡头一句状态。此前逐行打「单价未配置」五个亮白字，
+    2026-10-14 用户评审：状态词污染整页——行内一律暗灰 —，原因收进卡头 + 行 title） */
+const skillUnpriced = computed(() => bySkill.value.filter((r) => typeof r.usd !== 'number').length)
+/** 均次 Token（tokens / calls）：明细此前只有窗口总量，看不出「单次多重」 */
+function perCallTokens(r: SkillCostRow): string {
+  if (!r.calls || r.tokens <= 0) return '—'
+  return fmtTokens(Math.round(r.tokens / r.calls))
 }
 /** P2（2026-10-04 全站评审）：全部 Skill 均未定价时，成本列整列同词「单价未配置」收敛为
     卡头 meta 一句状态（行内显「—」，表尾 note 已有解释不丢信息）；混合定价时恢复逐行显示。 */
@@ -438,7 +460,13 @@ function skillSharePct(r: SkillCostRow): string {
   return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`
 }
 function skillRowTitle(r: SkillCostRow): string {
-  return `${r.display || r.key} · ${r.calls} 次调用 · Token ${fmtTokens(r.tokens)} · 成本 ${skillRowCost(r)} · 点击查看该 Skill 的逐调用明细`
+  // 成本原因随占位一起离开行内（行内只留 —），故 title 必须把原因说全，否则信息净丢
+  const cost = hasCost(r)
+    ? `成本 ≈ $${fmtCostUsd(r.usd as number)}`
+    : (r.callsMissingPricing ?? 0) > 0
+      ? `成本 单价未配置（${r.callsMissingPricing} 次调用未定价，不计入金额）`
+      : '成本 无已定价调用'
+  return `${r.display || r.key} · ${r.calls} 次调用 · Token ${fmtTokens(r.tokens)} · 均次 ${perCallTokens(r)} · ${cost} · 点击查看该 Skill 的逐调用明细`
 }
 
 /* 成本卡副行（长版，收进 KPI 卡 title 悬停）：数值本身只给结论。
@@ -746,10 +774,13 @@ const trendCols = computed(() => trend.value.map((d) => ({
   /* align-items:start 撤（2026-10-04 全站评审 P3#25，判例 42107f8e）：并排排行卡底边差 114.5px
      （右卡悬空），撤后 grid stretch 等高，与总览 Row A 同判 */
 }
-/* LY2（2026-10-05）：TcRankTable 半宽侧表最小内容宽 594px，卡宽 <622px 时
-   .mk-card 的 overflow:clip 会静默裁掉最右「占比」列。回落档从 1200 抬到 1599——
-   双列只在「每卡 ≥622px 内容宽」时成立；1201–1599 夹缝带一律单列全宽（保留 gap 与等高说明）。 */
-@media (max-width: 1599px) {
+/* LY2（2026-10-05，2026-10-14 重算）：TcRankTable 半宽侧表有最小内容宽，卡窄于此值
+   会被 .mk-card 的 overflow:clip 静默裁掉最右「占比」列（实测强制双列 491px 卡里
+   行宽 756px，末列右缘越出卡右缘 280px）。最小内容宽随 2026-10-04「审核 #112」插入
+   成本列后从 594px 涨到 700px（grid 最小值合计），故每卡 ≥ 728px、内容列 ≥ 1470px、
+   视口 ≥ 1754px 双列才成立（1280 面板实测内容列 = 视口 − 284）。原断点 1599 是成本列
+   之前算的，1600~1753 这段会裁列——断点抬到 1799 覆盖整段。 */
+@media (max-width: 1799px) {
   .tc-ranks { grid-template-columns: minmax(0, 1fr); }
 }
 
@@ -791,11 +822,14 @@ const trendCols = computed(() => trend.value.map((d) => ({
 .tc-skilltable__row {
   display: grid;
   grid-template-columns:
-    minmax(150px, 1.4fr)
-    minmax(56px, 0.5fr)
-    minmax(110px, 0.9fr)
-    minmax(96px, 0.8fr)
-    minmax(130px, 1fr);
+    minmax(130px, 175px)
+    minmax(44px, 62px)
+    minmax(70px, 100px)
+    minmax(56px, 78px)
+    minmax(76px, 100px)
+    minmax(62px, 84px)
+    minmax(70px, 92px)
+    minmax(105px, 1fr);
   align-items: center;
   gap: 10px;
 }
@@ -819,6 +853,19 @@ const trendCols = computed(() => trend.value.map((d) => ({
 }
 .tc-skilltable__row:last-child { border-bottom: none; }
 .tc-skilltable__row:hover { background: var(--mk-table-row-hover-bg); }
+  /* 列宽收敛（2026-10-14 用户评审）：原五列纯 fr（1.4/.5/.9/.8/1）在宽屏把每个数值摊到
+     各自列的最右——996px 卡里 Skill 列拿 282px 只装 85px 文字（Skill↔调用 空 197px），
+     1480px 卡里更到 ~340px 空转。现按内容给上下限（Skill 是唯一文本列，其余数字列 ~100px），
+     补 Prompt/Completion/均次 Token 三列把横向空间填成数据（用户的「要么补列填满、
+     要么别让列间空 500px」），余量由末列「占比」吸收——进度条是量表（轨道长度=刻度），
+     不制造空转白区。
+     下限合计 613 + 7×10 间隙 = 683：admin 最窄档 1280 视口的内容宽 996（表宽 968）富余，
+     八列在 ~1024 视口（表宽 ~712）仍不成行溢出（溢出=最右列被 .mk-card overflow:clip 静默裁掉）。
+     各列下限不低于表头文字宽（表头右对齐，窄列会让「Completion」折行）。 */
+  /* 上限刻意压紧：grid 的「maximize tracks」先于 fr 展开，若上限留得宽，窄屏下 7 个受限列
+     会先把余量吃光、末列只剩下限（实测 996px 卡里占比条塌到 39px，比改前 149px 更差）。
+     上限合计 691 + 7×10 间隙：996px 卡（可用 896）下受限列刚好到顶、占列拿 ~135（条 ~113px），
+     宽屏（内容 ≥1470）余量全归占列——条变长但不留空转白区。 */
 /* EG19：行可键盘聚焦，补可见焦点环（与 vl-cell--click:focus-visible 同判例） */
 .tc-skilltable__row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .tc-st__name { min-width: 0; }
@@ -863,3 +910,9 @@ html[data-theme='dark'] {
 /* 骨架内边距（形状由 MkSkeleton 提供） */
 .tc-skel-pad { padding: 12px 16px 16px; }
 </style>
+/* Prompt / Completion / 均次 Token 是 Token 总量的拆分与派生，弱一档避免与三个主数值抢层级 */
+.tc-st__num--dim { color: var(--mk-muted); font-weight: 600; }
+/* 未定价占位：暗灰（2026-10-14 用户评审——此前「单价未配置」五个亮白字逐行复读） */
+.tc-st__cost--none { color: var(--mk-faint); font-weight: 600; }
+  /* 与左侧金额列的分隔 = 列间距 10 + 14 = 24px（同一诉求：金额文字不要贴着占比条） */
+  padding-left: 14px;
