@@ -476,6 +476,14 @@ describe('SessionCockpit 双模式', () => {
     const payload = realTeachingPayload(); // path: M1 全完成 / M2 有未完任务，当前任务 task_2
     // 真实载荷里 stageResults.path 与 path 同构（都含 milestones）；fixture 按同构补齐，供里程碑视图取任务态
     payload.data.stageResults.path = payload.data.path;
+    // 未解锁阶段两处载荷同补（stepper 读数与面板手风琴吃同一条 path，fixture 保持同构）：
+    // 里程碑状态枚举三值之一（后端 task-completion.service.ts：locked → active → completed）。
+    // 此前 fixture 的里程碑一律写 in_progress —— 生产从不发这个值，接口词与用例词错配，
+    // 于是「active 漏译 + 被判成 idle」在测试里永不显形（2026-10-14 实修）。
+    payload.data.path.milestones.push({
+      stageNumber: 3, title: '闭包', status: 'locked',
+      tasks: [{ id: 'task_3', title: '闭包练习', status: 'todo', completed: false }]
+    });
     getRealSessionConsole.mockResolvedValue(payload);
     // 面板自取 getPathDetail 全量行（与退役的路径详情页同一接口、同一内容面）
     getPathDetailMock.mockResolvedValue({
@@ -493,10 +501,18 @@ describe('SessionCockpit 双模式', () => {
               ]
             },
             {
-              id: 'm2', stageNumber: 2, title: '作用域', status: 'in_progress', description: '局部与全局',
+              id: 'm2', stageNumber: 2, title: '作用域', status: 'active', description: '局部与全局',
               goal: '掌握词法作用域', coreConceptName: '作用域', estimatedHours: 6,
               subtasks: [
                 { id: 't3', title: '作用域练习', status: 'in_progress', taskType: 'practice', estimatedMinutes: 25 }
+              ]
+            },
+            {
+              // 里程碑状态枚举三值之一（后端 task-completion.service.ts：locked → active → completed）；
+              // M3 留未解锁，覆盖 .pd-stage--idle 分支（此前 fixture 全用 in_progress，正是漏测原因）
+              id: 'm3', stageNumber: 3, title: '闭包', status: 'locked', description: '捕获与内存',
+              subtasks: [
+                { id: 't4', title: '闭包练习', status: 'todo', taskType: 'practice', estimatedMinutes: 30 }
               ]
             }
           ]
@@ -507,9 +523,9 @@ describe('SessionCockpit 双模式', () => {
     await wrapper.findAll('.cp-stp')[1].trigger('click'); // Path 页签
     await settle();
     expect(getPathDetailMock).toHaveBeenCalledWith('lp_1');
-    // 步点副标走子任务动态读数（M1 2 任务完成 + M2 1 任务进行中 = 2/3），
+    // 步点副标走子任务动态读数（M1 2 任务完成 + M2 1 任务进行中 + M3 1 未开始 = 2/4），
     // 不再是「整阶段收齐才 +1」的里程碑口径（2026-10-12 走查：恒 0 读作没进展）
-    expect(wrapper.find('#cp-tab-path .cp-stp__meta').text()).toBe('任务 2/3');
+    expect(wrapper.find('#cp-tab-path .cp-stp__meta').text()).toBe('任务 2/4');
 
     const pane = wrapper.find('#cp-tabpanel-path');
     expect(pane.exists()).toBe(true);
@@ -519,7 +535,14 @@ describe('SessionCockpit 双模式', () => {
     expect(pane.text()).not.toContain('总体进度');
     expect(pane.text()).not.toContain('技术细节');
     const stageTitles = pane.findAll('.pd-stage__title').map((s) => s.text());
-    expect(stageTitles).toEqual(['函数基础', '作用域']);
+    expect(stageTitles).toEqual(['函数基础', '作用域', '闭包']);
+    // 里程碑状态词汇（2026-10-14 修）：生产真值 'active' 必须翻译且给 info 档——
+    // 此前只认 in_progress，active 裸出英文徽章、且被判成 idle，当前阶段与未解锁阶段视觉全同
+    const stageCards = pane.findAll('.pd-stage');
+    expect(stageCards.map((s) => s.find('.pd-stage__head .mk-badge').text())).toEqual(['已完成', '进行中', '未解锁']);
+    expect(pane.text()).not.toContain('active');
+    // --idle（压淡编号）只给未解锁：当前阶段与已完成阶段都不压
+    expect(stageCards.map((s) => s.classes().includes('pd-stage--idle'))).toEqual([false, false, true]);
     expect(pane.text()).toContain('目标掌握词法作用域');
     expect(pane.text()).toContain('核心概念：作用域');
     expect(pane.text()).toContain('2 / 2 任务'); // 阶段头自带完成数

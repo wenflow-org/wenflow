@@ -50,7 +50,7 @@
           v-for="(m, i) in stages"
           :key="m.id"
           class="pd-stage"
-          :class="{ 'pd-stage--idle': m.status !== 'in_progress' && m.status !== 'completed' }"
+          :class="{ 'pd-stage--idle': m.status !== 'active' && m.status !== 'completed' }"
         >
           <button
             type="button"
@@ -271,10 +271,16 @@ watch(
 /* ===== 阶段/任务统计：各阶段头自带「N / M 任务」，总体 % 不再单算（2026-10-12 用户拍板撤） ===== */
 const doneTasks = (m: PathMilestone) => m.subtasks.filter((t) => t.status === 'completed').length
 
-/* ===== 状态映射（与列表页 opsShared 同一套；子任务/里程碑为详情域映射） ===== */
-const milestoneText = (s: string) => ({ completed: '已完成', in_progress: '进行中', locked: '未解锁' }[s] || s)
+/* ===== 状态映射（与列表页 opsShared 同一套；子任务/里程碑为详情域映射） =====
+   里程碑状态枚举单源 = 后端 task-completion.service.ts（建路径时 'locked' → 逐级解锁写 'active'
+   → 收齐写 'completed'），**没有 'in_progress'**——那是子任务的状态词。此前里程碑映射只认
+   in_progress/locked/completed，生产真值 'active' 落不到任何键：阶段头徽章裸出英文
+   （statusText 字典明令禁止的漏译），且 .pd-stage--idle 的「非当前且未完成」判定对 active
+   也为真 → 当前阶段与未解锁阶段视觉全同、.pd-stage__n 的蓝底高亮永不出现（31/117 条里程碑，
+   2026-10-14 浏览器实测）。「进行中」与同列表的任务徽章同词，阶段与任务读到同一个状态词。 */
+const milestoneText = (s: string) => ({ completed: '已完成', active: '进行中', locked: '未解锁' }[s] || s)
 const milestoneBadge = (s: string) =>
-  s === 'completed' ? 'mk-badge--ok' : s === 'in_progress' ? 'mk-badge--info' : 'mk-badge--muted'
+  s === 'completed' ? 'mk-badge--ok' : s === 'active' ? 'mk-badge--info' : 'mk-badge--muted'
 const taskText = (s: string) => ({ completed: '已完成', in_progress: '进行中', todo: '未开始' }[s] || s)
 const taskBadge = (s: string) =>
   s === 'completed' ? 'mk-badge--ok' : s === 'in_progress' ? 'mk-badge--info' : 'mk-badge--muted'
