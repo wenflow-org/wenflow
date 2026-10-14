@@ -73,7 +73,9 @@
                 <div v-if="t.fields" class="pt-fields">
                   <span v-for="(fv, fk) in t.fields" :key="fk" class="pt-field"><b>{{ fk }}</b>={{ shortField(fv) }}</span>
                 </div>
-                <div v-if="t.error" class="pt-state">⚠️ {{ t.error }}</div>
+                <!-- 错误行前缀已撤（2026-10-14 与教学会话/虚拟画像同批）：原 emoji 只是装饰，
+                     错误原文已自足。管理端不用 emoji。 -->
+                <div v-if="t.error" class="pt-state">{{ t.error }}</div>
                 <div v-if="t.learnerState" class="pt-state">
                   被理解 {{ Math.round((t.learnerState.feltUnderstood ?? 0) * 100) }}% · 目标清晰 {{ Math.round((t.learnerState.problemClarity ?? 0) * 100) }}% · readyToProceed={{ t.learnerState.readyToProceed === true ? '是' : '否' }}{{ t.emotion ? ` · ${t.emotion}` : '' }}
                 </div>

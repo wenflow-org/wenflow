@@ -453,7 +453,9 @@
                         </span>
                         <div>
                           <div class="pe-transcript__content">{{ t.content }}</div>
-                          <div v-if="t.error" class="pe-transcript__meta">⚠️ {{ t.error }}</div>
+                          <!-- 错误行前缀已撤（2026-10-14 与教学会话/虚拟画像同批）：原 emoji 只是装饰，
+                               文案本身（后端错误原文或读取失败原因）已自足。管理端不用 emoji。 -->
+                          <div v-if="t.error" class="pe-transcript__meta">{{ t.error }}</div>
                           <div v-if="t.learnerState" class="pe-transcript__meta">
                             学生状态：被理解 {{ Math.round((t.learnerState.feltUnderstood ?? 0) * 100) }}% · 目标清晰 {{ Math.round((t.learnerState.problemClarity ?? 0) * 100) }}% ·
                             是否愿意推进：{{ t.learnerState.readyToProceed === true ? '是' : '否' }}{{ t.emotion ? ` · 情绪 ${t.emotion}` : '' }}
