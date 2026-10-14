@@ -113,15 +113,51 @@ export async function findRealUserIds(): Promise<string[]> {
 /**
  * 真实用户 where 片段（单点入口）：排除虚拟学习者与测试/审计账号。
  * extra 会覆盖同名键（例如统计口径要补 `deletedAt: null`）。
+ *
+ * ⚠ 2026-10-10（admin 走查 P2029）：notIn 只装「非虚拟」的测试/审计账号 id——
+ * 虚拟学习者已由 `isVirtualLearner: false` 布尔谓词排除，再进 notIn 纯属参数浪费。
+ * dev.db 实测虚拟学习者 954 + 非 virtual 测试账号 ~200，全量 notIn 直接近千参数上限；
+ * Prisma 对 SQLite 的大查询会拆分正向 in，但否定过滤不可拆 → P2029 把
+ * /admin/users、平台总览、活动日志三个接口整体打挂。集合语义不变：
+ * excluded = virtual ∪ test ≡ ¬virtual ∧ ¬(test ∧ ¬virtual)。
  */
 export async function buildRealUserWhere(
   extra?: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const excludedIds = await findTestAccountUserIds();
+  const rows = await prisma.users.findMany({
+    select: { id: true, email: true, name: true, isVirtualLearner: true },
+  });
+  const nonVirtualTestIds = rows
+    .filter((row) => !row.isVirtualLearner && isTestAccountUser(row))
+    .map((row) => row.id);
   return {
     isVirtualLearner: false,
     // 空集时省掉 id 条件：既省一条无用条件，也不依赖 `notIn: []` 的语义
-    ...(excludedIds.length ? { id: { notIn: excludedIds } } : {}),
+    ...(nonVirtualTestIds.length ? { id: { notIn: nonVirtualTestIds } } : {}),
+    ...(extra || {}),
+  };
+}
+
+/**
+ * 测试视角 where（2026-10-10 用户拍板：教学组口径开关从「仅真实/含测试（混合）」
+ * 改为「真实 / 测试」两个互斥视角）——testOnly = 只看虚拟学习者 + 测试/审计账号。
+ * 正向 in 列表（非虚拟测试账号 id 数量有限）可被 Prisma 拆分，无 P2029 风险。
+ * 判据与 buildRealUserWhere 同源（isTestAccountUser 单点），extra 覆盖同名键。
+ */
+export async function buildTestUserWhere(
+  extra?: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const rows = await prisma.users.findMany({
+    select: { id: true, email: true, name: true, isVirtualLearner: true },
+  });
+  const nonVirtualTestIds = rows
+    .filter((row) => !row.isVirtualLearner && isTestAccountUser(row))
+    .map((row) => row.id);
+  return {
+    OR: [
+      { isVirtualLearner: true },
+      ...(nonVirtualTestIds.length ? [{ id: { in: nonVirtualTestIds } }] : []),
+    ],
     ...(extra || {}),
   };
 }
