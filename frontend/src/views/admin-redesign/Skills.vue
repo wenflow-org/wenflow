@@ -17,6 +17,22 @@
         >{{ pePanel?.running ? '评估运行中…' : '批量跑评估' }}</button>
       </template>
     </MkPageHead>
+    <!-- 读数带统一槽位（2026-10-14 用户评审「kpi 怎么跑到表格里了吗」）：三条页签的读数带一律
+         排在页签栏之下、明细卡之上——读数描述的是「当前页签」，页签栏位置因此固定不跳。
+         此前「Skill 运行」的带在页签栏之上（切到 Prompt 评估时页签栏往上窜一格），
+         「模型路由」的带更在路由表那张卡的里面（.sk-routing__top）；Prompt 评估本就正确。
+         这条槽位与 PromptEvalPanel 注释里引的 ADMIN_VISUAL_LAYER_SPEC §163 同一条：KPI / 页签 /
+         筛选 / 表格不再挤进同一张 .mk-card--fill。 -->
+    <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
+         2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签）：
+         Skill 运行 / 模型路由 / Prompt 评估。健康检查 · 漂移 · 对账三 tab 已退役（2026-09-29 用户拍板）：
+         三者本就是同一份报表的三刀，合一后独立成 /admin/health-center，侧栏落在「系统」组。
+         Prompt 评估 2026-10-04 由独立场景 /admin/prompt-eval 折入（内层用例/历史页签用 ?peTab=） -->
+    <div class="tabs skills-tabs" role="tablist" aria-label="Skill 视图切换">
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'run'" @click="switchTab('run')">Skill 运行</button>
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'model-routing'" @click="switchTab('model-routing')">模型路由</button>
+      <button type="button" role="tab" class="tab" :aria-selected="tab === 'prompt-eval'" @click="switchTab('prompt-eval')">Prompt 评估</button>
+    </div>
     <section v-if="tab === 'run'" class="mk-kpi-grid" aria-label="Skill 运行统计">
       <MkKpi label="Skill" :value="liveLoading && !cards.length ? '…' : cards.length" :title="skillCountHint || '全量注册的 Skill 数'" />
       <!-- live 三态（评审「状态三态缺失」）：对账加载中 → 「…」；加载失败 → 「?」（读不到 ≠ 0）；
@@ -50,16 +66,42 @@
       <MkKpi v-if="idleCount > 0" label="空闲" :value="idleCount" title="窗口内无调用的 Skill 数（空闲是信号不是故障，不着色）" />
     </section>
 
-    <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
-         2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签）：
-         Skill 运行 / 模型路由 / Prompt 评估。健康检查 · 漂移 · 对账三 tab 已退役（2026-09-29 用户拍板）：
-         三者本就是同一份报表的三刀，合一后独立成 /admin/health-center，侧栏落在「系统」组。
-         Prompt 评估 2026-10-04 由独立场景 /admin/prompt-eval 折入（内层用例/历史页签用 ?peTab=） -->
-    <div class="tabs skills-tabs" role="tablist" aria-label="Skill 视图切换">
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'run'" @click="switchTab('run')">Skill 运行</button>
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'model-routing'" @click="switchTab('model-routing')">模型路由</button>
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'prompt-eval'" @click="switchTab('prompt-eval')">Prompt 评估</button>
-    </div>
+    <!-- 模型路由页签的读数带（2026-10-14 用户评审：这 4 张此前塞在路由表所在的同一张卡里
+         （.sk-routing__top），读数与明细挤一个卡壳、还吃掉表格首屏——归位到页面级读数槽位，
+         与「Skill 运行」「Prompt 评估」的读数带同一条线：页签栏之下、明细卡之上，明细卡只留小节头与表体。
+         前 3 张从 skills 列表 + coverage 派生（去重模型数 / 已路由 Skill 数 / 主模型覆盖占比）；
+         降级策略另读只读的 /admin/model-registry（llm-providers.json 的 fallbacks + 默认路由
+         解析），把「registry 默认」解析成实际链，拉不到显 — 不编造） -->
+    <section v-if="tab === 'model-routing'" class="mk-kpi-grid" aria-label="Skill 模型路由统计">
+      <MkKpi
+        label="承载模型"
+        :value="routeModelCount"
+        hint="去重模型"
+        :title="routeModelTitle"
+      />
+      <MkKpi
+        label="已路由 Skill"
+        :value="cards.length"
+        hint="全部 Skill"
+        title="主目录 Skill 数（不含外挂能力）"
+      />
+      <MkKpi
+        label="主模型覆盖"
+        :value="primaryCoverageText"
+        :hint="primaryModelLabel"
+        :title="primaryCoverageTitle"
+      />
+      <!-- 降级策略（原硬编码 value="自动" 删）：真实口径 = 自定义兜底链计数；无自定义链时
+           给出 registry 默认链的解析结果（F7-5：空数组=「无（空链）」，不再只回无信息的
+           「registry 默认」）。registry 未加载显 —，不伪装 -->
+      <MkKpi
+        label="降级策略"
+        :value="fallbackPolicyText"
+        :hint="fallbackPolicyHint"
+        :title="fallbackPolicyTitle"
+      />
+    </section>
+
 
     <!-- ===== Tab1: Skill 运行（原 Skills.vue 全量内容） ===== -->
     <template v-if="tab === 'run'">
@@ -300,43 +342,9 @@
          + 「Skill 模型路由」小节头 + 5 列表（Skill / 归属 Agent / 路由模型 / 备用模型 / 状态）。
          覆盖矩阵（SkillModelCoverage）保留为增强，置于原型结构之下。 -->
     <div v-if="tab === 'model-routing'" class="mk-card mk-card--fill sk-routing">
-      <div class="sk-routing__top">
-        <!-- 4 卡中前 3 张从现有 skills 列表 + coverage 派生（去重模型数 / 已路由 Skill 数 /
-             主模型覆盖占比）；降级策略另读只读的 /admin/model-registry（llm-providers.json 的
-             fallbacks + 默认路由解析），把「registry 默认」解析成实际链，拉不到显 — 不编造 -->
-        <div class="mk-kpi-grid">
-          <MkKpi
-            label="承载模型"
-            :value="routeModelCount"
-            hint="去重模型"
-            :title="routeModelTitle"
-          />
-          <MkKpi
-            label="已路由 Skill"
-            :value="cards.length"
-            hint="全部 Skill"
-            title="主目录 Skill 数（不含外挂能力）"
-          />
-          <MkKpi
-            label="主模型覆盖"
-            :value="primaryCoverageText"
-            :hint="primaryModelLabel"
-            :title="primaryCoverageTitle"
-          />
-          <!-- 降级策略（原硬编码 value="自动" 删）：真实口径 = 自定义兜底链计数；无自定义链时
-               给出 registry 默认链的解析结果（F7-5：空数组=「无（空链）」，不再只回无信息的
-               「registry 默认」）。registry 未加载显 —，不伪装 -->
-          <MkKpi
-            label="降级策略"
-            :value="fallbackPolicyText"
-            :hint="fallbackPolicyHint"
-            :title="fallbackPolicyTitle"
-          />
-        </div>
-        <div class="sk-routing__head">
-          <span class="mk-card__title">Skill 模型路由</span>
-          <span class="mk-card__meta">{{ routingMetaText }}</span>
-        </div>
+      <div class="sk-routing__head">
+        <span class="mk-card__title">Skill 模型路由</span>
+        <span class="mk-card__meta">{{ routingMetaText }}</span>
       </div>
 
       <div class="sk-routing__scroll">
@@ -1262,9 +1270,9 @@ const routingMetaText = computed(() => {
 
 /* ===== 模型路由页签（原型 renderSkillHub 1665-1681 routing 分支）=====
    KPI 栅格 + 小节头固定在上，路由表与覆盖矩阵共用下方滚动区 */
-.sk-routing__top { flex: none; padding: 14px 16px 0; display: grid; gap: 12px; }
-/* flex-wrap：F7-5 起表头副文携带 registry 默认链解析结果，窄屏允许换行不截断 */
-.sk-routing__head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+/* flex-wrap：F7-5 起表头副文携带 registry 默认链解析结果，窄屏允许换行不截断。
+   2026-10-14：KPI 带外移后 __top 包装退役，小节头自己承担卡内上内边距 */
+.sk-routing__head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 14px 16px 0; }
 .sk-routing__scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 16px; }
 .sk-routing__sub { color: var(--mk-muted); }
 /* 覆盖矩阵（增强块）与原型路由表分隔 */
