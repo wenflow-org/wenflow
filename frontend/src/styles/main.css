@@ -807,7 +807,13 @@ select {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    /* 不能写 transition-duration: 0.01ms：transition-property 的初值就是 all，
+       给 `*` 下 0.01ms 等于凭空给每个元素造一条「全属性过渡」——任何「写样式后同步量
+       尺寸」的代码量到的是过渡起始值而非终值。实测课堂 mermaid 结构图在减少动态效果
+       下量到标签 38×8（真值 112×24）、节点间距 104px→2077px，整图被放大到
+       4476×6313px 把课堂页撑到 1.2 万 px（评审 F23）。none 语义等价（用户要的就是
+       「没有过渡」），且不再污染度量。 */
+    transition-property: none !important;
     scroll-behavior: auto !important;
   }
 }

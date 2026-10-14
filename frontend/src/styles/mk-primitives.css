@@ -1922,7 +1922,10 @@ body.admin-route pre { border: 0; }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    /* 不用 transition-duration: 0.01ms：transition-property 初值为 all，对 `*` 下 0.01ms
+       会凭空造出「全属性过渡」，让「写样式后同步量尺寸」的代码量到过渡起始值（课堂
+       mermaid 结构图因此被放大 20 倍，评审 F23）。见 main.css 同名媒体块的完整说明。 */
+    transition-property: none !important;
   }
 }
 
