@@ -306,7 +306,7 @@
         <div class="sdp-proj__col">
           <h5 class="sdp-proj__title">输入契约 <b class="mono">{{ contractIns.length }}</b> 字段</h5>
           <MkLoading v-if="contractLoading && !contractFields.length" inline text="字段契约加载中…" />
-          <p v-else-if="contractNotApplicable" class="sdp-none">该 Skill 为辅助类（无编排阶段归属），字段契约不适用。</p>
+          <p v-else-if="contractNotApplicable" class="sdp-none">{{ AUX_CONTRACT_NA_TEXT }}</p>
           <p v-else-if="contractFailed" class="sdp-none sdp-bad-text">
             字段契约加载失败。<button type="button" class="mk-link" @click="loadContracts">重试</button>
           </p>
@@ -324,7 +324,7 @@
         <div class="sdp-proj__col">
           <h5 class="sdp-proj__title">输出契约 <b class="mono">{{ contractOuts.length }}</b> 字段</h5>
           <MkLoading v-if="contractLoading && !contractFields.length" inline text="字段契约加载中…" />
-          <p v-else-if="contractNotApplicable" class="sdp-none">该 Skill 为辅助类（无编排阶段归属），字段契约不适用。</p>
+          <p v-else-if="contractNotApplicable" class="sdp-none">{{ AUX_CONTRACT_NA_TEXT }}</p>
           <p v-else-if="contractFailed" class="sdp-none sdp-bad-text">
             字段契约加载失败。<button type="button" class="mk-link" @click="loadContracts">重试</button>
           </p>
@@ -385,6 +385,9 @@ const props = defineProps<{ skillId: string; reloadTick: number }>()
 const emit = defineEmits<{ (e: 'published'): void }>()
 
 const CORE_CHANNELS = ['dialogue', 'state', 'task', 'evidence', 'learner', 'path'] as const
+
+/* 文案单源（R6 复读单源化）：输入/输出契约两列的辅助类空态共用一句 */
+const AUX_CONTRACT_NA_TEXT = '该 Skill 为辅助类（无编排阶段归属），字段契约不适用。'
 const CORE_FIELD_TYPES = ['string', 'number', 'boolean', 'enum', 'object', 'object[]', 'string[]'] as const
 const CORE_FAILURE_POLICIES = ['retry', 'fallback', 'propagate'] as const
 const CORE_OUTPUT_MEDIA = ['json', 'markdown', 'text'] as const

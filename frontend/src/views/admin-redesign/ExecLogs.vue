@@ -113,8 +113,8 @@
                 </select>
               </label>
               <label class="mk-adv__field">
-                <span class="mk-cell-sub">Trace ID（链路 ID）</span>
-                <input v-model="traceId" class="mk-filter__input" placeholder="调用链路 ID（精确匹配）" aria-label="Trace ID（链路 ID）" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery()" />
+                <span class="mk-cell-sub">{{ TRACE_FIELD_LABEL }}</span>
+                <input v-model="traceId" class="mk-filter__input" placeholder="调用链路 ID（精确匹配）" :aria-label="TRACE_FIELD_LABEL" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery()" />
               </label>
               <label class="mk-adv__field">
                 <span class="mk-cell-sub">会话 sessionId</span>
@@ -366,6 +366,8 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import TraceWaterfall from './TraceWaterfall.vue'
+/* 文案单源（R6 复读单源化）：筛选项可见标签与其 aria-label 共用一份 */
+const TRACE_FIELD_LABEL = 'Trace ID（链路 ID）'
 /* shortTrace 单源自 terms.ts（2026-10-06 审核 #121）：Trace 页签（TraceWaterfall）同规则，
    同一 traceId/sessionId 跨页签形态一致 */
 import { TERMS, errorCodeLabel, routeSourceLabel, shortTrace } from './terms'

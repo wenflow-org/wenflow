@@ -111,6 +111,9 @@ import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { errMsg } from './live'
 import { toast } from '@/utils/toast'
 
+/* 文案单源（R6 复读单源化）：hero 副文与来源徽章悬停释共用一份 */
+const PRESET_SYNC_NOTE = '平台预置角色（随版本自动同步）'
+
 interface CardDetail {
   profileId: string
   userId: string
@@ -172,7 +175,7 @@ function goLearner() {
 }
 
 const heroSubText = computed(() => {
-  return d.value?.preset ? '平台预置角色（随版本自动同步）' : '学习者卡 · 导入即用'
+  return d.value?.preset ? PRESET_SYNC_NOTE : '学习者卡 · 导入即用'
 });
 function sourceText(c: Pick<CardDetail, 'preset' | 'sourceKind'>): string {
   if (c.preset) return '预置'
@@ -186,7 +189,7 @@ function sourceBadge(c: Pick<CardDetail, 'preset' | 'sourceKind'>): string {
   return 'mk-badge--muted'
 }
 function sourceTitle(c: Pick<CardDetail, 'preset' | 'sourceKind'>): string {
-  if (c.preset) return '平台预置角色（随版本自动同步）'
+  if (c.preset) return PRESET_SYNC_NOTE
   if (c.sourceKind === 'web') return '来源：网络采集卡'
   if (c.sourceKind === 'synthetic') return '来源：合成生成卡'
   return '后台手动 / AI 创建'

@@ -35,7 +35,7 @@
         :value="attentionCount"
         :tone="attentionCount ? 'warn' : ''"
         hint="关注度 高 / 中"
-        title="统计当前列表中的会话"
+        :title="KPI_LIST_SCOPE_TITLE"
       />
       <MkKpi
         label="缺总结"
@@ -48,7 +48,7 @@
         label="有建议"
         :value="advisoryCount"
         hint="含完课调整 / 复习建议"
-        title="统计当前列表中的会话"
+        :title="KPI_LIST_SCOPE_TITLE"
       />
     </section>
 
@@ -400,6 +400,9 @@ import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkDistBand from '@/components/mk/MkDistBand.vue'
+
+/* 文案单源（R6 复读单源化）：两个 KPI 卡的口径悬停释共用一份 */
+const KPI_LIST_SCOPE_TITLE = '统计当前列表中的会话'
 import { Filter } from 'lucide-vue-next'
 import { toast } from '@/utils/toast'
 import { useEscape } from './useEscape'

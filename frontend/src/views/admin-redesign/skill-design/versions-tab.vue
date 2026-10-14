@@ -240,6 +240,9 @@ import MkLoading from '@/components/mk/MkLoading.vue'
 const props = defineProps<{ skillId: string; refreshTick: number }>()
 const emit = defineEmits<{ (e: 'core-rolled-back'): void; (e: 'dirty', p: { dirty: boolean; label: string }): void }>()
 
+/* 文案单源（R6 复读单源化）：A/B 变体表单上报宿主脏态的标签，多处 emit 共用一份 */
+const VARIANT_DIRTY_LABEL = '变体权重/建变体表单'
+
 /* ---------- A/B 实验变体（2026-10-01） ---------- */
 interface VariantMetrics { calls: number; successRate: number | null; avgDurationMs: number | null }
 interface VariantRow {
@@ -291,7 +294,7 @@ async function loadVariants() {
     variantNewKey.value = nextAvailableKey.value
     // 数据落地 → 重设脏态基线并复位（#118）
     variantDirtyBase = variantSnapshot()
-    emit('dirty', { dirty: false, label: '变体权重/建变体表单' })
+    emit('dirty', { dirty: false, label: VARIANT_DIRTY_LABEL })
   } catch (e) {
     if (id !== props.skillId) return
     variantMsg.value = `变体加载失败：${errText(e)}`
@@ -315,7 +318,7 @@ function variantSnapshot(): string {
 }
 function reportVariantDirty() {
   if (!variantDirtyBase) return
-  emit('dirty', { dirty: variantSnapshot() !== variantDirtyBase, label: '变体权重/建变体表单' })
+  emit('dirty', { dirty: variantSnapshot() !== variantDirtyBase, label: VARIANT_DIRTY_LABEL })
 }
 
 const variantCorePublishing = ref(false)
@@ -619,7 +622,7 @@ watch(
 // 切换 skill：旧 skill 的编辑基线作废（新数据到达前不算脏；加载失败也不会残留脏态挡住下一次切换）
 watch(() => props.skillId, () => {
   variantDirtyBase = ''
-  emit('dirty', { dirty: false, label: '变体权重/建变体表单' })
+  emit('dirty', { dirty: false, label: VARIANT_DIRTY_LABEL })
 })
 </script>
 

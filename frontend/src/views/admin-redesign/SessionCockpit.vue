@@ -753,9 +753,9 @@
             <div class="cp-aside-state" :class="hasWrapup ? 'cp-aside-state--ok' : 'cp-aside-state--empty'">
               <span class="cp-aside-state__icon" aria-hidden="true">{{ hasWrapup ? '✓' : '◌' }}</span>
               <strong>{{ hasWrapup ? '总结已就绪' : '尚未生成总结' }}</strong>
-              <p v-if="hasWrapup">完整总结（学习目标 / 评估 / 知识掌握）见「学习总结」卡。</p>
-              <p v-else-if="lessonTree.length">全部课程完成后，可在控制台生成终局总结（学习目标、评估、知识掌握）。</p>
-              <p v-else>尚未开始学习，生成路径并启动教学后这里会展示进度。</p>
+              <p v-if="hasWrapup">{{ WRAPUP_READY_NOTE }}</p>
+              <p v-else-if="lessonTree.length">{{ WRAPUP_FINAL_NOTE }}</p>
+              <p v-else>{{ WRAPUP_NOT_STARTED_NOTE }}</p>
             </div>
           </div>
         </section>
@@ -851,7 +851,7 @@
             </details>
             <!-- 裁判旁路诊断 -->
             <details v-if="refereeTrace.length" class="cp-trace-panel">
-              <summary>裁判旁路诊断 · {{ refereeTraceCount }} 条</summary>
+              <summary>{{ REFEREE_TRACE_LABEL }} {{ refereeTraceCount }} 条</summary>
               <ol class="cp-trace-list">
                 <li v-for="(tv, idx) in refereeTraceViews" :key="(tv.item.traceId || '') + idx">
                   <div class="cp-trace-list__head"><span class="cp-trace-list__seq">#{{ idx + 1 }}</span><time>{{ formatTime(tv.item.timestamp) }}</time><code v-if="tv.item.traceId" class="cp-trace-list__id">{{ tv.item.traceId }}</code></div>
@@ -862,7 +862,7 @@
             </details>
             <!-- 角色私有状态 -->
             <details v-if="privateStateTrace.length" class="cp-trace-panel">
-              <summary>角色私有状态 · {{ privateStateTraceCount }} 条</summary>
+              <summary>{{ PRIVATE_STATE_TRACE_LABEL }} {{ privateStateTraceCount }} 条</summary>
               <ol class="cp-trace-list">
                 <li v-for="(item, idx) in privateStateTrace" :key="(item.sequence ?? idx)">
                   <div class="cp-trace-list__head"><span class="cp-trace-list__seq">#{{ item.sequence ?? (idx + 1) }}</span><span class="cp-trace-list__stage" :data-stage="item.stage">{{ item.stage }}</span><code v-if="item.taskId">task={{ item.taskId.slice(0, 8) }}</code><time v-if="item.generatedAt">{{ formatTime(item.generatedAt) }}</time><span v-if="item.emotion" class="cp-trace-list__emotion">{{ item.emotion }}</span><span v-if="item.degraded" class="cp-trace-list__degraded">降级</span><span v-if="item.transition" class="cp-trace-list__transition">{{ item.transition }}</span></div>
@@ -901,7 +901,7 @@
             </p>
             <template v-else>
               <pre class="cp-matview__text">{{ materialView.markdown }}</pre>
-              <p v-if="materialView.truncated" class="cp-matview__trunc">全文超长，仅展示前 20 万字。完整正文仍在服务端存档。</p>
+              <p v-if="materialView.truncated" class="cp-matview__trunc">{{ MATERIAL_TRUNC_NOTE }}</p>
             </template>
           </div>
           <div class="mk-modal__foot">
@@ -957,6 +957,17 @@ import { useCockpitStages, stageFlow, type StageKey } from './cockpitStages'
 import RunStatusPanel from './session-cockpit/RunStatusPanel.vue'
 import PathJourneyPanel from './PathJourneyPanel.vue'
 import { useCockpitAutopilot } from './cockpitAutopilot'
+
+/* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
+const WRAPUP_READY_NOTE = '完整总结（学习目标 / 评估 / 知识掌握）见「学习总结」卡。'
+const WRAPUP_FINAL_NOTE = '全部课程完成后，可在控制台生成终局总结（学习目标、评估、知识掌握）。'
+const WRAPUP_NOT_STARTED_NOTE = '尚未开始学习，生成路径并启动教学后这里会展示进度。'
+const REFEREE_TRACE_LABEL = '裁判旁路诊断 ·'
+const PRIVATE_STATE_TRACE_LABEL = '角色私有状态 ·'
+const MATERIAL_TRUNC_NOTE = '全文超长，仅展示前 20 万字。完整正文仍在服务端存档。'
+const CLASSROOM_EMPTY_TEXT = '该课堂暂未记录可展示消息。'
+const PATH_NOT_READY_TITLE = '路径尚未准备好启动教学'
+const BLACKBOX_CONTROL_BLOCK = '黑盒模式不支持此辅助控制'
 
 const sessionId = computed(() => subPage.value?.id || '')
 const shortId = computed(() => (sessionId.value.length > 20 ? `…${sessionId.value.slice(-16)}` : sessionId.value))
@@ -1375,10 +1386,10 @@ const learnEmptyHint = computed(() => {
   if (isRealMode.value) {
     if (!hasPath.value) return '该真实会话尚未开始学习（无关联教学记录）。'
     if (!bindings.value.teachingSessionId) return '该真实会话尚无课堂记录。'
-    return '该课堂暂未记录可展示消息。'
+    return CLASSROOM_EMPTY_TEXT
   }
   if (teachingDetailFailed.value) return '教学记录获取失败，请重试。'
-  if (teachingSessionHistory.value.length) return '该课堂暂未记录可展示消息。'
+  if (teachingSessionHistory.value.length) return CLASSROOM_EMPTY_TEXT
   if (!hasPath.value) return '尚未启动教学。'
   if (learningBlockedReason.value) return `尚未启动教学：${learningBlockedReason.value}`
   return '尚未启动教学。'
@@ -1580,7 +1591,7 @@ const wrapupAvailable = computed(() =>
 const assistedControlBlockReason = computed(() => {
   if (!session.value) return '会话仍在加载'
   if (busy.value) return '操作执行中'
-  if (isBlackbox.value) return '黑盒模式不支持此辅助控制'
+  if (isBlackbox.value) return BLACKBOX_CONTROL_BLOCK
   if (isFailedTerminal.value) return '会话已失败或终止，请保留现场记录'
   if (isTerminal.value) return '会话已完成'
   return ''
@@ -1666,7 +1677,7 @@ const startLearningDisabled = computed(() =>
 const startLearningTitle = computed(() => {
   if (assistedControlBlockReason.value) return assistedControlBlockReason.value
   if (learningActive.value) return '教学已在进行中'
-  if (!pathStartable.value) return learningBlockedReason.value || '路径尚未准备好启动教学'
+  if (!pathStartable.value) return learningBlockedReason.value || PATH_NOT_READY_TITLE
   return '启动教学：从第一个可运行课程开始（评审不是前置条件，可直接启动）'
 })
 const wrapupDisabled = computed(() => {
@@ -1676,7 +1687,7 @@ const wrapupDisabled = computed(() => {
 const wrapupTitle = computed(() => {
   if (!session.value) return '会话仍在加载'
   if (busy.value) return '操作执行中'
-  if (isBlackbox.value) return '黑盒模式不支持此辅助控制'
+  if (isBlackbox.value) return BLACKBOX_CONTROL_BLOCK
   if (isFailedTerminal.value) return '会话已失败或终止，不能生成学习总结'
   if (hasWrapup.value) return '学习总结已生成'
   if (!wrapupAvailable.value && !wrapupTaskSettled.value && learningActive.value) return '课堂总结在课程完成后才会生成：当前任务尚未结算完成'
@@ -1695,7 +1706,7 @@ const resetPathTitle = computed(() => {
 const resetLearningBlockReason = computed(() => {
   if (!session.value) return '会话仍在加载'
   if (busy.value) return '操作执行中'
-  if (isBlackbox.value) return '黑盒模式不支持此辅助控制'
+  if (isBlackbox.value) return BLACKBOX_CONTROL_BLOCK
   if (isTerminal.value && !isFailedTerminal.value) return '会话已完成，不能重启教学'
   return ''
 })
@@ -1707,7 +1718,7 @@ const resetLearningDisabled = computed(() =>
 )
 const resetLearningTitle = computed(() => {
   if (resetLearningBlockReason.value) return resetLearningBlockReason.value
-  if (!pathStartable.value && !canRestartFromFailedLearn.value) return learningBlockedReason.value || '路径尚未准备好启动教学'
+  if (!pathStartable.value && !canRestartFromFailedLearn.value) return learningBlockedReason.value || PATH_NOT_READY_TITLE
   if (!hasRunnablePathTask.value) return '路径中没有可重启的学习任务'
   return isFailedTerminal.value ? '从当前可运行任务恢复失败的教学' : '以可运行任务重新启动教学（评审为独立旁路）'
 })

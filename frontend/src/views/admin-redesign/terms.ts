@@ -105,10 +105,15 @@ export function routeSourceLabel(source?: string): string | undefined {
   return ROUTE_SOURCE_LABELS[source]
 }
 
+/** 上游异常统一话术：errorCodeLabel（UPSTREAM_NNN）与 humanizeHttpError（网关原文）同语义共用一份（R6 复读单源化） */
+function upstreamHttpText(httpStatus: string): string {
+  return `上游服务异常（HTTP ${httpStatus}）`
+}
+
 /** errorCode → 中文；未知码返回 undefined（调用方回退原样展示） */
 export function errorCodeLabel(code?: string): string | undefined {
   if (!code) return undefined
-  if (code.startsWith('UPSTREAM_')) return `上游服务异常（HTTP ${code.slice('UPSTREAM_'.length)}）`
+  if (code.startsWith('UPSTREAM_')) return upstreamHttpText(code.slice('UPSTREAM_'.length))
   return ERROR_CODE_LABELS[code]
 }
 
@@ -127,7 +132,7 @@ export function humanizeHttpError(message: string, status?: number): string | un
   // axios 默认错误消息（无 response 体时 status 可能缺失）：按文案模式兜底
   if (/^Request failed with status code 429$/.test(String(message || ''))) return '请求过于频繁，请稍后重试'
   const m = /^API request failed with status (\d+)(?::\s|$)/.exec(String(message || ''))
-  if (m) return `上游服务异常（HTTP ${m[1]}）`
+  if (m) return upstreamHttpText(m[1])
   return undefined
 }
 

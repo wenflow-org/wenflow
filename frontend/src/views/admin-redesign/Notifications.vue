@@ -38,10 +38,10 @@
             v-if="embedded"
             type="button"
             class="nt-boundary nt-boundary--link"
-            title="全站横幅公告请到「公告」页管理"
+            :title="BANNER_BOUNDARY_NOTE"
             @click="emit('go-announce')"
           >横幅公告 → 公告页</button>
-          <span v-else class="nt-boundary" title="全站横幅公告请到「公告」页管理">全站横幅公告在「公告」页管理</span>
+          <span v-else class="nt-boundary" :title="BANNER_BOUNDARY_NOTE">{{ BANNER_BOUNDARY_NOTE }}</span>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
         </div>
       </div>
@@ -183,7 +183,7 @@
                 <option value="announcement">公告提醒（站内信）</option>
                 <option value="achievement">成就</option>
               </select>
-              <span class="mk-field__hint">全站横幅公告在「公告」页管理</span>
+              <span class="mk-field__hint">{{ BANNER_BOUNDARY_NOTE }}</span>
             </label>
             <div class="mk-field">
               <span class="mk-field__label">发送范围</span>
@@ -256,6 +256,10 @@ import Pagination from './Pagination.vue'
     go-announce 事件：嵌入态「横幅公告 →」胶囊的跳转（审核 #172，宿主收后 switchTab('announce')） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 const emit = defineEmits<{ (e: 'count', total: number): void; (e: 'go-announce'): void }>()
+
+/* 文案单源（R6 复读单源化）：横幅公告的边界说明原有两个措辞（「请到…管理」/「在…管理」），
+   统一为陈述式一份，边界胶囊 title / 可见文本与发送弹窗 hint 共用。 */
+const BANNER_BOUNDARY_NOTE = '全站横幅公告在「公告」页管理'
 
 interface NotifRow {
   id: string

@@ -90,7 +90,7 @@
             <div v-if="trendLoading" class="chart__loading"><SkeletonLoader variant="lines" :count="3" /></div>
             <div v-else-if="trendError" class="chart__empty">
               <strong>学习状态数据加载失败</strong>
-              <p>网络或服务暂时不可用，稍后再试。</p>
+              <p>{{ NETWORK_UNAVAILABLE_MSG }}</p>
               <button type="button" class="chart__retry" @click="loadTrends">重试</button>
             </div>
             <div v-else-if="!hasAnyLoad" class="chart__empty">
@@ -379,7 +379,7 @@
               <div v-if="reviewLoading" class="chart__loading"><SkeletonLoader variant="lines" :count="3" /></div>
               <div v-else-if="reviewLoadFailed" class="chart__empty" role="alert">
                 <strong>复习台账暂时取不到</strong>
-                <p>网络或服务暂时不可用，稍后再试。</p>
+                <p>{{ NETWORK_UNAVAILABLE_MSG }}</p>
                 <button type="button" class="chart__retry" @click="loadReviews">重试</button>
               </div>
               <div v-else-if="!reviewRows.length" class="chart__empty">
@@ -410,7 +410,7 @@
               <div v-if="!masteryLoaded" class="chart__loading"><SkeletonLoader variant="lines" :count="3" /></div>
               <div v-else-if="!masteryOk" class="chart__empty" role="alert">
                 <strong>掌握分布暂时取不到</strong>
-                <p>网络或服务暂时不可用，稍后再试。</p>
+                <p>{{ NETWORK_UNAVAILABLE_MSG }}</p>
                 <button type="button" class="chart__retry" @click="loadMastery">重试</button>
               </div>
               <div v-else-if="!masteryBuckets.total" class="chart__empty">
@@ -495,6 +495,9 @@ import { computeStreakDays } from './streak';
 import { unwrap, unwrapArray } from './unwrap';
 
 type MetricKey = 'lsb' | 'lss' | 'ktl' | 'lf';
+
+/* 图表/台账加载失败共用文案（此前三处各抄一份，改文案时容易漏改） */
+const NETWORK_UNAVAILABLE_MSG = '网络或服务暂时不可用，稍后再试。';
 
 const current = ref<Record<string, any> | null>(null);
 const warnings = ref<Array<Record<string, any>>>([]);

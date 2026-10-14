@@ -53,7 +53,7 @@
 
       <!-- stopped 与 failed 并行：主动停止不是「连接失败」，用独立文案（useGoalLive.stopped） -->
       <div v-if="live.failed === 'start' && !live.stopped" class="errorbar">
-        连接失败，没能开始对话。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
+        {{ CONNECT_FAIL_MSG }}<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
       </div>
       <div v-else-if="live.stopped === 'start'" class="errorbar">
         已停止生成。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
@@ -90,7 +90,7 @@
             type="button"
             class="composer__attach"
             aria-label="添加资料"
-            title="添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框"
+            :title="ATTACH_HINT"
             @click="uploadRef?.openPicker()"
           >
             <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16.5 6v11.5a4 4 0 0 1-8 0V6a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v10.5a2.5 2.5 0 0 0 5 0V6a4 4 0 0 0-8 0v11.5a5.5 5.5 0 0 0 11 0V6z"/></svg>
@@ -130,7 +130,7 @@
           </button>
         </div>
         <div v-if="!isNarrow" class="composer__hint">
-          <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
+          <span class="composer__hint-shortcut">{{ SEND_SHORTCUT_HINT }}</span>
         </div>
       </div>
     </main>
@@ -194,7 +194,7 @@
         <!-- 会话态内 start 失败：错误条 + 重试（初始态 errorbar 在此视图不渲染）；
              主动停止走「已停止」分支，不误报「连接失败」 -->
         <div v-if="live.failed === 'start' && !live.stopped" class="errorbar chat__errorbar">
-          连接失败，没能开始对话。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
+          {{ CONNECT_FAIL_MSG }}<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
         </div>
         <div v-else-if="live.stopped === 'start'" class="errorbar chat__errorbar">
           已停止生成。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
@@ -333,7 +333,7 @@
               type="button"
               class="composer__attach"
               aria-label="添加资料"
-              title="添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框"
+              :title="ATTACH_HINT"
               @click="uploadRef?.openPicker()"
             >
               <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M16.5 6v11.5a4 4 0 0 1-8 0V6a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v10.5a2.5 2.5 0 0 0 5 0V6a4 4 0 0 0-8 0v11.5a5.5 5.5 0 0 0 11 0V6z"/></svg>
@@ -378,7 +378,7 @@
                并保留「继续上次的规划」恢复入口。 -->
           <div class="composer__hint">
             <span class="composer__hint-right">
-              <span class="composer__hint-shortcut">Enter 发送 · Shift+Enter 换行</span>
+              <span class="composer__hint-shortcut">{{ SEND_SHORTCUT_HINT }}</span>
               <span class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
               <AiContentNote />
             </span>
@@ -411,7 +411,7 @@
             type="button"
             class="proposal__x"
             aria-label="关闭方案确认"
-            title="关闭（Esc 可随时关闭）"
+            :title="CLOSE_ESC_HINT"
             @click="proposalDismissed = true"
           >×</button>
         </div>
@@ -519,7 +519,7 @@
           type="button"
           class="proposal__x proposal__x--corner"
           aria-label="关闭"
-          title="关闭（Esc 可随时关闭）"
+          :title="CLOSE_ESC_HINT"
           @click="proposalDismissed = true"
         >×</button>
         <span class="done-ring">
@@ -588,6 +588,11 @@ const panelOpen = ref(false);
 const panelExpanded = computed(() => !isNarrow.value || panelOpen.value);
 /** 输入上限：后端 GOAL_INPUT_MAX_CHARS 是 4096，前端再收紧只会把「贴一段背景」截断，对齐后端 */
 const INPUT_MAX = 4096;
+/* 双视图（初始态/会话态）各自渲染一份的错误条与输入提示，文案收成单源避免改一处漏一处 */
+const CONNECT_FAIL_MSG = '连接失败，没能开始对话。';
+const ATTACH_HINT = '添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框';
+const SEND_SHORTCUT_HINT = 'Enter 发送 · Shift+Enter 换行';
+const CLOSE_ESC_HINT = '关闭（Esc 可随时关闭）';
 /* 移动端输入框 placeholder 缩短（长文案换行后被裁，占两行以上无法完整显示） */
 const entryPlaceholder = computed(() => isNarrow.value ? '先说说你想解决什么…' : '先说说你最近想解决什么，或现在卡在哪里…');
 const chatPlaceholder = computed(() => isNarrow.value ? '回答问题，或补充基础、时间…' : '回答上面的问题，或补充你的基础、时间和限制…');

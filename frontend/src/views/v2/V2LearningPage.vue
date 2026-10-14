@@ -36,7 +36,7 @@
                 <span class="learn__menu-item-main"><strong>完成并结算任务</strong><small>{{ finishHint }}</small></span>
               </button>
               <button type="button" class="learn__menu-item" @click="endSession">
-                <span class="learn__menu-item-main"><strong>结束学习（不计入完成）</strong><small>生成本次总结，不推进任务进度</small></span>
+                <span class="learn__menu-item-main"><strong>{{ END_WITHOUT_FINISH_LABEL }}</strong><small>生成本次总结，不推进任务进度</small></span>
               </button>
             </div>
             <div class="learn__menu-sep"></div>
@@ -600,6 +600,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useIsDark } from '@/composables/useIsDark';
 
 const isDark = useIsDark();
+
+/* 菜单项与确认弹窗标题共用同一句，收成单源避免改一处漏一处 */
+const END_WITHOUT_FINISH_LABEL = '结束学习（不计入完成）';
+
 import { useRoute, useRouter } from 'vue-router';
 import request, { API_BASE_URL } from '@/utils/api';
 import { aiTeachingAPI } from '@/api/aiTeaching';
@@ -1619,7 +1623,7 @@ async function completeAndSettle() {
 async function endSession() {
   if (actionBusy.value) return;
   const ok = await askConfirm({
-    title: '结束学习（不计入完成）',
+    title: END_WITHOUT_FINISH_LABEL,
     message: '结束本次学习？将生成本次学习总结，但当前任务不会计入完成进度（里程碑/路径进度不动）。',
     confirmText: '结束学习',
     danger: false,

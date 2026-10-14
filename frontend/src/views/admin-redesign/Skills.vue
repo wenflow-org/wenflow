@@ -288,9 +288,9 @@
                   :class="completionBadgeOf(s.id)!.cls"
                   :title="completionBadgeOf(s.id)!.title"
                 >{{ completionBadgeOf(s.id)!.text }}</span>
-                <span v-else-if="recLoading" class="mk-na" title="上线状态加载中，暂不可用">…</span>
+                <span v-else-if="recLoading" class="mk-na" :title="REC_LOADING_TITLE">…</span>
                 <span v-else-if="recError" class="mk-na sk-rec-fail" :title="`上线状态加载失败：${recError}`">状态未知</span>
-                <span v-else class="mk-na" title="该 Skill 未纳入上线评估（多为外挂能力）">—</span>
+                <span v-else class="mk-na" :title="REC_NOT_IN_SCOPE_TITLE">—</span>
               </td>
               <td v-if="showCol('cat')"><span class="mk-badge mk-badge--muted" :title="s.category">{{ categoryText(s.category) }}</span></td>
               <td v-if="showCol('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
@@ -312,7 +312,7 @@
 
       <MkEmptyState
         v-if="skillsError && !cards.length"
-        title="Skill 数据加载失败"
+        :title="SKILLS_LOAD_FAIL_TITLE"
         :description="skillsError"
         action-text="重试"
         @action="retrySkills"
@@ -366,11 +366,11 @@
               <td><span class="mono sk-routing__sub" :title="fallbackTitleOf(s.id)">{{ fallbackOf(s.id) }}</span></td>
               <td>
                 <span v-if="completionBadgeOf(s.id)" class="mk-badge" :class="completionBadgeOf(s.id)!.cls" :title="completionBadgeOf(s.id)!.title">{{ completionBadgeOf(s.id)!.text }}</span>
-                <span v-else-if="recLoading" class="mk-na" title="上线状态加载中，暂不可用">…</span>
+                <span v-else-if="recLoading" class="mk-na" :title="REC_LOADING_TITLE">…</span>
                 <!-- 三态对齐 run 表（Skills.vue:238）：对账加载失败 ≠「对账报告中无此 Skill」，
                      此前失败与无数据同显「—」，把故障说成正常无数据 -->
                 <span v-else-if="recError" class="mk-na sk-rec-fail" :title="`上线状态加载失败：${recError}`">状态未知</span>
-                <span v-else class="mk-na" title="该 Skill 未纳入上线评估（多为外挂能力）">—</span>
+                <span v-else class="mk-na" :title="REC_NOT_IN_SCOPE_TITLE">—</span>
               </td>
             </tr>
           </tbody>
@@ -379,7 +379,7 @@
         <MkEmptyState
           v-if="skillsError && !cards.length"
           tone="error"
-          title="Skill 数据加载失败"
+          :title="SKILLS_LOAD_FAIL_TITLE"
           :description="skillsError"
           action-text="重试"
           @action="retrySkills"
@@ -432,6 +432,11 @@ import { adminSkillsApi, adminApiConfigApi, type SkillCompletion, type SkillReco
    唯一 tab 控件 = 本行页签（健康中心内不再嵌套 pills，R1）。 */
 const SKILLS_TABS = ['run', 'model-routing', 'prompt-eval'] as const
 type SkillsTab = (typeof SKILLS_TABS)[number]
+
+/* 对账三态与空态文案单源：表格视图与原型卡视图各渲染一份（R6 复读单源化） */
+const REC_LOADING_TITLE = '上线状态加载中，暂不可用'
+const REC_NOT_IN_SCOPE_TITLE = '该 Skill 未纳入上线评估（多为外挂能力）'
+const SKILLS_LOAD_FAIL_TITLE = 'Skill 数据加载失败'
 const tab = ref<SkillsTab>('run')
 const route = useRoute()
 const router = useRouter()

@@ -133,6 +133,9 @@ const route = useRoute()
 const loading = ref(false)
 const showPwd = ref(false)
 
+/* 凭证错误兜底文案单源（R6 复读单源化）：服务端无 message 与请求异常两条路径共用一份 */
+const LOGIN_FAILED_MSG = '登录失败，请检查账号密码'
+
 const loginForm = reactive({
   name: '',
   password: '',
@@ -216,7 +219,7 @@ const handleLogin = async () => {
       toast.success('登录成功')
       await router.replace(safeRedirect())
     } else {
-      const msg = response.data.message || '登录失败，请检查账号密码'
+      const msg = response.data.message || LOGIN_FAILED_MSG
       // 服务端失败统一进顶部横幅：凭证错误不属于「用户名格式」字段级问题，不挂到 errors.name。
       // 审核 #25③：横幅 role=alert 已播报一次，同文 toast 是第二次重复播报——只留横幅（常驻可读）。
       loginError.value = msg
@@ -225,7 +228,7 @@ const handleLogin = async () => {
     const status = error?.response?.status
     const msg = status === 429 ? '登录尝试过于频繁，请稍后再试'
       : !status || status >= 500 ? '服务暂时不可用，请稍后重试'
-      : error.response?.data?.error?.message || '登录失败，请检查账号密码'
+      : error.response?.data?.error?.message || LOGIN_FAILED_MSG
     loginError.value = msg
   } finally {
     loading.value = false

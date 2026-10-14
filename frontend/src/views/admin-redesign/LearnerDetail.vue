@@ -147,7 +147,7 @@
           </details>
           <p v-else class="ld-none">
             {{ '暂无概念掌握数据' }}
-            <span class="ld-none__hint">重算快照后自动生成。</span>
+            <span class="ld-none__hint">{{ CONCEPT_NONE_HINT }}</span>
           </p>
         </section>
 
@@ -294,7 +294,7 @@
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">认知与偏好</h3>
-            <span v-if="!evidence.length" class="mk-card__meta" title="该账号尚无学习证据，以下为初始先验值，随证据累积更新，不是实测结论">初始先验 · 暂无学习证据</span>
+            <span v-if="!evidence.length" class="mk-card__meta" :title="PRIOR_EMPTY_TITLE">{{ PRIOR_EMPTY_LABEL }}</span>
           </div>
           <div class="ld-pf-sub">
             <div>
@@ -320,7 +320,7 @@
         <section v-if="behaviorRows.length || historyRows.length" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">行为基线与互动</h3>
-            <span v-if="!evidence.length" class="mk-card__meta" title="该账号尚无学习证据，以下为初始先验值，随证据累积更新，不是实测结论">初始先验 · 暂无学习证据</span>
+            <span v-if="!evidence.length" class="mk-card__meta" :title="PRIOR_EMPTY_TITLE">{{ PRIOR_EMPTY_LABEL }}</span>
             <span class="mk-card__meta" :title="allPathsScope.title">{{ allPathsScope.label }}</span>
           </div>
           <div class="ld-pf-sub">
@@ -465,7 +465,7 @@
                  ——渲染条数=响应条数，口径写「教学域仅近 20 条」防「共 N 条」误读（2026-10-11 走查修正：
                  域合并后「仅最近 20 条」已失实） -->
             <!-- 卡头 meta 只留图形编码图例——条数/低置信计数归结论行（2026-10-11 用户走查：两处复读） -->
-            <span class="mk-card__meta">点色表示信号，条长表示置信</span>
+            <span class="mk-card__meta">{{ EVIDENCE_LEGEND }}</span>
           </div>
           <!-- T2 硬约束 2「结论与细节分层」：结论行常驻可见，明细折叠。
                结论文字完全取自本卡已有数据（条数 + 卡片里本来就标的「证据不足」），未新增判断。
@@ -525,7 +525,7 @@
           </div>
           <p v-else class="ld-none">
             {{ '暂无证据记录' }}
-            <span class="ld-none__hint">学习事件累积后自动生成。</span>
+            <span class="ld-none__hint">{{ EVIDENCE_NONE_HINT }}</span>
           </p>
         </section>
 
@@ -567,14 +567,14 @@
                 <span class="is-lsb-t">LSB {{ loadFmt(loadDisplayDay.lsb) }}</span>
               </div>
               <div class="ld-load__zones">
-                <span><i class="ld-load__dot is-lss"></i>LSS 学习压力（0-100，越高越累）</span>
-                <span><i class="ld-load__dot is-lf"></i>LF 疲劳度（0-100，≥60 警戒）</span>
-                <span><i class="ld-load__dot is-lsb"></i>LSB 状态平衡（KTL-LF，负值表示状态差）</span>
+                <span><i class="ld-load__dot is-lss"></i>{{ LOAD_ZONE_LSS }}</span>
+                <span><i class="ld-load__dot is-lf"></i>{{ LOAD_ZONE_LF }}</span>
+                <span><i class="ld-load__dot is-lsb"></i>{{ LOAD_ZONE_LSB }}</span>
               </div>
             </div>
             <div v-else class="ld-none">
               {{ '暂无压力记录' }}
-              <span class="ld-none__hint">学习者完成会话/任务后，系统会记录每次的压力评估。</span>
+              <span class="ld-none__hint">{{ LOAD_NONE_HINT }}</span>
             </div>
           </section>
 
@@ -592,7 +592,7 @@
           <section v-if="conceptStats.length" class="mk-card">
             <div class="mk-card__head">
               <h3 class="mk-card__title">概念证据密度</h3>
-              <span class="mk-card__meta">条长表示证据条数 · 颜色表示迁移风险（红 高 / 琥珀 中 / 绿 低）</span>
+              <span class="mk-card__meta">{{ DENSITY_LEGEND }}</span>
             </div>
             <div class="ld-bars ld-bars--dense">
               <div v-for="c in conceptStats" :key="c.label" class="ld-bar" :class="{ 'ld-bar--empty': c.count === 0 }">
@@ -615,7 +615,7 @@
             <div class="mk-card__head">
               <h3 class="mk-card__title">预测校准</h3>
               <!-- 结论常驻：卡头给结论（就地派生），原「非自报置信度」说明降级到 title -->
-              <span class="mk-card__meta" title="预测器实证命中率（非自报置信度）">{{ calibConclusion }}</span>
+              <span class="mk-card__meta" :title="CALIB_META_TITLE">{{ calibConclusion }}</span>
             </div>
             <div class="ld-cal">
               <div class="ld-cal__hits">
@@ -666,7 +666,7 @@
         <div class="mk-card__head">
           <h3 class="mk-card__title">知识图谱</h3>
           <span v-if="graphMeta" class="mk-card__meta" :title="scopeNote.title">
-            <template v-if="graphMeta.truncated">仅显示部分概念，共 {{ graphMeta.totalConcepts }} 个 · </template>
+            <template v-if="graphMeta.truncated">{{ GRAPH_TRUNCATED_NOTE }} {{ graphMeta.totalConcepts }} 个 · </template>
             {{ scopeNote.label }}
           </span>
         </div>
@@ -797,7 +797,7 @@
     <div v-else-if="tab === 'memory'" class="ld-tabpage" id="ld-panel-memory" role="tabpanel" aria-labelledby="ld-tab-memory">
       <section v-if="memoryPaneRows.length" class="mk-card">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">记忆与复习（FSRS）</h3>
+          <h3 class="mk-card__title">{{ MEMORY_PANE_TITLE }}</h3>
           <span class="mk-card__meta" :title="memMetaTitle">{{ memMetaText }}</span>
         </div>
         <!-- 视角（按复习状态分档）：把「待复习」这一档单独拎出来看，是这张表唯一的可动作子集。
@@ -903,6 +903,24 @@ import { useIsDark } from '@/composables/useIsDark'
 import { MK_CHART_PALETTES } from '@/components/mk/chartPalette'
 
 const isDark = useIsDark()
+
+/* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
+const CONCEPT_NONE_HINT = '重算快照后自动生成。'
+const PRIOR_EMPTY_LABEL = '初始先验 · 暂无学习证据'
+const PRIOR_EMPTY_TITLE = '该账号尚无学习证据，以下为初始先验值，随证据累积更新，不是实测结论'
+const EVIDENCE_LEGEND = '点色表示信号，条长表示置信'
+const EVIDENCE_NONE_HINT = '学习事件累积后自动生成。'
+const LOAD_ZONE_LSS = 'LSS 学习压力（0-100，越高越累）'
+const LOAD_ZONE_LF = 'LF 疲劳度（0-100，≥60 警戒）'
+const LOAD_ZONE_LSB = 'LSB 状态平衡（KTL-LF，负值表示状态差）'
+const LOAD_NONE_HINT = '学习者完成会话/任务后，系统会记录每次的压力评估。'
+const DENSITY_LEGEND = '条长表示证据条数 · 颜色表示迁移风险（红 高 / 琥珀 中 / 绿 低）'
+const CALIB_META_TITLE = '预测器实证命中率（非自报置信度）'
+const GRAPH_TRUNCATED_NOTE = '仅显示部分概念，共'
+const MEMORY_PANE_TITLE = '记忆与复习（FSRS）'
+/** 路径 stage 兜底文案（快照 / 列表两处同源） */
+const milestoneStageText = (p: { completedMilestones?: unknown; totalMilestones?: unknown }) =>
+  String(p.totalMilestones ? `已完成 ${p.completedMilestones ?? 0}/${p.totalMilestones} 个里程碑` : '')
 
 interface Detail {
   name: string
@@ -1493,7 +1511,7 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
     pathInfo.value = {
       id: currentPathId.value,
       title: String((currentPath.pathTitle as string) || model.pathTitle || ''),
-      stage: base?.currentMilestone || String(progress.totalMilestones ? `已完成 ${progress.completedMilestones ?? 0}/${progress.totalMilestones} 个里程碑` : ''),
+      stage: base?.currentMilestone || milestoneStageText(progress),
       task: base?.currentTask || '',
       done: Number(progress.completedMilestones || 0),
       total: Number(progress.totalMilestones || 0),
@@ -1544,7 +1562,7 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
       trend: base?.trend || 'flat',
       fatigue: base?.fatigue || '低',
       path: String((currentPath.pathTitle as string) || model.pathTitle || '尚未开始学习'),
-      stage: base?.currentMilestone || String(progress.totalMilestones ? `已完成 ${progress.completedMilestones ?? 0}/${progress.totalMilestones} 个里程碑` : ''),
+      stage: base?.currentMilestone || milestoneStageText(progress),
       task: base?.currentTask || '未开始',
       pct,
       taskDone: completedTasks,
@@ -2279,7 +2297,7 @@ const loadZoneCls = (z: 'fresh' | 'optimal' | 'risk') => (z === 'fresh' ? '--fre
 /** 预测校准结论（卡头结论常驻，就地派生；无样本时保持说明文案） */
 const calibConclusion = computed(() => {
   const s = predictionCalib.value?.stats
-  if (!s || !(s.total > 0)) return '预测器实证命中率（非自报置信度）'
+  if (!s || !(s.total > 0)) return CALIB_META_TITLE
   const pct = (r: number | null | undefined) => (r != null ? `${Math.round(r * 100)}%` : '—')
   return `卡壳 ${pct(s.stallHitRate)} · 基调 ${pct(s.toneHitRate)} · n=${s.total}`
 })

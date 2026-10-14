@@ -73,7 +73,7 @@
         <label class="sdp-field">
           <span>思考模式</span>
           <select v-model="rtForm.thinkingMode" class="mk-input" :disabled="!rtForm.enabled">
-            <option value="default">跟随继承值 / 模型默认</option>
+            <option value="default">{{ INHERIT_DEFAULT_LABEL }}</option>
             <option value="enabled">开启</option>
             <option value="disabled">关闭</option>
           </select>
@@ -81,7 +81,7 @@
         <label class="sdp-field">
           <span>思考强度</span>
           <select v-model="rtForm.reasoningEffort" class="mk-input" :disabled="!rtForm.enabled || rtForm.thinkingMode === 'disabled'">
-            <option value="default">跟随继承值 / 模型默认</option>
+            <option value="default">{{ INHERIT_DEFAULT_LABEL }}</option>
             <option value="low">low</option>
             <option value="high">high</option>
             <option value="max">max</option>
@@ -102,7 +102,7 @@
         <label class="sdp-field">
           <span>temperature</span>
           <select v-model="paramT.mode" class="mk-input" :disabled="!rtForm.enabled">
-            <option value="inherit">继承当前 Prompt</option>
+            <option value="inherit">{{ INHERIT_PROMPT_LABEL }}</option>
             <option value="override">覆盖</option>
           </select>
         </label>
@@ -124,7 +124,7 @@
         <label class="sdp-field">
           <span>maxTokens（输出预算）</span>
           <select v-model="paramMax.mode" class="mk-input" :disabled="!rtForm.enabled">
-            <option value="inherit">继承当前 Prompt</option>
+            <option value="inherit">{{ INHERIT_PROMPT_LABEL }}</option>
             <option value="override">覆盖</option>
           </select>
         </label>
@@ -245,6 +245,10 @@ import { useModelCatalog } from '@/composables/useModelCatalog'
 // 加载失败静默降级为空目录（输入框退化为自由文本，不影响配置）
 const { options: catalogOptions, load: loadModelCatalog } = useModelCatalog()
 loadModelCatalog()
+
+/* 文案单源（R6 复读单源化）：思考模式/思考强度下拉的继承项、参数覆盖三个下拉的继承项 */
+const INHERIT_DEFAULT_LABEL = '跟随继承值 / 模型默认'
+const INHERIT_PROMPT_LABEL = '继承当前 Prompt'
 
 const props = defineProps<{ skillId: string; refreshTick: number }>()
 /* #118：运行时配置的未保存改动上报宿主（此前只有协议编辑器有脏态，切 Skill/离开页面会静默丢弃） */

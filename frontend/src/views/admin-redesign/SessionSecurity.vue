@@ -19,13 +19,13 @@
     <div v-if="deepLinkUser" class="mk-alert mk-alert--info ss-deeplink">
       <strong>来自审计日志 · 查看「{{ deepLinkUser }}」的登录会话</strong>
       <span>仅列登录成功产生的会话（可强制下线），登录事件完整历史（含失败尝试）见</span>
-      <button type="button" class="mk-link" @click="goAuditLogs">审计日志 · 登录审计 →</button>
+      <button type="button" class="mk-link" @click="goAuditLogs">{{ AUDIT_LINK_LABEL }}</button>
       <button type="button" class="mk-link ss-deeplink__clear" @click="clearDeepLink">× 清除筛选</button>
     </div>
     <!-- 常驻分工说明（无深链时） -->
     <div v-else class="ss-note">
       <span>展示登录成功产生的会话（可管理/强制下线），登录事件的完整历史（含失败尝试）见</span>
-      <button type="button" class="mk-link" @click="goAuditLogs">审计日志 · 登录审计 →</button>
+      <button type="button" class="mk-link" @click="goAuditLogs">{{ AUDIT_LINK_LABEL }}</button>
     </div>
 
     <!-- 加载失败错误态：仅「整页无数据可显示」时走整页错误（审核 #179：原判据只有 loadError，
@@ -158,7 +158,7 @@
                 <td><span class="mk-badge" :class="statusClass(s)">{{ statusTextOf(s) }}</span></td>
                 <td class="mk-th--right">
                   <div class="mk-actions">
-                    <span v-if="s.id === currentId" class="ss-current" title="当前登录标签页的会话，不可下线">当前</span>
+                    <span v-if="s.id === currentId" class="ss-current" :title="CURRENT_TAB_HINT">当前</span>
                     <button
                       v-else-if="statusOf(s) === 'active'"
                       type="button"
@@ -223,7 +223,7 @@
                   <td><span class="mk-badge" :class="statusClass(s)">{{ statusTextOf(s) }}</span></td>
                   <td class="mk-th--right">
                     <div class="mk-actions">
-                      <span v-if="s.id === currentId" class="ss-current" title="当前登录标签页的会话，不可下线">当前</span>
+                      <span v-if="s.id === currentId" class="ss-current" :title="CURRENT_TAB_HINT">当前</span>
                       <button
                         v-else-if="statusOf(s) === 'active'"
                         type="button"
@@ -287,6 +287,10 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
     count 事件：会话总数上报（宿主「会话 N」徽章） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 const emit = defineEmits<{ (e: 'count', total: number): void }>()
+
+/* 文案单源（R6 复读单源化）：审计深链横幅与常驻分工说明的同一跳转钮、表格/卡片两种视图的同一「当前」标 */
+const AUDIT_LINK_LABEL = '审计日志 · 登录审计 →'
+const CURRENT_TAB_HINT = '当前登录标签页的会话，不可下线'
 
 /** admin_sessions 行（与后端 Prisma 模型一致 + adminName/adminEmail 联查字段） */
 interface AdminSessionRow {

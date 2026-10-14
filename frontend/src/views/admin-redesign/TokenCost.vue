@@ -189,7 +189,7 @@
            Token 三列把横向空间填成数据（用户的「要么补列填满、要么别让列间空 500px」）。 -->
       <section class="mk-card tc-card tc-card--skill">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">按 Skill 成本明细</h3>
+          <h3 class="mk-card__title">{{ SKILL_COST_TITLE }}</h3>
           <div class="mk-card__head-right">
             <span class="mk-card__meta">{{ bySkill.length }} 个<template v-if="skillAllUnpriced"> · 均未配置单价（成本列以 — 表示）</template><template v-else-if="skillUnpriced > 0"> · {{ skillUnpriced }} 个未配置单价（成本列以 — 表示）</template><template v-else-if="!skillAll && bySkill.length > skillLimit"> · 显示前 {{ skillLimit }}</template></span>
             <button
@@ -202,7 +202,7 @@
             </button>
           </div>
         </div>
-        <div v-if="skillRows.length" class="tc-skilltable" role="table" aria-label="按 Skill 成本明细">
+        <div v-if="skillRows.length" class="tc-skilltable" role="table" :aria-label="SKILL_COST_TITLE">
           <div class="tc-skilltable__head" role="row">
             <span role="columnheader">Skill</span>
             <span role="columnheader">调用</span>
@@ -300,6 +300,9 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { toast } from '@/utils/toast'
+
+/* 文案单源（R6 复读单源化）：卡标题与成本表的 aria-label 共用一份 */
+const SKILL_COST_TITLE = '按 Skill 成本明细'
 
 interface Summary {
   days: number

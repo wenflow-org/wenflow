@@ -60,7 +60,7 @@
                   v-model="apiConfig.apiKey"
                   :type="showKey ? 'text' : 'password'"
                   class="uc-field__input"
-                  :placeholder="hasSavedApiKey ? '已保存，留空继续使用' : '例如 sk-xxxxxxxx'"
+                  :placeholder="hasSavedApiKey ? SAVED_KEY_HINT : '例如 sk-xxxxxxxx'"
                   :disabled="busy"
                 />
                 <button type="button" class="uc-field__eye" @click="showKey = !showKey" :aria-label="showKey ? '隐藏密钥' : '显示密钥'">
@@ -267,7 +267,7 @@
               v-model="mcpForm.apiKey"
               type="password"
               class="uc-field__input"
-              :placeholder="mcpFormHadKey ? '已保存，留空继续使用' : '如 sk-…'"
+              :placeholder="mcpFormHadKey ? SAVED_KEY_HINT : '如 sk-…'"
             />
           </label>
           <p v-if="mcpForm.transport === 'mcp'" class="mcp-hint">
@@ -306,6 +306,11 @@ import {
   type UserMcpToolConfig
 } from '@/api/userCustom';
 import '@/components/user/uc.css';
+
+/* API Key 表单与 MCP 表单、两套校验路径共用同一句提示，收成单源避免改一处漏一处 */
+const SAVED_KEY_HINT = '已保存，留空继续使用';
+const ENDPOINT_FORMAT_MSG = '模型端点格式不正确，请输入以 http:// 或 https:// 开头的 URL';
+const API_KEY_REQUIRED_MSG = '请先填写 API Key';
 
 const saving = ref(false);
 const testing = ref(false);
@@ -368,12 +373,12 @@ const testConnection = async () => {
   }
 
   if (!isValidEndpoint(apiConfig.endpoint)) {
-    toast.warning('模型端点格式不正确，请输入以 http:// 或 https:// 开头的 URL');
+    toast.warning(ENDPOINT_FORMAT_MSG);
     return;
   }
 
   if (!apiConfig.apiKey && !hasSavedApiKey.value) {
-    toast.warning('请先填写 API Key');
+    toast.warning(API_KEY_REQUIRED_MSG);
     return;
   }
 
@@ -403,7 +408,7 @@ const loadModels = async () => {
     return;
   }
   if (!apiConfig.apiKey && !hasSavedApiKey.value) {
-    toast.warning('请先填写 API Key');
+    toast.warning(API_KEY_REQUIRED_MSG);
     return;
   }
 
@@ -434,7 +439,7 @@ const saveApiConfig = async (): Promise<boolean> => {
   }
 
   if (!isValidEndpoint(apiConfig.endpoint)) {
-    toast.warning('模型端点格式不正确，请输入以 http:// 或 https:// 开头的 URL');
+    toast.warning(ENDPOINT_FORMAT_MSG);
     return false;
   }
 

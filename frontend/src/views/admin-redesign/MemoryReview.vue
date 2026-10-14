@@ -232,7 +232,7 @@
                       type="button"
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
-                      title="驳回后不再提示，不影响学习记录"
+                      :title="REJECT_BTN_HINT"
                       @click="rejectOne({ canonicals: [proposal.canonical] }, `归并建议「${proposal.canonical}」`)"
                     >驳回</button>
                   </div>
@@ -288,7 +288,7 @@
                       type="button"
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
-                      title="驳回后不再提示，不影响学习记录"
+                      :title="REJECT_BTN_HINT"
                       @click="rejectOne({ ambiguous: [{ a: item.a, b: item.b }] }, `人工确认对「${item.a} ← ${item.b}」`)"
                     >驳回</button>
                   </div>
@@ -339,7 +339,7 @@
                       type="button"
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
-                      title="驳回后不再提示，不影响学习记录"
+                      :title="REJECT_BTN_HINT"
                       @click="rejectOne({ drops: [drop.conceptKey] }, `散键清理「${drop.conceptKey}」`)"
                     >驳回</button>
                   </div>
@@ -505,6 +505,9 @@ import { toast } from '@/utils/toast'
 import { errMsg, shortId, timeAgo } from './live'
 
 const props = defineProps<{ userId: string }>()
+
+/* 文案单源（R6 复读单源化）：三处「驳回」动作钮的悬停释共用一份 */
+const REJECT_BTN_HINT = '驳回后不再提示，不影响学习记录'
 
 interface AppliedMergeView {
   mergeId: string | null

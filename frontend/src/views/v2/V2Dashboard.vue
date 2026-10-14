@@ -285,7 +285,9 @@
                 <span class="day__min">{{ d.minutes ? d.minutes + '分' : '—' }}</span>
               </button>
             </div>
-            <div v-else class="week__empty">完成第一次学习后，这里会按天记录学习时长。</div>
+            <!-- 空态给出口（R6D）：照抄今日行动卡的开始学习入口逻辑（todayTask 有则 goLearn，
+                 没有则去路径页），文字链复用 .link-muted（同「数据源失败 + 重试」的行内先例） -->
+            <div v-else class="week__empty">完成第一次学习后，这里会按天记录学习时长。 <button v-if="todayTask" type="button" class="link-muted" @click="goLearn">开始学习</button><router-link v-else to="/learning-paths" class="link-muted">查看全部路径</router-link></div>
             <div v-if="hasAnyMinutes" class="week__stats">
               <span>本周 <b>{{ weekTotal }}</b> 分钟</span>
               <span><b>{{ weekActiveDays }}</b> 天有学习</span>
@@ -343,7 +345,7 @@
 
             <div class="sheet__block">
               <h4>学习记录</h4>
-              <div v-if="daySheet.count === 0" class="sheet__empty">这一天没有学习记录。可以休息，也可以补一次短时学习。</div>
+              <div v-if="daySheet.count === 0" class="sheet__empty">{{ EMPTY_DAY_MSG }}</div>
 
               <article v-for="s in daySheet.sessions" :key="s.id" class="scard">
                 <div class="scard__head">
@@ -417,6 +419,9 @@ import { computeStreakDays } from './streak';
 import { useCurrentTask } from '@/composables/useCurrentTask';
 import { useSafePolling } from '@/composables/useSafePolling';
 import { unwrapArray } from './unwrap';
+
+/* 日弹层空态与当天观察文案引擎共用同一句，收成单源避免改一处漏一处 */
+const EMPTY_DAY_MSG = '这一天没有学习记录。可以休息，也可以补一次短时学习。';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -1168,7 +1173,7 @@ const daySheet = computed(() => {
   const taskFragment = daySessions.length && primaryTask !== '未关联具体任务' ? `主要围绕“${primaryTask}”展开。` : '';
   let analysis = '';
   if (!daySessions.length) {
-    analysis = '这一天没有学习记录。可以休息，也可以补一次短时学习。';
+    analysis = EMPTY_DAY_MSG;
   } else if (minutes >= 120) {
     if (stateSummary === '有卡点需要巩固') analysis = `今天学习时长较长，累计 ${fmtDuration(minutes)}，过程中出现了卡点。建议之后安排一次针对性复习，把卡住的概念巩固下来。${taskFragment}`;
     else if (stateSummary === '专注度较好') analysis = `今天学习时长较长，累计 ${fmtDuration(minutes)}，但整体专注度不错。后续注意恢复，就能把这个节奏维持住。${taskFragment}`;

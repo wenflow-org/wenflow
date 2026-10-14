@@ -51,7 +51,7 @@
             class="mk-filter__input vl-rpm__input"
             aria-label="虚拟学习者专属出站 RPM 上限"
             :disabled="loadFailed"
-            :title="loadFailed ? '设置未加载：为避免用错底数覆盖服务端配置，已禁用编辑' : undefined"
+            :title="loadFailed ? LOAD_FAILED_EDIT_TITLE : undefined"
             @input="rpmDirty = true"
             @keydown.enter.prevent="saveRpm"
           />
@@ -62,7 +62,7 @@
         {{ saving === 'rpm' ? '保存中…' : '保存' }}
       </button>
       <span v-if="rpmDirty" class="vl-rpm__dirty">未保存</span>
-      <span v-if="loadFailed" class="vl-rpm__failed" role="alert">设置未加载，保存已禁用（请刷新重试）</span>
+      <span v-if="loadFailed" class="vl-rpm__failed" role="alert">{{ LOAD_FAILED_SAVE_NOTE }}</span>
       <span v-else class="vl-rpm__hint">虚拟学习者专属 · 0 为不限 · 不占真实用户额度</span>
     </div>
 
@@ -82,7 +82,7 @@
             class="mk-filter__input vl-rpm__input"
             aria-label="自动驾驶最高并发上限"
             :disabled="loadFailed"
-            :title="loadFailed ? '设置未加载：为避免用错底数覆盖服务端配置，已禁用编辑' : undefined"
+            :title="loadFailed ? LOAD_FAILED_EDIT_TITLE : undefined"
             @input="concurrencyDirty = true"
             @keydown.enter.prevent="saveConcurrency"
           />
@@ -93,7 +93,7 @@
         {{ saving === 'limit' ? '保存中…' : '保存' }}
       </button>
       <span v-if="concurrencyDirty" class="vl-rpm__dirty">未保存</span>
-      <span v-if="loadFailed" class="vl-rpm__failed" role="alert">设置未加载，保存已禁用（请刷新重试）</span>
+      <span v-if="loadFailed" class="vl-rpm__failed" role="alert">{{ LOAD_FAILED_SAVE_NOTE }}</span>
       <span v-else class="vl-rpm__hint">同时在跑会话数上限 · 1–200 · 超出按序排队，运营仍可任意提交启动</span>
     </div>
 
@@ -109,6 +109,10 @@ import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import { errMsg } from './live'
 import SimulatedDaySettings from './SimulatedDaySettings.vue'
+
+/* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板就地引用 ---------- */
+const LOAD_FAILED_EDIT_TITLE = '设置未加载：为避免用错底数覆盖服务端配置，已禁用编辑'
+const LOAD_FAILED_SAVE_NOTE = '设置未加载，保存已禁用（请刷新重试）'
 
 /** 压测参数三视图（速率上限 / 最高并发 / 日期模拟）；默认速率上限（日常位） */
 const settingsTab = ref<'rate' | 'concurrency' | 'date'>('rate')

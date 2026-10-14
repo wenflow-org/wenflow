@@ -549,14 +549,14 @@
       <!-- 单 IP 每日注册配额（live；默认关，避免误伤同一内网/出口的正常注册） -->
       <section v-if="isLive && registerIpQuotaEnabled !== null" class="mk-card">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">单 IP 每日注册配额</h3>
+          <h3 class="mk-card__title">{{ IP_QUOTA_TITLE }}</h3>
         </div>
         <div class="ac-body ac-policy__item">
           <div class="ac-quota-row">
             <MkSwitch
               :model-value="registerIpQuotaEnabled"
               :busy="quotaBusy"
-              aria-label="单 IP 每日注册配额"
+              :aria-label="IP_QUOTA_TITLE"
               :state-text="quotaEnabledText"
               @update:model-value="setQuotaEnabled"
             />
@@ -643,6 +643,9 @@ import { toast } from '@/utils/toast'
    外挂能力嵌入 Addons（embedded，域计数上报宿主） */
 const AC_TABS = ['access', 'routing', 'security', 'addons'] as const
 type AcTab = (typeof AC_TABS)[number]
+
+/* 文案单源（R6 复读单源化）：卡标题与开关的 aria-label 共用一份 */
+const IP_QUOTA_TITLE = '单 IP 每日注册配额'
 /** 旧页签键别名归一：站内「配置 →」与量测脚本曾用 ?tab=model / ?tab=registry / ?tab=model-routing；
     这些键不在白名单，watcher 原会静默把用户送到「接入与验证」，深链/书签永远落不到目标页签。
     2026-10-14 合并页签后追加：connection/overview→access、runtime→routing（旧书签继续可用）；

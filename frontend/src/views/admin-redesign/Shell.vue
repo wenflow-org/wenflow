@@ -80,8 +80,8 @@
         <button
           type="button"
           class="mshell__collapse"
-          :title="forcedCollapse ? '窄屏下侧栏保持图标轨' : collapsed ? '展开导航' : '收起导航'"
-          :aria-label="forcedCollapse ? '窄屏下侧栏保持图标轨' : collapsed ? '展开导航' : '收起导航'"
+          :title="forcedCollapse ? COLLAPSE_LOCK_HINT : collapsed ? '展开导航' : '收起导航'"
+          :aria-label="forcedCollapse ? COLLAPSE_LOCK_HINT : collapsed ? '展开导航' : '收起导航'"
           :aria-expanded="collapsed || forcedCollapse ? 'false' : 'true'"
           :disabled="forcedCollapse"
           @click="toggleCollapse"
@@ -204,8 +204,8 @@
         <button
           type="button"
           class="mshell__top-btn"
-          title="运营术语表 / 这是什么"
-          aria-label="运营术语表 / 这是什么"
+          :title="GLOSSARY_BTN_LABEL"
+          :aria-label="GLOSSARY_BTN_LABEL"
           @click="$emit('glossary')"
         >
           <CircleHelp :size="16" :stroke-width="1.75" aria-hidden="true" />
@@ -292,6 +292,10 @@ import { readTheme, writeTheme, applyDocumentTheme } from '@/utils/theme'
 
 const props = defineProps<{ current: string; crumb?: string; crumbTitle?: string; crumbClickable?: boolean; release?: boolean }>()
 const emit = defineEmits<{ (e: 'navigate', id: string): void; (e: 'glossary'): void; (e: 'crumb-click'): void }>()
+
+/* 文案单源（R6 复读单源化）：title 与 aria-label 同文案各渲染一份 */
+const COLLAPSE_LOCK_HINT = '窄屏下侧栏保持图标轨'
+const GLOSSARY_BTN_LABEL = '运营术语表 / 这是什么'
 
 /* 滚动修复 #9：回到顶部按钮（内容区滚动时出现）；
    应用式布局下真正滚动的是页面级容器（admin 为 .mk-page），

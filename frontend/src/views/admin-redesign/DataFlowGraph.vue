@@ -207,7 +207,7 @@
                 :class="step.kind === 'service' ? 'dfg-step__badge--svc' : 'dfg-step__badge--cross'"
               >{{ step.kind === 'service' ? '代码服务' : '跨阶段引用' }}</span>
               <span v-else class="dfg-step__badge dfg-step__badge--warn" title="该 Skill 已在 agents 注册，但无字段路由契约，未接入数据流水线">无数据契约</span>
-              <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" title="编排定义中该步骤未解析到契约">未解析</span>
+              <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" :title="UNRESOLVED_HINT">未解析</span>
               <span v-if="step.fromStage" class="dfg-step__stage mono" @click="switchStage(step.fromStage!)" title="点击跳到该阶段">→ {{ stageNameOf(step.fromStage) }}</span>
               <span v-if="step.role" class="dfg-step__role">{{ step.role }}</span>
               <template v-if="step.kind === 'orphan'">
@@ -227,7 +227,7 @@
               <span class="dfg-step__idx">{{ step.index }}</span>
               <strong class="dfg-step__name">{{ step.name }}</strong>
               <span class="dfg-step__badge">Skill</span>
-              <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" title="编排定义中该步骤未解析到契约">未解析</span>
+              <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" :title="UNRESOLVED_HINT">未解析</span>
               <span class="dfg-step__agent mono">{{ step.agentId }}</span>
               <span class="dfg-step__spacer"></span>
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
@@ -531,6 +531,9 @@ import { AGENT_TONES } from './store'
 /* ================= props / emits（与 FieldFlowGraph 同接口，Orchestrator 无缝替换） ================= */
 const props = defineProps<{ stage: string }>()
 const emit = defineEmits<{ changed: []; stage: [string] }>()
+
+/* 文案单源（R6 复读单源化）：工具步骤卡与 Skill 步骤卡的「未解析」悬停释共用一份 */
+const UNRESOLVED_HINT = '编排定义中该步骤未解析到契约'
 
 /* ================= 状态 ================= */
 const loading = ref(false)

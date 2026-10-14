@@ -136,7 +136,15 @@
               <span class="mk-badge ac-mr-mrow__state" :class="providerState(p).cls">{{ providerState(p).label }}</span>
             </div>
           </div>
-          <MkEmptyState v-else compact title="目录中没有登记的供应商，编辑模型目录配置文件后自动生效。" />
+          <!-- 空态给出口（R6D）：目录只读，接入配置（服务地址 / 密钥 / 模型清单）在
+               「模型与接入 → 接入与模型」页签，就地给跳转，不再只留一句说明 -->
+          <MkEmptyState
+            v-else
+            compact
+            title="目录中没有登记的供应商，编辑模型目录配置文件后自动生效。"
+            action-text="去模型接入配置"
+            @action="goAccessConfig"
+          />
         </section>
 
         <!-- ③ 模型能力与限额：目录文件 = 唯一写源 -->
@@ -238,6 +246,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { adminApiConfigApi } from '@/api/adminApi'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -336,6 +345,12 @@ const emit = defineEmits<{
 const data = ref<ModelRegistryOverviewData | null>(null)
 const failed = ref(false)
 const errorText = ref('')
+
+const router = useRouter()
+/** 空态出口（R6D）：跳到接入配置所在的「接入与模型」页签，路由与页签参数均为既有契约 */
+function goAccessConfig() {
+  void router.push({ path: '/admin/api-config', query: { tab: 'access' } })
+}
 
 /** 运行时模型候选上限(含主模型);后端 registry runtime 缺失时按现状 2 兜底 */
 function runtimeMaxCandidates(): number {

@@ -928,6 +928,9 @@ export function buildOverviewHead(input: {
   const warnByRate = todayCalls >= 20 && todaySuccessRate < 90
   const warnByFailures = todayFailed > 0 && todayFailed >= 3
   const badByRate = todaySuccessRate < 80 && todayFailed >= 3
+  // bad 与「仅成功率告警」两个分支结论同文案：单源一份（R6 复读单源化）
+  const rateAttentionHeadline = `需要关注：今日成功率 ${todaySuccessRate}%`
+  const rateAttentionSubline = `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
   if (todayCalls === 0) {
     if (todayOnlySimulated) {
       return { tone: 'muted', score: null, headline: '真实用户暂无调用', subline: '今日无真实用户调用。虚拟/模拟仿真请见「虚拟学习者」页。' }
@@ -940,8 +943,8 @@ export function buildOverviewHead(input: {
     return {
       tone: 'bad',
       score: todaySuccessRate,
-      headline: `需要关注：今日成功率 ${todaySuccessRate}%`,
-      subline: `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
+      headline: rateAttentionHeadline,
+      subline: rateAttentionSubline
     }
   }
   if (warnByRate && !warnByFailures) {
@@ -949,8 +952,8 @@ export function buildOverviewHead(input: {
     return {
       tone: 'warn',
       score: todaySuccessRate,
-      headline: `需要关注：今日成功率 ${todaySuccessRate}%`,
-      subline: `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
+      headline: rateAttentionHeadline,
+      subline: rateAttentionSubline
     }
   }
   if (warnByFailures) {

@@ -17,12 +17,17 @@
       @action="load"
     />
 
+    <!-- 空态给出口（R6D）：「启用日期模拟」开关唯一落点在压测参数卡的日期模拟页签
+         （模型与接入 → 路由与调用，2026-10-13 迁入）；本组件宿主（画像·日程）以 readonly
+         嵌入，不放写操作，就地给跳转。原文「可在…设置中开启」的指路由按钮承担 -->
     <MkEmptyState
       v-else-if="!clock"
       compact
       icon="◌"
       title="暂无模拟时钟数据"
-      description="该会话尚未开启日期模拟，可在「日期模拟」设置中开启。"
+      description="该会话尚未开启日期模拟。"
+      action-text="去开启日期模拟"
+      @action="goSimSettings"
     />
 
     <template v-else>
@@ -165,6 +170,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { errMsg } from './live'
@@ -206,6 +212,12 @@ const props = withDefaults(defineProps<{
   to: 29,
   readonly: false,
 })
+
+const router = useRouter()
+/** 空态出口（R6D）：跳到「启用日期模拟」开关所在的压测参数卡（模型与接入 → 路由与调用），路由与页签参数均为既有契约 */
+function goSimSettings() {
+  void router.push({ path: '/admin/api-config', query: { tab: 'routing' } })
+}
 
 /** 分页窗口：默认窗口只有 30 天，长会话更早的历史按 30 天一档翻页回看；load() 沿用这组 from/to 拉取参数 */
 const PAGE_SPAN = 30

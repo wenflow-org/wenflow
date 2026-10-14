@@ -266,6 +266,9 @@ useMaskClose(maskRef, close)
 
 const isEdit = computed(() => props.mode === 'edit')
 
+/* 保存同步失败的降级标题单源（R6 复读单源化）：结果弹层标题与 toast 警告共用一份 */
+const SYNC_FAILED_TITLE = '已写入文件但保存同步失败'
+
 const dialogTitle = computed(() => (isEdit.value ? `编辑字段 · ${props.fieldName}` : `加字段 · ${props.skillId}`))
 const subText = computed(() =>
   isEdit.value
@@ -275,7 +278,7 @@ const subText = computed(() =>
 const resultTitle = computed(() => {
   if (result.value?.changed === false) return '无变化'
   // add 模式 synced=false：文件已写但保存同步失败，标题同步降级（与结果列表的红色失败行一致）
-  if (!isEdit.value && result.value?.synced === false) return '已写入文件但保存同步失败'
+  if (!isEdit.value && result.value?.synced === false) return SYNC_FAILED_TITLE
   return isEdit.value ? '已更新并回填路由' : '已保存并回填路由'
 })
 const resultNote = computed(() => {
@@ -506,7 +509,7 @@ async function submit() {
       const res = await adminPromptWorkbenchApi.addSkillField(props.skillId, payload)
       result.value = (res.data?.data || {}) as SaveResult
       // synced=false 时文件已写但保存同步失败，成功文案会误导（结果列表同帧已标红失败行）
-      if (result.value.synced === false) toast.warning('已写入文件但保存同步失败')
+      if (result.value.synced === false) toast.warning(SYNC_FAILED_TITLE)
       else toast.success('新字段已登记路由并同步')
     }
     emit('saved')

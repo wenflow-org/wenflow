@@ -4,6 +4,9 @@ import { getProjectionToken } from './projection';
 import { setAuthFlashMessage } from './authFlash';
 import { clearUserLocalState } from './sessionCleanup';
 
+/** 登录失效统一话术：横幅提示与抛错信息共用一份（R6 复读单源化） */
+const AUTH_EXPIRED_MESSAGE = '登录状态已失效，请重新登录';
+
 export interface StreamSseHandlers {
   /** 每个 SSE 事件回调（event 为 'delta' | 'final' | 'done' | 'error' | 'restart' 等） */
   onEvent: (event: string, data: any) => void;
@@ -49,10 +52,10 @@ export async function streamSsePost(
     // 401：与 axios 拦截器行为对齐（清会话 + 跳登录），避免 SSE 路径静默保留过期会话
     if (response.status === 401) {
       clearUserLocalState();
-      setAuthFlashMessage('登录状态已失效，请重新登录');
+      setAuthFlashMessage(AUTH_EXPIRED_MESSAGE);
       const redirect = encodeURIComponent(window.location.pathname + window.location.search);
       window.location.replace(`/login?redirect=${redirect}`);
-      throw new Error('登录状态已失效，请重新登录');
+      throw new Error(AUTH_EXPIRED_MESSAGE);
     }
     let message = '请求失败';
     let code: string | undefined;

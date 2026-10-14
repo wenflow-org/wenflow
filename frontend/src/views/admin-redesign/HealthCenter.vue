@@ -210,7 +210,7 @@
               </span>
               <div v-if="detailOpen(item.id) && item.detail.length" class="hc-check__detail">
                 <p v-for="(d, i) in visibleDetail(item)" :key="i">{{ d }}</p>
-                <p v-if="detailTruncated(item)" class="hc-check__detail-more">共 {{ item.detail.length }} 条明细，仅显示前 {{ DETAIL_LIMIT }} 条</p>
+                <p v-if="detailTruncated(item)" class="hc-check__detail-more">{{ detailMoreText(item) }}</p>
               </div>
             </div>
 
@@ -238,7 +238,7 @@
                   </span>
                   <div v-if="detailOpen(item.id) && item.detail.length" class="hc-check__detail">
                     <p v-for="(d, i) in visibleDetail(item)" :key="i">{{ d }}</p>
-                    <p v-if="detailTruncated(item)" class="hc-check__detail-more">共 {{ item.detail.length }} 条明细，仅显示前 {{ DETAIL_LIMIT }} 条</p>
+                    <p v-if="detailTruncated(item)" class="hc-check__detail-more">{{ detailMoreText(item) }}</p>
                   </div>
                 </div>
               </div>
@@ -672,6 +672,10 @@ function formatLocalTime(ts: number): string {
   return `${d.getMonth() + 1}月${d.getDate()}日 ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 function detailTruncated(item: HealthCenterItem): boolean { return item.detail.length > DETAIL_LIMIT }
+/** 截断提示单源（R6 复读单源化）：异常区与折叠区两处明细尾注共用一份 */
+function detailMoreText(item: HealthCenterItem): string {
+  return `共 ${item.detail.length} 条明细，仅显示前 ${DETAIL_LIMIT} 条`
+}
 
 /* ---------- 数字带单位 + 语义标签提示 ---------- */
 const COUNT_UNITS: Record<string, string> = {

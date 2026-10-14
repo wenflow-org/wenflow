@@ -286,6 +286,8 @@ import { toast } from '@/utils/toast'
 import { isRealAccountUser, isVirtualLearnerAccount, levelFromXp, levelBadgeZh, useListQueryState } from './learner-profile'
 
 /* ---- 行级设计派生（2026-09-26）：身份 chip 色 / 升级进度 / 登录新鲜度 ---- */
+/* 密码规则错误提示单源（R6 复读单源化）：新建与改密两条校验分支共用一份 */
+const PASSWORD_RULE_MSG = '密码至少 8 位，且同时包含字母和数字'
 type UlUserLite = { deleted?: boolean; isVirtualLearner?: boolean; isTestAccount?: boolean; name?: string; email?: string; id?: string; xp?: number }
 function avaTone(u: UlUserLite): 'default' | 'virtual' | 'test' | 'muted' {
   if (u.deleted) return 'muted'
@@ -591,8 +593,8 @@ async function saveUser() {
   if (!form.value.name.trim()) errors.value.name = '请输入昵称'
   if (!form.value.email.trim()) errors.value.email = '请输入邮箱'
   else if (!/^\S+@\S+\.\S+$/.test(form.value.email.trim())) errors.value.email = '邮箱格式不正确'
-  if (isLive.value && !editTarget.value && !PASSWORD_RULE.test(form.value.password)) errors.value.password = '密码至少 8 位，且同时包含字母和数字'
-  if (isLive.value && editTarget.value && form.value.password && !PASSWORD_RULE.test(form.value.password)) errors.value.password = '密码至少 8 位，且同时包含字母和数字'
+  if (isLive.value && !editTarget.value && !PASSWORD_RULE.test(form.value.password)) errors.value.password = PASSWORD_RULE_MSG
+  if (isLive.value && editTarget.value && form.value.password && !PASSWORD_RULE.test(form.value.password)) errors.value.password = PASSWORD_RULE_MSG
   // 确认密码校验（仅新建时）
   if (isLive.value && !editTarget.value && form.value.confirmPassword !== form.value.password) {
     errors.value.confirmPassword = '两次输入的密码不一致'

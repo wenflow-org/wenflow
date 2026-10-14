@@ -34,8 +34,8 @@
             placeholder="稳定身份：职业处境、性格与长期底色（不写某次学习事件）"
           ></textarea>
           <span class="mk-field__hint">
-            <template v-if="isLibrary">{{ form.story.length }} 字 · 建议 ≥ 40 字 · 学习需求由入库后自动生成的故事定义</template>
-            <template v-else>{{ form.story.length }} 字 · 建议 ≥ 40 字 · 具体学习需求在画像页用「故事」产生</template>
+            <template v-if="isLibrary">{{ form.story.length }} {{ STORY_HINT_LIBRARY }}</template>
+            <template v-else>{{ form.story.length }} {{ STORY_HINT_PROFILE }}</template>
           </span>
           <span v-if="errors.story" class="mk-field__err">{{ errors.story }}</span>
         </label>
@@ -64,11 +64,11 @@
           <button type="button" class="mk-btn mk-btn--ghost vl-ai" :disabled="personaBusy" @click="generatePersona">
             {{ personaBusy ? '生成身份中…' : '✦ AI 生成身份' }}
           </button>
-          <span class="vl-ai-hint">人设 Skill · 只补稳定身份，不依赖学习目标，不写会话故事{{ sampleType === 'student' ? ' · 学生样本含考试节点与学期节奏' : '' }}</span>
+          <span class="vl-ai-hint">{{ PERSONA_SKILL_HINT }}{{ sampleType === 'student' ? ' · 学生样本含考试节点与学期节奏' : '' }}</span>
         </div>
-        <p v-if="personaSeed" class="mk-alert mk-alert--ok">已回填人设，可改称呼/背景后创建</p>
+        <p v-if="personaSeed" class="mk-alert mk-alert--ok">{{ PERSONA_BACKFILLED_NOTE }}</p>
         <details class="vl-advanced">
-          <summary>可选 · 长期学习倾向（不是某次故事的目标）</summary>
+          <summary>{{ ASPIRATION_SUMMARY }}</summary>
           <label class="mk-field">
             <span class="mk-field__label">长期倾向</span>
             <input
@@ -76,7 +76,7 @@
               class="mk-field__input"
               placeholder="例如：总想补职场工具（留空则由故事的学习需求定义）"
             />
-            <span class="mk-field__hint">写入画像备用，真正驱动学习路径的是故事里的学习需求</span>
+            <span class="mk-field__hint">{{ ASPIRATION_HINT }}</span>
           </label>
         </details>
       </div>
@@ -99,6 +99,14 @@ import { openSubPage, isLive } from './store'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
+
+/* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板就地引用 ---------- */
+const STORY_HINT_LIBRARY = '字 · 建议 ≥ 40 字 · 学习需求由入库后自动生成的故事定义'
+const STORY_HINT_PROFILE = '字 · 建议 ≥ 40 字 · 具体学习需求在画像页用「故事」产生'
+const PERSONA_SKILL_HINT = '人设 Skill · 只补稳定身份，不依赖学习目标，不写会话故事'
+const PERSONA_BACKFILLED_NOTE = '已回填人设，可改称呼/背景后创建'
+const ASPIRATION_SUMMARY = '可选 · 长期学习倾向（不是某次故事的目标）'
+const ASPIRATION_HINT = '写入画像备用，真正驱动学习路径的是故事里的学习需求'
 
 /* render=false 时不渲染 Teleport（保持与拆分前一致的 tab 条件渲染语义），弹窗状态仍常驻 */
 const props = withDefaults(defineProps<{ render?: boolean; context?: 'learners' | 'library' }>(), {

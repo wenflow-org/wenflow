@@ -173,13 +173,17 @@
               <button v-if="feedTruncated" type="button" class="nc__more" @click="feedLoadMore">查看更早 ›</button>
             </div>
 
-            <!-- 空态 -->
+            <!-- 空态给出口（R6D）：照抄上方通知空态的出口结构（.nc__empty-links + 去学习台），
+                 原句尾「可以先去学习台或路径页开始一次学习」的指路由按钮承担 -->
             <div v-if="!busyItems.length && !feed.length" class="nc__empty">
               <span class="nc__empty-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="28" height="28"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M9 7h6M9 12h6M9 17h3"/><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
               </span>
               <p>暂无 AI 任务</p>
-              <span>AI 处理任务时会在这里显示进度。可以先去学习台或路径页开始一次学习。</span>
+              <span>AI 处理任务时会在这里显示进度。</span>
+              <span class="nc__empty-links">
+                <router-link to="/dashboard">去学习台</router-link>
+              </span>
             </div>
           </template>
         </div>

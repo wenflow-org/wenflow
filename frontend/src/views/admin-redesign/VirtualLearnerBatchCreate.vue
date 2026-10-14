@@ -14,7 +14,7 @@
           <label class="mk-field vl-batch-config__count" :class="{ 'mk-field--error': !batchCountValid }">
             <span class="mk-field__label">人数</span>
             <input v-model.number="batchFillCount" type="number" class="mk-field__input" min="1" max="20" />
-            <span v-if="!batchCountValid" class="mk-field__err">人数须为 1–20 的整数</span>
+            <span v-if="!batchCountValid" class="mk-field__err">{{ BATCH_COUNT_INVALID }}</span>
           </label>
           <label class="mk-field vl-batch-config__stories" :class="{ 'mk-field--error': !batchStoriesValid }">
             <span class="mk-field__label">每人故事数</span>
@@ -57,6 +57,9 @@ import { useEscape } from './useEscape'
 import { useSafePolling } from '@/composables/useSafePolling'
 import { toast } from '@/utils/toast'
 import type { BatchTask } from './virtualLearnersTypes'
+
+/* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
+const BATCH_COUNT_INVALID = '人数须为 1–20 的整数'
 
 /* render=false 时不渲染 Teleport（保持与拆分前一致的 tab 条件渲染语义），后台任务状态仍常驻 */
 withDefaults(defineProps<{ render?: boolean }>(), { render: true })
@@ -147,7 +150,7 @@ async function retryBatchTask() {
 async function doBatchCreate() {
   // 越界/空值显式报错，不静默修正（按钮文案即提交口径，两者必须一致）
   if (!batchCountValid.value) {
-    batchError.value = '人数须为 1–20 的整数'
+    batchError.value = BATCH_COUNT_INVALID
     return
   }
   if (!batchStoriesValid.value) {

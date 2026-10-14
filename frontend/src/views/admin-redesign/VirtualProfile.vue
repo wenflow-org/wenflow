@@ -329,7 +329,7 @@
               <span class="mk-field__hint">每次上游 LLM 调用失败后的重试次数（一个教学回合含多次上游调用）</span>
             </label>
             <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.maxRetriesTotal }">
-              <span class="mk-field__label">会话 AI 调用上限</span>
+              <span class="mk-field__label">{{ BUDGET_TOTAL_LABEL }}</span>
               <input v-model.number="budgetForm.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" @input="budgetDirty = true" />
               <span v-if="budgetErrors.maxRetriesTotal" class="mk-field__err">{{ budgetErrors.maxRetriesTotal }}</span>
               <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止，防止无限跑下去。故事可单独覆盖</span>
@@ -795,7 +795,7 @@
               <span v-if="storyBudgetErrors.maxRetriesPerStep" class="mk-field__err">{{ storyBudgetErrors.maxRetriesPerStep }}</span>
             </label>
             <label class="mk-field" :class="{ 'mk-field--error': storyBudgetErrors.maxRetriesTotal }">
-              <span class="mk-field__label">会话 AI 调用上限</span>
+              <span class="mk-field__label">{{ BUDGET_TOTAL_LABEL }}</span>
               <input v-model="editStoryForm.budget.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" placeholder="留空即继承角色级（默认 600）" />
               <span v-if="storyBudgetErrors.maxRetriesTotal" class="mk-field__err">{{ storyBudgetErrors.maxRetriesTotal }}</span>
               <span class="mk-field__hint">单个会话累计 AI 调用（含重试）达到上限即终止，防本故事无限跑</span>
@@ -945,6 +945,9 @@ import { useIsDark } from '@/composables/useIsDark'
 import {
   RUNS_TAB_WINDOW
 } from './vlab'
+
+/* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板就地引用 ---------- */
+const BUDGET_TOTAL_LABEL = '会话 AI 调用上限'
 
 interface RunItem {
   time: string

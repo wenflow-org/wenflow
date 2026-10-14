@@ -622,6 +622,11 @@ import V2Footer from './V2Footer.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import { retryOnceOnTransient } from '@/utils/retry';
 
+/* 调整闭环里的失败/清理提示多处复用，收成单源避免改一处漏一处 */
+const ADJUST_FAIL_MSG = '调整失败，请稍后再试';
+const LESSON_END_FAIL_MSG = '结束课堂失败，请稍后再试';
+const LESSON_CLEANED_MSG = '课堂已清理，正在重新提交调整…';
+
 const route = useRoute();
 const router = useRouter();
 const pathId = ref(String(route.params.id || ''));
@@ -1163,7 +1168,7 @@ async function submitAdjust() {
     pendingAdjustRetry.value = () => runAdjustIntent(mode, t, fromStageNumber, clearedSessionIds.value);
     await runAdjustIntent(mode, t, fromStageNumber);
   } catch (err: any) {
-    const msg = err?.response?.data?.error?.message || err?.message || '调整失败，请稍后再试';
+    const msg = err?.response?.data?.error?.message || err?.message || ADJUST_FAIL_MSG;
     // 409：调整范围内有未结束课堂 → 弹窗内列出，供一键放弃后自动重试
     if (handleSessionConflict(err, () => runAdjustIntent(mode, t, fromStageNumber, clearedSessionIds.value))) {
       adjusting.value = false;
@@ -1199,7 +1204,7 @@ async function clearSessionAndRetry(session: Record<string, any>) {
     if (res?.success !== false) {
       toast.success(res?.message || '已结束该课堂');
     } else {
-      toast.error(res?.error?.message || '结束课堂失败，请稍后再试');
+      toast.error(res?.error?.message || LESSON_END_FAIL_MSG);
     }
     // 重新拉取仍挡路的课堂
     const leftover = (res?.data?.remaining) || [];
@@ -1207,14 +1212,14 @@ async function clearSessionAndRetry(session: Record<string, any>) {
       blockingSessions.value = [];
       if (pendingAdjustRetry.value) {
         retryingAfterClear.value = true;
-        toast.info('课堂已清理，正在重新提交调整…');
+        toast.info(LESSON_CLEANED_MSG);
         await pendingAdjustRetry.value();
       }
     } else {
       blockingSessions.value = leftover;
     }
   } catch (err: any) {
-    toast.error(err?.response?.data?.error?.message || err?.message || '结束课堂失败，请稍后再试');
+    toast.error(err?.response?.data?.error?.message || err?.message || LESSON_END_FAIL_MSG);
   } finally {
     clearingSessions.value = false;
     retryingAfterClear.value = false;
@@ -1236,14 +1241,14 @@ async function clearAllSessionsAndRetry() {
     if (leftover.length === 0) {
       blockingSessions.value = [];
       retryingAfterClear.value = true;
-      toast.info('课堂已清理，正在重新提交调整…');
+      toast.info(LESSON_CLEANED_MSG);
       await pendingAdjustRetry.value();
     } else {
       blockingSessions.value = leftover;
       toast.error(`还有 ${leftover.length} 个课堂未能结束，请稍后重试`);
     }
   } catch (err: any) {
-    toast.error(err?.response?.data?.error?.message || err?.message || '结束课堂失败，请稍后再试');
+    toast.error(err?.response?.data?.error?.message || err?.message || LESSON_END_FAIL_MSG);
   } finally {
     clearingSessions.value = false;
     retryingAfterClear.value = false;
@@ -1311,7 +1316,7 @@ async function confirmAiAdvice() {
       adjusting.value = false;
       return;
     }
-    toast.error(err?.response?.data?.error?.message || err?.message || '调整失败，请稍后再试');
+    toast.error(err?.response?.data?.error?.message || err?.message || ADJUST_FAIL_MSG);
   } finally {
     adjusting.value = false;
   }

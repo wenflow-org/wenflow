@@ -361,6 +361,15 @@ export function errorCategoryText(s: string | null | undefined): string {
   return ERROR_CATEGORY_TEXT[key] || String(s || '')
 }
 
+/* 长动作名跨表单源：ACTION_TEXT（审计 action 枚举）与 PATH_ACTION_RULES（HTTP path 规则）
+   指向同一动作时共用一份中文，改文案只动这里（R6 复读单源化）。 */
+export const ACT_AUTOPILOT_START = '启动虚拟会话自动驾驶'
+export const ACT_AUTOPILOT_STOP = '暂停虚拟会话自动驾驶'
+export const ACT_PROMPT_EVAL_RUN = '运行 Prompt 评估'
+export const ACT_PROMPT_COMPILE_CORE = '编译 Prompt 核心'
+export const ACT_PROMPT_PUBLISH_CORE = '发布 Prompt 核心'
+export const ACT_SKILL_AUTHOR_DRAFT = '生成 Skill 草稿'
+
 /** 操作审计 action → 中文；未知值回退原文 */
 const ACTION_TEXT: Record<string, string> = {
   'user-create': '创建用户',
@@ -395,11 +404,11 @@ const ACTION_TEXT: Record<string, string> = {
   'virtual-persona-generate': '生成虚拟人设',
   'virtual-session-step': '推进虚拟会话',
   'virtual-session-restart': '重启虚拟会话学习',
-  'virtual-session-autopilot-start': '启动虚拟会话自动驾驶',
-  'prompt-eval-run': '运行 Prompt 评估',
-  'prompt-compile-core': '编译 Prompt 核心',
-  'prompt-publish-core': '发布 Prompt 核心',
-  'skill-author-draft': '生成 Skill 草稿',
+  'virtual-session-autopilot-start': ACT_AUTOPILOT_START,
+  'prompt-eval-run': ACT_PROMPT_EVAL_RUN,
+  'prompt-compile-core': ACT_PROMPT_COMPILE_CORE,
+  'prompt-publish-core': ACT_PROMPT_PUBLISH_CORE,
+  'skill-author-draft': ACT_SKILL_AUTHOR_DRAFT,
   'achievement-grant': '授予成就',
   // 低频虚拟学习者/配置类接口（P2-16 补齐）
   'virtual-batch-create': '批量创建虚拟学习者',
@@ -407,7 +416,7 @@ const ACTION_TEXT: Record<string, string> = {
   'virtual-projection-token': '生成虚拟投影令牌',
   'virtual-session-start-learning': '开始虚拟会话学习',
   'virtual-session-stop-learning': '停止虚拟会话学习',
-  'virtual-session-autopilot-stop': '暂停虚拟会话自动驾驶',
+  'virtual-session-autopilot-stop': ACT_AUTOPILOT_STOP,
   'virtual-session-auto-learning': '虚拟会话自动学习',
   'virtual-session-run-full': '虚拟会话全量运行',
   'virtual-session-blackbox-action': '虚拟会话黑盒操作',
@@ -443,19 +452,19 @@ const PATH_ACTION_RULES: Array<[RegExp, string]> = [
   [/\/virtual-learners\/sessions\/[^/]+\/restart-learning$/, '重启虚拟会话学习'],
   [/\/virtual-learners\/sessions\/[^/]+\/start-learning$/, '开始虚拟会话学习'],
   [/\/virtual-learners\/sessions\/[^/]+\/stop-learning$/, '停止虚拟会话学习'],
-  [/\/virtual-learners\/sessions\/[^/]+\/autopilot\/start$/, '启动虚拟会话自动驾驶'],
-  [/\/virtual-learners\/sessions\/[^/]+\/autopilot\/stop$/, '暂停虚拟会话自动驾驶'],
+  [/\/virtual-learners\/sessions\/[^/]+\/autopilot\/start$/, ACT_AUTOPILOT_START],
+  [/\/virtual-learners\/sessions\/[^/]+\/autopilot\/stop$/, ACT_AUTOPILOT_STOP],
   [/\/virtual-learners\/sessions\/[^/]+\/auto-learning$/, '虚拟会话自动学习'],
   [/\/virtual-learners\/sessions\/[^/]+\/run-full$/, '虚拟会话全量运行'],
   [/\/virtual-learners\/sessions\/[^/]+\/blackbox-action$/, '虚拟会话黑盒操作'],
   [/\/virtual-learners\/[^/]+\/start-blackbox-session$/, '启动虚拟实验'],
   [/\/virtual-learners\/[^/]+\/start-session$/, '启动虚拟实验'],
   // Prompt / Skill / 成就
-  [/\/prompt-ops\/run-eval$/, '运行 Prompt 评估'],
-  [/\/prompt-lab\/compile-core$/, '编译 Prompt 核心'],
-  [/\/prompt-lab\/publish-core$/, '发布 Prompt 核心'],
-  [/\/prompt-workbench\/compile-core$/, '编译 Prompt 核心'],
-  [/\/skill-author\/draft$/, '生成 Skill 草稿'],
+  [/\/prompt-ops\/run-eval$/, ACT_PROMPT_EVAL_RUN],
+  [/\/prompt-lab\/compile-core$/, ACT_PROMPT_COMPILE_CORE],
+  [/\/prompt-lab\/publish-core$/, ACT_PROMPT_PUBLISH_CORE],
+  [/\/prompt-workbench\/compile-core$/, ACT_PROMPT_COMPILE_CORE],
+  [/\/skill-author\/draft$/, ACT_SKILL_AUTHOR_DRAFT],
   [/\/achievements\/grant$/, '授予成就'],
   // 投影令牌
   [/\/projection-access-grants\/[^/]+\/projection-token$/, '生成投影访问令牌']

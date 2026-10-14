@@ -48,6 +48,9 @@ const batchActionBusy = ref(false)
 /* 逐人循环进度（(i/n)）：批量启动/自动驾驶要串行打几十个请求，无进度会像卡死 */
 const batchProgress = ref('')
 
+/** 批量域「故事列表拉取失败」日志前缀（R6 单源：批量启动/自动驾驶/停止三处同用一句） */
+const storyListFailLog = (name: string) => `获取「${name}」故事列表失败:`
+
 /** 批量启动全部故事：为每个选中的虚拟学习者启动其全部故事的实验会话（一个故事一个会话），
  *  并自动开启自动驾驶（target=final 直达 Path 全部完成），无需手动逐个启动 */
 async function batchLaunchAllStories() {
@@ -108,7 +111,7 @@ async function batchLaunchAllStories() {
       }
     } catch (e) {
       failed++
-      console.error(`获取「${s.name}」故事列表失败:`, e)
+      console.error(storyListFailLog(s.name), e)
     }
   }
   batchActionBusy.value = false
@@ -178,7 +181,7 @@ async function batchAutopilotStart() {
       }
     } catch (e) {
       failed++
-      console.error(`获取「${s?.name || id}」故事列表失败:`, e)
+      console.error(storyListFailLog(s?.name || id), e)
     }
   }
   batchActionBusy.value = false
@@ -229,7 +232,7 @@ async function batchAutopilotStop() {
       }
     } catch (e) {
       failed++
-      console.error(`获取「${s?.name || id}」故事列表失败:`, e)
+      console.error(storyListFailLog(s?.name || id), e)
     }
   }
   batchActionBusy.value = false

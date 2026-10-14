@@ -167,8 +167,10 @@ function scan() {
         .replace(/<style[\s\S]*?<\/style>/g, (m2) => m2.replace(/[^\n]/g, ' '))
         .replace(/<script[\s\S]*?<\/script>/g, (m2) => m2.replace(/[^\n]/g, ' '))
         .replace(/<!--[\s\S]*?-->/g, (m2) => m2.replace(/[^\n]/g, ' '))
-        .replace(/\{\{(?:[^{}]|\{[^{}]*\})*\}\}/g, ' ')
-        .replace(/\$\{(?:[^{}]|\{[^{}]*\})*\}/g, ' ');
+        /* 抹除必须保行号：跨行插值 `{{ a\n b }}` 若折成单空格，后续行号整体前移，
+           同一文本节点会被逐行扫描与整块扫描各计一次（R6 幽灵翻倍）。 */
+        .replace(/\{\{(?:[^{}]|\{[^{}]*\})*\}\}/g, (m2) => m2.replace(/[^\n]/g, ' '))
+        .replace(/\$\{(?:[^{}]|\{[^{}]*\})*\}/g, (m2) => m2.replace(/[^\n]/g, ' '));
       const lineAt = (idx) => stripped.slice(0, idx).split('\n').length;
       for (const m of stripped.matchAll(/>([^<>]{2,})</g)) {
         const t = m[1].replace(/\s+/g, ' ').trim();

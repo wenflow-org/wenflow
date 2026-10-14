@@ -41,7 +41,7 @@
               <div class="skd-pad skd-rows">
                 <MkLoading v-if="routingsLoading && !routings" inline text="字段契约加载中…" />
                 <template v-else-if="routingsNotApplicable">
-                  <p class="mk-empty--line">该 Skill 为辅助类（无编排阶段归属），字段契约不适用。</p>
+                  <p class="mk-empty--line">{{ AUX_CONTRACT_NA_TEXT }}</p>
                 </template>
                 <template v-else-if="routingsFailed">
                   <div class="mk-alert mk-alert--row" role="alert">
@@ -72,7 +72,7 @@
               <div class="skd-pad skd-rows">
                 <MkLoading v-if="routingsLoading && !routings" inline text="字段契约加载中…" />
                 <template v-else-if="routingsNotApplicable">
-                  <p class="mk-empty--line">该 Skill 为辅助类（无编排阶段归属），字段契约不适用。</p>
+                  <p class="mk-empty--line">{{ AUX_CONTRACT_NA_TEXT }}</p>
                 </template>
                 <template v-else-if="routingsFailed">
                   <div class="mk-alert mk-alert--row" role="alert">
@@ -327,7 +327,7 @@
                   <label class="skd-field">
                     <span>思考模式</span>
                     <select v-model="rtForm.thinkingMode" class="mk-input" :disabled="!rtForm.enabled">
-                      <option value="default">跟随继承值 / 模型默认</option>
+                      <option value="default">{{ INHERIT_DEFAULT_LABEL }}</option>
                       <option value="enabled">开启</option>
                       <option value="disabled">关闭</option>
                     </select>
@@ -335,7 +335,7 @@
                   <label class="skd-field">
                     <span>思考强度</span>
                     <select v-model="rtForm.reasoningEffort" class="mk-input" :disabled="!rtForm.enabled || rtForm.thinkingMode === 'disabled'">
-                      <option value="default">跟随继承值 / 模型默认</option>
+                      <option value="default">{{ INHERIT_DEFAULT_LABEL }}</option>
                       <option value="low">low</option>
                       <option value="high">high</option>
                       <option value="max">max</option>
@@ -620,6 +620,11 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
+
+/* 文案单源：输入/输出契约两块空态共用一句（R6 复读单源化）；思考模式/思考强度
+   两个下拉的继承项共用一句。 */
+const AUX_CONTRACT_NA_TEXT = '该 Skill 为辅助类（无编排阶段归属），字段契约不适用。'
+const INHERIT_DEFAULT_LABEL = '跟随继承值 / 模型默认'
 
 /* ===== 6 页签（运行时置首：健康+证据先于配置，评审「结论埋深」）
    #149：键与设计页 ?tab= 深链键真对齐——「字段路由」设计页键是 routing，本页原写 fields

@@ -17,7 +17,7 @@
         <div class="sk-rec__pills">
           <span class="mk-pill" :title="`技能登记册全量（含外挂能力）vs 目录`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
           <span v-if="recReport.summary.unregistered" class="mk-badge mk-badge--bad">未注册 {{ recReport.summary.unregistered }}</span>
-          <span v-if="recReport.summary.activeMissing" class="mk-badge mk-badge--warn" title="缺少线上生效 Prompt">无生效版本 {{ recReport.summary.activeMissing }}</span>
+          <span v-if="recReport.summary.activeMissing" class="mk-badge mk-badge--warn" :title="ACTIVE_MISSING_HINT">无生效版本 {{ recReport.summary.activeMissing }}</span>
           <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="登记册已删除/不存在，但注册记录仍残留（幽灵注册）">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
           <span v-else class="mk-pill" :title="recReport.summary.orphanRetiredExempt ? `退役技能 ${recReport.summary.orphanRetiredExempt} 项注册行按「不动历史数据」保留、不计异常` : '无失效注册'">
             失效注册 0<span v-if="recReport.summary.orphanRetiredExempt">（退役豁免 {{ recReport.summary.orphanRetiredExempt }}）</span>
@@ -128,7 +128,7 @@
                 </td>
                 <td>
                   <span v-if="e.row.diff === 'unregistered'" class="mk-badge mk-badge--bad">未注册</span>
-                  <span v-else-if="e.row.diff === 'active-missing'" class="mk-badge mk-badge--warn" title="缺少线上生效 Prompt">无生效版本</span>
+                  <span v-else-if="e.row.diff === 'active-missing'" class="mk-badge mk-badge--warn" :title="ACTIVE_MISSING_HINT">无生效版本</span>
                   <span v-else class="mk-na">—</span>
                 </td>
               </tr>
@@ -188,6 +188,9 @@ import { adminSkillsApi, type SkillCompletion, type SkillReconciliationReport } 
 
 const props = defineProps<{ report?: SkillReconciliationReport | null; error?: string | null }>();
 const emit = defineEmits<{ (e: "openSkill", id: string): void; (e: "refresh"): void }>();
+
+/* 文案单源（R6 复读单源化）：口径 pill 与明细行两种视图的「无生效版本」悬停释共用一份 */
+const ACTIVE_MISSING_HINT = "缺少线上生效 Prompt";
 
 const ownReport = ref<SkillReconciliationReport | null>(null);
 const ownError = ref("");

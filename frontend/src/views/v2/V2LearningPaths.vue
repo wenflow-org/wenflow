@@ -170,7 +170,7 @@
                 </div>
               </div>
               <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
-                <span>确认删除这条路径？删除后不可自行恢复。</span>
+                <span>{{ CONFIRM_DELETE_PATH_MSG }}</span>
                 <button type="button" class="pcard__confirm-yes" @click="doDelete(card)">删除</button>
                 <button type="button" class="pcard__confirm-no" @click="deleting = ''">取消</button>
               </div>
@@ -192,7 +192,7 @@
               <!-- P2-30（设计评审）：错误行动词与按钮对齐——后端兜底句在渲染层改说「主结构」，见 failReasonText -->
               <div class="pcard__fail-reason">{{ failReasonText(card) || '生成失败，目标和已确认信息已保留。' }}</div>
               <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
-                <span>确认删除这条路径？删除后不可自行恢复。</span>
+                <span>{{ CONFIRM_DELETE_PATH_MSG }}</span>
                 <button type="button" class="pcard__confirm-yes" @click="doDelete(card)">删除</button>
                 <button type="button" class="pcard__confirm-no" @click="deleting = ''">取消</button>
               </div>
@@ -240,6 +240,11 @@ import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
 
 type CardKind = 'ready' | 'generating' | 'failed' | 'completed';
+
+/* 复读单源化：删除确认在卡片模板出现两份，生成结果 toast 在轮询/手动刷新两条路径各一份 */
+const CONFIRM_DELETE_PATH_MSG = '确认删除这条路径？删除后不可自行恢复。';
+const GEN_DONE_TAIL = '已生成，可以开始了';
+const GEN_FAIL_TAIL = '生成失败，可重试';
 interface PathCard {
   id: string;
   title: string;
@@ -396,8 +401,8 @@ async function pollOnce() {
   );
   if (finished.length) {
     for (const r of finished) {
-      if (r.value.lc.phase === 'ready') toast.success(`「${r.value.card.title}」已生成，可以开始了`);
-      else toast.error(`「${r.value.card.title}」生成失败，可重试`);
+      if (r.value.lc.phase === 'ready') toast.success(`「${r.value.card.title}」${GEN_DONE_TAIL}`);
+      else toast.error(`「${r.value.card.title}」${GEN_FAIL_TAIL}`);
     }
     await load();
     return;
@@ -427,10 +432,10 @@ async function refreshStatus(card: PathCard) {
   try {
     const lc = await learningAPI.getPathGenerationStatus(card.id);
     if (lc.phase === 'ready') {
-      toast.success(`「${card.title}」已生成，可以开始了`);
+      toast.success(`「${card.title}」${GEN_DONE_TAIL}`);
       await load();
     } else if (lc.status === 'failed' || lc.status === 'stale') {
-      toast.error(`「${card.title}」生成失败，可重试`);
+      toast.error(`「${card.title}」${GEN_FAIL_TAIL}`);
       await load();
     } else {
       toast.info('仍在生成中…');

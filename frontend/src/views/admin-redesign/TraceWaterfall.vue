@@ -14,7 +14,7 @@
         class="wf-locate mk-link"
         @click="locateFailure"
       >
-        {{ failedTraceIds.length }} 条链路含失败，定位 →
+        {{ locateLabel }}
       </button>
       <span class="mk-status__actions">
         <button
@@ -84,7 +84,7 @@
           :title="'样本内含失败的链路，点击跳到第一条失败链路'"
           @click="locateFailure"
         >
-          {{ failedTraceIds.length }} 条链路含失败，定位 →
+          {{ locateLabel }}
         </button>
         <span class="wf-tracepick__count">{{ viewMode === 'session' ? `${sessionIds.length} 个会话` : `${traceIds.length} 条链路` }}</span>
         <select v-if="viewMode === 'session'" class="wf-tracepick__select mono" v-model="activeSession" aria-label="选择会话">
@@ -617,6 +617,8 @@ const statusTone = computed(() => (!activeSpans.value.length ? 'mk-status--muted
 
 /* 全链路失败提示 + 定位 */
 const failedTraceIds = computed(() => [...new Set(baseSpans.value.filter((s) => s.status === 'err').map((s) => s.traceId))])
+/* 定位钮文案单源（R6 复读单源化）：状态条与内嵌态两个入口共用一份 */
+const locateLabel = computed(() => `${failedTraceIds.value.length} 条链路含失败，定位 →`)
 function locateFailure() {
   const ids = failedTraceIds.value
   if (!ids.length) return

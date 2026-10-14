@@ -64,11 +64,11 @@
           <ul class="frt__legend-list">
             <li class="frt__legend-item">
               <span class="mk-badge mk-badge--render-visible" title="可见性：可见">可见</span>
-              <span class="frt__legend-hint">可见：会出现在对外交付（用户 / 界面）</span>
+              <span class="frt__legend-hint">{{ RENDER_VISIBLE_HINT }}</span>
             </li>
             <li class="frt__legend-item">
               <span class="mk-badge mk-badge--render-hidden" title="可见性：隐藏">隐藏</span>
-              <span class="frt__legend-hint">隐藏：仅内部流转，不对外展示</span>
+              <span class="frt__legend-hint">{{ RENDER_HIDDEN_HINT }}</span>
             </li>
           </ul>
           <h5 class="frt__legend-title">流转（移交 / 内部 / 累积）</h5>
@@ -343,6 +343,10 @@ interface FieldItem {
   persistKey?: string | null;
 }
 interface AgentItem { agentId: string; description?: string }
+
+/* 可见性释义单源（R6 复读单源化）：图例与行悬停提示 renderHint 共用一份 */
+const RENDER_VISIBLE_HINT = '可见：会出现在对外交付（用户 / 界面）'
+const RENDER_HIDDEN_HINT = '隐藏：仅内部流转，不对外展示'
 interface RoutingItem {
   id: string;
   agentId: string;
@@ -512,9 +516,9 @@ function renderText(render: string) {
 
 function renderHint(row: RoutingItem) {
   const base = row.render === 'hidden'
-    ? '隐藏：仅内部流转，不对外展示'
+    ? RENDER_HIDDEN_HINT
     : row.render === 'visible'
-      ? '可见：会出现在对外交付（用户 / 界面）'
+      ? RENDER_VISIBLE_HINT
       : `可见性取值不在可选值列表：${row.render}`;
   return row.visibilityPreset ? `${base}\n可见性预设：${row.visibilityPreset}` : base;
 }

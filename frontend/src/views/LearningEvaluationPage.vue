@@ -9,12 +9,12 @@
         <!-- 窄屏收进 ⋮ 子菜单：三个并排按钮在 390px 下把头部撑到 154px 且换行凌乱（2026-09-25） -->
         <div class="evaluation-head__actions">
           <button type="button" class="btn-ghost" :disabled="exportingImage" @click="exportImage">{{ exportingImage ? '导出中…' : '导出图片' }}</button>
-          <button type="button" class="btn-ghost" @click="exportPdf">打印或另存为 PDF</button>
+          <button type="button" class="btn-ghost" @click="exportPdf">{{ EXPORT_PDF_LABEL }}</button>
           <button type="button" class="btn-primary" @click="() => goBackToPath()">返回学习路径</button>
         </div>
         <ImmersiveMenu>
           <button type="button" class="evaluation-head__pop-item" :disabled="exportingImage" @click="pickHeadMenu('image')">{{ exportingImage ? '导出中…' : '导出图片' }}</button>
-          <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('pdf')">打印或另存为 PDF</button>
+          <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('pdf')">{{ EXPORT_PDF_LABEL }}</button>
           <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('back')">返回学习路径</button>
         </ImmersiveMenu>
       </header>
@@ -181,6 +181,10 @@ import { aiTeachingAPI, type SessionDetail, type WrapupArtifact } from '@/api/ai
 import { toast } from '@/utils/toast';
 import api from '@/utils/api';
 import { isProjectionMode } from '@/utils/projection';
+
+/* 头部按钮与窄屏 ⋮ 菜单、两条加载路径各写一份的提示，收成单源避免改一处漏一处 */
+const EXPORT_PDF_LABEL = '打印或另存为 PDF';
+const EVAL_NOT_FOUND_MSG = '未找到该会话评估结果';
 
 const route = useRoute();
 const router = useRouter();
@@ -375,7 +379,7 @@ const pollEvaluation = async () => {
   try {
     const detail = await aiTeachingAPI.getSessionDetail(sessionId.value);
     if (componentUnmounted || !pollingActive) return;
-    if (!detail) throw new Error('未找到该会话评估结果');
+    if (!detail) throw new Error(EVAL_NOT_FOUND_MSG);
     sessionDetail.value = detail;
     if (shouldContinuePolling(detail)) {
       schedulePoll();
@@ -521,7 +525,7 @@ const fetchEvaluation = async () => {
     if (componentUnmounted) return;
     sessionDetail.value = detail;
     if (!detail) {
-      error.value = '未找到该会话评估结果';
+      error.value = EVAL_NOT_FOUND_MSG;
       return;
     }
 

@@ -36,7 +36,7 @@
           :value="statsKpiValue(statsKpiPct(completionPct))"
           :tone="statsState === 'error' ? 'bad' : ''"
           :hint="statsKpiHint(completionHint)"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '完成率按会话统计。「会话均长」为会话从创建到结束的平均时长，非单次调用耗时。活动会话含进行中与创建中'"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : '完成率按会话统计。「会话均长」为会话从创建到结束的平均时长，非单次调用耗时。活动会话含进行中与创建中'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         >
@@ -51,7 +51,7 @@
           :value="statsKpiValue(statsKpiPct(runStats.systemFailureRate))"
           :tone="statsState === 'error' ? 'bad' : (runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''"
           :hint="statsKpiHint(`系统失败 ${runStats.failed} / 全部会话 ${runStats.totalSessions} · 人为终止 ${runStats.abandoned} 另计（合计 ${statsKpiPct(runStats.failureRate)}）`)"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '按全部会话计算的失败率，与总览页「系统失败率」一致。管理员止停等人为终止另行统计'"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : '按全部会话计算的失败率，与总览页「系统失败率」一致。管理员止停等人为终止另行统计'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />
@@ -59,8 +59,8 @@
           label="并发"
           :value="statsKpiValue(concurrencyText)"
           :tone="concurrencyTone"
-          :hint="statsState === 'error' ? '统计不可用 · 点击重试' : '自动驾驶并发配额'"
-          :title="statsState === 'error' ? '运行统计拉取失败：点击重试' : '并发为自动驾驶同时在跑的会话数占配额比。「已满」是资源占满（后续请求排队），不是故障'"
+          :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : '自动驾驶并发配额'"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : '并发为自动驾驶同时在跑的会话数占配额比。「已满」是资源占满（后续请求排队），不是故障'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         >
@@ -373,6 +373,10 @@ import VirtualLearnerBatchCreate from './VirtualLearnerBatchCreate.vue'
 import VirtualLearnerBatchBar from './VirtualLearnerBatchBar.vue'
 import VirtualLearnerPromptTest from './VirtualLearnerPromptTest.vue'
 import type { VirtualLearnerRow as Sample, BatchTask } from './virtualLearnersTypes'
+
+/* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
+const STATS_RETRY_TITLE = '运行统计拉取失败：点击重试'
+const STATS_UNAVAILABLE_HINT = '统计不可用 · 点击重试'
 
 /* 头像按名称哈希取色，同一人恒定同色；八色板单源 = main.css --mk-vl-avatar-* +
    mk/vlAvatar.ts 的共享哈希（CM3：原 TS 数组 + 两页 CSS 三份拷贝收敛） */
@@ -698,7 +702,7 @@ function statsKpiPct(rate: number | null | undefined): string {
 /** 三态 hint：error 档给出动作出口 */
 function statsKpiHint(ready: string): string {
   if (statsState.value === 'loading') return '统计加载中…'
-  if (statsState.value === 'error') return '统计不可用 · 点击重试'
+  if (statsState.value === 'error') return STATS_UNAVAILABLE_HINT
   return ready
 }
 /** 点卡片重试（live 层 retryLiveVirtualStats）；非错误态点击是空操作。

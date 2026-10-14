@@ -116,13 +116,16 @@ export interface PanelScopeNote {
   title: string
 }
 
+/** 路径口径长释的公共尾段：「当前路径 / 所选路径」两种 scope 的取数说明一致，共用一份（R6 复读单源化） */
+const SCOPE_EVIDENCE_TAIL = '的会话与学习证据，并并入该学习者的全部记忆痕迹。其它路径不在这里。'
+
 export function panelScopeNote(scope: PanelScope, opts: { pathTitle?: string | null } = {}): PanelScopeNote {
   const named = (opts.pathTitle || '').trim()
   if (scope === 'current-path') {
     return {
       label: '当前路径',
       title:
-        `本块取自**当前路径**${named ? `（${named}）` : ''}的会话与学习证据，并并入该学习者的全部记忆痕迹。其它路径不在这里。` +
+        `本块取自**当前路径**${named ? `（${named}）` : ''}${SCOPE_EVIDENCE_TAIL}` +
         `\n当前路径 = 该学习者 status=active 且 updatedAt 最新的一条（快照 currentPath 口径）；已归档/失败的路径不参与。`,
     }
   }
@@ -130,7 +133,7 @@ export function panelScopeNote(scope: PanelScope, opts: { pathTitle?: string | n
     return {
       label: `路径 ${named.length > 12 ? `${named.slice(0, 12)}…` : named || '—'}`,
       title:
-        `本块取自**所选路径**${named ? `（${named}）` : ''}的会话与学习证据，并并入该学习者的全部记忆痕迹。其它路径不在这里。` +
+        `本块取自**所选路径**${named ? `（${named}）` : ''}${SCOPE_EVIDENCE_TAIL}` +
         `\n这不是该学习者的「当前路径」——当前路径由 status=active 且 updatedAt 最新的一条定义，与这里的筛选无关。`,
     }
   }
