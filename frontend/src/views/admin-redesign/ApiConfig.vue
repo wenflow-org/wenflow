@@ -206,16 +206,24 @@
             </div>
           </div>
           <div class="ac-cols__side">
-            <!-- 默认思考：平台级开关 + 强度（未单独配置的 Skill 继承此默认；skill 级可在设计页运行时 tab 覆盖） -->
+            <!-- 默认思考：平台级默认（未单独配置的 Skill 继承此默认；skill 级可在设计页运行时 tab 覆盖）。
+                 2026-10-14：原「启用思考」开关与「思考模式」下拉是**同一个字段的两个控件**——
+                 开关只是 `defaultThinkingMode !== 'disabled'` 的派生态（关闭 ⇔ 下拉的「关闭」档），
+                 且它表达不了「强制开启」，勾上只能落到「跟随模型默认」，是有损视图。
+                 同屏一处事实两个控件，还带来「强度灰了、模式没灰」的不一致。现只留真字段那一个控件。 -->
             <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认；可在 Skill 设计页「运行时」单独覆盖<span v-if="dirty.has('route')"> · 保存见卡头「保存路由」</span></span></div>
-            <div class="ac-row ac-row--3 ac-think">
-              <label class="mk-field mk-field--switch">
-                <input
-                  type="checkbox"
-                  :checked="thinkingOn"
-                  @change="setThinkingOn(($event.target as HTMLInputElement).checked)"
-                />
-                <span class="mk-field__label" style="margin:0">启用思考</span>
+            <div class="ac-row ac-row--2 ac-think">
+              <label class="mk-field">
+                <span class="mk-field__label">思考模式</span>
+                <select
+                  class="mk-field__select"
+                  :value="form.defaultThinkingMode"
+                  @change="setThinkingMode(($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="default">跟随模型默认</option>
+                  <option value="enabled">强制开启</option>
+                  <option value="disabled">关闭</option>
+                </select>
               </label>
               <label class="mk-field">
                 <span class="mk-field__label">思考强度</span>
@@ -231,34 +239,25 @@
                   <option value="max">最高（max）</option>
                 </select>
               </label>
-              <label class="mk-field">
-                <span class="mk-field__label">思考模式</span>
-                <select
-                  class="mk-field__select"
-                  :value="form.defaultThinkingMode"
-                  @change="setThinkingMode(($event.target as HTMLSelectElement).value)"
-                >
-                  <option value="default">跟随模型默认</option>
-                  <option value="enabled">强制开启</option>
-                  <option value="disabled">关闭</option>
-                </select>
-              </label>
             </div>
 
             <!-- 结构化输出：平台级默认（json 媒介 Skill 的请求附 response_format，上游解码层强制 JSON；
                  需渠道支持——2026-10-02 对本渠道直连实测为真强制；skill 级 paramOverrides.responseFormat 可覆盖/显式关闭） -->
             <div class="ac-sec__title">结构化输出<span class="ac-sec__hint">对输出 JSON 的 Skill 由上游强制 JSON（防「自然停止但吐散文」类失败）；仅支持 OpenAI 风格 response_format 的渠道可开<span v-if="dirty.has('route')"> · 保存见卡头「保存路由」</span></span></div>
-            <label class="mk-field">
-              <span class="mk-field__label">输出格式</span>
-              <select
-                class="mk-field__select"
-                :value="form.defaultResponseFormat"
-                @change="form.defaultResponseFormat = ($event.target as HTMLSelectElement).value as 'none' | 'json_object'; markDirty('route')"
-              >
-                <option value="none">关闭（默认行为）</option>
-                <option value="json_object">JSON 对象（json_object）</option>
-              </select>
-            </label>
+            <!-- 与上方「思考模式 / 思考强度」同宽（同列里同类控件两种宽度是偶然差异，不是层级） -->
+            <div class="ac-row ac-row--2">
+              <label class="mk-field">
+                <span class="mk-field__label">输出格式</span>
+                <select
+                  class="mk-field__select"
+                  :value="form.defaultResponseFormat"
+                  @change="form.defaultResponseFormat = ($event.target as HTMLSelectElement).value as 'none' | 'json_object'; markDirty('route')"
+                >
+                  <option value="none">关闭（默认行为）</option>
+                  <option value="json_object">JSON 对象（json_object）</option>
+                </select>
+              </label>
+            </div>
           </div>
         </div>
         <!-- 路由默认的候选：模型目录（File-as-Truth，带「供应商 · tier」标注）+ 通道拉取清单 + 逻辑别名 -->
@@ -1124,15 +1123,10 @@ const hasUnsavedModels = computed(() => {
   return models.value.length !== saved.length || models.value.some((m, i) => m !== saved[i])
 })
 
-/** 思考开关 = enabled(强制) 或 default(跟随模型) 视为"开"；disabled 视为"关"。
-    关闭时后端仍可被 skill 级配置覆盖；此处仅表达平台默认。 */
+/** 思考是否非关闭态（`defaultThinkingMode !== 'disabled'`）——只作「思考强度」的可用性判据。
+    2026-10-14：原「启用思考」开关（setThinkingOn）已删，它与「思考模式」下拉是同一字段的两个控件：
+    开关关掉 ⇔ 下拉选「关闭」，且勾上只能落到「跟随模型默认」，表达不了「强制开启」（有损视图）。 */
 const thinkingOn = computed(() => form.defaultThinkingMode !== 'disabled')
-function setThinkingOn(on: boolean) {
-  // 开 → 回到「跟随模型默认」（不强制）；关 → disabled，同时强度复位 default
-  form.defaultThinkingMode = on ? (form.defaultThinkingMode === 'disabled' ? 'default' : form.defaultThinkingMode) : 'disabled'
-  if (!on) form.defaultReasoningEffort = 'default'
-  markDirty('route')
-}
 
 function setThinkingMode(v: string) {
   if (v === 'default' || v === 'enabled' || v === 'disabled') {
@@ -1513,7 +1507,7 @@ async function saveQuota(enabled: boolean, quota: number) {
 /* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
 .ac-row { display: grid; gap: 14px; align-items: end; }
-.ac-row--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ac-row--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* 2026-10-06 审核 #159：四个配置页签的字段控件统一走 .mk-field__input/__select/__textarea
    （与 MCP 弹窗、加字段向导同原语）——原「.mk-field 下 .mk-filter__input 补 100% 宽」的补偿规则
    随控件换原语一并删除（字段原语自身即 width:100%） */
@@ -1613,8 +1607,7 @@ async function saveQuota(enabled: boolean, quota: number) {
 /* 持久化说明（F8-2）：拉取仅本页有效的提示，比清单胶囊再轻一档；仅未保存时出现 */
 .ac-models__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.55; }
 
-/* 默认思考：开关 + 强度 + 模式，与「路由默认」同一三列网格语言 */
-.ac-think .mk-field--switch { align-self: center; }
+/* 默认思考：模式 + 强度，同一行两列字段（2026-10-14 删冗余「启用思考」开关后由三列改两列） */
 
 /* 安全与访问卡：2×2 宫格（左列 ~700px 宽），虚线分隔按行划分——
    第 1、2 项无上分隔；第 3、4 项加顶部虚线换行分隔 */
@@ -1890,7 +1883,7 @@ async function saveQuota(enabled: boolean, quota: number) {
 @media (max-width: 800px) {
   /* 三列栅格在窄屏回落单列：此前漏掉这条，390 下「服务地址 | API Key」
      仍强行并排，服务地址输入框被 180px 下限撑破、压掉 API Key（审计 P1 2.2） */
-  .ac-row--3 { grid-template-columns: 1fr; }
+  .ac-row--2 { grid-template-columns: 1fr; }
   .ac-group__fields { grid-template-columns: 1fr; }
   .ac-health__row { grid-template-columns: 10px minmax(0, 1fr) auto; }
   .ac-health__head { grid-template-columns: 10px minmax(0, 1fr) auto; }
