@@ -181,4 +181,29 @@ describe('MemoryReviewOverview：到期时间轴（2026-10-12 恢复跨用户总
     const labels = grids[0].findAll('.mk-kpi__label').map((x) => x.text());
     expect(labels).toEqual(['用户', '记忆痕迹', '当前到期', '需人工看', '待归并建议', '措辞重复率', '未挂靠散键', '待审队列']);
   });
+
+  /** 2026-10-14 走查：待审队列 = 人审档归并建议 + ambiguous + 散键清理建议（后端 memory-review.ts:64-68），
+   *  「需人工看」就是中间那个加数——另两项为 0 时两卡必然同数，并排 7 与 7 读作两个矛盾口径。
+   *  断言：和卡 hint 明写包含关系、title 声明不是另一个口径（改 hint 文案不得静默退回）。 */
+  it('待审队列 hint 明写「含需人工看 N」：与同带那枚独立卡同数时不再读作矛盾口径', async () => {
+    const w = await mountWithRows(ROWS, {
+      ambiguous: 7,
+      fragmentation: { duplicateLabelRatio: 0, unattachedKeys: 0, pendingReview: 7 },
+    });
+    const byLabel = (label: string) =>
+      w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label)!;
+    expect(byLabel('需人工看').find('.mk-kpi__num').text()).toBe('7');
+    const queue = byLabel('待审队列');
+    expect(queue.find('.mk-kpi__num').text()).toBe('7');
+    expect(queue.find('.mk-kpi__hint').text()).toBe('含需人工看 7');
+    expect(queue.attributes('title')).toContain('已含在此数内');
+
+    // 无待人工确认时保留原口径文案（不为 0 时硬凑「含需人工看 0」）
+    const w0 = await mountWithRows(ROWS, {
+      ambiguous: 0,
+      fragmentation: { duplicateLabelRatio: 0, unattachedKeys: 0, pendingReview: 0 },
+    });
+    const queue0 = w0.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '待审队列')!;
+    expect(queue0.find('.mk-kpi__hint').text()).toBe('人审队列中的建议数');
+  });
 });

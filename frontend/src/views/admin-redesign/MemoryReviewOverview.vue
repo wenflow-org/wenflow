@@ -410,6 +410,10 @@ const fragmentationCards = computed<OverviewCard[]>(() => {
   const ratio = frag?.duplicateLabelRatio
   const unattached = frag?.unattachedKeys
   const pendingReview = frag?.pendingReview
+  /* 「需人工看」这一项（totals.ambiguous）既是同带上的独立一卡，又是 pendingReview 求和公式里的加数
+     （后端 memory-review.ts:64-68：review 档归并建议 + ambiguous + 散键清理建议）——
+     它非 0 而另两项为 0 时，两卡必然同数。 */
+  const ambiguous = totals.value.ambiguous
   return [
     {
       label: '措辞重复率',
@@ -428,9 +432,12 @@ const fragmentationCards = computed<OverviewCard[]>(() => {
     {
       label: '待审队列',
       value: na || pendingReview == null ? '—' : pendingReview,
-      hint: numHint('人审队列中的建议数'),
+      /* hint 明写包含关系（2026-10-14 走查）：旧 hint「人审队列中的建议数」不给任何线索，
+         而本卡是「人审档归并建议 + **需人工看** + 散键清理建议」之和 —— 带上那枚独立卡
+         「需人工看」就在和里，另两项为 0 时两卡同数，7 与 7 并排读作矛盾数字。 */
+      hint: numHint(pendingReview != null && ambiguous > 0 ? `含需人工看 ${ambiguous}` : '人审队列中的建议数'),
       tone: numTone(!na && pendingReview != null && pendingReview > 0 ? 'warn' : ''),
-      title: '待审队列深度：未执行的归并建议 + 需人工看 + 散键清理建议总数。不会自动执行——进具体学习者的「记忆调度」页签逐条确认或驳回'
+      title: '待审队列深度 = 人审档归并建议 + 需人工看 + 散键清理建议之和（同一带上的「需人工看」已含在此数内，不是另一个口径）。不会自动执行——进具体学习者的「记忆调度」页签逐条确认或驳回'
     }
   ];
 });
