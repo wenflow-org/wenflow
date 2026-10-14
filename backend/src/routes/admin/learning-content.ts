@@ -15,12 +15,12 @@ import {
   findLearningPathWithMilestoneCount,
   deleteLearningPath,
   getLearningContentStats,
+  findLatestVirtualSessionForPath,
 } from '../../services/admin/learning-content.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { logger } from '../../utils/logger';
 import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
-import prisma from '../../config/database';
 import simulationCoordinator from '../../coordinators/simulation.coordinator';
 
 const router = express.Router();
@@ -186,10 +186,7 @@ router.post('/paths/:id/retry-generation', async (req: Request, res: Response) =
     const path = await findLearningPathById(req.params.id);
     if (!path) return res.status(404).json({ success: false, error: { message: '路径不存在' } });
 
-    const session = await prisma.virtual_sessions.findFirst({
-      where: { learningPathId: path.id },
-      orderBy: { createdAt: 'desc' },
-    });
+    const session = await findLatestVirtualSessionForPath(path.id);
     if (!session) {
       return res.status(409).json({ success: false, error: { message: '该路径没有关联的虚拟学习会话，无法重试生成', status: 409 } });
     }

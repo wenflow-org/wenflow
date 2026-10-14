@@ -138,6 +138,17 @@ export async function findPathConversationId(id: string): Promise<string | null>
   return conv?.id ?? null;
 }
 
+/**
+ * 路径 → 最新虚拟学习会话（「重试路径生成」的派发目标）。
+ * 路径不直挂会话，按 learningPathId 取最近一条虚拟会话代发（与 findPathConversationId 同判据）。
+ */
+export async function findLatestVirtualSessionForPath(learningPathId: string) {
+  return prisma.virtual_sessions.findFirst({
+    where: { learningPathId },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
 /** 下线路径（内容治理：用户端不可继续学习；status=archived） */
 export function archiveLearningPath(id: string) {
   return prisma.learning_paths.update({
