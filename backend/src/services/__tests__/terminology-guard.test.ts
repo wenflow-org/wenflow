@@ -2,9 +2,9 @@
  * 前端术语单源守卫（阶段 1D + 治理强化）
  *
  * 职责（doc/ADMIN_TERMINOLOGY_AUDIT.md §4）：
- * 1. terms.ts 常量表存在且包含统一后的关键术语（漂移三义 / 同步族 / 状态族 / 健康族）；
- * 2. 漂移三义常量值互不相同（契约漂移 / 哈希漂移 / 遥测漂移不得合并文案）；
- * 3. 漂移/同步族关键页面必须 import terms.ts（文案单源引用）；
+ * 1. terms.ts 常量表存在且包含统一后的关键术语（不一致族 / 同步族 / 状态族 / 健康族）；
+ * 2. 不一致族各义常量值互不相同（文件与线上 / 哈希 / 运行时不得合并文案）；
+ * 3. 不一致/同步族关键页面必须 import terms.ts（文案单源引用）；
  * 4. 禁用叫法/黑话不出现——扫描 admin-redesign 下**全部 .vue**（不再硬编码文件清单）；
  * 5. 枚举直出守卫：模板文本不得直出英文枚举值（degraded/visible/hidden/draft/…）；
  * 6. 表头守卫：<th> 不得为 camelCase 字段名（工程明细 tab 放行）；
@@ -43,20 +43,20 @@ const listVueFiles = (dir: string, prefix = ''): string[] =>
   listSourceFiles(dir, prefix).filter((f) => f.endsWith('.vue'));
 
 describe('前端术语单源守卫（阶段 1D）', () => {
-  it('terms.ts 包含统一后的关键术语常量（漂移族 / 同步族 / 状态族 / 健康族）', () => {
+  it('terms.ts 包含统一后的关键术语常量（不一致族 / 同步族 / 状态族 / 健康族）', () => {
     const src = read('terms.ts');
     const expected: Array<[string, string]> = [
-      ["driftContract: '漂移'", '漂移主叫法（文件↔DB）'],
-      ["driftContractQualified: '契约漂移'", '契约漂移限定词'],
-      ["driftHash: 'W4 漂移'", 'W4 漂移（哈希）'],
-      ["driftHashQualified: '哈希漂移'", '哈希漂移限定词'],
-      ["driftRuntime: '运行时漂移'", '运行时漂移（遥测）'],
-      ["driftTab: '漂移与审计'", '漂移与审计 tab'],
+      ["driftContract: '不一致'", '主叫法（文件↔DB）'],
+      ["driftContractQualified: '文件与线上不一致'", '限定词（编排契约↔线上）'],
+      ["driftHash: '编译产物不一致'", '编译产物不一致（W4 哈希）'],
+      ["driftHashQualified: '哈希不一致'", '哈希不一致限定词'],
+      ["driftRuntime: '运行时不一致'", '运行时不一致（遥测）'],
+      ["driftTab: '不一致与审计'", '不一致与审计 tab'],
       ["syncToDb: '同步到 DB'", '同步按钮（文件→DB 生效动作）'],
       ["syncDone: '同步完成'", '同步完成提示'],
       ["saveToFile: '保存到编排文件'", '保存到编排文件'],
       ["publish: '发布'", '发布'],
-      ["reconcile: '对账'", '对账'],
+      ["reconcile: '一致性核查'", '一致性核查'],
       ["statusMissing: '缺项'", '缺项'],
       ["statusOrphan: '孤儿'", '孤儿'],
       ["fieldsSynced: '字段已同步'", '字段已同步'],
@@ -67,7 +67,7 @@ describe('前端术语单源守卫（阶段 1D）', () => {
     }
   });
 
-  it('漂移三义常量互不相同（契约/哈希/遥测不得合并文案）', () => {
+  it('不一致族各义常量互不相同（线上/哈希/运行时不得合并文案）', () => {
     const src = read('terms.ts');
     const keys = ['driftContract', 'driftContractQualified', 'driftHash', 'driftHashQualified', 'driftRuntime'];
     const vals = keys.map((k) => src.match(new RegExp(`\\b${k}: '([^']+)'`))?.[1]);
@@ -75,7 +75,7 @@ describe('前端术语单源守卫（阶段 1D）', () => {
     expect(new Set(vals).size).toBe(vals.length);
   });
 
-  it('漂移/同步族关键页面必须引用 terms.ts（文案单源）', () => {
+  it('不一致/同步族关键页面必须引用 terms.ts（文案单源）', () => {
     const mustImport = [
       'FieldRoutingTable.vue',
       'SkillFieldRouting.vue',

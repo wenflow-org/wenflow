@@ -69,9 +69,16 @@ describe('skills-file loader（P0 户口簿）', () => {
       'skill:teaching-turn',
       'skill:peer-reinforcement',
       'skill:session-wrapup',
-      'skill:adaptive-guidance-copy',
     ]);
-    expect(members.get('profile-agent')).toEqual(['skill:learner-model', 'skill:lesson-knowledge-enricher', 'skill:learning-predictor']);
+    // 2026-10-14 用户拍板：adaptive-guidance-copy 归画像阶段（它产出的是给学习者看的页面文案，
+    // 消费的是画像阶段的 learnerSnapshot/learningState，授课链 routings 里没有它的 handoff）
+    // → 从 teaching-agent 移到 profile-agent（按登记顺序排在首位）
+    expect(members.get('profile-agent')).toEqual([
+      'skill:adaptive-guidance-copy',
+      'skill:learner-model',
+      'skill:lesson-knowledge-enricher',
+      'skill:learning-predictor',
+    ]);
     expect(members.get('simulation-agent')).toHaveLength(9);
     expect(members.has('mcp-tool')).toBe(false);
   });
