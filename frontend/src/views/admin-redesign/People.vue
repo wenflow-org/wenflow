@@ -95,7 +95,7 @@ const ppKpi = computed<PpKpiTile[]>(() => {
         value: virtual,
         hint: '模拟数据账号',
         tone: '',
-        title: `${scope}；系统生成的模拟学习账号`,
+        title: `${scope}。系统生成的模拟学习账号`,
       },
       {
         label: '测试账号',
@@ -112,7 +112,7 @@ const ppKpi = computed<PpKpiTile[]>(() => {
         value: active7dOf(rows),
         hint: '最后登录在 7 天内',
         tone: '',
-        title: `${scope}；统计当前显示的账号（虚拟学习者与测试账号）`,
+        title: `${scope}。统计当前显示的账号（虚拟学习者与测试账号）`,
       },
     ]
   }
@@ -122,14 +122,14 @@ const ppKpi = computed<PpKpiTile[]>(() => {
       value: realRows.length,
       hint: `不含虚拟 / 测试账号 · ${adminsHint}`,
       tone: '',
-      title: `${scope}；切换页头「测试」后计入虚拟 / 测试账号`,
+      title: `${scope}。在「测试」视角下计入虚拟 / 测试账号`,
     },
     {
       label: '近 7 天活跃',
       value: active7dOf(realRows),
       hint: '最后登录在 7 天内',
       tone: '',
-      title: `${scope}；仅统计真实用户（不含虚拟 / 测试账号）`,
+      title: `${scope}。仅统计真实用户（不含虚拟 / 测试账号）`,
     },
   ]
 })

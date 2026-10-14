@@ -93,7 +93,7 @@ useEscape(() => !!launchTarget.value, () => { if (!launchBusy.value) launchTarge
 /** 父页面触发：加载故事并打开启动弹窗 */
 async function open(s: LaunchTarget) {
   if (s.storyCount === 0 && isLive.value) {
-    toast.error('请先在画像页生成故事；故事产生学习需求后才能运行')
+    toast.error('请先在画像页生成故事。故事产生学习需求后才能运行')
     openSubPage('virtual', s.id)
     return
   }
@@ -137,7 +137,7 @@ async function startLaunch() {
   const target = launchTarget.value
   if (!target || launchBusy.value) return
   if (!launchForm.value.storyId) {
-    toast.error('请选择故事；每个故事对应一套学习任务（Path）')
+    toast.error('请选择故事。每个故事对应一套学习任务（路径）')
     return
   }
   launchBusy.value = true

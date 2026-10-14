@@ -654,7 +654,7 @@ const testMcpTool = async (tool: UserMcpToolConfig) => {
   let callId = tool.id;
   if (tool.transport === 'mcp') {
     const toolName = (mcpToolName[tool.id] || '').trim();
-    if (!toolName) return toast.warning('请先填写该 MCP 服务的工具名（如 tavily_search）');
+    if (!toolName) return toast.warning('请先填写该 MCP 服务的工具名');
     callId = `${tool.id}:${toolName}`;
   }
 
@@ -723,7 +723,7 @@ const handleDeactivate = async () => {
   }
   const ok = await askConfirm({
     title: '注销账号',
-    message: '注销后账号将被标记为已删除，学习数据将无法继续访问；此操作不可自助撤销。确定注销吗？',
+    message: '注销后账号将被标记为已删除，学习数据将无法继续访问。此操作不可自助撤销。确定注销吗？',
     confirmText: '确认注销',
     danger: true,
     busy: true,

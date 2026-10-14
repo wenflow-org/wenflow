@@ -503,7 +503,7 @@ const pills = computed<Array<{ id: string; label: string; count: number | string
       id: 'online',
       label: '近 7 天活跃',
       count: realActive.filter((u) => recentLogin(u.lastLoginAt)).length,
-      title: `近 7 天内有登录；${pillDomainTitle}`
+      title: `近 7 天内有登录。${pillDomainTitle}`
     },
     /* 审核 #14（2026-10-06）：已删除列表取自单次 limit 窗口，超过窗口时计数会小于真实值——
        到顶显示「50+」并在 title 标注截断，界面不再把窗口当全量。 */
@@ -513,7 +513,7 @@ const pills = computed<Array<{ id: string; label: string; count: number | string
       count: deletedUsers.value.length
         ? (deletedUsers.value.length >= DELETED_WINDOW ? `${DELETED_WINDOW}+` : deletedUsers.value.length)
         : null,
-      title: `最多保留最近 ${DELETED_WINDOW} 条已删除账号记录；超过时计数显示「${DELETED_WINDOW}+」`
+      title: `最多保留最近 ${DELETED_WINDOW} 条已删除账号记录。超过时计数显示「${DELETED_WINDOW}+」`
     }
   ]
 })

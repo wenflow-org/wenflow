@@ -164,7 +164,7 @@ export function useCockpitStages(deps: {
   function stageMiniStatus(st: StageKey) {
     if (st === 'goal') {
       const n = goalConversationMessages.value.length
-      return n ? `${n} 轮` : (stageDone(st) ? '已收敛' : '')
+      return n ? `${n} 轮` : (stageDone(st) ? '已完成' : '')
     }
     if (st === 'path') {
       return pathMilestonesView.value.length ? `${pathMilestonesView.value.length} 个里程碑` : ''

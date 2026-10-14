@@ -276,19 +276,19 @@ const resultTitle = computed(() => {
   if (result.value?.changed === false) return '无变化'
   // add 模式 synced=false：文件已写但保存同步失败，标题同步降级（与结果列表的红色失败行一致）
   if (!isEdit.value && result.value?.synced === false) return '已写入文件但保存同步失败'
-  return isEdit.value ? '已更新并回填路由 ✓' : '已保存并回填路由 ✓'
+  return isEdit.value ? '已更新并回填路由' : '已保存并回填路由'
 })
 const resultNote = computed(() => {
   if (result.value?.changed === false) return '字段现状与提交内容一致，未保存 / 未同步 / 未记审计。'
   if (!isEdit.value && result.value?.synced === false) {
-    return '新字段已写入双文件，但保存同步失败（数据库尚无该字段）。请按失败提示排查后重试同步；发布 core 变更前先确认 DB 一致性核查恢复。'
+    return '新字段已写入双文件，但保存同步失败（数据库尚无该字段）。请按失败提示排查后重试同步。'
   }
   if (isEdit.value) {
-    return '字段修改已生效（core 声明 + 编排路由 + DB 一致性核查）；记得去「协议」tab 编译预览 → 发布 core 变更（发布需开发审批，不并入本次保存）。'
+    return '字段修改已生效（core 声明 + 编排路由 + DB 一致性核查）。'
   }
-  return '新字段已登记路由并同步；记得去「协议」tab 编译预览 → 发布 core 变更（发布需开发审批，不并入本次保存）。'
+  return '新字段已登记路由并同步。'
 })
-const previewMeta = computed(() => (isEdit.value ? 'core.yaml fields + 编排 fields/routings 将更新为' : 'core.yaml fields + 编排 fields/routings 各追加 1 行'))
+const previewMeta = computed(() => (isEdit.value ? '核心声明与编排路由将更新为' : '核心声明与编排路由各追加 1 行'))
 
 onMounted(() => {
   if (isEdit.value && props.initial) {
@@ -348,8 +348,8 @@ const nameProblems = computed(() => {
   const name = form.value.name.trim()
   if (!name) return '字段名必填'
   if (!nameSegmentsOk.value) return '命名非法：每段须小写字母开头，仅含字母/数字/下划线，可点分嵌套'
-  if (nameDup.value === 'full') return '✗ 与现有字段重复（核心声明或编排 fieldId，如需调整请走既有编辑面）'
-  if (nameDup.value === 'root' && !isNested.value) return '✗ 顶层名与现有核心字段首段重复'
+  if (nameDup.value === 'full') return '与现有字段重复（核心声明或编排登记，如需调整请走既有编辑面）'
+  if (nameDup.value === 'root' && !isNested.value) return '顶层名与现有核心字段首段重复'
   return ''
 })
 
@@ -399,7 +399,7 @@ const previewYaml = computed(() => {
 # ── prompts/orchestration/${props.stage}.yaml（fields）──
   - fieldId: ${name}
     promptRole: ${form.value.role}
-    valueType: ${vt ?? '⚠ enum 无编排侧拼写'}${fieldExtra}
+    valueType: ${vt ?? 'enum 无编排侧拼写'}${fieldExtra}
     description: ${desc}
 
 # ── prompts/orchestration/${props.stage}.yaml（routings）──
@@ -419,7 +419,7 @@ watch(
 )
 
 function checkName() {
-  nameHint.value = nameProblems.value || '✓ 可用（保存时后端还会做最终查重/校验）'
+  nameHint.value = nameProblems.value || '可用（保存时后端还会做最终查重/校验）'
 }
 
 /** 409 / 404 / 422 错误码 → 中文展示（message 取后端原文，code 前缀帮助定位） */
@@ -432,7 +432,7 @@ function errText(e: unknown): string {
     FIELD_EXISTS: '字段已存在（核心声明或编排 fieldId 重复），如需调整请走既有编辑面',
     FIELD_NOT_FOUND: '字段不存在：核心声明与编排登记需同名（可能已被删除或仅存在于一侧）',
     FIELD_SYSTEM_LOCKED: '该字段由平台锁定（平台自动生成）：此处只读，请改编排文件',
-    FIELD_CONSUMED: '字段仍被下游引用（其他 Agent 路由 或 其他 Skill 的输入声明），禁止删除；请先解除引用',
+    FIELD_CONSUMED: '字段仍被下游引用（其他 Agent 路由 或 其他 Skill 的输入声明），禁止删除。请先解除引用',
     FIELD_NAME_REQUIRED: '字段名校验失败',
     FIELD_NAME_INVALID: '字段名校验失败',
     FIELD_NAME_PLATFORM: '字段名是平台包装字段（success/quality/stage/raw），禁止出现在字段表',
@@ -445,7 +445,7 @@ function errText(e: unknown): string {
     VISIBILITY_PRESET_UNKNOWN: '「可见性预设」取值不在可选值列表',
     LOCKED_UNKNOWN: 'locked 非法（可选 system | structure）',
     FIELD_DESC_REQUIRED: 'desc（生成指令/含义）必填',
-    SKILL_NOT_FOUND: 'skills.yaml 无该 skill 登记',
+    SKILL_NOT_FOUND: '未找到该 skill 的登记',
     SKILL_NO_STAGE: '该 skill 无编排阶段归属',
     CORE_FILE_MISSING: '核心文件不存在',
     ORCHESTRATION_FILE_MISSING: '编排文件不存在',

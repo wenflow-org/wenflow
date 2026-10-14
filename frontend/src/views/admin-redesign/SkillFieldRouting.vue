@@ -541,7 +541,7 @@ function canDeleteRow(row: Record<string, any>): boolean {
 }
 function deleteTitleOf(row: Record<string, any>): string {
   if (row.lockLevel === 'system-locked') return '平台锁定字段禁止删除（平台自动生成，锁原因见编排文件）'
-  return '删除字段：同时移除核心声明、编排字段/路由与数据库行；若仍被下游引用，后端会拦截'
+  return '删除字段：同时移除核心声明、编排字段/路由与数据库行。若仍被下游引用，后端会拦截'
 }
 
 /** 404 / 409 删除错误码 → 中文 */

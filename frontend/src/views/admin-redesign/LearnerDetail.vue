@@ -1228,11 +1228,11 @@ const ldSessionMetaText = computed(() => {
 })
 const ldSessionMetaTitle = computed(() => {
   const base =
-    `${scopeNote.value.title}\n该学习者最近 ${LD_SESSION_WINDOW} 条教学会话（窗口上限）；有效表示有教学内容，已废弃表示学习者点「重新开始」后作废的旧会话。`
+    `${scopeNote.value.title}\n该学习者最近 ${LD_SESSION_WINDOW} 条教学会话（窗口上限）。有效表示有教学内容，已废弃表示学习者重新开始后作废的旧会话。`
   // 里程碑串档只在跨路径时存在：切到单条路径后档位天然同源，不必再告警
   return scopePathId.value
     ? base
-    : `${base}\n注意：「里程碑 N」档位按各会话自己的里程碑序号归并，跨路径时不同路径的同序号里程碑会合到同一档（用上方「路径视角」切到单条路径即无此串档）。`
+    : `${base}\n注意：「里程碑 N」档位按各会话自己的里程碑序号归并，跨路径时不同路径的同序号里程碑会合到同一档（在「路径视角」下看单条路径即无此串档）。`
 })
 
 /* ---------- 阶段切换器（用户诉求「切换学习者不同阶段」）----------
@@ -2443,8 +2443,8 @@ const memMetaText = computed(() => {
 })
 const memMetaTitle = computed(() => {
   const overdue = memoryPaneRows.value.filter((r) => r.overdue).length
-  return `记忆强度为 FSRS 可提取率；待复习为已到复习期（${overdue} 条）；稳固≥80% 且未到期；未初始化为尚无记忆痕迹。` +
-    `\n本块与页头「路径视角」开关无关，按学习者聚合：` +
+  return `记忆强度为 FSRS 可提取率。待复习为已到复习期（${overdue} 条）。稳固≥80% 且未到期。未初始化为尚无记忆痕迹。` +
+    `\n本块与「路径视角」开关无关，按学习者聚合：` +
     `一个概念只保留一条记忆痕迹（记的是最后写入的那条路径），按路径切会漏掉在另一条路径学过的概念。`
 })
 

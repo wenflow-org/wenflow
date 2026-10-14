@@ -153,7 +153,7 @@ const passwordInput = ref<HTMLInputElement | null>(null)
    原硬编码漏斗（末段 217 > 首段 128，自相矛盾）与「运行平稳 92」假看板整层退役 */
 const securityFacts = [
   { text: '会话凭据走 HttpOnly Cookie', detail: '前端只记「已登录」标记，令牌不进 JS/localStorage' },
-  { text: '登录失败与 429 限流', detail: '凭证错误走顶部横幅；频繁尝试提示稍后再试' },
+  { text: '登录失败与 429 限流', detail: '凭证错误显示在顶部横幅。频繁尝试会提示稍后再试' },
   { text: '登出跨标签页广播', detail: '会话失效即时清除本地标记并同步其它标签页' }
 ]
 

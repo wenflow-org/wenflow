@@ -166,7 +166,7 @@ async function open(profileIds?: string[]) {
     state.scanned = Number(d.scanned ?? (state.reclaimable.length + state.skipped.length))
     state.batchLimit = Number(d.batchLimit ?? 0)
   } catch (e) {
-    toast.error(`扫描卡死会话失败：${errMsg(e)}`)
+    toast.error(`扫描无响应会话失败：${errMsg(e)}`)
     state.open = false
   } finally {
     state.loading = false
@@ -183,7 +183,7 @@ async function confirmReclaim() {
       ...(state.profileIds ? { profileIds: state.profileIds } : {})
     })
     const d = res.data?.data ?? {}
-    toast.success(`已回收 ${Number(d.reclaimed ?? 0)} 个卡死会话（活跃租约跳过 ${Number(d.skippedActiveLease ?? 0)}）`)
+    toast.success(`已回收 ${Number(d.reclaimed ?? 0)} 个无响应会话（活跃租约跳过 ${Number(d.skippedActiveLease ?? 0)}）`)
     state.open = false
     emit('done')
     void loadLiveData()

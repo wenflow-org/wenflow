@@ -14,12 +14,12 @@
 
       <!-- 页头按原型 wf-paths__head（index.html 1786-1792）：左 16px 标题 + 右 ghost「新目标」，
            无 hero 大标题与说明文字；失败态仍隐藏（与失败原因同屏会互相矛盾）。
-           P3-44（设计评审）：同一「新建目标」动作两入口主名词统一为「新目标」——
-           页头短钮「新目标」（Plus 为 aria-hidden 图标非文字）+ 页尾长文案「用 2 分钟规划一个新目标」
-           可并存，改文案时两处主名词须同步 -->
+           「新建目标」每屏只保留一个入口（2026-10-09 用户反馈：空态 CTA、列表尾虚线条
+           与页头短钮三处并存是重复）——空态显示居中「规划第一个目标」，有路径后本按钮
+           是唯一入口（原列表尾 wf-newpath 虚线条已随本次反馈移除）。 -->
       <div v-if="!loadError" class="paths__head">
         <h2>我的学习路径</h2>
-        <button type="button" class="paths__new-goal" @click="router.push('/goal-conversation')">
+        <button v-if="cards.length > 0" type="button" class="paths__new-goal" @click="router.push('/goal-conversation')">
           <Plus :size="15" :stroke-width="2" aria-hidden="true" />
           新目标
         </button>
@@ -204,12 +204,6 @@
               </div>
             </template>
           </article>
-
-          <!-- 原型 wf-newpath（1823-1826 / 725-731）：列表末尾的虚线蓝底新目标入口 -->
-          <button type="button" class="cards__newpath" @click="router.push('/goal-conversation')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            用 2 分钟规划一个新目标
-          </button>
         </div>
 
         <!-- 筛选/搜索空态 -->
@@ -296,11 +290,11 @@ const deleteBusy = ref(false);
     2026-10-08 走查 #15：这两处原先各写一份，轮询一跑就把「主结构生成中，一般 1-2 分钟内完成…」
     换成「主结构生成中…」，那句用户最需要的时长承诺整段消失（手机档实测只剩短句，
     且本屏 docH=视口高、没有滚动可达的后半段）。抽成一处后不可能再各自漂移。 */
-const CORE_PHASE_TEXT = '主结构生成中，一般 1-2 分钟内完成…';
+const CORE_PHASE_TEXT = '路径生成中，一般 1-2 分钟内完成…';
 function phaseTextOf(lc: { phase?: string | null; completedStages?: number | null; totalStages?: number | null }) {
   return lc.phase === 'core'
     ? CORE_PHASE_TEXT
-    : `阶段任务准备中（${lc.completedStages ?? 0}/${lc.totalStages ?? '?'}）…`;
+    : `课程准备中（${lc.completedStages ?? 0}/${lc.totalStages ?? '?'}）…`;
 }
 
 /** 原型副行（wf-pathitem__sub）：「已备好 24 节课 · 约 24 小时」；
@@ -326,7 +320,7 @@ function normalize(p: Record<string, any>): PathCard {
       return {
         id: p.id, title, desc, sub: buildSub(stages), kind: 'failed', stages, stageDone: lc.completedStages ?? 0,
         percent: 0, hours, retryType: lc.retryType,
-        retryLabel: lc.retryType === 'stage_design' ? '重新准备阶段任务' : '重新生成主结构',
+        retryLabel: lc.retryType === 'stage_design' ? '重新准备课程' : '重新生成路径',
         phaseText: '', errorText: lc.errorMessage || ''
       };
     }
@@ -568,7 +562,7 @@ function statusLabel(card: PathCard) {
   if (card.kind === 'completed') return '已完成';
   if (card.kind === 'ready') return '进行中';
   if (card.kind === 'generating') return '生成中';
-  return card.retryType === 'stage_design' ? '阶段任务失败' : '主结构失败';
+  return card.retryType === 'stage_design' ? '课程失败' : '路径失败';
 }
 
 /** P2-30（设计评审 2026-10-04）：后端失败兜底句「学习路径生成失败，请先重新生成路径。」
@@ -577,7 +571,7 @@ function statusLabel(card: PathCard) {
  *  重试名词改说（core→主结构、stage_design→阶段任务），其余 errorMessage 原样直出；后端模板不动。 */
 function failReasonText(card: PathCard): string {
   if (card.errorText.trim() !== '学习路径生成失败，请先重新生成路径。') return card.errorText;
-  return card.retryType === 'stage_design' ? '阶段任务准备中断，可重试。' : '主结构生成中断，可重试。';
+  return card.retryType === 'stage_design' ? '课程准备中断，可重试。' : '路径生成中断，可重试。';
 }
 function badgeCls(card: PathCard) {
   if (card.kind === 'completed') return 'pcard__badge--green';
@@ -803,25 +797,6 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 .pcard__actions { display: flex; justify-content: flex-end; margin-top: auto; }
-
-/* 原型 wf-newpath（725-731）：82px 高虚线蓝底块，列表末尾的「规划新目标」入口 */
-.cards__newpath {
-  grid-column: 1 / -1;
-  min-height: 82px;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  border: 1.5px dashed color-mix(in srgb, var(--blue) 40%, transparent);
-  border-radius: var(--mk-radius-modal);
-  background: color-mix(in srgb, var(--blue) 4%, transparent);
-  color: var(--blue-deep);
-  font-family: inherit; font-size: 14px; font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.cards__newpath:hover {
-  background: color-mix(in srgb, var(--blue) 8%, transparent);
-  border-color: color-mix(in srgb, var(--blue) 60%, transparent);
-}
-.cards__newpath svg { width: 17px; height: 17px; }
 
 .pcard__generating {
   display: flex; align-items: center; gap: 9px;

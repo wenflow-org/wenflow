@@ -390,7 +390,7 @@ const wbErrorText = computed(() =>
 const todoConclusion = computed(() => {
   const pending = todoItems.value.filter((t) => t.count > 0 && !t.failed).length
   /* 有域失败时不得断言「全部已清零」：失败域的计数未被更新，清零结论不可信 */
-  if (wbHasError.value) return pending ? `${pending} 项待处理；另有待办域加载失败，结论不完整` : '待办数据加载失败，无法确认是否清零'
+  if (wbHasError.value) return pending ? `${pending} 项待处理。另有待办域加载失败，结论不完整` : '待办数据加载失败，无法确认是否清零'
   if (!pending) return '运营待办全部已清零'
   return `${pending} 项待处理`
 })

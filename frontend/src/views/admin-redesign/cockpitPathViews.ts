@@ -75,7 +75,7 @@ export function pathReviewStatusLabelOf(status: string) {
     pending: '评审完成，待人工处理',
     accepted: '已接受',
     replanning: '重规划中',
-    replanned: '已生成新版 Path，待再次评审',
+    replanned: '已生成新版路径，待再次评审',
     failed: '评审失败'
   }[status] || status)
 }

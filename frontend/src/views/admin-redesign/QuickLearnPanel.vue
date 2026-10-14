@@ -407,7 +407,7 @@ const resultDesc = computed(() => {
     return '现在可以打开普通前台页面，看这个虚拟账号的路径、课堂结果和学习状态。'
   }
   if (currentRun.value.status === 'aborted') return '已停止继续驱动该账号学习，已产生的课堂记录仍保留在平台。'
-  return '系统未确认这节课完成；可以先查看课堂结果和路径状态，再决定是否重跑。'
+  return '系统未确认这节课完成。可以先查看课堂结果和路径状态，再决定是否重跑。'
 })
 
 function flattenTasks(path: QuickLearnPath) {

@@ -274,7 +274,7 @@ export const overviewHealth = computed(() => {
     tone: 'muted' as const,
     score: null,
     headline: '统计尚未就绪',
-    subline: '总览统计加载中或后端不可达；健康结论以健康中心检查清单为准。',
+    subline: '总览统计加载中。健康结论以健康中心的检查清单为准。',
   }
 })
 

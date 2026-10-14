@@ -525,7 +525,7 @@ const SK_COLS_DEFAULT_HIDDEN = ['p95'] as const
 const skColDefs = [
   { key: 'agent', label: '归属 Agent', title: '所属顶层 Agent' },
   { key: 'version', label: '版本', title: 'registry definition.version' },
-  { key: 'routing', label: '路由模型', title: '生效模型；未配置=平台默认；无覆盖行=—' },
+  { key: 'routing', label: '路由模型', title: '生效模型。未配置时用平台默认，无平台覆盖字段时显示 —' },
   { key: 'calls', label: '调用', title: '统计窗口内调用次数（随窗口筛选）' },
   { key: 'p95', label: 'P95', title: '暂无单 Skill 的 P95 耗时数据；该列默认隐藏' },
   { key: 'rate', label: '成功率', title: '窗口内成功率' },
@@ -717,7 +717,7 @@ const okCalls = computed(() => Math.max(0, totalCalls.value - totalErrors.value)
 /** 口径提示：Skill 运行页不含外挂能力（MCP + 能力 Skill），而健康中心/对账的登记总数含它们——避免「31/28/3」三处数字无从解释 */
 const skillCountHint = computed(
   () => (EXTRA_CAPABILITY_SKILLS.length
-    ? `不含 ${EXTRA_CAPABILITY_SKILLS.length} 个外挂能力（见「外挂能力」页）；健康中心 / 对账的登记总数含它们`
+    ? `不含 ${EXTRA_CAPABILITY_SKILLS.length} 个外挂能力（见「外挂能力」页）。健康中心 / 一致性核查的登记总数含它们`
     : ''),
 )
 /** 状态条成功率：精度/阈值/兜底走 rate-utils 单点（P1#26：1 位小数，99.9% 不再显示 100%） */
@@ -1054,14 +1054,14 @@ function fallbackTitleOf(skillId: string): string {
   if (!coverageReady.value) return '模型覆盖数据未加载'
   const row = coverageById.value.get(skillId)
   if (!row) return '覆盖矩阵无此 Skill 行（未登记 skill-model-config）'
-  if (row.fallbackChain && row.fallbackChain.length) return `Skill 自定义兜底链：${row.fallbackChain.join(' → ')}`
-  if (!registryReady.value) return '无自定义兜底链；平台默认链未加载（模型总览拉取失败或未就绪）'
+  if (row.fallbackChain && row.fallbackChain.length) return `Skill 自定义备用模型列表：${row.fallbackChain.join(' → ')}`
+  if (!registryReady.value) return '无自定义备用模型列表。平台默认列表未加载（模型总览拉取失败或未就绪）'
   const modelId = row.model || (row.tier === 'reasoning' ? registryDefaultReasoningModel.value : registryDefaultModel.value)
   const chain = registryChainOf(skillId)
-  if (chain === null) return `无自定义兜底链；模型「${modelId || '未知'}」不在 registry，默认链无法解析`
+  if (chain === null) return `无自定义备用模型列表。模型「${modelId || '未知'}」不在模型目录，默认列表无法解析`
   return chain.length
-    ? `无自定义兜底链；平台默认（${modelId}）：${chain.join(' → ')}`
-    : `无自定义兜底链；平台默认（${modelId}）未配置备用模型，调用失败时不会自动切换`
+    ? `无自定义备用模型列表。平台默认（${modelId}）：${chain.join(' → ')}`
+    : `无自定义备用模型列表。平台默认（${modelId}）未配置备用模型，调用失败时不会自动切换`
 }
 
 /** 归属 Agent 文案（路由表 mono 副行） */
@@ -1130,7 +1130,7 @@ const registryChainText = computed(() => {
     registry 默认链的解析结果（F7-5）；覆盖/registry 未加载显 —，不伪装 */
 const fallbackPolicyText = computed(() => {
   if (!coverageReady.value) return '—'
-  if (fallbackConfigured.value > 0) return `${fallbackConfigured.value} 个自定义兜底链`
+  if (fallbackConfigured.value > 0) return `${fallbackConfigured.value} 个自定义备用模型列表`
   return registryChainText.value || '—'
 })
 const fallbackPolicyHint = computed(() => {
@@ -1139,30 +1139,30 @@ const fallbackPolicyHint = computed(() => {
   return '平台默认链'
 })
 const fallbackPolicyTitle = computed(() => {
-  const head = '模型重试耗尽后按兜底链自动切换；降级仅换模型名，网关与密钥沿用主调用'
+  const head = '模型重试耗尽后按备用模型列表自动切换。降级仅换模型名，网关与密钥沿用主调用'
   if (!coverageReady.value) return '兜底配置未加载（skill-model-configs/coverage 拉取失败或未就绪）'
   if (fallbackConfigured.value > 0) {
-    return `${head}；当前 ${fallbackConfigured.value} 个 Skill 配了自定义兜底链`
+    return `${head}。当前 ${fallbackConfigured.value} 个 Skill 配了自定义备用模型列表`
   }
   if (!registryReady.value) {
-    return `${head}；无自定义兜底链：走平台默认链，但平台默认模型数据暂未加载，默认链暂不可解析`
+    return `${head}。无自定义备用模型列表：走平台默认列表，但平台默认模型数据暂未加载，默认列表暂不可解析`
   }
   const chain = primaryRegistryChain.value
   const model = primaryModelId.value
-  if (!model) return `${head}；无自定义兜底链：暂无可解析的主模型`
-  if (chain === null) return `${head}；无自定义兜底链：模型「${model}」不在 registry，默认链无法解析`
+  if (!model) return `${head}。无自定义备用模型列表：暂无可解析的主模型`
+  if (chain === null) return `${head}。无自定义备用模型列表：模型「${model}」不在模型目录，默认列表无法解析`
   return chain.length
-    ? `${head}；无自定义兜底链：平台默认（${model}）= ${chain.join(' → ')}`
-    : `${head}；无自定义兜底链：平台默认（${model}）未配置备用模型，调用失败时不会自动切换`
+    ? `${head}。无自定义备用模型列表：平台默认（${model}）= ${chain.join(' → ')}`
+    : `${head}。无自定义备用模型列表：平台默认（${model}）未配置备用模型，调用失败时不会自动切换`
 })
 /** 路由表头提示（F7-5）：「备用模型」列的口径写在表头，运营不必猜「registry 默认」是什么 */
 const routingMetaText = computed(() => {
-  if (!coverageReady.value) return '备用模型：Skill 自定义兜底链；模型覆盖数据未加载'
-  if (!registryReady.value) return '备用模型：Skill 自定义兜底链；平台默认链未加载'
+  if (!coverageReady.value) return '备用模型：Skill 自定义备用模型列表。模型覆盖数据未加载'
+  if (!registryReady.value) return '备用模型：Skill 自定义备用模型列表。平台默认列表未加载'
   const text = registryChainText.value
   return text
-    ? `备用模型：自定义链优先；未配置时按平台默认链解析（主模型 ${primaryModelId.value || '平台默认'}：${text}）`
-    : '备用模型：自定义链优先；未配置时按平台默认链解析'
+    ? `备用模型：自定义列表优先。未配置时按平台默认列表解析（主模型 ${primaryModelId.value || '平台默认'}：${text}）`
+    : '备用模型：自定义列表优先。未配置时按平台默认列表解析'
 })
 </script>
 

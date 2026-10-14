@@ -740,7 +740,7 @@ const view = computed<SkillIdentity | null>(() => {
       id: skillId.value,
       name: m.skill?.name || skillId.value,
       category: m.skill?.category || '—',
-      categorySource: 'workbench-meta（兜底：live 档案未就绪）',
+      categorySource: 'workbench-meta（兜底：已上线档案未就绪）',
       agentId: m.parentAgent?.id || '',
       agentName: m.parentAgent?.name || m.parentAgent?.id || ''
     }
@@ -770,12 +770,12 @@ const statsRangeLabel = computed(() => STAT_RANGE_LABELS[liveSkillStatsRange.val
     文案带窗口词，且徽标可点 → 运行时页签（健康+证据先于配置） */
 const healthBadge = computed<{ cls: string; text: string; title: string }>(() => {
   if (stat.value.errors > 0) {
-    return { cls: 'mk-badge--bad', text: `${statsRangeLabel.value} · ${stat.value.errors} 次失败`, title: `${statsRangeLabel.value}窗口内存在失败调用；点击查看运行时指标与最近调用` }
+    return { cls: 'mk-badge--bad', text: `${statsRangeLabel.value} · ${stat.value.errors} 次失败`, title: `${statsRangeLabel.value}窗口内存在失败调用` }
   }
   if (stat.value.calls === 0) {
     return { cls: 'mk-badge--muted', text: '空闲', title: `${statsRangeLabel.value}窗口内无调用（从未调用不等于健康）` }
   }
-  return { cls: 'mk-badge--ok', text: '健康', title: `${statsRangeLabel.value}窗口内调用全部成功；点击查看运行时指标` }
+  return { cls: 'mk-badge--ok', text: '健康', title: `${statsRangeLabel.value}窗口内调用全部成功` }
 })
 
 /* ===== 生效 Prompt（协议页签 System Prompt 卡 + hero 版本 pill + 弹层预填） ===== */
@@ -1342,7 +1342,7 @@ async function saveRuntimeConfig() {
       requestTimeoutMs: rtForm.value.enabled ? (rtForm.value.requestTimeoutMs ?? null) : null,
       enabled: rtForm.value.enabled,
     })
-    rtMsg.value = '已保存（接入地址 / 超时 / 思考档生效；model 以 ACTIVE Prompt 为准）'
+    rtMsg.value = '已保存（接入地址 / 超时 / 思考档生效，模型以当前 Prompt 为准）'
     await loadRuntimeConfig(id, (ok) => ok)
   } catch (e) {
     rtErr.value = true

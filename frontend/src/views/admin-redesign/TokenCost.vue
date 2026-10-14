@@ -483,14 +483,14 @@ function skillRowTitle(r: SkillCostRow): string {
     : (r.callsMissingPricing ?? 0) > 0
       ? `成本 单价未配置（${r.callsMissingPricing} 次调用未定价，不计入金额）`
       : '成本 无已定价调用'
-  return `${r.display || r.key} · ${r.calls} 次调用 · Token ${fmtTokens(r.tokens)} · 均次 ${perCallTokens(r)} · ${cost} · 点击查看该 Skill 的逐调用明细`
+  return `${r.display || r.key} · ${r.calls} 次调用 · Token ${fmtTokens(r.tokens)} · 均次 ${perCallTokens(r)} · ${cost}`
 }
 
 /* 成本卡副行（长版，收进 KPI 卡 title 悬停）：数值本身只给结论。
    原型此位为「今日成本·预算」——接口无分日金额也无预算配置，故如实给当前窗口口径。 */
 const costHint = computed(() => {
   if (costLoading.value) return '金额统计中'
-  if (costFailed.value) return '金额统计拉取失败，可刷新重试；不影响下方逐调用明细'
+  if (costFailed.value) return '金额统计拉取失败，可刷新重试'
   const window = `近 ${days.value} 天`
   if (costUsd.value !== null) {
     const priced = `${window} · 已定价 ${costPricedCalls.value} 次`
@@ -503,8 +503,8 @@ const costHint = computed(() => {
   // backend/config/llm-providers.json 各模型的 pricing 块（File-as-Truth，保存即热重载）。
   // 文案改为指向真实补价路径，点击仍去模型配置页看哪些模型待补。
   return missing.length
-    ? `${window} · 暂不展示金额 · 待补单价模型 ${missing.length} 个：${missing.join('、')}；单价经 backend/config/llm-providers.json 的 pricing 块注入（File-as-Truth，保存即热重载）；点击查看模型配置`
-    : `${window} · models.config.ts 的 pricing 尚未填权威单价，暂不展示金额；单价经 backend/config/llm-providers.json 的 pricing 块注入（保存即热重载）；点击查看模型配置`
+    ? `${window} · 暂不展示金额 · 待补单价模型 ${missing.length} 个：${missing.join('、')}`
+    : `${window} · 尚未配置权威单价，暂不展示金额`
 })
 
 /* KPI hint 短口径（原型 metricCard 的 hint 是一短句）：长解释走卡 title 悬停 */
@@ -615,10 +615,8 @@ const failedCallsText = computed(() =>
 )
 const failedHint = computed(() => {
   const win = `近 ${days.value} 天${includeTest.value ? '（含测试）' : ''}`
-  const base = `${win}内失败 ${failedCalls.value} / 共 ${totalCalls.value} 次；重试后仍失败才计入`
-  return failedCalls.value > 0
-    ? `${base}；逐条失败可在「按 Skill 成本明细」点对应行直达执行日志`
-    : base
+  const base = `${win}内失败 ${failedCalls.value} / 共 ${totalCalls.value} 次（重试后仍失败才计入）`
+  return base
 })
 
 /* P1#25 单价未配置 = 决策态：卡可点直达「模型与接入」补单价 */

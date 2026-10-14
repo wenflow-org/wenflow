@@ -697,21 +697,21 @@ async function runPrune(apply: boolean) {
     if (data.dryRun) {
       msg = `预检：孤儿行 ${candidates.length} 条（契约 ${byTable('agent_contracts')} · 字段 ${byTable('field_definitions')} · 路由 ${byTable('agent_field_routings')}）`;
       if (candidates.length) {
-        msg += '；确认无误后点「确认清理冗余配置」执行';
+        msg += '。确认无误后清理冗余配置';
         pruneConfirming.value = true;
       } else {
-        msg += '；无待清理孤儿行';
+        msg += '。无待清理孤儿行';
         pruneConfirming.value = false;
       }
     } else {
       msg = `已清理 ${data.deletedCount ?? 0} 行孤儿数据（契约 ${byTable('agent_contracts')} · 字段 ${byTable('field_definitions')} · 路由 ${byTable('agent_field_routings')}）`;
       if (Array.isArray(data.auditIds) && data.auditIds.length) {
-        msg += `；审计留痕 ${data.auditIds.length} 条（孤儿清理）`;
+        msg += `。已记录审计 ${data.auditIds.length} 条`;
       }
       pruneConfirming.value = false;
     }
     if (protectedCount) {
-      msg += `；平台覆盖的字段跳过 ${protectedCount} 条（只报告不删）`;
+      msg += `。平台覆盖的字段跳过 ${protectedCount} 条（只报告不删）`;
     }
     orchMsg.value = msg;
 
@@ -737,7 +737,7 @@ async function saveOrchestration() {
   // 写盘前轻量确认：保存即覆写磁盘上的字段路由唯一声明源（对齐 forceSync 的二次确认；落库另走「同步到 DB」）
   const ok = await askConfirm({
     title: TERMS.saveToFile,
-    message: `将以当前编辑内容覆写 prompts/orchestration/${props.stage}.yaml。此操作只写编排文件，不影响数据库；保存需再点「${TERMS.syncToDb}」。`,
+    message: `将以当前编辑内容覆写 prompts/orchestration/${props.stage}.yaml。此操作只写编排文件，不影响数据库。`,
     confirmText: '保存到文件',
     danger: false,
   });
@@ -767,7 +767,7 @@ async function forceSync() {
   // 安全审计 K-M1：同步（全量对账覆写三表）执行前二次确认，注明影响范围
   const ok = await askConfirm({
     title: TERMS.syncToDb,
-    message: `将对「${props.stage}」阶段执行全量一致性核查：以编排 YAML 为唯一声明源，覆写 agent_contracts / field_definitions / agent_field_routings 三表；平台覆盖的字段跳过（只报告不改）。`,
+    message: `将对「${props.stage}」阶段执行全量一致性核查：以编排文件为准，覆写字段契约、字段定义与字段路由，平台覆盖的字段跳过（只报告不改）。`,
     confirmText: '执行同步',
     danger: false,
   })
@@ -781,9 +781,9 @@ async function forceSync() {
     let msg = `${TERMS.reconcile}完成：契约 ${data.contractsUpdated ?? 0} · 字段 ${data.fieldsUpdated ?? 0} · 路由 ${data.routingsUpdated ?? 0} · 新建 ${data.createdCount ?? 0}`;
     if (skipped.length) {
       const sample = skipped.slice(0, 5).map((s) => `${s.table}:${s.key}`).join('、');
-      msg += `；跳过平台覆盖的字段 ${skipped.length} 条（${sample}${skipped.length > 5 ? '…' : ''}）`;
+      msg += `。跳过平台覆盖的字段 ${skipped.length} 条（${sample}${skipped.length > 5 ? '…' : ''}）`;
     } else {
-      msg += '；无平台覆盖的字段被跳过';
+      msg += '。无平台覆盖的字段被跳过';
     }
     orchMsg.value = msg;
     toast.success(TERMS.syncDone);

@@ -56,25 +56,6 @@ const RULES = {
   R5: (s) => (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u.test(s) ? '文案含 emoji' : null)
 };
 
-/* 承载文案的 ts 文件（无 SFC 结构，整文件扫字符串字面量） */
-const TS_COPY = [
-  'views/admin-redesign/terms.ts',
-  'views/admin-redesign/statusText.ts',
-  'views/admin-redesign/glossaryMeta.ts',
-  'views/admin-redesign/live.ts',
-  'views/admin-redesign/evidence.ts',
-  'views/admin-redesign/dataFlow.ts',
-  'views/admin-redesign/opsShared.ts',
-  'views/admin-redesign/cockpitFormat.ts',
-  'views/admin-redesign/cockpitTraces.ts',
-  'views/admin-redesign/cockpitWrapup.ts',
-  'views/admin-redesign/cockpitAutopilot.ts',
-  'views/admin-redesign/vlab.ts',
-  'views/admin-redesign/vlab-controls.ts',
-  'views/v2/agent-labels.ts',
-  'views/v2/learningScene.ts'
-];
-
 /* 免检文件：开发者文档 **有意**展示目录树 / 命令 / 字段名，是内容不是文案缺陷。 */
 const SKIP_FILES = new Set(['views/DeveloperDocs.vue']);
 
@@ -82,9 +63,13 @@ function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
     if (e.isDirectory()) {
-      if (e.name === '__tests__' || e.name === 'test') continue;
+      /* 工具产物目录（.zcode workflow 草稿/运行记录、.mimosa 钩子快照）不进构建，不是产品文案。 */
+      if (e.name === '__tests__' || e.name === 'test' || e.name.startsWith('.')) continue;
       walk(p, out);
-    } else if (e.name.endsWith('.vue') || e.name.endsWith('.ts')) out.push(p);
+    } else if (e.name.endsWith('.vue') || e.name.endsWith('.ts') || e.name.endsWith('.js')) {
+      if (e.name.endsWith('.d.ts')) continue;
+      out.push(p);
+    }
   }
   return out;
 }
@@ -135,14 +120,12 @@ function candidates(line, isVue) {
 
 function scan() {
   const findings = [];
-  const tsSet = new Set(TS_COPY.map((p) => path.join(SRC, p).replace(/\\/g, '/')));
   /* R6 用：同一文件内同一句文案出现的行号（AP8「同页复读」的机械代理） */
   const perFile = new Map();
   for (const file of walk(SRC)) {
     const rel = path.relative(SRC, file).replace(/\\/g, '/');
     if (SKIP_FILES.has(rel)) continue;
     const isVue = file.endsWith('.vue');
-    if (!isVue && !tsSet.has(file.replace(/\\/g, '/'))) continue;
     const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
     const raw = lines.join('\n');
     const recorded = new Set(); // 去重：整块扫描与逐行扫描会命中同一处
@@ -167,8 +150,9 @@ function scan() {
         else if (/<script[\s>]/.test(line)) mode = 'script';
         else if (/<\/script>/.test(line)) mode = null;
         if (mode) return;
-        if (/^\s*(\/\/|\/\*|\*)/.test(line)) return;
       }
+      /* 注释行不是文案：ts 的 // 与块注释、模板里 // 开头的行都跳过。 */
+      if (/^\s*(\/\/|\/\*|\*)/.test(line)) return;
       const seen = new Set();
       for (const text of candidates(line, isVue)) {
         if (seen.has(text)) continue;
@@ -189,6 +173,34 @@ function scan() {
       for (const m of stripped.matchAll(/>([^<>]{2,})</g)) {
         const t = m[1].replace(/\s+/g, ' ').trim();
         if (t && /[\u4e00-\u9fff]/.test(t)) emit(t, lineAt(m.index));
+      }
+      /* script 块的字符串字面量：toast / 空态 / 错误提示 / 状态标签 / KPI title 等**会被渲染到界面**
+         的字符串也住在 <script> 里，此前不扫 → 是最大的取词盲区（实测漏 190 处）。
+         取字面量前先抹掉正则字面量与注释：`[*`~#>]` 这类含反引号的正则会把匹配起点带偏，
+         把两把反引号之间的整段代码/注释吞成「模板字符串」（实测在 V2LearningHistory 等文件
+         造出成片假阳性）；注释里的中文不是文案，一并抹掉。 */
+      const sm = raw.match(/<script[\s\S]*?<\/script>/);
+      if (sm) {
+        /* 剥离顺序有讲究：先 ${…}（模板表达式常含正则/斜杠，先抹掉可免得正则剥离器
+           把 `a/${x}/b` 里的斜杠误判成正则定界符），再正则字面量（`[*`~#>]` 这类含反引号
+           的正则会把反引号配对带偏），最后注释（注释里的中文不是文案）。 */
+        const code = sm[0]
+          .replace(/\$\{(?:[^{}]|\{[^{}]*\})*\}/g, (m2) => m2.replace(/[^\n]/g, ' '))
+          .replace(/\/(?![/*])(?:\\.|\[(?:[^\]\\]|\\.)*\]|[^/\\\n])+\/[gimsuy]*(?![a-zA-Z0-9_$])/g, (m2) => m2.replace(/[^\n]/g, ' '))
+          .replace(/(?<!:)\/\/[^\n]*/g, (m2) => m2.replace(/[^\n]/g, ' '))
+          .replace(/\/\*[\s\S]*?\*\//g, (m2) => m2.replace(/[^\n]/g, ' '));
+        const scriptStart = raw.slice(0, sm.index).split('\n').length - 1;
+        for (const lit of code.matchAll(/'((?:[^'\\\n]|\\.){4,})'|`((?:[^`\\]|\\.){4,})`/g)) {
+          const t = (lit[1] ?? lit[2] ?? '').replace(/\$\{(?:[^{}]|\{[^{}]*\})*\}/g, ' ').replace(/\s+/g, ' ').trim();
+          if (!t || !/[\u4e00-\u9fff]/.test(t)) continue;
+          if (t.includes('${') || t.includes('{{')) continue;
+          /* 兜底滤网：嵌套模板/未剥净的引号会让配对错位，把代码吞成「文案」。
+             真文案不会含 const/function/return/=> 这类代码标记，命中即丢。 */
+          if (/\b(const|let|var|function|return|typeof|await)\b|=>|\)\s*\{|;\s*\}/.test(t)) continue;
+          /* 行号按原始 sm[0] 折算：lit.index 是抹除后文本里的下标，好在抹除只把字符换成空格、
+             不增删换行，偏移一致。+1 折成 1-based（scriptStart 是 `<script>` 行的 0-based 下标）。 */
+          emit(t, scriptStart + sm[0].slice(0, lit.index).split('\n').length);
+        }
       }
     }
   }

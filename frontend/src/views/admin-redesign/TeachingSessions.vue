@@ -526,9 +526,9 @@ async function toggleOnlyAdvisory() {
 /** 「共 N」口径 title（P1#4）：后端真返回 total 才可声称全量；
     「只看有建议」过滤生效时 total 是过滤口径，同样要说明 */
 const totalTitle = computed(() => {
-  if (onlyAdvisory.value) return `当前只显示有教学建议的会话，此处为符合条件的总数；列表最多显示最近 ${LIST_LIMIT} 条`
+  if (onlyAdvisory.value) return `当前只显示有教学建议的会话，此处为符合条件的总数。列表最多显示最近 ${LIST_LIMIT} 条`
   return totalFromBackend.value
-    ? `总数为全部会话；上方分布条与列表最多显示最近 ${LIST_LIMIT} 条`
+    ? `总数为全部会话。分布条与列表最多显示最近 ${LIST_LIMIT} 条`
     : `总数未知，此处为已加载的会话数（最多 ${LIST_LIMIT} 条）`
 })
 
@@ -705,7 +705,7 @@ const pills = computed(() => {
       id: 'active' as const,
       label: '进行中',
       count: all.filter((r) => r.status === 'active').length,
-      title: '只含进行中单一状态；上方分布条「进行中」还含初始化 / 暂停 / 收尾中，范围更宽'
+      title: '只含进行中单一状态。分布条「进行中」还含初始化 / 暂停 / 收尾中，范围更宽'
     },
     { id: 'attention' as const, label: '待关注', count: attentionCount, title: '点击只看该组，再点取消' },
     { id: 'missing' as const, label: '缺总结', count: missingWrapupCount, title: '点击只看该组，再点取消' }
@@ -762,7 +762,7 @@ const tsBandSub = computed(() =>
   // 尾部补一句口径区分：下方快筛 chip「进行中」只算 status=active（单状态），
   // 本分布条的「进行中」是四状态合并档。两者同屏同为「进行中」却数字不同，
   // 此前只写在 title 悬停里（走查：进行中 0 与 进行中 2 并排、读者判不出哪个为真）。
-  `点击分段可筛选对应状态组 · 共 ${rows.value.length} 条（最多显示最近 ${LIST_LIMIT} 条） · 完结率 ${((rows.value.filter((r) => r.status === 'completed').length / (rows.value.length || 1)) * 100).toFixed(2)}% · 「进行中」含初始化 / 暂停 / 收尾中，比下方「进行中」快筛更宽`
+  `共 ${rows.value.length} 条（最多显示最近 ${LIST_LIMIT} 条） · 完结率 ${((rows.value.filter((r) => r.status === 'completed').length / (rows.value.length || 1)) * 100).toFixed(2)}% · 「进行中」含初始化 / 暂停 / 收尾中，比快筛更宽`
 )
 const bandGroup = ref<string | null>(null)
 /** 「其它」段 = 枚举外取值聚合，不能按组内枚举等值判断 */

@@ -495,7 +495,7 @@ const confRows = computed(() => rows.value.filter((r) => r.task && r.confidence 
     否则「卡 1 的 281」与「分档条的 241」同屏会被读成数字打架（2026-10-04 外部评审误读台账） */
 const excludedFromConf = computed(() => rows.value.length - confRows.value.length)
 const confBaseNote = computed(() =>
-  `点击分段可筛选对应置信区间 · 共 ${confRows.value.length} 位有学习任务的学习者` +
+  `共 ${confRows.value.length} 位有学习任务的学习者` +
   (excludedFromConf.value ? `（另 ${excludedFromConf.value} 位无学习任务，未计入）` : '')
 )
 /** 低置信 KPI 与分档条/均值同一口径（有任务的快照）：无任务行在表里置信列本显「—」，
@@ -700,7 +700,7 @@ async function recomputeAll() {
   const confirmed = await askConfirm({
     title: '重算快照',
     message: `确认重算当前筛选命中的 ${targets.length} 位学习者的快照？将逐个重新生成，耗时取决于人数。`
-      + (targets.length > 50 ? `\n当前命中 ${targets.length} 人（超过 50），建议先筛选分批；开始后可随时点「停止」中止。` : ''),
+      + (targets.length > 50 ? `\n当前命中 ${targets.length} 人（超过 50），建议先筛选分批。开始后可随时点「停止」中止。` : ''),
     confirmText: `重算 ${targets.length} 人`,
     danger: false
   })

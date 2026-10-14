@@ -437,7 +437,7 @@ function revokeCount(g: SessionGroup): number {
 /** 卡头口径 title：窗口截断时说明行列表只含最近 N 条，统计仍为全量 */
 const countsTitle = computed(() =>
   truncated.value
-    ? `统计为全部会话；列表仅含最近 ${sessions.value.length} 条`
+    ? `统计为全部会话。列表仅含最近 ${sessions.value.length} 条`
     : '统计与列表均为全部会话'
 )
 

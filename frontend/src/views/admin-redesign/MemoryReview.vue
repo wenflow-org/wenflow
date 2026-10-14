@@ -882,7 +882,7 @@ async function rejectOne(
 ) {
   const ok = await askConfirm({
     title: '驳回建议',
-    message: `驳回${describe}？服务端会留痕，这条建议之后不再重复给出（不改动记忆痕迹；重新观察仍可能生成新建议）。`,
+    message: `驳回${describe}？服务端会留痕，这条建议之后不再重复给出（不改动记忆痕迹。重新观察仍可能生成新建议）。`,
     confirmText: '驳回',
     danger: false,
   })

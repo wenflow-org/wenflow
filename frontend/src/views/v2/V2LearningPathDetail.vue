@@ -660,7 +660,7 @@ const refLabel = (ref: any): string => {
 const refClickable = (ref: any): boolean => !!(ref?.materialId || ref?.sourceUrl);
 
 const refTitle = (ref: any): string => {
-  if (ref?.materialId) return '点开看原文';
+  if (ref?.materialId) return '查看原文';
   if (ref?.sourceUrl) return String(ref.sourceUrl);
   return String(ref?.quote || '网络资料');
 };
@@ -1011,9 +1011,9 @@ const reshapeScopeUsable = computed(() => stages.value.some((s) => {
 }));
 
 const adjustPlaceholder = computed(() => {
-  if (adjustMode.value === 'rebuild') return '例如：之前选的太偏理论，我其实更需要实操；这次想从真实项目入手重新规划……';
-  if (adjustMode.value === 'reshape') return '例如：第二阶段太难了，先补一下基础再进入；或者从第 3 阶段起换成更多实操……';
-  if (adjustMode.value === 'auto') return '例如：最近学得有点吃力，卡点主要在 X；帮我看看接下来怎么调整更合适……';
+  if (adjustMode.value === 'rebuild') return '例如：之前选的太偏理论，我其实更需要实操。这次想从真实项目入手重新规划……';
+  if (adjustMode.value === 'reshape') return '例如：第二阶段太难了，先补一下基础再进入。或者从第 3 阶段起换成更多实操……';
+  if (adjustMode.value === 'auto') return '例如：最近学得有点吃力，卡点主要在 X。帮我看看接下来怎么调整更合适……';
   return '说说你想怎么调整……';
 });
 

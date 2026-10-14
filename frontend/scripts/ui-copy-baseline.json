@@ -1,10 +1,20 @@
 {
-  "generatedAt": "2026-10-14T12:18:03.399Z",
+  "generatedAt": "2026-10-14T13:27:32.200Z",
   "rules": {
-    "R6": 80
+    "R4": 3,
+    "R6": 106
   },
   "files": {
+    "views/admin-redesign/AdminGlossary.vue": {
+      "R4": 3
+    },
+    "utils/sse.ts": {
+      "R6": 1
+    },
     "views/admin-redesign/ApiConfig.vue": {
+      "R6": 1
+    },
+    "views/admin-redesign/CardDetailPage.vue": {
       "R6": 1
     },
     "views/admin-redesign/DataFlowGraph.vue": {
@@ -13,14 +23,23 @@
     "views/admin-redesign/ExecLogs.vue": {
       "R6": 1
     },
+    "views/admin-redesign/FieldAddWizard.vue": {
+      "R6": 1
+    },
+    "views/admin-redesign/FieldRoutingTable.vue": {
+      "R6": 2
+    },
     "views/admin-redesign/HealthCenter.vue": {
       "R6": 1
     },
     "views/admin-redesign/LearnerDetail.vue": {
-      "R6": 12
+      "R6": 14
     },
     "views/admin-redesign/live.ts": {
       "R6": 2
+    },
+    "views/admin-redesign/Login.vue": {
+      "R6": 1
     },
     "views/admin-redesign/MemoryReview.vue": {
       "R6": 1
@@ -35,7 +54,7 @@
       "R6": 1
     },
     "views/admin-redesign/SessionCockpit.vue": {
-      "R6": 6
+      "R6": 9
     },
     "views/admin-redesign/SessionSecurity.vue": {
       "R6": 2
@@ -48,6 +67,9 @@
     },
     "views/admin-redesign/skill-design/runtime-tab.vue": {
       "R6": 2
+    },
+    "views/admin-redesign/skill-design/versions-tab.vue": {
+      "R6": 1
     },
     "views/admin-redesign/SkillDetail.vue": {
       "R6": 2
@@ -73,29 +95,47 @@
     "views/admin-redesign/TraceWaterfall.vue": {
       "R6": 1
     },
+    "views/admin-redesign/Users.vue": {
+      "R6": 1
+    },
     "views/admin-redesign/VirtualLabLoadSettings.vue": {
       "R6": 2
+    },
+    "views/admin-redesign/VirtualLearnerBatchBar.vue": {
+      "R6": 1
+    },
+    "views/admin-redesign/VirtualLearnerBatchCreate.vue": {
+      "R6": 1
     },
     "views/admin-redesign/VirtualLearnerCreate.vue": {
       "R6": 6
     },
     "views/admin-redesign/VirtualLearners.vue": {
-      "R6": 1
+      "R6": 2
     },
     "views/admin-redesign/VirtualProfile.vue": {
       "R6": 1
     },
     "views/LearningEvaluationPage.vue": {
-      "R6": 1
+      "R6": 2
     },
     "views/user/Settings.vue": {
+      "R6": 3
+    },
+    "views/v2/V2Dashboard.vue": {
       "R6": 1
     },
     "views/v2/V2GoalConversation.vue": {
       "R6": 4
     },
-    "views/v2/V2LearningPaths.vue": {
+    "views/v2/V2LearningPage.vue": {
       "R6": 1
+    },
+    "views/v2/V2LearningPathDetail.vue": {
+      "R6": 3
+    },
+    "views/v2/V2LearningPaths.vue": {
+      "R6": 3
     },
     "views/v2/V2LearningState.vue": {
       "R6": 11

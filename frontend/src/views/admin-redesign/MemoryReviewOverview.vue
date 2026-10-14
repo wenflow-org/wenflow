@@ -423,7 +423,7 @@ const fragmentationCards = computed<OverviewCard[]>(() => {
       value: na || ratio == null ? '—' : `${Math.round(ratio * 100)}%`,
       hint: numHint('措辞重复的痕迹占比'),
       tone: numTone(!na && ratio != null && ratio >= 0.2 ? 'warn' : ''),
-      title: '含义相同、措辞重复的记忆记录占比，越高说明概念越碎，达到 20% 时标为需关注。是否含虚拟学习者随页头开关'
+      title: '含义相同、措辞重复的记忆记录占比，越高说明概念越碎，达到 20% 时标为需关注。虚拟学习者是否计入随所处视角变化'
     },
     {
       label: '未挂靠散键',

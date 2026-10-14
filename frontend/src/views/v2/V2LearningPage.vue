@@ -1572,14 +1572,14 @@ async function finish(action: 'complete_task' | 'end_only' | 'complete_review') 
   } catch (e: any) {
     // 结算失败不冒充完成：保留重试入口，用户仍可去学习反馈页查看
     const msg = e?.message || e?.response?.data?.error?.message || '结算失败';
-    toast.error(`课堂收束未完成：${msg}`);
+    toast.error(`课堂结算未完成：${msg}`);
     evaluationUrl.value = `/learn/${taskId}/evaluation/${session.value.sessionId}${pathId.value ? `?pathId=${encodeURIComponent(pathId.value)}` : ''}`;
     // 会话可能已收束但轮询异常：提供进入反馈页的途径（完成浮层不弹，直接弹全局确认引导，
     // 不再用 setTimeout（此前 timer 未在卸载清理，路由离开后弹窗会出现在下一个页面上））
     if (session.value) {
       const go = await askConfirm({
-        title: '收束未完成',
-        message: '课堂收束遇到问题。你可以稍后重试，或直接查看学习反馈（反馈可能仍在生成中）。',
+        title: '结算未完成',
+        message: '课堂结算遇到问题。你可以稍后重试，或直接查看学习反馈（反馈可能仍在生成中）。',
         confirmText: '查看学习反馈',
         danger: false,
       });

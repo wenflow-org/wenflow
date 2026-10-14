@@ -350,8 +350,8 @@ const canRetry = computed(() => {
 })
 const retryTitle = computed(() => {
   const v = d.value
-  if (v?.status === 'failed') return '该路径生成失败：守卫自动判「重建主结构」或「补齐阶段任务」'
-  return `active 超过 ${PATH_STALL_HOURS}h 无更新：通常为生成链停滞，可补齐阶段任务`
+  if (v?.status === 'failed') return '该路径生成失败：守卫自动判「重建路径」或「补齐课程」'
+  return `长时间无更新超过 ${PATH_STALL_HOURS}h：通常为生成链停滞，可补齐课程`
 })
 async function retryGeneration() {
   const v = d.value

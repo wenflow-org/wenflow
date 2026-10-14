@@ -853,8 +853,8 @@ function stageTabTitle(s: Stage): string {
   const lines = [s.name, `Agent: ${s.agentId}`]
   lines.push(s.skills.length
     ? `Skill: ${s.skills.length} 个`
-    : '该阶段下辖 0 个 Skill：可能调度树未登记，或拓扑 / 目录尚未拉取成功')
-  lines.push('点开即该阶段的字段旅程；已在子视图时再点一次回到字段旅程')
+    : '该阶段下辖 0 个 Skill：调度结构可能未登记，或尚未拉取成功')
+  lines.push('该阶段的字段旅程')
   return lines.join('\n')
 }
 
@@ -862,22 +862,22 @@ function stageTabTitle(s: Stage): string {
 function skillNodeTitle(sk: Stage['skills'][number], s: Stage): string {
   const lines = [sk.name, `Skill: ${sk.id}`, `Agent: ${s.agentId}`]
   if (sk.produces.length) lines.push(`产出字段: ${sk.produces.length} 个`)
-  lines.push('点击查看该 Skill 详情')
+  lines.push('Skill 详情')
   return lines.join('\n')
 }
 
 /** 字段路由卡头 tooltip：与画布 chips 同一份字段契约（同页同数纪律） */
 const routingMetaTitle = computed(() => {
   const c = contractOf(active.value)
-  if (!c.loaded) return '字段契约加载中（GET /admin/field-routings/stages/:id）'
-  return `口径与画布 chips 同源：必填入参 = hard-required ${c.ins.length} 项；产出 = 方案产出/公开回复/派生展示 ${c.outs.length} 项`
+  if (!c.loaded) return '字段契约加载中'
+  return `必填入参 ${c.ins.length} 项，产出 ${c.outs.length} 项`
 })
 
 /** 治理卡头 tooltip：定义与对账口径说明 */
 const govMetaTitle = computed(() =>
   [
-    '运行时定义：GET /admin/runtime-definitions（orchestrator / agent 两类）',
-    recReport.value ? `对账：live ${recLiveCount.value} / 登记 ${recTotalCount.value}（口径含外挂能力，多于 Skill 定义数属正常）` : '对账报告不可用'
+    '运行时定义（编排与执行两类）',
+    recReport.value ? `一致性核查：已上线 ${recLiveCount.value} / 登记 ${recTotalCount.value}（含外挂能力，多于 Skill 定义数属正常）` : '一致性核查报告不可用'
   ].join('；')
 )
 </script><style scoped>

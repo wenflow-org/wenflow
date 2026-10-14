@@ -74,7 +74,7 @@ const batchTaskStatusTitle = computed(() => {
   const t = props.task
   if (!t) return ''
   if (t.status === 'done') return `批量创建完成：${t.created} 人${t.totalStories ? ` · ${t.storiesDone} 个故事` : ''}`
-  if (t.status === 'error') return `批量生成有失败：${t.error}（点击展开可重试）`
+  if (t.status === 'error') return `批量生成有失败：${t.error}`
   return `后台生成中：身份 ${t.total - t.personaLeft}/${t.total}${t.totalStories ? ` · 故事 ${t.storiesDone}/${t.totalStories}` : ''}（点击展开详情）`
 })
 /* 批量进度（批F）：三阶段（建人/身份/故事）加权折算百分比 */

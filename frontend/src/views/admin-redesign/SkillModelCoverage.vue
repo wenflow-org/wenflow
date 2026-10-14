@@ -186,7 +186,7 @@ async function applyBulk() {
     bulkErr.value = failed.length > 0
     // 结果句拆成「已套用 N 个 / 失败 M 个」两个可读片段（读屏也拿得到唯一反馈）
     bulkMsg.value = failed.length
-      ? `已套用 ${applied} 个；失败 ${failed.length} 个：${failed.map(f => `${f.skillId}(${f.error})`).join('；')}`
+      ? `已套用 ${applied} 个，失败 ${failed.length} 个：${failed.map(f => `${f.skillId}（${f.error}）`).join('；')}`
       : `已套用 ${applied} 个，全部成功`
     await load()
     // 通知宿主重拉 coverage（#93）：上方路由表与四张 KPI 同屏跟随

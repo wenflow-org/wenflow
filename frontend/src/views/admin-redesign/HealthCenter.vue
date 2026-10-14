@@ -359,11 +359,11 @@ const reconCardTitle = computed(() => {
   // 2026-10-07 F6-3：未计入本卡的两类如实披露并指路——它们在「对账」页签内没有可定位的行/pill，
   // 各自的可定位项住在健康检查页签的对应行，不并入本卡以免「KPI 亮 N 而筛选 0 行」
   const excluded: string[] = []
-  if (r.zombieActive > 0) excluded.push(`失效生效版本 ${r.zombieActive}（该技能已不在平台注册档案中，不计入完成度统计；见健康检查「ACTIVE 检查（W1）」行）`)
-  if (r.unwired > 0) excluded.push(`接线不一致 ${r.unwired}（见健康检查「接线对账（W3）」行）`)
-  const exclNote = excluded.length ? `；另有未计入本卡（对账页签内无可定位行）：${excluded.join('、')}` : ''
-  const note = r.zombieSkillActive > 0 ? `（另有 ${r.zombieSkillActive} 条失效 ACTIVE 与健康检查「生效版本检查」同源，不重复计数）` : ''
-  const scope = extraCapabilityCount > 0 ? `（对账总数含 ${extraCapabilityCount} 个外挂能力，Skill 运行页不含）` : ''
+  if (r.zombieActive > 0) excluded.push(`失效生效版本 ${r.zombieActive}（该技能已不在平台注册档案中，不计入完成度统计）`)
+  if (r.unwired > 0) excluded.push(`接线不一致 ${r.unwired}（见健康检查「接线一致性核查（W3）」行）`)
+  const exclNote = excluded.length ? `。另有未计入本卡：${excluded.join('、')}` : ''
+  const note = r.zombieSkillActive > 0 ? `（另有 ${r.zombieSkillActive} 条失效生效版本与健康检查「生效版本检查」同源，不重复计数）` : ''
+  const scope = extraCapabilityCount > 0 ? `（登记总数含 ${extraCapabilityCount} 个外挂能力，Skill 运行页不含）` : ''
   return parts.join(' · ') + exclNote + note + scope
 })
 const skillCountTitle = computed(
@@ -381,7 +381,7 @@ const refreshNote = computed(() => {
 })
 /** 页头注记 title：健康报告 60s 轮询 + 对账数据的刷新口径分别说明（审核 #83 消除「60s 自动检测」的歧义） */
 const refreshNoteTitle = computed(() =>
-  `${displayReport.value ? skillCountTitle.value : '健康报告每 60s 自动检测'}，对账数据不随轮询，进入「对账」页签时刷新`
+  `${displayReport.value ? skillCountTitle.value : '健康报告每 60s 自动检测'}，一致性核查数据不随轮询，进入对应页签时刷新`
 )
 
 /** 概要卡跳转：= 切到对应域页签（2026-10-14 页签收敛后 4 卡 → 2 页签，卡到页签多对一） */
@@ -405,8 +405,8 @@ const route = useRoute()
    ?tab= 深链照旧可刷新/分享还原，旧键 drift→health、completion→recon 走别名不 404。 */
 type HcTab = 'health' | 'recon'
 const HC_TABS: Array<{ id: HcTab; label: string }> = [
-  { id: 'health', label: '健康与漂移' },
-  { id: 'recon', label: '对账与完成度' },
+  { id: 'health', label: '健康检查' },
+  { id: 'recon', label: '一致性核查与完成度' },
 ]
 const hcTab = ref<HcTab>('health')
 function switchTab(t: HcTab) {
@@ -479,7 +479,7 @@ const distribution = computed(() => displayReport.value?.completion.distribution
 const healthAbnormal = computed(() => displayReport.value?.health.abnormal ?? 0)
 /** 检查异常卡悬停：只给增量口径（值/总数已在 value/hint 可见，title 不再复读——CP2/CP9） */
 const healthAbnormalTitle = computed(
-  () => '异常为 error / warn 检查项，info 仅供参考，不计入异常。点击切到「健康与漂移」页签'
+  () => '异常为 error / warn 检查项，info 仅供参考，不计入异常'
 )
 
 const completionTiers = COMPLETION_META
@@ -522,12 +522,12 @@ const healthRemainingInfoCount = computed(() => healthRemaining.value.filter((i)
 /** 服务卡按「基准真源」归域：分组字段 = HealthCenterItem.base（后端 health-center.service.ts
     buildItem 逐项标注，DRIFT_BASELINE_SURVEY §4.1「谁是真源」）；中文名与其各检查项 cause 文案同口径 */
 const SERVICE_GROUP_NAMES: Record<HealthCenterItem['base'], string> = {
-  'file:core.yaml': '核心文件（core.yaml）',
-  'file:manifest': '契约清单（manifest）',
+  'file:core.yaml': '核心文件',
+  'file:manifest': '契约清单',
   'file:orchestration': '编排声明（orchestration）',
-  'file:skills.yaml': '技能户口簿（skills.yaml）',
-  bidirectional: '双向对账',
-  'db:managed': '数据库托管（覆盖行）',
+  'file:skills.yaml': '技能登记册',
+  bidirectional: '双向一致性核查',
+  'db:managed': '数据库托管（平台覆盖的字段）',
   runtime: '运行时遥测',
 }
 /** 服务卡 sub 行（原型 .sub）：一句话说明该服务域是什么。域语义与后端 health-center.service.ts
@@ -536,9 +536,9 @@ const SERVICE_GROUP_DESC: Record<HealthCenterItem['base'], string> = {
   'file:core.yaml': '核心文件哈希与参数声明核对',
   'file:manifest': '契约清单与数据库登记比对',
   'file:orchestration': '编排声明与字段路由登记比对',
-  'file:skills.yaml': '技能户口簿注册与生效版本对账',
-  bidirectional: '两侧独立维护的声明互相对账',
-  'db:managed': '管理员手工覆盖行清单（只读观测）',
+  'file:skills.yaml': '技能登记册注册与生效版本一致性核查',
+  bidirectional: '两侧独立维护的声明互相核查',
+  'db:managed': '管理员手工覆盖的字段清单（只读观测）',
   runtime: '线上调用行为的只读观测记录',
 }
 /** 服务卡 sub 行文案：域描述 + 真实检查项数（同原型「后端 API · 检查项 N 个」形态） */

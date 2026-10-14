@@ -45,7 +45,7 @@ const METRICS: LearnerMetricDef[] = [
     label: 'LSS 学习压力',
     code: 'LSS',
     band: '0–10 · 参考 4–7',
-    bandTitle: '学习压力 LSS（Learning Stress Score）：0-10，越高越累；参考区间 4–7。',
+    bandTitle: '学习压力 LSS（Learning Stress Score）：0-10，越高说明越累。',
     toneOf: loadTone,
   },
   {
@@ -53,7 +53,7 @@ const METRICS: LearnerMetricDef[] = [
     label: 'KTL 训练负荷',
     code: 'KTL',
     band: '慢 EWMA · 参考 ≤ 7',
-    bandTitle: '训练负荷 KTL（Knowledge Training Load）：学习压力 LSS 的慢速 EWMA，高 = 压力长期累积；参考 ≤ 7。',
+    bandTitle: '训练负荷 KTL（Knowledge Training Load）：学习压力的慢速均值，越高说明压力累积越久。',
     toneOf: loadTone,
   },
   {
@@ -61,7 +61,7 @@ const METRICS: LearnerMetricDef[] = [
     label: 'LF 学习疲劳',
     code: 'LF',
     band: '警戒 ≥ 6',
-    bandTitle: '学习疲劳 LF（Learning Fatigue）：越高越疲劳；≥6 警戒。',
+    bandTitle: '学习疲劳 LF（Learning Fatigue）：越高说明越疲劳。',
     toneOf: (v) => (v == null || v === 0 ? '' : v >= 6 ? 'bad' : loadTone(v)),
   },
   {
@@ -69,7 +69,7 @@ const METRICS: LearnerMetricDef[] = [
     label: 'LSB 状态平衡',
     code: 'LSB',
     band: 'KTL−LF · 参考 ≥ 0',
-    bandTitle: '状态平衡 LSB = KTL − LF：正 = 状态好；参考 ≥ 0。',
+    bandTitle: '状态平衡 LSB = 训练负荷 − 学习疲劳：正数说明状态好，负数说明该休息了。',
     toneOf: (v) => (v == null || v === 0 ? '' : v >= 1 ? 'ok' : v <= -3 ? 'bad' : 'warn'),
   },
 ]

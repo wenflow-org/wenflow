@@ -381,7 +381,7 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
           // 打 failed 标记：重试会先移除该条再重发，避免新旧答案叠在一起
           pushMessage({ role: 'ai', content: partial, time: nowTime(), failed: true });
         } else if (action !== 'supplement') {
-          pushMessage({ role: 'ai', content: '已停止生成。可以点下方「重试」继续，或直接输入新内容。', time: nowTime(), failed: true });
+          pushMessage({ role: 'ai', content: '已停止生成。可以重试，或直接输入新内容继续。', time: nowTime(), failed: true });
         }
         throw streamError;
       }
@@ -437,7 +437,7 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
       const business = e as { serverError?: boolean; message?: string };
       const content = business.serverError === true && typeof business.message === 'string' && business.message
         ? business.message
-        : '这次没有成功处理你的回答，点下方「重试」继续。';
+        : '这次没有成功处理你的回答，可以重试继续。';
       pushMessage({ role: 'ai', content, time: nowTime(), failed: true });
     }
     throw e;

@@ -768,7 +768,7 @@ async function requestPublish() {
   if (level === 'safe') {
     const ok = await askConfirm({
       title: '发布到运行时',
-      message: `确认发布 ${props.skillId} 的 core.yaml？\n发布后确定性编译为五块 Prompt（skill.${props.skillId}.md + 数据库 ACTIVE），运行时立即生效、不可回退。`,
+      message: `确认发布 ${props.skillId} 的核心文件？\n发布后确定性编译为五块 Prompt（skill.${props.skillId}.md + 数据库线上生效版本），运行时立即生效、不可回退。`,
       confirmText: '发布'
     })
     if (!ok) return

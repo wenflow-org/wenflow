@@ -198,7 +198,7 @@ function testCheckLabel(rawKey: string): string {
   if (kind === 'mustContain') return `必须出现「${val}」`
   if (kind === 'mustNotInclude') return `不能出现「${val}」`
   if (kind === 'mustInclude') return `含字段 ${val}`
-  if (kind === 'converge') return `收敛产出 ${val}`
+  if (kind === 'converge') return `完成产出 ${val}`
   const map: Record<string, string> = {
     parsed: '输出可解析',
     contractValid: '结构契约合法',

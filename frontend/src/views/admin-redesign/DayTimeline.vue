@@ -253,7 +253,7 @@ async function advance(days: number, runTasks = false) {
   if (runTasks) {
     const ok = await askConfirm({
       title: '推进并上课',
-      message: `将真实跑 ${clock.value?.lessonsPerDay ?? 1} 节课程（业务时间戳落在模拟日），每节消耗对应 AI 调用；课程产出会写入学习者数据，不可撤销。`,
+      message: `将真实跑 ${clock.value?.lessonsPerDay ?? 1} 节课程（业务时间戳落在模拟日），每节消耗对应 AI 调用。课程产出会写入学习者数据，不可撤销。`,
       confirmText: '推进并上课',
     })
     if (!ok) return

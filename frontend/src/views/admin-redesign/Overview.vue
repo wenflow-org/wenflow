@@ -343,7 +343,7 @@ const loopStages = computed<LoopStage[]>(() => {
     {
       name: '目标对话', meta: '澄清真实目标与约束',
       val: `${d?.loop.conversationsActive ?? 0} 进行中`, tone: 'active',
-      title: '进行中的目标对话数 · 点击查看目标对话',
+      title: '进行中的目标对话数',
       scene: 'goal-conversations',
     },
     {
@@ -351,7 +351,7 @@ const loopStages = computed<LoopStage[]>(() => {
       name: '路径规划', meta: '生成阶段化学习路径',
       val: `${d?.loop.pathsActive ?? 0} 进行中`, tone: pathsFailed > 0 ? 'alert' : 'done',
       failN: pathsFailed > 0 ? pathsFailed : undefined,
-      title: `进行中路径 ${d?.loop.pathsActive ?? 0} · 失败 ${pathsFailed} · 点击查看学习路径`,
+      title: `进行中路径 ${d?.loop.pathsActive ?? 0} · 失败 ${pathsFailed}`,
       scene: 'learning-paths',
     },
     {
@@ -386,8 +386,8 @@ const loopStages = computed<LoopStage[]>(() => {
       tone: memState.value === 'failed' || (memDue.value ?? 0) > 0 ? 'alert' : 'done',
       ringFailed: memState.value === 'failed',
       title: memState.value === 'failed'
-        ? '到期待办数拉取失败 · 点「重试」重拉 · 点击查看记忆与复盘'
-        : '到期未复习的记忆条数（随页头「真实 / 测试」开关变化）· 点击查看记忆与复习',
+        ? '到期待办数拉取失败 · 点「重试」重拉'
+        : '到期未复习的记忆条数',
       scene: 'memory-review',
     },
   ];
@@ -511,9 +511,9 @@ const healthText = computed(() => {
   return `${healthCheck.value.total} 项检查全部正常`;
 });
 const healthTitle = computed(() => {
-  if (healthState.value === 'error') return '健康检查清单加载失败 · 点击就地重试（完整清单走右侧「查看健康中心」）';
-  if (healthState.value === 'empty') return '健康中心暂无检查项 · 点击查看健康中心';
-  if (healthState.value === 'loading') return '健康检查加载中 · 点击查看健康中心';
+  if (healthState.value === 'error') return '健康检查清单加载失败';
+  if (healthState.value === 'empty') return '健康中心暂无检查项';
+  if (healthState.value === 'loading') return '健康检查加载中';
   return '查看健康中心完整检查清单';
 });
 function healthChipClick() {
@@ -593,7 +593,6 @@ const simTitle = computed(() => {
       `进行中 ${r.running}`
     )
   }
-  parts.push('点击进入「虚拟学习者」')
   return parts.join(' · ')
 })
 
@@ -634,13 +633,8 @@ const kpiTargets: Array<{ scene: string; tab?: string }> = [
 ]
 
 function kpiTitle(i: number): string {
-  // 口径说明随数据来（live.ts kpis.hint），前端只补跳转动作
-  const hint = kpiCards.value[i]?.hint || ''
-  const target = kpiTargets[i]?.scene || ''
-  const label = target === 'execution-logs' ? '执行日志'
-    : target === 'people' ? '用户与学习者'
-      : target === 'goal-conversations' ? '目标对话' : 'Skill 目录'
-  return [hint, `点击查看${label}`].filter(Boolean).join(' · ')
+  // 口径说明随数据来（live.ts kpis.hint）；目标页由卡片点击直达（kpiTargets）
+  return kpiCards.value[i]?.hint || ''
 }
 /** KPI 副文（MkKpi hint）：趋势 + foot 合流（原自搓 .kpi__foot 两段承载），口径注释仍走 title */
 function kpiHint(k: KpiCard): string {
@@ -710,7 +704,7 @@ function feedDesc(f: BriefData['feed'][number]): string {
   if (f.agentId) return `Skill · ${f.agentId}`
   // 失败类别不再回填副行（2026-10-04 全站评审 P3）：标题括注「（调用方中止）」已把类别说了一次，
   // 副行「失败类别 · 调用方中止」属同屏双写——类别只在标题出现一次；副行回退可点提示
-  return f.tone === 'bad' || f.tone === 'warn' ? '点击查看日志' : ''
+  return ''
 }
 function feedJump(f: { tone: string; errorCategory?: string }) {
   if (f.tone !== 'bad' && f.tone !== 'warn') return
@@ -720,7 +714,7 @@ function feedJump(f: { tone: string; errorCategory?: string }) {
  *  可点行保留「点击查看日志」提示，缀在原文之后 */
 function feedTitle(f: { text: string; desc: string; tone: string }) {
   const full = f.desc ? `${f.text} ${f.desc}` : f.text
-  return f.tone === 'bad' || f.tone === 'warn' ? `${full} · 点击查看日志` : full
+  return full
 }
 
 /* 底部渐隐只在「确有下文被裁」时挂（审核 #0，2026-10-06）：

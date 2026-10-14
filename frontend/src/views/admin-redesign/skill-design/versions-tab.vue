@@ -326,8 +326,8 @@ async function publishCoreAsVariant() {
   const ok = await askConfirm({
     title: '发布为变体',
     message: [
-      '把当前 core.yaml 的未发布改动编译发布为变体 ' + variantNewKey.value + '（' + variantNewWeight.value + '% 流量）？',
-      '基线与线上文件保持不变；发布守门检查照常执行。'
+      '把当前核心文件的未发布改动编译发布为变体 ' + variantNewKey.value + '（' + variantNewWeight.value + '% 流量）？',
+      '基线与线上文件保持不变。发布守门检查照常执行。'
     ].join('\n'),
     confirmText: '发布',
     /* 发布/停止/晋级都是可逆的实验臂操作（版本行保留为历史，可再克隆/再晋级），
@@ -410,7 +410,7 @@ async function stopVariant(v: VariantRow) {
   if (variantBusy.value) return
   const ok = await askConfirm({
     title: '停止变体',
-    message: `确认停止变体 ${v.variant}（v${v.version}）？\n其流量将全部回到基线；该版本行保留为历史，可再克隆。`,
+    message: `确认停止变体 ${v.variant}（v${v.version}）？\n其流量将全部回到基线。该版本行保留为历史，可再克隆。`,
     confirmText: '停止',
     danger: false
   })
@@ -434,7 +434,7 @@ async function promoteVariant(v: VariantRow) {
   if (variantBusy.value) return
   const ok = await askConfirm({
     title: '晋级为基线',
-    message: `确认把变体 ${v.variant}（v${v.version}）晋级为基线？\n该内容将写回 core.yaml 与 skill.md（文件 SSOT），旧基线转为历史。`,
+    message: `确认把变体 ${v.variant}（v${v.version}）晋级为基线？\n该内容将写回核心文件与 skill 说明，旧基线转为历史。`,
     confirmText: '晋级',
     danger: false
   })
@@ -582,7 +582,7 @@ async function rollbackCore(version: number) {
   if (coreRollbacking.value) return
   const ok = await askConfirm({
     title: '回滚版本',
-    message: `确认回滚 ${props.skillId} 到 v${version}？\n现行文件与 ACTIVE 将被替换。`,
+    message: `确认回滚 ${props.skillId} 到 v${version}？\n现行文件与线上生效版本将被替换。`,
     confirmText: '回滚'
   })
   if (!ok) return

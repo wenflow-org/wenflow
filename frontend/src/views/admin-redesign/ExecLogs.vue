@@ -511,7 +511,7 @@ const colDefs = [
   { key: 'time', label: '时间', title: '记录时间（MM-DD HH:mm:ss）' },
   { key: 'status', label: '级别', title: '执行级别（成功/失败/超时）——原型第二列' },
   { key: 'kind', label: '类型', title: '日志来源层（流程 / Skill / 网关 / 调用），由 executionLayer 判定' },
-  { key: 'agent', label: 'Skill', title: 'Skill 完整名；点击直达 Skill 详情' },
+  { key: 'agent', label: 'Skill', title: 'Skill 完整名' },
   { key: 'trace', label: 'Trace', title: '调用链路 ID：点击看完整链路，按钮复制' },
   { key: 'msg', label: '消息', title: '调用消息（输出摘要 / 错误信息）' },
   { key: 'model', label: '模型', title: '使用的 LLM 模型' },
@@ -966,7 +966,7 @@ const emptyDesc = computed(() =>
   traceMiss.value
     ? `完整标识 ${traceMiss.value}：可能超出日志保留期，或 ID 不完整（traceId/sessionId 均支持精确直达）。`
     : isFiltered.value
-      ? '当前筛选组合下没有命中的日志；清除筛选并放宽时间范围（全部）通常就能看到数据。'
+      ? '当前筛选组合下没有命中的日志。清除筛选并放宽时间范围（全部）通常就能看到数据。'
       : '有真实调用发生后，这里按时间倒序展示每条执行 / 网关日志。'
 )
 /** 空态逃生动作：清全部筛选 + 时间范围放宽到「全部」——窄时间窗/筛选态无日志时的最小代价出口 */

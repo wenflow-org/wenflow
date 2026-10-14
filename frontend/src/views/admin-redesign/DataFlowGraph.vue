@@ -1277,7 +1277,7 @@ function journeyHint() {
   const c = selected.value
   if (!c) return ''
   const consumers = (journeyOf('consumers') as string[]).filter(Boolean)
-  if (consumers.length) return `同名字段在管线中以轨道线相连：由上方步骤产出后，流转到 ${consumers.join('、')} 继续消费。`
+  if (consumers.length) return `同名字段在管线中以轨道线相连：产出后流转到 ${consumers.join('、')} 继续消费。`
   if (flow.value?.exit.some((x) => x.fieldId === c.fieldId)) return `该字段已汇总到汇入出口，整体移交下一阶段。`
   if (c.accumulate) return '该字段不向下游移交，累积进学习者状态（画像/上下文）。'
   return '该字段为阶段内信息，不参与跨阶段流转。'

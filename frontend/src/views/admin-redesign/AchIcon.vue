@@ -1,9 +1,4 @@
 <template>
-  <!-- 成就图标：品牌色块 + 线性图标（lucide）。
-       2026-09-14 的 fd0b9fa3 为去掉后端下发的成就 emoji 改成了「色块 + 首字标」，
-       但字标在界面上就是一个汉字，读不出「这是图标」（2026-10-08 反馈：logo 图没了，
-       怎么成字体了）。色块语言、尺寸档、aria-label 全部保留，只把字换成真图标。
-       注：本条注释在 dev 下会随模板进页面，故不举 emoji 字形为例（2026-10-14 管理端去 emoji 同批）。 -->
   <span
     class="ach-icon"
     :class="[`ach-icon--${meta.tone}`, size === 'lg' ? 'ach-icon--lg' : '']"
@@ -14,6 +9,10 @@
 </template>
 
 <script setup lang="ts">
+// 成就图标：品牌色块 + 线性图标（lucide）。
+// 2026-09-14 的 fd0b9fa3 为去掉后端下发的成就 emoji 改成了「色块 + 首字标」，
+// 但字标在界面上就是一个汉字，读不出「这是图标」（2026-10-08 反馈：logo 图没了，
+// 怎么成字体了）。色块语言、尺寸档、aria-label 全部保留，只把字换成真图标。
 import { computed } from 'vue'
 import { achIconMeta } from './achievementIcons'
 

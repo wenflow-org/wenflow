@@ -539,7 +539,7 @@ function badgeTitle(item: MockSceneDef): string {
   const count = badgeOf(item)
   if (!count) return ''
   if (alarmNavBadges.has(item.id)) {
-    return `近 7 天执行失败 ${count} 次（采样窗口口径：最近 200 条日志，非全量；告警徽章：红色，进入执行日志页后自动平息）`
+    return `近 7 天执行失败 ${count} 次（近 200 条日志内统计，进入执行日志页后自动平息）`
   }
   return `${BADGE_MEANING[item.id] || item.label}：${count}`
 }
