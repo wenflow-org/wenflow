@@ -130,7 +130,10 @@ describe('DELETE /admin/users/:id 软删除', () => {
     expect(usersUpdate).not.toHaveBeenCalled()
   })
 
-  it('最后管理员保护保留：最后一个管理员不可删除', async () => {
+  /* 2026-10-14 用户拍板把管理员下限从 2 放宽到 1（只挡真正最后一个）：本用例原先用
+     「共 2 名管理员」断言 409，等于把「必须留 2 名」钉住了；现在 2 名时删一名是允许的，
+    门槛降到「删完一个都不剩」。 */
+  it('最后管理员保护：共 2 名管理员时，删掉其中一名是允许的（下限 1）', async () => {
     mockOperatorAdmin()
     usersFindUnique.mockImplementationOnce(() =>
       Promise.resolve({ id: 'admin-2', isAdmin: true, deletedAt: null })
@@ -139,8 +142,22 @@ describe('DELETE /admin/users/:id 软删除', () => {
 
     const res = await runHandler('DELETE /:id', { user: { userId: 'admin-1' }, params: { id: 'admin-2' } })
 
+    expect(res.statusCode).toBe(200)
+    expect(usersUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('最后管理员保护：系统只剩这一名管理员时不可删除', async () => {
+    mockOperatorAdmin()
+    usersFindUnique.mockImplementationOnce(() =>
+      Promise.resolve({ id: 'admin-2', isAdmin: true, deletedAt: null })
+    )
+    usersCount.mockResolvedValue(1)
+
+    const res = await runHandler('DELETE /:id', { user: { userId: 'admin-1' }, params: { id: 'admin-2' } })
+
     expect(res.statusCode).toBe(409)
     expect(res.body.error.code).toBe('LAST_ADMIN_PROTECTED')
+    expect(res.body.error.message).toContain('至少需要保留 1 名管理员')
     expect(usersUpdate).not.toHaveBeenCalled()
   })
 })

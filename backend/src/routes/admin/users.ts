@@ -275,15 +275,17 @@ router.patch('/:id', async (req, res, next) => {
       });
     }
 
-    // 最后管理员保护：把管理员降为普通用户前，确认剩余管理员 ≥ 2
+    // 最后管理员保护：把管理员降为普通用户前，确认降级后仍留有管理员
+    // （2026-10-14 用户拍板把下限从 2 放宽到 1——只挡真正最后一个。旧实现判 remaining <= 1，
+    //   实际是「必须留 2 名」，与文案「最后的管理员」自相矛盾：2 名管理员时谁都降不了）
     if (typeof isAdmin === 'boolean' && isAdmin === false && existing.isAdmin) {
       const remainingAdmins = await countActiveAdmins() - 1;
-      if (remainingAdmins <= 1) {
+      if (remainingAdmins < 1) {
         return res.status(409).json({
           success: false,
           error: {
             code: 'LAST_ADMIN_PROTECTED',
-            message: '系统至少需要保留 2 名管理员，无法降级最后的管理员'
+            message: '系统至少需要保留 1 名管理员，无法降级最后的管理员'
           }
         });
       }
@@ -394,15 +396,16 @@ router.post('/batch-delete', async (req, res, next) => {
     }
 
     // 最后管理员保护：删除管理员前统计删除后的剩余管理员数量（软删管理员不计入）
+    // 2026-10-14 下限 2→1（同降级处）：批里含管理员时，只有把管理员清空才拦
     const adminsInBatch = await findActiveAdminIdsInBatch(ids);
     if (adminsInBatch.length > 0) {
       const remainingAdmins = await countActiveAdmins() - adminsInBatch.length;
-      if (remainingAdmins <= 1) {
+      if (remainingAdmins < 1) {
         return res.status(409).json({
           success: false,
           error: {
             code: 'LAST_ADMIN_PROTECTED',
-            message: '系统至少需要保留 2 名管理员，批量删除中不能包含最后的管理员'
+            message: '系统至少需要保留 1 名管理员，批量删除中不能包含最后的管理员'
           }
         });
       }
@@ -526,15 +529,16 @@ router.delete('/:id', async (req, res, next) => {
       });
     }
 
-    // 最后管理员保护：删除管理员前统计剩余管理员数量（软删管理员不计入）
+    // 最后管理员保护：删除管理员前统计删除后的剩余管理员数量（软删管理员不计入）
+    // 2026-10-14 下限 2→1（同降级处）：只挡真正最后一个管理员
     if (target.isAdmin) {
       const remainingAdmins = await countActiveAdmins() - 1;
-      if (remainingAdmins <= 1) {
+      if (remainingAdmins < 1) {
         return res.status(409).json({
           success: false,
           error: {
             code: 'LAST_ADMIN_PROTECTED',
-            message: '系统至少需要保留 2 名管理员，无法删除最后的管理员'
+            message: '系统至少需要保留 1 名管理员，无法删除最后的管理员'
           }
         });
       }
