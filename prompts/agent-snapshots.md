@@ -263,10 +263,12 @@ sandbox:teaching-agent.interactionProfile
 sandbox:teaching-agent.knowledge.points
 sandbox:teaching-agent.knowledge.state
 sandbox:teaching-agent.learner.learnerProjection
+sandbox:teaching-agent.learner.persona
 sandbox:teaching-agent.learningState
 sandbox:teaching-agent.pedagogy.strategies
 sandbox:teaching-agent.scenario
 sandbox:teaching-agent.scenario.interactionProfile
+sandbox:teaching-agent.school.anchor
 sandbox:teaching-agent.session.evidence
 sandbox:teaching-agent.session.info
 sandbox:teaching-agent.session.knowledgeState
@@ -275,6 +277,7 @@ sandbox:teaching-agent.session.mode
 sandbox:teaching-agent.session.topic
 sandbox:teaching-agent.session.wrapup
 sandbox:teaching-agent.summary.knowledgeItems
+sandbox:teaching-agent.task.profile
 sandbox:teaching-agent.teachingState.classroomContext
 sandbox:teaching-agent.teachingState.classroomEventHistory
 sandbox:teaching-agent.teachingState.teachingControlContext

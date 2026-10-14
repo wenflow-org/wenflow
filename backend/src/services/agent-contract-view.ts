@@ -107,6 +107,13 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'controls.teachingControlContext',
     'classroomContext',
     'classroomEventContext',
+    // 开场生成器（teaching-opening-generator）的三个「编排注入」输入（03e9c08e 开场自由化：
+    // 画像/学情锚/任务目标进输入）。值由编排层组装（ai-teaching/TeachingContextBuilder +
+    // skills/v4-aux-skills 在调用前注入 learnerPersona/schoolAnchor/taskProfile），
+    // 不是 routings 表可推导的通道 ⇒ 未登记会让 prompts:check-handoff --strict 判失败。
+    'learner.persona',
+    'school.anchor',
+    'task.profile',
   ],
   'profile-agent': [
     'snapshot.dynamicState',
