@@ -8,7 +8,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { LEARNER_METRICS, LEARNER_METRIC_CODES, learnerMetric } from '@/utils/learnerMetrics';
-import { loadCaliber } from '../opsShared';
+import { loadCaliber, panelScopeNote } from '../opsShared';
 
 describe('四读数共享口径', () => {
   it('四键齐全、标签无别名分叉（LF 不再一处「学习疲劳」一处「疲劳度」）', () => {
@@ -75,5 +75,41 @@ describe('读数出处（口径透明化）', () => {
     const note = loadCaliber('aggregate', null);
     expect(note.label).toBe('学习者级聚合');
     expect(note.title).not.toContain('取样时刻');
+  });
+});
+
+describe('面板作用域标注（一屏混三种作用域，各块自述）', () => {
+  it('当前路径：带上路径名，并说清其它路径不在这里 + 当前路径怎么选', () => {
+    const note = panelScopeNote('current-path', { pathTitle: '幼儿园指南五大领域归位速通' });
+    expect(note.label).toBe('当前路径');
+    expect(note.title).toContain('幼儿园指南五大领域归位速通');
+    expect(note.title).toContain('其它路径不在这里');
+    expect(note.title).toContain('status=active');
+  });
+
+  it('当前路径：无路径名时不渲染空括号', () => {
+    const note = panelScopeNote('current-path', { pathTitle: '' });
+    expect(note.title).not.toContain('（）');
+  });
+
+  it('跨全部路径：明说含已归档/失败（非 active 路径不可见是既有事实）', () => {
+    const note = panelScopeNote('all-paths');
+    expect(note.label).toBe('跨全部路径');
+    expect(note.title).toContain('已归档');
+    expect(note.title).toContain('全部');
+  });
+
+  it('跨全部故事：虚拟学习者页的对应轴是故事，措辞不串用「路径」', () => {
+    const note = panelScopeNote('all-stories');
+    expect(note.label).toBe('跨全部故事');
+    expect(note.title).toContain('故事');
+    expect(note.title).not.toContain('路径');
+  });
+
+  it('三种作用域标签互不相同（同屏并排时可直接分辨）', () => {
+    const labels = (['current-path', 'all-paths', 'all-stories', 'single-conversation'] as const).map(
+      (s) => panelScopeNote(s).label
+    );
+    expect(new Set(labels).size).toBe(labels.length);
   });
 });

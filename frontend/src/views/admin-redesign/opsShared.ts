@@ -95,6 +95,50 @@ export function loadCaliber(kind: LoadCaliber, at?: string | null): LoadCaliberN
   }
 }
 
+/* ---------- 面板作用域标注（详情页一屏混三种作用域，各块必须自述） ----------
+   背景：一个学习者可有多条路径（实测同账号并存 3 条 active），详情页里「当前进度/概念掌握/证据」
+   只取**当前路径**，「教学会话/记忆与复习」取**全部路径**，「LSS/KTL/LF/LSB」是**跨路径聚合**，
+   而此前只有图谱一处有作用域开关、其余静默；「全局信号与背景」卡头还自称「跨全部学习路径汇总」
+   （实测其数据源是当前路径的会话与证据 + 该学习者全部记忆痕迹，不是跨全部路径）。
+   文案单点在此，各卡头取用，避免各写一套说法。 */
+
+export type PanelScope = 'current-path' | 'all-paths' | 'all-stories' | 'single-conversation'
+
+export interface PanelScopeNote {
+  /** 可见短标（进卡头 mk-card__meta / 页头 pill） */
+  label: string
+  /** 悬停长释：说清这个块算的是哪些路径 */
+  title: string
+}
+
+export function panelScopeNote(scope: PanelScope, opts: { pathTitle?: string | null } = {}): PanelScopeNote {
+  const named = (opts.pathTitle || '').trim()
+  if (scope === 'current-path') {
+    return {
+      label: '当前路径',
+      title:
+        `本块取自**当前路径**${named ? `（${named}）` : ''}的会话与学习证据，并并入该学习者的全部记忆痕迹；其它路径不在这里。` +
+        `\n当前路径 = 该学习者 status=active 且 updatedAt 最新的一条（快照 currentPath 口径）；已归档/失败的路径不参与。`,
+    }
+  }
+  if (scope === 'all-paths') {
+    return {
+      label: '跨全部路径',
+      title: '本块按学习者聚合，统计其名下**全部**路径的数据（含已归档 / 失败的路径），不按当前路径收窄。',
+    }
+  }
+  if (scope === 'all-stories') {
+    return {
+      label: '跨全部故事',
+      title: '本块按该虚拟学习者聚合，统计其名下**全部故事**（story，即这个角色的多条独立学习线）的数据，不按单条故事收窄。',
+    }
+  }
+  return {
+    label: '单次会话',
+    title: '本块取自单次会话的读数，不是学习者级聚合。',
+  }
+}
+
 /* retryPathGeneration 的 retryType 文案（守卫自动判定，页面透传不二次解释） */
 export const PATH_RETRY_TYPE_TEXT: Record<string, string> = {
   core: '重建主结构',

@@ -25,6 +25,9 @@
     <!-- 详情页头（newui/admin hero 形态，MkDetailHero）：返回钮在壳层顶栏，页内不重复 -->
     <MkDetailHero :avatar="d.name.charAt(0)" :title="d.name" :sub="d.email">
       <template #pills>
+        <!-- 当前路径常驻：概念掌握/证据/当前进度 都只取这一条，而学习者可有多条路径并存——
+             此前只有「当前进度」卡正文带路径名，切到别的页签就无从判断在读哪条 -->
+        <span class="mk-badge mk-badge--muted" :title="currentPathScope.title">路径 {{ currentPathShort }}</span>
         <span class="mk-badge" :class="trendBadge">趋势：{{ trendText }}</span>
         <span class="mk-badge" :class="fatigueBadge">疲劳：{{ d.fatigue }}</span>
         <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">档案 {{ snapshotLabel }}</span>
@@ -86,7 +89,7 @@
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">概念掌握</h3>
-            <span class="mk-card__meta">{{ conceptBars.length }} 个概念</span>
+            <span class="mk-card__meta" :title="currentPathScope.title">{{ conceptBars.length }} 个概念 · {{ currentPathScope.label }}</span>
           </div>
           <!-- T2 硬约束 2：结论行常驻（数字全部由现有 conceptBars 的 tone 派生，未新增判断） -->
           <p v-if="conceptBars.length" class="mk-section__conclusion">
@@ -290,6 +293,7 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">行为基线与互动</h3>
             <span v-if="!evidence.length" class="mk-card__meta" title="以下为学习者模型的初始先验值（该账号尚无学习证据落库），随学习证据累积更新；不是实测结论">初始先验 · 暂无学习证据</span>
+            <span class="mk-card__meta" :title="allPathsScope.title">{{ allPathsScope.label }}</span>
           </div>
           <div class="ld-pf-sub">
             <div v-if="behaviorRows.length">
@@ -375,7 +379,9 @@
       <section v-if="signalTierRows.some((t) => t.n > 0) || foundations.reusable.length || foundations.blocked.length || recurringConfusions.length" class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">全局信号与背景</h3>
-          <span class="mk-card__meta" title="跨全部学习路径汇总；账本=概念底账规模">{{ sigHeadMeta }}</span>
+          <!-- 口径纠错：原 title 写「跨全部学习路径汇总」，实测数据源是当前路径的会话与学习证据
+               （sessions/learner_evidence 均按 pathId 过滤）+ 该学习者全部记忆痕迹，不是跨全部路径 -->
+          <span class="mk-card__meta" :title="`${currentPathScope.title}\n账本=概念底账规模`">{{ sigHeadMeta }} · {{ currentPathScope.label }}</span>
         </div>
         <div class="ld-sigbody">
           <div class="ld-sig-sec">
@@ -836,7 +842,7 @@ import { liveLearners, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidenc
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
 import { learnerMetric, LEARNER_METRIC_CODES, type LearnerMetricKey } from '@/utils/learnerMetrics'
-import { loadCaliber } from './opsShared'
+import { loadCaliber, panelScopeNote } from './opsShared'
 import { adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
 import {
   statusText,
@@ -970,6 +976,19 @@ const currentPathId = ref<string | null>(null)
  * 不复用「当前进度」卡 DOM——它已是该学习者能拿到的全部路径信息（快照只存当前路径）。
  */
 const pathInfo = ref<{ id: string | null; title: string; stage: string; task: string; done: number; total: number; pct: number } | null>(null)
+
+/* ---------- 作用域标注（一屏混三种作用域，各块自述）----------
+   单路径块（当前进度/概念掌握/证据/全局信号）与跨路径块（行为基线/教学会话/记忆与复习）并排，
+   此前只有图谱有作用域开关、其余静默；「全局信号与背景」还自称「跨全部学习路径汇总」。
+   词汇与长释单点在 opsShared.ts 的 panelScopeNote()。 */
+const currentPathScope = computed(() => panelScopeNote('current-path', { pathTitle: pathInfo.value?.title || d.value?.path }))
+const allPathsScope = computed(() => panelScopeNote('all-paths'))
+/** 页头 pill 用的短路径名（全名进 title，避免把 pills 行撑开） */
+const currentPathShort = computed(() => {
+  const t = String(pathInfo.value?.title || d.value?.path || '').trim()
+  if (!t) return '—'
+  return t.length > 14 ? `${t.slice(0, 14)}…` : t
+})
 /** 学习者画像 kv 卡：用户详情补充的层级/路径数/注册时间（后端 findUserDetailForAdmin） */
 const userRecord = ref<{ currentLevel: string; xp: number; pathCount: number; createdAt: string } | null>(null)
 /** 跟随 admin 主题（暗色用同族配色，见 MkGraph 的 colorOf）。
@@ -1147,12 +1166,14 @@ const ldSessViewRows = computed(() =>
 )
 const ldSessionMetaText = computed(() => {
   const all = ldSessionRows.value.length
-  if (!all) return '暂无'
+  const scope = allPathsScope.value.label
+  if (!all) return scope
   const win = all >= LD_SESSION_WINDOW ? `近 ${LD_SESSION_WINDOW} 条窗口` : `${all} 条`
-  return `${win} · 有效 ${activeSessionRows.value.length} · 废弃 ${ldSessDiscardedRows.value.length}`
+  return `${win} · 有效 ${activeSessionRows.value.length} · 废弃 ${ldSessDiscardedRows.value.length} · ${scope}`
 })
 const ldSessionMetaTitle = computed(() =>
-  `该学习者最近 ${LD_SESSION_WINDOW} 条教学会话（窗口上限）；有效=有教学内容，已废弃=学习者点「重新开始」后作废的旧会话`
+  `${allPathsScope.value.title}\n该学习者最近 ${LD_SESSION_WINDOW} 条教学会话（窗口上限）；有效=有教学内容，已废弃=学习者点「重新开始」后作废的旧会话。` +
+  `\n注意：「里程碑 N」档位按各会话自己的里程碑序号归并，跨路径时不同路径的同序号里程碑会合到同一档——本页暂不能按路径收窄。`
 )
 
 /* ---------- 阶段切换器（用户诉求「切换学习者不同阶段」）----------
@@ -2309,11 +2330,13 @@ const memoryRowsFiltered = computed(() =>
 /** 卡头读数：状态分档（剔除全零档），口径写进 title */
 const memMetaText = computed(() => {
   const parts = memViews.value.filter((v) => v.key !== 'all').map((v) => `${v.label} ${v.count}`)
-  return parts.length ? parts.join(' · ') : `共 ${memoryPaneRows.value.length} 点`
+  const base = parts.length ? parts.join(' · ') : `共 ${memoryPaneRows.value.length} 点`
+  return `${base} · ${allPathsScope.value.label}`
 })
 const memMetaTitle = computed(() => {
   const overdue = memoryPaneRows.value.filter((r) => r.overdue).length
-  return `记忆强度=FSRS 可提取率；待复习=已到复习期（${overdue} 条）；稳固≥80% 且未到期；未初始化=尚无记忆痕迹。`
+  return `${allPathsScope.value.title}\n记忆强度=FSRS 可提取率；待复习=已到复习期（${overdue} 条）；稳固≥80% 且未到期；未初始化=尚无记忆痕迹。` +
+    `\n另：部分历史痕迹写入时未带路径（实测同账号 18 条里 9 条 pathId 为空），故本块即使想按路径收窄也收不干净。`
 })
 
 const trendText = computed(() => (d.value?.trend === 'up' ? '↗ 上升' : d.value?.trend === 'down' ? '↘ 下降' : '→ 稳定'))

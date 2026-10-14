@@ -364,7 +364,7 @@
         <section v-if="activeTab === 'memory'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">记忆池 · {{ memoryPoolRows.length }} 个概念<template v-if="memoryCount"> / 共 {{ memoryCount }} 条</template></h3>
-            <span class="mk-card__meta">课后沉淀 · 记忆强度＝当前保留率（遗忘曲线调度）</span>
+            <span class="mk-card__meta" :title="allStoriesScope.title">课后沉淀 · 记忆强度＝当前保留率（遗忘曲线调度）· {{ allStoriesScope.label }}</span>
             <!-- 刷新已上移至统一操作台「主动作」槽 -->
           </div>
 
@@ -646,7 +646,7 @@
         <section v-if="activeTab === 'runs'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">会话流水 · {{ allRuns.length }}</h3>
-            <span class="mk-card__meta">按时间倒序 · 与故事池互补：那里按故事看，这里按会话发生时间看</span>
+            <span class="mk-card__meta" :title="allStoriesScope.title">按时间倒序 · 与故事池互补：那里按故事看，这里按会话发生时间看 · {{ allStoriesScope.label }}</span>
             <!-- 截断披露（#96）：详情接口最多 200 条，本页只渲染最近 RUNS_TAB_WINDOW 条 -->
             <span
               v-if="runsTruncated"
@@ -919,7 +919,7 @@ import QuickLearnPanel from './QuickLearnPanel.vue'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { memoryReviewUrl } from './learner-profile'
 import { LEARNER_METRICS, LEARNER_METRIC_CODES } from '@/utils/learnerMetrics'
-import { loadCaliber } from './opsShared'
+import { loadCaliber, panelScopeNote } from './opsShared'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -2454,6 +2454,11 @@ const lsmRows = computed<LsmRow[]>(() => {
 
 /** 四读数出处（单次会话运行时快照）：与「学习者详情」页的学习者级聚合态不同源，数值天然不同 */
 const loadCaliberNote = computed(() => loadCaliber('session-snapshot', d.value?.learningStateAt))
+
+/** 作用域标注：本页的「路径」轴是**故事**（每条 story 是这个角色的一条独立学习线）。
+ *  故事池按故事、运行流水与记忆池跨全部故事、学习状态读数取单次会话——同一屏三种作用域，
+ *  词汇与长释单点在 opsShared.ts 的 panelScopeNote()。 */
+const allStoriesScope = computed(() => panelScopeNote('all-stories'))
 
 /** 能力维度评分（原型 portrait pane 的 ranklist/meterrow index.html:2416-2421；原型 VL_DIMENSIONS 为假数据）。
     画像接口只有身份/偏好枚举（知识水平、性格基线、personalityTraits），无数值化维度 → 恒为空数组渲染空态（红线）。 */
