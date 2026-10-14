@@ -900,6 +900,10 @@ const fetchedModelsEndpoint = ref('')
 const savedApiUrl = ref('')
 
 const dirty = ref<Set<string>>(new Set())
+/** 正在保存的域（#19）：保存请求在途时，实时配置会因这次保存而回显、触发下方守卫 watch，
+ *  而 dirty 要到请求全部返回后才清。守卫据此把在途域排除出「未保存」，避免「保存成功却被
+ *  问要不要丢弃未保存修改」的假信号（更坏情况是点「覆盖」丢改动）。 */
+const savingGroups = ref<Set<string>>(new Set())
 function markDirty(group: string) {
   dirty.value = new Set([...dirty.value, group])
 }
@@ -1088,10 +1092,13 @@ watch(
   () => [dataSource.value, cfg.value] as const,
   async () => {
     // 全局刷新/数据源切换会用新配置覆盖表单:有未保存修改时先确认,拒绝则保留表单仅刷新后台状态
-    if (dirty.value.size > 0) {
+    // #19：把「正在保存」的域排除在未保存之外——保存带来的配置回显会先于 dirty 清除触发本 watch，
+    // 不过滤就会在保存成功那一刻弹「丢弃未保存的配置修改」，把成功呈现成未保存。
+    const pendingGroups = [...dirty.value].filter((g) => !savingGroups.value.has(g))
+    if (pendingGroups.length > 0) {
       const ok = await askConfirm({
         title: '丢弃未保存的配置修改?',
-        message: `配置数据已刷新,继续将覆盖以下未保存的修改:${dirtyGroups.value.join(' / ')}。`,
+        message: `配置数据已刷新,继续将覆盖以下未保存的修改:${pendingGroups.map((g) => DIRTY_GROUP_LABELS[g] || g).join(' / ')}。`,
         confirmText: '覆盖'
       })
       if (ok) applyLiveConfig()
@@ -1336,6 +1343,7 @@ async function saveGroups(groups: string[]) {
     if (!ok) return
   }
   saving.value = true
+  savingGroups.value = set
   try {
     // 分域保存:连接与路由各自独立提交(后端 PUT 为 partial 合并语义),
     // 修复「保存路由顺带落盘改了一半的连接」的范围错位
@@ -1391,6 +1399,7 @@ async function saveGroups(groups: string[]) {
     toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     saving.value = false
+    savingGroups.value = new Set()
   }
 }
 

@@ -567,4 +567,59 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.findAll('button').some((b) => b.text() === '重试')).toBe(true);
     wrapper.unmount();
   });
+
+  /* #19：保存请求在途时，实时配置会因这次保存而回显并触发守卫 watch，而脏位要到请求返回才清——
+     不把「正在保存」的域排除出「未保存」，就会在保存成功那一刻弹「丢弃未保存的配置修改」，
+     把成功呈现成未保存（更坏是点「覆盖」丢改动）。 */
+  it('#19：保存路由在途时配置回显不弹「丢弃未保存的配置修改」', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const baseCfg = {
+      apiUrl: 'https://api.example.com/v1',
+      apiKeyConfigured: true,
+      availableModels: ['model-a'],
+      defaultModel: 'model-a',
+      defaultReasoningModel: 'model-a',
+      defaultEvaluationModel: 'model-a',
+      defaultThinkingMode: 'default' as const,
+      defaultReasoningEffort: 'default' as const,
+      defaultResponseFormat: 'none' as const,
+      connectionStatus: 'connected',
+      lastCheckedAt: '2026-08-13T09:00:00.000Z',
+      networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
+    };
+    liveApiConfig.value = baseCfg;
+    const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '路由与调用');
+    await flushPromises();
+    expect(confirmState.open).toBe(false);
+
+    // 改动路由 → 出现分段保存入口
+    const input = wrapper.find('input[list="ac-model-options"]');
+    await input.setValue('agnes-2.5-flash');
+    await nextTick();
+    const saveBtn = wrapper.findAll('.ac-sec__save').find((b) => b.text() === '保存路由');
+    expect(saveBtn, '改动路由后应出现「保存路由」').toBeTruthy();
+
+    // 保存请求挂起，制造「已发出、响应未回」的窗口
+    let release: (v: unknown) => void = () => {};
+    updateConfigMock.mockImplementation(() => new Promise((r) => { release = r; }));
+    await saveBtn!.trigger('click');
+    await nextTick();
+    // 窗口内配置回显（这正是保存引起的刷新）→ 守卫不得弹确认框
+    liveApiConfig.value = { ...baseCfg, defaultModel: 'agnes-2.5-flash', availableModels: ['agnes-2.5-flash'] };
+    await nextTick();
+    await flushPromises();
+    expect(confirmState.open, '保存在途时不应弹「丢弃未保存的配置修改」').toBe(false);
+    // 回显不覆盖正在保存的表单值
+    expect((wrapper.find('input[list="ac-model-options"]').element as HTMLInputElement).value).toBe('agnes-2.5-flash');
+
+    release({ data: { data: {} } });
+    await flushPromises();
+    await nextTick();
+    await flushPromises();
+    // 保存完成：脏位清空（不再有「保存路由」分段入口），且全程未弹过丢弃确认
+    expect(wrapper.text()).not.toContain('保存路由');
+    expect(confirmState.open).toBe(false);
+    wrapper.unmount();
+  });
 });
