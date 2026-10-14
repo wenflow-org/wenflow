@@ -236,6 +236,11 @@ describe('LearningService.completeTask milestone progression', () => {
     expect((tasks[1] as any).completedAt).toEqual(asOf)
     // 里程碑关闭时间
     expect(milestones[0].completedAt).toEqual(asOf)
+    // learning_paths.updatedAt 是**运维/审计列**（管理端列表排序/停滞判定/重试新鲜度都读它）：
+    // 不吃 asOf、保持真墙钟——否则虚拟学习者跑日期模拟会把路径 updatedAt 写成未来日期，
+    // 管理端列表被模拟路径霸榜且时间倒挂（2026-10-14 用户纠偏 + f16ca56f）
+    expect(path.updatedAt).not.toEqual(asOf)
+    expect((path.updatedAt as Date).getTime()).toBeGreaterThan(Date.now() - 60_000)
     // task:completed 事件时间（reconcileTaskCompletionMetric 用 event.occurredAt 落指标）
     expect(outbox.find(item => item.eventType === 'task:completed')?.occurredAt).toEqual(asOf)
   })

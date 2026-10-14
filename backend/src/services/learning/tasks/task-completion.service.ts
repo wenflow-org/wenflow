@@ -206,16 +206,20 @@ export async function completeTask(data: CompleteTaskData) {
       );
     }
 
-    // 日期模拟：任务结算的业务时间戳（subtasks.completedAt / 完成类 evidence / 里程碑）
-    // 必须在模拟时钟下落到模拟日；无模拟上下文时 asOf 缺省 → new Date()，现网行为不变。
+    // 日期模拟：任务结算的**业务**时间戳（subtasks.completedAt / 完成类 evidence / 里程碑）
+    // 在模拟时钟下落模拟日；无模拟上下文时 asOf 缺省 → new Date()，现网行为不变。
     const completedAt = data.asOf ?? new Date();
+    // learning_paths.updatedAt 是**运维/审计列**（管理端列表排序、停滞判定、重试新鲜度都读它）：
+    // 按设计契约保持真墙钟、不吃 asOf——模拟日通常是未来日期，写进去会让虚拟路径在管理端列表霸榜、
+    // 且时间倒挂（createdAt < updatedAt）。见 doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md §9.5/§9.11。
+    const touchedAt = new Date();
     const completionResult = await withTransaction(async (tx) => {
       // 渐进式（批次 D）：本阶段完成 → 下一阶段解锁时带出（事务外触发 stage N+1 设计）
       let nextUnlockedMilestoneId: string | null = null;
       let nextUnlockedStageNumber: number | undefined = undefined;
       const lockedPath = await tx.learning_paths.updateMany({
         where: { id: pathId, userId: data.userId },
-        data: { updatedAt: completedAt }
+        data: { updatedAt: touchedAt }
       });
       if (lockedPath.count !== 1) {
         throw new PathMutationConflictError(
@@ -343,7 +347,7 @@ export async function completeTask(data: CompleteTaskData) {
           });
           await tx.learning_paths.update({
             where: { id: pathId },
-            data: { completedMilestones, updatedAt: completedAt }
+            data: { completedMilestones, updatedAt: touchedAt }
           });
         }
 
@@ -357,7 +361,7 @@ export async function completeTask(data: CompleteTaskData) {
           const completedMilestones = await tx.milestones.count({ where: { learningPathId: pathId, status: 'completed' } });
           const completedPath = await tx.learning_paths.updateMany({
             where: { id: pathId, status: { not: 'completed' } },
-            data: { status: 'completed', completedMilestones, updatedAt: completedAt }
+            data: { status: 'completed', completedMilestones, updatedAt: touchedAt }
           });
           if (completedPath.count === 1) {
             await enqueueDomainEvent(tx, createDomainEvent({

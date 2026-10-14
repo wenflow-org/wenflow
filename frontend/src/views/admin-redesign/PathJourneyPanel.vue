@@ -183,6 +183,8 @@ interface PathDetailData {
   title: string
   status: string
   updatedAt?: string | null
+  /** 真墙钟「最近活动」（后端派生；updatedAt 会被虚拟学习者的模拟钟写成未来日期） */
+  lastActivityAt?: string | null
   milestones: PathMilestone[]
   activeGenerationRunId?: string | null
 }
@@ -346,7 +348,9 @@ function restoreMessage(status: string, title: string): string {
 const canRetry = computed(() => {
   const v = d.value
   if (!v) return false
-  return v.status === 'failed' || isPathStalled(v.status, v.updatedAt || '')
+  // 停滞判据走真墙钟「最近活动」（后端派生 lastActivityAt，缺失回落 updatedAt）：
+  // 虚拟路径的 updatedAt 是模拟钟写的未来日期，会永远判「不停滞」（同列表页 OpsContent 口径）
+  return v.status === 'failed' || isPathStalled(v.status, v.lastActivityAt || v.updatedAt || '')
 })
 const retryTitle = computed(() => {
   const v = d.value
