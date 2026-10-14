@@ -413,6 +413,7 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import Pagination from './Pagination.vue'
 import { useIsNarrow } from './useIsNarrow'
 import { useTableSort } from './useTableSort'
+import { useListQueryState } from './learner-profile'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import SkillModelCoverage from './SkillModelCoverage.vue'
@@ -751,6 +752,35 @@ const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
+
+/* 列表状态 ↔ URL（2026-10-14 方案 B 的收尾）：行点击改跳设计页后本页会被卸载，此前是子页浮层
+   （列表保持挂载）所以筛选不丢；现按 house 组合式单点 useListQueryState 落 URL
+   （判例 Users / LearnerCenter / VirtualLearners / TeachingSessions 同一单点），
+   顺带把深链与刷新还原一起修好。键：?q= / ?page= / ?size= / ?pill=（attn=仅看需关注）
+   + extra ?cat= / ?agent=。
+   - 排序（?sort=/?dir=）**故意不在这里**：useTableSort 已带 storageKey 存 localStorage，
+     跨卸载/跨会话都活着，再进 URL 只会让链接变脏。
+   - cat / agent 不给白名单：选项由数据派生（categoryOptions / agentOptions 依赖 cards 异步加载），
+     挂载时白名单还是空集，会把合法深链当脏值丢掉；未知取值最多筛出空表，而空态带「清除筛选」出口。
+   - **调用位置必须在下方的「筛选变化回第 1 页」watch 之前**：本组合式在 setup 期同步落位 URL
+     状态，若那个 watch 已存在，深链 ?q=…&page=3 会在落位后立刻被拽回第 1 页。 */
+const attnPill = computed({
+  get: () => (onlyAttention.value ? 'attn' : 'all'),
+  set: (v: string) => { onlyAttention.value = v === 'attn' }
+})
+useListQueryState({
+  pill: attnPill,
+  keyword,
+  page,
+  pageSize,
+  allowedPills: ['all', 'attn'],
+  defaultPageSize: 15,
+  extra: [
+    { key: 'cat', get: () => categoryFilter.value, set: (v) => { categoryFilter.value = v } },
+    { key: 'agent', get: () => agentFilter.value, set: (v) => { agentFilter.value = v } }
+  ]
+})
+
 watch([onlyAttention, keyword, categoryFilter, agentFilter, sortKey, sortDir], () => {
   page.value = 1
 })
