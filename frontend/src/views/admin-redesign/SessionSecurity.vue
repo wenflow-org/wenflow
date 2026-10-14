@@ -595,8 +595,13 @@ async function revoke(s: AdminSessionRow) {
   if (!confirmed) return
   try {
     await adminSessionsApi.revokeAdminSession(s.id)
+    // 行级乐观更新：本地即刻把该行移入历史，避免等重取回来才有反馈
     s.revokedAt = new Date().toISOString()
     toast.success('会话已强制下线')
+    // 写后重取（#8）：卡头「活跃 N」/「N 个会话 · 活跃 N」/「下线全部（N）」读的是 counts /
+    // adminCounts，而二者只在整表加载（applyFilters）时赋值——只改本地行不会刷新计数。
+    // 收编到与「下线全部」同一条重取路径，不另造本地计数自减。
+    await applyFilters()
     doneConfirm()
   } catch (e) {
     toast.error(`下线失败：${errMsg(e)}`)

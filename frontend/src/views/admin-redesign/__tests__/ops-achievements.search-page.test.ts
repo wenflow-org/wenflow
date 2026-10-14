@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import OpsAchievements from '../OpsAchievements.vue';
+import { askConfirm } from '../useConfirm';
 
 const h = vi.hoisted(() => ({
   getRecords: vi.fn(),
@@ -116,6 +117,57 @@ describe('成就记录页：搜索提交与翻页语义', () => {
     const lastParams = h.getRecords.mock.calls[h.getRecords.mock.calls.length - 1][0] as Record<string, unknown>;
     expect(lastParams.q).toBe('张三');
     expect(lastParams.page).toBe(1);
+    w.unmount();
+  });
+
+  /* #12 回归：撤回解锁记录后徽标计数必须重取。
+     根因：宿主「成就 N」读 totalUnlocked（= defs.unlockCount 求和），本地删行不改 defs →
+     计数驻留旧值。修复：revoke 成功后重拉定义，让 unlockCount 归位并重新 emit。 */
+  it('撤回解锁记录后徽标计数重取（成就 1 → 0）', async () => {
+    const defWith = (n: number) => ({
+      id: 'a1',
+      name: '首次完成',
+      type: 'milestone',
+      description: '完成首个任务',
+      requirement: { type: 'task_count', value: 1 },
+      xpReward: 10,
+      unlockCount: n
+    });
+    h.getDefinitions.mockReset();
+    h.getRecords.mockReset();
+    h.getDefinitions
+      .mockResolvedValueOnce({ data: { data: [defWith(1)] } })
+      .mockResolvedValueOnce({ data: { data: [defWith(0)] } });
+    h.getRecords.mockResolvedValue({
+      data: {
+        data: {
+          records: [
+            {
+              id: 'r1',
+              userId: 'user_1',
+              achievementId: 'a1',
+              achievementName: '首次完成',
+              title: '首次完成',
+              xpReward: 10,
+              earnedAt: '2026-10-01T00:00:00Z'
+            }
+          ],
+          pagination: { total: 1, page: 1, limit: 20 }
+        }
+      }
+    });
+    vi.mocked(askConfirm).mockResolvedValueOnce(true);
+    const w = await mountPane();
+    await gotoTab(w);
+    const before = w.emitted('count')!;
+    expect(before[before.length - 1]).toEqual([1]);
+    const revokeBtn = w.findAll('button').find((b) => b.text().trim() === '撤回')!;
+    await revokeBtn.trigger('click');
+    await flushPromises();
+    await nextTick();
+    await flushPromises();
+    const after = w.emitted('count')!;
+    expect(after[after.length - 1]).toEqual([0]);
     w.unmount();
   });
 });

@@ -402,10 +402,14 @@ async function remove(n: NotifRow) {
   n.busy = true
   try {
     await adminNotificationsApi.remove(n.id)
+    // 行级乐观更新：行即刻消失、卡头「共 N / 未读 N」自减
     items.value = items.value.filter((x) => x.id !== n.id)
     total.value = Math.max(0, total.value - 1)
     if (!n.isRead) unreadTotal.value = Math.max(0, unreadTotal.value - 1)
     toast.success('通知已删除')
+    // 写后重取（#12）：徽标「站内通知 N」由 reload() 内的 emit('count') 上报，
+    // 本地删行不发上报——重跑列表加载器让计数归位并重新上报宿主。
+    void reload()
     doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)

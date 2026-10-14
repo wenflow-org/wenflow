@@ -414,9 +414,13 @@ async function revoke(r: AchievementRecord & { busy?: boolean }) {
   r.busy = true
   try {
     await adminAchievementsApi.revoke(r.id)
+    // 行级乐观更新：记录行即刻消失、分页读数自减
     records.value = records.value.filter((x) => x.id !== r.id)
     totalRecords.value = Math.max(0, totalRecords.value - 1)
     toast.success('成就已撤回')
+    // 写后重取（#12）：徽标「成就 N」读 totalUnlocked（= defs.unlockCount 求和），
+    // 本地删行不会改 defs——须重拉定义让 unlockCount 归位并重新上报宿主计数。
+    void loadDefs()
     doneConfirm()
   } catch (e) {
     toast.error(`撤回失败：${errMsg(e)}`)

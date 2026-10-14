@@ -11,7 +11,8 @@ import SessionSecurity from '../SessionSecurity.vue';
 
 const h = vi.hoisted(() => ({
   getMe: vi.fn(),
-  getSessions: vi.fn()
+  getSessions: vi.fn(),
+  revoke: vi.fn()
 }));
 
 const { apiObject } = vi.hoisted(() => ({
@@ -26,7 +27,7 @@ const { apiObject } = vi.hoisted(() => ({
 
 vi.mock('@/api/adminApi', () => ({
   adminAuthApi: { getMe: h.getMe },
-  adminSessionsApi: { getAdminSessions: h.getSessions, revokeAdminSession: vi.fn(), revokeAllAdminSessions: vi.fn() },
+  adminSessionsApi: { getAdminSessions: h.getSessions, revokeAdminSession: h.revoke, revokeAllAdminSessions: vi.fn() },
   adminAgentsApi: apiObject(),
   adminDashboardApi: apiObject(),
   adminSkillsApi: apiObject(),
@@ -44,7 +45,9 @@ vi.mock('@/api/adminApi', () => ({
 }));
 
 vi.mock('../useConfirm', () => ({
-  askConfirm: vi.fn(async () => true)
+  askConfirm: vi.fn(async () => true),
+  doneConfirm: vi.fn(),
+  failConfirm: vi.fn()
 }));
 
 function fakeSession(
@@ -92,6 +95,8 @@ describe('SessionSecurity 分页（标准页码器）', () => {
   beforeEach(() => {
     h.getMe.mockReset();
     h.getSessions.mockReset();
+    h.revoke.mockReset();
+    h.revoke.mockResolvedValue({ data: {} });
     h.getMe.mockResolvedValue({ data: { data: { id: 'admin-1' } } });
   });
 
@@ -253,5 +258,49 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(auditor2.find('.ss-tr').text()).toContain('#100');
     // 历史折叠组两页都在（翻页不藏历史入口）
     expect(w.find('.ss-hist').exists()).toBe(true);
+  });
+
+  /* #8 回归：强制下线单个会话后，卡头全量计数必须重取（不能只改本地行）。
+     根因：counts/adminCounts 只在整表加载时赋值，revoke 只改本地 sessions 行 → 计数驻留旧值。 */
+  it('强制下线单个会话后卡头计数立即重取（活跃 4 → 3、已撤销 0 → 1）', async () => {
+    const base = Array.from({ length: 4 }, (_, i) => fakeSession(i + 1));
+    const after = base.map((s) => (s.id === 'sess-2' ? { ...s, revokedAt: new Date().toISOString() } : s));
+    h.getSessions
+      .mockResolvedValueOnce({
+        data: {
+          data: {
+            sessions: base,
+            counts: { total: 4, active: 4, expired: 0, revoked: 0 },
+            adminCounts: [{ adminId: 'admin-1', total: 4, active: 4, expired: 0, revoked: 0 }]
+          }
+        }
+      })
+      .mockResolvedValueOnce({
+        data: {
+          data: {
+            sessions: after,
+            counts: { total: 4, active: 3, expired: 0, revoked: 1 },
+            adminCounts: [{ adminId: 'admin-1', total: 4, active: 3, expired: 0, revoked: 1 }]
+          }
+        }
+      });
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }]
+    });
+    await router.push('/admin/session-security');
+    await router.isReady();
+    const w = mount(SessionSecurity, { global: { plugins: [router] } });
+    await flushPromises();
+    await flushPromises();
+    expect(w.find('.mk-card__meta').text()).toContain('活跃 4');
+    // sess-1 是当前标签页（createdAt 最新，标「当前」），首枚「强制下线」即 sess-2
+    const revokeBtn = w.findAll('button').find((b) => b.text().trim() === '强制下线')!;
+    await revokeBtn.trigger('click');
+    await flushPromises();
+    await flushPromises();
+    // 卡头/组头/批量下线读数全部来自重取后的 counts（活跃 3、已撤销 1）
+    expect(w.find('.mk-card__meta').text()).toContain('活跃 3');
+    expect(w.find('.ss-group__count').text()).toContain('3 个活跃');
   });
 });
