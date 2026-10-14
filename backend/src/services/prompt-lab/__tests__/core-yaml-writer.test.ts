@@ -4,7 +4,7 @@
   scanCoreFiles,
   type CoreFile,
 } from '../core-file-loader';
-import { normalizeCoreFormInput, serializeCoreFile, extractHeaderComment } from '../core-yaml-writer';
+import { normalizeCoreFormInput, serializeCoreFile, extractHeaderComment, coreFileSemanticallyEqual } from '../core-yaml-writer';
 
 /** 去掉装载期字段后做深比较 */
 function stripLoaded(core: CoreFile): Omit<CoreFile, 'filePath'> {
@@ -214,6 +214,49 @@ describe('core-yaml-writer', () => {
       expect(parsed.diagnostics).toEqual([]);
       expect(stripLoaded(parsed.core!)).toEqual(stripLoaded(core));
     }
+  });
+});
+
+describe('coreFileSemanticallyEqual（#9 无编辑保存守卫）', () => {
+  const base: CoreFile = {
+    skillId: 'demo',
+    baseVersion: 1,
+    identity: 'x',
+    channels: ['dialogue'],
+    stateAdvance: false,
+    rules: ['r'],
+    fields: [{ name: 'f', type: 'string', optional: false, desc: 'd', turn: false }],
+    constraints: [],
+    params: { temperature: 0.5, maxTokens: 100, failurePolicy: 'retry' },
+    deltaOutput: false,
+    outputMedia: 'json',
+  };
+
+  it('忽略 filePath 差异，键序无关', () => {
+    const withPath: CoreFile = { ...base, filePath: '/tmp/demo.yaml' };
+    expect(coreFileSemanticallyEqual(base, withPath)).toBe(true);
+  });
+
+  it('语义不同则判不等', () => {
+    expect(coreFileSemanticallyEqual(base, { ...base, identity: 'y' })).toBe(false);
+  });
+
+  it('表单载荷经 normalize 后与磁盘 core 等价（无编辑保存可沿用原文本）', () => {
+    const normalized = normalizeCoreFormInput(
+      {
+        identity: base.identity,
+        channels: base.channels,
+        stateAdvance: base.stateAdvance,
+        deltaOutput: base.deltaOutput,
+        outputMedia: base.outputMedia,
+        rules: base.rules,
+        constraints: base.constraints,
+        fields: base.fields.map((f) => ({ name: f.name, type: f.type, desc: f.desc, turn: f.turn })),
+        params: base.params,
+      },
+      'demo'
+    ).core;
+    expect(coreFileSemanticallyEqual(base, normalized)).toBe(true);
   });
 });
 

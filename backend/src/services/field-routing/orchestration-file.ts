@@ -247,6 +247,120 @@ export function validateOrchestrationContent(content: string): OrchestrationStag
   return parseOrchestrationText(content, '<content>');
 }
 
+/** 行级路由 PATCH 的可编辑键集合（与编排文件 routing 条目键一致） */
+export interface OrchestrationRoutingEdits {
+  render?: RenderValue;
+  handoff?: string[];
+  internal?: boolean;
+  accumulate?: boolean;
+  visibilityPreset?: string | null;
+  notes?: string | null;
+}
+
+/** 写回顺序固定为条目声明序，避免键序抖动 */
+const ROUTING_EDIT_KEYS: Array<keyof OrchestrationRoutingEdits> = [
+  'render',
+  'handoff',
+  'internal',
+  'accumulate',
+  'visibilityPreset',
+  'notes',
+];
+
+/**
+ * 行级路由编辑：把 (agentId, fieldId) 目标 routing 条目上的可编辑键写回编排 YAML 文本。
+ *
+ * 契约（File-as-Truth 行级编辑）：
+ * - 仅改写目标 routing 条目，其余文本（含注释 / 其他条目 / 键序）逐字保留；
+ * - notes / visibilityPreset 置空（null 或空串）时删除整行键，而不是写 `notes: null`
+ *   —— 字段路由改回原值后文件必须回到原文（#10）；
+ * - 保留原文件行尾（EOL）与文末换行，避免 Windows CRLF 检出下「git diff 空、git status M」
+ *   的行尾噪音（#10/#11）；
+ * - 目标条目不存在时抛错，由路由侧映射为 422。
+ */
+export function applyRoutingEditsToOrchestrationText(
+  yamlText: string,
+  agentId: string,
+  fieldId: string,
+  edits: OrchestrationRoutingEdits,
+): string {
+  const eol = yamlText.includes('\r\n') ? '\r\n' : '\n';
+  const hadTrailingNewline = yamlText.endsWith('\n');
+  const lines = yamlText.replace(/\r\n/g, '\n').split('\n');
+  // 去掉 split 产生的尾部空元素：否则新增键会被追加到换行占位之后，丢掉文末换行（#10）
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+
+  // 定位该 (agentId, fieldId) 的 routing 条目：routings 段内逐块扫描
+  // （块 = 每条「- agentId: X」起始到下一个「- agentId:」前；goal-agent 的桥接路由
+  //   可能被 YAML 拆成多段，不能只取首个同名 agent 块）
+  const routingsIdx = lines.findIndex((l) => l.trim() === 'routings:');
+  const scanStart = routingsIdx >= 0 ? routingsIdx : 0;
+  let entryStart = -1;
+  let entryEnd = 0;
+  for (let i = scanStart; i < lines.length; i += 1) {
+    const t = lines[i].trim();
+    if (!t.startsWith('- agentId:')) continue;
+    const idMatch = t.match(/agentId:\s*"?([^"\s]+)"?/);
+    if (!idMatch || idMatch[1] !== agentId) continue;
+    const nextBlock = lines.slice(i + 1).findIndex((l) => l.trim().startsWith('- agentId:'));
+    const blockEnd = nextBlock >= 0 ? i + 1 + nextBlock : lines.length;
+    const blockLines = lines.slice(i, blockEnd);
+    const fIdx = blockLines.findIndex((l) => l.trim().startsWith('fieldId:'));
+    if (fIdx < 0) continue;
+    const idText = blockLines[fIdx].trim().replace(/^fieldId:\s*/, '').replace(/['"]/g, '').trim();
+    if (idText !== fieldId) continue;
+    entryStart = i;
+    entryEnd = blockEnd;
+    break;
+  }
+  if (entryStart < 0) {
+    throw new Error(`[orchestration] 未找到路由条目 ${agentId}/${fieldId}`);
+  }
+
+  const indent = (lines[entryStart].match(/^\s*/) || [''])[0];
+  const keyIndent = `${indent}  `;
+  const edited = lines.slice(entryStart, entryEnd);
+  const findKey = (key: string) => edited.findIndex((l) => l.trim().startsWith(`${key}:`));
+  const setKey = (key: string, value: string) => {
+    const line = `${keyIndent}${key}: ${value}`;
+    const idx = findKey(key);
+    if (idx >= 0) edited[idx] = line;
+    else edited.push(line);
+  };
+
+  for (const key of ROUTING_EDIT_KEYS) {
+    if (edits[key] === undefined) continue;
+    const raw = edits[key];
+    if (key === 'notes' || key === 'visibilityPreset') {
+      // 安全审计批次3：自由文本字段以 JSON 双引号标量写回——JSON 字符串是合法 YAML 标量，
+      // 换行/引号/控制字符天然转义；原样拼接会让值中换行注入任意 YAML 结构。
+      if (raw == null || raw === '') {
+        const idx = findKey(key);
+        if (idx >= 0) edited.splice(idx, 1); // 删除键行而不是写 `key: null`（#10）
+        continue;
+      }
+      setKey(key, JSON.stringify(String(raw)));
+      continue;
+    }
+    let value: string;
+    if (key === 'handoff') {
+      const arr = Array.isArray(raw) ? raw : [];
+      value = arr.length ? `[${arr.map((v) => `'${v}'`).join(', ')}]` : '[]';
+    } else if (key === 'internal' || key === 'accumulate') {
+      value = raw ? 'true' : 'false';
+    } else {
+      value = String(raw); // render（调用侧已校验 visible/hidden）
+    }
+    setKey(key, value);
+  }
+
+  const out = [...lines.slice(0, entryStart), ...edited, ...lines.slice(entryEnd)];
+  let text = out.join('\n');
+  if (hadTrailingNewline) text += '\n';
+  return eol === '\r\n' ? text.replace(/\n/g, '\r\n') : text;
+}
+
+
 /** 扫描编排目录，返回全部 stage（按文件名排序）；解析失败即抛错（fail-fast） */
 export function loadOrchestrationFiles(): OrchestrationStage[] {
   let entries: string[];

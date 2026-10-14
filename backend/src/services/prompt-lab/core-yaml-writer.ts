@@ -7,6 +7,7 @@
  * - normalizeCoreFormInput：网页表单提交的松散 JSON → CoreFile 形状，
  *   仅做类型矫正与兜底；语义校验仍由 parseCoreFile 单点承担。
  */
+import { isDeepStrictEqual } from 'util';
 import yaml from 'js-yaml';
 import {
   CORE_CHANNELS,
@@ -226,6 +227,22 @@ export function serializeCoreFile(core: CoreFile, headerComment?: string): strin
         '',
       ].join('\n');
   return `${header}${body}`;
+}
+
+/** 去掉加载期填充的 filePath（不参与语义比较） */
+function withoutFileRef(core: CoreFile): Omit<CoreFile, 'filePath'> {
+  const { filePath: _filePath, ...rest } = core;
+  void _filePath;
+  return rest;
+}
+
+/**
+ * 语义等价比较（忽略 filePath）。
+ * 供表单「无编辑保存」守卫复用：等价时直接沿用磁盘原文本，避免确定性序列化器
+ * 把原文的键序 / 引号 / 块标量风格整体改写（#9：不做任何编辑也会产生纯格式 diff）。
+ */
+export function coreFileSemanticallyEqual(a: CoreFile, b: CoreFile): boolean {
+  return isDeepStrictEqual(withoutFileRef(a), withoutFileRef(b));
 }
 
 /** 提取 YAML 文本开头的连续注释块（# 行，允许行间空行），无则返回 undefined */

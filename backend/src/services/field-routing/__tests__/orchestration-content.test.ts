@@ -8,6 +8,7 @@
 
 import {
   validateOrchestrationContent,
+  applyRoutingEditsToOrchestrationText,
   type OrchestrationStage,
 } from '../orchestration-file';
 
@@ -117,5 +118,94 @@ routings:
 
   it('stage 缺失/非字符串抛错', () => {
     expect(() => validateOrchestrationContent('displayName: x\ncontracts: []')).toThrow(/stage 必须为非空字符串/);
+  });
+});
+
+/**
+ * #10：字段路由行级 patch 把值改回 null 后必须回原文（不得残留 `notes: null`，
+ * 不得丢失文末换行 / 混入别的行尾）。
+ */
+describe('applyRoutingEditsToOrchestrationText（行级路由改写）', () => {
+  const ORIG = [
+    '# test goal.yaml（fixture）',
+    'stage: test-stage',
+    'displayName: Test 阶段',
+    'contracts:',
+    '  - agentId: skill:test-skill',
+    'fields:',
+    '  - fieldId: test.alpha',
+    '    promptRole: soft-info',
+    '    valueType: string',
+    '    description: 测试字段',
+    'routings:',
+    '  - agentId: skill:test-skill',
+    '    fieldId: test.alpha',
+    '    render: visible',
+    '    handoff: []',
+    '    internal: false',
+    '    accumulate: false',
+    '',
+  ].join('\n');
+
+  it('写 notes 再置 null：文件逐字节回原文（删键 + 保留文末换行）', () => {
+    const withNotes = applyRoutingEditsToOrchestrationText(ORIG, 'skill:test-skill', 'test.alpha', {
+      notes: '临时说明',
+    });
+    expect(withNotes).toContain('    notes: "临时说明"');
+    expect(withNotes.endsWith('\n')).toBe(true);
+
+    const back = applyRoutingEditsToOrchestrationText(withNotes, 'skill:test-skill', 'test.alpha', {
+      notes: null,
+    });
+    expect(back).toBe(ORIG);
+    expect(back).not.toContain('notes: null');
+  });
+
+  it('原本没有该键时置 null 不写 null 行，文本不变', () => {
+    const out = applyRoutingEditsToOrchestrationText(ORIG, 'skill:test-skill', 'test.alpha', {
+      visibilityPreset: null,
+    });
+    expect(out).toBe(ORIG);
+  });
+
+  it('CRLF 文件保持 CRLF 且保留文末换行', () => {
+    const crlf = ORIG.replace(/\n/g, '\r\n');
+    const out = applyRoutingEditsToOrchestrationText(crlf, 'skill:test-skill', 'test.alpha', {
+      notes: 'x',
+    });
+    expect(out.endsWith('\r\n')).toBe(true);
+    // 不得混入裸 LF：去掉所有 CRLF 后不应再有 \n
+    expect(out.replace(/\r\n/g, '')).not.toContain('\n');
+  });
+
+  it('改 render / handoff 只动目标键，注释与其余文本保持', () => {
+    const out = applyRoutingEditsToOrchestrationText(ORIG, 'skill:test-skill', 'test.alpha', {
+      render: 'hidden',
+      handoff: ['goal-agent'],
+      internal: true,
+      accumulate: true,
+    });
+    expect(out).toContain('# test goal.yaml（fixture）');
+    expect(out).toContain('    render: hidden');
+    expect(out).toContain("    handoff: ['goal-agent']");
+    expect(out).toContain('    internal: true');
+    expect(out).toContain('    accumulate: true');
+  });
+
+  it('目标条目不存在抛错', () => {
+    expect(() =>
+      applyRoutingEditsToOrchestrationText(ORIG, 'skill:test-skill', 'test.ghost', { render: 'hidden' }),
+    ).toThrow(/未找到路由条目/);
+  });
+
+  it('多条路由：只改命中 (agentId, fieldId) 的那条', () => {
+    const two = ORIG.replace(
+      '    accumulate: false\n',
+      '    accumulate: false\n  - agentId: goal-agent\n    fieldId: test.alpha\n    render: visible\n    handoff: []\n    internal: false\n    accumulate: false\n',
+    );
+    const out = applyRoutingEditsToOrchestrationText(two, 'goal-agent', 'test.alpha', { render: 'hidden' });
+    // skill 行不变，goal-agent 行变
+    expect(out).toContain('  - agentId: skill:test-skill\n    fieldId: test.alpha\n    render: visible');
+    expect(out).toContain('  - agentId: goal-agent\n    fieldId: test.alpha\n    render: hidden');
   });
 });

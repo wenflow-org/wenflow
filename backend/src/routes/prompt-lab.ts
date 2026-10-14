@@ -31,7 +31,8 @@ import {
   buildV4CompileSpecText,
 } from '../services/prompt-lab/core-compiler';
 import { loadCoreFile, scanCoreFiles, computeCoreHash, parseCoreFile, CORE_FILES_DIR, FORBIDDEN_PLATFORM_FIELDS } from '../services/prompt-lab/core-file-loader';
-import { normalizeCoreFormInput, serializeCoreFile, extractHeaderComment } from '../services/prompt-lab/core-yaml-writer';
+import { normalizeCoreFormInput, serializeCoreFile, extractHeaderComment, coreFileSemanticallyEqual } from '../services/prompt-lab/core-yaml-writer';
+import { readFileEol, withEol, writeTextPreservingEol } from '../utils/write-text-preserving-eol';
 import { getFieldLineageWithDeclarations, classifyCoreEdit } from '../services/prompt-lab/field-lineage';
 import {
   judgeSemanticFreeze,
@@ -791,7 +792,9 @@ router.post('/publish-core', async (req, res) => {
       // 与 PROMPTS_DIR 同目录保证 rename 不跨卷。
       const tmpPath = path.join(PROMPTS_DIR, `.skill.${skillId}.md.${process.pid}.tmp`);
       try {
-        await fs.writeFile(tmpPath, compiled.prompt, 'utf-8');
+        // #11：沿用现有生产文件 EOL（Windows 检出为 CRLF），避免写回 LF 产生行尾噪音
+        const prodEol = await readFileEol(prodPath);
+        await fs.writeFile(tmpPath, withEol(compiled.prompt, prodEol), 'utf-8');
         await fs.rename(tmpPath, prodPath);
       } catch (fileError) {
         await fs.unlink(tmpPath).catch(() => {});
@@ -922,7 +925,12 @@ router.put('/core/:skillId', async (req, res) => {
       }
       // 保留原文件头部注释块（M1 基准血缘等人工信息）
       const existingRaw = await fs.readFile(filePath, 'utf-8').catch(() => '');
-      yamlText = serializeCoreFile(normalized.core, extractHeaderComment(existingRaw));
+      const existingCore = existingRaw ? parseCoreFile(filePath, existingRaw).core : null;
+      // #9：表单「无编辑保存」守卫——载荷与磁盘现有 core 语义等价时直接沿用原文本，
+      // 避免确定性序列化器把原文键序 / 引号 / 块标量风格整体改写（无编辑也产生纯格式 diff）。
+      yamlText = existingCore && coreFileSemanticallyEqual(existingCore, normalized.core)
+        ? existingRaw
+        : serializeCoreFile(normalized.core, extractHeaderComment(existingRaw));
     } else {
       if (typeof content !== 'string' || !content.trim()) {
         return res.status(400).json({ error: '缺少 content（核心文件 YAML 文本）' });
@@ -964,7 +972,7 @@ router.put('/core/:skillId', async (req, res) => {
     } catch {
       // 首次创建无备份可不做
     }
-    await fs.writeFile(filePath, yamlText, 'utf-8');
+    await writeTextPreservingEol(filePath, yamlText);
 
     res.json({
       success: true,
@@ -2369,8 +2377,9 @@ router.post('/core/:skillId/rollback', async (req, res) => {
       await fs.copyFile(prodPath, path.join(backupsDir, `${ts}.md`));
       await fs.copyFile(corePath, path.join(backupsDir, `core-${ts}.yaml`));
     } catch { /* 备份失败不阻塞 */ }
-    await fs.writeFile(corePath, snapshot.raw, 'utf-8');
-    await fs.writeFile(prodPath, compiled.prompt, 'utf-8');
+    // #11：回滚沿用既有文件 EOL，避免写回 LF 造成「git diff 空、git status M」的行尾噪音
+    await writeTextPreservingEol(corePath, snapshot.raw);
+    await writeTextPreservingEol(prodPath, compiled.prompt);
 
     // 2) ACTIVE 翻转（其余置 ARCHIVED）
     await archiveOtherActivePrompts(agentId, target.id);
@@ -2603,8 +2612,8 @@ router.post('/variants/:id/promote', async (req, res) => {
         await fs.copyFile(prodPath, path.join(backupsDir, `${ts}.md`));
         await fs.copyFile(corePath, path.join(backupsDir, `core-${ts}.yaml`));
       } catch { /* 备份失败不阻塞 */ }
-      await fs.writeFile(corePath, snapshot.raw, 'utf-8');
-      await fs.writeFile(prodPath, compiled.prompt, 'utf-8');
+      await writeTextPreservingEol(corePath, snapshot.raw);
+      await writeTextPreservingEol(prodPath, compiled.prompt);
 
       // 2) ACTIVE 翻转：变体转基线 → 旧基线归档
       await withSystemTransaction(async (tx) => {

@@ -27,7 +27,9 @@ import {
   RENDER_VALUES,
   validateOrchestrationContent,
   parseOrchestrationFile,
+  applyRoutingEditsToOrchestrationText,
   type OrchestrationStage,
+  type RenderValue,
 } from '../../services/field-routing/orchestration-file';
 import { PROMPT_ROLE_META } from '../../services/yaml-vocabulary';
 import { getCanonicalAgentId, getAgentManifest } from '../../services/agent-manifest.service';
@@ -434,67 +436,24 @@ router.patch('/routings/:agentId/:fieldId', async (req: Request, res: Response) 
 
   // 行级修改 → 写回编排文件对应 routing 条目（File-as-Truth 单源化保持）
   const yaml = await fs.promises.readFile(filePath, 'utf-8');
-  const beforeText = yaml;
-  const lines = yaml.split('\n');
-  // 定位该 (agentId, fieldId) 的 routing 条目：routings 段内逐块扫描
-  // （块 = 每条「- agentId: X」起始到下一个「- agentId:」前；goal-agent 的桥接路由
-  //   可能被 YAML 拆成多段，不能只取首个同名 agent 块）
-  let entryStart = -1;
-  let entryEndInBlock = 0;
-  let blockBase = 0;
-  const routingsIdx = lines.findIndex((l) => l.trim() === 'routings:');
-  const scanStart = routingsIdx >= 0 ? routingsIdx : 0;
-  for (let i = scanStart; i < lines.length; i++) {
-    const t = lines[i].trim();
-    if (!t.startsWith('- agentId:')) continue;
-    const idMatch = t.match(/agentId:\s*"?([^"\s]+)"?/);
-    if (!idMatch || idMatch[1] !== agentId) continue;
-    const nextBlock = lines.slice(i + 1).findIndex((l) => l.trim().startsWith('- agentId:'));
-    const blockEndAbs = nextBlock >= 0 ? i + 1 + nextBlock : lines.length;
-    const blockLines = lines.slice(i, blockEndAbs);
-    const fIdx = blockLines.findIndex((l) => l.trim().startsWith('fieldId:'));
-    if (fIdx < 0) continue;
-    const idText = blockLines[fIdx].trim().replace(/^fieldId:\s*/, '').replace(/['"]/g, '').trim();
-    if (idText !== fieldId) continue;
-    entryStart = i;
-    entryEndInBlock = blockEndAbs;
-    blockBase = i;
-    break;
-  }  if (entryStart < 0) {
+  // 纯文本级改写（保留注释/键序/EOL/文末换行；空值删键而非写 null）集中在 orchestration-file，
+  // 便于单测；条目缺失抛错。
+  let nextText: string;
+  try {
+    nextText = applyRoutingEditsToOrchestrationText(yaml, agentId, fieldId, {
+      render: edits.render as RenderValue | undefined,
+      handoff: edits.handoff as string[] | undefined,
+      internal: edits.internal as boolean | undefined,
+      accumulate: edits.accumulate as boolean | undefined,
+      visibilityPreset: edits.visibilityPreset as string | null | undefined,
+      notes: edits.notes as string | null | undefined,
+    });
+  } catch (error) {
     return res.status(422).json({
       success: false,
-      error: { message: `编排文件 ${stage}.yaml 未找到 ${agentId}/${fieldId} 路由条目（文件与声明不一致，请先同步）` },
+      error: { message: `编排文件 ${stage}.yaml 未找到 ${agentId}/${fieldId} 路由条目（文件与声明不一致，请先同步）：${error instanceof Error ? error.message : String(error)}` },
     });
   }
-  const entryLines = lines.slice(blockBase, entryEndInBlock);
-
-  const indent = (entryLines[0].match(/^\s*/) || [''])[0];
-  const keyIndent = `${indent}  `;
-  const edited = [...entryLines];
-  const setKey = (key: string, value: string) => {
-    const idx = edited.findIndex((l) => l.trim().startsWith(`${key}:`));
-    const line = `${keyIndent}${key}: ${value}`;
-    if (idx >= 0) edited[idx] = line;
-    else edited.splice(edited.length, 0, line);
-  };
-  for (const key of Object.keys(edits) as Array<keyof typeof edits>) {
-    let value = edits[key];
-    if (key === 'handoff') {
-      value = Array.isArray(value) && (value as string[]).length ? `[${(value as string[]).map((v) => `'${v}'`).join(', ')}]` : '[]';
-    } else if (key === 'internal' || key === 'accumulate') {
-      value = value ? 'true' : 'false';
-    } else if (key === 'notes' || key === 'visibilityPreset') {
-      // 安全审计批次3：自由文本字段以 JSON 双引号标量写回——JSON 字符串是合法 YAML 标量，
-      // 换行/引号/控制字符天然转义；原样拼接会让值中换行注入任意 YAML 结构。
-      value = (value == null || value === '') ? 'null' : JSON.stringify(String(value));
-    } else if (value == null || value === '') {
-      value = 'null';
-    }
-    setKey(key, String(value));
-  }
-
-  const next = [...lines.slice(0, blockBase), ...edited, ...lines.slice(entryEndInBlock)];
-  const nextText = next.join('\n');
   // 写盘前整体校验（防止行级编辑破坏文件）
   try {
     validateOrchestrationContent(nextText);
