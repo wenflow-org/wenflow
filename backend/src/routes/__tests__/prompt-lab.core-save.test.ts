@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 测试内省 express router/mock 形状（对齐同目录既有豁免先例） */
 /**
  * #9 回归：Skill 设计页「保存并编译」在无任何编辑时不得重排 core/*.yaml。
  *

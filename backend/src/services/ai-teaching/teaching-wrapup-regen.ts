@@ -1,3 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 本模块全程在读写「动态形状」载荷：
+   wrapup JSON 列（历史行可能是字符串，键随版本演进）、LLM 运行信封（output.internal.ext.*）
+   与 Prisma JSON 输入转换。为这些形状写全量类型只会把 `any` 换成更长的断言，
+   故与仓库既有 94 处同类豁免（探针/测试/动态载荷模块）同口径。 */
 /**
  * 降级 wrapup 重生成（2026-10-11 补轮，用户令「补一轮」）
  *

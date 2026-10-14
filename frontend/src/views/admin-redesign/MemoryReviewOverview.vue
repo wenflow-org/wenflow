@@ -285,7 +285,7 @@ async function loadTraceWindow() {
   const seq = ++traceSeq
   traceFailed.value = false
   try {
-    const res: any = await adminMemoryTracesApi.list({ limit: 200, includeVirtual: includeVirtual.value, testOnly: includeVirtual.value || undefined })
+    const res = await adminMemoryTracesApi.list({ limit: 200, includeVirtual: includeVirtual.value, testOnly: includeVirtual.value || undefined })
     if (seq !== traceSeq) return
     const body = res.data?.data ?? res.data ?? {}
     traceRows.value = Array.isArray(body.rows) ? body.rows : []
@@ -468,7 +468,7 @@ async function loadOverview() {
   loading.value = true
   error.value = ''
   try {
-    const res: any = await adminMemoryReviewApi.overview({ limit: userPageSize.value, offset: (userPage.value - 1) * userPageSize.value, includeVirtual: includeVirtual.value, testOnly: includeVirtual.value || undefined })
+    const res = await adminMemoryReviewApi.overview({ limit: userPageSize.value, offset: (userPage.value - 1) * userPageSize.value, includeVirtual: includeVirtual.value, testOnly: includeVirtual.value || undefined })
     if (seq !== overviewSeq) return
     const body = res.data?.data ?? res.data ?? {}
     rows.value = Array.isArray(body.users) ? body.users : []
