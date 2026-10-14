@@ -189,7 +189,7 @@
                 </div>
               </td>
               <td v-if="!hiddenCols.has('updated')" :title="stallTitle(p)">
-                <span class="mk-cell-sub mono">{{ timeAgo(p.updatedAt) }}</span>
+                <span class="mk-cell-sub mono">{{ timeAgo(activityAt(p)) }}</span>
                 <!-- 停滞标记（2026-10-10 跑批实锤：active 且长时间无更新=生成链停滞，可「重试生成」补齐；
                      真实用户数日不学属正常，只提示不强判死，amber=需关注可行动） -->
                 <span v-if="isStalled(p)" class="mk-badge mk-badge--warn mk-badge--sm" title="长时间无更新，可「重试生成」补齐课程任务">停滞</span>
@@ -384,7 +384,12 @@ const { toggle: toggleOcSort, sortState: ocSortState, sortRows: sortOcRows, sort
     hours: (p) => (typeof p.estimatedHours === 'number' && p.estimatedHours > 0 ? p.estimatedHours : null),
     status: (p) => p.status,
     progress: (p) => progressPct(p),
-    updated: (p) => (p.updatedAt ? new Date(p.updatedAt).getTime() : null)
+    /* 「更新」列按真墙钟「最近活动」排序（lastActivityAt；缺失回落 updatedAt）——虚拟路径的
+       updatedAt 是模拟钟写的未来日期，直接排会霸榜（2026-10-14 用户纠偏） */
+    updated: (p) => {
+      const v = activityAt(p)
+      return v ? new Date(v).getTime() : null
+    }
   },
   storageKey: 'wf_ops_content_sort'
 })
@@ -469,6 +474,13 @@ function fmtDate(iso?: string | null): string {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/* 真墙钟「最近活动」：后端派生 lastActivityAt（路径 createdAt / 真墙钟 updatedAt / 名下会话 createdAt 三者最大值）。
+   updatedAt 会被虚拟学习者的日期模拟写成未来日期（模拟日），直接展示会让 timeAgo 渲染成「刚刚」并霸榜；
+   缺 lastActivityAt 时（旧响应/单测 fixture）回落 updatedAt。2026-10-14 用户纠偏「列表排序改用真实钟列」。 */
+function activityAt(p: PathRow): string | null {
+  return p.lastActivityAt || p.updatedAt || null
 }
 
 /* 请求代际号（2026-10-06 审核 F2-3，判例 GoalConversations.statsReqSeq）：
@@ -599,12 +611,14 @@ async function remove(p: PathRow) {
   }
 }
 
-/* 生成停滞（active 且 updatedAt 超 PATH_STALL_HOURS 无更新）：提醒可「重试生成」补齐 */
+/* 生成停滞（active 且「最近活动」超 PATH_STALL_HOURS）：提醒可「重试生成」补齐。
+   判据用真墙钟最近活动（同「更新」列口径）：虚拟路径的 updatedAt 是模拟钟未来值，会永远判「不停滞」。 */
 function isStalled(p: PathRow) {
-  return isPathStalled(p.status, p.updatedAt)
+  const at = activityAt(p)
+  return at ? isPathStalled(p.status, at) : false
 }
 function stallTitle(p: PathRow) {
-  const full = `完整时间 ${fmtDate(p.updatedAt)}`
+  const full = `完整时间 ${fmtDate(activityAt(p))}`
   return isStalled(p)
     ? `${full}。超过 ${PATH_STALL_HOURS} 小时无更新，可「重试生成」补齐`
     : full

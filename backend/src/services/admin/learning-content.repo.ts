@@ -7,10 +7,24 @@ import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account
  * 全局学习路径目录/详情/下线恢复/删除/统计；内容治理默认仅真实用户口径。
  */
 
-export function findLearningPathsForAdmin(where: Prisma.learning_pathsWhereInput, skip: number, take: number) {
-  return prisma.learning_paths.findMany({
+/**
+ * 管理端学习路径列表（内容治理页取数层）。
+ *
+ * 排序/展示用**真墙钟**的「最近活动」，不是 `learning_paths.updatedAt`：虚拟学习者的日期模拟
+ * 会把 `updatedAt` 写成模拟日（`task-completion.service.ts` 结算任务时用 `asOf` 连带写路径），
+ * 而模拟日通常是未来日期 —— 直接按 updatedAt 排会让虚拟路径霸榜（真实学习者永沉底），
+ * 前端 `timeAgo` 还会把未来时间渲染成「刚刚」。设计契约：运维/审计列保持真墙钟
+ * （doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md §9.5/§9.11）。
+ *
+ * 真墙钟锚点（都不被模拟钟改写）：`createdAt`（Prisma 默认 now）、`updatedAt` 仅当 ≤ 现在时可信
+ * （未来值=模拟钟产物，丢弃）、该路径名下 `teaching_sessions.createdAt` 的最新值（会话自动列）。
+ * 三者取最大值为 `lastActivityAt`。分页 orderBy 回落 `createdAt`（派生值无法下推 SQL）。
+ */
+export async function findLearningPathsForAdmin(where: Prisma.learning_pathsWhereInput, skip: number, take: number) {
+  const rows = await prisma.learning_paths.findMany({
     where,
-    orderBy: { updatedAt: 'desc' },
+    // 真墙钟排序：不按 updatedAt（虚拟路径的 updatedAt 会被模拟钟写成未来日期）
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     skip,
     take,
     select: {
@@ -33,6 +47,31 @@ export function findLearningPathsForAdmin(where: Prisma.learning_pathsWhereInput
       _count: { select: { milestones: true } },
     },
   });
+
+  // 「最近活动」= 真墙钟锚点的最大值（见函数头说明）
+  const now = Date.now();
+  const ids = rows.map((r) => r.id);
+  const sessionMax = new Map<string, Date>();
+  if (ids.length) {
+    const grouped = await prisma.teaching_sessions.groupBy({
+      by: ['learningPathId'],
+      where: { learningPathId: { in: ids } },
+      _max: { createdAt: true },
+    });
+    for (const g of grouped) {
+      if (g.learningPathId && g._max.createdAt) sessionMax.set(g.learningPathId, g._max.createdAt);
+    }
+  }
+  const latestOf = (...dates: Array<Date | null | undefined>): Date | null => {
+    let best: Date | null = null;
+    for (const d of dates) if (d && (!best || d.getTime() > best.getTime())) best = d;
+    return best;
+  };
+  return rows.map((r) => ({
+    ...r,
+    // updatedAt 只在非未来（真墙钟）时才可信：未来值 = 模拟钟写入，丢弃
+    lastActivityAt: latestOf(r.createdAt, r.updatedAt && r.updatedAt.getTime() <= now ? r.updatedAt : null, sessionMax.get(r.id)),
+  }));
 }
 
 export function countLearningPathsWhere(where: Prisma.learning_pathsWhereInput) {

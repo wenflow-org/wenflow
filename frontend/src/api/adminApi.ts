@@ -2171,6 +2171,8 @@ export interface LearningPathRow {
   aiGenerated: boolean;
   createdAt: string;
   updatedAt: string;
+  /** 真墙钟「最近活动」（后端派生；updatedAt 会被虚拟学习者的模拟钟写成未来日期，列表按此排序/展示） */
+  lastActivityAt?: string | null;
   deadline: string | null;
   user: { id: string; name: string; email: string; isVirtualLearner: boolean } | null;
   milestoneStatuses: string[];

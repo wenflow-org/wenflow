@@ -83,6 +83,8 @@ router.get('/paths', async (req: Request, res: Response) => {
           aiGenerated: p.aiGenerated,
           createdAt: p.createdAt,
           updatedAt: p.updatedAt,
+          // 真墙钟「最近活动」（列表排序/展示口径：updatedAt 会被虚拟学习者的模拟钟写成未来日期）
+          lastActivityAt: p.lastActivityAt,
           deadline: p.deadline,
           user: p.users
             ? { id: p.users.id, name: p.users.name, email: p.users.email, isVirtualLearner: p.users.isVirtualLearner }
