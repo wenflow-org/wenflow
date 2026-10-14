@@ -81,29 +81,10 @@
         </section>
 
         <aside class="auth__demo-side">
-          <!-- 审核 #26（2026-10-06）：原型 aside 的硬编码运营看板（绿点「运行平稳」+ 92 分 +
-               学习漏斗 128/86/64/217）不得照搬——SPEC §9 第 5 条要求改写为三条真实安全机制。
-               三条均可核实：会话凭 HttpOnly Cookie（adminApi.ts 会话标记）、失败/429 限流
-               （本页 handleLogin 分支）、会话失效跨标签广播（adminApi.ts clearAdminSession）。 -->
-          <div class="demo">
-            <p class="demo__tagline">WenFlow 管理后台</p>
-            <div class="demo__intro">
-              <p>AI 教学模拟 · 学习路径编排 · 实时观测</p>
-            </div>
-
-            <div class="demo__panel">
-              <div class="demo__panel-head">
-                <strong>安全机制</strong>
-                <span>真实实现</span>
-              </div>
-              <ul class="demo__feed demo__feed--facts">
-                <li v-for="item in securityFacts" :key="item.text">
-                  <strong>{{ item.text }}</strong>
-                  <span>{{ item.detail }}</span>
-                </li>
-              </ul>
-            </div>
-          </div>
+          <!-- 2026-10-14 用户拍板「保持用户侧一样」：右侧与用户侧认证页同款产品演示
+               （目标对话 demo，AuthGoalDemo 共享组件），此前的自创「安全机制」三条面板
+               （审核 #26，原型硬编码看板的替代方案）整层退役——不造第二套。 -->
+          <AuthGoalDemo />
         </aside>
       </div>
     </main>
@@ -120,6 +101,7 @@ import { onMounted, reactive, ref } from 'vue'
 /* 密码显隐图标：模板用了 <Eye>/<EyeOff> 却从未 import → 按钮点得动但图标空白
    （同 EyeOff 幽灵图标一类，2026-09-29 修） */
 import { Eye, EyeOff } from 'lucide-vue-next'
+import AuthGoalDemo from '@/components/ui/AuthGoalDemo.vue'
 import { useIsDark } from '@/composables/useIsDark';
 
 const isDark = useIsDark();
@@ -152,13 +134,11 @@ const submitted = ref(false)
 const nameInput = ref<HTMLInputElement | null>(null)
 const passwordInput = ref<HTMLInputElement | null>(null)
 
-/* 审核 #26：侧栏改为三条可核实的真实安全机制（SPEC §9 第 5 条），
-   原硬编码漏斗（末段 217 > 首段 128，自相矛盾）与「运行平稳 92」假看板整层退役 */
-const securityFacts = [
-  { text: '登录状态由 HttpOnly Cookie 保存', detail: '页面只保存登录标记，令牌不暴露给页面脚本' },
-  { text: '登录失败与频率限制', detail: '凭证错误显示在顶部横幅。频繁尝试会提示稍后再试' },
-  { text: '登出同步到所有标签页', detail: '会话失效即时清除本地标记并同步其它标签页' }
-]
+/* 审核 #26：侧栏三条安全机制已退役（2026-10-14 用户拍板「保持用户侧一样」，
+   右侧改用共享组件 AuthGoalDemo 的产品演示）。原 securityFacts 数组随之删除；
+   三条机制的「可核实性」仍由实现保证：HttpOnly Cookie（adminApi.ts 会话标记）、
+   429 限流（本页 handleLogin 分支）、跨标签广播（adminApi.ts clearAdminSession），
+   只是不再在登录页上自成一牌。 */
 
 function touch(key: 'name' | 'password') {
   // 审核 #23（2026-10-06）：首次提交前的 blur 不该报错——只是从账号框点到密码框，
@@ -512,86 +492,7 @@ onMounted(() => {
   display: grid;
   align-content: center;
 }
-
-.demo {
-  display: grid;
-  gap: 14px;
-}
-
-.demo__tagline {
-  margin: 0;
-  font-size: var(--mk-fs-emphasis);
-  font-weight: 600;
-  line-height: 1.7;
-  color: var(--ink);
-  max-width: 32ch;
-}
-
-.demo__intro {
-  margin: 0;
-}
-
-.demo__intro p {
-  margin: 0;
-  font-size: var(--mk-fs-micro);
-  color: var(--muted);
-  line-height: 1.6;
-}
-
-.demo__panel {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-xl);
-  padding: 13px 15px;
-  display: grid;
-  gap: 10px;
-}
-
-.demo__panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: var(--mk-fs-micro);
-}
-
-.demo__panel-head span {
-  font-size: var(--mk-fs-micro);
-  font-weight: 800;
-  /* 审核 #30：同上——「真实实现」是静态标注，不是链接 */
-  color: var(--mk-faint);
-}
-
-.demo__feed {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.demo__feed li {
-  display: grid;
-  gap: 2px;
-}
-
-.demo__feed strong {
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  line-height: 1.45;
-}
-
-.demo__feed span {
-  font-size: var(--mk-fs-micro);
-  color: var(--faint);
-}
-
-/* 真实机制条目（审核 #26）：主行 + 说明副行，与登录表单同字级层级 */
-.demo__feed--facts strong {
-  color: var(--ink);
-}
-.demo__feed--facts span {
-  line-height: 1.5;
-}
+/* .demo 子树样式在共享组件 AuthGoalDemo 内（2026-10-14 与用户侧认证页同款） */
 
 .auth__footer {
   position: relative;
@@ -632,10 +533,6 @@ onMounted(() => {
     border-left: 0;
     border-top: 1px solid var(--line);
     padding: 20px 22px 22px;
-  }
-
-  .demo__tagline {
-    font-size: var(--mk-fs-body);
   }
 
   .auth__form-side {
