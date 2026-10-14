@@ -388,6 +388,33 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
+  /* 注册表按域切片（2026-10-14）：默认路由（解析结果）与别名映射是路由域事实，归「路由与调用」；
+     供应商 / 能力限额 / 冷却 / 配置提示留在「接入与模型」。两页签各挂一份切片（同一份接口）。 */
+  it('注册表切片：接入页只留观测分区，路由两分区随「路由与调用」渲染', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const wrapper = await mountApiConfig();
+    await flushPromises();
+    const access = wrapper.find('.ac-registry');
+    expect(access.exists()).toBe(true);
+    expect(access.text()).toContain('模型供应商');
+    expect(access.text()).toContain('模型能力与限额');
+    expect(access.text()).not.toContain('默认路由（解析结果）');
+    expect(access.text()).not.toContain('别名映射');
+
+    await gotoTab(wrapper, '路由与调用');
+    await flushPromises();
+    // 同一时刻只挂一份：接入页那份随 v-if 卸载，路由页这份只带两个分区
+    expect(wrapper.findAll('.ac-registry')).toHaveLength(1);
+    const routing = wrapper.find('.ac-registry--routing');
+    expect(routing.exists()).toBe(true);
+    expect(routing.text()).toContain('默认路由（解析结果）');
+    expect(routing.text()).toContain('别名映射');
+    expect(routing.text()).not.toContain('模型供应商');
+    // 切片仍是注册表本体（失败态/刷新入口随组件走），且不因此冒出写入口
+    expect(wrapper.text()).not.toContain('保存连接');
+    wrapper.unmount();
+  });
+
   it('路由默认支持逻辑别名：输入框可填 chat（不再受模型清单未拉取限制）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
