@@ -1151,6 +1151,44 @@ function jumpToBottom() {
   scrollDown();
 }
 
+/* 窄屏课堂（#7）：检查点/快捷块是消息滚动区之后的 flex 兄弟，出现时会压缩滚动区，
+   其下边界会把正在讲解的代码块拦腰截断、末行紧贴检查点卡上边框，得手动再滚一次才读全。
+   用户本就贴着底读最新内容（被截断的那行就在视野底部 → nearBottom 为真）时，把滚动区
+   重新钉到底，让代码块完整落入视野；用户上翻看历史时不打断（尊重既成的「贴底跟随」语义）。
+   不改 DOM 结构：把检查点搬进滚动区会牵动 scrollEl 指向 / >1100 宽度规则 / 桌面「检查点
+   常驻输入条上方」的既有口径，回归面远大于这个低危项本身。 */
+watch(checkpoint, (now, prev) => {
+  if (now && !prev && nearBottom.value) void scrollDown();
+});
+
+/* ---------- 在途消息留痕（#6 流式中途刷新静默丢失） ----------
+   教学回合把「用户消息 + 导师回复」一次性原子落库（commitTurnState 单事务，基线 = 快照
+   消息条数）；而请求级 abortSignal 绑在 res.close 上（acp-context.middleware），流式中途
+   刷新会 abort 底层 LLM 调用 → 回合在落库前被取消 → 刚发出的用户消息与本轮回复双双不在
+   服务端历史里，界面也不留任何痕迹（静默丢失）。
+   前端在发送时把这条「尚未确认送达」的消息写进 sessionStorage，重启时若服务端历史不含它，
+   就恢复用户气泡并给出重发入口；确认送达（收到 final）即清除。
+   选前端留痕而非后端「先落用户消息」：回合同样是运营基线写入（messagesBaseCount + revision
+   CAS），拆成两段写会破坏基线不变量，风险远大于收益。 */
+const INFLIGHT_KEY_PREFIX = 'wf.learn.inflight.';
+interface InflightMarker { text: string; revision: number; ts: number }
+function markInflight(sessionId: string, text: string, revision: number) {
+  try {
+    window.sessionStorage.setItem(INFLIGHT_KEY_PREFIX + sessionId, JSON.stringify({ text, revision, ts: Date.now() } satisfies InflightMarker));
+  } catch { /* 隐私模式/配额不足：留痕失败不阻断发送 */ }
+}
+function clearInflight(sessionId: string) {
+  try { window.sessionStorage.removeItem(INFLIGHT_KEY_PREFIX + sessionId); } catch { /* ignore */ }
+}
+function readInflight(sessionId: string): InflightMarker | null {
+  try {
+    const raw = window.sessionStorage.getItem(INFLIGHT_KEY_PREFIX + sessionId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as InflightMarker;
+    return parsed && typeof parsed.text === 'string' ? parsed : null;
+  } catch { return null; }
+}
+
 /* ---------- 启动 ---------- */
 async function boot() {
   initing.value = true;
@@ -1269,6 +1307,27 @@ async function boot() {
             }
             restorePeerHistory(peerRestored);
           }
+          // 在途消息恢复（#6）：发送后中途刷新 → 回合在落库前被 abort 取消，服务端历史里
+          // 既没有用户消息也没有回复。若留痕仍在且历史不含它，则恢复用户气泡 + 失败提示
+          // （附「重试」重发入口），把「静默丢失」变成可感知、可重发；若历史已含该条
+          // （刷新落在提交之后）则清除留痕，不重复渲染。
+          const inflight = readInflight(s.sessionId);
+          if (inflight) {
+            const landed = Array.isArray(detail.messages)
+              && detail.messages.some((m) => m.role === 'user' && String(m.content || '') === inflight.text);
+            if (landed) {
+              clearInflight(s.sessionId);
+            } else {
+              lastUserText = inflight.text;
+              pushMsg({ role: 'user', text: inflight.text, time: nowTime() });
+              pushMsg({
+                role: 'ai',
+                text: '这条消息没有送达，点「重试」可以重新发送。',
+                time: nowTime(),
+                failed: true,
+              });
+            }
+          }
           // 恢复提示分级（2026-10-09 用户反馈：刷新/几分钟内重进也弹三选一大卡是纯摩擦）：
           // 短中断（<30min）意图无歧义就是继续——不弹大卡，静默恢复历史走细条幅（附「接着讲」，
           // 不自动触发续讲回合：用户可能只是看看，自动开讲费 token 且可能打断节奏）；
@@ -1381,6 +1440,8 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
   if (!session.value) return;
   lastUserText = text;
   if (!skipUserPush) pushMsg({ role: 'user', text, time: nowTime() });
+  // 发送即留痕（未确认送达）：中途刷新时据此恢复气泡/给重发入口（见 markInflight 注释）
+  markInflight(session.value.sessionId, text, session.value.revision);
   quickReplies.value = [];
   openingQuestion.value = '';
   confirmCheck.value = null;
@@ -1425,6 +1486,9 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
       streamAbort = null;
     }
     session.value.revision = r.revision ?? session.value.revision + 1;
+    // 收到 final 即代表服务端已原子落库本轮用户消息（commitTurnState 在 final 前完成）
+    // → 送达确认，清除在途留痕，避免下次刷新误报未送达。
+    clearInflight(session.value.sessionId);
     interactionMeta.markAssistantLanded();
     const aiMsg = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
     await applyTurnResult(r, aiMsg);
