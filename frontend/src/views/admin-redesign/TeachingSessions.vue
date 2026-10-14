@@ -41,7 +41,7 @@
         label="缺总结"
         :value="missingWrapupCount"
         :tone="missingWrapupCount ? 'warn' : ''"
-        hint="终态会话缺课后总结"
+        hint="已结束的会话缺课后总结"
         title="仅统计已结束的会话，进行中的会话总结尚未生成，不计入"
       />
       <MkKpi
@@ -758,7 +758,7 @@ const tsBandBins = computed(() => {
     n: cnt((s) => (g.statuses as readonly string[]).includes(s))
   }))
   const other = cnt((s) => !known.has(s))
-  if (other > 0) bins.push({ key: 'other', label: '其它', tone: 'var(--mk-faint)', hint: '枚举外取值', n: other })
+  if (other > 0) bins.push({ key: 'other', label: '其它', tone: 'var(--mk-faint)', hint: '其它未列出的状态', n: other })
   return bins
 })
 const tsBandSub = computed(() =>

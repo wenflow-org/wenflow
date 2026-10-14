@@ -256,7 +256,7 @@ async function batchTerminate() {
   }, 0)
   const ok = await askConfirm({
     title: '批量终止会话',
-    message: `确认终止选中的 ${ids.length} 个虚拟学习者全部非终态会话（进行中 ${runningSum} + 创建中）？\n会话将被标记为「已放弃」，数据保留，该操作不可撤销。`,
+    message: `确认终止选中的 ${ids.length} 个虚拟学习者全部未结束的会话（进行中 ${runningSum} + 创建中）？\n会话将被标记为「已放弃」，数据保留，该操作不可撤销。`,
     confirmText: `终止 ${ids.length} 人`,
     busy: true
   })
@@ -267,7 +267,7 @@ async function batchTerminate() {
     const d = res.data?.data ?? {}
     const terminated = Number(d.terminated ?? 0)
     const skipped = Number(d.skippedTerminal ?? 0)
-    toast.success(terminated > 0 ? `已终止 ${terminated} 个会话（跳过已终态 ${skipped}）` : '没有需要终止的非终态会话')
+    toast.success(terminated > 0 ? `已终止 ${terminated} 个会话（跳过已结束的 ${skipped} 个）` : '没有需要终止的未结束会话')
     emit('update:selected', [])
     void loadLiveData()
     doneConfirm()
@@ -292,7 +292,7 @@ async function batchDelete() {
   if (!ids.length || batchActionBusy.value) return
   const ok = await askConfirm({
     title: '批量删除虚拟学习者',
-    message: `确认删除选中的 ${ids.length} 个虚拟学习者？\n将级联删除其全部会话、教学记录、学习数据，该操作不可撤销。`,
+    message: `确认删除选中的 ${ids.length} 个虚拟学习者？\n将一并删除其全部会话、教学记录、学习数据，该操作不可撤销。`,
     confirmText: `删除 ${ids.length} 人`,
     busy: true
   })

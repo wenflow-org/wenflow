@@ -265,7 +265,7 @@
           v-else
           icon="◌"
           :title="keyword || statusFilter || noPathOnly ? '当前筛选无匹配' : '暂无目标对话'"
-          :description="keyword || statusFilter || noPathOnly ? '放宽筛选条件试试。' : (includeTest ? '当前范围（虚拟学习者与测试账号）暂无目标对话。' : '当前只显示真实用户；切「测试」可查看虚拟 / 测试账号的对话。')"
+          :description="keyword || statusFilter || noPathOnly ? '放宽筛选条件试试。' : (includeTest ? '当前范围（虚拟学习者与测试账号）暂无目标对话。' : '当前只显示真实用户，切「测试」可查看虚拟 / 测试账号的对话。')"
           :action-text="isFiltered ? '清除筛选' : ''"
           @action="clearFilters"
         />

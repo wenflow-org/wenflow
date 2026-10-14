@@ -117,7 +117,7 @@
         <!-- ① 执行推进（跨阶段：自动驾驶（全流程后台）/ 停止自动驾驶；黑盒与真实会话不提供） -->
         <template v-if="!isRealMode && !isBlackbox">
           <template v-if="autopilotQueued">
-            <button type="button" class="cp-btn" :disabled="busy" title="已排队等待自动驾驶并发槽位，点击取消排队" @click="act('autopilotStop')">取消排队（第 {{ autopilot.queuePosition || 1 }} 位）</button>
+            <button type="button" class="cp-btn" :disabled="busy" title="自动驾驶运行名额已满，正在排队等待，点击取消排队" @click="act('autopilotStop')">取消排队（第 {{ autopilot.queuePosition || 1 }} 位）</button>
           </template>
           <template v-else-if="!autopilotRunning">
             <button v-if="!autopilotStopping" type="button" class="cp-btn cp-btn--primary" :disabled="autopilotStartDisabled" :title="autopilotStartTitle" @click="act('autopilotStart')">自动驾驶</button>
@@ -144,9 +144,9 @@
           <template v-else>
             <button type="button" class="cp-btn" :disabled="learnStepDisabled" :title="learnStepTitle" @click="act('step')">推进一步</button>
             <button type="button" class="cp-btn cp-btn--primary" :disabled="learnAutoDisabled" :title="learnAutoTitle" @click="act('auto')">自动推进本课</button>
-            <label class="cp-turn-cap-label" title="每课自动推进的回合预算：『自动推进本课』与『自动驾驶』共用，复杂课程可调高到 100。超出 1–100 会按边界值执行">
+            <label class="cp-turn-cap-label" title="每课自动推进的回合上限：「自动推进本课」与「自动驾驶」共用，复杂课程可调高到 100。输入超出 1–100 时按 1 或 100 处理">
               每课回合上限
-              <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="每课自动推进的最大对话轮数（自动推进本课与自动驾驶共用）。输入超出 1–100 会回写为边界值" aria-label="每课回合上限" @change="learnAutoTurnCap = clampLearnAutoTurnCap()" />
+              <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="每课自动推进的最大对话轮数（自动推进本课与自动驾驶共用）。输入超出 1–100 时按 1 或 100 保存" aria-label="每课回合上限" @change="learnAutoTurnCap = clampLearnAutoTurnCap()" />
             </label>
             <!-- 进行中重开本课（失败后的「重试」由生命周期区统一承载，不重复） -->
             <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重开本课</button>
@@ -167,7 +167,7 @@
         <!-- 黑盒模式声明（2026-10-04 全站评审 P3#13）：真实会话的「只读监控」声明已并入
              顶栏模式 chip（modeText 单源），此处不再对真实会话重复一遍 -->
         <span v-if="isBlackbox" class="cp-console__note">
-          黑盒模式：辅助控制不可用
+          黑盒模式：不提供手动操作
         </span>
       </div>
     </div>
@@ -230,7 +230,7 @@
             :aria-selected="activeTab === st"
             :aria-controls="`cp-tabpanel-${st}`"
             :tabindex="activeTab === st ? 0 : -1"
-            :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `查看 ${stageLabel(st)} 页签`"
+            :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `打开「${stageLabel(st)}」页签`"
             :disabled="isBlackbox"
             @click="selectStageTab(st)"
           >
@@ -293,7 +293,7 @@
                 compact
                 icon="◌"
                 title="尚未产生目标对话"
-                description="学习者澄清从零开始，可在控制台用「推进一步」或「自动推进目标」启动。"
+                description="目标澄清尚未开始，可在控制台用「推进一步」或「自动推进目标」启动。"
               />
             </template>
           </div>
@@ -352,7 +352,7 @@
               </header>
               <p v-if="m.subject" class="cp-mat__subject">{{ m.subject }}</p>
               <p v-if="m.overview" class="cp-mat__overview">{{ m.overview }}</p>
-              <p v-else-if="!m.hasBrief" class="cp-mat__none">尚未生成资料理解摘要（brief 惰性生成，goal / path 首次用到时产出）</p>
+              <p v-else-if="!m.hasBrief" class="cp-mat__none">尚未生成资料理解摘要，在目标对话或路径首次用到该资料时自动生成</p>
               <div v-if="m.concepts.length" class="cp-mat__chips">
                 <span v-for="c in m.concepts" :key="c" class="mk-badge mk-badge--sm mk-badge--muted">{{ c }}</span>
               </div>
@@ -800,7 +800,7 @@
             <span>会话日志</span>
             <!-- 窗口口径披露（2026-10-06 审核 #71）：面板只保留最近 LOG_WINDOW 条，
                  不写会被读成全量（MkSubTabs 裸数字角标冒充总数判例的反向缺失） -->
-            <span class="cp-sidebar__toggle-hint">{{ isRealMode ? '只读' : isTerminal ? '已终态' : '5s 轮询' }} · 最近 {{ LOG_WINDOW }} 条</span>
+            <span class="cp-sidebar__toggle-hint">{{ isRealMode ? '只读' : isTerminal ? '已结束' : '每 5 秒刷新' }} · 最近 {{ LOG_WINDOW }} 条</span>
           </button>
           <div v-if="sidebarOpen.logs" class="cp-sidebar__body">
             <div v-if="session && logPhases.length > 1" class="cp-logs__filter">
@@ -835,16 +835,16 @@
         <div v-if="hasTraceFlows" class="cp-sidebar__section">
           <button type="button" class="cp-sidebar__toggle" :class="{ 'is-open': sidebarOpen.trace }" @click="sidebarOpen.trace = !sidebarOpen.trace">
             <span class="cp-sidebar__toggle-icon">{{ sidebarOpen.trace ? '▾' : '▸' }}</span>
-            <span>Trace 诊断</span>
+            <span>诊断轨迹</span>
             <span class="cp-sidebar__toggle-hint">{{ refereeTraceCount + privateStateTraceCount }} 条</span>
           </button>
           <div v-if="sidebarOpen.trace" class="cp-sidebar__body">
             <!-- 统一时间线 -->
             <details v-if="!isRealMode && unifiedTimeline.length" class="cp-trace-panel" open>
-              <summary>统一时间线 · {{ unifiedTimeline.length }} 条</summary>
+              <summary>时间线 · {{ unifiedTimeline.length }} 条</summary>
               <ol class="cp-trace-list">
                 <li v-for="(t, idx) in unifiedTimeline" :key="`tl-${idx}`">
-                  <div class="cp-trace-list__head"><span class="cp-trace-list__seq">#{{ idx + 1 }}</span><time>{{ formatTime(t.time) }}</time><span class="cp-timeline__kind" :data-kind="t.kind">{{ t.kindLabel }}</span><span v-if="t.stage" class="cp-timeline__stage" :data-stage="String(t.stage).toLowerCase()">{{ t.stage }}</span><strong class="cp-timeline__title">{{ t.title }}</strong></div>
+                  <div class="cp-trace-list__head"><span class="cp-trace-list__seq">#{{ idx + 1 }}</span><time>{{ formatTime(t.time) }}</time><span class="cp-timeline__kind" :data-kind="t.kind">{{ t.kindLabel }}</span><span v-if="t.stage" class="cp-timeline__stage" :data-stage="String(t.stage).toLowerCase()">{{ stageLabel(t.stage) }}</span><strong class="cp-timeline__title">{{ t.title }}</strong></div>
                   <p v-if="t.detail" class="cp-timeline__detail">{{ t.detail }}</p>
                 </li>
               </ol>
@@ -865,7 +865,7 @@
               <summary>{{ PRIVATE_STATE_TRACE_LABEL }} {{ privateStateTraceCount }} 条</summary>
               <ol class="cp-trace-list">
                 <li v-for="(item, idx) in privateStateTrace" :key="(item.sequence ?? idx)">
-                  <div class="cp-trace-list__head"><span class="cp-trace-list__seq">#{{ item.sequence ?? (idx + 1) }}</span><span class="cp-trace-list__stage" :data-stage="item.stage">{{ item.stage }}</span><code v-if="item.taskId">task={{ item.taskId.slice(0, 8) }}</code><time v-if="item.generatedAt">{{ formatTime(item.generatedAt) }}</time><span v-if="item.emotion" class="cp-trace-list__emotion">{{ item.emotion }}</span><span v-if="item.degraded" class="cp-trace-list__degraded">降级</span><span v-if="item.transition" class="cp-trace-list__transition">{{ item.transition }}</span></div>
+                  <div class="cp-trace-list__head"><span class="cp-trace-list__seq">#{{ item.sequence ?? (idx + 1) }}</span><span class="cp-trace-list__stage" :data-stage="item.stage">{{ stageLabel(item.stage) }}</span><code v-if="item.taskId">任务 {{ item.taskId.slice(0, 8) }}</code><time v-if="item.generatedAt">{{ formatTime(item.generatedAt) }}</time><span v-if="item.emotion" class="cp-trace-list__emotion">{{ item.emotion }}</span><span v-if="item.degraded" class="cp-trace-list__degraded">降级</span><span v-if="item.transition" class="cp-trace-list__transition">{{ item.transition }}</span></div>
                   <div v-if="item.phaseFocus" class="cp-trace-list__focus">聚焦：{{ item.phaseFocus }}</div>
                   <div v-if="item.visibleSignal" class="cp-trace-list__signal">{{ item.visibleSignal }}</div>
                   <div v-if="item.stateChangeReason" class="cp-trace-list__reason">状态变化：{{ item.stateChangeReason }}</div>
@@ -962,12 +962,13 @@ import { useCockpitAutopilot } from './cockpitAutopilot'
 const WRAPUP_READY_NOTE = '完整总结（学习目标 / 评估 / 知识掌握）见「学习总结」卡。'
 const WRAPUP_FINAL_NOTE = '全部课程完成后，可在控制台生成终局总结（学习目标、评估、知识掌握）。'
 const WRAPUP_NOT_STARTED_NOTE = '尚未开始学习，生成路径并启动教学后这里会展示进度。'
-const REFEREE_TRACE_LABEL = '裁判旁路诊断 ·'
-const PRIVATE_STATE_TRACE_LABEL = '角色私有状态 ·'
+const REFEREE_TRACE_LABEL = '裁判诊断 ·'
+const PRIVATE_STATE_TRACE_LABEL = '角色内部状态 ·'
 const MATERIAL_TRUNC_NOTE = '全文超长，仅展示前 20 万字。完整正文仍在服务端存档。'
 const CLASSROOM_EMPTY_TEXT = '该课堂暂未记录可展示消息。'
 const PATH_NOT_READY_TITLE = '路径尚未准备好启动教学'
-const BLACKBOX_CONTROL_BLOCK = '黑盒模式不支持此辅助控制'
+const BLACKBOX_CONTROL_BLOCK = '黑盒模式不提供手动操作'
+const FRICTION_LABEL: Record<string, string> = { none: '无', low: '低', normal: '正常', high: '高', stress_test: '压力测试' }
 
 const sessionId = computed(() => subPage.value?.id || '')
 const shortId = computed(() => (sessionId.value.length > 20 ? `…${sessionId.value.slice(-16)}` : sessionId.value))
@@ -1124,8 +1125,8 @@ const terminalStatus = computed(() => normalized(session.value?.status || runtim
 const isFailedTerminal = computed(() => ['failed', 'abandoned'].includes(terminalStatus.value))
 /** 黑盒 rerun 仅终态可跑（后端 409：只有终态黑盒实验可按原输入重跑），按钮禁用前置同一口径（报告 #37） */
 const blackboxRerunTitle = computed(() => isTerminal.value
-  ? '按原输入重跑本实验：生成新会话（运行配置与运行时快照不变）'
-  : '只有终态（完成/失败/已终止）实验可按原输入重跑')
+  ? '按原输入重跑本实验：生成一个新会话，运行配置保持不变'
+  : '实验结束后（完成、失败或已终止）才能按原输入重跑')
 /* 手动停止（emergencyStop）后后端写 status=failed + stageResults.teaching.manualStop */
 const manualStopped = computed(() =>
   learningResult.value.manualStop === true
@@ -1600,16 +1601,16 @@ const stepDisabled = computed(() => !session.value || busy.value || isTerminal.v
 const stepTitle = computed(() => {
   if (!session.value) return '会话仍在加载'
   if (busy.value) return '操作执行中'
-  if (isTerminal.value) return '会话已终态，不能继续推进'
-  return isBlackbox.value ? '执行一条黑盒实验轨迹' : '推进一步：当前阶段前进一轮（目标=对话一轮 / 教学=教学对话一轮），结果即时可见'
+  if (isTerminal.value) return '会话已结束，不能继续推进'
+  return isBlackbox.value ? '执行一条黑盒实验轨迹' : '推进一步：当前阶段前进一轮（目标阶段对话一轮，教学阶段课堂对话一轮），结果即时可见'
 })
 const autoDisabled = computed(() => !session.value || busy.value || isTerminal.value || isBlackbox.value)
 const autoTitle = computed(() => {
   if (!session.value) return '会话仍在加载'
   if (busy.value) return '操作执行中'
   if (isBlackbox.value) return '黑盒模式仅支持单步推进'
-  if (isTerminal.value) return '会话已终态，不能继续推进'
-  return '自动推进当前阶段直到完成或回合上限（目标=跑到完成转路径，教学=跑完当前课）'
+  if (isTerminal.value) return '会话已结束，不能继续推进'
+  return '自动推进当前阶段，直到完成或到达回合上限（目标阶段推进完自动转入路径，教学阶段跑完当前课）'
 })
 
 /* 分页内的阶段操作：除通用禁用外，还要求后端 currentStage 匹配，防止在错误阶段误推 */
@@ -1662,14 +1663,14 @@ const acceptPathTitle = computed(() => {
   if (assistedControlBlockReason.value) return assistedControlBlockReason.value
   return pathReviewDecision.value === 'accept'
     ? '确认接受评审结论。之后仍需手动启动教学'
-    : '强制接受当前路径（评审为独立旁路，不阻塞教学）。之后仍需手动启动教学'
+    : '强制接受当前路径（评审不通过也可启动教学）。之后仍需手动启动教学'
 })
 const replanPathVisible = computed(() =>
   reviewAwaitingDecision.value && ['modify', 'reject'].includes(pathReviewDecision.value)
 )
 const replanPathDisabled = computed(() => !!assistedControlBlockReason.value)
 const replanPathTitle = computed(() =>
-  assistedControlBlockReason.value || '把评审反应和修改意见交给目标重新生成路径，完成后需再次评审'
+  assistedControlBlockReason.value || '根据评审意见重新生成路径方案，完成后需再次评审'
 )
 const startLearningDisabled = computed(() =>
   !!assistedControlBlockReason.value || !pathStartable.value || learningActive.value
@@ -1690,7 +1691,7 @@ const wrapupTitle = computed(() => {
   if (isBlackbox.value) return BLACKBOX_CONTROL_BLOCK
   if (isFailedTerminal.value) return '会话已失败或终止，不能生成学习总结'
   if (hasWrapup.value) return '学习总结已生成'
-  if (!wrapupAvailable.value && !wrapupTaskSettled.value && learningActive.value) return '课堂总结在课程完成后才会生成：当前任务尚未结算完成'
+  if (!wrapupAvailable.value && !wrapupTaskSettled.value && learningActive.value) return '课堂总结在当前课程完成后才会生成'
   if (!wrapupAvailable.value) return '请先启动教学并产生消息或学习进度'
   return '根据当前教学记录生成总结'
 })
@@ -1720,7 +1721,7 @@ const resetLearningTitle = computed(() => {
   if (resetLearningBlockReason.value) return resetLearningBlockReason.value
   if (!pathStartable.value && !canRestartFromFailedLearn.value) return learningBlockedReason.value || PATH_NOT_READY_TITLE
   if (!hasRunnablePathTask.value) return '路径中没有可重启的学习任务'
-  return isFailedTerminal.value ? '从当前可运行任务恢复失败的教学' : '以可运行任务重新启动教学（评审为独立旁路）'
+  return isFailedTerminal.value ? '从当前可运行任务恢复失败的教学' : '从可运行的任务重新启动教学，无需等待评审'
 })
 const showPathReadiness = computed(() =>
   !isBlackbox.value && !isRealMode.value && (pathStatusFailed.value || goalConverged.value || hasPath.value || ['path', 'learning', 'wrapup'].includes(currentStage.value))
@@ -1739,7 +1740,7 @@ const pathReadinessText = computed(() => {
   if (pathGenerationInProgress.value) return learningBlockedReason.value || '路径正在生成或补全课程，请稍候。'
   if (pathStartable.value) return pathReviewAccepted.value
     ? '路径已就绪，可启动或重启教学。'
-    : '路径已就绪，可启动教学。评审为独立旁路，不阻塞启动。'
+    : '路径已就绪，可直接启动教学，无需等待评审。'
   return learningBlockedReason.value || '路径已生成，正在确认教学启动条件。'
 })
 
@@ -2350,7 +2351,7 @@ async function saveFriction() {
     await adminVirtualLearnersApi.updateSessionSimulationConfig(sessionId.value, {
       frictionBudget: frictionBudget.value
     })
-    toast.success(`难度等级已更新：${frictionBudget.value}`)
+    toast.success(`难度等级已更新：${FRICTION_LABEL[frictionBudget.value] || frictionBudget.value}`)
   } catch (e) {
     frictionBudget.value = previous
     toast.error(`更新失败：${errMsg(e)}`)
@@ -2367,7 +2368,7 @@ async function saveModel() {
     await adminVirtualLearnersApi.updateSessionSimulationConfig(sessionId.value, {
       model: simModel.value || null
     })
-    toast.success(simModel.value ? `模型已覆盖：${simModel.value}` : '已恢复默认模型路由')
+    toast.success(simModel.value ? `模型已更新：${simModel.value}` : '已恢复默认模型')
   } catch (e) {
     simModel.value = previous
     toast.error(`更新失败：${errMsg(e)}`)
@@ -2521,9 +2522,9 @@ async function act(kind: string) {
         const resp = await adminVirtualLearnersApi.autopilotStart(id, { maxTurns: clampLearnAutoTurnCap() })
         const payload = (resp as { data?: { data?: { queued?: boolean; position?: number } } })?.data?.data
         if (payload?.queued) {
-          toast.info(`自动驾驶并发已满，已排队（第 ${payload.position ?? 1} 位），有空位会自动启动`)
+          toast.info(`自动驾驶运行名额已满，已排队（第 ${payload.position ?? 1} 位），有空位会自动启动`)
         } else {
-          toast.info('全自动模式已启动：将以最终目标（路径全部完成）为终点持续运行，每课回合上限随「回合上限」设置')
+          toast.info('全自动模式已启动：将以最终目标（路径全部完成）为终点持续运行，每课推进轮数按「每课回合上限」设置')
         }
         break
       }

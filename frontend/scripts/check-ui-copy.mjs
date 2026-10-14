@@ -44,7 +44,9 @@ const RULES = {
     /* 先剔除 URL / 域名：`https://api.openai.com/v1`、`@test.local` 这类示例地址是正常文案，
        否则会被 forbiddenPatterns 的「点分路径」误判成实现外露。 */
     const t = s.replace(/https?:\/\/\S+/g, ' ').replace(/\b[a-z0-9-]+\.(?:com|cn|org|io|net|local|dev|top)\b/gi, ' ');
-    const hit = TERMS.forbidden.find((f) => t.includes(f.term));
+    /* 中文无词边界，两字词会跨词误中（「平[台账]号」「[先验]证」）。
+       词条可用 except 列出包含该词片段的正常复合词：候选里出现豁免词时该词条跳过。 */
+    const hit = TERMS.forbidden.find((f) => t.includes(f.term) && !(f.except || []).some((x) => t.includes(x)));
     if (hit) return `内部词「${hit.term}」→ ${hit.suggested}`;
     const en = t.match(new RegExp(`\\b(${TERMS.forbiddenEnums.join('|')})\\b`));
     if (en) return `英文枚举「${en[0]}」`;

@@ -68,7 +68,7 @@
           class="ow-rankrow"
           :class="{ 'ow-rankrow--done': t.count === 0 && !t.failed, 'ow-rankrow--failed': t.failed, 'ow-rankrow--act': t.actionable }"
           :disabled="!t.actionable"
-          :title="t.failed ? '该域数据加载失败，计数不可信' : (t.count > 0 ? t.hint : '该事项已清零')"
+          :title="t.failed ? '该项数据加载失败，计数不可信' : (t.count > 0 ? t.hint : '该事项已清零')"
           @click="t.actionable ? t.action() : undefined"
         >
           <span class="ow-rankrow__main">{{ t.label }}</span>
@@ -393,7 +393,7 @@ const wbErrorText = computed(() =>
 const todoConclusion = computed(() => {
   const pending = todoItems.value.filter((t) => t.count > 0 && !t.failed).length
   /* 有域失败时不得断言「全部已清零」：失败域的计数未被更新，清零结论不可信 */
-  if (wbHasError.value) return pending ? `${pending} 项待处理。另有待办域加载失败，结论不完整` : '待办数据加载失败，无法确认是否清零'
+  if (wbHasError.value) return pending ? `${pending} 项待处理。另有部分待办加载失败，结论不完整` : '待办数据加载失败，无法确认是否清零'
   if (!pending) return '运营待办全部已清零'
   return `${pending} 项待处理`
 })
@@ -406,7 +406,7 @@ const todoItems = computed(() => {
   const items = [
     { key: 'feedback', label: '待处理反馈', category: '反馈', hint: '学习者低分反馈等待分流', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback, actionable: !wbErrors.value.feedback && wbPendingFeedback.value > 0 },
     { key: 'paths', label: '生成失败路径', category: '路径', hint: '目标对话产出路径失败，需排查', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths, actionable: !wbErrors.value.paths && wbFailedPaths.value > 0 },
-    { key: 'dead', label: 'Outbox 死信', category: '通知', hint: '领域事件投递失败，影响画像/成就', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead, actionable: !wbErrors.value.dead && wbDeadLetters.value > 0 },
+    { key: 'dead', label: '事件投递失败', category: '事件', hint: '事件投递失败，影响画像与成就更新', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead, actionable: !wbErrors.value.dead && wbDeadLetters.value > 0 },
     { key: 'draft', label: '草稿公告', category: '公告', hint: '已创建未发布的公告', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value, actionable: !annFailed.value && ann.value.draft > 0 },
   ]
   return items.slice().sort((a, b) => TODO_SEV_RANK[a.severity] - TODO_SEV_RANK[b.severity] || b.count - a.count)
@@ -418,7 +418,7 @@ const todoItems = computed(() => {
  * 不硬造「其中新增 N」这类后端未提供的子计数，只作简短定性说明。
  * 顺序直接映射排序后的 todoItems（卡带承诺「按优先级排序」，卡与行单源同序）。
  */
-const TODO_METRIC_FOOT: Record<string, string> = { feedback: '等待分流', paths: '需排查重规划', dead: '投递失败待重投', draft: '待发布' }
+const TODO_METRIC_FOOT: Record<string, string> = { feedback: '等待分流', paths: '需排查重规划', dead: '待重放', draft: '待发布' }
 const todoMetrics = computed(() =>
   todoItems.value.map((t) => {
     /* F5-4 审核：色调按事项严重度分档，不再把 bad/warn 压成一个布尔——
@@ -461,7 +461,7 @@ const announcePillCount = computed(() => {
 })
 /** 公告角标悬停说明：失败与未加载分开口径（数字态不给 title，避免复读） */
 const announcePillTitle = computed(() => {
-  if (annFailed.value) return '公告列表加载失败，计数不可信，此处显示为占位（失败 ≠ 0）'
+  if (annFailed.value) return '公告列表加载失败，计数不可信，此处显示为占位'
   return undefined
 })
 

@@ -64,7 +64,7 @@
       </div>
 
       <p v-if="!clock.enabled" class="dt-hint">
-        日期模拟默认关闭。按天读数是该会话既有历史的自然日聚合（以会话创建日为第 1 天），可直接用于负担/干预观测。
+        日期模拟默认关闭。此时的按天读数按自然日统计（以会话创建日为第 1 天），可直接用于观察学习负担。
       </p>
 
       <!-- 操作类失败（推进/自动推进/重置）走行内 alert：error ref 只留给 load() 整页失败，
@@ -137,7 +137,7 @@
                 <span class="dt-task__meta">
                   <template v-if="task.actualMinutes !== null">{{ task.actualMinutes }} 分钟</template>
                   <template v-else-if="task.estimatedMinutes !== null">预计 {{ task.estimatedMinutes }} 分钟</template>
-                  <template v-if="task.cognitiveLoad"> · {{ task.cognitiveLoad }}</template>
+                  <template v-if="task.cognitiveLoad"> · {{ cognitiveLabel(task.cognitiveLoad) }}</template>
                 </span>
               </div>
             </div>
@@ -146,7 +146,7 @@
               <span class="dt-adjust__label">难度调整</span>
               <span v-for="(adj, i) in day.difficultyAdjustments" :key="i" class="dt-adjust__item" :title="adj.reasons.join('、')">
                 {{ adj.baseline }} → {{ adj.adjusted }}（{{ directionLabel(adj.direction) }}）
-                <em v-if="adj.applied">已执行</em><em v-else>仅判定</em>
+                <em v-if="adj.applied">已执行</em><em v-else>未执行</em>
               </span>
             </div>
 
@@ -265,7 +265,7 @@ async function advance(days: number, runTasks = false) {
   if (runTasks) {
     const ok = await askConfirm({
       title: '推进并上课',
-      message: `将真实跑 ${clock.value?.lessonsPerDay ?? 1} 节课程（业务时间戳落在模拟日），每节消耗对应 AI 调用。课程产出会写入学习者数据，不可撤销。`,
+      message: `将真实上 ${clock.value?.lessonsPerDay ?? 1} 节课（记录时间落在模拟日），每节消耗对应 AI 调用。课程产出会写入学习者数据，不可撤销。`,
       confirmText: '推进并上课',
     })
     if (!ok) return
@@ -333,6 +333,10 @@ function signalLabel(s: string): string {
 }
 function directionLabel(d: string): string {
   return { decrease: '降档', increase: '升档', keep: '不变' }[d] || d
+}
+/** 认知负荷枚举中文化（与 PathJourneyPanel 任务弹层同一组词），未命中回落原文 */
+function cognitiveLabel(c: string): string {
+  return { low: '低', medium: '中', high: '高' }[c] || c
 }
 
 /** 日程格四态（对齐原型 .schcell--done/active/skip/idle，546-549）：

@@ -216,7 +216,7 @@ async function generatePersona() {
     const d = res.data?.data ?? res.data ?? {}
     const seed = (d.personaSeed || d.profile || d) as Record<string, unknown>
     if (!seed || typeof seed !== 'object') {
-      toast.error('生成失败：未返回 personaSeed')
+      toast.error('生成失败：未拿到有效人设，请重试')
       return
     }
     personaSeed.value = seed

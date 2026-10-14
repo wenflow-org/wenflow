@@ -9,7 +9,7 @@
       v-else-if="!flow && stageErrors[active]"
       tone="error"
       :title="stageErrors[active]"
-      description="本阶段的字段路由接口没有返回数据；其余阶段已加载，可重试。"
+      description="本阶段的字段路由接口没有返回数据，其余阶段已加载，可重试。"
       action-text="重试"
       @action="load"
     />
@@ -40,7 +40,7 @@
             />
             <button v-if="query" type="button" class="dfg-search__clear" title="清除" @click="clearQuery">✕</button>
           </div>
-          <label class="dfg-switch" title="显示管线中的隐藏字段（对外不可见，含内部字段与累积字段）">
+          <label class="dfg-switch" title="显示流转中被隐藏的字段（对外不可见，含内部字段与累积字段）">
             <input type="checkbox" v-model="showHidden" />
             <span>隐藏字段</span>
           </label>
@@ -161,7 +161,7 @@
             <header class="dfg-step__head">
               <span class="dfg-step__idx">⇡</span>
               <strong class="dfg-step__name">{{ step.name }}</strong>
-              <span class="dfg-step__badge dfg-step__badge--gate">入口整装</span>
+              <span class="dfg-step__badge dfg-step__badge--gate">分发上游字段</span>
               <span class="dfg-step__agent mono">{{ step.agentId }}</span>
               <span class="dfg-step__spacer"></span>
               <span class="dfg-step__count">{{ step.outputChips.length }} 字段</span>
@@ -206,9 +206,9 @@
                 class="dfg-step__badge"
                 :class="step.kind === 'service' ? 'dfg-step__badge--svc' : 'dfg-step__badge--cross'"
               >{{ step.kind === 'service' ? '代码服务' : '跨阶段引用' }}</span>
-              <span v-else class="dfg-step__badge dfg-step__badge--warn" title="该 Skill 已在 agents 注册，但无字段路由契约，未接入数据流水线">无数据契约</span>
+              <span v-else class="dfg-step__badge dfg-step__badge--warn" title="该 Skill 已注册，但没有声明任何字段的产出与输入，未接入数据流转">无字段路由</span>
               <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" :title="UNRESOLVED_HINT">未解析</span>
-              <span v-if="step.fromStage" class="dfg-step__stage mono" @click="switchStage(step.fromStage!)" title="点击跳到该阶段">→ {{ stageNameOf(step.fromStage) }}</span>
+              <span v-if="step.fromStage" class="dfg-step__stage mono" @click="switchStage(step.fromStage!)" title="跳到该阶段">→ {{ stageNameOf(step.fromStage) }}</span>
               <span v-if="step.role" class="dfg-step__role">{{ step.role }}</span>
               <template v-if="step.kind === 'orphan'">
                 <span class="dfg-step__agent mono">{{ step.agentId }}</span>
@@ -216,7 +216,7 @@
               <span class="dfg-step__spacer"></span>
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
               <span v-if="step.loopOver" class="dfg-step__cond">循环：{{ step.loopOver }}</span>
-              <span v-if="step.kind === 'orphan'" class="dfg-step__count" title="该 Skill 无字段路由行，不参与阶段内数据流转">无字段流转</span>
+              <span v-if="step.kind === 'orphan'" class="dfg-step__count" title="该 Skill 没有字段的路由记录，不参与阶段内数据流转">无字段流转</span>
               <span v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></span>
             </header>
           </section>
@@ -361,7 +361,7 @@
           v-if="flow && !flow.steps.length && !flow.entry.length && !flow.exit.length"
           icon="⇅"
           title="该阶段暂无字段路由数据"
-          description="编排文件未声明字段路由；可在「字段路由」页编辑编排文件后回来。"
+          description="编排文件未声明字段路由，可在「字段路由」页编辑编排文件后回来。"
           action-text="刷新"
           compact
           @action="load"
@@ -482,7 +482,7 @@
                 </div>
                 <div class="dfg-field">
                   <span class="dfg-field__label">内部</span>
-                  <label class="dfg-check"><input type="checkbox" v-model="editDraft.internal" /><span>仅供平台内部消费</span></label>
+                  <label class="dfg-check"><input type="checkbox" v-model="editDraft.internal" /><span>仅供平台内部使用</span></label>
                 </div>
                 <div class="dfg-field">
                   <label class="dfg-field__label" for="dfg-edit-notes">备注</label>
@@ -533,7 +533,7 @@ const props = defineProps<{ stage: string }>()
 const emit = defineEmits<{ changed: []; stage: [string] }>()
 
 /* 文案单源（R6 复读单源化）：工具步骤卡与 Skill 步骤卡的「未解析」悬停释共用一份 */
-const UNRESOLVED_HINT = '编排定义中该步骤未解析到契约'
+const UNRESOLVED_HINT = '编排文件里没有解析到这一步的定义'
 
 /* ================= 状态 ================= */
 const loading = ref(false)
@@ -1025,7 +1025,7 @@ const flashKey = ref('')
 function cardLabelOf(key: string) {
   const f = flow.value
   if (!f) return key
-  if (key === '__entry__') return f.entryFrom?.stageName ? `入口·${f.entryFrom.stageName}` : '链首'
+  if (key === '__entry__') return f.entryFrom?.stageName ? `入口·${f.entryFrom.stageName}` : '上游'
   if (key === '__exit__') return '出口'
   const s = flowSteps.value.find((x) => x.agentId === key)
   return s ? s.name.replace(/ Skill$/, '') : key
@@ -1280,7 +1280,7 @@ function journeyHint() {
   const c = selected.value
   if (!c) return ''
   const consumers = (journeyOf('consumers') as string[]).filter(Boolean)
-  if (consumers.length) return `同名字段在管线中以轨道线相连：产出后流转到 ${consumers.join('、')} 继续消费。`
+  if (consumers.length) return `同名字段在图中以轨道线相连：产出后流转到 ${consumers.join('、')} 继续使用。`
   if (flow.value?.exit.some((x) => x.fieldId === c.fieldId)) return `该字段已汇总到汇入出口，整体移交下一阶段。`
   if (c.accumulate) return '该字段不向下游移交，累积进学习者状态（画像/上下文）。'
   return '该字段为阶段内信息，不参与跨阶段流转。'

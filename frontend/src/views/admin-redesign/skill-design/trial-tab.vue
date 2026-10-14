@@ -58,13 +58,13 @@
     <!-- 右：ACTIVE Prompt 只读参照 -->
     <section class="sdp-prompt">
       <header class="sdp-block__head">
-        <h4>ACTIVE Prompt</h4>
+        <h4>当前生效 Prompt</h4>
         <button type="button" class="mk-link" @click="copy(effectivePrompt?.prompt?.systemPrompt || '')">
           复制
         </button>
       </header>
       <div class="sdp-prompt__facts">
-        <span>DB ACTIVE <b class="mono">v{{ effectivePrompt?.prompt?.version ?? '—' }}</b></span>
+        <span>生效版本 <b class="mono">v{{ effectivePrompt?.prompt?.version ?? '—' }}</b></span>
         <span>源文本直出（编译层已退役）</span>
       </div>
       <p v-if="inspectError" class="sdp-none sdp-bad-text">Prompt 检视加载失败。<button type="button" class="mk-link" @click="loadInspect">重试</button></p>
@@ -130,7 +130,7 @@
     </div>
     <MkLoading v-if="recentLogsLoading" inline text="日志加载中…" />
     <p v-else-if="recentLogsError" class="sdp-none sdp-bad-text">近 8 条日志加载失败。<button type="button" class="mk-link" @click="loadRecentLogs">重试</button></p>
-    <p v-else class="sdp-none">近 8 条日志窗口内无调用。</p>
+    <p v-else class="sdp-none">近一周内没有调用记录。</p>
   </section>
 </template>
 

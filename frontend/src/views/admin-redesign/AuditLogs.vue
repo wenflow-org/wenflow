@@ -69,7 +69,7 @@
             type="button"
             class="al-fails__chip al-fails__chip--on"
             aria-pressed="true"
-            :title="`只看失败：${failedAction ? failureLabel(failedAction) : '全部失败'}（点击退出下钻）`"
+            :title="`只看失败：${failedAction ? failureLabel(failedAction) : '全部失败'}`"
             @click="filterByFailure(failedAction)"
           >只看失败 ×</button>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
@@ -135,7 +135,7 @@
                 <button type="button" class="mk-alert__btn" :disabled="statsLoading" @click="fetchStats">{{ statsLoading ? '重试中…' : '重试' }}</button>
               </div>
               <div v-else-if="failureByAction.length" class="al-fails al-fails--pop">
-                <span class="al-fails__label" title="失败最多的动作（基于最近 2000 条失败记录），点击 chip 下钻只看失败">失败 TOP</span>
+                <span class="al-fails__label" title="失败最多的动作（基于最近 2000 条失败记录）">失败 TOP</span>
                 <!-- P2：span→button。后端 /admin/audit-logs 支持 success=true/false 白名单参数（parseSuccess），
                      点击 = 只看失败 + path 首段关键词；再点已激活的 chip 退出下钻 -->
                 <button
@@ -228,7 +228,7 @@
                   </template>
                   <span v-else class="log-action">{{ actionText(log.action) }}</span>
                 </td>
-                <td v-if="!noTargetTypes && colVisible('tt')" class="log-tt" :title="log.targetType || '当前记录未写入目标类型'">{{ targetTypeText(log.targetType) }}</td>
+                <td v-if="!noTargetTypes && colVisible('tt')" class="log-tt" :title="log.targetType || '当前记录未包含目标类型'">{{ targetTypeText(log.targetType) }}</td>
                 <td v-if="colVisible('target')" class="log-target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</td>
                 <td v-if="colVisible('result')"><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
                 <td v-if="colVisible('ip')" class="log-ip mono" :title="log.ip || ''">{{ ipText(log.ip) }}</td>
@@ -788,7 +788,7 @@ const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天
 const emptyDescription = computed(() => {
   const base = tab.value === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕'
   if (isFiltered.value) return base
-  return `${base} · 默认时间范围「${timeRangeLabels[timeRange.value]}」，点卡头「时间范围」可改`
+  return `${base} · 默认时间范围「${timeRangeLabels[timeRange.value]}」，打开「高级筛选」即可修改`
 })
 
 /** 当前筛选快照（仅含非默认值；tab 默认「操作审计」不存） */

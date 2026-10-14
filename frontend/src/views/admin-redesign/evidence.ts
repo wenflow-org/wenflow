@@ -138,6 +138,6 @@ export function evidenceConfidenceTone(score: number): 'ok' | 'warn' | 'info' {
 /** 概念证据密度 hover 文案：说明数字来源（确定性事件计数 + AI 蒸馏，去重后取最大） */
 export function evidenceDensityTooltip(label: string, count: number): string {
   if (count <= 0) return `${label}：暂无关联学习事件`
-  return `${label}：关联 ${count} 条学习事件（来自教学会话/任务完成/总结/评估，快照重算时聚合）`
+  return `${label}：关联 ${count} 条学习事件（统计自教学会话、任务完成、总结与评估）`
 }
 

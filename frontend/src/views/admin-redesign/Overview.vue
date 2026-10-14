@@ -13,7 +13,7 @@
           class="ov-refresh-note ov-refresh-note--warn ov-refresh-note--action"
           :disabled="liveRefreshing"
           @click="refreshNow"
-        >{{ liveRefreshing ? '恢复中…' : '自动刷新已停止，点击恢复' }}</button>
+        >{{ liveRefreshing ? '恢复中…' : '自动刷新已停止 · 恢复刷新' }}</button>
         <span
           v-else
           class="ov-refresh-note"
@@ -123,7 +123,7 @@
                   v-if="s.ringFailed"
                   type="button"
                   class="mk-badge mk-badge--sm mk-badge--warn loop__fail"
-                  title="该环读数拉取失败 · 点击重试"
+                  title="该阶段读数获取失败 · 点击重试"
                   @click.stop="retryLoopExtras"
                 >重试</button>
                 <button
@@ -316,7 +316,7 @@ const effectiveActions = computed(() => {
   const tone = health.value.tone;
   if (tone === 'warn' || tone === 'bad') {
     // 兜底动作不伪造 agentId：空串让 investigateAgent 只带失败状态筛选
-    return [{ text: '教学链路出现失败，检查模型服务与限流配置', tone: 'bad' as Tone, agentId: '', link: '' }];
+    return [{ text: '教学流程出现失败，检查模型服务与限流配置', tone: 'bad' as Tone, agentId: '', link: '' }];
   }
   return [];
 });
@@ -359,12 +359,12 @@ const loopStages = computed<LoopStage[]>(() => {
       val: teachState.value === 'loading'
         ? '加载中…'
         : teachState.value === 'failed'
-          ? '读数拉取失败'
+          ? '读数获取失败'
           : `${(teachTotal.value ?? 0).toLocaleString()} 累计`,
       tone: teachState.value === 'failed' ? 'alert' : 'done',
       ringFailed: teachState.value === 'failed',
       title: teachState.value === 'failed'
-        ? '教学会话累计数拉取失败'
+        ? '教学会话累计数获取失败'
         : '教学会话累计数',
       scene: 'teaching-sessions',
     },
@@ -377,16 +377,16 @@ const loopStages = computed<LoopStage[]>(() => {
       scene: 'teaching-sessions',
     },
     {
-      name: '记忆复习', meta: '遗忘曲线调度复习',
+      name: '记忆复习', meta: '按遗忘曲线安排复习',
       val: memState.value === 'loading'
         ? '加载中…'
         : memState.value === 'failed'
-          ? '读数拉取失败'
+          ? '读数获取失败'
           : `${memDue.value ?? 0} 待办`,
       tone: memState.value === 'failed' || (memDue.value ?? 0) > 0 ? 'alert' : 'done',
       ringFailed: memState.value === 'failed',
       title: memState.value === 'failed'
-        ? '到期待办数拉取失败 · 点「重试」重拉'
+        ? '到期待办数获取失败 · 点「重试」重新获取'
         : '到期未复习的记忆条数',
       scene: 'memory-review',
     },

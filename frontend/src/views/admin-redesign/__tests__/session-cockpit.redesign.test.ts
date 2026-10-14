@@ -230,7 +230,7 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     // 回合 pill 撤（2026-10-04 批次五 P3#13）：回合数单源=「阶段推进」卡 statstrip「已用回合」格
     const pills = w.findAll('.mk-hero__pills .mk-badge').map((b) => b.text());
     expect(pills[0]).toBe('进行中');
-    expect(pills[1]).toBe('Learn');
+    expect(pills[1]).toBe('学习');
     // 只读声明（原顶栏 meta 迁入，2026-10-11 走查：真实会话不再渲染 .cp-topbar）
     expect(pills[2]).toBe('真实会话 · 只读监控');
     expect(pills).toHaveLength(3);

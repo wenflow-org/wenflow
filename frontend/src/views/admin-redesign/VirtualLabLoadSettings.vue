@@ -69,7 +69,7 @@
     <div v-show="settingsTab === 'concurrency'" class="vl-settings__pane">
       <label
         class="mk-field mk-field--row"
-        title="同时在跑的自动驾驶会话数上限。超出即排队（先到先服务），有空位自动拉起。与「速率上限」相互独立"
+        title="同时在跑的自动驾驶会话数上限。超出即排队（先到先服务），有空位自动开始运行。与「速率上限」相互独立"
       >
         <span class="mk-field__label">最高并发</span>
         <span class="vl-rpm__ctl">
@@ -94,7 +94,7 @@
       </button>
       <span v-if="concurrencyDirty" class="vl-rpm__dirty">未保存</span>
       <span v-if="loadFailed" class="vl-rpm__failed" role="alert">{{ LOAD_FAILED_SAVE_NOTE }}</span>
-      <span v-else class="vl-rpm__hint">同时在跑会话数上限 · 1–200 · 超出按序排队，运营仍可任意提交启动</span>
+      <span v-else class="vl-rpm__hint">同时在跑会话数上限 · 1–200 · 超出按序排队，仍可继续提交启动</span>
     </div>
 
     <div v-show="settingsTab === 'date'" class="vl-settings__pane">
@@ -111,7 +111,7 @@ import { errMsg } from './live'
 import SimulatedDaySettings from './SimulatedDaySettings.vue'
 
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板就地引用 ---------- */
-const LOAD_FAILED_EDIT_TITLE = '设置未加载：为避免用错底数覆盖服务端配置，已禁用编辑'
+const LOAD_FAILED_EDIT_TITLE = '设置未加载：为避免用默认值覆盖已保存的配置，已禁用编辑'
 const LOAD_FAILED_SAVE_NOTE = '设置未加载，保存已禁用（请刷新重试）'
 
 /** 压测参数三视图（速率上限 / 最高并发 / 日期模拟）；默认速率上限（日常位） */

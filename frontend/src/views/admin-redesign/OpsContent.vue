@@ -306,7 +306,7 @@ const stats = ref<LearningContentStats | null>(null)
 
 /* 列显隐（与同页其他列表一致）：路径/操作固定，其余可隐藏 */
 const colDefs = [
-  { key: 'difficulty', label: '难度', title: '路径难度：由目标对话里的水平自述归一（入门/进阶/高阶）；无法判断时为未知' },
+  { key: 'difficulty', label: '难度', title: '路径难度：由目标对话里的水平自述归一（入门/进阶/高阶），无法判断时为未知' },
   { key: 'hours', label: '时长', title: '预计学习时长（约数，带 ~ 表示近似）' },
   { key: 'user', label: '用户', title: '所属用户' },
   { key: 'status', label: '状态', title: '路径状态' },
@@ -579,7 +579,7 @@ async function restore(p: PathRow) {
 async function remove(p: PathRow) {
   const ok = await askConfirm({
     title: '删除路径',
-    message: `确认删除「${p.title}」？\n将级联删除其全部里程碑与子任务，不可撤销。`,
+    message: `确认删除「${p.title}」？\n将同时删除其全部里程碑与子任务，不可撤销。`,
     confirmText: '删除',
     busy: true,
   })
@@ -606,7 +606,7 @@ function isStalled(p: PathRow) {
 function stallTitle(p: PathRow) {
   const full = `完整时间 ${fmtDate(p.updatedAt)}`
   return isStalled(p)
-    ? `${full}；超过 ${PATH_STALL_HOURS} 小时无更新，可「重试生成」补齐`
+    ? `${full}。超过 ${PATH_STALL_HOURS} 小时无更新，可「重试生成」补齐`
     : full
 }
 
@@ -616,7 +616,7 @@ function stallTitle(p: PathRow) {
 async function retryGeneration(p: PathRow) {
   const ok = await askConfirm({
     title: '重试路径生成',
-    message: `确认对「${p.title}」重新发起生成？\n后台异步执行，完成后路径自动更新。`,
+    message: `确认对「${p.title}」重新发起生成？\n提交后在后台执行，完成后路径自动更新。`,
     confirmText: '重试',
     danger: false,
     busy: true,

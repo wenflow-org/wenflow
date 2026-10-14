@@ -11,8 +11,8 @@
 
         <!-- systemLocked 只读提示（编辑模式；平台派生/代码消费字段禁止在本向导修改） -->
         <p v-if="mode === 'edit' && form.systemLocked" class="faw__warn faw__warn--err">
-          {{ props.fieldName }} 为平台锁定（平台自动生成，锁原因见编排文件）：
-          只读字段，本向导不可编辑，需走编排文件编辑。
+          {{ props.fieldName }} 为平台锁定（由平台自动生成）：
+          只读字段，本向导不可编辑，需在编排文件里修改。
         </p>
         <p v-else-if="mode === 'edit' && form.structureLocked" class="faw__warn">
           平台锁定字段：修改需谨慎，保存将同步改 core 声明与编排路由。
@@ -27,7 +27,7 @@
               <li>core.yaml <b>{{ result.coreWritten ? '已写入' : '未写入' }}</b> · 编排文件 <b>{{ result.orchestrationWritten ? '已写入' : '未写入' }}</b></li>
               <li v-if="mode === 'add'">{{ TERMS.syncToDb }} <b :class="result.synced ? 'faw__ok' : 'faw__err'">{{ result.synced ? TERMS.driftInSync : '失败' }}</b>
                 <span class="faw__result-hint">{{ result.syncHint }}</span></li>
-              <li v-else>同步一致性核查：fields 更新 <b>{{ result.dbSync?.fieldsUpdated ?? 0 }}</b> · routings 更新 <b>{{ result.dbSync?.routingsUpdated ?? 0 }}</b>
+              <li v-else>同步一致性核查：字段定义更新 <b>{{ result.dbSync?.fieldsUpdated ?? 0 }}</b> · 字段路由更新 <b>{{ result.dbSync?.routingsUpdated ?? 0 }}</b>
                 <span v-if="result.dbSync?.skippedAdminRows?.length" class="faw__result-hint">
                   跳过受保护行 {{ result.dbSync.skippedAdminRows.length }}（{{ result.dbSync.skippedAdminRows.map((r) => r.key).join('，') }}，管理员覆盖的字段需在编排弹窗手动改）</span></li>
               <li v-if="result.syncCheck">字段同步复检：缺项 <b>{{ result.syncCheck.missing.length }}</b> · 孤儿 <b>{{ result.syncCheck.orphan.length }}</b> · 类型不一致 <b>{{ result.syncCheck.typeMismatch.length }}</b></li>
@@ -80,7 +80,7 @@
             <label class="mk-field">
               <span class="mk-field__label">可见性预设</span>
               <select v-model="form.visibilityPreset" class="mk-input">
-                <option value="">缺省（不声明）</option>
+                <option value="">默认（不声明）</option>
                 <option value="user-clarification">user-clarification</option>
                 <option value="agent-internal">agent-internal</option>
               </select>
@@ -121,7 +121,7 @@
             <label class="faw__check"><input v-model="form.accumulate" type="checkbox" /> 累积进学习者状态</label>
           </div>
           <p v-if="form.internal && handoffList.length" class="faw__warn">内部标记与移交互斥：建议留空移交去向（控制信号除外）</p>
-          <p v-if="isNested" class="faw__warn">嵌套字段：core 侧挂到顶层 object 的 desc 子字段说明，编排 fieldId 原样点分，turn 仅顶层直配</p>
+          <p v-if="isNested" class="faw__warn">嵌套字段：core 侧写在顶层 object 的说明子字段里，编排侧用点分字段名，turn 仅顶层可勾选</p>
 
           <!-- 双文件 YAML 预览（只读） -->
           <div class="faw__preview">
@@ -142,7 +142,7 @@
           <!-- 不禁用（仅保存中禁用）：表单有问题时点击 submit() 会把汇集的原因渲染到下方
                .faw__msg is-err；此前 !canSubmit 置灰使该提示路径永不可达，用户只看到点不动的灰按钮 -->
           <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="submit">
-            {{ saving ? '保存中…' : mode === 'edit' ? '保存修改（双文件原子）' : '保存并校验（双文件原子）' }}
+            {{ saving ? '保存中…' : mode === 'edit' ? '保存修改' : '保存并校验' }}
           </button>
         </template>
       </div>
@@ -351,15 +351,15 @@ const nameProblems = computed(() => {
   const name = form.value.name.trim()
   if (!name) return '字段名必填'
   if (!nameSegmentsOk.value) return '命名非法：每段须小写字母开头，仅含字母/数字/下划线，可点分嵌套'
-  if (nameDup.value === 'full') return '与现有字段重复（核心声明或编排登记，如需调整请走既有编辑面）'
+  if (nameDup.value === 'full') return '与现有字段重复（核心声明或编排里已登记），如需调整请编辑现有字段'
   if (nameDup.value === 'root' && !isNested.value) return '顶层名与现有核心字段首段重复'
   return ''
 })
 
 const typeHint = computed(() => {
   const vt = valueTypeOf(form.value.type)
-  if (form.value.type === 'enum') return '这个类型只能在核心文件里声明：编排侧没有对应写法，请改用其它类型，或人工登记编排侧'
-  return `core「${form.value.type}${form.value.optional ? '?' : ''}」 ⇔ 编排「${vt}」`
+  if (form.value.type === 'enum') return 'enum 只能在核心文件里声明，编排侧没有对应写法，请改用其它类型或在编排文件里手动登记'
+  return `core「${form.value.type}${form.value.optional ? '?' : ''}」对应编排「${vt}」`
 })
 const typeHintCls = computed(() => (form.value.type === 'enum' ? 'faw__hint--err' : ''))
 
@@ -373,7 +373,7 @@ const formProblems = computed(() => {
   if (form.value.systemLocked) list.push('平台锁定字段只读（平台自动生成），需在编排文件里改')
   const n = nameProblems.value
   if (n) list.push(n)
-  if (form.value.type === 'enum') list.push('这个类型只能在核心文件里声明，编排侧没有对应写法：请改用其它类型或人工登记（否则提交会被拒绝）')
+  if (form.value.type === 'enum') list.push('这个类型只能在核心文件里声明，编排侧没有对应写法，请改用其它类型或在编排文件里手动登记（否则提交会被拒绝）')
   if (!form.value.desc.trim()) list.push('字段说明（生成指令 / 含义）必填')
   if (form.value.internal && handoffList.value.length) list.push('「仅内部流转」与「移交去向」不能同时设置（控制信号字段除外）')
   if (form.value.optional && isNested.value) list.push('「可选」只在顶层字段生效（嵌套字段不要加 ?）')
@@ -432,7 +432,7 @@ function errText(e: unknown): string {
   const raw = d?.error ? (typeof d.error === 'string' ? d.error : d.error.message) : r?.message
   const code = d?.code || ''
   const map: Record<string, string> = {
-    FIELD_EXISTS: '字段已存在（核心声明或编排 fieldId 重复），如需调整请走既有编辑面',
+    FIELD_EXISTS: '字段已存在（核心声明或编排 fieldId 重复），如需调整请编辑现有字段',
     FIELD_NOT_FOUND: '字段不存在：核心声明与编排登记需同名（可能已被删除或仅存在于一侧）',
     FIELD_SYSTEM_LOCKED: '该字段由平台锁定（平台自动生成）：此处只读，请改编排文件',
     FIELD_CONSUMED: '字段仍被下游引用（其他 Agent 路由 或 其他 Skill 的输入声明），禁止删除。请先解除引用',
@@ -442,7 +442,7 @@ function errText(e: unknown): string {
     FIELD_TYPE_REQUIRED: '类型（core 侧）必填',
     FIELD_TYPE_UNKNOWN: '类型不在可选值列表',
     FIELD_TYPE_INVALID: '类型非法（? 只能作后缀）',
-    VALUE_TYPE_UNMAPPABLE: '这个类型只能在核心文件里声明，编排侧没有对应写法：请改用其它类型，或人工登记编排侧',
+    VALUE_TYPE_UNMAPPABLE: '这个类型只能在核心文件里声明，编排侧没有对应写法，请改用其它类型或在编排文件里手动登记',
     ROLE_UNKNOWN: '角色不在可选值列表',
     RENDER_UNKNOWN: '「对外可见性」取值不在可选值列表',
     VISIBILITY_PRESET_UNKNOWN: '「可见性预设」取值不在可选值列表',

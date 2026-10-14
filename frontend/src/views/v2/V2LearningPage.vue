@@ -299,7 +299,7 @@
                   @copy="copyMessage(m.text)"
                   @feedback="(up) => sendMessageFeedback(m, up)"
                 />
-                <span v-if="confusionDeltas[mi]?.length" class="msg__chip msg__chip--confuse">捕获到卡点「{{ confusionDeltas[mi]?.join('、') }}」</span>
+                <span v-if="confusionDeltas[mi]?.length" class="msg__chip msg__chip--confuse">发现卡点：「{{ confusionDeltas[mi]?.join('、') }}」</span>
                 <div class="msg__meta">
                   问流导师 · {{ m.time }}
                   <button v-if="m.failed" type="button" class="msg__retry" @click="retryLast">重试</button>

@@ -6,7 +6,7 @@
       <header class="mk-section__head">
         <h4>在线变体（A/B 实验）</h4>
         <span class="sdp-sec-meta">
-          分流按 userId 稳定分桶（同人恒定）· 指标近 7 天 · 变体内容=克隆既有版本
+          按用户分流，同一用户恒定进同一变体 · 指标为近 7 天 · 新变体内容克隆自既有版本
         </span>
       </header>
       <p v-if="variantMsg" class="sdp-versions-msg" :class="{ 'is-err': variantErr }">{{ variantMsg }}</p>
@@ -101,10 +101,10 @@
           type="button"
           class="mk-btn mk-btn--sm"
           :disabled="variantCorePublishing || !variantNewKey"
-          title="需先在协议页签保存声明源文件。发布守门检查照常执行，但不替换基线、不写技能源文件"
+          title="需先在协议页签保存核心文件。发布前的检查照常执行，不替换基线、不改技能源文件"
           @click="publishCoreAsVariant"
         >
-          {{ variantCorePublishing ? '发布中…' : '把当前声明源改动发布为变体' }}
+          {{ variantCorePublishing ? '发布中…' : '把当前核心文件改动发布为变体' }}
         </button>
         <span class="mk-na">评测钉变体：虚拟学习者试跑时可指定按某个变体执行</span>
       </div>
@@ -137,7 +137,7 @@
                     :disabled="coreRollbacking"
                     @click="rollbackCore(v.version)"
                   >回滚</button>
-                  <span v-else-if="v.status !== 'ACTIVE'" class="sdp-pw__audit" title="该历史版本没有可验证的声明源快照，只保留审计用途">仅审计</span>
+                  <span v-else-if="v.status !== 'ACTIVE'" class="sdp-pw__audit" title="该历史版本没有可验证的源文件快照，只保留审计用途">仅审计</span>
                 </div>
               </td>
             </tr>

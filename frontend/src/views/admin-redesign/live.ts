@@ -489,7 +489,7 @@ export async function loadPromptIndex(): Promise<void> {
       if (!traceId) continue
       const usage = (r.tokenUsage as Record<string, unknown>) || null
       const tokens = usage
-        ? `P ${usage.prompt_tokens ?? usage.prompt ?? 0} / C ${usage.completion_tokens ?? usage.completion ?? 0}`
+        ? `输入 ${usage.prompt_tokens ?? usage.prompt ?? 0} / 输出 ${usage.completion_tokens ?? usage.completion ?? 0}`
         : ''
       const row: PromptMetaRow = {
         agentId: String(r.agentId || ''),
@@ -933,7 +933,7 @@ export function buildOverviewHead(input: {
   const rateAttentionSubline = `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
   if (todayCalls === 0) {
     if (todayOnlySimulated) {
-      return { tone: 'muted', score: null, headline: '真实用户暂无调用', subline: '今日无真实用户调用。虚拟/模拟仿真请见「虚拟学习者」页。' }
+      return { tone: 'muted', score: null, headline: '真实用户暂无调用', subline: '今日无真实用户调用。虚拟学习者的模拟调用在「虚拟学习者」页单独统计。' }
     }
     return activeUsers === 0
       ? { tone: 'muted', score: null, headline: '系统空闲', subline: '今日尚无调用，等待学习者开始。' }
@@ -1101,7 +1101,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       // 「N 个 Skill 近 24h 有调用」从「进行中对话」卡迁来（2026-10-14 KPI 审计）：它是平台活跃面
       // 的事实，挂在本卡（平台用量）才算同域；原来挂在「进行中对话」（目标对话快照）属跨域副文错配。
       hint: [
-        todayCallsAll > todayCalls ? `真实用户口径 · 全量（含虚拟/测试）${fmt(todayCallsAll)} 次` : '真实用户口径 · 今日 00:00 起',
+        todayCallsAll > todayCalls ? `只统计真实用户 · 若含虚拟与测试共 ${fmt(todayCallsAll)} 次` : '只统计真实用户 · 从今日 00:00 起',
         `${fmt(Number(agents.activeAgents24h || 0))} 个 Skill 近 24h 有调用`,
       ].join(' · '),
     },
@@ -1109,14 +1109,14 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       label: TERMS.healthScore,
       value: todayCalls > 0 ? `${todaySuccessRate}%` : '—',
       foot: todayFailed > 0 ? `失败 ${todayFailed}` : todayOnlySimulated ? '今日无真实调用' : '无失败',
-      hint: '失败 / 调用 · 真实用户口径',
+      hint: '失败数 / 调用数 · 只统计真实用户',
     },
     {
       label: '用户活跃',
       value: fmt(activeUsers),
       trend: activeTrend,
       foot: `今日新增 ${fmt(Number(users.newToday || 0))} · ${baseNote(!!activeTrend)}`,
-      hint: `今日有学习会话的用户 · 总用户 ${users.total ?? 0}（真实口径）`,
+      hint: `今日有学习会话的用户 · 总用户 ${users.total ?? 0}（只计真实用户）`,
     },
     {
       // P2 文案纠偏：原「系统活跃」与值错位（值=进行中目标对话数快照），名实相符改为「进行中对话」
@@ -1821,7 +1821,7 @@ export async function liveRunModelTest(data: {
   })
   const d = res.data?.data ?? res.data ?? {}
   const usage = d.usage
-    ? `P ${d.usage.prompt_tokens ?? 0} / C ${d.usage.completion_tokens ?? 0} / T ${d.usage.total_tokens ?? 0}`
+    ? `输入 ${d.usage.prompt_tokens ?? 0} / 输出 ${d.usage.completion_tokens ?? 0} / 共 ${d.usage.total_tokens ?? 0}`
     : undefined
   return {
     text: String(d.text || d.output || d.content || '（无文本输出）'),

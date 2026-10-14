@@ -5,7 +5,7 @@
   <div class="sd-settings">
     <label
       class="sd-switch sd-settings__enable"
-      :title="form.enabled ? '已开启：允许按自然日推进虚拟学习' : '默认关闭，现网零变化'"
+      :title="form.enabled ? '已开启：允许按自然日推进虚拟学习' : '默认关闭，不影响真实用户'"
     >
       <!-- 可访问名（审核 #181）：label 唯一文本是状态词，读屏只听到「已关闭 复选框」不知在开关
            什么；给 input 补 aria-label 而不动 span 文案（该 span 是可见状态字，单测亦锁定其文本） -->
@@ -48,7 +48,7 @@
       </label>
     </div>
     <div class="sd-settings__foot">
-      <span v-if="loadFailed" class="sd-settings__hint sd-settings__hint--bad" title="设置加载失败，当前展示的是默认值。为避免用默认值覆盖服务端配置，保存已禁用，请刷新页面重试">设置未加载，保存已禁用（请刷新重试）</span>
+      <span v-if="loadFailed" class="sd-settings__hint sd-settings__hint--bad" title="设置加载失败，当前展示的是默认值。为避免用默认值覆盖已保存的配置，保存已禁用，请刷新页面重试">设置未加载，保存已禁用（请刷新重试）</span>
       <span v-else class="sd-settings__hint">默认关闭，只对虚拟学习者生效，不影响真实用户。</span>
       <button type="button" class="mk-btn mk-btn--primary" :disabled="!dirty || saving || loadFailed" @click="save">
         {{ saving ? '保存中…' : '保存日期模拟设置' }}

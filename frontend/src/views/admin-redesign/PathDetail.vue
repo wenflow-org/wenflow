@@ -11,7 +11,7 @@
       v-if="state === 'resolving'"
       icon="◌"
       title="正在打开该路径所在的学习会话…"
-      description="路径内容在会话座舱的「Path」阶段页签中查看。"
+      description="路径内容在会话座舱的「路径」阶段页签中查看。"
     />
     <MkEmptyState
       v-else-if="state === 'error'"

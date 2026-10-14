@@ -78,7 +78,7 @@ defineExpose({ scrollEl, scrollDown, jumpToBottom, nearBottom });
         <span v-if="showAvatar" class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" :alt="aiLabel" /></span>
         <div class="msg__content">
           <div class="msg__bubble msg__bubble--html" v-html="htmlFor(m)"></div>
-          <span v-if="m.confusion?.length" class="msg__chip msg__chip--confuse">捕获到卡点「{{ m.confusion.join('、') }}」· 导师会在这里多做确认</span>
+          <span v-if="m.confusion?.length" class="msg__chip msg__chip--confuse">发现卡点：「{{ m.confusion.join('、') }}」· 导师会在这里多做确认</span>
           <div class="msg__meta">
             {{ aiLabel }} · {{ m.time || nowTime() }}
             <button v-if="m.failed" type="button" class="msg__retry" @click="emit('retry')">重试</button>

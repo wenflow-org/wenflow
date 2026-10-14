@@ -51,7 +51,7 @@
           :value="statsKpiValue(statsKpiPct(runStats.systemFailureRate))"
           :tone="statsState === 'error' ? 'bad' : (runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''"
           :hint="statsKpiHint(`系统失败 ${runStats.failed} / 全部会话 ${runStats.totalSessions} · 人为终止 ${runStats.abandoned} 另计（合计 ${statsKpiPct(runStats.failureRate)}）`)"
-          :title="statsState === 'error' ? STATS_RETRY_TITLE : '按全部会话计算的失败率，与总览页「系统失败率」一致。管理员止停等人为终止另行统计'"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : '按全部会话计算的失败率，与总览页「系统失败率」一致。管理员手动停止等人为终止另行统计'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />
@@ -281,11 +281,11 @@
                   <button type="button" class="mk-menu__btn" aria-label="更多操作（测试 / 来源卡 / 删除）" aria-haspopup="menu" :aria-expanded="openMenu === s.id" :title="'更多操作：单步测试 / 查看来源卡 / 删除（不可恢复）'" @click.stop="toggleMenu(s.id)">⋯</button>
                   <div v-if="openMenu === s.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
                     <!-- 低频诊断：用人设和故事直接跑一次 Prompt 对话（不创建用例、不影响正式会话） -->
-                    <button type="button" class="mk-menu__item" role="menuitem" title="单步测试：用该人设和故事直接跑一次 Prompt 对话，看字段产出是否符合预期（不创建用例、不影响正式会话）" @click="openPromptTest(s)">单步测试</button>
+                    <button type="button" class="mk-menu__item" role="menuitem" title="单步测试：用该人设和故事直接跑一次 Prompt 对话，看输出的字段是否符合预期（不创建用例、不影响正式会话）" @click="openPromptTest(s)">单步测试</button>
                     <!-- 双向互链（卡库 ↔ 虚拟学习者）：卡与本人是同一条档案记录，卡 id 即本行 id -->
                     <button type="button" class="mk-menu__item" role="menuitem" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="menuOpenSourceCard(s)">查看来源卡</button>
                     <div class="mk-menu__sep" aria-hidden="true"></div>
-                    <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" :disabled="busyId === s.id" title="删除该虚拟学习者（级联删除，不可恢复）" @click="menuRemove(s)">删除</button>
+                    <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" :disabled="busyId === s.id" title="删除该虚拟学习者（其会话记录一并删除，不可恢复）" @click="menuRemove(s)">删除</button>
                   </div>
                 </div>
               </div>
@@ -299,7 +299,7 @@
         v-else-if="loadFailed"
         tone="error"
         title="虚拟学习者加载失败"
-        description="无法从后端拉取虚拟学习者列表。"
+        description="暂时无法加载虚拟学习者列表。"
         action-text="重试"
         @action="retryLoad"
       />
@@ -571,7 +571,7 @@ const vlColDefs = [
   { key: 'story', label: '故事池', title: '已生成故事条数（0 表示未生成，需先生成才能运行）' },
   { key: 'sessions', label: '会话', title: '累计会话数（全部会话，含终态）' },
   { key: 'failed', label: '失败', title: '已失败/已终止会话数（全量聚合）' },
-  { key: 'stalled', label: '无响应', title: '超过回收阈值无写入的卡死会话数（用页头「回收卡死」处理）' },
+  { key: 'stalled', label: '无响应', title: '超过回收阈值无写入的卡死会话数（用「回收卡死」按钮处理）' },
   { key: 'created', label: '创建' },
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())

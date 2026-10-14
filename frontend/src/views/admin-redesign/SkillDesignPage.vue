@@ -26,13 +26,13 @@
         <span
           v-if="workbenchMeta?.stats"
           class="mk-status__meta"
-          :title="`调用日志聚合统计，窗口：${statsRangeLabel}（与工程页签口径不同）`"
+          :title="`调用日志聚合统计，窗口：${statsRangeLabel}（工程页签「本版本累计调用」是另一种统计，数值不同）`"
         >
           {{ statsRangeLabel }}调用 <b class="mono">{{ workbenchMeta.stats.totalCalls }}</b>
           · 成功率 <b class="mono">{{ workbenchMeta.stats.successRate ?? '—' }}%</b>
           · 均耗 <b class="mono">{{ fmtMs(workbenchMeta.stats.avgDuration || 0) }}</b>
         </span>
-        <span v-if="recentFailures > 0" class="mk-status__meta sdp-bad-text">近 8 条 {{ recentFailures }} 失败</span>
+        <span v-if="recentFailures > 0" class="mk-status__meta sdp-bad-text">近 8 条调用 {{ recentFailures }} 条失败</span>
         <span v-if="overview.drift === 'file-vs-db-mismatch'" class="mk-badge mk-badge--warn">{{ TERMS.driftContract }}</span>
         <span class="mk-status__actions">
           <button type="button" class="mk-status__action" :disabled="loading" @click="loadAll">

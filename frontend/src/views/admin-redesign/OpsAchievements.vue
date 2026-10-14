@@ -253,7 +253,7 @@ const defs = ref<AchievementDef[]>([])
 const defsLoading = ref(false)
 const defsFailed = ref(false)
 
-const typeText = (t: string) => ({ milestone: '里程碑', streak: '连续', completion: '完成度', mastery: '掌握', social: '社交' }[t] || t)
+const typeText = (t: string) => ({ milestone: '里程碑', streak: '连续学习', completion: '完成度', mastery: '掌握', social: '社交' }[t] || t)
 const typeBadge = (t: string) =>
   t === 'milestone' ? 'mk-badge--info' : t === 'streak' ? 'mk-badge--warn' : t === 'completion' ? 'mk-badge--ok' : t === 'mastery' ? 'mk-badge--info' : 'mk-badge--muted'
 const reqText = (r: AchievementDef['requirement']) => {

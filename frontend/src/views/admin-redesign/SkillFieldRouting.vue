@@ -19,7 +19,7 @@
             <span v-if="syncReport.typeMismatch.length" class="mk-badge mk-badge--warn">类型不一致 {{ syncReport.typeMismatch.length }}</span>
           </template>
         </template>
-        <span v-else class="mk-badge mk-badge--muted">无 core 声明（core 缺失）</span>
+        <span v-else class="mk-badge mk-badge--muted">core 文件缺失</span>
         <span class="sfr__status-actions">
           <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="!canAdd" @click="openWizard">＋ 加字段</button>
           <button type="button" class="mk-btn mk-btn--sm" @click="goOrchestration">→ 编排图页（{{ data.stage }}）</button>
@@ -571,7 +571,7 @@ async function onDelete(row: Record<string, any>) {
   try {
     const res = await adminPromptWorkbenchApi.deleteSkillField(props.skillId, row.fieldId)
     const d = res.data?.data
-    toast.success(`已删除字段 ${row.fieldId}（双文件与 DB 均已清理）`)
+    toast.success(`已删除字段 ${row.fieldId}（声明、路由与数据库记录均已删除）`)
     if (d?.protectedRows?.length) {
       toast.warning(`受保护行未删：${d.protectedRows.map((p: any) => p.key).join('，')}（平台覆盖的字段需走编排弹窗处理）`)
     }

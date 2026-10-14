@@ -530,10 +530,10 @@ const roleMetaById = ref<Record<string, { label: string; hint: string }>>({})
 function contractTitle(kind: 'in' | 'out', n: number): string {
   if (kind === 'in') {
     const m = roleMetaById.value['hard-required']
-    return `必填入参 ${n} 个 · hard-required${m ? `：${m.hint}` : ''}`
+    return `必填入参 ${n} 个${m ? ` · ${m.label}：${m.hint}` : ''}`
   }
   const roles = OUT_ROLES.map((r) => roleMetaById.value[r]?.label || r).join(' / ')
-  return `产出字段 ${n} 个 · 口径：${roles}`
+  return `产出字段 ${n} 个 · 统计含：${roles}`
 }
 async function loadStageFieldContracts(ids: string[]) {
   const results = await Promise.allSettled(

@@ -327,7 +327,7 @@ export function buildStageFlow(
         : isSkill ? 'skill' as const
           : owner ? 'cross-agent' as const
             : (def?.resolved?.kind === 'service' ? 'service' as const : 'skill' as const)
-    const name = isBridge ? `${stageName}闸口` : resolvedName || a.replace(/^skill:/, '')
+    const name = isBridge ? `${stageName}入口` : resolvedName || a.replace(/^skill:/, '')
     steps.push({
       index: i + 1,
       agentId: a,

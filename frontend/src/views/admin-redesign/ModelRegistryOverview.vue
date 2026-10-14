@@ -63,27 +63,27 @@
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense">
               <thead>
-                <tr><th>别名</th><th>成员来源</th><th>成员（按序）</th><th>默认选中</th><th>需要思考时</th></tr>
+                <tr><th>别名</th><th>候选来源</th><th>候选模型（按序）</th><th>默认选中</th><th>需要思考时</th></tr>
               </thead>
               <tbody>
                 <tr v-for="alias in data.aliases" :key="alias.alias">
                   <td class="mono">{{ alias.alias }}</td>
                   <td>
                     <span class="mk-badge" :class="alias.source === 'db-override' ? 'mk-badge--warn' : 'mk-badge--muted'">
-                      {{ alias.source === 'db-override' ? 'DB 覆盖' : '代码注册表' }}
+                      {{ alias.source === 'db-override' ? '平台覆盖' : '平台内置' }}
                     </span>
                   </td>
-                  <td class="mono">{{ alias.members.length ? alias.members.join(' → ') : '（无可用成员）' }}</td>
+                  <td class="mono">{{ alias.members.length ? alias.members.join(' → ') : '（无可用模型）' }}</td>
                   <td class="mono">{{ alias.selected ?? '—' }}</td>
                   <td>
                     <span class="mono">{{ alias.selectedWhenRequiringThinking ?? '—' }}</span>
-                    <span v-if="alias.degradedWhenRequiringThinking" class="mk-badge mk-badge--warn ac-mr-badge" title="没有成员支持思考，已退化为该别名第一位成员。请求侧会自动裁掉思考参数">降级</span>
+                    <span v-if="alias.degradedWhenRequiringThinking" class="mk-badge mk-badge--warn ac-mr-badge" title="候选模型都不支持思考，已退回该别名的第一个模型。发起请求时会自动去掉思考参数">降级</span>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p v-if="data.aliases.some((a) => a.dbMembers)" class="ac-mr-note" title="DB 覆盖声明">
+          <p v-if="data.aliases.some((a) => a.dbMembers)" class="ac-mr-note" title="这些别名以平台配置为准">
             平台覆盖的别名：
             <span v-for="alias in data.aliases.filter((a) => a.dbMembers)" :key="`db-${alias.alias}`" class="mono ac-mr-note__item">
               {{ alias.alias }} = {{ alias.dbMembers?.join(', ') }}
@@ -98,12 +98,12 @@
         <section v-if="shows('providers')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">模型供应商</h3>
-            <span class="mk-card__meta" title="唯一写源 = 以源文件为准的模型目录（改动后自动生效）。继承通道沿用平台路由解析，自带端点的供应商在路由时整体切换 endpoint/key">
-              只读 · 配置文件托管
+            <span class="mk-card__meta" title="模型目录以配置文件为准（改动后自动生效）。不自带端点的供应商沿用平台统一的连接配置，自带端点的供应商在路由时使用自己的地址与密钥">
+              只读 · 来自配置文件
             </span>
           </div>
           <p v-if="data.registry?.source === 'embedded-fallback'" class="ac-mr-note">
-            当前目录来自内置兜底（未读到配置文件）：{{ data.registry?.path }}
+            未读到配置文件，当前为内置默认目录：{{ data.registry?.path }}
           </p>
           <p v-else-if="data.registry?.lastError" class="ac-mr-note" :title="data.registry?.lastError">
             最近一次更新失败，仍在使用上一次可用的模型目录。
@@ -129,7 +129,7 @@
                   </template>
                   <template v-else>
                     <span class="ac-mr-mrow__sep">·</span>
-                    <span>继承平台路由</span>
+                    <span>沿用平台连接配置</span>
                   </template>
                 </div>
               </div>
@@ -141,7 +141,7 @@
           <MkEmptyState
             v-else
             compact
-            title="目录中没有登记的供应商，编辑模型目录配置文件后自动生效。"
+            title="模型目录中没有登记供应商，编辑目录配置文件后自动生效。"
             action-text="去模型接入配置"
             @action="goAccessConfig"
           />
@@ -151,14 +151,14 @@
         <section v-if="shows('limits')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">模型能力与限额</h3>
-            <span class="mk-card__meta" title="唯一写源 = 以源文件为准的模型目录。此表只读。降级仅切换模型名，网关与密钥沿用主调用">只读 · 降级仅换模型名</span>
+            <span class="mk-card__meta" title="模型目录以配置文件为准，此表只读。降级时只更换模型，连接地址与密钥不变">只读 · 降级仅换模型名</span>
           </div>
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense">
               <thead>
                 <tr>
                   <th>模型</th><th>供应商</th><th>档位</th><th>思考</th><th>推理强度</th>
-                  <th>输出上限</th><th>缺省输出</th><th>推理预留</th><th>并发上限</th><th>降级链</th>
+                  <th>输出上限</th><th>默认输出</th><th>推理预留</th><th>并发上限</th><th>备用模型</th>
                 </tr>
               </thead>
               <tbody>
@@ -191,8 +191,8 @@
                       <span
                         v-if="model.fallbacks.length > effectiveFallbacks(model.fallbacks).length"
                         class="ac-mr-label"
-                        title="运行时最多主模型+1跳 fallback(MAX_MODEL_CANDIDATES),声明链更长也只生效前段"
-                      >(声明 {{ model.fallbacks.length }} 层,运行时生效 {{ effectiveFallbacks(model.fallbacks).length }} 层)</span>
+                        title="运行时最多使用主模型加 1 个备用模型，声明的备用再长也只生效前段"
+                      >(声明 {{ model.fallbacks.length }} 个，实际生效 {{ effectiveFallbacks(model.fallbacks).length }} 个)</span>
                     </template>
                     <template v-else>—</template>
                   </td>
@@ -228,7 +228,7 @@
         <section v-if="shows('tips')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">配置提示</h3>
-            <span class="mk-card__meta">未注册模型 / 别名为空 / 模型未被引用 / 废弃的 prompt 模型副本</span>
+            <span class="mk-card__meta">未注册的模型 / 空别名 / 未被引用的模型 / 已废弃的提示词模型引用</span>
           </div>
           <div v-if="data.warnings.length" class="ac-mr-warnings">
             <!-- 配置提示 = 警示语义：走 .note--warn 琥珀档（.mk-alert 本体红档留给错误，

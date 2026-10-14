@@ -18,7 +18,7 @@
         影响范围加载失败：{{ lineageError }}
         <button type="button" class="mk-link" @click="retryLineage">重试</button>
       </p>
-      <p v-else class="sdp-none">该 skill 暂无影响范围登记（后台消费或未登记）</p>
+      <p v-else class="sdp-none">该 skill 暂无影响范围记录（没有下游消费者，或尚未登记）</p>
     </details>
 
     <SkillFieldRouting :key="skillId" :skill-id="skillId" />

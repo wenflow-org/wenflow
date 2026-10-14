@@ -22,7 +22,7 @@
           type="button"
           class="mk-status__action"
           :title="'为保持流畅已停止追加'"
-          @click="notice = '已达本地样本上限，全量数据见左侧计数'"
+          @click="notice = '已达本地样本上限，为保持流畅已停止追加'"
         >已达上限 {{ WATERFALL_MAX_SPANS }} 条</button>
       </span>
     </div>
@@ -54,7 +54,7 @@
           class="mk-pill"
           :class="{ 'mk-pill--active': failuresOnly }"
           :aria-pressed="failuresOnly"
-          :title="`只显示失败的 span 行，当前样本共 ${errorTotal} 个失败 span（旁边「N 条链路含失败」计的是链路数，两者单位不同）`"
+          :title="`只显示失败的 span 行，当前样本共 ${errorTotal} 个失败 span（「N 条链路含失败」计的是链路数，两者单位不同）`"
           @click="failuresOnly = !failuresOnly"
         >仅失败{{ errorTotal > 0 ? ` ${errorTotal}` : '' }}</button>
         <select v-model="sortMode" class="wf-sort mono" aria-label="排序方式" title="按耗时排序">
@@ -81,7 +81,7 @@
           v-if="embedded && failedTraceIds.length"
           type="button"
           class="wf-locate mk-link"
-          :title="'样本内含失败的链路，点击跳到第一条失败链路'"
+          :title="'定位到样本内第一条含失败的链路'"
           @click="locateFailure"
         >
           {{ locateLabel }}
@@ -117,10 +117,10 @@
     <div v-if="traceSummary" class="wf-summary">
       <div class="wf-summary__item"><b>{{ traceSummary.spanCount }}</b><span>span</span></div>
       <div class="wf-summary__item"><b>{{ fmtMs(traceSummary.total) }}</b><span>总耗时</span></div>
-      <div class="wf-summary__item" :class="{ 'wf-summary__item--bad': traceSummary.errorCount }" title="所选链路内的失败 span 数（「仅失败」计全部样本的失败 span，定位链接计含失败的链路数）"><b>{{ traceSummary.errorCount }}</b><span>失败</span></div>
+      <div class="wf-summary__item" :class="{ 'wf-summary__item--bad': traceSummary.errorCount }" title="所选链路内的失败 span 数（「仅失败」按钮统计全部样本的失败 span，定位链接统计含失败的链路数）"><b>{{ traceSummary.errorCount }}</b><span>失败</span></div>
       <div class="wf-summary__item"><b>{{ fmtMs(traceSummary.avg) }}</b><span>平均耗时</span></div>
-      <div class="wf-summary__item" :title="'链路内 span 延迟分位'">
-        <b class="mono">P50 {{ fmtMs(traceSummary.p50) }} · P99 {{ fmtMs(traceSummary.p99) }}</b><span>延迟分位</span>
+      <div class="wf-summary__item" :title="'链路内各行的耗时分位'">
+        <b class="mono">P50 {{ fmtMs(traceSummary.p50) }} · P99 {{ fmtMs(traceSummary.p99) }}</b><span>耗时分位</span>
       </div>
       <!-- Token / 成本 / 模型三格只在链路真有 LLM 调用时出现：网关/模拟类链路（样本常态，
            代码注释记 26/30）此前一律渲染「Token 0 · 估算成本 — · 模型 —」三个空读数，
@@ -229,11 +229,11 @@
               class="wf-attempt"
               :class="{ 'wf-attempt--fail': !a.success, 'wf-attempt--retry': a.willRetry }"
             >
-              <span class="wf-attempt__no">P#{{ a.promptAttemptNo }} · N#{{ a.transportAttemptNo }}</span>
+              <span class="wf-attempt__no">第 {{ a.promptAttemptNo }} 次调用 · 第 {{ a.transportAttemptNo }} 次发送</span>
               <span class="mk-badge" :class="a.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ a.success ? '成功' : '失败' }}</span>
               <span v-if="a.willRetry" class="wf-attempt__retry">将在 {{ a.backoffMs ?? '—' }}ms 后自动重试</span>
               <span class="wf-attempt__meta mono">
-                {{ a.model || a.provider }}<template v-if="a.statusCode"> · HTTP {{ a.statusCode }}</template><template v-if="a.promptTokens != null"> · P {{ a.promptTokens }} / C {{ a.completionTokens ?? 0 }}</template>
+                {{ a.model || a.provider }}<template v-if="a.statusCode"> · HTTP {{ a.statusCode }}</template><template v-if="a.promptTokens != null"> · 输入 {{ a.promptTokens }} / 输出 {{ a.completionTokens ?? 0 }}</template>
               </span>
               <span class="wf-attempt__dur mono">{{ fmtMs(a.durationMs) }}</span>
             </div>
@@ -471,7 +471,7 @@ watch(
       activeTrace.value = t
       notice.value = ''
     } else if (!found) {
-      notice.value = `链路 ${shortTrace(t)} 未找到（服务端无此 traceId 记录）`
+      notice.value = `链路 ${shortTrace(t)} 未找到（服务端没有这条链路的记录）`
     }
   },
   { immediate: true }
@@ -598,7 +598,7 @@ watch(
       viewMode.value = 'session'
       notice.value = ''
     } else if (!found) {
-      notice.value = `会话 ${shortTrace(sid)} 未找到（服务端无此 sessionId 记录）`
+      notice.value = `会话 ${shortTrace(sid)} 未找到（服务端没有这个会话的记录）`
     }
   },
   { immediate: true }
@@ -796,7 +796,7 @@ const wfEmpty = computed(() => {
   if (q && !traceIds.value.length) {
     return {
       title: '没有匹配的链路',
-      description: `筛选「${q}」未匹配到任何链路 ID，可清除筛选，或输入完整 ID 回车服务端直达。`,
+      description: `筛选「${q}」未匹配到任何链路 ID，可清除筛选，或输入完整链路 ID 后回车查找。`,
       actionText: '清除链路筛选',
       action: () => { traceKeyword.value = '' }
     }
@@ -804,7 +804,7 @@ const wfEmpty = computed(() => {
   if (viewMode.value === 'session' && !sessionIds.value.length) {
     return {
       title: '暂无会话数据',
-      description: '教学 / 目标对话等业务调用产生后，这里按 sessionId 自动跨链路归组。',
+      description: '教学 / 目标对话等业务调用产生后，这里按会话 ID 自动跨链路归组。',
       actionText: '',
       action: () => {}
     }

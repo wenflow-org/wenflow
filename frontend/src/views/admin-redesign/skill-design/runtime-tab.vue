@@ -13,7 +13,7 @@
           {{ rtForm.enabled ? '独立路由' : '继承上层 / 平台默认' }}
         </span>
         <span class="sdp-chip">超时 <b class="mono">{{ rtForm.requestTimeoutMs ? Math.round(rtForm.requestTimeoutMs / 1000) + 's' : '继承' }}</b></span>
-        <span class="sdp-chip">Logical 预算 <b class="mono">{{ effectiveLogicalRetries }}</b> 次</span>
+        <span class="sdp-chip">逻辑重试 <b class="mono">{{ effectiveLogicalRetries }}</b> 次</span>
         <span class="sdp-chip">思考 <b class="mono">{{ thinkingLabel }}</b></span>
       </div>
       <div class="sdp-chiprow">
@@ -26,7 +26,7 @@
       <div class="sdp-chiprow">
         <span class="sdp-chiprow__label">备用模型</span>
         <span v-if="fallbackChain.length" class="sdp-chip">{{ fallbackChain.join(' → ') }}</span>
-        <span v-else class="sdp-chip">未配置（用模型注册表默认链）</span>
+        <span v-else class="sdp-chip">未配置（用平台默认备用模型）</span>
         <button type="button" class="mk-link" :disabled="probing || !rtForm.enabled" @click="probeChannel">
           {{ probing ? '探测中…' : '探测当前通道可用模型' }}
         </button>
@@ -141,7 +141,7 @@
 
       <div class="sdp-form__grid">
         <label class="sdp-field">
-          <span>Logical Retry（平台默认 {{ platformLogicalRetries }} 次）</span>
+          <span>逻辑重试（平台默认 {{ platformLogicalRetries }} 次）</span>
           <select v-model="logicalRetryMode" class="mk-input">
             <option value="inherit">继承平台默认</option>
             <option value="disabled">禁用</option>
@@ -220,7 +220,7 @@
           </div>
           <pre v-if="probeResult.contentPreview" class="sdp-probe__pre mono">{{ probeResult.contentPreview }}</pre>
         </div>
-        <p class="mk-card__note">先探测验证档位，再回来保存配置——探测不发保存、也不改生效配置。</p>
+        <p class="mk-card__note">先探测验证档位，再回来保存配置——探测不会保存，也不改当前生效配置。</p>
       </div>
     </section>
 
@@ -522,7 +522,7 @@ async function saveRuntime() {
     if (fallbackTouched.value) payload.fallbackChain = fallbackChain.value
     await adminSkillsApi.updateSkillModelConfig(props.skillId, payload)
     rtErr.value = false
-    rtMsg.value = '已更新（生成参数覆盖与备用模型列表同表管理）'
+    rtMsg.value = '已更新（生成参数与备用模型一起保存）'
     fallbackTouched.value = false
     await loadRuntime()
   } catch (e) {

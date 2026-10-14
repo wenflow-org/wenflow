@@ -27,7 +27,7 @@
           <MkEmptyState
             v-if="!candidateCount"
             title="没有可回收的无响应会话"
-            description="当前没有超过回收阈值的卡死候选会话，无需清理。"
+            description="当前没有超过回收阈值的无响应候选会话，无需清理。"
             action-text="关闭"
             compact
             @action="state.open = false"

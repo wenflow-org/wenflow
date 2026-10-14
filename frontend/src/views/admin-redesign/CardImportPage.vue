@@ -37,7 +37,7 @@
         <div class="ci-opts">
           <label class="ci-check">
             <input v-model="enrich" type="checkbox" />
-            <span>导入时富化（调用 persona-designer 逐卡生成完整认知人设，较慢）</span>
+            <span>导入时 AI 补全人设（调用 persona-designer 逐卡生成完整认知人设，较慢）</span>
           </label>
           <label class="ci-check">
             <input v-model="update" type="checkbox" />
@@ -70,11 +70,11 @@
       <div class="mk-table-scroll">
         <table class="mk-table">
           <thead>
-            <tr><th>卡 Key</th><th>状态</th><th>问题</th></tr>
+            <tr><th>卡号</th><th>状态</th><th>问题</th></tr>
           </thead>
           <tbody>
             <tr v-for="(r, i) in report.reports" :key="(r.cardKey || 'row') + i">
-              <td><span class="ci-key">{{ r.cardKey || '（无 cardKey）' }}</span></td>
+              <td><span class="ci-key">{{ r.cardKey || '（无卡号）' }}</span></td>
               <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
               <td>
                 <div class="ci-issues">
@@ -103,11 +103,11 @@
       <div class="mk-table-scroll">
         <table class="mk-table">
           <thead>
-            <tr><th>卡 Key</th><th>动作</th><th>备注</th></tr>
+            <tr><th>卡号</th><th>动作</th><th>备注</th></tr>
           </thead>
           <tbody>
             <tr v-for="(r, i) in importResult.results" :key="(r.cardKey || 'row') + i">
-              <td><span class="ci-key">{{ r.cardKey || '（无 cardKey）' }}</span></td>
+              <td><span class="ci-key">{{ r.cardKey || '（无卡号）' }}</span></td>
               <td><span class="mk-badge" :class="actionBadge(r.action)">{{ actionText(r.action) }}</span></td>
               <td><span class="ci-reason" :title="r.reason || ''">{{ r.reason || '—' }}</span></td>
             </tr>

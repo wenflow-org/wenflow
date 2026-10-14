@@ -39,7 +39,7 @@ export function useCockpitAutopilot(
   })
   const autopilotStartTitle = computed(() => {
     if (!session.value) return '会话仍在加载'
-    if (isTerminal.value) return '会话已终态，无需启动全自动'
+    if (isTerminal.value) return '会话已结束，无需启动全自动'
     if (autopilotRunning.value) return '全自动正在进行中'
     return '持续跑到全部任务完成，可随时停止，进度保留'
   })

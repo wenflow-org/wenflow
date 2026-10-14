@@ -155,9 +155,9 @@ const passwordInput = ref<HTMLInputElement | null>(null)
 /* 审核 #26：侧栏改为三条可核实的真实安全机制（SPEC §9 第 5 条），
    原硬编码漏斗（末段 217 > 首段 128，自相矛盾）与「运行平稳 92」假看板整层退役 */
 const securityFacts = [
-  { text: '会话凭据走 HttpOnly Cookie', detail: '前端只记「已登录」标记，令牌不进 JS/localStorage' },
-  { text: '登录失败与 429 限流', detail: '凭证错误显示在顶部横幅。频繁尝试会提示稍后再试' },
-  { text: '登出跨标签页广播', detail: '会话失效即时清除本地标记并同步其它标签页' }
+  { text: '登录状态由 HttpOnly Cookie 保存', detail: '页面只保存登录标记，令牌不暴露给页面脚本' },
+  { text: '登录失败与频率限制', detail: '凭证错误显示在顶部横幅。频繁尝试会提示稍后再试' },
+  { text: '登出同步到所有标签页', detail: '会话失效即时清除本地标记并同步其它标签页' }
 ]
 
 function touch(key: 'name' | 'password') {

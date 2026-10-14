@@ -22,7 +22,7 @@
         <label class="mk-field">
           <span class="mk-field__label">运行模式</span>
           <select v-model="launchForm.mode" class="mk-field__select">
-            <option value="assisted">辅助模拟（链路可控）</option>
+            <option value="assisted">辅助模拟（过程可控）</option>
             <option value="blackbox">黑盒模拟（更贴近真实）</option>
           </select>
         </label>

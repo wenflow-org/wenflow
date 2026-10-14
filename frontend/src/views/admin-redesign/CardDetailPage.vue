@@ -20,7 +20,7 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">概览</h3>
-        <span class="mk-card__meta mono">{{ d.cardKey || '（无 cardKey）' }}</span>
+        <span class="mk-card__meta mono">{{ d.cardKey || '（无卡号）' }}</span>
       </div>
       <div class="cd-pad">
         <div class="mk-facts mk-facts--rows">
@@ -72,7 +72,7 @@
             </template>
           </div>
         </article>
-        <p v-if="!d.stories.length" class="mk-empty--line">无故事池（该学习者可能是运行产物，无卡式故事）。</p>
+        <p v-if="!d.stories.length" class="mk-empty--line">无故事池（该学习者可能由运行产生，无随卡故事）。</p>
       </div>
     </section>
 

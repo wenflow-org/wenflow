@@ -652,13 +652,14 @@ describe('SessionCockpit 双模式', () => {
     const wrapper = await mountCockpit('session-real', 'ts_real_1');
 
     // Path tab（stepper 步点即页签）：真实模式空态明示数据边界
+    //（用 .cp-stp__name 精确取阶段名：步点 meta 会带「学习者发言」等词，includes 会误中 Goal 步点）
     const stages = wrapper.findAll('.cp-stp');
-    await stages.find((s) => s.text().includes('Path'))!.trigger('click');
+    await stages.find((s) => s.find('.cp-stp__name').text() === '路径')!.trigger('click');
     await settle();
     expect(wrapper.text()).toContain('该真实会话尚未生成路径');
 
     // Learn tab：真实模式无教学记录空态
-    await wrapper.findAll('.cp-stp').find((s) => s.text().includes('Learn'))!.trigger('click');
+    await wrapper.findAll('.cp-stp').find((s) => s.find('.cp-stp__name').text() === '学习')!.trigger('click');
     await settle();
     expect(wrapper.text()).toContain('尚未生成课程');
 
@@ -720,13 +721,13 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.text()).not.toContain('终局评估');
     expect(wrapper.text()).not.toContain('85%');
 
-    // Trace 诊断侧栏默认折叠：展开后可见三流统一时间线 + 裁判旁路诊断
-    const traceToggle = wrapper.findAll('button').find((b) => b.text().includes('Trace 诊断'));
+    // 诊断轨迹侧栏默认折叠：展开后可见三流时间线 + 裁判诊断
+    const traceToggle = wrapper.findAll('button').find((b) => b.text().includes('诊断轨迹'));
     expect(traceToggle).toBeTruthy();
     await traceToggle!.trigger('click');
     await nextTick();
-    expect(wrapper.text()).toContain('裁判旁路诊断');
-    expect(wrapper.text()).toContain('统一时间线');
+    expect(wrapper.text()).toContain('裁判诊断');
+    expect(wrapper.text()).toContain('时间线');
     const traceText = wrapper.find('.cp-trace-panel').text();
     expect(traceText).toContain('curious');
     expect(traceText).toContain('virtual-reply');
@@ -738,7 +739,7 @@ describe('SessionCockpit 双模式', () => {
     getRealSessionConsole.mockResolvedValue(realTeachingPayload());
     const wrapper = await mountCockpit('session-real', 'ts_real_1');
     // 切到存课堂转录的 Learn 页签（默认落 wrapup）
-    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.text().includes('Learn'));
+    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习');
     await learnTab!.trigger('click');
     await nextTick();
 

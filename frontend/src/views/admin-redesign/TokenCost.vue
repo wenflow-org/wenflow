@@ -132,7 +132,7 @@
           label="失败调用"
           :value="failedCallsText"
           :tone="failedCalls > 0 ? 'bad' : ''"
-          :hint="failedCalls > 0 ? `占总调用 ${failedPct}（重试后终态失败）` : '无失败调用'"
+          :hint="failedCalls > 0 ? `占总调用 ${failedPct}（重试后仍失败）` : '无失败调用'"
           :title="failedHint"
         />
       </section>
@@ -484,8 +484,8 @@ function skillRowTitle(r: SkillCostRow): string {
   const cost = hasCost(r)
     ? `成本 ≈ $${fmtCostUsd(r.usd as number)}`
     : (r.callsMissingPricing ?? 0) > 0
-      ? `成本 单价未配置（${r.callsMissingPricing} 次调用未定价，不计入金额）`
-      : '成本 无已定价调用'
+      ? `成本：单价未配置（${r.callsMissingPricing} 次调用未计入金额）`
+      : '成本：无已定价调用'
   return `${r.display || r.key} · ${r.calls} 次调用 · Token ${fmtTokens(r.tokens)} · 均次 ${perCallTokens(r)} · ${cost}`
 }
 
@@ -507,7 +507,7 @@ const costHint = computed(() => {
   // 文案改为指向真实补价路径，点击仍去模型配置页看哪些模型待补。
   return missing.length
     ? `${window} · 暂不展示金额 · 待补单价模型 ${missing.length} 个：${missing.join('、')}`
-    : `${window} · 尚未配置权威单价，暂不展示金额`
+    : `${window} · 尚未配置单价，暂不展示金额`
 })
 
 /* KPI hint 短口径（原型 metricCard 的 hint 是一短句）：长解释走卡 title 悬停 */

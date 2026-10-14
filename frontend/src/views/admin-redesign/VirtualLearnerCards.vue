@@ -28,7 +28,7 @@
          且它的 hint 又把「预置 / 自建」两个数说了一遍（就是右边这两张卡）。按计数单源家法，
          列表长度交给列表卡头自报，KPI 只说列表说不出的构成拆分。 -->
     <section class="mk-kpi-grid" aria-label="卡库构成">
-      <MkKpi label="预置卡" :value="summary?.builtin ?? '—'" hint="仓库预置随部署同步" title="平台预置角色，随版本更新自动同步。不包含在「导出卡库」内" />
+      <MkKpi label="预置卡" :value="summary?.builtin ?? '—'" hint="平台预置，随版本自动同步" title="平台预置角色，随版本更新自动同步。不包含在「导出卡库」内" />
       <MkKpi label="自建卡" :value="summary?.custom ?? '—'" hint="导入与 AI 创建" title="卡文档导入与后台/AI 创建的卡。「导出卡库」仅导出这部分" />
     </section>
 
@@ -46,7 +46,7 @@
           </span>
         </div>
         <div class="mk-card__head-right">
-          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / Key / 目标 / 标签" />
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 卡号 / 目标 / 标签" />
         </div>
       </div>
 
@@ -62,7 +62,7 @@
       <MkEmptyState
         v-else-if="indexError"
         tone="error"
-        title="卡库索引加载失败"
+        title="卡库加载失败"
         :description="indexError"
         action-text="重试"
         :action-busy="indexLoading"
@@ -80,7 +80,7 @@
       <MkEmptyState
         v-else-if="!filtered.length"
         :class="LINE_EMPTY"
-        title="没有命中的卡：换个关键词试试（名称 / Key / 目标 / 标签 / 邮箱）。"
+        title="没有命中的卡：换个关键词试试（名称 / 卡号 / 目标 / 标签 / 邮箱）。"
       />
       <div v-else class="vlc-wall">
         <article
@@ -212,7 +212,7 @@ async function loadIndex() {
     cards.value = d?.cards ?? []
     summary.value = d?.summary ?? null
   } catch (e) {
-    const msg = errMsg(e) || '卡库索引加载失败'
+    const msg = errMsg(e) || '卡库加载失败'
     indexError.value = msg
     toast.error(msg)
   } finally {

@@ -279,7 +279,7 @@
             class="sdp-pw__gate"
             :class="coreGateCls(coreGates.inputHandoff.length === 0)"
           >
-            输入一致性核查 {{ coreGates.inputHandoff.length === 0 ? '✓' : `⚠ ${coreGates.inputHandoff.length} 条 advisory` }}
+            输入一致性核查 {{ coreGates.inputHandoff.length === 0 ? '✓' : `⚠ ${coreGates.inputHandoff.length} 条提醒` }}
           </div>
           <div v-for="(issue, i) in coreGates.inputHandoff || []" :key="`ih-${i}`" class="sdp-pw__gate-issue">
             [{{ issue.code }}] {{ issue.message }}

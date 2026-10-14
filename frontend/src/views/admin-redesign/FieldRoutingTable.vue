@@ -4,7 +4,7 @@
     <div class="frt__stickybar">
       <div class="frt__toolbar">
         <button type="button" class="mk-btn" :disabled="!stage" @click="openOrchestration">编排文件</button>
-        <span class="frt__toolbar-hint">编辑 prompts/orchestration/{{ stage }}.yaml（字段路由唯一声明源）</span>
+        <span class="frt__toolbar-hint">编辑 prompts/orchestration/{{ stage }}.yaml（字段路由以这份文件为准）</span>
       </div>
     </div>
     <!-- 原型 .note--info：入口说明（不再自搓虚线蓝框）。审核 #111：按钮实为工具条最左侧（非右上角），
@@ -30,7 +30,7 @@
           <span v-if="s.sync.missing.length" class="frt-syncbar__count">{{ TERMS.statusMissing }} {{ s.sync.missing.length }}</span>
           <span v-else-if="s.sync.state === 'ok'">{{ TERMS.fieldsSynced }}</span>
           <span v-else-if="s.sync.state === 'no-core'">core 缺失</span>
-          <span v-else-if="s.sync.state === 'no-routings'">无产出行</span>
+          <span v-else-if="s.sync.state === 'no-routings'">未声明产出</span>
           <span v-else>已声明</span>
           <span v-if="s.sync.orphan.length" class="frt-syncbar__count">{{ TERMS.statusOrphan }} {{ s.sync.orphan.length }}</span>
           <span v-if="s.sync.typeMismatch.length" class="frt-syncbar__count">类型不一致 {{ s.sync.typeMismatch.length }}</span>
@@ -96,7 +96,7 @@
           <ul class="frt__legend-list">
             <li class="frt__legend-item">
               <span class="mk-badge mk-badge--lock-system">平台锁定</span>
-              <span class="frt__legend-hint">平台自动生成，admin 不可直接改（需改编排文件）</span>
+              <span class="frt__legend-hint">平台自动生成，管理员不可直接改（需改编排文件）</span>
             </li>
             <li class="frt__legend-item">
               <span class="mk-badge mk-badge--lock-structure">平台锁定</span>
@@ -242,8 +242,8 @@
           <MkEmptyState
             v-else
             compact
-            :title="filterActive ? '无匹配行' : '该 Agent 无字段路由行'"
-            :description="filterActive ? '试试调整搜索关键词或角色过滤。' : '本阶段该 Agent 暂无产出行声明。'"
+            :title="filterActive ? '无匹配行' : '该 Agent 没有字段的路由记录'"
+            :description="filterActive ? '试试调整搜索关键词或角色过滤。' : '本阶段该 Agent 暂无产出字段的声明。'"
             :action-text="filterActive ? '清除筛选' : ''"
             @action="clearFilter"
           />
@@ -528,7 +528,7 @@ function lockLabel(level?: string) {
   return '可编辑';
 }
 function lockHint(level?: string) {
-  if (level === 'system-locked') return '平台锁定：平台自动生成，admin 不可直接改（需改编排文件）';
+  if (level === 'system-locked') return '平台锁定：平台自动生成，管理员不可直接改（需改编排文件）';
   if (level === 'structure-locked') return '平台锁定：结构约束锁定，修改需谨慎';
   return '可编辑：可自由调整（仍走编排文件入口）';
 }
@@ -609,7 +609,7 @@ async function loadSkillSyncs() {
               : 'ok';
         const title = [
           sync?.state === 'no-core' ? 'core 文件缺失（协议 tab 未建核心声明）' : '',
-          sync ? `${TERMS.statusMissing} ${sync.missing.length} · ${TERMS.statusOrphan} ${sync.orphan.length} · 类型不一致 ${sync.typeMismatch.length}` : 'core 投影不可用'
+          sync ? `${TERMS.statusMissing} ${sync.missing.length} · ${TERMS.statusOrphan} ${sync.orphan.length} · 类型不一致 ${sync.typeMismatch.length}` : 'core 状态不可用'
         ].filter(Boolean).join('\n');
         return { skillId: s.skillId, sync, tone, title };
       });

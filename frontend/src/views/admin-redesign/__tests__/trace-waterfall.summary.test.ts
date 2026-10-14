@@ -96,7 +96,7 @@ describe('Trace 链路概要卡（读数带）', () => {
     expect(strip.find('.wf-summary__note').text()).toBe('无 LLM 调用');
     // 真实存在的量照旧
     expect(text).toContain('总耗时');
-    expect(text).toContain('延迟分位');
+    expect(text).toContain('耗时分位');
     w.unmount();
   });
 

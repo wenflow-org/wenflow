@@ -71,7 +71,7 @@
       </div>
 
       <div v-if="evaluation" id="sec-longterm" class="completion-section">
-        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><TrendCharts /></span>长期状态四维</h4>
+        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><TrendCharts /></span>长期学习状态</h4>
         <p class="section-hint">{{ longTermInterpretation }}</p>
         <div class="metrics-grid">
           <div v-for="item in longTermMetricCards" :key="item.key" class="metric-card" :class="`metric-card--${item.tone}`">

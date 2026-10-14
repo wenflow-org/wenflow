@@ -360,9 +360,9 @@ const reconCardTitle = computed(() => {
   // 各自的可定位项住在健康检查页签的对应行，不并入本卡以免「KPI 亮 N 而筛选 0 行」
   const excluded: string[] = []
   if (r.zombieActive > 0) excluded.push(`失效生效版本 ${r.zombieActive}（该技能已不在平台注册档案中，不计入完成度统计）`)
-  if (r.unwired > 0) excluded.push(`接线不一致 ${r.unwired}（见健康检查「接线一致性核查（W3）」行）`)
+  if (r.unwired > 0) excluded.push(`接线不一致 ${r.unwired}（见健康检查「接线一致性核查 W3」一行）`)
   const exclNote = excluded.length ? `。另有未计入本卡：${excluded.join('、')}` : ''
-  const note = r.zombieSkillActive > 0 ? `（另有 ${r.zombieSkillActive} 条失效生效版本与健康检查「生效版本检查」同源，不重复计数）` : ''
+  const note = r.zombieSkillActive > 0 ? `（另有 ${r.zombieSkillActive} 条失效生效版本，与健康检查「生效版本检查」是同一批数据，不重复计数）` : ''
   const scope = extraCapabilityCount > 0 ? `（登记总数含 ${extraCapabilityCount} 个外挂能力，Skill 运行页不含）` : ''
   return parts.join(' · ') + exclNote + note + scope
 })
@@ -479,7 +479,7 @@ const distribution = computed(() => displayReport.value?.completion.distribution
 const healthAbnormal = computed(() => displayReport.value?.health.abnormal ?? 0)
 /** 检查异常卡悬停：只给增量口径（值/总数已在 value/hint 可见，title 不再复读——CP2/CP9） */
 const healthAbnormalTitle = computed(
-  () => '异常为 error / warn 检查项，info 仅供参考，不计入异常'
+  () => '统计「异常」与「需关注」两档检查项，「观测」项仅供参考，不计入异常'
 )
 
 const completionTiers = COMPLETION_META

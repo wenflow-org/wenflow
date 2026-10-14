@@ -83,15 +83,15 @@ export function loadCaliber(kind: LoadCaliber, at?: string | null): LoadCaliberN
     return {
       label: hasStamp ? `学习者级聚合 · 快照 ${stamp}` : '学习者级聚合',
       title:
-        `LSS/KTL/LF/LSB 取自**学习者级聚合快照**（平台按路径保守聚合 + 当日课量疲劳加成），` +
-        `不是某一次会话的读数。${stampLine}\n同一学习者在「虚拟学习者档案」页看到的同名读数取自单次会话的运行时快照，数值天然不同——那是两套来源，不是其中一处算错。`,
+        `LSS/KTL/LF/LSB 取自学习者级聚合快照（按学习者的各条路径汇总，并计入当日课量带来的疲劳），` +
+        `不是某一次会话的读数。${stampLine}\n同一学习者在「虚拟学习者档案」页看到的同名读数取自单次会话当场留下的读数，数值天然不同——那是两套来源，不是其中一处算错。`,
     }
   }
   return {
     label: hasStamp ? `单次会话快照 · ${stamp}` : '单次会话快照',
-    title:
-      `LSS/KTL/LF/LSB 取自**最近一次带读数的教学会话**的运行时快照（该会话 teachingState 的 currentState），` +
-      `不是学习者级聚合。${stampLine}\n同一学习者在「学习者详情」页看到的同名读数是学习者级聚合态，数值天然不同——那是两套来源，不是其中一处算错。`,
+      title:
+        `LSS/KTL/LF/LSB 取自最近一次带读数的教学会话当场留下的读数（该会话当时记录的状态），` +
+        `不是学习者级聚合。${stampLine}\n同一学习者在「学习者详情」页看到的同名读数是学习者级聚合值，数值天然不同——那是两套来源，不是其中一处算错。`,
   }
 }
 
@@ -117,7 +117,7 @@ export interface PanelScopeNote {
 }
 
 /** 路径口径长释的公共尾段：「当前路径 / 所选路径」两种 scope 的取数说明一致，共用一份（R6 复读单源化） */
-const SCOPE_EVIDENCE_TAIL = '的会话与学习证据，并并入该学习者的全部记忆痕迹。其它路径不在这里。'
+const SCOPE_EVIDENCE_TAIL = '的会话与学习证据，同时涵盖该学习者的全部记忆痕迹。其它路径不在这里。'
 
 export function panelScopeNote(scope: PanelScope, opts: { pathTitle?: string | null } = {}): PanelScopeNote {
   const named = (opts.pathTitle || '').trim()
@@ -125,28 +125,28 @@ export function panelScopeNote(scope: PanelScope, opts: { pathTitle?: string | n
     return {
       label: '当前路径',
       title:
-        `本块取自**当前路径**${named ? `（${named}）` : ''}${SCOPE_EVIDENCE_TAIL}` +
-        `\n当前路径 = 该学习者 status=active 且 updatedAt 最新的一条（快照 currentPath 口径）；已归档/失败的路径不参与。`,
+        `本块取自当前路径${named ? `（${named}）` : ''}${SCOPE_EVIDENCE_TAIL}` +
+        `\n当前路径 = 该学习者正在进行、且最近有更新的一条路径。已归档或生成失败的路径不计入。`,
     }
   }
   if (scope === 'path') {
     return {
       label: `路径 ${named.length > 12 ? `${named.slice(0, 12)}…` : named || '—'}`,
       title:
-        `本块取自**所选路径**${named ? `（${named}）` : ''}${SCOPE_EVIDENCE_TAIL}` +
-        `\n这不是该学习者的「当前路径」——当前路径由 status=active 且 updatedAt 最新的一条定义，与这里的筛选无关。`,
+        `本块取自所选路径${named ? `（${named}）` : ''}${SCOPE_EVIDENCE_TAIL}` +
+        `\n这不是该学习者的「当前路径」——当前路径指正在进行、且最近有更新的一条，与这里的筛选无关。`,
     }
   }
   if (scope === 'all-paths') {
     return {
       label: '跨全部路径',
-      title: '本块按学习者聚合，统计其名下**全部**路径的数据（含已归档 / 失败的路径），不按当前路径收窄。',
+      title: '本块按学习者汇总，统计其名下全部路径的数据（含已归档或生成失败的路径），不限于当前路径。',
     }
   }
   if (scope === 'all-stories') {
     return {
       label: '跨全部故事',
-      title: '本块按该虚拟学习者聚合，统计其名下**全部故事**（story，即这个角色的多条独立学习线）的数据，不按单条故事收窄。',
+      title: '本块按该虚拟学习者汇总，统计其名下全部故事（同一个角色的多条独立学习线）的数据，不限于单条故事。',
     }
   }
   return {

@@ -70,7 +70,7 @@ export interface TimelineEntry {
 export function timelineKindLabel(kind: string): string {
   const map: Record<string, string> = {
     referee: '裁判',
-    private: '私有状态',
+    private: '角色内部状态',
     log: '日志',
     goal: '目标对话',
     path: '路径',

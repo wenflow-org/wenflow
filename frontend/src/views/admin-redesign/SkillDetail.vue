@@ -437,7 +437,7 @@
                   <div><span>归属 Agent</span><strong>{{ view.agentName || view.agentId || '—' }}</strong></div>
                   <div><span>类别</span><strong :title="`类别枚举：${view.category}（来源：${view.categorySource}）`">{{ categoryText(view.category) }}</strong></div>
                   <div v-if="coreFilePath"><span>核心文件</span><strong class="mono" :title="coreFilePath">{{ coreFilePath }}</strong></div>
-                  <div><span>统计口径</span><strong>{{ statsNote || '—' }}</strong></div>
+                  <div><span>统计来源</span><strong>{{ statsNote || '—' }}</strong></div>
                 </div>
               </div>
             </section>

@@ -211,10 +211,10 @@
 
           <!-- 预算（多目标调度台账） -->
           <div v-if="sourceFailed.budget" class="agenda__fail">
-            预算数据加载失败。<button type="button" class="agenda__retry" @click="loadAll">重试</button>
+            今日计划加载失败。<button type="button" class="agenda__retry" @click="loadAll">重试</button>
           </div>
           <template v-else-if="todaySchedule?.activeGoals?.length">
-            <div class="agenda__group">今日预算 · {{ todaySchedule.activeGoals.length }} 个目标</div>
+            <div class="agenda__group">今日计划 · {{ todaySchedule.activeGoals.length }} 个目标</div>
             <!-- 原型 wf-budget：第一行 名称/认知度/数字，第二行独立进度条（原一行内嵌条已拆开） -->
             <ul class="budget__list">
               <li v-for="g in todaySchedule.activeGoals" :key="g.goalId" class="budget__item">
@@ -917,9 +917,9 @@ const todayStr = localDateKey(new Date());
 /** 认知带宽枚举 → 中文（light/medium/heavy 等）；stress_test 是埋造数据，对外统一显示「—」 */
 function bandwidthLabel(v: string): string {
   const map: Record<string, string> = {
-    light: '轻度',
-    medium: '中度',
-    heavy: '重度',
+    light: '负担轻',
+    medium: '负担中',
+    heavy: '负担重',
     stress_test: '—'
   };
   return map[v] ?? v;
@@ -937,7 +937,7 @@ const agendaVisible = computed(
 const reviewBlockVisible = computed(() => Boolean(sourceFailed.value.review) || reviewDue.value.length > 0);
 const agendaMeta = computed(() => {
   const parts: string[] = [];
-  if (todaySchedule.value?.activeGoals?.length) parts.push(`预算 ${todaySchedule.value.totalPlanned} 分钟`);
+  if (todaySchedule.value?.activeGoals?.length) parts.push(`计划 ${todaySchedule.value.totalPlanned} 分钟`);
   if (reviewDue.value.length) {
     // 「课上带 N」（预算裁剪后的计划数）由下方复习主句独占，卡头只报到期总数：
     // 同卡同屏双报同一 reviewPlan.items.length 属复读（2026-10-05 去重；拍板豁免的是异屏，不含同卡）。
@@ -1196,8 +1196,8 @@ const daySheet = computed(() => {
     headline: !daySessions.length
       ? '这一天没有学习记录'
       : daySessions.length === 1
-        ? '这一天完成了 1 次学习会话'
-        : `这一天完成了 ${daySessions.length} 次学习会话`,
+        ? '这一天完成了 1 次学习'
+        : `这一天完成了 ${daySessions.length} 次学习`,
     count: daySessions.length,
     minutes,
     primaryTask,

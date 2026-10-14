@@ -28,7 +28,7 @@
       <span class="vl-running__dot" aria-hidden="true"></span>
       {{ s.name }} · 已暂停{{ s.pausedCount > 1 ? ` ${s.pausedCount}` : '' }}
     </button>
-    <span v-if="pausedSamples.length > PAUSED_CHIPS_LIMIT" class="vl-running__overflow" title="更多已暂停学习者请用列表卡头「已暂停」筛选查看">+{{ pausedSamples.length - PAUSED_CHIPS_LIMIT }} 已暂停</span>
+    <span v-if="pausedSamples.length > PAUSED_CHIPS_LIMIT" class="vl-running__overflow" title="更多已暂停学习者请用列表中的「已暂停」筛选查看">+{{ pausedSamples.length - PAUSED_CHIPS_LIMIT }} 已暂停</span>
     <!-- 实例 chip：少量实例全量平铺；聚合模式展示选中阶段的实例（点击跳会话座舱） -->
     <div v-if="activeChips.length" class="vl-running__chips">
       <button v-for="s in activeChips" :key="s.id" type="button" class="vl-running__chip" :title="chipTitle(s)" @click="openRunningSession(s)">
@@ -100,8 +100,8 @@ const STAGE_TONES: Record<string, string> = {
   Wrapup: 'var(--mk-amber)',
   Other: 'var(--mk-faint)',
 }
-/** 后端 currentStage 原文（goal/path/teaching/learn/wrapup 等）→ 中文阶段名 */
-function stageLabel(stage: string | null | undefined): string {
+/** 后端 currentStage 原文（goal/path/teaching/learn/wrapup 等）→ 阶段键（内部键，供分桶/色板） */
+function stageKey(stage: string | null | undefined): string {
   const s = String(stage || '').toLowerCase()
   if (s.includes('goal')) return 'Goal'
   if (s.includes('path')) return 'Path'
@@ -109,9 +109,15 @@ function stageLabel(stage: string | null | undefined): string {
   if (s.includes('wrap')) return 'Wrapup'
   return s || '—'
 }
+/* 显示名与座舱 stageLabel 同词表（2026-10-14 统一：同一条流水线不两套名字） */
+const STAGE_DISPLAY: Record<string, string> = { Goal: '目标', Path: '路径', Learn: '学习', Wrapup: '总结' }
+function stageLabel(stage: string | null | undefined): string {
+  const key = stageKey(stage)
+  return STAGE_DISPLAY[key] || key
+}
 function stageKeyOf(s: Sample): string {
-  const label = stageLabel(s.currentStage)
-  return (STAGE_ORDER as readonly string[]).includes(label) ? label : 'Other'
+  const key = stageKey(s.currentStage)
+  return (STAGE_ORDER as readonly string[]).includes(key) ? key : 'Other'
 }
 const fewMode = computed(() => props.runningSamples.length + props.pausedSamples.length <= FEW_LIMIT)
 const stageBins = computed(() => {
@@ -120,10 +126,10 @@ const stageBins = computed(() => {
   return [...STAGE_ORDER, 'Other' as const]
     .map((key) => ({
       key,
-      label: key === 'Other' ? '其它' : key,
+      label: key === 'Other' ? '其它' : STAGE_DISPLAY[key] || key,
       n: counts.get(key) || 0,
       tone: STAGE_TONES[key],
-      hint: key === 'Other' ? '阶段字段缺失或无法识别的会话' : '',
+      hint: key === 'Other' ? '阶段信息缺失或无法识别的会话' : '',
     }))
     .filter((b) => b.n > 0)
 })

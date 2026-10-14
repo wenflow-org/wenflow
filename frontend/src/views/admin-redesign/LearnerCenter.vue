@@ -145,7 +145,7 @@
               v-if="!lcHiddenCols.has('conf')"
               scope="col"
               class="mk-th--sortable"
-              title="当前读数置信度（<50% 为低置信）"
+              title="当前读数的置信度，低于 50% 记为低置信"
               :aria-sort="lcSortState('conf')"
               @click="toggleLcSort('conf')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('conf')">置信<span class="mk-th__caret" aria-hidden="true"></span></button></th>

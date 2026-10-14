@@ -107,7 +107,7 @@
               </label>
               <label class="mk-adv__field">
                 <span class="mk-cell-sub">节点（Skill）</span>
-                <select v-model="agentFilter" class="mk-filter__select mono" aria-label="按节点（Skill）筛选" title="按 Skill 精确筛选（全集来自注册表 + 当前页 + 保存视图）">
+                <select v-model="agentFilter" class="mk-filter__select mono" aria-label="按节点（Skill）筛选" title="按 Skill 名称精确筛选（列出全部已注册的 Skill）">
                   <option value="">全部节点</option>
                   <option v-for="a in agentOptions" :key="a" :value="a">{{ a }}</option>
                 </select>
@@ -117,8 +117,8 @@
                 <input v-model="traceId" class="mk-filter__input" placeholder="调用链路 ID（精确匹配）" :aria-label="TRACE_FIELD_LABEL" title="按调用链路 ID 精确查询：一次请求从进入到出结果的完整链路标识" @keydown.enter="applyServerQuery()" />
               </label>
               <label class="mk-adv__field">
-                <span class="mk-cell-sub">会话 sessionId</span>
-                <input v-model="sessionId" class="mk-filter__input" placeholder="sessionId" aria-label="按会话 sessionId 筛选" @keydown.enter="applyServerQuery()" />
+                <span class="mk-cell-sub">会话 ID</span>
+                <input v-model="sessionId" class="mk-filter__input" placeholder="会话 ID（精确匹配）" aria-label="按会话 ID 筛选" @keydown.enter="applyServerQuery()" />
               </label>
             </div>
           </div>
@@ -184,7 +184,7 @@
                 <td v-if="!hiddenCols.has('kind')">
                   <span class="exec-kind-group">
                     <span class="mk-badge" :class="`mk-badge--${kindTone(log)}`">{{ kindText(log) }}</span>
-                    <span v-if="isTestLog(log)" class="exec-test-tag" title="模型接入页的连通性/探活测试调用（system-canary）">测试</span>
+                    <span v-if="isTestLog(log)" class="exec-test-tag" title="模型接入页检查连通性时发出的测试调用">测试</span>
                   </span>
                 </td>
                 <!-- Skill 格显完整名（原型 Skill 列=真实名；此前只给短标签、全名藏在 title 提示里） -->
@@ -263,7 +263,7 @@
                           <div class="tline-attempts">
                             <div v-for="(a, i) in detailCache[log.id].attempts" :key="i" class="tline-attempt" :class="{ 'tline-attempt--fail': !a.success, 'tline-attempt--retry': a.willRetry }">
                               <div class="tline-attempt__head">
-                                <span class="tline-attempt__no">P#{{ a.promptAttemptNo }} · N#{{ a.transportAttemptNo }}</span>
+                                <span class="tline-attempt__no">第 {{ a.promptAttemptNo }} 次调用 · 第 {{ a.transportAttemptNo }} 次发送</span>
                                 <span class="mk-badge" :class="a.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ a.success ? '成功' : '失败' }}</span>
                                 <span v-if="a.willRetry" class="tline-attempt__retry">将在 {{ a.backoffMs ?? '—' }}ms 后自动重试</span>
                                 <span class="tline-attempt__dur mono">{{ fmtMs(a.durationMs) }}</span>
@@ -315,7 +315,7 @@
                         </div>
                         <!-- 未命中契约时的覆盖范围说明：契约索引只拉最近 200 次调用（live.ts loadPromptIndex limit:200），
                              周均 15k+ 调用量下绝大多数历史行不在索引内——显式说明而非静默空白，避免误读为「该调用无契约记录」 -->
-                        <p v-else class="tline__none">契约索引仅保留最近 200 次调用，本条未收录</p>
+                        <p v-else class="tline__none">Prompt 契约记录仅保留最近 200 次调用，本条不在其中</p>
                         <p v-if="detailFailed[log.id]" class="tline__none tline__none--err">详情拉取失败，请稍后重试</p>
                         <p v-else-if="!detailCache[log.id].attempts.length && !detailCache[log.id].error && !detailCache[log.id].input && !detailCache[log.id].output" class="tline__none">无请求内容记录</p>
                       </template>
@@ -511,10 +511,10 @@ async function copyTrace(traceId: string) {
 const COLS_KEY = 'wf_exec_hidden_cols_v2'
 const colDefs = [
   { key: 'time', label: '时间', title: '记录时间（MM-DD HH:mm:ss）' },
-  { key: 'status', label: '级别', title: '执行级别（成功/失败/超时）——原型第二列' },
-  { key: 'kind', label: '类型', title: '日志来源层（流程 / Skill / 网关 / 调用），由 executionLayer 判定' },
+  { key: 'status', label: '级别', title: '执行级别（成功 / 失败 / 超时）' },
+  { key: 'kind', label: '类型', title: '日志来源（流程 / Skill / 网关 / 调用）' },
   { key: 'agent', label: 'Skill', title: 'Skill 完整名' },
-  { key: 'trace', label: 'Trace', title: '调用链路 ID：点击看完整链路，按钮复制' },
+  { key: 'trace', label: 'Trace', title: '调用链路 ID' },
   { key: 'msg', label: '消息', title: '调用消息（输出摘要 / 错误信息）' },
   { key: 'model', label: '模型', title: '使用的 LLM 模型' },
   { key: 'tokens', label: '输入 / 输出', title: 'Token 用量（输入 / 输出）' },
@@ -585,10 +585,10 @@ function tokensSplitText(log: TokenRow): string {
 }
 function tokensTitle(log: TokenRow): string {
   if (log.promptTokens != null || log.completionTokens != null) {
-    return `输入 ${log.promptTokens ?? 0} / 输出 ${log.completionTokens ?? 0} token（传输层统计）`
+    return `输入 ${log.promptTokens ?? 0} / 输出 ${log.completionTokens ?? 0} token（网关记录）`
   }
   const p = promptOf(log)
-  if (p?.tokens) return `${p.tokens}（调用内容统计）`
+  if (p?.tokens) return `${p.tokens}（调用记录）`
   return '该日志未记录 token 用量'
 }
 
@@ -966,7 +966,7 @@ const emptyTitle = computed(() =>
 )
 const emptyDesc = computed(() =>
   traceMiss.value
-    ? `完整标识 ${traceMiss.value}：可能超出日志保留期，或 ID 不完整（traceId/sessionId 均支持精确直达）。`
+    ? `完整值为 ${traceMiss.value}：可能已超出日志保留期，或复制的 ID 不完整。`
     : isFiltered.value
       ? '当前筛选组合下没有命中的日志。清除筛选并放宽时间范围（全部）通常就能看到数据。'
       : '有真实调用发生后，这里按时间倒序展示每条执行 / 网关日志。'

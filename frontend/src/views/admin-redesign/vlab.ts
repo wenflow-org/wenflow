@@ -10,10 +10,10 @@ export const VLAB_STAGES = ['goal', 'path', 'learn', 'wrapup'] as const
 export type VlabStage = (typeof VLAB_STAGES)[number]
 
 export const VLAB_STAGE_LABELS: Record<VlabStage, string> = {
-  goal: 'Goal',
-  path: 'Path',
-  learn: 'Learn',
-  wrapup: 'Wrapup'
+  goal: '目标',
+  path: '路径',
+  learn: '学习',
+  wrapup: '总结'
 }
 
 /**

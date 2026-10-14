@@ -48,9 +48,9 @@ export function formatTime(value?: string | null) {
 
 export function stageLabel(st: string) {
   return {
-    goal: 'Goal',
-    path: 'Path',
-    learning: 'Learn',
+    goal: '目标',
+    path: '路径',
+    learning: '学习',
     wrapup: '总结'
   }[st] || st
 }

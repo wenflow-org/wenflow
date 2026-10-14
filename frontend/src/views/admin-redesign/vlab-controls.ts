@@ -56,10 +56,10 @@ export interface VsControlDef {
 
 /** 状态呈现元数据（唯一来源） */
 export const VS_STATE_META: Record<VsLifecycleState, VsStateMeta> = {
-  idle:      { label: '无活动会话', hint: '尚无会话或全部会话已终态。可用「运行」启动新会话', tone: 'muted' },
+  idle:      { label: '无活动会话', hint: '尚无会话或全部会话已结束。可用「运行」启动新会话', tone: 'muted' },
   created:   { label: '创建中', hint: '会话已创建，尚未开始推进（目标阶段起点）', tone: 'warn' },
   running:   { label: '进行中', hint: '学习推进中（目标 / 路径 / 教学）。可暂停或进入座舱', tone: 'ok' },
-  paused:    { label: '已暂停', hint: '管理员冻结：自动推进已停止，暂停期间无写入属预期，可继续或终止', tone: 'warn' },
+  paused:    { label: '已暂停', hint: '管理员冻结：自动推进已停止，暂停期间没有新记录属正常，可继续或终止', tone: 'warn' },
   failed:    { label: '已失败', hint: '可重试：从第一个未完成课程续传，已完成进度保留', tone: 'bad' },
   abandoned: { label: '已终止', hint: '已被终止或回收。可重试续传或删除', tone: 'bad' },
   completed: { label: '已完成', hint: '学习路径全部完成。可进入座舱查看', tone: 'ok' }
@@ -92,13 +92,13 @@ export const VS_CONTROL_DEFS: Record<VsControlKey, VsControlDef> = {
   auto: {
     key: 'auto',
     label: '自动',
-    hint: '自动推进当前会话（阶段/全程档请到会话座舱选择）',
+    hint: '自动推进当前会话（推进一个阶段还是推进到底，请到会话座舱选择）',
     tone: 'primary'
   },
   stop: {
     key: 'stop',
     label: '终止',
-    hint: '终止当前学习（不可恢复，数据保留）。与「停止自动驾驶」不同——那只停后台循环',
+    hint: '终止当前学习（不可恢复，数据保留）。与「停止自动驾驶」不同，那只停止自动推进，会话本身还在',
     tone: 'danger',
     confirm: {
       title: '终止学习',
@@ -120,11 +120,11 @@ export const VS_CONTROL_DEFS: Record<VsControlKey, VsControlDef> = {
   delete: {
     key: 'delete',
     label: '删除',
-    hint: '级联删除该会话全部数据（仅终态，不可恢复）',
+    hint: '删除该会话的全部数据（仅限已结束的会话，不可恢复）',
     tone: 'danger',
     confirm: {
       title: '删除会话',
-      message: '将级联删除该会话及相关数据，不可恢复。确认？',
+      message: '将一并删除该会话及相关数据，不可恢复。确认？',
       confirmText: '删除'
     }
   },

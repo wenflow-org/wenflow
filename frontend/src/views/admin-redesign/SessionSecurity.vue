@@ -607,7 +607,7 @@ async function revoke(s: AdminSessionRow) {
 async function revokeAll(g: SessionGroup) {
   const confirmed = await askConfirm({
     title: '下线该管理员全部会话',
-    message: `将强制下线「${g.adminName}」的全部未吊销会话（后端按管理员全量作用域，含未在列表中显示的会话，共 ${revokeCount(g)} 个，当前登录标签页除外），确定吗？`,
+    message: `将强制下线「${g.adminName}」的全部未撤销会话（含未在列表中显示的会话，共 ${revokeCount(g)} 个，当前登录标签页除外），确定吗？`,
     confirmText: '全部下线',
     busy: true,
   })

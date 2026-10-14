@@ -28,12 +28,12 @@
           <strong>虚拟学习者账号</strong>
         </div>
         <div class="ql-account-brief__item">
-          <span>链路</span>
-          <strong>真实 Teaching Session</strong>
+          <span>会话形态</span>
+          <strong>真实教学会话</strong>
         </div>
         <div class="ql-account-brief__item">
-          <span>验收</span>
-          <strong>前台投影视角</strong>
+          <span>验收方式</span>
+          <strong>真实前台页面</strong>
         </div>
       </div>
 
@@ -92,7 +92,7 @@
             {{ starting ? '开始中…' : '让账号开始学习' }}
           </button>
         </div>
-        <p class="ql-section__hint">故事可选：选中后单课会带有故事情境（非空时学习者有背景）。摩擦控制本课行为弧线（none 纯合作，normal 真实人物常态）。</p>
+        <p class="ql-section__hint">故事可选：选中后本课会带有故事情境。摩擦控制课堂里的对抗强度：选「无」时全程配合，选「正常」时接近真实人物的反应。</p>
 
         <details class="ql-fixture">
           <summary class="mk-section__summary">没有可学任务？把已有路径复制到该虚拟账号</summary>
@@ -141,7 +141,7 @@
               <MkLoading inline text="" />
               <div>
                 <div class="ql-status__title">虚拟账号正在上这节课</div>
-                <div class="ql-status__desc">真实 Teaching Session 正在生成课堂记录。完成后直接进入前台视角验收。</div>
+                <div class="ql-status__desc">真实课堂记录正在生成，完成后可直接打开前台页面验收。</div>
               </div>
             </div>
             <button type="button" class="mk-btn mk-btn--danger-ghost mk-btn--sm" @click="abortRun">中止</button>
@@ -156,7 +156,7 @@
                 <div class="ql-status__desc">{{ resultDesc }}</div>
                 <div v-if="currentRun.error" class="ql-status__error">{{ currentRun.error }}</div>
                 <div class="ql-status__tech">
-                  <span :class="techClass(lifecycle?.sessionClosed)">课堂闭合</span>
+                  <span :class="techClass(lifecycle?.sessionClosed)">课堂已结束</span>
                   <span :class="techClass(lifecycle?.wrapupGenerated)">评价已留存</span>
                   <span :class="techClass(lifecycle?.taskCompleted)">任务完成</span>
                   <span :class="techClass(lifecycle?.outboxConsumerDone)">学习者数据已处理</span>
@@ -209,7 +209,7 @@
           </div>
 
           <details v-if="report" class="ql-tech-detail">
-            <summary class="mk-section__summary">传播报告（开发者）</summary>
+            <summary class="mk-section__summary">数据变化明细（开发者）</summary>
             <div class="ql-delta__row">
               <span class="ql-label">指标变化</span>
               <span v-if="report.learnerDelta.metrics.changed.length === 0">无变化</span>
@@ -398,7 +398,7 @@ const resultTitle = computed(() => {
   if (!currentRun.value) return ''
   if (currentRun.value.status === 'completed') return '这节课已写入该账号'
   if (currentRun.value.status === 'aborted') return '本次运行已中止'
-  return '本次运行未达成完成条件'
+  return '本次运行未正常完成'
 })
 
 const resultDesc = computed(() => {
@@ -556,7 +556,7 @@ async function cloneFixture() {
     fixtureSourcePathId.value = ''
     await loadTasks()
   } catch (error: unknown) {
-    toast.error(apiErrorMessage(error, '克隆路径失败'))
+    toast.error(apiErrorMessage(error, '复制路径失败'))
   } finally {
     cloning.value = false
   }
@@ -572,7 +572,7 @@ async function startRun() {
       frictionBudget: frictionBudget.value || 'none',
     })
     const runId = String(data.data?.runId || '')
-    if (!runId) throw new Error('自动学习 runId 缺失')
+    if (!runId) throw new Error('启动失败：未获取到本次运行的记录')
     await loadRun(runId)
     startPollingForRun(runId)
   } catch (error: unknown) {
@@ -614,7 +614,7 @@ async function loadRun(runId: string) {
     if (status != null && status >= 400 && status !== 408 && status !== 429) {
       stopPolling()
       pollingRunId.value = null
-      toast.error(apiErrorMessage(error, '获取运行状态失败，已停止轮询'))
+      toast.error(apiErrorMessage(error, '获取运行状态失败，已停止自动刷新'))
     }
   }
 }

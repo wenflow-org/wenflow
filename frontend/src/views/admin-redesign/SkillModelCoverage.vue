@@ -55,9 +55,9 @@
                   {{ s.source === 'platform-default' ? '平台默认(未配置)' : s.source === 'skill-channel' ? '独立通道' : '仅技能模型' }}
                 </span>
               </td>
-              <td class="mono">{{ s.model || '继承' }}</td>
+              <td class="mono">{{ s.model || '未配置' }}</td>
               <td class="mono skc__wrap" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ s.paramOverrides ? JSON.stringify(s.paramOverrides) : '—' }}</td>
-              <td class="mono skc__wrap" :title="s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined">{{ s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : '注册表默认' }}</td>
+              <td class="mono skc__wrap" :title="s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined">{{ s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : '平台默认' }}</td>
             </tr>
           </tbody>
         </table>
@@ -159,7 +159,7 @@ async function applyBulk() {
   const apiKey = bulk.value.apiKey.trim()
   if (!endpoint || !apiKey) {
     bulkErr.value = true
-    bulkMsg.value = `请先填写 ${!endpoint ? 'endpoint' : ''}${!endpoint && !apiKey ? ' 与 ' : ''}${!apiKey ? 'apiKey' : ''}：留空提交会把所选技能的通道/密钥覆写成空值。`
+    bulkMsg.value = `请先填写 ${!endpoint ? 'endpoint' : ''}${!endpoint && !apiKey ? ' 与 ' : ''}${!apiKey ? 'apiKey' : ''}：留空提交会把所选技能的通道/密钥清空。`
     return
   }
   const ok = await askConfirm({

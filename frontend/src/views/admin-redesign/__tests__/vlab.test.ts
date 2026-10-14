@@ -33,8 +33,8 @@ describe('vlab.sessionStageIndex（V2 阶段映射：Goal→Path→Learn→Wrapu
 
   it('VLAB_STAGES 与标签一一对应', () => {
     expect(VLAB_STAGES).toEqual(['goal', 'path', 'learn', 'wrapup']);
-    expect(VLAB_STAGE_LABELS.goal).toBe('Goal');
-    expect(VLAB_STAGE_LABELS.learn).toBe('Learn');
+    expect(VLAB_STAGE_LABELS.goal).toBe('目标');
+    expect(VLAB_STAGE_LABELS.learn).toBe('学习');
   });
 });
 

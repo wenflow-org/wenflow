@@ -10,7 +10,7 @@
       </div>
       <div class="mk-modal__body">
         <p class="mk-alert mk-alert--info">
-          用「{{ testTarget.name }}」的人设和故事直接跑一次对话，检查助手字段产出。不创建用例、不影响正式会话。
+          用「{{ testTarget.name }}」的人设和故事直接跑一次对话，检查助手输出的字段。不创建用例、不影响正式会话。
         </p>
         <!-- 配置行 -->
         <div class="pt-config">
@@ -29,11 +29,11 @@
           <label class="mk-field">
             <span class="mk-field__label">学生对抗度</span>
             <select v-model="testForm.friction" class="mk-field__select">
-              <option value="none">none · 配合</option>
-              <option value="low">low · 犹豫</option>
-              <option value="normal">normal · 正常</option>
-              <option value="high">high · 难缠</option>
-              <option value="stress_test">stress · 极端</option>
+              <option value="none">配合</option>
+              <option value="low">犹豫</option>
+              <option value="normal">正常</option>
+              <option value="high">难缠</option>
+              <option value="stress_test">极端</option>
             </select>
           </label>
         </div>
@@ -43,7 +43,7 @@
           <div class="pt-verdict">
             <span class="mk-badge" :class="testResult.passed ? 'mk-badge--ok' : 'mk-badge--bad'">{{ testResult.passed ? '通过' : '未通过' }}</span>
             <span v-if="testResult.checks" class="pt-meta mono">{{ Object.values(testResult.checks).filter(Boolean).length }}/{{ Object.keys(testResult.checks).length }} 项检查通过</span>
-            <span v-if="testResult.transcript?.length" class="pt-meta">对话 {{ testResult.transcript.length }} 轮{{ testResult.converged === true ? ' · 已收敛' : '' }}</span>
+            <span v-if="testResult.transcript?.length" class="pt-meta">对话 {{ testResult.transcript.length }} 轮{{ testResult.converged === true ? ' · 已完成产出' : '' }}</span>
           </div>
 
           <!-- 输入 / 输出：评估的完整上下文 -->
@@ -77,7 +77,7 @@
                      错误原文已自足。管理端不用 emoji。 -->
                 <div v-if="t.error" class="pt-state">{{ t.error }}</div>
                 <div v-if="t.learnerState" class="pt-state">
-                  被理解 {{ Math.round((t.learnerState.feltUnderstood ?? 0) * 100) }}% · 目标清晰 {{ Math.round((t.learnerState.problemClarity ?? 0) * 100) }}% · readyToProceed={{ t.learnerState.readyToProceed === true ? '是' : '否' }}{{ t.emotion ? ` · ${t.emotion}` : '' }}
+                  被理解 {{ Math.round((t.learnerState.feltUnderstood ?? 0) * 100) }}% · 目标清晰 {{ Math.round((t.learnerState.problemClarity ?? 0) * 100) }}% · 可继续={{ t.learnerState.readyToProceed === true ? '是' : '否' }}{{ t.emotion ? ` · ${t.emotion}` : '' }}
                 </div>
               </div>
             </div>
@@ -201,8 +201,8 @@ function testCheckLabel(rawKey: string): string {
   if (kind === 'converge') return `完成产出 ${val}`
   const map: Record<string, string> = {
     parsed: '输出可解析',
-    contractValid: '结构契约合法',
-    structuredOutputValid: '结构化输出合法',
+    contractValid: '结构符合约定',
+    structuredOutputValid: '输出结构合法',
     stageValid: '阶段识别正确',
     expectedStage: '阶段符合预期',
     milestoneCount: '里程碑数',

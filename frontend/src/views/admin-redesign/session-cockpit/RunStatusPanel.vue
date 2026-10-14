@@ -36,10 +36,10 @@
       <label v-if="!isBlackbox" class="cp-run__budget">
         模型
         <select v-model="simModelValue" class="mk-filter__select" :disabled="simModelSaving" @change="emit('saveModel')">
-          <option value="">默认（路由）</option>
+          <option value="">默认（系统分配）</option>
           <option v-for="m in availableModels" :key="m" :value="m">{{ m }}</option>
         </select>
-        <span class="cp-run__budget-hint" title="实验快照在会话启动时捕获，模型变更需重跑（rerun）或新会话才生效">重跑生效</span>
+        <span class="cp-run__budget-hint" title="模型在会话启动时已确定，中途修改不生效，需重跑或新建会话">重跑生效</span>
       </label>
       <span v-if="showPathReadiness" class="cp-run__readiness" :class="`cp-run__readiness--${pathReadinessTone}`">{{ pathReadinessText }}</span>
     </div>

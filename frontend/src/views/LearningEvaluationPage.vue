@@ -644,7 +644,7 @@ const handleAdvisoryAction = async (action: string) => {
 
   const ok = await askConfirm({
     title: '调整当前路径',
-    message: '这会基于当前学习证据调整当前路径的后续阶段，已完成任务会保留不变。是否继续？',
+    message: '这会根据你最近的学习情况调整当前路径的后续阶段，已完成任务会保留不变。是否继续？',
     confirmText: '确认调整当前路径',
     danger: false,
   });
@@ -738,7 +738,7 @@ const tocItems = [
   { id: 'sec-topic', label: '主题总结' },
   { id: 'sec-progress', label: '本节进展' },
   { id: 'sec-perf', label: '本节表现' },
-  { id: 'sec-longterm', label: '长期四维' },
+  { id: 'sec-longterm', label: '长期状态' },
   { id: 'sec-knowledge', label: '知识点' },
   { id: 'sec-next', label: '下一步建议' },
   { id: 'sec-evaluation', label: '学习评价' },

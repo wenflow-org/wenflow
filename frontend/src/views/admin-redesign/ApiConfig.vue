@@ -121,7 +121,7 @@
         </div>
         <!-- 持久化说明（F8-2）：拉取是连通性验证的本页动作，只有随连接保存落盘，
              其他页面与下次进入才可见；保存成功后 hasUnsavedModels 归零，本行自动消失 -->
-        <span v-if="hasUnsavedModels" class="ac-models__hint">本次拉取的清单仅在本页有效，点卡头「保存连接」后其它页面与下次进入才可见。</span>
+        <span v-if="hasUnsavedModels" class="ac-models__hint">本次拉取的清单仅在本页有效，点「保存连接」后其它页面与下次进入才可见。</span>
       </div>
     </section>
 
@@ -183,7 +183,7 @@
                  是同屏两份回声（概览读的就是同一组 form 值），合并为一行 = 角色 + 输入 + 状态徽标；
                  徽标随输入实时翻转（已配置 ⇄ 未配置），编辑动作得到即时确认。
                  原型第四行「降级备用」本页无独立配置字段，不虚构该行。 -->
-            <div class="ac-sec__title">默认路由<span class="ac-sec__hint">可填具体模型 id、provider/model 限定式引用，或逻辑别名（chat / reasoning / light）</span></div>
+            <div class="ac-sec__title">默认路由<span class="ac-sec__hint">可填具体模型 id、「provider/模型名」形式，或逻辑别名（chat / reasoning / light）</span></div>
             <div class="ac-route" role="list" aria-label="默认路由角色">
               <label v-for="r in routeRoles" :key="r.key" class="ac-route__row" role="listitem">
                 <span class="ac-route__label">{{ r.role }}</span>
@@ -444,7 +444,7 @@
     <div class="ac-tab-body ac-sec-body" id="ac-panel-security" role="tabpanel" aria-labelledby="ac-tab-security">
       <div class="ac-sec__title ac-sec-head">
         安全与访问
-        <span class="mk-badge mk-badge--info">平台策略 · 热生效</span>
+        <span class="mk-badge mk-badge--info">平台策略 · 即时生效</span>
         <button v-if="dirty.has('policy')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['policy'])">{{ saving ? '保存中…' : '保存策略' }}</button>
       </div>
       <section class="mk-card">
@@ -769,7 +769,7 @@ const healthLabel = computed(
 )
 const healthLabelTip = computed(() =>
   !health.value?.overall || health.value.overall === 'unknown'
-    ? '未知档：能力探针关闭或尚未探测，可点「立即探测」获取各能力状态'
+    ? '状态未知：能力探针关闭或尚未探测，可点「立即探测」获取各能力状态'
     : ''
 )
 const healthBadgeCls = computed(
@@ -1074,7 +1074,7 @@ onBeforeRouteLeave(async () => {
   if (dirty.value.size === 0) return true
   const ok = await askConfirm({
     title: '有未保存的配置修改',
-    message: `尚未保存的域:${dirtyGroups.value.join(' / ')}。离开将丢弃这些修改,确认离开?`,
+    message: `尚未保存的配置组:${dirtyGroups.value.join(' / ')}。离开将丢弃这些修改,确认离开?`,
     confirmText: '丢弃并离开'
   })
   return ok === true
@@ -1141,14 +1141,14 @@ const routeRoles = computed(() => [
     key: 'reasoning',
     role: '推理默认',
     value: form.defaultReasoningModel,
-    title: '推理档：别名 reasoning 会按能力过滤到支持思考的成员',
+    title: '填别名 reasoning 时会自动选用支持思考的模型',
     set: (v: string) => { form.defaultReasoningModel = v; markDirty('route') },
   },
   {
     key: 'evaluation',
     role: '评估默认',
     value: form.defaultEvaluationModel,
-    title: '评估档：同样支持逻辑别名',
+    title: '同样支持逻辑别名',
     set: (v: string) => { form.defaultEvaluationModel = v; markDirty('route') },
   },
 ])
@@ -1180,7 +1180,7 @@ const connBadge = computed(() => {
 const connBadgeTitle = computed(() => {
   const at = connCheckedAt.value || cfg.value?.lastCheckedAt || ''
   const when = at ? `上次验证：${new Date(at).toLocaleString('zh-CN', { hour12: false })}` : '尚无验证记录'
-  return `${when}（「连接并拉取」成功/失败时更新）。连接状态为上次拉取的结果，非实时探活`
+  return `${when}（「连接并拉取」成功/失败时更新）。连接状态为上次拉取的结果，非实时检测结果`
 })
 
 /** 已配置密钥但改了服务地址且 Key 留空：密钥不会随地址迁移，需提示重新输入 */

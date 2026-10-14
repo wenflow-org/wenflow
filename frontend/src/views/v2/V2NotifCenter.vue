@@ -135,7 +135,7 @@
                   <div class="nc__task-content">
                     <div class="nc__task-row">
                       <span class="nc__task-label">{{ ev.label }}</span>
-                      <span v-if="ev.groupCount" class="nc__task-times" title="同一会话内的多次 AI 调用已合并">共 {{ ev.groupCount }} 次</span>
+                      <span v-if="ev.groupCount" class="nc__task-times" title="同一会话内的多次 AI 处理已合并">共 {{ ev.groupCount }} 次</span>
                       <span v-if="ev.subject" class="nc__task-subject">{{ ev.subject }}</span>
                       <span class="nc__task-time">{{ ev.time }}</span>
                     </div>
@@ -153,8 +153,8 @@
                     v-if="ev.groupItems && ev.groupItems.length"
                     type="button"
                     class="nc__task-expand"
-                    :title="expanded.has(ev.key) ? '收起' : '展开查看每次调用'"
-                    :aria-label="expanded.has(ev.key) ? '收起' : '展开查看每次调用'"
+                    :title="expanded.has(ev.key) ? '收起' : '展开查看每次处理'"
+                    :aria-label="expanded.has(ev.key) ? '收起' : '展开查看每次处理'"
                     @click="toggleExpand(ev.key)"
                   >
                     <svg viewBox="0 0 24 24" width="11" height="11" :style="{ transform: expanded.has(ev.key) ? 'rotate(180deg)' : 'none' }"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>

@@ -38,7 +38,7 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h4 class="mk-card__title">时间推进模拟</h4>
-        <span class="mk-card__meta">不写库：按衰减模型预览「N 天后」学习者画像变化</span>
+        <span class="mk-card__meta">模拟预览「N 天后」的学习者画像变化，不改动真实数据</span>
       </div>
       <div class="dt-body">
         <div class="dt-grid">
@@ -98,8 +98,8 @@
     <!-- Outbox 死信 -->
     <section class="mk-card">
       <div class="mk-card__head">
-        <h4 class="mk-card__title">事件投递死信</h4>
-        <span class="mk-card__meta">投递失败的事件可在此人工重放</span>
+        <h4 class="mk-card__title">事件投递失败</h4>
+        <span class="mk-card__meta">这些事件未能送达，可在此人工重放</span>
         <!-- 死信告警（原状态条语义迁入卡头）：失败显式降 bad，积压 >0 显式 warn——
              零值与加载中不得伪装成「确认无死信」 -->
         <span v-if="deadFailed" class="mk-badge mk-badge--bad">加载失败</span>
@@ -113,10 +113,10 @@
             type="button"
             class="mk-btn mk-btn--sm"
             :disabled="requeueBusy || deadFailed || (!deadLoading && deadCount === 0)"
-            :title="deadFailed ? '清单未加载成功，请先重试' : (!deadLoading && deadCount === 0 ? '暂无死信可重放' : undefined)"
+            :title="deadFailed ? '清单未加载成功，请先重试' : (!deadLoading && deadCount === 0 ? '暂无待重放的事件' : undefined)"
             @click="requeueAll"
           >
-            {{ requeueBusy ? '重放中…' : '重放全部死信' }}
+            {{ requeueBusy ? '重放中…' : '重放全部失败事件' }}
           </button>
         </div>
       </div>
@@ -130,7 +130,7 @@
               <tr>
                 <th>事件</th>
                 <th>用户</th>
-                <th>聚合</th>
+                <th>关联对象</th>
                 <th class="mk-th--right">尝试</th>
                 <th>错误</th>
                 <th>发生时间</th>
@@ -167,7 +167,7 @@
         v-else-if="deadFailed"
         tone="error"
         icon="!"
-        title="死信清单加载失败"
+        title="事件清单加载失败"
         description="请先重试加载，再决定是否重放。"
         action-text="重试"
         compact
@@ -175,7 +175,7 @@
       />
       <MkEmptyState
         v-else
-        title="没有死信事件"
+        title="没有待重放的事件"
         description="事件投递全部正常，无待处理积压。"
         compact
       />
@@ -357,7 +357,7 @@ async function runAdvance() {
       pathId: advance.value.pathId.trim() || undefined,
     })
     advanceResult.value = res.data?.data ?? res.data
-    toast.success('模拟完成（只读预览，未写库）')
+    toast.success('模拟完成（只读预览，未改动真实数据）')
   } catch (e) {
     toast.error(`模拟失败：${errMsg(e)}`)
   } finally {
@@ -393,7 +393,7 @@ async function loadDead() {
     deadLoaded.value = true
   } catch (e) {
     deadFailed.value = true
-    toast.error(`加载死信失败：${errMsg(e)}`)
+    toast.error(`事件清单加载失败：${errMsg(e)}`)
   } finally {
     deadLoading.value = false
   }
@@ -402,9 +402,9 @@ async function loadDead() {
 async function requeueAll() {
   // 重放会重新投递事件、产生真实副作用：执行前确认（与 HealthCenter 修复/会话下线同策略）
   const ok = await askConfirm({
-    title: '重放全部死信',
-    message: `将重放全部 ${deadCount.value} 条死信事件并重新投递，可能产生重复的业务副作用。确定继续？`,
-    confirmText: '重放全部',
+    title: '重放全部失败事件',
+    message: `将把全部 ${deadCount.value} 条投递失败的事件重新投递一次，可能产生重复的业务副作用。确定继续？`,
+    confirmText: '全部重放',
     danger: false,
   })
   if (!ok) return
@@ -412,7 +412,7 @@ async function requeueAll() {
   try {
     const res = await adminDevtoolsApi.requeueOutboxDead()
     const data = res.data?.data ?? res.data
-    toast.success(`已重放 ${data?.requeued ?? 0} 条死信`)
+    toast.success(`已重新投递 ${data?.requeued ?? 0} 条事件`)
     void loadDead()
   } catch (e) {
     toast.error(`重放失败：${errMsg(e)}`)
@@ -425,8 +425,8 @@ async function requeueAll() {
 async function requeueOne(eventType: string) {
   const count = deadItems.value.filter((i) => i.eventType === eventType).length
   const ok = await askConfirm({
-    title: '重放该类型死信',
-    message: `将重放事件类型「${eventType}」的全部死信（当前清单内 ${count} 条），可能产生重复的业务副作用。确定继续？`,
+    title: '重放该类事件',
+    message: `将把「${eventType}」类全部投递失败的事件重新投递一次（当前清单内 ${count} 条），可能产生重复的业务副作用。确定继续？`,
     confirmText: '重放该类',
     danger: false,
   })
@@ -435,7 +435,7 @@ async function requeueOne(eventType: string) {
   try {
     const res = await adminDevtoolsApi.requeueOutboxDead(eventType)
     const data = res.data?.data ?? res.data
-    toast.success(`已重放 ${data?.requeued ?? 0} 条「${eventType}」死信`)
+    toast.success(`已重新投递 ${data?.requeued ?? 0} 条「${eventType}」事件`)
     void loadDead()
   } catch (e) {
     toast.error(`重放失败：${errMsg(e)}`)

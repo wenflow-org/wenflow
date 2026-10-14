@@ -32,7 +32,7 @@
         :tone="!recLoading && !recError && liveCount === 0 ? 'bad' : ''"
         hint="提示词已生效"
         :title="recLoading
-          ? '完成度对账加载中，live 计数暂不可用'
+          ? '完成度对账加载中，已上线计数暂不可用'
           : recError
             ? `上线状态加载失败：${recError}；加载失败不代表没有已上线的 Skill`
             : liveCount === 0
@@ -119,7 +119,7 @@
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- #107：默认排序键 errors 无可见列 → 默认态给可见说明，非默认态给一键复位
                （此前点过别的表头就再也回不到默认序，只能清 localStorage） -->
-          <span v-if="isDefaultSort" class="mk-cell-sub sk-sort-hint" title="默认排序：失败数降序（问题浮顶）">默认按失败数排列</span>
+          <span v-if="isDefaultSort" class="mk-cell-sub sk-sort-hint" title="默认排序：失败多的排在前面">默认按失败数排列</span>
           <button v-else type="button" class="mk-link" @click="resetSort">恢复默认序（失败数优先）</button>
         </div>
         <div class="mk-card__head-right">
@@ -530,11 +530,11 @@ const SK_COLS_DEFAULT_HIDDEN = ['p95'] as const
 const skColDefs = [
   { key: 'agent', label: '归属 Agent', title: '所属顶层 Agent' },
   { key: 'version', label: '版本', title: 'registry definition.version' },
-  { key: 'routing', label: '路由模型', title: '生效模型。未配置时用平台默认，无平台覆盖字段时显示 —' },
+  { key: 'routing', label: '路由模型', title: '生效模型。未单独配置时用平台默认，无配置数据时显示 —' },
   { key: 'calls', label: '调用', title: '统计窗口内调用次数（随窗口筛选）' },
   { key: 'p95', label: 'P95', title: '暂无单 Skill 的 P95 耗时数据；该列默认隐藏' },
   { key: 'rate', label: '成功率', title: '窗口内成功率' },
-  { key: 'status', label: '完成度', title: '完成度对账 status（draft→live）' },
+  { key: 'status', label: '完成度', title: '完成度：是否已上线' },
   { key: 'cat', label: '类别', title: 'Skill 类别' },
   { key: 'last', label: '最近调用', title: '最近调用时间' },
 ] as const
@@ -1025,7 +1025,7 @@ function routingOf(skillId: string): string {
 function routingTitleOf(skillId: string): string {
   if (!coverageReady.value) return '模型覆盖数据未加载'
   const row = coverageById.value.get(skillId)
-  if (!row) return '覆盖矩阵无此 Skill 行（未登记 skill-model-config）'
+  if (!row) return '该 Skill 没有模型配置记录，显示 —'
   return row.model ? `生效模型：${row.model}` : '未单独配置模型：走平台默认'
 }
 
@@ -1052,13 +1052,13 @@ function fallbackOf(skillId: string): string {
   if (row.fallbackChain && row.fallbackChain.length) return row.fallbackChain.join(' → ')
   const chain = registryChainOf(skillId)
   if (chain === null) return '—'
-  return chain.length ? chain.join(' → ') : '无（空链）'
+  return chain.length ? chain.join(' → ') : '无备用模型（配置为空）'
 }
 
 function fallbackTitleOf(skillId: string): string {
   if (!coverageReady.value) return '模型覆盖数据未加载'
   const row = coverageById.value.get(skillId)
-  if (!row) return '覆盖矩阵无此 Skill 行（未登记 skill-model-config）'
+  if (!row) return '该 Skill 没有备用模型配置记录，显示 —'
   if (row.fallbackChain && row.fallbackChain.length) return `Skill 自定义备用模型列表：${row.fallbackChain.join(' → ')}`
   if (!registryReady.value) return '无自定义备用模型列表。平台默认列表未加载（模型总览拉取失败或未就绪）'
   const modelId = row.model || (row.tier === 'reasoning' ? registryDefaultReasoningModel.value : registryDefaultModel.value)
@@ -1086,7 +1086,7 @@ const routeModelCount = computed<number | string>(() =>
 )
 const routeModelTitle = computed(() =>
   routingLabels.value.length
-    ? `去重模型 ${new Set(routingLabels.value).size} 个（含「平台默认」桶）`
+    ? `去重模型 ${new Set(routingLabels.value).size} 个（「平台默认」计为一种）`
     : '模型覆盖数据未加载或无生效路由'
 )
 /** 主模型覆盖 = 使用最多的那个模型占全部 Skill 的比例 */
@@ -1129,7 +1129,7 @@ const primaryRegistryChain = computed<string[] | null>(() => {
 const registryChainText = computed(() => {
   const chain = primaryRegistryChain.value
   if (chain === null) return ''
-  return chain.length ? chain.join(' → ') : '无（空链）'
+  return chain.length ? chain.join(' → ') : '无备用模型（平台默认配置为空）'
 })
 /** 降级策略卡（原硬编码「自动」删）：真实口径 = 自定义兜底链计数；无自定义链时给出
     registry 默认链的解析结果（F7-5）；覆盖/registry 未加载显 —，不伪装 */
@@ -1140,12 +1140,12 @@ const fallbackPolicyText = computed(() => {
 })
 const fallbackPolicyHint = computed(() => {
   if (!coverageReady.value || !registryReady.value) return ''
-  if (fallbackConfigured.value > 0) return registryChainText.value ? `其余走平台默认链：${registryChainText.value}` : '其余走平台默认链'
-  return '平台默认链'
+  if (fallbackConfigured.value > 0) return registryChainText.value ? `其余走平台默认列表：${registryChainText.value}` : '其余走平台默认列表'
+  return '按平台默认列表'
 })
 const fallbackPolicyTitle = computed(() => {
   const head = '模型重试耗尽后按备用模型列表自动切换。降级仅换模型名，网关与密钥沿用主调用'
-  if (!coverageReady.value) return '兜底配置未加载（skill-model-configs/coverage 拉取失败或未就绪）'
+  if (!coverageReady.value) return '备用模型配置未加载（配置数据拉取失败或未就绪）'
   if (fallbackConfigured.value > 0) {
     return `${head}。当前 ${fallbackConfigured.value} 个 Skill 配了自定义备用模型列表`
   }
@@ -1157,17 +1157,19 @@ const fallbackPolicyTitle = computed(() => {
   if (!model) return `${head}。无自定义备用模型列表：暂无可解析的主模型`
   if (chain === null) return `${head}。无自定义备用模型列表：模型「${model}」不在模型目录，默认列表无法解析`
   return chain.length
-    ? `${head}。无自定义备用模型列表：平台默认（${model}）= ${chain.join(' → ')}`
+    ? `${head}。无自定义备用模型列表，走平台默认（${model}）：${chain.join(' → ')}`
     : `${head}。无自定义备用模型列表：平台默认（${model}）未配置备用模型，调用失败时不会自动切换`
 })
 /** 路由表头提示（F7-5）：「备用模型」列的口径写在表头，运营不必猜「registry 默认」是什么 */
 const routingMetaText = computed(() => {
-  if (!coverageReady.value) return '备用模型：Skill 自定义备用模型列表。模型覆盖数据未加载'
-  if (!registryReady.value) return '备用模型：Skill 自定义备用模型列表。平台默认列表未加载'
-  const text = registryChainText.value
-  return text
-    ? `备用模型：自定义列表优先。未配置时按平台默认列表解析（主模型 ${primaryModelId.value || '平台默认'}：${text}）`
-    : '备用模型：自定义列表优先。未配置时按平台默认列表解析'
+  if (!coverageReady.value) return '备用模型：Skill 自定义备用模型列表优先。模型覆盖数据未加载'
+  if (!registryReady.value) return '备用模型：Skill 自定义备用模型列表优先。平台默认列表未加载'
+  const chain = primaryRegistryChain.value
+  const model = primaryModelId.value
+  if (chain === null) return '备用模型：自定义了就用自定义，没自定义按平台默认列表。当前主模型的平台默认列表暂无法解析'
+  return chain.length
+    ? `备用模型：自定义了就用自定义，没自定义按平台默认列表。当前主模型 ${model} 的平台默认备用模型：${chain.join(' → ')}`
+    : `备用模型：自定义了就用自定义，没自定义按平台默认列表。当前主模型 ${model} 未配置备用模型，调用失败时不会自动切换`
 })
 </script>
 

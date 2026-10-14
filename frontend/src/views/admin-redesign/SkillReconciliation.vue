@@ -15,7 +15,7 @@
       <template v-else-if="recReport">
         <!-- 口径 pill（中性 mk-pill）+ 异常计数（mk-badge 语气，替代自造色块） -->
         <div class="sk-rec__pills">
-          <span class="mk-pill" :title="`技能登记册全量（含外挂能力）vs 目录`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
+          <span class="mk-pill" :title="`已上线数 / 登记册全量（登记册含外挂能力，多于目录）`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
           <span v-if="recReport.summary.unregistered" class="mk-badge mk-badge--bad">未注册 {{ recReport.summary.unregistered }}</span>
           <span v-if="recReport.summary.activeMissing" class="mk-badge mk-badge--warn" :title="ACTIVE_MISSING_HINT">无生效版本 {{ recReport.summary.activeMissing }}</span>
           <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="登记册已删除/不存在，但注册记录仍残留（幽灵注册）">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
@@ -86,7 +86,7 @@
                 <td colspan="6">
                   <span class="sk-rec-group__name">{{ e.group.parentAgent }}</span>
                   <span class="sk-rec-group__meta">下辖 {{ e.group.items.length }} 条</span>
-                  <span class="sk-rec-group__meta">live {{ e.group.liveCount }} / {{ e.group.items.length }}</span>
+                  <span class="sk-rec-group__meta">已上线 {{ e.group.liveCount }} / {{ e.group.items.length }}</span>
                 </td>
               </tr>
               <tr
@@ -158,7 +158,7 @@
         <span v-for="s in recStatusOrder" :key="s" class="sk-rec-legend__item">
           <i class="mk-badge" :class="`mk-badge--rec-${s}`"></i>{{ recStatusText(s) }}
         </span>
-        <span class="mk-card__meta">技能登记册口径 {{ recReport.summary.total }} 条 · {{ recReport.generatedAt ? '核查于 ' + new Date(recReport.generatedAt).toLocaleString() : '' }}</span>
+        <span class="mk-card__meta">技能登记册共 {{ recReport.summary.total }} 条 · {{ recReport.generatedAt ? '核查于 ' + new Date(recReport.generatedAt).toLocaleString() : '' }}</span>
       </div>
     </template>
     <MkEmptyState

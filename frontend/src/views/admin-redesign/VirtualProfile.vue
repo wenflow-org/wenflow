@@ -57,7 +57,7 @@
         v-if="d.userId"
         type="button"
         class="mk-btn mk-btn--sm"
-        title="同一实体的学习视图：学习模型 / 证据 / 图谱 / 教学会话 / 记忆复习"
+        title="同一账号的学习视图：学习模型 / 证据 / 图谱 / 教学会话 / 记忆复习"
         @click="goRealLearner()"
       >学习详情 →</button>
       <div v-if="isLive" class="mk-menu vp-tabsrow__ops">
@@ -231,7 +231,7 @@
                 <MkEmptyState
                   v-else
                   title="暂无学习状态读数"
-                  description="该画像的会话还没有按天学习状态聚合（LSS/KTL/LF/LSB）；运行一次课程后即可读数。"
+                  description="该画像的会话还没有按天汇总出学习状态读数，运行一次课程后即可读数。"
                   compact
                 />
               </div>
@@ -309,7 +309,7 @@
             <MkEmptyState
               v-else
               title="暂无学习状态读数"
-              description="该画像的会话还没有按天学习状态聚合（LSS/KTL/LF/LSB）。"
+              description="该画像的会话还没有按天汇总出学习状态读数。"
               compact
             />
           </div>
@@ -326,7 +326,7 @@
               <span class="mk-field__label">单步最大重试</span>
               <input v-model.number="budgetForm.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" @input="budgetDirty = true" />
               <span v-if="budgetErrors.maxRetriesPerStep" class="mk-field__err">{{ budgetErrors.maxRetriesPerStep }}</span>
-              <span class="mk-field__hint">每次上游 LLM 调用失败后的重试次数（一个教学回合含多次上游调用）</span>
+              <span class="mk-field__hint">每次模型调用失败后的自动重试次数（一个教学回合包含多次模型调用）</span>
             </label>
             <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.maxRetriesTotal }">
               <span class="mk-field__label">{{ BUDGET_TOTAL_LABEL }}</span>
@@ -753,7 +753,7 @@
           </label>
           <label class="mk-field">
             <span class="mk-field__label">可见开场</span>
-            <textarea v-model="editStoryForm.visibleOpening" class="mk-field__textarea" rows="3" placeholder="学习者可见的开场白（黑盒链路使用）"></textarea>
+            <textarea v-model="editStoryForm.visibleOpening" class="mk-field__textarea" rows="3" placeholder="学习者可见的开场白"></textarea>
           </label>
           <label class="mk-field">
             <span class="mk-field__label">对抗点（每行一条）</span>
@@ -1126,13 +1126,13 @@ async function batchAutopilotStories(action: 'start' | 'stop') {
   const withSession = targets.filter((t) => t.s.latestRun?.sessionId)
   const noSession = targets.length - withSession.length
   if (!withSession.length) {
-    toast.error(action === 'start' ? '勾选的故事都没有会话；请先「批量运行」创建会话' : '勾选的故事都没有会话，无需停止')
+    toast.error(action === 'start' ? '勾选的故事都没有会话，请先「批量运行」创建会话' : '勾选的故事都没有会话，无需停止')
     return
   }
   const verb = action === 'start' ? '启动自动驾驶' : '停止自动驾驶'
   const ok = await askConfirm({
     title: `批量${verb}`,
-    message: `将${action === 'start' ? '为' : '停止'}勾选的 ${withSession.length} 个故事的最新会话${action === 'start' ? '开启自动驾驶（target=final 直达 Path 全部完成），已运行的自动跳过' : '的自动驾驶，学习进度保留'}`,
+    message: `将${action === 'start' ? '为' : '停止'}勾选的 ${withSession.length} 个故事的最新会话${action === 'start' ? '开启自动驾驶（自动完成路径全部任务），已运行的自动跳过' : '的自动驾驶，学习进度保留'}`,
     confirmText: verb,
     danger: false
   })
@@ -1975,7 +1975,7 @@ async function saveProfile() {
     })
     await loadDetail(id, true)
     editOpen.value = false
-    toast.success('画像已保存（真实写入）')
+    toast.success('画像已保存')
   } catch (e) {
     toast.error(`保存失败：${errMsg(e)}`)
   } finally {
@@ -2057,7 +2057,7 @@ async function runStory(story?: StoryItem, index?: number) {
   if (!id || running.value) return
   const target = story || selectedStory.value
   if (!target && displayStories.value.length !== 1) {
-    toast.error('请先选择一个故事；每个故事对应一套学习任务（Path）')
+    toast.error('请先选择一个故事，每个故事对应一套学习任务')
     return
   }
   if (target) selectStory(target, typeof index === 'number' ? index : target.index ?? 0)
@@ -2208,7 +2208,7 @@ async function openProjection(url?: string | null) {
     const res = await adminVirtualLearnersApi.createProjectionToken(id, { scope: 'dashboard' })
     const d = res.data?.data ?? res.data ?? {}
     const token = String(d?.token || '')
-    if (!token) throw new Error('投影 token 缺失')
+    if (!token) throw new Error('未能取得前台访问凭据')
     setProjectionToken(token, { profileId: id, source: 'virtual-profile-story' })
     recordProjectionTokenExpiry({ token, expiresAt: Date.now() + PROJECTION_TOKEN_TTL_MS })
     window.open(url, '_blank', 'noopener')
@@ -2361,7 +2361,7 @@ const statItems = computed(() => {
     {
       label: '运行次数',
       value: `${rs.total}${rs.exact ? '' : '（加载窗口）'}`,
-      title: '来源：详情接口 sessions（会话流水窗口）'
+      title: '来源：会话流水记录（最近窗口）'
     },
     {
       label: '通过率',
@@ -2371,7 +2371,7 @@ const statItems = computed(() => {
     {
       label: '覆盖场景',
       value: sceneStats.value.length || '—',
-      title: '运行记录里出现过的去重场景（故事）数'
+      title: '运行记录里出现过的不同场景（故事）数'
     },
     {
       label: '当前状态',
@@ -2381,7 +2381,7 @@ const statItems = computed(() => {
     {
       label: '记忆点',
       value: memoryPoints == null ? '—' : String(memoryPoints),
-      title: memoryPoints == null ? '记忆池未加载' : '来源：记忆池 counts（已掌握 + 到期 + 卡点，不含最近完成事项）'
+      title: memoryPoints == null ? '记忆池未加载' : '来源：记忆池统计（已掌握、到期、卡点之和，不含最近完成事项）'
     }
   ]
 })
@@ -2417,11 +2417,11 @@ const loopStages = computed<LoopStage[]>(() => {
   const toneOf = (i: number): LoopStage['tone'] =>
     i === 4 && (due ?? 0) > 0 ? 'alert' : i === currentIdx ? 'active' : 'done'
   return [
-    { name: '目标对话', meta: '澄清真实目标与约束', val: `${goalTotal} 会话`, tone: toneOf(0), title: `来源：故事池 goalCount 合计 ${goalTotal}` },
-    { name: '路径规划', meta: '生成阶段化学习路径', val: `${pathTotal} 路径`, tone: toneOf(1), title: `来源：故事池 pathCount 合计 ${pathTotal}` },
-    { name: '教学回合', meta: '回合式讲解与追问', val: `${learnTotal} 教学会话`, tone: toneOf(2), title: `来源：故事池 learnCount 合计 ${learnTotal}` },
-    { name: '课后评估', meta: '产出与掌握度评估', val: completed == null ? '—' : `${completed} 成果`, tone: toneOf(3), title: completed == null ? '记忆池未加载，暂无完成事项读数' : `来源：记忆池 counts.completed（最近完成事项 ${completed} 项）` },
-    { name: '记忆复习', meta: '遗忘曲线调度复习', val: due == null ? '—' : `${due} 待办`, tone: toneOf(4), title: due == null ? '记忆池未加载，暂无到期读数' : `来源：记忆池 counts.dueReview（到期 ${due} 条）` }
+    { name: '目标对话', meta: '澄清真实目标与约束', val: `${goalTotal} 会话`, tone: toneOf(0), title: `来源：故事池目标会话合计 ${goalTotal}` },
+    { name: '路径规划', meta: '生成阶段化学习路径', val: `${pathTotal} 路径`, tone: toneOf(1), title: `来源：故事池路径合计 ${pathTotal}` },
+    { name: '教学回合', meta: '回合式讲解与追问', val: `${learnTotal} 教学会话`, tone: toneOf(2), title: `来源：故事池教学会话合计 ${learnTotal}` },
+    { name: '课后评估', meta: '产出与掌握度评估', val: completed == null ? '—' : `${completed} 成果`, tone: toneOf(3), title: completed == null ? '记忆池未加载，暂无完成事项读数' : `来源：记忆池最近完成事项（共 ${completed} 项）` },
+    { name: '记忆复习', meta: '遗忘曲线调度复习', val: due == null ? '—' : `${due} 待办`, tone: toneOf(4), title: due == null ? '记忆池未加载，暂无到期读数' : `来源：记忆池到期复习（共 ${due} 条）` }
   ]
 })
 

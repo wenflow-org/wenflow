@@ -371,14 +371,14 @@
           <section class="card band rlist">
             <div class="band__head">
               <div class="band__title">
-                <strong>复习台账</strong>
+                <strong>复习清单</strong>
                 <span class="band__meta">{{ reviewMeta }}</span>
               </div>
             </div>
             <div class="band__body">
               <div v-if="reviewLoading" class="chart__loading"><SkeletonLoader variant="lines" :count="3" /></div>
               <div v-else-if="reviewLoadFailed" class="chart__empty" role="alert">
-                <strong>复习台账暂时取不到</strong>
+                <strong>复习清单暂时取不到</strong>
                 <p>{{ NETWORK_UNAVAILABLE_MSG }}</p>
                 <button type="button" class="chart__retry" @click="loadReviews">重试</button>
               </div>
@@ -1006,7 +1006,7 @@ const reviewMeta = computed(() => {
   const due = reviewDue.value.length;
   if (!due) return '暂无到期';
   const planned = reviewPlanned.value;
-  return planned != null && planned > 0 ? `到期 ${due} · 课上带 ${planned}` : `到期 ${due}`;
+  return planned != null && planned > 0 ? `到期 ${due} · 下节课复习 ${planned}` : `到期 ${due}`;
 });
 
 const masteryMeta = computed(() => {

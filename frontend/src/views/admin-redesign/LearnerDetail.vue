@@ -30,7 +30,7 @@
         <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">档案 {{ snapshotLabel }}</span>
       </template>
       <template #actions>
-        <button v-if="linkedVirtualProfile" type="button" class="mk-btn mk-btn--sm" title="同一实体的仿真档案视图（故事池 / 运行 / 运行预算）" @click="openVirtualProfile">
+        <button v-if="linkedVirtualProfile" type="button" class="mk-btn mk-btn--sm" title="同一账号的仿真档案视图（故事池 / 运行 / 运行预算）" @click="openVirtualProfile">
           虚拟档案 →
         </button>
         <button type="button" class="mk-btn" :disabled="recomputing" @click="recompute">
@@ -71,7 +71,7 @@
       <MkLoading v-if="pathOptionsLoading" inline min />
       <span
         class="ld-scope__hint"
-        title="「记忆与复习」不随本开关走：一个概念只保留一条记忆痕迹（记的是最后写入的那条路径），按路径切会漏掉在另一条路径学过的概念。「行为基线与互动」本就是用户级先验，不含路径概念。要看跨全部路径的教学会话，走平台「教学会话」页（那里不按路径收窄）。"
+        title="「记忆与复习」不随本开关走：一个概念只保留一条记忆痕迹（记的是最后写入的那条路径），按路径切会漏掉在另一条路径学过的概念。「行为基线与互动」按账号整体统计，不含路径概念。要看跨全部路径的教学会话，走平台「教学会话」页（那里不按路径收窄）。"
       >作用于 概念掌握 · 证据 · 图谱 · 教学会话，记忆与行为基线不受影响</span>
     </div>
 
@@ -121,7 +121,7 @@
           </div>
           <!-- T2 硬约束 2：结论行常驻（数字全部由现有 conceptBars 的 tone 派生，未新增判断） -->
           <p v-if="conceptBars.length" class="mk-section__conclusion">
-            共 {{ conceptBars.length }} 个概念：{{ conceptBars.filter((c) => c.tone === 'ok').length }} 个转移就绪、{{
+            共 {{ conceptBars.length }} 个概念：{{ conceptBars.filter((c) => c.tone === 'ok').length }} 个可迁移、{{
               conceptBars.filter((c) => c.tone === 'warn' || c.tone === 'bad').length
             }} 个待巩固<template v-if="conceptBars.filter((c) => c.tone === 'muted').length"
               >、{{ conceptBars.filter((c) => c.tone === 'muted').length }} 个证据不足</template
@@ -132,11 +132,11 @@
             <div class="ld-bars">
             <div v-for="c in conceptBars" :key="c.label" class="ld-bar">
               <div class="ld-bar__head">
-                <strong :title="`转移就绪：${c.readiness} · 误解风险：${c.risk}`">{{ c.label }}</strong>
+                <strong :title="`概念掌握：${c.readiness} · 误解风险：${c.risk}`">{{ c.label }}</strong>
                 <span class="ld-bar__badges">
                   <span class="mk-badge" :class="barToneBadge(c.tone)">{{ c.readiness }}</span>
                   <span class="ld-bar__risk" :class="`ld-bar__risk--${c.riskTone}`">误解风险 {{ c.risk }}</span>
-                  <span v-if="c.evidenceCount > 0" class="ld-bar__ev" :title="`证据 ${c.evidenceCount} 条`">{{ c.evidenceCount }} 证据</span>
+                  <span v-if="c.evidenceCount > 0" class="ld-bar__ev" :title="`证据 ${c.evidenceCount} 条`">{{ c.evidenceCount }} 条证据</span>
                 </span>
               </div>
               <span class="mk-minibar ld-bar__track">
@@ -906,18 +906,18 @@ const isDark = useIsDark()
 
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
 const CONCEPT_NONE_HINT = '重算快照后自动生成。'
-const PRIOR_EMPTY_LABEL = '初始先验 · 暂无学习证据'
-const PRIOR_EMPTY_TITLE = '该账号尚无学习证据，以下为初始先验值，随证据累积更新，不是实测结论'
-const EVIDENCE_LEGEND = '点色表示信号，条长表示置信'
+const PRIOR_EMPTY_LABEL = '初始默认值 · 暂无学习记录'
+const PRIOR_EMPTY_TITLE = '该账号尚无学习记录，以下展示的是初始默认值，会随学习记录积累更新，不是实测结论'
+const EVIDENCE_LEGEND = '圆点颜色表示信号，横条长度表示置信'
 const EVIDENCE_NONE_HINT = '学习事件累积后自动生成。'
 const LOAD_ZONE_LSS = 'LSS 学习压力（0-100，越高越累）'
 const LOAD_ZONE_LF = 'LF 疲劳度（0-100，≥60 警戒）'
-const LOAD_ZONE_LSB = 'LSB 状态平衡（KTL-LF，负值表示状态差）'
+const LOAD_ZONE_LSB = 'LSB 状态平衡（训练负荷减疲劳，负值表示状态差）'
 const LOAD_NONE_HINT = '学习者完成会话/任务后，系统会记录每次的压力评估。'
-const DENSITY_LEGEND = '条长表示证据条数 · 颜色表示迁移风险（红 高 / 琥珀 中 / 绿 低）'
-const CALIB_META_TITLE = '预测器实证命中率（非自报置信度）'
+const DENSITY_LEGEND = '条长表示证据条数 · 颜色表示掌握风险（红 高 / 琥珀 中 / 绿 低）'
+const CALIB_META_TITLE = '预测与实际情况的吻合率（非学习者自评）'
 const GRAPH_TRUNCATED_NOTE = '仅显示部分概念，共'
-const MEMORY_PANE_TITLE = '记忆与复习（FSRS）'
+const MEMORY_PANE_TITLE = '记忆与复习'
 /** 路径 stage 兜底文案（快照 / 列表两处同源） */
 const milestoneStageText = (p: { completedMilestones?: unknown; totalMilestones?: unknown }) =>
   String(p.totalMilestones ? `已完成 ${p.completedMilestones ?? 0}/${p.totalMilestones} 个里程碑` : '')
@@ -2393,8 +2393,8 @@ const memoryPaneRows = computed(() =>
     if (t.fsrsStability != null) fsrsBits.push(`稳定性 ${t.fsrsStability} 天`)
     if (t.fsrsDifficulty != null) fsrsBits.push(`难度 ${t.fsrsDifficulty}`)
     const strengthTitle = fsrsBits.length
-      ? `FSRS 记忆强度（可提取率）：${fsrsBits.join(' · ')}`
-      : 'FSRS 尚未算出该知识点的可提取率'
+      ? `记忆强度（可提取率）：${fsrsBits.join(' · ')}`
+      : '系统尚未算出该知识点的记忆强度'
     const extract = t.extractionCount > 0
       ? `${t.extractionCount} 次${t.lastSeenAt ? ` · 最近 ${timeAgo(t.lastSeenAt)}` : ''}`
       : t.lastSeenAt
@@ -2436,7 +2436,7 @@ const memorySortedRows = computed(() =>
 /* 视角：分档计数从行派生；只有出现的档位才给 chips（+ 全部） */
 const memView = ref<'all' | 'due' | 'ok' | 'weak' | 'learning' | 'uninit'>('all')
 const MEM_STATE_ORDER: Array<{ key: Exclude<typeof memView.value, 'all'>; label: string; title: string }> = [
-  { key: 'due', label: '待复习', title: '已到复习期（含此前提取过、FSRS 未算出可提取率的点）' },
+  { key: 'due', label: '待复习', title: '已到复习期（含此前提取过、还没算出记忆强度的点）' },
   { key: 'ok', label: '稳固', title: '可提取率 ≥ 80% 且未到复习期' },
   { key: 'learning', label: '学习中', title: '可提取率 50-79%，仍在形成期' },
   { key: 'weak', label: '薄弱', title: '可提取率 < 50%，临近遗忘' },
@@ -2461,7 +2461,7 @@ const memMetaText = computed(() => {
 })
 const memMetaTitle = computed(() => {
   const overdue = memoryPaneRows.value.filter((r) => r.overdue).length
-  return `记忆强度为 FSRS 可提取率。待复习为已到复习期（${overdue} 条）。稳固≥80% 且未到期。未初始化为尚无记忆痕迹。` +
+  return `记忆强度即可提取率（现在能想起来的概率）。待复习为已到复习期（${overdue} 条）。稳固≥80% 且未到期。未初始化为尚无记忆痕迹。` +
     `\n本块与「路径视角」开关无关，按学习者聚合：` +
     `一个概念只保留一条记忆痕迹（记的是最后写入的那条路径），按路径切会漏掉在另一条路径学过的概念。`
 })
@@ -2531,7 +2531,7 @@ const snapshotBadge = computed(() =>
   snapshotLabel.value.includes('证据不足') ? 'mk-badge--warn' : 'mk-badge--muted'
 )
 const snapshotHint = computed(() =>
-  snapshotLabel.value.includes('证据不足') ? '档案可信度低于 50%，证据不足，建议重算' : '档案可信度'
+  snapshotLabel.value.includes('证据不足') ? '该档案置信度低于 50%，证据不足，建议重算' : '档案置信度'
 )
 
 function barToneBadge(tone: ConceptBarTone): string {

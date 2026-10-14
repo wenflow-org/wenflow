@@ -55,7 +55,7 @@ describe('读数出处（口径透明化）', () => {
     const note = loadCaliber('aggregate', '2026-10-14T03:30:00Z');
     expect(note.label).toContain('学习者级聚合');
     expect(note.label).toContain('30 分钟前');
-    expect(note.title).toContain('单次会话的运行时快照');
+    expect(note.title).toContain('单次会话当场留下的读数');
     expect(note.title).toContain('不是其中一处算错');
     vi.useRealTimers();
   });
@@ -84,7 +84,7 @@ describe('面板作用域标注（一屏混多种作用域，各块自述 + 页�
     expect(note.label).toBe('当前路径');
     expect(note.title).toContain('幼儿园指南五大领域归位速通');
     expect(note.title).toContain('其它路径不在这里');
-    expect(note.title).toContain('status=active');
+    expect(note.title).toContain('最近有更新');
   });
 
   it('当前路径：无路径名时不渲染空括号', () => {

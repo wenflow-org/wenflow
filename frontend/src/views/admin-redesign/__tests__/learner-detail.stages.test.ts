@@ -495,7 +495,7 @@ describe('四读数出处标注 + 虚拟档案互跳', () => {
       const metas = w.findAll('.mk-card__meta').map((m) => m.text());
       expect(metas.some((t) => t.includes('学习者级聚合')), `实际 meta: ${JSON.stringify(metas)}`).toBe(true);
       // 长释必须点明另一页的来源，否则「数字打架」的观感照旧
-      const note = w.find('.mk-card__meta[title*="单次会话的运行时快照"]');
+      const note = w.find('.mk-card__meta[title*="单次会话当场留下的读数"]');
       expect(note.exists()).toBe(true);
     } finally {
       routeQuery.tab = prevTab;

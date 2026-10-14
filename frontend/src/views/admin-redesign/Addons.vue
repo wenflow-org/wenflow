@@ -8,7 +8,7 @@
     <div class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">外挂能力</h3>
-        <span class="mk-card__meta">由白名单登记，新能力接入后自动列出</span>
+        <span class="mk-card__meta">新能力接入并登记后自动列出</span>
       </div>
       <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">
         <span class="mk-alert__msg">能力配置加载失败，以下表格为占位状态，无法反映真实接入情况。</span>
