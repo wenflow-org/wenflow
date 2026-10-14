@@ -37,10 +37,13 @@
 
     <!-- 到期时间轴（教学组标准件 MkDistBand；点某档 = 只看窗口内该档有到期痕迹的学习者）。
          口径：复习队列 = extractionCount>0，窗口 = 最近 200 条痕迹（updatedAt 倒序），非全量
-         ——全量到期数见页头 KPI「当前到期」 -->
+         ——全量到期数见页头 KPI「当前到期」。
+         2026-10-14 用户：教学组各页这条分布带一律默认折叠（表格才是各页主体）——折叠走共享
+         .mk-section__summary 原语，收起仍露标题与口径副文 -->
     <MkDistBand
       v-if="traceWindowReady"
       card
+      collapsible
       class="mr-distband"
       title="到期时间轴"
       :sub="`点击分段可筛选对应到期时间的学习者 · 共 ${queueRows.length} 个复习点（基于最近 ${traceRows.length} 条记忆记录）`"

@@ -78,10 +78,13 @@
          完结率随副标）；枚举外取值归「其它」段（仅实际出现时追加）。数据 = 已加载列表行
          （rows，最近 LIST_LIMIT 条加载窗口），非后端全量口径。分段/图例点击 = 只看该组
          （与「高级筛选」弹层的单状态下拉互斥切换）；embedded 时隐藏（宿主承载域计数）；
-         无数据不留空带 -->
+         无数据不留空带。2026-10-14 用户：教学组各页这条分布带一律默认折叠（表格才是各页主体）——
+         折叠走共享 .mk-section__summary 原语，收起仍露标题与口径副文；本页收起时卡头
+         「异常 / 有建议」快捷 chips 仍是常显的筛选出口 -->
     <MkDistBand
       v-if="!embedded && rows.length"
       card
+      collapsible
       class="ts-distband"
       title="会话状态分布"
       :sub="tsBandSub"

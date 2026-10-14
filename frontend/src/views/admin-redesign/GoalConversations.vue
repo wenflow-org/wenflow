@@ -56,11 +56,14 @@
       <!-- 目标对话状态分布（教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」：回到卡上方
            页面级，与旧构成带同位）：分段/图例点击 = 状态筛选（与原 pills 同一 statusFilter，
            「已取消」= 取补集聚合段）；口径 = stats 服务端全量状态计数（非本页 LIST_LIMIT 窗口），
-           完成率随副标；停滞信号随「进行中」段悬停披露（原桶 foot 迁移）；stats 失败/空数据整带隐藏 -->
+           完成率随副标；停滞信号随「进行中」段悬停披露（原桶 foot 迁移）；stats 失败/空数据整带隐藏。
+           2026-10-14 用户：教学组各页这条分布带一律默认折叠（表格才是各页主体）——折叠走共享
+           .mk-section__summary 原语，收起仍露标题与「完结率」副文 -->
       <MkDistBand
         v-if="!statsError && stats && stats.total > 0"
-      card
-      class="gc-distband"
+        card
+        collapsible
+        class="gc-distband"
         title="目标对话状态分布"
         :sub="`点击分段可筛选对应状态 · 完结率 ${stats.completionRate ?? 0}%`"
         unit="条"

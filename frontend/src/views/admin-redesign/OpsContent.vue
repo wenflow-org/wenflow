@@ -25,10 +25,13 @@
     <!-- 路径状态分布：教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」——回到卡上方
          页面级（与旧构成带同位）。分段/图例均可点下钻，是本页唯一状态筛选面。数据源与口径不变：
          getStats().byStatus 服务端按状态 group-by 全平台计数（60s 缓存），非本页 1000 条窗口推导；
-         embedded 时隐藏（宿主承载域计数）；stats 拉取失败或全零时静默隐藏，不留空带 -->
+         embedded 时隐藏（宿主承载域计数）；stats 拉取失败或全零时静默隐藏，不留空带。
+         2026-10-14 用户：教学组各页这条分布带一律默认折叠（表格才是各页主体）——折叠走共享
+         .mk-section__summary 原语，收起仍露标题与口径副文；展开后才见「本页唯一状态筛选面」 -->
     <MkDistBand
       v-if="!embedded && pathBandReady"
       card
+      collapsible
       class="oc-distband"
       title="路径状态分布"
       :sub="`点击分段可筛选对应状态的路径`"
