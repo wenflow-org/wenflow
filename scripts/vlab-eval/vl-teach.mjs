@@ -55,11 +55,25 @@ async function teach(sessionId) {
   log(`\n=== 会话 ${sessionId} ===`);
   const st = await api('GET', `/api/admin/virtual-learners/sessions/${sessionId}`, undefined, 30000);
   log(`  当前阶段=${st.json?.data?.currentStage} path=${st.json?.data?.learningPathId}`);
-  const sl = await api('POST', `/api/admin/virtual-learners/sessions/${sessionId}/start-learning`, {}, 300000);
+  let sl = await api('POST', `/api/admin/virtual-learners/sessions/${sessionId}/start-learning`, {}, 300000);
   log(`  start-learning http=${sl.status} err=${String(sl.json?.error || '').slice(0, 100)}`);
+  // failed/abandoned 是终态，start-learning 会拒绝并要求 restartLearningPhase——
+  // 该接口从「第一个未完成课程」续传（resetTaskProgress:false），正是续跑要的语义。
+  if (sl.status !== 200 || sl.json?.success === false) {
+    const rl = await api('POST', `/api/admin/virtual-learners/sessions/${sessionId}/restart-learning`, {}, 300000);
+    log(`  restart-learning http=${rl.status} success=${rl.json?.success} err=${String(rl.json?.error || '').slice(0, 120)}`);
+    if (rl.status !== 200 || rl.json?.success === false) {
+      log(`  !! 复活失败，跳过本会话`);
+      return;
+    }
+  }
 
   let baseline = doneCount(sessionId).n;
-  let steps = 0, deadline = Date.now() + 90 * 60 * 1000;
+  // 每节按 ~25 分钟预算（实测单节 12-25 分钟），至少给 30 分钟，避免多节续跑被 90 分钟硬顶截断。
+  const budgetMin = Math.max(30, (UNTIL - baseline) * 25);
+  let steps = 0, deadline = Date.now() + budgetMin * 60 * 1000;
+  log(`  预算 ${budgetMin} 分钟（目标 ${UNTIL}，起点 ${baseline}）`);
+  let lastProgressStep = 0;
   while (Date.now() < deadline && doneCount(sessionId).n < UNTIL) {
     let r;
     try { r = await api('POST', `/api/admin/virtual-learners/sessions/${sessionId}/teaching-step`, {}, 300000); }
@@ -73,8 +87,16 @@ async function teach(sessionId) {
       for (let f = 0; f < 2; f++) { try { await api('POST', `/api/admin/virtual-learners/sessions/${sessionId}/teaching-step`, {}, 300000); } catch { break; } }
       await api('POST', `/api/admin/virtual-learners/sessions/${sessionId}/wrapup`, {}, 120000).catch(() => {});
       baseline = cur;
+      lastProgressStep = steps;
       log(`  ✓ 本节完成 → done=${baseline}/${UNTIL}（${steps} 步）`);
       continue;
+    }
+    // 停滞护栏：会话被判死/回路空转时 teaching-step 仍返回 200（实测 60 步零进展，
+    // 空转只烧时钟）——连续 60 步无进度即停，别等满 260/90 分钟。
+    if (steps - lastProgressStep > 60) {
+      const vs = await api('GET', `/api/admin/virtual-learners/sessions/${sessionId}`, undefined, 30000);
+      log(`  停滞 ${steps - lastProgressStep} 步无进展，退出（status=${vs.json?.data?.status}）`);
+      break;
     }
     await sleep(2000);
     if (steps > 260) { log(`  step 超 260，退出（done=${doneCount(sessionId).n}）`); break; }
