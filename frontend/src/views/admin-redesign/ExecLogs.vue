@@ -24,18 +24,20 @@
       <MkKpi label="耗时 P99" :value="latencyP99" :hint="latencyHint" title="延迟分位（仅成功日志）：P99 = 99% 请求耗时" />
     </section>
 
-    <!-- 单卡容器（原型 renderObserve：card > .tabs 页签 + 页签体，对齐 Users.vue 卡内页签判例）：
-         日志 / Trace 链路（Trace 为执行日志下钻视图）两个页签体共用一张卡；
-         页签 2026-10-01 由 mk-pills 胶囊迁入下划线页签——胶囊只做筛选 chips，视图/分区切换归页签；
-         成本分析 2026-09-29 拆回独立页 /admin/token-cost -->
-    <div class="mk-card mk-card--fill">
-      <!-- 审核 #122：ARIA tabs 补全关联——页签有 id/aria-controls，两个页签体各有
-           role=tabpanel + aria-labelledby（方向键切换留待后续，roving 未承诺） -->
-      <div class="tabs" role="tablist" aria-label="执行日志视图切换">
-        <button type="button" role="tab" id="el-tab-logs" aria-controls="el-panel-logs" class="tab" :aria-selected="elTab === 'logs'" @click="switchElTab('logs')">日志</button>
-        <button type="button" role="tab" id="el-tab-trace" aria-controls="el-panel-trace" class="tab" :aria-selected="elTab === 'trace'" @click="switchElTab('trace')">Trace 链路</button>
-      </div>
+    <!-- 视图切换（2026-10-14 用户评审：此前贴在表格卡顶、通栏一条下划线，读起来像表格的表头）：
+         移到页面级槽位——读数带之下、明细卡之上；卡片顶部回归「筛选头 + 表头」。
+         与 Skills / Orchestrator / OpsHub / OpsAchievements 的页面级页签同形（原型 renderObserve 的
+         card > .tabs 是卡内做法，本页不再沿用）。页签 2026-10-01 由 mk-pills 胶囊迁入下划线页签 -->
+    <!-- 审核 #122：ARIA tabs 补全关联——页签有 id/aria-controls，两个页签体各有
+         role=tabpanel + aria-labelledby（方向键切换留待后续，roving 未承诺） -->
+    <div class="tabs" role="tablist" aria-label="执行日志视图切换">
+      <button type="button" role="tab" id="el-tab-logs" aria-controls="el-panel-logs" class="tab" :aria-selected="elTab === 'logs'" @click="switchElTab('logs')">日志</button>
+      <button type="button" role="tab" id="el-tab-trace" aria-controls="el-panel-trace" class="tab" :aria-selected="elTab === 'trace'" @click="switchElTab('trace')">Trace 链路</button>
+    </div>
 
+    <!-- 单卡容器（原型 renderObserve：筛选头 + 页签体同卡）：日志 / Trace 链路（Trace 为执行日志
+         下钻视图）两个页签体共用一张卡；成本分析 2026-09-29 拆回独立页 /admin/token-cost -->
+    <div class="mk-card mk-card--fill">
       <!-- ===== Tab2: Trace 链路（嵌入 TraceWaterfall 组件；embedded 根节点 display:contents，
            子元素直接成为本卡的 flex 子项，与日志页签体同卡）。id/role/aria-labelledby 经
            属性透传落到组件根节点（未设 inheritAttrs:false），display:contents 不影响 aria 属性 ===== -->
