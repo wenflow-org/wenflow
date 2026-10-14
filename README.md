@@ -254,15 +254,27 @@ WenFlow 目前仍处于**早期开发阶段**，是一个用于验证教学概�
 ### 推荐顺序（首次使用）
 
 ```bash
+# 0) 安装依赖（务必用 npm ci，不要用 npm install——原因见下方说明）
+npm ci
+npm --prefix backend ci
+npm --prefix frontend ci
+
 # 1) 初始化 backend/.env（JWT_SECRET、AI 配置、初始管理员）
 npm run env:setup        # Windows PowerShell；Linux/macOS 用 cp backend/.env.example backend/.env 后手工填写
 
 # 2) 跨平台启动（Windows → start-dev.ps1，Linux/macOS → start-dev.sh）
+#    启动脚本会先执行 `npm --prefix backend run prisma:prepare`（生成双 Prisma Client + 双库 migrate deploy），再拉起服务
 npm run dev
+
+# 如需手动分步（例如换 worktree / 移动目录后），必须先显式跑一次前置步骤
+npm --prefix backend run prisma:prepare
 ```
 
 说明：建议首次使用先完成环境初始化，再选择启动脚本。若 `backend/.env` 缺失或 `JWT_SECRET` 不合格，启动脚本也会自动拉起初始化流程。
 启动后端时会自动把仓库里的核心 prompts 同步进数据库；克隆仓库后即可直接运行，无需手动导入。
+`npm run dev`（`start-dev.ps1` / `start-dev.sh`）已把 `prisma:prepare`（生成客户端 + 双库迁移）作为前置步骤内置其中；仅在手动分步、或 `-SkipPrisma` / `--skip-prisma` 跳过时，才需要自己先跑。
+
+> **依赖安装一律用 `npm ci`，不要用 `npm install`。** `npm install` 会按当前解析结果重写 `package-lock.json`，把来自镜像（registry.npmmirror.com）的 optional / peer 条目整批删除（如 `@parcel/watcher` 全平台条目、`@bufbuild/protobuf`），实测一次就是数百行纯删除，并非代码改动。`npm ci` 严格按 lockfile 安装、且不改写 lockfile（CI 亦统一用 `npm ci`）。
 
 ### 本机开发
 
@@ -387,6 +399,15 @@ npm run prompts:core:check
 - `SYSTEM_DATABASE_URL=file:../system.db`
 
 相对 URL 按 Schema 目录解析。请勿继续使用旧的 `file:./prisma/*.db`，也不要把 System URL 改为 `file:./system.db`。已有环境升级前先确认真实权威数据库并备份，可运行 `npm run prisma:baseline:audit` 做只读检查。
+
+**换 worktree / 移动目录后连错库（迁移与运行数据分离）**：Prisma 生成的客户端会把生成时记录的相对路径写进 `node_modules/.prisma/client/index.js`（`alternativePaths`，按运行时 cwd 解析）。同一台机切换或移动 worktree 后，应用可能仍解析到**另一棵树**的库（如 `D:\test\wenflow-develop\backend\prisma\dev.db`），而 CLI `prisma migrate deploy` 迁移的却是当前工作区的库——表现为迁移与运行数据分离。用 `PRAGMA database_list`（经应用同款客户端）可确认实际路径。修复：在**当前工作区**的 `backend/` 下重新生成客户端并部署迁移：
+
+```bash
+npm --prefix backend run prisma:generate:main          # 关键：在正确 cwd 下重生成客户端
+npm --prefix backend run prisma:migrate:deploy:all     # 再迁移当前工作区的库
+# 或一步到位（等价于上面两条）：
+npm --prefix backend run prisma:prepare
+```
 
 ### 前端 API 环境变量
 

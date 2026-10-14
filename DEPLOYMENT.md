@@ -61,7 +61,7 @@
 ```powershell
 # 后端
 cd backend
-npm install
+npm ci
 Copy-Item .env.example .env
 npx prisma generate
 npx prisma generate --schema=prisma/system/schema.prisma
@@ -71,12 +71,14 @@ npm run dev
 
 # 前端
 cd ..\frontend
-npm install
+npm ci
 Copy-Item .env.example .env
 npm run dev
 ```
 
 补充说明：
+- 依赖安装统一用 `npm ci`（不要用 `npm install`）：`npm install` 会按当前解析结果重写 `package-lock.json`，把来自镜像（registry.npmmirror.com）的 optional / peer 条目（如 `@parcel/watcher` 全平台、`@bufbuild/protobuf`）整批删除；`npm ci` 严格按 lockfile 安装且不改写 lockfile，CI 亦统一使用 `npm ci`。
+- 后端 `npm run dev` 已内置 `npm run prisma:prepare`（生成双 Client + 双库 migrate deploy），上面的 `npx prisma generate` / `prisma:migrate:deploy:all` 手动分步可替换为一条 `npm run prisma:prepare`。
 - `npm run prompts:sync-core` 会把当前仓库代码中的核心 prompts 同步到数据库 ACTIVE 版本。
 - 如果代码与数据库 ACTIVE 不一致，系统会自动创建新版本并切到 ACTIVE，以保证新拉取项目的默认运行版本和代码一致。
 - 如果你直接在 `backend/` 目录执行 `npm run dev`，后端启动时也会做一次相同的 core prompt sync。
@@ -326,6 +328,25 @@ npm run prompts:sync-core
 ```
 
 说明：该命令会把核心 prompts 同步成当前代码版本；若只想补新增节点而不覆盖已有 ACTIVE prompt，继续使用 `npm run prompts:backfill-core`。
+
+### 1.2) 应用读写的库与迁移的库不是同一个（换 worktree / 移动目录后）
+
+现象：同一台机切换或移动 worktree / 目录后，应用实际读写的是**另一棵树**的库（例如 `D:\test\wenflow-develop\backend\prisma\dev.db`），而 `prisma migrate deploy` 迁移的却是当前工作区的库，导致迁移与运行数据分离。
+
+原因：Prisma 生成客户端时把相对路径写进 `node_modules/.prisma/client/index.js`（`alternativePaths`，按运行时 cwd 解析），换目录后可能仍指向旧树。
+
+定位：经应用同款客户端执行 `PRAGMA database_list`，确认实际打开的库路径。
+
+修复：在**当前工作区**的 `backend/` 下重新生成客户端并部署迁移：
+
+```powershell
+npm --prefix backend run prisma:generate:main
+npm --prefix backend run prisma:migrate:deploy:all
+# 或一步到位：
+npm --prefix backend run prisma:prepare
+```
+
+> 依赖安装请统一用 `npm ci`，不要用 `npm install`：后者会重写 `package-lock.json`，删除来自镜像（registry.npmmirror.com）的 optional / peer 条目（如 `@parcel/watcher` 全平台、`@bufbuild/protobuf`）。
 
 ### 2) 反向代理后出现 403「请求来源不被允许」
 
