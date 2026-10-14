@@ -5,7 +5,10 @@
        → 各页签内容卡（原型卡片/表格/代码块词汇）。
        Prompt 编辑是弹层（原型 openPromptModal：modal modal--wide），不是页签。 -->
   <div v-if="view" class="mk-page skd">
-    <MkDetailHero avatar="S" :title="view.name" :sub="heroSub">
+    <!-- 身份以**英文 canonical id** 为主（用户拍板 2026-10-14：中文名只是别名，且代码注册表与声明源
+         实测 17/34 不同名，拿中文当身份会认错技能——如当时显示的「学习路径规划」并不是声明源里的名字）；
+         中文名降为副行别名，只出现一次。 -->
+    <MkDetailHero avatar="S" :title="view.id" :sub="heroSub">
       <template #pills>
         <!-- 健康徽标：带窗口词（「N 次失败」不带窗口会被读成全量，评审「窗口冒充全量」）且可点
              → 运行时页签（健康+证据先于配置，评审「结论埋深」） -->
@@ -752,7 +755,8 @@ const heroSub = computed(() => {
   if (!v) return ''
   const who = v.agentName || v.agentId || '—'
   // 类别走人话（Skills.vue 同字段判例）：裸枚举 teaching → 「教学」
-  return `${who} · ${categoryText(v.category)}`
+  // 中文名是**别名**（标题已是英文 canonical id），故排在副行首位、不再进标题与面包屑
+  return `${v.name} · ${who} · ${categoryText(v.category)}`
 })
 
 /* ===== hero pills ===== */
@@ -1125,7 +1129,9 @@ async function load(force = false) {
   loading.value = false
   // 身份双源（live 档案 / meta）都拿不到才算未找到：live boot 未完成时 meta 兜底
   if (!view.value) notFound.value = true
-  else setSubPageLabel(view.value.name)
+  // 面包屑与标题同源（英文 canonical id）：中文别名只在 hero 副行出现一次，
+  // 否则「面包屑中文 / 标题英文」又成一件事两种说法
+  else setSubPageLabel(view.value.id)
 }
 
 /* ===== 换技能（含深链 / 关闭）的复位 watch 统一放在文件尾：

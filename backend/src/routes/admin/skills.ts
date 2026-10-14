@@ -181,6 +181,10 @@ router.get('/', async (req: Request, res: Response) => {
     // 时间窗口：all/24h/7d/30d（默认 all 保持兼容；前端目录页默认传 7d）
     const statsRange = (String(req.query.range || 'all')) as SkillStatsRange;
     const runtimeStats = await getSkillRuntimeStatsCached(skills.map(s => s.definition.name), statsRange);
+    // 显示名以**声明源** prompts/skills.yaml 为准。此前用代码注册表 SkillDefinition.displayName，
+    // 实测与声明源 17/34 不同名（如 path-planning：代码「学习路径规划 Skill」vs 声明「路径规划 Skill」），
+    // 于是 Skills 页/技能详情 与 编排图（读声明源）对同一技能显示两个中文名。
+    const declaredNames = new Map(loadSkillsBookRaw().skills.map((entry) => [entry.skillId, entry.displayName]));
     
     const skillList = skills.map(s => {
       const stats = runtimeStats.get(s.definition.name) || s.definition.stats;
@@ -195,7 +199,7 @@ router.get('/', async (req: Request, res: Response) => {
         stats,
         lastCalledAt: runtimeStats.get(s.definition.name)?.lastCalledAt || s.lastCalledAt,
         registeredAt: s.registeredAt,
-        displayName: s.definition.displayName || s.definition.name,
+        displayName: declaredNames.get(s.definition.name) || s.definition.displayName || s.definition.name,
         agentId: agentOf?.id ?? null,
         agentName: agentOf?.name ?? null
       };

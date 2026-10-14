@@ -323,14 +323,16 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
 })
 
 describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
-  it('hero：S 头像 + 技能名 + 归属·类别副文 + 健康/类别/模型/版本 pills + 真实动作', async () => {
+  it('hero：S 头像 + 英文 canonical id + 中文别名/归属·类别副文 + 健康/类别/模型/版本 pills + 真实动作', async () => {
     const w = mountDetail()
     await settle()
 
     expect(w.find('.mk-hero__avatar').text()).toBe('S')
-    expect(w.find('.mk-hero__title').text()).toBe('教学回合')
+    // 2026-10-14 用户拍板「英文优先，中文只是别名」：标题 = canonical id，中文名降为副文首位
+    // （代码注册表与声明源实测 17/34 不同名，拿中文当身份会认错技能）
+    expect(w.find('.mk-hero__title').text()).toBe('skill-a')
     // 类别人话（categoryText）：裸枚举 teaching → 「教学」
-    expect(w.find('.mk-hero__sub').text()).toBe('教学 Agent · 教学')
+    expect(w.find('.mk-hero__sub').text()).toBe('教学回合 · 教学 Agent · 教学')
 
     const pills = w.findAll('.mk-hero__pills .mk-badge').map((b) => b.text())
     expect(pills[0]).toBe('健康') // 窗口内 100 调用 0 失败
