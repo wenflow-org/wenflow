@@ -30,6 +30,21 @@
       </table>
     </section>
 
+    <section class="sdp-eng">
+      <header class="mk-section__head">
+        <h4>依赖与发布</h4>
+        <span class="sdp-sec-meta">{{ coreDeps.length ? `${coreDeps.length} 项上游依赖` : '无依赖声明' }}</span>
+      </header>
+      <!-- 依赖取 core YAML inputs 的 skill: / sandbox: 引用（原型 renderSkillDetail 2367-2371 的 chips） -->
+      <div v-if="coreDeps.length" class="sdp-deps">
+        <span v-for="d in coreDeps" :key="d" class="mk-badge mk-badge--muted mono" :title="d">{{ d }}</span>
+      </div>
+      <p v-else-if="coreDepsFailed" class="sdp-none sdp-bad-text">核心文件读取失败，依赖清单不可得。</p>
+      <p v-else class="sdp-none" title="core YAML 未声明 inputs 的 skill: / sandbox: 引用">该 Skill 未声明输入依赖。</p>
+      <!-- 四段发布流（草稿/评审/灰度/回滚）后端无阶段状态接口 → 只说明真实存在的两步 -->
+      <p class="sdp-none" title="草稿 / 评审 / 灰度 / 回滚状态暂未提供">发布链：保存并编译 → 发布（暂无草稿 / 评审 / 灰度阶段状态）。</p>
+    </section>
+
     <section v-if="overview.runtimeContract" class="sdp-eng">
       <header class="mk-section__head">
         <h4>运行时契约</h4>
@@ -105,7 +120,7 @@
  * 工程 tab：基础信息 kv / 运行时契约 / 协议视图 / Skill 规则总览（4 个低频只读区块）
  */
 import { computed, ref, watch } from 'vue'
-import { adminPromptOpsApi } from '@/api/adminApi'
+import { adminPromptOpsApi, adminPromptWorkbenchApi } from '@/api/adminApi'
 import { TERMS } from '../terms'
 import { shortHash } from './sdp-shared'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -149,19 +164,40 @@ const nodeRules = computed(() => {
   return out
 })
 
+/* ---------- 依赖与发布：core YAML inputs 的 skill: / sandbox: 引用即上游依赖边 ---------- */
+const coreInputs = ref<Array<{ ref?: string }>>([])
+const coreDepsFailed = ref(false)
+/** #132 口径照样搬入：ref 取到空白为止（旧正则 `([^.\s]+)` 在首个「.」截断，
+    sandbox:teaching.* 会被截成同一条后去重成一，依赖清单与真实数量双错） */
+const coreDeps = computed<string[]>(() => {
+  const out: string[] = []
+  for (const i of coreInputs.value) {
+    const m = /^(skill|sandbox):(\S+)/.exec(String(i?.ref || '').trim())
+    if (!m) continue
+    const label = `${m[1]}:${m[2]}`
+    if (!out.includes(label)) out.push(label)
+  }
+  return out
+})
+
 async function loadEngineering() {
   if (engLoaded) return
   engLoaded = true
   engLoading.value = true
   let pvOk = true
   let roOk = true
+  let coreOk = true
   try {
-    const [pv, ro] = await Promise.all([
+    const [pv, ro, core] = await Promise.all([
       adminPromptOpsApi.getProtocolView().catch(() => { pvOk = false; return null }),
-      adminPromptOpsApi.getSkillRulesOverview().catch(() => { roOk = false; return null })
+      adminPromptOpsApi.getSkillRulesOverview().catch(() => { roOk = false; return null }),
+      adminPromptWorkbenchApi.getCore(props.skillId).catch(() => { coreOk = false; return null })
     ])
     engProtoFailed.value = !pvOk
     engRulesFailed.value = !roOk
+    coreDepsFailed.value = !coreOk
+    const coreBody = (core?.data?.core || null) as { inputs?: Array<{ ref?: string }> } | null
+    coreInputs.value = Array.isArray(coreBody?.inputs) ? coreBody.inputs : []
     const pBody = pv?.data?.data ?? pv?.data ?? {}
     protocols.value = ((pBody.protocols as Record<string, unknown>[]) || []).map((p) => ({
       id: String(p.id || ''),
@@ -188,6 +224,8 @@ watch(
     engLoaded = false
     protocols.value = []
     rulesOverview.value = null
+    coreInputs.value = []
+    coreDepsFailed.value = false
     void loadEngineering()
   },
   { immediate: true }
@@ -240,6 +278,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
 .sdp-kv tr:last-child th, .sdp-kv tr:last-child td { border-bottom: none; }
 .sdp-kv code { font-size: var(--mk-fs-micro); }
 .sdp-protocols { display: grid; gap: 8px; }
+.sdp-deps { display: flex; flex-wrap: wrap; gap: 6px; }
 .sdp-protocol {
   border: 1px solid #e6ecf6;
   border-radius: var(--mk-radius-xl);

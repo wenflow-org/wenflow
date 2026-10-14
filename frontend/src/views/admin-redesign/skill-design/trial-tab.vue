@@ -37,6 +37,22 @@
       </div>
       <div v-if="trialError" class="sdp-error">{{ trialError }}</div>
       <pre v-if="trialOutputText" class="sdp-output mono">{{ trialOutputText }}</pre>
+      <!-- 执行链路（原型 renderSkillDetail 2332-2335：OK/ERR pill + 步骤名 + ms）。
+           真实试跑只回最终输出，无逐步链路 → 跑过显「仅返回最终输出」，未跑显占位 -->
+      <div class="sdp-steps">
+        <header class="sdp-block__head">
+          <h4>执行链路</h4>
+          <span class="sdp-block__meta">{{ trialSteps.length ? `${trialSteps.length} 步` : '—' }}</span>
+        </header>
+        <div v-for="(s, i) in trialSteps" :key="`${s.label}-${i}`" class="sdp-step">
+          <span class="mk-badge" :class="s.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ s.ok ? 'OK' : 'ERR' }}</span>
+          <span class="sdp-step__label" :title="s.label">{{ s.label }}</span>
+          <span class="mono sdp-step__ms">{{ s.ms != null ? `${s.ms} ms` : '—' }}</span>
+        </div>
+        <p v-if="!trialSteps.length" class="sdp-none" :title="trialResult ? '本次试跑仅返回最终输出' : '尚未试跑'">
+          {{ trialResult ? '本次试跑仅返回最终输出，暂无逐步明细。' : '—' }}
+        </p>
+      </div>
     </section>
 
     <!-- 右：ACTIVE Prompt 只读参照 -->
@@ -63,7 +79,7 @@
   <section class="sdp-block">
     <header class="sdp-block__head">
       <h4>最近调用</h4>
-      <span class="sdp-block__meta">重跑：用真实输入复现</span>
+      <span class="sdp-block__meta">重跑：用真实输入复现 · 看 Trace：查该条链路现场</span>
     </header>
     <div v-if="recentLogs.length" class="sdp-logs">
       <div
@@ -85,6 +101,16 @@
           @click="rerun(log)"
         >
           {{ log.loading ? '…' : '重跑' }}
+        </button>
+        <!-- 看 Trace：跳到执行日志页并预填该条链路（与「重跑」并存——重跑验行为，看 Trace 查现场） -->
+        <button
+          type="button"
+          class="sdp-log__trace"
+          :disabled="!log.traceId"
+          :title="log.traceId ? `在执行日志查看链路 ${log.traceId}` : '该条日志没有 traceId'"
+          @click="goTrace(log.traceId)"
+        >
+          看 Trace
         </button>
         <div v-if="openLogId === log.id && log.detail" class="sdp-log__detail">
           <div v-if="log.detail.input" class="sdp-log__io">
@@ -123,6 +149,7 @@ import {
 import { toast } from '@/utils/toast'
 import { fmtMs, errText } from './sdp-shared'
 import { humanizeHttpError } from '../terms'
+import { openTrace } from '../store'
 import MkLoading from '@/components/mk/MkLoading.vue'
 
 hljs.registerLanguage('json', json)
@@ -174,6 +201,25 @@ function clearTrial() {
   trialResult.value = null
   trialError.value = ''
 }
+
+/** 执行链路（原型 vrow：OK/ERR pill + 步骤名 + ms）：testSkill 只回最终输出 → 多为空态，
+    按原型口径防御式读 steps，后端补齐逐步链路后无需改渲染 */
+interface TrialStep { label: string; ms?: number; ok: boolean }
+const trialSteps = computed<TrialStep[]>(() => {
+  const raw = (trialResult.value as Record<string, unknown> | null)?.steps
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((s): TrialStep => {
+      const o = (s || {}) as Record<string, unknown>
+      const msRaw = o.ms ?? o.durationMs
+      return {
+        label: String(o.name ?? o.t ?? o.step ?? o.title ?? ''),
+        ms: msRaw == null ? undefined : Number(msRaw),
+        ok: o.ok !== false && o.success !== false && o.status !== 'error' && o.error == null
+      }
+    })
+    .filter((s) => !!s.label)
+})
 
 async function runTrial() {
   const id = props.skillId
@@ -230,6 +276,8 @@ interface LogRow {
   time: string
   durationMs: number
   summary: string
+  /** 链路 id（agent_call_logs.traceId）：空则「看 Trace」不可用 */
+  traceId: string
   loading: boolean
   detail: { input?: string; output?: string; error?: string } | null
 }
@@ -267,6 +315,7 @@ async function loadRecentLogs() {
         time: timeAgo(String(l.createdAt || '')),
         durationMs: Number(l.durationMs || 0),
         summary: status === 'ok' ? '成功' : err.slice(0, 60) || (status === 'timeout' ? '超时' : '失败'),
+        traceId: String(l.traceId || ''),
         loading: false,
         detail: null
       }
@@ -344,6 +393,12 @@ function timeAgo(iso?: string | null): string {
   if (h < 24) return `${h} 小时前`
   const d = Math.floor(h / 24)
   return d < 30 ? `${d} 天前` : new Date(t).toLocaleDateString('zh-CN')
+}
+
+/** 看 Trace：预填该链路并跳到执行日志页的 Trace tab（store.openTrace 跨页动线单源） */
+function goTrace(traceId: string) {
+  if (!traceId) return
+  openTrace(traceId)
 }
 
 async function copy(content: string) {
@@ -534,7 +589,9 @@ watch(() => props.skillId, () => {
 .sdp-logs { display: grid; gap: 4px; }
 .sdp-log {
   display: grid;
-  grid-template-columns: 1fr auto;
+  /* 3 列：主体（吃掉剩余宽）+ 重跑 + 看 Trace（两个窄动作列）。主体列必须 minmax(0,1fr)——
+     auto 列在窄容器里会把摘要挤没 */
+  grid-template-columns: minmax(0, 1fr) auto auto;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
@@ -579,6 +636,30 @@ watch(() => props.skillId, () => {
 }
 .sdp-log__rerun:hover { background: #eff6ff; }
 .sdp-log__rerun:disabled { color: var(--mk-faint); cursor: not-allowed; }
+.sdp-log__trace {
+  border: 0;
+  border-left: 1px solid var(--mk-line);
+  background: transparent;
+  color: var(--mk-blue);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  padding: 0 10px;
+  cursor: pointer;
+}
+.sdp-log__trace:hover { background: var(--mk-blue-bg); }
+.sdp-log__trace:disabled { color: var(--mk-faint); cursor: not-allowed; }
+/* 执行链路（试跑块内的子区块：分隔线 + 步骤行） */
+.sdp-steps { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--mk-line); }
+.sdp-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  font-size: var(--mk-fs-micro);
+}
+.sdp-step__label { color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sdp-step__ms { color: var(--mk-faint); text-align: right; }
 .sdp-log__detail {
   grid-column: 1 / -1;
   border-top: 1px solid #eef2f8;
@@ -636,6 +717,8 @@ watch(() => props.skillId, () => {
   .sdp-log__time { font-size: var(--mk-fs-micro); }
   .sdp-log__dur { font-size: var(--mk-fs-body); }
   .sdp-log__rerun { font-size: var(--mk-fs-body); padding: 0 14px; }
+  .sdp-log__trace { font-size: var(--mk-fs-body); padding: 0 14px; }
+  .sdp-step { font-size: var(--mk-fs-body); }
   .sdp-log__io span { font-size: var(--mk-fs-micro); }
   .sdp-log__io pre { font-size: var(--mk-fs-body); padding: 12px 14px; }
 }

@@ -35,6 +35,24 @@
       </div>
     </div>
 
+    <!-- 运行时限制（原型 renderSkillDetail 2355-2357 的 dl.kv）：后端逐 skill 只落 requestTimeoutMs
+         一项，其余限制（并发/速率/预算）无逐 skill 数据源 → 无值即说「未覆盖」而非留白 -->
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">运行时限制</h3>
+        <span class="mk-card__meta">{{ runtimeLimits.length ? `${runtimeLimits.length} 项` : '无独立限制' }}</span>
+      </div>
+      <div class="sdp-secbody">
+        <div v-if="runtimeLimits.length" class="sdp-limits">
+          <div v-for="r in runtimeLimits" :key="r.k" class="sdp-limits__row">
+            <span class="sdp-limits__k">{{ r.k }}</span>
+            <span class="mono sdp-limits__v">{{ r.v }}</span>
+          </div>
+        </div>
+        <p v-else class="sdp-none">该 Skill 未覆盖任何运行时限制（超时等走调用 Agent / 平台默认）。</p>
+      </div>
+    </section>
+
     <div class="sdp-form mk-card">
       <div v-if="rtLoadFailed" class="sdp-error">运行时配置加载失败，已重置为默认值。<button type="button" class="mk-link" @click="loadRuntime">重试</button></div>
       <label class="sdp-field sdp-field--check">
@@ -155,6 +173,58 @@
       </div>
     </div>
 
+    <!-- 模型测试（POST /skills/:name/model-probe）：与上方「通道探测」不是一回事 ——
+         探测只列 endpoint 可用模型；本块拿 ACTIVE Prompt 按所选档位直发上游跑一次，
+         看改档位后的真实延迟 / JSON / token。不落库、不改配置 -->
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">模型测试</h3>
+        <span class="mk-card__meta">ACTIVE Prompt + 当前路由直发上游 · 不落库</span>
+      </div>
+      <div class="sdp-secbody">
+        <div class="sdp-form__grid">
+          <label class="sdp-field">
+            <span>思考模式</span>
+            <select v-model="probeForm.thinkingMode" class="mk-input">
+              <option value="default">跟随配置（{{ thinkingLabel }}）</option>
+              <option value="enabled">开启</option>
+              <option value="disabled">关闭</option>
+            </select>
+          </label>
+          <label class="sdp-field">
+            <span>思考强度</span>
+            <select v-model="probeForm.reasoningEffort" class="mk-input" :disabled="probeForm.thinkingMode === 'disabled'">
+              <option value="default">跟随配置（{{ cfgEffortLabel }}）</option>
+              <option value="low">low</option>
+              <option value="high">high</option>
+              <option value="max">max</option>
+            </select>
+          </label>
+        </div>
+        <p v-if="probeResult?.resolved" class="sdp-probe__resolved mono">
+          生效：{{ probeResult.resolved.model }} · {{ probeResult.resolved.thinkingMode }} / {{ probeResult.resolved.reasoningEffort }}
+        </p>
+        <div class="sdp-form__footer">
+          <span v-if="probeError" class="sdp-form__msg is-err">{{ probeError }}</span>
+          <button type="button" class="mk-btn mk-btn--primary" :disabled="probeRunning" @click="runModelProbe">
+            {{ probeRunning ? '探测中…（最长 180s）' : '开始探测' }}
+          </button>
+        </div>
+        <div v-if="probeResult" class="sdp-probe" :class="probeResult.jsonOk === 'ok' ? 'is-ok' : 'is-bad'">
+          <div class="sdp-probe__grid">
+            <div><span>总耗时</span><strong class="mono">{{ fmtMs(probeResult.durationMs ?? 0) }}</strong></div>
+            <div><span>首字 TTFT</span><strong class="mono">{{ probeResult.ttftContentMs != null ? fmtMs(probeResult.ttftContentMs) : '—' }}</strong></div>
+            <div><span>JSON</span><strong class="mono">{{ probeResult.jsonOk || '—' }}</strong></div>
+            <div><span>输出字符</span><strong class="mono">{{ probeResult.contentChars ?? '—' }}</strong></div>
+            <div><span>completion</span><strong class="mono">{{ probeResult.completionTokens ?? '—' }}</strong></div>
+            <div><span>finish</span><strong class="mono">{{ probeResult.finish || '—' }}</strong></div>
+          </div>
+          <pre v-if="probeResult.contentPreview" class="sdp-probe__pre mono">{{ probeResult.contentPreview }}</pre>
+        </div>
+        <p class="mk-card__note">先探测验证档位，再回来保存配置——探测不发保存、也不改生效配置。</p>
+      </div>
+    </section>
+
     <!-- 模型目录候选：模型输入与兜底链输入共用（带「供应商 · tier」标注） -->
     <datalist id="rt-model-options">
       <option v-for="o in catalogOptions" :key="`cat-${o.value}`" :value="o.value" :label="o.label" />
@@ -169,7 +239,7 @@
 import { computed, ref, watch } from 'vue'
 import { adminPlatformSettingsApi, adminSkillsApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
-import { errText } from './sdp-shared'
+import { errText, fmtMs } from './sdp-shared'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 
 // 模型目录候选（File-as-Truth llm-providers.json）：模型输入与兜底链输入共用的 datalist；
@@ -229,6 +299,66 @@ const thinkingLabel = computed(() =>
   rtForm.value.thinkingMode === 'enabled' ? '开启' : rtForm.value.thinkingMode === 'disabled' ? '关闭' : '继承/默认'
 )
 const sourceLabel = (k: string) => generationParams.value?.sources?.[k] || '—'
+
+/** 运行时限制 kv：后端逐 skill 只落 requestTimeoutMs（未配置=继承，不算一条限制） */
+const runtimeLimits = computed<Array<{ k: string; v: string }>>(() => {
+  const rows: Array<{ k: string; v: string }> = []
+  const ms = rtForm.value.requestTimeoutMs
+  if (ms != null) rows.push({ k: '请求超时', v: `${ms} ms` })
+  return rows
+})
+
+/* ---------- 模型测试（model-probe；与 probeChannel 通道探测是两件事） ---------- */
+interface ProbeForm {
+  thinkingMode: 'default' | 'enabled' | 'disabled'
+  reasoningEffort: 'default' | 'low' | 'high' | 'max'
+}
+interface ProbeResult {
+  durationMs?: number
+  ttftContentMs?: number | null
+  contentChars?: number
+  completionTokens?: number | null
+  finish?: string
+  jsonOk?: string
+  contentPreview?: string
+  resolved?: { model?: string; thinkingMode?: string; reasoningEffort?: string }
+}
+const probeForm = ref<ProbeForm>({ thinkingMode: 'default', reasoningEffort: 'default' })
+const probeRunning = ref(false)
+const probeError = ref('')
+const probeResult = ref<ProbeResult | null>(null)
+/** 「跟随配置」档位回显（读当前生效配置，不与探测参数混为一谈） */
+const cfgEffortLabel = computed(() =>
+  rtForm.value.reasoningEffort === 'default' ? '继承/默认' : rtForm.value.reasoningEffort
+)
+
+function resetProbe() {
+  probeRunning.value = false
+  probeError.value = ''
+  probeResult.value = null
+  probeForm.value = { thinkingMode: 'default', reasoningEffort: 'default' }
+}
+
+async function runModelProbe() {
+  const id = props.skillId
+  if (!id || probeRunning.value) return
+  probeRunning.value = true
+  probeError.value = ''
+  probeResult.value = null
+  try {
+    const res = await adminSkillsApi.modelProbe(id, {
+      thinkingMode: probeForm.value.thinkingMode,
+      reasoningEffort: probeForm.value.reasoningEffort
+    })
+    if (id !== props.skillId) return
+    probeResult.value = (res.data?.data ?? res.data ?? {}) as ProbeResult
+  } catch (e) {
+    if (id !== props.skillId) return
+    probeError.value = `探测失败：${errText(e)}`
+  } finally {
+    if (id === props.skillId) probeRunning.value = false
+  }
+}
 
 /** 通道探测：用该 skill 已保存的 endpoint+key 拉可用模型列表 */
 async function probeChannel() {
@@ -428,6 +558,7 @@ watch(
   [() => props.skillId, () => props.refreshTick],
   () => {
     resetRtForm()
+    resetProbe()
     generationParams.value = null
     rtMsg.value = ''
     void loadRuntime()
@@ -467,6 +598,7 @@ watch(() => props.skillId, () => {
 
 <style scoped>
 .sdp-pane { display: grid; gap: 14px; align-content: start; }
+.sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .sdp-notice {
   padding: 9px 14px;
   border-radius: var(--mk-radius-xl);
@@ -544,6 +676,42 @@ watch(() => props.skillId, () => {
 }
 .sdp-form__msg { margin: 0 auto 0 0; font-size: var(--mk-fs-micro); color: var(--mk-green); font-weight: 600; }
 .sdp-form__msg.is-err { color: var(--mk-red); }
+/* 运行时限制 / 模型测试两张 mk-card 的卡体（与 .sdp-form 同内边距，视觉同族） */
+.sdp-secbody { padding: 14px 16px; display: grid; gap: 10px; }
+.sdp-limits { display: grid; gap: 6px; }
+.sdp-limits__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-sm);
+  font-size: var(--mk-fs-micro);
+}
+.sdp-limits__k { color: var(--mk-muted); }
+.sdp-limits__v { color: var(--mk-ink); }
+.sdp-probe { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); }
+.sdp-probe.is-ok { border-color: rgba(22, 163, 74, 0.35); background: var(--mk-green-bg); }
+.sdp-probe.is-bad { border-color: rgba(220, 38, 38, 0.3); background: var(--mk-red-bg); }
+.sdp-probe__resolved { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.sdp-probe__grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.sdp-probe__grid > div { display: grid; gap: 2px; font-size: var(--mk-fs-micro); min-width: 0; }
+.sdp-probe__grid span { color: var(--mk-faint); }
+.sdp-probe__grid strong { color: var(--mk-ink); font-weight: 600; overflow-wrap: anywhere; }
+.sdp-probe__pre {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.6;
+  color: var(--mk-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .sdp-probe__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 .sdp-error {
   padding: 10px 12px;
   border-radius: var(--mk-radius-xl);
@@ -566,6 +734,9 @@ watch(() => props.skillId, () => {
   .sdp-divider strong { font-size: var(--mk-fs-emphasis); }
   .sdp-divider span { font-size: var(--mk-fs-body); }
   .sdp-form__msg { font-size: var(--mk-fs-body); }
+  .sdp-secbody { padding: 18px 20px; gap: 12px; }
+  .sdp-limits__row { font-size: var(--mk-fs-body); padding: 9px 12px; }
+  .sdp-probe__resolved, .sdp-probe__grid > div, .sdp-probe__pre { font-size: var(--mk-fs-body); }
 }
 
 /* 暗色模式 */

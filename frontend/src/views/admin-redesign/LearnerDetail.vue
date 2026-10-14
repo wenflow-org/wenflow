@@ -62,12 +62,13 @@
         :title="scopeNote.title"
         @change="scopePathId = ($event.target as HTMLSelectElement).value"
       >
-        <option v-if="pathOptionsLoading" value="" disabled>加载中…</option>
-        <option v-else-if="!pathOptions.length" value="" disabled>该学习者暂无学习路径</option>
+        <option v-if="!pathOptionsLoading && !pathOptions.length" value="" disabled>该学习者暂无学习路径</option>
         <option v-for="p in pathOptions" :key="p.id" :value="p.id">
           {{ p.title }}（{{ pathStatusText(p.status) }}）{{ p.id === learnerCurrentPathId ? ' · 当前' : '' }}
         </option>
       </select>
+      <!-- 路径选项加载态走共享原语（select 内放不下组件），转圈挂在其后：select 不被挤位 -->
+      <MkLoading v-if="pathOptionsLoading" inline min />
       <span
         class="ld-scope__hint"
         title="「记忆与复习」不随本开关走：一个概念只保留一条记忆痕迹（记的是最后写入的那条路径），按路径切会漏掉在另一条路径学过的概念。「行为基线与互动」本就是用户级先验，不含路径概念。要看跨全部路径的教学会话，走平台「教学会话」页（那里不按路径收窄）。"
