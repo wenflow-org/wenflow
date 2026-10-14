@@ -874,8 +874,13 @@ function clearFilters() {
 </script>
 
 <style scoped>
-/* 嵌入模式（宿主 People 页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
-.u-embedded { flex: 1; min-height: 0; overflow: hidden; }
+/* 嵌入模式（宿主 People 页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例）。
+   2026-10-14 走查（「这个组件到底部的高度和其他页不一样」）：嵌入分支的根同时挂着
+   .mk-page--fill，于是它把**页面**的底部呼吸位又加了一遍——宿主 .pp-host 已给过 16px，
+   卡片离底边就成了 32px（实测 1560 视口：People 32 / 学习状态·目标对话·学习路径·教学会话均 16）。
+   这层不是页面、只是宿主页内的填充容器，故清掉它的底部内边距；.mk-page--fill 的 flex 列与 gap
+   保留（卡片靠它们撑开）。 */
+.u-embedded { flex: 1; min-height: 0; overflow: hidden; padding-bottom: 0; }
 /* pill 组维度分隔（角色/活跃 | 生命周期「已删除」）：细竖线，弱于 pill 边界。
    类名走页面前缀 ul-（design:check 规则 1：mk- 前缀属全局原语，页面 scoped 内禁定义）。 */
 .ul-pills__sep { width: 1px; align-self: stretch; margin: 7px 6px 7px 2px; background: color-mix(in srgb, currentColor 18%, transparent); }
