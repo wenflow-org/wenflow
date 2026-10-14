@@ -12,7 +12,6 @@ contracts:
   - agentId: skill:teaching-turn
   - agentId: skill:peer-reinforcement
   - agentId: skill:session-wrapup
-  - agentId: skill:adaptive-guidance-copy
   - agentId: teaching-agent
 
 fields:
@@ -175,40 +174,6 @@ fields:
     promptRole: derived-presentation
     valueType: string
     description: summary 结构版本（固定 v2）
-
-  # === skill:adaptive-guidance-copy 产出 ===
-  - fieldId: headline
-    promptRole: public-reply
-    valueType: string
-    description: 引导文案主标题
-  - fieldId: subtitle
-    promptRole: public-reply
-    valueType: string
-    description: 引导文案副标题
-  - fieldId: todayActions
-    promptRole: public-reply
-    valueType: array<object>
-    description: 今日行动列表（label/to）
-  - fieldId: nextStep
-    promptRole: public-reply
-    valueType: string
-    description: 下一步建议
-  - fieldId: pathHint
-    promptRole: public-reply
-    valueType: string
-    description: 路径相关提示
-  - fieldId: paceHint
-    promptRole: public-reply
-    valueType: string
-    description: 节奏相关提示
-  - fieldId: emptyStateCopy
-    promptRole: public-reply
-    valueType: string
-    description: 空态文案
-  - fieldId: warningCopy
-    promptRole: public-reply
-    valueType: string
-    description: 预警文案
 
 routings:
   # teaching-turn 输出
@@ -463,56 +428,6 @@ routings:
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
-
-  # adaptive-guidance-copy 输出
-  - agentId: skill:adaptive-guidance-copy
-    fieldId: headline
-    render: visible
-    handoff: [teaching-agent]
-    internal: false
-    accumulate: false
-  - agentId: skill:adaptive-guidance-copy
-    fieldId: subtitle
-    render: visible
-    handoff: [teaching-agent]
-    internal: false
-    accumulate: false
-  - agentId: skill:adaptive-guidance-copy
-    fieldId: todayActions
-    render: visible
-    handoff: [teaching-agent]
-    internal: false
-    accumulate: false
-  - agentId: skill:adaptive-guidance-copy
-    fieldId: nextStep
-    render: visible
-    handoff: [teaching-agent]
-    internal: false
-    accumulate: false
-  - agentId: skill:adaptive-guidance-copy
-    fieldId: pathHint
-    render: visible
-    handoff: [teaching-agent]
-    internal: false
-    accumulate: false
-  - agentId: skill:adaptive-guidance-copy
-    fieldId: paceHint
-    render: visible
-    handoff: [teaching-agent]
-    internal: false
-    accumulate: false
-  - agentId: skill:adaptive-guidance-copy
-    fieldId: emptyStateCopy
-    render: visible
-    handoff: [teaching-agent]
-    internal: false
-    accumulate: false
-  - agentId: skill:adaptive-guidance-copy
-    fieldId: warningCopy
-    render: visible
-    handoff: [teaching-agent]
-    internal: false
-    accumulate: false
 
   # teaching-agent → learner（累积画像）
   - agentId: teaching-agent

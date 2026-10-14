@@ -103,7 +103,9 @@ export function stageOfTarget(target: string): string | null {
     'teaching-turn': 'teaching',
     'peer-reinforcement': 'teaching',
     'session-wrapup': 'teaching',
-    'adaptive-guidance-copy': 'teaching',
+    // 2026-10-14：由 teaching 迁 profile（产出=学习者页面文案）。前端这份是硬编码镜像，
+    // 必须与 prompts/skills.yaml 的 stage 同步，否则编排图与 Skills 页对同一技能说法不一致。
+    'adaptive-guidance-copy': 'profile',
     'learner-model': 'profile',
     'lesson-knowledge-enricher': 'profile',
     'virtual-learner-goal-dialogue-simulator': 'simulation',

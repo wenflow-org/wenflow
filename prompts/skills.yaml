@@ -209,14 +209,17 @@ skills:
 
   - skillId: adaptive-guidance-copy
     kind: mainline
-    stage: teaching
-    parentAgent: teaching-agent
+    # 2026-10-14 用户拍板：它产出的是「给学习者看的页面文案」（dashboard/path/learning-state 首屏），
+    # 消费的是画像阶段的 learnerSnapshot/learningState，不属于授课交付链（teaching.yaml routings 里
+    # 它一条 handoff 都没有），归画像阶段。
+    stage: profile
+    parentAgent: profile-agent
     handlerRef: backend/src/skills/adaptive-guidance-copy/index.ts
     coreFile: prompts/core/adaptive-guidance-copy.yaml
     displayName: 自适应引导文案 Skill
     description: 根据情境生成自适应引导话术
     coordinator:
-      agentId: teaching-agent
+      agentId: profile-agent
       steps: []
     dataSource:
       db:

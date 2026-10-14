@@ -1,19 +1,23 @@
 # Profile 阶段编排文件（字段路由单源化）
 # 由字段路由 seed TS 机械迁移（1:1）；seed TS 已退役，本文件为唯一声明源。
 #
-# profile 阶段字段全部为编排器内部沉淀（写入 learnerModel），
+# profile 阶段字段**绝大多数**为编排器内部沉淀（写入 learnerModel），
 # 所以 render 默认 hidden, accumulate=true, internal 多为 false
 # （因为 snapshot/projection 会读，不是 skill 私有）。
+# 例外（2026-10-14）：skill:adaptive-guidance-copy 的 8 个产出是**学习者可见**的页面文案
+# （render: visible + public-reply），因该技能本身归画像阶段而随迁入本文件——
+# 见下方「产出」注释块；下表合计 33 个字段中 25 hidden / 8 visible。
 
 stage: profile
 order: 4
 displayName: 画像阶段
-description: 学习者画像增强与背景知识沉淀（编排器内部）
+description: 学习者画像增强与背景知识沉淀，以及面向学习者的引导文案生成
 
 contracts:
   - agentId: skill:lesson-knowledge-enricher
   - agentId: skill:learner-model
   - agentId: skill:learning-predictor
+  - agentId: skill:adaptive-guidance-copy
   - agentId: profile-agent
 
 fields:
@@ -73,6 +77,41 @@ fields:
     promptRole: derived-presentation
     valueType: object
     description: 课程控制（taskGranularity/conceptDensity/reviewFrequency）
+
+  # === skill:adaptive-guidance-copy 产出（2026-10-14 由 teaching 阶段随技能迁入） ===
+  # 学习者可见的页面文案：dashboard / path-list / path-detail / learning-state 首屏投影
+  - fieldId: headline
+    promptRole: public-reply
+    valueType: string
+    description: 引导文案主标题
+  - fieldId: subtitle
+    promptRole: public-reply
+    valueType: string
+    description: 引导文案副标题
+  - fieldId: todayActions
+    promptRole: public-reply
+    valueType: array<object>
+    description: 今日行动列表（label/to）
+  - fieldId: nextStep
+    promptRole: public-reply
+    valueType: string
+    description: 下一步建议
+  - fieldId: pathHint
+    promptRole: public-reply
+    valueType: string
+    description: 路径相关提示
+  - fieldId: paceHint
+    promptRole: public-reply
+    valueType: string
+    description: 节奏相关提示
+  - fieldId: emptyStateCopy
+    promptRole: public-reply
+    valueType: string
+    description: 空态文案
+  - fieldId: warningCopy
+    promptRole: public-reply
+    valueType: string
+    description: 预警文案
 
 routings:
   # lesson-knowledge-enricher → profile-agent（knowledgeBackground 聚合）
@@ -274,3 +313,55 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
     notes: learner 画像终点，写入 snapshot 与 projection
+
+  # adaptive-guidance-copy 输出（2026-10-14 随技能由 teaching 阶段迁入）
+  # handoff 由 [teaching-agent] 改为 [profile-agent]：本阶段内交付（原值会让编排图画出
+  # profile → teaching 的倒流箭头，阶段序是 3 teaching → 4 profile）。
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: headline
+    render: visible
+    handoff: [profile-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: subtitle
+    render: visible
+    handoff: [profile-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: todayActions
+    render: visible
+    handoff: [profile-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: nextStep
+    render: visible
+    handoff: [profile-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: pathHint
+    render: visible
+    handoff: [profile-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: paceHint
+    render: visible
+    handoff: [profile-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: emptyStateCopy
+    render: visible
+    handoff: [profile-agent]
+    internal: false
+    accumulate: false
+  - agentId: skill:adaptive-guidance-copy
+    fieldId: warningCopy
+    render: visible
+    handoff: [profile-agent]
+    internal: false
+    accumulate: false

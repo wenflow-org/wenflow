@@ -224,18 +224,6 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.7, maxTokens: 4000 }
   },
-  {
-    id: 'skill:adaptive-guidance-copy',
-    name: '自适应引导文案 Skill',
-    description: '根据情境生成自适应引导话术',
-    category: 'teaching',
-    kind: 'skill',
-    runtimeEnabled: true,
-    userVisible: false,
-    monitoringGroup: 'Teaching',
-    ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.7, maxTokens: 800 }
-  },
 
   // ============ Profile 下辖 Skills ============
   {
@@ -263,6 +251,20 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     monitoringGroup: 'Profile',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.4, maxTokens: 4000 }
+  },
+  // 2026-10-14 用户拍板由 teaching 段迁入：产出是学习者页面文案（dashboard/path 首屏），
+  // 消费画像阶段的 learnerSnapshot/learningState，不在授课交付链上（teaching.yaml routings 无它）
+  {
+    id: 'skill:adaptive-guidance-copy',
+    name: '自适应引导文案 Skill',
+    description: '根据情境生成自适应引导话术',
+    category: 'profile',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Profile',
+    ioContractVersion: 'agent-output-v1',
+    defaultModelConfig: { temperature: 0.7, maxTokens: 800 }
   },
   // ============ 课内/课后平台内部 aux skill ============
   // 走查 N1：这 4 个此前**没登记进 manifest**，于是绕过了「userVisible=false 不进
@@ -541,8 +543,10 @@ for (const item of AGENT_MANIFEST) {
 export const LEGACY_AGENT_MEMBERS: Record<string, string[]> = {
   'goal-agent': ['skill:goal-conversation'],
   'path-agent': ['skill:path-planning', 'skill:stage-designer', 'skill:path-reviewer', 'skill:kc-mapper'],
-  'teaching-agent': ['skill:teaching-turn', 'skill:peer-reinforcement', 'skill:session-wrapup', 'skill:adaptive-guidance-copy'],
-  'profile-agent': ['skill:learner-model', 'skill:lesson-knowledge-enricher', 'skill:learning-predictor'],
+  'teaching-agent': ['skill:teaching-turn', 'skill:peer-reinforcement', 'skill:session-wrapup'],
+  // adaptive-guidance-copy 2026-10-14 由 teaching-agent 迁入（产出=学习者页面文案，见 skills.yaml 注释）。
+  // 顺序 = skills.yaml 文件顺序（P1 派生等价校验按文件序比对，不能随意排）
+  'profile-agent': ['skill:adaptive-guidance-copy', 'skill:learner-model', 'skill:lesson-knowledge-enricher', 'skill:learning-predictor'],
   'simulation-agent': [
     'skill:virtual-learner-persona-designer',
     'skill:virtual-learner-scenario-designer',
