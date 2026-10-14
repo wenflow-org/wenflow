@@ -51,7 +51,7 @@
           class="mk-pill"
           :class="{ 'mk-pill--active': failuresOnly }"
           :aria-pressed="failuresOnly"
-          title="只显示失败行（err）"
+          :title="`只显示失败的 span 行，当前样本共 ${errorTotal} 个失败 span（旁边「N 条链路含失败」计的是链路数，两者单位不同）`"
           @click="failuresOnly = !failuresOnly"
         >仅失败{{ errorTotal > 0 ? ` ${errorTotal}` : '' }}</button>
         <select v-model="sortMode" class="wf-sort mono" aria-label="排序方式" title="按耗时排序">
@@ -106,25 +106,32 @@
          达上限时「加载更多样本」入口随之消失，若无任何说明就像按钮丢了/没数据了。
          这里常驻 wf-notice 说清「为什么不再有更多样本 + 怎么继续看」 -->
     <div v-if="embedded && waterfallCapReached" class="wf-notice" role="alert">
-      <span>已达本地样本上限 {{ WATERFALL_MAX_SPANS }} 条，为保持流畅已停止追加；要看更多链路，请在上方输入完整链路 ID 回车直达。</span>
+      <span>已达本地样本上限 {{ WATERFALL_MAX_SPANS }} 条，为保持流畅已停止追加。要看更多链路，请输入完整链路 ID 回车直达。</span>
     </div>
 
     <!-- 链路概要卡 -->
     <div v-if="traceSummary" class="wf-summary">
       <div class="wf-summary__item"><b>{{ traceSummary.spanCount }}</b><span>span</span></div>
       <div class="wf-summary__item"><b>{{ fmtMs(traceSummary.total) }}</b><span>总耗时</span></div>
-      <div class="wf-summary__item" :class="{ 'wf-summary__item--bad': traceSummary.errorCount }"><b>{{ traceSummary.errorCount }}</b><span>失败</span></div>
+      <div class="wf-summary__item" :class="{ 'wf-summary__item--bad': traceSummary.errorCount }" title="所选链路内的失败 span 数（「仅失败」计全部样本的失败 span，定位链接计含失败的链路数）"><b>{{ traceSummary.errorCount }}</b><span>失败</span></div>
       <div class="wf-summary__item"><b>{{ fmtMs(traceSummary.avg) }}</b><span>平均耗时</span></div>
       <div class="wf-summary__item" :title="'链路内 span 延迟分位'">
         <b class="mono">P50 {{ fmtMs(traceSummary.p50) }} · P99 {{ fmtMs(traceSummary.p99) }}</b><span>延迟分位</span>
       </div>
-      <div class="wf-summary__item" :title="`输入 ${traceSummary.promptTokens.toLocaleString()} · 输出 ${traceSummary.completionTokens.toLocaleString()}`">
-        <b>{{ fmtTokens(traceSummary.promptTokens + traceSummary.completionTokens) }}</b><span>Token</span>
-      </div>
-      <div class="wf-summary__item" :title="traceSummary.estCost === null ? '本链路无 LLM Token 调用（网关/模拟类 span），不计成本' : '估算成本（按 deepseek-v4-flash 公开价：输入 ¥0.5/M · 输出 ¥2/M，仅供参考）'">
-        <b>{{ traceSummary.estCost === null ? '—' : `¥${traceSummary.estCost}` }}</b><span>估算成本</span>
-      </div>
-      <div class="wf-summary__item wf-summary__models"><span>模型</span><b class="mono">{{ traceSummary.models.length ? traceSummary.models.join(' / ') : '—' }}</b></div>
+      <!-- Token / 成本 / 模型三格只在链路真有 LLM 调用时出现：网关/模拟类链路（样本常态，
+           代码注释记 26/30）此前一律渲染「Token 0 · 估算成本 — · 模型 —」三个空读数，
+           占着读数位却零信息——按站内「缺字段省略、不硬造」（ModelRegistryOverview 同款口径）
+           整组省略 + 一句说明，读数带只留真实存在的量。 -->
+      <template v-if="traceSummary.hasLlm">
+        <div class="wf-summary__item" :title="`输入 ${traceSummary.promptTokens.toLocaleString()} · 输出 ${traceSummary.completionTokens.toLocaleString()}`">
+          <b>{{ fmtTokens(traceSummary.promptTokens + traceSummary.completionTokens) }}</b><span>Token</span>
+        </div>
+        <div class="wf-summary__item" title="估算成本（按 deepseek-v4-flash 公开价：输入 ¥0.5/M · 输出 ¥2/M，仅供参考）">
+          <b>{{ `¥${traceSummary.estCost}` }}</b><span>估算成本</span>
+        </div>
+        <div class="wf-summary__item wf-summary__models"><span>模型</span><b class="mono">{{ traceSummary.models.join(' / ') }}</b></div>
+      </template>
+      <span v-else class="wf-summary__note" title="这条链路只有网关 / 模拟类 span，没有 LLM 调用，因此没有 Token、成本与模型读数">无 LLM 调用</span>
     </div>
 
     <div v-if="activeSpans.length" class="wf" ref="wfRoot">
@@ -163,7 +170,9 @@
           <span class="wf-row__tail">
             <span v-if="span.errorCode" class="wf-row__errcode mono" :title="span.errorMessage">{{ errorCodeLabel(span.errorCode) ?? `[${span.errorCategory || 'err'}] ${span.errorCode}` }}</span>
             <span v-if="promptOf(span)?.drift" class="wf-row__drift">{{ TERMS.driftRuntime }}</span>
-            <span v-if="span.gatewayDurMs" class="wf-row__gw mono">网关 {{ fmtMs(span.gatewayDurMs) }}</span>
+            <!-- 网关耗时只在「与总耗时读起来不同」时显示：网关＝上游耗时、总耗时＝端到端，
+                 两者格式化后同值（多数纯网关调用）时并列＝同一个数字写两遍 -->
+            <span v-if="span.gatewayDurMs && fmtMs(span.gatewayDurMs) !== fmtMs(span.durationMs)" class="wf-row__gw mono" :title="`上游网关 ${fmtMs(span.gatewayDurMs)}，本行端到端 ${fmtMs(span.durationMs)}（差值＝平台侧开销）`">网关 {{ fmtMs(span.gatewayDurMs) }}</span>
             <span class="wf-row__dur mono">{{ fmtMs(span.durationMs) }}</span>
             <span class="wf-row__arrow" aria-hidden="true">▸</span>
           </span>
@@ -651,6 +660,8 @@ const traceSummary = computed(() => {
   const totalTokens = promptTokens + completionTokens
   const estCostRaw = (promptTokens * 0.5 + completionTokens * 2) / 1_000_000
   const estCost = totalTokens > 0 ? (estCostRaw >= 0.01 ? estCostRaw.toFixed(2) : estCostRaw.toFixed(4)) : null
+  /* 是否有 LLM 读数（token 或模型名任一存在）：false ⇒ 概要卡省略 Token / 成本 / 模型三格 */
+  const hasLlm = totalTokens > 0 || models.length > 0
   return {
     spanCount: s.length,
     total: maxEnd.value,
@@ -661,7 +672,8 @@ const traceSummary = computed(() => {
     p99: pct(0.99),
     promptTokens,
     completionTokens,
-    estCost
+    estCost,
+    hasLlm
   }
 })
 
@@ -922,6 +934,8 @@ const verdictText = computed(() => {
 .wf-summary__item b { font-size: var(--mk-fs-emphasis); font-weight: 700; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
 .wf-summary__item span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .wf-summary__item--bad b { color: var(--mk-red); }
+/* 无 LLM 调用链路的替代说明（取代 Token / 成本 / 模型三格空读数）：与读数同栏居中 */
+.wf-summary__note { align-self: center; margin-left: 18px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .wf-summary__models { flex: 1; align-items: flex-start; justify-content: center; min-width: 0; }
 .wf-summary__models b {
   font-size: var(--mk-fs-micro);
