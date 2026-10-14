@@ -1848,6 +1848,16 @@ input[type='checkbox'] {
   flex: none;
 }
 
+/* 搜索框原生清除钮抑制（2026-10-15 #22）：
+   `type=search` 的输入框在 WebKit/Blink 下聚焦时，UA 会自绘一个 ::-webkit-search-cancel-button。
+   页面里已自绘 `.paths__search-clear`（实心 ×，跨浏览器一致），两者并存会在右侧并排出现两个 ×。
+   这里全局关掉原生那个（含 decoration），全站搜索框统一由自绘按钮承担。 */
+input[type='search']::-webkit-search-cancel-button,
+input[type='search']::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 /* 管理端 code/pre 归零用户侧全局 code/pre 样式：design-system.css 给 `code` 设了用户侧的
    --text-sm（14px）红字胶囊（:410-417）、给 `pre` 设了浅色 1px 边框（:418-424），
    在管理端会盖住表格/卡片的文本档与底色——

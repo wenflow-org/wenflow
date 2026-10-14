@@ -427,9 +427,13 @@ onUnmounted(() => {
     border-radius: var(--mk-radius-xl);
     color: var(--muted);
     text-decoration: none;
+    transition: background 0.14s ease, color 0.14s ease;
   }
   .v2nav__dock-icon { display: grid; place-items: center; opacity: 0.75; }
   .v2nav__dock-label { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  /* hover 态（#21）：桌面顶栏 .v2nav-topnav__link 有 hover，窄屏改由 dock 接管后这一态漏了，
+     补成与顶栏同口径（surface-2 底 + ink 字），避免「移上去像没反应」。 */
+  .v2nav__dock-item:hover { background: var(--mk-surface-2); color: var(--ink); }
   .v2nav__dock-item--active { color: var(--blue-deep); }
   .v2nav__dock-item--active .v2nav__dock-icon { opacity: 1; }
   .v2nav__dock-item:active { background: color-mix(in srgb, var(--blue) 8%, transparent); }
