@@ -30,6 +30,9 @@
         <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">档案 {{ snapshotLabel }}</span>
       </template>
       <template #actions>
+        <button v-if="linkedVirtualProfile" type="button" class="mk-btn mk-btn--sm" title="同一实体的仿真档案视图（故事池 / 运行 / 运行预算）" @click="openVirtualProfile">
+          虚拟档案 →
+        </button>
         <button type="button" class="mk-btn" :disabled="recomputing" @click="recompute">
           {{ recomputing ? '重算中…' : '重算档案' }}
         </button>
@@ -153,7 +156,7 @@
         <section v-if="dynamicState" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">学习状态追踪</h3>
-            <span class="mk-card__meta">LSS · KTL · LF · LSB</span>
+            <span class="mk-card__meta" :title="loadCaliberNote.title">{{ LEARNER_METRIC_CODES }} · {{ loadCaliberNote.label }}</span>
           </div>
           <div class="ld-lsm">
             <div v-for="r in learningStateRows" :key="r.label" class="ld-lsm__row">
@@ -167,7 +170,7 @@
                 ></i>
               </span>
               <span class="ld-lsm__val">{{ r.value }}</span>
-              <span class="ld-lsm__hint">{{ r.hint }}</span>
+              <span class="ld-lsm__hint" :title="r.hintTitle">{{ r.hint }}</span>
             </div>
           </div>
         </section>
@@ -508,7 +511,7 @@
             <!-- 当前读数行（2026-10-11 用户走查）：四张 KPI 卡与曲线卡同族指标合流——当前值并入
                  曲线卡头部，撤页宽 KPI 横排；四个读数全缺省时整行不出现（曲线/空态自足） -->
             <div v-if="metricCards.some((m) => m.value !== '—')" class="ld-load__hits">
-              <div v-for="m in metricCards" :key="m.label" class="ld-load__hit" :title="m.hint">
+              <div v-for="m in metricCards" :key="m.label" class="ld-load__hit" :title="m.title">
                 <span>{{ m.label }}</span>
                 <strong :class="{ 'is-good': m.tone === 'ok', 'is-bad': m.tone === 'bad' }">{{ m.value }}</strong>
               </div>
@@ -829,9 +832,10 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { subPage, openSubPage, setSubPageLabel } from './store'
-import { liveLearners, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
+import { liveLearners, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
+import { learnerMetric, loadCaliber, LEARNER_METRIC_CODES, type LearnerMetricKey } from './learnerMetrics'
 import { adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
 import {
   statusText,
@@ -1800,23 +1804,22 @@ const metricCards = computed(() => {
   /* 后端语义核实（backend/src/services/learning/learning-state.service.ts）：
      LSS=Learning Stress Score 学习压力（0-10，越高越累）、KTL=Knowledge Training Load 训练负荷
      （LSS 的慢 EWMA，高=负荷重）、LF=Learning Fatigue 疲劳（≥6 警戒）；三者均为负荷类——
-     高值是坏（红）、低值是好（绿）。LSB=KTL−LF 状态平衡，正=状态好。此前负荷类高值标绿与
-     同卡图例「越高越累」自相矛盾，已按真实语义反转。 */
-  const toneLoad = (v?: number): 'ok' | 'bad' | '' => {
-    if (v == null || v === 0) return ''
-    return v >= 7 ? 'bad' : v <= 4 ? 'ok' : ''
+     高值是坏（红）、低值是好（绿）。LSB=KTL−LF 状态平衡，正=状态好。
+     标签/参考带/色调阈值单点取自 learnerMetrics.ts——此前本页两处渲染点
+     （metricCards 与 learningStateRows）与 VirtualProfile.lsmRows 各写一套且互相打架。 */
+  const card = (key: LearnerMetricKey) => {
+    const def = learnerMetric(key)
+    const v = m[key]
+    const missing = v == null || v === 0
+    return {
+      label: def.label,
+      value: fmt(v),
+      band: def.band,
+      title: missing ? '暂无数据' : `${def.band}\n${def.bandTitle}`,
+      tone: def.toneOf(v)
+    }
   }
-  const toneBalance = (v?: number): 'ok' | 'bad' | '' => {
-    if (v == null || v === 0) return ''
-    return v >= 1 ? 'ok' : v <= -3 ? 'bad' : ''
-  }
-  const hint = (v?: number, fallback = '') => (v == null || v === 0 ? '暂无数据' : fallback)
-  return [
-    { label: 'LSS 学习压力', value: fmt(m.lss), hint: hint(m.lss, '0-10，越高越累'), tone: toneLoad(m.lss) },
-    { label: 'KTL 训练负荷', value: fmt(m.ktl), hint: hint(m.ktl, '压力长期累积（慢 EWMA）'), tone: toneLoad(m.ktl) },
-    { label: 'LF 学习疲劳', value: fmt(m.lf), hint: hint(m.lf, '越高越疲劳，≥6 警戒'), tone: m.lf != null && m.lf > 0 && m.lf >= 6 ? 'bad' : toneLoad(m.lf) },
-    { label: 'LSB 状态平衡', value: fmt(m.lsb), hint: hint(m.lsb, 'KTL−LF，正=状态好'), tone: toneBalance(m.lsb) }
-  ]
+  return [card('lss'), card('ktl'), card('lf'), card('lsb')]
 })
 
 const dynamicRows = computed(() => {
@@ -2177,22 +2180,21 @@ const riskFactors = computed(() => (teachingHints.value?.riskFactors || []) as s
 const learningStateRows = computed(() => {
   const m = (dynamicState.value?.metrics || {}) as Record<string, number>
   const width = (v: number | undefined) => (v == null || v === 0 ? 0 : Math.min(100, Math.round((v / 10) * 100)))
-  const tone = (v: number | undefined): 'ok' | 'warn' | 'bad' | 'muted' => {
-    if (v == null || v === 0) return 'muted'
-    return v >= 7 ? 'bad' : v <= 4 ? 'ok' : 'warn'
-  }
-  return [
-    { label: 'LSS 学习压力', value: m.lss ? m.lss.toFixed(1) : '—', width: width(m.lss), tone: tone(m.lss), hint: '0-10，越高越累' },
-    { label: 'KTL 训练负荷', value: m.ktl ? m.ktl.toFixed(1) : '—', width: width(m.ktl), tone: tone(m.ktl), hint: '压力长期累积' },
-    { label: 'LF 疲劳度', value: m.lf ? m.lf.toFixed(1) : '—', width: width(m.lf), tone: m.lf != null && m.lf >= 6 ? 'bad' : tone(m.lf), hint: '≥6 警戒' },
-    {
-      label: 'LSB 状态平衡',
-      value: m.lsb ? `${m.lsb > 0 ? '+' : ''}${m.lsb.toFixed(1)}` : '—',
-      width: m.lsb ? Math.min(100, Math.round(Math.abs(m.lsb) * 8 + 10)) : 0,
-      tone: (m.lsb == null || m.lsb === 0 ? 'muted' : m.lsb >= 1 ? 'ok' : m.lsb <= -3 ? 'bad' : 'warn') as 'ok' | 'warn' | 'bad' | 'muted',
-      hint: 'KTL−LF，正=状态好'
+  const row = (key: LearnerMetricKey) => {
+    const def = learnerMetric(key)
+    const v = m[key]
+    const t = def.toneOf(v)
+    return {
+      label: def.label,
+      value: v ? (key === 'lsb' ? `${v > 0 ? '+' : ''}${v.toFixed(1)}` : v.toFixed(1)) : '—',
+      width: key === 'lsb' ? (v ? Math.min(100, Math.round(Math.abs(v) * 8 + 10)) : 0) : width(v),
+      // 共享口径的 '' = 缺值/中性 → 本页条形用 'muted'（本页只有 ok/bad 上色档）
+      tone: (t === '' ? 'muted' : t) as 'ok' | 'warn' | 'bad' | 'muted',
+      hint: def.band,
+      hintTitle: def.bandTitle
     }
-  ]
+  }
+  return [row('lss'), row('ktl'), row('lf'), row('lsb')]
 })
 
 /* ---------- 学习路径 pane：路径卡（原型 2165-2171） ---------- */
@@ -2345,6 +2347,35 @@ const snapshotLabel = computed(() => {
   const f = snapshotFresh.value
   return f ? `${f.version} · ${f.generatedAt}` : `${d.value?.snapshot.version ?? '—'} · ${d.value?.snapshot.generatedAt ?? '从未'}`
 })
+
+/** 快照生成时刻（原始 ISO，与 snapshotFresh 同源）：供四读数出处标注（loadCaliber）用 */
+const snapshotGeneratedAtIso = computed<string | null>(() => {
+  const raw = rawDetail.value
+  const model = (raw?.model ?? null) as Record<string, unknown> | null
+  const fr = (raw?.freshness ?? model?.freshness ?? null) as { generatedAt?: unknown } | null
+  if (fr?.generatedAt) return String(fr.generatedAt)
+  const id = subPage.value?.id || ''
+  const base = id ? liveLearners.value.find((l) => l.userId === id) : undefined
+  return base?.generatedAt ?? null
+})
+
+/** 四读数出处（学习者级聚合快照）：与「虚拟学习者档案」页的单次会话快照不同源，数值天然不同 */
+const loadCaliberNote = computed(() => loadCaliber('aggregate', snapshotGeneratedAtIso.value))
+
+/** 虚拟账号互跳：同一实体两个 ID（users.id ↔ virtual_learner_profiles.id）。从 boot 已载入的
+ *  全量虚拟档案里按 userId 反查；真人账号无档案 → 不出入口（此前两页互不相通，要知道对方存在
+ *  得自己记住两条 URL）。 */
+const linkedVirtualProfile = computed(() => {
+  const uid = subPage.value?.id
+  if (!uid) return null
+  return liveVirtuals.value.find((v) => String(v.raw?.userId || '') === uid) || null
+})
+function openVirtualProfile() {
+  const p = linkedVirtualProfile.value
+  const uid = subPage.value?.id
+  if (!p || !uid) return
+  openSubPage('virtual', p.id, { from: { view: 'learner', id: uid, label: d.value?.name } })
+}
 const snapshotBadge = computed(() =>
   snapshotLabel.value.includes('证据不足') ? 'mk-badge--warn' : 'mk-badge--muted'
 )

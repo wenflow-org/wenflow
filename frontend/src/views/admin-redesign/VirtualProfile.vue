@@ -51,6 +51,15 @@
     <div class="vp-tabsrow">
       <!-- 二级页签（原型 subtabs 下划线式，同 LearnerDetail/UserDetail）：角标保留「数量即 tab 角标」决策 -->
       <MkSubTabs v-model="activeTab" :tabs="tabs" />
+      <!-- 跨页入口提到可见位（原只在 ⋯ 菜单里，两页互不相通的心智问题一半来自此）：
+           同一实体两个 ID，这里是仿真档案视图，跳过去是学习视图 -->
+      <button
+        v-if="d.userId"
+        type="button"
+        class="mk-btn mk-btn--sm"
+        title="同一实体的学习视图：学习模型 / 证据 / 图谱 / 教学会话 / 记忆复习"
+        @click="goRealLearner()"
+      >学习详情 →</button>
       <div v-if="isLive" class="mk-menu vp-tabsrow__ops">
         <button
           type="button"
@@ -81,8 +90,8 @@
           <button type="button" class="mk-menu__item" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="closeMenu(); goSourceCard()">查看来源卡</button>
           <!-- 跨页入口（#74）：该虚拟学习者绑定的真实账号 / 记忆与复习；userId 缺失时隐藏 -->
           <div v-if="d.userId" class="mk-menu__sep" aria-hidden="true"></div>
-          <button v-if="d.userId" type="button" class="mk-menu__item" title="查看该虚拟学习者绑定的真实账号与学习者详情" @click="closeMenu(); goRealLearner()">查真实学习者详情</button>
-          <button v-if="d.userId" type="button" class="mk-menu__item" title="进入记忆与复习页：归并凭据 / 回滚 / 到期明细（该真实账号口径）" @click="closeMenu(); goMemoryReview()">记忆与复习</button>
+          <button v-if="d.userId" type="button" class="mk-menu__item" title="查看该虚拟学习者绑定的学习者详情（学习模型 / 证据 / 图谱）" @click="closeMenu(); goRealLearner()">学习详情</button>
+          <button v-if="d.userId" type="button" class="mk-menu__item" title="进入记忆与复习页：归并凭据 / 回滚 / 到期明细（仅真实账号）" @click="closeMenu(); goMemoryReview()">记忆与复习</button>
         </div>
       </div>
     </div>
@@ -206,7 +215,7 @@
             <section class="mk-card">
               <div class="mk-card__head">
                 <h3 class="mk-card__title">学习状态读数</h3>
-                <span class="mk-card__meta">LSS · KTL · LF · LSB</span>
+                <span class="mk-card__meta" :title="loadCaliberNote.title">{{ LEARNER_METRIC_CODES }} · {{ loadCaliberNote.label }}</span>
               </div>
               <div class="vp-cardbody">
                 <div v-if="lsmRows.length" class="lsm">
@@ -215,7 +224,7 @@
                     <span class="lsm__track"><i :data-tone="row.tone" :style="{ width: row.pct + '%' }"></i></span>
                     <span class="lsm__end">
                       <span class="lsm__val">{{ row.value }}</span>
-                      <span class="mk-badge" :class="row.refCls">{{ row.ref }}</span>
+                      <span class="mk-badge" :class="row.refCls" :title="row.refTitle">{{ row.ref }}</span>
                     </span>
                   </div>
                 </div>
@@ -284,7 +293,7 @@
         <section v-if="activeTab === 'profile'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">学习状态读数</h3>
-            <span class="mk-card__meta">LSS · KTL · LF · LSB</span>
+            <span class="mk-card__meta" :title="loadCaliberNote.title">{{ LEARNER_METRIC_CODES }} · {{ loadCaliberNote.label }}</span>
           </div>
           <div class="vp-cardbody">
             <div v-if="lsmRows.length" class="lsm">
@@ -293,7 +302,7 @@
                 <span class="lsm__track"><i :data-tone="row.tone" :style="{ width: row.pct + '%' }"></i></span>
                 <span class="lsm__end">
                   <span class="lsm__val">{{ row.value }}</span>
-                  <span class="mk-badge" :class="row.refCls">{{ row.ref }}</span>
+                  <span class="mk-badge" :class="row.refCls" :title="row.refTitle">{{ row.ref }}</span>
                 </span>
               </div>
             </div>
@@ -642,8 +651,8 @@
             <span
               v-if="runsTruncated"
               class="mk-card__meta"
-              :title="`详情接口最多返回 200 条会话，本页仅渲染最近 ${RUNS_TAB_WINDOW} 条`"
-            >已截断 · 仅显示最近 {{ RUNS_TAB_WINDOW }} 次</span>
+              :title="`会话记录较多，此处显示最近 ${RUNS_TAB_WINDOW} 次`"
+            >显示最近 {{ RUNS_TAB_WINDOW }} 次</span>
           </div>
           <MkEmptyState v-if="!allRuns.length" :class="LINE_EMPTY" title="还没有运行记录" />
           <MkEmptyState v-else-if="!runRows.length" :class="LINE_EMPTY" title="当前筛选无运行：">
@@ -909,6 +918,7 @@ import { adminVirtualLearnersApi } from '@/api/adminApi'
 import QuickLearnPanel from './QuickLearnPanel.vue'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { memoryReviewUrl } from './learner-profile'
+import { LEARNER_METRICS, LEARNER_METRIC_CODES, loadCaliber } from './learnerMetrics'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -984,6 +994,9 @@ interface Detail {
     lf: number | null
     lsb: number | null
   }
+  /** 上述读数取自哪次会话（该会话的 createdAt）——与「学习者详情」页的学习者级聚合态不同源，
+      数值天然不同，卡头据此标出处，避免两页对照被读成其中一处算错 */
+  learningStateAt?: string | null
 }
 
 interface StoryLatestRun {
@@ -1616,11 +1629,13 @@ function parseSessionStory(session: Record<string, unknown>) {
 
 /** 学习状态读数抽取：sessions[].runtime.knowledgeState.learning.currentState 即后端
     teachingState（lss/ktl/lf/lsb，0-10 量纲，见 backend learning-state.service.ts）。
-    取最近一个含该读数的会话；都没有 → undefined（模板渲染空态，不硬造数字）。 */
+    取最近一个含该读数的会话；都没有 → undefined（模板渲染空态，不硬造数字）。
+    同时回带该会话的时刻（learningStateAt）：这是**单次会话的运行时快照**，与「学习者详情」页
+    的学习者级聚合态是两套来源，卡头必须标出处。 */
 function toNumOrNull(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null
 }
-function extractLearningState(sessions: Record<string, unknown>[]): NonNullable<Detail['learningState']> | undefined {
+function extractLearningState(sessions: Record<string, unknown>[]): { state: NonNullable<Detail['learningState']>; at: string | null } | undefined {
   for (const s of sessions) {
     const runtime = (s.runtime || {}) as Record<string, unknown>
     const knowledge = (runtime.knowledgeState || {}) as Record<string, unknown>
@@ -1632,7 +1647,8 @@ function extractLearningState(sessions: Record<string, unknown>[]): NonNullable<
     const lf = toNumOrNull(current.lf)
     const lsb = toNumOrNull(current.lsb)
     if (lss == null && ktl == null && lf == null && lsb == null) continue
-    return { lss, ktl, lf, lsb }
+    const at = String(s.createdAt || s.startedAt || '') || null
+    return { state: { lss, ktl, lf, lsb }, at }
   }
   return undefined
 }
@@ -1752,14 +1768,18 @@ async function loadDetail(id?: string, quiet = false) {
         }
       })(),
       // 学习状态读数（概览/画像 pane 的 lsm 卡）：取最近一个含教学状态读数的会话
-      learningState: extractLearningState(sessions)
+      ...(() => {
+        const ex = extractLearningState(sessions)
+        return ex ? { learningState: ex.state, learningStateAt: ex.at } : { learningState: undefined, learningStateAt: null }
+      })()
     }
-    // 深链/刷新进入时 subPage 只有 id（label 缺失 → 面包屑退化成裸 ID），加载出名字后回填
-    setSubPageLabel(liveDetail.value.name)
+    // 深链/刷新进入时 subPage 只有 id（label 缺失 → 面包屑退化成裸 ID），加载出名字后回填。
+    // id 守卫：seq 只防本页重入，防不住「响应回来时 subPage 已切到别的实体」的跨实体改名。
+    if (subPage.value?.id === id) setSubPageLabel(liveDetail.value.name)
   } catch {
     if (seq !== loadSeq) return
     const base = liveVirtuals.value.find((v) => v.id === id)
-    if (base) {      fallbackNotice.value = true
+      if (base) {      fallbackNotice.value = true
       liveDetail.value = {
         name: base.name,
         archetype: '自定义样本',
@@ -1774,7 +1794,8 @@ async function loadDetail(id?: string, quiet = false) {
         runs: [],
         aiProfile: [{ label: '知识水平', value: base.level || '—' }]
       }
-      setSubPageLabel(base.name)
+      // 兜底回写同样守 id：响应慢时用户可能已离开本画像
+      if (subPage.value?.id === id) setSubPageLabel(base.name)
     } else {
       detailError.value = true
     }
@@ -2194,10 +2215,17 @@ async function openProjection(url?: string | null) {
   }
 }
 
-/** 查该账号的真实学习者详情（#74）：userId 为学习者详情接口的主键（LearnerDetail 同源） */
+/** 查该账号的真实学习者详情（#74）：userId 为学习者详情接口的主键（LearnerDetail 同源）。
+ *  from 记画像自身：学习者详情的返回键回到画像，而非掉回一级列表 */
 function goRealLearner() {
   const uid = d.value?.userId
-  if (uid) openSubPage('learner', uid, { includeTest: true })
+  const cur = subPage.value
+  if (uid) {
+    openSubPage('learner', uid, {
+      includeTest: true,
+      from: cur ? { view: cur.view, id: cur.id, label: cur.label } : undefined
+    })
+  }
 }
 
 /** 记忆与复习（#74）：跨页深链（契约见 learner-profile.ts memoryReviewUrl，参数名 userId） */
@@ -2285,7 +2313,7 @@ const passRateTitle = computed(() => {
   const win = s.exact
     ? `最近 ${s.total} 次运行`
     : `最近 ${RUNS_TAB_WINDOW} 次运行（加载窗口上限，非全量口径）`
-  return `口径：${win}中完成 ${s.done} 次；主页 KPI「完成率」为全量口径，两者分母不同`
+  return `${win}内完成 ${s.done} 次（主页「完成率」为全量统计，范围不同）`
 })
 
 /** 覆盖场景：运行记录里出现过的去重故事（storyId/storyTitle），按出现次数降序。
@@ -2395,32 +2423,36 @@ const loopStages = computed<LoopStage[]>(() => {
 
 /** 学习状态读数（原型 learningState index.html:1723-1737 / lsm）
     数据来源：Detail.learningState（会话 runtime 里的 teachingState，0-10 真实量纲）。
-    无读数 → []，模板渲染 MkEmptyState；条宽按 0-10 归一（对齐 LearnerDetail，非原型 ktl/320 自造量纲）。 */
-interface LsmRow { label: string; pct: number; tone: 'ok' | 'warn' | 'bad'; value: string; ref: string; refCls: string }
+    无读数 → []，模板渲染 MkEmptyState；条宽按 0-10 归一（对齐 LearnerDetail，非原型 ktl/320 自造量纲）。
+    标签/参考带/色调阈值单点取自 learnerMetrics.ts——此前本页与 LearnerDetail 各写一套
+    （参考带一边「参考 4–7」一边「0-10，越高越累」）。 */
+interface LsmRow { label: string; pct: number; tone: 'ok' | 'warn' | 'bad'; value: string; ref: string; refTitle: string; refCls: string }
 const lsmRows = computed<LsmRow[]>(() => {
   const m = d.value?.learningState
   if (!m) return []
   const width = (v: number) => Math.min(100, Math.round((v / 10) * 100))
-  const toneLoad = (v: number): LsmRow['tone'] => (v >= 7 ? 'bad' : v <= 4 ? 'ok' : 'warn')
   const rows: LsmRow[] = []
-  if (m.lss != null) {
-    const t = toneLoad(m.lss)
-    rows.push({ label: 'LSS 学习压力', pct: width(m.lss), tone: t, value: m.lss.toFixed(1), ref: '参考 4–7', refCls: `mk-badge--${t}` })
-  }
-  if (m.ktl != null) {
-    const t = toneLoad(m.ktl)
-    rows.push({ label: 'KTL 训练负荷', pct: width(m.ktl), tone: t, value: m.ktl.toFixed(1), ref: '参考 ≤ 7', refCls: `mk-badge--${t}` })
-  }
-  if (m.lf != null) {
-    const t: LsmRow['tone'] = m.lf >= 6 ? 'bad' : toneLoad(m.lf)
-    rows.push({ label: 'LF 疲劳度', pct: width(m.lf), tone: t, value: m.lf.toFixed(1), ref: '警戒 ≥ 6', refCls: `mk-badge--${t}` })
-  }
-  if (m.lsb != null) {
-    const t: LsmRow['tone'] = m.lsb >= 1 ? 'ok' : m.lsb <= -3 ? 'bad' : 'warn'
-    rows.push({ label: 'LSB 状态平衡', pct: Math.min(100, Math.round(Math.abs(m.lsb) * 8 + 10)), tone: t, value: `${m.lsb > 0 ? '+' : ''}${m.lsb.toFixed(1)}`, ref: '参考 ≥ 0', refCls: `mk-badge--${t}` })
+  for (const def of LEARNER_METRICS) {
+    const v = m[def.key]
+    if (v == null) continue
+    // 共享口径的 '' = 缺值/中性 → 本页条形无中性档，落 warn（徽章 'muted' 另有其色）
+    const raw = def.toneOf(v)
+    const tone: LsmRow['tone'] = raw === '' || raw === 'warn' ? 'warn' : raw
+    rows.push({
+      label: def.label,
+      pct: def.key === 'lsb' ? Math.min(100, Math.round(Math.abs(v) * 8 + 10)) : width(v),
+      tone,
+      value: def.key === 'lsb' ? `${v > 0 ? '+' : ''}${v.toFixed(1)}` : v.toFixed(1),
+      ref: def.band,
+      refTitle: def.bandTitle,
+      refCls: `mk-badge--${raw || 'muted'}`
+    })
   }
   return rows
 })
+
+/** 四读数出处（单次会话运行时快照）：与「学习者详情」页的学习者级聚合态不同源，数值天然不同 */
+const loadCaliberNote = computed(() => loadCaliber('session-snapshot', d.value?.learningStateAt))
 
 /** 能力维度评分（原型 portrait pane 的 ranklist/meterrow index.html:2416-2421；原型 VL_DIMENSIONS 为假数据）。
     画像接口只有身份/偏好枚举（知识水平、性格基线、personalityTraits），无数值化维度 → 恒为空数组渲染空态（红线）。 */

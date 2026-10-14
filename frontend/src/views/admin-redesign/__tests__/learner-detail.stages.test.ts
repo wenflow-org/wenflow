@@ -30,6 +30,8 @@ vi.mock('../live', async () => {
   const { ref } = await import('vue');
   return {
     liveLearners: ref([{ userId: 'u1', name: '测试学习者', pathId: 'lp1' }]),
+    // 虚拟档案列表：boot 全量载入，学习者详情用它反查「虚拟档案 →」互跳入口（默认空 = 真人账号）
+    liveVirtuals: ref([]),
   liveGetLearnerDetail: vi.fn().mockResolvedValue({
     model: {
       name: '测试学习者',
@@ -101,6 +103,8 @@ vi.mock('../useConfirm', () => ({ askConfirm: vi.fn() }));
 vi.mock('@/utils/toast', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
 
 import LearnerDetail from '../LearnerDetail.vue';
+import { liveVirtuals, liveGetLearnerDetail, type LiveVirtual } from '../live';
+import { openSubPage } from '../store';
 
 function sessionRow(id: string, milestoneIndex: number | null, status = 'completed') {
   return {
@@ -456,5 +460,61 @@ describe('LearnerDetail 压力曲线 x 轴（B 案固定跨度：42/90 档真正
     expect(labels[labels.length - 1]).toBe(labelOf(dayKey(-7)));
     expect(labels).toContain(labelOf(dayKey(-3)));
     expect(labels).toContain(labelOf(dayKey(0)));
+  });
+});
+
+describe('四读数出处标注 + 虚拟档案互跳', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    listSessions.mockReset();
+    getMemoryTraces.mockReset().mockResolvedValue([]);
+    liveVirtuals.value = [];
+  });
+
+  it('卡头标出「学习者级聚合」出处（与虚拟档案页的单次会话快照区分开）', async () => {
+    // 共享 mock 的详情没有 dynamicState（学习状态追踪卡随之不渲染），本用例整体替换详情响应
+    const detailMock = vi.mocked(liveGetLearnerDetail as unknown as ReturnType<typeof vi.fn>);
+    const original = detailMock.getMockImplementation();
+    detailMock.mockResolvedValue({
+      model: {
+        name: '测试学习者',
+        knowledgeMemory: { currentPath: null, globalSignals: {} },
+      },
+      dynamicState: { metrics: { lss: 2.7, ktl: 7.8, lf: 1.9, lsb: 5.9 } },
+      freshness: { generatedAt: new Date().toISOString(), confidence: 0.2 },
+    });
+    // 学习状态追踪卡在「概览」页签（本文件其余用例默认落在 sessions 页签）
+    const prevTab = routeQuery.tab;
+    routeQuery.tab = 'overview';
+    try {
+      const w = await mountLd([]);
+      const metas = w.findAll('.mk-card__meta').map((m) => m.text());
+      expect(metas.some((t) => t.includes('学习者级聚合')), `实际 meta: ${JSON.stringify(metas)}`).toBe(true);
+      // 长释必须点明另一页的来源，否则「数字打架」的观感照旧
+      const note = w.find('.mk-card__meta[title*="单次会话的运行时快照"]');
+      expect(note.exists()).toBe(true);
+    } finally {
+      routeQuery.tab = prevTab;
+      if (original) detailMock.mockImplementation(original);
+    }
+  });
+
+  it('真人账号（无绑定虚拟档案）不出「虚拟档案」入口', async () => {
+    const w = await mountLd([]);
+    expect(w.text()).not.toContain('虚拟档案');
+  });
+
+  it('虚拟账号：出现「虚拟档案 →」，点击 openSubPage(virtual, profileId, from=学习者)', async () => {
+    liveVirtuals.value = [{ id: 'p1', raw: { userId: 'u1' } } as unknown as LiveVirtual];
+    const w = await mountLd([]);
+    await flushPromises();
+    const btn = w.findAll('button').find((b) => b.text().includes('虚拟档案'));
+    expect(btn, '虚拟账号应出现互跳入口').toBeTruthy();
+    await btn!.trigger('click');
+    expect(openSubPage).toHaveBeenCalledWith(
+      'virtual',
+      'p1',
+      expect.objectContaining({ from: expect.objectContaining({ view: 'learner', id: 'u1' }) })
+    );
   });
 });
