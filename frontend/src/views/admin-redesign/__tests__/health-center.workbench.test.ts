@@ -206,6 +206,17 @@ describe('健康中心（G1）', () => {
     expect(legend.join(' ')).toContain('已上线');
     // 完成度与对账表同页签（用户评审：原独立页签只有一卡 196px + 234px 死区）
     expect(wrapper.find('#hc-panel-recon .sk-rec').exists()).toBe(true);
+    // 2026-10-14 用户「也要折叠」：整卡走 details.mk-card + summary 折叠头（同 DriftAuditPanel /
+    // MkDistBand 折叠档），默认折叠=不带 open；折叠只影响可见性，图例计数仍在文档里
+    const card = wrapper.find('#hc-completion');
+    expect(card.element.tagName).toBe('DETAILS');
+    expect(card.classes()).toContain('mk-card');
+    expect(card.attributes('open')).toBeUndefined();
+    const head = card.find('summary.mk-card__head');
+    expect(head.element.tagName).toBe('SUMMARY');
+    expect(head.classes()).toContain('mk-section__summary');
+    // 折叠态仍露结论（头里的 N / N 已上线），展开才见五档形状
+    expect(head.text()).toContain('已上线');
     wrapper.unmount();
   });
 
