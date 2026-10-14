@@ -194,7 +194,7 @@ describe('跨月边界：本月摘要只含当前自然月', () => {
   it('今天没学、昨天学了：连续天数仍显示（当天宽限），不显示 0', async () => {
     freezeAt(2026, 10, 7, 12);
     const w = await mountDash([session('y', at(2026, 10, 6, 20), 30)]);
-    const summary = await openMonth(w);
+    await openMonth(w);
     // 今天 0 分钟，但连续不断（连续天数唯一出处：问候栏药丸）
     expect(w.find('.streak').text()).toContain('连续 1 天');
     expect(w.text()).toContain('今日已学 0 /');
