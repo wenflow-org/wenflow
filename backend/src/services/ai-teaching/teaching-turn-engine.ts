@@ -176,6 +176,20 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
         ...(context.learningSignal ? { learningSignal: context.learningSignal } : {}),
         ...(context.lastLessonRecap ? { lastLessonRecap: context.lastLessonRecap } : {}),
         ...(context.priorLearningContext ? { priorLearningContext: context.priorLearningContext } : {}),
+        // 画像/学情锚/任务目标（2026-10-14）：开场此前只看到课程文本+三个运行信号，
+        // 两个不同人设的首课载荷逐字节相同。缺省字段不进载荷（与 recap 同一口径）。
+        ...(context.learnerPersona ? { learnerPersona: context.learnerPersona } : {}),
+        ...(context.schoolAnchor.background || context.schoolAnchor.baselineEvidence
+          ? { schoolAnchor: context.schoolAnchor }
+          : {}),
+        ...(context.taskProfile.learningObjectives.length || context.taskProfile.coreConcept
+          ? {
+            taskProfile: {
+              learningObjectives: context.taskProfile.learningObjectives,
+              coreConcept: context.taskProfile.coreConcept,
+            },
+          }
+          : {}),
         __prompt: {
           userId: context.userId,
           taskId: context.taskId,

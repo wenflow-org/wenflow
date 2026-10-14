@@ -264,6 +264,11 @@ async function teachingOpeningGeneratorHandler(input: any) {
           taskDescription: d.taskDescription,
           ...(d.learningSignal ? { learningSignal: d.learningSignal } : {}),
           ...(d.lastLessonRecap ? { lastLessonRecap: d.lastLessonRecap } : {}),
+          // 画像/学情锚/任务目标（2026-10-14）：core rules 已引用，caller 已传——
+          // 漏在 payload 外会被模型无视（priorLearningContext 同款前科）
+          ...(d.learnerPersona ? { learnerPersona: d.learnerPersona } : {}),
+          ...(d.schoolAnchor?.background || d.schoolAnchor?.baselineEvidence ? { schoolAnchor: d.schoolAnchor } : {}),
+          ...(d.taskProfile?.learningObjectives?.length || d.taskProfile?.coreConcept ? { taskProfile: d.taskProfile } : {}),
         }
       : {
           subject: d.subject,
@@ -278,13 +283,24 @@ async function teachingOpeningGeneratorHandler(input: any) {
           ...(d.priorLearningContext ? { priorLearningContext: d.priorLearningContext } : {}),
           ...(d.learningSignal ? { learningSignal: d.learningSignal } : {}),
           ...(d.lastLessonRecap ? { lastLessonRecap: d.lastLessonRecap } : {}),
+          ...(d.learnerPersona ? { learnerPersona: d.learnerPersona } : {}),
+          ...(d.schoolAnchor?.background || d.schoolAnchor?.baselineEvidence ? { schoolAnchor: d.schoolAnchor } : {}),
+          ...(d.taskProfile?.learningObjectives?.length || d.taskProfile?.coreConcept ? { taskProfile: d.taskProfile } : {}),
         }),
-    normalize: (parsed, d) => ({
-      message: asTrimmedString(parsed?.message),
-      question: asTrimmedString(parsed?.question),
-      quickReplies: coerceTextOptions(parsed?.quickReplies),
-      mode: ['example-first', 'predict', 'self-assess'].includes(parsed?.mode) ? parsed.mode : d.openingMode,
-    }),
+    normalize: (parsed, d) => {
+      const message = asTrimmedString(parsed?.message);
+      const quickReplies = coerceTextOptions(parsed?.quickReplies);
+      // 开场只留一个「下一步」（2026-10-09 用户反馈）：动作选项在场时丢弃引导 question——
+      // message 指令 + question + quickReplies 三者同屏，抢学生仅有的一次回复，决策过载。
+      // core 规则已声明互斥，这里是模型越约时的确定性兜底
+      const question = quickReplies.length > 0 ? '' : asTrimmedString(parsed?.question);
+      return {
+        message,
+        question,
+        quickReplies,
+        mode: ['example-first', 'predict', 'self-assess'].includes(parsed?.mode) ? parsed.mode : d.openingMode,
+      };
+    },
     // 模型有时把 quickReplies 写成 string[]（core 声明为 object[]）；契约校验前补成 [{ text }]，
     // 避免因表述差异整轮失败（normalize 同样兼容两种形态）。
     coerceParse: (parsed) => (parsed && typeof parsed === 'object'

@@ -93,6 +93,17 @@ export interface TeachingScenarioContext {
     /** 现状自评证据句（如「同济版教材，期末闭卷」「算会算，就是不知道为啥」） */
     baselineEvidence: string | null;
   };
+  /** goal 阶段产出的学习者画像摘要（叙述性理解，随 profile 持久化），供开场等场景贴合「在教谁」。
+   *  无 goal 对话数据时为 null——消费方按缺省处理，不得编造背景。sourceGoal 记录画像出处目标
+   *  （画像按目标一条，跨目标并集会串味），供读侧防误读、不进学生可见文案。 */
+  learnerPersona?: {
+    surfaceGoal: string | null;
+    realProblem: string | null;
+    background: string | null;
+    currentLevel: string | null;
+    motivation: string | null;
+    sourceGoal: string | null;
+  } | null;
   learningState: {
     lss: number;
     ktl: number;
@@ -1296,6 +1307,24 @@ export async function buildTeachingScenarioContext(
   const learningSignal = typeof learningSignalRaw === 'string' && learningSignalRaw.trim()
     ? learningSignalRaw.trim()
     : null;
+  // 开场画像摘要（2026-10-14）：goal 阶段的叙述性理解此前只有 learningSignal 一根管子通到教学层，
+  // 开场生成器只能看到课程文本+三个运行信号（实测两条不同人设 VL 的首课载荷逐字节相同，
+  // 「个性化」全靠采样运气）。这里把画像压成最小摘要带出；叙述按 narrativeSource 单目标留存，
+  // 不做跨目标并集。全程可选：无 goal 对话数据时为 null。
+  const personaNarratives = learnerSnapshot.profile?.narratives;
+  const personaInsights = learnerSnapshot.profile?.narrativeInsights;
+  const personaStr = (value: unknown): string | null =>
+    typeof value === 'string' && value.trim() ? value.trim() : null;
+  const learnerPersona: TeachingScenarioContext['learnerPersona'] = (personaNarratives || personaInsights)
+    ? {
+        surfaceGoal: personaStr(personaNarratives?.surfaceGoal),
+        realProblem: personaStr(personaNarratives?.realProblem),
+        background: personaStr(personaNarratives?.backgroundExperience) ?? personaStr(personaInsights?.backgroundContextNote),
+        currentLevel: personaStr(personaNarratives?.currentLevel) ?? personaStr(personaInsights?.selfAssessmentNote),
+        motivation: personaStr(personaNarratives?.motivation) ?? personaStr(personaInsights?.motivationNarrative),
+        sourceGoal: personaStr(learnerSnapshot.profile?.narrativeSource?.goalTitle),
+      }
+    : null;
   // 传入本节课（进行中）会话：行为画像/求助软拦截必须看到"本课内"的表现（18 号报告 N9）
   const behavioralProfile = await fetchBehavioralProfile(userId, previousSession);
   const milestone = task.milestones;
@@ -1477,6 +1506,7 @@ export async function buildTeachingScenarioContext(
       totalTasksInMilestone: orderedTasks.length,
     },
     schoolAnchor: resolveSchoolAnchorForTeaching(path.aiPromptTemplate) ?? { background: null, baselineEvidence: null },
+    learnerPersona,
     learningState: learningState ? {
       lss: learningState.lss,
       ktl: learningState.ktl,
