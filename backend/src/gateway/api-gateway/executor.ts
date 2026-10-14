@@ -438,6 +438,7 @@ export class APIExecutor {
       delete requestBody.stream_options;
     }
 
+    const requestStartAt = Date.now();
     try {
       logger.debug('[api-gateway] request payload resolved', {
         providerId: route.providerId,
@@ -512,7 +513,10 @@ export class APIExecutor {
         resolvedModel: String(requestBody.model || route.model)
       };
     } catch (error: any) {
-      throw this.classifyTransportError(error, requestUrl, effectiveTimeoutMs);
+      throw this.classifyTransportError(error, requestUrl, effectiveTimeoutMs, {
+        elapsedMs: Date.now() - requestStartAt,
+        limiter: 'per-attempt'
+      });
     }
   }
 
@@ -699,7 +703,10 @@ export class APIExecutor {
           resolvedModel: String(requestBody.model || route.model)
         };
       } catch (error: any) {
-        const mapped = this.classifyTransportError(error, requestUrl, effectiveTimeoutMs);
+        const mapped = this.classifyTransportError(error, requestUrl, effectiveTimeoutMs, {
+          elapsedMs: Date.now() - streamStartAt,
+          limiter: 'stream-watchdog'
+        });
         if (
           pass === 0
           && mapped.statusCode === 400
@@ -825,11 +832,16 @@ export class APIExecutor {
     }
   }
 
-  /** 传输层错误归一化（缓冲路径与流式路径共用） */
+  /** 传输层错误归一化（缓冲路径与流式路径共用）
+   *
+   *  `origin` 由调用点补上本次尝试的实测耗时与真正生效的限流器：超时文案必须报实际事实，
+   *  不能报配置上限——流式路径有三个限流器（空闲 / 总时长 / 单次上限），先触发的往往不是
+   *  上限，写上限会把排查方向带偏（评审 F21）。 */
   private classifyTransportError(
     error: any,
     requestUrl: string,
-    effectiveTimeoutMs: number
+    effectiveTimeoutMs: number,
+    origin?: { elapsedMs?: number; limiter?: 'per-attempt' | 'stream-watchdog' }
   ): GatewayExecutionError {
     if (error instanceof GatewayExecutionError) return error;
     if (error instanceof UnsafeUrlError) {
@@ -848,7 +860,7 @@ export class APIExecutor {
       });
     }
     if (error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT' || /timeout|超时/i.test(error?.message || '')) {
-      return new GatewayExecutionError(`API request timed out after ${effectiveTimeoutMs}ms`, {
+      return new GatewayExecutionError(this.describeTimeout(origin, effectiveTimeoutMs), {
         category: 'provider_timeout', code: 'ATTEMPT_TIMEOUT', retryable: true, requestUrl
       });
     }
@@ -865,6 +877,21 @@ export class APIExecutor {
     return new GatewayExecutionError(error?.message || 'Internal API gateway error', {
       category: 'internal', code: 'API_GATEWAY_INTERNAL_ERROR', retryable: false, requestUrl
     });
+  }
+
+  /** 超时文案：报实测耗时 + 真正生效的限流器（三者互不相等，混为一谈即误导排查） */
+  private describeTimeout(
+    origin: { elapsedMs?: number; limiter?: 'per-attempt' | 'stream-watchdog' } | undefined,
+    effectiveTimeoutMs: number
+  ): string {
+    const elapsedMs = typeof origin?.elapsedMs === 'number' && Number.isFinite(origin.elapsedMs)
+      ? Math.max(0, Math.round(origin.elapsedMs))
+      : undefined;
+    const elapsed = elapsedMs === undefined ? '' : ` after ${elapsedMs}ms`;
+    if (origin?.limiter === 'stream-watchdog') {
+      return `API request timed out${elapsed} (stream watchdog: idle ${STREAM_IDLE_TIMEOUT_MS}ms / total ${STREAM_TOTAL_TIMEOUT_MS}ms)`;
+    }
+    return `API request timed out${elapsed} (per-attempt cap ${effectiveTimeoutMs}ms)`;
   }
 
   private attachGatewayMetadata(
