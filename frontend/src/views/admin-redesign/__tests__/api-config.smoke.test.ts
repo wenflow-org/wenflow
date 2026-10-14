@@ -200,7 +200,7 @@ describe('ApiConfig P1 修复批', () => {
   it('汇总角标：「5 能力 · 1 异常」（degraded 计异常）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '调用与健康');
+    await gotoTab(wrapper, '路由与调用');
     expect(wrapper.text()).toContain('5 能力 · 1 异常');
     expect(wrapper.find('.ac-sec__title .mk-badge--warn').exists()).toBe(true);
     wrapper.unmount();
@@ -222,7 +222,7 @@ describe('ApiConfig P1 修复批', () => {
       }
     });
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '调用与健康');
+    await gotoTab(wrapper, '路由与调用');
     expect(wrapper.text()).toContain('5 能力 · 全部正常');
     wrapper.unmount();
   });
@@ -230,7 +230,7 @@ describe('ApiConfig P1 修复批', () => {
   it('未知档卡头用「待确认」并与汇总角标同词（2026-10-11 走查：原「状态确认中」谎称进行中）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot({ overall: 'unknown' }) } });
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '调用与健康');
+    await gotoTab(wrapper, '路由与调用');
     expect(wrapper.text()).not.toContain('状态确认中');
     // 卡头徽章（整值即「待确认」；汇总角标是「N 能力 · M 待确认」复合串，不匹配整值）
     const badge = wrapper.findAll('.mk-badge').find((b) => b.text() === '待确认');
@@ -248,7 +248,7 @@ describe('ApiConfig P1 修复批', () => {
     let resolveProbe: (v: unknown) => void = () => {};
     probeCapabilitiesMock.mockReturnValue(new Promise((r) => { resolveProbe = r; }));
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '调用与健康');
+    await gotoTab(wrapper, '路由与调用');
     expect(getCapabilitiesMock).toHaveBeenCalled();
     expect(probeCapabilitiesMock).toHaveBeenCalledTimes(1);
     // stale 语义：上次探测时间 + 已过期提示 + 探测中
@@ -269,7 +269,7 @@ describe('ApiConfig P1 修复批', () => {
       data: { data: makeSnapshot({ overall: 'unknown', stale: true }) }
     });
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '调用与健康');
+    await gotoTab(wrapper, '路由与调用');
     expect(getCapabilitiesMock).toHaveBeenCalled();
     expect(probeCapabilitiesMock).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('结果已过期');
@@ -342,42 +342,30 @@ describe('ApiConfig P1 修复批', () => {
     const wrapper = await mountApiConfig();
     // 护栏（判例 buckets-band.test.ts）：页头状态条整块下线，「上次探测」复读随之消失
     expect(wrapper.find('.mk-status').exists()).toBe(false);
-    // 原状态条三读数由 KPI 卡承接（连接 tab 默认分支：beforeeach 已 mock 已配置密钥 + 2 模型 + 3 路由）
-    const kpiTexts = wrapper.findAll('.mk-kpi').map((k) => k.text());
-    expect(kpiTexts).toHaveLength(3);
-    expect(kpiTexts[0]).toContain('API 密钥');
-    expect(kpiTexts[0]).toContain('已配置');
-    expect(kpiTexts[1]).toContain('模型清单');
-    expect(kpiTexts[1]).toContain('2 个');
-    expect(kpiTexts[2]).toContain('默认路由');
-    expect(kpiTexts[2]).toContain('3/3');
-    await gotoTab(wrapper, '调用与健康');
+    /* 2026-10-14 用户拍板撤掉页首 KPI 带：原来那三块（密钥 / 模型清单 / 默认路由）是把卡里
+       已有的读数抄一遍。护栏钉「没有 KPI 带」，同时钉三个读数各有卡内出口——密钥看连接卡的
+       API Key 行（已配置时 placeholder 写「留空 = 沿用已配置」）、清单看模型 chips 数、
+       连接状态看连接卡头徽标。 */
+    expect(wrapper.findAll('.mk-kpi')).toHaveLength(0);
+    expect(wrapper.find('input[type="password"]').attributes('placeholder')).toBe('留空 = 沿用已配置');
+    expect(wrapper.findAll('.ac-model')).toHaveLength(2);
+    expect(wrapper.find('.ac-conn-body .mk-card .mk-badge').exists()).toBe(true);
+    await gotoTab(wrapper, '路由与调用');
     expect(wrapper.find('.ac-sec__sub').text()).toContain('最近探测');
     wrapper.unmount();
   });
 
-  it('模型总览 tab：切换后渲染只读总览，页首 KPI 带显示注册模型与漂移提示（2026-10-04 状态条退役迁入）', async () => {
+  it('模型总览并入「接入与模型」：注册表只读面板随默认页签渲染，旧 ?tab= 键归一（2026-10-14 页签重设计）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    const tab = wrapper.findAll('.mk-subtab').find((b) => b.text().includes('模型总览'));
-    expect(tab, '应存在「模型总览」tab').toBeTruthy();
-
-    await tab!.trigger('click');
+    // 默认页签即「接入与模型」：注册表随默认分支一起挂载（原独立页签需点击才挂）
+    expect(wrapper.findAll('.mk-subtab').some((b) => b.text().includes('模型总览'))).toBe(false);
+    const tab = wrapper.findAll('.mk-subtab').find((b) => b.text().includes('接入与模型'));
+    expect(tab, '应存在「接入与模型」tab').toBeTruthy();
     await flushPromises();
-    await nextTick();
-    await flushPromises();
-
     expect(getModelRegistryMock).toHaveBeenCalled();
-    // 原状态条读数迁 KPI 卡：「模型：2 个 / 提示：1 条 / 只读」→ 注册模型 2（hint 只读视图）+ 漂移提示 1
-    const kpiTexts = wrapper.findAll('.mk-kpi').map((k) => k.text());
-    expect(kpiTexts).toHaveLength(2);
-    expect(kpiTexts[0]).toContain('注册模型');
-    expect(kpiTexts[0]).toContain('2');
-    expect(kpiTexts[0]).toContain('来自能力注册表');
-    expect(kpiTexts[1]).toContain('漂移提示');
-    expect(kpiTexts[1]).toContain('1');
-    // 漂移 > 0 → warn 档；总览仍无保存按钮（只读语义不变）
-    expect(wrapper.find('.mk-kpi--warn').exists()).toBe(true);
+    expect(wrapper.find('.ac-registry').exists()).toBe(true);
+    // 注册表只读：不因并入而冒出保存入口（保存钮只在接入三卡各自的 dirty 态出现）
     expect(wrapper.text()).not.toContain('保存连接');
     wrapper.unmount();
   });
@@ -400,7 +388,7 @@ describe('ApiConfig P1 修复批', () => {
   it('路由默认支持逻辑别名：输入框可填 chat（不再受模型清单未拉取限制）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '模型路由');
+    await gotoTab(wrapper, '路由与调用');
     const input = wrapper.find('input[list="ac-model-options"]');
     expect(input.exists(), '路由默认应为可输入（支持别名）').toBe(true);
 

@@ -5,52 +5,33 @@
       <template #actions>
         <!-- 本页唯一主操作升 primary（2026-10-04 全站评审 P3#37：此前 sm 次要形态，
              动作权重与视觉权重倒挂）；sm 档保留，与页头动作位其余刷新钮同高 -->
-        <button v-if="tab === 'connection'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="fetching || !form.apiUrl" @click="fetchModels">
+        <button v-if="tab === 'access'" type="button" class="mk-btn mk-btn--sm" @click="registryRef?.refresh?.(true)">刷新注册表</button>
+        <button v-if="tab === 'access'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="fetching || !form.apiUrl" @click="fetchModels">
           <MkLoading v-if="fetching" inline text="拉取中…" />
           <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
         </button>
-        <button v-else-if="tab === 'overview'" type="button" class="mk-btn mk-btn--sm" @click="registryRef?.refresh?.(true)">刷新</button>
-        <!-- 刷新钮只挂在真有远端数据源的页签（总览/外挂能力）；四个配置 tab 的读取失败
-             重试走卡内 mk-alert「重试」，页头不放无效刷新（此前 v-else 落到 addonsRef 空引用） -->
+        <!-- 刷新钮只挂在真有远端数据源的页签（接入与模型含只读注册表 / 外挂能力）；其余配置
+             tab 的读取失败重试走卡内 mk-alert「重试」，页头不放无效刷新（此前 v-else 落到
+             addonsRef 空引用） -->
         <button v-else-if="tab === 'addons'" type="button" class="mk-btn mk-btn--sm" @click="addonsRef?.refresh?.()">刷新</button>
       </template>
     </MkPageHead>
-    <!-- 2026-10-04 状态条退役：指标类读数就地归位为页首 KPI 带（共享 .mk-kpi-grid + MkKpi，判例 VirtualLearners），
-         随页签切换；「上次探测」按 P3（2026-10-04 全站评审）撤除（连接卡角 badge 单源承载，此处不再出现）。
-         外挂能力页签不渲染带——「外挂能力 N 个」与下方页签角标同源同数，属复读，计数住角标单源。 -->
-    <section v-if="isConfigTab" class="mk-kpi-grid">
-      <MkKpi
-        label="API 密钥"
-        :value="apiConfigFailed ? '—' : (keySet ? '已配置' : '未配置')"
-        :tone="apiConfigFailed ? '' : (keySet ? 'ok' : 'bad')"
-        title="服务商 API Key 是否已配置"
-      />
-      <MkKpi label="模型清单" :value="apiConfigFailed ? '—' : (models.length ? `${models.length} 个` : '未拉取')" :title="modelListTitle" />
-      <MkKpi label="默认路由" :value="apiConfigFailed ? '—' : `${routeCount}/3`" :title="routeTitle" />
-    </section>
-    <!-- 「只读」不再独占一格：并进注册模型卡 hint（2026-10-04 状态条退役，同一句语义不占整格） -->
-    <section v-else-if="tab === 'overview'" class="mk-kpi-grid">
-      <MkKpi label="注册模型" :value="registryCount.models" hint="来自能力注册表" title="能力注册表中的模型数" />
-      <MkKpi
-        label="漂移提示"
-        :value="registryCount.warnings"
-        :tone="registryCount.warnings > 0 ? 'warn' : 'ok'"
-        :title="registryCount.warnings ? '存在配置漂移提示' : '无配置漂移'"
-      />
-    </section>
+    <!-- 页首 KPI 带已撤（2026-10-14 用户拍板「模型与接入的 kpi 也不要了」）：原两处带
+         （配置 tab 的 密钥/模型清单/默认路由、总览 tab 的 注册模型/漂移提示）都是把下方卡里
+         已有的读数抄一遍——密钥在连接卡（API Key 行的「留空 = 沿用已配置」+ 卡头连接徽标）、
+         模型清单在模型清单卡（chips 或空态句）、默认路由在路由页签的三条路由行、漂移清单在
+         注册表总览自己的「配置漂移」小节。撤带后这些事实各有唯一出口，页首只留页名与主操作。 -->
 
     <!-- 视图切换（原型 .tabs 下划线页签）：2026-10-05 CM1 收敛到共享 MkSubTabs（原页内 .tabs/.tab
          本地拷贝退役）；外挂能力计数走 MkSubTabs 的 count 角标，形态与其余二级页签一致。
-         原型 4 页签 → 现状 6 页签映射（原型 index.html:1789 renderModels tabs）：
-         · 接入与模型 = 「接入与验证」 + 「模型总览」
-         · 连接与安全 = 「接入与验证」（服务地址 / 密钥 / 连通性）
-                       + 「安全与访问」（访问来源模式 / 私有网络 / 注册策略）
-         · 路由与降级 = 「模型路由」（对话/推理/评估默认路由 + 默认思考）
-                       + 「调用与健康」（重试超时 / 降级守卫 / 能力健康）
-         · 外挂能力   = 「外挂能力」
-         现状 7 页签是能力扩展：原型把「连接与安全」「路由与降级」各压成一页，
-         本页按可独立保存的配置域拆成四页（连接/路由/运行时/策略）；「虚拟学习者」
-         （压测参数：速率上限 / 最高并发 / 日期模拟）为 2026-10-13 新增，原型无此页。 -->
+         2026-10-14 用户拍板重设计：7 页签 → 5（实测 7 个里有 4 个只装一张卡，碎得过细）——
+         · 接入与模型 = 原「接入与验证」（连接 / 模型清单 / 连通性验证）+ 原「模型总览」（注册表只读）
+           两张卡本就在互相指路（模型清单空态句写「平台实际在用模型见『模型总览』tab」），
+           合成一页后「拉取 → 看注册表解析结果」是一条动线。
+         · 路由与调用 = 原「模型路由」（对话/推理/评估默认路由 + 默认思考）+ 原「调用与健康」
+           （调用参数 / 降级守卫 / 能力健康）——同属「调用怎么走、挂了怎么办」。
+         · 安全与访问 / 虚拟学习者 / 外挂能力 原样保留（各 4 卡 / 压测参数 / 能力目录，自成域）。
+         旧键 ?tab=connection / overview / runtime 全部走 TAB_ALIAS 归一，书签与站内深链不失效。 -->
     <MkSubTabs
       class="ac-tabs"
       :tabs="acTabs"
@@ -62,11 +43,13 @@
 
     <!-- ===== Tab1-4：接入与验证 / 模型路由 / 调用与健康 / 安全与访问（2026-09-29 由单一大 tab 拆分，每 tab 一张语义卡；分段保存按钮随卡） ===== -->
     <template v-if="isConfigTab">
-    <template v-if="tab === 'connection'">
+    <template v-if="tab === 'access'">
     <!-- 2026-10-05 满屏重排：mk-narrow 限宽列在宽屏下「一张卡悬着」（用户实测批注）。
-         去限宽，单卡拆三卡满宽三列，与页首 KPI 三卡垂直对位（API 密钥→连接 / 模型清单→清单 /
-         默认路由→模型路由页签）；窄屏（≤1100px）回落单列。 -->
-    <div class="ac-tab-body ac-conn-body" id="ac-panel-connection" role="tabpanel" aria-labelledby="ac-tab-connection">
+         去限宽，单卡拆三卡满宽三列（窄屏 ≤1100px 回落单列）。
+         2026-10-14 并入「模型总览」：注册表只读面板作为本网格的第四个子项跨全宽
+         （.ac-registry 的 grid-column: 1/-1），排在三卡下方——拉取清单 → 看注册表解析
+         结果是一条动线；不再另起一层包裹，免得折进上百行缩进噪音。 -->
+    <div class="ac-tab-body ac-conn-body" id="ac-panel-access" role="tabpanel" aria-labelledby="ac-tab-access">
       <!-- 接入域（live 层）读取失败：表单全空不得伪装成「未配置」，显式失败 + 重试（置顶一次，管三张卡） -->
       <div v-if="apiConfigFailed" class="mk-alert mk-alert--row" role="alert">
         <span class="mk-alert__msg">配置读取失败：下方为空不代表未配置，请重试</span>
@@ -165,6 +148,11 @@
         </div>
       </div>
     </section>
+    <!-- 原「模型总览」页签（2026-10-14 并入）：注册表只读面板排在三卡下方、跨全宽；
+         「拉取清单 → 看注册表解析结果」是一条动线（原空态句还得把读者引到另一个页签）。
+         不再自带 role=tabpanel——它是本页签内部的第二段，a11y 归属由外层面板承担。 -->
+    <ModelRegistryOverview class="ac-registry" ref="registryRef" @aliases="aliasOptions = $event" />
+
     </div>
     </template>
     <template v-else-if="tab === 'routing'">
@@ -269,170 +257,8 @@
 
       </div>
     </section>
-    </div>
-    </template>
-    <template v-else-if="tab === 'security'">
-    <!-- 2026-10-05 满屏重排：去 mk-narrow 限宽，四条策略各自成卡排 2×2 宫格（≤1100px 回落单列），
-         分区标题行承担组级 badge 与「保存策略」（同「调用与健康」页签「调用参数」标题行模式） -->
-    <div class="ac-tab-body ac-sec-body" id="ac-panel-security" role="tabpanel" aria-labelledby="ac-tab-security">
-      <div class="ac-sec__title ac-sec-head">
-        安全与访问
-        <span class="mk-badge mk-badge--info">平台策略 · 热生效</span>
-        <button v-if="dirty.has('policy')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['policy'])">{{ saving ? '保存中…' : '保存策略' }}</button>
-      </div>
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">访问来源模式</h3>
-        </div>
-        <div class="ac-body ac-policy__item">
-          <!-- 原型 index.html:1793-1798 访问来源模式：radio 单选卡片
-               （radiogroup + role=radio + aria-checked，Enter/Space 可切）；
-               键盘契约（审核 #160）：roving tabindex（仅选中项可 Tab 进入）+ 左右方向键循环切换，
-               取值与提交逻辑不变，仍为 policy.adminAccessMode -->
-          <div class="ac-radio-row" role="radiogroup" aria-label="访问来源模式" @keydown="onAccessKeydown">
-            <span
-              v-for="(opt, i) in accessOptions"
-              :key="opt.id"
-              :ref="(el) => setAccessRef(el, i)"
-              class="ac-radio"
-              role="radio"
-              :tabindex="policy.adminAccessMode === opt.id ? 0 : -1"
-              :aria-checked="policy.adminAccessMode === opt.id"
-              @click="setAccessMode(opt.id)"
-              @keydown.enter.prevent="setAccessMode(opt.id)"
-              @keydown.space.prevent="setAccessMode(opt.id)"
-            >
-              <span class="ac-radio__mark" aria-hidden="true">{{ policy.adminAccessMode === opt.id ? '●' : '○' }}</span>
-              <span class="ac-radio__text">
-                <span class="ac-radio__title">{{ opt.label }}</span>
-                <span class="ac-radio__sub">{{ opt.sub }}</span>
-              </span>
-            </span>
-          </div>
-          <span class="ac-policy__hint">策略持久化到 System DB 并热生效；环境变量仅作默认值。</span>
-          <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">⚠ 公网开放 · 入口无访问限制</span>
-          <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
-            <span class="mk-field__label">额外允许的客户端 IP（每行一个，可留空）</span>
-            <textarea
-              class="mk-field__textarea ac-textarea"
-              rows="2"
-              :value="policy.adminAllowedIps.join('\n')"
-              @input="policy.adminAllowedIps = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
-              placeholder="203.0.113.10"
-            ></textarea>
-          </label>
-        </div>
-      </section>
-      <section class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">私有网络服务</h3>
-        </div>
-        <div class="ac-body ac-policy__item">
-          <div class="mk-seg" role="group" aria-label="私有网络服务">
-            <button
-              type="button"
-              class="mk-seg__item"
-              :class="{ 'mk-seg__item--active': policy.allowPrivateNetwork }"
-              :aria-pressed="policy.allowPrivateNetwork"
-              @click="policy.allowPrivateNetwork = true; markDirty('policy')"
-            >
-              允许
-            </button>
-            <button
-              type="button"
-              class="mk-seg__item"
-              :class="{ 'mk-seg__item--active': !policy.allowPrivateNetwork }"
-              :aria-pressed="!policy.allowPrivateNetwork"
-              @click="policy.allowPrivateNetwork = false; markDirty('policy')"
-            >
-              仅白名单
-            </button>
-          </div>
-          <label v-if="!policy.allowPrivateNetwork" class="mk-field">
-            <span class="mk-field__label">允许的 Host / IP（每行一个）</span>
-            <textarea
-              class="mk-field__textarea ac-textarea"
-              rows="2"
-              :value="policy.privateNetworkHosts.join('\n')"
-              @input="policy.privateNetworkHosts = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
-              placeholder="192.168.1.20"
-            ></textarea>
-          </label>
-        </div>
-      </section>
-      <!-- 新用户注册（live） -->
-      <section v-if="isLive && registrationEnabled !== null" class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">新用户注册</h3>
-        </div>
-        <div class="ac-body ac-policy__item">
-          <span class="ac-policy__desc">{{ registrationEnabled ? '当前：任何人可注册' : '当前：仅管理员创建' }}</span>
-          <!-- 与紧邻的「单 IP 每日注册配额」同一形态（mk-seg 两段 + 选中态）。
-               原先是「状态文字 + 一个裸的 .mk-seg__item」——借了分段器子项类却没有 .mk-seg
-               父容器，没有轨道底与选中态，渲染出来就是一行字（2026-10-08 反馈）。 -->
-          <div class="mk-seg ac-policy__seg" role="group" aria-label="新用户注册开关">
-            <button
-              type="button"
-              class="mk-seg__item"
-              :class="{ 'mk-seg__item--active': registrationEnabled }"
-              :disabled="registrationBusy"
-              @click="setRegistration(true)"
-            >开放注册</button>
-            <button
-              type="button"
-              class="mk-seg__item"
-              :class="{ 'mk-seg__item--active': !registrationEnabled }"
-              :disabled="registrationBusy"
-              @click="setRegistration(false)"
-            >关闭注册</button>
-          </div>
-        </div>
-      </section>
-      <!-- 单 IP 每日注册配额（live；默认关，避免误伤同一内网/出口的正常注册） -->
-      <section v-if="isLive && registerIpQuotaEnabled !== null" class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">单 IP 每日注册配额</h3>
-        </div>
-        <div class="ac-body ac-policy__item">
-          <span class="ac-policy__desc">{{ quotaEnabledText }}，超过后该 IP 当天无法再创建账号</span>
-          <div class="ac-quota-row">
-            <div class="mk-seg ac-quota-seg" role="group" aria-label="单 IP 每日注册配额开关">
-              <button
-                type="button"
-                class="mk-seg__item"
-                :class="{ 'mk-seg__item--active': registerIpQuotaEnabled }"
-                :disabled="quotaBusy"
-                @click="setQuotaEnabled(true)"
-              >启用</button>
-              <button
-                type="button"
-                class="mk-seg__item"
-                :class="{ 'mk-seg__item--active': !registerIpQuotaEnabled }"
-                :disabled="quotaBusy"
-                @click="setQuotaEnabled(false)"
-              >关闭</button>
-            </div>
-            <label v-if="registerIpQuotaEnabled" class="ac-quota-field">
-              <span class="mk-field__label">每日上限</span>
-              <input
-                type="number"
-                class="mk-field__input"
-                min="1"
-                max="100"
-                :value="quotaInput"
-                :disabled="quotaBusy"
-                @change="onQuotaInput"
-              />
-              <em>个 / IP</em>
-            </label>
-          </div>
-          <span class="ac-policy__hint">默认关闭。启用后，同一公网出口 IP 24 小时内最多注册 {{ quotaInput || 5 }} 个账号，适合在批量注册风险显现时开启。</span>
-        </div>
-      </section>
-    </div>
-    </template>
-    <template v-else-if="tab === 'runtime'">
-    <div class="ac-tab-body" id="ac-panel-runtime" role="tabpanel" aria-labelledby="ac-tab-runtime">
+      <!-- 原「调用与健康」页签内容（2026-10-14 并入本页签）：调用参数 / 降级守卫 / 能力健康——
+           与上方默认路由同属「调用怎么走、挂了怎么办」。并入后仍在同一个 role=tabpanel 内。 -->
       <section v-if="isLive && (reliability || probe.loaded || configLoadFailed)" class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">AI 调用与健康</h3>
@@ -596,6 +422,166 @@
       </section>
     </div>
     </template>
+    <template v-else-if="tab === 'security'">
+    <!-- 2026-10-05 满屏重排：去 mk-narrow 限宽，四条策略各自成卡排 2×2 宫格（≤1100px 回落单列），
+         分区标题行承担组级 badge 与「保存策略」（同「调用与健康」页签「调用参数」标题行模式） -->
+    <div class="ac-tab-body ac-sec-body" id="ac-panel-security" role="tabpanel" aria-labelledby="ac-tab-security">
+      <div class="ac-sec__title ac-sec-head">
+        安全与访问
+        <span class="mk-badge mk-badge--info">平台策略 · 热生效</span>
+        <button v-if="dirty.has('policy')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['policy'])">{{ saving ? '保存中…' : '保存策略' }}</button>
+      </div>
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">访问来源模式</h3>
+        </div>
+        <div class="ac-body ac-policy__item">
+          <!-- 原型 index.html:1793-1798 访问来源模式：radio 单选卡片
+               （radiogroup + role=radio + aria-checked，Enter/Space 可切）；
+               键盘契约（审核 #160）：roving tabindex（仅选中项可 Tab 进入）+ 左右方向键循环切换，
+               取值与提交逻辑不变，仍为 policy.adminAccessMode -->
+          <div class="ac-radio-row" role="radiogroup" aria-label="访问来源模式" @keydown="onAccessKeydown">
+            <span
+              v-for="(opt, i) in accessOptions"
+              :key="opt.id"
+              :ref="(el) => setAccessRef(el, i)"
+              class="ac-radio"
+              role="radio"
+              :tabindex="policy.adminAccessMode === opt.id ? 0 : -1"
+              :aria-checked="policy.adminAccessMode === opt.id"
+              @click="setAccessMode(opt.id)"
+              @keydown.enter.prevent="setAccessMode(opt.id)"
+              @keydown.space.prevent="setAccessMode(opt.id)"
+            >
+              <span class="ac-radio__mark" aria-hidden="true">{{ policy.adminAccessMode === opt.id ? '●' : '○' }}</span>
+              <span class="ac-radio__text">
+                <span class="ac-radio__title">{{ opt.label }}</span>
+                <span class="ac-radio__sub">{{ opt.sub }}</span>
+              </span>
+            </span>
+          </div>
+          <span class="ac-policy__hint">策略持久化到 System DB 并热生效；环境变量仅作默认值。</span>
+          <span v-if="policy.adminAccessMode === 'any'" class="ac-policy__warn">⚠ 公网开放 · 入口无访问限制</span>
+          <label v-if="policy.adminAccessMode === 'private'" class="mk-field">
+            <span class="mk-field__label">额外允许的客户端 IP（每行一个，可留空）</span>
+            <textarea
+              class="mk-field__textarea ac-textarea"
+              rows="2"
+              :value="policy.adminAllowedIps.join('\n')"
+              @input="policy.adminAllowedIps = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
+              placeholder="203.0.113.10"
+            ></textarea>
+          </label>
+        </div>
+      </section>
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">私有网络服务</h3>
+        </div>
+        <div class="ac-body ac-policy__item">
+          <div class="mk-seg" role="group" aria-label="私有网络服务">
+            <button
+              type="button"
+              class="mk-seg__item"
+              :class="{ 'mk-seg__item--active': policy.allowPrivateNetwork }"
+              :aria-pressed="policy.allowPrivateNetwork"
+              @click="policy.allowPrivateNetwork = true; markDirty('policy')"
+            >
+              允许
+            </button>
+            <button
+              type="button"
+              class="mk-seg__item"
+              :class="{ 'mk-seg__item--active': !policy.allowPrivateNetwork }"
+              :aria-pressed="!policy.allowPrivateNetwork"
+              @click="policy.allowPrivateNetwork = false; markDirty('policy')"
+            >
+              仅白名单
+            </button>
+          </div>
+          <label v-if="!policy.allowPrivateNetwork" class="mk-field">
+            <span class="mk-field__label">允许的 Host / IP（每行一个）</span>
+            <textarea
+              class="mk-field__textarea ac-textarea"
+              rows="2"
+              :value="policy.privateNetworkHosts.join('\n')"
+              @input="policy.privateNetworkHosts = splitLines(($event.target as HTMLTextAreaElement).value); markDirty('policy')"
+              placeholder="192.168.1.20"
+            ></textarea>
+          </label>
+        </div>
+      </section>
+      <!-- 新用户注册（live） -->
+      <section v-if="isLive && registrationEnabled !== null" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">新用户注册</h3>
+        </div>
+        <div class="ac-body ac-policy__item">
+          <span class="ac-policy__desc">{{ registrationEnabled ? '当前：任何人可注册' : '当前：仅管理员创建' }}</span>
+          <!-- 与紧邻的「单 IP 每日注册配额」同一形态（mk-seg 两段 + 选中态）。
+               原先是「状态文字 + 一个裸的 .mk-seg__item」——借了分段器子项类却没有 .mk-seg
+               父容器，没有轨道底与选中态，渲染出来就是一行字（2026-10-08 反馈）。 -->
+          <div class="mk-seg ac-policy__seg" role="group" aria-label="新用户注册开关">
+            <button
+              type="button"
+              class="mk-seg__item"
+              :class="{ 'mk-seg__item--active': registrationEnabled }"
+              :disabled="registrationBusy"
+              @click="setRegistration(true)"
+            >开放注册</button>
+            <button
+              type="button"
+              class="mk-seg__item"
+              :class="{ 'mk-seg__item--active': !registrationEnabled }"
+              :disabled="registrationBusy"
+              @click="setRegistration(false)"
+            >关闭注册</button>
+          </div>
+        </div>
+      </section>
+      <!-- 单 IP 每日注册配额（live；默认关，避免误伤同一内网/出口的正常注册） -->
+      <section v-if="isLive && registerIpQuotaEnabled !== null" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">单 IP 每日注册配额</h3>
+        </div>
+        <div class="ac-body ac-policy__item">
+          <span class="ac-policy__desc">{{ quotaEnabledText }}，超过后该 IP 当天无法再创建账号</span>
+          <div class="ac-quota-row">
+            <div class="mk-seg ac-quota-seg" role="group" aria-label="单 IP 每日注册配额开关">
+              <button
+                type="button"
+                class="mk-seg__item"
+                :class="{ 'mk-seg__item--active': registerIpQuotaEnabled }"
+                :disabled="quotaBusy"
+                @click="setQuotaEnabled(true)"
+              >启用</button>
+              <button
+                type="button"
+                class="mk-seg__item"
+                :class="{ 'mk-seg__item--active': !registerIpQuotaEnabled }"
+                :disabled="quotaBusy"
+                @click="setQuotaEnabled(false)"
+              >关闭</button>
+            </div>
+            <label v-if="registerIpQuotaEnabled" class="ac-quota-field">
+              <span class="mk-field__label">每日上限</span>
+              <input
+                type="number"
+                class="mk-field__input"
+                min="1"
+                max="100"
+                :value="quotaInput"
+                :disabled="quotaBusy"
+                @change="onQuotaInput"
+              />
+              <em>个 / IP</em>
+            </label>
+          </div>
+          <span class="ac-policy__hint">默认关闭。启用后，同一公网出口 IP 24 小时内最多注册 {{ quotaInput || 5 }} 个账号，适合在批量注册风险显现时开启。</span>
+        </div>
+      </section>
+    </div>
+    </template>
 
     <!-- 保存条（四个配置 tab 共享；脏位跨 tab 不丢） -->
     <div v-if="dirty.size > 0" class="ac-save">
@@ -611,7 +597,6 @@
 
     <!-- ===== Tab2: 模型总览（只读；消费 /api/admin/model-registry） =====
          id/role/aria-labelledby 走组件根元素透传，与 MkSubTabs 的 id-base="ac" 成对（审核 #161） -->
-    <ModelRegistryOverview v-else-if="tab === 'overview'" id="ac-panel-overview" role="tabpanel" aria-labelledby="ac-tab-overview" ref="registryRef" @count="registryCount = $event" @aliases="aliasOptions = $event" />
 
     <!-- ===== 虚拟学习者（压测参数：速率上限 / 最高并发 / 日期模拟） =====
          2026-10-13 自「虚拟学习者」页迁入：最高并发属上游容量治理，与接入/路由设置同处管理；
@@ -662,25 +647,27 @@ import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
-/* 2026-10-04 状态条退役：原页头 .mk-status 读数迁 KPI 带（页首 .mk-kpi-grid + MkKpi） */
-import MkKpi from '@/components/mk/MkKpi.vue'
 import { toast } from '@/utils/toast'
 
 /* ---------- 宿主：接入与模型 · 模型总览 · 外挂能力 ----------
    ?tab=model|overview|addons 双向同步；模型总览嵌入只读 ModelRegistryOverview，
    外挂能力嵌入 Addons（embedded，域计数上报宿主） */
-const AC_TABS = ['connection', 'routing', 'runtime', 'security', 'virtual-learners', 'overview', 'addons'] as const
+const AC_TABS = ['access', 'routing', 'security', 'virtual-learners', 'addons'] as const
 type AcTab = (typeof AC_TABS)[number]
 /** 旧页签键别名归一：站内「配置 →」与量测脚本曾用 ?tab=model / ?tab=registry / ?tab=model-routing；
-    这些键不在白名单，watcher 原会静默把用户送到「接入与验证」，深链/书签永远落不到目标页签 */
+    这些键不在白名单，watcher 原会静默把用户送到「接入与验证」，深链/书签永远落不到目标页签。
+    2026-10-14 合并页签后追加：connection/overview→access、runtime→routing（旧书签继续可用） */
 const TAB_ALIAS: Record<string, AcTab> = {
-  model: 'connection',
-  registry: 'overview',
+  model: 'access',
+  registry: 'access',
+  connection: 'access',
+  overview: 'access',
+  runtime: 'routing',
   'model-routing': 'routing',
 }
-const tab = ref<AcTab>('connection')
-/** 四个配置 tab 共享底部保存条（脏位跨 tab 不丢） */
-const isConfigTab = computed(() => ['connection', 'routing', 'runtime', 'security'].includes(tab.value))
+const tab = ref<AcTab>('access')
+/** 底部保存条挂载的 tab（脏位跨 tab 不丢）：接入与模型（接入三卡可写）+ 路由与调用 + 安全与访问 */
+const isConfigTab = computed(() => ['access', 'routing', 'security'].includes(tab.value))
 const route = useRoute()
 const router = useRouter()
 const addonsCount = ref(0)
@@ -692,21 +679,19 @@ function onAddonsCount(n: number) {
   addonsCount.value = n
   addonsCountReady.value = true
 }
-/** 页签定义（CM1：收敛到 MkSubTabs；count 只在已加载时给出，见上） */
+/** 页签定义（CM1：收敛到 MkSubTabs；count 只在已加载时给出，见上）。
+    2026-10-14 五页签：接入与模型 / 路由与调用 / 安全与访问 / 虚拟学习者 / 外挂能力 */
 const acTabs = computed(() => [
-  { key: 'connection', label: '接入与验证' },
-  { key: 'routing', label: '模型路由' },
-  { key: 'runtime', label: '调用与健康' },
+  { key: 'access', label: '接入与模型' },
+  { key: 'routing', label: '路由与调用' },
   { key: 'security', label: '安全与访问' },
   { key: 'virtual-learners', label: '虚拟学习者' },
-  { key: 'overview', label: '模型总览' },
   { key: 'addons', label: '外挂能力', count: addonsCountReady.value ? addonsCount.value : undefined },
 ])
 function onTabChange(key: string) {
   switchTab(key as AcTab)
 }
 const addonsRef = ref<{ refresh?: () => void } | null>(null)
-const registryCount = ref({ models: 0, warnings: 0 })
 const registryRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
 
 /** 逻辑别名候选（来自后端只读总览，避免前端硬编码与注册表漂移）。
@@ -725,8 +710,8 @@ watch(
       if (alias && route && router && route.query.tab !== v) {
         void router.replace({ query: { ...route.query, tab: v } })
       }
-    } else if (tab.value !== 'connection') {
-      tab.value = 'connection'
+    } else if (tab.value !== 'access') {
+      tab.value = 'access'
     }
   },
   { immediate: true }
@@ -840,10 +825,11 @@ async function probeHealth() {
 
 /* ---------- 表单状态（live 一套交互） ---------- */
 /**
- * 接入域（live 层 getConfig）读取失败：表单全空 + 页首 KPI 卡三读数显「—」+ 卡内 alert。
- * 原实现失败时 keySet/models/routeCount 全部为初始值，读数显示确定态「未配置/未拉取/0-3」——
- * 把「读不到」伪装成「没配置」，是审计不可接受的假信号。失败态由 liveFailures.apiConfig 驱动
- * （live.ts 已导出；读取成功后自动清除，无需本地维护）。
+ * 接入域（live 层 getConfig）读取失败：表单全空 + 卡内 alert 显式说明「下方为空不代表未配置」。
+ * 原实现失败时 keySet/models 全为初始值，读数伪装成确定态「未配置 / 未拉取」——把「读不到」
+ * 说成「没配置」，是审计不可接受的假信号。（2026-10-14 页首 KPI 带撤除后，失败态只剩卡内
+ * alert 一个出口，该 alert 因此不可省。）失败态由 liveFailures.apiConfig 驱动（live.ts 已导出；
+ * 读取成功后自动清除，无需本地维护）。
  */
 const apiConfigFailed = computed(() => !!liveFailures.value.apiConfig)
 /** 重试：重新走中央加载器拉取 apiConfig 域（liveFetchAt 未落 → 不会被 TTL 缓存跳过） */
@@ -1142,8 +1128,9 @@ function setEffort(v: string) {
   }
 }
 
-/* 2026-10-04 状态条退役：原「就绪」判定 ready（仅 statusTone 消费）随状态条删除，零引用一并清理 */
-const routeCount = computed(() => [form.defaultModel, form.defaultReasoningModel, form.defaultEvaluationModel].filter(Boolean).length)
+/* 2026-10-04 状态条退役：原「就绪」判定 ready（仅 statusTone 消费）随状态条删除，零引用一并清理。
+   2026-10-14 页首 KPI 带撤除：routeCount 原本还喂「默认路由 N/3」那块 KpiKpi 与其 title，
+   撤带后零引用，一并删除——路由就绪度由下方三行逐条徽标承担（不再有一个汇总数字复读）。 */
 /* 默认路由三角色行（2026-10-05 重设计：原 routeOverview 只读概览与三列输入是同屏回声，
    合并为一行 = 角色 + 输入 + 状态徽标；value 直读 form，徽标随输入实时翻转）。 */
 const routeRoles = computed(() => [
@@ -1178,17 +1165,9 @@ const routeWarnText = computed(() => {
   const names = bad.map((c) => c.message || c.id).slice(0, 2).join('、')
   return `${bad.length} 项能力降级 / 不可用：${names}${bad.length > 2 ? ' 等' : ''}`
 })
-/** 模型清单状态说明：区分「清单未拉取」「本次拉取未保存」「已就绪」，不点「默认路由 3/3」暗示整体就绪 */
-const modelListTitle = computed(() =>
-  models.value.length
-    ? hasUnsavedModels.value
-      ? `本次拉取 ${models.value.length} 个服务商模型，尚未保存：仅本页有效，保存连接后其他页面与下次进入才可见`
-      : `已拉取 ${models.value.length} 个服务商模型`
-    : '尚未拉取服务商模型清单；平台实际在用模型见「模型总览」tab 的解析结果，切换取值需先拉取清单',
-)
-const routeTitle = computed(
-  () => `已指定 ${routeCount.value} / 3 条默认路由（对话 / 推理 / 评估）。路由数只表示已指定，不代表模型清单已就绪`,
-)
+/* modelListTitle / routeTitle 两个说明 computed 随页首 KPI 带一并删除（2026-10-14）：
+   它们只喂过那三块 MkKpi 的 title。对应的诚实性提示改由卡内承接——模型清单卡的
+   「本次拉取未保存」徽标 + 持久化说明行、路由行的逐条 title。 */
 /* 2026-10-04 状态条退役：页头红/黄/绿基调 statusTone 随状态条整块删除（读取失败信号由
    接入卡内 mk-alert + KPI 卡「—」读数承载，不再有整页基调色） */
 const connBadge = computed(() => {
@@ -1496,13 +1475,16 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
 
 /* 满屏重排（2026-10-05）：mk-narrow 限宽列在宽屏下读作「一张卡悬着」（用户实测截图批注）。
-   接入三列（与页首 KPI 三卡垂直对位：密钥→连接 / 清单→模型清单 / 路由→模型路由页签）、
-   安全 2×2 策略卡宫格（标题行跨双列），≤1100px 回落单列 */
+   接入三列、安全 2×2 策略卡宫格（标题行跨双列），≤1100px 回落单列。
+   2026-10-14 页首 KPI 带撤除后，三列不再有「与 KPI 垂直对位」的对象；注册表只读面板
+   作为本网格第四项跨全宽（.ac-registry）。 */
 .ac-conn-body { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
 .ac-sec-body { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
 .ac-sec-head { grid-column: 1 / -1; }
 /* 置顶告警（接入域读取失败）横跨全部列，不占卡位把卡片挤换行 */
 .ac-conn-body > .mk-alert { grid-column: 1 / -1; }
+/* 注册表只读面板（原「模型总览」页签）：跨全宽排在三卡下方 */
+.ac-conn-body > .ac-registry { grid-column: 1 / -1; }
 
 /* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
