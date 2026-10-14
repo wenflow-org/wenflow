@@ -29,7 +29,7 @@
                 <span class="faw__result-hint">{{ result.syncHint }}</span></li>
               <li v-else>同步一致性核查：fields 更新 <b>{{ result.dbSync?.fieldsUpdated ?? 0 }}</b> · routings 更新 <b>{{ result.dbSync?.routingsUpdated ?? 0 }}</b>
                 <span v-if="result.dbSync?.skippedAdminRows?.length" class="faw__result-hint">
-                  跳过受保护行 {{ result.dbSync.skippedAdminRows.length }}（{{ result.dbSync.skippedAdminRows.map((r) => r.key).join('，') }}；admin 覆盖行需在编排弹窗手动改）</span></li>
+                  跳过受保护行 {{ result.dbSync.skippedAdminRows.length }}（{{ result.dbSync.skippedAdminRows.map((r) => r.key).join('，') }}，管理员覆盖的字段需在编排弹窗手动改）</span></li>
               <li v-if="result.syncCheck">字段同步复检：缺项 <b>{{ result.syncCheck.missing.length }}</b> · 孤儿 <b>{{ result.syncCheck.orphan.length }}</b> · 类型不一致 <b>{{ result.syncCheck.typeMismatch.length }}</b></li>
             </template>
           </ul>
@@ -74,7 +74,7 @@
             <label class="mk-field">
               <span class="mk-field__label">移交去向</span>
               <input v-model="form.handoff" type="text" class="mk-input mono" placeholder="goal-agent, path, skill:xxx" spellcheck="false" />
-              <span class="mk-field__hint">合法目标：阶段名（{{ STAGE_NAMES.join('/') }}）/ agent / skill:；逗号分隔</span>
+              <span class="mk-field__hint">合法目标：阶段名（{{ STAGE_NAMES.join('/') }}）/ agent / skill:，逗号分隔</span>
             </label>
 
             <label class="mk-field">

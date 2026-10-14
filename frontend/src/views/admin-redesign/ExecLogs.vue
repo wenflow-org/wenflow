@@ -288,7 +288,7 @@
                         </div>
                         <div v-if="log.gatewayDurMs" class="tline__section">
                           <span class="tline__label">网关合并</span>
-                          <p class="tline__none">{{ fmtMs(log.gatewayDurMs) }}（同一调用链的 api-gateway 记录，已合并展示）</p>
+                          <p class="tline__none">{{ fmtMs(log.gatewayDurMs) }}（同一调用链的网关记录，已合并展示）</p>
                         </div>
                         <div v-if="detailCache[log.id].input" class="tline__section">
                           <span class="tline__label">输入</span>

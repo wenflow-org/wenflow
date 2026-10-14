@@ -3,8 +3,7 @@
   <div class="sdp-pane">
     <div class="sdp-notice">
       <strong>路由、可靠性与生成参数</strong>
-      配置 endpoint / model 路由 / 超时 / 逻辑重试 / 参数覆盖 / 兜底链。
-      生成参数默认来自 ACTIVE Prompt（File-as-Truth），本页可逐字段覆盖；生效值与来源见上方「生成参数」投影。
+      本页配置该 Skill 的模型路由、超时、重试与生成参数，未覆盖项继承默认值。
     </div>
 
     <div class="sdp-chiprows">

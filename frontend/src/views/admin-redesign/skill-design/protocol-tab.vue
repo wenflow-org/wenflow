@@ -16,7 +16,7 @@
         </span>
       </header>
       <p class="sdp-pw__hint">
-        core YAML 是业务定义的唯一声明源：保存即编译（dry run 出五块产物与门禁），发布后确定性编译为五块 Prompt（<code class="mono">skill.{{ skillId }}.md</code> + 数据库 ACTIVE），运行时立即生效。
+        core YAML 是业务定义的唯一声明源：保存即编译（dry run 出五块产物与门禁），发布后确定性编译为五块 Prompt（<code class="mono">skill.{{ skillId }}.md</code> + 数据库生效版本），运行时立即生效。
       </p>
       <div class="sdp-pw__viewswitch">
         <button
@@ -104,7 +104,7 @@
             <p class="sdp-pwform__note">
               声明本 Skill 消费的输入。ref 前缀 = 来源分类：<code class="mono">skill:xxx.fieldPath</code>（上游 Skill 模型输出）/
               <code class="mono">sandbox:agent.key</code>（编排注入，对照沙盘说明书 <code class="mono">prompts/agent-snapshots.md</code>）/
-              <code class="mono">user:path</code>（用户/平台，绿灯）。保存/发布时对账（skill→handoff、sandbox→沙盘注册表、user→通过）。
+              <code class="mono">user:path</code>（用户/平台，绿灯）。保存/发布时核对（skill→移交、sandbox→沙盘注册表、user→通过）。
             </p>
             <div v-for="(input, i) in coreForm.inputs" :key="i" class="sdp-pwform__inputrow">
               <input v-model="input.name" class="mk-input" placeholder="别名 name（可选）" @input="markDirty" />
@@ -279,7 +279,7 @@
             class="sdp-pw__gate"
             :class="coreGateCls(coreGates.inputHandoff.length === 0)"
           >
-            输入对账 {{ coreGates.inputHandoff.length === 0 ? '✓' : `⚠ ${coreGates.inputHandoff.length} 条 advisory` }}
+            输入一致性核查 {{ coreGates.inputHandoff.length === 0 ? '✓' : `⚠ ${coreGates.inputHandoff.length} 条 advisory` }}
           </div>
           <div v-for="(issue, i) in coreGates.inputHandoff || []" :key="`ih-${i}`" class="sdp-pw__gate-issue">
             [{{ issue.code }}] {{ issue.message }}

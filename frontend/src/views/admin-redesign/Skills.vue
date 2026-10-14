@@ -173,7 +173,7 @@
       <!-- 统计窗口切换失败（已有数据时此前静默吞掉：KPI 副文已换新窗口口径、数字却还是旧窗口，
            页面无任何提示）→ 卡内显式错误条 + 重试，不把故障混进旧数字 -->
       <div v-if="liveSkillsError && cards.length" class="mk-alert mk-alert--row sk-live-err" role="alert">
-        <span class="mk-alert__msg">{{ rangeLabelOf(statsRange) }}窗口统计加载失败：{{ liveSkillsError }}（下方仍为{{ rangeLabel }}的数据）</span>
+        <span class="mk-alert__msg">{{ rangeLabelOf(statsRange) }}窗口统计加载失败：{{ liveSkillsError }}（仍为{{ rangeLabel }}的数据）</span>
         <button type="button" class="mk-alert__btn" @click="retrySkills">重试</button>
       </div>
 

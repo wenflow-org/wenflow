@@ -19,7 +19,7 @@
         <div class="mk-modal__body">
     <div class="quick-learn">
       <div class="mk-alert mk-alert--info" role="status">
-        以该虚拟学习者绑定的平台账号完成真实 Learn 流程；路径、课堂、任务完成和学习状态都会写回这个账号。
+        以该虚拟学习者绑定的平台账号真实走一遍学习流程。路径、课堂、任务完成和学习状态都会记到这个账号。
       </div>
 
       <div class="ql-account-brief" aria-label="自动学习边界">
@@ -188,7 +188,7 @@
                 课程结果
               </button>
               <button type="button" class="mk-btn" :disabled="openingFrontend" @click="openFrontend('task')">
-                本节课 Learn
+                本节课教学
               </button>
               <button type="button" class="mk-btn" :disabled="openingFrontend" @click="openFrontend('learning-state')">
                 学习状态

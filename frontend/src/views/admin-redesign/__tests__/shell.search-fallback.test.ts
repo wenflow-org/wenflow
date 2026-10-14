@@ -46,7 +46,7 @@ describe('顶栏搜索 · 转搜出口', () => {
     await wrapper.find('.mshell__search-input').setValue('孙浩');
     await flushPromises();
     expect(wrapper.text()).toContain('没有匹配的页面');
-    expect(wrapper.text()).toContain('只索引页面名称');
+    expect(wrapper.text()).toContain('只覆盖页面名称');
     const fallbacks = wrapper.findAll('.mshell__search-fallback');
     expect(fallbacks).toHaveLength(3);
     expect(fallbacks.map((f) => f.text())).toEqual([

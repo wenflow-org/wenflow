@@ -68,7 +68,7 @@
     <template v-else-if="!summary && loading">
       <!-- 冷载反馈（F8-3）：全表聚合冷载可达 20s+，8s 后给一句「仍在计算」，避免长时间只有
            骨架被读成卡死（热载命中 5min TTL 缓存 <1s，不会触发） -->
-      <p v-if="slowLoad" class="mk-card__note" role="status">首次聚合近 {{ days }} 天调用记录，冷载可能需数十秒，仍在计算…</p>
+      <p v-if="slowLoad" class="mk-card__note" role="status">正在统计近 {{ days }} 天调用记录，首次可能需数十秒…</p>
       <section class="mk-kpi-grid">
         <div v-for="i in 4" :key="i" class="mk-kpi tc-skel-kpi"><MkSkeleton w="60%" :h="26" /><MkSkeleton w="40%" :h="12" /></div>
       </section>
@@ -239,7 +239,7 @@
           </div>
         </div>
         <p v-if="skillRows.length" class="mk-card__note">
-          成本＝已定价调用金额合计（USD）· — 表示该行未配置单价（不计入占比）· 点击行可到执行日志看该 Skill 逐调用明细<template v-if="skillCostTotal <= 0">（当前无已定价调用，占比按 Token 计）</template>
+          成本＝已定价调用金额合计（USD）· — 表示该行未配置单价（不计入占比）<template v-if="skillCostTotal <= 0">（当前无已定价调用，占比按 Token 计）</template>
         </p>
         <p v-else class="mk-card__note">暂无数据。</p>
       </section>

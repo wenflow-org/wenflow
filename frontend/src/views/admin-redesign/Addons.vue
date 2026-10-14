@@ -188,9 +188,7 @@
             <span v-if="toolErrors.endpoint" class="mk-field__err">{{ toolErrors.endpoint }}</span>
           </label>
           <p v-if="toolForm.transport === 'mcp'" class="ac-mcp__hint">
-            MCP 服务的工具由服务端 <code>tools/list</code> 动态发现，不在本页逐个登记；调用时以
-            <code>{{ toolForm.id || 'serverId' }}:&lt;toolName&gt;</code> 寻址（如
-            <code>{{ toolForm.id || 'serverId' }}:tavily_search</code>）。保存后可在列表中「发现工具」查看。
+            工具由服务端动态发现，保存后可在列表中「发现工具」查看。
           </p>
           <label class="mk-field">
             <span class="mk-field__label">描述（可选）</span>

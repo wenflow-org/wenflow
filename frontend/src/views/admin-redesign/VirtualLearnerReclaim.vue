@@ -17,10 +17,10 @@
                可回收的列上面，被豁免的（hold/租约/在途/代际）逐条列下面并注明原因，
                不再出现「按钮 35 / 弹窗 0」两套数字 -->
           <p v-if="candidateCount > 0" class="vl-reclaim-summary">
-            扫描到 <b>{{ candidateCount }}</b> 个超阈值卡死候选会话{{ state.profileIds ? '（选中虚拟人口径）' : '（与页头角标同源）' }}：可回收 <b>{{ state.reclaimable.length }}</b> 个<template v-if="protectedSkipped.length">，豁免 <b>{{ protectedSkipped.length }}</b> 个（{{ skippedBreakdown }}）</template>。
+            扫描到 <b>{{ candidateCount }}</b> 个超过回收阈值的无响应候选会话{{ state.profileIds ? '（选中虚拟人口径）' : '（与页头角标同源）' }}：可回收 <b>{{ state.reclaimable.length }}</b> 个<template v-if="protectedSkipped.length">，豁免 <b>{{ protectedSkipped.length }}</b> 个（{{ skippedBreakdown }}）</template>。
           </p>
           <p v-if="scanTruncated" class="vl-reclaim-footnote">
-            单次扫描上限 {{ state.batchLimit }} 个，可能还有未列出的候选；回收后可再次扫描。
+            单次扫描上限 {{ state.batchLimit }} 个，可能还有未列出的候选。回收后可再次扫描。
           </p>
           <!-- 空态走共享 MkEmptyState（原型 .empty：图标/标题/下一步，index.html 287-289），带「关闭」CTA；
                原先的 mk-alert--ok 只有一句状态文案、没有下一步 -->
@@ -43,7 +43,7 @@
             本轮没有可回收的会话：{{ candidateCount }} 个候选全部处于豁免保护（{{ skippedBreakdown }}），无需清理。
           </p>
           <p v-if="pausedSkipped.length" class="vl-reclaim-footnote">
-            另有 {{ pausedSkipped.length }} 个管理员暂停会话按口径不计入卡死。
+            另有 {{ pausedSkipped.length }} 个管理员暂停会话不计入无响应。
           </p>
           <template v-if="protectedSkipped.length">
             <p class="vl-reclaim-skipped-title">以下候选本轮不会回收（豁免保护）：</p>

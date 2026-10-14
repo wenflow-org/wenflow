@@ -106,7 +106,7 @@
             当前目录来自内置兜底（未读到配置文件）：{{ data.registry?.path }}
           </p>
           <p v-else-if="data.registry?.lastError" class="ac-mr-note" :title="data.registry?.lastError">
-            最近一次热重载失败，仍在使用上一次可用的模型目录。
+            最近一次更新失败，仍在使用上一次可用的模型目录。
           </p>
           <div v-if="data.providers?.length" class="ac-mr-mlist" role="list">
             <div v-for="p in data.providers" :key="p.id" class="ac-mr-mrow" role="listitem">

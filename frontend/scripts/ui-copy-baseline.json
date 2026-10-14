@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-10-14T11:35:50.672Z",
+  "generatedAt": "2026-10-14T12:18:03.399Z",
   "rules": {
-    "R6": 46
+    "R6": 80
   },
   "files": {
     "views/admin-redesign/ApiConfig.vue": {
@@ -13,8 +13,11 @@
     "views/admin-redesign/ExecLogs.vue": {
       "R6": 1
     },
+    "views/admin-redesign/HealthCenter.vue": {
+      "R6": 1
+    },
     "views/admin-redesign/LearnerDetail.vue": {
-      "R6": 2
+      "R6": 12
     },
     "views/admin-redesign/live.ts": {
       "R6": 2
@@ -30,6 +33,9 @@
     },
     "views/admin-redesign/opsShared.ts": {
       "R6": 1
+    },
+    "views/admin-redesign/SessionCockpit.vue": {
+      "R6": 6
     },
     "views/admin-redesign/SessionSecurity.vue": {
       "R6": 2
@@ -64,16 +70,19 @@
     "views/admin-redesign/TokenCost.vue": {
       "R6": 1
     },
+    "views/admin-redesign/TraceWaterfall.vue": {
+      "R6": 1
+    },
     "views/admin-redesign/VirtualLabLoadSettings.vue": {
       "R6": 2
+    },
+    "views/admin-redesign/VirtualLearnerCreate.vue": {
+      "R6": 6
     },
     "views/admin-redesign/VirtualLearners.vue": {
       "R6": 1
     },
     "views/admin-redesign/VirtualProfile.vue": {
-      "R6": 1
-    },
-    "views/DeveloperDocs.vue": {
       "R6": 1
     },
     "views/LearningEvaluationPage.vue": {
@@ -83,13 +92,13 @@
       "R6": 1
     },
     "views/v2/V2GoalConversation.vue": {
-      "R6": 3
+      "R6": 4
     },
     "views/v2/V2LearningPaths.vue": {
       "R6": 1
     },
     "views/v2/V2LearningState.vue": {
-      "R6": 1
+      "R6": 11
     }
   }
 }

@@ -10,7 +10,7 @@
     <!-- 原型 .note--info：入口说明（不再自搓虚线蓝框）。审核 #111：按钮实为工具条最左侧（非右上角），
          文案改「本面板顶部」与 DriftAuditPanel 同口径，避免指路与实际位置相反 -->
     <p class="note note--info frt__notice">
-      行级编辑已收敛：修改字段路由请使用本面板顶部的「编排文件」按钮，保存后新建行即时生效，已有行修改后点「{{ TERMS.syncToDb }}」
+      修改字段路由请使用本面板顶部的「编排文件」按钮，保存后新建行即时生效，已有行修改后点「{{ TERMS.syncToDb }}」
     </p>
 
     <!-- core 联动提示条（M3 轻量：当前 stage 各 skill 的 fields-sync 状态角标） -->
@@ -110,7 +110,7 @@
         </div>
       </div>
       <p class="frt__legend-foot">
-        机制说明见仓库 <span class="mono">prompts/orchestration/_README.md</span> · 术语查顶栏「这是什么」→ 运营术语表
+
       </p>
     </details>
 

@@ -530,7 +530,7 @@
             <!-- #135：此处是「起草」区，草稿不再随关闭/跳转静默丢弃——关闭或跳设计页前写
                  sessionStorage（skd-prompt-draft:<skillId>），下次打开自动恢复并提示；另给「复制」带走 -->
             <p v-if="pmDraftRestored" class="skd-draft-note" role="status">
-              已恢复上次未提交的草稿（{{ pmDraftSavedAt }}）；「前往设计页编辑」不会携带草稿，可先「复制内容」。
+              已恢复上次未提交的草稿（{{ pmDraftSavedAt }}）。「前往设计页编辑」不会携带草稿，可先「复制内容」。
             </p>
             <label class="skd-field">
               <span>system</span>

@@ -70,7 +70,7 @@
       <p v-if="inspectError" class="sdp-none sdp-bad-text">Prompt 检视加载失败。<button type="button" class="mk-link" @click="loadInspect">重试</button></p>
       <pre class="sdp-prompt__code">{{ effectivePrompt?.prompt?.systemPrompt || (inspectError ? '加载失败，请重试' : '暂无内容') }}</pre>
       <p class="sdp-prompt__hint">
-        File-as-Truth：正式内容只能修改 <code class="mono">{{ filePath || 'prompts/skill.*.md' }}</code>，经部署同步生效。
+        正式内容以源文件为准：修改 <code class="mono">{{ filePath || 'prompts/skill.*.md' }}</code>，经部署同步生效。
       </p>
     </section>
   </div>

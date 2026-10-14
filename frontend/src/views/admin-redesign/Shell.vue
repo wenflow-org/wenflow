@@ -177,7 +177,7 @@
             <div v-if="!searchHits.length" class="mshell__search-empty">
               <p class="mshell__search-empty-title">没有匹配的页面</p>
               <p class="mshell__search-empty-hint">
-                顶栏搜索只索引页面名称（如「成本分析」「用户与学习者」）。找人 / 路径 / 调用记录请到列表页搜，关键词会带过去：
+                搜索只覆盖页面名称。找人 / 路径 / 调用记录请用下面的入口直接搜：
               </p>
               <button
                 v-for="f in searchFallbacks"

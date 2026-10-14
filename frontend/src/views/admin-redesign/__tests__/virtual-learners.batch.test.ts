@@ -511,7 +511,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     await flushPromises();
     const body = document.body.textContent || '';
     // 弹窗候选数与按钮角标同数（2），并给出豁免分项
-    expect(body).toContain('扫描到 2 个超阈值卡死候选会话（与页头角标同源）');
+    expect(body).toContain('扫描到 2 个超过回收阈值的无响应候选会话（与页头角标同源）');
     expect(body).toContain('可回收 0 个');
     expect(body).toContain('豁免 2 个');
     // 豁免项逐条可见 + 原因标签

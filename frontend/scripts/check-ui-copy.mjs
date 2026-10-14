@@ -75,6 +75,9 @@ const TS_COPY = [
   'views/v2/learningScene.ts'
 ];
 
+/* 免检文件：开发者文档 **有意**展示目录树 / 命令 / 字段名，是内容不是文案缺陷。 */
+const SKIP_FILES = new Set(['views/DeveloperDocs.vue']);
+
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -90,7 +93,11 @@ function walk(dir, out = []) {
 function candidates(line, isVue) {
   const out = [];
   if (isVue) {
-    for (const m of line.matchAll(/>([^<>{}]{2,})</g)) out.push(m[1]);
+    /* 先在**整行**剥离插值，再切文本节点：行内箭头函数 `(c) => …` 里的 `>` 会把文本节点切碎，
+       残片会带出 c.tone 之类的属性访问（误报），也会让真文案被切掉（漏报）。
+       注：跨行的文本节点由 scan() 的整块扫描负责，这里只兜本行的。 */
+    const clean = line.replace(/\{\{(?:[^{}]|\{[^{}]*\})*\}\}/g, ' ');
+    for (const m of clean.matchAll(/>([^<>]{2,})</g)) out.push(m[1]);
     ATTR_RE.lastIndex = 0;
     for (const m of line.matchAll(ATTR_RE)) {
       const bound = !!m[1];
@@ -118,8 +125,10 @@ function candidates(line, isVue) {
        允许一层嵌套花括号（`${x ? \`…${y}…\` : ''}`），否则嵌套三元里的属性访问仍会漏出。 */
     .map((s) => s.replace(/\{\{(?:[^{}]|\{[^{}]*\})*\}\}/g, ' ').replace(/\$\{(?:[^{}]|\{[^{}]*\})*\}/g, ' '))
     /* 剥离后仍残留 `${` / `{{` 说明是嵌套更深的表达式片段（不是完整文案），整条丢弃，
-       否则会把 `日${c.minutes ? …` 这类当文案判 R4。 */
-    .filter((s) => !s.includes('${') && !s.includes('{{'))
+       否则会把 `日${c.minutes ? …` 这类当文案判 R4。
+       同理丢弃含 `}}` / `=>` / `);` 的碎片——行内箭头函数里的 `>` 会把文本节点切碎，
+       残片会带出 `c.tone` 这种属性访问，属误报。 */
+    .filter((s) => !s.includes('${') && !s.includes('{{') && !s.includes('}}'))
     .map((s) => s.replace(/\s+/g, ' ').trim())
     .filter((s) => s && /[\u4e00-\u9fff]/.test(s) && !/^\{\{?\s*[\w.$]*\s*\}?\}$/.test(s));
 }
@@ -131,9 +140,25 @@ function scan() {
   const perFile = new Map();
   for (const file of walk(SRC)) {
     const rel = path.relative(SRC, file).replace(/\\/g, '/');
+    if (SKIP_FILES.has(rel)) continue;
     const isVue = file.endsWith('.vue');
     if (!isVue && !tsSet.has(file.replace(/\\/g, '/'))) continue;
     const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+    const raw = lines.join('\n');
+    const recorded = new Set(); // 去重：整块扫描与逐行扫描会命中同一处
+    const emit = (text, line) => {
+      const key = line + '\u0000' + text;
+      if (recorded.has(key)) return;
+      recorded.add(key);
+      if (!perFile.has(rel)) perFile.set(rel, new Map());
+      const m = perFile.get(rel);
+      if (!m.has(text)) m.set(text, []);
+      m.get(text).push(line);
+      for (const [rule, fn] of Object.entries(RULES)) {
+        const why = fn(text);
+        if (why) findings.push({ file: rel, line, rule, why, text: text.slice(0, 120) });
+      }
+    };
     let mode = null; // 跳过 style / script 区块（仅 .vue）
     lines.forEach((line, i) => {
       if (isVue) {
@@ -148,16 +173,24 @@ function scan() {
       for (const text of candidates(line, isVue)) {
         if (seen.has(text)) continue;
         seen.add(text);
-        if (!perFile.has(rel)) perFile.set(rel, new Map());
-        const m = perFile.get(rel);
-        if (!m.has(text)) m.set(text, []);
-        m.get(text).push(i + 1);
-        for (const [rule, fn] of Object.entries(RULES)) {
-          const why = fn(text);
-          if (why) findings.push({ file: rel, line: i + 1, rule, why, text: text.slice(0, 120) });
-        }
+        emit(text, i + 1);
       }
     });
+    /* 整块模板扫描：补「跨行文本节点」——`>` 在上一行时逐行扫描取不到，属取词盲区。
+       先把模板里的注释/style/script 与插值都去掉，再按偏移折算行号。 */
+    if (isVue) {
+      const stripped = raw
+        .replace(/<style[\s\S]*?<\/style>/g, (m2) => m2.replace(/[^\n]/g, ' '))
+        .replace(/<script[\s\S]*?<\/script>/g, (m2) => m2.replace(/[^\n]/g, ' '))
+        .replace(/<!--[\s\S]*?-->/g, (m2) => m2.replace(/[^\n]/g, ' '))
+        .replace(/\{\{(?:[^{}]|\{[^{}]*\})*\}\}/g, ' ')
+        .replace(/\$\{(?:[^{}]|\{[^{}]*\})*\}/g, ' ');
+      const lineAt = (idx) => stripped.slice(0, idx).split('\n').length;
+      for (const m of stripped.matchAll(/>([^<>]{2,})</g)) {
+        const t = m[1].replace(/\s+/g, ' ').trim();
+        if (t && /[\u4e00-\u9fff]/.test(t)) emit(t, lineAt(m.index));
+      }
+    }
   }
   /* R6：同文件内同一句（≥10 字、含中文）出现 ≥2 次 → 复读嫌疑，取第二次出现处报一条 */
   for (const [rel, m] of perFile) {

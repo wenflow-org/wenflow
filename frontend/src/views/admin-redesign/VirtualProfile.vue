@@ -428,7 +428,7 @@
             <!-- 口径披露（#76）：表内只渲染有记忆痕迹的概念（后端按保留率排序截断到 8 条），
                  与卡头「共 N 条」的四桶合计不同源时，这里写明差别 -->
             <p v-if="memoryPoolRows.length && memoryCount > memoryPoolRows.length" class="vp-memory__pool-note">
-              仅展示有记忆痕迹的最近 {{ memoryPoolRows.length }} 个概念（按当前保留率排序）；卡头「共 {{ memoryCount }} 条」为记忆池四桶合计。
+              仅展示有记忆痕迹的最近 {{ memoryPoolRows.length }} 个概念（按当前保留率排序），总数见卡头。
             </p>
 
             <!-- 记忆保持曲线（Q2/Q8）：到期 / 已掌握概念的保留率随天数衰减 -->
@@ -438,7 +438,7 @@
                 <span class="mk-card__meta">横轴为距上次复习天数 · 纵轴为预计还记得的比例</span>
               </div>
               <p class="vp-memory__curve-hint">
-                老师下次会先带你回捞这些点：曲线越陡、当前保留越低，越优先回捞。
+                下次复习会优先安排这些点：保留越低越优先。
               </p>
               <div class="vp-memory__curve-legend">
                 <span
