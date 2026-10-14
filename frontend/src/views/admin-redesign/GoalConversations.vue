@@ -838,11 +838,10 @@ onMounted(() => {
 <style scoped>/* 2026-09-29 拆回「目标对话」独立页：合并宿主的视图切换 pills（gc-tabs）随之退役。
    宿主容器沿用 .mk-page 的响应式内边距（对齐 pp-host / 虚拟学习者单页容器），
    避免 ≥1440px 档位状态条起始位置与其它页脱节。 */
-/* 子组件根节点（.mk-page--fill）：占满剩余高度，表格区内滚（对齐 pp-host > .mk-page--fill 先例） */
-.gc-host > .mk-page--fill {
-  flex: 1 1 auto;
-  min-height: 0;
-}/* 目标对话内联内容（状态条 + 卡片）：同为 fill 列的直接子级，卡片弹性填满 */
+/* 原「子组件根节点 .gc-host > .mk-page--fill」已删（2026-10-14）：本页 2026-09-29 从合并宿主
+   拆回独立页后不再内嵌 fill 子页，规则空转（浏览器实测 .gc-host 的 4 个直接子级 = 页头 /
+   KPI 带 / 分布带 / 列表卡，全树 .mk-page--fill 计数 0）。同形规则在 People(pp-host) /
+   OpsCenter(oc-card__body) / ApiConfig(ac-host) / OpsHub(oh-host) 仍在用，别照抄删除。 */
 .gc-host > .mk-status { flex: none; }/* 概览卡样式由共享 mk-overview/mk-kpi 体系承载；此处仅保留堆叠条（pre slot 内）与行样式 */
 /* 行点击/焦点态已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） *//* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；徽章本体用 mk-badge--*） */
 /* 用户格 min-width：本表为自动布局（无 colgroup），补「澄清进度/约束条件」两列后
