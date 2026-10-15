@@ -255,6 +255,7 @@ export class LearnerProjectionService {
         stableConcepts: snapshot.knowledgeMemory.globalSignals.masteredConcepts,
         fragileConcepts: snapshot.knowledgeMemory.globalSignals.fragileConcepts,
         strugglingConcepts: snapshot.knowledgeMemory.globalSignals.strugglingConcepts,
+        severeStrugglingConcepts: snapshot.knowledgeMemory.globalSignals.severeStrugglingConcepts,
       },
       risk: {
         fatigueRisk: snapshot.dynamicState.fatigueRisk,

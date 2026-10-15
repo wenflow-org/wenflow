@@ -308,6 +308,9 @@ export interface LearnerKnowledgeMemory {
     masteredConcepts: string[];
     fragileConcepts: string[];
     strugglingConcepts: string[];
+    /** 高严重度卡点：struggling 且证据均分 <0.3（2026-10-15 P0-2 F4）。fragile 通道被记忆引擎
+     *  的「未巩固」常态饱和（实测 70-100% 痕迹 <0.5），不能当门槛；加速/压缩的判据用这一档。 */
+    severeStrugglingConcepts: string[];
   };
   globalBackground: LearnerGlobalBackgroundKnowledge;
 }
@@ -469,6 +472,8 @@ export interface LearnerReplanProjection {
     stableConcepts: string[];
     fragileConcepts: string[];
     strugglingConcepts: string[];
+    /** 高严重度卡点（struggling 且证据均分 <0.3）——压缩/加速判据用（P0-2 F4） */
+    severeStrugglingConcepts: string[];
   };
   risk: {
     fatigueRisk: 'low' | 'medium' | 'high';

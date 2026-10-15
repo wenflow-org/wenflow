@@ -183,6 +183,7 @@ export function deriveReplanSignal(input: {
   const { dynamicState, learningControlState, knowledgeMemory } = input;
   const fragileCount = knowledgeMemory.globalSignals.fragileConcepts.length;
   const strugglingCount = knowledgeMemory.globalSignals.strugglingConcepts.length;
+  const severeStrugglingCount = knowledgeMemory.globalSignals.severeStrugglingConcepts?.length || 0;
   const blockedCount = knowledgeMemory.globalBackground.blockedFoundations.length;
   const prerequisiteGapCount = knowledgeMemory.currentPath?.prerequisiteGaps.length || 0;
   const reasonCodes: string[] = [];
@@ -245,18 +246,20 @@ export function deriveReplanSignal(input: {
   const highAction = structuralRisk
     ? { recommendation: 'resequence' as const, scope: 'downstream_path' as const }
     : { recommendation: 'slow_down' as const, scope: 'next_milestone' as const };
-  // mediumRisk：非结构性但存在需补强的信号（脆弱/挣扎点、复习优先级高、趋势下滑）。
-  // 接近完成且无结构性风险时也不进 medium——收尾阶段不再追加「补强建议」。
+  // mediumRisk（F3，2026-10-15）：fragile 通道被记忆引擎的「未巩固」常态饱和——实测四位 VL 的
+  // 痕迹 70-100% mastery<0.5（刚学的概念本来就在 0.5 以下），`fragile>0` 恒真；reviewPriority 又是
+  // `fragile>0` 的派生，拿它来判等于同一事实判两遍。两者合起来 = 「每课必发」的根。
+  // 收敛为：卡点达**数量门槛**（≥2 处，单处卡点是课堂教学的事，不值得动「重排路径」）或趋势下滑。
+  const MEDIUM_STRUGGLING_COUNT_THRESHOLD = 2;
   const mediumRisk = !nearCompleteNoStructural
-    && (learningControlState.reviewPriority === 'high' || fragileCount > 0 || strugglingCount > 0 || dynamicState.recentTrend === 'declining');
-  // 加速资格：学习者级（总负荷 ktl/lf）+ 路径级（paceMode 不是 recover）+ 知识证据。
-  // 不再看全局 `lss`：它 = 各路径里"最近一课最难"的那节课，用它给整个学习者判"能否加速"
-  // 正是"单课量决定全局判断"的老毛病；路径是否吃力由 learningControlState.paceMode 表达。
+    && (strugglingCount >= MEDIUM_STRUGGLING_COUNT_THRESHOLD || dynamicState.recentTrend === 'declining');
+  // 加速资格（F4，2026-10-15）：原 `fragile=0 && struggling=0` 在饱和通道下生产不可达 →
+  // 「压缩下一阶段」从未出现过（全库 0 次）。改**严重度门**：无高严重度卡点（证据均分 <0.3）
+  // 即可——刚学完的正常未巩固不该挡减法动作。学习者级负荷 + 路径级节奏两道门保留。
   const accelerateReady = dynamicState.metrics.ktl >= 6
     && dynamicState.metrics.lf <= 3
     && learningControlState.paceMode !== 'recover'
-    && fragileCount === 0
-    && strugglingCount === 0;
+    && severeStrugglingCount === 0;
 
   // 路径已完成：下游没有可「重排/减速」的阶段，任何重规划建议都是空转。
   // 明确回 keep（保留 reasonCodes 供观测），不再进 accelerate/high/medium 分支。
@@ -324,7 +327,9 @@ export function deriveReplanSignal(input: {
     recommendation: 'keep',
     scope: 'none',
     rationale: '',
-    reasonCodes: [],
+    // 观测口径：不发信号 ≠ 没看到信号。阈值收紧后（F3）多数课会落到这里，
+    // 丢掉累计的 reasonCodes 会让「为什么没建议」在决策流/审计里失明。
+    reasonCodes,
   };
 }
 

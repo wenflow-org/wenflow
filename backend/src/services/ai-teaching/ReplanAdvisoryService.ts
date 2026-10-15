@@ -156,10 +156,11 @@ export class ReplanAdvisoryService {
     }
 
     const reasonCodes: string[] = [];
-    const ktl = wrapup.evaluation?.sessionKtl ?? null;
     const lss = wrapup.evaluation?.sessionLss ?? null;
     const lf = wrapup.evaluation?.sessionLf ?? null;
-    const confidence = wrapup.evaluation?.confidence ?? 0;
+    // ktl/confidence 不再在本层判「能否加速」（F4 2026-10-15 归一到快照 accelerateReady）：
+    // ktl 是本会话训练负荷（会话量纲 0-10），"能不能加速"是学习者级判断，本层不重复真值；
+    // confidence 实测恒 0.7-0.9（自评饱和），从未起过阈值作用。
     const fragileConcepts = learnerReplanProjection.mastery.fragileConcepts || [];
     const strugglingConcepts = learnerReplanProjection.mastery.strugglingConcepts || [];
     const prerequisiteGaps = learnerReplanProjection.risk.prerequisiteGaps || [];
@@ -208,6 +209,8 @@ export class ReplanAdvisoryService {
         ...wrapup.progress.movedToReview.slice(0, 2),
       ].filter(Boolean);
 
+      // accelerate（压缩）走专用文案：界面语义是「把下一阶段压得更聚焦」，不是通用的「确认调整」。
+      const isAccelerate = recommendation === 'accelerate';
       return {
         shouldSuggest: true,
         priority,
@@ -215,17 +218,27 @@ export class ReplanAdvisoryService {
         scope,
         rationale: learnerSignal.rationale || '学习者状态中心判断当前路径后续安排需要重新确认。',
         reasonCodes: learnerSignal.reasonCodes || [],
-        ui: {
-          title: priority === 'high' ? '建议先确认路径调整' : '可以考虑调整后续路径',
-          body: focusPoints.length > 0
-            ? `系统检测到 ${focusPoints.join('、')} 这些点仍会影响后续推进。建议先确认是否调整“${nextMilestone.title}”及后续阶段安排。该调整只会调整后续阶段的课程安排，不会覆盖你已完成的内容。`
-            : `系统判断当前学习者状态与知识背景提示“${nextMilestone.title}”之后的推进方式需要重新确认。该调整只会调整后续阶段的课程安排，不会覆盖你已完成的内容。`,
-          options: [
-            { key: 'keep', label: '保持原计划', description: '继续按当前路径推进。' },
-            { key: 'preview', label: '查看调整建议', description: '先查看系统建议，再决定是否调整。' },
-            { key: 'confirm', label: '确认调整后续阶段', description: '确认后基于当前证据调整后续阶段的课程安排。' },
-          ],
-        },
+        ui: isAccelerate
+          ? {
+              title: '可以考虑加速下一阶段',
+              body: `你在当前阶段的掌握比较稳定，而且本节课学习压力与疲劳都不高。建议把下一阶段“${nextMilestone.title}”调整成更聚焦的安排。该调整只会调整后续阶段的课程安排，不影响你已完成的内容。`,
+              options: [
+                { key: 'keep', label: '保持原计划', description: '继续按当前路径推进。' },
+                { key: 'accelerate', label: '压缩下一阶段', description: '减少重复内容，更快进入重点。' },
+                { key: 'preview', label: '先看建议', description: '先查看系统建议，再决定是否调整。' },
+              ],
+            }
+          : {
+              title: priority === 'high' ? '建议先确认路径调整' : '可以考虑调整后续路径',
+              body: focusPoints.length > 0
+                ? `系统检测到 ${focusPoints.join('、')} 这些点仍会影响后续推进。建议先确认是否调整“${nextMilestone.title}”及后续阶段安排。该调整只会调整后续阶段的课程安排，不会覆盖你已完成的内容。`
+                : `系统判断当前学习者状态与知识背景提示“${nextMilestone.title}”之后的推进方式需要重新确认。该调整只会调整后续阶段的课程安排，不会覆盖你已完成的内容。`,
+              options: [
+                { key: 'keep', label: '保持原计划', description: '继续按当前路径推进。' },
+                { key: 'preview', label: '查看调整建议', description: '先查看系统建议，再决定是否调整。' },
+                { key: 'confirm', label: '确认调整后续阶段', description: '确认后基于当前证据调整后续阶段的课程安排。' },
+              ],
+            },
       };
     }
 
@@ -243,40 +256,10 @@ export class ReplanAdvisoryService {
       // movedToReview 降档后归入补强语义：阶段收尾时还有点在复习队列 → 建议补强（而非风险）
       wrapup.progress.movedToReview.length > 0
     );
-    // 层级要对齐：`ktl` 是**本会话**的训练负荷（这节课练得扎实，会话量纲 0-10），
-    // 而"能不能加速"是**学习者级**判断 —— 后者必须看学习者级疲劳/负荷，
-    // 不能拿单会话的 lss/lf 当全局闸门（"这节课难" ≠ "这个人该慢下来"）。
-    const canAccelerate = (
-      currentMilestoneComplete &&
-      (ktl !== null && ktl >= 7) &&
-      learnerReplanProjection.risk.fatigueRisk === 'low' &&
-      learnerSignal?.priority !== 'high' &&
-      confidence >= 0.6 &&
-      fragileConcepts.length === 0 &&
-      strugglingConcepts.length === 0 &&
-      wrapup.progress.movedToReview.length === 0
-    );
-
-    if (canAccelerate) {
-      reasonCodes.push('stable_mastery', 'ready_to_accelerate');
-      return {
-        shouldSuggest: true,
-        priority: 'low',
-        recommendation: 'accelerate',
-        scope: 'next_milestone',
-        rationale: '当前阶段掌握较稳定，下一阶段可以考虑压缩为更聚焦的推进版本。',
-        reasonCodes,
-        ui: {
-          title: '可以考虑加速下一阶段',
-          body: `你在当前阶段的掌握比较稳定，而且本节课学习压力与疲劳都不高。建议把下一阶段“${nextMilestone.title}”调整成更聚焦的安排。该调整只会调整后续阶段的课程安排，不影响你已完成的内容。`,
-          options: [
-            { key: 'keep', label: '保持原计划', description: '继续按当前路径推进。' },
-            { key: 'accelerate', label: '压缩下一阶段', description: '减少重复内容，更快进入重点。' },
-            { key: 'preview', label: '先看建议', description: '先查看系统建议，再决定是否调整。' },
-          ],
-        },
-      };
-    }
+    // 压缩（accelerate）不再在这里二次判定（F4，2026-10-15）：此处的 canAccelerate 是
+    // LearnerSnapshotService.accelerateReady 的更严孪生（fragile=0 && struggling=0 && movedToReview=0
+    // 在饱和通道下生产不可达）——同一事实两处真值、严者静默胜出，「压缩下一阶段」从未出现过。
+    // 归一为单一来源：accelerate 只由快照的 accelerateReady 判定，经上方信号分支直出（含专用文案）。
 
     // 同一阈值也管这条补强分支（该分支非 highRisk 时的唯一产出就是 reinforce）：
     // 本节课双低且没有显式知识证据时，不再凭 movedToReview/stillLearning 这类每课副产品发「补强」。

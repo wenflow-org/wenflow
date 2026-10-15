@@ -256,15 +256,17 @@ describe('deriveReplanSignal · 完成度归一（I-11：已完成路径不再�
     expect(signal.priority).toBe('high');
   });
 
-  it('只有脆弱点（无结构性证据）→ 补强档，不因 blockedFoundations 虚报 high', () => {
+  it('F3：只有脆弱点（无结构性证据）→ 不虚报 high，也不再凭 reviewPriority 派生发 medium（发补强需卡点达量/趋势下滑）', () => {
     const signal = deriveReplanSignal({
       dynamicState: dyn(),
       learningControlState: { paceMode: 'steady', reviewPriority: 'high' } as any,
       knowledgeMemory: km({ currentPath: { prerequisiteGaps: [], progress: { totalTasks: 18, completedTasks: 2 } } }),
     });
-    expect(signal.shouldSuggest).toBe(true);
-    expect(signal.priority).toBe('medium');
-    expect(signal.recommendation).toBe('reinforce');
+    // reviewPriority='high' 是 fragile>0 的派生（饱和通道），不再是 medium 的触发源：
+    // 单处卡点 + fragile 常态 → keep（观测 reasonCodes 保留）
+    expect(signal.shouldSuggest).toBe(false);
+    expect(signal.priority).not.toBe('high');
+    expect(signal.reasonCodes).toContain('fragile_concepts');
   });
 
   it('无 currentPath + 一跳前置缺口（真结构性风险）→ high/resequence', () => {

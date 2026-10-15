@@ -17,6 +17,7 @@ function input(over: {
   gaps?: Array<{ label: string; severity: string; source?: string }>;
   fragile?: string[];
   struggling?: string[];
+  severe?: string[];
   lf?: number;
   lsb?: number;
   ktl?: number;
@@ -42,6 +43,7 @@ function input(over: {
       globalSignals: {
         fragileConcepts: over.fragile ?? [],
         strugglingConcepts: over.struggling ?? [],
+        severeStrugglingConcepts: over.severe ?? [],
         masteredConcepts: [],
       },
       globalBackground: { blockedFoundations: over.fragile ?? [] },
@@ -57,16 +59,62 @@ function input(over: {
 }
 
 describe('deriveReplanSignal 区分度', () => {
-  it('只有脆弱点（每节课常态）→ 补强档，不是高危重排', () => {
+  // F3（2026-10-15）：fragile 通道被记忆引擎「未巩固」常态饱和（四位 VL 痕迹 70-100% <0.5），
+  // `fragile>0` 恒真；单处卡点是课堂教学的事。旧口径「fragile>0 即 medium」= 每课必发的根。
+  it('F3：单处卡点 + fragile 常态（饱和通道）→ 不发信号', () => {
     const s = deriveReplanSignal(input({
       fragile: ['从解析式画函数图像', '双向翻译'],
       struggling: ['三角恒等变形'],
+      gaps: [{ label: '从解析式画函数图像', severity: 'medium' }],
+    }));
+    expect(s.shouldSuggest).toBe(false);
+    expect(s.recommendation).not.toBe('resequence');
+  });
+
+  it('F3：卡点达数量门槛（≥2 处）→ medium/reinforce', () => {
+    const s = deriveReplanSignal(input({
+      fragile: ['从解析式画函数图像', '双向翻译'],
+      struggling: ['三角恒等变形', '和差角公式'],
       gaps: [{ label: '从解析式画函数图像', severity: 'medium' }],
     }));
     expect(s.shouldSuggest).toBe(true);
     expect(s.priority).toBe('medium');
     expect(s.recommendation).toBe('reinforce');
     expect(s.recommendation).not.toBe('resequence');
+  });
+
+  it('F3：趋势下滑独立构成 medium（不依赖任何计数通道）', () => {
+    const s = deriveReplanSignal(input({ trend: 'declining' }));
+    expect(s.shouldSuggest).toBe(true);
+    expect(s.priority).toBe('medium');
+    expect(s.recommendation).toBe('reinforce');
+  });
+
+  it('F4：学习者级负荷达标（ktl≥6 且 lf≤3）+ 无高严重度卡点 → accelerate（压缩建议可达）', () => {
+    const s = deriveReplanSignal(input({
+      ktl: 7, lf: 2,
+      // 存在 1 处普通卡点与饱和的 fragile——刚学完的正常未巩固，不再挡减法动作
+      fragile: ['a', 'b', 'c'],
+      struggling: ['三角恒等变形'],
+      severe: [],
+    }));
+    expect(s.shouldSuggest).toBe(true);
+    expect(s.priority).toBe('low');
+    expect(s.recommendation).toBe('accelerate');
+  });
+
+  it('F4：有高严重度卡点（<0.3）→ 不加速', () => {
+    const s = deriveReplanSignal(input({
+      ktl: 7, lf: 2,
+      struggling: ['向量组的秩'],
+      severe: ['向量组的秩'],
+    }));
+    expect(s.recommendation).not.toBe('accelerate');
+  });
+
+  it('F4：负荷不足（ktl<6）→ 不加速', () => {
+    const s = deriveReplanSignal(input({ ktl: 5, lf: 2 }));
+    expect(s.recommendation).not.toBe('accelerate');
   });
 
   it('一跳直接前置缺口（severity=high，来源=图）→ 高危重排', () => {

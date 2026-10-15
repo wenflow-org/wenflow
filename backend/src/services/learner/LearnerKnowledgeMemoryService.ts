@@ -57,6 +57,11 @@ function clamp(value: number, min: number, max: number) {
  */
 const PLACEHOLDER_CONCEPT_KEY_RE = /^concept-\d+$/i;
 
+/** 卡点判定线（2026-10-15 F3/F4 定档）：证据均分低于它算「卡点」。 */
+export const STRUGGLING_MASTERY_THRESHOLD = 0.55;
+/** 高严重度卡点线：低于它才允许触发「压缩/加速」这类减法动作（struggling 常态档挡不住它们）。 */
+export const SEVERE_STRUGGLING_MASTERY_THRESHOLD = 0.3;
+
 function isRealConceptKey(key: unknown): key is string {
   return typeof key === 'string' && key.trim().length > 0 && !PLACEHOLDER_CONCEPT_KEY_RE.test(key.trim());
 }
@@ -289,6 +294,7 @@ export class LearnerKnowledgeMemoryService {
           masteredConcepts: [],
           fragileConcepts: [],
           strugglingConcepts: [],
+          severeStrugglingConcepts: [],
         },
         globalBackground: {
           conceptLedger: [],
@@ -728,8 +734,13 @@ export class LearnerKnowledgeMemoryService {
     const fragileConcepts = conceptStates
       .filter((concept) => concept.stability === 'fragile' || concept.status === 'review')
       .map((concept) => concept.label);
+    // 卡点两档（2026-10-15 P0-2 F3/F4）：<0.55 = 卡点（名单/文案用）；<0.3 = 高严重度卡点
+    //（加速/压缩这类"减法"动作的判据用——刚学完的概念天然 <0.55，只挡真没学会的）。
     const strugglingConcepts = conceptStates
-      .filter((concept) => concept.status === 'learning' && concept.masteryScore < 0.55)
+      .filter((concept) => concept.status === 'learning' && concept.masteryScore < STRUGGLING_MASTERY_THRESHOLD)
+      .map((concept) => concept.label);
+    const severeStrugglingConcepts = conceptStates
+      .filter((concept) => concept.status === 'learning' && concept.masteryScore < SEVERE_STRUGGLING_MASTERY_THRESHOLD)
       .map((concept) => concept.label);
 
     const currentTaskConcepts = currentTask
@@ -956,6 +967,7 @@ export class LearnerKnowledgeMemoryService {
         masteredConcepts,
         fragileConcepts,
         strugglingConcepts,
+        severeStrugglingConcepts,
       },
       globalBackground,
     };
