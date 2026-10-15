@@ -181,6 +181,7 @@ import { aiTeachingAPI, type SessionDetail, type WrapupArtifact } from '@/api/ai
 import { toast } from '@/utils/toast';
 import api from '@/utils/api';
 import { isProjectionMode } from '@/utils/projection';
+import { replanModeForRecommendation } from '@/utils/replanSignal';
 
 /* 头部按钮与窄屏 ⋮ 菜单、两条加载路径各写一份的提示，收成单源避免改一处漏一处 */
 const EXPORT_PDF_LABEL = '打印或另存为 PDF';
@@ -659,7 +660,7 @@ const handleAdvisoryAction = async (action: string) => {
     };
     const res = await api.post(`/learning/paths/${learningPathId}/replan`, {
       triggerSource: 'ai-teaching',
-      mode: 'overwrite',
+      mode: replanModeForRecommendation(resolvedAction),
       reason: reasonMap[resolvedAction],
       // 用户已在本弹窗二次确认：跳过 awaiting-confirmation，直接执行重设计
       requireConfirmation: false,

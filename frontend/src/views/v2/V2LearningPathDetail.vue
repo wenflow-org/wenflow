@@ -614,6 +614,7 @@ import {
   getReplanReasonCodeLabels,
   getReplanScopeText,
   recommendedAdjustEntry,
+  replanModeForRecommendation,
   type LearnerAdjustEntry,
   type PathAdjustmentPolicyLike,
 } from '@/utils/replanSignal';
@@ -1291,7 +1292,7 @@ async function confirmAiAdvice() {
   adjusting.value = true;
   try {
     const result = await learningAPI.requestPathReplan(pathId.value, {
-      mode: 'overwrite',
+      mode: replanModeForRecommendation(aiAdvice.value.signal?.recommendation),
       reason: aiAdvice.value.reason,
       triggerSource: 'system',
       requireConfirmation: false,

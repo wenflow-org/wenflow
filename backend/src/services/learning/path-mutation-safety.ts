@@ -257,18 +257,23 @@ export async function assertPathMutationSafe(
     return;
   }
 
-  const blockedTaskStatuses = kind === 'replan-stage'
-    ? new Set(['in_progress'])
-    : scope.allowCompleted === true
+  // P0-1（2026-10-15）：replan-stage 不再单看 in_progress 标记。end_only 放弃收尾与超时自动收尾
+  // 都会把会话终态化而任务停在 in_progress——那是化石标记，不是进行中的学习；拿它当挡路项，
+  // 「清场 → 重试」会永久 409（清场后 listBlocking 已找不到可收的课堂，审计 B2：四位里三位因此落不了地）。
+  // 改为：in_progress 只经由下方的开放课堂检查拦截——报 PATH_MUTATION_HAS_OPEN_SESSION 并附课堂清单，
+  // 前端据此走「一键清场 → 自动重试」闭环；清场服务会顺手把无开放课堂的 in_progress 复位回 todo。
+  if (kind !== 'replan-stage') {
+    const blockedTaskStatuses = scope.allowCompleted === true
       ? new Set(['in_progress'])
       : new Set(['completed', 'in_progress']);
-  const blockedTask = tasks.find((task: { status: string }) => blockedTaskStatuses.has(task.status));
+    const blockedTask = tasks.find((task: { status: string }) => blockedTaskStatuses.has(task.status));
 
-  if (blockedTask) {
-    throw new PathMutationConflictError(
-      PATH_MUTATION_MESSAGES[kind],
-      'PATH_MUTATION_HAS_LEARNING_PROGRESS'
-    );
+    if (blockedTask) {
+      throw new PathMutationConflictError(
+        PATH_MUTATION_MESSAGES[kind],
+        'PATH_MUTATION_HAS_LEARNING_PROGRESS'
+      );
+    }
   }
 
   const affectedTaskIds = kind === 'replan-stage'

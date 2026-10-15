@@ -302,7 +302,8 @@ const completeTaskSchema = z.object({
 const replanPathSchema = z.object({
   triggerSource: z.enum(['goal-conversation', 'learner-model-agent', 'ai-teaching', 'admin', 'system', 'api']).optional(),
   reason: z.string().optional(),
-  mode: z.enum(['new_version', 'overwrite']).optional(),
+  // compress（2026-10-15 双向化）：把目标阶段压到更少任务；overwrite = 等量/按建议重排
+  mode: z.enum(['new_version', 'overwrite', 'compress']).optional(),
   stageNumber: z.number().int().positive().optional(),
   fromStageNumber: z.number().int().positive().optional(),
   evidence: z.record(z.any()).optional(),
@@ -1045,13 +1046,18 @@ router.post('/paths/:pathId/abandon-open-sessions', async (req, res, next) => {
       scopeTaskIds = scoped.flatMap((m: any) => (m.subtasks || []).map((t: any) => t.id));
     }
 
-    const result = await openSessionClearanceService.abandonBlocking({
-      pathId,
-      userId,
-      taskIds: scopeTaskIds.length > 0 ? scopeTaskIds : undefined,
-      milestoneIds: scopeMilestoneIds.length > 0 ? scopeMilestoneIds : undefined,
-      ...(sessionIds ? { taskIds: undefined, milestoneIds: undefined } : {})
-    });
+    // sessionIds 模式：只收尾指定的几个课堂（前端「结束这一课」），不放大到整条路径。
+    // 2026-10-15 修复：此前收了该参数却从不传入，且存在时把 stage 范围清空 → 实际放弃全路径课堂。
+    const result = await openSessionClearanceService.abandonBlocking(
+      sessionIds && sessionIds.length > 0
+        ? { pathId, userId, sessionIds }
+        : {
+            pathId,
+            userId,
+            taskIds: scopeTaskIds.length > 0 ? scopeTaskIds : undefined,
+            milestoneIds: scopeMilestoneIds.length > 0 ? scopeMilestoneIds : undefined
+          }
+    );
 
     res.json({
       success: true,
@@ -1059,6 +1065,7 @@ router.post('/paths/:pathId/abandon-open-sessions', async (req, res, next) => {
         cleared: result.cleared,
         failed: result.failed,
         remaining: result.remaining,
+        resetTaskIds: result.resetTaskIds,
         allCleared: result.remaining.length === 0,
       },
       message: result.cleared.length > 0

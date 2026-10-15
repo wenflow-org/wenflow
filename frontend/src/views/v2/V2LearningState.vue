@@ -485,7 +485,7 @@ import request from '@/utils/api';
 import { toast } from '@/utils/toast';
 import { metricsAPI } from '@/api/metrics';
 import { learningAPI } from '@/api/learning';
-import { adjustmentModeBlockReason, type PathAdjustmentPolicyLike } from '@/utils/replanSignal';
+import { adjustmentModeBlockReason, replanModeForRecommendation, type PathAdjustmentPolicyLike } from '@/utils/replanSignal';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
@@ -1186,7 +1186,7 @@ async function confirmAdjust(card: DecisionCard) {
   try {
     await request.post(`/learning/paths/${card.pathId}/replan`, {
       triggerSource: 'ai-teaching',
-      mode: 'overwrite',
+      mode: replanModeForRecommendation(card.recommendation),
       reason: REPLAN_REASON[card.recommendation || 'reinforce'] || '根据课后建议调整后续阶段',
       requireConfirmation: false,
       evidence: { advisoryAction: card.recommendation || 'reinforce', advisory: card.advisory || null }
@@ -1196,7 +1196,14 @@ async function confirmAdjust(card: DecisionCard) {
     advisoryDone.value = `已采用建议：「${card.pathTitle || '当前路径'}」的后续阶段已调整，已完成内容保留不变。`;
     dismissDecision(card);
   } catch (e: any) {
-    toast.error(e?.message || '调整失败，请稍后再试');
+    // 409 冲突（未结束课堂/进行中任务）在本页没有清场 UI —— 指到路径详情页的「一键清场」闭环，
+    // 别让用户对着一句「仍有进行中的任务」死胡同（审计 B2）。
+    const code = e?.response?.data?.error?.code;
+    if (e?.response?.status === 409 && typeof code === 'string' && code.startsWith('PATH_MUTATION_HAS_')) {
+      toast.error('这条路径还有没结束的课堂：去路径详情页点「一键清场」后再调整（不影响已完成内容）');
+    } else {
+      toast.error(e?.message || '调整失败，请稍后再试');
+    }
   } finally {
     replanBusy.value = false;
   }

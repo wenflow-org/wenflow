@@ -52,13 +52,26 @@ describe('path mutation safety', () => {
     expect(completedTx.teaching_sessions.findFirst).not.toHaveBeenCalled();
   });
 
-  it('preserves completed tasks during stage replanning but blocks an in-progress task', async () => {
+  it('replan-stage：已完成任务保留；in_progress 只有挂着开放课堂才算挡路（P0-1 闭环）', async () => {
     const completedTx = createTx([{ id: 'task-1', status: 'completed' }]);
     await expect(assertPathMutationSafe(completedTx, 'path-1', 'replan-stage')).resolves.toBeUndefined();
 
-    const inProgressTx = createTx([{ id: 'task-2', status: 'in_progress' }]);
-    await expect(assertPathMutationSafe(inProgressTx, 'path-1', 'replan-stage'))
-      .rejects.toMatchObject({ code: 'PATH_MUTATION_HAS_LEARNING_PROGRESS' });
+    // 化石 in_progress（课堂已终态化，如 end_only 放弃/超时收尾）→ 不再挡路：
+    // 此前这里永久 409 且清场后仍 409（「清场重试」空头支票，审计 B2）。
+    const staleInProgressTx = createTx([{ id: 'task-2', status: 'in_progress' }]);
+    await expect(assertPathMutationSafe(staleInProgressTx, 'path-1', 'replan-stage')).resolves.toBeUndefined();
+
+    // 活的 in_progress（有开放课堂）→ 报 OPEN_SESSION 并附课堂清单，前端走「一键清场 → 自动重试」
+    const liveInProgressTx = createTx(
+      [{ id: 'task-3', status: 'in_progress', title: '进行中任务' }],
+      { openSessions: [{ id: 'session-9', taskId: 'task-3', status: 'active', revision: 5, topic: null, updatedAt: null }] }
+    );
+    await expect(assertPathMutationSafe(liveInProgressTx, 'path-1', 'replan-stage'))
+      .rejects.toMatchObject({
+        status: 409,
+        code: 'PATH_MUTATION_HAS_OPEN_SESSION',
+        details: { sessions: [{ sessionId: 'session-9', taskId: 'task-3', status: 'active' }] }
+      });
   });
 
   it('blocks every mutation while a recoverable teaching session is open', async () => {

@@ -62,6 +62,38 @@ const NO_ADVISORY: ReplanAdvisory = {
   },
 };
 
+/** 补救型建议动作：它们的语义前提是「这节课让人吃力」，故只在有吃力证据时才允许发出。 */
+export const REMEDIAL_ADVISORY_ACTIONS = ['reinforce', 'slow_down'] as const;
+
+/**
+ * 建议可信度阈值（2026-10-15）。此前判据是「计数>0 即发」→ 建议退化成**每课必发**
+ * （实测全库 51 条带建议会话：`reinforce` 27 条、`resequence` 10 条，其中
+ * **19 条是 `reinforce` 打在 sessionLss=low 且 sessionLf=low 的课上**——这节课并没有吃力，
+ * 「补强关键基础」于是被稀释成噪音）。
+ *
+ * 注意 `wrapup.evaluation.confidence` **不能**当阈值：41 节实测恒落在 0.7-0.9（评测自评饱和），
+ * 阈值设 0.5/0.6/0.7 全都等于没设。真正的口子在本节课**自身**的档位证据。
+ *
+ * 口径（只压"补救型"、不动其它轴）：
+ * - 本节课双低（sessionLss=low 且 sessionLf=low）→ 压制 reinforce/slow_down；
+ * - `accelerate`（压缩下一阶段）**不压**——课不吃力正是它成立的理由；
+ * - `resequence` **不压**——它由结构性风险/截止落后驱动，与本节课难度是两条轴；
+ * - `highRisk` 与 `explicitKnowledgeEvidence`（本课真的浮出脆弱/卡点知识点）**豁免**——
+ *   它们是独立于自评档位的硬证据，"自评说不难"不应盖过它们；
+ * - 档位缺失（legacy 行）一律放行，避免误伤存量。
+ */
+export function shouldSuppressRemedialAdvisory(input: {
+  recommendation?: string | null;
+  sessionLss?: string | null;
+  sessionLf?: string | null;
+  highRisk?: boolean;
+  explicitKnowledgeEvidence?: boolean;
+}): boolean {
+  if (input.highRisk || input.explicitKnowledgeEvidence) return false;
+  if (input.sessionLss !== 'low' || input.sessionLf !== 'low') return false;
+  return (REMEDIAL_ADVISORY_ACTIONS as readonly string[]).includes(String(input.recommendation || ''));
+}
+
 /**
  * 把 LLM 归因并进建议：**只在建议本身已成立（shouldSuggest）时**才并，
  * 且方向必须落在本条建议的可选项里（否则 UI 会出现"按钮说一套、推荐说另一套"）；
@@ -152,7 +184,21 @@ export class ReplanAdvisoryService {
       prerequisiteGaps.some((item) => item.severity === 'high')
     );
 
-    if (learnerSignal?.shouldSuggest) {
+    // 建议可信度阈值：本节课双低时压制"补救型"动作（详见 shouldSuppressRemedialAdvisory 的注释）。
+    // 「显式知识证据」= 本课真的浮出脆弱/卡点知识点（不含 movedToReview/stillLearning 这类每课都有的副产品）。
+    const explicitKnowledgeEvidence = fragileConcepts.length > 0 || strugglingConcepts.length > 0;
+    const advisoryThreshold = {
+      sessionLss: evaluationTiers?.sessionLss,
+      sessionLf: evaluationTiers?.sessionLf,
+      highRisk,
+      explicitKnowledgeEvidence,
+    };
+    const suppressSignalAdvisory = shouldSuppressRemedialAdvisory({
+      ...advisoryThreshold,
+      recommendation: learnerSignal?.recommendation,
+    });
+
+    if (learnerSignal?.shouldSuggest && !suppressSignalAdvisory) {
       const recommendation = learnerSignal.recommendation === 'keep' ? 'reinforce' : learnerSignal.recommendation;
       const scope = learnerSignal.scope === 'none' ? 'next_milestone' : learnerSignal.scope;
       const priority = learnerSignal.priority === 'none' ? 'low' : learnerSignal.priority;
@@ -184,7 +230,9 @@ export class ReplanAdvisoryService {
     }
 
     if (!currentMilestoneComplete && !highRisk && fragileConcepts.length === 0 && strugglingConcepts.length === 0) {
-      return NO_ADVISORY;
+      return suppressSignalAdvisory
+        ? { ...NO_ADVISORY, reasonCodes: ['advisory_suppressed_lesson_not_hard'] }
+        : NO_ADVISORY;
     }
 
     const needsReinforcement = (
@@ -228,6 +276,12 @@ export class ReplanAdvisoryService {
           ],
         },
       };
+    }
+
+    // 同一阈值也管这条补强分支（该分支非 highRisk 时的唯一产出就是 reinforce）：
+    // 本节课双低且没有显式知识证据时，不再凭 movedToReview/stillLearning 这类每课副产品发「补强」。
+    if (shouldSuppressRemedialAdvisory({ ...advisoryThreshold, recommendation: 'reinforce' })) {
+      return { ...NO_ADVISORY, reasonCodes: ['advisory_suppressed_lesson_not_hard'] };
     }
 
     if (highRisk || (currentMilestoneComplete && needsReinforcement)) {

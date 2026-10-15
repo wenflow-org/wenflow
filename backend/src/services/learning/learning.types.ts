@@ -85,7 +85,8 @@ export interface PathReplanRequest {
   userId: string;
   triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'skill:learner-model' | 'ai-teaching' | 'teaching-agent' | 'admin' | 'system' | 'api';
   reason?: string;
-  mode?: 'new_version' | 'overwrite';
+  /** compress（2026-10-15 双向化）：按系数把目标阶段压到更少任务；overwrite = 等量/按建议重排。 */
+  mode?: 'new_version' | 'overwrite' | 'compress';
   stageNumber?: number;
   /** 后续阶段重排：从该未学阶段（含）起连续重排到末尾。缺省 = 当前活动阶段（单阶段，原行为）。 */
   fromStageNumber?: number;

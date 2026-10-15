@@ -53,6 +53,16 @@ export function getReplanReasonCodeLabels(codes: string[] = []) {
   return codes.map((code) => labels[code] || code);
 }
 
+/**
+ * 建议动作 → 重排请求 mode（2026-10-15 双向化）。
+ * `accelerate` 在界面文案里就是「压缩下一阶段」（见 getReplanRecommendationText），此前发送端一律硬写
+ * `overwrite` → 后端拿不到压缩意图，重排只会等量/膨胀。后端按 mode 与 evidence.advisoryAction 双取，
+ * 这里把意图显式写进 mode（可观测：replanMode 会落库）。
+ */
+export function replanModeForRecommendation(recommendation?: string | null): 'compress' | 'overwrite' {
+  return recommendation === 'accelerate' ? 'compress' : 'overwrite';
+}
+
 /* ---------- 路径调整策略（adjustmentPolicy）门控 ----------
    后端口径（learning.helpers.ts parsePathAdjustmentPolicy，随路径 DTO 下发）：
    - 策略存在与否看 aiPromptTemplate JSON 投影：旧路径/全空策略为 null = 不限制；

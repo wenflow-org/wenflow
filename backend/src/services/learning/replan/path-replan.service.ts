@@ -11,6 +11,7 @@ import { executeSkill } from '../../../skills';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/context';
 import { assertGenerationRunFence, assertStageTasksPresent } from '../path-generation-status';
+import { clampStageTasksToHints } from '../path-planning-hints';
 import {
   assertPathMutationSafe,
   buildPathReplanSnapshot,
@@ -51,6 +52,78 @@ import {
   startGenerationHeartbeat,
   updatePathGenerationStatus,
 } from '../generation/run-lifecycle';
+
+/* ---------------- 重排规模锚（2026-10-15 双向化） ----------------
+   背景（审计 §七）：重排此前**不向 stage-designer 传任务数锚**，designer 于是掉到「全缺默认 3-6 个」，
+   而源阶段常只有 2 个 → 只能膨胀；且阶段学时段落是「改完任务后反向汇总」，没有任何"先定规模"的入口。
+   这里按「目标阶段学时 × 系数」反推任务数，注入 `planningHints.targetSubtasksForStage`
+   （stage-designer 规则 8 视作**恰好该数**）→ 系数 <1 即压缩、>1 即补强、=1 即等量重排。
+   提示词侧规则 77 的「不能减课缩分钟」按 `repairHints.replanRatio < 1` 分叉（见 stage-designer.yaml）。
+
+   键必须同时覆盖**两套词汇**：上游建议动作（`replanSignal.recommendation` =
+   keep/reinforce/slow_down/resequence/accelerate，见 LearnerSnapshotService）与请求 `mode`
+   （new_version/overwrite/compress）。`accelerate` 就是学习者侧文案里的「压缩下一阶段」
+   （replanSignal.ts getReplanRecommendationText），故与 compress 同系数。 */
+export const REPLAN_TASK_RATIO: Record<string, number> = {
+  // 建议动作（evidence.advisoryAction）
+  accelerate: 0.5,
+  compress: 0.5,
+  reinforce: 1.35,
+  slow_down: 1.35,
+  resequence: 1,
+  keep: 1,
+};
+export const REPLAN_TASK_RATIO_DEFAULT = 1;
+export const REPLAN_TASK_COUNT_MIN = 1;
+export const REPLAN_TASK_COUNT_CAP = 8;
+export const REPLAN_ANCHOR_MINUTES_FALLBACK = 60;
+
+/**
+ * stage-designer 产出的任务草稿。模型给的是自由 JSON，字段全可选；下方落库处逐字段兜底，
+ * 故这里只声明「会被读到」的字段，不做校验（校验在 assertStageTasksPresent / hints 裁剪）。
+ * 显式声明用于给 `clampStageTasksToHints` 钉住 T：该泛型从参数推不出元素类型时会退回
+ * 约束 `{estimatedMinutes?: number}`，导致下游 taskData.title 等全部报 TS2339。
+ */
+export type ReplanTaskDraft = {
+  title?: string;
+  description?: string;
+  type?: string;
+  estimatedMinutes?: number;
+  acceptanceHint?: string;
+  knowledgeType?: string | null;
+  cognitiveLevel?: string | null;
+  icapLevel?: string | null;
+  transferable?: boolean | null;
+  linkedConcept?: string | null;
+};
+
+/** 系数来源：学员确认动作（`evidence.advisoryAction`）优先，其次显式 `mode`（compress）。 */
+export function resolveReplanTaskRatio(mode?: string | null, advisoryAction?: string | null): number {
+  const key = String(advisoryAction || '').trim() || String(mode || '').trim();
+  const ratio = REPLAN_TASK_RATIO[key];
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : REPLAN_TASK_RATIO_DEFAULT;
+}
+
+/**
+ * 由「目标阶段学时 × 系数」反推本次要生成的任务数。
+ * `completedMinutes` 是被保留的已完成任务耗时，不占新任务预算（它们原样留在阶段里）。
+ * 无学时锚（estimatedHours 缺失/非正）→ 返回 0 = **不注入**（保持旧行为，避免误伤无锚路径）。
+ */
+export function buildReplanTaskCount(input: {
+  estimatedHours: number | null | undefined;
+  completedMinutes: number;
+  ratio: number;
+  anchorMinutes?: number | null;
+  cap?: number | null;
+}): number {
+  const hours = Number(input.estimatedHours);
+  if (!Number.isFinite(hours) || hours <= 0) return 0;
+  const anchor = Number(input.anchorMinutes) > 0 ? Number(input.anchorMinutes) : REPLAN_ANCHOR_MINUTES_FALLBACK;
+  const cap = Number(input.cap) > 0 ? Math.max(REPLAN_TASK_COUNT_MIN, Number(input.cap)) : REPLAN_TASK_COUNT_CAP;
+  const targetMinutes = Math.max(0, Math.round(hours * 60 * input.ratio) - Math.max(0, input.completedMinutes));
+  const count = Math.round(targetMinutes / anchor);
+  return Math.min(cap, Math.max(REPLAN_TASK_COUNT_MIN, count));
+}
 
 function resolveStageReplanTarget(path: any, requestedStageNumber?: number | null) {
   if (requestedStageNumber) {
@@ -106,6 +179,26 @@ async function redesignMilestoneTasks(
     ? parsedTemplate.sceneFraming
     : null;
   const completedTasks = (milestone.subtasks || []).filter((task: any) => task.status === 'completed');
+  // 保留的已完成任务耗时（不算进新任务预算；下方 stageNewHours 汇总时也用同一个值）
+  const completedMinutes = completedTasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
+  // 重排规模锚：系数 → 任务数（见文件头说明）。无学时锚时不注入，保持旧行为。
+  const replanRatio = resolveReplanTaskRatio(data.mode, (data.evidence as any)?.advisoryAction);
+  const sourceHints = (normalizedInput as any)?.planningHints || null;
+  const targetTaskCount = buildReplanTaskCount({
+    estimatedHours: milestone.estimatedHours,
+    completedMinutes,
+    ratio: replanRatio,
+    anchorMinutes: Number(sourceHints?.targetMinutesPerTask) || Number(sourceHints?.subtaskMinutesRange?.[1]) || null,
+    cap: Number(sourceHints?.subtasksPerStageRange?.[1]) || null,
+  });
+  // 目标数同时作为**硬区间上界**：模型不听话时由 clampStageTasksToHints 兜底裁到该数（生成链同款）
+  const replanHints = targetTaskCount > 0
+    ? {
+        ...(sourceHints || {}),
+        targetSubtasksForStage: targetTaskCount,
+        subtasksPerStageRange: [REPLAN_TASK_COUNT_MIN, targetTaskCount] as [number, number],
+      }
+    : null;
   const sortedMilestones = [...(path.milestones || [])].sort((a: any, b: any) => a.stageNumber - b.stageNumber);
   const milestoneIndex = sortedMilestones.findIndex((m: any) => m.id === milestone.id);
   const previousMilestone = milestoneIndex > 0 ? sortedMilestones[milestoneIndex - 1] : null;
@@ -127,11 +220,16 @@ async function redesignMilestoneTasks(
       },
     } : {}),
     cognitiveCore: pathCognitiveDesign,
-    normalizedInput,
+    // 规模锚（与生成链同构：planningHints 嵌在 normalizedInput 下，stage-designer 规则 8/77 读它）
+    normalizedInput: replanHints
+      ? { ...((normalizedInput as any) || {}), planningHints: replanHints }
+      : normalizedInput,
     repairHints: {
       reason: data.reason || null,
       triggerSource: data.triggerSource || null,
       evidence: data.evidence || null,
+      replanRatio,
+      replanTargetTaskCount: targetTaskCount || null,
       learnerReplanProjection,
       preserveCompletedTasks: completedTasks.map((task: any) => ({ id: task.id, title: task.title })),
     },
@@ -141,7 +239,10 @@ async function redesignMilestoneTasks(
     executeSkill(stageDesignerDefinition, stageDesignerInput)
   );
 
-  const newTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
+  const newTasks = clampStageTasksToHints<ReplanTaskDraft>(
+    Array.isArray(stageResult?.subtasks) ? (stageResult.subtasks as ReplanTaskDraft[]) : [],
+    replanHints,
+  );
   assertStageTasksPresent(milestone.stageNumber, newTasks);
 
   await withTransaction(async (tx) => {
@@ -211,7 +312,6 @@ async function redesignMilestoneTasks(
     const redesignTotalMinutes = (newTasks as Array<{ estimatedMinutes?: number }>)
       .reduce((sum, t) => sum + (Number(t?.estimatedMinutes) || 0), 0);
     // 保留的已完成任务也计入本阶段时长
-    const completedMinutes = completedTasks.reduce((sum: number, t: any) => sum + (Number(t?.estimatedMinutes) || 0), 0);
     const stageNewHours = newTasks.length > 0 ? Math.max(1, Math.ceil((redesignTotalMinutes + completedMinutes) / 60)) : null;
     if (stageNewHours !== null) {
       await tx.milestones.update({

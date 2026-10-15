@@ -50,6 +50,17 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+/**
+ * 占位概念键不是概念身份：克隆源路径会把本地序号（`concept-4`）带进 `coreConcept`，痕迹表里也有
+ * 同形键。它们一旦进概念集合，就会以内部 id 形态漏进用户可见文案（2026-10-15 P0-2 实测：
+ * fragile 名单与 advisory 正文出现「concept-4」）。
+ */
+const PLACEHOLDER_CONCEPT_KEY_RE = /^concept-\d+$/i;
+
+function isRealConceptKey(key: unknown): key is string {
+  return typeof key === 'string' && key.trim().length > 0 && !PLACEHOLDER_CONCEPT_KEY_RE.test(key.trim());
+}
+
 function normalizeConceptKey(value: string | null | undefined): string | null {
   if (!value) return null;
   const normalized = value.trim().replace(/\s+/g, ' ');
@@ -144,7 +155,8 @@ function dedupe(values: Array<string | null | undefined>) {
 /**
  * 概念身份键（P1-16 修复，2026-10-06 审计）。
  *
- * 确定性台账的键是**中文 label**（task.linkedConceptName / displayLabel / 会话知识点名），
+ * 确定性台账的键是**中文 label**（task.linkedConceptName / 会话知识点名；displayLabel 兜底文案
+ * 自 2026-10-15 起不进概念集合——它是显示文案不是概念身份），
  * 而 lesson-knowledge-enricher 的模型行自拟 `conceptKey`（实测 67/120 为英文 slug，如
  * `hand-over-choice` 对应 label「交出选择权降低开场抵触」）。两套键空间按精确 conceptKey
  * 永不 join → 同一概念「确定性一行 + 模型一行」并存，经 toTeachingProjection 注入课堂 prompt
@@ -374,11 +386,12 @@ export class LearnerKnowledgeMemoryService {
 
     for (const { milestone, task } of allTasks) {
       const objectiveConcepts = parseLearningObjectives(task.learningObjectives);
-      const conceptCandidates = dedupe([
-        task.linkedConceptName || task.coreConcept,
-        task.displayLabel,
-        ...objectiveConcepts,
-      ]);
+      // displayLabel 是 DISPLAY_LABEL_MAP 的兜底文案（「理解核心原理」这类认知层级 × 领域组合词），
+      // 是任务的**显示文案**不是概念身份——进集合后会以同名词目的形态落进 fragile/struggling 并被
+      // advisory 正文原样打印（2026-10-15 P0-2 实测：52 条 advisory 里 40 条正文含这类兜底词）。
+      const conceptCandidates = dedupe(
+        [task.linkedConceptName || task.coreConcept, ...objectiveConcepts].filter(isRealConceptKey)
+      );
 
       for (const conceptKey of conceptCandidates) {
         const current = conceptSignals.get(conceptKey) || [];
@@ -514,7 +527,7 @@ export class LearnerKnowledgeMemoryService {
     // 痕迹派生自 `memoryTraces`（与 session 无关），故移出到会话循环之后、与 tasks/sessions 平级。
     for (const trace of memoryTraces) {
       const conceptKey = normalizeConceptKey(trace.conceptKey);
-      if (!conceptKey) continue;
+      if (!isRealConceptKey(conceptKey)) continue;
       const fragile = trace.stability === 'fragile'
         || (trace.masteryScore ?? 0.5) < 0.5
         || (trace.intervalFactor ?? 1) > 4;
@@ -538,16 +551,25 @@ export class LearnerKnowledgeMemoryService {
       conceptSignals.set(conceptKey, current);
     }
 
-    const conceptStates: LearnerConceptState[] = Array.from(conceptSignals.entries()).map(([conceptKey, signals]) => {
-      const labels = signals.map((signal) => signal.label).filter(Boolean);
-      const relatedTaskIds = Array.from(new Set(signals.map((signal) => signal.taskId).filter(Boolean) as string[]));
-      const relatedMilestoneIds = Array.from(new Set(signals.map((signal) => signal.milestoneId).filter(Boolean) as string[]));
-      const lastSeenAt = signals.map((signal) => signal.seenAt).filter(Boolean).sort().reverse()[0];
-      const masteryScore = clamp(signals.reduce((sum, signal) => sum + signal.score, 0) / Math.max(1, signals.length), 0, 1);
+    const conceptStates: LearnerConceptState[] = Array.from(conceptSignals.entries()).map(([conceptKey, allSignals]) => {
+      const labels = allSignals.map((signal) => signal.label).filter(Boolean);
+      const relatedTaskIds = Array.from(new Set(allSignals.map((signal) => signal.taskId).filter(Boolean) as string[]));
+      const relatedMilestoneIds = Array.from(new Set(allSignals.map((signal) => signal.milestoneId).filter(Boolean) as string[]));
+      const lastSeenAt = allSignals.map((signal) => signal.seenAt).filter(Boolean).sort().reverse()[0];
+      // 掌握判定只认「真实接触证据」（会话知识 / 摘要 / 记忆痕迹）。任务标签（task-label）只是
+      // "这条任务涉及此概念"的排期事实，不是学习证据：它给**全路径所有任务**（含 todo）推
+      // 0.45/0.25/0.1 分值，一旦参与均分，"被后续未开课任务再提一次"就能把从未教过的概念
+      // 拉破 0.55 落进 struggling——"没学过"被当成"没掌握"（2026-10-15 P0-2 实测：struggling
+      // 名单里混着纯任务标签与 DISPLAY_LABEL_MAP 兜底词；口径与下方 prerequisiteGaps 回落
+      // 过滤的「只认接触过且证据为负」一致）。只有标签信号的概念 = 未评估 → pending。
+      const evidence = allSignals.filter((signal) => signal.sourceType !== 'task-label');
+      const masteryScore = evidence.length > 0
+        ? clamp(evidence.reduce((sum, signal) => sum + signal.score, 0) / evidence.length, 0, 1)
+        : 0;
 
-      const hasReview = signals.some((signal) => signal.status === 'review' || signal.stability === 'fragile');
-      const hasMastery = signals.some((signal) => signal.status === 'mastered' || signal.stability === 'stable');
-      const hasLearning = signals.some((signal) => signal.status === 'learning' || signal.stability === 'developing');
+      const hasReview = evidence.some((signal) => signal.status === 'review' || signal.stability === 'fragile');
+      const hasMastery = evidence.some((signal) => signal.status === 'mastered' || signal.stability === 'stable');
+      const hasLearning = evidence.some((signal) => signal.status === 'learning' || signal.stability === 'developing');
 
       const status: 'pending' | 'learning' | 'mastered' | 'review' = hasReview
         ? 'review'
@@ -565,11 +587,11 @@ export class LearnerKnowledgeMemoryService {
             ? 'developing'
             : 'unknown';
 
-      const sourceType = signals.some((signal) => signal.sourceType === 'session-knowledge')
+      const sourceType = evidence.some((signal) => signal.sourceType === 'session-knowledge')
         ? 'session-knowledge'
-        : signals.some((signal) => signal.sourceType === 'memory-trace')
+        : evidence.some((signal) => signal.sourceType === 'memory-trace')
           ? 'memory-trace'
-          : signals.some((signal) => signal.sourceType === 'derived')
+          : evidence.some((signal) => signal.sourceType === 'derived')
             ? 'derived'
             : 'task-label';
 
@@ -577,7 +599,7 @@ export class LearnerKnowledgeMemoryService {
         conceptKey,
         label: labels[0] || conceptKey,
         // 概念身份（canonical）：优先取信号自带的（痕迹来源），缺失时由聚合后的统一解析补齐
-        conceptId: signals.map((signal) => signal.conceptId).find(Boolean),
+        conceptId: allSignals.map((signal) => signal.conceptId).find(Boolean),
         sourceType,
         masteryScore,
         stability,
@@ -611,11 +633,9 @@ export class LearnerKnowledgeMemoryService {
 
     const taskMastery: LearnerTaskMastery[] = allTasks.map(({ milestone, task }) => {
       const objectiveConcepts = parseLearningObjectives(task.learningObjectives);
-      const conceptCandidates = dedupe([
-        task.linkedConceptName || task.coreConcept,
-        task.displayLabel,
-        ...objectiveConcepts,
-      ]);
+      const conceptCandidates = dedupe(
+        [task.linkedConceptName || task.coreConcept, ...objectiveConcepts].filter(isRealConceptKey)
+      );
 
       const matchingConcepts = conceptStates.filter((concept) =>
         concept.relatedTaskIds.includes(task.id) || conceptCandidates.includes(concept.conceptKey)
@@ -713,11 +733,12 @@ export class LearnerKnowledgeMemoryService {
       .map((concept) => concept.label);
 
     const currentTaskConcepts = currentTask
-      ? dedupe([
-          currentTask.linkedConceptName || currentTask.coreConcept,
-          currentTask.displayLabel,
-          ...parseLearningObjectives(currentTask.learningObjectives),
-        ])
+      ? dedupe(
+          [
+            currentTask.linkedConceptName || currentTask.coreConcept,
+            ...parseLearningObjectives(currentTask.learningObjectives),
+          ].filter(isRealConceptKey)
+        )
       : [];
 
     // 前置缺口（L3 接入，语义修正）：
