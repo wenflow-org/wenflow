@@ -433,9 +433,19 @@ router.beforeEach(async (to, _from, next) => {
 
   /* ISSUE-12:标记缺失时用 HttpOnly cookie 自举恢复会话(标记+档案),有效会话不再误弹登录页。
      管理端不用学习者会话(判据是 hasAdminSession),这里若照常自举,每个管理页导航都会
-     打一条注定 401 的 /api/users/me——巡检实测 60 条失败请求全是它。 */
+     打一条注定 401 的 /api/users/me——巡检实测 60 条失败请求全是它。
+     #34（2026-10-15 走查）：同族的浪费还在公开页——游客打开 `/`、`/login`、`/register`
+     每次整页加载都要探一次注定 401 的 /users/me，控制台留下报错观感，且多一次无意义请求。
+     故自举只做在「真的需要会话」的路由上：只有受保护路由（缺会话会被拦，必须知道有没有）；
+     公开页一律不探。标记被清但 cookie 仍有效的那类用户，落在公开页不再被自动登入（点一下登录
+     即可），一旦走到任何受保护路由即刻自举——ISSUE-12 要保证的「有效会话不误弹登录页」
+     仍成立，只让出公开页这一次网络往返。 */
   const isAdminRoute = to.path.startsWith('/admin');
-  const hasSession = isAdminRoute ? false : await useUserStore().restoreFromCookie();
+  const hasSession = isAdminRoute
+    ? false
+    : to.meta.requiresAuth === true
+      ? await useUserStore().restoreFromCookie()
+      : useUserStore().hasSession;
   const projectionToken = getProjectionToken();
   const adminSession = hasAdminSession();
 
