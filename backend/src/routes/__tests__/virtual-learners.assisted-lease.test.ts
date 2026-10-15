@@ -720,11 +720,15 @@ describe('assisted virtual learner route leases', () => {
       where: { id: 'goal-1', userId: 'user-1' }
     })
     expect(mockVirtualSessionDelete).toHaveBeenCalledWith({ where: { id: 'session-1' } })
+    // F22（2026-10-15）：会话级残留级联——键空间 = 教学会话 id ∪ 虚拟会话 id
+    expect(mockLearnerEvidenceDeleteMany).toHaveBeenCalledWith({
+      where: { sessionId: { in: ['teaching-1', 'session-1'] } }
+    })
     expect(res.status).not.toHaveBeenCalledWith(409)
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       message: '模拟会话已删除',
-      data: { cleanup: { deletedTeachingSessions: 1 } }
+      data: { cleanup: { deletedTeachingSessions: 1, deletedEvidence: 0, deletedPredictions: 0 } }
     })
     expect(mockAdminAuditLogCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
       action: 'virtual-cascade-delete',

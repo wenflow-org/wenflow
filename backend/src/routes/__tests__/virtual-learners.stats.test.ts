@@ -76,6 +76,13 @@ describe('GET /stats（虚拟实验运行统计）', () => {
     ]).mockResolvedValueOnce([
       { createdAt: new Date('2026-08-01T00:00:00.000Z'), updatedAt: new Date('2026-08-01T02:00:00.000Z') },
       { createdAt: new Date('2026-08-02T00:00:00.000Z'), updatedAt: new Date('2026-08-02T00:30:00.000Z') }
+    /* F20 口径对齐（2026-10-15）：第 3 次 findMany = 运行中细分；4 条 running 里 1 条
+       autopilot=stopped → running 扣为 3、paused=1（与列表逐画像 runningCount 同式） */
+    ]).mockResolvedValueOnce([
+      { id: 'r1', stageResults: '{}' },
+      { id: 'r2', stageResults: '{"autopilot":{"status":"stopped"}}' },
+      { id: 'r3', stageResults: null },
+      { id: 'r4', stageResults: '{}' }
     ])
 
     const handler = getGetHandler('/stats')
@@ -91,6 +98,9 @@ describe('GET /stats（虚拟实验运行统计）', () => {
     expect(mockSessionsFindMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
       where: expect.objectContaining({ status: { in: ['completed', 'failed', 'abandoned'] } })
     }))
+    expect(mockSessionsFindMany).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      where: expect.objectContaining({ status: 'running' })
+    }))
     expect(mockUsersFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ OR: expect.any(Array) }) }))
     expect(mockAgentCallLogsCount).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ calledAt: expect.anything(), userId: { in: ['virt1', 'virt2'] } })
@@ -101,7 +111,8 @@ describe('GET /stats（虚拟实验运行统计）', () => {
         profileCount: 10,
         totalSessions: 10,
         created: 2,
-        running: 4,
+        running: 3,
+        paused: 1,
         failed: 3,
         abandoned: 1,
         completed: 0,
@@ -123,7 +134,7 @@ describe('GET /stats（虚拟实验运行统计）', () => {
       { createdAt: new Date('2026-08-01T00:00:00.000Z'), updatedAt: new Date('2026-08-01T02:00:00.000Z') },
       { createdAt: new Date('2026-08-02T00:00:00.000Z'), updatedAt: new Date('2026-08-02T00:30:00.000Z') },
       { createdAt: new Date('2026-08-03T00:00:00.000Z'), updatedAt: new Date('2026-08-03T01:30:00.000Z') }
-    ])
+    ]).mockResolvedValueOnce([])
 
     const handler = getGetHandler('/stats')
     const res = createResponse()
@@ -138,7 +149,7 @@ describe('GET /stats（虚拟实验运行统计）', () => {
   it('无任何会话：完成率/失败率为 0，卡死与时长均 0，不崩溃', async () => {
     mockSessionsGroupBy.mockResolvedValue([])
     mockProfilesCount.mockResolvedValue(0)
-    mockSessionsFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    mockSessionsFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([])
 
     const handler = getGetHandler('/stats')
     const res = createResponse()
