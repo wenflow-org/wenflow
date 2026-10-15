@@ -35,7 +35,8 @@
             <div class="band__head">
               <div class="band__title">
                 <strong>掌握趋势 · 疲劳度 · 整体状态</strong>
-                <span class="band__meta">{{ drawnSpanLabel }}</span>
+                <!-- 空态不报「近 N 天」：无数据时没有跨度可言，写「近 10 天」会先承诺一张不存在的图 -->
+                <span v-if="hasAnyLoad" class="band__meta">{{ drawnSpanLabel }}</span>
               </div>
               <!-- 窗口选择器只在真的有更长历史可看时出现（数据不足 42 天时两档是同一条图，
                    留着只会让口径与图对不上——2026-09-27 外部走查） -->
@@ -49,10 +50,12 @@
             </div>
 
             <div class="band__body">
-            <!-- 当前状态四项（原体检卡 vitals：整体状态主指标 + 学习压力/掌握趋势/疲劳程度）：
+            <!-- 空态（无任何学习状态数据）：不渲染「当前状态四项」与图例——它们是为一张还没画出来的图
+                 准备的注脚，先摆出来只会让人以为下面有图（2026-10-15 走查）。空态只留一块说明。
+                 当前状态四项（原体检卡 vitals：整体状态主指标 + 学习压力/掌握趋势/疲劳程度）：
                  原型该屏只认三张 KPI 卡（连续天数/本周分钟/已掌握知识点），这四项不删、
                  降级为趋势卡内的状态 meta 行——图里画的就是这四个指标，放这里口径自洽 -->
-            <div class="vitals vitals--meta">
+            <div v-if="hasAnyLoad" class="vitals vitals--meta">
               <div v-if="vitalsLoading" class="vitals__loading">
                 <SkeletonLoader variant="lines" :count="1" />
               </div>
@@ -73,7 +76,7 @@
             <!-- 图例（批19 术语自然化；2026-09-27 删状态 chip：与上方状态 meta 行重复。
                  2026-10-08 走查：两条阈值线原本在图内右侧浮着文字（自带 surface 底「压住曲线」），
                  窄屏下那段文字正好压在最陡的一段曲线上 —— 文字移到图例，图内只留虚线本体） -->
-            <div class="ff-legend">
+            <div v-if="hasAnyLoad" class="ff-legend">
               <span><i class="ff-dot ff-dot--fitness"></i>掌握趋势</span>
               <span><i class="ff-dot ff-dot--fatigue"></i>疲劳度</span>
               <span><i class="ff-dot ff-dot--lsb"></i>整体状态</span>
@@ -93,9 +96,16 @@
               <p>{{ NETWORK_UNAVAILABLE_MSG }}</p>
               <button type="button" class="chart__retry" @click="loadTrends">重试</button>
             </div>
-            <div v-else-if="!hasAnyLoad" class="chart__empty">
+            <div v-else-if="!hasAnyLoad" class="chart__empty chart__empty--first">
+              <span class="chart__empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 19V5" /><path d="M4 19h16" />
+                  <path d="M7.5 15.5 11 11l3 2.5L19 7" />
+                </svg>
+              </span>
               <strong>学习状态正在积累中</strong>
-              <p>完成第一个任务后开始记录，连续学习约 3 天即可看到掌握趋势、疲劳度与整体状态曲线。</p>
+              <p>完成第一个学习任务后开始记录。连续学习约 3 天，这里会出现你的掌握趋势、疲劳度与整体状态曲线。</p>
+              <router-link to="/learning-paths" class="chart__empty-cta">去开始学习</router-link>
             </div>
             <template v-else>
               <!-- 触屏补 touchstart/touchmove（2026-09-27 a11y）：历史值此前只认 mousemove，
@@ -1667,6 +1677,28 @@ function loadGuidance() {
   padding: 30px 0; text-align: center; color: var(--faint); font-size: 13px;
   border: 1px dashed var(--line); border-radius: var(--mk-radius-xl); background: var(--canvas);
 }
+/* 首用空态（无任何学习状态数据）：补一枚图标与一个可执行的下一步——
+   只说「还在积累」而不给去处，用户只能停在原地。图标用蓝底圆盘，与「失败/告警」的红黄态区分开。 */
+.chart__empty--first { padding: 28px 20px 26px; display: grid; justify-items: center; gap: 6px; }
+.chart__empty-icon {
+  display: grid; place-items: center;
+  width: 52px; height: 52px; margin-bottom: 6px;
+  border-radius: 50%;
+  color: var(--blue-deep);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+}
+.chart__empty--first strong { font-size: 15px; color: var(--ink); }
+.chart__empty--first p { max-width: 42ch; line-height: 1.7; }
+.chart__empty-cta {
+  margin-top: 14px;
+  display: inline-flex; align-items: center;
+  min-height: 44px; padding: 0 22px;
+  border-radius: var(--mk-radius-xl);
+  background: var(--blue); color: var(--text-on-primary);
+  font-size: 14px; font-weight: 700; text-decoration: none;
+  transition: background 0.16s ease;
+}
+.chart__empty-cta:hover { background: var(--blue-deep); }
 .sug--critical { border-color: color-mix(in srgb, var(--red) 35%, transparent); }
 .sug--warning { border-color: color-mix(in srgb, var(--amber) 35%, transparent); }
 .state__main { width: 100%; }
