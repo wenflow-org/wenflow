@@ -92,6 +92,31 @@
     </section>
 
 
+    <!-- Prompt 评估页签的读数带（2026-10-15 用户走查「KPI 卡片位置不对」）：此前由面板
+         自己渲染（在页签栏之下），同一条槽位切页签就换位置；现与 run/模型路由同槽位。
+         面板为异步组件，chunk 未就绪时按 live 三态纪律显「…」，不落定 0。 -->
+    <section v-if="tab === 'prompt-eval'" class="mk-kpi-grid" aria-label="Prompt 评估统计">
+      <MkKpi
+        label="最近评测通过率"
+        :value="pePanel?.kpiView?.passRateText ?? '…'"
+        :tone="pePanel?.kpiView?.passRateTone ?? ''"
+        :hint="pePanel?.kpiView?.passRateHint"
+        :title="pePanel?.kpiView?.passRateTitle"
+      />
+      <MkKpi
+        label="评估用例"
+        :value="pePanel?.kpiView?.caseCount ?? '…'"
+        :hint="pePanel?.kpiView?.casesHint"
+        :title="pePanel?.kpiView?.casesTitle"
+      />
+      <MkKpi
+        label="评估历史"
+        :value="pePanel?.kpiView?.runCount ?? '…'"
+        :hint="pePanel?.kpiView?.lastRunText"
+        :title="pePanel?.kpiView?.runsTitle"
+      />
+    </section>
+
     <!-- 视图切换（原型 .tabs 下划线页签：12px/600、激活蓝字+2px 蓝下划线、通栏底线；
          2026-10-01 由 mk-pills 胶囊迁入——胶囊只做筛选 chips，视图/分区切换归页签）：
          Skill 运行 / 模型路由 / Prompt 评估。健康检查 · 漂移 · 对账三 tab 已退役（2026-09-29 用户拍板）：
@@ -442,7 +467,24 @@ const tab = ref<SkillsTab>('run')
 const route = useRoute()
 const router = useRouter()
 /* Prompt 评估面板动作面（defineExpose）：页头「批量跑评估」的禁用态与点击经模板 ref 驱动 */
-interface PromptEvalPanelExpose { running: boolean; canRunBatch: boolean; runBatch: () => Promise<void> }
+interface PromptEvalPanelExpose {
+  running: boolean
+  canRunBatch: boolean
+  runBatch: () => Promise<void>
+  /** KPI 带取值（2026-10-15 迁回宿主槽位：与 run 页签同一条「页头之下、页签栏之上」） */
+  kpiView: {
+    passRateText: string
+    passRateTone: 'ok' | 'warn' | 'bad' | 'muted' | ''
+    passRateHint: string
+    passRateTitle: string
+    caseCount: number
+    casesHint: string
+    casesTitle: string
+    runCount: number
+    lastRunText: string
+    runsTitle: string
+  }
+}
 const pePanel = ref<PromptEvalPanelExpose | null>(null)
 const PromptEvalPanel = defineAsyncComponent(() => import('./PromptEvalPanel.vue'))
 /** 列表两个视图的共同落点：Skill 设计页「协议」页签（改提示词的唯一编辑点）。

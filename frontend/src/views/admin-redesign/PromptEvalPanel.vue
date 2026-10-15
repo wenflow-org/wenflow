@@ -8,20 +8,10 @@
   <div v-if="running" class="mk-alert mk-alert--row mk-alert--info pe-running" role="status" aria-live="polite">
     <span class="mk-alert__msg">{{ runningInfo || '评估运行中…' }}</span>
   </div>
-  <!-- KPI 带（2026-10-04 状态条退役）：原条读数改三卡——最近评测通过率（阈值着色语义不变，
-       类名 tone 翻译成 MkKpi tone；agent 筛选限定词与基数并进 hint）、评估用例、评估历史
-       （窗口上限口径进 title，上次评估时刻降为 hint）。批量跑评估在宿主页头，工具行动作在本卡 -->
-  <section class="mk-kpi-grid" aria-label="Prompt 评估统计">
-    <MkKpi
-      label="最近评测通过率"
-      :value="lastPassRateText"
-      :tone="lastRateTone"
-      :hint="lastRateHint"
-      :title="lastRateTitle"
-    />
-    <MkKpi label="评估用例" :value="cases.length" :hint="casesKpiHint" :title="casesKpiTitle" />
-    <MkKpi label="评估历史" :value="runs.length" :hint="lastRunText" :title="runsKpiTitle" />
-  </section>
+  <!-- KPI 带 2026-10-15 迁回宿主读数槽位（用户走查「位置不对」）：宿主 Skills 的槽位是
+       「页头之下、页签栏之上」（Skill 运行 / 模型路由两条带都在那），本带此前留在面板根片段里
+       即落在页签栏之下——同页签切一下读数带就换位置。现由宿主 v-if="tab==='prompt-eval'" 渲染，
+       数据经 defineExpose 的 kpiView 供出（与 runBatch 同法）。 -->
 
   <div class="mk-card mk-card--fill pe">
     <!-- 卡内主视图切换（原型 renderPromptEval card > .tabs 页签 + 工具栏 + 页签体；
@@ -585,7 +575,7 @@ import { askConfirm } from './useConfirm'
 import { openSkillDrawer } from './store'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
-import MkKpi from '@/components/mk/MkKpi.vue'
+/* MkKpi 2026-10-15 随 KPI 带迁出宿主：面板不再直接渲染读数卡（import 同步退役） */
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
@@ -1485,8 +1475,22 @@ watch(agentFilter, () => { compareIds.value = [] })
 // 挂载加载统一走上方 watch 的 immediate 首跑（bootstrapped 分支），此处不再裸拉一遍
 
 /* 宿主协作面：批量跑评估上移 Skills 宿主页头（本面板无页头），宿主经模板 ref 驱动——
-   running/canRunBatch 供禁用态，runBatch 供点击（ref 上 ref 自动解包，宿主读布尔值即可） */
-defineExpose({ running, canRunBatch, runBatch })
+   running/canRunBatch 供禁用态，runBatch 供点击（ref 上 ref 自动解包，宿主读布尔值即可）；
+   kpiView = KPI 带三卡的全部取值（computed 顶层被 expose 代理解包 → 宿主直接读 .passRateText）。
+   tone 在面板内是 '' as const 的字面量联合，供出前放宽为 MkKpi 的入参类型。 */
+const kpiView = computed(() => ({
+  passRateText: lastPassRateText.value,
+  passRateTone: lastRateTone.value as 'ok' | 'warn' | 'bad' | 'muted' | '',
+  passRateHint: lastRateHint.value,
+  passRateTitle: lastRateTitle.value,
+  caseCount: cases.value.length,
+  casesHint: casesKpiHint.value,
+  casesTitle: casesKpiTitle.value,
+  runCount: runs.value.length,
+  lastRunText: lastRunText.value,
+  runsTitle: runsKpiTitle.value,
+}))
+defineExpose({ running, canRunBatch, runBatch, kpiView })
 </script>
 
 <style scoped>
