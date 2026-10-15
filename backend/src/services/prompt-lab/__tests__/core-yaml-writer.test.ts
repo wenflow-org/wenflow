@@ -258,5 +258,71 @@ describe('coreFileSemanticallyEqual（#9 无编辑保存守卫）', () => {
     ).core;
     expect(coreFileSemanticallyEqual(base, normalized)).toBe(true);
   });
+
+  it('#9 回归：带嵌套 properties 的载荷经 normalize 后与磁盘 core 等价（不再静默删子字段）', () => {
+    const nested: CoreFile = {
+      ...base,
+      fields: [
+        {
+          name: 'gapCoverage',
+          type: 'object',
+          optional: false,
+          desc: '缺口覆盖',
+          turn: false,
+          properties: [
+            { name: 'covered', type: 'string[]', optional: false, desc: '已覆盖', turn: false },
+            {
+              name: 'uncovered',
+              type: 'object[]',
+              optional: false,
+              desc: '未覆盖',
+              turn: false,
+              properties: [{ name: 'concept', type: 'string', optional: false, desc: '概念', turn: false }],
+            },
+          ],
+        },
+        { name: 'status', type: 'enum', optional: false, desc: '状态', turn: false, enumValues: ['a', 'b'] },
+      ],
+    };
+    // 前端表单投影（带 properties / enumValues 透传）产出的载荷
+    const payload = {
+      identity: nested.identity,
+      channels: nested.channels,
+      stateAdvance: nested.stateAdvance,
+      deltaOutput: nested.deltaOutput,
+      outputMedia: nested.outputMedia,
+      rules: nested.rules,
+      constraints: nested.constraints,
+      fields: nested.fields.map((f) => ({
+        name: f.name,
+        type: f.type,
+        desc: f.desc,
+        turn: f.turn,
+        ...(f.enumValues?.length ? { enumValues: f.enumValues } : {}),
+        ...(f.properties?.length
+          ? {
+              properties: f.properties.map((p) => ({
+                name: p.name,
+                type: p.type,
+                desc: p.desc,
+                turn: p.turn,
+                ...(p.properties?.length
+                  ? { properties: p.properties.map((q) => ({ name: q.name, type: q.type, desc: q.desc, turn: q.turn })) }
+                  : {}),
+              })),
+            }
+          : {}),
+      })),
+      params: nested.params,
+    };
+    const normalized = normalizeCoreFormInput(payload, 'demo').core;
+    expect(coreFileSemanticallyEqual(nested, normalized)).toBe(true);
+    // 反证：若投影丢掉 properties（旧前端行为），守卫会判不等 → 触发全量序列化删子字段
+    const lossy = {
+      ...payload,
+      fields: nested.fields.map((f) => ({ name: f.name, type: f.type, desc: f.desc, turn: f.turn })),
+    };
+    expect(coreFileSemanticallyEqual(nested, normalizeCoreFormInput(lossy, 'demo').core)).toBe(false);
+  });
 });
 

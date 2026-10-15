@@ -755,6 +755,16 @@ select {
   font: inherit;
 }
 
+/* 搜索框原生清除钮抑制（#22）：`type=search` 在 WebKit/Blink 下聚焦时 UA 会自绘
+   `::-webkit-search-cancel-button`，与页面自绘的 `.paths__search-clear` 并排成两个 ×。
+   本文件在用户侧与 admin 侧都全局加载（main.ts / AdminConsole 均引），规则放这里才能覆盖全站
+   ——原先放在 mk-primitives.css（仅 admin 页引入），用户侧根本没加载，故一直并存。 */
+input[type='search']::-webkit-search-cancel-button,
+input[type='search']::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .mobile-table-scroll {
   width: 100%;
   overflow-x: auto;

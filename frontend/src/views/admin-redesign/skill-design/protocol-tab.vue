@@ -376,7 +376,7 @@ import 'highlight.js/styles/github-dark.css'
 import { adminFieldRoutingsApi, adminPromptWorkbenchApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
 import { toast } from '@/utils/toast'
-import { coreEditorState, coreShortHash, errText } from './sdp-shared'
+import { coreEditorState, coreShortHash, errText, toFormField, toCoreFieldPayload, type CoreFormField } from './sdp-shared'
 import MkLoading from '@/components/mk/MkLoading.vue'
 
 hljs.registerLanguage('yaml', yaml)
@@ -392,13 +392,6 @@ const CORE_FIELD_TYPES = ['string', 'number', 'boolean', 'enum', 'object', 'obje
 const CORE_FAILURE_POLICIES = ['retry', 'fallback', 'propagate'] as const
 const CORE_OUTPUT_MEDIA = ['json', 'markdown', 'text'] as const
 
-interface CoreFormField {
-  name: string
-  baseType: string
-  optional: boolean
-  desc: string
-  turn: boolean
-}
 interface CoreFormState {
   identity: string
   channels: string[]
@@ -493,6 +486,9 @@ async function switchCoreView(mode: 'form' | 'raw') {
   }
 }
 
+/* CoreFile 字段 ⇄ 表单字段的投影/回写是 #9 的关键点，提到 sdp-shared 便于单测：
+   enumValues / properties 表单不编辑但必须原样透传，否则无编辑保存会静默删掉嵌套子字段。 */
+
 /* ---------- 表单视图：CoreFile JSON → 表单状态 ---------- */
 function initCoreForm(core: Record<string, unknown> | null) {
   if (!core) {
@@ -519,17 +515,7 @@ function initCoreForm(core: Record<string, unknown> | null) {
     rules: Array.isArray(core.rules) ? core.rules.map((r) => String(r)) : [],
     constraints: Array.isArray(core.constraints) ? core.constraints.map((c) => String(c)) : [],
     examples: Array.isArray(core.examples) ? (core.examples as unknown[]).map((e) => String(e)) : [],
-    fields: fields.map((f) => {
-      const item = f as Record<string, unknown>
-      const rawType = String(item.type || 'string')
-      return {
-        name: String(item.name || ''),
-        baseType: rawType.replace(/\?$/, ''),
-        optional: rawType.endsWith('?'),
-        desc: String(item.desc || ''),
-        turn: item.turn === true
-      }
-    }),
+    fields: fields.map(toFormField),
     params: {
       temperature: Number(params.temperature ?? 0.5),
       maxTokens: Number(params.maxTokens ?? 8000),
@@ -558,12 +544,7 @@ function buildCorePayload() {
     rules: f.rules,
     constraints: f.constraints,
     ...(f.examples.length ? { examples: f.examples } : {}),
-    fields: f.fields.map((item) => ({
-      name: item.name,
-      type: `${item.baseType}${item.optional ? '?' : ''}`,
-      desc: item.desc,
-      turn: item.turn
-    })),
+    fields: f.fields.map(toCoreFieldPayload),
     params: {
       temperature: f.params.temperature,
       maxTokens: f.params.maxTokens,

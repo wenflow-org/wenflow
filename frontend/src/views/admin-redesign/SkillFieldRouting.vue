@@ -478,7 +478,7 @@ interface EditInitialShape {
   structureLocked: boolean
 }
 
-/** 编辑预填：行数据 + core 声明组装（core 类型优先 core 侧；嵌套从 desc 子字段说明解析） */
+/** 编辑预填：行数据 + core 声明组装（类型优先 core 侧；嵌套字段的 desc 优先取路由行自身的值） */
 function editInitialOf(row: Record<string, any>): EditInitialShape {
   const isNested = row.fieldId.includes('.')
   const root = row.fieldId.split('.')[0]
@@ -493,7 +493,9 @@ function editInitialOf(row: Record<string, any>): EditInitialShape {
       const m = coreField.desc?.match(noteRe)
       if (m) {
         type = m[1].trim() || type
-        desc = m[2].trim() || desc
+        // desc 只补空：core 侧子字段说明是**展示用**文案，与编排文件正式值不同源；
+        // 若覆盖，保存时会把预填值当「用户确认的描述」写回编排文件，改掉无关的 description（#10）。
+        desc = desc || m[2].trim() || desc
       }
     } else {
       type = coreField.type || type

@@ -32,6 +32,54 @@ export interface TrialInputDecl {
   type?: string
 }
 
+/**
+ * 协议页「表单视图」的输出字段形状。
+ * enumValues / properties 表单不编辑，但必须随行透传：否则「无编辑保存」时后端语义等价守卫
+ * （coreFileSemanticallyEqual）会判不等，走到全量序列化把嵌套子字段 schema 静默删掉（#9）。
+ */
+export interface CoreFormField {
+  name: string
+  baseType: string
+  optional: boolean
+  desc: string
+  turn: boolean
+  enumValues?: string[]
+  properties?: CoreFormField[]
+}
+
+/** CoreFile 字段 → 表单字段（递归；编辑位映射，enumValues/properties 原样透传） */
+export function toFormField(f: unknown): CoreFormField {
+  const item = (f || {}) as Record<string, unknown>
+  const rawType = String(item.type || 'string')
+  const out: CoreFormField = {
+    name: String(item.name || ''),
+    baseType: rawType.replace(/\?$/, ''),
+    optional: rawType.endsWith('?'),
+    desc: String(item.desc || ''),
+    turn: item.turn === true
+  }
+  if (Array.isArray(item.enumValues) && item.enumValues.length) {
+    out.enumValues = item.enumValues.map((v) => String(v))
+  }
+  if (Array.isArray(item.properties) && item.properties.length) {
+    out.properties = item.properties.map(toFormField)
+  }
+  return out
+}
+
+/** 表单字段 → core 载荷字段（递归）：与 toFormField 成对，保证装载→回写往返不丢字段（#9） */
+export function toCoreFieldPayload(item: CoreFormField): Record<string, unknown> {
+  return {
+    name: item.name,
+    type: `${item.baseType}${item.optional ? '?' : ''}`,
+    desc: item.desc,
+    turn: item.turn,
+    ...(item.enumValues && item.enumValues.length ? { enumValues: item.enumValues } : {}),
+    ...(item.properties && item.properties.length
+      ? { properties: item.properties.map(toCoreFieldPayload) }
+      : {})
+  }
+}
 /** 单类型示例值：只求「形状合法」，不编造具体内容 */
 function trialExampleValue(type: string): unknown {
   const base = type.replace(/\?$/, '').trim()
