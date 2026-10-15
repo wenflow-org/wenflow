@@ -60,14 +60,15 @@
             <!-- Skill 列宽收敛（2026-10-14 用户评审「中间三列全是孤零零的小绿勾、像撒芝麻」）：
                  原首尾两列都吃 --mk-col-text（372px 起），实测名称列 355px 只装 ~150px 文字，
                  首个 ✓ 落在 x=616、与名称末端隔 205px 空转，视线接不上。改取 --mk-cell-main-max
-                 （260px，与主行 id 自身的截断上限同值——不多截任何一个 id）+ 末列不写宽度由它吸收
-                 余量（判例：<col> 的 min/max-width 无效，留一个不写 width 的列=独吞余量）。 -->
+                 （260px，与主行 id 自身的截断上限同值——不多截任何一个 id）。 -->
             <col style="width:var(--mk-cell-main-max)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-badge)">
             <col style="width:var(--mk-col-badge)">
-            <!-- 差集列不写宽度：内容恒为一个徽章或「—」，余量归它（整表不再等分、名称列也不再被撑宽） -->
+            <!-- 差集列不写宽度：内容恒为一个徽章或「—」，随 width:auto 收缩到内容宽
+                 （2026-10-15 用户走查：昨日「余量归差集列」只是把空白从勾列中间挪到表尾——
+                 1990 容器 ~990px 空列比芝麻勾更刺眼；改由 .sk-rec-table width:auto 整表收齐内容） -->
             <col>
           </colgroup>
           <thead>
@@ -381,6 +382,11 @@ defineExpose({ refresh, recReport, recDiff });
 .sk-rec__pills > * { padding: 5px 12px; border-radius: 999px; font-size: var(--mk-fs-micro); font-weight: 600; }
 .sk-rec__skeleton { padding: 12px; }
 .sk-rec-table th, .sk-rec-table td { text-align: left; }
+/* 表宽收内容（2026-10-15 用户走查「右侧大面积空白」）：内容仅 ~700px 的稀表在 1990 容器里
+   拉满 width:100%，昨日把余量全归差集列后 ~990px 空白只是挪了位置。改 width:auto——
+   table-layout:fixed 下各列仍按 colgroup 声明取宽、差集列收缩到内容宽，行带/悬停底
+   随之收齐内容，剩余空间让位给卡片留白（稀疏报表表的贴内容形态）。 */
+.sk-rec-table { width: auto; }
 .sk-rec-yn { font-weight: 700; font-size: var(--mk-fs-body); }
 .sk-rec-yn--ok { color: var(--mk-green); }
 .sk-rec-yn--no { color: var(--mk-red); }
