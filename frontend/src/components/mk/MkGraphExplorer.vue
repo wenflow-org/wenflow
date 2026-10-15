@@ -339,6 +339,24 @@ const RAIL_MIN_OVERFLOW = 2
 /** 轨自身两端留白（.mk-ge__rail 的 padding: 4px 2px）—— 与 scroll-margin 保持同一口径 */
 const RAIL_PAD = 2
 
+/**
+ * 窄屏（≤900，与本文件移动端媒体块同档）：轨改**多行平铺、铺开全部路径**，不再横向滚动。
+ *
+ * 上面的「3 枚 + 更多」是按桌面 1024px 轨宽实测来的；390 手机档轨宽只有 ~358px，同一套
+ * 阈值下 3 条路径既够不着「更多」出口（数量不到 RAIL_MIN_OVERFLOW）、又必须横滑——
+ * 一屏外还有 2 条，只有一道很淡的右缘渐隐提示，学习者「不好选」（2026-10-15 走查）。
+ * 窄屏铺开所有 chip 一眼可见、直接点选；桌面维持有界轨 +「更多」浮层不变。
+ */
+const NARROW_RAIL_QUERY = '(max-width: 900px)'
+const railNarrow = ref(
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia(NARROW_RAIL_QUERY).matches
+    : false
+)
+function onRailNarrowChange(event: MediaQueryListEvent) {
+  railNarrow.value = event.matches
+}
+
 type PathOption = { value: string | null; label: string }
 /** 路径条目（value 必为 id）：可见集合与「更多」浮层都只装路径，不含「全部路径」 */
 type PathFilterOption = { value: string; label: string }
@@ -350,12 +368,15 @@ const allPathOption = computed<PathOption>(() => ({
 }))
 
 const pathOnlyOptions = computed<PathFilterOption[]>(() =>
-  props.paths.map((p) => ({ value: p.id, label: p.title || p.id }))
+  // 无标题路径回落「未命名路径」而非裸 id（lp_1791… 对学习者无意义）；
+  // 与列表页/学习台同款口径（V2LearningPaths / V2Dashboard 都是 `title || name || '未命名路径'`）
+  props.paths.map((p) => ({ value: p.id, label: p.title || '未命名路径' }))
 )
 
-/** 路径多到轨上放不下（且溢出值得开浮层）时收「更多」 */
+/** 路径多到轨上放不下（且溢出值得开浮层）时收「更多」。
+    窄屏一律不收（改多行平铺，见 railNarrow）：全部路径直接铺在轨上、点选，不走「更多」浮层 */
 const railBounded = computed(
-  () => pathOnlyOptions.value.length - RAIL_VISIBLE_PATHS >= RAIL_MIN_OVERFLOW
+  () => !railNarrow.value && pathOnlyOptions.value.length - RAIL_VISIBLE_PATHS >= RAIL_MIN_OVERFLOW
 )
 
 /** 当前选中路径在列表里的下标（-1 = 选的是「全部路径」，或选中项不在列表里） */
@@ -597,11 +618,17 @@ onMounted(() => {
   window.addEventListener('click', onMoreDocClick)
   window.addEventListener('keydown', onMoreDocKey)
   window.addEventListener('resize', onRailResize, { passive: true })
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    window.matchMedia(NARROW_RAIL_QUERY).addEventListener('change', onRailNarrowChange)
+  }
 })
 onBeforeUnmount(() => {
   window.removeEventListener('click', onMoreDocClick)
   window.removeEventListener('keydown', onMoreDocKey)
   window.removeEventListener('resize', onRailResize)
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    window.matchMedia(NARROW_RAIL_QUERY).removeEventListener('change', onRailNarrowChange)
+  }
 })
 
 /* ---------- 层级筛选（本地）：节点筛掉后，两端不齐的边也一并筛掉 ---------- */
@@ -1287,6 +1314,20 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   /* 路径 chip 桌面 38px（原型档）；触屏抬到 44 —— 轨道里 chip 数量 = 路径数 +1，
      每个 <44 都吃 mobile:spec 的 lt44 预算（kmap 页预算 7，旧 select 是 44 不占额度） */
   .mk-ge__chip { min-height: 44px; }
+  /* 窄屏路径轨改多行平铺：脚本侧 railBounded 在 ≤900 恒 false（不收「更多」），
+     这里让轨换行铺开全部 chip、不再横滚——390 轨宽仅 ~358px，横滚时屏外路径
+     只有一道很淡的右缘渐隐提示，学习者不好选（2026-10-15 走查）。
+     横滚相关的两端渐隐/scroll-margin 在窄屏失去意义，一并关掉。 */
+  .mk-ge__rail {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+  .mk-ge__rail--fade-l,
+  .mk-ge__rail--fade-r,
+  .mk-ge__rail--fade-l.mk-ge__rail--fade-r {
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
   /* 与 script 的 scrollSelectedChip 配套：chip 被**平台**自动滚进视口时（焦点落在一张卡片上，
      平台会把它滚到光标处；或宿主在轨尾钉进一枚新 chip），把落点边界设在 chip 的左缘
      + 轨自身 2px 内边距处——目标整枚带进来、且只露出它左侧的内容，不会把恒定第一枚

@@ -52,6 +52,9 @@ function mountRail(pathCount: number, pathId: string | null = null) {
   });
 }
 
+const chipTexts = (w: ReturnType<typeof mountRail>) =>
+  w.findAll('.mk-ge__rail .mk-ge__chip').map((c) => c.text());
+
 /** 焦点断言必须挂进 document：脱离文档的节点 focus() 不生效，activeElement 恒为 body */
 function mountRailAttached(pathCount: number, pathId: string | null = null) {
   return mount(MkGraphExplorer, {
@@ -60,8 +63,74 @@ function mountRailAttached(pathCount: number, pathId: string | null = null) {
   });
 }
 
-const chipTexts = (w: ReturnType<typeof mountRail>) =>
-  w.findAll('.mk-ge__rail .mk-ge__chip').map((c) => c.text());
+/** 以指定窄屏媒体查询命中态挂载（组件靠 window.matchMedia('(max-width: 900px)') 判定窄屏轨） */
+function withNarrowMatch(narrow: boolean, fn: () => void) {
+  const original = window.matchMedia;
+  window.matchMedia = ((query: string) => ({
+    matches: query.includes('max-width: 900px') ? narrow : false,
+    media: query,
+    onchange: null,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+  try {
+    fn();
+  } finally {
+    window.matchMedia = original;
+  }
+}
+
+/**
+ * 窄屏轨平铺（2026-10-15 走查）：390 轨宽仅 ~358px，桌面那套「3 枚 + 更多」在手机档
+ * 3-4 条路径时既够不着「更多」出口、又必须横滑（屏外路径只有一道很淡的右缘渐隐提示），
+ * 学习者「不好选」。修法=≤900 不收「更多」、轨换行铺开全部 chip。
+ */
+describe('MkGraphExplorer 路径轨窄屏平铺（≤900）', () => {
+  it('窄屏下 10 条路径全量铺开、不出现「更多」', () => {
+    withNarrowMatch(true, () => {
+      const w = mountRail(10);
+      const chips = chipTexts(w);
+      expect(chips).toHaveLength(11); // 全部路径 + 10 条
+      expect(chips).toContain('路径标题 10');
+      expect(w.find('.mk-ge__chip--more').exists()).toBe(false);
+      w.unmount();
+    });
+  });
+
+  it('宽屏（≥901）仍走有界轨 +「更多」，与窄屏判别', () => {
+    withNarrowMatch(false, () => {
+      const w = mountRail(10);
+      expect(w.find('.mk-ge__chip--more').exists()).toBe(true);
+      expect(chipTexts(w)).toHaveLength(4); // 全部 + 3
+      w.unmount();
+    });
+  });
+
+  it('窄屏下选中任一路径 chip 均在轨上（无「更多」可掉）', () => {
+    withNarrowMatch(true, () => {
+      const w = mountRail(10, 'lp_8');
+      expect(chipTexts(w)).toContain('路径标题 8');
+      w.unmount();
+    });
+  });
+
+  it('无标题路径 chip 回落「未命名路径」，不裸出 id', () => {
+    const w = mount(MkGraphExplorer, {
+      props: {
+        nodes: NODES,
+        edges: [],
+        paths: [{ id: 'lp_x', title: null }, { id: 'lp_y', title: '有标题的路径' }],
+      },
+    });
+    const texts = chipTexts(w);
+    expect(texts).toContain('未命名路径');
+    expect(texts.join(' ')).not.toContain('lp_x');
+    w.unmount();
+  });
+});
 
 describe('MkGraphExplorer 路径轨的有界化', () => {
   it('阈值内（4 条）全量铺开，不出现「更多」', async () => {
