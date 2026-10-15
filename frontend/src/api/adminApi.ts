@@ -1017,6 +1017,9 @@ export const adminFeedbackApi = {
     status?: 'new' | 'triaged' | 'resolved' | 'dismissed';
     userId?: string;
     taskId?: string;
+    /** 用户域视角（2026-10-10「真实/测试」互斥拍板）：默认真实；testOnly=true 只看虚拟学习者与测试账号 */
+    includeTest?: boolean;
+    testOnly?: boolean;
   }) => {
     return adminAxios.get('/admin/feedback', { params });
   },

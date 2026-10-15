@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import prisma from '../../config/database';
 import { loadTeachingMessages } from '../ai-teaching/teaching-session-message-store';
 import { logger } from '../../utils/logger';
+import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
 
 export type FeedbackStatus = 'new' | 'triaged' | 'resolved' | 'dismissed';
 export type DifficultyFit = 'too_easy' | 'appropriate' | 'too_hard';
@@ -293,6 +294,10 @@ export class FeedbackCollectionService {
     status?: FeedbackStatus;
     userId?: string;
     taskId?: string;
+    /** 用户域视角（2026-10-10「真实/测试」互斥拍板，2026-10-15 运营待办接入）：
+     *  默认真实（与 learning-content 同判例）；testOnly=true 只看虚拟学习者与测试账号 */
+    includeTest?: boolean;
+    testOnly?: boolean;
   }) {
     const where: Record<string, any> = {
       ...(input.maxRating ? { rating: { lte: input.maxRating } } : {}),
@@ -300,6 +305,11 @@ export class FeedbackCollectionService {
       ...(input.userId ? { userId: input.userId } : {}),
       ...(input.taskId ? { subtaskId: input.taskId } : {})
     };
+    // 显式 userId 查询（详情定位）不套用户域视角，避免自我矛盾
+    if (!input.userId) {
+      if (input.testOnly) where.users = await buildTestUserWhere();
+      else if (!input.includeTest) where.users = await buildRealUserWhere();
+    }
     const [items, total] = await Promise.all([
       prisma.content_feedback.findMany({
         where,

@@ -64,11 +64,14 @@
                 仅低分 ≤2<span class="mk-pill__count">{{ lowCount }}</span>
               </button>
             </div>
+            <!-- 真实/测试互斥视角（2026-10-10 拍板方言；2026-10-15 反馈列表接入——
+                 后端默认口径改为仅真实，测试视角显式切换，与运营待办/内容管理同判据） -->
+            <DataScopeToggle v-model="includeTest" />
             <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 评论 / 任务" />
             <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           </div>
           <span class="mk-card__head-right">
-            <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }}</span>
+            <span class="mk-card__meta" :title="includeTest ? '只看虚拟学习者与测试账号的反馈' : '只看真实用户的反馈'">（{{ includeTest ? '测试' : '真实' }}）{{ filtered.length }} / {{ rows.length }}</span>
           </span>
         </div>
 
@@ -240,6 +243,7 @@ import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
 import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import DataScopeToggle from './DataScopeToggle.vue'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -296,6 +300,12 @@ watch(total, (n) => {
 const keyword = ref('')
 const statusFilter = ref('')
 const lowOnly = ref(false)
+/* 真实/测试互斥视角（2026-10-10 拍板方言）：默认真实——后端列表口径同步改为仅真实，
+   测试视角显式切换（与运营待办/内容管理同判据）；切换强制重拉（绕过页缓存） */
+const includeTest = ref(false)
+watch(includeTest, () => {
+  void load(true)
+})
 const detail = ref<Detail | null>(null)
 const noteDraft = ref('')
 /** 抽屉统一关闭路径：提交中（saving）禁止 Esc/遮罩/✕ 误关——请求仍在跑却失去上下文。
@@ -418,9 +428,10 @@ async function load(force?: boolean) {
   loading.value = true
   loadFailed.value = false
   try {
+    const scope = { includeTest: includeTest.value || undefined, testOnly: includeTest.value || undefined }
     const [listRes, newRes, trendRes] = await Promise.all([
-      adminFeedbackApi.list({ limit: 1000 }),
-      adminFeedbackApi.list({ limit: 1, status: 'new' }).catch(() => null),
+      adminFeedbackApi.list({ limit: 1000, ...scope }),
+      adminFeedbackApi.list({ limit: 1, status: 'new', ...scope }).catch(() => null),
       adminFeedbackApi.getTrend(30).catch(() => null)
     ])
     const body = listRes.data?.data ?? listRes.data ?? []

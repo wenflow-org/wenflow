@@ -36,10 +36,18 @@
          事项 + 行尾 mute 类别 pill）。「去处理」保留为行尾按钮——行动能力不因形态改造丢失。 -->
     <section class="mk-card">
       <div class="mk-card__head">
-        <h4 class="mk-card__title">运营待办</h4>
-        <!-- 2026-10-04 状态条退役：结论句（原页头状态条 strong）并入卡头 meta，不另占一条。
-             三态纪律：首屏三请求未回来前不得渲染「全部已清零」（取不到 ≠ 没事） -->
-        <span class="mk-card__meta">{{ wbLoading && !stats ? '正在拉取待办…' : `${todoConclusion}` }}</span>
+        <!-- 左组（卡头成组判据：space-between 下三子元素会把 meta 挤到中间，标题+结论须成组吃 flex） -->
+        <div class="oh-wb-head">
+          <h4 class="mk-card__title">运营待办</h4>
+          <!-- 2026-10-04 状态条退役：结论句（原页头状态条 strong）并入卡头 meta，不另占一条。
+               三态纪律：首屏三请求未回来前不得渲染「全部已清零」（取不到 ≠ 没事） -->
+          <span class="mk-card__meta">{{ wbLoading && !stats ? '正在拉取待办…' : `${todoConclusion}` }}</span>
+        </div>
+        <!-- 真实/测试互斥视角（2026-10-10 拍板方言，2026-10-15 用户要求接入运营待办）：
+             反馈与失败路径按视角计数；事件投递与草稿公告是系统全域，不随视角变化 -->
+        <span class="oh-scope" title="反馈与生成失败路径按视角计数；事件投递失败与草稿公告为系统全域，不随视角变化">
+          <DataScopeToggle v-model="wbScope" />
+        </span>
       </div>
       <!-- 首屏加载态：三个待办请求在途且尚无 stats 时渲染骨架，不落定 0 值指标卡 -->
       <MockSkeletonTable v-if="wbLoading && !stats" :cols="4" :rows="1" />
@@ -190,6 +198,7 @@ import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkStageband from '@/components/mk/MkStageband.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
+import DataScopeToggle from './DataScopeToggle.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 
 /* ===== 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知（阶段 1 导航收敛） =====
@@ -321,6 +330,9 @@ watch(
 )
 
 /* ===== 运营待办：反馈待处理 / 失败路径 / 死信 / 草稿公告 ===== */
+/* 真实/测试互斥视角（2026-10-10 拍板方言）：false=真实用户；true=虚拟学习者与测试账号。
+   反馈与失败路径按此视角计数；事件投递（outbox 死信）与草稿公告是系统全域，不随视角变化 */
+const wbScope = ref(false)
 const wbPendingFeedback = ref(0)
 const wbFailedPaths = ref(0)
 const wbDeadLetters = ref(0)
@@ -338,11 +350,11 @@ async function loadWorkbench() {
   wbLoading.value = true
   const errors: Record<string, string> = {}
   const [feedbackR, statsR, deadR] = await Promise.allSettled([
-    // 待处理反馈：后端 status=new 计数（与 Feedback 页口径一致）
-    adminFeedbackApi.list({ limit: 1, status: 'new' }),
-    // 失败路径：学习内容 stats（与内容管理页口径一致）
-    adminLearningContentApi.getStats(),
-    // outbox 死信：系统工具页同源（返回 {deadCount, items}）
+    // 待处理反馈：后端 status=new 计数（与 Feedback 页口径一致）；按真实/测试视角过滤
+    adminFeedbackApi.list({ limit: 1, status: 'new', includeTest: wbScope.value || undefined, testOnly: wbScope.value || undefined }),
+    // 失败路径：学习内容 stats（与内容管理页口径一致）；按真实/测试视角过滤
+    adminLearningContentApi.getStats(wbScope.value || undefined, wbScope.value || undefined),
+    // outbox 死信：系统工具页同源（返回 {deadCount, items}）；系统全域，无视角
     adminDevtoolsApi.getOutboxDead(),
   ])
 
@@ -557,6 +569,10 @@ function goAnnouncements() {
 onMounted(() => {
   void loadWorkbench()
 })
+/* 切换真实/测试视角 → 按新视角重拉（事件投递与草稿公告全域不变，仍随请求刷新无妨） */
+watch(wbScope, () => {
+  void loadWorkbench()
+})
 </script>
 
 <style scoped>
@@ -586,6 +602,9 @@ onMounted(() => {
 }
 .oh-tabbar__sub { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .oh-tabbar .mk-btn { margin-left: auto; }
+/* 待办卡头左组（卡头成组判例）：标题+结论成组吃 flex，视角切换贴右 */
+.oh-wb-head { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.oh-scope { flex: none; }
 
 /* ================= 运营工作台（待办清单 + 状态面板，区别于 Dashboard 统计卡） ================= */
 /* 状态面板：路径 / 公告并列（行式计数 + 比例条，非 KPI 卡） */

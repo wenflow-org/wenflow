@@ -14,7 +14,10 @@ const listQuerySchema = z.object({
   maxRating: z.coerce.number().int().min(1).max(5).optional(),
   status: z.enum(['new', 'triaged', 'resolved', 'dismissed']).optional(),
   userId: z.string().trim().min(1).optional(),
-  taskId: z.string().trim().min(1).optional()
+  taskId: z.string().trim().min(1).optional(),
+  // 用户域视角（2026-10-10「真实/测试」互斥拍板）：默认真实；testOnly=true 只看虚拟学习者与测试账号
+  includeTest: z.string().optional(),
+  testOnly: z.string().optional()
 });
 
 const updateBodySchema = z.object({
@@ -45,7 +48,9 @@ router.get('/', async (req, res) => {
       maxRating: query.maxRating,
       status: query.status,
       userId: query.userId,
-      taskId: query.taskId
+      taskId: query.taskId,
+      includeTest: query.includeTest === 'true',
+      testOnly: query.testOnly === 'true'
     });
     return res.json({
       success: true,
