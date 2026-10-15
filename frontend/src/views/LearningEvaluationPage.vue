@@ -803,7 +803,7 @@ onUnmounted(() => {
    （手动流程问题测试 2026-09-26）；加宽并同步放宽目录偏移 */
 @media (min-width: 1500px) {
   .evaluation-shell { max-width: 1240px; gap: 24px; }
-  .eval-toc { left: calc(50% + 636px); }
+  .eval-toc { left: min(calc(50% + 636px), calc(100vw - 172px - 16px)); }
 }
 
 /* 入场编排：数据就绪后各块依次上浮出现 */
@@ -1817,7 +1817,8 @@ onUnmounted(() => {
     display: grid;
     gap: 2px;
     position: fixed;
-    left: calc(50% + 556px);
+    /* min() 把右缘夹到视口内：固定偏移在 1440 档会算出 720+556+172=1448 越界 8px，任何宽度都不能溢出。 */
+    left: min(calc(50% + 556px), calc(100vw - 172px - 16px));
     top: 96px;
     width: 172px;
     z-index: 10;

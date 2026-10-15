@@ -229,18 +229,20 @@
             </td>
             <td>
               <div class="vl-state-cell">
-                <template v-if="s.runningCount > 0 || (s.pausedCount ?? 0) > 0">
+                <!-- 渲染门：有活跃会话（运行/暂停）或有 stageProgress 即渲染——
+                     已结算的历史进度也要显示累计进度，不再一律塌成「空闲」（走查 #39） -->
+                <template v-if="s.runningCount > 0 || (s.pausedCount ?? 0) > 0 || s.stageProgress">
                   <RunStateBadge
+                    v-if="s.runningCount > 0 || (s.pausedCount ?? 0) > 0"
                     :status="s.runningCount > 0 ? 'running' : 'paused'"
                     :hint="`${s.runningCount} 个会话进行中 / ${s.pausedCount ?? 0} 个已暂停`"
                     clickable
                     @click.stop="openRunningSession(s)"
                   />
                   <RunStageBar
-                    :stage="s.currentStage"
-                    :status="s.runningCount > 0 ? 'running' : 'paused'"
+                    :stage="stageBarStage(s)"
+                    :status="s.runningCount > 0 ? 'running' : (s.pausedCount ?? 0) > 0 ? 'paused' : null"
                     :task-progress="s.stageProgress?.learnStarted ? { done: s.stageProgress.taskDone, total: s.stageProgress.taskTotal } : null"
-                    :show-task-text="false"
                   />
                 </template>
                 <span v-else class="mk-na" title="当前没有进行中的会话">空闲</span>
@@ -401,11 +403,25 @@ const samples = computed<Sample[]>(() =>
        pausedSessionIds 回退恒 undefined，已暂停行的「进行中」徽章点击静默无响应 */
     pausedSessionIds: v.pausedSessionIds,
     currentStage: v.currentStage || null,
+    /* 阶段进度必须随行带出：此前漏拷，模板 :task-progress 恒为 null（走查 #39） */
+    stageProgress: v.stageProgress || null,
     createdAt: String(v.createdAt || ''),
     created: timeAgo(v.createdAt),
     tags: Array.isArray(v.tags) ? v.tags : []
   }))
 )
+
+/** 阶段条 stage 取值：优先按 stageProgress 三态还原累计进度（已结算行也能显示 Goal/Path/Learn），
+    无进度时回落最近会话阶段。非活跃行 status 传 null，避免被终态强行涂满或全灰 */
+function stageBarStage(s: Sample): string | null {
+  const p = s.stageProgress
+  if (p) {
+    if (p.learnStarted) return 'learn'
+    if (p.pathReady) return 'path'
+    if (p.goalReady) return 'goal'
+  }
+  return s.currentStage
+}
 
 const keyword = ref('')
 /** F20 口径分列（2026-10-15）：单元格 title 给系统失败/人为终止的分解——

@@ -220,12 +220,14 @@ onMounted(load)
 .cd-pad { padding: 16px; }
 .cd-sec { display: grid; gap: 10px; }
 .cd-bg { margin: 0; font-size: var(--mk-fs-body); line-height: 1.6; color: var(--mk-ink); white-space: pre-wrap; }
-.cd-story { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-lg); background: var(--mk-surface-2); }
+.cd-story { display: grid; gap: 6px; min-width: 0; padding: 12px 14px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-lg); background: var(--mk-surface-2); }
 .cd-story__title { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 .cd-story__opening { margin: 0; font-size: var(--mk-fs-body); line-height: 1.6; color: var(--mk-ink); }
 .cd-story__hooks { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
 .cd-story__hooks li { font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
-.cd-story__meta { display: flex; flex-wrap: wrap; gap: 4px; }
+/* min-width:0 让 flex/grid 子项可收缩；徽章全局 nowrap 且无上限，长 domain 会在 349px 容器里撑到 483px 溢出。 */
+.cd-story__meta { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.cd-story__meta :deep(.mk-badge) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cd-mats { display: flex; flex-wrap: wrap; gap: 4px; }
 .mono { font-family: var(--mk-mono); }
 </style>

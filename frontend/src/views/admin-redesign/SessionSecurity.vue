@@ -307,6 +307,8 @@ interface AdminSessionRow {
   createdAt: string
   adminName?: string | null
   adminEmail?: string | null
+  /** 后端按请求者的 jti 精确计算：这一行就是当前标签页自身的会话 */
+  isCurrent?: boolean
 }
 
 type SessionStatus = 'active' | 'expired' | 'revoked'
@@ -406,12 +408,9 @@ function statusClass(s: AdminSessionRow): string {
   return 'mk-badge--bad'
 }
 
-/** 当前会话：本管理员中最新创建的活跃会话（登录即新建，同 adminId 下 createdAt 最新者即当前标签页） */
-const currentId = computed(() => {
-  const mine = sessions.value.filter((s) => s.adminId === myId.value && statusOf(s) === 'active')
-  if (!mine.length) return ''
-  return [...mine].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0].id
-})
+/** 当前会话：后端按请求 token 的 jti 精确标记的那一行（不再按「同 adminId 最新创建」推断——
+    多标签/多设备/脚本登录时最新创建的行未必是当前标签页，见 2026-10-15 走查 #28）。 */
+const currentId = computed(() => sessions.value.find((s) => s.isCurrent)?.id ?? '')
 
 /** 分组统计读全量口径（后端 adminCounts），缺失时回落窗口内计数。
     行窗口只决定列表渲染哪些行，组头/折叠头/批量下线按钮的条数一律走这里，

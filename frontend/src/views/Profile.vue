@@ -69,6 +69,11 @@
             </div>
           </template>
         </div>
+        <!-- 口径说明：连续天数为 0 时，今天新开始、尚未产生学习时长的任务会让用户误读成
+             「今天白学了」（2026-10-15 走查 #42）。给 0 值补一行可见口径，不用悬停提示。 -->
+        <p v-if="!kpiLoading && kpi.streak === 0" class="profile-kpis__note">
+          当天新开始的任务在产生有效学习时长后，才计入连续天数与掌握进度。
+        </p>
 
         <!-- 快捷入口列表卡（原型 wf-list 同构） -->
         <section class="uc-card">
@@ -363,6 +368,13 @@ async function handleSaveName() {
 .profile-kpi span {
   /* 原型为 11px，本仓门禁下限 12px（--mk-fs-micro 档即 12px 起） */
   font-size: 12px;
+  color: var(--faint);
+}
+
+.profile-kpis__note {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  line-height: 1.6;
   color: var(--faint);
 }
 

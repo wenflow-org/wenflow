@@ -67,6 +67,8 @@ function fakeSession(
     lastSeenAt: new Date(now - 60_000).toISOString(),
     revokedAt: opts.revoked ? new Date(now - 60_000).toISOString() : null,
     createdAt: new Date(now - 3600_000).toISOString(),
+    // 后端按请求者 jti 打的「当前标签页」标记（#28）：造 #1 为当前会话
+    isCurrent: i === 1,
     adminName: opts.adminId === 'admin-2' ? 'auditor' : 'admin',
     adminEmail: opts.adminId === 'admin-2' ? 'auditor@wenflow.local' : 'admin@wenflow.local'
   };
@@ -294,7 +296,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     await flushPromises();
     await flushPromises();
     expect(w.find('.mk-card__meta').text()).toContain('活跃 4');
-    // sess-1 是当前标签页（createdAt 最新，标「当前」），首枚「强制下线」即 sess-2
+    // sess-1 是当前标签页（后端 isCurrent 标记），首枚「强制下线」即 sess-2
     const revokeBtn = w.findAll('button').find((b) => b.text().trim() === '强制下线')!;
     await revokeBtn.trigger('click');
     await flushPromises();

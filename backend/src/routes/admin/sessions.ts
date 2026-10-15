@@ -34,6 +34,9 @@ router.get('/', async (req, res, next) => {
   try {
     const query = listQuerySchema.parse(req.query);
     const now = new Date();
+    // 请求者自身会话的 jti：前端据此精确打「当前」标记，不再按「最新创建」推断
+    //（多标签/多设备/脚本登录时，最新创建的那行未必是当前标签页——2026-10-15 走查 #28）。
+    const currentJti = extractSessionJti(req);
 
     const scopeWhere: Record<string, unknown> = {};
     if (query.adminId) {
@@ -59,6 +62,7 @@ router.get('/', async (req, res, next) => {
     const adminNames = await resolveAdminNames([...new Set(sessions.map(session => session.adminId))]);
     const data = sessions.map(session => ({
       ...session,
+      isCurrent: currentJti !== null && session.jti === currentJti,
       adminName: adminNames.get(session.adminId)?.name ?? null,
       adminEmail: adminNames.get(session.adminId)?.email ?? null,
     }));

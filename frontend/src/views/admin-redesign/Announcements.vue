@@ -60,10 +60,30 @@
         <thead>
           <tr>
             <th>公告</th>
-            <th>级别</th>
-            <th>状态</th>
-            <th>发布</th>
-            <th>过期</th>
+            <th
+              scope="col"
+              class="mk-th--sortable"
+              :aria-sort="anSortState('severity')"
+              @click="toggleAnSort('severity')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleAnSort('severity')">级别<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              scope="col"
+              class="mk-th--sortable"
+              :aria-sort="anSortState('status')"
+              @click="toggleAnSort('status')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleAnSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              scope="col"
+              class="mk-th--sortable"
+              :aria-sort="anSortState('published')"
+              @click="toggleAnSort('published')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleAnSort('published')">发布<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              scope="col"
+              class="mk-th--sortable"
+              :aria-sort="anSortState('expires')"
+              @click="toggleAnSort('expires')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleAnSort('expires')">过期<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th>创建人</th>
             <th class="mk-th--right">操作</th>
           </tr>
@@ -218,6 +238,7 @@ import { adminAnnouncementsApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
+import { useTableSort } from './useTableSort'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -257,9 +278,25 @@ const liveRetrying = ref(false)
 const keyword = ref('')
 const severityFilter = ref('')
 const statusFilter = ref('')
+
+/* 客户端排序：公告全量已在 live 层（拉全量 + 客户端分页），排序诚实。
+   级别/状态按语义档位排（非字典序）；发布/过期按时间戳，空值由 useTableSort 恒排末尾。
+   与 Feedback/Notifications 同款交互（点击列头切换升降序，localStorage 记忆）。 */
+const SEVERITY_RANK: Record<Row['severity'], number> = { info: 0, warning: 1, critical: 2 }
+const STATUS_RANK: Record<string, number> = { draft: 0, published: 1, archived: 2 }
+const { toggle: toggleAnSort, sortState: anSortState, sortRows: sortAnRows } = useTableSort<Row>({
+  accessors: {
+    severity: (r) => SEVERITY_RANK[r.severity] ?? 0,
+    status: (r) => STATUS_RANK[r.status] ?? 0,
+    published: (r) => (r.publishedAt ? new Date(r.publishedAt).getTime() : null),
+    expires: (r) => (r.expiresAt ? new Date(r.expiresAt).getTime() : null)
+  },
+  storageKey: 'wf_announcements_sort'
+})
+
 const filtered = computed(() => {
   const q = keyword.value.trim().toLowerCase()
-  return rows.value.filter((r) => {
+  return sortAnRows(rows.value.filter((r) => {
     if (severityFilter.value && r.severity !== severityFilter.value) return false
     if (statusFilter.value) {
       // 状态口径与徽章一致：「生效中」仅含未过期的 published；已过期拆为独立选项——
@@ -270,7 +307,7 @@ const filtered = computed(() => {
     }
     if (q && !`${r.title} ${r.body}`.toLowerCase().includes(q)) return false
     return true
-  })
+  }))
 })
 const isFiltered = computed(() => !!keyword.value.trim() || !!severityFilter.value || !!statusFilter.value)
 function clearFilters() {

@@ -120,6 +120,7 @@
  * （/admin/glossary?cat=&q= 与场景路由双向同步由 AdminConsole 既有机制承担）。
  */
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { adminGlossaryApi } from '@/api/adminApi'
 import { COMPLETION_META, SEMANTICS_META, type GlossaryTerm } from './glossaryMeta'
 import { errMsg } from './live'
@@ -176,19 +177,17 @@ function showCategory(id: string) {
 const flowRoles = computed<PromptRoleMeta[]>(() => [...promptRoles.value, ...FLOW_EXTRAS])
 
 function countOf(id: string) {
-  /* 搜索生效时分类计数必须跟随过滤：pill 数字与正文结果保持一致（沿袭抽屉版修过的回归） */
-  const searching = !!kwLower.value
+  /* 计数只统计正文真正渲染的集合（filteredX / termsOf 均自带关键词过滤）：
+     category='flow'/'status' 的动态词条在正文没有渲染位（flow 格渲染角色卡、status 格渲染
+     完成度/语义卡），过去计入会使 pill 数字大于实际卡片数（走查 #31：全部 84 实渲染 58） */
   if (id === 'all') {
-    if (searching) {
-      return filteredRoles.value.length + filteredCompletion.value.length + filteredSemantics.value.length
-        + filteredStages.value.length + termsOf('concept').length + termsOf('health').length + filteredDocs.value.length
-    }
-    return flowRoles.value.length + completionStates.value.length + semantics.value.length + stages.value.length + terms.value.length + docs.value.length
+    return filteredRoles.value.length + filteredCompletion.value.length + filteredSemantics.value.length
+      + filteredStages.value.length + termsOf('concept').length + termsOf('health').length + filteredDocs.value.length
   }
-  if (id === 'flow') return filteredRoles.value.length + terms.value.filter((t) => t.category === 'flow' && (!searching || t.term.toLowerCase().includes(kwLower.value) || t.def.toLowerCase().includes(kwLower.value))).length
+  if (id === 'flow') return filteredRoles.value.length
   if (id === 'status') return filteredCompletion.value.length + filteredSemantics.value.length
   if (id === 'stage') return filteredStages.value.length
-  return terms.value.filter((t) => t.category === id && (!searching || t.term.toLowerCase().includes(kwLower.value) || t.def.toLowerCase().includes(kwLower.value))).length
+  return termsOf(id as 'concept' | 'health').length
 }
 
 function termsOf(id: 'concept' | 'health') {
@@ -242,7 +241,15 @@ async function retryLoad() {
   await load()
 }
 
-onMounted(() => { void load() })
+const route = useRoute()
+
+onMounted(() => {
+  /* 深链 ?q=<术语>（成就卡术语链接 / 外部分享）→ 预填搜索，落点即所查词条；
+     分类保持「全部」，避免词条被当前分类格隐藏 */
+  const q = route.query.q
+  if (typeof q === 'string' && q.trim()) keyword.value = q.trim()
+  void load()
+})
 </script>
 
 <style scoped>

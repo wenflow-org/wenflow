@@ -1845,6 +1845,8 @@ onBeforeUnmount(() => {
      会垫在 2-4 屏外（2026-09-25 移动框架审查）；order:-1 提到阶段列表之前，
      桌面双列布局不受影响（order 只在单列时改变视觉顺序） */
   .side { position: static; order: -1; }
+  /* 单列下侧栏提到最前，其「继续当前任务」与主区 hero 重复且会被固定底栏压住；窄屏只保留主区那颗。 */
+  .sidecard--current .btn-primary--block { display: none; }
 }
 </style>
 

@@ -111,7 +111,10 @@
       </div>
 
       <template v-else>
-      <div class="uc-table-wrap">
+      <!-- 窄屏（10 列 1080px 表塞进 ~361px）首屏只见 3 列、操作列要横拖才够得着，
+           此前无任何横拖提示；补一行常显提示 + 常显横滚条（桌面档不显示不占位，走查 #43） -->
+      <p class="scroll-hint" aria-hidden="true">← 左右滑动查看全部列 →</p>
+      <div class="uc-table-wrap logs-scroll">
         <table class="uc-table logs-table">
           <thead>
             <tr>
@@ -865,6 +868,18 @@ const copyText = async (text: string, successMessage: string) => {
   min-width: 1080px;
 }
 
+/* 横拖提示：桌面档不渲染（表能完整放下），仅窄屏档显示 */
+.scroll-hint {
+  display: none;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--faint, #67758f);
+  text-align: center;
+  background: var(--canvas, #f3f6fb);
+  border-bottom: 1px solid var(--line, #e3e9f4);
+}
+
 .logs-error-cell {
   max-width: 200px;
   overflow: hidden;
@@ -1033,6 +1048,24 @@ const copyText = async (text: string, successMessage: string) => {
 }
 
 @media (max-width: 1100px) {
+  /* 窄屏才给横拖提示与常显横滚条（thumb 常驻，用户能看出右侧还有列） */
+  .scroll-hint {
+    display: block;
+  }
+
+  .logs-scroll {
+    scrollbar-width: thin;
+  }
+
+  .logs-scroll::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .logs-scroll::-webkit-scrollbar-thumb {
+    background: var(--line, #cbd5e1);
+    border-radius: 4px;
+  }
+
   .stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

@@ -44,6 +44,7 @@
               type="button"
               class="filter"
               :class="{ 'filter--active': statusFilter === f.key }"
+              :aria-pressed="statusFilter === f.key"
               @click="statusFilter = f.key"
             >{{ f.label }}</button>
           </div>
@@ -55,6 +56,7 @@
               type="button"
               class="filter"
               :class="{ 'filter--active': typeFilter === t.key }"
+              :aria-pressed="typeFilter === t.key"
               @click="typeFilter = typeFilter === t.key ? '' : t.key"
             >{{ t.label }}</button>
           </div>

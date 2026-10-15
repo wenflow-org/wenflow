@@ -394,7 +394,9 @@ const gcCancelledCount = computed(() => {
    的对话会按创建日额外成桶且桶日期在窗口外——按日期过滤后求和才是纯「新增」口径 */
 const recentCreated7d = computed<number | null>(() => {
   const ds = stats.value?.dailyStats
-  if (!ds || !ds.length) return null
+  // 区分「窗口内无新增」与「取数失败」：stats 未取到（失败）→ null 显「—」；
+  // dailyStats 为空数组是真实读数（窗口内没有新增）→ 归零显 0，不再伪装成不可用
+  if (!ds) return null
   const cutoff = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10)
   let sum = 0
   for (const d of ds) if (d.date >= cutoff) sum += Number(d.total) || 0

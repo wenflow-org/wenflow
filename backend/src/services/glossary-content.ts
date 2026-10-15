@@ -95,6 +95,7 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   { term: '基准（真源）', category: 'concept', def: '一条信息的"唯一权威来源"，其他位置都是它的镜像/副本；对账以它为准' },
   { term: '派生', category: 'concept', def: '由别的文件/字段自动生成（如契约 displayName 从 manifest 派生），不手写第二份' },
   { term: '覆盖行', category: 'concept', def: 'admin 在管理后台手工改过的配置行，覆盖权高于文件声明，对账时跳过' },
+  { term: 'KTL', category: 'concept', def: '本仓两套相反口径的缩写，读到时按位置判断：①成就体系按「知识掌握水平」理解，高=好（成就「知识小成/大成/宗师」即「KTL 达到 N」）；②学习状态的长期指标按「Knowledge Training Load 知识训练负荷」理解，高=负荷重（LSS 的慢 EWMA，λ=0.95、半衰期≈13.5 天）。注意两处读的其实是同一个 learningState.ktl、只是判读方向相反，属待收敛的历史债；另有会话级 sessionKtl（本节知识获得质量，高=好）同名不同义', where: '成就管理→成就定义；学习状态→学习指标；完课卡→会话级 sessionKtl' },
 
   // ---- 角色与流转（flow） ----
   { term: 'promptRole（字段角色）', category: 'flow', def: '字段的用途分类：必填/可选补充/隐式推断/公开回复/方案产出/派生展示/控制信号，见字段路由图例' },

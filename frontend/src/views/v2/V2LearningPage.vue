@@ -1945,7 +1945,9 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.learn { min-height: calc(100vh / var(--vp-zoom, 1)); display: flex; flex-direction: column; background: var(--canvas); }
+/* 锁视口高度：整页不滚动、tutor 内部滚动、composer 常驻底部（原先只有窄屏锁，桌面档 tutor 随内容长高把输入区顶出首屏）。
+   flex:0 0 auto 必须显式——.learn 同时带 .v2-page，需压过其全局 flex:1 拉伸，否则 height 会被拉到内容高度。 */
+.learn { height: calc(100dvh / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; display: flex; flex-direction: column; background: var(--canvas); }
 
 /* ---------- 头部 ---------- */
 .learn__head {

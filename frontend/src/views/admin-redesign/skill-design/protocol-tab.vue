@@ -304,7 +304,7 @@
       </header>
       <div class="sdp-proj__grid">
         <div class="sdp-proj__col">
-          <h5 class="sdp-proj__title">输入契约 <b class="mono">{{ contractIns.length }}</b> 字段</h5>
+          <h5 class="sdp-proj__title">输入契约（按角色） <b class="mono">{{ contractIns.length }}</b> 字段</h5>
           <MkLoading v-if="contractLoading && !contractFields.length" inline text="字段契约加载中…" />
           <p v-else-if="contractNotApplicable" class="sdp-none">{{ AUX_CONTRACT_NA_TEXT }}</p>
           <p v-else-if="contractFailed" class="sdp-none sdp-bad-text">
@@ -322,7 +322,7 @@
           </template>
         </div>
         <div class="sdp-proj__col">
-          <h5 class="sdp-proj__title">输出契约 <b class="mono">{{ contractOuts.length }}</b> 字段</h5>
+          <h5 class="sdp-proj__title">输出契约（按角色） <b class="mono">{{ contractOuts.length }}</b> 字段</h5>
           <MkLoading v-if="contractLoading && !contractFields.length" inline text="字段契约加载中…" />
           <p v-else-if="contractNotApplicable" class="sdp-none">{{ AUX_CONTRACT_NA_TEXT }}</p>
           <p v-else-if="contractFailed" class="sdp-none sdp-bad-text">
@@ -335,7 +335,7 @@
               <span class="mono sdp-vrow__type">{{ f.valueType || '—' }}</span>
               <span class="mk-badge" :class="roleCls(f.promptRole)">{{ roleLabel(f.promptRole) }}</span>
             </div>
-            <p v-if="!contractOuts.length" class="sdp-none">该 Skill 暂无产出字段声明。</p>
+            <p v-if="!contractOuts.length" class="sdp-none">该 Skill 未声明 proposal-output / public-reply / derived-presentation 角色字段。</p>
           </template>
         </div>
       </div>

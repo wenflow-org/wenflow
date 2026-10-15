@@ -31,7 +31,9 @@
             <span class="mk-badge" :class="typeBadge(d.type)">{{ typeText(d.type) }}</span>
           </div>
           <span class="ac-card__desc">{{ d.description }}</span>
-          <span class="ac-card__cond" :title="reqTitle(d.requirement)">条件：{{ reqText(d.requirement) }}</span>
+          <span class="ac-card__cond" :title="reqTitle(d.requirement)">
+            条件：<template v-if="d.requirement.type === 'ktl_level'"><RouterLink class="ac-card__term" :to="glossaryTermLink('KTL')">KTL</RouterLink> 达到 {{ d.requirement.value }}</template><template v-else>{{ reqText(d.requirement) }}</template>
+          </span>
           <div class="ac-card__foot">
             <span class="ac-card__unlocked">已解锁 <b class="mono">{{ d.unlockCount }}</b> 人</span>
             <span class="oa-xp" :title="`解锁可得 ${d.xpReward} XP`">+{{ d.xpReward }} XP</span>
@@ -201,6 +203,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useTableSort } from './useTableSort'
 import { timeAgo, errMsg } from './live'
 import { adminAchievementsApi, adminUsersApi, type AchievementDef, type AchievementRecord } from '@/api/adminApi'
@@ -263,6 +266,11 @@ const reqText = (r: AchievementDef['requirement']) => {
   if (t === 'path_completion') return `完成 ${r.value} 条路径`
   if (t === 'ktl_level') return `KTL 达到 ${r.value}`
   return `自定义条件`
+}
+/** 术语 → 术语表深链：?q= 由 AdminGlossary 读取并预填搜索，让成就卡里的裸缩写可点可查
+    （此前术语解释只塞在 title 悬停里，不可发现也不可点，走查 #32） */
+function glossaryTermLink(term: string) {
+  return { path: '/admin/glossary', query: { q: term } }
 }
 /** 条件列的补充说明：展开未在本行显示的术语（KTL 等），避免裸缩写无处可查 */
 const reqTitle = (r: AchievementDef['requirement']) => {
@@ -565,6 +573,9 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 条件格内可点术语：链接色 + 虚线下划线，区别于正文灰字（走查 #32） */
+.ac-card__term { color: var(--mk-blue); text-decoration: underline dotted; cursor: pointer; }
+.ac-card__term:hover { color: var(--mk-accent-deep); }
 .ac-card__foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ac-card__unlocked { margin-right: auto; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .ac-card__unlocked b {
