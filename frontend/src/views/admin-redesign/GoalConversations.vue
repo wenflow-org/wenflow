@@ -107,7 +107,7 @@
           </div>
         </div>
 
-        <MockSkeletonTable v-if="loading && !rows.length" :cols="9" />
+        <MockSkeletonTable v-if="loading && !rows.length" :cols="10" />
         <!-- P0 修复：加载失败行内错误 + 重试（此前失败伪装成「暂无会话」）。
              形态收敛共享 MkEmptyState tone="error"（2026-10-06 审核 #48）：私有 .gc-error
              与同页 stats 失败条两套错误形态并存的局面收敛，role=alert + 重试由原语承担 -->
@@ -149,6 +149,14 @@
                 :aria-sort="gcSortState('stage')"
                 @click="toggleGcSort('stage')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('stage')">阶段<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                v-if="showCol('stageDate')"
+                scope="col"
+                class="mk-th--sortable"
+                :title="sortWindowTitle"
+                :aria-sort="gcSortState('stageDate')"
+                @click="toggleGcSort('stageDate')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('stageDate')">阶段日期<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="showCol('turns')"
                 scope="col"
@@ -203,17 +211,20 @@
                 <div class="gc-stage-cell">
                   <div class="gc-stage-cell__head">
                     <!-- P3（2026-10-04 全站评审）：阶段词与状态词相同（完成态「已完成」/失败态「失败」）
-                         时徽章不重复出词——状态列已承载该词，本列只留进度点 + 日期 -->
+                         时徽章不重复出词——状态列已承载该词，本列只留进度点；
+                         日期 2026-10-15 起拆「阶段日期」独立列，本格不再有副行 -->
                     <span v-if="statusLabel(r.status) !== stageText(r.stage)" class="mk-badge" :class="stageBadgeCls(r.stage)" :title="`阶段：${stageText(r.stage) || '—'}`">{{ stageText(r.stage) || '—' }}</span>
                     <span v-if="r.timeline" class="gc-stage-cell__dots" :title="stageDotsTitle(r)" aria-label="阶段进度">
                       <i v-for="d in GOAL_STAGE_TOTAL" :key="d" class="gc-stage-cell__dot" :class="{ 'is-on': d <= r.stageIndex + 1 }"></i>
                     </span>
                   </div>
-                  <!-- 副行只留日期：阶段词由徽章单源承载（时间线末条恒复读徽章词，2026-10-03 去重）；
-                       完整时间线进 title 悬停 -->
-                  <span v-if="r.timelineDate" class="mk-cell-sub" :title="`阶段时间线 ${r.timeline}`">{{ r.timelineDate }}</span>
-                  <span v-else class="mk-na">—</span>
                 </div>
+              </td>
+              <td v-if="showCol('stageDate')">
+                <!-- 2026-10-15 用户拍板：日期自阶段格副行拆独立列。语义=时间线最后一站
+                     （已完成=完成日；进行中=进入当前阶段日；失败/取消=终态日），完整链路悬停可见 -->
+                <span v-if="r.timelineDate" :title="`阶段时间线 ${r.timeline}`">{{ r.timelineDate }}</span>
+                <span v-else class="mk-na">—</span>
               </td>
               <td v-if="showCol('turns')" class="mk-num">
                 <!-- 原型「澄清进度」列 = meter turns/targetTurns；本系统无目标轮次分母，
@@ -356,8 +367,10 @@ interface Row {
   stageIndex: number
   /** 轻量阶段时间线文本（如「创建 08-12 → 澄清中 08-13」；无数据为空串） */
   timeline: string
-  /** 时间线末条日期（副行只显日期，阶段词由徽章单源；全串进 title） */
+  /** 时间线末条日期（阶段日期列显示值，阶段词由徽章单源；全串进 title） */
   timelineDate: string
+  /** 时间线末站绝对时间（阶段日期列排序用；与 stageTimeline 末条同源） */
+  stageDateAbs: string
   regenerating?: boolean
 }
 
@@ -445,6 +458,7 @@ const gcColDefs = [
   { key: 'summary', label: '目标摘要', title: '对话目标摘要' },
   { key: 'status', label: '状态', title: '对话状态' },
   { key: 'stage', label: '阶段', title: '澄清阶段 + 过程点' },
+  { key: 'stageDate', label: '阶段日期', title: '阶段时间线最后一站：已完成=完成日，进行中=进入当前阶段日，失败/取消=终态日；悬停看完整链路' },
   { key: 'turns', label: '澄清进度', title: '学习者发言轮次（澄清深度）' },
   { key: 'constraints', label: '约束条件', title: '澄清中收集的可用时间 / 期限等约束' },
   { key: 'path', label: '路径', title: '路径是否已生成' },
@@ -454,7 +468,7 @@ const gcHiddenCols = ref<Set<string>>(new Set())
 
 /* 窄档列降级（UI 方案 §1 LAYOUT-3）：9 列 nowrap 表 1440 容器级横滚 151px（操作列被挤出）。
    ≤1599 收「约束条件」（真实数据稀疏、自然宽仅 ~83px）；≤1320 再收「创建时间」
-   （相对时间由阶段副行日期承载）。强制收起的列同时从 MkCols 菜单过滤，避免死开关。 */
+   （日期信号由「阶段日期」列承载，2026-10-15 该日期自阶段格副行拆为独立列）。强制收起的列同时从 MkCols 菜单过滤，避免死开关。 */
 const isMid = useIsNarrow(1600)
 const isCompact = useIsNarrow(1320)
 const GC_MID_HIDDEN = new Set(['constraints'])
@@ -605,9 +619,13 @@ function mapRow(c: Record<string, unknown>): Row {
       updatedAt: String(c.updatedAt || ''),
       completedAt: String(c.completedAt || '')
     }),
-    // 副行只留日期（阶段词由徽章单源承载），写法用「10月13日」而非裸「10-13」——
-    // 单看不再是数字区间的形状（2026-10-13 运营走查 F2）
+    // 写法用「10月13日」而非裸「10-13」——单看不再是数字区间的形状（2026-10-13 运营走查 F2）
     timelineDate: monthDayText(stageTl.at(-1)?.date || ''),
+    // 2026-10-15 用户拍板：阶段日期拆独立列。末站绝对时间与 stageTimeline 末条同源——
+    // 已完成=completedAt（缺则回落 createdAt），其余=updatedAt || createdAt；仅排序用
+    stageDateAbs: String(
+      (String(c.status || '').toLowerCase() === 'completed' ? (c.completedAt || c.createdAt) : (c.updatedAt || c.createdAt)) || ''
+    ),
   }
 }
 
@@ -619,6 +637,7 @@ const { toggle: toggleGcSort, sortState: gcSortState, sortRows: sortGcRows, sort
     user: (r) => r.userName,
     status: (r) => r.status,
     stage: (r) => r.stageIndex,
+    stageDate: (r) => r.stageDateAbs,
     turns: (r) => r.turns ?? -1,
     created: (r) => r.createdAtAbs
   },
