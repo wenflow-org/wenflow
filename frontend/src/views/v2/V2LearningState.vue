@@ -1908,6 +1908,15 @@ function loadGuidance() {
    判据：KPI 数字 16px（2026-09-24 用户指着统计卡数字说「数字也很大」后全站统一）、卡片内边距 12–16px、空态/加载留白 ≤32px。
    实测 390 下整页 3359px（最长的一页）。批19 起 KPI 卡墙改为体检卡（vitals），
    主数值桌面 34px、移动 24px 仍受密度口径约束。放在文件末尾：同权重下后出现者胜。 */
+@media (max-width: 640px) {
+  /* KPI 行：三卡在手机档占满整行后，「查看学习历史」换行落到第二行右侧、左边留大片空档
+     （grid flex-basis 460px 使卡片先吃满行宽；实测换行发生在约 616px 以下）。
+     手机档改成整宽、居中、与卡片同宽，从「孤零零挂右边」变成一次有意的次级动作（2026-10-15 走查）。
+     640 以上（平板/桌面）维持原「KPI 行 + 右侧入口」单行布局不动。 */
+  .kpis { flex-direction: column; align-items: stretch; gap: 10px; }
+  .kpis__grid { flex: 1 1 auto; width: 100%; }
+  .kpis__link { margin-left: 0; display: flex; justify-content: center; align-items: center; }
+}
 @media (max-width: 1100px) {
   /* 体检卡随原卡结构退役：.vitals__value / .vitals{padding} 两条移动规则已无对应元素（死 CSS 清理），
      现役的 .vitals--meta 是趋势卡内的单行状态条，不做卡级内边距 */
