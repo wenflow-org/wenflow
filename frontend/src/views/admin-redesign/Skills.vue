@@ -272,11 +272,10 @@
               <td v-if="showCol('calls')"><span class="mono">{{ s.calls }}</span></td>
               <td v-if="showCol('p95')"><span class="mk-na" title="暂无单 Skill 的 P95 耗时数据">—</span></td>
               <td v-if="showCol('rate')">
-                <!-- 行级设计（批C）：数字+比例条（与网格卡 sk-card__rate 同语言，消灭同页双形态）；
-                     精度/阈值/兜底走 rate-utils 单点（99.9% 不再显示 100%，无调用显「—」不显 0%） -->
+                <!-- 2026-10-15 用户拍板：成功率列只留百分比，比例条撤（数字+条双元素读作装饰噪音；
+                     精度/阈值/兜底仍走 rate-utils 单点，tone 着色保留在数字上） -->
                 <div class="sk-rate" :class="rateTone(s)" :title="rowRateTitle(s)">
                   <b>{{ successRateText(s.calls, s.errors) || '—' }}</b>
-                  <span v-if="s.calls" class="sk-rate__bar" aria-hidden="true"><i :style="{ width: (successRateOf(s.calls, s.errors) ?? 0) + '%' }"></i></span>
                 </div>
               </td>
               <td v-if="showCol('status')">
@@ -1238,13 +1237,8 @@ const routingMetaText = computed(() => {
 /* 指标阈值着色 */
 .sk-rate--bad { color: var(--mk-red); font-weight: 700; }
 .sk-rate--warn { color: var(--mk-amber); font-weight: 700; }
-/* 列表成功率列（批C）：数字+比例条 */
-.sk-rate { display: grid; gap: 3px; justify-items: end; }
+/* 列表成功率列：只留百分比（2026-10-15 用户拍板撤比例条），阈值着色（bad 红/warn 琥珀）在数字上 */
 .sk-rate b { font-variant-numeric: tabular-nums; }
-.sk-rate__bar { display: block; width: 56px; height: 4px; border-radius: var(--mk-radius-pill); background: var(--mk-line); overflow: hidden; }
-.sk-rate__bar i { display: block; height: 100%; border-radius: var(--mk-radius-pill); background: var(--mk-green); }
-.sk-rate--warn .sk-rate__bar i { background: var(--mk-amber); }
-.sk-rate--bad .sk-rate__bar i { background: var(--mk-red); }
 
 /* 归属 Agent 标签 */
 .sk-agent-tag {
