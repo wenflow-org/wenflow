@@ -111,7 +111,7 @@
             </div>
           </div>
           <div class="hero__ring">
-            <svg viewBox="0 0 120 120" width="120" height="120">
+            <svg viewBox="0 0 120 120" class="hero__ring-svg" aria-hidden="true">
               <circle cx="60" cy="60" r="52" fill="none" class="progress-track" stroke-width="10" />
               <circle
                 cx="60" cy="60" r="52" fill="none"
@@ -1652,6 +1652,9 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .hero__ring { position: relative; width: 120px; height: 120px; }
+/* svg 铺满容器而不是写死 120：窄屏容器收到 96 时，写死宽高的 svg 会被裁成 96×120、
+   环图与居中文字错位（2026-10-15 移动端重设计实测）。 */
+.hero__ring-svg { display: block; width: 100%; height: 100%; }
 .progress-track { stroke: var(--mk-surface-2); }
 .hero__ring circle[stroke="url(#v2ringGrad)"] { transition: stroke-dashoffset .6s ease; }
 .hero__ring-text {
@@ -1837,9 +1840,6 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1100px) {
   .detail__main { padding: 14px 14px 32px; }
-  .hero { grid-template-columns: 1fr; }
-  .hero__ring { justify-self: center; }
-  .hero h1 { font-size: 18px; }
   .detail__grid { grid-template-columns: 1fr; }
   /* 侧栏提前：aside 在 DOM 里位于阶段列表之后，单列下「进行到哪/学习资料」
      会垫在 2-4 屏外（2026-09-25 移动框架审查）；order:-1 提到阶段列表之前，
@@ -2261,10 +2261,30 @@ onBeforeUnmount(() => {
    进度环 120px 占 390 宽近 1/3、.sidecard 16×18、加载态 64px。
    放在文件末尾：同权重下后出现者胜（本文件有 4 个 style 块，基础规则在后面几块里）。 */
 @media (max-width: 1100px) {
-  .hero { padding: 16px 18px; gap: 12px; }
-  /* 120px 环 + 环内 22px 数字在 390 下太占地方；收到 96px、数字 16px（统计数字统一档） */
-  .hero__ring { width: 96px; height: 96px; }
+  /* ── Hero 移动端重设计（2026-10-15）──────────────────────────────
+     原单列把整块进度环甩到卡底、居中孤立，hero 撑到 415px 且环下留约 100px 死区。
+     改为「状态条 + 进度环」紧凑头：徽章与标题在左列，进度环锚在右上角（占两行、
+     收到 84px——再小装不下环内「整体进度」字样），描述/指标/动作整宽铺开。
+     hero__main 用 display:contents 拆成直接网格项摆位，不改 DOM 结构。 */
+  .hero {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    padding: 16px 18px;
+    gap: 10px 14px;
+  }
+  .hero__main { display: contents; }
+  .hero__tags { grid-column: 1; grid-row: 1; }
+  .hero h1 { grid-column: 1; grid-row: 2; font-size: 18px; align-self: center; }
+  .hero__ring {
+    grid-column: 2; grid-row: 1 / span 2;
+    align-self: center;
+    width: 84px; height: 84px;
+  }
   .hero__ring-text b { font-size: 16px; }
+  .hero__desc,
+  .hero__desc-toggle,
+  .hero__metrics,
+  .hero__actions { grid-column: 1 / -1; }
   .stages__empty { padding: 20px 16px; }
   .sidecard { padding: 12px 14px; }
   .sidecard strong { font-size: 14px; }
