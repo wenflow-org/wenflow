@@ -97,6 +97,7 @@ function makeVirtual(i: number, overrides: Record<string, unknown> = {}) {
     runningCount: 0,
     pausedCount: 0,
     failedCount: 0,
+    abandonedCount: 0,
     stalledCount: 0,
     runningSessionIds: [],
     pausedSessionIds: [],

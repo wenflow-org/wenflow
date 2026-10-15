@@ -2080,7 +2080,8 @@ async function removeSession(sessionId: string) {
   if (!sessionId || sessionBusy.value) return
   const ok = await askConfirm({
     title: '删除会话',
-    message: '确认删除该会话？\n运行记录将一并清理，该操作不可撤销。',
+    /* F22（2026-10-15）：原文「运行记录将一并清理」超出实现范围，按实际写明删除面与保留面 */
+    message: '确认删除该会话？\n将删除该会话及其课堂记录、目标对话与学习路径；该学习者的记忆、误解账本与调用遥测会保留。此操作不可撤销。',
     confirmText: '删除',
     busy: true
   })

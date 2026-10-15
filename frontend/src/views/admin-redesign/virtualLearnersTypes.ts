@@ -15,8 +15,10 @@ export interface VirtualLearnerRow {
   runningCount: number
   /** 已暂停自动驾驶的会话数（autopilot=stopped，会话数据保留） */
   pausedCount: number
-  /** 失败/放弃会话累计数（全量聚合） */
+  /** 失败/放弃会话累计数（全量聚合）。F20：含人为终止，分解见 abandonedCount 与单元格 title */
   failedCount: number
+  /** 人为终止（止停/回收/放弃）会话累计数（全量聚合，F20 与 failedCount 分列；旧缓存缺省 0） */
+  abandonedCount?: number
   /** 卡死（running 超回收阈值无写入）会话数 */
   stalledCount: number
   /** 进行中会话 id（会话样本内，用于「进行中」列直达座舱） */

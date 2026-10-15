@@ -43,6 +43,7 @@ import {
   findStaleSessionCandidates,
   findStaleSessionsForStats,
   findRunningSessionsByProfiles,
+  findRunningSessionsForStats,
   findTerminalSessions,
   countTodayVirtualAgentCalls,
   findSessionsByIdPair,
@@ -155,6 +156,19 @@ function isTeachingPausedSession(stageResults: string | null | undefined): boole
   try {
     const parsed = safeJsonParse<{ teaching?: { paused?: boolean } }>(String(stageResults || ''), {});
     return parsed?.teaching?.paused === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 自动驾驶已停止（用户暂停）的会话。运行中口径的分界：这类会话不再算「进行中」、
+ * 归入「已暂停」——列表逐画像与 /stats 全局必须同口径（F20 第二处，否则同名 running 两处不同值）。
+ */
+function isAutopilotStoppedSession(stageResults: string | null | undefined): boolean {
+  try {
+    const parsed = safeJsonParse<{ autopilot?: { status?: string } }>(String(stageResults || ''), {});
+    return parsed?.autopilot?.status === 'stopped';
   } catch {
     return false;
   }
@@ -1530,24 +1544,23 @@ router.get('/', async (req: Request, res) => {
     const countByStatus = (status: string) => statusAgg.find(s => s.status === status)?._count?._all ?? 0;
     const runningByProfile = new Map<string, number>();
     const failedByProfile = new Map<string, number>();
+    // F20 口径对齐 /stats（2026-10-15）：系统失败与人为终止分桶输出（failedCount/abandonedCount），
+    // 不再合并——合并口径下「1 次系统失败 + 10 次人为终止」与「11 次系统失败」读数相同，
+    // 运营信号（人设被反复手动停）与工程信号（系统在坏）无法区分。
+    const abandonedByProfile = new Map<string, number>();
     for (const agg of perProfileAgg) {
       const n = agg._count?._all ?? 0;
       if (agg.status === 'running') {
         runningByProfile.set(agg.virtualProfileId, n);
-      } else if (agg.status === 'failed' || agg.status === 'abandoned') {
-        failedByProfile.set(agg.virtualProfileId, (failedByProfile.get(agg.virtualProfileId) ?? 0) + n);
+      } else if (agg.status === 'failed') {
+        failedByProfile.set(agg.virtualProfileId, n);
+      } else if (agg.status === 'abandoned') {
+        abandonedByProfile.set(agg.virtualProfileId, n);
       }
     }
     // 运行中扣减：autopilot=stopped（用户暂停自动驾驶）的会话归入「已暂停」，不再算运行中
     const pausedByProfile = new Map<string, number>();
-    const isAutopilotStopped = (stageResultsJson: string | null | undefined): boolean => {
-      try {
-        const sr = JSON.parse(stageResultsJson || '{}');
-        return sr?.autopilot?.status === 'stopped';
-      } catch {
-        return false;
-      }
-    };
+    const isAutopilotStopped = isAutopilotStoppedSession;
     for (const s of runningSessionsAll) {
       if (!isAutopilotStopped(s.stageResults)) continue;
       runningByProfile.set(s.virtualProfileId, Math.max(0, (runningByProfile.get(s.virtualProfileId) ?? 0) - 1));
@@ -1643,6 +1656,8 @@ router.get('/', async (req: Request, res) => {
         // 已暂停自动驾驶的会话数（autopilot=stopped，会话数据保留）
         pausedCount: pausedByProfile.get(p.id) ?? 0,
         failedCount: failedByProfile.get(p.id) ?? 0,
+        // F20：与 failedCount 分列的人为终止数（/stats 的 abandoned 同口径）
+        abandonedCount: abandonedByProfile.get(p.id) ?? 0,
         stalledCount: staleByProfile.get(p.id) ?? 0,
         currentStage: runningSessions[0]?.currentStage || sessionSample[0]?.currentStage || null,
         runningSessionIds: runningSessions.map((s) => s.id),
@@ -1696,13 +1711,15 @@ router.get('/', async (req: Request, res) => {
  */
 router.get('/stats', async (req: Request, res) => {
   try {
-    const [statusAgg, profileCount, staleSessions, terminalSessions, todayVirtualCalls] = await Promise.all([
+    const [statusAgg, profileCount, staleSessions, terminalSessions, todayVirtualCalls, runningSessionsAll] = await Promise.all([
       getSessionStatusAggregates(),
       countProfiles(),
       findStaleSessionsForStats(staleThresholdAt()),
       findTerminalSessions(),
       // 今日虚拟/测试账号调用数（agent_call_logs）；仿真看板核心指标，与总览页真实口径互斥
-      countTodayVirtualAgentCalls()
+      countTodayVirtualAgentCalls(),
+      // F20 口径对齐列表（2026-10-15）：running 要扣 autopilot=stopped（已暂停），与逐画像 runningCount 同式
+      findRunningSessionsForStats()
     ]);
 
     const countByStatus = (status: string) => statusAgg.find(s => s.status === status)?._count?._all ?? 0;
@@ -1710,8 +1727,10 @@ router.get('/stats', async (req: Request, res) => {
     const completed = countByStatus('completed');
     const failed = countByStatus('failed');
     const abandoned = countByStatus('abandoned');
-    const running = countByStatus('running');
     const created = countByStatus('created');
+    // 运行中扣减与列表同式：autopilot=stopped（用户暂停自动驾驶）归「已暂停」，不算进行中
+    const paused = runningSessionsAll.filter((s) => isAutopilotStoppedSession(s.stageResults)).length;
+    const running = Math.max(0, countByStatus('running') - paused);
 
     // 卡死口径与 reclaim 服务同源：管理员暂停的会话无写入是预期行为，不算卡死
     const staleCandidates = staleSessions.filter((s) => !isTeachingPausedSession(s.stageResults));
@@ -1737,6 +1756,8 @@ router.get('/stats', async (req: Request, res) => {
         totalSessions: total,
         created,
         running,
+        // 已暂停（autopilot=stopped）的会话数：running 已不含它们，单独给出便于对账
+        paused,
         failed,
         abandoned,
         completed,
@@ -3550,6 +3571,9 @@ router.delete('/sessions/:sessionId', async (req: Request, res) => {
       if (!leasedSession) throw new Error('模拟会话不存在');
 
       let deletedTeachingCount = 0;
+      let deletedEvidenceCount = 0;
+      let deletedPredictionCount = 0;
+      const teachingSessionIds: string[] = [];
       await assertLeaseOwned();
       await withTransaction(async tx => {
         await assertLeaseOwned(tx);
@@ -3590,6 +3614,8 @@ router.delete('/sessions/:sessionId', async (req: Request, res) => {
             where: { OR: teachingSessionScopes },
             select: { id: true }
           });
+          // F22：教学会话 id 留给下面的会话级残留级联（learner_evidence/prediction_records）
+          teachingSessionIds.push(...associatedTeachingSessions.map((s: { id: string }) => s.id));
           if (associatedTeachingSessions.length > 0) {
             // R3 级联：虚拟学习者会话允许级联删除关联教学记录（虚拟数据可再生成）；
             // 真实用户会话仍保持原 409 保护，不触碰真实教学数据。
@@ -3625,15 +3651,24 @@ router.delete('/sessions/:sessionId', async (req: Request, res) => {
             }
           });
         }
+        /* F22 级联收口（2026-10-15）：会话键的会话级残留随删——证据流与预测记录。
+           两表的 sessionId 两套 id 空间都出现过（教学会话 id：teaching-checkpoint 等写入；
+           虚拟会话 UUID：churn/投影等按虚拟会话记），一并删除。
+           agent_call_logs 是成本/调用遥测（排查上游超时/失败的唯一回看面），保留不删；
+           memory_traces/learner_projections/misconception_ledger 按 userId 键控，
+           是画像跨会话资产，不随单个会话删除（确认框文案写明保留范围）。 */
+        const evidenceSessionIds = [...teachingSessionIds, sessionId];
+        deletedEvidenceCount = (await tx.learner_evidence.deleteMany({ where: { sessionId: { in: evidenceSessionIds } } })).count;
+        deletedPredictionCount = (await tx.prediction_records.deleteMany({ where: { sessionId: { in: evidenceSessionIds } } })).count;
         await tx.virtual_sessions.delete({
           where: { id: sessionId }
         });
       }, { label: 'virtual-learners.cascadeDeleteSession' });
 
-      return { session: leasedSession, deletedTeachingCount };
+      return { session: leasedSession, deletedTeachingCount, deletedEvidenceCount, deletedPredictionCount };
     }, { skipFinalLeaseCheck: true });
 
-    if (session.deletedTeachingCount > 0) {
+    if (session.deletedTeachingCount > 0 || session.deletedEvidenceCount > 0 || session.deletedPredictionCount > 0) {
       try {
         await createAdminAuditLog({
           data: {
@@ -3643,7 +3678,11 @@ router.delete('/sessions/:sessionId', async (req: Request, res) => {
             targetType: 'virtual-session',
             targetId: sessionId,
             beforeJson: JSON.stringify({ userId: session.session.userId }),
-            afterJson: JSON.stringify({ deletedTeachingSessions: session.deletedTeachingCount }),
+            afterJson: JSON.stringify({
+              deletedTeachingSessions: session.deletedTeachingCount,
+              deletedEvidence: session.deletedEvidenceCount,
+              deletedPredictions: session.deletedPredictionCount
+            }),
             method: 'DELETE',
             path: `/admin/virtual-learners/sessions/${sessionId}`,
             statusCode: 200,
@@ -3667,14 +3706,24 @@ router.delete('/sessions/:sessionId', async (req: Request, res) => {
     logger.info('删除模拟会话成功', {
       sessionId,
       userId: session.session.userId,
-      deletedTeachingCount: session.deletedTeachingCount
+      deletedTeachingCount: session.deletedTeachingCount,
+      deletedEvidenceCount: session.deletedEvidenceCount,
+      deletedPredictionCount: session.deletedPredictionCount
     });
-    
+
     res.json({
       success: true,
       message: '模拟会话已删除',
-      ...(session.deletedTeachingCount > 0
-        ? { data: { cleanup: { deletedTeachingSessions: session.deletedTeachingCount } } }
+      ...(session.deletedTeachingCount > 0 || session.deletedEvidenceCount > 0 || session.deletedPredictionCount > 0
+        ? {
+            data: {
+              cleanup: {
+                deletedTeachingSessions: session.deletedTeachingCount,
+                deletedEvidence: session.deletedEvidenceCount,
+                deletedPredictions: session.deletedPredictionCount
+              }
+            }
+          }
         : {})
     });
   } catch (error) {

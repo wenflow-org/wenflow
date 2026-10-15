@@ -167,6 +167,14 @@ export function findRunningSessionsByProfiles(profileIds: string[]) {
   });
 }
 
+/** 全局运行中会话（/stats 同口径细分用：running 扣 autopilot=stopped，与列表逐画像口径一致） */
+export function findRunningSessionsForStats() {
+  return prisma.virtual_sessions.findMany({
+    where: { status: 'running' },
+    select: { id: true, stageResults: true }
+  });
+}
+
 /** 终态会话（平均时长计算用） */
 export function findTerminalSessions() {
   return prisma.virtual_sessions.findMany({

@@ -252,7 +252,7 @@
                 type="button"
                 class="vl-faillink mk-num"
                 :class="{ 'vl-num--bad': s.failedCount > 0 }"
-                :title="s.failedCount > 0 ? `${s.failedCount} 个会话已失败/已终止` : '无失败/终止会话'"
+                :title="failCellTitle(s.failedCount, s.abandonedCount ?? 0)"
                 @click.stop="openSubPage('virtual', s.id)"
               >{{ s.failedCount }}</button>
             </td>
@@ -394,6 +394,7 @@ const samples = computed<Sample[]>(() =>
     runningCount: Number(v.runningCount || 0),
     pausedCount: Number(v.pausedCount || 0),
     failedCount: Number(v.failedCount || 0),
+    abandonedCount: Number(v.abandonedCount || 0),
     stalledCount: Number(v.stalledCount || 0),
     runningSessionIds: v.runningSessionIds,
     /* G2（2026-10-10）：已暂停会话 id 必须随行带出——否则 openRunningSession 的
@@ -407,6 +408,13 @@ const samples = computed<Sample[]>(() =>
 )
 
 const keyword = ref('')
+/** F20 口径分列（2026-10-15）：单元格 title 给系统失败/人为终止的分解——
+    合并数读不出「运营信号（人设被反复手动停）vs 工程信号（系统在坏）」的差别；
+    分解放进既有 tooltip，不加列（宽表压力不动） */
+function failCellTitle(failed: number, abandoned: number): string {
+  if (failed <= 0 && abandoned <= 0) return '无失败/终止会话'
+  return `系统失败 ${failed} · 人为终止 ${abandoned}（合计 ${failed + abandoned}）`
+}
 /** 状态过滤（轴 A 生命周期）：'all' = 全部 / running / paused / queued / failed / created
     （哨兵用 'all' 与 useListQueryState 的 pill 约定一致；URL 承载见下方 useListQueryState） */
 const stateFilter = ref('all')
@@ -424,7 +432,7 @@ const stateFilterOptions = computed(() => {
     // 否则 pill「已暂停 2」点进去只筛出 1 条（同时在跑的学习者被计入却被筛掉）
     { key: 'paused', label: '已暂停', count: n(count((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0)), hint: '当前无进行中会话、有暂停会话的学习者' },
     // P2（2026-10-02 人类可读性）：原名「需关注」读作当前异常，实为累计曾失败/被终止——正名 + 口径入 title
-    { key: 'failed', label: '曾失败', count: n(count((s) => s.failedCount > 0)), hint: '累计有失败/终止会话的虚拟学习者，非当前异常' },
+    { key: 'failed', label: '曾失败', count: n(count((s) => s.failedCount > 0)), hint: '累计有失败或终止会话的虚拟学习者，非当前异常。该数为系统失败+人为终止的合计，分解见「失败」列悬浮说明' },
   ]
 })
 /** live 虚拟人域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */

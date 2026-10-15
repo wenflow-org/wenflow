@@ -1473,8 +1473,11 @@ export interface LiveVirtual {
   runningCount: number
   /** 已暂停自动驾驶的会话数（autopilot=stopped，进度保留） */
   pausedCount: number
-  /** 失败/放弃的会话累计数（全量聚合） */
+  /** 失败/放弃的会话累计数（全量聚合）。F20：与 abandonedCount 分列前的历史字段，
+      仍含人为终止——分解看 abandonedCount，单元格 title 给两数 */
   failedCount: number
+  /** 人为终止（管理员止停/回收/放弃）的会话累计数（全量聚合，F20 与 failedCount 分列） */
+  abandonedCount: number
   /** 卡死（running 超 reclaim 阈值无写入）会话数 */
   stalledCount: number
   /** 运行中会话 id（会话样本内；用于「运行中」列直达座舱） */
@@ -1674,6 +1677,7 @@ async function fetchLiveVirtuals(): Promise<void> {
       runningCount: Number(p.runningCount ?? (runningSessions.length - pausedFallback.length) ?? 0),
       pausedCount: Number(p.pausedCount ?? pausedFallback.length ?? 0),
       failedCount: Number(p.failedCount ?? 0),
+      abandonedCount: Number(p.abandonedCount ?? 0),
       stalledCount: Number(p.stalledCount ?? 0),
       runningSessionIds: (Array.isArray(p.runningSessionIds) ? p.runningSessionIds : runningSessions.map((s) => String(s.id)))
         .map(String)

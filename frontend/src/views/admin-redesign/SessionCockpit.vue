@@ -108,6 +108,13 @@
       <span class="cp-healthstrip__text mono">{{ healthStrip.text }}</span>
     </div>
 
+    <!-- F27 超时读数条（2026-10-15）：失败徽章与 0/N 读数说不清「本课发生过什么」，首屏一条 note 带出
+         本任务回合 + 已完成节数 + 重试语义；复用 cp-advisory 条样式（amber 底），无新 CSS -->
+    <div v-if="timeoutReadout" class="cp-advisory" role="note">
+      <span class="mk-badge mk-badge--warn">授课超时</span>
+      <span class="cp-advisory__text">{{ timeoutReadout }}</span>
+    </div>
+
     <!-- ===== 统一控制台：该阶段操作（原阶段 tab 导航已收敛进「阶段推进」stepper，操作能力原样保留） =====
          v-if="!isRealMode"（2026-10-11 走查）：条内每个分支都以 !isRealMode 为前提
          （① 自动驾驶 / ② 阶段操作 / ③′ 黑盒入口），真实会话下恒无内容 → 此前只剩一条
@@ -1132,6 +1139,10 @@ const manualStopped = computed(() =>
   learningResult.value.manualStop === true
   || stageStatus.value.learning?.manualStop === true
 )
+/* F27：授课超时标记在 stageResults.learning.taskRuntime（teaching-session-ops 把 teaching 态
+   整包搬进 learning 分支再落 failed；teaching 分支仍是 active 态，不能读那边） */
+const teachingTimedOut = computed(() =>
+  normalized(asRecord(asRecord(stageResults.value.learning).taskRuntime).status) === 'timeout')
 /* 暂停标志：pause API 设 stageResults.teaching.paused = true（与 VirtualProfile 的读取位置一致） */
 const isPaused = computed(() =>
   learningResult.value.paused === true
@@ -1144,7 +1155,7 @@ const statusTitle = computed(() =>
     : terminalStatus.value === 'created'
       ? '会话未开始'
       : isFailedTerminal.value
-        ? manualStopped.value ? '已手动停止' : '会话失败'
+        ? manualStopped.value ? '已手动停止' : teachingTimedOut.value ? '会话失败 · 授课超时' : '会话失败'
         : isTerminal.value
           ? '会话已完成'
           : isPaused.value
@@ -1534,6 +1545,21 @@ const completedTaskCount = computed(() => {
 const hasCompletedTask = computed(() =>
   completedTaskCount.value > 0 || normalized(learningTaskRuntime.value.status) === 'completed'
 )
+/* F27 超时读数（2026-10-15）：授课超时把整条会话终局化为 failed，但徽章与 completedTasks
+   都说不清「本课发生过什么」——0/14 会被读成「什么都没学」。三个读数全是现成字段、不新增后端：
+   节数 = 行上 completedTasks/totalTasks（超时不改写它们，与路径实际已完成子任务逐条一致）；
+   本任务回合 = stageResults.learning.taskRuntime.turns（teaching.taskRuntime 会被逐课推进
+   removeStageResults:['teaching'] 重置，单用它约 1/7 读出假 0）。 */
+const timeoutReadout = computed(() => {
+  if (!teachingTimedOut.value) return null
+  const parts = ['本课未完整结束']
+  const turns = numberValue(asRecord(asRecord(stageResults.value.learning).taskRuntime).turns)
+  if (turns !== null && turns > 0) parts.push(`本任务已上 ${turns} 回合`)
+  const total = numberValue(session.value?.totalTasks)
+  parts.push(total !== null ? `已完成 ${completedTaskCount.value} / ${total} 节` : `已完成 ${completedTaskCount.value} 节`)
+  parts.push('已完成课程与路径进度保留；「重试」将重开本课，本课课堂记录不迁移')
+  return parts.join(' · ')
+})
 /* 课数读数单源（F2-1）：stepper「课程 x/y」/ Learn 卡头 / 学习总结卡头与卡内课时行
    一律取 learnLessons（Path 任务树 × 教学历史）里的同一份 done 判定，
    不再让 summary 顶层 completedTasks 与它并排成为第二个口径。

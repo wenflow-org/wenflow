@@ -120,11 +120,13 @@ export const VS_CONTROL_DEFS: Record<VsControlKey, VsControlDef> = {
   delete: {
     key: 'delete',
     label: '删除',
-    hint: '删除该会话的全部数据（仅限已结束的会话，不可恢复）',
+    /* F22（2026-10-15）：原文「全部数据」超出实现（会话+课堂/路径才删），按实际范围写，
+       并写明保留面——按 userId 键控的记忆/误解账本与 agent_call_logs 调用遥测不随会话删 */
+    hint: '删除该会话及其课堂/路径数据；该学习者的记忆、误解账本与调用遥测保留（仅限已结束的会话，不可恢复）',
     tone: 'danger',
     confirm: {
       title: '删除会话',
-      message: '将一并删除该会话及相关数据，不可恢复。确认？',
+      message: '将删除该会话及其课堂记录、目标对话与学习路径。\n该学习者的记忆、误解账本与调用遥测会保留。此操作不可撤销。确认？',
       confirmText: '删除'
     }
   },
