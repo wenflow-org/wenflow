@@ -269,9 +269,11 @@
               </td>
               <td v-if="showCol('version')"><span class="mono">{{ versionOf(s.id) }}</span></td>
               <td v-if="showCol('routing')"><span class="mono sk-model" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
-              <td v-if="showCol('calls')"><span class="mono">{{ s.calls }}</span></td>
-              <td v-if="showCol('p95')"><span class="mk-na" title="暂无单 Skill 的 P95 耗时数据">—</span></td>
-              <td v-if="showCol('rate')">
+              <!-- 调用/P95/成功率三格挂 mk-num（2026-10-15 用户走查）：表头 mk-th--right 右对齐，
+                   值格此前无 mk-num 左对齐，头与值各站一边；mk-num 同时补齐 mono/tabular 方言 -->
+              <td v-if="showCol('calls')" class="mk-num"><span class="mono">{{ s.calls }}</span></td>
+              <td v-if="showCol('p95')" class="mk-num"><span class="mk-na" title="暂无单 Skill 的 P95 耗时数据">—</span></td>
+              <td v-if="showCol('rate')" class="mk-num">
                 <!-- 2026-10-15 用户拍板：成功率列只留百分比，比例条撤（数字+条双元素读作装饰噪音；
                      精度/阈值/兜底仍走 rate-utils 单点，tone 着色保留在数字上） -->
                 <div class="sk-rate" :class="rateTone(s)" :title="rowRateTitle(s)">
