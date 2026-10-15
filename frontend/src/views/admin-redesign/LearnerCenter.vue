@@ -195,7 +195,7 @@
               </span>
             </td>
             <td v-if="!lcHiddenCols.has('fatigue')"><span class="mk-badge" :class="fatigueBadge(r.fatigue)">{{ r.fatigue }}</span></td>
-            <td v-if="!lcHiddenCols.has('conf')" class="mk-num">
+            <td v-if="!lcHiddenCols.has('conf')" class="mk-num lc-conf-cell">
               <span
                 v-if="r.confidence != null && r.task"
                 class="conf"
@@ -788,6 +788,12 @@ async function recomputeAll() {
 .conf__lack { font-style: normal; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-amber); background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
 .conf--low { color: var(--mk-amber); }
 .lc-conf__bar { width: 56px; flex-shrink: 0; }
+/* 置信格左对齐（2026-10-15 用户走查「百分比条不一样长」）：td.mk-num 的 text-align:right
+   让整组 inline-flex 随内容宽右对齐——「100%」比「60%」宽、低置信行还多一枚「证据不足」
+   徽章，于是每行的条起点/终点左右横跳（真机实测同列条起点差 69px），轨道虽恒 56px、
+   填充比例也对，但看起来「不一样长」。左对齐后所有轨道占据同一 x 区间，长度才可比；
+   表头本就左对齐（th 无 mk-th--right），格与头随之同侧。 */
+.lc-conf-cell { text-align: left; }
 
 @media (min-width: 2000px) {
   .risk-text { font-size: var(--mk-fs-body); }
