@@ -545,16 +545,20 @@ onMounted(async () => {
 
 /* 到期压力条：数字在上、比例条在下；右对齐与同列的数字表头对齐 */
 .mr__due { display: inline-flex; align-items: center; gap: 6px; }
-.mr__due b { font-variant-numeric: tabular-nums; font-weight: 700; }
+/* 数值盒定宽（2026-10-15 用户走查「百分比条不一样长」）：td.mk-num 右对齐下组宽随数值
+   文字宽变（「100%」比「64%」宽、「19」比「0」宽），每行条的起点左右横跳——轨道虽恒
+   64px、填充比例也对，看起来却「不一样长」。数值盒给定宽（内部右对齐）后组宽恒定，
+   条起点逐行对齐，数值右缘仍与右对齐表头同侧。 */
+.mr__due b { font-variant-numeric: tabular-nums; font-weight: 700; width: 26px; text-align: right; }
 .mr__due--none b { color: var(--mk-faint); font-weight: 400; }
 .mr__due--warn b { color: var(--mk-amber); }
 .mr__due--high b { color: var(--mk-red-strong); }
 /* 比例条走共享 mk-minibar（tone=warn/bad 由模板 data-tone 驱动）；页私有只留列内宽度 */
 .mr__bar { width: 64px; }
 
-/* 平均记忆强度格（原型 meterrow：小条 + mono %） */
+/* 平均记忆强度格（原型 meterrow：小条 + mono %）；% 盒定宽理由同 .mr__due b */
 .mr__strength { display: inline-flex; align-items: center; gap: 8px; }
-.mr__strength .mono { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.mr__strength .mono { color: var(--mk-muted); font-size: var(--mk-fs-micro); width: 34px; text-align: right; }
 
 /* 需人工看：>0 抬成琥珀胶囊；页私有只留数字对齐 */
 .mr__need { min-width: 22px; font-variant-numeric: tabular-nums; justify-content: center; }
