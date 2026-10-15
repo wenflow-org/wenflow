@@ -1,104 +1,50 @@
 <template>
-  <!-- 虚拟学习者压测参数（2026-10-13 自「虚拟学习者」页迁入「模型与接入 → 虚拟学习者」页签）：
-       三块可独立保存的设置同屏——速率上限 / 最高并发 / 日期模拟；分组由分段控件（.mk-seg）切换，
-       写控件与只读 KPI（留在原页）分离。搬迁理由：最高并发属「模型与接入」侧的上游容量治理，
-       与其余接入/路由设置同处管理；虚拟学习者页只管「启动多少」，上限由本页统一管控。 -->
-  <div class="mk-card vl-settings">
-    <div class="mk-card__head">
-      <h3 class="mk-card__title">压测参数</h3>
-      <div class="mk-card__head-right">
-        <div class="mk-seg" role="group" aria-label="压测参数视图">
-          <button
-            type="button"
-            class="mk-seg__item"
-            :class="{ 'mk-seg__item--active': settingsTab === 'rate' }"
-            :aria-pressed="settingsTab === 'rate'"
-            @click="settingsTab = 'rate'"
-          >速率上限</button>
-          <button
-            type="button"
-            class="mk-seg__item"
-            :class="{ 'mk-seg__item--active': settingsTab === 'concurrency' }"
-            :aria-pressed="settingsTab === 'concurrency'"
-            @click="settingsTab = 'concurrency'"
-          >最高并发</button>
-          <button
-            type="button"
-            class="mk-seg__item"
-            :class="{ 'mk-seg__item--active': settingsTab === 'date' }"
-            :aria-pressed="settingsTab === 'date'"
-            @click="settingsTab = 'date'"
-          >
-            日期模拟<span v-if="dateSimEnabled" class="vl-settings__on">已开启</span>
-          </button>
-        </div>
+  <!-- 虚拟学习者通道的两项容量设置（2026-10-15 用户重组）：自「模型与接入 → 虚拟学习者」页签的
+       独立卡片，收进「路由与调用 → AI 调用与健康」卡的「调用参数」栅格——自动驾驶并发上限与
+       日期模拟都属「调用怎么走、上游容量多少」，与同卡的出站速率同族。
+       不再自带卡片外壳与分段控件（原三段视图切换：速率上限 / 最高并发 / 日期模拟）：
+       速率上限已并入同卡的「出站速率」组（与平台全局上限同行，见 ApiConfig），
+       本组件只剩两项，各自独立保存，分组标题由宿主的 ac-group 承担。 -->
+  <div class="vl-settings">
+    <div class="vl-settings__block">
+      <div
+        class="vl-settings__label"
+        title="同时在跑的自动驾驶会话数上限。超出即排队（先到先服务），有空位自动开始运行。与平台全局出站速率相互独立"
+      >最高并发</div>
+      <div class="vl-settings__row">
+        <input
+          v-model.number="concurrencyInput"
+          type="number"
+          min="1"
+          max="200"
+          step="1"
+          class="mk-field__input vl-rpm__input"
+          aria-label="自动驾驶最高并发上限"
+          :disabled="loadFailed"
+          :title="loadFailed ? LOAD_FAILED_EDIT_TITLE : undefined"
+          @input="concurrencyDirty = true"
+          @keydown.enter.prevent="saveConcurrency"
+        />
+        <span class="vl-rpm__unit">个会话</span>
+        <button
+          type="button"
+          class="mk-btn mk-btn--sm"
+          :disabled="!concurrencyDirty || saving || loadFailed"
+          @click="saveConcurrency"
+        >
+          {{ saving ? '保存中…' : '保存' }}
+        </button>
+        <span v-if="concurrencyDirty" class="vl-rpm__dirty">未保存</span>
+        <span v-if="loadFailed" class="vl-rpm__failed" role="alert">{{ LOAD_FAILED_SAVE_NOTE }}</span>
+        <span v-else class="vl-rpm__hint">1–200 · 超出按序排队，仍可继续提交启动</span>
       </div>
     </div>
 
-    <div v-show="settingsTab === 'rate'" class="vl-settings__pane">
-      <label
-        class="mk-field mk-field--row"
-        title="虚拟学习者专属出站上限（每分钟调用数）。与平台全局速率相互独立，不挤占真实用户额度"
-      >
-        <span class="mk-field__label">出站速率上限</span>
-        <span class="vl-rpm__ctl">
-          <input
-            v-model.number="rpmInput"
-            type="number"
-            min="0"
-            max="100000"
-            step="10"
-            class="mk-filter__input vl-rpm__input"
-            aria-label="虚拟学习者专属出站 RPM 上限"
-            :disabled="loadFailed"
-            :title="loadFailed ? LOAD_FAILED_EDIT_TITLE : undefined"
-            @input="rpmDirty = true"
-            @keydown.enter.prevent="saveRpm"
-          />
-          <span class="vl-rpm__unit">/分</span>
-        </span>
-      </label>
-      <button type="button" class="mk-btn mk-btn--sm" :disabled="!rpmDirty || saving === 'rpm' || loadFailed" @click="saveRpm">
-        {{ saving === 'rpm' ? '保存中…' : '保存' }}
-      </button>
-      <span v-if="rpmDirty" class="vl-rpm__dirty">未保存</span>
-      <span v-if="loadFailed" class="vl-rpm__failed" role="alert">{{ LOAD_FAILED_SAVE_NOTE }}</span>
-      <span v-else class="vl-rpm__hint">虚拟学习者专属 · 0 为不限 · 不占真实用户额度</span>
-    </div>
-
-    <div v-show="settingsTab === 'concurrency'" class="vl-settings__pane">
-      <label
-        class="mk-field mk-field--row"
-        title="同时在跑的自动驾驶会话数上限。超出即排队（先到先服务），有空位自动开始运行。与「速率上限」相互独立"
-      >
-        <span class="mk-field__label">最高并发</span>
-        <span class="vl-rpm__ctl">
-          <input
-            v-model.number="concurrencyInput"
-            type="number"
-            min="1"
-            max="200"
-            step="1"
-            class="mk-filter__input vl-rpm__input"
-            aria-label="自动驾驶最高并发上限"
-            :disabled="loadFailed"
-            :title="loadFailed ? LOAD_FAILED_EDIT_TITLE : undefined"
-            @input="concurrencyDirty = true"
-            @keydown.enter.prevent="saveConcurrency"
-          />
-          <span class="vl-rpm__unit">个会话</span>
-        </span>
-      </label>
-      <button type="button" class="mk-btn mk-btn--sm" :disabled="!concurrencyDirty || saving === 'limit' || loadFailed" @click="saveConcurrency">
-        {{ saving === 'limit' ? '保存中…' : '保存' }}
-      </button>
-      <span v-if="concurrencyDirty" class="vl-rpm__dirty">未保存</span>
-      <span v-if="loadFailed" class="vl-rpm__failed" role="alert">{{ LOAD_FAILED_SAVE_NOTE }}</span>
-      <span v-else class="vl-rpm__hint">同时在跑会话数上限 · 1–200 · 超出按序排队，仍可继续提交启动</span>
-    </div>
-
-    <div v-show="settingsTab === 'date'" class="vl-settings__pane">
-      <SimulatedDaySettings @enabled="dateSimEnabled = $event" />
+    <div class="vl-settings__block">
+      <div class="vl-settings__label" title="把平台「当前日期」按偏移量前移/后移，用于验证跨日衰减、到期与复习节奏">日期模拟</div>
+      <!-- 日期模拟挪出分段视图后不再需要「已开启」角标（原角标挂在被选中的分段项上）；
+           开关状态由 SimulatedDaySettings 自己的控件呈现 -->
+      <SimulatedDaySettings />
     </div>
   </div>
 </template>
@@ -114,30 +60,17 @@ import SimulatedDaySettings from './SimulatedDaySettings.vue'
 const LOAD_FAILED_EDIT_TITLE = '设置未加载：为避免用默认值覆盖已保存的配置，已禁用编辑'
 const LOAD_FAILED_SAVE_NOTE = '设置未加载，保存已禁用（请刷新重试）'
 
-/** 压测参数三视图（速率上限 / 最高并发 / 日期模拟）；默认速率上限（日常位） */
-const settingsTab = ref<'rate' | 'concurrency' | 'date'>('rate')
-/** 日期模拟开启态（徽标）：由 SimulatedDaySettings 回传 */
-const dateSimEnabled = ref(false)
-
-/* 速率上限（RPM，0=不限）：与「最高并发」相互独立，各自保存 */
-const rpmInput = ref(0)
-const rpmDirty = ref(false)
-
 /* 最高并发（自动驾驶全局并发上限，1–200） */
 const concurrencyInput = ref(1)
 const concurrencyDirty = ref(false)
-
-/** 保存中位：'rpm' | 'limit' | null（两个设置块共用忙碌态文案） */
-const saving = ref<'rpm' | 'limit' | null>(null)
-/** 设置未加载位：getVirtualLabSettings 失败时置位——两个写控件禁用，禁止拿初始值覆盖服务端配置 */
+const saving = ref(false)
+/** 设置未加载位：getVirtualLabSettings 失败时置位——写控件禁用，禁止拿初始值覆盖服务端配置 */
 const loadFailed = ref(false)
 
 async function loadSettings() {
   try {
     const res = await adminVirtualLearnersApi.getVirtualLabSettings()
     const s = res.data?.data?.settings ?? {}
-    const rpm = Number(s.virtualLearnerRpmLimit ?? 0)
-    if (!rpmDirty.value) rpmInput.value = rpm
     const limit = Math.max(1, Number(s.autopilotConcurrencyLimit ?? 1))
     if (!concurrencyDirty.value) concurrencyInput.value = limit
     loadFailed.value = false
@@ -147,27 +80,11 @@ async function loadSettings() {
   }
 }
 
-async function saveRpm() {
-  if (saving.value || !rpmDirty.value || loadFailed.value) return
-  const value = Math.max(0, Math.min(100000, Math.round(Number(rpmInput.value) || 0)))
-  rpmInput.value = value
-  saving.value = 'rpm'
-  try {
-    await adminVirtualLearnersApi.updateVirtualLabSettings({ virtualLearnerRpmLimit: value })
-    rpmDirty.value = false
-    toast.success(value > 0 ? `虚拟学习者 RPM 上限已设为 ${value}` : '虚拟学习者 RPM 已设为不限')
-  } catch (e) {
-    toast.error(errMsg(e) || '保存失败')
-  } finally {
-    saving.value = null
-  }
-}
-
 async function saveConcurrency() {
   if (saving.value || !concurrencyDirty.value || loadFailed.value) return
   const value = Math.max(1, Math.min(200, Math.round(Number(concurrencyInput.value) || 1)))
   concurrencyInput.value = value
-  saving.value = 'limit'
+  saving.value = true
   try {
     await adminVirtualLearnersApi.updateVirtualLabSettings({ autopilotConcurrencyLimit: value })
     concurrencyDirty.value = false
@@ -175,7 +92,7 @@ async function saveConcurrency() {
   } catch (e) {
     toast.error(errMsg(e) || '保存失败')
   } finally {
-    saving.value = null
+    saving.value = false
   }
 }
 
@@ -185,17 +102,11 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 压测参数卡：标题与视图切换进 .mk-card__head（分段控件贴右、宽随内容），卡体只放当前设置行。
-   类名沿用迁入前的 .vl-settings/.vl-rpm（页内私有前缀，非共享 .mk-*），随组件迁移。 */
-.vl-settings { flex: none; }
-.vl-settings__pane { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px 14px; }
-.vl-settings__on {
-  margin-left: 6px;
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  color: var(--mk-green);
-}
-.vl-rpm__ctl { display: inline-flex; align-items: center; gap: 8px; }
+/* 两项设置内联进宿主的「调用参数」栅格：自身不再有卡片边框，节奏交由宿主的 ac-group 承担 */
+.vl-settings { display: grid; gap: 12px; }
+.vl-settings__block { display: grid; gap: 8px; min-width: 0; }
+.vl-settings__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
+.vl-settings__row { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; }
 .vl-rpm__input { width: 84px; }
 .vl-rpm__unit {
   font-size: var(--mk-fs-micro);

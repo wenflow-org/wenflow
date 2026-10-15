@@ -379,23 +379,25 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('压测参数卡并入「路由与调用」（2026-10-14 页签收敛：原独立页签实测 ~85% 死区）', async () => {
+  it('虚拟学习者通道并入「调用参数」栅格（2026-10-15 用户重组：卡片外壳与三段视图切换退役）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    // 收敛后不再有「虚拟学习者」页签，限流设置随「路由与调用」渲染
+    // 收敛后不再有「虚拟学习者」页签，也不再有独立「压测参数」卡
     expect(wrapper.findAll('.mk-subtab').map((b) => b.text()).some((t) => t.includes('虚拟学习者'))).toBe(false);
     await gotoTab(wrapper, '路由与调用');
     expect(wrapper.find('.vl-settings').exists()).toBe(true);
-    const labels = wrapper.findAll('.vl-settings .mk-seg__item').map((b) => b.text());
-    expect(labels.some((t) => t.includes('速率上限'))).toBe(true);
-    expect(labels.some((t) => t.includes('最高并发'))).toBe(true);
-    expect(labels.some((t) => t.includes('日期模拟'))).toBe(true);
+    // 两项设置内联渲染（速率上限已并入「出站速率」组，与平台全局上限同行）
+    const labels = wrapper.findAll('.vl-settings__label').map((b) => b.text());
+    expect(labels).toEqual(['最高并发', '日期模拟']);
+    expect(wrapper.text()).toContain('出站速率');
+    expect(wrapper.text()).toContain('平台全局 RPM 上限（0=不限）');
+    expect(wrapper.text()).toContain('虚拟学习者 RPM 上限（0=不限）');
     wrapper.unmount();
   });
 
-  /* 注册表按域切片（2026-10-14）：默认路由（解析结果）与别名映射是路由域事实，归「路由与调用」；
-     供应商 / 能力限额 / 冷却 / 配置提示留在「接入与模型」。两页签各挂一份切片（同一份接口）。 */
-  it('注册表切片：接入页只留观测分区，路由两分区随「路由与调用」渲染', async () => {
+  /* 注册表按域切片（2026-10-14；2026-10-15 重组）：别名映射是路由域事实，归「路由与调用」；
+     供应商 / 能力限额（含状态列）留在「接入与模型」；默认路由解析结果改宿主行内展示，切片退役。 */
+  it('注册表切片：接入页留观测分区，路由页只留别名映射（默认收起）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
     await flushPromises();
@@ -408,14 +410,19 @@ describe('ApiConfig P1 修复批', () => {
 
     await gotoTab(wrapper, '路由与调用');
     await flushPromises();
-    // 同一时刻只挂一份：接入页那份随 v-if 卸载，路由页这份只带两个分区
+    // 同一时刻只挂一份：接入页那份随 v-if 卸载，路由页这份只带别名映射一个分区
     expect(wrapper.findAll('.ac-registry')).toHaveLength(1);
     const routing = wrapper.find('.ac-registry--routing');
     expect(routing.exists()).toBe(true);
-    expect(routing.text()).toContain('默认路由（解析结果）');
     expect(routing.text()).toContain('别名映射');
+    expect(routing.text()).not.toContain('默认路由（解析结果）');
     expect(routing.text()).not.toContain('模型供应商');
-    // 切片仍是注册表本体（失败态/刷新入口随组件走），且不因此冒出写入口
+    // 默认收起的折叠条（details 未开时内容仍在 DOM，但折叠条文案常显）
+    const foldBar = wrapper.find('.ac-fold__bar');
+    expect(foldBar.exists()).toBe(true);
+    expect(foldBar.text()).toContain('内置别名映射表');
+    expect(wrapper.find('.ac-fold').attributes('open')).toBeUndefined();
+    // 切片仍是注册表本体（失败态随组件走），且不因此冒出写入口
     expect(wrapper.text()).not.toContain('保存连接');
     wrapper.unmount();
   });
@@ -562,8 +569,11 @@ describe('ApiConfig P1 修复批', () => {
     await flushPromises();
     await nextTick();
     expect(wrapper.text()).toContain('上次探测失败');
-    // 服务端记下的失败码在页面上可见（不再只剩泛化的「能力状态正在确认」）
-    expect(wrapper.text()).toContain('PROBE_TIMEOUT');
+    // 服务端记下的失败码仍可见（2026-10-15 能力健康改成紧凑胶囊：结论「待确认」常显在胶囊上，
+    // 失败码 / 耗时 / 探测时间收进 title——不再是一行大表）
+    const pill = wrapper.find('.ac-hpill');
+    expect(pill.exists()).toBe(true);
+    expect(pill.attributes('title')).toContain('PROBE_TIMEOUT');
     expect(wrapper.findAll('button').some((b) => b.text() === '重试')).toBe(true);
     wrapper.unmount();
   });

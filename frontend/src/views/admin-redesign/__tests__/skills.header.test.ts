@@ -11,8 +11,9 @@ import Skills from '../Skills.vue';
 import { dataSource, liveSkillStatsMap, intent } from '../store';
 import { liveSkillProfiles } from '../live';
 
-const { getReconciliationMock } = vi.hoisted(() => ({
+const { getReconciliationMock, getEvalRunsMock } = vi.hoisted(() => ({
   getReconciliationMock: vi.fn(),
+  getEvalRunsMock: vi.fn(),
 }));
 
 function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
@@ -43,7 +44,10 @@ vi.mock('@/api/adminApi', () => ({
   adminFeedbackApi: apiObject(),
   adminGoalConversationsApi: apiObject(),
   adminRuntimeDefinitionsApi: apiObject(),
-  adminPromptOpsApi: apiObject(),
+  adminPromptOpsApi: apiObject({
+    getEvalRuns: getEvalRunsMock,
+    getEvalCases: vi.fn(async () => ({ data: { data: [] } })),
+  }),
   adminHealthCenterApi: apiObject(),
   adminVirtualLearnersApi: apiObject(),
   adminSessionsApi: apiObject(),
@@ -141,6 +145,20 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     })
     expect(kpiOf(w, '成功率')!.find('.mk-kpi__num').text()).toBe('99.9%')
     expect(w.text()).not.toContain('100%')
+    w.unmount()
+  })
+
+  it('KPI 卡带：Prompt 评估页签的读数带在宿主槽位（面板经 kpiView 供出，2026-10-15 迁位）', async () => {
+    getEvalRunsMock.mockResolvedValue({ data: { data: Array.from({ length: 3 }, (_, i) => ({ id: `run-${i}`, agentId: 'skill:goal-conversation', promptVersion: 1, promptSource: 'active', mode: 'eval-set', caseCount: 2, totalRuns: 2, summary: { passRate: 100, passedCount: 2, totalRuns: 2, repeatCount: 1 }, durationMs: 900, createdAt: new Date().toISOString() })) } })
+    const w = await mountSkills()
+    await (w.vm as any).switchTab('prompt-eval')
+    // 面板是 defineAsyncComponent：异步分片解析 + 挂载 + ref 回填，用 waitFor 等这一刻
+    await vi.waitFor(() => {
+      expect(kpiOf(w, '评估历史')!.find('.mk-kpi__num').text()).toBe('3')
+    })
+    // 带在「页头之下、页签栏之上」的宿主槽位，随页签 v-if 渲染
+    const labels = w.findAll('.mk-kpi-grid .mk-kpi__label').map((el) => el.text().trim())
+    expect(labels).toEqual(['最近评测通过率', '评估用例', '评估历史'])
     w.unmount()
   })
 

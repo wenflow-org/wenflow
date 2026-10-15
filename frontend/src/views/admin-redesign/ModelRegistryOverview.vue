@@ -13,47 +13,9 @@
     <MkLoading v-else-if="!data" inline text="加载中…" />
 
     <template v-else>
-      <!-- 五个关注点折成一张连续分区卡（批24）：同构 5 卡堆叠是"数据库文档页"观感，
-           分区由卡头分隔线承担；表内数据语义不变 -->
+      <!-- 分区卡（批24；2026-10-15 用户重组）：默认路由解析结果改为宿主行内展示（「所配即所得」），
+           部署冷却落进限额表「状态」列、配置提示落进行级徽标 + 表尾注——三个尾巴分区随之退役 -->
       <section class="mk-card">
-        <!-- ① 默认路由：配置值 → 解析结果（回答"改成别名后到底用哪个模型"） -->
-        <section v-if="shows('routes')" class="ac-mr-sect">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">默认路由（解析结果）</h3>
-          </div>
-          <div class="mk-table-scroll">
-            <table class="mk-table mk-table--dense">
-              <thead>
-                <tr><th>用途</th><th>配置值</th><th>实际使用</th><th>来源</th></tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>对话默认</td>
-                  <td class="mono">{{ data.defaults.defaultModelConfigured ?? '未设置' }}</td>
-                  <td class="mono">{{ data.defaults.defaultModelResolved ?? '—' }}</td>
-                  <td><span class="mk-badge" :class="sourceBadge(data.defaults.defaultModelSource)">{{ sourceLabel(data.defaults.defaultModelSource) }}</span></td>
-                </tr>
-                <tr>
-                  <td>推理默认</td>
-                  <td class="mono">{{ data.defaults.defaultReasoningModelConfigured ?? '未设置' }}</td>
-                  <td class="mono">{{ data.defaults.defaultReasoningModelResolved ?? '—' }}</td>
-                  <td><span class="mk-badge" :class="sourceBadge(data.defaults.defaultReasoningModelSource)">{{ sourceLabel(data.defaults.defaultReasoningModelSource) }}</span></td>
-                </tr>
-                <tr>
-                  <!-- 评估默认：宿主「默认路由 x/3」按对话/推理/评估三档计数，本表须三行齐全；
-                       后端 /model-registry 暂未下发评估档字段，先渲染 '—' 占位（数据源待后端补齐后自动展示） -->
-                  <td>评估默认</td>
-                  <td class="mono">{{ data.defaults.defaultEvaluationModelConfigured ?? '—' }}</td>
-                  <td class="mono">{{ data.defaults.defaultEvaluationModelResolved ?? '—' }}</td>
-                  <td>
-                    <span v-if="data.defaults.defaultEvaluationModelSource" class="mk-badge" :class="sourceBadge(data.defaults.defaultEvaluationModelSource)">{{ sourceLabel(data.defaults.defaultEvaluationModelSource) }}</span>
-                    <span v-else class="mono">—</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
 
         <!-- ② 别名映射：一处切换的落点 -->
         <section v-if="shows('aliases')" class="ac-mr-sect">
@@ -147,7 +109,8 @@
           />
         </section>
 
-        <!-- ③ 模型能力与限额：目录文件 = 唯一写源 -->
+        <!-- ③ 模型能力与限额：目录文件 = 唯一写源。状态列（2026-10-15 用户重组）：
+             部署冷却从独立尾巴卡落进行内；模型级配置提示以 ⚠ 徽标挂行（全串进 title） -->
         <section v-if="shows('limits')" class="ac-mr-sect">
           <div class="mk-card__head">
             <h3 class="mk-card__title">模型能力与限额</h3>
@@ -157,7 +120,7 @@
             <table class="mk-table mk-table--dense">
               <thead>
                 <tr>
-                  <th>模型</th><th>供应商</th><th>档位</th><th>思考</th><th>推理强度</th>
+                  <th>模型</th><th>状态</th><th>供应商</th><th>档位</th><th>思考</th><th>推理强度</th>
                   <th>输出上限</th><th>默认输出</th><th>推理预留</th><th>并发上限</th><th>备用模型</th>
                 </tr>
               </thead>
@@ -166,6 +129,17 @@
                   <td>
                     <span class="mono">{{ model.id }}</span>
                     <span class="ac-mr-label">{{ model.label }}</span>
+                  </td>
+                  <td>
+                    <span v-if="cooldownOf(model)" class="mk-badge mk-badge--warn" :title="`该部署已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(model)!.remainingMs / 1000)}s）`">
+                      ⏳ 冷却中（剩余 {{ Math.ceil(cooldownOf(model)!.remainingMs / 1000) }}s）
+                    </span>
+                    <span v-else class="mk-badge mk-badge--ok" title="该部署无冷却记录">● 健康</span>
+                    <span
+                      v-if="modelWarnings(model).length"
+                      class="mk-badge mk-badge--warn ac-mr-rowwarn"
+                      :title="modelWarnings(model).join('\n')"
+                    >⚠</span>
                   </td>
                   <td>
                     <span class="mono">{{ model.providerId }}</span>
@@ -200,44 +174,13 @@
               </tbody>
             </table>
           </div>
-        </section>
-
-        <!-- ④ 部署冷却（进程内快照，只有真的触发过降级/限流时才有内容） -->
-        <section v-if="shows('cooldown')" class="ac-mr-sect">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">部署冷却</h3>
-            <span class="mk-card__meta">冷却中的部署在降级时会被跳过</span>
-          </div>
-          <div v-if="data.cooldowns.length" class="mk-table-scroll">
-            <table class="mk-table mk-table--dense">
-              <thead><tr><th>提供方</th><th>端点</th><th>模型</th><th>剩余</th></tr></thead>
-              <tbody>
-                <tr v-for="item in data.cooldowns" :key="item.key">
-                  <td class="mono">{{ item.providerId }}</td>
-                  <td class="mono">{{ item.endpoint }}</td>
-                  <td class="mono">{{ item.model }}</td>
-                  <td class="mono">{{ Math.ceil(item.remainingMs / 1000) }}s</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <MkEmptyState v-else compact title="当前没有冷却中的部署（部署全部健康）。" />
-        </section>
-
-        <!-- ⑤ 配置漂移告警 -->
-        <section v-if="shows('tips')" class="ac-mr-sect">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">配置提示</h3>
-            <span class="mk-card__meta">未注册的模型 / 空别名 / 未被引用的模型 / 已废弃的提示词模型引用</span>
-          </div>
-          <div v-if="data.warnings.length" class="ac-mr-warnings">
-            <!-- 配置提示 = 警示语义：走 .note--warn 琥珀档（.mk-alert 本体红档留给错误，
-                 不存在的 mk-alert--warn 幽灵类已删，改由容器覆写着色） -->
-            <div v-for="(warning, index) in data.warnings" :key="index" class="mk-alert mk-alert--row" role="alert">
+          <!-- 非模型级配置提示（2026-10-15 用户重组：原「配置提示」独立卡退役）：
+               目录兜底 / 密钥缺失 / 别名类告警无法挂到某一行，收在表尾一条注（无则不渲染，不留空卡） -->
+          <div v-if="globalWarnings.length" class="ac-mr-warnings">
+            <div v-for="(warning, index) in globalWarnings" :key="index" class="mk-alert mk-alert--row" role="alert">
               <span class="mk-alert__msg">{{ warning }}</span>
             </div>
           </div>
-          <MkEmptyState v-else compact title="没有发现配置不一致。" />
         </section>
       </section>
     </template>
@@ -245,7 +188,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { adminApiConfigApi } from '@/api/adminApi'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -326,25 +269,43 @@ interface ModelRegistryOverviewData {
   deprecatedPromptModelCount: number
 }
 
-/* 分区裁剪（2026-10-14 用户拍板）：宿主按域挂本组件的不同切片——
-   「默认路由（解析结果）/ 别名映射」是路由域事实，归「路由与调用」页签；供应商 /
-   能力限额 / 冷却 / 配置提示留在「接入与模型」。切片只裁剪渲染范围，数据仍是一次
-   getModelRegistry（同一时刻只有一个页签的实例挂载，不产生重复请求）。 */
-type MrPart = 'routes' | 'aliases' | 'providers' | 'limits' | 'cooldown' | 'tips'
+/* 分区裁剪（2026-10-14 用户拍板，2026-10-15 用户重组后收敛为三片）：宿主按域挂本组件的切片——
+   「别名映射」是路由域事实，归「路由与调用」页签；供应商 / 能力限额（含状态列：冷却 + 行级提示）
+   留在「接入与模型」。原 routes（解析结果）/ cooldown / tips 三片退役：解析结果改由宿主
+   「所配即所得」行内展示（defaults 经 emit 供出）、冷却与模型级提示落限额表状态列、
+   非模型级提示收在表尾注。切片只裁剪渲染范围，数据仍是一次 getModelRegistry。 */
+type MrPart = 'aliases' | 'providers' | 'limits'
 /* 默认值就地写死（不能引用本地常量：defineProps 会被提升到 setup 之外，编译器会拦下） */
 const props = withDefaults(defineProps<{ parts?: MrPart[] }>(), {
-  parts: () => ['routes', 'aliases', 'providers', 'limits', 'cooldown', 'tips']
+  parts: () => ['aliases', 'providers', 'limits']
 })
 const shows = (p: MrPart) => props.parts.includes(p)
 
 const emit = defineEmits<{
   count: [payload: { models: number; warnings: number }]
   aliases: [aliases: string[]]
+  /** 路由解析结果回传宿主（2026-10-15「所配即所得」）：宿主在三条角色行下展示
+   *  「实际生效 / 来源 / 降级备用」，原解析结果表退役 */
+  defaults: [payload: { defaults: ModelRegistryOverviewData['defaults']; models: ModelRegistryOverviewData['models']; runtime?: ModelRegistryOverviewData['runtime'] }]
 }>()
 
 const data = ref<ModelRegistryOverviewData | null>(null)
 const failed = ref(false)
 const errorText = ref('')
+
+/** 行级状态（2026-10-15）：该模型所属部署是否在熔断冷却中（providerId + model 双键匹配） */
+function cooldownOf(model: ModelRegistryOverviewData['models'][number]) {
+  return (data.value?.cooldowns ?? []).find((c) => c.model === model.id && c.providerId === model.providerId) ?? null
+}
+
+/** 模型级配置提示（warning 文案里以「模型「id」」包住的，挂到对应行；其余走 globalWarnings） */
+function modelWarnings(model: ModelRegistryOverviewData['models'][number]): string[] {
+  return (data.value?.warnings ?? []).filter((w) => w.includes(`模型「${model.id}」`))
+}
+const globalWarnings = computed(() => {
+  const models = data.value?.models ?? []
+  return (data.value?.warnings ?? []).filter((w) => !models.some((m) => w.includes(`模型「${m.id}」`)))
+})
 
 const router = useRouter()
 /** 空态出口（R6D）：跳到接入配置所在的「接入与模型」页签，路由与页签参数均为既有契约 */
@@ -360,16 +321,8 @@ function effectiveFallbacks(fallbacks: string[]): string[] {
   return fallbacks.slice(0, Math.max(0, runtimeMaxCandidates() - 1))
 }
 
-function sourceLabel(source: 'alias' | 'concrete' | 'unset'): string {
-  if (source === 'alias') return '别名'
-  if (source === 'concrete') return '具体模型'
-  return '未设置'
-}
-function sourceBadge(source: 'alias' | 'concrete' | 'unset'): string {
-  if (source === 'alias') return 'mk-badge--ok'
-  if (source === 'concrete') return 'mk-badge--muted'
-  return 'mk-badge--warn'
-}
+/* sourceLabel/sourceBadge 2026-10-15 随「默认路由（解析结果）」表退役——
+   来源徽标的渲染迁到宿主行内提示（ApiConfig 读 emit('defaults') 的 source 字段） */
 
 /** mrow 方块徽标：供应商名前 2 字（原型 index.html:354 .mrow__badge） */
 function providerBadge(p: ModelRegistryOverviewData['providers'][number]): string {
@@ -399,6 +352,10 @@ async function refresh(force = false): Promise<void> {
     })
     // 别名清单回传宿主（路由输入 datalist 候选）：共用本次请求，宿主不必再单独拉 getModelRegistry
     emit('aliases', (data.value?.aliases ?? []).map((a) => a.alias).filter(Boolean))
+    // 路由解析结果回传宿主（「所配即所得」行内展示；即使只渲染 aliases 切片也照发——数据同源）
+    if (data.value) {
+      emit('defaults', { defaults: data.value.defaults, models: data.value.models, runtime: data.value.runtime })
+    }
   } catch (error: unknown) {
     failed.value = true
     errorText.value = errMsg(error)
