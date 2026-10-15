@@ -60,18 +60,19 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'glossary', label: '运营术语表', group: '帮助', glyph: '术', icon: BookOpen, hidden: true },
   // 教学组：真实学习者 / 会话 / 复习（虚拟学习者已独立成组）
   { id: 'people', label: '用户与学习者', group: '教学', glyph: '人', icon: Users },
-  // 2026-10-04 用户拍板拆回独立页：学习状态从 people 宿主 tab 释放（同 2026-09-29 教学三页先例），
-  // 一屏工作台（观测栏 + 排查表格）自成入口；旧 ?tab=state / learner-center / learner-models 深链重定向兼容
-  { id: 'learner-state', label: '学习状态', group: '教学', glyph: '态', icon: Activity },
   // 2026-09-29 用户拍板拆回独立页：2026-09-04 曾合并为「学习会话」宿主（sessions，已下线、URL 重定向兼容），
   // 三域口径互异且入口层级深一层，目标对话 / 学习路径 / 教学会话各自占一个侧栏入口。
   // 排列＝学习流程（2026-10-11 走查「重新排序」）：Goal 目标对话 → Path 学习路径 → Learn 教学会话；
   // 原顺序把 Learn（教学会话）排在 Goal / Path 之前，与实际链路相反。
+  // 「学习状态」2026-10-15 用户拍板挪到教学会话之后（观测/工作台性质，不属学习流程链路，收在流程尾）。
   // 「记忆与复习」2026-10-12 用户拍板退役（并入学习者详情「记忆与复习」页签），侧栏项随之撤除；
   // 场景注册保留为重定向 shim 接旧深链。
   { id: 'goal-conversations', label: '目标对话', group: '教学', glyph: '话', icon: Target },
   { id: 'learning-paths', label: '学习路径', group: '教学', glyph: '径', icon: Route },
   { id: 'teaching-sessions', label: '教学会话', group: '教学', glyph: '教', icon: MessagesSquare },
+  // 2026-10-04 用户拍板拆回独立页：学习状态从 people 宿主 tab 释放（同 2026-09-29 教学三页先例），
+  // 一屏工作台（观测栏 + 排查表格）自成入口；旧 ?tab=state / learner-center / learner-models 深链重定向兼容
+  { id: 'learner-state', label: '学习状态', group: '教学', glyph: '态', icon: Activity },
   // 「记忆与复习」2026-10-12 一度随独立页退役，同日恢复跨用户总览（按待复习量排序的用户
   // 列表 + 到期时间轴）；单用户明细在学习者详情「记忆与复习 / 记忆调度」页签
   { id: 'memory-review', label: '记忆与复习', group: '教学', glyph: '忆', icon: History },

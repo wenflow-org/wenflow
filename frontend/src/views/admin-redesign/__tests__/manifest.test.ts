@@ -51,9 +51,10 @@ describe('AdminConsole 页面注册表', () => {
     for (const s of visible) (byGroup[s.group] ||= []).push(s.id);
     expect(byGroup).toEqual({
       总览: ['overview'],
-      // 排列＝学习流程（2026-10-11 走查「重新排序」）：Goal 目标对话 → Path 学习路径 → Learn 教学会话 → 记忆与复习
+      // 排列＝学习流程（2026-10-11 走查「重新排序」）：Goal 目标对话 → Path 学习路径 → Learn 教学会话
+      //   → 学习状态（2026-10-15 用户拍板挪到教学会话后：工作台性质，收在流程尾）→ 记忆与复习
       // （「记忆与复习」2026-10-12 恢复跨用户总览；单用户明细在学习者详情页签）
-      教学: ['people', 'learner-state', 'goal-conversations', 'learning-paths', 'teaching-sessions', 'memory-review'],
+      教学: ['people', 'goal-conversations', 'learning-paths', 'teaching-sessions', 'learner-state', 'memory-review'],
       虚拟学习者: ['virtual-learners', 'virtual-learner-cards'],
       Skill: ['orchestrator', 'skills'],
       观测: ['execution-logs', 'token-cost', 'audit-logs'],
