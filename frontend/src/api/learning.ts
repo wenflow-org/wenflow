@@ -313,8 +313,12 @@ export interface AdaptiveGuidancePayload {
 export interface PathReplanRequest {
   triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'ai-teaching' | 'admin' | 'system' | 'api';
   reason?: string;
-  /** 仅 overwrite：路径版本化未启用，后端对 'new_version' 一律 409（PATH_VERSIONING_NOT_SUPPORTED），前端不放行该值 */
-  mode?: 'overwrite';
+  /**
+   * `new_version` 不放行：路径版本化未启用，后端对 'new_version' 一律 409（PATH_VERSIONING_NOT_SUPPORTED）。
+   * `compress` = 规模压缩重排（后端 `routes/learning.ts` 的 mode 枚举 + `REPLAN_TASK_RATIO` 按系数反推任务数），
+   * 由 `replanSignal.replanModeForRecommendation` 在「加速」建议时给出。
+   */
+  mode?: 'overwrite' | 'compress';
   stageNumber?: number;
   /** 后续阶段重排：从该未学阶段（含）起连续重排到路径末尾；缺省 = 当前活动阶段（单阶段） */
   fromStageNumber?: number;
