@@ -1,8 +1,26 @@
 ﻿import type { LearnerReplanProjection } from '../../agents/learner-model-agent/types';
 import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
 import type { ReplanAttribution } from './ReplanAttributionService';
+import { DISPLAY_LABEL_MAP } from '../learning/learning.constants';
 
 import type { LearnerReplanSignal } from '../../agents/learner-model-agent/types';
+
+/**
+ * 兜底文案与占位 id 不是概念名（与 LearnerKnowledgeMemoryService 的 F2 同源口径）：
+ * `wrapup.progress.movedToReview` 的名字由教学层写进复习队列、**不经概念集合**，
+ * 会把「理解核心原理」这类认知层级×领域组合词和 `concept-N` 占位 id 直接带进建议正文
+ * （2026-10-15 真课实测：修复后新课正文仍含兜底词，走的正是这条 F2 管不到的通道）。
+ */
+const DISPLAY_LABEL_PHRASES: ReadonlySet<string> = new Set(
+  Object.values(DISPLAY_LABEL_MAP).flatMap((levelMap) => Object.values(levelMap))
+);
+const PLACEHOLDER_NAME_RE = /^concept-\d+$/i;
+
+function isRealConceptName(name: unknown): name is string {
+  if (typeof name !== 'string') return false;
+  const trimmed = name.trim();
+  return trimmed.length > 0 && !PLACEHOLDER_NAME_RE.test(trimmed) && !DISPLAY_LABEL_PHRASES.has(trimmed);
+}
 
 export interface ReplanAdvisory {
   shouldSuggest: boolean;
@@ -186,8 +204,11 @@ export class ReplanAdvisoryService {
     );
 
     // 建议可信度阈值：本节课双低时压制"补救型"动作（详见 shouldSuppressRemedialAdvisory 的注释）。
-    // 「显式知识证据」= 本课真的浮出脆弱/卡点知识点（不含 movedToReview/stillLearning 这类每课都有的副产品）。
-    const explicitKnowledgeEvidence = fragileConcepts.length > 0 || strugglingConcepts.length > 0;
+    // 「显式知识证据」只认**卡点**（struggling，证据均分 <0.55 的真接触证据）——2026-10-15 实测教训：
+    // 此前写成 `fragile>0 || struggling>0`，而 fragile 是记忆引擎「未巩固」的饱和通道（刚学的概念
+    // 本来 <0.5，四位 VL 痕迹 70-100% 命中）→ 豁免恒成立，双低压制形同虚设（真课实测：修复后新课
+    // 仍每课必发 reinforce 就是走的这个口）。
+    const explicitKnowledgeEvidence = strugglingConcepts.length > 0;
     const advisoryThreshold = {
       sessionLss: evaluationTiers?.sessionLss,
       sessionLf: evaluationTiers?.sessionLf,
@@ -203,12 +224,11 @@ export class ReplanAdvisoryService {
       const recommendation = learnerSignal.recommendation === 'keep' ? 'reinforce' : learnerSignal.recommendation;
       const scope = learnerSignal.scope === 'none' ? 'next_milestone' : learnerSignal.scope;
       const priority = learnerSignal.priority === 'none' ? 'low' : learnerSignal.priority;
+      // 点名只列真卡点与真实复习项：fragile 是饱和通道（会挤掉真名字），movedToReview 过兜底词/占位 id。
       const focusPoints = [
-        ...fragileConcepts.slice(0, 2),
         ...strugglingConcepts.slice(0, 2),
-        ...wrapup.progress.movedToReview.slice(0, 2),
+        ...wrapup.progress.movedToReview.filter(isRealConceptName).slice(0, 2),
       ].filter(Boolean);
-
       // accelerate（压缩）走专用文案：界面语义是「把下一阶段压得更聚焦」，不是通用的「确认调整」。
       const isAccelerate = recommendation === 'accelerate';
       return {
@@ -242,7 +262,9 @@ export class ReplanAdvisoryService {
       };
     }
 
-    if (!currentMilestoneComplete && !highRisk && fragileConcepts.length === 0 && strugglingConcepts.length === 0) {
+    // fragile 不再单独把流程救活（饱和通道，见上方 explicitKnowledgeEvidence 注释）：
+    // 阶段没完、无高危、无卡点 → 直接不发，哪怕 fragile 名单再长。
+    if (!currentMilestoneComplete && !highRisk && strugglingConcepts.length === 0) {
       return suppressSignalAdvisory
         ? { ...NO_ADVISORY, reasonCodes: ['advisory_suppressed_lesson_not_hard'] }
         : NO_ADVISORY;
@@ -250,7 +272,6 @@ export class ReplanAdvisoryService {
 
     const needsReinforcement = (
       wrapup.progress.stillLearning.length > 0 ||
-      fragileConcepts.length > 0 ||
       strugglingConcepts.length > 0 ||
       repeatedConfusion ||
       // movedToReview 降档后归入补强语义：阶段收尾时还有点在复习队列 → 建议补强（而非风险）
@@ -274,10 +295,10 @@ export class ReplanAdvisoryService {
       if (wrapup.progress.movedToReview.length > 0) reasonCodes.push('moved_to_review');
       if (repeatedConfusion) reasonCodes.push('repeated_confusion');
 
+      // 与信号分支同口径：点名只列真卡点与真实复习项（fragile 饱和会挤掉真名字）。
       const focusPoints = [
-        ...fragileConcepts.slice(0, 2),
         ...strugglingConcepts.slice(0, 2),
-        ...wrapup.progress.movedToReview.slice(0, 2),
+        ...wrapup.progress.movedToReview.filter(isRealConceptName).slice(0, 2),
       ].filter(Boolean);
 
       return {

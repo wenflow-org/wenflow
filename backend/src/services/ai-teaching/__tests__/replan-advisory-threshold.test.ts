@@ -160,17 +160,33 @@ describe('ReplanAdvisoryService.build 的阈值行为', () => {
     expect(advisory.recommendation).toBe('reinforce');
   });
 
-  it('双低但本课真的浮出脆弱知识点 → 仍发（硬证据盖过自评档位）', () => {
+  it('双低但本课真的浮出卡点知识点（struggling）→ 仍发（硬证据盖过自评档位）', () => {
     const advisory = service.build({
       wrapup: wrapupWith({ metricTiers: { sessionLss: 'low', sessionLf: 'low' } }),
       learnerReplanProjection: projectionWith({
         signal: reinforceSignal,
         milestoneComplete: false,
-        fragileConcepts: ['向量组的秩'],
+        strugglingConcepts: ['向量组的秩'],
       }),
       nextMilestone,
     });
     expect(advisory.shouldSuggest).toBe(true);
+  });
+
+  it('双低 + 只有 fragile（饱和通道，2026-10-15 真课实测的漏斗口）→ 压制，不豁免', () => {
+    // 真课回归：新课 dual-low 仍每课必发 reinforce，根因就是豁免口写成了 fragile>0 ||
+    // struggling>0，而 fragile（记忆引擎未巩固常态）恒非空 → 豁免恒成立。
+    const advisory = service.build({
+      wrapup: wrapupWith({ metricTiers: { sessionLss: 'low', sessionLf: 'low' } }),
+      learnerReplanProjection: projectionWith({
+        signal: reinforceSignal,
+        milestoneComplete: false,
+        fragileConcepts: ['真实情境问题与学科核心内容的对接', '驱动问题'],
+      }),
+      nextMilestone,
+    });
+    expect(advisory.shouldSuggest).toBe(false);
+    expect(advisory.reasonCodes).toContain('advisory_suppressed_lesson_not_hard');
   });
 
   it('双低 + accelerate（压缩下一阶段）→ 不被阈值误压', () => {
