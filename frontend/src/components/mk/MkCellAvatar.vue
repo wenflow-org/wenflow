@@ -3,7 +3,8 @@
   收敛 Users.ul-ava / GoalConversations.gc-ava / MemoryReview.mr__ava 三份同形私有实现。
   tone 语义与全站数据隔离标记一致：default 真实用户（蓝）/ virtual 虚拟学习者（紫）/
   test 测试账号（琥珀）/ muted 未知或已删（灰）。
-  注：VirtualLearners 的 vl-avatar 是「身份哈希 8 色」，属另一套刻意设计，不并入本原语。
+  注：2026-10-15 起 VirtualLearners 列表与 VirtualProfile 详情也改用本原语（虚拟学习者 tone=virtual）；
+  「身份哈希 8 色」现仅存于学习者卡库（VirtualLearnerCards），未并入本原语。
 -->
 <template>
   <i class="mk-ava" :class="`mk-ava--${tone}`" :style="size ? { width: size + 'px', height: size + 'px' } : undefined" aria-hidden="true">{{ initial }}</i>

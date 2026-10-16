@@ -12,7 +12,9 @@
     <header class="mk-entity mk-entity--flat">
       <button type="button" class="mk-back" @click="closeSubPage">← 虚拟学习者</button>
       <div class="mk-entity__main">
-        <span class="mk-entity__avatar mk-entity__avatar--round" :class="avatarClassOf(d.name)" aria-hidden="true">{{ d.name.slice(0, 1) }}</span>
+        <!-- 2026-10-15 用户拍板：撤「身份哈希八色」头像，改随全站语义——虚拟学习者=紫
+             （原语自带 mk-entity__avatar--learner，与列表 MkCellAvatar tone=virtual 同一语义色） -->
+        <span class="mk-entity__avatar mk-entity__avatar--round mk-entity__avatar--learner" aria-hidden="true">{{ d.name.slice(0, 1) }}</span>
         <div class="mk-entity__name-row">
           <h1 class="mk-entity__name mk-entity__name--lg">{{ d.name }}</h1>
           <!-- 生命周期状态（无活动会话/运行中…）：身份信息，与名字同行；操作行只留可点按钮 -->
@@ -831,7 +833,6 @@ import type { EChartsCoreOption } from 'echarts/core'
  *  此处 re-export 维持单测的导入路径（virtual-profile.memory-curve.test.ts）不变。 */
 export { MEMORY_CURVE_COLORS, memoryCurveColor } from '@/components/mk/chartPalette';
 import { memoryCurveColor as _memoryCurveColor, MK_CHART_PALETTES } from '@/components/mk/chartPalette';
-import { vlAvatarIndexOf } from '@/components/mk/vlAvatar'
 
 export interface MemoryCurveConcept {
   name: string
@@ -2673,11 +2674,6 @@ const runDayGroups = computed<RunDayGroup[]>(() => {
   return groups
 })
 
-/* 首字头像配色：按名称哈希取色（与虚拟学习者列表同 8 色板；单源 mk/vlAvatar.ts） */
-function avatarClassOf(name: string): string {
-  return `vp-avatar--${vlAvatarIndexOf(name)}`
-}
-
 /* ---- 头部「更多操作」⋯ 菜单（复用行内菜单模型：点击外部/Esc/方向键关闭，fixed 定位防裁切） ---- */
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 
@@ -2733,17 +2729,9 @@ async function quietReload(id: string) {
   gap: 16px;
 }
 /* 页头身份区走 .mk-entity（shared.css）：--flat + --round 头像 + --lg 名字。
-   以下是头像色板（按名称哈希取色，同一人恒定同色）：只给 background，形状来自原语。
-   单源：色值 token = main.css --mk-vl-avatar-*（与 .vl-avatar--N 同源同值，CM3 收敛），
-   该 8 色板经走查 2026-09-27 加深至白字对比度 ≥4.5:1。 */
-.vp-avatar--0 { background: var(--mk-vl-avatar-0); } /* 蓝 5.17 */
-.vp-avatar--1 { background: var(--mk-vl-avatar-1); } /* 紫 5.70 */
-.vp-avatar--2 { background: var(--mk-vl-avatar-2); } /* 绿 5.48 */
-.vp-avatar--3 { background: var(--mk-vl-avatar-3); } /* 琥珀 5.02 */
-.vp-avatar--4 { background: var(--mk-vl-avatar-4); } /* 红 4.83 */
-.vp-avatar--5 { background: var(--mk-vl-avatar-5); } /* 青 5.36 */
-.vp-avatar--6 { background: var(--mk-vl-avatar-6); } /* 粉 4.60 */
-.vp-avatar--7 { background: var(--mk-vl-avatar-7); } /* 灰 4.76 */
+   头像色（2026-10-15 用户拍板）：撤「身份哈希八色」私造色板，改随原语语义——
+   .mk-entity__avatar--learner（虚拟学习者=紫，见 mk-primitives.css），
+   与列表 MkCellAvatar tone=virtual 同一语义色。故本页不再有 vp-avatar--N 覆写。 */
 .vp-top__level { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
 /* 页头主操作走 .mk-entity__actions（shared.css） */
 /* 生命周期状态徽章（vlab-controls 唯一语义：进行中/已暂停/已失败/已终止/已完成…）

@@ -211,9 +211,10 @@
             <td v-if="isLive && !isNarrow"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
             <td>
               <div class="vl-cell vl-cell--click" role="button" tabindex="0" :title="`查看 ${s.name} 的画像：故事池 / 运行记录 / 会话控制`" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)" @keydown.space.prevent="openSubPage('virtual', s.id)">
-                <!-- 头像在 .mk-cell-main 外（同 Skills 名称格结构）：mk-cell-main strong 的
-                     display:block 高特异性会压过 strong 上的 flex，头像留格内会跌回块流 -->
-                <span class="vl-avatar" :class="avatarClass(s)" aria-hidden="true">{{ s.name.slice(0, 1) }}</span>
+                <!-- 2026-10-15 用户拍板：撤本页私造的「身份哈希八色」头像，改与教学组同款共享原语
+                     MkCellAvatar（虚拟学习者=紫）。头像在 .mk-cell-main 外（同 Skills / 教学组名称格结构）：
+                     mk-cell-main strong 的 display:block 高特异性会压过 strong 上的 flex，头像留格内会跌回块流 -->
+                <MkCellAvatar :name="s.name" tone="virtual" />
                 <div class="mk-cell-main">
                   <strong :title="s.name">{{ s.name }}</strong>
                   <span class="mk-cell-sub" :title="`ID ${s.id}`">{{ shortId(s.id) }}</span>
@@ -359,7 +360,7 @@ import Pagination from './Pagination.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
-import { vlAvatarIndexOf } from '@/components/mk/vlAvatar'
+import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { useTableSort } from './useTableSort'
 import { useListQueryState } from './learner-profile'
@@ -379,12 +380,6 @@ import type { VirtualLearnerRow as Sample, BatchTask } from './virtualLearnersTy
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
 const STATS_RETRY_TITLE = '运行统计拉取失败：点击重试'
 const STATS_UNAVAILABLE_HINT = '统计不可用 · 点击重试'
-
-/* 头像按名称哈希取色，同一人恒定同色；八色板单源 = main.css --mk-vl-avatar-* +
-   mk/vlAvatar.ts 的共享哈希（CM3：原 TS 数组 + 两页 CSS 三份拷贝收敛） */
-function avatarClass(s: Sample): string {
-  return `vl-avatar--${vlAvatarIndexOf(s.name)}`
-}
 
 const samples = computed<Sample[]>(() =>
   liveVirtuals.value.map((v) => ({
@@ -921,30 +916,9 @@ function openRunningSession(s: Sample) {
    实测高 23px 低于 24px 可点下限——本页 :deep 提最小高度补足 1px，padding 不动、视觉不变 */
 .vl-running :deep(.vl-running__chip) { min-height: 24px; }
 
-/* 名称头像：按名字哈希取色，同一人恒定同色。
-   色板整改（走查 2026-09-27）：彩底白字对比度须 ≥4.5:1，各色保持色相加深至达标
-   （emerald/amber/cyan 需取 700 档；slate 原 #64748b 已 4.76:1 达标不动），
-   26px 尺寸不变；行尾为对比白的前后比值。色值单源 = main.css --mk-vl-avatar-*（CM3） */
-.vl-avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--mk-on-fill);
-  font-size: var(--mk-fs-micro);
-  font-weight: 800;
-  flex-shrink: 0;
-}
-.vl-avatar--0 { background: var(--mk-vl-avatar-0); } /* 蓝 5.17 */
-.vl-avatar--1 { background: var(--mk-vl-avatar-1); } /* 紫 5.70 */
-.vl-avatar--2 { background: var(--mk-vl-avatar-2); } /* 绿 5.48 */
-.vl-avatar--3 { background: var(--mk-vl-avatar-3); } /* 琥珀 5.02 */
-.vl-avatar--4 { background: var(--mk-vl-avatar-4); } /* 红 4.83 */
-.vl-avatar--5 { background: var(--mk-vl-avatar-5); } /* 青 5.36 */
-.vl-avatar--6 { background: var(--mk-vl-avatar-6); } /* 粉 4.60 */
-.vl-avatar--7 { background: var(--mk-vl-avatar-7); } /* 灰 4.76 原值已达标 */
+/* 名称头像（2026-10-15 用户拍板）：撤本页私造的「身份哈希八色」，改与教学组同款共享原语
+   MkCellAvatar（虚拟学习者=紫）。本页私有 .vl-avatar / .vl-avatar--N 退役；
+   mk/vlAvatar.ts 与 --mk-vl-avatar-* 仍由学习者卡库（VirtualLearnerCards）消费，保留 */
 /* 名称列可点击进二级（整行不再监听点击，避免多选勾选时误触） */
 .vl-cell--click { cursor: pointer; border-radius: 6px; transition: background 0.12s ease; }
 .vl-cell--click:hover { background: color-mix(in srgb, var(--mk-blue) 6%, transparent); }
