@@ -158,9 +158,9 @@
     <!-- 原「模型总览」页签（2026-10-14 并入）：注册表只读面板排在三卡下方、跨全宽；
          「拉取清单 → 看注册表解析结果」是一条动线（原空态句还得把读者引到另一个页签）。
          不再自带 role=tabpanel——它是本页签内部的第二段，a11y 归属由外层面板承担。
-         2026-10-15 用户重组：冷却落限额表状态列、配置提示落行级徽标 + 表尾注，
-         两个尾巴分区随之退役（parts 只剩 providers/limits）。 -->
-    <ModelRegistryOverview class="ac-registry" ref="registryRef" :parts="['providers', 'limits']" @aliases="aliasOptions = $event" @defaults="registryDefaults = $event" />
+         2026-10-15 用户重组：冷却落限额表状态列、配置提示落行级徽标 + 表尾注。
+         2026-10-15 用户拍板：供应商与能力限额合并为一块，parts 只剩 providers。 -->
+    <ModelRegistryOverview class="ac-registry" ref="registryRef" :parts="['providers']" @aliases="aliasOptions = $event" @defaults="registryDefaults = $event" />
 
     </div>
     </template>

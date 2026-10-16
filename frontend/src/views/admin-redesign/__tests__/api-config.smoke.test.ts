@@ -395,16 +395,16 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 注册表按域切片（2026-10-14；2026-10-15 重组）：别名映射是路由域事实，归「路由与调用」；
-     供应商 / 能力限额（含状态列）留在「接入与模型」；默认路由解析结果改宿主行内展示，切片退役。 */
+  /* 注册表按域切片（2026-10-14；2026-10-15 重组 + 供应商与能力限额合并）：
+     别名映射是路由域事实，归「路由与调用」；供应商与能力限额（合并块）留「接入与模型」；
+     默认路由解析结果改宿主行内展示，切片退役。 */
   it('注册表切片：接入页留观测分区，路由页只留别名映射（默认收起）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
     await flushPromises();
     const access = wrapper.find('.ac-registry');
     expect(access.exists()).toBe(true);
-    expect(access.text()).toContain('模型供应商');
-    expect(access.text()).toContain('模型能力与限额');
+    expect(access.text()).toContain('模型供应商与能力限额');
     expect(access.text()).not.toContain('默认路由（解析结果）');
     expect(access.text()).not.toContain('别名映射');
 
@@ -416,7 +416,7 @@ describe('ApiConfig P1 修复批', () => {
     expect(routing.exists()).toBe(true);
     expect(routing.text()).toContain('别名映射');
     expect(routing.text()).not.toContain('默认路由（解析结果）');
-    expect(routing.text()).not.toContain('模型供应商');
+    expect(routing.text()).not.toContain('模型供应商与能力限额');
     // 默认收起的折叠条（details 未开时内容仍在 DOM，但折叠条文案常显）
     const foldBar = wrapper.find('.ac-fold__bar');
     expect(foldBar.exists()).toBe(true);
