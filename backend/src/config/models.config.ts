@@ -100,7 +100,7 @@ export interface ProviderDefinition {
   name: string;
   description?: string;
   enabled: boolean;
-  /** 推荐通道（UI 置顶标识；DeepSeek 官方/平台通道为 true） */
+  /** 推荐通道（UI 置顶标识；默认平台通道为 true） */
   recommended: boolean;
   /** 端点来源：'inherit' = 沿用平台路由解析；'own' = 供应商自带 baseUrl */
   endpointSource: 'inherit' | 'own';
@@ -220,7 +220,7 @@ function applySnapshot(snapshot: RegistrySnapshot): void {
   const enabledProviders = snapshot.providers.filter((p) => p.enabled);
   const allEnabledModels = enabledProviders.flatMap((p) => p.models);
 
-  // 多通道重名允许（同一模型经聚合网关与官方 API 各服务一份是常态）：
+  // 多通道重名允许（同一模型经平台聚合网关与用户自建供应商各服务一份是常态）：
   // 裸 id 归声明在前的启用通道（first-wins，总览告警提示歧义）；
   // 限定式 providerId/modelId 全量入限定表，跨通道精确引用不受影响。
   MODEL_MAP.clear();

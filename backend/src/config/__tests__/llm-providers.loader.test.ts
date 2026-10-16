@@ -72,8 +72,9 @@ describe('llm-providers.json 加载器', () => {
     expect(platform?.recommended).toBe(true);
     expect(platform?.endpointSource).toBe('inherit');
     // disabled 示例条目不进运行时注册表，但目录可见
-    const example = getProviderCatalog().find((p) => p.id === 'deepseek-official');
+    const example = getProviderCatalog().find((p) => p.id === 'custom-provider-example');
     expect(example?.enabled).toBe(false);
+    expect(example?.endpointSource).toBe('own');
     expect(MODEL_MAP.has('deepseek-chat')).toBe(false);
   });
 
@@ -81,7 +82,7 @@ describe('llm-providers.json 加载器', () => {
     expect(resolveModelRef('deepseek-v4.1-flash')?.definition.id).toBe('deepseek-v4.1-flash');
     expect(resolveModelRef('platform/deepseek-v4-pro')?.providerId).toBe('platform');
     // 未注册 provider → 不按限定式解析，也无同名裸 id → null（调用方按字面量透传）
-    expect(resolveModelRef('deepseek-official/deepseek-chat')).toBeNull();
+    expect(resolveModelRef('custom-provider-example/deepseek-chat')).toBeNull();
     expect(resolveModelRef('totally-unknown')).toBeNull();
   });
 
