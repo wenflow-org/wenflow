@@ -4,7 +4,7 @@
 
 > ⚠️ **当前主要开发版本**: [develop](https://github.com/wenflow-org/wenflow/tree/develop) 分支 | main 分支为稳定版
 
-**一款从真实问题出发的 AI 学习路径原型**
+**一款从真实问题出发的 AI 学习支持服务平台**
 
 > 核心理念：学习始于对真实问题的澄清，而非对课程的选择。
 
@@ -171,7 +171,7 @@ flowchart TD
 | **前端** | Vue 3 + TypeScript + Vite 6 + Element Plus + Pinia |
 | **后端** | Node.js + Express + TypeScript + Prisma |
 | **数据库（当前）** | SQLite（主库 51 表 + system 库 14 表，双库架构） |
-| **AI 接入** | OpenAI 兼容模型网关（默认 chat=deepseek-v4-flash / reasoning=deepseek-v4-pro），支持 SSE 流式、重试预算、thinking mode 控制 |
+| **AI 接入** | OpenAI 兼容模型网关（默认 chat / reasoning / evaluation 均为 deepseek-v4.1-flash），支持 SSE 流式、重试预算、thinking mode 控制 |
 | **Agent / Skill 编排** | EduClaw Gateway + 5 个顶层 Agent（goal/path/teaching/profile/simulation，无 prompt 编排器）/ Skill 执行层（prompts/core 真源 → 编译产物 → DB 镜像）+ Coordinators + Durable Outbox 事件链 |
 | **模型配置分层** | 环境变量 → 平台默认 → Agent/Skill 级 → 用户自定义 API / 模型覆盖 |
 | **虚拟实验** | Virtual Learner Lab（黑盒模拟 + Quick Learn） |
@@ -229,7 +229,7 @@ doc/                设计文档总索引 doc/README.md（过程材料在 gitign
 
 ## 项目状态
 
-WenFlow 目前仍处于**早期开发阶段**，是一个用于验证教学概念的实验性原型。
+WenFlow 由个人独立研发，自 2026 年 4 月首个版本起持续迭代；功能验证以内置的 AI 虚拟学习者实验室为主，公开演示站（[wenflow.org](https://wenflow.org)）可在线体验完整闭环。
 
 项目并非对既有学习流程的简单加速，而是试图验证另一条路径：以真实问题为起点，由 AI 协助澄清目标、生成路径并组织反馈，是否更契合 AI 时代的学习方式。
 
