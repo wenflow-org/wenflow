@@ -224,6 +224,8 @@ doc/*
 !doc/re_test/
 doc/re_test/*
 !doc/re_test/admin-audit-2026-09-24.md
+!doc/re_test/ADMIN_PAGE_AUDIT.md
+!doc/re_test/ADMIN_UI_WALKTHROUGH.md
 # 例外：管理端视觉层规范（守卫规则 10/11/12 与巡检脚本按路径引用它作为判据）
 !doc/ADMIN_VISUAL_LAYER_SPEC.md
 # 例外：Prompt 缓存优化技术文档（缓存口径与运维配置的权威引用）
@@ -254,6 +256,23 @@ doc/re_test/*
 !doc/UPGRADE_DIRECTION_20Q.md
 !doc/LEARNER_CENTER_AND_STATE_FUSION.md
 !doc/MODEL_GATEWAY_DESIGN.md
+# 例外：KC 概念身份/图 与 多路径信号作用域（协议与架构文档按路径引用）
+!doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md
+!doc/KC_MULTIPATH_AND_LEARNER_SIGNAL_SCOPE.md
+# 例外：管理端页面模板 / 列宽规范 / 业务审计 / 模块对标（历史快照，随代码可查）
+!doc/ADMIN_PAGE_TEMPLATES.md
+!doc/ADMIN_COLUMN_WIDTH_SPEC.md
+!doc/ADMIN_TABS_BUSINESS_AUDIT.md
+!doc/ADMIN_MODULE_BENCHMARK.md
+# 例外：虚拟学习者预制与日期模拟（预制真源已迁 presets.yaml v4，文档留痕）
+!doc/VIRTUAL_LEARNER_PRESET_DESIGN.md
+!doc/VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md
+!doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md
+# 例外：开发脚本手册 与 newui 原型登记规则
+!doc/DEV_SCRIPTS.md
+!doc/NEWUI-PROTOTYPES.md
+# 例外：会话大 JSON 列增量化设计（两侧已落地，设计留痕）
+!doc/SESSION_JSON_INCREMENTAL_DESIGN.md
 doc/local/
 
 # Playwright MCP 会话临时文件

@@ -4,7 +4,7 @@
 
 > ⚠️ **Current Main Development**: [develop](https://github.com/wenflow-org/wenflow/tree/develop) branch | main is stable
 
-**An AI learning-path prototype that starts from real problems**
+**An AI learning-support service platform that starts from real problems**
 
 > Core idea: learning begins with clarifying the real problem, not with choosing a course.
 
@@ -171,7 +171,7 @@ The admin panel lives at `/admin` with 18 scene pages across 7 sidebar groups, a
 | **Frontend** | Vue 3 + TypeScript + Vite 6 + Element Plus + Pinia |
 | **Backend** | Node.js + Express + TypeScript + Prisma |
 | **Database** | SQLite (main DB with 51 tables + system DB with 14 tables, dual-database architecture) |
-| **AI Integration** | OpenAI-compatible model gateway (defaults: chat = deepseek-v4-flash, reasoning = deepseek-v4-pro), SSE streaming, retry budget, thinking-mode control |
+| **AI Integration** | OpenAI-compatible model gateway (defaults: chat / reasoning / evaluation all use deepseek-v4.1-flash), SSE streaming, retry budget, thinking-mode control |
 | **Agent / Skill Orchestration** | EduClaw Gateway + 5 top-level Agents (goal/path/teaching/profile/simulation, no prompt orchestrator) / Skill execution layer (prompts/core source → compiled artifacts → DB mirror) + Coordinators + Durable Outbox event chain |
 | **Model Config Layers** | Env vars → platform defaults → Agent/Skill level → user-defined API / model overrides |
 | **Virtual Experiment** | Virtual Learner Lab (black-box simulation + Quick Learn) |
@@ -229,7 +229,7 @@ Both databases have their own migrations directory (`backend/prisma/migrations`,
 
 ## Project Status
 
-WenFlow is still in an **early development stage**, serving as an experimental prototype for validating a different learning approach.
+WenFlow is independently developed by a single author and has been iterating since its first version in April 2026. Functional validation is done primarily through the built-in AI Virtual Learner Lab, and the public demo site ([wenflow.org](https://wenflow.org)) lets you experience the full loop online.
 
 The project is not a simple acceleration of existing learning workflows; it explores an alternative path — starting from real problems, with AI helping to clarify goals, shape the path, and organize feedback — to determine whether this approach is better suited to the AI era.
 
@@ -244,25 +244,37 @@ The project will continue to explore how to cultivate five capabilities that mat
 - Windows + PowerShell 5.1+ or Linux/macOS + bash; `npm run dev` selects `start-dev.ps1` / `start-dev.sh` by platform.
 - On Linux/macOS without a local toolchain setup, Docker is recommended: `./docker-start.sh`.
 
-### Recommended Order (First Run)
+Security and secret management: see [`SECURITY.md`](./SECURITY.md). Run `npm run security:scan` before committing.
 
-See [`SECURITY.md`](./SECURITY.md) for credential and backup handling. Run `npm run security:scan` before publishing changes.
+Runtime status: `/health` and `/livez` report process liveness; only `/readyz` means both databases and the core runtime are ready to accept traffic.
 
-Runtime status: `/health` and `/livez` report process liveness; `/readyz` verifies both databases and the core runtime state.
-
-Self-check: when the environment won't start or behaves oddly, run `npm run doctor` first (cross-platform, read-only, seconds) —
+Self-check: when the environment won't start or behaves oddly, run `npm run doctor` first (cross-platform, read-only, takes seconds) —
 it checks Node / deps / .env / dual DB / CORS / ports and services one by one with fix guidance; `--deep` adds the prompts three-way parity audit.
 
+### Recommended Order (First Run)
+
 ```bash
+# 0) Install dependencies (always use npm ci, not npm install — see the note below)
+npm ci
+npm --prefix backend ci
+npm --prefix frontend ci
+
 # 1) Initialize backend/.env (JWT_SECRET, AI config, initial admin)
 npm run env:setup        # Windows PowerShell; on Linux/macOS: cp backend/.env.example backend/.env, then edit
 
 # 2) Start (cross-platform: Windows -> start-dev.ps1, Linux/macOS -> start-dev.sh)
+#    The startup script first runs `npm --prefix backend run prisma:prepare` (generate both Prisma Clients + migrate deploy on both DBs), then starts the services
 npm run dev
+
+# For manual step-by-step runs (e.g. after switching worktrees / moving the directory), run the prerequisite explicitly first
+npm --prefix backend run prisma:prepare
 ```
 
 Note: For first-time use, it is recommended to finish environment setup before choosing a startup script. If `backend/.env` is missing or `JWT_SECRET` is invalid, the startup scripts will also launch the setup flow automatically.
 When the backend starts, core prompts are synced from the repo into the database automatically; a fresh clone runs directly, with no manual prompt import required.
+`npm run dev` (`start-dev.ps1` / `start-dev.sh`) already includes `prisma:prepare` (client generation + dual-DB migration) as a built-in prerequisite; you only need to run it yourself when doing manual step-by-step runs, or when skipping it via `-SkipPrisma` / `--skip-prisma`.
+
+> **Always install dependencies with `npm ci`, not `npm install`.** `npm install` rewrites `package-lock.json` according to the current resolution, mass-deleting optional / peer entries that come from the mirror (registry.npmmirror.com) — e.g. all-platform entries of `@parcel/watcher` and `@bufbuild/protobuf`. Measured: a single run is hundreds of lines of pure deletion, not a code change. `npm ci` installs strictly from the lockfile and never rewrites it (CI also uses `npm ci`).
 
 ### Local Development
 

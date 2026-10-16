@@ -5,7 +5,7 @@
 > 需要时以 doc/ 根目录现行文档与代码为准。
 > **登记门禁（2026-09-28 起）**：新文档入库三件套 = 白名单 + 本表登记 + 状态头；实现与「不做」声明相悖须同提交改文档。
 
-## 总索引（40 篇 · 全覆盖 · 2026-10-05）
+## 总索引（doc/ 根 39 篇 · 全覆盖 · 2026-10-16）
 
 > 每篇文档头部有状态行（📌 类型｜最后核验）。**登记约定**：新增 doc/ 文档须同时 ①加入根 .gitignore 白名单 ②登记本表 ③写状态头；凡实现与文档「不做/待办」声明相悖的改动，须同一提交内更新该文档声明。审计详见 doc/local/DOC-TIMELINESS-AUDIT-2026-09-28（本机）。
 
@@ -24,7 +24,7 @@
 | LEARNER_STATE_REVIEW_DESIGN.md | 设计留痕 | 🔴 三张表未建，照抄会建错表 |
 | PATH_PRODUCTION_REPLAN_CONTRACT.md（.en） | 活规范 | ⚠️ 已知待办：2 处 409 判定 |
 | PATH_ANDERSON_ITERATION_NOTE.md（.en） | 设计留痕（已归档） | 砍二阶段的唯一决策留痕 |
-| SESSION_JSON_INCREMENTAL_DESIGN.md | 活规范 | 会话 JSON 增量（~95%） |
+| SESSION_JSON_INCREMENTAL_DESIGN.md | 设计留痕（已落地） | 会话大 JSON 列增量化设计与验收清单 |
 | VIRTUAL_LEARNER_DESIGN.md | 活规范 | VL 主文档（裁判已独立） |
 | VIRTUAL_LEARNER_CHAIN.md | 活规范 | VL 链路 SoT（16/17） |
 | VIRTUAL_LEARNER_PRESET_DESIGN.md | 设计留痕（已归档） | 真源已迁 presets.yaml v4 |
@@ -37,6 +37,7 @@
 | ADMIN_TERMINOLOGY_AUDIT.md | 活规范 | 术语 SSOT（不可归档） |
 | ADMIN_OPERATIONS_MANUAL.md | 活规范 | 管理端运营操作手册（路由 → 职责、指标口径、动作名、SOP + YAML 速查） |
 | ADMIN_VISUAL_LAYER_SPEC.md | 活规范 | ⛔ 禁归档（守卫硬引用）｜v4 已接设计体系包，令牌层/圆角/阴影/材质收口完毕 |
+| NEWUI-PROTOTYPES.md | 活规范 | newui 原型登记与「原型值残留」规则（基准层级：tokens.css/spec v4 > 原型 > 历史文档） |
 | ADMIN_COLUMN_WIDTH_SPEC.md | 活规范 | 48/48 全中 |
 | ADMIN_PAGE_TEMPLATES.md | 历史快照·已存档 | 2026-10-02 存档：T1-T4 模板职责由 newui 原型复刻体系 + spec v4 承接 |
 | ADMIN_TABS_BUSINESS_AUDIT.md | 历史审计 | 未核验 |
@@ -125,3 +126,5 @@
 调查快照（SKILL_RUNTIME_MAP_MAIN/SIM）、设计过程（ORCHESTRATOR_FIELD_FLOW_REDESIGN、QUICK_LEARN 设计稿）、design/ 目录（主计划/诊断/草案）、CHANGES_* 改动记录与 doc/CHANGELOG 等历史过程材料已于 2026-09-05 清理（不纳入仓库）。prompt-lab/archive/ 中的 v2 遗留资产同步清理。
 
 本机过程材料（设计稿、研究综述、日期快照、截图等）统一存放于 `doc/local/`（已被 gitignore，不进仓库）；`doc/` 根目录只保留纳入 git 的现行有效文档。
+
+**2026-10-16 整理**：`doc/` 根目录下三份未入库文件移入 `doc/local/`——`ADMIN-OPERATIONS-MANUAL.md`（连字符拼写的运营手册并行草稿，真源为 `ADMIN_OPERATIONS_MANUAL.md`；其独有章节「其余页面简表」「术语与状态字典」未并入真源，仅存本机副本）、`USER_SIDE_QA_REPORT.md`（2026-09-18 用户侧走查）、`agent-usage-audit-2026-09-22.md`（Agent 使用调查）。同批补入 11 个「已跟踪但漏登记白名单」的文档，并登记 `NEWUI-PROTOTYPES.md`。

@@ -97,7 +97,7 @@ const totalPages = computed(() => totalPagesOf(props.total, props.pageSize))
    页面若把 pageSize 初始化成不在预设档里的值（如 OpsAchievements / Notifications 的 20），
    原实现 `:value="pageSize"` 找不到对应 option → 浏览器 selectedIndex=-1，下拉渲染成空白
    （首选项被显示成"已选"的假象），与表格实际行数/分页器页数三者不一致（F5-2）。
-   补进当前值后：下拉显示真实每页条数，且不改变既有 15/30/50/100 档位口径（ADMIN-OPERATIONS-MANUAL:91）。 */
+   补进当前值后：下拉显示真实每页条数，且不改变既有 15/30/50/100 档位口径。 */
 const sizeOptions = computed(() => {
   const set = new Set(props.sizes)
   set.add(props.pageSize)

@@ -1,6 +1,7 @@
 # newui 原型登记与「原型值残留」规则（2026-10-02）
 
-> 类型：活规范（基准层级 + 原型文件索引）｜配套：`doc/ADMIN_VISUAL_LAYER_SPEC.md`（v4，语言细则与守卫）
+> 📌 类型：活规范（基准层级 + 原型文件索引）｜最后核验：2026-10-16。索引见 [doc/README.md](./README.md)。
+> 配套：`doc/ADMIN_VISUAL_LAYER_SPEC.md`（v4，语言细则与守卫）
 
 ## 0. 基准层级（谁说了算）
 
