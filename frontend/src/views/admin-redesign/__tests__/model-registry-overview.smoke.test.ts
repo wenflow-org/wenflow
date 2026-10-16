@@ -1,6 +1,6 @@
 /**
- * ModelRegistryOverview 冒烟（只读总览；2026-10-15 用户重组后三分片）：
- * 1. 别名映射 / 模型供应商 / 能力限额（含状态列）三段渲染 + 表头列数自洽
+ * ModelRegistryOverview 冒烟（只读总览；2026-10-15 供应商与能力限额合并后两分片）：
+ * 1. 别名映射 / 供应商与能力限额（含状态列）两段渲染；合并块按供应商分组、表头列数自洽
  * 2. 状态列：命中部署冷却 → 冷却徽标（providerId + model 双键）；未命中 → 健康
  * 3. 行级 ⚠（模型级提示）与表尾注（非模型级提示 / 无则不渲染）
  * 4. 分片裁剪（parts）：只渲染指定分片，但 defaults/aliases 照常回传宿主
@@ -31,6 +31,17 @@ const OVERVIEW = {
       apiKeyEnv: null,
       keyConfigured: true,
       modelIds: ['deepseek-v4-flash']
+    },
+    {
+      id: 'agnes',
+      name: 'Agnes',
+      enabled: true,
+      recommended: false,
+      endpointSource: 'inherit',
+      baseUrl: null,
+      apiKeyEnv: null,
+      keyConfigured: true,
+      modelIds: ['agnes-3.0-flash']
     }
   ],
   registry: { path: 'config/llm-providers.json', source: 'file', mtimeMs: null, lastError: null, fileDefaults: { chat: 'deepseek-v4-flash', reasoning: 'deepseek-v4-pro' } },
@@ -114,7 +125,7 @@ describe('ModelRegistryOverview（只读模型总览）', () => {
     getModelRegistryMock.mockReset();
   });
 
-  it('渲染供应商 / 别名映射 / 能力限额三段，限额表表头列数 === 数据行格数', async () => {
+  it('渲染别名映射 + 供应商与能力限额两块；合并块按供应商分组、表头列数 === 数据行格数', async () => {
     getModelRegistryMock.mockResolvedValue({ data: { data: OVERVIEW } });
     const wrapper = await mountOverview();
     const text = wrapper.text();
@@ -124,19 +135,24 @@ describe('ModelRegistryOverview（只读模型总览）', () => {
     expect(text).toContain('chat');
     expect(text).toContain('降级');
 
-    // ② 供应商
+    // ② 供应商与能力限额（合并块）：供应商作组头 + 其模型作组内行
+    expect(text).toContain('模型供应商与能力限额');
     expect(text).toContain('DeepSeek');
-
-    // ③ 能力与限额
     expect(text).toContain('不支持');
     expect(text).toContain('不限');
+    // 两个供应商（deepseek / agnes）各成一个组头行
+    expect(wrapper.findAll('.ac-mr-pgroup')).toHaveLength(2);
+    // 组内模型行归属其供应商：deepseek 组的行数 = OVERVIEW.models 中 providerId==='deepseek' 的条数
+    const groups = wrapper.findAll('.ac-mr-pgroup');
+    expect(groups[0].text()).toContain('DeepSeek');
 
-    // 限额表：表头 11 列（含状态列）必须与数据行格数一致——曾表头 10 列 / 行 9 格，
-    // 从「档位」起整列右移、备用模型列恒空；只断言文本包含抓不到这种错位
+    // 限额表：表头 10 列（去掉独立「供应商」列，供应商已升为组头）必须与数据行格数一致；
+    // 只断言文本包含抓不到列错位
     const limitTable = wrapper.findAll('table').find((t) => t.text().includes('推理预留'));
     expect(limitTable).toBeTruthy();
     const thCount = limitTable!.findAll('thead th').length;
-    const firstRowTds = limitTable!.find('tbody tr')?.findAll('td').length ?? 0;
+    const firstDataRow = limitTable!.find('tbody tr.ac-mr-mmodel');
+    const firstRowTds = firstDataRow?.findAll('td').length ?? 0;
     expect(thCount).toBeGreaterThan(0);
     expect(firstRowTds).toBe(thCount);
 
@@ -178,8 +194,9 @@ describe('ModelRegistryOverview（只读模型总览）', () => {
     const wrapper = await mountOverview({ parts: ['aliases'] });
     const text = wrapper.text();
     expect(text).toContain('别名映射');
-    expect(text).not.toContain('模型供应商');
-    expect(text).not.toContain('模型能力与限额');
+    // 合并块（供应商与能力限额）不渲染
+    expect(text).not.toContain('模型供应商与能力限额');
+    expect(wrapper.findAll('.ac-mr-pgroup')).toHaveLength(0);
     // 解析结果由宿主行内展示，切片再窄也要回传（同一份 getModelRegistry 数据）
     expect(wrapper.emitted('defaults')?.at(-1)?.[0]).toMatchObject({
       defaults: { defaultModelResolved: 'deepseek-v4-flash' }

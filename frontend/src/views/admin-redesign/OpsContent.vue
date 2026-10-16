@@ -195,30 +195,31 @@
                 <span v-if="isStalled(p)" class="mk-badge mk-badge--warn mk-badge--sm" title="长时间无更新，可「重试生成」补齐课程任务">停滞</span>
               </td>
               <td>
-                <!-- 操作列文字钮（原型 renderPaths 操作列 btn--sm「详情/下线」+ ⋯ 菜单）；
+                <!-- 操作列（2026-10-15 用户拍板）：行内只留高频「详情」，其余（重试生成/下线恢复/删除）
+                     收进 ⋯ 折叠菜单，操作列由四钮并排收成一钮一 ⋯。
                      右对齐与 mk-th--right 表头对齐（同 GoalConversations/Users 判例） -->
                 <div class="mk-actions">
-                  <!-- 失败行：「重试生成」就地重发（守卫自动判 core/stageDesign），「去详情」看结构 -->
                   <button
                     type="button"
                     class="mk-btn mk-btn--sm"
-                    :title="p.status === 'failed' ? '该路径生成失败，可「重试生成」' : undefined"
+                    :title="p.status === 'failed' ? '该路径生成失败，可在 ⋯ 菜单「重试生成」' : undefined"
                     @click.stop="openPath(p)"
-                  >{{ p.status === 'failed' ? '去详情' : '详情' }}</button>
-                  <button
-                    v-if="p.status === 'failed' || isStalled(p)"
-                    type="button"
-                    class="mk-btn mk-btn--sm mk-btn--primary"
-                    :disabled="p.busy"
-                    @click.stop="retryGeneration(p)"
-                  >重试生成</button>
-                  <button v-if="p.status !== 'archived'" type="button" class="mk-btn mk-btn--sm" :disabled="p.busy" @click.stop="archive(p)">下线</button>
-                  <button v-else type="button" class="mk-btn mk-btn--sm" :disabled="p.busy" @click.stop="restore(p)">恢复</button>
+                  >详情</button>
                   <div class="mk-menu">
                     <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === p.id" @click.stop="toggleMenu(p.id)">⋯</button>
-                    <div v-if="openMenu === p.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                      <button type="button" class="mk-menu__item" @click="menuDetail(p)">查看结构</button>
-                      <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuDelete(p)">删除路径</button>
+                    <div v-if="openMenu === p.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                      <!-- 失败行 / 停滞 active：就地重发（守卫自动判 core/stageDesign） -->
+                      <button
+                        v-if="p.status === 'failed' || isStalled(p)"
+                        type="button"
+                        class="mk-menu__item"
+                        role="menuitem"
+                        :disabled="p.busy"
+                        @click="menuRetry(p)"
+                      >重试生成</button>
+                      <button v-if="p.status !== 'archived'" type="button" class="mk-menu__item" role="menuitem" :disabled="p.busy" @click="menuArchive(p)">下线</button>
+                      <button v-else type="button" class="mk-menu__item" role="menuitem" :disabled="p.busy" @click="menuRestore(p)">恢复</button>
+                      <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" @click="menuDelete(p)">删除路径</button>
                     </div>
                   </div>
                 </div>
@@ -668,8 +669,12 @@ function openPath(p: PathRow) {
 }
 
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
-function menuDetail(p: PathRow) { closeMenu(); openPath(p) }
+/* 菜单项执行：先关菜单再执行（避免菜单残留与整行点击冒泡）。
+   2026-10-15 起重试生成/下线恢复/删除同处 ⋯ 菜单，统一走此包裹 */
 function menuDelete(p: PathRow) { closeMenu(); void remove(p) }
+function menuRetry(p: PathRow) { closeMenu(); void retryGeneration(p) }
+function menuArchive(p: PathRow) { closeMenu(); void archive(p) }
+function menuRestore(p: PathRow) { closeMenu(); void restore(p) }
 
 /* 深链：独立场景形态（嵌入时由宿主 GoalConversations 消费 intent 并传 initialStatus 预筛）：
    工作台「生成失败路径」→ 预筛 failed（消费后清空，避免菜单直达被残留筛选污染）。

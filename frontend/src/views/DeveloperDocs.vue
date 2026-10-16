@@ -275,7 +275,7 @@ prompts/                     # 仓库根，与 backend/ 同级
               <span class="steps__no">6</span>
               <div>
                 <strong>控制台验证</strong>
-                <p><a href="/admin/console" target="_blank" rel="noopener noreferrer">/admin/console</a>：字段流转图看字段流转与调用用量 → Skill 抽屉试跑 → <code>/admin/skills/my-skill</code> 设计页看生效 Prompt 与版本。</p>
+                <p><a href="/admin/console" target="_blank" rel="noopener noreferrer">/admin/console</a>：字段流转图看字段流转与调用用量 → Skill 抽屉试跑 → <code>/admin/skills?view=skill-design&id=my-skill</code> 设计页看生效 Prompt 与版本。</p>
               </div>
             </li>
           </ol>
@@ -290,7 +290,7 @@ prompts/                     # 仓库根，与 backend/ 同级
             <div class="mini"><strong>平台总览</strong><p>健康简报、24h 调用脉搏、待办。</p></div>
             <div class="mini"><strong>字段流转图</strong><p>五阶段流水线图：字段流转、调用用量边宽、hover 联动、时间范围切换，Skill 卡 ↗ 直达设计页。</p></div>
             <div class="mini"><strong>Skill 目录 / 抽屉</strong><p>统计排序、运行配置（路由/重试/超时）、试跑、协议规则、生效 Prompt。</p></div>
-            <div class="mini"><strong>Prompt 设计页</strong><p><code>/admin/skills/:id</code>：工作台（Prompt + 试跑 + 最近调用一键重跑）、版本对比与发布、运行时、工程信息。</p></div>
+            <div class="mini"><strong>Prompt 设计页</strong><p><code>/admin/skills?view=skill-design&amp;id=&lt;id&gt;</code>：工作台（Prompt + 试跑 + 最近调用一键重跑）、版本对比与发布、运行时、工程信息。</p></div>
             <div class="mini"><strong>Prompt Dry Run</strong><p>候选编译三视图（产物/候选/diff）+ 字段契约编辑。</p></div>
             <div class="mini"><strong>日志三件套</strong><p>执行日志（重试时间线/导出）、Prompt 调用、事件中心 + Trace 瀑布。</p></div>
             <div class="mini"><strong>虚拟学习者</strong><p>辅助模拟/仿真、一键快速代学、传播报告。</p></div>

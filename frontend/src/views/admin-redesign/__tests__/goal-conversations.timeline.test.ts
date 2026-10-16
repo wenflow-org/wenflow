@@ -196,4 +196,30 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     expect(onCounts).toEqual([1, 2, 3, 4, 3, 2]);
     wrapper.unmount();
   });
+
+  it('live：状态列只在终态/异常出词——进行中行留「—」不再与阶段列同出蓝胶囊（2026-10-15 用户拍板）', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          conversations: [
+            makeConv('act', { stage: 'understanding', status: 'active' }),
+            makeConv('done', { stage: 'completed', status: 'completed', completedAt: '2026-08-14T06:00:00.000Z' }),
+            makeConv('fail', { stage: 'proposal', status: 'failed', completedAt: null }),
+            makeConv('cancel', { stage: 'understanding', status: 'cancelled', completedAt: null })
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const rowText = (i: number) => wrapper.findAll('tbody tr')[i].text();
+    // 进行中行：状态列不再出「进行中」词，改留带解释的「—」；阶段词仍由阶段列承载
+    expect(rowText(0)).not.toContain('进行中')
+    expect(wrapper.findAll('[title="会话进行中，进度见「阶段」列"]')).toHaveLength(1)
+    // 终态/异常行：状态列照常出词（这些是阶段列表达不了的语义）
+    expect(rowText(1)).toContain('已完成')
+    expect(rowText(2)).toContain('失败')
+    expect(rowText(3)).toContain('已取消')
+    wrapper.unmount();
+  });
 });

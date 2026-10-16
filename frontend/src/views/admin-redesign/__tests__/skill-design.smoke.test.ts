@@ -13,7 +13,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import SkillDesignPage from '../SkillDesignPage.vue';
 import { coreEditorState } from '../skill-design/sdp-shared';
-import { intent } from '../store';
+import { intent, subPage } from '../store';
 import { confirmState, settleConfirm } from '../useConfirm';
 
 const { apiMocks } = vi.hoisted(() => {
@@ -207,13 +207,16 @@ async function settle() {
   await flushPromises();
 }
 
-async function mountPage(initialPath = '/admin/skills/test-skill') {
+/** 2026-10-15 迁入外壳二级页：本页 id 取自 store.subPage（不再读 route.params.agentId）。
+    seedSubPage 预置 subPage，query 承载页签键 sdTab（与列表 ?tab= 隔离）。 */
+async function mountPage(skillId = 'test-skill', query: Record<string, string> = {}) {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/admin/skills/:agentId+', name: 'SkillDesign', component: SkillDesignPage }]
+    routes: [{ path: '/admin/skills', name: 'AdminConsole', component: { template: '<div />' } }]
   });
-  await router.push(initialPath);
+  await router.push({ path: '/admin/skills', query });
   await router.isReady();
+  subPage.value = { view: 'skill-design', id: skillId };
   const wrapper = mount(SkillDesignPage, { global: { plugins: [router] }, attachTo: document.body });
   await settle();
   return { wrapper, router };

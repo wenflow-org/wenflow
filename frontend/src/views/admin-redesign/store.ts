@@ -216,7 +216,7 @@ export function intentQueryParams(scene: string): Record<string, string> {
 }
 
 /* ---------- 二级页面（drill-in） ---------- */
-export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real' | 'path' | 'skill' | 'card' | 'card-import'
+export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real' | 'path' | 'skill' | 'skill-design' | 'card' | 'card-import'
 
 /** 会话座舱的落点页签（2026-10-12 走查拍板：路径不再有独立详情页，统一在座舱的阶段页签打开；
  *  从学习路径列表进来 = 打开座舱并落在 Path 页签）。只对 session/session-real 有意义；

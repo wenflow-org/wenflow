@@ -313,10 +313,14 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
      learner = 原蓝→紫渐变
    渐变在 28px 的圆头像上两端色几乎混不出来，却让「这里的颜色有含义」
    读起来像「这里的颜色好看」。改为平涂后仍一眼可辨。
-   注：--mk-entity-avatar-user-from（渐变起端）已随死令牌清理删除（main.css）。 */
+   注：--mk-entity-avatar-user-from（渐变起端）已随死令牌清理删除（main.css）。
+   learner 底色走 *-fill 实心族（--mk-violet-fill #7c3aed，白字 5.70:1）而非 --mk-purple：
+   2026-10-15 实测 --mk-purple 在暗色档被提亮为 #a78bfa（供文字用），当背景白字只剩 2.72:1，
+   低于图形下限 3:1。本规则此前是死代码，接通虚拟学习者详情页后才暴露。 */
 .mk-entity__avatar--user { background: var(--mk-entity-avatar-user-to); }
-.mk-entity__avatar--learner { background: var(--mk-purple); }
-/* 圆形头像（虚拟学习者：具体颜色由页面按名称哈希给，原语只管形状） */
+.mk-entity__avatar--learner { background: var(--mk-violet-fill); }
+/* 圆形头像（虚拟学习者用）：形状修饰；底色自 2026-10-15 起随语义（--learner 紫），
+   不再由页面按名称哈希给（撤「身份哈希八色」私造设计，与列表 MkCellAvatar 同语义） */
 .mk-entity__avatar--round { border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); }
 
 .mk-entity__id { display: grid; gap: 2px; min-width: 0; flex: 1; }

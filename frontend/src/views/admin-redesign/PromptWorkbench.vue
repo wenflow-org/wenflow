@@ -155,9 +155,9 @@ function statusBadge(status: string) {
   return 'mk-badge--muted';
 }
 
-/** 编辑统一入口：Skill 设计页「协议」页签 */
+/** 编辑统一入口：Skill 设计页「协议」页签（2026-10-15 迁入外壳二级页，落 ?view=skill-design&id=） */
 function openDesign(skillId: string) {
-  void router.push(`/admin/skills/${encodeURIComponent(skillId)}?tab=protocol`);
+  void router.push({ path: '/admin/skills', query: { view: 'skill-design', id: skillId } });
 }
 
 async function loadList() {

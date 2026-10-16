@@ -281,13 +281,16 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     const tones = w.findAll('tbody .mk-minibar__fill').map((el) => el.attributes('data-tone') || '');
     expect(tones).toEqual(['ok', '', 'bad']);
 
-    // 失败行：动作钮改「去详情」（title 指向行内「重试生成」）+ 重试入口就地重发（2026-10-10）
+    // 操作列（2026-10-15 用户拍板）：行内只留「详情」，失败行 title 指向 ⋯ 菜单「重试生成」；
+    // 重试/下线收进折叠菜单，不再并排出钮
     const failRow = w.findAll('tbody tr').find((r) => r.text().includes('路径lp_fail'))!;
-    expect(failRow.find('.mk-actions .mk-btn').text()).toBe('去详情');
+    expect(failRow.find('.mk-actions .mk-btn').text()).toBe('详情');
     expect(failRow.find('.mk-actions .mk-btn').attributes('title')).toContain('重试生成');
-    const retryBtn = failRow.findAll('.mk-actions .mk-btn').find((b) => b.text() === '重试生成');
-    expect(retryBtn).toBeTruthy();
-    expect(retryBtn!.classes()).toContain('mk-btn--primary');
+    expect(failRow.find('.mk-actions .mk-btn--primary').exists()).toBe(false);
+    await failRow.find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    const retryItem = failRow.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '重试生成');
+    expect(retryItem).toBeTruthy();
 
     // 状态条已退役（2026-10-04）：失败抬红由分布条红段单源承载；总量读数迁 MkKpi 卡带
     expect(w.find('.mk-status').exists()).toBe(false);
@@ -299,9 +302,10 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     w.unmount();
   });
 
-  /** 生成停滞（2026-10-10 跑批实锤）：active 且 updatedAt 超 24h → 「停滞」warn 标记 + 行内重试入口；
-   *  fresh 行不标（真实用户数日不学属正常，只提示不强判死） */
-  it('生成停滞：active 超 24h 无更新 → 「停滞」标记 + 行内「重试生成」；fresh 行不标', async () => {
+  /** 生成停滞（2026-10-10 跑批实锤）：active 且 updatedAt 超 24h → 「停滞」warn 标记 + 「重试生成」入口；
+   *  fresh 行不标（真实用户数日不学属正常，只提示不强判死）。
+   *  2026-10-15 用户拍板：「重试生成」自操作列收进 ⋯ 折叠菜单。 */
+  it('生成停滞：active 超 24h 无更新 → 「停滞」标记 + ⋯ 菜单「重试生成」；fresh 行不标', async () => {
     listMock.mockResolvedValue({
       data: {
         data: {
@@ -315,10 +319,15 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await nextTick();
     const trs = w.findAll('tbody tr');
     expect(trs[0].find('.mk-badge--warn').exists()).toBe(false);
-    expect(trs[0].text()).not.toContain('重试生成');
     expect(trs[1].find('.mk-badge--warn').text()).toBe('停滞');
     expect(trs[1].find('.mk-badge--warn').attributes('title')).toContain('重试生成');
-    expect(trs[1].text()).toContain('重试生成');
+    // 停滞行 ⋯ 菜单内出「重试生成」；fresh 行菜单内无此入口
+    await trs[1].find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    expect(trs[1].findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text())).toContain('重试生成');
+    await trs[0].find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    expect(trs[0].findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text())).not.toContain('重试生成');
     w.unmount();
   });
 
@@ -333,7 +342,11 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await nextTick();
     const callsBefore = listMock.mock.calls.length;
 
-    const btn = w.findAll('tbody tr')[0].findAll('.mk-actions .mk-btn').find((b) => b.text() === '重试生成')!;
+    // 「重试生成」已收进 ⋯ 折叠菜单（2026-10-15 用户拍板）：先开菜单再点条目
+    const row = w.findAll('tbody tr')[0];
+    await row.find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    const btn = row.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '重试生成')!;
     await btn.trigger('click');
     await nextTick();
     const btns = [...document.querySelectorAll<HTMLButtonElement>('.mk-confirm button')];
@@ -363,7 +376,10 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await flushPromises();
     await nextTick();
 
-    const btn = w.findAll('tbody tr')[0].findAll('.mk-actions .mk-btn').find((b) => b.text() === '重试生成')!;
+    const row = w.findAll('tbody tr')[0];
+    await row.find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    const btn = row.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '重试生成')!;
     await btn.trigger('click');
     await nextTick();
     const btns = [...document.querySelectorAll<HTMLButtonElement>('.mk-confirm button')];

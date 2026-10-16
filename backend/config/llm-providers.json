@@ -4,12 +4,13 @@
     "provider 不带 baseUrl = 「继承通道」：端点/密钥沿用 platform_api_configs 与上层路由解析（历史行为）",
     "provider 带 baseUrl 时必须同时给 apiKeyEnv（密钥只走环境变量，本文件严禁出现真实密钥）",
     "modelId 字符集 [a-zA-Z0-9._-]；多通道重名允许：裸 id 解析取声明在前的启用通道（总览告警），跨通道引用用 \"providerId/modelId\" 限定式",
-    "enabled=false 的 provider 不进运行时注册表（可留作示例/停用）"
+    "enabled=false 的 provider 不进运行时注册表（可留作示例/停用）",
+    "加供应商照 providers 里 custom-provider-example 的结构：name（展示名）+ baseUrl（供应商服务地址）+ apiKeyEnv（存放密钥的环境变量名）+ models（模型清单）。下面 name/description 是给运营看的人话，别写字段名/机制说明——那属于本块 $rules 与 doc/MODEL_GATEWAY_DESIGN.md §4.2。"
   ],
   "providers": {
     "platform": {
       "name": "平台通道（继承）",
-      "description": "不携带端点：沿用 platform_api_configs / 上层路由的端点与密钥解析，行为与历史版本一致",
+      "description": "使用平台统一的模型服务地址与密钥，无需单独接入",
       "recommended": true,
       "models": {
         "deepseek-v4.1-flash": {
@@ -58,15 +59,15 @@
         }
       }
     },
-    "deepseek-official": {
-      "name": "DeepSeek 官方",
-      "description": "示例条目（enabled=false 不进注册表）：自部署/多通道时按此结构添加供应商——baseUrl + apiKeyEnv + models。现行官方模型即 v4.1-flash / v4-pro（chat/reasoner 旧名已下线）；模型 id 允许与平台通道重名",
+    "custom-provider-example": {
+      "name": "自建供应商（示例）",
+      "description": "示例条目，当前停用。想接自己的模型供应商，照这条准备服务地址、密钥与模型清单即可；密钥只存放在服务器上，不随这条记录保存",
       "enabled": false,
       "baseUrl": "https://api.deepseek.com/v1",
-      "apiKeyEnv": "DEEPSEEK_OFFICIAL_API_KEY",
+      "apiKeyEnv": "CUSTOM_PROVIDER_API_KEY",
       "models": {
         "deepseek-v4.1-flash": {
-          "label": "DeepSeek V4.1 Flash（官方通道）",
+          "label": "DeepSeek V4.1 Flash（示例）",
           "tier": "chat",
           "supportsThinking": true,
           "supportsReasoningEffort": true,
@@ -75,7 +76,7 @@
           "reasoningReserveTokens": 8192
         },
         "deepseek-v4-pro": {
-          "label": "DeepSeek V4 Pro（官方通道）",
+          "label": "DeepSeek V4 Pro（示例）",
           "tier": "reasoning",
           "supportsThinking": true,
           "supportsReasoningEffort": true,

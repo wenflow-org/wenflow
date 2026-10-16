@@ -211,12 +211,20 @@ const routes: RouteRecordRaw[] = [
     redirect: (to) => ({ path: `/admin/${(to.params.page as string) || 'overview'}` })
   },
   {
-    // Prompt 二级设计页（Skill 级编辑台：检视/试运行/运行时/工程，重设计版）
-    // agentId 必填：避免 /admin/skills（Skill 目录）被可选参数吞入设计页
+    // Skill 设计页深链兼容（2026-10-15 迁为外壳二级页）：
+    // 原独立整页 /admin/skills/:agentId 是全站唯一不套管理外壳的页，与其余详情页呈现不一致。
+    // 现重定向到二级页规范形 /admin/skills?view=skill-design&id=，由 AdminConsole 的
+    // ?view=&id= 标准机制承载（侧栏常驻、面包屑返回、Esc/后退可关）。
+    // 旧 ?tab=（protocol/trial/versions/runtime/engineering/routing + 历史别名）映射进本页独立键 ?sdTab=。
     path: '/admin/skills/:agentId+',
-    name: 'AdminSkillEditor',
-    component: () => import('@/views/admin-redesign/SkillDesignPage.vue'),
-    meta: { title: 'Skill 设计', requiresAdminAuth: true }
+    redirect: (to) => {
+      const rawId = to.params.agentId
+      const id = Array.isArray(rawId) ? String(rawId[0] ?? '') : String(rawId ?? '')
+      const q: Record<string, string> = { view: 'skill-design', id }
+      const tab = typeof to.query.tab === 'string' ? to.query.tab : ''
+      if (tab) q.sdTab = tab
+      return { path: '/admin/skills', query: q }
+    }
   },
   // 旧版带参数路由 → 新平级页面（参数型无法被 /admin/:page 吸收，保留重定向）
   // 2026-10-04：学习状态从 people?tab=state 拆出独立页 /admin/learner-state，旧深链改投新页
@@ -250,8 +258,12 @@ const routes: RouteRecordRaw[] = [
     redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
   },
   {
+    // 旧工作台详情深链：改投二级页规范形（2026-10-15；与上面 /admin/skills/:agentId 同源）
     path: '/admin/skill-workbench/:agentId',
-    redirect: (to) => ({ path: `/admin/skills/${to.params.agentId as string}` })
+    redirect: (to) => ({
+      path: '/admin/skills',
+      query: { view: 'skill-design', id: to.params.agentId as string }
+    })
   },
   {
     // 兼容：旧拓扑独立页 → 编排图页（拓扑统计已并入阶段泳道；query 仅保 URL 兼容，无独立 tab）

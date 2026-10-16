@@ -92,8 +92,9 @@
   --mk-red: #c81e1e;
   --mk-red-bg: #fef2f2;
   /* ---- 虚拟学习者「身份哈希八色」头像色板（单源；彩底白字对比度已调 ≥4.5:1，走查 2026-09-27）----
-     消费方：VirtualLearners .vl-avatar--N / VirtualProfile .vp-avatar--N；
-     哈希映射在 components/mk/vlAvatar.ts（CM3：原 TS 数组 + 两页 CSS 三份拷贝收敛）。 */
+     消费方仅剩学习者卡库（VirtualLearnerCards .vlc-avatar--N）——
+     2026-10-15 用户拍板：VirtualLearners 列表 / VirtualProfile 详情已改用语义色（虚拟学习者=紫）。
+     哈希映射在 components/mk/vlAvatar.ts。 */
   --mk-vl-avatar-0: #2563eb; /* 蓝 */
   --mk-vl-avatar-1: #7c3aed; /* 紫 */
   --mk-vl-avatar-2: #047857; /* 绿 */

@@ -53,14 +53,13 @@
           </p>
         </section>
 
-        <!-- ②b 模型供应商：File-as-Truth 目录（llm-providers.json）的通道视图。
-             形态对齐原型 index.html:345-357 .mlist/.mrow 与 1819-1823 供应商行：
-             38px badge 方块（名前 2 字）+ 主行「名 · 用途」+ 副行「id · 承载 N 个模型 · 端点/密钥」
-             + 右侧 ok/warn/off 状态徽标。原型 mrow 的 QPS/成本目录未下发，按「缺字段省略」不硬造 -->
+        <!-- ② 模型供应商与能力限额（2026-10-15 用户拍板合并）：原「模型供应商」列表与
+             「模型能力与限额」表同源于 llm-providers.json，并排铺开被读成「一份文件说两遍」。
+             现按文件的真实层级合成一块：供应商=组头，其模型=组内能力行。 -->
         <section v-if="shows('providers')" class="ac-mr-sect">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">模型供应商</h3>
-            <span class="mk-card__meta" title="模型目录以配置文件为准（改动后自动生效）。不自带端点的供应商沿用平台统一的连接配置，自带端点的供应商在路由时使用自己的地址与密钥">
+            <h3 class="mk-card__title">模型供应商与能力限额</h3>
+            <span class="mk-card__meta" title="模型目录来自配置文件，改动后自动生效，此处只读。降级时只更换模型，连接地址与密钥不变">
               只读 · 来自配置文件
             </span>
           </div>
@@ -70,33 +69,97 @@
           <p v-else-if="data.registry?.lastError" class="ac-mr-note" :title="data.registry?.lastError">
             最近一次更新失败，仍在使用上一次可用的模型目录。
           </p>
-          <div v-if="data.providers?.length" class="ac-mr-mlist" role="list">
-            <div v-for="p in data.providers" :key="p.id" class="ac-mr-mrow" role="listitem">
-              <span class="ac-mr-mrow__badge" aria-hidden="true">{{ providerBadge(p) }}</span>
-              <div class="ac-mr-mrow__grow">
-                <div class="ac-mr-mrow__t">
-                  <span class="ac-mr-mrow__name" :title="p.name">{{ p.name }}</span>
-                  <span v-if="p.description" class="ac-mr-mrow__kind" :title="p.description">· {{ p.description }}</span>
-                  <span v-if="p.recommended" class="mk-badge mk-badge--info">推荐</span>
-                </div>
-                <div class="ac-mr-mrow__d">
-                  <span class="mono">{{ p.id }}</span>
-                  <span class="ac-mr-mrow__sep">·</span>
-                  <span>承载 {{ p.modelIds.length }} 个模型</span>
-                  <template v-if="p.endpointSource === 'own'">
-                    <span class="ac-mr-mrow__sep">·</span>
-                    <span class="mono">{{ p.baseUrl }}</span>
-                    <span class="ac-mr-mrow__sep">·</span>
-                    <span>密钥{{ p.keyConfigured ? '已配置' : '未配置' }}</span>
-                  </template>
-                  <template v-else>
-                    <span class="ac-mr-mrow__sep">·</span>
-                    <span>沿用平台连接配置</span>
-                  </template>
-                </div>
-              </div>
-              <span class="mk-badge ac-mr-mrow__state" :class="providerState(p).cls">{{ providerState(p).label }}</span>
-            </div>
+          <div v-if="providerGroups.length" class="mk-table-scroll">
+            <table class="mk-table mk-table--dense">
+              <thead>
+                <tr>
+                  <th>模型</th><th>状态</th><th>档位</th><th>思考</th><th>推理强度</th>
+                  <th>输出上限</th><th>默认输出</th><th>推理预留</th><th>并发上限</th><th>备用模型</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-for="g in providerGroups" :key="g.id">
+                  <!-- 组头：供应商行（原「模型供应商」列表行形态；38px 方块徽标 + 名/用途 + id/承载/端点 + 状态徽标） -->
+                  <tr class="ac-mr-pgroup">
+                    <td colspan="10">
+                      <div class="ac-mr-mrow ac-mr-mrow--flat">
+                        <span class="ac-mr-mrow__badge" aria-hidden="true">{{ g.badge }}</span>
+                        <div class="ac-mr-mrow__grow">
+                          <div class="ac-mr-mrow__t">
+                            <span class="ac-mr-mrow__name" :title="g.name">{{ g.name }}</span>
+                            <span v-if="g.description" class="ac-mr-mrow__kind" :title="g.description">· {{ g.description }}</span>
+                            <span v-if="g.recommended" class="mk-badge mk-badge--info">推荐</span>
+                          </div>
+                          <div class="ac-mr-mrow__d">
+                            <span class="mono">{{ g.id }}</span>
+                            <span class="ac-mr-mrow__sep">·</span>
+                            <span>承载 {{ g.declaredCount }} 个模型</span>
+                            <template v-if="g.endpointSource === 'own'">
+                              <span class="ac-mr-mrow__sep">·</span>
+                              <span class="mono">{{ g.baseUrl }}</span>
+                              <span class="ac-mr-mrow__sep">·</span>
+                              <span>密钥{{ g.keyConfigured ? '已配置' : '未配置' }}</span>
+                            </template>
+                            <template v-else>
+                              <span class="ac-mr-mrow__sep">·</span>
+                              <span>沿用平台连接配置</span>
+                            </template>
+                          </div>
+                        </div>
+                        <span class="mk-badge ac-mr-mrow__state" :class="g.state.cls">{{ g.state.label }}</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <!-- 组内模型能力行 -->
+                  <tr v-for="model in g.models" :key="model.id" class="ac-mr-mmodel">
+                    <td>
+                      <span class="mono">{{ model.id }}</span>
+                      <span class="ac-mr-label">{{ model.label }}</span>
+                    </td>
+                    <td>
+                      <span v-if="cooldownOf(model)" class="mk-badge mk-badge--warn" :title="`该部署已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(model)!.remainingMs / 1000)}s）`">
+                        ⏳ 冷却中（剩余 {{ Math.ceil(cooldownOf(model)!.remainingMs / 1000) }}s）
+                      </span>
+                      <span v-else class="mk-badge mk-badge--ok" title="该部署无冷却记录">● 健康</span>
+                      <span
+                        v-if="modelWarnings(model).length"
+                        class="mk-badge mk-badge--warn ac-mr-rowwarn"
+                        :title="modelWarnings(model).join('\n')"
+                      >⚠</span>
+                    </td>
+                    <!-- 档位列：表头有「档位」而此前缺这一格，整行会右移、数值与标签错配 -->
+                    <td><span class="mk-badge mk-badge--muted">{{ model.tier || '—' }}</span></td>
+                    <td>
+                      <span class="mk-badge" :class="model.capabilities.supportsThinking ? 'mk-badge--ok' : 'mk-badge--muted'">
+                        {{ model.capabilities.supportsThinking ? '支持' : '不支持' }}
+                      </span>
+                    </td>
+                    <td>{{ model.capabilities.supportsReasoningEffort ? '支持' : '—' }}</td>
+                    <td class="mono">{{ model.limits.maxOutputTokens ?? '—' }}</td>
+                    <td class="mono">{{ model.limits.defaultMaxTokens ?? '—' }}</td>
+                    <td class="mono">{{ model.limits.reasoningReserveTokens || '—' }}</td>
+                    <td class="mono">{{ model.limits.maxParallelRequests ?? '不限' }}</td>
+                    <td class="mono">
+                      <template v-if="model.fallbacks.length">
+                        {{ effectiveFallbacks(model.fallbacks).join(' → ') }}
+                        <span
+                          v-if="model.fallbacks.length > effectiveFallbacks(model.fallbacks).length"
+                          class="ac-mr-label"
+                          title="运行时最多使用主模型加 1 个备用模型，声明的备用再长也只生效前段"
+                        >(声明 {{ model.fallbacks.length }} 个，实际生效 {{ effectiveFallbacks(model.fallbacks).length }} 个)</span>
+                      </template>
+                      <template v-else>—</template>
+                    </td>
+                  </tr>
+                  <!-- 该供应商没有参与路由的模型（停用条目 / 未登记）：一行说明，不留空组 -->
+                  <tr v-if="!g.models.length" class="ac-mr-pempty">
+                    <td colspan="10">
+                      {{ g.enabled ? '该供应商下暂无已登记的模型。' : '该供应商当前停用，其模型不参与路由。' }}
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
           </div>
           <!-- 空态给出口（R6D）：目录只读，接入配置（服务地址 / 密钥 / 模型清单）在
                「模型与接入 → 接入与模型」页签，就地给跳转，不再只留一句说明 -->
@@ -107,75 +170,7 @@
             action-text="去模型接入配置"
             @action="goAccessConfig"
           />
-        </section>
-
-        <!-- ③ 模型能力与限额：目录文件 = 唯一写源。状态列（2026-10-15 用户重组）：
-             部署冷却从独立尾巴卡落进行内；模型级配置提示以 ⚠ 徽标挂行（全串进 title） -->
-        <section v-if="shows('limits')" class="ac-mr-sect">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">模型能力与限额</h3>
-            <span class="mk-card__meta" title="模型目录以配置文件为准，此表只读。降级时只更换模型，连接地址与密钥不变">只读 · 降级仅换模型名</span>
-          </div>
-          <div class="mk-table-scroll">
-            <table class="mk-table mk-table--dense">
-              <thead>
-                <tr>
-                  <th>模型</th><th>状态</th><th>供应商</th><th>档位</th><th>思考</th><th>推理强度</th>
-                  <th>输出上限</th><th>默认输出</th><th>推理预留</th><th>并发上限</th><th>备用模型</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="model in data.models" :key="model.id">
-                  <td>
-                    <span class="mono">{{ model.id }}</span>
-                    <span class="ac-mr-label">{{ model.label }}</span>
-                  </td>
-                  <td>
-                    <span v-if="cooldownOf(model)" class="mk-badge mk-badge--warn" :title="`该部署已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(model)!.remainingMs / 1000)}s）`">
-                      ⏳ 冷却中（剩余 {{ Math.ceil(cooldownOf(model)!.remainingMs / 1000) }}s）
-                    </span>
-                    <span v-else class="mk-badge mk-badge--ok" title="该部署无冷却记录">● 健康</span>
-                    <span
-                      v-if="modelWarnings(model).length"
-                      class="mk-badge mk-badge--warn ac-mr-rowwarn"
-                      :title="modelWarnings(model).join('\n')"
-                    >⚠</span>
-                  </td>
-                  <td>
-                    <span class="mono">{{ model.providerId }}</span>
-                    <span v-if="model.hasOwnEndpoint" class="ac-mr-label" title="该供应商自带端点：路由时整体切换 endpoint/key">独立端点</span>
-                  </td>
-                  <!-- 档位列：表头有「档位」而此前缺这一格，整行从第 3 列起右移一列
-                       （「档位」列显示思考徽标、「并发上限」列显示降级链、「降级链」恒空），
-                       诊断页数值与标签错配会被读成真实配置。 -->
-                  <td><span class="mk-badge mk-badge--muted">{{ model.tier || '—' }}</span></td>
-                  <td>
-                    <span class="mk-badge" :class="model.capabilities.supportsThinking ? 'mk-badge--ok' : 'mk-badge--muted'">
-                      {{ model.capabilities.supportsThinking ? '支持' : '不支持' }}
-                    </span>
-                  </td>
-                  <td>{{ model.capabilities.supportsReasoningEffort ? '支持' : '—' }}</td>
-                  <td class="mono">{{ model.limits.maxOutputTokens ?? '—' }}</td>
-                  <td class="mono">{{ model.limits.defaultMaxTokens ?? '—' }}</td>
-                  <td class="mono">{{ model.limits.reasoningReserveTokens || '—' }}</td>
-                  <td class="mono">{{ model.limits.maxParallelRequests ?? '不限' }}</td>
-                  <td class="mono">
-                    <template v-if="model.fallbacks.length">
-                      {{ effectiveFallbacks(model.fallbacks).join(' → ') }}
-                      <span
-                        v-if="model.fallbacks.length > effectiveFallbacks(model.fallbacks).length"
-                        class="ac-mr-label"
-                        title="运行时最多使用主模型加 1 个备用模型，声明的备用再长也只生效前段"
-                      >(声明 {{ model.fallbacks.length }} 个，实际生效 {{ effectiveFallbacks(model.fallbacks).length }} 个)</span>
-                    </template>
-                    <template v-else>—</template>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <!-- 非模型级配置提示（2026-10-15 用户重组：原「配置提示」独立卡退役）：
-               目录兜底 / 密钥缺失 / 别名类告警无法挂到某一行，收在表尾一条注（无则不渲染，不留空卡） -->
+          <!-- 非模型级配置提示（目录兜底 / 密钥缺失 / 别名类告警无法挂到某一行，收在表尾一条注） -->
           <div v-if="globalWarnings.length" class="ac-mr-warnings">
             <div v-for="(warning, index) in globalWarnings" :key="index" class="mk-alert mk-alert--row" role="alert">
               <span class="mk-alert__msg">{{ warning }}</span>
@@ -269,15 +264,13 @@ interface ModelRegistryOverviewData {
   deprecatedPromptModelCount: number
 }
 
-/* 分区裁剪（2026-10-14 用户拍板，2026-10-15 用户重组后收敛为三片）：宿主按域挂本组件的切片——
-   「别名映射」是路由域事实，归「路由与调用」页签；供应商 / 能力限额（含状态列：冷却 + 行级提示）
-   留在「接入与模型」。原 routes（解析结果）/ cooldown / tips 三片退役：解析结果改由宿主
-   「所配即所得」行内展示（defaults 经 emit 供出）、冷却与模型级提示落限额表状态列、
-   非模型级提示收在表尾注。切片只裁剪渲染范围，数据仍是一次 getModelRegistry。 */
-type MrPart = 'aliases' | 'providers' | 'limits'
+/* 分区裁剪（2026-10-14 用户拍板；2026-10-15 合并后收敛为两片）：宿主按域挂本组件的切片——
+   「别名映射」是路由域事实，归「路由与调用」页签；「providers」= 供应商与能力限额合并块，
+   留「接入与模型」。切片只裁剪渲染范围，数据仍是一次 getModelRegistry。 */
+type MrPart = 'aliases' | 'providers'
 /* 默认值就地写死（不能引用本地常量：defineProps 会被提升到 setup 之外，编译器会拦下） */
 const props = withDefaults(defineProps<{ parts?: MrPart[] }>(), {
-  parts: () => ['aliases', 'providers', 'limits']
+  parts: () => ['aliases', 'providers']
 })
 const shows = (p: MrPart) => props.parts.includes(p)
 
@@ -324,10 +317,22 @@ function effectiveFallbacks(fallbacks: string[]): string[] {
 /* sourceLabel/sourceBadge 2026-10-15 随「默认路由（解析结果）」表退役——
    来源徽标的渲染迁到宿主行内提示（ApiConfig 读 emit('defaults') 的 source 字段） */
 
-/** mrow 方块徽标：供应商名前 2 字（原型 index.html:354 .mrow__badge） */
-function providerBadge(p: ModelRegistryOverviewData['providers'][number]): string {
-  return (p.name || p.id || '?').slice(0, 2)
-}
+/**
+ * 合并块数据：供应商=组头、其模型=组内行（同一份 llm-providers.json 的层级还原）。
+ * 组序随 providers 声明序；组内模型取 models 里 providerId 命中的行（顺序随声明序）。
+ * `declaredCount` 用文件里声明的模型数（含停用供应商）——组内若因停用而无行，仍有计数可读。
+ */
+const providerGroups = computed(() => {
+  const d = data.value
+  if (!d) return []
+  return (d.providers ?? []).map((p) => ({
+    ...p,
+    badge: (p.name || p.id || '?').slice(0, 2),
+    state: providerState(p),
+    declaredCount: p.modelIds?.length ?? 0,
+    models: (d.models ?? []).filter((m) => m.providerId === p.id)
+  }))
+})
 
 /**
  * 供应商三态（原型 statusPill ok/warn/off，index.html:1286-1299 / 1819-1823）：
@@ -388,12 +393,27 @@ defineExpose({ refresh })
 .ac-mr-note__item {
   margin-left: 8px;
 }
-/* 模型供应商行列表（原型 index.html:352-357 .mlist/.mrow，容器 345）：
-   方块徽标 + 名/用途主行 + id/承载/端点副行 + 右侧状态徽标 */
-.ac-mr-mlist {
-  display: grid;
-  gap: var(--mk-space-2);
-  padding: 12px 0 4px;
+/* 模型供应商组（2026-10-15 合并块）：供应商=组头行，其模型=组内能力行。
+   组头沿用 mrow 词汇（方块徽标 + 名/用途 + id/承载/端点 + 状态徽标），但进水表格后
+   去掉卡片描边/底色，改由行分隔线与缩进承担层级。 */
+.ac-mr-pgroup > td {
+  background: var(--mk-surface-2);
+  padding: 8px 12px;
+}
+.ac-mr-pgroup .ac-mr-mrow--flat {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+/* 组内模型行：左缘缩进一档，视觉上属于上面的供应商 */
+.ac-mr-mmodel > td:first-child {
+  padding-left: 20px;
+  border-left: 3px solid var(--mk-line);
+}
+.ac-mr-pempty > td {
+  padding-left: 20px;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
 }
 .ac-mr-mrow {
   display: flex;

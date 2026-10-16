@@ -179,6 +179,17 @@ describe('AdminConsole 导航冒烟', () => {
     await vi.waitFor(() => expect(wrapper.find('.mk-page.ld').exists()).toBe(true), { timeout: 15000 });
   });
 
+  it('深链 ?view=skill-design&id= 打开 Skill 设计页二级页（2026-10-15 由独立整页迁入外壳）', async () => {
+    const { wrapper, router } = await mountConsole('/admin/skills?view=skill-design&id=teaching-turn');
+    await settle();
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'skill-design', id: 'teaching-turn' });
+    expect(subPage.value).toMatchObject({ view: 'skill-design', id: 'teaching-turn' });
+    // 详情组件走 asyncPage（delay:200），等异步 chunk 挂载；渲染的是设计页本体（根 .mk-page.sdp）
+    await vi.waitFor(() => expect(wrapper.find('.mk-page.sdp').exists()).toBe(true), { timeout: 15000 });
+    // 外壳保留：侧栏导航在（不再是整页无壳）
+    expect(wrapper.find('nav[aria-label="管理导航"]').exists()).toBe(true);
+  });
+
   it('跨场景深链 push（overview → people?view=user&id=）同样存活', async () => {
     const { wrapper, router } = await mountConsole('/admin/overview');
     await router.push('/admin/people?view=user&id=user_abc');

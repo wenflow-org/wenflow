@@ -433,7 +433,7 @@ import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
-import { skillStatOf, isLive, intent, investigateAgent } from './store'
+import { skillStatOf, isLive, intent, investigateAgent, openSubPage } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
 import { COMPLETION_META, completionMetaOf } from './glossaryMeta'
@@ -488,9 +488,12 @@ interface PromptEvalPanelExpose {
 const pePanel = ref<PromptEvalPanelExpose | null>(null)
 const PromptEvalPanel = defineAsyncComponent(() => import('./PromptEvalPanel.vue'))
 /** 列表两个视图的共同落点：Skill 设计页「协议」页签（改提示词的唯一编辑点）。
- *  2026-10-14 方案 B：行点击直接走这里，列表侧不再单设「设计」小钮（同落点两入口冗余）。 */
+ *  2026-10-14 方案 B：行点击直接走这里，列表侧不再单设「设计」小钮（同落点两入口冗余）。
+ *  2026-10-15：设计页由独立整页迁入外壳二级页——走 openSubPage 标准机制，落
+ *  ?view=skill-design&id=（协议为默认档，不占 URL）。与其它详情页同一入口，
+ *  且保留列表现有 query（?tab=/?q= 不丢）。 */
 function openDesign(id: string) {
-  void router.push(`/admin/skills/${encodeURIComponent(id)}?tab=protocol`)
+  openSubPage('skill-design', id)
 }
 
 /** 退役 tab 的老深链（健康检查/漂移/对账）改投独立页；只认现役 tab，其余回落 run */
