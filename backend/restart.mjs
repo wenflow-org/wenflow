@@ -3,8 +3,8 @@
  * restart.mjs — 后端统一重启入口（2026-10-08 流程卫生；替代被杀软误判删除的 restart.ps1）。
  *
  * 职责：tsc 快检 → 杀指定端口进程 → ts-node --transpile-only 启动 →
- * 轮询 /readyz 直到就绪（默认 90s），失败退出码非零。
- * 用法：node backend/restart.mjs [--port=3011] [--skip-type-check]
+ * 轮询 /readyz 直到就绪（默认 180s），失败退出码非零。
+ * 用法：node backend/restart.mjs [--port=3011] [--skip-type-check] [--ready-timeout=180]
  */
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -21,6 +21,11 @@ const arg = (k, d) => {
 
 const PORT = Number(arg('port', 3001));
 const SKIP_TYPE_CHECK = arg('skip-type-check', false) === true;
+// 就绪窗口（秒）：本机冷启动要跑技能完成度诊断文件扫描、Token 成本缓存预热、管理端冷读预热等，
+// 偶尔 90~100s 才就绪；窗口偏紧会对「其实已起来」的服务误报超时。默认抬到 180s，可用 --ready-timeout 覆盖。
+const readyArg = arg('ready-timeout', 180);
+const parsedReady = typeof readyArg === 'number' || typeof readyArg === 'string' ? Number(readyArg) : NaN;
+const READY_TIMEOUT_SEC = Number.isFinite(parsedReady) && parsedReady > 0 ? parsedReady : 180;
 
 const log = (m) => console.log(`[restart] ${m}`);
 
@@ -69,8 +74,8 @@ child.unref();
 log(`已启动 PID=${child.pid}，日志 ${logFile}`);
 
 // 4) readyz 轮询
-log('等待 /readyz（最长 90s）…');
-const deadline = Date.now() + 90_000;
+log(`等待 /readyz（最长 ${READY_TIMEOUT_SEC}s）…`);
+const deadline = Date.now() + READY_TIMEOUT_SEC * 1000;
 while (Date.now() < deadline) {
   await new Promise((r) => setTimeout(r, 2000));
   const ready = await fetch(`http://127.0.0.1:${PORT}/readyz`, { signal: AbortSignal.timeout(3000) })
