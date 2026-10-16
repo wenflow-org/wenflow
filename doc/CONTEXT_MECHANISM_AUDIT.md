@@ -1,8 +1,8 @@
 # 上下文机制审计与优化方向（Context Mechanism Audit）
 
-> 📌 类型：历史审计（缓存基线数据为改造前口径）｜最后核验：2026-09-28（20.9% 标记+死文件名已修）。索引见 [doc/README.md](./README.md)。
+> 📌 类型：历史审计（缓存基线数据为改造前口径）｜最后核验：2026-10-16（20.9% 标记+死文件名已修；正文状态行与抬头口径统一）。索引见 [doc/README.md](./README.md)。
 
-> 状态：**现行**（2026-09-14）
+> 状态：**历史审计**（快照日期 2026-09-14；缓存基线为前缀稳定化改造前口径）
 > 范围：goal / path / teaching / profile / simulation 五阶段 skill + aux 的**上下文机制**
 > 数据来源：`backend/prisma/dev.db` 真实调用遥测（`llm_execution_attempts` × `prompt_call_logs`）
 > 关联：[`SKILL_PROTOCOL_V4.md`](./SKILL_PROTOCOL_V4.md)（§2.5 输入契约 / §3 材料池 / §5 运行时链路）、[`AGENT_IO_DESIGN_V3.md`](./AGENT_IO_DESIGN_V3.md)

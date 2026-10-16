@@ -1,5 +1,7 @@
 # 管理端桌面端全面巡检报告（2026-09-24）
 
+> 🗄️ **归档（2026-09-28）**：历史快照 · 非活规范。复跑入口 `node scripts/admin-audit.mjs`（只读）。索引见 [doc/README.md](../README.md)。
+
 - **检查时间**：2026-09-24
 - **环境**：本地开发 `http://localhost:5173/admin`（前端 Vite :5173，后端 :3001）
 - **账号**：开发默认管理员 `admin`（`ChangeMe_2026_Admin`，与 `scripts/admin-explore.mjs` 同源）

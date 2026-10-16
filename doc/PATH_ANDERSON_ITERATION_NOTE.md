@@ -1,6 +1,6 @@
 # 路径场景中的 Anderson 标注迭代方向
 
-> ⚫ **已归档（2026-09-28）**：本文是「为什么砍掉二阶段 Anderson 重规划」的唯一决策留痕。短期方案已全部落地（`stage-designer.yaml` / `retired-skills.ts` / `DISPLAY_LABEL_MAP.procedural`）。内容停止更新，勿作为现行规范引用。
+> 📌 类型：设计留痕（⚫ 已归档 2026-09-28）｜最后核验：2026-10-16。索引见 [doc/README.md](./README.md)。本文是「为什么砍掉二阶段 Anderson 重规划」的唯一决策留痕；短期方案已全部落地（`stage-designer.yaml` / `retired-skills.ts` / `DISPLAY_LABEL_MAP.procedural`），内容停止更新，勿作为现行规范引用。
 
 
 ## 背景

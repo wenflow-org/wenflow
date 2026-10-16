@@ -21,17 +21,17 @@
 | KC_MULTIPATH_AND_LEARNER_SIGNAL_SCOPE.md | 活规范 | KC 多路径+学习者信号（§2 结论仍成立） |
 | LEARNER_CENTER_AND_STATE_FUSION.md | 活规范 | 学习者中心/状态融合（§3.3 已接线） |
 | LEARNER_MODEL_ARCHITECTURE.md（.en） | 活规范 | 学习者模型（Phase 5 已消费；§6/§10/§11 待补） |
-| LEARNER_STATE_REVIEW_DESIGN.md | 设计留痕 | 🔴 三张表未建，照抄会建错表 |
+| LEARNER_STATE_REVIEW_DESIGN.md | 设计留痕 | ⚠️ 文内表名与现状不符，已锚定 learner_projections（见文内复核行） |
 | PATH_PRODUCTION_REPLAN_CONTRACT.md（.en） | 活规范 | ⚠️ 已知待办：2 处 409 判定 |
 | PATH_ANDERSON_ITERATION_NOTE.md（.en） | 设计留痕（已归档） | 砍二阶段的唯一决策留痕 |
 | SESSION_JSON_INCREMENTAL_DESIGN.md | 设计留痕（已落地） | 会话大 JSON 列增量化设计与验收清单 |
 | VIRTUAL_LEARNER_DESIGN.md | 活规范 | VL 主文档（裁判已独立） |
 | VIRTUAL_LEARNER_CHAIN.md | 活规范 | VL 链路 SoT（16/17） |
 | VIRTUAL_LEARNER_PRESET_DESIGN.md | 设计留痕（已归档） | 真源已迁 presets.yaml v4 |
-| VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md | 活规范 | ⚠️ 抬头待更新「已落地」 |
+| VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md | 活规范 | 页面侧已落地（e2af8f7/ce8c983/b57c480）；系统层 ③④ 见正文 |
 | VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md | 设计留痕 | ⚠️ 抬头已失准，全套修订待做 |
 | AGENT_IO_DESIGN_V3.md | 设计留痕（部分归档） | §1-4 由 V4 §2.6 承接 |
-| UPGRADE_DIRECTION_20Q.md | 治理台账 | Q12 已改「已实施」 |
+| UPGRADE_DIRECTION_20Q.md | 治理台账 | Q12/Q18 分级串位已修正；「向量/embedding/材料库」过期全局声明已回收 |
 | NON_FUNCTIONAL_GOVERNANCE_PLAN.md | 治理计划 | ⚠️ 状态基线 2026-07-17 |
 | EDUCATIONAL_THEORY_MAP.md | 参考资料 | 理论地图（文献已核实） |
 | ADMIN_TERMINOLOGY_AUDIT.md | 活规范 | 术语 SSOT（不可归档） |
