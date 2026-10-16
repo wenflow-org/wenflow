@@ -206,7 +206,14 @@
                   </div>
                 </div>
               </td>
-              <td v-if="showCol('status')"><span class="mk-badge" :class="statusBadge(r.status)" :title="statusHint(r.status)">{{ statusLabel(r.status) }}</span></td>
+              <td v-if="showCol('status')">
+                <!-- 2026-10-15 用户拍板：状态列只在「说得出阶段说不出的话」时出词——
+                     active 行的「进行中」零信息量（进行中必落在澄清/方案某阶段），
+                     与阶段列同出两个相同蓝胶囊属重复。终态(完成/取消)与异常(失败/放弃)才出徽章，
+                     active 行留「—」把进度信息让给阶段列 -->
+                <span v-if="showsStatusBadge(r.status)" class="mk-badge" :class="statusBadge(r.status)" :title="statusHint(r.status)">{{ statusLabel(r.status) }}</span>
+                <span v-else class="mk-na" title="会话进行中，进度见「阶段」列">—</span>
+              </td>
               <td v-if="showCol('stage')">
                 <div class="gc-stage-cell">
                   <div class="gc-stage-cell__head">
@@ -565,6 +572,13 @@ const statusHint = (s: string | null | undefined) => {
   if (k === 'failed') return '会话失败：可在会话座舱查看失败原因与日志'
   return ''
 }
+
+/** 状态列出词口径（2026-10-15 用户拍板）：状态列只说「阶段列说不出的话」——
+    进行中族（active 等）必然落在澄清/方案某个阶段上，与阶段列同出两枚同色蓝胶囊属复读，
+    故留「—」把进度让给阶段列；终态（已完成/已取消）与异常终止（失败/已放弃）阶段列表达不了，才单独成徽章。
+    黑名单（仅列进行中族）而非白名单：将来新增的终态/异常状态自动出词，不会静默丢信息。 */
+const ONGOING_STATUS = new Set(['active', 'in_progress', 'inprogress', 'running'])
+const showsStatusBadge = (s: string | null | undefined) => !ONGOING_STATUS.has(String(s || '').toLowerCase())
 
 /** 阶段过程点条工具提示（人话）：当前第 n/total 步（创建→澄清→方案→完成） */
 function stageDotsTitle(r: Row): string {
