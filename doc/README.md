@@ -39,7 +39,7 @@
 | ADMIN_VISUAL_LAYER_SPEC.md | 活规范 | ⛔ 禁归档（守卫硬引用）｜v4 已接设计体系包，令牌层/圆角/阴影/材质收口完毕 |
 | NEWUI-PROTOTYPES.md | 活规范 | newui 原型登记与「原型值残留」规则（基准层级：tokens.css/spec v4 > 原型 > 历史文档） |
 | ADMIN_COLUMN_WIDTH_SPEC.md | 活规范 | 48/48 全中 |
-| ADMIN_PAGE_TEMPLATES.md | 历史快照·已存档 | 2026-10-02 存档：T1-T4 模板职责由 newui 原型复刻体系 + spec v4 承接 |
+| ADMIN_PAGE_TEMPLATES.md | 历史快照（已存档） | 2026-10-02 存档；惟 R2 状态语义色 / 危险确认约定仍被活代码引用，2026-10-16 已迁 spec §0.5 |
 | ADMIN_TABS_BUSINESS_AUDIT.md | 历史审计 | 未核验 |
 | ADMIN_MODULE_BENCHMARK.md | 历史快照 | 未核验 |
 | CONTEXT_MECHANISM_AUDIT.md | 历史审计 | 缓存基线为改造前口径 |

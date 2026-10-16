@@ -334,7 +334,7 @@ async function publishCoreAsVariant() {
     ].join('\n'),
     confirmText: '发布',
     /* 发布/停止/晋级都是可逆的实验臂操作（版本行保留为历史，可再克隆/再晋级），
-       非销毁动作不该吃默认红底（doc/ADMIN_PAGE_TEMPLATES.md:644）。 */
+       非销毁动作不该吃默认红底（doc/ADMIN_VISUAL_LAYER_SPEC.md §0.5「危险确认」）。 */
     danger: false
   })
   if (!ok) return

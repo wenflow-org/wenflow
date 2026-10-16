@@ -58,7 +58,7 @@
       </div>
       <!-- 索引接口失败必须落在持久错误态 + 重试入口：此前只有一次瞬时 toast，
            失败后 cards 仍为 []，命中下面的空态，页面显示「卡库还是空的 / 导入第一张卡」，
-           把「没拉到」说成「本来就没有」（ADMIN_PAGE_TEMPLATES R2 硬约束）。 -->
+           把「没拉到」说成「本来就没有」（ADMIN_VISUAL_LAYER_SPEC §0.5「状态语义色」硬约束 2）。 -->
       <MkEmptyState
         v-else-if="indexError"
         tone="error"

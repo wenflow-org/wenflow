@@ -1,6 +1,6 @@
 # 路径生产场景改造说明（统一架构）
 
-> 📌 类型：活规范（⚠️ 已知待办：2 处 409 判定写错、漏记 rebuild-all）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范｜最后核验：2026-10-16（修正 2 处 409 判定、补记 `rebuild-all` 模式）。索引见 [doc/README.md](./README.md)。
 
 ## 适用范围
 
@@ -64,15 +64,17 @@ learning.service 调用 path-agent 时，除基础字段外需透传：
 
 | 模式 | 状态 | 语义 |
 |---|---|---|
+| `regenerate`（无学习进度） | ✅ | 整路径覆盖重建（replace-path）：删除旧 milestones 重建 |
+| `regenerate`（有 `completed`、无 `in_progress`） | ✅ | 收敛为 replan-stage：重设计当前活动阶段、保留已完成；带 `fromStageNumber` 时转为从该阶段起的多阶段重排 |
+| `regenerate` + `mode=rebuild-all` | ✅ | 显式「整条重来」：即使有 `completed` 也走 replace-path 整建（旧课堂/记录孤儿化保留在库）；有 `in_progress` → 409 `PATH_MUTATION_HAS_IN_PROGRESS` |
+| `regenerate` + `adjustments` | ✅ | `adjustments` **不是分支开关**（分支由学习进度决定）；它作为 `reason` 与 `normalizedInput.understanding.adjustments` 注入，重规划时最高优先级 |
 | `replan` + `mode=overwrite` | ✅ 现行唯一模式（默认） | 就地重设计**单个目标阶段**（resolveStageReplanTarget 定位当前活动阶段）：删除该阶段未完成任务、保留已完成（order 续排）、冻结学习证据、rollbackSnapshot 可恢复；发 `path:adjusted` 事件 |
 | `replan` + `mode=new_version` | ❌ 未实现（抛 `PATH_VERSIONING_NOT_SUPPORTED` 409） | 契约第一版曾承诺"创建新路径版本"，从未落地；按 2026-08-31 决策**不实现版本化/回退**（用户侧无需旧版本，overwrite + 冻结语义已满足） |
-| `regenerate`（无 adjustments） | ✅ | 整路径覆盖重建（replace-path）：删除旧 milestones 重建，**有学习进度（completed/in_progress）即 409 拦截** |
-| `regenerate` + `adjustments`（2026-08-31 新增） | ✅ | 用户侧"补充说明重新生成"：无进度 → 整路径重建（补充说明注入 `normalizedInput.understanding.adjustments` 供 path-agent 重规划）；有 completed 无 in_progress → 收敛为 replan-stage 重设计当前活动阶段（reason=补充说明，已完成保留）；有 in_progress/未结束课堂 → 409 |
 
 契约字段：
 
 - `triggerSource`: `goal-conversation|learner-model-agent|ai-teaching|admin|system|api`
-- `mode`: `new_version|overwrite`（服务端默认 `overwrite`；`new_version` 抛错）
+- `mode`: replan 用 `new_version|overwrite`（服务端默认 `overwrite`；`new_version` 抛 `PATH_VERSIONING_NOT_SUPPORTED`）；regenerate 另接受 `rebuild-all`（显式整条重建）
 - `evidence`: 自定义证据对象
 - `adjustments`（regenerate 专用）: 用户补充说明文本
 
@@ -111,5 +113,6 @@ learning.service 调用 path-agent 时，除基础字段外需透传：
 硬规则：
 
 - 已学内容冻结（`completed` 任务不可改写）
-- 有 `in_progress` 任务或未结束课堂时禁止任何重调（409 提示先结束课堂）
+- **重调（replan-stage）的拦截条件是「范围内有未结束课堂」**（409 `PATH_MUTATION_HAS_OPEN_SESSION`，响应附课堂清单，前端据此走「一键清场 → 自动重试」闭环）。2026-10-15 P0-1 起**不再单看 `in_progress` 标记**——end_only 放弃收尾与超时收尾会把任务留在 `in_progress` 当化石标记，拿它挡路会让「清场 → 重试」永久 409（`path-mutation-safety.ts:260-277`）
+- **replace-path 的拦截条件是「有学习进度（`completed`/`in_progress`）或已完成课堂证据」**（409）；用户主动整条重建（`mode=rebuild-all`）时 `allowCompleted` 放行已完成，仅拦 `in_progress`
 - 默认重调模式为 `overwrite`

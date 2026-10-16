@@ -651,7 +651,7 @@ async function closeOrchestration() {
       confirmText: '丢弃并关闭',
       /* danger:false = 「放弃未保存修改」统一档（2026-10-06 审核 §主题 7）：
          与 SkillDesignPage 三处（刷新设计页/切换 Skill/离开设计页）同语义，
-         原为 true 造成同一语义两页分级相反。doc/ADMIN_PAGE_TEMPLATES.md:644 的
+         原为 true 造成同一语义两页分级相反。doc/ADMIN_VISUAL_LAYER_SPEC.md §0.5「危险确认」的
          19 处清单以此档为准，本条已登记。 */
       danger: false,
     });
