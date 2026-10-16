@@ -193,19 +193,20 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(DETAIL_COMPONENTS.skill).toBeTruthy()
   })
 
-  it('Skills.vue 行点击直达设计页（2026-10-14 方案 B），且不再引用 SkillDrawer / openSubPage', async () => {
-    // 源文本白盒：SkillDrawer 引用清零；行点击改走 openDesign（原「设计」小钮撤除）
+  it('Skills.vue 行点击直达设计页二级页（2026-10-14 方案 B；2026-10-15 由独立整页迁入外壳）', async () => {
+    // 源文本白盒：SkillDrawer 引用清零；行点击改走 openDesign（原「设计」小钮撤除）。
+    // 2026-10-15 设计页迁入外壳后 openDesign 走 openSubPage 标准机制（与其它详情页同入口），
+    // 故不再断言「不含 openSubPage」，改断言它确以二级页机制打开。
     expect(SkillsSource).not.toContain('SkillDrawer')
-    expect(SkillsSource).not.toContain('openSubPage')
     expect(SkillsSource).not.toContain('>设计</button>')
     expect(SkillsSource).toContain('@click="openDesign(')
-    // 行为黑盒：真实点击目录行 → 路由落到设计页「协议」页签
+    expect(SkillsSource).toContain("openSubPage('skill-design'")
+    // 行为黑盒：真实点击目录行 → 打开设计页二级页（store.subPage 契约；
+    // URL 落地由 AdminConsole 的 subPage→URL watch 负责，另有 admin-console.smoke 覆盖）
+    closeSubPage()
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [
-        { path: '/admin/:page?', component: { template: '<div />' } },
-        { path: '/admin/skills/:agentId+', component: { template: '<div />' } }
-      ]
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }]
     })
     await router.push('/admin/skills')
     await router.isReady()
@@ -216,7 +217,8 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(row.exists()).toBe(true)
     await row.trigger('click')
     await settle()
-    expect(router.currentRoute.value.fullPath).toBe('/admin/skills/skill-a?tab=protocol')
+    expect(subPage.value).toMatchObject({ view: 'skill-design', id: 'skill-a' })
+    closeSubPage()
     w.unmount()
   })
 

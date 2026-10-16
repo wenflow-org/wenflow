@@ -74,10 +74,10 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.query.tab).toBe('topology');
   });
 
-  it('/admin/skill-workbench/:agentId → 设计页（旧工作台详情深链兼容）', async () => {
+  it('/admin/skill-workbench/:agentId → 设计页二级页（旧工作台详情深链兼容，2026-10-15 迁入外壳）', async () => {
     await router.push('/admin/skill-workbench/goal-agent');
-    expect(router.currentRoute.value.name).toBe('AdminSkillEditor');
-    expect(router.currentRoute.value.params.agentId).toEqual(['goal-agent']);
+    expect(router.currentRoute.value.path).toBe('/admin/skills');
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'skill-design', id: 'goal-agent' });
   });
 
   it('导航收敛旧 URL 重定向（2026-09-04 合并 + 2026-09-29 学习会话拆回独立页 + 2026-10-04 学习状态拆出独立页）', async () => {
@@ -146,10 +146,15 @@ describe('Admin 主路由解析', () => {
     expect(router.currentRoute.value.query.tab).toBeUndefined();
   });
 
-  it('/admin/skills/:agentId → SkillDesignPage 路由（不被 :page 吞掉）', async () => {
+  it('/admin/skills/:agentId → 设计页二级页重定向（2026-10-15：独立整页迁入外壳，?tab= 映射进 ?sdTab=）', async () => {
     await router.push('/admin/skills/goal-agent');
-    expect(router.currentRoute.value.name).toBe('AdminSkillEditor');
-    expect(router.currentRoute.value.params.agentId).toEqual(['goal-agent']);
+    expect(router.currentRoute.value.name).toBe('AdminConsole');
+    expect(router.currentRoute.value.path).toBe('/admin/skills');
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'skill-design', id: 'goal-agent' });
+    // 旧页签参数映射进本页独立键（不与列表 ?tab= 串键）
+    await router.push('/admin/skills/goal-agent?tab=versions');
+    expect(router.currentRoute.value.query.sdTab).toBe('versions');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
   });
 
   it('/admin/skill-workbench → AdminConsole 场景（Skill 工作台，旧 :agentId? 路由不再吞单段路径）', async () => {

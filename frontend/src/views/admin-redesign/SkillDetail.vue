@@ -590,10 +590,11 @@
  *  - 四段发布流：后端无阶段状态接口 → 空态；
  * 功能口径：SkillDrawer 的四页签能力全部迁入对应页签（概览→运行时指标+最近调用、
  * Prompt→协议页签 System Prompt 卡、模型配置/模型测试→运行时页签），
- * 深度编辑（协议发布 / 版本回滚 / 字段路由编辑）仍由 /admin/skills/:id 设计页承载，
+ * 深度编辑（协议发布 / 版本回滚 / 字段路由编辑）仍由 Skill 设计页承载
+ * （2026-10-15 起同挂外壳二级页 ?view=skill-design&id=，不再是独立整页 /admin/skills/:id），
  * 本页用原型动作钮的形态显式跳转，能力一个不丢。
  */
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { subPage, closeSubPage, setSubPageLabel, skillStatOf, recentSpansOf, openTrace, type TraceSpan } from './store'
 import { liveSkillProfiles, liveExtraProfiles, errMsg, liveSkillStatsRange } from './live'
@@ -1142,18 +1143,17 @@ async function load(force = false) {
 /* ===== 换技能（含深链 / 关闭）的复位 watch 统一放在文件尾：
    immediate 回调在 setup 期同步执行，必须排在全部状态声明之后（const 无提升）。 ===== */
 
-/* ===== 治理动作：设计页跳转（深度编辑仍在 /admin/skills/:id，判例 SkillDrawer goPromptLab） ===== */
-/* 必须先让「关闭二级页」落地再 push：宿主 AdminConsole 有一条 subPage→URL 的 watch，
-   它在 subPage 清空时会 replace 回本场景列表路径，与紧随其后的 push 打对台，
-   两个导航同帧结算 → push 以 NAVIGATION_CANCELLED 作废，用户被丢回 Skills 列表
-   （hero/版本/字段路由/工程/Prompt 弹层共 6 处入口全断）。await nextTick() 让清页先提交，
-   再 push 目标路由；已是目标路由时跳过，避免重复导航。 */
-async function goDesign(tabKey?: string) {
-  const id = skillId.value
-  const path = `/admin/skills/${encodeURIComponent(id)}${tabKey ? `?tab=${tabKey}` : ''}`
-  closeSubPage()
-  await nextTick()
-  if (router.currentRoute.value.fullPath !== router.resolve(path).fullPath) void router.push(path)
+/* ===== 治理动作：设计页跳转（2026-10-15 设计页迁入外壳二级页，落 ?view=skill-design&id=） =====
+   设计页与本页同挂 /admin/skills，切换只是同路径换 view/id（+ 落点页签 sdTab），
+   不再是「先 closeSubPage 再 push 另一条路由」的跨路由竞态（旧实现两导航同帧结算会
+   NAVIGATION_CANCELLED 把用户丢回列表）。合并当前 query 保留列表侧 ?tab=/?q= 等上下文；
+   本页页签键 skdTab 不带走（设计页读独立键 sdTab）。 */
+function goDesign(tabKey?: string) {
+  const q = { ...tabRoute.query, view: 'skill-design', id: skillId.value } as Record<string, string>
+  delete q.skdTab
+  if (tabKey) q.sdTab = tabKey
+  else delete q.sdTab
+  void router.push({ path: '/admin/skills', query: q })
 }
 
 /** 最近调用行 → 执行日志 Trace（动线与 SkillDrawer goTrace 一致：先收详情再跳） */

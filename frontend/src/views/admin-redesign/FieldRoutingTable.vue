@@ -621,7 +621,8 @@ async function loadSkillSyncs() {
 }
 
 function goSkill(skillId: string) {
-  void router.push({ path: `/admin/skills/${skillId}`, query: { tab: 'routing' } });
+  // 2026-10-15：设计页迁入外壳二级页，落点 ?view=skill-design&id=，页签键独立为 sdTab
+  void router.push({ path: '/admin/skills', query: { view: 'skill-design', id: skillId, sdTab: 'routing' } });
 }
 
 // ============ 编排文件编辑（单源化批次 C） ============

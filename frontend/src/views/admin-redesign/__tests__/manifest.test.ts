@@ -86,12 +86,14 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('详情页注册表（subPage）四个视图齐全', () => {
+  it('详情页注册表（subPage）视图齐全（含 2026-10-15 迁入的 skill-design 设计页）', () => {
     expect(DETAIL_COMPONENTS).toMatchObject({
       learner: expect.anything(),
       virtual: expect.anything(),
       user: expect.anything(),
-      session: expect.anything()
+      session: expect.anything(),
+      skill: expect.anything(),
+      'skill-design': expect.anything()
     });
   });
 });

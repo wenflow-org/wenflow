@@ -1,8 +1,9 @@
 <template>
   <div class="mk-page sdp">
-    <!-- 顶部：返回 + 状态条（与 console 统一的运维简报语言） -->
+    <!-- 状态条（与 console 统一的运维简报语言）。
+         2026-10-15 迁入外壳：撤页内「← Skill 与提示词」返回钮——返回由壳层面包屑/Esc/
+         浏览器后退承担（判例 LearnerDetail「返回入口在壳层顶栏，页内不重复」）。 -->
     <header class="sdp-head">
-      <button type="button" class="mk-back" @click="goConsole">← Skill 与提示词</button>
       <div v-if="overview" class="mk-status" :class="statusToneCls">
         <span class="mk-status__dot"></span>
         <strong class="mk-status__title">{{ overview.displayName || skillId }}</strong>
@@ -112,9 +113,12 @@
 
 <script setup lang="ts">
 /**
- * SkillDesignPage（Prompt 二级设计页 · 调试闭环重设计）
- * 路由：/admin/skills/:agentId
- * 拆分后主文件只负责：顶栏状态 / 单层 tab 导航 / 概览加载 / 脏态守卫；
+ * SkillDesignPage（Skill 设计页 · 调试闭环重设计）
+ * 落点：AdminConsole 二级页 ?view=skill-design&id=<skill>（2026-10-15 由独立整页
+ *   /admin/skills/:agentId 迁入外壳——此前是全站唯一不套管理外壳的整页，与学习者/会话/
+ *   路径 / 卡库详情的呈现语言不一致）。返回走外壳面包屑/Esc/浏览器后退（closeSubPage），
+ *   页内不再自带返回钮。id 取自 store.subPage，与其它二级页同源。
+ * 拆分后主文件只负责：顶部状态条 / 单层 tab 导航 / 概览加载 / 脏态守卫；
  * 各 tab 内容在 skill-design/ 下独立组件（protocol/trial/versions/runtime/engineering/routing）。
  * 设计主线：复现问题 / 安全变更 / 性能排障 三条工作流
  */
@@ -125,7 +129,7 @@ import {
   adminSkillWorkbenchApi
 } from '@/api/adminApi'
 import { askConfirm } from './useConfirm'
-import { AGENT_TONES } from './store'
+import { AGENT_TONES, subPage, closeSubPage, setSubPageLabel } from './store'
 import { coreEditorState, fmtMs, errText } from './skill-design/sdp-shared'
 import ProtocolTab from './skill-design/protocol-tab.vue'
 import TrialTab from './skill-design/trial-tab.vue'
@@ -140,25 +144,14 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 
-/* ---------- 路由与基础 ---------- */
+/* ---------- 基础 ---------- */
 const route = useRoute()
 const router = useRouter()
 
-const agentIdParam = computed(() => {
-  const v = route.params.agentId
-  return typeof v === 'string' ? v : Array.isArray(v) ? v[0] : ''
-})
-const skillId = computed(() => agentIdParam.value.replace(/^skill:/, ''))
-
-/** 返回来源页（2026-10-14 方案 B 后列表行是主入口，按钮文案随之从「← 控制台」改为
-    去向名「← Skill 与提示词」——两类落地都在 Skill 域，旧文案指向的「控制台」与真实
-    目的地不符）：优先回 SPA 来源页（从 Skill 列表行 / 抽屉 / 字段路由表进入均可）；
-    直接深链进来（无站内上一页）时回 Skill 列表兜底。onBeforeRouteLeave 的未保存确认对 back 同样生效 */
-function goConsole() {
-  const back = (window.history.state as { back?: string } | null)?.back
-  if (back && back.startsWith('/admin/')) router.back()
-  else void router.push('/admin/skills')
-}
+/** 目标 Skill：取自二级页 store（与 SessionCockpit/LearnerDetail 同源），
+    不再读 route.params.agentId——本页现挂在 /admin/skills 的 ?view=skill-design&id=… 上，
+    路径里没有 agentId 段。id 可能带 skill: 前缀，去掉后为裸 skill id。 */
+const skillId = computed(() => String(subPage.value?.id || '').replace(/^skill:/, ''))
 
 /** Dry Run → 试跑页签 */
 function goDryRun() {
@@ -233,8 +226,14 @@ const tabs: Array<{ key: TabKey; label: string }> = [
 const TAB_KEYS = tabs.map((t) => t.key)
 /** #128 已激活过的页签（首次激活才挂载，之后 v-show 保状态）：协议页签是默认入口，预置 */
 const visited = reactive(new Set<TabKey>(['protocol']))
+/** 本页页签 URL 键（2026-10-15 迁入外壳时由 ?tab= 改为独立键 ?sdTab=）：
+    本页现与 Skill 列表页共路径 /admin/skills，若沿用 ?tab= 会与列表的 run/model-routing/
+    prompt-eval 串键（切页签把列表键写成 versions，closeSubPage 保留非 view/id query →
+    返回列表时 Skills 的 watcher 见非法值静默重置为 run）。判例：SkillDetail 用 ?skdTab=、
+    PromptEvalPanel 用 ?peTab=。 */
+const TAB_QUERY_KEY = 'sdTab'
 /** MkSubTabs 回传 string：收敛回 TabKey（非法键忽略）。
-    #143：切换同时写回 ?tab=，与 applyQTab（唯一读取入口）形成双向同步——
+    #143：切换同时写回 ?sdTab=，与 applyQTab（唯一读取入口）形成双向同步——
     此前只写内存，切到「版本」后刷新/分享/复制链接会回到旧页签。
     默认档 protocol 从 URL 摘除（与 SkillDetail 缺省不占 URL 同约定），保持链接干净。 */
 function onTabSelect(key: string) {
@@ -242,17 +241,17 @@ function onTabSelect(key: string) {
   visited.add(key as TabKey)
   tab.value = key as TabKey
   const nextTab = key === 'protocol' ? undefined : key
-  const curTab = typeof route.query.tab === 'string' ? route.query.tab : undefined
+  const curTab = typeof route.query[TAB_QUERY_KEY] === 'string' ? route.query[TAB_QUERY_KEY] as string : undefined
   if (curTab !== nextTab) {
     const query = { ...route.query }
-    if (nextTab) query.tab = nextTab
-    else delete query.tab
+    if (nextTab) query[TAB_QUERY_KEY] = nextTab
+    else delete query[TAB_QUERY_KEY]
     void router.replace({ query })
   }
 }
-// ?tab= 直达 + 旧链接兼容（workbench 已拆入试跑）
+// ?sdTab= 直达 + 旧链接兼容（workbench 已拆入试跑；旧 ?tab= 键在路由 redirect 里映射进 ?sdTab=）
 function applyQTab() {
-  const qTab = typeof route.query.tab === 'string' ? route.query.tab : ''
+  const qTab = typeof route.query[TAB_QUERY_KEY] === 'string' ? route.query[TAB_QUERY_KEY] as string : ''
   if (['protocol', 'trial', 'versions', 'runtime', 'engineering', 'routing'].includes(qTab)) tab.value = qTab as TabKey
   if (qTab === 'workbench' || qTab === 'inspect' || qTab === 'preview' || qTab === 'trial') tab.value = 'trial'
   if (qTab === 'edit') tab.value = 'protocol'
@@ -260,7 +259,7 @@ function applyQTab() {
   visited.add(tab.value)
 }
 applyQTab()
-watch(() => route.query.tab, applyQTab)
+watch(() => route.query[TAB_QUERY_KEY], applyQTab)
 
 /* ---------- 子组件刷新协议（发布/回滚/切换 skill 后触发各 tab 重拉） ---------- */
 const refreshTick = ref(0)
@@ -322,6 +321,8 @@ async function loadAll() {
       return
     }
     overview.value = found
+    // 面包屑回填中文名（判例 SessionCockpit/LearnerDetail）：未取到则壳层回退显示 id 截断
+    if (found.displayName) setSubPageLabel(found.displayName)
     const meta = await adminSkillWorkbenchApi.getMeta(found.agentId).catch(() => null)
     if (id !== skillId.value) return
     workbenchMeta.value = meta?.data?.data ?? meta?.data ?? null
@@ -343,13 +344,7 @@ function shortFilePath(p?: string) {
   return parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : p
 }
 
-/* 脏态离开保护：切 Skill / 关闭页面 / 刷新前确认，避免静默丢编辑内容。
-   #119：lastAgentId 初始化为挂载时的真实 agentId——此前恒为空串，组件挂载后首次参数变化前
-   取消切换会 replace 到 `/admin/skills/`（空 id，落 Skill 目录页），等于「点了取消却离开当前 Skill」 */
-let lastAgentId = agentIdParam.value
-/** 已确认停留的完整路径（含 query）：取消切换时原样回滚，不丢 ?tab= 等定位参数 */
-let lastFullPath = route.fullPath
-/* #118：脏态多源登记——运行时/试跑/版本等页签的未保存改动经 @dirty 上报（sdp-shared 的
+/* 脏态多源登记——运行时/试跑/版本等页签的未保存改动经 @dirty 上报（sdp-shared 的
    coreEditorState 只管协议编辑器，改共享模块不在本批范围），守卫按「任一处脏」拦截 */
 const tabDirty = reactive<Record<string, { dirty: boolean; label: string }>>({})
 function onTabDirty(key: string, payload: { dirty: boolean; label: string }) {
@@ -364,31 +359,45 @@ function dirtyParts(): string[] {
 }
 const anyDirty = () => dirtyParts().length > 0
 const dirtySummary = () => dirtyParts().join('、')
-watch(agentIdParam, async (id) => {
-  // router.replace 回弹（取消切换）会以原 id 再触发一次：直接跳过，避免误重置
-  if (id === lastAgentId) return
-  if (anyDirty() && id && id !== lastAgentId) {
-    const ok = await askConfirm({
-      title: '切换 Skill',
-      message: `当前 Skill 有未保存的修改（${dirtySummary()}），切换后将丢失，确定离开？`,
-      confirmText: '离开并放弃修改',
-      danger: false
-    })
-    if (!ok) {
-      // 取消：回滚到已确认的完整 URL（不执行任何重置；回弹再进 watcher 时因 id === lastAgentId 直接跳过）
-      void router.replace(lastFullPath)
-      return
-    }
-  }
-  // 确认离开：通知子组件按新 skill 重拉（协议编辑器由 coreReloadTick 驱动复位）
-  lastAgentId = id
-  lastFullPath = route.fullPath
-  coreReloadTick.value++
-  refreshTick.value++
-  if (agentIdParam.value) void loadAll()
-})
 
-/* SPA 内导航离开（返回控制台 / 跳其他路由）有未保存修改必须确认；刷新/关闭由 beforeunload 兜底 */
+/* 脏态离开保护（2026-10-15 迁入外壳后重写）。
+   独立整页时代「离开」= 路由切换，onBeforeRouteLeave 够用；迁入二级页后，
+   「关闭本页」是同路由的 query 变化（closeSubPage 去掉 ?view/?id）+ 宿主 <component :key>
+   立即卸载本页——异步确认根本来不及拦，脏改动会被静默丢弃。
+   故用 flush:'sync' 的 watch：subPage 一变即**同步复原**（Vue 本轮渲染仍见到复原值，
+   组件不卸载），再弹确认：
+     - 取消：保持复原（留在页内），AdminConsole 的 subPage→URL watch 合并中间态，URL 无抖动；
+     - 确认：置放行标记并真正关闭 / 切到目标 skill。
+   真正的跨记录导航（登出、跳公开页）仍由下方 onBeforeRouteLeave 兜底；
+   整页刷新/关窗由 beforeunload 兜底。 */
+let allowLeave = false
+watch(
+  subPage,
+  (sp, prev) => {
+    if (allowLeave || !prev || prev.view !== 'skill-design') return
+    const leaving = !sp || sp.view !== 'skill-design' || sp.id !== prev.id
+    if (!leaving || !anyDirty()) return
+    const target = sp // 想去哪：null=关闭；否则=新落点（切 skill 或跳别的二级页）
+    subPage.value = prev // 同步复原，阻止卸载
+    void (async () => {
+      const ok = await askConfirm({
+        title: target ? '切换 Skill' : '离开设计页',
+        message: `当前 Skill 有未保存的修改（${dirtySummary()}），离开后将丢失，确定离开？`,
+        confirmText: '离开并放弃修改',
+        danger: false
+      })
+      if (!ok) return
+      allowLeave = true
+      if (target) subPage.value = target
+      else closeSubPage()
+    })()
+  },
+  { flush: 'sync' }
+)
+
+/* 跨记录路由离开（侧栏切场景 / 登出 / 跳公开页等真正换 route record）兜底确认；刷新/关闭由 beforeunload 兜底。
+   确认放行时置 allowLeave：否则导航提交后 AdminConsole 的清页会把 subPage 置空，本页的
+   subPage 同步守卫会再弹一次（切场景路径两守卫都命中 → 双确认）。 */
 onBeforeRouteLeave(async () => {
   if (!anyDirty()) return true
   const ok = await askConfirm({
@@ -397,6 +406,7 @@ onBeforeRouteLeave(async () => {
     confirmText: '离开并放弃修改',
     danger: false
   })
+  if (ok) allowLeave = true
   return ok === true
 })
 
@@ -422,12 +432,9 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .sdp {
-  /* #app 是 flex 列容器：margin auto 会让本页收缩到内容宽，必须显式 width:100% */
-  width: 100%;
-  /* 全页签统一宽度：避免协议/工作台等页签切换时页面宽度跳动 */
-  max-width: 1440px;
-  margin: 0 auto;
-  min-height: 100vh;
+  /* 2026-10-15 迁入外壳二级页：撤独立整页时代的 width:100%/max-width:1440px/margin:0 auto/
+     min-height:100vh——外壳内容区（.mshell__content > *）是有界可滚容器，本页随 .mk-page
+     填满（判例 LearnerDetail/SessionCockpit，仅覆写 gap）。宽度不再居中收窄。 */
   font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", Inter, sans-serif;
 }
 
@@ -467,17 +474,9 @@ onBeforeUnmount(() => {
 
 /* ---------- Tabs（收敛为全局 mk-pills / mk-pill） ---------- */
 
-/* 4K：设计页放宽 + 字号跟随壳层放大 */
-@media (min-width: 2000px) {
-  .sdp { max-width: 2000px; }
-}
-@media (min-width: 2800px) {
-  .sdp { max-width: 2600px; }
-}
+/* 4K：撤 max-width 居中档（迁入外壳后与其它详情页同宽，不再单独收窄；判例 LearnerDetail）。
+   字号档随壳层 token 走，仅保留局部放大以对齐管理台基线。 */
 @media (min-width: 3600px) {
-  /* 4K：设计页独立渲染（无全局 zoom），字号大幅放大以对齐管理台基线 */
-  .sdp { max-width: 3000px; }
-  .mk-back { font-size: var(--mk-fs-emphasis); }
   .sdp-parent { font-size: var(--mk-fs-body); }
   .sdp-drift { font-size: var(--mk-fs-body); padding: 14px 18px; }
   .sdp-drift code { font-size: var(--mk-fs-body); }
