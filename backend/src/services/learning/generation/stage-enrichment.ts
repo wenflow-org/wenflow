@@ -15,6 +15,7 @@ import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
 import { buildStageFillNote } from './stage-fill-note';
+import { auditStageBudget } from './stage-budget-invariant';
 import { sanitizeUserFacingText } from '../user-facing-text';
 import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
 import { buildSupplementRequest, mergeSupplementTasks, needsLessonSupplement } from './stage-task-supplement';
@@ -850,6 +851,8 @@ async function enrichLearningPathWithAndersonInner(
       // 阶段/路径估时回写：任务分钟汇总（ceil 整小时）覆盖骨架期 LLM 粗估
       let pathTotalMinutes = 0;
       let pathNormalizedHours = 0;
+      // #56：逐阶段记录回写后的学时，供收尾的不变量审计使用（回写前是骨架粗估，判不出退化）
+      const stageHoursForAudit: Array<{ stageNumber: number; title: string | null; estimatedHours: number | null }> = [];
       for (const milestone of learningPath.milestones) {
         const stageOutput = stageDesignOutputs.find((item) => item.milestoneId === milestone.id);
         const stageTasks = stageOutput?.subtasks || [];
@@ -857,6 +860,11 @@ async function enrichLearningPathWithAndersonInner(
           .reduce((sum, t) => sum + (Number(t?.estimatedMinutes) || 0), 0);
         pathTotalMinutes += stageTotalMinutes;
         const stageHours = stageTasks.length > 0 ? Math.max(1, Math.ceil(stageTotalMinutes / 60)) : null;
+        stageHoursForAudit.push({
+          stageNumber: milestone.stageNumber,
+          title: milestone.title ?? null,
+          estimatedHours: stageHours,
+        });
         if (stageHours !== null) {
           pathNormalizedHours += stageHours;
           // R3 欠 fill 诚实声明：锚必须在回写前读（回写后 estimatedHours 即任务汇总，锚丢失）
@@ -940,6 +948,24 @@ async function enrichLearningPathWithAndersonInner(
       }
       const pathHoursToWrite = pathNormalizedHours > 0 ? pathNormalizedHours : undefined;
 
+      // #56 阶段预算不变量：阶段预算必须按内容反推，不能恒等复制上游总量（等分/全等于总量
+      // 都是退化形态）。这里只做可见化：判成 violations → warn + 落 aiPromptTemplate，
+      // 由 `npx ts-node --transpile-only scripts/audit-stage-budget.ts` 汇总存量比例。怎么重新分配是产品决策，不在此处擅自裁剪。
+      const stageBudgetAudit = auditStageBudget({
+        pathEstimatedHours: pathNormalizedHours || null,
+        upstreamBudgetHours: Number((analysis as any)?.estimatedTotalHours) || Number(learningPath.estimatedHours) || null,
+        stages: stageHoursForAudit,
+        capacityMinutes,
+      });
+      if (!stageBudgetAudit.ok) {
+        logger.warn('[stage-enrichment] 阶段预算不变量未通过（阶段预算可能退化成复制/等分）', {
+          runId,
+          pathId: learningPath.id,
+          violations: stageBudgetAudit.violations.map((violation) => violation.kind),
+          detail: stageBudgetAudit.violations.map((violation) => violation.detail).join('；'),
+        });
+      }
+
       await tx.learning_paths.update({
         where: { id: learningPath.id },
         data: {
@@ -950,6 +976,7 @@ async function enrichLearningPathWithAndersonInner(
             stageDesigns: stageDesignRawOutputs,
             kcAnnotation,
             ...(capacityOverload ? { capacityOverload } : {}),
+            ...(stageBudgetAudit.ok ? {} : { stageBudgetAudit: stageBudgetAudit.violations }),
             ...(Object.keys(materialRefsByTask).length
               ? {
                   materialRefs: {
