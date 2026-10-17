@@ -18,6 +18,7 @@ import { FinalizationLeaseGuard } from './FinalizationLeaseGuard';
 import { applyWarmupExtractionForSession, enqueueReviewCompletedEvent } from './warmup-writeback';
 // 非正常终态判定（幽灵课 / 弃跑状态泄漏）：叶子方向的单向依赖，不成环（lifecycle 不 import 本服务）
 import { isAbnormalSessionClosure } from './teaching-session-lifecycle';
+import { evaluateSessionClosable } from './teaching-closure';
 
 export interface FinalizeSessionInput {
   sessionId: string;
@@ -103,6 +104,18 @@ export type { WarmupReviewItem } from './warmup-writeback';
 export class SessionFinalizationService {
   async finalize(input: FinalizeSessionInput) {
     const session = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
+    // #51 P-25：机械收束门禁——末问未答 / 检查点未闭合时先拒绝结算（放弃/异常终态豁免）
+    const closable = evaluateSessionClosable({
+      messages: session.messages,
+      teachingState: session.teachingState,
+      endReason: input.endReason,
+    });
+    if (!closable.closable) {
+      const error = new Error(closable.message || '课堂还有未完成的问答');
+      (error as { code?: string; status?: number }).code = closable.code;
+      (error as { status?: number }).status = 409;
+      throw error;
+    }
     const operationId = input.operationId || randomUUID();
     const requestIdentity = finalizationRequestIdentity(input);
 

@@ -27,6 +27,7 @@ import {
   fetchSupplementMaterial,
   type SupplementSlot,
 } from './teaching-supplement.service';
+import { normalizeForKeywordMatch } from './checkpoint-shared';
 import {
   TeachingCheckpoint,
   buildCheckpointCodeArbitration,
@@ -1031,6 +1032,22 @@ export async function processStudentMessage(
     // 出题节奏分档（拍板 #10）：与提示词闸共用同一口径（理解度<0.6 → 2 条消息优先探测），
     // 防两处数值漂移；理解度取上一轮分析（与 shouldEmitCheckpoint 的 gate 同基准），无读数按常规节奏。
     const previousTurnAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
+    // #50：答错重答时若模型给出了新题面，替换 pendingCheckpoint 的内容（保留 cpId，
+    // 因此重答上限仍按同一检查点累计），而不是把旧题原样再发一遍。
+    const pendingBeforeTurn = previousTeachingState.pendingCheckpoint;
+    if (pendingBeforeTurn && checkpointCandidate?.question) {
+      const changedQuestion = normalizeForKeywordMatch(pendingBeforeTurn.question) !== normalizeForKeywordMatch(checkpointCandidate.question);
+      if (changedQuestion && !isDuplicateCheckpointQuestion(previousTeachingState.checkpointHistory, checkpointCandidate)) {
+        teachingState.pendingCheckpoint = {
+          ...pendingBeforeTurn,
+          question: checkpointCandidate.question,
+          ...(checkpointCandidate.options ? { options: checkpointCandidate.options } : {}),
+          ...(checkpointCandidate.correctOptionIds ? { correctOptionIds: checkpointCandidate.correctOptionIds } : {}),
+          ...(checkpointCandidate.expectedKeywords ? { expectedKeywords: checkpointCandidate.expectedKeywords } : {}),
+          ...(checkpointCandidate.hint ? { hint: checkpointCandidate.hint } : {}),
+        };
+      }
+    }
     // 同题复问抑制（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺陷②）：候选题面与本会话**已出过**的题面
     // 归一后同文（学生已答过/跳过这道题）→ 本回合抑制该检查点，只打遥测；课堂照常继续、绝不阻塞。
     // 与「答错保留、答对消费」既有语义兼容：只少问第二遍同题，pendingCheckpoint 消费/重答链路不动。
@@ -1043,7 +1060,7 @@ export async function processStudentMessage(
         || updatedMessages.length - previousTeachingState.lastCheckpointTurn
           >= checkpointRhythmMinTurns(previousTurnAnalysis?.understanding));
     const duplicateCheckpointQuestion = checkpointEmissionEligible
-      && isDuplicateCheckpointQuestion(previousTeachingState.checkpointHistory, checkpointCandidate.question);
+      && isDuplicateCheckpointQuestion(previousTeachingState.checkpointHistory, checkpointCandidate);
     if (duplicateCheckpointQuestion) {
       const duplicatedQuestion = String(checkpointCandidate?.question ?? '');
       logger.info('[AITeaching] 检查点题面与本会话已出过的题面重复（归一后同文），本回合抑制该检查点', {

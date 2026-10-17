@@ -64,3 +64,87 @@ export function shouldDeferCompletionForClosure(input: ClosureGateInput): Closur
   }
   return { defer: false, reason: null };
 }
+
+
+/**
+ * 机械收束门禁（#51 P-25）：endSession 此前只看「谁来结束」，不核对课内问答是否闭合，
+ * 于是「老师刚抛了问题 / 检查点还没判对」也能直接结算，末问被写进 wrapup 的 actionPlan。
+ *
+ * 与回合内的延迟收束（shouldDeferCompletionForClosure）分工不同：
+ * - 回合内：压住「模型想收」的信号，最多 2 次，避免拖死；
+ * - 收束入口：学员/系统主动结束时，若仍有未闭合问答则 409，让前端先作答（或走放弃路径）。
+ * 放弃/异常终态一律放行——那不是「没答完」，是「不学了」。
+ */
+export type SessionClosableCode =
+  | 'FINALIZATION_PENDING_CHECKPOINT'
+  | 'FINALIZATION_OPEN_QUESTION'
+  | 'FINALIZATION_LAST_CHECKPOINT_FAILED';
+
+export interface SessionClosableDecision {
+  closable: boolean;
+  code?: SessionClosableCode;
+  message?: string;
+}
+
+const ABNORMAL_END_REASONS = new Set([
+  'learner-abandoned',
+  'abandoned',
+  'timeout',
+  'error',
+  'failed',
+  'system',
+]);
+
+/** 检查点最多作答次数（与 CHECKPOINT_MAX_ATTEMPTS 同口径；到顶后允许带错收束） */
+const CLOSURE_CHECKPOINT_MAX_ATTEMPTS = 2;
+
+export function evaluateSessionClosable(input: {
+  messages: Array<{ role?: string; content?: string }> | null | undefined;
+  teachingState: Record<string, any> | null | undefined;
+  endReason?: string | null;
+}): SessionClosableDecision {
+  if (input.endReason && ABNORMAL_END_REASONS.has(input.endReason)) return { closable: true };
+
+  const state = input.teachingState || {};
+  if (state.pendingCheckpoint) {
+    return {
+      closable: false,
+      code: 'FINALIZATION_PENDING_CHECKPOINT',
+      message: '还有一道题没有作答，先完成这道题再结束课堂',
+    };
+  }
+
+  const messages = Array.isArray(input.messages) ? input.messages : [];
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role === 'user') break;
+    if (message?.role === 'assistant' && detectTrailingQuestion(String(message.content || ''))) {
+      return {
+        closable: false,
+        code: 'FINALIZATION_OPEN_QUESTION',
+        message: '老师刚提了一个问题，先回答再结束课堂',
+      };
+    }
+  }
+
+  const history = Array.isArray(state.checkpointHistory) ? state.checkpointHistory : [];
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const entry = history[i] as { passed?: unknown; skipped?: unknown; attempts?: unknown };
+    if (entry?.skipped === true) break;
+    if (entry?.passed === false) {
+      const attempts = Number(entry.attempts);
+      // 只有「还能再答」时才拦；到顶（或旧数据没有次数）按既有设计放行，
+      // 避免把「记复习清单 → 收课」这条合法收束路径重新焊死。
+      if (Number.isFinite(attempts) && attempts < CLOSURE_CHECKPOINT_MAX_ATTEMPTS) {
+        return {
+          closable: false,
+          code: 'FINALIZATION_LAST_CHECKPOINT_FAILED',
+          message: '最后一道检查题还没答对，先再试一次或跳过它',
+        };
+      }
+    }
+    break;
+  }
+
+  return { closable: true };
+}

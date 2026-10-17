@@ -11,6 +11,7 @@ import { buildSkillOutcome, type SkillOutcome } from '../outcome';
 import { recordDegradation } from '../degradation-telemetry';
 import { findArithmeticMismatches, type ArithmeticMismatch } from '../../services/ai-teaching/teaching-arithmetic-guard';
 import { normalizeForKeywordMatch } from '../../services/ai-teaching/checkpoint-shared';
+import { applyObservableEvidenceGate, detectObservableEvidence } from './observable-evidence';
 
 const AGENT_ID = 'skill:teaching-turn';
 
@@ -77,6 +78,8 @@ export interface TeachingTurnInput {
       prerequisiteConcepts: string[];
       supportingConcepts?: string[];
     };
+    /** 本课细粒度知识组件（kc-mapper 产出）：提示词规则要求 knowledge.points 对齐到 KC 粒度 */
+    taskKcs?: Array<{ kcId: string; name: string; taxonomy?: string }>;
     /** 该路径关联的资料（投影后的最小集合）：讲解/示例要能引用其章节或条目原文 */
     materials?: Array<{
       title?: string | null;
@@ -98,13 +101,14 @@ export interface TeachingTurnInput {
     /**
      * 当前任务 materialRefs 的**章节原文窗口**（material-sections 取回，≤2×4K 字，2026-09-24）。
      * 讲到哪章就能看到那章原文；无引用/取回失败时为 null。
+     * anchor='semantic' = 标题/引文均未命中，由**语义召回**兜底选出的最相关原文块（2026-10-16）。
      */
     activeTaskMaterialExcerpts?: Array<{
       materialId?: string | null;
       materialName?: string | null;
       sectionTitle?: string | null;
       quote?: string | null;
-      anchor?: 'quote' | 'title' | 'none';
+      anchor?: 'quote' | 'title' | 'semantic' | 'none';
       excerpt?: string | null;
     }> | null;
     pathTitle?: string;
@@ -662,7 +666,7 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
     });
   }
 
-  const normalizedKnowledgePoints = filterOverlyBroadKnowledgePoints(
+  let normalizedKnowledgePoints = filterOverlyBroadKnowledgePoints(
     points.map((point: any) => ({
       name: typeof point?.name === 'string' ? point.name : '',
       status: (ALLOWED_KNOWLEDGE_STATUSES as readonly string[]).includes(point?.status)
@@ -675,6 +679,22 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
       .filter((point: any) => point.name),
     input,
   );
+
+  // #54 P-28：平台可观测证据门——规则 15 只是提示词，完成判定此前 100% 信任模型。
+  // 离线动作 / 学生无实质发言时：不得判完成，且本轮不得把知识点升为 mastered。
+  const observableEvidence = detectObservableEvidence(input.messages, reply);
+  if (observableEvidence.offlineAction || !observableEvidence.substantiveUserTurn) {
+    const gated = applyObservableEvidenceGate(normalizedKnowledgePoints, observableEvidence);
+    const downgraded = gated.filter((point, index) => point.status !== normalizedKnowledgePoints[index].status).length;
+    normalizedKnowledgePoints = gated;
+    logger.warn('[TeachingTurnAgent] 可观测证据不足，本轮不推进掌握/完成', {
+      taskTitle: input.scenario.taskTitle,
+      offlineAction: observableEvidence.offlineAction,
+      substantiveUserTurn: observableEvidence.substantiveUserTurn,
+      lastUserText: observableEvidence.lastUserText,
+      downgradedKnowledgePoints: downgraded,
+    });
+  }
 
   const normalizedCurrentPoint = typeof knowledge.currentPoint === 'string' && knowledge.currentPoint.trim()
     ? knowledge.currentPoint.trim()
@@ -699,7 +719,10 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
   // 现在：isCompletionCandidate 由 LLM 基于对话语义自行判断（提示词 rule 18/19/21），
   // 评估器输出仅作为观测信号透传（completionCandidateEvidence），不再参与完成门禁。
   const requestedCompletionCandidate = !!control.isCompletionCandidate;
-  const resolvedCompletionCandidate = requestedCompletionCandidate;
+  // #54：完成判定必须有平台可观测证据（纯文本产出）。规则 15 的离线动作或空转发言不构成完成。
+  const resolvedCompletionCandidate = requestedCompletionCandidate
+    && !observableEvidence.offlineAction
+    && observableEvidence.substantiveUserTurn;
 
   // 观测信号：规则判定（关键词匹配）结果，仅用于与 LLM 判定对比，不参与完成门禁
   const completionEvidenceSatisfied = acceptanceEvidence.hasCriteria
@@ -1378,6 +1401,13 @@ const CONDITIONAL_RULE_LEAD = /^(?:若输入提供|如果输入提供|若 classr
 /** 值条件（字段常在、但值通常不满足）：不能只判"字段存在" */
 const CONDITIONAL_RULE_OVERRIDES: Record<string, (input: TeachingTurnInput) => boolean> = {
   'controls.temporalGap': (input) => (input?.controls as any)?.temporalGap?.isLongGap === true,
+  // 规则 74 原文写「若输入提供 behavioralProfile」（抽键得顶层 `behavioralProfile`），但字段的**装配位置**
+  // 是 `scenario.behavioralProfile`（teaching-turn-shared.ts 组 scenario 时在该键下）——缺这条覆盖时
+  // hasPathValue 走顶层恒 false，规则被静默剥离，模型看不到"怎么用行为投影"（2026-10-17 实测）。
+  behavioralProfile: (input) => {
+    const v = input?.scenario?.behavioralProfile;
+    return v != null && typeof v === 'object' && Object.keys(v as object).length > 0;
+  },
 };
 
 /** 从规则正文里抽出它引用的输入字段路径（如 `scenario.materials`）。 */

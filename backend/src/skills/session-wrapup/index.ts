@@ -386,6 +386,45 @@ export function stripUnsupportedRetentionClaims(
 }
 
 /**
+ * 证据回链校验（#52 P-26 第④例）：
+ * 每条 knowledgeItem 的 evidence 必须是学员在本课真实说过的内容。此前只校验「是字符串」，
+ * 模型可以编一条证据把点推到 mastered。这里按归一化后的 6 字窗口在**学员消息**里回链，
+ * 找不到就标 evidenceUnverified 并把该点降级（mastered → learning，进度封顶 79）。
+ * 学员消息太少（<2 条）时不判——证据不足不能反过来惩罚学生。
+ */
+export function verifyKnowledgeEvidence(
+  summary: SessionWrapupSummary,
+  messages: Array<{ role?: string; content?: string }> | undefined,
+): { summary: SessionWrapupSummary; unverified: number } {
+  const userTexts = (Array.isArray(messages) ? messages : [])
+    .filter((message) => message?.role === 'user' && typeof message.content === 'string')
+    .map((message) => String(message.content));
+  if (userTexts.length < 2) return { summary, unverified: 0 };
+  const corpus = userTexts.join('\n').toLowerCase().replace(/[\s，。！？、；：,.!?;:'"“”‘’（）()【】\[\]]/g, '');
+  let unverified = 0;
+  const knowledgeItems = (summary.knowledgeItems || []).map((item) => {
+    const evidence = typeof item.evidence === 'string' ? item.evidence : '';
+    const normalized = evidence.toLowerCase().replace(/[\s，。！？、；：,.!?;:'"“”‘’（）()【】\[\]]/g, '');
+    if (normalized.length < 6) return item;
+    // 任一 6 字窗口出现在学员原话里即算回链成功（允许转述，不要求整句照抄）
+    let linked = false;
+    for (let i = 0; i + 6 <= normalized.length; i += 1) {
+      if (corpus.includes(normalized.slice(i, i + 6))) { linked = true; break; }
+    }
+    if (linked) return item;
+    unverified += 1;
+    return {
+      ...item,
+      evidenceUnverified: true,
+      ...(item.status === 'mastered'
+        ? { status: 'learning' as const, progress: Math.min(Number(item.progress) || 79, 79) }
+        : {}),
+    };
+  });
+  return { summary: { ...summary, knowledgeItems }, unverified };
+}
+
+/**
  * 算式自检 · 确定性剥离（内容正确性第二刀，2026-10-08）：summary 的**文本要点**（数组项）
  * 逐条跑 findArithmeticMismatches，命中即剔除该要点、其余保留。长文本字段（topicSummary 等）
  * 不整段剔除——它们是 summary 契约的必填字段，整体丢弃破坏远大于保留；数组项剔除后仍为数组，
@@ -867,6 +906,16 @@ export class SessionWrapupAgent {
           logger.warn('[SessionWrapupAgent] 剥离无数据支撑的记忆保持率断言（P1-11 输出保真）', {
             removedCount: stripped.removed.length,
             samples: stripped.removed.slice(0, 3),
+          });
+        }
+      }
+      // #52 第④例：证据回链——编造的学习证据不得把点推到 mastered
+      {
+        const verified = verifyKnowledgeEvidence(summary, input.messages);
+        if (verified.unverified > 0) {
+          summary = verified.summary;
+          logger.warn('[SessionWrapupAgent] 知识点证据未回链到学员原话，已标记并降级', {
+            unverified: verified.unverified,
           });
         }
       }

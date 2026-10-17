@@ -16,6 +16,17 @@ describe('KnowledgeStateService.merge（知识看板合并）', () => {
     expect(merged[0].progress).toBe(100)
   })
 
+  it('#52：code 负证据降级时进度同时回落到达标线下（79），不再保留 100 继续算达标', () => {
+    const merged = knowledgeStateService.merge(
+      [mastered],
+      [review],
+      false,
+      { codeFailedConceptNames: ['概念A'] },
+    )
+    expect(merged[0].status).toBe('learning')
+    expect(merged[0].progress).toBe(79)
+  })
+
   it('复习课（allowDegrade）：mastered 可降级为 review（复习失败真实可见）', () => {
     const merged = knowledgeStateService.merge([mastered], [review], true)
     expect(merged[0].status).toBe('review')

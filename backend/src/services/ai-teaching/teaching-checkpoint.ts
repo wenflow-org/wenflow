@@ -147,13 +147,40 @@ export function resolveCheckpointConsumption(
  * 短题仍可拦；长题 title 带省略号，归一后不会与完整题面相等 → 不误判）。
  * 空题面/无题面一律返回 false（不因脏数据误抑制）。
  */
-export function isDuplicateCheckpointQuestion(history: unknown, question: unknown): boolean {
+export type CheckpointDedupeCandidate =
+  | string
+  | { question?: unknown; options?: unknown };
+
+/** 选项集合指纹：只有 ≥2 个选项才参与判等（避免「是/否」二选一这种通用题被误杀） */
+function optionFingerprint(options: unknown): string | null {
+  if (!Array.isArray(options)) return null;
+  const texts = options
+    .map((option) => {
+      const raw = option && typeof option === 'object'
+        ? (option as { text?: unknown; label?: unknown }).text ?? (option as { label?: unknown }).label
+        : option;
+      return normalizeForKeywordMatch(raw);
+    })
+    .filter(Boolean)
+    .sort();
+  return texts.length >= 2 ? texts.join('|') : null;
+}
+
+export function isDuplicateCheckpointQuestion(history: unknown, candidate: CheckpointDedupeCandidate): boolean {
+  const question = typeof candidate === 'string' ? candidate : candidate?.question;
   const target = normalizeForKeywordMatch(question);
-  if (!target) return false;
+  const targetOptions = typeof candidate === 'string' ? null : optionFingerprint(candidate?.options);
+  if (!target && !targetOptions) return false;
   const rows = Array.isArray(history) ? history : [];
   return rows.some((row) => {
     const asked = normalizeForKeywordMatch(row?.question ?? row?.title);
-    return asked.length > 0 && asked === target;
+    if (target && asked.length > 0 && asked === target) return true;
+    // 换措辞但选项集合完全相同 = 同一道选择题（#50：只拦同文会放过「改个说法再问」）
+    if (targetOptions) {
+      const askedOptions = optionFingerprint(row?.options);
+      if (askedOptions && askedOptions === targetOptions) return true;
+    }
+    return false;
   });
 }
 

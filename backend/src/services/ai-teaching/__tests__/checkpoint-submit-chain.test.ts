@@ -454,6 +454,35 @@ describe('isDuplicateCheckpointQuestion：同题判据（归一与边界）', ()
   })
 })
 
+describe('isDuplicateCheckpointQuestion：选项集合判等（#50 换措辞复问）', () => {
+  const options = [
+    { id: 'a', text: '先乘后加' },
+    { id: 'b', text: '先加后乘' },
+    { id: 'c', text: '都可以' },
+  ];
+
+  it('题面换措辞但选项集合相同 → 命中', () => {
+    expect(isDuplicateCheckpointQuestion(
+      [{ question: '计算 2+3×4 时先算什么？', options }],
+      { question: '下面哪个运算顺序是对的？', options: [...options].reverse() },
+    )).toBe(true);
+  });
+
+  it('选项集合不同 → 不命中（新题不被误杀）', () => {
+    expect(isDuplicateCheckpointQuestion(
+      [{ question: '计算 2+3×4 时先算什么？', options }],
+      { question: '2×3×4 等于多少？', options: [{ text: '24' }, { text: '18' }] },
+    )).toBe(false);
+  });
+
+  it('只有一个选项时不按集合判等（避免通用二选一误杀）', () => {
+    expect(isDuplicateCheckpointQuestion(
+      [{ options: [{ text: '对' }] }],
+      { options: [{ text: '对' }] },
+    )).toBe(false);
+  });
+})
+
 describe('stripAffirmationsOnFailedVerdict：肯定语句子级剥离（拍板 #5 切口1 纯函数）', () => {
   const strip = (reply: string) => stripAffirmationsOnFailedVerdict(reply);
 

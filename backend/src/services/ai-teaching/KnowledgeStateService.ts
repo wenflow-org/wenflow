@@ -118,10 +118,17 @@ export class KnowledgeStateService {
               : point.status;
       const nextEvidenceSource =
         nextStatus === 'mastered' ? evidenceSourceFor(nameKey, previous) : previous.evidenceSource;
+      // #52 第②例：负证据降级时进度也必须回落——旧实现只降 status、progress 仍保留 100，
+      // isTargetSatisfied 仍判达标，末段答错后课照样能收束。封顶到达标线下（79）。
+      const nextProgress = degradeByNegativeEvidence
+        ? Math.min(previous.progress, COMPLETION_TARGET_PROGRESS_FLOOR - 1)
+        : allowDegrade
+          ? point.progress
+          : Math.max(previous.progress, point.progress);
       merged.set(nameKey, {
         ...previous,
         status: nextStatus,
-        progress: allowDegrade ? point.progress : Math.max(previous.progress, point.progress),
+        progress: nextProgress,
         // 授予处记录证据来源；非 mastered 点不再新授标注（保留历史值或缺省）
         ...(nextEvidenceSource ? { evidenceSource: nextEvidenceSource } : {}),
       });
