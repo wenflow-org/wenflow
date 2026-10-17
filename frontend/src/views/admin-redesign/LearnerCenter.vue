@@ -40,6 +40,28 @@
       <MkKpi label="需关注" :value="riskCount" :tone="riskCount ? 'warn' : ''" hint="趋势下降 / 疲劳高 / 有风险摘要" />
       <MkKpi label="低置信" :value="lowConfCount" :tone="lowConfCount ? 'warn' : ''" :hint="lowConfHint" />
       <MkKpi label="平均置信度" :value="avgConfText" :hint="avgConfHint" />
+      <!-- P-49（#74）：疲劳高 / 趋势下降原先被合并进「需关注」，看不到各自规模 -->
+      <MkKpi
+        label="疲劳高"
+        :value="fatigueHighCount"
+        :tone="fatigueHighCount ? 'warn' : ''"
+        hint="需要安排恢复"
+        title="fatigue=高 的学习者数（需关注卡把它和其它异常合并计数）"
+      />
+      <MkKpi
+        label="趋势下降"
+        :value="trendDownCount"
+        :tone="trendDownCount ? 'warn' : ''"
+        hint="学习状态走弱"
+        title="trend=down 的学习者数（需关注卡把它和其它异常合并计数）"
+      />
+      <MkKpi
+        label="数据覆盖率"
+        :value="confCoverageText"
+        :tone="confCoverageText === '—' ? 'muted' : ''"
+        :hint="`${confRows.length} / ${rows.length} 位有学习任务`"
+        title="有学习任务且产出置信度的学习者占比；无任务行不计入置信度分布与均值"
+      />
     </section>
 
     <!-- 置信度分段分布条（教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」：移出表格卡，
@@ -513,6 +535,12 @@ const avgConfText = computed(() => {
   const avg = confRows.value.reduce((s, r) => s + (r.confidence ?? 0), 0) / confRows.value.length
   return Math.round(avg * 100) + '%'
 })
+/* P-49（#74）：拆出被「需关注」合并的两个信号 + 置信度覆盖率 */
+const fatigueHighCount = computed(() => rows.value.filter((r) => r.fatigue === '高').length)
+const trendDownCount = computed(() => rows.value.filter((r) => r.trend === 'down').length)
+const confCoverageText = computed(() =>
+  rows.value.length ? `${Math.round((confRows.value.length / rows.value.length) * 100)}%` : '—'
+)
 /** 平均值必须带基数：n= 之外的行（无任务/无快照）不进均值，读数才知道它代表谁 */
 const avgConfHint = computed(() =>
   confRows.value.length

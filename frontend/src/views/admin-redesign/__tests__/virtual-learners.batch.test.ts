@@ -324,7 +324,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(kpiNum('系统失败率')).toBe('0%');
     // 防回归：这一页的运行指标必须挂在共享 .mk-kpi-grid 下（2026-09-29 归一，原 MkStatStrip 自由条）
     expect(w.find('.vl-kpi .mk-kpi-grid').exists()).toBe(true);
-    expect(w.findAll('.mk-kpi')).toHaveLength(5);
+    expect(w.findAll('.mk-kpi')).toHaveLength(6);
   });
 
   it('压测参数卡已迁出（2026-10-13）：本页不再有写控件，只留只读读数', async () => {
@@ -339,7 +339,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const kpiText = w.find('.vl-kpi').text();
     expect(kpiText).toContain('并发');
     expect(kpiText).toContain('速率');
-    expect(w.findAll('.vl-kpi .mk-kpi')).toHaveLength(5);
+    expect(w.findAll('.vl-kpi .mk-kpi')).toHaveLength(6);
   });
 
   it('KPI 卡内附挂 .mk-minibar 进度槽（完成率/并发），家族原语不私造', async () => {

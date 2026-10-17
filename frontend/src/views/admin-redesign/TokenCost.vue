@@ -95,6 +95,11 @@
         @action="days = 90"
       />
       <template v-else>
+      <!-- 刷新失败但仍有上次结果：不把旧数当新数静默展示（#72 P-47） -->
+      <div v-if="loadFailed" class="mk-alert mk-alert--row tc-error" role="alert">
+        <span class="mk-alert__msg">成本数据刷新失败，以下为上次加载结果</span>
+        <button type="button" class="mk-alert__btn" :disabled="loading" @click="load(true)">{{ loading ? '重试中…' : '重试' }}</button>
+      </div>
       <!-- 概览卡（统一走共享 .mk-kpi-grid + MkKpi；原型 renderCost 1771-1772 metricCard 四卡）。
            数据源核查（2026-10-01，只读后端 /admin/token-cost/summary）：
            金额已随接口返回（totals.usd / pricedCalls / callsMissingPricing），但**只按所选窗口聚合**——
@@ -127,12 +132,19 @@
           :hint="perCallHintShort"
           :title="perCallHint"
         />
-        <MkKpi label="总 Token" :value="summary ? fmtTokens(summary.totals.tokens) : '—'" :hint="`prompt ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · completion ${summary ? fmtTokens(summary.totals.completionTokens) : '—'} · ${summary ? summary.totals.calls : '—'} 次调用`" />
+        <MkKpi
+          label="总 Token"
+          :value="loadFailed ? '—' : summary ? fmtTokens(summary.totals.tokens) : '—'"
+          :tone="loadFailed ? 'muted' : ''"
+          :hint="loadFailed
+            ? '数据加载失败，Token 用量暂不可用'
+            : `prompt ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · completion ${summary ? fmtTokens(summary.totals.completionTokens) : '—'} · ${summary ? summary.totals.calls : '—'} 次调用`"
+        />
         <MkKpi
           label="失败调用"
-          :value="failedCallsText"
-          :tone="failedCalls > 0 ? 'bad' : ''"
-          :hint="failedCalls > 0 ? `占总调用 ${failedPct}（重试后仍失败）` : '无失败调用'"
+          :value="loadFailed ? '—' : failedCallsText"
+          :tone="loadFailed ? 'muted' : failedCalls > 0 ? 'bad' : ''"
+          :hint="loadFailed ? '数据加载失败，失败数未知' : failedCalls > 0 ? `占总调用 ${failedPct}（重试后仍失败）` : '无失败调用'"
           :title="failedHint"
         />
       </section>
@@ -943,6 +955,8 @@ html[data-theme='dark'] {
 
 /* 首载骨架：KPI 卡 / 趋势图 / 排行行 占位（skeleton shimmer 对齐 SkillReconciliation sk-rec__skeleton 手法） */
 .tc-skel-kpi { display: grid; gap: 8px; }
+/* 刷新失败但保留上次结果时的提示条（#72）：与教学会话页同一形态 */
+.tc-error { margin: 0 0 12px; }
 /* 骨架内边距（形状由 MkSkeleton 提供） */
 .tc-skel-pad { padding: 12px 16px 16px; }
 </style>

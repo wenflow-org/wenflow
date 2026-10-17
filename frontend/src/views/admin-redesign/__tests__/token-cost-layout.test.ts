@@ -226,3 +226,26 @@ describe('OvBars · 数值贴柱顶', () => {
     w.unmount();
   });
 });
+
+describe('成本页 · 失败三态（#72 P-47）', () => {
+  it('刷新失败保留旧数时：显式提示「以下为上次结果」，失败数与总 Token 不落成 0', async () => {
+    const { adminTokenCostApi } = await import('@/api/adminApi');
+    const w = await mountTokenCost();
+    expect(w.find('.tc-error').exists()).toBe(false);
+
+    vi.mocked(adminTokenCostApi.getSummary).mockRejectedValueOnce(new Error('network down'));
+    const refresh = w.findAll('button').find((b) => b.text() === '刷新')!;
+    await refresh.trigger('click');
+    await flushPromises();
+    await nextTick();
+
+    expect(w.find('.tc-error').exists()).toBe(true);
+    expect(w.find('.tc-error').text()).toContain('上次加载结果');
+    const failed = w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text() === '失败调用')!;
+    const tokens = w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text() === '总 Token')!;
+    // 旧 summary 里 failed=0，刷新失败后必须显示「—」而不是沿用 0 冒充健康
+    expect(failed.find('.mk-kpi__num').text()).toBe('—');
+    expect(tokens.find('.mk-kpi__num').text()).toBe('—');
+    w.unmount();
+  });
+});

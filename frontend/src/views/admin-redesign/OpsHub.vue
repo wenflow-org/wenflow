@@ -103,6 +103,8 @@
             :legend="false"
             aria-hidden="true"
           />
+          <!-- #72：stats 拉取失败时 pathSegments 为空，原先落成「暂无学习路径」——读不到 ≠ 没有 -->
+          <div v-else-if="wbErrors.paths" class="mk-alert ow-state__error" role="alert">路径数据加载失败，计数暂不可用</div>
           <div v-else-if="pathTotal === 0" class="ow-state__empty">暂无学习路径</div>
           <!-- P3（2026-10-04 全站评审）：空态时三行 0 计数不再与「暂无…」并存（零信息复读） -->
           <div v-if="pathTotal > 0" class="ow-state__rows">
@@ -681,6 +683,8 @@ watch(wbScope, () => {
   color: var(--mk-faint);
   line-height: 1;
 }
+/* 区块级失败走共享 .mk-alert；只清掉它在状态区里的外边距 */
+.ow-state__error { margin: 0; }
 .ow-state__rows { display: grid; gap: 5px; }
 .ow-state__row {
   display: flex;

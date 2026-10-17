@@ -131,6 +131,20 @@ const ppKpi = computed<PpKpiTile[]>(() => {
       tone: '',
       title: `${scope}。仅统计真实用户（不含虚拟 / 测试账号）`,
     },
+    {
+      label: '近 7 日新增',
+      value: realRows.filter((u) => !!u.createdAt && Date.now() - new Date(u.createdAt).getTime() < 7 * 86400000).length,
+      hint: '按注册时间',
+      tone: '',
+      title: `${scope}。仅统计当前显示的账号（列表上限 1000 条）`,
+    },
+    {
+      label: '从未登录',
+      value: realRows.filter((u) => !u.lastLoginAt).length,
+      hint: '注册后一次都没登录',
+      tone: '',
+      title: `${scope}。仅统计当前显示的账号；用于发现注册后搁置的账号`,
+    },
   ]
 })
 

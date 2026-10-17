@@ -23,7 +23,13 @@
          路由表那张卡里面（.sk-routing__top），本次只把它移出卡、回到这条槽位；
          读数带描述的是「当前页签」，所以随页签 v-if 渲染。 -->
     <section v-if="tab === 'run'" class="mk-kpi-grid" aria-label="Skill 运行统计">
-      <MkKpi label="Skill" :value="liveLoading && !cards.length ? '…' : cards.length" :title="skillCountHint || '全量注册的 Skill 数'" />
+      <!-- #72：列表加载失败时 cards=[] 会落成 0——读不到 ≠ 0 个，显「—」并把原因放进 title -->
+      <MkKpi
+        label="Skill"
+        :value="liveLoading && !cards.length ? '…' : skillsError && !cards.length ? '—' : cards.length"
+        :tone="skillsError && !cards.length ? 'muted' : ''"
+        :title="skillsError && !cards.length ? `Skill 列表加载失败：${skillsError}（读不到 ≠ 0 个）` : skillCountHint || '全量注册的 Skill 数'"
+      />
       <!-- live 三态（评审「状态三态缺失」）：对账加载中 → 「…」；加载失败 → 「?」（读不到 ≠ 0）；
            就绪且为 0 → 红 0（全 draft 是真异常，必须显性报警而非静默消失） -->
       <MkKpi
@@ -53,6 +59,15 @@
         :title="`统计窗口：${rangeLabel}`"
       />
       <MkKpi v-if="idleCount > 0" label="空闲" :value="idleCount" title="窗口内无调用的 Skill 数（空闲是信号不是故障，不着色）" />
+      <!-- P-49（#74）：异常 Skill 此前只活在筛选 pill 上；0 时不渲染，避免占位 -->
+      <MkKpi
+        v-if="errorCount > 0"
+        label="需关注 Skill"
+        :value="errorCount"
+        tone="bad"
+        hint="成功率低于 90%"
+        title="成功率红档（<90%）的 Skill 数，与「仅看需关注」筛选同一谓词"
+      />
     </section>
 
     <!-- 模型路由页签的读数带（2026-10-14 用户评审：这 4 张此前塞在路由表所在的同一张卡里
@@ -70,9 +85,10 @@
       />
       <MkKpi
         label="已路由 Skill"
-        :value="cards.length"
-        hint="全部 Skill"
-        title="主目录 Skill 数（不含外挂能力）"
+        :value="skillsError && !cards.length ? '—' : cards.length"
+        :tone="skillsError && !cards.length ? 'muted' : ''"
+        :hint="skillsError && !cards.length ? '列表加载失败' : '全部 Skill'"
+        :title="skillsError && !cards.length ? 'Skill 列表加载失败，无法统计已路由数（读不到 ≠ 0 个）' : '主目录 Skill 数（不含外挂能力）'"
       />
       <MkKpi
         label="主模型覆盖"
@@ -110,6 +126,12 @@
         :title="pePanel?.kpiView?.casesTitle"
       />
       <MkKpi
+        label="启用用例"
+        :value="pePanel?.kpiView?.enabledCaseCount ?? '…'"
+        :hint="pePanel?.kpiView?.disabledCaseCount != null ? `停用 ${pePanel?.kpiView?.disabledCaseCount}` : undefined"
+        title="启用中的评估用例数；停用用例仍保留但不参与批量评测"
+      />
+      <MkKpi
         label="评估历史"
         :value="pePanel?.kpiView?.runCount ?? '…'"
         :hint="pePanel?.kpiView?.lastRunText"
@@ -122,10 +144,18 @@
          Skill 运行 / 模型路由 / Prompt 评估。健康检查 · 漂移 · 对账三 tab 已退役（2026-09-29 用户拍板）：
          三者本就是同一份报表的三刀，合一后独立成 /admin/health-center，侧栏落在「系统」组。
          Prompt 评估 2026-10-04 由独立场景 /admin/prompt-eval 折入（内层用例/历史页签用 ?peTab=） -->
-    <div class="tabs skills-tabs" role="tablist" aria-label="Skill 视图切换">
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'run'" @click="switchTab('run')">Skill 运行</button>
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'model-routing'" @click="switchTab('model-routing')">模型路由</button>
-      <button type="button" role="tab" class="tab" :aria-selected="tab === 'prompt-eval'" @click="switchTab('prompt-eval')">Prompt 评估</button>
+    <div class="tabs skills-tabs" role="tablist" aria-label="Skill 视图切换" @keydown="onTabKeydown">
+      <button
+        v-for="(t, i) in SKILLS_TABS"
+        :key="t"
+        :ref="(el) => setTabRef(el, i)"
+        type="button"
+        role="tab"
+        class="tab"
+        :aria-selected="tab === t"
+        :tabindex="tab === t ? 0 : -1"
+        @click="switchTab(t)"
+      >{{ t === 'run' ? 'Skill 运行' : t === 'model-routing' ? '模型路由' : 'Prompt 评估' }}</button>
     </div>
     <!-- ===== Tab1: Skill 运行（原 Skills.vue 全量内容） ===== -->
     <template v-if="tab === 'run'">
@@ -433,6 +463,7 @@ import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
+import { useTablistKeyboard } from '@/composables/useTablistKeyboard'
 import { skillStatOf, isLive, intent, investigateAgent, openSubPage } from './store'
 import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg } from './live'
 import { categoryText } from './statusText'
@@ -477,10 +508,12 @@ interface PromptEvalPanelExpose {
     passRateTone: 'ok' | 'warn' | 'bad' | 'muted' | ''
     passRateHint: string
     passRateTitle: string
-    caseCount: number
+    caseCount: number | string
     casesHint: string
     casesTitle: string
-    runCount: number
+    enabledCaseCount: number | string
+    disabledCaseCount: number | string
+    runCount: number | string
     lastRunText: string
     runsTitle: string
   }
@@ -520,6 +553,8 @@ function switchTab(t: SkillsTab) {
   tab.value = t
   if (route && router && route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
 }
+/* 页签 ARIA 契约（#75）：roving tabindex + 方向键/Home/End（此前只有 role 与点击） */
+const { setTabRef, onTabKeydown } = useTablistKeyboard(SKILLS_TABS, tab, switchTab)
 /* 页头副文（原型 1698）：随 tab 切换口径——运行=目录/版本/提示词，模型路由=路由与降级策略，
    Prompt 评估=用例集与历史运行（沿原独立页副文） */
 const headSub = computed(() =>

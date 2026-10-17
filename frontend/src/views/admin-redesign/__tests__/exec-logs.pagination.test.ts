@@ -443,7 +443,7 @@ describe('2026-10-04 状态条退役（ExecLogs）', () => {
     expect(w.find('.mk-status').exists()).toBe(false);
     // KPI 卡带三张：成功率（95% ≥ 90 是健康读数，有失败也不标红——错误信号由告警条单源承载）
     const kpis = w.findAll('.mk-kpi');
-    expect(kpis.length).toBe(3);
+    expect(kpis.length).toBe(4);
     expect(kpis[0].text()).toContain('成功率');
     expect(kpis[0].text()).toContain('95%');
     expect(kpis[0].classes()).not.toContain('mk-kpi--bad');

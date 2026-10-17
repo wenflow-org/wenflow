@@ -22,6 +22,14 @@
       <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" :hint="successHint" title="当前筛选范围内的成功率，低于 90% 标红" />
       <MkKpi label="耗时 P50" :value="latencyP50" :hint="latencyHint" title="仅统计成功日志" />
       <MkKpi label="耗时 P99" :value="latencyP99" :hint="latencyHint" title="仅统计成功日志" />
+      <!-- P-49（#74）：失败数此前只有状态 pill 角标；错误类别 Top 取当前页行（窗口口径，随 hint 披露） -->
+      <MkKpi
+        label="失败调用"
+        :value="failedCount === null ? '—' : failedCount"
+        :tone="failedCount ? 'bad' : ''"
+        :hint="failedCount ? (topErrorCategory || '当前窗口内失败') : '当前窗口内无失败'"
+        title="失败数来自后端窗口 stats（与状态 pill 同源）；类别 Top 取当前页可见行，不是全窗口分布"
+      />
     </section>
 
     <!-- 视图切换（2026-10-14 用户评审：此前贴在表格卡顶、通栏一条下划线，读起来像表格的表头）：
@@ -30,9 +38,9 @@
          card > .tabs 是卡内做法，本页不再沿用）。页签 2026-10-01 由 mk-pills 胶囊迁入下划线页签 -->
     <!-- 审核 #122：ARIA tabs 补全关联——页签有 id/aria-controls，两个页签体各有
          role=tabpanel + aria-labelledby（方向键切换留待后续，roving 未承诺） -->
-    <div class="tabs" role="tablist" aria-label="执行日志视图切换">
-      <button type="button" role="tab" id="el-tab-logs" aria-controls="el-panel-logs" class="tab" :aria-selected="elTab === 'logs'" @click="switchElTab('logs')">日志</button>
-      <button type="button" role="tab" id="el-tab-trace" aria-controls="el-panel-trace" class="tab" :aria-selected="elTab === 'trace'" @click="switchElTab('trace')">Trace 链路</button>
+    <div class="tabs" role="tablist" aria-label="执行日志视图切换" @keydown="onTabKeydown">
+      <button type="button" role="tab" id="el-tab-logs" :ref="(el) => setTabRef(el, 0)" aria-controls="el-panel-logs" class="tab" :aria-selected="elTab === 'logs'" :tabindex="elTab === 'logs' ? 0 : -1" @click="switchElTab('logs')">日志</button>
+      <button type="button" role="tab" id="el-tab-trace" :ref="(el) => setTabRef(el, 1)" aria-controls="el-panel-trace" class="tab" :aria-selected="elTab === 'trace'" :tabindex="elTab === 'trace' ? 0 : -1" @click="switchElTab('trace')">Trace 链路</button>
     </div>
 
     <!-- 单卡容器（原型 renderObserve：筛选头 + 页签体同卡）：日志 / Trace 链路（Trace 为执行日志
@@ -353,6 +361,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { Copy, Waypoints, Filter } from 'lucide-vue-next'
 import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
+import { useTablistKeyboard } from '@/composables/useTablistKeyboard'
 import { toast } from '@/utils/toast'
 import { intent, openSkillDrawer, clearInvestigation, dataSource, liveSkillStatsMap } from './store'
 import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, liveLogsRowsMerged, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
@@ -403,6 +412,8 @@ function switchElTab(t: ElTab) {
   elTab.value = t
   if (route.query.tab !== t) void router.replace({ query: { ...route.query, tab: t } })
 }
+/* 页签 ARIA 契约（#75）：roving tabindex + 方向键/Home/End */
+const { setTabRef, onTabKeydown } = useTablistKeyboard(EL_TABS, elTab, switchElTab)
 
 
 /** 切到 Trace tab 并让瀑布聚焦指定链路/会话（openTrace/openSession 深链接入） */
@@ -1085,6 +1096,22 @@ const successKpiTone = computed(() => {
 const testCount = computed<number | null>(() => {
   if (testFilter.value === 'only') return liveLogsTotal.value
   return liveStats.value ? liveStats.value.canary ?? 0 : null
+})
+/** P-49（#74）：窗口失败数（与状态 pill 同源）；stats 未就绪返回 null → 渲染「—」 */
+const failedCount = computed<number | null>(() => {
+  const st = liveStats.value
+  if (!st) return null
+  return Number(st.error ?? 0)
+})
+/** 错误类别 Top：取当前页可见行（不是全窗口分布，hint 已披露）；无类别时返回空串 */
+const topErrorCategory = computed(() => {
+  const counts = new Map<string, number>()
+  for (const row of logs.value) {
+    const key = String((row as { errorCategory?: string | null }).errorCategory || '').trim()
+    if (key) counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
+  return top ? `${top[0]} ${top[1]} 次` : ''
 })
 /** 测试筛选两态切换：默认（已排除测试）→ 仅看测试 → 默认（重查由 status/agent/test watch 触发） */
 function toggleTestFilter() {

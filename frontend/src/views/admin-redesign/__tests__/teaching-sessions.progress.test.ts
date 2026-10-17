@@ -194,8 +194,8 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     const wrapper = await mountLive();
     // 三运维关注量住 MkKpi 卡带（值 = attentionCount / missingWrapupCount / advisoryCount）
     const tiles = wrapper.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '缺总结', '有建议']);
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '0']);
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '缺总结', '有建议', '异常终态']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '0', '1']);
     // KPI 孪生 chips 去计数（学习状态判例）：pill 退为纯筛选开关
     const chip = (label: string) =>
       wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').find((c) => c.text().replace(/\d+$/, '') === label)!;

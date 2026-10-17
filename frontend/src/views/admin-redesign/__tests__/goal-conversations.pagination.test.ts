@@ -277,8 +277,8 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     });
     const w = await mountGoals();
     const tiles = w.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['会话总数', '参与用户', '近 7 日新增']);
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['40', '12', '8']);
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['会话总数', '参与用户', '近 7 日新增', '停滞会话']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['40', '12', '8', '5']);
     // 状态数字只活在分布带（10-02 撤双带判例）；完结率保留在带副文
     const band = w.find('.gc-distband').text();
     expect(band).toContain('进行中');

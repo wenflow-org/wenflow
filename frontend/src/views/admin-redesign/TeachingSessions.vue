@@ -50,6 +50,15 @@
         hint="含完课调整 / 复习建议"
         :title="KPI_LIST_SCOPE_TITLE"
       />
+      <!-- P-49（#74）：异常终态从「非空才出现的 chip」升为首屏卡（0 时不渲染，避免恒 0 占位） -->
+      <MkKpi
+        v-if="abnormalSessionCount > 0"
+        label="异常终态"
+        :value="abnormalSessionCount"
+        tone="bad"
+        hint="失败 / 收尾失败 / 超时"
+        :title="`${KPI_LIST_SCOPE_TITLE}；点击列表上方「服务器异常」徽章可按该状态筛选`"
+      />
     </section>
 
     <!-- 首载占位（2026-10-06 审核 #44）：KPI 带与分布条以 rows.length 为渲染条件，

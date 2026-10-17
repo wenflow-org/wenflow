@@ -20,9 +20,9 @@
     <!-- 主视图切换（全局 .tabs/.tab 原语，判例 Skills.vue:58-62）：
            2026-10-06 审核收口——此前页内自搓 .pe-tabs/.pe-tab 是全仓最后一份 scoped 拷贝，
            与全局逐字重复且缺 transition（hover/激活硬切）。弹窗内两组改用 MkSubTabs -->
-      <div class="tabs" role="tablist" aria-label="评估视图切换">
-        <button type="button" role="tab" id="pe-tab-cases" aria-controls="pe-panel-cases" class="tab" :aria-selected="tab === 'cases'" @click="switchTab('cases')">评估用例</button>
-        <button type="button" role="tab" id="pe-tab-runs" aria-controls="pe-panel-runs" class="tab" :aria-selected="tab === 'runs'" @click="switchTab('runs')">评估历史</button>
+      <div class="tabs" role="tablist" aria-label="评估视图切换" @keydown="onTabKeydown">
+        <button type="button" role="tab" id="pe-tab-cases" :ref="(el) => setTabRef(el, 0)" aria-controls="pe-panel-cases" class="tab" :aria-selected="tab === 'cases'" :tabindex="tab === 'cases' ? 0 : -1" @click="switchTab('cases')">评估用例</button>
+        <button type="button" role="tab" id="pe-tab-runs" :ref="(el) => setTabRef(el, 1)" aria-controls="pe-panel-runs" class="tab" :aria-selected="tab === 'runs'" :tabindex="tab === 'runs' ? 0 : -1" @click="switchTab('runs')">评估历史</button>
       </div>
 
       <!-- 筛选/工具栏行（两页签共用 agent 筛选；原型 cases 工具栏右侧的 primary sm
@@ -565,6 +565,7 @@ const sharedRunningInfo = vue.ref('')
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useTablistKeyboard } from '@/composables/useTablistKeyboard'
 import { timeAgo, errMsg, shortId } from './live'
 import { adminPromptOpsApi, adminVirtualLearnersApi, type CreateEvalCasePayload } from '@/api/adminApi'
 import { formatRate, rateToneOf, RATE_THRESHOLD_NOTE } from './rate-utils'
@@ -896,6 +897,9 @@ function switchTab(t: 'cases' | 'runs') {
   if (t === 'cases' && !cases.value.length && !casesLoading.value) void reloadCases()
   if (t === 'runs' && !runs.value.length && !runsLoading.value) void reloadRuns()
 }
+/* 页签 ARIA 契约（#75）：roving tabindex + 方向键/Home/End */
+const PE_TAB_KEYS = ['cases', 'runs'] as const
+const { setTabRef, onTabKeydown } = useTablistKeyboard(PE_TAB_KEYS, tab, switchTab)
 
 /* 表单 */
 const formOpen = ref(false)
@@ -1483,12 +1487,19 @@ const kpiView = computed(() => ({
   passRateTone: lastRateTone.value as 'ok' | 'warn' | 'bad' | 'muted' | '',
   passRateHint: lastRateHint.value,
   passRateTitle: lastRateTitle.value,
-  caseCount: cases.value.length,
-  casesHint: casesKpiHint.value,
-  casesTitle: casesKpiTitle.value,
-  runCount: runs.value.length,
-  lastRunText: lastRunText.value,
-  runsTitle: runsKpiTitle.value,
+  // #72：加载失败不能落成 0（读不到 ≠ 没有）——三卡统一显「—」，失败原因进 title
+  caseCount: casesFailed.value ? ('—' as const) : cases.value.length,
+  casesHint: casesFailed.value ? '用例列表加载失败' : casesKpiHint.value,
+  casesTitle: casesFailed.value ? '评估用例加载失败：计数不可用（不代表没有用例）' : casesKpiTitle.value,
+  enabledCaseCount: casesFailed.value
+    ? ('—' as const)
+    : cases.value.filter((c) => c.enabled !== false).length,
+  disabledCaseCount: casesFailed.value
+    ? ('—' as const)
+    : cases.value.filter((c) => c.enabled === false).length,
+  runCount: runsFailed.value ? ('—' as const) : runs.value.length,
+  lastRunText: runsFailed.value ? '评估历史加载失败' : lastRunText.value,
+  runsTitle: runsFailed.value ? '评估历史加载失败：计数与最近一次时间不可用' : runsKpiTitle.value,
 }))
 defineExpose({ running, canRunBatch, runBatch, kpiView })
 </script>

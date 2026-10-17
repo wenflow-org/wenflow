@@ -100,7 +100,7 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     const w = mount(GoalConversations, { global: { plugins: [router] } });
     await settle();
     // 2026-10-05 并行批 248dd8c2：三卡 KPI 升 MkKpi 面板（OpsContent 同款），与分布带（状态比例）分属两维度
-    expect(kpiLabels(w)).toEqual(['会话总数', '参与用户', '近 7 日新增']);
+    expect(kpiLabels(w)).toEqual(['会话总数', '参与用户', '近 7 日新增', '停滞会话']);
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
     // 构成卡旧形态不复辟：状态构成唯一住在分布带（10-02 撤双带判例不回退）
     expect(w.find('.mk-card .buckets').exists()).toBe(false);

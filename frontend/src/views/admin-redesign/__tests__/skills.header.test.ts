@@ -158,7 +158,7 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     })
     // 带在「页头之下、页签栏之上」的宿主槽位，随页签 v-if 渲染
     const labels = w.findAll('.mk-kpi-grid .mk-kpi__label').map((el) => el.text().trim())
-    expect(labels).toEqual(['最近评测通过率', '评估用例', '评估历史'])
+    expect(labels).toEqual(['最近评测通过率', '评估用例', '启用用例', '评估历史'])
     w.unmount()
   })
 

@@ -179,8 +179,8 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     expect(bucketLabels(w)).toEqual([]);
     // 2026-10-11 换读数：管理员卡退役并入真实卡 hint；30 分钟在线（恒 0 死读数）→ 近 7 天活跃
     const tiles = w.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['真实用户', '近 7 天活跃']);
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['2', '1']);
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['真实用户', '近 7 天活跃', '近 7 日新增', '从未登录']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['2', '1', '0', '1']);
     expect(tiles[0].find('.mk-kpi__hint').text()).toContain('不含虚拟 / 测试账号');
     expect(tiles[0].find('.mk-kpi__hint').text()).toContain('其中管理员 1');
     expect(tiles[1].find('.mk-kpi__hint').text()).toContain('最后登录在 7 天内');

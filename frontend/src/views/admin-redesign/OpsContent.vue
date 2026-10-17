@@ -20,6 +20,15 @@
       />
       <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" hint="跨全部已生成路径" title="已生成路径的里程碑总数" />
       <MkKpi label="任务" :value="stats?.totalTasks ?? '—'" hint="挂在里程碑下" title="已生成路径的任务总数" />
+      <!-- P-49（#74）：生成失败路径此前只在分布条红段；0 时不占位 -->
+      <MkKpi
+        v-if="byStatus('failed') > 0"
+        label="生成失败"
+        :value="byStatus('failed')"
+        tone="bad"
+        hint="可在列表重试生成"
+        title="status=failed 的路径数（与分布条红段同源）；点分布条红段可下钻"
+      />
     </section>
 
     <!-- 路径状态分布：教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」——回到卡上方
