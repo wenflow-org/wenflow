@@ -695,7 +695,11 @@ export async function endSession(
     : [];
   const knowledgeDelta = computeKnowledgeDelta(initialKnowledgeState, session.knowledgeState);
   const sessionEvidence = computeSessionEvidence(session);
-  const context = await buildTeachingScenarioContext(session.userId, session.taskId, session);
+  // #52 P-26 ①：终评必须在收束时刻重算学习快照，不能复用本轮「判是否可完成」时读到的缓存
+  // （getLatest 有 5 分钟内存 + 10 分钟投影陈旧窗口）。终评写回的掌握度与判完成看到的必须是同一时点。
+  const context = await buildTeachingScenarioContext(session.userId, session.taskId, session, null, {
+    forceLearnerSnapshotRefresh: true,
+  });
   const reviewHints = await loadRetrievabilityHints(session.userId);
 
   const userMessageCount = session.messages.filter((message) => message.role === 'user').length;

@@ -19,6 +19,7 @@ import { applyWarmupExtractionForSession, enqueueReviewCompletedEvent } from './
 // 非正常终态判定（幽灵课 / 弃跑状态泄漏）：叶子方向的单向依赖，不成环（lifecycle 不 import 本服务）
 import { isAbnormalSessionClosure } from './teaching-session-lifecycle';
 import { evaluateSessionClosable } from './teaching-closure';
+import { validateTaskTerminalConsistency } from './terminal-consistency';
 
 export interface FinalizeSessionInput {
   sessionId: string;
@@ -269,6 +270,16 @@ export class SessionFinalizationService {
         asOf: simulatedNowOr(),
       });
       await leaseGuard.assertOwned();
+      // #52 第③例：终态一致性——收束即将把 taskCompletion 记成 completed，
+      // 必须同时观测到任务行已是 completed；否则会话 completed / 任务未完成会长期错账。
+      // 失败交给下面统一的 catch 落成 finalization_failed（异常终态），可被管理端异常 KPI 看到。
+      const terminalConsistency = validateTaskTerminalConsistency(completion);
+      if (!terminalConsistency.ok) {
+        const error = new Error(terminalConsistency.message);
+        (error as { code?: string; status?: number }).code = 'FINALIZATION_TERMINAL_INCONSISTENCY';
+        (error as { status?: number }).status = 500;
+        throw error;
+      }
       const completedSession = await teachingSessionRepository.completeFinalizationStep(
         input.sessionId,
         claim.operationId,

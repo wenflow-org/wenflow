@@ -62,14 +62,15 @@ jest.mock('../teaching-session-views', () => {
 jest.mock('../../learning/learning-state.service', () => ({
   learningStateService: { prepareSessionScoreCommit: mockPrepareSessionScoreCommit },
 }));
+const mockBuildTeachingScenarioContext = jest.fn().mockResolvedValue({
+  taskTitle: 't',
+  taskDescription: 'd',
+  pathContext: { pathTitle: null, pathSummary: null },
+  learningState: null,
+  cognitiveFrame: { transferGoal: null },
+});
 jest.mock('../TeachingContextBuilder', () => ({
-  buildTeachingScenarioContext: jest.fn().mockResolvedValue({
-    taskTitle: 't',
-    taskDescription: 'd',
-    pathContext: { pathTitle: null, pathSummary: null },
-    learningState: null,
-    cognitiveFrame: { transferGoal: null },
-  }),
+  buildTeachingScenarioContext: mockBuildTeachingScenarioContext,
 }));
 jest.mock('../ReplanAdvisoryService', () => ({
   replanAdvisoryService: {
@@ -311,6 +312,14 @@ describe('弃跑/非正常终态收束：只闭合状态机，不写正式轨', 
     expect(mockRecordChurnRiskAtFinalize).toHaveBeenCalledTimes(1);
     // 挂起检查点未作答 → 正常路径必须留痕（判别性对照：弃跑路径为 0）
     expect(mockRecordCheckpointAttemptEvidence).toHaveBeenCalledTimes(1);
+    // #52 ①：终评必须用收束时刻重算的快照（不能复用判完成时的缓存）
+    expect(mockBuildTeachingScenarioContext).toHaveBeenCalledWith(
+      'user-1',
+      'task-1',
+      expect.anything(),
+      null,
+      { forceLearnerSnapshotRefresh: true }
+    );
     expect(mockRefreshDashboardGuidance).toHaveBeenCalledTimes(1);
     expect(mockPrepareNextLesson).toHaveBeenCalledTimes(1);
   });

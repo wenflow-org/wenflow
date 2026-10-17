@@ -6,7 +6,7 @@ import { extractPromptMaterials, TEACHING_MATERIAL_LIMITS, type PromptMaterial }
 import { extractSectionWindow, type ActiveTaskMaterialExcerpt } from '../materials/material-sections';
 import { findWebRecordBySourceUrl } from '../materials/material-web-ingest.service';
 import { readMaterial } from '../materials/material-store';
-import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
+import { learnerSnapshotRefreshService, type LearnerSnapshotRefreshInput } from '../learner/LearnerSnapshotRefreshService';
 import { teachingStrategyConfig } from '../../config/pedagogy.config';
 import type { TeachingKnowledgePointState, TeachingSessionRecord } from './TeachingSessionRepository';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
@@ -1201,11 +1201,33 @@ export async function resolveActiveTaskMaterialExcerpts(params: {
   }
 }
 
+/**
+ * 课堂快照取数口（#52 P-26 ①）。
+ * 常规回合用 getLatest（5 分钟内存 + 10 分钟投影陈旧窗口，避免每回合重建）；
+ * 收束终评用 refresh 强制按收束时刻的事实重算，避免复用判完成时的旧快照。
+ */
+export async function loadLearnerSnapshotForContext(
+  input: LearnerSnapshotRefreshInput,
+  options?: { forceLearnerSnapshotRefresh?: boolean },
+) {
+  return options?.forceLearnerSnapshotRefresh
+    ? learnerSnapshotRefreshService.refresh(input)
+    : learnerSnapshotRefreshService.getLatest(input);
+}
+
 export async function buildTeachingScenarioContext(
   userId: string,
   taskId: string,
   previousSession?: TeachingSessionRecord | null,
-  interactionMeta?: InteractionMetaRecord | null
+  interactionMeta?: InteractionMetaRecord | null,
+  options?: {
+    /**
+     * #52 P-26 ①：终评（wrapup/收束）必须用**收束时刻重算**的快照，
+     * 不能复用本轮判「是否可完成」时读到的缓存快照。终评先于判完成的旧口径
+     * 会让「判完成看到的掌握度」与「终评写回的掌握度」错位。
+     */
+    forceLearnerSnapshotRefresh?: boolean;
+  }
 ): Promise<TeachingScenarioContext> {
   const task = await prisma.subtasks.findUnique({
     where: { id: taskId },
@@ -1240,13 +1262,14 @@ export async function buildTeachingScenarioContext(
     ? learningStateService.restoreMetrics(resumedLearningState)
     : null;
   const learningState = runtimeLearningState || await learningStateService.getCurrentState(userId);
-  const learnerSnapshot = await learnerSnapshotRefreshService.getLatest({
+  const learnerSnapshotInput = {
     userId,
     pathId: path.id,
     milestoneId: task.milestoneId,
     taskId: task.id,
-    scope: 'teaching',
-  });
+    scope: 'teaching' as const,
+  };
+  const learnerSnapshot = await loadLearnerSnapshotForContext(learnerSnapshotInput, options);
   const learnerProjection = learnerProjectionService.toTeachingProjection(learnerSnapshot, {
     // 任务级难度：由学习者状态（课内=本路径、全局=总负担）确定档位，代码判定、可审计（不用 LLM）
     taskDifficulty: decideTaskDifficulty({

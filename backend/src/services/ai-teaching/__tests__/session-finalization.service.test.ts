@@ -154,6 +154,35 @@ describe('SessionFinalizationService', () => {
     expect((result as any).taskCompletion).toEqual({ status: 'completed', alreadyCompleted: false })
   })
 
+  it('任务写入后仍是 todo → 终态不一致（#52 ③）：落 finalization_failed 且不提交完成步骤', async () => {
+    mockRepository.claimFinalization.mockResolvedValue({
+      status: 'claimed',
+      operationId: 'task-op-3',
+      leaseOwner: 'lease-3',
+      session: completedSession({ revision: 5 })
+    })
+    // 数据侧异常：completeTask 报告结束，但任务行仍是 todo
+    mockCompleteTask.mockResolvedValue({ alreadyCompleted: false, task: { id: 'task-1', status: 'todo' } })
+
+    await expect(service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_task',
+      operationId: 'task-op-3',
+      revision: 5
+    })).rejects.toMatchObject({ code: 'FINALIZATION_TERMINAL_INCONSISTENCY' })
+
+    expect(mockRepository.completeFinalizationStep).not.toHaveBeenCalled()
+    expect(mockRepository.failFinalization).toHaveBeenCalledWith(
+      'session-1',
+      'task-op-3',
+      'lease-3',
+      'complete_task',
+      'FINALIZATION_TERMINAL_INCONSISTENCY',
+      false
+    )
+  })
+
   it('任务完成重试成功后只提交任务步骤并保留 Wrapup', async () => {
     mockRepository.claimFinalization.mockResolvedValue({
       status: 'claimed',

@@ -36,6 +36,11 @@ export function classifyFinalizationError(error: unknown): FinalizationErrorInfo
   if (code === 'FINALIZATION_LEASE_LOST') {
     return { code, status: 409, retryable: true, category: 'lease' };
   }
+  // 终态不一致（#52 P-26 ③）：任务没完成却要记成 completed。重试不会变好——先人工核对数据，
+  // 因此 retryable=false，避免自动重试把同一笔错账反复写。
+  if (code === 'FINALIZATION_TERMINAL_INCONSISTENCY') {
+    return { code, status: 500, retryable: false, category: 'persistence' };
+  }
   if (status === 409 && code.startsWith('PATH_')) {
     return {
       code,

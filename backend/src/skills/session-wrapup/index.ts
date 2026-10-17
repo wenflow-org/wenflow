@@ -9,6 +9,7 @@ import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
 import { buildSkillOutcome, type SkillOutcome } from '../outcome';
 import { recordDegradation } from '../degradation-telemetry';
 import { findArithmeticMismatches } from '../../services/ai-teaching/teaching-arithmetic-guard';
+import { applyKnowledgeTerminalConsistency } from '../../services/ai-teaching/terminal-consistency';
 import {
   isSessionEvaluationTier,
   sessionEvaluationTierToValue,
@@ -916,6 +917,17 @@ export class SessionWrapupAgent {
           summary = verified.summary;
           logger.warn('[SessionWrapupAgent] 知识点证据未回链到学员原话，已标记并降级', {
             unverified: verified.unverified,
+          });
+        }
+      }
+      // #52 第③例：终态一致性——evidence/reason 里出现「反复冒头」「仍会」等相悖表述时，
+      // 该点不得继续输出 mastered / ≥90%（总结与证据不能互相打脸）。
+      {
+        const consistent = applyKnowledgeTerminalConsistency(summary.knowledgeItems);
+        if (consistent.downgraded.length > 0) {
+          summary = { ...summary, knowledgeItems: consistent.knowledgeItems };
+          logger.warn('[SessionWrapupAgent] 知识点终态与证据表述相悖，已降级封顶', {
+            downgraded: consistent.downgraded,
           });
         }
       }
