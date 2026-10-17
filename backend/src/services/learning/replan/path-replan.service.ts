@@ -12,6 +12,7 @@ import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/context';
 import { assertGenerationRunFence, assertStageTasksPresent } from '../path-generation-status';
 import { clampStageTasksToHints } from '../path-planning-hints';
+import { extractPromptMaterials, STAGE_MATERIAL_LIMITS } from '../../materials/material-prompt-projection';
 import {
   assertPathMutationSafe,
   buildPathReplanSnapshot,
@@ -234,6 +235,13 @@ async function redesignMilestoneTasks(
     .filter((task: any) => resolveTaskAdjustability(task, adjustabilityByTask) === 'core')
     .slice(0, 6)
     .map((task: any) => ({ id: task.id, title: task.title, taskType: task.taskType || null }));
+  // 资料投影（2026-10-17）：重排此前完全不传 materials —— stage-designer 的
+  // 「任务必须长在资料上」规则拿不到输入，重排出来的任务全部丢失 materialRefs。
+  // 与生成链同口径：按阶段位次切章节窗口，末阶段才能引用到资料后部。
+  const stageMaterials = extractPromptMaterials(normalizedInput, STAGE_MATERIAL_LIMITS, {
+    stageNumber: milestone.stageNumber,
+    stageCount: (path.milestones || []).length || 1,
+  });
 
   const stageDesignerInput = {
     milestone: {
@@ -252,6 +260,7 @@ async function redesignMilestoneTasks(
       },
     } : {}),
     cognitiveCore: pathCognitiveDesign,
+    ...(stageMaterials ? { materials: stageMaterials } : {}),
     // 规模锚（与生成链同构：planningHints 嵌在 normalizedInput 下，stage-designer 规则 8/77 读它）
     normalizedInput: replanHints
       ? { ...((normalizedInput as any) || {}), planningHints: replanHints }

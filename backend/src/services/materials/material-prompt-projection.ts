@@ -38,6 +38,42 @@ export const STAGE_MATERIAL_LIMITS: PromptMaterialLimits = {
   maxTldrChars: 400,
 };
 
+/**
+ * 阶段位置窗口（2026-10-17）：任务层只带 8 个章节，此前**永远取前 8 个**——24 章节的包里
+ * 后 2/3 对 stage-designer 完全不可见，路径引用因而恒落在原文前部（20 goal A/B 实证：
+ * 后半引用 9%，且 s-9 之后从未出现）。
+ *
+ * 修法：按阶段在路径中的位次，把章节/要点切成**连续窗口**（首阶段取头、末阶段取尾），
+ * 让整条路径的引用有机会覆盖全文，同时单阶段载荷不变。
+ */
+export interface MaterialProjectionWindow {
+  /** 当前阶段序号（1-based）。 */
+  stageNumber: number;
+  /** 全路径阶段总数。 */
+  stageCount: number;
+}
+
+/**
+ * 计算 `[start, end)` 切片：`take` 为单阶段最多可见条数。
+ * 阶段数 ≤1、条数不足窗口、或序号越界时退化为从头取（与改造前一致）。
+ */
+export function resolveMaterialWindowRange(
+  total: number,
+  take: number,
+  stageNumber?: number | null,
+  stageCount?: number | null
+): [number, number] {
+  const safeTotal = Math.max(0, Math.floor(Number(total) || 0));
+  const size = Math.max(0, Math.min(safeTotal, Math.floor(Number(take) || 0)));
+  if (size <= 0 || size >= safeTotal) return [0, safeTotal];
+  const count = Math.max(1, Math.floor(Number(stageCount) || 1));
+  if (count <= 1) return [0, size];
+  const index = Math.min(count, Math.max(1, Math.floor(Number(stageNumber) || 1)));
+  const maxStart = safeTotal - size;
+  const start = Math.round(((index - 1) * maxStart) / (count - 1));
+  return [start, start + size];
+}
+
 /** 课堂层（teaching-turn）：够引用原文即可，越小越好（每轮都进上下文）。 */
 export const TEACHING_MATERIAL_LIMITS: PromptMaterialLimits = {
   maxMaterials: 2,
@@ -91,22 +127,37 @@ function normalizeString(value: unknown): string | null {
  */
 export function buildPromptFriendlyMaterials(
   raw: unknown,
-  limits: PromptMaterialLimits = PATH_MATERIAL_LIMITS
+  limits: PromptMaterialLimits = PATH_MATERIAL_LIMITS,
+  window?: MaterialProjectionWindow | null
 ): PromptMaterial[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
   const out: PromptMaterial[] = [];
   for (const item of raw.slice(0, limits.maxMaterials)) {
     const pack = (item as { pack?: Record<string, unknown> })?.pack;
     if (!pack || typeof pack !== 'object') continue;
-    const sections = (Array.isArray(pack.sections) ? pack.sections : [])
-      .slice(0, limits.maxSections)
+    const rawSections = Array.isArray(pack.sections) ? pack.sections : [];
+    const [sectionStart, sectionEnd] = resolveMaterialWindowRange(
+      rawSections.length,
+      limits.maxSections,
+      window?.stageNumber,
+      window?.stageCount
+    );
+    const sections = rawSections
+      .slice(sectionStart, sectionEnd)
       .map((section: Record<string, unknown>) => ({
         id: normalizeString(section?.id),
         title: normalizeString(section?.title),
       }))
       .filter((section) => !!section.title);
-    const keyPoints = (Array.isArray(pack.keyPoints) ? pack.keyPoints : [])
-      .slice(0, limits.maxKeyPoints)
+    const rawKeyPoints = Array.isArray(pack.keyPoints) ? pack.keyPoints : [];
+    const [pointStart, pointEnd] = resolveMaterialWindowRange(
+      rawKeyPoints.length,
+      limits.maxKeyPoints,
+      window?.stageNumber,
+      window?.stageCount
+    );
+    const keyPoints = rawKeyPoints
+      .slice(pointStart, pointEnd)
       .map((point: Record<string, unknown>) => ({
         text: normalizeString(point?.text),
         cite: normalizeString(point?.cite),
@@ -135,7 +186,8 @@ export function buildPromptFriendlyMaterials(
  */
 export function extractPromptMaterials(
   container: unknown,
-  limits: PromptMaterialLimits = PATH_MATERIAL_LIMITS
+  limits: PromptMaterialLimits = PATH_MATERIAL_LIMITS,
+  window?: MaterialProjectionWindow | null
 ): PromptMaterial[] | null {
   if (!container || typeof container !== 'object') return null;
   const record = container as {
@@ -146,5 +198,5 @@ export function extractPromptMaterials(
     ?? record.normalizedInput?.resources?.materials
     ?? record.normalizedInput?.materials
     ?? null;
-  return buildPromptFriendlyMaterials(materials, limits);
+  return buildPromptFriendlyMaterials(materials, limits, window);
 }

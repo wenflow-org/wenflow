@@ -358,6 +358,13 @@ async function enrichLearningPathWithAndersonInner(
       const stageNormalizedInput = stageHints && (normalizedInput as any)
         ? { ...(normalizedInput as any), planningHints: stageHints }
         : normalizedInput;
+      // 资料章节按阶段位次分配（2026-10-17）：任务层每阶段只带 8 段，此前恒取前 8 段 ⇒
+      // 24 章节的包里后 2/3 永远不可见，路径引用恒落原文前部（20 goal A/B：后半引用 9%）。
+      // 按阶段位次切连续窗口：首阶段看头、末阶段看尾，整条路径才有机会覆盖全文。
+      const stageMaterials = extractPromptMaterials(normalizedInput, STAGE_MATERIAL_LIMITS, {
+        stageNumber: milestone.stageNumber,
+        stageCount: learningPath.milestones.length,
+      });
       const stageDesignerInput = {
         milestone: {
           stageNumber: milestone.stageNumber,
@@ -375,6 +382,7 @@ async function enrichLearningPathWithAndersonInner(
           } : null),
         } : {}),
         ...stageDesignerBaseInput,
+        ...(stageMaterials ? { materials: stageMaterials } : {}),
         normalizedInput: stageNormalizedInput,
         // 全路径阶段地图（2026-10-03 A/B 审计实证：stage-designer 逐阶段调用只见当前阶段，
         // 「真实动作前两个阶段」「跨阶段去重」类规则因看不见全局而无法执行——
@@ -460,6 +468,28 @@ async function enrichLearningPathWithAndersonInner(
         }
       }
       assertStageTasksPresent(milestone.stageNumber, stageTasks);
+      // 引用位置观测（2026-10-17 阶段窗口）：本阶段实际引用了哪些章节、落在文档的哪个位置。
+      // 只记事实不阻断——A/B 复算时据此判断「窗口是否真的把引用带到后文」。
+      if (stageMaterials) {
+        const sectionOrdinals = stageTasks
+          .flatMap((task: any) => (Array.isArray(task?.materialRefs) ? task.materialRefs : []))
+          .map((ref: any) => {
+            const match = /^s-(\d+)$/.exec(String(ref?.sectionId || ''));
+            return match ? Number(match[1]) : null;
+          })
+          .filter((value: number | null): value is number => value !== null);
+        if (sectionOrdinals.length > 0) {
+          logger.info('[stage-material-window] 本阶段资料引用位置', {
+            runId,
+            pathId,
+            stageNumber: milestone.stageNumber,
+            stageCount: learningPath.milestones.length,
+            refs: sectionOrdinals.length,
+            minSection: Math.min(...sectionOrdinals),
+            maxSection: Math.max(...sectionOrdinals),
+          });
+        }
+      }
       // 校内锚覆盖观测（只 warn 不阻断）：阶段目标+课标题是否真的引用了教材册次/考试范围。
       // 评审实证：锚传进上下文却没落进任何阶段——这里把它变成可复盘的事实。
       if (pathSchoolAnchor) {
