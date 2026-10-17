@@ -60,7 +60,7 @@
         :value="confCoverageText"
         :tone="confCoverageText === '—' ? 'muted' : ''"
         :hint="`${confRows.length} / ${rows.length} 位有学习任务`"
-        title="有学习任务且产出置信度的学习者占比；无任务行不计入置信度分布与均值"
+        title="有学习任务且产出置信度的学习者占比。无任务行不计入置信度分布与均值"
       />
     </section>
 

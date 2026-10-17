@@ -7,7 +7,7 @@
       <transition name="toast">
         <div v-if="goalBanner && hasGenerating" class="goal-banner">
           <span class="goal-banner__dot"></span>
-          这版路径正在生成，通常 1-3 分钟；遇到排队会更久。页面会自动刷新，也可以先离开。
+          这版路径正在生成，通常 1-3 分钟。遇到排队会更久。页面会自动刷新，也可以先离开。
           <button type="button" class="goal-banner__close" @click="goalBanner = false">×</button>
         </div>
       </transition>
@@ -295,7 +295,7 @@ const deleteBusy = ref(false);
     2026-10-08 走查 #15：这两处原先各写一份，轮询一跑就把「主结构生成中，一般 1-2 分钟内完成…」
     换成「主结构生成中…」，那句用户最需要的时长承诺整段消失（手机档实测只剩短句，
     且本屏 docH=视口高、没有滚动可达的后半段）。抽成一处后不可能再各自漂移。 */
-const CORE_PHASE_TEXT = '路径生成中，通常 1-2 分钟；排队时会久一些，完成后会出现在这里…';
+const CORE_PHASE_TEXT = '路径生成中，通常 1-2 分钟。排队时会久一些，完成后会出现在这里…';
 function phaseTextOf(lc: { phase?: string | null; completedStages?: number | null; totalStages?: number | null }) {
   if (lc.phase === 'core') return CORE_PHASE_TEXT;
   // 阶段数已满但整体未 ready：这是「任务正在写入」而不是 100% 卡死（#112）

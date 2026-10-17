@@ -13,7 +13,7 @@
   <span
     v-else-if="kind === 'test'"
     class="mk-badge mk-badge--sm mk-badge--warn"
-    title="测试/审计账号（不计入真实统计口径）"
+    title="测试/审计账号（不计入真实用户统计）"
   >测试账号</span>
 </template>
 

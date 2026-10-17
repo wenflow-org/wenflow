@@ -704,14 +704,25 @@ export async function requestPathReplan(data: PathReplanRequest) {
   const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);
   const replanSignal = learnerSnapshot.replanSignal;
 
-  // 后续阶段重排（多阶段）：显式指定 fromStageNumber 时触发
-  const downstreamTargets = data.fromStageNumber !== undefined && data.fromStageNumber !== null
-    ? resolveDownstreamReplanTargets(path, data.fromStageNumber)
+  // #58：建议确认时客户端可能只传 evidence（老客户端不传阶段参数）。若建议本身就是
+  // 「下一阶段」，按建议落点执行；不传时仍保持旧行为（当前活动阶段）——但绝不能一边
+  // 文案写「下一阶段及后续」、一边改当前阶段。
+  const advisory = (data.evidence && typeof data.evidence === 'object'
+    ? (data.evidence as { advisory?: { scope?: unknown; targetStageNumber?: unknown } }).advisory
+    : undefined);
+  const advisoryTargetStage = Number(advisory?.targetStageNumber);
+  const advisoryUsesStage = Number.isFinite(advisoryTargetStage) && advisoryTargetStage > 0;
+  const explicitStage = data.stageNumber ?? (advisory?.scope === 'next_milestone' && advisoryUsesStage ? advisoryTargetStage : undefined);
+  const explicitFromStage = data.fromStageNumber ?? (advisory?.scope === 'downstream_path' && advisoryUsesStage ? advisoryTargetStage : undefined);
+
+  // 后续阶段重排（多阶段）：显式指定（或建议范围=后续阶段）时触发
+  const downstreamTargets = explicitFromStage !== undefined && explicitFromStage !== null
+    ? resolveDownstreamReplanTargets(path, explicitFromStage)
     : null;
 
   const targetMilestone = downstreamTargets && downstreamTargets.length > 0
     ? downstreamTargets[0]
-    : resolveStageReplanTarget(path, data.stageNumber || null);
+    : resolveStageReplanTarget(path, explicitStage || null);
   const replanSnapshot = targetMilestone ? buildPathReplanSnapshot(targetMilestone) : null;
 
   if (!targetMilestone || !replanSnapshot) {

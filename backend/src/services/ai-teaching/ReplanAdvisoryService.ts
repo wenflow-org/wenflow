@@ -26,7 +26,18 @@ export interface ReplanAdvisory {
   shouldSuggest: boolean;
   priority: 'none' | 'low' | 'medium' | 'high';
   recommendation: 'keep' | 'reinforce' | 'slow_down' | 'resequence' | 'accelerate';
+  /**
+   * 建议影响范围。`downstream_path` **刻意没有自动执行器**（2026-10-17 判定为不做）：
+   * 它意味着改动会波及后续整条路径，而路径改动一律走「学习者确认 → 重排 + 快照可回退」这条门
+   * （replan-snapshots / replan-rollback）。若为它加自动执行，等于绕过确认门并让学习者失去
+   * 一键回退——省一次点击的收益远小于误改整条路径的代价。本字段只用于文案与执行范围提示。
+   */
   scope: 'none' | 'next_milestone' | 'downstream_path';
+  /**
+   * 建议所指的目标阶段（= 生成建议时的「下一阶段」）。确认时前端/后端据此传
+   * stageNumber / fromStageNumber，避免文案说「下一阶段」而执行落点回落到当前活动阶段（#58）。
+   */
+  targetStageNumber?: number | null;
   rationale: string;
   reasonCodes: string[];
   /** LLM 归因（阈值召回后补的"为什么"）；未启用/失败时为 null */
@@ -62,6 +73,8 @@ interface BuildInput {
     title: string;
     goal?: string | null;
     totalTasks?: number;
+    /** 阶段序号（#58：建议落点随建议一起落库，确认时不再靠缺省推断） */
+    stageNumber?: number;
   } | null;
 }
 
@@ -236,6 +249,7 @@ export class ReplanAdvisoryService {
         priority,
         recommendation,
         scope,
+        targetStageNumber: nextMilestone.stageNumber ?? null,
         rationale: learnerSignal.rationale || '学习者状态中心判断当前路径后续安排需要重新确认。',
         reasonCodes: learnerSignal.reasonCodes || [],
         ui: isAccelerate
@@ -306,6 +320,7 @@ export class ReplanAdvisoryService {
         priority: highRisk ? 'high' : 'medium',
         recommendation: highRisk ? 'slow_down' : 'reinforce',
         scope: 'next_milestone',
+        targetStageNumber: nextMilestone.stageNumber ?? null,
         rationale: '当前阶段虽然已结束或接近结束，但仍有关键知识点不够稳定，直接进入下一阶段可能会放大后续理解风险。',
         reasonCodes,
         ui: {

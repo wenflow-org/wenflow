@@ -1197,14 +1197,24 @@ async function confirmAdjust(card: DecisionCard) {
   }
   replanBusy.value = true;
   try {
+    // #58：建议卡承诺的范围必须与执行落点一致——next_milestone 传 stageNumber，
+    // downstream_path 传 fromStageNumber；不再让后端「缺省 = 当前活动阶段」把「下一阶段」吃掉。
+    const advisory = (card.advisory || {}) as { scope?: string; targetStageNumber?: number | null };
+    const targetStage = typeof advisory.targetStageNumber === 'number' && advisory.targetStageNumber > 0
+      ? advisory.targetStageNumber
+      : null;
+    const stageParams = targetStage
+      ? advisory.scope === 'downstream_path' ? { fromStageNumber: targetStage } : { stageNumber: targetStage }
+      : {};
     await request.post(`/learning/paths/${card.pathId}/replan`, {
       triggerSource: 'ai-teaching',
       mode: replanModeForRecommendation(card.recommendation),
       reason: REPLAN_REASON[card.recommendation || 'reinforce'] || '根据课后建议调整后续阶段',
       requireConfirmation: false,
+      ...stageParams,
       evidence: { advisoryAction: card.recommendation || 'reinforce', advisory: card.advisory || null }
     });
-    toast.success(`已调整「${card.pathTitle || '当前路径'}」的后续阶段`);
+    toast.success(`已调整「${card.pathTitle || '当前路径'}」的${advisory.scope === 'downstream_path' ? '后续阶段' : '下一阶段'}`);
     // 卡头双按钮的回执行（原型 wf-advisory__done）：确认成功后就地留一行，不只靠 toast 一闪而过
     advisoryDone.value = `已采用建议：「${card.pathTitle || '当前路径'}」的后续阶段已调整，已完成内容保留不变。`;
     dismissDecision(card);

@@ -83,13 +83,13 @@
           :title="vlRpmLoadFailed ? '设置未加载：点击重试' : '在途为正在出站的调用数。上限为已保存的速率配置（在「模型与接入 → 虚拟学习者」页签修改）'"
           @click="vlRpmLoadFailed && loadVlRpm()"
         />
-        <!-- P-49（#74）：卡死候选此前只在页头按钮和分区里出现，没有 KPI 位 -->
+        <!-- P-49（#74）：无响应候选此前只在页头按钮和分区里出现，没有 KPI 位 -->
         <MkKpi
-          label="卡死候选"
+          label="无响应候选"
           :value="statsState === 'error' ? '—' : liveVirtualStaleCount"
           :tone="statsState !== 'error' && liveVirtualStaleCount ? 'warn' : ''"
           :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : '超过回收阈值无写入'"
-          :title="statsState === 'error' ? STATS_RETRY_TITLE : '后端 staleCount（全量聚合）的卡死会话数；用页头「回收卡死」按钮处理'"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : '后端 staleCount（全量聚合）的无响应会话数。可用「回收无响应」操作处理'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />

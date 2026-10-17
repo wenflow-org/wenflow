@@ -746,7 +746,7 @@ const view = computed<SkillIdentity | null>(() => {
       id: skillId.value,
       name: m.skill?.name || skillId.value,
       category: m.skill?.category || '—',
-      categorySource: 'workbench-meta（兜底：已上线档案未就绪）',
+      categorySource: 'workbench-meta（备用：已上线档案未就绪）',
       agentId: m.parentAgent?.id || '',
       agentName: m.parentAgent?.name || m.parentAgent?.id || ''
     }

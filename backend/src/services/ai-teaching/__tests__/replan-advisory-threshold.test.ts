@@ -160,6 +160,16 @@ describe('ReplanAdvisoryService.build 的阈值行为', () => {
     expect(advisory.recommendation).toBe('reinforce');
   });
 
+  it('建议携带目标阶段号（#58：确认时按此传 stageNumber/fromStageNumber）', () => {
+    const advisory = service.build({
+      wrapup: wrapupWith({ metricTiers: { sessionLss: 'low', sessionLf: 'mid' } }),
+      learnerReplanProjection: projectionWith({ signal: reinforceSignal, milestoneComplete: false }),
+      nextMilestone: { ...nextMilestone, stageNumber: 3 },
+    });
+    expect(advisory.shouldSuggest).toBe(true);
+    expect(advisory.targetStageNumber).toBe(3);
+  });
+
   it('双低但本课真的浮出卡点知识点（struggling）→ 仍发（硬证据盖过自评档位）', () => {
     const advisory = service.build({
       wrapup: wrapupWith({ metricTiers: { sessionLss: 'low', sessionLf: 'low' } }),

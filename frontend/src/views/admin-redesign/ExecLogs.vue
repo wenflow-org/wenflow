@@ -28,7 +28,7 @@
         :value="failedCount === null ? '—' : failedCount"
         :tone="failedCount ? 'bad' : ''"
         :hint="failedCount ? (topErrorCategory || '当前窗口内失败') : '当前窗口内无失败'"
-        title="失败数来自后端窗口 stats（与状态 pill 同源）；类别 Top 取当前页可见行，不是全窗口分布"
+        title="失败数来自后端窗口 stats（与状态 pill 同源）。类别 Top 取当前页可见行，不是全窗口分布"
       />
     </section>
 

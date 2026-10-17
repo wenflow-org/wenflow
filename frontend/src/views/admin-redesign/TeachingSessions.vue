@@ -57,7 +57,7 @@
         :value="abnormalSessionCount"
         tone="bad"
         hint="失败 / 收尾失败 / 超时"
-        :title="`${KPI_LIST_SCOPE_TITLE}；点击列表上方「服务器异常」徽章可按该状态筛选`"
+        :title="`${KPI_LIST_SCOPE_TITLE}。点列表里的「服务器异常」徽章可按状态筛选`"
       />
     </section>
 

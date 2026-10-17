@@ -96,7 +96,7 @@ export const ROUTE_SOURCE_LABELS: Record<string, string> = {
   'user-agent': '用户覆盖',
   'user-provider': '用户自带接入',
   'skill-config': 'Skill 配置',
-  'env-fallback': '环境变量兜底',
+  'env-fallback': '环境变量备用',
   env: '环境变量',
 } as const
 

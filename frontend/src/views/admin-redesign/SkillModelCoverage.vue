@@ -1,16 +1,16 @@
 <template>
-  <!-- Skill × 模型 × 参数 × 兜底 覆盖矩阵 -->
+  <!-- Skill × 模型 × 参数 × 备用模型 覆盖矩阵 -->
   <div class="mk-card skc">
     <!-- 原型 .card__head（title + sub）：卡头统一走 mk-card 词表 -->
     <div class="mk-card__head">
-      <h3 class="mk-card__title">Skill × 模型 × 参数 × 兜底</h3>
+      <h3 class="mk-card__title">Skill × 模型 × 参数 × 备用模型</h3>
       <span class="mk-card__meta">全部技能 × 实际路由</span>
     </div>
     <div class="skc__body">
       <!-- 原型 .note：说明文字走 surface-2 底 + muted 小字（不再自搓提示样式） -->
       <p class="note" title="2026-09-28 曾因此把 7 个课后技能静默漏到旧通道">
         <b>未配置的技能会走平台默认</b>。
-        对多个技能套用同一份通道/模型/参数/兜底配置：
+        对多个技能套用同一份通道/模型/参数/备用模型配置：
       </p>
       <div class="skc__apply">
         <input v-model="bulk.endpoint" class="mk-input mono" placeholder="endpoint（必填，http://host:30001）" :class="{ 'is-err': bulkErr }" />

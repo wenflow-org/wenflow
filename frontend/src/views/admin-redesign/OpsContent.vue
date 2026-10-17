@@ -27,7 +27,7 @@
         :value="byStatus('failed')"
         tone="bad"
         hint="可在列表重试生成"
-        title="status=failed 的路径数（与分布条红段同源）；点分布条红段可下钻"
+        title="status=failed 的路径数（与分布条红段同源）。点分布条红段可下钻"
       />
     </section>
 

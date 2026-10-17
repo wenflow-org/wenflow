@@ -129,7 +129,7 @@
         label="启用用例"
         :value="pePanel?.kpiView?.enabledCaseCount ?? '…'"
         :hint="pePanel?.kpiView?.disabledCaseCount != null ? `停用 ${pePanel?.kpiView?.disabledCaseCount}` : undefined"
-        title="启用中的评估用例数；停用用例仍保留但不参与批量评测"
+        title="启用中的评估用例数。停用用例仍保留但不参与批量评测"
       />
       <MkKpi
         label="评估历史"

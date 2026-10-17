@@ -48,7 +48,7 @@
         </template>
         <MkEmptyState
           v-else
-          title="没有符合口径的旧账号"
+          title="没有符合条件的旧账号"
           description="当前保留期与保留名单下没有可删除的账号，无需清理。"
           action-text="关闭"
           compact

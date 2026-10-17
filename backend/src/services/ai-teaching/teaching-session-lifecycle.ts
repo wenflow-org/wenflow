@@ -890,6 +890,8 @@ export async function endSession(
         title: nextMilestone.title,
         goal: nextMilestone.goal,
         totalTasks: nextMilestone.totalTasks,
+        // #58：建议所指的阶段随建议落库，确认执行时不再靠「当前活动阶段」兜底
+        stageNumber: nextMilestone.stageNumber,
       } : null,
     });
     // 归因层（阈值召回 + LLM 归因）：只在建议已成立时补"为什么"，失败/超时保留阈值版。

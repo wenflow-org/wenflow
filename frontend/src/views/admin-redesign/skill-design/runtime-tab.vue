@@ -135,7 +135,7 @@
       </div>
 
       <div class="sdp-divider">
-        <strong>失败处理与模型兜底</strong>
+        <strong>失败处理与备用模型</strong>
         <span>备用模型最多 2 个，需与主模型同层级、同供应商。</span>
       </div>
 
