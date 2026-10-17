@@ -1285,6 +1285,8 @@ export async function buildTeachingScenarioContext(
       knowledgeSignals: {
         fragileCount: learnerSnapshot.knowledgeMemory.globalSignals.fragileConcepts.length,
         strugglingCount: learnerSnapshot.knowledgeMemory.globalSignals.strugglingConcepts.length,
+        // #59/#60 第 6 条：只有高严重度卡点/真缺口才否决升档
+        severeStrugglingCount: learnerSnapshot.knowledgeMemory.globalSignals.severeStrugglingConcepts.length,
         prerequisiteGapCount: learnerSnapshot.knowledgeMemory.currentPath?.prerequisiteGaps.length ?? 0,
       },
       // 情感（软传感器，§4.5）：取**上一节课**留下的连续受挫轮数——软传感器只允许降档/减速，

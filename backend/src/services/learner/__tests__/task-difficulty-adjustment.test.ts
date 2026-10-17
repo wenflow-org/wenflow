@@ -55,8 +55,8 @@ describe('decideTaskDifficulty：独立成功率带（§7 P1-1，2026-09-17）',
       learningControlState: { paceMode: 'steady', conceptLoad: 'medium', challengeLevelCap: 'high' } as const,
       knowledgeSignals: { fragileCount: 2, strugglingCount: 1, prerequisiteGapCount: 0 },
     });
-    // 旧口径：知识类理由挡升档 → 保持
-    expect(legacy.direction).toBe('keep');
+    // #59/#60 第 6 条：普通 fragile/struggling 不再一票否决升档（只留痕）
+    expect(legacy.direction).toBe('increase');
 
     const withBand = decideTaskDifficulty({
       ...normalInput(),
@@ -221,16 +221,16 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
     expect(decision.delta).toBe(0);
   });
 
-  it('只要存在任何理由（含知识类），就不升档', () => {
+  it('高严重度知识理由仍然不升档（普通 fragile 已改为止损留痕，见 #59/#60 严重度门）', () => {
     const decision = decideTaskDifficulty({
       ...normalInput(),
       lessonMetrics: metrics(3, 6, 2),
       learningControlState: { paceMode: 'push', conceptLoad: 'high', challengeLevelCap: 'high' },
-      knowledgeSignals: { fragileCount: 1, strugglingCount: 0, prerequisiteGapCount: 0 },
+      knowledgeSignals: { fragileCount: 1, strugglingCount: 0, severeStrugglingCount: 1, prerequisiteGapCount: 0 },
     });
     expect(decision.direction).toBe('keep');
     expect(decision.delta).toBe(0);
-    expect(decision.reasons).toEqual(['fragile_concepts']);
+    expect(decision.reasons).toEqual(['fragile_concepts', 'severe_struggling_concepts']);
   });
 
   it('台账"可度量理由"与判定器"负荷类理由"是同一集合（单一事实源）', async () => {
@@ -375,5 +375,49 @@ describe('decideTaskDifficulty：最小挑战保底 D_floor', () => {
     expect(decision.capApplied).toBe(true);
     expect(decision.floorApplied).toBe(false);
     expect(decision.adjusted).toBe(CHALLENGE_CAP_LIMITS.low);
+  });
+});
+
+
+describe('decideTaskDifficulty · 知识理由的严重度门（#59/#60 第 6 条）', () => {
+  const capable = () => ({
+    ...normalInput(),
+    learningControlState: { paceMode: 'steady', conceptLoad: 'medium', challengeLevelCap: 'high' } as const,
+  });
+
+  it('只有普通 fragile/struggling、无负荷理由 → 允许升档（旧口径被焊死）', () => {
+    const decision = decideTaskDifficulty({
+      ...capable(),
+      knowledgeSignals: { fragileCount: 3, strugglingCount: 1, prerequisiteGapCount: 0 },
+    });
+    expect(decision.delta).toBe(1);
+    expect(decision.direction).toBe('increase');
+    expect(decision.reasons).toEqual(expect.arrayContaining(['fragile_concepts', 'struggling_concepts']));
+  });
+
+  it('高危卡点（severeStruggling>0）→ 仍然挡升档', () => {
+    const decision = decideTaskDifficulty({
+      ...capable(),
+      knowledgeSignals: { fragileCount: 0, strugglingCount: 0, severeStrugglingCount: 1, prerequisiteGapCount: 0 },
+    });
+    expect(decision.direction).toBe('keep');
+  });
+
+  it('真实前置缺口 → 仍然挡升档', () => {
+    const decision = decideTaskDifficulty({
+      ...capable(),
+      knowledgeSignals: { fragileCount: 0, strugglingCount: 0, prerequisiteGapCount: 1 },
+    });
+    expect(decision.direction).toBe('keep');
+  });
+
+  it('负荷类理由仍然一票否决（知识类放宽不波及刹车）', () => {
+    const decision = decideTaskDifficulty({
+      ...capable(),
+      lessonMetrics: metrics(7, 3, 1),
+      knowledgeSignals: { fragileCount: 0, strugglingCount: 0, prerequisiteGapCount: 0 },
+    });
+    expect(decision.direction).toBe('decrease');
+    expect(decision.reasons).toContain('lesson_stress_high');
   });
 });

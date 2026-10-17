@@ -62,6 +62,8 @@ export interface TaskDifficultyInput {
   knowledgeSignals?: {
     fragileCount?: number;
     strugglingCount?: number;
+    /** #59/#60 第 6 条：高严重度卡点（mastery<0.3）。只有它/真缺口才挡升档。 */
+    severeStrugglingCount?: number;
     prerequisiteGapCount?: number;
   } | null;
   /**
@@ -111,6 +113,7 @@ export interface TaskDifficultyAdjustment {
     challengeLevelCap: string;
     fragileCount: number;
     strugglingCount: number;
+    severeStrugglingCount: number;
     prerequisiteGapCount: number;
     lessonScopeIsPath: boolean;
     /** 独立成功率带（§7 P1-1）：动作 / 成功率 / 样本数（无样本时 rate=null、sample=0） */
@@ -187,6 +190,9 @@ export const KNOWLEDGE_DECREASE_REASONS = [
 ] as const;
 
 const LOAD_BASED_REASON_SET = new Set<string>(LOAD_BASED_DECREASE_REASONS);
+/** 高严重度卡点（mastery<0.3）单列一条理由：它仍然否决升档，普通 fragile/struggling 不。 */
+export const SEVERE_KNOWLEDGE_REASON = 'severe_struggling_concepts';
+const KNOWLEDGE_REASON_SET = new Set<string>([...KNOWLEDGE_DECREASE_REASONS, SEVERE_KNOWLEDGE_REASON]);
 
 /**
  * 独立成功率带给出的**降档**理由（§7 P1-1）：也计入 delta，但**刻意不进**台账的可度量集合——
@@ -225,9 +231,11 @@ function collectReasons(
   // 知识证据：脆弱/挣扎/前置缺口（只挡升档，不降档）
   const fragile = input.knowledgeSignals?.fragileCount ?? 0;
   const struggling = input.knowledgeSignals?.strugglingCount ?? 0;
+  const severe = input.knowledgeSignals?.severeStrugglingCount ?? 0;
   const gaps = input.knowledgeSignals?.prerequisiteGapCount ?? 0;
   if (fragile > 0) reasons.push('fragile_concepts');
   if (struggling > 0) reasons.push('struggling_concepts');
+  if (severe > 0) reasons.push(SEVERE_KNOWLEDGE_REASON);
   if (gaps > 0) reasons.push('prerequisite_gaps');
 
   return reasons;
@@ -237,11 +245,20 @@ function collectReasons(
  * 升档资格：**有余力**才升。要求
  * ① 上限允许（`challengeLevelCap === 'high'`——它本身已蕴含"节奏可推、负荷有余"，故不再重复判 paceMode/ktl/lf，
  *    否则是同一份证据被算两次、并把升档口收窄到几乎打不开）；
- * ② 上一节课不紧绷（`lesson.lss <= 4`）。
- * 任何一条理由（含知识类）都会取消资格 → 存在理由时档位只可能"保持"或"降"。
+ * ② 上一节课不紧绷（`lesson.lss <= 4`）；
+ * ③ 没有负荷类理由，且知识类理由**只有高严重度风险时**才一票否决。
+ *
+ * #59/#60 第 6 条：旧口径「任何理由都取消资格」让 fragile（几乎恒大于 0）把升档口焊死；
+ * 现在普通 fragile/struggling 只留痕给模型做支架，不再作为升档否决项。
  */
-function canIncrease(input: TaskDifficultyInput, lesson: TaskDifficultyMetrics, reasons: string[]): boolean {
-  if (reasons.length > 0) return false;
+function canIncrease(
+  input: TaskDifficultyInput,
+  lesson: TaskDifficultyMetrics,
+  reasons: string[],
+  severeKnowledgeRisk: boolean,
+): boolean {
+  const blockingReasons = reasons.filter((reason) => !KNOWLEDGE_REASON_SET.has(reason) || severeKnowledgeRisk);
+  if (blockingReasons.length > 0) return false;
   const control = input.learningControlState;
   return Boolean(control && control.challengeLevelCap === 'high') && lesson.lss <= 4;
 }
@@ -267,7 +284,13 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
     // 带高于上沿 = 太容易：直接升一档，**不再**要求"无任何理由 + cap=high"同时成立
     // （旧口径正是"只有刹车没有油门"的来源，审计 §4.2(2)）。安全仍由 ceiling 封顶兜底。
     delta = frustrationActive ? 0 : 1;
-  } else if (canIncrease(input, lesson, reasons.filter((reason) => reason !== 'success_rate_above_band'))) {
+  } else if (canIncrease(
+    input,
+    lesson,
+    reasons.filter((reason) => reason !== 'success_rate_above_band'),
+    (input.knowledgeSignals?.severeStrugglingCount ?? 0) > 0
+      || (input.knowledgeSignals?.prerequisiteGapCount ?? 0) > 0,
+  )) {
     delta = 1;
   }
   if (!Number.isFinite(delta)) delta = 0;
@@ -311,6 +334,7 @@ export function decideTaskDifficulty(input: TaskDifficultyInput): TaskDifficulty
       challengeLevelCap: capSource,
       fragileCount: input.knowledgeSignals?.fragileCount ?? 0,
       strugglingCount: input.knowledgeSignals?.strugglingCount ?? 0,
+      severeStrugglingCount: input.knowledgeSignals?.severeStrugglingCount ?? 0,
       prerequisiteGapCount: input.knowledgeSignals?.prerequisiteGapCount ?? 0,
       lessonScopeIsPath: lessonProvided,
       successBandAction: bandAction,
