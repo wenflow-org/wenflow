@@ -1153,7 +1153,8 @@ export async function loadRetrievabilityHints(userId: string): Promise<Array<{ c
         lastSeenAt: true,
       },
     });
-    const now = new Date();
+    // 模拟钟单点（#68 P-43）：开课时的保持率提示必须与复习计划/到期判定同一时间基准
+    const now = simulatedNowOr();
     return traces
       .map((t) => {
         const state: FsrsMemoryState = {

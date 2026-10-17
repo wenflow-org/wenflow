@@ -437,6 +437,9 @@ export class LearnerKnowledgeMemoryService {
       const wrapup = parseJsonSafe<any>(session.wrapup, null);
       const summaryPayload = wrapup?.summary || null;
       const evaluationPayload = wrapup?.evaluation || null;
+      // 降级总结不得进掌握证据（#70 P-45）：summary-only / summarySource=fallback 是模板兜底产物，
+      // 它的 knowledgeItems 不是模型对学习结果的判断。知识状态行（session.knowledgeState）仍保留。
+      const summaryIsReliable = wrapup?.status !== 'summary-only' && wrapup?.sources?.summary !== 'fallback';
       const happenedAt = (session.endTime || session.updatedAt).toISOString();
       // 时钟域：概念"最近可见"只用会话业务结束时间 endTime（模拟链路经 simulatedNowOr 落模拟日）。
       // 会话未结束（endTime=null）时不回退 updatedAt（真墙钟）——无结束时间 = 不记 seenAt。
@@ -476,7 +479,7 @@ export class LearnerKnowledgeMemoryService {
       });
     }
 
-      if (Array.isArray(summaryPayload?.knowledgeItems)) {
+      if (summaryIsReliable && Array.isArray(summaryPayload?.knowledgeItems)) {
         for (const item of summaryPayload.knowledgeItems) {
           const conceptKey = normalizeConceptKey(item?.name);
           if (!conceptKey) continue;

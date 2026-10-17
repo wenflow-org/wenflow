@@ -28,6 +28,7 @@ import {
   findUserMemoryProfile,
   listUserMemoryTraces,
   findUserIdOnly,
+  findMemoryProjections,
   computeFragmentationMetrics,
   type FragmentationMetrics,
 } from '../../services/admin/memory-review.repo';
@@ -47,6 +48,7 @@ import {
 } from '../../services/learner/ConceptConsolidatorService';
 import { conceptGraphService } from '../../services/learner/concept-graph.service';
 import { fsrsRetrievability, fsrsStateFromLegacy, type FsrsMemoryState } from '../../services/memory/fsrs';
+import { simulatedNowOr } from '../../services/virtual-lab/simulation-clock-context';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -115,7 +117,8 @@ router.get('/', async (req, res) => {
     const rawOffset = req.query.offset ? Number(req.query.offset) : 0;
     const offset = Number.isFinite(rawOffset) ? Math.max(rawOffset, 0) : 0;
     const includeVirtual = String(req.query.includeVirtual || '') === 'true';
-    const now = new Date();
+    // 模拟钟单点（#68 P-43）：VL 管理视角的到期/积压必须与写入侧同一时间基准
+    const now = simulatedNowOr();
 
     const virtualIds = includeVirtual
       ? []
@@ -188,7 +191,12 @@ router.get('/', async (req, res) => {
     /* 原型 renderMemory 三列（薄弱项/平均记忆强度/最近复习）的读数：强度 = FSRS 可提取率
        （retentionOf，与「记忆强度分布」卡同一算法）；从未看过（lastSeenAt 空）的痕迹
        无强度可算，不进分子分母（与分布卡「不硬造」口径一致）。 */
-    const traceAggRows = await findTracesForStrengthAgg(userIds);
+    const [traceAggRows, memoryProjectionRows] = await Promise.all([
+      findTracesForStrengthAgg(userIds),
+      // #67：消费 memory scope 投影（此前只写不读）；无投影行的用户 projection=null
+      findMemoryProjections(userIds),
+    ]);
+    const projectionByUser = new Map(memoryProjectionRows.map((row) => [row.userId, row]));
     const aggByUser = new Map<string, { weak: number; seen: number; sum: number; last: Date | null }>();
     for (const t of traceAggRows) {
       if (!t.lastSeenAt) continue;
@@ -259,6 +267,20 @@ router.get('/', async (req, res) => {
             name: userById.get(row.userId)?.name ?? null,
             email: userById.get(row.userId)?.email ?? null,
             isVirtualLearner: !!userById.get(row.userId)?.isVirtualLearner,
+            // #67：memory 投影快照（无行 = 该用户还没有复习完成事件，不硬造 0）
+            projection: (() => {
+              const projection = projectionByUser.get(row.userId);
+              if (!projection) return null;
+              const payload = (() => {
+                try { return JSON.parse(projection.payload); } catch { return null; }
+              })();
+              return {
+                traceCount: typeof payload?.traceCount === 'number' ? payload.traceCount : null,
+                dueCount: typeof payload?.dueCount === 'number' ? payload.dueCount : null,
+                generatedAt: projection.generatedAt,
+                version: projection.version,
+              };
+            })(),
             /* 薄弱 = 强度<40% 的痕迹数（原型 threshold）；平均强度 0-1，null = 无 FSRS 强度数据 */
             weak: agg?.weak ?? 0,
             avgStrength: agg && agg.seen > 0 ? Math.round((agg.sum / agg.seen) * 100) / 100 : null,
@@ -360,7 +382,8 @@ router.get('/:userId', async (req, res) => {
         .map(toAliasView),
     };
 
-    const now = new Date();
+    // 模拟钟单点（#68 P-43）：VL 管理视角的到期/积压必须与写入侧同一时间基准
+    const now = simulatedNowOr();
     const dueTraces = traces
       .filter((trace) => trace.dueAt && trace.dueAt <= now && trace.extractionCount > 0)
       .map((trace) => ({

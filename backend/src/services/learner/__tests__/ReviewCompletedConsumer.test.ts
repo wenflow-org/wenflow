@@ -372,4 +372,19 @@ describe('ReviewCompletedConsumer memory 投影写入（B2）', () => {
       fsrs: { stability: 2.5, difficulty: 5.2, reps: 1, lapses: 0 },
     }))
   })
+
+  // #67 P-42：traceCount=0 时不再 upsert 空投影（读侧无法区分「从未复习」与「复习但无痕迹」）。
+  it('没有痕迹时不写空投影，事件照常消费', async () => {
+    const tx = buildTx()
+    tx.memory_traces.findMany.mockResolvedValue([])
+    tx.memory_traces.count.mockReset()
+    tx.memory_traces.count.mockResolvedValue(0)
+    transaction.mockImplementation(async (callback: (client: Tx) => Promise<unknown>) => callback(tx))
+    getActiveForConcepts.mockResolvedValue([])
+
+    await new ReviewCompletedConsumer().handle(event)
+
+    expect(tx.learner_projections.upsert).not.toHaveBeenCalled()
+    expect(tx.domain_event_inbox.create).toHaveBeenCalledTimes(1)
+  })
 })

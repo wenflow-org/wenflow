@@ -402,7 +402,13 @@ export class LearningStateService {
     since?: Date,
     excludedSourceKey?: string,
     asOf?: Date,
-    pathId?: string | null
+    pathId?: string | null,
+    /**
+     * 是否计入合成占位行（metadata.synthetic=true）。默认排除（#71 P-46）：占位值不能参与
+     * 当前状态 / 趋势 / EWMA 前值；只有 PMC 重放需要包含（否则只有占位行的冷启动用户会读成
+     * 「无状态」），且 PMC 内部另有 dedupeLessonRows 把「同课真实行 + 占位行」配对折叠。
+     */
+    includeSynthetic = false
   ) {
     return {
       userId,
@@ -413,6 +419,7 @@ export class LearningStateService {
       AND: [
         { metadata: { contains: `"version":"${this.committedMetricVersion}"` } },
         { metadata: { contains: '"committed":true' } },
+        ...(includeSynthetic ? [] : [{ NOT: { metadata: { contains: '"synthetic":true' } } }]),
       ],
       ...(since || asOf ? {
         calculatedAt: {
@@ -780,7 +787,12 @@ export class LearningStateService {
   /** devtools 时间推进：取用户最近一条原生 learning_metrics 行（不折算、不提交） */
   async getLatestMetricRecord(userId: string) {
     return prisma.learning_metrics.findFirst({
-      where: { userId },
+      // 只看学习状态行，且跳过合成占位行（#71：占位值是默认难度套公式的产物，不是测量）
+      where: {
+        userId,
+        metricType: 'learning_state',
+        NOT: { metadata: { contains: '"synthetic":true' } },
+      },
       orderBy: { calculatedAt: 'desc' },
       select: { lss: true, ktl: true, lf: true, lsb: true, calculatedAt: true },
     });
@@ -1101,7 +1113,12 @@ export class LearningStateService {
   ): Promise<Record<string, any>> {
     // 获取现有的 lssHistory
     const existingRecord = await prisma.learning_metrics.findFirst({
-      where: { userId },
+      // 只继承学习状态行，且不把占位行带进历史（#71）
+      where: {
+        userId,
+        metricType: 'learning_state',
+        NOT: { metadata: { contains: '"synthetic":true' } },
+      },
       orderBy: { calculatedAt: 'desc' },
     });
 

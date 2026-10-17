@@ -18,6 +18,7 @@ import { logger } from '../../utils/logger';
 import { runBackgroundTask } from '../background-task-tracker.service';
 import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
 import { normalizeConceptKey } from './memory-trace.service';
+import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 
 /** 单次 LLM 判定的概念数上限（控成本与输出长度） */
 export const MAX_JUDGE_BATCH = 30;
@@ -202,7 +203,8 @@ class ConceptLoadService {
     options: { now?: Date; deps?: LoadDeps; timeoutMs?: number } = {},
   ): Promise<{ profiles: Map<string, ConceptLoadProfile>; judged: number; source: 'cache' | 'llm' | 'degraded' }> {
     const deps = options.deps ?? this.deps;
-    const now = options.now ?? new Date();
+    // 模拟钟单点（#68 P-43）：VL 模拟日下概念负担档位的 TTL 也必须按模拟时间
+    const now = options.now ?? simulatedNowOr();
     const labels = new Map<string, string>();
     for (const raw of conceptKeys) {
       const key = normalizeConceptKey(raw);
@@ -285,7 +287,7 @@ class ConceptLoadService {
       const cache = await this.getCache(userId);
       if (!cache?.profiles) return new Map();
       const ttlMs = PROFILE_TTL_DAYS * 86400_000;
-      const now = Date.now();
+      const now = simulatedNowOr().getTime();
       const result = new Map<string, ConceptLoadProfile>();
       for (const raw of conceptKeys) {
         const key = normalizeConceptKey(raw);

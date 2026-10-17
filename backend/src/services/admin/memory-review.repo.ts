@@ -55,6 +55,18 @@ export function findConsolidationAuditProjections() {
   });
 }
 
+/**
+ * memory scope 投影（#67 P-42）：ReviewCompletedConsumer 在复习事件落账后写
+ * `memory-projection-v1:{userId}`，这里给管理端第一个读点——此前写入无任何消费者。
+ */
+export function findMemoryProjections(userIds: string[]) {
+  if (userIds.length === 0) return Promise.resolve([]);
+  return prisma.learner_projections.findMany({
+    where: { scope: 'memory', userId: { in: userIds } },
+    select: { userId: true, payload: true, generatedAt: true, version: true },
+  });
+}
+
 /** 按次留档的归并凭据（权威、长期有效） */
 export function findMergeRecordEvidence() {
   return prisma.learner_evidence.findMany({

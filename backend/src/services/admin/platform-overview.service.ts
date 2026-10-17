@@ -89,6 +89,48 @@ export function clearOverviewAllTimeCache(): void {
   sevenDayScanInflight = null;
 }
 
+/**
+ * 从课后总结执行日志的 output 里判定来源（#70 P-45）。
+ * handler 成功路径**恒返回 success:true**，用 success 推断会把降级输出统计成「模型产出」，
+ * 降级率长期看不见——必须读显式 sources/summarySource。
+ * 返回 null = 不是可识别的 agent-output-v1 输出。
+ */
+export function classifyWrapupSource(output: unknown): {
+  summaryModel: boolean;
+  evaluationModel: boolean;
+  evaluationAiFallback: boolean;
+} | null {
+  type WrapupOutputShape = {
+    schemaVersion?: string;
+    success?: boolean;
+    internal?: {
+      ext?: {
+        sessionWrapup?: {
+          result?: { summarySource?: string; evaluationSource?: string };
+          artifact?: { sources?: { summary?: string; evaluation?: string } };
+        };
+      };
+    };
+  };
+  let parsed: WrapupOutputShape | null;
+  try {
+    parsed = (typeof output === 'string' ? JSON.parse(output) : output) as WrapupOutputShape;
+  } catch {
+    return null;
+  }
+  if (parsed?.schemaVersion !== 'agent-output-v1') return null;
+  const wrapup = parsed?.internal?.ext?.sessionWrapup;
+  const summarySource = wrapup?.result?.summarySource ?? wrapup?.artifact?.sources?.summary;
+  const evaluationSource = wrapup?.result?.evaluationSource ?? wrapup?.artifact?.sources?.evaluation;
+  // 旧格式（无来源字段）才回退 success 推断
+  const legacyOk = parsed?.success !== false;
+  return {
+    summaryModel: summarySource ? summarySource === 'model' : legacyOk,
+    evaluationModel: evaluationSource ? evaluationSource === 'model' : legacyOk,
+    evaluationAiFallback: evaluationSource === 'ai-fallback',
+  };
+}
+
 async function computeAllTimeCallStats(realUserIds: string[], force = false): Promise<{ total: number; success: number; totalAll: number }> {
   if (!force && allTimeCache && Date.now() - allTimeCache.cachedAt < ALL_TIME_CACHE_TTL_MS) {
     return allTimeCache.payload;
@@ -387,23 +429,15 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
 
     for (const log of wrapupLogs) {
       if (!log.output) continue;
-      try {
-        const parsed = JSON.parse(log.output);
-        // 仅接受 agent-output-v1（当前唯一 schema；历史上不存在旧格式输出，
-        // sources/summarySource 等顶层字段从未被序列化过，见 git 7b2d58e）
-        if (parsed?.schemaVersion !== 'agent-output-v1') continue;
-        const ok = parsed?.success !== false;
-        wrapupSourceStats.sampleSize += 1;
-        // 总结来源：success=true（handler 在 model 路径置 true，否则 false）= 模型产出
-        if (ok) wrapupSourceStats.summaryModel += 1;
-        else wrapupSourceStats.summaryFallback += 1;
-        // 评估来源：success=true = model；失败/不可用 = failed。
-        // ai-fallback 已退役（8fe993d），不再产出，evaluationAiFallback 恒 0
-        if (ok) wrapupSourceStats.evaluationModel += 1;
-        else wrapupSourceStats.evaluationFailed += 1;
-      } catch {
-        continue;
-      }
+      const source = classifyWrapupSource(log.output);
+      if (!source) continue;
+      wrapupSourceStats.sampleSize += 1;
+      if (source.summaryModel) wrapupSourceStats.summaryModel += 1;
+      else wrapupSourceStats.summaryFallback += 1;
+      // ai-fallback 已退役（8fe993d），保留字段只为历史样本
+      if (source.evaluationAiFallback) wrapupSourceStats.evaluationAiFallback += 1;
+      if (source.evaluationModel) wrapupSourceStats.evaluationModel += 1;
+      else wrapupSourceStats.evaluationFailed += 1;
     }
 
     // 计算活跃用户数

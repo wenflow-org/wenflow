@@ -306,28 +306,32 @@ export class ReviewCompletedConsumer {
         lastReviewEventId: event.id,
         lastReviewSessionId: data.sessionId ?? null,
       });
-      await tx.learner_projections.upsert({
-        where: { projectionKey },
-        create: {
-          id: `lspm_${event.id}`,
-          projectionKey,
-          userId: event.userId,
-          scope: 'memory',
-          pathId: sessionPathId,
-          version: 1,
-          payload: projectionPayload,
-          lastEventId: event.id,
-          lastEventAt: event.occurredAt,
-          generatedAt: event.occurredAt,
-        },
-        update: {
-          version: { increment: 1 },
-          payload: projectionPayload,
-          lastEventId: event.id,
-          lastEventAt: event.occurredAt,
-          generatedAt: event.occurredAt,
-        },
-      });
+      // #67：没有痕迹时不写空投影（此前 traceCount=0 也会 upsert 一行空 payload，
+      // 读侧无法区分「从未复习」与「复习了但没有痕迹」）。事件照常消费。
+      if (traceCount > 0) {
+        await tx.learner_projections.upsert({
+          where: { projectionKey },
+          create: {
+            id: `lspm_${event.id}`,
+            projectionKey,
+            userId: event.userId,
+            scope: 'memory',
+            pathId: sessionPathId,
+            version: 1,
+            payload: projectionPayload,
+            lastEventId: event.id,
+            lastEventAt: event.occurredAt,
+            generatedAt: event.occurredAt,
+          },
+          update: {
+            version: { increment: 1 },
+            payload: projectionPayload,
+            lastEventId: event.id,
+            lastEventAt: event.occurredAt,
+            generatedAt: event.occurredAt,
+          },
+        });
+      }
 
       await tx.domain_event_inbox.create({
         data: {

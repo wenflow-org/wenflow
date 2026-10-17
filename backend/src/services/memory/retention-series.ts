@@ -16,6 +16,7 @@ import {
   fsrsStateFromLegacy,
   type FsrsMemoryState,
 } from './fsrs';
+import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 
 /** 遗忘曲线采样日（天，距上次复习）：与前端 x 轴一致 */
 export const RETENTION_CURVE_DAYS = [0, 1, 3, 7, 14, 30] as const;
@@ -85,7 +86,8 @@ export function buildRetentionSeries(
   source: RetentionCurveSource,
   options: { asOf?: Date; days?: readonly number[] } = {},
 ): RetentionSeries {
-  const asOf = options.asOf ?? new Date();
+  // 模拟钟单点（#68 P-43）：VL 模拟日下保持率曲线的 asOf 也走模拟时间
+  const asOf = options.asOf ?? simulatedNowOr();
   const days = [...(options.days ?? RETENTION_CURVE_DAYS)];
   const state = fsrsStateOfTrace(source);
   const anchor = state.lastReviewAt;
@@ -132,7 +134,8 @@ export function buildRetentionSeriesForConcepts(
   concepts: RetentionConceptInput[],
   options: { asOf?: Date; days?: readonly number[]; max?: number } = {},
 ): RetentionConceptSeries[] {
-  const asOf = options.asOf ?? new Date();
+  // 模拟钟单点（#68 P-43）：VL 模拟日下保持率曲线的 asOf 也走模拟时间
+  const asOf = options.asOf ?? simulatedNowOr();
   const max = Number.isInteger(options.max) && (options.max as number) > 0 ? (options.max as number) : 8;
   const bucketRank: Record<RetentionConceptBucket, number> = { due: 0, mastered: 1, other: 2 };
   return concepts
