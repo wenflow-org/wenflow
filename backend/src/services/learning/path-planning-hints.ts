@@ -73,12 +73,33 @@ function isLowLoadToleranceSignal(value: string): boolean {
  * 仅用于 timeDimensions.totalWeeks 缺失时钳制 maxWeeks（紧迫场景兜底），
  * 不改变 pace 档位。解析不出返回 null（保持 pace 默认值）。
  */
-export function inferMaxWeeksFromTimeHorizon(timeHorizon: string | null): number | null {
+export function inferMaxWeeksFromTimeHorizon(timeHorizon: string | null, now: Date = new Date()): number | null {
   if (!timeHorizon) return null;
   const text = timeHorizon.trim();
   if (!text) return null;
   // 字面 "null"/"undefined"（模型偶尔把空值写成字符串）视为缺失
   if (/^(null|undefined)$/i.test(text)) return null;
+
+  // #87 日历日期优先：「12月15日」「2027年1月10日」是具体日期，不是 N 个月。
+  // 旧实现先跑「N 个月」正则，于是「12月15日」被读成 12 个月（51.6 周）、
+  // 「2027年1月10日」被读成 1 个月——整条路径的时间跨度跟着错位。
+  const withYear = text.match(/(\d{4})\s*年\s*(\d{1,2})\s*月(?:\s*(\d{1,2})\s*[日号])?/);
+  const withoutYear = withYear ? null : text.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/);
+  if (withYear || withoutYear) {
+    const year = withYear ? Number(withYear[1]) : now.getFullYear();
+    const month = Number(withYear ? withYear[2] : withoutYear![1]);
+    const day = Number((withYear ? withYear[3] : withoutYear![2]) || 1);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      let target = new Date(year, month - 1, day, 23, 59, 59);
+      // 无年份的日期若已过，按「下一次」算（10 月说「12月15日」= 今年的 12 月 15 日）
+      if (!withYear && target.getTime() < now.getTime()) {
+        target = new Date(year + 1, month - 1, day, 23, 59, 59);
+      }
+      const weeks = (target.getTime() - now.getTime()) / (7 * 24 * 60 * 60 * 1000);
+      if (weeks > 0) return Math.round(weeks * 10) / 10;
+      return null; // 显式年份已过 = 没有可用跨度
+    }
+  }
 
   const cnNum: Record<string, number> = { '半': 0.5, '一': 1, '两': 2, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 };
 

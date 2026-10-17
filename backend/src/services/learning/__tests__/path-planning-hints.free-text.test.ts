@@ -99,6 +99,24 @@ describe('inferMaxWeeksFromTimeHorizon（自由文本周数兜底）', () => {
     { input: '周末', expected: 1, label: '仅"周末"→1周（短周期信号）' },
   ];
 
+
+  // #87：日历日期不能被读成「N 个月」（"12月15日" 曾 = 12 个月 = 51.6 周）
+  const dateCases: Array<{ input: string; now: string; expected: number; label: string }> = [
+    { input: '12月15日', now: '2026-10-17T00:00:00', expected: 8.6, label: '"12月15日"→约 8.6 周（不是 12 个月）' },
+    { input: '2027年1月10日', now: '2026-10-17T00:00:00', expected: 12.3, label: '"2027年1月10日"→约 12.3 周（不是 1 个月）' },
+    { input: '明年1月10号前', now: '2026-10-17T00:00:00', expected: 12.3, label: '"明年1月10号前"→按下一次 1/10' },
+  ];
+
+  it.each(dateCases)('$label', ({ input, now, expected }) => {
+    const actual = inferMaxWeeksFromTimeHorizon(input, new Date(now));
+    expect(actual).not.toBeNull();
+    expect(actual).toBeCloseTo(expected, 1);
+  });
+
+  it('显式年份已过 → 没有可用跨度', () => {
+    expect(inferMaxWeeksFromTimeHorizon('2020年1月10日', new Date('2026-10-17T00:00:00'))).toBeNull();
+  });
+
   it.each(cases)('$label', ({ input, expected }) => {
     const actual = inferMaxWeeksFromTimeHorizon(input);
     if (expected === null) {
