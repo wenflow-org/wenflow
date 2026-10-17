@@ -10,6 +10,7 @@
  *
  * 用法（cd backend）：
  *   npx ts-node --transpile-only scripts/content-correctness-review.ts --sample --days 7 --rate 0.05 --limit 40
+ *   npx ts-node --transpile-only scripts/content-correctness-review.ts --sample --real-only --days 7 --rate 0.3
  *   npx ts-node --transpile-only scripts/content-correctness-review.ts --label 12345 --verdict incorrect --note "把信度说成效度"
  *   npx ts-node --transpile-only scripts/content-correctness-review.ts --metrics --days 7 --rate 0.05
  *
@@ -51,6 +52,8 @@ const SAMPLE_RATE = (() => {
   return Number.isFinite(parsed) && parsed > 0 && parsed <= 1 ? parsed : 0.05;
 })();
 const LIMIT = Number(argValue('--limit', '40')) || 40;
+/** 只抽真人会话（排掉虚拟学习者）——运营抽检的人力优先给真实课堂 */
+const REAL_ONLY = hasFlag('--real-only');
 const PER_SESSION_CAP = Number(argValue('--per-session', '6')) || 6;
 
 interface SampledTurn {
@@ -61,16 +64,24 @@ interface SampledTurn {
   content: string;
 }
 
-async function collectSampledTurns(): Promise<{ sampled: SampledTurn[]; scannedSessions: number }> {
+async function collectSampledTurns(): Promise<{
+  sampled: SampledTurn[];
+  scannedSessions: number;
+  virtualSessions: number;
+}> {
   const since = new Date(Date.now() - WINDOW_DAYS * 86400000);
   const sessions = await prisma.teaching_sessions.findMany({
     where: { createdAt: { gte: since } },
-    select: { id: true, userId: true, taskId: true },
+    select: { id: true, userId: true, taskId: true, users: { select: { isVirtualLearner: true } } },
     orderBy: { createdAt: 'desc' },
     take: 400,
   });
   const sampled: SampledTurn[] = [];
+  let virtualSessions = 0;
   for (const session of sessions) {
+    const isVirtual = Boolean(session.users?.isVirtualLearner);
+    if (isVirtual) virtualSessions += 1;
+    if (REAL_ONLY && isVirtual) continue;
     const rows = await prisma.teaching_session_messages.findMany({
       where: { sessionId: session.id },
       orderBy: { id: 'asc' },
@@ -88,7 +99,7 @@ async function collectSampledTurns(): Promise<{ sampled: SampledTurn[]; scannedS
     }
     if (sampled.length >= LIMIT) break;
   }
-  return { sampled: sampled.slice(0, LIMIT), scannedSessions: sessions.length };
+  return { sampled: sampled.slice(0, LIMIT), scannedSessions: sessions.length, virtualSessions };
 }
 
 function messageEventId(messageId: number | string): string {
@@ -96,13 +107,21 @@ function messageEventId(messageId: number | string): string {
 }
 
 async function runSample() {
-  const { sampled, scannedSessions } = await collectSampledTurns();
+  const { sampled, scannedSessions, virtualSessions } = await collectSampledTurns();
+  const realSessions = scannedSessions - virtualSessions;
   if (AS_JSON) {
-    console.log(JSON.stringify({ windowDays: WINDOW_DAYS, rate: SAMPLE_RATE, scannedSessions, sampled }, null, 2));
+    console.log(
+      JSON.stringify(
+        { windowDays: WINDOW_DAYS, rate: SAMPLE_RATE, scannedSessions, realSessions, virtualSessions, realOnly: REAL_ONLY, sampled },
+        null,
+        2,
+      ),
+    );
     return;
   }
   console.log(
-    `[content-review] 抽样：窗口 ${WINDOW_DAYS} 天 / rate=${SAMPLE_RATE} / 扫描会话 ${scannedSessions} → 抽中 ${sampled.length} 条`,
+    `[content-review] 抽样：窗口 ${WINDOW_DAYS} 天 / rate=${SAMPLE_RATE} / 扫描会话 ${scannedSessions}` +
+      `（真人 ${realSessions} / 虚拟学习者 ${virtualSessions}${REAL_ONLY ? '，已按 --real-only 排除虚拟' : ''}） → 抽中 ${sampled.length} 条`,
   );
   for (const turn of sampled) {
     const single = turn.content.replace(/\s+/g, ' ');
@@ -178,7 +197,7 @@ async function runLabel() {
 }
 
 async function runMetrics() {
-  const { sampled } = await collectSampledTurns();
+  const { sampled, scannedSessions, virtualSessions } = await collectSampledTurns();
   const ids = sampled.map((turn) => turn.messageId);
   const rows = ids.length
     ? await prisma.learner_evidence.findMany({
@@ -197,7 +216,10 @@ async function runMetrics() {
     console.log(JSON.stringify({ windowDays: WINDOW_DAYS, rate: SAMPLE_RATE, ...metrics }, null, 2));
     return;
   }
-  console.log(`[content-review] 指标（窗口 ${WINDOW_DAYS} 天 / rate=${SAMPLE_RATE}）`);
+  console.log(
+    `[content-review] 指标（窗口 ${WINDOW_DAYS} 天 / rate=${SAMPLE_RATE} / 会话 ${scannedSessions}` +
+      `（真人 ${scannedSessions - virtualSessions} / 虚拟 ${virtualSessions}）${REAL_ONLY ? ' / --real-only' : ''}）`,
+  );
   console.log(
     `  抽中 ${metrics.sampled} / 已标注 ${metrics.labeled}（覆盖率 ${(metrics.coverage * 100).toFixed(1)}%）`,
   );
