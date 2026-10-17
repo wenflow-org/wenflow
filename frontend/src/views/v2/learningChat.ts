@@ -58,3 +58,20 @@ export function nowTime() {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
+
+/**
+ * 自动重发判定（#114）：只对「确定没送达」的错误重试。
+ * - 传输层（无 status）→ 可重试
+ * - 429 / 5xx → 可重试
+ * - 已收到部分内容（partialStream）→ 不可重试：重发会让用户看到两段回复
+ * - 业务失败（serverError，4xx）→ 不可重试
+ */
+export function isAutoRetryableSendError(err: unknown): boolean {
+  const e = (err || {}) as { cancelled?: boolean; partialStream?: boolean; serverError?: boolean; status?: number; response?: { status?: number } };
+  if (e.cancelled) return false;
+  if (e.partialStream) return false;
+  const status = typeof e.status === 'number' ? e.status : e.response?.status;
+  if (typeof status === 'number') return status === 429 || status >= 500;
+  if (e.serverError) return false;
+  return true;
+}

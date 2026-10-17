@@ -1,5 +1,5 @@
 // SSE 流式客户端：与 axios 拦截器对齐认证（Bearer / X-Projection-Token / credentials）
-import { API_BASE_URL } from './api';
+import { API_BASE_URL, refreshSessionSilently } from './api';
 import { getProjectionToken } from './projection';
 import { setAuthFlashMessage } from './authFlash';
 import { clearUserLocalState } from './sessionCleanup';
@@ -33,15 +33,23 @@ export async function streamSsePost(
   };
   if (projectionToken) headers['X-Projection-Token'] = projectionToken;
 
+  const send = () => fetch(`${API_BASE_URL}${url}`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify(payload),
+    signal: handlers.signal
+  });
+
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}${url}`, {
-      method: 'POST',
-      headers,
-      credentials: 'include',
-      body: JSON.stringify(payload),
-      signal: handlers.signal
-    });
+    response = await send();
+    // access token（30m）过期时，axios 通道会静默 refresh，SSE 通道此前直接踢回登录页——
+    // 长课堂/长生成必然遇到（#116）。这里复用同一把刷新互斥锁，成功后重发一次。
+    if (response.status === 401) {
+      const refreshed = await refreshSessionSilently();
+      if (refreshed) response = await send();
+    }
   } catch (error) {
     // 调用方主动 abort（离页/卸载止损）：单独标记 cancelled，避免被误判为传输层失败而重发
     if (isAbort(error, handlers.signal)) throw markCancelled(error);

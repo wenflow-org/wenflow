@@ -470,7 +470,7 @@
 
         <div class="proposal__note">
           <span v-if="materialCount">已上传的 {{ materialCount }} 份资料将作为学习主线。</span>
-          <span>确认后在本页生成，一般需要 1-2 分钟。失败可原地重试，信息不会丢。</span>
+          <span>确认后在本页生成，通常 1-2 分钟；排队时会久一些。失败可原地重试，信息不会丢。</span>
           <AiContentNote />
         </div>
         </div><!-- /.proposal__body（内容滚动区） -->
@@ -499,7 +499,7 @@
       <div v-else-if="phase === 'generating'" class="proposal proposal--center">
         <span class="spinner"></span>
         <h2 class="proposal__title">正在生成你的路径…</h2>
-        <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解，一般需要 1-2 分钟。</p>
+        <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解，通常 1-2 分钟；超过 5 分钟可以离开本页，完成后会出现在路径列表。</p>
         <div class="skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
         <!-- 生成阶段模型输出是 JSON（对用户不可读）：delta 阶段给中性进度文案，不直出原始流（P3） -->
         <div class="proposal__stream">

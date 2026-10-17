@@ -12,7 +12,7 @@ import {
   verifyRefreshToken,
 } from '../../utils/session-token';
 import { getPasswordResetMailProvider } from './password-reset-mailer';
-import { isTestAccountUser } from '../../utils/test-account';
+import { isLoginBlockedSyntheticUser } from '../../utils/test-account';
 import { withTransaction } from '../../utils/with-transaction';
 import { registerUserSession, revokeAllUserSessions, pruneUserSessions } from './user-session.service';
 
@@ -159,7 +159,7 @@ class AuthService {
       });
 
       // 未命中时也执行同等成本的密码校验，避免通过响应时序探测账号。
-      const isTestAccount = user ? isTestAccountUser(user) : false;
+      const isTestAccount = user ? isLoginBlockedSyntheticUser(user) : false;
       const isValidPassword = await bcrypt.compare(
         data.password,
         user?.password || INVALID_LOGIN_PASSWORD_HASH
@@ -248,7 +248,7 @@ class AuthService {
       });
 
       // 测试/审计账号的存量会话一并失效（与登录拒绝同源识别），用户侧不再展示测试账号
-      if (!user || isTestAccountUser(user)) {
+      if (!user || isLoginBlockedSyntheticUser(user)) {
         throw new Error('用户不存在');
       }
 

@@ -634,7 +634,7 @@ import xml from 'highlight.js/lib/languages/xml';
 import yaml from 'highlight.js/lib/languages/yaml';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { unwrap } from './unwrap';
-import { nowTime, type ChatMsg, type ChatSupplement } from './learningChat';
+import { nowTime, isAutoRetryableSendError, type ChatMsg, type ChatSupplement } from './learningChat';
 import MkGraph from '@/components/mk/MkGraph.vue'
 import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -1375,6 +1375,16 @@ async function boot() {
 let lastUserText = '';
 /** 流式发送中的 AbortController：离页/卸载时中止，触发后端 res close 止损上游生成 */
 let streamAbort: AbortController | null = null;
+/** 用户点了停止（或看门狗中止）：用于区分「主动取消」与「传输失败」，前者绝不回退/重试 */
+let stopRequested = false;
+/** 本轮被停滞看门狗判死：展示「超时」而不是普通的「失败」 */
+let turnTimedOut = false;
+/** 停滞判死阈值：流式与回退阶段都算，收到任意 delta/restart 会重置 */
+const SEND_STALL_TIMEOUT_MS = 90_000;
+/** 自动重发次数（仅传输层/5xx/429） */
+const SEND_MAX_AUTO_RETRIES = 2;
+/** 流失败后的非流式回退超时：旧实现沿用 300s，停止键在中止不了它，等于把卡死延长到 5 分钟 */
+const SEND_FALLBACK_TIMEOUT_MS = 90_000;
 /**
  * 流式内容气泡下标（-1 = 尚无气泡）：
  * teaching-turn 为 JSON 输出无 delta，期间仅显示 typing 指示器；首个 delta 到达时才建气泡，
@@ -1409,8 +1419,15 @@ async function syncRevisionFromServer(): Promise<void> {
 }
 
 function stopGeneration() {
+  stopRequested = true;
+  const hadActive = !!streamAbort;
   streamAbort?.abort();
   streamAbort = null;
+  // 没有在途请求但 UI 仍卡在「停止生成」（历史挂起态）：直接复位，否则用户只能刷新
+  if (!hadActive && typing.value) {
+    streamingBubbleIndex.value = -1;
+    typing.value = false;
+  }
   // 中止后立即向前同步：用户「停止 → 完成并结算」是常见路径，不等下一步才补
   void syncRevisionFromServer();
 }
@@ -1436,6 +1453,64 @@ async function sendDirect(text: string) {
   await doSend(text);
 }
 
+/**
+ * 发送一回合（流式优先 + 传输失败回退非流式）。抽出来是为了让外层做自动重试与看门狗：
+ * 回退请求也持有自己的 AbortController，用户点「停止」能真正中止它（#111：旧实现
+ * 在回退阶段 streamAbort 已置空，停止键点了没有任何效果，typing 永久为 true）。
+ */
+async function sendTurnOnce(
+  text: string,
+  meta: ReturnType<typeof interactionMeta.collect>,
+  onActivity: () => void
+): Promise<Record<string, any>> {
+  if (!session.value) throw Object.assign(new Error('会话不存在'), { cancelled: true });
+  try {
+    streamAbort = new AbortController();
+    const streamCtrl = streamAbort;
+    return await aiTeachingAPI.streamSendMessage(session.value.sessionId, text, session.value.revision, {
+      signal: streamCtrl.signal,
+      onDelta: (delta) => {
+        onActivity();
+        // 首个 delta 到达时才建 AI 气泡，避免 JSON 输出（无 delta）产生空气泡
+        let m = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
+        if (!m || m.role !== 'ai') {
+          pushMsg({ role: 'ai', text: '', time: nowTime() });
+          streamingBubbleIndex.value = msgs.value.length - 1;
+          m = msgs.value[streamingBubbleIndex.value];
+        }
+        if (m) {
+          m.text += delta;
+          // 仅贴底时自动跟随（用户上翻看旧内容时不打断）
+          if (nearBottom.value) void scrollDown();
+        }
+      },
+      onRestart: () => {
+        onActivity();
+        const m = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
+        if (m?.role === 'ai') m.text = '';
+      },
+    }, meta) as unknown as Record<string, any>;
+  } catch (streamError) {
+    // 用户停止 / 看门狗中止：不再走回退（否则会把「已取消」变成一次新请求）
+    if (stopRequested || (streamError as { cancelled?: boolean })?.cancelled) {
+      throw Object.assign(new Error('已停止'), { cancelled: true });
+    }
+    // 传输层失败且未收到任何内容：安全回退非流式；业务失败或已收到部分内容交给外层
+    if (!(streamError as { transport?: boolean })?.transport) throw streamError;
+    if (streamingBubbleIndex.value >= 0) msgs.value.splice(streamingBubbleIndex.value, 1);
+    streamingBubbleIndex.value = -1;
+    // 回退请求单独持控制器：停止键在回退阶段也必须有效
+    streamAbort = new AbortController();
+    const fallbackCtrl = streamAbort;
+    return await aiTeachingAPI.sendMessage(session.value.sessionId, text, session.value.revision, meta, {
+      timeout: SEND_FALLBACK_TIMEOUT_MS,
+      signal: fallbackCtrl.signal,
+    }) as unknown as Record<string, any>;
+  } finally {
+    streamAbort = null;
+  }
+}
+
 async function doSend(text: string, allowStaleRetry = true, skipUserPush = false) {
   if (!session.value) return;
   lastUserText = text;
@@ -1447,44 +1522,51 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
   confirmCheck.value = null;
   assessTarget.value = null;
   typing.value = true;
+  stopRequested = false;
   scrollDown();
   const meta = interactionMeta.collect(text);
+  let autoRetries = 0;
   try {
-    let r: Record<string, any>;
-    try {
-      streamAbort = new AbortController();
-      r = await aiTeachingAPI.streamSendMessage(session.value.sessionId, text, session.value.revision, {
-        signal: streamAbort.signal,
-        onDelta: (delta) => {
-          // 首个 delta 到达时才建 AI 气泡，避免 JSON 输出（无 delta）产生空气泡
-          let m = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
-          if (!m || m.role !== 'ai') {
-            pushMsg({ role: 'ai', text: '', time: nowTime() });
-            streamingBubbleIndex.value = msgs.value.length - 1;
-            m = msgs.value[streamingBubbleIndex.value];
+    let r: Record<string, any> | null = null;
+    for (let attempt = 0; attempt <= SEND_MAX_AUTO_RETRIES; attempt += 1) {
+      if (attempt > 0) {
+        // 退避 0.8s → 2s；等待期间仍可点「停止」
+        await new Promise((resolve) => window.setTimeout(resolve, attempt === 1 ? 800 : 2000));
+        if (stopRequested || !session.value) return;
+      }
+      // 停滞看门狗：流式与回退阶段都算——收到任意 delta/restart 会重置。
+      // 90s 无任何进展即中止，避免 typing 永久为 true（#111/#113）。
+      let watchdog = 0;
+      const armWatchdog = () => {
+        if (watchdog) window.clearTimeout(watchdog);
+        watchdog = window.setTimeout(() => {
+          turnTimedOut = true;
+          stopRequested = true;
+          streamAbort?.abort();
+          streamAbort = null;
+        }, SEND_STALL_TIMEOUT_MS);
+      };
+      armWatchdog();
+      try {
+        r = await sendTurnOnce(text, meta, armWatchdog);
+      } catch (err) {
+        if (turnTimedOut) throw Object.assign(new Error('回复超时'), { turnTimedOut: true });
+        if (stopRequested || (err as { cancelled?: boolean })?.cancelled) throw err;
+        if (attempt < SEND_MAX_AUTO_RETRIES && isAutoRetryableSendError(err)) {
+          autoRetries += 1;
+          if (streamingBubbleIndex.value >= 0) {
+            msgs.value.splice(streamingBubbleIndex.value, 1);
+            streamingBubbleIndex.value = -1;
           }
-          if (m) {
-            m.text += delta;
-            // 仅贴底时自动跟随（用户上翻看旧内容时不打断）
-            if (nearBottom.value) void scrollDown();
-          }
-        },
-        onRestart: () => {
-          const m = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
-          if (m?.role === 'ai') m.text = '';
-        },
-      }, meta) as unknown as Record<string, any>;
-    } catch (streamError) {
-      // 用户离页触发的 abort：不重发、不当作失败
-      if ((streamError as { cancelled?: boolean })?.cancelled) throw streamError;
-      // 传输层失败且未收到任何内容：安全回退非流式重发；业务失败或已收到部分内容则交给外层报错
-      if (!(streamError as { transport?: boolean })?.transport) throw streamError;
-      if (streamingBubbleIndex.value >= 0) msgs.value.splice(streamingBubbleIndex.value, 1);
-      streamingBubbleIndex.value = -1;
-      r = await aiTeachingAPI.sendMessage(session.value.sessionId, text, session.value.revision, meta) as unknown as Record<string, any>;
-    } finally {
-      streamAbort = null;
+          continue;
+        }
+        throw err;
+      } finally {
+        if (watchdog) window.clearTimeout(watchdog);
+      }
+      break;
     }
+    if (!r) throw new Error('发送失败');
     session.value.revision = r.revision ?? session.value.revision + 1;
     // 收到 final 即代表服务端已原子落库本轮用户消息（commitTurnState 在 final 前完成）
     // → 送达确认，清除在途留痕，避免下次刷新误报未送达。
@@ -1493,10 +1575,14 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
     const aiMsg = streamingBubbleIndex.value >= 0 ? msgs.value[streamingBubbleIndex.value] : undefined;
     await applyTurnResult(r, aiMsg);
   } catch (e) {
-    // 离页中止：静默丢弃，不重发也不展示失败气泡
-    if ((e as { cancelled?: boolean })?.cancelled) return;
+    // 离页/用户停止：静默丢弃，不重发也不展示失败气泡
+    if ((e as { cancelled?: boolean })?.cancelled || stopRequested && !turnTimedOut) return;
     // 流式气泡可能已有部分内容：移除后展示统一失败气泡
     if (streamingBubbleIndex.value >= 0) msgs.value.splice(streamingBubbleIndex.value, 1);
+    if ((e as { turnTimedOut?: boolean })?.turnTimedOut) {
+      pushMsg({ role: 'ai', text: '回复超时，已停止等待。你可以点重试或直接继续输入。', time: nowTime(), failed: true });
+      return;
+    }
     // 陈旧 revision（多标签页/刷新竞态）：同步最新 revision 后重发一次，避免重试死循环
     const raw = e as any;
     const staleCode = raw?.response?.data?.error?.code || raw?.response?.data?.error || raw?.code || '';
@@ -1511,10 +1597,16 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
       await doSend(text, false, true);
       return;
     }
-    pushMsg({ role: 'ai', text: '这次回复失败了。', time: nowTime(), failed: true });
+    pushMsg({
+      role: 'ai',
+      text: autoRetries > 0 ? `这次回复失败了（已自动重试 ${autoRetries} 次）。` : '这次回复失败了。',
+      time: nowTime(),
+      failed: true,
+    });
   } finally {
     streamingBubbleIndex.value = -1;
     typing.value = false;
+    turnTimedOut = false;
     scrollDown();
   }
 }

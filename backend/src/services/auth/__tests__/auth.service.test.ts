@@ -138,6 +138,42 @@ describe('AuthService 登录安全边界', () => {
     expect(result.user.name).toBe('real-user')
     expect(userMocks.update).toHaveBeenCalled()
   })
+
+  // 2026-10-17 #117：uitest* 是用户自选命名，不能因为「统计上算测试账号」就拒绝登录。
+  // 生产实测 uitest2026 / uitest853901 用正确密码持续 401，根因就是登录守卫复用了统计前缀。
+  it('用户自选的 uitest* 命名可正常登录（登录守卫只拒自动化账号）', async () => {
+    userMocks.findFirst.mockResolvedValue({
+      id: 'u-uitest',
+      name: 'uitest2026',
+      email: 'uitest2026@example.com',
+      password: 'hash',
+      tokenVersion: 0
+    })
+    bcryptCompare.mockResolvedValue(true)
+    userMocks.update.mockResolvedValue({ id: 'u-uitest' })
+
+    const result = await authService.login({ name: 'uitest2026', password: 'right-password' })
+
+    expect(result.user.name).toBe('uitest2026')
+    expect(userMocks.update).toHaveBeenCalled()
+  })
+
+  it('虚拟学习者与 @test.local 账号仍拒绝登录用户侧', async () => {
+    jest.clearAllMocks()
+    userMocks.findFirst.mockResolvedValue({
+      id: 'virtual_1', name: 'vl-x', email: 'vl-x@example.com', password: 'hash', tokenVersion: 0
+    })
+    bcryptCompare.mockResolvedValue(true)
+    await expect(authService.login({ name: 'vl-x', password: 'right-password' }))
+      .rejects.toBeInstanceOf(InvalidCredentialsError)
+
+    userMocks.findFirst.mockResolvedValue({
+      id: 'u-t', name: 'probe-user', email: 'audit_probe_01@test.local', password: 'hash', tokenVersion: 0
+    })
+    await expect(authService.login({ name: 'probe-user', password: 'right-password' }))
+      .rejects.toBeInstanceOf(InvalidCredentialsError)
+    expect(userMocks.update).not.toHaveBeenCalled()
+  })
 })
 
 describe('AuthService 软删除账号', () => {

@@ -3,7 +3,7 @@
  * 状态 refs + 流式提交（onJudgement 先行上锁、判定后 delta 逐段补齐）、
  * 跳过、传输失败回退非流式、「已处理」对账收起；checkpointCloseTimer 内聚并在 dispose 清理
  */
-import { ref, type Ref } from 'vue';
+import { ref, watch, type Ref } from 'vue';
 import { toast } from '@/utils/toast';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import { isCheckpointAlreadyHandled } from '@/utils/checkpoint';
@@ -30,6 +30,60 @@ export function useCheckpointFlow(
   const lastSettledReply = ref<{ checkpointId: string; text: string } | null>(null);
   /** 检查点通过后的自动关闭 timer（提交/卸载时清理，防竞态） */
   let checkpointCloseTimer = 0;
+  /** 讲解流停滞阈值：流式提交在「导师正在讲解…」阶段挂住时，超时后保留判定并允许继续（#113） */
+  const CHECKPOINT_STALL_TIMEOUT_MS = 90_000;
+
+  /* ---------- 在途作答草稿（#113：挂起后刷新，已选答案不能消失） ----------
+     只存「检查点 id + 选择 + 文字」到 sessionStorage；刷新后按 id 匹配恢复成「可重试」。
+     服务端若其实已消费，重交会命中 already-handled 分支（已有处理），不会被当成失败。 */
+  const CP_DRAFT_PREFIX = 'wenflow:cp-draft:';
+  const CP_DRAFT_TTL_MS = 30 * 60 * 1000;
+  const draftKey = () => (session.value ? `${CP_DRAFT_PREFIX}${session.value.sessionId}` : '');
+  function saveDraft(checkpointId: string) {
+    const key = draftKey();
+    if (!key) return;
+    try {
+      sessionStorage.setItem(key, JSON.stringify({
+        checkpointId,
+        selectedOptions: selectedOptions.value,
+        answerText: answerText.value,
+        ts: Date.now(),
+      }));
+    } catch { /* 隐私模式/配额满：草稿不阻断提交 */ }
+  }
+  function clearDraft() {
+    const key = draftKey();
+    if (!key) return;
+    try { sessionStorage.removeItem(key); } catch { /* 同上 */ }
+  }
+  let restoredDraftFor: string | null = null;
+  function restoreDraftFor(cp: Record<string, any> | null) {
+    const key = draftKey();
+    if (!key || !cp?.id || restoredDraftFor === cp.id) return;
+    restoredDraftFor = cp.id;
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (!draft || draft.checkpointId !== cp.id || Date.now() - Number(draft.ts) > CP_DRAFT_TTL_MS) {
+        sessionStorage.removeItem(key);
+        return;
+      }
+      const validIds = new Set((Array.isArray(cp.options) ? cp.options : []).map((o: any) => String(o?.id ?? '')));
+      if (Array.isArray(draft.selectedOptions)) {
+        selectedOptions.value = draft.selectedOptions
+          .map((v: unknown) => String(v))
+          .filter((v: string) => validIds.size === 0 || validIds.has(v));
+      }
+      if (typeof draft.answerText === 'string') answerText.value = draft.answerText;
+      if (selectedOptions.value.length > 0 || answerText.value.trim()) {
+        toast.info('已恢复上次未提交的作答');
+      }
+    } catch { /* 草稿损坏：当没有 */ }
+  }
+
+  // 检查点从详情/回合结果挂上来时恢复草稿（同一 id 只恢复一次，避免重复 toast）
+  watch(checkpoint, (cp) => restoreDraftFor(cp as Record<string, any> | null));
 
   function toggleOption(id: string) {
     if (!checkpoint.value) return;
@@ -91,6 +145,8 @@ export function useCheckpointFlow(
     // 记住提交时的会话对象：提交含一次教学回合（可达数十秒），期间用户可能「重新开始」
     // 换了新会话——settle 后旧 revision 不得回写到新会话（restart 有等待循环，这里兜底）
     const sessionAtSubmit = session.value;
+    // 先落草稿再发请求：挂起/刷新时用户的选择还在（#113）
+    saveDraft(String(checkpoint.value.id));
     checkpointPending.value = true;
     checkpointFeedback.value = '';
     checkpointStreaming.value = false;
@@ -100,11 +156,21 @@ export function useCheckpointFlow(
       const revision = session.value.revision;
       let streamed = '';
       let r: Record<string, any>;
+      // 讲解流停滞看门狗（#113）：90s 内没有 judgement/delta 就中止，别让卡片永远停在
+      // 「导师正在讲解…」。判定已到的情况会被外层 catch 保留（只丢讲解，不丢对错）。
+      const submitCtrl = new AbortController();
+      let submitWatchdog = window.setTimeout(() => submitCtrl.abort(), CHECKPOINT_STALL_TIMEOUT_MS);
+      const armSubmitWatchdog = () => {
+        window.clearTimeout(submitWatchdog);
+        submitWatchdog = window.setTimeout(() => submitCtrl.abort(), CHECKPOINT_STALL_TIMEOUT_MS);
+      };
       try {
         // 流式提交（走查 B-1）：先到 `judgement`（代码裁决的对错，立即可得），
         // 导师讲解随后用 delta 逐段补齐；因此用户可以"秒知对错"而不用干等整个教学回合。
         r = await aiTeachingAPI.streamSubmitCheckpoint(sessionId, checkpointId, payload, revision, {
+          signal: submitCtrl.signal,
           onJudgement: (j: { passed: boolean; judgedBy: string; detail: string | null }) => {
+            armSubmitWatchdog();
             checkpointPassed.value = j.passed === true;
             // 立即上锁：代码已判定，不再允许重交（重交必然 404，见走查 P2）
             checkpointSubmitting.value = true;
@@ -114,6 +180,7 @@ export function useCheckpointFlow(
             checkpointFeedback.value = j.passed ? '回答正确' : '这道没答对';
           },
           onDelta: (t: string) => {
+            armSubmitWatchdog();
             streamed += t;
             checkpointFeedback.value = streamed;
           },
@@ -123,6 +190,8 @@ export function useCheckpointFlow(
         // 服务端可能已经消费了检查点）
         if (!streamError?.transport) throw streamError;
         r = await aiTeachingAPI.submitCheckpoint(sessionId, checkpointId, payload, revision) as unknown as Record<string, any>;
+      } finally {
+        window.clearTimeout(submitWatchdog);
       }
       // 会话已被替换（重新开课）时不再回写：旧会话的 revision 写到新会话上必 409
       if (session.value === sessionAtSubmit) {
@@ -139,6 +208,7 @@ export function useCheckpointFlow(
       // 提交成功后服务端已消费该检查点：一律上锁。
       // 答错时旧实现保持可提交（nextAction='review'），用户重交必然 404（走查 P2）
       checkpointSubmitting.value = true;
+      clearDraft();
       if (r.passed) {
         // 答对：3s 后自动收起；延长自 1.6s，避免「刚看到答对了就消失」
         window.clearTimeout(checkpointCloseTimer);
@@ -153,6 +223,7 @@ export function useCheckpointFlow(
       if (isCheckpointAlreadyHandled(e)) {
         // 服务端已消费（重复提交 / 响应丢失后重试）：不算失败，收起卡片并向前同步
         resetCheckpointUi();
+        clearDraft();
         await resyncSessionRevision();
         toast.info('这个检查点已经提交过了，已为你同步进度');
       } else {
@@ -181,6 +252,7 @@ export function useCheckpointFlow(
     if (checkpoint.value.allowSkip === false) return;
     const cp = checkpoint.value;
     const sessionAtSkip = session.value;
+    clearDraft();
     checkpoint.value = null;
     checkpointPending.value = true;
     try {

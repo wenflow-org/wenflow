@@ -51,7 +51,7 @@
           </div>
           <p class="evaluation-loading__text">
             <span class="evaluation-spinner" aria-hidden="true"></span>
-            正在整理本次学习反馈，请稍候…
+            {{ finalizationRetrying ? '课堂已结束，结算遇到问题，正在自动重新结算…' : '正在整理本次学习反馈，请稍候…' }}
           </p>
         </div>
       </section>
@@ -199,6 +199,11 @@ const learnBasePath = computed(() => '/learn');
 
 const loading = ref(true);
 const error = ref('');
+/** 结算失败时继续轮询：后端每 2 分钟自动重结算一次（预算 ≤3），前端不再让用户「重新进入」空等 */
+const finalizationRetrying = ref(false);
+let finalizationRetryPolls = 0;
+const FINALIZATION_RETRY_MAX_POLLS = 6;
+const FINALIZATION_RETRY_POLL_MS = 30_000;
 const sessionDetail = ref<SessionDetail | null>(null);
 const pollTimer = ref<number | null>(null);
 const reportRef = ref<HTMLElement | null>(null);
@@ -347,10 +352,21 @@ const shouldContinuePolling = (detail: SessionDetail | null) => {
     return false;
   }
   if (detail.status === 'finalization_failed') {
+    // 后端已有有界自愈（冷却 2 分钟、≤3 次）。这里跟着它多等几轮，
+    // 而不是立刻让用户「重新进入」——那等于把自动重试藏起来（#115）。
+    if (finalizationRetryPolls < FINALIZATION_RETRY_MAX_POLLS) {
+      finalizationRetryPolls += 1;
+      finalizationRetrying.value = true;
+      error.value = '';
+      return true;
+    }
     stopPolling();
-    error.value = '课堂结算未完成，可稍后重新进入查看。';
+    finalizationRetrying.value = false;
+    error.value = '课堂结算暂未完成（已自动重试多次）。稍后重新进入仍可查看结果。';
     return false;
   }
+  finalizationRetrying.value = false;
+  finalizationRetryPolls = 0;
   if (['active', 'paused', 'initializing'].includes(detail.status)) {
     stopPolling();
     error.value = '课堂还在进行中，结束后才会生成学习反馈。';
@@ -371,7 +387,8 @@ const schedulePoll = (delay = POLL_INTERVAL_MS) => {
 
 const pollEvaluation = async () => {
   if (!pollingActive || componentUnmounted || document.hidden) return;
-  if (Date.now() - pollStartedAt >= POLL_TIMEOUT_MS) {
+  // 结算自动重试期间不套用 60s 总超时：后端冷却 2 分钟/次，窗口由重试轮数约束
+  if (!finalizationRetrying.value && Date.now() - pollStartedAt >= POLL_TIMEOUT_MS) {
     stopPolling();
     error.value = '评估生成超时，请稍后重试。';
     return;
@@ -383,7 +400,7 @@ const pollEvaluation = async () => {
     if (!detail) throw new Error(EVAL_NOT_FOUND_MSG);
     sessionDetail.value = detail;
     if (shouldContinuePolling(detail)) {
-      schedulePoll();
+      schedulePoll(finalizationRetrying.value ? FINALIZATION_RETRY_POLL_MS : POLL_INTERVAL_MS);
     } else {
       stopPolling();
     }

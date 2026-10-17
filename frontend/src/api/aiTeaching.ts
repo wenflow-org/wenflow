@@ -392,8 +392,22 @@ export const aiTeachingAPI = {
     return result.data || result;
   },
 
-  async sendMessage(sessionId: string, message: string, revision: number, meta?: InteractionMeta): Promise<MessageResult> {
-    const result = await api.post(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision, ...(meta ? { meta } : {}) }, { timeout: AI_REQUEST_TIMEOUT });
+  /**
+   * 非流式发送（也是流式失败后的回退通道）。
+   * options.signal 必须支持：回退请求最长可跑几十秒，用户点「停止」时要能真正中止它（#111）。
+   */
+  async sendMessage(
+    sessionId: string,
+    message: string,
+    revision: number,
+    meta?: InteractionMeta,
+    options?: { timeout?: number; signal?: AbortSignal }
+  ): Promise<MessageResult> {
+    const result = await api.post(
+      `/ai-teaching/sessions/${sessionId}/messages`,
+      { message, revision, ...(meta ? { meta } : {}) },
+      { timeout: options?.timeout ?? AI_REQUEST_TIMEOUT, ...(options?.signal ? { signal: options.signal } : {}) }
+    );
     return result.data || result;
   },
 

@@ -42,6 +42,11 @@ async function tryRefresh(): Promise<boolean> {
   return refreshPromise;
 }
 
+/** 供非 axios 通道（SSE fetch）复用同一把刷新互斥锁，避免两套 401 处理各自为政 */
+export async function refreshSessionSilently(): Promise<boolean> {
+  return tryRefresh();
+}
+
 /**
  * 用户会话标记：token 已通过 HttpOnly Cookie 下发，JS 侧只记录"已登录"标记（非敏感）
  * （安全审计批次6：legacy localStorage token 读取已移除——全仓已无写入点，残留读取

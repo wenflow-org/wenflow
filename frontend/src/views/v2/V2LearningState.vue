@@ -1450,7 +1450,8 @@ function loadGuidance() {
 .state__main {
   max-width: 880px; margin: 0 auto;
   padding: 24px 28px 48px;
-  display: grid; gap: 16px;
+  /* 显式单列轨道：隐式 auto 轨按 min-content 解算，窄屏内容一宽就把容器撑破（#118 同因） */
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px;
 }
 /* hero 已撤（原型 1948-1953：该屏直接以 KPI 开头，无 h1 + 说明句）；
    .kicker 保留——侧栏两张卡（学习偏好 / 指标说明）还在用 */
@@ -1523,7 +1524,9 @@ function loadGuidance() {
 
 /* ---------- 单列流（原型 924 + wf-screen）：主列 880px 居中，原 1fr + 300px 侧栏栅格撤掉 ---------- */
 .state__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-.state__col { display: grid; gap: 16px; }
+/* #118：隐式 auto 轨按 min-content 解算（390 宽实测 387.9px，容器仅 354px），
+   卡片被撑到 388px 导致整页横向溢出；显式 minmax(0,1fr) 让子项可收缩 */
+.state__col { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 /* P2-11：新用户（指标为空）时把「AI 调控建议」提到最前，作为首屏主内容；图表空态降级为「积累中」说明
    （原选择器 .band--suggest 随旧卡结构改名，2026-09-30 挂到现役的 wf-advisory 卡） */
 .state__col--empty .advisory { order: -1; }

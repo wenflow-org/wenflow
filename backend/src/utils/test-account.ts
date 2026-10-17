@@ -64,6 +64,38 @@ export const TEST_ACCOUNT_PREFIXES: string[] = [
 
 /** 前缀按字面拼进正则（当前清单只有字母/数字/`_`/`-`，仍显式转义，避免以后加前缀踩坑）。 */
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * 登录守卫专用前缀（**比统计口径窄**）：
+ * - 只收「自动化生成、真人几乎不会自选」的命名；用户自选的 uitest/uxtest/menutest/
+ *   vizcheck/logocheck/eval 不进这组——否则真人注册一个叫 uitest2026 的账号就永远登不进去，
+ *   而且返回的是 INVALID_CREDENTIALS，用户只会以为密码错了（#117 实测两例）。
+ * - 统计口径（TEST_ACCOUNT_PREFIXES）保持不变：误判只会让管理端少算一个测试账号，
+ *   不会影响真人登录。
+ */
+export const LOGIN_BLOCKED_ACCOUNT_PREFIXES: string[] = [
+  'e2e_',
+  'audit_probe_',
+  'uxaudit_',
+  'ui_check',
+  'motion_review',
+  'qa_audit_',
+  'shotsnap',
+  'verify_real_user',
+  'vcheck',
+  'vqa_audit',
+  'align_',
+  'qa_delete_test_',
+  'ui_audit_',
+  'audit_',
+  'simb_',
+  'vqa_',
+  'pe-finalverify',
+  'ev_p',
+  'gw-upload-probe',
+  'goalprobe',
+];
+const LOGIN_BLOCKED_PATTERN = new RegExp(`^(${LOGIN_BLOCKED_ACCOUNT_PREFIXES.map(escapeRegExp).join('|')})`, 'i');
 const TEST_ACCOUNT_PREFIX_PATTERN = new RegExp(`^(${TEST_ACCOUNT_PREFIXES.map(escapeRegExp).join('|')})`, 'i');
 
 export function isTestAccountUser(u: { id?: string; name?: string | null; email?: string | null }): boolean {
@@ -75,6 +107,23 @@ export function isTestAccountUser(u: { id?: string; name?: string | null; email?
   if (/^virtual_/i.test(email)) return true;
   if (TEST_ACCOUNT_PREFIX_PATTERN.test(email)) return true;
   if (TEST_ACCOUNT_PREFIX_PATTERN.test(name)) return true;
+  return false;
+}
+
+/**
+ * 登录 / 存量会话是否应被拒（**窄判据**）：只拒绝虚拟学习者与 unmistakable 的自动化账号。
+ * 与 isTestAccountUser 分开是刻意的——后者还承担管理端「真实/测试」统计分口径，
+ * 两者混用会让「统计上的测试账号」等于「不能登录」，从而误伤真人（#117）。
+ */
+export function isLoginBlockedSyntheticUser(u: { id?: string; name?: string | null; email?: string | null }): boolean {
+  const id = String(u.id || '');
+  const name = String(u.name || '');
+  const email = String(u.email || '');
+  if (/^virtual_/.test(id)) return true;
+  if (/@test\.local$/i.test(email)) return true;
+  if (/^virtual_/i.test(email)) return true;
+  if (LOGIN_BLOCKED_PATTERN.test(email)) return true;
+  if (LOGIN_BLOCKED_PATTERN.test(name)) return true;
   return false;
 }
 
