@@ -19,6 +19,7 @@ import {
 import type { GoalPathTimeBudgetCadence, GoalPathVisibleSummary } from '../services/learning/goal-path-visible-summary';
 import { normalizeSchoolAnchorShape } from '../services/learning/goal-path-visible-summary';
 import { normalizeDeadlineDate } from '../services/learning/deadline-date';
+import { isDeadlineExplicitlyUnspecified, deriveRelativeDeadline, parseAbsoluteDeadline } from '../services/learning/deadline-text';
 import type { MaterialNeed, MaterialPackResult } from '../skills/material-collector/types';
 
 const COORDINATOR_ID = 'path-agent';
@@ -709,18 +710,14 @@ class PathCoordinator {
     if (deadlineRaw instanceof Date) {
       deadline = deadline ?? deadlineRaw;
     } else if (typeof deadlineRaw === 'string' && deadlineRaw.trim()) {
-      if (/^\d{4}-\d{2}-\d{2}/.test(deadlineRaw)) {
-        deadline = deadline ?? new Date(deadlineRaw);
-      } else if (!deadline) {
-        const monthsMatch = deadlineRaw.match(/(\d+)\s*个月/);
-        const weeksMatch = deadlineRaw.match(/(\d+)\s*周/);
-        if (monthsMatch) {
-          deadline = new Date();
-          deadline.setMonth(deadline.getMonth() + parseInt(monthsMatch[1]));
-        } else if (weeksMatch) {
-          deadline = new Date();
-          deadline.setDate(deadline.getDate() + parseInt(weeksMatch[1]) * 7);
-        }
+      // #57：文本自述「未明确」时不得据其中的相对表述（如「未明确，先按 3 个月规划」里的
+      // 「3 个月」）推算硬截止日——那会把模型给的默认节奏伪装成学习者的外部锚，
+      // 后续 deadline 驱动的重排会拿一个凭空日期判「进度落后」（实测 5 条非空 deadline 里 3 条如此）。
+      // 文本仍保留用于展示。解析口径见 services/learning/deadline-text.ts。
+      if (!isDeadlineExplicitlyUnspecified(deadlineRaw)) {
+        const absolute = parseAbsoluteDeadline(deadlineRaw);
+        if (absolute) deadline = deadline ?? absolute;
+        else if (!deadline) deadline = deriveRelativeDeadline(deadlineRaw) ?? undefined;
       }
       deadlineText = deadlineRaw;
     }
