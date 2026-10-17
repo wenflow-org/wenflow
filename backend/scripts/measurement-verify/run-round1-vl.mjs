@@ -13,6 +13,7 @@
  *    409 会话写锁独立预算（run-vl-batch.mjs:104-110 同款「等就完事」语义）
  *  - 断点状态文件/日志只写 backend/scripts/measurement-verify/out/**
  */
+import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
@@ -40,7 +41,8 @@ function log(m) {
 // ---- admin 鉴权（admin-session.mjs 同协议；cookie 文件只读复用、不回写）----
 const env = fs.readFileSync(path.join(ROOT, 'backend', '.env'), 'utf8');
 const envGet = (k) => (env.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim() || '';
-const FLEET_COOKIE = path.join(ROOT, '.tmp-batch', 'admin-cookie.txt');
+// 凭据不落仓库：与 admin-session.mjs 同协议，改读系统临时目录（2026-10-17 安全整改）。
+const FLEET_COOKIE = path.join(process.env.WENFLOW_COOKIE_DIR || path.join(os.tmpdir(), 'wenflow-eval-cookies'), 'admin-cookie.txt');
 let cookie = '';
 async function adminLogin() {
   try {

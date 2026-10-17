@@ -438,7 +438,7 @@ function onRailKeydown(event: KeyboardEvent, value: string | null) {
   const options = railOptions.value
   const index = options.findIndex((opt) => opt.value === value)
   if (index < 0) return
-  let next = index
+  let next: number
   if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % options.length
   else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index - 1 + options.length) % options.length
   else if (event.key === 'Home') next = 0

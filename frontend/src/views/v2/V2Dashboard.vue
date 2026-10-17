@@ -1171,7 +1171,7 @@ const daySheet = computed(() => {
 
   // 当天观察（沿用旧版文案引擎：时长分档 × 状态摘要）
   const taskFragment = daySessions.length && primaryTask !== '未关联具体任务' ? `主要围绕“${primaryTask}”展开。` : '';
-  let analysis = '';
+  let analysis: string;
   if (!daySessions.length) {
     analysis = EMPTY_DAY_MSG;
   } else if (minutes >= 120) {

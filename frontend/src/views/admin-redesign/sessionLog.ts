@@ -67,7 +67,7 @@ export function parseLogEntry(entry: Record<string, unknown>): LogEntryView {
       }
     }
   }
-  let rawJson = ''
+  let rawJson: string
   try {
     rawJson = JSON.stringify(entry, null, 2)
   } catch {

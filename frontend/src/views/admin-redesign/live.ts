@@ -1674,8 +1674,9 @@ async function fetchLiveVirtuals(): Promise<void> {
       story: String(profile.background || profile.corePersonality || p.notes || ''),
       sessions: Number(p.sessionCount || (p._count as Record<string, number>)?.sessions || 0),
       storyCount,
-      runningCount: Number(p.runningCount ?? (runningSessions.length - pausedFallback.length) ?? 0),
-      pausedCount: Number(p.pausedCount ?? pausedFallback.length ?? 0),
+      // 中间项都是 number（永不为 nullish），无需再接 ?? 0；ESLint 9 的 no-constant-binary-expression 会报错
+      runningCount: Number(p.runningCount ?? (runningSessions.length - pausedFallback.length)),
+      pausedCount: Number(p.pausedCount ?? pausedFallback.length),
       failedCount: Number(p.failedCount ?? 0),
       abandonedCount: Number(p.abandonedCount ?? 0),
       stalledCount: Number(p.stalledCount ?? 0),

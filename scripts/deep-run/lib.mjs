@@ -4,6 +4,7 @@
  * - 双身份 cookie:admin(驾驶 VL)/ user(学习者B),过期自动重登
  * - 只读 SQLite 查询、PROGRESS.json 断点状态、路径结构快照
  */
+import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,7 +36,9 @@ function readEnvAdmin() {
 }
 
 // ---------- cookie(缓存 + 探测 + 重登) ----------
-const cookieFile = { admin: path.join(DATA, 'admin-cookie.txt'), user: path.join(DATA, 'userB-cookie.txt') };
+// 凭据不落仓库：历史写在 data/ 下，JWT 会随工作树被拷贝/打包（2026-10-17 安全整改）。
+const COOKIE_DIR = process.env.WENFLOW_COOKIE_DIR || path.join(os.tmpdir(), 'wenflow-eval-cookies');
+const cookieFile = { admin: path.join(COOKIE_DIR, 'admin-cookie.txt'), user: path.join(COOKIE_DIR, 'userB-cookie.txt') };
 async function login(kind) {
   let body, url;
   if (kind === 'admin') {
