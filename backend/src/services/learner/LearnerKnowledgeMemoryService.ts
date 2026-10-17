@@ -31,6 +31,8 @@ type ConceptSignal = {
   sourceType: 'task-label' | 'session-knowledge' | 'derived' | 'memory-trace';
   taskId?: string;
   milestoneId?: string;
+  /** 信号来源路径。缺省 = 用户级（记忆痕迹），当前路径视图里始终保留。 */
+  pathId?: string;
   seenAt?: string;
   label: string;
   /** 概念身份（canonical）。痕迹来源直接带；其它来源在聚合后统一解析（只读，不创建）。 */
@@ -306,16 +308,43 @@ export class LearnerKnowledgeMemoryService {
       };
     }
 
-    const [sessions, persistedEvidence, memoryTraces] = await Promise.all([
+    // #93：globalSignals / globalBackground 是**用户级**画像，不能只从当前路径取数——
+    // 多路径学习者的跨路径概念信号、反复误解、迁移信号此前全部漏掉。
+    // 取最近若干条路径参与聚合（有界，避免老路径的行数和查询成本无限增长）；
+    // 当前路径若不在最近 N 条里也会被显式并入（allPaths 首位）。
+    const OTHER_PATHS_LIMIT = 8;
+    const otherPaths = (await prisma.learning_paths.findMany({
+      where: { userId: input.userId, id: { not: path.id } },
+      orderBy: { updatedAt: 'desc' },
+      take: OTHER_PATHS_LIMIT,
+      include: {
+        milestones: {
+          orderBy: { stageNumber: 'asc' },
+          include: {
+            subtasks: {
+              orderBy: { order: 'asc' },
+            },
+          },
+        },
+      },
+    })) ?? [];
+    const allPaths = [path, ...otherPaths];
+    const pathIds = allPaths.map((item) => item.id);
+    const currentPathTaskIds = new Set(
+      path.milestones.flatMap((milestone) => (milestone.subtasks || []).map((task) => task.id))
+    );
+
+    const [allSessions, allPersistedEvidence, memoryTraces] = await Promise.all([
       prisma.teaching_sessions.findMany({
         where: {
           userId: input.userId,
-          learningPathId: path.id,
+          learningPathId: { in: pathIds },
         },
         orderBy: { startTime: 'desc' },
-        take: 30,
+        take: 30 * pathIds.length,
         select: {
           id: true,
+          learningPathId: true,
           taskId: true,
           milestoneId: true,
           knowledgeState: true,
@@ -325,9 +354,9 @@ export class LearnerKnowledgeMemoryService {
         },
       }),
       prisma.learner_evidence.findMany({
-        where: { userId: input.userId, pathId: path.id },
+        where: { userId: input.userId, pathId: { in: pathIds } },
         orderBy: { occurredAt: 'desc' },
-        take: 50
+        take: 50 * pathIds.length
       }),
       // 记忆引擎 M2 读侧并轨：memory_traces（ACT-R 痕迹）并入概念信号，脆弱/到期概念显式标记
       prisma.memory_traces.findMany({
@@ -339,13 +368,17 @@ export class LearnerKnowledgeMemoryService {
 
     const conceptSignals = new Map<string, ConceptSignal[]>();
     const recentEvidence: LearnerRecentEvidence[] = [];
+    // 用户级证据（跨路径）：只喂 globalBackground 台账聚合；currentPath.recentEvidence 仍按路径取。
+    const globalRecentEvidence: LearnerRecentEvidence[] = [];
     const enrichedLedger: LearnerBackgroundConceptLedgerItem[] = [];
     const enrichedConfusions: LearnerRecurringConfusion[] = [];
     const enrichedReusableFoundations: string[] = [];
     const enrichedBlockedFoundations: string[] = [];
     const enrichedTransferSignals: LearnerTransferSignal[] = [];
 
-    for (const evidence of persistedEvidence) {
+    for (const evidence of allPersistedEvidence) {
+      const evidencePathId = evidence.pathId ?? undefined;
+      const isCurrentPath = evidencePathId === path.id;
       const payload = parseJsonSafe<any>(evidence.payload, {});
       if (evidence.evidenceType === 'session-knowledge-distilled') {
         if (Array.isArray(payload.conceptLedger)) enrichedLedger.push(...payload.conceptLedger);
@@ -375,7 +408,7 @@ export class LearnerKnowledgeMemoryService {
           ? 'struggle'
           : 'mastery'
         : 'mastery';
-      recentEvidence.push({
+      const recent = {
         type,
         taskId: evidence.taskId || undefined,
         sessionId: evidence.sessionId || undefined,
@@ -383,11 +416,20 @@ export class LearnerKnowledgeMemoryService {
         signal,
         score: evidence.confidence,
         happenedAt: evidence.occurredAt.toISOString()
-      });
+      } satisfies LearnerRecentEvidence;
+      globalRecentEvidence.push(recent);
+      if (isCurrentPath) recentEvidence.push(recent);
     }
 
     const allTasks = path.milestones.flatMap((milestone) =>
       (milestone.subtasks || []).map((task) => ({ milestone, task }))
+    );
+    // 其它路径的任务只作为用户级概念台账/前置的排期事实（task-label），
+    // 不进 currentPath.taskMastery / 里程碑进度。
+    const otherPathTasks = otherPaths.flatMap((otherPath) =>
+      otherPath.milestones.flatMap((milestone) =>
+        (milestone.subtasks || []).map((task) => ({ pathId: otherPath.id, milestone, task }))
+      )
     );
 
     for (const { milestone, task } of allTasks) {
@@ -408,6 +450,7 @@ export class LearnerKnowledgeMemoryService {
           sourceType: 'task-label',
           taskId: task.id,
           milestoneId: milestone.id,
+          pathId: path.id,
           // 时钟域：只用业务写入的 completedAt（模拟链路经 simulatedNowOr/asOf 落模拟日）；
           // 绝不回退 Prisma @updatedAt（真墙钟基础设施列）——否则真/模拟时间混入 lastSeenAt，
           // 使延迟锚题跨域比较。无 completedAt = 无"接触"证据，宁可不记时间。
@@ -429,7 +472,39 @@ export class LearnerKnowledgeMemoryService {
       }
     }
 
-    for (const session of sessions) {
+    // 其它路径：只补 task-label 信号（用于用户级台账的存在性与排期事实），
+    // 不进 currentPath 的 recentEvidence / taskMastery。
+    for (const { pathId, milestone, task } of otherPathTasks) {
+      const conceptCandidates = dedupe(
+        [
+          task.linkedConceptName || task.coreConcept,
+          ...parseLearningObjectives(task.learningObjectives),
+        ].filter(isRealConceptKey)
+      );
+      for (const conceptKey of conceptCandidates) {
+        const current = conceptSignals.get(conceptKey) || [];
+        current.push({
+          score: task.status === 'completed' ? 0.45 : task.status === 'in_progress' ? 0.25 : 0.1,
+          status: task.status === 'completed' ? 'learning' : task.status === 'in_progress' ? 'learning' : 'pending',
+          stability: task.status === 'completed' ? 'developing' : 'unknown',
+          sourceType: 'task-label',
+          taskId: task.id,
+          milestoneId: milestone.id,
+          pathId,
+          seenAt: task.completedAt ? task.completedAt.toISOString() : undefined,
+          label: conceptKey,
+        });
+        conceptSignals.set(conceptKey, current);
+      }
+    }
+
+    for (const session of allSessions) {
+      const sessionPathId = session.learningPathId ?? undefined;
+      const isCurrentPath = sessionPathId === path.id;
+      const pushEvidence = (entry: LearnerRecentEvidence) => {
+        globalRecentEvidence.push(entry);
+        if (isCurrentPath) recentEvidence.push(entry);
+      };
       const knowledgeState = parseJsonSafe<Array<{ name: string; status: 'pending' | 'learning' | 'mastered' | 'review'; progress: number }>>(
         session.knowledgeState,
         []
@@ -457,6 +532,7 @@ export class LearnerKnowledgeMemoryService {
           sourceType: 'session-knowledge',
           taskId: session.taskId,
           milestoneId: session.milestoneId,
+          pathId: sessionPathId,
           seenAt: sessionSeenAt,
           label: point.name,
         });
@@ -464,7 +540,7 @@ export class LearnerKnowledgeMemoryService {
       }
 
       if (knowledgeState.length > 0) {
-      recentEvidence.push({
+      pushEvidence({
         type: 'teaching-session',
         taskId: session.taskId,
         sessionId: session.id,
@@ -495,6 +571,7 @@ export class LearnerKnowledgeMemoryService {
             sourceType: 'derived',
             taskId: session.taskId,
             milestoneId: session.milestoneId,
+            pathId: sessionPathId,
             // 与 session-knowledge 同源同口径：只认会话业务结束时间，不回退 updatedAt（真墙钟）
             seenAt: sessionSeenAt,
             label: item.name,
@@ -502,7 +579,7 @@ export class LearnerKnowledgeMemoryService {
           conceptSignals.set(conceptKey, current);
         }
 
-        recentEvidence.push({
+        pushEvidence({
           type: 'summary',
           taskId: session.taskId,
           sessionId: session.id,
@@ -513,7 +590,7 @@ export class LearnerKnowledgeMemoryService {
       }
 
       if (evaluationPayload) {
-        recentEvidence.push({
+        pushEvidence({
           type: 'evaluation',
           taskId: session.taskId,
           sessionId: session.id,
@@ -560,7 +637,8 @@ export class LearnerKnowledgeMemoryService {
       conceptSignals.set(conceptKey, current);
     }
 
-    const conceptStates: LearnerConceptState[] = Array.from(conceptSignals.entries()).map(([conceptKey, allSignals]) => {
+    // 用户级概念状态（全部路径 + 用户级痕迹）；currentPath.conceptStates 是它的路径子集。
+    const conceptStateRows = Array.from(conceptSignals.entries()).map(([conceptKey, allSignals]) => {
       const labels = allSignals.map((signal) => signal.label).filter(Boolean);
       const relatedTaskIds = Array.from(new Set(allSignals.map((signal) => signal.taskId).filter(Boolean) as string[]));
       const relatedMilestoneIds = Array.from(new Set(allSignals.map((signal) => signal.milestoneId).filter(Boolean) as string[]));
@@ -604,7 +682,7 @@ export class LearnerKnowledgeMemoryService {
             ? 'derived'
             : 'task-label';
 
-      return {
+      const state: LearnerConceptState = {
         conceptKey,
         label: labels[0] || conceptKey,
         // 概念身份（canonical）：优先取信号自带的（痕迹来源），缺失时由聚合后的统一解析补齐
@@ -617,17 +695,27 @@ export class LearnerKnowledgeMemoryService {
         relatedMilestoneIds,
         lastSeenAt,
       };
+      return { state, allSignals };
     });
+
+    const globalConceptStates: LearnerConceptState[] = conceptStateRows.map((row) => row.state);
+    // 当前路径视图：本路径产出的信号 + 用户级痕迹（pathId 缺省）参与过的概念；
+    // 只在其它路径出现过的概念不进 currentPath（不影响 taskMastery / 前置缺口）。
+    const conceptStates: LearnerConceptState[] = conceptStateRows
+      .filter((row) => row.allSignals.some((signal) => signal.pathId === undefined || signal.pathId === path.id))
+      .map((row) => row.state);
 
     // 概念身份补齐（只读）：来源不含痕迹的信号（会话知识/摘要/任务标签）没有 conceptId，
     // 用注册表按归一化键解析一次（`createIfMissing:false` —— **读侧绝不创建概念**）。
     // 解析失败/未命中一律留 undefined，读侧各处「conceptId 优先，空则回落 conceptKey」。
-    const missingIdentity = conceptStates.filter((state) => !state.conceptId).map((state) => state.label || state.conceptKey);
+    // 身份补齐跑在用户级集合上（globalConceptStates 是 conceptStates 的超集），
+    // 路径子集共享同一批 state 对象，补一次两边都生效。
+    const missingIdentity = globalConceptStates.filter((state) => !state.conceptId).map((state) => state.label || state.conceptKey);
     if (missingIdentity.length > 0) {
       try {
         const resolved = await conceptRegistryService.resolveMany(input.userId, missingIdentity, { createIfMissing: false });
         if (resolved.size > 0) {
-          for (const state of conceptStates) {
+          for (const state of globalConceptStates) {
             if (state.conceptId) continue;
             state.conceptId = resolved.get(normalizeConceptKeyCanonical(state.label || state.conceptKey)) ?? undefined;
           }
@@ -731,18 +819,19 @@ export class LearnerKnowledgeMemoryService {
       .map(({ task }) => task.title)
       .slice(-5);
 
-    const masteredConcepts = conceptStates
+    // #93：globalSignals 是用户级视角（跨路径并集），不用 currentPath 子集。
+    const masteredConcepts = globalConceptStates
       .filter((concept) => concept.stability === 'stable' || concept.status === 'mastered')
       .map((concept) => concept.label);
-    const fragileConcepts = conceptStates
+    const fragileConcepts = globalConceptStates
       .filter((concept) => concept.stability === 'fragile' || concept.status === 'review')
       .map((concept) => concept.label);
     // 卡点两档（2026-10-15 P0-2 F3/F4）：<0.55 = 卡点（名单/文案用）；<0.3 = 高严重度卡点
     //（加速/压缩这类"减法"动作的判据用——刚学完的概念天然 <0.55，只挡真没学会的）。
-    const strugglingConcepts = conceptStates
+    const strugglingConcepts = globalConceptStates
       .filter((concept) => concept.status === 'learning' && concept.masteryScore < STRUGGLING_MASTERY_THRESHOLD)
       .map((concept) => concept.label);
-    const severeStrugglingConcepts = conceptStates
+    const severeStrugglingConcepts = globalConceptStates
       .filter((concept) => concept.status === 'learning' && concept.masteryScore < SEVERE_STRUGGLING_MASTERY_THRESHOLD)
       .map((concept) => concept.label);
 
@@ -822,7 +911,16 @@ export class LearnerKnowledgeMemoryService {
       ).values()).slice(0, 20),
     };
 
-    const deterministicConceptLedger: LearnerBackgroundConceptLedgerItem[] = conceptStates
+    // 概念 → 出现过的路径（globalBackground 是用户级台账，sourcePaths 必须如实跨路径）。
+    const pathIdsByConceptKey = new Map<string, string[]>();
+    for (const [conceptKey, signals] of conceptSignals.entries()) {
+      pathIdsByConceptKey.set(
+        conceptKey,
+        dedupe(signals.map((signal) => signal.pathId).filter(Boolean) as string[]),
+      );
+    }
+
+    const deterministicConceptLedger: LearnerBackgroundConceptLedgerItem[] = globalConceptStates
       .map((concept) => {
         const familiarity: LearnerBackgroundConceptLedgerItem['familiarity'] = concept.status === 'mastered'
           ? 'stable'
@@ -841,7 +939,7 @@ export class LearnerKnowledgeMemoryService {
           : concept.status === 'learning'
             ? 'medium'
             : 'low';
-        const evidence = recentEvidence.filter((item) => item.conceptKeys.includes(concept.label) || item.conceptKeys.includes(concept.conceptKey));
+        const evidence = globalRecentEvidence.filter((item) => item.conceptKeys.includes(concept.label) || item.conceptKeys.includes(concept.conceptKey));
         return {
           conceptKey: concept.conceptKey,
           label: concept.label,
@@ -850,7 +948,9 @@ export class LearnerKnowledgeMemoryService {
           misconceptionRisk,
           firstSeenAt: concept.lastSeenAt,
           lastSeenAt: concept.lastSeenAt,
-          sourcePaths: [path.id],
+          sourcePaths: pathIdsByConceptKey.get(concept.conceptKey)?.length
+            ? pathIdsByConceptKey.get(concept.conceptKey) as string[]
+            : [path.id],
           sourceTasks: concept.relatedTaskIds,
           evidenceCount: evidence.length,
         };
@@ -862,8 +962,8 @@ export class LearnerKnowledgeMemoryService {
       label,
       pattern: '近期多次出现 review / fragile 信号，后续新目标与新路径中应视为不稳定前置。',
       confidence: 0.7,
-      count: recentEvidence.filter((item) => item.signal === 'struggle' && item.conceptKeys.includes(label)).length || 1,
-      lastSeenAt: conceptStates.find((concept) => concept.label === label)?.lastSeenAt,
+      count: globalRecentEvidence.filter((item) => item.signal === 'struggle' && item.conceptKeys.includes(label)).length || 1,
+      lastSeenAt: globalConceptStates.find((concept) => concept.label === label)?.lastSeenAt,
     }));
 
     const deterministicTransferSignals: LearnerTransferSignal[] = deterministicConceptLedger

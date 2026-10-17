@@ -449,6 +449,25 @@ npm run check
   - 总开关关闭后的精确 Host/IP Allowlist。
 - 从 LAN 地址切换为 `loopback` 时，页面会阻断式确认，提示当前浏览器保存后将失去后台访问。
 
+## 3.1 2026-10-17 复审（#97）
+
+状态基线原停在 2026-07-17。本轮逐条回代码核验，**8 条阻断项的「边界实现」均已在 HEAD**，
+残余项不是「没做」，而是「验收缺口」（矩阵测试、真实环境演练、外部轮换）：
+
+| 项 | 代码证据（2026-10-17 实测） | 仍缺 |
+| --- | --- | --- |
+| P0-1 Admin 权限 | `bootstrap/routers.ts:159` 统一挂载 `adminAuth + adminMiddleware + adminAudit`；`admin.middleware` 读库判定并拒绝 projection 身份 | 全路由 × Method 权限矩阵测试；账户禁用状态字段 |
+| P0-2 Projection 隔离 | 敏感路由拒绝链在 `admin.middleware` / `synthetic-projection.middleware`；`utils/projection-token.ts:49-60` 已签发 `issuer + audience` | `jti` / 服务端撤销 / 会话绑定；前端不在 `localStorage` 长期存放 |
+| P0-3 Secret 生命周期 | `wfsec:v1` 信封加密、`secrets:audit`、`security:scan:current/history` 均在 HEAD 且进根级 check | Provider 侧撤销/轮换历史 Key；`.env`/SQLite/日志 ACL |
+| P0-4 SSRF | `utils/safe-http.ts` + `services/runtime-network-policy.service.ts`（`SAFE_HTTP_PRIVATE_HOSTS` 运行时策略） | 真实 Socket 集成测试；更细的协议/Host/Body Policy |
+| P0-5 Prompt 真相源 | `middleware/prompt-file-truth.middleware.ts` 对非 GET 统一 409 | 清理不可达旧 handler；统一 Provenance（文件/DB Hash + Commit + 部署 ID） |
+| P0-6 Migration/备份 | `docker-entrypoint.sh` 不再执行 DDL；`docker-compose.yml` 独立 `migrate` 服务跑 `prisma:migrate:deploy:all` | 生产库副本上的恢复与旁路重建演练 |
+| P0-7 质量门禁 | 根 `check:quality` 已含双库 validate/clean replay、后端 typecheck、**前端 `vue-tsc`**、lint、prompts 与 design 检查；CI 三作业并行 | 仓库侧把 CI Job 设为 Required Status Check；Playwright Smoke |
+| P0-8 可靠性配置 | `LOGIN_LOCK_DURATION_SECONDS` 已落地；重试改为预算制 `maxAttempts`（`executor.ts:131`，非写死 2） | 全量环境变量 Zod Schema；Backoff/Jitter/`Retry-After`/总 Deadline |
+
+**结论**：以「发布阻断」标准看，P0-7 的残余项已从「未纳入门禁」变为「只差 Required Check 配置」；
+其余 7 条都卡在需要真实环境或外部协作的验收动作上，继续留在阻断清单但**不必再当实现缺口排期**。
+
 ## 4. P1 短期统一项
 
 ### NF-P1-1 认证只执行一次
@@ -988,12 +1007,12 @@ createApiClient({ authMode: 'user' | 'admin' | 'none' })
 | ID | 状态 | Owner | 目标波次 | 备注 |
 | --- | --- | --- | --- | --- |
 | NF-P0-1 | 第一阶段完成 | 待定 | Wave 1 | 已统一边界；待全路由矩阵测试和账户禁用状态 |
-| NF-P0-2 | 边界第一阶段完成 | 待定 | Wave 1 | 敏感路由已拒绝；待 Token 隔离和撤销 |
+| NF-P0-2 | 边界第一阶段完成 | 待定 | Wave 1 | 敏感路由已拒绝、issuer/audience 已隔离；待 jti/撤销和存储迁移 |
 | NF-P0-3 | 加密和扫描门禁完成 | 待定 | Wave 1 | 待 Provider 轮换和真实 ACL 修复 |
 | NF-P0-4 | 第一阶段完成 | 待定 | Wave 1 | 可配置外部请求已统一；待私有 Host Allowlist |
 | NF-P0-5 | 第一阶段完成 | 待定 | Wave 1 | File-as-Truth 已落地；待清理不可达旧代码和部署同步审计 |
 | NF-P0-6 | 基线完成 | 待定 | Wave 2 | 双库 Migration、clean replay 和正式备份已完成；待长期库旁路重建演练 |
-| NF-P0-7 | Required Baseline 完成 | 待定 | Wave 2 | 根级 Check/CI 已完成；待 lint、全量 vue-tsc 和 Playwright |
+| NF-P0-7 | Required Baseline 完成 | 待定 | Wave 2 | 根级 Check/CI 已含 vue-tsc + lint；待 Required Check 配置和 Playwright |
 | NF-P0-8 | 部分完成 | 待定 | Wave 2 | 登录锁定和 AI Retry 已修复；待配置 Schema |
 | NF-P1-1 | 未开始 | 待定 | Wave 4 | 重复认证 |
 | NF-P1-2 | 未开始 | 待定 | Wave 4 | JWT 生命周期 |

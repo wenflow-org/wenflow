@@ -12,7 +12,7 @@
 jest.mock('../../../config/database', () => ({
   __esModule: true,
   default: {
-    learning_paths: { findUnique: jest.fn(), findFirst: jest.fn() },
+    learning_paths: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn() },
     teaching_sessions: { findMany: jest.fn() },
     learner_evidence: { findMany: jest.fn() },
     memory_traces: { findMany: jest.fn() },
@@ -24,7 +24,7 @@ jest.mock('../../../config/database', () => ({
 import { learnerKnowledgeMemoryService, conceptIdentityKey } from '../LearnerKnowledgeMemoryService';
 
 const prisma = require('../../../config/database').default as {
-  learning_paths: { findUnique: jest.Mock };
+  learning_paths: { findUnique: jest.Mock; findMany: jest.Mock };
   teaching_sessions: { findMany: jest.Mock };
   learner_evidence: { findMany: jest.Mock };
   memory_traces: { findMany: jest.Mock };

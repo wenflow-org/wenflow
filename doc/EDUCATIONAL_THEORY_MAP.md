@@ -184,16 +184,20 @@ README 7 条（认知负荷 / 自我导向学习 / ZPD+支架 / 形成性评估 
 | Yerkes-Dodson ⑦ | `services/learner/LearnerSnapshotService.ts`（paceMode / conceptLoad 推导）；LSS/LSB 阈值 | 服务头部注释 |
 | 自我解释 ⑮ | 已归费曼名下（README「教育理论基础」） | 无需 |
 
+### 部分实现（机制已有落点，覆盖不全）
+| 理论 | 已有落点 | 仍缺的部分 |
+|---|---|---|
+| SDT ① | `goal-conversation.yaml:132` 静默累积 `sdt_needs`（autonomy / competence / relatedness） | 画像层未消费三需求；relatedness 无对应教学/同伴机制 |
+| 成长型思维 ③ | `teaching-turn.yaml:121` 成长型思维语言规范（过程表扬 / 归因于策略 / "还没"框架 / 禁特质语言），并进自检五件事第 ④ 条 | wrapup 反馈语言未接同一规范 |
+| 心流 ⑥ | `teaching-turn.yaml:97` 认知负荷三路由（0.6–0.8「愤悱带」即挑战-技能平衡带） | 未按心流命名；无挑战-技能平衡的可视化 |
+| 交错学习 ⑩ | `teaching-turn.yaml:104` 复习题策略选择框架（不预告方法 + 对比式回捞） | 任务/会话粒度的轮换编排（预算台账）未做 |
+
 ### 完全缺失（最大增量空间）
 | 理论 | 建议落点层 | 最小落地形态 |
 |---|---|---|
-| SDT ①（归属感） | Learn / Goal | learner-model 画像扩展三需求字段；peer 定位为 relatedness |
-| 成长型思维 ③ | Teach / Learn | 过程导向归因条文（teaching-turn.yaml 自检"失败归因指向策略/方法"扩展）；wrapup 反馈语言规范 |
-| 心流 ⑥（命名） | Teach / Path | 三路由补理论注释；挑战-技能平衡可视化 |
-| 交错学习 ⑩ | Path / 调度层 | 任务/会话粒度轮换编排（预算台账） |
 | SRL ⑫（三阶段视图） | Learn / Wrapup | 三阶段状态视图；actionPlan 作为反思产物 |
 | 睡眠巩固 ⑭（联动） | Path / 复习调度 | "今日复习"与"睡眠建议"联动（跨日递增已实现） |
-| 元认知训练 ⑬ | Wrapup / 复习课 | 自评→对照→校准环节 |
+| 元认知训练 ⑬ | Wrapup / 复习课 | 完整的自评→对照→校准环节（现有 `selfAssessmentSignal` 只做隐藏信号） |
 
 ---
 
