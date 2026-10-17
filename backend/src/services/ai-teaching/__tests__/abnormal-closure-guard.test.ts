@@ -252,6 +252,36 @@ describe('isAbnormalSessionClosure 判定口径', () => {
   });
 });
 
+describe('#69 幽灵课判定口径（正常收束理由 + 结构信号）', () => {
+  it('27 秒 / 1 个学生回合（实测样本）命中', () => {
+    expect(isAbnormalSessionClosure({
+      endReason: 'task-completed', status: 'finalizing', userTurnCount: 1, durationSeconds: 27.3,
+    })).toBe(true);
+  });
+
+  it('18 秒 / 0 个学生回合命中', () => {
+    expect(isAbnormalSessionClosure({
+      endReason: 'manual-end', status: 'finalizing', userTurnCount: 0, durationSeconds: 18,
+    })).toBe(true);
+  });
+
+  it('短但有两次真实往返（30 秒 / 2 回合）不命中', () => {
+    expect(isAbnormalSessionClosure({
+      endReason: 'manual-end', status: 'finalizing', userTurnCount: 2, durationSeconds: 30,
+    })).toBe(false);
+  });
+
+  it('只有一次发言但学了 5 分钟不命中（安静不等于空课）', () => {
+    expect(isAbnormalSessionClosure({
+      endReason: 'manual-end', status: 'finalizing', userTurnCount: 1, durationSeconds: 300,
+    })).toBe(false);
+  });
+
+  it('不传结构信号时保持旧口径（既有调用点不会被隐式改语义）', () => {
+    expect(isAbnormalSessionClosure({ endReason: 'manual-end', status: 'finalizing' })).toBe(false);
+  });
+});
+
 describe('弃跑/非正常终态收束：只闭合状态机，不写正式轨', () => {
   it('fixture 前置：会话确实带挂起检查点（无此条则 H1 留痕断言不具判别力）', () => {
     expect(getPendingCheckpoint(session().teachingState)).toEqual(
@@ -341,5 +371,34 @@ describe('弃跑/非正常终态收束：只闭合状态机，不写正式轨', 
     expect(mockCommitSessionLoadMetric).not.toHaveBeenCalled();
     expect(mockRecordSessionOutcome).not.toHaveBeenCalled();
     expect(mockRecordCheckpointAttemptEvidence).not.toHaveBeenCalled();
+  });
+
+  // #69 回放：2026-10-17 实测幽灵课（27.3s / 3 条消息 / 1 个学生回合 / 评估失败 fallback），
+  // 当时以 manual-end 正常收束，写进了 learner_evidence + session_load。现在必须按异常收束处理。
+  it('幽灵课（27 秒 / 1 个学生回合，正常收束理由）不写正式轨', async () => {
+    mockClaimFinalization.mockResolvedValue({
+      status: 'claimed',
+      operationId: 'end-op-ghost',
+      leaseOwner: 'lease-ghost',
+      session: session({
+        status: 'finalizing',
+        startTime: new Date(Date.now() - 27_300),
+        messages: [
+          { role: 'assistant', content: '开场', timestamp: new Date(Date.now() - 27_000).toISOString() },
+          { role: 'user', content: '这段我没跟上', timestamp: new Date(Date.now() - 20_000).toISOString() },
+          { role: 'assistant', content: '我们换个说法', timestamp: new Date(Date.now() - 10_000).toISOString() },
+        ],
+      }),
+    });
+
+    const result = await endSession('sess-abandon-1', 'manual-end', 7, 'end-op-ghost');
+
+    expect(result.status).toBe('completed');
+    expect(mockCompleteWithEvent.mock.calls[0][4].userId).toBeNull();
+    expect(mockCompleteWithEvent.mock.calls[0][3].wrapup).toBeNull();
+    expect(mockPrepareSessionScoreCommit).not.toHaveBeenCalled();
+    expect(mockCommitSessionLoadMetric).not.toHaveBeenCalled();
+    expect(mockRecordSessionOutcome).not.toHaveBeenCalled();
+    expect(mockRefreshDashboardGuidance).not.toHaveBeenCalled();
   });
 });

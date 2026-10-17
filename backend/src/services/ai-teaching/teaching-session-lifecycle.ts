@@ -195,12 +195,32 @@ export function buildEndSessionRequestIdentity(endReason: string) {
  */
 export const ABNORMAL_CLOSURE_STATUSES = ['discarded', 'superseded', 'failed'] as const;
 
+/** 幽灵课判据：整节课没有形成一次真实往返，且时长不到一分钟（#69 实测样本 27.3s / 3 条消息）。 */
+export const GHOST_SESSION_MAX_SECONDS = 60;
+export const GHOST_SESSION_MAX_USER_TURNS = 2;
+
 export function isAbnormalSessionClosure(input: {
   endReason?: string | null;
   status?: string | null;
+  /**
+   * 真实学生回合数（排除检查点合成消息）。与 durationSeconds 同时提供时才做幽灵课判定；
+   * 不传 = 保持旧口径（只认 endReason/status），避免所有既有调用点被隐式改语义。
+   */
+  userTurnCount?: number | null;
+  /** 会话时长（秒）。幽灵课判定的第二条件，见 GHOST_SESSION_*。 */
+  durationSeconds?: number | null;
 }): boolean {
   if (input.endReason === 'learner-abandoned') return true;
-  return !!input.status && (ABNORMAL_CLOSURE_STATUSES as readonly string[]).includes(input.status);
+  if (!!input.status && (ABNORMAL_CLOSURE_STATUSES as readonly string[]).includes(input.status)) return true;
+  // #69 幽灵课：走的是正常收束理由（manual-end / task-completed），但整节课只有开场 + 至多一句
+  // 学生发言，几十秒就结算。它不是「学完了一节」，只是任务被顺手点完成——不该写证据/负荷/FSRS。
+  // 阈值刻意收得窄（<2 个学生回合且 <60s）：正常短复习课仍有至少两次往返，不会误伤。
+  if (input.userTurnCount != null && input.durationSeconds != null) {
+    if (input.userTurnCount < GHOST_SESSION_MAX_USER_TURNS && input.durationSeconds < GHOST_SESSION_MAX_SECONDS) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -657,7 +677,18 @@ export async function endSession(
   // 幽灵课 / 弃跑状态泄漏拦截（2026-10-06）：非正常终态只闭合状态机，不写正式轨。
   // 注：claim 已把 end_only 的 status 改成 'finalizing'，所以这里能看到的运行态信号只有 endReason；
   // status 分支是防御性的（discarded/superseded/failed 正常到不了这里，见谓词注释）。
-  const abnormalClosure = isAbnormalSessionClosure({ endReason, status: session.status });
+  // #69：正常收束理由也可能对应「40 秒只说了两句话就点完成」的空课，必须靠结构信号识别——
+  // 学生回合数取真实 user 消息（排除检查点合成消息），时长取收束时刻与 startTime 之差。
+  const closureMessages = Array.isArray(session.messages) ? session.messages : [];
+  const closureUserTurns = closureMessages.filter((message) => message.role === 'user' && !message.checkpoint).length;
+  const closureEndedAt = session.endTime instanceof Date ? session.endTime : simulatedNowOr();
+  const closureDurationSeconds = Math.max(0, (closureEndedAt.getTime() - new Date(session.startTime).getTime()) / 1000);
+  const abnormalClosure = isAbnormalSessionClosure({
+    endReason,
+    status: session.status,
+    userTurnCount: closureUserTurns,
+    durationSeconds: closureDurationSeconds,
+  });
   if (abnormalClosure) {
     logAbnormalSessionClosure({
       sessionId,
