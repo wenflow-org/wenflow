@@ -57,7 +57,8 @@ export class KnowledgeStateService {
     allowDegrade = false,
     arbitration?: KnowledgeMergeArbitration,
   ): ArbitratedTeachingKnowledgePointState[] {
-    if (!incoming.length) return existing;
+    // #48：本回合模型没产出任何知识点也要继续——code 负证据的降级在循环后独立执行。
+    if (!incoming.length && !(arbitration?.codeFailedConceptNames?.length)) return existing;
 
     // 名字匹配口径与派生键一致（normalizeConceptName：折叠全部空白 + 小写），
     // 避免同名异写（'A B' vs 'AB'）绕过阻断/降级（F1 修复轮 c，复核 P16）
@@ -132,6 +133,27 @@ export class KnowledgeStateService {
         // 授予处记录证据来源；非 mastered 点不再新授标注（保留历史值或缺省）
         ...(nextEvidenceSource ? { evidenceSource: nextEvidenceSource } : {}),
       });
+    }
+
+    // #48（2026-10-17 活体探针）：code 负证据必须独立于「本回合模型是否又提到这个概念」。
+    // 旧实现只在 incoming 循环里降级——模型这一轮没把该概念写进 knowledge.points 时
+    // （回答跑到旁支、或点到为止），失败的检查点完全不进聚合：探针实测提交错误答案后
+    // 概念仍是 mastered@100、masteryDegradeCount 恒 0。这里对 failedNames 里已存在且
+    // 达到达标线的点补一次降级，与循环内判据同口径（普通课；复习课不叠加仲裁）。
+    if (!allowDegrade) {
+      for (const nameKey of failedNames) {
+        const previous = merged.get(nameKey);
+        if (!previous) continue;
+        const shouldDegrade = previous.status === 'mastered'
+          || Number(previous.progress) > COMPLETION_TARGET_PROGRESS_FLOOR - 1;
+        if (!shouldDegrade) continue;
+        merged.set(nameKey, {
+          ...previous,
+          status: 'learning',
+          progress: Math.min(Number(previous.progress) || 0, COMPLETION_TARGET_PROGRESS_FLOOR - 1),
+          evidenceSource: 'mixed',
+        });
+      }
     }
 
     return Array.from(merged.values());

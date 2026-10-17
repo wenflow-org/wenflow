@@ -27,6 +27,53 @@ describe('KnowledgeStateService.merge（知识看板合并）', () => {
     expect(merged[0].progress).toBe(79)
   })
 
+  // #48 活体探针（2026-10-17）：模型这一轮没把失败概念写进 knowledge.points 时，
+  // 旧实现完全不动聚合 → mastered 原地不动、下降计数恒 0。负证据必须独立生效。
+  it('#48：code 失败概念不在 incoming 里也必须降级（mastered → learning@79）', () => {
+    const merged = knowledgeStateService.merge(
+      [mastered],
+      [{ name: '另一个概念', status: 'learning' as const, progress: 20 }],
+      false,
+      { codeFailedConceptNames: ['概念A'] },
+    )
+    const target = merged.find((point) => point.name === '概念A')
+    expect(target?.status).toBe('learning')
+    expect(target?.progress).toBe(79)
+    expect(target?.evidenceSource).toBe('mixed')
+  })
+
+  it('#48：高进度但未 mastered 的点同样回落到达标线下', () => {
+    const merged = knowledgeStateService.merge(
+      [{ name: '概念A', status: 'learning' as const, progress: 90 }],
+      [],
+      false,
+      { codeFailedConceptNames: ['概念A'] },
+    )
+    expect(merged[0].status).toBe('learning')
+    expect(merged[0].progress).toBe(79)
+  })
+
+  it('#48：复习课（allowDegrade）不叠加负证据仲裁', () => {
+    const merged = knowledgeStateService.merge(
+      [mastered],
+      [],
+      true,
+      { codeFailedConceptNames: ['概念A'] },
+    )
+    expect(merged[0].status).toBe('mastered')
+    expect(merged[0].progress).toBe(100)
+  })
+
+  it('#48：库里没有该概念时不凭空造点', () => {
+    const merged = knowledgeStateService.merge(
+      [],
+      [],
+      false,
+      { codeFailedConceptNames: ['不存在'] },
+    )
+    expect(merged).toEqual([])
+  })
+
   it('复习课（allowDegrade）：mastered 可降级为 review（复习失败真实可见）', () => {
     const merged = knowledgeStateService.merge([mastered], [review], true)
     expect(merged[0].status).toBe('review')
