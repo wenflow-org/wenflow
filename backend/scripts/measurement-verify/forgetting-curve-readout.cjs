@@ -27,7 +27,8 @@ const dayFiles = (d) => {
 
 // ---------- ①② 曲线：动态聚合全部已有 day 文件（主曲线 = day10+，见下）----------
 const pairs = [];
-const seen = new Set();
+const byKey = new Map();
+let negativeDropped = 0;
 let dayMin = null;
 let dayMax = null;
 for (let d = 1; d <= 60; d++) {
@@ -48,11 +49,19 @@ for (let d = 1; d <= 60; d++) {
     const asOfMs = vl.window?.asOf ? Date.parse(vl.window.asOf) : (j.generatedAt ? Date.parse(j.generatedAt) : NaN);
     for (const p of vl.warmupPairs || []) {
       const key = `${p.conceptKey}|${p.occurredAt}|${p.source?.teachingSessionId || ''}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
       const elapsed = (asOfMs - Date.parse(p.predictedLastSeenAt)) / DAY_MS;
       if (!Number.isFinite(elapsed)) continue;
-      pairs.push({
+      // 负间隔（asOf 早于 lastSeenAt）时 FSRS 恒返回≈1，会把高预测带灌成假乐观。
+      // 每条配对只保留一次观测：同一 key 取「非负且间隔最大」的那条（最长间隔最校准），
+      // 与 e03-fsrs-calibration-readout.cjs 同口径。此前的"先到先得"会把首个出现在
+      // 负间隔文件里的观测锁死。
+      if (elapsed < 0) {
+        negativeDropped += 1;
+        continue;
+      }
+      const existing = byKey.get(key);
+      if (existing && existing.elapsed >= elapsed) continue;
+      byKey.set(key, {
         day: d,
         vl: p.source?.vlKey,
         concept: p.conceptKey,
@@ -66,6 +75,14 @@ for (let d = 1; d <= 60; d++) {
       }
     }
   }
+}
+pairs.push(...byKey.values());
+if (!TAG && pairs.length === 0) {
+  console.log('\n无 tag 模式没有匹配文件：epoch-1 单轨文件已于 2026-10-17 归档到 out/archive-20261017-epoch1/。');
+  console.log('纪元 2 读数请用：node scripts/measurement-verify/forgetting-curve-readout.cjs --tag=epoch2');
+}
+if (negativeDropped > 0) {
+  console.log(`\n== 负间隔剔除：${negativeDropped} 条（同 key 保留非负最大间隔观测）`);
 }
 // tag 批（纪元 2 等）的 day 标签是本批新计数，全部视为有效样本；无 tag（纪元 1 存档）保留 day10+ 分组
 const post = pairs.filter((p) => (TAG ? true : p.day >= 10));
