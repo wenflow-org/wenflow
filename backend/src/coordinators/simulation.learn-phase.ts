@@ -952,8 +952,10 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         closureDecision = computeClosureDecision(
           aiResult.closureSignal,
           virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null,
-          // P1-5：把认知判决接进完成裁决——判错/掌握不足时 learnerReady 强制 false
-          epistemicGrounding
+          // P1-5：#46 起判决改为「有界否决」——判错/掌握不足时不立即结课，
+          // 但不再把 learnerReady 置 false（否则收束连击永远到不了熔断阈值）。
+          epistemicGrounding,
+          taskRuntime.taskId === currentTask.id ? Number(taskRuntime.learnerDoneStreak) || 0 : 0
         );
 
         logs.push({

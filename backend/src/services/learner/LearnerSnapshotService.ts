@@ -11,6 +11,8 @@ import type {
   LearnerTeachingHints,
 } from '../../agents/learner-model-agent/types';
 import { learnerKnowledgeMemoryService } from './LearnerKnowledgeMemoryService';
+// 相对量判据（ACWR/form）单一真理源——把"疲劳/节奏/可加速"从绝对阈值迁到尺度无关的判据上。
+import { classifyLoad } from '../learning/learning-load-verdict';
 
 export interface LearnerSnapshotScopeInput {
   userId: string;
@@ -29,10 +31,13 @@ function parseJsonSafe(raw: string | null | undefined): any {
   }
 }
 
-function deriveFatigueRisk(lf: number): 'low' | 'medium' | 'high' {
-  if (lf >= 6) return 'high';
-  if (lf >= 3) return 'medium';
-  return 'low';
+/**
+ * 疲劳档（**相对量判据**，2026-10-15 PMC 改造）：由 ACWR = lf/ktl 定，不再用绝对 `lf >= 6`。
+ * 绝对阈值在 PMC 日负荷口径下失效——习惯每天多课的学习者（已适应）KTL/LF 会同步升高，
+ * 但 acwr≈1（稳态）；绝对 `lf>=6` 会把他永久判成"高疲劳"。相对量尺度无关。
+ */
+function deriveFatigueRisk(ktl: number, lf: number): 'low' | 'medium' | 'high' {
+  return classifyLoad({ ktl, lf }).fatigueRisk;
 }
 
 /** SRL 三阶段（Zimmerman 2000）：活跃会话=performance，完结会话=reflection，否则=forethought */
@@ -43,22 +48,21 @@ function deriveSrlPhase(latestSession: { updatedAt?: Date; status?: string } | n
 }
 
 /**
- * 全局节奏：只看"累积负荷/疲劳"（lf、ktl）。
+ * 全局节奏（**相对量判据**）：由相对形态定，不再用绝对 `lf>=6`/`ktl>=5`。
  * - LSS 是**单课**压力，不在这里决定全局节奏（否则"今天这门课很难"会被当成"这周很累"）；
  *   单课压力的去处是课内控制状态（deriveLearningControlState）。
- * - "总负荷失衡"（`lsb < 0`，例如当天课多）**不在这里重复消费**：它已由两处各司其职地消费——
- *   难度判定里的 `global_imbalance`（降档）与重排信号里的 `lsb_negative`（建议减速/补强）。
- *   节奏只回答"该快还是该慢"，失衡走"要不要重排"。
+ * - "总负荷失衡"（form < 0，旧 `lsb < 0`）**不在这里重复消费**：它由难度判定（降档）与
+ *   重排信号（减速/补强）各司其职。节奏只回答"该快还是该慢"。
  */
 export function derivePacing(lf: number, ktl: number): 'slow' | 'moderate' | 'fast' {
-  if (lf >= 6) return 'slow';
-  if (ktl >= 5 && lf <= 3) return 'fast';
-  return 'moderate';
+  return classifyLoad({ ktl, lf }).pacing;
 }
 
+/** 本节质量（**相对量判据**）：恢复良好 → strong；爬升过快 → weak；否则 mixed。 */
 function deriveSessionQuality(ktl: number, lf: number): 'strong' | 'mixed' | 'weak' {
-  if (ktl >= 5 && lf <= 3) return 'strong';
-  if (ktl <= 2 && lf >= 5) return 'weak';
+  const v = classifyLoad({ ktl, lf });
+  if (v.recovered) return 'strong';
+  if (v.fatigueRisk === 'high') return 'weak';
   return 'mixed';
 }
 
@@ -74,34 +78,44 @@ export function deriveLearningControlState(input: {
   const { dynamicState, knowledgeMemory } = input;
   const lesson = input.lessonMetrics ?? dynamicState.metrics;
   const { lss, ktl, lf, lsb } = lesson;
-  const fragileCount = knowledgeMemory.globalSignals.fragileConcepts.length;
+  // #59/#60 第 5 条：控制状态用**严重度**而不是裸 fragileCount——
+  // fragile 名单此前几乎恒大于 0（低分/幽灵痕都会进），拿它判 reviewPriority/checkpointNeed
+  // 等于把「刚学一半」当成「需要复习」，同时把难度升档口一路挡死。
+  const severeStrugglingCount = (knowledgeMemory.globalSignals.severeStrugglingConcepts || []).length;
   const strugglingCount = knowledgeMemory.globalSignals.strugglingConcepts.length;
   const prerequisiteGapCount = knowledgeMemory.currentPath?.prerequisiteGaps.length || 0;
+
+  // 相对量判据（ACWR/form，尺度无关）：见 learning-load-verdict。绝对 `lf>=6` 在 PMC 日负荷口径下失效。
+  // 失衡用 verdict.imbalanced（= form<0 **且基座成熟**）——PMC 从 0 爬升期新学习者 lsb 天然 <0，
+  // 那是"正在建立适应"，不是失衡（旧模型播种 ktl/lf 掩盖了这一点）。
+  const lessonVerdict = classifyLoad({ ktl: lesson.ktl, lf: lesson.lf });
+  const globalVerdict = classifyLoad({ ktl: dynamicState.metrics.ktl, lf: dynamicState.metrics.lf });
+  const overloaded = lessonVerdict.fatigueRisk === 'high' || lessonVerdict.imbalanced;
 
   // 单课压力大 → 课内降档/加支架。
   // LSS 是**会话级**量：只有拿到了"本节课所在路径"的状态时才成立；
   // 该路径还没有历史时不借用别的路径的单课压力（跨路径污染），只保留全局疲劳这一路信号。
   const lessonStress = Boolean(input.lessonMetrics) && lss >= 6;
 
-  const paceMode: LearnerLearningControlState['paceMode'] = lf >= 6 || lsb < 0 || lessonStress
+  const paceMode: LearnerLearningControlState['paceMode'] = overloaded || lessonStress
     ? 'recover'
-    : dynamicState.recentTrend === 'improving' && ktl >= 5 && lf <= 3 && lss <= 4
+    : dynamicState.recentTrend === 'improving' && lessonVerdict.recovered && lss <= 4
       ? 'push'
       : 'steady';
 
-  const conceptLoad: LearnerLearningControlState['conceptLoad'] = lf >= 6 || lsb < 0 || lessonStress
+  const conceptLoad: LearnerLearningControlState['conceptLoad'] = overloaded || lessonStress
     ? 'low'
-    : dynamicState.recentTrend === 'improving' && ktl >= 6 && prerequisiteGapCount === 0
+    : dynamicState.recentTrend === 'improving' && globalVerdict.recovered && prerequisiteGapCount === 0
       ? 'high'
       : 'medium';
 
-  const reviewPriority: LearnerLearningControlState['reviewPriority'] = prerequisiteGapCount > 0 || fragileCount > 0 || lsb < 0
+  const reviewPriority: LearnerLearningControlState['reviewPriority'] = prerequisiteGapCount > 0 || severeStrugglingCount > 0 || globalVerdict.imbalanced
     ? 'high'
     : strugglingCount > 0
       ? 'medium'
       : 'low';
 
-  const checkpointNeed: LearnerLearningControlState['checkpointNeed'] = dynamicState.recentTrend === 'declining' || fragileCount > 0 || strugglingCount > 1
+  const checkpointNeed: LearnerLearningControlState['checkpointNeed'] = dynamicState.recentTrend === 'declining' || severeStrugglingCount > 0 || strugglingCount > 1
     ? 'high'
     : paceMode === 'push'
       ? 'low'
@@ -115,7 +129,7 @@ export function deriveLearningControlState(input: {
     checkpointNeed,
     shouldAvoidNewConcepts: conceptLoad === 'low',
     shouldPreferConsolidation: reviewPriority === 'high',
-    shouldOfferBreak: lf >= 6 || dynamicState.fatigueRisk === 'high',
+    shouldOfferBreak: lessonVerdict.fatigueRisk === 'high' || dynamicState.fatigueRisk === 'high',
   };
 }
 
@@ -211,8 +225,13 @@ export function deriveReplanSignal(input: {
   // 接近完成（≥90%）且无结构性风险时，也不值得为「重排后续」打断收尾。
   const nearCompleteNoStructural = !pathFullyComplete && completionRatio >= 0.9 && !structuralRisk;
 
-  if (dynamicState.metrics.lf >= 6) reasonCodes.push('fatigue_high');
-  if (dynamicState.metrics.lsb < 0) reasonCodes.push('lsb_negative');
+  // 相对量判据（尺度无关）：全局疲劳由 ACWR 定，失衡由 form 定（imbalanced 已含"基座成熟"门，
+  // 避免 PMC 爬升期新学习者 lsb 天然 <0 被误报）。
+  const globalVerdict = classifyLoad({ ktl: dynamicState.metrics.ktl, lf: dynamicState.metrics.lf });
+  const fatigueHigh = globalVerdict.fatigueRisk === 'high';
+
+  if (fatigueHigh) reasonCodes.push('fatigue_high');
+  if (globalVerdict.imbalanced) reasonCodes.push('lsb_negative');
   if (dynamicState.recentTrend === 'declining') reasonCodes.push('recent_trend_declining');
   if (fragileCount > 0) reasonCodes.push('fragile_concepts');
   if (strugglingCount > 0) reasonCodes.push('struggling_concepts');
@@ -235,7 +254,7 @@ export function deriveReplanSignal(input: {
 
   // highRisk：疲劳/失衡/结构性风险。**路径已完成或接近完成且无结构性风险时，不进入 high**——
   // 此时没有「后续路径」可重排，报 high 只会误导用户去做一次空转的重规划。
-  const fatigueOrImbalance = dynamicState.metrics.lf >= 6 || dynamicState.metrics.lsb < 0;
+  const fatigueOrImbalance = fatigueHigh || globalVerdict.imbalanced;
   const highRisk = (fatigueOrImbalance || structuralRisk)
     && !pathFullyComplete
     && !nearCompleteNoStructural;
@@ -253,14 +272,14 @@ export function deriveReplanSignal(input: {
   const MEDIUM_STRUGGLING_COUNT_THRESHOLD = 2;
   const mediumRisk = !nearCompleteNoStructural
     && (strugglingCount >= MEDIUM_STRUGGLING_COUNT_THRESHOLD || dynamicState.recentTrend === 'declining');
-  // 加速资格（F4，2026-10-15）：原 `fragile=0 && struggling=0` 在饱和通道下生产不可达 →
-  // 「压缩下一阶段」从未出现过（全库 0 次）。改**严重度门**：无高严重度卡点（证据均分 <0.3）
-  // 即可——刚学完的正常未巩固不该挡减法动作。学习者级负荷 + 路径级节奏两道门保留。
-  const accelerateReady = dynamicState.metrics.ktl >= 6
-    && dynamicState.metrics.lf <= 3
+  // 加速资格（F4，2026-10-15；2026-10-15 PMC 改造改相对量）：原 `fragile=0 && struggling=0`
+  // 在饱和通道下生产不可达（全库 0 次「压缩」）。改**相对量门**：明显有余力（ACWR ≤ 0.6，
+  // 对齐旧 `ktl>=6 && lf<=3`）+ 节奏非 recover + 无高严重度卡点。绝对 `ktl>=6 && lf<=3` 在 PMC
+  // 日负荷口径下失效（量随课量放大，绝对上限无意义）。
+  const accelerateReady = globalVerdict.accelerateReady
+    && dynamicState.metrics.ktl > 0
     && learningControlState.paceMode !== 'recover'
     && severeStrugglingCount === 0;
-
   // 路径已完成：下游没有可「重排/减速」的阶段，任何重规划建议都是空转。
   // 明确回 keep（保留 reasonCodes 供观测），不再进 accelerate/high/medium 分支。
   if (pathFullyComplete) {
@@ -274,17 +293,7 @@ export function deriveReplanSignal(input: {
     };
   }
 
-  if (accelerateReady) {
-    return {
-      shouldSuggest: true,
-      priority: 'low',
-      recommendation: 'accelerate',
-      scope: 'next_milestone',
-      rationale: '当前掌握较稳定，且近期压力与疲劳都较低，可以考虑把下一阶段调整为更聚焦的推进版本。',
-      reasonCodes: ['stable_mastery', 'ready_to_accelerate'],
-    };
-  }
-
+  // 顺序即优先级：风险/落后**先于**加速——"可以加速"绝不能盖过真实的结构性缺口或落后。
   if (highRisk) {
     return {
       shouldSuggest: true,
@@ -307,6 +316,17 @@ export function deriveReplanSignal(input: {
       scope: 'downstream_path',
       rationale: `外部截止前时间进度已走到约 ${Math.round(deadlinePace.expectedRatio * 100)}%，实际完成约 ${Math.round(deadlinePace.actualRatio * 100)}%，进度明显落后于剩余时间；建议确认后续安排（收缩范围或调整节奏），已完成内容不受影响。`,
       reasonCodes,
+    };
+  }
+
+  if (accelerateReady) {
+    return {
+      shouldSuggest: true,
+      priority: 'low',
+      recommendation: 'accelerate',
+      scope: 'next_milestone',
+      rationale: '当前掌握较稳定，且近期压力与疲劳都较低，可以考虑把下一阶段调整为更聚焦的推进版本。',
+      reasonCodes: ['stable_mastery', 'ready_to_accelerate'],
     };
   }
 
@@ -379,7 +399,7 @@ export class LearnerSnapshotService {
         lsb: metrics.lsb,
       },
       recentTrend: metrics.recentProgress,
-      fatigueRisk: deriveFatigueRisk(metrics.lf),
+      fatigueRisk: deriveFatigueRisk(metrics.ktl, metrics.lf),
       confidenceTrend: profile.emotional.confidenceLevel === 'anxious' ? 'falling' : profile.emotional.confidenceLevel === 'confident' ? 'rising' : 'stable',
       recentSessionQuality: deriveSessionQuality(metrics.ktl, metrics.lf),
       recommendedPacing: derivePacing(metrics.lf, metrics.ktl),
@@ -504,7 +524,7 @@ export class LearnerSnapshotService {
         lsb: input.metrics.lsb,
       },
       recentTrend: profile.learning.recentProgress,
-      fatigueRisk: deriveFatigueRisk(input.metrics.lf),
+      fatigueRisk: deriveFatigueRisk(input.metrics.ktl, input.metrics.lf),
       confidenceTrend: profile.emotional.confidenceLevel === 'anxious' ? 'falling' : profile.emotional.confidenceLevel === 'confident' ? 'rising' : 'stable',
       recentSessionQuality: deriveSessionQuality(input.metrics.ktl, input.metrics.lf),
       recommendedPacing: derivePacing(input.metrics.lf, input.metrics.ktl),
