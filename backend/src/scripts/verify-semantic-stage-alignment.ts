@@ -39,12 +39,13 @@ function sectionOrdinal(sectionId: unknown): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-function milestoneRefs(milestone: any): string[] {
+function milestoneRefs(milestone: unknown): string[] {
   const ids: string[] = [];
-  for (const ref of Array.isArray(milestone?.materialRefs) ? milestone.materialRefs : []) {
+  const node = (milestone && typeof milestone === 'object' ? milestone : {}) as Record<string, unknown>;
+  for (const ref of Array.isArray(node.materialRefs) ? node.materialRefs : []) {
     if (ref?.sectionId) ids.push(String(ref.sectionId));
   }
-  for (const task of Array.isArray(milestone?.subtasks) ? milestone.subtasks : []) {
+  for (const task of Array.isArray(node.subtasks) ? node.subtasks : []) {
     for (const ref of Array.isArray(task?.materialRefs) ? task.materialRefs : []) {
       if (ref?.sectionId) ids.push(String(ref.sectionId));
     }
@@ -59,7 +60,7 @@ interface SectionRow {
 }
 
 async function packSections(userId: string): Promise<SectionRow[]> {
-  const packs: any[] = await buildUploadedMaterialPacksAsync(userId).catch(() => []);
+  const packs = await buildUploadedMaterialPacksAsync(userId).catch(() => []);
   const pack = packs.find((entry) => Array.isArray(entry?.pack?.sections) && entry.pack.sections.length > 0)?.pack;
   if (!pack) return [];
   const sections = pack.sections as Array<{ id?: string; title?: string; summary?: string }>;
@@ -81,21 +82,22 @@ async function main(): Promise<void> {
     thirds: number[][];
     refs: Array<{ refMean: number; windowTop8Mean: number; windowAllMean: number; refPct: number }>;
   }> = {};
-  const perGoal: any[] = [];
+  const perGoal: Array<Record<string, unknown>> = [];
 
   for (const row of rows) {
     const result = row?.arms?.new;
     if (!result?.pathId) continue;
-    const detail: any = await getLearningPath(result.pathId).catch(() => null);
+    const detail: unknown = await getLearningPath(result.pathId).catch(() => null);
     if (!detail) continue;
     const sections = await packSections(result.userId);
     if (sections.length === 0) continue;
     const sectionVectors = await embedTexts({ input: sections.map((section) => section.text) }, { timeoutMs: 60_000 });
     const total = sections.length;
-    const stageCount = Array.isArray(detail.milestones) ? detail.milestones.length : 0;
+    const root = (detail && typeof detail === 'object' ? detail : {}) as Record<string, unknown>;
+    const stageCount = Array.isArray(root.milestones) ? root.milestones.length : 0;
 
-    const goalRow: any = { goal: row.goal, stages: [] };
-    for (const milestone of detail.milestones || []) {
+    const goalRow: { goal: unknown; stages: unknown[] } = { goal: row.goal, stages: [] };
+    for (const milestone of root.milestones || []) {
       const stageNumber = Number(milestone?.stageNumber) || goalRow.stages.length + 1;
       const query = `${String(milestone?.title || '')}。${String(milestone?.goal || '')}`.trim();
       const queryVector = (await embedTexts({ input: [query] }, { timeoutMs: 30_000 })).vectors[0]?.embedding;
@@ -168,9 +170,9 @@ async function main(): Promise<void> {
     console.log(
       `stage ${key}｜语义均值 ${mean(bucket.semantic).toFixed(3)}｜窗口中点 ${mean(bucket.window).toFixed(3)}` +
         `｜三分位均值 ${thirdMean.map((value) => value.toFixed(1)).join('/')}` +
-        `｜引用 cos ${mean(refRows.map((row: any) => row.refMean)).toFixed(3)}` +
-        `（窗口 top8 ${mean(refRows.map((row: any) => row.windowTop8Mean)).toFixed(3)}` +
-        ` / 全量 ${mean(refRows.map((row: any) => row.windowAllMean)).toFixed(3)}，分位 ${mean(refRows.map((row: any) => row.refPct)).toFixed(2)}）`
+        `｜引用 cos ${mean(refRows.map((row) => row.refMean)).toFixed(3)}` +
+        `（窗口 top8 ${mean(refRows.map((row) => row.windowTop8Mean)).toFixed(3)}` +
+        ` / 全量 ${mean(refRows.map((row) => row.windowAllMean)).toFixed(3)}，分位 ${mean(refRows.map((row) => row.refPct)).toFixed(2)}）`
     );
   }
 

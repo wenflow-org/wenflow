@@ -91,19 +91,21 @@ function chunkPositionOf(doc: Doc | undefined, quote: string, title: string): nu
   return doc.chunks.length > 1 ? median / (doc.chunks.length - 1) : 0;
 }
 
-function collectRefs(detail: any): RefRow[] {
+function collectRefs(detail: unknown): RefRow[] {
   const refs: RefRow[] = [];
-  const push = (ref: any) => {
+  const push = (ref: unknown) => {
+    const r = (ref && typeof ref === 'object' ? ref : {}) as Record<string, unknown>;
     refs.push({
-      packIndex: Number.isInteger(ref?.packIndex) ? Number(ref.packIndex) : null,
-      materialId: ref?.materialId ? String(ref.materialId) : null,
-      sourceTitle: ref?.sourceTitle ? String(ref.sourceTitle) : null,
-      sectionId: ref?.sectionId ? String(ref.sectionId) : null,
-      sectionTitle: ref?.sectionTitle ? String(ref.sectionTitle) : null,
-      quote: String(ref?.quote || ''),
+      packIndex: Number.isInteger(r.packIndex) ? Number(r.packIndex) : null,
+      materialId: r.materialId ? String(r.materialId) : null,
+      sourceTitle: r.sourceTitle ? String(r.sourceTitle) : null,
+      sectionId: r.sectionId ? String(r.sectionId) : null,
+      sectionTitle: r.sectionTitle ? String(r.sectionTitle) : null,
+      quote: String(r.quote || ''),
     });
   };
-  for (const milestone of Array.isArray(detail?.milestones) ? detail.milestones : []) {
+  const root = (detail && typeof detail === 'object' ? detail : {}) as Record<string, unknown>;
+  for (const milestone of Array.isArray(root.milestones) ? root.milestones : []) {
     for (const ref of Array.isArray(milestone?.materialRefs) ? milestone.materialRefs : []) push(ref);
     for (const task of Array.isArray(milestone?.subtasks) ? milestone.subtasks : []) {
       for (const ref of Array.isArray(task?.materialRefs) ? task.materialRefs : []) push(ref);
@@ -164,12 +166,12 @@ async function main(): Promise<void> {
     goalsWithLateChunk: 0,
     goalsWithLateSection: 0,
   };
-  const perGoal: any[] = [];
+  const perGoal: Array<Record<string, unknown>> = [];
 
   for (const row of rows) {
     const result = row?.arms?.new;
     if (!result?.pathId) continue;
-    const detail: any = await getLearningPath(result.pathId).catch(() => null);
+    const detail: unknown = await getLearningPath(result.pathId).catch(() => null);
     if (!detail) continue;
     const refs = collectRefs(detail);
     const docs = (row.materials || [])
@@ -178,14 +180,14 @@ async function main(): Promise<void> {
 
     // 引用 → 所属资料包的章节总数（用于 section 分位）
     const packs = result.userId ? await buildUploadedMaterialPacksAsync(result.userId).catch(() => []) : [];
-    const packTotals = packs.map((entry: any) => (Array.isArray(entry?.pack?.sections) ? entry.pack.sections.length : 0));    const totalSectionsOf = (ref: RefRow): number | null => {
+    const packTotals = packs.map((entry) => (Array.isArray(entry?.pack?.sections) ? entry.pack.sections.length : 0));    const totalSectionsOf = (ref: RefRow): number | null => {
       if (Number.isInteger(ref.packIndex) && ref.packIndex !== null && ref.packIndex >= 0) {
         const byIndex = packTotals[ref.packIndex];
         if (byIndex > 0) return byIndex;
       }
-      const byId = packs.findIndex((entry: any) => ref.materialId && entry?.pack?.materialId === ref.materialId);
+      const byId = packs.findIndex((entry) => entry?.pack?.materialId === ref.materialId);
       if (byId >= 0 && packTotals[byId] > 0) return packTotals[byId];
-      const byTitle = packs.findIndex((entry: any) => ref.sourceTitle && entry?.pack?.title === ref.sourceTitle);
+      const byTitle = packs.findIndex((entry) => ref.sourceTitle && entry?.pack?.title === ref.sourceTitle);
       if (byTitle >= 0 && packTotals[byTitle] > 0) return packTotals[byTitle];
       return null;
     };
@@ -194,7 +196,7 @@ async function main(): Promise<void> {
     let lateSection = 0;
     let sectionOnly = 0;
     let neither = 0;
-    const samples: any[] = [];
+    const samples: Array<{ sectionId: string | null; total: number | null; sectionPos: number | null; chunkPos: number | null }> = [];
     for (const ref of refs) {
       const chunkPos = docs
         .map((doc) => chunkPositionOf(doc, ref.quote, ref.sectionTitle || ''))
@@ -219,7 +221,7 @@ async function main(): Promise<void> {
     if (lateChunk > 0) totals.goalsWithLateChunk += 1;
     if (lateSection > 0) totals.goalsWithLateSection += 1;
     const primaryDoc = docs[0];
-    const primaryPack = packs.find((entry: any) => primaryDoc && entry?.pack?.title === primaryDoc.name) || packs[0];
+    const primaryPack = packs.find((entry) => primaryDoc && entry?.pack?.title === primaryDoc.name) || packs[0];
     const primarySections = (primaryPack?.pack?.sections || []) as Array<{ title?: string }>;
     const corrPairs: Array<[number, number]> = [];
     for (let index = 0; index < primarySections.length; index += 1) {

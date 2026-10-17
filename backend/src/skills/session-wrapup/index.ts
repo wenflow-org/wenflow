@@ -400,11 +400,11 @@ export function verifyKnowledgeEvidence(
     .filter((message) => message?.role === 'user' && typeof message.content === 'string')
     .map((message) => String(message.content));
   if (userTexts.length < 2) return { summary, unverified: 0 };
-  const corpus = userTexts.join('\n').toLowerCase().replace(/[\s，。！？、；：,.!?;:'"“”‘’（）()【】\[\]]/g, '');
+  const corpus = userTexts.join('\n').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
   let unverified = 0;
   const knowledgeItems = (summary.knowledgeItems || []).map((item) => {
     const evidence = typeof item.evidence === 'string' ? item.evidence : '';
-    const normalized = evidence.toLowerCase().replace(/[\s，。！？、；：,.!?;:'"“”‘’（）()【】\[\]]/g, '');
+    const normalized = evidence.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
     if (normalized.length < 6) return item;
     // 任一 6 字窗口出现在学员原话里即算回链成功（允许转述，不要求整句照抄）
     let linked = false;

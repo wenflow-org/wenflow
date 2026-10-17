@@ -100,7 +100,7 @@ const CLOSURE_CHECKPOINT_MAX_ATTEMPTS = 2;
 
 export function evaluateSessionClosable(input: {
   messages: Array<{ role?: string; content?: string }> | null | undefined;
-  teachingState: Record<string, any> | null | undefined;
+  teachingState: Record<string, unknown> | null | undefined;
   endReason?: string | null;
 }): SessionClosableDecision {
   if (input.endReason && ABNORMAL_END_REASONS.has(input.endReason)) return { closable: true };
