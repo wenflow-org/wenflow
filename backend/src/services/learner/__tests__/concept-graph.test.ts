@@ -121,11 +121,27 @@ describe('materializePathGraph（图物化）', () => {
     expect(r.skipped).toBe(1);
   });
 
+  // #92：用户级（跨路径）边——此前只写 scope='path'，全库 scope='user' 零行，
+  // 多路径用户的概念图在路径之间不连通。
+  it('#92：同一前置同时落 path 级与 user 级（pathId=null）两条边', async () => {
+    const { deps, edges, idOf } = makeDeps();
+    const svc = new ConceptGraphService(deps);
+    const r = await svc.materializePathGraph({ userId: 'u1', pathId: 'p1', kcAnnotation: annotation, cognitiveCore: core });
+    expect(r.prerequisite).toBe(1);
+    expect(r.prerequisiteUser).toBe(1);
+    const userScoped = Array.from(edges.values()).filter((edge) => edge.scope === 'user');
+    expect(userScoped).toHaveLength(1);
+    expect(userScoped[0].pathId).toBeNull();
+    // 跨路径（不传 pathId）也能取到上游：user 级边让多路径用户图谱连通
+    const upstream = await svc.upstreamClosure('u1', idOf('按公共键对齐拼接'), { maxDepth: 1 });
+    expect(upstream.map((item) => item.label)).toEqual(['识别列名差异']);
+  });
+
   it('缺 kcAnnotation / pathId 时安全返回零值', async () => {
     const { deps } = makeDeps();
     const svc = new ConceptGraphService(deps);
-    expect(await svc.materializePathGraph({ userId: 'u1', pathId: 'p1', kcAnnotation: null })).toEqual({ prerequisite: 0, partOf: 0, prerequisiteConcept: 0, skipped: 0 });
-    expect(await svc.materializePathGraph({ userId: 'u1', pathId: '', kcAnnotation: annotation })).toEqual({ prerequisite: 0, partOf: 0, prerequisiteConcept: 0, skipped: 0 });
+    expect(await svc.materializePathGraph({ userId: 'u1', pathId: 'p1', kcAnnotation: null })).toEqual({ prerequisite: 0, partOf: 0, prerequisiteConcept: 0, prerequisiteUser: 0, skipped: 0 });
+    expect(await svc.materializePathGraph({ userId: 'u1', pathId: '', kcAnnotation: annotation })).toEqual({ prerequisite: 0, partOf: 0, prerequisiteConcept: 0, prerequisiteUser: 0, skipped: 0 });
   });
 });
 

@@ -23,6 +23,12 @@ import { conceptRegistryService } from './concept-registry.service';
 export const RELATION_PREREQUISITE = 'prerequisite';
 export const RELATION_PART_OF = 'part_of';
 export const SCOPE_PATH = 'path';
+/**
+ * 用户级边（#92）：pathId=null 的跨路径投影——同一对概念在不同路径里各自成立时，
+ * 聚合为一条用户级边，让「跨路径概念图」不再各自孤岛。此前只写 SCOPE_PATH，
+ * `scope='user'` 全库零行，多路径用户的知识图谱在概念间完全不连通。
+ */
+export const SCOPE_USER = 'user';
 export const SOURCE_KC_MAPPER = 'kc-mapper';
 export const SOURCE_DERIVED = 'path-planning-derived';
 /**
@@ -106,6 +112,30 @@ const defaultDeps: ConceptGraphDeps = {
       originPathId: options?.originPathId ?? null,
     }),
   upsertEdge: async (data) => {
+    // 用户级边（#92）：Prisma 复合唯一键含可空列 pathId，where 里不接受 null
+    // （Argument `pathId` must not be null），所以走 findFirst + create/update。
+    // 库里另有部分唯一索引（migration concept_edges_user_scope_unique）防重复；
+    // 并发下 create 撞索引按已存在处理。
+    if (data.pathId === null) {
+      const existing = await prisma.concept_edges.findFirst({
+        where: {
+          userId: data.userId, fromConceptId: data.fromConceptId, toConceptId: data.toConceptId,
+          relation: data.relation, scope: data.scope, pathId: null,
+        },
+        select: { id: true },
+      });
+      if (existing) {
+        await prisma.concept_edges.update({ where: { id: existing.id }, data: { source: data.source } });
+        return;
+      }
+      try {
+        await prisma.concept_edges.create({ data });
+      } catch (error) {
+        // P2002：并发写入同一用户级边——目标状态已达成，不需重试
+        if (!/P2002/.test(String((error as { code?: string })?.code || error))) throw error;
+      }
+      return;
+    }
     await prisma.concept_edges.upsert({
       where: {
         userId_fromConceptId_toConceptId_relation_scope_pathId: {
@@ -200,6 +230,8 @@ export interface MaterializeResult {
   partOf: number;
   /** 概念级前置投影边（KC 级 prerequisite 折叠到所属 coreConcept 后新增的边） */
   prerequisiteConcept: number;
+  /** 用户级（跨路径）前置边（#92）：pathId=null，多路径图谱连通性来源 */
+  prerequisiteUser: number;
   /** 因两端无法解析出 canonical 身份而跳过的边数 */
   skipped: number;
 }
@@ -221,7 +253,7 @@ export class ConceptGraphService {
     cognitiveCore?: CognitiveCoreLike | null;
   }): Promise<MaterializeResult> {
     const { userId, pathId, kcAnnotation, cognitiveCore } = params;
-    const result: MaterializeResult = { prerequisite: 0, partOf: 0, prerequisiteConcept: 0, skipped: 0 };
+    const result: MaterializeResult = { prerequisite: 0, partOf: 0, prerequisiteConcept: 0, prerequisiteUser: 0, skipped: 0 };
     if (!userId || !pathId || !kcAnnotation) return result;
 
     const conceptKcs = Array.isArray(kcAnnotation.conceptKcs) ? kcAnnotation.conceptKcs! : [];
@@ -291,6 +323,14 @@ export class ConceptGraphService {
         relation: RELATION_PREREQUISITE, scope: SCOPE_PATH, pathId, source: SOURCE_KC_MAPPER,
       });
       result.prerequisite += 1;
+      // #92 用户级投影：同一条 KC 级前置同时落一条 pathId=null 的用户级边，
+      // 跨路径查询（多路径用户图谱）才连得起来。幂等键含 scope，不会与路径级行冲突。
+      await this.deps.upsertEdge({
+        id: newId(), userId,
+        fromConceptId: from, toConceptId: to,
+        relation: RELATION_PREREQUISITE, scope: SCOPE_USER, pathId: null, source: SOURCE_KC_MAPPER,
+      });
+      result.prerequisiteUser += 1;
 
       // 折叠到概念级：KC 级前置 → 其所属 coreConcept 之间的前置
       const parentFromName = parentNameByKcId.get(fromKcId);
@@ -444,7 +484,17 @@ export class ConceptGraphService {
       this.deps.listEdges({ userId, relations: [RELATION_PREREQUISITE, RELATION_PART_OF] }),
       this.deps.listTraceMastery(userId),
     ]);
-    const edges = options.pathId ? allEdges.filter((edge) => edge.pathId === options.pathId) : allEdges;
+    const filteredEdges = options.pathId ? allEdges.filter((edge) => edge.pathId === options.pathId) : allEdges;
+    // #92：用户级边（pathId=null）是跨路径投影，可能与路径级边同 (from,to,relation)。
+    // 同一对概念只保留一条，优先路径级（带 pathId，可筛选、可挂「去练习」锚点）；
+    // 只在没有路径级边时才用用户级边，避免图谱里出现重影边、边数虚高。
+    const edgeByKey = new Map<string, (typeof filteredEdges)[number]>();
+    for (const edge of filteredEdges) {
+      const key = `${edge.fromConceptId}|${edge.toConceptId}|${edge.relation}`;
+      const existing = edgeByKey.get(key);
+      if (!existing || (existing.pathId === null && edge.pathId !== null)) edgeByKey.set(key, edge);
+    }
+    const edges = [...edgeByKey.values()];
 
     // 路径收敛：有 pathId 时只保留"这条路径的概念"（边两端 + 首次出现于该路径）
     let concepts = allConcepts;
