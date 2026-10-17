@@ -168,9 +168,9 @@ The admin panel lives at `/admin` with 18 scene pages across 7 sidebar groups, a
 
 | Layer | Technology |
 |------|------|
-| **Frontend** | Vue 3 + TypeScript + Vite 6 + Element Plus + Pinia |
+| **Frontend** | Vue 3 + TypeScript + Vite 6 + in-house Mk* primitives + lucide icons + Pinia |
 | **Backend** | Node.js + Express + TypeScript + Prisma |
-| **Database** | SQLite (main DB with 51 tables + system DB with 14 tables, dual-database architecture) |
+| **Database** | SQLite (main DB: 51 Prisma models + 1 runtime-created table; system DB: 14 tables; dual-database architecture) |
 | **AI Integration** | OpenAI-compatible model gateway (defaults: chat / reasoning / evaluation all use deepseek-v4.1-flash), SSE streaming, retry budget, thinking-mode control |
 | **Agent / Skill Orchestration** | EduClaw Gateway + 5 top-level Agents (goal/path/teaching/profile/simulation, no prompt orchestrator) / Skill execution layer (prompts/core source → compiled artifacts → DB mirror) + Coordinators + Durable Outbox event chain |
 | **Model Config Layers** | Env vars → platform defaults → Agent/Skill level → user-defined API / model overrides |
@@ -216,7 +216,7 @@ Two SQLite databases are currently in use; relative URLs resolve from each schem
 
 | DB | Schema | Env var | Default path | Tables |
 |----|--------|----------|----------|------|
-| Main DB | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 51 |
+| Main DB | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 51 (+1 runtime table) |
 | System DB | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` | 14 |
 
 Both databases have their own migrations directory (`backend/prisma/migrations`, `backend/prisma/system/migrations`); the startup scripts and CI both run migrate deploy.
@@ -471,7 +471,7 @@ Important: Admin login defaults to `ADMIN_ACCESS_MODE=private`, allowing only lo
 
 ## Educational Theory Foundation
 
-The design is grounded in these theories, each backed by concrete implementation (the full 16-theory map with literature DOI/arXiv links and implementation index is in [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md)):
+The design is grounded in these theories, each backed by concrete implementation (the 11 below map directly to product behavior; the full 16-theory map with literature DOI/arXiv links is in [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md)):
 
 1. **Cognitive Load Theory** - per-round knowledge-point caps, response-format budgets, automatic context compression
 2. **Self-directed Learning** - the goal is stated and the plan confirmed by the learner; the pace is learner-controlled

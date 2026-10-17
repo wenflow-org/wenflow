@@ -168,9 +168,9 @@ flowchart TD
 
 | 层级 | 技术 |
 |------|------|
-| **前端** | Vue 3 + TypeScript + Vite 6 + Element Plus + Pinia |
+| **前端** | Vue 3 + TypeScript + Vite 6 + 自研 Mk* 原语 + lucide 图标 + Pinia |
 | **后端** | Node.js + Express + TypeScript + Prisma |
-| **数据库（当前）** | SQLite（主库 51 表 + system 库 14 表，双库架构） |
+| **数据库（当前）** | SQLite（主库 51 个 Prisma 模型 + 1 张运行期建表，system 库 14 表，双库架构） |
 | **AI 接入** | OpenAI 兼容模型网关（默认 chat / reasoning / evaluation 均为 deepseek-v4.1-flash），支持 SSE 流式、重试预算、thinking mode 控制 |
 | **Agent / Skill 编排** | EduClaw Gateway + 5 个顶层 Agent（goal/path/teaching/profile/simulation，无 prompt 编排器）/ Skill 执行层（prompts/core 真源 → 编译产物 → DB 镜像）+ Coordinators + Durable Outbox 事件链 |
 | **模型配置分层** | 环境变量 → 平台默认 → Agent/Skill 级 → 用户自定义 API / 模型覆盖 |
@@ -216,7 +216,7 @@ doc/                设计文档总索引 doc/README.md（过程材料在 gitign
 
 | 库 | Schema | 环境变量 | 默认路径 | 表数 |
 |----|--------|----------|----------|------|
-| 主库 | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 51 |
+| 主库 | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 51（+1 运行期建表） |
 | System DB | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` | 14 |
 
 两库各有独立 migrations 目录（`backend/prisma/migrations`、`backend/prisma/system/migrations`），启动脚本与 CI 都会执行迁移部署。
@@ -481,7 +481,7 @@ INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
 
 ## 教育理论基础
 
-设计背后的理论，每条都有对应实现（完整 16 条理论、文献 DOI/arXiv 链接与落点索引见 [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md)）：
+设计背后的理论，每条都有对应实现（下列 11 条与产品行为直接对应；完整 16 条理论、文献 DOI/arXiv 链接与落点索引见 [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md)）：
 
 1. **认知负荷理论** - 单轮知识点上限、回复形态预算，长对话自动压缩
 2. **自我导向学习** - 目标由学习者提出、方案由学习者确认，学习节奏由学习者掌控
