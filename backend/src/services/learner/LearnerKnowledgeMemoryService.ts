@@ -1,6 +1,7 @@
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { conceptRegistryService } from './concept-registry.service';
+import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { conceptGraphService } from './concept-graph.service';
 // 注册表口径的归一化（比本文件的本地 normalizeConceptKey 更强：还去引号/冒号从句/尾部标点）。
 // 查别名表必须用它，否则会 miss——本文件那个本地版只做 trim+空白压缩。
@@ -63,6 +64,15 @@ const PLACEHOLDER_CONCEPT_KEY_RE = /^concept-\d+$/i;
 export const STRUGGLING_MASTERY_THRESHOLD = 0.55;
 /** 高严重度卡点线：低于它才允许触发「压缩/加速」这类减法动作（struggling 常态档挡不住它们）。 */
 export const SEVERE_STRUGGLING_MASTERY_THRESHOLD = 0.3;
+
+/**
+ * fragile 证据门（#59/#60 第 1 条，2026-10-17）：
+ * `masteryScore < 0.5` 单独不再构成「脆弱」——它曾让「刚学一半」与「真卡住」共用同一名单，
+ * fragile 恒大于 0 又反过来焊死难度升档口。现在低分要配合**真实提取证据**：
+ * 至少 3 次提取，且最近一次已过去 7 天（遗忘窗口），或 FSRS 已标 fragile / 间隔因子 >4。
+ */
+export const FRAGILE_MIN_EXTRACTIONS = 3;
+export const FRAGILE_STALE_DAYS = 7;
 
 function isRealConceptKey(key: unknown): key is string {
   return typeof key === 'string' && key.trim().length > 0 && !PLACEHOLDER_CONCEPT_KEY_RE.test(key.trim());
@@ -611,13 +621,27 @@ export class LearnerKnowledgeMemoryService {
     //      （痕迹是用户级、天然跨 path，不该被"这条路径有没有会话"门控）；
     //   ② **重复注入**：N 个会话就把同一条痕迹推 N 次。
     // 痕迹派生自 `memoryTraces`（与 session 无关），故移出到会话循环之后、与 tasks/sessions 平级。
+    const traceNow = simulatedNowOr().getTime();
     for (const trace of memoryTraces) {
       const conceptKey = normalizeConceptKey(trace.conceptKey);
       if (!isRealConceptKey(conceptKey)) continue;
+      // #59/#60 第 1/3 条：KT 幽灵痕（applyKtEstimate 创建、从未真正提取过）没有资格进掌握判定。
+      // 它承载的是模型估计而非学习证据；此前以 masteryScore=0.3 冒充「学过一半」，直接制造 fragile。
+      const isKtGhost = trace.source === 'kt-estimate' && (Number(trace.extractionCount) || 0) === 0;
+      if (isKtGhost) continue;
+      const mastery = trace.masteryScore ?? 0.5;
+      const extractionCount = Number(trace.extractionCount) || 0;
+      const lastSeenMs = trace.lastSeenAt ? new Date(trace.lastSeenAt).getTime() : null;
+      const staleForgetting = lastSeenMs !== null
+        && traceNow - lastSeenMs >= FRAGILE_STALE_DAYS * 86400000;
+      // 低分只有在「有足够提取次数 + 已过遗忘窗口」时才算脆弱证据；否则只是「还没学完」。
+      const lowMasteryWithEvidence = mastery < 0.5
+        && extractionCount >= FRAGILE_MIN_EXTRACTIONS
+        && staleForgetting;
       const fragile = trace.stability === 'fragile'
-        || (trace.masteryScore ?? 0.5) < 0.5
-        || (trace.intervalFactor ?? 1) > 4;
-      const mastered = !fragile && (trace.stability === 'stable' || (trace.masteryScore ?? 0) >= 0.8);
+        || (trace.intervalFactor ?? 1) > 4
+        || lowMasteryWithEvidence;
+      const mastered = !fragile && (trace.stability === 'stable' || mastery >= 0.8);
       const current = conceptSignals.get(conceptKey) || [];
       current.push({
         score: trace.masteryScore ?? 0.5,
