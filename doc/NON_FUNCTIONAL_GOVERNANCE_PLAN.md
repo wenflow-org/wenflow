@@ -736,11 +736,12 @@ createApiClient({ authMode: 'user' | 'admin' | 'none' })
 
 ### NF-P2-1 数据分类、保留、删除和导出
 
-**状态：需决策**
+**状态：不做重层，仅保留删除卫生**（2026-10-17 与 `UPGRADE_DIRECTION_20Q.md` Q16 对齐）
 
-用户学习数据分散在业务表、Outbox/Inbox、Evidence、Projection、调用日志、文件日志和备份中，目前没有统一保留和删除矩阵。
-
-需要确认：
+`UPGRADE_DIRECTION_20Q.md:66,235,292` 已裁决：同意流程、未成年人保护、数据导出、自述优先仲裁均为**商业级，不做**；
+本项只保留「用户删除时在线派生记录一并清理 + 日志/备份保留期有明确期限」这条卫生底线。
+因此下表不再是「待逐项决策」，而是「删除卫生的检查清单」——其中同意/导出两列已裁决不做，
+保留决策范围收窄为日志内容与备份保留期。
 
 | 数据 | 需要的决策 |
 | --- | --- |
@@ -1008,7 +1009,7 @@ createApiClient({ authMode: 'user' | 'admin' | 'none' })
 | NF-P1-12 | 未开始 | 待定 | Wave 4 | Metrics/Alert |
 | NF-P1-13 | 未开始 | 待定 | Wave 4 | API/Axios |
 | NF-P1-14 | 未开始 | 待定 | Wave 4 | 自动化测试 |
-| NF-P2-1 | 待决策 | 待定 | Wave 5 | 数据保留 |
+| NF-P2-1 | 不做重层（仅删除卫生） | 已裁决 | Wave 5 | 数据保留 |
 | NF-P2-2 | 未开始 | 待定 | Wave 5 | Circuit Breaker |
 | NF-P2-3 | 未开始 | 待定 | Wave 5 | 长任务异步化 |
 | NF-P2-4 | 未开始 | 待定 | Wave 5 | Cache |

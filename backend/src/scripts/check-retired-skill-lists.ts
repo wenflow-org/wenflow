@@ -20,8 +20,10 @@ import path from 'path';
 import { allSkillDefinitions } from '../skills';
 import { PURGED_SKILLS, ALL_RETIRED_SKILLS } from '../skills/retired-skills';
 
-const CORE_DIR = path.join(process.cwd(), '../prompts/core');
-const MANIFESTS_DIR = path.join(process.cwd(), '../prompts/manifests');
+// #78：按脚本自身位置锚定仓库根，不在 process.cwd() 上猜（从仓库根、backend/ 或其它 cwd 运行都一样）
+const REPO_ROOT = path.resolve(__dirname, '../../..');
+const CORE_DIR = path.join(REPO_ROOT, 'prompts/core');
+const MANIFESTS_DIR = path.join(REPO_ROOT, 'prompts/manifests');
 
 /** 已声明允许保留 manifest 残留的退役项（2026-08-09 退役，resolve-prompt-contract 按需加载无运行影响） */
 const MANIFEST_RESIDUE_ALLOWED = new Set(['concept-priority', 'path-adjustment-generator']);

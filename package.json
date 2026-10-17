@@ -46,7 +46,8 @@
     "check": "npm run check:quality && npm run check:test && npm run check:build",
     "check:frontend-types": "npm --prefix frontend run typecheck",
     "design:check": "npm --prefix frontend run design:check",
-    "lint": "npm --prefix backend run lint && npm --prefix frontend run lint"
+    "lint": "npm --prefix backend run lint && npm --prefix frontend run lint",
+    "restart:backend": "node backend/restart.mjs"
   },
   "keywords": [
     "ai-agent",

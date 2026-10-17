@@ -134,7 +134,7 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 
 | 概念 | 文献 | 与 Wenflow 的关系 |
 |---|---|---|
-| 工作记忆容量 4±1 | Cowan (2010) *The magical mystery four*（[DOI 10.1177/0963721410370094](https://doi.org/10.1177/0963721410370094)） | 支撑 `teaching-turn.yaml`"knowledge.points 最多输出 5 个、单焦点主讲"与回复形态预算 |
+| 工作记忆容量 4±1 | Cowan (2010) *The magical mystery four*（[DOI 10.1177/0963721409359277](https://doi.org/10.1177/0963721409359277)） | 支撑 `teaching-turn.yaml`"knowledge.points 最多输出 5 个、单焦点主讲"与回复形态预算 |
 | 幂律遗忘 / Base-Level Activation | Anderson & Schooler (1991)（[DOI 10.1111/j.1467-9280.1991.tb00174.x](https://doi.org/10.1111/j.1467-9280.1991.tb00174.x)） | M2 记忆引擎 `backend/src/services/memory/actr.ts` 的直接数学基础 |
 | 间隔效应 / 遗忘曲线 | Ebbinghaus (1885)；Cepeda et al. (2006) 荟萃（[DOI 10.1037/0033-2909.132.3.354](https://doi.org/10.1037/0033-2909.132.3.354)）；Cepeda et al. (2008)（[DOI 10.1111/j.1467-9280.2008.02209.x](https://doi.org/10.1111/j.1467-9280.2008.02209.x)） | M2 间隔规则（目标保留期 15%）与复习调度设计依据 |
 | 多巴胺奖励预测误差 | Schultz (1997) *A neural substrate of prediction and reward*（[DOI 10.1126/science.275.5306.1593](https://doi.org/10.1126/science.275.5306.1593)） | XP/成就/streak 游戏化的神经基础；与 SDT 内在动机保护需平衡 |

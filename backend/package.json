@@ -74,7 +74,8 @@
     "prisma:baseline:adopt": "ts-node src/scripts/adopt-prisma-baseline.ts --apply",
     "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
     "prisma:studio": "prisma studio",
-    "prisma:validate": "prisma validate --schema prisma/schema.prisma && prisma validate --schema prisma/system/schema.prisma"
+    "prisma:validate": "prisma validate --schema prisma/schema.prisma && prisma validate --schema prisma/system/schema.prisma",
+    "telemetry:guards": "ts-node src/scripts/audit-telemetry-guards.ts"
   },
   "keywords": [
     "ai",
