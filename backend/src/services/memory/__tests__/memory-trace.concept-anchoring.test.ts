@@ -152,5 +152,7 @@ describe('applyKtEstimate 走同一条键控契约', () => {
     expect(mockCreate.mock.calls[0][0].data.conceptId).toBe('cpt_canonical_1')
     expect(mockCreate.mock.calls[1][0].data.conceptId).toBeNull()
     expect(mockCreate.mock.calls[1][0].data.source).toBe('kt-estimate')
+    // #59/#60 第 3 条：masteryScore 落 KT 估计值，不再用 0.3 冒充「学过一半」
+    expect(mockCreate.mock.calls[0][0].data.masteryScore).toBe(0.8)
   })
 })

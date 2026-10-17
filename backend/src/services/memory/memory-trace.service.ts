@@ -578,14 +578,17 @@ class MemoryTraceService {
           data: { ktMasteryEma: ema, ...(conceptId !== null ? { conceptId } : {}) },
         });
       } else {
-        // 无痕迹也记录 EMA（独立于 ACT-R/FSRS 调度的知识状态通道）
+        // 无痕迹也记录 EMA（独立于 ACT-R/FSRS 调度的知识状态通道）。
+        // #59/#60 第 3 条：masteryScore 不再硬编码 0.3（会把「没学过」冒充成「学过一半」，
+        // 并被 fragile 判定当成低分证据）——落 KT 估计值本身；extractionCount=0 仍如实标着
+        // 「从未提取」，读侧据此把他当幽灵痕排除在掌握聚合外。
         await prisma.memory_traces.create({
           data: {
             id: `mt_${now.getTime()}_${Math.random().toString(36).slice(2, 10)}`,
             userId,
             conceptKey: key,
             conceptId,
-            masteryScore: 0.3,
+            masteryScore: mastery,
             stability: 'unknown',
             ktMasteryEma: mastery,
             extractionCount: 0,
