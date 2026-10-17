@@ -46,6 +46,9 @@ import {
   buildTeachingTurnContext,
   loadTeachTurnKnowledgeAssets,
   computeClosureDecision,
+  advanceLearnerDoneStreak,
+  shouldBreakClosureLoop,
+  LEARN_CLOSURE_LOOP_BREAK_TURNS,
   buildNextLearningState,
   auditGroundingCompliance,
   clampLearnerStateToJudgment,
@@ -988,6 +991,34 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           }
         });
         
+        // 收束循环熔断（2026-10-10 逐字稿评审）：学员连续 N 轮自评完成而教学系统不给收束信号
+        // → 按学员意愿结课。连击计数与 buildNextLearningState 的 taskRuntime.learnerDoneStreak 同口径。
+        const learnerDoneStreak = advanceLearnerDoneStreak(
+          taskRuntime.taskId === currentTask.id ? Number(taskRuntime.learnerDoneStreak) || 0 : 0,
+          closureDecision
+        );
+        const closureLoopBreak = shouldBreakClosureLoop(learnerDoneStreak);
+        if (closureLoopBreak) {
+          closureDecision = {
+            ...closureDecision,
+            canCompleteTask: true,
+            reason: `连续 ${learnerDoneStreak} 轮学员自评完成而教学系统未给收束信号，触发收束循环熔断，按学员意愿结课`,
+          };
+          logs.push({
+            timestamp: new Date().toISOString(),
+            phase: 'stage-transition',
+            details: {
+              output: {
+                action: 'closure-loop-break',
+                learnerDoneStreak,
+                threshold: LEARN_CLOSURE_LOOP_BREAK_TURNS,
+                currentTask: currentTask.title,
+                message: closureDecision.reason
+              }
+            }
+          });
+        }
+
         if (closureDecision.canCompleteTask) {
           await ctx.assertCurrentSessionLeaseOwned(sessionId);
           const endResult = await aiTeachingOrchestrator.endSession(
@@ -1017,7 +1048,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
             teachingRevision,
             closureDecision,
             finalizedAt: taskFinalizedAt,
-            completionSource: 'teacher-and-learner-feedback',
+            completionSource: closureLoopBreak ? 'learner-done-streak-break' : 'teacher-and-learner-feedback',
             error: null,
             updatedAt: taskFinalizedAt
           };
@@ -1289,6 +1320,46 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     };
   } catch (error: unknown) {
     const durationMs = Date.now() - startTime;
+    const outerFailureMessage = asErrorLike(error).message || '学习步骤执行失败';
+
+    // 非终局防线（2026-10-13 夜跑）：内层教学回合 catch 管不到的 LLM 调用点（真凶=785 行「模拟学员
+    // 回复」）此前任何失败都直落 persistLearningFailure 判终局——一次池轮换 404（账号池暂无可用账号
+    // 服务该模型）就让整节课不可续（两轨 33 次全断于此）。此处与内层 1113/1133/1157 分支同语义：
+    // 中止 / 模型抖动 / 上游突发一律**非终局暂停**，保留同一 task 与课堂，下一轮重新推进。
+    const abortLikeFailure = isAbortLikeLearnError(error);
+    const transientFailure = !abortLikeFailure
+      && (isTransientUpstreamLearnError(error) || isTeachingTurnHiccupError(error));
+    if (abortLikeFailure || transientFailure) {
+      logger.warn('[simulation-coordinator] Learn 步骤被非终局中断（可续跑）', {
+        sessionId,
+        error: outerFailureMessage,
+        abortLike: abortLikeFailure
+      });
+      await ctx.persistTeachingPauseMarker(
+        sessionId,
+        outerFailureMessage,
+        transientFailure ? { code: 'LEARN_UPSTREAM_TRANSIENT_PAUSED' } : {}
+      );
+      logs.push({
+        timestamp: new Date().toISOString(),
+        phase: 'teaching-interrupted',
+        durationMs,
+        details: {
+          error: outerFailureMessage,
+          output: {
+            action: transientFailure ? 'teaching-step-upstream-paused' : 'teaching-step-interrupted',
+            retryable: true
+          }
+        }
+      });
+      await ctx.addSessionLogs(sessionId, logs);
+      return {
+        success: false,
+        aiResponse: '教学回合暂时未能生成，已暂停本回合（可续跑）。',
+        logs,
+        error: outerFailureMessage
+      };
+    }
     
     logger.error('[simulation-coordinator] 学习步骤执行失败', {
       sessionId,

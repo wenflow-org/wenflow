@@ -36,6 +36,9 @@ import {
   demoteProfileKnownConcepts,
   reconcileKnowledgeBoardWithJudgment,
   evaluateJudgeCompletionGate,
+  advanceLearnerDoneStreak,
+  shouldBreakClosureLoop,
+  LEARN_CLOSURE_LOOP_BREAK_TURNS,
   LEARN_JUDGE_COMPLETION_MASTERY_THRESHOLD,
 } from '../simulation.learn.steps'
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory'
@@ -59,19 +62,21 @@ describe('P1-5 · computeClosureDecision 判决完成门', () => {
     expect(decision.learnerReady).toBe(true)
   })
 
-  it('sampledCorrectness=false → learnerReady=false，判 0.3 掌握不得结课', () => {
+  it('sampledCorrectness=false → 首轮不结课，但不再把 learnerReady 置 false（#46）', () => {
     const decision = computeClosureDecision(teacherDone, learnerDone, {
       sampledCorrectness: false,
       blockedConcept: '执行停—绕—留钩子降级',
       errorPattern: null,
       masteryProb: 0.3,
     })
-    expect(decision.learnerReady).toBe(false)
+    // 学员自评只取决于学员侧信号；判决只做有界否决
+    expect(decision.learnerReady).toBe(true)
+    expect(decision.judgeBlocked).toBe(true)
     expect(decision.canCompleteTask).toBe(false)
     expect(decision.reason).toContain('judge-sampled-correctness-false')
   })
 
-  it('判对但 masteryProb 低于阈值 → 同样拦截', () => {
+  it('判对但 masteryProb 低于阈值 → 首轮同样拦截', () => {
     const decision = computeClosureDecision(teacherDone, learnerDone, {
       sampledCorrectness: true,
       blockedConcept: null,
@@ -80,6 +85,20 @@ describe('P1-5 · computeClosureDecision 判决完成门', () => {
     })
     expect(decision.canCompleteTask).toBe(false)
     expect(decision.reason).toContain('judge-mastery-below-threshold')
+  })
+
+  it('#46：判决连续两轮不放行后，第三轮按双方意愿结课（有界否决）', () => {
+    const judge = {
+      sampledCorrectness: false,
+      blockedConcept: '收尾作业尚未完成',
+      errorPattern: null,
+      masteryProb: 0.3,
+    }
+    expect(computeClosureDecision(teacherDone, learnerDone, judge, 1).canCompleteTask).toBe(false)
+    const third = computeClosureDecision(teacherDone, learnerDone, judge, 2)
+    expect(third.canCompleteTask).toBe(true)
+    expect(third.judgeBlocked).toBe(true)
+    expect(third.reason).toContain('按双方意愿结课')
   })
 
   it('判对且掌握达标 → 放行', () => {
@@ -318,5 +337,34 @@ describe('P1-6 闭环 · demoteProfileKnownConcepts（画像 knownConcepts 定�
     mockPrisma.virtual_learner_profiles.findUnique.mockResolvedValue(null)
     const snapshot = await buildLearnerMemorySnapshot('u1')
     expect(snapshot.mastered).toEqual([])
+  })
+})
+
+describe('收束循环熔断（2026-10-10 逐字稿评审）· advanceLearnerDoneStreak / shouldBreakClosureLoop', () => {
+  const learnerDoneTeacherSilent = {
+    learnerReady: true,
+    canCompleteTask: false,
+  }
+
+  it('学员自评完成而教师未放行 → 连击递增；到 3 轮熔断', () => {
+    let streak = 0
+    streak = advanceLearnerDoneStreak(streak, learnerDoneTeacherSilent)
+    expect(streak).toBe(1)
+    expect(shouldBreakClosureLoop(streak)).toBe(false)
+    streak = advanceLearnerDoneStreak(streak, learnerDoneTeacherSilent)
+    expect(shouldBreakClosureLoop(streak)).toBe(false)
+    streak = advanceLearnerDoneStreak(streak, learnerDoneTeacherSilent)
+    expect(streak).toBe(LEARN_CLOSURE_LOOP_BREAK_TURNS)
+    expect(shouldBreakClosureLoop(streak)).toBe(true)
+  })
+
+  it('任一侧放行（双放行/教师放行）→ 连击清零', () => {
+    expect(advanceLearnerDoneStreak(2, { learnerReady: true, canCompleteTask: true })).toBe(0)
+    expect(advanceLearnerDoneStreak(2, { learnerReady: false, canCompleteTask: false })).toBe(0)
+  })
+
+  it('跨课换任务（priorStreak 传 0）从 1 起算；非法入参按 0 兜底', () => {
+    expect(advanceLearnerDoneStreak(0, learnerDoneTeacherSilent)).toBe(1)
+    expect(advanceLearnerDoneStreak(Number('NaN'), learnerDoneTeacherSilent)).toBe(1)
   })
 })

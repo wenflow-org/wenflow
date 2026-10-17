@@ -337,14 +337,14 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
   const fallbackFeedback = buildFeedbackFromState(learnerState, fallback.learnerFeedback.reason);
   const feedbackBlockers = normalizeStringArray(rawFeedback.remainingBlockers);
   const wantsMoreHelp = safeBool(rawFeedback.wantsMoreHelp, fallbackFeedback.wantsMoreHelp);
-  // P1-5：认知判决接入完成门——判决缺失时保持现状（宁松勿误伤，兼容 blackbox/quick-learn 无判决调用）；
-  // 判错（sampledCorrectness=false）或 masteryProb 低于阈值时强制 selfReportedTaskDone=false，
-  // 避免「判 0.3 掌握也能结课」。
+  // P1-5 / #46：认知判决保留为留痕与上游「有界否决」信号，但不再改写学员自评。
+  // 旧实现把 judgeGate 焊进 selfReportedTaskDone，判决一 false 学员就永远「没学完」，
+  // 连收束熔断的连击都数不起来（实测 29/29 轮判死、40 轮空转）。学员是否认为学完，
+  // 由学员自己的反馈决定；判决对结课的约束放在 computeClosureDecision 里做（有界否决）。
   const judgeGate = evaluateJudgeCompletionGate(input.epistemicGrounding);
   const selfReportedTaskDone = safeBool(rawFeedback.selfReportedTaskDone, fallbackFeedback.selfReportedTaskDone)
     && !wantsMoreHelp
-    && feedbackBlockers.length === 0
-    && judgeGate.allowsCompletion;
+    && feedbackBlockers.length === 0;
   const checkpointAnswer = normalizeCheckpointAnswer(parsed?.checkpointAnswer, input.pendingCheckpoint);
 
   return {

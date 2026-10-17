@@ -248,22 +248,22 @@ describe('virtual-learner-learn-turn-simulator · 判决完成门（P1-5 / VL-1�
     expect(output.debug?.judgeCompletionBlock).toBeUndefined()
   })
 
-  it('sampledCorrectness=false → 强制 selfReportedTaskDone=false，并留拦截原因', () => {
+  it('sampledCorrectness=false → 学员自评不被改写，但留拦截原因供上游有界否决（#46）', () => {
     const output = normalizeOutput(doneRaw, {
       ...input,
       epistemicGrounding: { sampledCorrectness: false, blockedConcept: '执行停—绕—留钩子降级', errorPattern: null, masteryProb: 0.3 },
     })
-    expect(output.learnerFeedback.selfReportedTaskDone).toBe(false)
-    expect(output.learnerFeedback.stopAsking).toBe(false)
+    expect(output.learnerFeedback.selfReportedTaskDone).toBe(true)
+    expect(output.learnerFeedback.stopAsking).toBe(true)
     expect(output.debug?.judgeCompletionBlock).toBe('judge-sampled-correctness-false')
   })
 
-  it('判对但 masteryProb 低于阈值 → 拦截（判 0.3 掌握不得结课）', () => {
+  it('判对但 masteryProb 低于阈值 → 自评保留，拦截原因留痕', () => {
     const output = normalizeOutput(doneRaw, {
       ...input,
       epistemicGrounding: { sampledCorrectness: true, blockedConcept: null, errorPattern: null, masteryProb: 0.3 },
     })
-    expect(output.learnerFeedback.selfReportedTaskDone).toBe(false)
+    expect(output.learnerFeedback.selfReportedTaskDone).toBe(true)
     expect(output.debug?.judgeCompletionBlock).toBe('judge-mastery-below-threshold')
   })
 
