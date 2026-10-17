@@ -18,6 +18,7 @@ function input(over: {
   fragile?: string[];
   struggling?: string[];
   severe?: string[];
+  mastered?: string[];
   lf?: number;
   lsb?: number;
   ktl?: number;
@@ -44,7 +45,8 @@ function input(over: {
         fragileConcepts: over.fragile ?? [],
         strugglingConcepts: over.struggling ?? [],
         severeStrugglingConcepts: over.severe ?? [],
-        masteredConcepts: [],
+        // #61：压缩需要掌握证据；默认给两条，专门的缺证据用例显式传空
+        masteredConcepts: over.mastered ?? ['概念A', '概念B'],
       },
       globalBackground: { blockedFoundations: over.fragile ?? [] },
       currentPath: {
@@ -103,6 +105,15 @@ describe('deriveReplanSignal 区分度', () => {
     expect(s.recommendation).toBe('accelerate');
   });
 
+  it('#61：负荷达标但没有任何掌握证据 → 不压缩，并留痕原因码', () => {
+    const s = deriveReplanSignal(input({
+      ktl: 7, lf: 2,
+      mastered: [],
+    }));
+    expect(s.recommendation).not.toBe('accelerate');
+    expect(s.reasonCodes).toContain('accelerate_blocked_no_mastery_evidence');
+  });
+
   it('F4：有高严重度卡点（<0.3）→ 不加速', () => {
     const s = deriveReplanSignal(input({
       ktl: 7, lf: 2,
@@ -156,9 +167,9 @@ describe('deriveReplanSignal 区分度', () => {
 
   // 2026-09-29：动作必须对准触发源。此前按「缺口/阻塞计数>0」挑派生动作，
   // 导致疲劳/失衡触发的高危也被配成 resequence——学习者拿到与自身状态无关的「重排路径」。
-  it('失衡（lsb<0）触发高危 → 降速，不是「重排后续路径」', () => {
+  it('失衡（form<0 且基座成熟）触发高危 → 降速，不是「重排后续路径」', () => {
     const s = deriveReplanSignal(input({
-      lsb: -1,
+      lf: 6, ktl: 5, // form = 5−6 = −1 < 0，ktl≥3 基座成熟 → 失衡
       // 同时存在脆弱点与 medium 缺口（每节课常态），但都不构成结构性风险
       fragile: ['a'],
       gaps: [{ label: 'b', severity: 'medium' }],
@@ -170,7 +181,7 @@ describe('deriveReplanSignal 区分度', () => {
 
   it('结构性缺口 + 失衡同时存在 → 结构性缺口优先（重排后续）', () => {
     const s = deriveReplanSignal(input({
-      lsb: -1,
+      lf: 6, ktl: 5, // 失衡
       gaps: [{ label: '分组键唯一性', severity: 'high' }],
     }));
     expect(s.recommendation).toBe('resequence');

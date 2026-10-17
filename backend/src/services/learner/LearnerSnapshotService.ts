@@ -145,6 +145,13 @@ export function deriveLearningControlState(input: {
 export const DEADLINE_PACE_BEHIND_CODE = 'deadline_pace_behind';
 export const DEADLINE_PACE_BEHIND_THRESHOLD = 0.2;
 
+/**
+ * 压缩（accelerate）所需的掌握证据数（#61）：压缩会砍掉后续课量，
+ * 只有「负荷轻」不够，还必须有实际学成的概念。2 是保守起步值——
+ * 一节课都没产出掌握的路径不该被建议压缩。
+ */
+export const MIN_MASTERED_FOR_ACCELERATE = 2;
+
 export interface DeadlinePaceJudgement {
   behind: boolean;
   /** 时间进度百分位（0..1，已过期取 1） */
@@ -276,10 +283,16 @@ export function deriveReplanSignal(input: {
   // 在饱和通道下生产不可达（全库 0 次「压缩」）。改**相对量门**：明显有余力（ACWR ≤ 0.6，
   // 对齐旧 `ktl>=6 && lf<=3`）+ 节奏非 recover + 无高严重度卡点。绝对 `ktl>=6 && lf<=3` 在 PMC
   // 日负荷口径下失效（量随课量放大，绝对上限无意义）。
-  const accelerateReady = globalVerdict.accelerateReady
+  // #61：压缩必须有**掌握证据**——「进度够」不等于「学会了」。此前只看负荷与卡点，
+  // 一节还没产出任何 mastered 证据的课也能建议压缩下一阶段。要求至少 2 个概念有掌握证据
+  // （globalSignals.masteredConcepts 由 code 裁决通过的检查点与会话知识状态聚合而来）。
+  const masteredEvidenceCount = (knowledgeMemory.globalSignals.masteredConcepts || []).length;
+  const accelerateGatesOk = globalVerdict.accelerateReady
     && dynamicState.metrics.ktl > 0
     && learningControlState.paceMode !== 'recover'
     && severeStrugglingCount === 0;
+  const accelerateReady = accelerateGatesOk && masteredEvidenceCount >= MIN_MASTERED_FOR_ACCELERATE;
+  if (accelerateGatesOk && !accelerateReady) reasonCodes.push('accelerate_blocked_no_mastery_evidence');
   // 路径已完成：下游没有可「重排/减速」的阶段，任何重规划建议都是空转。
   // 明确回 keep（保留 reasonCodes 供观测），不再进 accelerate/high/medium 分支。
   if (pathFullyComplete) {

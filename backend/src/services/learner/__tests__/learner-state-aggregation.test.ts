@@ -131,7 +131,7 @@ describe('getCurrentState 支持 asOf（PMC 读侧：行过滤按 asOf）', () =
 
 describe('deriveReplanSignal（层级对齐：加速资格不看"任一路径最近一课最难"）', () => {
   const knowledgeMemory = {
-    globalSignals: { fragileConcepts: [], strugglingConcepts: [], masteredConcepts: [] },
+    globalSignals: { fragileConcepts: [], strugglingConcepts: [], masteredConcepts: ['概念A', '概念B'] },
     globalBackground: { blockedFoundations: [] },
   } as any;
 
