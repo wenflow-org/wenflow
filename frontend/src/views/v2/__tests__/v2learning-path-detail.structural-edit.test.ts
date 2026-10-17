@@ -4,7 +4,7 @@
  * 只允许进行中的路径与未完成、已解锁的任务；已完成任务必须保持冻结（结算口径）。
  * 每次操作走 `learningAPI.applyStructuralEdit`，成功后静默刷新路径详情。
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
 const getPathDetail = vi.hoisted(() => vi.fn());
@@ -53,14 +53,25 @@ function payload(status = 'active') {
   };
 }
 
+let mounted: ReturnType<typeof mount> | null = null;
+
 async function mountDetail(status = 'active') {
   getPathDetail.mockResolvedValue(payload(status));
-  const w = mount(V2LearningPathDetail);
+  mounted = mount(V2LearningPathDetail, {
+    // router 被 mock 掉后 <router-link> 会变成未解析组件并持续打 warning，
+    // CI 上会以 EnvironmentTeardownError（console rpc 悬空）把 job 判红。
+    global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+  });
   await flushPromises();
-  return w;
+  return mounted;
 }
 
 describe('V2LearningPathDetail 任务微调', () => {
+  afterEach(() => {
+    mounted?.unmount();
+    mounted = null;
+  });
+
   beforeEach(() => {
     getPathDetail.mockReset();
     applyStructuralEdit.mockReset();
