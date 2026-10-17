@@ -3,9 +3,11 @@
  */
 import {
   MAX_MATERIAL_REFS,
+  assessMaterialCoverage,
   describeMaterialRef,
   isQuoteVerbatim,
   normalizeMaterialRefs,
+  summarizeSectionRefPositions,
 } from '../material-refs';
 import type { PromptMaterial } from '../material-prompt-projection';
 
@@ -147,5 +149,54 @@ describe('describeMaterialRef（前端标签）', () => {
     const label = describeMaterialRef({ packIndex: 0, materialId: null, sectionId: null, sectionTitle: null, quote: '一二三四五六七八九十一二三四五六七八九十一二三四五六' });
     expect(label.length).toBeLessThanOrEqual(25);
     expect(label.endsWith('…')).toBe(true);
+  });
+});
+
+describe('summarizeSectionRefPositions（运行期覆盖守卫）', () => {
+  it('统计条数与章节序号范围', () => {
+    expect(summarizeSectionRefPositions([
+      { sectionId: 's-2' },
+      { sectionId: 's-17' },
+      { sectionId: 's-9' },
+    ])).toEqual({ count: 3, minSection: 2, maxSection: 17 });
+  });
+
+  it('无引用 / 非数组 / 无 sectionId → count=0 且范围为空（零引用缺口可被记录）', () => {
+    expect(summarizeSectionRefPositions([])).toEqual({ count: 0, minSection: null, maxSection: null });
+    expect(summarizeSectionRefPositions(null)).toEqual({ count: 0, minSection: null, maxSection: null });
+    expect(summarizeSectionRefPositions([{ sectionId: null }, { quote: 'x' }, { sectionId: 'chapter-1' }]))
+      .toEqual({ count: 0, minSection: null, maxSection: null });
+  });
+
+  it('忽略非法序号，不把 s-0 / s-x 算进范围', () => {
+    expect(summarizeSectionRefPositions([{ sectionId: 's-0' }, { sectionId: 's-x' }, { sectionId: 's-4' }]))
+      .toEqual({ count: 1, minSection: 4, maxSection: 4 });
+  });
+});
+
+describe('assessMaterialCoverage（全路径覆盖体检）', () => {
+  const stage = (stageNumber: number, refs: number, maxSection: number | null) => ({
+    stageNumber, refs, minSection: refs > 0 ? 1 : null, maxSection,
+  });
+
+  it('引用覆盖到资料后部 → lowCoverage=false', () => {
+    const result = assessMaterialCoverage([stage(1, 5, 8), stage(2, 4, 16), stage(3, 3, 24)], 24);
+    expect(result).toEqual({ zeroRefStages: [], maxSection: 24, lowCoverage: false });
+  });
+
+  it('零引用阶段被点名（cpa/mbsr 末阶段的缺口形态）', () => {
+    const result = assessMaterialCoverage([stage(1, 5, 8), stage(2, 3, 12), stage(3, 0, null), stage(4, 0, null)], 24);
+    expect(result.zeroRefStages).toEqual([3, 4]);
+    expect(result.lowCoverage).toBe(true);
+  });
+
+  it('阶段数 <3 或资料 <9 节时不做「后半」判定（避免小资料误报）', () => {
+    expect(assessMaterialCoverage([stage(1, 2, 2), stage(2, 2, 4)], 24).lowCoverage).toBe(false);
+    expect(assessMaterialCoverage([stage(1, 1, 2), stage(2, 1, 3), stage(3, 1, 4)], 6).lowCoverage).toBe(false);
+  });
+
+  it('全零引用 → maxSection=null，仍点名全部阶段', () => {
+    const result = assessMaterialCoverage([stage(1, 0, null), stage(2, 0, null), stage(3, 0, null)], 24);
+    expect(result).toEqual({ zeroRefStages: [1, 2, 3], maxSection: null, lowCoverage: false });
   });
 });

@@ -7,12 +7,14 @@
  */
 import prisma from '../../../config/database';
 import { withTransaction } from '../../../utils/with-transaction';
+import { logger } from '../../../utils/logger';
 import { executeSkill } from '../../../skills';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/context';
 import { assertGenerationRunFence, assertStageTasksPresent } from '../path-generation-status';
 import { clampStageTasksToHints } from '../path-planning-hints';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS } from '../../materials/material-prompt-projection';
+import { summarizeSectionRefPositions } from '../../materials/material-refs';
 import {
   assertPathMutationSafe,
   buildPathReplanSnapshot,
@@ -287,6 +289,22 @@ async function redesignMilestoneTasks(
   );
   assertStageTasksPresent(milestone.stageNumber, newTasks);
 
+  // 重排后的资料覆盖守卫（2026-10-17）：有资料却零引用只告警，不自动补引用。
+  // 与生成链同口径，保证「一旦微调就断链」的缺口在重排时也能被看见。
+  const replanMaterialSummary = stageMaterials
+    ? summarizeSectionRefPositions(
+        (newTasks as any[]).flatMap((task: any) => (Array.isArray(task?.materialRefs) ? task.materialRefs : [])),
+      )
+    : null;
+  if (stageMaterials && replanMaterialSummary && replanMaterialSummary.count === 0) {
+    logger.warn('[stage-material-window] 重排后本阶段有资料但零引用', {
+      pathId: path.id,
+      stageNumber: milestone.stageNumber,
+      stageCount: (path.milestones || []).length,
+      taskCount: newTasks.length,
+    });
+  }
+
   // 新任务的可调整性（动态规划）：随模板 sidecar 落库，供后续重排继续保护骨干。
   // 事务可能整体重试 → 在事务内重置，避免重复累加。
   const newAdjustabilityByTask: Record<string, 'core' | 'flexible'> = {};
@@ -422,6 +440,7 @@ async function redesignMilestoneTasks(
               },
               redesignedAt: new Date().toISOString(),
               redesignReason: data.reason || null,
+              ...(replanMaterialSummary ? { materialCoverage: replanMaterialSummary } : {}),
               ...(eventRunTotal > 1 ? { rangeDesign: true } : {}),
             }
           },

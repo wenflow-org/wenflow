@@ -23,6 +23,7 @@ import { buildAnchorGoalNote } from './school-anchor-goal';
 import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS } from '../../materials/material-prompt-projection';
+import { summarizeSectionRefPositions, assessMaterialCoverage } from '../../materials/material-refs';
 import type { PreviousStageOutcome } from './progressive-design';
 import {
   assertGenerationRunFence,
@@ -267,6 +268,15 @@ async function enrichLearningPathWithAndersonInner(
         : {}),
     };
     const stageDesignRawOutputs: Record<string, any> = {};
+    // 资料覆盖审计（2026-10-17）：每阶段「几条引用、覆盖到第几节」。
+    // 20 goal 复核发现 cpa/mbsr 的末阶段有资料却零引用，而旧日志只在有引用时输出，
+    // 缺口完全不可见。这里落进模板 _generation.materialCoverage，供运维/复算直接读取。
+    const stageMaterialAudit: Array<{
+      stageNumber: number;
+      refs: number;
+      minSection: number | null;
+      maxSection: number | null;
+    }> = [];
     const stageDesignOutputs: Array<{
       milestoneId: string;
       stageNumber: number;
@@ -468,25 +478,37 @@ async function enrichLearningPathWithAndersonInner(
         }
       }
       assertStageTasksPresent(milestone.stageNumber, stageTasks);
-      // 引用位置观测（2026-10-17 阶段窗口）：本阶段实际引用了哪些章节、落在文档的哪个位置。
-      // 只记事实不阻断——A/B 复算时据此判断「窗口是否真的把引用带到后文」。
+      // 引用覆盖守卫（2026-10-17）：有资料却零引用 = 本阶段任务没有长在资料上
+      //（20 goal 复核实证：cpa/mbsr 末阶段）。只记录/告警，**不自动补引用**——
+      // 系统替模型绑一条不可核对的引用，比缺引用更糟（学习者点开原文会发现对不上）。
       if (stageMaterials) {
-        const sectionOrdinals = stageTasks
-          .flatMap((task: any) => (Array.isArray(task?.materialRefs) ? task.materialRefs : []))
-          .map((ref: any) => {
-            const match = /^s-(\d+)$/.exec(String(ref?.sectionId || ''));
-            return match ? Number(match[1]) : null;
-          })
-          .filter((value: number | null): value is number => value !== null);
-        if (sectionOrdinals.length > 0) {
+        const stageMaterialSummary = summarizeSectionRefPositions(
+          stageTasks.flatMap((task: any) => (Array.isArray(task?.materialRefs) ? task.materialRefs : [])),
+        );
+        stageMaterialAudit.push({
+          stageNumber: milestone.stageNumber,
+          refs: stageMaterialSummary.count,
+          minSection: stageMaterialSummary.minSection,
+          maxSection: stageMaterialSummary.maxSection,
+        });
+        if (stageMaterialSummary.count === 0) {
+          logger.warn('[stage-material-window] 本阶段有资料但零引用（任务未长在资料上）', {
+            runId,
+            pathId,
+            stageNumber: milestone.stageNumber,
+            stageCount: learningPath.milestones.length,
+            materials: stageMaterials.length,
+            taskCount: stageTasks.length,
+          });
+        } else {
           logger.info('[stage-material-window] 本阶段资料引用位置', {
             runId,
             pathId,
             stageNumber: milestone.stageNumber,
             stageCount: learningPath.milestones.length,
-            refs: sectionOrdinals.length,
-            minSection: Math.min(...sectionOrdinals),
-            maxSection: Math.max(...sectionOrdinals),
+            refs: stageMaterialSummary.count,
+            minSection: stageMaterialSummary.minSection,
+            maxSection: stageMaterialSummary.maxSection,
           });
         }
       }
@@ -545,6 +567,33 @@ async function enrichLearningPathWithAndersonInner(
         .map((_, index) => index)
         .slice(batchStart, batchStart + STAGE_DESIGN_CONCURRENCY);
       await Promise.all(batchIndexes.map(processStageDesign));
+    }
+
+    // 全路径覆盖体检（只告警）：阶段数 ≥3、资料 ≥9 节，但所有引用都停在文档前半，
+    // 或存在零引用阶段 ⇒ 生成当下就能看见缺口（报告里「后半引用 0」的运行期对应物），
+    // 而不是等 A/B 复算才发现。不阻断、不改写模型输出。
+    if (stageMaterialAudit.length >= 3) {
+      const primarySectionTotal = Number(
+        (normalizedInput as any)?.resources?.materials?.[0]?.pack?.sections?.length
+        || (normalizedInput as any)?.materials?.[0]?.pack?.sections?.length
+        || 0,
+      );
+      const coverage = assessMaterialCoverage(stageMaterialAudit, primarySectionTotal);
+      if (coverage.lowCoverage) {
+        logger.warn('[stage-material-window] 全路径引用未覆盖资料后半', {
+          pathId,
+          primarySectionTotal,
+          maxSection: coverage.maxSection,
+          stages: stageMaterialAudit.length,
+        });
+      }
+      if (coverage.zeroRefStages.length > 0) {
+        logger.warn('[stage-material-window] 存在零引用阶段', {
+          pathId,
+          zeroRefStages: coverage.zeroRefStages,
+          stageCount: stageMaterialAudit.length,
+        });
+      }
     }
 
     // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图，
@@ -959,6 +1008,19 @@ async function enrichLearningPathWithAndersonInner(
               sourceConversationId: data.sourceConversationId || null,
               triggerSource,
               ...(progressive ? { progressive: true } : {}),
+              ...(stageMaterialAudit.length
+                ? {
+                    // 资料覆盖审计（2026-10-17）：逐阶段引用条数与章节序号范围 + 零引用阶段。
+                    // 与 A/B 的「后半引用」同源，运维/复算可直接读，不需再跑探针。
+                    materialCoverage: {
+                      stages: [...stageMaterialAudit].sort((a, b) => a.stageNumber - b.stageNumber),
+                      zeroRefStages: stageMaterialAudit
+                        .filter((item) => item.refs === 0)
+                        .map((item) => item.stageNumber)
+                        .sort((a, b) => a - b),
+                    },
+                  }
+                : {}),
               updatedAt: new Date().toISOString()
             }
           }),

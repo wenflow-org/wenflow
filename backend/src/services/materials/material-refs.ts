@@ -127,3 +127,74 @@ export function describeMaterialRef(ref: MaterialRef): string {
   if (ref.sectionTitle) return ref.sectionTitle;
   return ref.quote.length > 24 ? `${ref.quote.slice(0, 24)}…` : ref.quote;
 }
+
+/**
+ * 引用列表 → 章节序号覆盖摘要（运行期守卫用，纯函数）。
+ *
+ * 为什么需要：20 goal 复核发现 cpa/mbsr 的末阶段**有资料却一条引用都没写**，
+ * 而日志只在有引用时输出，缺口完全不可见。这里把「几条、覆盖到第几节」变成
+ * 可记录/可告警的事实（只观测，不补写引用——自动绑定会制造不可核对的伪引用）。
+ */
+export function summarizeSectionRefPositions(refs: unknown): {
+  count: number;
+  minSection: number | null;
+  maxSection: number | null;
+} {
+  const ordinals: number[] = [];
+  if (Array.isArray(refs)) {
+    for (const ref of refs) {
+      const sectionId = typeof (ref as { sectionId?: unknown })?.sectionId === 'string'
+        ? String((ref as { sectionId?: string }).sectionId)
+        : '';
+      if (!/^s-\d+$/.test(sectionId)) continue;
+      const ordinal = Number(sectionId.slice(2));
+      if (Number.isFinite(ordinal) && ordinal > 0) ordinals.push(ordinal);
+    }
+  }
+  return {
+    count: ordinals.length,
+    minSection: ordinals.length ? Math.min(...ordinals) : null,
+    maxSection: ordinals.length ? Math.max(...ordinals) : null,
+  };
+}
+
+export interface MaterialCoverageStage {
+  stageNumber: number;
+  refs: number;
+  minSection: number | null;
+  maxSection: number | null;
+}
+
+export interface MaterialCoverageAssessment {
+  /** 有资料但零引用的阶段（按序号升序）。 */
+  zeroRefStages: number[];
+  /** 全路径引用触达的最大章节序号；无引用时为 null。 */
+  maxSection: number | null;
+  /** 阶段数 ≥3、资料 ≥9 节，但所有引用都停在文档前半（运行期「后半覆盖」缺口）。 */
+  lowCoverage: boolean;
+}
+
+/**
+ * 全路径资料覆盖体检（纯函数，运行期告警用）。
+ * 只判断「缺口是否存在」，不做任何补写——引用必须逐字可核对，系统不能替模型编。
+ */
+export function assessMaterialCoverage(
+  stages: MaterialCoverageStage[],
+  totalSections: number
+): MaterialCoverageAssessment {
+  const list = Array.isArray(stages) ? stages : [];
+  const zeroRefStages = list
+    .filter((stage) => Number(stage?.refs) === 0)
+    .map((stage) => Number(stage?.stageNumber))
+    .filter((stageNumber) => Number.isFinite(stageNumber))
+    .sort((a, b) => a - b);
+  const sections = list
+    .filter((stage) => Number(stage?.refs) > 0 && stage?.maxSection !== null && Number.isFinite(Number(stage?.maxSection)))
+    .map((stage) => Number(stage.maxSection));
+  const maxSection = sections.length ? Math.max(...sections) : null;
+  const lowCoverage = list.length >= 3
+    && Number(totalSections) >= 9
+    && maxSection !== null
+    && maxSection <= Number(totalSections) / 2;
+  return { zeroRefStages, maxSection, lowCoverage };
+}
