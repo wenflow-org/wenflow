@@ -100,3 +100,22 @@ describe('LearnerKnowledgeMemoryService · fragile 证据门（#59/#60）', () =
     expect(memory.globalSignals.fragileConcepts).toContain('已到期');
   });
 });
+
+describe('LearnerKnowledgeMemoryService · 机器 slug 过滤（#59/#60 第 4 条）', () => {
+  it('下划线/连字符 slug 与命名空间键不进概念集合；带空格的英文名仍保留', async () => {
+    const memory = await build([
+      trace({ conceptKey: 'rubric_document_alignment', label: 'rubric_document_alignment', masteryScore: 0.2, stability: 'fragile' }),
+      trace({ conceptKey: 'reliability_vs_validity', label: 'reliability_vs_validity', masteryScore: 0.2, stability: 'fragile' }),
+      trace({ conceptKey: 'intrinsic-vs-extrinsic-motivation', label: 'intrinsic-vs-extrinsic-motivation', masteryScore: 0.2, stability: 'fragile' }),
+      trace({ conceptKey: 'skill:teaching-turn', label: 'skill:teaching-turn', masteryScore: 0.2, stability: 'fragile' }),
+      trace({ conceptKey: 'supply and demand', label: 'supply and demand', masteryScore: 0.9, stability: 'stable' }),
+    ]);
+    const keys = (memory.currentPath?.conceptStates ?? []).map((c) => c.conceptKey);
+    expect(keys).not.toContain('rubric_document_alignment');
+    expect(keys).not.toContain('reliability_vs_validity');
+    expect(keys).not.toContain('intrinsic-vs-extrinsic-motivation');
+    expect(keys).not.toContain('skill:teaching-turn');
+    expect(keys).toContain('supply and demand');
+    expect(memory.globalSignals.fragileConcepts).toEqual([]);
+  });
+});

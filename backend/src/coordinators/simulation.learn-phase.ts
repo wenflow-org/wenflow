@@ -621,7 +621,23 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           ? taskRuntime.teachingRevision
           : (typeof learningState.teachingRevision === 'number' ? learningState.teachingRevision : undefined);
         if (teachingSessionId) {
-          await aiTeachingOrchestrator.endSession(teachingSessionId, 'task-completed', teachingRevision).catch(() => {});
+          await aiTeachingOrchestrator.endSession(teachingSessionId, 'task-completed', teachingRevision).catch(async (endError: unknown) => {
+            // #46：旧实现静默吞掉——教学会话收束失败时任务已 completed，留下永久 active 的孤儿会话
+            // （wrapup / 证据 / FSRS 全缺）。这里留痕，并去掉 revision 乐观锁重试一次（revision 被
+            // 并发回合推进是这类失败的主因）。
+            logger.warn('[simulation-coordinator] timebox-skip endSession 失败，去除 revision 重试', {
+              sessionId,
+              teachingSessionId,
+              error: asErrorLike(endError).message || String(endError),
+            });
+            await aiTeachingOrchestrator.endSession(teachingSessionId, 'task-completed').catch((retryError: unknown) => {
+              logger.warn('[simulation-coordinator] timebox-skip endSession 重试仍失败（孤儿会话待对账）', {
+                sessionId,
+                teachingSessionId,
+                error: asErrorLike(retryError).message || String(retryError),
+              });
+            });
+          });
         }
       } catch (error: unknown) {
         logger.warn('[simulation-coordinator] timebox-skip endSession 失败（不阻断跳课）', {

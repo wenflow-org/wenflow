@@ -60,6 +60,15 @@ function clamp(value: number, min: number, max: number) {
  */
 const PLACEHOLDER_CONCEPT_KEY_RE = /^concept-\d+$/i;
 
+/**
+ * 机器 slug 不是概念身份（#59/#60 第 4 条）：模型常把分析用语写成
+ * `rubric_document_alignment` / `reliability_vs_validity` / `intrinsic-vs-extrinsic-motivation`
+ * 这类全 ASCII + 下划线/连字符的键，它们在名单里既不可读也无法与中文概念归并。
+ * 只过滤「全 ASCII 且带分隔符」的形态：人类英文概念名通常带空格（`supply and demand`），不受影响。
+ */
+const MACHINE_SLUG_RE = /^[A-Za-z0-9]+(?:[_-][A-Za-z0-9]+)+$/;
+const NAMESPACED_KEY_RE = /^[A-Za-z0-9]+(?::[A-Za-z0-9_-]+)+$/;
+
 /** 卡点判定线（2026-10-15 F3/F4 定档）：证据均分低于它算「卡点」。 */
 export const STRUGGLING_MASTERY_THRESHOLD = 0.55;
 /** 高严重度卡点线：低于它才允许触发「压缩/加速」这类减法动作（struggling 常态档挡不住它们）。 */
@@ -75,7 +84,13 @@ export const FRAGILE_MIN_EXTRACTIONS = 3;
 export const FRAGILE_STALE_DAYS = 7;
 
 function isRealConceptKey(key: unknown): key is string {
-  return typeof key === 'string' && key.trim().length > 0 && !PLACEHOLDER_CONCEPT_KEY_RE.test(key.trim());
+  if (typeof key !== 'string') return false;
+  const trimmed = key.trim();
+  if (!trimmed) return false;
+  if (PLACEHOLDER_CONCEPT_KEY_RE.test(trimmed)) return false;
+  if (MACHINE_SLUG_RE.test(trimmed)) return false;
+  if (NAMESPACED_KEY_RE.test(trimmed)) return false;
+  return true;
 }
 
 function normalizeConceptKey(value: string | null | undefined): string | null {
