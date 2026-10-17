@@ -43,8 +43,17 @@ export function installRafStallFallback(stallMs = 250): () => void {
       pending.delete(id);
       callback(performance.now());
     };
-    const timer = window.setTimeout(() => {
-      if (Date.now() - lastFrameAt >= stallMs) fire();
+    const timer = window.setTimeout(function check() {
+      if (fired) return;
+      // 定时器可能在 stallMs 边界上提前一两毫秒触发（CI 实测有）——单次判死会永久挂起回调，
+      // 因此未达阈值时按剩余时间续排，直到真正满足条件或被原生帧放行。
+      const stalledFor = Date.now() - lastFrameAt;
+      if (stalledFor >= stallMs) {
+        fire();
+        return;
+      }
+      const entry = pending.get(id);
+      if (entry) entry.timer = window.setTimeout(check, Math.max(5, stallMs - stalledFor));
     }, stallMs);
     pending.set(id, { fire, timer });
     origRaf(fire);
