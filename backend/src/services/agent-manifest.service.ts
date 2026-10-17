@@ -131,7 +131,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     aliases: ['goal-conversation-agent', 'goal-conversation'],
     ioContractVersion: 'agent-output-v1',
     // 与 prompts/skill.goal-conversation.md 及 handler codeDefaults 对齐（仅展示/兜底，权威在 ACTIVE prompt）
-    defaultModelConfig: { temperature: 0.7, maxTokens: 32000 }
+    defaultModelConfig: { temperature: 0.7, maxTokens: 64000 }
   },
 
   // ============ Path 下辖 Skills ============
@@ -145,7 +145,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Path',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.2, maxTokens: 32000 }
+    defaultModelConfig: { temperature: 0.2, maxTokens: 64000 }
   },
   {
     id: 'skill:stage-designer',
@@ -157,7 +157,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Path',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.3, maxTokens: 32000 }
+    defaultModelConfig: { temperature: 0.3, maxTokens: 64000 }
   },
   {
     id: 'skill:path-reviewer',
@@ -354,7 +354,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 32000 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 64000 }
   },
   {
     id: 'skill:virtual-learner-scenario-designer',
@@ -366,7 +366,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.9, maxTokens: 32000 }
+    defaultModelConfig: { temperature: 0.9, maxTokens: 64000 }
   },
   {
     id: 'skill:virtual-learner-goal-dialogue-simulator',
@@ -378,7 +378,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 32000 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 64000 }
   },
   {
     id: 'skill:virtual-learner-path-evaluator',
@@ -390,7 +390,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 32000 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 64000 }
   },
   {
     id: 'skill:virtual-learner-learn-turn-simulator',
@@ -402,7 +402,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Simulation',
     ioContractVersion: 'agent-output-v1',
-    defaultModelConfig: { temperature: 0.8, maxTokens: 32000 }
+    defaultModelConfig: { temperature: 0.8, maxTokens: 64000 }
   },
   {
     id: 'skill:virtual-learner-epistemic-grounding',

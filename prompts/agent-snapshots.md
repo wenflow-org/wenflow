@@ -186,6 +186,7 @@ sandbox:path-agent.path.summary
 sandbox:path-agent.pathStageMap
 sandbox:path-agent.planningHints
 sandbox:path-agent.previousMilestone
+sandbox:path-agent.previousStageOutcome
 sandbox:path-agent.repairHints
 sandbox:path-agent.replan
 sandbox:path-agent.schoolAnchor

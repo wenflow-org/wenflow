@@ -260,6 +260,8 @@ export function buildPathSandboxPool(
       normalizedInput: normalizedInputV1,
       replan: null, // goal→path 生成场景无 replan（replan 走 learn 链）
       previousMilestone: null, // stage-designer 通道，由 stage 链单独校验
+      // 动态规划（2026-10-17）：上一阶段真实学习信号，stage-designer 通道由 stage 链注入与校验
+      previousStageOutcome: null,
     },
   };
 }

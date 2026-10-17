@@ -1,9 +1,9 @@
 ---
 agentId: skill:session-wrapup
-coreHash: b516f2fb652ad803962610698342419692633e09f1e8b09644f9ef0bc747a70b
+coreHash: ac73c4cdc605e70899786d33a6bad9b34edaca24790167bc039d50245cb0e5e4
 coreVersion: 1
 temperature: 0.7
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: propagate
 ---
 

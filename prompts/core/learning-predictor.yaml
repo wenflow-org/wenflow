@@ -45,5 +45,5 @@ constraints:
   - stallRisk 与 predictedTone 必须自洽（如 stallRisk>0.7 时 predictedTone 不应是 smooth）
   - 预测要保守：不确定时往中间值靠，不极端
   - predictedTone/toneDetail 语义含「反复卡壳/吃力/受阻/放慢」时不得同时给出 smooth 基调；混合描述按非乐观侧定枚举
-params: { temperature: 0.2, maxTokens: 32000, failurePolicy: propagate }
+params: { temperature: 0.2, maxTokens: 64000, failurePolicy: propagate }
 deltaOutput: false

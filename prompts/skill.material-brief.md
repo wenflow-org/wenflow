@@ -1,9 +1,9 @@
 ---
 agentId: skill:material-brief
-coreHash: 9a88bb0e6511c5d4ce8a34e440814d1193b18d6b379494db3a36c3a1db618bb6
+coreHash: 162150b05de2a582f21a6b554a74d6ccead57097c9eb586615abee9874ab848b
 coreVersion: 1
 temperature: 0.2
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: retry
 ---
 

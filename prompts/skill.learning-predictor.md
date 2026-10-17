@@ -1,9 +1,9 @@
 ---
 agentId: skill:learning-predictor
-coreHash: 419e56f0ca7ae7393ee6e310de398f9206d6b7aaffe589baa9a7d5d48d0f47fc
+coreHash: 5147beab20a722ba4c3ebf0d38f1100ab002040def50405600daab67e979e81a
 coreVersion: 1
 temperature: 0.2
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: propagate
 ---
 

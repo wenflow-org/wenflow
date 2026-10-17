@@ -10,7 +10,7 @@ import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { normalizeMaterialRefs } from '../../services/materials/material-refs';
 import type { PromptMaterial } from '../../services/materials/material-prompt-projection';
 
-const STAGE_DESIGNER_MAX_TOKENS = 32000;
+const STAGE_DESIGNER_MAX_TOKENS = 64000;
 const STAGE_DESIGNER_TEMPERATURE = 0.3;
 
 // File-as-Truth：systemPrompt 以 prompts/skill.stage-designer.md 为唯一事实源（与其他 skill 一致），
@@ -30,6 +30,8 @@ export const stageDesignerDefinition: SkillDefinition = {
       cognitiveCore: { type: 'object', required: true },
       normalizedInput: { type: 'object' },
       repairHints: { type: 'object' },
+      previousStageOutcome: { type: 'object' },
+      supplementRequest: { type: 'object' },
     },
   },
   outputSchema: {
@@ -66,12 +68,23 @@ function normalizeTaskType(value: any): 'acquire' | 'deconstruct' | 'model' | 'e
   return 'execute';
 }
 
-function normalizeSubtasks(raw: any, fallbackConcept: string | null) {
+function normalizeAdjustability(value: any, taskType: ReturnType<typeof normalizeTaskType>): 'core' | 'flexible' {
+  if (value === 'core' || value === 'flexible') return value;
+  // 未标注时的确定性兜底：交付/收口/应用类任务是骨干，建立/拆解/诊断类可被压缩。
+  // 兜底与提示词规则同口径，保证旧输出（无 adjustability）也有可用的重排语义。
+  return taskType === 'acquire' || taskType === 'deconstruct' || taskType === 'diagnose'
+    ? 'flexible'
+    : 'core';
+}
+
+export function normalizeSubtasks(raw: any, fallbackConcept: string | null) {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((item: any) => ({
+    .map((item: any) => {
+      const taskType = normalizeTaskType(item?.type);
+      return {
       title: normalizeString(item?.title) || '阶段学习任务',
-      type: normalizeTaskType(item?.type),
+      type: taskType,
       // 下沿取 10：path-planning-hints 对"一节课量级"的路径给的是 subtaskMinutesRange=[10,15]，
       // 而规则 49 要求此时 estimatedMinutes 取该区间下沿——此前硬抬到 15，等于静默覆盖规则
       // （审计 P2「下沿不一致」）。地板仍保留，用来挡模型给出的荒谬小值。
@@ -89,6 +102,9 @@ function normalizeSubtasks(raw: any, fallbackConcept: string | null) {
         ? item.icapLevel
         : null,
       transferable: !!item?.transferable,
+      // 动态规划（2026-10-17）：任务级可调整性，重排压缩时据此保护骨干（core）、
+      // 优先删减 flexible。白名单归一必须带上，否则模型输出会被剥掉（与 materialRefs 同坑）。
+      adjustability: normalizeAdjustability(item?.adjustability, taskType),
       // 白名单归一**必须带上** materialRefs，否则任务级资料引用在此被丢掉
       // （随后由 withMaterialRefs 逐字核对；核对不过会在那里被删除）
       materialRefs: Array.isArray(item?.materialRefs) ? item.materialRefs : undefined,
@@ -104,7 +120,8 @@ function normalizeSubtasks(raw: any, fallbackConcept: string | null) {
             .filter((hint: { conceptKey: string; label: string }) => hint.conceptKey && hint.label)
             .slice(0, 2)
         : undefined,
-    }))
+      };
+    })
     .filter((item) => !!item.title);
 }
 
@@ -197,6 +214,12 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
             firstDeliverable: payload.firstDeliverable || null,
             successCriteria: payload.successCriteria || null,
             repairHints: payload.repairHints || null,
+            // 动态规划信号（2026-10-17）：上一阶段真实学习结果。此前 progressive 模式在
+            // stage-enrichment 里算出了 previousStageOutcome，但 skill 的载荷白名单没带它 →
+            // 信号在边界被静默丢弃（提示词侧从未见过）。同理补上 supplementRequest——
+            // 补课调用一直在传，提示词的 supplementRequest 规则却永远拿不到输入。
+            previousStageOutcome: payload.previousStageOutcome || null,
+            supplementRequest: payload.supplementRequest || null,
           }
         : {
             milestone: withLoadTargetForMilestone(payload.milestone, payload.cognitiveCore),
@@ -209,6 +232,8 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
             normalizedInput: stripNestedMaterials(payload.normalizedInput),
             materials: payload.materials || null,
             repairHints: payload.repairHints || null,
+            previousStageOutcome: payload.previousStageOutcome || null,
+            supplementRequest: payload.supplementRequest || null,
           }),
       normalizeOutput: (parsed, payload) => ({
         subtasks: withMaterialRefs(

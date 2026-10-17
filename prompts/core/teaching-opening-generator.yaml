@@ -76,5 +76,5 @@ constraints:
   - 开场交互块只允许一个「下一步」：quickReplies（动作出口）与 question（软引导）互斥，不得同时输出；message 也不再叠加行动指令——学生看到的第一屏只有一条行动线
   - message 与 question 必须互不相同，也不能让 question 重复 message 的原句
   - 不解释 mode 的定义，不输出分析过程，不输出任务验收结论
-params: { temperature: 0.4, maxTokens: 32000, failurePolicy: propagate }
+params: { temperature: 0.4, maxTokens: 64000, failurePolicy: propagate }
 deltaOutput: false

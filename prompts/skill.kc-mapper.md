@@ -1,9 +1,9 @@
 ---
 agentId: skill:kc-mapper
-coreHash: 93bd79a238047f75ef4b55848f74851559ae86c4d68dd4131b07d6ca23667aaf
+coreHash: 53573d965b5fb5d97be75b0e9ecdf99c3c989ee0369321a1d4b50060f2b64c9c
 coreVersion: 3
 temperature: 0.3
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: propagate
 ---
 

@@ -1,9 +1,9 @@
 ---
 agentId: skill:peer-reinforcement
-coreHash: 9608e99f93beca839754997a8d6acbd96366cc256adcae1e23a47c57fcc1520e
+coreHash: 506694a76d2c6f166bfa4958763c0ebc9107add8364e8397fcf009e666ced730
 coreVersion: 2
 temperature: 0.7
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: propagate
 ---
 

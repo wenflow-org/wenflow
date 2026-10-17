@@ -1,9 +1,9 @@
 ---
 agentId: skill:stage-designer
-coreHash: c7578ccfcda23e0a750041abad00fa1c6095224cf2165df87d3912d3ec201d63
+coreHash: 2754337c5edd3e09df4cde06c12bccba0ccfe3d059e02622a17ffc0012cf5afa
 coreVersion: 7
 temperature: 0.3
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: retry
 ---
 
@@ -28,6 +28,7 @@ failurePolicy: retry
 - 「supplementRequest（object?）」`sandbox:path.supplementRequest`（编排注入） — 补课调用（服务层检测到本阶段课数不足 targetSubtasksForStage 的 70% 时注入）：{needed, existing[{title,type}], minutesRange, stageNumber}。出现时只做增量补课，不重写既有任务
 - 「schoolAnchor（object?）」`sandbox:path.schoolAnchor`（编排注入） — 校内锚（学习者在读某套教材/考试体系时由服务层确定性抽取）：{textbook, examScope, schoolPace, evidence}。出现时阶段目标与课标题必须引用其中的册次/单元/考试范围，不得编造学习者没说过的教材细节；无该键则不做任何校内假设
 - 「pathStageMap（object?）」`sandbox:path.pathStageMap`（编排注入） — 全路径阶段地图（服务层注入）：{stageCount, currentStageNumber, stages[{stageNumber,title,estimatedHours}]}。出现时按「真实动作前置/跨阶段去重」规则使用它确定本阶段位次与全路径分工；无该键则不做跨阶段假设
+- 「previousStageOutcome（object?）」`sandbox:path.previousStageOutcome`（编排注入） — 上一阶段真实学习结果（动态规划信号，渐进式设计/阶段推进时由服务层注入）：{source, previousStageNumber, fragileConcepts[], strugglingConcepts[], prerequisiteGaps[], stillLearning[], recommendation?, reasonCodes?, fatigueRisk?, paceMode?}。这是**已发生的学习事实**而非建议：出现时按「学习信号驱动」规则调整本阶段坡度、补强位置与任务可调整性；无该键时按骨架设计，不假设上一阶段表现
 
 ## 执行规则
 
@@ -69,7 +70,10 @@ failurePolicy: retry
 36. 任务估时如实反映工作量，禁止全部等值或围绕单一数值（45 分钟模板化=机械切分）。需要分化时**优先把同质小任务合并成完整任务**（三个零散的『拆解X』合成一个『在真实需求上走完拆解』），而不是把大任务拆碎凑多样性——阶段任务数永远服从 targetSubtasksForStage/输出数量规则，不得为显得多样而超出
 37. 跨阶段去重（2026-10-02 审计模式7 实证：『Stage2-6 同义反复』）：pathStageMap 或 previousMilestone 已注入时，本阶段任何 subtask 不得与前序阶段任务同义（同一动作换个对象/换个说法）；对照 pathStageMap.stages 里的全部阶段标题，确保本阶段在整条路径中有**独立的能力增量**。前序出现过的动作类型，本阶段必须以新材料、新条件、更高难度或新产出物续接，且 description 里能看出与前一阶段的具体差异点
 38. 真实交付锚（2026-10-02 广度审计 Top1 实证：路径产出教材目录式任务清单，『路径名叫Java后端，但内容几乎没有Java』）：每个阶段的 subtasks 中安排 **1-2 个**「面向学习者目标场景的真实交付物」任务（能投出去的申请、能讲给人听的说法、能跑起来的一次操作、能做成的一个决定），其余任务仍是正常学习任务——不要求全部任务都产出交付物，满篇交付清单与满篇知识整理同样是错。
-39. 示范题/例题/真题引用必须自带题面（2026-10-06 R4 实测实证：rw-school6-09 全程引用从未展示的示范题——422 次提及、0 次展示）：凡在 subtask 的 title/description/acceptanceHint 里写到「示范题」「例题」「真题」「示范证明」「经典例题」这类引用，必须**在任务描述里直接给出具体题面**（已知条件 / 求证或求解目标 / 必要的图形文字说明——图形也要用文字写清），或**明确引用 materials 中实际存在的小节**（写清 sectionId 与章节标题，且该小节确实包含这道题/证明）；两者都做不到时**改写任务**——换成自足的可执行描述，或删掉该引用。**禁止**留"对照一道完整示范证明""参考一道例题""仿照真题"这类**没有主体的悬空引用**：学生与下游教学层拿不到题面，任务不可执行，验收也无从谈起
+39. 可调整性标注（2026-10-17 动态规划，必填）：每个 subtask 必须标注 `adjustability`（core|flexible）。**core = 本阶段不可省的骨干**——真实交付物任务、consolidate 收口、修补先修缺口的任务、milestone 目标成立的决定性动作；**flexible = 加速/压缩时可以被合并、删减或跳过的任务**——背景建立（acquire）、同族拆解（deconstruct）、非必要诊断（diagnose）与可选的迁移练习。约束：① 每个阶段至少 1 个 core；② consolidate 与真实交付物任务一律 core；③ 阶段任务 ≥4 时至少 1 个 flexible——**把整段都标成 core 等于本阶段没有可调整性**，会让后续重排只能整段重写；④ core 通常是少数骨干（1-3 个），不要把全部任务都标成 core
+40. 学习信号驱动（previousStageOutcome，动态规划）：出现该输入时它来自上一阶段真实学习记录，按事实处理——① `strugglingConcepts` / `stillLearning` 里的概念必须在本阶段**前段**安排 ≤2 个补强任务（紧跟在首个建立类任务之后、第一个 model/execute 之前），标 core，补的是这些概念本身而不是整段重讲；② `prerequisiteGaps` 必须先补再进新内容：缺口对应的任务排在第一个 model/execute 之前；③ `recommendation=accelerate`（掌握稳定且压力低）→ 减少 acquire/deconstruct 的数量与分钟、合并同族巩固，把省下的额度给迁移/真实交付任务，flexible 优先被压；④ `recommendation=reinforce|slow_down` → 不增加新概念密度（单任务新增概念 ≤1），保留 consolidate，必要时加 1 个 diagnose（core），不得靠"把原任务换说法多排几节"补强；⑤ `fatigueRisk=high` → 不安排高负荷长任务，拆成更短的单次可完成单元；⑥ 信号为空/缺失 → 按骨架设计，不假设上一阶段表现
+41. 重排可保留性（repairHints.preserveCoreTasks / repairHints.learnerReplanProjection，动态规划）：压缩（`replanRatio<1`）时被删减的应是 flexible 任务；`preserveCoreTasks` 列出的现有核心任务所承载的能力必须在新任务中保留（可合并表述，不得整体消失），真实交付物与 consolidate 永远保留。补强（`replanRatio>1`）时新增任务必须对准 `learnerReplanProjection.mastery` 的 fragile/struggling 概念或 `preserveCoreTasks` 暴露的薄弱环节，而不是把原阶段任务换说法重跑；已有完成任务的既得能力不得重教
+42. 示范题/例题/真题引用必须自带题面（2026-10-06 R4 实测实证：rw-school6-09 全程引用从未展示的示范题——422 次提及、0 次展示）：凡在 subtask 的 title/description/acceptanceHint 里写到「示范题」「例题」「真题」「示范证明」「经典例题」这类引用，必须**在任务描述里直接给出具体题面**（已知条件 / 求证或求解目标 / 必要的图形文字说明——图形也要用文字写清），或**明确引用 materials 中实际存在的小节**（写清 sectionId 与章节标题，且该小节确实包含这道题/证明）；两者都做不到时**改写任务**——换成自足的可执行描述，或删掉该引用。**禁止**留"对照一道完整示范证明""参考一道例题""仿照真题"这类**没有主体的悬空引用**：学生与下游教学层拿不到题面，任务不可执行，验收也无从谈起
 
 ## 输出字段
 
@@ -84,6 +88,7 @@ failurePolicy: retry
   "knowledgeType": "factual|conceptual|procedural|metacognitive",
   "cognitiveLevel": "remember|understand|apply|analyze|evaluate|create",
   "icapLevel": "active|constructive|interactive",
+  "adjustability": "core|flexible",
   "transferable": true,
   "materialRefs": [{ "packIndex": 0, "sectionId": "s-3", "quote": "逐字复制资料里的原文片段" }],
   "anticipatedMisconceptions": [{ "conceptKey": "概念id（与 linkedConcept 同源）", "label": "学习者对该概念最容易形成的一句错误理解", "why": "为什么会自然地这么错（一句话）" }]

@@ -1,9 +1,9 @@
 ---
 agentId: skill:teaching-opening-generator
-coreHash: 2728b7663e7167b6cf7e705a81a08c0191a177154b43676391de444c26522f30
+coreHash: b24c29c51e3f72f8bb2ab7e40c0bc0c135156e661de2fd22bf2632cfa07ed854
 coreVersion: 5
 temperature: 0.4
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: propagate
 ---
 

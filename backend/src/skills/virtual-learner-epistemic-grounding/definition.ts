@@ -25,7 +25,7 @@ export const virtualLearnerEpistemicGroundingRuntimeDefinition: RuntimeDefinitio
     },
   },
   capabilities: ['learner-epistemic-grounding', 'competency-bias-mitigation'],
-  defaultMaxTokens: 32000,
+  defaultMaxTokens: 64000,
   defaultTemperature: 0.3,
   source: 'code',
   managedByCode: true,

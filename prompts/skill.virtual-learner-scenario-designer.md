@@ -1,9 +1,9 @@
 ---
 agentId: skill:virtual-learner-scenario-designer
-coreHash: 627face7b7201a601427e334bd991bbaa56079b89a4530cb2549bf6e1b90f304
+coreHash: 1ba8a4ec7ccb2801b8d5aec8e21618fcb3aa1b7cb092b8afd9ef4ee6bc4040eb
 coreVersion: 1
 temperature: 0.9
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: retry
 ---
 

@@ -203,7 +203,7 @@ export function resolveLlmGenerationParams(
   //   - 未声明 → 模型 defaultMaxTokens，其次全局兜底
   //   - runtime-override 保持豁免（调试/低耗可显式调小；越界由调用方负责）
   // 旧实现把任何非 runtime-override 的声明值**无条件抬到模型硬上限**（deepseek=131072），
-  // 使 prompts/core/*.yaml 的 params.maxTokens（800~32000）全部失效。
+  // 使 prompts/core/*.yaml 的 params.maxTokens（800~64000）全部失效。
   if (maxTokens.source !== 'runtime-override') {
     const modelDef = model.value ? getModelDefinition(model.value) : undefined;
     if (maxTokens.value === undefined) {

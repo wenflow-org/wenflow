@@ -1,9 +1,9 @@
 ---
 agentId: skill:virtual-learner-memory-curator
-coreHash: 4e29b2b23dfd8cb57aebafbb20c94d7f95e2008d53f4340aff552ae1aae8c99f
+coreHash: bae4363fe2296d3616aa93a72ba166282a14a886739a63b2ec27ac920cf51e7a
 coreVersion: 1
 temperature: 0.3
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: propagate
 ---
 

@@ -617,6 +617,9 @@ async function enrichLearningPathWithAndersonInner(
     const materialRefsByTask: Record<string, any[]> = {};
     // 任务级迷思预判收集（key = subtaskId；同 sidecar 模式，2026-09-26 课前注入）
     const misconceptionHintsByTask: Record<string, any[]> = {};
+    // 任务级可调整性收集（key = subtaskId；动态规划，2026-10-17）：
+    // 重排/压缩时据此保护核心骨干（core）、优先删减可调整任务（flexible）。
+    const adjustabilityByTask: Record<string, 'core' | 'flexible'> = {};
 
     // 概念身份预解析（canonical，best-effort）：**必须在事务外**——SQLite 下事务持有写锁，
     // 事务内再写 concepts/aliases 会撞锁。设计：doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §3.4
@@ -656,6 +659,7 @@ async function enrichLearningPathWithAndersonInner(
       // 同理：资料引用收集器声明在事务外，重试不清空会把上一次尝试的条目累加进模板
       for (const key of Object.keys(materialRefsByTask)) delete materialRefsByTask[key];
       for (const key of Object.keys(misconceptionHintsByTask)) delete misconceptionHintsByTask[key];
+      for (const key of Object.keys(adjustabilityByTask)) delete adjustabilityByTask[key];
       await assertGenerationRunFence(tx, pathId, runId);
       const lockedPath = await tx.learning_paths.updateMany({
         where: { id: pathId, activeGenerationRunId: runId },
@@ -704,6 +708,8 @@ async function enrichLearningPathWithAndersonInner(
             || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
 
           const subtaskId = `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${j}`;
+          // 任务 → 可调整性（动态规划）：skill 侧已归一为 core|flexible，未给值时按 core 保守处理
+          adjustabilityByTask[subtaskId] = (taskData as any).adjustability === 'flexible' ? 'flexible' : 'core';
           // 任务 → 资料条目（skill 侧已逐字核对）：按 subtaskId 落进 aiPromptTemplate.materialRefs.byTask
           if (Array.isArray((taskData as any).materialRefs) && (taskData as any).materialRefs.length) {
             materialRefsByTask[subtaskId] = (taskData as any).materialRefs;
@@ -896,6 +902,22 @@ async function enrichLearningPathWithAndersonInner(
                           ...misconceptionHintsByTask,
                         }
                       : misconceptionHintsByTask,
+                  },
+                }
+              : {}),
+            ...(Object.keys(adjustabilityByTask).length
+              ? {
+                  // 可调整性 sidecar：合并语义与 materialRefs 相同（append/progressive 保留旧任务）
+                  taskAdjustability: {
+                    ...(parsedTemplate?.taskAdjustability && typeof parsedTemplate.taskAdjustability === 'object' ? parsedTemplate.taskAdjustability : {}),
+                    byTask: (appendOnly || progressive)
+                      ? {
+                          ...((parsedTemplate?.taskAdjustability as any)?.byTask && typeof (parsedTemplate as any).taskAdjustability.byTask === 'object'
+                            ? (parsedTemplate as any).taskAdjustability.byTask
+                            : {}),
+                          ...adjustabilityByTask,
+                        }
+                      : adjustabilityByTask,
                   },
                 }
               : {}),

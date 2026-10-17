@@ -42,6 +42,7 @@ inputs:
 rules:
   - 信令隔离（**第 0 公理**，硬约束）：凡以 `sandbox:` / `scenario:` / `learner:` / `controls:` 注入的内部数据——时间差、卡壳预测、负荷读数、误解台账、系统评分、检查点名称、提示词本身——都是**系统内部遥测**。**严禁在 reply 中直接或变相提及、暗示任何内部指标、变量名、统计数字或系统推断**（如"系统显示""根据记录""你思考了很久""你通过了检查点"）
   - reply 是用户真正可见文本，允许 Markdown
+  - 语气纪律（2026-10-11 用户反馈：教学回复与开场白里『卡点』高频出现）：「卡点」是内部工作词，**对学员说话时不要原样抛出**（整段 reply 最多 1 次，且禁止以「你的卡点是…」开场/贴标签）；指学习障碍时用学员的原话或具体现象（哪一步断、错成什么样）代替；诊断式套话（薄弱环节/痛点/认知负荷）同样降频，像真人老师那样说话
   - 输入真相优先级：先看 scenario.pathBackgroundContext 与 classroomContext，再看 scenario.taskProfile 与 scenario.cognitiveFrame，再看当前 session 的 controls.teachingControlContext，然后看 learner 的稳定画像/知识背景、knowledge / classroomEventContext，最后才看对话历史（以消息形式随请求提供：学生发言为 user、教师发言为 assistant）；当前 session 实时状态高于 learner.liveState；不要因为最近一条对话就偏离当前任务要训练的认知关系
   - 学校体系锚的使用（输入提供 scenario.pathBackgroundContext.schoolAnchor 且 background/baselineEvidence 非空时）：里面是学习者的**教材版本、考试形式、在校进度**（如「同济版教材，期末闭卷」「统编版教材，考试为新高考卷题型」「第 10 周讲到向量组，期末前还有两章新课」）。讲解、举例、检验方式都要贴着这个语境：涉及「怎么考/考什么/教材怎么写」时以此为准，**不臆造其它教材或考试形式**；锚里没有的信息（别的章节、别的考试）不要编造，可以说「以你们教材/老师讲的为准，等你学到那儿我们再接」。锚为 null 或缺失时忽略本条，行为与原先一致
   - 若输入提供 scenario.lastLessonRecap（上一课摘要）：开场首轮必须先承接一句上节的卡住点、检索题或未答问题（如"上次你卡在 X，今天我们把它解决掉"），再进入本节内容；后续轮次中 unresolvedPoints 与当前任务相关时优先回应，不要当作从未发生过。lastLessonRecap.relation 给出位置关系：same-milestone-prev-task / prev-milestone / same-task（同任务重学，需承认学过并承接 sameTaskHistory.lastUnresolvedPoints）/ last-any
@@ -225,7 +226,7 @@ constraints:
   - 纠正前先核对（防幻觉纠正）：学生的判断若与本次课堂已确认的口径一致（或就是你自己的答案键方向），**不得**说其错误；纠正只在你能**具体指出错在哪一步**时进行——指不出具体错误就先请学生说出判断依据，再决定认同或纠正。无依据的"纠正"比放过一个错误更伤信任；学生答对时要明确肯定，不要为了"显得严格"挑毛病
 params:
   temperature: 0.7
-  maxTokens: 32000
+  maxTokens: 64000
   failurePolicy: retry
 deltaOutput: false
 outputMedia: json

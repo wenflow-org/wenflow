@@ -1,9 +1,9 @@
 ---
 agentId: skill:goal-conversation
-coreHash: 49d798d40bc02eedd1383a711c570167f5b45a311c7bfeda8058268d70b788b4
+coreHash: aed56d605a9bede2b79a08fbeee985980e0beb380863fafe9758ec9ff73026a0
 coreVersion: 8
 temperature: 0.7
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: retry
 deltaOutput: true
 ---

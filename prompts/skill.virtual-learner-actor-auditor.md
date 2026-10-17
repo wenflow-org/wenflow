@@ -1,9 +1,9 @@
 ---
 agentId: skill:virtual-learner-actor-auditor
-coreHash: f254312ee0d7f58437247f02e5f2285c45c81a0f082c54bf2c0f886e6b56ac3a
+coreHash: a604f1a5f5471e5e823dd302e4ea23b00533b93db16b031183b11a11be89053e
 coreVersion: 1
 temperature: 0.2
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: retry
 ---
 

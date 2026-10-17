@@ -1,9 +1,9 @@
 ---
 agentId: skill:concept-load-estimator
-coreHash: 8a73b12fa1af4aa6187b2bfb14670f3c805b4d6db20cc885616ad5506382045d
+coreHash: 709c3fb2ab733f4e7dd314d88ff8d6010a59bc1984a1cbf6a0650618cda93906
 coreVersion: 1
 temperature: 0.2
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: propagate
 ---
 

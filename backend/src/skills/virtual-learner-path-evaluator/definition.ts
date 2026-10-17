@@ -30,7 +30,7 @@ export const virtualLearnerPathEvaluatorRuntimeDefinition: RuntimeDefinitionReco
     produces: ['reaction', 'visibleRequestedChanges', 'debug'],
   },
   capabilities: ['virtual-learner-path-evaluation', 'virtual-learner-replan-evaluation'],
-  defaultMaxTokens: 32000,
+  defaultMaxTokens: 64000,
   defaultTemperature: 0.5,
   source: 'code',
   managedByCode: true,

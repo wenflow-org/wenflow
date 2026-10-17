@@ -36,6 +36,14 @@ export interface PreviousStageOutcome {
   prerequisiteGaps: string[];
   /** 上一阶段 wrapup 里仍未掌握的知识点（≤5） */
   stillLearning: string[];
+  /** 上一阶段结束时的重排建议（动态规划信号，来自 learner snapshot；keep/无信号时不出现） */
+  recommendation?: 'keep' | 'reinforce' | 'slow_down' | 'resequence' | 'accelerate';
+  /** 该建议的触发原因码（≤6） */
+  reasonCodes?: string[];
+  /** 当前疲劳档：high 时下一阶段不得加负荷（控制坡度与单任务时长） */
+  fatigueRisk?: 'low' | 'medium' | 'high';
+  /** 节奏模式：recover 时下一阶段只减不增 */
+  paceMode?: 'recover' | 'steady' | 'push';
 }
 
 const SIGNAL_CAP = 5;
@@ -117,6 +125,26 @@ export async function buildPreviousStageOutcome(
       source: 'learner-snapshot',
       previousStageNumber,
       ...extractLearnerSignals(knowledgeMemory, wrapup),
+      // 动态规划（2026-10-17）：不只传「哪几个概念没掌握」，还传系统对下一阶段的建议方向
+      // 与当前负荷档——stage-designer 据此决定坡度、补强位置与任务可调整性，而不是只看到
+      // 一份概念清单后自行猜测该加速还是减速。
+      ...((): Partial<PreviousStageOutcome> => {
+        const snapshotSignal = (snapshot as any)?.replanSignal;
+        const dynamicState = (snapshot as any)?.dynamicState;
+        const controlState = (snapshot as any)?.learningControlState;
+        const recommendation = typeof snapshotSignal?.recommendation === 'string'
+          ? snapshotSignal.recommendation
+          : null;
+        const reasonCodes = Array.isArray(snapshotSignal?.reasonCodes)
+          ? snapshotSignal.reasonCodes.map((code: unknown) => String(code || '').trim()).filter(Boolean).slice(0, 6)
+          : [];
+        return {
+          ...(recommendation && recommendation !== 'keep' ? { recommendation } : {}),
+          ...(reasonCodes.length ? { reasonCodes } : {}),
+          ...(typeof dynamicState?.fatigueRisk === 'string' ? { fatigueRisk: dynamicState.fatigueRisk } : {}),
+          ...(typeof controlState?.paceMode === 'string' ? { paceMode: controlState.paceMode } : {}),
+        };
+      })(),
     };
     logger.info('[progressive-design] 上一阶段学习者信号已提炼', {
       pathId,

@@ -1,9 +1,9 @@
 ---
 agentId: skill:semantic-freeze-judge
-coreHash: 8ca85a2dae0ebccff9348724dd6988bb62cc6308e21b221f7556f642bbbcaae4
+coreHash: 27bc2a57598844e3dcaafcbd7846fb84ed849c2086f57f46e1edfb25abca337e
 coreVersion: 1
 temperature: 0.1
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: retry
 ---
 

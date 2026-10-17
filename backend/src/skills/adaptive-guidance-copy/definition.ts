@@ -35,7 +35,7 @@ export const adaptiveGuidanceCopyRuntimeDefinition: RuntimeDefinitionRecord = {
     },
   },
   capabilities: ['adaptive-copy', 'dashboard-copy', 'path-copy', 'learning-guidance'],
-  defaultMaxTokens: 32000,
+  defaultMaxTokens: 64000,
   defaultTemperature: 0.6,
   source: 'code',
   managedByCode: true,

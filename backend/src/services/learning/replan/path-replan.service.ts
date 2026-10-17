@@ -95,6 +95,8 @@ export type ReplanTaskDraft = {
   icapLevel?: string | null;
   transferable?: boolean | null;
   linkedConcept?: string | null;
+  /** 任务级可调整性（stage-designer 2026-10-17 输出）：压缩时保护 core、优先删减 flexible */
+  adjustability?: string | null;
 };
 
 /** 系数来源：学员确认动作（`evidence.advisoryAction`）优先，其次显式 `mode`（compress）。 */
@@ -102,6 +104,23 @@ export function resolveReplanTaskRatio(mode?: string | null, advisoryAction?: st
   const key = String(advisoryAction || '').trim() || String(mode || '').trim();
   const ratio = REPLAN_TASK_RATIO[key];
   return Number.isFinite(ratio) && ratio > 0 ? ratio : REPLAN_TASK_RATIO_DEFAULT;
+}
+
+/** 建立/拆解/诊断类任务在压缩时优先让位；交付/应用/收口类是骨干。 */
+const FLEXIBLE_TASK_TYPES = new Set(['acquire', 'deconstruct', 'diagnose']);
+
+/**
+ * 任务可调整性判据（与 stage-designer 的 normalizeAdjustability 同口径，动态规划 2026-10-17）：
+ * sidecar `aiPromptTemplate.taskAdjustability.byTask` 优先；旧路径没有 sidecar 时按任务类型兜底，
+ * 使存量路径也能获得「保护骨干、优先删减建立类」的压缩语义。
+ */
+export function resolveTaskAdjustability(
+  task: { id?: string | null; taskType?: string | null },
+  byTask?: Record<string, unknown> | null
+): 'core' | 'flexible' {
+  const tagged = byTask?.[String(task?.id || '')];
+  if (tagged === 'core' || tagged === 'flexible') return tagged;
+  return FLEXIBLE_TASK_TYPES.has(String(task?.taskType || '')) ? 'flexible' : 'core';
 }
 
 /**
@@ -203,6 +222,19 @@ async function redesignMilestoneTasks(
   const milestoneIndex = sortedMilestones.findIndex((m: any) => m.id === milestone.id);
   const previousMilestone = milestoneIndex > 0 ? sortedMilestones[milestoneIndex - 1] : null;
 
+  // 动态规划（2026-10-17）：把「本阶段现有骨干任务」作为重排输入。
+  // 已完成任务由重排原样保留（preserveCompletedTasks），这里只保护**未完成的 core 任务**——
+  // 压缩时它们承载的能力必须在新任务里合并保留，而不是被 flexible 任务挤掉。
+  const adjustabilityByTaskRaw = (parsedTemplate as any)?.taskAdjustability?.byTask;
+  const adjustabilityByTask = adjustabilityByTaskRaw && typeof adjustabilityByTaskRaw === 'object'
+    ? (adjustabilityByTaskRaw as Record<string, unknown>)
+    : null;
+  const preserveCoreTasks = (milestone.subtasks || [])
+    .filter((task: any) => task.status !== 'completed')
+    .filter((task: any) => resolveTaskAdjustability(task, adjustabilityByTask) === 'core')
+    .slice(0, 6)
+    .map((task: any) => ({ id: task.id, title: task.title, taskType: task.taskType || null }));
+
   const stageDesignerInput = {
     milestone: {
       stageNumber: milestone.stageNumber,
@@ -232,6 +264,7 @@ async function redesignMilestoneTasks(
       replanTargetTaskCount: targetTaskCount || null,
       learnerReplanProjection,
       preserveCompletedTasks: completedTasks.map((task: any) => ({ id: task.id, title: task.title })),
+      preserveCoreTasks: preserveCoreTasks.length ? preserveCoreTasks : null,
     },
   };
   // 【A/B 归因修复 2026-10-01】重排链路同样补 userId 上下文（变体分流 + 调用日志归因）
@@ -245,7 +278,12 @@ async function redesignMilestoneTasks(
   );
   assertStageTasksPresent(milestone.stageNumber, newTasks);
 
+  // 新任务的可调整性（动态规划）：随模板 sidecar 落库，供后续重排继续保护骨干。
+  // 事务可能整体重试 → 在事务内重置，避免重复累加。
+  const newAdjustabilityByTask: Record<string, 'core' | 'flexible'> = {};
+
   await withTransaction(async (tx) => {
+    for (const key of Object.keys(newAdjustabilityByTask)) delete newAdjustabilityByTask[key];
     await assertGenerationRunFence(tx, path.id, runId);
     await claimPathReplanSnapshot(tx, snapshot);
     await assertPathMutationSafe(tx, path.id, 'replan-stage', {
@@ -281,9 +319,11 @@ async function redesignMilestoneTasks(
       const displayLabel = generateDisplayLabel(taskData.knowledgeType || null, taskData.cognitiveLevel || null)
         || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
 
+      const subtaskId = `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${index}`;
+      newAdjustabilityByTask[subtaskId] = taskData.adjustability === 'flexible' ? 'flexible' : 'core';
       await tx.subtasks.create({
         data: {
-          id: `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${index}`,
+          id: subtaskId,
           milestoneId: milestone.id,
           userId: data.userId,
           title: taskData.title || `任务${index + 1}`,
@@ -339,6 +379,18 @@ async function redesignMilestoneTasks(
     const pathHoursFromTasks = allPathTasks.length > 0 ? Math.max(1, Math.ceil(pathTotalMinutes / 60)) : 0;
     const pathHours = pathHoursFromTasks + Math.ceil(undesignedHours);
 
+    // 可调整性 sidecar 合并：保留已完成任务的标注，清掉被本次重排删除任务的旧键
+    const staleAdjustabilityIds = (milestone.subtasks || [])
+      .filter((task: any) => task.status !== 'completed')
+      .map((task: any) => String(task.id));
+    const mergedAdjustabilityByTask: Record<string, 'core' | 'flexible'> = {
+      ...(((txParsed as any)?.taskAdjustability?.byTask && typeof (txParsed as any).taskAdjustability.byTask === 'object')
+        ? (txParsed as any).taskAdjustability.byTask
+        : {}),
+      ...newAdjustabilityByTask,
+    };
+    for (const staleId of staleAdjustabilityIds) delete mergedAdjustabilityByTask[staleId];
+
     await tx.learning_paths.update({
       where: { id: path.id },
       data: {
@@ -364,6 +416,16 @@ async function redesignMilestoneTasks(
               ...(eventRunTotal > 1 ? { rangeDesign: true } : {}),
             }
           },
+          ...(Object.keys(mergedAdjustabilityByTask).length
+            ? {
+                taskAdjustability: {
+                  ...(((txParsed as any)?.taskAdjustability && typeof (txParsed as any).taskAdjustability === 'object')
+                    ? (txParsed as any).taskAdjustability
+                    : {}),
+                  byTask: mergedAdjustabilityByTask,
+                },
+              }
+            : {}),
           _generation: {
             ...(parsedTemplate?._generation && typeof parsedTemplate._generation === 'object' ? parsedTemplate._generation : {}),
             stageDesign: 'succeeded',

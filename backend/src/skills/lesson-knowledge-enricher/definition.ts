@@ -33,7 +33,7 @@ export const lessonKnowledgeEnricherRuntimeDefinition: RuntimeDefinitionRecord =
     },
   },
   capabilities: ['lesson-knowledge-enrichment', 'learner-background-update'],
-  defaultMaxTokens: 32000,
+  defaultMaxTokens: 64000,
   defaultTemperature: 0.4,
   source: 'code',
   managedByCode: true,

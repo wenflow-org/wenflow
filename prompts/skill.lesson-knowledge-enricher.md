@@ -1,9 +1,9 @@
 ---
 agentId: skill:lesson-knowledge-enricher
-coreHash: ba1f9979b74495fe9cca00e0a367830c4b788399dfa5a21adc63470b0af6d683
+coreHash: 8a5000c8bb750dc3c9f6e6cd1cfd159acfa1e1cb6bbf8d5746f0b90f640fc6e5
 coreVersion: 1
 temperature: 0.4
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: propagate
 ---
 

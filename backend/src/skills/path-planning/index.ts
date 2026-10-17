@@ -27,7 +27,7 @@ import { normalizeMaterialRefs } from '../../services/materials/material-refs';
 import type { PromptMaterial } from '../../services/materials/material-prompt-projection';
 
 const AGENT_ID = 'skill:path-planning';
-const PATH_AGENT_MAX_TOKENS = 32000;
+const PATH_AGENT_MAX_TOKENS = 64000;
 
 // File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
 const PATH_PLANNING_PROMPT = loadPromptFile(AGENT_ID)?.systemPrompt || '';
@@ -405,6 +405,20 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
       // 只透传这一个键（不平铺整个 understanding），保持白名单纪律。
       ...(normalizePromptString(normalizedInput.understanding?.adjustments)
         ? { understanding: { adjustments: normalizePromptString(normalizedInput.understanding?.adjustments) } }
+        : {}),
+      // 校内锚（教材册次/考试范围/学校进度）：core 规则 37/47 明确以 normalizedInput.schoolAnchor 为依据
+      // （阶段目标点明教材册次与单元、考试范围全集核对）。定帧层早已产出该键
+      // （path-planning-hints.buildFramedNormalizedInput:1036），但本投影是逐字段白名单重建，
+      // 白名单里没有它 ⇒ 决策层静默拿不到（阶段设计层能拿到，2026-10-17 实测）。
+      // 无锚时不出现该键，冷启动行为不变。
+      ...(normalizedInput.schoolAnchor && typeof normalizedInput.schoolAnchor === 'object'
+        ? {
+            schoolAnchor: {
+              textbook: normalizePromptString(normalizedInput.schoolAnchor.textbook),
+              examScope: normalizePromptString(normalizedInput.schoolAnchor.examScope),
+              schoolPace: normalizePromptString(normalizedInput.schoolAnchor.schoolPace),
+            },
+          }
         : {}),
     },
       };

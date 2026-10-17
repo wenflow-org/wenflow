@@ -1,9 +1,9 @@
 ---
 agentId: skill:virtual-learner-epistemic-grounding
-coreHash: cbe77d44679f08f9e01a11fc45085c3612fc402ac7bbea4125967fcf6cfdccab
+coreHash: cd12f7a7c20f1309a361bd0ce8e6fa18f603cc7a71dedf3d2dc0bae75ffde91f
 coreVersion: 2
 temperature: 0.3
-maxTokens: 32000
+maxTokens: 64000
 failurePolicy: propagate
 ---
 

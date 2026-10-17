@@ -86,6 +86,9 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'schoolAnchor',
     'supplementRequest',
     'pathStageMap',
+    // 动态规划（2026-10-17）：上一阶段真实学习信号（渐进式设计/阶段推进时由 stage 链注入）。
+    // stage-designer 提示词按它调整坡度与补强位置，必须登记，否则 strict 对账恒红。
+    'previousStageOutcome',
   ],
   'teaching-agent': [
     'session.messages',
