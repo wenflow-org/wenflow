@@ -129,20 +129,33 @@ export async function buildPreviousStageOutcome(
       // 与当前负荷档——stage-designer 据此决定坡度、补强位置与任务可调整性，而不是只看到
       // 一份概念清单后自行猜测该加速还是减速。
       ...((): Partial<PreviousStageOutcome> => {
-        const snapshotSignal = (snapshot as any)?.replanSignal;
-        const dynamicState = (snapshot as any)?.dynamicState;
-        const controlState = (snapshot as any)?.learningControlState;
-        const recommendation = typeof snapshotSignal?.recommendation === 'string'
-          ? snapshotSignal.recommendation
-          : null;
+        // 快照是学习者 agent 的账本投影，这三块由不同写入方维护，这里只取需要的字段
+        // （形状未知时按 unknown 收窄，避免 as any 把类型检查整段关掉）。
+        const snapshotView = (snapshot || {}) as {
+          replanSignal?: { recommendation?: unknown; reasonCodes?: unknown[] };
+          dynamicState?: { fatigueRisk?: unknown };
+          learningControlState?: { paceMode?: unknown };
+        };
+        const snapshotSignal = snapshotView.replanSignal;
+        const dynamicState = snapshotView.dynamicState;
+        const controlState = snapshotView.learningControlState;
+        // 快照字段是字符串直传，这里按契约白名单收窄——非法值当作「无信号」，不把脏值塞进设计输入。
+        const pick = <T extends string>(value: unknown, allowed: readonly T[]): T | null =>
+          typeof value === 'string' && (allowed as readonly string[]).includes(value) ? value as T : null;
+        const recommendation = pick(
+          snapshotSignal?.recommendation,
+          ['keep', 'reinforce', 'slow_down', 'resequence', 'accelerate'] as const
+        );
+        const fatigueRisk = pick(dynamicState?.fatigueRisk, ['low', 'medium', 'high'] as const);
+        const paceMode = pick(controlState?.paceMode, ['recover', 'steady', 'push'] as const);
         const reasonCodes = Array.isArray(snapshotSignal?.reasonCodes)
           ? snapshotSignal.reasonCodes.map((code: unknown) => String(code || '').trim()).filter(Boolean).slice(0, 6)
           : [];
         return {
           ...(recommendation && recommendation !== 'keep' ? { recommendation } : {}),
           ...(reasonCodes.length ? { reasonCodes } : {}),
-          ...(typeof dynamicState?.fatigueRisk === 'string' ? { fatigueRisk: dynamicState.fatigueRisk } : {}),
-          ...(typeof controlState?.paceMode === 'string' ? { paceMode: controlState.paceMode } : {}),
+          ...(fatigueRisk ? { fatigueRisk } : {}),
+          ...(paceMode ? { paceMode } : {}),
         };
       })(),
     };

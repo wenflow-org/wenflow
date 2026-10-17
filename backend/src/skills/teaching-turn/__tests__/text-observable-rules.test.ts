@@ -49,17 +49,17 @@ describe('A 项：产出与练习动作必须纯文本可完成、平台可观�
     expect(CORE_TEXT).not.toContain('做给我看');
   });
 
-  it('编译产物 md：规则 14 逐字携带新禁令', () => {
+  it('编译产物 md：规则 15 逐字携带新禁令', () => {
     const line = MD.split('\n').find((l) => l.includes('当前课堂以**文本为主**')) || '';
-    expect(line.trimStart().startsWith('14.')).toBe(true);
+    expect(line.trimStart().startsWith('15.')).toBe(true);
     expect(line).toContain('不得布置离线物理动作');
     expect(line).toContain('对着镜子念一遍');
     expect(line).toContain('平台观测不到');
   });
 
-  it('编译产物 md：口头宣称规则（37.）示例同步替换', () => {
+  it('编译产物 md：口头宣称规则（38.）示例同步替换', () => {
     const line = MD.split('\n').find((l) => l.includes('口头宣称不构成掌握证据')) || '';
-    expect(line.trimStart().startsWith('37.')).toBe(true);
+    expect(line.trimStart().startsWith('38.')).toBe(true);
     expect(line).toContain('把这一步用你自己的话写出来');
     expect(MD).not.toContain('做给我看');
   });

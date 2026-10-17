@@ -46,7 +46,7 @@ describe('P1-13：learnerPrediction 自由描述（toneDetail/depthDetail）驱�
   it('编译产物 md：规则逐字携带新口径（core→md 编译链）', () => {
     expect(MD).toContain(RULE);
     const line = MD.split('\n').find((l) => l.includes('scenario.learnerPrediction')) || '';
-    expect(line.trimStart().startsWith('11.')).toBe(true);
+    expect(line.trimStart().startsWith('12.')).toBe(true);
     expect(line).toContain('toneDetail');
     expect(line).toContain('不得全速推进');
   });
