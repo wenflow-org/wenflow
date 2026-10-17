@@ -195,6 +195,37 @@ export class KnowledgeStateService {
     }, 0);
     return total / present.length;
   }
+
+  /**
+   * 掌握下降事件（#48 P-22 的可观测指标，2026-10-17）：
+   * 逐概念比较合并前后，统计**进度回落**或**mastered 撤销**的次数。
+   *
+   * 为什么需要它：F1 修复给了「负证据可降级」的分支，但活体课堂是否真的走到该分支
+   * 一直不可见——只升不降若仍是常态，难度控制与完课判定的输入就不可信。
+   * 本函数只做确定性比较（无 I/O），由回合引擎累加进 teachingState，
+   * `npm run mastery:degrade-audit` 再按「每百课下降事件数」汇总。
+   */
+  diffMastery(
+    before: ReadonlyArray<TeachingKnowledgePointState> | undefined,
+    after: ReadonlyArray<TeachingKnowledgePointState> | undefined,
+  ): { count: number; concepts: string[] } {
+    const beforeByName = new Map(
+      (Array.isArray(before) ? before : []).map((point) => [normalizeConceptName(point.name), point]),
+    );
+    const concepts: string[] = [];
+    for (const point of Array.isArray(after) ? after : []) {
+      const previous = beforeByName.get(normalizeConceptName(point.name));
+      if (!previous) continue;
+      const previousProgress = Number(previous.progress);
+      const nextProgress = Number(point.progress);
+      const progressDropped = Number.isFinite(previousProgress)
+        && Number.isFinite(nextProgress)
+        && nextProgress < previousProgress;
+      const masteryRevoked = previous.status === 'mastered' && point.status !== 'mastered';
+      if (progressDropped || masteryRevoked) concepts.push(point.name);
+    }
+    return { count: concepts.length, concepts };
+  }
 }
 
 export const knowledgeStateService = new KnowledgeStateService();

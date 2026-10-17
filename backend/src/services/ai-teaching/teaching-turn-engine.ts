@@ -528,6 +528,10 @@ export async function processStudentMessage(
       codeEvidenceArbitration
     )
   );
+  // #48 P-22：掌握下降事件计数——负证据降级分支是否真的可达，必须有可观测读数
+  // （只升不降若仍是常态，难度控制与完课判定的输入不可信）。累加进 teachingState，
+  // 由 `npm run mastery:degrade-audit` 汇总「每百课下降事件数」。
+  const masteryDegrade = knowledgeStateService.diffMastery(existingPoints, mergedKnowledge);
   // 收束判定锚定「冻结目标集」而非每轮合并后的膨胀集合：
   // 目标集在开课（有种子）或首个教学回合冻结，之后模型新增/改名的点不再抬高门槛；
   // 目标点达到 mastered 或进度≥阈值即视为可收束。envelope phase 仍仅作观测 soft 信号。
@@ -1025,6 +1029,13 @@ export async function processStudentMessage(
     // 收口闭合门禁计数：延迟发生时 +1（跨回合继承），供 COMPLETION_DEFERRAL_CAP 活力兜底
     if (closureGate.defer) {
       teachingState.completionDeferrals = (Number(previousTeachingState.completionDeferrals) || 0) + 1;
+    }
+
+    // #48 P-22：掌握下降计数跨回合累加（本轮 0 次也保留上一轮计数，不清零）
+    if (masteryDegrade.count > 0) {
+      teachingState.masteryDegradeCount =
+        (Number(previousTeachingState.masteryDegradeCount) || 0) + masteryDegrade.count;
+      teachingState.lastMasteryDegrades = masteryDegrade.concepts.slice(0, 5);
     }
 
     // 检查点产生：teaching-turn 可选输出 control.checkpoint，按规则落库为 pendingCheckpoint

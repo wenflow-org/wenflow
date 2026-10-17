@@ -2,6 +2,30 @@
 import api, { AI_REQUEST_TIMEOUT } from '../utils/api';
 import type { ReplanSignalLike } from '@/utils/replanSignal';
 
+/** #64 P-39：结构编辑请求/响应（顺序权威 = subtasks.order，后端在事务内重排） */
+export type StructuralEditRequest =
+  | {
+      op: 'insert_task';
+      milestoneId: string;
+      afterTaskId?: string;
+      title: string;
+      description?: string;
+      taskType?: string;
+      estimatedMinutes?: number;
+      cognitiveLoad?: 'low' | 'medium' | 'high';
+      learningObjectives?: string[];
+    }
+  | { op: 'extend_task'; taskId: string; deltaMinutes: number }
+  | { op: 'shrink_task'; taskId: string; deltaMinutes: number }
+  | { op: 'delete_task'; taskId: string };
+
+export interface StructuralEditResult {
+  op: StructuralEditRequest['op'];
+  pathId: string;
+  milestoneId: string;
+  tasks: Array<{ id: string; title: string; order: number; status: string; estimatedMinutes: number }>;
+}
+
 export type GenerationLifecycle =
   | 'core_queued'
   | 'core_processing'
@@ -622,6 +646,12 @@ export const learningAPI = {
   async requestPathReplan(pathId: string, data: PathReplanRequest): Promise<PathReplanResponse> {
     const response = await api.post(`/learning/paths/${pathId}/replan`, data, { timeout: AI_REQUEST_TIMEOUT });
     return response.data;
+  },
+
+  /** #64 P-39：手动结构编辑（插任务 / 延长 / 缩短 / 删除未开始任务）。 */
+  async applyStructuralEdit(pathId: string, data: StructuralEditRequest): Promise<StructuralEditResult> {
+    const response = await api.post(`/learning/paths/${pathId}/structural-edit`, data);
+    return response?.data?.data as StructuralEditResult;
   },
 
   // 重排快照列表与回退（R8 选项 B：调整前安排自动留存，可一键回退）

@@ -19,6 +19,7 @@ import { buildGoalPathVisibleSummary } from '../services/learning/goal-path-visi
 import { resolveLearnerLoadProfileFromCollectedData } from '../services/learning/learner-load-profile';
 import { isPathMutationConflictError } from '../services/learning/path-mutation-safety';
 import { openSessionClearanceService } from '../services/learning/open-session-clearance.service';
+import { applyPathStructuralEdit, type PathStructuralEditInput } from '../services/learning/path-structural-edit.service';
 import { conceptGraphService } from '../services/learner/concept-graph.service';
 import { setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
 
@@ -311,6 +312,36 @@ const replanPathSchema = z.object({
   previewOnly: z.boolean().optional(),
   clearedSessionIds: z.array(z.string()).optional()
 });
+
+// #64 P-39：手动结构编辑（插任务 / 延长 / 缩短 / 删除未开始任务）。
+// 顺序权威 = subtasks.order（同阶段内 0..n-1），执行器在事务内重排。
+const structuralEditSchema = z.discriminatedUnion('op', [
+  z.object({
+    op: z.literal('insert_task'),
+    milestoneId: z.string().min(1),
+    afterTaskId: z.string().min(1).optional(),
+    title: z.string().trim().min(1).max(120),
+    description: z.string().max(2000).optional(),
+    taskType: z.string().max(40).optional(),
+    estimatedMinutes: z.number().int().min(5).max(600).optional(),
+    cognitiveLoad: z.enum(['low', 'medium', 'high']).optional(),
+    learningObjectives: z.array(z.string().max(200)).max(12).optional()
+  }),
+  z.object({
+    op: z.literal('extend_task'),
+    taskId: z.string().min(1),
+    deltaMinutes: z.number().int().min(1).max(600)
+  }),
+  z.object({
+    op: z.literal('shrink_task'),
+    taskId: z.string().min(1),
+    deltaMinutes: z.number().int().min(1).max(600)
+  }),
+  z.object({
+    op: z.literal('delete_task'),
+    taskId: z.string().min(1)
+  })
+]);
 
 // 创建学习目标
 router.post('/goals', async (req, res, next) => {
@@ -999,6 +1030,34 @@ router.post('/paths/:pathId/replan', llmGenerateUserLimiter, async (req, res, ne
 
     if (sendPathMutationConflict(res, error)) return;
 
+    next(error);
+  }
+});
+
+// #64 P-39：手动结构编辑执行器（插 / 延 / 缩 / 删）。只允许进行中的路径与未完成任务；
+// 有开放课堂时按 PATH_MUTATION_HAS_OPEN_SESSION 返回，前端走既有「一键清场 → 重试」闭环。
+router.post('/paths/:pathId/structural-edit', async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const { pathId } = req.params;
+    if (req.user?.projection?.active) {
+      return res.status(403).json({
+        success: false,
+        error: { message: 'Projection 身份不能修改学习路径', code: 'PATH_STRUCTURAL_EDIT_FORBIDDEN' }
+      });
+    }
+    const payload = structuralEditSchema.parse(req.body || {});
+    withPathContext(req, pathId);
+    const result = await applyPathStructuralEdit({ ...payload, pathId, userId } as PathStructuralEditInput);
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({
+        success: false,
+        error: { message: '数据验证失败', details: error.errors }
+      });
+    }
+    if (sendPathMutationConflict(res, error)) return;
     next(error);
   }
 });

@@ -114,3 +114,29 @@ describe('KnowledgeStateService 收束目标集（P0：锚定冻结目标，防�
     expect(knowledgeStateService.averageTargetProgress([], merged)).toBe(0)
   })
 })
+
+describe('KnowledgeStateService.diffMastery（#48 掌握下降可观测）', () => {
+  const point = (name: string, status: 'pending' | 'learning' | 'mastered' | 'review', progress: number) =>
+    ({ name, status, progress })
+
+  it('进度回落 / mastered 撤销 都算下降事件（同概念一轮只记一次）', () => {
+    const result = knowledgeStateService.diffMastery(
+      [point('A', 'mastered', 100), point('B', 'learning', 60), point('C', 'learning', 40)],
+      [point('A', 'learning', 79), point('B', 'learning', 50), point('C', 'learning', 40)],
+    )
+    expect(result.count).toBe(2)
+    expect(result.concepts).toEqual(['A', 'B'])
+  })
+
+  it('只升不降 / 新增概念 / 名字写法不同（归一后同名）都不误报', () => {
+    const result = knowledgeStateService.diffMastery(
+      [point('概 念 A', 'learning', 40)],
+      [point('概念A', 'mastered', 100), point('新概念', 'learning', 10)],
+    )
+    expect(result).toEqual({ count: 0, concepts: [] })
+  })
+
+  it('空输入安全', () => {
+    expect(knowledgeStateService.diffMastery(undefined, undefined)).toEqual({ count: 0, concepts: [] })
+  })
+})

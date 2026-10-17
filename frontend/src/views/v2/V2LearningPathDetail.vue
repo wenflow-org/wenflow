@@ -173,9 +173,8 @@
                       @click="openMaterialRef(ref)"
                     >{{ refLabel(ref) }}</button>
                   </p>
+                  <template v-for="task in stageTasks(stage)" :key="task.id">
                   <div
-                    v-for="task in stageTasks(stage)"
-                    :key="task.id"
                     class="task"
                     :class="`task--${taskCls(task)}`"
                   >
@@ -207,7 +206,38 @@
                   <span v-else-if="taskCls(task) === 'locked'" class="task__lock-label">待解锁</span>
                   <button type="button" v-else-if="task.status === 'in_progress'" class="task__cta" @click="goLearn(task.id)">继续学习</button>
                   <span v-else class="task__todo-label">待开始</span>
+                  <button
+                    v-if="canEditTask(task)"
+                    type="button"
+                    class="task__edit"
+                    :aria-expanded="editingTaskId === task.id"
+                    @click="toggleTaskEditor(task.id)"
+                  >微调</button>
                   </div>
+                  <!-- #64 P-39：手动结构编辑（插 / 延 / 缩 / 删）。顺序权威=subtasks.order，保存后静默刷新。 -->
+                  <div v-if="editingTaskId === task.id" class="task-edit" role="group" aria-label="任务微调">
+                    <span class="task-edit__minutes">时长 {{ task.estimatedMinutes || 30 }} 分钟</span>
+                    <button type="button" class="task-edit__btn" :disabled="structuralEditBusy" @click="changeTaskMinutes(task, -10)">缩短 10 分钟</button>
+                    <button type="button" class="task-edit__btn" :disabled="structuralEditBusy" @click="changeTaskMinutes(task, 10)">延长 10 分钟</button>
+                    <span class="task-edit__insert">
+                      <input
+                        v-model="insertTitle"
+                        class="task-edit__input"
+                        maxlength="120"
+                        placeholder="在这之后插入一个任务"
+                        @keyup.enter="insertTaskAfter(stage, task)"
+                      />
+                      <button type="button" class="task-edit__btn" :disabled="structuralEditBusy || !insertTitle.trim()" @click="insertTaskAfter(stage, task)">插入</button>
+                    </span>
+                    <button
+                      v-if="task.status === 'todo'"
+                      type="button"
+                      class="task-edit__btn task-edit__btn--danger"
+                      :disabled="structuralEditBusy"
+                      @click="deleteTask(task)"
+                    >删除</button>
+                  </div>
+                  </template>
                 </div>
               </div>
             </section>
@@ -1340,6 +1370,80 @@ function stageTasks(stage: Record<string, any>) {
   return (stage.subtasks || stage.tasks || []) as Array<Record<string, any>>;
 }
 
+/* ---------- 手动结构编辑（#64 P-39） ---------- */
+const editingTaskId = ref<string | null>(null);
+const insertTitle = ref('');
+const structuralEditBusy = ref(false);
+
+/** 只允许进行中的路径与未完成、已解锁的任务微调（已完成任务冻结，避免改写结算口径）。 */
+function canEditTask(task: Record<string, any>) {
+  return path.value?.status === 'active'
+    && task.status !== 'completed'
+    && taskCls(task) !== 'locked';
+}
+
+function toggleTaskEditor(taskId: string) {
+  editingTaskId.value = editingTaskId.value === taskId ? null : taskId;
+  insertTitle.value = '';
+}
+
+async function runStructuralEdit(
+  payload: Parameters<typeof learningAPI.applyStructuralEdit>[1],
+  successMessage: string,
+) {
+  if (structuralEditBusy.value) return;
+  structuralEditBusy.value = true;
+  try {
+    await learningAPI.applyStructuralEdit(pathId.value, payload);
+    toast.success(successMessage);
+    editingTaskId.value = null;
+    insertTitle.value = '';
+    await load(true);
+  } catch (error: any) {
+    const code = error?.response?.data?.error?.code;
+    const message = error?.response?.data?.error?.message || '调整失败，请稍后再试';
+    toast.error(
+      code === 'PATH_MUTATION_HAS_OPEN_SESSION'
+        ? '这节课还没结束，先结束课堂再调整任务。'
+        : message,
+    );
+  } finally {
+    structuralEditBusy.value = false;
+  }
+}
+
+function changeTaskMinutes(task: Record<string, any>, delta: number) {
+  void runStructuralEdit(
+    { op: delta > 0 ? 'extend_task' : 'shrink_task', taskId: task.id, deltaMinutes: Math.abs(delta) },
+    delta > 0 ? '已延长任务' : '已缩短任务',
+  );
+}
+
+function insertTaskAfter(stage: Record<string, any>, task: Record<string, any>) {
+  const title = insertTitle.value.trim();
+  if (!title) return;
+  void runStructuralEdit(
+    {
+      op: 'insert_task',
+      milestoneId: String(task.milestoneId || stage.id || ''),
+      afterTaskId: task.id,
+      title,
+    },
+    '已插入任务',
+  );
+}
+
+async function deleteTask(task: Record<string, any>) {
+  const confirmed = await askConfirm({
+    title: '删除这个任务？',
+    message: `「${task.title || task.displayLabel || '该任务'}」会从本阶段移除，顺序自动重排。只允许删除尚未开始的任务。`,
+    confirmText: '删除',
+    danger: true,
+  });
+  if (!confirmed) return;
+  void runStructuralEdit({ op: 'delete_task', taskId: task.id }, '已删除任务');
+}
+
 /**
  * 已备好的课数（2026-09-29 口径修正）。
  * 平台职责是「组课 + 保持就绪」，用户自定真实学习时间；所以这里呈现**已组好的课**，
@@ -1734,11 +1838,37 @@ onBeforeUnmount(() => {
 }
 .stage__body--open .stage__body-inner { padding: 8px 12px 12px; opacity: 1; }
 .task {
-  display: grid; grid-template-columns: 24px 1fr auto;
+  display: grid; grid-template-columns: 24px 1fr auto auto;
   align-items: center; gap: 11px;
   padding: 9px 10px;
   border-radius: 12px; /* 圆角阶梯：面板 */
   border: 1px solid transparent;
+}
+/* #64 P-39：任务微调入口（只在校验通过的任务上出现；第 4 列在无按钮的行自动塌成 0 宽） */
+.task__edit {
+  font: inherit; font-size: 12px; color: var(--faint);
+  background: none; border: 0; padding: 12px 4px; min-height: 44px;
+  cursor: pointer;
+}
+.task__edit:hover, .task__edit[aria-expanded="true"] { color: var(--blue); }
+.task-edit {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin: -2px 0 6px 45px; padding: 8px 10px;
+  border: 1px dashed var(--line); border-radius: var(--mk-radius-lg);
+  font-size: 12px; color: var(--faint);
+}
+.task-edit__minutes { font-weight: 600; color: var(--ink); }
+.task-edit__btn {
+  font: inherit; font-size: 12px; padding: 5px 9px;
+  border-radius: var(--mk-radius-md); border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.task-edit__btn:disabled { opacity: .55; cursor: not-allowed; }
+.task-edit__btn--danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 30%, var(--line)); }
+.task-edit__insert { display: inline-flex; gap: 6px; align-items: center; }
+.task-edit__input {
+  width: 200px; padding: 5px 8px; border-radius: var(--mk-radius-md);
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 12px;
 }
 .task--current { background: color-mix(in srgb, var(--blue) 6%, transparent); border-color: color-mix(in srgb, var(--blue) 20%, transparent); }
 /* 锁定态（2026-10-08 走查 #65）：原 `.task--locked { opacity: .62 }` 把整行连文字一起压暗，
