@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "npm run prisma:prepare && npm run dev:server",
-    "dev:server": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev:server": "node restart.mjs",
     "build": "node scripts/clean-dist.js && tsc -p tsconfig.build.json && node scripts/copy-system-prisma-client.js",
     "start": "node dist/index.js",
     "test": "jest",

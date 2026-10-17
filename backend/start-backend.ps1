@@ -7,15 +7,8 @@ Write-Host "🚀 Starting WenFlow Backend..." -ForegroundColor Green
 $backendDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 Set-Location $backendDir
 
-# 检查端口占用
-$port = 3001
-$portInfo = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
-
-if ($portInfo) {
-    Write-Host "⚠️ Port $port is in use, killing existing process..." -ForegroundColor Yellow
-    Get-Process -Id $portInfo.OwningProcess -ErrorAction SilentlyContinue | Stop-Process -Force
-    Start-Sleep -Seconds 2
-}
+# 端口 / 旧进程 / 就绪等待统一交给 restart.mjs（#80：不再手工杀端口、不再裸启）
+# 端口解析：--port > 环境变量 PORT > backend/.env 的 PORT > 3001
 
 Write-Host "Preparing Prisma clients and database schemas..." -ForegroundColor Yellow
 npm run prisma:prepare
@@ -31,6 +24,6 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-# 启动后端服务
-Write-Host "📡 Starting backend server on port $port..." -ForegroundColor Cyan
-npm run dev:server
+# 启动后端服务（统一入口：tsc 快检 → 停旧进程 → 起进程 → 等 /readyz）
+Write-Host "📡 Starting backend via restart.mjs..." -ForegroundColor Cyan
+node restart.mjs

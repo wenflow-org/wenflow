@@ -34,8 +34,13 @@ npm run dev
 # Windows：backend-only 便捷脚本（含 core prompt sync）
 cd backend && ./start-backend.ps1
 
-# 任意平台：仅启动后端服务（需数据库已就绪；先执行 npm run prisma:prepare）
-cd backend && npm run dev:server
+# 任意平台：仅启动后端（统一入口：tsc 快检 → 停旧进程 → 起进程 → 等 /readyz）
+npm run restart:backend                 # 等价于 node backend/restart.mjs
+node backend/restart.mjs --port=3011
+
+# 查状态 / 停服务（不要手工 netstat + taskkill）
+node backend/restart.mjs --status --port=3011
+node backend/restart.mjs --stop   --port=3011
 ```
 
 说明：

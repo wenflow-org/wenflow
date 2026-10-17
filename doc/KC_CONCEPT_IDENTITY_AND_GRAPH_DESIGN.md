@@ -483,8 +483,8 @@ subtasks / milestones ─resolve───► conceptId ───┤
 2. `memory_traces` 内部比值无改善（`@@unique(userId,conceptKey)` 写入时已去重）。
 3. **计划↔痕迹贯通率仍仅 ~7.8%**——子任务的"关系描述式"命名与痕迹的 KC 级命名是两套词汇，
    机械归一化桥不过去；**S3 的 alias 升格（LLM 建议）才是收敛杠杆**，需实际跑一轮归并才会见效。
-4. 物化钩子**需要一次干净的后端重启**才在服务进程内生效：实测 ts-node-dev `--respawn`
-   偶发漏重载深层模块，导致 2 条新路径未物化（重启后实测触发：`prerequisite:16, partOf:15`）。
+4. 物化钩子**需要一次干净的后端重启**才在服务进程内生效：2026-09 实测热重载偶发漏掉深层模块，
+   导致 2 条新路径未物化（重启后实测触发：`prerequisite:16, partOf:15`）；现在统一用 `node backend/restart.mjs`。
 5. S4b/S4c 是**用户可见**改动（`hasPrerequisiteGaps` / 重规划触发率）。**2026-09-23 已跑跨日对照**
    （单用户 3 路径 × 2 模拟日，见 `doc/KC_MULTIPATH_AND_LEARNER_SIGNAL_SCOPE.md`），结论修正如下：
 6. **S4b 曾因层级错配而实际未生效（2026-09-23 已修）**：任务概念是 `concept` 级（当时实测 25/25），
