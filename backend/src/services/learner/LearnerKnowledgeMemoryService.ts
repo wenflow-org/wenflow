@@ -678,17 +678,33 @@ export class LearnerKnowledgeMemoryService {
         ? clamp(evidence.reduce((sum, signal) => sum + signal.score, 0) / evidence.length, 0, 1)
         : 0;
 
+      // #59/#60 第 2 条：消灭 OR 吸收——此前任一条历史 review 会永久压住后来的 mastered。
+      // 现改为「最近一条有业务时间的证据说了算」，让后来真的掌握能翻案；
+      // 全部无时间戳（旧数据/测试桩）时退回保守 OR 口径（行为不变）。
       const hasReview = evidence.some((signal) => signal.status === 'review' || signal.stability === 'fragile');
       const hasMastery = evidence.some((signal) => signal.status === 'mastered' || signal.stability === 'stable');
       const hasLearning = evidence.some((signal) => signal.status === 'learning' || signal.stability === 'developing');
+      const latestTimed = evidence
+        .filter((signal) => typeof signal.seenAt === 'string' && signal.seenAt.length > 0)
+        .sort((a, b) => String(b.seenAt).localeCompare(String(a.seenAt)))[0];
+      const statusFromLatest: 'pending' | 'learning' | 'mastered' | 'review' | null = latestTimed
+        ? latestTimed.status === 'review' || latestTimed.stability === 'fragile'
+          ? 'review'
+          : latestTimed.status === 'mastered' || latestTimed.stability === 'stable'
+            ? 'mastered'
+            : latestTimed.status === 'learning' || latestTimed.stability === 'developing'
+              ? 'learning'
+              : 'pending'
+        : null;
 
-      const status: 'pending' | 'learning' | 'mastered' | 'review' = hasReview
-        ? 'review'
-        : hasMastery
-          ? 'mastered'
-          : hasLearning
-            ? 'learning'
-            : 'pending';
+      const status: 'pending' | 'learning' | 'mastered' | 'review' = statusFromLatest
+        ?? (hasReview
+          ? 'review'
+          : hasMastery
+            ? 'mastered'
+            : hasLearning
+              ? 'learning'
+              : 'pending');
 
       const stability: 'unknown' | 'fragile' | 'developing' | 'stable' = status === 'review'
         ? 'fragile'
