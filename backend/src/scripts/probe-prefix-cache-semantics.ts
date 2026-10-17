@@ -32,7 +32,8 @@ async function main(): Promise<void> {
   }
 
   // 真实 system prompt（编译产物，v48 同源； prompts/ 在仓库根）
-  const system = readFileSync(join(process.cwd(), '..', 'prompts', 'skill.teaching-turn.md'), 'utf8');
+  // #78：按脚本位置锚定仓库根，不依赖 cwd（从仓库根或 backend/ 跑都一样）
+  const system = readFileSync(join(__dirname, '../../..', 'prompts', 'skill.teaching-turn.md'), 'utf8');
 
   // 构造体量接近真实的载荷：~10K 字符 userPayload + 助手历史
   const scenario = JSON.stringify({

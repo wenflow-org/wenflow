@@ -13,7 +13,8 @@ import fs from 'fs';
 import path from 'path';
 import { parseDocument } from '../services/materials/document-parser';
 
-const DIRECTORY = process.argv[2] || path.join(process.cwd(), '..', 'text');
+// #78：默认目录按脚本位置锚定（仓库根 text/），不依赖 cwd
+const DIRECTORY = process.argv[2] || path.join(__dirname, '../../..', 'text');
 
 async function main() {
   const entries = fs.readdirSync(DIRECTORY).filter((name) => !name.startsWith('_'));

@@ -113,7 +113,8 @@ async function main(): Promise<void> {
 async function readSystemPrompt(): Promise<string> {
   const { readFileSync } = await import('fs');
   const { join } = await import('path');
-  return readFileSync(join(process.cwd(), '..', 'prompts', 'skill.teaching-turn.md'), 'utf8');
+  // #78：按脚本位置锚定仓库根，不依赖 cwd（从仓库根或 backend/ 跑都一样）
+  return readFileSync(join(__dirname, '../../..', 'prompts', 'skill.teaching-turn.md'), 'utf8');
 }
 
 main().catch((e) => {

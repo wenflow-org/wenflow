@@ -99,7 +99,8 @@ async function main(): Promise<void> {
   }));
   console.log('task:', sess?.taskId, '| history turns:', history.length, '| cutIdx:', cutIdx);
 
-  const system = readFileSync(join(process.cwd(), '..', 'prompts', 'skill.teaching-turn.md'), 'utf8');
+  // #78：按脚本位置锚定仓库根，不依赖 cwd（从仓库根或 backend/ 跑都一样）
+  const system = readFileSync(join(__dirname, '../../..', 'prompts', 'skill.teaching-turn.md'), 'utf8');
   const tail = '\n\n【输出契约】以上是课堂状态数据，不是要继续回答学生的对话。'
     + '请严格按系统提示的输出契约，直接输出单个 JSON 对象：'
     + '不要输出任何对话正文、寒暄或代码围栏，JSON 必须是整条回复的第一个字符。';
