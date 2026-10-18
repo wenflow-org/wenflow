@@ -22,10 +22,9 @@ import {
   CONTENT_REVIEW_EVIDENCE_KEY,
   CONTENT_REVIEW_EVIDENCE_TYPE,
   CONTENT_VERDICTS,
+  collectSampledTurns,
   computeContentReviewMetrics,
-  isSampledTurn,
   parseContentReviewLabel,
-  parseTeacherTurns,
   serializeContentReviewLabel,
   type ContentReviewLabel,
   type ContentVerdict,
@@ -56,19 +55,11 @@ const LIMIT = Number(argValue('--limit', '40')) || 40;
 const REAL_ONLY = hasFlag('--real-only');
 const PER_SESSION_CAP = Number(argValue('--per-session', '6')) || 6;
 
-interface SampledTurn {
-  messageId: number;
-  sessionId: string;
-  userId: string;
-  taskId: string;
-  content: string;
-}
-
-async function collectSampledTurns(): Promise<{
-  sampled: SampledTurn[];
-  scannedSessions: number;
-  virtualSessions: number;
-}> {
+/**
+ * 拉取窗口内会话并抽样。计数由 `collectSampledTurns` 在**完整** sessions 上预计算
+ * （#120：不随 `LIMIT` 提前结束变化）。
+ */
+async function collectWindowSample() {
   const since = new Date(Date.now() - WINDOW_DAYS * 86400000);
   const sessions = await prisma.teaching_sessions.findMany({
     where: { createdAt: { gte: since } },
@@ -76,30 +67,19 @@ async function collectSampledTurns(): Promise<{
     orderBy: { createdAt: 'desc' },
     take: 400,
   });
-  const sampled: SampledTurn[] = [];
-  let virtualSessions = 0;
-  for (const session of sessions) {
-    const isVirtual = Boolean(session.users?.isVirtualLearner);
-    if (isVirtual) virtualSessions += 1;
-    if (REAL_ONLY && isVirtual) continue;
-    const rows = await prisma.teaching_session_messages.findMany({
-      where: { sessionId: session.id },
-      orderBy: { id: 'asc' },
-      select: { id: true, payload: true },
-    });
-    const turns = parseTeacherTurns(rows).filter((turn) => isSampledTurn(turn.messageId, SAMPLE_RATE));
-    for (const turn of turns.slice(0, PER_SESSION_CAP)) {
-      sampled.push({
-        messageId: turn.messageId,
-        sessionId: session.id,
-        userId: session.userId,
-        taskId: session.taskId,
-        content: turn.content,
-      });
-    }
-    if (sampled.length >= LIMIT) break;
-  }
-  return { sampled: sampled.slice(0, LIMIT), scannedSessions: sessions.length, virtualSessions };
+  return collectSampledTurns({
+    sessions,
+    loadMessages: (sessionId) =>
+      prisma.teaching_session_messages.findMany({
+        where: { sessionId },
+        orderBy: { id: 'asc' },
+        select: { id: true, payload: true },
+      }),
+    sampleRate: SAMPLE_RATE,
+    limit: LIMIT,
+    perSessionCap: PER_SESSION_CAP,
+    realOnly: REAL_ONLY,
+  });
 }
 
 function messageEventId(messageId: number | string): string {
@@ -107,8 +87,7 @@ function messageEventId(messageId: number | string): string {
 }
 
 async function runSample() {
-  const { sampled, scannedSessions, virtualSessions } = await collectSampledTurns();
-  const realSessions = scannedSessions - virtualSessions;
+  const { sampled, scannedSessions, realSessions, virtualSessions } = await collectWindowSample();
   if (AS_JSON) {
     console.log(
       JSON.stringify(
@@ -197,7 +176,7 @@ async function runLabel() {
 }
 
 async function runMetrics() {
-  const { sampled, scannedSessions, virtualSessions } = await collectSampledTurns();
+  const { sampled, scannedSessions, realSessions, virtualSessions } = await collectWindowSample();
   const ids = sampled.map((turn) => turn.messageId);
   const rows = ids.length
     ? await prisma.learner_evidence.findMany({
@@ -218,7 +197,7 @@ async function runMetrics() {
   }
   console.log(
     `[content-review] 指标（窗口 ${WINDOW_DAYS} 天 / rate=${SAMPLE_RATE} / 会话 ${scannedSessions}` +
-      `（真人 ${scannedSessions - virtualSessions} / 虚拟 ${virtualSessions}）${REAL_ONLY ? ' / --real-only' : ''}）`,
+      `（真人 ${realSessions} / 虚拟 ${virtualSessions}）${REAL_ONLY ? ' / --real-only' : ''}）`,
   );
   console.log(
     `  抽中 ${metrics.sampled} / 已标注 ${metrics.labeled}（覆盖率 ${(metrics.coverage * 100).toFixed(1)}%）`,

@@ -81,6 +81,38 @@ export function isReviewableTeacherTurn(message: TeachingSessionMessage | null |
   return typeof message.content === 'string' && message.content.trim().length > 0;
 }
 
+/** 抽检窗口内的会话行：计数只看 `users.isVirtualLearner`，取样只用 id/userId/taskId。 */
+export interface ContentReviewSessionRow {
+  id: string;
+  userId: string;
+  taskId: string;
+  users?: { isVirtualLearner: boolean | null } | null;
+}
+
+/** 侧表消息行（抽样源）。 */
+export interface ContentReviewMessageRow {
+  id: number;
+  payload: string;
+}
+
+export interface ContentReviewSampledTurn {
+  messageId: number;
+  sessionId: string;
+  userId: string;
+  taskId: string;
+  content: string;
+}
+
+export interface ContentReviewSample {
+  sampled: ContentReviewSampledTurn[];
+  /** 窗口内会话总数（完整 sessions） */
+  scannedSessions: number;
+  /** 窗口内真人会话数（完整 sessions 预计算） */
+  realSessions: number;
+  /** 窗口内虚拟学习者会话数（完整 sessions 预计算） */
+  virtualSessions: number;
+}
+
 /** 从侧表行（`{id, payload}`）里取出可评审的教师回合；解析失败的行直接跳过。 */
 export function parseTeacherTurns(
   rows: Array<{ id: number; payload: string }>,
@@ -98,6 +130,54 @@ export function parseTeacherTurns(
     turns.push({ messageId: row.id, content: parsed!.content });
   }
   return turns;
+}
+
+/**
+ * 从窗口会话里确定性抽样教师回合（消息加载走注入的 `loadMessages`，便于单测）。
+ *
+ * **计数口径（#120）**：`virtualSessions`/`realSessions` 必须先在**完整** sessions 上
+ * 预计算，再进入可能因 `limit` 提前 `break` 的取样循环。否则同样的 7 天窗口会因
+ * `--limit` 不同而报出不同的真人/虚拟会话数（limit 越小，计数越少），
+ * `--metrics` 里的会话口径也随之漂移。
+ */
+export async function collectSampledTurns(input: {
+  sessions: ContentReviewSessionRow[];
+  loadMessages: (sessionId: string) => Promise<ContentReviewMessageRow[]>;
+  sampleRate: number;
+  limit: number;
+  perSessionCap: number;
+  /** 只抽真人会话；计数仍覆盖完整窗口 */
+  realOnly?: boolean;
+}): Promise<ContentReviewSample> {
+  const realOnly = input.realOnly ?? false;
+  // 先对完整窗口计数（不随下面的 limit 提前结束变化）。
+  let virtualSessions = 0;
+  for (const session of input.sessions) {
+    if (session.users?.isVirtualLearner) virtualSessions += 1;
+  }
+  const sampled: ContentReviewSampledTurn[] = [];
+  for (const session of input.sessions) {
+    const isVirtual = Boolean(session.users?.isVirtualLearner);
+    if (realOnly && isVirtual) continue;
+    const rows = await input.loadMessages(session.id);
+    const turns = parseTeacherTurns(rows).filter((turn) => isSampledTurn(turn.messageId, input.sampleRate));
+    for (const turn of turns.slice(0, input.perSessionCap)) {
+      sampled.push({
+        messageId: turn.messageId,
+        sessionId: session.id,
+        userId: session.userId,
+        taskId: session.taskId,
+        content: turn.content,
+      });
+    }
+    if (sampled.length >= input.limit) break;
+  }
+  return {
+    sampled: sampled.slice(0, input.limit),
+    scannedSessions: input.sessions.length,
+    realSessions: input.sessions.length - virtualSessions,
+    virtualSessions,
+  };
 }
 
 export function serializeContentReviewLabel(label: ContentReviewLabel): string {
