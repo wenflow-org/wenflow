@@ -95,14 +95,15 @@ function makeCapability(id: string, status: 'operational' | 'degraded' | 'unavai
 /**
  * 供应商注册表视图（后端 GET /admin/model-providers 的 data）。
  * 2026-10-18 BYOK 重做后，「接入与模型」页签 = 左供应商列表 / 右详情，
- * 平台通道的连接表单嵌在「平台提供」详情里，故这些用例都得先喂这份数据。
+ * 平台通道的连接表单嵌在那条通道的详情里，故这些用例都得先喂这份数据。
  */
 function providersView(): Record<string, unknown> {
   return {
     registry: { path: 'backend/config/llm-providers.json', source: 'file', mtimeMs: 1, lastError: null, readOnly: false },
     providers: [
       {
-        id: 'platform', name: '平台提供', description: '已接入，开箱可用，无需自己准备服务地址与密钥',
+        id: 'platform', name: '平台',
+        description: '平台自带的上游通道：地址与密钥走本页的连接设置，模型在这里登记',
         enabled: true, recommended: true, endpointSource: 'inherit', baseUrl: null, apiKeyEnv: null,
         keySource: 'none', keyHint: null, status: 'inherit',
         models: [
@@ -182,7 +183,7 @@ describe('ApiConfig P1 修复批', () => {
           generatedAt: '2026-09-19T12:00:00.000Z',
           providers: [
             {
-              id: 'platform', name: '平台提供', enabled: true, recommended: true,
+              id: 'platform', name: '平台', enabled: true, recommended: true,
               endpointSource: 'inherit', baseUrl: null, apiKeyEnv: null, keyConfigured: null,
               modelIds: ['deepseek-v4-flash', 'agnes-3.0-flash']
             }
@@ -415,7 +416,7 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('接入与模型 = 供应商两栏面板：左列表（平台提供 / 自行接入）+ 右详情（2026-10-18 BYOK 重做）', async () => {
+  it('接入与模型 = 供应商两栏面板：左列表平铺一份清单 + 右详情（2026-10-19 去分区）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
     // 默认页签即「接入与模型」：供应商面板随默认分支一起挂载（原独立页签需点击才挂）
@@ -428,12 +429,14 @@ describe('ApiConfig P1 修复批', () => {
     const panel = wrapper.find('.mpp');
     expect(panel.exists()).toBe(true);
     expect(panel.text()).toContain('模型供应商');
-    // 左栏分组：平台提供 / 自行接入（两条都来自注册表）
-    const groups = wrapper.findAll('.mpp-group__title').map((el) => el.text());
-    expect(groups).toEqual(['平台提供', '自行接入']);
+    // 2026-10-19 用户「就不分区，不要做什么平台提供…自行接入又是什么意义呢」：
+    // 分组标题与来历词都不再出现，只剩一份平铺清单（平台通道排最前）
+    expect(wrapper.findAll('.mpp-group__title')).toHaveLength(0);
+    expect(wrapper.text()).not.toContain('平台提供');
+    expect(wrapper.text()).not.toContain('自行接入');
     const items = wrapper.findAll('.mpp-item__name').map((el) => el.text());
-    expect(items).toEqual(['平台提供', 'Acme 网关']);
-    // 默认选中平台提供：它的详情里嵌着连接表单（服务地址 / API Key / 连通性验证）
+    expect(items).toEqual(['平台', 'Acme 网关']);
+    // 默认选中平台通道：它的详情里嵌着连接表单（服务地址 / API Key / 连通性验证）
     expect(wrapper.find('.ac-conn').exists()).toBe(true);
     expect(wrapper.text()).toContain('平台通道的服务地址与密钥在这里配置');
     // 平台通道没有自带端点：模型清单只给增改，不给「获取模型列表」（那是自带端点才有的动作）；

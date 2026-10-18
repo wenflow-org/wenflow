@@ -208,7 +208,7 @@ aliases / defaults
 - 页面：`模型与接入 → 接入与模型`（左供应商列表 / 右详情）。供应商与模型的增删改走 `services/admin/model-providers.service.ts`：读**原始 JSON**（`$header`/`$rules` 原文不动）→ 打补丁 → 复解析校验（报错文案即运行时那条）+ 自洽检查（`defaults` 必须解析到已启用供应商的模型）→ 备份 `config/backups/llm-providers.<ts>.json`（留 10 份）→ 原子写（tmp + rename）→ 立即热重载，重载失败回滚。文件或目录不可写 ⇒ 409 只读降级，页面整体只读。
 - 写回的格式与原文对齐（短数组单行、沿袭原换行风格）：一次编辑不应带出满屏与本次改动无关的 diff。
 - **密钥不进文件**：文件规则本来就禁止真实密钥，页面里填的密钥落 system.db 密文表 `provider_secrets`（AES-256-GCM，AAD=`system.provider_secrets.apiKey`），文件里只同步一个 `apiKeyEnv` 名。运行时解析顺序改为 **本表密文 → `apiKeyEnv` 环境变量**（`APIRouter.applyProviderEndpoint`，60s 缓存 + 写接口失效）——同一台机器上「页面点保存 → 下一次调用就用新密钥」。
-- **平台通道例外**：`id=platform`（无 baseUrl 的继承通道）的服务地址与密钥仍归 `platform_api_configs`（`PUT /api/admin/api-config`，UI 里嵌在「平台提供」详情内、走脏位保存）；它的 `PATCH`/`DELETE` 在注册表侧被拒绝。
+- **平台通道例外**：`id=platform`（无 baseUrl 的继承通道）的服务地址与密钥仍归 `platform_api_configs`（`PUT /api/admin/api-config`，UI 里嵌在「平台」这条通道的详情内、走脏位保存）；它的 `PATCH`/`DELETE` 在注册表侧被拒绝。
 - **不在这里编辑**：别名成员、档位默认（`defaults`）、按 agent/skill 的模型绑定仍归「路由与调用」页；模型编辑器只写模型自身字段（档位/能力/限额/备用链/单价）。
 
 ### 4.3 ③ 参数解析策略（P0 已实现）

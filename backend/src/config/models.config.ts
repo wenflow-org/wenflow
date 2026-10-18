@@ -196,7 +196,7 @@ function buildEmbeddedFallback(): RegistrySnapshot {
     }
   ];
   const platform: ProviderDefinition = {
-    id: 'platform', name: '平台提供', enabled: true, recommended: true, endpointSource: 'inherit', models
+    id: 'platform', name: '平台', enabled: true, recommended: true, endpointSource: 'inherit', models
   };
   return {
     models,

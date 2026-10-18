@@ -64,7 +64,7 @@ const tempConfig = path.join(tmpDir, 'llm-providers.json');
 
 const FIXTURE = {
   providers: {
-    platform: { name: '平台提供', recommended: true, models: { 'm-chat': { label: 'M Chat', tier: 'chat' } } },
+    platform: { name: '平台', recommended: true, models: { 'm-chat': { label: 'M Chat', tier: 'chat' } } },
     custom: {
       name: '自建通道',
       baseUrl: 'https://api.example.com/v1',
@@ -125,14 +125,14 @@ describe('GET /api/admin/model-providers', () => {
 });
 
 describe('PATCH /:id（平台通道特例）', () => {
-  it('平台提供：地址与密钥字段被剥掉，只接受展示名/说明/启用位', async () => {
+  it('平台通道：地址与密钥字段被剥掉，只接受展示名/说明/启用位', async () => {
     const res = createRes();
     await handlerFor('patch', '/:id')(
-      { params: { id: 'platform' }, body: { name: '平台提供（改）', baseUrl: 'https://evil.example.com/v1', apiKeyEnv: 'MY_KEY', apiKey: 'sk-should-be-ignored' } },
+      { params: { id: 'platform' }, body: { name: '平台（改）', baseUrl: 'https://evil.example.com/v1', apiKeyEnv: 'MY_KEY', apiKey: 'sk-should-be-ignored' } },
       res
     );
     const file = JSON.parse(fs.readFileSync(tempConfig, 'utf-8'));
-    expect(file.providers.platform.name).toBe('平台提供（改）');
+    expect(file.providers.platform.name).toBe('平台（改）');
     expect(file.providers.platform.baseUrl).toBeUndefined();
     expect(file.providers.platform.apiKeyEnv).toBeUndefined();
     expect(mockSecretRows.size).toBe(0);

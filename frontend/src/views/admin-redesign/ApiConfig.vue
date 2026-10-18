@@ -52,7 +52,7 @@
     <!-- 2026-10-05 满屏重排：mk-narrow 限宽列在宽屏下「一张卡悬着」（用户实测批注）。
          去限宽，单卡拆三卡满宽三列（窄屏 ≤1100px 回落单列）。
          2026-10-18 BYOK 重做：本页签从「连接卡 + 只读能力表」改成左供应商列表 / 右详情
-         （ModelProvidersPanel）。平台通道的服务地址与密钥作为「平台提供」的详情内容经
+         （ModelProvidersPanel）。平台通道的服务地址与密钥作为那条通道的详情内容经
          #platform-detail 插槽注入——它们仍归 platform_api_configs、走既有的脏位保存；
          其余供应商与全部模型的增删改即时保存，落回 llm-providers.json。 -->
     <div class="ac-tab-body ac-conn-body" id="ac-panel-access" role="tabpanel" aria-labelledby="ac-tab-access">
@@ -67,8 +67,8 @@
         @changed="onProvidersChanged"
         @registered="registeredModelIds = $event"
       >
-        <!-- 平台提供 = 平台通道：服务地址与密钥仍归 platform_api_configs（连接设置），
-             走既有的脏位保存（本页脚保存条），不混进「即时保存」的注册表编辑。
+        <!-- 平台通道 = 那条端点沿用连接设置的供应商：服务地址与密钥仍归 platform_api_configs
+             （连接设置），走既有的脏位保存（本页脚保存条），不混进「即时保存」的注册表编辑。
              表单嵌在供应商详情里，读者看到的是「这一个供应商怎么连」。 -->
         <template #platform-detail>
           <div class="ac-conn">
@@ -1752,7 +1752,7 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-sec-head { grid-column: 1 / -1; }
 /* 置顶告警（接入域读取失败）横跨全部列，不占卡位把卡片挤换行 */
 .ac-conn-body > .mk-alert { grid-column: 1 / -1; }
-/* 平台提供详情里的连接块（2026-10-18 从独立「连接」卡搬进供应商详情）：外层卡头没了，
+/* 平台通道那条详情的连接块（2026-10-18 从独立「连接」卡搬进供应商详情）：外层卡头没了，
    状态徽标与「保存连接」收进一条细条，右侧一句说明这段表单管什么。 */
 .ac-conn__bar { display: flex; align-items: center; gap: 10px; padding: 12px 16px 0; flex-wrap: wrap; }
 .ac-conn__bar-hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); }

@@ -93,7 +93,7 @@ function seedView(extra?: Partial<{ readOnly: boolean; providers: Array<Record<s
       readOnly: extra?.readOnly ?? false
     },
     providers: extra?.providers ?? [
-      providerView({ id: 'platform', name: '平台提供', models: [{ id: 'deepseek-v4-flash' }, { id: 'agnes-3.0-flash' }] }),
+      providerView({ id: 'platform', name: '平台', models: [{ id: 'deepseek-v4-flash' }, { id: 'agnes-3.0-flash' }] }),
       providerView({ id: 'acme-gateway', name: 'Acme 网关', baseUrl: 'https://gw.acme.com/v1', apiKeyEnv: 'PROVIDER_ACME_GATEWAY_API_KEY', keyHint: '····9xQv', models: [{ id: 'acme-chat', fallbacks: ['acme-chat-2'] }, { id: 'acme-chat-2' }] })
     ]
   }
@@ -134,13 +134,19 @@ describe('ModelProvidersPanel', () => {
     seedView()
   })
 
-  it('两栏结构：左列表按「平台提供 / 自行接入」分组，默认选中平台提供', async () => {
+  it('两栏结构：左列表平铺一份供应商清单（不按来历分组），默认选中平台通道', async () => {
     const w = await mountPanel()
-    expect(w.findAll('.mpp-group__title').map((el) => el.text())).toEqual(['平台提供', '自行接入'])
-    expect(w.findAll('.mpp-item__name').map((el) => el.text())).toEqual(['平台提供', 'Acme 网关'])
-    expect(w.find('.mpp-item--on').text()).toContain('平台提供')
-    // 平台提供详情：状态徽标 + 模型清单（2 个），服务地址与密钥归连接设置（宿主插槽）
-    expect(w.find('.mpp-detail__head').text()).toContain('平台提供')
+    // 2026-10-19 用户「就不分区」：原「平台提供 / 自行接入」两组与详情头「平台提供」徽标都撤了
+    expect(w.findAll('.mpp-group__title')).toHaveLength(0)
+    expect(w.text()).not.toContain('平台提供')
+    expect(w.text()).not.toContain('自行接入')
+    expect(w.findAll('.mpp-item__name').map((el) => el.text())).toEqual(['平台', 'Acme 网关'])
+    // 列表行只给「N 个模型」，不露注册表 id（id 在详情头）
+    expect(w.findAll('.mpp-item__meta').map((el) => el.text())).toEqual(['2 个模型', '2 个模型'])
+    expect(w.find('.mpp-item--on').text()).toContain('平台')
+    // 平台通道详情：状态徽标只出「能不能用」，这一档由下面的连接徽标回答 → 不出徽标
+    expect(w.find('.mpp-detail__head').text()).toContain('平台')
+    expect(w.find('.mpp-detail__head').findAll('.mk-badge')).toHaveLength(0)
     expect(w.text()).toContain('2 个')
   })
 

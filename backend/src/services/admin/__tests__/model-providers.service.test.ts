@@ -62,7 +62,7 @@ const FIXTURE = {
   $rules: ['规则一'],
   providers: {
     platform: {
-      name: '平台提供',
+      name: '平台',
       recommended: true,
       models: {
         'm-chat': { label: 'M Chat', tier: 'chat' },
@@ -179,7 +179,7 @@ describe('供应商', () => {
     await expectEditError(() => createProvider({ id: 'nourl', baseUrl: 'ftp://a.com' }), 400, 'http:// 或 https://');
   });
 
-  it('停用平台提供而没别的启用供应商供模型：被挡（不然全平台无路可走）', async () => {
+  it('停用平台通道而没别的启用供应商供模型：被挡（不然全平台无路可走）', async () => {
     await expectEditError(() => updateProvider(PLATFORM_PROVIDER_ID, { enabled: false }), 400, '没有任何 enabled 的 provider 提供模型');
     expect(readFile().providers.platform.enabled).toBeUndefined();
   });
@@ -191,12 +191,12 @@ describe('供应商', () => {
     expect(mockSecretRows.get('custom')!.apiKeyEnv).toBe('CUSTOM_KEY');
   });
 
-  it('平台提供：拒绝清空地址（要停用请用启用开关）', async () => {
+  it('平台通道：拒绝清空地址（要停用请用启用开关）', async () => {
     // 平台通道没有 baseUrl，走的是 api-config；这里用自定义供应商验证「清空地址」这一条
     await expectEditError(() => updateProvider('custom', { baseUrl: '' }), 400, '服务地址不能清空');
   });
 
-  it('删除：平台提供被拒；自建供应商连密钥一起清（并告警备用链残留）', async () => {
+  it('删除：平台通道被拒；自建供应商连密钥一起清（并告警备用链残留）', async () => {
     await addModel('custom', { id: 'cm-1', tier: 'chat' });
     await addModel(PLATFORM_PROVIDER_ID, { id: 'm-chat-2', tier: 'chat', fallbacks: ['cm-1'] });
     mockSecretRows.set('custom', { providerId: 'custom', apiKey: 'wfsec:v1:test:eA==', apiKeyEnv: 'CUSTOM_KEY' });

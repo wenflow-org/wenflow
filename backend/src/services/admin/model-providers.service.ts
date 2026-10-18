@@ -581,7 +581,7 @@ export async function createProvider(input: ProviderInput): Promise<EditOutcome 
   }
   const baseUrl = normalizeBaseUrl(input.baseUrl);
   if (!baseUrl) {
-    throw new RegistryEditError('自行接入的供应商必须填服务地址（要沿用平台地址，请直接改「平台提供」下的模型）。', 400, 'invalid');
+    throw new RegistryEditError('没有独立端点的供应商必须填服务地址（要沿用平台地址，直接改「平台」这条通道下的模型）。', 400, 'invalid');
   }
   const { root } = readRegistryFile();
   if (providersOf(root)[id]) {
@@ -646,7 +646,7 @@ export async function updateProvider(providerId: string, input: ProviderInput): 
 export async function deleteProvider(providerId: string): Promise<EditOutcome> {
   if (providerId === PLATFORM_PROVIDER_ID) {
     throw new RegistryEditError(
-      '「平台提供」是内置通道，不能删除；要让它不参与路由请停用它（需保证还有别的启用供应商提供模型）。',
+      '「平台」是平台自带通道，不能删除；要让它不参与路由请停用它（需保证还有别的启用供应商提供模型）。',
       400,
       'invalid'
     );

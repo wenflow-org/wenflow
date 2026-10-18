@@ -9,8 +9,8 @@
   ],
   "providers": {
     "platform": {
-      "name": "平台提供",
-      "description": "已接入，开箱可用，无需自己准备服务地址与密钥",
+      "name": "平台",
+      "description": "平台自带的上游通道：地址与密钥走本页的连接设置，模型在这里登记",
       "recommended": true,
       "models": {
         "deepseek-v4.1-flash": {
@@ -56,11 +56,12 @@
             "outputPer1M": 0.15
           }
         }
-      }
+      },
+      "enabled": true
     },
     "custom-provider-example": {
-      "name": "自行接入（示例）",
-      "description": "示例条目，当前停用。想接自己的模型服务，照这条填服务地址、密钥与模型清单即可。密钥只存放在服务器上，不随这条记录保存",
+      "name": "示例供应商",
+      "description": "停用的示例条目：照这条填服务地址、密钥与模型清单，就能接一个上游",
       "enabled": false,
       "baseUrl": "https://api.deepseek.com/v1",
       "apiKeyEnv": "CUSTOM_PROVIDER_API_KEY",

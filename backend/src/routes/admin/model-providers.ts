@@ -26,7 +26,7 @@ const router = Router();
  * 写成功即热重载生效（见 services/admin/model-providers.service.ts）。
  * 密钥不落文件：表单里填的密钥落 system.db 密文（provider_secrets）。
  *
- * 特例：`platform`（平台提供）在文件里没有 baseUrl，端点与密钥在 platform_api_configs，
+ * 特例：`platform`（平台自带通道）在文件里没有 baseUrl，端点与密钥在 platform_api_configs，
  * 仍由既有 `PUT /api/admin/api-config` 管；本组接口拒绝删除它。
  */
 
@@ -142,7 +142,7 @@ router.post('/:id/models/pull', async (req, res) => {
   try {
     const provider = providerOf(req.params.id);
     if (!provider.baseUrl) {
-      res.status(400).json({ success: false, error: '「平台提供」沿用平台地址，模型清单由上游与登记表对比给出。' });
+      res.status(400).json({ success: false, error: '「平台」沿用平台地址，模型清单由上游与登记表对比给出。' });
       return;
     }
     const resolved = await resolveProviderApiKey(provider.id, provider.apiKeyEnv ?? undefined);

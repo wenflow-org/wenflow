@@ -1,9 +1,13 @@
 <template>
-  <!-- 模型供应商与模型（BYOK 重做，2026-10-18）。
-       左=供应商列表（平台提供 / 自行接入分组 + 状态点 + 启用开关 + 添加），右=选中供应商的详情
+  <!-- 模型供应商与模型（BYOK 重做，2026-10-18；2026-10-19 去分区）。
+       左=供应商列表（平台自己的通道 + 若干自加上游，平铺一份清单、不分组），右=选中供应商的详情
        （服务地址、密钥三件套、模型清单可增删改、上游未登记折叠；平台通道的服务地址与密钥、
         连通性验证由宿主经 #platform-detail 注入）。
-       编辑是**即时保存**：点保存就落盘并热生效，不并入页脚保存条——只有「平台提供」的服务地址与
+       2026-10-19 用户「就不分区，不要做什么平台提供，对于运营来说就是平台本身，自行接入又是什么
+       意义呢」：原先按 id==='platform' 硬切「平台提供 / 自行接入」两组，详情头还挂「平台提供」
+       徽标——那是「这条通道是谁给的」的来历视角，运营不需要，两栏看着还像两种东西。现在平铺成
+       一份供应商清单（平台通道排最前），来历词全部撤掉。
+       编辑是**即时保存**：点保存就落盘并热生效，不并入页脚保存条——只有平台通道的服务地址与
        密钥仍是连接设置的脏位保存（那段表单由宿主经 #platform-detail 插槽注入）。
        运行面读数（冷却/健康/配置漂移告警）另取 GET /admin/model-registry：编辑面只有配置值，
        把「这个模型现在能不能用」也算在这里会让两个接口互相复述。 -->
@@ -39,33 +43,30 @@
     />
 
     <div v-else class="mpp-body">
-      <!-- 左：供应商列表 -->
-      <aside class="mpp-list" role="tablist" aria-label="供应商">
-        <div v-for="group in groups" :key="group.key" class="mpp-group">
-          <div class="mpp-group__title">{{ group.label }}</div>
-          <div
-            v-for="p in group.items"
-            :key="p.id"
-            class="mpp-item"
-            :class="{ 'mpp-item--on': p.id === selectedId }"
-            role="tab"
-            :aria-selected="p.id === selectedId"
-            tabindex="0"
-            @click="select(p.id)"
-            @keydown.enter.prevent="select(p.id)"
-            @keydown.space.prevent="select(p.id)"
-          >
-            <span class="mpp-item__dot" :class="`mpp-item__dot--${p.status}`" :title="statusLabel(p)" aria-hidden="true"></span>
-            <span class="mpp-item__grow">
-              <span class="mpp-item__name">{{ p.name }}</span>
-              <span class="mpp-item__meta">{{ p.id }} · {{ p.models.length }} 个模型</span>
-            </span>
-            <MkSwitch
-              :model-value="p.enabled"
-              :disabled="busy"
-              @update:model-value="(v: boolean) => toggleEnabled(p, v)"
-            />
-          </div>
+      <!-- 左：供应商列表（平铺一份清单，平台通道在最前；不再按来历分组） -->
+      <aside class="mpp-list" role="tablist" aria-label="模型供应商">
+        <div
+          v-for="p in orderedProviders"
+          :key="p.id"
+          class="mpp-item"
+          :class="{ 'mpp-item--on': p.id === selectedId }"
+          role="tab"
+          :aria-selected="p.id === selectedId"
+          tabindex="0"
+          @click="select(p.id)"
+          @keydown.enter.prevent="select(p.id)"
+          @keydown.space.prevent="select(p.id)"
+        >
+          <span class="mpp-item__dot" :class="`mpp-item__dot--${p.status}`" :title="statusLabel(p)" aria-hidden="true"></span>
+          <span class="mpp-item__grow">
+            <span class="mpp-item__name">{{ p.name }}</span>
+            <span class="mpp-item__meta">{{ p.models.length }} 个模型</span>
+          </span>
+          <MkSwitch
+            :model-value="p.enabled"
+            :disabled="busy"
+            @update:model-value="(v: boolean) => toggleEnabled(p, v)"
+          />
         </div>
         <button type="button" class="mk-btn mk-btn--sm mpp-add" :disabled="busy || registry?.readOnly" @click="providerEditor?.openWith(null)">
           ＋ 添加供应商
@@ -78,8 +79,9 @@
           <div class="mpp-detail__id">
             <strong class="mpp-detail__name">{{ selected.name }}</strong>
             <span class="mono mpp-detail__code">{{ selected.id }}</span>
-            <span class="mk-badge" :class="statusBadge(selected).cls">{{ statusBadge(selected).label }}</span>
-            <span v-if="selected.recommended" class="mk-badge mk-badge--info">推荐</span>
+            <!-- 状态徽标只出「能不能用」；平台通道那一档（endpointSource=inherit）不出徽标——
+                 它用不用得了由下面「连接」段的连接徽标回答，同屏两处说同一件事是复读 -->
+            <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
           </div>
           <div class="mpp-detail__acts">
             <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="providerEditor?.openWith(selected)">设置</button>
@@ -94,7 +96,8 @@
         </div>
         <p v-if="selected.description" class="mpp-detail__desc">{{ selected.description }}</p>
 
-        <!-- 平台提供：服务地址与密钥归连接设置（宿主注入），沿用既有的脏位保存 -->
+        <!-- 平台通道（endpointSource=inherit，注册表里没有自己的 baseUrl）：服务地址与密钥
+             归连接设置（宿主注入），沿用既有的脏位保存 -->
         <slot v-if="selected.id === 'platform'" name="platform-detail" />
 
         <template v-else>
@@ -146,7 +149,7 @@
               <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="providerEditor?.openWith(selected)">编辑供应商</button>
               <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: null })">＋ 添加模型</button>
               <!-- 自带端点才有「获取模型列表」（拉上游清单来勾选登记）；
-                   平台提供的地址与密钥归上面那段连接设置，它那边已有「运行测试」，
+                   平台通道的地址与密钥归上面那段连接设置，它那边已有「运行测试」，
                    这里不再挂第二枚检测钮（两枚做同一件事，还会选错模型）。 -->
               <button
                 v-if="selected.endpointSource === 'own'"
@@ -340,11 +343,12 @@ const registryPathTitle = computed(() => {
   return parts.join('\n')
 })
 
-/** 平台提供在最前（它决定平台通道），自行接入按文件声明序 */
-const groups = computed(() => [
-  { key: 'platform', label: '平台提供', items: providers.value.filter((p) => p.id === 'platform') },
-  { key: 'custom', label: '自行接入', items: providers.value.filter((p) => p.id !== 'platform') }
-])
+/** 平铺一份清单：平台通道在最前（它是平台自己的通道），其余按文件声明序。
+    2026-10-19 去分区：原按 id==='platform' 切「平台提供 / 自行接入」两组，那是来历视角。 */
+const orderedProviders = computed(() => {
+  const list = providers.value
+  return [...list.filter((p) => p.id === 'platform'), ...list.filter((p) => p.id !== 'platform')]
+})
 
 const registeredIds = computed(() => new Set(selected.value?.models.map((m) => m.id) ?? []))
 const pulledUnregistered = computed(() => pulled.value.filter((n) => !registeredIds.value.has(n)))
@@ -363,16 +367,19 @@ function emitRegistered(): void {
 
 function statusLabel(p: ProviderView): string {
   if (p.status === 'disabled') return '已停用'
-  if (p.status === 'inherit') return '平台提供（沿用平台地址与密钥）'
+  if (p.status === 'inherit') return '用连接设置里的地址与密钥'
   if (p.status === 'unconfigured') return '还没配置密钥'
   return '可用'
 }
-function statusBadge(p: ProviderView): { cls: string; label: string } {
+/** 详情头徽标：只出「能不能用」。「用平台连接设置」这一档返回 null——那句话由下面「连接」段
+    的连接徽标回答（同屏一处事实一个控件）。 */
+function statusBadge(p: ProviderView): { cls: string; label: string } | null {
+  if (p.status === 'inherit') return null
   if (p.status === 'disabled') return { cls: 'mk-badge--muted', label: '已停用' }
-  if (p.status === 'inherit') return { cls: 'mk-badge--info', label: '平台提供' }
   if (p.status === 'unconfigured') return { cls: 'mk-badge--warn', label: '待配置密钥' }
   return { cls: 'mk-badge--ok', label: '可用' }
 }
+const headBadge = computed(() => (selected.value ? statusBadge(selected.value) : null))
 
 function cooldownOf(m: ModelLike) {
   return (health.value?.cooldowns ?? []).find((c) => c.model === m.id && c.providerId === selected.value?.id) ?? null
@@ -415,7 +422,7 @@ function select(id: string): void {
   pulledPicked.value = new Set()
 }
 
-/** 选中项被删/首次加载后归位：优先平台提供，其次第一个 */
+/** 选中项被删/首次加载后归位：优先平台通道，其次第一个 */
 function ensureSelection(): void {
   if (providers.value.some((p) => p.id === selectedId.value)) return
   const first = providers.value.find((p) => p.id === 'platform') ?? providers.value[0]
@@ -661,13 +668,6 @@ defineExpose({ refresh })
 .mpp-list {
   padding: 10px;
   border-right: 1px solid var(--mk-line);
-}
-.mpp-group + .mpp-group { margin-top: 12px; }
-.mpp-group__title {
-  padding: 0 6px 6px;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  letter-spacing: 0.04em;
 }
 .mpp-item {
   display: flex;
