@@ -28,7 +28,8 @@ import { schoolAnchorCoverage, type PathSchoolAnchor } from './school-anchor';
 import { buildAnchorGoalNote } from './school-anchor-goal';
 import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
-import { extractPromptMaterials, STAGE_MATERIAL_LIMITS } from '../../materials/material-prompt-projection';
+import { extractPromptMaterials, STAGE_MATERIAL_LIMITS, collectMaterialSectionRefs } from '../../materials/material-prompt-projection';
+import { buildSectionSemanticOrder } from '../../materials/material-semantic-order';
 import { summarizeSectionRefPositions, assessMaterialCoverage } from '../../materials/material-refs';
 import type { PreviousStageOutcome } from './progressive-design';
 import {
@@ -377,10 +378,42 @@ async function enrichLearningPathWithAndersonInner(
       // 资料章节按阶段位次分配（2026-10-17）：任务层每阶段只带 8 段，此前恒取前 8 段 ⇒
       // 24 章节的包里后 2/3 永远不可见，路径引用恒落原文前部（20 goal A/B：后半引用 9%）。
       // 按阶段位次切连续窗口：首阶段看头、末阶段看尾，整条路径才有机会覆盖全文。
-      const stageMaterials = extractPromptMaterials(normalizedInput, STAGE_MATERIAL_LIMITS, {
+      const materialWindow = {
         stageNumber: milestone.stageNumber,
         stageCount: learningPath.milestones.length,
-      });
+      };
+      // 窗口内语义排序（#119 优化项 2）：只重排同一窗口里的顺序（成员/数量不变），
+      // 实证依据=现有引用语义分位 0.54–0.69、模型偏爱先出现的资料。
+      // fail-open：embedding 不可用/报错/章节不足时返回 null，按原顺序喂（生成链不受影响）。
+      // kill switch：STAGE_MATERIAL_SEMANTIC_ORDER=0。
+      let stageSectionOrder: Map<string, number> | null = null;
+      if (process.env.STAGE_MATERIAL_SEMANTIC_ORDER !== '0') {
+        try {
+          const refs = collectMaterialSectionRefs(normalizedInput);
+          if (refs.length >= 2) {
+            stageSectionOrder = await buildSectionSemanticOrder({
+              query: [milestone.title, milestone.goal, milestone.description]
+                .map((part) => String(part || '').trim())
+                .filter(Boolean)
+                .join('；'),
+              sections: refs,
+            });
+          }
+        } catch (error) {
+          // buildSectionSemanticOrder 自身已 fail-open；这里兜底防将来改动把异常抛出来打断生成
+          logger.warn('[path-generation] 阶段资料语义排序失败（按原位次继续）', {
+            runId,
+            milestoneId: milestone.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      const stageMaterials = extractPromptMaterials(
+        normalizedInput,
+        STAGE_MATERIAL_LIMITS,
+        materialWindow,
+        stageSectionOrder
+      );
       const stageDesignerInput = {
         milestone: {
           stageNumber: milestone.stageNumber,

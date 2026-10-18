@@ -124,11 +124,15 @@ function normalizeString(value: unknown): string | null {
 
 /**
  * 投影资料包；无可用资料时返回 `null`（调用方据此**不出现该键**，冷启动行为不变）。
+ *
+ * `preferredSectionOrder`（#119 优化项 2）：章节 id → 名次。只在**已切好的窗口内**重排顺序，
+ * 成员与数量不变（不做跨窗口检索、不做 top-k 截断）；未命中名次的章节保持原位排在后面。
  */
 export function buildPromptFriendlyMaterials(
   raw: unknown,
   limits: PromptMaterialLimits = PATH_MATERIAL_LIMITS,
-  window?: MaterialProjectionWindow | null
+  window?: MaterialProjectionWindow | null,
+  preferredSectionOrder?: ReadonlyMap<string, number> | null
 ): PromptMaterial[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
   const out: PromptMaterial[] = [];
@@ -149,6 +153,14 @@ export function buildPromptFriendlyMaterials(
         title: normalizeString(section?.title),
       }))
       .filter((section) => !!section.title);
+    // 窗口内语义重排（#119-2）：稳定排序，未命中名次的章节（未知 id）保持原位排后。
+    if (preferredSectionOrder && preferredSectionOrder.size && sections.length > 1) {
+      const rankOf = (section: { id: string | null }): number => {
+        const rank = section.id ? preferredSectionOrder.get(section.id) : undefined;
+        return typeof rank === 'number' ? rank : Number.POSITIVE_INFINITY;
+      };
+      sections.sort((left, right) => rankOf(left) - rankOf(right));
+    }
     const rawKeyPoints = Array.isArray(pack.keyPoints) ? pack.keyPoints : [];
     const [pointStart, pointEnd] = resolveMaterialWindowRange(
       rawKeyPoints.length,
@@ -180,16 +192,9 @@ export function buildPromptFriendlyMaterials(
   return out.length ? out : null;
 }
 
-/**
- * 从任意「携带 normalizedInput 的容器」里取资料并投影。
- * 容器形态：`{ normalizedInput }` / `{ resources: { materials } }` / 直接的 normalizedInput。
- */
-export function extractPromptMaterials(
-  container: unknown,
-  limits: PromptMaterialLimits = PATH_MATERIAL_LIMITS,
-  window?: MaterialProjectionWindow | null
-): PromptMaterial[] | null {
-  if (!container || typeof container !== 'object') return null;
+/** 从容器里解析资料包数组（与 extractPromptMaterials 同一套容器形态）。 */
+export function resolvePromptMaterialPacks(container: unknown): unknown[] {
+  if (!container || typeof container !== 'object') return [];
   const record = container as {
     resources?: { materials?: unknown };
     normalizedInput?: { resources?: { materials?: unknown }; materials?: unknown };
@@ -198,5 +203,37 @@ export function extractPromptMaterials(
     ?? record.normalizedInput?.resources?.materials
     ?? record.normalizedInput?.materials
     ?? null;
-  return buildPromptFriendlyMaterials(materials, limits, window);
+  return Array.isArray(materials) ? materials : [];
+}
+
+/**
+ * 收集资料包里全部章节的 `{id,title,summary}`（语义排序用；不含窗口裁剪）。
+ * 与投影侧同一个 normalize 口径，避免 id 对不上导致排序整段失效。
+ */
+export function collectMaterialSectionRefs(container: unknown): Array<{ id: string; title: string; summary: string }> {
+  const refs: Array<{ id: string; title: string; summary: string }> = [];
+  for (const item of resolvePromptMaterialPacks(container)) {
+    const pack = (item as { pack?: Record<string, unknown> })?.pack;
+    const sections = pack && Array.isArray(pack.sections) ? pack.sections : [];
+    for (const section of sections as Array<Record<string, unknown>>) {
+      const id = normalizeString(section?.id);
+      const title = normalizeString(section?.title);
+      if (!id || !title) continue;
+      refs.push({ id, title, summary: normalizeString(section?.summary) || '' });
+    }
+  }
+  return refs;
+}
+
+/**
+ * 从任意「携带 normalizedInput 的容器」里取资料并投影。
+ * 容器形态：`{ normalizedInput }` / `{ resources: { materials } }` / 直接的 normalizedInput。
+ */
+export function extractPromptMaterials(
+  container: unknown,
+  limits: PromptMaterialLimits = PATH_MATERIAL_LIMITS,
+  window?: MaterialProjectionWindow | null,
+  preferredSectionOrder?: ReadonlyMap<string, number> | null
+): PromptMaterial[] | null {
+  return buildPromptFriendlyMaterials(resolvePromptMaterialPacks(container), limits, window, preferredSectionOrder);
 }
