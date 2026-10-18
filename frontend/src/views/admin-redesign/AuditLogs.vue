@@ -221,13 +221,21 @@
                 <td v-if="colVisible('admin')" class="log-admin" :title="log.adminName || log.adminId || ''">
                   {{ log.adminName || (log.adminId ? shortId(log.adminId) : '—') }}
                 </td>
+                <!-- 动作格两段式（2026-10-18 用户走查「很突兀，不整齐」）：名字靠左、方法徽章贴格右缘。
+                     此前三者同行内联，名字长短不同就把徽章推来推去——实测同列徽章左缘散布 125px。
+                     拆独立「方法」列可解，但 1280/1440 内容区已无余量，加列即出横向滚动（实测 +81/+12px）；
+                     改用格内两端对齐：徽章落在同一 x（chip 定宽后左右缘都齐），且列宽与改动前一致。
+                     flex-wrap 保留换行能力——1280 档动作列仅 189px，名字+徽章本就放不下（原版该档已有
+                     5 行折行），可换行才不至于把整表顶出横向滚动。 -->
                 <td v-if="colVisible('action')" :title="log.action">
-                  <template v-if="methodOf(log)">
-                    <span class="log-path mono" :title="`${methodOf(log)} ${log.path || ''}`">{{ actionLabelOf(log) }}</span>
-                    <span class="log-action-sep" aria-hidden="true">·</span>
-                    <span class="log-method" :class="`log-method--${methodOf(log).toLowerCase()}`">{{ methodOf(log) }}</span>
-                  </template>
-                  <span v-else class="log-action">{{ actionText(log.action) }}</span>
+                  <div class="log-act-line">
+                    <span v-if="methodOf(log)" class="log-path mono" :title="`${methodOf(log)} ${log.path || ''}`">{{ actionLabelOf(log) }}</span>
+                    <span v-else class="log-action">{{ actionText(log.action) }}</span>
+                    <span v-if="methodOf(log)" class="log-act-method">
+                      <span class="log-action-sep" aria-hidden="true">·</span>
+                      <span class="log-method" :class="`log-method--${methodOf(log).toLowerCase()}`">{{ methodOf(log) }}</span>
+                    </span>
+                  </div>
                 </td>
                 <td v-if="!noTargetTypes && colVisible('tt')" class="log-tt" :title="log.targetType || '当前记录未包含目标类型'">{{ targetTypeText(log.targetType) }}</td>
                 <td v-if="colVisible('target')" class="log-target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</td>
@@ -947,7 +955,11 @@ function exportCurrentPage() {
   text-overflow: ellipsis;
   max-width: 220px;
 }
-/* HTTP 方法徽标：按方法着色（颜色仅作识别辅助） */
+/* 动作格两段：名字靠左、方法徽章贴格右缘——徽章位置不再随名字长短漂移（两端对齐把
+   名字与徽章之间多出的宽度吃掉）。flex-wrap 保留换行：1280 档动作列仅 189px，
+   名字+徽章本就放不下（原版该档已有 5 行折行），能换行才不至于把整表顶出横向滚动。 */
+.log-act-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: 10px; row-gap: 2px; }
+.log-act-method { display: inline-flex; align-items: center; flex: none; }
 .log-method {
   display: inline-block;
   font-family: var(--mk-mono);
@@ -955,7 +967,11 @@ function exportCurrentPage() {
   font-weight: 800;
   border-radius: var(--mk-radius-sm);
   padding: 1px 7px;
-  margin-right: 7px;
+  /* 最小宽：两端对齐后 chip 右缘成一条线，但 POST 与 DELETE 字样宽窄不同，左缘仍差十几像素；
+     收一个下限把最窄的 POST 抬到与 PUT 同级（再放宽到 DELETE 那么宽会让 1440 档名字+徽章放不下、
+     行高翻倍，实测过）。 */
+  min-width: 46px;
+  text-align: center;
   vertical-align: middle;
 }
 .log-method--get { background: var(--mk-blue-bg); color: #1d4ed8; }
@@ -965,13 +981,13 @@ function exportCurrentPage() {
 .log-method--delete { background: var(--mk-red-bg); color: var(--mk-red-strong); }
 .log-method--options,
 .log-method--head { background: var(--mk-badge-virtual-bg); color: #475569; }
-/* 动作名与方法之间的分隔符：避免「POST探测模型能力」这类无分隔粘连（复制文本也不再黏在一起） */
+/* HTTP 方法徽标：按方法着色（颜色仅作识别辅助） */
+/* 动作名与方法之间的分隔符：两段之间隔着空白，仍留一个点，复制文本时不至于「推进虚拟会话POST」黏成一体 */
 .log-action-sep {
   display: inline-block;
-  margin: 0 6px;
+  margin-right: 6px;
   color: var(--mk-faint);
   font-weight: 700;
-  vertical-align: middle;
 }
 /* API 路径：mono 省略号 + title 全值。
    max-width 用固定值（非 100%）：表格 auto 布局按单元格 max-content 定列宽，
@@ -985,20 +1001,20 @@ function exportCurrentPage() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  /* 200px（原 240px）：路径 + 分隔符 + 方法徽章同行内联排布，241+18+55 = 314px 超过
-     动作列 1440 下的内容盒（≈301px），方法徽章被挤到第二行、行高翻倍。200px 留出余量
-     后三者同行；完整路径仍在 title 与展开行里。 */
+  /* 上限只为让「一条超长路径」不把动作列撑开（auto 布局按 max-content 定列宽）；
+     徽章位置由 .log-act-line 的两端对齐决定，不靠这里的宽度。 */
   max-width: 200px;
+  min-width: 0;
   vertical-align: middle;
 }
 /* 非 API 动作（中文标签）：中性蓝 chip */
 /* UI 复查 #11：操作列是末列，贴表格右缘过紧，补右留白 */
 .al-act { padding-right: 16px; }
-/* LY9：1280 档动作列（方法徽标 + 动作名 + 路径）折行致近半数行高 46→70px。
-   收紧路径 max-width 并锁方法徽标单行，三者保持同行不折。 */
+/* LY9：1280 档动作列折行致近半数行高 46→70px —— 收紧路径 max-width、锁方法徽标单行，
+   内容保持一行不折。2026-10-18 方法徽章拆列后本档不再需要 150px 那么紧，
+   但保持收起一档：1280 内容区宽度不变，动作列多让出的宽要还给其余长列。 */
 @media (max-width: 1439px) {
   .log-path { max-width: 150px; }
-  .log-method { white-space: nowrap; }
   .log-action { max-width: 200px; }
 }
 /* 窄屏（≤720，次要列已随 useIsNarrow 隐藏）：操作者/动作列收为弹性宽 + 单行截断
