@@ -12,8 +12,7 @@
 
 🌐 **Demo 站点**: https://wenflow.org
 
-> 仅作 Demo 演示，不提供正式服务。
-> ⚠️ **注意**: Demo 站点会定期清理所有账号和数据，请勿用于存放重要信息。
+> 仅作 Demo 演示，不提供正式服务，会定期清理账号与数据，请勿用于存放重要信息。
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.17.0-green.svg)](https://nodejs.org)
@@ -41,9 +40,7 @@
 
 ---
 
-## 核心特性
-
-### 产品流程预览
+## 核心体验预览
 
 这 6 张图按“从真实问题出发，到进入完整学习闭环”的顺序展示 WenFlow 的核心体验。
 
@@ -67,163 +64,111 @@
 | ![学习状态追踪](doc/images/learning-state.png) |
 | LSS / KTL / LF / LSB 持续追踪学习状态，并在疲劳时予以提醒 |
 
-### 从问题到路径
-- **问题澄清**：通过多轮自然对话澄清学习目标
-- **路径生成**：将模糊目标拆解为阶段、任务与可立即执行的第一步
-- **回合式学习**：AI 讲解、学习者作答并即时获得反馈，教学过程根据理解情况持续调整
+---
 
-### 学习状态追踪
-借鉴运动科学中的负荷与恢复思路，持续追踪学习状态，而不只记录是否完成任务：
+## 核心亮点
 
-| 指标 | 含义 | 用途 |
-|------|------|------|
-| LSS | 学习压力评分 | 基于任务难度、时长、认知负荷、效率与完成率综合计算 |
-| KTL | 知识训练负荷（Knowledge Training Load） | 长期积累，日衰减因子 0.95（半衰期约 13.5 天） |
-| LF | 学习疲劳度 | 短期累计，日衰减因子 0.70（半衰期约 2 天） |
-| LSB | 学习状态平衡 | KTL - LF，预警过度学习 |
+### 1. 真正在“上课”的多 Agent 课堂
 
-### 平台 Agent / Skill 编排（简版）
+多数 AI 教学工具本质是一个套了提示词的聊天框，聊着聊着就跑偏。WenFlow 背后是一套明确的分工与回合协议：
 
 ```mermaid
 flowchart TD
-    U[用户] --> G1[目标对话 Skill\n多轮澄清 → 方案确认]
-    G1 -- 用户显式确认 --> P1[路径规划 Skill\n认知图景 + 阶段骨架]
-    P1 --> P2[阶段设计 Skill\n阶段 → 任务 + 验收点]
-    P2 --> T0[AI 教学编排器\n回合状态机]
+    U[学习者提出问题] --> G1[目标澄清：多轮追问到能确认]
+    G1 -- 明确确认 --> P1[路径规划：阶段骨架与每日任务]
+    P1 --> T0[回合式课堂]
 
-    T0 --> T1[教学回合 Skill\n讲解 提问 诊断]
-    T1 --> K1[知识状态更新\n知识点进度]
-    T1 --> S1[学习状态更新\nLSS KTL LF LSB]
-    T1 --> C1[检查点测验\n未通过 → 回教学]
-
-    T1 --> D{需要强化?}
-    D -- 是 --> PEER[伴学补强 Skill\n费曼式讨论强化]
-    D -- 否 --> NEXT{本节结束?}
-    C1 --> NEXT
+    T0 --> T1[讲解 · 提问 · 随堂测验]
+    T1 --> C1{答对 / 能自己讲清?}
+    C1 -- 没掌握 --> T1
+    T1 --> D{连续卡壳或求助?}
+    D -- 是 --> PEER[伴学补强：放慢节奏、换个讲法]
+    D -- 否 --> NEXT{本节学完?}
     PEER --> NEXT
+    C1 --> NEXT
 
-    NEXT -- 结束 --> W1[课后产出 Skill\n总结与评估]
-    W1 -- lesson:completed 事件 --> E1[outbox 事件\n学习者证据/投影刷新]
-    W1 --> R1[重规划建议\n用户确认后生效]
-    E1 -. 下一节上下文 .-> T0
-    R1 -. 确认后 .-> P1
+    NEXT -- 下课 --> W1[课后总结与掌握度评估]
+    W1 --> R1[后续路径调整建议]
+    W1 -. 记住薄弱点 .-> T0
+    R1 -. 你确认后 .-> P1
 ```
 
-- 顶层 Agent 负责编排，真正持有 prompt、直接调用模型的是 Skills。
-- 先澄清目标，再拆解路径。路径生成须经用户显式确认后才启动。
-- 教学阶段按 opening → teaching ⇄ intervention → ready_to_close 推进；检查点（checkpoint）是**回合内**的测验控制对象（含答案键与代码裁决），不是阶段值；课堂收尾由 ready_to_close 表达；课堂模式固定为 tutor。
-- 学习者出现求助信号（求助关键词、连续数轮理解度偏低）时触发伴学，不会放弃当前任务。
-- 课后自动生成总结与评估，并附带重规划建议；路径不会自动变更，须经用户确认后才生成新版本。
-- 每节课结束后，事件将持久化并更新学习者画像；下一节课开始时，AI 会基于这些信息继续教学。
+- **不会自作主张**：生成路径、调整计划都要经过学习者的明确确认，系统不会偷偷改你的路线。
+- **卡壳有兜底**：连续答错或明确求助时，课堂会切进“伴学补强”，先补齐前置概念再往下走，而不是硬念下一段。
+- **跨课有记忆**：每节课的掌握情况会沉淀进学习画像，下一节课从你上次的薄弱点自然接上，并按记忆规律安排复习。
 
-### 虚拟学习者实验室（Virtual Learner Lab）
+### 2. 像管理体能一样管理脑力负荷
 
-通过虚拟学习者账号，以真实用户的方式完整运行产品，用于功能验证：
+很多人学三天就放弃，不是因为懒，而是开始时冲太猛。WenFlow 借鉴耐力运动科学的负荷与恢复模型，给学习强度也装上“仪表盘”：
 
-- **黑盒模拟**：以普通用户的视角完整执行“目标 → 路径 → 学习”全流程，并由裁判与角色保真审计把关
-- **Quick Learn**：选取虚拟账号下的任务，自动完成一节课并生成传播报告
-
-### 学习者端（用户端）
-
-用户端与管理员端分离：落地页 `/` 与 `/vision`，登录 `/login`、注册 `/register`，登录后进入 V2 壳（`frontend/src/views/v2/*.vue`）。
-
-顶栏 / 底栏主导航五个入口（`frontend/src/views/v2/V2Nav.vue:117`）：
-
-| 页面 | 路径 | 说明 |
+| 指标 | 全称 | 用大白话讲 |
 |------|------|------|
-| 学习台 | `/dashboard` | 今日行动、路径进度、连续学习天数 |
-| 目标规划 | `/goal-conversation` | 多轮对话澄清真实目标 |
-| 学习路径 | `/learning-paths` | 路径列表与进度 |
-| 知识图谱 | `/knowledge-map` | 全部路径的知识聚合视图（学习页内只看当前路径） |
-| 学习状态 | `/learning-state` | LSS / KTL / LF / LSB 与疲劳提醒 |
+| **LSS** | 学习压力评分 | 今天这一顿学得有多猛：由任务难度、时长、认知负荷与完成率综合算出 |
+| **KTL** | 知识训练负荷 | 你的长期底子：累计学习量按日衰减保留（半衰期约 13.5 天） |
+| **LF** | 学习疲劳度 | 最近累不累：短期累计疲劳（半衰期约 1.9 天），连轴转就会飙升 |
+| **LSB** | 学习状态平衡 | 还能不能继续加量：KTL − LF，偏低时提示过度学习，建议休息或复习 |
 
-核心学习流：注册 / 登录 → `/onboarding` 引导 → `/goal-conversation` 澄清目标 → 用户显式确认后生成路径 → `/learning-paths` 列表 → `/learning-path/:id` 路径详情 → `/learn/:taskId` 回合式学习 → `/learn/:taskId/evaluation/:sessionId` 课后评估。
+### 3. 把教育学理论落进代码
 
-个人中心收在 `/user/*`：账户（`/user/account`）、设置含 API 接入（`/user/settings`）、调用日志（`/user/agent-logs`）、成就（`/user/achievements`）、学习历史（`/user/learning-history`）。旧 `/v2/*` 地址一律重定向到上述正式路径（`frontend/src/router/index.ts:165`）。
+WenFlow 的教学行为不是提示词拍脑袋，每条设计都有对应的理论来源（11 条与产品行为直接对应，完整 16 条含文献链接见 [`doc/EDUCATIONAL_THEORY_MAP.md`](doc/EDUCATIONAL_THEORY_MAP.md)）：
 
-### 管理端
+- **认知负荷理论**：限制单轮知识量与篇幅，长对话自动压缩，拒绝刷屏式讲解
+- **最近发展区 + 支架**：难度随理解度自动升降，受阻时回补前置基础
+- **费曼技巧 + 检索练习**：能独立讲清、并通过随堂检查才算掌握，相信自己“看懂了”不算数
+- **有效失败**：先独立试错，再由 AI 带着对比复盘，把答错变成理解的切口
+- **间隔效应与复习闭环**：按 FSRS-6 记忆模型安排跨天复习（替代早期 SM-2 式固定倍增），学完的知识有安排、不是一次性消耗
 
-管理后台在 `/admin`，共 18 个场景页 / 7 个分组（按侧栏分组），数据来自真实 API（演示模式已移除，恒 live）：
+### 4. 虚拟学习者实验室
 
-- **总览**：平台总览——当日系统健康度、失败率最高的模型与待排查事项
-- **教学**：用户与学习者、学习状态（风险与疲劳度，支持手动重算快照）、教学会话、目标对话、学习路径、记忆与复习
-- **虚拟学习者**：虚拟学习者（运行态：并发配额 / 全局限速 / 实例流水 / 批量新建、单步测试）、学习者卡库（角色卡结构化导入导出）
-- **Skill**：编排图（阶段泳道 + 字段数据旅程/逻辑图 + 调用用量）、Skill 与提示词（Skill 运行 + 模型路由；Prompt 评估为宿主内页签；Skill 设计二级页含协议编辑、编译、守门检查、发布、回滚、试跑）
-- **观测**：执行日志（日志 / Trace 链路双 tab，带重试时间线、自动刷新、导出）、成本分析、审计日志
-- **系统**：健康中心、模型与接入（路由 / 连通性 / 网络边界 / 重试超时）、系统工具（运维工具 + 数据导出 + 会话安全）
-- **运营**：运营中心（待办工作台 / 反馈 / 成就 / 公告 / 站内通知）
+为了在没有大规模真人样本时也能验证教学效果，项目内置 Virtual Learner Lab：预置不同基础与性格的虚拟学习者账号，以真实用户的方式完整跑完“澄清目标 → 生成路径 → 上课答题”，再由独立的裁判与角色保真审计给教学质量打分。
 
-> 说明：字段数据旅程（逻辑图）已并入「编排图」页；「Prompt 评估」已折入「Skill 与提示词」宿主页签（2026-10-04，旧 URL `/admin/prompt-eval` 重定向到 `/admin/skills?tab=prompt-eval`）；成本分析已拆回独立页（2026-09-29）；「批量实验」场景已下线（运行态并入「虚拟学习者」，资产输入归「学习者卡库」，旧 URL 重定向到 `/admin/virtual-learners`）。场景清单以 `frontend/src/views/admin-redesign/manifest.ts` 为准。
+- **黑盒模拟**：只用产品界面能看到的动作，不改数据、不读内部状态
+- **Quick Learn**：挑一个任务自动上完一节课并生成报告，用于快速回归
 
-### Prompt 工程体系（Prompt Lab v4，File-as-Truth）
+### 5. 自带 18 个场景页的管理后台
 
-- **真源**：`prompts/core/*.yaml`（唯一人工编辑的入口，进 git）
-- **编译产物**：`prompts/skill.*.md`（确定性编译生成，模型只读这个文本）
-- **发布链路**：编辑 core.yaml → compile（守门检查）→ publish（写回 md + DB ACTIVE）→ 可 rollback
-- **数据库**：`agent_prompts` 只是运行时镜像，文件为准、DB 为镜像
+学习端之外还有一套完整的运营与可观测后台（`/admin`），数据全部来自真实 API：
 
----
-
-## 技术栈
-
-| 层级 | 技术 |
-|------|------|
-| **前端** | Vue 3 + TypeScript + Vite 6 + 自研 Mk* 原语 + lucide 图标 + Pinia |
-| **后端** | Node.js + Express + TypeScript + Prisma |
-| **数据库（当前）** | SQLite（主库 51 个 Prisma 模型 + 1 张运行期建表，system 库 14 表，双库架构） |
-| **AI 接入** | OpenAI 兼容模型网关（默认 chat / reasoning / evaluation 均为 deepseek-v4.1-flash），支持 SSE 流式、重试预算、thinking mode 控制 |
-| **Agent / Skill 编排** | EduClaw Gateway + 5 个顶层 Agent（goal/path/teaching/profile/simulation，无 prompt 编排器）/ Skill 执行层（prompts/core 真源 → 编译产物 → DB 镜像）+ Coordinators + Durable Outbox 事件链 |
-| **模型配置分层** | 环境变量 → 平台默认 → Agent/Skill 级 → 用户自定义 API / 模型覆盖 |
-| **虚拟实验** | Virtual Learner Lab（黑盒模拟 + Quick Learn） |
-| **可观测** | Agent/Skill 调用日志、Trace 瀑布、LLM 执行明细 |
-| **安全** | JWT + CSRF + 登录限流 + Secret AES-256-GCM 静态加密 + 敏感存储权限审计 |
-| **部署** | 跨平台启动脚本（`npm run dev`：Windows PowerShell / Linux·macOS bash）+ 可选 Nginx（测试部署）+ Docker（Linux/macOS 推荐） |
+- **Prompt 设计台（File-as-Truth）**：在线编辑提示词、编译守门、发布与一键回滚，本地 YAML 源码与数据库运行镜像自动同步
+- **全链路可观测**：每次调用的 Token 成本、模型耗时、Agent 执行链路与重试时间线
+- **模型路由**：兼容所有 OpenAI 接口的供应商，默认 `deepseek-v4.1-flash`，可按 Agent 分配快模型或推理模型，也支持用户自带 API Key
 
 ---
 
-## 项目结构
+## 3 分钟快速开始
 
-```text
-backend/            Node.js + Express + TypeScript 后端（18 个模块目录）
-  src/
-    agents/         顶层 Agent（含 learner-model-agent / simulation-agent）
-    skills/         Skill 实现（提示词真源在 prompts/，非此处硬编码）
-    coordinators/   业务流程编排（goal / path / ai-teaching / learner / simulation / requirement）
-    gateway/        模型网关（OpenAI 兼容）
-    routes/         HTTP 路由（用户端 / admin）
-    services/       领域服务与数据访问
-    virtual-lab/    虚拟学习者实验室
-    events/         持久化事件与 outbox
-    scripts/        正式工具：门禁 / 只读审计 / 探针 / 回填 / 运维
-  prisma/           主库 schema 与 migrations；system/ 为 System DB
-frontend/           Vue 3 + TypeScript + Vite 6 前端
-  src/
-    views/v2/       学习者端页面
-    views/admin-redesign/  管理端页面与场景清单 manifest.ts
-    components/mk/  管理端共享原语（MkKpi / MkRowList / MkDistBand / MkBuckets …）
-    styles/         设计令牌与 mk-primitives.css
-    api/ · stores/ · router/ · composables/
-prompts/            File-as-Truth 提示词：core/*.yaml 真源 → skill.*.md 编译产物
-scripts/            仓库根脚本（虚拟学习者跑批 / 巡检 / 演示 / 门禁），索引见 doc/DEV_SCRIPTS.md
-virtual-learners/   预制虚拟学习者语料 presets.yaml（File-as-Truth）
-doc/                设计文档总索引 doc/README.md（过程材料在 gitignored 的 doc/local/）
-.github/workflows/  CI 门禁 quality-check.yml
+前置条件：**Node.js >= 20.17.0**；Windows（PowerShell 5.1+）、Linux、macOS 均可；Linux/macOS 也可直接 `./docker-start.sh` 走 Docker。
+
+```bash
+# 1) 克隆
+git clone https://github.com/wenflow-org/wenflow.git
+cd wenflow
+
+# 2) 初始化配置（按提示填 AI 接口 Key 与管理员密码）
+npm run env:setup
+
+# 3) 一键启动（自动安装依赖、初始化双库、同步内置 Prompt，再拉起前后端）
+npm run dev
 ```
 
-### 数据与存储
+启动后：
 
-当前使用两个 SQLite 库，相对 URL 按各自 Schema 目录解析：
+- 学习端：http://localhost:5173
+- 管理后台：http://localhost:5173/admin（用第 2 步设置的管理员账号登录）
+- 后端接口：http://localhost:3001
 
-| 库 | Schema | 环境变量 | 默认路径 | 表数 |
-|----|--------|----------|----------|------|
-| 主库 | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 51（+1 运行期建表） |
-| System DB | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` | 14 |
+> 起不来或行为异常时，先跑 `npm run doctor`：只读、秒级，逐项体检 Node / 依赖 / `.env` / 双库 / CORS / 端口并给出修复建议。
 
-两库各有独立 migrations 目录（`backend/prisma/migrations`、`backend/prisma/system/migrations`），启动脚本与 CI 都会执行迁移部署。
+<details>
+<summary><b>首次使用与常见坑（点开）</b></summary>
 
-- 迁移与校验：`npm run prisma:migrate:verify-clean`（空库迁移回放）、`npm run prisma:baseline:audit`（只读基线审计）、`npm --prefix backend run prisma:migrate:deploy:all`
-- 备份与维护：`npm run database:backup:create` / `database:backup:verify` / `database:vacuum:status` / `database:vacuum`（会自动先构建后端）
-- 提示词运行时镜像：数据库 `agent_prompts` 只是 `prompts/core/*.yaml` 的镜像，文件为准
+- **依赖一律用 `npm ci`，不要用 `npm install`。** 本项目 lockfile 里带镜像来源的 optional / peer 条目（如 `@parcel/watcher`、`@bufbuild/protobuf`），`npm install` 会按当前解析结果重写 lockfile 并整批删掉这些行，实测一次就是数百行纯删除，不是代码改动。需要手动装依赖时：`npm ci && npm --prefix backend ci && npm --prefix frontend ci`。
+- `npm run dev` 已内置 `prisma:prepare`（生成双 Prisma Client + 双库迁移部署）。只有在手动分步、或显式跳过（PowerShell `./start-dev.ps1 -SkipPrisma`，bash `./start-dev.sh --skip-prisma`）时，才需要自己先跑 `npm --prefix backend run prisma:prepare`。
+- 跳过 Prisma 的选项同时会跳过启动前的 core prompts 同步，仅适用于数据库与 prompts 都已就绪的环境。
+- `backend/.env` 缺失或 `JWT_SECRET` 不合格时，启动脚本会自动拉起初始化流程。
+- 运行状态探针：`/health`、`/livez` 只表示进程活着，`/readyz` 才代表双库与核心运行态可接收流量。重启后端用统一入口 `node backend/restart.mjs --port=<端口>`（`--status` 查状态、`--stop` 停服务），不要手工杀端口或用裸 `ts-node` 启动。
+
+</details>
 
 ---
 
@@ -237,280 +182,241 @@ WenFlow 由个人独立研发，自 2026 年 4 月首个版本起持续迭代；
 
 ---
 
-## 快速开始
+## 技术栈
 
-### 环境要求
-- Node.js >= 20.17.0
-- Windows + PowerShell 5.1+ 或 Linux/macOS + bash 均可；`npm run dev` 会按平台自动选择 `start-dev.ps1` / `start-dev.sh`
-- Linux/macOS 不想在本机装依赖时，推荐直接走 Docker：`./docker-start.sh`
+| 层级 | 技术 |
+|------|------|
+| **前端** | Vue 3 + TypeScript + Vite 6 + 自研 Mk* 管理端原语 + lucide 图标 + Pinia |
+| **后端** | Node.js + Express + TypeScript + Prisma |
+| **数据库** | SQLite 双库架构（主库 51 个模型 + system 库 14 表），零外部数据库依赖即可跑通 |
+| **AI 接入** | OpenAI 兼容模型网关（默认 chat / reasoning / evaluation 均为 deepseek-v4.1-flash），支持 SSE 流式、重试预算与 thinking mode 控制 |
+| **Agent / Skill** | 5 个顶层 Agent（目标 / 路径 / 教学 / 画像 / 仿真）+ Skill 执行层（提示词真源 `prompts/core/*.yaml` → 编译产物 → 数据库镜像）+ 流程编排器 + 持久化事件链 |
+| **模型配置分层** | 环境变量 → 平台默认 → Agent / Skill 级 → 用户自定义 API 与模型覆盖 |
+| **虚拟实验** | Virtual Learner Lab（黑盒模拟 + Quick Learn） |
+| **可观测** | Agent / Skill 调用日志、Trace 瀑布、LLM 执行明细 |
+| **安全** | JWT + CSRF + 登录限流 + Secret AES-256-GCM 静态加密 + 敏感存储权限审计 |
+| **部署** | 跨平台启动脚本（`npm run dev`）+ 可选 Nginx 测试部署 + Docker（Linux/macOS 推荐） |
 
-安全与 Secret 管理见 [`SECURITY.md`](./SECURITY.md)。提交前运行 `npm run security:scan`。
+<details>
+<summary><b>项目结构（点开）</b></summary>
 
-运行状态：`/health` 和 `/livez` 表示进程存活，`/readyz` 才表示双库和核心运行态可接收流量。
-
-自检：环境起不来或行为异常时，先跑 `npm run doctor`（跨平台、只读、秒级），
-会逐项给出 Node/依赖/.env/双库/CORS/端口与服务的体检结果和修复指引；`--deep` 追加 prompts 三方对账。
-
-### 推荐顺序（首次使用）
-
-```bash
-# 0) 安装依赖（务必用 npm ci，不要用 npm install——原因见下方说明）
-npm ci
-npm --prefix backend ci
-npm --prefix frontend ci
-
-# 1) 初始化 backend/.env（JWT_SECRET、AI 配置、初始管理员）
-npm run env:setup        # Windows PowerShell；Linux/macOS 用 cp backend/.env.example backend/.env 后手工填写
-
-# 2) 跨平台启动（Windows → start-dev.ps1，Linux/macOS → start-dev.sh）
-#    启动脚本会先执行 `npm --prefix backend run prisma:prepare`（生成双 Prisma Client + 双库 migrate deploy），再拉起服务
-npm run dev
-
-# 如需手动分步（例如换 worktree / 移动目录后），必须先显式跑一次前置步骤
-npm --prefix backend run prisma:prepare
+```text
+backend/            Node.js + Express + TypeScript 后端
+  src/
+    agents/         顶层 Agent（含 learner-model-agent / simulation-agent）
+    skills/         Skill 实现（提示词真源在 prompts/，不在此处硬编码）
+    coordinators/   业务流程编排（目标 / 路径 / 教学 / 学习者 / 仿真）
+    gateway/        OpenAI 兼容模型网关
+    routes/         HTTP 路由（用户端 / 管理端）
+    services/       领域服务与数据访问
+    virtual-lab/    虚拟学习者实验室
+    events/         持久化事件与 outbox
+    scripts/        正式工具：门禁 / 只读审计 / 探针 / 回填 / 运维
+  prisma/           主库 schema 与 migrations；system/ 为 System DB
+frontend/           Vue 3 + TypeScript + Vite 6 前端
+  src/
+    views/v2/             学习者端页面
+    views/admin-redesign/ 管理端页面与场景清单 manifest.ts
+    components/mk/        管理端共享原语（MkKpi / MkRowList / MkDistBand …）
+    api/ · stores/ · router/ · composables/
+prompts/            File-as-Truth 提示词：core/*.yaml 真源 → skill.*.md 编译产物
+scripts/            仓库根脚本（跑批 / 巡检 / 演示 / 门禁），索引见 doc/DEV_SCRIPTS.md
+virtual-learners/   预制虚拟学习者语料 presets.yaml（File-as-Truth）
+doc/                设计文档总索引 doc/README.md（过程材料在 gitignored 的 doc/local/）
+.github/workflows/  CI 门禁 quality-check.yml
 ```
 
-说明：建议首次使用先完成环境初始化，再选择启动脚本。若 `backend/.env` 缺失或 `JWT_SECRET` 不合格，启动脚本也会自动拉起初始化流程。
-启动后端时会自动把仓库里的核心 prompts 同步进数据库；克隆仓库后即可直接运行，无需手动导入。
-`npm run dev`（`start-dev.ps1` / `start-dev.sh`）已把 `prisma:prepare`（生成客户端 + 双库迁移）作为前置步骤内置其中；仅在手动分步、或 `-SkipPrisma` / `--skip-prisma` 跳过时，才需要自己先跑。
+</details>
 
-> **依赖安装一律用 `npm ci`，不要用 `npm install`。** `npm install` 会按当前解析结果重写 `package-lock.json`，把来自镜像（registry.npmmirror.com）的 optional / peer 条目整批删除（如 `@parcel/watcher` 全平台条目、`@bufbuild/protobuf`），实测一次就是数百行纯删除，并非代码改动。`npm ci` 严格按 lockfile 安装、且不改写 lockfile（CI 亦统一用 `npm ci`）。
+---
 
-### 本机开发
+## 页面地图
+
+<details>
+<summary><b>学习者端（点的展开）</b></summary>
+
+落地页 `/` 与 `/vision`，登录 `/login`、注册 `/register`，登录后进入 V2 壳。
+
+顶栏 / 底栏五个入口：
+
+| 页面 | 路径 | 说明 |
+|------|------|------|
+| 学习台 | `/dashboard` | 今日行动、路径进度、连续学习天数 |
+| 目标规划 | `/goal-conversation` | 多轮对话澄清真实目标 |
+| 学习路径 | `/learning-paths` | 路径列表与进度 |
+| 知识图谱 | `/knowledge-map` | 全部路径的知识聚合视图（学习页内只看当前路径） |
+| 学习状态 | `/learning-state` | LSS / KTL / LF / LSB 与疲劳提醒 |
+
+核心学习流：注册 / 登录 → `/onboarding` 引导 → `/goal-conversation` 澄清目标 → 你确认后生成路径 → `/learning-paths` → `/learning-path/:id` 路径详情 → `/learn/:taskId` 回合式学习 → `/learn/:taskId/evaluation/:sessionId` 课后评估。
+
+个人中心在 `/user/*`：账户、设置（含 API 接入）、调用日志、成就、学习历史。旧的 `/v2/*` 地址会自动重定向到正式路径。
+
+</details>
+
+<details>
+<summary><b>管理端场景（点的展开）</b></summary>
+
+管理后台在 `/admin`，共 **18 个场景页 / 7 个分组**（另有 1 个隐藏的「运营术语表」，仅供页头帮助入口）：
+
+- **总览**：平台总览，当日系统健康度、失败率最高的模型与待排查事项
+- **教学**：用户与学习者、学习状态（风险与疲劳度，支持手动重算快照）、教学会话、目标对话、学习路径、记忆与复习
+- **虚拟学习者**：运行态（并发配额 / 全局限速 / 实例流水 / 批量新建、单步测试）、学习者卡库（角色卡结构化导入导出）
+- **Skill**：编排图（阶段泳道 + 字段数据旅程 / 逻辑图 + 调用用量）、Skill 与提示词（Skill 运行 + 模型路由；Prompt 评估为宿主内页签；Skill 设计二级页含协议编辑、编译、守门检查、发布、回滚、试跑）
+- **观测**：执行日志（日志 / Trace 双 tab，带重试时间线、自动刷新、导出）、成本分析、审计日志
+- **系统**：健康中心、模型与接入（路由 / 连通性 / 网络边界 / 重试超时）、系统工具（运维工具 + 数据导出 + 会话安全）
+- **运营**：运营中心（待办工作台 / 反馈 / 成就 / 公告 / 站内通知）
+
+场景清单以 [`frontend/src/views/admin-redesign/manifest.ts`](frontend/src/views/admin-redesign/manifest.ts) 为准；页面新增、下线与旧链接重定向的历史见 [`CHANGELOG.md`](CHANGELOG.md)。
+
+</details>
+
+---
+
+## 进阶部署与运维
+
+<details>
+<summary><b>局域网多设备调试（手机 / 平板真机）</b></summary>
 
 ```bash
-npm run dev              # 跨平台：Windows 走 start-dev.ps1，Linux/macOS 走 start-dev.sh
-
-# 也可显式指定
-npm run dev:win          # Windows PowerShell
-npm run dev:unix         # Linux/macOS bash
+npm run dev:lan                     # 自动获取局域网 IP
+./start-lan.ps1 -LanIP 192.168.31.26  # 或手动指定
 ```
 
-说明：脚本会自动安装依赖、生成双 Prisma Client、给主库和 System DB 分别执行 migrate、必要时引导创建或补全 `backend/.env`，启动前再自动同步一次 core prompts。
-如需跳过 Prisma 初始化：PowerShell 用 `./start-dev.ps1 -SkipPrisma`，bash 用 `./start-dev.sh --skip-prisma`。注意：该选项也会跳过启动前的 core prompts 同步，仅适用于数据库和 prompts 已经准备好的环境。
+会把局域网 IP 加入 `CORS_ORIGIN`，适合多设备调试前台页面；不改变管理员登录的 `ADMIN_ACCESS_MODE` 限制。
 
-### 局域网开发模式
+</details>
 
-```bash
-# 自动获取局域网 IP 并启动
-./start-lan.ps1
-
-# 或使用 npm 脚本
-npm run dev:lan
-
-# 手动指定 IP
-./start-lan.ps1 -LanIP 192.168.31.26
-```
-
-说明：自动将局域网 IP 加入 `CORS_ORIGIN`，适合多设备调试前台页面；不会改变管理员登录的 `ADMIN_ACCESS_MODE` 访问限制。
-
-### 一键测试部署（本机 Nginx，HTTP）
+<details>
+<summary><b>本机 Nginx 测试部署（HTTP）</b></summary>
 
 ```bash
-# 依赖本机已安装 nginx（并已加入 PATH）
-./start-dev.ps1 -UseNginx
-
-# 或使用 npm 脚本
-npm run dev:nginx
-
-# 指定域名（不填默认 localhost）
+npm run dev:nginx                        # 依赖本机已装 nginx 且在 PATH
 ./start-dev.ps1 -UseNginx -Domain test.example.com
-
-# nginx 不在 PATH 时，指定可执行文件路径
 ./start-dev.ps1 -UseNginx -NginxExePath "C:\nginx\nginx.exe"
 ```
 
-说明：`-UseNginx` 模式会自动执行 `npm run build`（前端）并生成运行时配置到 `runtime/nginx/wenflow.nginx.conf`；启动前会校验 80 端口可用，若系统 nginx 或其他进程已占用 80 端口，需要先手动停止。
+会自动构建前端并生成配置到 `runtime/nginx/wenflow.nginx.conf`，启动前校验 80 端口可用。
 
-### Docker 部署（Linux/macOS）
+</details>
+
+<details>
+<summary><b>Docker 部署（Linux / macOS）</b></summary>
 
 ```bash
-# 启动（交互式补齐 backend/.env，也支持环境变量非交互传入）
-./docker-start.sh
-
-# 数据库备份（一次性 operations 服务，只读挂载数据卷；需先设置 WENFLOW_BACKUP_HOST_DIR 指定备份输出目录）
-docker compose -f docker-compose.operations.yml run --rm backup
+./docker-start.sh          # 交互式补齐 backend/.env 后启动
+docker compose -f docker-compose.operations.yml run --rm backup   # 数据库备份（需先设 WENFLOW_BACKUP_HOST_DIR）
 ```
 
-说明：`docker-compose.yml` 提供 migrate / backend / nginx 三个服务，默认只发布 Nginx（80），不发布后端 `3001`；后端强制 `ADMIN_ACCESS_MODE=private`。详见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+`docker-compose.yml` 提供 migrate / backend / nginx 三个服务，默认只发布 Nginx（80），不发布后端 3001；后端强制 `ADMIN_ACCESS_MODE=private`。详见 [`DEPLOYMENT.md`](DEPLOYMENT.md)。
 
-### 质量检查（与 CI 一致）
+</details>
 
-`npm run check` 串起三个阶段，与 CI 的三个并行 job 一一对应，可在本地逐条复现：
+<details>
+<summary><b>质量门禁（与 CI 一致）</b></summary>
+
+`npm run check` 串起三个阶段，与 CI 的三个并行 job 一一对应：
 
 ```bash
-# Quality job：secret 扫描（当前工作区）→ Prisma 双 schema 校验 → 空库迁移回放 → 后端 typecheck →
-#   前端 typecheck → LLM 调用契约 → 常量来源 → 双库迁移部署 → 字段路由播种 →
-#   prompts 门禁（lint / 快照 / 漂移 / 契约 / core 哈希对账）→ 设计系统守卫 →
-#   路由-数据边界 → doc 死链 → lint
-npm run check:quality
-
-# Tests job：后端 + 前端测试（含覆盖率）
-npm run check:test
-
-# Build job：后端 + 前端构建
-npm run check:build
-
-# 三者依次全跑（等价于 CI）
-npm run check
+npm run check:quality   # secret 扫描 → Prisma 双 schema 校验 → 空库迁移回放 → 前后端 typecheck →
+                        # LLM 调用契约 → 常量来源 → 双库迁移部署 → prompts 门禁 → 设计系统守卫 →
+                        # 路由-数据边界 → 启动入口守卫 → doc 死链 → lint
+npm run check:test      # 后端 + 前端测试（含覆盖率）
+npm run check:build     # 后端 + 前端构建
+npm run check           # 三者依次全跑（等价于 CI）
 ```
 
-说明：GitHub Actions（`.github/workflows/quality-check.yml`）在 push main/master/develop 与 PR 时执行上述三阶段，其中 Quality job 另加 Git 历史 secret 扫描。CI 使用 Node 20；本地要求 Node >= 20.17.0。CI 失败时可用 `npm run ci:status` 回看最近 run 的失败 job / 步骤 / 错误行。
+CI（`.github/workflows/quality-check.yml`）在 push main/master/develop 与 PR 时执行；失败可用 `npm run ci:status` 回看最近 run 的失败 job / 步骤 / 错误行。
 
-### 环境配置辅助命令
+</details>
 
-```bash
-# 交互式初始化 backend/.env
-npm run env:setup
+<details>
+<summary><b>Prompt 初始化与维护（File-as-Truth）</b></summary>
 
-# 快速打开 backend/.env 手动编辑
-npm run env:edit
-```
-
-说明：`env:setup` 不再单独询问域名；Nginx 模式下域名由 `-Domain`（优先）或 `backend/.env` 中的 `FRONTEND_URL` 推断。
-
-### Prompt 初始化与维护（File-as-Truth）
-
-核心 prompts 采用两级模型：**真源**是 `prompts/core/*.yaml`（唯一人工编辑入口，进 git），**编译产物**是 `prompts/skill.*.md`（模型唯一读取文本），数据库 `agent_prompts` 只是运行时镜像。编辑 → 编译 → 发布链路（含守门检查与回滚）见管理端「Prompt 设计台」，机制详见 [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md)。
+真源是 `prompts/core/*.yaml`（唯一人工编辑入口，进 git），编译产物是 `prompts/skill.*.md`（模型唯一读取文本），数据库 `agent_prompts` 只是运行时镜像。编辑 → 编译 → 发布链路（含守门检查与回滚）在管理端「Prompt 设计台」操作，机制见 [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md)，目录说明见 [`prompts/_README.md`](prompts/_README.md)。
 
 ```bash
-# 把 prompts/core/*.yaml 全部确定性编译，重新生成 prompts/skill.*.md（不写数据库）
 cd backend
-npm run prompts:compile-all
-
-# 把编译产物同步到数据库 ACTIVE 版本（启动时也会自动执行）
-npm run prompts:sync-core
-
-# 升级后补齐新增的 prompt 节点，不覆盖已有 ACTIVE 配置
-npm run prompts:backfill-core
-
-# 校验与对账
-npm run prompts:lint
-npm run prompts:core:check
+npm run prompts:compile-all    # core/*.yaml → skill.*.md（不写库）
+npm run prompts:sync-core      # 同步数据库 ACTIVE 版本（启动时也会自动执行）
+npm run prompts:backfill-core  # 升级后只补新增节点，不覆盖已有 ACTIVE 配置
+npm run prompts:lint && npm run prompts:core:check
 ```
 
-说明：`prompts:sync-core` 以仓库编译产物为准，把数据库 ACTIVE 版本同步成一致；不一致时自动创建新版本并切换（旧版归档）。`prompts:backfill-core` 只补缺失节点，不覆盖已有 ACTIVE 配置。若直接在 `backend/` 下运行 `npm run dev`，后端启动时也会自动做一次同步。更多说明见 [`prompts/_README.md`](prompts/_README.md)。
+</details>
 
-### 本地 SQLite 路径约定
+<details>
+<summary><b>数据与存储</b></summary>
 
-当前仓库默认使用两个 SQLite 库：
+两个 SQLite 库，相对 URL 按各自 schema 目录解析：
 
-- `DATABASE_URL=file:./dev.db`
-- `SYSTEM_DATABASE_URL=file:../system.db`
+| 库 | Schema | 环境变量 | 默认路径 | 表数 |
+|----|--------|----------|----------|------|
+| 主库 | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 51（+1 运行期建表） |
+| System DB | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` | 14 |
 
-相对 URL 按 Schema 目录解析。请勿继续使用旧的 `file:./prisma/*.db`，也不要把 System URL 改为 `file:./system.db`。已有环境升级前先确认真实权威数据库并备份，可运行 `npm run prisma:baseline:audit` 做只读检查。
+- 迁移与校验：`npm run prisma:migrate:verify-clean`（空库回放）、`npm run prisma:baseline:audit`（只读审计）、`npm --prefix backend run prisma:migrate:deploy:all`
+- 备份与维护：`npm run database:backup:create` / `database:backup:verify` / `database:vacuum:status` / `database:vacuum`
+- **换 worktree 或移动目录后连错库**：Prisma 客户端会把生成时的相对路径写进 `node_modules/.prisma/client/index.js`，应用可能仍解析到另一棵树的库，表现为“迁移与运行数据分离”。修复方式是**在当前工作区**重新生成客户端并部署迁移：`npm --prefix backend run prisma:prepare`。
+- 不要继续使用旧的 `file:./prisma/*.db`，也不要把 System URL 改成 `file:./system.db`。
 
-**换 worktree / 移动目录后连错库（迁移与运行数据分离）**：Prisma 生成的客户端会把生成时记录的相对路径写进 `node_modules/.prisma/client/index.js`（`alternativePaths`，按运行时 cwd 解析）。同一台机切换或移动 worktree 后，应用可能仍解析到**另一棵树**的库（如 `D:\test\wenflow-develop\backend\prisma\dev.db`），而 CLI `prisma migrate deploy` 迁移的却是当前工作区的库——表现为迁移与运行数据分离。用 `PRAGMA database_list`（经应用同款客户端）可确认实际路径。修复：在**当前工作区**的 `backend/` 下重新生成客户端并部署迁移：
+</details>
 
-```bash
-npm --prefix backend run prisma:generate:main          # 关键：在正确 cwd 下重生成客户端
-npm --prefix backend run prisma:migrate:deploy:all     # 再迁移当前工作区的库
-# 或一步到位（等价于上面两条）：
-npm --prefix backend run prisma:prepare
-```
+<details>
+<summary><b>前端 API 环境变量</b></summary>
 
-### 前端 API 环境变量
+- 默认前端通过相对路径 `/api` 访问后端，由 Vite 代理或 Nginx 转发；无特殊部署需求保持默认即可。
+- 管理端主要读 `frontend/.env` 的 `VITE_API_BASE_URL`；普通用户端开发模式固定用 `/api`，非开发模式 `VITE_API_BASE_URL` 优先，`VITE_API_URL` 仅作历史兼容。
 
-- 默认情况下，前端通过相对路径 `/api` 访问后端，由 Vite 代理或 Nginx 转发。
-- 管理端配置主要读取 `frontend/.env` 中的 `VITE_API_BASE_URL`。
-- 普通用户端在开发模式下固定使用 `/api`；非开发模式下 `VITE_API_BASE_URL` 优先，`VITE_API_URL` 仅作历史兼容保留。如果没有特殊部署需求，保持默认 `/api` 即可。
+</details>
 
-如需更细粒度的部署或非脚本方式启动，可参考 [DEPLOYMENT.md](DEPLOYMENT.md)。
+<details>
+<summary><b>管理员账户与反向代理</b></summary>
 
-架构设计、Skill 协议、Prompt 管理与虚拟学习者链路等设计文档见 [`doc/README.md`](doc/README.md)（设计文档索引）。
+首次启动时按 `backend/.env` 自动创建初始管理员（`INIT_ADMIN_NAME` / `INIT_ADMIN_PASSWORD`，已有管理员则跳过）。首次登录后请立即修改密码。
 
-### 访问地址
+管理员登录默认 `ADMIN_ACCESS_MODE=private`（仅本机与局域网），可设 `loopback`（仅本机）或 `any`，并用 `ADMIN_ALLOWED_IPS` 精确放行；该策略可在管理端「模型与接入」页热生效。确有公网远程管理需求时，请配合 VPN 或精确 IP 白名单。详见 [`admin-guide.md`](admin-guide.md)。
 
-**Demo 站点**: https://wenflow.org
+反向代理注意：
 
-**本地开发**
-- 前端: http://localhost:5173
-- 后端: http://localhost:3001
-- 管理后台: http://localhost:5173/admin
+- `CORS_ORIGIN` 不要写尾部 `/`（`https://demo.example.com` 而不是 `https://demo.example.com/`）
+- `TRUST_PROXY` 填直连后端的代理 IP/CIDR，生产禁止用 `true`
+- 不要暴露可绕过代理直连的后端端口（Docker 默认只发布 Nginx）
+- 遇到“请求来源不被允许”时，先比对浏览器 `Origin` 与 `CORS_ORIGIN`
 
-说明：管理员登录默认 `ADMIN_ACCESS_MODE=private`（仅本机 + 局域网），也可设为 `loopback`（仅本机）或 `any`（不限来源），并支持 `ADMIN_ALLOWED_IPS` 精确放行（不推荐直接暴露公网管理登录）。
+</details>
 
----
+<details>
+<summary><b>常用命令索引</b></summary>
 
-## 常用脚本与工具索引
-
-日常最常用的 `npm run` 命令（完整明文见根 `package.json` 与 [`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)）：
+完整明文见根 `package.json` 与 [`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)（三个脚本目录的定位、跑批链路与工具索引）：
 
 | 分类 | 命令 | 说明 |
 |------|------|------|
-| 启动 | `npm run dev` / `dev:win` / `dev:unix` | 跨平台 / Windows / Linux·macOS 启动 |
+| 启动 | `npm run dev` / `dev:win` / `dev:unix` | 跨平台 / Windows / Linux·macOS |
 | 启动 | `npm run dev:lan` / `dev:nginx` | 局域网调试 / 本机 Nginx 测试部署 |
-| 自诊 | `npm run doctor` | 只读体检 Node / 依赖 / .env / 双库 / CORS / 端口；`-- --deep` 追加 prompts 对账 |
-| 门禁 | `npm run check` | `check:quality` + `check:test` + `check:build`（详见上节） |
-| 测试 | `npm run test` / `test:coverage` | 后端 Jest（CI 用 `--runInBand`）/ 含覆盖率；前端测试用 `npm --prefix frontend run test`（或 `npm run check:test` 跑两边） |
-| 类型 | `npm run typecheck:backend` / `check:frontend-types` | 前后端 typecheck |
-| 代码风格 | `npm run lint` | 后端 + 前端 ESLint |
-| 设计系统 | `npm run design:check` | 管理端设计体系守卫（令牌 / 原语用法 / 视觉层） |
-| 安全 | `npm run security:scan` / `permissions:audit` / `secrets:audit` | 密钥扫描 / 敏感存储权限审计 / Secret 迁移审计（审计只读，对应的 `permissions:repair`、`secrets:migrate` 才写库） |
-| 数据库 | `npm run database:backup:create` / `database:vacuum` | 备份 / 真空整理（先构建后端） |
-| Prompt | `cd backend && npm run prompts:compile-all` / `prompts:sync-core` / `prompts:lint` | 编译 / 同步 ACTIVE / 校验（见上「Prompt 初始化与维护」） |
-| 运维 | `npm run ci:status` | 回看最近 CI run 的失败 job / 步骤 / 错误行（只读） |
+| 后端重启 | `node backend/restart.mjs --port=3011` | 统一入口：类型快检 → 停旧进程 → 起进程 → 等 `/readyz`；`--status` 查状态、`--stop` 停服务 |
+| 自诊 | `npm run doctor` | 只读体检；`-- --deep` 追加 prompts 对账 |
+| 门禁 | `npm run check` | `check:quality` + `check:test` + `check:build` |
+| 测试 | `npm run test` / `test:coverage` | 后端 Jest（CI 用 `--runInBand`）/ 覆盖率 |
+| 安全 | `npm run security:scan` / `permissions:audit` / `secrets:audit` | 密钥扫描 / 权限审计 / Secret 迁移审计（对应的 `*:repair`、`*:migrate` 才写库） |
+| 运维 | `npm run ci:status` | 回看最近 CI run 的失败 job / 步骤 / 错误行 |
 
-虚拟学习者跑批（造人 / 跑批 / 看结果 / 救场）链路的脚本定位与用法见 [`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md) §2。
+</details>
 
 ---
 
-## 管理员账户
+## 设计文档入口
 
-首次启动时，系统会读取 `backend/.env` 中的以下字段自动创建初始管理员：
+仓库文档总表在 [`doc/README.md`](doc/README.md)，按「活规范 / 设计留痕 / 历史快照」分类登记。常用入口：
 
-```env
-INIT_ADMIN_NAME=admin
-INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
-```
-
-如果数据库里已经存在管理员，系统会自动跳过创建。
-
-建议：首次登录管理端后立即修改密码；对外部署时请使用强密码。
-
-注意：管理员登录默认 `ADMIN_ACCESS_MODE=private`，仅允许本机与局域网（RFC1918）来源访问；可设为 `loopback`（仅本机）或 `any`（不限制来源），并用 `ADMIN_ALLOWED_IPS` 精确放行指定客户端 IP。访问模式策略可在管理端「模型与接入」页面热生效，环境变量仅作默认值。如确有公网远程管理需求，请配合 VPN 或精确 IP 白名单，并自行承担安全加固责任。详见 [admin-guide.md](admin-guide.md)
-
-### 反向代理常见问题
-
-- `CORS_ORIGIN` 建议不要写尾部 `/`（如 `https://demo.example.com`，不要写成 `https://demo.example.com/`）。
-- 使用反向代理时，将 `TRUST_PROXY` 配置为直接连接后端的代理 IP/CIDR；生产禁止使用 `true`。
-- 不要公开可绕过代理直连的后端端口。Docker Compose 默认只发布 Nginx，不发布后端 `3001`。
-- 如果遇到“请求来源不被允许”，先检查浏览器 `Origin` 与 `CORS_ORIGIN` 是否匹配。
-
----
-
-## 教育理论基础
-
-设计背后的理论，每条都有对应实现（下列 11 条与产品行为直接对应；完整 16 条理论、文献 DOI/arXiv 链接与落点索引见 [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md)）：
-
-1. **认知负荷理论** - 单轮知识点上限、回复形态预算，长对话自动压缩
-2. **自我导向学习** - 目标由学习者提出、方案由学习者确认，学习节奏由学习者掌控
-3. **最近发展区 + 支架** - 难度随理解度自动升降，理解受阻时回补前置基础
-4. **形成性评估** - 每轮理解度诊断 + 检查点测验，即时反馈、失败重学
-5. **刻意练习 + 检索练习** - 能够独立阐述才算掌握；课后检索式自测，下一节开场承接
-6. **间隔效应与复习闭环** - 跨日递增间隔（SM-2 式）+ 自动复习课闭环，巩固长期记忆
-7. **费曼技巧（自我解释）** - 以复述讲解检验理解，无法讲清时重新学习
-8. **ICAP 框架** - 学习活动按认知参与度分档（交互 > 建构 > 主动 > 被动），阶段任务按 ICAP 等级递进
-9. **有效失败（Productive Failure）** - 先独立试错、再对比整合的两阶段教学，以失败作为学习信号
-10. **预测校准方法论** - 教学决策置信度可证伪：预测留档、结果回写、命中率统计，数据驱动调优
-11. **安德森认知目标分类** - 从"记忆"到"创造"6 级认知目标，贯穿标注、教学与完成判定
-
----
-
-## 文档与协作
-
-仓库文档总表在 [`doc/README.md`](doc/README.md)——按「活规范 / 设计留痕 / 历史快照」分类型登记，新增文档需同时进 doc 白名单、登记总表、写状态头。常用入口：
-
-- **开发脚本手册**：[`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)（三个脚本目录的定位与命名约定、虚拟学习者跑批链路、可复用工具索引）
-- **Agent / Skill**：[`doc/AGENT_SKILL_MANUAL.md`](doc/AGENT_SKILL_MANUAL.md)（why）、[`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md)（协议 SSOT）、[`doc/SKILL_DEVELOPMENT_GUIDE.md`](doc/SKILL_DEVELOPMENT_GUIDE.md)（新建 / 改造 Skill）
-- **架构与模型**：[`doc/MODEL_GATEWAY_DESIGN.md`](doc/MODEL_GATEWAY_DESIGN.md)、[`doc/LEARNER_MODEL_ARCHITECTURE.md`](doc/LEARNER_MODEL_ARCHITECTURE.md)
 - **教学理论落点**：[`doc/EDUCATIONAL_THEORY_MAP.md`](doc/EDUCATIONAL_THEORY_MAP.md)
+- **Agent / Skill**：[`doc/AGENT_SKILL_MANUAL.md`](doc/AGENT_SKILL_MANUAL.md)（why）、[`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md)（协议）、[`doc/SKILL_DEVELOPMENT_GUIDE.md`](doc/SKILL_DEVELOPMENT_GUIDE.md)（新建 / 改造 Skill）
+- **架构与模型**：[`doc/MODEL_GATEWAY_DESIGN.md`](doc/MODEL_GATEWAY_DESIGN.md)、[`doc/LEARNER_MODEL_ARCHITECTURE.md`](doc/LEARNER_MODEL_ARCHITECTURE.md)
+- **开发脚本**：[`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)
 - **部署 / 安全 / 管理**：[`DEPLOYMENT.md`](DEPLOYMENT.md)、[`SECURITY.md`](SECURITY.md)、[`admin-guide.md`](admin-guide.md)
 - **参与开发**：[`CONTRIBUTING.md`](CONTRIBUTING.md)（分支模型 `develop` → `main`、门禁与协作）
-- **面向 AI 编码会话**：[`CLAUDE.md`](CLAUDE.md)（仓库工作约定：文档治理、共享工作树纪律）
+- **面向 AI 编码会话**：[`CLAUDE.md`](CLAUDE.md)（文档治理、共享工作树纪律等仓库约定）
 - **更新日志**：[`CHANGELOG.md`](CHANGELOG.md)
-
-> `doc/local/` 存放设计草稿、调查快照等过程材料，已被 gitignore、不进仓库；仓库内只保留现行有效文档。
 
 ---
 

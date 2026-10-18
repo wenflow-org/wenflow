@@ -12,8 +12,7 @@ English Version | [中文版](README.md)
 
 🌐 **Demo Site**: https://wenflow.org
 
-> Demo only, not for production use.
-> ⚠️ **Notice**: All accounts and data on the demo site are periodically purged. Do not store important information.
+> Demo only, not for production use, and all accounts and data are periodically purged. Do not store important information.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.17.0-green.svg)](https://nodejs.org)
@@ -41,9 +40,7 @@ As AI becomes increasingly capable of producing answers, the skills worth cultiv
 
 ---
 
-## Core Features
-
-### Product Flow Preview
+## Core Experience Preview
 
 These six screenshots show WenFlow's core experience, from a real problem to a complete learning loop.
 
@@ -67,163 +64,111 @@ These six screenshots show WenFlow's core experience, from a real problem to a c
 | ![Learning State Tracking](doc/images/learning-state.png) |
 | LSS / KTL / LF / LSB tracked continuously, with rest prompts when fatigue is detected |
 
-### From Problem to Path
-- **Problem Clarification**: multi-round natural dialogue to clarify the learning goal
-- **Path Generation**: a vague goal becomes phases, tasks, and an actionable first step
-- **Round-based Learning**: the AI teaches, the learner answers, feedback is immediate, and teaching adapts to the learner's understanding
+---
 
-### Learning State Tracking
-Inspired by load-and-recovery ideas from sports science, WenFlow tracks learning state rather than only whether a task was completed:
+## Highlights
 
-| Metric | Meaning | Usage |
-|------|------|------|
-| LSS | Learning Stress Score | Composite of task difficulty, duration, cognitive load, efficiency and completion rate |
-| KTL | Knowledge Training Load | Long-term accumulation, daily decay factor 0.95 (half-life ≈ 13.5 days) |
-| LF | Learning Fatigue | Short-term accumulation, daily decay factor 0.70 (half-life ≈ 1.9 days) |
-| LSB | Learning State Balance | KTL - LF, warns against over-learning |
+### 1. A multi-agent classroom that actually teaches
 
-### Platform Agent Architecture (Simplified)
+Most AI teaching tools are a chat box with a prompt attached, and the conversation drifts. WenFlow runs on an explicit division of labour and a round-based protocol:
 
 ```mermaid
 flowchart TD
-    U[User] --> G1[Goal Conversation Skill\nMulti-round Clarify → Proposal Confirm]
-    G1 -- explicit user confirm --> P1[Path Planning Skill\nCognitive Map + Milestone Skeleton]
-    P1 --> P2[Stage Designer Skill\nStage → Tasks + Acceptance Criteria]
-    P2 --> T0[AI Teaching Orchestrator\nRound-based State Machine]
+    U[Learner states a problem] --> G1[Goal clarification: clarifying questions until confirmable]
+    G1 -- explicit confirmation --> P1[Path planning: phase skeleton and daily tasks]
+    P1 --> T0[Round-based classroom]
 
-    T0 --> T1[Learning Turn Skill\nExplain, Ask, Diagnose Each Round]
-    T1 --> K1[Knowledge State Update\nTopic Progress]
-    T1 --> S1[Learning State Update\nLSS, KTL, LF, LSB]
-    T1 --> C1[Checkpoint Quiz\nFail → Back to Teaching]
-
-    T1 --> D{Need Reinforcement?}
-    D -- Yes --> PEER[Peer Learning Skill\nFeynman-style Discussion]
-    D -- No --> NEXT{Lesson Complete?}
-    C1 --> NEXT
+    T0 --> T1[Explain, ask, quiz]
+    T1 --> C1{Correct / can explain it back?}
+    C1 -- not mastered --> T1
+    T1 --> D{Repeatedly stuck or asks for help?}
+    D -- yes --> PEER[Peer reinforcement: slower pace, different explanation]
+    D -- no --> NEXT{Lesson complete?}
     PEER --> NEXT
+    C1 --> NEXT
 
-    NEXT -- Complete --> W1[Post-session Skill\nSummary + Evaluation]
-    W1 -- lesson:completed event --> E1[Outbox Event\nLearner Evidence / Projection Refresh]
-    W1 --> R1[Replan Suggestion\nApplied After User Confirm]
-    E1 -. next-lesson context .-> T0
-    R1 -. after confirm .-> P1
+    NEXT -- wrap up --> W1[Post-session summary and mastery evaluation]
+    W1 --> R1[Follow-up path adjustment suggestion]
+    W1 -. remembers weak spots .-> T0
+    R1 -. after your confirmation .-> P1
 ```
 
-- Top-level agents are orchestration-oriented; the Skills hold the prompts and call the LLM.
-- The goal is clarified first, then broken into a path. Path generation starts only after explicit user confirmation.
-- Teaching progresses opening → teaching ⇄ intervention → ready_to_close; the checkpoint is a **within-round** quiz control object (with answer keys and code adjudication), not a stage value; lesson closing is expressed by ready_to_close; session mode is always tutor.
-- When a learner shows signs of getting stuck (help keywords, several consecutive low-understanding rounds), peer reinforcement is triggered — the current task is never abandoned.
-- Each session ends with a summary, evaluation, and replan suggestions. Paths are never changed automatically; a new version is created only after user confirmation.
-- After a lesson, events are persisted and the learner profile is updated; the next lesson starts with that context.
+- **It never acts on its own**: generating a path or changing a plan requires the learner's explicit confirmation.
+- **Getting stuck is handled**: after repeated wrong answers or an explicit request for help, the session switches into peer reinforcement and rebuilds the missing prerequisites instead of pushing on.
+- **Memory carries across lessons**: each session feeds the learner profile, so the next lesson picks up from the weak spots and schedules reviews according to memory science.
 
-### Virtual Learner Lab
+### 2. Managing cognitive load like physical training load
 
-Virtual learner accounts exercise the product the way a real user would, to validate the platform:
+People often quit after three days, not out of laziness but because they start too hard. WenFlow borrows the load-and-recovery model from endurance sports and gives study intensity its own dashboard:
 
-- **Black-box simulation**: walks through goal → path → learning from a normal user's perspective, with a referee and actor-fidelity audit checking the results
-- **Quick Learn**: selects a task from a virtual account, auto-completes a lesson, and produces a propagation report
-
-### Learner App
-
-The learner app and the admin console are separate: landing `/` and `/vision`, login `/login`, register `/register`; after login you enter the V2 shell (`frontend/src/views/v2/*.vue`).
-
-The top bar / bottom bar navigation has five entries (`frontend/src/views/v2/V2Nav.vue:117`):
-
-| Page | Path | Description |
+| Metric | Full name | In plain words |
 |------|------|------|
-| Dashboard | `/dashboard` | Today's actions, path progress, learning streak |
-| Goal Planning | `/goal-conversation` | Multi-round dialogue to clarify the real goal |
-| Learning Paths | `/learning-paths` | Path list and progress |
-| Knowledge Map | `/knowledge-map` | Knowledge aggregation across all paths (current path only inside a lesson) |
-| Learning State | `/learning-state` | LSS / KTL / LF / LSB with fatigue reminders |
+| **LSS** | Learning Stress Score | How hard today's session hit: computed from task difficulty, duration, cognitive load, and completion rate |
+| **KTL** | Knowledge Training Load | Your long-term base: accumulated study load with daily decay retention (half-life ≈ 13.5 days) |
+| **LF** | Learning Fatigue | How tired you are right now: short-term accumulated fatigue (half-life ≈ 1.9 days) that spikes when you study back-to-back |
+| **LSB** | Learning State Balance | Whether you can take more: KTL − LF; when low, the platform warns against over-learning and suggests rest or review |
 
-Core learning flow: register / login → `/onboarding` guide → `/goal-conversation` to clarify the goal → path generated only after explicit user confirmation → `/learning-paths` list → `/learning-path/:id` path detail → `/learn/:taskId` round-based learning → `/learn/:taskId/evaluation/:sessionId` post-session evaluation.
+### 3. Educational theory that lands in code
 
-The personal center lives under `/user/*`: account (`/user/account`), settings with API access (`/user/settings`), agent call logs (`/user/agent-logs`), achievements (`/user/achievements`), learning history (`/user/learning-history`). Legacy `/v2/*` URLs all redirect to the canonical paths above (`frontend/src/router/index.ts:165`).
+WenFlow's teaching behaviour is not prompt guesswork; each design point has a theory behind it (11 of them map directly to product behaviour, and the full 16 with literature links are in [`doc/EDUCATIONAL_THEORY_MAP.md`](doc/EDUCATIONAL_THEORY_MAP.md)):
 
-### Admin Console
+- **Cognitive load theory**: caps the knowledge points and length of each turn, compresses long conversations instead of flooding the screen
+- **Zone of proximal development + scaffolding**: difficulty rises and falls with demonstrated understanding, and prerequisites are rebuilt when progress stalls
+- **Feynman technique + retrieval practice**: being able to explain it back and pass the in-session check is what counts, not a feeling of “I get it”
+- **Productive failure**: try first, then compare and integrate with the AI, turning wrong answers into understanding
+- **Spacing and the review loop**: reviews are scheduled across days by the FSRS-6 memory model (replacing the earlier SM-2-style fixed multiplier), so knowledge is maintained rather than consumed once
 
-The admin panel lives at `/admin` with 18 scene pages across 7 sidebar groups, all backed by real APIs (demo mode has been removed; always live):
+### 4. Virtual Learner Lab
 
-- **Overview**: platform overview — current system health, the model with the highest failure rate, and items requiring investigation
-- **Teaching**: people & learners, learning state (risk and fatigue, with manual snapshot recompute), teaching sessions, goal conversations, learning paths, memory & review
-- **Virtual Learners**: virtual learners (runtime state: concurrency quota / global rate limit / instance log / batch creation, single-step testing), learner card library (structured role-card import/export)
-- **Skill**: orchestration map (stage lanes + field data journey / logic diagram + call usage), skills & prompts (skill runtime + model routing; prompt evaluation as an in-host tab; skill design secondary page with protocol editing, compile, gate checks, publish, rollback, trial runs)
-- **Observability**: execution logs (logs / trace dual tab, with retry timeline, auto-refresh, export), cost analysis, audit logs
-- **System**: health center, models & access (routing / connectivity / network boundary / retry & timeout), system tools (ops tools + data export + session security)
-- **Operations**: operations hub (todo workbench / feedback / achievements / announcements / in-app notifications)
+To validate teaching quality without a large human sample, the project ships a Virtual Learner Lab: preset learner accounts with different backgrounds and personalities run the full flow — clarify the goal, generate the path, attend the lesson — while an independent judge and a role-fidelity audit score the teaching.
 
-> Note: the field data journey (logic diagram) has been merged into the "Orchestration Map" page; "Prompt Evaluation" is now a tab inside the "Skills & Prompts" host page (2026-10-04; the old URL `/admin/prompt-eval` redirects to `/admin/skills?tab=prompt-eval`); cost analysis has been split back into its own page (2026-09-29); the "Batch Experiments" scene has been retired (runtime merged into "Virtual Learners", asset input moved to the "Learner Card Library"; old URL redirects to `/admin/virtual-learners`). The authoritative scene list is `frontend/src/views/admin-redesign/manifest.ts`.
+- **Black-box simulation**: only actions visible through the product UI, no data edits, no reading internal state
+- **Quick Learn**: pick a task, complete one lesson automatically, and get a report for fast regression
 
-### Prompt Engineering (Prompt Lab v4, File-as-Truth)
+### 5. An admin console with 18 scene pages
 
-- **Source of truth**: `prompts/core/*.yaml` (the only manual edit entry, committed to git)
-- **Compiled artifacts**: `prompts/skill.*.md` (generated deterministically; models read this text only)
-- **Publish chain**: edit core.yaml → compile (gate checks) → publish (write md + DB ACTIVE) → rollback
-- **Database**: `agent_prompts` is only a runtime mirror; files are the truth, DB is the mirror
+Beyond the learner app there is a full operations and observability console (`/admin`), all backed by real APIs:
 
----
-
-## Tech Stack
-
-| Layer | Technology |
-|------|------|
-| **Frontend** | Vue 3 + TypeScript + Vite 6 + in-house Mk* primitives + lucide icons + Pinia |
-| **Backend** | Node.js + Express + TypeScript + Prisma |
-| **Database** | SQLite (main DB: 51 Prisma models + 1 runtime-created table; system DB: 14 tables; dual-database architecture) |
-| **AI Integration** | OpenAI-compatible model gateway (defaults: chat / reasoning / evaluation all use deepseek-v4.1-flash), SSE streaming, retry budget, thinking-mode control |
-| **Agent / Skill Orchestration** | EduClaw Gateway + 5 top-level Agents (goal/path/teaching/profile/simulation, no prompt orchestrator) / Skill execution layer (prompts/core source → compiled artifacts → DB mirror) + Coordinators + Durable Outbox event chain |
-| **Model Config Layers** | Env vars → platform defaults → Agent/Skill level → user-defined API / model overrides |
-| **Virtual Experiment** | Virtual Learner Lab (black-box simulation + Quick Learn) |
-| **Observability** | Agent/Skill call logs, trace waterfall, LLM execution details |
-| **Security** | JWT + CSRF + login rate limiting + Secret AES-256-GCM encryption + sensitive-storage permission audits |
-| **Deployment** | Cross-platform start script (`npm run dev`: Windows `start-dev.ps1` / Linux·macOS `start-dev.sh`) + optional Nginx + Docker (recommended for Linux/macOS) |
+- **Prompt Studio (File-as-Truth)**: edit prompts online, compile with gates, publish and roll back in one click; local YAML sources and the runtime mirror in the database stay in sync
+- **End-to-end observability**: token cost, model latency, agent execution chains and retry timelines for every call
+- **Model routing**: any OpenAI-compatible provider, defaulting to `deepseek-v4.1-flash`; fast or reasoning models can be assigned per agent, and users can bring their own API key
 
 ---
 
-## Project Structure
+## Quick Start in 3 Minutes
 
-```text
-backend/            Node.js + Express + TypeScript backend (18 module directories)
-  src/
-    agents/         top-level Agents (incl. learner-model-agent / simulation-agent)
-    skills/         Skill implementations (prompt source of truth lives in prompts/, not hardcoded here)
-    coordinators/   business-flow orchestration (goal / path / ai-teaching / learner / simulation / requirement)
-    gateway/        model gateway (OpenAI-compatible)
-    routes/         HTTP routes (user-facing / admin)
-    services/       domain services and data access
-    virtual-lab/    virtual learner lab
-    events/         persisted events and outbox
-    scripts/        official tools: gates / read-only audits / probes / backfills / ops
-  prisma/           main DB schema and migrations; system/ is the System DB
-frontend/           Vue 3 + TypeScript + Vite 6 frontend
-  src/
-    views/v2/       learner app pages
-    views/admin-redesign/  admin pages and scene manifest.ts
-    components/mk/  admin shared primitives (MkKpi / MkRowList / MkDistBand / MkBuckets …)
-    styles/         design tokens and mk-primitives.css
-    api/ · stores/ · router/ · composables/
-prompts/            File-as-Truth prompts: core/*.yaml source → skill.*.md compiled artifacts
-scripts/            repo-root scripts (virtual-learner batches / inspections / demo / gates), indexed in doc/DEV_SCRIPTS.md
-virtual-learners/   prebuilt virtual-learner corpus presets.yaml (File-as-Truth)
-doc/                design-doc index doc/README.md (process material lives in gitignored doc/local/)
-.github/workflows/  CI gates quality-check.yml
+Requirements: **Node.js >= 20.17.0**; Windows (PowerShell 5.1+), Linux, or macOS; on Linux/macOS you can also run `./docker-start.sh` to use Docker.
+
+```bash
+# 1) Clone
+git clone https://github.com/wenflow-org/wenflow.git
+cd wenflow
+
+# 2) Initialise config (set the AI API key and the admin password)
+npm run env:setup
+
+# 3) One-command start (installs dependencies, initialises both databases, syncs built-in prompts, then starts both ends)
+npm run dev
 ```
 
-### Data and Storage
+Then open:
 
-Two SQLite databases are currently in use; relative URLs resolve from each schema directory:
+- Learner app: http://localhost:5173
+- Admin console: http://localhost:5173/admin (log in with the admin account you just set)
+- Backend API: http://localhost:3001
 
-| DB | Schema | Env var | Default path | Tables |
-|----|--------|----------|----------|------|
-| Main DB | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 51 (+1 runtime table) |
-| System DB | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` | 14 |
+> If it will not start or behaves oddly, run `npm run doctor` first: read-only, takes seconds, and checks Node / dependencies / `.env` / both databases / CORS / ports with fix suggestions.
 
-Both databases have their own migrations directory (`backend/prisma/migrations`, `backend/prisma/system/migrations`); the startup scripts and CI both run migrate deploy.
+<details>
+<summary><b>First run and common pitfalls (click to expand)</b></summary>
 
-- Migrations & validation: `npm run prisma:migrate:verify-clean` (clean-DB migration replay), `npm run prisma:baseline:audit` (read-only baseline audit), `npm --prefix backend run prisma:migrate:deploy:all`
-- Backup & maintenance: `npm run database:backup:create` / `database:backup:verify` / `database:vacuum:status` / `database:vacuum` (builds the backend first)
-- Prompt runtime mirror: the `agent_prompts` table is only a mirror of `prompts/core/*.yaml`; files are the truth
+- **Always use `npm ci`, never `npm install`.** The lockfile contains mirror-sourced optional / peer entries (e.g. `@parcel/watcher`, `@bufbuild/protobuf`); `npm install` rewrites the lockfile from the current resolution and drops those entries in bulk (hundreds of deleted lines that are not real code changes). To install manually: `npm ci && npm --prefix backend ci && npm --prefix frontend ci`.
+- `npm run dev` already runs `prisma:prepare` (generate both Prisma clients + deploy migrations for both databases). Only if you start things step by step, or explicitly skip it (PowerShell `./start-dev.ps1 -SkipPrisma`, bash `./start-dev.sh --skip-prisma`), do you need to run `npm --prefix backend run prisma:prepare` yourself.
+- The skip option also skips the pre-start core-prompt sync and is only meant for environments where the databases and prompts are already prepared.
+- If `backend/.env` is missing or `JWT_SECRET` is invalid, the start script launches the setup flow automatically.
+- Health probes: `/health` and `/livez` only mean the process is alive; `/readyz` means both databases and core runtime state can serve traffic. To restart the backend use the single entry point `node backend/restart.mjs --port=<port>` (`--status` to inspect, `--stop` to stop); do not kill ports by hand or start with a bare `ts-node`.
+
+</details>
 
 ---
 
@@ -237,276 +182,247 @@ The project will continue to explore how to cultivate five capabilities that mat
 
 ---
 
-## Quick Start
+## Tech Stack
 
-### Requirements
-- Node.js >= 20.17.0
-- Windows + PowerShell 5.1+ or Linux/macOS + bash; `npm run dev` selects `start-dev.ps1` / `start-dev.sh` by platform.
-- On Linux/macOS without a local toolchain setup, Docker is recommended: `./docker-start.sh`.
+| Layer | Technology |
+|------|------|
+| **Frontend** | Vue 3 + TypeScript + Vite 6 + in-house Mk* admin primitives + lucide icons + Pinia |
+| **Backend** | Node.js + Express + TypeScript + Prisma |
+| **Database** | SQLite, dual-database architecture (main DB: 51 models + 1 runtime table; system DB: 14 tables), runs with no external database service |
+| **AI Integration** | OpenAI-compatible model gateway (defaults: chat / reasoning / evaluation all use deepseek-v4.1-flash), SSE streaming, retry budget, thinking-mode control |
+| **Agent / Skill** | 5 top-level agents (goal / path / teaching / profile / simulation) + Skill execution layer (prompt source `prompts/core/*.yaml` → compiled artifacts → database mirror) + coordinators + persisted event chain |
+| **Model Config Layers** | Env vars → platform defaults → Agent/Skill level → user-defined API and model overrides |
+| **Virtual Experiment** | Virtual Learner Lab (black-box simulation + Quick Learn) |
+| **Observability** | Agent/Skill call logs, trace waterfall, LLM execution details |
+| **Security** | JWT + CSRF + login rate limiting + Secret AES-256-GCM encryption + sensitive-storage permission audits |
+| **Deployment** | Cross-platform start script (`npm run dev`) + optional Nginx test deployment + Docker (recommended for Linux/macOS) |
 
-Security and secret management: see [`SECURITY.md`](./SECURITY.md). Run `npm run security:scan` before committing.
+<details>
+<summary><b>Project structure (click to expand)</b></summary>
 
-Runtime status: `/health` and `/livez` report process liveness; only `/readyz` means both databases and the core runtime are ready to accept traffic.
-
-Self-check: when the environment won't start or behaves oddly, run `npm run doctor` first (cross-platform, read-only, takes seconds) —
-it checks Node / deps / .env / dual DB / CORS / ports and services one by one with fix guidance; `--deep` adds the prompts three-way parity audit.
-
-### Recommended Order (First Run)
-
-```bash
-# 0) Install dependencies (always use npm ci, not npm install — see the note below)
-npm ci
-npm --prefix backend ci
-npm --prefix frontend ci
-
-# 1) Initialize backend/.env (JWT_SECRET, AI config, initial admin)
-npm run env:setup        # Windows PowerShell; on Linux/macOS: cp backend/.env.example backend/.env, then edit
-
-# 2) Start (cross-platform: Windows -> start-dev.ps1, Linux/macOS -> start-dev.sh)
-#    The startup script first runs `npm --prefix backend run prisma:prepare` (generate both Prisma Clients + migrate deploy on both DBs), then starts the services
-npm run dev
-
-# For manual step-by-step runs (e.g. after switching worktrees / moving the directory), run the prerequisite explicitly first
-npm --prefix backend run prisma:prepare
+```text
+backend/            Node.js + Express + TypeScript backend
+  src/
+    agents/         top-level agents (including learner-model-agent / simulation-agent)
+    skills/         skill implementations (prompt sources live in prompts/, not hard-coded here)
+    coordinators/   business flow orchestration (goal / path / teaching / learner / simulation)
+    gateway/        OpenAI-compatible model gateway
+    routes/         HTTP routes (learner app / admin)
+    services/       domain services and data access
+    virtual-lab/    Virtual Learner Lab
+    events/         persisted events and outbox
+    scripts/        official tooling: gates / read-only audits / probes / backfills / ops
+  prisma/           main DB schema and migrations; system/ holds the System DB
+frontend/           Vue 3 + TypeScript + Vite 6 frontend
+  src/
+    views/v2/             learner app pages
+    views/admin-redesign/ admin pages and scene manifest.ts
+    components/mk/        shared admin primitives (MkKpi / MkRowList / MkDistBand …)
+    api/ · stores/ · router/ · composables/
+prompts/            File-as-Truth prompts: core/*.yaml source → skill.*.md compiled artifacts
+scripts/            repo-root scripts (runs / inspections / demos / gates), index in doc/DEV_SCRIPTS.md
+virtual-learners/   preset virtual-learner material presets.yaml (File-as-Truth)
+doc/                documentation index at doc/README.md (process material lives in gitignored doc/local/)
+.github/workflows/  CI gate quality-check.yml
 ```
 
-Note: For first-time use, it is recommended to finish environment setup before choosing a startup script. If `backend/.env` is missing or `JWT_SECRET` is invalid, the startup scripts will also launch the setup flow automatically.
-When the backend starts, core prompts are synced from the repo into the database automatically; a fresh clone runs directly, with no manual prompt import required.
-`npm run dev` (`start-dev.ps1` / `start-dev.sh`) already includes `prisma:prepare` (client generation + dual-DB migration) as a built-in prerequisite; you only need to run it yourself when doing manual step-by-step runs, or when skipping it via `-SkipPrisma` / `--skip-prisma`.
+</details>
 
-> **Always install dependencies with `npm ci`, not `npm install`.** `npm install` rewrites `package-lock.json` according to the current resolution, mass-deleting optional / peer entries that come from the mirror (registry.npmmirror.com) — e.g. all-platform entries of `@parcel/watcher` and `@bufbuild/protobuf`. Measured: a single run is hundreds of lines of pure deletion, not a code change. `npm ci` installs strictly from the lockfile and never rewrites it (CI also uses `npm ci`).
+---
 
-### Local Development
+## Page Map
+
+<details>
+<summary><b>Learner app (click to expand)</b></summary>
+
+Landing pages `/` and `/vision`, login `/login`, register `/register`, then the V2 shell.
+
+Five entries in the top / bottom navigation:
+
+| Page | Path | Description |
+|------|------|------|
+| Dashboard | `/dashboard` | Today's actions, path progress, learning streak |
+| Goal planning | `/goal-conversation` | Multi-round dialogue to clarify the real goal |
+| Learning paths | `/learning-paths` | Path list and progress |
+| Knowledge map | `/knowledge-map` | Aggregated knowledge view across all paths (in-lesson view shows only the current path) |
+| Learning state | `/learning-state` | LSS / KTL / LF / LSB with fatigue alerts |
+
+Core flow: register / log in → `/onboarding` → `/goal-conversation` → after your confirmation the path is generated → `/learning-paths` → `/learning-path/:id` → `/learn/:taskId` round-based learning → `/learn/:taskId/evaluation/:sessionId` post-session evaluation.
+
+The personal centre lives under `/user/*`: account, settings (including API access), call logs, achievements, learning history. Legacy `/v2/*` URLs redirect to the current paths.
+
+</details>
+
+<details>
+<summary><b>Admin console scenes (click to expand)</b></summary>
+
+The admin console lives at `/admin` with **18 scene pages in 7 groups** (plus one hidden “operations glossary” used only by the header help entry):
+
+- **Overview**: platform overview with today's health, the models with the highest failure rates, and open items
+- **Teaching**: users and learners, learning state (risk and fatigue, with manual snapshot recompute), teaching sessions, goal conversations, learning paths, memory and review
+- **Virtual Learners**: runtime (concurrency quota / global rate limit / instance stream / batch creation, single-step test), learner card library (structured import and export of role cards)
+- **Skill**: orchestration graph (phase swimlanes + field data journey and logic graph + call usage), Skills and prompts (skill runtime + model routing; prompt evaluation as a host tab; the skill-design sub-page covers protocol editing, compile, gates, publish, rollback, trial run)
+- **Observability**: execution logs (log / trace tabs with retry timeline, auto refresh, export), cost analysis, audit log
+- **System**: health centre, models and access (routing / connectivity / network boundary / retry timeout), system tools (ops tools + data export + session security)
+- **Operations**: operations centre (todo workbench / feedback / achievements / announcements / notifications)
+
+The authoritative scene list is [`frontend/src/views/admin-redesign/manifest.ts`](frontend/src/views/admin-redesign/manifest.ts); the history of pages added, retired, and redirected lives in [`CHANGELOG.md`](CHANGELOG.md).
+
+</details>
+
+---
+
+## Advanced Deployment and Operations
+
+<details>
+<summary><b>LAN development mode (phones / tablets)</b></summary>
 
 ```bash
-npm run dev              # cross-platform: Windows -> start-dev.ps1, Linux/macOS -> start-dev.sh
-
-# Or explicitly
-npm run dev:win          # Windows PowerShell
-npm run dev:unix         # Linux/macOS bash
+npm run dev:lan                        # detect the LAN IP automatically
+./start-lan.ps1 -LanIP 192.168.31.26   # or specify it manually
 ```
 
-Note: The script installs dependencies, generates both Prisma clients, runs migrations for the main and System databases, guides environment setup if needed, and syncs core prompts once before startup.
-To skip Prisma initialization: `./start-dev.ps1 -SkipPrisma` (PowerShell) or `./start-dev.sh --skip-prisma` (bash).
-Important: this flag also skips the startup prompt sync, so it should only be used when both the database schema and prompt records are already ready.
+Adds the LAN IP to `CORS_ORIGIN` for multi-device testing of the learner app; it does not change the admin `ADMIN_ACCESS_MODE` restriction.
 
-### LAN Development Mode
+</details>
 
-```bash
-# Auto-detect LAN IP and start
-./start-lan.ps1
-
-# Or use npm script
-npm run dev:lan
-
-# Manually specify IP
-./start-lan.ps1 -LanIP 192.168.31.26
-```
-
-Note: This mode automatically adds the LAN IP to `CORS_ORIGIN`, which is useful for multi-device frontend testing. It does not change the `ADMIN_ACCESS_MODE` restriction on admin login.
-
-### Test Deployment with Nginx (HTTP)
+<details>
+<summary><b>Local Nginx test deployment (HTTP)</b></summary>
 
 ```bash
-# Requires nginx installed and in PATH
-./start-dev.ps1 -UseNginx
-
-# Or via npm script
-npm run dev:nginx
-
-# Specify domain (defaults to localhost)
+npm run dev:nginx                          # requires nginx on PATH
 ./start-dev.ps1 -UseNginx -Domain test.example.com
-
-# If nginx not in PATH, specify executable path
 ./start-dev.ps1 -UseNginx -NginxExePath "C:\nginx\nginx.exe"
 ```
 
-Note: `-UseNginx` mode runs `npm run build` (frontend) and generates runtime config to `runtime/nginx/wenflow.nginx.conf`; it validates port 80 availability first, and the system nginx (or any other process holding port 80) must be stopped manually.
+Builds the frontend and writes a runtime config to `runtime/nginx/wenflow.nginx.conf`; it checks that port 80 is free before starting.
 
-### Docker Deployment (Linux/macOS)
+</details>
+
+<details>
+<summary><b>Docker deployment (Linux / macOS)</b></summary>
 
 ```bash
-# One-shot start (interactively fills backend/.env; env vars can also be passed non-interactively)
-./docker-start.sh
-
-# Database backup (one-off operations service, read-only volume mount; requires WENFLOW_BACKUP_HOST_DIR to be set to the backup output directory)
-docker compose -f docker-compose.operations.yml run --rm backup
+./docker-start.sh        # interactively completes backend/.env, then starts
+docker compose -f docker-compose.operations.yml run --rm backup   # DB backup (set WENFLOW_BACKUP_HOST_DIR first)
 ```
 
-Note: `docker-compose.yml` provides three services (migrate / backend / nginx) and publishes only Nginx (80) by default, never the backend port `3001`; the backend enforces `ADMIN_ACCESS_MODE=private`. See [DEPLOYMENT.md](DEPLOYMENT.md) for details.
+`docker-compose.yml` defines migrate / backend / nginx; it only publishes Nginx (80) and never publishes backend `3001`, and the backend is forced to `ADMIN_ACCESS_MODE=private`. See [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
-### Quality Check (same as CI)
+</details>
 
-`npm run check` chains three stages that map one-to-one to the three parallel CI jobs, reproducible locally step by step:
+<details>
+<summary><b>Quality gates (same as CI)</b></summary>
+
+`npm run check` chains three stages, mirroring the three parallel CI jobs:
 
 ```bash
-# Quality job: secret scan (working tree) → Prisma dual-schema validation → clean-replay migrations →
-#   backend typecheck → frontend typecheck → LLM call contract → constants provenance → dual-DB migrate deploy →
-#   field-route seeding → prompts gates (lint / snapshot / drift / contract / core hash parity) → design-system guard →
-#   route-data boundary → doc dead links → lint
-npm run check:quality
-
-# Tests job: backend + frontend tests (with coverage)
-npm run check:test
-
-# Build job: backend + frontend builds
-npm run check:build
-
-# All three in sequence (equivalent to CI)
-npm run check
+npm run check:quality   # secret scan → Prisma schema validation → empty-DB migration replay → typecheck (both ends) →
+                        # LLM call contract → constant provenance → both migrations deployed → prompt gates →
+                        # design-system guard → route/DB boundary → dev-entrypoint guard → doc dead links → lint
+npm run check:test      # backend + frontend tests with coverage
+npm run check:build     # backend + frontend builds
+npm run check           # all three in order (equivalent to CI)
 ```
 
-Note: GitHub Actions (`.github/workflows/quality-check.yml`) runs the three stages on push to main/master/develop and on PRs, with the Quality job additionally running a git-history secret scan. CI uses Node 20; Node >= 20.17.0 is required locally. When CI fails, `npm run ci:status` reviews the failed jobs / steps / error lines of the latest run.
+CI (`.github/workflows/quality-check.yml`) runs on push to main/master/develop and on PRs; when it fails, `npm run ci:status` shows the failing job, step, and error lines.
 
-### First-time Environment Setup (Recommended)
+</details>
 
-```bash
-# Interactive initialization of backend/.env
-npm run env:setup
+<details>
+<summary><b>Prompt bootstrap and maintenance (File-as-Truth)</b></summary>
 
-# Or quickly open backend/.env for manual editing
-npm run env:edit
-```
-
-Note: `env:setup` no longer asks for a domain separately. In Nginx mode, the domain is inferred from `-Domain` first, then from `FRONTEND_URL` in `backend/.env`.
-
-### Prompt Bootstrap and Maintenance (File-as-Truth)
-
-Core prompts use a two-level model: **the source of truth** is `prompts/core/*.yaml` (the only manual edit entry, committed to git), **compiled artifacts** are `prompts/skill.*.md` (the only text models read), and the `agent_prompts` table is just a runtime mirror. The edit → compile → publish chain (with gate checks and rollback) lives in the admin "Prompt Design" workbench; see [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md) for the mechanism.
+The source of truth is `prompts/core/*.yaml` (the only hand-edited entry point, tracked in git); compiled artifacts are `prompts/skill.*.md` (the only text the model reads); the `agent_prompts` table in the database is a runtime mirror. The edit → compile → publish chain (with gates and rollback) is operated from the admin Prompt Studio; the mechanism is documented in [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md) and the directory notes in [`prompts/_README.md`](prompts/_README.md).
 
 ```bash
-# Deterministically compile all prompts/core/*.yaml, regenerating prompts/skill.*.md (no DB writes)
 cd backend
-npm run prompts:compile-all
-
-# Sync compiled artifacts into database ACTIVE versions (also runs automatically at startup)
-npm run prompts:sync-core
-
-# Backfill newly introduced prompt nodes without overriding existing ACTIVE prompts
-npm run prompts:backfill-core
-
-# Lint and parity checks
-npm run prompts:lint
-npm run prompts:core:check
+npm run prompts:compile-all    # core/*.yaml → skill.*.md (does not touch the DB)
+npm run prompts:sync-core      # sync the ACTIVE version in the DB (also runs on startup)
+npm run prompts:backfill-core  # after an upgrade, add only new nodes without overwriting ACTIVE
+npm run prompts:lint && npm run prompts:core:check
 ```
 
-Note: `prompts:sync-core` aligns the database ACTIVE versions with the compiled repo artifacts, creating and switching to a new version when they differ (the old one is archived). `prompts:backfill-core` only fills missing nodes and never overwrites existing ACTIVE prompts. If you run `npm run dev` directly inside `backend/`, the same sync also runs during startup. See [`prompts/_README.md`](prompts/_README.md) for more.
+</details>
 
-### Local SQLite Path Rule
+<details>
+<summary><b>Data and storage</b></summary>
 
-- For local SQLite development, use: `DATABASE_URL=file:./dev.db`
-- For the System database, use: `SYSTEM_DATABASE_URL=file:../system.db`
-- Do not use the old `file:./prisma/*.db` values. Relative SQLite URLs are resolved from each schema directory.
-- Before upgrading an existing environment, identify and back up the authoritative database files, then run `npm run prisma:baseline:audit` in read-only mode.
+Two SQLite databases; relative URLs resolve against their own schema directory:
 
-### Frontend API Environment Variables
+| Database | Schema | Env var | Default path | Tables |
+|----|--------|----------|----------|------|
+| Main | `backend/prisma/schema.prisma` | `DATABASE_URL` | `file:./dev.db` | 51 (+1 runtime table) |
+| System | `backend/prisma/system/schema.prisma` | `SYSTEM_DATABASE_URL` | `file:../system.db` | 14 |
 
-- By default, the frontend calls the backend through the relative `/api` path, forwarded by Vite proxy or Nginx.
-- The admin panel primarily reads `VITE_API_BASE_URL` from `frontend/.env`.
-- The main user-facing app always uses `/api` in dev mode; outside dev mode `VITE_API_BASE_URL` takes priority, with `VITE_API_URL` kept only as a legacy fallback. Unless a custom deployment is required, the default `/api` is recommended.
+- Migrations and checks: `npm run prisma:migrate:verify-clean` (empty-DB replay), `npm run prisma:baseline:audit` (read-only audit), `npm --prefix backend run prisma:migrate:deploy:all`
+- Backup and maintenance: `npm run database:backup:create` / `database:backup:verify` / `database:vacuum:status` / `database:vacuum`
+- **After switching worktrees or moving the directory, the app may connect to the wrong database**: the generated Prisma client records the relative path at generation time in `node_modules/.prisma/client/index.js`, so the app can keep resolving to another tree's DB while the CLI migrates the current one. Fix it by regenerating in the current workspace: `npm --prefix backend run prisma:prepare`.
+- Do not use the legacy `file:./prisma/*.db`, and do not change the System URL to `file:./system.db`.
 
-For more fine-grained deployment steps or non-script startup, see [DEPLOYMENT.md](DEPLOYMENT.md).
+</details>
 
-Architecture design, Skill protocol, prompt management, and virtual-learner-chain docs are indexed in [`doc/README.md`](doc/README.md).
+<details>
+<summary><b>Frontend API environment variables</b></summary>
 
-### Access URLs
+- By default the frontend calls the backend through the relative `/api` path, proxied by Vite or Nginx; keep the default unless you have a specific deployment need.
+- The admin console mainly reads `VITE_API_BASE_URL` from `frontend/.env`; the learner app uses `/api` in development, and in non-development builds `VITE_API_BASE_URL` takes precedence while `VITE_API_URL` remains only for backward compatibility.
 
-**Demo Site**: https://wenflow.org
+</details>
 
-**Local Development**
-- Frontend: http://localhost:5173
-- Backend: http://localhost:3001
-- Admin Panel: http://localhost:5173/admin
+<details>
+<summary><b>Admin account and reverse proxy</b></summary>
 
-Note: Admin login defaults to `ADMIN_ACCESS_MODE=private` (localhost + LAN only), and can be set to `loopback` (localhost only) or `any` (no source restriction), with `ADMIN_ALLOWED_IPS` for precise IP allowlisting (exposing admin login directly to the public internet is not recommended).
+The initial admin is created from `backend/.env` on first start (`INIT_ADMIN_NAME` / `INIT_ADMIN_PASSWORD`; skipped if an admin already exists). Change the password right after the first login.
 
----
+Admin login defaults to `ADMIN_ACCESS_MODE=private` (local machine and LAN only); it can be set to `loopback` or `any`, with `ADMIN_ALLOWED_IPS` for exact allowances. The policy can be changed live from the admin “Models and Access” page. For remote administration over the public internet, pair it with a VPN or an exact IP allowlist. See [`admin-guide.md`](admin-guide.md).
 
-## Common Scripts and Tools
+Reverse proxy notes:
 
-The most-used `npm run` commands (full plain-text list in the root `package.json` and [`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)):
+- Do not add a trailing `/` to `CORS_ORIGIN` (`https://demo.example.com`, not `https://demo.example.com/`)
+- Set `TRUST_PROXY` to the IP/CIDR of the proxy that connects directly to the backend; never `true` in production
+- Do not expose a backend port that can bypass the proxy (Docker publishes only Nginx)
+- On “origin not allowed”, compare the browser `Origin` with `CORS_ORIGIN` first
 
-| Category | Command | Description |
+</details>
+
+<details>
+<summary><b>Command index</b></summary>
+
+The full list lives in the root `package.json` and [`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md) (script directories, run pipelines, tool index):
+
+| Category | Command | Notes |
 |------|------|------|
-| Start | `npm run dev` / `dev:win` / `dev:unix` | Cross-platform / Windows / Linux·macOS start |
+| Start | `npm run dev` / `dev:win` / `dev:unix` | Cross-platform / Windows / Linux·macOS |
 | Start | `npm run dev:lan` / `dev:nginx` | LAN debugging / local Nginx test deployment |
-| Self-check | `npm run doctor` | Read-only check of Node / deps / .env / dual DB / CORS / ports; `-- --deep` adds prompts parity |
-| Gates | `npm run check` | `check:quality` + `check:test` + `check:build` (see above) |
-| Tests | `npm run test` / `test:coverage` | Backend Jest (CI uses `--runInBand`) / with coverage; frontend tests via `npm --prefix frontend run test` (or `npm run check:test` for both sides) |
-| Types | `npm run typecheck:backend` / `check:frontend-types` | Backend / frontend typecheck |
-| Style | `npm run lint` | Backend + frontend ESLint |
-| Design system | `npm run design:check` | Admin design-system guard (tokens / primitive usage / visual layers) |
-| Security | `npm run security:scan` / `permissions:audit` / `secrets:audit` | Secret scan / sensitive-storage permission audit / secret migration audit (audits are read-only; the corresponding `permissions:repair` and `secrets:migrate` write to the DB) |
-| Database | `npm run database:backup:create` / `database:vacuum` | Backup / vacuum (builds the backend first) |
-| Prompts | `cd backend && npm run prompts:compile-all` / `prompts:sync-core` / `prompts:lint` | Compile / sync ACTIVE / validate (see "Prompt Bootstrap and Maintenance" above) |
-| Ops | `npm run ci:status` | Review the latest CI run's failed jobs / steps / error lines (read-only) |
+| Backend restart | `node backend/restart.mjs --port=3011` | Single entry: type check → stop old process → start → wait for `/readyz`; `--status` to inspect, `--stop` to stop |
+| Doctor | `npm run doctor` | Read-only health check; `-- --deep` also audits prompts |
+| Gates | `npm run check` | `check:quality` + `check:test` + `check:build` |
+| Tests | `npm run test` / `test:coverage` | Backend Jest (CI uses `--runInBand`) / with coverage |
+| Security | `npm run security:scan` / `permissions:audit` / `secrets:audit` | Secret scan / permission audit / secret migration audit (`*:repair`, `*:migrate` are the writing counterparts) |
+| Ops | `npm run ci:status` | Recent CI failures by job, step, and error line |
 
-For the virtual-learner batch pipeline (create accounts / run batches / read results / rescue), see [`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md) §2.
+</details>
 
 ---
 
-## Admin Account
+## Design Documentation
 
-On first startup, the system reads these fields from `backend/.env` to auto-create initial admin:
+The documentation index is [`doc/README.md`](doc/README.md), organised as “living specs / design traces / historical snapshots”. Common entry points:
 
-```env
-INIT_ADMIN_NAME=admin
-INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
-```
-
-If admin already exists in database, creation is skipped.
-
-Recommendation: Change password immediately after first login. Use strong passwords for externally accessible deployments.
-
-Important: Admin login defaults to `ADMIN_ACCESS_MODE=private`, allowing only localhost and LAN (RFC1918) sources. Set `loopback` for localhost-only or `any` to remove the source restriction, and use `ADMIN_ALLOWED_IPS` to allowlist specific client IPs. The policy can be applied at runtime from the admin "Models & Access" page; the env var is only the default. For public remote administration, use a VPN or precise IP allowlist, and take responsibility for the added security risk. See [admin-guide.md](admin-guide.md) for details.
-
-### Reverse Proxy Common Issues
-
-- Do not add a trailing `/` to `CORS_ORIGIN` (use `https://demo.example.com`, not `https://demo.example.com/`)
-- Set `TRUST_PROXY` to the IP/CIDR of the proxy that directly connects to the backend; production rejects `true`
-- Do not publish a backend port that bypasses the trusted proxy. Docker Compose exposes only Nginx to the host
-- If "origin not allowed" error occurs, check browser `Origin` matches `CORS_ORIGIN`
-
----
-
-## Educational Theory Foundation
-
-The design is grounded in these theories, each backed by concrete implementation (the 11 below map directly to product behavior; the full 16-theory map with literature DOI/arXiv links is in [doc/EDUCATIONAL_THEORY_MAP.md](doc/EDUCATIONAL_THEORY_MAP.md)):
-
-1. **Cognitive Load Theory** - per-round knowledge-point caps, response-format budgets, automatic context compression
-2. **Self-directed Learning** - the goal is stated and the plan confirmed by the learner; the pace is learner-controlled
-3. **Zone of Proximal Development + Scaffolding** - difficulty adjusts to understanding; prerequisite gaps are backfilled first
-4. **Formative Assessment** - per-round understanding diagnosis plus checkpoint quizzes; immediate feedback, retry on failure
-5. **Deliberate + Retrieval Practice** - mastery is demonstrated by explaining a point independently; post-session retrieval self-tests carry into the next lesson
-6. **Spacing Effect + Review Loop** - multi-day increasing intervals (SM-2 style) with an automatic review-lesson loop for long-term retention
-7. **Feynman Technique (Self-explanation)** - explaining in one's own words to verify understanding; relearn when unable to articulate clearly
-8. **ICAP Framework** - learning activities classified by cognitive engagement (Interactive > Constructive > Active > Passive); stage tasks follow a non-decreasing ICAP level
-9. **Productive Failure** - a two-phase approach of independent trial first, then comparison and integration, using failure as a learning signal
-10. **Predictive Calibration Methodology** - teaching confidence is falsifiable: predictions logged, outcomes written back, hit-rate statistics drive tuning
-11. **Anderson's Taxonomy** - six cognitive levels from remember to create, applied across labeling, teaching, and completion checks
-
----
-
-## Documentation and Collaboration
-
-The repository doc registry is [`doc/README.md`](doc/README.md) — entries are classified as "living specs / design records / historical snapshots"; new docs must also enter the doc allowlist, the registry, and carry a status header. Common entries:
-
-- **Dev scripts manual**: [`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md) (roles and naming conventions of the three script directories, the virtual-learner batch pipeline, reusable tools index)
-- **Agent / Skill**: [`doc/AGENT_SKILL_MANUAL.md`](doc/AGENT_SKILL_MANUAL.md) (why), [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md) (protocol SSOT), [`doc/SKILL_DEVELOPMENT_GUIDE.md`](doc/SKILL_DEVELOPMENT_GUIDE.md) (creating / adapting Skills)
-- **Architecture & models**: [`doc/MODEL_GATEWAY_DESIGN.md`](doc/MODEL_GATEWAY_DESIGN.md), [`doc/LEARNER_MODEL_ARCHITECTURE.md`](doc/LEARNER_MODEL_ARCHITECTURE.md)
-- **Educational theory mapping**: [`doc/EDUCATIONAL_THEORY_MAP.md`](doc/EDUCATIONAL_THEORY_MAP.md)
+- **Where educational theory lands**: [`doc/EDUCATIONAL_THEORY_MAP.md`](doc/EDUCATIONAL_THEORY_MAP.md)
+- **Agent / Skill**: [`doc/AGENT_SKILL_MANUAL.md`](doc/AGENT_SKILL_MANUAL.md) (why), [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md) (protocol), [`doc/SKILL_DEVELOPMENT_GUIDE.md`](doc/SKILL_DEVELOPMENT_GUIDE.md) (building or changing a skill)
+- **Architecture and models**: [`doc/MODEL_GATEWAY_DESIGN.md`](doc/MODEL_GATEWAY_DESIGN.md), [`doc/LEARNER_MODEL_ARCHITECTURE.md`](doc/LEARNER_MODEL_ARCHITECTURE.md)
+- **Development scripts**: [`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)
 - **Deployment / security / admin**: [`DEPLOYMENT.md`](DEPLOYMENT.md), [`SECURITY.md`](SECURITY.md), [`admin-guide.md`](admin-guide.md)
 - **Contributing**: [`CONTRIBUTING.md`](CONTRIBUTING.md) (branch model `develop` → `main`, gates and collaboration)
-- **For AI coding sessions**: [`CLAUDE.md`](CLAUDE.md) (repo working conventions: doc governance, shared worktree discipline)
+- **For AI coding sessions**: [`CLAUDE.md`](CLAUDE.md) (documentation governance, shared-worktree discipline)
 - **Changelog**: [`CHANGELOG.md`](CHANGELOG.md)
-
-> `doc/local/` holds design drafts, investigation snapshots and other process material; it is gitignored and not committed; only current, valid documents live in the repo.
 
 ---
 
 ## License
 
-This project uses [MIT License](LICENSE).
+Released under the [MIT License](LICENSE).
 
 Copyright (c) 2026 wenflow-org
 
@@ -514,8 +430,8 @@ Copyright (c) 2026 wenflow-org
 
 ## Acknowledgments
 
-Gratitude to the [Linux.do](https://linux.do/) community for their ongoing support and sharing.
+Thanks to the [Linux.do](https://linux.do/) community for their long-term support and feedback.
 
 ---
 
-*When AI can answer all standard questions, those who ask good questions will define the future.*
+*When AI can answer every standard question, the people who ask good questions will define the future.*
