@@ -4,8 +4,8 @@
  * - 定义真源：仓库根 virtual-learners/presets.yaml（File-as-Truth，进 git）
  * - 启动同步：ensureBuiltinVirtualLearners()（幂等，保留运行时产物）
  */
-export { ensureBuiltinVirtualLearners, __internal } from './seeder';
-export type { EnsureBuiltinLearnersResult } from './seeder';
+export { ensureBuiltinVirtualLearners, classifyPresetVersion, __internal } from './seeder';
+export type { EnsureBuiltinLearnersResult, PresetVersionRelation } from './seeder';
 export {
   loadBuiltinLearnerPresets,
   computePresetContentHash,

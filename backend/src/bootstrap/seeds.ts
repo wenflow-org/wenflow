@@ -72,6 +72,7 @@ export async function runBuiltinVirtualLearnersSeed(assertActive: AssertActive):
       updated: builtinLearners.updated.length,
       skipped: builtinLearners.skipped.length,
       drifted: builtinLearners.drifted.length,
+      versionAhead: builtinLearners.versionAhead.length,
       errors: builtinLearners.errors.length,
     });
   } catch (err) {

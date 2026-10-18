@@ -28,7 +28,24 @@
          且它的 hint 又把「预置 / 自建」两个数说了一遍（就是右边这两张卡）。按计数单源家法，
          列表长度交给列表卡头自报，KPI 只说列表说不出的构成拆分。 -->
     <section class="mk-kpi-grid" aria-label="卡库构成">
-      <MkKpi label="预置卡" :value="summary?.builtin ?? '—'" hint="平台预置，随版本自动同步" title="平台预置角色，随版本更新自动同步。不包含在「导出卡库」内" />
+      <!-- #91：预置区补「一键加载」入口。启动同步 2026-10-09 已摘除（空白项目零 VL 起步），
+           此后卡库的预置实例全靠显式入口写入；此前管理台只有计数、没有任何加载按钮。
+           口径同时修正：预置不是「随版本自动同步」，而是「定义随代码进仓、实例需一键加载」。 -->
+      <MkKpi
+        label="预置卡"
+        :value="summary?.builtin ?? '—'"
+        :hint="presetHint"
+        :hintTone="presetHintTone"
+        title="平台预置角色，随仓库内的预置定义发布。不随启动自动同步，要用「一键加载」写入卡库。加载只新建缺的卡、按版本更新已有卡的定义，故事与记忆保留，卡不会被删。不含在「导出卡库」内"
+      >
+        <button
+          type="button"
+          class="mk-btn mk-btn--sm"
+          :disabled="presetLoading"
+          :title="presetLoadTitle"
+          @click="doLoadPresets"
+        >{{ presetLoading ? '同步中…' : '一键加载' }}</button>
+      </MkKpi>
       <MkKpi label="自建卡" :value="summary?.custom ?? '—'" hint="导入与 AI 创建" title="卡文档导入与后台/AI 创建的卡。「导出卡库」仅导出这部分" />
     </section>
 
@@ -227,6 +244,86 @@ function openCard(c: CardWallEntry) {
   openSubPage('card', c.profileId)
 }
 
+/* ===== 平台预置「一键加载」（#91 / P-67）=====
+   后端：GET /api/admin/presets 只读总览（定义逐条 + 实例对齐状态）；POST 幂等同步。
+   入口位置按 issue 指定落在「预置」KPI 卡内（MkKpi 默认 slot = 卡内附挂位）。 */
+interface PresetOverviewSummary {
+  definitions: number
+  loaded: number
+  missing: number
+  upgradable: number
+  rolledBack: number
+  drifted: number
+}
+interface PresetLoadResult {
+  created: string[]
+  updated: string[]
+  skipped: string[]
+  drifted: string[]
+  versionAhead: string[]
+  errors: Array<{ presetKey: string; message: string }>
+  overview?: { summary?: PresetOverviewSummary }
+}
+
+const presetLoading = ref(false)
+/** 定义侧快照（只读副信息）：拿不到就退回静态提示，不影响按钮可用 */
+const presetSummary = ref<PresetOverviewSummary | null>(null)
+
+const presetHint = computed(() => {
+  const s = presetSummary.value
+  if (!s) return '平台预置（需一键加载）'
+  const parts = [`定义 ${s.definitions} 条`, `已加载 ${s.loaded}`]
+  if (s.missing) parts.push(`待加载 ${s.missing}`)
+  if (s.upgradable) parts.push(`待升级 ${s.upgradable}`)
+  if (s.rolledBack) parts.push(`定义回退 ${s.rolledBack}`)
+  return parts.join(' · ')
+})
+/** 定义回退（实例版本高于定义）是人工要看的异常档：琥珀脚注（不阻断，只是要人看一眼） */
+const presetHintTone = computed<'warn' | ''>(() => ((presetSummary.value?.rolledBack ?? 0) > 0 ? 'warn' : ''))
+const presetLoadTitle = computed(() => {
+  const s = presetSummary.value
+  const base = '从仓库预置定义加载平台预置到卡库：新建缺的卡，按版本更新已有卡的定义，故事与记忆保留，卡不会被删'
+  if (!s) return base
+  return `${base}（当前 定义 ${s.definitions} 条 / 已加载 ${s.loaded}）`
+})
+
+async function loadPresetOverview() {
+  try {
+    const res = await adminVirtualLearnersApi.presetsOverview()
+    const d = (res.data?.data ?? res.data) as { summary?: PresetOverviewSummary } | undefined
+    presetSummary.value = d?.summary ?? null
+  } catch {
+    // 只读副信息：失败保持静态提示（按钮照常可用），不弹 toast 打扰主流程
+    presetSummary.value = null
+  }
+}
+
+async function doLoadPresets() {
+  presetLoading.value = true
+  try {
+    const res = await adminVirtualLearnersApi.presetsLoad()
+    const d = (res.data?.data ?? res.data) as PresetLoadResult | undefined
+    if (d?.overview?.summary) presetSummary.value = d.overview.summary
+    const parts = [
+      `新建 ${d?.created?.length ?? 0}`,
+      `更新 ${d?.updated?.length ?? 0}`,
+      `跳过 ${d?.skipped?.length ?? 0}`,
+    ]
+    if (d?.versionAhead?.length) parts.push(`定义回退跳过 ${d.versionAhead.length}`)
+    if (d?.drifted?.length) parts.push(`内容不一致 ${d.drifted.length}`)
+    if (d?.errors?.length) parts.push(`失败 ${d.errors.length}`)
+    const message = `预置卡已加载：${parts.join(' · ')}`
+    // 有失败/定义回退时不报「全绿」：同一句结果文案换档，提示仍需人看
+    if (d?.errors?.length || d?.versionAhead?.length) toast.warning(message)
+    else toast.success(message)
+    await loadIndex()
+  } catch (e) {
+    toast.error(errMsg(e) || '预置卡加载失败')
+  } finally {
+    presetLoading.value = false
+  }
+}
+
 /** 导入卡 → 卡导入二级页（id 为常量占位；返回卡墙时本组件重挂载自动刷新索引） */
 function openImport() {
   openSubPage('card-import', 'new')
@@ -259,7 +356,7 @@ function sourceBadge(c: Pick<CardWallEntry, 'preset' | 'sourceKind'>): string {
   return 'mk-badge--muted'
 }
 function sourceTitle(c: Pick<CardWallEntry, 'preset' | 'sourceKind'>): string {
-  if (c.preset) return '平台预置角色（随版本自动同步）'
+  if (c.preset) return '平台预置角色（卡库内「一键加载」同步）'
   if (c.sourceKind === 'web') return '来源：网络采集卡'
   if (c.sourceKind === 'synthetic') return '来源：合成生成卡'
   return '后台手动 / AI 创建'
@@ -300,7 +397,11 @@ async function doExport() {
   }
 }
 
-onMounted(loadIndex)
+onMounted(() => {
+  void loadIndex()
+  // 预置定义快照（只读，失败静默）：用于「预置」卡脚注的 定义/已加载/待升级 计数
+  void loadPresetOverview()
+})
 </script>
 
 <style scoped>

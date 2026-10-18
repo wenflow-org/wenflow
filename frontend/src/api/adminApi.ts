@@ -1703,6 +1703,19 @@ export const adminVirtualLearnersApi = {
   cardsDetail: async (profileId: string) => {
     return adminAxios.get(`/admin/virtual-learners/cards/${encodeURIComponent(profileId)}/detail`);
   },
+
+  /**
+   * 平台预置（virtual-learners/presets.yaml）总览（#91）：逐条定义 + 对齐到的实例状态
+   * （not-loaded / current / upgradable / rolled-back / drifted）与汇总计数。只读。
+   */
+  presetsOverview: async () => {
+    return adminAxios.get('/admin/presets');
+  },
+
+  /** 平台预置一键加载（#91）：幂等同步定义 → 实例，返回同步结果 + 新快照 */
+  presetsLoad: async () => {
+    return adminAxios.post('/admin/presets');
+  },
 };
 
 // ============================================================
