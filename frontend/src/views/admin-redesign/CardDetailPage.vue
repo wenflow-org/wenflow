@@ -12,7 +12,15 @@
       </template>
       <template #actions>
         <button type="button" class="mk-btn" :disabled="loading" @click="load">{{ loading ? '刷新中…' : '刷新' }}</button>
-        <button type="button" class="mk-btn mk-btn--primary" @click="goLearner">到虚拟学习者 →</button>
+        <!-- 「从这张卡造一个」的落点（2026-10-18 用户走查：卡库侧只有卡头勾选框，读作没有流程）：
+             身份卡可反复派生、不消耗卡本身，故本页主操作是派生，切画像降为次按钮 -->
+        <button type="button" class="mk-btn" @click="goLearner">到虚拟学习者 →</button>
+        <button
+          type="button"
+          class="mk-btn mk-btn--primary"
+          title="从这张身份卡创建 1 个虚拟学习者，下一步挑要带走的故事。卡留在卡库，可再派生"
+          @click="openDerive"
+        >派生虚拟学习者 →</button>
       </template>
     </MkDetailHero>
 
@@ -107,6 +115,9 @@
         <p v-if="d.notes" class="cd-bg">{{ d.notes }}</p>
       </div>
     </section>
+
+    <!-- 从卡派生虚拟学习者（与卡墙同一子组件；本页是单卡语境，恒只带这一张卡） -->
+    <CardDeriveDialog ref="deriveRef" @created="onDerived" />
   </div>
   <div v-else class="mk-page">
     <div v-if="loading" class="cd-pad cd-sec">
@@ -122,6 +133,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
+import CardDeriveDialog from './CardDeriveDialog.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
@@ -235,6 +247,18 @@ function fmtDate(iso: string): string {
   if (!iso) return '—'
   const t = new Date(iso)
   return Number.isNaN(t.getTime()) ? '—' : t.toLocaleString()
+}
+
+/* ===== 派生（从这张卡创建虚拟学习者）=====
+   成功后回刷本卡：派生不消耗身份卡，运营常会连着造几个实例。 */
+const deriveRef = ref<InstanceType<typeof CardDeriveDialog> | null>(null)
+function openDerive() {
+  const pid = d.value?.profileId
+  if (!pid) return
+  deriveRef.value?.openWith([pid])
+}
+function onDerived() {
+  void load()
 }
 
 onMounted(load)

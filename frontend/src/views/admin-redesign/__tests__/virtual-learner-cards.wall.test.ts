@@ -169,6 +169,24 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     w.unmount();
   });
 
+  /** 2026-10-18 用户走查「从卡库想创建一个虚拟学习者，为什么没有流程」：
+   *  此前唯一入口是卡头那个无标签勾选框，运营读作没有流程——卡面补一枚「派生」动作。 */
+  it('卡面「派生」：单卡一键进同一派生面板，且不误触进卡详情', async () => {
+    const w = await mountPage();
+    const derive = w.findAll('.vlc-card__derive');
+    expect(derive, '卡面缺派生入口').toHaveLength(2);
+
+    await derive[0].trigger('click');
+    await flushPromises();
+    // 只带这一张卡
+    expect(cardsTasksMock).toHaveBeenCalledWith(['p1']);
+    // 点它不进卡详情（卡整体是 role=button，必须 stop 冒泡）
+    expect(openSubPageMock).not.toHaveBeenCalled();
+    // 面板已开（Teleport 到 body）
+    expect(document.body.querySelector('.cdd-task__pick')).toBeTruthy();
+    w.unmount();
+  });
+
   it('选角 → 勾任务 → 派生虚拟学习者（卡=身份模板，卡留在库里）', async () => {
     const w = await mountPage();
     const picks = w.findAll('.vlc-card__pick input');

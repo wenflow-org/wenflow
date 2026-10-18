@@ -120,7 +120,7 @@
                  否则点它就等于点开卡详情。键盘同样 stop，Enter/Space 才不会既勾选又进详情。 -->
             <label
               class="vlc-card__pick"
-              :title="`把「${cardName(c)}」加入待派生队列`"
+              :title="`勾选「${cardName(c)}」，在页面底部批量创建虚拟学习者`"
               @click.stop
               @keydown.stop
             >
@@ -151,7 +151,20 @@
           </p>
           <footer class="vlc-card__foot">
             <span class="vlc-card__level" :title="`知识水平：${c.knowledgeLevel}`">{{ levelText(c.knowledgeLevel) }}</span>
-            <span class="vlc-card__go">看详情 →</span>
+            <span class="vlc-card__acts">
+              <!-- 单卡派生入口（2026-10-18 用户走查「从卡库想创建一个虚拟学习者，为什么没有流程」）：
+                   此前只有卡头那个无标签勾选框能到派生面板，运营读作「没有流程」。卡内放一枚动作，
+                   勾选框留给批量；卡整体是 role=button，故 stop 冒泡（点它不进详情） -->
+              <button
+                type="button"
+                class="mk-link vlc-card__derive"
+                :aria-label="`从「${cardName(c)}」派生虚拟学习者`"
+                title="从这张身份卡创建 1 个虚拟学习者，下一步挑要带走的故事"
+                @click.stop="openDeriveFor(c)"
+                @keydown.stop
+              >派生</button>
+              <span class="vlc-card__go">看详情 →</span>
+            </span>
           </footer>
         </article>
       </div>
@@ -359,6 +372,11 @@ function openDerive() {
   deriveRef.value?.openWith([...selected.value])
 }
 
+/** 卡面「派生」：单卡一键进同一个面板（不经过勾选队列） */
+function openDeriveFor(c: { profileId: string }) {
+  deriveRef.value?.openWith([c.profileId])
+}
+
 /** 派生成功：清勾选 + 回刷卡墙（新实例要立刻出现在墙上，KPI 的「已派生实例」也跟着走） */
 function onDerived() {
   clearPick()
@@ -531,5 +549,8 @@ onMounted(loadIndex)
   margin-top: 2px;
 }
 .vlc-card__level { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* 页脚动作组：派生（低频但此前无处可寻）与看详情并排，右对齐 */
+.vlc-card__acts { display: inline-flex; align-items: center; gap: 10px; }
+.vlc-card__derive { font-size: var(--mk-fs-micro); font-weight: 700; }
 .vlc-card__go { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue); white-space: nowrap; }
 </style>
