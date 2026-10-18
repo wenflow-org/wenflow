@@ -90,7 +90,7 @@
 | 特异维度 | 为什么特异 | 真实证据 |
 |---|---|---|
 | **"真实问题澄清"起点** | 命题是"学习始于对真实问题的澄清，而非选课"；画像从 goal 对话抽取，而不是先修课程/测评 | `goal_conversations`（`schema.prisma:238`）；`LearnerModelProfile` 的 `narrativeInsights`（`types.ts:66`） |
-| **运动科学负荷隐喻 LSS/KTL/LF/LSB** | 用负荷/疲劳/平衡这套自造标度驱动课堂，是产品私有口径（审计承认是工程启发式） | `learning-state.service.ts:1-19`（EWMA λ + 半衰期）；`TWELVE_QUESTIONS_INVESTIGATION.md:86` |
+| **运动科学负荷隐喻 LSS/KTL/LF/LSB** | 用负荷/疲劳/平衡这套自造标度驱动课堂，是产品私有口径（审计承认是工程启发式） | `learning-load.pmc.ts`（PMC/TSB 日负荷 EWMA，2026-10-15 起为权威时钟）；`learning-load-verdict.ts`（相对量判据 form/acwr）；`TWELVE_QUESTIONS_INVESTIGATION.md:86` |
 | **预测校准闭环** | 不信"LLM 自报置信度"，用"预测 vs 实际命中率"替代 | `prediction_records`（`schema.prisma:650`）；`PredictionCalibrationService.ts:27` |
 | **记忆与画像分层**（用户级跨路径记忆 vs 路径级概念隔离） | 刻意让"遗忘不分路径"，但"知识结构分路径"，避免跨路径污染 | `ConceptConsolidatorService.ts:9-13`（分层边界）；`memory_traces` 无 `pathId` 唯一约束、`conceptLedger` 按 path 隔离 |
 | **教学提示层 + 任务级难度裁决** | `taskDifficulty` 由代码判定后整体注入课堂 prompt，不让模型自行揣测难度 | `LearnerProjectionService.ts:173` `toTeachingProjection`；`TeachingContextBuilder.ts:890` |
@@ -127,7 +127,7 @@
 
 **关键点**：
 - ② 是**事实源**，只追加（`LearnerEvidenceProjector.ts:21`）；③④ 都是**可重建的投影**——这是把"知识/状态聚合"做在代码而非模型里的一半原因。
-- ⑤ 的 LSS/KTL/LF/LSB 是**确定性的 EWMA**（`learning-state.service.ts:16-19`：KTL λ=0.95≈13.5 天、LF λ=0.70≈1.9 天），不是 LLM 产出。
+- ⑤ 的 LSS/KTL/LF/LSB 是**确定性的 EWMA**。**2026-10-15 负荷模型改造（PMC/TSB）**：时钟由「按课 EWMA」改为「**按天**日负荷 EWMA」——当日负荷 = 该日各节课 `lss` 之和，空闲日以 0 参与（自然回落），半衰期不变（KTL λ=0.95≈13.5 天、LF λ=0.70≈1.9 天，`learning-load.pmc.ts`）；读取侧独立的跨日自然衰减退役（两套时钟合一）。机制判据改**相对量**（`form=ktl−lf`、`acwr=lf/ktl`，单一真理源 `learning-load-verdict.ts`）。都不是 LLM 产出。
 - ④ 的 `memory_traces` 是**概念级物化聚合**：复习/温故的结果经 FSRS 更新后落到该行（`fsrs.ts:128` `fsrsSchedule`、`:161` `fsrsRetrievability`）。
 
 > **关于"per-skill 聚合"的诚实说明**：系统**没有**一张"按 skill 聚合的长期状态表"。skill 维度出现在**证据的 `evidenceType`/运行用量**（如 `checkpoint:result`、`task:difficulty:adjustment`）与 `prompt_call_logs` 的运行时统计里；**长期学习状态的聚合键是 `conceptKey`（概念），不是 skill**。这是有意的：教的内容跨 skill 复用，概念才是知识结构的单位。

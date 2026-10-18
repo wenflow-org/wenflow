@@ -46,6 +46,11 @@ import {
   AGGREGATION_ACTIVE_WINDOW_DAYS,
   DAY_LOAD_FATIGUE_RULES,
 } from '../services/learning/learning-state.service';
+import {
+  PMC_KTL_LAMBDA,
+  PMC_LF_LAMBDA,
+} from '../services/learning/learning-load.pmc';
+import { LOAD_VERDICT_THRESHOLDS } from '../services/learning/learning-load-verdict';
 import { KTL_EWMA_LAMBDA, LF_EWMA_LAMBDA } from '../services/metrics/LearningMetricService';
 import {
   SUCCESS_BAND_LOW,
@@ -187,6 +192,46 @@ export const SCIENTIFIC_CONSTANTS: ScientificConstant[] = [
     source: '工程启发式',
     note: '时长加成封顶，防止超长挂机把全局疲劳顶高。',
     resolve: () => DAY_LOAD_FATIGUE_RULES.maxMinutesBonus,
+  },
+
+  // ---------- 负荷模型（PMC/TSB 式：日负荷求和 + 按天 EWMA）----------
+  // 2026-10-15 改造：KTL/LF 由「逐日负荷之和 + 按天 EWMA」派生，取代旧「每课 EWMA」。
+  // λ 沿用旧值（半衰期不变），只把"按课步进"改"按天步进" → 单课日零漂移、多课日真正累加。
+  {
+    key: 'load.pmc.ktlLambda',
+    value: 0.95,
+    source: '工程启发式',
+    note: 'PMC 的 KTL（CTL 角色）每日保留系数；半衰期≈13.5 天。沿用旧 EWMA_CONFIG.KTL_LAMBDA。',
+    resolve: () => PMC_KTL_LAMBDA,
+  },
+  {
+    key: 'load.pmc.lfLambda',
+    value: 0.7,
+    source: '工程启发式',
+    note: 'PMC 的 LF（ATL 角色）每日保留系数；半衰期≈1.9 天。沿用旧 EWMA_CONFIG.LF_LAMBDA。',
+    resolve: () => PMC_LF_LAMBDA,
+  },
+  {
+    key: 'load.verdict.fatigueHighAcwr',
+    value: 1.5,
+    source: '文献',
+    ref: '急性:慢性负荷比（ACWR）"危险区" ≥1.5，见 Gabbett 2016, doi:10.1136/bjsports-2015-095788',
+    note: 'ACWR = lf/ktl ≥ 1.5 → 高疲劳（急性负荷远超慢性适应基座）。尺度无关，取代绝对 lf≥6。',
+    resolve: () => LOAD_VERDICT_THRESHOLDS.fatigueHighAcwr,
+  },
+  {
+    key: 'load.verdict.accelerateAcwr',
+    value: 0.5,
+    source: '工程启发式',
+    note: 'ACWR ≤ 0.5 → 明显有余力，可"压缩/加速"。对齐旧 ktl≥6 且 lf≤3 的口径。',
+    resolve: () => LOAD_VERDICT_THRESHOLDS.accelerateAcwr,
+  },
+  {
+    key: 'load.verdict.minKtlForAccelerate',
+    value: 6,
+    source: '工程启发式',
+    note: '加速还需 ktl 达此下限（"已有可用适应基座"）。绝对量，PMC 口径下待按真实分布重标。',
+    resolve: () => LOAD_VERDICT_THRESHOLDS.minKtlForAccelerate,
   },
 
   // ---------- 难度控制：目标成功率带 ----------

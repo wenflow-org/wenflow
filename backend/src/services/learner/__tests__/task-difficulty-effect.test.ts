@@ -45,7 +45,7 @@ describe('metricReasonsFromState（与判定器同阈值、同层级）', () => 
     })).toEqual(['lesson_stress_high']);
 
     expect(metricReasonsFromState({
-      pathState: { lss: 2, ktl: 2, lf: 2.5, lsb: -0.5 },
+      pathState: { lss: 2, ktl: 4, lf: 5, lsb: -1 }, // form<0 且 ktl≥3（基座成熟）→ 失衡
       globalLf: 3, globalLsb: 1,
     })).toEqual(['path_load_unbalanced']);
   });
@@ -69,6 +69,7 @@ describe('evaluateAdjustmentEffect', () => {
       nextState: { metrics: { lss: 5.6, ktl: 3.3, lf: 2.1, lsb: 1.2 }, taskId: 't2', calculatedAt: new Date() },
       nextPathState: { lss: 5.6, ktl: 3.3, lf: 2.1, lsb: 1.2 },
       globalLfAtNextState: 3,
+      globalKtlAtNextState: 3,
       globalLsbAtNextState: 0.5,
     });
     expect(effect.outcome).toBe('relieved');
@@ -83,6 +84,7 @@ describe('evaluateAdjustmentEffect', () => {
       nextState: { metrics: { lss: 7.2, ktl: 3.7, lf: 2.4, lsb: 1.3 }, taskId: 't2', calculatedAt: new Date() },
       nextPathState: { lss: 7.2, ktl: 3.7, lf: 2.4, lsb: 1.3 },
       globalLfAtNextState: 3,
+      globalKtlAtNextState: 3,
       globalLsbAtNextState: 0.5,
     });
     expect(effect.outcome).toBe('still_triggered');
@@ -95,6 +97,7 @@ describe('evaluateAdjustmentEffect', () => {
       nextState: { metrics: { lss: 1, ktl: 1, lf: 1, lsb: 0 }, taskId: 't2', calculatedAt: new Date() },
       nextPathState: { lss: 1, ktl: 1, lf: 1, lsb: 0 },
       globalLfAtNextState: 1,
+      globalKtlAtNextState: 1,
       globalLsbAtNextState: 0,
     });
     expect(effect.outcome).toBe('not_measurable');
@@ -107,6 +110,7 @@ describe('evaluateAdjustmentEffect', () => {
       nextState: null,
       nextPathState: null,
       globalLfAtNextState: null,
+      globalKtlAtNextState: null,
       globalLsbAtNextState: null,
     });
     expect(effect.outcome).toBe('no_next_state');

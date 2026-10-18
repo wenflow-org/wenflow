@@ -18,6 +18,7 @@ import prisma from '../../config/database';
 import learningStateService from '../learning/learning-state.service';
 import type { TaskDifficultyAdjustment } from './TaskDifficultyAdjustmentService';
 import { LOAD_BASED_DECREASE_REASONS } from './TaskDifficultyAdjustmentService';
+import { classifyLoad } from '../learning/learning-load-verdict';
 
 export const ADJUSTMENT_EVIDENCE_TYPE = 'task:difficulty:adjustment';
 export const ADJUSTMENT_EVIDENCE_KEY = 'difficulty-adjustment';
@@ -145,14 +146,23 @@ export async function listTaskDifficultyAdjustments(input: {
 export function metricReasonsFromState(input: {
   pathState: TaskDifficultyMetricsSnapshot | null;
   globalLf: number | null;
+  globalKtl?: number | null;
   globalLsb: number | null;
 }): string[] {
   const reasons: string[] = [];
+  // 2026-10-15 PMC 改造：疲劳判据改**相对量**（ACWR）——绝对 lf≥6 在日负荷口径下失效。
+  // globalKtl 缺省（旧台账行没有该字段）时回落到绝对 lf≥6，保证历史行复算行为不变。
   if (input.pathState) {
     if (input.pathState.lss >= 6) reasons.push('lesson_stress_high');
-    if (input.pathState.lf >= 6 || input.pathState.lsb < 0) reasons.push('path_load_unbalanced');
+    const pv = classifyLoad({ ktl: input.pathState.ktl, lf: input.pathState.lf });
+    if (pv.fatigueRisk === 'high' || pv.imbalanced) reasons.push('path_load_unbalanced');
   }
-  if (input.globalLf != null && input.globalLf >= 6) reasons.push('fatigue_high');
+  if (input.globalLf != null) {
+    const fatigueHigh = typeof input.globalKtl === 'number'
+      ? classifyLoad({ ktl: input.globalKtl, lf: input.globalLf }).fatigueRisk === 'high'
+      : input.globalLf >= 6; // 旧行无 ktl → 绝对口径回落
+    if (fatigueHigh) reasons.push('fatigue_high');
+  }
   if (!input.pathState && input.globalLsb != null && input.globalLsb < 0) reasons.push('global_imbalance');
   return reasons;
 }
@@ -190,6 +200,7 @@ export function evaluateAdjustmentEffect(input: {
   /** 复算路径级理由用的"本路径"状态（有路径时 = nextState.metrics） */
   nextPathState: TaskDifficultyMetricsSnapshot | null;
   globalLfAtNextState: number | null;
+  globalKtlAtNextState: number | null;
   globalLsbAtNextState: number | null;
 }): AdjustmentEffect {
   const { record, nextState } = input;
@@ -234,6 +245,7 @@ export function evaluateAdjustmentEffect(input: {
   const nowReasons = metricReasonsFromState({
     pathState: input.nextPathState,
     globalLf: input.globalLfAtNextState,
+    globalKtl: input.globalKtlAtNextState,
     globalLsb: input.globalLsbAtNextState,
   });
   const stillTriggeredReasons = measurableReasons.filter((reason) => nowReasons.includes(reason));
@@ -310,18 +322,28 @@ export async function measureTaskDifficultyEffects(input: {
         userId: record.userId,
         metricType: 'learning_state',
         calculatedAt: { gte: record.occurredAt },
+        // 排除 task-completion 合成占位行（lss 恒 4）：它与同日同 taskId 的 session-wrapup 权威行成对出现，
+        // 两边 calculatedAt 常为同一毫秒（实测 88 组里 84 组同毫秒），按升序取"下一条状态"排序不确定，
+        // 可能取到占位行 → 效果度量读到假的 lss=4。与 PMC 读侧的同义去重（dedupeLessonRows）对齐。
+        NOT: { sourceKey: { startsWith: 'task-completion:' } },
         ...(record.pathId ? { pathId: record.pathId } : {}),
       },
       orderBy: { calculatedAt: 'asc' },
       select: { lss: true, ktl: true, lf: true, lsb: true, taskId: true, calculatedAt: true },
     });
+    // 复算用的"下一条状态"必须与**判据同源**（PMC 读侧）——落库列 ktl/lf 是旧"按课 EWMA"值，
+    // 直接读会与判定器的口径打架（复算判据 vs 判定判据不同源 → 效果度量失真）。
+    // 以该行时刻为准走 getCurrentState（PMC 重放）取路径级状态。
+    const pmcPathState = record.pathId && nextRow
+      ? await learningStateService.getCurrentState(record.userId, { pathId: record.pathId, asOf: nextRow.calculatedAt })
+      : null;
     const nextState = nextRow
       ? {
           metrics: {
             lss: Number(nextRow.lss) || 0,
-            ktl: Number(nextRow.ktl) || 0,
-            lf: Number(nextRow.lf) || 0,
-            lsb: Number(nextRow.lsb) || 0,
+            ktl: pmcPathState ? Number(pmcPathState.ktl) : Number(nextRow.ktl) || 0,
+            lf: pmcPathState ? Number(pmcPathState.lf) : Number(nextRow.lf) || 0,
+            lsb: pmcPathState ? Number(pmcPathState.lsb) : Number(nextRow.lsb) || 0,
           },
           taskId: nextRow.taskId,
           calculatedAt: nextRow.calculatedAt,
@@ -337,6 +359,7 @@ export async function measureTaskDifficultyEffects(input: {
       nextState,
       nextPathState,
       globalLfAtNextState: aggregate ? aggregate.metrics.lf : null,
+      globalKtlAtNextState: aggregate ? aggregate.metrics.ktl : null,
       globalLsbAtNextState: aggregate ? aggregate.metrics.lsb : null,
     }));
   }

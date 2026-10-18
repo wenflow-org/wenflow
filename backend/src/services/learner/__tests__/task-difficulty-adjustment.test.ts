@@ -116,8 +116,10 @@ describe('decideTaskDifficulty（调整档位与依据）', () => {
     expect(decision.evidence.lessonScopeIsPath).toBe(false);
   });
 
-  it('路径失衡（lf≥6 或 lsb<0）→ 降一档', () => {
-    const decision = decideTaskDifficulty({ ...normalInput(), lessonMetrics: metrics(2, 2, 4) }); // lsb = -2
+  it('路径失衡（form<0 且基座成熟）→ 降一档', () => {
+    // 相对量判据（ACWR/form）：ktl=8 已过 minKtlForRatio 门 → form=8-10=-2<0 判失衡。
+    // 旧口径 `lf>=6` 在 PMC 日负荷下失效（量随课量放大），故 fixture 用成熟基座表达失衡。
+    const decision = decideTaskDifficulty({ ...normalInput(), lessonMetrics: metrics(2, 8, 10) });
     expect(decision.direction).toBe('decrease');
     expect(decision.reasons).toContain('path_load_unbalanced');
   });
@@ -378,7 +380,6 @@ describe('decideTaskDifficulty：最小挑战保底 D_floor', () => {
   });
 });
 
-
 describe('decideTaskDifficulty · 知识理由的严重度门（#59/#60 第 6 条）', () => {
   const capable = () => ({
     ...normalInput(),
@@ -392,6 +393,7 @@ describe('decideTaskDifficulty · 知识理由的严重度门（#59/#60 第 6 �
     });
     expect(decision.delta).toBe(1);
     expect(decision.direction).toBe('increase');
+    // 理由仍全部留痕给模型做支架
     expect(decision.reasons).toEqual(expect.arrayContaining(['fragile_concepts', 'struggling_concepts']));
   });
 

@@ -96,19 +96,21 @@ describe('双向自检的接线位置', () => {
     expect(data.lsb).toBe(5);
   });
 
-  it('读取漏斗：列里存了异刻度值（>10）→ 告警，且返回值仍是 0-10（值不静默消失）', async () => {
+  it('读取漏斗（PMC）：lss 异刻度 → 告警且归一；ktl/lf 由日负荷重放（允许 >10 的量）', async () => {
     const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined as any);
     (prisma.learning_metrics.findMany as jest.Mock).mockResolvedValue([
-      { lss: 40, ktl: 30, lf: 10, lsb: 10, calculatedAt: new Date('2026-09-16T00:00:00Z'), pathId: 'lp-A' },
+      { lss: 40, ktl: 30, lf: 10, calculatedAt: new Date('2026-09-16T00:00:00Z'), metadata: '{"committed":true}' },
     ]);
-    (prisma.learning_metrics.findFirst as jest.Mock).mockResolvedValue(null);
 
     const state = await learningStateService.getCurrentState('u1', { pathId: 'lp-A', asOf: new Date('2026-09-16T01:00:00Z') });
 
+    // lss=40 是异刻度脏值：告警 + 归一（40→4）
     expect(warn).toHaveBeenCalledTimes(1);
     const warnCall = warn.mock.calls[0] as unknown as [string, Record<string, unknown>];
-    expect(warnCall[1]).toMatchObject({ context: expect.stringContaining('read'), fields: ['lss', 'ktl'] });
+    expect(warnCall[1]).toMatchObject({ context: expect.stringContaining('read') });
     expect(state?.lss).toBe(4);
-    expect(state?.ktl).toBe(3);
+    // ktl/lf 不再是落库原值（30/10），而是由归一后的单节负荷 4 重放：ktl=0.05×4=0.2、lf=0.3×4=1.2
+    expect(state?.ktl).toBeCloseTo(0.2, 6);
+    expect(state?.lf).toBeCloseTo(1.2, 6);
   });
 });

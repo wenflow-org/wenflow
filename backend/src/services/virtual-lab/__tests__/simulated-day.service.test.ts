@@ -132,8 +132,8 @@ describe('simulated-day 纯函数', () => {
 function makeDeps(overrides: Partial<SimulatedDayDeps> = {}): SimulatedDayDeps {
   return {
     getAggregatedState: jest.fn(async () => ({
-      metrics: { lss: 4, ktl: 6, lf: 7, lsb: -1, timestamp: new Date('2026-09-16T00:00:00Z') },
-      perPath: [{ pathId: 'p1', metrics: { lss: 5, ktl: 6, lf: 7, lsb: -1, timestamp: new Date() }, calculatedAt: new Date() }],
+      metrics: { lss: 4, ktl: 4, lf: 7, lsb: -3, timestamp: new Date('2026-09-16T00:00:00Z') },
+      perPath: [{ pathId: 'p1', metrics: { lss: 5, ktl: 4, lf: 7, lsb: -3, timestamp: new Date() }, calculatedAt: new Date() }],
       activePathIds: ['p1'],
       dayLoad: { lessons: 3, minutes: 90, fatigueBonus: 1 },
       latestAt: new Date(),
@@ -184,10 +184,10 @@ describe('buildDayEntry / buildDayTimeline（注入 deps）', () => {
     const entry = await buildDayEntry('u1', '2026-09-16', 0, makeDeps(), NOW);
     expect(entry.simulatedDay).toBe('2026-09-16');
     expect(entry.dayLoad).toEqual({ lessons: 3, minutes: 90, fatigueBonus: 1 });
-    expect(entry.metrics).toEqual({ lss: 4, ktl: 6, lf: 7, lsb: -1 });
-    expect(entry.pacing).toBe('slow'); // lf>=6
+    expect(entry.metrics).toEqual({ lss: 4, ktl: 4, lf: 7, lsb: -3 });
+    expect(entry.pacing).toBe('slow'); // acwr = 7/4 = 1.75 ≥ 1.5 → 高疲劳（相对量判据）
     expect(entry.signals).toEqual(expect.arrayContaining(['fatigue_high', 'lsb_negative']));
-    expect(entry.perPath).toEqual([{ pathId: 'p1', lss: 5, ktl: 6, lf: 7, lsb: -1 }]);
+    expect(entry.perPath).toEqual([{ pathId: 'p1', lss: 5, ktl: 4, lf: 7, lsb: -3 }]);
     expect(entry.tasks[0]).toEqual(expect.objectContaining({ taskId: 't1', actualMinutes: 28, cognitiveLoad: 'medium' }));
     expect(entry.difficultyAdjustments[0]).toEqual(expect.objectContaining({
       taskId: 't1', baseline: 5, adjusted: 4, direction: 'decrease', reasons: ['lesson_stress_high'], applied: true,

@@ -16,7 +16,11 @@ import { logger } from '../../utils/logger';
 // 否则跨日模拟里"隔了一个模拟日"的疲劳恢复会按真实墙钟差（≈0 或夸张天数）计算。
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 // 日界单一真理源（应用时区本地日）——所有"按天归组/比较"必须走这里
-import { dayKeyOf, startOfDay, dayDiffInDays, DAY_BOUNDARY_DAY_MS } from '../time/day-boundary';
+import { dayKeyOf, startOfDay, dayDiffInDays, addDaysToDayKey, DAY_BOUNDARY_DAY_MS } from '../time/day-boundary';
+// PMC/TSB 式负荷模型（纯函数 + 行重放）：KTL/LF/LSB 由「逐日负荷之和 + 按天 EWMA」派生，
+// 取代旧「按课 EWMA」。读侧权威：每行 learning_metrics 的 lss 列是**该节瞬时压力**（内容驱动、
+// 非 EWMA），按日求和即可重放。详见 learning-load.pmc.ts。
+import { replayDailyPmc } from './learning-load-pmc.service';
 
 // EWMA 配置（半衰期按日更新折算：h = ln(0.5)/ln(λ)）
 export const EWMA_CONFIG = {
@@ -117,6 +121,7 @@ interface LearningStateMetricPersistOptions {
   taskId?: string | null;
   sessionId?: string | null;
   primaryMetric?: 'lss' | 'lsb';
+  synthetic?: boolean;
 }
 
 export interface DisplayMetricCommitInput {
@@ -135,6 +140,12 @@ export interface DisplayMetricCommitInput {
   taskId?: string | null;
   sessionId?: string | null;
   primaryMetric?: 'lss' | 'lsb';
+  /**
+   * 本行 LSS 是「占位值」而非实测量（如 task-completion 在无主观难度时按默认难度 5 套公式）。
+   * 落 metadata.synthetic=true，供聚合侧显式区分；与 session-wrapup 的同课真实行并存时
+   * 由 dedupeLessonRows 优先保留真实行。
+   */
+  synthetic?: boolean;
 }
 
 export interface PreparedLearningStateMetricCommit {
@@ -1037,6 +1048,7 @@ export class LearningStateService {
       taskId: input.taskId,
       sessionId: input.sessionId,
       primaryMetric: input.primaryMetric || 'lsb',
+      synthetic: input.synthetic === true,
     };
     await this.commitPreparedMetric({
       userId,
@@ -1142,7 +1154,7 @@ export class LearningStateService {
       lssHistory = lssHistory.slice(-30);
     }
 
-    const metadata = (options.version || options.committed || options.source || options.pathId || options.taskId || options.sessionId)
+    const metadata = (options.version || options.committed || options.source || options.pathId || options.taskId || options.sessionId || options.synthetic)
       ? JSON.stringify({
           version: options.version || undefined,
           committed: options.committed === true,
@@ -1151,6 +1163,7 @@ export class LearningStateService {
           pathId: options.pathId || undefined,
           taskId: options.taskId || undefined,
           sessionId: options.sessionId || undefined,
+          synthetic: options.synthetic === true ? true : undefined,
         })
       : null;
 
@@ -1212,12 +1225,81 @@ export class LearningStateService {
     userId: string,
     options: { pathId?: string | null; asOf?: Date } = {}
   ): Promise<LearningStateMetrics | null> {
+    const pmc = await this.derivePmcState(userId, options);
+    if (pmc) return pmc;
+    // 无已提交行时的兜底：沿用旧读取（wrapup.stateUpdate），保证冷启动/异常态不倒退
     return this.getPreviousMetrics(userId, options);
   }
 
   /**
-   * 学习者级状态 = **按路径最新状态保守聚合（max）+ 当日课量疲劳加成**。
-   * 见 `AggregatedLearningState` 的说明：全局管"总负担/节奏"，路径级管"单课难易"。
+   * PMC 读侧派生（2026-10-15 负荷模型改造）：KTL/LF/LSB 由「逐日负荷之和 + 按天 EWMA」重放。
+   *
+   * **取代**旧「按课 EWMA（写入侧）+ 自然衰减（读取侧）」两套时钟 —— 权威输入是每行的
+   * `lss` 列（**该节瞬时压力**，内容驱动、非 EWMA），按应用时区本地日求和成当日负荷，
+   * 再逐日推进 PMC（空闲日以 0 参与 = 自然回落）。详见 learning-load.pmc.ts。
+   *
+   * 返回值**不套 0-10 clamp**（`toInternalTenScale` 会把 >10 的值 /10，那正是用户纠正的
+   * 「0-100 是刻度不是区间」——PMC 日负荷可 >10，是正常的"量"）。仅有 lss 走 0-10 归一
+   * （它是单节瞬时压力，本就 0-10）。
+   */
+  private async derivePmcState(
+    userId: string,
+    options: { pathId?: string | null; asOf?: Date } = {}
+  ): Promise<LearningStateMetrics | null> {
+    // 行过滤与 until 必须**同一时间基准**（2026-10-17 修）：此前行查询用原始 options.asOf（可能
+    // undefined ⇒ 不过滤），而 until 用 `options.asOf ?? simulatedNowOr()`，于是 calculatedAt 落在
+    // 未来的残留行会**进序列**（贡献当日负荷）却不受 until 影响 —— 实测把一户 LSS 抬到 8.57（真值 1.97）。
+    // 写侧早已统一 simulatedNowOr（见文件顶部"时钟域"注释），读侧同口径。
+    const asOf = options.asOf ?? simulatedNowOr();
+    const rows = await prisma.learning_metrics.findMany({
+      where: this.buildCommittedMetricWhere(userId, undefined, undefined, asOf, options.pathId, true),
+      select: { lss: true, ktl: true, lf: true, calculatedAt: true, sourceKey: true, taskId: true },
+      orderBy: { calculatedAt: 'asc' },
+    });
+    if (rows.length === 0) return null;
+    // 读取漏斗（保留量纲防线）：lss 是单节瞬时压力，应 0-10 —— 异刻度脏值**可见化 + 归一**，
+    // 不让 0-100 的脏值把当日负荷顶高（ktl/lf/lsb 允许 >10，那是"量"不是"区间"，不告警）。
+    const normalizedRows = rows.map((r) => {
+      let lss = r.lss;
+      if (lss != null && Number.isFinite(lss) && (lss < -1e-9 || lss > 10 + 1e-9)) {
+        logger.warn('[scale-guard] 读取到越界的单节 LSS（异刻度脏值，已归一）', {
+          context: 'read:pmc-lss',
+          raw: { lss: r.lss },
+        });
+      }
+      lss = this.normalizeTenScale(lss);
+      // sourceKey/taskId 透传给 replayDailyPmc 做跨家族去重：一节课可能同时有
+      // session-wrapup（真实 LSS）与 task-completion（合成占位 lss=4）两行，不去重会翻倍。
+      return { calculatedAt: r.calculatedAt, lss, ktl: r.ktl, lf: r.lf, sourceKey: r.sourceKey, taskId: r.taskId };
+    });
+    // until=asOf：把"最后一节课之后到今天"的空闲日补进序列，KTL/LF 才会按 λ^d 回落
+    const series = replayDailyPmc(normalizedRows, { until: asOf });
+    if (!series.latest) return null;
+    const round = (value: number) => Math.round(value * 1000) / 1000;
+    // LSS 是**单节瞬时压力**（非累加量）：仍按自然衰减折算到 asOf——否则"5 天前那节难课"
+    // 会永远读成"现在压力大"。KTL/LF/LSB 由 PMC 重放（空闲日以 0 参与，已自带回落），不再叠加。
+    const lessonAt = series.latestLessonAt ?? simulatedNowOr();
+    const lssDayDiff = this.getNaturalDayDiff(lessonAt, options.asOf ?? simulatedNowOr());
+    const lss = this.normalizeTenScale(
+      (series.latestLessonLss ?? 0) * Math.pow(NATURAL_DECAY.LSS_DAILY_FACTOR, lssDayDiff),
+    );
+    return {
+      lss,
+      ktl: round(series.latest.ktl) as LearningStateMetrics['ktl'],
+      lf: round(series.latest.lf) as LearningStateMetrics['lf'],
+      lsb: round(series.latest.lsb) as LearningStateMetrics['lsb'],
+      timestamp: lessonAt,
+    };
+  }
+
+  /**
+   * 学习者级状态 = **PMC 日负荷模型**（跨路径统一）。
+   *
+   * 与旧实现（按路径 max + 当日课量疲劳加成）的区别：PMC 口径下**负荷就是负荷、与路径无关**，
+   * 且「同日多课」已由日负荷求和进入 KTL/LF —— 故不再需要跨路径 max，也不再需要外挂的
+   * `dayLoad` 疲劳加成（那会与日负荷求和重复计算同一件事）。`perPath` 仍按路径给出 PMC 分解，
+   * 供课内/路径级判断使用；`dayLoad` 保留为**原始观测**（课节数/时长），不再叠加进 lf。
+   *
    * 没有任何状态行时返回 null（调用方自行决定回退）。
    */
   async getAggregatedState(
@@ -1228,47 +1310,39 @@ export class LearningStateService {
     const snapshots = await this.listCommittedSnapshots(userId, undefined, undefined, asOf);
     if (snapshots.length === 0) return null;
 
-    // 每条路径只保留最新一行（ASC 遍历 → 后者覆盖）；无路径归属的行单独兜底，不参与 max
-    const latestByPath = new Map<string, LearningStateCommittedSnapshot>();
-    for (const snapshot of snapshots) {
-      latestByPath.set(snapshot.pathId || '', snapshot);
-    }
-    const perPath = [...latestByPath.entries()]
-      .filter(([key]) => key.length > 0)
-      .map(([pathId, snapshot]) => ({
-        pathId,
-        // 与读取路径同口径：按自然衰减折算到 asOf。
-        // 否则一条两个月没动的路径会永远用它当时的峰值把全局疲劳顶住（实证见过 ktl 4.4 来自 7 月）。
-        metrics: this.restoreMetrics(snapshot.metrics, asOf),
-        calculatedAt: snapshot.calculatedAt,
-      }));
-    // 只让"活跃路径"参与投票（陈年峰值不参与）；窗口内为空 = 学习者已经闲置，
-    // 此时回退到**全部路径**（它们都已按 asOf 折算衰减，取 max 等价于"最近活动的那条"）
+    // 全局 PMC（跨全部路径的逐日负荷序列）
+    const globalMetrics = (await this.derivePmcState(userId, { asOf })) ?? null;
+    if (!globalMetrics) return null;
+
+    // 每条路径的 PMC 分解（供路径级/课内判断；不再做跨路径 max）
+    const pathIds = [...new Set(snapshots.map((s) => s.pathId).filter((id): id is string => !!id))];
+    const perPath = (
+      await Promise.all(
+        pathIds.map(async (pathId) => {
+          const m = await this.derivePmcState(userId, { pathId, asOf });
+          if (!m) return null;
+          const last = snapshots.filter((s) => s.pathId === pathId).pop();
+          return { pathId, metrics: m, calculatedAt: last?.calculatedAt ?? asOf };
+        }),
+      )
+    ).filter((entry): entry is { pathId: string; metrics: LearningStateMetrics; calculatedAt: Date } => !!entry);
+
+    // 活跃窗口：超窗（久未活动）的路径不算"当前总负担"的一部分。perPath 仍完整返回供审计。
+    // 旧实现"窗口内为空则回退全部路径"是为了给 max 聚合兜底；PMC 的全局量是跨路径日负荷、
+    // 不再依赖 perPath，故按字面给"窗口内路径"（全闲置 = 空，更诚实）。
     const windowStart = new Date(asOf.getTime() - AGGREGATION_ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-    const activeEntries = perPath.filter((entry) => entry.calculatedAt >= windowStart);
-    const votingEntries = activeEntries.length > 0 ? activeEntries : perPath;
-    const pool = votingEntries.length > 0
-      ? votingEntries.map((entry) => entry.metrics)
-      : [this.restoreMetrics(snapshots[snapshots.length - 1].metrics, asOf)];
+    const activePathIds = perPath
+      .filter((entry) => entry.calculatedAt >= windowStart)
+      .map((entry) => entry.pathId);
 
     const dayLoad = await this.resolveDayLoad(userId, asOf);
-    const fatigueBonus = computeDayLoadFatigueBonus(dayLoad);
-    const round = (value: number) => Math.round(value * 1000) / 1000;
-
-    const lss = round(Math.max(...pool.map((metrics) => metrics.lss)));
-    const ktl = round(Math.max(...pool.map((metrics) => metrics.ktl)));
-    const lf = round(Math.min(10, Math.max(...pool.map((metrics) => metrics.lf)) + fatigueBonus));
+    // PMC 已把同日多课求和进 lf，不再叠加 fatigueBonus（保留字段为 0，避免消费方误读为"没算"）
+    const fatigueBonus = 0;
 
     return {
-      metrics: {
-        lss: toInternalTenScale(lss),
-        ktl: toInternalTenScale(ktl),
-        lf: toInternalTenScale(lf),
-        lsb: toInternalBalance(round(ktl - lf)),
-        timestamp: asOf,
-      },
+      metrics: globalMetrics,
       perPath,
-      activePathIds: votingEntries.map((entry) => entry.pathId),
+      activePathIds,
       dayLoad: { ...dayLoad, fatigueBonus },
       latestAt: snapshots[snapshots.length - 1].calculatedAt,
     };

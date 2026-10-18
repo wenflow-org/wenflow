@@ -172,6 +172,10 @@ export async function updateLearningMetrics(
         // 路径身份透传（落库列 + metadata）：否则多路径学习者的状态无法按路径读取
         pathId: input.pathId ?? null,
         primaryMetric: 'lsb',
+        // 占位标记：无主观难度时 LSS 是按默认难度 5 套公式算的，不是测量值。
+        // 旧行为把它当等价真实行，与同课 session-wrapup 真实行并存时污染日负荷
+        // （dedupeLessonRows 事后补救）；现在把「这是占位」写进 metadata，读侧不用再靠巧合猜。
+        synthetic: input.lssScore == null && input.subjectiveDifficulty == null,
       };
     }, {
       sourceKey,

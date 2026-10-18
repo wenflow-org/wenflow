@@ -140,4 +140,42 @@ describe('LearningMetricService task completion persistence', () => {
       timestamp: new Date('2026-07-19T08:30:00.000Z')
     })).rejects.toThrow('commit failed')
   })
+
+  /**
+   * 占位行标记（2026-10-17）：无主观难度时 LSS 是按默认难度 5 套公式算的，不是测量值。
+   * 旧行为把它当等价真实行写库，与同课 session-wrapup 真实行并存时把日负荷算成两倍
+   * （dedupeLessonRows 事后补救）。现在打 metadata.synthetic，读侧可显式区分而不是靠巧合猜。
+   */
+  describe('synthetic（占位值）标记', () => {
+    const captureDerive = () => {
+      let derived: any = null
+      mockCommitDerivedDisplayMetrics.mockImplementation(async (_userId: string, derive: any) => {
+        derived = await derive(null)
+        return { lss: derived.lss, ktl: derived.ktl, lf: derived.lf, lsb: derived.lsb, timestamp: new Date() }
+      })
+      return () => derived
+    }
+
+    it('无 subjectiveDifficulty 且无显式 lssScore → synthetic=true', async () => {
+      const getDerived = captureDerive()
+      await updateLearningMetrics({ userId: 'user-1', taskId: 'task-1', durationMinutes: 30, completed: true })
+      expect(getDerived().synthetic).toBe(true)
+    })
+
+    it('有 subjectiveDifficulty（真实测量）→ synthetic=false', async () => {
+      const getDerived = captureDerive()
+      await updateLearningMetrics({
+        userId: 'user-1', taskId: 'task-1', durationMinutes: 30, subjectiveDifficulty: 6, completed: true,
+      })
+      expect(getDerived().synthetic).toBe(false)
+    })
+
+    it('调用方显式给 lssScore → synthetic=false（哪怕没有主观难度）', async () => {
+      const getDerived = captureDerive()
+      await updateLearningMetrics({
+        userId: 'user-1', taskId: 'task-1', durationMinutes: 30, lssScore: 7.2, completed: true,
+      })
+      expect(getDerived().synthetic).toBe(false)
+    })
+  })
 })

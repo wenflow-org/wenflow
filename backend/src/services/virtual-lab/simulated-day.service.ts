@@ -21,6 +21,7 @@ import {
 } from '../time/day-boundary';
 import learningStateService, { type AggregatedLearningState } from '../learning/learning-state.service';
 import { derivePacing } from '../learner/LearnerSnapshotService';
+import { classifyLoad } from '../learning/learning-load-verdict';
 import {
   reviewQuotaService,
   type ReviewDailyState,
@@ -340,10 +341,13 @@ export async function buildDayEntry(
     ? { lss: state.metrics.lss, ktl: state.metrics.ktl, lf: state.metrics.lf, lsb: state.metrics.lsb }
     : null;
 
+  // 信号判据改**相对量**（ACWR/form）——绝对 lf≥6 在 PMC 日负荷口径下失效（量随课量放大）。
+  // 与 LearnerSnapshotService / TaskDifficultyAdjustmentService 同源（classifyLoad），不各写一套。
   const signals: string[] = [];
   if (metrics) {
-    if (metrics.lf >= 6) signals.push('fatigue_high');
-    if (metrics.lsb < 0) signals.push('lsb_negative');
+    const verdict = classifyLoad({ ktl: metrics.ktl, lf: metrics.lf });
+    if (verdict.fatigueRisk === 'high') signals.push('fatigue_high');
+    if (verdict.imbalanced) signals.push('lsb_negative');
   }
 
   const adjustments: SimulatedDayAdjustment[] = [];

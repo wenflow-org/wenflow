@@ -14,6 +14,7 @@
  * 升档更保守：要求**没有任何降档理由**，且课内状态明确"有余力"。降档最多 2 档，升档最多 1 档。
  */
 import type { LearnerLearningControlState } from '../../agents/learner-model-agent/types';
+import { classifyLoad } from '../learning/learning-load-verdict';
 
 /** `challengeLevelCap` 在任务级的具体含义：本任务难度不得越过该上限 */
 export const CHALLENGE_CAP_LIMITS: Record<'low' | 'medium' | 'high', number> = {
@@ -215,16 +216,20 @@ function collectReasons(
   // 课内（路径级）：这条路最近本来就吃力 → 这节课降档。
   // 仅在**有本路径历史**时生效：本路径还没上过课时，不能借用别的路径的路径级证据
   // （LSS 是会话级量、balance 是路径自身状态），那是跨路径污染。
+  // 2026-10-15 PMC 改造：疲劳/失衡改**相对量**（ACWR/form）——绝对 `lf>=6` 在日负荷口径下失效。
+  const lessonVerdict = classifyLoad({ ktl: lesson.ktl, lf: lesson.lf });
   if (lessonScopeIsPath && lesson.lss >= 6) reasons.push('lesson_stress_high');
-  if (lessonScopeIsPath && (lesson.lf >= 6 || lesson.lsb < 0)) reasons.push('path_load_unbalanced');
+  if (lessonScopeIsPath && (lessonVerdict.fatigueRisk === 'high' || lessonVerdict.imbalanced)) reasons.push('path_load_unbalanced');
   // 学习者级：总负担重（累）→ 任何路径都别再上强度
-  if (input.fatigueRisk === 'high' || input.recommendedPacing === 'slow' || input.globalMetrics.lf >= 6) {
+  const globalVerdict = classifyLoad({ ktl: input.globalMetrics.ktl, lf: input.globalMetrics.lf });
+  if (input.fatigueRisk === 'high' || input.recommendedPacing === 'slow' || globalVerdict.fatigueRisk === 'high') {
     reasons.push('fatigue_high');
   }
   // 学习者级：总负担失衡（例如当天课多）→ 同样降档。层级要说清：这是全局信号，不是"本路径失衡"。
   // 该信号在别处还有另一处消费：重排信号里的 `lsb_negative`（建议减速/补强）——
   // 节奏（derivePacing）刻意**不再**重复消费它，否则同一个信号会同时压低难度、放慢节奏、触发重排，三处叠加。
-  if (!lessonScopeIsPath && input.globalMetrics.lsb < 0) reasons.push('global_imbalance');
+  // 用 globalVerdict.imbalanced（含"基座成熟"门）——PMC 爬升期新学习者 lsb 天然 <0，不该判失衡。
+  if (!lessonScopeIsPath && globalVerdict.imbalanced) reasons.push('global_imbalance');
   // 情感（软传感器，§4.5）：连续受挫 → 降档/减速。**只降不升**——它在 LOAD_BASED 集合里，
   // 结构上就进不了 canIncrease 的升档路径（软传感器不得作为升档依据）。
   if ((input.recentFrustrationStreak ?? 0) >= FRUSTRATION_DECREASE_MIN_STREAK) reasons.push('frustration_streak');

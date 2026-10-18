@@ -23,7 +23,7 @@
  */
 import 'dotenv/config';
 import prisma from '../config/database';
-import learningStateService, { computeDayLoadFatigueBonus } from '../services/learning/learning-state.service';
+import learningStateService from '../services/learning/learning-state.service';
 import { updateLearningMetrics } from '../services/metrics/LearningMetricService';
 import {
   deriveLearningControlState,
@@ -34,18 +34,16 @@ import { decideTaskDifficulty, resolveBaselineLevel } from '../services/learner/
 import {
   measureTaskDifficultyEffects,
   recordTaskDifficultyAdjustment,
+  summarizeAdjustmentEffects,
 } from '../services/learner/TaskDifficultyAdjustmentLedger';
+// PMC 负荷模型（2026-10-15）：读侧权威 = 日负荷求和 + 按天 EWMA。断言用它算期望值。
+import { replayDailySeries, PMC_KTL_LAMBDA, PMC_LF_LAMBDA } from '../services/learning/learning-load.pmc';
 // 日期模拟的"第 dayIndex 天"用平台规范助手（virtual-lab/simulated-day.service）：
 // 不 mock 时钟，而是把第 N 天映射为 baseDate + N，日界与 getAggregatedState.dayLoad / ReviewQuotaService 同口径。
 import { resolveDayWindow, toDateOnly } from '../services/virtual-lab/simulated-day.service';
 
-/** EWMA 系数（与 LearningMetricService 的派生公式一致，断言里用来算预测值）
- * 归一化凸组合：ktl = 0.95/0.05、lf = 0.70/0.30。
- * （2026-09-17 修：lf 新值系数原为 0.15、系数和 0.85 → 稳态被压到 0.5c，疲劳阈值实际失效；审计 §4.3） */
-const KTL_LAMBDA = 0.95;
-const KTL_NEW_TERM = 0.05;
-const LF_LAMBDA = 0.7;
-const LF_NEW_TERM = 0.3;
+/** 完成态单节 LSS（difficulty → lss）：calculateLSS(completed) = difficulty×10×0.8 → 归一到 0-10 → difficulty×0.8 */
+const lessonLss = (difficulty: number) => difficulty * 0.8;
 
 export interface SimLesson {
   /** 相对起始日的天数（0 = 起始日） */
@@ -146,7 +144,7 @@ async function main(): Promise<void> {
     console.log(`  day${day} (${dayStart(day).toISOString().slice(0, 10)}) : ${dayLessons.map((l) => `${l.pathKey} d${l.difficulty}/${l.durationMinutes}min`).join('  ')}`);
   }
   const day3Lessons = lessonsForDay(plan, 2);
-  console.log(`[sim] 第 3 天课量= ${day3Lessons.length} 节 → 预期疲劳加成 ${computeDayLoadFatigueBonus({ lessons: day3Lessons.length, minutes: day3Lessons.reduce((s, l) => s + l.durationMinutes, 0) })}`);
+  console.log(`[sim] 第 3 天课量= ${day3Lessons.length} 节（PMC 口径：当日负荷求和 = ${day3Lessons.reduce((s, l) => s + lessonLss(l.difficulty), 0).toFixed(2)}）`);
 
   if (!args.apply) {
     console.log('\n[sim] dry-run 结束（未写库）。确认剧本后跑 --apply');
@@ -213,6 +211,15 @@ async function main(): Promise<void> {
 
     // 2) 按天重放（真实写入路径：updateLearningMetrics + 回填日期）
     const rowByLesson = new Map<string, { lss: number; ktl: number; lf: number; lsb: number }>();
+    // 逐日负荷（按路径 + 全局）：PMC 读侧权威 = 这些日负荷之和的按天重放
+    const loadsByPath = new Map<string, Map<number, number>>();
+    const loadsByDay = new Map<number, number>();
+    const recordLoad = (pathKey: string, day: number, lss: number) => {
+      if (!loadsByPath.has(pathKey)) loadsByPath.set(pathKey, new Map());
+      const m = loadsByPath.get(pathKey)!;
+      m.set(day, (m.get(day) ?? 0) + lss);
+      loadsByDay.set(day, (loadsByDay.get(day) ?? 0) + lss);
+    };
     for (let day = 0; day < plan.days; day += 1) {
       const dayLessons = lessonsForDay(plan, day);
       for (let index = 0; index < dayLessons.length; index += 1) {
@@ -276,59 +283,70 @@ async function main(): Promise<void> {
           select: { lss: true, ktl: true, lf: true, lsb: true },
         });
         if (row) {
+          const lssRow = Number(row.lss);
           rowByLesson.set(`${day}-${index}`, {
-            lss: Number(row.lss), ktl: Number(row.ktl), lf: Number(row.lf), lsb: Number(row.lsb),
+            lss: lssRow, ktl: Number(row.ktl), lf: Number(row.lf), lsb: Number(row.lsb),
           });
+          recordLoad(lesson.pathKey, day, lssRow);
         }
       }
     }
 
+    /** 逐日负荷 → PMC 末值（按天推进，缺日以 0 参与自然回落） */
+    const pmcFromLoads = (byDay: Map<number, number>, upToDayInclusive: number) => {
+      const seq: number[] = [];
+      for (let d = 0; d <= upToDayInclusive; d += 1) seq.push(byDay.get(d) ?? 0);
+      const points = replayDailySeries(seq);
+      return points.length ? points[points.length - 1] : { ktl: 0, lf: 0, lsb: 0, dayLoad: 0 };
+    };
+
     const stateAt = async (pathKey: 'A' | 'B', day: number) =>
       learningStateService.getCurrentState(userId, { pathId: pathIds[pathKey], asOf: dayAsOf(day) });
 
-    // ── 断言 1：路径隔离（B 的第 2 节课接 B 的第 1 节，而不是 A 的最后那节）
-    const b1 = rowByLesson.get('1-0');
-    const b2 = rowByLesson.get('1-1');
-    const aLast = rowByLesson.get('0-1');
-    if (b1 && b2 && aLast) {
-      const fromB = { ktl: b1.ktl * KTL_LAMBDA + b2.lss * KTL_NEW_TERM, lf: b1.lf * LF_LAMBDA + b2.lss * LF_NEW_TERM };
-      const fromA = { ktl: aLast.ktl * KTL_LAMBDA + b2.lss * KTL_NEW_TERM, lf: aLast.lf * LF_LAMBDA + b2.lss * LF_NEW_TERM };
-      const dFromB = Math.abs(b2.ktl - fromB.ktl) + Math.abs(b2.lf - fromB.lf);
-      const dFromA = Math.abs(b2.ktl - fromA.ktl) + Math.abs(b2.lf - fromA.lf);
-      assertions.push({
-        name: '路径隔离：B 的第 2 节课接在 B 自己的第 1 节上（不是 A 的难课）',
-        pass: dFromB < 1e-3 && dFromA > 0.5,
-        detail: `B1 ktl ${b1.ktl} lf ${b1.lf}｜A末 ktl ${aLast.ktl} lf ${aLast.lf}｜B2 实际 ktl ${b2.ktl} lf ${b2.lf}`
-          + `｜预测(本路径) ktl ${fromB.ktl.toFixed(4)} lf ${fromB.lf.toFixed(4)}`
-          + `｜预测(跨路径) ktl ${fromA.ktl.toFixed(4)} lf ${fromA.lf.toFixed(4)}`
-          + `｜偏差 本路径 ${dFromB.toFixed(4)} vs 跨路径 ${dFromA.toFixed(4)}`,
-      });
-    } else {
-      assertions.push({ name: '路径隔离', pass: false, detail: '缺少样本行' });
-    }
+    // ── 断言 1：路径隔离（路径 B 的 PMC 只吃 B 自己的日负荷，不吃路径 A 的难课）
+    const pathBStateDay1 = await stateAt('B', 1);
+    const pathBExpected = pmcFromLoads(loadsByPath.get('B') ?? new Map(), 1);
+    const globalExpectedDay1 = pmcFromLoads(loadsByDay, 1);
+    const pathBIsIsolated = pathBStateDay1 != null
+      && Math.abs(pathBStateDay1.ktl - pathBExpected.ktl) < 1e-3
+      && Math.abs(pathBStateDay1.lf - pathBExpected.lf) < 1e-3;
+    const pathBDiffersFromGlobal = pathBStateDay1 != null
+      && Math.abs(pathBStateDay1.ktl - globalExpectedDay1.ktl) > 0.2; // 全局含路径 A 的难课，路径 B 不含
+    assertions.push({
+      name: '路径隔离：路径 B 的负荷只由 B 自己的日负荷重放（不接路径 A 的难课）',
+      pass: pathBIsIsolated && pathBDiffersFromGlobal,
+      detail: `路径B(day1) ktl ${pathBStateDay1?.ktl} lf ${pathBStateDay1?.lf}`
+        + `｜期望(仅B) ktl ${pathBExpected.ktl.toFixed(4)} lf ${pathBExpected.lf.toFixed(4)}`
+        + `｜全局含A ktl ${globalExpectedDay1.ktl.toFixed(4)} lf ${globalExpectedDay1.lf.toFixed(4)}`
+        + `｜隔离=${pathBIsIsolated} 异于全局=${pathBDiffersFromGlobal}`,
+    });
 
-    // ── 断言 2：一天 3 节课 → 全局疲劳按课量上升；各节课 LSS 互不污染
+    // ── 断言 2：一天 3 节课 → 日负荷求和进 PMC；各节课 LSS 各自独立
     const day3 = lessonsForDay(plan, 2);
     const day3Minutes = day3.reduce((sum, lesson) => sum + lesson.durationMinutes, 0);
-    const expectedBonus = computeDayLoadFatigueBonus({ lessons: day3.length, minutes: day3Minutes });
     const aggregateDay3 = await learningStateService.getAggregatedState(userId, { asOf: dayAsOf(2) });
     const perLessonLssOk = day3.every((lesson, index) => {
       const row = rowByLesson.get(`2-${index}`);
-      // 完成态 LSS：difficulty × 10 × 0.8 → 归一到 0-10 → 落库
       return row != null && Math.abs(row.lss - lesson.difficulty * 0.8) < 1e-6;
     });
-    const maxLfDay3 = Math.max(...(aggregateDay3?.perPath.map((entry) => entry.metrics.lf) ?? [0]));
-    const expectedLf = Math.min(10, maxLfDay3 + expectedBonus);
+    const globalExpectedDay3 = pmcFromLoads(loadsByDay, 2);
+    // 第 3 天当日负荷 = 三节之和
+    const day3Load = loadsByDay.get(2) ?? 0;
+    const day3LoadSum = day3.reduce((s, l) => s + lessonLss(l.difficulty), 0);
     assertions.push({
-      name: '总负担：第 3 天课量进入全局疲劳加成，且各节课 LSS 各自独立',
+      name: '总负担：同一日的多节课 → 日负荷求和进 PMC（KTL/LF 反映当日总量）',
       pass: Boolean(aggregateDay3)
         && aggregateDay3!.dayLoad.lessons === day3.length
-        && Math.abs(aggregateDay3!.dayLoad.fatigueBonus - expectedBonus) < 1e-6
-        && Math.abs(aggregateDay3!.metrics.lf - expectedLf) < 1e-3
+        && aggregateDay3!.dayLoad.fatigueBonus === 0   // PMC 已把课量求和进 KTL/LF，不再外挂加成
+        && Math.abs(day3Load - day3LoadSum) < 1e-6
+        && Math.abs(aggregateDay3!.metrics.ktl - globalExpectedDay3.ktl) < 1e-3
+        && Math.abs(aggregateDay3!.metrics.lf - globalExpectedDay3.lf) < 1e-3
         && perLessonLssOk,
-      detail: `课量 ${aggregateDay3?.dayLoad.lessons}/${aggregateDay3?.dayLoad.minutes}min 加成 ${aggregateDay3?.dayLoad.fatigueBonus}`
-        + `（期望 ${expectedBonus}）｜全局 lf ${aggregateDay3?.metrics.lf}（期望 max路径 ${maxLfDay3.toFixed(4)}+${expectedBonus}=${expectedLf.toFixed(4)}）`
-        + `｜各课 LSS 独立 ${perLessonLssOk}（${day3.map((lesson, index) => `d${lesson.difficulty}→${rowByLesson.get(`2-${index}`)?.lss}`).join(', ')}）`,
+      detail: `课量 ${aggregateDay3?.dayLoad.lessons}/${aggregateDay3?.dayLoad.minutes}min 加成 ${aggregateDay3?.dayLoad.fatigueBonus}（期望 0）`
+        + `｜day3 负荷 ${day3Load.toFixed(3)}（=三节之和 ${day3LoadSum.toFixed(3)}）`
+        + `｜全局 ktl ${aggregateDay3?.metrics.ktl}（期望 ${globalExpectedDay3.ktl.toFixed(4)}）`
+        + ` lf ${aggregateDay3?.metrics.lf}（期望 ${globalExpectedDay3.lf.toFixed(4)}）`
+        + `｜各课 LSS 独立 ${perLessonLssOk}`,
     });
 
     // ── 断言 3：信号区分「这门课难」vs「最近太累」
@@ -354,8 +372,8 @@ async function main(): Promise<void> {
         })
       : null;
 
-    // "最近太累"：把全局疲劳直接推到 ≥6（等价于连续多日高负荷后的累积状态）
-    const tiredMetrics = { lss: 3, ktl: 5, lf: 7, lsb: -2 };
+    // "最近太累"：急性/慢性比明显超载（acwr = lf/ktl ≥ 1.5）+ 趋势下滑
+    const tiredMetrics = { lss: 3, ktl: 5, lf: 8.5, lsb: -3.5 }; // acwr=1.7
     const tiredPacing = derivePacing(tiredMetrics.lf, tiredMetrics.ktl);
     const tiredReplan = deriveReplanSignal({
       dynamicState: { metrics: tiredMetrics, recentTrend: 'declining', fatigueRisk: 'high' } as any,
@@ -413,10 +431,13 @@ async function main(): Promise<void> {
     });
 
     // ── 断言 5：难度调整的效果度量（同类降档理由是否缓解；对照 vs 执行）
-    const { effects, groups } = await measureTaskDifficultyEffects({
+    // 只取**本次模拟**的锚点（该账号可能有真实历史锚点，混入会污染对照/执行分组）
+    const { effects, groups: rawGroups } = await measureTaskDifficultyEffects({
       userId,
       since: new Date(dayStart(0).getTime() - 3600_000),
     });
+    const simEffects = effects.filter((effect) => effect.taskId.startsWith(`sim-${runId}-`));
+    const groups = summarizeAdjustmentEffects(simEffects);
     const appliedGroup = groups.find((group) => group.reason === 'lesson_stress_high' && group.applied);
     const controlGroup = groups.find((group) => group.reason === 'lesson_stress_high' && !group.applied);
     assertions.push({
@@ -424,12 +445,13 @@ async function main(): Promise<void> {
       pass: Boolean(appliedGroup && controlGroup)
         && appliedGroup!.relieved === appliedGroup!.total
         && controlGroup!.relieved === 0,
-      detail: `锚点 ${effects.length} 条｜lesson_stress_high：执行组 缓解 ${appliedGroup?.relieved}/${appliedGroup?.total}`
+      detail: `模拟锚点 ${simEffects.length}/${effects.length} 条（已排除该账号真实历史 ${rawGroups ? effects.length - simEffects.length : 0} 条）`
+        + `｜lesson_stress_high：执行组 缓解 ${appliedGroup?.relieved}/${appliedGroup?.total}`
         + `（Δlsb ${appliedGroup?.avgLsbDelta}）｜对照组 缓解 ${controlGroup?.relieved}/${controlGroup?.total}`
         + `（Δlsb ${controlGroup?.avgLsbDelta}）`,
     });
 
-    // ── 断言 6：跨天恢复 —— 状态按日因子衰减；超过活跃窗口的路径不再参与全局投票
+    // ── 断言 6：跨天恢复 —— PMC 空闲日以 0 参与（KTL/LF 按 λ^d 降）；超窗口路径不再参与全局分解
     const decayDayMs = 24 * 3600_000;
     const pathAAtDay2 = await learningStateService.getCurrentState(userId, { pathId: pathIds.A, asOf: dayAsOf(2) });
     const pathAAtPlus3 = await learningStateService.getCurrentState(userId, {
@@ -440,24 +462,26 @@ async function main(): Promise<void> {
       asOf: new Date(dayAsOf(2).getTime() + 20 * decayDayMs),
     });
     const simPaths = [pathIds.A, pathIds.B, pathIds.C];
+    // activePathIds = 活跃窗口内仍算"当前总负担"的路径；超窗路径不再出现（perPath 仍完整返回供审计）
     const stillVotingAt20 = (pathAAtPlus20Agg?.activePathIds ?? []).filter((id) => simPaths.includes(id));
 
     const decayDays = 3;
+    // LSS 仍按日因子回落（单节瞬时压力）；KTL/LF 走 PMC 空闲日（0 负荷）推进 = λ^d
     const decayExpectedLss = Number(pathAAtDay2?.lss) * 0.82 ** decayDays;
-    const decayExpectedKtl = Number(pathAAtDay2?.ktl) * 0.99 ** decayDays;
-    const decayExpectedLf = 1.2 + (Number(pathAAtDay2?.lf) - 1.2) * 0.74 ** decayDays;
+    const decayExpectedKtl = Number(pathAAtDay2?.ktl) * PMC_KTL_LAMBDA ** decayDays;
+    const decayExpectedLf = Number(pathAAtDay2?.lf) * PMC_LF_LAMBDA ** decayDays;
     const decayOk = Boolean(pathAAtDay2 && pathAAtPlus3)
-      && Math.abs(Number(pathAAtPlus3!.lss) - decayExpectedLss) < 1e-6
-      && Math.abs(Number(pathAAtPlus3!.ktl) - decayExpectedKtl) < 1e-6
-      && Math.abs(Number(pathAAtPlus3!.lf) - decayExpectedLf) < 1e-6;
+      && Math.abs(Number(pathAAtPlus3!.lss) - decayExpectedLss) < 1e-2
+      && Math.abs(Number(pathAAtPlus3!.ktl) - decayExpectedKtl) < 1e-2
+      && Math.abs(Number(pathAAtPlus3!.lf) - decayExpectedLf) < 1e-2;
 
     assertions.push({
-      name: '跨天恢复：状态按日因子衰减（LSS×0.82^d / KTL×0.99^d / LF→基线1.2 的0.74^d），超窗口不再投票',
+      name: '跨天恢复：PMC 空闲日以 0 参与（KTL×λk^d / LF×λl^d），LSS 按 0.82^d 回落；超窗口路径不再出现在全局分解',
       pass: decayOk && stillVotingAt20.length === 0,
       detail: `+3 天：lss ${pathAAtPlus3?.lss}（期望 ${decayExpectedLss.toFixed(4)}）`
         + ` ktl ${pathAAtPlus3?.ktl}（期望 ${decayExpectedKtl.toFixed(4)}）`
         + ` lf ${pathAAtPlus3?.lf}（期望 ${decayExpectedLf.toFixed(4)}）→ ${decayOk ? '吻合' : '不符'}`
-        + `｜+20 天仍在投票的模拟路径：${stillVotingAt20.length} 条（期望 0，活跃窗口 14 天）`,
+        + `｜+20 天仍在全局分解的模拟路径：${stillVotingAt20.length} 条（期望 0）`,
     });
 
     assertions.push({

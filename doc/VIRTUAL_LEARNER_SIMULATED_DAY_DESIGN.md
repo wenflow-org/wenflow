@@ -158,7 +158,7 @@ GET /api/admin/batch-experiments/:experimentId/day-timeline?metric=burden|interv
 - **会话负荷聚合**：`commitSessionLoadMetric`（`AITeachingCoordinator.ts:964`）以 `metricType='session_load'`（`sourceKey=session-load:{sessionId}`）幂等写 `learning_metrics.metadata={max, basisDist, perTurnCount}`。
 - **课后评估**：`session-wrapup` 的 `evaluation.sessionLss/sessionKtl/sessionLf` + `metricMetadata`（标注为间接推断）。
 - **动态调整（记忆侧）**：`review-plan.computeLoadBudget` 的 `budget` 序列（1.0/2.0/3.0，按成功率回校准）。
-- **动态调整（状态侧）**：`learning-state.service.restoreMetrics(…, asOf)` 的 KTL/LF 跨日自然衰减。
+- **动态调整（状态侧）**：KTL/LF 的**按天日负荷 EWMA**（`learning-load.pmc.ts`，2026-10-15 起为权威时钟）——当日负荷 = 该日各节课 `lss` 之和，空闲日以 0 参与（即自然回落）。旧「按课步进 + 读取侧独立自然衰减」两套时钟已退役。
 - **教师侧微调**：`teaching-turn` 开场消费 `scenario.learnerPrediction`（`stallRisk/reliability`）与 `behavioralProfile`。
 - **负担顺延**：当 `consumedMinutes + nextTaskEstimated > maxMinutesPerDay` 时，系统层把任务留到次日（本稿只要求接口能表达"顺延"，具体策略由系统层定）。
 
@@ -170,9 +170,9 @@ GET /api/admin/batch-experiments/:experimentId/day-timeline?metric=burden|interv
 
 | 能力 | 位置 | 产出 |
 |---|---|---|
-| 全局聚合（按 `asOf`） | `learningStateService.getAggregatedState(userId,{asOf})` | `{metrics, perPath[], dayLoad:{lessons,minutes,fatigueBonus}}` |
-| 路径级状态 | `learningStateService.getCurrentState(userId,{pathId,asOf})` | `metrics` |
-| 当日课量 → 疲劳加成 | `computeDayLoadFatigueBonus({lessons,minutes})` | `fatigueBonus` |
+| 全局聚合（按 `asOf`） | `learningStateService.getAggregatedState(userId,{asOf})` | `{metrics, perPath[], dayLoad:{lessons,minutes,fatigueBonus}}`（**2026-10-15**：`metrics`/`perPath` 为 PMC 日负荷重放；`dayLoad` 降为**原始观测**，`fatigueBonus` 恒 0，不再叠加进 lf） |
+| 路径级状态 | `learningStateService.getCurrentState(userId,{pathId,asOf})` | `metrics`（PMC 重放） |
+| 当日课量（原始观测） | `computeDayLoadFatigueBonus({lessons,minutes})` | `fatigueBonus`（**沿用旧算法只为观测**；PMC 已把同日多课求和进 KTL/LF，此值不再进 lf） |
 | 节奏 | `LearnerSnapshotService.derivePacing(lf,ktl)` | `slow\|moderate\|fast` |
 | 课内控制状态 | `deriveLearningControlState(...)` | `paceMode / challengeLevelCap / conceptLoad` |
 | 重排召回信号 | `deriveReplanSignal(...)` | `reasonCodes[]`：`fatigue_high / lsb_negative / recent_trend_declining / fragile_concepts / struggling_concepts / blocked_foundations / prerequisite_gaps` |
@@ -315,7 +315,7 @@ GET /api/admin/batch-experiments/:experimentId/day-timeline?metric=burden|interv
 
 **F. 测试与回归**（详见五）
 - [ ] C1–C4 契约测试
-- [ ] 重放语义测试（`asOf` 过滤 / 自然衰减；**不 mock 时钟**）
+- [ ] 重放语义测试（`asOf` 过滤 / PMC 日负荷按天重放与空闲日回落；**不 mock 时钟**）
 - [ ] 隔离测试（仅 `isVirtualLearner`，真实用户零变更）
 - [ ] 幂等测试（同日重复 `advance-day`）
 - [ ] 既有基线不破（`batch-experiment` / `resolve-llm-call-params` / `vlab-controls`）
@@ -331,7 +331,7 @@ GET /api/admin/batch-experiments/:experimentId/day-timeline?metric=burden|interv
 ## 五、测试与回归
 
 - **契约测试**：C1–C4 的请求/响应形状（可先用 mock）。
-- **重放语义测试**：`asOf` 的过滤与自然衰减（`9c3fd45` 已覆盖"asOf=行时间不衰减 / 缺省按现在衰减 / 过滤参数透传"5 例，在此扩展）。**重放本身不 mock 时钟**（写过去日期 + asOf 读回）；`jest.useFakeTimers({ now })` 只用于需要"真实 now"的守卫（仓库既有模式：`simulation.coordinator.lease.test.ts:172`、`blackbox-runner.test.ts:837`）。
+- **重放语义测试**：`asOf` 的过滤与 **PMC 日负荷按天重放**（空闲日以 `D_day=0` 参与 ⇒ 自然回落；`9c3fd45` 已覆盖"asOf=行时间/缺省按现在/过滤参数透传"5 例，在此扩展）。**重放本身不 mock 时钟**（写过去日期 + asOf 读回）；`jest.useFakeTimers({ now })` 只用于需要"真实 now"的守卫（仓库既有模式：`simulation.coordinator.lease.test.ts:172`、`blackbox-runner.test.ts:837`）。
 - **隔离测试**：断言推进逻辑只在 `isVirtualLearner = 1` 生效，真实用户数据零变更（依赖 `asOf` 上界，见 §8.8）。
 - **幂等测试**：同日重复 `advance-day` 不重复写入、不重复计。
 - **既有基线**：不得破坏 `batch-experiment.service.ts` 的 `setup→…→decay→done`、`resolve-llm-call-params`、`vlab-controls`、`simulate-learner-days` 现有测试。

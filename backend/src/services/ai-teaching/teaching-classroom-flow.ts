@@ -8,6 +8,7 @@
  */
 import { simulatedNowOr } from '../../services/virtual-lab/simulation-clock-context';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
+import { classifyLoad } from '../learning/learning-load-verdict';
 import type { TeachingSessionMessage, TeachingKnowledgePointState } from './TeachingSessionRepository';
 import type { TeachingScenarioContext } from './TeachingContextBuilder';
 import type { TeachingTurnOutput } from '../../skills/teaching-turn';
@@ -110,22 +111,24 @@ export function deriveTeachingRuntimeSignals(context: TeachingScenarioContext) {
   const ktl = Number(context.learningState?.ktl ?? 0);
   const lf = Number(context.learningState?.lf ?? 0);
   const lsb = Number(context.learningState?.lsb ?? 0);
+  // 相对量判据（尺度无关）：疲劳由 ACWR 定、恢复由 form 定——绝对 `lf>=6` 在 PMC 日负荷口径下失效
+  const verdict = classifyLoad({ ktl, lf });
 
-  const recommendedPacing: 'slow' | 'moderate' | 'fast' = lf >= 6 || lss >= 6
+  const recommendedPacing: 'slow' | 'moderate' | 'fast' = verdict.fatigueRisk === 'high' || lss >= 6
     ? 'slow'
-    : ktl >= 5 && lf <= 3 && lss <= 4
+    : verdict.recovered && lss <= 4
       ? 'fast'
       : 'moderate';
 
-  const recentTrend: 'improving' | 'stable' | 'declining' = lf >= 6 || lsb < 0
+  const recentTrend: 'improving' | 'stable' | 'declining' = verdict.fatigueRisk === 'high' || verdict.imbalanced
     ? 'declining'
-    : ktl >= 6 && lf <= 3 && lss <= 4
+    : verdict.recovered && lss <= 4
       ? 'improving'
       : 'stable';
 
-  const confidenceLevel: 'confident' | 'moderate' | 'anxious' = lsb < 0 || lf >= 6
+  const confidenceLevel: 'confident' | 'moderate' | 'anxious' = verdict.imbalanced || verdict.fatigueRisk === 'high'
     ? 'anxious'
-    : ktl >= 6 && lf <= 3 && lss <= 4
+    : verdict.recovered && lss <= 4
       ? 'confident'
       : 'moderate';
 
