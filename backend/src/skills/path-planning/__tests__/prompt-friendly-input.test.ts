@@ -94,4 +94,29 @@ describe('path-planning 输入构造：学习证据必须真正进入提示词',
     );
     expect(Object.prototype.hasOwnProperty.call(blank.normalizedInput, 'understanding')).toBe(false);
   });
+
+  /**
+   * 2026-10-17：校内锚（教材册次 / 考试范围 / 学校进度）。
+   * 定帧层早已产出 `schoolAnchor`（path-planning-hints:1036），但本投影是逐字段白名单重建，
+   * 白名单里没有它 ⇒ path-planning 规则 37/47 静默拿不到数据（阶段设计层却能拿到）。
+   */
+  it('schoolAnchor 透传三个子键；缺失/空对象不出现该键', () => {
+    const withAnchor = asPromptFriendly(
+      buildPromptFriendlyNormalizedInput({
+        ...base,
+        schoolAnchor: { textbook: '人教A版必修一', examScope: '期中：集合与函数', schoolPace: '已讲到单调性' },
+      }),
+    );
+    expect(withAnchor.normalizedInput.schoolAnchor).toEqual({
+      textbook: '人教A版必修一',
+      examScope: '期中：集合与函数',
+      schoolPace: '已讲到单调性',
+    });
+
+    const without = asPromptFriendly(buildPromptFriendlyNormalizedInput({ ...base }));
+    expect(Object.prototype.hasOwnProperty.call(without.normalizedInput, 'schoolAnchor')).toBe(false);
+
+    const empty = asPromptFriendly(buildPromptFriendlyNormalizedInput({ ...base, schoolAnchor: null }));
+    expect(Object.prototype.hasOwnProperty.call(empty.normalizedInput, 'schoolAnchor')).toBe(false);
+  });
 });

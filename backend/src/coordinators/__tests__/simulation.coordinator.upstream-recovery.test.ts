@@ -91,6 +91,11 @@ function retryBudgetError() {
   })
 }
 
+/** 池轮换 404：上游「账号池暂无可用账号服务该模型」（type=model_not_found），文案裸奔形态（category 被包装丢失） */
+function poolRotationError() {
+  return new Error('API request failed with status 404: {"error":{"message":"Model \\"deepseek-v4.1-flash\\" is not supported by any configured account in this group","type":"model_not_found"}}')
+}
+
 describe('上游重试耗尽 → 暂停 → 续跑到 completed（报告 #9/#12）', () => {
   let sessionRecord: any
   let learningPath: any
@@ -216,6 +221,31 @@ describe('上游重试耗尽 → 暂停 → 续跑到 completed（报告 #9/#12�
     const learning = getLearningState()
     expect(learning.conversationHistory).toEqual([])
     expect(learning.taskRuntime.status).toBe('active')
+    expect(mockEndSession).not.toHaveBeenCalled()
+  })
+
+  it('模拟学员调用撞池轮换 404（文案裸奔）→ 非终局暂停（2026-10-13 夜跑：两轨整夜课曾全断于此）', async () => {
+    // 真凶形态：785 行「模拟学员回复」调用在内层教学回合 try 之外，此前任何失败都直落
+    // persistLearningFailure 判终局 failed；本用例锁住最外层 catch 的非终局分支。
+    // mockRejectedValue（非 Once）：709 行认知地基调用先消费一次（自有 catch 降级为无硬约束），模拟学员再抛。
+    mockExecuteSkill.mockRejectedValue(poolRotationError())
+
+    const result = await runStep()
+
+    expect(result.success).toBe(false)
+    expect(String(result.error)).toContain('not supported by any configured account')
+
+    // 非终局：会话保持 running（修复前 = status failed，整节课不可续）
+    expect(sessionRecord.status).toBe('running')
+    const stats = getRuntimeStats()
+    expect(stats.lastError).toEqual(expect.objectContaining({
+      code: 'LEARN_UPSTREAM_TRANSIENT_PAUSED',
+      retryable: true
+    }))
+
+    const pauseLog = result.logs?.find((entry: any) => entry.phase === 'teaching-interrupted')
+    expect(pauseLog?.details?.output?.action).toBe('teaching-step-upstream-paused')
+    expect(pauseLog?.details?.output?.retryable).toBe(true)
     expect(mockEndSession).not.toHaveBeenCalled()
   })
 

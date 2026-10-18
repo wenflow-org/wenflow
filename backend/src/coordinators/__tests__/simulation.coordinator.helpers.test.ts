@@ -581,6 +581,9 @@ describe('misc pure helpers', () => {
     expect(isTransientUpstreamLearnError(Object.assign(new Error('boom'), { statusCode: 503 }))).toBe(true)
     expect(isTransientUpstreamLearnError(new Error('Provider request retry budget exhausted'))).toBe(true)
     expect(isTransientUpstreamLearnError(new Error('connection timeout'))).toBe(true)
+    // 池轮换 404（2026-10-13 夜跑实况）：语义=账号池暂无可用账号，文案裸奔也必须判成上游突发
+    expect(isTransientUpstreamLearnError(new Error('API request failed with status 404: {"error":{"message":"Model \\"deepseek-v4.1-flash\\" is not supported by any configured account in this group","type":"model_not_found"}}'))).toBe(true)
+    expect(isTransientUpstreamLearnError(Object.assign(new Error('not supported by any configured account'), { category: 'provider_http', statusCode: 404 }))).toBe(true)
     // 硬失败：业务/契约类不该被当成"再跑一次就好"
     expect(isTransientUpstreamLearnError(new Error('业务校验失败：缺少必填字段'))).toBe(false)
     expect(isTransientUpstreamLearnError(new Error('当前 Learn 没有绑定教学会话'))).toBe(false)
