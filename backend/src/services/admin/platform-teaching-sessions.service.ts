@@ -18,19 +18,30 @@ function parseJsonSafe<T>(raw: string | null | undefined, fallback: T): T {
 }
 
 /**
- * 「消息数」列（只数用户消息，口径与改造前逐字一致）改为在库里算。
+ * 列表用到的两个「库里算」事实：
+ *  - userCount：只数用户消息（口径与改造前逐字一致）
+ *  - endReason：收束原因（manual-end / task-completed / learner-abandoned，老会话为 null）
  *
- * 原实现为这一列把 `messages` 整列 JSON 读进 Node 再 JSON.parse 过滤：该列合计 **197.7MB**
+ * 原实现为消息数把 `messages` 整列 JSON 读进 Node 再 JSON.parse 过滤：该列合计 **197.7MB**
  * （单行最大 3.3MB），而列表页请求的是 `limit=1000`（真实用户 215 行 / 含测试 472 行），
  * 2026-09-29 实测 2.4s / 4.4s。计数搬进库后这 197MB 不再出库。
+ *
+ * endReason 同理：它在 teachingState.sessionArtifacts 里，teachingState 是 10~20KB 的大 JSON 列，
+ * 整列进 Node 没有意义；这里只用 JSON1 取一个标量（`json_extract`），与消息计数共用一次扫描。
+ * schema 里不新增列，历史会话也能直接读到，无需回填。
  *
  * 口径沿用双读过渡（见 schema `teaching_session_messages` 注释）：**侧表有行即权威**；
  * 无侧表行的历史会话回退 `messages` 列，回退分支用 json_each 在库内解析，同样不出库。
  */
-async function countUserMessagesBySession(ids: string[]): Promise<Map<string, number>> {
-  const counts = new Map<string, number>();
-  if (ids.length === 0) return counts;
-  const rows = await prisma.$queryRaw<Array<{ id: string; userCount: number | bigint }>>`
+interface SessionFacts {
+  userCount: number;
+  endReason: string | null;
+}
+
+async function sessionFactsById(ids: string[]): Promise<Map<string, SessionFacts>> {
+  const facts = new Map<string, SessionFacts>();
+  if (ids.length === 0) return facts;
+  const rows = await prisma.$queryRaw<Array<{ id: string; userCount: number | bigint; endReason: string | null }>>`
     SELECT s.id AS id,
       CASE
         WHEN EXISTS (SELECT 1 FROM teaching_session_messages m WHERE m.sessionId = s.id)
@@ -41,12 +52,22 @@ async function countUserMessagesBySession(ids: string[]): Promise<Map<string, nu
           THEN (SELECT COUNT(*) FROM json_each(s.messages)
                 WHERE json_extract(value, '$.role') = 'user')
         ELSE 0
-      END AS userCount
+      END AS userCount,
+      CASE
+        WHEN json_valid(s.teachingState)
+          THEN json_extract(s.teachingState, '$.sessionArtifacts.endReason')
+        ELSE NULL
+      END AS endReason
     FROM teaching_sessions s
     WHERE s.id IN (${Prisma.join(ids)})
   `;
-  for (const row of rows) counts.set(row.id, Number(row.userCount));
-  return counts;
+  for (const row of rows) {
+    facts.set(row.id, {
+      userCount: Number(row.userCount),
+      endReason: typeof row.endReason === 'string' && row.endReason ? row.endReason : null,
+    });
+  }
+  return facts;
 }
 
 export async function listTeachingSessionsDebug(params: {
@@ -76,7 +97,7 @@ export async function listTeachingSessionsDebug(params: {
   const [total, sessions] = await Promise.all([
     prisma.teaching_sessions.count({ where }),
     // select 而非 include：**排除 messages / teachingState 大 JSON 列**（前者 197.7MB，是这一页
-    // 的唯一性能黑洞；消息数改由 countUserMessagesBySession 在库内聚合）
+    // 的唯一性能黑洞；消息数与 endReason 改由 sessionFactsById 在库里各取一个标量）
     prisma.teaching_sessions.findMany({
       where,
       orderBy: { startTime: 'desc' },
@@ -105,15 +126,17 @@ export async function listTeachingSessionsDebug(params: {
     })
   ]);
 
-  const [progressById, userMessageCount] = await Promise.all([
+  const [progressById, factsById] = await Promise.all([
     deriveTeachingSessionProgress(sessions),
-    countUserMessagesBySession(sessions.map((s) => s.id)),
+    sessionFactsById(sessions.map((s) => s.id)),
   ]);
 
   const items = sessions.map((session) => {
     const wrapup = parseJsonSafe<any>(session.wrapup, null);
     const advisory = parseJsonSafe<any>(session.advisory, null);
     const knowledgePoints = parseJsonSafe<any[]>(session.knowledgeState, []);
+    const facts = factsById.get(session.id);
+    const endReason = facts?.endReason ?? null;
 
     return {
       id: session.id,
@@ -130,10 +153,12 @@ export async function listTeachingSessionsDebug(params: {
       topic: session.topic,
       taskType: session.taskType,
       status: session.status,
+      /** 收束原因：manual-end（用户主动结束）/ task-completed / learner-abandoned；老会话 null */
+      endReason,
       startTime: session.startTime,
       endTime: session.endTime,
       duration: session.duration,
-      messageCount: userMessageCount.get(session.id) ?? 0,
+      messageCount: facts?.userCount ?? 0,
       knowledgePointCount: Array.isArray(knowledgePoints) ? knowledgePoints.length : 0,
       progress: progressById.get(session.id) || null,
       wrapup,

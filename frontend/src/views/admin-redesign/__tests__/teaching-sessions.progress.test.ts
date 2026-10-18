@@ -1,7 +1,7 @@
 /**
  * TeachingSessions 进度列冒烟（遗留项「教学会话进度列」）：
  * 1. live 模式：后端补字段 progress → 任务 x/y + mk-minibar 迷你条（档位色：完成 ok / 失败 bad）
- * 2. 中断态：失败/超时显示「中断于 任务 x/y」
+ * 2. 中断态：失败/超时显示「中断于 x/y」
  * 3. 无进度数据（老数据）→ —
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -83,6 +83,37 @@ describe('TeachingSessions 低参与标注（拍板 #1：completed 且用户消�
   });
 });
 
+describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后区分「任务完成」与「用户结束」）', () => {
+  it('completed + manual-end → 「手动结束」徽章；task-completed 与缺失不猜', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          items: [
+            makeItem('manual', {
+              status: 'completed',
+              endReason: 'manual-end',
+              messageCount: 6,
+              progress: { taskIndex: 1, totalTasks: 4, milestoneIndex: 1, totalMilestones: 3 }
+            }),
+            makeItem('done', { status: 'completed', endReason: 'task-completed', progress: { taskIndex: 4, totalTasks: 4, milestoneIndex: 3, totalMilestones: 3 } }),
+            makeItem('old', { status: 'completed', progress: { taskIndex: 2, totalTasks: 5, milestoneIndex: 2, totalMilestones: 4 } })
+          ]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const rows = wrapper.findAll('tbody tr');
+    expect(rows[0].find('.ts-status').text()).toContain('已完成');
+    expect(rows[0].find('.ts-status').text()).toContain('手动结束');
+    expect(rows[0].text()).toContain('结束于 1/4');
+    expect(rows[1].find('.ts-status').text()).not.toContain('手动结束');
+    expect(rows[1].text()).toContain('结束于 4/4');
+    expect(rows[2].find('.ts-status').text()).not.toContain('手动结束');
+    wrapper.unmount();
+  });
+});
+
 beforeEach(() => {
   listMock.mockReset();
   dataSource.value = 'live';
@@ -94,7 +125,7 @@ afterEach(() => {
 });
 
 describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）', () => {
-  it('live：已完成会话 → 进度列只显「已完成」（不渲染任务 x/y 与进度条，语义一致），title 保留历史进度', async () => {
+  it('live：已完成会话 → 进度列显「结束于 x/y」（不渲染进度条），title 保留历史进度', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -114,10 +145,11 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const row = wrapper.find('tbody tr');
     const prog = row.find('.ts-prog--done');
     expect(prog.exists()).toBe(true);
-    expect(prog.text()).toBe('已完成');
+    // 2026-10-18：终态不再说「已完成」（状态列已表达生命周期），进度列只回答结束在哪一格
+    expect(prog.text()).toBe('结束于 2/5');
     expect(row.find('.mk-minibar').exists()).toBe(false);
     expect(row.text()).not.toContain('任务 2/5');
-    expect(prog.attributes('title')).toContain('阶段 2/4 · 任务 2/5');
+    expect(prog.attributes('title')).toContain('阶段 2/4 · 第 2 个任务（共 5 个）');
     wrapper.unmount();
   });
 
@@ -141,9 +173,9 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     });
     const wrapper = await mountLive();
     const rows = wrapper.findAll('tbody tr');
-    expect(rows[0].text()).toContain('中断于 任务 3/4');
+    expect(rows[0].text()).toContain('中断于 3/4');
     expect(rows[0].find('.mk-minibar__fill').attributes('data-tone')).toBe('bad');
-    expect(rows[1].text()).toContain('中断于 任务 1/2');
+    expect(rows[1].text()).toContain('中断于 1/2');
     wrapper.unmount();
   });
 
@@ -163,7 +195,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     });
     const wrapper = await mountLive();
     const row = wrapper.find('tbody tr');
-    expect(row.text()).toContain('中断于 任务 2/4');
+    expect(row.text()).toContain('中断于 2/4');
     expect(row.find('.mk-minibar__fill').attributes('data-tone')).toBe('bad');
     wrapper.unmount();
   });

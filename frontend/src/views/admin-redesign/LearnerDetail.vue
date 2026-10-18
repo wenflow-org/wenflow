@@ -761,7 +761,6 @@
                       <i class="mk-minibar__fill" :data-tone="sessionProgressTone(s.status) || undefined" :style="{ width: (sessionProgressPct(s.progress) ?? 0) + '%' }"></i>
                     </span>
                   </span>
-                  <span v-else-if="sessionProgressDone(s.status)" class="ld-prog ld-prog--done" :title="ldProgTitle(s)">已完成</span>
                   <span v-else class="ld-sub">—</span>
                 </td>
                 <td>
@@ -902,8 +901,7 @@ import {
   sessionStatusBadgeCls,
   sessionProgressPct,
   sessionProgressText,
-  sessionProgressTone,
-  sessionProgressDone
+  sessionProgressTone
 } from './statusText'
 import type { SessionProgress } from './statusText'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
@@ -2862,7 +2860,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-prog { display: inline-flex; align-items: center; gap: 6px; }
 .ld-prog__num { font-size: var(--mk-fs-micro); white-space: nowrap; }
 .ld-prog__bar { width: 56px; }
-.ld-prog--done { color: var(--mk-green); font-size: var(--mk-fs-micro); font-weight: 600; }
 /* 产物列的建议徽章：截断必须落在**内层 span**（平台页 .ts-adv-badge__txt 同法）——
    加在徽章本体上时 overflow 会先吃掉圆角内边距，长标题还会把末字竖切（用户走查
    「pill 字体尾部被压缩」）；内层截断则只会出干净省略号，徽章 padding 始终完整。

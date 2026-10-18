@@ -266,6 +266,14 @@
                   class="mk-badge mk-badge--sm mk-badge--muted"
                   title="低参与：完成时用户消息不足 2 条，无真实学习参与证据"
                 >低参与</span>
+                <!-- 手动结束（2026-10-18 用户拍板）：completed 只是生命周期终态，用户点「结束学习」
+                     也会走到这里；endReason 从会话收束时已落进 teachingState.sessionArtifacts。
+                     老会话没有该字段时不猜、不加徽章。 -->
+                <span
+                  v-if="r.status === 'completed' && r.endReason === 'manual-end'"
+                  class="mk-badge mk-badge--sm mk-badge--muted"
+                  title="用户主动结束学习（非任务完成结算）：任务未必做完，进度列显示结束在哪一格"
+                >手动结束</span>
               </td>
               <td v-if="!tsHiddenCols.has('interact')">
                 <!-- 行级设计（批B）：时长主值+档位 tone（≥25 分钟长时标琥珀 / <1 分钟秒退弱化），消息/知识点降 sub 行；
@@ -277,8 +285,11 @@
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('progress')">
+                <!-- 终态完成：只出「结束于 x/y」，不出进度条（不再说「已完成」——那是状态列的词，
+                     也容易读成任务做到了最后一格；实际 11 条 completed 里 10 条停在半途） -->
                 <template v-if="sessionProgressDone(r.status)">
-                  <span class="ts-prog ts-prog--done" :title="progressTitle(r)">已完成</span>
+                  <span v-if="r.progress" class="ts-prog ts-prog--done" :title="progressTitle(r)">{{ sessionProgressText(r.progress, r.status) }}</span>
+                  <span v-else class="mk-na" title="这次会话没有任务维度数据">—</span>
                 </template>
                 <template v-else-if="sessionProgressPct(r.progress) !== null">
                   <span class="ts-prog" :title="progressTitle(r)">
@@ -419,6 +430,9 @@ interface Row {
   isVirtualLearner: boolean
   isTestAccount: boolean
   status: string
+  /** 收束原因（后端从 teachingState.sessionArtifacts.endReason 读）：manual-end / task-completed /
+      learner-abandoned；老会话缺失为 null。只用于给 completed 行加「手动结束」标注。 */
+  endReason: string | null
   duration: number
   messageCount: number
   knowledgePointCount: number
@@ -643,6 +657,7 @@ function mapRow(s: Record<string, unknown>): Row {
     isVirtualLearner: !!s.isVirtualLearner,
     isTestAccount: !!s.isTestAccount,
     status: String(s.status || ''),
+    endReason: s.endReason ? String(s.endReason) : null,
     duration: Number(s.duration || 0),
     messageCount: Number(s.messageCount || 0),
     knowledgePointCount: Number(s.knowledgePointCount || 0),
@@ -958,11 +973,15 @@ function interactTitle(r: Row): string | undefined {
   return r.duration >= IDLE_LONG_SECONDS ? `${base} · 时长 ≥ 25 分钟按长时标注（信号，非故障）` : base
 }
 /** 进度工具提示（人话）：阶段 n/m · 任务 x/y；无里程碑维度只给任务 */
+/** 进度工具提示（人话）：阶段 n/m · 第 x 个任务（共 y 个）。
+ *  写成「第 x 个」而不是「任务 x/y」，是因为后端 taskIndex 是**位置**不是完成数——
+ *  「任务 1/4」容易被读成「4 个里做完了 1 个」。 */
 function progressTitle(r: Row): string {
   const p = r.progress
   if (!p) return ''
-  if (p.totalMilestones > 0 && p.milestoneIndex > 0) return `阶段 ${p.milestoneIndex}/${p.totalMilestones} · 任务 ${p.taskIndex}/${p.totalTasks}`
-  return `任务 ${p.taskIndex}/${p.totalTasks}`
+  const at = Math.max(1, p.taskIndex)
+  if (p.totalMilestones > 0 && p.milestoneIndex > 0) return `阶段 ${p.milestoneIndex}/${p.totalMilestones} · 第 ${at} 个任务（共 ${p.totalTasks} 个）`
+  return `第 ${at} 个任务（共 ${p.totalTasks} 个）`
 }
 
 /* 宿主刷新联动（学习会话合并宿主「刷新」按钮 → refreshNow） */

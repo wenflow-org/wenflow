@@ -256,13 +256,16 @@ export function sessionProgressPct(p: SessionProgress | null | undefined): numbe
   return Math.max(0, Math.min(100, pct))
 }
 
-/** 教学会话进度文本：x/y；失败/超时等中断态加「中断于」前缀；无数据 → — */
+/** 教学会话进度文本：进行中「任务 x/y」；中断「中断于 x/y」；完成「结束于 x/y」。
+ *  终态不再只说「已完成」——那与状态列同词，且会让人以为任务做到了最后一格；
+ *  进度列只回答「结束在哪一格」。无进度数据 → —。 */
 export function sessionProgressText(p: SessionProgress | null | undefined, status?: string | null): string {
   if (!p || !Number.isFinite(p.totalTasks) || p.totalTasks <= 0) return '—'
-  const base = `任务 ${Math.min(Math.max(p.taskIndex, 0), p.totalTasks)}/${p.totalTasks}`
+  const pos = `${Math.min(Math.max(p.taskIndex, 0), p.totalTasks)}/${p.totalTasks}`
   const st = String(status || '').toLowerCase()
-  if (['failed', 'timeout', 'finalization_failed', 'discarded', 'superseded'].includes(st)) return `中断于 ${base}`
-  return base
+  if (st === 'completed' || st === 'succeeded') return `结束于 ${pos}`
+  if (['failed', 'timeout', 'finalization_failed', 'discarded', 'superseded'].includes(st)) return `中断于 ${pos}`
+  return `任务 ${pos}`
 }
 
 /** 教学会话进度条档位：完成 → ok；失败/超时/收尾失败/废弃/已被替代 → bad；其余默认蓝条（null） */
@@ -273,7 +276,8 @@ export function sessionProgressTone(status?: string | null): 'ok' | 'bad' | null
   return null
 }
 
-/** 教学会话终态完成判定（P1 语义修复：已完成会话不再展示「任务 x/y」进度，改显「已完成」） */
+/** 教学会话终态完成判定：用于「只出文字、不出进度条」的终态展示（2026-10-18 起
+ *  文案改为「结束于 x/y」，不再只说「已完成」——状态列已表达生命周期） */
 export function sessionProgressDone(status?: string | null): boolean {
   const st = String(status || '').toLowerCase()
   return st === 'completed' || st === 'succeeded'

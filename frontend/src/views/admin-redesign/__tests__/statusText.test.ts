@@ -247,12 +247,13 @@ describe('sessionProgress（教学会话进度列单源：任务 x/y + 迷你条
     expect(sessionProgressPct(null)).toBe(null);
   });
 
-  it('文本 = 任务 x/y；中断态加「中断于」前缀；无数据 → —', () => {
+  it('文本 = 任务 x/y；中断「中断于 x/y」；完成「结束于 x/y」；无数据 → —', () => {
     expect(sessionProgressText(p, 'active')).toBe('任务 3/5');
-    expect(sessionProgressText(p, 'completed')).toBe('任务 3/5');
-    expect(sessionProgressText(p, 'failed')).toBe('中断于 任务 3/5');
-    expect(sessionProgressText(p, 'timeout')).toBe('中断于 任务 3/5');
-    expect(sessionProgressText(p, 'finalization_failed')).toBe('中断于 任务 3/5');
+    expect(sessionProgressText(p, 'completed')).toBe('结束于 3/5');
+    expect(sessionProgressText(p, 'succeeded')).toBe('结束于 3/5');
+    expect(sessionProgressText(p, 'failed')).toBe('中断于 3/5');
+    expect(sessionProgressText(p, 'timeout')).toBe('中断于 3/5');
+    expect(sessionProgressText(p, 'finalization_failed')).toBe('中断于 3/5');
     expect(sessionProgressText(null, 'active')).toBe('—');
     expect(sessionProgressText({ taskIndex: 9, totalTasks: 5, milestoneIndex: 1, totalMilestones: 4 }, 'active')).toBe('任务 5/5');
   });
