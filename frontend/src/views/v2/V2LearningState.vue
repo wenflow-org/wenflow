@@ -1561,7 +1561,9 @@ function loadGuidance() {
 }
 
 /* ---------- AI 建议 ---------- */
-.suggest__list { display: grid; gap: 10px; }
+/* 单列 grid 一律显式轨道（#122，同 .state__col/.state__main 的 #118 判例）：隐式 auto 轨
+   按子项 min-content 解算，一个不可收缩的长药丸就能把整页撑出 21px 横向滚动。 */
+.suggest__list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .sug {
   display: grid; grid-template-columns: 38px 1fr auto;
   align-items: center; gap: 12px;
@@ -1592,7 +1594,7 @@ function loadGuidance() {
    4px 琥珀左边条 + 琥珀星标 head + 正文 + 主次双按钮 + 成功回执行 + 次级区块（学习调控）。
    pad 走 16（同 .card band 的内边距节奏），左边条由 border-left 提供，故右侧/下方补 16。 */
 .advisory {
-  display: grid; gap: 11px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 11px;
   padding: 14px 16px 16px;
   border-left: 4px solid var(--amber);
 }
@@ -1604,14 +1606,14 @@ function loadGuidance() {
 .advisory__star { width: 15px; height: 15px; flex: 0 0 auto; }
 /* 卡头右侧的来源标注（AI 生成 / 系统建议）：跟 head 同色会抢星标语义，压回 meta 灰 */
 .advisory__head .band__meta { margin-left: auto; font-weight: 600; color: var(--faint); }
-.advisory__body { display: grid; gap: 11px; }
+.advisory__body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 11px; }
 .advisory__actions { display: flex; gap: 9px; flex-wrap: wrap; }
 .advisory__done { margin: 0; font-size: 12.5px; font-weight: 700; color: var(--green-ink); }
 /* 调整策略禁用「采用建议」的原因行（amber 一档，与预警同色语言） */
 .advisory__blocked { margin: 0; font-size: 12.5px; color: var(--amber-ink, #b45309); }
 /* 次级区块（学习调控）：与正文之间用分隔线分层，卡内再分一层，避免与建议正文糊在一起 */
 .advisory__sub {
-  display: grid; gap: 12px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px;
   margin-top: 2px; padding-top: 14px;
   border-top: 1px solid var(--line);
 }
@@ -1719,7 +1721,7 @@ function loadGuidance() {
 
 <style scoped>
 /* skill 引导块 */
-.guide { display: grid; gap: 6px; }
+.guide { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .guide__title { margin: 0; font-size: 16px; letter-spacing: -0.01em; }
 .guide__sub { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.65; }
 /* 建议与调控互相引用（2026-09-27）：依据行把 AI 建议挂回到调控区的证据条目 */
@@ -1759,19 +1761,22 @@ function loadGuidance() {
 .review__item strong { display: block; font-size: 13px; }
 .review__action { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
 /* ---------- 学习调控（2026-09-27）：待确认 / 已自动处理 / 已执行的调整 ---------- */
-.ctl { display: grid; gap: 8px; }
+.ctl { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .ctl + .ctl { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 .ctl__label { margin: 0; font-size: 12px; font-weight: 800; color: var(--faint); letter-spacing: 0.04em; }
 .ctl__label b { margin-left: 6px; color: var(--blue); }
 .ctl__empty { margin: 0; font-size: 12.5px; color: var(--faint); line-height: 1.6; }
 .ctl-card {
-  display: grid; gap: 8px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px;
   padding: 13px 15px;
   border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
   border-radius: 12px; /* 圆角阶梯：次级面板 */
   background: color-mix(in srgb, var(--blue) 4%, var(--surface));
 }
 .ctl-card__head { display: flex; align-items: center; gap: 8px; }
+/* 路径名药丸（390 实测 249px nowrap）是整页横向溢出的 min-content 源头：
+   药丸必须可收缩并省略，卡头行才允许比内容窄（配合各层 minmax(0,1fr) 轨道，#122）。 */
+.ctl-card__head .dec__tag { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ctl-card__head time { margin-left: auto; font-size: 12px; color: var(--faint); white-space: nowrap; }
 .ctl-card__merged { font-size: 12px; color: var(--amber-ink); }
 .ctl-card__body { margin: 0; font-size: 13px; line-height: 1.65; color: var(--ink); }
