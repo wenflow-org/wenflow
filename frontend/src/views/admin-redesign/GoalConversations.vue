@@ -194,7 +194,14 @@
                     <!-- 全表唯一截断后无 title 的文本格（2026-10-06 审核 #46）：该格有
                          200px（≤1599 收 176px）强制最小宽，长名字/长邮箱被省略号截断后
                          看不到全值——同表其余格均有 title -->
-                    <strong :title="r.userName">{{ r.userName }}</strong>
+                    <!-- 2026-10-18：姓名即学习者详情入口（行点击仍是进会话，这里 stop 冒泡） -->
+                    <button
+                      type="button"
+                      class="mk-user-link"
+                      :title="`查看学习者详情：${r.userName}`"
+                      @click.stop="openLearner(r.userId)"
+                      @keydown.enter.stop.prevent="openLearner(r.userId)"
+                    >{{ r.userName }}</button>
                     <span class="mk-cell-sub" :title="r.userEmail">{{ r.userEmail }}</span>
                   </div>
                   <div class="gc-tags">
@@ -804,6 +811,12 @@ function closeDetail() {
 
 /** 真实会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：轻量深链 = 会话座舱（session-real）+ Trace 瀑布按 sessionId 归组。
     行点击与「详情」钮同走 goConsole（2026-10-02 与 TeachingSessions 行点击语义对齐：两页行点击都进座舱） */
+/** 用户格 → 学习者详情（2026-10-18 用户走查：三处列表都没有这个入口）。
+ *  行点击仍是进会话座舱，单元格按钮上 stop 冒泡。 */
+function openLearner(userId: string) {
+  const id = String(userId || '')
+  if (id) openSubPage('learner', id)
+}
 const { goTrace, goConsole } = useSessionDrill(closeDetail)
 
 /** 页头副题随 includeTest 切换如实（评审 §口径）：默认仅真实，切「含测试」后不得再声称仅真实用户口径 */

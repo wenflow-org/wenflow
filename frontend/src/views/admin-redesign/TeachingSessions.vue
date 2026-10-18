@@ -240,7 +240,14 @@
                 <div class="ts-user">
                   <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
                   <div class="mk-cell-main">
-                    <strong>{{ r.userName }}</strong>
+                    <!-- 2026-10-18：姓名即学习者详情入口（行点击仍是进座舱，stop 冒泡） -->
+                    <button
+                      type="button"
+                      class="mk-user-link"
+                      :title="`查看学习者详情：${r.userName}`"
+                      @click.stop="openLearner(r.userId)"
+                      @keydown.enter.stop.prevent="openLearner(r.userId)"
+                    >{{ r.userName }}</button>
                     <span v-if="r.email" class="mk-cell-sub">{{ r.email }}</span>
                     <span v-else-if="r.userId" class="mk-cell-sub mono" :title="r.userId">{{ shortId(r.userId) }}</span>
                   </div>
@@ -585,6 +592,11 @@ function displayName(s: Record<string, unknown>): string {
   return uid ? `用户 ·${uid.slice(-4)}` : '用户'
 }
 
+/** 用户格 → 学习者详情（2026-10-18 用户走查：三处列表都没有这个入口） */
+function openLearner(userId: string) {
+  const id = String(userId || '')
+  if (id) openSubPage('learner', id)
+}
 /** 头像 tone（同 GoalConversations 判例；语义与 MkVariantBadge 一致：虚拟=紫 / 测试=琥珀 / 真实=默认蓝） */
 function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtual' | 'test' | 'default' {
   return r.isVirtualLearner ? 'virtual' : r.isTestAccount ? 'test' : 'default'

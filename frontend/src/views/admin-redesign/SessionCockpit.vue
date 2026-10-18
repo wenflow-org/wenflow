@@ -67,6 +67,11 @@
         <span v-if="isRealMode" class="mk-badge mk-badge--muted" title="真实会话控制台只读：不可推进阶段、不可改会话状态">{{ modeText }}</span>
         <!-- 回合 pill 撤（2026-10-04 全站评审 P3#13）：回合数单源=「阶段推进」卡 statstrip
              「已用回合」格，同屏双写收敛 -->
+        <!-- 学习者身份（2026-10-18 用户走查）：页头此前只说「这是哪个会话」，不说是谁的会话；
+             名字常显、邮箱与 id 进 title，入口按钮在动作区（唯一入口，不重复挂第二枚） -->
+        <span v-if="learner" class="mk-badge mk-badge--muted cp-hero__learner" :title="learnerTitle('会话所属学习者')">
+          学习者 {{ learnerText }}
+        </span>
         <!-- 会话 ID meta：主标题已让位给会话主题，原始 ID 降为副行 mono 小字（title 带全量 ID；
              原始 ID 留在 URL 与日志） -->
         <span class="cp-hero__id mono" :title="`会话 ID：${sessionId}`">{{ shortId }}</span>
@@ -76,6 +81,9 @@
              壳层「刷新真实数据」刷的是全站 live 数据、不含本会话载荷，两者不是同一件事
              （2026-10-11 走查：同屏两个「刷新」易混，故本页这颗明确写成刷新会话数据）。 -->
         <template v-if="isRealMode">
+          <!-- 学习者详情入口（2026-10-18）：目标对话 / 学习路径 / 教学会话三处此前都没有
+               去学习者详情的按钮；返回靠 subPage.from 记住本座舱页签 -->
+          <button v-if="learner" type="button" class="mk-btn" :title="learnerTitle('查看学习者详情')" @click="openLearnerDetail">查看学习者</button>
           <button type="button" class="mk-btn" :disabled="busy" :title="busy ? '刷新中…' : '刷新本页会话数据'" @click="refresh">{{ busy ? '刷新中…' : '刷新' }}</button>
           <button type="button" class="mk-btn" :title="backTip" @click="goBack">← {{ backLabel }}</button>
         </template>
@@ -960,7 +968,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
+import { subPage, closeSubPage, openSubPage, setSubPageLabel, asSubPageStage } from './store'
 import { errMsg, liveApiConfig } from './live'
 import { askConfirm } from './useConfirm'
 import { useMaskClose, useOverlay } from './useOverlay'
@@ -1238,6 +1246,41 @@ const {
 
 /* 阶段分页：阶段条即 tab，默认跟随 currentStage；控制面板与日志常驻 */
 const activeTab = ref<StageKey>('goal')
+
+/* ===== 会话所属学习者（2026-10-18 用户走查「三处都没有跳学习者详情的按钮」） =====
+   真实会话载荷的 learner 块由后端从会话行 users 关系投影（缺用户为 null，不拿会话 id 冒充）。
+   页头因此能回答「这是谁的会话」，并给出唯一入口「查看学习者」；返回时靠 subPage.from
+   回到本座舱的同一页签（from 带 stage，2026-10-18 起）。 */
+const learner = computed(() => {
+  const l = (session.value as Record<string, any> | null)?.learner
+  const id = String(l?.id || '')
+  if (!id) return null
+  return { id, name: String(l?.name || ''), email: String(l?.email || '') }
+})
+const learnerText = computed(() => {
+  const l = learner.value
+  if (!l) return ''
+  return l.name || `…${l.id.slice(-8)}`
+})
+function learnerTitle(prefix: string): string {
+  const l = learner.value
+  if (!l) return prefix
+  const sub = [l.name || l.id, l.email].filter(Boolean).join(' · ')
+  return `${prefix}：${sub}`
+}
+function openLearnerDetail() {
+  const l = learner.value
+  if (!l) return
+  const stage = asSubPageStage(activeTab.value)
+  openSubPage('learner', l.id, {
+    from: {
+      view: isRealMode.value ? 'session-real' : 'session',
+      id: sessionId.value,
+      label: '会话监控',
+      ...(stage ? { stage } : {})
+    }
+  })
+}
 
 /** 真实会话的教学建议（advisory）：接口字段为松类型，仅取有效档位渲染 */
 const realAdvisory = computed(() => {
@@ -2253,7 +2296,15 @@ const EVIDENCE_TITLE_ZH: Record<string, string> = {
   'path:created': '学习路径已创建',
   'path:generated': '路径生成完成',
   'path:adjusted': '路径已调整',
-  'path:completed': '路径已完成'
+  'path:completed': '路径已完成',
+  /* 其余生产真值（2026-10-18 按 learner_evidence 实际 evidenceType 计数补全）：
+     不补这六条，日志主视觉位会继续露 session:outcome / checkpoint:attempt 这种事件码 */
+  'session:outcome': '学习结果',
+  'checkpoint:attempt': '检查点作答',
+  'task:difficulty:adjustment': '难度调整',
+  'session-knowledge-distilled': '知识点提炼',
+  'dialogue-concepts-extracted': '对话概念抽取',
+  'anchor:result': '锚点结果'
 }
 
 async function loadLogs() {

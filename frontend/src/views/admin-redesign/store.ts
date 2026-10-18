@@ -242,11 +242,15 @@ export type SubPageTab = string
  *  落点只此一处定义——改映射改这里一行；传空的调用方（画像 / 会话列表下钻）仍落概览。 */
 export const LEARNER_DETAIL_LANDING = { learnerState: 'evidence', memoryReview: 'memory' } as const
 
-/** 来源记忆：从二级（画像）进三级（会话）后，返回时回到来源页而非直接回一级列表 */
+/** 来源记忆：从二级（画像）进三级（会话）后，返回时回到来源页而非直接回一级列表。
+ *  2026-10-18：来源页的落点（stage/tab）也要记住——从座舱 Path 页签点「查看学习者」，
+ *  返回时若丢掉 stage 会落回会话默认页签，读的上下文没了。 */
 export interface SubPageFrom {
   view: SubPageView
   id: string
   label?: string
+  stage?: SubPageStage
+  tab?: SubPageTab
 }
 
 export const subPage = ref<{ view: SubPageView; id: string; label?: string; includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab; from?: SubPageFrom } | null>(null)
@@ -274,8 +278,13 @@ export function setSubPageLabel(label: string) {
 export function closeSubPage() {
   // 有来源记忆（从二级进三级）→ 返回来源页；否则回一级列表
   if (subPage.value?.from) {
-    const { view, id, label } = subPage.value.from
-    subPage.value = { view, id, ...(label ? { label } : {}) }
+    const { view, id, label, stage, tab } = subPage.value.from
+    subPage.value = {
+      view, id,
+      ...(label ? { label } : {}),
+      ...(stage ? { stage } : {}),
+      ...(tab ? { tab } : {})
+    }
   } else {
     subPage.value = null
   }

@@ -176,7 +176,17 @@
                     :tone="p.user?.isVirtualLearner ? 'virtual' : p.isTestAccount ? 'test' : 'default'"
                   />
                   <div class="mk-cell-main">
-                    <strong>{{ p.user?.name || '—' }}</strong>
+                    <!-- 2026-10-18：姓名即学习者详情入口（行点击仍进路径座舱，stop 冒泡）；
+                         没有 user.id 时退回纯文本（不拿路径 id 冒充） -->
+                    <button
+                      v-if="p.user?.id"
+                      type="button"
+                      class="mk-user-link"
+                      :title="`查看学习者详情：${p.user?.name || p.user?.id}`"
+                      @click.stop="openLearnerOf(p)"
+                      @keydown.enter.stop.prevent="openLearnerOf(p)"
+                    >{{ p.user?.name || '—' }}</button>
+                    <strong v-else>{{ p.user?.name || '—' }}</strong>
                     <span class="mk-cell-sub">{{ p.user?.email || '' }}</span>
                   </div>
                 </div>
@@ -698,6 +708,11 @@ async function retryGeneration(p: PathRow) {
 /* 行点击 → 会话座舱 Path 阶段页签（2026-10-12 拍板：路径不再有独立详情页）。
    本页只有路径 id：openSubPage('path') 落到深链适配层（PathDetail.vue），由它反查
    目标对话后带 stage=path 换开座舱。列表态由 URL 承载，返回时自动还原。 */
+/** 用户格 → 学习者详情（2026-10-18 用户走查：三处列表都没有这个入口） */
+function openLearnerOf(p: PathRow) {
+  const id = String(p.user?.id || '')
+  if (id) openSubPage('learner', id)
+}
 function openPath(p: PathRow) {
   closeMenu()
   openSubPage('path', p.id)

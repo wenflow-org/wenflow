@@ -1019,6 +1019,19 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-link--active:hover { background: var(--mk-link-active-hover-bg); }
 /* 弱化链接（例：计数为 0 时的次要入口）：原 VirtualLearners 页内私有，收敛为全局 */
 .mk-link--muted { opacity: 0.55; }
+/* 表格用户格里的姓名 → 学习者详情（2026-10-18）：继承单元格排版，hover 才上色。
+   整列姓名都染蓝会被读成「操作列」，所以常态保持正文色（spec §4：hover 只许变色/底/边）。 */
+.mk-user-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mk-user-link:hover { color: var(--mk-blue); }
 /* 图标按钮：操作列高频操作改为 SVG 图标 + tooltip，节省列宽 */
 .mk-icon-btn {
   display: inline-flex;

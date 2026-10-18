@@ -262,6 +262,25 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     w.unmount();
   });
 
+  it('用户格姓名 → 学习者详情（subPage=learner）；不触发整行进路径详情', async () => {
+    closeSubPage();
+    const w = mount(OpsContent, { props: { embedded: true } });
+    await flushPromises();
+    await nextTick();
+
+    // 行序随状态/时间排序变，按姓名定位「张三」那一行（user u1）
+    const row = w.findAll('tbody tr').find((tr) => tr.find('.mk-user-link').exists() && tr.find('.mk-user-link').text() === '张三');
+    expect(row).toBeTruthy();
+    const nameBtn = row!.find('.mk-user-link');
+    expect(nameBtn.attributes('title')).toContain('查看学习者详情');
+    await nameBtn.trigger('click');
+    await nextTick();
+    expect(subPage.value).toMatchObject({ view: 'learner', id: 'u1' });
+
+    closeSubPage();
+    w.unmount();
+  });
+
   /** P1#9 + P2 顺手（2026-10-02）：口径标注 / 进度条三态 / 失败行入口 / 失败严重度对齐 OpsHub */
   it('口径标注 + 三态 + 失败行入口：状态 pills 带全平台计数；进度条失败红/100% 绿/进行中中性；失败行「去详情」；状态条已退役', async () => {
     listMock.mockResolvedValue({

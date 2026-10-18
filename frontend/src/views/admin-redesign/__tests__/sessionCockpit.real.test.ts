@@ -575,6 +575,37 @@ describe('SessionCockpit 双模式', () => {
     wrapper.unmount();
   });
 
+  it('页头显示会话所属学习者，并给出「查看学习者」入口（返回落回同一页签）', async () => {
+    const payload = realTeachingPayload();
+    payload.data.learner = { id: 'user_7', name: '陈晓', email: 'chenxiao@example.com' };
+    payload.data.stageResults.path = payload.data.path;
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    // 身份信息进身份区（名字常显，邮箱/id 进 title）
+    const pill = wrapper.find('.cp-hero__learner');
+    expect(pill.exists()).toBe(true);
+    expect(pill.text()).toContain('陈晓');
+    expect(pill.attributes('title')).toContain('chenxiao@example.com');
+
+    // 切到 Path 页签再跳：返回时要回到 Path，而不是会话默认页签
+    await wrapper.findAll('.cp-stp')[1].trigger('click');
+    await settle();
+    const entry = wrapper.findAll('.mk-hero__actions button').find((b) => b.text() === '查看学习者');
+    expect(entry).toBeTruthy();
+    expect(entry!.attributes('title')).toContain('陈晓');
+    await entry!.trigger('click');
+    await settle();
+    expect(subPage.value).toMatchObject({
+      view: 'learner',
+      id: 'user_7',
+      from: { view: 'session-real', id: 'ts_real_1', label: '会话监控', stage: 'path' },
+    });
+
+    wrapper.unmount();
+    subPage.value = null;
+  });
+
   it('Learn 课表：真实会话下「从该课开始学习」是虚拟专属 → 只读行，不给假入口', async () => {
     const payload = realTeachingPayload();
     payload.data.stageResults.path = payload.data.path; // 同构补齐（里程碑视图取任务态）
