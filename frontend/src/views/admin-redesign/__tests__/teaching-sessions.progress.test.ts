@@ -438,7 +438,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('筛选：一行到底——chips 全在卡头，状态下拉与时间下拉收进「高级筛选」弹层', async () => {
+  it('筛选：一行到底——chips 全在卡头，状态下拉与时间下拉收进「筛选」弹层', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -448,7 +448,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     const wrapper = await mountLive();
     // 表前只有一行：快筛条 .ts-toolbar 退役（chips 并回卡头，2026-10-04）
     expect(wrapper.find('.ts-toolbar').exists(), '快筛条已并回卡头一行').toBe(false);
-    // 状态 / 时间 = 高级筛选弹层里的 select（枚举 = 全部状态 + statusOptions 10 档）
+    // 状态 / 时间 = 筛选弹层里的 select（枚举 = 全部状态 + statusOptions 10 档）
     await wrapper.find('.mk-adv .mk-btn').trigger('click');
     const sel = wrapper.find('.mk-adv__pop select[aria-label="按状态筛选"]');
     expect(sel.exists()).toBe(true);

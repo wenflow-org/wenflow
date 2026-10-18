@@ -136,7 +136,7 @@
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" :aria-pressed="!onlyAttention" @click="onlyAttention = false">全部</button>
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" :aria-pressed="onlyAttention" @click="onlyAttention = true">仅看需关注<span class="mk-pill__count">{{ errorCount }}</span></button>
           </div>
-          <!-- 2026-10-05 卡头统一弹层法：归属 Agent / 类别 两下拉收进右侧「高级筛选」弹层
+          <!-- 2026-10-05 卡头统一弹层法：归属 Agent / 类别 两下拉收进右侧「筛选」弹层
               （统计窗口是全页 KPI 口径的视图范围开关，不是行筛选，留右区）；
               触发钮标生效数 -->
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
@@ -167,7 +167,7 @@
               :aria-expanded="advOpen"
               @click="advOpen = !advOpen"
             >
-              <Filter :size="14" :stroke-width="1.75" />高级筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
+              <Filter :size="14" :stroke-width="1.75" />筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
             </button>
             <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
             <div v-show="advOpen" class="mk-adv__pop" @click.stop>
@@ -654,7 +654,7 @@ const menuColDefs = computed<ReadonlyArray<{ key: string; label: string; title: 
 })
 const statsRange = liveSkillStatsRange
 
-/* 高级筛选弹层（2026-10-05 卡头统一：归属 Agent/类别自主行收进共享 .mk-adv），
+/* 筛选弹层（2026-10-05 卡头统一：归属 Agent/类别自主行收进共享 .mk-adv），
    Esc 关闭走共享 useEscape（与教学会话同一外壳） */
 const advOpen = ref(false)
 useEscape(() => advOpen.value, () => { advOpen.value = false })

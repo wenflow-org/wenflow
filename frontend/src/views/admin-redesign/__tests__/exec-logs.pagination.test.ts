@@ -77,6 +77,14 @@ function findBtn(wrapper: ReturnType<typeof mount>, text: string) {
   return b;
 }
 
+/** 「筛选」钮（2026-10-19 起原「高级筛选」改名，全站统一叫「筛选」）：
+    includes 匹配会先撞上左组的「清除筛选」链接，这里按文本开头精确认这颗 */
+function findFilterBtn(wrapper: ReturnType<typeof mount>) {
+  const b = wrapper.findAll('button').find((x) => x.text().trim().startsWith('筛选'));
+  if (!b) throw new Error('button not found: 筛选');
+  return b;
+}
+
 async function mountExec() {
   // 合并页统一约定：?tab= 深链（可寻址），测试与真实应用一致提供 router
   const router = createRouter({
@@ -180,7 +188,7 @@ describe('ExecLogs 传统分页（方案 A）', () => {
       await findBtn(w, '下一页').trigger('click');
       await flushPromises();
       expect(liveLogsPage.value).toBe(2);
-      await findBtn(w, '高级').trigger('click');
+      await findFilterBtn(w).trigger('click');
       await w.find('input[type="checkbox"]').setValue(true);
       await vi.advanceTimersByTime(10000);
       await flushPromises();
@@ -197,7 +205,7 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     await nextTick();
     await findBtn(w, '下一页').trigger('click');
     await flushPromises();
-    // 2026-10-05 卡头统一：Trace ID 收进「高级筛选」弹层（v-show 常驻 DOM，jsdom 直接可寻址）
+    // 2026-10-05 卡头统一：Trace ID 收进「筛选」弹层（v-show 常驻 DOM，jsdom 直接可寻址）
     const input = w.find<HTMLInputElement>('input[aria-label="Trace ID（链路 ID）"]');
     await input.setValue('tr:abc');
     await input.trigger('keydown.enter');
@@ -579,12 +587,12 @@ describe('批次 1：EG7 / EG17 / D19', () => {
     expect(w.find('.exec-updating').exists()).toBe(false);
   });
 
-  it('EG17：sessionId 生效时「高级」钮带计数徽章（收起也不丢状态）', async () => {
+  it('EG17：sessionId 生效时「筛选」钮带计数徽章（收起也不丢状态）', async () => {
     liveLogsTotal.value = 1;
     liveLogsFiltered.value = [fakeSpan(1)];
     const w = await mountExecAt('/admin/execution-logs?session=sess-xyz');
     await nextTick();
-    const adv = findBtn(w, '高级');
+    const adv = findFilterBtn(w);
     expect(adv.find('.mk-pill__count').text()).toBe('1');
   });
 

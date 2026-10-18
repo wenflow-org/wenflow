@@ -115,7 +115,7 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     h.getStats.mockRejectedValue(new Error('stats unavailable'));
     const w = await mountAudit();
     await flushPromises();
-    await findBtn(w, '高级筛选').trigger('click');
+    await findBtn(w, '筛选').trigger('click');
     await nextTick();
     expect(w.text()).toContain('失败 TOP 统计不可用，无法判断是否存在失败动作。');
     expect(findBtn(w, '重试').exists()).toBe(true);

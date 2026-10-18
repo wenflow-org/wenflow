@@ -416,7 +416,7 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
         2026-10-15 用户拍板「列表统一设计，搜索放右侧」——搜索由左组移到右组首位）-----
    左组（.mk-filter，吃剩余宽度）：快筛 chips → 清除筛选（仅筛选激活时）；
    右组（.mk-card__head-right，贴右缘）：搜索框 → 页级动作（如 全部重算）→ 列(MkCols) →
-   高级筛选(.mk-adv，仅当存在放不进主栏的次级筛选) → 计数 meta(仅当说独有事实：
+   筛选(.mk-adv，仅当存在放不进主栏的次级筛选；2026-10-19 用户令全站统一叫「筛选」，原「高级筛选」) → 计数 meta(仅当说独有事实：
    筛选态行数差 / 窗口截断口径；与分页器「共 N 条」复读的不渲染)。
    纪律：搜索一律行内不藏弹层；chips 计数只留「别处没有的」（总数归分页器、
    构成计数归分布条）；没有的槽位不硬造（目标对话/学习路径的状态快筛已由
@@ -644,7 +644,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-menu__item--danger { color: var(--mk-red, #dc2626); }
 .mk-menu__item--danger:hover { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .mk-menu__sep { height: 1px; margin: 3px 4px; background: var(--mk-line); }
-/* ----- 高级筛选弹层（工具栏右侧「列」旁的 .mk-btn--sm + Filter 图标）-----
+/* ----- 筛选弹层（工具栏右侧「列」旁的 .mk-btn--sm + Filter 图标）-----
    把放不进主栏的次级筛选（搜索 / 状态下拉 / 时间下拉）收进弹层，主栏只留 chips——
    原型工具栏右侧即此形态（.btn--sm），本原语是它的实现：点击展开、遮罩吞外点、
    Esc 关闭（页内 useEscape，见各页）。面板视觉与 .mk-menu__pop 同一套。
@@ -1013,7 +1013,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-link:hover { background: var(--mk-hover-surface); }
 .mk-link--danger { color: var(--mk-red, #dc2626); }
 .mk-link--danger:hover { background: var(--mk-red-bg, #fef2f2); }
-/* 链接按钮「激活/展开中」态（ExecLogs 高级筛选、MkCols 列设置共用）。
+/* 链接按钮「激活/展开中」态（ExecLogs 筛选、MkCols 列设置共用）。
    此前全局零定义 → 展开态无任何视觉反馈（视觉审计 附 A #7）。 */
 .mk-link--active { background: var(--mk-hover-surface); }
 .mk-link--active:hover { background: var(--mk-link-active-hover-bg); }

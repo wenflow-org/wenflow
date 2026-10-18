@@ -44,7 +44,7 @@
       <div class="mk-card__head">
         <div class="mk-filter">
           <!-- 时间范围常驻回显（B14/F6-2）：timeRange 默认 'today'，而后端按日界
-               （Asia/Shanghai）过滤——选择器只活在「高级筛选」弹层里，卡头原先无任何
+               （Asia/Shanghai）过滤——选择器只活在「筛选」弹层里，卡头原先无任何
                可见提示，空态/低条数被读成「从未发生过」（实测操作审计默认 3 条、
                登录审计直接空态；改「全部」后 87474 / 3927）。此 chip 常驻显示当前生效
                档位（值随 select 单源联动），点击即展开同一弹层改范围。 -->
@@ -53,7 +53,7 @@
             class="mk-pill al-range"
             :class="{ 'mk-pill--active': timeRange !== 'today' }"
             :aria-expanded="advOpen"
-            :title="`当前生效时间范围：${timeRangeLabels[timeRange]}（点击展开高级筛选修改）`"
+            :title="`当前生效时间范围：${timeRangeLabels[timeRange]}（点击展开筛选修改）`"
             @click="advOpen = !advOpen"
           ><span class="al-range__k">时间范围</span> <b class="al-range__v">{{ timeRangeLabels[timeRange] }}</b></button>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
@@ -98,7 +98,7 @@
               :aria-expanded="advOpen"
               @click="advOpen = !advOpen"
             >
-              <Filter :size="14" :stroke-width="1.75" />高级筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
+              <Filter :size="14" :stroke-width="1.75" />筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
             </button>
             <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
             <div v-show="advOpen" class="mk-adv__pop" @click.stop>
@@ -488,7 +488,7 @@ type TabId = (typeof tabs)[number]['id']
 const tab = ref<TabId>('operation')
 const keyword = ref('')
 const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('today')
-/* 高级筛选弹层（2026-10-05 卡头统一：动作/时间/失败 TOP 自主行收进共享 .mk-adv），
+/* 筛选弹层（2026-10-05 卡头统一：动作/时间/失败 TOP 自主行收进共享 .mk-adv），
    Esc 关闭走共享 useEscape（与教学会话同一外壳） */
 const advOpen = ref(false)
 useEscape(() => advOpen.value, () => { advOpen.value = false })
@@ -797,7 +797,7 @@ const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天
 const emptyDescription = computed(() => {
   const base = tab.value === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕'
   if (isFiltered.value) return base
-  return `${base} · 默认时间范围「${timeRangeLabels[timeRange.value]}」，打开「高级筛选」即可修改`
+  return `${base} · 默认时间范围「${timeRangeLabels[timeRange.value]}」，打开「筛选」即可修改`
 })
 
 /** 当前筛选快照（仅含非默认值；tab 默认「操作审计」不存） */
@@ -1039,7 +1039,7 @@ function exportCurrentPage() {
   max-width: 240px;
 }
 /* 时间范围常驻回显 chip（B14/F6-2）：复用 .mk-pill 描边胶囊外观，默认档为中性灰，
-   非默认档（已改范围）走 .mk-pill--active 浅蓝激活态；点击展开高级筛选弹层。 */
+   非默认档（已改范围）走 .mk-pill--active 浅蓝激活态；点击展开筛选弹层。 */
 .al-range { display: inline-flex; align-items: center; gap: 5px; }
 .al-range__k { color: var(--mk-faint); font-weight: 600; }
 .al-range__v { font-weight: 800; font-variant-numeric: tabular-nums; }

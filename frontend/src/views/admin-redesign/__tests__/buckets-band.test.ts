@@ -92,7 +92,7 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     liveUsersTotal.value = 0;
   });
 
-  it('教学会话：分布带退役（2026-10-17）→ 完结率升 KPI、状态组筛选交给快捷 chips 与高级筛选', async () => {
+  it('教学会话：分布带退役（2026-10-17）→ 完结率升 KPI、状态组筛选交给快捷 chips 与筛选', async () => {
     tsList.mockResolvedValue({
       data: { data: { total: 7, items: [
         { id: 's1', status: 'active', userName: '甲', topic: 'T1' },

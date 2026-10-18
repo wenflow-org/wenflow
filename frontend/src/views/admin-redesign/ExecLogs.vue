@@ -46,7 +46,7 @@
       <!-- ===== Tab1: 日志流（默认） ===== -->
       <!-- 卡片常驻（对齐 Users.vue：页签 + 常驻筛选头同卡，骨架/错误/空态/表格/分页都在卡片内）。
            旧实现把渲染条件挂在卡片外壳（v-else-if="filtered.length"），空列表时状态 pills / 搜索 /
-           高级筛选 / 列设置 / 保存视图 / 页码器整组消失，只剩一页没有任何筛选出口的死路空态 -->
+           筛选 / 列设置 / 保存视图 / 页码器整组消失，只剩一页没有任何筛选出口的死路空态 -->
       <div v-if="elTab === 'logs'" id="el-panel-logs" role="tabpanel" aria-labelledby="el-tab-logs" class="exec-tabpanel">
       <div class="mk-card__head">
         <!-- 左侧筛选组（对齐 Users：pills + 搜索框） -->
@@ -64,7 +64,7 @@
             :title="testFilter === 'only' ? '仅看测试' : '测试日志'"
             @click="toggleTestFilter"
           >测试<span class="mk-pill__count">{{ testCount ?? '—' }}</span></button>
-          <!-- 2026-10-05 卡头统一弹层法：时间范围 / 节点 / Trace ID 三件收进右侧「高级筛选」弹层
+          <!-- 2026-10-05 卡头统一弹层法：时间范围 / 节点 / Trace ID 三件收进右侧「筛选」弹层
               （2026-10-04「提上主行」的发现性问题由弹层钮生效计数兜住），主行回到 pills + 搜索 -->
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
@@ -79,9 +79,9 @@
             @save="onSaveView"
           />
         </div>
-        <!-- 右侧：自动刷新 / 列 / 高级筛选（2026-10-05 全站卡头统一弹层法：时间范围/节点/
+        <!-- 右侧：自动刷新 / 列 / 筛选（2026-10-05 全站卡头统一弹层法：时间范围/节点/
              Trace ID 自主行收进共享 .mk-adv 弹层（此前 10-04 提上主行致 1440 折两行），
-             与私有的 sessionId「高级」面板合并为同一弹层；触发钮标生效数） -->
+             与私有的 sessionId 面板合并为同一弹层；触发钮标生效数） -->
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位。
                审核 #127：搜索框补 aria-label（MkFilterSearch inheritAttrs:false + v-bind="$attrs"，
@@ -96,7 +96,7 @@
               :aria-expanded="advOpen"
               @click="advOpen = !advOpen"
             >
-              <Filter :size="14" :stroke-width="1.75" />高级筛选<span v-if="advancedFilterCount" class="mk-pill__count">{{ advancedFilterCount }}</span>
+              <Filter :size="14" :stroke-width="1.75" />筛选<span v-if="advancedFilterCount" class="mk-pill__count">{{ advancedFilterCount }}</span>
             </button>
             <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
             <div v-show="advOpen" class="mk-adv__pop" @click.stop>
@@ -1025,12 +1025,12 @@ const logs = computed(() => liveLogsFiltered.value)
    该查询实测可达 30s，用户易误判「箭头变了、数据没变」。卡片头「更新中」角标 +
    表格降透明，收起骨架条件（骨架只在无数据首载显示）。 */
 const listRefreshing = computed(() => (liveLoading.value || liveLogsLoading.value) && logs.value.length > 0)
-/* 「高级」筛选生效计数（EG17）：目前面板内仅 sessionId 一项；非空即计 1，
+/* 筛选弹层生效计数（EG17）：目前面板内仅 sessionId 一项；非空即计 1，
    面板收起时按钮上仍有徽章，状态不丢。 */
 /** 时间档是否偏离默认（'today'）：自定义档即便两端留空也算非默认（用户显式选过自定义）。
-    与「高级筛选」徽章、isFiltered、清除筛选同一判据（单源，勿各写一遍）。 */
+    与「筛选」徽章、isFiltered、清除筛选同一判据（单源，勿各写一遍）。 */
 const timeRangeActive = computed(() => timeRange.value !== 'today')
-/** 高级筛选弹层生效数：时间档非默认 / 节点 / Trace ID / sessionId 任一激活即计（收起也不丢状态） */
+/** 筛选弹层生效数：时间档非默认 / 节点 / Trace ID / sessionId 任一激活即计（收起也不丢状态） */
 const advancedFilterCount = computed(
   () => (timeRangeActive.value ? 1 : 0) + (agentFilter.value ? 1 : 0) + (traceId.value.trim() ? 1 : 0) + (sessionId.value.trim() ? 1 : 0)
 )

@@ -73,7 +73,7 @@
 
     <!-- 会话状态分布带已退役（2026-10-17 用户走查「教学会话也用不到吧」）：
          四组里此刻两组为 0，条上只剩两段；而进行中 / 异常 / 缺总结 在卡头 chips 已有入口，
-         精确状态在「高级筛选」下拉里可选。完结率升独立 KPI 卡。 -->
+         精确状态在「筛选」下拉里可选。完结率升独立 KPI 卡。 -->
 
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
@@ -82,7 +82,7 @@
                左组 = 焦点 chips（单选 全部/进行中/待关注/缺总结）+ 两枚独立开关
                （有建议服务端过滤 / 异常多选，aria-pressed 表开关态，故另起 aria group），
                随后是搜索；放不下主栏的次级筛选（全部状态 / 全部时间 两个下拉）收进
-               右侧「高级筛选」弹层（与用户与学习者同构，外壳见 .mk-adv 原语）。 -->
+               右侧「筛选」弹层（与用户与学习者同构，外壳见 .mk-adv 原语）。 -->
           <div class="mk-pills" role="group" aria-label="焦点筛选">
             <button
               v-for="p in pills"
@@ -131,7 +131,7 @@
             v-model:hidden="tsHiddenCols"
           />
           <div class="mk-adv">
-            <!-- 高级筛选：主栏只留 chips + 搜索；10 档状态枚举与时间窗收进弹层
+            <!-- 筛选：主栏只留 chips + 搜索；10 档状态枚举与时间窗收进弹层
                  （点击展开、遮罩吞外点、Esc 关闭）。触发钮标出生效数，收起来也不丢状态 -->
             <button
               type="button"
@@ -139,7 +139,7 @@
               :aria-expanded="advOpen"
               @click="advOpen = !advOpen"
             >
-              <Filter :size="14" :stroke-width="1.75" />高级筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
+              <Filter :size="14" :stroke-width="1.75" />筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
             </button>
             <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
             <div v-show="advOpen" class="mk-adv__pop" @click.stop>
@@ -686,7 +686,7 @@ const pill = ref('all')
 const keyword = ref('')
 const statusFilter = ref('')
 const dateFilter = ref('')
-/* 高级筛选弹层（状态 / 时间两个下拉）：表前只留一行，放不进主栏的次级筛选收在这里。
+/* 筛选弹层（状态 / 时间两个下拉）：表前只留一行，放不进主栏的次级筛选收在这里。
    Esc 关闭走共享 useEscape（与 用户与学习者 同一外壳 .mk-adv*） */
 const advOpen = ref(false)
 useEscape(() => advOpen.value, () => { advOpen.value = false })
@@ -827,7 +827,7 @@ const pageSize = ref(15)
    而筛选此前只活在内存里——实测点「异常18」→ 进详情 → 返回（或刷新）都回到全部 167 条，
    逐条看要重筛一遍，也没法把「这批异常」的链接发给同事。与 用户与学习者 / 学习状态 /
    虚拟学习者 / 学习路径 同一组合式单点（learner-profile.ts useListQueryState）。
-   焦点 chip、状态组、异常开关、高级筛选（状态/时间）、有建议开关全部进 URL：
+   焦点 chip、状态组、异常开关、筛选（状态/时间）、有建议开关全部进 URL：
    缺省值不写（URL 短且人可读），空结果也不怕深链缺失。
    必须在下方「筛选变化回第 1 页」的 watch 之前调用：URL 落位要发生在监听建立之前，
    否则挂载时还原出来的筛选会被当成用户改筛选、把还原的页码打回 1（Users.vue 判例）。 */
@@ -1010,7 +1010,7 @@ defineExpose({ refreshNow })
 /* 用户格（对齐 Users.ul-user / GoalConversations.gc-user 头像判例）：头像 + 主副行 + 右侧身份徽章 */
 .ts-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .ts-user .mk-cell-main { min-width: 0; flex: 1; }/* 虚拟/测试行灰标（数据隔离 A3：includeTest 切换后显式标记；随头像判例收进用户格右侧） */
-.ts-tags { display: flex; gap: 6px; margin-left: auto; flex: none; }/* 高级筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
+.ts-tags { display: flex; gap: 6px; margin-left: auto; flex: none; }/* 筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }/* 原型 .tbl td：nowrap（表格已改自动布局，列宽随内容；
    长内容由 .ts-summary-preview / .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底）。
@@ -1028,7 +1028,7 @@ defineExpose({ refreshNow })
 }/* 异常堆积（合计 ≥ 阈值）chip 转红：原状态条 mk-status--bad 的同一告警，阈值在 chip title 披露。
    选中态（筛选生效中）由模板守卫——abnormalOnly 时不再加本类，让位给 .mk-pill--active 的蓝 */
 /* 分布带已退役（2026-10-17）：原页面级 .ts-distband 与类名一并下线，状态筛选在卡头 chips
-   与「高级筛选」下拉；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
+   与「筛选」下拉；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
 .ts-abn-chip--heap {
   color: var(--mk-red);
   border-color: color-mix(in srgb, var(--mk-red) 45%, var(--mk-line));
