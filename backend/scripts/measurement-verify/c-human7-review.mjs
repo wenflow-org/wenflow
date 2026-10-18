@@ -10,8 +10,17 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 const BASE = 'http://127.0.0.1:3011';
-const NAME = 'c-human7-01';
-const PASSWORD = 'HumanJourney2026';
+// 凭据只从环境变量 / backend/.env 读（安全约束：源码不写凭据字面量）。
+const credGet = (k) => {
+  if (process.env[k]) return String(process.env[k]).trim();
+  try {
+    const txt = fs.readFileSync(path.join(ROOT, 'backend', '.env'), 'utf8');
+    return (txt.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim() || '';
+  } catch { return ''; }
+};
+const NAME = credGet('CHUMAN7_NAME');
+const PASSWORD = credGet('CHUMAN7_PASSWORD');
+if (!NAME || !PASSWORD) { console.error('FATAL: 缺少凭据——请设置 CHUMAN7_NAME / CHUMAN7_PASSWORD（环境变量或 backend/.env）'); process.exit(1); }
 const STATE_FILE = path.join(__dirname, 'out', 'c-human7-state.json');
 const OUT_FILE = path.join(__dirname, 'out', 'c-human7-review.json');
 
@@ -77,7 +86,8 @@ async function main() {
   const d0 = start.json?.data || {};
   rec.sessionStart = { status: start.status, sessionId: d0.sessionId, mode: d0.mode, welcome: String(d0.welcomeMessage || '').slice(0, 200) };
   log(`review session: status=${start.status} session=${d0.sessionId} mode=${d0.mode}`);
-  if (!d0.sessionId) { fs.writeFileSync(OUT_FILE, JSON.stringify(rec, null, 1)); console.log(JSON.stringify(rec, null, 1)); return; }
+  // 审计 2026-10-12：复习会话没起来必须非零退出（原静默 return → exit 0 假成功）
+  if (!d0.sessionId) { fs.writeFileSync(OUT_FILE, JSON.stringify(rec, null, 1)); console.log(JSON.stringify(rec, null, 1)); console.error('FATAL: review 会话未创建（无 sessionId）'); process.exitCode = 1; return; }
 
   let revision = d0.revision;
   let lastTeacher = String(d0.welcomeMessage || '');

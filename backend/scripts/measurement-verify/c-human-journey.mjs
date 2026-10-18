@@ -19,8 +19,18 @@ const OUT = path.join(__dirname, 'out');
 fs.mkdirSync(OUT, { recursive: true });
 
 const BASE = 'http://127.0.0.1:3011';
-const NAME = 'c-human7-01';
-const PASSWORD = 'HumanJourney2026';
+// 凭据只从环境变量 / backend/.env 读（安全约束：源码不写凭据字面量）。
+// 本地把 CHUMAN7_NAME / CHUMAN7_PASSWORD 放进 backend/.env（gitignored），或直接导出为环境变量。
+const credGet = (k) => {
+  if (process.env[k]) return String(process.env[k]).trim();
+  try {
+    const txt = fs.readFileSync(path.join(ROOT, 'backend', '.env'), 'utf8');
+    return (txt.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim() || '';
+  } catch { return ''; }
+};
+const NAME = credGet('CHUMAN7_NAME');
+const PASSWORD = credGet('CHUMAN7_PASSWORD');
+if (!NAME || !PASSWORD) { console.error('FATAL: 缺少凭据——请设置 CHUMAN7_NAME / CHUMAN7_PASSWORD（环境变量或 backend/.env）'); process.exit(1); }
 const STATE_FILE = path.join(OUT, 'c-human7-state.json');
 
 const log = (m) => console.log(`[${new Date().toISOString()}] ${m}`);

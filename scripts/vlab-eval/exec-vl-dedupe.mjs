@@ -57,19 +57,30 @@ const PAIRS = [
 
 const db = new DatabaseSync(path.join(ROOT, 'backend/prisma/dev.db'));
 db.exec('PRAGMA busy_timeout=30000; PRAGMA foreign_keys=ON;');
+// 名字 → 行数组（审计 2026-10-12：旧实现 set(name,row) 只留最后一行 → 同名多行时丢错行）
 const byName = new Map();
-for (const r of db.prepare('SELECT u.name, p.id, p.userId FROM virtual_learner_profiles p JOIN users u ON p.userId = u.id').all()) byName.set(r.name, r);
+for (const r of db.prepare('SELECT u.name, u.isVirtualLearner, p.id, p.userId FROM virtual_learner_profiles p JOIN users u ON p.userId = u.id').all()) {
+  if (!byName.has(r.name)) byName.set(r.name, []);
+  byName.get(r.name).push(r);
+}
 const sessions = (pid) => db.prepare('SELECT COUNT(*) n FROM virtual_sessions WHERE virtualProfileId=?').get(pid).n;
+const teachings = (uid) => db.prepare('SELECT COUNT(*) n FROM teaching_sessions WHERE userId=?').get(uid).n;
 
 const drops = [];
 const problems = [];
 for (const [keep, dropNames] of PAIRS) {
-  if (!byName.has(keep)) problems.push(`keep 不存在: ${keep}`);
+  const keepRows = byName.get(keep) || [];
+  if (keepRows.length === 0) problems.push(`keep 不存在: ${keep}`);
+  else if (keepRows.length > 1) problems.push(`keep「${keep}」有 ${keepRows.length} 行（歧义，需人工裁决）`);
   for (const name of dropNames) {
-    const row = byName.get(name);
-    if (!row) { problems.push(`drop 不存在（可能已删）: ${name}`); continue; }
+    const list = byName.get(name) || [];
+    if (list.length === 0) { problems.push(`drop 不存在（可能已删）: ${name}`); continue; }
+    if (list.length > 1) { problems.push(`跳过 ${name}：同名 ${list.length} 行（歧义，需人工裁决）`); continue; }
+    const row = list[0];
+    if (row.isVirtualLearner !== 1) { problems.push(`跳过 ${name}：非虚拟学习者（保护）`); continue; }
     const sc = sessions(row.id);
-    if (sc > 0) { problems.push(`跳过 ${name}：有 ${sc} 个会话（保护）`); continue; }
+    const tc = teachings(row.userId);
+    if (sc > 0 || tc > 0) { problems.push(`跳过 ${name}：有 ${sc} 会话/${tc} 教学课（保护）`); continue; }
     drops.push({ name, ...row });
   }
 }
@@ -77,21 +88,42 @@ console.log(`待删 ${drops.length} 个（保护跳过 ${problems.filter((p) => 
 for (const p of problems) console.log('  !', p);
 if (DRY) { console.log('[dry] 名单:', drops.map((d) => d.name).join(', ')); db.close(); process.exit(0); }
 
+// 备份（删真实 users 行前必须有回滚点；审计 2026-10-12）
+const OUT_DIR = path.join(ROOT, 'doc', 'local', 'runs', '20261001');
+fs.mkdirSync(OUT_DIR, { recursive: true });
+const backupPath = path.join(OUT_DIR, `dev-backup-dedupe-${Date.now()}.db`);
+{
+  const w = new DatabaseSync(path.join(ROOT, 'backend/prisma/dev.db'));
+  w.exec('PRAGMA busy_timeout=30000;');
+  w.exec(`VACUUM INTO '${backupPath.replace(/\\/g, '/')}'`);
+  w.close();
+  console.log('备份 → ' + backupPath);
+}
+
 const ORDER = ['learner_evidence', 'learner_projections', 'memory_traces', 'prediction_records', 'misconception_ledger', 'virtual_quick_learn_runs', 'goal_scheduling_ledger', 'domain_event_outbox', 'agent_call_logs', 'prompt_call_logs', 'llm_execution_attempts', 'teaching_sessions', 'learning_paths', 'goal_conversations', 'learning_goals', 'learning_metrics', 'achievements', 'content_feedback', 'projection_access_grants'];
-const manifest = { at: new Date().toISOString(), pairs: PAIRS.length, dropped: [], skipped: problems };
-db.exec('BEGIN');
-try {
-  for (const d of drops) {
+// 无 FK 到 users 的挂靠表（审计 2026-10-12 补齐，避免孤儿）
+const ORPHAN_TABLES = ['concepts', 'concept_aliases', 'concept_edges', 'user_agent_model_configs', 'user_agent_configs', 'user_api_configs', 'user_mcp_configs', 'user_skill_configs', 'user_sessions', 'notifications', 'login_attempts', 'password_reset_tokens'];
+const MANIFEST = path.join(OUT_DIR, 'vl-dedupe-executed.json');
+const manifest = { at: new Date().toISOString(), pairs: PAIRS.length, backup: backupPath, dropped: [], skipped: problems, perTable: {} };
+fs.writeFileSync(MANIFEST, JSON.stringify(manifest, null, 1));
+for (const d of drops) {
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM batch_experiment_runs WHERE profileId=?').run(d.id);
     db.prepare('DELETE FROM virtual_sessions WHERE virtualProfileId=?').run(d.id);
-    for (const t of ORDER) db.prepare('DELETE FROM ' + t + ' WHERE userId=?').run(d.userId);
+    for (const t of [...ORDER, ...ORPHAN_TABLES]) {
+      const r = db.prepare('DELETE FROM ' + t + ' WHERE userId=?').run(d.userId);
+      manifest.perTable[t] = (manifest.perTable[t] || 0) + r.changes;
+    }
     db.prepare('DELETE FROM virtual_learner_profiles WHERE id=?').run(d.id);
-    db.prepare('DELETE FROM users WHERE id=?').run(d.userId);
+    db.prepare('DELETE FROM users WHERE id=? AND isVirtualLearner=1').run(d.userId);
+    db.exec('COMMIT');
     manifest.dropped.push(d.name);
-  }
-  db.exec('COMMIT');
-} catch (e) { db.exec('ROLLBACK'); console.error('回滚:', e.message.slice(0, 150)); db.close(); process.exit(1); }
+    fs.writeFileSync(MANIFEST, JSON.stringify(manifest, null, 1));
+  } catch (e) { db.exec('ROLLBACK'); console.error('回滚:', String(e.message).slice(0, 150)); manifest.aborted = true; fs.writeFileSync(MANIFEST, JSON.stringify(manifest, null, 1)); db.close(); process.exit(1); }
+}
 const left = db.prepare('SELECT COUNT(*) n FROM virtual_learner_profiles').get().n;
 manifest.leftProfiles = left;
-fs.writeFileSync(path.join(ROOT, 'doc/local/runs/20261001/vl-dedupe-executed.json'), JSON.stringify(manifest, null, 1));
+fs.writeFileSync(MANIFEST, JSON.stringify(manifest, null, 1));
 console.log(`删除完成 ${manifest.dropped.length} 个，VL 库剩余 ${left}`);
 db.close();

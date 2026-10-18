@@ -21,7 +21,11 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const EVAL_DIR = path.join(ROOT, 'doc/local/runs/20261002/vl-evals');
 const LOG = path.join(ROOT, '.tmp-batch/overnight-supervisor.log');
 const BASE = 'http://127.0.0.1:3010';
-const DEADLINE = new Date('2026-10-06T09:00:00+08:00');
+// 审计 2026-10-12：DEADLINE 改为 env `VL_DEADLINE`（与看门狗同源，避免两者窗口错位）；缺省沿用旧值。
+// deadline 已过期 → 明确报错退出（旧实现会 0 轮空转、看起来「跑过了」实为假空跑）。
+const DEADLINE = new Date(process.env.VL_DEADLINE || '2026-10-06T09:00:00+08:00');
+if (Number.isNaN(DEADLINE.getTime())) { console.error(`FATAL: 非法 VL_DEADLINE`); process.exit(1); }
+if (Date.now() >= DEADLINE.getTime()) { console.error(`FATAL: DEADLINE ${DEADLINE.toISOString()} 已过期，监工不启动（设 VL_DEADLINE 指定新窗口）`); process.exit(1); }
 const SOFT_STOP = new Date(DEADLINE.getTime() - 30 * 60 * 1000);
 const TICK_MS = 60_000;
 const HOLD_REFRESH_MS = 30 * 60 * 1000;
@@ -29,8 +33,25 @@ const MAX_SWEEP_DRIVERS = 3;
 const MAX_PASSES = 6;
 
 const log = (m) => { const line = `[${new Date().toISOString().slice(5, 19)}] ${m}`; console.log(line); fs.appendFileSync(LOG, line + '\n'); };
+
+// 单实例锁（审计 2026-10-12）：看门狗会在监工死后重启，但若并发起了两个监工，二者各自 running 为空
+// → 会重复 launch 同一 cohort，两个驱动驱动同一批 VL 会话（状态文件互相覆盖、会话重复）。
+// 用 O_EXCL 原子创建锁文件（含 pid），已存在且进程存活 → 自杀退出。
+const LOCKFILE = path.join(ROOT, '.tmp-batch/overnight-supervisor.lock');
+try {
+  const prev = fs.existsSync(LOCKFILE) ? Number(fs.readFileSync(LOCKFILE, 'utf8').trim()) : 0;
+  if (prev) { let alive = false; try { process.kill(prev, 0); alive = true; } catch { alive = false; } if (alive) { console.error(`FATAL: 已有监工在跑 (pid=${prev})，拒绝重复启动`); process.exit(1); } }
+  fs.writeFileSync(LOCKFILE, String(process.pid), { flag: 'w' });
+} catch (e) { console.error('FATAL: 获取监工锁失败', e.message); process.exit(1); }
+const releaseLock = () => { try { if (fs.readFileSync(LOCKFILE, 'utf8').trim() === String(process.pid)) fs.unlinkSync(LOCKFILE); } catch { /* ok */ } };
+process.on('exit', releaseLock);
+process.on('SIGINT', () => { releaseLock(); process.exit(0); });
 // pidfile：看门狗探活用
 fs.writeFileSync(path.join(ROOT, '.tmp-batch/overnight-supervisor.pid'), String(process.pid));
+
+// 每驱动墙钟上限（审计 2026-10-12）：alive() 只看进程存在，卡死但活着的驱动（如挂在 40 分钟 HTTP 上）
+// 会永久占住工位 → learn 轨永不重排。超时即杀 + 移出 running（下轮重排）。默认 4h。
+const DRIVER_TIMEOUT_MS = Number(process.env.VL_DRIVER_TIMEOUT_MS || 4 * 60 * 60 * 1000);
 
 const ID_MAP = { 'learn30ds': 'learn30-ds-ids.txt', 'learn30b-ds': 'learn30b-ds-ids.txt', 'learn30b-ag': 'learn30b-ag-ids.txt' };
 const idsOf = (tag) => `.tmp-batch/${ID_MAP[tag] || `${tag}-ids.txt`}`;
@@ -41,6 +62,7 @@ const LEARN_COHORTS = Object.keys(ID_MAP).concat(['learn30c-ds', 'learn30c-ag', 
 
 const passes = {};
 const running = new Map(); // tag -> pid
+const launchedAt = new Map(); // tag -> ms（审计 2026-10-12：进程级超时用）
 let holdRefreshAt = 0;
 let learnRelaunchCooldownUntil = 0;
 
@@ -90,15 +112,18 @@ function launch(tag, idsFile, conc, mode) {
   if (mode === 'learn') args.push('--learn', `--lessons=2`, `--concurrency=${conc}`);
   else args.push('--skip-learn', `--concurrency=${conc}`);
   const child = spawn('node', args, { cwd: ROOT, env: { ...process.env, VL_RUN_DATE: '20261002' }, detached: true, stdio: ['ignore', 'ignore', 'ignore'] });
+  // spawn 失败（ENOENT 等）走 'error' 而非 'exit'：不监听会 unhandled error 崩掉监工，watchdog 再重启 → 循环（审计 2026-10-12）
+  child.on('error', (e) => { log(`launch ${tag} spawn 失败: ${String((e && e.message) || e)}`); running.delete(tag); launchedAt.delete(tag); });
   child.unref();
   running.set(tag, child.pid);
+  launchedAt.set(tag, Date.now());
   log(`launch ${tag} (${mode}) pid=${child.pid} ids=${idsFile} conc=${conc}`);
 }
 
 /** 解除正式 pause 的教学会话（teaching.paused=true）——上课轨接手前清标志 */
 async function resumePausedSessions(cookie) {
   const { DatabaseSync } = await import('node:sqlite');
-  const db = new DatabaseSync('D:/wenflow/wenflow/backend/prisma/dev.db', { readOnly: true });
+  const db = new DatabaseSync(path.join(ROOT, 'backend', 'prisma', 'dev.db'), { readOnly: true });
   const rows = db.prepare("SELECT id FROM virtual_sessions WHERE status='running' AND currentStage='teaching'").all();
   let n = 0;
   for (const r of rows) {
@@ -158,8 +183,16 @@ async function main() {
     const now = new Date();
     if (now >= DEADLINE) break;
     try {
-      // 清理已退出的驱动
-      for (const [tag, pid] of running) if (!alive(pid)) { running.delete(tag); log(`driver ${tag} exited`); }
+      // 清理已退出的驱动 + 墙钟超时回收（审计 2026-10-12：卡死但活着的驱动不再永久占工位）
+      for (const [tag, pid] of running) {
+        if (!alive(pid)) { running.delete(tag); launchedAt.delete(tag); log(`driver ${tag} exited`); continue; }
+        const t0 = launchedAt.get(tag) || 0;
+        if (t0 && Date.now() - t0 > DRIVER_TIMEOUT_MS) {
+          log(`driver ${tag}(pid=${pid}) 超时 ${(DRIVER_TIMEOUT_MS / 60000).toFixed(0)}min → 杀掉重排`);
+          try { process.kill(pid); } catch { /* 已退 */ }
+          running.delete(tag); launchedAt.delete(tag);
+        }
+      }
 
       const backendUp = await backendAlive();
       if (!backendUp) { log('后端不在线（可能评审会话重启中），30s 后重试'); await sleep(30_000); continue; }

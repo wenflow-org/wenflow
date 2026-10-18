@@ -20,31 +20,33 @@ const ENRICH = !process.argv.includes('--no-enrich');
 const RUN_DATE = (() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`; })();
 const OUT = path.join(ROOT, 'doc/local/runs', RUN_DATE, 'vl-import-summary.jsonl');
 
-// admin 登录（INIT_ADMIN_* 与 run-vl-one.js 同源）
+// admin 登录走 fleet 共享模块（审计 2026-10-12）：adminAuth 单会话互踢，自己登录会把
+// 并发的监工/驱动踢下线（401 风暴）。getAdminCookie 先认领共享 cookie，无才登录。
 const env = fs.readFileSync(path.join(ROOT, 'backend', '.env'), 'utf8');
 const envGet = (k) => (env.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim() || '';
+const { getAdminCookie, refreshAdminCookie } = await import('./admin-session.mjs');
 let cookie = '';
 async function adminLogin() {
-  const res = await fetch(BASE + '/api/admin-auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173' }, body: JSON.stringify({ name: envGet('INIT_ADMIN_NAME'), password: envGet('INIT_ADMIN_PASSWORD'), remember: true }) });
-  cookie = (res.headers.get('set-cookie') || '').split(';')[0];
-  const j = await res.json().catch(() => ({}));
-  if (!cookie || j.success === false) throw new Error('admin 登录失败: ' + JSON.stringify(j).slice(0, 120));
+  cookie = await getAdminCookie(BASE, envGet);
+  if (!cookie) throw new Error('admin 登录失败（共享 cookie 为空）');
 }
 async function api(method, urlPath, body, { retries = 4, timeout = 300000 } = {}) {
   let last = null;
   for (let i = 0; i <= retries; i++) {
     try {
       const res = await fetch(BASE + urlPath, { method, headers: { Cookie: cookie, Origin: 'http://localhost:5173', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(timeout) });
-      if (res.status === 401 && i < retries) { await adminLogin(); continue; }
+      if ((res.status === 401 || res.status === 403) && i < retries) { cookie = await refreshAdminCookie(BASE, envGet, cookie); continue; }
       const text = await res.text();
       let json; try { json = JSON.parse(text); } catch { json = { raw: text.slice(0, 200) }; }
       if (!res.ok || json?.success === false) {
         last = `${res.status} ${String(json?.error?.message || json?.error || text).slice(0, 140)}`;
         if (res.status === 409 || res.status === 429 || res.status >= 500) { await new Promise((r) => setTimeout(r, 8000 * (i + 1))); continue; }
-        throw new Error(last);
+        // 确定性 4xx（400/404 等）重试无意义（审 2026-10-12）：标记不可重试，直接抛
+        const fatal = new Error(last); fatal.nonRetryable = true; throw fatal;
       }
       return json;
     } catch (e) {
+      if (e?.nonRetryable) throw e;
       if (e?.name === 'TimeoutError' || e?.name === 'AbortError') { last = 'timeout'; await new Promise((r) => setTimeout(r, 8000 * (i + 1))); continue; }
       last = e.message || String(e);
       if (i === retries) throw new Error(last);

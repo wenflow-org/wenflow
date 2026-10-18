@@ -23,7 +23,7 @@ add('user.exists', !!user, user || null);
 if (user) {
   const prov = g('SELECT * FROM v_user_provenance WHERE userId=?', user.id);
   add('user.provenance', !!prov, prov || 'no row in view');
-  const sessions = q('SELECT sessionId,provenance,measurement_sealed,startTime FROM v_session_provenance ORDER BY startTime DESC LIMIT 3');
+  const sessions = q('SELECT sessionId,provenance,measurement_sealed,startTime FROM v_session_provenance WHERE userId=? ORDER BY startTime DESC LIMIT 3', user.id);
   add('session.provenance', sessions.length > 0, sessions);
 }
 
@@ -42,7 +42,9 @@ add('teaching.oldColumnEmpty', (tsmOldCol?.n ?? -1) === 0, { contentSessions: ts
 const tsmInit = g("SELECT COUNT(*) n FROM teaching_sessions WHERE messages IS NOT NULL");
 add('teaching.oldColumnInitOnly', true, { initOnlySessions: tsmInit?.n });
 const tsmRows = g("SELECT COUNT(*) n FROM teaching_session_messages");
-add('teaching.sideRows', (tsmRows?.n ?? 0) >= 0, { sideRows: tsmRows?.n });
+const tsTotal = g("SELECT COUNT(*) n FROM teaching_sessions");
+// 审计 2026-10-12：原 `(n>=0)` 恒真（假断言）。真不变式：有授课会话时侧表必须有行。
+add('teaching.sideRows', (tsTotal?.n ?? 0) === 0 ? true : (tsmRows?.n ?? 0) > 0, { sideRows: tsmRows?.n, sessions: tsTotal?.n });
 
 // ---- E. 教学相关（post-lesson 起才有意义）
 const teach = q("SELECT id,status,mode,teachingState IS NOT NULL ths,wrapup IS NOT NULL wp FROM teaching_sessions ORDER BY createdAt DESC LIMIT 3");
@@ -64,7 +66,8 @@ add('wrapup.status', wraps.length > 0, wraps);
 const mt = q("SELECT conceptKey, fsrsStability, dueAt, lastSeenAt FROM memory_traces ORDER BY updatedAt DESC LIMIT 5");
 add('memory.recentTraces', mt.length > 0, mt);
 const mtStats = g("SELECT COUNT(*) n, SUM(CASE WHEN fsrsStability IS NOT NULL THEN 1 ELSE 0 END) native FROM memory_traces");
-add('memory.nativeFsrs', true, mtStats);
+// 审计 2026-10-12：原恒真。真不变式：有痕迹行时必须有原生 FSRS 字段。
+add('memory.nativeFsrs', (mtStats?.n ?? 0) === 0 ? true : (mtStats?.native ?? 0) > 0, mtStats);
 
 // ---- I. 观测面：降级事件表与投影
 const deg = (() => { try { return g('SELECT COUNT(*) n FROM degradation_events'); } catch { return null; } })();
@@ -83,8 +86,16 @@ try {
   const outbox = q(`SELECT "${typeCol}" t, COUNT(*) n FROM domain_event_outbox GROUP BY "${typeCol}" ORDER BY n DESC LIMIT 12`);
   add('outbox.types', outbox.length > 0, { typeCol, rows: outbox });
 } catch (e) {
-  add('outbox.types', true, 'inspect failed: ' + e.message);
+  // 审计 2026-10-12：inspect 失败不能当「通过」（原为 true → 假绿）
+  add('outbox.types', false, 'inspect failed: ' + e.message);
 }
 
 console.log(JSON.stringify(out, null, 1));
 db.close();
+// 聚合门禁（审计 2026-10-12）：原实现只 print JSON、恒 exit 0，CI/流水线读退出码看到的是「成功」。
+// 仅 phase=all（完整旅程）做硬门禁；分阶段跑（post-setup/post-lesson 等）是信息性读数，不误判早退。
+const failed = out.checks.filter((c) => !c.ok);
+if (failed.length) {
+  console.error(`invariants 未通过: ${failed.length}/${out.checks.length} → ${failed.map((c) => c.id).join(', ')}`);
+  if (phase === 'all') process.exitCode = 1;
+}

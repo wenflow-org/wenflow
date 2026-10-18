@@ -20,8 +20,13 @@ const origLog = console.log.bind(console);
 console.log = (...a) => { const s = a.map(x => typeof x === 'string' ? x : JSON.stringify(x, null, 1)).join(' '); LINES.push(s); origLog(...a); };
 process.on('exit', () => { try { fs.writeFileSync(OUT_PATH, LINES.join('\n'), 'utf8'); } catch {} });
 
-const SEQ_USER = 'user_1447d5a2-8ff8-47f1-a0e8-cc67d741223d';
-const PCL = {
+// 参数化（审计 2026-10-12）：冻结的 userId / PCL / 窗口 / VL 队列可经环境变量覆盖，换批无需改源码。
+// 默认值 = 第二轮跨课取证那一批（保留原口径，向后兼容）。
+const envJSON = (k) => { try { return process.env[k] ? JSON.parse(process.env[k]) : null; } catch { return null; } };
+const SEQ_USER = process.env.CROSSLOOP_USER || 'user_1447d5a2-8ff8-47f1-a0e8-cc67d741223d';
+// 会话 id 由 SEQ_USER + 会话 uuid 拼成（teaching_<user>_<uuid>），随 CROSSLOOP_USER 一起走
+const SEQ_SESS = Object.assign({ a1: 'c646b45d-0ba9-4881-853a-ee556f2372d5', a2: '2b33f54d-5a9e-44b1-9d5d-4316ec655e60', a3: '62ec1f40-6117-49c8-b34e-502cecb16be5' }, envJSON('CROSSLOOP_SEQ_SESS_JSON') || {});
+const DEFAULT_PCL = {
   a1Open: 'pcl_26336914-981e-41c0-97fd-c7c3e7f669ac',
   a2Open: 'pcl_08198a37-4304-4462-80b3-30327b969357',
   a2Turn1: 'pcl_704c24dc-f42f-495e-8028-e05ae598b62d',
@@ -32,6 +37,18 @@ const PCL = {
   a2Wrap: 'pcl_5a639b0e-7252-4e68-b75e-17271c3332cb',
   a3Wrap: 'pcl_22f485ad-6959-4d9c-9a37-15b182277b1d',
 };
+const PCL = Object.assign({}, DEFAULT_PCL, envJSON('CROSSLOOP_PCL_JSON') || {});
+// 窗口（默认 = 原批次：2026-10-05T00:00Z / 07:53Z）
+const SINCE_A = Number(process.env.CROSSLOOP_SINCE_A || 1791228800000);
+const SINCE_B = Number(process.env.CROSSLOOP_SINCE_B || 1791230000000);
+const VL_USERS = Object.assign({
+  'VL-1': 'ee52b287-29b4-4d0b-9995-303f13322f8c',
+  'VL-B1': '0b27bb9e-afed-4a7a-9991-1dd404b6c4b5',
+  'VL-B2': '802c1a8a-423f-4e9c-aa15-68035cecede2',
+  'VL-B3': '7a3f3955-6f4e-4dbb-9f00-d92969cd019c',
+  'VL-B4': 'b78b4b66-dd38-4a7b-ab0f-23284c7b3847',
+  'VL-B5': '7099f596-8962-4ada-a10f-6dcc6c2d4578',
+}, envJSON('CROSSLOOP_VLS_JSON') || {});
 
 function sectionsAround(text, needles, radius = 420) {
   const out = {};
@@ -109,7 +126,7 @@ if (mode === 'seq') {
   });
 
   step('S12.a1-wrapup-stateUpdate', () => {
-    const w = db.prepare('SELECT wrapup FROM teaching_sessions WHERE id=?').get('teaching_user_1447d5a2-8ff8-47f1-a0e8-cc67d741223d_c646b45d-0ba9-4881-853a-ee556f2372d5');
+    const w = db.prepare('SELECT wrapup FROM teaching_sessions WHERE id=?').get(`teaching_${SEQ_USER}_${SEQ_SESS.a1}`);
     if (!w || !w.wrapup) return 'wrapup NULL';
     const j = JSON.parse(w.wrapup);
     const keys = Object.keys(j);
@@ -118,7 +135,7 @@ if (mode === 'seq') {
   });
 
   step('S13.a2-wrapup-stateUpdate', () => {
-    const w = db.prepare('SELECT wrapup FROM teaching_sessions WHERE id=?').get('teaching_user_1447d5a2-8ff8-47f1-a0e8-cc67d741223d_2b33f54d-5a9e-44b1-9d5d-4316ec655e60');
+    const w = db.prepare('SELECT wrapup FROM teaching_sessions WHERE id=?').get(`teaching_${SEQ_USER}_${SEQ_SESS.a2}`);
     if (!w || !w.wrapup) return 'wrapup NULL';
     const j = JSON.parse(w.wrapup);
     const su = j.stateUpdate ?? null;
@@ -126,7 +143,7 @@ if (mode === 'seq') {
   });
 
   step('S14.a3-wrapup-stateUpdate-and-mode', () => {
-    const w = db.prepare('SELECT wrapup, mode, status FROM teaching_sessions WHERE id=?').get('teaching_user_1447d5a2-8ff8-47f1-a0e8-cc67d741223d_62ec1f40-6117-49c8-b34e-502cecb16be5');
+    const w = db.prepare('SELECT wrapup, mode, status FROM teaching_sessions WHERE id=?').get(`teaching_${SEQ_USER}_${SEQ_SESS.a3}`);
     if (!w) return 'session NOT FOUND';
     const j = w.wrapup ? JSON.parse(w.wrapup) : null;
     return { mode: w.mode, status: w.status, stateUpdate: j ? j.stateUpdate : null };
@@ -173,14 +190,7 @@ if (mode === 'seq') {
 }
 
 if (mode === 'adv') {
-  const VLS = {
-    'VL-1': 'ee52b287-29b4-4d0b-9995-303f13322f8c',
-    'VL-B1': '0b27bb9e-afed-4a7a-9991-1dd404b6c4b5',
-    'VL-B2': '802c1a8a-423f-4e9c-aa15-68035cecede2',
-    'VL-B3': '7a3f3955-6f4e-4dbb-9f00-d92969cd019c',
-    'VL-B4': 'b78b4b66-dd38-4a7b-ab0f-23284c7b3847',
-    'VL-B5': '7099f596-8962-4ada-a10f-6dcc6c2d4578',
-  };
+  const VLS = VL_USERS; // 参数化（CROSSLOOP_VLS_JSON 可覆盖）
 
   step('A1.vl-review-completed-evidence-count', () => {
     const rows = {};
@@ -214,7 +224,7 @@ if (mode === 'adv') {
   step('A5.vl-teaching-sessions-3day', () => {
     const rows = [];
     for (const [k, u] of Object.entries(VLS)) {
-      const s = db.prepare("SELECT id, mode, status, startTime, endTime, substr(knowledgeState,1,240) AS ks240 FROM teaching_sessions WHERE userId=? AND createdAt >= ? ORDER BY startTime").all(u, 1791228800000); // >= 2026-10-05T00:00Z 窗
+      const s = db.prepare("SELECT id, mode, status, startTime, endTime, substr(knowledgeState,1,240) AS ks240 FROM teaching_sessions WHERE userId=? AND createdAt >= ? ORDER BY startTime").all(u, SINCE_A); // 窗口可配（CROSSLOOP_SINCE_A，默认 2026-10-05T00:00Z）
       rows.push({ vl: k, sessions: s });
     }
     return rows;
@@ -224,7 +234,7 @@ if (mode === 'adv') {
     // 找 day2-end 之后开的会话（如 B1 d1fda105）里 memoryWarmup 结构段
     const out = [];
     for (const [k, u] of Object.entries(VLS)) {
-      const ss = db.prepare("SELECT id, startTime FROM teaching_sessions WHERE userId=? AND startTime >= ? ORDER BY startTime").all(u, 1791230000000);
+      const ss = db.prepare("SELECT id, startTime FROM teaching_sessions WHERE userId=? AND startTime >= ? ORDER BY startTime").all(u, SINCE_B); // 窗口可配（CROSSLOOP_SINCE_B）
       for (const s of ss) {
         const t = db.prepare('SELECT teachingState FROM teaching_sessions WHERE id=?').get(s.id);
         if (!t || !t.teachingState) continue;

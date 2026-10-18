@@ -16,7 +16,9 @@
  *   node scripts/vlab-eval/ab-pair-setup.mjs --apply            # 落库（默认 dry-run 只打印计划）
  *   node scripts/vlab-eval/ab-pair-setup.mjs --learn            # 对 manifest 里的会话起课（start-learning）
  *   node scripts/vlab-eval/ab-pair-setup.mjs --learn --auto     # 再跑 auto-learning 完成首阶段
+ *   node scripts/vlab-eval/ab-pair-setup.mjs --grind            # 逐课推进（每课 teaching-step 到完课 + finalize）
  *   可选：--base=http://127.0.0.1:3011 --source=lp_xxx
+ *   --case=<json>：换案例（身份/源路径/产物目录外置），见 CASE 定义处的形状说明
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,12 +33,20 @@ const ROOT = path.resolve(HERE, '../..');
 const arg = (k, d) => { const hit = process.argv.find((a) => a.startsWith(`--${k}=`)); return hit ? hit.split('=').slice(1).join('=') : (process.argv.includes(`--${k}`) ? true : d); };
 
 const BASE = arg('base', 'http://127.0.0.1:3011');
-const SOURCE = arg('source', 'lp_1791817016486_mot0ov1');
+/** 案例文件（--case=<json>）：把「两个身份 + 源路径 + 产物目录」外置，同一套机制可用于任何一条课。
+ *  case.json 形状：{ runDir: '20261014/ab-pair-guide', source: 'lp_xxx', identities: [<同下方 IDENTITIES 结构>] } */
+const CASE = (() => {
+  const p = arg('case', '');
+  if (!p) return null;
+  const abs = path.isAbsolute(p) ? p : path.join(ROOT, p);
+  return { ...JSON.parse(fs.readFileSync(abs, 'utf8')), _file: abs };
+})();
+const SOURCE = arg('source', CASE?.source || 'lp_1791817016486_mot0ov1');
 const APPLY = arg('apply', false) === true;
 const LEARN = arg('learn', false) === true;
 const AUTO = arg('auto', false) === true;
 const DB_PATH = arg('db', path.join(ROOT, 'backend/prisma/dev.db'));
-const OUT_DIR = path.join(ROOT, 'doc/local/runs/20261013/ab-pair');
+const OUT_DIR = CASE?.runDir ? path.join(ROOT, 'doc/local/runs', CASE.runDir) : path.join(ROOT, 'doc/local/runs/20261013/ab-pair');
 const MANIFEST = path.join(OUT_DIR, 'manifest.json');
 
 const env = fs.readFileSync(path.join(ROOT, 'backend', '.env'), 'utf8');
@@ -73,9 +83,10 @@ async function api(method, urlPath, body, timeoutMs = 60000) {
   });
 }
 
-/* ---------------- 两个身份（同路径、不同先验/性格/动机） ---------------- */
+/* ---------------- 两个身份（同路径、不同先验/性格/动机） ----------------
+   --case=<json> 时改用案例文件里的 identities（默认档保持 2026-10-13 教育心理学那对不变） */
 
-const IDENTITIES = [
+const IDENTITIES = CASE?.identities || [
   {
     name: '林然',
     tags: ['ab-pair', 'same-path', 'edu-psych', 'novice-pm'],
@@ -278,6 +289,9 @@ function materializeClonedPaths(pathIds) {
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const db = new DatabaseSync(DB_PATH);
+  // dev server 常驻持库：直写（复刻路径插入 / 会话绑定）会撞 "database is locked"（errcode 5）。
+  // busy_timeout 是仓里跑批持锁的既定配方（见 project-perf-audit 记忆：迁移建索引同套路）。
+  db.exec('PRAGMA busy_timeout = 15000');
   const source = db.prepare('SELECT id,title,userId FROM learning_paths WHERE id = ?').get(SOURCE);
   if (!source) throw new Error(`源路径不存在：${SOURCE}`);
 
@@ -446,6 +460,14 @@ async function runGrind(db) {
         const lessonDeadline = Date.now() + 75 * 60 * 1000;
         let turns = 0, restarts = 0, stepRetries = 0, completed = false;
         let upstreamPauses = 0;
+        /**
+         * 收束对峙计数（2026-10-14 实训 #46）：「老师已收口、学员自评说没完」的对峙轮数。
+         * 平台只熔断镜像方向（学员连说完成而老师不给信号 → learnerDoneStreak，见 learn-phase），
+         * 本方向恒 0；不加反向熔断（那等于拿老师的话强制结课，会造假完成），只把对峙显形到日志，
+         * 便于事后判读「这一课是不是又在门口十八相送」。
+         */
+        let closureStandoff = 0;
+        let maxStandoff = 0;
         let lastProbeAt = Date.now();
         while (Date.now() < lessonDeadline) {
           // 每 90s 探一次会话本体：会话被池抖动打成 failed 后 teaching-step 会**快速空转**
@@ -487,6 +509,17 @@ async function runGrind(db) {
           stepRetries = 0;
           const d = r?.data || {};
           turns += 1;
+          // 收束对峙：老师已给收束信号但平台判定还不能结（学员自评没完 / 抽样判决没放行）
+          const cd = d.closureDecision;
+          if (cd && cd.teacherReady === true && cd.canCompleteTask === false) {
+            closureStandoff += 1;
+            if (closureStandoff > maxStandoff) maxStandoff = closureStandoff;
+            if (closureStandoff === 1) write(`收束对峙开始（第 ${turns} 轮）：${String(cd.reason || '').slice(0, 90)}`);
+            else if (closureStandoff % 5 === 0) write(`收束对峙已 ${closureStandoff} 轮（第 ${turns} 轮，仍未结）：${String(cd.reason || '').slice(0, 90)}`);
+          } else {
+            if (maxStandoff > 0 && closureStandoff === 0) write(`收束对峙结束（最长 ${maxStandoff} 轮）`);
+            closureStandoff = 0;
+          }
           // 上游暂停（池轮换/禁用窗口；后端已改为非终局暂停）：不再 2 秒一锤——30s 退避重推同一回合；
           // 连续 10 次判窗口未恢复，提前换轮（由外层 revive 循环接管）
           if (d.success === false && /已暂停本回合|教学回合暂时未能生成/.test(String(d.aiResponse || ''))) {
@@ -514,7 +547,7 @@ async function runGrind(db) {
           } catch { break; }
         }
         await api('POST', `/api/admin/virtual-learners/sessions/${p.sessionId}/wrapup`, {}).catch(() => {});
-        write(`本课完成（${turns} 轮）｜已完成 ${completedCount(p.pathId)}/${TARGET}`);
+        write(`本课完成（${turns} 轮）｜已完成 ${completedCount(p.pathId)}/${TARGET}${maxStandoff ? `｜收束对峙最长 ${maxStandoff} 轮` : ''}`);
       } catch (error) {
         write(`本轮失败（${(error instanceof Error ? error.message : String(error)).slice(0, 140)}）→ 20s 后再来`);
         await sleep(20000);

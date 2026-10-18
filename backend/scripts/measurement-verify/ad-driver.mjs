@@ -299,7 +299,10 @@ async function advanceDay(vl) {
     // 429/5xx，或 200 包裹的上游 provider 错误（R1 §13 实锤：DS 池 403「No active subscription」
     // 散布且同会话续跑即恢复）——仅在「日未被消耗」（reverted/dayIndex 未动）时重试，否则会烧掉下一天
     const learningErr = r.json?.data?.learning?.error;
-    const notConsumed = r.json?.data?.reverted === true || r.json?.data?.learning?.started === false;
+    // 审计 2026-10-12：`started===false` 漏判 —— 200 包裹的上游错误响应常不带 started 字段（undefined），
+    // 旧写法 notConsumed=false → retryable 不成立 → 把可重试的上游抖动当终态烧掉一天。改为 `!== true`
+    // （仅在有 learningErr 时被 retryable 采用，故不会对成功响应误重试）。
+    const notConsumed = r.json?.data?.reverted === true || r.json?.data?.learning?.started !== true;
     const retryable = r.status === 429 || r.status >= 500 || (r.status === 200 && notConsumed && !!learningErr);
     if (!retryable) break;
     if (i < 4) { log(`  [${vl.key}] advance 可重试失败（http=${r.status} err=${String(learningErr || '').slice(0, 120)}），退避 30s`); await sleep(30000); }
@@ -365,6 +368,9 @@ async function runDay(day, targets) {
       // dayIndex 是「自 baseDate 起的日历偏移」，默认课表周一~五、baseDate=2026-10-01(Thu) 时
       // 三个上课日的 index = 1(Fri 10-02) / 4(Mon 10-05，跳过周末 2-3) / 5(Tue 10-06)
       const expectedIdx = { 1: 1, 2: 4, 3: 5 }[day];
+      // okAttempt 必须在两分支外声明（审计 2026-10-12）：旧实现 const 在 else 块内、块外引用 →
+      // 走 skipped 分支时 ReferenceError，被 catch 吞成 rec.fatal，整轮取证全废却仍写 JSON。
+      let okAttempt = null;
       if ((c.clock?.dayIndex ?? 0) >= expectedIdx) {
         rec.advanceAttempts = [{ attempt: 1, skipped: `clock already at dayIndex ${c.clock.dayIndex} (>= expected ${expectedIdx})` }];
         log(`  advance: skipped（dayIndex 已 ${c.clock.dayIndex} ≥ 目标 ${expectedIdx}）`);
@@ -379,7 +385,7 @@ async function runDay(day, targets) {
         // 2) 推进 1 个模拟日（runTasks=true，串行，全场唯一在飞请求）
         const attempts = await advanceDay(vl);
         rec.advanceAttempts = attempts;
-        const okAttempt = attempts.find((a) => a.http === 200 && a.success !== false);
+        okAttempt = attempts.find((a) => a.http === 200 && a.success !== false);
         log(`  advance: ${JSON.stringify(attempts)}`);
       }
 
@@ -448,7 +454,15 @@ async function runDay(day, targets) {
     await sleep(8000);
   }
   writeDay(file, result);
-  log(`day${day} 完成 → ${file}`);
+  // 致命记录必须透出非零退出码（审计 2026-10-12）：旧实现全 6 个 VL fatal 也 exit 0，
+  // 编排器把「整轮失败」当成功，再被 ad-summarize 汇总成假证据。
+  const fatals = result.vls.filter((v) => v.fatal);
+  if (fatals.length) {
+    log(`day${day} 完成 但 ${fatals.length}/${result.vls.length} 个 VL 致命失败 → 非零退出`);
+    process.exitCode = 1;
+  } else {
+    log(`day${day} 完成 → ${file}`);
+  }
 }
 
 function writeDay(file, result) {

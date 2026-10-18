@@ -79,7 +79,8 @@ for (const pid of ids) {
 
 const ok = rows.filter((r) => r.ready);
 const r2 = ok.map((r) => r.ratioTasksToStage).filter((v) => v != null).sort((a, b) => a - b);
-const median = r2.length ? +(r2[Math.floor(r2.length / 2)]).toFixed(3) : null;
+// 审计 2026-10-12：偶数个取两中位平均（原取上中位有向上偏置，门禁 [0.5,2] 会误判）
+const median = r2.length ? +((r2.length % 2 ? r2[(r2.length - 1) / 2] : (r2[r2.length / 2 - 1] + r2[r2.length / 2]) / 2)).toFixed(3) : null;
 const cov = ok.length ? +(ok.reduce((a, r) => a + r.conceptCoverage, 0) / ok.length).toFixed(3) : 0;
 const minTasks = ok.length ? Math.min(...ok.map((r) => r.tasks)) : 0;
 const checks = [

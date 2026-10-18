@@ -11,10 +11,11 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const ROOT = path.resolve('D:/wenflow/wenflow');
+// 审计 2026-10-12：硬编码绝对路径在别的检出上失效 → 从脚本位置派生
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const HERE = path.join(ROOT, 'backend', 'scripts', 'measurement-verify');
 const OUT = path.join(HERE, 'out');
 const arg = (k, d) => { const h = process.argv.find((a) => a.startsWith(`--${k}=`)); return h ? h.split('=').slice(1).join('=') : d; };

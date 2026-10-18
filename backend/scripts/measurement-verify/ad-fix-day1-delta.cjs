@@ -62,7 +62,25 @@ const db = new DatabaseSync(path.resolve(__dirname, '..', '..', 'prisma', 'dev.d
 db.exec('PRAGMA busy_timeout = 5000');
 
 const dayFile = path.join(OUT, 'ad-day1.json');
+const day2File = path.join(OUT, 'ad-day2.json');
 const day = JSON.parse(fs.readFileSync(dayFile, 'utf8'));
+
+// 窗口守卫（审计 2026-10-12）：本脚本重建的是「day1 已完成、day2 未启动」窗口的 traceDelta，
+// 窗口外运行会把真实 traceDelta 静默替换成近似值。守卫不满足即拒绝写（--force 可覆盖）。
+const FORCE = process.argv.includes('--force');
+const dayIdxAll = day.vls.map((v) => v.clockAfter?.dayIndex ?? null);
+const inWindow = !fs.existsSync(day2File) && dayIdxAll.length > 0 && dayIdxAll.every((i) => i === 1);
+if (!inWindow && !FORCE) {
+  console.error(`FATAL: 不在「day1 完成、day2 未启动」窗口——拒绝覆写。day2 文件存在=${fs.existsSync(day2File)}，各 VL dayIndex=${JSON.stringify(dayIdxAll)}。确认无误可加 --force。`);
+  db.close();
+  process.exit(1);
+}
+
+// 覆写前备份（审计 2026-10-12）：原实现无备份直接覆写，一旦重建有误无法回退。
+const backupPath = `${dayFile}.bak-${Date.now()}`;
+fs.copyFileSync(dayFile, backupPath);
+console.log(`已备份 ${dayFile} → ${backupPath}`);
+
 let touched = 0;
 for (const vl of day.vls) {
   const pre = PRE[vl.vlKey] || {};

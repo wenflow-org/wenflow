@@ -11,7 +11,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
-import { adminLoginOnce, refreshAdminCookie } from './admin-session.mjs';
+import { adminLoginOnce, refreshAdminCookie, getAdminCookie } from './admin-session.mjs';
+import { DatabaseSync } from 'node:sqlite';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
@@ -50,6 +51,14 @@ function classifyWrappedUpstream(msg) {
  * vl-learn-queue-summary.jsonl:248/:569。 */
 function isPathTasksNotReadyError(msg) {
   return /第一个里程碑没有可用任务/.test(String(msg || ''));
+}
+
+/** [审计 2026-10-12] 会话失效判决（纯函数，供 selftest 回归）。
+ * 只认「会话级」终态信号；**绝不能裸匹配 /404/**——上游模型 404（如 `... failed with status 404`）
+ * 会被 api() 归为不可重试错误抛出，裸 404 会把它误判成「会话没了」→ 重置 phase='start' 重开新会话，
+ * 白白丢掉已建好的 goal/path。 */
+function isDeadSessionError(msg) {
+  return /abandoned|已终止|会话[^。，]{0,16}(结束|不存在|已回收)|session\s*(not\s*found|gone|closed)/i.test(String(msg || ''));
 }
 
 /** [F3-b] path 任务就绪状态（口径与后端 waitForPathReady 对齐：simulation.path-phase.ts:58-70
@@ -124,6 +133,12 @@ if (process.argv.includes('--selftest')) {
   t('d·active=非终态(任务仍可能写入,继续等)', () => eq(pathTerminalStatus('active'), false, 'terminal'));
   t('d·generating=非终态(继续等)', () => eq(pathTerminalStatus('generating'), false, 'terminal'));
   t('d·空/undefined/null=非终态(响应异常不误早停)', () => eq([pathTerminalStatus(''), pathTerminalStatus(undefined), pathTerminalStatus(null)], [false, false, false], 'terminal'));
+  // e) [审计 2026-10-12] 会话失效判决：裸 404 是历史 P1（上游模型 404 被误判成会话没了→丢 path）
+  t('e·上游模型 404 不误判为会话失效(历史 P1 回归)', () => eq(isDeadSessionError('200 API request failed with status 404: {"error":{"message":"model not found"}}'), false, 'dead'));
+  t('e·abandoned=会话失效', () => eq(isDeadSessionError('会话已终止（abandoned），无法继续执行'), true, 'dead'));
+  t('e·会话不存在=会话失效', () => eq(isDeadSessionError('会话不存在'), true, 'dead'));
+  t('e·session gone=会话失效', () => eq(isDeadSessionError('session gone'), true, 'dead'));
+  t('e·普通业务错不误判', () => eq(isDeadSessionError('第一个里程碑没有可用任务'), false, 'dead'));
   let fail = 0;
   for (const [name, ok, err] of cases) { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ' — ' + err}`); if (!ok) fail++; }
   console.log(`selftest: ${cases.length - fail}/${cases.length} passed`);
@@ -138,6 +153,35 @@ const CONC = Math.max(1, Number(arg('concurrency', '10')));
 // （=CONC 本身），防 Number(true)=1 之类的隐式坑。
 const CONC_MAX_EXPLICIT = /^[0-9]+$/.test(String(arg('conc-max', ''))) ? Number(arg('conc-max', '')) : 0;
 const LEARN = process.argv.includes('--learn');
+// --story-mode=frontier（2026-10-11 多故事续章延展测试）：每 VL 开场时锁定「生长前沿」故事——
+// 即故事池里尚无续章（无别的故事 progressesFrom 指向它）且 chapterIndex 最大的那条。一节真课完课
+// 后 story-chapter 钩子会给它长出下一章，于是下一波自然推进到新章（同一人不同场景的叙事链）。
+// 缺省 'index' = 旧的固定 storyIndex（默认 0）。
+const STORY_MODE = String(arg('story-mode', 'index'));
+const STORY_INDEX = Number(arg('story-index', '0'));
+
+/** frontier 模式：返回该 VL 生长前沿故事的索引（无续章 + chapterIndex 最大者；平局取最后）。 */
+function resolveStoryIndex(vl) {
+  if (STORY_MODE !== 'frontier') return Number.isFinite(STORY_INDEX) ? STORY_INDEX : 0;
+  try {
+    const db = new DatabaseSync(path.join(ROOT, 'backend', 'prisma', 'dev.db'), { readOnly: true });
+    db.exec('PRAGMA busy_timeout=10000');
+    const row = db.prepare('SELECT profile FROM virtual_learner_profiles WHERE id=?').get(vl.id);
+    db.close();
+    const pool = JSON.parse(row?.profile || '{}').storyPool || [];
+    if (!pool.length) return 0;
+    const hasSuccessor = new Set(pool.map((s) => s.progressesFrom).filter(Boolean));
+    let best = 0; let bestCi = -1;
+    pool.forEach((s, i) => {
+      if (hasSuccessor.has(s.id || s.storyId)) return;
+      const ci = Number.isFinite(Number(s.chapterIndex)) ? Number(s.chapterIndex) : 1;
+      if (ci >= bestCi) { bestCi = ci; best = i; }
+    });
+    return best;
+  } catch {
+    return Number.isFinite(STORY_INDEX) ? STORY_INDEX : 0;
+  }
+}
 // --lessons=N：每人上 N 节课就收（默认 1 = 首课）。N≥2 时 learn-done 收尾（wrapup 落库）后
 // 继续 start-learning 推进下一任务，以 completedTasks 基线 +1 为第二课完课信号，wrapup 后终态。
 const LESSONS = Math.max(1, Number(arg('lessons', '1')));
@@ -159,9 +203,12 @@ const log = (m) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${m}
 const env = fs.readFileSync(path.join(ROOT, 'backend', '.env'), 'utf8');
 const envGet = (k) => (env.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1]?.trim() || '';
 let cookie = '';
-// fleet 共享 cookie（adminAuth 单会话互踢，2026-10-03 实锤死锁）：登录/认领走共享模块
+// fleet 共享 cookie（adminAuth 单会话互踢，2026-10-03 实锤死锁）：登录/认领走共享模块。
+// 启动用 getAdminCookie（先认领共享文件里的 cookie，无才登录）——旧实现直接 adminLoginOnce
+// 无条件 POST /login，会把同机并发的其它驱动/监工的会话踢掉（审 2026-10-12）。
 async function adminLogin() {
-  cookie = await adminLoginOnce(BASE, envGet);
+  cookie = await getAdminCookie(BASE, envGet);
+  if (!cookie) cookie = await adminLoginOnce(BASE, envGet);
   if (!cookie) throw new Error('admin 登录失败');
 }
 async function refreshLogin() {
@@ -301,7 +348,7 @@ const _aimdBounds = concBounds(CONC, CONC_MAX_EXPLICIT);
 log(`目标 ${idsArg.length} 个 VL，并发 ${Math.min(CONC, _aimdBounds.max)}${_aimdBounds.max !== CONC ? `（AIMD 界 [${_aimdBounds.min}, ${_aimdBounds.max}]，--conc-max 指定）` : ''}${LEARN ? '（含 learn 首课）' : ''}`);
 
 const record = (o) => fs.appendFileSync(SUMMARY, JSON.stringify(o) + '\n');
-const statePath = (pid) => path.join(EVAL_DIR, `vlstate-${pid}.json`);
+const statePath = (pid) => path.join(EVAL_DIR, `vlstate-${String(pid).replace(/[:\\/*?"<>|]/g, '_')}.json`);
 const loadState = (pid) => { try { return JSON.parse(fs.readFileSync(statePath(pid), 'utf8')); } catch { return null; } };
 const saveState = (pid, st) => fs.writeFileSync(statePath(pid), JSON.stringify(st, null, 1));
 
@@ -373,9 +420,11 @@ async function runOne(pid) {
     return;
   }
   // 课额已满（上完目标节数）的格子终态短路：监工队列重发会反复把 learn-done 格子重进
-  // finalize+wrapup+3min 轮询，上满两节后必须秒收（只补一条记录，不碰 API）
-  if (LEARN && !PATH_ONLY && st.phase === 'learn-done' && st.lesson2Done && LESSONS >= 2) {
-    record({ id: pid, ok: true, phase: 'learn-done-2', sessionId: st.sessionId, pathId: st.pathId, turns: st.turns2 || 0, durSec: 0 });
+  // finalize+wrapup+3min 轮询，上满两节后必须秒收（只补一条记录，不碰 API）。
+  // lesson2Done 只在第二课真成功后写；失败给过上限（lesson2GiveUp）也短路并如实记 ok:false
+  // （旧实现提前写 lesson2Done → 失败也报 ok:true/turns=0 的假 OK，审 2026-10-12）。
+  if (LEARN && !PATH_ONLY && st.phase === 'learn-done' && LESSONS >= 2 && (st.lesson2Done || st.lesson2GiveUp)) {
+    record({ id: pid, ok: !!st.lesson2Done, phase: st.lesson2Done ? 'learn-done-2' : 'learn-2-giveup', sessionId: st.sessionId, pathId: st.pathId, turns: st.turns2 || 0, durSec: 0 });
     return;
   }
   if (PATH_ONLY && st.phase === 'path-ready') {
@@ -392,7 +441,10 @@ async function runOne(pid) {
         return;
       } catch (e) {
         const msg = String(e.message || e);
-        const deadSession = /abandoned|已终止|会话.*(结束|不存在)|404/.test(msg);
+        // 会话失效判决：只认「会话级」终态信号（isDeadSessionError，见纯函数区）。**绝不能裸匹配
+        // /404/**——上游模型 404 会被 api() 归为不可重试错误抛出，裸 404 会把它误判成「会话没了」
+        // → 重置 phase='start' 重开新会话，白白丢掉已建好的 goal/path（审 2026-10-12）。
+        const deadSession = isDeadSessionError(msg);
         if (deadSession && attempt < 2) {
           log(`${pid} 会话失效（${msg.slice(0, 40)}），重开新会话 ${attempt + 1}/2`);
           st = { pid, vlId: vl.id, phase: 'start', restarts: (st.restarts || 0) + 1 };
@@ -406,9 +458,12 @@ async function runOne(pid) {
     const msg = String(e.message || e);
     record({ id: pid, ok: false, phase: st.phase, err: msg.slice(0, 200) });
     log(`${pid} FAIL@${st.phase}: ${msg.slice(0, 100)}`);
-    // 限流类失败立即反馈给 AIMD（降并发）；这类格多为"慢"而非"坏"，重跑成本低
-    if (/429|rate_?limit|排队超时|RPM_QUEUE_TIMEOUT|retry.?budget|Too Many Requests/i.test(msg)) {
+    // 限流类失败立即反馈给 AIMD（降并发）；这类格多为"慢"而非"坏"，重跑成本低。
+    // 注：**不含 retry.?budget**——「重试预算耗尽」是模型/上游抖动，不是限流信号，误并入会让
+    // 一次普通抖动永久压死并发（审 2026-10-12）。
+    if (/429|rate_?limit|排队超时|RPM_QUEUE_TIMEOUT|Too Many Requests/i.test(msg)) {
       rateLimitedFails++;
+      lastRateLimitAt = Date.now();
       const next = Math.max(CONC_MIN, targetConc - 2);
       if (next !== targetConc) { log(`AIMD 限流失败 → 降并发 ${targetConc}→${next}`); targetConc = next; }
     }
@@ -417,23 +472,39 @@ async function runOne(pid) {
 
 async function runPhase(pid, vl, st, t0) {
     if (st.phase === 'start') {
-      const s = await api('POST', `/api/admin/virtual-learners/${vl.id}/start-session`, { storyIndex: 0 });
+      const s = await api('POST', `/api/admin/virtual-learners/${vl.id}/start-session`, { storyIndex: resolveStoryIndex(vl) });
       st.sessionId = s.data?.id || s.data?.sessionId; st.phase = 'goal-path';
       saveState(pid, st);
     }
     if (st.phase === 'goal-path') {
-      try {
-        await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/run-full`, { maxRounds: 30, maxMilestones: 10, continueOnTaskComplete: false, autoAdvanceToPath: true, autoAdvanceToLearning: false }, { timeout: 40 * 60 * 1000, revive: () => reviveIfSessionDead(st) });
-      } catch (e) {
-        // autoAdvanceToLearning:false 时 run-full 必然以「未能进入教学阶段（当前阶段：path）」收尾——
-        // 那是"诚实停在 path"的状态标记（run-vl-one.js 同款处理），不是失败；其余错误照抛。
-        const msg = String(e.message || e);
-        // 「等待路径生成超时」= 服务端内部等待放弃，但路径生成任务仍在跑/稍后会就绪——
-        // 转入 poll-path 慢轮询收尾（50 分钟耐心），不丢格（2026-10-02：60 格并发下该形态占比最高）
-        if (/等待路径生成超时/.test(msg)) {
-          log(`${pid} run-full 服务端等待超时 → 转 poll-path 慢轮询`);
-        } else if (!/未能进入教学阶段/.test(msg)) throw e;
-        else log(`${pid} run-full 止于 path 阶段（预期行为）`);
+      // 2026-10-11：goal 阶段是「~10 次串行 LLM 调用」的长链，单次上游瞬态失败率 p 时整链成功率
+      // ≈ (1-p)^10——实测池子 ~17%/次（500/timeout）时整链仅 ~15%，一整链一挂就全废且无中途重试。
+      // run-full 可续跑（服务端继续未完成的 goal 会话）→ 加有界重试把「整链失败」摊成「单步失败」。
+      const GOAL_MAX = Math.max(1, Number(arg('goal-retries', '3')));
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await api('POST', `/api/admin/virtual-learners/sessions/${st.sessionId}/run-full`, { maxRounds: 30, maxMilestones: 10, continueOnTaskComplete: false, autoAdvanceToPath: true, autoAdvanceToLearning: false }, { timeout: 40 * 60 * 1000, revive: () => reviveIfSessionDead(st) });
+          break;
+        } catch (e) {
+          // autoAdvanceToLearning:false 时 run-full 必然以「未能进入教学阶段（当前阶段：path）」收尾——
+          // 那是"诚实停在 path"的状态标记（run-vl-one.js 同款处理），不是失败；其余错误照抛。
+          const msg = String(e.message || e);
+          // 「等待路径生成超时」= 服务端内部等待放弃，但路径生成任务仍在跑/稍后会就绪——
+          // 转入 poll-path 慢轮询收尾（50 分钟耐心），不丢格（2026-10-02：60 格并发下该形态占比最高）
+          if (/等待路径生成超时/.test(msg)) {
+            log(`${pid} run-full 服务端等待超时 → 转 poll-path 慢轮询`);
+            break;
+          }
+          if (/未能进入教学阶段/.test(msg)) { log(`${pid} run-full 止于 path 阶段（预期行为）`); break; }
+          // 瞬态上游失败（retry budget/timeout/5xx/429/网络）：run-full 可续跑 → 有界重试
+          const transient = /retry.?budget|timed out|timeout|50[0-9]|429|Too Many Requests|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|network|ECONNREFUSED/i.test(msg);
+          if (transient && attempt < GOAL_MAX) {
+            log(`${pid} run-full 瞬态失败(${msg.slice(0, 44)}) → 重试 ${attempt}/${GOAL_MAX - 1}`);
+            await sleep(15000 + attempt * 10000);
+            continue;
+          }
+          throw e;
+        }
       }
       st.phase = 'poll-path'; saveState(pid, st);
     }
@@ -448,6 +519,8 @@ async function runPhase(pid, vl, st, t0) {
         st.pathId = d.learningPathId || st.pathId;
         // 真实字段：data.status = learningPath.status（生成完成 = active）；milestones/stages 有内容即就绪
         lastStatus = String(d.status || '');
+        // 路径终态早停：archived/failed 等 → 生成链已死、阶段任务永不会写入，继续轮询只空等满 50 分钟
+        if (pathTerminalStatus(lastStatus)) { log(`${pid} path 落终态(${lastStatus})，停止等待`); break; }
         const milestones = d.path?.milestones || d.path?.stages || [];
         if (lastStatus === 'active' || lastStatus === 'ready' || (Array.isArray(milestones) && milestones.length > 0) || d.path?.canStartLearning === true) { ready = true; break; }
         // 后端 harness 契约：pathGeneration 明确失败且允许重试 → 有界自愈（≤2 次）
@@ -559,10 +632,11 @@ async function runPhase(pid, vl, st, t0) {
       }
       record({ id: pid, ok: true, phase: 'learn-done', sessionId: st.sessionId, pathId: st.pathId, turns: st.turns, wrapup: wrapupStatus, durSec: Math.round((Date.now() - t0) / 1000) });
       log(`${pid} learn 首课 OK (turns=${st.turns}, wrapup=${wrapupStatus})`);
-      // --lessons≥2：wrapup 落库后再上一节。completedTasks 基线 +1 为完课信号；失败不重试
-      // （写 lesson2Done 防止队列反复重进），格子保持 learn-done 终态，监工队列不会重排它。
-      if (LESSONS >= 2 && !st.lesson2Done) {
-        st.lesson2Done = true; saveState(pid, st);
+      // --lessons≥2：wrapup 落库后再上一节。completedTasks 基线 +1 为完课信号；失败有上限重试
+      // （lesson2Attempts ≤3，超限 lesson2GiveUp 短路，不再反复重进）。
+      // 注意：lesson2Done 只在真成功后写（见上方短路注释），失败不能假 OK。
+      if (LESSONS >= 2 && !st.lesson2Done && !st.lesson2GiveUp) {
+        st.lesson2Attempts = (st.lesson2Attempts || 0) + 1; saveState(pid, st);
         let ok2 = false, turns2 = 0;
         // 整体重试 ≤2 次：撞上会话 failed/停止（后端重启连锁）→ restart-learning 复活再开
         for (let attempt = 1; attempt <= 2 && !ok2; attempt++) {
@@ -635,6 +709,8 @@ async function runPhase(pid, vl, st, t0) {
             if (attempt >= 2) {
               record({ id: pid, ok: false, phase: 'learn-2', err: String(e.message || e).slice(0, 200), sessionId: st.sessionId });
               log(`${pid} 第二课 FAIL: ${String(e.message || e).slice(0, 100)}`);
+              // 失败上限：跨波累计 3 次未成功则短路，避免监工队列无限重进
+              if ((st.lesson2Attempts || 0) >= 3) { st.lesson2GiveUp = true; saveState(pid, st); log(`${pid} 第二课连续 ${st.lesson2Attempts} 次失败 → 放弃重进`); }
             } else {
               log(`${pid} 第二课 attempt${attempt} 失败重试: ${String(e.message || e).slice(0, 80)}`);
               await sleep(8000);
@@ -642,7 +718,7 @@ async function runPhase(pid, vl, st, t0) {
           }
         }
         if (ok2) {
-          st.turns2 = turns2; saveState(pid, st);
+          st.turns2 = turns2; st.lesson2Done = true; saveState(pid, st);
           record({ id: pid, ok: true, phase: 'learn-done-2', sessionId: st.sessionId, pathId: st.pathId, turns: turns2, durSec: Math.round((Date.now() - t0) / 1000) });
           log(`${pid} 第二课 OK (turns=${turns2})`);
         }
@@ -660,10 +736,14 @@ const { min: CONC_MIN, max: CONC_MAX } = concBounds(CONC, CONC_MAX_EXPLICIT);
 let cursor = 0, doneCount = 0, active = 0;
 let targetConc = Math.min(CONC, CONC_MAX);
 let rateLimitedFails = 0;
+let lastRateLimitAt = 0;
 let lastGrowAt = Date.now();
 let stopping = false;
 
 function aimdAdjust(rpmStats) {
+  // 限流失败计数按 90s 窗口衰减：旧实现只在「rateLimitedFails===0」分支里重置计数 → 该分支被
+  // 计数非零挡住，一次 429 后永远升不回并发（审 2026-10-12）。
+  if (rateLimitedFails > 0 && Date.now() - lastRateLimitAt > 90000) rateLimitedFails = 0;
   const queued = Number(rpmStats?.queued ?? 0);
   if (queued > 0) {
     const next = Math.max(CONC_MIN, targetConc - 2);
@@ -672,7 +752,7 @@ function aimdAdjust(rpmStats) {
   }
   if (rateLimitedFails === 0 && Date.now() - lastGrowAt > 90000) {
     const next = Math.min(CONC_MAX, targetConc + 1);
-    if (next !== targetConc) { log(`AIMD 升并发 ${targetConc}→${next}（队列空·无限流失败）`); targetConc = next; lastGrowAt = Date.now(); rateLimitedFails = 0; }
+    if (next !== targetConc) { log(`AIMD 升并发 ${targetConc}→${next}（队列空·无限流失败）`); targetConc = next; lastGrowAt = Date.now(); }
   }
 }
 

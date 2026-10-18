@@ -11,6 +11,9 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// 审计 2026-10-12：可配窗口——旧实现把某批快照的墙钟 epoch 常量硬编码，换库/换批静默返回 0。
+const arg = (k, d) => { const h = process.argv.find((a) => a.startsWith('--' + k + '=')); return h ? h.split('=').slice(1).join('=') : d; };
+const SINCE = Number(arg('since', 0)) || 0;
 const OUT = path.join(__dirname, 'out');
 const VL = {
   'VL-1': 'ee52b287-29b4-4d0b-9995-303f13322f8c',
@@ -141,21 +144,19 @@ for (const [key, uid] of Object.entries(VL)) {
     lastCompletedEnd: isoOrNull(tss.filter((t) => t.status === 'completed').slice(-1)[0]?.endTime),
   });
 }
-const ckRows = db.prepare(`SELECT userId, COUNT(*) AS cnt FROM learner_evidence WHERE evidenceType = 'checkpoint:result' AND userId IN (${Object.values(VL).map(() => '?').join(',')}) AND occurredAt >= 1791231000000 GROUP BY userId`).all(...Object.values(VL));
+const ckRows = db.prepare(`SELECT userId, COUNT(*) AS cnt FROM learner_evidence WHERE evidenceType = 'checkpoint:result' AND userId IN (${Object.values(VL).map(() => '?').join(',')}) AND occurredAt >= ? GROUP BY userId`).all(...Object.values(VL), SINCE);
+// checkpoint 计数一律来自 DB 实测（审计 2026-10-12：删掉硬编码 CK 字面量，换库/换会话不再产出编造数字）
+const ckByUser = new Map(ckRows.map((r) => [r.userId, r.cnt]));
 const fsrsCount = db.prepare(`SELECT COUNT(*) AS total, SUM(CASE WHEN fsrsStability IS NOT NULL THEN 1 ELSE 0 END) AS withFsrs FROM memory_traces WHERE userId IN (${Object.values(VL).map(() => '?').join(',')})`).get(...Object.values(VL));
 db.close();
 
 // ---- TrackSummary ----
-// checkpoint:result per VL-day（墙钟窗口归属：day1=20:26-20:46Z, day2=20:46-21:10:30Z, day3=21:10:30-21:26Z；judgedBy=code 38/38，查询语句见本轮会话记录）
-const CK = {
-  1: { 'VL-1': 5, 'VL-B1': 5, 'VL-B2': 1, 'VL-B3': 1, 'VL-B4': 2, 'VL-B5': 1 },
-  2: { 'VL-B2': 2, 'VL-B3': 7, 'VL-B5': 5 },
-  3: { 'VL-1': 1, 'VL-B1': 4, 'VL-B2': 4 },
-};
+// checkpoint 计数：见 ckByUser（DB 实测，替代旧硬编码 CK）
 const lessons = [];
 const dayNotes = [];
 const httpFailures = [];
 let allOk = true;
+let partials = 0; // 审计 2026-10-12：partial（推进了但学习未启动）不再当「全绿」
 days.forEach((day, di) => {
   const n = di + 1;
   const rows = [];
@@ -168,6 +169,7 @@ days.forEach((day, di) => {
     const advancedOk = adv || (skipped && dayIdx >= expectedIdx);
     const status = advancedOk ? (adv?.learning?.started === true || (skipped && n === 1 && vl.vlKey === 'VL-B1') ? 'done' : 'partial') : 'failed';
     if (status === 'failed') allOk = false;
+    if (status === 'partial') partials++;
     for (const a of attempts) {
       if (a.http === 429 || a.http >= 500) httpFailures.push(`day${n}/${vl.vlKey}: http=${a.http}`);
       else if (a.learning?.error) httpFailures.push(`day${n}/${vl.vlKey}: 上游包 200 错(${String(a.learning.error).slice(0, 60)}…)`);
@@ -182,7 +184,7 @@ days.forEach((day, di) => {
       userId: vl.userId,
       sessionId: vl.vsessionId,
       turns: (vl.newSessions || []).reduce((acc, s) => acc + (s.msgCount || 0), 0),
-      checkpoints: (CK[n] || {})[vl.vlKey] || 0,
+      checkpoints: ckByUser.get(vl.userId) || 0, // 本轮该 VL 累计（DB 实测）
       expectedRows: [
         `advance-day 推进至 simulatedDay=${adv?.simulatedDay ?? vl.window?.asOf ?? '?'}（dayIndex=${dayIdx}）`,
         `当日取证：memory_traces 变化 ${deltaRows} 行；memoryWarmup 注入课 ${warmupLessons} 节`,
@@ -198,7 +200,8 @@ days.forEach((day, di) => {
 
 const summary = {
   track: 'advance',
-  ok: allOk && calibration.length > 0,
+  ok: allOk && partials === 0 && calibration.length > 0,
+  partials,
   lessons,
   notes: [
     `【推进口径】advance-day POST /api/admin/virtual-learners/sessions/:id/advance-day {days:1, runTasks:true}，串行×6 VL×3 模拟日，全局同一时刻仅 1 个推进在飞；baseDate=2026-10-01，模拟日=Fri10-02→Mon10-05（跨周末 gap=3）→Tue10-06。P0 未来日护栏（simulated-day.service.ts:455）使 10-07+ 当晚不可达；全局 dateSimulation 原本即开（lessonsPerDay=2），未改任何全局配置`,
