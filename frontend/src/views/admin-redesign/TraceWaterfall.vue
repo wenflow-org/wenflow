@@ -130,8 +130,8 @@
         <div class="wf-summary__item" :title="`输入 ${traceSummary.promptTokens.toLocaleString()} · 输出 ${traceSummary.completionTokens.toLocaleString()}`">
           <b>{{ fmtTokens(traceSummary.promptTokens + traceSummary.completionTokens) }}</b><span>Token</span>
         </div>
-        <div class="wf-summary__item" title="估算成本（按 deepseek-v4-flash 公开价：输入 ¥0.5/M · 输出 ¥2/M，仅供参考）">
-          <b>{{ `¥${traceSummary.estCost}` }}</b><span>估算成本</span>
+        <div class="wf-summary__item" :title="costTitle">
+          <b>{{ traceSummary.estCost ? `≈ $${traceSummary.estCost}` : '—' }}</b><span>估算成本</span>
         </div>
         <div class="wf-summary__item wf-summary__models"><span>模型</span><b class="mono">{{ traceSummary.models.join(' / ') }}</b></div>
       </template>
@@ -313,8 +313,17 @@ import { monitoringGroupText, statusText } from './statusText'
    上方 immediate watch 引用它不再有 TDZ 顾虑 */
 import { TERMS, errorCodeLabel, shortTrace } from './terms'
 import { prettyPayload } from './payload-format'
+import { estimateTraceCostUsd, loadModelPrices, type PriceMap } from './traceCost'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+
+/* 估算成本的单价表（接入页登记的单价，进程内缓存一次）：概要卡按它逐 span 算金额。
+   读不到就保持 null——此时成本格显「—」，title 说明是读不到还是没配。 */
+const modelPrices = ref<PriceMap | null>(null)
+function ensureModelPrices(): void {
+  if (modelPrices.value) return
+  void loadModelPrices().then((m) => { modelPrices.value = m })
+}
 
 const activeTrace = ref('')
 const openSpanId = ref('')
@@ -403,6 +412,7 @@ const sessionAggMap = computed<Map<string, SessionAgg>>(() => {
 /* Prompt 契约索引（与执行日志同源：同 traceId 关联 prompt_call_logs） */
 onMounted(() => {
   void loadPromptIndex()
+  ensureModelPrices()
   waterfallSyncFromBoot()
   observeRowTrack()
 })
@@ -662,14 +672,18 @@ const traceSummary = computed(() => {
   const durations = s.map((x) => x.durationMs).filter((d): d is number => typeof d === 'number' && d >= 0).sort((a, b) => a - b)
   const avg = durations.length ? Math.round(durations.reduce((a, x) => a + x, 0) / durations.length) : 0
   const pct = (q: number) => durations.length ? durations[Math.min(durations.length - 1, Math.max(0, Math.round((durations.length - 1) * q)))] : 0
-  // 估算成本：按 deepseek-v4-flash 公开价（输入 ¥0.5/M，输出 ¥2/M），仅供参考。
-  // P2（2026-10-04 全站评审）：0 Token 链路（Simulation/网关类常态，占样本 26/30）不显
-  // 「¥0.0000」假金额——显「—」与成本分析页「缺单价不编造金额」口径一致，title 说明原因
+  // 估算成本：逐 span 用该 span 自己的模型查接入页登记的单价（USD / 1M tokens），
+  // 查不到单价的调用不计入（与成本分析页同口径：缺单价不编造金额）。
+  // 2026-10-18 前这里按 deepseek-v4-flash 公开价（¥0.5/¥2）硬算——模型已下线，
+  // 且与成本页的币种/价目表都对不上。
   const promptTokens = s.reduce((a, x) => a + (x.promptTokens ?? 0), 0)
   const completionTokens = s.reduce((a, x) => a + (x.completionTokens ?? 0), 0)
   const totalTokens = promptTokens + completionTokens
-  const estCostRaw = (promptTokens * 0.5 + completionTokens * 2) / 1_000_000
-  const estCost = totalTokens > 0 ? (estCostRaw >= 0.01 ? estCostRaw.toFixed(2) : estCostRaw.toFixed(4)) : null
+  const cost = estimateTraceCostUsd(s, modelPrices.value)
+  /* 位数与成本分析页 fmtCostUsd 同档（≥1 两位 / ≥0.01 四位 / 其余六位）：
+     同一屏的金额换个页面就少两位，读起来会以为是两个不同的量 */
+  const fmtCost = (v: number) => (v >= 1 ? v.toFixed(2) : v >= 0.01 ? v.toFixed(4) : v.toFixed(6))
+  const estCost = cost.usd !== null ? fmtCost(cost.usd) : null
   /* 是否有 LLM 读数（token 或模型名任一存在）：false ⇒ 概要卡省略 Token / 成本 / 模型三格 */
   const hasLlm = totalTokens > 0 || models.length > 0
   return {
@@ -683,8 +697,25 @@ const traceSummary = computed(() => {
     promptTokens,
     completionTokens,
     estCost,
+    cost,
     hasLlm
   }
+})
+
+/** 估算成本的悬停口径：把「按谁的价、哪部分没算进去」说清，别让人把估算当账单 */
+const costTitle = computed(() => {
+  const c = traceSummary.value?.cost
+  if (!traceSummary.value?.hasLlm) return '这条链路没有 LLM 调用'
+  if (!c || c.usd === null) {
+    const miss = c?.unpricedModels?.length ? `（未配单价的模型：${c.unpricedModels.join(' / ')}）` : ''
+    return `算不出金额：链路内调用的模型没有登记单价${miss}。到「接入」页补单价后即可估算`
+  }
+  const parts = [
+    `估算成本（USD）：按接入页登记的模型单价逐次调用计算，共 ${c.priced} 次已定价调用`,
+    '未含缓存命中折扣，仅供参考。以成本分析页为准'
+  ]
+  if (c.unpriced > 0) parts.push(`另有 ${c.unpriced} 次调用未配单价，未计入：${c.unpricedModels.join(' / ')}`)
+  return parts.join(' · ')
 })
 
 // 刻度：按总量程取 ~8 档自适应步长（人读友好 1/2/5×10^n 序列），
