@@ -23,14 +23,16 @@ jest.mock('../../config/database', () => ({
 import { callPrompt } from '../prompt-composer';
 import { runWithContext } from '../../gateway/api-gateway/context';
 
-const IMAGE_DATA_URL = 'data:image/png;base64,' + 'F'.repeat(64);
-const IMAGE_PART = { type: 'image_url', image_url: { url: IMAGE_DATA_URL } };
+interface CapturedMessage { role: string; content: unknown }
 
-function lastGatewayMessages(): any[] {
-  return mockGatewayExecute.mock.calls.at(-1)?.[0]?.messages || [];
+const IMAGE_DATA_URL = 'data:image/png;base64,' + 'F'.repeat(64);
+const IMAGE_PART = { type: 'image_url' as const, image_url: { url: IMAGE_DATA_URL } };
+
+function lastGatewayMessages(): CapturedMessage[] {
+  return (mockGatewayExecute.mock.calls.at(-1)?.[0]?.messages || []) as CapturedMessage[];
 }
 
-async function invoke(spec: any, promptContext?: any, modelOverride?: string) {
+async function invoke(spec: Parameters<typeof callPrompt>[0], promptContext?: Record<string, unknown>, modelOverride?: string) {
   return runWithContext(
     {
       promptRuntimeOverride: {
@@ -41,13 +43,13 @@ async function invoke(spec: any, promptContext?: any, modelOverride?: string) {
   );
 }
 
-const baseSpec = {
+const baseSpec: Parameters<typeof callPrompt>[0] = {
   agentId: 'skill:vision-test',
   defaultSystemPrompt: 'default prompt',
   requireActivePrompt: false,
   caller: { skillId: 'vision-test' },
   buildUserPayload: () => ({ q: 1 }),
-  normalizeOutput: (parsed: any) => parsed,
+  normalizeOutput: (parsed: unknown) => parsed,
 };
 
 describe('callPrompt × 视觉能力（#123）', () => {
@@ -63,11 +65,11 @@ describe('callPrompt × 视觉能力（#123）', () => {
   });
 
   it('生效模型未声明 vision：buildMessages 的图片块被摘掉（文本保留）', async () => {
-    const spec = {
+    const spec: Parameters<typeof callPrompt>[0] = {
       ...baseSpec,
       buildMessages: () => [
-        { role: 'system', content: 'sys' },
-        { role: 'user', content: [{ type: 'text', text: '看这张图' }, IMAGE_PART] },
+        { role: 'system' as const, content: 'sys' },
+        { role: 'user' as const, content: [{ type: 'text' as const, text: '看这张图' }, IMAGE_PART] },
       ],
     };
     const result = await invoke(spec, undefined, 'deepseek-v4-pro');
@@ -79,11 +81,11 @@ describe('callPrompt × 视觉能力（#123）', () => {
   });
 
   it('生效模型已声明 vision：图片块原样进请求', async () => {
-    const spec = {
+    const spec: Parameters<typeof callPrompt>[0] = {
       ...baseSpec,
       buildMessages: () => [
-        { role: 'system', content: 'sys' },
-        { role: 'user', content: [{ type: 'text', text: '看这张图' }, IMAGE_PART] },
+        { role: 'system' as const, content: 'sys' },
+        { role: 'user' as const, content: [{ type: 'text' as const, text: '看这张图' }, IMAGE_PART] },
       ],
     };
     const result = await invoke(spec, undefined, 'deepseek-v4.1-flash');
@@ -99,9 +101,10 @@ describe('callPrompt × 视觉能力（#123）', () => {
     expect(result.success).toBe(true);
     const userMessage = lastGatewayMessages().at(-1);
     expect(userMessage.role).toBe('user');
-    expect(Array.isArray(userMessage.content)).toBe(true);
-    expect(userMessage.content[0].type).toBe('text');
-    expect(userMessage.content.at(-1)).toEqual(IMAGE_PART);
+    const parts = userMessage.content as Array<{ type: string }>;
+    expect(Array.isArray(parts)).toBe(true);
+    expect(parts[0].type).toBe('text');
+    expect(parts.at(-1)).toEqual(IMAGE_PART);
   });
 
   it('context.images 显式输入：未声明 vision 的模型回退纯文本（不丢正文）', async () => {

@@ -4,7 +4,9 @@
  */
 import { teachingContextCompressionService } from '../TeachingContextCompressionService';
 
-function makeMessage(role: 'user' | 'assistant', content: string, i: number, images?: any[]) {
+interface FakeImage { url: string; caption: string | null; prompt: string; provider: string; model: string; kind: string | null; createdAt: string }
+
+function makeMessage(role: 'user' | 'assistant', content: string, i: number, images?: FakeImage[]) {
   return {
     role,
     content,
@@ -12,7 +14,7 @@ function makeMessage(role: 'user' | 'assistant', content: string, i: number, ima
     textLength: content.length,
     id: `m${i}`,
     ...(images ? { images } : {}),
-  } as any;
+  };
 }
 
 const png = (n: number) => `data:image/png;base64,${'D'.repeat(n)}`;

@@ -23,8 +23,10 @@ const baseInput: LearnLearnerSimulationInput = {
   knowledgeSnapshot: [],
 };
 
-function buildMessagesFromSpec(specInput: unknown, spec: any) {
-  return spec.buildMessages({
+interface SpecWithMessages { buildMessages: (args: { input: unknown; systemPrompt: string; userPayload: string; retryMessage: string | null; runtime: Record<string, unknown> }) => Array<{ role: string; content: unknown }> }
+
+function buildMessagesFromSpec(specInput: unknown, spec: unknown) {
+  return (spec as SpecWithMessages).buildMessages({
     input: specInput,
     systemPrompt: 'SYS',
     userPayload: '{"a":1}',
