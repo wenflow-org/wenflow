@@ -265,6 +265,9 @@ export class SessionFinalizationService {
         userId: session.userId,
         actualMinutes: input.actualMinutes,
         subjectiveDifficulty: input.subjectiveDifficulty,
+        // #105 观测统一：事件记录收束通道与会话 id（真人与 VL 都可能走 finalize，轨道由 isVirtualLearner 派生）
+        completionSource: 'teaching-finalize',
+        sessionId: input.sessionId,
         // 时钟域：模拟链路下把任务完成时间落在模拟日（无模拟上下文时 simulatedNowOr() === new Date()，
         // 现网行为不变）。否则 completedAt 会用真墙钟，污染概念账本 lastSeenAt → 延迟锚题跨域比较。
         asOf: simulatedNowOr(),

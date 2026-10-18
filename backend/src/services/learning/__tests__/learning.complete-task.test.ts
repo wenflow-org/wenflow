@@ -2,6 +2,9 @@ const mockPrisma: any = {
   subtasks: {
     findUnique: jest.fn()
   },
+  users: {
+    findUnique: jest.fn()
+  },
   $transaction: jest.fn()
 }
 const mockUpdateLearningMetrics = jest.fn()
@@ -99,6 +102,7 @@ describe('LearningService.completeTask milestone progression', () => {
     xp = 0
 
     mockPrisma.subtasks.findUnique.mockImplementation(async ({ where }: any) => taskRecord(where.id))
+    mockPrisma.users.findUnique.mockResolvedValue({ isVirtualLearner: false })
     mockUpdateLearningMetrics.mockResolvedValue(null)
     mockAchievementCheck.mockResolvedValue([])
     mockAddXp.mockResolvedValue(undefined)
@@ -205,7 +209,12 @@ describe('LearningService.completeTask milestone progression', () => {
     expect(path).toEqual(expect.objectContaining({ status: 'completed', completedMilestones: 2 }))
     expect(mockAddXp).toHaveBeenCalledTimes(2)
     expect(outbox.map(item => item.eventType)).toEqual(['task:completed', 'task:completed', 'path:completed'])
-    expect(JSON.parse(outbox[2].payload)).toEqual({ pathId, completedByTaskId: 'task-3' })
+    expect(JSON.parse(outbox[2].payload)).toEqual(expect.objectContaining({
+      pathId,
+      completedByTaskId: 'task-3',
+      track: 'human',
+      completionSource: 'unknown',
+    }))
     expect(tx.learning_paths.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: pathId, status: { not: 'completed' } }
     }))
@@ -225,6 +234,24 @@ describe('LearningService.completeTask milestone progression', () => {
 
     expect(xp).toBe(0)
     expect(outbox).toHaveLength(0)
+  })
+
+  it('#105 观测统一：VL 轨道与完成通道写进 task/path 完成事件', async () => {
+    mockPrisma.users.findUnique.mockResolvedValueOnce({ isVirtualLearner: true })
+
+    await learningService.completeTask({
+      taskId: 'task-2',
+      userId,
+      completionSource: 'vl-assisted',
+      sessionId: 'teaching-1',
+    })
+
+    const taskEvent = outbox.find(item => item.eventType === 'task:completed')
+    expect(JSON.parse(taskEvent?.payload || '{}')).toEqual(expect.objectContaining({
+      track: 'virtual-learner',
+      completionSource: 'vl-assisted',
+      sessionId: 'teaching-1',
+    }))
   })
 
   it('日期模拟：传 asOf 时结算时间戳落模拟日（不落真墙钟）', async () => {

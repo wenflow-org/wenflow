@@ -1304,7 +1304,8 @@ router.post('/tasks/:taskId/complete', async (req, res, next) => {
       userId,
       actualMinutes: data.actualMinutes,
       subjectiveDifficulty: data.subjectiveDifficulty,
-      notes: data.notes
+      notes: data.notes,
+      completionSource: 'human-ui',
     });
 
     res.json({

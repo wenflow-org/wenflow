@@ -94,8 +94,8 @@ export async function assertTaskReadyForLearning(
   }
 
   // 已完成任务默认不允许再开「上课」会话（避免直接访问 /learn/<taskId> 又新建一节课）；
-  // 由用户上课路由显式传入 requireTaskIncomplete 生效——复习课 / quick-learn 等
-  // 既有调用方行为保持不变（复习课本就作用于已完成任务）。
+  // 由用户上课路由显式传入 requireTaskIncomplete 生效——复习课等既有调用方行为保持不变
+  // （复习课本就作用于已完成任务）。
   if (options.requireTaskIncomplete && task.status === 'completed') {
     const error = new Error('该任务已完成，请查看学习反馈，或从学习路径页选择重学');
     (error as { code?: string; status?: number }).code = 'TASK_ALREADY_COMPLETED';
@@ -206,6 +206,20 @@ export async function completeTask(data: CompleteTaskData) {
       );
     }
 
+    // #105 观测统一：收束事件带上轨道（真人 / 虚拟学习者）与完成通道，管理端统一从
+    // task:completed / path:completed 统计，不再各页各算。查询失败不阻断结算（track=unknown）。
+    const completionActor = await prisma.users
+      .findUnique({ where: { id: data.userId }, select: { isVirtualLearner: true } })
+      .catch(() => null);
+    const completionTrack = completionActor
+      ? (completionActor.isVirtualLearner ? 'virtual-learner' : 'human')
+      : 'unknown';
+    const completionContext = {
+      track: completionTrack,
+      completionSource: data.completionSource ?? 'unknown',
+      sessionId: data.sessionId ?? null,
+    };
+
     // 日期模拟：任务结算的**业务**时间戳（subtasks.completedAt / 完成类 evidence / 里程碑）
     // 在模拟时钟下落模拟日；无模拟上下文时 asOf 缺省 → new Date()，现网行为不变。
     const completedAt = data.asOf ?? new Date();
@@ -309,7 +323,8 @@ export async function completeTask(data: CompleteTaskData) {
           actualMinutes: data.actualMinutes || null,
           subjectiveDifficulty: data.subjectiveDifficulty || null,
           rating: data.rating || null,
-          linkedConceptName: currentSubtask.linkedConceptName || currentSubtask.coreConcept || null
+          linkedConceptName: currentSubtask.linkedConceptName || currentSubtask.coreConcept || null,
+          ...completionContext,
         }
       }));
 
@@ -371,7 +386,7 @@ export async function completeTask(data: CompleteTaskData) {
               userId: data.userId,
               source: 'learning-service',
               occurredAt: completedAt,
-              data: { pathId, completedByTaskId: data.taskId }
+              data: { pathId, completedByTaskId: data.taskId, ...completionContext }
             }));
           }
         }

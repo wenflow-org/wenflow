@@ -92,6 +92,7 @@ async function main(): Promise<void> {
       pathId,
       actualMinutes: 20,
       rating: 3,
+      completionSource: 'probe',
     } as any);
   }
   console.log('[probe] stage 1 任务已全部 completeTask');

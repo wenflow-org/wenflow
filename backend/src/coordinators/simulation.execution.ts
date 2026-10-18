@@ -67,6 +67,8 @@ export async function completeCheckpointedSimulationTask(
   if (!taskMatch) return null;
 
   let taskCompletionResult: Awaited<ReturnType<typeof learningService.completeTask>> | undefined;
+  // 收束授课会话 id 先于结算取出：#105 观测统一要把 sessionId/通道写进完成事件
+  const wrapupTeachingSessionId = typeof taskRuntime.teachingSessionId === 'string' ? taskRuntime.teachingSessionId : null;
   try {
     await ctx.assertCurrentSessionLeaseOwned(sessionId);
     taskCompletionResult = await learningService.completeTask({
@@ -75,6 +77,8 @@ export async function completeCheckpointedSimulationTask(
       actualMinutes: taskMatch.task.estimatedMinutes || 30,
       notes: '虚拟学习者完成当前 task 的教学会话',
       rating: 5,
+      completionSource: 'vl-assisted',
+      sessionId: wrapupTeachingSessionId,
       // 日期模拟：台账/streak 落在模拟日（无模拟上下文时不传 → 现网行为不变）
       ...(isSimulatedClockActive() ? { asOf: simulatedNowOr() } : {}),
     });
@@ -83,7 +87,6 @@ export async function completeCheckpointedSimulationTask(
     // 收束授课会话（best-effort）：endSession 走 finalization 生成 wrapup 并把会话置 completed。
     // 此前恢复路径只 completeTask 不 endSession → wrapup 永不落库、授课会话恒 active
     // （2026-10-02 端到端实证；与 checkpoint 路径、timebox-skip 路径行为对齐）
-    const wrapupTeachingSessionId = typeof taskRuntime.teachingSessionId === 'string' ? taskRuntime.teachingSessionId : null;
     if (wrapupTeachingSessionId) {
       try {
         const endTeachingRevision = typeof taskRuntime.teachingRevision === 'number'
