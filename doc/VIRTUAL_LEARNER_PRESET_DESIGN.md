@@ -1418,3 +1418,6 @@ consistencyNotes:
   语料集合（空语料/重复键/覆盖统计）、定义↔实例（未实例化与退役实例记 info；版本超前 error、
   同版本哈希漂移 warn、storyPool/knownConcepts 保留 warn）。error 级发现时 CLI 退出码 1。
   实测（2026-10-18）：9 条定义 0 error；实例 5 条、4 条未实例化（与「启动不自动同步」一致）。
+  **环境依赖**：`fixtureMaterials.file` 指向的 `text/` 目录被 `.gitignore` 排除（体积/版权），
+  新工作副本（含 CI）没有这些文件——检查器对这种情况只报 warn（夹具注入本身 fail-open），
+  但该条语料的「附件→路径→课堂」覆盖在该环境下会静默失效，跑批前需先备好 `text/`。

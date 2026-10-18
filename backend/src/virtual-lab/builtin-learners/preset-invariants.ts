@@ -205,7 +205,15 @@ export function checkPresetDefinition(
       continue;
     }
     if (options.fixtureExists && !options.fixtureExists(file)) {
-      findings.push(finding('D-fixture-missing', 'error', key, `夹具文件不存在：${file}`));
+      // 夹具是可选增强（注入失败 fail-open，跑批继续），因此缺失不足以判 error：
+      // 既可能是路径拼错（该修），也可能是文件被 .gitignore 排除（如 text/），
+      // 新环境跑批会静默跳过、该条的附件链路覆盖失效。
+      findings.push(finding(
+        'D-fixture-missing',
+        'warn',
+        key,
+        `夹具文件不在当前工作副本：${file}（路径拼错，或文件被 .gitignore 排除；新环境跑批会跳过该夹具）`,
+      ));
     }
   }
 

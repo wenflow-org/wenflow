@@ -109,14 +109,14 @@ describe('checkPresetDefinition', () => {
       .not.toContain('D-budget-nonpositive');
   });
 
-  it('夹具：绝对路径/越界/文件缺失', () => {
+  it('夹具：绝对路径/越界 error；文件缺失 warn（可选增强 + 可能被 .gitignore 排除）', () => {
     expect(codes(makePreset({ fixtureMaterials: [{ file: '/etc/passwd', note: null }] }))).toContain('D-fixture-path-absolute');
     expect(codes(makePreset({ fixtureMaterials: [{ file: 'text/../secret.pptx', note: null }] }))).toContain('D-fixture-traversal');
     const missing = checkPresetDefinition(
       makePreset({ fixtureMaterials: [{ file: 'text/nope.pptx', note: null }] }),
       { fixtureExists: () => false },
     );
-    expect(missing.map((item) => item.code)).toContain('D-fixture-missing');
+    expect(missing.find((item) => item.code === 'D-fixture-missing')!.severity).toBe('warn');
     const exists = checkPresetDefinition(
       makePreset({ fixtureMaterials: [{ file: 'text/ok.pptx', note: null }] }),
       { fixtureExists: () => true },
@@ -184,7 +184,7 @@ describe('checkPresetInstances', () => {
 describe('真实语料守门（virtual-learners/presets.yaml）', () => {
   const loaded = loadBuiltinLearnerPresets();
 
-  it('可加载且零 error（含夹具文件真实存在）', () => {
+  it('可加载且零 error（夹具缺失只 warn：text/ 被 gitignore，CI 工作副本没有该文件）', () => {
     expect(loaded.presets.length).toBeGreaterThan(0);
     expect(loaded.diagnostics).toEqual([]);
     const findings = checkPresetSet(loaded.presets, {
@@ -192,6 +192,14 @@ describe('真实语料守门（virtual-learners/presets.yaml）', () => {
     });
     const errors = findings.filter((item) => item.severity === 'error');
     expect(errors).toEqual([]);
+    const fixtureWarnings = findings.filter((item) => item.code === 'D-fixture-missing');
+    expect(fixtureWarnings.every((item) => item.severity === 'warn')).toBe(true);
+  });
+
+  it('无夹具的工作副本（CI）下仍零 error——夹具缺失不得让守门变红', () => {
+    const findings = checkPresetSet(loaded.presets, { fixtureExists: () => false });
+    expect(findings.filter((item) => item.severity === 'error')).toEqual([]);
+    expect(findings.some((item) => item.code === 'D-fixture-missing')).toBe(true);
   });
 
   it('报告含覆盖统计（供人工复核语料分布）', () => {
