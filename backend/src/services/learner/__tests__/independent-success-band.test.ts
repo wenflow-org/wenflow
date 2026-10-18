@@ -17,6 +17,7 @@ import {
   SUCCESS_BAND_HIGH,
   SUCCESS_BAND_LOW,
   SUCCESS_BAND_MIN_SAMPLE,
+  SUCCESS_BAND_WINDOW_DAYS,
 } from '../independent-success-band.service';
 
 describe('evaluateSuccessBand（带判定：双向 + 死区 + 样本下限）', () => {
@@ -81,5 +82,53 @@ describe('loadCodeJudgedSuccess（只认代码裁决）', () => {
   it('读取失败 → 按无样本处理（不让一次读失败影响档位）', async () => {
     findMany.mockRejectedValue(new Error('db down'));
     expect(await loadCodeJudgedSuccess('u1')).toEqual({ rate: null, sample: 0, passed: 0 });
+  });
+});
+
+/**
+ * 口径钉子（D4 收口）：上面对「判据」有覆盖，但**取数边界**没有回归——
+ * 窗口变了、路径归属丢了、或把非布尔 passed 当真，都能在测试全绿的情况下悄悄改掉难度控制行为。
+ */
+describe('loadCodeJudgedSuccess（取数边界口径）', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('回看窗口 = SUCCESS_BAND_WINDOW_DAYS 天（默认 14）', async () => {
+    const before = Date.now();
+    findMany.mockResolvedValue([]);
+    await loadCodeJudgedSuccess('u1');
+    const where = findMany.mock.calls[0][0].where;
+    const sinceMs = where.occurredAt.gte.getTime();
+    const expected = before - SUCCESS_BAND_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    expect(SUCCESS_BAND_WINDOW_DAYS).toBe(14);
+    expect(Math.abs(sinceMs - expected)).toBeLessThan(5_000);
+  });
+
+  it('pathId 只在显式给出时收窄；未给出时不得加成 pathId=null（否则全局统计变"只看无归属"）', async () => {
+    findMany.mockResolvedValue([]);
+    await loadCodeJudgedSuccess('u1', { pathId: 'path_a' });
+    expect(findMany.mock.calls[0][0].where.pathId).toBe('path_a');
+
+    await loadCodeJudgedSuccess('u1', { pathId: null });
+    expect(Object.prototype.hasOwnProperty.call(findMany.mock.calls[1][0].where, 'pathId')).toBe(false);
+
+    await loadCodeJudgedSuccess('u1');
+    expect(Object.prototype.hasOwnProperty.call(findMany.mock.calls[2][0].where, 'pathId')).toBe(false);
+  });
+
+  it('passed 只认严格 true（字符串/1 都不算通过）', async () => {
+    findMany.mockResolvedValue([
+      { payload: JSON.stringify({ judgedBy: 'code', passed: 'true', type: 'single_choice' }) },
+      { payload: JSON.stringify({ judgedBy: 'code', passed: 1, type: 'single_choice' }) },
+      { payload: JSON.stringify({ judgedBy: 'code', passed: true, type: 'single_choice' }) },
+    ]);
+    expect(await loadCodeJudgedSuccess('u1')).toEqual({ rate: 1 / 3, sample: 3, passed: 1 });
+  });
+
+  it('取最近 60 条（orderBy occurredAt desc + take 60）', async () => {
+    findMany.mockResolvedValue([]);
+    await loadCodeJudgedSuccess('u1');
+    const args = findMany.mock.calls[0][0];
+    expect(args.orderBy).toEqual({ occurredAt: 'desc' });
+    expect(args.take).toBe(60);
   });
 });
