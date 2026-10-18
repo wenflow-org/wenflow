@@ -16,7 +16,6 @@ import { DurableEventConsumerRegistry } from '../events/consumer-registry';
 import { DurableOutboxWorker } from '../events/outbox.worker';
 import { handleLearnerEvent, LEARNER_EVENT_TYPES } from '../events/learner-event-consumer';
 import { reviewCompletedConsumer } from '../services/learner/ReviewCompletedConsumer';
-import { quickLearnService } from '../virtual-lab/quick-learn/quick-learn.service';
 import { autopilotService } from '../virtual-lab/autopilot.service';
 import { startBatchExperimentScheduler } from '../services/virtual-lab/batch-experiment.service';
 import { startSimulatedDayScheduler } from '../services/virtual-lab/simulated-day-scheduler';
@@ -76,14 +75,10 @@ export function startOutboxWorker(): DurableOutboxWorker {
   return worker;
 }
 
-/** 学习侧启动恢复：回收 generating 路径、标记中断的虚拟账号自动学习运行（V1 不续跑） */
+/** 学习侧启动恢复：回收因进程中断遗留的 generating 路径（quick-learn 已于 2026-10-18 下线） */
 export async function runLearningStartupRecovery(assertActive: AssertActive): Promise<void> {
   // 回收因进程中断等原因遗留的 generating 路径
   await learningService.recoverStaleGeneratingPaths();
-  assertActive();
-
-  // 标记因进程中断而遗留的虚拟账号自动学习运行（V1 不续跑）
-  await quickLearnService.recoverInterruptedRuns();
   assertActive();
 }
 

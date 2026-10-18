@@ -33,7 +33,9 @@ export const FIELD_LINEAGE: FieldLineageEntry[] = [
   { skillId: 'teaching-turn', field: 'reply', consumers: ['frontend: LearningPage.vue（aiResponse）', 'backend: AITeachingCoordinator（消息持久化）'] },
   { skillId: 'teaching-turn', field: 'analysis', consumers: ['frontend: LearningPage.vue', 'frontend: CognitiveStatePanel.vue（confusionPoints）'] },
   { skillId: 'teaching-turn', field: 'knowledge', consumers: ['backend: AITeachingCoordinator reconcileTeachingKnowledgeState（看板回灌）', 'frontend: LearningPage.vue（knowledgePoints）'] },
-  { skillId: 'teaching-turn', field: 'pedagogy', consumers: ['frontend: LearningPage.vue（strategies）'] },
+  // pedagogy.strategies 不进学习者 UI（此前误登记为 LearningPage.vue 渲染）：它随消息落库，
+  // 供反馈归因取本轮策略；课堂页只展示 peerStrategy（同伴策略），两者不是同一字段。
+  { skillId: 'teaching-turn', field: 'pedagogy', consumers: ['backend: feedback-collection.service（策略归因，取 message.strategies[0]）', 'backend: AITeachingCoordinator（随消息落库，供审计脚本 inspect-strategy-*）'] },
   { skillId: 'teaching-turn', field: 'control', consumers: ['backend: AITeachingCoordinator（课堂收束判断）', 'backend: peerTriggerService.shouldTrigger（同伴触发）'] },
   // session-wrapup
   { skillId: 'session-wrapup', field: 'summary', consumers: ['frontend: CompletionCard.vue', 'backend: learner.coordinator / LessonKnowledgeEnrichmentConsumer（回灌蒸馏器）'] },
@@ -50,7 +52,7 @@ export const FIELD_LINEAGE: FieldLineageEntry[] = [
   { skillId: 'stage-designer', field: 'subtasks', consumers: ['backend: learning.service（subtasks.create / replan 重建）', 'frontend: LearningPathDetail.vue（间接）'] },
   // virtual-learner 家族
   { skillId: 'virtual-learner-goal-dialogue-simulator', field: '*', consumers: ['backend: simulation.coordinator（stageResults.goal）'] },
-  { skillId: 'virtual-learner-learn-turn-simulator', field: '*', consumers: ['backend: simulation.coordinator / quick-learn.service（transcript/report）'] },
+  { skillId: 'virtual-learner-learn-turn-simulator', field: '*', consumers: ['backend: simulation.coordinator（stageResults.teaching）'] },
   { skillId: 'virtual-learner-path-evaluator', field: '*', consumers: ['backend: simulation.coordinator（stageResults.path_review）'] },
   { skillId: 'virtual-learner-persona-designer', field: 'personaSeed', consumers: ['backend: admin virtual-learners 路由（persona 持久化）'] },
   { skillId: 'virtual-learner-scenario-designer', field: '*', consumers: ['backend: admin virtual-learners 路由'] },

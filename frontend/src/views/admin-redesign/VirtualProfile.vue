@@ -84,7 +84,6 @@
             @click="runLifeAction(c); closeMenu()"
           >{{ c.label }}</button>
           <div v-if="lifeControls.length" class="mk-menu__sep" aria-hidden="true"></div>
-          <button type="button" class="mk-menu__item" title="账号自动学习：批量自动运行该虚拟人的全部故事/课程（独立于单个故事运行）" @click="closeMenu(); quickLearnOpen = true">账号自动学习</button>
           <button type="button" class="mk-menu__item" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="closeMenu(); editOpen = true">画像与偏好</button>
           <!-- 双向互链（卡库 ↔ 虚拟学习者）：卡与本人是同一条档案记录。带 from 使卡页
                面包屑拼出「画像 / 卡」并支持点面包屑回本页（子页返回机制，不自造返回钮） -->
@@ -683,13 +682,6 @@
         </section>
     </div>
 
-    <QuickLearnPanel
-      v-if="isLive && subPage?.id"
-      v-model:visible="quickLearnOpen"
-      :profile-id="subPage.id"
-      @token-issued="recordProjectionTokenExpiry"
-    />
-
     <!-- 编辑画像 -->
     <Teleport to="body">
     <div v-if="editOpen" ref="maskRef" class="mk-modal">
@@ -916,7 +908,6 @@ import { statusText } from './statusText'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
-import QuickLearnPanel from './QuickLearnPanel.vue'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { memoryReviewUrl } from './learner-profile'
 import { LEARNER_METRICS, LEARNER_METRIC_CODES } from '@/utils/learnerMetrics'
@@ -1285,20 +1276,18 @@ const running = ref(false)
 const saving = ref(false)
 const storyBusy = ref(false)
 const sessionBusy = ref(false)
-const quickLearnOpen = ref(false)
 
 /* ===== 投影 token（冒充该虚拟人）的本地生命周期 =====
-   为什么：QuickLearnPanel 签发的投影 token 与管理员自身凭据同存 localStorage，
+   为什么：跨页深链（故事 → 真实教学对象）会签发投影 token，与管理员自身凭据同存 localStorage，
    后端 TTL 30m。此前无过期簿记——token 到期后仍躺在存储里并被请求头注入，
-   表现为管理员前台会话被反复踢下线（静默 401）。本页作为 QuickLearnPanel 的宿主，
-   复刻 UserDetail.vue 的「本地过期记账 + 60s 轮询清理」：
-   签发处（QuickLearnPanel）只透传到期时刻，簿记与清理集中在这里一处。 */
+   表现为管理员前台会话被反复踢下线（静默 401）。本页复刻 UserDetail.vue 的
+   「本地过期记账 + 60s 轮询清理」：签发处只透传到期时刻，簿记与清理集中在这里一处。 */
 const PROJECTION_TOKEN_TTL_MS = 30 * 60 * 1000
 const PROJECTION_TOKEN_EXPIRES_KEY = 'projection_token_expires_at'
 /** 当前本地投影 token 的过期时刻（ms）；null = 本地无有效记录 */
 const projectionTokenExpiresAt = ref<number | null>(null)
 
-/** QuickLearnPanel 签发成功回调：落过期时刻（先有 token 后有期限，避免孤儿 token） */
+/** 投影 token 签发成功回调：落过期时刻（先有 token 后有期限，避免孤儿 token） */
 function recordProjectionTokenExpiry(payload: { token: string; expiresAt: number }) {
   // 服务端给不出可信日期时，按后端 30min TTL 兜底记账（宁可早清也不留无法清理的孤儿 token）
   const exp = Number(payload?.expiresAt)
@@ -2199,8 +2188,7 @@ const tabRouter = useRouter()
 
 /** 从故事跳到真实教学对象（#73）：projection 深链由后端逐故事产出。
     目标是用户侧路由（/goal-conversation、/learning-path、/learn），需要以该虚拟学习者身份
-    浏览——与 QuickLearnPanel.openFrontend 同款：先签发投影 token 再新开标签页，
-    否则用户侧守卫会把管理员挡回登录页。 */
+    浏览——先签发投影 token 再新开标签页，否则用户侧守卫会把管理员挡回登录页。 */
 const projectionOpening = ref(false)
 async function openProjection(url?: string | null) {
   const id = subPage.value?.id

@@ -13,7 +13,7 @@
                           └─ 正式 Path（只吃 Goal，不读 story，不改 Path 契约）
                                 └─ Learn / 指标 / 前台投影验收
 
-快捷支路：账号自动学习（账号已有 Path 后直接上课，不经故事/Goal）
+快捷支路：账号自动学习（账号已有 Path 后直接上课，不经故事/Goal）——**2026-10-18 已下线**，入口/服务/API 已移除，仅保留运行记录表与存量数据
 ```
 
 ## 分层与职责
@@ -26,7 +26,7 @@
 | Goal | `goal_conversations.description` | 开场诉求写入 description；正式对话收束 |
 | Path | `learning_paths` | **只消费 Goal 产物**（`rawGoal`/`visibleSummary`/`history`） |
 | Learn | teaching sessions + metrics | 真平台上课链路 |
-| 快捷 | `virtual_quick_learn_runs` | 跳过故事/Goal，按账号已有 Path/task 自动学 |
+| 快捷（已下线） | `virtual_quick_learn_runs` | 跳过故事/Goal 的自动学习支路；2026-10-18 移除代码，仅留存量表 |
 | 投影 | projection token | 前台以虚拟账号视角验收 |
 
 ## 传递规则（故事 → Goal → Path）
@@ -61,11 +61,13 @@
 2. 画像页生成故事（学习需求）
 3. 选故事启动（辅助 / 黑盒）
 4. 会话推进：Goal → Path → Learn
-5. 前台投影 / 账号自动学习验收
+5. 前台投影验收
 
-## 快捷支路
+## 快捷支路（已下线，2026-10-18）
 
-「账号自动学习」：账号已有 Path 后，`startSession → teaching-turn → endSession → completeTask`，不经故事与 Goal。
+「账号自动学习」原语义：账号已有 Path 后，`startSession → teaching-turn → endSession → completeTask`，不经故事与 Goal。
+该支路已于 2026-10-18 下线（入口/路由/服务/API 移除；运行记录表保留供存量数据与用户删除清理）。
+VL 学习一律走「故事 → Goal → Path → Learn」主链。
 
 ## 残余
 

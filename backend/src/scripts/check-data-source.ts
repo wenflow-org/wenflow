@@ -116,7 +116,6 @@ const CALL_SITE_MANIFEST: Record<string, CallSite[]> = {
   ],
   'virtual-learner-learn-turn-simulator': [
     { file: 'backend/src/coordinators/simulation.learn-phase.ts', line: 692 },
-    { file: 'backend/src/virtual-lab/quick-learn/quick-learn.service.ts', line: 650 },
   ],
   'virtual-learner-referee': [
     { file: 'backend/src/virtual-lab/blackbox-runner.ts', line: 653 },
@@ -224,9 +223,6 @@ const CROSS_FILE_EVIDENCE: Record<string, Array<{ table: string; file: string; l
   'virtual-learner-learn-turn-simulator': [
     { table: 'milestones', file: 'backend/src/coordinators/simulation.coordinator.ts', line: 2555 },
     { table: 'subtasks', file: 'backend/src/coordinators/simulation.coordinator.ts', line: 2555 },
-    { table: 'virtual_learner_profiles', file: 'backend/src/virtual-lab/quick-learn/quick-learn.service.ts', line: 99 },
-    { table: 'subtasks', file: 'backend/src/virtual-lab/quick-learn/quick-learn.service.ts', line: 104 },
-    { table: 'milestones', file: 'backend/src/virtual-lab/quick-learn/quick-learn.service.ts', line: 583 },
   ],
   'teaching-opening-generator': [
     // 输入 = buildTeachingScenarioContext 产物（startSession 组装，非 generateOpening 自身）

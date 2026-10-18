@@ -1519,30 +1519,6 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/blackbox-rerun`, {});
   },
 
-  cloneQuickLearnFixture: async (profileId: string, data: { sourcePathId: string; titlePrefix?: string }) => {
-    return adminAxios.post(`/admin/virtual-learners/${profileId}/quick-learn/fixtures`, data);
-  },
-
-  getQuickLearnTasks: async (profileId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/${profileId}/quick-learn/tasks`);
-  },
-
-  startQuickLearnRun: async (profileId: string, data: { taskId: string; maxTurns?: number; storyId?: string; frictionBudget?: string }) => {
-    return adminAxios.post(`/admin/virtual-learners/${profileId}/quick-learn/runs`, data);
-  },
-
-  getQuickLearnRuns: async (profileId: string, params?: { page?: number; pageSize?: number }) => {
-    return adminAxios.get(`/admin/virtual-learners/${profileId}/quick-learn/runs`, { params });
-  },
-
-  getQuickLearnRun: async (runId: string) => {
-    return adminAxios.get(`/admin/virtual-learners/quick-learn/runs/${runId}`);
-  },
-
-  abortQuickLearnRun: async (runId: string) => {
-    return adminAxios.post(`/admin/virtual-learners/quick-learn/runs/${runId}/abort`, {});
-  },
-
   virtualSessionAuto: async (sessionId: string, data?: { maxRounds?: number }) => {
     return adminAxios.post(`/admin/virtual-learners/sessions/${sessionId}/auto`, data);
   },

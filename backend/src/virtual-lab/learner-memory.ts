@@ -1,5 +1,5 @@
 /**
- * 虚拟学习者记忆回写与读取（三链统一：assisted / blackbox / quick-learn）
+ * 虚拟学习者记忆回写与读取（两链统一：assisted / blackbox；quick-learn 已于 2026-10-18 下线）
  *
  * 目标：让虚拟学习者「记得自己学过什么、做过什么」。
  * - writeProfileConceptsAfterLesson：课后把知识看板状态回写画像
@@ -233,7 +233,7 @@ export function deriveCuratedSelfState(
  * ① curator 输出全量名单（curatedConcepts，LLM 提炼）
  * ② 虚拟学习者「自己提炼」的自述状态（selfState）
  * ③ 老师侧 knowledgeState（仅 fallback 与成果物证据）
- * 三链共用（assisted / blackbox / quick-learn）。同名概念跨表去重，mastered 优先。
+ * 两链共用（assisted / blackbox）。同名概念跨表去重，mastered 优先。
  */
 export async function writeProfileConceptsAfterLesson(
   userId: string,

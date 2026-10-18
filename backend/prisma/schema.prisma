@@ -1086,6 +1086,8 @@ model virtual_experiment_commands {
   @@index([runId, status])
 }
 
+/// quick-learn 支路已于 2026-10-18 下线（入口/服务/API 已移除）。表保留用于存量数据与
+/// 用户删除清理（virtual-cleanup / prune-virtual-learners），确认生产零数据后再单独迁移删除。
 model virtual_quick_learn_runs {
   id                String    @id @default(uuid())
   profileId         String

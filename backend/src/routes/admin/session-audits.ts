@@ -3,7 +3,7 @@
  *
  * 裁判（referee 终局评审 + actor-auditor 角色保真审计）从虚拟学习者路由迁出，独立成自己的
  * 挂载面：管理台 VL 页面不再暴露任何评审入口/徽章，仿真核（assisted/blackbox/autopilot/
- * batch/quick-learn）不调用本模块；能否以何种形态合回（独立模型路由？评审真实会话？）
+ * batch）不调用本模块；能否以何种形态合回（独立模型路由？评审真实会话？）
  * 以后再议。评估对象仍是 VL 会话的公开轨迹，报告仍落在 virtual_sessions 的 blackbox JSON
  * （refereeReports / actorAuditReports），数据模型不动——合回时无需迁移。
  *

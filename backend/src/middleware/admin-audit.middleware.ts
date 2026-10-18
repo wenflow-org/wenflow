@@ -21,12 +21,10 @@ const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 /**
  * 高频执行类黑名单（仅对写方法生效）：路由命中则仅失败（success=false）时落库，避免成功噪音。
  * - virtual-learners 的 step/auto/advance-path/blackbox 系列（逐帧/逐轮推进，均为 POST）
- * - virtual-quick-learn 的 runs 系列（自动学习运行轮询/推进）
  */
 const HIGH_FREQUENCY_PATH_PATTERNS: RegExp[] = [
   /\/virtual-learners\/.*\/(step|auto|advance-path)(\/|$)/,
   /\/virtual-learners\/.*\/blackbox/,
-  /\/virtual-quick-learn\/.*\/runs/,
 ];
 
 /**

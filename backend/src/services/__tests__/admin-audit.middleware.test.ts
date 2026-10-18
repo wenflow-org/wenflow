@@ -122,9 +122,9 @@ describe('adminAuditMiddleware', () => {
   it('黑名单命中且为 GET 时同样完全跳过（黑名单仅对写方法生效）', () => {
     const req = createRequest({
       method: 'GET',
-      baseUrl: '/api/admin/virtual-quick-learn',
-      path: '/p1/quick-learn/runs',
-      originalUrl: '/api/admin/virtual-quick-learn/p1/quick-learn/runs'
+      baseUrl: '/api/admin/virtual-learners',
+      path: '/sessions/s1/step',
+      originalUrl: '/api/admin/virtual-learners/sessions/s1/step'
     });
     const res = createResponse(500);
     adminAuditMiddleware(req, res, jest.fn());
@@ -152,26 +152,6 @@ describe('adminAuditMiddleware', () => {
     const data = create.mock.calls[0][0].data;
     expect(data.success).toBe(false);
     expect(data.statusCode).toBe(500);
-  });
-
-  it('quick-learn runs 系列同样只记录失败', () => {
-    const runsReq = createRequest({
-      method: 'POST',
-      baseUrl: '/api/admin/virtual-quick-learn',
-      path: '/p1/quick-learn/runs',
-      originalUrl: '/api/admin/virtual-quick-learn/p1/quick-learn/runs'
-    });
-
-    const okRes = createResponse(200);
-    adminAuditMiddleware(runsReq, okRes, jest.fn());
-    okRes.emit('finish');
-    expect(create).not.toHaveBeenCalled();
-
-    const failedRes = createResponse(429);
-    adminAuditMiddleware(runsReq, failedRes, jest.fn());
-    failedRes.emit('finish');
-    expect(create).toHaveBeenCalledTimes(1);
-    expect(create.mock.calls[0][0].data.success).toBe(false);
   });
 
   it('未知路径回退为 method + path 原文', () => {

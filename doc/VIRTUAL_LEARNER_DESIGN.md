@@ -20,7 +20,7 @@
 
               ┌── assisted 链：选故事 → Goal（模拟器扮演学习者）→ Path → Learn
 运行方式 ──────┼── blackbox-api 链：黑盒实验（step / observe / evaluate / checkpoint）
-              └── quick-learn 支路：账号已有 Path，直接上课，不经故事与 Goal
+              └── quick-learn 支路（**2026-10-18 已下线**；原语义：账号已有 Path，直接上课，不经故事与 Goal）
 ```
 
 - 模式开关：`backend/src/virtual-lab/session-mode.ts` → `'assisted' | 'blackbox-api'`（互斥，混用会抛 `VirtualSessionModeError`）
@@ -38,7 +38,7 @@
 | 故事 | `profile.storyPool[]`（JSON，非独立表） | 见 §4；无硬 FK，故事↔Path 是软关联 |
 | 记忆 | `memory_traces`（含 FSRS/ACT-R 状态）+ 画像 `knownConcepts` / `struggleConcepts` / `recentCompleted` | 见 §7 |
 | 批量 | `batch_experiment_*` | **时间推演**（模拟日推进 / 记忆衰减 / 快照），不是 A/B 对照设施 |
-| 快捷 | `virtual_quick_learn_runs` | 快捷支路运行记录 |
+| 快捷（已下线） | `virtual_quick_learn_runs` | 快捷支路运行记录；2026-10-18 移除代码，表保留供存量与清理 |
 
 本地现状：**89 个虚拟学习者**（14 内置 + 75 custom）、**282 个虚拟会话**、102 个 Goal 会话带负荷画像。
 

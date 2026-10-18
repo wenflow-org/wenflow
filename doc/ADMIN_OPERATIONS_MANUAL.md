@@ -773,7 +773,7 @@ pages:
   - id: virtual-profile
     subpage: virtual
     purpose: 虚拟学习者画像（故事池/运行记录/会话控制）
-    actions: [openSubPage(learner), quickLearnOpen, editOpen, batchRunStories, batchAutopilotStories, batchRemoveStories, openSubPage(session)]
+    actions: [openSubPage(learner), editOpen, batchRunStories, batchAutopilotStories, batchRemoveStories, openSubPage(session)]
   - id: skill-detail
     subpage: skill
     purpose: 单 Skill 契约/运行时/提示词
