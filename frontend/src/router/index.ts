@@ -337,13 +337,12 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/api-config'
   },
   {
-    // 导航一级收敛（阶段 1）：外挂能力折入「模型与接入」宿主 tab
-    path: '/admin/addons',
-    redirect: (to) => ({ path: '/admin/api-config', query: { ...to.query, tab: 'addons' } })
-  },
-  {
+    // 外挂能力 2026-10-19 从「模型与接入」宿主拆回独立页（用户拍板：「拆出来，作为单页，
+    // 放到 skill 那边」），/admin/addons 回归为真实场景路径（由 /admin/:page? → AdminConsole
+    // 按场景 id 解析，见 manifest「外挂能力」）；此处不再重定向。
+    // 旧外部路径 /admin/external-capabilities 是同一个页面的别名，改投本页。
     path: '/admin/external-capabilities',
-    redirect: (to) => ({ path: '/admin/api-config', query: { ...to.query, tab: 'addons' } })
+    redirect: (to) => ({ path: '/admin/addons', query: to.query })
   },
   {
     path: '/admin/orchestration',
@@ -441,6 +440,15 @@ router.beforeEach(async (to, _from, next) => {
       next({ path: '/admin/health-center', query });
       return;
     }
+  }
+  /* 退役 tab 老深链（?tab=addons）→ 外挂能力独立页（2026-10-19 用户拍板从模型与接入拆出）。
+     与上面健康中心同款：路由级改投，别等宿主挂载后由 query watch 兜（那样用户会先看到
+     目标错误的「接入与模型」页签）。 */
+  if (to.path === '/admin/api-config' && to.query.tab === 'addons') {
+    const query = { ...to.query };
+    delete query.tab;
+    next({ path: '/admin/addons', query });
+    return;
   }
   document.title = `${to.meta.title || '问流 WenFlow'} - 问流 WenFlow`;
   syncThemeForRoute(to.path);

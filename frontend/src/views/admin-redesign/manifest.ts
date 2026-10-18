@@ -6,6 +6,7 @@
  *   · 运维工具 · 数据导出 · 会话安全；
  *   feedback / ops-achievements / messages 场景下线（其 URL 重定向到对应 tab）。
  * - 模型与接入（api-config）成为 tab 宿主：接入与模型 · 外挂能力；addons 场景下线。
+ *   （2026-10-19 反转：「外挂能力」从该宿主拆回独立页并归入 Skill 组——见下方 Skill 组注释）
  * - 系统工具（ops-center）2026-10-16 解散并入运营中心（三页签挂 ops-hub）；session-security 场景同日退役。
  * - 记忆与复习（memory-review）由「观测」移入「教学」；Skill 组本阶段保持不变。
  *
@@ -34,7 +35,7 @@
 import type { Component } from 'vue'
 import {
   Activity, BookOpen, Coins, FlaskConical, HeartPulse, History, IdCard, LayoutDashboard,
-  Megaphone, MessagesSquare, Plug, Route, ScrollText, ShieldCheck, Sparkles,
+  Megaphone, MessagesSquare, Plug, Puzzle, Route, ScrollText, ShieldCheck, Sparkles,
   Target, Users, Workflow,
 } from 'lucide-vue-next'
 
@@ -83,10 +84,15 @@ export const MOCK_SCENES: MockSceneDef[] = [
   // Skill 组：健康中心已于 2026-09-29 抽出为独立场景（系统组）。
   // 「Prompt 评估」2026-10-04 折入 skills 宿主「Prompt 评估」页签，本组收敛为 2 项
   // （orchestrator · skills）；旧 URL /admin/prompt-eval 在 router 重定向。
+  // 2026-10-19 用户拍板：「外挂能力」从 api-config 宿主拆回独立页并入本组（第 3 项）。
   // label 带上「提示词」关键词（2026-09 定位收敛：管理台=轻运营调整，改 prompt 的
   // 动线从这里进——新人搜「提示词」落到本组；评估动线现同在 skills 宿主页签内）
   { id: 'orchestrator', label: '编排图', group: 'Skill', glyph: '流', icon: Workflow },
   { id: 'skills', label: 'Skill 与提示词', group: 'Skill', glyph: '能', icon: Sparkles },
+  // 「外挂能力」2026-10-19 用户拍板拆回独立页：「模型与接入」宿主撤掉该页签——这一页列的是
+  // 外挂进来的能力与 MCP 服务（每项能力本身就是一条 Skill），关系更近 Skill，故归入本组；
+  // 旧深链 /admin/addons 与 /admin/external-capabilities 本就是本页路径，?tab=addons 由路由改投。
+  { id: 'addons', label: '外挂能力', group: 'Skill', glyph: '挂', icon: Puzzle },
   // 观测组：Token 成本并入执行日志第三 tab（成本分析）；记忆与复习移出后只剩日志双子页
   // 2026-09-29 用户拍板拆回独立页：成本分析从执行日志宿主 tab 释放（原 2026-09-04 并入）
   { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志', icon: ScrollText },

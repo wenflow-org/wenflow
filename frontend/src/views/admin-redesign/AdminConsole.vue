@@ -109,6 +109,9 @@ const PromptWorkbench = asyncPage(() => import('./PromptWorkbench.vue'));
 // 运营术语表（2026-10-10 抽屉退役改整页）：壳层帮助按钮跳转的隐藏场景，不进侧栏
 const AdminGlossary = asyncPage(() => import('./AdminGlossary.vue'));
 const OpsHub = asyncPage(() => import('./OpsHub.vue'));
+// 外挂能力（2026-10-19 用户拍板从 api-config 宿主拆回独立页，归入侧栏 Skill 组）：
+// 能力 Skill 与 MCP 服务的登记/测试，页头自带刷新
+const Addons = asyncPage(() => import('./Addons.vue'));
 const LearnerDetail = asyncPage(() => import('./LearnerDetail.vue'));
 const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
 const PathDetail = asyncPage(() => import('./PathDetail.vue'));
@@ -129,7 +132,8 @@ const components: Record<string, unknown> = {
   'overview': Overview,
   // 导航收敛 2026-09-04：users+learner-center → people；announcements+notifications → messages；token-cost → execution-logs（成本分析 tab）
   // 导航一级收敛 2026-09-19（阶段 1）：feedback/ops-achievements/messages → ops-hub 宿主 tab；
-  // addons → api-config 宿主 tab；session-security → ops-hub 宿主 tab（场景下线，URL 重定向兼容）
+  // session-security → ops-hub 宿主 tab（场景下线，URL 重定向兼容）
+  // （addons 当时折入 api-config 宿主，2026-10-19 已拆回独立场景，见上）
   // 阶段 3（2026-09-19）：health-center → skills 宿主 tab（健康检查/漂移/对账），场景下线
   // 2026-09-29 用户拍板拆回：teaching-sessions / goal-conversations / learning-paths 各自独立成页
   //（2026-09-04 曾合并为「学习会话」宿主 sessions，场景已下线，URL 重定向兼容）
@@ -147,6 +151,8 @@ const components: Record<string, unknown> = {
   // 建页至今 batch_experiments 两表 0 行）；旧 URL 在 router 重定向到 /admin/virtual-learners
   'skills': Skills,
   'orchestrator': Orchestrator,
+  // 外挂能力（2026-10-19 从 api-config 宿主拆回独立场景，侧栏 Skill 组）
+  'addons': Addons,
   // 「Prompt 评估」2026-10-04 下线（折入 skills 宿主「Prompt 评估」页签；
   // 组件更名 PromptEvalPanel 由 Skills 异步加载）；旧 URL 在 router 重定向 ?tab=cases|runs → ?peTab=
   'execution-logs': ExecLogs,

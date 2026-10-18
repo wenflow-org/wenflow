@@ -119,8 +119,8 @@ describe('Admin 路由重定向', () => {
       ['/admin/messages', '/admin/ops-hub', 'announce'],
       ['/admin/announcements', '/admin/ops-hub', 'announce'],
       ['/admin/notifications', '/admin/ops-hub', 'inapp'],
-      ['/admin/addons', '/admin/api-config', 'addons'],
-      ['/admin/external-capabilities', '/admin/api-config', 'addons'],
+      // 2026-10-19：「外挂能力」从「模型与接入」宿主拆回独立页 —— /admin/addons 不再是重定向，
+      // 而是真实场景路径（下面单独断言）；旧外部别名 /admin/external-capabilities 改投本页。
       ['/admin/session-security', '/admin/ops-hub', 'security'],
       // 2026-10-16：「系统工具」解散并入运营中心，旧深链改指 ops-hub 对应页签
       ['/admin/ops-center', '/admin/ops-hub', 'tools'],
@@ -132,6 +132,20 @@ describe('Admin 路由重定向', () => {
       expect(router.currentRoute.value.path, `${from} 未重定向到 ${toPath}`).toBe(toPath);
       expect(router.currentRoute.value.query.tab, `${from} tab 应为 ${tab}`).toBe(tab);
     }
+  });
+
+  it('外挂能力拆回独立页（2026-10-19）：/admin/addons 是真实场景路径，旧别名与 ?tab=addons 改投', async () => {
+    // 真实路径不再重定向（由 /admin/:page? → AdminConsole 按场景 id 解析）
+    await router.push('/admin/addons');
+    expect(router.currentRoute.value.path).toBe('/admin/addons');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
+    // 旧外部别名
+    await router.push('/admin/external-capabilities');
+    expect(router.currentRoute.value.path).toBe('/admin/addons');
+    // 老书签：宿主页签键改投独立页，且不残留 tab（否则落到 api-config 的默认页签）
+    await router.push('/admin/api-config?tab=addons');
+    expect(router.currentRoute.value.path).toBe('/admin/addons');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
   });
 
   it('退役场景深链保留业务 query（会话安全 ?user= 透传）', async () => {

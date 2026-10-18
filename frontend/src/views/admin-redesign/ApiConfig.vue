@@ -10,10 +10,9 @@
           <MkLoading v-if="fetching" inline text="拉取中…" />
           <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
         </button>
-        <!-- 刷新钮只挂在真有远端数据源的页签（接入与模型含只读注册表 / 外挂能力）；其余配置
-             tab 的读取失败重试走卡内 mk-alert「重试」，页头不放无效刷新（此前 v-else 落到
-             addonsRef 空引用） -->
-        <button v-else-if="tab === 'addons'" type="button" class="mk-btn mk-btn--sm" @click="addonsRef?.refresh?.()">刷新</button>
+        <!-- 刷新钮只挂在真有远端数据源的页签（接入与模型含只读注册表）；其余配置 tab 的
+             读取失败重试走卡内 mk-alert「重试」，页头不放无效刷新。
+             （外挂能力 2026-10-19 拆出独立页时带走它自己的刷新钮，这里不再有第三个分支） -->
         <!-- 重置为默认（#13）：后端 POST /admin/api-config/reset 此前无前端入口。高风险不可撤销，
              二次确认在 resetConfig 内；三个配置 tab 常驻，与「分组保存」并列但语义是整页级 -->
         <button v-if="isConfigTab" type="button" class="mk-btn mk-btn--sm" :disabled="resetting" @click="resetConfig">{{ resetting ? '重置中…' : '重置为默认' }}</button>
@@ -645,10 +644,6 @@
       </button>
     </div>
     </template>
-
-
-    <!-- ===== Tab2: 外挂能力（Addons embedded） ===== -->
-    <Addons v-else id="ac-panel-addons" role="tabpanel" aria-labelledby="ac-tab-addons" ref="addonsRef" embedded @count="onAddonsCount" />
   </div>
 </template>
 
@@ -659,7 +654,6 @@ import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { Eye, EyeOff } from 'lucide-vue-next'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { dataSource, isLive } from './store'
-import Addons from './Addons.vue'
 import ModelRegistryOverview from './ModelRegistryOverview.vue'
 import ModelProvidersPanel from './ModelProvidersPanel.vue'
 import { splitUpstreamByRegistry } from './modelNameMatch'
@@ -694,11 +688,12 @@ import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
 import { toast } from '@/utils/toast'
 
-/* ---------- 宿主：接入与模型 · 路由与调用 · 安全与访问 · 外挂能力 ----------
-   ?tab=model|overview|addons 双向同步；只读 ModelRegistryOverview 按分区切片嵌两个页签
-   （接入：供应商/能力限额/冷却/配置提示；路由：默认路由解析结果/别名映射），
-   外挂能力嵌入 Addons（embedded，域计数上报宿主） */
-const AC_TABS = ['access', 'routing', 'security', 'addons'] as const
+/* ---------- 宿主：接入与模型 · 路由与调用 · 安全与访问 ----------
+   ?tab=model|overview 双向同步；只读 ModelRegistryOverview 按分区切片嵌两个页签
+   （接入：供应商/能力限额/冷却/配置提示；路由：默认路由解析结果/别名映射）。
+   2026-10-19 用户拍板「外挂能力」从本宿主拆回独立页（/admin/addons，侧栏 Skill 组）：
+   原来那个页签与它的角标计数、刷新分支一并撤除；旧深链 ?tab=addons 由路由改投。 */
+const AC_TABS = ['access', 'routing', 'security'] as const
 type AcTab = (typeof AC_TABS)[number]
 
 /* 文案单源（R6 复读单源化）：卡标题与开关的 aria-label 共用一份 */
@@ -722,28 +717,17 @@ const tab = ref<AcTab>('access')
 const isConfigTab = computed(() => ['access', 'routing', 'security'].includes(tab.value))
 const route = useRoute()
 const router = useRouter()
-const addonsCount = ref(0)
-/* D11：Addons 只在切到「外挂能力」页签才挂载并上报计数；未访问前 addonsCount 恒为初始 0，
-   角标显 0 会被读成「外挂能力 0 个」（实际 4）。故用 ready 位区分「未加载」与「就是 0」——
-   未加载不渲染角标（隐藏而非显 0）。 */
-const addonsCountReady = ref(false)
-function onAddonsCount(n: number) {
-  addonsCount.value = n
-  addonsCountReady.value = true
-}
-/** 页签定义（CM1：收敛到 MkSubTabs；count 只在已加载时给出，见上）。
-    2026-10-14 四页签：接入与模型 / 路由与调用 / 安全与访问 / 外挂能力
-    （「虚拟学习者」页签同日撤除，压测参数卡并入「路由与调用」）。 */
+/** 页签定义（CM1：收敛到 MkSubTabs）。
+    2026-10-14 四页签 → 2026-10-19 三页签：接入与模型 / 路由与调用 / 安全与访问
+    （「虚拟学习者」页签 2026-10-14 撤除并入「路由与调用」；「外挂能力」2026-10-19 拆出独立页）。 */
 const acTabs = computed(() => [
   { key: 'access', label: '接入与模型' },
   { key: 'routing', label: '路由与调用' },
   { key: 'security', label: '安全与访问' },
-  { key: 'addons', label: '外挂能力', count: addonsCountReady.value ? addonsCount.value : undefined },
 ])
 function onTabChange(key: string) {
   switchTab(key as AcTab)
 }
-const addonsRef = ref<{ refresh?: () => void } | null>(null)
 /** 供应商面板（BYOK）：页头「刷新注册表」与写后重取都走它的 refresh */
 const providersRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
 /** 已登记模型 id（面板回传）：上游清单的关系句与折叠共用这一次计算 */

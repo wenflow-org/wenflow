@@ -613,11 +613,14 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('#13：外挂能力 tab 不出现重置入口（重置是配置域动作）', async () => {
+  it('2026-10-19 拆页后：本页只剩三个页签，「外挂能力」页签整块不在', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    await gotoTab(wrapper, '外挂能力');
-    expect(wrapper.findAll('button').some((b) => b.text() === '重置为默认')).toBe(false);
+    await flushPromises();
+    const tabs = wrapper.findAll('.mk-subtab').map((t) => t.text().trim());
+    expect(tabs).toEqual(['接入与模型', '路由与调用', '安全与访问']);
+    expect(wrapper.text()).not.toContain('外挂能力');
+    expect(wrapper.find('#ac-panel-addons').exists()).toBe(false);
     wrapper.unmount();
   });
 
