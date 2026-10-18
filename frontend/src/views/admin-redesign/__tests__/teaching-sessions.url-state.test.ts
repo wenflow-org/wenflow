@@ -122,14 +122,12 @@ describe('TeachingSessions · 筛选 ↔ URL（O2c）', () => {
   });
 });
 
-describe('TeachingSessions · 行内动作说明（O4）', () => {
-  it('「链路 / 详情」都带 tooltip，且各自说清去哪', async () => {
+describe('TeachingSessions · 行内动作（O4 说明保留 + 2026-10-19 下线链路）', () => {
+  it('行内只剩「详情」且带 tooltip；「链路」入口已下线（工程排查面不进运营列表）', async () => {
     const { wrapper } = await mountTs('/admin/teaching-sessions');
     const btns = wrapper.findAll('button').filter((b) => ['链路', '详情'].includes(b.text()));
-    expect(btns.length).toBeGreaterThanOrEqual(2);
-    const label = btns.find((b) => b.text() === '链路')!;
+    expect(btns.some((b) => b.text() === '链路')).toBe(false);
     const detail = btns.find((b) => b.text() === '详情')!;
-    expect(label.attributes('title')).toContain('模型调用瀑布');
     expect(detail.attributes('title')).toContain('只读会话座舱');
     wrapper.unmount();
   });

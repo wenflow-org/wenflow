@@ -340,17 +340,12 @@
               </td>
               <td>
                 <!-- 操作列文字钮（原型 .tbl 操作列 btn--sm「详情/下线」形态，不用纯图标钮）；
-                     右对齐走共享 .mk-actions，与 mk-th--right 表头对齐 -->
+                     右对齐走共享 .mk-actions，与 mk-th--right 表头对齐。
+                     行内曾并列「链路」入口（执行日志按 sessionId 归组的模型调用瀑布），
+                     2026-10-19 用户拍板下线：链路是工程排查面，不是运营面——运营看这节课
+                     教得怎样（详情座舱：对话 / 阶段进度 / 产物），不看模型调用瀑布。
+                     需要链路时从执行日志页按会话查（该页保留归组能力），列表不再摆第二颗钮。 -->
                 <div class="mk-actions">
-                  <!-- 链路/详情都须有 id 守卫（2026-10-06 审核 #41）：id 缺失时 goTrace 会带空
-                       sessionId 跳执行日志的无效筛选态，与「详情」的 v-if="r.id" 对齐 -->
-                  <button
-                    v-if="r.id"
-                    type="button"
-                    class="mk-btn mk-btn--sm"
-                    title="链路：这次会话的模型调用瀑布（执行日志 · 按会话归组）"
-                    @click.stop="goTrace(r)"
-                  >链路</button>
                   <button
                     v-if="r.id"
                     type="button"
@@ -956,8 +951,10 @@ function closeDetail() {
   const q = { ...route.query }; delete q.session; void router.replace({ query: q })
 }
 
-/** 真实教学会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：轻量深链 = 学习者详情 / Trace 瀑布按 sessionId 归组 */
-const { goTrace, goConsole } = useSessionDrill(closeDetail)
+/** 真实教学会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：轻量深链 = 学习者详情 / 只读座舱。
+    链路（Trace 按 sessionId 归组）行内入口已下线（2026-10-19 用户拍板：工程排查面不进运营列表），
+    故这里不再取 goTrace。 */
+const { goConsole } = useSessionDrill(closeDetail)
 
 /* 状态映射统一走共享字典（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
 /* 状态徽章已上收共享单源 statusText.sessionStatusBadgeCls（收尾批 C10，import 别名 statusBadge——语义逐值等价迁移） */
