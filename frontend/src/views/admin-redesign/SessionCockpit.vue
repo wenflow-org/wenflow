@@ -266,7 +266,7 @@
         </section>
 
         <!-- 学习路径（Path 页签 = 路径内容本体，2026-10-12 拍板）：独立路径详情页已退役，
-             阶段手风琴/任务弹层/治理动作长在座舱这一页（PathJourneyPanel）。
+             路径内容（阶段全展开/任务弹层/治理动作）长在座舱这一页（PathJourneyPanel）。
              页签 meta 仍按会话侧 pathStatus 给「难度 / 预计 / 里程碑数」速读。 -->
         <section v-if="!isBlackbox && activeTab === 'path'" role="tabpanel" :id="`cp-tabpanel-path`" :aria-labelledby="`cp-tab-path`" class="mk-card">
           <div class="mk-card__head">
@@ -1881,7 +1881,7 @@ function stepMeta(st: StageKey) {
 const stageDoneCount = computed(() => stageFlow.reduce((n, st) => n + (stageDone(st as StageKey) ? 1 : 0), 0))
 
 /** 阶段推进卡的下游直达入口（2026-10-11 走查；2026-10-12 收敛）：
- *  Path 出口已撤——Path 页签自本拍板起就是路径内容本体（阶段手风琴/任务弹层/治理动作），
+ *  Path 出口已撤——Path 页签自本拍板起就是路径内容本体（阶段全展开/任务弹层/治理动作），
  *  stepper 的「Path」步点即唯一入口，再给一枚「查看学习路径」按钮是同目标双入口。
  *  只保留课堂会话出口：只在「真实 + 目标对话」给——这页的对象是 Goal 对话，课堂是另一个
  *  对象；课堂会话控制台上再给这条就是自指，虚拟会话的课堂本来就在本页。

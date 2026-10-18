@@ -531,8 +531,9 @@ describe('SessionCockpit 双模式', () => {
     const pane = wrapper.find('#cp-tabpanel-path');
     expect(pane.exists()).toBe(true);
     expect(pane.find('.mk-card__title').text()).toBe('关联学习路径');
-    // 面板内容体 = 阶段手风琴（默认展开当前阶段「作用域」，含阶段目标/核心概念）+ 治理动作；
-    // 「总体进度」与「技术细节」2026-10-12 用户拍板撤（各阶段头自带 N / M 任务，工程标识不进运营页面）
+    // 面板内容体 = 阶段全展开（2026-10-18 用户走查：运营要一眼看到信息，不接受点开一个
+    // 就把别的阶段收起）+ 治理动作；「总体进度」与「技术细节」2026-10-12 用户拍板撤
+    // （各阶段头自带 N / M 任务，工程标识不进运营页面）
     expect(pane.text()).not.toContain('总体进度');
     expect(pane.text()).not.toContain('技术细节');
     const stageTitles = pane.findAll('.pd-stage__title').map((s) => s.text());
@@ -544,9 +545,19 @@ describe('SessionCockpit 双模式', () => {
     expect(pane.text()).not.toContain('active');
     // --idle（压淡编号）只给未解锁：当前阶段与已完成阶段都不压
     expect(stageCards.map((s) => s.classes().includes('pd-stage--idle'))).toEqual([false, false, true]);
-    expect(pane.text()).toContain('目标掌握词法作用域');
+    // 全展开（2026-10-18）：三段的说明与任务行同时在场，不需要点开任何阶段
+    expect(pane.findAll('.pd-stage__body')).toHaveLength(3);
+    expect(pane.findAll('.pd-task').map((t) => t.find('.pd-task__title').text()))
+      .toEqual(['函数定义', '参数与返回值', '作用域练习', '闭包练习']);
+    expect(pane.text()).toContain('参数与返回值'); // M1 说明
+    expect(pane.text()).toContain('目标掌握词法作用域'); // M2 目标
+    expect(pane.text()).toContain('捕获与内存'); // M3 说明
     expect(pane.text()).toContain('核心概念：作用域');
     expect(pane.text()).toContain('2 / 2 任务'); // 阶段头自带完成数
+    // 手风琴已退役：阶段头是分区标题（div），没有 aria-expanded / 折叠箭头
+    expect(pane.find('.pd-stage__head').element.tagName).toBe('DIV');
+    expect(pane.find('.pd-stage__head').attributes('aria-expanded')).toBeUndefined();
+    expect(pane.find('.pd-stage__caret').exists()).toBe(false);
     // 旧出口退役：stepper 的 Path 步点即唯一入口，不再有「打开路径详情页」按钮
     expect(pane.text()).not.toContain('打开路径详情页');
     // 治理动作保留（真实能力：下线路径）

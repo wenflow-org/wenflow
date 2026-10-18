@@ -37,7 +37,7 @@
 /** 历史口径备查（原 PathDetail 详情页，2026-10-01 newui 原型落点）：
  *  - 「重规划」按钮原型有而管理侧无任何可达能力，按「宁缺勿假」未搬（2026-10-01 核查）；
  *  - 「导出」是原型假按钮，未搬。
- *  内容体（进度/阶段手风琴/任务弹层/重试生成/下线恢复）现居 PathJourneyPanel.vue。 */
+ *  内容体（阶段全展开/任务弹层/重试生成/下线恢复）现居 PathJourneyPanel.vue。 */
 import { onMounted, ref } from 'vue'
 import { subPage, openSubPage, closeSubPage } from './store'
 import { errMsg } from './live'
