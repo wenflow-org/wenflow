@@ -241,14 +241,14 @@
                 <td v-if="colVisible('target')" class="log-target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</td>
                 <td v-if="colVisible('result')"><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
                 <td v-if="colVisible('ip')" class="log-ip mono" :title="log.ip || ''">{{ ipText(log.ip) }}</td>
-                <td class="mk-th--right log-arrow" aria-hidden="true">▸</td>
+                <td class="mk-th--right log-arrow" aria-hidden="true"><span class="log-arrow__i">▸</span></td>
               </tr>
               <tr v-if="openId === log.id" class="log-payload-row">
                 <td :colspan="visibleAlCols">
                   <div :id="`audit-payload-${log.id}`" class="log-payload">
                     <div class="log-payload-meta">
                       <span>{{ log.method }} {{ log.path }} · HTTP {{ log.statusCode }}<template v-if="log.durationMs != null"> · {{ fmtMs(log.durationMs) }}</template></span>
-                      <span v-if="log.userAgent" class="log-ua" :title="log.userAgent">{{ log.userAgent }}</span>
+                      <span v-if="log.userAgent" class="log-ua" :title="log.userAgent"><span class="log-meta-sep" aria-hidden="true">·</span>{{ log.userAgent }}</span>
                     </div>
                     <div v-if="log.requestJson" class="log-section">
                       <span class="log-label">请求</span>
@@ -927,7 +927,7 @@ function exportCurrentPage() {
 .log-tr { cursor: pointer; }
 .log-tr--err { background: rgba(220, 38, 38, 0.04); }
 .log-tr--open td { background: var(--mk-blue-bg); }
-.log-tr--open .log-arrow { transform: rotate(90deg); }
+.log-tr--open .log-arrow__i { transform: rotate(90deg); }
 
 /* 展开的 payload 行：整行铺开，不参与行点击 */
 .log-payload-row { cursor: default; }
@@ -1093,8 +1093,11 @@ function exportCurrentPage() {
   max-width: 320px;
 }
 /* 展开指示：行末箭头，展开时旋转 90°。
-   箭头列显式定宽 + 居中 + overflow hidden：auto 布局下表头空列宽度随内容抖动，
-   大字号/旋转动画下字符可能溢出列边界压到相邻列（用户反馈展开后箭头与邻列视觉重叠） */
+   箭头列显式定宽 + 居中：auto 布局下表头空列宽度随内容抖动（用户反馈展开后箭头与邻列视觉重叠）。
+   2026-10-19 用户走查「旋转后大小不对了」：原先 rotate 直接挂在 <td> 上——格子是 36×41.4 的
+   非正方盒，rotate(90deg) 后外接盒变成 42.1×36（实测），箭头连背景一起横向撑出列 6px、纵向缩
+   5px，字形还因为绕格心而非自身中心旋转右移约 10px。改法：格子里放 1em 正方、字形居中的内层盒，
+   只转内层——正方盒绕自身中心旋转外接盒不变，字形中心也不动。 */
 .mk-table-scroll table th:last-child { width: 36px; }
 .log-arrow {
   display: block;
@@ -1102,22 +1105,42 @@ function exportCurrentPage() {
   max-width: 36px;
   min-width: 36px;
   margin-left: auto;
+  /* 水平内衬清零：mk-table 的 td 有 16px 左右内衬，36px 定宽格里内容盒只剩 4px，
+     比内容还窄的居中会退化成「贴内容盒左缘」（实测箭头偏列心右 4.25px）。 */
+  padding-left: 0;
+  padding-right: 0;
   text-align: center;
-  overflow: hidden;
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
+}
+.log-arrow__i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
   transition: transform 0.15s ease;
 }
 
 .log-payload { display: grid; gap: 8px; }
+/* 请求行与客户端一行读；2026-10-19 用户走查「文案位置不对」：原先 space-between 把 UA 甩到
+   块右缘（实测请求行止于 x=1211、UA 起于 x=1748，中间空 536px），悬在 1500px 宽的展开区右端
+   与它描述的请求行脱开。改左对齐顺排，长请求行 + 长 UA 时 UA 折到第二行，不撑破块。 */
 .log-payload-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   font-family: var(--mk-mono);
+}
+.log-meta-sep {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--mk-faint);
+  font-weight: 700;
 }
 .log-ua {
   white-space: nowrap;
