@@ -35,17 +35,8 @@ export function isProviderRetryable(errorMsg: string): boolean {
     || e.includes('does not contain valid json') || e.includes('response does not contain');
 }
 
-export function isPrismaErrorCode(error: unknown, code: string) {
-  return typeof error === 'object' && error !== null && asErrorLike(error).code === code;
-}
-
-export function isLeaseDatabaseBusyError(error: unknown) {
-  if (isPrismaErrorCode(error, 'P1008')) return true;
-  const code = typeof error === 'object' && error !== null ? String(asErrorLike(error).code || '') : '';
-  const message = error instanceof Error ? error.message : String(error || '');
-  return code === 'SQLITE_BUSY'
-    || /SQLITE_BUSY|database (?:is|table is) locked|timed out|timeout/i.test(message);
-}
+// #106：租约/DB_BUSY 判定单源化到 virtual-lab/lease-protocol，保留原导出名供既有调用方使用
+export { isPrismaErrorCode, isLeaseDatabaseBusyError } from '../virtual-lab/lease-protocol';
 
 export function sanitizeVisibleDialogue(text: string): string {
   if (!text) return '';
@@ -137,7 +128,10 @@ export function isAbortLikeLearnError(error: unknown): boolean {
 
 /** 上游突发不可用的网关 category（预算耗尽会继承最后一次真实失败的 category）。 */
 const TRANSIENT_UPSTREAM_CATEGORIES = new Set(['network', 'provider_timeout', 'provider_http', 'rate_limit', 'quota']);
-const TRANSIENT_UPSTREAM_MESSAGE_RE = /retry budget exhausted|upstream_5\d\d|\b50[234]\b|\b529\b|\b429\b|provider_timeout|timed out|timeout|fetch failed|socket hang up|econnreset|rate.?limit|insufficient quota|network error/i;
+/** 文案兜底（category 被包装丢失时用）。2026-10-13 夜跑补：上游 404「Model ... is not supported by
+ *  any configured account in this group」（type=model_not_found）的语义是**账号池此刻没有可用账号
+ *  服务该模型**——容量轮换突发，不是「模型不存在」；遥测实证 53 次全 retryable=false 直落终局 failed。 */
+const TRANSIENT_UPSTREAM_MESSAGE_RE = /retry budget exhausted|upstream_5\d\d|\b50[234]\b|\b529\b|\b429\b|provider_timeout|timed out|timeout|fetch failed|socket hang up|econnreset|rate.?limit|insufficient quota|network error|not supported by any configured account/i;
 
 /**
  * 「上游突发不可用」类错误（**会话级**判定，2026-09-23 四学段测试 I-1）。

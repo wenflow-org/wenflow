@@ -1,9 +1,13 @@
 // 模拟协调器 - 模块级常量（自 simulation.coordinator.ts 抽离，行为保持不变）
 
+// #106：租约 TTL/续租/退避单源化到 virtual-lab/lease-protocol（与黑盒命令租约同一份值）
+export {
+  VIRTUAL_SESSION_LEASE_TTL_MS as ASSISTED_SESSION_LEASE_MS,
+  VIRTUAL_SESSION_LEASE_RENEW_MS as ASSISTED_SESSION_LEASE_RENEW_MS,
+  LEASE_RETRY_DELAYS_MS,
+} from '../virtual-lab/lease-protocol';
+
 export const COORDINATOR_ID = 'simulation-agent';
-export const ASSISTED_SESSION_LEASE_MS = 10 * 60 * 1000;
-export const ASSISTED_SESSION_LEASE_RENEW_MS = 2 * 60 * 1000;
-export const LEASE_RETRY_DELAYS_MS = [25, 50, 100];
 export const LEARN_UPSTREAM_RETRY_ATTEMPTS = 8;
 export const LEARN_UPSTREAM_RETRY_DELAY_MS = 2000;
 /** 一节课的课时预算：超过仍未双方收束则显式失败（可重启恢复），不允许无限拖堂 */

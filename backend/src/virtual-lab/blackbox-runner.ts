@@ -21,6 +21,14 @@ import type {
 } from './contracts'
 import { PlatformUserAdapter } from './platform-user-adapter'
 import { assertBlackboxSessionMode, VirtualSessionModeError } from './session-mode'
+// #106：租约 TTL/续租/退避与 DB_BUSY 判定与 assisted 会话租约共用同一份定义
+import {
+  VIRTUAL_SESSION_LEASE_TTL_MS,
+  VIRTUAL_SESSION_LEASE_RENEW_MS,
+  LEASE_RETRY_DELAYS_MS,
+  isPrismaErrorCode,
+  isLeaseDatabaseBusyError,
+} from './lease-protocol'
 import { resolveStorySessionDemand } from './story-demand'
 import {
   executeSkill,
@@ -98,22 +106,17 @@ function deepValue(value: Record<string, unknown>, path: string[]): unknown {
 }
 
 const TERMINAL_SESSION_STATUSES = new Set(['completed', 'failed', 'abandoned'])
-const COMMAND_LEASE_MS = 10 * 60 * 1000
-const COMMAND_LEASE_RENEW_MS = 2 * 60 * 1000
+const COMMAND_LEASE_MS = VIRTUAL_SESSION_LEASE_TTL_MS
+const COMMAND_LEASE_RENEW_MS = VIRTUAL_SESSION_LEASE_RENEW_MS
 // 崩溃残留命令自愈阈值（报告 #39）：processing 命令无平台回执且静默超过该时长，视为持有进程已死亡
 // （命令租约 TTL=10min，能进入 barrier 逻辑即代表旧租约已过期），允许后续命令将其命令级落 failed 放行
 const CRASH_STALE_COMMAND_MS = (() => {
   const raw = Number(process.env.BLACKBOX_STALE_COMMAND_MS)
   return Number.isFinite(raw) && raw > 0 ? raw : 10 * 60 * 1000
 })()
-const LEASE_RETRY_DELAYS_MS = [25, 50, 100]
-/** 模拟器 LLM 调用重试次数（对齐 quick-learn 3-strike 语义：瞬态失败/空回复可重试） */
+/** 模拟器 LLM 调用重试次数（3-strike：瞬态失败/空回复可重试） */
 const BLACKBOX_SIMULATOR_RETRY_ATTEMPTS = 3
 const BLACKBOX_SIMULATOR_RETRY_DELAY_MS = 750
-
-function isPrismaErrorCode(error: unknown, code: string) {
-  return typeof error === 'object' && error !== null && asErrorLike(error).code === code
-}
 
 /**
  * LLM/Provider 瞬时失败识别（黑盒可恢复失败判定）：
@@ -124,14 +127,6 @@ function isTransientLlMFailure(error: unknown): boolean {
   const message = String(asErrorLike(error).message || error || '').toLowerCase()
   if (!message.trim()) return true
   return /structured_output_invalid|invalid chat completion|finish_reason|empty content|api request canceled|fetch failed|timeout|timed out|econnreset|socket|network|rate.?limit|\b429\b|\b5\d\d\b|does not contain valid json|invalid json response|response does not contain|response is empty|missing reply|missing learnerstate/i.test(message)
-}
-
-function isLeaseDatabaseBusyError(error: unknown) {
-  if (isPrismaErrorCode(error, 'P1008')) return true
-  const code = typeof error === 'object' && error !== null ? String(asErrorLike(error).code || '') : ''
-  const message = error instanceof Error ? error.message : String(error || '')
-  return code === 'SQLITE_BUSY'
-    || /SQLITE_BUSY|database (?:is|table is) locked|timed out|timeout/i.test(message)
 }
 
 type PendingProjectionReceipt = {
@@ -2769,7 +2764,7 @@ export class BlackboxVirtualLearnerRunner {
   }
 
   /**
-   * 模拟器 LLM 调用重试（S1，对齐 quick-learn 3-strike 语义）：
+   * 模拟器 LLM 调用重试（S1，3-strike 语义）：
    * 瞬态 provider 失败（网络/超时/限流/5xx）与「输出缺 reply」的语义失败最多重试
    * BLACKBOX_SIMULATOR_RETRY_ATTEMPTS 次（指数退避）；耗尽后落 degraded 标记并明确失败
    * （不再单次失败即报废整场实验）。
