@@ -1,10 +1,10 @@
 <template>
-  <!-- 从卡派生虚拟学习者（2026-10-16 用户拍板：卡库=身份池，卡是身份模板、虚拟学习者是由它派生的实例）。
-       面板：逐卡列出它的任务（故事池），勾中的任务随身份一起带走；一张卡派生出 1 个虚拟学习者。
+  <!-- 从卡创建虚拟学习者（2026-10-16 用户拍板：卡库=身份池，卡是身份模板、虚拟学习者是由它创建的实例）。
+       面板：逐卡列出它的任务（故事池），勾中的任务随身份一起带走；一张卡创建出 1 个虚拟学习者。
        部分失败不整体回滚——按 created/failed 分别汇报，与批量新建「投产半成不报成整单失败」同判例。 -->
   <Teleport v-if="open" to="body">
     <div class="mk-modal">
-      <div class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="从卡派生虚拟学习者">
+      <div class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="从卡创建虚拟学习者">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">创建虚拟学习者</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
@@ -12,7 +12,7 @@
 
         <div class="mk-modal__body">
           <p class="cdd-lead">
-            已选 {{ groups.length }} 张身份卡 · 每张卡按挑中的任务派生出 1 个虚拟学习者，卡本身留在卡库，可再派生
+            已选 {{ groups.length }} 张身份卡 · 每张卡按挑中的任务创建 1 个虚拟学习者，卡本身留在卡库，可再创建
           </p>
 
           <MkLoading v-if="loading" text="读取任务中…" min />
@@ -32,7 +32,7 @@
                 <strong class="cdd-group__name">{{ g.name }}</strong>
                 <span class="cdd-group__meta">{{ pickedCount(g.profileId) }} / {{ g.tasks.length }} 个任务</span>
               </div>
-              <p v-if="!g.tasks.length" class="mk-empty--line">这张身份卡没有任务，派不出可运行的虚拟学习者。</p>
+              <p v-if="!g.tasks.length" class="mk-empty--line">这张身份卡没有任务，创建不出可运行的虚拟学习者。</p>
               <ul v-else class="cdd-tasks">
                 <li v-for="t in g.tasks" :key="t.id" class="cdd-task">
                   <label class="mk-field mk-field--switch cdd-task__pick">
@@ -58,7 +58,7 @@
             </label>
 
             <div v-if="failed.length" class="cdd-failed" role="alert">
-              <strong>有 {{ failed.length }} 张卡没派生成功</strong>
+              <strong>有 {{ failed.length }} 张卡没创建成功</strong>
               <ul>
                 <li v-for="f in failed" :key="f.profileId">{{ f.name }}：{{ f.reason }}</li>
               </ul>
@@ -84,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-/** 卡→虚拟学习者派生面板。父组件经 ref 调 open(profileIds) 打开；成功创建后 emit('created', ...)。 */
+/** 卡→虚拟学习者创建面板。父组件经 ref 调 open(profileIds) 打开；成功创建后 emit('created', ...)。 */
 import { computed, onBeforeUnmount, ref } from 'vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
@@ -108,7 +108,7 @@ const note = ref('')
 /** profileId → 勾中的任务 id（默认全选：一张卡的任务通常都要跑，取消个别才是少数派操作） */
 const picked = ref<Record<string, string[]>>({})
 
-/** 至少留了 1 个任务的卡才会被派生（0 任务的卡后端也会拒，挡在前面省一轮往返） */
+/** 至少留了 1 个任务的卡才会被创建（0 任务的卡后端也会拒，挡在前面省一轮往返） */
 const derivable = computed(() => groups.value.filter((g) => pickedCount(g.profileId) > 0))
 
 function isPicked(profileId: string, taskId: string): boolean {
@@ -132,7 +132,7 @@ async function load() {
     const d = (res.data?.data ?? res.data) as { groups: TaskGroup[] }
     const next = d?.groups ?? []
     groups.value = next
-    // 勾选态按新任务清单重建（重试后任务可能变过，保留旧勾选会派生出对不上的任务）
+    // 勾选态按新任务清单重建（重试后任务可能变过，保留旧勾选会创建出对不上的任务）
     const map: Record<string, string[]> = {}
     for (const g of next) map[g.profileId] = g.tasks.map((t) => t.id)
     picked.value = map
@@ -188,7 +188,7 @@ async function submit() {
       window.removeEventListener('keydown', onKey)
     }
   } catch (e) {
-    toast.error(errMsg(e) || '派生失败')
+    toast.error(errMsg(e) || '创建失败')
   } finally {
     busy.value = false
   }

@@ -114,8 +114,8 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     const w = await mountPage();
     const labels = w.findAll('.mk-kpi .mk-kpi__label').map((x) => x.text());
     // 卡总数不再立卡：它恒等于下方卡墙行数，卡头「共 N 张」已自报（计数单源在列表）
-    // 「已派生实例」2026-10-16 立卡：卡=身份模板后，池里有多少条已派生出虚拟学习者，列表说不出来
-    expect(labels).toEqual(['预置卡', '自建卡', '已派生实例']);
+    // 「已创建实例」2026-10-16 立卡（2026-10-19 随动作文案统一改名）：卡=身份模板后，池里有多少条已创建出虚拟学习者，列表说不出来
+    expect(labels).toEqual(['预置卡', '自建卡', '已创建实例']);
     expect(w.find('.mk-card__meta').text()).toContain('共 2 张');
     const wall = w.findAll('.vlc-card');
     expect(wall).toHaveLength(2);
@@ -124,7 +124,7 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     expect(wall[1].text()).toContain('预置');
   });
 
-  it('身份池快筛（只看未派生的身份卡）与派生实例标记', async () => {
+  it('身份池快筛（只看还没创建过的身份卡）与实例来源标记', async () => {
     cardsIndexMock.mockImplementation(async () => ({
       data: {
         data: {
@@ -137,11 +137,11 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
       },
     }));
     const w = await mountPage();
-    // 派生实例在卡面带来源行（不分标记的话身份池与实例混成一锅）
+    // 实例在卡面带来源行（不分标记的话身份池与实例混成一锅）
     expect(w.findAll('.vlc-card__derived')).toHaveLength(1);
-    expect(w.find('.vlc-card__derived').text()).toContain('派生自 高一学生小陈');
+    expect(w.find('.vlc-card__derived').text()).toContain('源自 高一学生小陈');
     expect(w.find('.mk-kpi').text()).toBeTruthy();
-    // 快筛收窄到未派生的身份卡
+    // 快筛收窄到还没创建过的身份卡
     const pill = w.findAll('.mk-pill').find((p) => p.text().includes('只看身份池'))!;
     expect(pill.text()).toContain('1');
     await pill.trigger('click');
@@ -164,17 +164,17 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     const w = await mountPage();
     await w.findAll('.mk-pill').find((p) => p.text().includes('只看身份池'))!.trigger('click');
     expect(w.findAll('.vlc-card')).toHaveLength(0);
-    expect(w.text()).toContain('身份池里的卡都已派生出虚拟学习者');
+    expect(w.text()).toContain('身份池里的卡都已创建出虚拟学习者');
     expect(w.text()).not.toContain('卡库还是空的');
     w.unmount();
   });
 
   /** 2026-10-18 用户走查「从卡库想创建一个虚拟学习者，为什么没有流程」：
-   *  此前唯一入口是卡头那个无标签勾选框，运营读作没有流程——卡面补一枚「派生」动作。 */
-  it('卡面「派生」：单卡一键进同一派生面板，且不误触进卡详情', async () => {
+   *  此前唯一入口是卡头那个无标签勾选框，运营读作没有流程——卡面补一枚动作（2026-10-19 文案统一为「创建学习者」）。 */
+  it('卡面「创建学习者」：单卡一键进同一创建面板，且不误触进卡详情', async () => {
     const w = await mountPage();
     const derive = w.findAll('.vlc-card__derive');
-    expect(derive, '卡面缺派生入口').toHaveLength(2);
+    expect(derive, '卡面缺创建入口').toHaveLength(2);
 
     await derive[0].trigger('click');
     await flushPromises();
@@ -187,7 +187,7 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     w.unmount();
   });
 
-  it('选角 → 勾任务 → 派生虚拟学习者（卡=身份模板，卡留在库里）', async () => {
+  it('选角 → 勾任务 → 创建虚拟学习者（卡=身份模板，卡留在库里）', async () => {
     const w = await mountPage();
     const picks = w.findAll('.vlc-card__pick input');
     expect(picks, '卡面缺少选角勾选框').toHaveLength(2);
@@ -208,7 +208,7 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     // 默认全选（一张卡的任务通常都要跑）
     expect(tasks.every((t) => t.checked)).toBe(true);
 
-    // 取消 p2 的唯一任务 → 该卡不参与派生（面板里说清剩余数量）
+    // 取消 p2 的唯一任务 → 该卡不参与创建（面板里说清剩余数量）
     tasks[1].checked = false;
     tasks[1].dispatchEvent(new Event('change'));
     await nextTick();
@@ -219,13 +219,13 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
 
     expect(cardsCloneMock).toHaveBeenCalledWith([{ profileId: 'p1', storyIds: ['story-1'] }], undefined);
     expect(toast.success).toHaveBeenCalledWith('已创建 1 个虚拟学习者');
-    // 派生出实例后清勾选并回刷卡墙
+    // 创建出实例后清勾选并回刷卡墙
     expect(w.find('.mk-batchbar').exists()).toBe(false);
     expect(cardsIndexMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     w.unmount();
   });
 
-  it('派生部分失败：逐卡点名原因留在面板内，成功的照常回刷卡墙', async () => {
+  it('创建部分失败：逐卡点名原因留在面板内，成功的照常回刷卡墙', async () => {
     cardsCloneMock.mockImplementationOnce(async () => ({
       data: { data: { created: [{ profileId: 'new-p1', userId: 'u', name: '高一学生小陈', cardKey: 'k', taskCount: 1 }], failed: [{ profileId: 'p2', reason: '未勾选任何任务' }] } },
     }));

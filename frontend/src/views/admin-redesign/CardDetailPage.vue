@@ -13,19 +13,20 @@
       <template #actions>
         <button type="button" class="mk-btn" :disabled="loading" @click="load">{{ loading ? '刷新中…' : '刷新' }}</button>
         <!-- 「从这张卡造一个」的落点（2026-10-18 用户走查：卡库侧只有卡头勾选框，读作没有流程）：
-             身份卡可反复派生、不消耗卡本身，故本页主操作是派生，切画像降为次按钮 -->
+             身份卡可反复创建、不消耗卡本身，故本页主操作是创建，切画像降为次按钮。
+             文案 2026-10-19 与卡墙同批统一：原「派生虚拟学习者」是本页独有的说法。 -->
         <button type="button" class="mk-btn" @click="goLearner">到虚拟学习者 →</button>
         <button
           type="button"
           class="mk-btn mk-btn--primary"
-          title="从这张身份卡创建 1 个虚拟学习者，下一步挑要带走的故事。卡留在卡库，可再派生"
+          title="从这张身份卡创建 1 个虚拟学习者，下一步挑要带走的故事。卡留在卡库，可再创建"
           @click="openDerive"
-        >派生虚拟学习者 →</button>
+        >创建虚拟学习者</button>
       </template>
     </MkDetailHero>
 
-    <!-- 派生来源（2026-10-16 卡=身份模板）：本卡是从另一张身份卡派生出来的实例。
-         给回模板的入口——运营常要从同一张身份卡再派生一个实例。 -->
+    <!-- 来源（2026-10-16 卡=身份模板）：本卡是从另一张身份卡创建出来的实例。
+         给回模板的入口——运营常要从同一张身份卡再创建一个实例。 -->
     <section v-if="d.derivedFrom" class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">身份来源</h3>
@@ -37,7 +38,7 @@
             class="mk-link"
             :title="`打开身份卡「${d.derivedFrom.name}」`"
             @click.prevent="goTemplate(d.derivedFrom!.profileId)"
-          >{{ d.derivedFrom.name }}</a>」派生，任务取自该身份卡的故事池。派生不消耗身份卡，可重复派生。
+          >{{ d.derivedFrom.name }}</a>」创建，任务取自该身份卡的故事池。创建不消耗身份卡，可重复创建。
         </p>
       </div>
     </section>

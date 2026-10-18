@@ -24,7 +24,7 @@ const { cardsTasksMock, cardsCloneMock } = vi.hoisted(() => ({ cardsTasksMock: v
 
 vi.mock('@/api/adminApi', () => ({
   adminVirtualLearnersApi: {
-    /* 派生面板（CardDeriveDialog）走这两个端点 */
+    /* 创建面板（CardDeriveDialog）走这两个端点 */
     cardsTasks: cardsTasksMock,
     cardsClone: cardsCloneMock,
     cardsDetail: vi.fn(async () => ({
@@ -66,17 +66,17 @@ describe('CardDetailPage（卡详情二级页）', () => {
     expect(setSubPageLabelMock).toHaveBeenCalledWith('高一学生小陈');
   });
 
-  /** 2026-10-18 用户走查：卡库侧此前只有卡头勾选框能到派生面板，读作没有流程。
+  /** 2026-10-18 用户走查：卡库侧此前只有卡头勾选框能到创建面板，读作没有流程。
    *  卡详情页是「我想从这张卡造一个」最自然的落点，hero 加主操作。 */
-  it('hero 主操作「派生虚拟学习者 →」：就地开派生面板（单卡），不到别的页面', async () => {
+  it('hero 主操作「创建虚拟学习者」：就地开创建面板（单卡），不到别的页面', async () => {
     cardsTasksMock.mockResolvedValueOnce({
       data: { data: { groups: [{ profileId: 'p1', name: '高一学生小陈', tasks: [{ id: 'story-1', title: '函数补差', opening: null }] }] } },
     } as never);
     const w = mount(CardDetailPage);
     await flushPromises();
 
-    const act = w.findAll('button').find((b) => b.text().includes('派生虚拟学习者'))!;
-    expect(act, 'hero 缺派生主操作').toBeTruthy();
+    const act = w.findAll('button').find((b) => b.text().includes('创建虚拟学习者'))!;
+    expect(act, 'hero 缺创建主操作').toBeTruthy();
     // 主操作是它，切画像降为次按钮
     expect(act.classes()).toContain('mk-btn--primary');
     expect(w.findAll('button').find((b) => b.text().includes('到虚拟学习者'))!.classes()).not.toContain('mk-btn--primary');
