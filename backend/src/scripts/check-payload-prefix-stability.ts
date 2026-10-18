@@ -7,6 +7,11 @@
  * 判定：每条声明 skill 取最近 N 条 `prompt_call_logs.userPayload`（JSON 对象），
  * 若**最新一条**的首键不在声明内 → 记为违规；历史行仅统计占比（迁移期噪声）。
  *
+ * 遥测瘦身兼容（2026-10-15）：成功行超过 4K 的 userPayload 会被 telemetry-writer 的
+ * `slimPromptCallRow` 换成 `{__slim,bytes,sha256,head}` 标记（存储优化）——标记本身不是
+ * 发给模型的那份载荷，首键会恒为 `__slim` ⇒ 护栏全线误报。故遇到标记时从 `head`
+ * （原 JSON 的前 400 字符）还原首键，护栏继续盯真实载荷的稳定前缀。
+ *
  * 用法：
  *   npm run prompts:payload-prefix:check               # 报告模式（默认，退出码恒 0）
  *   npm run prompts:payload-prefix:check -- --strict   # 严格模式：存在违规即退出码 1
@@ -18,12 +23,22 @@ import { PAYLOAD_STABILITY, isFirstKeyStable, validateStabilityMap } from '../se
 
 const TAKE = Number(process.env.PAYLOAD_PREFIX_TAKE || 30);
 
-function firstKeyOf(userPayload: unknown): string | undefined {
+/** 从 JSON 文本开头取首个键名（供瘦身标记的 head 用：head 是被截断的 JSON，不能整体 parse）。 */
+function firstKeyOfJsonHead(head: string): string | undefined {
+  const m = head.match(/^\s*\{\s*"((?:[^"\\]|\\.)*)"/);
+  return m ? m[1].replace(/\\(.)/g, '$1') : undefined;
+}
+
+export function firstKeyOf(userPayload: unknown): string | undefined {
   if (typeof userPayload !== 'string' || !userPayload.trim().startsWith('{')) return undefined;
   try {
     const parsed = JSON.parse(userPayload);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
-    return Object.keys(parsed)[0];
+    const record = parsed as Record<string, unknown>;
+    if (record.__slim === true) {
+      return typeof record.head === 'string' ? firstKeyOfJsonHead(record.head) : undefined;
+    }
+    return Object.keys(record)[0];
   } catch {
     return undefined;
   }

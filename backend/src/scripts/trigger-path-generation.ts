@@ -18,7 +18,7 @@ const POLL_TIMEOUT_MS = Number(process.env.TRIGGER_POLL_TIMEOUT_MS || 300_000);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function waitForStagePhase(pathId: string): Promise<void> {
+async function waitForStagePhase(pathId: string): Promise<boolean> {
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   let last = '';
   while (Date.now() < deadline) {
@@ -33,10 +33,11 @@ async function waitForStagePhase(pathId: string): Promise<void> {
       console.log(`[stage] ${state}`);
       last = state;
     }
-    if (tpl._generation?.kcMapping) return;
+    if (tpl._generation?.kcMapping) return true;
     await sleep(5000);
   }
   console.log(`[stage] 等待超时（${POLL_TIMEOUT_MS / 1000}s），最后状态: ${last}`);
+  return false; // 审计 2026-10-12：超时必须上报失败，不能静默当成功（原实现 return void）
 }
 
 async function main() {
@@ -50,9 +51,10 @@ async function main() {
   });
   const pathId = result?.internal?.core?.learningPath?.id;
   console.log(`[trigger] 核心生成完成 pathId=${pathId} name=${result?.internal?.core?.learningPath?.name} 耗时=${((Date.now() - started) / 1000).toFixed(1)}s`);
-  if (!pathId) return;
+  if (!pathId) throw new Error('核心生成未产出 pathId（生成失败，勿静默当成功）');
 
-  await waitForStagePhase(pathId);
+  const stageOk = await waitForStagePhase(pathId);
+  if (!stageOk) throw new Error('stage/kc-mapper 未在超时内完成（kcMapping 未落库）');
   await backgroundTaskTracker.drain().catch(() => undefined);
 
   const row = await prisma.learning_paths.findUnique({ where: { id: pathId }, select: { aiPromptTemplate: true } });

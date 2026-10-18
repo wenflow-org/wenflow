@@ -8,14 +8,19 @@
  *      逐字节相同）——只对「侧表已有行」的完结会话置 NULL（读路径双读就绪，侧表权威）。
  *
  * 用法：
- *   ts-node --transpile-only src/scripts/teaching-storage-reclaim.ts --dry-run
- *   ts-node --transpile-only src/scripts/teaching-storage-reclaim.ts
+ *   ts-node --transpile-only src/scripts/teaching-storage-reclaim.ts              # 默认 dry-run（只统计）
+ *   ts-node --transpile-only src/scripts/teaching-storage-reclaim.ts --apply      # 真写（先 VACUUM INTO 备份）
  *
- * 注意：旧代码进程若仍在跑，其新写入的 debug 行会在重启后再次出现——重启后可低成本重跑本脚本。
+ * 审计 2026-10-12：默认改为 dry-run（旧实现默认真写、无备份——裸跑一次就不可逆改数万行）。
+ * --apply 时先落一致性备份到 doc/local/runs/<date>/reclaim-backup-<ts>.db。
  */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { prisma } from '../config/database';
 
-const DRY_RUN = process.argv.includes('--dry-run');
+const APPLY = process.argv.includes('--apply');
+const DRY_RUN = !APPLY; // 默认 dry-run；仅 --apply 真写
 const BATCH = 500;
 
 async function main(): Promise<void> {
@@ -36,6 +41,19 @@ async function main(): Promise<void> {
   );
   const columnBytesBefore = columnRows.reduce((sum, row) => sum + Number(row.n || 0), 0);
   console.log(`[reclaim] 扫描完成（${Math.round((Date.now() - scanStart) / 1000)}s）：debug 信封 ${targets.length} 行 / ${(debugBytesBefore / 1e9).toFixed(2)}GB，完结双存列 ${columnRows.length} 行 / ${(columnBytesBefore / 1e9).toFixed(2)}GB，dryRun=${DRY_RUN}`);
+
+  // --apply 前置：一致性备份（审计 2026-10-12：旧实现默认真写且零备份）
+  if (!DRY_RUN && (targets.length || columnRows.length)) {
+    const d = new Date();
+    const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const outDir = path.join(ROOT, 'doc', 'local', 'runs', date);
+    fs.mkdirSync(outDir, { recursive: true });
+    const backupPath = path.join(outDir, `reclaim-backup-${Date.now()}.db`);
+    console.log(`[reclaim] 前置备份（VACUUM INTO）→ ${backupPath} …`);
+    await prisma.$executeRawUnsafe(`VACUUM INTO '${backupPath.replace(/\\/g, '/')}'`);
+    console.log('[reclaim] 备份完成');
+  }
 
   // ── 1) tsm debug 剥离（按 id 索引分批）───────────────────────────────────────
   let strippedRows = 0;

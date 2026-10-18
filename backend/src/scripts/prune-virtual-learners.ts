@@ -144,8 +144,10 @@ async function main() {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupPath = path.join(BACKUP_DIR, `dev.db.bak-${stamp}`);
-    fs.copyFileSync(DB_PATH, backupPath);
-    console.log(`已备份主库 → ${backupPath}`);
+    // 审计 2026-10-12：dev.db 跑 WAL（存在 .db-wal），copyFileSync 只拷主库会漏掉未 checkpoint 的
+    // 已提交事务 → 备份不一致。改用 VACUUM INTO 生成一致性快照（自动含 WAL 内容）。
+    await run(db, `VACUUM INTO '${backupPath.replace(/\\/g, '/')}'`);
+    console.log(`已备份主库（VACUUM INTO 一致快照）→ ${backupPath}`);
     await run(db, 'PRAGMA foreign_keys = ON');
     await cleanupOrphans(db);
     db.close();
