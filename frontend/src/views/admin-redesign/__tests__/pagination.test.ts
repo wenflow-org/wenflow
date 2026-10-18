@@ -83,6 +83,12 @@ describe('Pagination（mk-pagination 传统分页器）', () => {
     expect(w.text()).toContain('共 378 条');
   });
 
+  it('unit 可换：列表数的是「人」时直接写「位学习者」，不再另起一句解释', () => {
+    const w = mountPagination({ showTotal: true, unit: '位学习者' });
+    expect(w.text()).toContain('共 378 位学习者');
+    expect(w.text()).not.toContain('378 条');
+  });
+
   it('信息行不再复读「每页 S 条」（P3-28，设计评审 4.3-28：与右侧「S条/页」下拉同屏同事实，条数单源在下拉）', () => {
     const w = mountPagination();
     expect(w.text()).not.toContain('每页');

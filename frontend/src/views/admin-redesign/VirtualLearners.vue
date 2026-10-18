@@ -398,7 +398,7 @@
         v-model:pageSize="pageSize"
         :total="filtered.length"
         :showTotal="true"
-        note="行数为虚拟学习者数，「全部会话」为会话数，两者含义不同"
+        unit="位学习者"
       />
     </div>
 

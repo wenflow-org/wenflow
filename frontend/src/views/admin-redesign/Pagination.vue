@@ -3,11 +3,13 @@
     <!-- 信息行 = 原型 .pager__info 口径（newui pager()）：「共 N 条 · 第 P / T 页」恒显、
          muted 弱化色、tabular-nums，不再加粗当前页。showTotal 保留为兼容 prop（12 个页面在传），
          原「共 N 条」前缀开关已并入恒显口径。
+         2026-10-18：单位可换（默认「条」）——列表数的是「人」时直接写「位学习者」，
+         不再另起一句解释「行数=学习者数、全部会话=会话数」。
          P3-28（设计评审）：撤「每页 S 条」段——与右侧「S条/页」下拉同屏复读同事实，
          条数口径单源留在下拉（aria-label 已有「每页条数」）。 -->
     <span class="pagination-left">
       <span class="mk-pagination__total">
-        共 {{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页
+        共 {{ total }} {{ unit }} · 第 {{ page }} / {{ totalPages }} 页
       </span>
       <!-- 口径说明（可选，如「在当前页内搜索」「全部活跃 93 条」）：与 total 同组，弱化补充，不占按钮区。
            2026-10-18 用户走查「这类文案」：只放「这个数是什么范围」，不放系统怎么把数据拼起来的自述 -->
@@ -75,6 +77,8 @@ const props = withDefaults(
     /** 固定每页行数场景（如字段路由表 15 行/页）：隐藏每页条数下拉，页码器形态不变 */
     hideSize?: boolean
     sizes?: number[]
+    /** 总数单位（默认「条」）：列表数的是「人」时传「位学习者」，把口径放进计数本身 */
+    unit?: string
     /** 附加口径说明（如「在当前页内搜索」）：显示在总数右侧，弱化文本；装配自述（谁并入谁）不属于此列 */
     note?: string
   }>(),
@@ -83,6 +87,7 @@ const props = withDefaults(
     showTotal: false,
     hideSize: false,
     sizes: () => [15, 30, 50, 100],
+    unit: '条',
     note: ''
   }
 )

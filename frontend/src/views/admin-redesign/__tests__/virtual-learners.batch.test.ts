@@ -326,8 +326,9 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).toContain('人为终止 1');
     expect(w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '系统失败率')?.attributes('title')).toContain('两类合计占 40%');
     expect(w.text()).toContain('已完成 6 / 全部会话 10');
-    // 表格分页行必须声明自己数的是学习者，与上方会话口径区分
-    expect(w.text()).toContain('行数为虚拟学习者数');
+    // 表格分页的计数单位直接写「位学习者」，不再用一句「行数=学习者数」解释口径
+    expect(w.find('.mk-pagination__total').text()).toContain('位学习者');
+    expect(w.text()).not.toContain('行数为虚拟学习者数');
   });
 
   it('无会话数据时完成率/系统失败率显示 0%（共享 KPI 卡常驻）', async () => {
