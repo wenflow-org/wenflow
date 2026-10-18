@@ -126,8 +126,10 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(w.find('.mk-card__head input.mk-filter__input').exists()).toBe(true);
     expect(w.find('.ds-toggle').exists()).toBe(false);
     expect(w.find('.mk-cols').exists()).toBe(true);
-    // 卡头 meta 只留分页器没有的事实（口径开关；命中数/总数交分页器单源）
-    expect(w.text()).toContain('（真实）');
+    // 卡头 meta 只留分页器没有的事实（截断窗口）；口径不再复读（2026-10-19 用户走查
+    // 「这个小文案不要」：真实/测试由页头开关自明，embedded 态宿主页头承载）
+    expect(w.text()).not.toContain('（真实）');
+    expect(w.find('.mk-card--fill .mk-card__meta').exists()).toBe(false);
 
     // 表头：路径/用户/状态/进度/更新/操作——「主题」独立列已退役（P2-6 2026-10-04 全站评审：
     // 91% 行与路径列同文），subject≠title 时作路径列副行

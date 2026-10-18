@@ -121,14 +121,12 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     // 2026-10-04 用户拍板：页头状态条整体退役——需关注 / 缺总结与焦点 chips 同源同数、
     // 异常与分布条「异常终态」段同源同数（同一数字不两处渲染）；总数与窗口截断口径并进卡头 meta
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
-    const meta = w.find('.mk-card__meta');
-    // 卡头 meta 只留分页器没有的事实（口径开关；命中数/总数交分页器单源）
-    expect(meta.text()).toContain('（真实）');
-    // 本用例 0 行未触上限：不出现截断口径（触限时 meta 追加「后端共 N 条，仅显示最近 1000 条」）
-    expect(meta.text()).not.toContain('仅显示最近');
-    // P1#4 兜底诚实化：后端未回 total（mock 空响应）时，meta title 不得声称全量
-    expect(meta.attributes('title')).toContain('总数未知');
-    expect(meta.attributes('title')).not.toContain('全量口径');
+    // 口径不在卡头复读（2026-10-19 用户走查「这个小文案不要」）：口径状态的唯一展示点
+    // 是页头那颗真实/测试开关
+    expect(w.find('.ds-toggle .mk-pill--active').text()).toBe('真实');
+    // 本用例 0 行未触上限：连截断 meta 都不渲染（触限时才有「共 N 条 · 当前显示最近 1000 条」，
+    // 那是分页器没有的事实；未触限时窗口=全量，无需再报一遍）
+    expect(w.find('.mk-card--fill .mk-card__meta').exists()).toBe(false);
     // 计数升 KPI 后 chips 全部去计数（学习状态判例：KPI 孪生 pill 退为纯筛选开关）；
     // 0 行时异常 chip 不出现
     expect(w.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([

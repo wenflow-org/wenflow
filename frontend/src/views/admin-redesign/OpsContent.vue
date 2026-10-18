@@ -75,8 +75,10 @@
             storage-key="wf_paths_hidden_cols"
             v-model:hidden="hiddenCols"
           />
-          <span class="mk-card__meta" :title="includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'">
-            （{{ includeTest ? '测试' : '真实' }}）<template v-if="total > rows.length"> · 共 {{ total }} 条，当前显示最近 {{ rows.length }} 条</template>
+          <!-- 卡头 meta 只放分页器没有的事实：口径（真实/测试）由页头那个开关自明，
+               这里再写一遍「（真实）」是同一状态复读（2026-10-19 用户走查「这个小文案不要」） -->
+          <span v-if="total > rows.length" class="mk-card__meta" title="后端一次下发的条数有上限，超出的未载入">
+            共 {{ total }} 条 · 当前显示最近 {{ rows.length }} 条
           </span>
         </div>
       </div>

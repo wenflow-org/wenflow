@@ -108,7 +108,9 @@
               :default-hidden="['constraints']"
               v-model:hidden="gcHiddenCols"
             />
-            <span class="mk-card__meta" :title="`${includeTest ? '含虚拟学习者与测试账号，行内带标记' : '仅真实用户'}${truncated ? `，排序与搜索仅覆盖最近 ${LIST_LIMIT} 条` : ''}`">（{{ includeTest ? '测试' : '真实' }}）<template v-if="truncated"> · 共 {{ listTotal }} 条，当前显示最近 {{ rows.length }} 条</template></span>
+            <!-- 卡头 meta 只放分页器没有的事实：口径（真实/测试）由页头那个开关自明，
+                 这里再写一遍「（真实）」是同一状态复读（2026-10-19 用户走查「这个小文案不要」） -->
+            <span v-if="truncated" class="mk-card__meta" :title="`排序与搜索仅覆盖最近 ${LIST_LIMIT} 条`">共 {{ listTotal }} 条 · 当前显示最近 {{ rows.length }} 条</span>
           </div>
         </div>
 

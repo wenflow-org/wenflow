@@ -100,6 +100,14 @@ function findBtn(wrapper: ReturnType<typeof mount>, text: string) {
   return b;
 }
 
+/** 当前口径 = 页头那颗开关的选中 pill。2026-10-19 起卡头 meta 不再复读「（真实）/（测试）」，
+    口径状态的唯一展示点就是控件自身（用户走查「这个小文案不要」）。 */
+function scopePill(wrapper: ReturnType<typeof mount>): string {
+  const active = wrapper.find('.ds-toggle .mk-pill--active');
+  if (!active.exists()) throw new Error('数据视角开关的选中项未找到');
+  return active.text();
+}
+
 function tsItem(id: string, over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id,
@@ -170,7 +178,7 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
     await nextTick();
     await flushPromises();
     expect(tsListMock).toHaveBeenCalledWith({ limit: 1000, includeTest: false });
-    expect(wrapper.text()).toContain('（真实）');
+    expect(scopePill(wrapper)).toBe('真实');
     expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
     wrapper.unmount();
   });
@@ -197,7 +205,7 @@ describe('TeachingSessions 数据隔离切换（A3）', () => {
     await flushPromises();
     await nextTick();
     expect(tsListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true, testOnly: true });
-    expect(wrapper.text()).toContain('（测试）');
+    expect(scopePill(wrapper)).toBe('测试');
     const tags = wrapper.findAll('.mk-badge--sm');
     expect(tags).toHaveLength(2);
     expect(tags[0].text()).toBe('虚拟');
@@ -216,7 +224,7 @@ describe('GoalConversations 数据隔离切换（A3）', () => {
     await flushPromises();
     await flushPromises();
     expect(gcListMock).toHaveBeenCalledWith({ limit: 1000, includeTest: false });
-    expect(wrapper.text()).toContain('（真实）');
+    expect(scopePill(wrapper)).toBe('真实');
     expect(wrapper.find('.mk-badge--virtual').exists()).toBe(false);
 
     gcListMock.mockResolvedValue({
@@ -238,7 +246,7 @@ describe('GoalConversations 数据隔离切换（A3）', () => {
     await flushPromises();
     await nextTick();
     expect(gcListMock).toHaveBeenLastCalledWith({ limit: 1000, includeTest: true, testOnly: true });
-    expect(wrapper.text()).toContain('（测试）');
+    expect(scopePill(wrapper)).toBe('测试');
     const tag = wrapper.find('.mk-badge--virtual');
     expect(tag.exists()).toBe(true);
     expect(tag.text()).toBe('虚拟');

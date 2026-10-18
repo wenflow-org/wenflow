@@ -72,7 +72,9 @@
           <span class="mk-card__head-right">
             <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
             <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 评论 / 任务" />
-            <span class="mk-card__meta" :title="includeTest ? '只看虚拟学习者与测试账号的反馈' : '只看真实用户的反馈'">（{{ includeTest ? '测试' : '真实' }}）{{ filtered.length }} / {{ rows.length }}</span>
+            <!-- 口径（真实/测试）由左侧开关自明，meta 只报「筛选命中 / 本页行数」这一个事实
+                 （2026-10-19 用户走查「这个小文案不要」删掉前置的（真实）复读） -->
+            <span class="mk-card__meta" title="筛选命中条数 / 已载入条数">命中 {{ filtered.length }} / {{ rows.length }} 条</span>
           </span>
         </div>
 
