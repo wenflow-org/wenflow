@@ -924,9 +924,10 @@ const verdictText = computed(() => {
 }
 .wf-notice__close:hover { opacity: 0.7; }
 
-/* 链路 / 会话视图切换 */
+/* 链路 / 会话视图切换（与筛选条同一行：不再留 10px 下边距，否则胶囊比右侧
+   排序/搜索高 6px，整条工具条读起来是错位的） */
 .wf-mode {
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }/* 链路概要卡 */
 /* 链路概要卡：KPI 格栅同族（原型 .kpi 231-234：标签 + 等宽数字 + faint 小字），
    单行等分格，`<b>` 走 emphasis 700 + tabular-nums */
@@ -947,14 +948,18 @@ const verdictText = computed(() => {
   gap: 2px;
   padding: 10px 22px;
   min-width: 96px;
+  /* 读数格吃满整条：此前固定内容宽 + 左对齐，1920 档右侧留下近千像素空白，
+     看起来像卡片画到一半断了。 */
+  flex: 1 1 auto;
   border-right: 1px solid var(--mk-line);
 }
 .wf-summary__item:last-child { border-right: none; }
 .wf-summary__item b { font-size: var(--mk-fs-emphasis); font-weight: 700; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
 .wf-summary__item span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .wf-summary__item--bad b { color: var(--mk-red); }
-/* 无 LLM 调用链路的替代说明（取代 Token / 成本 / 模型三格空读数）：与读数同栏居中 */
-.wf-summary__note { align-self: center; margin-left: 18px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+/* 无 LLM 调用链路的替代说明（取代 Token / 成本 / 模型三格空读数）：与读数同栏居中，
+   固定在读数格之后，不参与等分（读数格吃满其余宽度） */
+.wf-summary__note { align-self: center; flex: 0 0 auto; margin-left: 18px; margin-right: 18px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .wf-summary__models { flex: 1; align-items: flex-start; justify-content: center; min-width: 0; }
 .wf-summary__models b {
   font-size: var(--mk-fs-micro);
