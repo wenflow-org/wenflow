@@ -26,6 +26,7 @@ import {
   countProfiles,
   groupPathCountsByProfile,
 } from '../../services/virtual-lab/virtual-learner-profile.repo';
+import { deriveActiveRuns, deriveRunProgress } from '../../services/virtual-lab/virtual-run-progress';
 import {
   findSessionById,
   findSessionWithProfileAndUser,
@@ -1575,8 +1576,11 @@ router.get('/', async (req: Request, res) => {
     // 卡死口径与 reclaim 服务同源：管理员暂停的会话（teaching.paused）无写入是预期行为，
     // 不算卡死（否则「卡死 N」与回收 dryRun 清单不一致，且暂停会话会被误标）
     const staleByProfile = new Map<string, number>();
+    /* 逐会话口径：列表「进行中」列逐条标出哪一条运行会话无响应（与右侧「无响应」计数同源） */
+    const stalledSessionIds = new Set<string>();
     for (const s of staleSessions) {
       if (isTeachingPausedSession(s.stageResults)) continue;
+      stalledSessionIds.add(s.id);
       staleByProfile.set(s.virtualProfileId, (staleByProfile.get(s.virtualProfileId) ?? 0) + 1);
     }
     const staleTotal = staleCandidates.filter((s) => !isTeachingPausedSession(s.stageResults)).length;
@@ -1607,22 +1611,14 @@ router.get('/', async (req: Request, res) => {
       );
       const runningSessions = sessionSample.filter((s) => s.status === 'running' && !autopilotStoppedIds.has(s.id));
       const pausedSessions = sessionSample.filter((s) => s.status === 'running' && autopilotStoppedIds.has(s.id));
-      // 阶段进度（轴 B）：优先取「正在跑 / 已暂停」的会话——学习者可能有多个故事、多条路径，
-      // 直接用 sessionSample[0]（最新创建）会把已完成的老会话画成当前进度，且状态徽章说的是
-      // 另一个会话在跑。没有活跃会话时才回落到最近一次会话（历史进度，前端 title 标明「最近一次」）。
+      // 阶段进度（轴 B）：没有活跃会话时回落到最近一次会话（历史进度，前端标「最近」）。
       const latestSession = runningSessions[0] || pausedSessions[0] || sessionSample[0];
-      let stageProgress: { goalReady: boolean; pathReady: boolean; learnStarted: boolean; taskDone: number; taskTotal: number } | null = null;
-      if (latestSession) {
-        let sr: Record<string, any> = {};
-        try { sr = JSON.parse(String(latestSession.stageResults || '{}')); } catch { /* 忽略 */ }
-        stageProgress = {
-          goalReady: !!(sr?.goal?.converged || sr?.goal?.finalStage || sr?.goal?.stage === 'completed' || latestSession.goalConversationId),
-          pathReady: !!(sr?.path?.success || latestSession.learningPathId),
-          learnStarted: !!(sr?.teaching?.teachingSessionId || latestSession.currentTaskId || latestSession.currentStage === 'teaching' || latestSession.currentStage === 'learn'),
-          taskDone: Number(latestSession.completedTasks) || 0,
-          taskTotal: Number(latestSession.totalTasks) || 0,
-        };
-      }
+      const stageProgress = latestSession ? deriveRunProgress(latestSession) : null;
+      /* 多活跃会话（2026-10-18 用户走查）：一个学习者可同时跑多条路径，列表不再只画第一条。
+         运行在前、暂停在后；逐条标记是否无响应。activeRunTotal 用全量聚合数，
+         与 activeRuns.length 的差即样本窗口外未展开的条数。 */
+      const activeRuns = deriveActiveRuns(sessionSample, stalledSessionIds);
+      const activeRunTotal = (runningByProfile.get(p.id) ?? 0) + (pausedByProfile.get(p.id) ?? 0);
       // 日期模拟进度（只读）：优先会话时钟，其次画像级；供列表「模拟进度」列
       let simulation: { enabled: boolean; dayIndex: number; baseDate: string | null; autoAdvance: boolean } | null = null;
       {
@@ -1681,8 +1677,11 @@ router.get('/', async (req: Request, res) => {
         currentStage: runningSessions[0]?.currentStage || sessionSample[0]?.currentStage || null,
         runningSessionIds: runningSessions.map((s) => s.id),
         pausedSessionIds: pausedSessions.map((s) => s.id),
-        // 阶段进度（轴 B）：Goal/Path/Learn 三态 + 任务进度
-        stageProgress
+        // 阶段进度（轴 B）：Goal/Path/Learn 三态 + 任务进度（无活跃会话时 = 最近一次会话）
+        stageProgress,
+        /* 逐条活跃会话：前端「进行中」列按行渲染多路径；无活跃行时为空数组 */
+        activeRuns,
+        activeRunTotal,
       };
     });
 

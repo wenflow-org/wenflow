@@ -177,10 +177,16 @@
             <th
               scope="col"
               class="mk-th--sortable"
-              title="当前进行中/创建中的会话数及最近阶段"
+              title="当前活跃会话（运行 + 已暂停）逐条显示。同一学习者可同时跑多条路径，无活跃会话时显示最近一次会话"
               :aria-sort="vlSortState('running')"
               @click="toggleVlSort('running')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('running')">进行中<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              v-if="showTaskColumn"
+              scope="col"
+              class="mk-th--right"
+              :title="TASK_COL_TITLE"
+            >任务</th>
             <th
               v-if="!isNarrow && !hiddenCols.has('sessions')"
               scope="col"
@@ -201,7 +207,7 @@
               v-if="!isNarrow && !hiddenCols.has('stalled')"
               scope="col"
               class="mk-th--right mk-th--sortable"
-              title="超过回收阈值无写入的无响应会话数"
+              :title="stalledColTitle"
               :aria-sort="vlSortState('stalled')"
               @click="toggleVlSort('stalled')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('stalled')">无响应<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -240,28 +246,83 @@
               <span v-else class="mk-na">—</span>
             </td>
             <td>
-              <div class="vl-state-cell">
-                <!-- 渲染门：有活跃会话（运行/暂停）或有 stageProgress 即渲染——
-                     已结算的历史进度也要显示累计进度，不再一律塌成「空闲」（走查 #39） -->
-                <template v-if="s.runningCount > 0 || (s.pausedCount ?? 0) > 0 || s.stageProgress">
-                  <RunStateBadge
-                    v-if="s.runningCount > 0 || (s.pausedCount ?? 0) > 0"
-                    :status="s.runningCount > 0 ? 'running' : 'paused'"
-                    :hint="runningBadgeHint(s)"
-                    clickable
-                    @click.stop="openRunningSession(s)"
-                  />
-                  <!-- 阶段条只表达一条会话的进度（多故事/多路径学习者其余的故事不在其中），
-                       用 wrapper 的 title 交代口径；节点自带 title，悬停节点时以节点为准 -->
-                  <span class="vl-stage" :title="stageBarTitle(s)">
-                    <RunStageBar
-                      :stage="stageBarStage(s)"
-                      :status="s.runningCount > 0 ? 'running' : (s.pausedCount ?? 0) > 0 ? 'paused' : null"
-                      :task-progress="s.stageProgress?.learnStarted ? { done: s.stageProgress.taskDone, total: s.stageProgress.taskTotal } : null"
+              <div class="vl-state-cell" :class="{ 'vl-state-cell--multi': activeRunsOf(s).length > 1 }">
+                <!-- 多活跃会话逐条渲染（2026-10-18）：一个学习者可同时跑多条路径，
+                     运行在前、暂停在后；每条徽章可点进自己的座舱。
+                     无活跃会话时回落到最近一次会话的历史进度，并标「最近」，
+                     避免「进行中」列里的进度条被读成现在在跑。 -->
+                <template v-if="activeRunsOf(s).length">
+                  <div v-for="(run, i) in activeRunsOf(s)" :key="run.sessionId" class="vl-runline">
+                    <RunStateBadge
+                      :status="run.state"
+                      :hint="runBadgeHint(run)"
+                      clickable
+                      @click.stop="openRun(run.sessionId)"
                     />
-                  </span>
+                    <span class="vl-stage" :title="runStageTitle(s, run)">
+                      <RunStageBar
+                        :stage="runStage(run)"
+                        :status="run.state"
+                        :task-progress="run.taskTotal > 0 ? { done: run.taskDone, total: run.taskTotal } : null"
+                        :show-task-text="taskInline"
+                      />
+                    </span>
+                    <!-- 余量跟最后一条同行，任务列逐行对齐不被多出来的一行破坏 -->
+                    <span
+                      v-if="i === activeRunsOf(s).length - 1 && omittedRuns(s) > 0"
+                      class="vl-runmore"
+                      :title="`另有 ${omittedRuns(s)} 条活跃会话未展开（逐条展示取最近 3 条，进画像页看全部）`"
+                    >+{{ omittedRuns(s) }}</span>
+                  </div>
+                </template>
+                <!-- 聚合说有活跃会话、但样本里拿不到详情（窗口外/缺 id）：不冒领成「最近」或「空闲」 -->
+                <span
+                  v-else-if="activeCount(s) > 0"
+                  class="vl-unlisted"
+                  :title="`有 ${activeCount(s)} 条活跃会话，但不在最近 50 条会话样本内，进画像页查看`"
+                >活跃 {{ activeCount(s) }} 条 · 未展开</span>
+                <template v-else-if="s.stageProgress">
+                  <div class="vl-runline vl-runline--history">
+                    <span class="vl-histmark">最近</span>
+                    <span class="vl-stage" :title="historicTitle(s)">
+                      <RunStageBar
+                        :stage="stageBarStage(s)"
+                        :status="null"
+                        :task-progress="s.stageProgress.learnStarted && s.stageProgress.taskTotal > 0 ? { done: s.stageProgress.taskDone, total: s.stageProgress.taskTotal } : null"
+                        :show-task-text="taskInline"
+                      />
+                    </span>
+                  </div>
                 </template>
                 <span v-else class="mk-na" title="当前没有进行中的会话">空闲</span>
+              </div>
+            </td>
+            <td v-if="showTaskColumn" class="mk-num">
+              <!-- 任务数单列（2026-10-18）：与「进行中」列同一顺序、逐行对齐；
+                   无活跃会话时显示最近一次会话的任务数（弱化），多条会话不伪造合计 -->
+              <div class="vl-taskcell">
+                <span
+                  v-for="run in activeRunsOf(s)"
+                  :key="run.sessionId"
+                  class="vl-tasknum"
+                  :title="taskRunTitle(run)"
+                >
+                  <template v-if="run.taskTotal > 0">{{ run.taskDone }}/{{ run.taskTotal }}</template>
+                  <span v-else class="mk-na">—</span>
+                </span>
+                <span
+                  v-if="!activeRunsOf(s).length && activeCount(s) === 0 && s.stageProgress"
+                  class="vl-tasknum vl-tasknum--history"
+                  title="最近一次会话（已结束）的任务完成数"
+                >
+                  <template v-if="s.stageProgress.taskTotal > 0">{{ s.stageProgress.taskDone }}/{{ s.stageProgress.taskTotal }}</template>
+                  <span v-else class="mk-na">—</span>
+                </span>
+                <span
+                  v-if="!activeRunsOf(s).length && (activeCount(s) > 0 || !s.stageProgress)"
+                  class="mk-na"
+                  :title="activeCount(s) > 0 ? '活跃会话在样本窗口外，任务进度暂不可见' : undefined"
+                >—</span>
               </div>
             </td>
             <td v-if="!isNarrow && !hiddenCols.has('sessions')" class="mk-num">{{ s.sessions }}</td>
@@ -275,7 +336,7 @@
               >{{ s.failedCount }}</button>
             </td>
             <td v-if="!isNarrow && !hiddenCols.has('stalled')" class="mk-num">
-              <span v-if="s.stalledCount > 0" class="vl-num--bad" :title="`${s.stalledCount} 个进行中会话无响应（超过回收阈值无写入）`">{{ s.stalledCount }}</span>
+              <span v-if="s.stalledCount > 0" class="vl-num--bad" :title="stalledCellTitle(s)">{{ s.stalledCount }}</span>
               <span v-else class="mk-na" title="当前没有无响应会话">—</span>
             </td>
             <td v-if="!isNarrow && !hiddenCols.has('created')"><span class="mk-cell-sub" :title="s.createdAt ? `创建于 ${fmtDateTime(s.createdAt)}` : undefined">{{ s.created }}</span></td>
@@ -391,7 +452,7 @@ import VirtualLearnerLaunch from './VirtualLearnerLaunch.vue'
 import VirtualLearnerBatchCreate from './VirtualLearnerBatchCreate.vue'
 import VirtualLearnerBatchBar from './VirtualLearnerBatchBar.vue'
 import VirtualLearnerPromptTest from './VirtualLearnerPromptTest.vue'
-import type { VirtualLearnerRow as Sample, BatchTask } from './virtualLearnersTypes'
+import type { VirtualLearnerRow as Sample, BatchTask, ActiveRun } from './virtualLearnersTypes'
 
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
 const STATS_RETRY_TITLE = '运行统计拉取失败：点击重试'
@@ -399,6 +460,8 @@ const STATS_UNAVAILABLE_HINT = '统计不可用 · 点击重试'
 /* 列头口径（表头 title 与「列」菜单共用同一句，避免同页两处漂移） */
 const SESSIONS_COL_TITLE = '累计会话数（全部会话，含终态）'
 const FAILED_COL_TITLE = '已失败/已终止会话数（全量聚合）'
+const TASK_COL_TITLE = '进行中会话已完成的任务数 / 总任务数。多条活跃会话按行与「进行中」对齐，无活跃会话时显示最近一次会话'
+const STALLED_COL_TITLE = '运行中的会话超过回收阈值没有新写入（疑似卡住）的数量。可用「回收无响应」清理，已暂停的会话不计入'
 
 const samples = computed<Sample[]>(() =>
   liveVirtuals.value.map((v) => ({
@@ -414,28 +477,104 @@ const samples = computed<Sample[]>(() =>
     abandonedCount: Number(v.abandonedCount || 0),
     stalledCount: Number(v.stalledCount || 0),
     runningSessionIds: v.runningSessionIds,
-    /* G2（2026-10-10）：已暂停会话 id 必须随行带出——否则 openRunningSession 的
-       pausedSessionIds 回退恒 undefined，已暂停行的「进行中」徽章点击静默无响应 */
+    /* G2（2026-10-10）：已暂停会话 id 必须随行带出——否则「正在运行」条的暂停样本拿不到
+       可回退的会话 id。列表本行的逐条徽章已改用 activeRuns，但这两列仍供运行条消费。 */
     pausedSessionIds: v.pausedSessionIds,
     currentStage: v.currentStage || null,
     /* 阶段进度必须随行带出：此前漏拷，模板 :task-progress 恒为 null（走查 #39） */
     stageProgress: v.stageProgress || null,
+    /* 逐条活跃会话（2026-10-18）：多路径同时运行时按行展开，不再只画第一条 */
+    activeRuns: Array.isArray(v.activeRuns) ? v.activeRuns : [],
+    activeRunTotal: Number(v.activeRunTotal ?? 0),
     createdAt: String(v.createdAt || ''),
     created: timeAgo(v.createdAt),
     tags: Array.isArray(v.tags) ? v.tags : []
   }))
 )
 
-/** 阶段条 stage 取值：优先按 stageProgress 三态还原累计进度（已结算行也能显示 Goal/Path/Learn），
-    无进度时回落最近会话阶段。非活跃行 status 传 null，避免被终态强行涂满或全灰 */
-function stageBarStage(s: Sample): string | null {
-  const p = s.stageProgress
+/** 阶段条 stage 取值：按三态还原累计进度（已结算行也能显示 Goal/Path/Learn），
+    无进度时回落会话阶段。非活跃行 status 传 null，避免被终态强行涂满或全灰 */
+function stageOfProgress(
+  p: { learnStarted: boolean; pathReady: boolean; goalReady: boolean } | null | undefined,
+  fallback: string | null
+): string | null {
   if (p) {
     if (p.learnStarted) return 'learn'
     if (p.pathReady) return 'path'
     if (p.goalReady) return 'goal'
   }
-  return s.currentStage
+  return fallback
+}
+function stageBarStage(s: Sample): string | null {
+  return stageOfProgress(s.stageProgress, s.currentStage)
+}
+
+/* ---------- 「进行中」列：多活跃会话逐条渲染（2026-10-18） ---------- */
+function activeRunsOf(s: Sample): ActiveRun[] {
+  if (s.activeRuns?.length) return s.activeRuns
+  /* 兼容旧缓存/滚动升级中的旧后端：没有 activeRuns 时用原来的单条口径还原一条，
+     避免徽章与阶段条一起消失（旧行为是 runningCount>0 就画一条）。 */
+  if (s.runningCount > 0 || (s.pausedCount ?? 0) > 0) {
+    const state: 'running' | 'paused' = s.runningCount > 0 ? 'running' : 'paused'
+    const sessionId = state === 'running' ? s.runningSessionIds[0] : s.pausedSessionIds?.[0]
+    if (sessionId) {
+      return [{
+        sessionId,
+        state,
+        currentStage: s.currentStage,
+        goalReady: !!s.stageProgress?.goalReady,
+        pathReady: !!s.stageProgress?.pathReady,
+        learnStarted: !!s.stageProgress?.learnStarted,
+        taskDone: Number(s.stageProgress?.taskDone) || 0,
+        taskTotal: Number(s.stageProgress?.taskTotal) || 0,
+        stalled: false,
+      }]
+    }
+  }
+  return []
+}
+/** 活跃会话总数（运行 + 已暂停，全量聚合）：样本窗口外也能如实说「有 N 条」 */
+function activeCount(s: Sample): number {
+  return Number(s.runningCount || 0) + Number(s.pausedCount || 0)
+}
+/** 列表逐条上限之外还有几条（后端 activeRunTotal 来自全量聚合） */
+function omittedRuns(s: Sample): number {
+  const total = s.activeRunTotal ?? activeRunsOf(s).length
+  return Math.max(0, total - activeRunsOf(s).length)
+}
+function runStage(run: ActiveRun): string | null {
+  return stageOfProgress(run, run.currentStage)
+}
+/** 每条活跃会话的徽章提示：说清是运行还是暂停，无响应的那条直接点明 */
+function runBadgeHint(run: ActiveRun): string {
+  const base = run.state === 'running' ? '该会话正在运行' : '该会话的自动驾驶已暂停'
+  const stall = run.stalled ? ' · 超过回收阈值没有新写入（无响应）' : ''
+  return `${base}${stall}`
+}
+/** 每条阶段条的口径：多活跃时说明这是第几条、共几条 */
+function runStageTitle(s: Sample, run: ActiveRun): string {
+  const idx = activeRunsOf(s).findIndex((r) => r.sessionId === run.sessionId) + 1
+  const total = activeRunsOf(s).length
+  return total > 1
+    ? `第 ${idx} 条活跃会话的阶段进度（共 ${total} 条在列表内）`
+    : '这条活跃会话的阶段进度'
+}
+/** 任务格口径：任务数来自这条会话的已完成/总任务 */
+function taskRunTitle(run: ActiveRun): string {
+  if (run.taskTotal <= 0) return '这条会话还没有任务维度数据'
+  return `这条会话已完成 ${run.taskDone} / ${run.taskTotal} 个任务`
+}
+/** 历史进度（无活跃会话）的条目标题：明确是最近一次、不是现在在跑 */
+function historicTitle(s: Sample): string {
+  return s.pathCount > 1
+    ? `当前没有活跃会话，显示最近一次会话的阶段进度（该学习者共 ${s.pathCount} 条路径）`
+    : '当前没有活跃会话，显示最近一次会话的阶段进度'
+}
+/** 「无响应」单元格口径：条数 + 阈值 + 暂停不计入（与表头同一来源） */
+function stalledCellTitle(s: Sample): string {
+  const t = reclaimThresholdText()
+  const within = t ? `超过 ${t}` : '超过回收阈值'
+  return `${s.stalledCount} 条运行中会话${within}没有新写入，疑似卡住，可用「回收无响应」清理。已暂停的会话不计入`
 }
 
 /** 「故事 / 路径」单元格 title：故事是复杂情景、路径是从情景里走出来的学习路线，
@@ -447,23 +586,6 @@ function storyPathTitle(s: Sample): string {
   return s.pathCount > s.storyCount
     ? `${base}。一个故事可衍生多条路径，同一路径的多次会话不重复计`
     : base
-}
-
-/** 进行中徽章 hint：多路径学习者补一句总量，避免把「1 个会话在跑」误读成「只有 1 条路径」 */
-function runningBadgeHint(s: Sample): string {
-  const base = `${s.runningCount} 个会话进行中 / ${s.pausedCount ?? 0} 个已暂停`
-  return s.pathCount > 1 ? `${base} · 共 ${s.pathCount} 条路径` : base
-}
-
-/** 阶段条口径：这一条只对应一次会话（多路径时说明是哪一次、总共几条） */
-function stageBarTitle(s: Sample): string {
-  const which = s.runningCount > 0
-    ? '正在进行的那次会话'
-    : (s.pausedCount ?? 0) > 0
-      ? '已暂停的那次会话'
-      : '最近一次会话'
-  const note = s.pathCount > 1 ? `该学习者共 ${s.pathCount} 条路径，此处只显示其中一条` : ''
-  return note ? `${which}的阶段进度。${note}` : `${which}的阶段进度`
 }
 
 const keyword = ref('')
@@ -486,7 +608,7 @@ const stateFilterOptions = computed(() => {
   const n = (v: number) => (failed ? '—' : v)
   return [
     { key: 'all', label: '全部', count: n(samples.value.length), hint: '' },
-    { key: 'running', label: '进行中', count: n(count((s) => s.runningCount > 0)), hint: '' },
+    { key: 'running', label: '进行中', count: n(count((s) => s.runningCount > 0)), hint: '有进行中会话的学习者数（同一学习者可同时跑多条路径，行内逐条显示）' },
     // P1-3（2026-10-04 全站评审）：计数谓词与 filtered 的筛选谓词（runningCount===0 && pausedCount>0）同式，
     // 否则 pill「已暂停 2」点进去只筛出 1 条（同时在跑的学习者被计入却被筛掉）
     { key: 'paused', label: '已暂停', count: n(count((s) => s.runningCount === 0 && (s.pausedCount ?? 0) > 0)), hint: '当前无进行中会话、有暂停会话的学习者' },
@@ -508,7 +630,8 @@ const { toggle: toggleVlSort, sortState: vlSortState, sortRows: sortVlRows } = u
     name: (s) => s.name,
     story: (s) => s.storyCount,
     sessions: (s) => s.sessions,
-    running: (s) => s.runningCount,
+    /* 「进行中」列同时显示运行与已暂停会话，排序按活跃总数，避免暂停多的行被排到空闲区 */
+    running: (s) => s.runningCount + (s.pausedCount ?? 0),
     failed: (s) => s.failedCount,
     stalled: (s) => s.stalledCount,
     created: (s) => (s.createdAt ? new Date(s.createdAt).getTime() : null)
@@ -625,10 +748,13 @@ function menuOpenSourceCard(s: Sample) {
   openSubPage('card', s.id)
 }
 
-/* 窄屏（≤720）：10 列只保留「名称 / 进行中 / 操作」，次要列（勾选/倾向/故事池/会话/
-   失败/卡死/创建）随 useIsNarrow 隐藏——此前整表 860px 最小宽只能横向拖（vlab 大表
+/* 窄屏（≤720）：11 列只保留「名称 / 进行中 / 操作」，次要列（勾选/倾向/故事池/任务/
+   会话/失败/卡死/创建）随 useIsNarrow 隐藏——此前整表 860px 最小宽只能横向拖（vlab 大表
    窄屏零降级问题）；行详情（画像页）信息不丢 */
 const isNarrow = useIsNarrow()
+/* ≤1439 档（LY12 判例）整表已贴容器宽：任务数不单开一列，回落到阶段条尾部；
+   宽屏才成列，便于纵向扫读。列被用户手动隐藏时同样回落。 */
+const isTableCompact = useIsNarrow(1439)
 
 /* 列显隐（2026-10-05 卡头统一补「列」按钮）：次要列可勾选；名称/进行中/操作是
    身份与动作列不进 colDefs。窄屏（isNarrow）折叠优先于列勾选——窄屏档勾了也不显
@@ -639,12 +765,29 @@ const vlColDefs = [
   { key: 'check', label: '选择框（批量操作）', title: '勾选后可在列表底部批量回收无响应会话' },
   { key: 'tendency', label: '长期倾向' },
   { key: 'story', label: '故事 / 路径', title: '故事池条数 / 已生成路径条数（一个故事可衍生多条路径，同一路径的多次会话不重复计）' },
+  { key: 'task', label: '任务', title: TASK_COL_TITLE },
   { key: 'sessions', label: '会话', title: SESSIONS_COL_TITLE },
   { key: 'failed', label: '失败', title: FAILED_COL_TITLE },
-  { key: 'stalled', label: '无响应', title: '超过回收阈值无写入的会话数（用「回收无响应」按钮批量清理）' },
+  { key: 'stalled', label: '无响应', title: STALLED_COL_TITLE },
   { key: 'created', label: '创建' },
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())
+/** 任务列是否成列（宽屏且未被用户隐藏）；否则任务数回到每条阶段条尾部 */
+const showTaskColumn = computed(() => !isNarrow.value && !isTableCompact.value && !hiddenCols.value.has('task'))
+const taskInline = computed(() => !showTaskColumn.value)
+/** 回收阈值的人话（30 分钟 / 24 小时）：直接写「1440 分钟」没人能立刻换算 */
+function reclaimThresholdText(): string {
+  const mins = Math.round((Number(liveVirtualRunStats.value.reclaimThresholdMs) || 0) / 60000)
+  if (!mins) return ''
+  if (mins % 60 === 0) return `${mins / 60} 小时`
+  if (mins >= 60) return `${Math.round((mins / 60) * 10) / 10} 小时`
+  return `${mins} 分钟`
+}
+/** 「无响应」表头口径：把阈值直接写出来（用户问「无响应是什么意思」——不能只让人猜） */
+const stalledColTitle = computed(() => {
+  const t = reclaimThresholdText()
+  return t ? `${STALLED_COL_TITLE}（当前阈值 ${t}）` : STALLED_COL_TITLE
+})
 
 /* ===== intent 快捷动作：直达并打开新建弹窗（子组件挂载后触发，保持深链行为） ===== */
 watch(
@@ -909,18 +1052,10 @@ function onBatchReclaim(ids: string[]) {
   void reclaimRef.value?.open(ids)
 }
 
-/** 「进行中」列点击直达会话座舱（画像页入口保持：行点击/画像按钮）。
- *  仅暂停行（无进行中 id）回退到已暂停会话 id：徽章 title 承诺「点击进入会话座舱」，
- *  否则该行点击无响应，等于一个说了不做的交互承诺。
- *  G2（2026-10-10）兜底：running/paused 会话 id 都拿不到时（会话样本窗口外的旧行等），
- *  退而进画像页——保证点击必有落点，不静默 return。 */
-function openRunningSession(s: Sample) {
-  const id = s.runningSessionIds[0] || s.pausedSessionIds?.[0]
-  if (id) {
-    openSubPage('session', id)
-    return
-  }
-  openSubPage('virtual', s.id)
+/** 「进行中」列每条会话的徽章点击直达该会话座舱（2026-10-18 多活跃会话：
+ *  不再一律打开第一条——徽章挂在谁身上就打开谁，保证「点哪条进哪条」）。 */
+function openRun(sessionId: string) {
+  if (sessionId) openSubPage('session', sessionId)
 }
 </script>
 
@@ -932,8 +1067,8 @@ function openRunningSession(s: Sample) {
 .vl-op--muted { color: var(--mk-muted); }
 /* 窄屏表格：8 列在 704px 内容区会被压扁操作列，设 min-width 触发 .mk-table-scroll 横向滚动（对齐 AuditLogs 模式） */
 .mk-table-scroll .mk-table { min-width: 860px; }
-/* ≤1599 档：10 列在 1138px 内容区超出（改前 1185 / 现 1167 vs 容器 1138），
-   操作列被挤出可视区——收单元格左右内边距 16→12 把整表塞回容器
+/* ≤1599 档：11 列在 1138px 内容区会超出，收单元格左右内边距 16→12 把整表塞回容器
+   （任务列在 ≤1439 档不再单开，回落阶段条尾部，见 isTableCompact）
    （同 Skills.vue 先例，2026-10-03 浏览器巡检） */
 @media (max-width: 1599px) {
   .mk-table th, .mk-table td { padding-inline: 12px; }
@@ -954,7 +1089,47 @@ function openRunningSession(s: Sample) {
 .vl-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* 状态列：进行中胶囊 / 失败数 / 卡死徽章 分列展示（一列一语义）；gap+wrap 归并为一处定义 */
 .vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 26px; }
-/* 阶段条 wrapper：只承载口径 title（多路径学习者一次只画一条会话的进度） */
+/* 多活跃会话（2026-10-18）：逐条一行，徽章 + 阶段条；行高 24 与右侧「任务」列逐行对齐 */
+.vl-state-cell--multi { display: grid; gap: 2px; justify-items: start; }
+.vl-runline { display: flex; align-items: center; gap: 6px; min-height: 24px; min-width: 0; }
+.vl-runline--history { gap: 4px; }
+/* 历史进度标记：无活跃会话时这条 bar 不是「现在在跑」 */
+.vl-histmark {
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  color: var(--mk-faint-soft);
+  background: var(--mk-surface-2);
+  border-radius: var(--mk-radius-xs);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+/* 聚合有活跃会话、样本里拿不到详情时的如实提示 */
+.vl-unlisted { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); white-space: nowrap; }
+/* 逐条展示上限之外还有几条（跟最后一行同行，不额外占行高）。
+   做成胶囊而不是裸「+1」：右侧紧邻任务列，裸数字会被读成任务数的一部分 */
+.vl-runmore {
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  color: var(--mk-muted);
+  background: var(--mk-surface-2);
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+/* 「任务」列：与进行中列同一顺序、逐行右对齐；无活跃会话时显示最近一次（弱化） */
+.vl-taskcell { display: grid; gap: 2px; justify-content: end; justify-items: end; }
+.vl-tasknum {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 24px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.vl-tasknum--history { color: var(--mk-faint-soft); font-weight: 600; }
+/* 阶段条 wrapper：只承载口径 title（多活跃会话时每条一行，各带自己的 title） */
 .vl-stage { display: inline-flex; min-width: 0; }
 /* 「故事 / 路径」两数的分隔符：弱化到次级色，数字本身仍是 mk-num 的等宽口径 */
 .vl-story-path__sep { color: var(--mk-faint); padding: 0 1px; }

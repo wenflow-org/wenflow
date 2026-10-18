@@ -1472,6 +1472,20 @@ export async function liveGetLearnerPredictions(userId: string, includeTest?: bo
 }
 
 /* ================= 虚拟学习者 ================= */
+/** 一条活跃会话（virtual-learners 列表 activeRuns 项；与后端 virtual-run-progress 同形） */
+export interface LiveVirtualRun {
+  sessionId: string
+  state: 'running' | 'paused'
+  currentStage: string | null
+  goalReady: boolean
+  pathReady: boolean
+  learnStarted: boolean
+  taskDone: number
+  taskTotal: number
+  /** 超过回收阈值无写入（与「无响应」列同源；暂停会话恒 false） */
+  stalled: boolean
+}
+
 export interface LiveVirtual {
   id: string
   name: string
@@ -1508,6 +1522,10 @@ export interface LiveVirtual {
     taskDone: number
     taskTotal: number
   } | null
+  /** 逐条活跃会话（2026-10-18：多路径可同时运行，列表按行展开；运行在前暂停在后） */
+  activeRuns?: LiveVirtualRun[]
+  /** 活跃会话全量数（含样本窗口外未展开的余量） */
+  activeRunTotal?: number
   /** 最近一个运行中会话的阶段（无运行中会话时回退最近会话阶段） */
   currentStage: string | null
   createdAt: string
@@ -1712,6 +1730,20 @@ async function fetchLiveVirtuals(): Promise<void> {
       /* 清理向导（2026-10-10）的保留名单按画像 tag 匹配（persona id / cohort key 即 tag），透传不解析 */
       tags: (Array.isArray(p.tags) ? p.tags : []).map(String),
       stageProgress: (p.stageProgress as LiveVirtual['stageProgress']) || null,
+      activeRuns: Array.isArray(p.activeRuns)
+        ? (p.activeRuns as LiveVirtualRun[]).map((r) => ({
+            sessionId: String(r.sessionId),
+            state: r.state === 'paused' ? 'paused' : 'running',
+            currentStage: r.currentStage ? String(r.currentStage) : null,
+            goalReady: !!r.goalReady,
+            pathReady: !!r.pathReady,
+            learnStarted: !!r.learnStarted,
+            taskDone: Number(r.taskDone) || 0,
+            taskTotal: Number(r.taskTotal) || 0,
+            stalled: !!r.stalled,
+          }))
+        : [],
+      activeRunTotal: Number(p.activeRunTotal ?? 0),
       raw: p
     }
   })

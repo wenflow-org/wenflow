@@ -37,6 +37,10 @@ export interface VirtualLearnerRow {
     taskDone: number
     taskTotal: number
   } | null
+  /** 逐条活跃会话（多路径可同时运行；运行在前、暂停在后） */
+  activeRuns?: ActiveRun[]
+  /** 活跃会话全量数（含逐条展示上限之外未展开的余量） */
+  activeRunTotal?: number
   /** 日期模拟进度（只读）：会话时钟或画像级；无则 null */
   simulation?: {
     enabled: boolean
@@ -51,6 +55,21 @@ export interface VirtualLearnerRow {
   created: string
   /** 画像 tags（persona id / cohort key 即 tag）——清理向导保留名单匹配用；旧缓存可能缺 */
   tags?: string[]
+}
+
+/** 一条活跃会话（后端 activeRuns 项）：生命周期 + 阶段 + 任务进度 */
+export interface ActiveRun {
+  sessionId: string
+  /** running = 真在跑；paused = 自动驾驶已暂停 */
+  state: 'running' | 'paused'
+  currentStage: string | null
+  goalReady: boolean
+  pathReady: boolean
+  learnStarted: boolean
+  taskDone: number
+  taskTotal: number
+  /** 超过回收阈值无写入（与「无响应」列同源；暂停会话恒 false） */
+  stalled: boolean
 }
 
 /** 启动实验弹窗里的故事条目 */
