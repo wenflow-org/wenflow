@@ -112,7 +112,7 @@ describe('清理旧账号向导 · 判定口径', () => {
     (w.vm as unknown as { open: () => void }).open();
     await nextTick();
     await setSelect('30');
-    expect(bodyText()).toContain('没有符合口径的旧账号');
+    expect(bodyText()).toContain('没有符合条件的旧账号');
     const del = bodyButton((b) => b.classList.contains('mk-btn--danger')) as HTMLButtonElement;
     expect(del.disabled).toBe(true);
     w.unmount();

@@ -1,9 +1,9 @@
 <template>
-  <!-- Skill × 模型 × 参数 × 兜底 覆盖矩阵 -->
+  <!-- Skill × 模型 × 参数 × 备用模型 覆盖矩阵（2026-10-19：原「兜底」与同表列头「备用模型」同义不同词） -->
   <div class="mk-card skc">
     <!-- 原型 .card__head（title + sub）：卡头统一走 mk-card 词表 -->
     <div class="mk-card__head">
-      <h3 class="mk-card__title">Skill × 模型 × 参数 × 兜底</h3>
+      <h3 class="mk-card__title">Skill × 模型 × 参数 × 备用模型</h3>
       <span class="mk-card__meta">全部技能 × 实际路由</span>
     </div>
     <div class="skc__body">
@@ -24,7 +24,7 @@
       <p v-if="loadErr && rows.length" class="note note--bad" role="alert">刷新失败：{{ loadErr }}（下表仍为上次成功的数据）</p>
       <p v-if="bulkMsg" class="note" :class="{ 'note--bad': bulkErr }" :role="bulkErr ? 'alert' : 'status'" aria-live="polite">{{ bulkMsg }}</p>
 
-      <!-- 原型 .tbl：统一 mk-table--dense 词表；长内容列（参数/兜底链）走 wrap 列 -->
+      <!-- 原型 .tbl：统一 mk-table--dense 词表；长内容列（参数/备用模型链）走 wrap 列 -->
       <div v-if="rows.length" class="mk-table-scroll">
         <table class="mk-table mk-table--dense skc__table">
           <thead>
@@ -67,7 +67,7 @@
                 class="mk-th--sortable skc__wrap"
                 :aria-sort="covSortState('fallback')"
                 @click="toggleCovSort('fallback')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('fallback')" title="按备用链条数排序">备用模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('fallback')" title="按备用模型链条数排序">备用模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             </tr>
           </thead>
           <tbody>
@@ -139,7 +139,7 @@ interface Row {
 
 const rows = ref<Row[]>([])
 /* 矩阵排序（2026-10-17 用户走查「有的列没有排序」）：数据是全量覆盖清单，
-   客户端排序诚实；参数覆盖按覆盖项数排（无覆盖 = 0），备用模型按链条数排。 */
+   客户端排序诚实；参数覆盖按覆盖项数排（无覆盖 = 0），备用模型按链条数排（该列列头就叫「备用模型」，注释与卡头不再用「兜底」）。 */
 const { sortState: covSortState, toggle: toggleCovSort, sortRows: sortCovRows } = useTableSort<Row>({
   accessors: {
     skill: (r) => r.skillId,
@@ -265,7 +265,7 @@ onMounted(load)
 .skc__apply { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .skc__apply .mk-input { max-width: 280px; }
 .skc__apply .is-err { border-color: var(--mk-red); }
-/* 原型 .tbl td.wrap：长文本列（参数覆盖 / 兜底链）换行不截断 */
+/* 原型 .tbl td.wrap：长文本列（参数覆盖 / 备用模型链）换行不截断 */
 .skc__table th.skc__wrap,
 .skc__table td.skc__wrap { white-space: normal; overflow-wrap: anywhere; min-width: 220px; max-width: 320px; }
 </style>

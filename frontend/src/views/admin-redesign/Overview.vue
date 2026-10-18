@@ -602,12 +602,14 @@ const hasWrapupStats = computed(() => {
   return w.summaryModel > 0 || w.summaryFallback > 0 || w.evaluationModel > 0 || w.evaluationAiFallback > 0 || w.evaluationFailed > 0;
 });
 
-/* 总结质量条件行：只在出现兜底/失败时露头 */
+/* 总结质量条件行：只在出现降级/失败时露头。
+   2026-10-19：「N 次兜底」改「N 次降级总结」——同一件事（总结走的是非模型兜底路径）
+   在教学会话列表挂的徽章就叫「降级总结」，概览这里换个词等于同屏两个叫法。 */
 const wrapupIssue = computed(() => {
   const w = data.value?.wrapup;
   if (!w || !hasWrapupStats.value) return null;
   const parts: string[] = [];
-  if (w.summaryFallback > 0) parts.push(`${w.summaryFallback} 次兜底`);
+  if (w.summaryFallback > 0) parts.push(`${w.summaryFallback} 次降级总结`);
   if (w.evaluationFailed > 0) parts.push(`${w.evaluationFailed} 次失败`);
   if (!parts.length) return null;
   return {
