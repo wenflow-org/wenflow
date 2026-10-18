@@ -825,18 +825,23 @@
               <tr>
                 <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('concept')"
                   title="点列头排序：按知识点名称（中文拼音序）"
+                  @click="toggleMemSort('concept')"
                 ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('concept')">知识点<span class="mk-th__caret" aria-hidden="true"></span></button></th>
                 <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('strength')"
                   title="点列头排序：升序 = 记忆强度最弱的在前（没有强度读数的行恒排末尾）"
+                  @click="toggleMemSort('strength')"
                 ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('strength')">记忆强度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
                 <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('due')"
                   title="点列头排序：升序 = 逾期最久的在前（没有到期时间的行恒排末尾）"
+                  @click="toggleMemSort('due')"
                 ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('due')">复习到期<span class="mk-th__caret" aria-hidden="true"></span></button></th>
                 <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('extract')"
                   title="点列头排序：降序 = 提取次数最多的在前"
+                  @click="toggleMemSort('extract')"
                 ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('extract')">提取史<span class="mk-th__caret" aria-hidden="true"></span></button></th>
                 <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('state')"
-                  title="点列头排序：按需关注程度（待复习 → 薄弱 → 学习中 → 稳固 → 未初始化）"
+                  title="点列头排序：按复习状态分档（待复习 → 稳固 → 学习中 → 薄弱 → 未初始化）"
+                  @click="toggleMemSort('state')"
                 ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('state')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               </tr>
             </thead>
@@ -901,6 +906,7 @@ import {
   sessionStatusBadgeCls,
   sessionProgressPct,
   sessionProgressText,
+  sessionProgressTitle,
   sessionProgressTone
 } from './statusText'
 import type { SessionProgress } from './statusText'
@@ -1330,7 +1336,8 @@ function ldInteractTitle(r: LdSessionRow): string {
 }
 function ldProgTitle(r: LdSessionRow): string {
   if (!r.progress) return '无任务级进度数据'
-  return `路径任务进度：第 ${r.progress.taskIndex}/${r.progress.totalTasks} 个任务（里程碑 ${r.progress.milestoneIndex}/${r.progress.totalMilestones}）`
+  const pos = sessionProgressTitle(r.progress, { withMilestone: true })
+  return pos ? `路径任务进度：${pos}` : '无任务级进度数据'
 }
 const ldSessLoading = ref(false)
 const ldSessError = ref(false)
@@ -2498,8 +2505,11 @@ const memViews = computed(() => {
 })
 /* FSRS 普查表排序（2026-10-18 用户走查「这张表也缺排序」）：行集是该学习者的全量痕迹，
    客户端排序诚实且最便宜（useTableSort 适用范围：数据完整的列表）。
-   默认不选键 = 保留原有口径序（待复习 → 未到期 → 未初始化）。 */
-const MEM_STATE_RANK: Record<string, number> = { due: 0, weak: 1, learning: 2, ok: 3, uninit: 4 }
+   默认不选键 = 保留原有口径序（待复习 → 未到期 → 未初始化）。
+   状态档位与上方「视角」pills 同序（MEM_STATE_ORDER：待复习 → 稳固 → 学习中 → 薄弱 →
+   未初始化）：同一屏上同一根轴只有一种顺序——pills 按强弱梯子读，列头排序却按需关注度
+   排，用户点完列头会以为点错了。 */
+const MEM_STATE_RANK: Record<string, number> = { due: 0, ok: 1, learning: 2, weak: 3, uninit: 4 }
 const {
   toggle: toggleMemSort,
   sortState: memSortState,

@@ -204,7 +204,7 @@
                 title="互动：时长 / 消息数 / 知识点，时长 ≥ 25 分钟按长时标琥珀（信号，非故障）"
                 @click="toggleTsSort('interact')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">互动<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!tsHiddenCols.has('progress')">进度</th>
+              <th v-if="!tsHiddenCols.has('progress')" scope="col" title="任务进度：进行中显示「任务 第几个/共几个」，终态显示「结束于 第几个/共几个」——两种说法都是位置，不是完成数">进度</th>
               <th v-if="!tsHiddenCols.has('output')">产物</th>
               <th v-if="!isTableNarrow && !tsHiddenCols.has('attention')">关注</th>
               <th
@@ -258,7 +258,7 @@
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('status')" class="ts-status">
-                <span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span>
+                <span class="mk-badge ts-status__main" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span>
                 <!-- 低参与标注（拍板 #1，显示口径）：completed 但用户消息 <2 条（与零证据门同阈值）。
                      状态机语义不动——会话确实终态结束；运营口径单独标注，避免「完成」被读成「真实参与过」。 -->
                 <span
@@ -268,11 +268,13 @@
                 >低参与</span>
                 <!-- 手动结束（2026-10-18 用户拍板）：completed 只是生命周期终态，用户点「结束学习」
                      也会走到这里；endReason 从会话收束时已落进 teachingState.sessionArtifacts。
-                     老会话没有该字段时不猜、不加徽章。 -->
+                     老会话没有该字段时不猜、不加徽章。
+                     title 只说「记为 manual-end」不说「用户点的」——后台收束悬挂会话的那个脚本
+                     也写同一个值，断言成用户动作会冤枉会话也冤枉运营。 -->
                 <span
                   v-if="r.status === 'completed' && r.endReason === 'manual-end'"
                   class="mk-badge mk-badge--sm mk-badge--muted"
-                  title="用户主动结束学习（非任务完成结算）：任务未必做完，进度列显示结束在哪一格"
+                  title="结束原因记为「手动结束」而不是「任务完成」：用户点「结束学习」，或后台自动结束长时间没有动静的会话，都会记这个原因。任务未必做完，进度列显示结束在哪一格"
                 >手动结束</span>
               </td>
               <td v-if="!tsHiddenCols.has('interact')">
@@ -286,10 +288,14 @@
               </td>
               <td v-if="!tsHiddenCols.has('progress')">
                 <!-- 终态完成：只出「结束于 x/y」，不出进度条（不再说「已完成」——那是状态列的词，
-                     也容易读成任务做到了最后一格；实际 11 条 completed 里 10 条停在半途） -->
-                <template v-if="sessionProgressDone(r.status)">
-                  <span v-if="r.progress" class="ts-prog ts-prog--done" :title="progressTitle(r)">{{ sessionProgressText(r.progress, r.status) }}</span>
-                  <span v-else class="mk-na" title="这次会话没有任务维度数据">—</span>
+                     也容易读成任务做到了最后一格；实际 11 条 completed 里 10 条停在半途）。
+                     守卫用「有任务维度」而非「有 progress 对象」：totalTasks=0 时文本回落到 —
+                     却会挂在绿色分数样式里，成了绿色破折号（读起来像「第 0 格也算完成」） -->
+                <template v-if="sessionProgressDone(r.status) && sessionProgressPct(r.progress) !== null">
+                  <span class="ts-prog ts-prog--done" :title="progressTitle(r)">{{ sessionProgressText(r.progress, r.status) }}</span>
+                </template>
+                <template v-else-if="sessionProgressDone(r.status)">
+                  <span class="mk-na" title="这次会话没有任务维度数据">—</span>
                 </template>
                 <template v-else-if="sessionProgressPct(r.progress) !== null">
                   <span class="ts-prog" :title="progressTitle(r)">
@@ -384,7 +390,7 @@ import { useSessionDrill } from './useSessionDrill'
 import { useIsNarrow } from './useIsNarrow'
 import { useListQueryState } from './learner-profile'
 import { timeAgo, isPageCacheFresh, markPageFetched, shortId, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
-import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge } from './statusText'
+import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge } from './statusText'
 import type { SessionProgress } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -977,11 +983,9 @@ function interactTitle(r: Row): string | undefined {
  *  写成「第 x 个」而不是「任务 x/y」，是因为后端 taskIndex 是**位置**不是完成数——
  *  「任务 1/4」容易被读成「4 个里做完了 1 个」。 */
 function progressTitle(r: Row): string {
-  const p = r.progress
-  if (!p) return ''
-  const at = Math.max(1, p.taskIndex)
-  if (p.totalMilestones > 0 && p.milestoneIndex > 0) return `阶段 ${p.milestoneIndex}/${p.totalMilestones} · 第 ${at} 个任务（共 ${p.totalTasks} 个）`
-  return `第 ${at} 个任务（共 ${p.totalTasks} 个）`
+  // 措辞单源在 statusText.sessionProgressTitle：taskIndex=0（结束时还没定位到具体任务）
+  // 不能 clamp 成「第 1 个」——同一行的可见文本写的是「结束于 0/4」，两处互相打脸
+  return sessionProgressTitle(r.progress, { withMilestone: true })
 }
 
 /* 宿主刷新联动（学习会话合并宿主「刷新」按钮 → refreshNow） */
@@ -1029,8 +1033,10 @@ defineExpose({ refreshNow })
 }/* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字）。
    锚点用稳定类 .ts-status（2026-10-06 审核 #37）：原 td:nth-child(3) 在用户列被
    隐藏后失配（状态列变第 2 个 td），切换状态筛选时列宽照样跳动——正是本规则要防的。
-   68px = 4 字 × micro 档 + 徽章内边距，容得下最长档 */
-.ts-status .mk-badge { min-width: 68px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
+   68px = 4 字 × micro 档 + 徽章内边距，容得下最长档。
+   只给主状态徽章（.ts-status__main）：标注徽章（低参与 / 手动结束）是内容宽，
+   套上 68px 会把「低参与 + 手动结束」撑到 ~150px，把状态列拉宽又没换来任何对齐。 */
+.ts-status .ts-status__main { min-width: 68px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
    badge 本体 inline-flex，截断由内层文本节点承载（flex 项 overflow!=visible → min-width 归 0 可收缩） */
 .ts-adv-badge { margin-left: 4px; max-width: 168px; }.ts-adv-badge__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
 .ts-error { margin: 0 16px 10px; }/* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页）。

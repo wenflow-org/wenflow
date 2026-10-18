@@ -141,8 +141,8 @@
             :default-hidden="['check']"
             v-model:hidden="hiddenCols"
           />
-          <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-card__meta vl-truncated">
-            共 {{ liveVirtualsTotal }} 人 · 当前显示前 {{ samples.length }} 人
+          <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-card__meta vl-truncated" title="后端一次下发的条数有上限，超出的未载入">
+            共 {{ liveVirtualsTotal }} 位学习者 · 本次载入 {{ samples.length }} 位
           </span>
         </div>
       </div>
@@ -271,7 +271,7 @@
                     <span
                       v-if="i === activeRunsOf(s).length - 1 && omittedRuns(s) > 0"
                       class="vl-runmore"
-                      :title="`另有 ${omittedRuns(s)} 条活跃会话未展开（逐条展示取最近 3 条，进画像页看全部）`"
+                      :title="`另有 ${omittedRuns(s)} 条活跃会话未展开。逐条最多 ${ACTIVE_RUNS_LIMIT} 条，运行在前、暂停在后，各按最近写入倒序，进画像页看全部`"
                     >+{{ omittedRuns(s) }}</span>
                   </div>
                 </template>
@@ -279,7 +279,7 @@
                 <span
                   v-else-if="activeCount(s) > 0"
                   class="vl-unlisted"
-                  :title="`有 ${activeCount(s)} 条活跃会话，但不在最近 50 条会话样本内，进画像页查看`"
+                  :title="`有 ${activeCount(s)} 条活跃会话，但不在本次载入的会话明细里，进画像页查看`"
                 >活跃 {{ activeCount(s) }} 条 · 未展开</span>
                 <template v-else-if="s.stageProgress">
                   <div class="vl-runline vl-runline--history">
@@ -321,7 +321,7 @@
                 <span
                   v-if="!activeRunsOf(s).length && (activeCount(s) > 0 || !s.stageProgress)"
                   class="mk-na"
-                  :title="activeCount(s) > 0 ? '活跃会话在样本窗口外，任务进度暂不可见' : undefined"
+                  :title="activeCount(s) > 0 ? '活跃会话不在本次载入的会话明细里，任务进度暂不可见' : undefined"
                 >—</span>
               </div>
             </td>
@@ -461,7 +461,14 @@ const STATS_UNAVAILABLE_HINT = '统计不可用 · 点击重试'
 const SESSIONS_COL_TITLE = '累计会话数（全部会话，含终态）'
 const FAILED_COL_TITLE = '已失败/已终止会话数（全量聚合）'
 const TASK_COL_TITLE = '进行中会话已完成的任务数 / 总任务数。多条活跃会话按行与「进行中」对齐，无活跃会话时显示最近一次会话'
-const STALLED_COL_TITLE = '运行中的会话超过回收阈值没有新写入（疑似卡住）的数量。可用「回收无响应」清理，已暂停的会话不计入'
+/* 「已暂停不计入」必须点名是**哪一种**暂停：本页「已暂停」pill/徽章指的是自动驾驶被停
+   （autopilot=stopped），而回收口径排除的是会话页「暂停」写下的 teaching.paused——后者暂停后
+   无写入属预期、回收干跑清单也跳过它（VirtualLearnerReclaim 同用「管理员暂停」一词）。
+   自动驾驶已暂停的会话仍在回收候选里，写成「已暂停的不计入」会与回收清单对不上。 */
+const STALLED_COL_TITLE = '运行中的会话超过回收阈值仍没有新写入的数量。可用「回收无响应」清理，管理员在会话页手动暂停的会话不计入'
+/** 逐条活跃会话的展示上限（与后端 deriveActiveRuns 的 ACTIVE_RUNS_LIMIT 同值：
+    后端 services/virtual-lab/virtual-run-progress.ts）。改一处必须改另一处——余量文案要用它。 */
+const ACTIVE_RUNS_LIMIT = 3
 
 const samples = computed<Sample[]>(() =>
   liveVirtuals.value.map((v) => ({
@@ -537,10 +544,12 @@ function activeRunsOf(s: Sample): ActiveRun[] {
 function activeCount(s: Sample): number {
   return Number(s.runningCount || 0) + Number(s.pausedCount || 0)
 }
-/** 列表逐条上限之外还有几条（后端 activeRunTotal 来自全量聚合） */
+/** 列表逐条上限之外还有几条（后端 activeRunTotal 来自全量聚合）。
+    两个数都可能是窗口内的量：取较大者做基准，免得旧缓存缺 activeRunTotal 时算出负数或不披露余量 */
 function omittedRuns(s: Sample): number {
-  const total = s.activeRunTotal ?? activeRunsOf(s).length
-  return Math.max(0, total - activeRunsOf(s).length)
+  const runs = activeRunsOf(s).length
+  const total = Math.max(Number(s.activeRunTotal) || 0, runs)
+  return total - runs
 }
 function runStage(run: ActiveRun): string | null {
   return stageOfProgress(run, run.currentStage)
@@ -570,11 +579,11 @@ function historicTitle(s: Sample): string {
     ? `当前没有活跃会话，显示最近一次会话的阶段进度（该学习者共 ${s.pathCount} 条路径）`
     : '当前没有活跃会话，显示最近一次会话的阶段进度'
 }
-/** 「无响应」单元格口径：条数 + 阈值 + 暂停不计入（与表头同一来源） */
+/** 「无响应」单元格口径：条数 + 阈值 + 哪一种暂停不计入（与表头同一来源） */
 function stalledCellTitle(s: Sample): string {
   const t = reclaimThresholdText()
   const within = t ? `超过 ${t}` : '超过回收阈值'
-  return `${s.stalledCount} 条运行中会话${within}没有新写入，疑似卡住，可用「回收无响应」清理。已暂停的会话不计入`
+  return `${s.stalledCount} 条运行中会话${within}仍没有新写入。可用「回收无响应」清理，管理员在会话页手动暂停的会话不计入`
 }
 
 /** 「故事 / 路径」单元格 title：故事是复杂情景、路径是从情景里走出来的学习路线，
@@ -760,7 +769,7 @@ const isTableCompact = useIsNarrow(1439)
    身份与动作列不进 colDefs。窄屏（isNarrow）折叠优先于列勾选——窄屏档勾了也不显
    （行详情进画像页，信息不丢）。
    2026-10-18：勾选列进 colDefs 并默认隐藏（用户「多选还是不要先显示」，与 People 同判例） */
-const vlColDefs = [
+const VL_COL_DEFS = [
   /* 默认隐藏后，列菜单这一项就是批量操作的唯一入口：label 直接写清用途 */
   { key: 'check', label: '选择框（批量操作）', title: '勾选后可在列表底部批量回收无响应会话' },
   { key: 'tendency', label: '长期倾向' },
@@ -775,6 +784,10 @@ const hiddenCols = ref<Set<string>>(new Set())
 /** 任务列是否成列（宽屏且未被用户隐藏）；否则任务数回到每条阶段条尾部 */
 const showTaskColumn = computed(() => !isNarrow.value && !isTableCompact.value && !hiddenCols.value.has('task'))
 const taskInline = computed(() => !showTaskColumn.value)
+/* ≤1439 档任务列本就不成列（回落阶段条尾部），列菜单里的「任务」勾选项在该档是死开关——
+   点它没有任何可见变化。按档位把它从菜单里摘掉，菜单只列当前真能生效的列（同「窄屏折叠
+   优先于列勾选」的既有判例：不给做不到的承诺）。 */
+const vlColDefs = computed(() => VL_COL_DEFS.filter((d) => d.key !== 'task' || showTaskColumn.value))
 /** 回收阈值的人话（30 分钟 / 24 小时）：直接写「1440 分钟」没人能立刻换算 */
 function reclaimThresholdText(): string {
   const mins = Math.round((Number(liveVirtualRunStats.value.reclaimThresholdMs) || 0) / 60000)
@@ -1067,24 +1080,6 @@ function openRun(sessionId: string) {
 .vl-op--muted { color: var(--mk-muted); }
 /* 窄屏表格：8 列在 704px 内容区会被压扁操作列，设 min-width 触发 .mk-table-scroll 横向滚动（对齐 AuditLogs 模式） */
 .mk-table-scroll .mk-table { min-width: 860px; }
-/* ≤1599 档：11 列在 1138px 内容区会超出，收单元格左右内边距 16→12 把整表塞回容器
-   （任务列在 ≤1439 档不再单开，回落阶段条尾部，见 isTableCompact）
-   （同 Skills.vue 先例，2026-10-03 浏览器巡检） */
-@media (max-width: 1599px) {
-  .mk-table th, .mk-table td { padding-inline: 12px; }
-}
-/* LY12（1280 实测）：10 列内容宽 1071 vs 容器 994，最右「操作」列被卡片裁掉 77px。
-   ≤1439 档再收紧：单元格内边距 12→10（×10 列 ≈40px）+「长期倾向」换行格
-   min/max 220/320 → 120/160（该列是唯一可换行的宽列，收窄仍保两行语义骨架）
-   → 整表塞回容器，1280 dx 归零。 */
-@media (max-width: 1439px) {
-  .mk-table th, .mk-table td { padding-inline: 10px; }
-  .mk-table .mk-cell-text--wrap { min-width: 120px; max-width: 160px; }
-}
-/* 窄屏（≤720）次要列已随 useIsNarrow 隐藏，仅剩 3 列可完整放下，不再强制最小宽 */
-@media (max-width: 720px) {
-  .mk-table-scroll .mk-table { min-width: 0; }
-}
 /* 名称格 flex 基座：头像 + mk-cell-main（强/副行截断由原语承担，2026-10-03 方言收敛） */
 .vl-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* 状态列：进行中胶囊 / 失败数 / 卡死徽章 分列展示（一列一语义）；gap+wrap 归并为一处定义 */
@@ -1176,4 +1171,26 @@ function openRun(sessionId: string) {
 .vl-cell--click:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 
 /* 暗色模式：全量走 var(--mk-*) token（faillink hover 也已 token 化），不再需要页面补丁 */
+
+/* ===== 响应式覆写（必须留在文件末尾） =====
+   同类规则散布多个位置时，插在前面的媒体块会被后面的桌面规则按同特异性覆盖成死代码——
+   多活跃会话那一批规则（.vl-state-cell--multi / .vl-runline / .vl-taskcell）就长在媒体块后面。 */
+/* ≤1599 档：11 列在 1138px 内容区会超出，收单元格左右内边距 16→12 把整表塞回容器
+   （任务列在 ≤1439 档不再单开，回落阶段条尾部，见 isTableCompact）
+   （同 Skills.vue 先例，2026-10-03 浏览器巡检） */
+@media (max-width: 1599px) {
+  .mk-table th, .mk-table td { padding-inline: 12px; }
+}
+/* LY12（1280 实测）：10 列内容宽 1071 vs 容器 994，最右「操作」列被卡片裁掉 77px。
+   ≤1439 档再收紧：单元格内边距 12→10（×10 列 ≈40px）+「长期倾向」换行格
+   min/max 220/320 → 120/160（该列是唯一可换行的宽列，收窄仍保两行语义骨架）
+   → 整表塞回容器，1280 dx 归零。 */
+@media (max-width: 1439px) {
+  .mk-table th, .mk-table td { padding-inline: 10px; }
+  .mk-table .mk-cell-text--wrap { min-width: 120px; max-width: 160px; }
+}
+/* 窄屏（≤720）次要列已随 useIsNarrow 隐藏，仅剩 3 列可完整放下，不再强制最小宽 */
+@media (max-width: 720px) {
+  .mk-table-scroll .mk-table { min-width: 0; }
+}
 </style>

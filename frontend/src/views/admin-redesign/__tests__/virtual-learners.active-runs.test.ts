@@ -194,21 +194,53 @@ describe('虚拟学习者：多活跃会话与任务列', () => {
     await nextTick();
     const row = w.find('tbody tr');
     expect(row.find('.vl-unlisted').text()).toBe('活跃 2 条 · 未展开');
-    expect(row.find('.vl-unlisted').attributes('title')).toContain('不在最近 50 条会话样本内');
+    expect(row.find('.vl-unlisted').attributes('title')).toContain('不在本次载入的会话明细里');
     expect(row.find('.vl-histmark').exists()).toBe(false);
     expect(row.findAll('.vl-tasknum')).toHaveLength(0);
     w.unmount();
   });
 
-  it('「无响应」表头写明阈值与「暂停不计入」，不再是只有内部人懂的「超过回收阈值」', async () => {
+  it('「无响应」表头写明阈值与「哪一种暂停不计入」（回收口径排除的是管理员暂停，不是自动驾驶已暂停）', async () => {
     const w = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
     const th = w.findAll('thead th').find((t) => t.text().trim() === '无响应')!;
     const title = th.attributes('title')!;
     expect(title).toContain('30 分钟');
-    expect(title).toContain('已暂停的会话不计入');
+    expect(title).toContain('管理员在会话页手动暂停的会话不计入');
     expect(title).toContain('回收无响应');
+    // 「已暂停的会话不计入」会与本页「已暂停」pill（自动驾驶已停）撞义：那类会话仍在回收候选里
+    expect(title).not.toContain('已暂停的会话不计入');
     w.unmount();
+  });
+
+  it('≤1439 档：任务不成列回落到阶段条，列菜单里也不留「任务」这项死开关', async () => {
+    const orig = window.matchMedia
+    // useIsNarrow 走 matchMedia：让 ≤1439 的查询命中，模拟中窄屏档
+    window.matchMedia = ((q: string) => ({
+      matches: /max-width: (1439|1599|720)px/.test(q),
+      media: q,
+      onchange: null,
+      addEventListener() {}, removeEventListener() {},
+      addListener() {}, removeListener() {},
+      dispatchEvent: () => false
+    })) as unknown as typeof window.matchMedia
+    try {
+      const w = mount(VirtualLearners)
+      await flushPromises()
+      await nextTick()
+      // 任务列不成列
+      expect(w.findAll('thead th').map((h) => h.text().trim())).not.toContain('任务')
+      // 列菜单里也没有「任务」勾选项（勾了也不会显形 = 死开关）
+      const colsBtn = w.findAll('button').find((b) => b.text().trim() === '列')!
+      await colsBtn.trigger('click')
+      expect(w.find('.mk-cols__menu').exists()).toBe(true)
+      const labels = w.findAll('.mk-cols__item span').map((s) => s.text().trim())
+      expect(labels).not.toContain('任务')
+      expect(labels).toContain('无响应')
+      w.unmount()
+    } finally {
+      window.matchMedia = orig
+    }
   });
 });

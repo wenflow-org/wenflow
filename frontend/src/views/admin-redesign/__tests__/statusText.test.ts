@@ -20,6 +20,8 @@ import {
   sessionProgressText,
   sessionProgressTone,
   sessionProgressDone,
+  sessionTaskPositionText,
+  sessionProgressTitle,
   GOAL_STAGE_TOTAL,
   runHealthTone
 } from '../statusText';
@@ -278,6 +280,23 @@ describe('sessionProgress（教学会话进度列单源：任务 x/y + 迷你条
     expect(sessionProgressDone('timeout')).toBe(false);
     expect(sessionProgressDone('')).toBe(false);
     expect(sessionProgressDone(null)).toBe(false);
+  });
+
+  it('进度 title：taskIndex 是 1-based，0 表示没进到任务——如实说，不 clamp 成「第 1 个」', () => {
+    expect(sessionTaskPositionText(p)).toBe('第 3 个任务（共 5 个）');
+    expect(sessionTaskPositionText({ taskIndex: 0, totalTasks: 4, milestoneIndex: 1, totalMilestones: 3 })).toBe('未进入具体任务（共 4 个）');
+    // 越界（数据脏）夹到总数，不显示「第 9 个（共 5 个）」
+    expect(sessionTaskPositionText({ taskIndex: 9, totalTasks: 5, milestoneIndex: 1, totalMilestones: 3 })).toBe('第 5 个任务（共 5 个）');
+    expect(sessionTaskPositionText(null)).toBe('');
+    expect(sessionTaskPositionText({ taskIndex: 1, totalTasks: 0, milestoneIndex: 0, totalMilestones: 0 })).toBe('');
+  });
+
+  it('进度 title 全文：可选带里程碑前缀；无任务维度给空串（调用方不挂空 title）', () => {
+    expect(sessionProgressTitle(p)).toBe('第 3 个任务（共 5 个）');
+    expect(sessionProgressTitle(p, { withMilestone: true })).toBe('阶段 2/4 · 第 3 个任务（共 5 个）');
+    // 里程碑读数缺失时不硬写「阶段 0/0」
+    expect(sessionProgressTitle({ taskIndex: 2, totalTasks: 5, milestoneIndex: 0, totalMilestones: 0 }, { withMilestone: true })).toBe('第 2 个任务（共 5 个）');
+    expect(sessionProgressTitle(null, { withMilestone: true })).toBe('');
   });
 });
 

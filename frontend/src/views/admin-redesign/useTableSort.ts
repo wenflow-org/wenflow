@@ -150,7 +150,9 @@ export function useTableSort<T>(options: UseTableSortOptions<T>): UseTableSort<T
 
   function reset() {
     sortKey.value = validDefault
-    sortDir.value = options.defaultDir ?? 'desc'
+    // 回到默认列时方向也要取该列的默认方向：否则“重置”会得到一个从未出现过的组合
+    // （例：记忆强度首击升序，重置后变降序，最弱的排到末尾——与列头自己声明的口径相反）
+    sortDir.value = (validDefault ? options.defaultDirOf?.[validDefault] : undefined) ?? options.defaultDir ?? 'desc'
     persist()
   }
 

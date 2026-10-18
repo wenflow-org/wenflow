@@ -199,6 +199,19 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     await flushPromises();
     expect(overview.mock.calls.at(-1)![0]).toMatchObject({ sort: 'strength', order: 'asc' });
     expect(w.find('.mk-card__head-right .mk-card__meta').text()).toContain('记忆强度从弱到强');
+
+    // 最近复习：首击也升序——运营口径是「最久没复习的在前」（与待复习「最多的在前」同一条习惯：
+    // 最该关注的排头），而不是「最近复习过的在前」
+    const reviewedTh = w.findAll('thead th').find((t) => t.text() === '最近复习')!;
+    await reviewedTh.find('.mk-th__btn').trigger('click');
+    await flushPromises();
+    expect(overview.mock.calls.at(-1)![0]).toMatchObject({ sort: 'lastReviewed', order: 'asc' });
+    expect(w.find('.mk-card__head-right .mk-card__meta').text()).toContain('最近复习从久到近');
+    // 列头本身可点（整格热区，与 .mk-th--sortable 的光标承诺一致）：点 padding 区域也生效
+    await reviewedTh.trigger('click');
+    await flushPromises();
+    expect(overview.mock.calls.at(-1)![0]).toMatchObject({ sort: 'lastReviewed', order: 'desc' });
+    expect(w.find('.mk-card__head-right .mk-card__meta').text()).toContain('最近复习从近到久');
   });
 
   it('复习状态快筛：有待复习 / 未复习 / 需关注 计数按当前页，点击后行集收敛，可一键显示全部', async () => {

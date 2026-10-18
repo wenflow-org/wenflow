@@ -97,4 +97,26 @@ describe('useTableSort', () => {
     const data = [{ id: 'a' }, { id: 'b' }]
     expect(s.sortRows(data)).toEqual(data) // 无 accessor → 交给后端，前端不动
   })
+
+  it('reset 回到默认列时用该列的默认方向（不留下从未出现过的组合）', () => {
+    const s = useTableSort<Row>({
+      accessors: { name: (r) => r.name, n: (r) => r.n, t: (r) => r.t },
+      defaultKey: 'n',
+      defaultDir: 'desc',
+      defaultDirOf: { n: 'asc' }
+    })
+    expect(s.sortDir.value).toBe('desc') // 初始仍走 defaultDir（存量行为不变）
+    s.toggle('name')
+    s.reset()
+    expect(s.sortKey.value).toBe('n')
+    expect(s.sortDir.value).toBe('asc')  // n 的首击方向是 asc，重置后不该变 desc
+  })
+
+  it('reset 无默认键时回落 defaultDir', () => {
+    const s = make()
+    s.toggle('n')
+    s.reset()
+    expect(s.sortKey.value).toBe('')
+    expect(s.sortDir.value).toBe('desc')
+  })
 })

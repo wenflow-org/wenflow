@@ -107,9 +107,33 @@ describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后
     expect(rows[0].find('.ts-status').text()).toContain('已完成');
     expect(rows[0].find('.ts-status').text()).toContain('手动结束');
     expect(rows[0].text()).toContain('结束于 1/4');
+    // 徽章 title 不把 manual-end 一律说成用户动作：后台收束悬挂会话也写同一个原因
+    const badge = rows[0].findAll('.ts-status .mk-badge--sm').find((b) => b.text() === '手动结束');
+    const t = badge!.attributes('title') || '';
+    expect(t).toContain('任务未必做完');
+    expect(t).not.toContain('用户主动结束');
     expect(rows[1].find('.ts-status').text()).not.toContain('手动结束');
     expect(rows[1].text()).toContain('结束于 4/4');
     expect(rows[2].find('.ts-status').text()).not.toContain('手动结束');
+    wrapper.unmount();
+  });
+
+  it('状态列徽章：主状态徽章带 ts-status__main（68px 定宽），标注徽章不受定宽牵连', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          items: [makeItem('m', { status: 'completed', endReason: 'manual-end', messageCount: 1 })]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const main = wrapper.find('.ts-status .ts-status__main');
+    expect(main.exists()).toBe(true);
+    // 低参与 + 手动结束两枚标注徽章都按内容宽（模板里不再落到 .ts-status .mk-badge 那条定宽规则）
+    const sm = wrapper.findAll('.ts-status .mk-badge--sm');
+    expect(sm).toHaveLength(2);
+    sm.forEach((b) => expect(b.classes()).not.toContain('ts-status__main'));
     wrapper.unmount();
   });
 });
@@ -211,6 +235,40 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const row = wrapper.find('tbody tr');
     expect(row.text()).toContain('—');
     expect(row.find('.ts-prog').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('live：终态但 totalTasks=0 → 出灰色「—」，不套绿色终态样式（绿色破折号会被读成「第 0 格也算完成」）', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          items: [makeItem('zero', { status: 'completed', progress: { taskIndex: 0, totalTasks: 0, milestoneIndex: 0, totalMilestones: 0 } })]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const row = wrapper.find('tbody tr');
+    expect(row.find('.ts-prog--done').exists()).toBe(false);
+    expect(row.find('td:nth-child(5) .mk-na').text()).toBe('—');
+    wrapper.unmount();
+  });
+
+  it('live：taskIndex=0（结束时还没定位到任务）→ title 说「未进入具体任务」，不说「第 1 个」（与可见的 0/4 自相矛盾）', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          items: [makeItem('n', { status: 'completed', progress: { taskIndex: 0, totalTasks: 4, milestoneIndex: 1, totalMilestones: 3 } })]
+        }
+      }
+    });
+    const wrapper = await mountLive();
+    const prog = wrapper.find('tbody tr').find('.ts-prog--done');
+    expect(prog.text()).toBe('结束于 0/4');
+    const title = prog.attributes('title') || '';
+    expect(title).toContain('未进入具体任务（共 4 个）');
+    expect(title).not.toContain('第 1 个任务');
     wrapper.unmount();
   });
 });

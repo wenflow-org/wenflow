@@ -283,6 +283,35 @@ export function sessionProgressDone(status?: string | null): boolean {
   return st === 'completed' || st === 'succeeded'
 }
 
+/** 进度列 hover 的任务位置短语（教学会话列表 / 学习者明细共用一句措辞）。
+ *  taskIndex 是 1-based（teaching-session-progress.service），**0 = 会话结束时还没定位到
+ *  具体任务**（未开始或数据缺失）；旧实现 clamp 成「第 1 个任务」，与同一行的可见文本
+ *  「结束于 0/4」自相矛盾——0 就如实说是没进到任务，不硬凑成第 1 个。 */
+export function sessionTaskPositionText(p: SessionProgress | null | undefined): string {
+  if (!p || !Number.isFinite(p.totalTasks) || p.totalTasks <= 0) return ''
+  const total = p.totalTasks
+  if (!Number.isFinite(p.taskIndex) || p.taskIndex <= 0) return `未进入具体任务（共 ${total} 个）`
+  return `第 ${Math.min(p.taskIndex, total)} 个任务（共 ${total} 个）`
+}
+
+/** 进度列 hover 全文：任务位置（+ 可选里程碑定位）。
+ *  withMilestone 时前缀「阶段 x/y」；两页同用，避免同一格两种说法。 */
+export function sessionProgressTitle(
+  p: SessionProgress | null | undefined,
+  opts?: { withMilestone?: boolean }
+): string {
+  const pos = sessionTaskPositionText(p)
+  if (!pos) return ''
+  if (
+    opts?.withMilestone && p
+    && Number.isFinite(p.totalMilestones) && p.totalMilestones > 0
+    && Number.isFinite(p.milestoneIndex) && p.milestoneIndex > 0
+  ) {
+    return `阶段 ${p.milestoneIndex}/${p.totalMilestones} · ${pos}`
+  }
+  return pos
+}
+
 /** Skill 类别 → 中文 */
 const CATEGORY_TEXT: Record<string, string> = {
   analysis: '分析',

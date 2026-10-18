@@ -196,8 +196,8 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(countOf('已暂停')).toBe('1');
     expect(countOf('曾失败')).toBe('1');
     expect(w.text()).not.toContain('需关注');
-    // 截断提示迁卡头 meta（与行数同格）
-    expect(w.text()).toContain('共 80 人 · 当前显示前');
+    // 截断提示迁卡头 meta（与行数同格）；单位与分页器同词（位学习者），并说明「本次载入」而非再报一个「共」
+    expect(w.text()).toContain('共 80 位学习者 · 本次载入');
     expect(w.text()).toContain('回收无响应（2）');
   });
 

@@ -102,21 +102,27 @@
             <tr>
               <th scope="col" class="mk-th--sortable" :aria-sort="userSortState('name')"
                 title="点列头排序：按学习者名称（中文拼音序）"
+                @click="toggleUserSort('name')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('name')">学习者<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-num mk-th--sortable" :aria-sort="userSortState('traces')"
                 title="该用户全部记忆记录数（跨学习路径）。点列头排序：降序 = 痕迹最多的在前"
+                @click="toggleUserSort('traces')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('traces')">记忆痕迹<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-num mk-th--sortable" :aria-sort="userSortState('due')"
                 title="点列头排序：降序 = 待复习最多的在前（默认）"
+                @click="toggleUserSort('due')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('due')">待复习<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-th--sortable" :aria-sort="userSortState('weak')"
                 title="强度跌破 40% 的痕迹数，以及待人工确认的归并候选。点列头排序：降序 = 薄弱痕迹最多的在前"
+                @click="toggleUserSort('weak')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('weak')">需关注<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-num mk-th--sortable" :aria-sort="userSortState('strength')"
                 title="有复习记录的痕迹的平均记忆强度，从未复习的用户没有读数（恒排末尾）。点列头排序：升序 = 平均强度最弱的在前"
+                @click="toggleUserSort('strength')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('strength')">记忆强度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-th--sortable" :aria-sort="userSortState('lastReviewed')"
-                title="点列头排序：降序 = 最近复习过的在前（从未复习的恒排末尾）"
+                title="点列头排序：升序 = 最久没复习的在前（从未复习的恒排末尾）"
+                @click="toggleUserSort('lastReviewed')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('lastReviewed')">最近复习<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th class="mk-th--right">操作</th>
             </tr>
@@ -251,8 +257,9 @@ const {
   keys: ['name', 'traces', 'due', 'weak', 'strength', 'lastReviewed'],
   defaultKey: 'due',
   defaultDir: 'desc',
-  // 姓名/强度首击升序（名字正序、最弱的在前），其余首击降序（最多的在前）
-  defaultDirOf: { name: 'asc', strength: 'asc' }
+  // 姓名/强度/最近复习首击升序（名字正序、最弱的在前、最久没复习的在前——「最该关注的在前」
+  // 在时间列上的写法就是最久没复习的排头），其余首击降序（最多的在前）
+  defaultDirOf: { name: 'asc', strength: 'asc', lastReviewed: 'asc' }
 })
 const USER_SORT_LABEL: Record<string, string> = {
   name: '学习者名称',
