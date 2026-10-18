@@ -156,7 +156,8 @@ export const DEFAULT_MODELS = {
 // ---------------------------------------------------------------------------
 
 /** 配置文件路径：env 可覆盖（测试/多部署）；每次调用时解析，改 env 后下一次 reload 即生效。 */
-function resolveConfigPath(): string {
+/** 注册表文件路径（管理台 BYOK 编辑器要按同一路径读写：导出以免两处各写一份解析逻辑） */
+export function resolveConfigPath(): string {
   return (process.env.LLM_PROVIDERS_CONFIG || '').trim()
     || path.resolve(__dirname, '../../config/llm-providers.json');
 }
@@ -410,8 +411,10 @@ initFromDisk();
  * 热重载：文件 mtime 变化时重读并原地更新注册表。
  * 解析失败时**保留上一次好目录**并把错误记入 status（运行中的服务不能因一次坏编辑崩溃）。
  * 由路由层在每次 resolve 前调用（stat 开销远小于一次 LLM 调用）。
+ * `force` = 跳过 mtime 短路，供管理台写接口用：同一毫秒内连续两次保存时 mtime 可能不变，
+ * 靠 mtime 判断会「写进去了但运行时没换」，那就成了最难查的一类不一致。
  */
-export function reloadLlmProvidersIfChanged(): { reloaded: boolean; error: string | null } {
+export function reloadLlmProvidersIfChanged(force = false): { reloaded: boolean; error: string | null } {
   const configPath = resolveConfigPath();
   let st: fs.Stats;
   try {
@@ -420,7 +423,7 @@ export function reloadLlmProvidersIfChanged(): { reloaded: boolean; error: strin
     lastReloadError = `配置文件不可读：${configPath}`;
     return { reloaded: false, error: lastReloadError };
   }
-  if (lastMtimeMs !== null && st.mtimeMs === lastMtimeMs && activeSource === 'file') {
+  if (!force && lastMtimeMs !== null && st.mtimeMs === lastMtimeMs && activeSource === 'file') {
     lastReloadError = null;
     return { reloaded: false, error: null };
   }

@@ -7,6 +7,7 @@ import { decryptSecret, SecretCryptoError } from '../../utils/secret-crypto';
 import { endpointsMatch } from '../../utils/endpoint-identity';
 import { selectModelForAlias } from './model-alias';
 import { reloadLlmProvidersIfChanged, resolveModelRef } from '../../config/models.config';
+import { resolveProviderApiKey } from '../../services/provider-secrets.service';
 
 const PLATFORM_KEY_CONTEXT = 'system.platform_api_configs.apiKey';
 const SKILL_KEY_CONTEXT = 'system.skill_model_configs.apiKey';
@@ -94,11 +95,12 @@ export class APIRouter {
 
   /**
    * 供应商自带端点覆盖（llm-providers.json File-as-Truth）：
-   * 解析后的模型所属供应商声明了 baseUrl ⇒ endpoint/apiKey 整体切到该供应商
-   * （key 从 apiKeyEnv 环境变量读取，缺失 = 明确报错，不带病调用）。
+   * 解析后的模型所属供应商声明了 baseUrl ⇒ endpoint/apiKey 整体切到该供应商；
+   * key 解析顺序 **管理台写入的密文（provider_secrets）→ apiKeyEnv 环境变量**，两处都没有 = 明确报错，
+   * 不带病调用（管理台 BYOK 表单填的密钥落库，文件里只留环境变量名做兜底，见 provider-secrets.service.ts）。
    * 用户自带 provider（source user-*）不受覆盖——用户模型身份属于用户自己的供应商空间。
    */
-  private applyProviderEndpoint(route: ResolvedRoute): ResolvedRoute {
+  private async applyProviderEndpoint(route: ResolvedRoute): Promise<ResolvedRoute> {
     if (route.source === 'user-provider' || route.source === 'user-agent-override') return route;
     const ref = resolveModelRef(route.model || '');
     if (!ref) return route;
@@ -106,17 +108,18 @@ export class APIRouter {
     if (!ref.definition.providerEndpoint) {
       return ref.definition.id === route.model ? route : { ...route, model: ref.definition.id };
     }
-    const apiKey = (process.env[ref.definition.providerEndpoint.apiKeyEnv] || '').trim();
-    if (!apiKey) {
+    const { apiKeyEnv } = ref.definition.providerEndpoint;
+    const resolved = await resolveProviderApiKey(ref.providerId, apiKeyEnv);
+    if (!resolved) {
       throw new Error(
-        `模型「${ref.definition.id}」所属供应商「${ref.providerId}」要求环境变量 ${ref.definition.providerEndpoint.apiKeyEnv}，但未配置（来源 llm-providers.json）。请在部署环境设置后重试。`
+        `模型「${ref.definition.id}」所属供应商「${ref.providerId}」尚未配置密钥（管理台「模型与接入」填写，或部署环境设置 ${apiKeyEnv}）。请配置后重试。`
       );
     }
     return {
       ...route,
       model: ref.definition.id,
       endpoint: ref.definition.providerEndpoint.baseUrl,
-      apiKey,
+      apiKey: resolved.apiKey,
       privateNetworkPolicy: 'runtime',
       source: 'provider-endpoint'
     };
@@ -191,10 +194,10 @@ export class APIRouter {
       if (caller.skillId === 'semantic-freeze-judge') {
         route = { ...route, thinkingMode: 'disabled', reasoningEffort: 'default' };
       }
-      return this.withRequestTimeout(this.applyProviderEndpoint(route), caller.agentId);
+      return this.withRequestTimeout(await this.applyProviderEndpoint(route), caller.agentId);
     }
 
-    return this.withRequestTimeout(this.applyProviderEndpoint(await this.resolveBaseRoute(caller, userId)), caller.agentId);
+    return this.withRequestTimeout(await this.applyProviderEndpoint(await this.resolveBaseRoute(caller, userId)), caller.agentId);
   }
 
   private async resolveBaseRoute(caller: CallerInfo, userId?: string): Promise<ResolvedRoute> {

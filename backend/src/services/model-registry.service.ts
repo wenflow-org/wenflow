@@ -14,6 +14,7 @@ import {
 } from '../config/models.config';
 import { selectModelForAlias } from '../gateway/api-gateway/model-alias';
 import { MAX_MODEL_CANDIDATES } from '../gateway/api-gateway/executor';
+import { providerSecretSources } from './provider-secrets.service';
 import { listCoolingDowns, type CooldownSnapshot } from '../gateway/api-gateway/deployment-health';
 
 export interface ModelRegistryOverview {
@@ -121,6 +122,14 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     light: parseModelList(platform?.lightModels)
   };
 
+  // 密钥来源：BYOK 表单填的密钥落 system.db 密文（provider_secrets），apiKeyEnv 环境变量只是兜底。
+  // 只看 env 会与「模型与接入」面板打架（面板说已配置、总览说未配置），所以两处取「或」。
+  const dbSecretProviders = await providerSecretSources();
+  const keyConfiguredOf = (apiKeyEnv?: string | null, providerId?: string): boolean | null => {
+    if (!apiKeyEnv) return null;
+    return Boolean(providerId && dbSecretProviders[providerId]) || Boolean((process.env[apiKeyEnv] || '').trim());
+  };
+
   const providers = getProviderCatalog().map((p) => ({
     id: p.id,
     name: p.name,
@@ -130,7 +139,7 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     endpointSource: p.endpointSource,
     baseUrl: p.baseUrl ?? null,
     apiKeyEnv: p.apiKeyEnv ?? null,
-    keyConfigured: p.apiKeyEnv ? Boolean((process.env[p.apiKeyEnv] || '').trim()) : null,
+    keyConfigured: keyConfiguredOf(p.apiKeyEnv, p.id),
     modelIds: p.models.map((m) => m.id)
   }));
   const registryStatus = getLlmRegistryStatus();
@@ -209,7 +218,7 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     ...(model.providerName ? { providerName: model.providerName } : {}),
     hasOwnEndpoint: Boolean(model.providerEndpoint),
     keyConfigured: model.providerEndpoint
-      ? Boolean((process.env[model.providerEndpoint.apiKeyEnv] || '').trim())
+      ? keyConfiguredOf(model.providerEndpoint.apiKeyEnv, model.providerId)
       : null,
     capabilities: {
       supportsThinking: model.supportsThinking === true,

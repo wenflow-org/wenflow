@@ -112,6 +112,14 @@ const ACTION_RULES: ActionRule[] = [
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/run-full$/, action: 'virtual-session-run-full', targetType: 'virtual-session' },
   { method: 'POST', pattern: /^\/api\/admin\/virtual-learners\/sessions\/[^/]+\/blackbox-action$/, action: 'virtual-session-blackbox-action', targetType: 'virtual-session' },
   { method: 'POST', pattern: /^\/api\/admin\/projection-access-grants\/[^/]+\/projection-token$/, action: 'projection-access-token' },
+  // 模型供应商注册表编辑（2026-10-18 BYOK 编辑器）：动作名要能看出改了哪一层
+  { method: 'POST', pattern: /^\/api\/admin\/model-providers$/, action: 'model-provider-create', targetType: 'model-provider' },
+  { method: 'PATCH', pattern: /^\/api\/admin\/model-providers\/[^/]+$/, action: 'model-provider-update', targetType: 'model-provider' },
+  { method: 'DELETE', pattern: /^\/api\/admin\/model-providers\/[^/]+$/, action: 'model-provider-delete', targetType: 'model-provider' },
+  { method: 'DELETE', pattern: /^\/api\/admin\/model-providers\/[^/]+\/secret$/, action: 'model-provider-key-clear', targetType: 'model-provider' },
+  { method: 'POST', pattern: /^\/api\/admin\/model-providers\/[^/]+\/models$/, action: 'model-provider-model-add', targetType: 'model-provider' },
+  { method: 'PATCH', pattern: /^\/api\/admin\/model-providers\/[^/]+\/models\/[^/]+$/, action: 'model-provider-model-update', targetType: 'model-provider' },
+  { method: 'DELETE', pattern: /^\/api\/admin\/model-providers\/[^/]+\/models\/[^/]+$/, action: 'model-provider-model-delete', targetType: 'model-provider' },
 ];
 
 /** 去掉末尾斜杠后匹配映射表（路由注册在挂载点下时 baseUrl+path 即为完整路径） */

@@ -1,8 +1,9 @@
 /**
  * 供应商自带端点路由规则（llm-providers.json File-as-Truth）：
  * 解析后的模型命中自带 baseUrl 的供应商 ⇒ endpoint/apiKey 整体切换（source=provider-endpoint）；
- * 密钥 env 缺失 ⇒ 明确报错；用户自带 provider（source user-*）不受覆盖。
- * 测试密钥一律用 ut- 前缀占位（非真实凭据；真实凭据只允许来自环境变量）。
+ * 密钥解析顺序为 **管理台写入的 DB 密文 → apiKeyEnv 环境变量**，两处都缺 ⇒ 明确报错；
+ * 用户自带 provider（source user-*）不受覆盖。
+ * 测试密钥一律用 ut- 前缀占位（非真实凭据；真实凭据只允许来自环境变量或管理台密文表）。
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -22,12 +23,15 @@ jest.mock('../../../config/database', () => ({
   }
 }))
 
+const secretFindUnique = jest.fn()
+
 jest.mock('../../../config/system-database', () => ({
   __esModule: true,
   default: {
     agent_model_configs: { findFirst: agentConfigFindFirst },
     skill_model_configs: { findFirst: skillConfigFindFirst },
-    platform_api_configs: { findFirst: platformConfigFindFirst }
+    platform_api_configs: { findFirst: platformConfigFindFirst },
+    provider_secrets: { findUnique: secretFindUnique }
   }
 }))
 
@@ -37,12 +41,18 @@ jest.mock('../../../utils/logger', () => ({
 
 import { APIRouter } from '../router'
 import { reloadLlmProvidersIfChanged } from '../../../config/models.config'
+import { encryptSecret } from '../../../utils/secret-crypto'
+import { invalidateProviderSecretCache } from '../../../services/provider-secrets.service'
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-providers-router-'))
 const tempConfig = path.join(tmpDir, 'llm-providers.json')
 
 // 占位值：ut- 前缀 = unit-test 假数据，不含任何真实凭据
 const UT_PROV_KEY = 'ut-testprov-placeholder-key'
+// 测试用密钥环：只在本文件的进程内生效（真密文/真解密，密钥是随机 32 字节）
+const UT_DB_KEY = 'ut-db-placeholder-key'
+process.env.SECRET_ENCRYPTION_KEYS = `ut-key:${Buffer.alloc(32, 7).toString('base64')}`
+process.env.SECRET_ENCRYPTION_CURRENT_KEY_ID = 'ut-key'
 const UT_PLATFORM_KEY = 'ut-platform-placeholder-key'
 const UT_USER_KEY = 'ut-user-placeholder-key'
 
@@ -92,6 +102,8 @@ describe('APIRouter 供应商端点覆盖', () => {
     agentConfigFindFirst.mockResolvedValue(null)
     skillConfigFindFirst.mockResolvedValue(null)
     platformConfigFindFirst.mockResolvedValue({ ...PLATFORM })
+    secretFindUnique.mockResolvedValue(null)
+    invalidateProviderSecretCache()
   })
 
   it('平台模型命中自带端点的供应商 → endpoint/apiKey 整体切换，source=provider-endpoint', async () => {
@@ -125,12 +137,23 @@ describe('APIRouter 供应商端点覆盖', () => {
     expect(route.source).toBe('provider-endpoint')
   })
 
-  it('供应商密钥 env 缺失 → 明确报错（不带病调用）', async () => {
+  it('管理台写入的密文优先于环境变量', async () => {
+    secretFindUnique.mockResolvedValue({ providerId: 'testprov', apiKey: encryptSecret(UT_DB_KEY, 'system.provider_secrets.apiKey'), apiKeyEnv: 'TEST_PROV_KEY' })
+    invalidateProviderSecretCache()
+    const route = await new APIRouter().resolve({})
+    expect(route.apiKey).toBe(UT_DB_KEY)
+    expect(route.endpoint).toBe('http://testprov.local/v1')
+  })
+
+  it('供应商密钥 DB 与环境变量都缺 → 明确报错（不带病调用）', async () => {
     delete process.env.TEST_PROV_KEY
     try {
+      // 进程内 60s 缓存：环境变量在真实部署里靠重启改，测试里显式失效以模拟重启
+      invalidateProviderSecretCache()
       await expect(new APIRouter().resolve({})).rejects.toThrow(/TEST_PROV_KEY/)
     } finally {
       process.env.TEST_PROV_KEY = UT_PROV_KEY
+      invalidateProviderSecretCache()
     }
   })
 
