@@ -60,6 +60,13 @@ export interface ModelDefinition {
   /** 是否支持 `reasoning_effort` 字段（不支持时即使 supportsThinking 也不发该字段） */
   supportsReasoningEffort?: boolean;
   /**
+   * 是否支持图片输入（OpenAI 兼容 `content: [{type:'image_url',…}]`）。
+   * 网关**不提供**能力声明（`GET /v1/models` 只有 supported_endpoint_types），
+   * 因此由本注册表声明；带图请求打到未声明视觉的模型会被网关明确拒绝（MODEL_VISION_UNSUPPORTED），
+   * 而不是静默丢图或上游 400。声明前用 `npm run vision:probe -- --model=<id>` 实测把关。
+   */
+  vision?: boolean;
+  /**
    * 输出 token 硬上限（上游限制）。语义 = **能力上限**，不是请求参数：
    * 只在调用方声明值越界时用于封顶（见 doc/MODEL_GATEWAY_DESIGN.md §4.3）。
    */
@@ -277,6 +284,7 @@ function parseModelEntry(providerId: string, providerName: string, endpoint: { b
     ...(endpoint ? { providerEndpoint: endpoint } : {}),
     ...(b.supportsThinking === true ? { supportsThinking: true } : b.supportsThinking === false ? { supportsThinking: false } : {}),
     ...(b.supportsReasoningEffort === true ? { supportsReasoningEffort: true } : b.supportsReasoningEffort === false ? { supportsReasoningEffort: false } : {}),
+    ...(b.vision === true ? { vision: true } : b.vision === false ? { vision: false } : {}),
     ...(b.maxOutputTokens != null ? { maxOutputTokens: asNumber(b.maxOutputTokens, 'maxOutputTokens', where) } : {}),
     ...(b.defaultMaxTokens != null ? { defaultMaxTokens: asNumber(b.defaultMaxTokens, 'defaultMaxTokens', where) } : {}),
     ...(b.reasoningReserveTokens != null ? { reasoningReserveTokens: asNumber(b.reasoningReserveTokens, 'reasoningReserveTokens', where) } : {}),
@@ -505,6 +513,15 @@ export function getModelAliasMembers(
 export function supportsThinkingMode(modelId: string): boolean {
   const model = MODEL_MAP.get(modelId);
   return model?.supportsThinking ?? false;
+}
+
+/**
+ * 模型是否声明支持图片输入（见 ModelDefinition.vision）。
+ * 未登记到注册表的模型按 false 处理——带图请求宁缺勿滥，明确报错好过上游静默丢图。
+ */
+export function supportsVision(modelId: string): boolean {
+  const model = MODEL_MAP.get(String(modelId || '').trim());
+  return model?.vision === true;
 }
 
 /**

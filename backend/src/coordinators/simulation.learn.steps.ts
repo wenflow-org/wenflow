@@ -487,6 +487,8 @@ export function buildNextLearningState(params: {
   currentTask: SimulationTask;
   teachingSessionId: string | null | undefined;
   aiResponse: string;
+  /** 本轮教师配图（#123）：随教师消息一起进学习者可见上下文 */
+  teacherImages?: ConversationHistoryItem['images'];
 }): Record<string, unknown> {
   const {
     learningState,
@@ -502,7 +504,8 @@ export function buildNextLearningState(params: {
     learningStepError,
     currentTask,
     teachingSessionId,
-    aiResponse
+    aiResponse,
+    teacherImages
   } = params;
 
   return {
@@ -553,7 +556,12 @@ export function buildNextLearningState(params: {
     conversationHistory: [
       ...(learningState.conversationHistory || []),
       { role: 'user', content: virtualReply.userVisible },
-      { role: 'assistant', content: aiResponse }
+      // 教师配图随教师消息回流（#123）：下一轮模拟学习者请求组装时转 image_url 内容块
+      {
+        role: 'assistant',
+        content: aiResponse,
+        ...(Array.isArray(teacherImages) && teacherImages.length > 0 ? { images: teacherImages } : {})
+      }
     ]
   };
 }

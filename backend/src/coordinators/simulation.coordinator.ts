@@ -44,7 +44,8 @@ import type {
   AssistedLeaseContext,
   SimulationOrchestratorInput,
   AutoLoopOptions,
-  RunFullOptions
+  RunFullOptions,
+  ConversationHistoryItem
 } from './simulation.types';
 import {
   COORDINATOR_ID,
@@ -226,6 +227,8 @@ export function resolveCheckpointSubmitAction(params: {
  */
 export interface NormalizedTeachingTurn {
   aiResponse: string;
+  /** 本轮教师配图（#123）：随学习者可见上下文回流，模拟学习者"看得见"课堂配图 */
+  images?: Array<{ url: string; caption?: string | null }>;
   revision: number;
   knowledgePoints: any[];
   isCompletion: boolean;
@@ -259,6 +262,9 @@ interface RunTeachingTurnParams {
 export function normalizeProcessTeachingTurn(result: ProcessTeachingTurnResult): NormalizedTeachingTurn {
   return {
     aiResponse: result.aiResponse || '',
+    ...(Array.isArray(result.images) && result.images.length > 0
+      ? { images: result.images.map((image) => ({ url: image.url, caption: image.caption ?? null })) }
+      : {}),
     revision: result.revision,
     knowledgePoints: result.knowledgePoints || [],
     isCompletion: result.isCompletion,
@@ -771,7 +777,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
   async simulateGoalLearnerReply(params: {
     profile: VirtualLearnerProfile;
     storyContext?: SimulationContext['storyContext'];
-    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
+    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string; images?: ConversationHistoryItem['images'] }>;
     lastAssistantMessage: string;
     currentPhase: 'opening' | 'understanding' | 'proposal_evaluation';
     previousLearnerState?: Partial<LearnerLatentState>;

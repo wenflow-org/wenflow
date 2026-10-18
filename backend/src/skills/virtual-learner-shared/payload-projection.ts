@@ -15,6 +15,26 @@ export interface StoryHistoryItem {
   summary: string;
 }
 
+/** 可见上下文历史随带的教学配图引用（#123）：url + 可选说明 */
+export interface VisibleHistoryImage {
+  url: string;
+  caption?: string | null;
+}
+
+/**
+ * 从可见上下文历史里收集随带配图（#123）：保持历史顺序（早→晚），
+ * 由 `buildVisionContent` 做 URL 白名单与数量上限收口。
+ * 注意：图片**不进 payload JSON**（base64 会白烧 token 且模型读不到像素），
+ * 只作为请求消息的 image_url 内容块随 payload 一起发送。
+ */
+export function collectVisibleHistoryImages(history: unknown): VisibleHistoryImage[] {
+  if (!Array.isArray(history)) return [];
+  return history.flatMap((message: unknown) => {
+    const images = (message as { images?: unknown } | null)?.images;
+    return Array.isArray(images) ? (images as VisibleHistoryImage[]) : [];
+  });
+}
+
 const STORY_HISTORY_LIMIT = 12;
 const STORY_SUMMARY_MAX = 160;
 

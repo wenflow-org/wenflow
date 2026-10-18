@@ -21,7 +21,7 @@ import simulatedDayService from '../services/virtual-lab/simulated-day.service';
 import { safeJsonParse } from '../utils/safe-json';
 import { asErrorLike } from '../virtual-lab/vlab-types';
 import type { SimulationMilestone, StageResults, TeachingState } from '../virtual-lab/vlab-types';
-import type { SimulationContext, SimulationLogEntry } from './simulation.types';
+import type { SimulationContext, SimulationLogEntry, ConversationHistoryItem } from './simulation.types';
 import { LEARN_AUTO_TURN_CAP } from './simulation.constants';
 import {
   buildLearningProgressSnapshot,
@@ -719,6 +719,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         history: trimmedConversationHistory.map((item) => ({
           role: item.role === 'assistant' ? 'teacher' : 'learner',
           content: item.content,
+          // 判决器与模拟器看到同一份可见上下文（#123）：配图一并带上
+          ...(Array.isArray(item.images) && item.images.length > 0 ? { images: item.images } : {}),
         })),
         lastTeacherMessage: lastAssistantMessage,
       };
@@ -813,6 +815,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         history: trimmedConversationHistory.map((item) => ({
           role: item.role === 'assistant' ? 'teacher' : 'learner',
           content: item.content,
+          ...(Array.isArray(item.images) && item.images.length > 0 ? { images: item.images } : {}),
         })),
         lastTeacherMessage: lastAssistantMessage,
       },
@@ -902,6 +905,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     });
     
     let aiResponse = '';
+    // 本轮教师配图（#123）：教学回合产出后随教师消息进学习者可见上下文（模拟学习者"看得见图"）
+    let teacherImages: ConversationHistoryItem['images'] | undefined;
     const nextTaskIdx = currentTaskIdx;
     const nextMilestoneIdx = currentMilestoneIdx;
     let learningStepError: string | null = null;
@@ -935,6 +940,9 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         teachingRevision = aiResult.revision;
         
         aiResponse = aiResult.aiResponse || '';
+        teacherImages = Array.isArray(aiResult.images) && aiResult.images.length > 0
+          ? aiResult.images.map((image) => ({ url: image.url, caption: image.caption ?? null }))
+          : undefined;
         
         // P1-6：看板 × 判决对账——判错轮里被 blockedConcept 命中的教师侧看板项若仍标 mastered，
         // 落库前降级为 learning（progress ≤40），避免教师看板与判决器自相矛盾（audit n=12 中 6 条）。
@@ -1037,7 +1045,12 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           const checkpointConversationHistory = [
             ...(learningState.conversationHistory || []),
             { role: 'user', content: virtualReplyResult.userVisible },
-            { role: 'assistant', content: aiResponse }
+            // 教师配图同上（#123）：结课检查点快照也保住配图
+            {
+              role: 'assistant',
+              content: aiResponse,
+              ...(Array.isArray(teacherImages) && teacherImages.length > 0 ? { images: teacherImages } : {})
+            }
           ];
           const pendingTaskRuntime = {
             status: 'task_completion_pending',
@@ -1263,7 +1276,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
       learningStepError,
       currentTask,
       teachingSessionId,
-      aiResponse
+      aiResponse,
+      teacherImages
     });
 
     await ctx.updateTeachingStatePreservingControlFlags(sessionId, nextLearningState);

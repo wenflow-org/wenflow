@@ -157,6 +157,7 @@ export interface ModelDefinition {
   supportsReasoningEffort?: boolean;
   supportsTools?: boolean;
   supportsResponseFormat?: boolean;
+  vision?: boolean;                // 是否支持图片输入（OpenAI 兼容 image_url 内容块；2026-10-18 #123）
   // —— 限额 ——
   contextWindow?: number;
   maxOutputTokens?: number;        // 硬上限（上游），请求参数的上界
@@ -172,6 +173,27 @@ export interface ModelDefinition {
 ```
 
 **裁剪记录（2026-09-24 对账）**：已实现的注册表是上述接口的**能力 + 限额 + 经济性半边**（`supportsThinking` / `supportsReasoningEffort` / `maxOutputTokens` / `defaultMaxTokens` / `reasoningReserveTokens` / `fallbacks` / `maxParallelRequests` / `pricing`）。接入半边（`endpoint` / `apiKeyRef` / `realModelId` / `contextWindow` / `supportsTools` / `supportsResponseFormat` / `requestTimeoutMs` / `rpm`）**有意识地未实现**：当前部署是单一聚合网关（所有模型同 endpoint/apiKey），接入信息归平台层（`platform_api_configs`）；引入 per-provider 端点时再按本接口补齐。P0 的「已实现」以本记录为准。
+
+#### 4.1a 视觉能力（`vision`，2026-10-18 #123 落地）
+
+网关端点**不提供能力声明**（`GET /v1/models` 只有 `supported_endpoint_types`），因此「这个模型能不能读图」由本注册表声明、由探针把关：
+
+- **声明**：`llm-providers.json` 的模型条目加 `"vision": true`（当前：`deepseek-v4.1-flash`、`agnes-3.0-flash`；实测两者都能读图）。
+- **把关**：`npm run vision:probe [-- --model=<id>] [--stream] [--history-image] [--image=<path>]`
+  —— 内置确定性图案（左红最窄 / 中绿最宽 / 右蓝居中）+ 四项判据（颜色、顺序、最宽=绿、最窄=红），
+  颜色顺序说反或宽度归属读错都会 FAIL，避免"配了但读不了图"静默上线。
+- **硬闸门**：请求含图片块而**最终生效模型**（含 fallback 换型后）未声明 `vision` → 网关在发上游前直接拒绝
+  （`MODEL_VISION_UNSUPPORTED`，可执行提示：声明 + 探针命令），不静默丢图、不让上游 400 掩盖真因。
+- **可选上下文的优雅降级**：prompt-composer 知道生效模型，未声明 vision 时把消息里的图片块摘掉
+  （文本保留）并告警——课堂配图随历史回流属可选上下文，模型无视觉时应退成无图课堂继续跑，
+  而不是把教学链路打挂。保存技能模型绑定时（`admin/skill-model-configs`）同口径给可见 warning。
+- **上游形态约束（实测）**：把 `image_url` 内容块挂在 **`role:'assistant'` 消息**上会被上游拒收
+  （先挂起 100+s 再 400 `invalid_request`，`vision:probe -- --history-image` 可复现）；
+  **挂在 user 消息**上正常。因此上下文通道（teaching-turn 历史配图、VL 可见上下文配图）
+  一律把图片附加到 **user 消息**尾部。
+- **计费/体积**：data URL 很大，视觉输入按图片块折算（上下文压缩按 ~1000 token/张估算，
+  **不按 base64 字符数**，否则每节课都会被顶进压缩路径）；请求日志只记类型与体积，base64 明文不进日志。
+
 
 ### 4.2 ② 别名与部署
 

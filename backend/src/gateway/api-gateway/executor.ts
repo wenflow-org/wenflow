@@ -1,10 +1,10 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../../utils/logger';
 import { redactLogValue } from '../../utils/secret-redaction';
-import { ResolvedRoute, ChatRequest, ChatResponse, ExecutionContext } from './types';
+import { ResolvedRoute, ChatRequest, ChatResponse, ExecutionContext, ChatContentPart, ChatMessageContent, messagesHaveImages } from './types';
 import { getDefaultAIRequestTimeoutMs } from '../../services/agentRequestTimeout.service';
 import { buildThinkingPolicy, type ReasoningEffort, type ThinkingMode } from './thinking-policy';
-import { getModelDefinition, getModelFallbacks } from '../../config/models.config';
+import { getModelDefinition, getModelFallbacks, supportsVision } from '../../config/models.config';
 import {
   clearCooldown,
   deploymentKey,
@@ -747,6 +747,11 @@ export class APIExecutor {
     if (process.env.LLM_SYSTEM_PROMPT_FOLD !== '0') {
       requestBody.messages = foldSystemMessagesIntoUser(requestBody.messages);
     }
+    // 视觉把关（2026-10-18 #123）：请求里含图片内容块时，**最终生效模型**必须声明 vision，
+    // 否则明确拒绝（而不是把图发给不认识图的模型：上游要么 400，要么当没看见，两种都难排查）。
+    // 放在这里而不是路由层：fallback 换型（execute → {...request, model: fallbackModel}）也经过本函数，
+    // 保证降级候选同样按自己的能力声明受检。
+    this.assertVisionAllowed(String(requestBody.model || ''), requestBody.messages);
     // 调用方**显式**声明 thinking 时以调用方为准（定向重试：截断空输出 → 关闭思考重试），
     // 否则按路由档位 + 模型能力推导。
     const explicitThinking = requestBody.thinking;
@@ -756,6 +761,31 @@ export class APIExecutor {
       if (explicitThinking.type === 'disabled') delete requestBody.reasoning_effort;
     }
     return requestBody;
+  }
+
+  /**
+   * 带图请求的模型能力闸门（2026-10-18 #123）。
+   *
+   * 网关端点不提供能力声明（`GET /v1/models` 只有 supported_endpoint_types），
+   * 因此能力以本仓模型注册表（llm-providers.json `vision: true`）为唯一事实源。
+   * 未声明即拒绝：自定义端点要用视觉模型，需先在 llm-providers.json 声明并实测
+   * （`npm run vision:probe -- --model=<id>`）。
+   */
+  private assertVisionAllowed(model: string, messages: ChatRequest['messages']): void {
+    if (!messagesHaveImages(messages)) return;
+    if (supportsVision(model)) return;
+    throw new GatewayExecutionError(
+      `模型「${model || 'unknown'}」未声明视觉能力（llm-providers.json 缺 \`"vision": true\`），`
+      + '但本次请求包含图片内容块，已拒绝发送。'
+      + `如确认该模型支持图片输入，请先在 llm-providers.json 为其声明 vision 并用 \`npm run vision:probe -- --model=${model}\` 实测把关；`
+      + '否则请改走纯文本请求或把该技能路由到已声明视觉的模型。',
+      {
+        category: 'configuration',
+        code: 'MODEL_VISION_UNSUPPORTED',
+        statusCode: 400,
+        retryable: false
+      }
+    );
   }
 
   /** 降级候选链：主模型 + 声明的 fallback（去重、过滤未知模型、限量）。 */
@@ -1202,7 +1232,7 @@ export class APIExecutor {
       messageCount: request.messages?.length || 0,
       messages: (request.messages || []).map(message => ({
         role: message.role,
-        content: (message.content || '').slice(0, 500)
+        content: summarizeContentForLog(message.content)
       }))
     }) as Record<string, unknown>;
   }
@@ -1238,11 +1268,13 @@ export class APIExecutor {
  * - 无 system 消息 → 原样返回（引用不变，避免无谓拷贝）；
  * - 多条 system → 按顺序以空行拼接；
  * - 有 user 消息 → system 文本前置到**首条** user 消息，用分隔线隔开，保留原 user 内容与其余消息顺序；
- * - 无 user 消息（只有 system/assistant）→ 生成一条 user 消息承载 system 文本。
+ * - 无 user 消息（只有 system/assistant）→ 生成一条 user 消息承载 system 文本；
+ * - 首条 user 是内容块数组（多模态）→ 在首个文本块前插入 system 文本块，图片块原样保留（#123）。
  */
 export function foldSystemMessagesIntoUser(messages: ChatRequest['messages']): ChatRequest['messages'] {
   if (!Array.isArray(messages) || messages.length === 0) return messages;
-  const systems = messages.filter((m) => m?.role === 'system' && String(m?.content || '').trim());
+  // 只折叠**纯文本** system 消息：内容块数组形态的 system 不在此兼容层处理（当前无此调用方）
+  const systems = messages.filter((m) => m?.role === 'system' && typeof m?.content === 'string' && m.content.trim());
   if (systems.length === 0) return messages;
 
   const systemText = systems.map((m) => String(m.content)).join('\n\n');
@@ -1254,7 +1286,44 @@ export function foldSystemMessagesIntoUser(messages: ChatRequest['messages']): C
   const merged = [...rest];
   merged[firstUserIndex] = {
     ...merged[firstUserIndex],
-    content: `${systemText}\n\n---\n${String(merged[firstUserIndex].content || '')}`,
+    content: mergeSystemTextIntoContent(systemText, merged[firstUserIndex].content),
   };
   return merged;
+}
+
+/**
+ * 把 system 文本合并进目标内容（2026-10-18 #123 多模态兼容）：
+ * - string：前置文本 + 分隔线（原行为不变）；
+ * - 内容块数组（含图片）：在**首个文本块**前插入 system 文本块——绝不能走字符串拼接，
+ *   否则数组会被 `String()` 成 `[object Object]`，图片块与用户正文一起丢失。
+ */
+function mergeSystemTextIntoContent(systemText: string, content: ChatMessageContent | undefined): ChatMessageContent {
+  if (typeof content === 'string') {
+    return `${systemText}\n\n---\n${content}`;
+  }
+  if (!Array.isArray(content)) {
+    return `${systemText}\n\n---\n`;
+  }
+  const parts = [...content];
+  const prefix: ChatContentPart = { type: 'text', text: `${systemText}\n\n---` };
+  const firstTextIndex = parts.findIndex((part) => part?.type === 'text');
+  if (firstTextIndex === -1) return [prefix, ...parts];
+  parts.splice(firstTextIndex, 0, prefix);
+  return parts;
+}
+
+/**
+ * 日志摘要：文本截断，图片块只留类型与 data URL 体积（base64 明文不进日志）。
+ */
+export function summarizeContentForLog(content: ChatMessageContent | undefined | null): string {
+  if (typeof content === 'string') return content.slice(0, 500);
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((part) => {
+      if (part?.type === 'text') return part.text || '';
+      if (part?.type === 'image_url') return `[image ${String(part.image_url?.url || '').length} chars]`;
+      return '[unknown block]';
+    })
+    .join(' ')
+    .slice(0, 500);
 }

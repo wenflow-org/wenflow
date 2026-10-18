@@ -12,7 +12,9 @@ import {
   decideFrictionTrigger,
   PERSONA_FIELD_ANCHORS_HINT,
   projectSimulatorPayload,
+  collectVisibleHistoryImages,
 } from '../virtual-learner-shared';
+import { buildVisionContent } from '../../utils/vision-content';
 
 export const VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_MAX_TOKENS = 1200;
 export const VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_TEMPERATURE = 0.8;
@@ -28,6 +30,8 @@ export type GoalLearnerPhase = 'opening' | 'understanding' | 'proposal_evaluatio
 export interface GoalLearnerVisibleMessage {
   role: 'learner' | 'goal_agent';
   content: string;
+  /** 配图（#123）：目标阶段对话当前无图，保留通道以待后续（如学习者上传参考图） */
+  images?: Array<{ url: string; caption?: string | null }>;
 }
 
 export interface GoalLearnerSimulationInput {
@@ -319,6 +323,21 @@ export async function virtualLearnerGoalDialogueSimulator(input: GoalLearnerSimu
       requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-goal-dialogue-simulator' },
             buildUserPayload: (value: any) => projectSimulatorPayload(buildUserPayload(value)),
+      /**
+       * 消息形态（2026-10-18 #123）：与 learn-turn 模拟器同构——payload 保持既有 JSON 文本，
+       * 可见历史里的配图作为 image_url 内容块附在 user 消息尾部（当前目标阶段无图，保留通道）。
+       */
+      buildMessages: ({ input: value, systemPrompt, userPayload, retryMessage }: any) => [
+        { role: 'system' as const, content: systemPrompt },
+        {
+          role: 'user' as const,
+          content: buildVisionContent(
+            retryMessage ? `${userPayload}\n\n${retryMessage}` : userPayload,
+            collectVisibleHistoryImages(value?.visibleContext?.history),
+            { label: '配图', context: 'vl-goal-dialogue-simulator' }
+          ),
+        },
+      ],
       validateParsedOutput: (parsed) => ({
         valid: !!safeText(parsed?.reply) && parsed?.learnerState && typeof parsed.learnerState === 'object',
         failureReason: 'missing reply or learnerState'

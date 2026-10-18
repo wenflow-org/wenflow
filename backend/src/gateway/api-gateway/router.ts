@@ -6,7 +6,7 @@ import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.s
 import { decryptSecret, SecretCryptoError } from '../../utils/secret-crypto';
 import { endpointsMatch } from '../../utils/endpoint-identity';
 import { selectModelForAlias } from './model-alias';
-import { reloadLlmProvidersIfChanged, resolveModelRef } from '../../config/models.config';
+import { reloadLlmProvidersIfChanged, resolveModelRef, supportsVision } from '../../config/models.config';
 
 const PLATFORM_KEY_CONTEXT = 'system.platform_api_configs.apiKey';
 const SKILL_KEY_CONTEXT = 'system.skill_model_configs.apiKey';
@@ -18,6 +18,8 @@ interface Config {
   endpoint: string;
   apiKey: string;
   model: string;
+  /** 该模型是否声明支持图片输入（llm-providers.json `vision: true`；2026-10-18 #123） */
+  vision?: boolean;
   reasoningModel?: string;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
   reasoningEffort?: 'default' | 'low' | 'high' | 'max';
@@ -285,6 +287,9 @@ export class APIRouter {
         endpoint,
         apiKey,
         model,
+        // 视觉能力跟随**最终生效模型**（2026-10-18 #123）：skill 绑定换过模型时，
+        // 不能沿用父级路线（平台默认）的 vision 标志，否则带图请求打到无视觉模型上。
+        vision: supportsVision(model),
         // 标记 skill 级是否显式指定了模型（供 resolve-llm-call-params 决定优先级）；
         // 用户自有端点上学习对话链的模型由用户的 chatModel 决定，skill 绑定未生效 → 不标 explicit
         modelExplicit: Boolean(config.model) && !userModelWins,
@@ -336,16 +341,20 @@ export class APIRouter {
         ? decryptSecret(config.apiKey, USER_AGENT_KEY_CONTEXT) || ''
         : '';
 
+      const model = this.resolveModel(
+        config.model || platformConfig?.defaultModel,
+        platformConfig ? this.platformAliasOverrides(platformConfig) : null
+      );
+
       return {
         providerId: `user-agent:${userId}:${agentId}`,
         endpoint: customEndpoint || platformConfig?.apiUrl || this.resolveBaseEndpoint(),
         apiKey: customEndpoint
           ? customApiKey
           : this.resolvePlatformApiKey(platformConfig, platformConfig?.apiUrl || this.resolveBaseEndpoint()),
-        model: this.resolveModel(
-          config.model || platformConfig?.defaultModel,
-          platformConfig ? this.platformAliasOverrides(platformConfig) : null
-        ),
+        model,
+        // 与 skill 路由同口径：能力跟随最终模型声明（2026-10-18 #123）
+        vision: supportsVision(model),
         thinkingMode: 'default',
         reasoningEffort: 'default',
         temperature: config.temperature ?? platformConfig?.defaultTemperature ?? 0.7,
@@ -396,12 +405,16 @@ export class APIRouter {
         reasoningEffort = this.normalizeReasoningEffort(plat?.defaultReasoningEffort || 'default');
       } catch { /* 读不到按默认 */ }
 
+      const userChatModel = this.resolveModel(config.chatModel);
       return {
         providerId: `user-provider:${userId}`,
         endpoint: config.endpoint,
         apiKey: decryptSecret(config.apiKey, USER_KEY_CONTEXT) || '',
         // 用户自有 provider:模型身份是用户自己的供应商空间,不套平台别名覆盖(有意豁免)
-        model: this.resolveModel(config.chatModel),
+        model: userChatModel,
+        // 用户自带模型不在平台注册表内 → 无声明即视为**无视觉**（保守拒绝带图请求并提示，
+        // 而不是静默丢图；要在自定义端点用视觉模型，需在 llm-providers.json 里声明 vision 后加入注册表）
+        vision: supportsVision(userChatModel),
         reasoningModel: config.reasoningModel ? this.resolveModel(config.reasoningModel) : undefined,
         thinkingMode,
         reasoningEffort,
@@ -502,11 +515,13 @@ export class APIRouter {
         return this.getFallbackConfig();
       }
 
+      const platformModel = this.resolveModel(config.defaultModel, this.platformAliasOverrides(config));
       return {
         providerId: 'platform',
         endpoint: config.apiUrl || this.resolveBaseEndpoint(),
         apiKey: this.resolvePlatformApiKey(config, config.apiUrl || this.resolveBaseEndpoint()),
-        model: this.resolveModel(config.defaultModel, this.platformAliasOverrides(config)),
+        model: platformModel,
+        vision: supportsVision(platformModel),
         thinkingMode: this.normalizeThinkingMode(config.defaultThinkingMode || 'default'),
         reasoningEffort: this.normalizeReasoningEffort(config.defaultReasoningEffort || 'default'),
         responseFormat: this.normalizeResponseFormat(config.defaultResponseFormat),
@@ -526,11 +541,13 @@ export class APIRouter {
   }
 
   private getFallbackConfig(): ResolvedRoute {
+    const fallbackModel = this.resolveModel();
     return {
       providerId: 'env-default',
       endpoint: this.resolveBaseEndpoint(),
       apiKey: process.env.AI_API_KEY || '',
-      model: this.resolveModel(),
+      model: fallbackModel,
+      vision: supportsVision(fallbackModel),
       thinkingMode: 'default',
       reasoningEffort: 'default',
       responseFormat: 'none',

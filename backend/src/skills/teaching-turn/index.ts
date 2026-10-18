@@ -12,6 +12,8 @@ import { recordDegradation } from '../degradation-telemetry';
 import { findArithmeticMismatches, type ArithmeticMismatch } from '../../services/ai-teaching/teaching-arithmetic-guard';
 import { normalizeForKeywordMatch } from '../../services/ai-teaching/checkpoint-shared';
 import { applyObservableEvidenceGate, detectObservableEvidence } from './observable-evidence';
+import type { ChatMessageContent } from '../../gateway/api-gateway/types';
+import { buildVisionContent } from '../../utils/vision-content';
 
 const AGENT_ID = 'skill:teaching-turn';
 
@@ -19,6 +21,12 @@ const AGENT_ID = 'skill:teaching-turn';
 const TEACHING_TURN_PROMPT = loadPromptFile(AGENT_ID)?.systemPrompt || '';
 
 type MessageRole = 'user' | 'assistant' | 'system';
+
+/** 教学配图的最小可送模型形态（#123）：url + 可选说明；日期/provider 等元数据不进提示词 */
+export interface TeachingTurnMessageImage {
+  url: string;
+  caption?: string | null;
+}
 
 const ALLOWED_COGNITIVE_LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'] as const;
 const ALLOWED_EMOTIONAL_STATES = ['positive', 'neutral', 'frustrated', 'confused', 'bored'] as const;
@@ -29,7 +37,11 @@ const ALLOWED_LOAD_BASIS = ['semantic', 'structure', 'pacing', 'combined', 'abse
 const KNOWLEDGE_SUBFIELD_KEYS = ['currentPoint', 'points', 'confirmCheck'] as const;
 
 export interface TeachingTurnInput {
-  messages: Array<{ role: MessageRole; content: string }>;
+  /**
+   * 对话消息（#123 起可携带课堂配图）：images 仅用于**模型可见历史**，
+   * 确定性判据（evaluate* 系列）仍只读文本（见 toWireMessages）。
+   */
+  messages: Array<{ role: MessageRole; content: string; images?: TeachingTurnMessageImage[] }>;
   learner: TeachingLearnerProjection;
   scenario: {
     subject: string;
@@ -1381,6 +1393,35 @@ export function toWireMessages(
   }));
 }
 
+/** 单次教学回合请求里随历史回流的课堂配图上限（更早的图退化为文本） */
+const MAX_HISTORY_IMAGES_PER_REQUEST = 4;
+
+/**
+ * 收集历史消息随带的课堂配图（2026-10-18 #123 视觉）：从最近的消息往回数，
+ * 超过 `MAX_HISTORY_IMAGES_PER_REQUEST` 的旧图不再进请求（文本保留）。
+ *
+ * 为什么**不把图挂在历史 assistant 消息上**（最初的实现，实测证伪）：
+ * 平台上游 zoujian 网关对 `role:'assistant'` 消息里的 image_url 内容块返回
+ * 400 invalid_request（先挂起 100+s 再 400；`npm run vision:probe -- --history-image` 可复现），
+ * 而挂在 user 消息上的图片块正常（`vision:probe` 两种模式对照）。因此本链改为：
+ * 历史消息保持纯文本，历史配图统一附加到**本轮 user 消息**尾部（见 buildTeachingTurnMessages）。
+ */
+export function collectHistoryImages(messages: TeachingTurnInput['messages']): TeachingTurnMessageImage[] {
+  const source = Array.isArray(messages) ? messages : [];
+  const collected: TeachingTurnMessageImage[] = [];
+  let budget = MAX_HISTORY_IMAGES_PER_REQUEST;
+  for (let index = source.length - 1; index >= 0 && budget > 0; index -= 1) {
+    const images = Array.isArray(source[index]?.images) ? source[index].images!.filter((image) => image?.url) : [];
+    if (images.length === 0) continue;
+    const kept = images.slice(-budget);
+    collected.unshift(...kept);
+    budget -= kept.length;
+  }
+  return collected;
+}
+
+/**
+
 /**
  * 条件规则（A 项，2026-09-23）：编译产物里以「若输入提供 X / 如果输入提供 X / 若 classroomEventContext…」
  * 开头的规则，只在对应输入**真的存在**时才需要发送（实测 13 条 / 3,078 字 = 执行规则段的 21.7%）。
@@ -1724,12 +1765,16 @@ function buildTeachingTurnMessages(args: {
   systemPrompt: string;
   userPayload: string;
   retryMessage?: string | null;
-}): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
+}): Array<{ role: 'system' | 'user' | 'assistant'; content: ChatMessageContent }> {
+  // 历史外移为真 message（前缀缓存修正，2026-09-25）；形态保持纯文本（判据与缓存前缀都不动）。
   const wire = toWireMessages(args.input.messages);
   const history = wire.map((message) => ({
     role: (message.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
     content: message.content,
   }));
+  // 历史配图（#123）：统一附加到**本轮 user 消息**尾部（上游拒收 assistant 消息里的 image_url 块，
+  // 见 collectHistoryImages 注释）；无图时 userContent 与改动前逐字节一致。
+  const historyImages = collectHistoryImages(args.input.messages);
   const suffix = args.retryMessage
     ? `\n\n${args.retryMessage}`
     : OUTPUT_CONTRACT_TAIL;
@@ -1763,11 +1808,49 @@ function buildTeachingTurnMessages(args: {
     }
   }
 
+  // 历史配图归属声明（#123）：图只能挂在 user 消息上（上游拒收 assistant 里的 image_url），
+  // 但实测（带图/不带图双组对照）模型会把 user 回合里的图读成"学生本轮发来的内容"，
+  // 进而以"我没画过这张图"拒绝引用。归属由指令层定死，不靠模型自推。
+  if (historyImages.length > 0) {
+    systemContent = `${systemContent}\n\n【课堂配图说明】本轮用户消息里附有你（老师）此前发给学生的板书图`
+      + '（属于课堂状态数据，不是学生本轮发来的内容）。你可以且应当直接引用图里的信息（布局、行列、颜色、宽窄等）；'
+      + '不要说"我看不到图/没有图/我没画过图"。';
+  }
+
   return [
     { role: 'system', content: systemContent },
     ...history,
-    { role: 'user', content: userContent },
+    {
+      role: 'user',
+      content: buildUserMessageContent({ userContent, historyImages, suffix }),
+    },
   ];
+}
+
+/**
+ * 本轮 user 消息内容（#123）：
+ * - 无历史配图 → 纯文本（`userContent` 与改动前逐字节一致，请求形态与缓存前缀都不动）；
+ * - 有历史配图 → 内容块数组，**顺序为 [载荷文本, 配图标签, 图片块…, 输出契约尾]**：
+ *   图片紧贴载荷（属于「课堂状态数据」的一部分）而不是落在输出契约之后——契约尾必须保持
+ *   离输出最近（模型把它当"这是结构化任务"的最后一道信号；实测图放尾部会让模型把图误当成
+ *   学生本轮发来的东西，出现「我没画过这张图」的错角色归因）。
+ */
+function buildUserMessageContent(args: {
+  userContent: string;
+  historyImages: TeachingTurnMessageImage[];
+  suffix: string;
+}): ChatMessageContent {
+  if (args.historyImages.length === 0) return args.userContent;
+  // userContent 此时可能已含 suffix（旧形状兜底路径）——先剥离，重新按 [载荷][图][契约尾] 组装
+  const payloadText = args.suffix && args.userContent.endsWith(args.suffix)
+    ? args.userContent.slice(0, -args.suffix.length)
+    : args.userContent;
+  const withImages = buildVisionContent(payloadText, args.historyImages, {
+    label: '课堂配图：你（老师）上一轮发给学生的板书图',
+    context: 'teaching-turn/history',
+  });
+  if (!Array.isArray(withImages)) return withImages;
+  return [...withImages, { type: 'text', text: args.suffix }];
 }
 
 const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutput> = {

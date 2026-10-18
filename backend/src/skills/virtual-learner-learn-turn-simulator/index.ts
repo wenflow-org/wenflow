@@ -12,7 +12,9 @@ import {
   decideFrictionTrigger,
   PERSONA_FIELD_ANCHORS_HINT,
   projectSimulatorPayload,
+  collectVisibleHistoryImages,
 } from '../virtual-learner-shared';
+import { buildVisionContent } from '../../utils/vision-content';
 import type { EpistemicGrounding } from '../virtual-learner-epistemic-grounding';
 
 export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS = 800;
@@ -29,6 +31,8 @@ export type LearnLearnerPhase = 'trying' | 'blocked' | 'verifying' | 'ready_to_c
 export interface LearnLearnerVisibleMessage {
   role: 'learner' | 'teacher';
   content: string;
+  /** 教师配图（#123）：以 image_url 内容块随请求发送；payload 里仍只投影文本 */
+  images?: Array<{ url: string; caption?: string | null }>;
 }
 
 export interface LearnLearnerSimulationInput {
@@ -597,6 +601,23 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
       requireActivePrompt: true,
       caller: { skillId: 'virtual-learner-learn-turn-simulator' },
             buildUserPayload: (value: any) => projectSimulatorPayload(buildUserPayload(value)),
+      /**
+       * 消息形态（2026-10-18 #123）：payload 仍是既有 JSON 文本（prompt/缓存形态不变）；
+       * 可见历史里的**课堂配图**作为 image_url 内容块附在 user 消息尾部——
+       * 模拟学习者于是和真实学生一样"看得见"教师板书图，能引用只有图里才有的信息。
+       * 生效模型未声明 vision 时，prompt-composer 会摘掉图片块并告警（纯文本回退）。
+       */
+      buildMessages: ({ input: value, systemPrompt, userPayload, retryMessage }: any) => [
+        { role: 'system' as const, content: systemPrompt },
+        {
+          role: 'user' as const,
+          content: buildVisionContent(
+            retryMessage ? `${userPayload}\n\n${retryMessage}` : userPayload,
+            collectVisibleHistoryImages(value?.visibleContext?.history),
+            { label: '课堂配图', context: 'vl-learn-turn-simulator' }
+          ),
+        },
+      ],
       validateParsedOutput: (parsed: any) => {
         const replyOk = typeof parsed?.reply === 'string' && parsed.reply.trim().length > 0
         const stateOk = parsed?.learnerState && typeof parsed.learnerState === 'object'

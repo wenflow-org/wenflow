@@ -26,12 +26,43 @@ import { validateSkillOutputFields } from '../services/skill-output-validator';
 import type { RuntimeContract } from '../services/prompt-lab/runtime-contract';
 import { resolveLlmCallParams } from '../services/resolve-llm-call-params';
 import { getRoutingSnapshotHash } from '../services/prompt-composer';
+import { supportsVision } from '../config/models.config';
+import { messagesHaveImages, type ChatMessageContent } from '../gateway/api-gateway/types';
+import { buildVisionContent, stripVisionImages } from '../utils/vision-content';
 import type { SkillPromptOutputMedia } from '../services/skill-prompt-contract';
 import {
   mergeContextEnvelopes,
   normalizeContextEnvelope,
   withContextMode,
 } from '../skills/context-envelope';
+
+/**
+ * 视觉能力护栏（2026-10-18 #123）：生效模型未声明 `vision` 时，把消息里的图片块摘掉
+ * （文本保留 = 纯文本回退），并留下可检索的告警。
+ *
+ * 为什么放在 prompt 层而不是只靠网关硬闸门：网关只能"拒绝整条请求"，
+ * 而课堂配图随历史回流属于**可选上下文**——模型无视觉时应退化成无图课堂继续跑，
+ * 而不是把教学链路打挂（issue #123 验收③的"运行被拦下"由网关硬闸门覆盖：
+ * 任何仍带图的请求打到未声明模型都会被明确拒绝，见 executor.assertVisionAllowed）。
+ */
+function enforceVisionCapability(
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: ChatMessageContent }>,
+  model: string | undefined,
+  meta: { skillId: string; attempt: number }
+): Array<{ role: 'system' | 'user' | 'assistant'; content: ChatMessageContent }> {
+  if (!messagesHaveImages(messages)) return messages;
+  if (supportsVision(String(model || ''))) return messages;
+  logger.warn('[callPrompt] 生效模型未声明视觉能力，消息中的图片内容块已省略（文本保留）', {
+    ...meta,
+    model: model ?? null,
+    hint: '如该模型支持图片输入：在 llm-providers.json 声明 "vision": true，并用 npm run vision:probe -- --model=<id> 实测把关',
+  });
+  return messages.map((message) => (
+    Array.isArray(message.content)
+      ? { ...message, content: stripVisionImages(message.content) }
+      : message
+  ));
+}
 
 /**
  * 默认原始输出解析。JSON media 走 extractJsonObject；
@@ -384,8 +415,24 @@ export async function callPrompt<TInput, TOutput>(
           ...(Array.isArray(context.assistantMessages)
             ? context.assistantMessages.map((message) => ({ role: message.role as 'user' | 'assistant', content: message.content }))
             : []),
-          { role: 'user' as const, content: retryMessage ? `${userPayload}\n\n${retryMessage}` : userPayload },
+          {
+            role: 'user' as const,
+            // 显式图片输入（#123）：有图 → 内容块数组（载荷文本在前、图片在后）；无图 → 纯文本（回退）
+            content: buildVisionContent(
+              retryMessage ? `${userPayload}\n\n${retryMessage}` : userPayload,
+              context.images,
+              { label: '本轮输入图片', context: spec.agentId }
+            ),
+          },
         ];
+    // 视觉能力护栏（2026-10-18 #123）：生效模型未声明 vision 时，消息里的图片块**摘掉**
+    // （文本保留，纯文本回退）并告警。网关是硬闸门（带图请求打到未声明模型直接拒绝），
+    // 这里做的是"可选上下文"的优雅降级：课堂配图随历史回流这类场景，模型无视觉时
+    // 应退成无图课堂，而不是把整条教学链路打挂。
+    const visionCheckedMessages = enforceVisionCapability(messages, generationResolution.model, {
+      skillId: spec.agentId,
+      attempt,
+    });
 
     let response: any;
     try {
@@ -405,7 +452,7 @@ export async function callPrompt<TInput, TOutput>(
         ? { type: 'json_object' as const }
         : undefined;
       response = await gateway.execute({
-        messages,
+        messages: visionCheckedMessages,
         ...llmParams.request,
         ...(responseFormat ? { response_format: responseFormat } : {}),
         stream: streamRequested,

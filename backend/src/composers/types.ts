@@ -6,6 +6,7 @@ export interface PromptDriftInfo {
 
 // 与 gateway/api-gateway/context 的 PromptStreamEvent 对齐
 import type { PromptStreamEvent } from '../gateway/api-gateway/context';
+import type { ChatMessageContent } from '../gateway/api-gateway/types';
 
 export interface PromptCallContext {
   userId?: string;
@@ -19,8 +20,19 @@ export interface PromptCallContext {
   };
   /** 显式覆盖 ALS 中的 Context Envelope；默认只供投影函数和 telemetry 使用。 */
   contextEnvelope?: import('../skills/context-envelope').ContextEnvelopeV1;
-  /** 已完成的对话历史；仅 conversational/turn 类 Skill 应使用。 */
-  assistantMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  /**
+   * 已完成的对话历史；仅 conversational/turn 类 Skill 应使用。
+   * content 支持 OpenAI 兼容内容块数组（2026-10-18 #123）：带图历史以
+   * `[{type:'text'},{type:'image_url'}]` 进入请求；生效模型未声明 vision 时由
+   * prompt-composer 摘掉图片块并告警（纯文本回退）。
+   */
+  assistantMessages?: Array<{ role: 'user' | 'assistant'; content: ChatMessageContent }>;
+  /**
+   * 本轮的显式图片输入（2026-10-18 #123）：非空时最后一条 user 消息改为内容块数组
+   * （文本载荷在前、图片依次在后）。url 仅接受 `data:image/*` 与 http(s)。
+   * 体积提示：data URL 很大，调用方应先下采样；无有效图片时自动回退纯文本。
+   */
+  images?: Array<{ url: string; detail?: 'auto' | 'low' | 'high' }>;
   pipelineRunId?: string;
   pipelineStepIndex?: number;
   traceId?: string;
@@ -146,6 +158,7 @@ export interface PromptCallSpec<TInput, TOutput> {
   /**
    * 仅用于兼容遗留多消息调用。正式 Skill 保持 system + user 的确定性投影，
    * 不应默认使用此扩展点。
+   * content 允许 OpenAI 兼容内容块数组（2026-10-18 #123：带图历史以 image_url 块进入请求）。
    */
   buildMessages?: (params: {
     input: TInput;
@@ -157,7 +170,7 @@ export interface PromptCallSpec<TInput, TOutput> {
       runtimeContract: RuntimeContract;
       promptContract: SkillPromptContract;
     };
-  }) => Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  }) => Array<{ role: 'system' | 'user' | 'assistant'; content: ChatMessageContent }>;
   normalizeOutput: (parsed: any, input: TInput) => TOutput;
   validateParsedOutput?: (parsed: any, input: TInput) => PromptValidationResult;
   /**

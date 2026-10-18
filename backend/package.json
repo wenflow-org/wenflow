@@ -75,6 +75,8 @@
     "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
     "prisma:studio": "prisma studio",
     "prisma:validate": "prisma validate --schema prisma/schema.prisma && prisma validate --schema prisma/system/schema.prisma",
+    "vision:probe": "ts-node src/scripts/vision-probe.ts",
+    "vision:acceptance": "ts-node src/scripts/vision-context-acceptance.ts",
     "telemetry:guards": "ts-node src/scripts/audit-telemetry-guards.ts",
     "mastery:degrade-audit": "ts-node src/scripts/audit-mastery-degrades.ts"
   },

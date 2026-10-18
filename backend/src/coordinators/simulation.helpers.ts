@@ -552,17 +552,30 @@ export function resolveLearnTurnBudget(stageResults: StageResults, authorizedTur
   return Math.max(...candidates);
 }
 
-export function sanitizeVisibleContextMessage(message: { content?: unknown }, role: 'learner' | 'goal_agent') {
+export function sanitizeVisibleContextMessage(
+  message: { content?: unknown; images?: ConversationHistoryItem['images'] },
+  role: 'learner' | 'goal_agent'
+) {
   const content = sanitizeVisibleDialogue(typeof message?.content === 'string' ? message.content : '');
   if (!content) return null;
-  return { role, content };
+  // 配图随上下文保留（#123）：模拟器请求组装时转 image_url 内容块；判据/落库投影仍只用文本
+  const images = Array.isArray(message?.images)
+    ? message.images.filter((image) => image?.url)
+    : [];
+  return images.length > 0 ? { role, content, images } : { role, content };
 }
 
-export function trimLearningConversationHistory(history: Array<{ role: string; content: string }> = []): ConversationHistoryItem[] {
+export function trimLearningConversationHistory(
+  history: Array<{ role: string; content: string; images?: ConversationHistoryItem['images'] }> = []
+): ConversationHistoryItem[] {
   if (!Array.isArray(history) || history.length === 0) return [];
   return history.slice(-6).map((item): ConversationHistoryItem => ({
     role: item.role === 'assistant' ? 'assistant' : 'user',
-    content: sanitizeVisibleDialogue(typeof item?.content === 'string' ? item.content : '')
+    content: sanitizeVisibleDialogue(typeof item?.content === 'string' ? item.content : ''),
+    // 配图跟随消息一起截取（#123）：只保留最近 6 条窗口内的图
+    ...(Array.isArray(item?.images) && item.images.length > 0
+      ? { images: item.images.filter((image) => image?.url) }
+      : {}),
   })).filter((item) => item.content);
 }
 
@@ -649,7 +662,10 @@ export function mergeLearnerState(
   return merged;
 }
 
-export function buildGoalVisibleContext(history: Array<{ role: 'user' | 'assistant'; content: string }>, lastAssistantMessage: string) {
+export function buildGoalVisibleContext(
+  history: Array<{ role: 'user' | 'assistant'; content: string; images?: ConversationHistoryItem['images'] }>,
+  lastAssistantMessage: string
+) {
   const visibleHistory = history.flatMap((item) => {
     if (item.role === 'user') {
       const learner = sanitizeVisibleContextMessage(item, 'learner');

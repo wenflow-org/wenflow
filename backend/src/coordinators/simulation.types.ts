@@ -62,9 +62,20 @@ export interface VirtualLearnerProfile {
   simulationTemperature?: number;
 }
 
+/** VL 可见上下文里的配图引用（#123）：url（data URL 或 http(s)）+ 可选说明 */
+export interface ConversationHistoryImage {
+  url: string;
+  caption?: string | null;
+}
+
 export interface ConversationHistoryItem {
   role: 'user' | 'assistant';
   content: string;
+  /**
+   * 教师消息随带的教学配图（#123）：模拟学习者的上下文与真实学生一样"看得见"课堂配图。
+   * 仅在模拟器请求组装时转成 image_url 内容块；落库/判据投影仍只读文本。
+   */
+  images?: ConversationHistoryImage[];
 }
 
 export interface KnowledgePointState {

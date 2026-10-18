@@ -4,6 +4,7 @@ import { preserveConfiguredSecret, toSecretSafeResponse } from '../../utils/secr
 import { normalizeEndpointIdentity } from '../../utils/endpoint-identity';
 import { getPlatformReliabilitySettings } from '../../services/reliability-settings.service';
 import { resolveModelRef } from '../../config/models.config';
+import { buildVisionBindingWarning } from '../../config/vision-capability';
 import { scanPromptFiles } from '../../composers/prompt-files/loader';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 
@@ -171,6 +172,10 @@ const PLATFORM_DEFAULT_ALLOWLIST: readonly string[] = [
 ];
 
 /**
+ * 视觉能力绑定提示见 config/vision-capability.ts（纯函数，便于单测）。
+ */
+
+/**
  * 覆盖矩阵：prompts/skill.*.md 注册表（技能全集）× skill_model_configs 实际行。
  * 未配置行 = 走平台默认路由（2026-09-28 教训：7 个课后链技能曾因此静默落到旧 key）。
  */
@@ -286,12 +291,17 @@ router.post('/bulk-apply', async (req, res) => {
     }
     setAuditAfter(res, after);
     const failed = results.filter(r => !r.ok);
+    // 视觉能力提示（#123）：本次批量套用的模型（若给了）打到"会带图"的技能上却没声明 vision
+    const visionWarnings = model
+      ? skillIds.map((skillId) => buildVisionBindingWarning(skillId, model)).filter((warning): warning is string => !!warning)
+      : [];
     res.json({
       success: failed.length === 0,
       data: {
         applied: results.filter(r => r.ok).length,
         failed: failed.length,
         results,
+        warnings: visionWarnings,
       },
       message: failed.length ? '部分技能套用失败，详见 results' : '批量套用完成',
     });
@@ -453,6 +463,10 @@ router.put('/:skillId', async (req, res) => {
       skillId: req.params.skillId,
       includeRouteFallback: true,
     }).catch(() => null);
+    // 视觉能力提示（#123）：会带图的技能 + 生效模型未声明 vision → 保存时明确提示。
+    // 不阻断保存（图片是可选上下文，运行时会降级纯文本），但把「配了却读不了图」提前说出来。
+    const visionWarning = buildVisionBindingWarning(req.params.skillId, llm?.model ?? null);
+    if (visionWarning) warnings.push(visionWarning);
     res.json({
       success: true,
       data: {

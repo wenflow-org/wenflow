@@ -16,9 +16,29 @@ export type RouteSource =
   /** 模型所属供应商自带端点（llm-providers.json 的 baseUrl+apiKeyEnv），endpoint/apiKey 已被供应商覆盖 */
   | 'provider-endpoint';
 
+/**
+ * OpenAI 兼容的多模态内容块（2026-10-18 #123）。
+ * 文本与图片可混排；纯文本调用仍用 string，避免全链大改。
+ */
+export type ChatContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail?: string } };
+
+export type ChatMessageContent = string | ChatContentPart[];
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: ChatMessageContent;
+}
+
+/** 消息内容里是否含图片块（网关视觉能力把关用）。 */
+export function messageHasImage(content: ChatMessageContent | undefined | null): boolean {
+  return Array.isArray(content) && content.some((part) => part?.type === 'image_url');
+}
+
+/** 消息列表里是否存在任一图片块。 */
+export function messagesHaveImages(messages: Array<{ content?: ChatMessageContent }> | undefined | null): boolean {
+  return Array.isArray(messages) && messages.some((message) => messageHasImage(message?.content));
 }
 
 export interface ResolvedRoute {
@@ -27,6 +47,8 @@ export interface ResolvedRoute {
   endpoint: string;
   apiKey: string;
   model: string;
+  /** 该模型是否声明支持图片输入（llm-providers.json `vision: true`）；带图请求的放行依据 */
+  vision?: boolean;
   /** 推理模型（用户双模型配置：reasoningModel / 平台 defaultReasoningModel），供两段式调用使用 */
   reasoningModel?: string;
   /** 模型是否由 skill 级配置显式指定（true=skill_model_configs.model 非空；false=继承上层默认） */
@@ -68,7 +90,7 @@ export interface RouteExecutionOverride {
 }
 
 export interface ChatRequest {
-  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: ChatMessageContent }>;
   model?: string;
   temperature?: number;
   max_tokens?: number;
