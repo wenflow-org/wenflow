@@ -561,8 +561,9 @@ export interface SpanQuery {
  * 避免筛选结果污染其他页面的统计与列表
  */
 export const liveLogsFiltered = ref<TraceSpan[]>([])
-/** 本页被合并掉的网关行数（D19）：列表把同一调用的网关行与 Skill 行合并为一行展示，
-    页码器据此注明「本页 N 条网关记录已并入」，避免与「共 N 条 / 30 条每页」口径打架 */
+/** 本页被合并掉的网关行数（D19）：列表把同一调用的网关行与 Skill 行合并为一行展示。
+    2026-10-18 用户走查「这类文案」：页码器不再据此写装配自述句，规则改住「类型」列 title
+    （ExecLogs.vue 的 KIND_COL_TITLE）；本引用保留供列表装配与测试断言使用 */
 export const liveLogsRowsMerged = ref(0)
 
 /** 执行日志服务端查询 loading（首屏骨架屏用；与全局 liveLoading 区分，后者覆盖全量 boot） */

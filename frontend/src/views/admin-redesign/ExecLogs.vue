@@ -19,9 +19,9 @@
          B22/F8-1：成功率与表格同窗口同源（live.ts 页面查询单源），hint 披露取值来源，
          查询在途/失败时显示「—」而不是 0 -->
     <section v-if="logs.length" class="mk-kpi-grid">
-      <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" :hint="successHint" title="当前筛选范围内的成功率，低于 90% 标红" />
-      <MkKpi label="耗时 P50" :value="latencyP50" :hint="latencyHint" title="仅统计成功日志" />
-      <MkKpi label="耗时 P99" :value="latencyP99" :hint="latencyHint" title="仅统计成功日志" />
+      <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" :hint="successHint" :title="successKpiTitle" />
+      <MkKpi label="耗时 P50" :value="latencyP50" :hint="latencyHint" :title="latencyKpiTitle" />
+      <MkKpi label="耗时 P99" :value="latencyP99" :hint="latencyHint" :title="latencyKpiTitle" />
     </section>
 
     <!-- 视图切换（2026-10-14 用户评审：此前贴在表格卡顶、通栏一条下划线，读起来像表格的表头）：
@@ -176,7 +176,7 @@
               <th v-if="!hiddenCols.has('status')">级别</th>
               <th v-if="!hiddenCols.has('kind')">类型</th>
               <th v-if="!hiddenCols.has('agent')">Skill</th>
-              <th v-if="!hiddenCols.has('trace')">Trace</th>
+              <th v-if="!hiddenCols.has('trace')" :title="TRACE_COL_TITLE">Trace</th>
               <th v-if="!hiddenCols.has('msg')">消息</th>
               <th v-if="!hiddenCols.has('model')">模型</th>
               <th v-if="!hiddenCols.has('tokens')">输入 / 输出</th>
@@ -303,7 +303,7 @@
                         </div>
                         <div v-if="log.gatewayDurMs" class="tline__section">
                           <span class="tline__label">网关合并</span>
-                          <p class="tline__none">{{ fmtMs(log.gatewayDurMs) }}（同一调用链的网关记录，已合并展示）</p>
+                          <p class="tline__none">{{ fmtMs(log.gatewayDurMs) }}</p>
                         </div>
                         <div v-if="detailCache[log.id].input" class="tline__section">
                           <span class="tline__label">输入</span>
@@ -357,7 +357,7 @@
         :action-text="isFiltered ? '清除筛选，放宽到全部时间' : ''"
         @action="clearFilterToAll"
       />
-      <Pagination v-if="logs.length" v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" :note="mergedRowsNote" />
+      <Pagination v-if="logs.length" v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" />
       </div>
     </div>
   </div>
@@ -370,7 +370,7 @@ import { useEscape } from './useEscape'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { intent, openSkillDrawer, clearInvestigation, dataSource, liveSkillStatsMap } from './store'
-import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, liveLogsRowsMerged, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
+import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from '@/components/mk/MkCols.vue'
@@ -586,12 +586,17 @@ async function copyTrace(traceId: string) {
 /* D3 表格增强：列显隐（localStorage 持久化）。列集/列序 2026-10-02 对齐原型 renderObserve
    （时间|级别|Skill|Trace|消息|耗时），key 升 v2：旧存储按旧列集持久化，不清会盖掉新默认 */
 const COLS_KEY = 'wf_exec_hidden_cols_v2'
+/* Trace 列口径（列菜单与表头共用一句，避免同页两处漂移）。
+   2026-10-18 用户走查「这类文案」：原页码器那句「本页 N 条网关记录已并入对应 Skill 行」是讲
+   列表怎么被拼出来的装配自述，撤下；它要防的误读（可见行数少于「共 N 条」）收在这里——
+   合并的单位正是本列的一条链路，且本列默认可见（类型/模型/输入输出默认隐藏，收在那里等于没写）。 */
+const TRACE_COL_TITLE = '调用链路 ID。同一调用链的网关记录与 Skill 记录合并为一行，所以本页可见行数会少于「共 N 条」的记录数'
 const colDefs = [
   { key: 'time', label: '时间', title: '记录时间（MM-DD HH:mm:ss）' },
   { key: 'status', label: '级别', title: '执行级别（成功 / 失败 / 超时）' },
   { key: 'kind', label: '类型', title: '日志来源（流程 / Skill / 网关 / 调用）' },
   { key: 'agent', label: 'Skill', title: 'Skill 完整名' },
-  { key: 'trace', label: 'Trace', title: '调用链路 ID' },
+  { key: 'trace', label: 'Trace', title: TRACE_COL_TITLE },
   { key: 'msg', label: '消息', title: '调用消息（输出摘要 / 错误信息）' },
   { key: 'model', label: '模型', title: '使用的 LLM 模型' },
   { key: 'tokens', label: '输入 / 输出', title: 'Token 用量（输入 / 输出）' },
@@ -1029,11 +1034,6 @@ const timeRangeActive = computed(() => timeRange.value !== 'today')
 const advancedFilterCount = computed(
   () => (timeRangeActive.value ? 1 : 0) + (agentFilter.value ? 1 : 0) + (traceId.value.trim() ? 1 : 0) + (sessionId.value.trim() ? 1 : 0)
 )
-/* 分页口径说明（D19）：本页把同一调用的网关行与 Skill 行合并为一行展示，
-   一页 30 行原始记录合并后可见行数更少——页码器注明已并入条数，避免与「30 条/页」口径打架。 */
-const mergedRowsNote = computed(() =>
-  liveLogsRowsMerged.value > 0 ? `本页 ${liveLogsRowsMerged.value} 条网关记录已并入对应 Skill 行` : ''
-)
 /* 节点下拉数据源不能只来自当前页 30 行（截断后筛不到页外的 skill）。
    组合三源：注册表 skill 全集（liveSkillStatsMap，boot 域预载，去掉 skill: 前缀与行内
    agent 口径对齐）+ 当前页实际出现的节点（网关/流程行不在注册表）+ 保存视图历史用过的节点 */
@@ -1114,9 +1114,17 @@ const successRate = computed(() => {
   const ok = logs.value.filter((l) => l.status === 'ok').length
   return Math.round((ok / logs.value.length) * 100)
 })
-/** 成功率取值来源（KPI 卡 hint/title 如实标注）：全窗口 / 本页样本估算 / 读数加载中 */
+/** 成功率读数行：只放这个数是什么范围（全窗口 / 样本 / 加载中）。
+    2026-10-18 用户走查「这类文案」：原 hint「按本页记录估算」是讲取数过程的装配自述，
+    压成「样本估算」两个字的范围标签，怎么估的整句收进 title。 */
 const successHint = computed(() =>
-  statsReady.value ? '按当前筛选范围统计' : statsPending.value || !logs.value.length ? '读数加载中' : '按本页记录估算'
+  statsReady.value ? '按当前筛选范围统计' : statsPending.value || !logs.value.length ? '读数加载中' : '样本估算'
+)
+/** 成功率卡 title：阈值 + 回退样本时的取数说明（悬停可得，不占读数行） */
+const successKpiTitle = computed(() =>
+  `当前筛选范围内的成功率，低于 90% 标红${
+    statsReady.value || statsPending.value || !logs.value.length ? '' : '。统计接口未就绪，本次读数按当前页样本估算'
+  }`
 )
 /** KPI 显示值：数字档补 %；未就绪档直接「—」（不出现「—%」这种残缺读数） */
 const successRateText = computed(() => (successRate.value === '—' ? '—' : `${successRate.value}%`))
@@ -1143,8 +1151,12 @@ function percentileOf(durations: number[], q: number): string {
 const latencySampled = computed(
   () => !(liveStats.value?.latencyPercentiles?.p50 != null) && logs.value.some((l) => l.status === 'ok')
 )
-/* 耗时分位卡 hint（2026-10-04 状态条退役迁入）：口径「仅成功日志」；回退样本估算时如实标注 */
-const latencyHint = computed(() => (latencySampled.value ? '仅成功日志 · 按本页记录估算' : '仅成功日志'))
+/* 耗时分位卡读数行（2026-10-04 状态条退役迁入）：口径「仅成功日志」；回退样本时标「样本估算」 */
+const latencyHint = computed(() => (latencySampled.value ? '仅成功日志 · 样本估算' : '仅成功日志'))
+/** 耗时分位卡 title：范围 + 回退样本时的取数说明（悬停可得，不占读数行） */
+const latencyKpiTitle = computed(() =>
+  `仅统计成功日志${latencySampled.value ? '。统计接口未返回分位，本次按当前页样本估算' : ''}`
+)
 function percentileMsOf(durations: unknown[], q: number): number | null {
   const arr = durations.filter((d): d is number => typeof d === 'number' && d >= 0).sort((a, b) => a - b)
   if (!arr.length) return null

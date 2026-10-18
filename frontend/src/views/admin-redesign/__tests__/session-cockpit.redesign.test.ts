@@ -351,12 +351,14 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     // 回合记录曾是它的表格翻版（也曾把 Goal 段错拼进来），故真实模式整卡不渲染。
     expect(w.find('.cp-turns').exists()).toBe(false);
     expect(w.text()).not.toContain('回合记录');
-    expect(w.text()).not.toContain('目标 + 课堂按序合并');
+    // 2026-10-18 用户走查「这类文案」：装配自述句（按序合并）从可见 meta 撤下，
+    // 范围事实留「目标与课堂两段」，合并规则进卡头 title
+    expect(w.text()).not.toContain('按序合并');
 
     w.unmount();
   });
 
-  it('回合记录：虚拟会话保持 Goal + 课堂按序合并（那边一个会话就是完整旅程；卡归位 Goal 页）', async () => {
+  it('回合记录：虚拟会话两段合并且按序（一个会话就是完整旅程；卡归位 Goal 页）', async () => {
     stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
     const w = await mountCockpit('session', 'vs_1');
     await w.findAll('.cp-stp')[0].trigger('click'); // Goal 页签（2026-10-12 四页拆分：回合记录归位 Goal 页）
@@ -367,7 +369,10 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(rows[0].find('.mk-badge').text()).toBe('虚拟学习者');
     expect(rows[1].find('.mk-badge').text()).toBe('虚拟学习者');
     expect(rows[2].find('.mk-badge').text()).toBe('教师');
-    expect(w.text()).toContain('3 条对话 · 目标 + 课堂按序合并');
+    expect(w.text()).toContain('3 条对话 · 目标与课堂两段');
+    // 合并规则 hover 可得（卡头 title），不再占读数行
+    const meta = w.findAll('.mk-card__meta').find((m) => m.text().includes('目标与课堂两段'))!;
+    expect(meta.attributes('title')).toContain('按发生顺序合并展示');
 
     w.unmount();
   });

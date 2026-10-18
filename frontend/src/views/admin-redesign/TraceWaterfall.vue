@@ -516,7 +516,7 @@ const intentTraceMiss = computed(() => {
   return t
 })
 watch(intentTraceMiss, (t) => {
-  if (t) notice.value = `链路 ${shortTrace(t)} 不在当前加载范围内（样本截断），已自动展示最相关链路`
+  if (t) notice.value = `链路 ${shortTrace(t)} 不在当前加载范围内，已自动展示最相关链路`
   else if (notice.value) notice.value = ''
 })
 

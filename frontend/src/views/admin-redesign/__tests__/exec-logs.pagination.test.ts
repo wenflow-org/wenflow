@@ -588,12 +588,20 @@ describe('批次 1：EG7 / EG17 / D19', () => {
     expect(adv.find('.mk-pill__count').text()).toBe('1');
   });
 
-  it('D19：本页有网关行并入时页码器注明口径', async () => {
+  it('D19 改（2026-10-18 用户走查「这类文案」）：页码器不再自述并入，规则收进「Trace」列 title', async () => {
     liveLogsTotal.value = 30;
     liveLogsFiltered.value = [fakeSpan(1)];
     liveLogsRowsMerged.value = 2;
     const w = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    expect(w.find('.pagination-note').text()).toContain('2 条网关记录已并入');
+    // 页码器旁边不再出现讲系统怎么拼数据的句子
+    expect(w.find('.pagination-note').exists()).toBe(false);
+    // 规则改住在 Trace 列（默认可见），表头与列菜单同一句
+    const traceTh = w.findAll('th').find((th) => th.text().trim() === 'Trace')!;
+    expect(traceTh.attributes('title')).toContain('合并为一行');
+    await findBtn(w, '列').trigger('click');
+    await nextTick();
+    const item = w.findAll('.mk-cols__item').find((x) => x.text().includes('Trace'))!;
+    expect(item.attributes('title')).toContain('合并为一行');
   });
 });

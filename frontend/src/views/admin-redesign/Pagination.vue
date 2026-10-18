@@ -9,7 +9,8 @@
       <span class="mk-pagination__total">
         共 {{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页
       </span>
-      <!-- 口径说明（可选，如执行日志「本页 N 条网关记录已并入」）：与 total 同组，弱化补充，不占按钮区 -->
+      <!-- 口径说明（可选，如「在当前页内搜索」「全部活跃 93 条」）：与 total 同组，弱化补充，不占按钮区。
+           2026-10-18 用户走查「这类文案」：只放「这个数是什么范围」，不放系统怎么把数据拼起来的自述 -->
       <span v-if="note" class="pagination-note">{{ note }}</span>
     </span>
     <span class="mk-pagination__right">
@@ -74,7 +75,7 @@ const props = withDefaults(
     /** 固定每页行数场景（如字段路由表 15 行/页）：隐藏每页条数下拉，页码器形态不变 */
     hideSize?: boolean
     sizes?: number[]
-    /** 附加口径说明（如「本页 N 条网关记录已并入」）：显示在总数右侧，弱化文本 */
+    /** 附加口径说明（如「在当前页内搜索」）：显示在总数右侧，弱化文本；装配自述（谁并入谁）不属于此列 */
     note?: string
   }>(),
   {
@@ -155,7 +156,7 @@ watch(
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-/* 左侧信息组：总数字 + 可选口径说明（如「本页 N 条网关记录已并入」）同组排布 */
+/* 左侧信息组：总数字 + 可选口径说明（如「全部活跃 93 条」）同组排布 */
 .pagination-left {
   display: inline-flex;
   align-items: center;

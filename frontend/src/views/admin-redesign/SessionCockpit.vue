@@ -319,7 +319,7 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">回合记录</h3>
             <!-- 加载中 meta 留空（骨架已在下方承担加载态；不写「暂无对话记录」假空文案） -->
-            <span class="mk-card__meta">{{ turnMeta }}</span>
+            <span class="mk-card__meta" :title="turnMetaTitle || undefined">{{ turnMeta }}</span>
           </div>
           <!-- 会话未加载（首载/切换会话）先给骨架：不得把「尚未加载」渲染成「暂无对话记录」（2026-10-06 审核 #47） -->
           <div v-if="!session" class="cp-cardbody"><MkSkeleton variant="rows" :count="4" :h="12" :radius="4" /></div>
@@ -443,7 +443,10 @@
               <div v-if="lessonCheckpoints.length" class="cp-checkpoints">
                 <div class="cp-checkpoints__head">
                   <span class="cp-checkpoints__title">检查点</span>
-                  <span class="cp-checkpoints__meta">{{ lessonCheckpoints.length }} 次作答 · 题目不计入聊天记录</span>
+                  <span
+                    class="cp-checkpoints__meta"
+                    title="题目与作答走结构化通道，不写入聊天逐字稿，所以在转录之外单独列出"
+                  >{{ lessonCheckpoints.length }} 次作答</span>
                 </div>
                 <div v-for="(cp, i) in lessonCheckpoints" :key="`cp-${i}`" class="cp-checkpoint">
                   <p class="cp-checkpoint__q">{{ cp.question || cp.title || '（无题干）' }}</p>
@@ -1935,15 +1938,23 @@ const turnRows = computed<TurnRow[]>(() => {
   return rows
 })
 
-/** 回合记录卡头：按模式给不同口径（合并规则只在虚拟会话成立，不能当本会话构成的说明） */
+/** 回合记录卡头：按模式给不同口径（合并规则只在虚拟会话成立，不能当本会话构成的说明）。
+    2026-10-18 用户走查「这类文案」：读数行不再写「目标 + 课堂按序合并」这句装配自述——
+    保留「两段」这个范围事实（N 数的是两段的总和），怎么合并在卡头 title 里说。 */
 const turnMeta = computed(() => {
   if (!session.value) return ''
   if (!turnRows.value.length) return '暂无对话记录'
-  if (!isRealMode.value) return `${turnRows.value.length} 条对话 · 目标 + 课堂按序合并`
+  if (!isRealMode.value) return `${turnRows.value.length} 条对话 · 目标与课堂两段`
   return realKind.value === 'goal'
     ? `${turnRows.value.length} 条对话 · 本目标对话`
     : `${turnRows.value.length} 条对话 · 本课课堂转录`
 })
+/** 虚拟会话的回合构成（只挂在卡头 title）：本会话一个会话即完整旅程 */
+const turnMetaTitle = computed(() =>
+  !isRealMode.value && turnRows.value.length
+    ? '本目标对话与课堂转录按发生顺序合并展示。真实会话只取当前阶段那一段'
+    : ''
+)
 
 /* 知识状态更新（真实掌握度）：真实会话 = teaching.knowledgeState（后端 knowledgePointStates）；
    虚拟会话 = 当前课课时总结 knowledgeItems。无数据整卡不渲染，不硬造 ±Δ（后端无增量字段） */

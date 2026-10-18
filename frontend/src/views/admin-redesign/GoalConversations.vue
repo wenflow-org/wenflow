@@ -34,7 +34,7 @@
       <MkKpi
         label="参与用户"
         :value="stats?.distinctUsers ?? '—'"
-        hint="发起过目标对话的去重用户"
+        hint="按用户计，不按发起次数"
         title="至少发起过一次目标对话的用户数"
       />
       <MkKpi
