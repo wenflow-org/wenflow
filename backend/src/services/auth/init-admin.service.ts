@@ -42,12 +42,15 @@ function initialAdminPassword(environment: NodeJS.ProcessEnv): string | null {
     }
     return password;
   }
-  // 未配置时：开发环境使用内置默认密码（便于本地初始化）；生产环境拒绝默认口令，必须显式配置
-  // 注意：闸门为精确等值——NODE_ENV 漏配或写作 prod/Production 时仍回退默认口令（收紧属行为变更，见 MIMOSA-TRIAGE §3-C1，待决策）
-  if (environment.NODE_ENV === 'production') {
-    return null;
+  // 未配置时：**只在明确的本机环境**（development / test）回退内置默认口令，便于本地初始化。
+  // 2026-10-17 收紧（原判定为「NODE_ENV === 'production' 才拒绝」）：实测 9 种取值里 `Production`/`prod`/
+  // `staging`/未设置/空串/任意非 production 值共 8 种都会拿到公开常量 ChangeMe_2026_Admin，
+  // 而 NODE_ENV 漏配或手误在部署时极常见 —— 改为白名单：只有明确是本机开发才允许默认口令。
+  const nodeEnv = String(environment.NODE_ENV ?? '').trim().toLowerCase();
+  if (nodeEnv === 'development' || nodeEnv === 'test') {
+    return DEFAULT_INIT_ADMIN_PASSWORD;
   }
-  return DEFAULT_INIT_ADMIN_PASSWORD;
+  return null;
 }
 
 export async function initializeAdmin(

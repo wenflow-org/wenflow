@@ -112,5 +112,9 @@ export async function syncCapabilityProbeSettings(): Promise<void> {
   await aiCapabilityHealthService.setEnabled(probeEnabled);
   if (!probeEnabled) {
     logger.info('[ai-capability] 探测定时器已禁用（默认关闭 / 连接与安全开关关闭），跳过 start()');
+    return;
   }
+  // 默认关闭是产品约束（2026-10-18）：只有 DB 里被人显式打开才会走到这里。
+  // 打一条醒目的警告，避免误开后周期性真实请求悄悄烧额度。
+  logger.warn('[ai-capability] 测活探针已开启（platform_settings.aiCapabilityProbeEnabled=true），将周期性向模型服务发真实请求');
 }

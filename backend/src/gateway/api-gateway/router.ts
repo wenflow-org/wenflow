@@ -49,6 +49,11 @@ const LEARN_DIALOGUE_SKILLS = new Set([
   // 才走用户模型；外部测试者无绑定 → 技能行 ds 照常生效。
   'goal-conversation',
   'teaching-opening-generator',
+  // 2026-10-10：session-wrapup 与上两条同境——绑定链上技能行 ds 落到无 ds 通道的分组
+  //（实测「No available channel for deepseek-v4.1-flash under group 周卡」8/8 全灭，
+  // wrapup 是链上唯一既被绑定又钉 ds 的环节，整晚 completed 课总结全退 fallback）。
+  // 收口本就是学习对话链的一环，随链走用户模型；外部测试者无绑定不受影响。
+  'session-wrapup',
 ]);
 
 /** 解析 skill_model_configs.paramOverrides（JSON）。非对象/坏 JSON 一律视为未覆盖。 */

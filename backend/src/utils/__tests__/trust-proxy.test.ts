@@ -1,6 +1,6 @@
 import express from 'express'
 import type { Server } from 'http'
-import { resolveTrustProxySetting } from '../trust-proxy'
+import { resolveTrustProxySetting, assessAdminAllowlistRisk } from '../trust-proxy'
 
 async function requestClientIp(trustProxy: boolean | number | string, forwardedFor: string) {
   const app = express()
@@ -51,5 +51,40 @@ describe('trust proxy boundary', () => {
     const result = await requestClientIp('127.0.0.1', '192.168.1.20')
     expect(result.ip).toBe('192.168.1.20')
     expect(result.ips).toEqual(['192.168.1.20'])
+  })
+})
+
+/**
+ * 2026-10-17：管理端「按来源 IP 放行」的白名单与 TRUST_PROXY 的组合风险。
+ * 实测：TRUST_PROXY=true/跳数 时，把 X-Forwarded-For 写成 127.0.0.1 即可穿过 private 白名单。
+ */
+describe('admin allowlist × trust proxy', () => {
+  it('trust proxy 为 true 或非零跳数时判定为可伪造', () => {
+    expect(assessAdminAllowlistRisk({ trustProxy: true, adminAccessMode: 'private' }).spoofable).toBe(true)
+    expect(assessAdminAllowlistRisk({ trustProxy: 1, adminAccessMode: 'loopback' }).spoofable).toBe(true)
+  })
+
+  it('不信任代理（false / 0）时不可伪造', () => {
+    expect(assessAdminAllowlistRisk({ trustProxy: false, adminAccessMode: 'private' }).spoofable).toBe(false)
+    expect(assessAdminAllowlistRisk({ trustProxy: 0, adminAccessMode: 'private' }).spoofable).toBe(false)
+  })
+
+  it('显式代理 IP/CIDR 列表不判定为可伪造（只有来自该代理的连接才被信任）', () => {
+    expect(assessAdminAllowlistRisk({ trustProxy: '127.0.0.1', adminAccessMode: 'private' }).spoofable).toBe(false)
+    expect(assessAdminAllowlistRisk({ trustProxy: '10.0.0.0/8', adminAccessMode: 'loopback' }).spoofable).toBe(false)
+  })
+
+  it('ADMIN_ACCESS_MODE=any 时白名单本就不生效，不告警', () => {
+    expect(assessAdminAllowlistRisk({ trustProxy: true, adminAccessMode: 'any' }).spoofable).toBe(false)
+  })
+
+  it('未设置 ADMIN_ACCESS_MODE 按 private 处理（默认收紧）', () => {
+    expect(assessAdminAllowlistRisk({ trustProxy: true, adminAccessMode: undefined }).spoofable).toBe(true)
+    expect(assessAdminAllowlistRisk({ trustProxy: true, adminAccessMode: null }).spoofable).toBe(true)
+  })
+
+  it('组合风险确实成立：trust proxy=1 时伪造 XFF 会改变 req.ip（真起服务验证）', async () => {
+    const result = await requestClientIp(1, '127.0.0.1')
+    expect(result.ip).toBe('127.0.0.1')
   })
 })

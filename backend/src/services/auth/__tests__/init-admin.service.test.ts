@@ -18,17 +18,44 @@ function database(existing: any = null) {
 }
 
 describe('initializeAdmin', () => {
-  it('开发环境未配置密码时使用内置默认密码创建', async () => {
+  // bcrypt.hash 是模块级 mock，调用历史会跨用例累积 —— 不清会让「未被调用」类断言假红。
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('development 环境未配置密码时使用内置默认密码创建', async () => {
     const db = database()
-    const result = await initializeAdmin(db, {})
+    const result = await initializeAdmin(db, { NODE_ENV: 'development' })
     expect(bcrypt.hash).toHaveBeenCalledWith('ChangeMe_2026_Admin', 10)
     expect(db.users.create).toHaveBeenCalled()
     expect(result.status).toBe('created')
   })
 
+  it('test 环境未配置密码时同样允许默认口令（本机测试）', async () => {
+    const db = database()
+    await expect(initializeAdmin(db, { NODE_ENV: 'test' })).resolves.toMatchObject({ status: 'created' })
+  })
+
   it('生产环境未配置密码时安全跳过', async () => {
     const db = database()
     await expect(initializeAdmin(db, { NODE_ENV: 'production' })).resolves.toEqual({ status: 'skipped_not_configured' })
+    expect(db.users.create).not.toHaveBeenCalled()
+  })
+
+  // 2026-10-17 收紧：白名单判定。此前 `NODE_ENV` 漏配 / 写作 prod / Production 都会回退公开默认口令；
+  // 实测 9 种取值里 8 种泄漏，故逐值钉住「非 development/test 一律拒绝」。
+  it.each([
+    ['Production（大小写）', 'Production'],
+    ['prod（常见简写）', 'prod'],
+    ['staging', 'staging'],
+    ['空字符串', ''],
+    ['中文值', '生产'],
+    ['未设置', undefined],
+  ])('非本机环境 %s 未配置密码时安全跳过（不回退默认口令）', async (_label, nodeEnv) => {
+    const db = database()
+    const env = nodeEnv === undefined ? {} : { NODE_ENV: nodeEnv }
+    await expect(initializeAdmin(db, env as NodeJS.ProcessEnv)).resolves.toEqual({ status: 'skipped_not_configured' })
+    expect(bcrypt.hash).not.toHaveBeenCalled()
     expect(db.users.create).not.toHaveBeenCalled()
   })
 

@@ -5,6 +5,14 @@ const SETTING_KEY_ENABLED = 'aiCapabilityProbeEnabled';
 const SETTING_KEY_INTERVAL = 'aiCapabilityProbeInterval';
 const RUNTIME_CACHE_TTL_MS = 30_000;
 
+/**
+ * 测活探针（能力健康探测）开关的**代码默认值**。
+ *
+ * 硬约束（2026-10-18 用户明确要求）：默认必须关闭，不得改成 true，也不得在启动/热更新时自动开启。
+ * 探针会周期性向模型服务发真实请求（按 5 个能力逐个探测），默认开启等于持续消耗额度。
+ * 只有管理员在平台设置里显式打开（platform_settings.aiCapabilityProbeEnabled=true）才启动定时器；
+ * 回归测试见 services/__tests__/capability-probe-default-off.test.ts。
+ */
 export const DEFAULT_CAPABILITY_PROBE_ENABLED = false;
 
 export const DEFAULT_CAPABILITY_PROBE_INTERVAL_MS = 120_000;

@@ -10,7 +10,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { logger } from '../utils/logger';
-import { resolveTrustProxySetting } from '../utils/trust-proxy';
+import { resolveTrustProxySetting, assessAdminAllowlistRisk } from '../utils/trust-proxy';
 import { adminApiLimiter, globalApiLimiter } from '../middleware/api-rate-limit.middleware';
 import { csrfMiddleware } from '../middleware/csrf.middleware';
 import type { ApplicationLifecycle } from '../services/application-lifecycle.service';
@@ -32,7 +32,18 @@ export interface HttpAppDeps {
 export function createHttpApp({ lifecycle, readinessService }: HttpAppDeps): express.Express {
   const app = express();
 
-  app.set('trust proxy', resolveTrustProxySetting(process.env.TRUST_PROXY, process.env.NODE_ENV));
+  const trustProxySetting = resolveTrustProxySetting(process.env.TRUST_PROXY, process.env.NODE_ENV);
+  app.set('trust proxy', trustProxySetting);
+  // 管理端 IP 白名单可被 X-Forwarded-For 伪造的组合（TRUST_PROXY=true/跳数 + 按 IP 放行）：
+  // 生产拒绝启动，非生产高声告警（本地开发可继续，但不静默）。见 trust-proxy.assessAdminAllowlistRisk。
+  const adminAllowlistRisk = assessAdminAllowlistRisk({
+    trustProxy: trustProxySetting,
+    adminAccessMode: process.env.ADMIN_ACCESS_MODE,
+  });
+  if (adminAllowlistRisk.spoofable && adminAllowlistRisk.reason) {
+    if (process.env.NODE_ENV === 'production') throw new Error(`[安全] ${adminAllowlistRisk.reason}`);
+    logger.warn(`[安全] ${adminAllowlistRisk.reason}`, { context: 'boot:admin-allowlist-risk' });
+  }
 
   // 中间件
   app.use(helmet.contentSecurityPolicy({
