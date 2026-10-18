@@ -6,7 +6,12 @@ import {
 } from '../services/background-task-tracker.service';
 import learningService from '../services/learning/learning.service';
 import { buildFramedNormalizedInput, type LearnerLoadProfile } from '../services/learning/path-planning-hints';
-import { buildUploadedMaterialPacks, buildPackFromMaterial } from '../services/materials/material-pack.builder';
+import {
+  buildUploadedMaterialPacks,
+  buildUploadedMaterialPacksAsync,
+  buildPackFromMaterial,
+  buildPackFromMaterialAsync,
+} from '../services/materials/material-pack.builder';
 import { listMaterials, readMaterial } from '../services/materials/material-store';
 import { findWebRecordByTitle, normalizeTitleForMatch } from '../services/materials/material-web-ingest.service';
 import { patchPathsWithAsyncMaterials } from '../services/materials/material-async-collect.service';
@@ -31,6 +36,15 @@ const COORDINATOR_ID = 'path-agent';
  */
 function isMaterialCollectionEnabled(): boolean {
   return process.env.MATERIAL_COLLECTION_DISABLED !== '1';
+}
+
+/**
+ * 资料包口径开关（2026-10-17）。默认走语义化打包（`buildPackFromMaterialAsync`：
+ * 跨全文 tldr + 按位置分层的 48 条原文要点）；设 `MATERIAL_PACK_SEMANTIC_DISABLED=1`
+ * 回退到旧的头部/锚点口径——既是灰度回滚开关，也是 goal→path A/B 的对照组。
+ */
+function isSemanticMaterialPackEnabled(): boolean {
+  return process.env.MATERIAL_PACK_SEMANTIC_DISABLED !== '1';
 }
 
 /**
@@ -357,11 +371,13 @@ class PathCoordinator {
    * 纯本地读盘（无网络/LLM），同步且**绝不抛错**；一份都没有时返回空数组（零影响）。
    * 开关：`MATERIAL_UPLOAD_INJECTION_DISABLED=1` 关闭。
    */
-  private resolveUploadedMaterialPacks(userId: unknown): MaterialPackResult[] {
+  private async resolveUploadedMaterialPacks(userId: unknown): Promise<MaterialPackResult[]> {
     const id = typeof userId === 'string' ? userId.trim() : '';
     if (!id) return [];
     try {
-      return buildUploadedMaterialPacks(id);
+      return isSemanticMaterialPackEnabled()
+        ? await buildUploadedMaterialPacksAsync(id)
+        : buildUploadedMaterialPacks(id);
     } catch (error) {
       logger.warn('[path-coordinator] 读取上传附件失败，已跳过（fail-open，不阻塞路径生成）', {
         error: error instanceof Error ? error.message : String(error),
@@ -370,12 +386,14 @@ class PathCoordinator {
     }
   }
 
-  /** 库中联网资料 → pack（读盘 + 确定性打包；fail-open，任何失败返回 null 回退采集）。 */
-  private buildWebRecordPackQuietly(record: { id: string; userId: string }): MaterialPackResult | null {
+  /** 库中联网资料 → pack（语义化打包；fail-open，任何失败回退同步口径/采集）。 */
+  private async buildWebRecordPackQuietly(record: { id: string; userId: string }): Promise<MaterialPackResult | null> {
     try {
       const material = readMaterial(record.userId, record.id);
       if (!material) return null;
-      return buildPackFromMaterial(material.record, material.markdown);
+      return isSemanticMaterialPackEnabled()
+        ? await buildPackFromMaterialAsync(material.record, material.markdown)
+        : buildPackFromMaterial(material.record, material.markdown);
     } catch (error) {
       logger.warn('[path-coordinator] 库中联网资料打包失败，回退采集（fail-open）', {
         recordId: record.id,
@@ -427,7 +445,7 @@ class PathCoordinator {
     for (const need of needs) {
       const libraryRecord = collectorUserId ? findWebRecordByTitle(collectorUserId, String(need?.title || '')) : null;
       if (libraryRecord) {
-        const cached = this.buildWebRecordPackQuietly(libraryRecord);
+        const cached = await this.buildWebRecordPackQuietly(libraryRecord);
         if (cached) {
           results.push({
             ...cached,
@@ -646,7 +664,7 @@ class PathCoordinator {
     }
 
     // 附件是主线：用户上传的资料优先进入路径（本地读盘，无网络、无 LLM）
-    const uploadedPacks = this.resolveUploadedMaterialPacks(input.userId);
+    const uploadedPacks = await this.resolveUploadedMaterialPacks(input.userId);
     const uploadedMaterialIds = new Set(
       uploadedPacks.map((pack) => pack.pack?.materialId).filter((id): id is string => !!id)
     );
