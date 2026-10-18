@@ -131,7 +131,16 @@
                截断警示仍在此（数据完整性事实，与行数同格就近） -->
           <!-- 2026-10-05 卡头统一：补「列」按钮（此前全站唯一没有列控制的列表页）；
                窄屏档（isNarrow）仍按视口折叠，列勾选在桌面档生效 -->
-          <MkCols :col-defs="vlColDefs" storage-key="wf_vl_hidden_cols_v1" v-model:hidden="hiddenCols" />
+          <!-- 选择框列默认隐藏（2026-10-18 用户「多选还是不要先显示」，与 People 同判例）：
+               批量回收是低频动作，常驻一整列勾选框顶在身份列前面，会被读成每行都要勾。
+               入口保留在「列」菜单（选择框，标了批量操作）。存储键升 v2：v1 存下的隐藏集不含
+               check，不升版新默认对老用户无效。 -->
+          <MkCols
+            :col-defs="vlColDefs"
+            storage-key="wf_vl_hidden_cols_v2"
+            :default-hidden="['check']"
+            v-model:hidden="hiddenCols"
+          />
           <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-card__meta vl-truncated">
             共 {{ liveVirtualsTotal }} 人 · 当前显示前 {{ samples.length }} 人
           </span>
@@ -147,7 +156,7 @@
       <table class="mk-table">
         <thead>
           <tr>
-            <th v-if="isLive && !isNarrow" scope="col">
+            <th v-if="isLive && !isNarrow && !hiddenCols.has('check')" scope="col">
               <input type="checkbox" aria-label="全选当前页" title="全选/清空当前页的虚拟学习者" :indeterminate="headerIndeterminate" :checked="allChecked" @change="toggleAll" />
             </th>
             <th
@@ -208,7 +217,7 @@
         </thead>
         <tbody>
           <tr v-for="s in paged" :key="s.id">
-            <td v-if="isLive && !isNarrow"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
+            <td v-if="isLive && !isNarrow && !hiddenCols.has('check')"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
             <td>
               <div class="vl-cell vl-cell--click" role="button" tabindex="0" :title="`查看 ${s.name} 的画像：故事池 / 运行记录 / 会话控制`" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)" @keydown.space.prevent="openSubPage('virtual', s.id)">
                 <!-- 2026-10-15 用户拍板：撤本页私造的「身份哈希八色」头像，改与教学组同款共享原语
@@ -621,10 +630,13 @@ function menuOpenSourceCard(s: Sample) {
    窄屏零降级问题）；行详情（画像页）信息不丢 */
 const isNarrow = useIsNarrow()
 
-/* 列显隐（2026-10-05 卡头统一补「列」按钮）：六个次要列可勾选；名称/进行中/操作是
-   身份与动作列不进 colDefs，勾选列仍随 live+窄屏逻辑。窄屏（isNarrow）折叠优先于列
-   勾选——窄屏档勾了也不显（行详情进画像页，信息不丢） */
+/* 列显隐（2026-10-05 卡头统一补「列」按钮）：次要列可勾选；名称/进行中/操作是
+   身份与动作列不进 colDefs。窄屏（isNarrow）折叠优先于列勾选——窄屏档勾了也不显
+   （行详情进画像页，信息不丢）。
+   2026-10-18：勾选列进 colDefs 并默认隐藏（用户「多选还是不要先显示」，与 People 同判例） */
 const vlColDefs = [
+  /* 默认隐藏后，列菜单这一项就是批量操作的唯一入口：label 直接写清用途 */
+  { key: 'check', label: '选择框（批量操作）', title: '勾选后可在列表底部批量回收无响应会话' },
   { key: 'tendency', label: '长期倾向' },
   { key: 'story', label: '故事 / 路径', title: '故事池条数 / 已生成路径条数（一个故事可衍生多条路径，同一路径的多次会话不重复计）' },
   { key: 'sessions', label: '会话', title: SESSIONS_COL_TITLE },

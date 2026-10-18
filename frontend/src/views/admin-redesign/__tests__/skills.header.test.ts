@@ -152,10 +152,12 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     getEvalRunsMock.mockResolvedValue({ data: { data: Array.from({ length: 3 }, (_, i) => ({ id: `run-${i}`, agentId: 'skill:goal-conversation', promptVersion: 1, promptSource: 'active', mode: 'eval-set', caseCount: 2, totalRuns: 2, summary: { passRate: 100, passedCount: 2, totalRuns: 2, repeatCount: 1 }, durationMs: 900, createdAt: new Date().toISOString() })) } })
     const w = await mountSkills()
     await (w.vm as any).switchTab('prompt-eval')
-    // 面板是 defineAsyncComponent：异步分片解析 + 挂载 + ref 回填，用 waitFor 等这一刻
+    // 面板是 defineAsyncComponent：异步分片解析 + 挂载 + ref 回填，用 waitFor 等这一刻。
+    // 2026-10-18：默认 1s 在 100 文件并行跑时不够（异步分片解析排队 >1s，整跑偶发失败、
+    // 单跑必过），显式给 10s——这是等分片解析，不是掩盖产品竞态（testTimeout 20s）。
     await vi.waitFor(() => {
       expect(kpiOf(w, '评估历史')!.find('.mk-kpi__num').text()).toBe('3')
-    })
+    }, { timeout: 10000 })
     // 带在「页头之下、页签栏之上」的宿主槽位，随页签 v-if 渲染
     const labels = w.findAll('.mk-kpi-grid .mk-kpi__label').map((el) => el.text().trim())
     expect(labels).toEqual(['最近评测通过率', '评估用例', '评估历史'])

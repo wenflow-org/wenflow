@@ -116,6 +116,18 @@ function findBtn(wrapper: ReturnType<typeof mount>, text: string) {
 }
 
 async function mountPage() {
+  /* 2026-10-18：勾选列默认隐藏（与 People 同判例），本文件的批量条用例都依赖行内勾选框，
+     先把已存隐藏集置空把所有列打开；默认隐藏本身另有专测。 */
+  localStorage.setItem('wf_vl_hidden_cols_v2', JSON.stringify([]));
+  const w = mount(VirtualLearners);
+  await flushPromises();
+  await nextTick();
+  return w;
+}
+
+/** 默认隐藏专测用：清掉本地记录，走 MkCols 首访 defaultHidden 路径 */
+async function mountPageFreshCols() {
+  localStorage.removeItem('wf_vl_hidden_cols_v2');
   const w = mount(VirtualLearners);
   await flushPromises();
   await nextTick();
@@ -364,6 +376,30 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const w = await mountPage();
     expect(w.text()).not.toContain('回收无响应');
     expect(w.text()).not.toContain('已截断');
+  });
+
+  /** 2026-10-18 用户走查「多选还是不要先显示」：勾选列默认不出，
+   *  批量入口保留在「列」菜单（选择框（批量操作）），需要时自己打开。 */
+  it('选择框列默认隐藏：首访无全选、无行内勾选，列菜单仍可找回', async () => {
+    liveVirtuals.value = [makeVirtual(1), makeVirtual(2)];
+    const w = await mountPageFreshCols();
+    expect(w.find('thead input[type="checkbox"][aria-label="全选当前页"]').exists()).toBe(false);
+    expect(w.findAll('tbody input[type="checkbox"]')).toHaveLength(0);
+    expect(w.text()).not.toContain('已选');
+
+    await findBtn(w, '列').trigger('click');
+    await nextTick();
+    const labels = w.findAll('.mk-cols__item').map((x) => x.text());
+    expect(labels.some((t) => t.includes('选择框'))).toBe(true);
+
+    // 打开后可勾选并出批量条（入口是活的，不是只删了列）
+    const item = w.findAll('.mk-cols__item').find((x) => x.text().includes('选择框'))!;
+    await item.find('input[type="checkbox"]').setValue(true);
+    await nextTick();
+    expect(w.findAll('tbody input[type="checkbox"]')).toHaveLength(2);
+    await w.findAll<HTMLInputElement>('tbody input[type="checkbox"]')[0].setValue(true);
+    await nextTick();
+    expect(w.text()).toContain('已选 1 人');
   });
 
   it('复选框勾选后出现批量条：已选数量 + 取消选择', async () => {
