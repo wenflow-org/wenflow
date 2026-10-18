@@ -184,7 +184,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
 });
 
 describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对照）', () => {
-  it('KPI 面板（2026-10-05 统一面板设计）：需关注 / 缺总结 / 有建议升 MkKpi 卡带，chips 显命中数（2026-10-11 统一判例）', async () => {
+  it('KPI 面板（2026-10-17 分布带退役后四卡）：需关注 / 缺总结 / 有建议 / 完结率，chips 显命中数（2026-10-11 统一判例）', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -192,20 +192,20 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    // 三运维关注量住 MkKpi 卡带（值 = attentionCount / missingWrapupCount / advisoryCount）
+    // 三运维关注量 + 完结率住 MkKpi 卡带（值 = attentionCount / missingWrapupCount / advisoryCount / 1-已完成占比）
     const tiles = wrapper.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '缺总结', '有建议']);
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '0']);
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '缺总结', '有建议', '完结率']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '0', '0%']);
     // KPI 孪生 chips 去计数（学习状态判例）：pill 退为纯筛选开关
     const chip = (label: string) =>
       wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').find((c) => c.text().replace(/\d+$/, '') === label)!;
-    expect(chip('待关注').find('.mk-pill__count').exists()).toBe(true);
+    expect(chip('需关注').find('.mk-pill__count').exists()).toBe(true);
     expect(chip('缺总结').find('.mk-pill__count').exists()).toBe(true);
     expect(wrapper.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill .mk-pill__count').exists()).toBe(true);
     wrapper.unmount();
   });
 
-  it('状态条退役（2026-10-04）：待关注 / 缺总结住焦点 chips 且显命中数，点选即筛选', async () => {
+  it('状态条退役（2026-10-04）：需关注 / 缺总结住焦点 chips 且显命中数，点选即筛选', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -219,11 +219,11 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').find((c) => c.text().replace(/\d+$/, '') === label)!;
     // 「全部」不显数 = 卡头 meta 的已加载行数（同 People 页判例：同一数字不两处渲染）
     expect(chip('全部').find('.mk-pill__count').exists()).toBe(false);
-    expect(chip('待关注').text()).toBe('待关注1');
+    expect(chip('需关注').text()).toBe('需关注1');
     expect(chip('缺总结').text()).toBe('缺总结1');
-    // 点选 = 既有「待关注」筛选口径（attention !== low）：只剩失败行
-    await chip('待关注').trigger('click');
-    expect(chip('待关注').attributes('aria-pressed')).toBe('true');
+    // 点选 = 既有「需关注」筛选口径（attention !== low）：只剩失败行
+    await chip('需关注').trigger('click');
+    expect(chip('需关注').attributes('aria-pressed')).toBe('true');
     const rows = wrapper.findAll('tbody tr');
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain('用户a');
@@ -308,7 +308,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('贴表分布条（2026-10-04 晚接棒 buckets 构成带）：MkDistBand 四组归并，buckets/stageband 均不再出现', async () => {
+  it('分布带已退役（2026-10-17）：buckets/stageband/mk-distband 均不出现，完结率由 KPI 承载', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -316,14 +316,13 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    // 旧「stageband 分布卡」护栏语义已失效（MkDistBand 复用 stageband 原语类）——
-    // 改断言：buckets 不再出现 + 新形态贴表分布条在场
+    // 旧「stageband 分布卡」与后续 MkDistBand 贴表分布条均已下线
     expect(wrapper.find('.buckets').exists()).toBe(false);
-    expect(wrapper.find('.ts-distband .mk-distband__band').exists()).toBe(true);
-    // failed + active：图例恒显四组（零值档如实显示）；「其它」段无枚举外取值不出现
-    const legend = wrapper.findAll('.ts-distband .stageband__legend .sbl');
-    expect(legend.map((el) => el.find('.sbl__name').text())).toEqual(['进行中', '已完成', '异常终态', '已废弃']);
-    expect(legend.map((el) => el.find('.sbl__n').text())).toEqual(['1', '0', '1', '0']);
+    expect(wrapper.find('.mk-distband').exists()).toBe(false);
+    expect(wrapper.find('.stageband').exists()).toBe(false);
+    // 2 条里 0 条 completed → 完结率 0%
+    const rate = wrapper.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '完结率')!;
+    expect(rate.find('.mk-kpi__num').text()).toBe('0%');
     wrapper.unmount();
   });
 
@@ -371,7 +370,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     const groups = wrapper.findAll('.mk-card__head .mk-pills');
     expect(groups.map((g) => g.attributes('aria-label'))).toEqual(['焦点筛选', '快捷筛选']);
     expect(wrapper.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
-      '全部', '进行中', '待关注', '缺总结'
+      '全部', '进行中', '需关注', '缺总结'
     ]);
     expect(wrapper.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
       '有建议', '异常'

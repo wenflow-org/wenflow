@@ -80,26 +80,28 @@ const ppKpi = computed<PpKpiTile[]>(() => {
      测试 4 张（运行中仿真/虚拟/测试/活跃）——「真实用户」在测试视角恒 0，换虚拟域读数；
      仅真实 2 张（真实/活跃）——管理员数并入真实卡 hint，不再单独立卡 */
   if (liveIncludeVirtual.value) {
-    const virtual = rows.filter(isVirtualLearnerAccount).length
-    const test = rows.length - realRows.length - virtual
+    const virtualRows = rows.filter(isVirtualLearnerAccount)
+    const testRows = rows.filter((r) => !isVirtualLearnerAccount(r) && !isRealAccountUser(r))
     return [
       {
-        label: '运行中仿真',
+        // 2026-10-16 KPI 审计补完：原 label「运行中仿真」说的是会话，值是**账号数**
+        // （仿真会话数 ≥1 的虚拟学习者账号）。标签补「账号」二字，与右侧两张账号卡同一量纲。
+        label: '运行中仿真账号',
         value: runningSims.value,
-        hint: '正在运行仿真会话的账号',
+        hint: '有仿真会话在跑的账号',
         tone: '',
         title: '仿真会话数 ≥ 1 的虚拟学习者账号（随虚拟学习者数据刷新）',
       },
       {
         label: '虚拟学习者',
-        value: virtual,
+        value: virtualRows.length,
         hint: '模拟数据账号',
         tone: '',
         title: `${scope}。系统生成的模拟学习账号`,
       },
       {
         label: '测试账号',
-        value: test,
+        value: testRows.length,
         // 2026-10-14（KPI 审计）：原 hint「默认统计不含，切「测试」后计入」在测试视角自相矛盾——
         // 这张卡本来就只在切到「测试」后才渲染，等于叫用户做一件已经做完的事。改为只描述账号类别；
         // 「默认统计不含」那句说明留在「真实用户」卡（真实视角）的 title 里。
@@ -108,11 +110,16 @@ const ppKpi = computed<PpKpiTile[]>(() => {
         title: scope,
       },
       {
-        label: '近 7 天活跃',
-        value: active7dOf(rows),
+        // 2026-10-15 KPI 审计：测试视角本卡按「当前显示的账号」算，与下方列表 pill「近 7 天活跃」
+        // （据 2026-10-11 拍板恒为真实域）同名不同数（实测 50 vs 2）。pill 的真实域不变，
+        // 本卡显式带上「测试」二字做域区分，读者不再把两个数当同一个读数。
+        // 2026-10-16 补完：改名后**取值仍按虚拟+测试全体算**，于是出现「活跃 50 > 测试账号 48」
+        // ——标签说测试、数字含虚拟。取值收到测试账号本身，与左侧那张卡同集合。
+        label: '测试账号活跃',
+        value: active7dOf(testRows),
         hint: '最后登录在 7 天内',
         tone: '',
-        title: `${scope}。统计当前显示的账号（虚拟学习者与测试账号）`,
+        title: `${scope}。只统计测试账号（不含虚拟学习者）中最近 7 天内登录过的`,
       },
     ]
   }

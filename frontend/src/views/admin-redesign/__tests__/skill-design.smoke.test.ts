@@ -1,17 +1,19 @@
 /**
- * SkillDesignPage 阶段 2E 拆分冒烟：
- * 1. 双层 tab 压平：6 个单层顶层 tab（协议/试跑/版本/运行时/工程/字段路由），
+ * Skill 详情页·设计能力平铺冒烟（2026-10-15：独立设计页退役，内容就地铺进 SkillDetail）：
+ * 1. 双层 tab 压平：6 个单层顶层 tab（运行时/协议/试跑/版本/工程/字段路由），
  *    协议 tab 内不再有「版本历史 / 字段血缘」pill，编译预览直接内嵌
  * 2. 版本单入口：核心文件版本 + Prompt 版本 都挂在顶层「版本」tab
  * 3. 字段血缘并入「字段路由」tab（折叠块懒加载）
  * 4. 发布链 3 步：保存并编译 → 发布 →（409 SEMANTIC_UNCERTAIN）强制发布；
  *    不再有独立「编译预览」步骤
+ * 说明：本文件所有断言都跑在**平铺后的 SkillDetail 页**上——挂载 SkillDetail（view=skill），
+ *      切换到目标页签后断言设计页子区块（.sdp-*）已就地渲染。脏态守卫也迁进 SkillDetail。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
-import SkillDesignPage from '../SkillDesignPage.vue';
+import SkillDetail from '../SkillDetail.vue';
 import { coreEditorState } from '../skill-design/sdp-shared';
 import { intent, subPage } from '../store';
 import { confirmState, settleConfirm } from '../useConfirm';
@@ -31,8 +33,10 @@ const { apiMocks } = vi.hoisted(() => {
     }
   });
   /** 批 1 只读能力并入的断言目标：模型测试 / 试跑 / core 投影（均需可控返回）。
-      返回类型显式放宽到 Record——用例会用 mockImplementationOnce 换 core 形状（含状态机等可选段） */
-  const getCore = vi.fn(async (): Promise<{ data: Record<string, unknown> }> => ({
+      平铺后 SkillDetail 自身也调 getCore（回合状态机/终止条件投影）+ ProtocolTab 也调，
+      故用**常量函数**（defaultCore）复位，用例要用不同 core 形状时改 mockImplementation；
+      mockImplementationOnce 会因两处调用顺序不定而错配。 */
+  const defaultCore = () => ({
     data: {
       raw: 'identity: test\nfields: []\n',
       diagnostics: [],
@@ -54,7 +58,8 @@ const { apiMocks } = vi.hoisted(() => {
         params: { temperature: 0.5, maxTokens: 8000, failurePolicy: 'retry' }
       }
     }
-  }));
+  });
+  const getCore = vi.fn(async (): Promise<{ data: Record<string, unknown> }> => defaultCore());
   const modelProbe = vi.fn(async () => ({
     data: {
       data: {
@@ -73,7 +78,7 @@ const { apiMocks } = vi.hoisted(() => {
     data: { data: { success: true, duration: 912, output: '预览输出', steps: [{ name: '解析输入', ms: 12 }, { name: '调用模型', ms: 900, ok: false }] } }
   }));
   return {
-    apiMocks: { publishCore, saveCoreForm, compileCore, getCore, modelProbe, testSkill }
+    apiMocks: { publishCore, saveCoreForm, compileCore, getCore, defaultCore, modelProbe, testSkill }
   };
 });
 
@@ -207,8 +212,8 @@ async function settle() {
   await flushPromises();
 }
 
-/** 2026-10-15 迁入外壳二级页：本页 id 取自 store.subPage（不再读 route.params.agentId）。
-    seedSubPage 预置 subPage，query 承载页签键 sdTab（与列表 ?tab= 隔离）。 */
+/** 2026-10-15 设计页平铺：本页 id 取自 store.subPage（view=skill）。
+    与其它二级页同源；query 承载页签键 skdTab（与列表 ?tab= 隔离）。 */
 async function mountPage(skillId = 'test-skill', query: Record<string, string> = {}) {
   const router = createRouter({
     history: createMemoryHistory(),
@@ -216,18 +221,19 @@ async function mountPage(skillId = 'test-skill', query: Record<string, string> =
   });
   await router.push({ path: '/admin/skills', query });
   await router.isReady();
-  subPage.value = { view: 'skill-design', id: skillId };
-  const wrapper = mount(SkillDesignPage, { global: { plugins: [router] }, attachTo: document.body });
+  subPage.value = { view: 'skill', id: skillId };
+  const wrapper = mount(SkillDetail, { global: { plugins: [router] }, attachTo: document.body });
   await settle();
   return { wrapper, router };
 }
 
-/** 顶层 tab 导航：现走共享 MkSubTabs 原语（role=tablist/tab + aria-selected，原型 .subtab 语义） */
+/** 顶层 tab 导航：走共享 MkSubTabs 原语（role=tablist/tab + aria-selected，原型 .subtab 语义）。
+    平铺后 6 页签是 SkillDetail 的 MkSubTabs（不再有设计页外壳的第二条 tab 条）。 */
 function tabButtons(wrapper: ReturnType<typeof mount>) {
-  return wrapper.findAll('.mk-subtabs')[0].findAll('button.mk-subtab');
+  return wrapper.findAll('button.mk-subtab');
 }
 
-describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {
+describe('Skill 详情页·设计能力平铺冒烟', () => {
   beforeEach(() => {
     coreEditorState.dirty = false;
     apiMocks.publishCore.mockClear();
@@ -244,16 +250,20 @@ describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {
   it('单层 6 tab 导航，无双层 pill', async () => {
     const { wrapper } = await mountPage();
     const pills = tabButtons(wrapper);
-    expect(pills.map((p) => p.text())).toEqual(['协议', '试跑', '版本', '运行时', '工程', '字段路由']);
-    // 协议 pane 内不再有「版本历史 / 字段血缘」子 pill（双层导航已压平）
+    // 详情页默认落「运行时」（健康+证据先于配置）；页签顺序 = 详情页既有顺序
+    expect(pills.map((p) => p.text())).toEqual(['运行时', '协议', '试跑', '版本', '工程', '字段路由']);
+    // 切到协议页签（设计页默认档；平铺后需显式切）
+    await pills.find((b) => b.text() === '协议')!.trigger('click');
+    await settle();
+    // 协议区块（.sdp-pw）内不再有「版本历史 / 字段血缘」子 pill（双层导航已压平）
     expect(wrapper.find('.sdp-pw__pills').exists()).toBe(false);
-    const protocolPane = wrapper.findAll('.sdp-pane')[0];
-    expect(protocolPane.text()).not.toContain('版本历史');
-    expect(protocolPane.text()).not.toContain('字段血缘');
-    // 编译预览块直接内嵌在协议 tab
-    expect(wrapper.text()).toContain('编译预览');
-    expect(wrapper.text()).toContain('保存并编译');
-    expect(wrapper.text()).toContain('发布');
+    const protocolBlock = wrapper.find('.sdp-pw');
+    expect(protocolBlock.text()).not.toContain('版本历史');
+    expect(protocolBlock.text()).not.toContain('字段血缘');
+    // 编译预览块直接内嵌在协议页签
+    expect(protocolBlock.text()).toContain('编译预览');
+    expect(protocolBlock.text()).toContain('保存并编译');
+    expect(protocolBlock.text()).toContain('发布');
     // 独立「编译预览」按钮已合并进「保存并编译」
     expect(wrapper.findAll('button').some((b) => b.text() === '编译预览')).toBe(false);
     wrapper.unmount();
@@ -289,6 +299,8 @@ describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {
 
   it('发布链第 1 步：保存并编译 = 一次保存 + 一次编译（无独立编译预览步）', async () => {
     const { wrapper } = await mountPage();
+    await tabButtons(wrapper).find((b) => b.text() === '协议')!.trigger('click');
+    await settle();
     const saveBtn = wrapper.findAll('button').find((b) => b.text() === '保存并编译')!;
     await saveBtn.trigger('click');
     await settle();
@@ -300,6 +312,8 @@ describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {
 
   it('发布链第 2 步：safe 分类先过确认框，确认后才发布（无开发确认步），发布后刷新 overview', async () => {
     const { wrapper } = await mountPage();
+    await tabButtons(wrapper).find((b) => b.text() === '协议')!.trigger('click');
+    await settle();
     await wrapper.findAll('button').find((b) => b.text() === '发布')!.trigger('click');
     await settle();
     // B17：单击先弹确认框，未确认不发 POST
@@ -318,6 +332,8 @@ describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {
 
   it('发布链第 2 步：确认框取消 → 不发布', async () => {
     const { wrapper } = await mountPage();
+    await tabButtons(wrapper).find((b) => b.text() === '协议')!.trigger('click');
+    await settle();
     await wrapper.findAll('button').find((b) => b.text() === '发布')!.trigger('click');
     await settle();
     expect(confirmState.open).toBe(true);
@@ -335,6 +351,8 @@ describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {
         return err;
       })());
     const { wrapper } = await mountPage();
+    await tabButtons(wrapper).find((b) => b.text() === '协议')!.trigger('click');
+    await settle();
     await wrapper.findAll('button').find((b) => b.text() === '发布')!.trigger('click');
     await settle();
     settleConfirm(true);
@@ -366,10 +384,12 @@ describe('SkillDesignPage 阶段 2E 拆分冒烟', () => {
  * 批 1（A→B 只读能力并入）：把 SkillDetail（二级技能详情页）独有的只读块搬进设计页，
  * 每块一条 B 侧断言 —— 保证搬过来的不是「长得像」而是真读到了数据/真发了请求。
  */
-describe('SkillDesignPage 批 1：A 只读能力并入', () => {
+describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
   beforeEach(() => {
     coreEditorState.dirty = false;
-    apiMocks.getCore.mockClear();
+    // 复位为默认 core 形状（上一例可能用 mockImplementation 换过）
+    apiMocks.getCore.mockReset();
+    apiMocks.getCore.mockImplementation(async () => apiMocks.defaultCore());
     apiMocks.modelProbe.mockClear();
     apiMocks.testSkill.mockClear();
     confirmState.open = false;
@@ -400,7 +420,9 @@ describe('SkillDesignPage 批 1：A 只读能力并入', () => {
   it('运行时 tab：模型测试直发 model-probe，返回的延迟/JSON/token 落到读数格', async () => {
     const { wrapper } = await mountPage();
     await gotoTab(wrapper, '运行时');
-    const probeBtn = wrapper.findAll('button').find((b) => b.text() === '开始探测')!;
+    // 平铺后本页有两处「开始探测」（SkillDetail 只读概览的模型测试 + 设计区块 RuntimeTab 的模型测试）；
+    // 断言目标是设计区块（RuntimeTab，根 .sdp-pane），故按容器定位其探测钮。
+    const probeBtn = wrapper.find('.sdp-pane').findAll('button').find((b) => b.text() === '开始探测')!;
     await probeBtn.trigger('click');
     await settle();
     expect(apiMocks.modelProbe).toHaveBeenCalledTimes(1);
@@ -449,6 +471,7 @@ describe('SkillDesignPage 批 1：A 只读能力并入', () => {
 
   it('协议 tab：输入/输出契约卡按 promptRole 方向拆分，角色词表来自后端下发', async () => {
     const { wrapper } = await mountPage();
+    await gotoTab(wrapper, '协议');
     const proj = wrapper.find('.sdp-proj');
     expect(proj.exists()).toBe(true);
     const cols = proj.findAll('.sdp-proj__col');
@@ -465,6 +488,7 @@ describe('SkillDesignPage 批 1：A 只读能力并入', () => {
 
   it('协议 tab：回合状态机/终止条件无声明即空态（不硬造状态）', async () => {
     const { wrapper } = await mountPage();
+    await gotoTab(wrapper, '协议');
     const proj = wrapper.find('.sdp-proj');
     expect(proj.text()).toContain('该 Skill 未声明回合状态机。');
     expect(proj.text()).toContain('该 Skill 未声明终止条件。');
@@ -473,7 +497,8 @@ describe('SkillDesignPage 批 1：A 只读能力并入', () => {
   });
 
   it('协议 tab：core 声明了状态机/终止条件就按序列渲染（防御式读取）', async () => {
-    apiMocks.getCore.mockImplementationOnce(async () => ({
+    // 平铺后 getCore 被本页与 ProtocolTab 两处调用 → 用 mockImplementation（非 Once），afterEach 复位默认
+    apiMocks.getCore.mockImplementation(async () => ({
       data: {
         raw: 'identity: test\n',
         diagnostics: [],
@@ -490,6 +515,7 @@ describe('SkillDesignPage 批 1：A 只读能力并入', () => {
       }
     }));
     const { wrapper } = await mountPage();
+    await gotoTab(wrapper, '协议');
     const steps = wrapper.findAll('.sdp-proj__step');
     expect(steps.map((s) => s.text())).toEqual(['1idle', '2asking', '3wrapping']);
     expect(wrapper.findAll('.sdp-proj__rank').map((r) => r.text())).toEqual(['达成目标', '轮次超限']);

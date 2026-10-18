@@ -94,17 +94,18 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     w.unmount();
   });
 
-  it('目标对话独立页：KPI 面板 = 会话总数/参与用户/近 7 日新增（2026-10-05 248dd8c2 对齐学习路径家族），状态构成归分布带', async () => {
+  it('目标对话独立页：KPI 面板 = 会话总数/完结率/参与用户/近 7 天新增，状态计数归卡头 pills（2026-10-17 分布带退役）', async () => {
     const { router, ready } = mockRouter('/admin/goal-conversations');
     await ready;
     const w = mount(GoalConversations, { global: { plugins: [router] } });
     await settle();
-    // 2026-10-05 并行批 248dd8c2：三卡 KPI 升 MkKpi 面板（OpsContent 同款），与分布带（状态比例）分属两维度
-    expect(kpiLabels(w)).toEqual(['会话总数', '参与用户', '近 7 日新增']);
+    // 2026-10-17：分布带退役，完结率从带副文升独立 KPI 卡；状态计数迁回卡头 pills
+    expect(kpiLabels(w)).toEqual(['会话总数', '完结率', '参与用户', '近 7 天新增']);
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
-    // 构成卡旧形态不复辟：状态构成唯一住在分布带（10-02 撤双带判例不回退）
+    // 构成卡旧形态不复辟：状态计数只活在卡头 pills（10-02 撤双带判例不回退）
     expect(w.find('.mk-card .buckets').exists()).toBe(false);
     expect(w.find('.buckets').exists()).toBe(false);
+    expect(w.find('.gc-distband').exists()).toBe(false);
     // 2026-09-29 拆回独立页：学习会话合并宿主的视图切换 pills 不应再出现
     expect(w.find('.gc-tabs').exists()).toBe(false);
     w.unmount();
@@ -131,7 +132,7 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     // 计数升 KPI 后 chips 全部去计数（学习状态判例：KPI 孪生 pill 退为纯筛选开关）；
     // 0 行时异常 chip 不出现
     expect(w.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
-      '全部', '进行中', '待关注', '缺总结'
+      '全部', '进行中', '需关注', '缺总结'
     ]);
     expect(w.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').map((c) => c.text())).toEqual(['有建议0']);
     w.unmount();

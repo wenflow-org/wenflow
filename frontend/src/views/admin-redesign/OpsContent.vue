@@ -19,39 +19,52 @@
         :title="includeTest ? '只统计虚拟学习者与测试账号' : '只统计真实用户'"
       />
       <MkKpi label="里程碑" :value="stats?.totalMilestones ?? '—'" hint="跨全部已生成路径" title="已生成路径的里程碑总数" />
-      <MkKpi label="任务" :value="stats?.totalTasks ?? '—'" hint="挂在里程碑下" title="已生成路径的任务总数" />
+      <!-- 2026-10-16 KPI 审计补完：label 原为「任务」，而本页其它文案（删除确认）说的是「子任务」，
+           同一个东西两个叫法。按页面内部多数用法统一为「子任务」。 -->
+      <MkKpi label="子任务" :value="stats?.totalTasks ?? '—'" hint="挂在里程碑下" title="已生成路径的子任务总数" />
     </section>
 
-    <!-- 路径状态分布：教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」——回到卡上方
-         页面级（与旧构成带同位）。分段/图例均可点下钻，是本页唯一状态筛选面。数据源与口径不变：
-         getStats().byStatus 服务端按状态 group-by 全平台计数（60s 缓存），非本页 1000 条窗口推导；
-         embedded 时隐藏（宿主承载域计数）；stats 拉取失败或全零时静默隐藏，不留空带。
-         2026-10-14 用户：教学组各页这条分布带一律默认折叠（表格才是各页主体）——折叠走共享
-         .mk-section__summary 原语，收起仍露标题与口径副文；展开后才见「本页唯一状态筛选面」 -->
-    <MkDistBand
-      v-if="!embedded && pathBandReady"
-      card
-      collapsible
-      class="oc-distband"
-      title="路径状态分布"
-      unit="条"
-      aria-label="按路径状态筛选"
-      :bins="pathBandBins"
-      :active-key="statusFilter === 'all' ? null : statusFilter"
-      @select="toggleStatusBand"
-    />
+    <!-- 路径状态分布带已退役（2026-10-17 用户走查「这个也不太好，毕竟上面又 KPI」）：
+         页头已有 KPI 卡带，再压一条整宽分布条等于同屏两段读数；四状态里当前三档为 0，
+         条上只剩一段。状态筛选回卡头 pills（计数仍取 stats 的全平台 byStatus），
+         分档形状交给表格「状态」列与 KPI。 -->
 
     <!-- 筛选 + 列表（单行头部与教学会话/目标对话 tab 一致：pill 组 + 搜索 + 数据口径 + 列显隐） -->
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <!-- 状态筛选唯一入口 = 上方「路径状态分布」分布条（2026-10-04 晚：原 pills 与分布条
-               同驱一个 statusFilter，同屏两处筛选面退役一处）；pill 计数（窗口口径）随 pills 退役，
-               全量计数由分布条图例恒显。此处只留搜索与筛选清理 -->
-          <MkFilterSearch v-model="keyword" placeholder="搜索标题 / 用户 / ID" />
+          <!-- 状态筛选（2026-10-17 从退役分布带迁回）：四枚举 + 枚举外的「其它」档；
+               计数取 stats 全平台 byStatus，stats 未落定时不渲染计数徽章（不把未知读成 0）。
+               「停滞」是分布条表达不了的**复合口径快筛**——进行中 ∧ 超 24h 无更新，
+               该被拎出来的那批（与「生成失败」同为运营救援对象，行内带同名徽标、⋯ 菜单可
+               就地「重试生成」）。两者叠加为 AND；再点已选中的状态即取消 -->
+          <div class="mk-pills" role="group" aria-label="状态筛选">
+            <button
+              v-for="p in ocStatusPills"
+              :key="p.key"
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': statusFilter === p.key }"
+              :aria-pressed="statusFilter === p.key"
+              :title="p.title"
+              @click="selectStatus(p.key)"
+            >{{ p.name }}<span v-if="p.n != null" class="mk-pill__count">{{ p.n }}</span></button>
+          </div>
+          <div class="mk-pills" role="group" aria-label="路径快筛">
+            <button
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': stalledOnly }"
+              :aria-pressed="stalledOnly"
+              title="进行中且超过 24 小时无更新（生成链停滞，可「重试生成」补齐）"
+              @click="stalledOnly = !stalledOnly"
+            >停滞<span class="mk-pill__count">{{ stalledCount }}</span></button>
+          </div>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
+          <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
+          <MkFilterSearch v-model="keyword" placeholder="搜索标题 / 用户 / ID" />
           <!-- 口径切换加载反馈（2026-10-06 审核 F2-3）：切换后列表与统计同时重拉，列表接口实测
                可滞后数秒；期间表格走骨架、KPI 显「—」，此处再给一处文字化「正在加载」，
                让「已切口径但读数未到」有明确反馈（MkLoading 共享原语，含 role=status）。
@@ -94,6 +107,14 @@
                 :aria-sort="ocSortState('path')"
                 @click="toggleOcSort('path')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('path')">路径<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th v-if="!hiddenCols.has('user')">用户</th>
+              <th
+                v-if="!hiddenCols.has('status')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="ocSortState('status')"
+                @click="toggleOcSort('status')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!hiddenCols.has('difficulty')"
                 scope="col"
@@ -108,14 +129,6 @@
                 :aria-sort="ocSortState('hours')"
                 @click="toggleOcSort('hours')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('hours')">时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!hiddenCols.has('user')">用户</th>
-              <th
-                v-if="!hiddenCols.has('status')"
-                scope="col"
-                class="mk-th--sortable"
-                :aria-sort="ocSortState('status')"
-                @click="toggleOcSort('status')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
                 v-if="!hiddenCols.has('progress')"
                 scope="col"
@@ -154,12 +167,6 @@
                   <span class="mk-cell-sub" :title="p.id">{{ shortId(p.id, 10, 4) }}</span>
                 </div>
               </td>
-              <td v-if="!hiddenCols.has('difficulty')">
-                <!-- 难度：只有三个枚举值可判；老数据里混着 unknown 与自述整句（~35%），
-                     一律显示「未知」，原文进 title，不把半句话当难度展示 -->
-                <span class="oc-diff" :title="difficultyTitle(p.difficulty)">{{ difficultyText(p.difficulty) }}</span>
-              </td>
-              <td v-if="!hiddenCols.has('hours')" class="mk-num">{{ p.estimatedHours ? `~${p.estimatedHours}h` : '—' }}</td>
               <td v-if="!hiddenCols.has('user')">
                 <!-- 原型学习者格 .celluser = 首字母头像 + 姓名；tone 与行内虚拟/测试标记同语义
                      （MkCellAvatar 共享原语，同 GoalConversations 用户格） -->
@@ -179,6 +186,12 @@
                 </div>
               </td>
               <td v-if="!hiddenCols.has('status')"><span class="mk-badge" :class="statusBadge(p.status)">{{ statusText(p.status) }}</span></td>
+              <td v-if="!hiddenCols.has('difficulty')">
+                <!-- 难度：只有三个枚举值可判；老数据里混着 unknown 与自述整句（~35%），
+                     一律显示「未知」，原文进 title，不把半句话当难度展示 -->
+                <span class="oc-diff" :title="difficultyTitle(p.difficulty)">{{ difficultyText(p.difficulty) }}</span>
+              </td>
+              <td v-if="!hiddenCols.has('hours')" class="mk-num">{{ p.estimatedHours ? `~${p.estimatedHours}h` : '—' }}</td>
               <td v-if="!hiddenCols.has('progress')">
                 <!-- 进度列直出里程碑计数（2026-10-06 审核 #54）：此前「已完成/总数」只挂 title，
                      扫读看不到达成量（判断卡在 2/5 还是 4/5 必须逐行悬停） -->
@@ -232,8 +245,8 @@
       <MkEmptyState
         v-else
         icon="◌"
-        :title="keyword || statusFilter !== 'all' ? '当前筛选无匹配' : '没有学习路径'"
-        :description="keyword || statusFilter !== 'all' ? '放宽筛选条件试试。' : '用户的目标对话生成路径后，会出现在这里。'"
+        :title="isFiltered ? '当前筛选无匹配' : '没有学习路径'"
+        :description="isFiltered ? '放宽筛选条件试试。' : '用户的目标对话生成路径后，会出现在这里。'"
         :action-text="isFiltered ? '清除筛选' : ''"
         @action="clearFilters"
       />
@@ -274,7 +287,6 @@ import Pagination from './Pagination.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
-import MkDistBand from '@/components/mk/MkDistBand.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import { statusText, statusBadge, isPathStalled, pathRetryTypeText, PATH_STALL_HOURS } from './opsShared'
@@ -298,6 +310,9 @@ const loadError = ref('')
 const keyword = ref('')
 /** 状态筛选（'' 退役，哨兵 'all' 与 useListQueryState 的 pill 约定一致） */
 const statusFilter = ref('all')
+/** 复合快筛「停滞」（进行中 ∧ 超阈值无更新）：与 statusFilter 叠加为 AND；再点取消。
+    计数按本页已加载窗口（同 GoalConversations「未生成路径」，不显服务端全量口径以免两数打架） */
+const stalledOnly = ref(false)
 /* 口径整组统一（2026-10-04 用户拍板）：get/set 走 live.ts 共享态（页头开关同源），本页 watch 只负责重拉 */
 const includeTest = computed({
   get: () => liveIncludeVirtual.value,
@@ -306,11 +321,14 @@ const includeTest = computed({
 const stats = ref<LearningContentStats | null>(null)
 
 /* 列显隐（与同页其他列表一致）：路径/操作固定，其余可隐藏 */
+/* 列序（2026-10-16 教学组统一）：主体列（路径）→ 用户 → 状态 → 属性/过程（难度、时长、进度）→ 时间（更新）→ 操作。
+   原先把难度/时长排在用户与状态之前，与同组其它页（目标对话 / 教学会话）的「主体 → 用户 → 状态 → 过程」
+   不一致，也违背 2026-10-03 定下的「主体列恒在首、用户列随后」。MkCols 菜单按本数组顺序渲染。 */
 const colDefs = [
-  { key: 'difficulty', label: '难度', title: '路径难度：由目标对话里的水平自述归一（入门/进阶/高阶），无法判断时为未知' },
-  { key: 'hours', label: '时长', title: '预计学习时长（约数，带 ~ 表示近似）' },
   { key: 'user', label: '用户', title: '所属用户' },
   { key: 'status', label: '状态', title: '路径状态' },
+  { key: 'difficulty', label: '难度', title: '路径难度：由目标对话里的水平自述归一（入门/进阶/高阶），无法判断时为未知' },
+  { key: 'hours', label: '时长', title: '预计学习时长（约数，带 ~ 表示近似）' },
   { key: 'progress', label: '进度', title: '里程碑完成进度' },
   { key: 'updated', label: '更新时间', title: '最近更新' }
 ] as const
@@ -347,21 +365,29 @@ const pathBand = computed<PathBandEntry[]>(() => {
   return entries
 })
 const pathBandTotal = computed(() => pathBand.value.reduce((a, e) => a + e.n, 0))
-/* stats 拉取失败（null）或状态合计为 0 → 整带隐藏（v-if），不留空带 */
+/* stats 拉取失败（null）或状态合计为 0 → 计数不可用；此时 pills 仍可筛，但不渲染计数徽章 */
 const pathBandReady = computed(() => !!stats.value && pathBandTotal.value > 0)
 
-/** 贴表分布条数据（与构成带同源：byStatus 全平台计数）；hint 只给失败段（重规划去向） */
-const pathBandBins = computed(() =>
-  pathBand.value.map((e) => ({
-    key: e.key,
-    label: e.name,
-    n: e.n,
-    tone: e.tone,
-    hint: e.key === 'failed' ? '行内「重试生成」可就地重发（详情页同入口）' : undefined
-  }))
-)
-/** 分布条点击 = 单状态筛选（与原 pills 同一 statusFilter）；再点取消 */
-function toggleStatusBand(key: string) {
+/** 卡头状态 pills（2026-10-17 从退役的分布带迁回）：与分布带同源（byStatus 全平台计数）；
+    stats 未落定 → n=null，不把未知读成 0；「其它」档只在枚举外取值实际出现时追加 */
+const ocStatusPills = computed<Array<{ key: string; name: string; n: number | null; title: string }>>(() => {
+  const ready = pathBandReady.value
+  return [
+    { key: 'all', name: '全部', n: null, title: '不限状态' },
+    ...pathBand.value.map((e) => ({
+      key: e.key,
+      name: e.name,
+      n: ready ? e.n : null,
+      title: e.key === 'failed'
+        ? `生成失败：${e.n} 条 · 行内「重试生成」可就地重发（详情页同入口）`
+        : e.key === 'other'
+          ? `枚举外状态合计 ${e.n} 条`
+          : `${e.name}：${e.n} 条`
+    }))
+  ]
+})
+/** 点状态 pill = 单状态筛选；再点已选中的取消回「全部」（'all'） */
+function selectStatus(key: string) {
   statusFilter.value = statusFilter.value === key ? 'all' : key
 }
 /** 「其它」段 = 四枚举之外取值的聚合，不能按单状态等值比较（点了要真能筛出那些行） */
@@ -400,14 +426,18 @@ const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase()
   return sortOcRows(rows.value.filter((p) => {
     if (statusFilter.value !== 'all' && !pathStatusMatch(p.status, statusFilter.value)) return false
+    if (stalledOnly.value && !isStalled(p)) return false
     if (!k) return true
     return `${p.title} ${p.user?.name || ''} ${p.user?.email || ''} ${p.subject || ''}`.toLowerCase().includes(k)
   }))
 })
-const isFiltered = computed(() => !!keyword.value.trim() || statusFilter.value !== 'all')
+/** 「停滞」快筛命中数（按当前已加载窗口；判据与行内「停滞」徽标同一 isStalled） */
+const stalledCount = computed(() => rows.value.filter((p) => isStalled(p)).length)
+const isFiltered = computed(() => !!keyword.value.trim() || statusFilter.value !== 'all' || stalledOnly.value)
 function clearFilters() {
   keyword.value = ''
   statusFilter.value = 'all'
+  stalledOnly.value = false
 }
 /* 筛选 / 页码 ↔ URL query（2026-10-13 运营走查 O2）：本页原为「只读 URL 不回写」（写入权在
    发起方）——手动筛选在刷新 / 分享 / 收藏里全部丢失。改为双向同步（缺省值不写 URL，所以
@@ -416,12 +446,17 @@ function clearFilters() {
    必须在下方「筛选变化回第 1 页」的 watch 之前调用：URL 落位要发生在监听建立之前，
    否则挂载时还原出来的筛选会被当成用户改筛选、把还原的页码打回 1（Users.vue 判例）。 */
 useListQueryState(
-  { pill: statusFilter, keyword, page, pageSize, allowedPills: ['all', 'active', 'completed', 'failed', 'archived'] },
+  {
+    pill: statusFilter, keyword, page, pageSize,
+    allowedPills: ['all', 'active', 'completed', 'failed', 'archived'],
+    /* 「停滞」快筛也进 URL（1=开），刷新/分享/返回可还原（与 pill 同一组合式单点） */
+    extra: [{ key: 'stalled', get: () => (stalledOnly.value ? '1' : ''), set: (v) => { stalledOnly.value = v === '1' }, allowed: ['1'] }]
+  },
   { pill: 'status' }
 )
 /* 回第 1 页只监听筛选输入与排序（TeachingSessions 判例）：监听 filtered 会让数据回填
    （重挂载恢复列表态后的装载）也把页码打回第 1 页。越界收敛由 Pagination 自带 watcher 兜底。 */
-watch([keyword, statusFilter, ocSortKey, ocSortDir], () => {
+watch([keyword, statusFilter, stalledOnly, ocSortKey, ocSortDir], () => {
   page.value = 1
 })
 /* 出站下钻不再存快照：筛选/页码已住进 URL（上方 useListQueryState），
@@ -713,8 +748,8 @@ defineExpose({ reload: () => void reload(true) })
 <style scoped>
 /* 嵌入模式（目标对话页「学习路径」tab）：fill 容器内占满，主卡片弹性 */
 .oc-embedded { flex: 1; min-height: 0; overflow: hidden; }
-/* 分布条在卡上方页面级（2026-10-05 用户拍板「分段条在上」）：贴条 padding/下边框随撤，
-   页面级间距由 .mk-page 的 --mk-stack-gap 统一供。oc-distband 类保留作测试与定位钩子 */
+/* 分布条已退役（2026-10-17）：原页面级 .oc-distband 与类名一并下线，状态筛选在卡头 pills；
+   页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
 /* 加载失败错误态已收敛共享 MkEmptyState tone="error"（role=alert + 失败原因 + 重试/busy），
    私有 .oc-error 与暗色描边覆写随撤（2026-10-06 审核 #38） */
 /* 原型 .tbl td nowrap 已收敛全局修饰类 .mk-table--nowrap（2026-10-06 审核 #56），

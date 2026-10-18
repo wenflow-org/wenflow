@@ -18,8 +18,8 @@
              故事阶段允许先关弹窗——卡已在库，服务端继续生成，完成后仍会刷新卡墙。 -->
         <p v-if="isLibrary && creating" class="mk-alert mk-alert--info" role="status">
           {{ phase === 'card'
-            ? '① 正在建卡入库…'
-            : '① 卡已入库 ✓ ② 正在用 AI 备好第一个故事…（可先关闭，故事在服务端继续）' }}
+            ? '正在建卡入库…'
+            : '卡已入库。正在用 AI 备好第一个故事，可先关闭，故事会在服务端继续生成' }}
         </p>
         <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
           <span class="mk-field__label">称呼 / 样本名 <em class="mk-field__req">必填</em></span>
@@ -62,7 +62,7 @@
             >传统学生</button>
           </div>
           <button type="button" class="mk-btn mk-btn--ghost vl-ai" :disabled="personaBusy" @click="generatePersona">
-            {{ personaBusy ? '生成身份中…' : '✦ AI 生成身份' }}
+            {{ personaBusy ? '生成身份中…' : 'AI 生成身份' }}
           </button>
           <span class="vl-ai-hint">{{ PERSONA_SKILL_HINT }}{{ sampleType === 'student' ? ' · 学生样本含考试节点与学期节奏' : '' }}</span>
         </div>

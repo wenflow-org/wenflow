@@ -60,7 +60,7 @@ export const spans = computed<TraceSpan[]>(() => {
 })
 
 /* ---------- 身份色（拓扑 / 编排 / 抽屉 / 设计页共用，单源） ---------- */
-/** 各顶层 Agent 的身份色；key = Agent id。历史重复定义（SkillDesignPage/SkillDrawer 内嵌）已收敛至此 */
+/** 各顶层 Agent 的身份色；key = Agent id。历史重复定义（Skill 详情页/SkillDrawer 内嵌）已收敛至此 */
 export const AGENT_TONES: Record<string, { hue: string; soft: string }> = {
   'goal-agent': { hue: '#4f46e5', soft: 'rgba(79, 70, 229, 0.1)' },
   'path-agent': { hue: '#0d9488', soft: 'rgba(13, 148, 136, 0.1)' },
@@ -73,7 +73,10 @@ export interface SkillStat {
   calls: number
   errors: number
   avgMs: number
+  /** 相对时间（列表展示用：刚刚 / 2 天前 / 从未） */
   lastAt: string
+  /** 原始调用时间（排序用：相对时间串不可比较大小） */
+  lastCalledAt?: string
 }
 
 export function skillStatOf(skillId: string): SkillStat {
@@ -216,7 +219,7 @@ export function intentQueryParams(scene: string): Record<string, string> {
 }
 
 /* ---------- 二级页面（drill-in） ---------- */
-export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real' | 'path' | 'skill' | 'skill-design' | 'card' | 'card-import'
+export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real' | 'path' | 'skill' | 'card' | 'card-import'
 
 /** 会话座舱的落点页签（2026-10-12 走查拍板：路径不再有独立详情页，统一在座舱的阶段页签打开；
  *  从学习路径列表进来 = 打开座舱并落在 Path 页签）。只对 session/session-real 有意义；

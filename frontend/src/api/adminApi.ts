@@ -629,7 +629,7 @@ export const adminSkillWorkbenchApi = {
   getMeta: async (skillId: string) => {
     const canonicalSkillId = skillId.startsWith('skill:') ? skillId : `skill:${skillId}`;
     // 返回体结构：{ success, data: SkillWorkbenchMeta }；data.completion 为可选新增字段，
-    // 404 降级分支 data.draft=true。既有调用方（SkillDrawer/SkillDesignPage）用
+    // 404 降级分支 data.draft=true。既有调用方（SkillDetail / 编排图）用
     // `res?.data?.data ?? res?.data` 取值，保持返回类型宽松不破坏。
     return adminAxios.get(`/admin/skills/${encodeURIComponent(canonicalSkillId)}/workbench-meta`);
   },
@@ -1727,6 +1727,18 @@ export const adminVirtualLearnersApi = {
   cardsDetail: async (profileId: string) => {
     return adminAxios.get(`/admin/virtual-learners/cards/${encodeURIComponent(profileId)}/detail`);
   },
+
+  /** 卡的任务清单（2026-10-16 卡→虚拟学习者创建面板）：逐卡给故事池任务 id + 标题 */
+  cardsTasks: async (profileIds: string[]) => {
+    return adminAxios.get('/admin/virtual-learners/cards/tasks', {
+      params: { ids: profileIds.join(',') },
+    });
+  },
+
+  /** 卡 → 虚拟学习者（2026-10-16 卡=身份模板）：批量派生出新账号 + 新档案，故事池只带勾选的任务 */
+  cardsClone: async (items: Array<{ profileId: string; storyIds?: string[] }>, note?: string) => {
+    return adminAxios.post('/admin/virtual-learners/cards/clone', { items, note });
+  },
 };
 
 // ============================================================
@@ -1831,8 +1843,10 @@ export const adminPromptOpsApi = {
     return adminAxios.post('/admin/prompt-ops/run-eval', payload, { timeout: AI_REQUEST_TIMEOUT });
   },
 
-  getEvalRuns: async (agentId?: string, limit?: number) => {
-    return adminAxios.get('/admin/prompt-ops/eval-runs', { params: { agentId: agentId || undefined, limit: limit || undefined } });
+  getEvalRuns: async (agentId?: string, limit?: number, sort?: string, order?: 'asc' | 'desc') => {
+    return adminAxios.get('/admin/prompt-ops/eval-runs', {
+      params: { agentId: agentId || undefined, limit: limit || undefined, sort: sort || undefined, order: sort ? order || 'desc' : undefined }
+    });
   },
 
   getEvalRun: async (id: string) => {

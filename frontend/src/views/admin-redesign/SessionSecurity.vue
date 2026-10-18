@@ -1,6 +1,6 @@
 <template>
   <div :class="embedded ? 'mk-page--fill ss-embedded' : 'mk-page'">
-    <!-- 状态条：全量会话统计 + 刷新（embedded 时由系统工具宿主承载域计数，不再渲染） -->
+    <!-- 状态条：全量会话统计 + 刷新（embedded 时由运营中心宿主承载域计数，不再渲染） -->
     <div v-if="!embedded" class="mk-status" :class="`mk-status--${statusTone}`">
       <span class="mk-status__dot"></span>
       <strong class="mk-status__title">会话安全</strong>
@@ -283,7 +283,7 @@ import Pagination from './Pagination.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 
-/** 嵌入模式：作为「系统工具」页「会话安全」tab 渲染（仅去掉外层状态条；宿主承载域计数与刷新）。
+/** 嵌入模式：作为「运营中心」页「会话安全」tab 渲染（仅去掉外层状态条；宿主承载域计数与刷新）。
     count 事件：会话总数上报（宿主「会话 N」徽章） */
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 const emit = defineEmits<{ (e: 'count', total: number): void }>()
@@ -380,7 +380,7 @@ const router = useRouter()
 /** 审计日志深链：?user=用户名 → 仅展示该管理员的会话组 */
 const deepLinkUser = computed(() => String(route.query.user || '').trim())
 function clearDeepLink() {
-  // 仅移除 user 筛选，保留宿主 tab 查询（嵌入「系统工具」页时 ?tab=security 不可被清掉）
+  // 仅移除 user 筛选，保留宿主 tab 查询（嵌入「运营中心」页时 ?tab=security 不可被清掉）
   const q = { ...route.query }
   delete q.user
   void router.replace({ query: q })
@@ -646,7 +646,7 @@ function fmtFull(iso?: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
-/** 宿主刷新联动（系统工具宿主「刷新」按钮 → 重拉会话列表） */
+/** 宿主刷新联动（运营中心宿主「刷新」按钮 → 重拉会话列表） */
 defineExpose({ refresh: () => { void applyFilters() } })
 
 onMounted(async () => {
@@ -662,7 +662,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 嵌入模式（系统工具宿主 flex 列内）：占满剩余高度，卡片内滚（对齐 nt-embedded 先例） */
+/* 嵌入模式（运营中心宿主 flex 列内）：占满剩余高度，卡片内滚（对齐 nt-embedded 先例） */
 .ss-embedded { flex: 1; min-height: 0; overflow: hidden; }
 /* 状态条走全局 mk-status 体系（shared.css）；此处不再 scoped 覆盖，
    避免遮蔽全局升级（此前重定义导致 mk-status__actions 等新类不生效） */

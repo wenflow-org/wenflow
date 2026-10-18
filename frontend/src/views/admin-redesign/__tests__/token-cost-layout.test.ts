@@ -107,7 +107,8 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
   it('Skill 明细：已定价行显金额、未定价行显暗灰 —（不再逐行复读状态词）', async () => {
     const w = await mountTokenCost();
     const heads = w.findAll('.tc-skilltable__head > span').map((s) => s.text());
-    expect(heads).toEqual(['Skill', '调用', 'Token 用量', 'Prompt', 'Completion', '均次 Token', '成本', '占比']);
+    // 输入/输出（原 Prompt/Completion，2026-10-16 用户：「那就输入输出就行了，不要搞那么多」）
+    expect(heads).toEqual(['Skill', '调用', 'Token 用量', '输入', '输出', '均次 Token', '成本', '占比']);
     const rows = w.findAll('.tc-skilltable__row');
     expect(rows).toHaveLength(2);
     const priced = rows[0].find('.tc-st__cost');

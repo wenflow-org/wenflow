@@ -168,6 +168,18 @@ export function countProfiles() {
   return prisma.virtual_learner_profiles.count();
 }
 
+/** 每个画像已生成的路径数（distinct learningPathId）：一个故事可衍生多条路径，
+    同一路径的多次会话不重复计。列表页用它与故事条数并置，避免把多路径学习者读成一条路径。 */
+export function groupPathCountsByProfile(profileIds: string[]) {
+  if (!profileIds.length) {
+    return Promise.resolve([] as Array<{ virtualProfileId: string; learningPathId: string | null }>);
+  }
+  return prisma.virtual_sessions.groupBy({
+    by: ['virtualProfileId', 'learningPathId'],
+    where: { virtualProfileId: { in: profileIds }, learningPathId: { not: null } },
+  });
+}
+
 /* ---------- 卡库（card-import.service）取数 ---------- */
 
 /** 全量卡的查重索引取数：profile JSON + tags（cardKey/同源扫描用） */
@@ -185,7 +197,8 @@ export function findCustomCardsForExport() {
   });
 }
 
-/** 卡墙索引取数（2026-10-05 卡库改版）：全部卡（预置+自建）带展示列与账号信息，新卡在前 */
+/** 卡墙索引取数（2026-10-05 卡库改版）：全部卡（预置+自建）带展示列与账号信息，新卡在前。
+ *  known/struggleConcepts 供「卡 → 虚拟学习者」派生时随身份带走（2026-10-16）。 */
 export function findProfilesForCardWall() {
   return prisma.virtual_learner_profiles.findMany({
     select: {
@@ -195,6 +208,8 @@ export function findProfilesForCardWall() {
       tags: true,
       learningGoal: true,
       knowledgeLevel: true,
+      knownConcepts: true,
+      struggleConcepts: true,
       presetKey: true,
       notes: true,
       createdAt: true,

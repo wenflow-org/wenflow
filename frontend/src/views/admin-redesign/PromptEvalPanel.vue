@@ -33,8 +33,11 @@
           <option value="">全部 Agent</option>
           <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.label }}</option>
         </select>
-        <span v-if="tab === 'cases'" class="pe-filter__hint">用例驱动：为 goal-conversation 等 Agent 维护评估集，一键跑评估验证 prompt 改动</span>
-        <button v-if="tab === 'cases'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openCreate">新建用例</button>
+        <!-- 原「用例驱动：为 goal-conversation 等 Agent 维护评估集…」说明行已删
+             （2026-10-17 用户走查「这种文案清理掉」）：页头副文、两个页签名、
+             空态正文与「新建用例 / 批量跑评估」按钮已经把同一件事说了四遍，
+             且句中硬编码了一个 Agent id，Agent 目录一变就是过期示例。 -->
+        <button v-if="tab === 'cases'" type="button" class="mk-btn mk-btn--sm mk-btn--primary pe-filter__action" @click="openCreate">新建用例</button>
       </div>
 
     <!-- 用例 Tab -->
@@ -46,12 +49,37 @@
         <table class="mk-table mk-table--click">
           <thead>
             <tr>
-              <th>用例</th>
-              <th>Agent</th>
-              <th class="mk-th--right">消息数</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="caseSortState('name')"
+                @click="toggleCaseSort('name')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCaseSort('name')">用例<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="caseSortState('agent')"
+                @click="toggleCaseSort('agent')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCaseSort('agent')">Agent<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--right mk-th--sortable"
+                :aria-sort="caseSortState('messages')"
+                @click="toggleCaseSort('messages')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCaseSort('messages')">消息数<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th>期望</th>
-              <th>状态</th>
-              <th>更新</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="caseSortState('enabled')"
+                @click="toggleCaseSort('enabled')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCaseSort('enabled')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="caseSortState('updated')"
+                @click="toggleCaseSort('updated')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCaseSort('updated')">更新<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th class="mk-th--right">操作</th>
             </tr>
           </thead>
@@ -59,7 +87,7 @@
             <!-- 原型 2105：用例行 data-action="open-skill" → 点击/回车打开对应 Skill 详情；
                  行内按钮一律 stop，键盘冒泡在 openCaseSkill 内按 target 守卫 -->
             <tr
-              v-for="c in cases"
+              v-for="c in sortedCases"
               :key="c.id"
               tabindex="0"
               role="button"
@@ -152,11 +180,31 @@
             <tr>
               <th class="pe-compare-col"><span class="visually-hidden">选择对比</span></th>
               <th>运行</th>
-              <th>Agent</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="runSortState('agent')"
+                @click="toggleRunSort('agent')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleRunSort('agent')">Agent<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th>结果</th>
-              <th>用例/次数</th>
-              <th class="mk-th--right">耗时</th>
-              <th>时间</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="runSortState('cases')"
+                @click="toggleRunSort('cases')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleRunSort('cases')">用例/次数<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--right mk-th--sortable"
+                :aria-sort="runSortState('duration')"
+                @click="toggleRunSort('duration')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleRunSort('duration')">耗时<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="runSortState('created')"
+                @click="toggleRunSort('created')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleRunSort('created')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th class="mk-th--right">操作</th>
             </tr>
           </thead>
@@ -571,6 +619,7 @@ import { formatRate, rateToneOf, RATE_THRESHOLD_NOTE } from './rate-utils'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
+import { useTableSort } from './useTableSort'
 import { askConfirm } from './useConfirm'
 import { openSkillDrawer } from './store'
 import { toast } from '@/utils/toast'
@@ -676,6 +725,36 @@ const runsFailed = ref(false)
    自身的 catch 吞成 runsFailed + toast，首屏「评估历史」KPI 卡恒显「0 / 暂无评估记录」，
    切到历史页签后同一张卡才变 30（那时常量已初始化，故「自愈」） */
 const RUNS_LIMIT = 30
+
+/* ===== 列表排序（2026-10-17 用户走查「有的列没有排序」） =====
+   用例：接口返回全量（无 limit），客户端排序诚实。
+   历史：接口固定只回最近 30 条窗口，客户端排只会排这 30 条却像全量 →
+   走服务端排序（键即后端列名），排序变化时重拉。结果/通过率在 summaryJson 里，
+   不能下推 SQL，故「结果」列保持不可排。 */
+const { sortState: caseSortState, toggle: toggleCaseSort, sortRows: sortCaseRows } = useTableSort<EvalCase>({
+  accessors: {
+    name: (c) => c.name || c.caseId,
+    agent: (c) => agentLabel(c.agentId),
+    messages: (c) => c.messages.length,
+    enabled: (c) => c.enabled,
+    updated: (c) => (c.updatedAt ? Date.parse(c.updatedAt) : null)
+  },
+  storageKey: 'wf_pe_cases_sort'
+})
+const sortedCases = computed(() => sortCaseRows(cases.value))
+
+const { sortKey: runSortKey, sortDir: runSortDir, sortState: runSortState, toggle: toggleRunSort } = useTableSort<EvalRun>({
+  keys: ['agent', 'cases', 'duration', 'created'],
+  storageKey: 'wf_pe_runs_sort'
+})
+/** 前端排序键 → 后端列名（白名单在路由侧再校验一次） */
+const RUN_SORT_FIELD: Record<string, string> = {
+  agent: 'agentId',
+  cases: 'caseCount',
+  duration: 'durationMs',
+  created: 'createdAt'
+}
+
 /* URL ↔ 内层页签双向同步：键用 ?peTab=（宿主 ?tab= 归 Skills 页签所有，不共键）。
    immediate 首跑兼作唯一挂载加载入口（原先 setup 末尾还有一组裸 reload，深链 ?peTab=runs 时会双拉，
    且该 watch 必须放在 cases/runs 等 ref 声明之后，否则 immediate 回调会撞 TDZ） */
@@ -703,22 +782,37 @@ function onAgentFilterChange() {
   void reloadRuns()
 }
 
-/* 最近一次评估的通过率口径（runs[0] 即最新一次，reloadRuns 保持接口倒序）。
-   精度/阈值/兜底走 rate-utils 单点：passRate 缺失显「—」+ title「暂无评测数据」（不 ?? 0 伪装 0%）。
+/* 历史排序变化 → 服务端重拉（不 immediate：首屏由上方 bootstrapped 分支统一拉一次，
+   且 reloadRuns 会读当前 sortKey，持久化过的排序首屏即生效） */
+watch([runSortKey, runSortDir], () => {
+  if (bootstrapped) void reloadRuns()
+})
+
+/* 最近一次评估的通过率口径。
+   2026-10-17：历史表支持服务端排序后，runs[0] 不再恒为最新一条（按耗时/用例数排时首行会变），
+   改为按 createdAt 现取最新（同刻保留原序）。精度/阈值/兜底走 rate-utils 单点：
+   passRate 缺失显「—」+ title「暂无评测数据」（不 ?? 0 伪装 0%）。
    P2（2026-10-04 全站评审）：totalRuns=0（用例全部被跳过）也不是「0% 通过」失败态——红字
    配绿点同条打架；无分母走中性句，红档只留给真跑过且未达标的运行（后端在空跑时仍持久化 passRate=0）。 */
+const latestRun = computed<EvalRun | null>(() => {
+  let best: EvalRun | null = null
+  for (const r of runs.value) {
+    if (!best || Date.parse(r.createdAt) > Date.parse(best.createdAt)) best = r
+  }
+  return best
+})
 const lastRunEmpty = computed(() => {
-  const s = runs.value[0]?.summary
+  const s = latestRun.value?.summary
   return !!s && (s.totalRuns ?? 0) === 0
 })
 const lastPassRateText = computed(() => {
   if (lastRunEmpty.value) return '暂无通过数据（0 次执行）'
-  return formatRate(runs.value[0]?.summary?.passRate) ?? '—'
+  return formatRate(latestRun.value?.summary?.passRate) ?? '—'
 })
 /** 基数（23/25）：summary 带通过数/总次数才拼接，缺一项就不硬凑；0 次执行不拼「（0/0）」 */
 const lastRateBase = computed(() => {
   if (lastRunEmpty.value) return ''
-  const s = runs.value[0]?.summary
+  const s = latestRun.value?.summary
   if (!s || typeof s.passedCount !== 'number' || typeof s.totalRuns !== 'number') return ''
   return `（${s.passedCount}/${s.totalRuns}）`
 })
@@ -726,7 +820,7 @@ const lastRateBase = computed(() => {
     阈值纪律走 rate-utils 单点不变；muted（缺 passRate）与 0 次执行不着色 */
 const lastRateTone = computed(() => {
   if (lastRunEmpty.value) return '' as const
-  const tone = rateToneOf(runs.value[0]?.summary?.passRate)
+  const tone = rateToneOf(latestRun.value?.summary?.passRate)
   return tone === 'muted' ? '' : tone
 })
 /** 通过率卡 hint（2026-10-04 状态条退役）：基数 + agent 筛选限定词（原条句面口径迁入，数字不裸奔） */
@@ -744,9 +838,9 @@ const lastRateTitle = computed(() => {
 })
 /* P3（设计评审 4.3-20）：同屏两个「最近」异义——「最近 30 次」是窗口、「最近 N 小时前」是时刻；
    时刻改「上次」前缀消歧，作 KPI「评估历史」卡 hint */
-const lastRunText = computed(() => (runs.value.length ? `上次 ${timeAgo(runs.value[0]?.createdAt)}` : '暂无评估记录'))
+const lastRunText = computed(() => (latestRun.value ? `上次 ${timeAgo(latestRun.value.createdAt)}` : '暂无评估记录'))
 const lastRunHint = computed(() => {
-  const s = runs.value[0]?.summary
+  const s = latestRun.value?.summary
   if (!s) return ''
   const rate = formatRate(s.passRate)
   return `${rate ? `通过率 ${rate}` : '通过率暂无数据'}；${RATE_THRESHOLD_NOTE}`
@@ -868,7 +962,13 @@ async function reloadRuns() {
   runsLoading.value = true
   runsFailed.value = false
   try {
-    const res = await adminPromptOpsApi.getEvalRuns(agentFilter.value || undefined, RUNS_LIMIT)
+    const sortField = RUN_SORT_FIELD[runSortKey.value]
+    const res = await adminPromptOpsApi.getEvalRuns(
+      agentFilter.value || undefined,
+      RUNS_LIMIT,
+      sortField,
+      sortField ? runSortDir.value : undefined
+    )
     const items = (res.data?.data ?? res.data) || []
     runs.value = items.map((r: Record<string, unknown>) => ({
       id: String(r.id),
@@ -1499,6 +1599,8 @@ defineExpose({ running, canRunBatch, runBatch, kpiView })
 /* 筛选/工具栏行收进单卡容器：与页签体之间以发丝线分层（原型 .toolbar border-bottom） */
 .pe-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--mk-line); }
 .pe-filter__hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); margin-left: auto; }
+/* 主操作贴右缘（原由说明行的 margin-left:auto 顺带推开；说明行删后按钮会挤在筛选器旁） */
+.pe-filter__action { margin-left: auto; }
 
 /* 跨运行对比（#94）：选择列窄 + 对比工具条 */
 .pe-compare-bar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--mk-line); }

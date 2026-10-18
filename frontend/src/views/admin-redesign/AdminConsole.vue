@@ -109,15 +109,13 @@ const PromptWorkbench = asyncPage(() => import('./PromptWorkbench.vue'));
 // 运营术语表（2026-10-10 抽屉退役改整页）：壳层帮助按钮跳转的隐藏场景，不进侧栏
 const AdminGlossary = asyncPage(() => import('./AdminGlossary.vue'));
 const OpsHub = asyncPage(() => import('./OpsHub.vue'));
-const OpsCenter = asyncPage(() => import('./OpsCenter.vue'));
 const LearnerDetail = asyncPage(() => import('./LearnerDetail.vue'));
 const VirtualProfile = asyncPage(() => import('./VirtualProfile.vue'));
 const PathDetail = asyncPage(() => import('./PathDetail.vue'));
-// 技能详情二级页（原型 renderSkillDetail 落点；Skill 目录行 / 编排图节点下钻）
+// 技能详情二级页（原型 renderSkillDetail 落点；Skill 目录行 / 编排图节点下钻）。
+// 2026-10-15 用户拍板：独立「Skill 设计页」退役，其可编辑六页签内容平铺进本页各页签
+// （只读概览在上、设计区块在下），故不再有单独的 design 子页。
 const SkillDetail = asyncPage(() => import('./SkillDetail.vue'));
-// Skill 设计页（可编辑六页签）：2026-10-15 起由独立整页路由 /admin/skills/:id 迁入外壳内二级页，
-// 与学习者/会话/路径详情同一种呈现（侧栏常驻 + 面包屑返回 + Esc/后退可关）
-const SkillDesignPage = asyncPage(() => import('./SkillDesignPage.vue'));
 // 卡库二级页（2026-10-06 抽屉退役：卡详情/导入卡从 mk-drawer 迁标准二级页）
 const CardDetailPage = asyncPage(() => import('./CardDetailPage.vue'));
 const CardImportPage = asyncPage(() => import('./CardImportPage.vue'));
@@ -131,7 +129,7 @@ const components: Record<string, unknown> = {
   'overview': Overview,
   // 导航收敛 2026-09-04：users+learner-center → people；announcements+notifications → messages；token-cost → execution-logs（成本分析 tab）
   // 导航一级收敛 2026-09-19（阶段 1）：feedback/ops-achievements/messages → ops-hub 宿主 tab；
-  // addons → api-config 宿主 tab；session-security → ops-center 宿主 tab（场景下线，URL 重定向兼容）
+  // addons → api-config 宿主 tab；session-security → ops-hub 宿主 tab（场景下线，URL 重定向兼容）
   // 阶段 3（2026-09-19）：health-center → skills 宿主 tab（健康检查/漂移/对账），场景下线
   // 2026-09-29 用户拍板拆回：teaching-sessions / goal-conversations / learning-paths 各自独立成页
   //（2026-09-04 曾合并为「学习会话」宿主 sessions，场景已下线，URL 重定向兼容）
@@ -161,8 +159,7 @@ const components: Record<string, unknown> = {
   'skill-workbench': PromptWorkbench,
   // 运营术语表（manifest hidden: true）：壳层帮助按钮 → /admin/glossary 整页
   'glossary': AdminGlossary,
-  'ops-hub': OpsHub,
-  'ops-center': OpsCenter
+  'ops-hub': OpsHub
 };
 
 const detailComponents: Record<string, unknown> = {
@@ -174,10 +171,9 @@ const detailComponents: Record<string, unknown> = {
   'session-real': SessionCockpit,
   // 路径深链适配层（2026-10-12 拍板：路径不再有独立详情页；由它反查对话后换开座舱 Path 页签）
   path: PathDetail,
-  // 技能详情二级页（原型 renderSkillDetail 落点；Skill 目录行/编排图节点下钻，替代 SkillDrawer 打开）
+  // 技能详情二级页（原型 renderSkillDetail 落点；Skill 目录行/编排图节点下钻，替代 SkillDrawer 打开）。
+  // 设计页能力已平铺进本页（2026-10-15），Skill 列表行点击、编排图节点下钻都落这里。
   skill: SkillDetail,
-  // Skill 设计页（可编辑六页签）：Skill 列表行点击的主落点（2026-10-15 由独立整页迁入外壳）
-  'skill-design': SkillDesignPage,
   // 卡库二级页（卡墙点卡 / 页头「导入卡」）
   card: CardDetailPage,
   'card-import': CardImportPage
@@ -248,7 +244,7 @@ const router = useRouter()
    二级页此前只存在内存 ref，刷新/深链/前进后退均无法寻址（URL 不显示）。
    打开：openSubPage（任意组件）→ subPage 变化 → URL 补 query；
    恢复：整页刷新 /admin/:page?view=virtual&id=xxx → query watch → subPage 恢复 → 详情组件直接渲染。 */
-const SUBPAGE_VIEWS = ['learner', 'virtual', 'user', 'session', 'session-real', 'path', 'skill', 'skill-design', 'card', 'card-import']
+const SUBPAGE_VIEWS = ['learner', 'virtual', 'user', 'session', 'session-real', 'path', 'skill', 'card', 'card-import']
 /* 没有实体 id 的二级视图：导入卡是纯表单页，本身不带 id（CardImportPage.vue 文件头
    写明的深链就是 ?view=card-import）。守卫此前要求 view 与 id 同时非空，这种写法会
    落到下面的「无 id 即关闭二级页」分支、渲染回场景页（卡墙）——导入页只有带哨兵 id

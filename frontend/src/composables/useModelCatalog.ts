@@ -21,7 +21,7 @@ export interface ModelCatalogEntry {
 
 export interface ModelCatalogOption {
   value: string
-  /** datalist option 的展示标注，如「平台通道（继承） · chat」 */
+  /** datalist option 的展示标注，如「平台提供 · chat」 */
   label: string
 }
 

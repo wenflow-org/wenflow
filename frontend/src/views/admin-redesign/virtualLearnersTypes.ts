@@ -10,6 +10,10 @@ export interface VirtualLearnerRow {
   name: string
   goal: string
   storyCount: number
+  /** 已生成的路径数（distinct learningPathId）：故事是复杂情景、路径是情景里走出来的
+      学习路线，一个故事可衍生多条路径（每次运行生成一条），故可能大于故事条数；
+      同一路径的多次会话不重复计 */
+  pathCount: number
   sessions: number
   /** 进行中会话数（live：后端全量聚合 runningCount，已扣除暂停的自动驾驶） */
   runningCount: number
@@ -54,6 +58,8 @@ export interface LaunchStory {
   id: string
   title: string
   runCount: number
+  /** 该故事已衍生的路径条数（每运行一次生成一条，同一路径多次会话不重复计） */
+  pathCount: number
   pathId: string | null
 }
 

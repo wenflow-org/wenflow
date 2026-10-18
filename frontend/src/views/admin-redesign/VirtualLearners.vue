@@ -11,10 +11,10 @@
           type="button"
           class="mk-btn mk-btn--sm"
           :disabled="reclaimRef?.state.busy"
-          :title="'角标为超阈值无响应候选数（含豁免项）'"
+          :title="'角标为超过回收阈值的无响应候选会话数（含豁免项）'"
           @click="openReclaimModal()"
         >
-          {{ reclaimRef?.state.busy ? '回收中…' : `回收卡死（${partition.stale}）` }}
+          {{ reclaimRef?.state.busy ? '回收中…' : `回收无响应（${partition.stale}）` }}
         </button>
         <button type="button" class="mk-btn mk-btn--sm" title="清理旧账号：按建号时间批量删除旧虚拟学习者（进行中与保留名单自动豁免，先预览再执行）" @click="cleanupRef?.open()">清理旧账号</button>
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" title="新建虚拟学习者" @click="openCreate">新建</button>
@@ -36,22 +36,23 @@
           :value="statsKpiValue(statsKpiPct(completionPct))"
           :tone="statsState === 'error' ? 'bad' : ''"
           :hint="statsKpiHint(completionHint)"
-          :title="statsState === 'error' ? STATS_RETRY_TITLE : '完成率按会话统计。「会话均长」为会话从创建到结束的平均时长，非单次调用耗时。活动会话含进行中与创建中'"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : '完成率按会话统计。「平均」是会话从创建到结束的时长，不是单次调用耗时。活动会话含进行中与创建中'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
-        >
-          <span class="mk-minibar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: completionBarPct }"></i></span>
-        </MkKpi>
+        />
         <!-- B8-F4-4 口径对齐：本卡值取 systemFailureRate（failed / 全部），原 label「失败率」
              配 hint 里并列的「人为终止 1096」让 24% 被读成「全部失败占比」（真值 97%）。
              总览页同事实标作「系统失败率」（Overview.vue:506 同判例），此处跟随；
-             hint 补分母与「人为终止另计，合计 X%」，运营不再低估。 -->
+             hint 补分母与「人为终止另计，合计 X%」，运营不再低估。
+             2026-10-16 用户拍板「不要非零就红」：着色改走 rate-utils 的跨页单源
+             failureRateTone（≥50 红 / ≥20 或有失败 黄）——本页是历史累计口径，一条旧失败
+             就把整卡染红会让红灯失去区分度。 -->
         <MkKpi
           label="系统失败率"
           :value="statsKpiValue(statsKpiPct(runStats.systemFailureRate))"
-          :tone="statsState === 'error' ? 'bad' : (runStats.systemFailureRate ?? 0) > 0 ? 'bad' : ''"
-          :hint="statsKpiHint(`系统失败 ${runStats.failed} / 全部会话 ${runStats.totalSessions} · 人为终止 ${runStats.abandoned} 另计（合计 ${statsKpiPct(runStats.failureRate)}）`)"
-          :title="statsState === 'error' ? STATS_RETRY_TITLE : '按全部会话计算的失败率，与总览页「系统失败率」一致。管理员手动停止等人为终止另行统计'"
+          :tone="statsState === 'error' ? 'bad' : failureRateTone(runStats.systemFailureRate, runStats.failed)"
+          :hint="statsKpiHint(failureHint)"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : `按全部会话计算，与总览页「系统失败率」同口径。管理员手动停止等人为终止单独统计，两类合计占 ${statsKpiPct(runStats.failureRate)}。${FAILURE_RATE_THRESHOLD_NOTE}`"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />
@@ -59,18 +60,16 @@
           label="并发"
           :value="statsKpiValue(concurrencyText)"
           :tone="concurrencyTone"
-          :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : '自动驾驶并发配额'"
-          :title="statsState === 'error' ? STATS_RETRY_TITLE : '并发为自动驾驶同时在跑的会话数占配额比。「已满」是资源占满（后续请求排队），不是故障'"
+          :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : '同时运行 / 配额上限'"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : '自动驾驶同时在跑的会话数占配额比。「已满」是资源占满（后续请求排队），不是故障'"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
-        >
-          <span class="mk-minibar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: concurrencyBarPct }"></i></span>
-        </MkKpi>
+        />
         <MkKpi
           label="今日调用"
           :value="statsKpiValue(String(runStats.todayCalls ?? 0))"
-          :hint="statsKpiHint('仅统计虚拟 / 测试账号')"
-          title="今日虚拟 / 测试账号的调用次数"
+          :hint="statsKpiHint('只统计虚拟与测试账号')"
+          title="今日虚拟学习者与测试账号的调用次数"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />
@@ -80,7 +79,7 @@
           :tone="vlRpmLoadFailed ? 'bad' : ''"
           :hint="rateHint"
           :clickable="vlRpmLoadFailed"
-          :title="vlRpmLoadFailed ? '设置未加载：点击重试' : '在途为正在出站的调用数。上限为已保存的速率配置（在「模型与接入 → 虚拟学习者」页签修改）'"
+          :title="vlRpmLoadFailed ? '设置未加载，可重试' : '在途为正在出站的调用数。上限为已保存的速率配置（在「模型与接入 → 虚拟学习者」页签修改）'"
           @click="vlRpmLoadFailed && loadVlRpm()"
         />
       </section>
@@ -123,10 +122,11 @@
             :title="o.hint ? `${o.label}（${o.hint}）· 点击筛选` : `点击筛选「${o.label}」虚拟学习者`"
             @click="stateFilter = stateFilter === o.key ? 'all' : o.key"
           >{{ o.label }}<span v-if="o.key !== 'all'" class="mk-pill__count">{{ o.count }}</span></button>
-          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
+          <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 倾向 / ID" />
           <!-- CP1：筛选命中数单源住在分页器（「共 N 条」），卡头不再渲染「X / N 人」；
                截断警示仍在此（数据完整性事实，与行数同格就近） -->
           <!-- 2026-10-05 卡头统一：补「列」按钮（此前全站唯一没有列控制的列表页）；
@@ -161,10 +161,10 @@
               v-if="!isNarrow && !hiddenCols.has('story')"
               scope="col"
               class="mk-th--right mk-th--sortable"
-              title="已生成故事条数（0 表示未生成，需先生成才能运行）"
+              title="故事池条数 / 已生成路径条数（一个故事可衍生多条路径，同一路径的多次会话不重复计）"
               :aria-sort="vlSortState('story')"
               @click="toggleVlSort('story')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('story')">故事池<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('story')">故事 / 路径<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
               scope="col"
               class="mk-th--sortable"
@@ -176,7 +176,7 @@
               v-if="!isNarrow && !hiddenCols.has('sessions')"
               scope="col"
               class="mk-th--right mk-th--sortable"
-              title="累计会话数（全部会话，含终态）"
+              :title="SESSIONS_COL_TITLE"
               :aria-sort="vlSortState('sessions')"
               @click="toggleVlSort('sessions')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('sessions')">会话<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -184,7 +184,7 @@
               v-if="!isNarrow && !hiddenCols.has('failed')"
               scope="col"
               class="mk-th--right mk-th--sortable"
-              title="已失败/已终止会话数（全量聚合）"
+              :title="FAILED_COL_TITLE"
               :aria-sort="vlSortState('failed')"
               @click="toggleVlSort('failed')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('failed')">失败<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -224,8 +224,10 @@
             <td v-if="!isNarrow && !hiddenCols.has('tendency')">
               <span class="mk-cell-text--wrap" :class="{ 'mk-na': !s.goal || s.goal === '—' }" :title="s.goal || undefined">{{ s.goal || '未设置' }}</span>
             </td>
-            <td v-if="!isNarrow && !hiddenCols.has('story')" class="mk-num" :title="s.storyCount > 0 ? `故事池 ${s.storyCount} 条` : '尚未生成故事，需先生成才能运行'">
-              <span v-if="s.storyCount > 0">{{ s.storyCount }}</span>
+            <td v-if="!isNarrow && !hiddenCols.has('story')" class="mk-num" :title="storyPathTitle(s)">
+              <template v-if="s.storyCount > 0">
+                <span>{{ s.storyCount }}</span><span class="vl-story-path__sep" aria-hidden="true"> / </span><span :class="{ 'mk-na': s.pathCount === 0 }">{{ s.pathCount }}</span>
+              </template>
               <span v-else class="mk-na">—</span>
             </td>
             <td>
@@ -236,15 +238,19 @@
                   <RunStateBadge
                     v-if="s.runningCount > 0 || (s.pausedCount ?? 0) > 0"
                     :status="s.runningCount > 0 ? 'running' : 'paused'"
-                    :hint="`${s.runningCount} 个会话进行中 / ${s.pausedCount ?? 0} 个已暂停`"
+                    :hint="runningBadgeHint(s)"
                     clickable
                     @click.stop="openRunningSession(s)"
                   />
-                  <RunStageBar
-                    :stage="stageBarStage(s)"
-                    :status="s.runningCount > 0 ? 'running' : (s.pausedCount ?? 0) > 0 ? 'paused' : null"
-                    :task-progress="s.stageProgress?.learnStarted ? { done: s.stageProgress.taskDone, total: s.stageProgress.taskTotal } : null"
-                  />
+                  <!-- 阶段条只表达一条会话的进度（多故事/多路径学习者其余的故事不在其中），
+                       用 wrapper 的 title 交代口径；节点自带 title，悬停节点时以节点为准 -->
+                  <span class="vl-stage" :title="stageBarTitle(s)">
+                    <RunStageBar
+                      :stage="stageBarStage(s)"
+                      :status="s.runningCount > 0 ? 'running' : (s.pausedCount ?? 0) > 0 ? 'paused' : null"
+                      :task-progress="s.stageProgress?.learnStarted ? { done: s.stageProgress.taskDone, total: s.stageProgress.taskTotal } : null"
+                    />
+                  </span>
                 </template>
                 <span v-else class="mk-na" title="当前没有进行中的会话">空闲</span>
               </div>
@@ -353,6 +359,7 @@ import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useRowMenu } from './useRowMenu'
 import { useIsNarrow } from './useIsNarrow'
 import { useSafePolling } from '@/composables/useSafePolling'
+import { failureRateTone, FAILURE_RATE_THRESHOLD_NOTE } from './rate-utils'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -380,6 +387,9 @@ import type { VirtualLearnerRow as Sample, BatchTask } from './virtualLearnersTy
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
 const STATS_RETRY_TITLE = '运行统计拉取失败：点击重试'
 const STATS_UNAVAILABLE_HINT = '统计不可用 · 点击重试'
+/* 列头口径（表头 title 与「列」菜单共用同一句，避免同页两处漂移） */
+const SESSIONS_COL_TITLE = '累计会话数（全部会话，含终态）'
+const FAILED_COL_TITLE = '已失败/已终止会话数（全量聚合）'
 
 const samples = computed<Sample[]>(() =>
   liveVirtuals.value.map((v) => ({
@@ -387,6 +397,7 @@ const samples = computed<Sample[]>(() =>
     name: v.name,
     goal: v.goal,
     storyCount: Number(v.storyCount || 0),
+    pathCount: Number(v.pathCount || 0),
     sessions: v.sessions,
     runningCount: Number(v.runningCount || 0),
     pausedCount: Number(v.pausedCount || 0),
@@ -416,6 +427,34 @@ function stageBarStage(s: Sample): string | null {
     if (p.goalReady) return 'goal'
   }
   return s.currentStage
+}
+
+/** 「故事 / 路径」单元格 title：故事是复杂情景、路径是从情景里走出来的学习路线，
+    一个故事可以衍生多条路径（每次运行生成一条），两个数不等是正常状态。 */
+function storyPathTitle(s: Sample): string {
+  if (s.storyCount === 0) return '尚未生成故事，需先生成才能运行'
+  if (s.pathCount === 0) return `故事池 ${s.storyCount} 条，还没有生成路径（开始运行后生成）`
+  const base = `故事池 ${s.storyCount} 条，已生成路径 ${s.pathCount} 条`
+  return s.pathCount > s.storyCount
+    ? `${base}。一个故事可衍生多条路径，同一路径的多次会话不重复计`
+    : base
+}
+
+/** 进行中徽章 hint：多路径学习者补一句总量，避免把「1 个会话在跑」误读成「只有 1 条路径」 */
+function runningBadgeHint(s: Sample): string {
+  const base = `${s.runningCount} 个会话进行中 / ${s.pausedCount ?? 0} 个已暂停`
+  return s.pathCount > 1 ? `${base} · 共 ${s.pathCount} 条路径` : base
+}
+
+/** 阶段条口径：这一条只对应一次会话（多路径时说明是哪一次、总共几条） */
+function stageBarTitle(s: Sample): string {
+  const which = s.runningCount > 0
+    ? '正在进行的那次会话'
+    : (s.pausedCount ?? 0) > 0
+      ? '已暂停的那次会话'
+      : '最近一次会话'
+  const note = s.pathCount > 1 ? `该学习者共 ${s.pathCount} 条路径，此处只显示其中一条` : ''
+  return note ? `${which}的阶段进度。${note}` : `${which}的阶段进度`
 }
 
 const keyword = ref('')
@@ -587,10 +626,10 @@ const isNarrow = useIsNarrow()
    勾选——窄屏档勾了也不显（行详情进画像页，信息不丢） */
 const vlColDefs = [
   { key: 'tendency', label: '长期倾向' },
-  { key: 'story', label: '故事池', title: '已生成故事条数（0 表示未生成，需先生成才能运行）' },
-  { key: 'sessions', label: '会话', title: '累计会话数（全部会话，含终态）' },
-  { key: 'failed', label: '失败', title: '已失败/已终止会话数（全量聚合）' },
-  { key: 'stalled', label: '无响应', title: '超过回收阈值无写入的卡死会话数（用「回收卡死」按钮处理）' },
+  { key: 'story', label: '故事 / 路径', title: '故事池条数 / 已生成路径条数（一个故事可衍生多条路径，同一路径的多次会话不重复计）' },
+  { key: 'sessions', label: '会话', title: SESSIONS_COL_TITLE },
+  { key: 'failed', label: '失败', title: FAILED_COL_TITLE },
+  { key: 'stalled', label: '无响应', title: '超过回收阈值无写入的会话数（用「回收无响应」按钮批量清理）' },
   { key: 'created', label: '创建' },
 ] as const
 const hiddenCols = ref<Set<string>>(new Set())
@@ -679,8 +718,14 @@ const partition = computed(() => {
     stale: liveVirtualStaleCount.value
   }
 })
-/** 活动会话（全量会话口径）= 当前进行中 + 创建中（含卡死）；原状态条读数，2026-10-04 迁入完成率卡 hint */
-const activeSessions = computed(() => partition.value.running + partition.value.created)
+/** 活动会话（全量会话口径）= 当前进行中 + 创建中（含卡死）；原状态条读数，2026-10-04 迁入完成率卡 hint。
+    2026-10-15 KPI 审计：running 改取 /stats 的 F20 口径（已扣 autopilot=stopped 的已暂停会话）——
+    列表接口 sessionStats.running 尚未扣减，与逐画像「进行中」列及完成率卡同屏时会彼此打架，
+    也与本卡同源的 completed/totalSessions（都来自 /stats）不同源。两处 running 都落到 /stats 单源。 */
+const activeSessions = computed(() => {
+  if (statsState.value === 'ready') return runStats.value.running + runStats.value.created
+  return partition.value.running + partition.value.created
+})
 
 /* ===== A5 运行统计：完成率/失败率/平均时长/卡死最长分钟（GET /virtual-learners/stats） ===== */
 const runStats = computed(() => liveVirtualRunStats.value)
@@ -764,7 +809,8 @@ const rateValue = computed(() => {
 })
 const rateHint = computed(() => {
   if (vlRpmLoadFailed.value) return '设置未加载 · 点击重试'
-  return vlRpm.queued > 0 ? `在途 / 上限（已保存值）· 排队 ${vlRpm.queued}` : '在途 / 上限（已保存值）'
+  const base = '在途调用数 / 每分钟上限，上限读已保存配置'
+  return vlRpm.queued > 0 ? `${base} · 排队 ${vlRpm.queued}` : base
 })
 
 /** 「今日调用」卡 hint（2026-10-05 口径纠偏）：只报口径不复述数字。原 hint「平均耗时」
@@ -786,13 +832,18 @@ const completionHint = computed(() => {
   if (sessionAvgHuman.value) parts.push(`会话均长 ${sessionAvgHuman.value}`)
   return parts.join(' · ')
 })
-/* 卡内进度槽（.mk-minibar 家族原语）：完成率宏观推进比 / 并发配额利用率 */
-const completionBarPct = computed(() => `${Math.min(Math.max(completionPct.value, 0), 100)}%`)
-const concurrencyBarPct = computed(() => {
-  if (statsState.value === 'error') return '0%'
-  const c = concurrency.value
-  return c.limit > 0 ? `${Math.min((c.used / c.limit) * 100, 100)}%` : '0%'
+/** 系统失败率卡口径：三项分解（系统失败 / 人为终止 / 已完成），三项相加即会话总数。
+    原写法「系统失败 8 / 全部会话 36 · 人为终止 28 另计（合计 100%）」有两处歧义：
+    ① 比值与数值位的大字 22% 重复；② 0 完成时两项恰好凑满 100%，「合计 100%」紧贴
+    失败率读数会被读成「失败率 100%」。现给分解式（8+28+0=36 自明），并把两项合并的
+    占比显式标成「失败合计」，与卡片大字的「系统失败率」区分开。 */
+const failureHint = computed(() => {
+  const s = runStats.value
+  return `系统失败 ${s.failed} · 人为终止 ${s.abandoned} · 已完成 ${s.completed} · 共 ${s.totalSessions} 场`
 })
+/* 卡内进度条已退役（2026-10-16 用户拍板「kpi 面板内部进度条不要出现」）：
+   完成率/并发两张卡曾各挂一根 .mk-minibar 进度槽，读数已经在数值位与 hint 里说全了，
+   卡内再画一根轨道只是重复表达、还把卡面高度撑高；读数类卡保持「label + 数值 + 一句口径」。 */
 
 /** 运行指标已改走共享 KPI 栅格（模板内 MkKpi ×5）：原先的 MkStatStrip 自由指标条
  *  （含下面这份 runStatItems）已删除，口径数据（全量会话/系统失败/人为终止/平均耗时）
@@ -882,6 +933,10 @@ function openRunningSession(s: Sample) {
 .vl-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* 状态列：进行中胶囊 / 失败数 / 卡死徽章 分列展示（一列一语义）；gap+wrap 归并为一处定义 */
 .vl-state-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 26px; }
+/* 阶段条 wrapper：只承载口径 title（多路径学习者一次只画一条会话的进度） */
+.vl-stage { display: inline-flex; min-width: 0; }
+/* 「故事 / 路径」两数的分隔符：弱化到次级色，数字本身仍是 mk-num 的等宽口径 */
+.vl-story-path__sep { color: var(--mk-faint); padding: 0 1px; }
 /* 失败列：全量聚合数字（>0 标红，可点击直达画像页的重试入口）；hover 环走 token（原 #eff6ff 硬编码无暗色适配） */
 .vl-num--bad { color: var(--mk-red, #dc2626); font-weight: 800; }
 .vl-faillink {
@@ -900,8 +955,8 @@ function openRunningSession(s: Sample) {
 .vl-faillink:hover { color: var(--mk-blue); background: var(--mk-blue-bg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-blue) 18%, transparent); }
 
 /* 运行指标带：KPI 独占整行（共享 .mk-kpi-grid + MkKpi，卡自带面/描边，外层不套盒子）；
-   读写分块判例不变：写控制（速率上限/日期模拟）不进数字栅格，收进下方「压测参数」页签卡；
-   完成率/并发卡内附挂 .mk-minibar 进度槽（MkKpi 默认 slot，家族原语） */
+   读写分块判例不变：写控制（速率上限/日期模拟）不进数字栅格，收进下方「压测参数」页签卡。
+   卡内进度条 2026-10-16 按用户要求退役（见脚本侧同名注记），本处不再挂 minibar。 */
 .vl-kpi {
   display: grid;
   gap: 8px;

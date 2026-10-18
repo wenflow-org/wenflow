@@ -1,9 +1,10 @@
 <template>
   <div class="mk-page mk-page--fill oh-host">
     <!-- 页头（newui/admin pagehead）：页名 + 刷新/重试上移（2026-10-04 状态条退役：整块下线，读数各归其位） -->
-    <MkPageHead title="运营中心" sub="运营待办、用户反馈、成就与公告运营">
+    <MkPageHead title="运营中心" sub="运营待办、用户反馈、成就与公告运营 · 运维工具、数据导出与会话安全">
       <template #actions>
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshActive">
+        <!-- export 页签是表单（无远端读数），不渲染刷新钮（原「系统工具」页同判例） -->
+        <button v-if="tab !== 'export'" type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshActive">
           {{ refreshing ? '刷新中…' : (tab === 'todo' && wbHasError ? '重试' : '刷新') }}
         </button>
       </template>
@@ -21,6 +22,10 @@
       <button type="button" class="tab" role="tab" id="oh-tab-achievements" :ref="(el) => setTabRef(el, 2)" :tabindex="tab === 'achievements' ? 0 : -1" aria-controls="oh-panel-achievements" :aria-selected="tab === 'achievements'" @click="switchTab('achievements')">成就<span class="tab__count" :title="domainCount.achievements === null ? TAB_COUNT_LOADING_TITLE : '含虚拟学习者'">{{ domainCount.achievements === null ? '未加载' : domainCount.achievements }}</span></button>
       <button type="button" class="tab" role="tab" id="oh-tab-announce" :ref="(el) => setTabRef(el, 3)" :tabindex="tab === 'announce' ? 0 : -1" aria-controls="oh-panel-announce" :aria-selected="tab === 'announce'" @click="switchTab('announce')">公告<span class="tab__count" :title="announcePillTitle">{{ announcePillCount }}</span></button>
       <button type="button" class="tab" role="tab" id="oh-tab-inapp" :ref="(el) => setTabRef(el, 4)" :tabindex="tab === 'inapp' ? 0 : -1" aria-controls="oh-panel-inapp" :aria-selected="tab === 'inapp'" @click="switchTab('inapp')">站内通知<span class="tab__count" :title="domainCount.inapp === null ? TAB_COUNT_LOADING_TITLE : undefined">{{ domainCount.inapp === null ? '未加载' : domainCount.inapp }}</span></button>
+      <!-- 系统工具三页签（2026-10-16 由退役的「系统工具」场景整体迁入：运维工具/数据导出/会话安全） -->
+      <button type="button" class="tab" role="tab" id="oh-tab-tools" :ref="(el) => setTabRef(el, 5)" :tabindex="tab === 'tools' ? 0 : -1" aria-controls="oh-panel-tools" :aria-selected="tab === 'tools'" @click="switchTab('tools')">运维工具</button>
+      <button type="button" class="tab" role="tab" id="oh-tab-export" :ref="(el) => setTabRef(el, 6)" :tabindex="tab === 'export' ? 0 : -1" aria-controls="oh-panel-export" :aria-selected="tab === 'export'" @click="switchTab('export')">数据导出</button>
+      <button type="button" class="tab" role="tab" id="oh-tab-security" :ref="(el) => setTabRef(el, 7)" :tabindex="tab === 'security' ? 0 : -1" aria-controls="oh-panel-security" :aria-selected="tab === 'security'" @click="switchTab('security')">会话安全<span class="tab__count" :title="domainCount.security === null ? TAB_COUNT_LOADING_TITLE : undefined">{{ domainCount.security === null ? '未加载' : domainCount.security }}</span></button>
     </div>
 
     <!-- ===== Tab1: 运营待办（原运营中心全量内容） ===== -->
@@ -173,13 +178,37 @@
     <!-- ===== Tab5: 站内通知（Notifications embedded） =====
          与公告 tab 同判例：嵌入态下 Notifications 隐藏自身状态条，列表非空时
          「发送通知」主钮无处可见（空态按钮只在无数据时出现），宿主补工具行并调其 openSend()。 -->
-    <template v-else>
+    <template v-else-if="tab === 'inapp'">
       <div class="oh-tabbar">
         <span class="oh-tabbar__sub">站内信与推送</span>
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="notifRef?.openSend?.()">发送通知</button>
       </div>
       <Notifications id="oh-panel-inapp" role="tabpanel" aria-labelledby="oh-tab-inapp" ref="notifRef" embedded @count="onDomainCount('inapp', $event)" @go-announce="switchTab('announce')" />
     </template>
+
+    <!-- ===== Tab6: 运维工具（时间推进模拟 + outbox 死信重放；原「系统工具」页 Tab1） ===== -->
+    <ServerToolsPanel
+      v-else-if="tab === 'tools'"
+      id="oh-panel-tools"
+      role="tabpanel"
+      aria-labelledby="oh-tab-tools"
+      ref="toolsRef"
+    />
+
+    <!-- ===== Tab7: 数据导出（多表 CSV 快照；原「系统工具」页 Tab2） ===== -->
+    <DataExportPanel v-else-if="tab === 'export'" id="oh-panel-export" role="tabpanel" aria-labelledby="oh-tab-export" />
+
+    <!-- ===== Tab8: 会话安全（SessionSecurity embedded；原「系统工具」页 Tab3） =====
+         role=tabpanel/aria-labelledby 透传到 SessionSecurity 根 div（单根组件） -->
+    <SessionSecurity
+      v-else
+      id="oh-panel-security"
+      role="tabpanel"
+      aria-labelledby="oh-tab-security"
+      ref="securityRef"
+      embedded
+      @count="onDomainCount('security', $event)"
+    />
   </div>
 </template>
 
@@ -194,6 +223,9 @@ import Feedback from './Feedback.vue'
 import OpsAchievements from './OpsAchievements.vue'
 import Announcements from './Announcements.vue'
 import Notifications from './Notifications.vue'
+import ServerToolsPanel from './ServerToolsPanel.vue'
+import DataExportPanel from './DataExportPanel.vue'
+import SessionSecurity from './SessionSecurity.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkStageband from '@/components/mk/MkStageband.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -201,9 +233,13 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 
-/* ===== 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知（阶段 1 导航收敛） =====
-   低频页折入 tab 宿主；?tab= 双向同步，深链/刷新/前进后退可寻址（对齐消息/用户宿主约定） */
-const OH_TABS = ['todo', 'feedback', 'achievements', 'announce', 'inapp'] as const
+/* ===== 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知 · 运维工具 · 数据导出 · 会话安全 =====
+   低频页折入 tab 宿主；?tab= 双向同步，深链/刷新/前进后退可寻址（对齐消息/用户宿主约定）。
+   2026-10-16 用户拍板：「系统工具」（ops-center）场景解散并入本页——它是「发现→去处理」的
+   动作枢纽（事件投递失败已作为运营待办项挂在这里），而健康中心是只读报表，落这边更顺。
+   原三页签整体迁入为 tools/export/security，旧深链 /admin/devtools|export-data|session-security
+   在 router 重定向到对应 tab。 */
+const OH_TABS = ['todo', 'feedback', 'achievements', 'announce', 'inapp', 'tools', 'export', 'security'] as const
 
 /* 文案单源（R6 复读单源化）：三个页签角标的「未加载」悬停释共用一份 */
 const TAB_COUNT_LOADING_TITLE = '进入该页签后加载计数'
@@ -212,14 +248,16 @@ const tab = ref<OhTab>('todo')
 const route = useRoute()
 const router = useRouter()
 
-/** 宿主域计数（由激活子视图上报）：反馈总数 / 解锁数 / 公告数 / 通知数。
+/** 宿主域计数（由激活子视图上报）：反馈总数 / 解锁数 / 公告数 / 通知数 / 会话数。
     null = 该子页签尚未访问、计数未拉取 → 页签角标显「未加载」弱灰字，
-    不显 0（EG10：0 会被读成「确认无数据」，是假信号；对照 OpsCenter 会话安全页签判例）。 */
-const domainCount = ref<{ feedback: number | null; achievements: number | null; announce: number | null; inapp: number | null }>({
+    不显 0（EG10：0 会被读成「确认无数据」，是假信号）。会话安全角标判例同此
+    （原 OpsCenter：0 会被读成「确认无会话」，是另一种假信号）。 */
+const domainCount = ref<{ feedback: number | null; achievements: number | null; announce: number | null; inapp: number | null; security: number | null }>({
   feedback: null,
   achievements: null,
   announce: null,
-  inapp: null
+  inapp: null,
+  security: null
 })
 function onDomainCount(domain: keyof typeof domainCount.value, n: number) {
   domainCount.value[domain] = n
@@ -228,6 +266,8 @@ const feedbackRef = ref<{ refresh?: () => void } | null>(null)
 const achievementsRef = ref<{ refresh?: () => void } | null>(null)
 const announceRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
 const notifRef = ref<{ reload?: () => void; openSend?: () => void } | null>(null)
+const toolsRef = ref<{ refresh?: () => void } | null>(null)
+const securityRef = ref<{ refresh?: () => void } | null>(null)
 const refreshing = ref(false)
 async function refreshActive() {
   if (refreshing.value) return
@@ -237,7 +277,10 @@ async function refreshActive() {
     else if (tab.value === 'feedback') feedbackRef.value?.refresh?.()
     else if (tab.value === 'achievements') achievementsRef.value?.refresh?.()
     else if (tab.value === 'announce') announceRef.value?.refresh?.()
-    else notifRef.value?.reload?.()
+    else if (tab.value === 'inapp') notifRef.value?.reload?.()
+    else if (tab.value === 'tools') toolsRef.value?.refresh?.()
+    else if (tab.value === 'security') securityRef.value?.refresh?.()
+    /* export 是表单，无远端读数可刷新——不渲染刷新钮（见页头 v-if） */
   } finally {
     refreshing.value = false
   }
@@ -547,9 +590,10 @@ function goFailedPaths() {
   intent.statusFilter = 'failed'
   intent.scene = 'learning-paths'
 }
-/** outbox 死信 → 系统工具页（原运维中心） */
+/** outbox 死信 → 本页「运维工具」页签（2026-10-16：系统工具场景解散并入本页后，
+    不再跨页跳转，直接切到同页的重放面板；死信清单由该面板挂载时自拉） */
 function goDeadLetters() {
-  intent.scene = 'ops-center'
+  switchTab('tools')
 }
 /** 学习路径管理 → 学习路径页（URL 直达，与 goFailedPaths 同构） */
 function goContent() {
@@ -590,6 +634,10 @@ watch(wbScope, () => {
 }
 /* 子组件根节点（.mk-page--fill + 父级 scope 属性）：占满剩余高度 */
 .oh-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
+/* 系统工具迁入的两个面板（2026-10-16）：根节点是普通 div，不占满整高，改为占满剩余高度
+   并自管纵向滚动——原 OpsCenter 的 .oc-card__body 承担同一职责（表单/清单长时卡内滚动） */
+.oh-host > .stp-body,
+.oh-host > .exp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 /* 公告 tab 工具行：嵌入态宿主提供「新建公告」唯一入口（子页自身工具条在 embedded 隐藏），
    形态对齐子页 .an-toolbar（左说明 + grow + 右 primary sm） */
 .oh-tabbar {

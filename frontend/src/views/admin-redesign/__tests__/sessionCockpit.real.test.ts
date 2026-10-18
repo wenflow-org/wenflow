@@ -756,4 +756,42 @@ describe('SessionCockpit 双模式', () => {
 
     wrapper.unmount();
   });
+
+  /** 2026-10-17 走查：原始会话数据此前静默截断 4000 字符，读作完整载荷实则停在半句
+   *  （真实目标对话会话的路径树就超过 4000，目标对话消息根本露不出来）。
+   *  断言：截断必须披露字符总数，预览严格等于 4000 字符，复制拿到的必须是完整串。 */
+  it('原始会话数据：截断披露字符总数，复制写入完整载荷而非预览片段', async () => {
+    const payload = realTeachingPayload();
+    // 造一个超长字段（真实会话的 path 树/消息远超此量级）
+    payload.data.path.milestones[0].description = '长'.repeat(5000);
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const writeText = vi.fn(async (_text: string) => {});
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const rawDetails = wrapper.find('details.cp-raw');
+    (rawDetails.element as HTMLDetailsElement).open = true;
+    await rawDetails.trigger('toggle');
+    await nextTick();
+
+    const meta = wrapper.find('.cp-raw__meta');
+    expect(meta.exists()).toBe(true);
+    expect(meta.text()).toContain('仅显示前 4000 字符');
+    // 完整长度按 toLocaleString 展示（5,000+ 字符）
+    expect(meta.text()).toMatch(/完整共 \d{1,3}(,\d{3})+ 字符/);
+
+    const pre = rawDetails.find('pre').text();
+    expect(pre).toHaveLength(4000);
+
+    const copyBtn = meta.findAll('button').find((b) => b.text() === '复制完整 JSON')!;
+    await copyBtn.trigger('click');
+    await flushPromises();
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied.length).toBeGreaterThan(4000);
+    expect(copied).toContain('"kind": "teaching"');
+
+    wrapper.unmount();
+  });
 });

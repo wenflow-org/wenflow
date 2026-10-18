@@ -62,7 +62,9 @@
       </div>
       <section class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">连接与模型清单</h3>
+        <!-- 卡题 2026-10-16 去掉「与模型清单」：逐个模型名不再铺在本卡（移进登记表的折叠），
+             本卡只剩「连不连得上」——卡题承诺清单而卡内没有，正是走查里「看不明白」的来源之一 -->
+        <h3 class="mk-card__title">连接</h3>
         <!-- connBadge 附「N 前」（P1#32 子集）：连接状态是上次拉取/探测落库的结果，
              无时间的「连接正常」会把陈旧快照读成实时健康，误导熔断判断 -->
         <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
@@ -126,30 +128,23 @@
           <span class="ac-test__hint">测试走真实上游调用：选中一个模型点「运行测试」，通过即地址与密钥可用。</span>
         </div>
       </div>
-      <!-- 模型清单（2026-10-14 用户评审并入本卡）：原独立成卡，未拉取时整卡只有一句引导文字，
-           占着首屏黄金位却零信息量。清单是「连接并拉取」的产物、也随「保存连接」落盘，
-           收进连接卡内是同一条动线（拉取 → 看清单 → 保存）。 -->
+      <!-- 上游模型清单（2026-10-16 用户走查重排）：原样铺 30+ 个 chip，与下方登记表并列成
+           两份「模型名单」，读起来像同一件事说两遍——实测用户走查问「下面那张卡是干嘛的」。
+           这里改成只说关系：上游返回多少、其中多少已登记参与路由、其余去哪看。
+           逐个名字的清单移到登记表的「上游未登记」折叠里（同一份数据，一处展开，不两处铺开）。 -->
       <div class="ac-body ac-models-body">
         <div class="ac-sec__title">
-          模型清单
+          上游模型清单
           <!-- F8-2：拉取只写本页内存，不说明「需保存才可见」会被读成清单已持久化（刷新回退=丢数据） -->
           <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">本次拉取未保存</span>
         </div>
-        <div class="ac-models">
-          <template v-if="models.length">
-            <span v-for="m in models" :key="m" class="ac-model" :title="m">{{ m }}</span>
-          </template>
-          <div v-else class="ac-models__empty">
-            <span class="ac-models__empty-icon" aria-hidden="true">﹢</span>
-            <!-- fetchError 人话化（P2）：裸 errMsg（HTTP 枚举/堆栈词）对运营不可读——
-                 人话一句给动作，错误原文进 title 供排查贴单 -->
-            <span v-if="fetchError" :title="`错误原文：${fetchError}`">模型清单拉取失败：请检查服务地址与密钥是否正确、服务商是否可访问。</span>
-            <!-- P3（2026-10-04 全站评审）：括号内连接状态复读撤——「连接」卡 40px 左侧 badge
-                 已承载「连接正常 · N 前」，空态句只说自己没拉清单。
-                 2026-10-14：原句把读者指去「模型总览」页签，该页签同日已并入本页签（指针失效），改指本页下方注册表。 -->
-            <span v-else>尚未拉取模型清单。</span>
-          </div>
-        </div>
+        <!-- fetchError 人话化（P2）：裸 errMsg（HTTP 枚举/堆栈词）对运营不可读——
+             人话一句给动作，错误原文进 title 供排查贴单 -->
+        <p v-if="fetchError && !models.length" class="ac-models__line" :title="`错误原文：${fetchError}`">
+          模型清单拉取失败：请检查服务地址与密钥是否正确、服务商是否可访问。
+        </p>
+        <p v-else-if="models.length" class="ac-models__line">{{ upstreamSummary }}</p>
+        <p v-else class="ac-models__line">尚未拉取模型清单。</p>
         <!-- 持久化说明（F8-2）：拉取是连通性验证的本页动作，只有随连接保存落盘，
              其他页面与下次进入才可见；保存成功后 hasUnsavedModels 归零，本行自动消失 -->
         <span v-if="hasUnsavedModels" class="ac-models__hint">本次拉取的清单仅在本页有效，点「保存连接」后其它页面与下次进入才可见。</span>
@@ -160,7 +155,7 @@
          不再自带 role=tabpanel——它是本页签内部的第二段，a11y 归属由外层面板承担。
          2026-10-15 用户重组：冷却落限额表状态列、配置提示落行级徽标 + 表尾注。
          2026-10-15 用户拍板：供应商与能力限额合并为一块，parts 只剩 providers。 -->
-    <ModelRegistryOverview class="ac-registry" ref="registryRef" :parts="['providers']" @aliases="aliasOptions = $event" @defaults="registryDefaults = $event" />
+    <ModelRegistryOverview class="ac-registry" ref="registryRef" :parts="['providers']" :upstream="models" @aliases="aliasOptions = $event" @defaults="registryDefaults = $event" />
 
     </div>
     </template>
@@ -218,7 +213,7 @@
                  开关只是 `defaultThinkingMode !== 'disabled'` 的派生态（关闭 ⇔ 下拉的「关闭」档），
                  且它表达不了「强制开启」，勾上只能落到「跟随模型默认」，是有损视图。
                  同屏一处事实两个控件，还带来「强度灰了、模式没灰」的不一致。现只留真字段那一个控件。 -->
-            <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认，可在 Skill 设计页「运行时」覆盖</span></div>
+            <div class="ac-sec__title">默认思考<span class="ac-sec__hint">未单独配置的 Skill 继承此默认，可在 Skill 详情页「运行时」覆盖</span></div>
             <div class="ac-row ac-row--2 ac-think">
               <label class="mk-field">
                 <span class="mk-field__label">思考模式</span>
@@ -663,6 +658,7 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { dataSource, isLive } from './store'
 import Addons from './Addons.vue'
 import ModelRegistryOverview from './ModelRegistryOverview.vue'
+import { splitUpstreamByRegistry } from './modelNameMatch'
 import VirtualLabLoadSettings from './VirtualLabLoadSettings.vue'
 import {
   liveApiConfig as cfg,
@@ -1267,7 +1263,7 @@ watch(
   { immediate: true, deep: true }
 )
 
-// 路由离开守卫:与其他管理页(SkillDesignPage)同款,未保存修改不静默丢失
+// 路由离开守卫:与其他管理页(Skill 详情页等)同款,未保存修改不静默丢失
 onBeforeRouteLeave(async () => {
   if (dirty.value.size === 0) return true
   const ok = await askConfirm({
@@ -1293,6 +1289,27 @@ onBeforeUnmount(() => {
 const models = computed(() => fetchedModels.value)
 /** 通道拉取到、但不在模型目录里的 id（历史保存值/通道私有模型），仍保留在候选里 */
 const extraFetchedModels = computed(() => extraIds(models.value))
+
+/**
+ * 上游清单 ↔ 平台登记表的对齐（2026-10-16 用户走查）：连接卡只说关系（上游几个、对上几个），
+ * 逐个名字的清单由登记表的「上游未登记」折叠承载。登记 id 由 ModelRegistryOverview 经
+ * @defaults 回传，未到时按空表算（此时只说「上游返回 N 个」，不说对上几个）。
+ */
+const upstreamSplit = computed(() =>
+  splitUpstreamByRegistry(models.value, (registryDefaults.value?.models ?? []).map((m) => m.id))
+)
+/** 登记表是否已回来：未回来时只说「上游 N 个」，不能说「对上 0 个」（那是句假话） */
+const upstreamReady = computed(() => registryDefaults.value !== null)
+
+/** 上游清单与登记表的关系句（空串 = 无清单可谈，模板走空态分支） */
+const upstreamSummary = computed(() => {
+  const total = models.value.length
+  if (!total) return ''
+  if (!upstreamReady.value) return `上游返回 ${total} 个模型，正在对齐平台登记表…`
+  const matched = upstreamSplit.value.registered.length
+  if (!matched) return `上游返回 ${total} 个模型，都没有与平台登记的模型对上，不参与路由。`
+  return `上游返回 ${total} 个模型，其中 ${matched} 个与平台登记的模型对上，其余 ${total - matched} 个没有登记，不参与路由。`
+})
 
 /**
  * 当前清单是否已落盘（F8-2）：拉取只写本页内存 ref，只有随「保存连接」进 availableModels 才持久化。
@@ -1701,7 +1718,7 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
 
 /* 满屏重排（2026-10-05）：mk-narrow 限宽列在宽屏下读作「一张卡悬着」（用户实测截图批注）。
-   2026-10-15 用户重组后接入页只剩「连接与模型清单」一张卡（连通性验证与模型清单并入，
+   2026-10-15 用户重组后接入页只剩「连接」一张卡（连通性验证并入，
    供应商 / 能力限额为注册表只读面板），三列宫格不再有第二个卡位——保持三列会把唯一的卡
    挤成 1/3 宽。改单列：连接卡满宽，注册表随其后。安全页两列（左一右二），≤1100px 回落单列。 */
 .ac-conn-body { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
@@ -1778,49 +1795,9 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-test__text--bad { color: var(--mk-red); }
 .ac-test__btn { align-self: flex-end; }
 
-/* 长清单降噪（2026-10-05）：约 4 行高度帽 + 内滚，几十枚模型不再把卡片拉到一屏外 */
-.ac-models {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  max-height: 132px;
-  overflow-y: auto;
-}
-.ac-model {
-  padding: 4px 10px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
-  font-family: var(--mk-mono);
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-}
-/* 可用模型空态：引导操作而非一行弱文字（原「尚未拉取模型」独占一行显空） */
-.ac-models__empty {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px dashed var(--mk-line);
-  border-radius: var(--mk-radius-sm);
-  background: #fafbfc;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-}
-.ac-models__empty-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--mk-blue-bg);
-  color: var(--mk-blue);
-  font-size: var(--mk-fs-body);
-  font-weight: 800;
-  flex-shrink: 0;
-}
+/* 上游清单关系句（2026-10-16 用户走查重排）：原 30+ 枚模型胶囊（.ac-models/.ac-model）退役——
+   与下方登记表并列成两份模型名单，被读成「同一件事说两遍」。现在只说关系，逐个名字在登记表折叠里。 */
+.ac-models__line { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
 /* 持久化说明（F8-2）：拉取仅本页有效的提示，比清单胶囊再轻一档；仅未保存时出现 */
 .ac-models__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.55; }
 
@@ -2139,7 +2116,6 @@ async function saveQuota(enabled: boolean, quota: number) {
 @media (min-width: 2000px) {
   .ac-body { gap: 16px; padding: 6px 18px 18px; }
   .mk-field__label { font-size: var(--mk-fs-micro); }
-  .ac-model { font-size: var(--mk-fs-micro); padding: 5px 12px; }
 
   .ac-policy__warn { font-size: var(--mk-fs-micro); }
   .mk-seg { border-radius: 12px; }
@@ -2159,7 +2135,6 @@ async function saveQuota(enabled: boolean, quota: number) {
   /* zoom 1.15 档：字号继续放大 */
   .ac-body { gap: 18px; padding: 8px 22px 22px; }
   .mk-field__label { font-size: var(--mk-fs-micro); }
-  .ac-model { font-size: var(--mk-fs-micro); padding: 6px 14px; border-radius: var(--mk-radius-xl); }
 
   .ac-policy__warn { font-size: var(--mk-fs-micro); }
   .mk-seg__item { font-size: var(--mk-fs-micro); padding: 9px 16px; }
@@ -2178,7 +2153,6 @@ async function saveQuota(enabled: boolean, quota: number) {
   /* 4K（zoom 1.3 档）：字号继续放大，与页面基线对齐 */
   .ac-body { gap: 20px; padding: 10px 26px 26px; }
   .mk-field__label { font-size: var(--mk-fs-body); }
-  .ac-model { font-size: var(--mk-fs-body); padding: 7px 16px; }
 
   .ac-policy__warn { font-size: var(--mk-fs-body); }
   .mk-seg__item { font-size: var(--mk-fs-body); padding: 11px 19px; }
@@ -2200,10 +2174,7 @@ html[data-theme='dark'] {
   /* 审核 #163：原 .mk-seg 覆写 #232325 对卡面 #202124 仅 3 个 sRGB 级台阶（<6），
      轨道几乎与卡面同色——删除覆写，回到 token（--mk-pills-bg 暗色 #27282c，7/8 级） */
   .ac-save { background: #19191a; border-color: var(--wf-border-light); }
-  /* 补漏：密钥切换钮/模型胶囊浅底 */
-  .ac-key-toggle,
-  .ac-model { background: #232325; color: var(--mk-muted); }
-  /* 硬编码浅色分隔线（卡内分区/健康表行）暗色适配 */
-  .ac-models__empty { background: #19191a; border-color: #313235; }
+  /* 补漏：密钥切换钮浅底（模型胶囊随清单胶囊退役，2026-10-16） */
+  .ac-key-toggle { background: #232325; color: var(--mk-muted); }
 }
 </style>

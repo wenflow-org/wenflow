@@ -228,7 +228,7 @@
             <template v-else>
               <div v-if="!suggestionCards.length" class="chart__empty">
                 {{ guidanceLoadFailed
-                  ? 'AI 建议暂时取不到，可点上方重试。'
+                  ? 'AI 建议暂时取不到，可重新加载。'
                   : (hasAnyLoad ? '当前没有特别建议，保持节奏就好。' : '完成第一次学习后，这里会出现 AI 建议。') }}
               </div>
               <div v-else class="suggest__list">

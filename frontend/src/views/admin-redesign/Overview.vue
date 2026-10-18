@@ -299,6 +299,7 @@ import MkKpi from '@/components/mk/MkKpi.vue';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
 import { useSafePolling } from '@/composables/useSafePolling';
+import { failureRateTone } from './rate-utils'
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
@@ -565,9 +566,8 @@ const simTone = computed<Tone>(() => {
   if (!liveVirtualStatsLoaded.value) return 'muted'
   const r = runStats.value
   if (!r.totalSessions && !r.todayCalls) return 'muted'
-  if (r.systemFailureRate >= 50) return 'bad'
-  if (r.systemFailureRate >= 20 || r.failed > 0) return 'warn'
-  return 'ok'
+  // 阈值跨页单源（2026-10-16 用户拍板「不要非零就红」）：与虚拟学习者页同口径
+  return failureRateTone(r.systemFailureRate, r.failed)
 })
 const simHeadline = computed(() => {
   if (liveVirtualStatsError.value) return '统计加载失败'

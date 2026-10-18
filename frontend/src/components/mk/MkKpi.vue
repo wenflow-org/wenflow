@@ -11,8 +11,10 @@
     <span class="mk-kpi__label">{{ label }} </span>
     <strong class="mk-kpi__num">{{ value }}</strong>
     <span v-if="hint && !compact" class="mk-kpi__hint" :class="hintTone ? `mk-kpi__hint--${hintTone}` : ''">{{ hint }}</span>
-    <!-- 默认 slot（2026-10-05）：卡内附挂位（VL 判例 = .mk-minibar 进度槽）。空 slot 渲染零节点，
-         既有用法无感；附挂物走卡面原语（mk-minibar），不在页面发明新卡内词汇 -->
+    <!-- 默认 slot（2026-10-05）：卡内附挂位。空 slot 渲染零节点，既有用法无感。
+         2026-10-16 用户拍板「kpi 面板内部进度条不要出现」——原 VL 判例（.mk-minibar 进度槽）
+         已退役，读数类卡保持「label + 数值 + 一句口径」；此 slot 留给确有必要的附挂物，
+         别再往里塞进度轨道。 -->
     <slot></slot>
   </component>
 </template>
@@ -43,6 +45,12 @@ withDefaults(
    蓝灰底（--mk-surface-2）留给卡内次级指标（MkStatStrip）。 */
 .mk-kpi {
   display: grid;
+  /* 内容从上往下排，多余高度留在卡底（2026-10-17 走查「怎么高度还不一样呢」）：
+     同一排卡片被 flex 拉伸到等高后，grid 默认的 align-content:normal 会把多出来的
+     高度均摊进各行，导致没有 hint 的卡 label 行被撑高、数字比邻卡低十几像素；
+     且 hint 行数不同的卡会把整排撑到不同高度。顶对齐后标签/数字/口径三行始终同位，
+     卡高差异只体现为卡底留白。 */
+  align-content: start;
   gap: 6px;
   padding: 16px;
   /* KPI 瓦片 = 卡片·弹层档 16（§0.5；批次 C 抬 xl 时此字面量漏改） */

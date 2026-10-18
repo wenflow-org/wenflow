@@ -92,7 +92,7 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     liveUsersTotal.value = 0;
   });
 
-  it('教学会话：贴表分布条四组归并+完结率入副标（组内口径在分段悬停披露）；下钻互斥可取消；异常筛选迁卡头快捷 chips', async () => {
+  it('教学会话：分布带退役（2026-10-17）→ 完结率升 KPI、状态组筛选交给快捷 chips 与高级筛选', async () => {
     tsList.mockResolvedValue({
       data: { data: { total: 7, items: [
         { id: 's1', status: 'active', userName: '甲', topic: 'T1' },
@@ -108,39 +108,28 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     await ready;
     const w = mount(TeachingSessions, { global: { plugins: [router] } });
     await settle();
-    // 2026-10-04 晚换装贴表分布条（MkDistBand）：buckets 不再出现；其它段 1 人（枚举外）出现
+    // 构成带与分布带先后退役，buckets / mk-distband 都不再出现
     expect(w.find('.buckets').exists()).toBe(false);
-    expect(w.find('.ts-distband .mk-distband__title').text()).toBe('会话状态分布');
-    // 图例恒显全档（含 0 值）：进行中 2（active+initializing）/ 已完成 1 / 异常终态 2 / 已废弃 1 / 其它 1
-    const legend = w.findAll('.ts-distband .stageband__legend .sbl');
-    expect(legend.map((el) => el.find('.sbl__name').text())).toEqual(['进行中', '已完成', '异常终态', '已废弃', '其它']);
-    expect(legend.map((el) => el.find('.sbl__n').text())).toEqual(['2', '1', '2', '1', '1']);
-    // 组内合并口径披露 + 完结率随副标（14.29% = 1/7）
-    const segTitles = w.findAll('.ts-distband .mk-distband__seg').map((el) => el.attributes('title') || '');
-    expect(segTitles.some((t) => t.includes('含初始化 / 暂停 / 收尾中'))).toBe(true);
-    expect(segTitles.some((t) => t.includes('失败 / 超时 / 收尾失败合计'))).toBe(true);
-    expect(segTitles.some((t) => t.includes('含已被替代'))).toBe(true);
-    expect(w.find('.ts-distband .mk-distband__sub').text()).toContain('完结率 14.29%');
-    // 下钻：点「已完成」图例 → 只剩丙；再点取消恢复 7 行
-    const doneBtn = legend.find((el) => el.find('.sbl__name').text() === '已完成')!;
-    await doneBtn.trigger('click');
-    await settle();
-    expect(w.findAll('tbody tr').map((r) => r.text()).filter((t) => t.includes('丙'))).toHaveLength(1);
-    expect(w.findAll('tbody tr').length).toBe(1);
-    await doneBtn.trigger('click');
-    await settle();
-    expect(w.findAll('tbody tr').length).toBe(7);
-    // 异常快捷筛选迁卡头快捷 chips（2026-10-04 状态条退役后）：失败+超时 = 2 由本带「异常终态」单源承载，
-    // chip 不显计数（同一数字不两处渲染），点击可穿
+    expect(w.find('.ts-distband').exists()).toBe(false);
+    expect(w.find('.mk-distband').exists()).toBe(false);
+    // 完结率从带副文升 KPI：1/7 → 14%（四舍五入，不再有 14.29% 的假精度）
+    const kpis = w.findAll('.mk-kpi');
+    expect(kpis.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '缺总结', '有建议', '完结率']);
+    const rate = kpis.find((c) => c.find('.mk-kpi__label').text() === '完结率')!;
+    expect(rate.find('.mk-kpi__num').text()).toBe('14%');
+    // 异常快捷筛选仍在卡头 chips（失败 + 超时 = 2，与「异常」计数同口径），点击可穿
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
     const abnormalBtn = w.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').find((b) => b.text().startsWith('异常'));
     expect(abnormalBtn?.text()).toContain('异常');
+    await abnormalBtn!.trigger('click');
+    await settle();
+    expect(w.findAll('tbody tr').length).toBe(2);
     // 右组另一枚 = 有建议（2026-10-11 统一判例：chip 显命中数）
     expect(w.find('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').text()).toContain('有建议');
     w.unmount();
   });
 
-  it('学习路径：贴表分布条（2026-10-04 晚接棒构成带）——byStatus 全平台口径，零值档图例如实显示、枚举外归「其它」', async () => {
+  it('学习路径：状态筛选在卡头 pills（2026-10-17 分布带退役）——byStatus 全平台口径，零值档如实显示、枚举外归「其它」', async () => {
     pathStats.mockResolvedValue({
       data: { data: { total: 10, totalMilestones: 3, totalTasks: 5, byStatus: { active: 4, completed: 3, failed: 2, archived: 0, custom_state: 1 } } }
     });
@@ -148,17 +137,17 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     await ready;
     const w = mount(OpsContent, { global: { plugins: [router] } });
     await settle();
-    // 构成带退役（教学组统一贴表分布条），buckets 不再出现
+    // 构成带与分布带先后退役，buckets / mk-distband 都不再出现
     expect(w.find('.buckets').exists()).toBe(false);
-    // 图例恒显全部档位（含零值「已下线 0」），段仅非零（custom_state 1 → 其它段出现 = 5 段中 4 段非零）
-    const legend = w.findAll('.stageband__legend .sbl');
-    expect(legend.map((el) => el.find('.sbl__name').text())).toEqual(['学习中', '已完成', '生成失败', '已下线', '其它']);
-    expect(legend.map((el) => el.find('.sbl__n').text())).toEqual(['4', '3', '2', '0', '1']);
-    expect(w.findAll('.mk-distband__seg')).toHaveLength(4);
+    expect(w.find('.mk-distband').exists()).toBe(false);
+    // pills 恒显全部档位（含零值「已下线 0」），枚举外 custom_state 归「其它」；「全部」不显数
+    const pills = w.findAll('.mk-card__head .mk-pills[aria-label="状态筛选"] .mk-pill');
+    expect(pills.map((p) => p.text().replace(/\d+$/, '').trim())).toEqual(['全部', '学习中', '已完成', '生成失败', '已下线', '其它']);
+    expect(pills.map((p) => p.find('.mk-pill__count').exists() ? p.find('.mk-pill__count').text() : '—')).toEqual(['—', '4', '3', '2', '0', '1']);
     w.unmount();
   });
 
-  it('用户与学习者：默认「仅真实」KPI 两卡（真实/近 7 天活跃，管理员并入 hint）；含测试后四卡（运行中仿真/虚拟/测试/活跃）', async () => {
+  it('用户与学习者：默认「仅真实」KPI 两卡（真实/近 7 天活跃，管理员并入 hint）；含测试后四卡（运行中仿真/虚拟/测试/测试账号活跃）', async () => {
     const { router, ready } = mockRouter('/admin/people');
     await ready;
     liveIncludeVirtual.value = false;
@@ -186,15 +175,19 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     expect(tiles[1].find('.mk-kpi__hint').text()).toContain('最后登录在 7 天内');
     w.unmount();
 
-    // 含测试口径 → 四卡：「真实用户」在测试视角结构性恒 0，换虚拟域「运行中仿真」
+    // 含测试口径 → 四卡：「真实用户」在测试视角结构性恒 0，换虚拟域「运行中仿真账号」
     liveIncludeVirtual.value = true;
     liveVirtuals.value = [{ runningCount: 1 }] as unknown as typeof liveVirtuals.value;
     const w2 = mount(People, { global: { plugins: [router] } });
     await settle();
     await nextTick();
     const tiles2 = w2.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles2.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['运行中仿真', '虚拟学习者', '测试账号', '近 7 天活跃']);
-    expect(tiles2.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '1', '2']);
+    expect(tiles2.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['运行中仿真账号', '虚拟学习者', '测试账号', '测试账号活跃']);
+    /* 2026-10-16 KPI 审计补完：活跃卡取值收到「测试账号」域（此前按虚拟+测试全体算，
+       出现「活跃 50 > 测试账号 48」这种自相矛盾）。夹具里 u4（测试乙）从未登录，故活跃为 0，
+       u3（虚拟甲）虽活跃但不计入本卡。 */
+    expect(tiles2.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '1', '0']);
+    expect(tiles2[3].attributes('title')).toContain('只统计测试账号');
     expect(tiles2[1].attributes('title')).toContain('当前显示 4 个账号');
     w2.unmount();
 

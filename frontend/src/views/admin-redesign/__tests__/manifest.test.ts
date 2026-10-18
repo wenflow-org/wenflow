@@ -39,11 +39,11 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('导航（2026-09 拆页 + 健康中心独立；2026-10-01 学习者卡库；2026-10-04 学习状态拆页 + 批量实验下线 + Prompt 评估折入 skills；2026-10-10 术语表改隐藏场景；2026-10-12 记忆与复习恢复跨用户总览）：7 分组 / 18 可见场景与目标 IA 完全一致', () => {
+  it('导航（2026-09 拆页 + 健康中心独立；2026-10-01 学习者卡库；2026-10-04 学习状态拆页 + 批量实验下线 + Prompt 评估折入 skills；2026-10-10 术语表改隐藏场景；2026-10-12 记忆与复习恢复跨用户总览；2026-10-16 系统工具并入运营中心）：7 分组 / 17 可见场景与目标 IA 完全一致', () => {
     // 隐藏场景（hidden: true，如运营术语表）不占侧栏席位：由顶栏帮助按钮跳转，单独断言
     const visible = MOCK_SCENES.filter((s) => !s.hidden);
-    expect(MOCK_SCENES).toHaveLength(19);
-    expect(visible).toHaveLength(18);
+    expect(MOCK_SCENES).toHaveLength(18);
+    expect(visible).toHaveLength(17);
     // 分组顺序即侧栏渲染顺序（总览为 pinned，但仍计入分组集合）
     const groups = visible.map((s) => s.group);
     expect([...new Set(groups)]).toEqual(['总览', '教学', '虚拟学习者', 'Skill', '观测', '系统', '运营']);
@@ -58,7 +58,7 @@ describe('AdminConsole 页面注册表', () => {
       虚拟学习者: ['virtual-learners', 'virtual-learner-cards'],
       Skill: ['orchestrator', 'skills'],
       观测: ['execution-logs', 'token-cost', 'audit-logs'],
-      系统: ['health-center', 'api-config', 'ops-center'],
+      系统: ['health-center', 'api-config'],
       运营: ['ops-hub']
     });
     expect(MOCK_SCENES.filter((s) => s.hidden).map((s) => s.id)).toEqual(['glossary']);
@@ -70,7 +70,8 @@ describe('AdminConsole 页面注册表', () => {
     // batch-experiments 2026-10-04 整体下线（运行态并入 virtual-learners、资产输入归卡库，URL 重定向）
     // prompt-eval 2026-10-04 折入 skills 宿主「Prompt 评估」页签（旧 URL 重定向）
     // memory-review 2026-10-12 一度退役，同日恢复跨用户总览（单用户明细在学习者详情页签）——不再列退役
-    for (const retired of ['feedback', 'ops-achievements', 'messages', 'addons', 'session-security', 'batch-experiments', 'prompt-eval']) {
+    // ops-center 2026-10-16 解散并入运营中心（运维工具 / 数据导出 / 会话安全三页签），侧栏撤除
+    for (const retired of ['feedback', 'ops-achievements', 'messages', 'addons', 'session-security', 'ops-center', 'batch-experiments', 'prompt-eval']) {
       expect(ids.has(retired), `退役场景「${retired}」不应在侧栏清单`).toBe(false);
     }
   });
@@ -86,14 +87,15 @@ describe('AdminConsole 页面注册表', () => {
     }
   });
 
-  it('详情页注册表（subPage）视图齐全（含 2026-10-15 迁入的 skill-design 设计页）', () => {
+  it('详情页注册表（subPage）视图齐全（设计页已平铺进 skill 详情，2026-10-15 无独立 skill-design）', () => {
     expect(DETAIL_COMPONENTS).toMatchObject({
       learner: expect.anything(),
       virtual: expect.anything(),
       user: expect.anything(),
       session: expect.anything(),
-      skill: expect.anything(),
-      'skill-design': expect.anything()
+      skill: expect.anything()
     });
+    // 独立设计页退役：注册表不再有 skill-design 键
+    expect(DETAIL_COMPONENTS).not.toHaveProperty('skill-design');
   });
 });

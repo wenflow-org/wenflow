@@ -279,7 +279,7 @@
             class="sdp-pw__gate"
             :class="coreGateCls(coreGates.inputHandoff.length === 0)"
           >
-            输入一致性核查 {{ coreGates.inputHandoff.length === 0 ? '✓' : `⚠ ${coreGates.inputHandoff.length} 条提醒` }}
+            输入一致性核查 {{ coreGates.inputHandoff.length === 0 ? '通过' : `${coreGates.inputHandoff.length} 条提醒` }}
           </div>
           <div v-for="(issue, i) in coreGates.inputHandoff || []" :key="`ih-${i}`" class="sdp-pw__gate-issue">
             [{{ issue.code }}] {{ issue.message }}
@@ -291,7 +291,7 @@
         <div v-if="coreCompiledMeta" class="sdp-pw__meta mono">
           coreHash <span :title="coreCompiledMeta.coreHash">{{ coreShortHash(coreCompiledMeta.coreHash) }}</span> · coreVersion {{ coreCompiledMeta.coreVersion }}
         </div>
-        <pre class="sdp-pw__pre">{{ coreCompiledPrompt || '点击「保存并编译」查看五块产物（dry run，不写入）。' }}</pre>
+        <pre class="sdp-pw__pre">{{ coreCompiledPrompt || '点「保存并编译」后显示五块产物（dry run，不写入）。' }}</pre>
       </div>
     </section>
 

@@ -6,8 +6,8 @@
  *
  *  1) OpsHub 三个待办域用 .catch(() => count = 0)，后端故障时页面伪装成「全部已清零」——
  *     驾驶舱最不可接受的一种假信号，因为它恰好把「取不到」显示成「没事」。
- *  2) OpsCenter 用 `.is-bad` 作为告警类名，但该类全站零定义（页面 scoped 里也没有）→
- *     死信告警永远不标红（无效类名静默失效）。
+ *  2) 运维工具面板（原 OpsCenter Tab1，2026-10-16 并入运营中心）用 `.is-bad` 作为告警类名，
+ *     但该类全站零定义（页面 scoped 里也没有）→ 死信告警永远不标红（无效类名静默失效）。
  *
  * 2026-10-04 状态条退役：OpsHub 页头 .mk-status 整块下线（失败信号由页签体内 mk-alert +
  * 指标卡「加载失败」foot 承载；结论句并入「运营待办」卡头 meta），本文件对 .mk-status--bad/--ok
@@ -55,7 +55,7 @@ vi.mock('../useConfirm', () => ({ askConfirm: vi.fn(async () => true) }))
 vi.mock('@/utils/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
 import OpsHub from '../OpsHub.vue'
-import OpsCenter from '../OpsCenter.vue'
+import ServerToolsPanel from '../ServerToolsPanel.vue'
 
 describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
   beforeEach(() => {
@@ -173,7 +173,7 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
   })
 })
 
-describe('R2：OpsCenter 死信告警随死信卡呈现（状态条已按原型退役）', () => {
+describe('R2：运维工具死信告警随死信卡呈现（状态条已按原型退役）', () => {
   beforeEach(() => {
     h.outboxDead.mockReset()
   })
@@ -181,13 +181,13 @@ describe('R2：OpsCenter 死信告警随死信卡呈现（状态条已按原型�
   it('死信 > 0 → 卡头 warn 徽标计数（而非零定义的 .is-bad；状态条类不再出现）', async () => {
     h.outboxDead.mockResolvedValue({ data: { data: { deadCount: 3, items: [] } } })
 
-    const w = mount(OpsCenter)
+    const w = mount(ServerToolsPanel)
     await flushPromises()
 
     const warn = w.find('.mk-card__head .mk-badge--warn')
     expect(warn.exists(), '死信积压要显式 warn 徽标（迁入死信卡头）').toBe(true)
     expect(warn.text()).toContain('3')
-    expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false)
+    expect(w.find('.mk-status').exists(), '本面板无状态条').toBe(false)
     // 无效类名不得再出现（它曾让告警静默失效）
     expect(w.find('.is-bad').exists()).toBe(false)
 

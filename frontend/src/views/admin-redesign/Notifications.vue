@@ -14,13 +14,6 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="nt-filter">
-          <!-- 关键词搜索：后端列表接口无关键词参数（adminApi list 无 search），按当前页客户端过滤；
-               口径在 title 里写明，不把「当前页内过滤」读成全量搜索 -->
-          <MkFilterSearch
-            v-model="keyword"
-            placeholder="搜索标题 / 姓名 / 邮箱"
-            title="在当前页内搜索"
-          />
           <select v-model="kindFilter" class="mk-filter__select" @change="reloadFromFirstPage">
             <option value="">全部类型</option>
             <option value="system">系统</option>
@@ -43,6 +36,16 @@
           >横幅公告 → 公告页</button>
           <span v-else class="nt-boundary" :title="BANNER_BOUNDARY_NOTE">{{ BANNER_BOUNDARY_NOTE }}</span>
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
+        </div>
+        <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组。
+             关键词：后端列表接口无关键词参数（adminApi list 无 search），按当前页客户端过滤；
+             口径在 title 里写明，不把「当前页内过滤」读成全量搜索 -->
+        <div class="mk-card__head-right">
+          <MkFilterSearch
+            v-model="keyword"
+            placeholder="搜索标题 / 姓名 / 邮箱"
+            title="在当前页内搜索"
+          />
         </div>
       </div>
 

@@ -115,6 +115,22 @@ describe('Users 客户端分页（mk-pagination）', () => {
     expect(w.text()).not.toContain('用户16');
   });
 
+  /** 2026-10-17 用户走查「这个多选，默认不出来吧」：勾选列默认不出，
+   *  批量入口保留在「列」菜单（选择框（批量操作）），需要时自己打开。 */
+  it('选择框列默认隐藏：首访无全选、无行内勾选，列菜单仍可找回', async () => {
+    localStorage.removeItem('wf_users_hidden_cols_v4');
+    const w = await mountUsers();
+    await nextTick();
+    expect(w.find('thead input[type="checkbox"][aria-label="全选当前页"]').exists()).toBe(false);
+    expect(w.findAll('tbody input[type="checkbox"]')).toHaveLength(0);
+
+    await findBtn(w, '列').trigger('click');
+    await nextTick();
+    const labels = w.findAll('.mk-cols__item label, .mk-cols__item').map((x) => x.text());
+    expect(labels.some((t) => t.includes('选择框'))).toBe(true);
+    w.unmount();
+  });
+
   it('翻页：第 2 页整页切片（第 16-30 行，无第 1 页残留）', async () => {
     const w = await mountUsers();
     await findBtn(w, '下一页').trigger('click');
@@ -160,7 +176,7 @@ describe('Users 客户端分页（mk-pagination）', () => {
     expect(w.text()).toContain('用户36');
   });
 
-  it('筛选强化：pill 计数 + 搜索清空 × + 过滤态「清除筛选」', async () => {
+  it('筛选强化：pill 计数 + 搜索清空 ×（卡头不再出「清除筛选」）', async () => {
     const w = await mountUsers();
     // pill 计数（2026-10-11 全站统一判例）：筛选 pill 一律显命中数，唯「全部」不显（总数单源=分页器）；
     // 「30 分钟在线」已随宿主 KPI 换窗为「近 7 天活跃」
@@ -171,16 +187,17 @@ describe('Users 客户端分页（mk-pagination）', () => {
     // 计数徽章在用户数据到达后才渲染（CI 时序下 pill 先行、count 后至 → 空 DOMWrapper 竞态）——waitFor 轮询
     const normalPill = pills.find((p) => p.text().includes('普通用户'));
     await vi.waitFor(() => expect(normalPill?.find('.mk-pill__count').text()).toBe('36'));
-    // 无筛选态：不显示清空 × 与「清除筛选」
+    // 2026-10-17 用户拍板：本页只有 pill（单选）与搜索，二者各自有「全部」与搜索框 ✕，
+    // 卡头「清除筛选」是第三个重复入口，已退役
     expect(w.find('.mk-search__clear').exists()).toBe(false);
     expect(w.findAll('button').some((b) => b.text() === '清除筛选')).toBe(false);
-    // 输入关键词 → 出现清空 × 与「清除筛选」
+    // 输入关键词 → 只出现清空 ×，仍不再出「清除筛选」
     const input = w.find<HTMLInputElement>('.mk-filter__input');
     await input.setValue('用户36');
     await nextTick();
     expect(w.find('.mk-search__clear').exists()).toBe(true);
-    expect(w.findAll('button').some((b) => b.text() === '清除筛选')).toBe(true);
-    // 点清空 × → 关键词清空，二者消失
+    expect(w.findAll('button').some((b) => b.text() === '清除筛选')).toBe(false);
+    // 点清空 × → 关键词清空，× 消失
     await w.find('.mk-search__clear').trigger('click');
     await nextTick();
     expect((input.element as HTMLInputElement).value).toBe('');

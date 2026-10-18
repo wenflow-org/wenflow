@@ -16,6 +16,24 @@
       </template>
     </MkDetailHero>
 
+    <!-- 派生来源（2026-10-16 卡=身份模板）：本卡是从另一张身份卡派生出来的实例。
+         给回模板的入口——运营常要从同一张身份卡再派生一个实例。 -->
+    <section v-if="d.derivedFrom" class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">身份来源</h3>
+      </div>
+      <div class="cd-pad">
+        <p class="cd-bg">
+          本卡由身份卡「<a
+            href="#"
+            class="mk-link"
+            :title="`打开身份卡「${d.derivedFrom.name}」`"
+            @click.prevent="goTemplate(d.derivedFrom!.profileId)"
+          >{{ d.derivedFrom.name }}</a>」派生，任务取自该身份卡的故事池。派生不消耗身份卡，可重复派生。
+        </p>
+      </div>
+    </section>
+
     <!-- 概览事实栅格（mk-facts 原语：div>span+strong 契约） -->
     <section class="mk-card">
       <div class="mk-card__head">
@@ -143,6 +161,7 @@ interface CardDetail {
     budget: Record<string, unknown>
   }>
   materials: Array<{ kind: string; title: string }>
+  derivedFrom: { profileId: string; cardKey: string | null; name: string } | null
 }
 
 const d = ref<CardDetail | null>(null)
@@ -173,6 +192,11 @@ function goLearner() {
   const pid = d.value?.profileId
   if (!pid) return
   openSubPage('virtual', pid, { from: { view: 'card', id: pid, label: '学习者卡' } })
+}
+
+/** 回派生来源的身份卡（本卡是实例时才有入口；label 用视图名，避免「同名卡 / 同名卡」） */
+function goTemplate(profileId: string) {
+  openSubPage('card', profileId, { from: { view: 'card', id: profileId, label: '身份卡' } })
 }
 
 const heroSubText = computed(() => {

@@ -132,7 +132,7 @@ describe('ApiConfig P1 修复批', () => {
           generatedAt: '2026-09-19T12:00:00.000Z',
           providers: [
             {
-              id: 'platform', name: '平台通道（继承）', enabled: true, recommended: true,
+              id: 'platform', name: '平台提供', enabled: true, recommended: true,
               endpointSource: 'inherit', baseUrl: null, apiKeyEnv: null, keyConfigured: null,
               modelIds: ['deepseek-v4-flash', 'agnes-3.0-flash']
             }
@@ -353,11 +353,12 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.find('.mk-status').exists()).toBe(false);
     /* 2026-10-14 用户拍板撤掉页首 KPI 带：原来那三块（密钥 / 模型清单 / 默认路由）是把卡里
        已有的读数抄一遍。护栏钉「没有 KPI 带」，同时钉三个读数各有卡内出口——密钥看连接卡的
-       API Key 行（已配置时 placeholder 写「留空 = 沿用已配置」）、清单看模型 chips 数、
+       API Key 行（已配置时 placeholder 写「留空 = 沿用已配置」）、清单看连接卡的关系句、
        连接状态看连接卡头徽标。 */
     expect(wrapper.findAll('.mk-kpi')).toHaveLength(0);
     expect(wrapper.find('input[type="password"]').attributes('placeholder')).toBe('留空 = 沿用已配置');
-    expect(wrapper.findAll('.ac-model')).toHaveLength(2);
+    // 2026-10-16 用户走查重排：原 30+ 枚模型胶囊（.ac-model）退役，清单出口改为「上游 N 个」关系句
+    expect(wrapper.find('.ac-models__line').text()).toContain('上游返回 2 个模型');
     expect(wrapper.find('.ac-conn-body .mk-card .mk-badge').exists()).toBe(true);
     await gotoTab(wrapper, '路由与调用');
     expect(wrapper.find('.ac-sec__sub').text()).toContain('最近探测');
@@ -493,7 +494,11 @@ describe('ApiConfig P1 修复批', () => {
     await flushPromises();
     await nextTick();
 
-    expect(wrapper.findAll('.ac-model').map((e) => e.text())).toEqual(['m-1', 'm-2']);
+    /* 2026-10-16 用户走查重排：拉取后的落点从「铺一排模型胶囊」改为「上游 N 个」关系句；
+       逐个名字的清单在登记表的「上游未登记」折叠里（本用例的登记表 mock 没有 m-1/m-2，
+       故此处断言 0 个对上那支文案——它同时守住「没对上时不能说成对上 0 个就完事」）。 */
+    expect(wrapper.find('.ac-models__line').text()).toContain('上游返回 2 个模型');
+    expect(wrapper.find('.ac-models__line').text()).toContain('都没有与平台登记的模型对上');
     expect(wrapper.text()).toContain('本次拉取未保存');
     expect(wrapper.find('.ac-models__hint').text()).toContain('仅在本页有效');
     expect(wrapper.find('.ac-models__hint').text()).toContain('保存连接');

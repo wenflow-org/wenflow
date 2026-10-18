@@ -1040,7 +1040,17 @@ router.get('/eval-runs', async (req: Request, res: Response) => {
     const agentId = String(req.query.agentId || '').trim();
     const limit = Math.min(50, Number(req.query.limit) || 20);
     const where = agentId ? { agentId } : {};
-    const runs = await listEvalRuns(where, limit);
+    /* 服务端排序（2026-10-17）：列表只回最近 N 条窗口，客户端排会「只排前 N 行」，
+       所以排序下推到 SQL。键用列名白名单，未知键回落 createdAt。 */
+    const RUN_SORT_FIELDS: Record<string, 'createdAt' | 'durationMs' | 'caseCount' | 'agentId'> = {
+      createdAt: 'createdAt',
+      durationMs: 'durationMs',
+      caseCount: 'caseCount',
+      agentId: 'agentId',
+    };
+    const sortField = RUN_SORT_FIELDS[String(req.query.sort || '')] || 'createdAt';
+    const sortOrder = req.query.order === 'asc' ? 'asc' : 'desc';
+    const runs = await listEvalRuns(where, limit, { [sortField]: sortOrder });
     return res.json({
       success: true,
       data: runs.map((r) => ({

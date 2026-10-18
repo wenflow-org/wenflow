@@ -9,8 +9,8 @@
   ],
   "providers": {
     "platform": {
-      "name": "平台通道（继承）",
-      "description": "使用平台统一的模型服务地址与密钥，无需单独接入",
+      "name": "平台提供",
+      "description": "已接入，开箱可用，无需自己准备服务地址与密钥",
       "recommended": true,
       "models": {
         "deepseek-v4.1-flash": {
@@ -60,8 +60,8 @@
       }
     },
     "custom-provider-example": {
-      "name": "自建供应商（示例）",
-      "description": "示例条目，当前停用。想接自己的模型供应商，照这条准备服务地址、密钥与模型清单即可；密钥只存放在服务器上，不随这条记录保存",
+      "name": "自行接入（示例）",
+      "description": "示例条目，当前停用。想接自己的模型服务，照这条填服务地址、密钥与模型清单即可。密钥只存放在服务器上，不随这条记录保存",
       "enabled": false,
       "baseUrl": "https://api.deepseek.com/v1",
       "apiKeyEnv": "CUSTOM_PROVIDER_API_KEY",

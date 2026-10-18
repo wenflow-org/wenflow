@@ -133,7 +133,11 @@ describe('健康中心（G1）', () => {
     expect(cards[0].text()).toContain('4');                    // 检查异常（value=异常数）
     expect(cards[0].text()).toContain('健康检查共 13 项');       // 总数下沉 hint
     expect(cards[1].text()).toContain('3');                    // 漂移需处理：契约 1 + W4 2
-    expect(cards[1].text()).toContain('契约 1 + 哈希 2');
+    /* 2026-10-16 KPI 审计补完：标签原先只有「不一致」没有宾语（谁跟谁不一致？），
+       改用术语表的限定词；hint 同步从「契约 N + 哈希 M」换成两个概念的人话名。 */
+    expect(cards[1].text()).toContain('文件与线上不一致');
+    expect(cards[1].text()).toContain('文件与线上 1 条 · 编译产物 2 条');
+    expect(cards[1].text()).not.toContain('契约');
     expect(cards[2].text()).toContain('3');                    // 对账异常：登记缺项 1 + 无生效版本 2 + 失效注册 0（zombieActive/unwired 不计入）
     expect(cards[2].text()).toContain('登记 8 项');
     expect(cards[3].text()).toContain('2');                    // 完成度未达标

@@ -41,6 +41,10 @@ export const liveLoading = ref(false)
 export const liveFailures = ref<Record<string, string>>({})
 /** 并发守卫：防止 auto-refresh 在上一次未完成时重复发起请求 */
 export const liveRefreshing = ref(false)
+/** 顶栏「刷新」序号：`loadLiveData(true)` 每次自增。页面自有域（不在 boot 域内、
+ *  只有本页消费的数据，如编排图的运行时定义 / 阶段清单 / 对账）watch 它重跑——
+ *  这样全站只有一个刷新入口，且不需要把页面专属的请求塞进全站 boot 让别的页白付。 */
+export const liveRefreshSeq = ref(0)
 
 /* ================= 工具 ================= */
 
@@ -804,7 +808,8 @@ async function fetchLiveSkills(): Promise<Record<string, SkillStat>> {
       calls,
       errors: calls > 0 ? Math.round(calls * (1 - rate)) : 0,
       avgMs: Number(st.avgLatency || 0),
-      lastAt: st.lastCalledAt ? timeAgo(st.lastCalledAt) : '从未'
+      lastAt: st.lastCalledAt ? timeAgo(st.lastCalledAt) : '从未',
+      lastCalledAt: st.lastCalledAt ? String(st.lastCalledAt) : undefined
     }
     // 主目录档案：排除外挂能力 Skill（与生产 AgentRegistry 同口径）；外挂档案单独保留
     if (isExtraSkill(id)) {
@@ -1101,7 +1106,9 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       // 「N 个 Skill 近 24h 有调用」从「进行中对话」卡迁来（2026-10-14 KPI 审计）：它是平台活跃面
       // 的事实，挂在本卡（平台用量）才算同域；原来挂在「进行中对话」（目标对话快照）属跨域副文错配。
       hint: [
-        todayCallsAll > todayCalls ? `只统计真实用户 · 若含虚拟与测试共 ${fmt(todayCallsAll)} 次` : '只统计真实用户 · 从今日 00:00 起',
+        todayCallsAll > todayCalls
+          ? `只统计真实用户 · 截至现在（非全日）· 若含虚拟与测试共 ${fmt(todayCallsAll)} 次`
+          : '只统计真实用户 · 从今日 00:00 起，截至现在（非全日）',
         `${fmt(Number(agents.activeAgents24h || 0))} 个 Skill 近 24h 有调用`,
       ].join(' · '),
     },
@@ -1119,13 +1126,17 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       hint: `今日有学习会话的用户 · 总用户 ${users.total ?? 0}（只计真实用户）`,
     },
     {
-      // P2 文案纠偏：原「系统活跃」与值错位（值=进行中目标对话数快照），名实相符改为「进行中对话」
+      // P2 文案纠偏：原「系统活跃」与值错位（值=进行中目标对话数快照），名实相符改为「进行中对话」。
       // 2026-10-14（KPI 审计）：副文当时仍是「系统活跃」时代的残留（N Skill 近 24h 有调用），
       // 与「目标对话」跨域；该事实已迁到「今日调用」悬停说明，此处换回同域读数。
-      label: '进行中对话',
-      value: fmt(Number(conv.active || 0)),
+      // 2026-10-15（KPI 审计）：本卡的「进行中」值与下方「教学闭环」首环（目标对话 `N 进行中`）
+      // 同源同数（都取 conv.active），同屏复读三处（KPI 值 + 闭环环 + 该环 title）。
+      // 闭环卡是本页招牌块，把「进行中」留给它单源承载；本卡改读会话总量这个 KPI 级读数，
+      // 与另三张（今日调用/成功率/用户活跃）同为「总量」量纲，不再是闭环的一个子读数。
+      label: '目标对话',
+      value: fmt(Number(conv.active || 0) + Number(conv.completed || 0) + Number(conv.cancelled || 0)),
       foot: `累计完成 ${fmt(Number(conv.completed || 0))} 个`,
-      hint: '进行中目标对话',
+      hint: '目标对话累计总量（含进行中/已完成/已取消）· 进行中数由「教学闭环」首环单源承载',
     },
   ]
 
@@ -1469,6 +1480,10 @@ export interface LiveVirtual {
   sessions: number
   /** 故事池条数（会话故事，不是人物背景字数） */
   storyCount: number
+  /** 已生成的路径数（distinct learningPathId）：故事是复杂情景、路径是情景里走出来的
+      学习路线，一个故事可衍生多条路径（每次运行生成一条），故 M 可能大于故事条数；
+      同一路径的多次会话不重复计 */
+  pathCount: number
   /** 当前运行中的会话数（后端 runningCount，全量聚合口径，已扣除暂停的自动驾驶） */
   runningCount: number
   /** 已暂停自动驾驶的会话数（autopilot=stopped，进度保留） */
@@ -1647,6 +1662,11 @@ async function fetchLiveVirtuals(): Promise<void> {
     const storyCount = Number(p.storyCount ?? pool.length ?? 0)
     // 运行中信号：后端列表接口已补 runningCount/currentStage/pausedCount；旧缓存（无字段）时由 raw.sessions 兜底推导
     const sessionSample = Array.isArray(p.sessions) ? p.sessions as Record<string, unknown>[] : []
+    /* 已生成路径数：后端按 distinct learningPathId 聚合。旧缓存无该字段时，从会话样本里
+       去重 learningPathId 兜底——一个故事可衍生多条路径，不能让多路径学习者被读成单路径。 */
+    const pathCount = Number(
+      p.pathCount ?? new Set(sessionSample.map((s) => String(s.learningPathId || '')).filter(Boolean)).size
+    )
     const runningSessions = sessionSample.filter((s) => String(s.status || '') === 'running')
     const pausedFallback = sessionSample.filter((s) => {
       if (String(s.status || '') !== 'running') return false
@@ -1674,6 +1694,7 @@ async function fetchLiveVirtuals(): Promise<void> {
       story: String(profile.background || profile.corePersonality || p.notes || ''),
       sessions: Number(p.sessionCount || (p._count as Record<string, number>)?.sessions || 0),
       storyCount,
+      pathCount,
       runningCount: Number(p.runningCount ?? (runningSessions.length - pausedFallback.length) ?? 0),
       pausedCount: Number(p.pausedCount ?? pausedFallback.length ?? 0),
       failedCount: Number(p.failedCount ?? 0),
@@ -2237,6 +2258,9 @@ export async function loadLiveData(force = false) {
   if (liveLoading.value) return
   liveLoading.value = true
   liveFailures.value = {}
+  /* 显式刷新（Shell 顶栏）广播一次：页面自有域由各自 watch(liveRefreshSeq) 重跑，
+     与 boot 域同一入口、同一时刻（见 liveRefreshSeq 注释） */
+  if (force) liveRefreshSeq.value++
 
   const jobs: Record<string, () => Promise<unknown>> = {
     spans: async () => { liveSpans.value = await fetchLiveSpans() },

@@ -1,7 +1,7 @@
 /**
  * VirtualLearners P1 批量管理与生命周期视图（A1/A2）测试：
  * 分区筛选 chips（2026-10-04 自页头状态条迁入卡头）/ 活动会话 hint / 已截断提示 / 复选框批量条 /
- * 批量终止（profileIds → terminate 端点）/ 批量清理卡死与一键回收（reclaim-stale dryRun → 确认落地）/
+ * 批量终止（profileIds → terminate 端点）/ 批量清理无响应与一键回收（reclaim-stale dryRun → 确认落地）/
  * 进行中列直达座舱 / 卡死·失败 bad 色标注 / 批量删除标记待 2B
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -94,6 +94,7 @@ function makeVirtual(i: number, overrides: Record<string, unknown> = {}) {
     story: '背景',
     sessions: 2,
     storyCount: 1,
+    pathCount: 1,
     runningCount: 0,
     pausedCount: 0,
     failedCount: 0,
@@ -159,6 +160,9 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
 
   it('状态条已退役：分区筛选计数迁卡头 chips + 活动会话进完成率 hint + 已截断提示保留', async () => {
     liveVirtualSessionStats.value = { created: 3, running: 2, failed: 1, abandoned: 1, completed: 0, total: 7 };
+    // 2026-10-15：活动会话改与完成率卡同源（/stats 的 running/created，F20 已扣已暂停），
+    // 不再读列表 sessionStats（未扣减，与逐画像「进行中」打架）。数值仍 running 2 + created 3 = 5。
+    liveVirtualRunStats.value = { ...liveVirtualRunStats.value, running: 2, created: 3 };
     liveVirtualStaleCount.value = 2;
     liveVirtualsTotal.value = 80;
     liveVirtuals.value = [
@@ -182,7 +186,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).not.toContain('需关注');
     // 截断提示迁卡头 meta（与行数同格）
     expect(w.text()).toContain('共 80 人 · 当前显示前');
-    expect(w.text()).toContain('回收卡死（2）');
+    expect(w.text()).toContain('回收无响应（2）');
   });
 
   it('P1#19 运行统计三态：stats 拉取失败 → KPI「不可用」弱红可点重试（不再 0% 假绿）', async () => {
@@ -230,7 +234,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     // 1/26 = 3.846… → 4%；系统失败率 / 合计同为整数百分号
     expect(kpiNum('完成率')).toBe('4%');
     expect(kpiNum('系统失败率')).toBe('19%');
-    expect(w.text()).toContain('合计 69%');
+    expect(w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '系统失败率')?.attributes('title')).toContain('两类合计占 69%');
     expect(w.text()).not.toMatch(/3\.8461538/);
   });
 
@@ -260,7 +264,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     // getVirtualLabSettings 回执：limit=200 / inFlight=3
     // 2026-10-03：值与口径分栏——整串「在途 3 · 上限 200/分」在卡宽内必换行，把整排 KPI 拉伸到 180px
     expect(card.find('.mk-kpi__num').text()).toBe('3 / 200/分');
-    expect(card.find('.mk-kpi__hint').text()).toContain('在途 / 上限');
+    expect(card.find('.mk-kpi__hint').text()).toContain('每分钟上限');
   });
 
   it('P1#20 创建列：相对时间配绝对时间 title', async () => {
@@ -306,9 +310,9 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     // hint 必须写明分母与「人为终止另计」，并给出合计失败率（40%），运营不再把 30% 读成全部失败占比
     // 2026-10-08 走查 #3：分母由裸「全部」改为「全部会话」——同一张卡上方是会话口径、
     // 下方表格是学习者口径（行数 = 虚拟学习者），裸「全部」会被读成同一个分母。
-    expect(w.text()).toContain('系统失败 3 / 全部会话 10');
-    expect(w.text()).toContain('人为终止 1 另计');
-    expect(w.text()).toContain('合计 40%');
+    expect(w.text()).toContain('系统失败 3');
+    expect(w.text()).toContain('人为终止 1');
+    expect(w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '系统失败率')?.attributes('title')).toContain('两类合计占 40%');
     expect(w.text()).toContain('已完成 6 / 全部会话 10');
     // 表格分页行必须声明自己数的是学习者，与上方会话口径区分
     expect(w.text()).toContain('行数为虚拟学习者数');
@@ -342,11 +346,14 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.findAll('.vl-kpi .mk-kpi')).toHaveLength(5);
   });
 
-  it('KPI 卡内附挂 .mk-minibar 进度槽（完成率/并发），家族原语不私造', async () => {
+  /* 2026-10-16 用户拍板「kpi 面板内部进度条不要出现」：完成率/并发两张卡原先各挂一根
+     .mk-minibar 进度槽，读数已在数值位与 hint 说全，卡内再画轨道只是重复表达并撑高卡面。
+     这里把方向反过来钉住：KPI 卡内不许出现进度条（表格列内的进度条不受影响）。 */
+  it('KPI 卡内不出现进度条（读数类卡只有 label + 数值 + 一句口径）', async () => {
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    const bars = w.findAll('.vl-kpi .mk-kpi .mk-minibar');
-    expect(bars.length).toBe(2);
+    expect(w.findAll('.vl-kpi .mk-kpi').length).toBeGreaterThan(0);
+    expect(w.findAll('.vl-kpi .mk-kpi .mk-minibar').length).toBe(0);
   });
 
   it('无卡死时不出现一键回收按钮；未截断时不出现截断提示', async () => {
@@ -355,7 +362,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     liveVirtualsTotal.value = 1;
     liveVirtuals.value = [makeVirtual(1)];
     const w = await mountPage();
-    expect(w.text()).not.toContain('回收卡死');
+    expect(w.text()).not.toContain('回收无响应');
     expect(w.text()).not.toContain('已截断');
   });
 
@@ -369,7 +376,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     await nextTick();
     expect(w.text()).toContain('已选 1 人');
     expect(w.text()).toContain('批量终止');
-    expect(w.text()).toContain('批量清理卡死');
+    expect(w.text()).toContain('批量清理无响应');
     const del = findBtn(w, '批量删除');
     // 批量删除已实装（2B 完成）：仅受 batchActionBusy 互斥，不再处于占位禁用态
     expect((del.element as HTMLButtonElement).disabled).toBe(false);
@@ -440,7 +447,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(terminateMock).not.toHaveBeenCalled();
   });
 
-  it('批量清理卡死：dryRun 清单 → 确认 → dryRun:false 落地（均带选中 profileIds）', async () => {
+  it('批量清理无响应：dryRun 清单 → 确认 → dryRun:false 落地（均带选中 profileIds）', async () => {
     liveVirtuals.value = [makeVirtual(1, { stalledCount: 1 }), makeVirtual(2)];
     reclaimMock.mockResolvedValueOnce({
       data: { data: { dryRun: true, reclaimed: 0, skippedActiveLease: 0, sessions: [{ id: 'stale-1', status: 'running', currentStage: 'goal', staleMs: 3 * 3600 * 1000, updatedAt: 'x' }] } }
@@ -452,11 +459,11 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const boxes = w.findAll<HTMLInputElement>('tbody input[type="checkbox"]');
     await boxes[0].setValue(true);
     await nextTick();
-    findBtn(w, '批量清理卡死').trigger('click');
+    findBtn(w, '批量清理无响应').trigger('click');
     await flushPromises();
     expect(reclaimMock).toHaveBeenNthCalledWith(1, { dryRun: true, profileIds: ['vl-1'] });
     // Teleport 到 body 后，modal 内容在 document.body 而非 wrapper 内
-    expect(document.body.textContent).toContain('批量清理卡死会话');
+    expect(document.body.textContent).toContain('批量清理无响应会话');
     expect(document.body.textContent).toContain('stale-1');
     expect(document.body.textContent).toContain('3.0 小时无写入');
     const confirmBtn = Array.from(document.body.querySelectorAll('button')).find(b => b.textContent?.includes('确认回收'));
@@ -472,11 +479,11 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     reclaimMock.mockResolvedValueOnce({ data: { data: { dryRun: true, reclaimed: 0, skippedActiveLease: 0, sessions: [{ id: 'stale-9', status: 'running', currentStage: 'learn', staleMs: 7200000, updatedAt: 'x' }] } } });
     reclaimMock.mockResolvedValueOnce({ data: { data: { dryRun: false, reclaimed: 1, skippedActiveLease: 0, sessions: [] as Array<Record<string, unknown>> } } });
     const w = await mountPage();
-    findBtn(w, '回收卡死（3）').trigger('click');
+    findBtn(w, '回收无响应（3）').trigger('click');
     await flushPromises();
     expect(reclaimMock).toHaveBeenNthCalledWith(1, { dryRun: true });
     // Teleport 到 body 后，modal 内容在 document.body
-    expect(document.body.textContent).toContain('一键回收卡死会话');
+    expect(document.body.textContent).toContain('一键回收无响应会话');
     const confirmBtn2 = Array.from(document.body.querySelectorAll('button')).find(b => b.textContent?.includes('确认回收'));
     if (confirmBtn2) await confirmBtn2.dispatchEvent(new Event('click'));
     await flushPromises();
@@ -508,11 +515,11 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
       }
     });
     const w = await mountPage();
-    findBtn(w, '回收卡死（2）').trigger('click');
+    findBtn(w, '回收无响应（2）').trigger('click');
     await flushPromises();
     const body = document.body.textContent || '';
     // 弹窗候选数与按钮角标同数（2），并给出豁免分项
-    expect(body).toContain('扫描到 2 个超过回收阈值的无响应候选会话（与页头角标同源）');
+    expect(body).toContain('扫描到 2 个超过回收阈值的无响应候选会话（与「回收无响应」按钮同一口径）');
     expect(body).toContain('可回收 0 个');
     expect(body).toContain('豁免 2 个');
     // 豁免项逐条可见 + 原因标签
@@ -605,6 +612,27 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     await nextTick();
     await row.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '查看来源卡')!.trigger('click');
     expect(openSubPageMock).toHaveBeenCalledWith('card', 'vl-7');
+    w.unmount();
+  });
+
+  it('故事 / 路径列：两个数并置，多路径学习者的阶段条只交代最近一次会话', async () => {
+    liveVirtuals.value = [
+      makeVirtual(1, {
+        storyCount: 2,
+        pathCount: 5,
+        stageProgress: { goalReady: true, pathReady: true, learnStarted: true, taskDone: 1, taskTotal: 25 }
+      })
+    ];
+    const w = await mountPage();
+    expect(w.findAll('thead th').map((th) => th.text())).toContain('故事 / 路径');
+    const cell = w.find('tbody tr td[title^="故事池"]');
+    expect(cell.exists(), '缺少故事 / 路径列').toBe(true);
+    expect(cell.text().replace(/\s+/g, '')).toBe('2/5');
+    // 一个故事可衍生多条路径：路径数大于故事数不是数据错，title 必须交代设计语义
+    expect(cell.attributes('title')).toContain('已生成路径 5 条');
+    expect(cell.attributes('title')).toContain('一个故事可衍生多条路径');
+    // 阶段条只对应一条会话（多路径时点明总量），避免把「1 条路径在跑」读成「只有 1 条路径」
+    expect(w.find('.vl-stage').attributes('title')).toContain('共 5 条路径');
     w.unmount();
   });
 });

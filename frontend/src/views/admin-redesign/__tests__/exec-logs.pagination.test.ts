@@ -405,6 +405,67 @@ describe('P1#24：执行日志筛选（15m/1h 自定义窗 / 失败 pill 单源 
     await flushPromises();
     expect((h.reload.mock.calls.at(-1)![0] as Record<string, unknown>).status).toBeUndefined();
   });
+
+  it('自定义时间段：始末换算 startTime/endTime 下发（不传 timeRange，后端枚举会 400）', async () => {
+    liveLogsTotal.value = 1;
+    const { w, router } = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    await w.find('select[aria-label="时间范围筛选"]').setValue('custom');
+    await flushPromises();
+    // 切入自定义：按上一档（默认 today）回填开始输入，结束留空
+    const start = w.find('input[aria-label="开始时间"]');
+    const end = w.find('input[aria-label="结束时间"]');
+    expect(start.exists()).toBe(true);
+    expect(end.exists()).toBe(true);
+    await start.setValue('2026-10-01T09:00');
+    await end.setValue('2026-10-02T18:30');
+    await end.trigger('change');
+    await flushPromises();
+    const q = h.reload.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(q.timeRange).toBeUndefined();
+    expect(typeof q.startTime).toBe('string');
+    expect(typeof q.endTime).toBe('string');
+    // 本地 09:00 → ISO 无时区漂移（parse 后回到同一本地时刻）
+    const back = new Date(q.startTime as string);
+    expect(back.getHours()).toBe(9);
+    expect(back.getDate()).toBe(1);
+    // URL 同步：range=custom + from/to
+    expect(router.currentRoute.value.query.range).toBe('custom');
+    expect(router.currentRoute.value.query.from).toBe('2026-10-01T09:00');
+    expect(router.currentRoute.value.query.to).toBe('2026-10-02T18:30');
+    w.unmount();
+  });
+
+  it('自定义时间段：开始晚于结束 = 矛盾区间，行内报错且不下发查询', async () => {
+    const { w } = await mountExecAt('/admin/execution-logs');
+    await nextTick();
+    await w.find('select[aria-label="时间范围筛选"]').setValue('custom');
+    await flushPromises();
+    const start = w.find('input[aria-label="开始时间"]');
+    const end = w.find('input[aria-label="结束时间"]');
+    await start.setValue('2026-10-05T10:00');
+    await end.setValue('2026-10-01T10:00');
+    await end.trigger('change');
+    await flushPromises();
+    expect(w.text()).toContain('开始时间需早于结束时间');
+    // 矛盾区间不应把「开始晚于结束」这一对下发：沿用上一次已生效查询（只有开始、无结束）
+    const q = h.reload.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(q.endTime).toBeUndefined();
+    expect(q.startTime).toBe(new Date('2026-10-05T10:00').toISOString());
+    w.unmount();
+  });
+
+  it('深链 ?range=custom&from&to 落位（刷新 / 分享可还原始末）', async () => {
+    const { w } = await mountExecAt('/admin/execution-logs?range=custom&from=2026-10-01T09:00&to=2026-10-02T18:30');
+    await flushPromises();
+    expect((w.find('input[aria-label="开始时间"]').element as HTMLInputElement).value).toBe('2026-10-01T09:00');
+    expect((w.find('input[aria-label="结束时间"]').element as HTMLInputElement).value).toBe('2026-10-02T18:30');
+    const q = h.reload.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(q.timeRange).toBeUndefined();
+    expect(typeof q.startTime).toBe('string');
+    expect(typeof q.endTime).toBe('string');
+    w.unmount();
+  });
 });
 
 /* ---------- 2026-10-04 状态条退役：页头 .mk-status 整块下线，读数迁页首 KPI 卡带、

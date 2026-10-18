@@ -67,10 +67,11 @@
             <!-- 真实/测试互斥视角（2026-10-10 拍板方言；2026-10-15 反馈列表接入——
                  后端默认口径改为仅真实，测试视角显式切换，与运营待办/内容管理同判据） -->
             <DataScopeToggle v-model="includeTest" />
-            <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 评论 / 任务" />
             <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           </div>
           <span class="mk-card__head-right">
+            <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
+            <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 评论 / 任务" />
             <span class="mk-card__meta" :title="includeTest ? '只看虚拟学习者与测试账号的反馈' : '只看真实用户的反馈'">（{{ includeTest ? '测试' : '真实' }}）{{ filtered.length }} / {{ rows.length }}</span>
           </span>
         </div>

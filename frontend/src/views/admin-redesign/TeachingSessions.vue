@@ -3,11 +3,9 @@
     <!-- 教学会话页头（newui/admin pagehead；embedded 由宿主承载，本组件不渲染页头）。
          本页 20s 静默轮询，手动「刷新」钮与之重复已撤（对齐执行日志/健康中心先例：
          轮询页不放刷新钮）；拉取失败走错误条重试钮（refreshNow 仍被错误态与宿主联动使用）。
-         统计口径（2026-10-05 分段条升卡装）：全页统计带 = 列表卡上方 MkDistBand 唯一一处；
-         计数每个只出现一次——加载/筛选/总量/截断住卡头 meta，待关注 / 缺总结 / 有建议住
-         卡头 chips（后两者无分布组覆盖），进行中 chip 是 active 单状态 ≠ 分布条
-         「进行中」四状态合并档（两个不同口径，见各自 title） -->
-    <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 状态分布与需关注识别">
+         统计口径（2026-10-17 分布带退役后）：不再有整页统计带；观测读数住 KPI 卡
+         （需关注 / 缺总结 / 有建议 / 完结率），筛选出口住卡头 chips，每个数只出现一次。 -->
+    <MkPageHead v-if="!embedded" title="教学会话" sub="会话状态实时监视 · 需关注识别与完课质量">
       <template #actions>
         <!-- 整组统一口径开关（2026-10-04 用户拍板：撤页头刷新钮，学习组六页同一位、同一状态） -->
         <DataScopeToggle v-model="includeTest" />
@@ -50,48 +48,32 @@
         hint="含完课调整 / 复习建议"
         :title="KPI_LIST_SCOPE_TITLE"
       />
+      <!-- 2026-10-17：分布带退役，完结率从带副文升独立 KPI（两位小数 → 四舍五入） -->
+      <MkKpi
+        label="完结率"
+        :value="completionRate"
+        hint="已完成 / 已加载会话"
+        :title="`已完成会话占已加载会话的比例（窗口最多最近 ${LIST_LIMIT} 条），四舍五入到整数`"
+      />
     </section>
 
-    <!-- 首载占位（2026-10-06 审核 #44）：KPI 带与分布条以 rows.length 为渲染条件，
-         首载整块不存在，数据到达后两块同时插入把主表卡下推约 230px；
-         改为首载渲染等高 .mk-skeleton 占位（R3 卡片区加载态），主表卡位置不跳 -->
+    <!-- 首载占位（2026-10-06 审核 #44）：KPI 带以 rows.length 为渲染条件，
+         首载整块不存在，数据到达后插入把主表卡下推；改为首载渲染等高 .mk-skeleton 占位
+         （R3 卡片区加载态），主表卡位置不跳。2026-10-17 分布带退役后只补 KPI 一排。 -->
     <section
       v-if="!embedded && refreshing && !rows.length && !loadFailed"
       class="mk-kpi-grid"
       aria-hidden="true"
     >
-      <div v-for="n in 3" :key="n" class="mk-skeleton ts-skel-kpi"></div>
+      <div v-for="n in 4" :key="n" class="mk-skeleton ts-skel-kpi"></div>
     </section>
-    <div
-      v-if="!embedded && refreshing && !rows.length && !loadFailed"
-      class="mk-skeleton ts-skel-distband"
-      aria-hidden="true"
-    ></div>
 
     <!-- G5（2026-10-10）：深链未命中提示由常驻 alert 横幅改为一次性 toast（见 script 区 watch），
          此前横幅无关闭出口、?session= 不清就永久挂着 -->
 
-    <!-- 会话状态分布（教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」：回到卡上方
-         页面级，与旧构成带同位）：十状态按收束语义归四组 + 完结率（组内合并口径在分段悬停披露，
-         完结率随副标）；枚举外取值归「其它」段（仅实际出现时追加）。数据 = 已加载列表行
-         （rows，最近 LIST_LIMIT 条加载窗口），非后端全量口径。分段/图例点击 = 只看该组
-         （与「高级筛选」弹层的单状态下拉互斥切换）；embedded 时隐藏（宿主承载域计数）；
-         无数据不留空带。2026-10-14 用户：教学组各页这条分布带一律默认折叠（表格才是各页主体）——
-         折叠走共享 .mk-section__summary 原语，收起仍露标题与口径副文；本页收起时卡头
-         「异常 / 有建议」快捷 chips 仍是常显的筛选出口 -->
-    <MkDistBand
-      v-if="!embedded && rows.length"
-      card
-      collapsible
-      class="ts-distband"
-      title="会话状态分布"
-      :sub="tsBandSub"
-      unit="条"
-      aria-label="按会话状态组筛选"
-      :bins="tsBandBins"
-      :active-key="bandGroup"
-      @select="toggleBandGroup"
-    />
+    <!-- 会话状态分布带已退役（2026-10-17 用户走查「教学会话也用不到吧」）：
+         四组里此刻两组为 0，条上只剩两段；而进行中 / 异常 / 缺总结 在卡头 chips 已有入口，
+         精确状态在「高级筛选」下拉里可选。完结率升独立 KPI 卡。 -->
 
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
@@ -134,10 +116,11 @@
               @click="abnormalOnly = !abnormalOnly"
             >异常<span class="mk-pill__count">{{ abnormalSessionCount }}</span></button>
           </div>
-          <MkFilterSearch v-model="keyword" placeholder="搜索主题 / 用户 / 邮箱 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
+          <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
+          <MkFilterSearch v-model="keyword" placeholder="搜索主题 / 用户 / 邮箱 / ID" />
           <!-- 口径切换/刷新加载反馈（2026-10-06 审核 F2-3）：列表接口实测可滞后数秒，
                此前全程无加载提示；这里给一处文字化「正在加载」（MkLoading 共享原语，
                含 role=status）。常驻卡头，切换口径时位置不跳。 -->
@@ -399,7 +382,6 @@ import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
-import MkDistBand from '@/components/mk/MkDistBand.vue'
 
 /* 文案单源（R6 复读单源化）：两个 KPI 卡的口径悬停释共用一份 */
 const KPI_LIST_SCOPE_TITLE = '统计当前列表中的会话'
@@ -710,8 +692,10 @@ const pills = computed(() => {
       count: all.filter((r) => r.status === 'active').length,
       title: '只含进行中单一状态。分布条「进行中」还含初始化 / 暂停 / 收尾中，范围更宽'
     },
-    { id: 'attention' as const, label: '待关注', count: attentionCount, title: '点击只看该组，再点取消' },
-    { id: 'missing' as const, label: '缺总结', count: missingWrapupCount, title: '点击只看该组，再点取消' }
+    /* 2026-10-16 KPI 审计补完：本页 KPI 叫「需关注」、这枚筛选 chip 叫「待关注」，同一件事两个词。
+       全站「需关注」42 处、「待关注」7 处，按多数统一为「需关注」（id 不变，筛选口径不受影响）。 */
+    { id: 'attention' as const, label: '需关注', count: attentionCount, title: '只看需关注的会话组' },
+    { id: 'missing' as const, label: '缺总结', count: missingWrapupCount, title: '只看缺总结的会话组' }
   ]
 })
 /* 状态筛选选项（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
@@ -738,48 +722,13 @@ const abnormalSessionCount = computed(() =>
    分布条段 = 互斥切片（一次只看一组）。 */
 const abnormalOnly = ref(false)
 
-/* ===== 会话状态分布（2026-10-04 晚贴表分布条，构成带换装 MkDistBand）=====
-   十状态按收束语义归四组 + 枚举外归「其它」段（仅实际出现时追加）；完结率随副标披露。
-   数据 = 已加载列表行（rows，最近 LIST_LIMIT 条加载窗口），非后端全量口径。
-   点击分段/图例 = 只看该组（bandGroup，互斥开关）；与「高级筛选」弹层的单状态
-   statusFilter 互斥切换（同属「状态范围」一个维度，两控件不同粒度）。 */
-const TS_BAND_GROUPS = [
-  { key: 'running', label: '进行中', tone: 'var(--mk-blue)', hint: '含初始化 / 暂停 / 收尾中', statuses: ['initializing', 'active', 'paused', 'finalizing'] },
-  { key: 'completed', label: '已完成', tone: 'var(--mk-green)', hint: '终态', statuses: ['completed'] },
-  { key: 'abnormal', label: '异常终态', tone: 'var(--mk-red)', hint: '失败 / 超时 / 收尾失败合计', statuses: ['failed', 'finalization_failed', 'timeout'] },
-  { key: 'retired', label: '已废弃', tone: 'var(--mk-faint)', hint: '含已被替代', statuses: ['discarded', 'superseded'] }
-] as const
-const tsBandBins = computed(() => {
-  const known = new Set(statusOptions.map((s) => s.value))
-  const cnt = (pred: (s: string) => boolean) => rows.value.filter((r) => pred(r.status)).length
-  // 显式放宽为 string：可变的「其它」段（枚举外聚合）要与 as const 组档同数组
-  const bins: Array<{ key: string; label: string; tone: string; hint: string; n: number }> = TS_BAND_GROUPS.map((g) => ({
-    key: g.key, label: g.label, tone: g.tone, hint: g.hint,
-    n: cnt((s) => (g.statuses as readonly string[]).includes(s))
-  }))
-  const other = cnt((s) => !known.has(s))
-  if (other > 0) bins.push({ key: 'other', label: '其它', tone: 'var(--mk-faint)', hint: '其它未列出的状态', n: other })
-  return bins
-})
-const tsBandSub = computed(() =>
-  // 尾部补一句口径区分：下方快筛 chip「进行中」只算 status=active（单状态），
-  // 本分布条的「进行中」是四状态合并档。两者同屏同为「进行中」却数字不同，
-  // 此前只写在 title 悬停里（走查：进行中 0 与 进行中 2 并排、读者判不出哪个为真）。
-  `共 ${rows.value.length} 条（最多显示最近 ${LIST_LIMIT} 条） · 完结率 ${((rows.value.filter((r) => r.status === 'completed').length / (rows.value.length || 1)) * 100).toFixed(2)}% · 「进行中」含初始化 / 暂停 / 收尾中，比快筛更宽`
-)
-const bandGroup = ref<string | null>(null)
-/** 「其它」段 = 枚举外取值聚合，不能按组内枚举等值判断 */
-function inBandGroup(status: string, key: string): boolean {
-  if (key === 'other') return !statusOptions.some((s) => s.value === status)
-  const group = TS_BAND_GROUPS.find((g) => g.key === key)
-  return !!group && (group.statuses as readonly string[]).includes(status)
-}
-function toggleBandGroup(key: string) {
-  bandGroup.value = bandGroup.value === key ? null : key
-  if (bandGroup.value) statusFilter.value = ''
-}
-watch(statusFilter, (v) => {
-  if (v) bandGroup.value = null // 单状态（高级筛选）与状态组（分布条）互斥切换
+/* ===== 完结率（2026-10-17 分布带退役后从带副文迁入 KPI）=====
+   口径 = 已加载会话窗口（rows，最近 LIST_LIMIT 条），非后端全量；后端两位小数的
+   46.15% 在这里四舍五入成 46%，避免小样本假精度。 */
+const completionRate = computed(() => {
+  const total = rows.value.length
+  if (!total) return '—'
+  return `${Math.round((rows.value.filter((r) => r.status === 'completed').length / total) * 100)}%`
 })
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
@@ -800,8 +749,6 @@ const filtered = computed(() => {
   if (pill.value === 'attention') list = list.filter((r) => r.attention !== 'low')
   if (pill.value === 'missing') list = list.filter(isMissingWrapup)
   if (abnormalOnly.value) list = list.filter((r) => ABNORMAL_STATUSES.has(r.status))
-  const bg = bandGroup.value
-  if (bg) list = list.filter((r) => inBandGroup(r.status, bg))
   if (statusFilter.value) {
     list = list.filter((r) => r.status === statusFilter.value)
   }
@@ -818,12 +765,11 @@ const filtered = computed(() => {
   return sortTsRows(list)
 })
 
-const isFiltered = computed(() => pill.value !== 'all' || abnormalOnly.value || !!bandGroup.value || !!statusFilter.value || !!dateFilter.value || !!keyword.value.trim() || onlyAdvisory.value)
+const isFiltered = computed(() => pill.value !== 'all' || abnormalOnly.value || !!statusFilter.value || !!dateFilter.value || !!keyword.value.trim() || onlyAdvisory.value)
 function clearFilters() {
   const hadOnlyAdvisory = onlyAdvisory.value
   pill.value = 'all'
   abnormalOnly.value = false
-  bandGroup.value = null
   statusFilter.value = ''
   dateFilter.value = ''
   keyword.value = ''
@@ -858,12 +804,6 @@ useListQueryState(
     pageSize,
     allowedPills: ['all', 'active', 'attention', 'missing'],
     extra: [
-      {
-        key: 'band',
-        get: () => bandGroup.value || '',
-        set: (v) => (bandGroup.value = v || null),
-        allowed: ['running', 'completed', 'abnormal', 'retired', 'other']
-      },
       { key: 'abn', get: () => (abnormalOnly.value ? '1' : ''), set: (v) => (abnormalOnly.value = v === '1'), allowed: ['1'] },
       {
         key: 'adv',
@@ -881,7 +821,7 @@ const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([pill, statusFilter, dateFilter, keyword, tsSortKey, tsSortDir, abnormalOnly, bandGroup, onlyAdvisory, includeTest], () => {
+watch([pill, statusFilter, dateFilter, keyword, tsSortKey, tsSortDir, abnormalOnly, onlyAdvisory, includeTest], () => {
   page.value = 1
 })
 
@@ -1018,9 +958,9 @@ defineExpose({ refreshNow })
 </script>
 
 <style scoped>/* 嵌入模式（宿主学习会话页 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
-/* 首载占位（#44）：等比 MkKpi 卡（16px 内边距 + 三行内容 ≈ 114px）与 MkDistBand 卡（≈ 120px） */
+/* 首载占位（#44）：等比 MkKpi 卡一排（16px 内边距 + 三行内容 ≈ 114px）。
+   2026-10-17 分布带退役，原 ts-skel-distband 占位随之下线 */
 .ts-skel-kpi { height: 114px; border-radius: var(--mk-radius-xl); }
-.ts-skel-distband { height: 120px; border-radius: var(--mk-radius-xl); }
 .ts-embedded { flex: 1; min-height: 0; overflow: hidden; }/* 总结预览行（P1-2）：副行语义走 .mk-cell-sub（截断/灰阶原语承担）；页私有只留 help 悬停。
    2026-10-14 用户质询「怎么会有 emoji」：原 ::before 给副行加了个记事本 emoji 前缀，且对所有带
    topicSummary 的行生效——包括异常会话那条降级替代文案（显示的是兜底读数「开始于 …」，加总结
@@ -1050,8 +990,8 @@ defineExpose({ refreshNow })
   white-space: nowrap;
 }/* 异常堆积（合计 ≥ 阈值）chip 转红：原状态条 mk-status--bad 的同一告警，阈值在 chip title 披露。
    选中态（筛选生效中）由模板守卫——abnormalOnly 时不再加本类，让位给 .mk-pill--active 的蓝 */
-/* 分布条在卡上方页面级（2026-10-05 用户拍板「分段条在上」）：卡片内的贴条 padding/下边框随撤，
-   页面级间距由 .mk-page 的 --mk-stack-gap 统一供。ts-distband 类保留作测试与定位钩子 */
+/* 分布带已退役（2026-10-17）：原页面级 .ts-distband 与类名一并下线，状态筛选在卡头 chips
+   与「高级筛选」下拉；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
 .ts-abn-chip--heap {
   color: var(--mk-red);
   border-color: color-mix(in srgb, var(--mk-red) 45%, var(--mk-line));

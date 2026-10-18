@@ -91,6 +91,13 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     const dateEl = stageDateEl(wrapper);
     expect(dateEl.text()).toBe('8月13日');
     expect(dateEl.attributes('title')).toContain('创建 08-12 → 澄清中 08-13');
+    /* 教学组列序统一（2026-10-16）：身份 → 用户 → 状态 → 过程 → 时间 → 操作。
+       原先把「最近活动」紧跟状态列（当状态伴侣），与同组其它页「时间列在过程之后」不一致；
+       现移到路径列之后、创建时间之前，两列时间收在表尾。约束条件默认隐藏（MkCols），不进可见表头。 */
+    const ths = wrapper.findAll('thead th').map((t) => t.text());
+    expect(ths.slice(0, 6)).toEqual(['目标摘要', '用户', '状态 / 阶段', '澄清进度', '路径', '最近活动']);
+    expect(ths.at(-2)).toBe('创建时间');
+    expect(ths.at(-1)).toBe('操作');
     const dots = cell.findAll('.gc-stage-cell__dot');
     expect(dots).toHaveLength(4);
     expect(dots.filter((d) => d.classes().includes('is-on'))).toHaveLength(2);
@@ -115,8 +122,8 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     });
     const wrapper = await mountLive();
     const cell = wrapper.find('.gc-stage-cell');
-    // P3（2026-10-04 全站评审）：完成态阶段词与状态列同词，徽章不再出词——列里只剩点条
-    expect(cell.text()).not.toContain('已完成');
+    // 2026-10-15 合并列：终态行出结果词「已完成」（旧两列实现里阶段列压制该词，合并后单格只说一次）
+    expect(cell.text()).toContain('已完成');
     const dateEl = stageDateEl(wrapper);
     expect(dateEl.text()).toBe('8月14日');
     expect(dateEl.attributes('title')).toContain('创建 08-12 → 已完成 08-14');
@@ -197,7 +204,7 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     wrapper.unmount();
   });
 
-  it('live：状态列只在终态/异常出词——进行中行留「—」不再与阶段列同出蓝胶囊（2026-10-15 用户拍板）', async () => {
+  it('live：合并列只在措得出阶段说不出的话时出结果词（2026-10-15 用户拍板）', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -212,14 +219,14 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
       }
     });
     const wrapper = await mountLive();
-    const rowText = (i: number) => wrapper.findAll('tbody tr')[i].text();
-    // 进行中行：状态列不再出「进行中」词，改留带解释的「—」；阶段词仍由阶段列承载
-    expect(rowText(0)).not.toContain('进行中')
-    expect(wrapper.findAll('[title="会话进行中，进度见「阶段」列"]')).toHaveLength(1)
-    // 终态/异常行：状态列照常出词（这些是阶段列表达不了的语义）
-    expect(rowText(1)).toContain('已完成')
-    expect(rowText(2)).toContain('失败')
-    expect(rowText(3)).toContain('已取消')
+    const cells = wrapper.findAll('.gc-stage-cell');
+    // 进行中行：只出阶段词（澄清中）+ 过程条，不出「进行中」状态词（黑名单口径，同色蓝胶囊复读已消）
+    expect(cells[0].text()).toContain('澄清中');
+    expect(cells[0].text()).not.toContain('进行中');
+    // 终态/异常行：结果词压过阶段词（这些是阶段表达不了的终止方式）
+    expect(cells[1].text()).toContain('已完成');
+    expect(cells[2].text()).toContain('失败');
+    expect(cells[3].text()).toContain('已取消');
     wrapper.unmount();
   });
 });

@@ -24,6 +24,7 @@ import {
   createVirtualLearnerProfile,
   listProfilesWithSessionSamples,
   countProfiles,
+  groupPathCountsByProfile,
 } from '../../services/virtual-lab/virtual-learner-profile.repo';
 import {
   findSessionById,
@@ -83,6 +84,9 @@ import {
   ensureCardKey,
   getCardWallIndex,
   getCardDetail,
+  getCardTaskGroups,
+  cloneCardsToLearners,
+  CLONE_MAX_ITEMS,
   attachMaterialsToLearner,
 } from '../../services/virtual-lab/card-import.service';
 import { setRequestContext, getRequestContext } from '../../gateway/api-gateway/context';
@@ -1527,7 +1531,7 @@ router.get('/', async (req: Request, res) => {
 
     // 全量口径聚合（P1-1/D3）：运行中/失败/卡死分区与状态条不再基于 50 条会话样本
     const profileIds = profiles.map(p => p.id);
-    const [statusAgg, perProfileAgg, staleSessions, staleCandidates, runningSessionsAll] = await Promise.all([
+    const [statusAgg, perProfileAgg, staleSessions, staleCandidates, runningSessionsAll, pathAgg] = await Promise.all([
       getSessionStatusAggregates(),
       profileIds.length
         ? getPerProfileStatusAggregates(profileIds)
@@ -1540,6 +1544,8 @@ router.get('/', async (req: Request, res) => {
       profileIds.length
         ? findRunningSessionsByProfiles(profileIds)
         : Promise.resolve([]),
+      // 每个画像的路径数（distinct learningPathId）：一个故事可衍生多条路径，同一路径的多次会话不重复计
+      groupPathCountsByProfile(profileIds),
     ]);
     const countByStatus = (status: string) => statusAgg.find(s => s.status === status)?._count?._all ?? 0;
     const runningByProfile = new Map<string, number>();
@@ -1574,6 +1580,14 @@ router.get('/', async (req: Request, res) => {
       staleByProfile.set(s.virtualProfileId, (staleByProfile.get(s.virtualProfileId) ?? 0) + 1);
     }
     const staleTotal = staleCandidates.filter((s) => !isTeachingPausedSession(s.stageResults)).length;
+
+    /* 路径数 = distinct learningPathId：故事是复杂情景，一次运行生成一条路径，一个故事可衍生多条。
+       列表的「故事 / 路径」列和状态条口径都靠它把「多路径学习者」与「单路径」区分开。 */
+    const pathCountByProfile = new Map<string, number>();
+    for (const row of pathAgg) {
+      if (!row.learningPathId) continue;
+      pathCountByProfile.set(row.virtualProfileId, (pathCountByProfile.get(row.virtualProfileId) ?? 0) + 1);
+    }
     
     const formattedProfiles = profiles.map(p => {
       const profileData = JSON.parse(p.profile || '{}');
@@ -1593,8 +1607,10 @@ router.get('/', async (req: Request, res) => {
       );
       const runningSessions = sessionSample.filter((s) => s.status === 'running' && !autopilotStoppedIds.has(s.id));
       const pausedSessions = sessionSample.filter((s) => s.status === 'running' && autopilotStoppedIds.has(s.id));
-      // 阶段进度（轴 B）：从最新会话的 stageResults 推导 Goal/Path/Learn 三态 + 任务进度
-      const latestSession = sessionSample[0];
+      // 阶段进度（轴 B）：优先取「正在跑 / 已暂停」的会话——学习者可能有多个故事、多条路径，
+      // 直接用 sessionSample[0]（最新创建）会把已完成的老会话画成当前进度，且状态徽章说的是
+      // 另一个会话在跑。没有活跃会话时才回落到最近一次会话（历史进度，前端 title 标明「最近一次」）。
+      const latestSession = runningSessions[0] || pausedSessions[0] || sessionSample[0];
       let stageProgress: { goalReady: boolean; pathReady: boolean; learnStarted: boolean; taskDone: number; taskTotal: number } | null = null;
       if (latestSession) {
         let sr: Record<string, any> = {};
@@ -1652,6 +1668,9 @@ router.get('/', async (req: Request, res) => {
         })),
         sessionCount: p._count?.sessions ?? sessionSample.length,
         storyCount: storyPool.length,
+        /* 已生成的路径数（distinct learningPathId）：故事是复杂情景、路径是走出来的学习路线，
+           一个故事可衍生多条路径，故与故事条数不等是正常状态 */
+        pathCount: pathCountByProfile.get(p.id) ?? 0,
         runningCount: runningByProfile.get(p.id) ?? 0,
         // 已暂停自动驾驶的会话数（autopilot=stopped，会话数据保留）
         pausedCount: pausedByProfile.get(p.id) ?? 0,
@@ -4076,6 +4095,68 @@ router.get('/cards/:profileId/detail', async (req: Request, res) => {
   } catch (error) {
     logger.error('卡详情失败:', error);
     res.status(500).json({ success: false, error: (error as Error).message || '卡详情失败' });
+  }
+});
+
+/**
+ * 卡的任务清单（2026-10-16「卡 → 虚拟学习者」创建面板的数据源）：逐卡给故事池任务
+ * （id + 标题 + 开场白）。读档案原始 storyPool——卡详情的展示映射会丢 goalSeed /
+ * problemKnowledge，照它勾选再克隆，派生实例的任务会残。
+ * GET /api/admin/virtual-learners/cards/tasks?ids=<profileId,profileId>
+ */
+router.get('/cards/tasks', async (req: Request, res) => {
+  try {
+    const ids = String(req.query.ids || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!ids.length) {
+      return res.status(400).json({ success: false, error: '缺少 ids（卡 id 列表）' });
+    }
+    const groups = await getCardTaskGroups(ids);
+    res.json({ success: true, data: { groups } });
+  } catch (error) {
+    logger.error('卡任务清单失败:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || '卡任务清单失败' });
+  }
+});
+
+/**
+ * 卡 → 虚拟学习者（2026-10-16 用户拍板「卡库是身份池，选卡 + 勾任务 → 创建虚拟学习者」）。
+ * 派生语义 = 身份克隆：新账号 + 新档案，人设整体带走，故事池只带勾选的任务，卡号重算。
+ * 批量：一次 1..CLONE_MAX_ITEMS 张卡；逐项返回结果（部分失败不整体回滚，投产半成不报成整单失败）。
+ * POST /api/admin/virtual-learners/cards/clone
+ */
+router.post('/cards/clone', async (req: Request, res) => {
+  try {
+    const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+    const items = rawItems
+      .map((it: unknown) => {
+        const o = (it || {}) as Record<string, unknown>;
+        return {
+          profileId: String(o.profileId || '').trim(),
+          storyIds: Array.isArray(o.storyIds) ? o.storyIds.map(String) : undefined,
+        };
+      })
+      .filter((it: { profileId: string }) => it.profileId);
+    if (!items.length) {
+      return res.status(400).json({ success: false, error: '请先选择要派生的卡' });
+    }
+    if (items.length > CLONE_MAX_ITEMS) {
+      return res.status(400).json({ success: false, error: `一次最多派生 ${CLONE_MAX_ITEMS} 张卡` });
+    }
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim() : undefined;
+    const data = await cloneCardsToLearners(items, note || undefined);
+    logger.info('卡派生虚拟学习者', {
+      requested: items.length,
+      created: data.created.length,
+      failed: data.failed.length,
+      createdBy: req.user?.userId,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error('卡派生失败:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || '卡派生失败' });
   }
 });
 

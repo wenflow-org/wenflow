@@ -225,27 +225,33 @@
         </span>
       </div>
       <div class="cp-cardbody">
+        <!-- 2026-10-15 用户走查重设计：原实现是「1380px 宽卡里四枚 20px 圆点各自居中」，
+             水平空间几乎全空、读数缩在 12.5px 灰字里（用户原话「很不好看，利用率也低」）。
+             改为四枚等宽阶段瓦片：每票一条状态色顶轨 + 状态标记 + 阶段名（正文档）+ 真实读数，
+             既填满卡宽，又把「推进到哪一步、每步什么读数」一屏读完。瓦片间用 chevron 连成流水线。 -->
         <div class="cp-stepper" role="tablist" aria-label="阶段推进" @keydown="onStepKeydown">
-          <button
-            v-for="(st, i) in stageFlow"
-            :key="st"
-            :id="`cp-tab-${st}`"
-            type="button"
-            role="tab"
-            class="cp-stp"
-            :class="`cp-stp--${stepState(st)}`"
-            :aria-selected="activeTab === st"
-            :aria-controls="`cp-tabpanel-${st}`"
-            :tabindex="activeTab === st ? 0 : -1"
-            :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `打开「${stageLabel(st)}」页签`"
-            :disabled="isBlackbox"
-            @click="selectStageTab(st)"
-          >
-            <span class="cp-stp__line" aria-hidden="true"></span>
-            <span class="cp-stp__dot" aria-hidden="true">{{ stepState(st) === 'done' ? '✓' : i + 1 }}</span>
-            <span class="cp-stp__name">{{ stageLabel(st) }}</span>
-            <span class="cp-stp__meta">{{ stepMeta(st) }}</span>
-          </button>
+          <template v-for="(st, i) in stageFlow" :key="st">
+            <span v-if="i" class="cp-stepper__arrow" aria-hidden="true"></span>
+            <button
+              :id="`cp-tab-${st}`"
+              type="button"
+              role="tab"
+              class="cp-stp"
+              :class="`cp-stp--${stepState(st)}`"
+              :aria-selected="activeTab === st"
+              :aria-controls="`cp-tabpanel-${st}`"
+              :tabindex="activeTab === st ? 0 : -1"
+              :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `打开「${stageLabel(st)}」页签`"
+              :disabled="isBlackbox"
+              @click="selectStageTab(st)"
+            >
+              <span class="cp-stp__dot" aria-hidden="true">{{ stepState(st) === 'done' ? '✓' : i + 1 }}</span>
+              <span class="cp-stp__body">
+                <span class="cp-stp__name">{{ stageLabel(st) }}</span>
+                <span class="cp-stp__meta">{{ stepMeta(st) }}</span>
+              </span>
+            </button>
+          </template>
         </div>
       </div>
     </section>
@@ -574,7 +580,7 @@
                       <span class="cp-lesson-wrapup__section-title">知识点掌握</span>
                       <div v-for="k in lessonWrapup.knowledgeItems" :key="k.name" class="cp-lesson-wrapup__kp">
                         <span class="cp-lesson-wrapup__kp-name">{{ k.name }}</span>
-                        <span class="cp-lesson-wrapup__kp-status" :class="`is-${k.status}`">{{ { mastered: '✓ 已掌握', learning: '学习中', review: '待复习' }[k.status] || k.status }}</span>
+                        <span class="cp-lesson-wrapup__kp-status" :class="`is-${k.status}`">{{ { mastered: '已掌握', learning: '学习中', review: '待复习' }[k.status] || k.status }}</span>
                         <!-- 单值进度条走共享原语 .mk-minibar（原 .cp-lesson-wrapup__kp-bar 是它的逐字重写：
                              同 6px / 999px / --mk-minibar-bg，只是没挂原语类） -->
                         <span class="mk-minibar"><i class="mk-minibar__fill" data-tone="ok" :style="{ width: (k.progress || 0) + '%' }"></i></span>
@@ -651,6 +657,10 @@
         <!-- rawJson 惰性计算：仅展开时序列化（见脚本 rawJsonOpen），折叠态 pre 渲染空串 -->
         <details class="cp-raw" @toggle="onRawToggle">
           <summary>原始会话数据</summary>
+          <div v-if="rawJsonOpen" class="cp-raw__meta">
+            <span>{{ rawJsonTruncated ? `仅显示前 ${RAW_JSON_PREVIEW_CHARS} 字符 · 完整共 ${rawJsonLength.toLocaleString('zh-CN')} 字符` : `完整共 ${rawJsonLength} 字符` }}</span>
+            <button type="button" class="mk-link" title="把完整原始数据写入剪贴板，不受预览截断影响" @click="copyRawJson">复制完整 JSON</button>
+          </div>
           <pre>{{ rawJson }}</pre>
         </details>
       </main>
@@ -2735,10 +2745,26 @@ watch(
 )
 
 /* rawJson 惰性计算：session 每 5s 轮询全量更新，computed 常驻 stringify 会让每个轮询拍
-   都完整序列化一次大 JSON；改为仅在「原始数据」details 展开时才计算 */
+   都完整序列化一次大 JSON；改为仅在「原始数据」details 展开时才计算。
+   2026-10-17：此前静默截断 4000 字符，读作「完整原始数据」实则停在半句（真实目标对话会话的
+   路径树就超过这个长度，目标对话消息根本没露出来）。改为显式披露截断并把完整串交给复制。 */
+const RAW_JSON_PREVIEW_CHARS = 4000
 const rawJsonOpen = ref(false)
 function onRawToggle(e: Event) { rawJsonOpen.value = (e.target as HTMLDetailsElement).open }
-const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value, null, 2)?.slice(0, 4000) : '') || '')
+const rawJsonFull = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value, null, 2) : '') || '')
+const rawJsonLength = computed(() => rawJsonFull.value.length)
+const rawJson = computed(() => rawJsonFull.value.slice(0, RAW_JSON_PREVIEW_CHARS))
+const rawJsonTruncated = computed(() => rawJsonLength.value > RAW_JSON_PREVIEW_CHARS)
+
+async function copyRawJson() {
+  try {
+    await navigator.clipboard.writeText(rawJsonFull.value)
+    toast.success('完整会话数据已复制')
+  } catch {
+    // 非安全上下文或浏览器未授予剪贴板权限：不假装成功
+    toast.error('复制失败，浏览器未授予剪贴板权限')
+  }
+}
 </script>
 
 <style scoped>
@@ -2841,33 +2867,41 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 .cp-loop__name { font-weight: 700; font-size: var(--mk-fs-emphasis); }
 .cp-loop__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 
-/* 阶段推进（原型 .stepper 三态：done 实心 / active 品牌描边 / idle 灰；步点即阶段页签） */
+/* 阶段推进（2026-10-15 重设计：四枚等宽阶段瓦片，每票一条状态色顶轨 + 标记 + 阶段名 + 真实读数，
+   填满卡宽并把「推进到哪一步/每步读数」一屏读完；瓦片间 chevron 连成流水线。步点即阶段页签。） */
 .cp-stepcard { margin-top: 14px; }
 .cp-stepcard__spacer { flex: 1 1 auto; }
 /* 下游直达入口（阶段推进卡头右侧）：两枚小动作钮，卡头不再只有读数 */
 .cp-stepjumps { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
-.cp-stepper { display: flex; align-items: flex-start; }
+.cp-stepper { display: flex; align-items: stretch; gap: 8px; }
+.cp-stepper__arrow { flex: none; align-self: center; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 5px solid var(--mk-faint); opacity: 0.55; }
 .cp-stp {
-  position: relative; flex: 1 1 0; min-width: 0; display: grid; justify-items: center; gap: 6px; text-align: center;
-  border: none; background: transparent; font: inherit; padding: 0; cursor: pointer;
+  position: relative; flex: 1 1 0; min-width: 0;
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  padding: 12px 14px 12px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-md);
+  background: var(--mk-surface); font: inherit; cursor: pointer; overflow: hidden;
 }
+/* 顶轨：状态色单源（done 绿 / active 蓝 / idle 灰），瓦片顶部一条 3px 实心线 */
+.cp-stp::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--mk-line); }
+.cp-stp--done::before { background: var(--mk-green); }
+.cp-stp--active::before { background: var(--mk-blue); }
 .cp-stp:disabled { cursor: default; }
 .cp-stp:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }
-.cp-stp__line { position: absolute; top: 9px; left: 50%; width: 100%; height: 2px; background: var(--mk-line); }
-.cp-stp:last-child .cp-stp__line { display: none; }
-.cp-stp--done .cp-stp__line { background: var(--mk-blue); }
+.cp-stp:not(:disabled):hover { border-color: var(--mk-blue); }
+.cp-stp--active { background: var(--mk-blue-bg); border-color: var(--mk-blue); }
 .cp-stp__dot {
-  position: relative; z-index: 1; box-sizing: border-box; width: 20px; height: 20px; border-radius: 50%;
+  flex: none; box-sizing: border-box; width: 22px; height: 22px; border-radius: 50%;
   display: grid; place-items: center; background: var(--mk-surface); border: 2px solid var(--mk-faint);
   color: var(--mk-faint); font-size: var(--mk-fs-micro); font-weight: 700; font-variant-numeric: tabular-nums;
 }
-.cp-stp--done .cp-stp__dot { background: var(--mk-blue); border-color: var(--mk-blue); color: var(--mk-on-fill); }
-.cp-stp--active .cp-stp__dot { background: var(--mk-blue-bg); border-color: var(--mk-blue); color: var(--mk-blue); }
-.cp-stp__name { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); overflow-wrap: anywhere; }
-.cp-stp--active .cp-stp__name { color: var(--mk-ink); font-weight: 700; }
-.cp-stp--idle .cp-stp__name { color: var(--mk-faint); }
-.cp-stp__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.cp-stp--active .cp-stp__meta { color: var(--mk-blue); font-weight: 600; }
+.cp-stp--done .cp-stp__dot { background: var(--mk-green-fill); border-color: var(--mk-green-fill); color: var(--mk-on-fill); }
+.cp-stp--active .cp-stp__dot { background: var(--mk-blue-fill); border-color: var(--mk-blue-fill); color: var(--mk-on-fill); }
+.cp-stp__body { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.cp-stp__name { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); overflow-wrap: anywhere; }
+.cp-stp--idle .cp-stp__name { color: var(--mk-muted); }
+.cp-stp__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }
+.cp-stp--done .cp-stp__meta { color: var(--mk-green); font-weight: 600; }
+.cp-stp--active .cp-stp__meta { color: var(--mk-accent-deep); font-weight: 700; }
 
 /* 会话级卡片已归位各阶段页（2026-10-12 四页拆分），原 .cp-detail-grid 双栏栅格退役 */
 .cp-turns td { vertical-align: top; }
@@ -3259,6 +3293,10 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
   .cp-learn-grid { grid-template-columns: 1fr; }
   .cp-learn-tree { border-right: none; border-bottom: 1px solid var(--mk-line); max-height: 200px; }
   .cp-learn-chat { max-height: 560px; }
+  /* 阶段瓦片窄屏折行：4 枚并排会压字，改两行两列；chevron 是横向流水线语义，折行后撤掉 */
+  .cp-stepper { flex-wrap: wrap; }
+  .cp-stepper__arrow { display: none; }
+  .cp-stp { flex: 1 1 calc(50% - 4px); }
 }
 
 /* Lesson head */
@@ -3570,6 +3608,8 @@ const rawJson = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value
 /* Raw data */
 .cp-raw { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .cp-raw summary { cursor: pointer; padding: 4px 2px; }
+/* 截断披露行（2026-10-17）：预览只有前 4000 字符，字符总数与「复制完整 JSON」必须和预览同屏 */
+.cp-raw__meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 6px; padding: 0 2px; }
 .cp-raw pre {
   margin: 8px 0 0; padding: 12px; border-radius: var(--mk-radius-xl); background: var(--mk-code-bg); color: var(--mk-code-fg);
   font: 10.5px/1.6 var(--mk-mono); max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-all;
@@ -3748,10 +3788,10 @@ html[data-theme='dark'] {
   /* hover 补漏：rgba(0,0,0,0.02) 叠在暗色底上不可见，用与阶段步点同档的实色 */
   .cp-sidebar__toggle:hover { background: #252627; }
   .cp-learn-tree__lesson:hover:not(:disabled) { background: #252627; }
-  /* 原型骨架补漏：闭环 active 环 / stepper active 步点在暗色下的底色 */
+  /* 原型骨架补漏：闭环 active 环 / stepper 瓦片在暗色下的底色（active 顶轨与实心步点走 --mk-*-fill，两主题通用） */
   .cp-loop__step--active { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); border-color: color-mix(in srgb, var(--wf-color-primary) 40%, transparent); }
-  .cp-stp--active .cp-stp__dot { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); color: var(--mk-accent-deep); }
-  .cp-stp__dot { background: #19191a; }
+  .cp-stp--active { background: color-mix(in srgb, var(--wf-color-primary) 14%, transparent); }
+  .cp-stp--idle .cp-stp__dot { background: #19191a; }
   .cp-transcript__message { background: #19191a; border-left-color: #313235; }
   .cp-transcript__message.is-teacher { background: color-mix(in srgb, var(--wf-color-primary) 12%, transparent); border-left-color: var(--mk-blue); }
   .cp-transcript__message.is-learner { background: rgba(45, 212, 191, 0.1); border-left-color: var(--mk-teal); }

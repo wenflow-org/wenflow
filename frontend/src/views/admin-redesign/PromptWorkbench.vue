@@ -21,7 +21,7 @@
     <section class="mk-card">
       <div class="mk-card__head">
         <h3 class="mk-card__title">核心文件</h3>
-        <span class="mk-card__meta">改提示词与发布在 Skill 设计页「协议」页签。新建 Skill 为开发操作，需由开发人员创建</span>
+        <span class="mk-card__meta">改提示词与发布在 Skill 详情页「协议」页签。新建 Skill 为开发操作，需由开发人员创建</span>
       </div>
       <!-- 刷新失败但已有清单（2026-10-06 审核 #139）：保留已渲染表格，行内 alert 说明数据可能过期 + 重试入口；
            无数据（首载失败）时才由下方 MkEmptyState 走整页错误态（口径同 MemoryReview / DayTimeline） -->
@@ -155,9 +155,9 @@ function statusBadge(status: string) {
   return 'mk-badge--muted';
 }
 
-/** 编辑统一入口：Skill 设计页「协议」页签（2026-10-15 迁入外壳二级页，落 ?view=skill-design&id=） */
+/** 编辑统一入口：Skill 详情页「协议」页签（2026-10-15 设计页平铺进详情页，落 ?view=skill&id=&skdTab=protocol） */
 function openDesign(skillId: string) {
-  void router.push({ path: '/admin/skills', query: { view: 'skill-design', id: skillId } });
+  void router.push({ path: '/admin/skills', query: { view: 'skill', id: skillId, skdTab: 'protocol' } });
 }
 
 async function loadList() {

@@ -322,7 +322,7 @@
   --mk-fs-body: var(--wf-fs-body);
   --mk-fs-emphasis: var(--wf-fs-emphasis);
   /* 档位覆写放在本文件（全局加载）而非 mk-primitives.css（2026-10-06 审核 §主题 6）：
-     后者只被 AdminConsole.vue / SkillDesignPage.vue 懒加载，于是 /admin/login 这类
+     后者只被 AdminConsole.vue（及其懒加载的二级页）懒加载，于是 /admin/login 这类
      独立路由停在基准值 12/14/15，1440→1920 之间整页不放大——同视口比同域其它页
      少半像素档。基准值本就在本文件，档位覆写与它同处才是单一来源。 */
 }

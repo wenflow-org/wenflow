@@ -64,10 +64,13 @@
           :title="healthAbnormalTitle"
           @click="kpiGo('health')"
         />
+        <!-- 2026-10-16 KPI 审计补完：原标签是裸「不一致」，没有宾语——运营看不出是谁跟谁不一致。
+             术语表早备好了限定词「文件与线上不一致」（driftContractQualified），这里改用。
+             hint 同步把「契约 N + 哈希 M」换成两个概念的人话名（术语表的三义区分照旧不合并）。 -->
         <MkKpi
-          :label="TERMS.driftContract"
+          :label="TERMS.driftContractQualified"
           :value="driftActionable"
-          :hint="driftActionable > 0 ? `契约 ${drift.contract} + 哈希 ${drift.hash}` : drift.runtime > 0 ? `另 ${drift.runtime} 条只读遥测` : '正常'"
+          :hint="driftActionable > 0 ? `文件与线上 ${drift.contract} 条 · 编译产物 ${drift.hash} 条` : drift.runtime > 0 ? `另 ${drift.runtime} 条只读遥测` : '正常'"
           :tone="driftActionable > 0 ? 'warn' : 'ok'"
           clickable
           :title="driftCardTitle"

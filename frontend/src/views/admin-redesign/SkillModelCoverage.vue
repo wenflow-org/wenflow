@@ -7,11 +7,10 @@
       <span class="mk-card__meta">全部技能 × 实际路由</span>
     </div>
     <div class="skc__body">
-      <!-- 原型 .note：说明文字走 surface-2 底 + muted 小字（不再自搓提示样式） -->
-      <p class="note" title="2026-09-28 曾因此把 7 个课后技能静默漏到旧通道">
-        <b>未配置的技能会走平台默认</b>。
-        对多个技能套用同一份通道/模型/参数/兜底配置：
-      </p>
+      <!-- 说明段已删（2026-10-17 用户走查：这类文案没有用）：
+           「未配置的技能会走平台默认」是下面「路由来源」列与页头「降级策略」KPI 的原文复述；
+           「对多个技能套用同一份…配置：」是表单自身的用途，输入框占位与按钮已说明。
+           原 p 的 title 还挂着一条 2026-09-28 的研发事故记录，属实现历史，不该出现在界面上。 -->
       <div class="skc__apply">
         <input v-model="bulk.endpoint" class="mk-input mono" placeholder="endpoint（必填，http://host:30001）" :class="{ 'is-err': bulkErr }" />
         <input v-model="bulk.apiKey" class="mk-input mono" type="password" placeholder="apiKey（必填）" :class="{ 'is-err': bulkErr }" />
@@ -39,15 +38,40 @@
                   @change="toggleAll(($event.target as HTMLInputElement).checked)"
                 />
               </th>
-              <th scope="col">Skill</th>
-              <th scope="col">路由来源</th>
-              <th scope="col">model</th>
-              <th scope="col">参数覆盖</th>
-              <th scope="col" class="skc__wrap">备用模型</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="covSortState('skill')"
+                @click="toggleCovSort('skill')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('skill')">Skill<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="covSortState('source')"
+                @click="toggleCovSort('source')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('source')">路由来源<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="covSortState('model')"
+                @click="toggleCovSort('model')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('model')">model<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="covSortState('params')"
+                @click="toggleCovSort('params')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('params')" title="按覆盖项数排序">参数覆盖<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable skc__wrap"
+                :aria-sort="covSortState('fallback')"
+                @click="toggleCovSort('fallback')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('fallback')" title="按备用链条数排序">备用模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in rows" :key="s.skillId">
+            <tr v-for="s in sortedRows" :key="s.skillId">
               <td><input v-model="selected" type="checkbox" :value="s.skillId" :aria-label="`选择技能 ${s.skillId}`" /></td>
               <td class="mono">{{ s.skillId }}</td>
               <td>
@@ -93,6 +117,7 @@ import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { askConfirm } from './useConfirm'
+import { useTableSort } from './useTableSort'
 
 /** 套用成功 → 通知宿主 Skills.vue 重拉 coverageById（#93：否则上方路由表两列与四张 KPI
     仍用挂载时的旧值，与下方矩阵同屏互相打架） */
@@ -112,6 +137,19 @@ interface Row {
 }
 
 const rows = ref<Row[]>([])
+/* 矩阵排序（2026-10-17 用户走查「有的列没有排序」）：数据是全量覆盖清单，
+   客户端排序诚实；参数覆盖按覆盖项数排（无覆盖 = 0），备用模型按链条数排。 */
+const { sortState: covSortState, toggle: toggleCovSort, sortRows: sortCovRows } = useTableSort<Row>({
+  accessors: {
+    skill: (r) => r.skillId,
+    source: (r) => r.source,
+    model: (r) => r.model || '未配置',
+    params: (r) => (r.paramOverrides ? Object.keys(r.paramOverrides).length : 0),
+    fallback: (r) => r.fallbackChain?.length ?? 0
+  },
+  storageKey: 'wf_skc_sort'
+})
+const sortedRows = computed(() => sortCovRows(rows.value))
 const loading = ref(false)
 const selected = ref<string[]>([])
 const bulk = ref({ endpoint: '', apiKey: '', model: '' })

@@ -82,13 +82,13 @@ describe('TeachingSessions · 筛选 ↔ URL（O2c）', () => {
     wrapper.unmount();
   });
 
-  it('点「待关注」→ URL 带 pill=attention；再点一次取消 → 删键（title 承诺的「再点取消」）', async () => {
+  it('点「需关注」→ URL 带 pill=attention；再点一次取消 → 删键（title 承诺的「再点取消」）', async () => {
     const { wrapper, router } = await mountTs('/admin/teaching-sessions');
-    const attention = pillByText(wrapper, '待关注')!;
+    const attention = pillByText(wrapper, '需关注')!;
     await attention.trigger('click');
     await flushPromises();
     expect(router.currentRoute.value.query.pill).toBe('attention');
-    await pillByText(wrapper, '待关注')!.trigger('click');
+    await pillByText(wrapper, '需关注')!.trigger('click');
     await flushPromises();
     expect(router.currentRoute.value.query.pill).toBeUndefined();
     wrapper.unmount();

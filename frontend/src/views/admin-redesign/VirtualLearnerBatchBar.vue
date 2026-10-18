@@ -16,7 +16,7 @@
       {{ batchActionBusy ? '处理中…' : '批量终止' }}
     </button>
     <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" @click="batchReclaim">
-      {{ batchActionBusy ? '处理中…' : '批量清理卡死' }}
+      {{ batchActionBusy ? '处理中…' : '批量清理无响应' }}
     </button>
     <button type="button" class="mk-batchbar__danger" :disabled="batchActionBusy" @click="batchDelete">
       批量删除

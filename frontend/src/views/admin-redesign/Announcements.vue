@@ -19,7 +19,6 @@
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
         <div class="mk-filter">
-          <MkFilterSearch v-model="keyword" placeholder="搜索标题 / 正文" />
           <select v-model="severityFilter" class="mk-filter__select" aria-label="按级别筛选">
             <option value="">全部级别</option>
             <option value="info">通知</option>
@@ -36,6 +35,8 @@
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <span class="mk-card__head-right">
+          <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
+          <MkFilterSearch v-model="keyword" placeholder="搜索标题 / 正文" />
           <span class="mk-card__meta">{{ filtered.length }} / {{ rows.length }} 条</span>
         </span>
       </div>

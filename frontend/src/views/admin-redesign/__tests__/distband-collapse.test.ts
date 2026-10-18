@@ -1,43 +1,44 @@
 /**
- * 教学组五页分布带默认折叠（2026-10-14 用户拍板：「教学组的这些，默认折叠，也就是分布的条
- * 状态默认折叠起来」——当天先在「学习状态」落地，随即按用户指示扩到同组其余四页）。
+ * 教学组分布带全部退役（2026-10-17 用户连续走查四页 + 「记忆与复习也不要了」）。
  *
- * 折叠是 MkDistBand 的**可选档**（collapsible 默认关，原语级行为见
- * components/mk/__tests__/MkDistBand.collapsible.test.ts），所以「哪几页折了」只能由各页
- * 显式传参决定——本用例钉的就是这份页面名单，防以后改版漏掉一页或悄悄折错页。
+ * 历史：2026-10-14 曾拍板「教学组各页这条分布带一律默认折叠」，五页名单由本用例钉住。
+ * 2026-10-17 起五页相继移除 MkDistBand——目标对话 / 学习路径 / 教学会话 / 学习状态 /
+ * 记忆与复习；原因统一是：分档多数为 0 时比例条只等于上方 KPI 的一个数，且这些带都兼作
+ * 唯一筛选入口，折叠后筛选被藏起来。
  *
- * 名单外两处不是遗漏：
- *  - 用户与学习者（People）本就没有分布带；
- *  - 虚拟学习者运行条用的是裸条（无标题卡头可折，且不属教学组）。
- *
- * 为什么用源码断言而不是逐页挂载：这五页的数据前置各不相同（stats / 窗口 / embedded 宿主），
- * 逐页挂载得各造一套 mock 才能摸到这条带；而本拍板的对象就是「页面有没有传这个 prop」本身。
+ * 现在本用例从「哪几页折了」转为「哪几页不许再加回来」：教学组六页源码里不得出现 MkDistBand。
+ * 名单外唯一保留者是虚拟学习者运行条的裸条（无卡头、无折叠，不属教学组）。
  */
 import { describe, expect, it } from 'vitest';
-import LearnerCenterSource from '../LearnerCenter.vue?raw';
+import PeopleSource from '../People.vue?raw';
 import GoalConversationsSource from '../GoalConversations.vue?raw';
 import OpsContentSource from '../OpsContent.vue?raw';
 import TeachingSessionsSource from '../TeachingSessions.vue?raw';
+import LearnerCenterSource from '../LearnerCenter.vue?raw';
 import MemoryReviewOverviewSource from '../MemoryReviewOverview.vue?raw';
 import VirtualLearnerRunningBarSource from '../VirtualLearnerRunningBar.vue?raw';
 
-const PAGES: Array<[string, string]> = [
-  ['学习状态 LearnerCenter', LearnerCenterSource],
+const TEACHING_PAGES: Array<[string, string]> = [
+  ['用户与学习者 People', PeopleSource],
   ['目标对话 GoalConversations', GoalConversationsSource],
   ['学习路径 OpsContent', OpsContentSource],
   ['教学会话 TeachingSessions', TeachingSessionsSource],
+  ['学习状态 LearnerCenter', LearnerCenterSource],
   ['记忆与复习 MemoryReviewOverview', MemoryReviewOverviewSource]
 ];
 
-/** 分布带开标签之后、其内某行恰好是 collapsible（属性行，不是注释里的描述句） */
-const BAND_FOLDED = /<MkDistBand\b[\s\S]{0,400}?^\s*collapsible$/m;
-
-describe('教学组分布带默认折叠', () => {
-  it.each(PAGES)('%s：分布带显式开 collapsible', (_name, src) => {
-    expect(src).toMatch(BAND_FOLDED);
+describe('教学组分布带已全部退役', () => {
+  it.each(TEACHING_PAGES)('%s：不再使用 MkDistBand', (_name, src) => {
+    expect(src).not.toContain('<MkDistBand');
   });
 
-  it('虚拟学习者运行条用裸条（无卡头可折）→ 不在折叠名单内', () => {
+  it('替代出口仍在：状态筛选回到卡头 pills / chips（目标对话、学习路径），完结率升 KPI（教学会话）', () => {
+    expect(GoalConversationsSource).toContain('gcStatusPills');
+    expect(OpsContentSource).toContain('ocStatusPills');
+    expect(TeachingSessionsSource).toContain('completionRate');
+  });
+
+  it('虚拟学习者运行条仍用裸条（无卡头可折，且不属教学组）', () => {
     expect(VirtualLearnerRunningBarSource).toContain('<MkDistBand');
     expect(VirtualLearnerRunningBarSource).not.toMatch(/^\s*collapsible$/m);
   });

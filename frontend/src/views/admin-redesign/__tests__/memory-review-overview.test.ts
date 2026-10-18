@@ -1,26 +1,24 @@
 /**
  * 记忆与复习跨用户总览（MemoryReviewOverview.vue）——2026-10-12 用户拍板恢复独立页：
- * 列表态用例自原 MemoryReview（c28019d6 前版本）迁移，组件逻辑逐字找回：
- * - 到期时间轴 MkDistBand：六档图例（零值段不渲染分段）、分桶按 dueAt 日差
- * - 贴表到期带可点下钻：点「已逾期」→ 只剩窗口内该档有到期痕迹的学习者；再点取消
- * - 窗口口径：adminMemoryTracesApi.list 带 limit 200 与作用域开关；窗口为空整块隐藏
+ * 列表态用例自原 MemoryReview（c28019d6 前版本）迁移。
+ * 2026-10-17 到期时间轴分布带退役（用户「记忆与复习也不要了」）：原六档分桶/下钻/窗口用例撤除，
+ * 只保留 KPI、列集与行点击语义。
  * - 既有功能不丢：用户行点击仍跳学习者详情（open-learner 判例）
  * - KPI「当前到期」阈值化：占比 <20% 且人均 <5 保持中性；达阈值才抬琥珀且 title 披露阈值
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
 
 const overview = vi.hoisted(() => vi.fn());
 const detail = vi.hoisted(() => vi.fn());
 const recompute = vi.hoisted(() => vi.fn());
 const apply = vi.hoisted(() => vi.fn());
 const rollback = vi.hoisted(() => vi.fn());
-const traceList = vi.hoisted(() => vi.fn());
 const openSubPage = vi.hoisted(() => vi.fn());
 
 vi.mock('@/api/adminApi', () => ({
   adminMemoryReviewApi: { overview, detail, recompute, apply, rollback },
-  adminMemoryTracesApi: { list: traceList },
 }));
 vi.mock('../store', () => ({ openSubPage }));
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -34,38 +32,7 @@ vi.mock('vue-router', () => ({
 
 import MemoryReviewOverview from '../MemoryReviewOverview.vue';
 
-// 到期日以「测试运行当天 0 点」为锚：页面用真实 new Date() 分桶，同一运行日内口径一致
-const midnight = (() => {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-})();
-const at = (dayOffset: number) => {
-  const d = new Date(midnight);
-  d.setDate(d.getDate() + dayOffset);
-  d.setHours(12, 0, 0, 0);
-  return d.toISOString();
-};
-const row = (over: Partial<{ id: string; userId: string; extractionCount: number; dueAt: string | null; retrievability: number | null }>) => ({
-  id: 't0',
-  userId: 'u1',
-  conceptKey: 'k0',
-  label: null,
-  extractionCount: 1,
-  dueAt: null,
-  retrievability: null,
-  ...over,
-});
-
-// 覆盖六档边界：-1 已逾期 · 0 今天 ×2 · 1 明天 · 2 2天后 · 4 3天后档 · 从未提取（t7）不进队列
-const ROWS = [
-  row({ id: 't1', dueAt: at(-1), extractionCount: 2, retrievability: 0.19 }),
-  row({ id: 't2', dueAt: at(0), retrievability: 0.2 }),
-  row({ id: 't3', dueAt: at(0), retrievability: null }),                      // 无强度 → 不进分母
-  row({ id: 't4', dueAt: at(1), retrievability: 0.5 }),
-  row({ id: 't5', dueAt: at(2), retrievability: 0.8 }),
-  row({ id: 't6', dueAt: at(4), retrievability: 0.9 }),
-  row({ id: 't7', extractionCount: 0, dueAt: null, retrievability: null }),   // 从未提取 → 不进队列
-];
+const ROWS = Array.from({ length: 7 }, (_, i) => ({ id: `t${i}`, userId: 'u1' }));
 
 async function mountWithRows(rows: unknown[], totalsOver: Record<string, unknown> = {}) {
   overview.mockResolvedValue({
@@ -76,80 +43,14 @@ async function mountWithRows(rows: unknown[], totalsOver: Record<string, unknown
       },
     },
   });
-  traceList.mockResolvedValue({ data: { data: { total: rows.length, rows } } });
   const w = mount(MemoryReviewOverview);
   await flushPromises();
   return w;
 }
 
-describe('MemoryReviewOverview：到期时间轴（2026-10-12 恢复跨用户总览）', () => {
+describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-17 分布带退役）', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it('到期带：零值段跳过、图例恒六行（色块+名+数），分桶按 dueAt 日差', async () => {
-    const w = await mountWithRows(ROWS);
-
-    // 桶计数：已逾期 1 · 今天 2 · 明天 1 · 2天后 1 · 3天后(3–4 天) 1 · 5天后 0
-    const legend = w.findAll('.stageband__legend .sbl');
-    expect(legend.map((el) => el.find('.sbl__name').text())).toEqual(['已逾期', '今天', '明天', '2天后', '3天后', '5天后']);
-    expect(legend.map((el) => el.find('.sbl__n').text())).toEqual(['1', '2', '1', '1', '1', '0']);
-
-    // 5天后 = 0 → 段不渲染，其余 5 段渲染（原型 distBand 口径；组件 v-if，隐藏段不留 DOM）
-    const segments = w.findAll('.mk-distband__seg');
-    expect(segments).toHaveLength(5);
-    expect(segments[0].attributes('title')).toBe('已逾期：1 个 · 点击只看');
-  });
-
-  it('贴表到期带可点下钻：点「已逾期」→ 只剩窗口内该档有到期痕迹的学习者；再点取消', async () => {
-    overview.mockResolvedValue({
-      data: { data: {
-        totals: { users: 2, traces: 2, due: 2, usersWithAudit: 0, proposed: 0, autoApplicable: 0, ambiguous: 0, applied: 0, deleted: 0 },
-        users: [
-          { userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: 1, due: 1, audit: null, weak: 1, avgStrength: 0.19, lastReviewedAt: new Date().toISOString() },
-          { userId: 'u2', name: '小红', email: null, isVirtualLearner: false, traces: 1, due: 1, audit: null, weak: 0, avgStrength: 0.5, lastReviewedAt: new Date().toISOString() },
-        ],
-      } },
-    });
-    traceList.mockResolvedValue({
-      data: { data: { total: 2, rows: [
-        row({ id: 't1', userId: 'u1', dueAt: at(-1), extractionCount: 2, retrievability: 0.19 }),
-        row({ id: 't8', userId: 'u2', dueAt: at(1), retrievability: 0.5 }),
-      ] } },
-    });
-    const w = mount(MemoryReviewOverview);
-    await flushPromises();
-    expect(w.findAll('tbody tr')).toHaveLength(2);
-
-    const overdueBtn = w.findAll('.stageband__legend .sbl').find((b) => b.text().includes('已逾期'))!;
-    await overdueBtn.trigger('click');
-    await flushPromises();
-    const rowsText = w.findAll('tbody tr').map((r) => r.text());
-    expect(rowsText).toHaveLength(1);
-    expect(rowsText[0]).toContain('小明');
-    expect(rowsText[0]).not.toContain('小红');
-    expect(w.text()).toContain('已筛 1 位');
-
-    await overdueBtn.trigger('click');
-    await flushPromises();
-    expect(w.findAll('tbody tr')).toHaveLength(2);
-    w.unmount();
-  });
-
-  it('窗口口径：list 带 limit 200 与作用域开关；窗口为空时整块隐藏', async () => {
-    const w = await mountWithRows(ROWS);
-    expect(traceList).toHaveBeenCalledWith({ limit: 200, includeVirtual: false });
-
-    // 切「含测试」→ 窗口随作用域重拉；还原共享口径（整组状态是模块级，别泄漏给后续用例）
-    const scopePills = w.findAll('.ds-toggle .mk-pill');
-    await scopePills.find((p) => p.text() === '测试')!.trigger('click');
-    await flushPromises();
-    expect(traceList).toHaveBeenLastCalledWith({ limit: 200, includeVirtual: true, testOnly: true });
-    await scopePills.find((p) => p.text() === '真实')!.trigger('click');
-    await flushPromises();
-
-    const empty = await mountWithRows([]);
-    expect(empty.find('.stageband').exists()).toBe(false);
   });
 
   it('既有功能不丢：用户行点击仍跳学习者详情（测试视角下透传 includeTest，真实口径第三参为 undefined）', async () => {
@@ -205,5 +106,110 @@ describe('MemoryReviewOverview：到期时间轴（2026-10-12 恢复跨用户总
     });
     const queue0 = w0.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '待审队列')!;
     expect(queue0.find('.mk-kpi__hint').text()).toBe('人审队列中的建议数');
+  });
+
+  /** 2026-10-17 重设计：19 位有痕迹的用户里 17 位从未复习，旧的四列（需人工看/薄弱/强度/
+   *  最近复习）成片「—」，0 到期还各画一条空轨。
+   *  二次调整：相邻两列各画一条比例条会读成一排重叠的条——待复习只留数字，
+   *  记忆强度单独一列带条，需关注与最近复习各自成列。 */
+  it('列集拆为七列：待复习只出数字、全表仅强度一条比例条、无关注项显示「无」', async () => {
+    overview.mockResolvedValue({
+      data: { data: {
+        totals: { users: 2, traces: 14, due: 6, usersWithAudit: 0, proposed: 0, autoApplicable: 0, ambiguous: 2, applied: 0, deleted: 0 },
+        users: [
+          { userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: 4, due: 0, audit: null, weak: 0, avgStrength: null, lastReviewedAt: null },
+          {
+            userId: 'u2', name: '小红', email: null, isVirtualLearner: false, traces: 10, due: 6,
+            audit: { mode: 'review', generatedAt: new Date().toISOString(), candidates: 4, proposed: 2, autoApplicable: 0, ambiguous: 2, drops: 0, applied: 0, deleted: 0 },
+            weak: 3, avgStrength: 0.52, lastReviewedAt: new Date().toISOString(),
+          },
+        ],
+      } },
+    });
+    const w = mount(MemoryReviewOverview);
+    await flushPromises();
+
+    expect(w.findAll('thead th').map((t) => t.text())).toEqual(['学习者', '记忆痕迹', '待复习', '需关注', '记忆强度', '最近复习', '操作']);
+
+    const trs = w.findAll('tbody tr');
+    expect(trs).toHaveLength(2);
+    // 待复习列不再有比例条（避免与相邻的强度条并排）
+    expect(trs[1].findAll('td')[2].findAll('.mk-minibar')).toHaveLength(0);
+    expect(trs[1].findAll('td')[2].text()).toBe('6');
+    // 全表只有记忆强度列那一条
+    expect(trs[0].findAll('.mk-minibar')).toHaveLength(0);
+    expect(trs[1].findAll('.mk-minibar')).toHaveLength(1);
+    expect(trs[1].findAll('td')[4].find('.mr__strength-pct').text()).toBe('52%');
+    // 需关注列：无事项出「无」，有事项出两枚徽章
+    expect(trs[0].findAll('td')[3].text()).toBe('无');
+    expect(trs[1].findAll('td')[3].text()).toContain('薄弱 3');
+    expect(trs[1].findAll('td')[3].text()).toContain('人工看 2');
+    // 最近复习列独立：从未复习只出状态词
+    expect(trs[0].findAll('td')[5].text()).toBe('未复习');
+    w.unmount();
+  });
+
+  /** 2026-10-17 用户「参考学习组做一些 pill」：分布带退役后左组补三枚复习状态快筛，
+   *  计数按当前页（服务端分页只回 limit 条，用全库数字会与本页行对不上）。 */
+  it('复习状态快筛：有待复习 / 未复习 / 需关注 计数按当前页，点击后行集收敛，可一键显示全部', async () => {
+    overview.mockResolvedValue({
+      data: { data: {
+        totals: { users: 3, traces: 12, due: 3, usersWithAudit: 0, proposed: 0, autoApplicable: 0, ambiguous: 1, applied: 0, deleted: 0 },
+        users: [
+          { userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: 4, due: 0, audit: null, weak: 0, avgStrength: null, lastReviewedAt: null },
+          { userId: 'u2', name: '小红', email: null, isVirtualLearner: false, traces: 5, due: 3, audit: null, weak: 0, avgStrength: 0.62, lastReviewedAt: new Date().toISOString() },
+          {
+            userId: 'u3', name: '小刚', email: null, isVirtualLearner: false, traces: 3, due: 0,
+            audit: { mode: 'review', generatedAt: new Date().toISOString(), candidates: 2, proposed: 1, autoApplicable: 0, ambiguous: 1, drops: 0, applied: 0, deleted: 0 },
+            weak: 2, avgStrength: 0.31, lastReviewedAt: new Date().toISOString(),
+          },
+        ],
+      } },
+    });
+    const w = mount(MemoryReviewOverview);
+    await flushPromises();
+
+    const pill = (label: string) => w.findAll('.mk-pill').find((p) => p.text().replace(/\d+$/, '') === label)!;
+    expect(pill('全部').find('.mk-pill__count').exists()).toBe(false);
+    expect(pill('有待复习').find('.mk-pill__count').text()).toBe('1');   // 小红
+    expect(pill('未复习').find('.mk-pill__count').text()).toBe('1');     // 小明
+    expect(pill('需关注').find('.mk-pill__count').text()).toBe('1');     // 小刚（薄弱 + 人工看）
+
+    await pill('有待复习').trigger('click');
+    await nextTick();
+    expect(w.findAll('tbody tr')).toHaveLength(1);
+    expect(w.find('tbody').text()).toContain('小红');
+    expect(w.find('.mk-card__meta').text()).toContain('已筛 1 位');
+
+    await pill('需关注').trigger('click');
+    await nextTick();
+    expect(w.findAll('tbody tr')).toHaveLength(1);
+    expect(w.find('tbody').text()).toContain('小刚');
+
+    await pill('全部').trigger('click');
+    await nextTick();
+    expect(w.findAll('tbody tr')).toHaveLength(3);
+    w.unmount();
+
+    // 筛空：计数为 0 的条件仍可点，空态给「显示全部」出口（筛选只作用于当前页）
+    overview.mockResolvedValue({
+      data: { data: {
+        totals: { users: 2, traces: 4, due: 0, usersWithAudit: 0, proposed: 0, autoApplicable: 0, ambiguous: 0, applied: 0, deleted: 0 },
+        users: [
+          { userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: 2, due: 0, audit: null, weak: 0, avgStrength: 0.8, lastReviewedAt: new Date().toISOString() },
+          { userId: 'u2', name: '小红', email: null, isVirtualLearner: false, traces: 2, due: 0, audit: null, weak: 0, avgStrength: 0.7, lastReviewedAt: new Date().toISOString() },
+        ],
+      } },
+    });
+    const w2 = mount(MemoryReviewOverview);
+    await flushPromises();
+    await w2.findAll('.mk-pill').find((p) => p.text().startsWith('有待复习'))!.trigger('click');
+    await nextTick();
+    expect(w2.findAll('tbody tr')).toHaveLength(0);
+    expect(w2.find('.mk-empty').text()).toContain('当前页没有符合条件的学习者');
+    await w2.find('.mk-empty__action').trigger('click');
+    await nextTick();
+    expect(w2.findAll('tbody tr')).toHaveLength(2);
+    w2.unmount();
   });
 });

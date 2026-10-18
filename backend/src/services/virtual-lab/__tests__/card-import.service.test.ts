@@ -1,4 +1,4 @@
-import { parseCardDocument, validateCard, resolveCardKey, ensureCardKey, buildCardWallEntries, cleanDisplayName, deriveCardNickname, stripWaveTags, mergeEnrichedPersonaSeed, type LearnerCard } from '../card-import.service';
+import { parseCardDocument, validateCard, resolveCardKey, ensureCardKey, buildCardWallEntries, buildCardTaskGroups, storyIdOf, cleanDisplayName, deriveCardNickname, stripWaveTags, mergeEnrichedPersonaSeed, type LearnerCard } from '../card-import.service';
 
 function emptyIndex() {
   return { byKey: new Map<string, string>(), refs: new Map<string, string[]>(), seenInDoc: new Set<string>() };
@@ -335,5 +335,54 @@ describe('card-import：富化合并保留显式 nickname（#14）', () => {
       learningGoal: '高中数学', knowledgeLevel: 'beginner', presetKey: null, users: { name: null, email: null },
     }]);
     expect(entry.name).toBe('想补函数的高一学生');
+  });
+});
+
+/* 卡 → 虚拟学习者（2026-10-16 用户拍板：卡=身份模板、卡库=身份池，选卡 + 勾任务 → 派生实例） */
+describe('card-import：buildCardTaskGroups / storyIdOf（派生前勾任务的数据源）', () => {
+  const taskRow = (over: Record<string, unknown> = {}) => ({
+    id: 'p1', userId: 'u1',
+    profile: JSON.stringify({
+      personaSeed: { nickname: '想啃西瓜书的研究生', scenarioCard: { cardKey: 'k1' } },
+      storyPool: [
+        { id: 'story_a', title: '逻辑回归推导', visibleOpening: '最大似然我卡住了。' },
+        { id: 'story_b', title: '学习率怎么选', visibleOpening: '' },
+      ],
+    }),
+    tags: null, learningGoal: '机器学习基础', knowledgeLevel: 'beginner',
+    knownConcepts: null, struggleConcepts: null, presetKey: null, notes: null, createdAt: new Date(),
+    users: { name: null, email: null },
+    ...over,
+  });
+
+  it('逐卡给任务 id + 标题 + 开场白（空开场白归一为 null）', () => {
+    const [g] = buildCardTaskGroups([taskRow()], ['p1']);
+    expect(g.name).toBe('想啃西瓜书的研究生');
+    expect(g.tasks).toEqual([
+      { id: 'story_a', title: '逻辑回归推导', opening: '最大似然我卡住了。' },
+      { id: 'story_b', title: '学习率怎么选', opening: null },
+    ]);
+  });
+
+  it('缺 id 的故事按序位兜底、缺 title 的给占位名（面板不出现无名行）', () => {
+    const [g] = buildCardTaskGroups([taskRow({
+      profile: JSON.stringify({ storyPool: [{ title: '' }, { id: 'story_ok', title: '有 id' }] }),
+    })], ['p1']);
+    expect(g.tasks.map((t) => t.id)).toEqual(['story-1', 'story_ok']);
+    expect(g.tasks[0].title).toBe('任务 1');
+  });
+
+  it('无故事池的卡给空任务表（面板据此说「派不出」而不是静默派个没任务的实例）', () => {
+    const [g] = buildCardTaskGroups([taskRow({ profile: JSON.stringify({ personaSeed: {} }) })], ['p1']);
+    expect(g.tasks).toEqual([]);
+  });
+
+  it('请求里不存在的卡直接跳过（不产出无主分组）', () => {
+    expect(buildCardTaskGroups([taskRow()], ['p1', 'ghost'])).toHaveLength(1);
+  });
+
+  it('任务 id 口径与克隆挑选同源：无 id / 空白 id 的故事两边算出同一个键', () => {
+    const stories = [{ title: 'a' }, { id: 'story_ok', title: 'b' }, { id: '  ', title: 'c' }];
+    expect(stories.map((s, i) => storyIdOf(s, i))).toEqual(['story-1', 'story_ok', 'story-3']);
   });
 });

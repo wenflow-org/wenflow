@@ -28,11 +28,15 @@
       <div class="mk-card__head">
         <div class="mk-filter">
           <!-- 列表卡头统一语法（2026-10-05 教学组六页同一槽位序）：
-               左 = 快筛 chips → 搜索 → 清除筛选（激活时）；右 = 页级动作 → 列 → 高级筛选(仅有次级筛选时) → 计数 meta(仅说独有事实时)。
+               左 = 快筛 chips → 搜索（本页不出「清除筛选」，理由见末段）；右 = 页级动作 → 列 → 高级筛选(仅有次级筛选时) → 计数 meta(仅说独有事实时)。
                计数判例（2026-10-11 用户拍板全站统一）：筛选 pill 一律显命中数，唯「全部」不显
                （总数单源=分页器「共 N 条」）——取代旧「KPI 孪生 pill 不显数」判例，忽隐忽现的计数消失。
                本页无次级筛选（口径开关在页头），「高级筛选」弹层随之退役——搜索回到行内；
-               「N / N 人」meta 维持不渲染（与分页器复读）。 -->
+               「N / N 人」meta 维持不渲染（与分页器复读）。
+               2026-10-17 用户走查「清除筛选没啥意义」：本页是教学组唯一没有分布条下钻的列表，
+               可叠加的只有 pill（单选）与搜索，二者各自已有「全部」与搜索框 ✕ 两条一键复位；
+               卡头不再出「清除筛选」（空态里的「显示全部用户」仍保留）。其它四页保留——那里
+               它同时负责清掉分布条的下钻段。 -->
           <div class="mk-pills">
             <template v-for="p in pills" :key="p.id">
               <!-- 「已删除」是生命周期维度（独立数据源），与角色/活跃 pills 之间加分隔，
@@ -48,17 +52,18 @@
               >{{ p.label }}<span v-if="p.count != null && p.id !== 'all'" class="mk-pill__count">{{ p.count }}</span></button>
             </template>
           </div>
-          <MkFilterSearch v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
-          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
-          <!-- CM8：默认隐藏列集变更，存储键必须升 v2——旧键早被历史访问写回，不升会盖掉新默认（判例 ExecLogs/LearnerCenter）
-               审核 #7（2026-10-06）：check 从默认隐藏摘出——批量删除与导出 CSV 的唯一入口依赖勾选列，
-               而勾选列默认关着 = 两条批量操作默认无入口；注册时间仍默认收起 -->
+          <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
+          <MkFilterSearch v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
+          <!-- 选择框列默认隐藏（2026-10-17 用户走查「这个多选，默认不出来吧」）：
+               批量删除/导出属低频动作，常驻一整列勾选框会顶在身份列前面，也容易被读成每行都要勾。
+               审核 #7 当年担心「批量操作没有入口」——入口保留在「列」菜单（选择框，标了批量操作），
+               需要时自己打开。存储键升 v4：v3 存下的隐藏集不含 check，不升版新默认对老用户无效。 -->
           <MkCols
             :col-defs="ulColDefs"
-            storage-key="wf_users_hidden_cols_v3"
-            :default-hidden="['created']"
+            storage-key="wf_users_hidden_cols_v4"
+            :default-hidden="['created', 'check']"
             v-model:hidden="hiddenCols"
           />
         </div>
@@ -448,7 +453,8 @@ watch(includeTest, (v) => {
    （列菜单可恢复）。首访默认隐藏走 MkCols :default-hidden 单源（与 LearnerCenter/ExecLogs 同判例）；
    页面不再私设 v-model 初值——否则 localStorage 已存在时会被双源钉死。 */
 const ulColDefs = [
-  { key: 'check', label: '选择框', title: '批量操作选择框' },
+  /* 默认隐藏后，列菜单这一项就是批量操作的唯一入口：label 直接写清用途 */
+  { key: 'check', label: '选择框（批量操作）', title: '勾选后可在列表底部导出 CSV / 批量删除' },
   { key: 'email', label: '邮箱', title: '登录邮箱' },
   { key: 'role', label: '角色', title: '管理员 / 用户' },
   { key: 'paths', label: '路径 / 会话', title: '学习路径数 / 会话数' },

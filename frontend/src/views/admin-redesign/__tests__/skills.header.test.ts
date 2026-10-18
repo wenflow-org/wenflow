@@ -238,6 +238,25 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     w.unmount()
   })
 
+  it('运行表补齐版本 / 路由模型 / 最近调用排序；模型路由表五列全部可排', async () => {
+    localStorage.removeItem('wf_skills_sort')
+    localStorage.removeItem('wf_skills_routing_sort')
+    const w = await mountSkills()
+    const runSortable = w.findAll('th.mk-th--sortable').map((t) => t.text())
+    expect(runSortable).toEqual(expect.arrayContaining(['版本', '路由模型', '最近调用']))
+    const versionTh = w.findAll('th.mk-th--sortable').find((t) => t.text().includes('版本'))
+    expect(versionTh!.attributes('aria-sort')).toBe('none')
+    await versionTh!.find('button').trigger('click')
+    expect(versionTh!.attributes('aria-sort')).toBe('descending')
+
+    const routingTab = w.findAll('.tabs .tab').find((t) => t.text() === '模型路由')
+    await routingTab!.trigger('click')
+    await flushPromises()
+    const routingSortable = w.findAll('th.mk-th--sortable').map((t) => t.text())
+    expect(routingSortable).toEqual(expect.arrayContaining(['Skill', '归属 Agent', '路由模型', '备用模型', '完成度']))
+    w.unmount()
+  })
+
   it('表头排序：点击「成功率」在 none → descending → ascending 间切换 aria-sort', async () => {
     localStorage.removeItem('wf_skills_sort')
     const w = await mountSkills()

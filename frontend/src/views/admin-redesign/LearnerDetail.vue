@@ -1226,8 +1226,8 @@ const ldSessView = ref<'active' | 'discarded' | 'all'>('active')
 /* 有效行复用概览「最近会话」的同一过滤（activeSessionRows，本文件下方定义） */
 const ldSessDiscardedRows = computed(() => ldSessionRows.value.filter((r) => r.status === 'discarded'))
 const ldSessViews = computed(() => [
-  { key: 'active' as const, label: '有效', count: activeSessionRows.value.length, title: '有教学内容的会话（含超时/失败的信号会话；不含重置作废的旧会话）' },
-  { key: 'discarded' as const, label: '已废弃', count: ldSessDiscardedRows.value.length, title: '学习者点「重新开始」后作废的旧会话；时长按真实有效时长保留，仍属学习记录' },
+  { key: 'active' as const, label: '有效', count: activeSessionRows.value.length, title: '有教学内容的会话，含超时与失败的信号会话，不含重置作废的旧会话' },
+  { key: 'discarded' as const, label: '已废弃', count: ldSessDiscardedRows.value.length, title: '学习者点「重新开始」后作废的旧会话，时长按真实有效时长保留，仍属学习记录' },
   { key: 'all' as const, label: '窗口全部', count: ldSessionRows.value.length, title: `最近 ${LD_SESSION_WINDOW} 条窗口内的全部会话（含已废弃）` }
 ])
 const ldSessViewRows = computed(() =>

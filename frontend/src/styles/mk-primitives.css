@@ -412,9 +412,10 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   border-bottom: 1px solid var(--mk-line);
   flex-wrap: wrap;
 }
-/* ----- 列表卡头统一语法（2026-10-05 教学组六页同一槽位序，判例=教学会话）-----
-   左组（.mk-filter，吃剩余宽度）：快筛 chips → 搜索框 → 清除筛选（仅筛选激活时）；
-   右组（.mk-card__head-right，贴右缘）：页级动作（如 全部重算）→ 列(MkCols) →
+/* ----- 列表卡头统一语法（2026-10-05 教学组六页同一槽位序，判例=教学会话；
+        2026-10-15 用户拍板「列表统一设计，搜索放右侧」——搜索由左组移到右组首位）-----
+   左组（.mk-filter，吃剩余宽度）：快筛 chips → 清除筛选（仅筛选激活时）；
+   右组（.mk-card__head-right，贴右缘）：搜索框 → 页级动作（如 全部重算）→ 列(MkCols) →
    高级筛选(.mk-adv，仅当存在放不进主栏的次级筛选) → 计数 meta(仅当说独有事实：
    筛选态行数差 / 窗口截断口径；与分页器「共 N 条」复读的不渲染)。
    纪律：搜索一律行内不藏弹层；chips 计数只留「别处没有的」（总数归分页器、
@@ -428,6 +429,10 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
    首个元素吃掉全部剩余空间后，尾部元素自然贴右且彼此只隔 gap；
    页面在尾部元素上写的 margin-left:auto 变成空操作（无剩余空间可分），无需逐页清理。 */
 .mk-card__head > :first-child { flex: 1 1 auto; }
+/* 无标题的纯工具栏卡头（如成就解锁记录：头内只有右组）：首个子元素就是 .mk-card__head-right
+   时不能被上面的 flex:1 拉伸——否则右组吃满整行、内部搜索/控件退成左对齐（内容贴左，
+   与「右组贴右缘」的语义相反）。改为不伸张 + margin-left:auto 顶到右缘。 */
+.mk-card__head > .mk-card__head-right:first-child { flex: 0 0 auto; margin-left: auto; }
 /* 卡题 15px = 原型 .card__title（--fs-emp）。原与正文同为 14px，卡题只靠字重区分，
    页名 24px 之下直接掉到 14px 落差过陡；15px 是页名与正文之间的那一级。 */
 .mk-card__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 700; }
@@ -881,6 +886,9 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
    width:84px。表单输入框宽度由各自容器（.mk-field width:100% / 内联）决定。 */
 .mk-filter .mk-filter__input,
 .log-advpanel .mk-filter__input { min-width: 180px; }
+/* 2026-10-15 用户拍板：列表卡头搜索统一移到右组（.mk-card__head-right）首位。
+   搜索框不再落在 .mk-filter 语境里，需在此补同一 180px 下限（否则回落到 input 默认 ~20ch 的窄宽）。 */
+.mk-card__head-right .mk-search > .mk-filter__input { min-width: 180px; }
 /* 视图/筛选切换：**独立描边胶囊**（原型 .chips / .chip），不再是灰底分段控件。
    2026-09-26 曾定「顶层切换走分段控件（灰轨+白片）」，本次按 newui「UI-分支优化设计」
    原型改回胶囊：原型里根本没有分段轨道，切换控件一律是描边胶囊（筛选）或下划线页签
@@ -1339,7 +1347,9 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-field__textarea:focus { border-color: var(--mk-blue, #2f6ae0); box-shadow: var(--mk-focus-ring); }
 .mk-field__textarea { min-height: 96px; resize: vertical; line-height: 1.6; }
 .mk-field--error .mk-field__input,
-.mk-field--error .mk-field__textarea { border-color: var(--mk-red, #dc2626); }
+.mk-field--error .mk-field__textarea,
+.mk-field--error .mk-filter__input,
+.mk-field--error .mk-filter__select { border-color: var(--mk-red, #dc2626); }
 .mk-field__err { font-size: var(--mk-fs-micro); color: var(--mk-red, #dc2626); font-weight: 600; }
 
 /* 通用输入框（input/select/textarea 三合一）：FieldAddWizard 等 Teleport/子组件场景必须用全局类，
@@ -1688,7 +1698,7 @@ html[data-theme='dark'] {
    (此前 .mk-section__head h4 / .mk-card__note / .mk-field__opt 等就是这样漏的)。
    展示型字号(实体名/图标字符/KPI 数字)不占文本档位,单独按 display 档放大,见各档 display 段。 */
 /* 1440 / 1920 两档的文本档 :root 覆写已迁到全局 main.css（2026-10-06 审核 §主题 6）：
-   本文件只被 AdminConsole / SkillDesignPage 懒加载，独立路由（/admin/login）拿不到，
+   本文件只被 AdminConsole（及其懒加载的二级页）懒加载，独立路由（/admin/login）拿不到，
    于是登录页停在基准 12/14/15。改在 main.css 一处定义，全站同源。 */
 
 /* 1920px 档（D4 补丁：最低标准 1920×1080 全屏时落在 1440 档，字号/间距偏小。

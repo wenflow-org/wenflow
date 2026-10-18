@@ -27,13 +27,13 @@
          页头/口径条之下、内容卡之上，与记忆复习 KPI 栅格同形同节拍） -->
     <section v-if="rows.length" class="mk-kpi-grid lc-kpi" aria-label="学习状态概览">
       <!-- P1#16 数据层已接线（live.ts liveLearnersTotal）：真窗口显「N · 已载 M」，total 未知才退「已加载 N」。
-           P2（2026-10-04 全站评审）：hint 撤截断句（单源=页状态条），只留口径差异。
-           审核 #13（2026-10-06）：label 改「学习者账号」并补与用户页同集合的说明——
-           本卡与「用户」页「共 N 人」同 where（未删除、排除测试/虚拟），且含从未开始学习的账号。 -->
+           审核 #13（2026-10-06）：label 改「学习者账号」。
+           2026-10-15 KPI 审计：原 hint 写死「含虚拟学习者与测试账号」，与页头「真实/测试」互斥视角
+           矛盾——真实视角下这是错的（读者会以为数里混了虚拟账号）。改为随视角条件式。 -->
       <MkKpi
         label="学习者账号"
         :value="learnerTotalText"
-        :hint="`含虚拟学习者与测试账号 · 含未开始学习的账号`"
+        :hint="learnerKpiHint"
       />
       <!-- P1#17：需关注收窄为真异常（趋势降 ∨ 疲劳高 ∨ 有风险摘要）；
            常态档「疲劳=中」拆到 pills 的「观察」，不再把需关注撑爆 -->
@@ -42,27 +42,9 @@
       <MkKpi label="平均置信度" :value="avgConfText" :hint="avgConfHint" />
     </section>
 
-    <!-- 置信度分段分布条（教学组标准件 MkDistBand；2026-10-05 用户拍板「分段条在上」：移出表格卡，
-         回到卡上方页面级，与教学组其余页同位）——段与图例均可点下钻；偏态保护 min-width 14px +
-         3% 宽度下限在组件内单源。
-         2026-10-14 用户：这一条「做成可以折叠展开的区域，默认折叠」——它占了首屏 117px 而表格才是
-         本页主体；折叠态仍露标题与口径副文（共 N 位 / 另 M 位未计入），展开才见分段与图例。
-         折叠走共享 .mk-section__summary 原语（原生 details/summary，键盘天然可用）；
-         蒙层筛选激活时不可见的问题由本页既有「清除筛选」出口兜住（isFiltered → 卡头出该链）。
-         2026-10-14 用户二次拍板：教学组各页这条分布带**一律默认折叠**（当天先在本页落地，
-         随即扩到目标对话 / 学习路径 / 教学会话 / 记忆与复习四页）——五页同为「表格才是主体」。 -->
-    <MkDistBand
-      v-if="rows.length && confRows.length && !loadFailed"
-      card
-      collapsible
-      title="置信度分布"
-      :sub="confBaseNote"
-      unit="人"
-      aria-label="按置信度分档筛选"
-      :bins="confBandBins"
-      :active-key="confBin == null ? null : String(confBin)"
-      @select="toggleConfBand"
-    />
+    <!-- 置信度分布带已退役（2026-10-17 用户走查「学习状态也是」）：五档里当前三档为 0、
+         实际只有 2 位有任务的学习者分坐两端，图上只剩两段；「低置信」chip 与可排序的
+         「置信」列已覆盖定位需求，平均/低置信口径留在 KPI 卡。 -->
 
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
@@ -82,11 +64,11 @@
                    （总数单源=分页器）——取代旧「KPI 孪生 pill 不显数」判例（P2 2026-10-04），忽隐忽现消失 -->
             </button>
           </div>
-          <!-- 搜索框走共享默认宽（2026-10-05 卡头统一语法：页内不再私定宽度） -->
-          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 邮箱 / ID" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
         </div>
         <div class="mk-card__head-right">
+          <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 邮箱 / ID" />
           <button
             v-if="recomputingAll"
             type="button"
@@ -300,7 +282,6 @@ import MkCols from '@/components/mk/MkCols.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
-import MkDistBand from '@/components/mk/MkDistBand.vue'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
 import { useTableSort } from './useTableSort'
@@ -435,6 +416,13 @@ const learnerTotalText = computed(() => {
   if (t != null) return t === rows.value.length ? String(t) : `${t} · 已加载 ${rows.value.length}`
   return rows.value.length ? `已加载 ${rows.value.length}` : '0'
 })
+/** 「学习者账号」KPI 口径 hint（2026-10-15 KPI 审计）：随页头「真实/测试」互斥视角变化——
+    真实视角绝不提虚拟/测试账号（否则读者以为数里混了假账号）；两视角都含未开始学习的账号。 */
+const learnerKpiHint = computed(() =>
+  includeTest.value
+    ? `仅测试视角：虚拟学习者与测试账号 · 含未开始学习的账号`
+    : `仅真实用户 · 含未开始学习的账号`
+)
 const rows = computed<Row[]>(() =>
   liveLearners.value.map((m) => ({
     id: m.userId,
@@ -491,16 +479,9 @@ const watchCount = computed(() => rows.value.filter(isWatch).length)
    口径 = rows 全集（随「含测试账号」范围联动），不随 pill / 搜索筛选变化；
    有学习任务（r.task）才有有效置信度，与表格置信列的「—」口径一致 */
 const confRows = computed(() => rows.value.filter((r) => r.task && r.confidence != null))
-/** 口径外的行数（无任务/无置信度）：分档条与均值都不含它们——就地明示去向，
-    否则「卡 1 的 281」与「分档条的 241」同屏会被读成数字打架（2026-10-04 外部评审误读台账） */
-const excludedFromConf = computed(() => rows.value.length - confRows.value.length)
-const confBaseNote = computed(() =>
-  `共 ${confRows.value.length} 位有学习任务的学习者` +
-  (excludedFromConf.value ? `（另 ${excludedFromConf.value} 位无学习任务，未计入）` : '')
-)
-/** 低置信 KPI 与分档条/均值同一口径（有任务的快照）：无任务行在表里置信列本显「—」，
-    计入会与紧邻方的分布对不上（分布合计里数不出它）——外部评审「274 vs 高分区 7 人」的
-    真接缝即此（274=234+40 无任务行），统一后 KPI 恒等于分档条 <50% 两档之和 */
+/** 低置信 KPI 与均值同一口径（有任务的快照）：无任务行在表里置信列本显「—」，
+    计入会与均值对不上。2026-10-17 分布带退役后，「另 M 位无学习任务未计入」的说明
+    由「学习者账号」KPI 的 hint（含未开始学习的账号）与均值 hint 的基数共同承担。 */
 const lowConfCount = computed(() => confRows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1)).length)
 /** 低置信 hint 带基数（与平均置信度同判例：数字要能对上分母） */
 const lowConfHint = computed(() =>
@@ -519,47 +500,8 @@ const avgConfHint = computed(() =>
     ? `基于 ${confRows.value.length} 位有学习任务的学习者计算`
     : '暂无有学习任务的学习者'
 )
-/** 直方图五档（原型 .histo bad→ok 自左向右）：阈值锚定产品既定的 50% 低置信线，
-    <50 区按严重度再分 <25（红）/ 25–49（琥珀）两档；柱高 = n / maxBin（6px 下限，原型同款） */
-const HISTO_BINS = [
-  { label: '< 25%', min: 0, tone: 'bad' },
-  { label: '25–49%', min: 25, tone: 'warn' },
-  { label: '50–74%', min: 50, tone: 'faint' },
-  { label: '75–89%', min: 75, tone: 'brand' },
-  { label: '≥ 90%', min: 90, tone: 'ok' }
-] as const
-const histoBins = computed(() => {
-  const counts = HISTO_BINS.map((b, i) =>
-    confRows.value.filter((r) => {
-      const v = (r.confidence ?? 0) * 100
-      return v >= b.min && (i === HISTO_BINS.length - 1 || v < HISTO_BINS[i + 1].min)
-    }).length
-  )
-  return HISTO_BINS.map((b, i) => ({ ...b, n: counts[i] }))
-})
-/** 分档色（stageband 段与图例共用）；行 → 分箱序号（下钻谓词用） */
-const BIN_TONE: Record<string, string> = {
-  bad: 'var(--mk-red)',
-  warn: 'var(--mk-amber)',
-  faint: 'var(--mk-faint)',
-  brand: 'var(--mk-blue)',
-  ok: 'var(--mk-green)'
-}
-function binOf(r: { task?: string; confidence?: number | null }): number {
-  const v = (r.confidence ?? 0) * 100
-  return HISTO_BINS.findIndex((b, i) => v >= b.min && (i === HISTO_BINS.length - 1 || v < HISTO_BINS[i + 1].min))
-}
-/* 一屏工作台（2026-10-04 用户拍板）：分段条点击 = 只看该置信区间（再点取消），
-   「看大盘 → 定位群体 → 查表格」闭环；与 pill/搜索叠加生效，清除筛选一并清 */
-const confBin = ref<number | null>(null)
-/** MkDistBand 以 key（分箱序号串）通认；段宽/悬停文案/偏态下限在组件内单源 */
-const confBandBins = computed(() =>
-  histoBins.value.map((b, i) => ({ key: String(i), label: b.label, n: b.n, tone: BIN_TONE[b.tone] }))
-)
-function toggleConfBand(key: string) {
-  const i = Number(key)
-  confBin.value = confBin.value === i ? null : i
-}
+/** 直方图五档已随分布带退役（2026-10-17）：口径阈值仍锚定 50% 低置信线，
+    由「低置信」KPI 与 chip 承载（<50%），分档细节交给可排序的「置信」列。 */
 
 /* 表头排序（审核 #20，2026-10-06）：置信 / 更新两列接共享 useTableSort
    （与 Users.vue 同写法：mk-th--sortable + aria-sort + .mk-th__btn）。
@@ -578,8 +520,6 @@ const filtered = computed(() => {
   if (pill.value === 'risk') list = rows.value.filter(isRisk)
   if (pill.value === 'watch') list = rows.value.filter(isWatch)
   if (pill.value === 'stale') list = confRows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1))
-  // 置信分段下钻（一屏工作台）：只看命中分箱且有快照的学习者
-  if (confBin.value != null) list = list.filter((r) => r.task && r.confidence != null && binOf(r) === confBin.value)
   // 关键词搜索
   const kw = keyword.value.trim().toLowerCase()
   if (kw) {
@@ -601,10 +541,9 @@ const filtered = computed(() => {
   return sortLcRows(list)
 })
 
-const isFiltered = computed(() => pill.value !== 'all' || confBin.value != null || !!keyword.value.trim())
+const isFiltered = computed(() => pill.value !== 'all' || !!keyword.value.trim())
 function clearFilters() {
   pill.value = 'all'
-  confBin.value = null
   keyword.value = ''
 }
 
@@ -636,7 +575,6 @@ useListQueryState({
   keyword,
   page,
   pageSize,
-  bin: confBin,
   allowedPills: ['all', 'risk', 'watch', 'stale']
 })
 
@@ -646,7 +584,7 @@ const paged = computed(() => {
 })
 /* 筛选变化回第 1 页：监听筛选输入而非 filtered 结果（TeachingSessions 判例）——快照重拉 /
    口径切换同样会让 filtered 重算，监听结果会把还原的页码打回 1；越界页码由 Pagination 收敛 */
-watch([pill, keyword, confBin, lcSortKey, lcSortDir], () => {
+watch([pill, keyword, lcSortKey, lcSortDir], () => {
   page.value = 1
 })
 

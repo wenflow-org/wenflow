@@ -56,11 +56,6 @@
             :title="`当前生效时间范围：${timeRangeLabels[timeRange]}（点击展开高级筛选修改）`"
             @click="advOpen = !advOpen"
           ><span class="al-range__k">时间范围</span> <b class="al-range__v">{{ timeRangeLabels[timeRange] }}</b></button>
-          <MkFilterSearch
-            v-model="keyword"
-            :placeholder="tab === 'login' ? '用户名 / IP' : '关键词'"
-            @keydown.enter="applyFilters"
-          />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 失败 TOP 下钻的常驻状态（审核 #152）：弹层关闭后仍可见可退；徽章计数含 failedOnly，
                点击 = 退出下钻（与弹层内已激活 chip 同义） -->
@@ -85,6 +80,12 @@
           />
         </div>
         <div class="mk-card__head-right">
+          <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
+          <MkFilterSearch
+            v-model="keyword"
+            :placeholder="tab === 'login' ? '用户名 / IP' : '关键词'"
+            @keydown.enter="applyFilters"
+          />
           <!-- 2026-10-05 卡头统一弹层法：动作/时间下拉自主行收进共享 .mk-adv 弹层，
                失败 TOP 快捷下钻同迁（此前在头部右区占位致 1440 折两行）；触发钮标生效数 -->
           <!-- 列设置仅操作审计页签有效（登录表 6 列为固定列，不读 colVisible）；
@@ -881,9 +882,9 @@ onMounted(() => {
   void applyFilters()
 })
 
-/** 会话安全深链：?user=用户名 → 只看该用户当前会话（系统工具宿主「会话安全」tab） */
+/** 会话安全深链：?user=用户名 → 只看该用户当前会话（运营中心宿主「会话安全」tab） */
 function goSessions(username: string) {
-  void router.push({ path: '/admin/ops-center', query: { tab: 'security', user: username } })
+  void router.push({ path: '/admin/ops-hub', query: { tab: 'security', user: username } })
 }
 
 /** 导出当前筛选页为 JSON（与 ExecLogs.exportJson 同款：仅当前页 rows，非全量筛选结果）。

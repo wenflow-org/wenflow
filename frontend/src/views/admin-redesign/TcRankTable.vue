@@ -53,10 +53,10 @@
         {{ r.failed > 0 ? r.failed : '0' }}<em v-if="r.failed > 0" class="tc-c__sub">{{ failRate(r) }}</em>
       </span>
 
-      <!-- Token 用量：主值 + prompt·completion 拆分 -->
+      <!-- Token 用量：主值 + 输入·输出拆分 -->
       <div class="tc-c tc-c--tok" role="cell">
         <strong class="tc-num">{{ fmtTokens(r.tokens) }}</strong>
-        <em class="tc-c__sub">prompt {{ fmtTokens(r.promptTokens) }}<template v-if="(r.completionTokens ?? 0) > 0"> · comp {{ fmtTokens(r.completionTokens) }}</template></em>
+        <em class="tc-c__sub">输入 {{ fmtTokens(r.promptTokens) }}<template v-if="(r.completionTokens ?? 0) > 0"> · 输出 {{ fmtTokens(r.completionTokens) }}</template></em>
       </div>
 
       <!-- 成本（审核 #112）：照抄 SkillCostRow 取值口径——已定价 ≈$x，其余一律暗灰 — 占位。
@@ -173,7 +173,7 @@ function rowTitle(r: RankRow): string {
   const label = props.variant === 'user' ? (r.name || r.key) : (r.display || r.key)
   const parts = [label, `${r.calls} 次调用`, `失败 ${r.failed}`, `成本 ${costDesc(r)}`]
   if (r.promptTokens || r.completionTokens) {
-    parts.push(`prompt ${fmtTokens(r.promptTokens)} · completion ${fmtTokens(r.completionTokens)}`)
+    parts.push(`输入 ${fmtTokens(r.promptTokens)} · 输出 ${fmtTokens(r.completionTokens)}`)
   }
   return parts.join(' · ')
 }
@@ -193,8 +193,8 @@ function rowTitle(r: RankRow): string {
   gap: 10px;
 }
 /* user/model 半宽侧表：原「名称 1fr 独吃 + Token 固定 112px」——Token 副行
-   （prompt X · comp Y）实测宽 183px，溢出列宽 71px 压到「失败」列上（用户实测「挤着」）。
-   名称与 Token 双 fr 摊分：名称足够放邮箱（~178px），Token 放得下 183px 副行。
+   （prompt X · completion Y）实测宽 ~227px，溢出列宽会压到「失败」列上（用户实测「挤着」）。
+   名称与 Token 双 fr 摊分：名称足够放邮箱（~178px），Token 放得下 ~227px 副行。
    审核 #112：Token 与占比之间插成本列（minmax 保证「单价未配置」可读）。 */
 .tc-table--user .tc-table__head,
 .tc-table--user .tc-table__row,
@@ -237,8 +237,8 @@ function rowTitle(r: RankRow): string {
 .tc-c--num { text-align: right; }
 .tc-c--tok {
   text-align: right;
-  /* 主值 + prompt·comp 拆分必须两行堆叠：原靠 128px 定宽被迫换行，
-     列宽按 fr 摊开后装得下就横排成「48.7Mprompt 47.0M · comp 1.7M」 */
+  /* 主值 + prompt·completion 拆分必须两行堆叠：原靠 128px 定宽被迫换行，
+     列宽按 fr 摊开后装得下就横排成「48.7Mprompt 47.0M · completion 1.7M」 */
   display: grid;
   gap: 1px;
   justify-items: end;

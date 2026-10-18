@@ -3,12 +3,13 @@
     <!-- 页头（newui/admin pagehead）：页名 + 刷新上移；2026-10-04 状态条退役，读数迁页首
          KPI 带；2026-10-12 按用户走查再收一层：三张纯读数卡撤（阶段/Skill 进总览卡头 meta），
          无警时页头直接接页签（详见下方告警条注释） -->
-    <MkPageHead title="编排图" sub="顶层 Agent 数据流转逻辑图 · 字段影响范围">
-      <template #actions>
-        <!-- 刷新此前只重拉 definitions， stages / 对账仍是旧值（治理面板数字对不上）→ 三个域全拉 -->
-        <button type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
-      </template>
-    </MkPageHead>
+    <MkPageHead title="编排图" sub="顶层 Agent 数据流转逻辑图 · 字段影响范围" />
+    <!-- 页头刷新已撤（2026-10-16 用户走查「这个刷新是不是重了，有一个固定的刷新了」）：
+         本页原先另有一颗页头「刷新」，实测与顶栏固定刷新各打一半数据——页头打运行时定义/
+         阶段清单/对账，顶栏打拓扑/目录/其余全域，用户按任一颗都会以为整页刷了。
+         现全站统一由顶栏那一颗（loadLiveData(true)）驱动：本页自有域 watch(liveRefreshSeq)
+         重跑（见下方 watch），不再有第二颗语义重叠的刷新钮。 -->
+
     <!-- 页级告警已撤（2026-10-12 用户拍板「这个应该放到健康中心」）：拓扑完整性的页级信号
          （未解析步骤 / W4 哈希漂移）统一归健康中心检查项（orchestration-steps / w4-corehash，
          本页删去告警条后不再有 KPI 或告警条；健康中心那两项可深链回本页「字段旅程」）。
@@ -222,7 +223,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSubPage } from './store'
-import { liveTopoNodes, liveSkillCatalog, liveLoading, liveFailures, reloadLiveTopology } from './live'
+import { liveTopoNodes, liveSkillCatalog, liveLoading, liveFailures, reloadLiveTopology, liveRefreshSeq } from './live'
 import { TERMS } from './terms'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
@@ -408,12 +409,12 @@ watch(dataSource, () => {
   if (!recReport.value) void loadReconciliation()
 })
 
-/** 页头「刷新」：三个域（阶段清单 / 运行时定义 / 对账）全拉，避免只刷一半 */
-const refreshing = computed(() => defsLoading.value || stagesLoading.value || recLoading.value)
-async function refreshAll() {
-  if (refreshing.value) return
-  await Promise.all([loadDefinitions(), loadStages(), loadReconciliation()])
-}
+/* 顶栏固定「刷新」驱动本页自有域（2026-10-16）：这三个域不在 boot 域内，原先靠本页
+   页头的第二颗刷新钮重拉；现在页头钮已撤，改为 watch 顶栏刷新广播（liveRefreshSeq 在
+   loadLiveData(true) 里自增）。拓扑/目录本就是 boot 域，顶栏那次已一并刷新。 */
+watch(liveRefreshSeq, () => {
+  void Promise.all([loadDefinitions(), loadStages(), loadReconciliation()])
+})
 
 interface SkillNode { id: string; name: string; produces: string[] }
 interface DefStep { step: number; role?: string; condition?: string; loopOver?: string; agentId?: string; resolved?: { displayName?: string; kind?: string; nodeKind?: string; unresolved?: boolean } }
@@ -535,29 +536,42 @@ function contractTitle(kind: 'in' | 'out', n: number): string {
   const roles = OUT_ROLES.map((r) => roleMetaById.value[r]?.label || r).join(' / ')
   return `产出字段 ${n} 个 · 统计含：${roles}`
 }
+/** 在途去重（按键签名）：顶栏刷新同时改动 topology（boot 域）与 stageList（本页域），
+    两次都会让 `stages` 重算、各触发一次本函数——同一批 id 的重复拉取并成一笔；
+    签名不同（真的换了阶段集）时照常再拉 */
+let stageContractInflight: { key: string; p: Promise<void> } | null = null
 async function loadStageFieldContracts(ids: string[]) {
-  const results = await Promise.allSettled(
-    ids.map((id) => adminFieldRoutingsApi.getStageDetail(id)),
-  )
-  const map: Record<string, StageFieldContract> = {}
-  let meta: Array<{ id: string; label: string; hint: string }> = []
-  results.forEach((r, i) => {
-    if (r.status !== 'fulfilled') return
-    const data = r.value.data?.data
-    const fields = (data?.fields ?? []) as Array<{ promptRole?: string; camelName?: string | null; fieldId: string }>
-    if (!meta.length && Array.isArray(data?.promptRoleMeta) && data.promptRoleMeta.length) {
-      meta = data.promptRoleMeta
-    }
-    map[ids[i]] = {
-      ins: fields.filter((f) => f.promptRole === 'hard-required').map((f) => f.camelName || f.fieldId),
-      outs: fields.filter((f) => OUT_ROLES.includes(f.promptRole || '')).map((f) => f.camelName || f.fieldId),
-      loaded: true,
-    }
-  })
-  stageFieldContract.value = map
-  if (meta.length) {
-    roleMetaById.value = Object.fromEntries(meta.map((m) => [m.id, { label: m.label, hint: m.hint }]))
+  const key = ids.join('|')
+  if (stageContractInflight) {
+    if (stageContractInflight.key === key) { await stageContractInflight.p; return }
+    await stageContractInflight.p
   }
+  const p = (async () => {
+    const results = await Promise.allSettled(
+      ids.map((id) => adminFieldRoutingsApi.getStageDetail(id)),
+    )
+    const map: Record<string, StageFieldContract> = {}
+    let meta: Array<{ id: string; label: string; hint: string }> = []
+    results.forEach((r, i) => {
+      if (r.status !== 'fulfilled') return
+      const data = r.value.data?.data
+      const fields = (data?.fields ?? []) as Array<{ promptRole?: string; camelName?: string | null; fieldId: string }>
+      if (!meta.length && Array.isArray(data?.promptRoleMeta) && data.promptRoleMeta.length) {
+        meta = data.promptRoleMeta
+      }
+      map[ids[i]] = {
+        ins: fields.filter((f) => f.promptRole === 'hard-required').map((f) => f.camelName || f.fieldId),
+        outs: fields.filter((f) => OUT_ROLES.includes(f.promptRole || '')).map((f) => f.camelName || f.fieldId),
+        loaded: true,
+      }
+    })
+    stageFieldContract.value = map
+    if (meta.length) {
+      roleMetaById.value = Object.fromEntries(meta.map((m) => [m.id, { label: m.label, hint: m.hint }]))
+    }
+  })().finally(() => { if (stageContractInflight?.p === p) stageContractInflight = null })
+  stageContractInflight = { key, p }
+  await p
 }
 watch(
   stages,

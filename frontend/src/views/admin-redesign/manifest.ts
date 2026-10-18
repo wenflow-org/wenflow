@@ -2,10 +2,11 @@
  * Admin 控制台：场景清单（侧栏单一数据源）
  *
  * 导航一级收敛（阶段 1，2026-09-19）：低频页折入 tab 宿主，侧栏由 19 项/6 组收敛为 14 项/6 组。
- * - 运营中心（ops-hub）成为 tab 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知；
+ * - 运营中心（ops-hub）成为 tab 宿主：运营待办 · 反馈 · 成就 · 公告 · 站内通知
+ *   · 运维工具 · 数据导出 · 会话安全；
  *   feedback / ops-achievements / messages 场景下线（其 URL 重定向到对应 tab）。
  * - 模型与接入（api-config）成为 tab 宿主：接入与模型 · 外挂能力；addons 场景下线。
- * - 系统工具（ops-center）成为 tab 宿主：运维工具 · 数据导出 · 会话安全；session-security 场景下线。
+ * - 系统工具（ops-center）2026-10-16 解散并入运营中心（三页签挂 ops-hub）；session-security 场景同日退役。
  * - 记忆与复习（memory-review）由「观测」移入「教学」；Skill 组本阶段保持不变。
  *
  * 阶段 2（2026-09-19）：虚拟学习者独立成组（个体实验 / 规模实验）；
@@ -34,7 +35,7 @@ import type { Component } from 'vue'
 import {
   Activity, BookOpen, Coins, FlaskConical, HeartPulse, History, IdCard, LayoutDashboard,
   Megaphone, MessagesSquare, Plug, Route, ScrollText, ShieldCheck, Sparkles,
-  Target, Users, Workflow, Wrench,
+  Target, Users, Workflow,
 } from 'lucide-vue-next'
 
 export interface MockSceneDef {
@@ -91,13 +92,14 @@ export const MOCK_SCENES: MockSceneDef[] = [
   { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志', icon: ScrollText },
   { id: 'token-cost', label: '成本分析', group: '观测', glyph: '费', icon: Coins },
   { id: 'audit-logs', label: '审计日志', group: '观测', glyph: '审', icon: ShieldCheck },
-  // 系统组：原「配置」组改名；模型与接入成为 tab 宿主（接入与模型 · 外挂能力）；
-  // 系统工具成为 tab 宿主（运维工具 · 数据导出 · 会话安全）
+  // 系统组：原「配置」组改名；模型与接入成为 tab 宿主（接入与模型 · 外挂能力）
   // 2026-09-29 用户拍板：健康中心从 skills 宿主 tab 释放，回独立场景并归入系统组
   //（「健康检查/漂移/对账」三个 tab 本就是同一份报表的三刀，合一后独立成页）
+  // 2026-10-16 用户拍板：「系统工具」场景解散并入运营中心（ops-hub 的运维工具/数据导出/
+  // 会话安全三页签）；ops-center 从侧栏撤除，旧 URL 在 router 重定向到对应 tab。
   { id: 'health-center', label: '健康中心', group: '系统', glyph: '康', icon: HeartPulse },
   { id: 'api-config', label: '模型与接入', group: '系统', glyph: '安', icon: Plug },
-  { id: 'ops-center', label: '系统工具', group: '系统', glyph: '维', icon: Wrench },
-  // 运营组：运营中心为 tab 宿主（运营待办 · 反馈 · 成就 · 公告 · 站内通知）
+  // 运营组：运营中心为 tab 宿主（运营待办 · 反馈 · 成就 · 公告 · 站内通知
+  //          · 2026-10-16 并入的运维工具 / 数据导出 / 会话安全）
   { id: 'ops-hub', label: '运营中心', group: '运营', glyph: '营', icon: Megaphone }
 ]

@@ -63,6 +63,13 @@
               只读 · 来自配置文件
             </span>
           </div>
+          <!-- 这张卡决定什么（2026-10-16 用户走查：「下面那个卡片是设计意义是什么」）。
+               原卡头只写「只读 · 来自配置文件」，读者拿不到「所以呢」——限额到底是摆设还是真在生效。
+               一句说清它的三类作用，长了反而没人读。 -->
+          <p class="ac-mr-lead">
+            平台会路由的模型只有下面登记的这些。档位决定走对话还是推理通道，限额决定单次输出长度、思考参数与并发，
+            降级时只在模型之间切换，连接地址与密钥不动。
+          </p>
           <p v-if="data.registry?.source === 'embedded-fallback'" class="ac-mr-note">
             未读到配置文件，当前为内置默认目录：{{ data.registry?.path }}
           </p>
@@ -176,6 +183,19 @@
               <span class="mk-alert__msg">{{ warning }}</span>
             </div>
           </div>
+          <!-- 上游有、平台没登记的模型（2026-10-16 用户走查）：原在连接卡铺成 30+ 个 chip，与
+               本表并列成两份模型名单。收到这里，折叠着——它们只在排查「某个模型为什么不能用」
+               时才有用（答案是：没登记）。名字按厂家前缀归一比对，见 modelNameMatch。
+               未拉取上游清单时不渲染，免得给一个恒为 0 的折叠。 -->
+          <details v-if="upstreamUnregistered.length" class="ac-mr-upstream">
+            <summary class="mk-card__head mk-section__summary">
+              <h4 class="mk-card__title">上游还有 {{ upstreamUnregistered.length }} 个未登记</h4>
+              <span class="mk-card__meta">不参与路由</span>
+            </summary>
+            <div class="ac-mr-upstream__body">
+              <span v-for="name in upstreamUnregistered" :key="name" class="ac-mr-upstream__item mono" :title="name">{{ name }}</span>
+            </div>
+          </details>
         </section>
       </section>
     </template>
@@ -189,6 +209,7 @@ import { adminApiConfigApi } from '@/api/adminApi'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { errMsg } from './live'
+import { splitUpstreamByRegistry } from './modelNameMatch'
 
 interface ModelRegistryOverviewData {
   generatedAt: string
@@ -269,8 +290,10 @@ interface ModelRegistryOverviewData {
    留「接入与模型」。切片只裁剪渲染范围，数据仍是一次 getModelRegistry。 */
 type MrPart = 'aliases' | 'providers'
 /* 默认值就地写死（不能引用本地常量：defineProps 会被提升到 setup 之外，编译器会拦下） */
-const props = withDefaults(defineProps<{ parts?: MrPart[] }>(), {
-  parts: () => ['aliases', 'providers']
+const props = withDefaults(defineProps<{ parts?: MrPart[]; upstream?: string[] }>(), {
+  parts: () => ['aliases', 'providers'],
+  /** 上游中转站返回的原始模型清单（宿主传入，本组件不做拉取） */
+  upstream: () => []
 })
 const shows = (p: MrPart) => props.parts.includes(p)
 
@@ -335,6 +358,15 @@ const providerGroups = computed(() => {
 })
 
 /**
+ * 上游清单里平台没登记的模型（2026-10-16 用户走查）。登记表就是「平台会路由的集合」，
+ * 上游多出来的名字只在排查「某个模型为什么用不了」时有意义，故收进表尾折叠。
+ * 名字对齐口径与连接卡的计数共用 modelNameMatch（同一个数不能在两处各算一遍）。
+ */
+const upstreamUnregistered = computed(() =>
+  splitUpstreamByRegistry(props.upstream, (data.value?.models ?? []).map((m) => m.id)).unregistered
+)
+
+/**
  * 供应商三态（原型 statusPill ok/warn/off，index.html:1286-1299 / 1819-1823）：
  * 停用 → off；启用但自带端点且密钥未配置 → warn；其余 → ok。
  * 全部映射现有真实字段（enabled / endpointSource / keyConfigured），不引入新数据。
@@ -387,6 +419,29 @@ defineExpose({ refresh })
 }
 .ac-mr-note {
   margin: 8px 0 0;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+}
+/* 卡首一句「这张表决定什么」（2026-10-16 用户走查）：比正文轻一档、比表尾注重一档，
+   读者扫一眼卡头就知道限额是真在生效的东西，不是摆设。 */
+.ac-mr-lead {
+  margin: 8px 14px 0;
+  color: var(--mk-ink);
+  font-size: var(--mk-fs-micro);
+  line-height: 1.65;
+}
+/* 上游未登记折叠：默认收起（只在排查「某模型为什么用不了」时展开） */
+.ac-mr-upstream { margin: 4px 0 0; }
+.ac-mr-upstream__body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 14px 10px;
+}
+.ac-mr-upstream__item {
+  padding: 3px 8px;
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface-2);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }

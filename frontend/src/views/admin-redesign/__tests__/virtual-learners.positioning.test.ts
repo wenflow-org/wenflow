@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import VirtualLearners from '../VirtualLearners.vue';
-import { liveVirtuals, liveVirtualSessionStats } from '../live';
+import { liveVirtuals, liveVirtualSessionStats, liveVirtualRunStats } from '../live';
 import { MOCK_SCENES } from '../manifest';
 
 vi.mock('../live', async () => {
@@ -96,7 +96,8 @@ describe('虚拟学习者定位（D1）', () => {
   });
 
   it('活动会话按全量会话口径（running + created）进完成率卡 hint', async () => {
-    liveVirtualSessionStats.value = { created: 1, running: 2, failed: 3, abandoned: 1, completed: 0, total: 7 };
+    // 2026-10-15：与完成率卡同源（/stats，F20 口径已扣 autopilot=stopped）；不再读列表 sessionStats
+    liveVirtualRunStats.value = { ...liveVirtualRunStats.value, running: 2, created: 1 };
     const wrapper = mount(VirtualLearners);
     await flushPromises();
     await nextTick();

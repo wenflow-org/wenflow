@@ -26,10 +26,13 @@
     <!-- 卡库构成 KPI（全站家法：label + 28px 值 + hint 一短句口径，长解释收 title）。
          2026-10-14 KPI 审计：原「卡总数」卡删除——那个数与下方「卡墙」卡头「共 N 张」同屏复读，
          且它的 hint 又把「预置 / 自建」两个数说了一遍（就是右边这两张卡）。按计数单源家法，
-         列表长度交给列表卡头自报，KPI 只说列表说不出的构成拆分。 -->
+         列表长度交给列表卡头自报，KPI 只说列表说不出的构成拆分。
+         2026-10-16 卡=身份模板后新增「已派生实例」：身份池里有多少条已经派生出虚拟学习者
+         （卡墙默认展示全部卡，这两类混在一屏，需要分计才看得出池子规模）。 -->
     <section class="mk-kpi-grid" aria-label="卡库构成">
       <MkKpi label="预置卡" :value="summary?.builtin ?? '—'" hint="平台预置，随版本自动同步" title="平台预置角色，随版本更新自动同步。不包含在「导出卡库」内" />
       <MkKpi label="自建卡" :value="summary?.custom ?? '—'" hint="导入与 AI 创建" title="卡文档导入与后台/AI 创建的卡。「导出卡库」仅导出这部分" />
+      <MkKpi label="已派生实例" :value="summary?.derived ?? '—'" hint="已从身份卡创建虚拟学习者" title="已经派生出虚拟学习者的身份卡数量。派生不消耗身份卡——同一张卡可反复派生出多个虚拟学习者" />
     </section>
 
     <!-- 卡墙：全部卡的可视清单（搜名称/Key/目标/标签/邮箱）；点卡 = 卡详情二级页 -->
@@ -44,6 +47,21 @@
             <template v-if="keyword">命中 {{ filtered.length }} / 共 {{ cards.length }} 张</template>
             <template v-else>共 {{ cards.length }} 张</template>
           </span>
+        </div>
+        <div class="mk-filter">
+          <!-- 身份池快筛（2026-10-16 卡=身份模板）：卡墙默认两类同屏——还没派生过的身份卡，
+               以及从某张身份卡派生出来的实例。运营选角时要看的是前者，故给一处一键收窄。
+               与搜索叠加为 AND。 -->
+          <div class="mk-pills" role="group" aria-label="身份池快筛">
+            <button
+              type="button"
+              class="mk-pill"
+              :class="{ 'mk-pill--active': poolOnly }"
+              :aria-pressed="poolOnly"
+              :title="`只看还没派生过虚拟学习者的身份卡（当前 ${poolOnlyCount} 张）`"
+              @click="poolOnly = !poolOnly"
+            >只看身份池<span class="mk-pill__count">{{ poolOnlyCount }}</span></button>
+          </div>
         </div>
         <div class="mk-card__head-right">
           <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 卡号 / 目标 / 标签" />
@@ -76,11 +94,14 @@
         <button type="button" class="mk-btn mk-btn--primary" @click="openImport">导入第一张卡</button>
       </MkEmptyState>
       <!-- 筛选后 0 行是「卡内列表」场景，按规范用一行式内联空态（MkEmptyState + --line 修饰；
-           此前用 48px 内边距的居中大块空态，占位与场景不符） -->
+           此前用 48px 内边距的居中大块空态，占位与场景不符）。两处口径文案不同：
+           关键词命中为 0 与「身份池已被派空」不是一回事，说错会让人以为卡库空了。 -->
       <MkEmptyState
         v-else-if="!filtered.length"
         :class="LINE_EMPTY"
-        title="没有命中的卡：换个关键词试试（名称 / 卡号 / 目标 / 标签 / 邮箱）。"
+        :title="keyword
+          ? '没有命中的卡：换个关键词试试（名称 / 卡号 / 目标 / 标签 / 邮箱）。'
+          : '身份池里的卡都已派生出虚拟学习者，关掉快筛即可看到这些实例。'"
       />
       <div v-else class="vlc-wall">
         <article
@@ -95,6 +116,21 @@
           @keydown.space.prevent="openCard(c)"
         >
           <header class="vlc-card__head">
+            <!-- 选角勾选框（2026-10-16）：卡整体是 role=button，勾选框必须 @click.stop，
+                 否则点它就等于点开卡详情。键盘同样 stop，Enter/Space 才不会既勾选又进详情。 -->
+            <label
+              class="vlc-card__pick"
+              :title="`把「${cardName(c)}」加入待派生队列`"
+              @click.stop
+              @keydown.stop
+            >
+              <input
+                type="checkbox"
+                :checked="selected.includes(c.profileId)"
+                :aria-label="`选择 ${cardName(c)}`"
+                @change="togglePick(c.profileId)"
+              />
+            </label>
             <span class="vlc-avatar" :class="`vlc-avatar--${vlAvatarIndexOf(cardName(c))}`" aria-hidden="true">{{ cardName(c).slice(0, 1) }}</span>
             <strong class="vlc-card__name" :title="cardName(c)">{{ cardName(c) }}</strong>
             <span class="mk-badge" :class="sourceBadge(c)" :title="sourceTitle(c)">{{ sourceText(c) }}</span>
@@ -108,6 +144,11 @@
             <span v-for="t in c.tags.slice(0, 3)" :key="t" class="mk-badge mk-badge--muted" :title="t">{{ tagText(t) }}</span>
             <span v-if="c.tags.length > 3" class="vlc-card__more" :title="c.tags.join(' · ')">+{{ c.tags.length - 3 }}</span>
           </div>
+          <!-- 派生标记（2026-10-16 卡=身份模板）：这张卡是从另一张身份卡派生出来的实例，
+               不是可选角的身份本身。title 点名来源，便于顺着回模板再派生。 -->
+          <p v-if="c.derivedFrom" class="vlc-card__derived" :title="`派生自身份卡「${c.derivedFrom}」`">
+            派生自 {{ c.derivedFrom }}
+          </p>
           <footer class="vlc-card__foot">
             <span class="vlc-card__level" :title="`知识水平：${c.knowledgeLevel}`">{{ levelText(c.knowledgeLevel) }}</span>
             <span class="vlc-card__go">看详情 →</span>
@@ -125,8 +166,23 @@
       />
     </section>
 
+    <!-- 选角批量栏（页面级兄弟节点，选中后底部浮现；与虚拟学习者页同款全局 mk-batchbar 形态）：
+         卡库的主操作是「选身份 → 派生虚拟学习者」，批量是常态（一次挑几张身份各派生一个实例）。 -->
+    <div v-if="selected.length" class="mk-batchbar">
+      <span>已选 {{ selected.length }} 张身份卡</span>
+      <button type="button" class="mk-link" @click="clearPick">取消选择</button>
+      <button
+        type="button"
+        class="mk-btn mk-btn--primary"
+        title="每张选中的身份卡派生出 1 个虚拟学习者，任务在下一步挑"
+        @click="openDerive"
+      >创建虚拟学习者</button>
+    </div>
+
     <!-- 平台生产（同一份表单的 library 语境）：建卡入库 + 备好第一个故事，完成后回刷本页 -->
     <VirtualLearnerCreate ref="produceRef" context="library" @produced="onProduced" />
+    <!-- 从卡派生虚拟学习者（身份池主操作） -->
+    <CardDeriveDialog ref="deriveRef" @created="onDerived" />
   </div>
 </template>
 
@@ -139,6 +195,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import Pagination from './Pagination.vue'
 import VirtualLearnerCreate from './VirtualLearnerCreate.vue'
+import CardDeriveDialog from './CardDeriveDialog.vue'
 import { vlAvatarIndexOf } from '@/components/mk/vlAvatar'
 import { openSubPage } from './store'
 import { errMsg } from './live'
@@ -166,24 +223,32 @@ interface CardWallEntry {
   preset: boolean
   sourceKind: string | null
   email: string | null
+  /** 派生来源身份卡名（2026-10-16 卡=身份模板）：非空即本卡是派生出的实例 */
+  derivedFrom: string | null
 }
 
 /* ===== 卡墙 ===== */
 const cards = ref<CardWallEntry[]>([])
-const summary = ref<{ total: number; builtin: number; custom: number } | null>(null)
+const summary = ref<{ total: number; builtin: number; custom: number; derived: number } | null>(null)
 const indexLoading = ref(false)
 /** 索引拉取失败原因（非空 = 渲染持久错误态 + 重试入口，而不是把失败画成空态） */
 const indexError = ref('')
 const keyword = ref('')
+/** 只看身份池（未派生过的身份卡）：卡库里选角时把派生实例先收起来 */
+const poolOnly = ref(false)
+
+/** 未派生过的身份卡数（快筛角标与候选池规模） */
+const poolOnlyCount = computed(() => cards.value.filter((c) => !c.derivedFrom).length)
 
 const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
-  if (!kw) return cards.value
-  return cards.value.filter((c) =>
-    [c.name, c.cardKey, c.goal, c.opening, c.email, ...c.tags]
+  return cards.value.filter((c) => {
+    if (poolOnly.value && c.derivedFrom) return false
+    if (!kw) return true
+    return [c.name, c.cardKey, c.goal, c.opening, c.email, ...c.tags]
       .filter(Boolean)
       .some((v) => String(v).toLowerCase().includes(kw))
-  )
+  })
 })
 
 /* 卡墙分页：数据全量在客户端（索引接口一次给全），筛选后按页切片；
@@ -194,7 +259,7 @@ const pagedCards = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([keyword, cards], () => {
+watch([keyword, cards, poolOnly], () => {
   page.value = 1
 })
 /* 页码收敛：改大 pageSize 或数据缩减后 current page 超界时回落（单页时页码器不渲染，
@@ -209,7 +274,7 @@ async function loadIndex() {
   indexError.value = ''
   try {
     const res = await adminVirtualLearnersApi.cardsIndex()
-    const d = (res.data?.data ?? res.data) as { cards: CardWallEntry[]; summary: { total: number; builtin: number; custom: number } }
+    const d = (res.data?.data ?? res.data) as { cards: CardWallEntry[]; summary: { total: number; builtin: number; custom: number; derived: number } }
     cards.value = d?.cards ?? []
     summary.value = d?.summary ?? null
   } catch (e) {
@@ -273,6 +338,32 @@ function levelText(level: string): string {
     看全值（CSS 腰斩）。显示取 `hash:` + 前 8 位十六进制（够核对），完整值走 title。
     2026-10-14 #16：抽到 @/utils/shortHash 单源，卡详情 hero 同口径复用。 */
 const tagText = shortHashTag
+
+/* ===== 选角 → 派生虚拟学习者（2026-10-16 卡=身份模板，卡库即身份池） ===== */
+/** 待派生的身份卡 id（卡墙勾选框 v-model） */
+const selected = ref<string[]>([])
+
+function togglePick(profileId: string) {
+  const i = selected.value.indexOf(profileId)
+  if (i >= 0) selected.value.splice(i, 1)
+  else selected.value.push(profileId)
+}
+function clearPick() {
+  selected.value = []
+}
+
+const deriveRef = ref<InstanceType<typeof CardDeriveDialog> | null>(null)
+
+function openDerive() {
+  if (!selected.value.length) return
+  deriveRef.value?.openWith([...selected.value])
+}
+
+/** 派生成功：清勾选 + 回刷卡墙（新实例要立刻出现在墙上，KPI 的「已派生实例」也跟着走） */
+function onDerived() {
+  clearPick()
+  void loadIndex()
+}
 
 /* ===== 导出（卡库级动作，留在本页）===== */
 const exporting = ref(false)
@@ -407,6 +498,31 @@ onMounted(loadIndex)
   white-space: nowrap;
 }
 .vlc-card__more { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.vlc-card__derived {
+  margin: 0;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 勾选框：卡整体是 role=button，勾选框是它内部唯一的交互子控件，故撑到可点面积（≥24px 触控基准） */
+.vlc-card__pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: -4px;
+  flex: none;
+  cursor: pointer;
+}
+.vlc-card__pick input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--mk-blue, #2f6ae0);
+  cursor: pointer;
+}
 .vlc-card__foot {
   display: flex;
   align-items: center;
