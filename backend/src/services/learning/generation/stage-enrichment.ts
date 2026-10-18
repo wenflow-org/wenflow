@@ -15,6 +15,11 @@ import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { clampHintsToOneSitting, clampStageTasksToHints, ONE_SITTING_MAX_HOURS } from '../path-planning-hints';
 import { buildStageFillNote } from './stage-fill-note';
+import {
+  appendDescriptionNote,
+  buildPathFillNote,
+  reconcileDeliveryConservation,
+} from './path-fill-note';
 import { auditStageBudget } from './stage-budget-invariant';
 import { sanitizeUserFacingText } from '../user-facing-text';
 import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
@@ -853,6 +858,13 @@ async function enrichLearningPathWithAndersonInner(
       let pathNormalizedHours = 0;
       // #56：逐阶段记录回写后的学时，供收尾的不变量审计使用（回写前是骨架粗估，判不出退化）
       const stageHoursForAudit: Array<{ stageNumber: number; title: string | null; estimatedHours: number | null }> = [];
+      // #55：路径级对账要的是「计划」而不是回写后的任务汇总——必须在循环前从骨架锚取
+      // （循环内 tx.milestones.update 之后 learningPath.milestones 仍是旧值，语义上也是锚）。
+      const plannedAnchorHours = learningPath.milestones.reduce(
+        (sum, milestone) => sum + (Number(milestone.estimatedHours) || 0),
+        0,
+      );
+      let stageFillNoteCount = 0;
       for (const milestone of learningPath.milestones) {
         const stageOutput = stageDesignOutputs.find((item) => item.milestoneId === milestone.id);
         const stageTasks = stageOutput?.subtasks || [];
@@ -874,6 +886,7 @@ async function enrichLearningPathWithAndersonInner(
             (milestone as { description?: string | null }).description,
           );
           if (fillNote) {
+            stageFillNoteCount += 1;
             logger.info('[stage-enrichment] 阶段课时欠 fill，已追加容量说明', {
               pathId: learningPath.id,
               milestoneId: milestone.id,
@@ -935,8 +948,49 @@ async function enrichLearningPathWithAndersonInner(
         ? `【时间预算提示】按你当前的学习节奏，这份路径全部学完约需 ${Math.round(pathTotalMinutes / 60)} 小时，超出你可用时间的约 ${Math.round((capacityOverload.ratio - 1) * 100)}%。目标本身不受影响，但按原节奏会超出期限：可以先专注前几个阶段，学完再续后面的，或适当增加每周学习时间。`
         : null;
       const existingDescription = String(learningPath.description || '');
-      const descriptionWithOverload = overloadDeclaration && !existingDescription.includes('【时间预算提示】')
-        ? `${existingDescription}${existingDescription ? '\n\n' : ''}${overloadDeclaration}`
+      // #55 路径级欠交付声明：计划→实际这一跳此前完全静默（阶段级只覆盖低于自身锚 70% 的阶段，
+      // 路径级只有「超容量」一个方向）。计划优先取守恒层 after（容量夹取后的真实计划），无则退骨架锚。
+      // 只在**全路径生成**时评估：追加/渐进模式的本轮任务只是片段，用它算路径交付会把
+      // 「只做了第 3 阶段」误判成「整条路径只交付 23%」。
+      const fullPathRun = !appendOnly && !progressive && !restrictMilestoneIds;
+      const plannedAfterHours = Number((parsedTemplate as any)?.budgetConservation?.after) > 0
+        ? Number((parsedTemplate as any)?.budgetConservation?.after)
+        : plannedAnchorHours;
+      const pathFillNote = fullPathRun
+        ? buildPathFillNote({
+            plannedHours: plannedAfterHours,
+            deliveredHours: pathNormalizedHours,
+            existingDescription,
+          })
+        : null;
+      if (pathFillNote) {
+        logger.warn('[stage-enrichment] 路径实际交付低于计划，已追加路径级课时说明', {
+          pathId: learningPath.id,
+          plannedHours: plannedAfterHours,
+          deliveredHours: pathNormalizedHours,
+          ratio: plannedAfterHours > 0
+            ? Math.round((pathNormalizedHours / plannedAfterHours) * 100) / 100
+            : null,
+        });
+      }
+      // 两个方向的声明可同时成立（计划很宽、交付已超容量但仍低于计划 70%），各自按标记幂等追加
+      const descriptionNotes: string[] = [];
+      if (overloadDeclaration && !existingDescription.includes('【时间预算提示】')) {
+        descriptionNotes.push(overloadDeclaration);
+      }
+      if (pathFillNote) descriptionNotes.push(pathFillNote);
+      const descriptionWithNotes = descriptionNotes.reduce<string | null>(
+        (description, note) => appendDescriptionNote(description ?? existingDescription, note),
+        null,
+      );
+      // 实际交付落库：审计脚本据此区分「已声明缩水」与「静默缺陷」（存量路径无此字段时回退读描述标记）。
+      // 同样只在全路径生成时写——部分片段写进去会被读成整条路径的交付量。
+      const reconciledConservation = fullPathRun
+        ? reconcileDeliveryConservation({
+            conservation: (parsedTemplate as any)?.budgetConservation,
+            deliveredHours: pathNormalizedHours,
+            declaration: pathFillNote ? 'path' : stageFillNoteCount > 0 ? 'stage' : 'none',
+          })
         : null;
       if (pathSchoolAnchor && anchorGoalNotes > 0) {
         logger.info('[school-anchor] 阶段目标缺锚，已按确定性括注补齐', {
@@ -970,12 +1024,13 @@ async function enrichLearningPathWithAndersonInner(
         where: { id: learningPath.id },
         data: {
           ...(pathHoursToWrite !== undefined ? { estimatedHours: pathHoursToWrite } : {}),
-          ...(descriptionWithOverload ? { description: descriptionWithOverload } : {}),
+          ...(descriptionWithNotes ? { description: descriptionWithNotes } : {}),
           aiPromptTemplate: JSON.stringify({
             ...parsedTemplate,
             stageDesigns: stageDesignRawOutputs,
             kcAnnotation,
             ...(capacityOverload ? { capacityOverload } : {}),
+            ...(reconciledConservation ? { budgetConservation: reconciledConservation } : {}),
             ...(stageBudgetAudit.ok ? {} : { stageBudgetAudit: stageBudgetAudit.violations }),
             ...(Object.keys(materialRefsByTask).length
               ? {

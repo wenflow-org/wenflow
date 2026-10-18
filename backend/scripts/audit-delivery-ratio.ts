@@ -16,8 +16,11 @@
 import prisma from '../src/config/database';
 import {
   computeDeliveryRatio,
+  detectShortfallDeclaration,
   summarizeDeliveryRatios,
+  summarizeGapDeclarations,
   type DeliveryRatioRow,
+  type ShortfallDeclaration,
 } from '../src/services/learning/delivery-ratio';
 
 const args = process.argv.slice(2);
@@ -31,6 +34,8 @@ interface AuditRow {
   status: string;
   taskCount: number;
   ratio: DeliveryRatioRow;
+  /** 缺口声明（真缺口才有意义）：path=路径级课时说明，stage=阶段级时间/容量说明 */
+  declaration: ShortfallDeclaration;
 }
 
 async function main() {
@@ -39,9 +44,14 @@ async function main() {
       id: true,
       title: true,
       status: true,
+      description: true,
       aiPromptTemplate: true,
       milestones: {
-        select: { id: true, subtasks: { select: { estimatedMinutes: true } } },
+        select: {
+          id: true,
+          description: true,
+          subtasks: { select: { estimatedMinutes: true } },
+        },
       },
     },
     orderBy: { createdAt: 'desc' },
@@ -90,13 +100,27 @@ async function main() {
       noAnchor += 1;
       continue;
     }
-    rows.push({ pathId: path.id, title: path.title, status: path.status, taskCount, ratio });
+    // 声明分档：新生成路径读 budgetConservation.delivery.declaration（写入链落库），
+    // 存量路径回退扫描述标记（路径级【课时说明】优先，其次阶段级时间/容量说明）。
+    const persisted = (conservation as { delivery?: { declaration?: unknown } })?.delivery?.declaration;
+    const declaration: ShortfallDeclaration = persisted === 'path' || persisted === 'stage'
+      ? persisted
+      : detectShortfallDeclaration({
+          pathDescription: path.description,
+          milestoneDescriptions: path.milestones.map((milestone) => milestone.description),
+        });
+    rows.push({ pathId: path.id, title: path.title, status: path.status, taskCount, ratio, declaration });
   }
 
   const summary = summarizeDeliveryRatios(rows.map((row) => row.ratio));
+  const gapDeclarations = summarizeGapDeclarations(rows.map((row) => ({ trueGap: row.ratio.trueGap, declaration: row.declaration })));
   const gaps = rows
     .filter((row) => row.ratio.trueGap)
     .sort((a, b) => a.ratio.ratioActual - b.ratio.ratioActual);
+  // 计划→实际兑现不足的全体（含 cap ≥0.8 的设计性缩水）：路径级声明的目标集合
+  const plannedShortfalls = rows
+    .filter((row) => row.ratio.actualVsPlanned !== null && row.ratio.actualVsPlanned < 0.8)
+    .sort((a, b) => (a.ratio.actualVsPlanned ?? 1) - (b.ratio.actualVsPlanned ?? 1));
 
   if (AS_JSON) {
     console.log(JSON.stringify({
@@ -106,7 +130,9 @@ async function main() {
       noAnchor,
       noTasks,
       summary,
+      gapDeclarations,
       trueGaps: gaps,
+      plannedShortfalls,
     }, null, 2));
     return;
   }
@@ -118,6 +144,7 @@ async function main() {
   console.log(`  中位实际 ratio：${summary.medianActual ?? '-'}`);
   console.log(`  分档：${JSON.stringify(summary.bands)}`);
   console.log(`  计划→实际兑现率 <0.8（守恒层说排了、任务没排到）：${summary.plannedShortfall} 条`);
+  console.log(`  真缺口声明分档：已声明 ${gapDeclarations.declared} / 静默 ${gapDeclarations.silent}（真缺口 ${summary.trueGap} 条）`);
   console.log(`  判据（>40% 成立）：${summary.verdict}`);
   if (gaps.length) {
     console.log('[delivery:ratio] 真缺口样本（实际/计划/容量，hours）：');
@@ -126,7 +153,7 @@ async function main() {
       console.log(
         `  ${row.pathId} | ${row.status} | ${row.taskCount} 任务 | 锚 ${r.templateHours} 容量 ${r.capacityHours ?? '-'}`
         + ` 计划 ${r.plannedHours ?? '-'} 实际 ${r.deliveredHours} | ratio ${r.ratioActual} cap ${r.ratioCap ?? '-'}`
-        + ` | ${row.title ?? ''}`
+        + ` | 声明 ${row.declaration} | ${row.title ?? ''}`
       );
     }
   }

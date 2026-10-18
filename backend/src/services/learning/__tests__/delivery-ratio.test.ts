@@ -3,7 +3,13 @@
  * 口径陷阱是本模块的全部意义：计划口径（bc.after/锚）与实路口径（Σ任务分钟/锚）必须分开，
  * 否则「容量装不下」会被读成「交付塌方」，或者反过来把 5 条真缺口漏成 0 条。
  */
-import { computeDeliveryRatio, summarizeDeliveryRatios, type DeliveryRatioRow } from '../delivery-ratio';
+import {
+  computeDeliveryRatio,
+  detectShortfallDeclaration,
+  summarizeDeliveryRatios,
+  summarizeGapDeclarations,
+  type DeliveryRatioRow,
+} from '../delivery-ratio';
 
 describe('computeDeliveryRatio 口径', () => {
   it('无预算锚 / 锚为 0 / 负数 → 不可算（null），不当 0 参与统计', () => {
@@ -85,5 +91,40 @@ describe('summarizeDeliveryRatios 汇总', () => {
     expect(summary.medianActual).toBeNull();
     expect(summary.trueGapRate).toBe(0);
     expect(summary.verdict).toBe('不成立');
+  });
+});
+
+describe('缺口声明分档（#55 两镜头：有声明=自觉缩水，无声明=静默缺陷）', () => {
+  it('路径级【课时说明】优先识别为 path', () => {
+    expect(detectShortfallDeclaration({
+      pathDescription: '描述\n\n【课时说明】按你的时间预算……',
+      milestoneDescriptions: ['时间说明：这一阶段……'],
+    })).toBe('path');
+  });
+
+  it('仅阶段级声明识别为 stage（兼容存量「容量说明」旧文案）', () => {
+    expect(detectShortfallDeclaration({
+      pathDescription: '普通描述',
+      milestoneDescriptions: ['阶段描述', '时间说明：这一阶段按你的时间预算约 30 小时……'],
+    })).toBe('stage');
+    expect(detectShortfallDeclaration({
+      milestoneDescriptions: ['容量说明：本阶段按你的时间预算约 6 小时……'],
+    })).toBe('stage');
+  });
+
+  it('无任何声明识别为 none（静默缺陷）', () => {
+    expect(detectShortfallDeclaration({ pathDescription: '普通描述', milestoneDescriptions: [null, undefined, ''] })).toBe('none');
+    expect(detectShortfallDeclaration({})).toBe('none');
+  });
+
+  it('只统计真缺口；declared + silent === trueGap', () => {
+    const counts = summarizeGapDeclarations([
+      { trueGap: true, declaration: 'path' },
+      { trueGap: true, declaration: 'stage' },
+      { trueGap: true, declaration: 'none' },
+      { trueGap: false, declaration: 'none' }, // 非真缺口不计
+    ]);
+    expect(counts).toEqual({ declared: 2, silent: 1 });
+    expect(counts.declared + counts.silent).toBe(3);
   });
 });

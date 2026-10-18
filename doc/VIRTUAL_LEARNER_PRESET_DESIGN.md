@@ -1398,15 +1398,23 @@ consistencyNotes:
 
 - 定义 → 实例的**升级语义细节**（当前：presetVersion 变了才刷定义，保留运行时产物）。
 - 越界（out_of_scope）套件的设计与判定方式。
-- 管理台对预制实例的展示与「一键加载」入口（当前仅启动同步 + 复用现有列表）。
-- 判据 / 不变量检查器（我们已确认：不做答案键）。
+- 管理台对预制实例的展示与「一键加载」入口（启动同步已于 2026-10-09 摘除，见落地状态）。
+- ~~判据 / 不变量检查器~~ → **已实现（2026-10-18）**，见落地状态；仍不做答案键。
 
 ### 落地状态（2026-09-11，已实现）
 
-- 真源文件：`virtual-learners/presets.yaml`（14 条，进 git）。
+- 真源文件：`virtual-learners/presets.yaml`（2026-09-11 为 14 条；2026-10-01 收编为 9 条，当前即 9 条）。
 - 加载器：`backend/src/virtual-lab/builtin-learners/loader.ts`（校验 + 内容哈希）。
 - 组装纯函数：`backend/src/virtual-lab/builtin-learners/profile-data.ts`（保留运行时产物）。
-- 启动同步：`backend/src/virtual-lab/builtin-learners/seeder.ts` + `backend/src/index.ts` 挂载（幂等，best-effort）。
+- 同步入口：`backend/src/virtual-lab/builtin-learners/seeder.ts`（幂等，best-effort）。
+  **2026-10-09 起不再随启动自跑**（架构改版：卡库选角，空白项目零 VL 起步）——
+  改为显式入口 `runBuiltinVirtualLearnersSeed`（工具/脚本按需调用），下一行「启动挂载」为历史。
 - 数据模型：`virtual_learner_profiles` 新增 `source` / `presetKey`(unique) / `presetVersion`；迁移 `20260911000000_add_virtual_learner_presets`。
 - 测试：`backend/src/virtual-lab/__tests__/builtin-learners.test.ts`（7 项）。
-- 已在本机 dev.db 完成预填充（14 条 builtin 实例），重复执行幂等。
+- 已在本机 dev.db 完成预填充，重复执行幂等。
+- **不变量检查器（2026-10-18，#91）**：`backend/src/virtual-lab/builtin-learners/preset-invariants.ts`
+  （纯函数）+ `backend/scripts/audit-preset-invariants.ts`（CLI，`--with-db` 校验定义↔实例）。
+  判据分三层：单条定义（键/枚举/覆盖轴/时间轴对齐/概念矛盾/预算/夹具路径/答案键字段禁入）、
+  语料集合（空语料/重复键/覆盖统计）、定义↔实例（未实例化与退役实例记 info；版本超前 error、
+  同版本哈希漂移 warn、storyPool/knownConcepts 保留 warn）。error 级发现时 CLI 退出码 1。
+  实测（2026-10-18）：9 条定义 0 error；实例 5 条、4 条未实例化（与「启动不自动同步」一致）。

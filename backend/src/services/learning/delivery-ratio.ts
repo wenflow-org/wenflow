@@ -14,6 +14,7 @@
  * 与「装得下却没交付」（cap < 0.8，真塌方）。没有预算锚（budgetConservation 为 null）的路径
  * 不可算，单独计数，绝不当成 0 或 1 参与分母。
  */
+import { PATH_FILL_NOTE_MARKER } from './generation/path-fill-note';
 
 export interface DeliveryRatioInput {
   /** 预算锚（budgetConservation.target，小时）；null/0 表示无锚 */
@@ -63,6 +64,45 @@ export interface DeliveryRatioSummary {
 }
 
 const round3 = (value: number): number => Number(value.toFixed(3));
+
+/**
+ * 缺口声明判据（#55 两镜头）：真缺口里「有声明」是自觉缩水，「无声明」才是静默缺陷。
+ * - `path`：路径级 `【课时说明】`（`path-fill-note.ts`，2026-10-18 新增）；
+ * - `stage`：阶段级 `时间说明` / 存量 `容量说明`（`stage-fill-note.ts`）。
+ */
+export type ShortfallDeclaration = 'path' | 'stage' | 'none';
+
+/** 与 `path-fill-note.ts` 的 PATH_FILL_NOTE_MARKER 同源，避免审计侧另写一份字面量 */
+const PATH_DECLARATION_MARKER = PATH_FILL_NOTE_MARKER;
+const STAGE_DECLARATION_PATTERN = /(容量说明|时间说明)/;
+
+export function detectShortfallDeclaration(input: {
+  pathDescription?: string | null;
+  milestoneDescriptions?: Array<string | null | undefined>;
+}): ShortfallDeclaration {
+  if (typeof input.pathDescription === 'string' && input.pathDescription.includes(PATH_DECLARATION_MARKER)) {
+    return 'path';
+  }
+  const stages = input.milestoneDescriptions ?? [];
+  if (stages.some((text) => typeof text === 'string' && STAGE_DECLARATION_PATTERN.test(text))) {
+    return 'stage';
+  }
+  return 'none';
+}
+
+/** 真缺口的声明分档计数：declared + silent === trueGap */
+export function summarizeGapDeclarations(
+  entries: Array<{ trueGap: boolean; declaration: ShortfallDeclaration }>,
+): { declared: number; silent: number } {
+  let declared = 0;
+  let silent = 0;
+  for (const entry of entries) {
+    if (!entry.trueGap) continue;
+    if (entry.declaration === 'none') silent += 1;
+    else declared += 1;
+  }
+  return { declared, silent };
+}
 
 /** 单条路径的比值；无锚或锚为 0 → null（不可算，调用方须单独计数） */
 export function computeDeliveryRatio(input: DeliveryRatioInput): DeliveryRatioRow | null {
