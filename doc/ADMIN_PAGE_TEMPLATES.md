@@ -154,10 +154,7 @@
 
 ## 3. T1 · 列表页模板
 
-**适用（12 个导航页，最高杠杆）**：`people`、`sessions`、`virtual-learners`、`skills`、`prompt-eval`、`ops-achievements`、`feedback`、`messages`、`addons`、`session-security`、`execution-logs`、`audit-logs`
-
-> 状态（2026-09-19 校正）：**该清单已因导航收敛而过时**（写于 19 项侧栏时代）。现行侧栏为 **14 项 / 7 组**（`manifest.ts:31-54`）：总览 `overview`；教学 `people` · `sessions` · `memory-review`；虚拟实验 `virtual-learners` · `batch-experiments`；Skill `orchestrator` · `skills` · `prompt-eval`；观测 `execution-logs` · `audit-logs`；系统 `api-config` · `ops-center`；运营 `ops-hub`。原清单中的 `feedback` / `ops-achievements` / `messages`（→ `ops-hub` tab）、`addons`（→ `api-config` tab）、`session-security`（→ `ops-center` tab）、`health-center`（→ `skills` tab）**已下线为 tab 宿主子页，不再是侧栏场景**
-> 状态（2026-09-29 校正）：**侧栏现为 18 项 / 7 组**，上句里的 `health-center` 已**回归独立场景**并归入「系统」组（顺序：健康中心 / 模型与接入 / 系统工具）——它折入 `skills` 的那三个 tab（健康检查 · 漂移 · 对账）本就是同一份报表的三刀，2026-09-29 合一成页并从 Skills 抽出；`skills` 只剩 Skill 运行 · 模型路由。另：`token-cost` 已从执行日志宿主 tab 释放为独立场景（观测组）。；`sessions` 现外层为 `GoalConversations`（内嵌 `TeachingSessions`/`OpsContent`）；`memory-review`、`batch-experiments` 升为独立场景。T1 模板本身不变，但"适用导航页"应读作「场景 + tab 宿主子页」。
+**适用**：侧栏场景页与 tab 宿主子页（如 `sessions` 外层为 `GoalConversations`，内嵌教学会话与运营内容）。场景清单以 `frontend/src/views/admin-redesign/manifest.ts` 为准，当前为 18 个可见场景 / 7 组。
 
 ```
 ┌─ T1 列表页 ──────────────────────────────────────────┐
@@ -1561,7 +1558,6 @@ hex 随之 1114 → 1032（死规则里带的硬编码一并清掉）。真机�
 **遗留（诚实记账）**
 - **`document.body` 计算背景仍是 `#f3f6fb`**，而 `--bg-body` 在 `:root` 上已解析为 `#f7f8fa` → 该值应来自 **body 局部的自定义属性改写**。已排除：`App.vue` 全局 style、`main.css`、`v2.css`、各面 scoped 样式、以及 `styleSheets` 中所有匹配 `body`/`html` 且声明 `background(s)` 的规则。差 4/255，肉眼不可辨，不再追。
 - **`--blue-deep` / `--cyan` 与全部 `-ink` 变体**仍是字面量（mk 无对应档；`-ink` 是"浅底上的文本色"，与填充色角色不同）。
-- **EP 依赖已移除**（`b7ef7e3c`／`8712c6f9`：markup 与样式面清零 → 卸载包 + 清解析器/分包 + 9 个图标改内联 SVG）。
 
 ### 仍未动的（后续）
 

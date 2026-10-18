@@ -318,8 +318,8 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 | 灰度 | 别名权重 + 会话粘性（复用现有 `sessionId`） |
 | 验证 | per-deployment 健康探针（现有探针只到平台级，需下沉） |
 
-**2026-09-24 补记**：
-- **启动金丝雀已移除**：健康快照改由周期探测（开关开启时）或手动「立即探测」生成，进程启动不再向模型服务发真实请求（dev 热重载下尤其浪费）；见 `bootstrap/gateway.ts` 的 `syncCapabilityProbeSettings`。
+**健康快照与实验钉扎**：
+- 健康快照由周期探测（开关开启时）或手动「立即探测」生成，进程启动不向模型服务发真实请求（dev 热重载下每次启动都探测尤其浪费）；见 `bootstrap/gateway.ts` 的 `syncCapabilityProbeSettings`。
 - **实验钉扎（prompt-lab）**：`promptRuntimeOverride.routeOverride` 支持 `expectedProviderId` + `expectedCredentialFingerprint`（route.apiKey 的 SHA-256）双校验——实验期间路由漂移或换钥即拒绝执行，防实验结果串线；`privateNetworkPolicy` 只能收紧不能放宽。
 
 ---
