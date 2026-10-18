@@ -54,28 +54,15 @@
           <DataScopeToggle v-model="wbScope" />
         </span>
       </div>
-      <!-- 首屏加载态：三个待办请求在途且尚无 stats 时渲染骨架，不落定 0 值指标卡 -->
-      <MockSkeletonTable v-if="wbLoading && !stats" :cols="4" :rows="1" />
-      <!-- 审核 #174：四张自搓瓦片（.oh-metric 与 MkKpi 同解剖、值档/4K 档各成一套）收编共享
-           MkKpi；失败态脚注的红字走新增的 hintTone prop（扩共享原语而非页内再长一张卡）。 -->
-      <div v-else class="mk-kpi-grid oh-metrics">
-        <MkKpi
-          v-for="m in todoMetrics"
-          :key="m.key"
-          :label="m.label"
-          :value="m.failed ? '—' : m.value"
-          :tone="m.tone"
-          :hint="m.foot"
-          :hint-tone="m.failed ? 'bad' : ''"
-        />
-      </div>
-      <div class="ow-ranklist">
-        <!-- 首屏加载期间整段不落定（不渲染「已清零 / 去处理」），改渲染共用加载原语，
-             避免把「还没拉到」显示成「确认清零」 -->
-        <MkLoading v-if="wbLoading && !stats" inline />
+      <!-- 一份清单（2026-10-18 用户走查：「KPI 面板和 tab 的关系错了」）：原先是上面 4 张只读
+           MkKpi、下面 4 行只给动作，同一组四项在同一张卡里讲两遍，数字与动作还分在两处。
+           现合成一件事一行：事项 + 计数 + 类别 + 动作——数字与「去处理」同处，顺序仍按严重度
+           （坏>警告>中性，同档按计数降序）；计数着色沿用原指标卡分档（bad/warn/零值不着色），
+           失败态显「—」而不是 0（取不到 ≠ 没事）。首屏未到数时整段走骨架，不落定 0 值行。 -->
+      <MockSkeletonTable v-if="wbLoading && !stats" :cols="4" :rows="4" />
+      <div v-else class="ow-ranklist">
         <button
           v-for="t in todoItems"
-          v-else
           :key="t.key"
           type="button"
           class="ow-rankrow"
@@ -85,6 +72,7 @@
           @click="t.actionable ? t.action() : undefined"
         >
           <span class="ow-rankrow__main">{{ t.label }}</span>
+          <span class="ow-rankrow__count" :class="`ow-rankrow__count--${countTone(t)}`">{{ t.failed ? '—' : t.count }}</span>
           <span class="mk-badge mk-badge--muted">{{ t.category }}</span>
           <span class="ow-rankrow__go" :class="{ 'ow-rankrow__go--bad': t.failed }">{{ t.failed ? '加载失败' : (t.count > 0 ? '去处理 →' : '已清零') }}</span>
         </button>
@@ -228,8 +216,6 @@ import DataExportPanel from './DataExportPanel.vue'
 import SessionSecurity from './SessionSecurity.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkStageband from '@/components/mk/MkStageband.vue'
-import MkLoading from '@/components/mk/MkLoading.vue'
-import MkKpi from '@/components/mk/MkKpi.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 
@@ -468,31 +454,16 @@ const todoItems = computed(() => {
 })
 
 /**
- * 运营待办 metricCard 数值（原型 1906-1910 四张卡：待处理反馈 / 生成失败路径 /
- * Outbox 死信 / 草稿公告）。数值全部取现有统计，foot 用真实口径——
- * 不硬造「其中新增 N」这类后端未提供的子计数，只作简短定性说明。
- * 顺序直接映射排序后的 todoItems（卡带承诺「按优先级排序」，卡与行单源同序）。
+ * 待办行的计数档位（原指标卡的 tone 分档，2026-10-18 随合并搬进行）：
+ * 按事项严重度分档，不把 bad/warn 压成一个布尔——原 `severity !== 'muted' && count > 0` 让
+ * 「生成失败路径 23」（bad，排在第一行）与「待处理反馈 10」（warn）同为琥珀，颜色不再承载
+ * 紧急度；同屏「学习路径」面板的「生成失败」已显红（ow-state__bad），同一事实两色。
+ * 失败态计数显红（加载失败为 bad），muted（草稿公告）/零值维持原样不着色。
  */
-const TODO_METRIC_FOOT: Record<string, string> = { feedback: '等待分流', paths: '需排查重规划', dead: '待重放', draft: '待发布' }
-const todoMetrics = computed(() =>
-  todoItems.value.map((t) => {
-    /* F5-4 审核：色调按事项严重度分档，不再把 bad/warn 压成一个布尔——
-       原 `bad: severity !== 'muted' && count > 0` 让「生成失败路径 23」（bad，ranklist 第一位）
-       与「待处理反馈 10」（warn）同为琥珀，颜色不再承载紧急度；同屏「学习路径」面板的
-       「生成失败」已显红（ow-state__bad），同一事实两色。失败态数字显红（加载失败为 bad），
-       muted（草稿公告）/零值维持原样不着色 */
-    const tone: 'bad' | 'warn' | '' =
-      t.failed || (t.count > 0 && t.severity === 'bad') ? 'bad' : t.count > 0 && t.severity === 'warn' ? 'warn' : ''
-    return {
-      key: t.key,
-      label: t.label,
-      value: t.count,
-      tone,
-      failed: t.failed,
-      foot: t.failed ? '加载失败，计数不可信' : TODO_METRIC_FOOT[t.key] ?? '',
-    }
-  })
-)
+function countTone(t: (typeof todoItems.value)[number]): 'bad' | 'warn' | '' {
+  if (t.failed || (t.count > 0 && t.severity === 'bad')) return 'bad'
+  return t.count > 0 && t.severity === 'warn' ? 'warn' : ''
+}
 
 /* 公告三态计数（live 层共享，与侧栏徽章同源） */
 const ann = announcementCounts
@@ -664,13 +635,8 @@ watch(wbScope, () => {
      底边悬空 28.9px（先例 42107f8e 同判）；stretch 拉齐，增量由 .ow-state 行距消化 */
 }
 
-.oh-metrics {
-  /* 网格由共享 .mk-kpi-grid 承担（审核 #174）；此处只留卡内边距 */
-  padding: 4px 14px 12px;
-}
-
-/* ranklist 行动行（原型 290-295 .ranklist/.rankrow）：事项 + 行尾 mute 类别 pill；
-   「去处理」作为行尾按钮保留（行动能力不丢）。仅可跳转行给 pointer。 */
+/* ranklist 行动行（原型 290-295 .ranklist/.rankrow）：事项 + 计数 + 行尾 mute 类别 pill；
+   计数与「去处理」同处一行（2026-10-18 从 KPI 卡搬进来，见模板注释）。仅可跳转行给 pointer。 */
 .ow-ranklist { padding: 0 14px 6px; }
 .ow-rankrow {
   display: flex;
@@ -698,6 +664,19 @@ watch(wbScope, () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 计数（2026-10-18 从指标卡搬进行）：右对齐定宽，四行数字成列好扫；着色只承载紧急度 */
+.ow-rankrow__count {
+  flex: none;
+  min-width: 44px;
+  text-align: right;
+  font-size: var(--mk-fs-emphasis);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--mk-ink);
+}
+.ow-rankrow__count--bad { color: var(--mk-red); }
+.ow-rankrow__count--warn { color: var(--mk-amber); }
+.ow-rankrow--done .ow-rankrow__count { color: var(--mk-faint); }
 .ow-rankrow__go {
   font-size: var(--mk-fs-micro);
   font-weight: 700;

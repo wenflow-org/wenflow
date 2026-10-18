@@ -77,15 +77,13 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     // 显式错误条（页签体内 mk-alert，可重试的信号，而非静默）
     expect(w.find('.mk-alert').exists()).toBe(true)
     expect(w.text()).toContain('待办数据加载失败')
-    // 指标卡不得显假 0：三个失败域显「—」+「加载失败，计数不可信」foot。
-    // 2026-10-06 审核 #174：页内 .oh-metric 瓦片收编共享 MkKpi（tone=bad 着色数字，
-    // hintTone=bad 着色脚注），选择器随之迁移，断言语义不变。
-    const naValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '—')
-    expect(naValues).toHaveLength(3)
-    expect(w.findAll('.mk-kpi__hint--bad')).toHaveLength(3)
-    // 全页唯一显 0 的是「草稿公告」（取 live 层，未失败 → 0 是真实值，如实显示）
-    const zeroValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '0')
-    expect(zeroValues).toHaveLength(1)
+    // 计数不得显假 0：三个失败域显「—」+「加载失败」，只有「草稿公告」（取 live 层、未失败）显真 0。
+    // 2026-10-18 用户走查：「KPI 面板和 tab 的关系错了」——原先 KPI 卡与行动行同一组四项讲两遍，
+    // 现合成一件事一行（计数搬进行内），选择器随 .mk-kpi__num → .ow-rankrow__count，断言语义不变。
+    const counts = w.findAll('.ow-rankrow__count').map((c) => c.text())
+    expect(counts.filter((c) => c === '—')).toHaveLength(3)
+    expect(counts.filter((c) => c === '0')).toHaveLength(1)
+    expect(w.findAll('.mk-kpi__num')).toHaveLength(0)
     // 三个失败域行动行标失败态，且该行不得显示「已清零」
     // （第 4 行「草稿公告」取自 live 层，未失败 → 仍显示「已清零」是正确的）
     // 2026-10-01 对齐原型：待办清单由行动行改为 metricCard 条 + ranklist 行，
@@ -95,6 +93,8 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     for (const row of failedRows) {
       expect(row.text()).toContain('加载失败')
       expect(row.text()).not.toContain('已清零')
+      // 计数着色承载紧急度（原指标卡分档搬进行内）：失败域显红
+      expect(row.find('.ow-rankrow__count').classes()).toContain('ow-rankrow__count--bad')
     }
     // 重试入口（页头动作区，newui/admin pagehead 形态）
     expect(w.find('.mk-pagehead__actions button').text()).toContain('重试')
@@ -119,9 +119,9 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     const todoHead = w.find('.mk-card__head')
     expect(todoHead.find('.mk-card__title').text()).toBe('运营待办')
     expect(todoHead.find('.mk-card__meta').text()).toContain('运营待办全部已清零')
-    // 指标卡如实显示 0（真实 0 可以显；四卡：待处理反馈/生成失败路径/Outbox 死信/草稿公告）
-    // 2026-10-06 审核 #174：瓦片迁 MkKpi，.oh-metric__value → .mk-kpi__num
-    const values = w.findAll('.mk-kpi__num').map((v) => v.text())
+    // 计数如实显示 0（真实 0 可以显；四行：生成失败路径/待处理反馈/事件投递失败/草稿公告）
+    // 2026-10-18：计数由 KPI 卡搬进行内（KPI 面板与行动行合并），选择器随之迁移
+    const values = w.findAll('.ow-rankrow__count').map((v) => v.text())
     expect(values).toEqual(['0', '0', '0', '0'])
     // 行动行仍给「已清零」收尾
     expect(w.text()).toContain('已清零')
@@ -139,8 +139,8 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     const w = mount(OpsHub)
     await flushPromises()
 
-    // 指标卡如实显示 10（不再解析错位成 0）。2026-10-06 审核 #174：瓦片迁 MkKpi。
-    const values = w.findAll('.mk-kpi__num').map((v) => v.text())
+    // 行内计数如实显示 10（不再解析错位成 0）。2026-10-18：计数由 KPI 卡搬进行内。
+    const values = w.findAll('.ow-rankrow__count').map((v) => v.text())
     expect(values).toContain('10')
     // 结论句改总括句（审核 #173：逐项数字只留指标卡一处，卡头不再复述数字）
     const todoHead = w.find('.mk-card__head')
@@ -150,6 +150,8 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     expect(feedbackRow.attributes('disabled')).toBeUndefined()
     expect(feedbackRow.classes()).toContain('ow-rankrow--act')
     expect(feedbackRow.find('.ow-rankrow__go').text()).toContain('去处理')
+    // 计数着色：待处理反馈的严重度是 warn（琥珀），不是 bad（红）——颜色只承载紧急度
+    expect(feedbackRow.find('.ow-rankrow__count').classes()).toContain('ow-rankrow__count--warn')
 
     w.unmount()
   })
