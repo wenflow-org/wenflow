@@ -24,6 +24,11 @@ import { auditStageBudget } from './stage-budget-invariant';
 import { sanitizeUserFacingText } from '../user-facing-text';
 import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
 import { buildSupplementRequest, mergeSupplementTasks, needsLessonSupplement } from './stage-task-supplement';
+import {
+  supplementZeroRefStage,
+  createZeroRefSupplementGate,
+  type ZeroRefSupplementAudit,
+} from './stage-material-supplement';
 import { schoolAnchorCoverage, type PathSchoolAnchor } from './school-anchor';
 import { buildAnchorGoalNote } from './school-anchor-goal';
 import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } from './kc-annotation';
@@ -283,7 +288,13 @@ async function enrichLearningPathWithAndersonInner(
       refs: number;
       minSection: number | null;
       maxSection: number | null;
+      /** 零引用补课结果（#119 优化项 1）：仅在该阶段首轮零引用时出现。 */
+      materialSupplement?: ZeroRefSupplementAudit;
     }> = [];
+    // 零引用补课闸（#119 优化项 1）：run 作用域共享，本次路径生成最多 1 次补课调用
+    //（阶段设计并发 2 路，取闸是同步 check-and-set，先到先得——闸是路径级预算；
+    // 全量生成=每路径 1 次；渐进/追加每次 run 各有一份额度）。
+    const zeroRefSupplementGate = createZeroRefSupplementGate();
     const stageDesignOutputs: Array<{
       milestoneId: string;
       stageNumber: number;
@@ -518,17 +529,63 @@ async function enrichLearningPathWithAndersonInner(
       }
       assertStageTasksPresent(milestone.stageNumber, stageTasks);
       // 引用覆盖守卫（2026-10-17）：有资料却零引用 = 本阶段任务没有长在资料上
-      //（20 goal 复核实证：cpa/mbsr 末阶段）。只记录/告警，**不自动补引用**——
+      //（20 goal 复核实证：cpa/mbsr 末阶段）。缺口可见化之后**定向补课**（#119 优化项 1，2026-10-19）：
+      // 在路径级闸（每路径最多 1 次调用）下再调一次 stage-designer，只收「带引用且 sectionId
+      // 命中本阶段窗口」的新任务；闸用完/补不来则维持原状（只告警，见下方）。
+      // 纪律不变：**绝不自动补引用**——引用必须由模型给出并经 skill 侧逐字核对（withMaterialRefs），
       // 系统替模型绑一条不可核对的引用，比缺引用更糟（学习者点开原文会发现对不上）。
+      let materialSupplement: ZeroRefSupplementAudit | null = null;
       if (stageMaterials) {
-        const stageMaterialSummary = summarizeSectionRefPositions(
+        let stageMaterialSummary = summarizeSectionRefPositions(
           stageTasks.flatMap((task: any) => (Array.isArray(task?.materialRefs) ? task.materialRefs : [])),
         );
+        if (stageMaterialSummary.count === 0) {
+          const outcome = await supplementZeroRefStage({
+            stageNumber: milestone.stageNumber,
+            materials: stageMaterials,
+            stageTasks,
+            designerInput: stageDesignerInput,
+            hints: stageHints || (normalizedInput as any)?.planningHints || null,
+            gate: zeroRefSupplementGate,
+            // 与首轮同一条 skill 调用链（含逐字核对引用、白名单归一），补课只是多带一个 supplementRequest
+            callDesigner: (input) => executeSkill(stageDesignerDefinition, input),
+          });
+          if (outcome.applied) {
+            stageTasks = outcome.tasks;
+            stageMaterialSummary = summarizeSectionRefPositions(
+              stageTasks.flatMap((task: any) => (Array.isArray(task?.materialRefs) ? task.materialRefs : [])),
+            );
+          }
+          materialSupplement = {
+            attempted: outcome.attempted,
+            applied: outcome.applied,
+            reason: outcome.reason,
+            needed: outcome.needed,
+            incoming: outcome.incoming,
+            accepted: outcome.accepted,
+            rejected: outcome.rejected,
+          };
+          const supplementLogPayload = {
+            runId,
+            pathId,
+            stageNumber: milestone.stageNumber,
+            stageCount: learningPath.milestones.length,
+            ...materialSupplement,
+            refsAfter: stageMaterialSummary.count,
+          };
+          if (materialSupplement.attempted && !materialSupplement.applied) {
+            // 调了模型仍没拿到带引用的任务：缺口保留，如实告警（不硬塞）
+            logger.warn('[stage-material-supplement] 零引用补课未补成（缺口保留）', supplementLogPayload);
+          } else {
+            logger.info('[stage-material-supplement] 零引用阶段定向补课', supplementLogPayload);
+          }
+        }
         stageMaterialAudit.push({
           stageNumber: milestone.stageNumber,
           refs: stageMaterialSummary.count,
           minSection: stageMaterialSummary.minSection,
           maxSection: stageMaterialSummary.maxSection,
+          ...(materialSupplement ? { materialSupplement } : {}),
         });
         if (stageMaterialSummary.count === 0) {
           logger.warn('[stage-material-window] 本阶段有资料但零引用（任务未长在资料上）', {
@@ -574,6 +631,8 @@ async function enrichLearningPathWithAndersonInner(
           subtasks: stageTasks,
         },
         ...(supplementAudit ? { supplement: supplementAudit } : {}),
+        // 零引用补课审计（#119 优化项 1）：原始产出里留档，复算时可对照 prompt_call_logs 复核
+        ...(materialSupplement ? { materialSupplement } : {}),
       };
       stageDesignOutputs.push({
         milestoneId: milestone.id,
@@ -1127,12 +1186,27 @@ async function enrichLearningPathWithAndersonInner(
                 ? {
                     // 资料覆盖审计（2026-10-17）：逐阶段引用条数与章节序号范围 + 零引用阶段。
                     // 与 A/B 的「后半引用」同源，运维/复算可直接读，不需再跑探针。
+                    // 2026-10-19（#119 优化项 1）：零引用阶段经定向补课后 refs 已按补后清单重算，
+                    // `zeroRefStages` 即补后缺口（下降幅度 = 补课效果）。
                     materialCoverage: {
                       stages: [...stageMaterialAudit].sort((a, b) => a.stageNumber - b.stageNumber),
                       zeroRefStages: stageMaterialAudit
                         .filter((item) => item.refs === 0)
                         .map((item) => item.stageNumber)
                         .sort((a, b) => a - b),
+                      // 零引用补课审计（#119 优化项 1）：闸是否被消耗 + 逐阶段补课结果。
+                      // `attempted=false` 表示未发起调用（无窗口章节/已满/闸已耗尽），
+                      // `gateUsed=false` 表示本路径的补课额度未被消耗（下次生成还有机会）。
+                      ...(stageMaterialAudit.some((item) => item.materialSupplement)
+                        ? {
+                            zeroRefSupplement: {
+                              gateUsed: zeroRefSupplementGate.used,
+                              stages: stageMaterialAudit.flatMap((item) => (item.materialSupplement
+                                ? [{ stageNumber: item.stageNumber, ...item.materialSupplement }]
+                                : [])),
+                            },
+                          }
+                        : {}),
                     },
                   }
                 : {}),
