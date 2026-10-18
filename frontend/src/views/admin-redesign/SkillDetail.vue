@@ -309,127 +309,18 @@
             </section>
           </div>
           <p v-if="statsNote" class="mk-card__note">统计来源：{{ statsNote }}</p>
-          <!-- 运行时限制：原型 renderSkillDetail 2355-2357（dl.kv）；后端逐 skill 仅 requestTimeoutMs 可得，其余空态 -->
-          <section class="mk-card">
-            <div class="mk-card__head">
-              <h3 class="mk-card__title">运行时限制</h3>
-              <span class="mk-card__meta">{{ runtimeLimits.length ? `${runtimeLimits.length} 项` : '无独立限制' }}</span>
-            </div>
-            <div class="skd-pad">
-              <div v-if="runtimeLimits.length" class="skd-kv">
-                <div v-for="r in runtimeLimits" :key="r.k" class="skd-kv__row">
-                  <span class="skd-kv__k">{{ r.k }}</span>
-                  <span class="mono skd-kv__v">{{ r.v }}</span>
-                </div>
-              </div>
-              <p v-else class="mk-empty--line">暂无该 Skill 的独立运行时限制数据。</p>
-            </div>
-          </section>
-          <div class="skd-grid">
-            <!-- 模型配置（SkillDrawer「模型配置」页签整体迁入：skill_model_configs CRUD） -->
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">模型配置</h3>
-                <span class="mk-card__meta">{{ rtForm.enabled ? '独立路由' : '继承上层 / 平台默认' }}</span>
-              </div>
-              <div class="skd-pad skd-stack">
-                <label class="skd-check">
-                  <input v-model="rtForm.enabled" type="checkbox" />
-                  <span>独立配置<em>关闭 = 继承 Agent / 平台默认</em></span>
-                </label>
-                <div class="skd-fgrid">
-                  <label class="skd-field">
-                    <span>模型层级</span>
-                    <select v-model="rtForm.tier" class="mk-input" :disabled="!rtForm.enabled">
-                      <option value="chat">chat</option>
-                      <option value="reasoning">reasoning</option>
-                    </select>
-                  </label>
-                  <label class="skd-field">
-                    <span>模型<em>Prompt 声明 model 时不生效</em></span>
-                    <input v-model="rtForm.model" class="mk-input mono" :disabled="!rtForm.enabled" placeholder="留空 = 继承默认" spellcheck="false" />
-                  </label>
-                  <label class="skd-field">
-                    <span>思考模式</span>
-                    <select v-model="rtForm.thinkingMode" class="mk-input" :disabled="!rtForm.enabled">
-                      <option value="default">{{ INHERIT_DEFAULT_LABEL }}</option>
-                      <option value="enabled">开启</option>
-                      <option value="disabled">关闭</option>
-                    </select>
-                  </label>
-                  <label class="skd-field">
-                    <span>思考强度</span>
-                    <select v-model="rtForm.reasoningEffort" class="mk-input" :disabled="!rtForm.enabled || rtForm.thinkingMode === 'disabled'">
-                      <option value="default">{{ INHERIT_DEFAULT_LABEL }}</option>
-                      <option value="low">low</option>
-                      <option value="high">high</option>
-                      <option value="max">max</option>
-                    </select>
-                  </label>
-                  <label class="skd-field">
-                    <span>请求超时（ms）</span>
-                    <input v-model.number="rtForm.requestTimeoutMs" type="number" min="10000" max="300000" step="10000" class="mk-input" :disabled="!rtForm.enabled" placeholder="继承" />
-                  </label>
-                </div>
-                <p v-if="rtMsg" class="skd-msg" :class="{ 'is-err': rtErr }">{{ rtMsg }}</p>
-                <div class="skd-actions">
-                  <button type="button" class="mk-btn mk-btn--danger-ghost" :disabled="rtSaving" @click="resetRuntimeConfig">恢复默认</button>
-                  <button type="button" class="mk-btn" :disabled="rtSaving" @click="refreshRuntimeConfig">刷新</button>
-                  <button type="button" class="mk-btn mk-btn--primary" :disabled="rtSaving" @click="saveRuntimeConfig">
-                    {{ rtSaving ? '保存中…' : '保存配置' }}
-                  </button>
-                </div>
-                <p class="mk-card__note">模型仅当该 Skill 的线上生效 Prompt 未声明 model 时生效。生成参数（含 model）以线上生效 Prompt 为准。</p>
-              </div>
-            </section>
-            <!-- 模型测试（SkillDrawer「模型测试」页签整体迁入：model-probe 直发上游，不落库） -->
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">模型测试</h3>
-                <span class="mk-card__meta">直发上游 · 不留记录</span>
-              </div>
-              <div class="skd-pad skd-stack">
-                <div class="skd-fgrid">
-                  <label class="skd-field">
-                    <span>思考模式</span>
-                    <select v-model="probeForm.thinkingMode" class="mk-input">
-                      <option value="default">跟随配置（{{ cfgThinkingLabel }}）</option>
-                      <option value="enabled">开启</option>
-                      <option value="disabled">关闭</option>
-                    </select>
-                  </label>
-                  <label class="skd-field">
-                    <span>思考强度</span>
-                    <select v-model="probeForm.reasoningEffort" class="mk-input" :disabled="probeForm.thinkingMode === 'disabled'">
-                      <option value="default">跟随配置（{{ cfgEffortLabel }}）</option>
-                      <option value="low">low</option>
-                      <option value="high">high</option>
-                      <option value="max">max</option>
-                    </select>
-                  </label>
-                </div>
-                <p v-if="probeResolved" class="skd-resolved mono">生效：{{ probeResolved.model }} · {{ probeResolved.thinkingMode }} / {{ probeResolved.reasoningEffort }}</p>
-                <div class="skd-actions">
-                  <button type="button" class="mk-btn mk-btn--primary" :disabled="probeRunning" @click="runModelProbe">
-                    {{ probeRunning ? '探测中…（最长 180s）' : '开始探测' }}
-                  </button>
-                  <span v-if="probeError" class="skd-error">{{ probeError }}</span>
-                </div>
-                <div v-if="probeResult" class="skd-probe" :class="probeResult.jsonOk === 'ok' ? 'is-ok' : 'is-bad'">
-                  <div class="skd-probe__grid">
-                    <div><span>总耗时</span><strong class="mono">{{ fmtMs(probeResult.durationMs) }}</strong></div>
-                    <div><span>首字 TTFT</span><strong class="mono">{{ probeResult.ttftContentMs != null ? fmtMs(probeResult.ttftContentMs) : '—' }}</strong></div>
-                    <div><span>JSON</span><strong class="mono" :class="probeResult.jsonOk === 'ok' ? 'is-ok' : 'is-bad'">{{ probeResult.jsonOk }}</strong></div>
-                    <div><span>输出字符</span><strong class="mono">{{ probeResult.contentChars }}</strong></div>
-                    <div><span>completion</span><strong class="mono">{{ probeResult.completionTokens ?? '—' }}</strong></div>
-                    <div><span>finish</span><strong class="mono">{{ probeResult.finish || '—' }}</strong></div>
-                  </div>
-                  <pre v-if="probeResult.contentPreview" class="skd-code skd-code--short mono">{{ probeResult.contentPreview }}</pre>
-                </div>
-                <p class="mk-card__note">探测用线上生效 Prompt + 当前路由直发上游，测「改档位后真实延迟 / JSON / token」。先验证再保存配置。</p>
-              </div>
-            </section>
-          </div>
+          <!-- 运行时限制 / 模型配置 / 模型测试三张卡 2026-10-19 从本页删除：
+               它们与下方 RuntimeTab（设计区块）渲染的是同一套配置的第二份可编辑副本
+               （同一份 skill_model_configs、两个独立表单各自保存），页面上同题两遍，
+               而且各改各的互不可见。改由 RuntimeTab 单点承载（用户「要重新优化设计，
+               参考模型接入的设计」）；本页只留只读读数：运行指标 + 最近调用。
+               运行时限制那点信息（请求超时）在 RuntimeTab 的「生效值」胶囊与超时字段里已有。 -->
+          <!-- 设计页「运行时」内容（路由层/生成参数/备用模型速览 + 完整运行时配置 + 模型测试） -->
+          <RuntimeTab
+            :skill-id="skillId"
+            :refresh-tick="refreshTick"
+            @dirty="(d) => onTabDirty('runtime', d)"
+          />
           <!-- 最近调用（SkillDrawer「概览」迁入：点行跳执行日志 Trace） -->
           <section class="mk-card">
             <div class="mk-card__head">
@@ -447,12 +338,6 @@
               <p v-if="!recent.length" class="mk-empty--line">近 7 天暂无该 Skill 的调用记录。指标由统计接口聚合，统计范围与列表不同，以指标卡为准。</p>
             </div>
           </section>
-          <!-- 设计页「运行时」内容（路由层/生成参数/备用模型速览 + 完整运行时配置 + 模型测试） -->
-          <RuntimeTab
-            :skill-id="skillId"
-            :refresh-tick="refreshTick"
-            @dirty="(d) => onTabDirty('runtime', d)"
-          />
         </div>
 
         <!-- ========== 工程（原型 engineering：工程信息 kv + 依赖与发布 chips/feed） ========== -->
@@ -614,7 +499,7 @@
  * 数据口径：全部来自现有接口的真实字段——live 注册表档案 + workbench meta +
  * effective-prompt + skill_model_configs + model-probe + 字段路由 + Prompt 版本 + core YAML；
  * 原型有而后端没有数据源的展示项一律空态并注明来源缺失（回合状态机 / 终止条件 / 执行链路 /
- * 试跑对比 / 依赖 chips / 四段发布流 / 运行时限制 / 脱敏列 / 版本日期作者），绝不硬造：
+ * 试跑对比 / 依赖 chips / 四段发布流 / 脱敏列 / 版本日期作者），绝不硬造：
  *  - 回合状态机 / 终止条件 / 依赖 chips：防御式读 core YAML（stateMachine/states/termination/limits/inputs），
  *    当前 CoreFile schema 无这些字段 → 空态；
  *  - 执行链路 / 试跑对比：testSkill 仅回 output/success/duration → 执行链路空态、试跑对比整卡省略；
@@ -667,7 +552,6 @@ import RoutingTab from './skill-design/routing-tab.vue'
 /* 文案单源：输入/输出契约两块空态共用一句（R6 复读单源化）；思考模式/思考强度
    两个下拉的继承项共用一句。 */
 const AUX_CONTRACT_NA_TEXT = '该 Skill 为辅助类（无编排阶段归属），字段契约不适用。'
-const INHERIT_DEFAULT_LABEL = '跟随继承值 / 模型默认'
 
 /* ===== 6 页签（运行时置首：健康+证据先于配置，评审「结论埋深」）
    #149：键与设计页 ?tab= 深链键真对齐——「字段路由」设计页键是 routing，本页原写 fields
@@ -1218,10 +1102,6 @@ async function load(force = false) {
         if (guard(true)) { prompt.value = null; promptFailed.value = true; promptLoaded.value = true }
       }
     })(),
-    // 模型配置表单（运行时页签）
-    (async () => {
-      await loadRuntimeConfig(id, (ok) => guard(ok))
-    })(),
     // 字段路由（协议契约 + 字段路由页签）
     (async () => {
       routingsLoading.value = true
@@ -1433,178 +1313,13 @@ async function runTrial() {
   }
 }
 
-/* ===== 模型配置（运行时页签；SkillDrawer 表单整体迁入，skill_model_configs CRUD） ===== */
-interface RtForm {
-  enabled: boolean
-  tier: 'chat' | 'reasoning'
-  model: string
-  thinkingMode: 'default' | 'enabled' | 'disabled'
-  reasoningEffort: 'default' | 'low' | 'high' | 'max'
-  requestTimeoutMs: number | null
-}
-const defaultRtForm = (): RtForm => ({
-  enabled: false,
-  tier: 'chat',
-  model: '',
-  thinkingMode: 'default',
-  reasoningEffort: 'default',
-  requestTimeoutMs: null,
-})
-const rtForm = ref<RtForm>(defaultRtForm())
-const rtSaving = ref(false)
-const rtMsg = ref('')
-const rtErr = ref(false)
-
-/** 运行时限制 kv（原型 SKILL_RUNTIME_LIMITS，index.html 2355-2357）：后端逐 skill 仅 requestTimeoutMs 可得 */
-const runtimeLimits = computed<Array<{ k: string; v: string }>>(() => {
-  const rows: Array<{ k: string; v: string }> = []
-  const ms = rtForm.value.requestTimeoutMs
-  if (ms != null) rows.push({ k: '请求超时', v: `${ms} ms` })
-  return rows
-})
-
-async function loadRuntimeConfig(id: string, guard: (ok: boolean) => boolean) {
-  try {
-    const res = await adminSkillsApi.getSkillModelConfig(id)
-    if (!guard(true)) return
-    const raw = res.data?.data ?? res.data ?? {}
-    rtForm.value = {
-      enabled: raw?.enabled === true,
-      tier: raw?.tier === 'reasoning' ? 'reasoning' : 'chat',
-      model: raw?.model || '',
-      thinkingMode: raw?.thinkingMode || 'default',
-      reasoningEffort: raw?.reasoningEffort || 'default',
-      requestTimeoutMs: raw?.requestTimeoutMs ?? null,
-    }
-  } catch {
-    if (guard(true)) rtForm.value = defaultRtForm()
-  }
-  // 探测表单跟随当前生效配置（与 SkillDrawer syncProbeConfig 同语义）
-  cfgThinking.value = rtForm.value.thinkingMode
-  cfgEffort.value = rtForm.value.reasoningEffort
-  probeForm.value = { thinkingMode: 'default', reasoningEffort: 'default' }
-}
-
-/** 配置卡「刷新」钮：click 事件不能当 id 传（vue-tsc 捕获的签名问题），显式包一层 */
-function refreshRuntimeConfig() {
-  const id = skillId.value
-  if (!id || rtSaving.value) return
-  void loadRuntimeConfig(id, (ok) => ok)
-}
-
-async function saveRuntimeConfig() {
-  const id = skillId.value
-  if (!id || rtSaving.value) return
-  rtSaving.value = true
-  rtMsg.value = ''
-  rtErr.value = false
-  try {
-    await adminSkillsApi.updateSkillModelConfig(id, {
-      tier: rtForm.value.tier,
-      model: rtForm.value.model || undefined,
-      thinkingMode: rtForm.value.thinkingMode,
-      reasoningEffort: rtForm.value.thinkingMode === 'disabled' ? 'default' : rtForm.value.reasoningEffort,
-      requestTimeoutMs: rtForm.value.enabled ? (rtForm.value.requestTimeoutMs ?? null) : null,
-      enabled: rtForm.value.enabled,
-    })
-    rtMsg.value = '已保存（接入地址 / 超时 / 思考档生效，模型以当前 Prompt 为准）'
-    await loadRuntimeConfig(id, (ok) => ok)
-  } catch (e) {
-    rtErr.value = true
-    rtMsg.value = `保存失败：${errMsg(e)}`
-  } finally {
-    rtSaving.value = false
-  }
-}
-
-async function resetRuntimeConfig() {
-  const id = skillId.value
-  if (!id || rtSaving.value) return
-  // EG2：破坏性动作（删除本 Skill 独立模型配置）先确认，文案对齐 skill-design/runtime-tab 的 askConfirm
-  const ok = await askConfirm({
-    title: '恢复默认配置',
-    message: '确定恢复该 Skill 的默认模型配置吗？\n独立配置将被删除，恢复为继承上层 / 平台默认。',
-    confirmText: '恢复默认'
-  })
-  if (!ok) return
-  rtSaving.value = true
-  rtMsg.value = ''
-  rtErr.value = false
-  try {
-    await adminSkillsApi.deleteSkillModelConfig(id)
-    rtMsg.value = '已恢复默认（继承上层 / 平台）'
-    await loadRuntimeConfig(id, (ok) => ok)
-  } catch (e) {
-    rtErr.value = true
-    rtMsg.value = `恢复失败：${errMsg(e)}`
-  } finally {
-    rtSaving.value = false
-  }
-}
-
-/* ===== 模型测试（运行时页签；SkillDrawer model-probe 整体迁入） ===== */
-interface ProbeForm {
-  thinkingMode: 'default' | 'enabled' | 'disabled'
-  reasoningEffort: 'default' | 'low' | 'high' | 'max'
-}
-interface ProbeResult {
-  durationMs?: number
-  ttftContentMs?: number | null
-  contentChars?: number
-  completionTokens?: number | null
-  finish?: string
-  jsonOk?: string
-  contentPreview?: string
-  resolved?: { model?: string; thinkingMode?: string; reasoningEffort?: string }
-}
-const probeForm = ref<ProbeForm>({ thinkingMode: 'default', reasoningEffort: 'default' })
-const cfgThinking = ref<'default' | 'enabled' | 'disabled'>('default')
-const cfgEffort = ref<'default' | 'low' | 'high' | 'max'>('default')
-const probeRunning = ref(false)
-const probeError = ref('')
-const probeResult = ref<ProbeResult | null>(null)
-
-const cfgThinkingLabel = computed(() =>
-  cfgThinking.value === 'enabled' ? '开启' : cfgThinking.value === 'disabled' ? '关闭' : '继承/默认'
-)
-const cfgEffortLabel = computed(() => (cfgEffort.value === 'default' ? '继承/默认' : cfgEffort.value))
-const probeResolved = computed(() => probeResult.value?.resolved || null)
-
-function resetProbe() {
-  probeRunning.value = false
-  probeError.value = ''
-  probeResult.value = null
-  probeForm.value = { thinkingMode: 'default', reasoningEffort: 'default' }
-}
-
-async function runModelProbe() {
-  const id = skillId.value
-  if (!id || !view.value || probeRunning.value) return
-  probeRunning.value = true
-  probeError.value = ''
-  probeResult.value = null
-  try {
-    const res = await adminSkillsApi.modelProbe(id, {
-      thinkingMode: probeForm.value.thinkingMode,
-      reasoningEffort: probeForm.value.reasoningEffort,
-    })
-    if (id !== skillId.value) return
-    const body = res.data?.data ?? res.data ?? {}
-    if (body.thinkingMode !== 'default' && (body.thinkingMode as string) !== cfgThinking.value) {
-      body.thinkingMode = probeForm.value.thinkingMode
-    }
-    probeResult.value = body
-  } catch (e) {
-    if (id !== skillId.value) return
-    probeError.value = `探测失败：${errMsg(e)}`
-  } finally {
-    if (id === skillId.value) probeRunning.value = false
-  }
-}
-
+/* 模型配置 / 模型测试的状态与动作 2026-10-19 迁出本页：
+   宿主原本自己维护一份 rtForm/probeForm 并渲染同名的两张卡，与设计区块 RuntimeTab 构成
+   同一份 skill_model_configs 的两个独立编辑器（各存各的、互不可见）。现由 RuntimeTab 单点承载，
+   本页只留只读读数（运行指标 / 最近调用）。 */
 /* ===== 换技能（含深链 / 关闭）：全量复位 + 重拉（判例 PathDetail 的 pathId watch）。
    声明位置约束：immediate 回调在 setup 期同步执行，本 watch 必须排在全部状态声明之后
-   （resetTrial/resetProbe 是函数声明可提升，rtMsg/probeForm 等 const 不行）。 */
+   （resetTrial 是函数声明可提升，trial 的 const 状态不行）。 */
 watch(
   skillId,
   (id) => {
@@ -1628,8 +1343,6 @@ watch(
     tab.value = readTabFromQuery()
     visited.add(tab.value)
     resetTrial()
-    resetProbe()
-    rtMsg.value = ''
     if (id) void load()
   },
   { immediate: true }
@@ -1797,21 +1510,8 @@ useEscape(
 .skd-meter { flex: 1; min-width: 60px; height: 6px; border-radius: 999px; background: var(--mk-surface-3); overflow: hidden; }
 .skd-meter i { display: block; height: 100%; background: var(--mk-blue); }
 
-/* ===== 工程：依赖 chips / 运行时限制 kv（原型 .chips/.kv，index.html 2368 / 2355） ===== */
+/* ===== 工程：依赖 chips（原型 .chips，index.html 2368） ===== */
 .skd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.skd-kv { display: grid; gap: 0; }
-.skd-kv__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--mk-line);
-  font-size: var(--mk-fs-micro);
-}
-.skd-kv__row:last-child { border-bottom: 0; }
-.skd-kv__k { color: var(--mk-muted); }
-.skd-kv__v { color: var(--mk-ink); }
 
 /* ===== 代码井（原型 .code：深底 mono 块；System Prompt / 试跑输出 / 探测预览共用） ===== */
 .skd-code {
@@ -1828,7 +1528,6 @@ useEscape(
   overflow-y: auto;
 }
 .skd-code--tall { max-height: 320px; }
-.skd-code--short { max-height: 160px; font-size: var(--mk-fs-micro); }
 
 /* ===== 试跑 ===== */
 .skd-ta { width: 100%; }
@@ -1844,50 +1543,10 @@ useEscape(
 /* ===== 运行时：指标卡（原型 metricCard 四张独立卡）走共享 MkKpi + .mk-kpi-grid（审核 #146），
    本文件的 .skd-metric* 私有实现已删（含值档与 4K 档覆写，原语自带全档位） ===== */
 
-/* ===== 运行时：模型配置表单（SkillDrawer mt-* 迁入，统一 skd- 前缀） ===== */
-.skd-check {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 10px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface-2);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-}
-.skd-check input { width: 15px; height: 15px; accent-color: var(--mk-blue); }
-.skd-check em { font-style: normal; font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
-.skd-fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* ===== 试跑表单字段（标签 + 控件） ===== */
 .skd-field { display: grid; gap: 4px; min-width: 0; }
 .skd-field > span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
 .skd-field > span em { font-style: normal; font-weight: 400; color: var(--mk-faint); margin-left: 5px; }
-.skd-msg { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-green); font-weight: 600; }
-.skd-msg.is-err { color: var(--mk-red); }
-.skd-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
-.skd-resolved {
-  margin: 0;
-  padding: 6px 10px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface-2);
-  border: 1px dashed var(--mk-line);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-}
-.skd-probe {
-  display: grid;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--mk-line);
-  background: var(--mk-surface);
-}
-.skd-probe.is-ok { border-color: color-mix(in srgb, var(--mk-green) 35%, transparent); }
-.skd-probe.is-bad { border-color: color-mix(in srgb, var(--mk-red) 35%, transparent); }
-.skd-probe__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
-.skd-probe__grid > div { display: grid; gap: 2px; min-width: 0; }
-.skd-probe__grid span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; }
-.skd-probe__grid strong { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
-.skd-probe__grid strong.is-ok { color: var(--mk-green); }
-.skd-probe__grid strong.is-bad { color: var(--mk-red); }
 
 /* ===== 运行时：最近调用行（SkillDrawer msk__row 迁入：状态点 + 标题 + 耗时） ===== */
 .skd-call {

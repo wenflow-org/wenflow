@@ -26,6 +26,29 @@ export const errText = (e: unknown) => {
   return humanizeHttpError(message, r?.response?.status) || message || '未知错误'
 }
 
+/**
+ * 生成参数的来源码（后端 resolve-llm-call-params 的 LlmParamSource 枚举）→ 人话。
+ * 这些码只在接口里存在：直接渲染会露出 active-prompt / route-fallback 这类黑话
+ * （2026-10-19 走查实测：胶囊里就写着 active-prompt、topP 那格写着 none）。
+ * 未知码原样返回（宁可露码，也不把来源藏掉）。
+ */
+const CALL_PARAM_SOURCES: Record<string, string> = {
+  'runtime-override': '调用时指定',
+  'skill-override': '本 Skill 覆盖',
+  'active-prompt': 'Prompt 文件声明',
+  'code-defaults': '代码默认',
+  'route-fallback': '路由表',
+  none: '未设',
+  // 契约服务（skill-runtime-contract）的同族码，走同一张表免得再漏
+  route: '路由表',
+  'agent-or-platform': 'Agent / 平台默认',
+  'platform-default': '平台默认',
+  unresolved: '未解析'
+}
+
+export const callParamSourceLabel = (raw?: string | null): string =>
+  raw ? CALL_PARAM_SOURCES[raw] ?? raw : '—'
+
 /** core.yaml 输入声明（试跑默认载荷只读 name/type 两个字段） */
 export interface TrialInputDecl {
   name?: string

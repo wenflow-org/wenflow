@@ -502,7 +502,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  it('运行时页签（置首默认）：指标格（真实统计）+ 模型配置表单 + 模型测试 + 最近调用空态', async () => {
+  it('运行时页签（置首默认）：指标格（真实统计）+ 模型与路由表单 + 模型测试 + 最近调用空态', async () => {
     const w = mountDetail()
     await settle()
     await w.findAll('.mk-subtab')[0].trigger('click')
@@ -518,16 +518,21 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     // 统计口径对齐真实窗口（liveSkillStatsMap 默认近 7 天）：不再照抄 meta.stats 的「全量」
     expect(w.text()).toContain('近 7 天')
 
-    // 模型配置（SkillDrawer 迁入）：独立配置开着 + 保存/恢复默认在位
-    expect(w.text()).toContain('模型配置')
+    // 模型与路由（2026-10-19 重排：宿主与设计区块原本各渲染一份同配置的可编辑副本，
+    // 现由 RuntimeTab 单点承载，卡名从「模型配置」改为「模型与路由」）
+    expect(w.text()).toContain('模型与路由')
     expect(w.text()).toContain('独立配置')
     expect(w.text()).toContain('保存配置')
     expect(w.text()).toContain('恢复默认')
-    // 模型测试（SkillDrawer 迁入）
+    // 生效值（只读「所配即所得」）：运行时限制独立卡退役后，超时等信息在这里看
+    expect(w.text()).toContain('生效值')
+    // 模型测试（右侧验证列）
     expect(w.text()).toContain('模型测试')
     expect(w.text()).toContain('开始探测')
-    // 运行时限制：无独立 requestTimeoutMs（cfg 未回超时值时为 null）→ 空态注明
-    expect(w.text()).toContain('运行时限制')
+    // 同题不再出现两遍：页面里「模型与路由」「模型测试」各只一处
+    expect(w.findAll('.mk-card__title').filter((t) => t.text().includes('模型与路由')).length).toBe(1)
+    expect(w.findAll('.mk-card__title').filter((t) => t.text().includes('模型测试')).length).toBe(0) // 模型测试是段标题不是卡
+    expect(w.text()).not.toContain('运行时限制')
     // 最近调用（SkillDrawer 概览迁入）：无日志窗口数据 → 明确空态
     expect(w.text()).toContain('最近调用')
     // 2026-10-08 走查 #3：原空态写「日志窗口内无调用」，与同屏近 7 天统计卡（如 27852 次调用）
