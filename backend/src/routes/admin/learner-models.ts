@@ -41,6 +41,7 @@ router.get('/', async (req, res) => {
       staleOnly: req.query.staleOnly === 'true',
       riskOnly: req.query.riskOnly === 'true',
       excludeTest,
+      testOnly: String(req.query.testOnly || '') === 'true',
       page: req.query.page ? Number(req.query.page) : undefined,
       limit: req.query.limit ? Number(req.query.limit) : undefined,
     });

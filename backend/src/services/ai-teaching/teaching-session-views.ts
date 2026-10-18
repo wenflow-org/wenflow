@@ -61,6 +61,18 @@ export function buildRecoveredOpening(session: TeachingSessionRecord): TeachingO
 }
 
 /**
+ * 开场正文拼装：`question` 是可选字段（与 quickReplies 互斥，见 TeachingOpening 契约；
+ * 确定性兜底 `buildDeterministicOpening` 就只给 quickReplies），裸 `${message}\n\n${question}`
+ * 会把字面量 "undefined" 写进落库消息 —— 那是学习者直接看到的第一句话
+ * （2026-10-11 走查：全库 108/827 会话命中）。只拼有值的部分。
+ */
+export function composeWelcome(opening: TeachingOpening): string {
+  return [opening.message, opening.question]
+    .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+    .join('\n\n');
+}
+
+/**
  * 确定性开场兜底：generateOpening（LLM）失败/无有效结构时使用，
  * 保证开课链路在模型不可用时仍可用（此前直接抛错导致开课整体不可用）。
  * 结构对齐 TeachingOpening 契约（message/question/quickReplies/mode）。
@@ -68,7 +80,8 @@ export function buildRecoveredOpening(session: TeachingSessionRecord): TeachingO
 export function buildDeterministicOpening(context: TeachingScenarioContext): TeachingOpening {
   return {
     message: `我们先从 **${context.topic || context.taskTitle}** 开始这节课。目标是把关键知识点讲清楚，并在过程中检查你的掌握情况。`,
-    question: '准备好了的话，我们直接开始。',
+    // 开场只留一个「下一步」（2026-10-09 用户反馈）：quickReplies 在场时不给 question，
+    // 与 core 规则的互斥约束、normalize 兜底同一口径
     quickReplies: [{ text: '准备好了，开始' }, { text: '先讲讲目标' }, { text: '换种方式讲解' }],
     mode: 'example-first',
   };

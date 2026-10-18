@@ -25,7 +25,7 @@ import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 import { randomUUID as uuidv4 } from 'crypto';
 import { logger } from '../../utils/logger';
-import { buildRealUserWhere, isTestAccountUser } from '../../utils/test-account';
+import { buildRealUserWhere, buildTestUserWhere, isTestAccountUser } from '../../utils/test-account';
 
 const router = express.Router();
 
@@ -79,20 +79,27 @@ router.get('/', async (req, res, next) => {
 
     // 数据隔离（A3）：默认仅真实用户（排除虚拟学习者与测试/审计账号，单点 utils/test-account.ts）；
     // includeTest=true 时显式包含（切换后前端对虚拟/测试行做灰标标记）。
-    // 已删除视图不适用（回收站需展示全量账号以恢复）
+    // 已删除视图不适用（回收站需展示全量账号以恢复）。
+    // testOnly=true（2026-10-10 用户拍板：口径开关改「真实/测试」互斥视角）→ 只看虚拟 + 测试账号
     const includeTest = String(req.query.includeTest || '') === 'true';
-    if (!includeTest && status !== 'deleted') {
+    const testOnly = String(req.query.testOnly || '') === 'true';
+    if (testOnly && status !== 'deleted') {
+      Object.assign(where, await buildTestUserWhere());
+    } else if (!includeTest && status !== 'deleted') {
       // 判据用 isTestAccountUser 取 id 排除，不用 Prisma startsWith：SQLite 的 LIKE 会把
       // 前缀里的 `_` 当通配符，`e2e_` 会连 `e2e.` 开头的真实账号一起滤掉（2026-10-09 修）。
       Object.assign(where, await buildRealUserWhere());
     }
 
-    // 搜索条件
+    // 搜索条件（与测试视角的 OR 块用 AND 组合——直接写 where.OR 会互覆，测试+搜索变全量搜索）
     if (search) {
-      where.OR = [
-        { name: { contains: search } },
-        { email: { contains: search } }
-      ];
+      const searchOr: any = [{ name: { contains: search } }, { email: { contains: search } }];
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, { OR: searchOr }];
+        delete where.OR;
+      } else {
+        where.OR = searchOr;
+      }
     }
 
     // 角色筛选

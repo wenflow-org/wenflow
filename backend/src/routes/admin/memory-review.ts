@@ -33,6 +33,7 @@ import {
   type FragmentationMetrics,
 } from '../../services/admin/memory-review.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
+import { findTestAccountUserIds } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
 import { normalizeConceptKey } from '../../services/memory/memory-trace.service';
 import { reviewPlanService } from '../../services/memory/review-plan.service';
@@ -117,14 +118,22 @@ router.get('/', async (req, res) => {
     const rawOffset = req.query.offset ? Number(req.query.offset) : 0;
     const offset = Number.isFinite(rawOffset) ? Math.max(rawOffset, 0) : 0;
     const includeVirtual = String(req.query.includeVirtual || '') === 'true';
+    // 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：只看虚拟学习者 + 测试/审计账号
+    const testOnly = String(req.query.testOnly || '') === 'true';
     // 模拟钟单点（#68 P-43）：VL 管理视角的到期/积压必须与写入侧同一时间基准
     const now = simulatedNowOr();
 
-    const virtualIds = includeVirtual
-      ? []
-      : (await listVirtualLearnerIds()).map((row) => row.id);
-
-    const baseWhere = virtualIds.length > 0 ? { userId: { notIn: virtualIds } } : {};
+    let baseWhere: Record<string, unknown>;
+    if (testOnly) {
+      // 正向 in 清单（虚拟 + 测试），与真实视角的 notIn 互为镜像；判据同源 findTestAccountUserIds
+      const testUserIds = await findTestAccountUserIds();
+      baseWhere = testUserIds.length > 0 ? { userId: { in: testUserIds } } : { userId: { in: ['__none__'] } };
+    } else {
+      const virtualIds = includeVirtual
+        ? []
+        : (await listVirtualLearnerIds()).map((row) => row.id);
+      baseWhere = virtualIds.length > 0 ? { userId: { notIn: virtualIds } } : {};
+    }
     const [traceCounts, dueCounts, audits, mergeRecords, unattachedCounts] = await Promise.all([
       groupTraceCountsByUser(baseWhere),
       groupDueCountsByUser(baseWhere, now),

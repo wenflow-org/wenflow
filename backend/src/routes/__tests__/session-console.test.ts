@@ -15,6 +15,8 @@ const mockPrisma = {
   milestones: { findMany: jest.fn() },
   subtasks: { findUnique: jest.fn() },
   learner_evidence: { findMany: jest.fn() },
+  // 本节课负荷聚合（session_load 行）；默认无行 → teaching.sessionLoad = null
+  learning_metrics: { findUnique: jest.fn().mockResolvedValue(null) },
 };
 
 jest.mock('../../config/database', () => ({ __esModule: true, default: mockPrisma }));
@@ -350,6 +352,52 @@ describe('GET /api/admin/session-console/:sessionId', () => {
     expect(teachingEntries).toHaveLength(4);
     expect(teachingEntries[0].detail).toContain('产业园选址');
     expect(teachingEntries[2].title).toBe('学习者消息');
+  });
+
+  // 2026-10-17：session_load 此前是「写了没人看」的死仓（全库 118 行、零运行时读取方）。
+  // 控制台总结页成为它的第一个消费者；本用例钉住 API 侧的映射口径（无行 → null，不造 0）。
+  it('本节课负荷聚合：有 session_load 行 → teaching.sessionLoad 带均值/峰值/依据分布/轮数', async () => {
+    mockPrisma.teaching_sessions.findUnique.mockResolvedValue(teachingSessionRow({ status: 'completed' }));
+    mockPrisma.goal_conversations.findFirst.mockResolvedValue(null);
+    mockPrisma.learning_paths.findUnique.mockResolvedValue(null);
+    mockPrisma.milestones.findMany.mockResolvedValue([]);
+    mockPrisma.subtasks.findUnique.mockResolvedValue(null);
+    mockPrisma.learner_evidence.findMany.mockResolvedValue([]);
+    mockPrisma.learning_metrics.findUnique.mockResolvedValue({
+      value: 0.264,
+      metadata: JSON.stringify({ max: 0.4, basisDist: { semantic: 7 }, perTurnCount: 7, scale: '0-1' }),
+    });
+
+    const handler = getRouteHandler('/:sessionId', 'get');
+    const res = createResponse();
+    await handler({ params: { sessionId: 'ts_real_1' } }, res);
+    const data = res.json.mock.calls[0][0].data;
+
+    expect(mockPrisma.learning_metrics.findUnique).toHaveBeenCalledWith({
+      where: { sourceKey: 'session-load:ts_real_1' },
+      select: { value: true, metadata: true },
+    });
+    expect(data.teaching.sessionLoad).toEqual({
+      mean: 0.264,
+      max: 0.4,
+      basisDist: { semantic: 7 },
+      perTurnCount: 7,
+    });
+  });
+
+  it('本节课无负荷证据（旧会话 / 弃跑课）→ teaching.sessionLoad = null，不是 0', async () => {
+    mockPrisma.teaching_sessions.findUnique.mockResolvedValue(teachingSessionRow({ status: 'completed' }));
+    mockPrisma.goal_conversations.findFirst.mockResolvedValue(null);
+    mockPrisma.learning_paths.findUnique.mockResolvedValue(null);
+    mockPrisma.milestones.findMany.mockResolvedValue([]);
+    mockPrisma.subtasks.findUnique.mockResolvedValue(null);
+    mockPrisma.learner_evidence.findMany.mockResolvedValue([]);
+    mockPrisma.learning_metrics.findUnique.mockResolvedValue(null);
+
+    const handler = getRouteHandler('/:sessionId', 'get');
+    const res = createResponse();
+    await handler({ params: { sessionId: 'ts_real_1' } }, res);
+    expect(res.json.mock.calls[0][0].data.teaching.sessionLoad).toBeNull();
   });
 
   // 2026-10-11 走查：goal 阶段会把学习者携带的资料与系统联网采集的资料纳入上下文，结果要在监控页可见

@@ -28,8 +28,10 @@ router.get('/', async (req, res) => {
     const rawLimit = req.query.limit ? Number(req.query.limit) : 50;
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
     const includeVirtual = String(req.query.includeVirtual || '') === 'true';
+    // 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：只看虚拟学习者 + 测试/审计账号
+    const testOnly = String(req.query.testOnly || '') === 'true';
 
-    const traces = await listAdminMemoryTraces({ userId, includeVirtual, limit });
+    const traces = await listAdminMemoryTraces({ userId, includeVirtual, testOnly, limit });
 
     const now = new Date();
     const rows = traces.map((t) => {

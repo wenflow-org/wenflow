@@ -52,6 +52,7 @@ import {
   buildEndWrapupFallback,
   buildRecoveredOpening,
   commitSessionLoadMetric,
+  composeWelcome,
   computeEffectiveDurationMinutes,
   computeSessionEvidence,
 } from './teaching-session-views';
@@ -488,7 +489,7 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
         subject: previousSession.subject,
         topic: previousSession.topic,
         startTime: previousSession.startTime,
-        welcomeMessage: previousSession.messages[0]?.content || `${opening.message}\n\n${opening.question}`,
+        welcomeMessage: previousSession.messages[0]?.content || composeWelcome(opening),
         opening,
         knowledgePoints: normalizeKnowledgePoints(resumedKnowledgeState),
         mode: 'resumed',
@@ -510,7 +511,7 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
   initLeaseGuard.start();
   try {
     const opening = await generateOpening(context);
-    const welcomeMessage = `${opening.message}\n\n${opening.question}`;
+    const welcomeMessage = composeWelcome(opening);
     const messages: TeachingSessionMessage[] = [
       {
         role: 'assistant',
@@ -744,11 +745,12 @@ export async function endSession(
       userMessageCount,
     });
   } else {
-    try {
-    // wrapup LLM 硬帽 8 分钟（2026-10-02 完课死锁修复）：调用方断开后流式请求可能永不
-    // settle、await 悬空且 catch 无法 rescue（实测 wrapup 跑了 6.5 分钟后整链冻结）。
-    // 超时按失败处理，走下方 summary-only 兜底继续收束。
-    wrapupOutput = await Promise.race([
+    // wrapup LLM 硬帽（2026-10-02 完课死锁修复）：调用方断开后流式请求可能永不 settle、
+    // await 悬空且 catch 无法 rescue（实测 wrapup 跑了 6.5 分钟后整链冻结）。
+    // 失败先重试一次再降级（2026-10-10 评审）：网关瞬时 5xx/抖动打中的是单次调用，
+    // 直接 fallback 会把一节真课的总结退化成占位文案（实测 2026-10-09 两节 completed 课中招）。
+    // 首试 480s、重试 240s；超时后旧 promise 不再 await（悬挂侧由 executeSkill 自身的流生命周期收尾）。
+    const runWrapupAttempt = (timeoutMs: number) => Promise.race([
       executeSkill(sessionWrapupAgentDefinition, {
     input: {
       messages: session.messages.map((message) => ({
@@ -800,10 +802,20 @@ export async function endSession(
     },
       }),
       new Promise<never>((_, reject) => {
-        const timer = setTimeout(() => reject(new Error('SESSION_WRAPUP_TIMEOUT_480S')), 480_000);
+        const timer = setTimeout(() => reject(new Error(`SESSION_WRAPUP_TIMEOUT_${Math.round(timeoutMs / 1000)}S`)), timeoutMs);
         if (timer && typeof timer === 'object' && 'unref' in timer) timer.unref();
       }),
     ]);
+    try {
+      try {
+        wrapupOutput = await runWrapupAttempt(480_000);
+      } catch (firstError) {
+        logger.warn('[AITeaching] 课后产出生成异常，重试一次后再降级', {
+          sessionId,
+          firstAttemptError: firstError instanceof Error ? firstError.message : String(firstError),
+        });
+        wrapupOutput = await runWrapupAttempt(240_000);
+      }
   } catch (error) {
     logger.warn('[AITeaching] 课后产出生成异常，改用 summary-only 兜底继续收束', {
       sessionId,
@@ -1139,6 +1151,23 @@ export async function endSession(
       pathId: session.learningPathId ?? undefined,
       completedTaskId: session.taskId ?? undefined,
     }));
+    // 多故事续章（2026-10-11 人物立体化接线）：本节真课完课 → 为当前故事生成下一章，让虚拟学习者
+    // 的叙事宇宙随学习生长（诊断：storyPool 只在创建期注水 → 91/98 单故事 → 人物扁平）。
+    // always best-effort：动态 import 避环依赖 + 彻底吞错，绝不阻断课堂收尾；非虚拟学习者/无可靠
+    // wrapup 由钩子内部静默跳过（见 story-chapter.service.ts onTeachingSessionCompleted）。
+    const wrapupReliable = (finalWrapup as any)?.summarySource === 'model';
+    void import('../virtual-lab/story-chapter.service')
+      .then((m) => m.onTeachingSessionCompleted({
+        userId: session.userId,
+        learningPathId: session.learningPathId ?? null,
+        wrapupReliable,
+      }))
+      .catch((error) => {
+        logger.warn('[AITeaching] 故事续章生长失败', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
     return {
       status: 'completed',
       operationId,

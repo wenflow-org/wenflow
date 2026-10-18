@@ -93,6 +93,32 @@ describe('selectApplicableRules', () => {
     expect(selectApplicableRules(rules, { ...base, visualOpportunity: { suggested: false } } as never)).toHaveLength(0);
     expect(selectApplicableRules(rules, { ...base, visualOpportunity: { suggested: true } } as never)).toHaveLength(1);
   });
+
+  // 2026-10-17 回归：规则 74 的抽键是顶层 `behavioralProfile`，而字段**装配在** scenario 下。
+  // 缺 override 时 hasPathValue 恒 false → 规则被静默剥离（实测真会话里 14 条只下发 8 条）。
+  it('behavioralProfile 走 override：装配位置在 scenario 下也要判定为存在', () => {
+    const RULE = '若输入提供 behavioralProfile（行为投影）：按样本量决定是否参考。';
+    const withRule: ConditionalRule[] = [{ key: 'behavioralProfile', text: RULE }];
+    const inScenario = {
+      ...base,
+      scenario: { behavioralProfile: { avgUnderstanding: 0.6, frustrationRate: 0.2 } },
+    } as never;
+    expect(selectApplicableRules(withRule, inScenario)).toEqual([RULE]);
+    // 空对象 / 缺失 → 不带（保持「有值才注入」）
+    expect(selectApplicableRules(withRule, { ...base, scenario: { behavioralProfile: {} } } as never)).toHaveLength(0);
+    expect(selectApplicableRules(withRule, base)).toHaveLength(0);
+  });
+
+  it('scenario.taskKcs 存在即下发（装配点回归：teaching-turn-shared 必须把它塞进 scenario）', () => {
+    const RULE = '如果输入提供 scenario.taskKcs：按 KC 组织。';
+    const withRule: ConditionalRule[] = [{ key: 'scenario.taskKcs', text: RULE }];
+    const input = {
+      ...base,
+      scenario: { taskKcs: [{ kcId: 'KC-1', name: '区分四类考点类型', taxonomy: 'concept' }] },
+    } as never;
+    expect(selectApplicableRules(withRule, input)).toEqual([RULE]);
+    expect(selectApplicableRules(withRule, { ...base, scenario: { taskKcs: [] } } as never)).toHaveLength(0);
+  });
 });
 
 // ─────────────────────────── 接线（真实编译产物） ───────────────────────────

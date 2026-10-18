@@ -40,6 +40,17 @@ export function findSubtaskById(taskId: string) {
   return prisma.subtasks.findUnique({ where: { id: taskId } });
 }
 
+/**
+ * 本节课的负荷聚合行（teaching-session-views.commitSessionLoadMetric 写入）。
+ * 该行此前无任何读取方，属「写了没人看」；控制台总结页是本会话唯一面向人的消费点。
+ */
+export function findSessionLoadMetric(sessionId: string) {
+  return prisma.learning_metrics.findUnique({
+    where: { sourceKey: `session-load:${sessionId}` },
+    select: { value: true, metadata: true },
+  });
+}
+
 export function findTeachingSessionsByPathId(learningPathId: string) {
   return prisma.teaching_sessions.findMany({
     where: { learningPathId, status: { not: 'superseded' } },

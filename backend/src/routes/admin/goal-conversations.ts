@@ -13,7 +13,7 @@ import {
   countDistinctGoalConversationUsers,
 } from '../../services/admin/goal-conversation-admin.repo';
 import { generateLearningPathFromConversation } from '../../services/learning/goal-conversation.service';
-import { buildRealUserWhere, isTestAccountUser } from '../../utils/test-account';
+import { buildRealUserWhere, buildTestUserWhere, isTestAccountUser } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
 
 const router = express.Router();
@@ -51,7 +51,10 @@ router.get('/', async (req: any, res) => {
       where.userId = userId;
     }
 
-    if (!includeTest) {
+    // testOnly=true（2026-10-10 用户拍板「真实/测试」互斥视角）→ 只看虚拟 + 测试账号
+    if (String(req.query.testOnly || '') === 'true') {
+      where.users = await buildTestUserWhere();
+    } else if (!includeTest) {
       where.users = await resolveStatsUserWhere();
     }
 
@@ -228,10 +231,12 @@ router.post('/:id/regenerate-path', async (req: any, res) => {
  */
 router.get('/stats/overview', async (req: any, res) => {
   try {
-    // 口径随列表「含测试」开关联动：默认仅真实用户；includeTest=true 时不过滤 users
-    // （与 GET / 的 includeTest 分支同一判据，否则分布条/完成率与列表不同源）
+    // 口径随列表「真实/测试」开关联动：默认仅真实用户；测试视角（testOnly）只看虚拟 + 测试账号
+    // （与 GET / 的分支同一判据，否则分布条/完成率与列表不同源）
     const includeTest = String(req.query.includeTest || '') === 'true';
-    const userWhere = includeTest ? {} : await resolveStatsUserWhere();
+    const userWhere = String(req.query.testOnly || '') === 'true'
+      ? await buildTestUserWhere()
+      : includeTest ? {} : await resolveStatsUserWhere();
     const [[total, active, completed, cancelled], distinctUsers] = await Promise.all([
       getGoalConversationStatusCounts(userWhere),
       countDistinctGoalConversationUsers(userWhere)

@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import { learnerSnapshotService } from './LearnerSnapshotService';
-import { buildRealUserWhere, isTestAccountUser } from '../../utils/test-account';
+import { buildRealUserWhere, buildTestUserWhere, isTestAccountUser } from '../../utils/test-account';
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
 
 export interface LearnerSnapshotRefreshInput {
@@ -97,20 +97,27 @@ export class LearnerSnapshotRefreshService {
     riskOnly?: boolean;
     excludeTest?: boolean;
     includeTest?: boolean;
+    testOnly?: boolean;
     page?: number;
     limit?: number;
   }) {
     const page = Math.max(1, Number(params?.page || 1));
-    // 窗口上限 500（2026-10-04 用户拍板解锁 50 截断：管理端学习状态页要全量学习者；
-    // 默认仍 20，天花板防滥用）。放开后冷缓存整页重建量大，配套 stillMissing 分批消费。
-    const limit = Math.max(1, Math.min(500, Number(params?.limit || 20)));
+    // 窗口上限 500 → 2000（2026-10-10 用户反馈「有多少加载多少」：842 个账号被 500 截成两半，
+    // 管理端搜索/翻页够不到后一半）。默认仍 20，天花板防滥用；冷缓存整页重建量大，
+    // 配套 stillMissing 分批消费的既有机制不变。
+    const limit = Math.max(1, Math.min(2000, Number(params?.limit || 20)));
 
     // 软删用户不进入管理端快照列表（列表与总数口径一致）。
     // 默认排除虚拟学习者与测试/审计账号（风险队列只给真实用户看）；
-    // includeTest=true 时显式包含（管理需要查看虚拟数据，不删数据只改默认视图）。
+    // includeTest=true 时显式包含（管理需要查看虚拟数据，不删数据只改默认视图）；
+    // testOnly=true（2026-10-10 用户拍板「真实/测试」互斥视角）→ 只看虚拟 + 测试账号。
     const excludeTest = params?.includeTest ? false : (params?.excludeTest ?? true);
     const userWhere = {
-      ...(excludeTest ? await buildRealUserWhere({ deletedAt: null }) : { deletedAt: null }),
+      ...(params?.testOnly
+        ? await buildTestUserWhere({ deletedAt: null })
+        : excludeTest
+          ? await buildRealUserWhere({ deletedAt: null })
+          : { deletedAt: null }),
       ...(params?.userId ? { id: params.userId } : {}),
     };
     const total = await prisma.users.count({ where: userWhere });

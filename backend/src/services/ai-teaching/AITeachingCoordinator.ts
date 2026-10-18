@@ -87,7 +87,8 @@ export interface TeachingSessionStartInput {
 
 export interface TeachingOpening {
   message: string;
-  question: string;
+  /** 可选软引导：与 quickReplies 互斥（2026-10-10 起动作选项在场时不下发，见开场生成器 core 规则） */
+  question?: string;
   quickReplies: Array<{ text: string }>;
   mode: 'self-assess' | 'predict' | 'example-first';
 }

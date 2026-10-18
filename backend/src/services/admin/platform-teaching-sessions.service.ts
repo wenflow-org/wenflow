@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/database';
 import { isTestAccountUser } from '../../utils/test-account';
-import { buildRealUserWhere } from '../../utils/test-account';
+import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
 import { deriveTeachingSessionProgress } from '../teaching-session-progress.service';
 
 /**
@@ -59,8 +59,10 @@ export async function listTeachingSessionsDebug(params: {
   onlyWithAdvisory: boolean;
   onlyMissingWrapup: boolean;
   includeTest: boolean;
+  /** 测试视角（2026-10-10 用户拍板「真实/测试」互斥视角）：只看虚拟学习者 + 测试账号 */
+  testOnly?: boolean;
 }): Promise<unknown> {
-  const { page, limit, userId, pathId, status, onlyWithAdvisory, onlyMissingWrapup, includeTest } = params;
+  const { page, limit, userId, pathId, status, onlyWithAdvisory, onlyMissingWrapup, includeTest, testOnly } = params;
   const where: any = {
     ...(userId ? { userId } : {}),
     ...(pathId ? { learningPathId: pathId } : {}),
@@ -70,7 +72,11 @@ export async function listTeachingSessionsDebug(params: {
     ...(onlyMissingWrapup
       ? { OR: [{ wrapup: null }, { NOT: { wrapup: { contains: 'topicSummary' } } }] }
       : {}),
-    ...(includeTest ? {} : { users: await buildRealUserWhere() }),
+    ...(testOnly
+      ? { users: await buildTestUserWhere() }
+      : includeTest
+        ? {}
+        : { users: await buildRealUserWhere() }),
   };
 
   const [total, sessions] = await Promise.all([

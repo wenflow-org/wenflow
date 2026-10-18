@@ -62,6 +62,8 @@ import { executeSkill } from '../../skills';
 import learningService from '../../services/learning/learning.service';
 import { assertPathMutationSafe } from '../../services/learning/path-mutation-safety';
 import { teachingSessionRepository, type TeachingSessionRecord } from '../../services/ai-teaching/TeachingSessionRepository';
+import { findTeachingSessionsByPathId } from '../../services/admin/session-console.repo';
+import { teachingSessionHistoryOf } from './session-console';
 import { signProjectionToken } from '../../utils/projection-token';
 import blackboxVirtualLearnerRunner from '../../virtual-lab/blackbox-runner';
 import type { LearnerAction } from '../../virtual-lab/contracts';
@@ -69,6 +71,7 @@ import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
 import { autopilotService, AutopilotService } from '../../virtual-lab/autopilot.service';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
+import { buildLearnerStoryHints } from '../../services/virtual-lab/story-chapter.service';
 import { buildRetentionSeriesForConcepts, type RetentionConceptInput } from '../../services/memory/retention-series';
 import { simulatedDayService, resolveSimulationClock, planClockAdvance, explainPlanFailure, resolveDayWindow, resolutionEnteredLearn, summarizeDayLearning, shouldAdvanceSimulationClock } from '../../services/virtual-lab/simulated-day.service';
 import { runWithSimulatedClock, simulatedNowOr } from '../../services/virtual-lab/simulation-clock-context';
@@ -105,6 +108,7 @@ import {
   SIMULATION_FRICTION_BUDGETS,
 } from '../../virtual-lab/session-factory';
 import { batchJobService } from '../../virtual-lab/batch-job.service';
+import { regenerateWrapup } from '../../services/ai-teaching/teaching-wrapup-regen';
 
 /**
  * 负荷画像字段层级归一（I-13，2026-09-23）：
@@ -814,25 +818,9 @@ async function buildLearnerMemoryStoryHints(profile: {
   userId: string;
   profile: string;
 }): Promise<string[]> {
-  try {
-    const memory = await buildLearnerMemorySnapshot(profile.userId, { limit: 6 });
-    const hints: string[] = [];
-    if (memory.mastered.length > 0) {
-      hints.push(`此人在过往学习中已掌握：${memory.mastered.map((m) => m.name).join('、')}。新故事可自然承接这些基础，不要让他完全从头开始。`);
-    }
-    if (memory.recentCompleted.length > 0) {
-      const items = memory.recentCompleted
-        .map((item) => item.deliverable ? `${item.title}（成果：${item.deliverable}）` : item.title)
-        .join('；');
-      hints.push(`此人在近期完成了这些事：${items}。新故事可以在这些成果的基础上展开（如后续任务、复盘、被他人看到等），让故事有连续性。`);
-    }
-    if (memory.struggling.length > 0) {
-      hints.push(`此人仍在学习的点：${memory.struggling.map((s) => s.name).join('、')}。新故事可以包含相关但不重复的挑战。`);
-    }
-    return hints;
-  } catch {
-    return [];
-  }
+  // 单一来源：与「完课自动续章」共用同一份学习史→故事 hints（services/virtual-lab/story-chapter.service.ts），
+  // 消除手动补生成 / 自动续章两处各写一份的漂移风险。
+  return buildLearnerStoryHints(profile.userId);
 }
 
 /**
@@ -2072,6 +2060,18 @@ router.get('/sessions/:sessionId', async (req: Request, res) => {
     let goalConversation: goal_conversations | null = null;
     if (session.goalConversationId) {
       goalConversation = await findGoalConversationById(session.goalConversationId);
+    }
+
+    /* 同路径课堂清单：控制台课程树凭 teachingSessionHistory 把每节课映射到课堂会话 id（点开已上完的课）。
+       真实会话由 session-console 现算，虚拟会话此前只读 stageResults.teaching 里的这个字段——
+       而逐课推进（start-learning 每课一调）会 removeStageResults:['teaching'] 重置该阶段，
+       只会把重置前读到的旧值写回，于是列表恒空：已上完的课没有课堂 id，点它只会落到
+       「从该课开始学习」。这里与真实会话同源补算（同一 mapper，形状不分叉）。 */
+    if (session.learningPathId) {
+      const teaching = (stageResults.teaching = stageResults.teaching || {});
+      teaching.teachingSessionHistory = teachingSessionHistoryOf(
+        await findTeachingSessionsByPathId(session.learningPathId)
+      );
     }
 
     let teachingSession: Awaited<ReturnType<typeof teachingSessionRepository.getById>> | null = null;
@@ -3860,6 +3860,26 @@ router.get('/regression/compare-sessions', async (req: Request, res) => {
       success: false,
       error: error.message || '对比 session 失败'
     });
+  }
+});
+
+/**
+ * 降级 wrapup 重生成（2026-10-11 补轮）：仅完结且 wrapup 退化为 summary-only 的会话可重跑
+ * wrapup 技能并回写产物 + 补写 learning_metrics。POST /api/admin/virtual-learners/sessions/:sessionId/regenerate-wrapup
+ */
+router.post('/sessions/:sessionId/regenerate-wrapup', async (req: Request, res) => {
+  try {
+    const result = await regenerateWrapup(req.params.sessionId, {
+      adminId: req.user?.userId ?? null,
+      adminName: req.user?.email ?? null
+    });
+    if (result.error) {
+      return res.status(409).json({ success: false, error: result.error });
+    }
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('wrapup 重生成失败:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || 'wrapup 重生成失败' });
   }
 });
 

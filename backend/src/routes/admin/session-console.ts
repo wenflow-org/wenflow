@@ -9,6 +9,7 @@ import {
   findMilestonesByPathId,
   findLatestGoalConversationByPathId,
   findSessionEvidence,
+  findSessionLoadMetric,
   findSubtaskById,
   findTeachingSessionsByPathId,
   findPathEvidence,
@@ -359,7 +360,7 @@ function materialSummaries(userId: string | null | undefined) {
 async function buildTeachingConsole(session: any) {
   // 消息子表水合：侧表权威的会话覆写内存 messages 字段（旧会话原样读列）
   await hydrateTeachingSessionMessages(session);
-  const [goalConversation, path, evidence, task] = await Promise.all([
+  const [goalConversation, path, evidence, task, sessionLoadMetric] = await Promise.all([
     session.learningPathId
       ? findLatestGoalConversationByPathId(session.learningPathId)
       : Promise.resolve(null),
@@ -370,6 +371,7 @@ async function buildTeachingConsole(session: any) {
     session.taskId
       ? findSubtaskById(session.taskId)
       : Promise.resolve(null),
+    findSessionLoadMetric(session.id),
   ]);
 
   const pathView = path ? await resolvePathView(path) : null;
@@ -382,6 +384,19 @@ async function buildTeachingConsole(session: any) {
   )?.title
     || null;
   const totalMilestones = pathView?.totalMilestones ?? null;
+
+  // 本节课负荷聚合（analysis.loadIndex 聚合）。null = 本节无负荷证据（旧会话 / 弃跑课不写）。
+  const sessionLoadMeta = parseJsonSafe<Record<string, any>>(sessionLoadMetric?.metadata, {});
+  const sessionLoad = sessionLoadMetric
+    ? {
+        mean: sessionLoadMetric.value,
+        max: typeof sessionLoadMeta.max === 'number' ? sessionLoadMeta.max : null,
+        basisDist: (sessionLoadMeta.basisDist && typeof sessionLoadMeta.basisDist === 'object')
+          ? sessionLoadMeta.basisDist as Record<string, number>
+          : {},
+        perTurnCount: typeof sessionLoadMeta.perTurnCount === 'number' ? sessionLoadMeta.perTurnCount : null,
+      }
+    : null;
 
   const stage = goalConversation?.stage || null;
   const ready = goalStageReady(stage, goalConversation?.status);
@@ -424,6 +439,7 @@ async function buildTeachingConsole(session: any) {
       messageCount: messages.filter((m) => m.role === 'user').length,
       knowledgeState,
       checkpoints: checkpointHistoryView(session.teachingState),
+      sessionLoad,
       wrapup,
       advisory: parseJsonSafe<any>(session.advisory, null),
       messages,
@@ -489,8 +505,10 @@ async function buildTeachingConsole(session: any) {
 /** goal_conversations → 控制台同构载荷 */
 
 /** 同路径课堂清单 → 前端 teachingSessionHistory 契约（课程树把每节课映射到课堂会话 id）。
- *  只取定位所需字段：单课正文不进清单（点开时由 /:sessionId 按需取）。 */
-function teachingSessionHistoryOf(sessions: any[]) {
+ *  只取定位所需字段：单课正文不进清单（点开时由 /:sessionId 按需取）。
+ *  导出给虚拟会话详情复用（virtual-learners.ts）：两个控制台必须下发同一形状，否则
+ *  「真实会话点得开已上完的课、虚拟会话点不开」又是一处两套说法。 */
+export function teachingSessionHistoryOf(sessions: any[]) {
   return (sessions || []).map((s: any) => ({
     teachingSessionId: s.id,
     taskId: s.taskId,
