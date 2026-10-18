@@ -426,7 +426,9 @@ export const adminMemoryTracesApi = {
  * （outlet 域：apply 引擎 + 自动档 + 预闸门 + 碎片率指标）。
  */
 export const adminMemoryReviewApi = {
-  overview: async (params?: { limit?: number; offset?: number; includeVirtual?: boolean; testOnly?: boolean }) => {
+  /** 跨用户总览。sort/order = 服务端排序（name / traces / due / weak / strength / lastReviewed），
+   *  在切片之前生效（分页列表只在当前页排会误导）。 */
+  overview: async (params?: { limit?: number; offset?: number; includeVirtual?: boolean; testOnly?: boolean; sort?: string; order?: 'asc' | 'desc' }) => {
     return adminAxios.get('/admin/memory-review', { params });
   },
   /**

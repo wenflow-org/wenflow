@@ -101,10 +101,44 @@ function retentionOf(trace: {
   return Math.round(fsrsRetrievability(state, new Date()) * 100) / 100;
 }
 
+/* ---------- 跨用户总览：排序键与「薄弱/平均强度/最近复习」聚合 ---------- */
+const OVERVIEW_SORT_KEYS = ['name', 'traces', 'due', 'weak', 'strength', 'lastReviewed'] as const;
+type OverviewSortKey = (typeof OVERVIEW_SORT_KEYS)[number];
+function isOverviewSortKey(v: unknown): v is OverviewSortKey {
+  return typeof v === 'string' && (OVERVIEW_SORT_KEYS as readonly string[]).includes(v);
+}
+
+type StrengthAggRow = Awaited<ReturnType<typeof findTracesForStrengthAgg>>[number];
+interface StrengthAgg {
+  weak: number;
+  seen: number;
+  sum: number;
+  last: Date | null;
+}
+
+/** 痕迹 → 每用户读数（薄弱条数 / 有强度痕迹数 / 强度合计 / 最近复习）。
+ *  同一份聚合供「排序」与「行读数」两处使用，避免两套口径。 */
+function strengthAggByUser(rows: ReadonlyArray<StrengthAggRow>): Map<string, StrengthAgg> {
+  const byUser = new Map<string, StrengthAgg>();
+  for (const t of rows) {
+    if (!t.lastSeenAt) continue;
+    const agg = byUser.get(t.userId) ?? { weak: 0, seen: 0, sum: 0, last: null as Date | null };
+    const retention = retentionOf(t);
+    agg.seen += 1;
+    agg.sum += retention;
+    if (retention < 0.4) agg.weak += 1;
+    if (!agg.last || t.lastSeenAt > agg.last) agg.last = t.lastSeenAt;
+    byUser.set(t.userId, agg);
+  }
+  return byUser;
+}
+
 /**
  * GET /api/admin/memory-review
- * 跨用户总览：记忆层规模 + 到期积压 + 归并审计汇总（按痕迹数倒序）。
- * query: limit?（默认 30，上限 100）、offset?（默认 0，#41 分页）、includeVirtual?（默认排除虚拟学习者）
+ * 跨用户总览：记忆层规模 + 到期积压 + 归并审计汇总（默认按待复习量倒序）。
+ * query: limit?（默认 30，上限 100）、offset?（默认 0，#41 分页）、includeVirtual?（默认排除虚拟学习者）、
+ *        sort?（name / traces / due / weak / strength / lastReviewed，默认 due）、order?（asc / desc，默认 desc）。
+ * 服务端分页 → 排序必须在切片前做（客户端排序只会排当前页，判例见 useTableSort 头注）。
  */
 router.get('/', async (req, res) => {
   try {
@@ -119,6 +153,11 @@ router.get('/', async (req, res) => {
     const rawOffset = req.query.offset ? Number(req.query.offset) : 0;
     const offset = Number.isFinite(rawOffset) ? Math.max(rawOffset, 0) : 0;
     const includeVirtual = String(req.query.includeVirtual || '') === 'true';
+    /* 排序键（2026-10-18 用户走查「跨用户总览 5 列缺排序」）：默认 due（原型口径）。
+       weak / strength / lastReviewed 的读数在本页切片之后才算出，要按它们排序得先对全量用户
+       做一次痕迹聚合——只在被请求时加载，默认翻页不多查一遍库。 */
+    const sortKey: OverviewSortKey = isOverviewSortKey(req.query.sort) ? req.query.sort : 'due';
+    const sortOrder: 'asc' | 'desc' = req.query.order === 'asc' ? 'asc' : 'desc';
     const now = new Date();
 
     const virtualIds = includeVirtual
@@ -175,35 +214,74 @@ router.get('/', async (req, res) => {
               }
             : null,
         };
-      })
-      // 原型 renderMemory 排序口径：按待复习（到期）量倒序，同量按痕迹数（存量体积）破平
-      .sort((a, b) => (b.due - a.due) || (b.traces - a.traces));
+      });
+
+    /* —— 排序（切片之前）——
+       默认口径沿用原型：待复习量倒序、同量按痕迹数破平；
+       姓名 / 薄弱 / 平均强度 / 最近复习需要全量读数，按需加载（见文件顶部类型与参数说明）。 */
+    const allRankedIds = ranked.map((row) => row.userId);
+    const sortNameById = sortKey === 'name'
+      ? new Map((await findUsersByIdsWithFlags(allRankedIds)).map((u) => [u.id, u]))
+      : null;
+    const needsAggSort = sortKey === 'weak' || sortKey === 'strength' || sortKey === 'lastReviewed';
+    const allTraceRows = needsAggSort ? await findTracesForStrengthAgg(allRankedIds) : null;
+    const sortAggByUser = allTraceRows ? strengthAggByUser(allTraceRows) : null;
+    const sortValueOf = (row: { userId: string; traces: number; due: number }): string | number | Date | null => {
+      switch (sortKey) {
+        case 'name':
+          return String(sortNameById?.get(row.userId)?.name || '').trim();
+        case 'traces':
+          return row.traces;
+        case 'due':
+          return row.due;
+        case 'weak':
+          return sortAggByUser?.get(row.userId)?.weak ?? 0;
+        case 'strength': {
+          const agg = sortAggByUser?.get(row.userId);
+          return agg && agg.seen > 0 ? agg.sum / agg.seen : null;
+        }
+        case 'lastReviewed':
+          return sortAggByUser?.get(row.userId)?.last ?? null;
+      }
+    };
+    const sortDirSign = sortOrder === 'asc' ? 1 : -1;
+    ranked.sort((a, b) => {
+      const va = sortValueOf(a);
+      const vb = sortValueOf(b);
+      const aEmpty = va === null || va === undefined || va === '';
+      const bEmpty = vb === null || vb === undefined || vb === '';
+      // 空值恒末尾（与客户端 useTableSort 同口径）：无强度/从未复习的用户不因翻方向跳到最前
+      if (aEmpty || bEmpty) {
+        if (aEmpty && bEmpty) return (b.due - a.due) || (b.traces - a.traces);
+        return aEmpty ? 1 : -1;
+      }
+      const base = va instanceof Date && vb instanceof Date
+        ? va.getTime() - vb.getTime()
+        : typeof va === 'number' && typeof vb === 'number'
+          ? va - vb
+          : String(va).localeCompare(String(vb), 'zh');
+      return base * sortDirSign || (b.due - a.due) || (b.traces - a.traces);
+    });
+
     // 列表只返回 offset 起的 limit 条（#41 分页），但 totals 必须按全量聚合：
     // totals.users 是全量有痕迹用户数，若 traces/due 只对切片求和，
     // 用户数超过 limit 时前端的「覆盖 N 位用户」与到期比例条口径不一致（到期占比被低估）。
     const rows = ranked.slice(offset, offset + limit);
 
     const userIds = rows.map((row) => row.userId);
-    const users = userIds.length > 0
-      ? await findUsersByIdsWithFlags(userIds)
-      : [];
-    const userById = new Map(users.map((row) => [row.id, row]));
+    const users = sortNameById
+      ? userIds.map((id) => sortNameById.get(id)).filter(Boolean)
+      : userIds.length > 0
+        ? await findUsersByIdsWithFlags(userIds)
+        : [];
+    const userById = new Map(users.map((row) => [row.id!, row]));
 
     /* 原型 renderMemory 三列（薄弱项/平均记忆强度/最近复习）的读数：强度 = FSRS 可提取率
        （retentionOf，与「记忆强度分布」卡同一算法）；从未看过（lastSeenAt 空）的痕迹
        无强度可算，不进分子分母（与分布卡「不硬造」口径一致）。 */
-    const traceAggRows = await findTracesForStrengthAgg(userIds);
-    const aggByUser = new Map<string, { weak: number; seen: number; sum: number; last: Date | null }>();
-    for (const t of traceAggRows) {
-      if (!t.lastSeenAt) continue;
-      const agg = aggByUser.get(t.userId) ?? { weak: 0, seen: 0, sum: 0, last: null as Date | null };
-      const retention = retentionOf(t);
-      agg.seen += 1;
-      agg.sum += retention;
-      if (retention < 0.4) agg.weak += 1;
-      if (!agg.last || t.lastSeenAt > agg.last) agg.last = t.lastSeenAt;
-      aggByUser.set(t.userId, agg);
-    }
+    // 按 weak/strength/lastReviewed 排序时全量痕迹已加载，直接复用（不再查一遍）
+    const traceAggRows = allTraceRows ?? await findTracesForStrengthAgg(userIds);
+    const aggByUser = allTraceRows ? (sortAggByUser as Map<string, StrengthAgg>) : strengthAggByUser(traceAggRows);
     // outlet(D)：碎片率按该用户全部入围行计算（含 lastSeenAt 为空的行——它们同样占碎片口径），
     // 与强度三列共用一次取数，不加第二次扫描
     const fragByUser = new Map<string, FragmentationMetrics>();
@@ -256,6 +334,8 @@ router.get('/', async (req, res) => {
       success: true,
       data: {
         totals,
+        // 实际生效的排序（参数非法时后端回落默认，界面不得把默认序说成用户选的那档）
+        sort: { key: sortKey, order: sortOrder },
         users: rows.map((row) => {
           const agg = aggByUser.get(row.userId);
           return {

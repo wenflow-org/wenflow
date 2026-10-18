@@ -7,6 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
+import { nextTick } from 'vue';
 
 const listSessions = vi.hoisted(() => vi.fn());
 const listPaths = vi.hoisted(() => vi.fn());
@@ -326,6 +327,35 @@ describe('LearnerDetail 记忆与复习 pane（2026-10-11 深设计）', () => {
     ]);
     const labels = w.findAll('#ld-panel-memory tbody tr').map((tr) => tr.find('td').text());
     expect(labels).toEqual(['逾期七点', '逾期两点', '稳固点', '未初始化点']);
+  });
+
+  it('列头排序（2026-10-18）：记忆强度首击升序（弱在前）、提取史首击降序（多在前）', async () => {
+    const rows = [
+      trace({ conceptKey: 'k-a', label: '甲', retrievability: 0.9, dueAt: new Date(Date.now() + day).toISOString(), extractionCount: 2 }),
+      trace({ conceptKey: 'k-b', label: '乙', retrievability: 0.3, dueAt: new Date(Date.now() + day).toISOString(), extractionCount: 9 }),
+      trace({ conceptKey: 'k-c', label: '丙', retrievability: 0.6, dueAt: new Date(Date.now() + day).toISOString(), extractionCount: 5 }),
+    ];
+    const w = await mountMemory(rows);
+    const labelsOf = () => w.findAll('#ld-panel-memory tbody tr').map((tr) => tr.find('td').text());
+
+    // 记忆强度：首击升序 → 30% → 60% → 90%
+    const strengthTh = w.findAll('#ld-panel-memory thead th').find((t) => t.text() === '记忆强度')!;
+    await strengthTh.find('.mk-th__btn').trigger('click');
+    await nextTick();
+    expect(labelsOf()).toEqual(['乙', '丙', '甲']);
+    expect(strengthTh.attributes('aria-sort')).toBe('ascending');
+
+    // 再击 → 降序
+    await strengthTh.find('.mk-th__btn').trigger('click');
+    await nextTick();
+    expect(labelsOf()).toEqual(['甲', '丙', '乙']);
+
+    // 提取史：首击降序（9 次 → 5 次 → 2 次）
+    const extractTh = w.findAll('#ld-panel-memory thead th').find((t) => t.text() === '提取史')!;
+    await extractTh.find('.mk-th__btn').trigger('click');
+    await nextTick();
+    expect(labelsOf()).toEqual(['乙', '丙', '甲']);
+    expect(extractTh.attributes('aria-sort')).toBe('descending');
   });
 
   it('压暗只标「未初始化」：待复习行即使没有强度读数也不压暗', async () => {

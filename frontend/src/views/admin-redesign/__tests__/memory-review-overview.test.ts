@@ -168,6 +168,39 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
 
   /** 2026-10-17 用户「参考学习组做一些 pill」：分布带退役后左组补三枚复习状态快筛，
    *  计数按当前页（服务端分页只回 limit 条，用全库数字会与本页行对不上）。 */
+  it('服务端排序：列头下发 sort/order 并按回显更新卡头口径（排序在切片前生效）', async () => {
+    // 回显请求里的 sort/order（真实后端行为）：界面口径必须跟随回显，而不是本地猜
+    overview.mockImplementation(async (params: any) => ({
+      data: {
+        data: {
+          totals: { users: 1, traces: 7, due: 1 },
+          sort: { key: params?.sort ?? 'due', order: params?.order ?? 'desc' },
+          users: [{ userId: 'u1', name: '小明', email: null, isVirtualLearner: false, traces: 7, due: 1, audit: null, weak: 1, avgStrength: 0.52, lastReviewedAt: null }],
+        },
+      },
+    }));
+    const w = mount(MemoryReviewOverview);
+    await flushPromises();
+    // 默认口径：待复习从多到少
+    expect(w.find('.mk-card__head-right .mk-card__meta').text()).toContain('待复习从多到少');
+
+    // 记忆痕迹：首击降序
+    const tracesTh = w.findAll('thead th').find((t) => t.text() === '记忆痕迹')!;
+    await tracesTh.find('.mk-th__btn').trigger('click');
+    await flushPromises();
+    const call = overview.mock.calls.at(-1)![0];
+    expect(call).toMatchObject({ sort: 'traces', order: 'desc' });
+    expect(w.find('.mk-card__head-right .mk-card__meta').text()).toContain('记忆痕迹从多到少');
+    expect(tracesTh.attributes('aria-sort')).toBe('descending');
+
+    // 记忆强度：首击升序（最弱的在前）
+    const strengthTh = w.findAll('thead th').find((t) => t.text() === '记忆强度')!;
+    await strengthTh.find('.mk-th__btn').trigger('click');
+    await flushPromises();
+    expect(overview.mock.calls.at(-1)![0]).toMatchObject({ sort: 'strength', order: 'asc' });
+    expect(w.find('.mk-card__head-right .mk-card__meta').text()).toContain('记忆强度从弱到强');
+  });
+
   it('复习状态快筛：有待复习 / 未复习 / 需关注 计数按当前页，点击后行集收敛，可一键显示全部', async () => {
     overview.mockResolvedValue({
       data: { data: {

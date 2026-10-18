@@ -823,7 +823,23 @@
             <thead>
               <!-- 「来源」列名与取值不符（值是提取次数与最近提取时间，不是来源）→ 更名「提取史」，
                    并把 lastSeenAt 一并消费（原先只出计数，最近提取时间被 title 藏着） -->
-              <tr><th>知识点</th><th>记忆强度</th><th>复习到期</th><th>提取史</th><th>状态</th></tr>
+              <tr>
+                <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('concept')"
+                  title="点列头排序：按知识点名称（中文拼音序）"
+                ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('concept')">知识点<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+                <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('strength')"
+                  title="点列头排序：升序 = 记忆强度最弱的在前（没有强度读数的行恒排末尾）"
+                ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('strength')">记忆强度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+                <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('due')"
+                  title="点列头排序：升序 = 逾期最久的在前（没有到期时间的行恒排末尾）"
+                ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('due')">复习到期<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+                <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('extract')"
+                  title="点列头排序：降序 = 提取次数最多的在前"
+                ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('extract')">提取史<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+                <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('state')"
+                  title="点列头排序：按需关注程度（待复习 → 薄弱 → 学习中 → 稳固 → 未初始化）"
+                ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('state')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              </tr>
             </thead>
             <tbody>
               <!-- 降透明度只标「未初始化」（无任何记忆痕迹），不标「无强度读数」：
@@ -879,6 +895,7 @@ import { learnerMetric, LEARNER_METRIC_CODES, type LearnerMetricKey } from '@/ut
 // pathStatusText：路径域状态文案（active → 「学习中」；全局字典是「进行中」）。本文件已从
 // './statusText' 引入同名 statusText（会话域），故此处显式改名，避免两条文案链混用。
 import { loadCaliber, panelScopeNote, statusText as pathStatusText } from './opsShared'
+import { useTableSort } from './useTableSort'
 import { adminLearningContentApi, adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
 import {
   statusText,
@@ -2385,7 +2402,26 @@ function dueText(dueAt: string): string {
       3% 且逾期原先是琥珀，读数本身该是红的；
    ② 排序显式化：待复习（逾期最久在前）→ 有痕迹未到期（按到期升序）→ 未初始化压尾。
       此前直接透传接口顺序，口径不可读。 */
-const memoryPaneRows = computed(() =>
+/** FSRS 普查表行（供客户端排序取数；其余字段与模板同源） */
+interface MemoryRow {
+  key: string
+  label: string
+  strength: number | null
+  barTone: 'ok' | 'warn' | 'bad' | undefined
+  strengthTitle: string
+  tone: 'ok' | 'warn' | 'bad' | 'info'
+  stateText: string
+  stateKey: string
+  uninit: boolean
+  overdue: boolean
+  due: string
+  dueAbs: string
+  dueTs: number | null
+  extract: string
+  extractCount: number
+  seenAbs: string
+}
+const memoryPaneRows = computed<MemoryRow[]>(() =>
   memoryTraces.value.map((t) => {
     const strength = t.retrievability != null ? Math.round(t.retrievability * 100) : null
     const overdue = !!t.dueAt && new Date(t.dueAt).getTime() <= Date.now()
@@ -2428,6 +2464,7 @@ const memoryPaneRows = computed(() =>
       dueAbs: t.dueAt ? new Date(t.dueAt).toLocaleString() : '',
       dueTs: t.dueAt ? new Date(t.dueAt).getTime() : null,
       extract,
+      extractCount: t.extractionCount,
       seenAbs: t.lastSeenAt ? new Date(t.lastSeenAt).toLocaleString() : ''
     }
   })
@@ -2461,9 +2498,30 @@ const memViews = computed(() => {
     ...MEM_STATE_ORDER.filter((s) => (counts.get(s.key) || 0) > 0).map((s) => ({ ...s, count: counts.get(s.key) as number }))
   ]
 })
-const memoryRowsFiltered = computed(() =>
-  memView.value === 'all' ? memorySortedRows.value : memorySortedRows.value.filter((r) => r.stateKey === memView.value)
-)
+/* FSRS 普查表排序（2026-10-18 用户走查「这张表也缺排序」）：行集是该学习者的全量痕迹，
+   客户端排序诚实且最便宜（useTableSort 适用范围：数据完整的列表）。
+   默认不选键 = 保留原有口径序（待复习 → 未到期 → 未初始化）。 */
+const MEM_STATE_RANK: Record<string, number> = { due: 0, weak: 1, learning: 2, ok: 3, uninit: 4 }
+const {
+  toggle: toggleMemSort,
+  sortState: memSortState,
+  sortRows: sortMemRows
+} = useTableSort<MemoryRow>({
+  accessors: {
+    concept: (r) => r.label,
+    strength: (r) => r.strength,
+    due: (r) => r.dueTs,
+    extract: (r) => r.extractCount,
+    state: (r) => MEM_STATE_RANK[r.stateKey] ?? 9
+  },
+  defaultDir: 'asc',
+  // 提取史首击降序（复现最多的先看）；其余列首击升序（最该关注的在前）
+  defaultDirOf: { extract: 'desc' }
+})
+const memoryRowsFiltered = computed(() => {
+  const base = memView.value === 'all' ? memorySortedRows.value : memorySortedRows.value.filter((r) => r.stateKey === memView.value)
+  return sortMemRows([...base])
+})
 /** 卡头读数：状态分档（剔除全零档），口径写进 title */
 const memMetaText = computed(() => {
   const parts = memViews.value.filter((v) => v.key !== 'all').map((v) => `${v.label} ${v.count}`)

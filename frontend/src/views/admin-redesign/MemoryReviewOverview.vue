@@ -64,7 +64,7 @@
           </div>
         </div>
         <div class="mk-card__head-right">
-          <span class="mk-card__meta" :title="`按待复习量从多到少排序，每页显示的行数可调。筛选只作用于当前页${mrPill === 'all' ? '' : '，已筛 ' + visibleRows.length + ' 位'}`">第 {{ userPage }} 页 · 每页 {{ userPageSize }} 位 · 按待复习量倒序<template v-if="mrPill !== 'all'"> · 已筛 {{ visibleRows.length }} 位</template></span>
+          <span class="mk-card__meta" :title="`按「${userSortText}」排序（在全部用户里排好再分页，不是只排当前页），每页显示的行数可调。快速筛选只作用于当前页${mrPill === 'all' ? '' : '，已筛 ' + visibleRows.length + ' 位'}`">第 {{ userPage }} 页 · 每页 {{ userPageSize }} 位 · {{ userSortText }}<template v-if="mrPill !== 'all'"> · 已筛 {{ visibleRows.length }} 位</template></span>
         </div>
       </div>
       <!-- 取数失败不得渲染成「暂无数据」（R2）：有旧行时保留旧行并给带重试的 .mk-alert -->
@@ -100,12 +100,24 @@
                最近复习与需关注也各自成列，不再把两项塞进同一格上下叠放。 -->
           <thead>
             <tr>
-              <th>学习者</th>
-              <th class="mk-num" title="该用户全部记忆记录数，跨学习路径">记忆痕迹</th>
-              <th class="mk-num">待复习</th>
-              <th title="强度跌破 40% 的痕迹数，以及待人工确认的归并候选">需关注</th>
-              <th class="mk-num" title="有复习记录的痕迹的平均记忆强度。从未复习的用户没有强度读数">记忆强度</th>
-              <th>最近复习</th>
+              <th scope="col" class="mk-th--sortable" :aria-sort="userSortState('name')"
+                title="点列头排序：按学习者名称（中文拼音序）"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('name')">学习者<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th scope="col" class="mk-num mk-th--sortable" :aria-sort="userSortState('traces')"
+                title="该用户全部记忆记录数（跨学习路径）。点列头排序：降序 = 痕迹最多的在前"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('traces')">记忆痕迹<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th scope="col" class="mk-num mk-th--sortable" :aria-sort="userSortState('due')"
+                title="点列头排序：降序 = 待复习最多的在前（默认）"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('due')">待复习<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th scope="col" class="mk-th--sortable" :aria-sort="userSortState('weak')"
+                title="强度跌破 40% 的痕迹数，以及待人工确认的归并候选。点列头排序：降序 = 薄弱痕迹最多的在前"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('weak')">需关注<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th scope="col" class="mk-num mk-th--sortable" :aria-sort="userSortState('strength')"
+                title="有复习记录的痕迹的平均记忆强度，从未复习的用户没有读数（恒排末尾）。点列头排序：升序 = 平均强度最弱的在前"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('strength')">记忆强度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th scope="col" class="mk-th--sortable" :aria-sort="userSortState('lastReviewed')"
+                title="点列头排序：降序 = 最近复习过的在前（从未复习的恒排末尾）"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('lastReviewed')">最近复习<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th class="mk-th--right">操作</th>
             </tr>
           </thead>
@@ -182,6 +194,7 @@ import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkVariantBadge from '@/components/mk/MkVariantBadge.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
+import { useTableSort } from './useTableSort'
 import DataScopeToggle from './DataScopeToggle.vue'
 import { askConfirm } from './useConfirm'
 import { openSubPage, LEARNER_DETAIL_LANDING } from './store'
@@ -227,6 +240,48 @@ const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
 /* 口径整组统一（2026-10-04 用户拍板）：get/set 走 live.ts 共享态，本页 watch 负责整页重新统计 */
+/* 跨用户总览排序（2026-10-18 用户走查「5 列缺排序」）：服务端分页，排序键必须下发后端、
+   在切片之前生效（useTableSort 头注的服务端模式）；这里只用它的状态/语义（caret + aria-sort）。 */
+const {
+  toggle: toggleUserSort,
+  sortState: userSortState,
+  sortKey: userSortKey,
+  sortDir: userSortDir
+} = useTableSort({
+  keys: ['name', 'traces', 'due', 'weak', 'strength', 'lastReviewed'],
+  defaultKey: 'due',
+  defaultDir: 'desc',
+  // 姓名/强度首击升序（名字正序、最弱的在前），其余首击降序（最多的在前）
+  defaultDirOf: { name: 'asc', strength: 'asc' }
+})
+const USER_SORT_LABEL: Record<string, string> = {
+  name: '学习者名称',
+  traces: '记忆痕迹',
+  due: '待复习',
+  weak: '需关注',
+  strength: '记忆强度',
+  lastReviewed: '最近复习'
+}
+/** 实际生效的排序以响应回显为准（参数非法时后端回落默认，界面不得把默认序说成用户选的） */
+const appliedUserSort = ref<{ key: string; order: 'asc' | 'desc' }>({ key: 'due', order: 'desc' })
+const userSortText = computed(() => {
+  const { key, order } = appliedUserSort.value
+  const label = USER_SORT_LABEL[key] ?? key
+  const dirText = key === 'name'
+    ? (order === 'asc' ? '正序' : '倒序')
+    : key === 'due' || key === 'traces' || key === 'weak'
+      ? (order === 'asc' ? '从少到多' : '从多到少')
+      : key === 'strength'
+        ? (order === 'asc' ? '从弱到强' : '从强到弱')
+        : (order === 'asc' ? '从久到近' : '从近到久')
+  return `${label}${dirText}`
+})
+watch([userSortKey, userSortDir], () => {
+  // 排序变了从第 1 页看（否则停在旧页会读作「排序没生效」）
+  if (userPage.value !== 1) userPage.value = 1
+  else void loadOverview()
+})
+
 const includeVirtual = computed({
   get: () => liveIncludeVirtual.value,
   set: (v) => liveSetIncludeVirtual(v)
@@ -416,7 +471,14 @@ async function loadOverview() {
   loading.value = true
   error.value = ''
   try {
-    const res = await adminMemoryReviewApi.overview({ limit: userPageSize.value, offset: (userPage.value - 1) * userPageSize.value, includeVirtual: includeVirtual.value, testOnly: includeVirtual.value || undefined })
+    const res = await adminMemoryReviewApi.overview({
+      limit: userPageSize.value,
+      offset: (userPage.value - 1) * userPageSize.value,
+      includeVirtual: includeVirtual.value,
+      testOnly: includeVirtual.value || undefined,
+      sort: userSortKey.value,
+      order: userSortDir.value
+    })
     if (seq !== overviewSeq) return
     const body = res.data?.data ?? res.data ?? {}
     rows.value = Array.isArray(body.users) ? body.users : []
@@ -425,6 +487,9 @@ async function loadOverview() {
       return
     }
     totals.value = { ...totals.value, ...(body.totals || {}) }
+    if (body.sort && typeof body.sort.key === 'string') {
+      appliedUserSort.value = { key: body.sort.key, order: body.sort.order === 'asc' ? 'asc' : 'desc' }
+    }
     overviewReady.value = true
   } catch (e) {
     if (seq !== overviewSeq) return

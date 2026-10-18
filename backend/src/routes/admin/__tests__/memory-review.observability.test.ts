@@ -206,6 +206,86 @@ describe('总览', () => {
   })
 })
 
+describe('总览排序（2026-10-18：跨用户 5 列缺排序）', () => {
+  /** 每次重置默认桩再按调用顺序补 once：users.findMany 第 1 次是虚拟 id 列表，第 2 次才是展示行 */
+  function queueBase() {
+    usersFindMany.mockReset()
+    tracesGroupBy.mockReset()
+    tracesFindMany.mockReset()
+    usersFindMany.mockResolvedValue([])
+    tracesGroupBy.mockResolvedValue([])
+    tracesFindMany.mockResolvedValue([])
+  }
+
+  it('traces 升序：切片前排序 + 回显 sort；非法键回落 due/desc', async () => {
+    queueBase()
+    usersFindMany
+      .mockResolvedValueOnce([]) // 虚拟 id 列表
+      .mockResolvedValueOnce([
+        { id: 'u1', name: '小明' }, { id: 'u2', name: '小红' }, { id: 'u3', name: '小刚' },
+      ])
+    tracesGroupBy
+      .mockResolvedValueOnce([
+        { userId: 'u1', _count: { _all: 20 } },
+        { userId: 'u2', _count: { _all: 5 } },
+        { userId: 'u3', _count: { _all: 10 } },
+      ])
+      .mockResolvedValueOnce([{ userId: 'u1', _count: { _all: 9 } }])
+
+    const res = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { sort: 'traces', order: 'asc' } })
+    const body = res.body.data
+    expect(body.users.map((row: any) => row.userId)).toEqual(['u2', 'u3', 'u1'])
+    expect(body.sort).toEqual({ key: 'traces', order: 'asc' })
+
+    const bad = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { sort: 'oops', order: 'sideways' } })
+    expect(bad.body.data.sort).toEqual({ key: 'due', order: 'desc' })
+  })
+
+  it('name 升序：全量用户名先加载再切片（中文按 zh 排序）', async () => {
+    queueBase()
+    usersFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { id: 'u1', name: '张伟' }, { id: 'u2', name: '阿花' }, { id: 'u3', name: '小明' },
+      ])
+    tracesGroupBy.mockResolvedValueOnce([
+      { userId: 'u1', _count: { _all: 1 } },
+      { userId: 'u2', _count: { _all: 1 } },
+      { userId: 'u3', _count: { _all: 1 } },
+    ])
+
+    const res = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { sort: 'name', order: 'asc' } })
+    expect(res.body.data.users.map((row: any) => row.userId)).toEqual(['u2', 'u3', 'u1'])
+    expect(res.body.data.sort).toEqual({ key: 'name', order: 'asc' })
+    // 展示行复用排序阶段取到的用户（不重复查一遍用户表）：虚拟列表 + 全量排序各一次
+    expect(usersFindMany).toHaveBeenCalledTimes(2)
+  })
+
+  it('lastReviewed 降序：按最近复习时间排，从未复习的（null）恒在末尾', async () => {
+    queueBase()
+    usersFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      { id: 'u1', name: 'A' }, { id: 'u2', name: 'B' }, { id: 'u3', name: 'C' },
+    ])
+    tracesGroupBy.mockResolvedValueOnce([
+      { userId: 'u1', _count: { _all: 3 } },
+      { userId: 'u2', _count: { _all: 3 } },
+      { userId: 'u3', _count: { _all: 3 } },
+    ])
+    const trace = (userId: string, lastSeenAt: Date | null) => ({
+      userId, conceptKey: 'k', label: 'k', conceptId: null, masteryScore: 0.6, extractionCount: 3,
+      lastSeenAt, fsrsStability: null, fsrsDifficulty: null, fsrsLapses: null, fsrsReps: null,
+    })
+    tracesFindMany.mockResolvedValue([
+      trace('u1', new Date('2026-10-01T00:00:00Z')),
+      trace('u2', new Date('2026-10-05T00:00:00Z')),
+      trace('u3', null),
+    ])
+
+    const res = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { sort: 'lastReviewed', order: 'desc' } })
+    expect(res.body.data.users.map((row: any) => row.userId)).toEqual(['u2', 'u1', 'u3'])
+  })
+})
+
 describe('单用户明细', () => {
   it('同族重复分组 + 到期预览按记忆强度升序 + 温故计划', async () => {
     usersFindUnique.mockImplementation(async (args: any) => (
