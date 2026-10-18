@@ -86,6 +86,20 @@ function writeFixture(): void {
   fs.writeFileSync(tempConfig, `${JSON.stringify(FIXTURE, null, 2)}\n`, 'utf-8');
 }
 
+/**
+ * 写服务的规范输出（与 collapseShortArrays + 换行沿袭同规则）。
+ * 单测里直接复刻一遍，是为了把「编辑一轮后文件逐字节不变」钉成回归断言——
+ * 那是 git diff 卫生与运维改文件时的可预期性（格式被悄悄重排会淹没真实改动）。
+ */
+function canonical(value: unknown, eol: '\n' | '\r\n'): string {
+  const collapsed = JSON.stringify(value, null, 2).replace(/\[[^[\]{}]*\]/g, (match) => {
+    const flat = match.replace(/\s*\n\s*/g, ' ').replace(/\s{2,}/g, ' ').replace(/\[ /, '[').replace(/ \]/, ']');
+    return flat.length <= 120 ? flat : match;
+  });
+  const text = `${collapsed}\n`;
+  return eol === '\r\n' ? text.replace(/\n/g, '\r\n') : text;
+}
+
 function readFile(): any {
   return JSON.parse(fs.readFileSync(tempConfig, 'utf-8'));
 }
@@ -252,6 +266,29 @@ describe('模型', () => {
     const result = await deleteModel(PLATFORM_PROVIDER_ID, 'm-extra');
     expect(readFile().providers.platform.models['m-extra']).toBeUndefined();
     expect(result.warnings.join(' ')).toContain('别名「chat」');
+  });
+});
+
+describe('写回的文件格式（git diff 卫生 + 换行风格沿袭）', () => {
+  it('增删一轮后与写前逐字节相同（含 CRLF 风格与短数组单行）', async () => {
+    // 夹具按写服务的规范格式落盘（CRLF + 短数组单行），模拟「这次检出里的真文件」
+    fs.writeFileSync(tempConfig, canonical(FIXTURE, '\r\n'), 'utf-8');
+    const before = fs.readFileSync(tempConfig, 'utf-8');
+    expect(before).toContain('\r\n');
+    expect(before).toContain('"aliases"');
+
+    await createProvider({ id: 'tmp-gw', name: '临时网关', baseUrl: 'https://tmp.example.com/v1', apiKey: 'sk-tmp-123456' });
+    await addModel('tmp-gw', { id: 'tmp-model', tier: 'chat', fallbacks: ['m-chat'] });
+    await updateModel('tmp-gw', 'tmp-model', { label: '临时模型' });
+    await deleteProvider('tmp-gw');
+
+    expect(fs.readFileSync(tempConfig, 'utf-8')).toBe(before);
+  });
+
+  it('短数组收成一行（不制造满屏无关 diff），长数组保持多行', () => {
+    const text = canonical({ a: ['x'], b: ['y'.repeat(140)] }, '\n');
+    expect(text).toContain('"a": ["x"]');
+    expect(text).toContain('"b": [\n');
   });
 });
 

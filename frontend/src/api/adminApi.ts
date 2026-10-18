@@ -780,6 +780,58 @@ export const adminApiConfigApi = {
 };
 
 /**
+ * 模型供应商与模型编辑（BYOK，2026-10-18）
+ *
+ * 真源仍是 `backend/config/llm-providers.json`：这里的每个写接口都由后端做校验、备份、
+ * 原子写与热重载（services/admin/model-providers.service.ts），写成功即回吐最新视图，
+ * 前端不必再拉一次列表。表单里填的密钥落 system.db 密文表，不进配置文件。
+ */
+export const adminModelProvidersApi = {
+  /** 注册表原始条目（供应商 + 模型）+ 密钥摘要（尾部 4 位）+ 文件是否可写 */
+  get: async () => adminAxios.get('/admin/model-providers'),
+
+  create: async (data: {
+    id: string;
+    name?: string;
+    description?: string;
+    enabled?: boolean;
+    baseUrl: string;
+    apiKeyEnv?: string;
+    apiKey?: string;
+  }) => adminAxios.post('/admin/model-providers', data),
+
+  update: async (providerId: string, data: {
+    name?: string;
+    description?: string;
+    enabled?: boolean;
+    baseUrl?: string;
+    apiKey?: string;
+  }) => adminAxios.patch(`/admin/model-providers/${encodeURIComponent(providerId)}`, data),
+
+  remove: async (providerId: string) => adminAxios.delete(`/admin/model-providers/${encodeURIComponent(providerId)}`),
+
+  /** 移除密钥（注册表里的环境变量名保留，仍作回落来源） */
+  removeKey: async (providerId: string) => adminAxios.delete(`/admin/model-providers/${encodeURIComponent(providerId)}/secret`),
+
+  addModel: async (providerId: string, data: Record<string, unknown>) =>
+    adminAxios.post(`/admin/model-providers/${encodeURIComponent(providerId)}/models`, data),
+
+  updateModel: async (providerId: string, modelId: string, data: Record<string, unknown>) =>
+    adminAxios.patch(`/admin/model-providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}`, data),
+
+  removeModel: async (providerId: string, modelId: string) =>
+    adminAxios.delete(`/admin/model-providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}`),
+
+  /** 真实调用一次（用该供应商自己的地址与密钥），回显原文与耗时 */
+  test: async (providerId: string, data: { modelId?: string; prompt?: string }) =>
+    adminAxios.post(`/admin/model-providers/${encodeURIComponent(providerId)}/test`, data),
+
+  /** 拉上游模型清单（不落库，供勾选登记） */
+  pullModels: async (providerId: string) =>
+    adminAxios.post(`/admin/model-providers/${encodeURIComponent(providerId)}/models/pull`)
+};
+
+/**
  * AI 能力探测设置（开关 + 间隔；默认关闭）
  */
 export const adminCapabilityProbeApi = {
@@ -1995,6 +2047,9 @@ export const adminApi = {
 
   // API Config
   ...adminApiConfigApi,
+
+  // 模型供应商与模型编辑（BYOK）
+  ...adminModelProvidersApi,
 
   // Users
   ...adminUsersApi,

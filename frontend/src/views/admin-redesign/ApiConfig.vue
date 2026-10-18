@@ -5,7 +5,7 @@
       <template #actions>
         <!-- 本页唯一主操作升 primary（2026-10-04 全站评审 P3#37：此前 sm 次要形态，
              动作权重与视觉权重倒挂）；sm 档保留，与页头动作位其余刷新钮同高 -->
-        <button v-if="tab === 'access'" type="button" class="mk-btn mk-btn--sm" @click="registryRef?.refresh?.(true)">刷新注册表</button>
+        <button v-if="tab === 'access'" type="button" class="mk-btn mk-btn--sm" @click="providersRef?.refresh?.(true)">刷新注册表</button>
         <button v-if="tab === 'access'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="fetching || !form.apiUrl" @click="fetchModels">
           <MkLoading v-if="fetching" inline text="拉取中…" />
           <span v-else>{{ models.length ? '重新拉取' : '连接并拉取' }}</span>
@@ -51,111 +51,114 @@
     <template v-if="tab === 'access'">
     <!-- 2026-10-05 满屏重排：mk-narrow 限宽列在宽屏下「一张卡悬着」（用户实测批注）。
          去限宽，单卡拆三卡满宽三列（窄屏 ≤1100px 回落单列）。
-         2026-10-14 并入「模型总览」：注册表只读面板作为本网格的第四个子项跨全宽
-         （.ac-registry 的 grid-column: 1/-1），排在三卡下方——拉取清单 → 看注册表解析
-         结果是一条动线；不再另起一层包裹，免得折进上百行缩进噪音。 -->
+         2026-10-18 BYOK 重做：本页签从「连接卡 + 只读能力表」改成左供应商列表 / 右详情
+         （ModelProvidersPanel）。平台通道的服务地址与密钥作为「平台提供」的详情内容经
+         #platform-detail 插槽注入——它们仍归 platform_api_configs、走既有的脏位保存；
+         其余供应商与全部模型的增删改即时保存，落回 llm-providers.json。 -->
     <div class="ac-tab-body ac-conn-body" id="ac-panel-access" role="tabpanel" aria-labelledby="ac-tab-access">
       <!-- 接入域（live 层）读取失败：表单全空不得伪装成「未配置」，显式失败 + 重试（置顶一次，管三张卡） -->
       <div v-if="apiConfigFailed" class="mk-alert mk-alert--row" role="alert">
         <span class="mk-alert__msg">配置读取失败：为空不代表未配置，请重试</span>
         <button type="button" class="mk-alert__btn" @click="retryApiConfigLoad">重试</button>
       </div>
-      <section class="mk-card">
-      <div class="mk-card__head">
-        <!-- 卡题 2026-10-16 去掉「与模型清单」：逐个模型名不再铺在本卡（移进登记表的折叠），
-             本卡只剩「连不连得上」——卡题承诺清单而卡内没有，正是走查里「看不明白」的来源之一 -->
-        <h3 class="mk-card__title">连接</h3>
-        <!-- connBadge 附「N 前」（P1#32 子集）：连接状态是上次拉取/探测落库的结果，
-             无时间的「连接正常」会把陈旧快照读成实时健康，误导熔断判断 -->
-        <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
-        <button v-if="dirty.has('conn')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['conn'])">{{ saving ? '保存中…' : '保存连接' }}</button>
-      </div>
-      <!-- 左右双列（2026-10-15 用户重组）：左=填地址/密钥 + 清单，右=连通性验证——
-           「填完地址 → 顺手在右边点测试」一条动线；原「连通性验证」独立卡只有一行内容、
-           下半截全是黑洞，左右高度严重失衡。右列在窄屏（≤1100）回落整行 -->
-      <div class="ac-body ac-conn2">
-        <div class="ac-conn2__col">
-          <label class="mk-field">
-            <span class="mk-field__label">服务地址</span>
-            <input class="mk-field__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
-          </label>
-          <label class="mk-field">
-            <span class="mk-field__label">API Key</span>
-            <span class="ac-key-wrap">
-              <span class="ac-key-input-row">
-                <input
-                  class="mk-field__input"
-                  :type="keyVisible ? 'text' : 'password'"
-                  v-model="form.apiKey"
-                  autocomplete="new-password"
-                  :placeholder="keySet ? '留空 = 沿用已配置' : '输入 API Key'"
-                  @input="markDirty('conn')"
-                />
-                <button
-                  v-if="keySet || form.apiKey"
-                  type="button"
-                  class="ac-key-toggle"
-                  :title="keyVisible ? '隐藏' : '显示'"
-                  @click="keyVisible = !keyVisible"
-                ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
-                  <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
-              </span>
-              <em v-if="keyHintNeeded" class="ac-keyhint">更换服务地址需重新输入密钥</em>
-            </span>
-          </label>
-        </div>
-        <div class="ac-conn2__col ac-conn2__col--test">
-          <span class="ac-sec__title">连通性验证</span>
-          <div class="ac-test">
-            <label class="mk-field ac-test__model">
-              <span class="mk-field__label">测试模型</span>
-              <select class="mk-field__select" :disabled="!models.length" :value="testModel" @change="testModel = ($event.target as HTMLSelectElement).value">
-                <option v-if="!models.length" value="">无可用模型（等待拉取）</option>
-                <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-              </select>
-            </label>
-            <button type="button" class="mk-btn mk-btn--primary ac-test__btn" :disabled="!models.length || testing" @click="runTest">
-              <MkLoading v-if="testing" inline text="测试中…" />
-              <span v-else>运行测试</span>
-            </button>
-            <span v-if="testResult" class="ac-test__result">
-              <span class="mk-badge" :class="testResult.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ testResult.ok ? '测试通过' : '测试失败' }}</span>
-              <span class="ac-test__meta mono">{{ testResult.latency || '—' }}{{ testResult.usage ? ` · ${testResult.usage}` : '' }}</span>
-              <!-- 回文/错误原文全值进 title（审核 #162）：视觉仍单行截断，但运营可悬停核对模型真实输出 -->
-              <span class="ac-test__text" :class="{ 'ac-test__text--bad': !testResult.ok }" :title="testResult.text">「{{ testResult.text }}」</span>
-            </span>
+      <ModelProvidersPanel
+        ref="providersRef"
+        :upstream="models"
+        @changed="onProvidersChanged"
+        @registered="registeredModelIds = $event"
+      >
+        <!-- 平台提供 = 平台通道：服务地址与密钥仍归 platform_api_configs（连接设置），
+             走既有的脏位保存（本页脚保存条），不混进「即时保存」的注册表编辑。
+             表单嵌在供应商详情里，读者看到的是「这一个供应商怎么连」。 -->
+        <template #platform-detail>
+          <div class="ac-conn">
+            <div class="ac-conn__bar">
+              <!-- connBadge 附「N 前」（P1#32 子集）：连接状态是上次拉取/探测落库的结果，
+                   无时间的「连接正常」会把陈旧快照读成实时健康，误导熔断判断 -->
+              <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
+              <span class="ac-conn__bar-hint">平台通道的服务地址与密钥在这里配置。下面的模型清单决定哪些模型参与路由。</span>
+              <button v-if="dirty.has('conn')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['conn'])">{{ saving ? '保存中…' : '保存连接' }}</button>
+            </div>
+            <!-- 左右双列（2026-10-15 用户重组）：左=填地址/密钥，右=连通性验证——
+                 「填完地址 → 顺手在右边点测试」一条动线；右列在窄屏（≤1100）回落整行 -->
+            <div class="ac-body ac-conn2">
+              <div class="ac-conn2__col">
+                <label class="mk-field">
+                  <span class="mk-field__label">服务地址</span>
+                  <input class="mk-field__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
+                </label>
+                <label class="mk-field">
+                  <span class="mk-field__label">API Key</span>
+                  <span class="ac-key-wrap">
+                    <span class="ac-key-input-row">
+                      <input
+                        class="mk-field__input"
+                        :type="keyVisible ? 'text' : 'password'"
+                        v-model="form.apiKey"
+                        autocomplete="new-password"
+                        :placeholder="keySet ? '留空 = 沿用已配置' : '输入 API Key'"
+                        @input="markDirty('conn')"
+                      />
+                      <button
+                        v-if="keySet || form.apiKey"
+                        type="button"
+                        class="ac-key-toggle"
+                        :title="keyVisible ? '隐藏' : '显示'"
+                        @click="keyVisible = !keyVisible"
+                      ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
+                        <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
+                    </span>
+                    <em v-if="keyHintNeeded" class="ac-keyhint">更换服务地址需重新输入密钥</em>
+                  </span>
+                </label>
+              </div>
+              <div class="ac-conn2__col ac-conn2__col--test">
+                <span class="ac-sec__title">连通性验证</span>
+                <div class="ac-test">
+                  <label class="mk-field ac-test__model">
+                    <span class="mk-field__label">测试模型</span>
+                    <select class="mk-field__select" :disabled="!models.length" :value="testModel" @change="testModel = ($event.target as HTMLSelectElement).value">
+                      <option v-if="!models.length" value="">无可用模型（等待拉取）</option>
+                      <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+                    </select>
+                  </label>
+                  <button type="button" class="mk-btn mk-btn--primary ac-test__btn" :disabled="!models.length || testing" @click="runTest">
+                    <MkLoading v-if="testing" inline text="测试中…" />
+                    <span v-else>运行测试</span>
+                  </button>
+                  <span v-if="testResult" class="ac-test__result">
+                    <span class="mk-badge" :class="testResult.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ testResult.ok ? '测试通过' : '测试失败' }}</span>
+                    <span class="ac-test__meta mono">{{ testResult.latency || '—' }}{{ testResult.usage ? ` · ${testResult.usage}` : '' }}</span>
+                    <!-- 回文/错误原文全值进 title（审核 #162）：视觉仍单行截断，但运营可悬停核对模型真实输出 -->
+                    <span class="ac-test__text" :class="{ 'ac-test__text--bad': !testResult.ok }" :title="testResult.text">「{{ testResult.text }}」</span>
+                  </span>
+                </div>
+                <span class="ac-test__hint">测试走真实上游调用：选中一个模型点「运行测试」，通过即地址与密钥可用。</span>
+              </div>
+            </div>
+            <!-- 上游模型清单（2026-10-16 用户走查重排）：不铺 30+ 个 chip，只说关系——
+                 上游返回多少、其中多少已登记参与路由；逐个名字在下方模型清单的「上游未登记」折叠里。
+                 F8-2：拉取只写本页内存，不说「需保存才可见」会被读成清单已持久化。 -->
+            <div class="ac-body ac-models-body">
+              <div class="ac-sec__title">
+                上游模型清单
+                <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">本次拉取未保存</span>
+              </div>
+              <!-- fetchError 人话化（P2）：裸 errMsg（HTTP 枚举/堆栈词）对运营不可读——
+                   人话一句给动作，错误原文进 title 供排查贴单 -->
+              <p v-if="fetchError && !models.length" class="ac-models__line" :title="`错误原文：${fetchError}`">
+                模型清单拉取失败：请检查服务地址与密钥是否正确、服务商是否可访问。
+              </p>
+              <p v-else-if="models.length" class="ac-models__line">{{ upstreamSummary }}</p>
+              <p v-else class="ac-models__line">尚未拉取模型清单。</p>
+              <!-- 持久化说明（F8-2）：拉取是连通性验证的本页动作，只有随连接保存落盘，
+                   其他页面与下次进入才可见；保存成功后 hasUnsavedModels 归零，本行自动消失 -->
+              <span v-if="hasUnsavedModels" class="ac-models__hint">本次拉取的清单仅在本页有效，点「保存连接」后其它页面与下次进入才可见。</span>
+            </div>
           </div>
-          <span class="ac-test__hint">测试走真实上游调用：选中一个模型点「运行测试」，通过即地址与密钥可用。</span>
-        </div>
-      </div>
-      <!-- 上游模型清单（2026-10-16 用户走查重排）：原样铺 30+ 个 chip，与下方登记表并列成
-           两份「模型名单」，读起来像同一件事说两遍——实测用户走查问「下面那张卡是干嘛的」。
-           这里改成只说关系：上游返回多少、其中多少已登记参与路由、其余去哪看。
-           逐个名字的清单移到登记表的「上游未登记」折叠里（同一份数据，一处展开，不两处铺开）。 -->
-      <div class="ac-body ac-models-body">
-        <div class="ac-sec__title">
-          上游模型清单
-          <!-- F8-2：拉取只写本页内存，不说明「需保存才可见」会被读成清单已持久化（刷新回退=丢数据） -->
-          <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">本次拉取未保存</span>
-        </div>
-        <!-- fetchError 人话化（P2）：裸 errMsg（HTTP 枚举/堆栈词）对运营不可读——
-             人话一句给动作，错误原文进 title 供排查贴单 -->
-        <p v-if="fetchError && !models.length" class="ac-models__line" :title="`错误原文：${fetchError}`">
-          模型清单拉取失败：请检查服务地址与密钥是否正确、服务商是否可访问。
-        </p>
-        <p v-else-if="models.length" class="ac-models__line">{{ upstreamSummary }}</p>
-        <p v-else class="ac-models__line">尚未拉取模型清单。</p>
-        <!-- 持久化说明（F8-2）：拉取是连通性验证的本页动作，只有随连接保存落盘，
-             其他页面与下次进入才可见；保存成功后 hasUnsavedModels 归零，本行自动消失 -->
-        <span v-if="hasUnsavedModels" class="ac-models__hint">本次拉取的清单仅在本页有效，点「保存连接」后其它页面与下次进入才可见。</span>
-      </div>
-    </section>
-    <!-- 原「模型总览」页签（2026-10-14 并入）：注册表只读面板排在三卡下方、跨全宽；
-         「拉取清单 → 看注册表解析结果」是一条动线（原空态句还得把读者引到另一个页签）。
-         不再自带 role=tabpanel——它是本页签内部的第二段，a11y 归属由外层面板承担。
-         2026-10-15 用户重组：冷却落限额表状态列、配置提示落行级徽标 + 表尾注。
-         2026-10-15 用户拍板：供应商与能力限额合并为一块，parts 只剩 providers。 -->
-    <ModelRegistryOverview class="ac-registry" ref="registryRef" :parts="['providers']" :upstream="models" @aliases="aliasOptions = $event" @defaults="registryDefaults = $event" />
+        </template>
+      </ModelProvidersPanel>
+
 
     </div>
     </template>
@@ -658,6 +661,7 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { dataSource, isLive } from './store'
 import Addons from './Addons.vue'
 import ModelRegistryOverview from './ModelRegistryOverview.vue'
+import ModelProvidersPanel from './ModelProvidersPanel.vue'
 import { splitUpstreamByRegistry } from './modelNameMatch'
 import VirtualLabLoadSettings from './VirtualLabLoadSettings.vue'
 import {
@@ -740,7 +744,10 @@ function onTabChange(key: string) {
   switchTab(key as AcTab)
 }
 const addonsRef = ref<{ refresh?: () => void } | null>(null)
-const registryRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
+/** 供应商面板（BYOK）：页头「刷新注册表」与写后重取都走它的 refresh */
+const providersRef = ref<{ refresh?: (force?: boolean) => void } | null>(null)
+/** 已登记模型 id（面板回传）：上游清单的关系句与折叠共用这一次计算 */
+const registeredModelIds = ref<string[]>([])
 
 /** 逻辑别名候选（来自后端只读总览，避免前端硬编码与注册表漂移）。
     不再进页即拉：与总览 tab 的 getModelRegistry 是同一份接口，重复请求；
@@ -1292,14 +1299,29 @@ const extraFetchedModels = computed(() => extraIds(models.value))
 
 /**
  * 上游清单 ↔ 平台登记表的对齐（2026-10-16 用户走查）：连接卡只说关系（上游几个、对上几个），
- * 逐个名字的清单由登记表的「上游未登记」折叠承载。登记 id 由 ModelRegistryOverview 经
- * @defaults 回传，未到时按空表算（此时只说「上游返回 N 个」，不说对上几个）。
+ * 逐个名字的清单由模型清单的「上游未登记」折叠承载。
+ * 登记 id 有两个来源、都来自同一份注册表读数：接入页由 ModelProvidersPanel 经 @registered 回传，
+ * 路由页由 ModelRegistryOverview 经 @defaults 回传——谁在屏上用谁，未到时按 null 算
+ * （此时只说「上游返回 N 个」，不说对上几个，避免「对上 0 个」这种假话）。
  */
-const upstreamSplit = computed(() =>
-  splitUpstreamByRegistry(models.value, (registryDefaults.value?.models ?? []).map((m) => m.id))
-)
-/** 登记表是否已回来：未回来时只说「上游 N 个」，不能说「对上 0 个」（那是句假话） */
-const upstreamReady = computed(() => registryDefaults.value !== null)
+const registeredIds = computed<string[] | null>(() => {
+  if (registeredModelIds.value.length) return registeredModelIds.value
+  const fromRegistry = registryDefaults.value?.models
+  return fromRegistry ? fromRegistry.map((m) => m.id) : null
+})
+const upstreamSplit = computed(() => splitUpstreamByRegistry(models.value, registeredIds.value ?? []))
+/** 登记表是否已回来：未回来时只说「上游 N 个」 */
+const upstreamReady = computed(() => registeredIds.value !== null)
+
+/**
+ * 供应商面板改过注册表（增删改或改密钥）：路由页那份别名/解析回传是上一次读数的快照，
+ * 先作废——路由页的 ModelRegistryOverview 下次挂载会自己重取并回传，不留过期候选。
+ * 接入页自己的登记 id 由面板当场回传，不受影响。
+ */
+function onProvidersChanged() {
+  registryDefaults.value = null
+  aliasOptions.value = []
+}
 
 /** 上游清单与登记表的关系句（空串 = 无清单可谈，模板走空态分支） */
 const upstreamSummary = computed(() => {
@@ -1730,8 +1752,10 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-sec-head { grid-column: 1 / -1; }
 /* 置顶告警（接入域读取失败）横跨全部列，不占卡位把卡片挤换行 */
 .ac-conn-body > .mk-alert { grid-column: 1 / -1; }
-/* 注册表只读面板（原「模型总览」页签）：跨全宽排在连接卡下方 */
-.ac-conn-body > .ac-registry { grid-column: 1 / -1; }
+/* 平台提供详情里的连接块（2026-10-18 从独立「连接」卡搬进供应商详情）：外层卡头没了，
+   状态徽标与「保存连接」收进一条细条，右侧一句说明这段表单管什么。 */
+.ac-conn__bar { display: flex; align-items: center; gap: 10px; padding: 12px 16px 0; flex-wrap: wrap; }
+.ac-conn__bar-hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 /* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }

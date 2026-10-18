@@ -12,13 +12,14 @@ import { dataSource } from '../store';
 import { liveApiConfig, registrationEnabled, registerIpQuotaEnabled } from '../live';
 import { confirmState, settleConfirm } from '../useConfirm';
 
-const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSettingsMock, getReliabilityMock, getModelRegistryMock, testConnectionMock, updateConfigMock, resetConfigMock } = vi.hoisted(() => ({
+const { getConfigMock, getCapabilitiesMock, probeCapabilitiesMock, getProbeSettingsMock, getReliabilityMock, getModelRegistryMock, getModelProvidersMock, testConnectionMock, updateConfigMock, resetConfigMock } = vi.hoisted(() => ({
   getConfigMock: vi.fn(),
   getCapabilitiesMock: vi.fn(),
   probeCapabilitiesMock: vi.fn(),
   getProbeSettingsMock: vi.fn(),
   getReliabilityMock: vi.fn(),
   getModelRegistryMock: vi.fn(),
+  getModelProvidersMock: vi.fn(),
   testConnectionMock: vi.fn(),
   updateConfigMock: vi.fn(),
   resetConfigMock: vi.fn(),
@@ -74,6 +75,8 @@ vi.mock('@/api/adminApi', () => ({
     updateConfig: updateConfigMock,
     resetConfig: resetConfigMock
   }),
+  /* 供应商与模型编辑（BYOK，2026-10-18）：接入页的供应商面板与平台通道的连接表单都读它 */
+  adminModelProvidersApi: apiObject({ get: getModelProvidersMock }),
   adminAgentsApi: apiObject(),
   adminAgentTopologyApi: apiObject(),
   adminApi: apiObject(),
@@ -87,6 +90,51 @@ vi.mock('@/api/adminApi', () => ({
 
 function makeCapability(id: string, status: 'operational' | 'degraded' | 'unavailable' | 'unknown', checkedAt: string | null) {
   return { id, status, checkedAt, latencyMs: status === 'operational' ? 300 : null, message: '服务正常', failureCode: null, retryable: true, lastSuccessAt: null };
+}
+
+/**
+ * 供应商注册表视图（后端 GET /admin/model-providers 的 data）。
+ * 2026-10-18 BYOK 重做后，「接入与模型」页签 = 左供应商列表 / 右详情，
+ * 平台通道的连接表单嵌在「平台提供」详情里，故这些用例都得先喂这份数据。
+ */
+function providersView(): Record<string, unknown> {
+  return {
+    registry: { path: 'backend/config/llm-providers.json', source: 'file', mtimeMs: 1, lastError: null, readOnly: false },
+    providers: [
+      {
+        id: 'platform', name: '平台提供', description: '已接入，开箱可用，无需自己准备服务地址与密钥',
+        enabled: true, recommended: true, endpointSource: 'inherit', baseUrl: null, apiKeyEnv: null,
+        keySource: 'none', keyHint: null, status: 'inherit',
+        models: [
+          {
+            id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', tier: 'chat',
+            supportsThinking: true, supportsReasoningEffort: true, maxOutputTokens: 131072,
+            defaultMaxTokens: 32768, reasoningReserveTokens: 8192, maxParallelRequests: null,
+            fallbacks: ['agnes-3.0-flash'], pricing: null, description: null
+          },
+          {
+            id: 'agnes-3.0-flash', label: 'Agnes 3.0 Flash', tier: 'chat',
+            supportsThinking: false, supportsReasoningEffort: false, maxOutputTokens: 65536,
+            defaultMaxTokens: 32768, reasoningReserveTokens: null, maxParallelRequests: null,
+            fallbacks: [], pricing: null, description: null
+          }
+        ]
+      },
+      {
+        id: 'acme-gateway', name: 'Acme 网关', description: null,
+        enabled: true, recommended: false, endpointSource: 'own', baseUrl: 'https://gw.acme.com/v1',
+        apiKeyEnv: 'PROVIDER_ACME_GATEWAY_API_KEY', keySource: 'db', keyHint: '····9xQv', status: 'ready',
+        models: [
+          {
+            id: 'acme-chat', label: 'Acme Chat', tier: 'chat',
+            supportsThinking: false, supportsReasoningEffort: false, maxOutputTokens: null,
+            defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: 8,
+            fallbacks: [], pricing: { inputPer1M: 0.3, outputPer1M: 0.6 }, description: null
+          }
+        ]
+      }
+    ]
+  }
 }
 
 function makeSnapshot(overrides: Partial<Record<'overall' | 'stale', string | boolean>> = {}) {
@@ -122,6 +170,8 @@ describe('ApiConfig P1 修复批', () => {
     getProbeSettingsMock.mockReset();
     getReliabilityMock.mockReset();
     getModelRegistryMock.mockReset();
+    getModelProvidersMock.mockReset();
+    getModelProvidersMock.mockResolvedValue({ data: { data: providersView() } });
     testConnectionMock.mockReset();
     updateConfigMock.mockReset();
     resetConfigMock.mockReset();
@@ -365,20 +415,36 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('模型总览并入「接入与模型」：注册表只读面板随默认页签渲染，旧 ?tab= 键归一（2026-10-14 页签重设计）', async () => {
+  it('接入与模型 = 供应商两栏面板：左列表（平台提供 / 自行接入）+ 右详情（2026-10-18 BYOK 重做）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
-    // 默认页签即「接入与模型」：注册表随默认分支一起挂载（原独立页签需点击才挂）
+    // 默认页签即「接入与模型」：供应商面板随默认分支一起挂载（原独立页签需点击才挂）
     expect(wrapper.findAll('.mk-subtab').some((b) => b.text().includes('模型总览'))).toBe(false);
     const tab = wrapper.findAll('.mk-subtab').find((b) => b.text().includes('接入与模型'));
     expect(tab, '应存在「接入与模型」tab').toBeTruthy();
     await flushPromises();
-    expect(getModelRegistryMock).toHaveBeenCalled();
-    expect(wrapper.find('.ac-registry').exists()).toBe(true);
-    // 注册表只读：不因并入而冒出保存入口（保存钮只在接入三卡各自的 dirty 态出现）
-    expect(wrapper.text()).not.toContain('保存连接');
+    // 面板读的是可编辑注册表视图（供应商 + 模型 + 文件可写状态）
+    expect(getModelProvidersMock).toHaveBeenCalled();
+    const panel = wrapper.find('.mpp');
+    expect(panel.exists()).toBe(true);
+    expect(panel.text()).toContain('模型供应商');
+    // 左栏分组：平台提供 / 自行接入（两条都来自注册表）
+    const groups = wrapper.findAll('.mpp-group__title').map((el) => el.text());
+    expect(groups).toEqual(['平台提供', '自行接入']);
+    const items = wrapper.findAll('.mpp-item__name').map((el) => el.text());
+    expect(items).toEqual(['平台提供', 'Acme 网关']);
+    // 默认选中平台提供：它的详情里嵌着连接表单（服务地址 / API Key / 连通性验证）
+    expect(wrapper.find('.ac-conn').exists()).toBe(true);
+    expect(wrapper.text()).toContain('平台通道的服务地址与密钥在这里配置');
+    // 平台通道没有自带端点：模型清单只给增改，不给「获取模型列表」（那是自带端点才有的动作）；
+    // 连通性验证在连接表单里（上面那段「运行测试」），不在下面再挂第二枚检测钮
+    const acts = wrapper.findAll('.mpp-models__acts .mk-btn').map((b) => b.text());
+    expect(acts).toEqual(['编辑供应商', '＋ 添加模型']);
+    // 只读能力表已从本页签退役
+    expect(wrapper.find('.ac-registry').exists()).toBe(false);
     wrapper.unmount();
   });
+
 
   it('虚拟学习者通道并入「调用参数」栅格（2026-10-15 用户重组：卡片外壳与三段视图切换退役）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
@@ -396,22 +462,22 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 注册表按域切片（2026-10-14；2026-10-15 重组 + 供应商与能力限额合并）：
-     别名映射是路由域事实，归「路由与调用」；供应商与能力限额（合并块）留「接入与模型」；
-     默认路由解析结果改宿主行内展示，切片退役。 */
-  it('注册表切片：接入页留观测分区，路由页只留别名映射（默认收起）', async () => {
+  /* 注册表按域切片（2026-10-14；2026-10-15 供应商与能力限额合并；2026-10-18 BYOK 重做）：
+     别名映射是路由域事实，仍归「路由与调用」（只读切片，默认收起）；
+     「接入与模型」页签改成可编辑的供应商面板，只读能力表整块退役。 */
+  it('注册表切片：接入页是供应商编辑面板，路由页只留别名映射（默认收起）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
     await flushPromises();
-    const access = wrapper.find('.ac-registry');
-    expect(access.exists()).toBe(true);
-    expect(access.text()).toContain('模型供应商与能力限额');
-    expect(access.text()).not.toContain('默认路由（解析结果）');
-    expect(access.text()).not.toContain('别名映射');
+    // 接入页：可编辑面板，不再是只读能力表
+    expect(wrapper.find('.ac-registry').exists()).toBe(false);
+    expect(wrapper.find('.mpp').exists()).toBe(true);
+    // 可编辑面板自带写入口（即时保存），与「只读」形态互斥
+    expect(wrapper.findAll('.mpp-models__acts .mk-btn').map((b) => b.text())).toContain('＋ 添加模型');
 
     await gotoTab(wrapper, '路由与调用');
     await flushPromises();
-    // 同一时刻只挂一份：接入页那份随 v-if 卸载，路由页这份只带别名映射一个分区
+    // 路由页那份只带别名映射一个分区（同一时刻只挂一份注册表切片）
     expect(wrapper.findAll('.ac-registry')).toHaveLength(1);
     const routing = wrapper.find('.ac-registry--routing');
     expect(routing.exists()).toBe(true);
@@ -423,8 +489,8 @@ describe('ApiConfig P1 修复批', () => {
     expect(foldBar.exists()).toBe(true);
     expect(foldBar.text()).toContain('内置别名映射表');
     expect(wrapper.find('.ac-fold').attributes('open')).toBeUndefined();
-    // 切片仍是注册表本体（失败态随组件走），且不因此冒出写入口
-    expect(wrapper.text()).not.toContain('保存连接');
+    // 别名切片仍是只读的：本页签不冒出模型/供应商写入口
+    expect(wrapper.findAll('.mpp')).toHaveLength(0);
     wrapper.unmount();
   });
 

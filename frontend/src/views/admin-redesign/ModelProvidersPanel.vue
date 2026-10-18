@@ -1,0 +1,840 @@
+<template>
+  <!-- 模型供应商与模型（BYOK 重做，2026-10-18）。
+       左=供应商列表（平台提供 / 自行接入分组 + 状态点 + 启用开关 + 添加），右=选中供应商的详情
+       （服务地址、密钥三件套、模型清单可增删改、上游未登记折叠；平台通道的服务地址与密钥、
+        连通性验证由宿主经 #platform-detail 注入）。
+       编辑是**即时保存**：点保存就落盘并热生效，不并入页脚保存条——只有「平台提供」的服务地址与
+       密钥仍是连接设置的脏位保存（那段表单由宿主经 #platform-detail 插槽注入）。
+       运行面读数（冷却/健康/配置漂移告警）另取 GET /admin/model-registry：编辑面只有配置值，
+       把「这个模型现在能不能用」也算在这里会让两个接口互相复述。 -->
+  <section class="mk-card mpp">
+    <div class="mk-card__head">
+      <h3 class="mk-card__title">模型供应商</h3>
+      <span class="mk-card__meta" :title="registryPathTitle">{{ registryMeta }}</span>
+      <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="配置文件所在目录不可写，请在部署侧开放写权限">
+        只读
+      </button>
+      <button type="button" class="mk-btn mk-btn--sm" :disabled="loading" @click="refresh(true)">刷新</button>
+    </div>
+
+    <div v-if="actionError" class="mk-alert mk-alert--row mpp-alert" role="alert">
+      <span class="mk-alert__msg">{{ actionError }}</span>
+      <button type="button" class="mk-alert__btn" @click="actionError = ''">知道了</button>
+    </div>
+    <div v-for="(w, i) in writeWarnings" :key="`w-${i}`" class="mk-alert mk-alert--row mpp-alert" role="status">
+      <span class="mk-alert__msg">{{ w }}</span>
+    </div>
+    <p v-if="registry?.readOnly" class="mpp-note">
+      注册表文件所在目录当前不可写，页面只能查看。请由部署侧开放写权限后再编辑。
+    </p>
+
+    <MkLoading v-if="loading && !view" inline text="读取供应商…" />
+    <MkEmptyState
+      v-else-if="failed"
+      tone="error"
+      title="供应商读取失败"
+      :description="errorText"
+      action-text="重试"
+      @action="refresh(true)"
+    />
+
+    <div v-else class="mpp-body">
+      <!-- 左：供应商列表 -->
+      <aside class="mpp-list" role="tablist" aria-label="供应商">
+        <div v-for="group in groups" :key="group.key" class="mpp-group">
+          <div class="mpp-group__title">{{ group.label }}</div>
+          <div
+            v-for="p in group.items"
+            :key="p.id"
+            class="mpp-item"
+            :class="{ 'mpp-item--on': p.id === selectedId }"
+            role="tab"
+            :aria-selected="p.id === selectedId"
+            tabindex="0"
+            @click="select(p.id)"
+            @keydown.enter.prevent="select(p.id)"
+            @keydown.space.prevent="select(p.id)"
+          >
+            <span class="mpp-item__dot" :class="`mpp-item__dot--${p.status}`" :title="statusLabel(p)" aria-hidden="true"></span>
+            <span class="mpp-item__grow">
+              <span class="mpp-item__name">{{ p.name }}</span>
+              <span class="mpp-item__meta">{{ p.id }} · {{ p.models.length }} 个模型</span>
+            </span>
+            <MkSwitch
+              :model-value="p.enabled"
+              :disabled="busy"
+              @update:model-value="(v: boolean) => toggleEnabled(p, v)"
+            />
+          </div>
+        </div>
+        <button type="button" class="mk-btn mk-btn--sm mpp-add" :disabled="busy || registry?.readOnly" @click="providerEditor?.openWith(null)">
+          ＋ 添加供应商
+        </button>
+      </aside>
+
+      <!-- 右：详情 -->
+      <div v-if="selected" class="mpp-detail">
+        <div class="mpp-detail__head">
+          <div class="mpp-detail__id">
+            <strong class="mpp-detail__name">{{ selected.name }}</strong>
+            <span class="mono mpp-detail__code">{{ selected.id }}</span>
+            <span class="mk-badge" :class="statusBadge(selected).cls">{{ statusBadge(selected).label }}</span>
+            <span v-if="selected.recommended" class="mk-badge mk-badge--info">推荐</span>
+          </div>
+          <div class="mpp-detail__acts">
+            <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="providerEditor?.openWith(selected)">设置</button>
+            <button
+              v-if="selected.id !== 'platform'"
+              type="button"
+              class="mk-btn mk-btn--sm mk-btn--danger"
+              :disabled="busy || registry?.readOnly"
+              @click="removeProvider(selected)"
+            >删除</button>
+          </div>
+        </div>
+        <p v-if="selected.description" class="mpp-detail__desc">{{ selected.description }}</p>
+
+        <!-- 平台提供：服务地址与密钥归连接设置（宿主注入），沿用既有的脏位保存 -->
+        <slot v-if="selected.id === 'platform'" name="platform-detail" />
+
+        <template v-else>
+          <div class="mpp-endpoint">
+            <div class="mpp-endpoint__row">
+              <span class="mpp-endpoint__label">服务地址</span>
+              <span class="mono mpp-endpoint__value">{{ selected.baseUrl }}</span>
+            </div>
+            <div class="mpp-endpoint__row">
+              <span class="mpp-endpoint__label">API Key</span>
+              <span class="mpp-endpoint__key">
+                <input
+                  v-model="keyDraft"
+                  class="mk-field__input"
+                  :type="keyVisible ? 'text' : 'password'"
+                  autocomplete="new-password"
+                  :placeholder="selected.keyHint ? `已配置 ${selected.keyHint}，留空 = 沿用` : '输入 API Key'"
+                  :disabled="registry?.readOnly"
+                />
+                <button
+                  v-if="selected.keyHint || keyDraft"
+                  type="button"
+                  class="mpp-key-toggle"
+                  :title="keyVisible ? '隐藏' : '显示'"
+                  @click="keyVisible = !keyVisible"
+                >{{ keyVisible ? '隐藏' : '显示' }}</button>
+              </span>
+              <span class="mpp-endpoint__acts">
+                <button
+                  type="button"
+                  class="mk-btn mk-btn--sm mk-btn--primary"
+                  :disabled="busy || !keyDraft.trim() || registry?.readOnly"
+                  @click="saveKey(selected)"
+                >保存密钥</button>
+                <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="clearKey(selected)">移除密钥</button>
+              </span>
+            </div>
+            <p class="mpp-endpoint__hint">
+              密钥只存在服务器上，不写进模型目录文件。清空后运行时回落到服务器环境变量
+              <span class="mono">{{ selected.apiKeyEnv || '—' }}</span>
+            </p>
+          </div>
+        </template>
+
+        <div class="mpp-models">
+          <div class="mpp-models__head">
+            <span class="mpp-sec">模型清单<span class="mpp-sec__count">{{ selected.models.length }} 个</span></span>
+            <span class="mpp-models__acts">
+              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="providerEditor?.openWith(selected)">编辑供应商</button>
+              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: null })">＋ 添加模型</button>
+              <!-- 自带端点才有「获取模型列表」（拉上游清单来勾选登记）；
+                   平台提供的地址与密钥归上面那段连接设置，它那边已有「运行测试」，
+                   这里不再挂第二枚检测钮（两枚做同一件事，还会选错模型）。 -->
+              <button
+                v-if="selected.endpointSource === 'own'"
+                type="button"
+                class="mk-btn mk-btn--sm"
+                :disabled="pulling || !selected.keyHint"
+                :title="selected.keyHint ? '向上游拉一份模型清单，勾选后登记' : '先保存密钥再拉取'"
+                @click="pullModels(selected)"
+              >{{ pulling ? '拉取中…' : '获取模型列表' }}</button>
+            </span>
+          </div>
+
+          <div v-if="testResult" class="mpp-test" :class="{ 'mpp-test--bad': !testResult.ok }">
+            <span class="mk-badge" :class="testResult.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ testResult.ok ? '调用通过' : '调用失败' }}</span>
+            <span class="mpp-test__meta mono">{{ testResult.model }}{{ testResult.latency ? ` · ${testResult.latency}` : '' }}</span>
+            <span class="mpp-test__text" :title="testResult.text">「{{ testResult.text }}」</span>
+          </div>
+
+          <div v-if="pulled.length" class="mpp-pulled">
+            <div class="mpp-pulled__head">
+              <span>上游返回 {{ pulled.length }} 个模型，其中 {{ pulledUnregistered.length }} 个还没登记</span>
+              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy" @click="pulled = []">收起</button>
+            </div>
+            <div class="mpp-pulled__body">
+              <label v-for="name in pulled" :key="name" class="mpp-chip" :class="{ 'mpp-chip--on': pulledPicked.has(name), 'mpp-chip--has': registeredIds.has(name) }">
+                <input type="checkbox" :checked="pulledPicked.has(name)" :disabled="registeredIds.has(name)" @change="togglePulled(name)" />
+                <span class="mono">{{ name }}</span>
+                <span v-if="registeredIds.has(name)" class="mpp-chip__tag">已登记</span>
+              </label>
+            </div>
+            <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="busy || !pulledPicked.size" @click="registerPicked">
+              登记选中的 {{ pulledPicked.size }} 个（按对话档）
+            </button>
+          </div>
+
+          <div class="mk-table-scroll">
+            <table class="mk-table mk-table--dense mpp-table">
+              <thead>
+                <!-- 五列（2026-10-18 实测收窄）：8 列在 1280 下要横向滚 205px，而档位/能力/单价
+                     都不是「并排比较」才看得懂的信息——档位与能力收进模型格的徽标，单价收进限额格
+                     的第二行。状态列保留：冷却中的模型要一眼看见（降级会跳过它）。 -->
+                <tr>
+                  <th>模型</th><th>状态</th><th>限额</th><th>备用模型</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="m in selected.models" :key="m.id">
+                  <td class="mpp-model">
+                    <span class="mono mpp-model__id">{{ m.id }}</span>
+                    <span
+                      class="mk-badge mk-badge--muted mpp-chipbadge"
+                      :title="m.tier === 'reasoning' ? '推理档：默认推理路由优先挑它' : '对话档：默认对话路由优先挑它'"
+                    >{{ m.tier }}</span>
+                    <span v-if="m.supportsThinking" class="mk-badge mk-badge--muted mpp-chipbadge" title="支持思考模式">思考</span>
+                    <span v-if="m.supportsReasoningEffort" class="mk-badge mk-badge--muted mpp-chipbadge" title="支持推理强度">强度</span>
+                    <span v-if="m.label && m.label !== m.id" class="mpp-desc" :title="m.label">{{ m.label }}</span>
+                  </td>
+                  <td>
+                    <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
+                    <span v-else class="mk-badge mk-badge--ok" title="没有冷却记录">● 健康</span>
+                    <span v-if="modelWarnings(m).length" class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠</span>
+                  </td>
+                  <td class="mono mpp-limits" :title="limitsTitle(m)">
+                    <span>{{ limitsText(m) }}</span>
+                    <span class="mpp-price" :title="priceTitle(m)">{{ priceText(m) }}</span>
+                  </td>
+                  <td class="mono">{{ m.fallbacks.length ? effectiveFallbacks(m.fallbacks).join(' → ') : '—' }}</td>
+                  <td class="mpp-rowacts">
+                    <button type="button" class="mk-link" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: m })">编辑</button>
+                    <button type="button" class="mk-link" :disabled="busy || testing" @click="testModel(selected, m.id)">测试</button>
+                    <button type="button" class="mk-link mk-link--danger" :disabled="busy || registry?.readOnly" @click="removeModel(m)">删除</button>
+                  </td>
+                </tr>
+                <tr v-if="!selected.models.length">
+                  <td colspan="5" class="mpp-empty">
+                    {{ selected.enabled ? '这个供应商下还没有登记模型，点「添加模型」加一个。' : '这个供应商当前停用，模型不参与路由。' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 上游有、这里没登记的模型：只在排查「某模型为什么用不了」时有用 -->
+          <details v-if="upstreamUnregistered.length" class="mpp-upstream">
+            <summary class="mk-card__head mk-section__summary">
+              <h4 class="mk-card__title">上游还有 {{ upstreamUnregistered.length }} 个未登记</h4>
+              <span class="mk-card__meta">不参与路由</span>
+            </summary>
+            <div class="mpp-upstream__body">
+              <span v-for="name in upstreamUnregistered" :key="name" class="mono mpp-upstream__item" :title="name">{{ name }}</span>
+            </div>
+          </details>
+        </div>
+      </div>
+      <MkEmptyState v-else compact title="还没有供应商。用左栏底部的「添加供应商」建一个。" />
+    </div>
+
+    <ProviderEditorDialog ref="providerEditor" @saved="onProviderSaved" />
+    <ModelEditorDialog ref="modelEditor" :fallback-options="fallbackOptions" @saved="onModelSaved" />
+  </section>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
+import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSwitch from '@/components/mk/MkSwitch.vue'
+import ProviderEditorDialog, { type ProviderLike } from './ProviderEditorDialog.vue'
+import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
+import { askConfirm } from './useConfirm'
+import { errMsg } from './live'
+import { splitUpstreamByRegistry } from './modelNameMatch'
+
+/** 注册表编辑视图（后端 services/admin/model-providers.service.ts 的 ProviderRegistryView） */
+interface ProviderView extends ProviderLike {
+  id: string
+  name: string
+  description: string | null
+  enabled: boolean
+  recommended: boolean
+  endpointSource: 'inherit' | 'own'
+  baseUrl: string | null
+  apiKeyEnv: string | null
+  keySource: 'db' | 'env' | 'none'
+  keyHint: string | null
+  status: 'ready' | 'unconfigured' | 'inherit' | 'disabled'
+  models: ModelLike[]
+}
+interface ProvidersView {
+  registry: { path: string; source: 'file' | 'embedded-fallback'; mtimeMs: number | null; lastError: string | null; readOnly: boolean }
+  providers: ProviderView[]
+}
+/** 运行面读数（GET /admin/model-registry 的子集）：冷却、告警、候选上限 */
+interface RegistryHealth {
+  models: Array<{ id: string; providerId: string }>
+  cooldowns: Array<{ providerId: string; model: string; remainingMs: number }>
+  warnings: string[]
+  runtime?: { maxModelCandidates: number }
+}
+
+const props = withDefaults(defineProps<{
+  /** 上游模型清单（宿主连接设置里拉到的，平台通道用） */
+  upstream?: string[]
+}>(), { upstream: () => [] })
+
+const emit = defineEmits<{
+  /** 注册表被改动（增删改）→ 宿主决定是否重取别名/默认解析 */
+  changed: []
+  /** 已登记的模型 id（宿主用它算「上游还有几个没登记」的关系句，避免两处各算一遍） */
+  registered: [ids: string[]]
+}>()
+
+const view = ref<ProvidersView | null>(null)
+const health = ref<RegistryHealth | null>(null)
+const loading = ref(false)
+const failed = ref(false)
+const errorText = ref('')
+const busy = ref(false)
+const actionError = ref('')
+const writeWarnings = ref<string[]>([])
+const selectedId = ref('')
+const keyDraft = ref('')
+const keyVisible = ref(false)
+const testing = ref(false)
+const pulling = ref(false)
+const testResult = ref<{ ok: boolean; model: string; latency: string; text: string } | null>(null)
+const pulled = ref<string[]>([])
+const pulledPicked = ref<Set<string>>(new Set())
+
+const providerEditor = ref<InstanceType<typeof ProviderEditorDialog> | null>(null)
+const modelEditor = ref<InstanceType<typeof ModelEditorDialog> | null>(null)
+
+const providers = computed(() => view.value?.providers ?? [])
+/** 目录文件状态（路径/可写/最近一次热重载错误）：模板里多处按它决定是否禁用编辑 */
+const registry = computed(() => view.value?.registry ?? null)
+const selected = computed(() => providers.value.find((p) => p.id === selectedId.value) ?? null)
+
+const registryMeta = computed(() => {
+  const r = view.value?.registry
+  if (!r) return '来自模型目录文件'
+  if (r.readOnly) return '只读 · 来自模型目录文件'
+  return '改动即时生效 · 来自模型目录文件'
+})
+const registryPathTitle = computed(() => {
+  const r = view.value?.registry
+  if (!r) return ''
+  const parts = [`目录文件：${r.path}`]
+  if (r.lastError) parts.push(`最近更新失败：${r.lastError}`)
+  else parts.push('改动由服务端校验后写入并立即生效')
+  return parts.join('\n')
+})
+
+/** 平台提供在最前（它决定平台通道），自行接入按文件声明序 */
+const groups = computed(() => [
+  { key: 'platform', label: '平台提供', items: providers.value.filter((p) => p.id === 'platform') },
+  { key: 'custom', label: '自行接入', items: providers.value.filter((p) => p.id !== 'platform') }
+])
+
+const registeredIds = computed(() => new Set(selected.value?.models.map((m) => m.id) ?? []))
+const pulledUnregistered = computed(() => pulled.value.filter((n) => !registeredIds.value.has(n)))
+const upstreamUnregistered = computed(() => {
+  const registered = view.value?.providers.flatMap((p) => p.models.map((m) => m.id)) ?? []
+  return splitUpstreamByRegistry(props.upstream, registered).unregistered
+})
+const fallbackOptions = computed(() =>
+  providers.value.flatMap((p) => p.models.map((m) => `${p.id}/${m.id}`))
+)
+
+/** 已登记模型 id 回传宿主（上游清单的关系句由宿主渲染，数据同源一次算） */
+function emitRegistered(): void {
+  emit('registered', providers.value.flatMap((p) => p.models.map((m) => m.id)))
+}
+
+function statusLabel(p: ProviderView): string {
+  if (p.status === 'disabled') return '已停用'
+  if (p.status === 'inherit') return '平台提供（沿用平台地址与密钥）'
+  if (p.status === 'unconfigured') return '还没配置密钥'
+  return '可用'
+}
+function statusBadge(p: ProviderView): { cls: string; label: string } {
+  if (p.status === 'disabled') return { cls: 'mk-badge--muted', label: '已停用' }
+  if (p.status === 'inherit') return { cls: 'mk-badge--info', label: '平台提供' }
+  if (p.status === 'unconfigured') return { cls: 'mk-badge--warn', label: '待配置密钥' }
+  return { cls: 'mk-badge--ok', label: '可用' }
+}
+
+function cooldownOf(m: ModelLike) {
+  return (health.value?.cooldowns ?? []).find((c) => c.model === m.id && c.providerId === selected.value?.id) ?? null
+}
+function modelWarnings(m: ModelLike): string[] {
+  return (health.value?.warnings ?? []).filter((w) => w.includes(`模型「${m.id}」`))
+}
+function effectiveFallbacks(fallbacks: string[]): string[] {
+  return fallbacks.slice(0, Math.max(0, (health.value?.runtime?.maxModelCandidates ?? 2) - 1))
+}
+function priceText(m: ModelLike): string {
+  const p = m.pricing
+  if (!p || (p.inputPer1M == null && p.outputPer1M == null)) return '单价未知'
+  return `单价 入 ${p.inputPer1M ?? '—'} / 出 ${p.outputPer1M ?? '—'}`
+}
+function priceTitle(m: ModelLike): string {
+  return `${priceText(m)}（USD / 1M tokens，只影响成本核算）`
+}
+function limitsText(m: ModelLike): string {
+  return `出 ${m.maxOutputTokens ?? '—'} / 默 ${m.defaultMaxTokens ?? '—'} / 预 ${m.reasoningReserveTokens ?? '—'} / 并发 ${m.maxParallelRequests ?? '不限'}`
+}
+function limitsTitle(m: ModelLike): string {
+  return `输出上限 ${m.maxOutputTokens ?? '未配置'}。默认输出 ${m.defaultMaxTokens ?? '未配置'}。推理预留 ${m.reasoningReserveTokens ?? '未配置'}。并发上限 ${m.maxParallelRequests ?? '不限'}`
+}
+
+function select(id: string): void {
+  selectedId.value = id
+  keyDraft.value = ''
+  keyVisible.value = false
+  testResult.value = null
+  pulled.value = []
+  pulledPicked.value = new Set()
+}
+
+/** 选中项被删/首次加载后归位：优先平台提供，其次第一个 */
+function ensureSelection(): void {
+  if (providers.value.some((p) => p.id === selectedId.value)) return
+  const first = providers.value.find((p) => p.id === 'platform') ?? providers.value[0]
+  selectedId.value = first?.id ?? ''
+}
+
+async function refresh(force = false): Promise<void> {
+  if (view.value && !force) return
+  loading.value = true
+  failed.value = false
+  try {
+    const [providersRes, registryRes] = await Promise.all([
+      adminModelProvidersApi.get(),
+      adminModelRegistryHealth()
+    ])
+    view.value = (providersRes?.data?.data ?? null) as ProvidersView | null
+    health.value = registryRes
+    ensureSelection()
+    emitRegistered()
+  } catch (e) {
+    failed.value = true
+    errorText.value = errMsg(e)
+  } finally {
+    loading.value = false
+  }
+}
+
+/**
+ * 运行面读数失败不该让整块面板报「读取失败」：它只喂状态列与告警角标，
+ * 缺了就按「没有冷却记录」渲染，编辑面照常用。
+ */
+async function adminModelRegistryHealth(): Promise<RegistryHealth | null> {
+  try {
+    const res = await adminApiConfigApi.getModelRegistry()
+    return (res?.data?.data ?? null) as RegistryHealth | null
+  } catch {
+    return null
+  }
+}
+
+/** 写接口统一回吐最新视图：直接换掉本地数据，不再多一次 GET */
+function adopt(payload: unknown, warnings: string[]): void {
+  const data = (payload as { data?: unknown })?.data ?? payload
+  if (data && typeof data === 'object' && 'providers' in (data as object)) {
+    view.value = data as ProvidersView
+    ensureSelection()
+    emitRegistered()
+  }
+  writeWarnings.value = warnings
+  emit('changed')
+}
+
+async function toggleEnabled(p: ProviderView, value: boolean): Promise<void> {
+  busy.value = true
+  actionError.value = ''
+  try {
+    const res = await adminModelProvidersApi.update(p.id, { enabled: value })
+    adopt(res?.data, res?.data?.warnings ?? [])
+  } catch (e) {
+    actionError.value = errMsg(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function saveKey(p: ProviderView): Promise<void> {
+  if (!keyDraft.value.trim()) return
+  busy.value = true
+  actionError.value = ''
+  try {
+    const res = await adminModelProvidersApi.update(p.id, { apiKey: keyDraft.value.trim() })
+    adopt(res?.data, res?.data?.warnings ?? [])
+    keyDraft.value = ''
+  } catch (e) {
+    actionError.value = errMsg(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function clearKey(p: ProviderView): Promise<void> {
+  const ok = await askConfirm({
+    title: '移除已保存的密钥',
+    message: `移除「${p.name}」当前保存的密钥后，运行时会回落到服务器环境变量 ${p.apiKeyEnv || '（未配置）'}。若两处都没有，它的模型会直接报错。`,
+    confirmText: '移除密钥'
+  })
+  if (ok !== true) return
+  busy.value = true
+  actionError.value = ''
+  try {
+    const res = await adminModelProvidersApi.removeKey(p.id)
+    adopt(res?.data, res?.data?.warnings ?? [])
+  } catch (e) {
+    actionError.value = errMsg(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function removeProvider(p: ProviderView): Promise<void> {
+  const ok = await askConfirm({
+    title: `删除供应商「${p.name}」`,
+    message: `将从模型目录里删掉这个供应商和它下面的 ${p.models.length} 个模型，并清除已保存的密钥。删掉后引用这些模型的默认路由与别名会失效（系统会拦下那种情况）。`,
+    confirmText: '删除供应商'
+  })
+  if (ok !== true) return
+  busy.value = true
+  actionError.value = ''
+  try {
+    const res = await adminModelProvidersApi.remove(p.id)
+    select('')
+    adopt(res?.data, res?.data?.warnings ?? [])
+  } catch (e) {
+    actionError.value = errMsg(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function removeModel(m: ModelLike): Promise<void> {
+  const ok = await askConfirm({
+    title: `删除模型「${m.id}」`,
+    message: '从模型目录里删掉它，此后不再参与路由。若它正被默认路由或别名引用，系统会拦下并说明。',
+    confirmText: '删除模型'
+  })
+  if (ok !== true) return
+  busy.value = true
+  actionError.value = ''
+  try {
+    const res = await adminModelProvidersApi.removeModel(selected.value!.id, m.id)
+    adopt(res?.data, res?.data?.warnings ?? [])
+  } catch (e) {
+    actionError.value = errMsg(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+function onProviderSaved(payload: { providerId: string; warnings: string[] }): void {
+  void reloadAfterDialog(payload.providerId, payload.warnings)
+}
+function onModelSaved(payload: { modelId: string; warnings: string[] }): void {
+  void reloadAfterDialog(null, payload.warnings)
+}
+
+/**
+ * 弹层保存后：写接口的回吐在弹层里被吃掉了，这里重新拉一次视图（唯一需要再拉一次的场景），
+ * 并把告警透传到面板顶部。
+ */
+async function reloadAfterDialog(providerId: string | null, warnings: string[]): Promise<void> {
+  if (providerId) selectedId.value = providerId
+  await refresh(true)
+  writeWarnings.value = warnings
+  emit('changed')
+}
+
+async function testModel(p: ProviderView, modelId: string): Promise<void> {
+  testing.value = true
+  actionError.value = ''
+  try {
+    const res = await adminModelProvidersApi.test(p.id, { modelId })
+    testResult.value = { ok: true, model: res?.data?.data?.model ?? modelId, latency: `${res?.data?.data?.durationMs ?? 0}ms`, text: res?.data?.data?.content ?? '' }
+  } catch (e) {
+    testResult.value = { ok: false, model: modelId, latency: '', text: errMsg(e) }
+  } finally {
+    testing.value = false
+  }
+}
+
+async function pullModels(p: ProviderView): Promise<void> {
+  pulling.value = true
+  actionError.value = ''
+  try {
+    const res = await adminModelProvidersApi.pullModels(p.id)
+    pulled.value = (res?.data?.data?.models ?? []) as string[]
+    pulledPicked.value = new Set()
+  } catch (e) {
+    actionError.value = errMsg(e)
+  } finally {
+    pulling.value = false
+  }
+}
+
+function togglePulled(name: string): void {
+  const next = new Set(pulledPicked.value)
+  if (next.has(name)) next.delete(name)
+  else next.add(name)
+  pulledPicked.value = next
+}
+
+/** 勾选登记：按对话档先建出来（档位/能力可在行内再改），能力标记让运营在下一步补 */
+async function registerPicked(): Promise<void> {
+  const names = [...pulledPicked.value]
+  if (!names.length || !selected.value) return
+  busy.value = true
+  actionError.value = ''
+  const warnings: string[] = []
+  let added = 0
+  for (const name of names) {
+    try {
+      const res = await adminModelProvidersApi.addModel(selected.value.id, { id: name, label: name, tier: 'chat' })
+      warnings.push(...(res?.data?.warnings ?? []))
+      added += 1
+    } catch (e) {
+      actionError.value = `「${name}」没登记成功：${errMsg(e)}`
+      break
+    }
+  }
+  try {
+    await refresh(true)
+    writeWarnings.value = warnings
+    pulledPicked.value = new Set()
+    if (added) emit('changed')
+  } finally {
+    busy.value = false
+  }
+}
+
+onMounted(() => {
+  void refresh()
+})
+
+defineExpose({ refresh })
+</script>
+
+<style scoped>
+.mpp-alert { margin: 8px 14px 0; }
+.mpp-note {
+  margin: 8px 14px 0;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+}
+.mpp-body {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 0;
+  border-top: 1px solid var(--mk-line);
+}
+@media (max-width: 900px) {
+  .mpp-body { grid-template-columns: minmax(0, 1fr); }
+  .mpp-list { border-right: 0; border-bottom: 1px solid var(--mk-line); }
+}
+.mpp-list {
+  padding: 10px;
+  border-right: 1px solid var(--mk-line);
+}
+.mpp-group + .mpp-group { margin-top: 12px; }
+.mpp-group__title {
+  padding: 0 6px 6px;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  letter-spacing: 0.04em;
+}
+.mpp-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  border-radius: var(--mk-radius-md);
+  cursor: pointer;
+}
+.mpp-item:hover { background: var(--mk-surface-2); }
+.mpp-item--on { background: var(--mk-surface-2); box-shadow: inset 2px 0 0 var(--mk-accent-deep); }
+.mpp-item__dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--mk-muted);
+}
+.mpp-item__dot--ready { background: var(--mk-green); }
+.mpp-item__dot--unconfigured { background: var(--mk-amber); }
+.mpp-item__dot--disabled { background: var(--mk-muted); }
+.mpp-item__dot--inherit { background: var(--mk-accent-deep); }
+.mpp-item__grow { min-width: 0; flex: 1 1 auto; }
+.mpp-item__name { display: block; font-size: var(--mk-fs-body); }
+.mpp-item__meta {
+  display: block;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mpp-add { width: 100%; margin-top: 10px; }
+.mpp-detail { padding: 12px 14px 14px; min-width: 0; }
+.mpp-detail__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.mpp-detail__id { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mpp-detail__name { font-size: var(--mk-fs-emphasis); }
+.mpp-detail__code { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.mpp-detail__acts { display: inline-flex; gap: 6px; }
+.mpp-detail__desc {
+  margin: 6px 0 0;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+}
+.mpp-endpoint {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-lg);
+}
+.mpp-endpoint__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mpp-endpoint__row + .mpp-endpoint__row { margin-top: 8px; }
+.mpp-endpoint__label {
+  flex: 0 0 72px;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+}
+.mpp-endpoint__value { min-width: 0; overflow-wrap: anywhere; font-size: var(--mk-fs-body); }
+.mpp-endpoint__key { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1 1 auto; }
+.mpp-key-toggle {
+  background: none;
+  border: 0;
+  padding: 2px 6px;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  cursor: pointer;
+}
+.mpp-endpoint__acts { display: inline-flex; gap: 6px; flex: 0 0 auto; }
+.mpp-endpoint__hint {
+  margin: 8px 0 0;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+}
+.mpp-models { margin-top: 14px; }
+.mpp-models__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.mpp-models__acts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.mpp-sec { font-size: var(--mk-fs-body); }
+.mpp-sec__count {
+  margin-left: 8px;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+}
+.mpp-test {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-md);
+  font-size: var(--mk-fs-micro);
+}
+.mpp-test__meta { color: var(--mk-muted); }
+.mpp-test__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mpp-pulled {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--mk-line);
+  border-radius: var(--mk-radius-lg);
+}
+.mpp-pulled__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+}
+.mpp-pulled__body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+  max-height: 160px;
+  overflow: auto;
+}
+.mpp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-pill);
+  font-size: var(--mk-fs-micro);
+  cursor: pointer;
+}
+.mpp-chip--on { border-color: var(--mk-accent-deep); }
+.mpp-chip--has { opacity: 0.6; cursor: default; }
+.mpp-chip__tag { color: var(--mk-muted); }
+.mpp-table { width: 100%; }
+.mpp-label {
+  margin-left: 6px;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+}
+.mpp-desc {
+  display: block;
+  margin-top: 2px;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 模型格承载 id + 档位/能力徽标：给个下限，长 id 换行也别把徽标挤没 */
+.mpp-model { min-width: 200px; }
+.mpp-model__id { overflow-wrap: anywhere; }
+.mpp-chipbadge { margin-left: 6px; }
+.mpp-price { display: block; margin-top: 2px; color: var(--mk-faint); }
+.mpp-limits { font-size: var(--mk-fs-micro); max-width: 170px; }
+.mpp-rowacts { display: flex; gap: 8px; white-space: nowrap; }
+.mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.mpp-upstream { margin-top: 10px; }
+.mpp-upstream__body { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px 4px; }
+.mpp-upstream__item {
+  padding: 2px 8px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-pill);
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+}
+</style>

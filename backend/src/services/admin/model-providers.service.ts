@@ -237,8 +237,30 @@ function modelOwners(root: Root): Map<string, string[]> {
   return owners;
 }
 
-function textOf(root: Root): string {
-  return `${JSON.stringify(root, null, 2)}\n`;
+/**
+ * 短数组收成一行：`JSON.stringify(…, 2)` 会把 `"fallbacks": ["x"]` 摊成三行，
+ * 一次编辑就制造出满屏与本次改动无关的 diff（这文件在 git 里是要被 review 的）。
+ * 只收「收成一行不超过 120 字符」的数组——$rules 那种长文本数组保持多行（作者本来就那么排）。
+ */
+function collapseShortArrays(text: string): string {
+  return text.replace(/\[[^[\]{}]*\]/g, (match) => {
+    const flat = match.replace(/\s*\n\s*/g, ' ').replace(/\s{2,}/g, ' ').replace(/\[ /, '[').replace(/ \]/, ']');
+    return flat.length <= 120 ? flat : match;
+  });
+}
+
+/** 沿用作息文件本身的换行风格：这次检出里它是 CRLF，写回 LF 会让整份文件逐行变红 */
+function currentEol(filePath: string): '\n' | '\r\n' {
+  try {
+    return fs.readFileSync(filePath, 'utf-8').includes('\r\n') ? '\r\n' : '\n';
+  } catch {
+    return '\n';
+  }
+}
+
+function textOf(root: Root, eol: '\n' | '\r\n'): string {
+  const text = `${collapseShortArrays(JSON.stringify(root, null, 2))}\n`;
+  return eol === '\r\n' ? text.replace(/\n/g, '\r\n') : text;
 }
 
 /**
@@ -287,7 +309,7 @@ function selfCheck(parsedRoot: Root, snapshotText: string): string[] {
 function saveRegistry(root: Root, warnings: string[]): string[] {
   const configPath = resolveConfigPath();
   assertWritable();
-  const text = textOf(root);
+  const text = textOf(root, currentEol(configPath));
 
   // 闸 1：结构校验（报错文案即运行时那条）
   try {

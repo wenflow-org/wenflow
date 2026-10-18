@@ -79,7 +79,9 @@ describe('前端术语单源守卫（阶段 1D）', () => {
     const mustImport = [
       'FieldRoutingTable.vue',
       'SkillFieldRouting.vue',
-      'SkillDesignPage.vue',
+      // SkillDesignPage.vue 已退役（2026-10-15 设计页并入 SkillDetail：只读概览上 + 设计区块下），
+      // 单源消费点随之搬进 SkillDetail.vue
+      'SkillDetail.vue',
       'ExecLogs.vue',
       'TraceWaterfall.vue',
       'HealthCenter.vue',
