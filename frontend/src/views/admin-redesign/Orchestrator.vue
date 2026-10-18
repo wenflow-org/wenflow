@@ -167,7 +167,7 @@
           <!-- 未加载显「…」（与画布 chips 同一三态约定；规则 5 禁内联「加载中」文案，
                口径解释在 :title 里） -->
           <template v-if="!contractOf(active).loaded">…</template>
-          <template v-else>必填入参 {{ contractOf(active).ins.length }} · 产出 {{ contractOf(active).outs.length }} · {{ current.skills.length }} Skill</template>
+          <template v-else>必填入参 {{ contractOf(active).ins.length }} · 产出 {{ contractOf(active).outs.length }}</template>
         </span>
       </div>
       <FieldRoutingTable :stage="active" @changed="onRoutingChanged" />
@@ -179,7 +179,7 @@
              37 含外挂能力（skill-catalog 口径）、32 是运行时 Skill 定义数，两数不同源不冲突，
              但必须自解释才不像「数字对不上」 -->
         <span class="mk-card__meta" :title="govMetaTitle">
-          编排定义 {{ orchCount }} · Skill 定义 {{ skillDefCount }}<template v-if="recReport"> · 已上线 {{ recLiveCount }}/{{ recTotalCount }}（含外挂能力）</template>
+          编排定义 {{ orchCount }} · Skill 定义 {{ skillDefCount }}
         </span>
       </div>
       <!-- 定义明细（definitionNotes 调试转储）2026-10-05 撤：Skill 行名称字段全空

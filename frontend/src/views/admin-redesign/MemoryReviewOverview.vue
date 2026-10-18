@@ -333,7 +333,7 @@ const overviewCards = computed<OverviewCard[]>(() => {
     { label: '记忆痕迹', value: val(t.traces), hint: numHint('跨全部学习路径'), tone: numTone(''), title: '记忆记录总数（用户级、跨全部学习路径）' },
     { label: '当前到期', value: val(t.due), hint: numHint(t.traces ? `占痕迹 ${duePct.value}%` : '暂无痕迹'), tone: numTone(dueWarn.value ? 'warn' : ''), title: dueCardTitle.value },
     { label: '需人工看', value: val(t.ambiguous), hint: numHint('归并候选 · 不自动执行'), tone: numTone(t.ambiguous > 0 ? 'warn' : ''), title: '像但不确定的归并候选，需人工确认，不会自动执行' },
-    { label: '待归并建议', value: val(t.proposed), hint: numHint(`可自动 ${t.autoApplicable} · 已执行 ${t.applied}/${t.deleted}`), tone: numTone(''), title: '模型给出的同义概念候选。「可自动」指系统有把握且名称足够相似。执行后保留备份，可回滚' }
+    { label: '待归并建议', value: val(t.proposed), hint: numHint(`其中 ${t.autoApplicable} 条可自动执行`), tone: numTone(''), title: `模型给出的同义概念候选。「可自动」指系统有把握且名称足够相似。执行后保留备份，可回滚。已执行 ${t.applied} 条，已删除 ${t.deleted} 条` }
   ];
 });
 

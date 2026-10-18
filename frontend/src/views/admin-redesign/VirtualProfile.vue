@@ -366,7 +366,7 @@
         <section v-if="activeTab === 'memory'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">记忆池 · {{ memoryPoolRows.length }} 个概念<template v-if="memoryCount"> / 共 {{ memoryCount }} 条</template></h3>
-            <span class="mk-card__meta" :title="allStoriesScope.title">课后沉淀 · 记忆强度为当前保留率 · {{ allStoriesScope.label }}</span>
+            <span class="mk-card__meta" :title="`记忆强度为当前保留率。${allStoriesScope.title}`">课后沉淀</span>
             <!-- 刷新已上移至统一操作台「主动作」槽 -->
           </div>
 
@@ -648,7 +648,7 @@
         <section v-if="activeTab === 'runs'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">会话流水 · {{ allRuns.length }}</h3>
-            <span class="mk-card__meta" :title="allStoriesScope.title">按时间倒序 · 与故事池互补：那里按故事看，这里按会话发生时间看 · {{ allStoriesScope.label }}</span>
+            <span class="mk-card__meta" :title="`与「故事池」互补，那里按故事看，这里按会话发生时间看。${allStoriesScope.title}`">按时间倒序</span>
             <!-- 截断披露（#96）：详情接口最多 200 条，本页只渲染最近 RUNS_TAB_WINDOW 条 -->
             <span
               v-if="runsTruncated"

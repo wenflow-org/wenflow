@@ -671,7 +671,7 @@
         <section v-if="!isRealMode && !isBlackbox && activeTab === 'goal'" class="mk-card">
           <div class="mk-card__head">
             <h4 class="mk-card__title">预生成路径 <span class="cp-aside-dot" :class="hasPath ? 'is-ok' : pathGenerationFailed ? 'is-bad' : goalConverged ? 'is-warn' : 'is-muted'"></span></h4>
-            <span class="mk-card__meta">{{ hasPath ? `已生成 ${pathMilestonesView.length} 个里程碑 · ${learnLessons.length || '—'} 节课` : goalConverged ? '目标已确认，待生成' : '未生成（目标未确认）' }}</span>
+            <span class="mk-card__meta">{{ hasPath ? `已生成 ${pathMilestonesView.length} 个里程碑` : goalConverged ? '目标已确认，待生成' : '未生成（目标未确认）' }}</span>
           </div>
           <div class="cp-aside-body">
             <template v-if="hasPath">
@@ -985,6 +985,8 @@ const MATERIAL_TRUNC_NOTE = '全文超长，仅展示前 20 万字。完整正�
 const CLASSROOM_EMPTY_TEXT = '该课堂暂未记录可展示消息。'
 const PATH_NOT_READY_TITLE = '路径尚未准备好启动教学'
 const BLACKBOX_CONTROL_BLOCK = '黑盒模式不提供手动操作'
+/** 终态下「推进」类动作的禁用原因（单步 / 自动两处共用，同文件复读由 R6 治理） */
+const TERMINAL_STEP_BLOCK = '会话已结束，不能继续推进'
 const FRICTION_LABEL: Record<string, string> = { none: '无', low: '低', normal: '正常', high: '高', stress_test: '压力测试' }
 
 const sessionId = computed(() => subPage.value?.id || '')
@@ -1577,10 +1579,9 @@ const timeoutReadout = computed(() => {
 const doneLessonCount = computed(() => countDoneLessons(learnLessons.value))
 /** 学习总结卡头：课数与卡内课时行同源（learnLessons）；课表未加载时不报 N/0 假读 */
 const wrapupHeadMeta = computed(() => {
-  const parts: string[] = []
-  if (learnLessons.value.length) parts.push(`${doneLessonCount.value}/${learnLessons.value.length} 课已完成`)
-  if (hasWrapup.value) parts.push('终局总结已生成')
-  return parts.join(' · ')
+  /* 2026-10-18 用户走查「这类文案」：读数行只报课数进度。「终局总结已生成」是状态位
+     不是读数，卡体正文与阶段状态已表达，并列在读数行会把课进度读成半句话。 */
+  return learnLessons.value.length ? `${doneLessonCount.value}/${learnLessons.value.length} 课已完成` : ''
 })
 const hasRunnablePathTask = computed(() => pathMilestones.value.some((milestone) => {
   const tasks = milestone.subtasks || milestone.tasks
@@ -1637,7 +1638,7 @@ const stepDisabled = computed(() => !session.value || busy.value || isTerminal.v
 const stepTitle = computed(() => {
   if (!session.value) return '会话仍在加载'
   if (busy.value) return '操作执行中'
-  if (isTerminal.value) return '会话已结束，不能继续推进'
+  if (isTerminal.value) return TERMINAL_STEP_BLOCK
   return isBlackbox.value ? '执行一条黑盒实验轨迹' : '推进一步：当前阶段前进一轮（目标阶段对话一轮，教学阶段课堂对话一轮），结果即时可见'
 })
 const autoDisabled = computed(() => !session.value || busy.value || isTerminal.value || isBlackbox.value)
@@ -1645,7 +1646,7 @@ const autoTitle = computed(() => {
   if (!session.value) return '会话仍在加载'
   if (busy.value) return '操作执行中'
   if (isBlackbox.value) return '黑盒模式仅支持单步推进'
-  if (isTerminal.value) return '会话已结束，不能继续推进'
+  if (isTerminal.value) return TERMINAL_STEP_BLOCK
   return '自动推进当前阶段，直到完成或到达回合上限（目标阶段推进完自动转入路径，教学阶段跑完当前课）'
 })
 
@@ -2033,14 +2034,10 @@ const realMaterials = computed<RealMaterial[]>(() => {
 const materialMetaText = computed(() => {
   const list = realMaterials.value
   if (!list.length) return ''
-  const web = list.filter((m) => m.origin === 'web').length
-  const upload = list.length - web
   const withBrief = list.filter((m) => m.hasBrief).length
-  const parts = [`${list.length} 份`]
-  if (upload) parts.push(`上传 ${upload}`)
-  if (web) parts.push(`联网 ${web}`)
-  parts.push(`含理解摘要 ${withBrief}`)
-  return parts.join(' · ')
+  /* 2026-10-18 用户走查「这类文案」：只报「几份 · 几份有摘要」。
+     上传 / 联网的拆分是来源构成（每条资料行首徽章已标），此前四个计数并排把主读数挤没。 */
+  return withBrief === list.length ? `${list.length} 份` : `${list.length} 份资料 · ${withBrief} 份有理解摘要`
 })
 
 /* ===== 资料全文弹层（2026-10-12 走查「只能看到简介吗」）：控制台列表载荷刻意不含正文

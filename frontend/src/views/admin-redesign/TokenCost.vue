@@ -124,7 +124,7 @@
           :hint="perCallHintShort"
           :title="perCallHint"
         />
-        <MkKpi label="总 Token" :value="summary ? fmtTokens(summary.totals.tokens) : '—'" :hint="`输入 ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · 输出 ${summary ? fmtTokens(summary.totals.completionTokens) : '—'} · ${summary ? summary.totals.calls : '—'} 次调用`" />
+        <MkKpi label="总 Token" :value="summary ? fmtTokens(summary.totals.tokens) : '—'" :hint="`输入 ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · 输出 ${summary ? fmtTokens(summary.totals.completionTokens) : '—'}`" title="输入与输出相加即总量。调用次数见「单次调用均值」卡" />
         <MkKpi
           label="失败调用"
           :value="failedCallsText"
@@ -157,8 +157,12 @@
              2026-10-16 KPI 审计补完：原句把「N 次调用 / 失败 K 次」也念了一遍，而上面 KPI 带的
              「总 Token」插文与「失败调用」值已经说过——同一分母不两处说。此行只留图表侧独有的事实：
              Token 合计与「有多少次没按日拆分」。 -->
-        <p v-if="trend.length" class="mk-card__note tc-card__note">
-          逐日合计 {{ fmtTokens(summary?.totals.tokens ?? 0) }} token<template v-if="summary && trendCallsShortfall > 0">（另有 {{ trendCallsShortfall }} 次未按日拆分，仅计入总量）</template>
+        <p
+          v-if="trend.length"
+          class="mk-card__note tc-card__note"
+          :title="summary && trendCallsShortfall > 0 ? `逐日柱按自然日聚合，跨日窗口头部不足一日的 ${trendCallsShortfall} 次调用只计入总量，故柱合计略低于总量` : ''"
+        >
+          逐日合计 {{ fmtTokens(summary?.totals.tokens ?? 0) }} token
         </p>
         <p v-else class="mk-card__note tc-card__note">近 {{ days }} 天暂无调用记录。</p>
         <!-- 趋势柱：走全 admin 统一图表语言 OvBars（2026-09-29 自 MkChart/ECharts 换入）。
@@ -194,7 +198,10 @@
         <div class="mk-card__head">
           <h3 class="mk-card__title">{{ SKILL_COST_TITLE }}</h3>
           <div class="mk-card__head-right">
-            <span class="mk-card__meta">{{ bySkill.length }} 个<template v-if="skillAllUnpriced"> · 均未配置单价（成本列以 — 表示）</template><template v-else-if="skillUnpriced > 0"> · {{ skillUnpriced }} 个未配置单价（成本列以 — 表示）</template><template v-else-if="!skillAll && bySkill.length > skillLimit"> · 显示前 {{ skillLimit }}</template></span>
+            <span class="mk-card__meta">{{ bySkill.length }} 个 Skill</span>
+            <!-- 未配置单价是可执行的配置缺口，用徽章单列（原做法挤在读数行里，会让「N 个」被读成缺价数） -->
+            <span v-if="skillAllUnpriced" class="mk-badge mk-badge--muted" title="这些 Skill 的模型都没配单价，成本列显示「—」，不计入成本合计">均未配置单价</span>
+            <span v-else-if="skillUnpriced > 0" class="mk-badge mk-badge--muted" :title="`其中 ${skillUnpriced} 个 Skill 的模型未配单价，成本列显示「—」，不计入成本合计`">{{ skillUnpriced }} 个未配置单价</span>
             <button
               v-if="bySkill.length > skillLimit"
               type="button"

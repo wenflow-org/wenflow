@@ -383,10 +383,11 @@ describe('SessionCockpit 双模式', () => {
 
     const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '学习者资料');
     expect(card).toBeTruthy();
-    expect(card!.find('.mk-card__meta').text()).toContain('2 份');
-    expect(card!.find('.mk-card__meta').text()).toContain('上传 1');
-    expect(card!.find('.mk-card__meta').text()).toContain('联网 1');
-    expect(card!.find('.mk-card__meta').text()).toContain('含理解摘要 1');
+    // 2026-10-18 用户走查「这类文案」：卡头只报份数与有摘要份数；
+    // 上传 / 联网的来源构成改由每行行首徽章承担（下方 rows[*].mk-badge 断言）。
+    expect(card!.find('.mk-card__meta').text()).toContain('2 份资料');
+    expect(card!.find('.mk-card__meta').text()).toContain('1 份有理解摘要');
+    expect(card!.find('.mk-card__meta').text()).not.toContain('上传');
 
     const rows = card!.findAll('.cp-mat');
     expect(rows).toHaveLength(2);

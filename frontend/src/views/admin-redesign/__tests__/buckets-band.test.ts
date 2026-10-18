@@ -170,8 +170,10 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     const tiles = w.findAll('.mk-kpi-grid .mk-kpi');
     expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['真实用户', '近 7 天活跃']);
     expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['2', '1']);
-    expect(tiles[0].find('.mk-kpi__hint').text()).toContain('不含虚拟 / 测试账号');
-    expect(tiles[0].find('.mk-kpi__hint').text()).toContain('其中管理员 1');
+    // 2026-10-18 用户走查「这类文案」：读数行只讲这个数是什么，管理员计数与口径说明移入 title
+    expect(tiles[0].find('.mk-kpi__hint').text()).toContain('不含虚拟学习者和测试账号');
+    expect(tiles[0].find('.mk-kpi__hint').text()).not.toContain('其中管理员');
+    expect(tiles[0].attributes('title')).toContain('其中管理员 1');
     expect(tiles[1].find('.mk-kpi__hint').text()).toContain('最后登录在 7 天内');
     w.unmount();
 

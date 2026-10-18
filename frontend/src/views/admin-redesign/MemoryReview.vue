@@ -24,8 +24,8 @@
         <strong class="mr-panels__title">记忆调度与治理</strong>
         <span
           class="mr-panels__meta"
-          title="到期 = 到该复习而未复习。同族重复 = 含义相同、措辞不同的记录。从未提取 = 从未被安排复习过。有强度数据 = 带完整记忆模型参数的记录，旧记录按掌握度回退估算。到期占比 ≥20% 或 ≥5 条时标为需关注"
-        >痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} · 同族重复 {{ detail.summary.duplicatedFamilies }} 组/{{ detail.summary.duplicatedTraces }} 条 · 从未提取 {{ detail.summary.neverExtracted }} · 有强度数据 {{ detail.summary.withFsrsState }}<template v-if="detail.summary.strengthFromLegacy">（另有 {{ detail.summary.strengthFromLegacy }} 条回退估算）</template></span>
+          title="到期 = 到该复习而未复习。同族重复 = 含义相同、措辞不同的记录。从未提取 = 从未被安排复习过。有强度数据 = 带完整记忆模型参数的记录，其中旧记录按掌握度回退估算。到期占比 ≥20% 或 ≥5 条时标为需关注"
+        >痕迹 {{ detail.summary.traces }} · 到期 {{ detail.summary.due }} · 同族重复 {{ detail.summary.duplicatedTraces }} 条 · 从未提取 {{ detail.summary.neverExtracted }} · 有强度数据 {{ detail.summary.withFsrsState }}</span>
         <button
           type="button"
           class="mk-btn mk-btn--sm"
@@ -421,7 +421,7 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">到期清单预览</h3>
-          <span class="mk-card__meta" :title="`按记忆强度从低到高：越靠前越该先复习，最多显示前 20 条。旧记录的强度按掌握度回退估算${duePreviewLegacyCount ? `（本页 ${duePreviewLegacyCount} 条为回退估算）` : ''}`">前 20 · 记忆强度升序<template v-if="duePreviewLegacyCount"> · 含 {{ duePreviewLegacyCount }} 条回退估算</template></span>
+          <span class="mk-card__meta" :title="`按记忆强度从低到高：越靠前越该先复习，最多显示前 20 条。旧记录的强度按掌握度回退估算${duePreviewLegacyCount ? `（本页 ${duePreviewLegacyCount} 条为回退估算）` : ''}`">前 20 · 记忆强度升序</span>
         </div>
         <div v-if="detail.duePreview.length" class="mk-table-scroll">
           <table class="mk-table">

@@ -839,16 +839,11 @@ const lastRateTitle = computed(() => {
 /* P3（设计评审 4.3-20）：同屏两个「最近」异义——「最近 30 次」是窗口、「最近 N 小时前」是时刻；
    时刻改「上次」前缀消歧，作 KPI「评估历史」卡 hint */
 const lastRunText = computed(() => (latestRun.value ? `上次 ${timeAgo(latestRun.value.createdAt)}` : '暂无评估记录'))
-const lastRunHint = computed(() => {
-  const s = latestRun.value?.summary
-  if (!s) return ''
-  const rate = formatRate(s.passRate)
-  return `${rate ? `通过率 ${rate}` : '通过率暂无数据'}；${RATE_THRESHOLD_NOTE}`
-})
-/** 评估历史卡 title（2026-10-04 状态条退役）：窗口上限口径 + 原条 lastRunHint 语义并入。
-    #88：数字随 agent 筛选收窄，限定词一并披露 */
+/** 评估历史卡 title（2026-10-04 状态条退役；2026-10-18 用户走查去掉分号堆叠）：
+    只报窗口上限口径与 agent 筛选限定。最近一次通过率、着色阈值另有「最近评测通过率」卡承载，
+    不在本卡重复。 #88：数字随 agent 筛选收窄，限定词一并披露 */
 const runsKpiTitle = computed(() =>
-  `评估历史按最近 ${RUNS_LIMIT} 次窗口加载（上限非总数）${agentFilter.value ? `；仅 ${agentLabel(agentFilter.value)}` : ''}${lastRunHint.value ? `；${lastRunHint.value}` : ''}`
+  `按最近 ${RUNS_LIMIT} 次窗口加载，上限并非总数${agentFilter.value ? ` · 仅 ${agentLabel(agentFilter.value)}` : ''}`
 )
 /* #88：用例/历史两张 KPI 的数字随顶部 agent 筛选收窄（reloadCases/reloadRuns 都带 agentFilter），
    口径文案必须同步披露这层限定——否则「用例总数」被读成全站总数，切筛选后数字骤降像「用例丢了」 */

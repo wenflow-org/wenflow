@@ -75,7 +75,6 @@ const ppKpi = computed<PpKpiTile[]>(() => {
   const realRows = rows.filter(isRealAccountUser)
   const admins = realRows.filter((u) => u.isAdmin).length
   const scope = `当前显示 ${rows.length} 个账号 · 全部共 ${liveUsersTotal.value} 个`
-  const adminsHint = realRows.length ? `其中管理员 ${admins}` : '—'
   /* 两档统一 MkKpi 卡带（2026-10-10 统一卡型；2026-10-11 换读数）：
      测试 4 张（运行中仿真/虚拟/测试/活跃）——「真实用户」在测试视角恒 0，换虚拟域读数；
      仅真实 2 张（真实/活跃）——管理员数并入真实卡 hint，不再单独立卡 */
@@ -127,9 +126,9 @@ const ppKpi = computed<PpKpiTile[]>(() => {
     {
       label: '真实用户',
       value: realRows.length,
-      hint: `不含虚拟 / 测试账号 · ${adminsHint}`,
+      hint: '不含虚拟学习者和测试账号',
       tone: '',
-      title: `${scope}。在「测试」视角下计入虚拟 / 测试账号`,
+      title: `${scope}。在「测试」视角下计入虚拟 / 测试账号${realRows.length ? `。其中管理员 ${admins}` : ''}`,
     },
     {
       label: '近 7 天活跃',

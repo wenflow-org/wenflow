@@ -157,7 +157,7 @@
       <section v-if="recentFixes.length" class="mk-card" id="hc-fixlog">
         <div class="mk-card__head">
           <h3 class="mk-card__title">最近修复</h3>
-          <span class="mk-card__meta">本次会话 · 权威记录见审计日志</span>
+          <span class="mk-card__meta" title="本列表只留本次会话的修复记录，刷新即清。权威记录在审计日志">本次会话</span>
         </div>
         <div class="hc-fixlog">
           <div v-for="f in recentFixes" :key="f.key" class="hc-fixlog__row">

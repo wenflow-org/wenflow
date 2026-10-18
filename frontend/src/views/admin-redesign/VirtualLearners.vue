@@ -36,7 +36,7 @@
           :value="statsKpiValue(statsKpiPct(completionPct))"
           :tone="statsState === 'error' ? 'bad' : ''"
           :hint="statsKpiHint(completionHint)"
-          :title="statsState === 'error' ? STATS_RETRY_TITLE : '完成率按会话统计。「平均」是会话从创建到结束的时长，不是单次调用耗时。活动会话含进行中与创建中'"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : completionTitle"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />
@@ -828,7 +828,16 @@ const completionHint = computed(() => {
   // 「全部」是分母＝全部会话数，而本页表格与页脚计数的是虚拟学习者行数——
   // 两个数字同屏且都不写口径，读者会把「全部 10」当成学习者总数（走查：与页脚
   // 「共 N 条」、侧栏徽标打架）。分母带上「会话」二字，口径落到明面。
-  const parts = [`已完成 ${runStats.value.completed} / 全部会话 ${runStats.value.totalSessions}`, `活动会话 ${activeSessions.value}`]
+  // 2026-10-18 用户走查「这类文案」：读数行只留会话口径的读数。
+  // 「活动会话」同属会话口径（2026-10-04 从退役状态条迁入本卡）保留；
+  // 「会话均长」是时长读数、单位不同，与完成率并列会被读成同一分母体系，移入 title。
+  const parts = [`已完成 ${runStats.value.completed} / 全部会话 ${runStats.value.totalSessions}`]
+  if (activeSessions.value) parts.push(`活动会话 ${activeSessions.value}`)
+  return parts.join(' · ')
+})
+/** 完成率卡 title：比值口径 + 移出读数行的会话均长 */
+const completionTitle = computed(() => {
+  const parts = ['完成率按会话统计。活动会话含进行中与创建中']
   if (sessionAvgHuman.value) parts.push(`会话均长 ${sessionAvgHuman.value}`)
   return parts.join(' · ')
 })

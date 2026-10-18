@@ -469,10 +469,16 @@
           </div>
           <!-- T2 硬约束 2「结论与细节分层」：结论行常驻可见，明细折叠。
                结论文字完全取自本卡已有数据（条数 + 卡片里本来就标的「证据不足」），未新增判断。
-               P2 口径：「共 N 条」改「最近 N 条」——接口侧 limit=20，列表不是全量 -->
-          <p v-if="evidence.length" class="mk-section__conclusion">
-            最近 {{ evidence.length }} 条学习事件（教学事件仅取近 20 条），其中
-            {{ evidence.filter((e) => evidenceLowConfidence(e.score) && !isDomainEvidence(e.title)).length }} 条置信度低于 50%（仅供参照）。
+               P2 口径：「共 N 条」改「最近 N 条」——接口侧 limit=20，列表不是全量。
+               2026-10-18 用户走查「这类文案」：两个限定语（教学域截断、低置信仅供参照）从结论行
+               移入 title——结论行只报两个读数，悬停仍能看到它们成立的前提。 -->
+          <p
+            v-if="evidence.length"
+            class="mk-section__conclusion"
+            title="教学类事件接口侧只取近 20 条，目标与路径类事件全量并入，故本行是「最近」而非「共」。低置信计数仅供参考，不构成「证据不足」判定"
+          >
+            最近 {{ evidence.length }} 条学习事件，其中
+            {{ evidence.filter((e) => evidenceLowConfidence(e.score) && !isDomainEvidence(e.title)).length }} 条置信度低于 50%。
           </p>
           <!-- 明细常驻（2026-10-11 用户走查「折叠干嘛」）：监控窗改内滚后折叠失去职责——
                它挡住的正是视口内的滚动容器，结论行本就常驻其上；撤 details 直接渲染。
@@ -1242,7 +1248,7 @@ const ldSessionMetaText = computed(() => {
   const scope = scopeNote.value.label
   if (!all) return scope
   const win = all >= LD_SESSION_WINDOW ? `近 ${LD_SESSION_WINDOW} 条窗口` : `${all} 条`
-  return `${win} · 有效 ${activeSessionRows.value.length} · 废弃 ${ldSessDiscardedRows.value.length} · ${scope}`
+  return `${win} · 有效 ${activeSessionRows.value.length} · 废弃 ${ldSessDiscardedRows.value.length}`
 })
 const ldSessionMetaTitle = computed(() => {
   const base =
@@ -2457,6 +2463,8 @@ const memoryRowsFiltered = computed(() =>
 const memMetaText = computed(() => {
   const parts = memViews.value.filter((v) => v.key !== 'all').map((v) => `${v.label} ${v.count}`)
   const base = parts.length ? parts.join(' · ') : `共 ${memoryPaneRows.value.length} 点`
+  /* 作用域标注保留（2026-10-17 拍板）：它不是页级开关的复读——记忆块按用户级、跨全部路径，
+     与页内路径视角开关无关，读错会漏掉在另一条路径学过的概念。 */
   return `${base} · ${allPathsScope.value.label}`
 })
 const memMetaTitle = computed(() => {

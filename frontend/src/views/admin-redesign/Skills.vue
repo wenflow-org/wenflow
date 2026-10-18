@@ -86,7 +86,6 @@
       <MkKpi
         label="降级策略"
         :value="fallbackPolicyText"
-        :hint="fallbackPolicyHint"
         :title="fallbackPolicyTitle"
       />
     </section>
@@ -1270,13 +1269,9 @@ const fallbackPolicyText = computed(() => {
   if (chain === null) return '—'
   return chain.length ? `${chain.length} 个备用模型` : '无备用模型'
 })
-const fallbackPolicyHint = computed(() => {
-  if (!coverageReady.value || !registryReady.value) return ''
-  if (fallbackConfigured.value > 0) return '其余按平台默认列表'
-  const chain = primaryRegistryChain.value
-  if (chain === null) return '平台默认列表暂不可解析'
-  return chain.length ? '按平台默认列表' : '平台默认配置为空'
-})
+/* 降级策略卡不再出 hint（2026-10-18 用户走查「这类文案」）：读数位报「几个自定义」，
+   hint 讲「其余那些走什么」是另一个范围的事实，连读会让运营分不清数字属于哪一边。
+   完整规则（含无自定义时走什么）都在这张卡的 title 里。 */
 const fallbackPolicyTitle = computed(() => {
   const head = '模型重试耗尽后按备用模型列表自动切换。降级仅换模型名，网关与密钥沿用主调用'
   if (!coverageReady.value) return '备用模型配置未加载（配置数据拉取失败或未就绪）'

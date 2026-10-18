@@ -30,7 +30,7 @@
       </select>
     </label>
     <div class="exp-foot">
-      <span class="exp-hint">已选 {{ exportSel.length }} 项 · CSV（UTF-8 BOM，Excel / WPS 可直接打开）</span>
+      <span class="exp-hint" title="导出为 CSV，带 UTF-8 BOM，Excel / WPS 可直接打开">已选 {{ exportSel.length }} 项</span>
       <button
         type="button"
         class="mk-btn mk-btn--primary exp-go"

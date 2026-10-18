@@ -171,11 +171,9 @@ function costTitle(r: RankRow): string {
 
 function rowTitle(r: RankRow): string {
   const label = props.variant === 'user' ? (r.name || r.key) : (r.display || r.key)
-  const parts = [label, `${r.calls} 次调用`, `失败 ${r.failed}`, `成本 ${costDesc(r)}`]
-  if (r.promptTokens || r.completionTokens) {
-    parts.push(`输入 ${fmtTokens(r.promptTokens)} · 输出 ${fmtTokens(r.completionTokens)}`)
-  }
-  return parts.join(' · ')
+  /* 2026-10-18 用户走查「这类文案」：行 title 只留调用/失败/成本三项，
+     输入/输出两列就在同一行里，悬停复读一遍只会让长串里更难找关心的那一项 */
+  return [label, `${r.calls} 次调用`, `失败 ${r.failed}`, `成本 ${costDesc(r)}`].join(' · ')
 }
 </script>
 
