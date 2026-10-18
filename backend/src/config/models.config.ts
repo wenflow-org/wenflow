@@ -28,6 +28,8 @@ import path from 'node:path';
  * - 不要凭经验估算，也不要把厂商页面临时价当权威值。
  * - 三个字段都可选；某字段未配置（undefined）表示"该口径金额未知"，
  *   成本计算器会返回 `usd: null / pricingKnown: false`，**不会**用 0 冒充成本。
+ * - 字段**出现即必须是正有限数**（> 0：非有限数 / 负数 / 0 一律按配置非法拒绝加载，
+ *   见 `asPricing`）——负值或 Infinity 会静默产出负成本 / 无穷金额，比"未知"更危险。
  * - 仅改价时才更新此表；首版不含 `effectiveFrom`，调价历史见
  *   `doc/UPGRADE_DIRECTION_20Q.md` §2 Q20 / §7（后续可增量迁到系统库 `model_pricing`）。
  */
@@ -263,6 +265,29 @@ function asNumber(value: unknown, field: string, where: string): number {
   return value;
 }
 
+/** pricing 允许的费率字段（USD / 1M tokens）。 */
+const PRICING_FIELDS = ['inputPer1M', 'cachedInputPer1M', 'outputPer1M'] as const;
+
+/**
+ * 校验 pricing 块：整块必须是非数组对象，三个费率字段**出现即必须是正有限数**。
+ *
+ * 口径与 `asNumber` 一致（本文件既有 fail-loud 风格）：非有限数（NaN/Infinity）或 <= 0 直接抛错。
+ * 这样坏价目不会静默流入成本核算（负成本 / Infinity 金额），而是启动时拒绝加载、
+ * 热重载时保留上一次好目录并把错误记进 `getLlmRegistryStatus().lastError`。
+ * 未配置的字段（undefined / `pricing` 缺失或为 null / 空对象 `{}`）= 金额未知，仍然合法。
+ * 校验只读不写：返回原对象引用，价目数据与未来新增字段一律原样透传。
+ */
+function asPricing(value: unknown, where: string): ModelPricing {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`llm-providers.json：${where} 的 pricing 必须是对象（USD / 1M tokens 费率，如 {"inputPer1M":0.5}）`);
+  }
+  const p = value as Record<string, unknown>;
+  for (const field of PRICING_FIELDS) {
+    if (p[field] != null) asNumber(p[field], `pricing.${field}`, where);
+  }
+  return value as ModelPricing;
+}
+
 function parseModelEntry(providerId: string, providerName: string, endpoint: { baseUrl: string; apiKeyEnv: string } | null, modelId: string, raw: unknown): ModelDefinition {
   const where = `provider「${providerId}」模型「${modelId}」`;
   if (!MODEL_ID_PATTERN.test(modelId)) {
@@ -290,7 +315,7 @@ function parseModelEntry(providerId: string, providerName: string, endpoint: { b
     ...(b.reasoningReserveTokens != null ? { reasoningReserveTokens: asNumber(b.reasoningReserveTokens, 'reasoningReserveTokens', where) } : {}),
     ...(b.maxParallelRequests != null ? { maxParallelRequests: asNumber(b.maxParallelRequests, 'maxParallelRequests', where) } : {}),
     ...(Array.isArray(b.fallbacks) ? { fallbacks: b.fallbacks.map((x) => String(x).trim()).filter(Boolean) } : {}),
-    ...(b.pricing && typeof b.pricing === 'object' && !Array.isArray(b.pricing) ? { pricing: b.pricing as ModelPricing } : {}),
+    ...(b.pricing != null ? { pricing: asPricing(b.pricing, where) } : {}),
     ...(typeof b.description === 'string' && b.description.trim() ? { description: b.description.trim() } : {})
   };
   if (def.supportsReasoningEffort === true && def.supportsThinking !== true) {

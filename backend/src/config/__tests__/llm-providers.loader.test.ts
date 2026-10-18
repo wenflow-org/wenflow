@@ -107,6 +107,34 @@ describe('llm-providers.json 加载器', () => {
     }))).toThrow(/supportsThinking/);
   });
 
+  it('pricing 正数校验：合法价透传；0 / 负数 / 非有限数 / 非数值 一律 fail-loud（不静默流入成本核算）', () => {
+    /** 直接从 JSON 文本构造，才能覆盖 JSON 合法但语义非法的写法（如 1e999 → Infinity） */
+    const rawWithPricing = (pricingJson: string): string =>
+      `{"providers":{"a":{"models":{"m":{"tier":"chat","pricing":${pricingJson}}}}}}`;
+
+    const ok = parseLlmProvidersConfig(rawWithPricing('{"inputPer1M":0.5,"cachedInputPer1M":0.05,"outputPer1M":2}'));
+    expect(ok.models[0].pricing).toEqual({ inputPer1M: 0.5, cachedInputPer1M: 0.05, outputPer1M: 2 });
+
+    // 未配置（整块缺失 / null / 空对象 / 字段缺省）= 金额未知，仍然合法（usd:null 口径不变）
+    expect(parseLlmProvidersConfig(JSON.stringify({
+      providers: { a: { models: { m: { tier: 'chat' } } } }
+    })).models[0].pricing).toBeUndefined();
+    expect(parseLlmProvidersConfig(rawWithPricing('null')).models[0].pricing).toBeUndefined();
+    expect(parseLlmProvidersConfig(rawWithPricing('{}')).models[0].pricing).toEqual({});
+    expect(parseLlmProvidersConfig(rawWithPricing('{"inputPer1M":0.5}')).models[0].pricing).toEqual({ inputPer1M: 0.5 });
+
+    // 非法数值：0 / 负数 / 1e999（JSON 合法但解析为 Infinity）/ 字符串
+    expect(() => parseLlmProvidersConfig(rawWithPricing('{"inputPer1M":0}'))).toThrow(/pricing\.inputPer1M 必须是正数/);
+    expect(() => parseLlmProvidersConfig(rawWithPricing('{"cachedInputPer1M":-0.05}'))).toThrow(/pricing\.cachedInputPer1M 必须是正数/);
+    expect(() => parseLlmProvidersConfig(rawWithPricing('{"outputPer1M":-1e999}'))).toThrow(/pricing\.outputPer1M 必须是正数/);
+    expect(() => parseLlmProvidersConfig(rawWithPricing('{"inputPer1M":"0.5"}'))).toThrow(/pricing\.inputPer1M 必须是正数/);
+
+    // 整块形态非法：字符串 / 数组 / 布尔
+    for (const badShape of ['"0.5"', '[0.5]', 'true']) {
+      expect(() => parseLlmProvidersConfig(rawWithPricing(badShape))).toThrow(/pricing 必须是对象/);
+    }
+  });
+
   describe('热重载（env 指向临时文件）', () => {
     beforeEach(() => {
       writeTempConfig(VALID_CUSTOM);
@@ -140,6 +168,22 @@ describe('llm-providers.json 加载器', () => {
       expect(viaQualified?.providerId).toBe('second');
       expect(viaQualified?.definition.providerEndpoint?.baseUrl).toBe('http://second.local/v1');
       expect(MODEL_MAP.size).toBe(1); // 扁平注册表去重，不重复收录
+    });
+
+    it('价目热重载：合法价随文件生效；负单价 → 拒绝新文件、保留上一次好目录并把 pricing 记进 error', () => {
+      expect(reloadLlmProvidersIfChanged().reloaded).toBe(true);
+      writeTempConfig(JSON.stringify({
+        providers: { testprov: { models: { 'priced-model': { tier: 'chat', pricing: { inputPer1M: 0.5, outputPer1M: 2 } } } } }
+      }));
+      expect(reloadLlmProvidersIfChanged().reloaded).toBe(true);
+      expect(MODEL_MAP.get('priced-model')?.pricing).toEqual({ inputPer1M: 0.5, outputPer1M: 2 });
+      writeTempConfig(JSON.stringify({
+        providers: { testprov: { models: { 'priced-model': { tier: 'chat', pricing: { inputPer1M: -0.5 } } } } }
+      }));
+      const bad = reloadLlmProvidersIfChanged();
+      expect(bad.reloaded).toBe(false);
+      expect(bad.error).toMatch(/pricing\.inputPer1M 必须是正数/);
+      expect(MODEL_MAP.get('priced-model')?.pricing).toEqual({ inputPer1M: 0.5, outputPer1M: 2 }); // 上一次好目录仍在
     });
 
     it('坏文件 → 保留上一次好目录并带 error；文件删失同理', () => {
