@@ -81,6 +81,7 @@ import type { TeachingSessionMessage } from './TeachingSessionRepository';
 import type { TeachingTurnOutput } from '../../skills/teaching-turn';
 import { findArithmeticMismatches, describeMismatchesForRepair } from './teaching-arithmetic-guard';
 import { stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
+import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching-repetition-guard';
 import { recordDegradation } from '../../skills/degradation-telemetry';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
 import {
@@ -865,6 +866,28 @@ export async function processStudentMessage(
         });
         assistantMessage.content = stripped;
       }
+    }
+  }
+
+  // 相邻轮低增量重复护栏（issue #103 / E-02 语义卡环，最小版·**仅告警**）：
+  // 判据与事后机械尺 r6post-eval.mjs mechTeacherLoop 同源（归一化字三元组 Jaccard ≥ 0.5），
+  // 纯函数在 teaching-repetition-guard.ts。此处的定位是**观测**：不改写回复、不重调、不阻断
+  // 课堂（主防线是提示词「相邻轮不得复述已教内容」）。命中即打一条 warn，供告警回看与
+  // 后续「改动前后同读数对照」取证；若读数证实该护栏无用，删本块即完全回退。
+  {
+    const previousReply = findPreviousAssistantReply(updatedMessages);
+    const repetition = assessAdjacentRepetition(previousReply, assistantMessage.content);
+    if (repetition.lowIncrement) {
+      logger.warn('[AITeaching] 相邻教学轮低增量重复（换措辞未增信息）', {
+        sessionId: session.id,
+        taskId: session.taskId,
+        stage: nextStageDecision.stage,
+        jaccard: Number(repetition.jaccard.toFixed(3)),
+        sharedTrigrams: repetition.sharedTrigrams,
+        novelRatio: Number(repetition.novelRatio.toFixed(3)),
+        previousExcerpt: String(previousReply ?? '').slice(0, 120),
+        currentExcerpt: String(assistantMessage.content ?? '').slice(0, 120),
+      });
     }
   }
 
