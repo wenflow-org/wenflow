@@ -131,10 +131,16 @@ describe('运营中心宿主：系统工具三页签在位', () => {
     w.unmount()
   })
 
-  it('数据导出页签是表单：不渲染页头刷新钮（无远端读数可刷新）', async () => {
+  it('数据导出页签的刷新钮服务页级读数带（表单页零读数，但读数带在每个页签都在）', async () => {
+    // 2026-10-18 用户拍板：四张待办读数卡升到页签栏之上，8 个页签都可见（含 export 表单页）。
+    // 于是「export 不渲染刷新钮」的旧判据作废——页级读数带随时可刷，失败时这枚钮就是它的重试出口。
     const w = await mountWithRouter(OpsHub, '/admin/ops-hub?tab=export')
-    const headBtns = w.findAll('.mk-pagehead__actions button')
-    expect(headBtns.length, '导出页签不渲染刷新钮').toBe(0)
+    const headBtns = w.findAll('.mk-pagehead__actions > button')
+    expect(headBtns.length, '导出页签仍渲染刷新钮（服务页级读数带）').toBe(1)
+    expect(headBtns[0].text()).toContain('刷新')
+    // 读数带在导出页签也渲染：四张卡，且位于页签栏之前（页级、非页签体内）
+    expect(w.findAll('.oh-metrics .mk-kpi')).toHaveLength(4)
+    expect((w.find('.tabs').element.compareDocumentPosition(w.find('.oh-metrics').element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0).toBe(true)
     w.unmount()
   })
 })
