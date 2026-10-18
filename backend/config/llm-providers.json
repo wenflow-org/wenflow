@@ -23,6 +23,11 @@
           "reasoningReserveTokens": 8192,
           "maxParallelRequests": 30,
           "fallbacks": [],
+          "pricing": {
+            "inputPer1M": 0.3,
+            "cachedInputPer1M": 0.006,
+            "outputPer1M": 1.2
+          },
           "description": "V4.1 Flash：标准运行模型（字面 id，2026-09-28 起全链统一）。显式空链：同通道无同 tier 候选，兜底用 skill 级 fallbackChain 声明。maxParallelRequests=30：本地并发突发闸门（通用档：外部测试与日常使用；跑批实例用 LLM_PROVIDERS_CONFIG 指向 .tmp-batch/llm-providers.batch.json 收紧到 5）"
         },
         "deepseek-v4-flash": {
@@ -55,7 +60,23 @@
           "maxOutputTokens": 65536,
           "defaultMaxTokens": 32768,
           "maxParallelRequests": 14,
+          "fallbacks": [],
+          "pricing": {
+            "inputPer1M": 0.03,
+            "outputPer1M": 0.15
+          },
           "description": "轻量快速模型，TPS 高，适合 skill 高频调用。maxParallelRequests=10：渠道单 key 突发桶限流实测持续安全档 8、A/B 分桶后摸高档（2026-10-02）；与 ds 各自独立并发闸门"
+        },
+        "agnes-2.5-flash": {
+          "label": "Agnes 2.5 Flash",
+          "tier": "chat",
+          "supportsThinking": false,
+          "supportsReasoningEffort": false,
+          "fallbacks": [],
+          "pricing": {
+            "inputPer1M": 0.03,
+            "outputPer1M": 0.15
+          }
         }
       }
     },

@@ -231,8 +231,9 @@ describe('aggregateCallCosts（按模型 / 会话 / 技能 / 节点分组）', (
 });
 
 describe('describePricingStatus', () => {
-  it('使用默认（占位空）单价表时，所有出现过的模型都进入待补清单', () => {
-    const status = describePricingStatus(['deepseek-v4-flash', 'deepseek-v4-flash', 'agnes-3.0-flash']);
+  it('传入空单价表时，所有出现过的模型都进入待补清单', () => {
+    /* 显式空表：仓库注册表已配真实单价，不能拿默认表当「未配置」基线 */
+    const status = describePricingStatus(['deepseek-v4-flash', 'deepseek-v4-flash', 'agnes-3.0-flash'], []);
     expect(status.configuredModels).toEqual([]);
     expect(status.missingPricingModels).toEqual(['deepseek-v4-flash', 'agnes-3.0-flash']);
   });

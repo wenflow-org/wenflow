@@ -160,6 +160,30 @@ describe('ModelEditorDialog', () => {
     }))
   })
 
+  it('单价三档：编辑回填并与输入/输出一起提交（缓存命中价是成本口径的一部分）', async () => {
+    const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
+    w.vm.openWith({
+      providerId: 'platform',
+      model: {
+        id: 'm-priced', label: 'm-priced', tier: 'chat', supportsThinking: false, supportsReasoningEffort: false,
+        maxOutputTokens: null, defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: null,
+        fallbacks: [], pricing: { inputPer1M: 0.3, cachedInputPer1M: 0.006, outputPer1M: 1.2 }, description: null
+      }
+    })
+    await flushPromises()
+    const [inputIn, cachedIn, output] = w.findAll('.med-price input')
+    expect((inputIn.element as HTMLInputElement).value).toBe('0.3')
+    expect((cachedIn.element as HTMLInputElement).value).toBe('0.006')
+    expect((output.element as HTMLInputElement).value).toBe('1.2')
+
+    updateModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
+    await btn(w, '保存').trigger('click')
+    await flushPromises()
+    expect(updateModelMock).toHaveBeenCalledWith('platform', 'm-priced', expect.objectContaining({
+      pricing: { inputPer1M: 0.3, cachedInputPer1M: 0.006, outputPer1M: 1.2 }
+    }))
+  })
+
   it('编辑：模型 ID 只读（路由按它找模型，改名等于换模型）', async () => {
     const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
     w.vm.openWith({

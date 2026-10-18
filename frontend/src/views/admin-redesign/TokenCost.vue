@@ -105,8 +105,9 @@
       <section class="mk-kpi-grid">
         <!-- hint = 原型 metricCard 的一短句口径；长解释收进卡 title 悬停（复刻调整 2026-10-02：
              此前 28px 数字下拖整句「待补单价模型 3 个：deepseek-v4-flash、…」小字，非原型节奏）。
-             P1#25：单价未配置态可点直达「模型与接入」；W6（2026-10-10 走查）核实该页
-             无单价编辑入口，补价真实路径=llm-providers.json 的 pricing 块（文案已改，点击去看待补清单）。
+             P1#25：单价未配置态可点直达「模型与接入」。W6（2026-10-10）当时该页还没有单价编辑入口；
+             2026-10-18 BYOK 模型编辑器补上单价（输入 / 缓存命中 / 输出，USD per 1M tokens）后，
+             补价路径=「接入与模型」→ 供应商 → 模型行「编辑」→ 单价，落回 llm-providers.json 的 pricing 块。
              2026-10-14 用户评审：状态词此前占着 28px 数值位（「调用成本 / 单价未配置」），
              被读成主数值——数值位改为暗灰占位「—」，原因与动作由 hint 一行承担（该卡仍可点）。 -->
         <MkKpi
@@ -513,10 +514,9 @@ const costHint = computed(() => {
   }
   if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `${window}没有带 token 的 LLM 调用`
   const missing = missingPricingModels.value
-  // 2026-10-10 走查 W6：原文案「点击本卡直达『模型与接入』补单价」是死胡同——
-  // 该页只读展示 pricingConfigured，全站没有单价编辑入口；单价唯一注入点=
-  // backend/config/llm-providers.json 各模型的 pricing 块（File-as-Truth，保存即热重载）。
-  // 文案改为指向真实补价路径，点击仍去模型配置页看哪些模型待补。
+  // 2026-10-10 走查 W6 时这条动线是死胡同（那页没有单价编辑入口）；2026-10-18 BYOK 模型编辑器
+  // 补上单价后，点击可直达「接入与模型」，模型行的「单价未知 · 点编辑补」就是入口，
+  // 保存落回 llm-providers.json 的 pricing 块并热重载（File-as-Truth）。
   return missing.length
     ? `${window} · 暂不展示金额 · 待补单价模型 ${missing.length} 个：${missing.join('、')}`
     : `${window} · 尚未配置单价，暂不展示金额`

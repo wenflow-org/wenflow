@@ -91,19 +91,28 @@
                 </select>
                 <span class="mk-field__hint">运行时最多用到第 1 条备用。降级只换模型名，跨供应商的候选不可达</span>
               </label>
-              <div class="med-sec">单价（USD / 1M tokens）</div>
-              <div class="med-price">
-                <label class="mk-field">
-                  <span class="mk-field__label">输入</span>
-                  <input v-model.number="form.inputPer1M" class="mk-field__input mono" type="number" min="0" step="0.01" placeholder="未知" />
-                </label>
-                <label class="mk-field">
-                  <span class="mk-field__label">输出</span>
-                  <input v-model.number="form.outputPer1M" class="mk-field__input mono" type="number" min="0" step="0.01" placeholder="未知" />
-                </label>
-              </div>
-              <span class="mk-field__hint">只影响成本核算。留空 = 金额未知，不会按 0 计算</span>
             </div>
+          </div>
+
+          <!-- 单价独立成条：三档（输入 / 缓存命中 / 输出）并排时需要整行宽度，
+               挤在备用链那一列里每格只剩 60 多 px，读数会被截断 -->
+          <div class="med-pricebar">
+            <div class="med-sec">单价（USD / 1M tokens）</div>
+            <div class="med-price">
+              <label class="mk-field">
+                <span class="mk-field__label">输入</span>
+                <input v-model.number="form.inputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="未知" />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">缓存命中</span>
+                <input v-model.number="form.cachedInputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="留空按输入价计" />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">输出</span>
+                <input v-model.number="form.outputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="未知" />
+              </label>
+            </div>
+            <span class="mk-field__hint">只影响成本分析页的金额换算。缓存命中留空按输入价计（保守高估）。输入与输出都留空 = 金额未知，不会按 0 计算</span>
           </div>
         </div>
 
@@ -160,6 +169,7 @@ const form = reactive({
   maxParallelRequests: null as number | null,
   description: '',
   inputPer1M: null as number | null,
+  cachedInputPer1M: null as number | null,
   outputPer1M: null as number | null
 })
 
@@ -191,6 +201,7 @@ function openWith(target: { providerId: string; model: ModelLike | null }): void
   form.maxParallelRequests = m?.maxParallelRequests ?? null
   form.description = m?.description ?? ''
   form.inputPer1M = m?.pricing?.inputPer1M ?? null
+  form.cachedInputPer1M = m?.pricing?.cachedInputPer1M ?? null
   form.outputPer1M = m?.pricing?.outputPer1M ?? null
   pickedFallbacks.value = [...(m?.fallbacks ?? [])]
   open.value = true
@@ -216,6 +227,7 @@ async function submit(): Promise<void> {
   try {
     const pricing = {
       ...(numOrNull(form.inputPer1M) !== null ? { inputPer1M: numOrNull(form.inputPer1M)! } : {}),
+      ...(numOrNull(form.cachedInputPer1M) !== null ? { cachedInputPer1M: numOrNull(form.cachedInputPer1M)! } : {}),
       ...(numOrNull(form.outputPer1M) !== null ? { outputPer1M: numOrNull(form.outputPer1M)! } : {})
     }
     const payload = {
@@ -263,7 +275,12 @@ defineExpose({ openWith })
   letter-spacing: 0.04em;
 }
 .med-fallbacks { height: auto; min-height: 120px; }
-.med-price { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.med-pricebar {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mk-line);
+}
+.med-price { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .mk-field__hint {
   display: block;
   margin-top: 4px;

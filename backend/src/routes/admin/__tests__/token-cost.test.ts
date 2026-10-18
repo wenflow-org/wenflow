@@ -25,6 +25,7 @@ import {
   aggregateTokenGroups,
 } from '../../../services/cost/token-cost.service';
 import { dayKeyOf } from '../../../services/time/day-boundary';
+import * as modelsConfig from '../../../config/models.config';
 
 const mockResolveRealUserIds = resolveRealUserIds as jest.Mock;
 const mockListUsersBasicInfo = listUsersBasicInfo as jest.Mock;
@@ -131,6 +132,31 @@ describe('GET /token-cost/summary', () => {
     await handler(createRequest({ days: '7' }), res2);
     expect(mockAggregateTokenGroups.mock.calls.length + mockAggregateWindow.mock.calls.length).toBe(callsAfterFirst);
     expect(res2.json.mock.calls[0][0].data.totals.tokens).toBe(100);
+  });
+
+  it('注册表版本变化即失效缓存（配完单价不必等 TTL，金额立刻按新单价算）', async () => {
+    mockResolveRealUserIds.mockResolvedValue(['u1']);
+    mockWindow();
+    mockAggregateTokenGroups.mockResolvedValue([group('teaching-turn', 'u1', 'm1', { tokens: 100 })]);
+
+    let mtimeMs = 111;
+    const spy = jest
+      .spyOn(modelsConfig, 'getLlmRegistryStatus')
+      .mockImplementation(() => ({ path: 'llm-providers.json', source: 'file', mtimeMs, lastError: null }));
+
+    const handler = getRouteHandler('/summary', 'get');
+    await handler(createRequest({ days: '7' }), createResponse());
+    const callsAfterFirst = mockAggregateTokenGroups.mock.calls.length + mockAggregateWindow.mock.calls.length;
+
+    // 同一版本：命中缓存
+    await handler(createRequest({ days: '7' }), createResponse());
+    expect(mockAggregateTokenGroups.mock.calls.length + mockAggregateWindow.mock.calls.length).toBe(callsAfterFirst);
+
+    // 注册表被写（单价新增/修改）：版本变了，必须重算而不是继续吐旧金额
+    mtimeMs = 222;
+    await handler(createRequest({ days: '7' }), createResponse());
+    expect(mockAggregateTokenGroups.mock.calls.length + mockAggregateWindow.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    spy.mockRestore();
   });
 
   it('总量 / 调用数 / prompt·completion / 按天趋势', async () => {
@@ -291,6 +317,11 @@ describe('GET /token-cost · 成本字段与 pricingStatus', () => {
   beforeEach(() => { jest.clearAllMocks(); __clearTokenCacheForTests(); });
 
   it('summary 响应：新增成本字段 + 顶层 pricingStatus；单价未配置时 usd=null（不用 0 冒充）', async () => {
+    /* 单价已按真实价格写进仓库的 llm-providers.json，这里要守住的是「未配置」分支，
+       所以临时清空单价表（computeCallCostUsd 内部直接调用查价函数，spy 不到），
+       结束后恢复，而不是依赖文件当前是否已配价 */
+    const priceTable = [...modelsConfig.AVAILABLE_MODELS];
+    modelsConfig.AVAILABLE_MODELS.length = 0;;
     mockResolveRealUserIds.mockResolvedValue(['u1']);
     mockWindow();
     mockAggregateTokenGroups.mockResolvedValue([
@@ -304,7 +335,7 @@ describe('GET /token-cost · 成本字段与 pricingStatus', () => {
 
     const body = res.json.mock.calls[0][0];
     expect(body.success).toBe(true);
-    // 顶层 pricingStatus：models.config.ts 的 pricing 仍为空 → 出现过的模型都进待补清单
+    // 顶层 pricingStatus：查不到单价 → 出现过的模型都进待补清单
     expect(body.pricingStatus.configuredModels).toEqual([]);
     expect(body.pricingStatus.missingPricingModels).toEqual(['deepseek-v4-flash', 'agnes-3.0-flash']);
     // totals 成本字段
@@ -315,6 +346,7 @@ describe('GET /token-cost · 成本字段与 pricingStatus', () => {
     // 既有字段语义/名字不变
     expect(body.data.totals.tokens).toBe(1500);
     expect(body.data.totals.calls).toBe(0);
+    modelsConfig.AVAILABLE_MODELS.push(...priceTable);
   });
 
   it('by-model 条目：携带 usd/pricingKnown/callsMissingPricing/pricedCalls', async () => {

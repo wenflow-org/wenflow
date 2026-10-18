@@ -211,7 +211,7 @@
                   </td>
                   <td class="mono mpp-limits" :title="limitsTitle(m)">
                     <span>{{ limitsText(m) }}</span>
-                    <span class="mpp-price" :title="priceTitle(m)">{{ priceText(m) }}</span>
+                    <span class="mpp-price" :class="{ 'mpp-price--missing': priceMissing(m) }" :title="priceTitle(m)">{{ priceText(m) }}</span>
                   </td>
                   <td class="mono">{{ m.fallbacks.length ? effectiveFallbacks(m.fallbacks).join(' → ') : '—' }}</td>
                   <td class="mpp-rowacts">
@@ -383,13 +383,21 @@ function modelWarnings(m: ModelLike): string[] {
 function effectiveFallbacks(fallbacks: string[]): string[] {
   return fallbacks.slice(0, Math.max(0, (health.value?.runtime?.maxModelCandidates ?? 2) - 1))
 }
-function priceText(m: ModelLike): string {
+/** 未配单价 = 成本分析页这个模型的金额会显示「—」，是可在本页补的配置缺口 */
+function priceMissing(m: ModelLike): boolean {
   const p = m.pricing
-  if (!p || (p.inputPer1M == null && p.outputPer1M == null)) return '单价未知'
+  return !p || (p.inputPer1M == null && p.outputPer1M == null)
+}
+function priceText(m: ModelLike): string {
+  if (priceMissing(m)) return '单价未知 · 点编辑补'
+  const p = m.pricing!
   return `单价 入 ${p.inputPer1M ?? '—'} / 出 ${p.outputPer1M ?? '—'}`
 }
 function priceTitle(m: ModelLike): string {
-  return `${priceText(m)}（USD / 1M tokens，只影响成本核算）`
+  const p = m.pricing
+  if (priceMissing(m)) return '未配单价：成本分析页这个模型的金额会显示「—」。点「编辑」补输入与输出单价'
+  const cached = p!.cachedInputPer1M != null ? ` / 缓存 ${p!.cachedInputPer1M}` : ''
+  return `单价 入 ${p!.inputPer1M ?? '—'}${cached} / 出 ${p!.outputPer1M ?? '—'}（USD / 1M tokens，只影响成本分析）`
 }
 function limitsText(m: ModelLike): string {
   return `出 ${m.maxOutputTokens ?? '—'} / 默 ${m.defaultMaxTokens ?? '—'} / 预 ${m.reasoningReserveTokens ?? '—'} / 并发 ${m.maxParallelRequests ?? '不限'}`
@@ -824,7 +832,10 @@ defineExpose({ refresh })
 .mpp-model { min-width: 200px; }
 .mpp-model__id { overflow-wrap: anywhere; }
 .mpp-chipbadge { margin-left: 6px; }
-.mpp-price { display: block; margin-top: 2px; color: var(--mk-faint); }
+/* 单价是一句读数（入 x / 出 y），断行会把它拆成两截读不出配对关系 */
+.mpp-price { display: block; margin-top: 2px; color: var(--mk-faint); white-space: nowrap; }
+/* 未配单价是能直接修的配置缺口：用警示色把「单价未知」从限额副行里拎出来，别读成普通弱字 */
+.mpp-price--missing { color: var(--mk-amber); }
 .mpp-limits { font-size: var(--mk-fs-micro); max-width: 170px; }
 .mpp-rowacts { display: flex; gap: 8px; white-space: nowrap; }
 .mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }

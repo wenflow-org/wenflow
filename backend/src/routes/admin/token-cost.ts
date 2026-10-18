@@ -38,6 +38,7 @@ import {
 } from '../../services/cost/token-cost.service';
 import { logger } from '../../utils/logger';
 import { dayKeyOf, addDaysToDayKey, parseDayKeyStart } from '../../services/time/day-boundary';
+import { getLlmRegistryStatus } from '../../config/models.config';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -116,8 +117,14 @@ const tokenCache = new Map<string, { expires: number; data: TokenDataResult }>()
 /** in-flight 去重：并发 4 请求首载时共享同一个计算 Promise,只跑一次全表聚合 */
 const tokenInflight = new Map<string, Promise<TokenDataResult>>();
 
+/**
+ * 缓存键带上注册表版本（mtime）：单价在「模型与接入」里改，改完系统承诺即时生效；
+ * 而这里的金额依赖注册表 pricing。只按 days+includeTest 做键会让配价后最多 5 分钟
+ * 仍显示「金额未知」，把刚做完的动作读成没生效。
+ */
 function cacheKey(days: number, includeTest: boolean): string {
-  return `${days}:${includeTest ? 1 : 0}`;
+  const version = getLlmRegistryStatus().mtimeMs ?? 0;
+  return `${days}:${includeTest ? 1 : 0}:${version}`;
 }
 
 async function loadTokenDataCached(days: number, includeTest: boolean): Promise<TokenDataResult> {
