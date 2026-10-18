@@ -18,6 +18,7 @@ import {
   writeMaterial,
   type MaterialRecord,
 } from './material-store';
+import { warmMaterialVectorIndex } from './material-semantic.service';
 
 export { listMaterials, readMaterial, deleteMaterial, type MaterialRecord };
 
@@ -62,6 +63,7 @@ export async function saveUploadedMaterial(input: {
   };
 
   // 同名同大小重复上传 ⇒ 覆盖旧记录（否则列表与「资料包」里会堆同一份资料的多个副本）
+  // deleteMaterial 已连同向量侧车一并清理，这里不必单独删索引
   try {
     for (const existing of listMaterials(userId)) {
       if (existing.name === record.name && existing.size === record.size) {
@@ -73,6 +75,8 @@ export async function saveUploadedMaterial(input: {
   }
 
   writeMaterial(record, parsed.markdown);
+  // 后台预热向量索引（失败静默；首次检索/采样无需等嵌入）
+  warmMaterialVectorIndex(record, parsed.markdown);
   logger.info(`[materials] 已保存资料 ${record.id}（${record.name}，${record.charCount} 字，${record.structure.chunkCount} 锚点）`);
   return { ok: true, record };
 }

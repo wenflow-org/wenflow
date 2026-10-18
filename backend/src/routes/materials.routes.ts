@@ -16,6 +16,7 @@ import {
   saveUploadedMaterial,
 } from '../services/materials/material-upload.service';
 import { extractSectionWindow } from '../services/materials/material-sections';
+import { isMaterialSemanticEnabled, recallMaterialChunks } from '../services/materials/material-semantic.service';
 
 const router = express.Router();
 
@@ -99,6 +100,51 @@ router.get('/', (req: Request, res: Response) => {
   }
 });
 
+/**
+ * 语义召回（外挂能力 embedding/rerank 的业务出口）：
+ *   GET /:id/recall?q=…&topK=…&rerank=1   —— 在单份资料内召回最相关的原文块
+ *   GET /recall?q=…&topK=…&rerank=1       —— 在当前用户最近若干资料里跨库召回
+ * 未启用语义层（MATERIAL_SEMANTIC_DISABLED=1）时返回空列表 + enabled=false，不报错。
+ */
+router.get('/:id/recall', async (req: Request, res: Response) => {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const query = String((req.query.q as string) || '').trim();
+  if (!query) return res.status(400).json({ success: false, error: '缺少查询词 q' });
+  const topK = Math.min(Math.max(Number(req.query.topK) || 6, 1), 20);
+  const rerank = ['1', 'true', 'yes'].includes(String(req.query.rerank || '').toLowerCase());
+  try {
+    const hits = await recallMaterialChunks({
+      userId,
+      query,
+      materialIds: [String(req.params.id || '')],
+      topK,
+      rerank,
+    });
+    return res.json({ success: true, data: { enabled: isMaterialSemanticEnabled(), hits } });
+  } catch (error) {
+    logger.error('资料语义召回失败:', error);
+    return res.status(500).json({ success: false, error: '语义召回失败，请稍后重试' });
+  }
+});
+
+/** 跨库语义召回（当前用户最近若干资料）。 */
+router.get('/recall', async (req: Request, res: Response) => {
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  const query = String((req.query.q as string) || '').trim();
+  if (!query) return res.status(400).json({ success: false, error: '缺少查询词 q' });
+  const topK = Math.min(Math.max(Number(req.query.topK) || 6, 1), 20);
+  const rerank = ['1', 'true', 'yes'].includes(String(req.query.rerank || '').toLowerCase());
+  try {
+    const hits = await recallMaterialChunks({ userId, query, topK, rerank });
+    return res.json({ success: true, data: { enabled: isMaterialSemanticEnabled(), hits } });
+  } catch (error) {
+    logger.error('资料语义召回失败:', error);
+    return res.status(500).json({ success: false, error: '语义召回失败，请稍后重试' });
+  }
+});
+
 /** 按章节取回资料原文窗口（前端引用定位；与课堂取回共用 extractSectionWindow 语义）。 */
 router.get('/:id/section', (req: Request, res: Response) => {
   const userId = requireUserId(req, res);
@@ -146,7 +192,9 @@ router.delete('/:id', (req: Request, res: Response) => {
   const userId = requireUserId(req, res);
   if (!userId) return;
   try {
-    const removed = deleteMaterial(userId, String(req.params.id || ''));
+    const id = String(req.params.id || '');
+    // deleteMaterial 内部已连同向量侧车一起清理（收口在 store 层，见其注释）
+    const removed = deleteMaterial(userId, id);
     if (!removed) return res.status(404).json({ success: false, error: '资料不存在' });
     return res.json({ success: true, data: { id: req.params.id } });
   } catch (error) {

@@ -15,13 +15,38 @@ import { logger } from '../../utils/logger';
 import { generateMaterialBriefDraft } from '../../skills/material-brief';
 import type { MaterialBrief } from '../../skills/material-brief/types';
 import { readMaterial, updateRecord, type MaterialRecord } from './material-store';
+import { selectRepresentativeText } from './material-semantic.service';
 
 /** brief 生成的输入正文上限（超出采样并附截断标记）。 */
 const BRIEF_INPUT_CHARS = 24_000;
 /** 单份 brief 生成的超时硬上限。 */
 const BRIEF_TIMEOUT_MS = 45_000;
+/** 代表采样（嵌入）的等待预算——超出即退回头部截断，不挤占 brief 的 LLM 预算。 */
+const BRIEF_SAMPLE_TIMEOUT_MS = 15_000;
 
 const inflight = new Map<string, Promise<MaterialBrief | null>>();
+
+/**
+ * 超长正文的 brief 输入组装：优先**语义代表采样**（选与原文档各主题最相关的块，
+ * 避免"开头是目录/前言 → 只理解到目录"），采样不可用（未启用/嵌入失败）时退回头部截断。
+ * 两条路都保证输入 ≤ BRIEF_INPUT_CHARS 量级（采样按预算拼、截断按字切）。
+ */
+async function composeBriefInput(record: MaterialRecord, markdown: string): Promise<string> {
+  if (markdown.length <= BRIEF_INPUT_CHARS) return markdown;
+  try {
+    const sampled = await selectRepresentativeText(record, markdown, BRIEF_INPUT_CHARS, {
+      timeoutMs: BRIEF_SAMPLE_TIMEOUT_MS,
+    });
+    if (sampled && sampled.trim()) return sampled;
+  } catch (error) {
+    logger.warn('[material-brief] 代表采样失败，退回头部截断', {
+      userId: record.userId,
+      materialId: record.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return `${markdown.slice(0, BRIEF_INPUT_CHARS)}\n\n（已截断：仅提供前 ${BRIEF_INPUT_CHARS} 字）`;
+}
 
 function inflightKey(userId: string, id: string): string {
   return `${userId}::${id}`;
@@ -54,10 +79,7 @@ export async function getOrGenerateMaterialBrief(record: MaterialRecord): Promis
     try {
       const { markdown } = readMaterial(record.userId, record.id) ?? { markdown: '' };
       if (!markdown.trim()) return null;
-      const truncated = markdown.length > BRIEF_INPUT_CHARS;
-      const inputText = truncated
-        ? `${markdown.slice(0, BRIEF_INPUT_CHARS)}\n\n（已截断：仅提供前 ${BRIEF_INPUT_CHARS} 字）`
-        : markdown;
+      const inputText = await composeBriefInput(record, markdown);
       const result = await Promise.race([
         generateMaterialBriefDraft({ name: record.name, markdown: inputText }),
         sleep(BRIEF_TIMEOUT_MS),

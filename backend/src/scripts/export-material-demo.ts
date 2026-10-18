@@ -67,6 +67,7 @@ async function main() {
     orderBy: { createdAt: 'asc' },
   });
   const sessionMessages: Record<string, any[]> = {};
+  const sessionCheckpoints: Record<string, any[]> = {};
   for (const session of sessions) {
     const rows: any[] = await (prisma as any).teaching_session_messages.findMany({
       where: { sessionId: session.id },
@@ -79,6 +80,14 @@ async function main() {
         return { role: '?', content: String(row.payload || '').slice(0, 200) };
       }
     });
+    let checkpoints: any[] = [];
+    try {
+      const state = JSON.parse(String(session.teachingState || '{}'));
+      checkpoints = Array.isArray(state?.checkpointHistory) ? state.checkpointHistory : [];
+    } catch {
+      checkpoints = [];
+    }
+    sessionCheckpoints[session.id] = checkpoints;
   }
 
   // 资料原文节选（只有本地附件能取回原文；联网资料没有 id）
@@ -111,6 +120,8 @@ async function main() {
       if (refLabels.some((label) => label.length >= 2 && text.includes(label))) chatHits += 1;
     }
   }
+  const allCheckpoints = sessions.flatMap((s) => sessionCheckpoints[s.id] || []);
+  const passedCheckpoints = allCheckpoints.filter((c) => c?.passed).length;
 
   const html = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"/>
@@ -137,6 +148,7 @@ async function main() {
   .msg { border-left: 3px solid #d9dde3; padding: 8px 12px; margin: 8px 0; background: #fff; border-radius: 0 8px 8px 0; }
   .msg--user { border-left-color: #94a3b8; background: #f8fafc; }
   .msg--assistant { border-left-color: #2563eb; }
+  .msg--checkpoint { border-left-color: #d97706; background: #fffbeb; }
   .role { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
   pre { white-space: pre-wrap; word-break: break-word; font-size: 12.5px; line-height: 1.65; margin: 6px 0 0; font-family: inherit; }
   .note { color: #6b7280; font-size: 12px; }
@@ -159,6 +171,7 @@ async function main() {
     <ul>
       <li>资料引用（<b>逐字核对</b>后落库）：阶段 <b>${stageRefs.length}/${milestones.length}</b>，任务 <b>${taskRefs.length}/${allTasks.length}</b></li>
       <li>课堂回合引用资料章节：<b>${chatHits}/${chatTurns}</b>（按引用章节名/引文在老师发言里做字面命中，仅作粗筛）</li>
+      <li>回合内检查点：<b>${passedCheckpoints}/${allCheckpoints.length}</b> 通过（程序化判定，做错自动回退讲解）</li>
       <li>路径摘要：${esc(detail?.summary || '-')}</li>
     </ul>
   </div>
@@ -203,6 +216,14 @@ async function main() {
   <div class="card">
     <h3>${esc(session?.topic || '（无主题）')}</h3>
     <p class="sub">会话 <code>${esc(session.id)}</code>｜状态 ${esc(session.status)}｜开始 ${esc(session.startTime ? new Date(Number(session.startTime) || session.startTime).toLocaleString('zh-CN') : '-')}</p>
+    ${(sessionCheckpoints[session.id] || []).length ? `
+    <div class="role" style="margin-top:10px;">回合内检查点（${sessionCheckpoints[session.id].length} 个，学生作答见下方对话）</div>
+    ${sessionCheckpoints[session.id].map((checkpoint: any, index: number) => `
+      <div class="msg msg--checkpoint">
+        <div class="role">检查点 ${index + 1}｜${esc(checkpoint?.conceptName || '')}｜${checkpoint?.passed ? '✓ 通过' : '✗ 未通过（触发回退讲解）'}｜判定 ${esc(checkpoint?.judgedBy || '-')}｜理解度 ${esc(checkpoint?.understanding ?? '-')}</div>
+        <pre>${esc(checkpoint?.question || checkpoint?.title || '')}</pre>
+      </div>`).join('')}
+    ` : ''}
     ${(sessionMessages[session.id] || []).map((message: any) => `
       <div class="msg msg--${esc(message?.role || 'unknown')}">
         <div class="role">${message?.role === 'user' ? '学生' : '老师'}</div>

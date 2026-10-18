@@ -8,16 +8,26 @@
  *
  * 设计约束：
  *   - 走 parseDocument('.md') 复用文本闸门 + 锚点抽取（与上传同一套确定性解析）；
+ *   - 入库前**恢复章节结构**：抓取 provider 常返回扁平文本（无 ATX 标题），不补的话
+ *     锚点恒为空、path 资料包只能读开头（2026-10-17 真机：50 份里 48 份如此）；
  *   - URL 规范化去重：同一来源同一用户只存一份（刷新 fetchedAt，不堆副本）；
- *   - 文本 100K 截断（存储帽 400K 之上再收紧，控库膨胀）；
+ *   - 文本 160K 截断（与分块上限 200 块 × ~900 字对齐；存储帽之上再收紧，控库膨胀）；
  *   - fail-open：任何失败返回 null，由调用方记 note，绝不阻塞采集主流程。
  */
 import crypto from 'crypto';
+import { logger } from '../../utils/logger';
 import { parseDocument } from './document-parser';
+import { MAX_MATERIAL_CHUNKS, chunkMaterialMarkdown } from './material-chunker';
 import { listMaterials, updateRecord, writeMaterial, type MaterialRecord } from './material-store';
+import { warmMaterialVectorIndex } from './material-semantic.service';
+import { normalizeWebTextStructure } from './material-web-structure';
 
-/** 联网正文入库上限（字符）。fetch 层 8MB 上限之内再收紧——资料库不是网页存档站。 */
-const MAX_WEB_TEXT_CHARS = 100_000;
+/**
+ * 联网正文入库上限（字符）。
+ * 2026-10-17：100K → 160K。原上限让 18 份长文在入库时就丢尾（语义层也救不回来）；
+ * 160K ≈ 200 块（MAX_MATERIAL_CHUNKS）× 900 字预算，再长也只是撞分块上限、不再是"截断即丢"。
+ */
+const MAX_WEB_TEXT_CHARS = 160_000;
 
 export interface IngestWebMaterialInput {
   userId: string;
@@ -101,13 +111,39 @@ export async function ingestWebMaterial(input: IngestWebMaterialInput): Promise<
     return updated ? { record: updated, deduped: true } : null;
   }
 
-  // --- 截断 + 复用上传解析（文本闸门 + 锚点），与附件同一套确定性解析 ---
+  // --- 截断 + 结构恢复 + 复用上传解析（文本闸门 + 锚点），与附件同一套确定性解析 ---
   const overLong = text.length > MAX_WEB_TEXT_CHARS;
   const bounded = overLong
     ? `${text.slice(0, MAX_WEB_TEXT_CHARS)}\n\n<!-- 联网正文超长，已截断：仅保留前 ${MAX_WEB_TEXT_CHARS} 字 -->`
     : text;
-  const parsed = await parseDocument(Buffer.from(bounded, 'utf-8'), 'web-source.md');
+  // 扁平正文补 ATX 标题：不做这一步 anchors 恒为空，path 资料包退化成"前 24 行"（真机根因）
+  const structured = normalizeWebTextStructure(bounded);
+  const parsed = await parseDocument(Buffer.from(structured.markdown, 'utf-8'), 'web-source.md');
   if (parsed.status === 'rejected') return null;
+
+  // 无内容闸门（真机发现）：采集有时抓到的是下载落地页/纯导航页——正文全是面包屑与元信息，
+  // 被样板规则过滤后**切不出任何可召回块**。这种记录入库只会占位并让语义层静默不可用，
+  // 按「采集未取到内容」处理（返回 null，由调用方记 note），而不是写一条垃圾资料。
+  const chunks = chunkMaterialMarkdown(parsed.markdown);
+  if (chunks.length === 0) {
+    logger.info('[material-web-ingest] 网页正文无可召回内容，不入库', {
+      userId,
+      url,
+      title,
+      charCount: parsed.charCount,
+    });
+    return null;
+  }
+  if (chunks.length >= MAX_MATERIAL_CHUNKS) {
+    // 撞分块上限意味着正文尾部在建索引时不可见；留痕以便区分"内容没了"与"索引装不下"
+    logger.warn('[material-web-ingest] 正文块数撞上限，尾部不会进入语义索引', {
+      userId,
+      url,
+      charCount: parsed.charCount,
+      chunks: chunks.length,
+      maxChunks: MAX_MATERIAL_CHUNKS,
+    });
+  }
 
   const record: MaterialRecord = {
     id: crypto.randomUUID(),
@@ -128,5 +164,7 @@ export async function ingestWebMaterial(input: IngestWebMaterialInput): Promise<
     fetchedAt: new Date().toISOString(),
   };
   writeMaterial(record, parsed.markdown);
+  // 后台预热向量索引（失败静默；联网资料与附件同享语义召回）
+  warmMaterialVectorIndex(record, parsed.markdown);
   return { record, deduped: false };
 }

@@ -9,6 +9,7 @@ export const EXTRA_CAPABILITY_SKILLS: readonly string[] = [
   'text-to-image',
   'web-search',
   'web-fetch',
+  'decision-gate',
   'material-collector',
 ] as const;
 

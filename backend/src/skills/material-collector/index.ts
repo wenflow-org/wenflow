@@ -23,6 +23,7 @@
 import { searchWeb } from '../../services/search';
 import { fetchWeb } from '../../services/fetch';
 import { ingestWebMaterial as ingestWebMaterialService } from '../../services/materials/material-web-ingest.service';
+import { gateMaterialDocument, type MaterialGateVerdict } from '../../services/materials/material-quality-gate';
 import type { MaterialRecord } from '../../services/materials/material-store';
 import type { SearchCallOptions, SearchQuery, SearchResponse, SearchResultItem } from '../../services/search/types';
 import type { FetchCallOptions, FetchContentItem, FetchRequest, FetchResponse } from '../../services/fetch/types';
@@ -56,6 +57,13 @@ export interface MaterialCollectorProviderDeps {
    */
   ingestWebMaterial: (input: { userId: string; url: string; title: string; text: string })
     => Promise<{ record: Pick<MaterialRecord, 'id' | 'name' | 'charCount'>; deduped: boolean } | null>;
+  /**
+   * 入库前质量闸门（决策模型判定缺陷类型/可用性/主题一致性）。
+   * 返回 null = 未启用或判定失败（fail-open，按放行处理）。
+   * 可选：未注入时跳过闸门（单测只需关注 search/fetch/extract）。
+   */
+  gateMaterial?: (input: { topic: string; title: string; url: string; text: string })
+    => Promise<MaterialGateVerdict | null>;
 }
 
 /** 依赖注入别名（对外可读名） */
@@ -366,6 +374,7 @@ function resolveDeps(partial?: Partial<MaterialCollectorProviderDeps>): Material
     fetchWeb: partial?.fetchWeb ?? fetchWeb,
     extract: partial?.extract ?? createPromptExtractor(),
     ingestWebMaterial: partial?.ingestWebMaterial ?? ingestWebMaterialService,
+    gateMaterial: partial?.gateMaterial ?? gateMaterialDocument,
   };
 }
 
@@ -545,11 +554,52 @@ export async function collectMaterialPack(
     ]);
   }
 
+  // --- 2.5) 质量闸门（决策模型；fail-open） ---
+  // 只拒「切不出块」的入库闸门管不住拦截页/乱码/导航页/视频页/整本转储（2026-10-18 实测 15/15 全放行），
+  // 这里按缺陷类型分流：reject 不入库不参与抽取；cap 保留但限量，避免 27 万字转储挤占块预算。
+  // 未配置决策 provider、超时或异常 → gateMaterial 返回 null，按放行处理（绝不阻塞路径生成）。
+  const cappedUrls = new Set<string>();
+  let gatedItems = usable;
+  const gate = deps.gateMaterial;
+  if (gate) {
+    try {
+      const verdicts = await Promise.all(
+        usable.map((item) =>
+          gate({ topic: title, title: normalizeText(item.title), url: item.url, text: String(item.text) })
+            .catch(() => null)
+        )
+      );
+      const kept: FetchContentItem[] = [];
+      usable.forEach((item, index) => {
+        const verdict = verdicts[index];
+        if (!verdict) {
+          kept.push(item);
+          return;
+        }
+        if (verdict.action === 'reject') {
+          notes.push(`质量闸门拒收（${verdict.reason}）：${item.url}`);
+          return;
+        }
+        if (verdict.action === 'cap') {
+          cappedUrls.add(item.url);
+          notes.push(`质量闸门限量收录（${verdict.reason}）：${item.url}`);
+        }
+        kept.push(item);
+      });
+      if (kept.length === 0) {
+        return notFound(emptyCoverage, [...notes, '所有候选正文被质量闸门拒收，显式返回 not_found']);
+      }
+      gatedItems = kept;
+    } catch (error) {
+      notes.push(`质量闸门异常，按放行处理：${errorMessage(error)}`);
+    }
+  }
+
   // --- 3) 抽取（LLM；按候选顺序直到拿到可用草稿） ---
   const tierByUrl = new Map(selected.map((source) => [source.url, source.sourceTier]));
   let chosen: FetchContentItem | null = null;
   let draft: MaterialExtractionDraft | null = null;
-  for (const item of usable) {
+  for (const item of gatedItems) {
     const sourceUrl = normalizeText(item.finalUrl) || item.url;
     const request: MaterialExtractionRequest = {
       need: { ...need, title },
@@ -612,11 +662,15 @@ export async function collectMaterialPack(
   const ingestUserId = normalizeText(options.userId);
   if (ingestUserId) {
     try {
+      // cap 档：限量收录（默认 4 万字），避免整本转储把块预算吃满、把尾部内容挤到不可召回。
+      const capChars = Math.max(2000, Number(process.env.MATERIAL_GATE_CAP_CHARS || 40_000));
+      const capped = cappedUrls.has(sourceUrl) || cappedUrls.has(chosen.url);
+      const ingestText = capped ? String(chosen.text).slice(0, capChars) : String(chosen.text);
       const ingested = await deps.ingestWebMaterial({
         userId: ingestUserId,
         url: sourceUrl,
         title: pack.title,
-        text: String(chosen.text),
+        text: ingestText,
       });
       if (ingested?.record?.id) {
         pack.materialId = ingested.record.id;

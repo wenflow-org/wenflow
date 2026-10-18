@@ -4,6 +4,7 @@ import learningStateService from '../learning/learning-state.service';
 import { getSceneFramingNormalizedInput, resolveNormalizedInputSnapshot, resolvePersistedNormalizedInput } from '../learning/learning.helpers';
 import { extractPromptMaterials, TEACHING_MATERIAL_LIMITS, type PromptMaterial } from '../materials/material-prompt-projection';
 import { extractSectionWindow, type ActiveTaskMaterialExcerpt } from '../materials/material-sections';
+import { isMaterialSemanticEnabled, recallMaterialChunks } from '../materials/material-semantic.service';
 import { findWebRecordBySourceUrl } from '../materials/material-web-ingest.service';
 import { readMaterial } from '../materials/material-store';
 import { learnerSnapshotRefreshService, type LearnerSnapshotRefreshInput } from '../learner/LearnerSnapshotRefreshService';
@@ -11,6 +12,7 @@ import { teachingStrategyConfig } from '../../config/pedagogy.config';
 import type { TeachingKnowledgePointState, TeachingSessionRecord } from './TeachingSessionRepository';
 import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { decideTaskDifficulty, resolveBaselineLevel } from '../learner/TaskDifficultyAdjustmentService';
+import { classifyLoad } from '../learning/learning-load-verdict';
 import { resolveSuccessBandVerdict } from '../learner/independent-success-band.service';
 import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 import { executeSkill } from '../../skills';
@@ -38,6 +40,8 @@ export interface TeachingScenarioContext {
     prerequisiteConcepts: string[];
     supportingConcepts: string[];
   };
+  /** 本课细粒度知识组件（kc-mapper 产出，含 kcId）：教学提示词按 KC 粒度对齐 knowledge.points 的依据 */
+  taskKcs: Array<{ kcId: string; name: string; taxonomy: string }>;
   taskKnowledgeSeeds: TeachingKnowledgePointState[];
   taskProfile: {
     knowledgeType: 'factual' | 'conceptual' | 'procedural' | 'metacognitive' | null;
@@ -1148,6 +1152,8 @@ export async function resolveActiveTaskMaterialExcerpts(params: {
   aiPromptTemplate: string | null | undefined;
   taskId: string;
   userId: string;
+  /** 语义召回的查询词（任务标题/描述）；缺省时不做语义兜底，行为与旧版一致。 */
+  query?: string | null;
   maxExcerpts?: number;
   maxCharsPerExcerpt?: number;
 }): Promise<ActiveTaskMaterialExcerpt[] | null> {
@@ -1159,7 +1165,16 @@ export async function resolveActiveTaskMaterialExcerpts(params: {
       ? (parsed.materialRefs as Record<string, any>).byTask
       : null;
     const refs: any[] = byTask && typeof byTask === 'object' ? (byTask[params.taskId] || []) : [];
-    if (!Array.isArray(refs) || refs.length === 0) return null;
+
+    // 无任何结构化引用：交给语义召回兜底（仅当启用 + 有查询词），否则维持旧行为返回 null
+    if (!Array.isArray(refs) || refs.length === 0) {
+      return await resolveSemanticExcerpts({
+        userId: params.userId,
+        query: params.query,
+        maxExcerpts,
+        maxCharsPerExcerpt,
+      });
+    }
 
     const excerpts: ActiveTaskMaterialExcerpt[] = [];
     const seenMaterials = new Set<string>();
@@ -1176,11 +1191,42 @@ export async function resolveActiveTaskMaterialExcerpts(params: {
       seenMaterials.add(materialId);
       const found = readMaterial(params.userId, materialId);
       if (!found) continue;
-      const window = extractSectionWindow(
+      let window = extractSectionWindow(
         found.markdown,
         { sectionTitle: ref.sectionTitle || null, quote: ref.quote || null },
         maxCharsPerExcerpt
       );
+      // 结构化取回退化到「全文开头」= 标题/引文都没在这份资料里命中 →
+      // 用语义召回在同一份资料里找最相关的块，替代无信息量的头部窗口（fail-open 保留原窗口）
+      if (window.anchor === 'none' && params.query && isMaterialSemanticEnabled()) {
+        try {
+          const semantic = await recallMaterialChunks({
+            userId: params.userId,
+            query: params.query,
+            materialIds: [materialId],
+            topK: 1,
+            records: [found.record],
+          });
+          if (semantic.length > 0 && semantic[0].text.trim()) {
+            window = { excerpt: semantic[0].text.slice(0, maxCharsPerExcerpt), anchor: 'semantic' };
+            // 可观测性（2026-10-17）：成功路径原本静默，"语义层到底有没有进课堂"只能靠读代码推断。
+            // 教学链路的每一次兜底命中都留痕（score 是余弦分，仅作观测）。
+            logger.info('[teaching-context] 单资料语义兜底命中', {
+              taskId: params.taskId,
+              materialId,
+              chunkId: semantic[0].chunkId,
+              score: Number(semantic[0].score.toFixed(4)),
+            });
+          }
+        } catch (error) {
+          // 单份资料的语义兜底失败不能吞掉整批（保留结构化窗口继续）
+          logger.warn('[teaching-context] 语义兜底失败（保留头部窗口）', {
+            taskId: params.taskId,
+            materialId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
       if (!window.excerpt) continue;
       excerpts.push({
         materialId,
@@ -1199,6 +1245,49 @@ export async function resolveActiveTaskMaterialExcerpts(params: {
     });
     return null;
   }
+}
+
+/**
+ * 任务**没有**结构化资料引用时的语义兜底：按任务查询词在该用户资料库里召回最相关的原文块。
+ * 每份资料最多取一块（保证跨资料多样），最多 maxExcerpts 块。未启用/无查询/无命中 → null。
+ */
+async function resolveSemanticExcerpts(params: {
+  userId: string;
+  query?: string | null;
+  maxExcerpts: number;
+  maxCharsPerExcerpt: number;
+}): Promise<ActiveTaskMaterialExcerpt[] | null> {
+  const query = String(params.query || '').trim();
+  if (!query || !isMaterialSemanticEnabled()) return null;
+  const hits = await recallMaterialChunks({
+    userId: params.userId,
+    query,
+    topK: params.maxExcerpts * 2,
+    // 跨资料候选池较大（≤8 份资料 × 若干块），精排在此有实质增益：
+    // 真机抽样 40 份长文档自检，余弦 top3 命中 108/111 → rerank top3 命中 111/111（2026-10-16）
+    rerank: true,
+  });
+  logger.info('[teaching-context] 跨资料语义兜底', { userId: params.userId, hits: hits.length });
+  if (!hits.length) return null;
+
+  const excerpts: ActiveTaskMaterialExcerpt[] = [];
+  const seen = new Set<string>();
+  for (const hit of hits) {
+    if (excerpts.length >= params.maxExcerpts) break;
+    if (seen.has(hit.materialId)) continue;
+    seen.add(hit.materialId);
+    const text = String(hit.text || '').trim();
+    if (!text) continue;
+    excerpts.push({
+      materialId: hit.materialId,
+      materialName: hit.materialName,
+      sectionTitle: hit.title || null,
+      quote: null,
+      anchor: 'semantic',
+      excerpt: text.slice(0, params.maxCharsPerExcerpt),
+    });
+  }
+  return excerpts.length ? excerpts : null;
 }
 
 /**
@@ -1547,11 +1636,13 @@ export async function buildTeachingScenarioContext(
     },
     // 资料 → 课堂：从路径模板里取回资料包并投影（见 resolvePathMaterialsForTeaching）
     materials: resolvePathMaterialsForTeaching(path.aiPromptTemplate),
-    // 章节 → 课堂：当前任务引用的章节原文窗口（按章节取回；无引用时为 null）
+    // 章节 → 课堂：当前任务引用的章节原文窗口（按章节取回；无引用时语义兜底，两者皆空则 null）
     activeTaskMaterialExcerpts: await resolveActiveTaskMaterialExcerpts({
       aiPromptTemplate: path.aiPromptTemplate,
       taskId: task.id,
       userId,
+      // 语义召回的查询词 = 本任务标题 + 描述（结构化引用缺失/未命中时的兜底依据）
+      query: [task.title, task.description].filter(Boolean).join(' '),
     }),
     previousSession: previousSession ? {
       sessionId: previousSession.id,
@@ -1575,7 +1666,7 @@ export async function buildTeachingScenarioContext(
   // - 无 → await LLM 预测（≤8s，超时降级 null）→ 记录校准行
   // - 失败/超时 → null，教学照常
   context.learnerPrediction = await buildLearnerPrediction(userId, path.id, task.id, milestone?.id, previousSession?.id, {
-    fatigueSignal: learningState ? (learningState.lf >= 6 ? 'high' : learningState.lf >= 4 ? 'medium' : 'low') : undefined,
+    fatigueSignal: learningState ? classifyLoad({ ktl: learningState.ktl, lf: learningState.lf }).fatigueRisk : undefined,
     taskContext: {
       title: task.title,
       knowledgeType: (task as any).knowledgeType,

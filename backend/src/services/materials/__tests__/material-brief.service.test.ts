@@ -14,8 +14,15 @@ jest.mock('../material-store', () => ({
   updateRecord: jest.fn(),
 }));
 
+// 语义采样层：默认返回 null（等价于未启用/失败 → 走头部截断），单独用例覆盖命中路径
+jest.mock('../material-semantic.service', () => ({
+  __esModule: true,
+  selectRepresentativeText: jest.fn(),
+}));
+
 import { generateMaterialBriefDraft } from '../../../skills/material-brief';
 import { readMaterial, updateRecord } from '../material-store';
+import { selectRepresentativeText } from '../material-semantic.service';
 import {
   getOrGenerateMaterialBrief,
   collectBriefsWithDeadline,
@@ -26,6 +33,7 @@ import type { MaterialBrief } from '../../../skills/material-brief/types';
 const generateMock = generateMaterialBriefDraft as jest.Mock;
 const readMaterialMock = readMaterial as jest.Mock;
 const updateRecordMock = updateRecord as jest.Mock;
+const selectRepMock = selectRepresentativeText as jest.Mock;
 
 function makeRecord(overrides: Partial<MaterialRecord> = {}): MaterialRecord {
   return {
@@ -58,6 +66,8 @@ beforeEach(() => {
   generateMock.mockReset();
   readMaterialMock.mockReset();
   updateRecordMock.mockReset();
+  selectRepMock.mockReset();
+  selectRepMock.mockResolvedValue(null);
   readMaterialMock.mockReturnValue({ record: makeRecord(), markdown: '正文内容'.repeat(100) });
 });
 
@@ -115,5 +125,23 @@ describe('material-brief 惰性编排', () => {
     expect(result[0]).toEqual(brief);
     const request = generateMock.mock.calls[0][0];
     expect(request.markdown).toContain('已截断');
+  });
+
+  it('超长正文 + 语义采样可用 → 用代表采样文本（不再头部截断）', async () => {
+    generateMock.mockResolvedValue({ status: 'ok', brief, notes: [] });
+    readMaterialMock.mockReturnValue({ record: makeRecord(), markdown: '长'.repeat(30_000) });
+    selectRepMock.mockResolvedValue('【代表节选：…】\n\n采样正文');
+    await collectBriefsWithDeadline([makeRecord()], 5_000);
+    const request = generateMock.mock.calls[0][0];
+    expect(request.markdown).toContain('代表节选');
+    expect(request.markdown).not.toContain('已截断');
+    expect(selectRepMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('正文未超预算 → 不调语义采样', async () => {
+    generateMock.mockResolvedValue({ status: 'ok', brief, notes: [] });
+    readMaterialMock.mockReturnValue({ record: makeRecord(), markdown: '短正文'.repeat(10) });
+    await getOrGenerateMaterialBrief(makeRecord());
+    expect(selectRepMock).not.toHaveBeenCalled();
   });
 });

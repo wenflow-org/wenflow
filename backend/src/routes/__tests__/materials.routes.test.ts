@@ -3,6 +3,8 @@ const mockSave = jest.fn();
 const mockList = jest.fn();
 const mockRead = jest.fn();
 const mockDelete = jest.fn();
+const mockRecall = jest.fn();
+const mockSemanticEnabled = jest.fn(() => true);
 
 jest.mock('../../services/materials/material-upload.service', () => ({
   __esModule: true,
@@ -10,6 +12,11 @@ jest.mock('../../services/materials/material-upload.service', () => ({
   listMaterials: (...args: any[]) => mockList(...args),
   readMaterial: (...args: any[]) => mockRead(...args),
   deleteMaterial: (...args: any[]) => mockDelete(...args),
+}));
+jest.mock('../../services/materials/material-semantic.service', () => ({
+  __esModule: true,
+  isMaterialSemanticEnabled: () => mockSemanticEnabled(),
+  recallMaterialChunks: (...args: any[]) => mockRecall(...args),
 }));
 jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn(), info: jest.fn() } }));
 
@@ -100,10 +107,63 @@ describe('DELETE /api/materials/:id', () => {
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
-  it('删除成功 → 200', () => {
+  it('删除成功 → 200（侧车清理已收口在 store 层，路由不再单独调用）', () => {
     mockDelete.mockReturnValue(true);
     const res = createResponse();
     getRouteHandler('delete', '/:id')(createRequest({ params: { id: 'm1' } }), res);
+    expect(mockDelete).toHaveBeenCalledWith('user-1', 'm1');
     expect(res.json).toHaveBeenCalledWith({ success: true, data: { id: 'm1' } });
+  });
+});
+
+describe('GET /api/materials/:id/recall（单资料语义召回）', () => {
+  it('缺查询词 → 400', async () => {
+    const res = createResponse();
+    await getRouteHandler('get', '/:id/recall')(createRequest({ params: { id: 'm1' }, query: {} }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockRecall).not.toHaveBeenCalled();
+  });
+
+  it('命中 → 200 返回 hits + enabled', async () => {
+    mockRecall.mockResolvedValue([{ materialId: 'm1', chunkId: 'c-1', text: '原文', score: 0.8 }]);
+    const res = createResponse();
+    await getRouteHandler('get', '/:id/recall')(
+      createRequest({ params: { id: 'm1' }, query: { q: '健康', topK: '3' } }),
+      res
+    );
+    expect(mockRecall).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1', query: '健康', materialIds: ['m1'], topK: 3 })
+    );
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: { enabled: true, hits: [{ materialId: 'm1', chunkId: 'c-1', text: '原文', score: 0.8 }] },
+    });
+  });
+});
+
+describe('GET /api/materials/recall（跨库语义召回）', () => {
+  it('缺查询词 → 400', async () => {
+    const res = createResponse();
+    await getRouteHandler('get', '/recall')(createRequest({ query: {} }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('命中 → 200（不限定 materialIds）', async () => {
+    mockRecall.mockResolvedValue([{ materialId: 'm2', chunkId: 'c-2', text: 'B', score: 0.5 }]);
+    const res = createResponse();
+    await getRouteHandler('get', '/recall')(createRequest({ query: { q: '光合作用' } }), res);
+    expect(mockRecall).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1', query: '光合作用', topK: 6 }));
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: { enabled: true, hits: [{ materialId: 'm2', chunkId: 'c-2', text: 'B', score: 0.5 }] },
+    });
+  });
+
+  it('语义层关停 → enabled=false 且仍 200', async () => {
+    mockSemanticEnabled.mockReturnValue(false);
+    mockRecall.mockResolvedValue([]);
+    const res = createResponse();
+    await getRouteHandler('get', '/recall')(createRequest({ query: { q: 'x' } }), res);
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: { enabled: false, hits: [] } });
   });
 });

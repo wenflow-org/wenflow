@@ -192,7 +192,17 @@ node scripts/<名字>.mjs [参数]
 
 ### 3.8 外挂能力冒烟
 
-`check-web-search`（`search:check`）· `check-web-fetch`（`fetch:check`）· `check-text-to-image`（`image:check`）· `check-mcp-client`（`mcp:check`）
+`check-web-search`（`search:check`）· `check-web-fetch`（`fetch:check`）· `check-text-to-image`（`image:check`）· `check-embedding`（`embedding:check`）· `check-mcp-client`（`mcp:check`）
+
+### 3.8.1 资料语义层评测（向量化 / 重排接入材料层）
+
+| 脚本 | 说明 |
+|---|---|
+| `eval-material-semantic.ts`（`material:semantic:eval`） | 真机评测（≥20 用例：单/跨资料召回、rerank 精排、代表采样、关停开关、分块健全性）。资料写临时目录，不污染用户数据；`--only=A/B/C/D/E/F` 只跑某类 |
+| `audit-material-semantic.ts`（`material:semantic:audit`） | **真实资料库审计**（只读）：① 静态全量扫描（切不出块/单块超上限/命中块数上限/块大小与保留率分布）；② 抽样嵌入 + 「小节标题当查询词」召回自检（可选 `--rerank=1` 出精排对照）。`--embed=N --recall=K --only=static\|embed` |
+| `ab-path-material-pack.ts`（`material:ab:path-pack`） | **path 资料包 A/B**（真实联网长文，拷贝到临时沙箱跑，索引缓存复用）：A=现状/B=语义 tldr/C=语义 tldr+MMR24/D=分层24/E=分层48/**G=新入库结构+旧pack**/**F=新链路（生产实现）**；判据=资料包文本是否引用到各块正文（36 字滑窗，排除文档开头 1500 字的目录污染），分「后半」「前 1/4」两档。`--docs=N --min=10000`（`--fresh=1` 清索引缓存） |
+| `ab-goal-path-material.ts`（`material:ab:goal-path`） | **goal→path 端到端 A/B**：20 个内置 goal，每个 goal 两臂（old=历史扁平资料+旧打包 / new=结构恢复+语义打包），独立用户、同资料，走生产 `generateFromGoal`；输出任务/课时/materialRefs/后半引用比例与包层指标，原始 JSON 落 `doc/local/ab-goal-path/`。`--arms=old\|new\|both --count=N --start=N`（两臂并行跑两个进程，各约 45 分钟） |
+| `analyze-goal-path-ab.ts`（`material:ab:goal-path:report`） | 合并上面两份结果并重算指标：目录污染修正的引用位置、包层 sections/keyPoints 后半覆盖。`--old=<json> --new=<json>` |
 
 ### 3.9 全链验证 / 重放
 
@@ -264,4 +274,5 @@ node scripts/<名字>.mjs [参数]
 | `npm run boundaries:check` | 路由层 DB 边界 |
 | `npm run design:check` | 前端设计系统守卫 |
 | `npm run verify:kv-prefix-cache` | KV 前缀缓存验证 |
-| `npm run search:check` / `fetch:check` / `image:check` / `mcp:check` | 外挂能力冒烟 |
+| `npm run search:check` / `fetch:check` / `image:check` / `embedding:check` / `mcp:check` | 外挂能力冒烟 |
+| `npm run material:semantic:eval` | 资料语义层真机评测（≥20 用例） |

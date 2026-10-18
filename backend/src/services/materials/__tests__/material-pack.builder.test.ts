@@ -17,6 +17,7 @@ import {
   MAX_UPLOAD_MATERIAL_PACKS,
   attachmentSourceUrl,
   buildPackFromMaterial,
+  buildPackFromMaterialAsync,
   buildUploadedMaterialPacks,
   isUploadMaterialInjectionEnabled,
 } from '../material-pack.builder';
@@ -251,5 +252,25 @@ describe('buildPackFromMaterial 身份标注（2026-09-26）', () => {
     expect(String(built.pack!.sourceUrl)).toContain('attachment://');
     expect(built.pack!.sourceTier).toBe('unknown');
     expect(built.notes[0]).toContain('来自用户上传的本地附件');
+  });
+});
+
+describe('buildPackFromMaterialAsync（语义化打包的回落口径）', () => {
+  it('语义层关闭 → 与同步口径完全一致（fail-open 不改变现状行为）', async () => {
+    const previous = process.env.MATERIAL_SEMANTIC_DISABLED;
+    process.env.MATERIAL_SEMANTIC_DISABLED = '1';
+    try {
+      const record = makeRecord();
+      const markdown = '正文……';
+      writeMaterial(record, markdown);
+      const sync = buildPackFromMaterial(record, markdown);
+      const asyncResult = await buildPackFromMaterialAsync(record, markdown);
+      expect(asyncResult.pack?.tldr).toBe(sync.pack?.tldr);
+      expect(asyncResult.pack?.keyPoints).toEqual(sync.pack?.keyPoints);
+      expect(asyncResult.pack?.sections).toEqual(sync.pack?.sections);
+    } finally {
+      if (previous === undefined) delete process.env.MATERIAL_SEMANTIC_DISABLED;
+      else process.env.MATERIAL_SEMANTIC_DISABLED = previous;
+    }
   });
 });

@@ -22,8 +22,8 @@ export interface SectionWindowOptions {
 
 export interface MaterialSectionWindow {
   excerpt: string;
-  /** 命中方式：title=章节标题定位（最长窗口）；quote=引文锚定；none=回退全文开头。 */
-  anchor: 'quote' | 'title' | 'none';
+  /** 命中方式：title=章节标题定位（最长窗口）；quote=引文锚定；semantic=语义召回兜底；none=回退全文开头。 */
+  anchor: 'quote' | 'title' | 'semantic' | 'none';
 }
 
 /** 教学回合注入用的「当前任务引用章节原文窗口」（带出处元信息）。 */

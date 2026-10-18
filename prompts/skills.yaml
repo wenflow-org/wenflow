@@ -542,6 +542,17 @@ skills:
       sandbox: []
     notes: handler-only 外挂能力——handler 委托 backend/src/services/fetch（provider 抽象 + 降级链），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制）；provider 与密钥由 FETCH_PROVIDER / FETCH_API_KEY（缺省复用 SEARCH_API_KEY）等环境变量承担，无 DB 直读，dataSource.db 保持空
 
+  - skillId: decision-gate
+    kind: handler-only
+    handlerRef: backend/src/skills/decision-gate/index.ts
+    noPromptFile: true
+    displayName: 决策闸门 Skill
+    description: 调用外部决策模型（Clef / jev 系）把一段材料与一组带类型的问题转成概率化判定（choice/noul/score）
+    dataSource:
+      db: []
+      sandbox: []
+    notes: handler-only 外挂能力——handler 委托 backend/src/services/decision（provider 抽象 + 降级链：Cloudflare Clef / 阿里云 MaaS / Venice / OpenCode Zen），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制）；provider 与密钥由 DECISION_PROVIDER / CF_ACCOUNT_ID / CF_TOKEN / DASHSCOPE_API_KEY 等环境变量承担，无 DB 直读，dataSource.db 保持空。**能力边界**：只返回每个 question 的概率/选项/分值，不生成自由文本，因此不得用于资料抽取（tldr/sections/keyPoints）；典型用途是材料可用性、可答性、覆盖度与分级判定。
+
   - skillId: material-collector
     kind: handler-only
     handlerRef: backend/src/skills/material-collector/index.ts

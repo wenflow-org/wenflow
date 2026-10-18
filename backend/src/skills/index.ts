@@ -49,6 +49,11 @@ import { executeWebFetch as executeWebFetchFn } from './web-fetch';
 export { textToImageDefinition } from './text-to-image';
 import { executeTextToImage as executeTextToImageFn } from './text-to-image';
 
+// 决策模型能力（非 LLM 外挂能力；SystemOne 槽位协议：choice / noul / score，只判定不生成）
+export { decisionGateDefinition } from './decision-gate';
+import { decisionGateDefinition } from './decision-gate';
+import { executeDecisionGate as executeDecisionGateFn } from './decision-gate';
+
 // 资料采集编排器（非 LLM 外挂能力；确定性编排 search→选源→fetch，LLM 仅抽取带引文要点）
 export { materialCollectorDefinition, executeMaterialCollector, collectMaterialPack, collectMaterialForGoal, hasMaterialNeed } from './material-collector';
 export { materialBriefDefinition, generateMaterialBriefDraft, normalizeMaterialBrief, MATERIAL_BRIEF_PROMPT } from './material-brief';
@@ -156,6 +161,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   webSearchDefinition,
   webFetchDefinition,
   textToImageDefinition,
+  decisionGateDefinition,
   materialCollectorDefinition,
   materialBriefDefinition,
   ...auxSkillDefinitions,
@@ -243,6 +249,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'web-search': executeWebSearchFn,
   'web-fetch': executeWebFetchFn,
   'text-to-image': executeTextToImageFn,
+  'decision-gate': executeDecisionGateFn,
   'material-collector': executeMaterialCollectorFn,
   'material-brief': (input: any) => generateMaterialBriefFn(input),
   ...auxSkillHandlers,

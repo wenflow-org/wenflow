@@ -81,6 +81,19 @@ function userDirectories(userId: string): string[] {
   return current === legacy ? [current] : [current, legacy];
 }
 
+/**
+ * 侧车文件目录候选（新→旧），供 material-vector-store 等伴生文件复用同一套目录约定。
+ * 不暴露目录内的具体文件布局，只暴露"该用户的资料可能落在哪些目录"。
+ */
+export function materialDirCandidates(userId: string): string[] {
+  return userDirectories(userId);
+}
+
+/** 资料在当前目录约定下的**首选**目录（写侧用；读侧用 materialDirCandidates 兜底旧目录）。 */
+export function materialPrimaryDir(userId: string): string {
+  return userDirectory(userId);
+}
+
 export function recordPath(userId: string, id: string): string {
   return path.join(userDirectory(userId), `${id}.json`);
 }
@@ -173,12 +186,22 @@ export function readMaterial(userId: string, id: string): { record: MaterialReco
   return { record, markdown };
 }
 
-/** 删除单份资料（只删自己的；返回是否删掉了东西；兼容旧目录）。 */
+/** 向量侧车文件名后缀（单点定义：material-vector-store 与本文件的删除路径共用，防两处漂移）。 */
+export const VECTOR_SIDECAR_SUFFIX = '.vectors.json';
+
+/**
+ * 删除单份资料（只删自己的；返回是否删掉了东西；兼容旧目录）。
+ *
+ * 侧车（`<id>.vectors.json`）也在**这里**一并删除 —— 收口成一处，任何调用方（HTTP 路由、
+ * 上传同名覆盖、将来的 TTL 回收）都不会再留下孤儿索引。
+ * （真机实测过孤儿：早前只在路由层补删侧车，其它删除路径仍会残留，而残留的侧车会被
+ * `readVectorIndex` 命中，让一份已删资料继续占用磁盘。）
+ */
 export function deleteMaterial(userId: string, id: string): boolean {
   if (!readRecord(userId, id)) return false;
   let removed = false;
   for (const dir of userDirectories(userId)) {
-    for (const target of [recordPathIn(dir, id), markdownPathIn(dir, id)]) {
+    for (const target of [recordPathIn(dir, id), markdownPathIn(dir, id), path.join(dir, `${id}${VECTOR_SIDECAR_SUFFIX}`)]) {
       try {
         fs.unlinkSync(target);
         removed = true;

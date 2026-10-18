@@ -1,6 +1,6 @@
 /**
  * 联网资料入库单测（活的 path 批次 A）：
- * 正常入库（锚点/origin/sourceUrl）/ URL 去重（复用既有记录）/ 过短拒收 / 100K 截断。
+ * 正常入库（锚点/origin/sourceUrl）/ URL 去重（复用既有记录）/ 过短拒收 / 160K 截断 / 扁平正文补结构。
  */
 import fs from 'fs';
 import os from 'os';
@@ -90,18 +90,52 @@ describe('ingestWebMaterial 联网入库', () => {
     expect(listMaterials('user_web5')).toHaveLength(0);
   });
 
+  // 真机发现（2026-10-16）：采集偶尔抓到下载落地页/纯导航页——正文全是面包屑与元信息，
+  // 被样板规则过滤后切不出任何可召回块；这种记录入库只会占位并让语义层静默不可用。
+  it('正文无可召回内容（纯面包屑/元信息）→ 拒收不落盘', async () => {
+    const breadcrumb =
+      '当前位置： 首页 > 法律法规 > 法律法规数据库 > 法律法规详情 2026法律职业资格考试大纲目录.pdf 下载 239 KB 下载数 311 更新时间 2026-09-28 适用范围：法考考生';
+    const result = await ingestWebMaterial({ userId: 'user_web8', url: 'https://e.example.com/dl', title: '下载页', text: breadcrumb });
+    expect(result).toBeNull();
+    expect(listMaterials('user_web8')).toHaveLength(0);
+  });
+
   it('缺参数（空 userId/url/text）→ null', async () => {
     expect(await ingestWebMaterial({ userId: '', url: 'https://x.com', title: 't', text: WEB_TEXT })).toBeNull();
     expect(await ingestWebMaterial({ userId: 'u', url: '', title: 't', text: WEB_TEXT })).toBeNull();
     expect(await ingestWebMaterial({ userId: 'u', url: 'https://x.com', title: 't', text: '   ' })).toBeNull();
   });
 
-  it('超长正文 100K 截断', async () => {
-    const long = '一'.repeat(150_000);
+  it('超长正文 160K 截断', async () => {
+    const long = '一'.repeat(220_000);
     const result = await ingestWebMaterial({ userId: 'user_web6', url: 'https://d.example.com/long', title: '长文', text: long });
     expect(result).not.toBeNull();
-    expect(result!.record.charCount).toBeLessThanOrEqual(100_100);
+    expect(result!.record.charCount).toBeLessThanOrEqual(160_100);
     expect(result!.record.warnings.join(' ')).toContain('截断');
+  });
+
+  it('扁平正文（无 ATX 标题）→ 入库时恢复章节结构，anchors 非空', async () => {
+    const body = '这一条讲的是管理对象与适用范围，需要逐字回看原文才能确认。';
+    const text = [
+      '安全生产管理',
+      '第一篇 总则',
+      '第一章 基本规定',
+      body,
+      '第二章 监督管理',
+      body,
+      '第三章 法律责任',
+      body,
+    ].join('\n');
+    const result = await ingestWebMaterial({
+      userId: 'user_web7',
+      url: 'https://e.example.com/structured',
+      title: '安全生产管理',
+      text,
+    });
+    expect(result).not.toBeNull();
+    expect(result!.record.anchors.length).toBeGreaterThanOrEqual(3);
+    expect(result!.record.anchors.map((a) => a.heading).join('|')).toContain('第一章 基本规定');
+    expect(result!.record.structure.headingCount).toBeGreaterThanOrEqual(3);
   });
 });
 

@@ -498,6 +498,17 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     noPromptFile: true
   },
   {
+    id: 'skill:decision-gate',
+    name: '决策闸门 Skill',
+    description: '调用外部决策模型（Clef / jev 系）把一段材料与一组带类型的问题转成概率化判定（choice/noul/score）',
+    category: 'tool',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Tool',
+    noPromptFile: true
+  },
+  {
     id: 'skill:material-collector',
     name: '资料采集编排器 Skill',
     description: '在 goal→path 之间采集外部权威资料：确定性编排 search→选源→fetch，LLM 仅抽取带引文的要点，产出 Material Pack',
