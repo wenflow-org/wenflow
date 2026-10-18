@@ -6,7 +6,7 @@
  * `LearnerEvidenceProjector` 落到 `learner_evidence`——缺的只是事件里的「哪条轨 / 哪个通道」。
  * 本模块统一解析这份事件（纯函数，不做 DB 访问）：
  * - track：真人 / 虚拟学习者，由 `users.isVirtualLearner` 在写入侧派生；
- * - completionSource：结算入口（human-ui / teaching-finalize / vl-assisted / learning-api / probe）；
+ * - completionSource：结算入口（human-ui / teaching-finalize / vl-assisted / vl-blackbox / learning-api / probe）；
  * - 2026-10-18 之前的历史行没有 track，一律标 `legacy`，不猜、不混入新口径。
  */
 

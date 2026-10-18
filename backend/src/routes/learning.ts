@@ -1291,6 +1291,34 @@ router.post('/paths/:pathId/retry-stage-design', llmGenerateUserLimiter, async (
   }
 });
 
+/** #105 观测统一：任务结算通道（learning.types.ts `completionSource` union 的三个入口子集） */
+type TaskCompletionSource = 'human-ui' | 'learning-api' | 'vl-blackbox';
+
+/**
+ * #105 观测统一：按调用方身份解析任务结算通道（只此一处口径；读侧接入与历史回填不在范围）。
+ * - vl-blackbox：blackbox VL 投影通道。synthetic 投影 token 只由黑盒实验会话签发
+ *   （`virtual-lab/blackbox-runner.ts:1019-1033`），本路由对 synthetic 会话的能力门为 task:write
+ *   （`middleware/synthetic-projection.middleware.ts:16`）。
+ * - learning-api：走公开学习 API 的程序化调用方——以 API 凭证（`Authorization: Bearer`）或
+ *   显式调用方标记（`X-Caller-Agent`，如 `virtual-lab/platform-user-adapter.ts:81-91`）自报身份。
+ *   真人 UI 走 HttpOnly Cookie，注入器只加投影 Token（`frontend/src/utils/http.ts:30-38`、
+ *   `frontend/src/utils/api.ts:77-86`），故无这两个标记时回落 human-ui。
+ * - human-ui：浏览器会话（含管理员前台投影的 UI 操作）。
+ * 注：未采用 `X-Source-Entry`——acp-context 中间件对非管理员会话一律忽略客户端来源头
+ * （`middleware/acp-context.middleware.ts:28-38`），普通用户/投影请求恒为 'platform'，不可判别。
+ */
+const resolveTaskCompletionSource = (req: express.Request): TaskCompletionSource => {
+  if (req.user?.projection?.grantSource === 'synthetic') return 'vl-blackbox';
+
+  const authorization = req.headers?.authorization;
+  if (typeof authorization === 'string' && /^Bearer\s+\S+/i.test(authorization)) return 'learning-api';
+
+  const callerAgent = req.headers?.['x-caller-agent'];
+  if (typeof callerAgent === 'string' && callerAgent.trim()) return 'learning-api';
+
+  return 'human-ui';
+};
+
 // 完成任务
 router.post('/tasks/:taskId/complete', async (req, res, next) => {
   try {
@@ -1305,7 +1333,7 @@ router.post('/tasks/:taskId/complete', async (req, res, next) => {
       actualMinutes: data.actualMinutes,
       subjectiveDifficulty: data.subjectiveDifficulty,
       notes: data.notes,
-      completionSource: 'human-ui',
+      completionSource: resolveTaskCompletionSource(req),
     });
 
     res.json({

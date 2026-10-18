@@ -320,8 +320,9 @@ export interface CompleteTaskData {
    * 收束通道（#105 观测统一）：调用方声明自己从哪条入口结算任务。
    * 与 `users.isVirtualLearner` 派生的 track 一起进 `task:completed` / `path:completed` 事件，
    * 供管理端用同一份事件统计真人/VL、各通道的完成量（不再各页各算）。
+   * `vl-blackbox` = 黑盒实验的 synthetic 投影通道（`routes/learning.ts` 按调用方身份分流）。
    */
-  completionSource?: 'human-ui' | 'teaching-finalize' | 'vl-assisted' | 'learning-api' | 'probe';
+  completionSource?: 'human-ui' | 'teaching-finalize' | 'vl-assisted' | 'vl-blackbox' | 'learning-api' | 'probe';
   /** 关联的教学会话（有则写入事件与 learner_evidence.sessionId） */
   sessionId?: string | null;
   /** 业务时间（日期模拟用）：提供时台账日期按 UTC 日、streak 以该时刻推进；缺省=真墙钟（现网不变） */
