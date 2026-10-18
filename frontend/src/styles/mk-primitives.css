@@ -1512,13 +1512,20 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 
 /* ----- 抽屉（mk-drawer：覆盖层通用骨架）。收敛情况：
    已全部迁入：GoalConversations / TeachingSessions / DataFlowGraph / SkillDrawer / AdminGlossaryDrawer / Feedback 等；
-   页面仅保留各自的额外类（如 agd__panel / msk__head 的布局补充）。 ----- */
+   页面仅保留各自的额外类（如 agd__panel / msk__head 的布局补充）。
+   2026-10-18：抽屉是「离边浮起的浮层卡片」，不是贴着窗口右缘的侧栏——容器留 padding
+   让面板四周透出遮罩（常规 12px，4K 阶梯 16/20/24px），面板取规范半径表「卡片·弹层」
+   档的 16px。留边后 max-width 必须按容器而非视口计，否则 100vw 会溢出。
+   窄屏例外：≤720px 时留缝会把面板挤到不可用，此时恢复满宽满高、去圆角。
+   4K 档只覆写 --mk-drawer-pad（不写 padding 字面量），与档内「只换 token」的判例一致。 ----- */
 .mk-drawer {
+  --mk-drawer-pad: 12px;
   position: fixed;
   inset: 0;
   z-index: var(--mk-z-drawer);
   display: flex;
   justify-content: flex-end;
+  padding: var(--mk-drawer-pad);
   overscroll-behavior: contain;
 }
 .mk-drawer__mask {
@@ -1529,11 +1536,12 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-drawer__panel {
   position: relative;
   width: var(--mk-drawer-w, 560px);
-  max-width: 100vw;
+  max-width: 100%;
   height: 100%;
   display: grid;
   grid-template-rows: auto 1fr;
   background: var(--mk-surface, #fff);
+  border-radius: var(--mk-radius-xl);
   box-shadow: var(--mk-shadow-drawer);
   animation: mk-drawer-in 0.18s ease;
   /* 子元素不得撑开面板或越界（宽内容只在 __body 内滚动） */
@@ -1599,7 +1607,9 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-drawer__heading { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
 /* 窄屏：抽屉变成全宽面板（浮层语义下比留一条缝更可用） */
 @media (max-width: 720px) {
-  .mk-drawer__panel { width: 100vw; }
+  /* 窄屏仍满宽满高：浮层语义下留缝会窄到不可用（保留原判例） */
+  .mk-drawer { padding: 0; }
+  .mk-drawer__panel { width: 100%; border-radius: 0; }
 }
 
 /* ----- 抽屉内的「事实栅格」（2026-09-29 收敛）-----
@@ -1753,6 +1763,7 @@ html[data-theme='dark'] {
   .mk-btn--sm { padding: 6px 13px; }
   .mk-list-more { padding: 11px 16px 13px; }
   .mk-actions { min-width: 84px; }
+  .mk-drawer { --mk-drawer-pad: 16px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-lg, 700px); }
   .mk-drawer__panel--wide { width: var(--mk-drawer-w-xl, 880px); }
   .mk-drawer__head { padding: 20px 24px 14px; }
@@ -1802,6 +1813,7 @@ html[data-theme='dark'] {
   .mk-btn { padding: 12px 22px; }
   .mk-btn--sm { padding: 8px 16px; }
   .mk-actions { min-width: 100px; }
+  .mk-drawer { --mk-drawer-pad: 20px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-xl, 880px); }
   .mk-drawer__panel--wide { width: var(--mk-drawer-w-xxl, 1040px); }
   .mk-drawer__head { padding: 24px 28px 16px; }
@@ -1843,6 +1855,7 @@ html[data-theme='dark'] {
   .mk-modal__panel--wide { width: min(var(--mk-modal-w-wide-xxl, 1160px), 100%); }
   .mk-modal__title { font-size: 23px; }
   .mk-modal__close { width: 46px; height: 46px; }
+  .mk-drawer { --mk-drawer-pad: 24px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-xxl, 1040px); }
   .mk-drawer__head { padding: 28px 36px 18px; }
   .mk-drawer__title { font-size: 23px; }
