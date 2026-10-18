@@ -421,11 +421,40 @@
       <section class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">到期清单预览</h3>
-          <span class="mk-card__meta" :title="`按记忆强度从低到高：越靠前越该先复习，最多显示前 20 条。旧记录的强度按掌握度回退估算${duePreviewLegacyCount ? `（本页 ${duePreviewLegacyCount} 条为回退估算）` : ''}`">前 20 · 记忆强度升序</span>
+          <!-- 口径随实际生效的排序走（后端回显 dueSort）：不把「排序只在预览的 20 条里换过序」
+               说成「按掌握排序」——排序在后端截断之前生效，取的是全量到期痕迹里该口径的前 20 条 -->
+          <span class="mk-card__meta" :title="duePreviewMetaTitle">前 20 · {{ dueSortText }}</span>
         </div>
         <div v-if="detail.duePreview.length" class="mk-table-scroll">
           <table class="mk-table">
-          <thead><tr><th>概念</th><th class="mk-num" title="由记忆模型计算的记住概率，旧记录按掌握度回退估算">记忆强度</th><th class="mk-num">掌握</th><th class="mk-num">提取次数</th><th>来源</th><th title="相对表达：已逾期 N 天 / 今天 / 明天 / N 天后">到期</th></tr></thead>
+          <thead><tr>
+            <th>概念</th>
+            <th
+              scope="col"
+              class="mk-num mk-th--sortable"
+              title="由记忆模型计算的记住概率，旧记录按掌握度回退估算。点列头排序：升序 = 越靠前越该先复习"
+              :aria-sort="dueSortState('retention')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleDueSort('retention')">记忆强度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              scope="col"
+              class="mk-num mk-th--sortable"
+              title="记忆模型给出的掌握分。点列头排序：升序 = 掌握最弱的在前，降序 = 已掌握但到期的在前"
+              :aria-sort="dueSortState('mastery')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleDueSort('mastery')">掌握<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th
+              scope="col"
+              class="mk-num mk-th--sortable"
+              title="点列头排序：降序 = 复现最多的在前"
+              :aria-sort="dueSortState('extractions')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleDueSort('extractions')">提取次数<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <th>来源</th>
+            <th
+              scope="col"
+              class="mk-th--sortable"
+              title="相对表达：已逾期 N 天 / 今天 / 明天 / N 天后。点列头排序：升序 = 逾期最久的在前"
+              :aria-sort="dueSortState('due')"
+            ><button type="button" class="mk-th__btn" @click.stop="toggleDueSort('due')">到期<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+          </tr></thead>
           <tbody>
             <tr v-for="trace in detail.duePreview" :key="trace.conceptKey">
               <!-- 原型记忆明细表首列 = 知识点 strong；同族重复/归并建议首列是裸 key（无人类可读
@@ -459,7 +488,7 @@
           </tbody>
         </table>
         </div>
-        <MkEmptyState v-else title="当前没有到期点" description="该用户的记忆痕迹都还没到复习时间；到期后会按记忆强度升序列在这里（前 20 条）。" />
+        <MkEmptyState v-else title="当前没有到期点" :description="`该用户的记忆痕迹都还没到复习时间；到期后会按「${dueSortText}」列在这里（前 20 条）。`" />
       </section>
 
       <!-- 4. 同族重复：措辞不同、说的是同一件事（归并的输入） -->
@@ -500,6 +529,7 @@ import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'
 import { askConfirm } from './useConfirm'
+import { useTableSort, type SortDir } from './useTableSort'
 import { openSubPage, subPage } from './store'
 import { toast } from '@/utils/toast'
 import { errMsg, shortId, timeAgo } from './live'
@@ -585,6 +615,8 @@ interface ReviewDetail {
   }
   duplicatedFamilies: Array<{ family: string; size: number; members: Array<{ conceptKey: string; extractionCount: number; masteryScore: number }> }>
   duePreview: Array<{ conceptKey: string; label: string; retention: number; masteryScore: number; extractionCount: number; source?: string | null; dueAt?: string | null; fsrsScheduled?: boolean }>
+  /** 到期清单预览实际生效的排序（后端回显；排序在截断前执行） */
+  dueSort?: { key: string; order: 'asc' | 'desc' }
 }
 
 const rollbackableMerges = computed<AppliedMergeView[]>(() => detail.value?.appliedMerges?.rollbackable ?? [])
@@ -618,6 +650,41 @@ const duePreviewLegacyCount = computed(() => {
   }
   return detail.value?.summary.strengthFromLegacy ?? 0
 })
+
+/* ---------- 到期清单预览的排序（2026-10-18 用户走查「排序呢」）----------
+   为什么是服务端排序：这张卡只发前 20 条（后端 dueTraces.slice(0,20)），客户端排序
+   只会在那 20 条里换序，读起来像「按掌握排序」其实不是——useTableSort 头注明的
+   截断列表禁用判例。故排序键当请求参数下发、在后端截断之前生效（判例 ExecLogs 服务端排序），
+   这里只用它的状态/语义（caret + aria-sort），不调用 sortRows。 */
+const {
+  toggle: toggleDueSort,
+  sortState: dueSortState,
+  sortKey: dueSortKey,
+  sortDir: dueSortDir
+} = useTableSort({
+  keys: ['retention', 'mastery', 'extractions', 'due'],
+  defaultKey: 'retention',
+  defaultDir: 'asc'
+})
+const DUE_SORT_LABEL: Record<string, string> = { retention: '记忆强度', mastery: '掌握', extractions: '提取次数', due: '到期' }
+/** 卡头口径：键名 + 方向；「到期」的升降序读作逾期先后更实（各列含义写在列头 title） */
+const DUE_ORDER_LABEL: Record<string, Record<SortDir, string>> = {
+  retention: { asc: '升序', desc: '降序' },
+  mastery: { asc: '升序', desc: '降序' },
+  extractions: { asc: '升序', desc: '降序' },
+  due: { asc: '逾期最久在前', desc: '最近到期在前' }
+}
+/** 实际生效的排序以响应回显为准（参数非法时后端回落默认，界面不得把默认序说成用户选的那档） */
+const appliedDueSort = computed(() => detail.value?.dueSort ?? { key: dueSortKey.value, order: dueSortDir.value as SortDir })
+const dueSortText = computed(
+  () => `${DUE_SORT_LABEL[appliedDueSort.value.key] ?? appliedDueSort.value.key}${DUE_ORDER_LABEL[appliedDueSort.value.key]?.[appliedDueSort.value.order as SortDir] ?? ''}`
+)
+/** 卡头长释：把「排序在前 20 之后还是之前」讲清楚（这决定读者能不能拿它当全量排序用） */
+const duePreviewMetaTitle = computed(
+  () =>
+    `在全部到期痕迹里按「${dueSortText.value}」排好序再取前 20 条（排序在截断之前，不是只排这 20 条）。` +
+    `记忆强度升序 = 越靠前越该先复习。旧记录的强度按掌握度回退估算${duePreviewLegacyCount.value ? `（本页 ${duePreviewLegacyCount.value} 条为回退估算）` : ''}`
+)
 
 const busy = ref(false)
 const error = ref('')
@@ -930,13 +997,19 @@ async function rollbackOne(canonical: string) {
 /* last-wins 代际号（P2）：换用户/连点刷新时，旧响应不得覆盖新状态 */
 let detailSeq = 0
 
-async function load() {
+/** 到期预览排序随请求下发（服务端在截断前排序，见排序块注释）；
+ *  quietSort = 只是换排序口径：不置 busy（页内动作钮不该因换序闪一下禁用），
+ *  已渲染的明细也不清空——骨架只在「首载且无数据」时出。 */
+async function load(opts: { quietSort?: boolean } = {}) {
   const seq = ++detailSeq
   detailLoading.value = true
-  busy.value = true
+  if (!opts.quietSort) busy.value = true
   error.value = ''
   try {
-    const res: any = await adminMemoryReviewApi.detail(props.userId)
+    const res: any = await adminMemoryReviewApi.detail(props.userId, {
+      dueSort: dueSortKey.value,
+      dueOrder: dueSortDir.value
+    })
     if (seq !== detailSeq) return // 已有更新的明细请求在途/完成：丢弃过期响应
     // 载荷归一：data:null（该用户无记忆数据）不得经 ?? res.data 兜成缺 summary 的空壳对象
     const body = (res.data?.data ?? res.data) ?? null
@@ -955,6 +1028,10 @@ async function load() {
 }
 
 watch(() => props.userId, () => { void load() }, { immediate: true })
+
+/* 换排序口径 → 重取（服务端排序）：判例 ExecLogs「watch([sortKey, sortDir]) → reload」；
+   首次挂载时上面的 userId watch 已带当前键取过一次，这里不重复发请求（只在两者变化时跑） */
+watch([dueSortKey, dueSortDir], () => { void load({ quietSort: true }) })
 
 /** 行内「重新观察」进行中标记：只转该按钮文案，不锁整页 */
 const recomputing = ref(false)

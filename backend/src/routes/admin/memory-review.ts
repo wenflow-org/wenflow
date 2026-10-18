@@ -51,6 +51,10 @@ import { fsrsRetrievability, fsrsStateFromLegacy, type FsrsMemoryState } from '.
 const router = express.Router();
 router.use(authMiddleware);
 
+/** 到期清单预览的可排序键（与界面列一一对应：记忆强度 / 掌握 / 提取次数 / 到期） */
+const DUE_SORT_KEYS = ['retention', 'mastery', 'extractions', 'due'] as const;
+type DueSortKey = (typeof DUE_SORT_KEYS)[number];
+
 async function ensureAdmin(userId?: string) {
   return checkIsAdmin(userId);
 }
@@ -377,8 +381,25 @@ router.get('/:userId', async (req, res) => {
            与 summary.withFsrsState 同口径判断——两处数字来源不同，界面据此各自标注，
            避免「有 FSRS 状态 1」与「20 行都带记忆强度」读起来自相矛盾。 */
         fsrsScheduled: trace.fsrsStability !== null && trace.fsrsStability !== undefined,
-      }))
-      .sort((a, b) => a.retention - b.retention);
+      }));
+
+    /* 到期清单预览的排序（2026-10-18 用户走查「排序呢」）：卡片只发前 20 条，
+       所以排序必须发生在截断之前——客户端排那 20 条只会在这 20 条里换序，
+       读起来像「按掌握排序」其实不是（useTableSort 头注明的截断列表禁用判例）。
+       键与界面列一一对应：记忆强度 / 掌握 / 提取次数 / 到期；未知值回落默认（不 400：
+       深链里带个旧键不该让整页读不出来），回显 applied 供界面如实标注当前口径。 */
+    const dueSortKey = DUE_SORT_KEYS.includes(req.query.dueSort as DueSortKey)
+      ? (req.query.dueSort as DueSortKey)
+      : 'retention';
+    const dueSortOrder = req.query.dueOrder === 'desc' ? 'desc' : 'asc';
+    const dueSortOf: Record<DueSortKey, (row: (typeof dueTraces)[number]) => number> = {
+      retention: (row) => row.retention,
+      mastery: (row) => row.masteryScore,
+      extractions: (row) => row.extractionCount,
+      due: (row) => new Date(row.dueAt as Date).getTime(),
+    };
+    const dueSortFactor = dueSortOrder === 'desc' ? -1 : 1;
+    const sortedDueTraces = [...dueTraces].sort((a, b) => (dueSortOf[dueSortKey](a) - dueSortOf[dueSortKey](b)) * dueSortFactor);
 
     // 同族分组：按归一化键归族，只看 size > 1（重复/近义就是「过多过杂」的直接证据）
     const families = new Map<string, Array<typeof traces[number]>>();
@@ -423,7 +444,10 @@ router.get('/:userId', async (req, res) => {
           ).length,
         },
         reviewPlan: plan,
-        duePreview: dueTraces.slice(0, 20),
+        duePreview: sortedDueTraces.slice(0, 20),
+        /* 回显实际生效的排序（父级保持既有字段形状，只加不删）——界面卡头据此标注口径，
+           参数非法回落默认时也不会把默认序说成用户选的那一档 */
+        dueSort: { key: dueSortKey, order: dueSortOrder },
         duplicatedFamilies,
         audit,
         appliedMerges,

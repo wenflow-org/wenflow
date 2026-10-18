@@ -429,8 +429,12 @@ export const adminMemoryReviewApi = {
   overview: async (params?: { limit?: number; offset?: number; includeVirtual?: boolean; testOnly?: boolean }) => {
     return adminAxios.get('/admin/memory-review', { params });
   },
-  detail: async (userId: string) => {
-    return adminAxios.get(`/admin/memory-review/${userId}`);
+  /**
+   * 单用户明细。dueSort/dueOrder = 到期清单预览的排序（记忆强度 / 掌握 / 提取次数 / 到期），
+   * **由后端在截断前生效**（卡片只发前 20 条，客户端排序只会在那 20 条里换序）。
+   */
+  detail: async (userId: string, params?: { dueSort?: string; dueOrder?: 'asc' | 'desc' }) => {
+    return adminAxios.get(`/admin/memory-review/${userId}`, { params });
   },
   recompute: async (userId: string) => {
     return adminAxios.post(`/admin/memory-review/${userId}/recompute`);

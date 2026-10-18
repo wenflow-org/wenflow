@@ -86,7 +86,8 @@ describe('MemoryReview 归并执行交互（页签内面板）', () => {
 
   it('挂载即按 userId 取明细', async () => {
     await mountPanels();
-    expect(detail).toHaveBeenCalledWith('u1');
+    // 第二参 = 到期预览排序（默认记忆强度升序；排序由后端在截断前执行，见 memory-review.redesign）
+    expect(detail).toHaveBeenCalledWith('u1', { dueSort: 'retention', dueOrder: 'asc' });
   });
 
   it('默认只勾选「可自动执行」的建议', async () => {

@@ -253,6 +253,58 @@ describe('单用户明细', () => {
     })
   })
 
+  it('到期预览按 dueSort/dueOrder 排序且**在截断前生效**（掌握降序能把默认被切掉的那条排到第一）；未知值回落默认并回显', async () => {
+    usersFindUnique.mockImplementation(async (args: any) => (
+      args?.select?.isAdmin ? { isAdmin: true } : { id: 'u1', name: '小明', email: null, isVirtualLearner: false }
+    ))
+    buildReviewPlan.mockResolvedValue(null)
+    getAudit.mockResolvedValue(null)
+    const now = Date.now()
+    /* 21 条到期痕迹（预览只发前 20）：i 越大 → 记忆强度越高、掌握越高、提取越少、越不逾期。
+       默认（记忆强度升序）= c0..c19，c20 被切掉；按掌握降序则 c20 必须排第一——
+       这就是「排序在截断之前」与「只排这 20 条」的分界。 */
+    tracesFindMany.mockResolvedValue(
+      Array.from({ length: 21 }, (_, i) => ({
+        conceptKey: `c${i}`,
+        label: `概念 ${i}`,
+        source: 'derived',
+        masteryScore: (i + 1) / 100,
+        extractionCount: 21 - i,
+        lastSeenAt: new Date(now - 86400000),
+        dueAt: new Date(now - (21 - i) * 86400000),
+        fsrsStability: null,
+        fsrsDifficulty: null,
+      }))
+    )
+
+    const handler = getRouteHandler(memoryReviewRouter, '/:userId', 'get')
+    const bodyOf = async (query: Record<string, string>) => {
+      const res = await run(handler, { ...adminReq, params: { userId: 'u1' }, query })
+      return res.body.data
+    }
+
+    const base = await bodyOf({})
+    expect(base.duePreview).toHaveLength(20)
+    expect(base.duePreview[0].conceptKey).toBe('c0')
+    expect(base.duePreview.map((r: any) => r.conceptKey)).not.toContain('c20')
+    expect(base.dueSort).toEqual({ key: 'retention', order: 'asc' })
+
+    const byMastery = await bodyOf({ dueSort: 'mastery', dueOrder: 'desc' })
+    expect(byMastery.duePreview[0].conceptKey).toBe('c20')
+    expect(byMastery.duePreview.map((r: any) => r.conceptKey)).not.toContain('c0')
+    expect(byMastery.dueSort).toEqual({ key: 'mastery', order: 'desc' })
+
+    const byExtractions = await bodyOf({ dueSort: 'extractions', dueOrder: 'asc' })
+    expect(byExtractions.duePreview[0].conceptKey).toBe('c20')      // 提取最少 = 21-i 最小
+    const byDue = await bodyOf({ dueSort: 'due', dueOrder: 'desc' })
+    expect(byDue.duePreview[0].conceptKey).toBe('c20')              // 最近到期在前
+
+    /* 参数非法只回落默认，不让整页读不出来（深链里带个旧键是常态） */
+    const bogus = await bodyOf({ dueSort: 'nope', dueOrder: 'sideways' })
+    expect(bogus.dueSort).toEqual({ key: 'retention', order: 'asc' })
+    expect(bogus.duePreview[0].conceptKey).toBe('c0')
+  })
+
   it('归并凭据按次留档展示：窗口外的旧归并也看得见、已回滚的单独列出', async () => {
     usersFindUnique.mockImplementation(async (args: any) => (
       args?.select?.isAdmin ? { isAdmin: true } : { id: 'u1', name: '小明', email: null, isVirtualLearner: false }
