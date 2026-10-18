@@ -1,9 +1,9 @@
-# 虚拟学习者 · 日期模拟与学习负担评估（设计稿 + 待做清单 v5）
+# 虚拟学习者 · 日期模拟与学习负担评估（设计稿 + 待做清单 v10）
 
-> 📌 类型：设计留痕（⚠️ 抬头「未实现」已失准——advance-day 已落地；全套修订待做）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+> 📌 类型：设计留痕（**部分已落地**：会话级模拟时钟、`advance-day` 写路径、按天时间线与座舱徽章已上线；技能层时间维度与部分页面仍待做）｜最后核验：2026-10-19（代码/DB 对账，见 §4.2）。索引见 [doc/README.md](./README.md)。
 
-> 状态：**设计稿 + 契约 + 待做清单（仅审阅，未实现）**。不是代码，不进运行时，**不改 Path 契约、不改 session/profile schema**。
-> 系统层现状：日期重放脚手架已落地（`simulate-learner-days.ts`），其余见 §四 待做清单。
+> 状态：**设计稿 + 契约 + 待做清单（部分已落地 · 2026-10-19 对账）**。不是代码，不进运行时，**不改 Path 契约、不改 session/profile schema**。
+> 系统层现状：日期重放脚手架、`advance-day` 写路径（`backend/src/routes/admin/virtual-learners.ts:3239`）、会话级 `simulationClock` 与按天时间线均已落地（`backend/src/services/virtual-lab/simulated-day.service.ts`）；其余见 §四 待做清单。
 > 目的：把"学习分散在各自然天"的仿真语义、系统层契约、页面落点先钉死，与系统层对齐后直接对接。
 > 粒度：**按自然日**；推进方向：**过去锚点 + 向前推进（历史重放）**（§8.8）。
 > 关联：`doc/VIRTUAL_LEARNER_CHAIN.md`、`doc/LEARNER_STATE_REVIEW_DESIGN.md`、`doc/local/EDUCATIONAL_THEORY_RESEARCH_2026.md`、`doc/VIRTUAL_LEARNER_PRESET_DESIGN.md`。
@@ -250,7 +250,8 @@ GET /api/admin/batch-experiments/:experimentId/day-timeline?metric=burden|interv
 
 ## 四、分期落地与待做清单（TODO）
 
-> 图例：`[x]` 已完成（系统层已提交，2026-09-16）、`[ ]` 待做。
+> 图例：`[x]` 已完成（2026-10-19 对账：附代码/DB 证据）、`[ ]` 未做（附落点）、`[—]` 条目作废或边界声明（非待办）。
+> **对账基线（2026-10-19）**：HEAD 代码 + `backend/prisma/dev.db` 只读查询（`virtual_sessions` 57 条中 7 条 `simulationClock.enabled=true` 且 `dayIndex>0`，最大 29 天）。
 
 ### 4.1 分期
 
@@ -270,8 +271,9 @@ GET /api/admin/batch-experiments/:experimentId/day-timeline?metric=burden|interv
 > - ✔ P1 前端：`DayTimeline.vue` + 画像页「日程」tab + 列表页 `SimulatedDaySettings` 设置区 + 座舱评审强制接受
 > - ✔ 会话级时钟配置/重置 + `elapsedDays` 进度
 > - ✔ 技能层 `temporalContext`（learn-turn-simulator 感知跨天；可选注入）
-> - ✔ 系统层对齐：日界统一 **UTC**（`700b718`）；脚手架复用本侧 `resolveDayWindow`（`fcf651b`）
-> - ✖ 仍待做：`advance-day` 写路径、`simulationClock` 下推、画像级配置/重置、列表"模拟进度"列、座舱"第 N 天"徽章、批量实验、`session-wrapup` 的 `temporalContext`
+> - ✔ 系统层对齐：日界统一为**应用时区本地日**（`backend/src/services/time/day-boundary.ts:4-14`，2026-09-22 拍板；早前 `700b718` 的 UTC 结论已作废）；脚手架复用本侧 `resolveDayWindow`（`fcf651b`）
+> - ✔ 2026-10-19 复核：`advance-day` 写路径、会话级 `simulationClock`、座舱「第 N 天」徽章已落地；批量实验页 2026-10-04 下线（相关条目标「条目作废」）
+> - ✖ 仍待做：`session-wrapup` 的 `temporalContext`、画像级配置/重置、列表「模拟进度」列、座舱推进按钮/按天分组、技能层 `dueInDays`/`dayLoadContext`
 
 
 **A. 系统层（时钟与重放）**
@@ -282,49 +284,56 @@ GET /api/admin/batch-experiments/:experimentId/day-timeline?metric=burden|interv
 - [x] `TaskDifficultyAdjustmentService` + `TaskDifficultyAdjustmentLedger` + 效果度量
 - [x] `ReviewQuotaService`（每日温故配额 + 顺延）
 - [x] 日期重放验证器 `simulate-learner-days.ts` + 测试
-- [ ] `simulationClock` 落地：`baseDate = now - maxTotalDays` 自动生成 + `stageResults.simulationClock` 读写
-- [ ] `advance-day` 写接口（重放式，C2②）
-- [ ] 记忆/画像时间戳注入：`recordCompletedArtifact(now)`、`recordExtraction(now)`、`loadRetrievabilityHints(asOf)`（C1 剩余项）
-- [ ] 日界统一为本地（`planTodaySchedule` / streak；风险 1）
+- [x] `simulationClock` 落地：会话级 `stageResults.simulationClock` 读写。证据：`simulated-day.service.ts:180-209`（`resolveSimulationClock` 解析 enabled/时区/baseDate/dayIndex，默认关）、`:616`（`getDayTimeline`）；路由 `virtual-learners.ts:2123`（读）/`:3060`（会话级配置）/`:3131`（重置）。注：原设计「`baseDate = now - maxTotalDays` 自动生成」实际实现为**会话创建日**为锚点（`:186-191`，仍属过去锚点），以实现为准。
+- [x] `advance-day` 写接口（重放式，C2②）：`virtual-learners.ts:3239`；`runWithSimulatedClock(dayWindow.asOf, …)` 见 `:3290`；零成功不推进（`:3300`）；自动推进调度见 `simulated-day-scheduler.ts:1-14`。
+- [x] 记忆/画像时间戳注入：实现改用 AsyncLocalStorage 模拟钟（替代 C1 的显式 `now?` 参数）：`virtual-lab/learner-memory.ts:647`、`memory-trace.service.ts:230`、`teaching-session-lifecycle.ts:1223`；上下文 `simulation-clock-context.ts`（测试 3 例）。DB 侧 7 个会话 `dayIndex>0`（最大 29 天）证明推进链在真实数据上生效。
+- [x] 日界统一为本地：`backend/src/services/time/day-boundary.ts:4-14`（2026-09-22 拍板：应用时区本地日，UTC 切日与机器本地时区均禁止）；`goal-schedule.service.ts:88`（"今天"）、`learning/tasks/streak.ts:45`（`dayKeyOf` 比较）、`learning-state.service.ts:365`。
 
 **B. 技能层（契约增补）**
-- [ ] `temporalContext` 输入：core yaml `inputs` + handler 透传 + runtime-contract parity 校验（先 `learn-turn-simulator`、`session-wrapup`）
-- [ ] `learnerMemory` 增 `dueInDays`（7.2）
-- [ ] `dayLoadContext`（`adaptive-guidance-copy` / `learning-predictor`，7.3）
-- [ ] `loadRetrievabilityHints(asOf)`（7.4）
-- [ ] 编译流程：`compile-core-files.ts` → `ensure-core-agent-prompts --sync`
+- [x] `temporalContext` 输入（`learn-turn-simulator`）：core yaml `prompts/core/virtual-learner-learn-turn-simulator.yaml:40-49` + handler `skills/virtual-learner-learn-turn-simulator/index.ts:453,497` + 编排注入 `coordinators/simulation.learn-phase.ts:778,836` + 契约声明 `definition.ts:19`；测试 `index.test.ts:159`。
+- [ ] `session-wrapup` 的 `temporalContext`：未接（`backend/src/skills/session-wrapup` 与 `services/ai-teaching` 均无 `temporalContext` 命中）。落点：wrapup 调用链透传 + `prompts/core/session-wrapup.yaml` inputs。
+- [ ] `learnerMemory` 增 `dueInDays`（7.2）：全仓 0 命中。落点：`backend/src/virtual-lab/learner-memory.ts` 的 `buildLearnerMemorySnapshot` + `services/memory/memory-trace.service.ts`（`dueAt` 已有列）。
+- [ ] `dayLoadContext`（7.3）：全仓 0 命中。落点：`adaptive-guidance-copy` / `learning-predictor` 的 core yaml inputs 与编排注入。
+- [x] `loadRetrievabilityHints` 去墙钟（7.4）：`teaching-session-lifecycle.ts:1223` 改用 `simulatedNowOr()`；签名仍为 `(userId)`，模拟时刻经 ALS 注入而非显式 `asOf`（设计口径按实现更新）。调用点 `:735`、`AITeachingCoordinator.ts:217-218`。
+- [x] 编译流程：`backend/package.json:29`（`prompts:sync` = `ensure-core-agent-prompts --sync`）、`:66`（`prompts:compile-all` = `compile-core-files.ts`）；编译产物 `prompts/skill.virtual-learner-learn-turn-simulator.md` 在库。
 
 **C. 后端接口**
-- [ ] C2① `GET /sessions/:id/simulation-clock`
-- [ ] C2② `POST /sessions/:id/advance-day`（重放式）
-- [ ] C2③ `GET /sessions/:id/day-timeline`
-- [ ] C2④ `GET /batch-experiments/:id/day-timeline`
-- [ ] 设置：`GET/PUT /settings` 扩展 `dateSimulation`；`GET/PUT /:id` 扩展 `simulationClock`；`POST /:id/simulation-clock/reset`；列表返回进度字段（8.4）
+- [x] C2① `GET /sessions/:id/simulation-clock`：`virtual-learners.ts:2123`。
+- [x] C2② `POST /sessions/:id/advance-day`（重放式）：`virtual-learners.ts:3239`。
+- [x] C2③ `GET /sessions/:id/day-timeline`：`virtual-learners.ts:2141`（服务 `simulated-day.service.ts:616`）。
+- [—] C2④ `GET /batch-experiments/:id/day-timeline`：**条目作废**——批量实验页 2026-10-04 整体下线（`frontend/src/views/admin-redesign/manifest.ts:26,79`、`AdminConsole.vue:148`），运行态并入「虚拟学习者」页，仅保留会话级 C2③。
+- [x] 设置：`GET/PUT /settings` 已含 `dateSimulation`（`virtual-learners.ts:1780/1791`；`virtual-lab-settings.service.ts:49,143`）；会话级 `PUT /sessions/:id/simulation-config`（`:3060`）、`POST /sessions/:id/simulation-clock/reset`（`:3131`）；列表每条返回 `simulation`（`:1599-1614`）。
+- [ ] 画像级 `GET/PUT /:id` 的 `simulationClock`：未接（`virtual-learners.ts:1812` 响应无该字段、`:1861` 不处理）。落点：`virtual-learners.ts:1812/1861`；或按 §8.1「会话级权威」明确画像级只存配置、不提供接口。
 
 **D. 前端页面**
-- [ ] `DayTimeline.vue`（一个组件，画像页/座舱/批量实验三处复用）
-- [ ] `VirtualLearners.vue`：日期模拟设置区 + 模拟进度列（3.2）
-- [ ] `VirtualProfile.vue`：`日程` tab（时间线/负担曲线/干预清单）+ 画像"日期模拟"区块 + 重置（3.3）
-- [ ] `SessionCockpit.vue`：第 N 天徽章 + 推进按钮 + 按天分组（3.4）
-- [ ] `BatchExperiments.vue`：跨日推进 + 横向对比 + 统一起点（3.5）
-- [ ] `vlab-controls.ts`：新增 `advanceDay` 动作
+- [x] `DayTimeline.vue` 组件：`frontend/src/views/admin-redesign/DayTimeline.vue`（时间线 + 推进 1/5 天 + 推进并上课 + 自动推进 + 重置，`:52-60,260-320`）；UI 守卫测试 `__tests__/simulated-day.ui-guard.test.ts:24`。
+- [x] 日期模拟设置区：已迁至「模型与接入 → 虚拟学习者」压测参数卡（2026-10-13）：`ApiConfig.vue:433` → `VirtualLabLoadSettings.vue:47` → `SimulatedDaySettings.vue`；不再位于 `VirtualLearners.vue`。
+- [ ] 列表「模拟进度」列（3.2）：后端已返回 `simulation`（`virtual-learners.ts:1599-1614`），前端表格未消费（`VirtualLearners.vue` 无该字段渲染）。落点：`VirtualLearners.vue` 表格列 + `useTableSort`。
+- [x] `VirtualProfile.vue`：`日程` tab（时间线只读聚合）`VirtualProfile.vue:625-644`（`DayTimeline` 以 `readonly` 嵌入 `:643`；tab 声明 `:1209/:2243`）。
+- [ ] 画像级「日期模拟」配置区块 + 重置（3.3/8.5）：未接；当前 `reset` 仅在 `DayTimeline.vue` 非 `readonly` 时渲染，画像页以只读嵌入。落点：`VirtualProfile.vue` 预算 tab 或单独配置区。
+- [x] 座舱「第 N 天」徽章（3.4）：`SessionCockpit.vue:17-26`，时钟经 API 读取（`:2162`），不在前端推导（测试 `simulated-day.ui-guard.test.ts:51`）。
+- [ ] 座舱「推进到下一天」按钮 + Learn 按天分组（3.4）：未接（`SessionCockpit.vue` 无 `advanceDay`；`vlab-controls.ts:29` 的 `VsControlKey` 无该动作）。落点：控制台动作 + Learn 课程列表分组。
+- [—] `BatchExperiments.vue`（3.5）：**条目作废**——页面 2026-10-04 下线（`manifest.ts:26,79`），跨日/横向对比需求未在新宿主立项。
+- [ ] `vlab-controls.ts` 新增 `advanceDay` 动作：未加（`VsControlKey` 见 `frontend/src/views/admin-redesign/vlab-controls.ts:29`）。落点：同文件操作定义 + 座舱按钮（若产品确认需要）。
 
 **E. 设置**
-- [ ] `dateSimulation`（默认关）+ `simulationClock` 四层解析优先级（8.1/8.2）
-- [ ] 每日负担设置组：`dailyMinutesCap` / `maxLessonsPerDay` / 展示 `REVIEW_DAILY_LOAD_LIMIT`（8.9）
+- [x] `dateSimulation`（默认关）+ 解析优先级 session > profile > global：默认值 `virtual-lab-settings.service.ts:65`，解析 `simulated-day.service.ts:180-191`（`enabled = stageResultsClock ?? profileClock ?? settings`）；默认关测试 `services/__tests__/virtual-lab-settings.test.ts:7-21`。
+- [ ] 第四层 `story.pace` 覆盖：未接（`resolveSimulationClock` 只读 session/profile/settings）。落点：`simulated-day.service.ts:180`；若决定不接，需在 §8.1 把"四层"改为"三层"。
+- [x] 每日负担设置组中的时长/节数：`SimulatedDaySettings.vue` 表单（每日时长上限、每天几节）+ `virtual-lab-settings.service.ts:22-33`；实现名为 `lessonsPerDay`（对应文档 `maxLessonsPerDay`）。
+- [ ] 设置页展示 `REVIEW_DAILY_LOAD_LIMIT`（8.9）：未展示（仅 env/服务端 `review-quota.service.ts:70`，前端 0 命中）。落点：设置页只读展示 + 设置接口回传生效值。
 
 **F. 测试与回归**（详见五）
-- [ ] C1–C4 契约测试
-- [ ] 重放语义测试（`asOf` 过滤 / PMC 日负荷按天重放与空闲日回落；**不 mock 时钟**）
-- [ ] 隔离测试（仅 `isVirtualLearner`，真实用户零变更）
-- [ ] 幂等测试（同日重复 `advance-day`）
-- [ ] 既有基线不破（`batch-experiment` / `resolve-llm-call-params` / `vlab-controls`）
+- [ ] C1–C4 路由级契约测试：未找到（`backend/src/routes/admin/__tests__/` 无 virtual-learners 日期模拟用例）；现有覆盖为服务/纯函数级。落点：新增 `backend/src/routes/admin/__tests__/virtual-learners.simulated-day.test.ts`。
+- [x] 重放语义测试：`services/virtual-lab/__tests__/simulated-day.service.test.ts:180-240`（按 `asOf` 聚合、过滤未来痕迹、degraded 保底）、`:209`（from/to 夹紧）、`:218`（未来模拟日独立构建）、`:284-345`（推进/节流）。
+- [ ] 隔离测试：未找到显式 `isVirtualLearner` 断言（推进以 `virtual_sessions` 行为入口、天然不含真实用户）。落点：路由用例断言非虚拟会话不可推进且真实用户数据零变更。
+- [ ] 幂等测试：现状是「每次调用推进一个上课日」，未实现同日重复调用幂等。落点：`advance-day` `virtual-learners.ts:3239`（若产品要求同日幂等，需以 `dayIndex` 作判重键）。
+- [ ] 既有基线不破（持续项）：`batch-experiment.scheduler.test.ts` / `resolve-llm-call-params` / `vlab-controls.test.ts` 等仍在库；本次仅改文档未跑全量，执行链改动时按 §五 定向回归。
 
 **G. 明确不做（边界）**
-- [ ] 不改 Path 契约、不动 `presets.yaml`
-- [ ] 不做纯"未来推进"（除非满足 §8.8 三条件）
-- [ ] 不合并负担口径（§8.9）
-- [ ] 不重定义 `epistemic-grounding`（ESS 无时间，6.3）
+- [—] 边界声明（非待办）：不改 Path 契约、不动 `presets.yaml`
+- [—] 边界声明（非待办）：不做纯"未来推进"（除非满足 §8.8 三条件）
+- [—] 边界声明（非待办）：不合并负担口径（§8.9）
+- [—] 边界声明（非待办）：不重定义 `epistemic-grounding`（ESS 无时间，6.3）
 
 ---
 
@@ -380,7 +389,8 @@ GET /api/admin/batch-experiments/:experimentId/day-timeline?metric=burden|interv
    真实前端交互特征；虚拟学习者该 profile 为 `absent`（prompt 规则已明确处理）。
 4. **`adaptive-guidance-copy` 的 `paceHint/warningCopy`**（负荷联动）
 
-> **结论**：**没有任何 skill prompt 知道"日期/第几天"**；所有"跨日"只通过 `dueReview` 间接体现。
+> **结论（v1 摸底时）**：**没有任何 skill prompt 知道"日期/第几天"**；所有"跨日"只通过 `dueReview` 间接体现。
+> **2026-10-19 更新**：`learn-turn-simulator` 已接 `temporalContext`（`prompts/core/virtual-learner-learn-turn-simulator.yaml:40-49`，见 §4.2 B）；其余 skill（含 `session-wrapup`）仍未注入。
 
 ### 6.3 不可破坏的硬约束
 
@@ -483,6 +493,8 @@ dayLoadContext: {
 ### 7.4 `session-wrapup` 的 `reviewHints` 去墙钟
 
 `loadRetrievabilityHints(userId, asOf = new Date())`；`buildReviewPlan`/`getDueTraces` 已有 `now`，一并透传。
+
+> **实现口径（2026-10-19）**：未新增 `asOf` 参数；`teaching-session-lifecycle.ts:1223` 改用 `simulatedNowOr()`（AsyncLocalStorage 模拟钟），效果等价于"去墙钟"，见 §4.2 B。
 
 ### 7.5 明确"不改"的 skill（边界）
 
@@ -652,18 +664,25 @@ dayLoadContext: {
 
 ## 九、风险与未决问题
 
-1. **日界（已定案 UTC，2026-09-16）**：系统层 `700b718` 已把学习状态自然衰减统一到 **UTC 日界**，与 `getAggregatedState.dayLoad` / `ReviewQuotaService` / `resolveDayWindow` **四口径合一**；`fcf651b` 进一步把日期模拟脚手架切到本稿的 `resolveDayWindow` 作为规范助手。本稿据此对齐（早前的"建议本地日界"作废）。
-2. **一次会话=一次跑完**：`autopilot` 现在一口气跑 goal→path→learn；跨日续跑需要新的调度切口（系统层负责）。页面只消费结果，不假设调度方式。
-3. **成本**：跨 N 天推进 = N 倍 LLM 调用；需复用 `session-budget` 的 `costCeiling/noProgressChunkLimit` 做护栏。
-4. **"负担"口径待定**：`consumedMinutes`（实际）vs `estimatedMinutes`（预估）vs `cognitiveLoad`（档位）三种口径在意义上是不同的。建议页面同时给"时间口径"（分钟）与"认知口径"（load/档位），不混成一根线。
-5. **`simulatedNow` 与真实 `createdAt/updatedAt`**：Prisma 自动列仍用真墙钟（用于运维/审计），模拟时间只进业务时间戳。两者在 UI 上要明确区分标签。
-6. **能力悖论（ESS）不能被时间注入放松**：`epistemic-grounding` 判决与 persona 掌握度的一致性由 `actor-auditor` 审计；时间只影响叙事与节奏，不得让"隔了几天"变成"突然会了"或"突然全忘"。
-7. **"跨日"语义目前只能表达"到期"**：`learnerMemory.dueReview` 没有"几天前"，需要 7.2 的时间维度补充；否则模拟器说"上次学过"没有时间感。
-8. **`generateIntervention` 死代码**：要么删除，要么接线；在接线前，页面/评估一律以 C3 列出的真实产出为准。
-9. **双时钟源**：会话级是权威时钟，画像/全局只是配置。页面读进度必须走会话级（或后端汇总），不得把画像级 `simulationClock` 当权威，否则多会话并行时会漂移。
-10. **设置越权**：`simulationClock` 进度字段只能由服务端写；前端 PUT 携带进度字段必须显式忽略，避免前端手改造成双写。
-11. **重放方向（已定 v4）**：采用"**过去锚点 + 向前推进**"（见 §8.8）。若将来要做"未来预演"，须先满足 §8.8 末段三条件；`createdAt/updatedAt` 等审计/运维列保持真墙钟，业务时间戳用模拟时间。
-12. **不要重复造负担口径**：`getAggregatedState().dayLoad.fatigueBonus`、`deriveReplanSignal.reasonCodes`、`decideTaskDifficulty.reasons`、`ReviewQuotaService` 已是权威口径；页面/设置**不得自建平行定义**，否则"评估负担变化"会两套数。
+> 2026-10-19 对账：原 12 条按「已定案 / 真未决」两栏重排，编号保留以便追溯。
+
+### 9.1 已定案（有代码/文档落点）
+
+- **1. 日界：应用时区本地日（已定案，2026-09-22）** —— 单一真理源 `backend/src/services/time/day-boundary.ts:4-14`：一律按**应用时区本地日**切日，禁止 UTC `toISOString().slice(0,10)` 与服务器机器本地时区；时区来源为平台设置 `timezone`（默认 `Asia/Shanghai`），虚拟侧可用 `dateSimulation.timezone` 覆盖。**2026-09-16 的「UTC 日界（`700b718`）」结论作废**；`goal_scheduling_ledger` 的"今天"（`goal-schedule.service.ts:88`）、streak（`learning/tasks/streak.ts:45`）、PMC 日负荷（`learning-state.service.ts:365`）与日期模拟均已同口径。
+- **4. "负担"口径** —— 已定案：页面同时给"时间口径"（分钟）与"认知口径"（load/档位），不混成一根线（C3 / §6.5 按此消费）。
+- **5. `simulatedNow` 与真实 `createdAt/updatedAt`** —— 已定案并验证：业务时间戳走模拟日，Prisma 自动列保持真墙钟；实现为 `simulatedNowOr()`（§11 / §11.1）。
+- **6. 能力悖论（ESS）不得被时间注入放松** —— 已定案（硬约束）：`virtual-learner-epistemic-grounding` 保持无时间，时间只影响叙事与节奏（§6.3 / §7.5）。
+- **9. 双时钟源** —— 已定案：会话级是权威时钟，画像/全局只是配置；列表读取亦会话级优先（`virtual-learners.ts:1605`：`stageResults.simulationClock || profile.simulationClock`）。
+- **10. 设置越权** —— 已定案：进度字段服务端唯一写者；`PUT /sessions/:id/simulation-config` 只接收 `baseDate/enabled/autoAdvance`，`dayIndex/history` 不接收（`virtual-learners.ts:3072-3102`）。
+- **11. 重放方向** —— 已定案 v4：「过去锚点 + 向前推进」（§8.8），落地为 `advance-day`（`virtual-learners.ts:3239`）。
+- **12. 不要重复造负担口径** —— 已定案：权威口径清单见 §6.5；页面只消费 `getAggregatedState` / `deriveReplanSignal` / `TaskDifficultyAdjustment*` / `ReviewQuotaService`。
+
+### 9.2 真未决（仍需排期或拍板）
+
+- **2. 一次会话=一次跑完 / 跨日续跑编排**：`advance-day runTasks=true` 已能按天真实跑课，但自动推进调度只做时钟簿记、不跑课（`simulated-day-scheduler.ts:1-14`）；「跨多日无人值守续跑」仍未立项。
+- **3. 跨日成本护栏**：N 天推进 = N 倍 LLM 调用；`session-budget` 的 `costCeiling/noProgressChunkLimit` 是否覆盖跨日累计调用，尚未在推进链上显式确认。
+- **7. "跨日"语义只能表达"到期"**：`learnerMemory.dueReview` 仍无 `dueInDays`（全仓 0 命中），模拟器无法自然表达"几天前学过"；落点见 §4.2 B。
+- **8. `generateIntervention` 死代码**：仍无调用者（仅 `learning-state.service.ts:1550` 定义）；删除或接线未决，接线前一律以 C3 的真实产出为准。
 
 ---
 
@@ -679,6 +698,7 @@ dayLoadContext: {
 - 2026-09-16 v7：**完整验证（跑到任务结算）**（§11.1）——发现结算类写入点落真墙钟（`subtasks.completedAt` / `endTime` / 指标 / 完成类 evidence / 课堂事件），根因 `completeTask` 的 `completedAt = new Date()` 忽略 `asOf`；已修（`3297703`）并加确定性单测 + 接线守卫。
 - 2026-09-16 v8：**「第一个里程碑没有可用任务」根因定位**（§11.2）——非"没生成"，而是子任务由后台异步产出（不 await）+ 「删路径重建」的错误补救；已改为按生成状态处置（`9bda3e7`）。
 - 2026-09-17 v9：**推进并上课空烧模拟日**（§11.3）——零节成功仍 `started:true` → 白推一天；改为 `summarizeDayLearning` 判定（`d39cf17`）。
+- 2026-10-19 v10：**已做/未做对账（#89）**——抬头由「仅审阅，未实现」改为「部分已落地」并更新核验日期；§4.2 按 HEAD 代码与 `dev.db` 只读查询逐条改勾（`advance-day`、C2①–③、`DayTimeline`、座舱徽章等已落地；未做项补落点；批量实验相关条目标「条目作废」）；§九 风险 1 改为 2026-09-22「应用时区本地日」定案（`day-boundary.ts:4-14`），12 条拆「已定案 / 真未决」两栏。
 
 ---
 
