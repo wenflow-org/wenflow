@@ -3328,8 +3328,16 @@ async function copyRawJson() {
 .cp-review__changes { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .cp-review__replan { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-blue); }
 
-/* ===== Learn 双栏：课程树 + 对话 ===== */
+/* ===== Learn 双栏：课程树 + 对话 =====
+   课堂区高度（2026-10-19 用户「重新设计，课堂区域高度高一些」）：原两根 max-height 都是
+   max(420px, calc(100dvh - 510px))——510 是照「从页面顶部往下还剩多少」估的，可课堂区在页面
+   最下方，用户是滚到它才开始用：900/1000 高的视口里 100dvh-510 只有 390/490，被 420 下限吃掉，
+   两列恒 420（实测 1440×900：grid 420 / 卡 472），而滚到那儿实际还有约 760 可用，下面空一大片。
+   改按「滚到课堂区后还剩多少视口」这把尺子（对照：右侧 .cp-sidebar sticky top 84 +
+   max-height calc(100vh - 100px) 是同一把）：下限 560 保证矮屏上仍是一块可用工作区，
+   上限 1100 防 4K/超高的屏把整页撑成一张卡。两列同高（只给一处口径，避免再各写一半）。 */
 .cp-learn-grid {
+  --cp-class-h: clamp(560px, calc(100dvh - 140px), 1100px);
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   gap: 0;
@@ -3339,7 +3347,7 @@ async function copyRawJson() {
   border-right: 1px solid var(--mk-line);
   padding: 6px 0;
   overflow-y: auto;
-  max-height: max(420px, calc(100dvh - 510px));
+  max-height: var(--cp-class-h);
   /* 嵌套滚动隔离（#72）：滚到底不把滚动链传给外层侧栏/页面 */
   overscroll-behavior: contain;
 }
@@ -3410,9 +3418,9 @@ async function copyRawJson() {
 .cp-learn-chat {
   padding: 12px 16px 16px;
   overflow-y: auto;
-  /* 内滚动上限与左邻课树同规则、随视口自适应（2026-10-12 走查：无上限时对话列长到
-     2000px+ 撑长整页；写死 520 又浪费视口余量）；嵌套滚动隔离（#72） */
-  max-height: max(420px, calc(100dvh - 510px));
+  /* 内滚动上限与左邻课树同一条口径（--cp-class-h，定义在 .cp-learn-grid）；
+     无上限时对话列会长到 2000px+ 撑长整页（2026-10-12 走查）；嵌套滚动隔离（#72） */
+  max-height: var(--cp-class-h);
   overscroll-behavior: contain;
   display: grid;
   /* 行轨显式 max-content：auto 轨按最小贡献定尺，课时总结卡（overflow:hidden 项的自动
