@@ -142,7 +142,7 @@
                   <span v-else class="mk-na">—</span>
                 </td>
                 <td>
-                  <span class="mk-badge" :class="`mk-badge--render-${row.render}`" :title="renderHintOf(row)">{{ row.render }}</span>
+                  <span class="mk-badge" :class="`mk-badge--render-${row.render}`" :title="renderHintOf(row)">{{ renderText(row.render) }}</span>
                 </td>
                 <td><span class="mono sfr__handoff" :title="handoffTitleOf(row)">{{ formatHandoff(row.handoff) }}</span></td>
                 <td>{{ row.internal ? '是' : '否' }}</td>
@@ -324,6 +324,10 @@ function formatHandoff(raw?: string[] | string | null) {
   if (!raw) return ''
   if (Array.isArray(raw)) return raw.join(', ')
   return String(raw)
+}
+/** 渲染位 → 中文（2026-10-18：此前徽章直接露 visible/hidden，而 hover 说明早有中文） */
+function renderText(render: string) {
+  return ({ visible: '可见', hidden: '隐藏' } as Record<string, string>)[render] || render
 }
 function renderHintOf(row: { render: string; visibilityPreset?: string; notes?: string }) {
   const base = row.render === 'hidden' ? '隐藏：仅内部流转，不对外展示' : '可见：会出现在对外交付（用户 / 界面）'

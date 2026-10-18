@@ -510,6 +510,38 @@ describe('buildTimeline（时间线合成）', () => {
     expect(timeline[timeline.length - 1].title).toBe('会话总结已生成');
   });
 
+  it('证据条目给人读 detail（不再把 payload JSON 前缀摆到主视觉位），整包仍留在 raw', () => {
+    const timeline = buildTimeline({
+      evidence: [
+        {
+          occurredAt: new Date('2026-10-01T14:12:26.000Z'),
+          evidenceType: 'path:created',
+          payload: JSON.stringify({ pathId: 'lp_1', title: 'Python 服务容器化部署到 K8s', subject: 'Python' }),
+        },
+        {
+          occurredAt: new Date('2026-10-01T14:24:38.000Z'),
+          evidenceType: 'path:generated',
+          payload: JSON.stringify({ pathId: 'lp_1', taskCount: 33, milestoneCount: 3, sourceConversationId: 'gc_1' }),
+        },
+        {
+          occurredAt: new Date('2026-10-01T14:30:00.000Z'),
+          evidenceType: 'lesson:completed',
+          payload: '{}',
+        },
+      ],
+    });
+
+    const [created, generated, lesson] = timeline;
+    expect(created.title).toBe('path:created'); // 原枚举保留（前端过中文词表）
+    expect(created.detail).toBe('路径「Python 服务容器化部署到 K8s」');
+    expect(created.raw).toContain('"pathId":"lp_1"');
+    expect(generated.detail).toBe('已生成 33 个任务 / 3 个里程碑');
+    // 空 payload 不再产生「 · {}」这种噪音
+    expect(lesson.detail).toBe('');
+    // 主视觉位不出现 JSON 花括号
+    for (const t of timeline) expect(t.detail).not.toContain('{');
+  });
+
   it('prisma Date 对象（路径 createdAt）归一为 ISO 后参与字典序，不破坏时间升序', () => {
     const timeline = buildTimeline({
       goalConversation: {

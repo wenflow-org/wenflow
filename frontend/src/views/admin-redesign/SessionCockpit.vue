@@ -656,16 +656,17 @@
              回合记录（虚拟）与学习者资料 → Goal 页；知识状态更新 → Learn 页。
              原共享 .cp-detail-grid（四页签底下复读同一坨 1371px 卡片）随之退役。 -->
 
-        <!-- 调试：原始 JSON -->
-        <!-- rawJson 惰性计算：仅展开时序列化（见脚本 rawJsonOpen），折叠态 pre 渲染空串 -->
-        <details class="cp-raw" @toggle="onRawToggle">
-          <summary>原始会话数据</summary>
-          <div v-if="rawJsonOpen" class="cp-raw__meta">
-            <span>{{ rawJsonTruncated ? `仅显示前 ${RAW_JSON_PREVIEW_CHARS} 字符 · 完整共 ${rawJsonLength.toLocaleString('zh-CN')} 字符` : `完整共 ${rawJsonLength} 字符` }}</span>
-            <button type="button" class="mk-link" title="把完整原始数据写入剪贴板，不受预览截断影响" @click="copyRawJson">复制完整 JSON</button>
-          </div>
-          <pre>{{ rawJson }}</pre>
-        </details>
+        <!-- 会话数据包（2026-10-18 用户走查：原「原始会话数据」整包 JSON 直排偏源码开发）。
+             主列只留一行「这包数据里有什么」的读数；整包载荷是排查物，收进弹层，
+             日常监控看四个阶段页签即可。 -->
+        <section class="cp-raw">
+          <span class="cp-raw__title">会话数据包</span>
+          <span class="cp-raw__facts">{{ packageFacts }}</span>
+          <span class="cp-raw__acts">
+            <button type="button" class="mk-link" @click="rawOpen = true">查看原始数据</button>
+            <button type="button" class="mk-link" @click="copyRawJson">复制 JSON</button>
+          </span>
+        </section>
       </main>
 
       <!-- ===== 右列：阶段卡（按当前阶段） + 运维面板（折叠） ===== -->
@@ -930,6 +931,29 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- 原始会话数据弹层（2026-10-18）：排查用整包载荷，开合四件套同资料全文弹层 -->
+    <Teleport to="body">
+      <div v-if="rawOpen" ref="rawMaskRef" class="mk-modal">
+        <div ref="rawPanelRef" class="mk-modal__panel mk-modal__panel--wide cp-rawview" role="dialog" aria-modal="true" aria-label="原始会话数据">
+          <div class="mk-modal__head">
+            <div class="cp-rawview__head">
+              <h2 class="mk-modal__title">原始会话数据</h2>
+              <span class="cp-rawview__meta mono">{{ rawJsonLength.toLocaleString('zh-CN') }} 字符</span>
+            </div>
+            <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeRaw">✕</button>
+          </div>
+          <div class="mk-modal__body">
+            <p class="cp-rawview__note">接口返回的完整会话数据，供排查使用。日常监控看四个阶段页签即可。</p>
+            <pre class="cp-rawview__pre">{{ rawJsonFull }}</pre>
+          </div>
+          <div class="mk-modal__foot">
+            <button type="button" class="mk-btn" @click="closeRaw">关闭</button>
+            <button type="button" class="mk-btn mk-btn--primary" @click="copyRawJson">复制完整 JSON</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -954,7 +978,7 @@ import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { runHealthTone, statusText } from './statusText'
-import { parseLogEntry } from './sessionLog'
+import { parseLogEntry, virtualLogPhaseZh } from './sessionLog'
 // 评分助手（evalScore）原供终局评估面板使用；面板已随裁判独立面移除（2026-09-27），本组件不再引用
 import { useSafePolling } from '@/composables/useSafePolling'
 import {
@@ -1043,7 +1067,7 @@ function goBack() {
 }
 const realKind = ref<'teaching' | 'goal'>('teaching')
 /* 真实模式时间线（后端合成）与虚拟模式日志原文（统一时间线三流合并用） */
-const timelineEntries = ref<Array<{ time: string; kind: string; title: string; detail: string }>>([])
+const timelineEntries = ref<Array<{ time: string; kind: string; title: string; detail: string; raw?: string }>>([])
 const rawLogs = ref<Record<string, unknown>[]>([])
 
 const session = ref<Record<string, unknown> | null>(null)
@@ -2223,7 +2247,13 @@ const EVIDENCE_TITLE_ZH: Record<string, string> = {
   'review:completed': '复习完成',
   'review:warmup': '课内温故',
   'concept:merge:applied': '概念归并已执行',
-  'learner:confusion:detected': '检测到困惑'
+  'learner:confusion:detected': '检测到困惑',
+  /* 路径家族（2026-10-18）：此前缺这四条，日志主视觉位直接露 path:created 这种事件码。
+     措辞按日志行（事件句）调，与后端人读 detail 配对读作「学习路径已创建 · 路径「X」」 */
+  'path:created': '学习路径已创建',
+  'path:generated': '路径生成完成',
+  'path:adjusted': '路径已调整',
+  'path:completed': '路径已完成'
 }
 
 async function loadLogs() {
@@ -2240,13 +2270,19 @@ async function loadLogs() {
            合成行只剩标题——这里显式拼回正文，日志行才可读。 */
         const title = EVIDENCE_TITLE_ZH[String(t.title || '')] || String(t.title || '')
         const detail = String(t.detail || '').trim()
+        /* 证据事件整包 payload（2026-10-18）：主行只读人读 detail，payload 放进「原文」，
+           排查时展开仍能看到真实字段；无 payload 就不挂空的 details */
+        let payload: unknown = null
+        if (typeof t.raw === 'string' && t.raw) {
+          try { payload = JSON.parse(t.raw) } catch { payload = t.raw }
+        }
         return {
           id: `${t.time || ''}|${t.kind || ''}|${String(t.title || '').slice(0, 60)}|${String(t.detail || '').slice(0, 40)}`,
           createdAt: t.time || '',
           timestamp: t.time || '',
           phase: t.kind,
           message: detail ? `${title} · ${detail}` : title,
-          details: t.detail ? { text: t.detail } : undefined
+          details: detail || payload ? { ...(detail ? { text: detail } : {}), ...(payload ? { payload } : {}) } : undefined
         }
       })
       appendLogs(items.slice(-LOG_WINDOW).map((l: Record<string, unknown>) => {
@@ -2273,11 +2309,14 @@ async function loadLogs() {
     rawLogs.value = items
     appendLogs(items.slice(-LOG_WINDOW).map((l: Record<string, unknown>) => {
       const view = parseLogEntry(l)
+      /* 阶段徽章中文化（2026-10-18）：虚拟日志 phase 是后端枚举（virtual-reply / goal-response…），
+         此前主视觉位直接露英文；筛选项同源取自这里，所以筛选也一并变中文 */
+      const phase = virtualLogPhaseZh(view.phase)
       return {
         id: String(l.id ?? l.messageId ?? ''),
         time: l.timestamp || l.createdAt ? new Date(String(l.timestamp || l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
-        text: view.text || view.phase,
-        view
+        text: view.text || phase,
+        view: { ...view, phase }
       }
     }))
     logsFailed.value = false
@@ -2752,21 +2791,56 @@ watch(
   { immediate: true }
 )
 
-/* rawJson 惰性计算：session 每 5s 轮询全量更新，computed 常驻 stringify 会让每个轮询拍
-   都完整序列化一次大 JSON；改为仅在「原始数据」details 展开时才计算。
-   2026-10-17：此前静默截断 4000 字符，读作「完整原始数据」实则停在半句（真实目标对话会话的
-   路径树就超过这个长度，目标对话消息根本没露出来）。改为显式披露截断并把完整串交给复制。 */
-const RAW_JSON_PREVIEW_CHARS = 4000
-const rawJsonOpen = ref(false)
-function onRawToggle(e: Event) { rawJsonOpen.value = (e.target as HTMLDetailsElement).open }
-const rawJsonFull = computed(() => (rawJsonOpen.value ? JSON.stringify(session.value, null, 2) : '') || '')
+/* ===== 会话数据包（2026-10-18 用户走查：原「原始会话数据」整包 JSON 直排偏源码开发） =====
+   主列只回答「这包数据里有什么」：类型 + 消息数 + 路径规模 + 时间线/日志条数。整包 JSON 收进弹层。
+   rawJsonFull 仍是惰性计算（session 每 5s 轮询全量更新，常驻 stringify 会每拍序列化一次大载荷），
+   仅弹层打开时序列化；复制按需现取。 */
+const rawOpen = ref(false)
+const rawMaskRef = ref<HTMLElement | null>(null)
+const rawPanelRef = ref<HTMLElement | null>(null)
+function closeRaw() { rawOpen.value = false }
+useOverlay(computed(() => rawOpen.value), rawPanelRef)
+useMaskClose(rawMaskRef, () => closeRaw())
+useEscape(() => rawOpen.value, () => closeRaw())
+
+const rawJsonFull = computed(() => (rawOpen.value ? JSON.stringify(session.value, null, 2) : '') || '')
 const rawJsonLength = computed(() => rawJsonFull.value.length)
-const rawJson = computed(() => rawJsonFull.value.slice(0, RAW_JSON_PREVIEW_CHARS))
-const rawJsonTruncated = computed(() => rawJsonLength.value > RAW_JSON_PREVIEW_CHARS)
+
+/** 数据包读数：只取载荷里确实存在的字段，缺就跳过（不拿 0 冒充「没有」） */
+const packageFacts = computed(() => {
+  const s = session.value as Record<string, any> | null
+  if (!s) return '加载中…'
+  const parts: string[] = []
+  parts.push(isRealMode.value ? (realKind.value === 'goal' ? '目标对话' : '教学会话') : '虚拟会话')
+  const teachMsgs = Array.isArray(s.teaching?.messages) ? s.teaching.messages.length : null
+  const goalMsgs = Array.isArray(s.goal?.messages)
+    ? s.goal.messages.length
+    : Array.isArray(s.conversations?.goal?.messages) ? s.conversations.goal.messages.length : null
+  const msgCount = teachMsgs ?? (typeof s.goal?.messageCount === 'number' ? s.goal.messageCount : goalMsgs)
+  if (msgCount !== null && msgCount !== undefined) parts.push(`${msgCount} 条消息`)
+  const p = s.path
+  if (p && typeof p === 'object') {
+    const stages = typeof p.totalMilestones === 'number'
+      ? p.totalMilestones
+      : Array.isArray(p.milestones) ? p.milestones.length : null
+    const tasks = typeof p.totalTasks === 'number'
+      ? p.totalTasks
+      : Array.isArray(p.milestones)
+        ? p.milestones.reduce((n: number, m: any) => n + (Array.isArray(m?.tasks) ? m.tasks.length : Array.isArray(m?.subtasks) ? m.subtasks.length : 0), 0)
+        : null
+    if (stages !== null) {
+      const title = typeof p.title === 'string' && p.title ? `「${p.title}」` : ''
+      parts.push(`路径${title} · ${stages} 个阶段${tasks !== null ? ` / ${tasks} 个任务` : ''}`)
+    }
+  }
+  if (Array.isArray(s.timeline)) parts.push(`${s.timeline.length} 条时间线`)
+  if (Array.isArray(s.logs)) parts.push(`${s.logs.length} 条日志`)
+  return parts.join(' · ')
+})
 
 async function copyRawJson() {
   try {
-    await navigator.clipboard.writeText(rawJsonFull.value)
+    await navigator.clipboard.writeText(JSON.stringify(session.value, null, 2))
     toast.success('完整会话数据已复制')
   } catch {
     // 非安全上下文或浏览器未授予剪贴板权限：不假装成功
@@ -3614,13 +3688,23 @@ async function copyRawJson() {
 .cp-wrapup-footer .mk-badge { margin: 0; }
 
 /* Raw data */
-.cp-raw { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.cp-raw summary { cursor: pointer; padding: 4px 2px; }
-/* 截断披露行（2026-10-17）：预览只有前 4000 字符，字符总数与「复制完整 JSON」必须和预览同屏 */
-.cp-raw__meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 6px; padding: 0 2px; }
-.cp-raw pre {
-  margin: 8px 0 0; padding: 12px; border-radius: var(--mk-radius-xl); background: var(--mk-code-bg); color: var(--mk-code-fg);
-  font: 10.5px/1.6 var(--mk-mono); max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-all;
+/* 会话数据包读数行（2026-10-18）：主列只放「这包数据里有什么」，JSON 进弹层 */
+.cp-raw {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 12px; padding: 10px 14px;
+  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface-2);
+  font-size: var(--mk-fs-micro);
+}
+.cp-raw__title { color: var(--mk-ink); font-weight: 600; }
+.cp-raw__facts { flex: 1; min-width: 200px; color: var(--mk-muted); }
+.cp-raw__acts { display: flex; align-items: center; gap: 12px; }
+.cp-rawview__head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.cp-rawview__meta { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.cp-rawview__note { margin: 0 0 10px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.cp-rawview__pre {
+  margin: 0; padding: 12px; border-radius: var(--mk-radius-sm); background: var(--mk-code-bg); color: var(--mk-code-fg);
+  font: 10.5px/1.6 var(--mk-mono); max-height: 56vh; overflow: auto; white-space: pre-wrap; word-break: break-all;
 }
 
 /* 终局评估样式已随裁判独立面移除（2026-09-27） */
@@ -3724,7 +3808,7 @@ async function copyRawJson() {
   .cp-wrapup-section__text { font-size: var(--mk-fs-body); }
   .cp-wrapup__json { font-size: var(--mk-fs-micro); }
   .cp-raw { font-size: var(--mk-fs-micro); }
-  .cp-raw pre { font-size: var(--mk-fs-micro); }
+  .cp-rawview__pre { font-size: var(--mk-fs-micro); }
   .cp-trace-panel > summary { font-size: var(--mk-fs-micro); }
   .cp-trace-panel > summary code { font-size: var(--mk-fs-micro); }
   .cp-trace-list__head { font-size: var(--mk-fs-micro); }
@@ -3774,7 +3858,7 @@ async function copyRawJson() {
   .cp-wrapup-section__text { font-size: var(--mk-fs-body); }
   .cp-wrapup__json { font-size: var(--mk-fs-micro); }
   .cp-raw { font-size: var(--mk-fs-micro); }
-  .cp-raw pre { font-size: var(--mk-fs-micro); }
+  .cp-rawview__pre { font-size: var(--mk-fs-micro); }
   .cp-trace-panel > summary { font-size: var(--mk-fs-micro); }
   .cp-trace-panel > summary code { font-size: var(--mk-fs-micro); }
   .cp-trace-list__head { font-size: var(--mk-fs-micro); }

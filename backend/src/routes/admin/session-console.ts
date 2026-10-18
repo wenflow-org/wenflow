@@ -221,6 +221,42 @@ interface TimelineEntry {
   kind: 'goal' | 'path' | 'teaching' | 'evidence';
   title: string;
   detail: string;
+  /** 证据事件整包 payload（JSON 串）：detail 已人读化，原文放这里供「技术原文」折叠查看 */
+  raw?: string;
+}
+
+/**
+ * 证据事件 → 人读摘要（2026-10-18 用户走查「会话日志偏源码开发」）。
+ * 此前 detail 是 payload JSON 的前 80 字符，主视觉位露出 `path:created · {"pathId":"lp_…`：
+ * 既读不出发生了什么，也会停在半句（截断处的字符串不可解析）。这里按事件类型取关键字段；
+ * 整包 payload 仍随 TimelineEntry.raw 下发，折叠在「原文」里供排查。
+ */
+function evidenceDetail(type: string, payload: any): string {
+  const p = payload && typeof payload === 'object' ? payload : {};
+  switch (type) {
+    case 'path:created': {
+      const title = String(p.pathTitle || p.title || '').trim();
+      return title ? `路径「${title}」` : '路径已创建';
+    }
+    case 'path:generated': {
+      const parts: string[] = [];
+      if (typeof p.taskCount === 'number') parts.push(`${p.taskCount} 个任务`);
+      if (typeof p.milestoneCount === 'number') parts.push(`${p.milestoneCount} 个里程碑`);
+      return parts.length ? `已生成 ${parts.join(' / ')}` : '路径生成完成';
+    }
+    case 'path:adjusted':
+      return '路径已按学习进展调整';
+    case 'path:completed':
+      return '路径已完成';
+    case 'goal:understanding:updated': {
+      const goal = String(p.understanding?.surface_goal || p.surfaceGoal || '').trim();
+      return goal ? `目标：${goal}` : '目标理解已更新';
+    }
+    default: {
+      // 其余事件（lesson/task/review 等）：payload 常带标题；没有就不给 detail，不拿 JSON 顶位
+      return String(p.title || p.name || '').trim();
+    }
+  }
 }
 
 function pushTimeline(list: TimelineEntry[], entry: TimelineEntry | null) {
@@ -295,11 +331,14 @@ function buildTimeline(params: {
   }
 
   for (const item of evidence || []) {
+    const type = String(item.evidenceType || 'evidence');
+    const payload = parseJsonSafe<any>(item.payload, {});
     pushTimeline(timeline, {
       time: item.occurredAt ? item.occurredAt.toISOString() : null,
       kind: 'evidence',
-      title: String(item.evidenceType || 'evidence'),
-      detail: JSON.stringify(parseJsonSafe<any>(item.payload, {}))?.slice(0, 80) || '',
+      title: type,
+      detail: evidenceDetail(type, payload),
+      raw: JSON.stringify(payload),
     });
   }
 

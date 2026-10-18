@@ -865,7 +865,8 @@ function fmtMs(ms: number | undefined | null): string {
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(1)}s`
 }
-const promptSourceText = (s: string) => ({ active: 'ACTIVE', version: '版本', custom: '自定义', draft: '草稿' }[s] || s)
+/** prompt 来源 → 中文（2026-10-18：active 原样露英文 ACTIVE，与同排「版本/自定义/草稿」不成一套） */
+const promptSourceText = (s: string) => ({ active: '生效中', version: '历史版本', custom: '自定义', draft: '草稿' }[s] || s)
 /** mode 枚举 → 中文（后端 prompt_eval_runs.mode 现仅 eval-set；未知值回退原文） */
 const modeText = (m: string) => ({ 'eval-set': '用例集' }[m] || m || '—')
 /** 0 次执行（totalRuns=0，用例全被跳过）不是「0% 通过」失败态（D15）：
@@ -918,7 +919,7 @@ const expectationText = (c: EvalCase) => {
   if (e.dialogueRounds) parts.push(`${e.dialogueRounds} 轮`)
   // 原漏计 mustContainText：列表期望摘要看不到「必须做到」配置，会误判用例没有期望
   if (e.mustContainText?.length) parts.push(`须含 ${e.mustContainText.length} 句`)
-  if (e.expectedStage) parts.push(`stage=${e.expectedStage}`)
+  if (e.expectedStage) parts.push(`阶段：${stageText(e.expectedStage)}`)
   if (e.mustIncludeFields?.length) parts.push(`含 ${e.mustIncludeFields.length} 字段`)
   if (e.mustNotInclude?.length) parts.push(`不含 ${e.mustNotInclude.length} 词`)
   return parts.join(' · ')

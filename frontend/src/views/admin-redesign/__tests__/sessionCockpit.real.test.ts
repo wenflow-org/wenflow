@@ -253,15 +253,24 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.text()).toContain('围绕函数作用域展开');
     expect(wrapper.text()).toContain('模型生成');
 
-    // 原始 JSON（rawJson 惰性计算：展开 details 才序列化，2026-09-27 性能整改）
-    const rawDetails = wrapper.find('details.cp-raw');
-    (rawDetails.element as HTMLDetailsElement).open = true;
-    await rawDetails.trigger('toggle');
-    await nextTick();
-    // Path 里程碑渲染（读 stageResults.path 兜底）：里程碑名出现在原始 JSON 中
-    expect(wrapper.text()).toContain('Python 入门学习路径');
-    expect(wrapper.text()).toContain('函数基础');
-    expect(wrapper.text()).toContain('参数与返回值');
+    // 会话数据包（2026-10-18）：主列只留一行读数，整包 JSON 收进弹层（点开才序列化）
+    const pkg = wrapper.find('.cp-raw');
+    expect(pkg.exists()).toBe(true);
+    expect(pkg.text()).toContain('会话数据包');
+    expect(pkg.text()).toContain('教学会话');
+    expect(pkg.text()).toContain('Python 入门学习路径');
+    expect(pkg.find('pre').exists()).toBe(false);
+    const openRawBtn = pkg.findAll('button').find((b) => b.text() === '查看原始数据')!;
+    await openRawBtn.trigger('click');
+    await flushPromises();
+    // Path 里程碑渲染（读 stageResults.path 兜底）：里程碑名出现在弹层原始 JSON 中（Teleport 到 body）
+    const rawView = document.body.querySelector('.cp-rawview') as HTMLElement | null;
+    expect(rawView).not.toBeNull();
+    expect(rawView!.textContent).toContain('Python 入门学习路径');
+    expect(rawView!.textContent).toContain('函数基础');
+    expect(rawView!.textContent).toContain('参数与返回值');
+    ;[...rawView!.querySelectorAll('button')].find((b) => b.textContent === '关闭')?.click();
+    await flushPromises();
 
     // 黑盒/仿真专属区隐藏：无 act() 按钮、无对抗预算、无删除会话、无评审面板
     expect(wrapper.find('.cp-config').exists()).toBe(false);
@@ -769,10 +778,9 @@ describe('SessionCockpit 双模式', () => {
     wrapper.unmount();
   });
 
-  /** 2026-10-17 走查：原始会话数据此前静默截断 4000 字符，读作完整载荷实则停在半句
-   *  （真实目标对话会话的路径树就超过 4000，目标对话消息根本露不出来）。
-   *  断言：截断必须披露字符总数，预览严格等于 4000 字符，复制拿到的必须是完整串。 */
-  it('原始会话数据：截断披露字符总数，复制写入完整载荷而非预览片段', async () => {
+  /** 2026-10-18 用户走查「原始会话数据偏源码开发」：主列不再内联整包 JSON，
+   *  改为一行数据包读数；完整载荷点「查看原始数据」进弹层，复制拿到的必须是完整串。 */
+  it('会话数据包：主列只出读数，原始 JSON 进弹层且复制为完整载荷', async () => {
     const payload = realTeachingPayload();
     // 造一个超长字段（真实会话的 path 树/消息远超此量级）
     payload.data.path.milestones[0].description = '长'.repeat(5000);
@@ -782,26 +790,29 @@ describe('SessionCockpit 双模式', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
 
     const wrapper = await mountCockpit('session-real', 'ts_real_1');
-    const rawDetails = wrapper.find('details.cp-raw');
-    (rawDetails.element as HTMLDetailsElement).open = true;
-    await rawDetails.trigger('toggle');
-    await nextTick();
+    const pkg = wrapper.find('.cp-raw');
+    // 折叠态：页面上没有 JSON 直排（pre），只有一行读数与两个动作
+    expect(pkg.find('pre').exists()).toBe(false);
+    expect(pkg.text()).toContain('教学会话');
+    expect(pkg.text()).toContain('条消息');
+    expect(pkg.findAll('button').map((b) => b.text())).toEqual(['查看原始数据', '复制 JSON']);
 
-    const meta = wrapper.find('.cp-raw__meta');
-    expect(meta.exists()).toBe(true);
-    expect(meta.text()).toContain('仅显示前 4000 字符');
-    // 完整长度按 toLocaleString 展示（5,000+ 字符）
-    expect(meta.text()).toMatch(/完整共 \d{1,3}(,\d{3})+ 字符/);
+    // 打开弹层：完整载荷（无 4000 截断）+ 字符总数
+    await pkg.findAll('button').find((b) => b.text() === '查看原始数据')!.trigger('click');
+    await flushPromises();
+    const view = document.body.querySelector('.cp-rawview') as HTMLElement | null;
+    expect(view).not.toBeNull();
+    expect(view!.querySelector('.cp-rawview__meta')!.textContent).toMatch(/\d{1,3}(,\d{3})* 字符/);
+    expect(view!.querySelector('pre')!.textContent!.length).toBeGreaterThan(5000);
+    expect(view!.querySelector('pre')!.textContent).toContain('"kind": "teaching"');
 
-    const pre = rawDetails.find('pre').text();
-    expect(pre).toHaveLength(4000);
-
-    const copyBtn = meta.findAll('button').find((b) => b.text() === '复制完整 JSON')!;
-    await copyBtn.trigger('click');
+    // 复制：拿到的必须是完整串（弹层展示与复制同源）
+    const copyBtn = [...view!.querySelectorAll('button')].find((b) => b.textContent === '复制完整 JSON') as HTMLButtonElement;
+    copyBtn.click();
     await flushPromises();
     expect(writeText).toHaveBeenCalledTimes(1);
     const copied = writeText.mock.calls[0][0] as string;
-    expect(copied.length).toBeGreaterThan(4000);
+    expect(copied.length).toBeGreaterThan(5000);
     expect(copied).toContain('"kind": "teaching"');
 
     wrapper.unmount();

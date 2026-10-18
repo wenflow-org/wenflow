@@ -80,7 +80,8 @@
                 </span>
               </td>
               <td class="mono">{{ s.model || '未配置' }}</td>
-              <td class="mono skc__wrap" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ s.paramOverrides ? JSON.stringify(s.paramOverrides) : '—' }}</td>
+              <!-- 2026-10-18：整串 JSON 挤在单元格里属开发向；表内只给项数，原文进 title -->
+              <td class="mono skc__wrap" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ overrideText(s.paramOverrides) }}</td>
               <td class="mono skc__wrap" :title="s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined">{{ s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : '平台默认' }}</td>
             </tr>
           </tbody>
@@ -149,6 +150,11 @@ const { sortState: covSortState, toggle: toggleCovSort, sortRows: sortCovRows } 
   },
   storageKey: 'wf_skc_sort'
 })
+/** 参数覆盖单元格：只给项数（原文在 title）；整串 JSON 在列里读不出「覆盖了几项」 */
+function overrideText(p: Record<string, number> | null): string {
+  const n = p ? Object.keys(p).length : 0
+  return n ? `${n} 项参数` : '—'
+}
 const sortedRows = computed(() => sortCovRows(rows.value))
 const loading = ref(false)
 const selected = ref<string[]>([])
