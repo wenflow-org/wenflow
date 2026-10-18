@@ -268,7 +268,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { openSubPage, isLive } from './store'
+import { openSubPage, isLive, LEARNER_DETAIL_LANDING } from './store'
 import { liveLearners, liveLearnersTotal, liveRecomputeLearner, liveSetLearnersIncludeTest, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 import { evidenceLowConfidence } from './evidence'
 import { askConfirm } from './useConfirm'
@@ -345,7 +345,10 @@ function freshTone(ts?: number): string {
   return Date.now() - ts < 24 * 3600000 ? 'mk-fresh--fresh' : ''
 }
 function openDetail(r: Row) {
-  openSubPage('learner', r.id, includeTest.value ? { includeTest: true } : undefined)
+  /* 落点页签：本列表读的是趋势 / 疲劳 / 置信 / 风险摘要，同口径内容在详情的「证据」页签
+     （判据与常量单点在 store 的 LEARNER_DETAIL_LANDING）——不再一律落「概览」，
+     2026-10-18 用户走查。干预弹窗里的「查看学习详情」是泛化措辞，仍落概览。 */
+  openSubPage('learner', r.id, { tab: LEARNER_DETAIL_LANDING.learnerState, ...(includeTest.value ? { includeTest: true } : {}) })
 }
 
 /* —— C2 干预动线：风险学习者 → 查看会话 / 发送站内提醒 —— */

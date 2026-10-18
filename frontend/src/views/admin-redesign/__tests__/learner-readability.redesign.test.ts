@@ -103,6 +103,15 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     subPage.value = null;
   });
 
+  it('行「详情」落在「证据」页签（列表读数列与详情证据页签同口径；2026-10-18 用户走查，不再一律落概览）', async () => {
+    const w = mount(LearnerCenter);
+    await settle();
+    await w.find('tbody tr').trigger('click');
+    expect(subPage.value).toMatchObject({ view: 'learner', tab: 'evidence' });
+    expect(subPage.value?.id).toBeTruthy();
+    w.unmount();
+  });
+
   it('需关注收窄（不含疲劳=中）；「观察」pill 单列疲劳中且可筛选；pill 计数全显（2026-10-11 统一判例）', async () => {
     const w = mount(LearnerCenter);
     await settle();

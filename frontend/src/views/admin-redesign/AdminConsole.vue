@@ -293,6 +293,12 @@ watch(
       else delete q.includeTest
       if (sp.stage) q.stage = sp.stage
       else delete q.stage
+      /* 详情内部页签落点（learner）：并进同一次 push，详情挂载即从 ?tab= 取到落点。
+         不让详情挂载后再补一笔 replace——两笔导航互相竞态时，补参数那笔会把 view/id 冲掉，
+         二级页被自己的 URL 同步当场关掉。离开 learner 详情时顺手清掉它，避免列表 URL 上
+         留一个无主 tab（skills 宿主的 ?tab= 不受影响：只在 curView=learner 时清）。 */
+      if (sp.tab) q.tab = sp.tab
+      else if (curView === 'learner') delete q.tab
       if (curView !== sp.view || curId !== sp.id || (sp.includeTest ? route.query.includeTest !== 'true' : route.query.includeTest != null)) {
         void router.push({ query: q })
       }
@@ -306,6 +312,8 @@ watch(
         delete q.id
         delete q.includeTest
         delete q.stage
+        // 落点页签是详情自己的参数，随详情一起收（判据同上：只清 learner 写的那一个）
+        if (curView === 'learner') delete q.tab
         void router.replace({ query: q })
       }
     }

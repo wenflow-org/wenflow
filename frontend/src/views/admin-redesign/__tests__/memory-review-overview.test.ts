@@ -20,7 +20,12 @@ const openSubPage = vi.hoisted(() => vi.fn());
 vi.mock('@/api/adminApi', () => ({
   adminMemoryReviewApi: { overview, detail, recompute, apply, rollback },
 }));
-vi.mock('../store', () => ({ openSubPage }));
+// 落点常量取真实 store（只替换 openSubPage）：断言里写死的 'memory' 才能钉住落点映射，
+// 若映射被改成别的页签，这里会红。
+vi.mock('../store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../store')>()),
+  openSubPage,
+}));
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('../useConfirm', () => ({ askConfirm: vi.fn(async () => true) }));
 const routerReplace = vi.hoisted(() => vi.fn());
@@ -31,6 +36,7 @@ vi.mock('vue-router', () => ({
 }));
 
 import MemoryReviewOverview from '../MemoryReviewOverview.vue';
+import { liveSetIncludeVirtual } from '../live';
 
 const ROWS = Array.from({ length: 7 }, (_, i) => ({ id: `t${i}`, userId: 'u1' }));
 
@@ -53,10 +59,21 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     vi.clearAllMocks();
   });
 
-  it('既有功能不丢：用户行点击仍跳学习者详情（测试视角下透传 includeTest，真实口径第三参为 undefined）', async () => {
+  it('用户行点击跳到学习者详情并落在「记忆与复习」页签（不再一律落概览；2026-10-18 用户走查）', async () => {
     const w = await mountWithRows(ROWS);
     await w.find('tbody tr').trigger('click');
-    expect(openSubPage).toHaveBeenCalledWith('learner', 'u1', undefined);
+    expect(openSubPage).toHaveBeenCalledWith('learner', 'u1', { tab: 'memory' });
+  });
+
+  it('测试视角下仍透传 includeTest（与落点页签同在一份 opts）', async () => {
+    liveSetIncludeVirtual(true);
+    try {
+      const w = await mountWithRows(ROWS);
+      await w.find('tbody tr').trigger('click');
+      expect(openSubPage).toHaveBeenCalledWith('learner', 'u1', { tab: 'memory', includeTest: true });
+    } finally {
+      liveSetIncludeVirtual(false);
+    }
   });
 
   /** P1#13：KPI「当前到期」阈值化（占痕迹 ≥20% 或人均 ≥5），阈值写进 title */

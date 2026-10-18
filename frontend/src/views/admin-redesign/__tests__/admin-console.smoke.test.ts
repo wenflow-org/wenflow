@@ -13,7 +13,7 @@ import AdminConsole from '../AdminConsole.vue';
 import { SCENE_COMPONENTS } from '../AdminConsole.vue';
 import { MOCK_SCENES } from '../manifest';
 import Overview from '../Overview.vue';
-import { intent, subPage } from '../store';
+import { intent, subPage, openSubPage, closeSubPage } from '../store';
 
 /** API 层整体 mock：任意方法返回 { data: {} }（空数据成功响应），函数型导出为 noop/成功 */
 const { apiObject } = vi.hoisted(() => ({
@@ -188,6 +188,24 @@ describe('AdminConsole 导航冒烟', () => {
     await vi.waitFor(() => expect(wrapper.find('.mk-page.skd').exists()).toBe(true), { timeout: 15000 });
     // 外壳保留：侧栏导航在
     expect(wrapper.find('nav[aria-label="管理导航"]').exists()).toBe(true);
+  });
+
+  /* 2026-10-18 用户走查：列表条目一律落「概览」不匹配列表主题 → 二级页带落点页签。
+     落点必须与 view/id 同一次 push 并进 URL（刷新/深链保持），关闭二级页时随详情一起收，
+     否则列表 URL 上留一个无主的 ?tab=。 */
+  it('二级页落点页签：openSubPage 带 tab 并进 URL，closeSubPage 时随 view/id 一起收（learner 专有）', async () => {
+    const { router } = await mountConsole('/admin/learner-state');
+    await settle();
+    openSubPage('learner', 'user_abc', { tab: 'evidence' });
+    await settle();
+    expect(subPage.value).toMatchObject({ view: 'learner', id: 'user_abc', tab: 'evidence' });
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'learner', id: 'user_abc', tab: 'evidence' });
+    closeSubPage();
+    await settle();
+    expect(subPage.value).toBeNull();
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
+    expect(router.currentRoute.value.query.view).toBeUndefined();
+    expect(router.currentRoute.value.query.id).toBeUndefined();
   });
 
   it('跨场景深链 push（overview → people?view=user&id=）同样存活', async () => {

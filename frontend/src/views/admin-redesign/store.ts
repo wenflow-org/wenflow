@@ -230,6 +230,18 @@ export function asSubPageStage(v: unknown): SubPageStage | undefined {
   return typeof v === 'string' && SUBPAGE_STAGES.has(v) ? (v as SubPageStage) : undefined
 }
 
+/** 详情内部页签落点：只对 learner 详情有意义（页签 id 见 LearnerDetail 的 LD_TAB_IDS）。
+ *  二级页页面内的 ?tab= 归详情组件自己读写（P0-2 页签路由化），这里只带一个「落哪」的提示，
+ *  AdminConsole 打开二级页时并进 URL，刷新/深链保持落点。 */
+export type SubPageTab = string
+
+/** 列表行 → 学习者详情的落点页签（2026-10-18 用户走查：「学习状态」条目落「概览」不匹配列表主题）：
+ *  · 学习状态列表（LearnerCenter）的读数列——趋势 / 疲劳 / 置信 / 风险摘要——与详情「证据」
+ *    页签同源同口径（趋势与建议 / 学习压力记录 / 预测校准 / 概念证据密度）；
+ *  · 记忆与复习列表（MemoryReviewOverview）与详情「记忆与复习」页签同名同口径（同为 FSRS 普查）。
+ *  落点只此一处定义——改映射改这里一行；传空的调用方（画像 / 会话列表下钻）仍落概览。 */
+export const LEARNER_DETAIL_LANDING = { learnerState: 'evidence', memoryReview: 'memory' } as const
+
 /** 来源记忆：从二级（画像）进三级（会话）后，返回时回到来源页而非直接回一级列表 */
 export interface SubPageFrom {
   view: SubPageView
@@ -237,12 +249,13 @@ export interface SubPageFrom {
   label?: string
 }
 
-export const subPage = ref<{ view: SubPageView; id: string; label?: string; includeTest?: boolean; stage?: SubPageStage; from?: SubPageFrom } | null>(null)
+export const subPage = ref<{ view: SubPageView; id: string; label?: string; includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab; from?: SubPageFrom } | null>(null)
 
-export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?: boolean; stage?: SubPageStage; from?: SubPageFrom }) {
-  const base: { view: SubPageView; id: string; includeTest?: boolean; stage?: SubPageStage } =
+export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab; from?: SubPageFrom }) {
+  const base: { view: SubPageView; id: string; includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab } =
     opts?.includeTest ? { view, id, includeTest: true } : { view, id }
   if (opts?.stage) base.stage = opts.stage
+  if (opts?.tab) base.tab = opts.tab
   /* 来源记忆：二级页 → 三级页都可记来源，返回时回原页（不限 session）。
      原先只对 session/session-real 生效，于是「学习者详情 → 路径详情」返回时 from 被
      静默丢弃，直接落回一级列表，原详情与页签上下文全丢（2026-10-08 走查确认）。 */

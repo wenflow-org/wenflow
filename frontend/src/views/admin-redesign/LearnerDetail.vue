@@ -991,8 +991,11 @@ function normalizeLdTab(v: unknown): LdTab {
   return isLdTab(s) ? s : normalizeLearnerTab(s)
 }
 
-// 默认落点统一「概览」（2026-10-11 用户拍板，两轴入口一致）；无学习数据的账号轴入口
-// 由 loadDetail 兜底切「账号与许可」（见该处注释）
+/* 缺省落点「概览」：无落点提示的入口（画像「查真实学习者」、会话列表下钻、裸深链）用它。
+   列表条目自带落点页签（?tab=，常量单点在 store 的 LEARNER_DETAIL_LANDING）：学习状态列表
+   落「证据」、记忆与复习列表落「记忆与复习」——2026-10-18 用户走查改「一律概览」为按列表主题
+   落点（旧约定 2026-10-11「两轴入口一致」）。无学习数据的账号轴入口由 loadDetail 兜底切
+   「账号与许可」（见该处注释）。 */
 const tab = ref<LdTab>('overview')
 
 const tabs = [
@@ -1437,8 +1440,10 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
   // （此前无条件置 'overview'，会把 ?tab=profile/evidence/graph 的深链与刷新全部冲掉——
   //  与上方「P0-2 tab 路由化：?tab= 深链/刷新保持」的约定相矛盾，实测发现。）
   const urlTab = typeof tabRoute.query.tab === 'string' ? tabRoute.query.tab.trim() : ''
-  // 默认落点统一「概览」（2026-10-11 用户拍板）：列表行已展示账号事实，点「详情」的动机是看
-  // 学习侧；两轴入口落点一致，心智模型简单。?tab= 深链/刷新仍优先。
+  // 落点来源：?tab=（列表条目带进来的落点页签，或读者自己切过的页签）> 概览。
+  // 2026-10-11 曾统一为「概览」（列表行已展示账号事实，点详情的动机是看学习侧）；
+  // 2026-10-18 用户走查改为按列表主题落点（学习状态→证据、记忆与复习→记忆与复习），
+  // 由列表页在打开二级页时带 ?tab=（映射单点在 store 的 LEARNER_DETAIL_LANDING）。
   tab.value = urlTab ? normalizeLdTab(urlTab) : 'overview'
   const base = liveLearners.value.find((l) => l.userId === id)
   // 路径作用域：取页级开关的值（'' = 全部路径 → 不传 pathId，后端走 global 聚合）。

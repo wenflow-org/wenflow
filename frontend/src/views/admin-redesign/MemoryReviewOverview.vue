@@ -115,8 +115,8 @@
               :key="row.userId"
               :data-mr-row="row.userId"
               tabindex="0"
-              @click="openSubPage('learner', row.userId, includeVirtual ? { includeTest: true } : undefined)"
-              @keydown.enter.self.prevent="openSubPage('learner', row.userId, includeVirtual ? { includeTest: true } : undefined)"
+              @click="openLearner(row.userId)"
+              @keydown.enter.self.prevent="openLearner(row.userId)"
             >
               <td>
                 <div class="mr__user">
@@ -184,7 +184,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
 import DataScopeToggle from './DataScopeToggle.vue'
 import { askConfirm } from './useConfirm'
-import { openSubPage } from './store'
+import { openSubPage, LEARNER_DETAIL_LANDING } from './store'
 import { toast } from '@/utils/toast'
 import { errMsg, shortId, timeAgo, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
 
@@ -470,6 +470,14 @@ async function recompute(userId: string, name?: string | null) {
 
 const route = useRoute()
 const router = useRouter()
+
+/** 行 → 学习者详情并落在「记忆与复习」页签：本列表读的就是 FSRS 普查读数（记忆痕迹 / 待复习 /
+ *  记忆强度），与详情同名页签同源同口径，不该落「概览」（2026-10-18 用户走查）。
+ *  落点常量单点在 store 的 LEARNER_DETAIL_LANDING；「记忆调度」页签是治理动作面，
+ *  仍只由旧深链 ?userId= 与详情内切换进入。 */
+function openLearner(userId: string) {
+  openSubPage('learner', userId, { tab: LEARNER_DETAIL_LANDING.memoryReview, ...(includeVirtual.value ? { includeTest: true } : {}) })
+}
 
 onMounted(async () => {
   // 旧深链 /admin/memory-review?userId=… → 学习者详情「记忆调度」页签（单用户明细单家，
