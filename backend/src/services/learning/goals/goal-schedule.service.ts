@@ -113,7 +113,9 @@ export async function getTodaySchedule(userId: string) {
   const settledMinutes = todaySessions.reduce((sum, s) => sum + (s.duration ?? 0), 0);
   const activeElapsedMinutes = activeSessions.reduce((sum, s) => {
     const started = new Date(s.startTime).getTime();
-    return Number.isFinite(started) ? sum + Math.max(0, Math.round((Date.now() - started) / 60000)) : sum;
+    // 流逝分钟必须与「今天」用同一个钟（#88 第 1 项残留）：此前这里用 Date.now() 墙钟，
+    // 而日窗按 simulatedNowOr() 算——模拟日重放时「进行中会话已学多久」会读成真实时长。
+    return Number.isFinite(started) ? sum + Math.max(0, Math.round((now.getTime() - started) / 60000)) : sum;
   }, 0);
   const todayMinutes = settledMinutes + activeElapsedMinutes;
 

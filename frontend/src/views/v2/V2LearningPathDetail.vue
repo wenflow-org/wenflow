@@ -37,8 +37,8 @@
           <template v-else>
             <span class="spinner"></span>
             <div class="genbar__text">
-              <strong>{{ lifecycle.phase === 'core' ? '正在生成路径…' : `正在准备课程（${lifecycle.completedStages}/${lifecycle.totalStages}）…` }}</strong>
-              <p>你也可以先去别的页面看看。</p>
+              <strong>{{ genProgress?.primary }}</strong>
+              <p>{{ genProgress?.secondary }}</p>
             </div>
           </template>
         </section>
@@ -635,6 +635,7 @@ import { toast } from '@/utils/toast';
 import { readMaterial, readMaterialSection } from '@/api/materials';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { pickCurrentTask } from '@/composables/useCurrentTask';
+import { buildGenerationProgress } from './learningPathProgress';
 import {
   adjustEntryAllowedByPolicy,
   adjustPolicyBlockReason,
@@ -664,6 +665,12 @@ const pathId = ref(String(route.params.id || ''));
 
 const path = ref<Record<string, any> | null>(null);
 const lifecycle = ref<Record<string, any> | null>(null);
+/* 生成条副行的「最近一次进展 X 前」需要一个会走的时钟：#112 剩余半——阶段数满后原本文案
+   会停 4 分钟，加心跳年龄后用户能看出进程还活着。每次轮询（5s）推进一次，不额外起定时器。 */
+const genNowTick = ref(Date.now());
+const genProgress = computed(() =>
+  lifecycle.value ? buildGenerationProgress(lifecycle.value, genNowTick.value) : null
+);
 const loading = ref(true);
 const loadError = ref(false);
 const retrying = ref(false);
@@ -804,6 +811,7 @@ async function load(silent = false) {
     // 启动/重启窗口内的 5xx 会自己好（走查 N3）：静默重试一次再报错
     const p = await retryOnceOnTransient(() => learningAPI.getPathDetail(pathId.value)) as unknown as Record<string, any>;
     path.value = p;
+    genNowTick.value = Date.now();
     lifecycle.value = p.generationLifecycle ?? null;
     if (p.generationLifecycle && p.generationLifecycle.phase !== 'ready') {
       if (p.generationLifecycle.status === 'processing' || p.generationLifecycle.status === 'queued') {
@@ -933,6 +941,7 @@ async function pollOnce() {
       await load(true);
       return;
     }
+    genNowTick.value = Date.now();
     lifecycle.value = lc;
   } catch {
     // 静默失败不该无限轮询：连续 6 次失败说明状态接口异常，熔断并交还用户手动刷新

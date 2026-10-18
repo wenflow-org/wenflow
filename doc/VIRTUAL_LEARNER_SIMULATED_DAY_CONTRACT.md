@@ -66,18 +66,23 @@
 
 ## 四、系统层必须补的注入点（`asOf/now`）
 
-| 位置 | 现状 | 需要 |
-|---|---|---|
-| `learning.service.ts:1539 getTodaySchedule` | 内部 `new Date()` | `asOf?: Date` |
-| `learning.service.ts:1624 planTodaySchedule` | UTC `toISOString()` | `asOf` + 统一本地日界 |
-| `learning.service.ts:4292` streak 更新 | `new Date()` | `asOf` + 统一日界 |
-| `memory-trace.service.ts:185 recordExtraction` / `:394 applyKtEstimate` / `:435 bumpReviewInterval` | `new Date()` | `now?: Date`（`getDueTraces:275` / `getRetentionSnapshot` 已有 `now?`） |
-| `learner-memory.ts:361 recordCompletedArtifact` | `new Date().toISOString()` | `now?: Date` |
-| `learner-memory.ts:249 buildLearnerMemorySnapshot` | 不透传 `now` | `now?` |
-| `TeachingSessionRepository.reserve:172` / `AITeachingCoordinator.ts:719` | Prisma `@default(now())` / `Date.now()` | 显式 `startTime` / `asOf` |
-| `AITeachingCoordinator.ts:2867 loadRetrievabilityHints` | `new Date()` | `asOf` |
+**2026-10-18 逐条复核（#88）**：8 处全部已注入——形态统一为**环境模拟钟 `simulatedNowOr()`**
+（`virtual-lab/simulation-clock-context`），不额外加 `asOf` 参数；无模拟上下文时回落真实时钟，
+现网行为不变。行号是 2026-09 的旧值，实现文件已迁移（下表「位置」列为现行位置）。
+
+| # | 位置（现行） | 契约要求 | 复核 |
+|---|---|---|---|
+| 1 | `services/learning/goals/goal-schedule.service.ts:86 getTodaySchedule` | `asOf?: Date` | ✓ 日窗走 `simulatedNowOr()`；**2026-10-18 修掉一处残留**：进行中会话「已学分钟」原用 `Date.now()`（墙钟），模拟日重放会读成真实时长 |
+| 2 | 同文件 `:171 planTodaySchedule` | `asOf` + 本地日界 | ✓ `dayKeyOf(simulatedNowOr())`（台账 date 键）；`updatedAt` 等审计列保留墙钟 |
+| 3 | `services/learning/tasks/task-completion.service.ts:470` → 纯函数 `tasks/streak.ts advanceStreak` | `asOf` + 日界 | ✓ `data.asOf ?? new Date()`；日界用 `dayKeyOf/dayDiffInDays`（应用时区） |
+| 4 | `services/memory/memory-trace.service.ts recordExtraction` / `applyKtEstimate` | `now?: Date` | ✓ `simulatedNowOr()`；读侧 `getDueTraces({ now })` 已带参 |
+| 5 | `virtual-lab/learner-memory.ts recordCompletedArtifact` | `now?: Date` | ✓ `completedAt: simulatedNowOr()` |
+| 6 | `virtual-lab/learner-memory.ts buildLearnerMemorySnapshot` | `now?` | ✓ 经 `getDueTraces` 缺省 `simulatedNowOr()`（不额外传参） |
+| 7 | `services/ai-teaching/TeachingSessionRepository.ts reserve` | 显式 `startTime` | ✓ `startTime: now`（`simulatedNowOr()`），租约同源 |
+| 8 | `services/ai-teaching/teaching-session-lifecycle.ts loadRetrievabilityHints` | `asOf` | ✓ `simulatedNowOr()`（FSRS 可提取度） |
 
 > 只读侧已就绪（`getCurrentState/getPreviousMetrics({pathId,asOf})`、`getAggregatedState({asOf})`、`buildReviewPlan({now})`）。
+> 仍未做的是系统层的 `advance-day` / batch day-timeline 路由与 §六 待确认 5 项（属接口与产品裁决，不在注入点清单内）。
 
 ---
 
