@@ -248,7 +248,7 @@ describe('virtual-learner-learn-turn-simulator · 判决完成门（P1-5 / VL-1�
     expect(output.debug?.judgeCompletionBlock).toBeUndefined()
   })
 
-  it('sampledCorrectness=false → 学员自评不被改写，但留拦截原因供上游有界否决（#46）', () => {
+  it('sampledCorrectness=false → 学员自评不被改写，拦截原因只作观测留痕（#46 教师权威）', () => {
     const output = normalizeOutput(doneRaw, {
       ...input,
       epistemicGrounding: { sampledCorrectness: false, blockedConcept: '执行停—绕—留钩子降级', errorPattern: null, masteryProb: 0.3 },

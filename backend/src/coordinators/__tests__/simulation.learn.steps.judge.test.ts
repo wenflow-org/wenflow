@@ -62,43 +62,57 @@ describe('P1-5 · computeClosureDecision 判决完成门', () => {
     expect(decision.learnerReady).toBe(true)
   })
 
-  it('sampledCorrectness=false → 首轮不结课，但不再把 learnerReady 置 false（#46）', () => {
+  it('#46 教师权威：sampledCorrectness=false 只留痕，不否决教师结课', () => {
     const decision = computeClosureDecision(teacherDone, learnerDone, {
       sampledCorrectness: false,
       blockedConcept: '执行停—绕—留钩子降级',
       errorPattern: null,
       masteryProb: 0.3,
     })
-    // 学员自评只取决于学员侧信号；判决只做有界否决
+    // 学员自评只取决于学员侧信号；判决只作观测留痕
     expect(decision.learnerReady).toBe(true)
     expect(decision.judgeBlocked).toBe(true)
-    expect(decision.canCompleteTask).toBe(false)
+    expect(decision.canCompleteTask).toBe(true)
+    expect(decision.closureAuthority).toBe('teacher')
     expect(decision.reason).toContain('judge-sampled-correctness-false')
+    expect(decision.reason).toContain('仅作观测留痕')
   })
 
-  it('判对但 masteryProb 低于阈值 → 首轮同样拦截', () => {
+  it('#46 教师权威：masteryProb 低于阈值同样不否决结课', () => {
     const decision = computeClosureDecision(teacherDone, learnerDone, {
       sampledCorrectness: true,
       blockedConcept: null,
       errorPattern: null,
       masteryProb: 0.4,
     })
-    expect(decision.canCompleteTask).toBe(false)
+    expect(decision.judgeBlocked).toBe(true)
+    expect(decision.canCompleteTask).toBe(true)
     expect(decision.reason).toContain('judge-mastery-below-threshold')
   })
 
-  it('#46：判决连续两轮不放行后，第三轮按双方意愿结课（有界否决）', () => {
-    const judge = {
-      sampledCorrectness: false,
-      blockedConcept: '收尾作业尚未完成',
-      errorPattern: null,
-      masteryProb: 0.3,
+  it('#46 教师权威：教师收束即可下课，不依赖学员自评（延伸学按另起任务处理）', () => {
+    const learnerWantsMore = {
+      selfReportedTaskDone: false,
+      wantsMoreHelp: true,
+      stopAsking: false,
+      remainingBlockers: ['还想学下一节'],
     }
-    expect(computeClosureDecision(teacherDone, learnerDone, judge, 1).canCompleteTask).toBe(false)
-    const third = computeClosureDecision(teacherDone, learnerDone, judge, 2)
-    expect(third.canCompleteTask).toBe(true)
-    expect(third.judgeBlocked).toBe(true)
-    expect(third.reason).toContain('按双方意愿结课')
+    const decision = computeClosureDecision(teacherDone, learnerWantsMore, null)
+    expect(decision.teacherReady).toBe(true)
+    expect(decision.learnerReady).toBe(false)
+    expect(decision.canCompleteTask).toBe(true)
+    expect(decision.reason).toContain('教师权威')
+  })
+
+  it('教师未给收束信号时，学员自评再完整也不结课（等待教师判定）', () => {
+    const decision = computeClosureDecision(
+      { isCompletion: false, autoEnded: false },
+      learnerDone,
+      null
+    )
+    expect(decision.learnerReady).toBe(true)
+    expect(decision.canCompleteTask).toBe(false)
+    expect(decision.reason).toContain('等待教师判定')
   })
 
   it('判对且掌握达标 → 放行', () => {

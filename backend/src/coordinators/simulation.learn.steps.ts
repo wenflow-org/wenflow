@@ -49,7 +49,13 @@ export type LearningClosureDecision = {
   teacherReady: boolean;
   learnerReady: boolean;
   canCompleteTask: boolean;
-  /** 本轮认知判决未放行完成（仅作留痕与有界放开判据，不再是单票否决，见 #46） */
+  /**
+   * 结课权威（#46 拍板）：教师判据是「开课冻结的目标集讲完即可下课」，与真人端一致；
+   * 学员自评与认知判决只作观测留痕，不再是一票否决。
+   * `learner-loop-break` = 学员连续多轮要下课而教师未给信号时的熔断兜底。
+   */
+  closureAuthority: 'teacher' | 'learner-loop-break';
+  /** 本轮认知判决未放行完成（仅作留痕与知识看板对账，不再否决结课，见 #46） */
   judgeBlocked: boolean;
   judgeBlockReason: string | null;
   teacherSignal: {
@@ -208,17 +214,13 @@ export function computeClosureDecision(
     };
   },
   learnerFeedback: Record<string, unknown> | null,
-  /** 本轮认知判决（P1-5）。#46：以「有界否决」接入——判决不放行时不立即结课，
-   *  但也不再把 learnerReady 直接改写为 false（那会让收束连击永远到不了熔断阈值）。 */
-  judge?: JudgeGroundingLike,
-  /** 本 task 之前连续「学员自评完成但未结课」的轮数（决定有界否决何时放开） */
-  priorLearnerDoneStreak = 0
+  /** 本轮认知判决（P1-5）。#46 拍板：降级为观测信号——记录 judgeBlocked 供审计/看板对账，
+   *  不再否决结课（旧实现把它焊进 learnerReady，实测 29/29 轮判死、40 轮空转）。 */
+  judge?: JudgeGroundingLike
 ): LearningClosureDecision {
   const teacherReady = !!(aiResult.isCompletion || aiResult.autoEnded);
   const judgeGate = evaluateJudgeCompletionGate(judge);
-  // #46 根因 A：旧实现把 judgeGate 焊进 learnerReady，判决一旦不开就连「学员想下课」都不成立，
-  // 收束熔断（advanceLearnerDoneStreak）永远数不到——实测 29/29 轮 judgeCompletionBlock 非空、
-  // 学员自评恒 false、40 轮空转到 turn-budget-skip。学员自评只取决于学员侧信号。
+  // 学员侧信号只作观测：保留原始自评口径，供日志、熔断连击与人工复核使用。
   const learnerReady = !!(
     learnerFeedback?.selfReportedTaskDone === true &&
     learnerFeedback?.wantsMoreHelp !== true &&
@@ -226,15 +228,15 @@ export function computeClosureDecision(
     (!Array.isArray(learnerFeedback?.remainingBlockers) || learnerFeedback.remainingBlockers.length === 0)
   );
   const judgeBlocked = !judgeGate.allowsCompletion;
-  // 有界否决：判决连续两轮不放行后，第三轮按 teacher+learner 双方意愿结课（留痕 judgeBlocked）。
-  // 只在「双方都认为可以下课」时生效——判决仍能拦住单方抢跑。
-  const judgeOverride = judgeBlocked
-    && (Number(priorLearnerDoneStreak) || 0) >= LEARN_CLOSURE_LOOP_BREAK_TURNS - 1;
-  const canCompleteTask = teacherReady && learnerReady && (!judgeBlocked || judgeOverride);
+  // #46 教师权威：教师判据（冻结目标集讲完 / softCompletion / backstop）已是产品定义的「可以下课」，
+  // 与真人端收到 isCompletion 即结算完全同口径。学员想继续学（wantsMoreHelp）不阻塞课界——
+  // 延伸学按「另起任务/下一课」处理，不新增课堂状态（2026-10-18 拍板）。
+  const canCompleteTask = teacherReady;
   return {
     teacherReady,
     learnerReady,
     canCompleteTask,
+    closureAuthority: 'teacher',
     judgeBlocked,
     judgeBlockReason: judgeBlocked ? judgeGate.reason : null,
     teacherSignal: {
@@ -243,17 +245,13 @@ export function computeClosureDecision(
       classroomStage: aiResult.promptDebug?.learnDebug?.output?.stageDecision?.stage || null
     },
     learnerFeedback,
-    reason: teacherReady && learnerReady && judgeOverride
-      ? `教学系统与学员均认为可结课；认知判决连续多轮未放行（${judgeGate.reason}），按双方意愿结课。`
-      : teacherReady && learnerReady && canCompleteTask
-        ? '教学系统给出收束信号，AI 学生也自评当前 task 已完成。'
-        : teacherReady && judgeBlocked
-          ? `教学系统给出收束信号，但本轮认知判决未放行完成（${judgeGate.reason}）。`
-          : teacherReady
-            ? '教学系统给出收束信号，但 AI 学生仍未自评完成或仍想继续获得帮助。'
-            : learnerReady
-              ? 'AI 学生自评当前 task 已完成，但教学系统尚未给出收束信号。'
-              : '教学系统与 AI 学生均未同时满足当前 task 收束条件。'
+    reason: teacherReady && judgeBlocked
+      ? `教学系统给出收束信号，按教师权威结课；本轮认知判决未放行（${judgeGate.reason}），仅作观测留痕。`
+      : teacherReady
+        ? '教学系统给出收束信号，按教师权威结课（学员自评仅作观测）。'
+        : learnerReady
+          ? 'AI 学生自评当前 task 已完成，但教学系统尚未给出收束信号（等待教师判定）。'
+          : '教学系统与 AI 学生均未给出收束信号。'
   };
 }
 

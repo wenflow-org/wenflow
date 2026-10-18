@@ -341,10 +341,10 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
   const fallbackFeedback = buildFeedbackFromState(learnerState, fallback.learnerFeedback.reason);
   const feedbackBlockers = normalizeStringArray(rawFeedback.remainingBlockers);
   const wantsMoreHelp = safeBool(rawFeedback.wantsMoreHelp, fallbackFeedback.wantsMoreHelp);
-  // P1-5 / #46：认知判决保留为留痕与上游「有界否决」信号，但不再改写学员自评。
+  // P1-5 / #46（2026-10-18 拍板）：认知判决只作观测留痕，不再改写学员自评、也不再否决结课。
   // 旧实现把 judgeGate 焊进 selfReportedTaskDone，判决一 false 学员就永远「没学完」，
   // 连收束熔断的连击都数不起来（实测 29/29 轮判死、40 轮空转）。学员是否认为学完，
-  // 由学员自己的反馈决定；判决对结课的约束放在 computeClosureDecision 里做（有界否决）。
+  // 由学员自己的反馈决定；结课权威在教师侧（computeClosureDecision 记录 judgeBlocked）。
   const judgeGate = evaluateJudgeCompletionGate(input.epistemicGrounding);
   const selfReportedTaskDone = safeBool(rawFeedback.selfReportedTaskDone, fallbackFeedback.selfReportedTaskDone)
     && !wantsMoreHelp

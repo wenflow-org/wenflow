@@ -963,10 +963,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         closureDecision = computeClosureDecision(
           aiResult.closureSignal,
           virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null,
-          // P1-5：#46 起判决改为「有界否决」——判错/掌握不足时不立即结课，
-          // 但不再把 learnerReady 置 false（否则收束连击永远到不了熔断阈值）。
-          epistemicGrounding,
-          taskRuntime.taskId === currentTask.id ? Number(taskRuntime.learnerDoneStreak) || 0 : 0
+          // P1-5：#46 拍板后判决降级为观测信号（judgeBlocked 留痕），不再否决教师权威结课。
+          epistemicGrounding
         );
 
         logs.push({
@@ -1010,6 +1008,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           closureDecision = {
             ...closureDecision,
             canCompleteTask: true,
+            closureAuthority: 'learner-loop-break',
             reason: `连续 ${learnerDoneStreak} 轮学员自评完成而教学系统未给收束信号，触发收束循环熔断，按学员意愿结课`,
           };
           logs.push({

@@ -253,6 +253,34 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(mockVirtualSessionUpdate.mock.calls.some(([input]) => input.data.status === 'failed')).toBe(false)
   })
 
+  it('恢复路径 endSession 遇快照 revision 过期 → 去 revision 重试一次，不留孤儿会话（#46）', async () => {
+    setLearningState(buildLearningState({
+      status: 'task_completion_pending',
+      taskId: 'task-1',
+      taskTitle: '任务一',
+      teachingSessionId: 'teaching-1',
+      teachingRevision: 3,
+      closureDecision: { canCompleteTask: true, reason: '已收束' },
+      finalizedAt: '2026-07-19T00:00:00.000Z',
+      error: 'transient',
+      updatedAt: '2026-07-19T00:00:01.000Z'
+    }))
+    mockCompleteTask.mockResolvedValue({
+      task: { id: 'task-1', status: 'completed', completedAt: '2026-07-19T00:00:02.000Z' }
+    })
+    mockEndSession
+      .mockRejectedValueOnce(Object.assign(new Error('课堂已在其他页面更新，请刷新后继续'), { code: 'TEACHING_SESSION_STALE' }))
+      .mockResolvedValueOnce({ revision: 4 })
+
+    const result = await coordinator.executeLearningStep('simulation-1')
+
+    expect(result).toEqual(expect.objectContaining({ success: true, taskCompleted: true }))
+    // 首次带快照 revision；失败后去掉 revision（由 endSession 内部重读当前值）重试
+    expect(mockEndSession).toHaveBeenNthCalledWith(1, 'teaching-1', 'task-completed', 3)
+    expect(mockEndSession).toHaveBeenNthCalledWith(2, 'teaching-1', 'task-completed')
+    expect(mockEndSession).toHaveBeenCalledTimes(2)
+  })
+
   it('下一步只重试 completeTask，并为路径中的下一任务建立新课堂', async () => {
     learningPath = buildPath(task('task-1', '任务一'), task('task-2', '任务二'))
     setLearningState(buildLearningState({

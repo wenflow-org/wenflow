@@ -91,9 +91,20 @@ export async function completeCheckpointedSimulationTask(
           : (typeof learningState.teachingRevision === 'number' ? learningState.teachingRevision : undefined);
         await aiTeachingOrchestrator.endSession(wrapupTeachingSessionId, 'task-completed', endTeachingRevision);
       } catch (error: unknown) {
-        logger.warn('[simulation-coordinator] 完课收束 endSession 失败（不阻断任务完成）', {
+        // #46：快照 revision 常被并发回合推进（TEACHING_SESSION_STALE），旧实现只 warn 就放行，
+        // 结果任务 completed、授课会话永久 active（wrapup/证据/FSRS 全缺）。去掉 revision 重试一次
+        // ——endSession 内部会重读当前 revision；仍失败才留痕待对账。
+        logger.warn('[simulation-coordinator] 完课收束 endSession 失败，去除 revision 重试', {
           sessionId,
+          teachingSessionId: wrapupTeachingSessionId,
           error: asErrorLike(error).message || String(error)
+        });
+        await aiTeachingOrchestrator.endSession(wrapupTeachingSessionId, 'task-completed').catch((retryError: unknown) => {
+          logger.warn('[simulation-coordinator] 完课收束 endSession 重试仍失败（孤儿会话待对账）', {
+            sessionId,
+            teachingSessionId: wrapupTeachingSessionId,
+            error: asErrorLike(retryError).message || String(retryError)
+          });
         });
       }
       // 课内温故回写（R2 判定#7 VL 轨断链修复）：VL 收束直接调 endSession、不经过
