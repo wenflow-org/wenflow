@@ -39,16 +39,14 @@ CREATE TABLE "agent_prompts" (
     "name" TEXT NOT NULL,
     "description" TEXT,
     "systemPrompt" TEXT NOT NULL,
-    "compiledSystemPrompt" TEXT,
-    "compileStatus" TEXT,
-    "compileError" TEXT,
-    "sourceHash" TEXT,
-    "compileContextHash" TEXT,
-    "compiledAt" DATETIME,
+    "coreHash" TEXT,
+    "coreVersion" INTEGER,
     "temperature" REAL,
     "maxTokens" INTEGER,
     "model" TEXT,
     "status" TEXT NOT NULL DEFAULT 'draft',
+    "variant" TEXT,
+    "trafficWeight" INTEGER,
     "createdBy" TEXT NOT NULL,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -57,39 +55,6 @@ CREATE TABLE "agent_prompts" (
     "avgLatency" REAL,
     "successRate" REAL,
     "publishedAt" DATETIME
-);
-
--- CreateTable
-CREATE TABLE "agent_definitions" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "displayName" TEXT NOT NULL,
-    "description" TEXT,
-    "category" TEXT NOT NULL,
-    "inputSchema" TEXT,
-    "outputSchema" TEXT,
-    "variableBindings" TEXT,
-    "capabilities" TEXT,
-    "defaultMaxTokens" INTEGER,
-    "defaultTemperature" REAL,
-    "schemaVersion" INTEGER NOT NULL DEFAULT 1,
-    "source" TEXT NOT NULL DEFAULT 'code',
-    "managedByCode" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
-);
-
--- CreateTable
-CREATE TABLE "orchestrator_definitions" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "displayName" TEXT NOT NULL,
-    "description" TEXT,
-    "category" TEXT NOT NULL DEFAULT 'agent',
-    "steps" TEXT NOT NULL,
-    "variableGraph" TEXT,
-    "source" TEXT NOT NULL DEFAULT 'code',
-    "managedByCode" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
 );
 
 -- CreateTable
@@ -128,6 +93,9 @@ CREATE TABLE "platform_api_configs" (
     "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "defaultTemperature" REAL NOT NULL DEFAULT 0.7,
     "defaultMaxTokens" INTEGER NOT NULL DEFAULT 2000,
+    "defaultThinkingMode" TEXT DEFAULT 'default',
+    "defaultReasoningEffort" TEXT DEFAULT 'default',
+    "defaultResponseFormat" TEXT DEFAULT 'none',
     "reasoningEndpoint" TEXT,
     "lightEndpoint" TEXT,
     "chatModels" TEXT,
@@ -137,6 +105,14 @@ CREATE TABLE "platform_api_configs" (
     "adminAllowedIps" TEXT,
     "allowPrivateNetwork" BOOLEAN,
     "privateNetworkHosts" TEXT
+);
+
+-- CreateTable
+CREATE TABLE "platform_settings" (
+    "key" TEXT NOT NULL PRIMARY KEY,
+    "value" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
 );
 
 -- CreateTable
@@ -152,7 +128,10 @@ CREATE TABLE "skill_model_configs" (
     "temperature" REAL NOT NULL DEFAULT 0.7,
     "maxTokens" INTEGER NOT NULL DEFAULT 2000,
     "requestTimeoutMs" INTEGER,
+    "maxLogicalRetries" INTEGER,
     "enabled" BOOLEAN NOT NULL DEFAULT true,
+    "paramOverrides" TEXT,
+    "fallbackChain" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
 );
@@ -182,6 +161,8 @@ CREATE TABLE "field_definitions" (
     "valueType" TEXT NOT NULL DEFAULT 'string',
     "snakeName" TEXT,
     "camelName" TEXT,
+    "pathInRawOutput" TEXT,
+    "persistKey" TEXT,
     "description" TEXT,
     "enumValues" TEXT,
     "schemaVersion" TEXT NOT NULL DEFAULT 'v3',
@@ -295,12 +276,6 @@ CREATE INDEX "agent_prompts_status_idx" ON "agent_prompts"("status");
 CREATE UNIQUE INDEX "agent_prompts_agentId_version_key" ON "agent_prompts"("agentId", "version");
 
 -- CreateIndex
-CREATE INDEX "agent_definitions_category_idx" ON "agent_definitions"("category");
-
--- CreateIndex
-CREATE INDEX "agent_definitions_managedByCode_idx" ON "agent_definitions"("managedByCode");
-
--- CreateIndex
 CREATE UNIQUE INDEX "agent_registrations_name_key" ON "agent_registrations"("name");
 
 -- CreateIndex
@@ -310,13 +285,13 @@ CREATE UNIQUE INDEX "skill_model_configs_skillId_key" ON "skill_model_configs"("
 CREATE UNIQUE INDEX "skill_registrations_name_key" ON "skill_registrations"("name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "field_definitions_fieldId_key" ON "field_definitions"("fieldId");
-
--- CreateIndex
 CREATE INDEX "field_definitions_stage_idx" ON "field_definitions"("stage");
 
 -- CreateIndex
 CREATE INDEX "field_definitions_promptRole_idx" ON "field_definitions"("promptRole");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "field_definitions_stage_fieldId_key" ON "field_definitions"("stage", "fieldId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_contracts_agentId_key" ON "agent_contracts"("agentId");
@@ -356,3 +331,4 @@ CREATE INDEX "prompt_eval_runs_agentId_idx" ON "prompt_eval_runs"("agentId");
 
 -- CreateIndex
 CREATE INDEX "prompt_eval_runs_createdAt_idx" ON "prompt_eval_runs"("createdAt");
+

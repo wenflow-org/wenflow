@@ -20,6 +20,32 @@
 - **虚拟学习者强化**：并发配额与全局限速、排队护栏、时间线独立于真实时钟、批量回收语义三分类。
 - **知识图谱直达练习**：管理端知识图谱节点可一键跳转对应学习任务。
 
+### 仓库基线收口（可阅性维护）
+
+面向「今天第一次 clone 的人」做了一次减法，功能行为不变：
+
+- **README 改写（中英同构）**：产品价值在前、工程细节收进折叠块；去掉状态机内部词汇与源码行号；页面新增/下线/改名的历史统一记在本文件。
+- **删除已退役的一次性脚本（17 个）**：Prompt 评估验证脚本、一轮修复的取证脚本、机器相关补丁脚本（写死 `D:/` 路径、按行号改 `.vue` 的那类）。git 历史仍可回溯。
+- **活规范去时间线**：管理端模板规范里的旧导航清单、网关文档的「补记」框架、虚拟学习者文档的「页已下线」日期注，都改为现状口径。
+- **路由别名区去历史注释**：25 条旧 URL 重定向保留（护的是书签），逐条历史说明收成一段区首说明。
+- **退役 `VITE_API_URL`**：配置只认 `VITE_API_BASE_URL`。
+- **迁移压平**：主库 62 个、system 库 15 个历史迁移压成各 1 条 baseline（`20260717000000_main_baseline` / `20260717000000_system_baseline`）；空库回放校验（`prisma:migrate:verify-clean`）通过，迁移目录从 77 个收敛到 2 个。
+
+  已有数据库（本机、demo 服务器）需要重新打基线（旧迁移名已不在目录里）：
+
+  ```bash
+  cd backend
+  node scripts/rebaseline-migrations.mjs          # dry-run：先看现状
+  node scripts/rebaseline-migrations.mjs --apply  # 清空旧记录，把 baseline 记为已应用
+  npx prisma migrate status --schema prisma/schema.prisma
+  npx prisma migrate status --schema prisma/system/schema.prisma   # 均应报 up to date
+  ```
+
+  该脚本只动 `_prisma_migrations` 表，不碰业务数据；全新环境无需执行，直接 `migrate deploy` 即可。
+
+- **留档未动**：`promptDebug` / `peerDebug` 看似废弃，实际模拟教学链路仍在写（`simulation.learn-phase.ts`）且前端消息类型在读——不是死兼容，处理它属于行为改动，另案。
+
+
 ### 修复
 
 - 目标对话对「再让我考虑一下」等犹豫表达不再误确认为同意。

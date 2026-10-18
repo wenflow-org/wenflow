@@ -1,5 +1,0 @@
--- AlterTable
-ALTER TABLE "users" ADD COLUMN "streakDays" INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE "users" ADD COLUMN "streakLastDate" DATETIME;
-ALTER TABLE "users" ADD COLUMN "longestStreak" INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE "users" ADD COLUMN "onboardingCompleted" BOOLEAN NOT NULL DEFAULT false;
