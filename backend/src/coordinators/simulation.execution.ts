@@ -95,20 +95,25 @@ export async function completeCheckpointedSimulationTask(
         await aiTeachingOrchestrator.endSession(wrapupTeachingSessionId, 'task-completed', endTeachingRevision);
       } catch (error: unknown) {
         // #46：快照 revision 常被并发回合推进（TEACHING_SESSION_STALE），旧实现只 warn 就放行，
-        // 结果任务 completed、授课会话永久 active（wrapup/证据/FSRS 全缺）。去掉 revision 重试一次
-        // ——endSession 内部会重读当前 revision；仍失败才留痕待对账。
-        logger.warn('[simulation-coordinator] 完课收束 endSession 失败，去除 revision 重试', {
+        // 结果任务 completed、授课会话永久 active（wrapup/证据/FSRS 全缺）。
+        // 注意：endSession 的 revision 是必填乐观锁（缺省即抛 TEACHING_REVISION_REQUIRED），
+        // 旧「去除 revision 重试」实测恒抛、是死代码 —— 这里改为**先现读当前 revision**，
+        // 读到才重试；读不到/仍失败才留痕待对账。
+        logger.warn('[simulation-coordinator] 完课收束 endSession 失败，现读 revision 后重试', {
           sessionId,
           teachingSessionId: wrapupTeachingSessionId,
           error: asErrorLike(error).message || String(error)
         });
-        await aiTeachingOrchestrator.endSession(wrapupTeachingSessionId, 'task-completed').catch((retryError: unknown) => {
+        try {
+          const freshTeachingRevision = await ctx.resolveTeachingRevision(wrapupTeachingSessionId, session.userId);
+          await aiTeachingOrchestrator.endSession(wrapupTeachingSessionId, 'task-completed', freshTeachingRevision);
+        } catch (retryError: unknown) {
           logger.warn('[simulation-coordinator] 完课收束 endSession 重试仍失败（孤儿会话待对账）', {
             sessionId,
             teachingSessionId: wrapupTeachingSessionId,
             error: asErrorLike(retryError).message || String(retryError)
           });
-        });
+        }
       }
       // 课内温故回写（R2 判定#7 VL 轨断链修复）：VL 收束直接调 endSession、不经过
       // SessionFinalizationService.finalize（其 end_only/complete_task 分支才调

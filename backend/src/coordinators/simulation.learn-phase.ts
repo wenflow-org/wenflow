@@ -626,20 +626,24 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         if (teachingSessionId) {
           await aiTeachingOrchestrator.endSession(teachingSessionId, 'task-completed', teachingRevision).catch(async (endError: unknown) => {
             // #46：旧实现静默吞掉——教学会话收束失败时任务已 completed，留下永久 active 的孤儿会话
-            // （wrapup / 证据 / FSRS 全缺）。这里留痕，并去掉 revision 乐观锁重试一次（revision 被
-            // 并发回合推进是这类失败的主因）。
-            logger.warn('[simulation-coordinator] timebox-skip endSession 失败，去除 revision 重试', {
+            // （wrapup / 证据 / FSRS 全缺）。这里留痕并重试一次，但必须**先现读 revision**：
+            // endSession 的 revision 是必填乐观锁（缺省即抛 TEACHING_REVISION_REQUIRED），
+            // 旧「去除 revision 重试」实测恒抛、是死代码，永远修不好并发回合推进导致的 STALE。
+            logger.warn('[simulation-coordinator] timebox-skip endSession 失败，现读 revision 后重试', {
               sessionId,
               teachingSessionId,
               error: asErrorLike(endError).message || String(endError),
             });
-            await aiTeachingOrchestrator.endSession(teachingSessionId, 'task-completed').catch((retryError: unknown) => {
+            try {
+              const freshTeachingRevision = await ctx.resolveTeachingRevision(teachingSessionId, session.userId);
+              await aiTeachingOrchestrator.endSession(teachingSessionId, 'task-completed', freshTeachingRevision);
+            } catch (retryError: unknown) {
               logger.warn('[simulation-coordinator] timebox-skip endSession 重试仍失败（孤儿会话待对账）', {
                 sessionId,
                 teachingSessionId,
                 error: asErrorLike(retryError).message || String(retryError),
               });
-            });
+            }
           });
         }
       } catch (error: unknown) {

@@ -253,7 +253,7 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(mockVirtualSessionUpdate.mock.calls.some(([input]) => input.data.status === 'failed')).toBe(false)
   })
 
-  it('恢复路径 endSession 遇快照 revision 过期 → 去 revision 重试一次，不留孤儿会话（#46）', async () => {
+  it('恢复路径 endSession 遇快照 revision 过期 → 现读 revision 后重试一次，不留孤儿会话（#46）', async () => {
     setLearningState(buildLearningState({
       status: 'task_completion_pending',
       taskId: 'task-1',
@@ -270,15 +270,58 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     })
     mockEndSession
       .mockRejectedValueOnce(Object.assign(new Error('课堂已在其他页面更新，请刷新后继续'), { code: 'TEACHING_SESSION_STALE' }))
-      .mockResolvedValueOnce({ revision: 4 })
+      .mockResolvedValueOnce({ revision: 5 })
+    // 课堂已被并发回合推进到 revision 4：重试前必须现读它（无 revision 直调是死代码，
+    // endSession 缺 revision 直接抛 TEACHING_REVISION_REQUIRED）
+    mockGetSessionDetail.mockResolvedValue({
+      id: 'teaching-1',
+      taskId: 'task-1',
+      status: 'active',
+      revision: 4
+    })
 
     const result = await coordinator.executeLearningStep('simulation-1')
 
     expect(result).toEqual(expect.objectContaining({ success: true, taskCompleted: true }))
-    // 首次带快照 revision；失败后去掉 revision（由 endSession 内部重读当前值）重试
+    // 首次带快照 revision；失败后现读当前 revision（4）再重试
     expect(mockEndSession).toHaveBeenNthCalledWith(1, 'teaching-1', 'task-completed', 3)
-    expect(mockEndSession).toHaveBeenNthCalledWith(2, 'teaching-1', 'task-completed')
+    expect(mockGetSessionDetail).toHaveBeenCalledWith('teaching-1', 'user-1')
+    expect(mockEndSession).toHaveBeenNthCalledWith(2, 'teaching-1', 'task-completed', 4)
     expect(mockEndSession).toHaveBeenCalledTimes(2)
+  })
+
+  it('timebox-skip 收束遇快照 revision 过期 → 现读 revision 后重试一次，不留孤儿会话（#46）', async () => {
+    setLearningState(buildLearningState({
+      status: 'active',
+      taskId: 'task-1',
+      taskTitle: '任务一',
+      teachingSessionId: 'teaching-1',
+      teachingRevision: 7,
+      turns: 40
+    }))
+    // 课堂仍在进行（不触发「已完成课堂」legacy 恢复分支），当前 revision 已推进到 8
+    mockGetSessionDetail.mockResolvedValue({
+      id: 'teaching-1',
+      taskId: 'task-1',
+      status: 'active',
+      revision: 8
+    })
+    // 快照 revision 7 已被并发回合推进 → STALE；现读到的 revision 8 可成功收束
+    mockEndSession.mockImplementation(async (_sessionId: string, _reason: string, revision?: number) => {
+      if (revision === 7) {
+        throw Object.assign(new Error('课堂已在其他页面更新，请刷新后继续'), { code: 'TEACHING_SESSION_STALE' })
+      }
+      return { revision: 9 }
+    })
+
+    const result = await coordinator.executeLearningStep('simulation-1')
+
+    expect(result).toEqual(expect.objectContaining({ success: true, taskCompleted: true }))
+    // 首次带快照 revision 7（被拒）；重试前现读 revision 8，而不是无 revision 直调
+    expect(mockEndSession).toHaveBeenNthCalledWith(1, 'teaching-1', 'task-completed', 7)
+    expect(mockGetSessionDetail).toHaveBeenCalledWith('teaching-1', 'user-1')
+    expect(mockEndSession).toHaveBeenNthCalledWith(2, 'teaching-1', 'task-completed', 8)
+    expect(mockEndSession.mock.calls.some(([, , revision]) => revision === undefined)).toBe(false)
   })
 
   it('下一步只重试 completeTask，并为路径中的下一任务建立新课堂', async () => {
