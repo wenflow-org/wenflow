@@ -23,9 +23,9 @@ const CORE = yaml.load(CORE_TEXT) as { rules: string[] };
 const RULE = CORE.rules.find((r) => r.includes('示范题/例题/真题引用必须自带题面')) || '';
 
 describe('B 项：示范题/例题/真题引用必须自带题面', () => {
-  it('core yaml 含新规则，且按仓库约定追加在末位', () => {
+  it('core yaml 含新规则（按仓库约定追加；后续新规则可后移，编号不动）', () => {
     expect(RULE).not.toBe('');
-    expect(CORE.rules[CORE.rules.length - 1]).toBe(RULE);
+    expect(CORE.rules).toContain(RULE);
   });
 
   it('规则给出两条合法路径：直接给题面 / 引用 materials 实存小节', () => {
@@ -44,11 +44,10 @@ describe('B 项：示范题/例题/真题引用必须自带题面', () => {
     expect(RULE).toContain('改写任务');
   });
 
-  it('编译产物 md：末位编号规则逐字携带新规则（core→md 编译链）', () => {
+  it('编译产物 md：规则逐字携带且编号连续（core→md 编译链；后续新规则可后移）', () => {
     const nums = [...MD.matchAll(/^(\d+)\.\s/gm)].map((m) => Number(m[1]));
-    const last = Math.max(...nums);
     const line = MD.split('\n').find((l) => l.includes('示范题/例题/真题引用必须自带题面')) || '';
-    expect(line.trimStart().startsWith(`${last}.`)).toBe(true);
+    expect(line.trimStart()).toMatch(/^\d+\./);
     expect(MD).toContain(RULE);
     // 编号连续：追加不跳号、不夹塞
     expect(nums.every((n, i) => n === i + 1)).toBe(true);
