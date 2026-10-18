@@ -365,7 +365,7 @@ npm run prompts:lint && npm run prompts:core:check
 <summary><b>前端 API 环境变量</b></summary>
 
 - 默认前端通过相对路径 `/api` 访问后端，由 Vite 代理或 Nginx 转发；无特殊部署需求保持默认即可。
-- 管理端主要读 `frontend/.env` 的 `VITE_API_BASE_URL`；普通用户端开发模式固定用 `/api`，非开发模式 `VITE_API_BASE_URL` 优先，`VITE_API_URL` 仅作历史兼容。
+- 配置只认 `VITE_API_BASE_URL`（`frontend/.env`）；开发模式固定走 `/api` 代理，缺省值也是 `/api`。
 
 </details>
 

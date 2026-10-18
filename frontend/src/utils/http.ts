@@ -6,12 +6,9 @@ import axios, { type AxiosError, type AxiosInstance, type AxiosResponse, type In
 
 const isDev = import.meta.env.DEV;
 
-// 统一使用 VITE_API_BASE_URL（VITE_API_URL 为历史遗留别名，保留兼容）。
-// dev 固定 '/api' 走代理，prod 读环境变量。
+// dev 固定 '/api' 走代理；prod 读 VITE_API_BASE_URL，缺省仍是 '/api'。
 export function resolveApiBaseUrl(): string {
-  return isDev
-    ? '/api'
-    : (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '/api');
+  return isDev ? '/api' : (import.meta.env.VITE_API_BASE_URL || '/api');
 }
 
 export interface ApiClientProfile {

@@ -131,7 +131,7 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '设置', requiresAuth: true }
   },
   {
-    // 成就 / 学习历史：2026-09-24 从顶层导航收进个人中心（走 CapabilityShell 分段导航）
+    // 成就 / 学习历史收在个人中心（走 CapabilityShell 分段导航）
     path: '/user/achievements',
     name: 'UserAchievements',
     component: () => import('@/views/v2/V2Achievements.vue'),
@@ -211,7 +211,7 @@ const routes: RouteRecordRaw[] = [
     redirect: (to) => ({ path: `/admin/${(to.params.page as string) || 'overview'}` })
   },
   {
-    // Skill 设计页深链兼容（2026-10-15 迁为外壳二级页）：
+    // Skill 设计页深链 → 外壳二级页规范形：
     // 原独立整页 /admin/skills/:agentId 是全站唯一不套管理外壳的页，与其余详情页呈现不一致。
     // 现重定向到二级页规范形 /admin/skills?view=skill-design&id=，由 AdminConsole 的
     // ?view=&id= 标准机制承载（侧栏常驻、面包屑返回、Esc/后退可关）。
@@ -226,14 +226,17 @@ const routes: RouteRecordRaw[] = [
       return { path: '/admin/skills', query: q }
     }
   },
-  // 旧版带参数路由 → 新平级页面（参数型无法被 /admin/:page 吸收，保留重定向）
-  // 2026-10-04：学习状态从 people?tab=state 拆出独立页 /admin/learner-state，旧深链改投新页
+  // ===== 旧 URL 别名区 =====
+  // 这里只为书签/外链兼容保留重定向：每条一行「旧 → 新」，不写日期与原因；
+  // 页面新增、下线、改名的历史统一记在 CHANGELOG.md。
+  // 旧版带参数路由 → 新平级页面（参数型无法被 /admin/:page 吸收）
+  // 旧深链：people?tab=state → /admin/learner-state
   {
     path: '/admin/learner-models/:userId?',
     redirect: '/admin/learner-state'
   },
   {
-    // 导航收敛 2026-09-04：用户+学习者中心合并为「用户与学习者」；2026-10-04 学习状态再拆出独立页
+    // 旧路径：/admin/users → /admin/people
     path: '/admin/users',
     redirect: '/admin/people'
   },
@@ -242,8 +245,7 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/learner-state'
   },
   {
-    // 2026-09-29 拆回独立页：教学会话 / 目标对话 / 学习路径各自成场景，旧重定向退役；
-    // /admin/sessions 合并宿主 URL 保留重定向（tab 映射到对应独立页）
+    // 旧合并宿主：/admin/sessions（tab 映射到对应独立页）
     path: '/admin/sessions',
     redirect: (to) => {
       const tab = typeof to.query.tab === 'string' ? to.query.tab : ''
@@ -253,12 +255,12 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    // 兼容：Agent 拓扑视图已并入编排图页（拓扑数据并入运行时统计），旧 URL 落在默认阶段视图（?tab=topology 仅作兼容 query，编排页按阶段泳道渲染）
+    // 旧注册表：/admin/agent-registry → 编排图
     path: '/admin/agent-registry/:agentId?',
     redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
   },
   {
-    // 旧工作台详情深链：改投二级页规范形（2026-10-15；与上面 /admin/skills/:agentId 同源）
+    // 旧工作台详情深链 → 二级页规范形（与上面 /admin/skills/:agentId 同源）
     path: '/admin/skill-workbench/:agentId',
     redirect: (to) => ({
       path: '/admin/skills',
@@ -266,12 +268,12 @@ const routes: RouteRecordRaw[] = [
     })
   },
   {
-    // 兼容：旧拓扑独立页 → 编排图页（拓扑统计已并入阶段泳道；query 仅保 URL 兼容，无独立 tab）
+    // 旧拓扑页：/admin/topology → 编排图
     path: '/admin/topology',
     redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
   },
   {
-    // 阶段 2B N1：prompt-workbench 改名「Skill 工作台」（场景 id skill-workbench），旧 URL 重定向兼容（深链/书签）
+    // 旧命名：/admin/prompt-workbench → /admin/skill-workbench
     path: '/admin/prompt-workbench',
     redirect: '/admin/skill-workbench'
   },
@@ -292,14 +294,12 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/execution-logs'
   },
   {
-    // 事件中心下线：路径生成事件无业务消费价值，统一入口走执行日志
+    // 旧事件中心：/admin/event-center → 执行日志
     path: '/admin/event-center',
     redirect: '/admin/execution-logs'
   },
   {
-    // 直链兼容：用户直觉 URL → 实际 scene ID（manifest 命名与直觉 URL 不一致时兜底）
-    // 2026-09-29：健康中心回独立场景 /admin/health-center（此前折入 skills 宿主 tab），
-    // 直觉 URL /admin/health 继续重定向过去（query 透传，如 ?refresh=1 强制刷新）
+    // 直觉 URL → 实际 scene ID（query 透传，如 ?refresh=1 强制刷新）
     path: '/admin/health',
     redirect: (to) => ({ path: '/admin/health-center', query: to.query })
   },
@@ -308,23 +308,17 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/execution-logs'
   },
   {
-    // Trace 已并入执行日志（下钻 tab），旧 URL 兼容
+    // 旧 Trace 页：/admin/trace-waterfall → 执行日志
     path: '/admin/trace-waterfall',
     redirect: '/admin/execution-logs'
   },
-  // 阶段 2（2026-09-19）：「批量实验」由 virtual-learners 的 tab 提升为独立场景。
-  // 2026-10-04：整体下线——运行态并入 virtual-learners（批量新建/并发配额/全局限速/实例流水），
-  // 资产输入归学习者卡库；且建页至今 batch_experiments 两表 0 行（空占位页）。
-  // 旧深链（书签/外链）重定向到列表页；旧的合并宿主深链 /admin/virtual-learners?tab=experiments
-  // 本就落到学习者列表（页面已不读 tab），行为不变。
+  // 旧批量实验页：/admin/batch-experiments → 虚拟学习者列表
   {
     path: '/admin/batch-experiments',
     redirect: (to) => ({ path: '/admin/virtual-learners', query: to.query })
   },
   {
-    // 「Prompt 评估」2026-10-04 下线：折入 skills 宿主「Prompt 评估」页签（组件更名
-    // PromptEvalPanel 由 Skills 异步加载，场景注册同步撤销）。旧页内页签键 ?tab=cases|runs
-    // 改写为宿主 ?tab=prompt-eval + 内层 ?peTab=，其余 query 透传
+    // 旧 Prompt 评估页 → skills 宿主页签（旧页内 ?tab=cases|runs 映射为 ?peTab=）
     path: '/admin/prompt-eval',
     redirect: (to) => {
       const { tab: evalTab, ...rest } = to.query as Record<string, string>
@@ -360,7 +354,7 @@ const routes: RouteRecordRaw[] = [
     redirect: () => ({ path: '/admin/ops-center', query: { tab: 'export' } })
   },
   {
-    // 内容管理（学习路径）2026-09-29 拆回独立页 learning-paths，旧 URL 兼容重定向
+    // 旧内容管理 URL → /admin/learning-paths
     path: '/admin/content',
     redirect: '/admin/learning-paths'
   },
@@ -369,7 +363,7 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/learning-paths'
   },
   {
-    // 导航一级收敛 2026-09-19（阶段 1）：公告/站内通知折入「运营中心」宿主 tab
+    // 旧公告 / 站内通知 URL → 运营中心宿主 tab
     path: '/admin/announcements',
     redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'announce' } })
   },
