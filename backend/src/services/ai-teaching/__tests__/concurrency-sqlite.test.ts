@@ -12,13 +12,7 @@ import {
 jest.setTimeout(30000);
 
 const backendRoot = resolve(__dirname, '..', '..', '..', '..');
-const migrationNames = [
-  '20260717000000_main_baseline',
-  '20260717010000_blackbox_command_journal',
-  '20260719000000_teaching_session_concurrency',
-  '20260719010000_learning_state_serialization',
-  '20260719020000_path_generation_rollback_snapshot',
-];
+const baselineMigration = '20260717000000_main_baseline';
 
 function run(database: sqlite3.Database, sql: string, params: any[] = []): Promise<number> {
   return new Promise((resolveRun, reject) => {
@@ -42,9 +36,7 @@ async function openWritableDatabase(filePath: string): Promise<sqlite3.Database>
 
 async function createMigratedDatabase(filePath: string): Promise<sqlite3.Database> {
   const database = await openWritableDatabase(filePath);
-  for (const migration of migrationNames) {
-    await applyMigration(database, migration);
-  }
+  await applyMigration(database, baselineMigration);
   return database;
 }
 
@@ -200,48 +192,31 @@ describe('Teaching SQLite concurrency and migrations', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it('backfills canonical metric identities and discards orphan legacy closure rows', async () => {
+  it('baseline enforces canonical metric identity and single open session key', async () => {
     const database = await openWritableDatabase(databasePath);
     databases.push(database);
-    await applyMigration(database, migrationNames[0]);
-    await applyMigration(database, migrationNames[1]);
+    await applyMigration(database, baselineMigration);
     await insertUser(database);
 
     await run(database, `
-      INSERT INTO teaching_sessions (id, userId, taskId, subject, topic, status, wrapup, teachingState, endTime, updatedAt)
-      VALUES
-        ('session-complete', 'user-1', 'task-1', '测试', '完成', 'completed', '{"status":"complete"}', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-        ('session-active', 'user-1', 'task-2', '测试', '进行中', 'active', NULL, '{}', NULL, CURRENT_TIMESTAMP),
-        ('session-reset', 'user-1', 'task-3', '测试', '重置', 'completed', NULL, '{"sessionArtifacts":{"resetAt":"2026-07-19T00:00:00.000Z"}}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      INSERT INTO teaching_sessions (id, userId, taskId, subject, topic, status, openKey, updatedAt)
+      VALUES ('session-active', 'user-1', 'task-2', '测试', '进行中', 'active', 'user-1:task-2', CURRENT_TIMESTAMP)
     `);
     await run(database, `
-      INSERT INTO learning_metrics (id, userId, metricType, value, metadata, calculatedAt)
-      VALUES
-        ('metric-old', 'user-1', 'learning_state', 1, '{"source":"session-wrapup","sessionId":"session-complete"}', '2026-07-19T00:00:00.000Z'),
-        ('metric-new', 'user-1', 'learning_state', 2, '{"source":"session-wrapup","sessionId":"session-complete"}', '2026-07-19T01:00:00.000Z'),
-        ('metric-orphan', 'user-1', 'learning_state', 3, '{"source":"session-wrapup","sessionId":"session-active"}', '2026-07-19T02:00:00.000Z')
+      INSERT INTO learning_metrics (id, sourceKey, userId, metricType, value, calculatedAt)
+      VALUES ('metric-1', 'session-wrapup:session-complete', 'user-1', 'learning_state', 1, CURRENT_TIMESTAMP)
     `);
 
-    for (const migration of migrationNames.slice(2)) {
-      await applyMigration(database, migration);
-    }
-
-    const metrics = await queryAll<any>(database, `
-      SELECT id, sourceKey FROM learning_metrics ORDER BY id
-    `);
-    expect(metrics).toEqual([{
-      id: 'metric-new',
-      sourceKey: 'session-wrapup:session-complete'
-    }]);
-    const reset = await queryAll<any>(database, `
-      SELECT status, openKey FROM teaching_sessions WHERE id = 'session-reset'
-    `);
-    expect(reset[0]).toEqual({ status: 'discarded', openKey: null });
-
+    // 身份唯一性由基线唯一索引保证：同 openKey / 同 sourceKey 均不得重复
     await expect(run(database, `
       INSERT INTO teaching_sessions (
         id, userId, taskId, subject, topic, status, openKey, updatedAt
       ) VALUES ('duplicate-open', 'user-1', 'task-2', '测试', '重复', 'active', 'user-1:task-2', CURRENT_TIMESTAMP)
+    `)).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT' });
+
+    await expect(run(database, `
+      INSERT INTO learning_metrics (id, sourceKey, userId, metricType, value, calculatedAt)
+      VALUES ('metric-2', 'session-wrapup:session-complete', 'user-1', 'learning_state', 2, CURRENT_TIMESTAMP)
     `)).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT' });
   });
 
