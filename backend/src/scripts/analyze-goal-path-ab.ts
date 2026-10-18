@@ -1,4 +1,4 @@
-/* eslint-disable no-console -- 一次性分析 CLI */
+/* eslint-disable no-console, @typescript-eslint/no-explicit-any -- 一次性分析 CLI，读两侧产物 JSON 按 any 取字段 */
 /**
  * 汇总 goal→path A/B：读取 old/new 两次运行的 JSON，重算「引用落在原文后半」的比例
  * （目录污染修正：同一标题在目录页也出现，取正文侧匹配），并生成 Markdown 报告。

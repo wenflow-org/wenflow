@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 测试夹具：mock session/消息常用 any 构造 */
 /**
  * session_load 指标：写入端（commitSessionLoadMetric）与读取端（findSessionLoadMetric）契约。
  *

@@ -1,4 +1,4 @@
-/* eslint-disable no-console -- 一次性对照 CLI：输出面向人读 */
+/* eslint-disable no-console, @typescript-eslint/no-explicit-any -- 一次性对照 CLI：输出面向人读，DB 行按 any 取字段 */
 /**
  * goal → path 端到端 A/B（2026-10-17）。
  *
