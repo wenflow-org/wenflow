@@ -219,6 +219,62 @@ describe('V2LearningPage 挂载回归', () => {
     w.unmount();
   });
 
+  it('恢复续课分级：短中断（<30min）不弹大卡，走细条幅并给出「接着讲」入口', async () => {
+    api.startSession.mockResolvedValue({
+      sessionId: 's_resumed_fresh',
+      revision: 3,
+      mode: 'resumed',
+      scene: { kind: 'resume', title: '接着上次的作用域' },
+    });
+    api.getSessionDetail.mockResolvedValue({
+      revision: 4,
+      messages: [
+        { role: 'user', content: '什么是变量提升？', timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString() },
+        { role: 'assistant', content: '变量提升是指声明被移到作用域顶部。', timestamp: new Date(Date.now() - 4 * 60 * 1000).toISOString() },
+      ],
+    });
+
+    const w = await mountPage();
+
+    // 短中断：大卡让位，细条幅承担恢复提示，且带「接着讲」轻入口
+    expect(w.find('.oscene').exists()).toBe(false);
+    expect(w.find('.tutor__resume').exists()).toBe(true);
+    expect(w.find('.tutor__resume-go').exists()).toBe(true);
+    expect(w.find('.tutor__resume-go').text()).toContain('接着讲');
+    // 历史照常回填
+    expect(w.findAll('.msg--ai').length).toBeGreaterThan(0);
+
+    w.unmount();
+  });
+
+  it('恢复续课分级：长回归（≥30min）仍出重定向大卡，且卡内只有主按钮 + 小字重开链接', async () => {
+    api.startSession.mockResolvedValue({
+      sessionId: 's_resumed_late',
+      revision: 5,
+      mode: 'resumed',
+      scene: { kind: 'resume', title: '接着上次的作用域' },
+    });
+    api.getSessionDetail.mockResolvedValue({
+      revision: 6,
+      messages: [
+        { role: 'user', content: '闭包是什么？', timestamp: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString() },
+        { role: 'assistant', content: '闭包是函数与其词法环境的组合。', timestamp: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString() },
+      ],
+    });
+
+    const w = await mountPage();
+
+    // 长回归：recap 卡有真实价值 → 大卡出现、条幅让位
+    expect(w.find('.oscene').exists()).toBe(true);
+    expect(w.find('.tutor__resume').exists()).toBe(false);
+    // 卡收敛：只剩主按钮；重新开始降级为小字链接；先看看已删
+    expect(w.find('.oscene__actions .btn-ghost').exists()).toBe(false);
+    expect(w.find('.oscene__restart').exists()).toBe(true);
+    expect(w.text()).not.toContain('先看看');
+
+    w.unmount();
+  });
+
   it('检查点提交：空选拦截 → 流式提交 onJudgement 先行 → 反馈展示与防重交上锁', async () => {
     api.startSession.mockResolvedValue({
       sessionId: 's_resumed',

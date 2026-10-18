@@ -483,7 +483,7 @@
 
           <!-- 终局总结（已生成时；总在前、单课分列在后） -->
           <template v-if="hasWrapup">
-            <div class="cp-wrapup-stats" v-if="pathDetailTitle || wrapupSourceBadge">
+            <div class="cp-wrapup-stats" v-if="pathDetailTitle || wrapupSourceBadge || sessionLoadView">
               <div class="cp-wrapup-stats__goal" v-if="pathDetailTitle">
                 <span class="cp-wrapup-stats__label">学习目标</span>
                 <strong>{{ pathDetailTitle }}</strong>
@@ -491,6 +491,7 @@
               <div class="cp-wrapup-stats__badges">
                 <span class="cp-wrapup-stats__item"><em>{{ pathMilestonesView.length }}</em> 个里程碑</span>
                 <span class="cp-wrapup-stats__item"><em>{{ learnLessons.length }}</em> 节课</span>
+                <span v-if="sessionLoadView" class="cp-wrapup-stats__item" :title="sessionLoadTitle">本轮负荷 {{ sessionLoadView }}</span>
                 <span v-if="wrapupSourceBadge" class="mk-badge" :class="wrapupSourceBadge === '模型生成' ? 'mk-badge--info' : 'mk-badge--muted'">{{ wrapupSourceBadge }}</span>
                 <span v-if="wrapupStatusBadge" class="mk-badge" :class="wrapupStatusBadge === 'complete' ? 'mk-badge--ok' : 'mk-badge--warn'">{{ wrapupStatusBadge === 'complete' ? '总结完整' : '降级总结' }}</span>
               </div>
@@ -1937,6 +1938,28 @@ const turnMeta = computed(() => {
 /* 知识状态更新（真实掌握度）：真实会话 = teaching.knowledgeState（后端 knowledgePointStates）；
    虚拟会话 = 当前课课时总结 knowledgeItems。无数据整卡不渲染，不硬造 ±Δ（后端无增量字段） */
 const realTeachingBlock = computed(() => asRecord(isRealMode.value ? session.value?.teaching : null))
+
+/* 本节课负荷聚合：后端 commitSessionLoadMetric 写 learning_metrics(session_load)，
+   session-console API 回填 teaching.sessionLoad。此前该指标无任何读取方（死仓），
+   这里给它第一个面向人的消费点——总结页的本轮负荷一行。 */
+const sessionLoadBlock = computed(() => asRecord(realTeachingBlock.value.sessionLoad))
+const sessionLoadView = computed(() => {
+  const mean = sessionLoadBlock.value.mean
+  if (typeof mean !== 'number' || !Number.isFinite(mean)) return ''
+  const pct = (v: number) => `${Math.round(v * 100)}%`
+  const parts = [`均值 ${pct(mean)}`]
+  if (typeof sessionLoadBlock.value.max === 'number') parts.push(`峰值 ${pct(sessionLoadBlock.value.max as number)}`)
+  if (typeof sessionLoadBlock.value.perTurnCount === 'number') parts.push(`${sessionLoadBlock.value.perTurnCount} 轮`)
+  return parts.join(' · ')
+})
+const sessionLoadTitle = computed(() => {
+  const dist = asRecord(sessionLoadBlock.value.basisDist)
+  const basis = Object.entries(dist)
+    .filter(([, n]) => typeof n === 'number')
+    .map(([key, n]) => `${key} ${n}`)
+    .join(' / ')
+  return basis ? `负荷判定依据分布：${basis}` : 'AI 对每轮作答的认知负荷估计（0-1）'
+})
 const KNOWLEDGE_STATUS_TEXT: Record<string, string> = { mastered: '已掌握', learning: '学习中', review: '待复习', pending: '未开始' }
 const knowledgeRows = computed<Array<{ name: string; value: string; statusLabel: string; statusTone: string }>>(() => {
   const raw = isRealMode.value ? realTeachingBlock.value.knowledgeState : lessonWrapup.value?.knowledgeItems

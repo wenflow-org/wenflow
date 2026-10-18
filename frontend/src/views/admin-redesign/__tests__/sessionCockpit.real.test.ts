@@ -308,6 +308,28 @@ describe('SessionCockpit 双模式', () => {
     wrapper.unmount();
   });
 
+  // 2026-10-17：session_load 此前零运行时读取方（写了没人看的死仓）。总结页是它第一个消费点，
+  // 这里钉住渲染口径与「无数据不渲染」——后端没行时不能凭空显示 0。
+  it('总结页呈现本轮负荷聚合（均值/峰值/轮数 + 依据分布 tooltip）；无数据整项不渲染', async () => {
+    const payload = realTeachingPayload();
+    payload.data.teaching.sessionLoad = { mean: 0.264, max: 0.4, basisDist: { semantic: 7 }, perTurnCount: 7 };
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const stats = wrapper.find('.cp-wrapup-stats');
+    expect(stats.text()).toContain('本轮负荷 均值 26% · 峰值 40% · 7 轮');
+    const item = stats.findAll('.cp-wrapup-stats__item').find((n) => n.text().includes('本轮负荷'));
+    expect(item?.attributes('title')).toContain('semantic 7');
+    wrapper.unmount();
+
+    const noLoad = realTeachingPayload();
+    delete noLoad.data.teaching.sessionLoad;
+    getRealSessionConsole.mockResolvedValue(noLoad);
+    const empty = await mountCockpit('session-real', 'ts_real_1');
+    expect(empty.text()).not.toContain('本轮负荷');
+    empty.unmount();
+  });
+
   it('阶段推进卡：下游直达入口（2026-10-12 收敛——Path 出口撤，stepper 步点即唯一入口；课堂会话不给自指）', async () => {
     const goalPayload = realTeachingPayload();
     goalPayload.data.kind = 'goal';

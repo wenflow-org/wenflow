@@ -1176,90 +1176,80 @@ async function doReset() {
 }
 
 const SCENE_BATCH_SIZE = 3;
+/**
+ * 场景池：默认展示前 3 个，覆盖应试 / 职业转型 / 学业 / 兴趣 / 资料驱动五类起点。
+ * seed 自带「现状 + 约束 + 想要的结果」，让目标澄清从具体场景开始，而不是先被反问四五轮。
+ */
 const scenePool = [
   {
-    title: '用 Python 自动化 Excel 报表',
-    desc: '每天省下的复制粘贴时间，一周就能看到',
-    seed: '我想用 Python 自动化处理 Excel 报表，每天能节省时间',
-    bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>'
-  },
-  {
-    title: '提升职场沟通表达',
-    desc: '从下一次周会发言开始练，场景化拆解',
-    seed: '我想学会沟通技巧，提高职场表达和人际交往能力',
+    title: '考公面试开口卡壳',
+    desc: '30 天，练到能完整答完结构化面试',
+    seed: '我笔试过了，但面试一开口就卡壳，还有 30 天，想练到能完整答完结构化面试',
     bg: 'color-mix(in srgb, var(--accent) 13%, transparent)', ink: 'var(--purple-ink)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM7 9h10v2H7V9zm6 5H7v-2h6v2zm4-6H7V6h10v2z"/></svg>'
   },
   {
-    title: '用 AI 做自媒体副业',
-    desc: '围绕你的账号定位，搭一条内容生产流程',
-    seed: '我想做自媒体副业，用 AI 工具提高内容创作效率',
-    bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: 'var(--wf-color-secondary-dark)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h4a2 2 0 0 1 2 2v1.28c.6.35 1 .98 1 1.72a2 2 0 0 1-1 1.73V17a2 2 0 0 1-2 2h-4v1.27c.6.34 1 .99 1 1.73a2 2 0 1 1-4 0c0-.74.4-1.39 1-1.73V19H7a2 2 0 0 1-2-2v-3.27A2 2 0 0 1 4 12c0-.74.4-1.38 1-1.72V9a2 2 0 0 1 2-2h4V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/></svg>'
-  },
-  {
-    title: '零基础学前端开发',
-    desc: '从第一个网页到能独立做一个小项目',
-    seed: '我想从零开始学前端开发，能独立做出网页',
-    bg: 'rgba(240,101,149,.12)', ink: '#d1456f',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14.6 16.6 19.2 12l-4.6-4.6 1.4-1.4L22 12l-5.9 5.9-1.5-1.3zm-5.2 0L7.8 18l-5.8-6 5.8-6 1.6 1.4L4.8 12l4.6 4.6z"/></svg>'
-  },
-  {
-    title: '用 SQL 做数据分析',
-    desc: '能从数据库里查数、会看数、会讲数',
-    seed: '我想学会 SQL 数据分析，能自己从数据库里查数据',
+    title: '会计转数据分析',
+    desc: '3 个月补齐 SQL 与 Python，做出作品',
+    seed: '我做会计 5 年，想 3 个月内转到数据分析岗，SQL 和 Python 都是零基础',
     bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: 'var(--wf-color-secondary-dark)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2C7.6 2 4 3.8 4 6v12c0 2.2 3.6 4 8 4s8-1.8 8-4V6c0-2.2-3.6-4-8-4zm0 2c3.9 0 6 1.5 6 2s-2.1 2-6 2-6-1.5-6-2 2.1-2 6-2zm6 14c0 .5-2.1 2-6 2s-6-1.5-6-2v-3.2C7.7 17.5 9.8 18 12 18s4.3-.5 6-1.2V18zm0-5.5c0 .5-2.1 2-6 2s-6-1.5-6-2V9.3C7.7 10.5 9.8 11 12 11s4.3-.5 6-1.2V12.5z"/></svg>'
   },
   {
-    title: '掌握 Git 版本控制',
-    desc: '提交、分支、回滚，代码管理不再手忙脚乱',
-    seed: '我想掌握 Git 版本控制，工作中代码管理不再混乱',
+    title: '系统了解心理学',
+    desc: '不考试，读懂主要流派和经典实验',
+    seed: '我对心理学一直有兴趣，想系统了解主要流派和经典实验，不为了考试',
     bg: 'color-mix(in srgb, var(--amber) 14%, transparent)', ink: 'var(--amber-ink)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 2a3 3 0 0 0-1 5.83v8.34A3.001 3.001 0 1 0 9 16.17V12h4a3 3 0 0 0 3-3V7.83A3 3 0 1 0 14 8v1a1 1 0 0 1-1 1H8V7.83A3 3 0 0 0 7 2zm0 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm10 8a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM7 16a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>'
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V17h8v-2.26A7 7 0 0 0 12 2zM8 19h8v2H8v-2z"/></svg>'
   },
   {
-    title: '学会写工作总结汇报',
-    desc: '把做的事说清楚，让成果被看见',
-    seed: '我想学会写工作总结和汇报，让领导看到我的成果',
+    title: '考研数学卡在 90 分',
+    desc: '12 月考试，每天 2 小时补薄弱章节',
+    seed: '我是二战考研，数学二卡在 90 分上不去，12 月底考试，每天能学 2 小时',
+    bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>'
+  },
+  {
+    title: '在职考电工中级证',
+    desc: '每晚 1 小时，理论题不再靠死记',
+    seed: '我在职考电工中级证，每晚只有 1 小时，理论题总是记不住',
     bg: 'rgba(49,177,111,.12)' /* 场景卡专用绿基色：等价 var(--wf-color-success-bg) 家族 */, ink: 'var(--green-ink)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm9 1.5V8h4.5L15 3.5zM8 13h8v-1.5H8V13zm0 4h8v-1.5H8V17z"/></svg>'
   },
   {
-    title: '搭建个人知识库',
-    desc: '学过的内容沉淀下来，能真正用起来',
-    seed: '我想搭建自己的知识管理系统，学过的内容能真正用起来',
-    bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)',
+    title: '初二几何证明没思路',
+    desc: '月考 70 分，想把证明题提到 90',
+    seed: '我上初二，几何证明题总是没思路，月考 70 分左右，想提到 90 分',
+    bg: 'rgba(240,101,149,.12)', ink: '#d1456f',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 4h7v7H4V4zm2 2v3h3V6H6zm7-2h7v7h-7V4zm2 2v3h3V6h-3zM4 13h7v7H4v-7zm2 2v3h3v-3H6zm7-2h7v7h-7v-7zm2 2v3h3v-3h-3z"/></svg>'
   },
   {
-    title: '掌握 Linux 命令行',
-    desc: '文件、权限、进程，命令行操作行云流水',
-    seed: '我想掌握 Linux 命令行操作，能熟练处理文件和权限管理',
+    title: '后端进阶分布式',
+    desc: '做了 3 年 CRUD，想真正搞懂一致性',
+    seed: '我做了 3 年 CRUD，想系统搞懂分布式一致性，也能应对大厂面试',
+    bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14.6 16.6 19.2 12l-4.6-4.6 1.4-1.4L22 12l-5.9 5.9-1.5-1.3zm-5.2 0L7.8 18l-5.8-6 5.8-6 1.6 1.4L4.8 12l4.6 4.6z"/></svg>'
+  },
+  {
+    title: '英语开会开不了口',
+    desc: '看得懂文档，要能讲清项目进展',
+    seed: '工作要用英语开会，文档看得懂但开不了口，想练到能讲清项目进展',
     bg: 'rgba(49,177,111,.12)' /* 场景卡专用绿基色：等价 var(--wf-color-success-bg) 家族 */, ink: 'var(--green-ink)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM7.8 15.6 6.4 14.2 9.6 11l-3.2-3.2 1.4-1.4L12.4 11l-4.6 4.6zM12 17h6v-2h-6v2z"/></svg>'
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM7 9h10v2H7V9zm6 5H7v-2h6v2zm4-6H7V6h10v2z"/></svg>'
   },
   {
-    title: '学习时间管理',
-    desc: '一天的事排得明明白白，告别忙乱',
-    seed: '我想学习时间管理，把每天的工作安排得有条不紊',
-    bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: 'var(--wf-color-secondary-dark)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm1-12h-2v6l5 3 1-1.6-4-2.4V8z"/></svg>'
-  },
-  {
-    title: '学会基础理财规划',
-    desc: '工资存得住、钱能生钱，从记账开始',
-    seed: '我想学会基础理财规划，工资能存得住、钱能生钱',
+    title: '公文写作总被退回',
+    desc: '通知、总结、请示，按机关格式写',
+    seed: '我刚转岗做行政，写通知和总结总被退回，想掌握机关公文的格式和写法',
     bg: 'color-mix(in srgb, var(--amber) 14%, transparent)', ink: 'var(--amber-ink)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M21 7H6a1 1 0 0 1 0-2h13V3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zm-6 7.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>'
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M21 4H3a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1zM7 6h12v2H7V6zm0 5h12v2H7v-2zm0 5h8v2H7v-2z"/></svg>'
   },
   {
-    title: '学会写技术文档',
-    desc: '结构、示例、可读性，让文档真正有人读',
-    seed: '我想学会写技术文档，把知识表达清楚让别人能看懂',
+    title: '把手里的资料学成课',
+    desc: '上传资料，按章节拆成能上的课',
+    seed: '公司发了一本 200 页的合规手册，只有两周，想抓住重点，资料可以上传',
     bg: 'color-mix(in srgb, var(--accent) 13%, transparent)', ink: 'var(--purple-ink)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M21 4H3a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1zM7 6h12v2H7V6zm0 5h12v2H7v-2zm0 5h8v2H7v-2z"/></svg>'
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>'
   }
 ];
 

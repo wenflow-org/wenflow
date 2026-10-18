@@ -190,10 +190,12 @@
               <!-- 到期复习说明：concept-graph 节点不带 dueAt，只按提取次数/最近练习说清节奏 -->
               <p class="mk-ge__review">{{ reviewNote }}</p>
 
-              <!-- 主 CTA + ghost（原型 wf-drawer__acts：去练习这个知识点 / 先放着） -->
-              <div v-if="practiceActionText" class="mk-ge__acts">
+              <!-- 主 CTA（原型 wf-drawer__acts 收敛，2026-10-09 用户反馈）：
+                   仅在概念有可直达任务锚点时出现（practice.taskId 为 null 时原先会兜底跳
+                   /dashboard，是语义断裂的"去练习"）；「先放着」删除——侧栏非模态，
+                   点其他节点即切换内容，无需显式关闭按钮 -->
+              <div v-if="practiceActionText && selected.practice?.taskId" class="mk-ge__acts">
                 <button type="button" class="mk-ge__cta" @click="onPractice">{{ practiceActionText }}</button>
-                <button type="button" class="mk-ge__ghost" @click="dismissSelected">先放着</button>
               </div>
 
               <!-- 字段分区（2026-09-27）：概览条带 + 关系分区（发丝线分隔）；掌握度/提取次数已由上方 bar 承载 -->
@@ -801,12 +803,6 @@ function focusNode(id: string) {
   emit('select', node)
 }
 
-/** 原型 ghost「先放着」：关闭当前详情，回到提示态 */
-function dismissSelected() {
-  selected.value = null
-  emit('select', null)
-}
-
 function onIsolatedChange(event: Event) {
   hideIsolated.value = !(event.target as HTMLInputElement).checked
 }
@@ -1183,14 +1179,13 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   line-height: 1.6;
   color: var(--mk-faint);
 }
-/* 动作区（原型 wf-drawer__acts：主 CTA + ghost，两枚通栏 44px） */
+/* 动作区（原型 wf-drawer__acts 收敛：ghost「先放着」已于 2026-10-09 删除，只剩主 CTA） */
 .mk-ge__acts {
   display: grid;
   gap: var(--mk-space-2);
   margin-top: var(--mk-space-3);
 }
-.mk-ge__cta,
-.mk-ge__ghost {
+.mk-ge__cta {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1212,16 +1207,6 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   color: var(--mk-on-fill);
 }
 .mk-ge__cta:active { transform: scale(0.98); }
-.mk-ge__ghost {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--muted);
-}
-.mk-ge__ghost:hover {
-  border-color: color-mix(in srgb, var(--blue) 35%, transparent);
-  color: var(--blue-deep);
-}
-.mk-ge__ghost:active { transform: scale(0.98); }
 /* 读屏等价清单：整段钉在页面既有字号档（micro）上——h4/ul 的浏览器默认字号
    会给 mobile:spec 的 steps 档数 +1，而视觉隐藏的清单字号无视觉意义 */
 .mk-ge__inventory {
