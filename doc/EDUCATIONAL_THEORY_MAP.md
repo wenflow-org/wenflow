@@ -7,6 +7,7 @@
 > 规范：新增任何教学法条文或指标时，应在此登记理论来源（含 DOI/arXiv ID）与代码落点，防止"理论漂移"。
 > 核实说明：本文档中所有标注 ✅ 的文献均经联网核查（2026-08，Crossref / arXiv / Wikisource / Wikipedia）；标注 ⚠️ 的为存在出入的引用。
 > 复核说明：2026-09-05 对照代码复核落点（引用改按"文件 + 规则/字段名"定位，行号仅作示意并可能漂移）；已被后续实现吸收的状态已更新。
+> 复核基线：**2026-10-19**（对照当时 HEAD 复跑 §二 逐条口径与 §五 缺口表；SRL ⑫ / 睡眠巩固 ⑭ / 元认知训练 ⑬ 三项由「完全缺失」改判「部分实现」，见 §五）。
 
 ---
 
@@ -26,6 +27,8 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 ---
 
 ## 二、教学 / 心理 / 神经科学理论清单
+
+> **复核基线：2026-10-19**（本节逐条对照 HEAD 代码复核；落点以「文件 + 字段/函数名」为准，行号仅作示意并可能漂移）。
 
 ### ① 自我决定论（Self-Determination Theory, SDT）
 - **文献**：Deci & Ryan (1985) *Intrinsic Motivation and Self-Determination in Human Behavior*；Ryan & Deci (2000) *Self-determination theory and the facilitation of intrinsic motivation*（[DOI 10.1037/0003-066X.55.1.68](https://doi.org/10.1037/0003-066X.55.1.68)）。✅ Crossref 核实
@@ -99,20 +102,23 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 ### ⑫ 自我调节学习（Self-Regulated Learning, SRL）
 - **文献**：Zimmerman (1989) *Models of self-regulated learning*（[DOI 10.1007/978-1-4612-3618-4_1](https://doi.org/10.1007/978-1-4612-3618-4_1)）；Zimmerman & Risemberg (1997)（[DOI 10.1006/ceps.1997.0919](https://doi.org/10.1006/ceps.1997.0919)）。✅ Crossref 核实
 - **核心观点**：三阶段循环——**前思（Forethought：规划/目标）/ 表现（Performance：自我监控）/ 反思（Self-Reflection：归因/调整）**。
-- **Wenflow 落点**：**部分**——metacognitive knowledgeType 完整链路（`teaching-turn.yaml`"knowledgeType=metacognitive 优先 reflect/diagnose/motivate"；`pedagogy.config.ts` metacognitive 块）；画像 `metacognitionLevel`（`learner-model-agent/types.ts`）；无三阶段显式追踪。
-- **建议**：wrapup actionPlan 可作为反思阶段产物，下一节开场承接（`teaching-turn.yaml`"开场承接检索题"）即下一循环的前思输入；learn agent 出口可提供 SRL 三阶段状态视图。
+- **Wenflow 落点**：**部分（2026-10-19 复核）**——① metacognitive knowledgeType 完整链路（`teaching-turn.yaml`"knowledgeType=metacognitive 优先 reflect/diagnose/motivate"；`pedagogy.config.ts` metacognitive 块）；画像 `metacognitionLevel`（`learner-model-agent/types.ts`）。② **三阶段已有字段与派生**：`agents/learner-model-agent/types.ts:171` `srlPhase: 'forethought' | 'performance' | 'self-reflection'`（注释引 Zimmerman 2000），`services/learner/LearnerSnapshotService.ts:44` `deriveSrlPhase(latestSession)`——无会话→forethought、active/paused→performance、其余→self-reflection，在快照 `:425` / `:549` 两条路径写入；投影层透传 `LearnerProjectionService.ts:145`（learner-state-review 诊断载荷）。
+- **缺口（如实标注）**：无**用户可见**的三阶段视图（`frontend/src` 无 `srlPhase` 消费点；`grep -rni srl prompts/` 无命中——提示词层不引用该字段）；判据是**会话状态粗派生**而非学习者自我监控证据；三阶段**未接干预路由**（前思/表现/反思无对应教学动作）。
+- **建议**：wrapup actionPlan 可作为反思阶段产物，下一节开场承接（`teaching-turn.yaml`"开场承接检索题"）即下一循环的前思输入；learn agent 出口提供 SRL 三阶段状态视图（字段/派生已就位，缺呈现与阶段化动作）。
 
 ### ⑬ 元认知训练（Metacognition）
 - **文献**：Flavell (1979) *Metacognition and cognitive monitoring*（[DOI 10.1037/0003-066X.34.10.906](https://doi.org/10.1037/0003-066X.34.10.906)）。✅ 公认文献
 - **核心观点**：对自身认知过程的计划、监控、评估；元认知监控可被刻意训练。
-- **Wenflow 落点**：**有（部分）**——metacognitive 链路完整；`teaching-turn.yaml`"理解/负荷须可引用证据"（自检四件事）即元认知证据纪律；缺"学习者反思习惯的刻意训练循环"（如定期自评）。
-- **建议**：复习课可加入"自评→对照→校准"环节；Learn 层记录自我评估准确度（`learner-model-agent/types.ts` `selfAssessmentAccuracy` 字段已有）。
+- **Wenflow 落点**：**部分（2026-10-19 复核）**——① metacognitive 链路完整；`teaching-turn.yaml`"理解/负荷须可引用证据"（自检五件事）即元认知证据纪律。② **校准闭环已有数据驱动实现**：`services/learner/calibration.service.ts:20` `computeCalibrationBias`（由 `memory_traces` 的 masteryScore × FSRS stability/difficulty 判 overconfident / underconfident，样本 <5 保持 accurate，并并入最近 10 次完结会话的隐藏自评信号）→ 画像覆盖 `cognitive.selfAssessmentAccuracy`（`agents/learner-model-agent/profile-aggregator.ts:178-180`）→ 教学链消费（`services/ai-teaching/teaching-session-lifecycle.ts:1130` 取偏置 → `services/memory/memory-trace.service.ts:177-179`：overconfident 降 0.1 / underconfident 升 0.05）；管理端可见该项（`frontend/src/views/admin-redesign/LearnerDetail.vue:1827`「自评准确度」）。
+- **缺口（如实标注）**：**无面向学习者的"自评→对照→校准"训练环节**——`selfAssessmentSignal` 仍是隐藏信号（prompt 明示不主动询问、不在 reply 提及），学习者看不到自己的校准结论与偏置。
+- **建议**：复习课加入"自评→对照→校准"环节；Learn 层出口展示校准结论（字段与闭环已就位，缺训练呈现）。
 
 ### ⑭ 记忆巩固与睡眠（Memory Consolidation / Sleep）
 - **文献**：Rasch & Born (2013) *About sleep's role in memory*（[DOI 10.1152/physrev.00032.2012](https://doi.org/10.1152/physrev.00032.2012)）；Walker & Stickgold (2004) sleep-dependent consolidation。✅ 公认文献
 - **核心观点**：睡眠期突触重放与巩固；跨日间隔复习受益于巩固窗口。
-- **Wenflow 落点**：**缺失**——仅健康建议（`services/metrics/LearningMetricService.ts`"疲劳度较高。确保充足睡眠"）。
-- **建议**：复习调度**已改为跨日递增（2026-08-30）**——`services/memory/actr.ts` `reviewIntervalDays`：Cepeda 10-20% 中间值 15% + SM-2 式 `intervalFactor`（复习成功倍增，clamp 上限 32×）；"今日复习"与"睡眠建议"联动仍未实现。
+- **Wenflow 落点**：**部分（2026-10-19 复核）**——① 复习调度跨日递增（2026-08-30）：`services/memory/actr.ts:28` `reviewIntervalDays`——Cepeda 10-20% 中间值 15% + SM-2 式 `intervalFactor`（复习成功倍增，clamp 上限 32×）。② **睡眠窗口锚定已实现**：`services/memory/memory-trace.service.ts:191` `snapToActiveWindow`——dueAt 落在 23:00-07:00 睡眠区（常量 `:185-188`）推至次日 09:00 活跃窗口；**首次提取保证至少跨 1 个睡眠周期**（注释引 Rasch & Born 2013 / Gais 2006），`computeDueAt`（`:217-220` / `:260`）统一调用。
+- **缺口（如实标注）**：**无"今日复习"与睡眠建议的联动**——`services/metrics/LearningMetricService.ts:312` 仍是一句泛健康建议；到期日为何跳过夜间无用户可读解释；无就寝时间感知的提醒或复习窗口提示。
+- **建议**：把已含睡眠窗口的 dueAt 接进用户可见的"今日/明日复习"，与睡眠建议同屏联动（后端锚定已就位，缺呈现与联动）。
 
 ### ⑮ 自我解释效应（Self-Explanation Effect）
 - **文献**：Chi, de Leeuw, Chiu & LaVancher (1994) *Eliciting self-explanations improves understanding*（Cognitive Science 18:439-477）。✅ 公认文献（Crossref 检索有噪声但该文为领域经典）
@@ -184,20 +190,21 @@ README 7 条（认知负荷 / 自我导向学习 / ZPD+支架 / 形成性评估 
 | Yerkes-Dodson ⑦ | `services/learner/LearnerSnapshotService.ts`（paceMode / conceptLoad 推导）；LSS/LSB 阈值 | 服务头部注释 |
 | 自我解释 ⑮ | 已归费曼名下（README「教育理论基础」） | 无需 |
 
-### 部分实现（机制已有落点，覆盖不全）
+### 部分实现（机制已有落点，覆盖不全）｜复核基线 2026-10-19
+
 | 理论 | 已有落点 | 仍缺的部分 |
 |---|---|---|
 | SDT ① | `goal-conversation.yaml:132` 静默累积 `sdt_needs`（autonomy / competence / relatedness） | 画像层未消费三需求；relatedness 无对应教学/同伴机制 |
 | 成长型思维 ③ | `teaching-turn.yaml:121` 成长型思维语言规范（过程表扬 / 归因于策略 / "还没"框架 / 禁特质语言），并进自检五件事第 ④ 条 | wrapup 反馈语言未接同一规范 |
 | 心流 ⑥ | `teaching-turn.yaml:97` 认知负荷三路由（0.6–0.8「愤悱带」即挑战-技能平衡带） | 未按心流命名；无挑战-技能平衡的可视化 |
 | 交错学习 ⑩ | `teaching-turn.yaml:104` 复习题策略选择框架（不预告方法 + 对比式回捞） | 任务/会话粒度的轮换编排（预算台账）未做 |
+| SRL ⑫ | `agents/learner-model-agent/types.ts:171` `srlPhase` 字段 + `services/learner/LearnerSnapshotService.ts:44` `deriveSrlPhase`（快照 `:425`/`:549` 写入，投影 `LearnerProjectionService.ts:145` 透传） | 无用户可见三阶段视图；判据只按会话状态粗派生（非自我监控证据）；三阶段未接干预路由 |
+| 睡眠巩固 ⑭ | `services/memory/memory-trace.service.ts:191` `snapToActiveWindow`（23-07 睡眠区让位、首次提取保证跨 1 睡眠周期）+ `services/memory/actr.ts:28` 跨日递增调度 | 与"今日复习"/睡眠建议无联动；无就寝时间感知的提醒；到期日跳过夜间无用户可读解释 |
+| 元认知训练 ⑬ | `services/learner/calibration.service.ts:20` `computeCalibrationBias` → 画像覆盖 `selfAssessmentAccuracy`（`profile-aggregator.ts:178-180`）→ 教学链消费（`teaching-session-lifecycle.ts:1130`）；管理端可见（`LearnerDetail.vue:1827`） | 无面向学习者的"自评→对照→校准"训练环节；`selfAssessmentSignal` 仍是隐藏信号 |
 
-### 完全缺失（最大增量空间）
-| 理论 | 建议落点层 | 最小落地形态 |
-|---|---|---|
-| SRL ⑫（三阶段视图） | Learn / Wrapup | 三阶段状态视图；actionPlan 作为反思产物 |
-| 睡眠巩固 ⑭（联动） | Path / 复习调度 | "今日复习"与"睡眠建议"联动（跨日递增已实现） |
-| 元认知训练 ⑬ | Wrapup / 复习课 | 完整的自评→对照→校准环节（现有 `selfAssessmentSignal` 只做隐藏信号） |
+### 完全缺失（最大增量空间）｜复核基线 2026-10-19
+
+（本轮 2026-10-19 复核后为**空**：原列 SRL ⑫ / 睡眠巩固 ⑭ / 元认知训练 ⑬ 三项均已核到机制落点，移入上表「部分实现」；剩余增量空间见上表「仍缺的部分」列——均为呈现/联动/训练环节，不是机制从零建。）
 
 ---
 
