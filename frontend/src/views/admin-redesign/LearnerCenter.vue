@@ -486,10 +486,12 @@ const confRows = computed(() => rows.value.filter((r) => r.task && r.confidence 
     计入会与均值对不上。2026-10-17 分布带退役后，「另 M 位无学习任务未计入」的说明
     由「学习者账号」KPI 的 hint（含未开始学习的账号）与均值 hint 的基数共同承担。 */
 const lowConfCount = computed(() => confRows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1)).length)
-/** 低置信 hint 带基数（与平均置信度同判例：数字要能对上分母） */
+/** 低置信 hint 带基数（与平均置信度同判例：数字要能对上分母）。
+    2026-10-18：口径压成一行——原句 27 字在卡片宽度里折成两行，把整排读数卡撑到
+    115px；阈值、口径与基数都不变，只压措辞（「有任务」= 表格置信列出读数的条件）。 */
 const lowConfHint = computed(() =>
   confRows.value.length
-    ? `置信度低于 50% 的有学习任务的学习者 · 共 ${confRows.value.length} 位`
+    ? `低于 50% 的有任务学习者 · 共 ${confRows.value.length} 位`
     : '暂无有学习任务的学习者'
 )
 const avgConfText = computed(() => {
