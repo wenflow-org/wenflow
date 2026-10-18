@@ -12,10 +12,17 @@
  * （end_only 后再 complete_task、超时兜底叠加直连回写等）会对同一会话重复入队 review:completed，
  * 两条事件的 eventId 与 occurredAt 都不同——事件级幂等拦不住。故按「会话 + 概念」稳定键
  * （见 `reviewEvidenceKeyForConcept`）对每个 reviewItem 恰好应用一次；重复条目直接跳过。
+ *
+ * 概念身份（#94 写入侧稳定键，2026-10-19）：本消费者此前完全按自由文本 conceptKey 写行、
+ * **从不写 conceptId**（复习来源的痕迹长期停在第 40+ 行注释所说的「未挂靠」）。现在按
+ * item.kcId（看板透传的 KC 局部序号）先做锚定解析——`resolveConceptIdSafe`：命中稳定键即
+ * 用其身份（措辞漂移不分叉）、未命中或缺失回落文本名（现行为）；解析失败 → create 落
+ * conceptId=null（未挂靠）、update 不触碰既有值（绝不写回 null）。锚定在**事务外**完成：
+ * 注册表走独立连接写 concepts/concept_aliases，SQLite 写事务期间再写库会争锁。
  * 事件 payload：
  *   {
  *     sessionId, mode: 'review', reviewItems: [
- *       { conceptKey, label, status, progress, masteryScore, rating: 'again'|'hard'|'good'|'easy' }
+ *       { conceptKey, kcId?, label, status, progress, masteryScore, rating: 'again'|'hard'|'good'|'easy' }
  *     ]
  *   }
  */
@@ -25,6 +32,7 @@ import type { DurableDomainEvent } from '../../events/contracts';
 import { logger } from '../../utils/logger';
 import { clamp01 } from '../memory/actr';
 import { fsrsSchedule, fsrsStateFromLegacy, type FsrsGradeCode, type FsrsMemoryState } from '../memory/fsrs';
+import { resolveConceptIdSafe } from '../memory/memory-trace.service';
 import { getActiveForConcepts } from './misconception-ledger.service';
 import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
 
@@ -56,6 +64,13 @@ export type ReviewRating = 'again' | 'hard' | 'good' | 'easy';
 export interface ReviewCompletedItem {
   conceptKey: string;
   label?: string | null;
+  /**
+   * 可选稳定身份键（#94 写入侧稳定键，2026-10-19）：复习课采集项从看板透传的 KC 局部序号
+   * （模型对 `scenario.taskKcs[].kcId` 的原样回填）。写入侧据此锚定概念身份
+   * （`resolveConceptIdSafe`：先稳定键、未命中回落文本名）；缺失/未解析出即落「未挂靠」
+   * 语义（conceptId 不写），行为与引入前一致。
+   */
+  kcId?: string | null;
   status: string;
   progress: number;
   masteryScore: number;
@@ -91,6 +106,14 @@ export class ReviewCompletedConsumer {
     const items = Array.isArray(data.reviewItems) ? data.reviewItems : [];
     if (items.length === 0) return;
 
+    // #94 写入侧稳定键：概念锚定解析必须在**事务外**做（注册表用独立连接写 concepts/
+    // concept_aliases；SQLite 写事务期间再写库会争锁）。best-effort：读不到路径/解析失败
+    // 一律退回文本名（map 里没有该键 → conceptId 不写 = 「未挂靠」），绝不影响复习落库。
+    const anchorPath = await this.readSessionPathIdForAnchor(data.sessionId);
+    const conceptAnchors = anchorPath.known
+      ? await this.resolveConceptAnchors(event.userId, items, anchorPath.pathId)
+      : new Map<string, string | null>();
+
     await withTransaction(async (tx) => {
       const consumed = await tx.domain_event_inbox.findUnique({
         where: { consumerId_eventId: { consumerId: CONSUMER_ID, eventId: event.id } }
@@ -105,7 +128,6 @@ export class ReviewCompletedConsumer {
             select: { learningPathId: true },
           }))?.learningPathId ?? null
         : null;
-
       // B1/Q3：本轮有多少条目的"误解干扰"读取降级（数据不全时仍写证据，但显式打标）
       let degradedItems = 0;
 
@@ -179,6 +201,9 @@ export class ReviewCompletedConsumer {
         }
         const interferenceMultiplier = activeMisconceptions.length > 0 ? MISCONCEPTION_STABILITY_MULTIPLIER : 1;
 
+        // #94：本条的概念身份（事务外已解析；null = 未挂靠，写入侧照旧不写 conceptId）
+        const anchoredConceptId = conceptAnchors.get(conceptKey) ?? null;
+
         // 1) 复习观测 → learner_evidence（可追溯、可重放，供画像/BKT）
         await tx.learner_evidence.create({
           data: {
@@ -190,6 +215,8 @@ export class ReviewCompletedConsumer {
             evidenceType: 'review:completed',
             payload: JSON.stringify({
               conceptKey,
+              // #94：稳定键随证据留痕（可回溯"这条复习是按哪个 KC 锚定的"）
+              ...(typeof item.kcId === 'string' && item.kcId.trim() ? { kcId: item.kcId.trim() } : {}),
               rating: item.rating,
               status: item.status,
               progress: item.progress,
@@ -231,6 +258,8 @@ export class ReviewCompletedConsumer {
             id: `mt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
             userId: event.userId,
             conceptKey,
+            // #94：解析成功 → 锚定身份必填；未解析出 → null（「未挂靠」的现有列表达，同写入主链契约）
+            conceptId: anchoredConceptId,
             label: item.label ?? null,
             masteryScore: clamp01(item.masteryScore),
             stability: item.status === 'mastered' ? 'stable' : 'fragile',
@@ -246,6 +275,8 @@ export class ReviewCompletedConsumer {
           },
           update: {
             label: item.label ?? undefined,
+            // #94：只在解析成功时覆盖（未解析出不得把已锚定的行写回 null，同写入主链契约）
+            ...(anchoredConceptId !== null ? { conceptId: anchoredConceptId } : {}),
             masteryScore: clamp01(item.masteryScore),
             stability: item.status === 'mastered' ? 'stable' : 'fragile',
             lastSeenAt: now,
@@ -350,6 +381,47 @@ export class ReviewCompletedConsumer {
         ...(skippedDuplicateItems > 0 ? { skippedDuplicateItems } : {}),
       });
     }, { label: 'learner.review-completed-consumer' });
+  }
+
+  /**
+   * #94：为锚定解析取会话路径（事务外用独立连接；best-effort）。
+   * `known=false` = 读失败/无会话 → 本次**禁用锚定**（宁缺勿错：不拿无路径键凭空建第二个身份，
+   * 回落文本名 = 引入前行为）；`known=true, pathId=null` = 确实没有路径 → 与写入主链
+   * （recordExtraction 的 pathId=null 分支）同键，锚定照常。
+   */
+  private async readSessionPathIdForAnchor(
+    sessionId: string | undefined,
+  ): Promise<{ known: boolean; pathId: string | null }> {
+    if (!sessionId) return { known: false, pathId: null };
+    try {
+      const session = await prisma.teaching_sessions.findUnique({
+        where: { id: sessionId },
+        select: { learningPathId: true },
+      });
+      return { known: true, pathId: session?.learningPathId ?? null };
+    } catch (error) {
+      logger.warn('[ReviewCompletedConsumer] 锚定路径读取失败（本次禁用 kcId 锚定）', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { known: false, pathId: null };
+    }
+  }
+
+  /** #94：逐条解析概念身份（同 conceptKey 只解析一次）；返回 conceptKey → conceptId（null = 未解析出） */
+  private async resolveConceptAnchors(
+    userId: string,
+    items: ReviewCompletedItem[],
+    pathId: string | null,
+  ): Promise<Map<string, string | null>> {
+    const anchors = new Map<string, string | null>();
+    for (const item of items) {
+      const conceptKey = String(item?.conceptKey || '').trim();
+      if (!conceptKey || anchors.has(conceptKey)) continue;
+      const kcId = typeof item.kcId === 'string' && item.kcId.trim() ? item.kcId.trim() : null;
+      anchors.set(conceptKey, await resolveConceptIdSafe(userId, conceptKey, pathId, kcId));
+    }
+    return anchors;
   }
 }
 

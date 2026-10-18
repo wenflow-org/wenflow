@@ -2,14 +2,26 @@ const transaction = jest.fn()
 const inboxFindUnique = jest.fn()
 const getActiveForConcepts = jest.fn()
 const recordDegradation = jest.fn()
+// #94 写入侧稳定键：锚定解析是 memory-trace 域的写入契约，消费侧只调用（此处隔离，专测调用口径与落库）
+const mockResolveConceptIdSafe = jest.fn()
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
   default: {
     domain_event_inbox: { findUnique: inboxFindUnique },
+    // #94：锚定路径读取（事务外）——真实实现读 teaching_sessions，默认给一条有路径的会话
+    teaching_sessions: { findUnique: jest.fn(async () => ({ learningPathId: 'path-1' })) },
     $transaction: transaction,
   },
 }))
+
+jest.mock('../../memory/memory-trace.service', () => ({
+  __esModule: true,
+  resolveConceptIdSafe: (...args: unknown[]) => mockResolveConceptIdSafe(...args),
+}))
+
+// 默认「未解析出身份」（= 未挂靠）：既有用例行为与引入前逐字一致；clearAllMocks 不清实现，故在模块级设默认
+mockResolveConceptIdSafe.mockResolvedValue(null)
 
 jest.mock('../misconception-ledger.service', () => ({
   __esModule: true,
@@ -386,5 +398,125 @@ describe('ReviewCompletedConsumer memory 投影写入（B2）', () => {
 
     expect(tx.learner_projections.upsert).not.toHaveBeenCalled()
     expect(tx.domain_event_inbox.create).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * #94 写入侧稳定键（2026-10-19）：复习链此前**从不写 conceptId**（复习来源的痕迹长期「未挂靠」）。
+ * 现在按 item.kcId 先做锚定（`resolveConceptIdSafe`：先稳定键、未命中回落文本名），
+ * 契约与写入主链一致：解析成功 → create 落 conceptId / update 覆盖；
+ * 解析失败 → create 落 null、update 不触碰既有值。
+ */
+describe('ReviewCompletedConsumer kcId 锚定（#94 写入侧稳定键）', () => {
+  interface Tx {
+    domain_event_inbox: { findUnique: jest.Mock; create: jest.Mock }
+    teaching_sessions: { findUnique: jest.Mock }
+    learner_evidence: { findFirst: jest.Mock; create: jest.Mock }
+    memory_traces: { findUnique: jest.Mock; upsert: jest.Mock; findMany: jest.Mock; count: jest.Mock }
+    learner_projections: { upsert: jest.Mock }
+  }
+
+  const buildTx = (): Tx => ({
+    domain_event_inbox: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({}),
+    },
+    teaching_sessions: { findUnique: jest.fn().mockResolvedValue({ learningPathId: 'path-1' }) },
+    learner_evidence: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    memory_traces: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      upsert: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+    },
+    learner_projections: { upsert: jest.fn().mockResolvedValue({}) },
+  })
+
+  const eventWith = (reviewItems: unknown[]) => createDomainEvent({
+    id: 'evt-kc-1',
+    type: 'review:completed',
+    aggregateType: 'review',
+    aggregateId: 'ts-1',
+    userId: 'user-1',
+    source: 'session-finalization',
+    occurredAt: new Date(1_700_000_000_000),
+    data: { sessionId: 'ts-1', mode: 'review', reviewItems },
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    // clearAllMocks 不清实现：显式回默认「未解析出身份」（各用例再按需覆盖）
+    mockResolveConceptIdSafe.mockResolvedValue(null)
+    getActiveForConcepts.mockResolvedValue([])
+  })
+
+  it('有 kcId：按 (路径, kcId) 锚定解析，命中的身份写进痕迹（create 与 update 都覆盖）', async () => {
+    const tx = buildTx()
+    transaction.mockImplementation(async (callback: (client: Tx) => Promise<unknown>) => callback(tx))
+    getActiveForConcepts.mockResolvedValue([])
+    mockResolveConceptIdSafe.mockResolvedValue('cpt_kc_1')
+
+    await new ReviewCompletedConsumer().handle(eventWith([
+      { conceptKey: '光合作用', kcId: 'kc-1a', label: '光合作用', status: 'learning', progress: 40, masteryScore: 0.5, rating: 'hard' },
+    ]))
+
+    // 锚定口径：路径 + kcId 原样传给写入域（未命中回落由该函数内部保证）
+    expect(mockResolveConceptIdSafe).toHaveBeenCalledWith('user-1', '光合作用', 'path-1', 'kc-1a')
+    const upsert = tx.memory_traces.upsert.mock.calls[0][0]
+    expect(upsert.create.conceptId).toBe('cpt_kc_1')
+    expect(upsert.update.conceptId).toBe('cpt_kc_1')
+    // 稳定键随证据留痕（可回溯）
+    const payload = JSON.parse(tx.learner_evidence.create.mock.calls[0][0].data.payload)
+    expect(payload.kcId).toBe('kc-1a')
+  })
+
+  it('无 kcId：照旧不锚定（kcId 传 null 交写入域回落文本名），痕迹落「未挂靠」', async () => {
+    const tx = buildTx()
+    transaction.mockImplementation(async (callback: (client: Tx) => Promise<unknown>) => callback(tx))
+    getActiveForConcepts.mockResolvedValue([])
+    // 回落语义在写入域内部（resolveConceptIdSafe 的文本名分支）：此处返回其回落结果
+    mockResolveConceptIdSafe.mockResolvedValue('cpt_by_name')
+
+    await new ReviewCompletedConsumer().handle(eventWith([
+      { conceptKey: '光合作用', label: '光合作用', status: 'learning', progress: 40, masteryScore: 0.5, rating: 'hard' },
+    ]))
+
+    expect(mockResolveConceptIdSafe).toHaveBeenCalledWith('user-1', '光合作用', 'path-1', null)
+    const upsert = tx.memory_traces.upsert.mock.calls[0][0]
+    expect(upsert.create.conceptId).toBe('cpt_by_name')
+  })
+
+  it('未解析出身份（注册表故障）：create 落 null（未挂靠）、update 不触碰既有 conceptId', async () => {
+    const tx = buildTx()
+    transaction.mockImplementation(async (callback: (client: Tx) => Promise<unknown>) => callback(tx))
+    getActiveForConcepts.mockResolvedValue([])
+    mockResolveConceptIdSafe.mockResolvedValue(null)
+
+    await new ReviewCompletedConsumer().handle(eventWith([
+      { conceptKey: '光合作用', kcId: 'kc-1a', label: '光合作用', status: 'mastered', progress: 100, masteryScore: 0.9, rating: 'easy' },
+    ]))
+
+    const upsert = tx.memory_traces.upsert.mock.calls[0][0]
+    expect(upsert.create.conceptId).toBeNull()
+    expect(upsert.update).not.toHaveProperty('conceptId')
+  })
+
+  it('会话路径读失败：本次禁用锚定（宁缺勿错，不拿无路径键凭空建第二个身份），复习照常落库', async () => {
+    const prismaMock = jest.requireMock('../../../config/database').default as {
+      teaching_sessions: { findUnique: jest.Mock };
+    }
+    prismaMock.teaching_sessions.findUnique.mockRejectedValueOnce(new Error('db locked'))
+    const tx = buildTx()
+    transaction.mockImplementation(async (callback: (client: Tx) => Promise<unknown>) => callback(tx))
+    getActiveForConcepts.mockResolvedValue([])
+    mockResolveConceptIdSafe.mockResolvedValue('cpt_never')
+
+    await new ReviewCompletedConsumer().handle(eventWith([
+      { conceptKey: '光合作用', kcId: 'kc-1a', label: '光合作用', status: 'learning', progress: 40, masteryScore: 0.5, rating: 'hard' },
+    ]))
+
+    expect(mockResolveConceptIdSafe).not.toHaveBeenCalled()
+    expect(tx.memory_traces.upsert).toHaveBeenCalledTimes(1)
+    expect(tx.memory_traces.upsert.mock.calls[0][0].create.conceptId).toBeNull()
   })
 })

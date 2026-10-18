@@ -1264,10 +1264,13 @@ export async function processStudentMessage(
     }
 
     // θ−d EMA：ktEstimate 跨会话滑动平均（α=0.2），best-effort 不阻断回合
+    // #94：kcId（模型从 scenario.taskKcs 回填的稳定键）随行透传——写入侧优先按它锚定概念身份，
+    // 未命中/缺失回落自由文本名（见 memory-trace.service resolveConceptIdSafe）。
     const ktConceptMastery = teachingOutput.analysis?.ktEstimate?.conceptMastery;
     if (Array.isArray(ktConceptMastery) && ktConceptMastery.length > 0) {
       void memoryTraceService.applyKtEstimate(session.userId, ktConceptMastery.map((c) => ({
         conceptKey: c.conceptKey,
+        ...(typeof c.kcId === 'string' && c.kcId.trim() ? { kcId: c.kcId.trim() } : {}),
         mastery: c.mastery,
       })), session.learningPathId ?? null).catch((error) => {
         logger.warn('[AITeachingCoordinator] ktEstimate EMA 回写失败', { error: error instanceof Error ? error.message : String(error) });

@@ -36,6 +36,29 @@ const ALLOWED_LOAD_BASIS = ['semantic', 'structure', 'pacing', 'combined', 'abse
 /** knowledge 对象的子字段：Q9 契约漂移容错时按此名单从顶层回填（见 resolveKnowledgeBlock） */
 const KNOWLEDGE_SUBFIELD_KEYS = ['currentPoint', 'points', 'confirmCheck'] as const;
 
+/**
+ * 知识点条目的**稳定身份键**（KC 身份迁移遗留项的写入侧收口，2026-10-19）：
+ * `kcId` 来自 scenario.taskKcs（kc-mapper 产出，路径内 KC 局部序号），由模型在
+ * knowledge.points / analysis.ktEstimate.conceptMastery 里原样回填（契约见
+ * prompts/core/teaching-turn.yaml）。模型措辞漂移时名字会变、kcId 不变——写入侧
+ * 据此锚定同一概念（memory-trace.service resolveConceptIdSafe）。可选：缺省不填，
+ * 行为与引入前逐字一致（回落自由文本名）。
+ */
+export interface TeachingTurnKnowledgePoint {
+  name: string;
+  /** 可选稳定键：与 scenario.taskKcs[].kcId 同值（模型原样回填；缺失即无稳定键） */
+  kcId?: string;
+  status: 'pending' | 'learning' | 'mastered' | 'review';
+  progress: number;
+}
+
+/** kcId 归一（透传而非改写）：去空白、限长；空/非字符串 → undefined（不得伪造） */
+function normalizeKcId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, 120) : undefined;
+}
+
 export interface TeachingTurnInput {
   /**
    * 对话消息（#123 起可携带课堂配图）：images 仅用于**模型可见历史**，
@@ -267,6 +290,8 @@ export interface TeachingTurnInput {
   knowledge: {
     points: Array<{
       name: string;
+      /** 可选稳定键（KC 身份）：见 TeachingTurnKnowledgePoint 注释；透传，代码不改写 */
+      kcId?: string;
       status: 'pending' | 'learning' | 'mastered' | 'review';
       progress: number;
     }>;
@@ -326,9 +351,13 @@ export interface TeachingTurnOutput {
       evidence: string;
       status: string;
     }>;
-    /** 回合级知识状态估计（θ−d 路由信号）：conceptMastery + 任务难度 + 建议 */
+    /**
+     * 回合级知识状态估计（θ−d 路由信号）：conceptMastery + 任务难度 + 建议。
+     * conceptMastery 项的 kcId 与 knowledge.points 同概念一致（同一稳定键，见
+     * TeachingTurnKnowledgePoint）；写入侧据此锚定概念身份（名字漂移不再分叉）。
+     */
     ktEstimate?: {
-      conceptMastery?: Array<{ conceptKey: string; mastery: number; evidence?: string }>;
+      conceptMastery?: Array<{ conceptKey: string; kcId?: string; mastery: number; evidence?: string }>;
       currentTaskDifficulty?: number;
       recommendation?: string;
     };
@@ -349,11 +378,7 @@ export interface TeachingTurnOutput {
   };
   knowledge: {
     currentPoint: string | null;
-    points: Array<{
-      name: string;
-      status: 'pending' | 'learning' | 'mastered' | 'review';
-      progress: number;
-    }>;
+    points: TeachingTurnKnowledgePoint[];
     /** 可选：需要学生对当前点表态时的确认动作组（前端渲染为行动按钮；不输出则前端回退固定按钮） */
     confirmCheck?: {
       prompt: string;
@@ -622,7 +647,7 @@ function deriveFallbackStrategies(input: TeachingTurnInput): string[] {
   return getFallbackStrategies(input.scenario.taskProfile?.knowledgeType);
 }
 
-function filterOverlyBroadKnowledgePoints(points: Array<{ name: string; status: 'pending' | 'learning' | 'mastered' | 'review'; progress: number }>, input: TeachingTurnInput) {
+function filterOverlyBroadKnowledgePoints(points: TeachingTurnKnowledgePoint[], input: TeachingTurnInput): TeachingTurnKnowledgePoint[] {
   const coreConcept = normalizeConceptName(input.scenario.taskProfile?.coreConcept || input.scenario.taskProfile?.linkedConceptName || '');
   const hasFinerPrimaryConcept = points.some((point) => normalizeConceptName(point.name) && normalizeConceptName(point.name) !== coreConcept);
 
@@ -681,6 +706,8 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
   let normalizedKnowledgePoints = filterOverlyBroadKnowledgePoints(
     points.map((point: any) => ({
       name: typeof point?.name === 'string' ? point.name : '',
+      // kcId 透传（不改写、不按名字推断）：模型没给就没有——写入侧据此回落自由文本名
+      ...(normalizeKcId(point?.kcId) ? { kcId: normalizeKcId(point?.kcId)! } : {}),
       status: (ALLOWED_KNOWLEDGE_STATUSES as readonly string[]).includes(point?.status)
         ? point.status
         : 'pending',
@@ -1317,7 +1344,11 @@ function normalizeConfirmCheck(value: any): { confirmCheck?: NonNullable<Teachin
   };
 }
 
-/** 归一化回合级知识状态估计（θ−d 路由信号）：数值钳制、推荐值白名单 */
+/**
+ * 归一化回合级知识状态估计（θ−d 路由信号）：数值钳制、推荐值白名单、kcId 透传。
+ * kcId 是**稳定身份键**（可选）：原样保留（去空白/限长），不做任何按名字推断的补写——
+ * 模型没回填就没有，写入侧回落自由文本名（见 memory-trace.service resolveConceptIdSafe）。
+ */
 function normalizeKtEstimate(value: any): { ktEstimate?: NonNullable<TeachingTurnOutput['analysis']['ktEstimate']> } {
   if (!value || typeof value !== 'object') return {};
   const conceptMastery = Array.isArray(value.conceptMastery)
@@ -1326,6 +1357,7 @@ function normalizeKtEstimate(value: any): { ktEstimate?: NonNullable<TeachingTur
         .slice(0, 5)
         .map((item: any) => ({
           conceptKey: String(item.conceptKey).trim().slice(0, 120),
+          ...(normalizeKcId(item.kcId) ? { kcId: normalizeKcId(item.kcId)! } : {}),
           mastery: Number.isFinite(Number(item.mastery)) ? Math.max(0, Math.min(1, Number(item.mastery))) : 0.5,
           evidence: typeof item.evidence === 'string' ? item.evidence.trim().slice(0, 200) : undefined,
         }))

@@ -398,6 +398,11 @@ export class SessionFinalizationService {
   private async collectReviewOutcomes(session: TeachingSessionRecord): Promise<Array<{
     conceptKey: string;
     label: string | null;
+    /**
+     * 可选稳定身份键（#94 写入侧稳定键）：看板项从模型输出带回的 KC 局部序号。
+     * 随事件 payload 到消费者，写入侧据此锚定概念身份；缺失回落文本名（现行为）。
+     */
+    kcId: string | null;
     status: string;
     progress: number;
     masteryScore: number;
@@ -421,6 +426,8 @@ export class SessionFinalizationService {
       const items = progressed.map((p: any) => ({
         conceptKey: p.name,
         label: p.name,
+        // #94：看板项若带稳定键就带上（原样透传，不做名字推断）；没有就是 null
+        kcId: typeof p.kcId === 'string' && p.kcId.trim() ? p.kcId.trim() : null,
         status: p.status,
         progress: Number(p.progress) || 0,
         masteryScore: p.status === 'mastered' ? (Number(p.progress) >= 100 ? 0.9 : 0.85) : 0.5,

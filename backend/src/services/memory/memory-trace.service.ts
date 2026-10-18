@@ -48,14 +48,73 @@ import {
  *
  * 语义近义（"判断对齐关系" vs "识别对齐关系"）解析不到同一身份，不在写入侧处理——留给
  * ConceptConsolidatorService 的 LLM 建议 + outlet 域 apply 路径；写入侧只做机械归一同形。
+ *
+ * kcId 锚定（#94 写入侧稳定键，2026-10-19）：模型自由措辞是漂移的根因，而 kcId
+ * （scenario.taskKcs[].kcId，模型在 knowledge.points / ktEstimate.conceptMastery 回填）
+ * 在同一路径内是稳定的 KC 局部序号。解析顺序改为**先稳定键、后文本名**：
+ *   ① kcId 锚定：`kc:<pathId>:<kcId>` 已在别名表里有归属 → 直接命中，措辞怎么变都不分叉；
+ *   ② 未命中（该 kcId 首次出现，或整条链路没带 kcId）→ 回落到原文本名解析，**行为与引入前
+ *      逐字一致**（未命中按设计新建身份）；首次解析成功后把稳定键登记为该身份的别名，
+ *      此后同名异写收敛到同一身份。
+ * 纪律：锚定与登记都是 best-effort（失败只告警、不阻断写入，更不改回落语义）；
+ * 没有 kcId 时**一次额外的表访问都不发生**（旧行为零开销）。
  */
-async function resolveConceptIdSafe(userId: string, conceptKey: string, pathId?: string | null): Promise<string | null> {
+/** kcId 锚键：`kc:<pathId>:<kcId>`（无 pathId 时 `kc:<kcId>`）——path 前缀不可省：kcId 是路径内局部序号 */
+export function kcAnchorKey(kcId: unknown, pathId?: string | null): string {
+  const id = typeof kcId === 'string' ? kcId.trim() : '';
+  if (!id) return '';
+  const path = typeof pathId === 'string' ? pathId.trim() : '';
+  return path ? `kc:${path}:${id}` : `kc:${id}`;
+}
+
+export async function resolveConceptIdSafe(
+  userId: string,
+  conceptKey: string,
+  pathId?: string | null,
+  kcId?: string | null,
+): Promise<string | null> {
+  const anchorKey = kcAnchorKey(kcId, pathId);
+  if (anchorKey) {
+    try {
+      const anchored = await conceptRegistryService.resolveConcept(userId, anchorKey, {
+        createIfMissing: false,
+        source: 'write_time',
+      });
+      if (anchored?.conceptId) return anchored.conceptId;
+    } catch (error) {
+      logger.warn('[memory-trace] kcId 锚定解析失败（回落文本名）', {
+        userId,
+        kcId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
   try {
     const resolved = await conceptRegistryService.resolveConcept(userId, conceptKey, {
       source: 'write_time',
       originPathId: pathId ?? null,
     });
-    return resolved?.conceptId ?? null;
+    const conceptId = resolved?.conceptId ?? null;
+    // 首次相遇：把稳定键登记为该身份的别名（此后措辞漂移也命中同一身份）。
+    // best-effort：登记失败只告警，本次写入与回落语义不受影响（下次再登记）。
+    if (conceptId && anchorKey) {
+      try {
+        await conceptRegistryService.registerAlias({
+          userId,
+          conceptId,
+          aliasRaw: anchorKey,
+          source: 'write_time',
+          confidence: 1,
+        });
+      } catch (error) {
+        logger.warn('[memory-trace] kcId 锚键登记失败（不影响本次写入）', {
+          userId,
+          kcId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return conceptId;
   } catch (error) {
     logger.warn('[memory-trace] 概念身份解析失败（best-effort，conceptId 留空）', {
       userId,
@@ -129,6 +188,11 @@ export interface MemoryTraceInput {
   source?: string;
   /** 来源路径（首次出现的路径；已有值不覆盖——originPathTitle 的语义是"最早出现"） */
   pathId?: string | null;
+  /**
+   * 可选稳定身份键（#94 写入侧稳定键）：模型从 scenario.taskKcs 回填的 KC 局部序号。
+   * 提供时优先按 kcId 锚定概念身份，未命中/缺失回落自由文本名（见 resolveConceptIdSafe）。
+   */
+  kcId?: string | null;
   /** 下次到期时间（物化 dueAt；缺省按 ACT-R 间隔规则计算） */
   dueAt?: Date | null;
   /** 复习间隔因子（用于计算 dueAt；默认沿用现有 intervalFactor 语义） */
@@ -139,6 +203,8 @@ export interface MemoryTraceInput {
 
 export interface SessionKnowledgeOutcome {
   name: string;
+  /** 可选稳定身份键（KC 身份）：看板项透传，写入侧据此锚定（缺失回落文本名） */
+  kcId?: string | null;
   status: 'pending' | 'learning' | 'mastered' | 'review';
   progress: number;
 }
@@ -267,9 +333,10 @@ class MemoryTraceService {
       && existing.fsrsStability !== null && existing.fsrsStability !== undefined;
 
     // 概念身份（canonical）——键控契约见 resolveConceptIdSafe：
+    // kcId 提供时先按稳定键锚定（措辞漂移不分叉）；未命中/缺失回落文本名解析。
     // 解析成功 → conceptId 必填（create 落 / update 覆盖为最新解析，含增量补全与归并重锚）；
     // 解析失败 → create 落 null（=「未挂靠」，现有列表达）、update 不触碰既有值（不回退为 null）。
-    const conceptId = await resolveConceptIdSafe(input.userId, conceptKey, input.pathId ?? null);
+    const conceptId = await resolveConceptIdSafe(input.userId, conceptKey, input.pathId ?? null, input.kcId ?? null);
 
     await prisma.memory_traces.upsert({
       where: {
@@ -370,6 +437,8 @@ class MemoryTraceService {
         stability,
         source,
         pathId,
+        // #94 写入侧稳定键：看板项带的 kcId 一路带到记录提取（缺失即不写键，回落文本名）
+        ...(typeof item.kcId === 'string' && item.kcId.trim() ? { kcId: item.kcId.trim() } : {}),
         // 键存在性即语义：无证据时不写 fsrsGrade 键（undefined 会走 legacy 分支）
         ...(fsrsGrade !== null ? { fsrsGrade } : {}),
       });
@@ -390,6 +459,8 @@ class MemoryTraceService {
           fsrsGrade: fsrsGrade ?? null,
           calibrationBias,
           source,
+          // #94：稳定键随证据留痕（可回溯"这条掌握度是按哪个 KC 锚定的"）
+          ...(typeof item.kcId === 'string' && item.kcId.trim() ? { kcId: item.kcId.trim() } : {}),
         }),
         confidence: 0.6,
         occurredAt: at,
@@ -554,10 +625,11 @@ class MemoryTraceService {
    *
    * 概念键控：同样走 resolveConceptIdSafe 的键控契约——解析成功 → update 补齐 conceptId /
    * create 直接落；解析失败 → 「未挂靠」（create 落 null、update 不触碰既有值）。
+   * #94：item.kcId（模型回填的稳定键）优先锚定，未命中回落 conceptKey 文本名。
    */
   async applyKtEstimate(
     userId: string,
-    items: Array<{ conceptKey: string; mastery: number }>,
+    items: Array<{ conceptKey: string; kcId?: string | null; mastery: number }>,
     pathId: string | null = null,
   ): Promise<void> {
     if (!items || items.length === 0) return;
@@ -568,7 +640,7 @@ class MemoryTraceService {
       if (!key) continue;
       const mastery = Number.isFinite(item.mastery) ? Math.max(0, Math.min(1, item.mastery)) : null;
       if (mastery === null) continue;
-      const conceptId = await resolveConceptIdSafe(userId, key, pathId);
+      const conceptId = await resolveConceptIdSafe(userId, key, pathId, item.kcId ?? null);
       const existing = await this.getTrace(userId, key);
       if (existing) {
         const prev = existing.ktMasteryEma ?? existing.masteryScore;

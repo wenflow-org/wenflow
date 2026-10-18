@@ -156,6 +156,14 @@ export interface TeachingFigure {
 
 export interface TeachingKnowledgePointState {
   name: string;
+  /**
+   * 可选稳定身份键（KC 身份迁移遗留项的写入侧收口，2026-10-19）：模型本轮从
+   * `scenario.taskKcs[].kcId` 原样回填的 KC 局部序号。knowledgeState 是 JSON 列，
+   * 字段级增补、无 schema 迁移（同 evidenceSource 先例）；结算链据此把记忆痕迹
+   * 锚定到同一概念身份（memory-trace.service resolveConceptIdSafe），
+   * 缺失时不写、行为与引入前逐字一致（回落自由文本概念名）。
+   */
+  kcId?: string | null;
   status: 'pending' | 'learning' | 'mastered' | 'review';
   progress: number;
 }export interface TeachingSessionRecord {

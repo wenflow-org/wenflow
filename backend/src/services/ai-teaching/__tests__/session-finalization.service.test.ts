@@ -496,6 +496,35 @@ describe('SessionFinalizationService', () => {
     ])
   })
 
+  // #94 写入侧稳定键：复习结果采集点（SessionFinalizationService.collectReviewOutcomes）此前只带
+  // 自由文本名 → 消费侧只能按名字建身份。看板项带的 kcId 必须原样随事件到写入侧
+  // （缺省为 null = 回落文本名，行为不变）。
+  it('complete_review：看板项的 kcId 随复习结果透传（无 kcId 的项为 null，回落文本名）', async () => {
+    const reviewSession = completedSession({
+      mode: 'review',
+      knowledgeState: [
+        { name: '叶绿体', kcId: 'kc-2b', status: 'mastered', progress: 100 },
+        { name: '光反应', status: 'learning', progress: 40 },
+      ],
+    })
+    mockRepository.assertOwnership.mockResolvedValue(reviewSession)
+    mockEndSession.mockResolvedValue({ status: 'completed', operationId: 'review-op', revision: 5 })
+
+    await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_review',
+      operationId: 'review-op',
+      revision: 4,
+    })
+
+    expect(mockEnqueueReviewCompletedEvent).toHaveBeenCalledTimes(1)
+    expect(mockEnqueueReviewCompletedEvent.mock.calls[0][1]).toEqual([
+      expect.objectContaining({ conceptKey: '叶绿体', kcId: 'kc-2b' }),
+      expect.objectContaining({ conceptKey: '光反应', kcId: null }),
+    ])
+  })
+
   it('complete_review：endSession 抛错时不入队 review:completed', async () => {
     const reviewSession = completedSession({
       mode: 'review',

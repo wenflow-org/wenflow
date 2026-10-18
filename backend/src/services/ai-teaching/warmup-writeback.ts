@@ -22,6 +22,13 @@ import type { TeachingSessionRecord } from './TeachingSessionRepository';
 export interface WarmupReviewItem {
   conceptKey: string;
   label: string | null;
+  /**
+   * 可选稳定身份键（#94 写入侧稳定键）：复习课采集项从看板透传的 KC 局部序号，
+   * 随 `review:completed` 事件 payload 到消费者（消费侧据此锚定概念身份，
+   * 见 memory-trace.service resolveConceptIdSafe）。温故回写（课内回捞）目前无 kcId
+   * 来源，缺省即不写该键——消费侧回落文本名，行为与引入前一致。
+   */
+  kcId?: string | null;
   status: string;
   progress: number;
   masteryScore: number;

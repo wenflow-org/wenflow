@@ -37,6 +37,20 @@ function carryEvidenceSource(
   return typeof source === 'string' ? { evidenceSource: source } : {};
 }
 
+/**
+ * 稳定身份键（KC 身份，2026-10-19）随克隆保留：kcId 是**模型从 scenario.taskKcs 原样回填**
+ * 的 KC 局部序号，结算链（recordSessionOutcome → recordExtraction）据此锚定概念身份。
+ * 与 evidenceSource 同一条理由：knowledgeState 是 JSON 列，pick 字段的克隆会把它剥掉，
+ * 「写入侧稳定键」就在中途丢失。仅内部权威面携带——normalizeKnowledgePoints（客户端投影）
+ * 刻意不透出，前端形状不变。缺失（旧数据/模型没填）时不写该字段。
+ */
+function carryKcId(
+  point: TeachingKnowledgePointState,
+): Pick<TeachingKnowledgePointState, 'kcId'> | Record<string, never> {
+  const kcId = point.kcId;
+  return typeof kcId === 'string' && kcId.trim() ? { kcId: kcId.trim() } : {};
+}
+
 export function cloneKnowledgePoints(points: TeachingKnowledgePointState[] | null | undefined): ArbitratedTeachingKnowledgePointState[] {
   if (!Array.isArray(points)) return [];
   return points
@@ -45,6 +59,7 @@ export function cloneKnowledgePoints(points: TeachingKnowledgePointState[] | nul
       name: point.name.trim(),
       status: point.status,
       progress: Number.isFinite(point.progress) ? Number(point.progress) : 0,
+      ...carryKcId(point),
       ...carryEvidenceSource(point),
     }));
 }
@@ -77,6 +92,8 @@ export function normalizeFrozenKnowledgeState(
       name: point.name,
       status: currentPoint?.status || point.status || (index === 0 ? 'learning' : 'pending'),
       progress: currentPoint ? Math.max(point.progress || 0, currentPoint.progress || 0) : (point.progress || 0),
+      // 稳定身份键：本回合合并结果优先，其次保留冻结面的历史键（两处都没有则不写字段）
+      ...(carryKcId(currentPoint ?? point).kcId ? carryKcId(currentPoint ?? point) : carryKcId(point)),
       // 本回合合并结果的授予标注优先，其次保留冻结面的历史标注（F1 修复轮 b）
       ...(currentPoint?.evidenceSource
         ? { evidenceSource: currentPoint.evidenceSource }

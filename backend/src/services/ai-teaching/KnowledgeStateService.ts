@@ -51,6 +51,8 @@ export class KnowledgeStateService {
     existing: TeachingKnowledgePointState[],
     incoming: Array<{
       name: string;
+      /** 可选稳定身份键（KC 身份，2026-10-19）：模型从 scenario.taskKcs 原样回填，随看板落库 */
+      kcId?: string | null;
       status: 'pending' | 'learning' | 'mastered' | 'review';
       progress: number;
     }>,
@@ -96,6 +98,8 @@ export class KnowledgeStateService {
           name: point.name,
           status,
           progress: point.progress,
+          // 稳定身份键随看板落库（结算链据它锚定概念身份）；模型没回填时不写该字段
+          ...(typeof point.kcId === 'string' && point.kcId.trim() ? { kcId: point.kcId.trim() } : {}),
           ...(status === 'mastered' ? { evidenceSource: evidenceSourceFor(nameKey) } : {}),
         });
         continue;
@@ -130,6 +134,8 @@ export class KnowledgeStateService {
         ...previous,
         status: nextStatus,
         progress: nextProgress,
+        // 稳定身份键：本回合模型回填（非空）优先，否则保留既有值（不清空——锚点缺失不得倒退）
+        ...(typeof point.kcId === 'string' && point.kcId.trim() ? { kcId: point.kcId.trim() } : {}),
         // 授予处记录证据来源；非 mastered 点不再新授标注（保留历史值或缺省）
         ...(nextEvidenceSource ? { evidenceSource: nextEvidenceSource } : {}),
       });

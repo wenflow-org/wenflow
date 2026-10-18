@@ -74,6 +74,32 @@ describe('KnowledgeStateService.merge（知识看板合并）', () => {
     expect(merged).toEqual([])
   })
 
+  // #94 写入侧稳定键：kcId 随看板落库（knowledgeState 是 JSON 列，结算链据它锚定概念身份）
+  it('#94：新点的 kcId 随看板落库；模型没回填时不写该字段', () => {
+    const merged = knowledgeStateService.merge([], [
+      { name: '光反应', kcId: 'kc-1a', status: 'learning' as const, progress: 40 },
+      { name: '暗反应', status: 'pending' as const, progress: 0 },
+    ])
+    const withKc = merged.find((point) => point.name === '光反应')
+    const withoutKc = merged.find((point) => point.name === '暗反应')
+    expect(withKc?.kcId).toBe('kc-1a')
+    expect(withoutKc).not.toHaveProperty('kcId')
+  })
+
+  it('#94：既有点回填的 kcId 生效；模型没回填时保留既有键（不得清空）', () => {
+    const merged = knowledgeStateService.merge(
+      [{ name: '光反应', kcId: 'kc-1a', status: 'learning' as const, progress: 40 }],
+      [{ name: '光反应', status: 'mastered' as const, progress: 100 }],
+    )
+    expect(merged.find((point) => point.name === '光反应')?.kcId).toBe('kc-1a')
+
+    const refilled = knowledgeStateService.merge(
+      [{ name: '光反应', status: 'learning' as const, progress: 40 }],
+      [{ name: '光反应', kcId: ' kc-9z ', status: 'mastered' as const, progress: 100 }],
+    )
+    expect(refilled.find((point) => point.name === '光反应')?.kcId).toBe('kc-9z')
+  })
+
   it('复习课（allowDegrade）：mastered 可降级为 review（复习失败真实可见）', () => {
     const merged = knowledgeStateService.merge([mastered], [review], true)
     expect(merged[0].status).toBe('review')
