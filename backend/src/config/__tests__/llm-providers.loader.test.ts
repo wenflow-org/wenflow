@@ -70,7 +70,7 @@ describe('llm-providers.json 加载器', () => {
        这里守的是「启用通道的模型 1:1 进运行时表、停用示例不进」 */
     const seedPlatform = getProviderCatalog().find((p) => p.id === 'platform');
     expect(MODEL_MAP.size).toBe(seedPlatform?.models.length);
-    expect(MODEL_MAP.size).toBeGreaterThanOrEqual(4);
+    expect(MODEL_MAP.size).toBeGreaterThanOrEqual(3);
     expect(getLlmRegistryStatus().source).toBe('file');
     const platform = getProviderCatalog().find((p) => p.id === 'platform');
     expect(platform?.recommended).toBe(true);
@@ -84,7 +84,7 @@ describe('llm-providers.json 加载器', () => {
 
   it('resolveModelRef：裸 id / 限定式 / 未知识别（含带斜杠的字面量不误伤）', () => {
     expect(resolveModelRef('deepseek-v4.1-flash')?.definition.id).toBe('deepseek-v4.1-flash');
-    expect(resolveModelRef('platform/deepseek-v4-pro')?.providerId).toBe('platform');
+    expect(resolveModelRef('platform/deepseek-v4.1-flash')?.providerId).toBe('platform');
     // 未注册 provider → 不按限定式解析，也无同名裸 id → null（调用方按字面量透传）
     expect(resolveModelRef('custom-provider-example/deepseek-chat')).toBeNull();
     expect(resolveModelRef('totally-unknown')).toBeNull();

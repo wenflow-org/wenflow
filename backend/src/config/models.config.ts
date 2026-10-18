@@ -147,8 +147,8 @@ export const MODEL_MAP = new Map<string, ModelDefinition>();
  * 运行时生效值走 `getModelDefaults()`（跟随配置文件）；此处仅为兼容保留的初始快照。
  */
 export const DEFAULT_MODELS = {
-  chat: 'deepseek-v4-flash',
-  reasoning: 'deepseek-v4-pro'
+  chat: 'deepseek-v4.1-flash',
+  reasoning: 'deepseek-v4.1-flash'
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -175,6 +175,8 @@ let lastMtimeMs: number | null = null;
 let lastReloadError: string | null = null;
 
 function buildEmbeddedFallback(): RegistrySnapshot {
+  /* 与 config/llm-providers.json 的平台通道保持一致：2026-10-18 上游已不再提供
+     deepseek-v4-flash / deepseek-v4-pro，兜底目录不得把已下线的模型再复活。 */
   const models: ModelDefinition[] = [
     {
       id: 'deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash', tier: 'chat', provider: 'deepseek', providerId: 'platform',
@@ -183,21 +185,14 @@ function buildEmbeddedFallback(): RegistrySnapshot {
       description: 'V4.1 Flash：标准运行模型（字面 id，2026-09-28 起全链统一）'
     },
     {
-      id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', tier: 'chat', provider: 'deepseek', providerId: 'platform',
-      supportsThinking: true, supportsReasoningEffort: true, maxOutputTokens: 131072, defaultMaxTokens: 32768,
-      reasoningReserveTokens: 8192, fallbacks: ['agnes-3.0-flash'],
-      description: 'V4 Flash（含混别名：部分渠道实际由 V4.1 部署服务，输出量波动大）'
-    },
-    {
-      id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', tier: 'reasoning', provider: 'deepseek', providerId: 'platform',
-      supportsThinking: true, supportsReasoningEffort: true, maxOutputTokens: 131072, defaultMaxTokens: 32768,
-      reasoningReserveTokens: 16384, fallbacks: ['deepseek-v4-flash'],
-      description: '强大推理能力，适合复杂任务和深度思考'
-    },
-    {
       id: 'agnes-3.0-flash', label: 'Agnes 3.0 Flash', tier: 'chat', provider: 'agnes', providerId: 'platform',
       supportsThinking: false, supportsReasoningEffort: false, maxOutputTokens: 65536, defaultMaxTokens: 32768,
       description: '轻量快速模型，TPS 高，适合 skill 高频调用'
+    },
+    {
+      id: 'agnes-2.5-flash', label: 'Agnes 2.5 Flash', tier: 'chat', provider: 'agnes', providerId: 'platform',
+      supportsThinking: false, supportsReasoningEffort: false,
+      description: '轻量快速模型（同族旧档）'
     }
   ];
   const platform: ProviderDefinition = {
@@ -207,11 +202,11 @@ function buildEmbeddedFallback(): RegistrySnapshot {
     models,
     providers: [platform],
     aliases: {
-      chat: ['deepseek-v4-flash', 'agnes-3.0-flash'],
-      reasoning: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+      chat: ['deepseek-v4.1-flash', 'agnes-3.0-flash'],
+      reasoning: ['deepseek-v4.1-flash'],
       light: ['agnes-3.0-flash']
     },
-    defaults: { chat: 'deepseek-v4-flash', reasoning: 'deepseek-v4-pro' },
+    defaults: { chat: 'deepseek-v4.1-flash', reasoning: 'deepseek-v4.1-flash' },
     source: 'embedded-fallback'
   };
 }

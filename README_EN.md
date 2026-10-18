@@ -171,7 +171,7 @@ The admin panel lives at `/admin` with 18 scene pages across 7 sidebar groups, a
 | **Frontend** | Vue 3 + TypeScript + Vite 6 + Element Plus + Pinia |
 | **Backend** | Node.js + Express + TypeScript + Prisma |
 | **Database** | SQLite (main DB with 51 tables + system DB with 14 tables, dual-database architecture) |
-| **AI Integration** | OpenAI-compatible model gateway (defaults: chat = deepseek-v4-flash, reasoning = deepseek-v4-pro), SSE streaming, retry budget, thinking-mode control |
+| **AI Integration** | OpenAI-compatible model gateway (defaults: chat = deepseek-v4.1-flash, reasoning = deepseek-v4.1-flash), SSE streaming, retry budget, thinking-mode control |
 | **Agent / Skill Orchestration** | EduClaw Gateway + 5 top-level Agents (goal/path/teaching/profile/simulation, no prompt orchestrator) / Skill execution layer (prompts/core source → compiled artifacts → DB mirror) + Coordinators + Durable Outbox event chain |
 | **Model Config Layers** | Env vars → platform defaults → Agent/Skill level → user-defined API / model overrides |
 | **Virtual Experiment** | Virtual Learner Lab (black-box simulation + Quick Learn) |

@@ -54,7 +54,7 @@ describe('APIRouter 逻辑别名解析（chat / reasoning / light）', () => {
 
   it('平台 defaultModel 为别名 chat → 展开为第一位部署', async () => {
     const route = await new APIRouter().resolve({})
-    expect(route.model).toBe('deepseek-v4-flash')
+    expect(route.model).toBe('deepseek-v4.1-flash')
   })
 
   it('DB 覆盖（chatModels）优先于代码注册表', async () => {
@@ -82,7 +82,7 @@ describe('APIRouter 逻辑别名解析（chat / reasoning / light）', () => {
     expect(route.model).toBe('agnes-3.0-flash')
   })
 
-  it('tier=reasoning + model 为别名 reasoning → 按能力选 pro', async () => {
+  it('tier=reasoning + model 为别名 reasoning → 按能力选支持思考的 v4.1-flash', async () => {
     skillConfigFindFirst.mockResolvedValue({
       endpoint: null,
       apiKey: null,
@@ -95,12 +95,12 @@ describe('APIRouter 逻辑别名解析（chat / reasoning / light）', () => {
       requestTimeoutMs: 45000
     })
     const route = await new APIRouter().resolve({ skillId: 'reasoning-skill' })
-    expect(route.model).toBe('deepseek-v4-pro')
+    expect(route.model).toBe('deepseek-v4.1-flash')
   })
 
   it('具体模型 id 不受别名逻辑影响（向后兼容）', async () => {
-    platformConfigFindFirst.mockResolvedValue({ ...BASE_PLATFORM, defaultModel: 'deepseek-v4-flash' })
+    platformConfigFindFirst.mockResolvedValue({ ...BASE_PLATFORM, defaultModel: 'deepseek-v4.1-flash' })
     const route = await new APIRouter().resolve({})
-    expect(route.model).toBe('deepseek-v4-flash')
+    expect(route.model).toBe('deepseek-v4.1-flash')
   })
 })

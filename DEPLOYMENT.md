@@ -154,8 +154,8 @@ SHUTDOWN_DEADLINE_MS=25000
 
 AI_API_URL=https://api.deepseek.com
 AI_API_KEY=sk-your-api-key
-AI_MODEL=deepseek-v4-flash
-AI_MODEL_REASONING=deepseek-v4-pro
+AI_MODEL=deepseek-v4.1-flash
+AI_MODEL_REASONING=deepseek-v4.1-flash
 
 INIT_ADMIN_NAME=admin
 INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
