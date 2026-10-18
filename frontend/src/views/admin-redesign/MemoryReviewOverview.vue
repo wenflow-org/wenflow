@@ -170,7 +170,16 @@
                 <span v-else class="mr__none">未复习</span>
               </td>
               <td>
+                <!-- 行可点（整行进详情），但只靠整行可点新人看不出这里有二级页：
+                     补一颗明面上的「详情」（2026-10-19 用户建议），落点与整行点击同一个
+                     openLearner（学习者的「记忆与复习」页签）。@click.stop 防与整行点击重复触发。 -->
                 <div class="mk-actions">
+                  <button
+                    type="button"
+                    class="mk-btn mk-btn--sm"
+                    title="详情：该学习者的记忆与复习详情页（逐条记忆痕迹、复习排期与归并记录）"
+                    @click.stop="openLearner(row.userId)"
+                  >详情</button>
                   <button type="button" class="mk-btn mk-btn--sm" :disabled="recomputingId === row.userId" title="重新跑一次该用户的记忆复盘，结果实时刷新" @click.stop="recompute(row.userId, row.name)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
                 </div>
               </td>

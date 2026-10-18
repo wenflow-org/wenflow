@@ -65,6 +65,20 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     expect(openSubPage).toHaveBeenCalledWith('learner', 'u1', { tab: 'memory' });
   });
 
+  it('行内「详情」钮：明面上的二级页入口（2026-10-19 用户建议，让新人知道这里有二级页）', async () => {
+    const w = await mountWithRows(ROWS);
+    const detail = w.findAll('tbody .mk-actions button').find((b) => b.text() === '详情');
+    expect(detail, '行内应有「详情」钮').toBeTruthy();
+    expect(detail!.attributes('title')).toContain('记忆与复习详情页');
+    // 与整行点击同一落点；@click.stop 保证不冒泡重复触发（只调一次）
+    await detail!.trigger('click');
+    expect(openSubPage).toHaveBeenCalledTimes(1);
+    expect(openSubPage).toHaveBeenCalledWith('learner', 'u1', { tab: 'memory' });
+    // 动作列次序对齐学习状态列表：详情在前、重算类动作在后
+    const labels = w.findAll('tbody .mk-actions button').map((b) => b.text());
+    expect(labels.indexOf('详情')).toBeLessThan(labels.indexOf('重新观察'));
+  });
+
   it('测试视角下仍透传 includeTest（与落点页签同在一份 opts）', async () => {
     liveSetIncludeVirtual(true);
     try {
