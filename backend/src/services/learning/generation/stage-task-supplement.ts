@@ -117,7 +117,7 @@ export function mergeSupplementTasks<T extends SupplementTask>(
   return { merged, added, dropped, dropReasons: reasons };
 }
 
-function titlesTooClose(a: string | undefined, b: string, threshold: number): boolean {
+export function titlesTooClose(a: string | undefined, b: string, threshold: number): boolean {
   if (!a) return false;
   if (titleSimilarity(a, b) >= threshold) return true;
   // 公共前缀判据（2026-09-30 b2 评审实证）：「搭建单调性证明的符号推理链骨架」vs「完整推理链框架」

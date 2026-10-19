@@ -6,8 +6,10 @@
  *    本阶段窗口」的新任务；补后覆盖口径 refs>0（zeroRefStages 下降）；
  * 2) **补不来**：调用失败 / 返回的任务都不带窗口内引用 → 保留首轮产出，如实记 reason；
  * 3) **闸耗尽**：每路径最多 1 次调用，第二次触发只记账、不再调用模型；
- * 4) **窗口无可用章节**：没有可核对的引用目标 → 不发起调用，且不消耗闸。
- * 另覆盖：无并入空位（已达 subtasksPerStageRange 上界）不消耗闸；系统不自动补写引用
+ * 4) **窗口无可用章节**：没有可核对的引用目标 → 不发起调用，且不消耗闸；
+ * 5) **满员置换（2026-10-19 跑批实证补修）**：阶段任务数达 subtasksPerStageRange 上界是常态
+ *    （clamp 所致），上界内无空位时改为 1 换 1 等量置换无引用旧任务，阶段任务数不变。
+ * 另覆盖：旧任务都已带引用（无可置换对象）不消耗闸；系统不自动补写引用
  * （拒收不带引用的任务 = 「宁缺勿编」的代码化）。
  */
 import {
@@ -17,6 +19,7 @@ import {
   countWindowSectionRefs,
   createZeroRefSupplementGate,
   filterTasksByWindowRefs,
+  pickReplaceVictims,
   supplementZeroRefStage,
 } from '../stage-material-supplement';
 import { readFileSync } from 'fs';
@@ -81,6 +84,8 @@ describe('零引用补课 · 场景 1：有缺口补成', () => {
     expect(outcome.attempted).toBe(true);
     expect(outcome.applied).toBe(true);
     expect(outcome.reason).toBeNull();
+    expect(outcome.mode).toBe('add'); // 上界内还有空位 → 直接并入，不动旧任务
+    expect(outcome.replaced).toBe(0);
     expect(outcome.accepted).toBe(1);
     expect(outcome.rejected).toBe(2);
     expect(outcome.tasks.map((task) => task.title)).toEqual(['建立概念地图', '精读第 2 节并把对照表复述一遍']);
@@ -100,6 +105,42 @@ describe('零引用补课 · 场景 1：有缺口补成', () => {
     });
     expect(request.existing).toEqual([{ title: '建立概念地图', type: 'acquire' }]);
     expect(designerPayloadOf(callDesigner).milestone).toEqual({ stageNumber: 3 });
+  });
+
+  it('有空位时不按空位预截断：前几条判重丢弃，后几条带引用任务照样并入（实证形态）', async () => {
+    // 2026-10-19 child-development 阶段 2 实证形态：空位 2，模型返回 5 条（前 3 条是既有任务改写
+    // → 判重丢弃；后 2 条是带引用的全新任务），预截断会把 2 个空位全部押在被丢弃的前两条上。
+    const gate = createZeroRefSupplementGate();
+    const callDesigner = jest.fn(async () => ({
+      subtasks: [
+        withRef('建立概念地图', 's-1'),                 // 与既有逐字重复 → 丢
+        withRef('搭建概念骨架', 's-1'),                 // 与既有逐字重复 → 丢
+        withRef('把概念地图复述一遍', 's-2'),           // 与既有近似 → 丢
+        withRef('用第 2 节内容做迁移练习', 's-2'),      // 全新 + 窗口内引用 → 并入
+        withRef('整理一份概念自查清单', 's-1'),         // 全新 + 窗口内引用 → 并入
+      ],
+    }));
+    const stageTasks = [plainTask('建立概念地图'), plainTask('搭建概念骨架'), plainTask('把概念地图复述一遍')];
+
+    const outcome = await supplementZeroRefStage({
+      stageNumber: 2,
+      materials: [materialWithSections(['s-1', 's-2'])],
+      stageTasks,
+      designerInput: {},
+      hints: { subtasksPerStageRange: [3, 5] },
+      gate,
+      callDesigner,
+    });
+
+    expect(outcome.applied).toBe(true);
+    expect(outcome.mode).toBe('add');
+    expect(outcome.accepted).toBe(2);
+    expect(outcome.rejected).toBe(3); // 3 条判重丢弃（不再蚕食空位）
+    expect(outcome.tasks).toHaveLength(5); // 3 首轮 + 2 并入（上界 5 内）
+    expect(outcome.tasks.map((task) => task.title).slice(3)).toEqual([
+      '用第 2 节内容做迁移练习',
+      '整理一份概念自查清单',
+    ]);
   });
 });
 
@@ -250,12 +291,83 @@ describe('零引用补课 · 场景 4：窗口无可用章节', () => {
     expect(gate.used).toBe(false);
   });
 
-  it('阶段任务已达上界（无并入空位）→ 不发起调用，也不消耗闸', async () => {
+  it('上界内无空位但无可换下的无引用任务（旧任务都已带引用）→ 不发起调用，也不消耗闸', async () => {
     const gate = createZeroRefSupplementGate();
     const callDesigner = jest.fn(async () => ({ subtasks: [withRef('精读第 2 节', 's-2')] }));
 
     const outcome = await supplementZeroRefStage({
       stageNumber: 2,
+      materials: [materialWithSections(['s-1', 's-2'])],
+      stageTasks: [withRef('课一', 's-1'), withRef('课二', 's-2')],
+      designerInput: {},
+      hints: { subtasksPerStageRange: [2, 2] },
+      gate,
+      callDesigner,
+    });
+
+    expect(outcome.reason).toBe('no-headroom');
+    expect(outcome.mode).toBeNull();
+    expect(callDesigner).not.toHaveBeenCalled();
+    expect(gate.used).toBe(false);
+  });
+});
+
+describe('零引用补课 · 场景 5：满员置换（replace 模式）', () => {
+  // 2026-10-19 20 goal 跑批实证：阶段任务数被 clamp 到 subtasksPerStageRange 上界是常态
+  // （51/73 阶段正好 = 上界），「无空位就跳过」让补课永不触发；满员时改为 1 换 1 等量置换。
+  it('满员 + 模型把既有任务改写成带引用版本 → 置换成立、任务数不变、replaced 记账', async () => {
+    const gate = createZeroRefSupplementGate();
+    const callDesigner = jest.fn(async () => ({
+      subtasks: [
+        withRef('精读第 1 节并把对照表复述一遍', 's-1'), // 与既有任务标题近重复（改写）+ 引用 → 置换
+        withRef('用第 2 节内容做迁移练习', 's-2'),
+      ],
+    }));
+    const stageTasks = [
+      plainTask('精读第 1 节并把对照表复述一遍'),
+      plainTask('搭建概念地图'),
+      plainTask('整理自查清单'),
+    ];
+
+    const outcome = await supplementZeroRefStage({
+      stageNumber: 2,
+      materials: [materialWithSections(['s-1', 's-2'])],
+      stageTasks,
+      designerInput: {},
+      hints: { subtasksPerStageRange: [3, 3], subtaskMinutesRange: [20, 40] },
+      gate,
+      callDesigner,
+    });
+
+    expect(callDesigner).toHaveBeenCalledTimes(1);
+    expect(outcome.attempted).toBe(true);
+    expect(outcome.applied).toBe(true);
+    expect(outcome.reason).toBeNull();
+    expect(outcome.mode).toBe('replace');
+    expect(outcome.replaced).toBe(2);
+    expect(outcome.accepted).toBe(2);
+    // 阶段任务数不变（上界 3 是硬结构约束）：换下 2 条（含标题近重复的那条）+ 换入 2 条
+    expect(outcome.tasks).toHaveLength(3);
+    const titles = outcome.tasks.map((task) => task.title);
+    expect(titles).toContain('精读第 1 节并把对照表复述一遍');
+    expect(titles).toContain('用第 2 节内容做迁移练习');
+    expect(titles).toContain('搭建概念地图'); // 无近重复匹配的候选 → 退而换尾部无引用旧任务
+    expect(titles).not.toContain('整理自查清单');
+    expect(gate.used).toBe(true);
+    const summary = summarizeSectionRefPositions(outcome.tasks.flatMap((task) => task.materialRefs || []));
+    expect(summary.count).toBe(2);
+    // 请求形态：needed 取可置换槽位数（满员时为上界内可换条数，非空位数 0）
+    expect(supplementRequestOf(callDesigner)).toMatchObject({ needed: 2, reason: 'zero-material-ref', materialRefsRequired: true });
+  });
+
+  it('满员 + 只有 1 条带引用任务可换入 → 只换 1 条（不缩水、不越界）', async () => {
+    const gate = createZeroRefSupplementGate();
+    const callDesigner = jest.fn(async () => ({
+      subtasks: [withRef('精读第 2 节并复述', 's-2')],
+    }));
+
+    const outcome = await supplementZeroRefStage({
+      stageNumber: 1,
       materials: [materialWithSections(['s-1', 's-2'])],
       stageTasks: [plainTask('课一'), plainTask('课二')],
       designerInput: {},
@@ -264,9 +376,38 @@ describe('零引用补课 · 场景 4：窗口无可用章节', () => {
       callDesigner,
     });
 
-    expect(outcome.reason).toBe('no-headroom');
-    expect(callDesigner).not.toHaveBeenCalled();
-    expect(gate.used).toBe(false);
+    expect(outcome.applied).toBe(true);
+    expect(outcome.mode).toBe('replace');
+    expect(outcome.replaced).toBe(1);
+    expect(outcome.tasks).toHaveLength(2);
+    expect(outcome.tasks.map((task) => task.title)).toEqual(['课一', '精读第 2 节并复述']);
+  });
+
+  it('满员 + 换入候选与「留任」旧任务近重复（换皮）→ 不置换，记 no-added-tasks，清单原样', async () => {
+    const gate = createZeroRefSupplementGate();
+    const callDesigner = jest.fn(async () => ({
+      subtasks: [withRef('搭建概念地图的完整骨架', 's-2')],
+    }));
+    // 候选与「带引用、不可换下」的旧任务近重复：置换对象只剩尾部无引用任务，
+    // 判重底座里那条带引用的任务把它拦下 → 宁少勿换皮
+    const stageTasks = [withRef('搭建概念地图', 's-1'), plainTask('课二')];
+
+    const outcome = await supplementZeroRefStage({
+      stageNumber: 1,
+      materials: [materialWithSections(['s-1', 's-2'])],
+      stageTasks,
+      designerInput: {},
+      hints: { subtasksPerStageRange: [2, 2] },
+      gate,
+      callDesigner,
+    });
+
+    expect(outcome.applied).toBe(false);
+    expect(outcome.mode).toBe('replace');
+    expect(outcome.reason).toBe('no-added-tasks');
+    expect(outcome.replaced).toBe(0);
+    expect(outcome.tasks).toEqual(stageTasks); // 首轮产出原样保留
+    expect(gate.used).toBe(true); // 调用发生过 → 额度已消耗
   });
 });
 
@@ -297,6 +438,18 @@ describe('零引用补课 · 判据纯函数', () => {
     expect(rejected).toBe(1);
     expect(ZERO_REF_SUPPLEMENT_MAX_TASKS).toBe(2);
   });
+
+  it('pickReplaceVictims：标题近重复的旧任务优先做置换对象，其余换尾部', () => {
+    const replaceable = [plainTask('精读第 1 节并把对照表复述一遍'), plainTask('搭建概念地图'), plainTask('整理自查清单')];
+    const victims = pickReplaceVictims(replaceable, [
+      withRef('精读第 1 节并把对照表复述一遍', 's-1'), // 逐字改写 → 对应旧任务做置换对象
+      withRef('用第 2 节内容做迁移练习', 's-2'),       // 无对应 → 换尾部
+    ]);
+    expect(victims.map((task) => task.title)).toEqual(['精读第 1 节并把对照表复述一遍', '整理自查清单']);
+    // 候选多于置换对象时（不可能出现：slots ≤ replaceable.length）返回短列表且不重复
+    const short = pickReplaceVictims([plainTask('课一')], [withRef('课九', 's-1'), withRef('课十', 's-2')]);
+    expect(short.map((task) => task.title)).toEqual(['课一']);
+  });
 });
 
 describe('#119 优化项 1 接线（源码守卫）', () => {
@@ -320,6 +473,9 @@ describe('#119 优化项 1 接线（源码守卫）', () => {
     expect(source).toContain('...(materialSupplement ? { materialSupplement } : {})');
     expect(source).toContain('zeroRefSupplement: {');
     expect(source).toContain('gateUsed: zeroRefSupplementGate.used,');
+    // 满员置换：形态与换下条数一并记账（add/replace、replaced），复算可直接读
+    expect(source).toContain('mode: outcome.mode,');
+    expect(source).toContain('replaced: outcome.replaced,');
   });
 
   it('纪律：模块只读判据 + 拒收无引用任务，不自动补写/绑定 materialRefs', () => {

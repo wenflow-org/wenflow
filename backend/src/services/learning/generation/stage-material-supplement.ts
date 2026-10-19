@@ -11,6 +11,17 @@
  * **每路径最多 1 次**——闸对象由调用方按 run 作用域持有并传给每个阶段，
  * 本模块在**发起调用前**同步取闸（阶段设计并发 2 路，先查后置必须是同步的）。
  *
+ * 满员置换（2026-10-19 20 goal 跑批实证补修）：首版「阶段任务已达 subtasksPerStageRange 上界
+ * → 不发调用」把补课变成了事实上的死代码——阶段任务数在真实跑批里被 clampStageTasksToHints
+ * 顶到上界是常态（20 goal：51/73 阶段正好 = 上界；13 个零引用阶段里 12 个因此从未发起调用），
+ * 唯一一次发起调用（child-development 阶段 2）返回的 5 条任务全部带窗口内引用、其中 3 条是
+ * 「把既有任务改写成带引用版本」，却因与既有任务标题近重复被 merge 全部判重丢弃。修法：
+ * 上界内无空位时改为**等量置换**——换下至多 2 条「不带窗口引用」的旧任务，换入同数量的带引用
+ * 任务（上界是硬结构约束不能破，阶段任务数不变）；判重底座排除被换下的任务，否则模型对既有
+ * 任务的带引用改写（补课的目标形态）永远过不了「与首轮近似 = 换皮」闸。同时删掉 add 模式的
+ * 「按空位预截断」：预截断会让前几条被判重的候选白白吃掉空位（同实证：2 个空位被两条改写占满、
+ * 判重丢弃后，后面两条真正带引用的全新任务也已被截断丢掉）。
+ *
  * 纪律（issue「不做」项的代码化）：
  * - 系统**绝不**自动补写/绑定 `materialRefs`——引用必须由模型给出，并经 skill 侧逐字核对
  *   （`withMaterialRefs` → `normalizeMaterialRefs`：quote 逐字在资料里、sectionId 真实存在）。
@@ -18,11 +29,14 @@
  *   没给 sectionId 的引用一律拒收（不可核对的伪引用比缺引用更糟）。
  * - 补不齐不硬塞：闸内拿不到带引用任务就如实记账（`reason`），保留首轮产出。
  */
-import { mergeSupplementTasks, type SupplementTask } from './stage-task-supplement';
+import { mergeSupplementTasks, titlesTooClose, type SupplementTask } from './stage-task-supplement';
 import type { PromptMaterial } from '../../materials/material-prompt-projection';
 
-/** 单次零引用补课最多请求几条任务（1 条带引用即闭合缺口，多要 1 条防单条被去重/拒收）。 */
+/** 单次零引用补课最多并入/置换几条任务（1 条带引用即闭合缺口，多要 1 条防单条被去重/拒收）。 */
 export const ZERO_REF_SUPPLEMENT_MAX_TASKS = 2;
+
+/** 置换模式判「改写对象」的标题相似度阈值：与 mergeSupplementTasks 的默认判重阈值同源。 */
+const REPLACE_MATCH_DUP_THRESHOLD = 0.6;
 
 /** 补课只用到 planningHints 的这两项（避免把 any 传进纯逻辑）。 */
 export interface ZeroRefSupplementHints {
@@ -56,7 +70,7 @@ export function claimZeroRefSupplementGate(gate: ZeroRefSupplementGate): boolean
 export type ZeroRefSupplementReason =
   /** 本阶段窗口内没有带 id 的可用章节：没有可核对的引用目标，不发起调用 */
   | 'no-window-sections'
-  /** 阶段任务已达 subtasksPerStageRange 上界：没有并入空位，不发起调用 */
+  /** 上界内无并入空位、且没有可换下的「无窗口引用」旧任务：没有可动的位置，不发起调用 */
   | 'no-headroom'
   /** 路径级闸已耗尽（每路径最多 1 次） */
   | 'gate-exhausted'
@@ -64,8 +78,11 @@ export type ZeroRefSupplementReason =
   | 'call-failed'
   /** 调用有返回，但没有任何「带窗口内引用」的任务 */
   | 'no-ref-tasks'
-  /** 带引用任务被标题去重/上界拦下，无一并入 */
+  /** 带引用任务被标题去重/上界拦下，无一并入（add）或无一置换成立（replace） */
   | 'no-added-tasks';
+
+/** 补课形态：add=上界内直接并入；replace=已达上界，等量置换无引用旧任务（阶段任务数不变）。 */
+export type ZeroRefSupplementMode = 'add' | 'replace';
 
 export interface ZeroRefSupplementAudit {
   /** 是否发起了模型调用（闸被消耗）。 */
@@ -74,13 +91,17 @@ export interface ZeroRefSupplementAudit {
   applied: boolean;
   /** 未补成的原因；补成时为 null。 */
   reason: ZeroRefSupplementReason | null;
-  /** 请求补几条。 */
+  /** 补课形态；未发起调用时为 null。 */
+  mode: ZeroRefSupplementMode | null;
+  /** 请求补几/换几条。 */
   needed: number;
   /** 模型返回的任务数。 */
   incoming: number;
-  /** 实际并入的任务数。 */
+  /** 实际并入（add）或置换入（replace）的任务数。 */
   accepted: number;
-  /** 因「无窗口内引用」被拒收的任务数。 */
+  /** replace 模式实际换下的无引用旧任务数（add 模式恒为 0）。 */
+  replaced: number;
+  /** 被拒收/未并入的任务数（无窗口内引用 + 越空位截断 + 判重丢弃）。 */
   rejected: number;
 }
 
@@ -149,17 +170,48 @@ function nonNegativeInt(value: unknown): number | null {
 }
 
 /**
+ * 置换模式的「换下对象」选择（与 `candidates` 同序一一对应）：
+ * ① 优先挑与补课任务标题近重复的无引用旧任务——模型最常见的形态是把阶段里某条任务**改写**成
+ *    带引用版本（2026-10-19 实证：child-development 阶段 2 补课返回 5 条中 3 条是既有任务的
+ *    逐字/近似改写 + 引用），被改写的那条正是该换下的；
+ * ② 没有近重复匹配的，退而换下**尾部**（收尾动作，通常锚定资料最弱）的无引用旧任务——
+ *    确定性选择，便于复算；无论如何都不动已带窗口引用的任务。
+ */
+export function pickReplaceVictims<T extends SupplementTask>(
+  replaceable: T[],
+  candidates: T[],
+  dupThreshold = REPLACE_MATCH_DUP_THRESHOLD,
+): T[] {
+  const used = new Set<T>();
+  const victims: T[] = [];
+  for (const candidate of candidates) {
+    const title = String(candidate?.title || '');
+    const matched = replaceable.find((task) => !used.has(task)
+      && titlesTooClose(String(task?.title || ''), title, dupThreshold));
+    const victim = matched
+      || [...replaceable].reverse().find((task) => !used.has(task));
+    if (!victim) break;
+    used.add(victim);
+    victims.push(victim);
+  }
+  return victims;
+}
+
+/**
  * 零引用阶段的限定补课：闸内调一次 stage-designer，只并入「带窗口内引用」的新任务。
  *
  * 流程与闸语义（按序）：
  *   ① 窗口无可用章节 → 跳过（**不消耗闸**：没发起调用）；
- *   ② 阶段已无并入空位（任务数 ≥ subtasksPerStageRange[1]）→ 跳过（不消耗闸）；
+ *   ② 上界内无空位（任务数 ≥ subtasksPerStageRange[1]）→ 转**置换模式**：可换下的
+ *      「无窗口引用」旧任务为 0 条时才跳过（不消耗闸）；否则照常发起调用，补成时等量置换；
  *   ③ 取闸失败（本路径已补过）→ 跳过；
  *   ④ 调用 stage-designer（payload = 首轮输入 + supplementRequest{needed, existing, minutesRange,
  *      stageNumber, reason:'zero-material-ref', materialRefsRequired:true}）；抛错 → `call-failed`；
  *   ⑤ 收任务：只留带窗口内引用的（其余拒收）；一条都没有 → `no-ref-tasks`；
- *   ⑥ 按空位数截断后并入（标题近重复/上界仍由 mergeSupplementTasks 兜底）；一条都没并入
- *      → `no-added-tasks`；否则 `applied`，返回补后清单。
+ *   ⑥ add：整批候选交 mergeSupplementTasks 判重（**不按空位预截断**——预截断会让前几条被判重的
+ *      候选白白吃掉空位），最终条数由 upper 兜底，一条都没并入 → `no-added-tasks`；
+ *      replace：1 换 1 等量置换（判重底座排除被换下者），k 条全换入才成立，阶段任务数不变；
+ *      换不成 → `no-added-tasks`。否则 `applied`，返回补后清单。
  *
  * 任何一步失败都不抛出——补课是优化项，不得打断路径生成（fail-open）。
  */
@@ -172,9 +224,11 @@ export async function supplementZeroRefStage<T extends SupplementTask>(
     attempted: false,
     applied: false,
     reason,
+    mode: null,
     needed: 0,
     incoming: 0,
     accepted: 0,
+    replaced: 0,
     rejected: 0,
   });
 
@@ -186,10 +240,22 @@ export async function supplementZeroRefStage<T extends SupplementTask>(
   const headroom = upper === null
     ? ZERO_REF_SUPPLEMENT_MAX_TASKS
     : Math.max(0, upper - existing.length);
-  if (headroom <= 0) return skipped('no-headroom');
+  // 满员置换（2026-10-19 跑批实证调整）：上界内无空位是真实跑批的常态（clampStageTasksToHints
+  // 会把模型超产裁到上界），若直接跳过，补课在常规路径上永不触发（20 goal：13 个零引用阶段
+  // 里 12 个这样被跳过，闸从未成为瓶颈）。上界是硬结构约束不能破 → 满员时改为等量置换。
+  const replaceMode = headroom <= 0;
+  // 可换下的旧任务：不带「窗口内引用」者——补课的目标就是让任务长在资料上，绝不换下已锚定资料的任务。
+  const replaceable = replaceMode
+    ? existing.filter((task) => countWindowSectionRefs(task, windowIds) === 0)
+    : [];
+  if (replaceMode && replaceable.length === 0) return skipped('no-headroom');
+  const slots = replaceMode
+    ? Math.min(ZERO_REF_SUPPLEMENT_MAX_TASKS, replaceable.length)
+    : Math.min(ZERO_REF_SUPPLEMENT_MAX_TASKS, headroom);
 
   if (!claimZeroRefSupplementGate(params.gate)) return skipped('gate-exhausted');
 
+  const mode: ZeroRefSupplementMode = replaceMode ? 'replace' : 'add';
   // 闸已消耗：从这里起所有返回都带 attempted=true（调用了模型 / 至少发起了调用）。
   const attempted = (
     reason: ZeroRefSupplementReason | null,
@@ -200,14 +266,16 @@ export async function supplementZeroRefStage<T extends SupplementTask>(
     attempted: true,
     applied: reason === null,
     reason,
-    needed: Math.min(ZERO_REF_SUPPLEMENT_MAX_TASKS, headroom),
+    mode,
+    needed: slots,
     incoming: 0,
     accepted: 0,
+    replaced: 0,
     rejected: 0,
     ...fields,
   });
 
-  const needed = Math.min(ZERO_REF_SUPPLEMENT_MAX_TASKS, headroom);
+  const needed = slots;
   const supplementRequest = {
     needed,
     existing: existing.map((task) => ({ title: String(task?.title || ''), type: task?.type })),
@@ -234,23 +302,57 @@ export async function supplementZeroRefStage<T extends SupplementTask>(
   if (accepted.length === 0) {
     return attempted('no-ref-tasks', { incoming: incomingRaw.length, rejected });
   }
-  // 空位先截断：不让上界在 merge 里静默丢掉带引用的任务（丢多少看得见）
-  const limited = accepted.slice(0, headroom);
-  const { merged, added } = mergeSupplementTasks(existing, limited, {
-    upper,
-    // 零引用补课不设动作族闸：这里要的是「长在资料上」的任务，允许与首轮同族的
-    // acquire/execute（换材料做深）；换皮仍由标题近重复闸拦截。
-    requireTypeNovelty: null,
-  });
-  if (added.length === 0) {
-    return attempted('no-added-tasks', {
-      incoming: incomingRaw.length,
-      rejected: rejected + (accepted.length - limited.length),
+
+  if (!replaceMode) {
+    // 不按空位**预截断**：先让判重把整批候选过完，最终条数由 upper 在 merge 里兜底。
+    // 预截断的实测副作用（2026-10-19 child-development 阶段 2）：2 个空位被前两条「既有任务改写」
+    // 占满，判重把它们丢弃后，后面两条真正带窗口引用的全新任务已被截断丢掉 → 空位白费
+    // （audit: needed=2, incoming=5, accepted=0, rejected=3）。
+    const limitUpper = upper === null ? existing.length + ZERO_REF_SUPPLEMENT_MAX_TASKS : upper;
+    const { merged, added } = mergeSupplementTasks<T>(existing, accepted, {
+      upper: limitUpper,
+      // 零引用补课不设动作族闸：这里要的是「长在资料上」的任务，允许与首轮同族的
+      // acquire/execute（换材料做深）；换皮仍由标题近重复闸拦截。
+      requireTypeNovelty: null,
     });
+    const rejectedTotal = rejected + (accepted.length - added.length);
+    if (added.length === 0) {
+      return attempted('no-added-tasks', {
+        incoming: incomingRaw.length,
+        rejected: rejectedTotal,
+      });
+    }
+    return attempted(null, {
+      incoming: incomingRaw.length,
+      accepted: added.length,
+      rejected: rejectedTotal,
+    }, merged);
   }
-  return attempted(null, {
-    incoming: incomingRaw.length,
-    accepted: added.length,
-    rejected: rejected + (accepted.length - limited.length),
-  }, merged);
+
+  // —— replace 模式：1 换 1 等量置换，阶段任务数不变（= 原条数 ≤ 上界） ——
+  // 从大往小试置换条数 k：判重底座 = 原清单 − k 条被换下者，模型对既有任务的带引用改写
+  // （与「被它换下的那条」标题近重复）才不会在判重里被自己人拦下；k 条全换入才成立，
+  // 少一条就退到更小的 k 重试，宁少勿换皮。
+  const pool = accepted.slice(0, slots);
+  const truncated = rejected + (accepted.length - pool.length);
+  for (let k = pool.length; k >= 1; k -= 1) {
+    const candidates = pool.slice(0, k);
+    const victims = pickReplaceVictims(replaceable, candidates);
+    if (victims.length < k) continue;
+    const basis = existing.filter((task) => !victims.includes(task));
+    const { merged, added } = mergeSupplementTasks<T>(basis, candidates, {
+      // 置换后总条数 = 原条数（上界内）；upper 兜底防任何越界
+      upper: existing.length,
+      requireTypeNovelty: null,
+    });
+    if (added.length === k) {
+      return attempted(null, {
+        incoming: incomingRaw.length,
+        accepted: k,
+        replaced: k,
+        rejected: truncated,
+      }, merged);
+    }
+  }
+  return attempted('no-added-tasks', { incoming: incomingRaw.length, rejected: truncated });
 }

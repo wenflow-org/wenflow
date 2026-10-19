@@ -531,7 +531,9 @@ async function enrichLearningPathWithAndersonInner(
       // 引用覆盖守卫（2026-10-17）：有资料却零引用 = 本阶段任务没有长在资料上
       //（20 goal 复核实证：cpa/mbsr 末阶段）。缺口可见化之后**定向补课**（#119 优化项 1，2026-10-19）：
       // 在路径级闸（每路径最多 1 次调用）下再调一次 stage-designer，只收「带引用且 sectionId
-      // 命中本阶段窗口」的新任务；闸用完/补不来则维持原状（只告警，见下方）。
+      // 命中本阶段窗口」的新任务；阶段已满（真实跑批常态：任务数被裁到 subtasksPerStageRange
+      // 上界）时改为**等量置换**至多 2 条无引用旧任务，阶段任务数不变；闸用完/补不来则维持
+      // 原状（只告警，见下方）。
       // 纪律不变：**绝不自动补引用**——引用必须由模型给出并经 skill 侧逐字核对（withMaterialRefs），
       // 系统替模型绑一条不可核对的引用，比缺引用更糟（学习者点开原文会发现对不上）。
       let materialSupplement: ZeroRefSupplementAudit | null = null;
@@ -560,9 +562,11 @@ async function enrichLearningPathWithAndersonInner(
             attempted: outcome.attempted,
             applied: outcome.applied,
             reason: outcome.reason,
+            mode: outcome.mode,
             needed: outcome.needed,
             incoming: outcome.incoming,
             accepted: outcome.accepted,
+            replaced: outcome.replaced,
             rejected: outcome.rejected,
           };
           const supplementLogPayload = {
