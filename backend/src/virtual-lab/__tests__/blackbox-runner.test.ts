@@ -1252,6 +1252,106 @@ describe('BlackboxVirtualLearnerRunner', () => {
     expect(currentSession().status).toBe('running')
   })
 
+  it('延伸课 #124：本课结算且此前表达过延伸意愿时开 extension 课堂', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const session = sessionWith({
+      learningPathId: 'p1',
+      taskId: 't2',
+      teachingSessionId: null,
+      extensionPhase: 'pending',
+      extensionTaskId: 't1',
+      extensionSourceSessionId: 'teach1',
+      extensionText: '老师，我还想就这节课再深入一点'
+    })
+    addObservation(session, {
+      stage: 'path',
+      visibleMessages: [],
+      visiblePath: { id: 'p1', title: '路径', milestones: [] },
+      visibleTask: { id: 't2', title: '第二个任务' },
+      availableActions: ['start_learning']
+    })
+    const adapter = {
+      startExtensionSession: jest.fn().mockResolvedValue({
+        observation: {
+          stage: 'teaching',
+          visibleMessages: [{ role: 'platform', content: '好，我们继续深入' }],
+          visibleTask: { id: 't1', title: '第一课' },
+          availableActions: ['chat', 'abandon']
+        },
+        control: { teachingSessionId: 'teach-ext', teachingRevision: 1, platformStage: 'teaching' }
+      })
+    }
+    const currentSession = installMutableActionSession(runner, session, adapter)
+
+    const result = await runner.autoStep('vs1', 'admin1')
+
+    expect(adapter.startExtensionSession).toHaveBeenCalledWith('t1')
+    expect(result.action).toEqual({ type: 'request_extension', text: '老师，我还想就这节课再深入一点' })
+    expect(result.result.observation.stage).toBe('teaching')
+    const persisted = JSON.parse(currentSession().stageResults)
+    expect(persisted.blackbox.control).toEqual(expect.objectContaining({
+      teachingSessionId: 'teach-ext',
+      extensionMode: true,
+      extensionPhase: 'active',
+      extensionTaskId: 't1',
+      extensionSourceSessionId: 'teach1',
+      extensionTurns: 0,
+      taskCompleted: false,
+      taskCompletionCheckpoint: null
+    }))
+  })
+
+  it('延伸课 #124：轮次上限到达时 end_only 收束并回到路径', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const session = sessionWith({
+      learningPathId: 'p1',
+      taskId: 't1',
+      teachingSessionId: 'teach-ext',
+      teachingRevision: 2,
+      extensionMode: true,
+      extensionPhase: 'active',
+      extensionTurns: 4
+    })
+    addObservation(session, {
+      stage: 'teaching',
+      visibleMessages: [],
+      visibleTask: { id: 't1', title: '第一课' },
+      availableActions: ['chat']
+    })
+    const adapter = {
+      endTeaching: jest.fn().mockResolvedValue({
+        observation: { stage: 'completed', visibleMessages: [], availableActions: [] },
+        control: { platformStage: 'completed' },
+        diagnostic: { endResult: { status: 'completed' } }
+      }),
+      getPath: jest.fn().mockResolvedValue({
+        observation: {
+          stage: 'path',
+          visibleMessages: [],
+          visiblePath: { id: 'p1', title: '路径', milestones: [] },
+          visibleTask: { id: 't2', title: '第二个任务' },
+          availableActions: ['start_learning']
+        },
+        control: { learningPathId: 'p1', platformStage: 'active', runCompleted: false }
+      })
+    }
+    const currentSession = installMutableActionSession(runner, session, adapter)
+
+    const result = await runner.autoStep('vs1', 'admin1')
+
+    expect(adapter.endTeaching).toHaveBeenCalledWith('teach-ext', 2, 'completed')
+    expect(adapter.getPath).toHaveBeenCalledWith('p1')
+    expect(result.result.observation.stage).toBe('path')
+    const persisted = JSON.parse(currentSession().stageResults)
+    expect(persisted.blackbox.control).toEqual(expect.objectContaining({
+      learningPathId: 'p1',
+      extensionMode: false,
+      extensionPhase: 'completed',
+      taskCompleted: true,
+      taskCompletionCheckpoint: null
+    }))
+  })
+
   it('Teaching 自动结束后复用同一完成流程且不再调用 endTeaching', async () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith(

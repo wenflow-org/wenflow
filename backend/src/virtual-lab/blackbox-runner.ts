@@ -122,6 +122,11 @@ const BLACKBOX_SIMULATOR_RETRY_DELAY_MS = 750
  * 有上限才能防止把收束点拖成无限轮（#46 的 40 轮空转教训）。
  */
 const MAX_EXTENSION_REQUESTS = 2
+/**
+ * 延伸课（#124）轮次上限：本课结算后开一节 extension 课堂，最多陪学这么多轮，
+ * 到上限即 end_only 收束回路径——防止延伸课把整场实验拖成无限轮。
+ */
+const MAX_EXTENSION_TURNS = 4
 
 /**
  * LLM/Provider 瞬时失败识别（黑盒可恢复失败判定）：
@@ -862,10 +867,25 @@ export class BlackboxVirtualLearnerRunner {
           throw new BlackboxRunStateError('当前没有可交互的教学会话', 'BLACKBOX_TEACHING_NOT_AVAILABLE')
         }
         const teachingResult = await adapter.sendTeachingMessage(control.teachingSessionId, control.teachingRevision, action)
-        if (teachingResult.observation.stage === 'completed' && control.taskId && control.learningPathId) {
-          result = await this.completeCurrentTask(session, state, adapter, control, latestObservation, teachingResult)
+        // 延伸课（#124）：达标轮里的「还想深入」既是一条课堂发言，也是开延伸课的意图——
+        // 意图先记在 control 上，等本课结算后由 autoStep 开一节 extension 课堂（见 startExtensionSession）。
+        const extensionControl = action.type === 'request_extension' && !control.extensionMode
+          ? {
+              extensionPhase: 'pending' as const,
+              extensionTaskId: control.taskId ?? null,
+              extensionSourceSessionId: control.teachingSessionId ?? null,
+              extensionText: action.text.slice(0, 500)
+            }
+          : control.extensionMode
+            ? { extensionTurns: (control.extensionTurns ?? 0) + 1 }
+            : {}
+        const nextTeachingResult = Object.keys(extensionControl).length > 0
+          ? { ...teachingResult, control: { ...teachingResult.control, ...extensionControl } }
+          : teachingResult
+        if (nextTeachingResult.observation.stage === 'completed' && control.taskId && control.learningPathId) {
+          result = await this.completeCurrentTask(session, state, adapter, control, latestObservation, nextTeachingResult)
         } else {
-          result = teachingResult
+          result = nextTeachingResult
         }
       }
 
@@ -875,13 +895,23 @@ export class BlackboxVirtualLearnerRunner {
 
   async autoStep(sessionId: string, operatorId: string): Promise<{ action?: LearnerAction; result: PlatformInteractionResult; waitingForObservation?: boolean }> {
     return this.executeWithFailurePersistence(sessionId, 'BLACKBOX_STEP_FAILED', async () => {
-      const { session, state } = await this.context(sessionId, operatorId)
+      const { session, state, adapter } = await this.context(sessionId, operatorId)
       this.assertMutableSession(session)
       const latest = state.blackbox?.publicTrace?.slice(-1)[0]?.observation
       const control = (state.blackbox?.control || {}) as PlatformControlReceipt
       if (this.currentTaskCompletionCheckpoint(control)) {
         const action: LearnerAction = { type: 'confirm_complete' }
         return { action, result: await this.act(sessionId, operatorId, action) }
+      }
+      // 延伸课（#124）：本课已结算且学习者表达过延伸意愿 → 基于源任务开一节 extension 课堂。
+      // 路径观察面本身不提供 request_extension，所以这是 runner 的内部状态迁移，不走 act 的动作白名单。
+      if (control.extensionPhase === 'pending' && control.extensionTaskId && !control.extensionMode) {
+        const action: LearnerAction = {
+          type: 'request_extension',
+          text: control.extensionText || '老师，我想就这节课再深入学一点。'
+        }
+        const extensionResult = await this.startExtensionSession(session, state, adapter, control)
+        return { action, result: await this.projectPlatformResult(session, state, extensionResult, action) }
       }
       const snapshot = await this.getExperimentSnapshot(session, state)
       const story = snapshot.story
@@ -939,6 +969,11 @@ export class BlackboxVirtualLearnerRunner {
         }
         action = { type: 'start_learning', taskId: latest.visibleTask?.id }
       } else if (latest.stage === 'teaching') {
+        // 延伸课（#124）：达到轮次上限直接 end_only 收束，不再多烧一轮模拟器调用。
+        if (control.extensionMode && (control.extensionTurns ?? 0) >= MAX_EXTENSION_TURNS) {
+          const ended = await this.endExtensionSession(session, state, adapter, control)
+          return { result: await this.projectPlatformResult(session, state, ended) }
+        }
         const history = this.visibleHistory(state).map((item) => ({
           role: item.role === 'platform' ? 'teacher' : 'learner',
           content: item.content
@@ -987,6 +1022,13 @@ export class BlackboxVirtualLearnerRunner {
           snapshot,
           'teaching'
         )
+        // 延伸课（#124）：学习者在延伸段自己收束（自述做完且不再追问）→ end_only 回路径。
+        if (control.extensionMode
+          && output.learnerFeedback?.selfReportedTaskDone === true
+          && output.learnerFeedback?.stopAsking === true) {
+          const ended = await this.endExtensionSession(session, state, adapter, control)
+          return { result: await this.projectPlatformResult(session, state, ended) }
+        }
         // 延伸意愿（#124）：达标后仍想深入 → 不确认完成，继续陪学；
         // 上限 MAX_EXTENSION_REQUESTS 次，防止把收束点拖成无限轮（#46 的 40 轮空转教训）。
         const priorExtensionRequests = Number(
@@ -1623,6 +1665,91 @@ export class BlackboxVirtualLearnerRunner {
       if (latestObservation.visibleTask?.id && latestObservation.visibleTask.id !== control.taskId) {
         throw new BlackboxRunStateError('完成任务与当前 Observation 不一致', 'BLACKBOX_TASK_MISMATCH')
       }
+    }
+  }
+
+  /**
+   * 延伸课开课（#124 Phase 1）：本课结算后基于同一 task 开一节 extension 课堂。
+   * 课堂不结算任务（后端 finalize 只接受 end_only），学到的新概念照常进记忆/画像；
+   * wrapup 侧留 extensionObservability，用于后续「延伸学了什么 vs 后续路径」的对照观测。
+   */
+  private async startExtensionSession(
+    session: VirtualSessionRow,
+    state: StageResults,
+    adapter: PlatformUserAdapter,
+    control: PlatformControlReceipt
+  ): Promise<PlatformInteractionResult> {
+    const taskId = control.extensionTaskId
+    if (!taskId) throw new BlackboxRunStateError('延伸课缺少源任务', 'BLACKBOX_EXTENSION_TASK_MISSING')
+    const extension = await adapter.startExtensionSession(taskId)
+    return {
+      observation: extension.observation,
+      control: {
+        ...extension.control,
+        taskId,
+        learningPathId: control.learningPathId,
+        platformStage: 'teaching',
+        extensionMode: true,
+        extensionPhase: 'active',
+        extensionTaskId: taskId,
+        extensionSourceSessionId: control.extensionSourceSessionId ?? control.teachingSessionId ?? null,
+        extensionTurns: 0,
+        taskCompleted: false,
+        taskCompletionCheckpoint: null
+      },
+      diagnostic: { extensionStarted: extension.diagnostic ?? null }
+    }
+  }
+
+  /**
+   * 延伸课收束（#124）：end_only 结算延伸课，刷新路径并把控制面切回「路径选下一任务」。
+   * 收束失败也回路径（fail-open）：延伸课是观测段，不能把整条学习路径卡死在这里。
+   */
+  private async endExtensionSession(
+    session: VirtualSessionRow,
+    state: StageResults,
+    adapter: PlatformUserAdapter,
+    control: PlatformControlReceipt
+  ): Promise<PlatformInteractionResult> {
+    let ended: PlatformInteractionResult | null = null
+    if (control.teachingSessionId) {
+      try {
+        ended = await adapter.endTeaching(control.teachingSessionId, control.teachingRevision, 'completed')
+      } catch (error) {
+        logger.warn('[Blackbox] 延伸课收束失败（继续回路径）', {
+          sessionId: session.id,
+          teachingSessionId: control.teachingSessionId,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+    }
+    let pathResult: PlatformInteractionResult | null = null
+    if (control.learningPathId) {
+      try {
+        pathResult = await adapter.getPath(control.learningPathId)
+      } catch (error) {
+        logger.warn('[Blackbox] 延伸课后刷新路径失败', {
+          sessionId: session.id,
+          learningPathId: control.learningPathId,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+    }
+    const observation: LearnerObservation = pathResult?.observation ?? {
+      stage: 'completed',
+      visibleMessages: [],
+      availableActions: []
+    }
+    return {
+      observation,
+      control: {
+        ...(pathResult?.control || {}),
+        extensionMode: false,
+        extensionPhase: 'completed',
+        taskCompleted: true,
+        taskCompletionCheckpoint: null
+      },
+      diagnostic: { extensionEnded: ended?.diagnostic ?? null, pathRefreshed: pathResult !== null }
     }
   }
 

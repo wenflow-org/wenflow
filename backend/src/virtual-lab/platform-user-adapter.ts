@@ -247,6 +247,38 @@ export class PlatformUserAdapter {
     }
   }
 
+  /**
+   * 延伸课（#124）：基于**已完成**的本课再开一节课堂（不结算任务，finalize 仅 end_only）。
+   * 与 startTeaching 的差别只在端点与语义；观察面同构，便于模拟器继续按人设陪学。
+   */
+  async startExtensionSession(taskId: string): Promise<PlatformInteractionResult> {
+    const response = await this.transport.request<any>({
+      method: 'POST',
+      url: `/ai-teaching/tasks/${encodeURIComponent(taskId)}/extension-session`,
+      headers: await this.headers()
+    })
+    const result = unwrap<any>(response)
+    const visibleText = result?.welcomeMessage || ''
+    return {
+      observation: {
+        stage: 'teaching',
+        visibleMessages: visibleText ? [{ role: 'platform', content: visibleText }] : [],
+        visibleTask: { id: taskId, title: result?.topic || result?.subject || '当前任务' },
+        // 延伸课不再对外提供 confirm_complete / request_extension：它是收束后的陪学段，
+        // 只能由 runner 在轮次上限或学习者收束信号出现时 end_only。
+        availableActions: ['chat', 'request_hint', 'request_example', 'submit_answer', 'submit_code', 'abandon'],
+        lastActionResult: { status: 'success', visibleMessage: visibleText }
+      },
+      control: {
+        teachingSessionId: result?.sessionId,
+        teachingRevision: result?.revision,
+        taskId,
+        platformStage: 'teaching',
+        rawTraceId: traceIdFrom(response.headers)
+      }
+    }
+  }
+
   async sendTeachingMessage(sessionId: string, revision: number | null | undefined, action: LearnerAction): Promise<PlatformInteractionResult> {
     const message = action.type === 'submit_code' ? action.code
       : action.type === 'submit_answer' ? action.answer

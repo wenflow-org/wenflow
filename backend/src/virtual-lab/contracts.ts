@@ -73,6 +73,17 @@ export type PlatformControlReceipt = {
   teachingRevision?: number | null
   taskId?: string | null
   taskCompletionCheckpoint?: TaskCompletionCheckpoint | null
+  /**
+   * 延伸课（#124）：`pending`=学习者已表达延伸意愿、等本课结算后开课；
+   * `active`=延伸课进行中（`extensionMode`）；`completed`=已 end_only 收束、回到路径。
+   */
+  extensionPhase?: 'pending' | 'active' | 'completed'
+  extensionMode?: boolean
+  extensionTaskId?: string | null
+  extensionSourceSessionId?: string | null
+  extensionTurns?: number
+  /** 学习者表达延伸意愿的原话（开延伸课时作为开场白） */
+  extensionText?: string | null
   platformStage?: string
   goalCompleted?: boolean
   taskCompleted?: boolean
