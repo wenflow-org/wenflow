@@ -53,46 +53,51 @@
     <div class="vp-tabsrow">
       <!-- 二级页签（原型 subtabs 下划线式，同 LearnerDetail/UserDetail）：角标保留「数量即 tab 角标」决策 -->
       <MkSubTabs v-model="activeTab" :tabs="tabs" />
-      <!-- 跨页入口提到可见位（原只在 ⋯ 菜单里，两页互不相通的心智问题一半来自此）：
+      <!-- 右组（2026-10-20 用户走查「按钮位置调整」）：跨页入口与 ⋯ 同一组贴右缘。
+           此前按钮跟在页签后面单飞——离页签 12px、离右缘 600px+，读起来像页签级控件；
+           它和 ⋯ 一样是页面级动作，归右组后才有统一的「页签左 / 动作右」轴。
+           提到可见位的原因不变（原只在 ⋯ 菜单里，两页互不相通的心智问题一半来自此）：
            同一实体两个 ID，这里是仿真档案视图，跳过去是学习视图 -->
-      <button
-        v-if="d.userId"
-        type="button"
-        class="mk-btn mk-btn--sm"
-        title="同一账号的学习视图：学习模型 / 证据 / 图谱 / 教学会话 / 记忆复习"
-        @click="goRealLearner()"
-      >学习详情 →</button>
-      <div v-if="isLive" class="mk-menu vp-tabsrow__ops">
+      <div class="vp-tabsrow__actions">
         <button
+          v-if="d.userId"
           type="button"
-          class="mk-menu__btn"
-          aria-label="更多操作"
-          aria-haspopup="menu"
-          :aria-expanded="openMenu === 'ops'"
-          title="更多操作：座舱 / 生命周期 / 账号自动学习 / 编辑画像"
-          @click.stop="toggleMenu('ops')"
-        >⋯</button>
-        <div v-if="openMenu === 'ops'" class="mk-menu__pop" :style="popStyle" @click.stop>
+          class="mk-btn mk-btn--sm"
+          title="同一账号的学习视图：学习模型 / 证据 / 图谱 / 教学会话 / 记忆复习"
+          @click="goRealLearner()"
+        >学习详情 →</button>
+        <div v-if="isLive" class="mk-menu vp-tabsrow__ops">
           <button
-            v-for="c in lifeControls"
-            :key="c.key"
             type="button"
-            class="mk-menu__item"
-            :class="{ 'mk-menu__item--danger': c.tone === 'danger' }"
-            :disabled="sessionBusy"
-            :title="c.hint"
-            @click="runLifeAction(c); closeMenu()"
-          >{{ c.label }}</button>
-          <div v-if="lifeControls.length" class="mk-menu__sep" aria-hidden="true"></div>
-          <button type="button" class="mk-menu__item" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="closeMenu(); editOpen = true">画像与偏好</button>
-          <!-- 双向互链（卡库 ↔ 虚拟学习者）：卡与本人是同一条档案记录。带 from 使卡页
-               面包屑拼出「画像 / 卡」并支持点面包屑回本页（子页返回机制，不自造返回钮） -->
-          <div class="mk-menu__sep" aria-hidden="true"></div>
-          <button type="button" class="mk-menu__item" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="closeMenu(); goSourceCard()">查看来源卡</button>
-          <!-- 跨页入口（#74）：该虚拟学习者绑定的真实账号 / 记忆与复习；userId 缺失时隐藏 -->
-          <div v-if="d.userId" class="mk-menu__sep" aria-hidden="true"></div>
-          <button v-if="d.userId" type="button" class="mk-menu__item" title="查看该虚拟学习者绑定的学习者详情（学习模型 / 证据 / 图谱）" @click="closeMenu(); goRealLearner()">学习详情</button>
-          <button v-if="d.userId" type="button" class="mk-menu__item" title="进入记忆与复习页：归并凭据 / 回滚 / 到期明细（仅真实账号）" @click="closeMenu(); goMemoryReview()">记忆与复习</button>
+            class="mk-menu__btn"
+            aria-label="更多操作"
+            aria-haspopup="menu"
+            :aria-expanded="openMenu === 'ops'"
+            title="更多操作：座舱 / 生命周期 / 账号自动学习 / 编辑画像"
+            @click.stop="toggleMenu('ops')"
+          >⋯</button>
+          <div v-if="openMenu === 'ops'" class="mk-menu__pop" :style="popStyle" @click.stop>
+            <button
+              v-for="c in lifeControls"
+              :key="c.key"
+              type="button"
+              class="mk-menu__item"
+              :class="{ 'mk-menu__item--danger': c.tone === 'danger' }"
+              :disabled="sessionBusy"
+              :title="c.hint"
+              @click="runLifeAction(c); closeMenu()"
+            >{{ c.label }}</button>
+            <div v-if="lifeControls.length" class="mk-menu__sep" aria-hidden="true"></div>
+            <button type="button" class="mk-menu__item" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="closeMenu(); editOpen = true">画像与偏好</button>
+            <!-- 双向互链（卡库 ↔ 虚拟学习者）：卡与本人是同一条档案记录。带 from 使卡页
+                 面包屑拼出「画像 / 卡」并支持点面包屑回本页（子页返回机制，不自造返回钮） -->
+            <div class="mk-menu__sep" aria-hidden="true"></div>
+            <button type="button" class="mk-menu__item" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="closeMenu(); goSourceCard()">查看来源卡</button>
+            <!-- 跨页入口（#74）：该虚拟学习者绑定的真实账号 / 记忆与复习；userId 缺失时隐藏 -->
+            <div v-if="d.userId" class="mk-menu__sep" aria-hidden="true"></div>
+            <button v-if="d.userId" type="button" class="mk-menu__item" title="查看该虚拟学习者绑定的学习者详情（学习模型 / 证据 / 图谱）" @click="closeMenu(); goRealLearner()">学习详情</button>
+            <button v-if="d.userId" type="button" class="mk-menu__item" title="进入记忆与复习页：归并凭据 / 回滚 / 到期明细（仅真实账号）" @click="closeMenu(); goMemoryReview()">记忆与复习</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2755,7 +2760,9 @@ async function quietReload(id: string) {
 
 /* tabs 行右端常驻账号级 ⋯ 操作（页签本体是共享 MkSubTabs 下划线式） */
 .vp-tabsrow { display: flex; align-items: center; gap: 12px; }
-.vp-tabsrow__ops { margin-left: auto; }
+/* 右组：学习详情 → 与 ⋯ 同贴右缘；fill 模式（isLive=false）下 ⋯ 不渲染时按钮也照样贴右 */
+.vp-tabsrow__actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.vp-tabsrow__ops { margin-left: 0; }
 /* 内联空态已改用共享 .mk-empty--line（审核 2026-10-06 低 [97]）：原 .vp-none 私有基类删除 */
 
 .vp-body { display: grid; gap: 14px; }
