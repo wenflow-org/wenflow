@@ -1,4 +1,5 @@
 import { runWithTransaction } from '../../utils/with-transaction';
+import { PATH_GENERATION_LEASE_MS } from '../../virtual-lab/lease-protocol';
 
 export type PathGenerationPhase = 'core' | 'stageDesign';
 export type PathGenerationRunStatus = 'queued' | 'processing' | 'succeeded' | 'failed' | 'cancelled';
@@ -72,7 +73,8 @@ export class PathGenerationRunConflictError extends Error {
   }
 }
 
-export const PATH_GENERATION_LEASE_MS = 5 * 60 * 1000;
+// #106：TTL 权威在 virtual-lab/lease-protocol.ts（本模块只转出，不再自定义字面量）
+export { PATH_GENERATION_LEASE_MS };
 export const PATH_GENERATION_LEASE_OWNER = process.env.INSTANCE_ID || `process-${process.pid}`;
 const STALE_STAGE_DESIGN_MINUTES = 4;
 const STALE_CORE_MINUTES = 15;

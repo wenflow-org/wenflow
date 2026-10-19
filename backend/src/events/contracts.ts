@@ -20,6 +20,12 @@ export interface DurableDomainEvent<T = Record<string, any>> {
   data: T;
   metadata?: Record<string, any> | null;
   occurredAt: Date;
+  /**
+   * 排期（#106②，2026-10-19）：事件何时可以被消费，NULL = 无排期、立即可用。
+   * 显式给值即排期；缺省时由 enqueueDomainEvent 按「未来 occurredAt」落成排期
+   * （模拟日历按未来模拟日写入的事件照旧延后到那一天）。业务时间仍以 occurredAt 为准。
+   */
+  scheduledAt?: Date | null;
 }
 
 export function createDomainEvent<T>(input: Omit<DurableDomainEvent<T>, 'id' | 'schemaVersion' | 'occurredAt'> & {

@@ -599,6 +599,8 @@ model domain_event_outbox {
   status           String   @default("pending")
   attemptCount     Int      @default(0)
   availableAt      DateTime @default(now())
+  /// 业务排期：事件何时可被处理（NULL = 无排期，立即可用）。语义与拾取门见 src/events/outbox.worker.ts。
+  scheduledAt      DateTime?
   lockedAt         DateTime?
   lockOwner        String?
   processedAt      DateTime?

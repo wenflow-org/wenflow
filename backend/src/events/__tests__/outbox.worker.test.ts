@@ -19,7 +19,9 @@ describe('DurableOutboxWorker same-user ordering', () => {
     jest.clearAllMocks()
     records.length = 0
     mockPrisma.domain_event_outbox.findMany.mockImplementation(async () => records
-      .filter(record => record.status === 'pending' && record.availableAt <= new Date())
+      .filter(record => record.status === 'pending'
+        && record.availableAt <= new Date()
+        && (!record.scheduledAt || record.scheduledAt <= new Date()))
       .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime()
         || a.createdAt.getTime() - b.createdAt.getTime()
         || a.id.localeCompare(b.id)))
@@ -164,6 +166,32 @@ describe('DurableOutboxWorker same-user ordering', () => {
 
     expect(records[0]).toEqual(expect.objectContaining({ status: 'dead', attemptCount: 8 }))
   })
+
+  it('#106② schedule gate: scheduledAt 未到点不拾取、到点拾取、NULL 立即可拾取', async () => {
+    const base = new Date(Date.now() - 10_000)
+    const future = new Date(Date.now() + 60 * 60 * 1000)
+    records.push(
+      buildRecord('plain-now', 'user-a', base, 'task:completed', 0, null),
+      buildRecord('sched-due', 'user-b', new Date(base.getTime() + 1000), 'task:completed', 0, base),
+      buildRecord('sched-future', 'user-c', new Date(base.getTime() + 2000), 'task:completed', 0, future)
+    )
+    const dispatched: string[] = []
+    const registry = { dispatch: jest.fn(async (event: any) => { dispatched.push(event.id) }) }
+
+    const worker = new DurableOutboxWorker(registry as any)
+    await worker.runOnce()
+
+    expect(dispatched).toEqual(['plain-now', 'sched-due'])
+    expect(records.find(record => record.id === 'sched-future')?.status).toBe('pending')
+
+    // 排期到点（把 scheduledAt 拨到过去）后即可拾取
+    const scheduled = records.find(record => record.id === 'sched-future')
+    scheduled.scheduledAt = new Date(Date.now() - 1000)
+    await worker.runOnce()
+
+    expect(dispatched).toEqual(['plain-now', 'sched-due', 'sched-future'])
+    expect(scheduled.status).toBe('published')
+  })
 })
 
 function buildRecord(
@@ -171,7 +199,8 @@ function buildRecord(
   userId: string,
   occurredAt: Date,
   eventType = 'task:completed',
-  attemptCount = 0
+  attemptCount = 0,
+  scheduledAt: Date | null = null
 ) {
   return {
     id,
@@ -187,6 +216,7 @@ function buildRecord(
     status: 'pending',
     attemptCount,
     availableAt: occurredAt,
+    scheduledAt,
     lockedAt: null,
     lockOwner: null,
     occurredAt,

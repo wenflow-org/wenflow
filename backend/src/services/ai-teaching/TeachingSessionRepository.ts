@@ -16,16 +16,26 @@ import {
   getSessionFinalizationState,
   updateSessionFinalizationState
 } from './SessionFinalizationPolicy';
+import {
+  FINALIZATION_LEASE_MS,
+  FINALIZATION_LEASE_RENEW_MS,
+  TEACHING_OPERATION_LEASE_MS,
+  TEACHING_OPERATION_RENEW_MS,
+} from '../../virtual-lab/lease-protocol';
 
 /**
  * 课堂操作租约（P2）：原为 30 分钟且无心跳——进程重启/请求挂起会把这个会话锁死很久
  * （实测 BUSY 卡住 10+ 分钟）。改为「短租期 + 心跳续租」：在途回合由
  * TeachingOperationLeaseGuard 每 30s 续一次，最长孤儿窗口从 30 分钟降到 2 分钟。
+ *
+ * #106：TTL/续租值的权威在 virtual-lab/lease-protocol.ts（本模块只转出，不再自定义字面量）。
  */
-export const TEACHING_OPERATION_LEASE_MS = 2 * 60 * 1000;
-export const TEACHING_OPERATION_RENEW_MS = 30 * 1000;
-export const FINALIZATION_LEASE_MS = 3 * 60 * 1000;
-export const FINALIZATION_LEASE_RENEW_MS = 45 * 1000;
+export {
+  TEACHING_OPERATION_LEASE_MS,
+  TEACHING_OPERATION_RENEW_MS,
+  FINALIZATION_LEASE_MS,
+  FINALIZATION_LEASE_RENEW_MS,
+};
 const RECOVERABLE_SESSION_STATUSES = ['active', 'paused', 'timeout'] as const;
 
 export class TeachingSessionConflictError extends Error {

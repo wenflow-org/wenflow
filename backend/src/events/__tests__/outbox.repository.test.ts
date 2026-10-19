@@ -29,6 +29,32 @@ describe('durable event outbox repository', () => {
     });
   });
 
+  it('#106② 写入侧拆列：排期落 scheduledAt，availableAt 只作技术门（不再直抄 occurredAt）', async () => {
+    const tx = { domain_event_outbox: { create: jest.fn().mockResolvedValue({}) } };
+    const future = new Date(Date.now() + 60 * 60 * 1000);
+
+    await enqueueDomainEvent(tx, createDomainEvent({
+      id: 'evt-future', type: 'task:completed', aggregateType: 'task', aggregateId: 'task-f',
+      source: 'test', occurredAt: future, data: {}
+    }));
+    const futureData = tx.domain_event_outbox.create.mock.calls[0][0].data;
+    expect(futureData.scheduledAt.getTime()).toBe(future.getTime());
+    expect(futureData.availableAt.getTime()).toBeLessThanOrEqual(Date.now());
+
+    const explicit = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    await enqueueDomainEvent(tx, createDomainEvent({
+      id: 'evt-explicit', type: 'task:completed', aggregateType: 'task', aggregateId: 'task-e',
+      source: 'test', occurredAt: new Date(Date.now() - 1000), scheduledAt: explicit, data: {}
+    }));
+    expect(tx.domain_event_outbox.create.mock.calls[1][0].data.scheduledAt.getTime()).toBe(explicit.getTime());
+
+    await enqueueDomainEvent(tx, createDomainEvent({
+      id: 'evt-normal', type: 'task:completed', aggregateType: 'task', aggregateId: 'task-n',
+      source: 'test', occurredAt: new Date(), data: {}
+    }));
+    expect(tx.domain_event_outbox.create.mock.calls[2][0].data.scheduledAt).toBeNull();
+  });
+
   it('maps a persisted record back to a domain event', () => {
     const occurredAt = new Date('2026-07-16T12:00:00.000Z');
     expect(mapOutboxRecord({

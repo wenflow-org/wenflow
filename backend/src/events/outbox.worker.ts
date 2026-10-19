@@ -75,12 +75,30 @@ export class DurableOutboxWorker {
     }
   }
 
+  /**
+   * 拾取门（#106②，2026-10-19 拆列后）——可拾取 = 三条同时成立：
+   *
+   *   1. `availableAt <= now`：技术可用（入队即当时刻；失败重投 = 退避到期）；
+   *   2. `scheduledAt IS NULL OR scheduledAt <= now`：业务排期（NULL = 无排期立即可用；
+   *      模拟日历按未来模拟日写入的事件在这里被延后）；
+   *   3. `status='pending'` 或 `status='processing'` 且锁已过期（崩溃/卡死回收）。
+   *
+   * 为什么是两条时间门而不是只看 scheduledAt：退避重投的行排期是 NULL，必须靠 availableAt 挡住；
+   * 为什么不是只看 availableAt（旧门）：旧实现的 availableAt 直抄 occurredAt，「发生时间」被当成了
+   * 「排期」——occurredAt 语义一变（模拟日历/迟到事件）排期就静默跟着变。
+   *
+   * 存量等价性：迁移已把未决未来行的原可用时刻回填到 scheduledAt（保留原排期），其余行 NULL；
+   * 因此对迁移前写入的所有行，本门与旧门 `availableAt <= now` 逐一等价。
+   */
   private async processBatch(): Promise<void> {
     const now = new Date();
     const staleLock = new Date(now.getTime() - LOCK_TIMEOUT_MS);
     const records = await prisma.domain_event_outbox.findMany({
       where: {
         availableAt: { lte: now },
+        AND: [
+          { OR: [{ scheduledAt: null }, { scheduledAt: { lte: now } }] }
+        ],
         OR: [
           { status: 'pending' },
           { status: 'processing', lockedAt: { lte: staleLock } }
@@ -146,6 +164,8 @@ export class DurableOutboxWorker {
           data: {
             status: dead ? 'dead' : 'pending',
             attemptCount,
+            // 重试只后移技术门；scheduledAt（业务排期）不动——能走到这里说明排期已过，且排期约束
+            // 不受消费失败影响（#106②）。
             availableAt: new Date(Date.now() + backoffMs),
             lockedAt: null,
             lockOwner: null,
@@ -182,9 +202,11 @@ export async function getDeadOutboxSummary() {
 }
 
 /**
- * 死信重置：dead → pending，清零尝试计数并立即可投递。
+ * 死信重置：dead → pending，清零尝试计数并清技术门（availableAt=now）。
  * 背景：dead 是无出口终态（worker 不会再拾取），此前没有任何管理手段把
  * 修复后的死信重新入队。运维修复根因后调用本函数重放。
+ * #106②：`scheduledAt`（业务排期）刻意不清——排期是业务约束，不由运维重放解除；
+ * 且死信只可能产生于「已被拾取过 8 次」的行，其排期早已到点，当前行为不受影响。
  * @param eventType 可选按事件类型过滤（如 'lesson:completed'）；缺省重置全部死信
  * @returns 重置的事件数
  */
