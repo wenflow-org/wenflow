@@ -547,12 +547,20 @@ export function supportsVision(modelId: string): boolean {
   return model?.vision === true;
 }
 
+/** 已下线模型 id（2026-10-18 上游下线）：兜底目录、回显与写入校验都不得让它们复活。 */
+const RETIRED_MODEL_IDS = new Set(['deepseek-v4-flash', 'deepseek-v4-pro']);
+
+/** 是否已下线模型 id（大小写不敏感）。 */
+export function isRetiredModelId(modelId: string): boolean {
+  return RETIRED_MODEL_IDS.has(String(modelId || '').trim().toLowerCase());
+}
+
 /**
- * 检查是否为 DeepSeek V4 模型（兼容旧逻辑）
+ * 检查是否为 DeepSeek V4 模型（兼容旧逻辑）。
+ * 语义就是「已下线的 v4-flash / v4-pro」——保留旧名供既有调用方使用。
  */
 export function isDeepSeekV4Model(modelId: string): boolean {
-  const normalized = modelId.trim().toLowerCase();
-  return normalized === 'deepseek-v4-flash' || normalized === 'deepseek-v4-pro';
+  return isRetiredModelId(modelId);
 }
 
 /**

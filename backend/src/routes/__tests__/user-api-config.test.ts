@@ -164,4 +164,56 @@ describe('用户 API 配置连接测试', () => {
     expect(res.statusCode).toBe(400)
     expect(create).not.toHaveBeenCalled()
   })
+
+  it('已下线模型（v4-flash/v4-pro）回显归一为现行默认（#86 收尾）', async () => {
+    findUnique.mockResolvedValue({
+      userId: 'user-1',
+      endpoint: null,
+      apiKey: null,
+      chatModel: 'deepseek-v4-flash',
+      reasoningModel: 'deepseek-v4-pro',
+      enabled: false
+    })
+    const req: any = { user: { userId: 'user-1' } }
+    const res = createResponse()
+
+    await routes['GET /'](req, res, jest.fn())
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body.data.chatModel).toBe('deepseek-v4.1-flash')
+    expect(res.body.data.reasoningModel).toBe('deepseek-v4.1-flash')
+  })
+
+  it('已下线模型禁止写回：PUT 提交 v4-flash 直接 400', async () => {
+    findUnique.mockResolvedValue(null)
+    const req: any = {
+      user: { userId: 'user-1' },
+      body: { endpoint: 'https://provider.example/v1', apiKey: 'user-secret', chatModel: 'deepseek-v4-flash', enabled: false }
+    }
+    const res = createResponse()
+
+    await routes['PUT /'](req, res, jest.fn())
+
+    expect(res.statusCode).toBe(400)
+    expect(res.body.error.message).toContain('已下线')
+    expect(create).not.toHaveBeenCalled()
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('用户自有端点的未注册模型名照旧透传（不误伤 BYOK）', async () => {
+    findUnique.mockResolvedValue({
+      userId: 'user-1',
+      endpoint: 'https://provider.example/v1',
+      apiKey: null,
+      chatModel: 'my-self-hosted-model',
+      reasoningModel: 'my-self-hosted-model',
+      enabled: true
+    })
+    const req: any = { user: { userId: 'user-1' } }
+    const res = createResponse()
+
+    await routes['GET /'](req, res, jest.fn())
+
+    expect(res.body.data.chatModel).toBe('my-self-hosted-model')
+  })
 })

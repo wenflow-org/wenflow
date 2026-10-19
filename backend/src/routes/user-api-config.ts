@@ -12,10 +12,22 @@ import { safeHttpRequest } from '../utils/safe-http';
 import { decryptSecret, encryptSecret } from '../utils/secret-crypto';
 import { getRequestContext } from '../gateway/api-gateway/context';
 import { endpointsMatch } from '../utils/endpoint-identity';
+import { getModelDefaults, isRetiredModelId } from '../config/models.config';
 
 const SECRET_CONTEXT = 'main.user_api_configs.apiKey';
 
 const router = express.Router();
+
+/**
+ * 已下线模型回显归一（2026-10-19 用户拍板清理）：库里存量配置可能仍存 deepseek-v4-flash/pro，
+ * 直接回显会把过时模型名带回设置页与下一次保存。只归一**已下线 id**，用户自有端点的任意
+ * 未注册模型名照旧透传（BYOK 语义）。
+ */
+function normalizeRetiredModel(stored: string | null | undefined, fallback: string): string | null {
+  const value = typeof stored === 'string' ? stored.trim() : '';
+  if (!value) return null;
+  return isRetiredModelId(value) ? fallback : value;
+}
 
 // 获取平台默认配置
 router.get('/platform-default', async (req, res) => {
@@ -51,6 +63,7 @@ router.get('/', async (req, res, next) => {
     }
     
     // 不返回实际 apiKey，只返回状态
+    const modelDefaults = getModelDefaults();
     res.json({
       success: true,
       data: {
@@ -59,8 +72,8 @@ router.get('/', async (req, res, next) => {
         apiKey: '',
         hasApiKey: !!config.apiKey,
         apiKeyStatus: config.apiKey ? '已配置' : '未配置',
-        chatModel: config.chatModel,
-        reasoningModel: config.reasoningModel,
+        chatModel: normalizeRetiredModel(config.chatModel, modelDefaults.chat),
+        reasoningModel: normalizeRetiredModel(config.reasoningModel, modelDefaults.reasoning),
       }
     });
   } catch (error) {
@@ -104,6 +117,17 @@ router.put('/', async (req, res, next) => {
     const finalReasoningModel = reasoningModel !== undefined
       ? reasoningModel || finalChatModel
       : existing?.reasoningModel || finalChatModel;
+
+    // 已下线模型禁止写回（2026-10-19 用户拍板清理）：旧客户端/旧表单提交过时 id 时明确拒绝，
+    // 否则会把无法路由的模型名（deepseek-v4-flash / v4-pro）重新写进库并在下次回显。
+    const retiredHit = [finalChatModel, finalReasoningModel]
+      .find((value) => typeof value === 'string' && isRetiredModelId(value));
+    if (retiredHit) {
+      return res.status(400).json({
+        success: false,
+        error: { message: `模型 ${retiredHit} 已下线，请改用现行模型（如 ${getModelDefaults().chat}）` }
+      });
+    }
 
     // 仅当 Endpoint 未变化时，空 apiKey 才表示保留已保存密钥。
     if (finalEnabled && (!finalEndpoint || !finalApiKey || !finalChatModel)) {
