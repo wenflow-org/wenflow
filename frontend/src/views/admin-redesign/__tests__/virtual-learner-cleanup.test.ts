@@ -48,7 +48,7 @@ beforeEach(() => {
 });
 
 const mk = (over: Record<string, unknown>) => ({
-  id: 'x', name: 'n', goal: '', storyCount: 0, sessions: 1,
+  id: 'x', name: 'n', goal: '', storyCount: 0, pathCount: 0, sessions: 1,
   runningCount: 0, pausedCount: 0, failedCount: 0, stalledCount: 0,
   runningSessionIds: [], currentStage: null,
   createdAt: '2026-09-01T00:00:00+08:00', created: 'x', tags: [] as string[],

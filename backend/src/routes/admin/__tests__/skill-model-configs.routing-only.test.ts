@@ -97,7 +97,7 @@ describe('skill-model-configs routing-only write path', () => {
           maxLogicalRetries: 1,
           requestTimeoutMs: 60000,
           paramOverrides: { temperature: 0.4, topP: 0.9, maxTokens: 32000 },
-          fallbackChain: ['deepseek-v4-pro'],
+          fallbackChain: ['agnes-3.0-flash'],
         },
       },
       res
@@ -111,7 +111,7 @@ describe('skill-model-configs routing-only write path', () => {
         requestTimeoutMs: 60000,
         enabled: true,
         paramOverrides: JSON.stringify({ temperature: 0.4, topP: 0.9, maxTokens: 32000 }),
-        fallbackChain: JSON.stringify(['deepseek-v4-pro']),
+        fallbackChain: JSON.stringify(['agnes-3.0-flash']),
       })
     )
     expect(mockUpsert.mock.calls[0][1]).not.toHaveProperty('temperature', 0.1)
@@ -162,14 +162,14 @@ describe('skill-model-configs routing-only write path', () => {
     expect(res.status).toHaveBeenCalledWith(400)
   })
 
-  it('PUT 拒绝跨 tier 的 fallback 候选', async () => {
+  it('PUT 拒绝未注册的 fallback 候选', async () => {
     mockGet.mockResolvedValue({ skillId: 'goal-conversation', enabled: true, model: 'deepseek-v4.1-flash', apiKey: null })
     const handler = getHandler('put', '/:skillId')
     const res = createRes()
     await handler(
       {
         params: { skillId: 'goal-conversation' },
-        body: { enabled: true, fallbackChain: ['deepseek-v4-pro'] },
+        body: { enabled: true, fallbackChain: ['totally-unknown-model'] },
       },
       res
     )

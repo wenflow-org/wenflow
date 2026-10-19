@@ -65,8 +65,12 @@ afterAll(() => {
 });
 
 describe('llm-providers.json 加载器', () => {
-  it('种子文件加载：4 个模型 + 平台继承通道 + 停用示例条目可见', () => {
-    expect(MODEL_MAP.size).toBe(4);
+  it('种子文件加载：平台模型逐个入表 + 平台继承通道 + 停用示例条目可见', () => {
+    /* 不钉死模型个数：种子文件会随实际接入增减（2026-10-18 补 agnes-2.5-flash），
+       这里守的是「启用通道的模型 1:1 进运行时表、停用示例不进」 */
+    const seedPlatform = getProviderCatalog().find((p) => p.id === 'platform');
+    expect(MODEL_MAP.size).toBe(seedPlatform?.models.length);
+    expect(MODEL_MAP.size).toBeGreaterThanOrEqual(3);
     expect(getLlmRegistryStatus().source).toBe('file');
     const platform = getProviderCatalog().find((p) => p.id === 'platform');
     expect(platform?.recommended).toBe(true);
@@ -80,7 +84,7 @@ describe('llm-providers.json 加载器', () => {
 
   it('resolveModelRef：裸 id / 限定式 / 未知识别（含带斜杠的字面量不误伤）', () => {
     expect(resolveModelRef('deepseek-v4.1-flash')?.definition.id).toBe('deepseek-v4.1-flash');
-    expect(resolveModelRef('platform/deepseek-v4-pro')?.providerId).toBe('platform');
+    expect(resolveModelRef('platform/deepseek-v4.1-flash')?.providerId).toBe('platform');
     // 未注册 provider → 不按限定式解析，也无同名裸 id → null（调用方按字面量透传）
     expect(resolveModelRef('custom-provider-example/deepseek-chat')).toBeNull();
     expect(resolveModelRef('totally-unknown')).toBeNull();

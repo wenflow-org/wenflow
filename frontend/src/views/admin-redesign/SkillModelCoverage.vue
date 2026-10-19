@@ -1,5 +1,5 @@
 <template>
-  <!-- Skill × 模型 × 参数 × 备用模型 覆盖矩阵 -->
+  <!-- Skill × 模型 × 参数 × 备用模型 覆盖矩阵（2026-10-19：原「兜底」与同表列头「备用模型」同义不同词） -->
   <div class="mk-card skc">
     <!-- 原型 .card__head（title + sub）：卡头统一走 mk-card 词表 -->
     <div class="mk-card__head">
@@ -7,11 +7,10 @@
       <span class="mk-card__meta">全部技能 × 实际路由</span>
     </div>
     <div class="skc__body">
-      <!-- 原型 .note：说明文字走 surface-2 底 + muted 小字（不再自搓提示样式） -->
-      <p class="note" title="2026-09-28 曾因此把 7 个课后技能静默漏到旧通道">
-        <b>未配置的技能会走平台默认</b>。
-        对多个技能套用同一份通道/模型/参数/备用模型配置：
-      </p>
+      <!-- 说明段已删（2026-10-17 用户走查：这类文案没有用）：
+           「未配置的技能会走平台默认」是下面「路由来源」列与页头「降级策略」KPI 的原文复述；
+           「对多个技能套用同一份…配置：」是表单自身的用途，输入框占位与按钮已说明。
+           原 p 的 title 还挂着一条 2026-09-28 的研发事故记录，属实现历史，不该出现在界面上。 -->
       <div class="skc__apply">
         <input v-model="bulk.endpoint" class="mk-input mono" placeholder="endpoint（必填，http://host:30001）" :class="{ 'is-err': bulkErr }" />
         <input v-model="bulk.apiKey" class="mk-input mono" type="password" placeholder="apiKey（必填）" :class="{ 'is-err': bulkErr }" />
@@ -25,7 +24,7 @@
       <p v-if="loadErr && rows.length" class="note note--bad" role="alert">刷新失败：{{ loadErr }}（下表仍为上次成功的数据）</p>
       <p v-if="bulkMsg" class="note" :class="{ 'note--bad': bulkErr }" :role="bulkErr ? 'alert' : 'status'" aria-live="polite">{{ bulkMsg }}</p>
 
-      <!-- 原型 .tbl：统一 mk-table--dense 词表；长内容列（参数/兜底链）走 wrap 列 -->
+      <!-- 原型 .tbl：统一 mk-table--dense 词表；长内容列（参数/备用模型链）走 wrap 列 -->
       <div v-if="rows.length" class="mk-table-scroll">
         <table class="mk-table mk-table--dense skc__table">
           <thead>
@@ -39,15 +38,40 @@
                   @change="toggleAll(($event.target as HTMLInputElement).checked)"
                 />
               </th>
-              <th scope="col">Skill</th>
-              <th scope="col">路由来源</th>
-              <th scope="col">model</th>
-              <th scope="col">参数覆盖</th>
-              <th scope="col" class="skc__wrap">备用模型</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="covSortState('skill')"
+                @click="toggleCovSort('skill')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('skill')">Skill<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="covSortState('source')"
+                @click="toggleCovSort('source')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('source')">路由来源<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="covSortState('model')"
+                @click="toggleCovSort('model')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('model')">model<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="covSortState('params')"
+                @click="toggleCovSort('params')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('params')" title="按覆盖项数排序">参数覆盖<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable skc__wrap"
+                :aria-sort="covSortState('fallback')"
+                @click="toggleCovSort('fallback')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('fallback')" title="按备用模型链条数排序">备用模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in rows" :key="s.skillId">
+            <tr v-for="s in sortedRows" :key="s.skillId">
               <td><input v-model="selected" type="checkbox" :value="s.skillId" :aria-label="`选择技能 ${s.skillId}`" /></td>
               <td class="mono">{{ s.skillId }}</td>
               <td>
@@ -56,7 +80,8 @@
                 </span>
               </td>
               <td class="mono">{{ s.model || '未配置' }}</td>
-              <td class="mono skc__wrap" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ s.paramOverrides ? JSON.stringify(s.paramOverrides) : '—' }}</td>
+              <!-- 2026-10-18：整串 JSON 挤在单元格里属开发向；表内只给项数，原文进 title -->
+              <td class="mono skc__wrap" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ overrideText(s.paramOverrides) }}</td>
               <td class="mono skc__wrap" :title="s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined">{{ s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : '平台默认' }}</td>
             </tr>
           </tbody>
@@ -93,6 +118,7 @@ import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { askConfirm } from './useConfirm'
+import { useTableSort } from './useTableSort'
 
 /** 套用成功 → 通知宿主 Skills.vue 重拉 coverageById（#93：否则上方路由表两列与四张 KPI
     仍用挂载时的旧值，与下方矩阵同屏互相打架） */
@@ -112,6 +138,24 @@ interface Row {
 }
 
 const rows = ref<Row[]>([])
+/* 矩阵排序（2026-10-17 用户走查「有的列没有排序」）：数据是全量覆盖清单，
+   客户端排序诚实；参数覆盖按覆盖项数排（无覆盖 = 0），备用模型按链条数排（该列列头就叫「备用模型」，注释与卡头不再用「兜底」）。 */
+const { sortState: covSortState, toggle: toggleCovSort, sortRows: sortCovRows } = useTableSort<Row>({
+  accessors: {
+    skill: (r) => r.skillId,
+    source: (r) => r.source,
+    model: (r) => r.model || '未配置',
+    params: (r) => (r.paramOverrides ? Object.keys(r.paramOverrides).length : 0),
+    fallback: (r) => r.fallbackChain?.length ?? 0
+  },
+  storageKey: 'wf_skc_sort'
+})
+/** 参数覆盖单元格：只给项数（原文在 title）；整串 JSON 在列里读不出「覆盖了几项」 */
+function overrideText(p: Record<string, number> | null): string {
+  const n = p ? Object.keys(p).length : 0
+  return n ? `${n} 项参数` : '—'
+}
+const sortedRows = computed(() => sortCovRows(rows.value))
 const loading = ref(false)
 const selected = ref<string[]>([])
 const bulk = ref({ endpoint: '', apiKey: '', model: '' })
@@ -221,7 +265,7 @@ onMounted(load)
 .skc__apply { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .skc__apply .mk-input { max-width: 280px; }
 .skc__apply .is-err { border-color: var(--mk-red); }
-/* 原型 .tbl td.wrap：长文本列（参数覆盖 / 兜底链）换行不截断 */
+/* 原型 .tbl td.wrap：长文本列（参数覆盖 / 备用模型链）换行不截断 */
 .skc__table th.skc__wrap,
 .skc__table td.skc__wrap { white-space: normal; overflow-wrap: anywhere; min-width: 220px; max-width: 320px; }
 </style>

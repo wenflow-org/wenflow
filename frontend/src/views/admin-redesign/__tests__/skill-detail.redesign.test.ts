@@ -148,7 +148,9 @@ routingsMock.mockResolvedValue({
         { id: 'hard-required', label: '必填入参' },
         { id: 'public-reply', label: '公开回复' },
         { id: 'proposal-output', label: '方案产出' }
-      ]
+      ],
+      // 平铺后 RoutingTab 内嵌 SkillFieldRouting 也读本接口（需 core.fields/core.sync）
+      core: { exists: true, fields: [], sync: null }
     }
   }
 })
@@ -193,15 +195,14 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(DETAIL_COMPONENTS.skill).toBeTruthy()
   })
 
-  it('Skills.vue 行点击直达设计页二级页（2026-10-14 方案 B；2026-10-15 由独立整页迁入外壳）', async () => {
+  it('Skills.vue 行点击直达 Skill 详情二级页（2026-10-14 方案 B；2026-10-15 设计页平铺后落 skill）', async () => {
     // 源文本白盒：SkillDrawer 引用清零；行点击改走 openDesign（原「设计」小钮撤除）。
-    // 2026-10-15 设计页迁入外壳后 openDesign 走 openSubPage 标准机制（与其它详情页同入口），
-    // 故不再断言「不含 openSubPage」，改断言它确以二级页机制打开。
+    // 2026-10-15 设计页退役平铺进详情页后，行点击落 ?view=skill&id=（与编排图节点下钻同一落点）。
     expect(SkillsSource).not.toContain('SkillDrawer')
     expect(SkillsSource).not.toContain('>设计</button>')
     expect(SkillsSource).toContain('@click="openDesign(')
-    expect(SkillsSource).toContain("openSubPage('skill-design'")
-    // 行为黑盒：真实点击目录行 → 打开设计页二级页（store.subPage 契约；
+    expect(SkillsSource).toContain("openSubPage('skill'")
+    // 行为黑盒：真实点击目录行 → 打开 Skill 详情二级页（store.subPage 契约；
     // URL 落地由 AdminConsole 的 subPage→URL watch 负责，另有 admin-console.smoke 覆盖）
     closeSubPage()
     const router = createRouter({
@@ -217,7 +218,7 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(row.exists()).toBe(true)
     await row.trigger('click')
     await settle()
-    expect(subPage.value).toMatchObject({ view: 'skill-design', id: 'skill-a' })
+    expect(subPage.value).toMatchObject({ view: 'skill', id: 'skill-a' })
     closeSubPage()
     w.unmount()
   })
@@ -342,9 +343,10 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(pills.join('|')).toContain('gpt-5.2')
     expect(pills.join('|')).toContain('线上生效 v2')
 
-    // 动作 = 真实能力（刷新 + 设计页跳转），不搬原型的假评测/发布钮
+    // 动作 = 真实能力（2026-10-15 设计页平铺进本页后，hero 只剩「刷新」——
+    // 原「打开设计页 →」跳转钮随独立页退役撤除，设计能力已在本页各页签就地铺开）
     const actions = w.findAll('.mk-hero__actions button').map((b) => b.text())
-    expect(actions).toEqual(['刷新', '打开设计页 →'])
+    expect(actions).toEqual(['刷新'])
 
     w.unmount()
   })
@@ -386,29 +388,32 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     await w.findAll('.mk-subtab')[1].trigger('click')
     await nextTick()
 
-    const cards = w.findAll('.skd-pane .mk-card__title').map((t) => t.text())
+    // 平铺后 .skd-pane 内有多个 .skd-bloc（运行时默认块 + 协议块，各 v-show）；
+    // 协议块是模板里的第一个（index 0）。只读概览断言全部限定在协议块内。
+    const bloc = w.findAll('.skd-bloc')[0]
+    const cards = bloc.findAll('.mk-card__title').map((t) => t.text())
     expect(cards).toEqual(['输入契约', '输出契约', '回合状态机', '终止条件', 'System Prompt'])
 
     // 输入 = 非产出角色字段（hard-required）；输出 = proposal-output / public-reply 等产出角色
-    const ins = w.findAll('.skd-vrow')
+    const ins = bloc.findAll('.skd-vrow')
     expect(ins.length).toBe(3)
     expect(ins[0].text()).toContain('learner_state')
     expect(ins[0].text()).toContain('入参')
     expect(ins[0].text()).toContain('必填')
     // 输出契约卡必含产出字段与角色徽标（后端 promptRoleMeta 单源人话）
-    const outCard = w.findAll('.skd-pane > .skd-grid > .mk-card')[1]
+    const outCard = bloc.findAll('.skd-grid > .mk-card')[1]
     expect(outCard.text()).toContain('public_reply')
     expect(outCard.text()).toContain('公开回复')
 
     // System Prompt：生效内容代码卡 + 截断说明不误报
-    expect(w.find('.skd-code').text()).toContain('SYSTEM PROMPT BODY')
-    expect(w.text()).not.toContain('已截断')
+    expect(bloc.find('.skd-code').text()).toContain('SYSTEM PROMPT BODY')
+    expect(bloc.text()).not.toContain('已截断')
     // 回合状态机 / 终止条件：core YAML 无 stateMachine/states/termination/limits → 明确空态（不硬造）。
     // 文案 2026-10-04 P3-21（设计评审）人话化：人话领句「该 Skill 未声明…」，schema 细节挪 title
-    expect(w.text()).toContain('回合状态机')
-    expect(w.text()).toContain('该 Skill 未声明回合状态机')
-    expect(w.text()).toContain('终止条件')
-    expect(w.text()).toContain('该 Skill 未声明终止条件')
+    expect(bloc.text()).toContain('回合状态机')
+    expect(bloc.text()).toContain('该 Skill 未声明回合状态机')
+    expect(bloc.text()).toContain('终止条件')
+    expect(bloc.text()).toContain('该 Skill 未声明终止条件')
 
     w.unmount()
   })
@@ -426,9 +431,9 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(modal!.querySelector('.mk-modal__title')!.textContent).toContain('编辑 Prompt · 教学回合')
     const ta = modal!.querySelector('textarea') as HTMLTextAreaElement
     expect(ta.value).toBe('SYSTEM PROMPT BODY')
-    // 原型的「保存草稿」无后端草稿接口：主操作 = 真实跳转设计页，不放假保存钮
+    // 原型的「保存草稿」无后端草稿接口：主操作 = 切到核心文件编辑（本页协议页签），不放假保存钮
     expect(modal!.textContent).not.toContain('保存草稿')
-    expect(modal!.textContent).toContain('前往设计页编辑')
+    expect(modal!.textContent).toContain('前往核心文件编辑')
 
     // 关闭钮收起；再开 → Esc 收起（弹层在 Esc 栈顶，先于页面关闭）
     ;(modal!.querySelector('.mk-modal__close') as HTMLButtonElement).click()
@@ -476,27 +481,28 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  it('版本页签：版本表格（版本/名称/状态），对比回滚投设计页；日期/作者无源不渲染', async () => {
+  it('版本页签：版本表格（版本/名称/状态）+ 下方版本管理区块；日期/作者无源不渲染', async () => {
     const w = mountDetail()
     await settle()
     await w.findAll('.mk-subtab')[3].trigger('click') // 版本（第 4 个）
     await nextTick()
 
-    const rows = w.findAll('.mk-table tbody tr')
+    const rows = w.find('.mk-table').findAll('tbody tr')
     expect(rows.length).toBe(2)
     // ACTIVE 优先排前
     expect(rows[0].text()).toContain('v2')
     expect(rows[0].text()).toContain('生效')
     expect(rows[1].text()).toContain('v1')
-    // 后端列表无日期/作者字段：列不出现，操作投设计页
+    // 后端列表无日期/作者字段：列不出现
     expect(w.find('.mk-table thead').text()).not.toContain('日期')
     expect(w.find('.mk-table thead').text()).not.toContain('作者')
-    expect(w.text()).toContain('对比 / 回滚')
+    // 2026-10-15 设计页平铺：版本管理区块（VersionsTab）就地渲染在只读版本表下方
+    expect(w.find('.sdp-versions').exists()).toBe(true)
 
     w.unmount()
   })
 
-  it('运行时页签（置首默认）：指标格（真实统计）+ 模型配置表单 + 模型测试 + 最近调用空态', async () => {
+  it('运行时页签（置首默认）：指标格（真实统计）+ 模型与路由表单 + 模型测试 + 最近调用空态', async () => {
     const w = mountDetail()
     await settle()
     await w.findAll('.mk-subtab')[0].trigger('click')
@@ -512,16 +518,21 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     // 统计口径对齐真实窗口（liveSkillStatsMap 默认近 7 天）：不再照抄 meta.stats 的「全量」
     expect(w.text()).toContain('近 7 天')
 
-    // 模型配置（SkillDrawer 迁入）：独立配置开着 + 保存/恢复默认在位
-    expect(w.text()).toContain('模型配置')
+    // 模型与路由（2026-10-19 重排：宿主与设计区块原本各渲染一份同配置的可编辑副本，
+    // 现由 RuntimeTab 单点承载，卡名从「模型配置」改为「模型与路由」）
+    expect(w.text()).toContain('模型与路由')
     expect(w.text()).toContain('独立配置')
     expect(w.text()).toContain('保存配置')
     expect(w.text()).toContain('恢复默认')
-    // 模型测试（SkillDrawer 迁入）
+    // 生效值（只读「所配即所得」）：运行时限制独立卡退役后，超时等信息在这里看
+    expect(w.text()).toContain('生效值')
+    // 模型测试（右侧验证列）
     expect(w.text()).toContain('模型测试')
     expect(w.text()).toContain('开始探测')
-    // 运行时限制：无独立 requestTimeoutMs（cfg 未回超时值时为 null）→ 空态注明
-    expect(w.text()).toContain('运行时限制')
+    // 同题不再出现两遍：页面里「模型与路由」「模型测试」各只一处
+    expect(w.findAll('.mk-card__title').filter((t) => t.text().includes('模型与路由')).length).toBe(1)
+    expect(w.findAll('.mk-card__title').filter((t) => t.text().includes('模型测试')).length).toBe(0) // 模型测试是段标题不是卡
+    expect(w.text()).not.toContain('运行时限制')
     // 最近调用（SkillDrawer 概览迁入）：无日志窗口数据 → 明确空态
     expect(w.text()).toContain('最近调用')
     // 2026-10-08 走查 #3：原空态写「日志窗口内无调用」，与同屏近 7 天统计卡（如 27852 次调用）
@@ -555,21 +566,23 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  it('字段路由页签：字段流转表格（角色人话/流向/渲染/属性）+ 编辑投设计页；脱敏列无源不渲染', async () => {
+  it('字段路由页签：字段流转表格（角色人话/流向/渲染/属性）+ 下方字段路由设计区块；脱敏列无源不渲染', async () => {
     const w = mountDetail()
     await settle()
     await w.findAll('.mk-subtab')[5].trigger('click') // 字段路由（第 6 个）
     await nextTick()
 
-    const rows = w.findAll('.mk-table tbody tr')
+    // 平铺后本页有两处字段表（只读概览 + 设计区块的路由表）：断言只读概览那张（首个表）
+    const rows = w.find('.mk-table').findAll('tbody tr')
     expect(rows.length).toBe(2)
     expect(rows[0].text()).toContain('learner_state')
     expect(rows[0].text()).toContain('必填入参')
     expect(rows[0].text()).toContain('state-agent')
     expect(rows[1].text()).toContain('内部')
-    expect(w.text()).toContain('编辑字段路由')
     // 原型「脱敏」列后端无对应字段：不出现该列
     expect(w.find('.mk-table thead').text()).not.toContain('脱敏')
+    // 2026-10-15 设计页平铺：字段路由设计区块（RoutingTab，根 .sdp-routing）就地渲染
+    expect(w.find('.sdp-routing').exists()).toBe(true)
 
     w.unmount()
   })

@@ -206,8 +206,6 @@
                 <dd>{{ d.archetype || '—' }}</dd>
                 <dt>主测场景</dt>
                 <dd :title="topScene ? `出现最频繁的运行场景：${topScene}` : '该画像还没有运行记录'">{{ topScene || '—' }}</dd>
-                <dt>当前状态</dt>
-                <dd><span class="mk-badge" :class="lifeBadgeCls">{{ lifeLabel }}</span></dd>
                 <dt>运行信息</dt>
                 <dd class="mono">{{ runInfoText }}</dd>
               </dl>
@@ -365,7 +363,7 @@
         <section v-if="activeTab === 'memory'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">记忆池 · {{ memoryPoolRows.length }} 个概念<template v-if="memoryCount"> / 共 {{ memoryCount }} 条</template></h3>
-            <span class="mk-card__meta" :title="allStoriesScope.title">课后沉淀 · 记忆强度为当前保留率 · {{ allStoriesScope.label }}</span>
+            <span class="mk-card__meta" :title="`记忆强度为当前保留率。${allStoriesScope.title}`">课后沉淀</span>
             <!-- 刷新已上移至统一操作台「主动作」槽 -->
           </div>
 
@@ -647,7 +645,7 @@
         <section v-if="activeTab === 'runs'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">会话流水 · {{ allRuns.length }}</h3>
-            <span class="mk-card__meta" :title="allStoriesScope.title">按时间倒序 · 与故事池互补：那里按故事看，这里按会话发生时间看 · {{ allStoriesScope.label }}</span>
+            <span class="mk-card__meta" :title="`与「故事池」互补，那里按故事看，这里按会话发生时间看。${allStoriesScope.title}`">按时间倒序</span>
             <!-- 截断披露（#96）：详情接口最多 200 条，本页只渲染最近 RUNS_TAB_WINDOW 条 -->
             <span
               v-if="runsTruncated"
@@ -918,6 +916,7 @@ import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import {
   VS_STATE_META,
+  deriveVsLifecycleStateFromRuns,
   vlabControlsFor,
   type VsControlDef,
   type VsControlKey,
@@ -2103,17 +2102,13 @@ const activeSessionId = computed(() => {
   return failed?.sessionId || null
 })
 /** 会话生命周期状态（统一模型 vlab-controls：状态徽章 + 合法操作，三层共用）
- *  派生自最新会话：paused 由 teaching.paused 派生；failed/abandoned 在 tone=bad 下合并展示 */
-const lifeState = computed<VsLifecycleState>(() => {
-  const runs = allRuns.value
-  if (!runs.length) return 'idle'
-  const pausedRun = runs.find(r => r.paused && (r.result === 'running' || r.result === 'created'))
-  if (pausedRun) return 'paused'
-  if (runs.some(r => r.result === 'running' || r.result === 'created')) return 'running'
-  if (runs.some(r => r.tone === 'bad')) return 'failed'
-  if (runs.some(r => r.tone === 'ok')) return 'completed'
-  return 'idle'
-})
+ *  派生本体在 vlab-controls#deriveVsLifecycleStateFromRuns（单一实现，与座舱的单会话版同源）；
+ *  本页只负责把会话流水喂进去。failed/abandoned 在 tone=bad 下合并展示。
+ *
+ *  2026-10-19 运营走查「同屏三处当前状态」：本状态此前在 hero 徽章、概览状态条、画像设定 kv
+ *  各渲染一遍（同一个 lifeLabel 三写）。现在只留 hero 徽章一处——它在页签之上，任何页签都在屏；
+ *  状态条与 kv 行撤除（复读三遍不增加任何信息）。 */
+const lifeState = computed<VsLifecycleState>(() => deriveVsLifecycleStateFromRuns(allRuns.value))
 const lifeMeta = computed(() => VS_STATE_META[lifeState.value])
 const lifeLabel = computed(() => lifeMeta.value.label)
 const lifeTone = computed(() => lifeMeta.value.tone)
@@ -2337,7 +2332,6 @@ const runInfoText = computed(() => {
 })
 
 /** 当前状态徽章语气：VS_STATE_META.tone（muted/warn/ok/bad）→ mk-badge 修饰类（均已全局定义） */
-const lifeBadgeCls = computed(() => `mk-badge--${lifeTone.value}`)
 
 /** 概览状态条 items（#68：共享 MkStatStrip layout=grid；#69：原 vp-metricgrid 的
     「记忆点」并入本条第 5 格，不再与前三格同屏复读）。口径与下方各 pane 同源。 */
@@ -2362,11 +2356,6 @@ const statItems = computed(() => {
       label: '覆盖场景',
       value: sceneStats.value.length || '—',
       title: '运行记录里出现过的不同场景（故事）数'
-    },
-    {
-      label: '当前状态',
-      value: lifeLabel.value,
-      title: lifeHint.value
     },
     {
       label: '记忆点',

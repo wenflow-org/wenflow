@@ -24,7 +24,7 @@
           @drop.prevent="onDrop"
         >
           <span class="ci-drop__title">{{ isDragOver ? '松开导入卡文档' : (fileName || '拖入或点击选择 .yaml / .json 卡文档') }}</span>
-          <span class="ci-drop__hint">{{ isDragOver ? '松开后将读取并填入下方文本框' : '也可以直接粘贴到下方文本框' }}</span>
+          <span class="ci-drop__hint">{{ isDragOver ? '松开后将读取并填入文本框' : '也可以直接粘贴到文本框' }}</span>
         </div>
         <textarea
           v-model="rawText"

@@ -125,7 +125,7 @@ describe('Prompt 评估「评估历史」首屏读数与列表同源（F7-2）',
 
     // 首屏就发起了历史请求，且窗口上限常量可达（TDZ 会让调用根本发不出去）
     expect(getEvalRunsMock).toHaveBeenCalledTimes(1);
-    expect(getEvalRunsMock).toHaveBeenCalledWith(undefined, 30);
+    expect(getEvalRunsMock).toHaveBeenCalledWith(undefined, 30, undefined, undefined);
 
     // 没有任何「加载历史失败」toast（TDZ 曾被 reloadRuns 自身 catch 吞成此 toast）
     expect(toastErrorMock).not.toHaveBeenCalled();
@@ -137,6 +137,54 @@ describe('Prompt 评估「评估历史」首屏读数与列表同源（F7-2）',
     // 读数带已迁宿主槽位：面板自身不再渲染 .mk-kpi（否则宿主 + 面板两条带同屏）
     expect(wrapper.findAll('.mk-kpi')).toHaveLength(0);
 
+    wrapper.unmount();
+  });
+
+  it('历史排序下推到服务端（窗口内客户端假排会漏掉窗口外记录）', async () => {
+    const wrapper = await mountPanel();
+    await wrapper.findAll('.tabs .tab')[1].trigger('click');
+    await flushPromises();
+    getEvalRunsMock.mockClear();
+
+    const th = wrapper.findAll('.pe-panel table.mk-table thead th').find((x) => x.text().includes('耗时'));
+    expect(th, '历史表缺少「耗时」排序表头').toBeTruthy();
+    await th!.find('button').trigger('click');
+    await flushPromises();
+
+    expect(getEvalRunsMock).toHaveBeenLastCalledWith(undefined, 30, 'durationMs', 'desc');
+    wrapper.unmount();
+  });
+
+  it('列表被排序打乱后，「最近一次评估」仍按 createdAt 取最新', async () => {
+    const runs = makeRuns();
+    runs[0].summary.passRate = 100;
+    for (let i = 1; i < runs.length; i += 1) runs[i].summary.passRate = 50;
+    // 服务端按 createdAt 升序返回：最新一条（run-0）在末行
+    getEvalRunsMock.mockResolvedValue({ data: { data: [...runs].reverse() } });
+    const wrapper = await mountPanel();
+
+    const kpiView = (wrapper.vm as unknown as { kpiView: { passRateText: string } }).kpiView;
+    expect(kpiView.passRateText, '读数取成了排序后的首行而非最新运行').toBe('100%');
+    wrapper.unmount();
+  });
+
+  it('评估用例列排序：用例名在降序/升序间切换', async () => {
+    const c = (id: string, name: string) => ({
+      id, agentId: 'skill:goal-conversation', caseId: `case-${id}`, name,
+      description: null, messages: [], expectations: null, enabled: true,
+      createdAt: '', updatedAt: '',
+    });
+    getEvalCasesMock.mockResolvedValue({ data: { data: [c('1', 'B 用例'), c('2', 'A 用例')] } });
+    const wrapper = await mountPanel();
+    const names = () => wrapper.findAll('.pe-panel table tbody tr .mk-cell-main strong').map((x) => x.text());
+    const th = wrapper.findAll('th.mk-th--sortable').find((t) => t.text().includes('用例'));
+    expect(th, '用例表缺少排序表头').toBeTruthy();
+    await th!.find('button').trigger('click');
+    await flushPromises();
+    expect(names()[0]).toBe('B 用例');
+    await th!.find('button').trigger('click');
+    await flushPromises();
+    expect(names()[0]).toBe('A 用例');
     wrapper.unmount();
   });
 

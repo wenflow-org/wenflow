@@ -225,6 +225,14 @@ aliases / defaults
 - **降级边界**：skill 兜底链候选必须**同供应商**（保存侧校验拒绝跨供应商）；跨供应商兜底需等端点感知降级（候选自带 endpoint/key，未做）。
 - **可观测**：`/admin/model-registry` 总览新增 providers 段 + registry 文件状态（source/mtime/lastError）+ 缺密钥告警；`/api/config/available-models` 返回 providers 维度。
 
+**编辑入口（2026-10-18，BYOK）**：文件仍是唯一真源，管理台只是它的**编辑器**——两者不是两个写源。
+
+- 页面：`模型与接入 → 接入与模型`（左供应商列表 / 右详情）。供应商与模型的增删改走 `services/admin/model-providers.service.ts`：读**原始 JSON**（`$header`/`$rules` 原文不动）→ 打补丁 → 复解析校验（报错文案即运行时那条）+ 自洽检查（`defaults` 必须解析到已启用供应商的模型）→ 备份 `config/backups/llm-providers.<ts>.json`（留 10 份）→ 原子写（tmp + rename）→ 立即热重载，重载失败回滚。文件或目录不可写 ⇒ 409 只读降级，页面整体只读。
+- 写回的格式与原文对齐（短数组单行、沿袭原换行风格）：一次编辑不应带出满屏与本次改动无关的 diff。
+- **密钥不进文件**：文件规则本来就禁止真实密钥，页面里填的密钥落 system.db 密文表 `provider_secrets`（AES-256-GCM，AAD=`system.provider_secrets.apiKey`），文件里只同步一个 `apiKeyEnv` 名。运行时解析顺序改为 **本表密文 → `apiKeyEnv` 环境变量**（`APIRouter.applyProviderEndpoint`，60s 缓存 + 写接口失效）——同一台机器上「页面点保存 → 下一次调用就用新密钥」。
+- **平台通道例外**：`id=platform`（无 baseUrl 的继承通道）的服务地址与密钥仍归 `platform_api_configs`（`PUT /api/admin/api-config`，UI 里嵌在「平台」这条通道的详情内、走脏位保存）；它的 `PATCH`/`DELETE` 在注册表侧被拒绝。
+- **不在这里编辑**：别名成员、档位默认（`defaults`）、按 agent/skill 的模型绑定仍归「路由与调用」页；模型编辑器只写模型自身字段（档位/能力/限额/备用链/单价）。
+
 ### 4.3 ③ 参数解析策略（P0 已实现）
 
 **语义修正**：`maxOutputTokens` = 硬上限；`defaultMaxTokens` = 缺省值；声明值 = 权威意图。
@@ -258,7 +266,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 
 **已实现（P1）**：
 - **部署级 cooldown**：`deployment-health.ts`，键 = `providerId|endpoint|model`；仅「可降级错误类」触发；进程内实现，不引入 Redis。
-- **降级链**：模型声明 `fallbacks`（`models.config.ts`）。当前默认：`deepseek-v4-pro → deepseek-v4-flash`、`deepseek-v4-flash → agnes-3.0-flash`（同层互为备份；agnes 无思考能力，由 `thinking-policy` 自动裁剪字段）。限一跳，且仅在 `!streamStarted`（内容未透传）时生效。
+- **降级链**：模型声明 `fallbacks`（`models.config.ts`）。注册表当前（2026-10-18 上游下线 `deepseek-v4-flash` / `deepseek-v4-pro` 后）平台目录未声明模型级 fallbacks，降级改由 skill 级 `fallbackChain` 承担；机制与「agnes 无思考能力时由 `thinking-policy` 自动裁剪字段」不变。限一跳，且仅在 `!streamStarted`（内容未透传）时生效。
 - **skill 级兜底链（2026-09-28）**：`skill_model_configs.fallbackChain`（JSON string[]，≤2 跳）优先于 registry 全局链；保存时校验候选在 registry、与主模型同 tier、且**在该 skill 的 endpoint+key 上可服务**（`routes/admin/skill-model-configs.ts` 的频道探测，30min 缓存）。背景：registry 默认链里的 agnes-3.0-flash 在新 key 分组不存在，400→503「空气兜底」会掩盖真因。探测走 `utils/safe-http`（协议/保留地址/凭据 URL 检查，policy=runtime 与 executor 同款）。
 - **单端点前提（2026-09-24 补记）**：降级只换 `model`、不换 `endpoint/apiKey`——`deepseek → agnes` 成立的前提是所有模型经由**同一聚合网关**。若将来 per-provider 端点落地，fallback 链必须随部署（endpoint+key）整体切换，否则跨 provider 直接 404。
 - **可降级错误类**：`rate_limit` / `provider_http` / `network` / `provider_timeout`；**不含** `quota`（账号/余额级，换模型无效）、`authentication`、`configuration`、`protocol`。

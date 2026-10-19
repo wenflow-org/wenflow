@@ -60,7 +60,7 @@ export const spans = computed<TraceSpan[]>(() => {
 })
 
 /* ---------- 身份色（拓扑 / 编排 / 抽屉 / 设计页共用，单源） ---------- */
-/** 各顶层 Agent 的身份色；key = Agent id。历史重复定义（SkillDesignPage/SkillDrawer 内嵌）已收敛至此 */
+/** 各顶层 Agent 的身份色；key = Agent id。历史重复定义（Skill 详情页/SkillDrawer 内嵌）已收敛至此 */
 export const AGENT_TONES: Record<string, { hue: string; soft: string }> = {
   'goal-agent': { hue: '#4f46e5', soft: 'rgba(79, 70, 229, 0.1)' },
   'path-agent': { hue: '#0d9488', soft: 'rgba(13, 148, 136, 0.1)' },
@@ -73,7 +73,10 @@ export interface SkillStat {
   calls: number
   errors: number
   avgMs: number
+  /** 相对时间（列表展示用：刚刚 / 2 天前 / 从未） */
   lastAt: string
+  /** 原始调用时间（排序用：相对时间串不可比较大小） */
+  lastCalledAt?: string
 }
 
 export function skillStatOf(skillId: string): SkillStat {
@@ -216,7 +219,7 @@ export function intentQueryParams(scene: string): Record<string, string> {
 }
 
 /* ---------- 二级页面（drill-in） ---------- */
-export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real' | 'path' | 'skill' | 'skill-design' | 'card' | 'card-import'
+export type SubPageView = 'learner' | 'virtual' | 'user' | 'session' | 'session-real' | 'path' | 'skill' | 'card' | 'card-import'
 
 /** 会话座舱的落点页签（2026-10-12 走查拍板：路径不再有独立详情页，统一在座舱的阶段页签打开；
  *  从学习路径列表进来 = 打开座舱并落在 Path 页签）。只对 session/session-real 有意义；
@@ -227,19 +230,36 @@ export function asSubPageStage(v: unknown): SubPageStage | undefined {
   return typeof v === 'string' && SUBPAGE_STAGES.has(v) ? (v as SubPageStage) : undefined
 }
 
-/** 来源记忆：从二级（画像）进三级（会话）后，返回时回到来源页而非直接回一级列表 */
+/** 详情内部页签落点：只对 learner 详情有意义（页签 id 见 LearnerDetail 的 LD_TAB_IDS）。
+ *  二级页页面内的 ?tab= 归详情组件自己读写（P0-2 页签路由化），这里只带一个「落哪」的提示，
+ *  AdminConsole 打开二级页时并进 URL，刷新/深链保持落点。 */
+export type SubPageTab = string
+
+/** 列表行 → 学习者详情的落点页签（2026-10-18 用户走查：「学习状态」条目落「概览」不匹配列表主题）：
+ *  · 学习状态列表（LearnerCenter）的读数列——趋势 / 疲劳 / 置信 / 风险摘要——与详情「证据」
+ *    页签同源同口径（趋势与建议 / 学习压力记录 / 预测校准 / 概念证据密度）；
+ *  · 记忆与复习列表（MemoryReviewOverview）与详情「记忆与复习」页签同名同口径（同为 FSRS 普查）。
+ *  落点只此一处定义——改映射改这里一行；传空的调用方（画像 / 会话列表下钻）仍落概览。 */
+export const LEARNER_DETAIL_LANDING = { learnerState: 'evidence', memoryReview: 'memory' } as const
+
+/** 来源记忆：从二级（画像）进三级（会话）后，返回时回到来源页而非直接回一级列表。
+ *  2026-10-18：来源页的落点（stage/tab）也要记住——从座舱 Path 页签点「查看学习者」，
+ *  返回时若丢掉 stage 会落回会话默认页签，读的上下文没了。 */
 export interface SubPageFrom {
   view: SubPageView
   id: string
   label?: string
+  stage?: SubPageStage
+  tab?: SubPageTab
 }
 
-export const subPage = ref<{ view: SubPageView; id: string; label?: string; includeTest?: boolean; stage?: SubPageStage; from?: SubPageFrom } | null>(null)
+export const subPage = ref<{ view: SubPageView; id: string; label?: string; includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab; from?: SubPageFrom } | null>(null)
 
-export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?: boolean; stage?: SubPageStage; from?: SubPageFrom }) {
-  const base: { view: SubPageView; id: string; includeTest?: boolean; stage?: SubPageStage } =
+export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab; from?: SubPageFrom }) {
+  const base: { view: SubPageView; id: string; includeTest?: boolean; stage?: SubPageStage; tab?: SubPageTab } =
     opts?.includeTest ? { view, id, includeTest: true } : { view, id }
   if (opts?.stage) base.stage = opts.stage
+  if (opts?.tab) base.tab = opts.tab
   /* 来源记忆：二级页 → 三级页都可记来源，返回时回原页（不限 session）。
      原先只对 session/session-real 生效，于是「学习者详情 → 路径详情」返回时 from 被
      静默丢弃，直接落回一级列表，原详情与页签上下文全丢（2026-10-08 走查确认）。 */
@@ -258,8 +278,13 @@ export function setSubPageLabel(label: string) {
 export function closeSubPage() {
   // 有来源记忆（从二级进三级）→ 返回来源页；否则回一级列表
   if (subPage.value?.from) {
-    const { view, id, label } = subPage.value.from
-    subPage.value = { view, id, ...(label ? { label } : {}) }
+    const { view, id, label, stage, tab } = subPage.value.from
+    subPage.value = {
+      view, id,
+      ...(label ? { label } : {}),
+      ...(stage ? { stage } : {}),
+      ...(tab ? { tab } : {})
+    }
   } else {
     subPage.value = null
   }

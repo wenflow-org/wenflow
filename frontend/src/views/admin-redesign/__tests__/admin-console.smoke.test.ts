@@ -13,7 +13,7 @@ import AdminConsole from '../AdminConsole.vue';
 import { SCENE_COMPONENTS } from '../AdminConsole.vue';
 import { MOCK_SCENES } from '../manifest';
 import Overview from '../Overview.vue';
-import { intent, subPage } from '../store';
+import { intent, subPage, openSubPage, closeSubPage } from '../store';
 
 /** API 层整体 mock：任意方法返回 { data: {} }（空数据成功响应），函数型导出为 noop/成功 */
 const { apiObject } = vi.hoisted(() => ({
@@ -179,15 +179,33 @@ describe('AdminConsole 导航冒烟', () => {
     await vi.waitFor(() => expect(wrapper.find('.mk-page.ld').exists()).toBe(true), { timeout: 15000 });
   });
 
-  it('深链 ?view=skill-design&id= 打开 Skill 设计页二级页（2026-10-15 由独立整页迁入外壳）', async () => {
-    const { wrapper, router } = await mountConsole('/admin/skills?view=skill-design&id=teaching-turn');
+  it('深链 ?view=skill&id= 打开 Skill 详情二级页（设计页已平铺进本页，2026-10-15）', async () => {
+    const { wrapper, router } = await mountConsole('/admin/skills?view=skill&id=teaching-turn');
     await settle();
-    expect(router.currentRoute.value.query).toMatchObject({ view: 'skill-design', id: 'teaching-turn' });
-    expect(subPage.value).toMatchObject({ view: 'skill-design', id: 'teaching-turn' });
-    // 详情组件走 asyncPage（delay:200），等异步 chunk 挂载；渲染的是设计页本体（根 .mk-page.sdp）
-    await vi.waitFor(() => expect(wrapper.find('.mk-page.sdp').exists()).toBe(true), { timeout: 15000 });
-    // 外壳保留：侧栏导航在（不再是整页无壳）
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'skill', id: 'teaching-turn' });
+    expect(subPage.value).toMatchObject({ view: 'skill', id: 'teaching-turn' });
+    // 详情组件走 asyncPage（delay:200），等异步 chunk 挂载；渲染的是 Skill 详情页本体（根 .mk-page.skd）
+    await vi.waitFor(() => expect(wrapper.find('.mk-page.skd').exists()).toBe(true), { timeout: 15000 });
+    // 外壳保留：侧栏导航在
     expect(wrapper.find('nav[aria-label="管理导航"]').exists()).toBe(true);
+  });
+
+  /* 2026-10-18 用户走查：列表条目一律落「概览」不匹配列表主题 → 二级页带落点页签。
+     落点必须与 view/id 同一次 push 并进 URL（刷新/深链保持），关闭二级页时随详情一起收，
+     否则列表 URL 上留一个无主的 ?tab=。 */
+  it('二级页落点页签：openSubPage 带 tab 并进 URL，closeSubPage 时随 view/id 一起收（learner 专有）', async () => {
+    const { router } = await mountConsole('/admin/learner-state');
+    await settle();
+    openSubPage('learner', 'user_abc', { tab: 'evidence' });
+    await settle();
+    expect(subPage.value).toMatchObject({ view: 'learner', id: 'user_abc', tab: 'evidence' });
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'learner', id: 'user_abc', tab: 'evidence' });
+    closeSubPage();
+    await settle();
+    expect(subPage.value).toBeNull();
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
+    expect(router.currentRoute.value.query.view).toBeUndefined();
+    expect(router.currentRoute.value.query.id).toBeUndefined();
   });
 
   it('跨场景深链 push（overview → people?view=user&id=）同样存活', async () => {

@@ -12,7 +12,8 @@ import type { goal_conversations } from '../../services/prisma-client-types';
 import { randomUUID as uuidv4 } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
-import { findProfileById, findProfileDetail, findProfileForProjectionToken, updateProfileFields, updateUserName, createVirtualLearnerUser, createVirtualLearnerProfile, listProfilesWithSessionSamples, countProfiles } from '../../services/virtual-lab/virtual-learner-profile.repo';
+import { findProfileById, findProfileDetail, findProfileForProjectionToken, updateProfileFields, updateUserName, createVirtualLearnerUser, createVirtualLearnerProfile, listProfilesWithSessionSamples, countProfiles, groupPathCountsByProfile } from '../../services/virtual-lab/virtual-learner-profile.repo';
+import { deriveActiveRuns, deriveRunProgress } from '../../services/virtual-lab/virtual-run-progress';
 import { findSessionWithProfileAndUser, findGoalConversationById, getSessionStatusAggregates, getPerProfileStatusAggregates, findStaleSessionsByProfiles, findStaleSessionCandidates, findStaleSessionsForStats, findRunningSessionsByProfiles, findRunningSessionsForStats, findTerminalSessions, countTodayVirtualAgentCalls } from '../../services/virtual-lab/virtual-session.repo';
 import { hydrateSessionLogsField as hydrateVirtualSessionLogsField } from '../../services/virtual-lab/virtual-session-log-store';
 import { logger } from '../../utils/logger';
@@ -236,7 +237,7 @@ router.get('/', async (req: Request, res) => {
 
     // 全量口径聚合（P1-1/D3）：运行中/失败/卡死分区与状态条不再基于 50 条会话样本
     const profileIds = profiles.map(p => p.id);
-    const [statusAgg, perProfileAgg, staleSessions, staleCandidates, runningSessionsAll] = await Promise.all([
+    const [statusAgg, perProfileAgg, staleSessions, staleCandidates, runningSessionsAll, pathAgg] = await Promise.all([
       getSessionStatusAggregates(),
       profileIds.length
         ? getPerProfileStatusAggregates(profileIds)
@@ -249,6 +250,8 @@ router.get('/', async (req: Request, res) => {
       profileIds.length
         ? findRunningSessionsByProfiles(profileIds)
         : Promise.resolve([]),
+      // 每个画像的路径数（distinct learningPathId）：一个故事可衍生多条路径，同一路径的多次会话不重复计
+      groupPathCountsByProfile(profileIds),
     ]);
     const countByStatus = (status: string) => statusAgg.find(s => s.status === status)?._count?._all ?? 0;
     const runningByProfile = new Map<string, number>();
@@ -278,11 +281,22 @@ router.get('/', async (req: Request, res) => {
     // 卡死口径与 reclaim 服务同源：管理员暂停的会话（teaching.paused）无写入是预期行为，
     // 不算卡死（否则「卡死 N」与回收 dryRun 清单不一致，且暂停会话会被误标）
     const staleByProfile = new Map<string, number>();
+    /* 逐会话口径：列表「进行中」列逐条标出哪一条运行会话无响应（与右侧「无响应」计数同源） */
+    const stalledSessionIds = new Set<string>();
     for (const s of staleSessions) {
       if (isTeachingPausedSession(s.stageResults)) continue;
+      stalledSessionIds.add(s.id);
       staleByProfile.set(s.virtualProfileId, (staleByProfile.get(s.virtualProfileId) ?? 0) + 1);
     }
     const staleTotal = staleCandidates.filter((s) => !isTeachingPausedSession(s.stageResults)).length;
+
+    /* 路径数 = distinct learningPathId：故事是复杂情景，一次运行生成一条路径，一个故事可衍生多条。
+       列表的「故事 / 路径」列和状态条口径都靠它把「多路径学习者」与「单路径」区分开。 */
+    const pathCountByProfile = new Map<string, number>();
+    for (const row of pathAgg) {
+      if (!row.learningPathId) continue;
+      pathCountByProfile.set(row.virtualProfileId, (pathCountByProfile.get(row.virtualProfileId) ?? 0) + 1);
+    }
     
     const formattedProfiles = profiles.map(p => {
       const profileData = JSON.parse(p.profile || '{}');
@@ -302,20 +316,14 @@ router.get('/', async (req: Request, res) => {
       );
       const runningSessions = sessionSample.filter((s) => s.status === 'running' && !autopilotStoppedIds.has(s.id));
       const pausedSessions = sessionSample.filter((s) => s.status === 'running' && autopilotStoppedIds.has(s.id));
-      // 阶段进度（轴 B）：从最新会话的 stageResults 推导 Goal/Path/Learn 三态 + 任务进度
-      const latestSession = sessionSample[0];
-      let stageProgress: { goalReady: boolean; pathReady: boolean; learnStarted: boolean; taskDone: number; taskTotal: number } | null = null;
-      if (latestSession) {
-        let sr: Record<string, any> = {};
-        try { sr = JSON.parse(String(latestSession.stageResults || '{}')); } catch { /* 忽略 */ }
-        stageProgress = {
-          goalReady: !!(sr?.goal?.converged || sr?.goal?.finalStage || sr?.goal?.stage === 'completed' || latestSession.goalConversationId),
-          pathReady: !!(sr?.path?.success || latestSession.learningPathId),
-          learnStarted: !!(sr?.teaching?.teachingSessionId || latestSession.currentTaskId || latestSession.currentStage === 'teaching' || latestSession.currentStage === 'learn'),
-          taskDone: Number(latestSession.completedTasks) || 0,
-          taskTotal: Number(latestSession.totalTasks) || 0,
-        };
-      }
+      // 阶段进度（轴 B）：没有活跃会话时回落到最近一次会话（历史进度，前端标「最近」）。
+      const latestSession = runningSessions[0] || pausedSessions[0] || sessionSample[0];
+      const stageProgress = latestSession ? deriveRunProgress(latestSession) : null;
+      /* 多活跃会话（2026-10-18 用户走查）：一个学习者可同时跑多条路径，列表不再只画第一条。
+         运行在前、暂停在后；逐条标记是否无响应。activeRunTotal 用全量聚合数，
+         与 activeRuns.length 的差即样本窗口外未展开的条数。 */
+      const activeRuns = deriveActiveRuns(sessionSample, stalledSessionIds);
+      const activeRunTotal = (runningByProfile.get(p.id) ?? 0) + (pausedByProfile.get(p.id) ?? 0);
       // 日期模拟进度（只读）：优先会话时钟，其次画像级；供列表「模拟进度」列
       let simulation: { enabled: boolean; dayIndex: number; baseDate: string | null; autoAdvance: boolean } | null = null;
       {
@@ -361,6 +369,9 @@ router.get('/', async (req: Request, res) => {
         })),
         sessionCount: p._count?.sessions ?? sessionSample.length,
         storyCount: storyPool.length,
+        /* 已生成的路径数（distinct learningPathId）：故事是复杂情景、路径是走出来的学习路线，
+           一个故事可衍生多条路径，故与故事条数不等是正常状态 */
+        pathCount: pathCountByProfile.get(p.id) ?? 0,
         runningCount: runningByProfile.get(p.id) ?? 0,
         // 已暂停自动驾驶的会话数（autopilot=stopped，会话数据保留）
         pausedCount: pausedByProfile.get(p.id) ?? 0,
@@ -371,8 +382,11 @@ router.get('/', async (req: Request, res) => {
         currentStage: runningSessions[0]?.currentStage || sessionSample[0]?.currentStage || null,
         runningSessionIds: runningSessions.map((s) => s.id),
         pausedSessionIds: pausedSessions.map((s) => s.id),
-        // 阶段进度（轴 B）：Goal/Path/Learn 三态 + 任务进度
-        stageProgress
+        // 阶段进度（轴 B）：Goal/Path/Learn 三态 + 任务进度（无活跃会话时 = 最近一次会话）
+        stageProgress,
+        /* 逐条活跃会话：前端「进行中」列按行渲染多路径；无活跃行时为空数组 */
+        activeRuns,
+        activeRunTotal,
       };
     });
 

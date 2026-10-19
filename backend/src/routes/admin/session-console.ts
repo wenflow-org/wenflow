@@ -222,6 +222,74 @@ interface TimelineEntry {
   kind: 'goal' | 'path' | 'teaching' | 'evidence';
   title: string;
   detail: string;
+  /** 证据事件整包 payload（JSON 串）：detail 已人读化，原文放这里供「技术原文」折叠查看 */
+  raw?: string;
+}
+
+/**
+ * 证据事件 → 人读摘要（2026-10-18 用户走查「会话日志偏源码开发」）。
+ * 此前 detail 是 payload JSON 的前 80 字符，主视觉位露出 `path:created · {"pathId":"lp_…`：
+ * 既读不出发生了什么，也会停在半句（截断处的字符串不可解析）。这里按事件类型取关键字段；
+ * 整包 payload 仍随 TimelineEntry.raw 下发，折叠在「原文」里供排查。
+ */
+function evidenceDetail(type: string, payload: any): string {
+  const p = payload && typeof payload === 'object' ? payload : {};
+  switch (type) {
+    case 'path:created': {
+      const title = String(p.pathTitle || p.title || '').trim();
+      return title ? `路径「${title}」` : '路径已创建';
+    }
+    case 'path:generated': {
+      const parts: string[] = [];
+      if (typeof p.taskCount === 'number') parts.push(`${p.taskCount} 个任务`);
+      if (typeof p.milestoneCount === 'number') parts.push(`${p.milestoneCount} 个里程碑`);
+      return parts.length ? `已生成 ${parts.join(' / ')}` : '路径生成完成';
+    }
+    case 'path:adjusted':
+      return '路径已按学习进展调整';
+    case 'path:completed':
+      return '路径已完成';
+    case 'goal:understanding:updated': {
+      const goal = String(p.understanding?.surface_goal || p.surfaceGoal || '').trim();
+      return goal ? `目标：${goal}` : '目标理解已更新';
+    }
+    case 'session:outcome': {
+      // 学习结果：概念 + 状态（progress 是进度百分比，读作「进行到 85%」容易与掌握度混）
+      const concept = String(p.conceptKey || p.concept || '').trim();
+      const status = String(p.status || '').trim();
+      const statusZh = status === 'mastered' ? '已掌握' : status === 'learning' ? '学习中' : status === 'pending' ? '未开始' : '';
+      if (!concept) return statusZh;
+      return statusZh ? `概念「${concept}」· ${statusZh}` : `概念「${concept}」`;
+    }
+    case 'checkpoint:attempt': {
+      const title = String(p.title || '').trim();
+      if (!title) return '已作答';
+      return `题目：${title.length > 40 ? `${title.slice(0, 40)}…` : title}`;
+    }
+    case 'task:difficulty:adjustment': {
+      const base = typeof p.baseline === 'number' ? p.baseline : null;
+      const adjusted = typeof p.adjusted === 'number' ? p.adjusted : null;
+      if (base === null || adjusted === null) return '';
+      if (base === adjusted) return `难度保持 ${base}`;
+      return `难度 ${base} → ${adjusted}`;
+    }
+    case 'session-knowledge-distilled': {
+      const n = Array.isArray(p.conceptLedger) ? p.conceptLedger.length : 0;
+      return n ? `${n} 个概念入账` : '';
+    }
+    case 'dialogue-concepts-extracted': {
+      const confusions = Array.isArray(p.recurringConfusions) ? p.recurringConfusions.length : 0;
+      const transfers = Array.isArray(p.transferSignals) ? p.transferSignals.length : 0;
+      const parts: string[] = [];
+      if (confusions) parts.push(`困惑 ${confusions}`);
+      if (transfers) parts.push(`迁移信号 ${transfers}`);
+      return parts.join(' · ');
+    }
+    default: {
+      // 其余事件（lesson/task/review 等）：payload 常带标题；没有就不给 detail，不拿 JSON 顶位
+      return String(p.title || p.name || '').trim();
+    }
+  }
 }
 
 function pushTimeline(list: TimelineEntry[], entry: TimelineEntry | null) {
@@ -296,11 +364,14 @@ function buildTimeline(params: {
   }
 
   for (const item of evidence || []) {
+    const type = String(item.evidenceType || 'evidence');
+    const payload = parseJsonSafe<any>(item.payload, {});
     pushTimeline(timeline, {
       time: item.occurredAt ? item.occurredAt.toISOString() : null,
       kind: 'evidence',
-      title: String(item.evidenceType || 'evidence'),
-      detail: JSON.stringify(parseJsonSafe<any>(item.payload, {}))?.slice(0, 80) || '',
+      title: type,
+      detail: evidenceDetail(type, payload),
+      raw: JSON.stringify(payload),
     });
   }
 
@@ -354,6 +425,22 @@ function materialSummaries(userId: string | null | undefined) {
     logger.warn('[admin-session-console] 学习者资料读取失败，控制台按无资料渲染', { userId, error });
     return [];
   }
+}
+
+/**
+ * 会话所属学习者（2026-10-18 用户走查「三处都没有跳学习者详情的按钮」）。
+ * 路由层查询已 include users(id/name/email)，这里只做投影；缺用户时给 null，
+ * 绝不拿会话 id 冒充学习者 id（前端据此决定是否渲染入口）。
+ */
+function learnerBlock(row: any) {
+  const user = row?.users || null;
+  const id = String(row?.userId || user?.id || '');
+  if (!id) return null;
+  return {
+    id,
+    name: user?.name || null,
+    email: user?.email || null,
+  };
 }
 
 /** teaching_sessions → 控制台同构载荷 */
@@ -420,6 +507,7 @@ async function buildTeachingConsole(session: any) {
   return {
     kind: 'teaching' as const,
     sessionId: session.id,
+    learner: learnerBlock(session),
     goal: goalBlock,
     path: pathView,
     teaching: {
@@ -566,6 +654,7 @@ async function buildGoalConsole(conversation: any) {
   return {
     kind: 'goal' as const,
     sessionId: conversation.id,
+    learner: learnerBlock(conversation),
     goal: goalBlock,
     path: pathView,
     /* 学习者资料（2026-10-11 走查）：goal 阶段会把学习者**携带的资料**（上传附件）与**系统联网采集**

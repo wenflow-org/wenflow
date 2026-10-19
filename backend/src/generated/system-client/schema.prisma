@@ -124,6 +124,20 @@ model platform_api_configs {
   privateNetworkHosts    String?
 }
 
+/// 供应商级密钥（BYOK，2026-10-18）：llm-providers.json 是供应商/模型的唯一真源，
+/// 但密钥严禁写进该文件（文件规则只允许 apiKeyEnv 环境变量名）。管理台表单里填的密钥落在这里
+/// （AES-256-GCM 密文，AAD=system.provider_secrets.apiKey）。运行时解析顺序：本表密文 → 进程环境变量。
+model provider_secrets {
+  id         String   @id @default(cuid())
+  providerId String   @unique
+  /// 明文密钥的密文（wfsec:v1: 信封）
+  apiKey     String
+  /// 文件中该供应商声明的环境变量名（UI 写入时自动生成，作为无密文时的回落来源）
+  apiKeyEnv  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 model platform_settings {
   key       String   @id
   value     String

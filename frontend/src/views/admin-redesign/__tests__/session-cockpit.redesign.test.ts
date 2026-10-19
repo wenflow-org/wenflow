@@ -4,7 +4,8 @@
  * 断言 = 原型版式的每一块 + 数据诚实性：
  *  - hero（头像「S」/ 会话主题主标题 + 会话 ID 副行 meta（2026-10-04 批次五 P2-7）/ 学习者·科目·开始于副文 /
  *    状态 + 阶段 pills——回合 pill 已撤（P3#13：回合数单源=阶段推进卡）/ 真实能力动作）
- *  - 教学闭环定位（.loop 五环：目标对话→…→记忆复习；教学回合 active，其余 done）
+ *  - 教学闭环定位（原型 .loop 五环）2026-10-19 拍板下线：与下方 stepper 同源同态、属纯重复，
+ *    本文件只保留「不得回归」的断言
  *  - 阶段推进（.stepper done/active/idle 三态 + 卡头「已完成 N / 4 阶段」+ statstrip 三读数）
  *  - 双栏 grid(1.5fr/1fr)：回合记录表（# / 类型 / 内容 / 时间；原型 Token/耗时/解答分无真数据不硬造）
  *    + 知识状态更新 ranklist（真实掌握度；无数据整卡不渲染）
@@ -15,6 +16,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import SessionCockpit from '../SessionCockpit.vue';
 import { subPage } from '../store';
+import { confirmState, settleConfirm } from '../useConfirm';
 
 const { stableVirtualApi, apiObject } = vi.hoisted(() => {
   const stableVirtualApi = {
@@ -255,13 +257,27 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(runningBtns.find((b) => b.text() === '按原输入重跑')!.attributes('disabled')).toBeDefined();
     running.unmount();
 
-    // 终态黑盒：重跑可点，点击调用 rerun API
+    // 终态黑盒：重跑可点 —— 会新建会话 + 重新消耗 AI 调用，故先二次确认（2026-10-19 运营走查）
     stableVirtualApi.getVirtualSession.mockResolvedValue(blackboxPayload('completed'));
     stableVirtualApi.rerunBlackboxVirtualSession.mockResolvedValue({ data: { data: { id: 'vs_bb_new' } } });
     const done = await mountCockpit('session', 'vs_bb_1');
     const doneRerun = done.findAll('.cp-console__actions button').find((b) => b.text() === '按原输入重跑')!;
     expect(doneRerun.attributes('disabled')).toBeUndefined();
     await doneRerun.trigger('click');
+    await settle();
+    // 弹确认框、且此刻还没打扰后端
+    expect(confirmState.open).toBe(true);
+    expect(confirmState.title).toBe('按原输入重跑');
+    expect(confirmState.message).toContain('消耗新的 AI 调用');
+    expect(stableVirtualApi.rerunBlackboxVirtualSession).not.toHaveBeenCalled();
+    // 取消 → 不发请求（原实现直接重跑，无任何确认）
+    settleConfirm(false);
+    await settle();
+    expect(stableVirtualApi.rerunBlackboxVirtualSession).not.toHaveBeenCalled();
+    // 二次点击并确认 → 才发请求
+    await doneRerun.trigger('click');
+    await settle();
+    settleConfirm(true);
     await settle();
     expect(stableVirtualApi.rerunBlackboxVirtualSession).toHaveBeenCalledWith('vs_bb_1');
     done.unmount();
@@ -273,37 +289,69 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     assisted.unmount();
   });
 
-  it('教学闭环定位：真实模式隐藏该卡（防伪造进度）；虚拟模式五环由真实阶段状态机派生（2026-10-06 审核 #46）', async () => {
-    // 真实会话：静态「已完成/本会话进行中」与真实进度无关，监控页上是负信息 → 整卡隐藏
-    stableVirtualApi.getRealSessionConsole.mockResolvedValue(realTeachingPayload());
-    const real = await mountCockpit('session-real', 'ts_re_1');
-    expect(real.findAll('.cp-loop__step')).toHaveLength(0);
-    expect(real.text()).not.toContain('教学闭环定位');
-    real.unmount();
-
-    // 虚拟会话：五环状态与同屏 stepper 同源（Learn 当前 → 前两环 done、教学回合 active、其余 idle）
+  it('「每课回合上限」写明是本屏临时覆盖（2026-10-19 运营走查：title 原写「按 1 或 100 保存」，实际刷新即回到画像默认值）', async () => {
     stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
     const w = await mountCockpit('session', 'vs_1');
-
-    const steps = w.findAll('.cp-loop__step');
-    expect(steps.map((s) => s.find('.cp-loop__name').text())).toEqual(
-      ['目标对话', '路径规划', '教学回合', '课后评估', '记忆复习']
-    );
-    expect(w.findAll('.cp-loop__arrow')).toHaveLength(4);
-
-    const active = steps.filter((s) => s.classes().includes('cp-loop__step--active'));
-    expect(active).toHaveLength(1);
-    expect(active[0].find('.cp-loop__name').text()).toBe('教学回合');
-    expect(active[0].find('.cp-loop__meta').text()).toBe('本会话进行中');
-    const done = steps.filter((s) => s.classes().includes('cp-loop__step--done'));
-    expect(done.map((s) => s.find('.cp-loop__name').text())).toEqual(['目标对话', '路径规划']);
-    expect(done.every((s) => s.find('.cp-loop__meta').text() === '已完成')).toBe(true);
-    // 未进入的阶段不得再被写成「已完成」（原写死状态的负信息）
-    const idle = steps.filter((s) => s.classes().includes('cp-loop__step--idle'));
-    expect(idle.map((s) => s.find('.cp-loop__name').text())).toEqual(['课后评估', '记忆复习']);
-    expect(idle.every((s) => s.find('.cp-loop__meta').text() === '未进入')).toBe(true);
-
+    await w.findAll('.cp-stp')[2].trigger('click'); // Learn 页签（回合上限只在这一页出现）
+    await settle();
+    const cap = w.find('.cp-turn-cap');
+    expect(cap.exists()).toBe(true);
+    // 输入框：不许再出现「保存」；必须说明是临时值 + 长期值在哪
+    expect(cap.attributes('title')).not.toContain('保存');
+    expect(cap.attributes('title')).toContain('本屏是临时值');
+    expect(cap.attributes('title')).toContain('运行预算');
+    expect(w.find('.cp-turn-cap-label').attributes('title')).toContain('画像「运行预算 · 每课回合上限」');
     w.unmount();
+  });
+
+  it('顶栏按钮簇与状态徽章同源（2026-10-19 运营走查）：自动驾驶已停的会话不再同时给「暂停」', async () => {
+    // 复现原缺陷：会话 status 仍是 running、autopilot.status 已是 stopped。
+    // 修前 lifeStateCockpit 只看 status+isPaused → 判 running → 顶栏给「暂停」，
+    // 而同屏状态徽章/运行状态卡按 runLifecycleState 判 paused → 一个会话两个状态词。
+    const payload = virtualLearningPayload();
+    payload.data.status = 'running';
+    payload.data.runtime.status = 'running';
+    payload.data.stageResults.autopilot = { status: 'stopped' };
+    stableVirtualApi.getVirtualSession.mockResolvedValue(payload);
+    const w = await mountCockpit('session', 'vs_1');
+    const heroBtns = w.find('.cp-hero, .mk-hero, .cp').findAll('.mk-btn').map((b) => b.text());
+    expect(heroBtns).toContain('继续');
+    expect(heroBtns).not.toContain('暂停');
+    w.unmount();
+  });
+
+  it('运行状态面板接线：自动驾驶排队时给出位次（驱动器行；纯函数另有专测）', async () => {
+    const payload = virtualLearningPayload();
+    payload.data.stageResults.autopilot = { status: 'queued', queuePosition: 2 };
+    stableVirtualApi.getVirtualSession.mockResolvedValue(payload);
+    const w = await mountCockpit('session', 'vs_1');
+    const lines = w.findAll('.cp-run__autopilot-result').map((n) => n.text());
+    expect(lines.some((t) => t.includes('排队中 · 第 2 位'))).toBe(true);
+    expect(lines.every((t) => !t.includes('最后心跳'))).toBe(true); // 排队不报心跳（没有主循环在跑）
+    w.unmount();
+  });
+
+  it('「教学闭环定位」卡已下线（2026-10-19 用户走查「这不重复吗」→ 拍板删卡）：五环与 stepper 同源同态，属纯重复', async () => {
+    // 原卡：前四环由 stageDone/stageActive 派生（与下方 stepper 同一对判据）、第五环「记忆复习」
+    // 无对应阶段恒「未进入」，即不含 stepper 之外的任何会话状态，只多出一套更长的阶段名。
+    // 负信息修正（2026-10-06 审核 #46）随之失去载体——阶段状态唯一落点是 stepper 瓦片。
+    stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
+    const w = await mountCockpit('session', 'vs_1');
+    expect(w.findAll('.cp-loop__step')).toHaveLength(0);
+    expect(w.findAll('.cp-loop__arrow')).toHaveLength(0);
+    expect(w.text()).not.toContain('教学闭环定位');
+    // 阶段状态仍完整可读（迁移目标在位）：四枚瓦片 + done/active/idle
+    const steps = w.findAll('.cp-stp');
+    expect(steps).toHaveLength(4);
+    expect(steps.map((s) => s.classes().find((c) => c.startsWith('cp-stp--')))).toEqual([
+      'cp-stp--done', 'cp-stp--done', 'cp-stp--active', 'cp-stp--idle'
+    ]);
+    w.unmount();
+
+    stableVirtualApi.getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+    const real = await mountCockpit('session-real', 'ts_re_1');
+    expect(real.text()).not.toContain('教学闭环定位');
+    real.unmount();
   });
 
   it('阶段推进：stepper done/active/idle 三态 + 卡头 N/4 + statstrip 三读数；步点点击切换阶段页签', async () => {
@@ -351,12 +399,14 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     // 回合记录曾是它的表格翻版（也曾把 Goal 段错拼进来），故真实模式整卡不渲染。
     expect(w.find('.cp-turns').exists()).toBe(false);
     expect(w.text()).not.toContain('回合记录');
-    expect(w.text()).not.toContain('目标 + 课堂按序合并');
+    // 2026-10-18 用户走查「这类文案」：装配自述句（按序合并）从可见 meta 撤下，
+    // 范围事实留「目标与课堂两段」，合并规则进卡头 title
+    expect(w.text()).not.toContain('按序合并');
 
     w.unmount();
   });
 
-  it('回合记录：虚拟会话保持 Goal + 课堂按序合并（那边一个会话就是完整旅程；卡归位 Goal 页）', async () => {
+  it('回合记录：虚拟会话两段合并且按序（一个会话就是完整旅程；卡归位 Goal 页）', async () => {
     stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
     const w = await mountCockpit('session', 'vs_1');
     await w.findAll('.cp-stp')[0].trigger('click'); // Goal 页签（2026-10-12 四页拆分：回合记录归位 Goal 页）
@@ -367,7 +417,10 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(rows[0].find('.mk-badge').text()).toBe('虚拟学习者');
     expect(rows[1].find('.mk-badge').text()).toBe('虚拟学习者');
     expect(rows[2].find('.mk-badge').text()).toBe('教师');
-    expect(w.text()).toContain('3 条对话 · 目标 + 课堂按序合并');
+    expect(w.text()).toContain('3 条对话 · 目标与课堂两段');
+    // 合并规则 hover 可得（卡头 title），不再占读数行
+    const meta = w.findAll('.mk-card__meta').find((m) => m.text().includes('目标与课堂两段'))!;
+    expect(meta.attributes('title')).toContain('按发生顺序合并展示');
 
     w.unmount();
   });

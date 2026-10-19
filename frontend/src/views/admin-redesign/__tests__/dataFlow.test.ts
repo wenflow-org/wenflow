@@ -238,3 +238,22 @@ describe('字段旅程画布缩放接线（2026-10-13 用户：这里也要支�
     expect(DataFlowGraphSource).toContain('if (typeBits.length)')
   })
 })
+
+describe('字段详情抽屉（2026-10-18 用户：抽屉贴边且超高内容不可滚）', () => {
+  it('正文容器同时挂共享类与私有类：内衬与纵向滚动来自 mk-drawer__body', () => {
+    // 此前只挂私有 dfg-drawer__body：正文没有 padding（贴到面板边缘、卡片圆角被裁），
+    // 也没有 overflow-y:auto（超高内容被面板 overflow:hidden 裁掉且滚不到）。
+    expect(DataFlowGraphSource).toContain('class="mk-drawer__body dfg-drawer__body"')
+  })
+
+  it('面板使用宽版：700px 下两列事实表与标签左置表单才放得开', () => {
+    // 560px 窄版里 6 行事实表 + 5 行竖排表单显得松散；宽度阶梯由共享原语统一给出。
+    expect(DataFlowGraphSource).toContain('mk-drawer__panel--wide')
+  })
+
+  it('事实表不再出现 <dd：值行统一为 div > span + strong 结构', () => {
+    // dd 直接放在 div 里是非法结构，也不命中 mk-facts--rows > div > strong 的字号/颜色规则，
+    // 会与同表其它行的色号不一致。
+    expect(DataFlowGraphSource).not.toContain('<dd')
+  })
+})

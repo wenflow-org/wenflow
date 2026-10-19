@@ -37,7 +37,7 @@
         </template>
         <span v-else class="frt-syncbar__count">未核对</span>
       </button>
-      <span class="frt-syncbar__hint">该字段未登记 core 声明 / 未登记路由 → 去 Skill 设计页补全（字段路由 tab）</span>
+      <span class="frt-syncbar__hint">该字段未登记 core 声明 / 未登记路由 → 去 Skill 详情页补全（字段路由 tab）</span>
     </div>
     <div v-else-if="skillSyncLoading" class="note frt-syncbar frt-syncbar--muted">
       <span class="frt-syncbar__title">core 联动</span>
@@ -621,8 +621,8 @@ async function loadSkillSyncs() {
 }
 
 function goSkill(skillId: string) {
-  // 2026-10-15：设计页迁入外壳二级页，落点 ?view=skill-design&id=，页签键独立为 sdTab
-  void router.push({ path: '/admin/skills', query: { view: 'skill-design', id: skillId, sdTab: 'routing' } });
+  // 2026-10-15：设计页平铺进 Skill 详情页，落点 ?view=skill&id=，页签键 skdTab=routing
+  void router.push({ path: '/admin/skills', query: { view: 'skill', id: skillId, skdTab: 'routing' } });
 }
 
 // ============ 编排文件编辑（单源化批次 C） ============
@@ -650,7 +650,7 @@ async function closeOrchestration() {
       message: '编排文件内容已被修改且尚未保存到文件，关闭将丢弃这些改动。',
       confirmText: '丢弃并关闭',
       /* danger:false = 「放弃未保存修改」统一档（2026-10-06 审核 §主题 7）：
-         与 SkillDesignPage 三处（刷新设计页/切换 Skill/离开设计页）同语义，
+         与 Skill 详情页三处（刷新/切换 Skill/关闭本页）同语义，
          原为 true 造成同一语义两页分级相反。doc/ADMIN_VISUAL_LAYER_SPEC.md §0.5「危险确认」的
          19 处清单以此档为准，本条已登记。 */
       danger: false,

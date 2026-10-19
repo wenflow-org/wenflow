@@ -37,21 +37,58 @@ export function fmtDurationMs(ms: number | string | null | undefined): string {
   return s > 0 ? `${m} 分 ${String(s).padStart(2, '0')} 秒` : `${m} 分钟`
 }
 
-/** 摘要文本：顶层 message/text/error/title/action 优先，其次 details 内同类键；type 已作阶段展示不重复 */
+const SUMMARY_KEYS = ['message', 'text', 'error', 'title', 'action', 'reason'] as const
+
+/** 摘要文本：顶层 message/text/error/title/action 优先，其次 details 内同类键（含 details.output 一层）；
+ *  type 已作阶段展示不重复 */
 function summaryText(entry: Record<string, unknown>): string {
-  for (const key of ['message', 'text', 'error', 'title', 'action', 'reason']) {
+  for (const key of SUMMARY_KEYS) {
     const v = entry[key]
     if (typeof v === 'string' && v.trim()) return v.trim()
   }
   const details = entry.details
   if (details && typeof details === 'object' && !Array.isArray(details)) {
     const d = details as Record<string, unknown>
-    for (const key of ['message', 'text', 'error', 'title', 'reason']) {
+    for (const key of SUMMARY_KEYS) {
       const v = d[key]
       if (typeof v === 'string' && v.trim()) return v.trim()
     }
+    /* 虚拟会话日志把正文放在 details.output（simulation.learn-phase 的 message/reply 都在这一层）：
+       不读它整行就只剩英文阶段徽章 + 「原文」JSON，主视觉位等于没有内容（2026-10-18 走查） */
+    const out = d.output
+    if (out && typeof out === 'object' && !Array.isArray(out)) {
+      const o = out as Record<string, unknown>
+      for (const key of [...SUMMARY_KEYS, 'reply', 'userVisible', 'aiResponse', 'response'] as const) {
+        const v = o[key]
+        if (typeof v === 'string' && v.trim()) return v.trim()
+      }
+    }
   }
   return ''
+}
+
+/** 虚拟会话日志阶段 → 中文（后端 SimulationLogEntry.phase 枚举；未命中回落原文，不猜词）。
+ *  与真实模式的 timelineKindLabel（goal/path/teaching/evidence）分属两套枚举，不要混用。 */
+const VIRTUAL_PHASE_ZH: Record<string, string> = {
+  'virtual-reply': '学习者回复',
+  'goal-response': '目标对话',
+  'stage-transition': '阶段推进',
+  'path-review': '路径复盘',
+  'path-replan': '路径重排',
+  'path-replan-completed': '路径重排完成',
+  'path-replan-guard': '路径重排拦截',
+  'path-regenerate': '路径重生成',
+  'path-enrichment-not-ready': '路径内容未就绪',
+  'teaching-reply': '课堂回复',
+  'teaching-response': '课堂响应',
+  'teaching-start': '课堂开始',
+  'teaching-interrupted': '课堂中断',
+  error: '错误'
+}
+
+export function virtualLogPhaseZh(phase: string): string {
+  const raw = String(phase || '').trim()
+  return VIRTUAL_PHASE_ZH[raw.toLowerCase()] || raw
 }
 
 export function parseLogEntry(entry: Record<string, unknown>): LogEntryView {

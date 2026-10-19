@@ -133,7 +133,11 @@ describe('健康中心（G1）', () => {
     expect(cards[0].text()).toContain('4');                    // 检查异常（value=异常数）
     expect(cards[0].text()).toContain('健康检查共 13 项');       // 总数下沉 hint
     expect(cards[1].text()).toContain('3');                    // 漂移需处理：契约 1 + W4 2
-    expect(cards[1].text()).toContain('契约 1 + 哈希 2');
+    /* 2026-10-16 KPI 审计补完：标签原先只有「不一致」没有宾语（谁跟谁不一致？），
+       改用术语表的限定词；hint 同步从「契约 N + 哈希 M」换成两个概念的人话名。 */
+    expect(cards[1].text()).toContain('文件与线上不一致');
+    expect(cards[1].text()).toContain('文件与线上 1 条 · 编译产物 2 条');
+    expect(cards[1].text()).not.toContain('契约');
     expect(cards[2].text()).toContain('3');                    // 对账异常：登记缺项 1 + 无生效版本 2 + 失效注册 0（zombieActive/unwired 不计入）
     expect(cards[2].text()).toContain('登记 8 项');
     expect(cards[3].text()).toContain('2');                    // 完成度未达标
@@ -188,7 +192,7 @@ describe('健康中心（G1）', () => {
     wrapper.unmount();
   });
 
-  it('完成度构成带（MkStageband）+ 对账表同页：段宽按登记总数算，图例五档全给（含 0 档）', async () => {
+  it('「完成度分布」构成带卡已下线（2026-10-19 用户「下线，不要了」）；结论仍在 KPI 与对账表', async () => {
     getSummaryMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
     const router = createRouter({
       history: createMemoryHistory(),
@@ -199,24 +203,15 @@ describe('健康中心（G1）', () => {
     const wrapper = mount(HealthCenter, { global: { plugins: [router] } });
     await flushPromises();
     await nextTick();
-    expect(wrapper.find('#hc-completion .stageband').exists()).toBe(true);
-    // 图例五档逐条给数（0 档也在，段宽 0% 但计数不藏）
-    const legend = wrapper.findAll('#hc-completion .sbl').map((n) => n.text());
-    expect(legend.length).toBe(5);
-    expect(legend.join(' ')).toContain('已上线');
-    // 完成度与对账表同页签（用户评审：原独立页签只有一卡 196px + 234px 死区）
+    expect(wrapper.find('#hc-completion').exists()).toBe(false);
+    expect(wrapper.find('.stageband').exists()).toBe(false);
+    expect(wrapper.find('.hc-fold').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('完成度分布');
+    // 信息没净丢：完成度的结论在页首 KPI hint（已上线 N/N），逐条明细在下方对账表
+    const kpi = wrapper.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text().includes('完成度未达标'));
+    expect(kpi?.exists()).toBe(true);
+    expect(kpi!.find('.mk-kpi__hint').text()).toContain('已上线');
     expect(wrapper.find('#hc-panel-recon .sk-rec').exists()).toBe(true);
-    // 2026-10-14 用户「也要折叠」：整卡走 details.mk-card + summary 折叠头（同 DriftAuditPanel /
-    // MkDistBand 折叠档），默认折叠=不带 open；折叠只影响可见性，图例计数仍在文档里
-    const card = wrapper.find('#hc-completion');
-    expect(card.element.tagName).toBe('DETAILS');
-    expect(card.classes()).toContain('mk-card');
-    expect(card.attributes('open')).toBeUndefined();
-    const head = card.find('summary.mk-card__head');
-    expect(head.element.tagName).toBe('SUMMARY');
-    expect(head.classes()).toContain('mk-section__summary');
-    // 折叠态仍露结论（头里的 N / N 已上线），展开才见五档形状
-    expect(head.text()).toContain('已上线');
     wrapper.unmount();
   });
 

@@ -5,7 +5,7 @@
  *  - 有关联对话 → 就地换开座舱（?view=session-real&id=gc_x&stage=path），from 原样带走
  *  - 无关联对话（孤儿路径）→ 明确空态 + 返回列表，不静默、不假开
  *  - 接口失败 → 错误态可重试
- * 路径内容体（进度/阶段手风琴/任务弹层/治理动作）的断言在
+ * 路径内容体（阶段全展开/任务弹层/治理动作）的断言在
  * sessionCockpit.real.test.ts（座舱 Path 页签内嵌 PathJourneyPanel）。
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'

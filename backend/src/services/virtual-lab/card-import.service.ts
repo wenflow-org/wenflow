@@ -460,6 +460,8 @@ export interface CardWallEntry {
   preset: boolean;
   sourceKind: string | null;
   email: string | null;
+  /** 派生来源模板名（2026-10-16 卡=身份模板）：非空即「已派生实例」，空为身份池里的模板卡 */
+  derivedFrom: string | null;
 }
 
 /**
@@ -486,6 +488,7 @@ export function buildCardWallEntries(
     let nameHint: string | null = null;
     let opening: string | null = null;
     let sourceKind: string | null = null;
+    let derivedFrom: string | null = null;
     try {
       const p = JSON.parse(r.profile || '{}') as Record<string, unknown>;
       const seed = (p.personaSeed || {}) as Record<string, unknown>;
@@ -496,6 +499,7 @@ export function buildCardWallEntries(
       nameHint = (seed.nameHint as string) || null;
       opening = (sc.opening as string) || null;
       sourceKind = (sc.sourceKind as string) || null;
+      derivedFrom = ((p.derivedFrom as Record<string, unknown> | undefined)?.name as string) || null;
     } catch {
       /* 坏 JSON：占位展示（名称回退 email/cardKey），不阻断整面卡墙 */
     }
@@ -513,6 +517,7 @@ export function buildCardWallEntries(
       preset: r.presetKey != null,
       sourceKind,
       email,
+      derivedFrom,
     };
   });
 }
@@ -527,8 +532,212 @@ export async function getCardWallIndex() {
       total: cards.length,
       builtin: cards.filter((c) => c.preset).length,
       custom: cards.filter((c) => !c.preset).length,
+      /** 已派生实例（带 derivedFrom 的卡）：卡库=身份池，此数说明池里有多少条已派生出虚拟学习者 */
+      derived: cards.filter((c) => c.derivedFrom).length,
     },
   };
+}
+
+/* ============ 卡 → 虚拟学习者（2026-10-16 用户拍板：卡=身份模板，派生=建运行实例） ============
+   卡库是「身份池」：一张卡 = 一份身份模板（人设 + 若干任务），虚拟学习者 = 用某张模板派生的实例。
+   派生取「身份克隆」而非「引用」语义——同一张卡可反复派生多个独立实例，源卡留在池里。
+   实现与卡导入（importCards）同构，只是来源从卡文档换成库内已有档案，故同样落
+   users(isVirtualLearner) + virtual_learner_profiles + 随卡资料。 */
+
+/** 运行期累积状态：克隆身份时必须剥掉，否则派生实例带着模板的学习痕迹起跑
+    （recentCompleted 由跑批证据写回档案，见 virtual-lab/learner-memory.ts:653）。 */
+const RUNTIME_PROFILE_KEYS = ['recentCompleted'] as const;
+
+/** 派生单次上限（与批量新建 batch-create 的 20 人同档，超限由路由拒绝而非静默截断） */
+export const CLONE_MAX_ITEMS = 20;
+
+type CardWallRow = Awaited<ReturnType<typeof findProfilesForCardWall>>[number];
+
+/** 档案里的故事池原样读（不走卡详情的展示映射——展示映射会丢掉 goalSeed / problemKnowledge 等，
+ *  照它克隆出来的实例任务会残，路径生成质量跟着掉） */
+function parseStoryPool(profileJson: string | null | undefined): Array<Record<string, unknown>> {
+  try {
+    const d = JSON.parse(profileJson || '{}') as Record<string, unknown>;
+    return Array.isArray(d.storyPool) ? (d.storyPool as Array<Record<string, unknown>>) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 任务（故事）稳定 id：卡导入写 story-1、场景设计器写 story_<uuid>；缺 id 的按序位兜底 */
+export function storyIdOf(story: Record<string, unknown>, index: number): string {
+  const id = typeof story.id === 'string' ? story.id.trim() : '';
+  return id || `story-${index + 1}`;
+}
+
+export interface CardTaskGroup {
+  profileId: string;
+  name: string;
+  tasks: Array<{ id: string; title: string; opening: string | null }>;
+}
+
+/** 卡的任务清单（创建面板勾选任务的数据源）。纯函数，可单测。 */
+export function buildCardTaskGroups(rows: CardWallRow[], profileIds: string[]): CardTaskGroup[] {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const groups: CardTaskGroup[] = [];
+  for (const pid of profileIds) {
+    const row = byId.get(pid);
+    if (!row) continue;
+    const [entry] = buildCardWallEntries([row]);
+    groups.push({
+      profileId: pid,
+      name: entry.name,
+      tasks: parseStoryPool(row.profile).map((s, i) => ({
+        id: storyIdOf(s, i),
+        title: (typeof s.title === 'string' && s.title.trim()) || `任务 ${i + 1}`,
+        opening: typeof s.visibleOpening === 'string' && s.visibleOpening.trim() ? s.visibleOpening : null,
+      })),
+    });
+  }
+  return groups;
+}
+
+export async function getCardTaskGroups(profileIds: string[]): Promise<CardTaskGroup[]> {
+  return buildCardTaskGroups(await findProfilesForCardWall(), profileIds);
+}
+
+export interface CloneCardItem {
+  profileId: string;
+  /** 勾选的任务 id；省略或空数组 = 全部任务随身份带走 */
+  storyIds?: string[];
+}
+
+export interface CloneCardOutcome {
+  created: Array<{ profileId: string; userId: string; name: string; cardKey: string; taskCount: number }>;
+  failed: Array<{ profileId: string; reason: string }>;
+}
+
+/** 随卡资料随身份搬一份：资料库按 userId 分目录，不搬则派生实例的 personaSeed 挂着指向源用户的资料。
+ *  归属判据与卡导出回程同源（标题清单 → 按标题回查源用户资料库）。 */
+function copyOwnedMaterials(
+  sourceProfile: Record<string, unknown>,
+  srcUserId: string,
+  dstUserId: string,
+  newCardKey: string
+): number {
+  const seed = (sourceProfile.personaSeed || {}) as Record<string, unknown>;
+  const sc = (seed.scenarioCard || {}) as Record<string, unknown>;
+  const owned = (sc.materials as Array<{ title?: string }> | undefined) || [];
+  let copied = 0;
+  for (const m of owned) {
+    const title = String(m.title || '').trim();
+    if (!title) continue;
+    try {
+      const found = findMaterialByTitle(srcUserId, title);
+      if (!found) continue;
+      writeMaterial({ ...found.record, id: materialId(newCardKey, title), userId: dstUserId }, found.markdown);
+      copied++;
+    } catch {
+      /* 单份资料搬家失败不阻断派生：卡身份本身已落库 */
+    }
+  }
+  return copied;
+}
+
+/**
+ * 从库内卡派生虚拟学习者（批量）。返回逐项结果——部分失败不整体回滚，
+ * 调用方按 created/failed 分别汇报（与批量新建「投产半成不报成整单失败」同判例）。
+ */
+export async function cloneCardsToLearners(items: CloneCardItem[], note?: string): Promise<CloneCardOutcome> {
+  const rows = await findProfilesForCardWall();
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const created: CloneCardOutcome['created'] = [];
+  const failed: CloneCardOutcome['failed'] = [];
+
+  for (const item of items) {
+    const sourceId = String(item.profileId || '');
+    const row = byId.get(sourceId);
+    if (!row) {
+      failed.push({ profileId: sourceId, reason: '卡不存在' });
+      continue;
+    }
+    try {
+      const [entry] = buildCardWallEntries([row]);
+      const source = (() => {
+        try {
+          return JSON.parse(row.profile || '{}') as Record<string, unknown>;
+        } catch {
+          return {} as Record<string, unknown>;
+        }
+      })();
+      const pool = parseStoryPool(row.profile);
+      const wanted = Array.isArray(item.storyIds) && item.storyIds.length ? new Set(item.storyIds.map(String)) : null;
+      const picked = wanted ? pool.filter((s, i) => wanted.has(storyIdOf(s, i))) : pool;
+      if (!picked.length) {
+        failed.push({ profileId: sourceId, reason: '未勾选任何任务' });
+        continue;
+      }
+
+      const userId = randomUUID();
+      const profileId = randomUUID();
+      // 身份克隆：源档案剥掉运行期累积状态与卡号后整体带走。用减法而非人设字段白名单——
+      // 人设 schema 有 30+ 字段且随版本增删，白名单会静默漏字段。
+      const template: Record<string, unknown> = { ...source };
+      for (const k of RUNTIME_PROFILE_KEYS) delete template[k];
+      delete template.cardKey;
+      // 卡号必须重算：沿用源卡号 → 「导出卡库」以 cardKey 去重会把它当成同一张卡、
+      // 卡导入校验也会判「已存在」。取法与 ensureCardKey 的新增分支同源（vl-<id8>）。
+      const cardKey = `vl-${profileId.slice(0, 8)}`;
+      template.cardKey = cardKey;
+      template.storyPool = picked.map((s) => ({ ...s }));
+      template.derivedFrom = {
+        profileId: row.id,
+        cardKey: entry.cardKey,
+        name: entry.name,
+        at: new Date().toISOString(),
+      };
+      template.importedAt = new Date().toISOString();
+
+      const email = `virtual_${userId.slice(0, 8)}@test.local`;
+      const password = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
+      const user = await createVirtualLearnerUser({
+        data: {
+          id: userId,
+          email,
+          name: entry.name,
+          password,
+          role: 'user',
+          currentLevel: row.knowledgeLevel || 'beginner',
+          isAdmin: false,
+          isVirtualLearner: true,
+          updatedAt: new Date(),
+        },
+      });
+
+      // 标签：新卡号置顶（与卡导入同形），源卡号剔除——不剔会被 buildCardWallEntries 当作
+      // 「本卡 key」而把源卡号留在卡面标签里，指向另一张卡
+      const srcTags = parseTags(row.tags);
+      const carriedTags = srcTags.filter((t) => t !== entry.cardKey && t !== source.cardKey);
+
+      await createVirtualLearnerProfile({
+        data: {
+          id: profileId,
+          userId: user.id,
+          profile: JSON.stringify(template),
+          learningGoal: row.learningGoal,
+          knowledgeLevel: row.knowledgeLevel || 'beginner',
+          knownConcepts: row.knownConcepts,
+          struggleConcepts: row.struggleConcepts,
+          simulationTemperature: 0.8,
+          tags: JSON.stringify([cardKey, ...carriedTags]),
+          notes: note || row.notes || null,
+        },
+      });
+
+      copyOwnedMaterials(source, row.userId, user.id, cardKey);
+      created.push({ profileId, userId: user.id, name: entry.name, cardKey, taskCount: picked.length });
+    } catch (e) {
+      logger.warn('[card-clone] 卡派生失败', { profileId: sourceId, error: (e as Error).message });
+      failed.push({ profileId: sourceId, reason: (e as Error).message || '派生失败' });
+    }
+  }
+
+  return { created, failed };
 }
 
 export interface CardDetail {
@@ -560,6 +769,8 @@ export interface CardDetail {
     budget: Record<string, unknown>;
   }>;
   materials: Array<{ kind: string; title: string }>;
+  /** 派生来源模板（2026-10-16）：非空即本卡是某个模板派生出的实例，可点回模板 */
+  derivedFrom: { profileId: string; cardKey: string | null; name: string } | null;
 }
 
 const PERSONA_FACT_LABELS: Record<string, string> = {
@@ -698,6 +909,15 @@ export async function getCardDetail(profileId: string): Promise<CardDetail | nul
       };
     }),
     materials,
+    derivedFrom: (() => {
+      const df = root.derivedFrom as Record<string, unknown> | undefined;
+      if (!df || typeof df.profileId !== 'string') return null;
+      return {
+        profileId: df.profileId,
+        cardKey: (df.cardKey as string) || null,
+        name: (df.name as string) || (df.cardKey as string) || '来源卡',
+      };
+    })(),
   };
 }
 

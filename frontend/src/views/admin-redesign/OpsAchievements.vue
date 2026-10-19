@@ -55,11 +55,13 @@
     <!-- 解锁记录 -->
     <div v-else id="oa-panel-records" role="tabpanel" aria-labelledby="oa-tab-records" class="mk-card mk-card--fill">
       <div class="mk-card__head">
-        <div class="ac-filter">
+        <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位；
+             「查询」钮随搜索框一起移（它是搜索的提交动作，贴着输入框才读得出从属） -->
+        <div class="mk-card__head-right">
           <MkFilterSearch v-model="recordSearch" placeholder="搜索姓名 / 邮箱" @keydown.enter="reloadRecordsFromFirstPage" />
           <button type="button" class="mk-btn mk-btn--sm" @click="reloadRecordsFromFirstPage">查询</button>
+          <DataScopeToggle :model-value="achIncludeTest" @update:model-value="onAchRescope" />
         </div>
-        <DataScopeToggle :model-value="achIncludeTest" @update:model-value="onAchRescope" />
       </div>
       <MockSkeletonTable v-if="recordsLoading && !records.length" :cols="6" />
       <div v-else-if="records.length" class="mk-table-scroll ac-list">
@@ -595,8 +597,10 @@ onMounted(() => {
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class）。 */
 
 
-.ac-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ac-filter .mk-filter__input { min-width: 240px; }
+/* 解锁记录的搜索框宽度：原挂在 .ac-filter 上，2026-10-15 搜索移进 .mk-card__head-right 后
+   该类成死类（搜索随右组走），宽度随之丢失。改挂右组内的输入框本身——共享层没给
+   .mk-filter__input 定宽，不补则搜索框退成内容宽、与「查询」钮挤成一小撮。 */
+.mk-card__head-right .mk-filter__input { min-width: 240px; }
 
 .ac-grant-target {
   display: flex;

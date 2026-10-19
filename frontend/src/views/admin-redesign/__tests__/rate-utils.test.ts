@@ -17,6 +17,9 @@ import {
   successRateTone,
   formatRate,
   rateToneClass,
+  failureRateTone,
+  FAILURE_RATE_BAD_AT,
+  FAILURE_RATE_WARN_AT,
   type RateTone,
 } from '../rate-utils'
 
@@ -96,5 +99,30 @@ describe('rateToneClass（tone → 页面本地类名）', () => {
   ]
   it.each(cases)('%s + %s → %s', (tone, prefix, expected) => {
     expect(rateToneClass(tone, prefix)).toBe(expected)
+  })
+})
+
+describe('failureRateTone（系统失败率跨页单源，2026-10-16 用户拍板「不要非零就红」）', () => {
+  it('阈值：≥50 红、≥20 黄、低于 20 且无失败 → ok', () => {
+    expect(FAILURE_RATE_BAD_AT).toBe(50)
+    expect(FAILURE_RATE_WARN_AT).toBe(20)
+    expect(failureRateTone(80, 80)).toBe('bad')
+    expect(failureRateTone(50, 50)).toBe('bad')
+    expect(failureRateTone(49, 0)).toBe('warn')
+    expect(failureRateTone(20, 20)).toBe('warn')
+    expect(failureRateTone(19, 0)).toBe('ok')
+    expect(failureRateTone(0, 0)).toBe('ok')
+  })
+
+  it('关键回归：非零但比例很低时不再标红（历史累计口径，一条旧失败不染红整卡）', () => {
+    expect(failureRateTone(1, 1)).toBe('warn')
+    expect(failureRateTone(0.3, 2)).toBe('warn')
+    expect(failureRateTone(1, 1)).not.toBe('bad')
+  })
+
+  it('无数据 → muted（不把「未加载」伪装成 0% 健康）', () => {
+    expect(failureRateTone(null)).toBe('muted')
+    expect(failureRateTone(undefined)).toBe('muted')
+    expect(failureRateTone(Number.NaN)).toBe('muted')
   })
 })

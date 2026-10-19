@@ -8,7 +8,7 @@
  * 瀑布样本来自 ./live 的 waterfallSpans，故整体 mock ./live 与 ./store，只用真实 ref 驱动。
  */
 import { describe, expect, it, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import type { TraceSpan } from '../store';
 
 const h = vi.hoisted(() => ({
@@ -44,6 +44,18 @@ vi.mock('../store', async () => {
     intent: { agentFilter: '', statusFilter: '' },
     openSkillDrawer: vi.fn(),
     dataSource: ref('live')
+  };
+});
+
+/* 估算成本的单价表来自接入页注册表（真实现会打接口）：这里只替掉取数，
+   计算逻辑用真身的 estimateTraceCostUsd，保证断言的是「按登记单价逐 span 算」这条链。 */
+vi.mock('../traceCost', async (orig) => {
+  const actual = await orig<typeof import('../traceCost')>();
+  return {
+    ...actual,
+    loadModelPrices: vi.fn(async () => new Map([
+      ['deepseek-v4.1-flash', { inputPer1M: 0.3, outputPer1M: 1.2 }]
+    ]))
   };
 });
 
@@ -102,6 +114,8 @@ describe('Trace 链路概要卡（读数带）', () => {
 
   it('有 LLM 调用：三格照旧出现（不再有说明），数值来自 span 汇总', async () => {
     const w = mountWith(WITH_LLM);
+    // 单价表是异步取来的（注册表接口）：等一拍，否则成本格停在「—」
+    await flushPromises();
     await w.vm.$nextTick();
     const strip = w.find('.wf-summary');
     const text = strip.text();
@@ -110,7 +124,21 @@ describe('Trace 链路概要卡（读数带）', () => {
     expect(text).toContain('估算成本');
     expect(text).toContain('模型');
     expect(text).toContain('deepseek-v4.1-flash');
-    expect(text).toContain('¥');   // 1200 输入 + 300 输出 → 有成本读数
+    // 1200 输入 × $0.3/M + 300 输出 × $1.2/M = $0.00072 → 千分位以下给 6 位
+    expect(text).toContain('≈ $0.000720');
+    w.unmount();
+  });
+
+  it('成本格口径 title 说清「按谁的价、哪部分没算进去」，且不再提已下线模型', async () => {
+    const w = mountWith(WITH_LLM);
+    await flushPromises();
+    await w.vm.$nextTick();
+    const cell = w.findAll('.wf-summary__item').find((c) => c.text().includes('估算成本'));
+    const t = cell!.attributes('title') ?? '';
+    expect(t).toContain('接入页登记的模型单价');
+    expect(t).toContain('USD');
+    expect(t).toContain('成本分析页');
+    expect(t).not.toContain('deepseek-v4-flash');
     w.unmount();
   });
 

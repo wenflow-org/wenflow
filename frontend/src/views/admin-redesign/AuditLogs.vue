@@ -44,7 +44,7 @@
       <div class="mk-card__head">
         <div class="mk-filter">
           <!-- 时间范围常驻回显（B14/F6-2）：timeRange 默认 'today'，而后端按日界
-               （Asia/Shanghai）过滤——选择器只活在「高级筛选」弹层里，卡头原先无任何
+               （Asia/Shanghai）过滤——选择器只活在「筛选」弹层里，卡头原先无任何
                可见提示，空态/低条数被读成「从未发生过」（实测操作审计默认 3 条、
                登录审计直接空态；改「全部」后 87474 / 3927）。此 chip 常驻显示当前生效
                档位（值随 select 单源联动），点击即展开同一弹层改范围。 -->
@@ -53,14 +53,9 @@
             class="mk-pill al-range"
             :class="{ 'mk-pill--active': timeRange !== 'today' }"
             :aria-expanded="advOpen"
-            :title="`当前生效时间范围：${timeRangeLabels[timeRange]}（点击展开高级筛选修改）`"
+            :title="`当前生效时间范围：${timeRangeLabels[timeRange]}（点击展开筛选修改）`"
             @click="advOpen = !advOpen"
           ><span class="al-range__k">时间范围</span> <b class="al-range__v">{{ timeRangeLabels[timeRange] }}</b></button>
-          <MkFilterSearch
-            v-model="keyword"
-            :placeholder="tab === 'login' ? '用户名 / IP' : '关键词'"
-            @keydown.enter="applyFilters"
-          />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- 失败 TOP 下钻的常驻状态（审核 #152）：弹层关闭后仍可见可退；徽章计数含 failedOnly，
                点击 = 退出下钻（与弹层内已激活 chip 同义） -->
@@ -85,6 +80,12 @@
           />
         </div>
         <div class="mk-card__head-right">
+          <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
+          <MkFilterSearch
+            v-model="keyword"
+            :placeholder="tab === 'login' ? '用户名 / IP' : '关键词'"
+            @keydown.enter="applyFilters"
+          />
           <!-- 2026-10-05 卡头统一弹层法：动作/时间下拉自主行收进共享 .mk-adv 弹层，
                失败 TOP 快捷下钻同迁（此前在头部右区占位致 1440 折两行）；触发钮标生效数 -->
           <!-- 列设置仅操作审计页签有效（登录表 6 列为固定列，不读 colVisible）；
@@ -97,7 +98,7 @@
               :aria-expanded="advOpen"
               @click="advOpen = !advOpen"
             >
-              <Filter :size="14" :stroke-width="1.75" />高级筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
+              <Filter :size="14" :stroke-width="1.75" />筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
             </button>
             <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
             <div v-show="advOpen" class="mk-adv__pop" @click.stop>
@@ -220,26 +221,34 @@
                 <td v-if="colVisible('admin')" class="log-admin" :title="log.adminName || log.adminId || ''">
                   {{ log.adminName || (log.adminId ? shortId(log.adminId) : '—') }}
                 </td>
+                <!-- 动作格两段式（2026-10-18 用户走查「很突兀，不整齐」）：名字靠左、方法徽章贴格右缘。
+                     此前三者同行内联，名字长短不同就把徽章推来推去——实测同列徽章左缘散布 125px。
+                     拆独立「方法」列可解，但 1280/1440 内容区已无余量，加列即出横向滚动（实测 +81/+12px）；
+                     改用格内两端对齐：徽章落在同一 x（chip 定宽后左右缘都齐），且列宽与改动前一致。
+                     flex-wrap 保留换行能力——1280 档动作列仅 189px，名字+徽章本就放不下（原版该档已有
+                     5 行折行），可换行才不至于把整表顶出横向滚动。 -->
                 <td v-if="colVisible('action')" :title="log.action">
-                  <template v-if="methodOf(log)">
-                    <span class="log-path mono" :title="`${methodOf(log)} ${log.path || ''}`">{{ actionLabelOf(log) }}</span>
-                    <span class="log-action-sep" aria-hidden="true">·</span>
-                    <span class="log-method" :class="`log-method--${methodOf(log).toLowerCase()}`">{{ methodOf(log) }}</span>
-                  </template>
-                  <span v-else class="log-action">{{ actionText(log.action) }}</span>
+                  <div class="log-act-line">
+                    <span v-if="methodOf(log)" class="log-path mono" :title="`${methodOf(log)} ${log.path || ''}`">{{ actionLabelOf(log) }}</span>
+                    <span v-else class="log-action">{{ actionText(log.action) }}</span>
+                    <span v-if="methodOf(log)" class="log-act-method">
+                      <span class="log-action-sep" aria-hidden="true">·</span>
+                      <span class="log-method" :class="`log-method--${methodOf(log).toLowerCase()}`">{{ methodOf(log) }}</span>
+                    </span>
+                  </div>
                 </td>
                 <td v-if="!noTargetTypes && colVisible('tt')" class="log-tt" :title="log.targetType || '当前记录未包含目标类型'">{{ targetTypeText(log.targetType) }}</td>
                 <td v-if="colVisible('target')" class="log-target mono" :title="log.targetId || ''">{{ log.targetId ? shortId(log.targetId) : '—' }}</td>
                 <td v-if="colVisible('result')"><span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span></td>
                 <td v-if="colVisible('ip')" class="log-ip mono" :title="log.ip || ''">{{ ipText(log.ip) }}</td>
-                <td class="mk-th--right log-arrow" aria-hidden="true">▸</td>
+                <td class="mk-th--right log-arrow" aria-hidden="true"><span class="log-arrow__i">▸</span></td>
               </tr>
               <tr v-if="openId === log.id" class="log-payload-row">
                 <td :colspan="visibleAlCols">
                   <div :id="`audit-payload-${log.id}`" class="log-payload">
                     <div class="log-payload-meta">
                       <span>{{ log.method }} {{ log.path }} · HTTP {{ log.statusCode }}<template v-if="log.durationMs != null"> · {{ fmtMs(log.durationMs) }}</template></span>
-                      <span v-if="log.userAgent" class="log-ua" :title="log.userAgent">{{ log.userAgent }}</span>
+                      <span v-if="log.userAgent" class="log-ua" :title="log.userAgent"><span class="log-meta-sep" aria-hidden="true">·</span>{{ log.userAgent }}</span>
                     </div>
                     <div v-if="log.requestJson" class="log-section">
                       <span class="log-label">请求</span>
@@ -479,7 +488,7 @@ type TabId = (typeof tabs)[number]['id']
 const tab = ref<TabId>('operation')
 const keyword = ref('')
 const timeRange = ref<'today' | 'yesterday' | 'week' | 'month' | 'all'>('today')
-/* 高级筛选弹层（2026-10-05 卡头统一：动作/时间/失败 TOP 自主行收进共享 .mk-adv），
+/* 筛选弹层（2026-10-05 卡头统一：动作/时间/失败 TOP 自主行收进共享 .mk-adv），
    Esc 关闭走共享 useEscape（与教学会话同一外壳） */
 const advOpen = ref(false)
 useEscape(() => advOpen.value, () => { advOpen.value = false })
@@ -788,7 +797,7 @@ const timeRangeLabels = { today: '今天', yesterday: '昨天', week: '近 7 天
 const emptyDescription = computed(() => {
   const base = tab.value === 'login' ? '管理员登录成功/失败都会在此留痕' : '管理员的增删改操作会自动记录留痕'
   if (isFiltered.value) return base
-  return `${base} · 默认时间范围「${timeRangeLabels[timeRange.value]}」，打开「高级筛选」即可修改`
+  return `${base} · 默认时间范围「${timeRangeLabels[timeRange.value]}」，打开「筛选」即可修改`
 })
 
 /** 当前筛选快照（仅含非默认值；tab 默认「操作审计」不存） */
@@ -881,9 +890,9 @@ onMounted(() => {
   void applyFilters()
 })
 
-/** 会话安全深链：?user=用户名 → 只看该用户当前会话（系统工具宿主「会话安全」tab） */
+/** 会话安全深链：?user=用户名 → 只看该用户当前会话（运营中心宿主「会话安全」tab） */
 function goSessions(username: string) {
-  void router.push({ path: '/admin/ops-center', query: { tab: 'security', user: username } })
+  void router.push({ path: '/admin/ops-hub', query: { tab: 'security', user: username } })
 }
 
 /** 导出当前筛选页为 JSON（与 ExecLogs.exportJson 同款：仅当前页 rows，非全量筛选结果）。
@@ -918,7 +927,7 @@ function exportCurrentPage() {
 .log-tr { cursor: pointer; }
 .log-tr--err { background: rgba(220, 38, 38, 0.04); }
 .log-tr--open td { background: var(--mk-blue-bg); }
-.log-tr--open .log-arrow { transform: rotate(90deg); }
+.log-tr--open .log-arrow__i { transform: rotate(90deg); }
 
 /* 展开的 payload 行：整行铺开，不参与行点击 */
 .log-payload-row { cursor: default; }
@@ -946,7 +955,11 @@ function exportCurrentPage() {
   text-overflow: ellipsis;
   max-width: 220px;
 }
-/* HTTP 方法徽标：按方法着色（颜色仅作识别辅助） */
+/* 动作格两段：名字靠左、方法徽章贴格右缘——徽章位置不再随名字长短漂移（两端对齐把
+   名字与徽章之间多出的宽度吃掉）。flex-wrap 保留换行：1280 档动作列仅 189px，
+   名字+徽章本就放不下（原版该档已有 5 行折行），能换行才不至于把整表顶出横向滚动。 */
+.log-act-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: 10px; row-gap: 2px; }
+.log-act-method { display: inline-flex; align-items: center; flex: none; }
 .log-method {
   display: inline-block;
   font-family: var(--mk-mono);
@@ -954,7 +967,11 @@ function exportCurrentPage() {
   font-weight: 800;
   border-radius: var(--mk-radius-sm);
   padding: 1px 7px;
-  margin-right: 7px;
+  /* 最小宽：两端对齐后 chip 右缘成一条线，但 POST 与 DELETE 字样宽窄不同，左缘仍差十几像素；
+     收一个下限把最窄的 POST 抬到与 PUT 同级（再放宽到 DELETE 那么宽会让 1440 档名字+徽章放不下、
+     行高翻倍，实测过）。 */
+  min-width: 46px;
+  text-align: center;
   vertical-align: middle;
 }
 .log-method--get { background: var(--mk-blue-bg); color: #1d4ed8; }
@@ -964,13 +981,13 @@ function exportCurrentPage() {
 .log-method--delete { background: var(--mk-red-bg); color: var(--mk-red-strong); }
 .log-method--options,
 .log-method--head { background: var(--mk-badge-virtual-bg); color: #475569; }
-/* 动作名与方法之间的分隔符：避免「POST探测模型能力」这类无分隔粘连（复制文本也不再黏在一起） */
+/* HTTP 方法徽标：按方法着色（颜色仅作识别辅助） */
+/* 动作名与方法之间的分隔符：两段之间隔着空白，仍留一个点，复制文本时不至于「推进虚拟会话POST」黏成一体 */
 .log-action-sep {
   display: inline-block;
-  margin: 0 6px;
+  margin-right: 6px;
   color: var(--mk-faint);
   font-weight: 700;
-  vertical-align: middle;
 }
 /* API 路径：mono 省略号 + title 全值。
    max-width 用固定值（非 100%）：表格 auto 布局按单元格 max-content 定列宽，
@@ -984,20 +1001,20 @@ function exportCurrentPage() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  /* 200px（原 240px）：路径 + 分隔符 + 方法徽章同行内联排布，241+18+55 = 314px 超过
-     动作列 1440 下的内容盒（≈301px），方法徽章被挤到第二行、行高翻倍。200px 留出余量
-     后三者同行；完整路径仍在 title 与展开行里。 */
+  /* 上限只为让「一条超长路径」不把动作列撑开（auto 布局按 max-content 定列宽）；
+     徽章位置由 .log-act-line 的两端对齐决定，不靠这里的宽度。 */
   max-width: 200px;
+  min-width: 0;
   vertical-align: middle;
 }
 /* 非 API 动作（中文标签）：中性蓝 chip */
 /* UI 复查 #11：操作列是末列，贴表格右缘过紧，补右留白 */
 .al-act { padding-right: 16px; }
-/* LY9：1280 档动作列（方法徽标 + 动作名 + 路径）折行致近半数行高 46→70px。
-   收紧路径 max-width 并锁方法徽标单行，三者保持同行不折。 */
+/* LY9：1280 档动作列折行致近半数行高 46→70px —— 收紧路径 max-width、锁方法徽标单行，
+   内容保持一行不折。2026-10-18 方法徽章拆列后本档不再需要 150px 那么紧，
+   但保持收起一档：1280 内容区宽度不变，动作列多让出的宽要还给其余长列。 */
 @media (max-width: 1439px) {
   .log-path { max-width: 150px; }
-  .log-method { white-space: nowrap; }
   .log-action { max-width: 200px; }
 }
 /* 窄屏（≤720，次要列已随 useIsNarrow 隐藏）：操作者/动作列收为弹性宽 + 单行截断
@@ -1022,7 +1039,7 @@ function exportCurrentPage() {
   max-width: 240px;
 }
 /* 时间范围常驻回显 chip（B14/F6-2）：复用 .mk-pill 描边胶囊外观，默认档为中性灰，
-   非默认档（已改范围）走 .mk-pill--active 浅蓝激活态；点击展开高级筛选弹层。 */
+   非默认档（已改范围）走 .mk-pill--active 浅蓝激活态；点击展开筛选弹层。 */
 .al-range { display: inline-flex; align-items: center; gap: 5px; }
 .al-range__k { color: var(--mk-faint); font-weight: 600; }
 .al-range__v { font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -1076,8 +1093,11 @@ function exportCurrentPage() {
   max-width: 320px;
 }
 /* 展开指示：行末箭头，展开时旋转 90°。
-   箭头列显式定宽 + 居中 + overflow hidden：auto 布局下表头空列宽度随内容抖动，
-   大字号/旋转动画下字符可能溢出列边界压到相邻列（用户反馈展开后箭头与邻列视觉重叠） */
+   箭头列显式定宽 + 居中：auto 布局下表头空列宽度随内容抖动（用户反馈展开后箭头与邻列视觉重叠）。
+   2026-10-19 用户走查「旋转后大小不对了」：原先 rotate 直接挂在 <td> 上——格子是 36×41.4 的
+   非正方盒，rotate(90deg) 后外接盒变成 42.1×36（实测），箭头连背景一起横向撑出列 6px、纵向缩
+   5px，字形还因为绕格心而非自身中心旋转右移约 10px。改法：格子里放 1em 正方、字形居中的内层盒，
+   只转内层——正方盒绕自身中心旋转外接盒不变，字形中心也不动。 */
 .mk-table-scroll table th:last-child { width: 36px; }
 .log-arrow {
   display: block;
@@ -1085,22 +1105,42 @@ function exportCurrentPage() {
   max-width: 36px;
   min-width: 36px;
   margin-left: auto;
+  /* 水平内衬清零：mk-table 的 td 有 16px 左右内衬，36px 定宽格里内容盒只剩 4px，
+     比内容还窄的居中会退化成「贴内容盒左缘」（实测箭头偏列心右 4.25px）。 */
+  padding-left: 0;
+  padding-right: 0;
   text-align: center;
-  overflow: hidden;
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
+}
+.log-arrow__i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
   transition: transform 0.15s ease;
 }
 
 .log-payload { display: grid; gap: 8px; }
+/* 请求行与客户端一行读；2026-10-19 用户走查「文案位置不对」：原先 space-between 把 UA 甩到
+   块右缘（实测请求行止于 x=1211、UA 起于 x=1748，中间空 536px），悬在 1500px 宽的展开区右端
+   与它描述的请求行脱开。改左对齐顺排，长请求行 + 长 UA 时 UA 折到第二行，不撑破块。 */
 .log-payload-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   font-family: var(--mk-mono);
+}
+.log-meta-sep {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--mk-faint);
+  font-weight: 700;
 }
 .log-ua {
   white-space: nowrap;

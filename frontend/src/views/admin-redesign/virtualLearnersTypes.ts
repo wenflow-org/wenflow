@@ -10,6 +10,10 @@ export interface VirtualLearnerRow {
   name: string
   goal: string
   storyCount: number
+  /** 已生成的路径数（distinct learningPathId）：故事是复杂情景、路径是情景里走出来的
+      学习路线，一个故事可衍生多条路径（每次运行生成一条），故可能大于故事条数；
+      同一路径的多次会话不重复计 */
+  pathCount: number
   sessions: number
   /** 进行中会话数（live：后端全量聚合 runningCount，已扣除暂停的自动驾驶） */
   runningCount: number
@@ -33,6 +37,10 @@ export interface VirtualLearnerRow {
     taskDone: number
     taskTotal: number
   } | null
+  /** 逐条活跃会话（多路径可同时运行；运行在前、暂停在后） */
+  activeRuns?: ActiveRun[]
+  /** 活跃会话全量数（含逐条展示上限之外未展开的余量） */
+  activeRunTotal?: number
   /** 日期模拟进度（只读）：会话时钟或画像级；无则 null */
   simulation?: {
     enabled: boolean
@@ -49,11 +57,28 @@ export interface VirtualLearnerRow {
   tags?: string[]
 }
 
+/** 一条活跃会话（后端 activeRuns 项）：生命周期 + 阶段 + 任务进度 */
+export interface ActiveRun {
+  sessionId: string
+  /** running = 真在跑；paused = 自动驾驶已暂停 */
+  state: 'running' | 'paused'
+  currentStage: string | null
+  goalReady: boolean
+  pathReady: boolean
+  learnStarted: boolean
+  taskDone: number
+  taskTotal: number
+  /** 超过回收阈值无写入（与「无响应」列同源；暂停会话恒 false） */
+  stalled: boolean
+}
+
 /** 启动实验弹窗里的故事条目 */
 export interface LaunchStory {
   id: string
   title: string
   runCount: number
+  /** 该故事已衍生的路径条数（每运行一次生成一条，同一路径多次会话不重复计） */
+  pathCount: number
   pathId: string | null
 }
 

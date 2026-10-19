@@ -156,7 +156,7 @@ onMounted(async () => {
   if (pathId.value !== null || paths.value.length < 2 || !first) return
   const connected = connectedCount(nodes.value, edges.value)
   if (connected <= AUTO_NARROW_CONNECTED_NODES) return
-  narrowedNote.value = `你有 ${paths.value.length} 条学习路径，合起来有 ${connected} 个概念节点，一张图放不下，先只展示「${first.title ?? '最近一条路径'}」。想看全貌可以切回「全部路径」。`
+  narrowedNote.value = `共 ${paths.value.length} 条学习路径、${connected} 个概念节点。当前展示「${first.title ?? '最近一条路径'}」。想看全貌可切回「全部路径」。`
   await applyPath(first.id)
 })
 </script>

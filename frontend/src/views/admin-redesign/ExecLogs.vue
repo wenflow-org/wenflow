@@ -19,9 +19,9 @@
          B22/F8-1：成功率与表格同窗口同源（live.ts 页面查询单源），hint 披露取值来源，
          查询在途/失败时显示「—」而不是 0 -->
     <section v-if="logs.length" class="mk-kpi-grid">
-      <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" :hint="successHint" title="当前筛选范围内的成功率，低于 90% 标红" />
-      <MkKpi label="耗时 P50" :value="latencyP50" :hint="latencyHint" title="仅统计成功日志" />
-      <MkKpi label="耗时 P99" :value="latencyP99" :hint="latencyHint" title="仅统计成功日志" />
+      <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" :hint="successHint" :title="successKpiTitle" />
+      <MkKpi label="耗时 P50" :value="latencyP50" :hint="latencyHint" :title="latencyKpiTitle" />
+      <MkKpi label="耗时 P99" :value="latencyP99" :hint="latencyHint" :title="latencyKpiTitle" />
       <!-- P-49（#74）：失败数此前只有状态 pill 角标；错误类别 Top 取当前页行（窗口口径，随 hint 披露） -->
       <MkKpi
         label="失败调用"
@@ -54,7 +54,7 @@
       <!-- ===== Tab1: 日志流（默认） ===== -->
       <!-- 卡片常驻（对齐 Users.vue：页签 + 常驻筛选头同卡，骨架/错误/空态/表格/分页都在卡片内）。
            旧实现把渲染条件挂在卡片外壳（v-else-if="filtered.length"），空列表时状态 pills / 搜索 /
-           高级筛选 / 列设置 / 保存视图 / 页码器整组消失，只剩一页没有任何筛选出口的死路空态 -->
+           筛选 / 列设置 / 保存视图 / 页码器整组消失，只剩一页没有任何筛选出口的死路空态 -->
       <div v-if="elTab === 'logs'" id="el-panel-logs" role="tabpanel" aria-labelledby="el-tab-logs" class="exec-tabpanel">
       <div class="mk-card__head">
         <!-- 左侧筛选组（对齐 Users：pills + 搜索框） -->
@@ -72,11 +72,8 @@
             :title="testFilter === 'only' ? '仅看测试' : '测试日志'"
             @click="toggleTestFilter"
           >测试<span class="mk-pill__count">{{ testCount ?? '—' }}</span></button>
-          <!-- 2026-10-05 卡头统一弹层法：时间范围 / 节点 / Trace ID 三件收进右侧「高级筛选」弹层
+          <!-- 2026-10-05 卡头统一弹层法：时间范围 / 节点 / Trace ID 三件收进右侧「筛选」弹层
               （2026-10-04「提上主行」的发现性问题由弹层钮生效计数兜住），主行回到 pills + 搜索 -->
-          <!-- 审核 #127：搜索框补 aria-label（MkFilterSearch inheritAttrs:false + v-bind="$attrs"，
-               属性直达内层 input），与同工具栏 Trace ID / 会话输入的显式标签口径一致 -->
-          <MkFilterSearch v-model="keyword" placeholder="搜索关键词" aria-label="关键词搜索（回车查询）" @keydown.enter="applyServerQuery()" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清除筛选</button>
           <!-- 保存视图：筛选组合命名存档（localStorage），pill 一键恢复 -->
           <SavedViewsBar
@@ -90,10 +87,14 @@
             @save="onSaveView"
           />
         </div>
-        <!-- 右侧：自动刷新 / 列 / 高级筛选（2026-10-05 全站卡头统一弹层法：时间范围/节点/
+        <!-- 右侧：自动刷新 / 列 / 筛选（2026-10-05 全站卡头统一弹层法：时间范围/节点/
              Trace ID 自主行收进共享 .mk-adv 弹层（此前 10-04 提上主行致 1440 折两行），
-             与私有的 sessionId「高级」面板合并为同一弹层；触发钮标生效数） -->
+             与私有的 sessionId 面板合并为同一弹层；触发钮标生效数） -->
         <div class="mk-card__head-right">
+          <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位。
+               审核 #127：搜索框补 aria-label（MkFilterSearch inheritAttrs:false + v-bind="$attrs"，
+               属性直达内层 input），与同工具栏 Trace ID / 会话输入的显式标签口径一致 -->
+          <MkFilterSearch v-model="keyword" placeholder="搜索关键词" aria-label="关键词搜索（回车查询）" @keydown.enter="applyServerQuery()" />
           <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
           <MkCols :col-defs="colDefs" :storage-key="COLS_KEY" :default-hidden="DEFAULT_HIDDEN" v-model:hidden="hiddenCols" />
           <div class="mk-adv">
@@ -103,16 +104,30 @@
               :aria-expanded="advOpen"
               @click="advOpen = !advOpen"
             >
-              <Filter :size="14" :stroke-width="1.75" />高级筛选<span v-if="advancedFilterCount" class="mk-pill__count">{{ advancedFilterCount }}</span>
+              <Filter :size="14" :stroke-width="1.75" />筛选<span v-if="advancedFilterCount" class="mk-pill__count">{{ advancedFilterCount }}</span>
             </button>
             <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
             <div v-show="advOpen" class="mk-adv__pop" @click.stop>
               <label class="mk-adv__field">
                 <span class="mk-cell-sub">时间范围</span>
-                <select v-model="timeRange" class="mk-filter__select" aria-label="时间范围筛选" @change="applyServerQuery()">
+                <select v-model="timeRange" class="mk-filter__select" aria-label="时间范围筛选" @change="onTimeRangeChange">
                   <option v-for="o in timeRangeOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
                 </select>
               </label>
+              <!-- 自定义时间段（2026-10-16 用户走查「换成可以选定始末时间」）：选定后露出开始 / 结束两个
+                   本地时间输入，换算成 startTime/endTime（ISO）下发——后端精确时间优先于快捷枚举，
+                   且 statsWhere 与行查询同窗口。开始晚于结束时行内报错并拦住查询（不下发矛盾区间） -->
+              <template v-if="timeRange === 'custom'">
+                <label class="mk-adv__field">
+                  <span class="mk-cell-sub">开始时间</span>
+                  <input v-model="customStart" type="datetime-local" class="mk-filter__input" aria-label="开始时间" :aria-invalid="customRangeInvalid" @change="applyServerQuery()" />
+                </label>
+                <label class="mk-adv__field" :class="{ 'mk-field--error': customRangeInvalid }">
+                  <span class="mk-cell-sub">结束时间</span>
+                  <input v-model="customEnd" type="datetime-local" class="mk-filter__input" aria-label="结束时间" :aria-invalid="customRangeInvalid" @change="applyServerQuery()" />
+                  <span v-if="customRangeInvalid" class="mk-field__err">开始时间需早于结束时间</span>
+                </label>
+              </template>
               <label class="mk-adv__field">
                 <span class="mk-cell-sub">节点（Skill）</span>
                 <select v-model="agentFilter" class="mk-filter__select mono" aria-label="按节点（Skill）筛选" title="按 Skill 名称精确筛选（列出全部已注册的 Skill）">
@@ -169,7 +184,7 @@
               <th v-if="!hiddenCols.has('status')">级别</th>
               <th v-if="!hiddenCols.has('kind')">类型</th>
               <th v-if="!hiddenCols.has('agent')">Skill</th>
-              <th v-if="!hiddenCols.has('trace')">Trace</th>
+              <th v-if="!hiddenCols.has('trace')" :title="TRACE_COL_TITLE">Trace</th>
               <th v-if="!hiddenCols.has('msg')">消息</th>
               <th v-if="!hiddenCols.has('model')">模型</th>
               <th v-if="!hiddenCols.has('tokens')">输入 / 输出</th>
@@ -280,7 +295,7 @@
                                 <span>{{ a.provider || 'provider?' }}</span>
                                 <span>{{ a.model || 'model?' }}</span>
                                 <span v-if="a.statusCode">HTTP {{ a.statusCode }}</span>
-                                <span v-if="a.promptTokens != null">P {{ a.promptTokens }} / C {{ a.completionTokens ?? 0 }}</span>
+                                <span v-if="a.promptTokens != null">输入 {{ a.promptTokens }} / 输出 {{ a.completionTokens ?? 0 }}</span>
                                 <span v-if="a.ttftMs != null" :title="'TTFT（首字节）'">TTFT {{ a.ttftMs }}ms</span>
                                 <span v-if="a.promptCacheHitTokens" class="tline-attempt__cache" :title="'DeepSeek 自动前缀缓存命中'">缓存 {{ a.promptCacheHitTokens }} token</span>
                                 <span v-if="a.routeSource" :title="a.routeSource">路由 {{ routeSourceLabel(a.routeSource) ?? a.routeSource }}</span>
@@ -296,7 +311,7 @@
                         </div>
                         <div v-if="log.gatewayDurMs" class="tline__section">
                           <span class="tline__label">网关合并</span>
-                          <p class="tline__none">{{ fmtMs(log.gatewayDurMs) }}（同一调用链的网关记录，已合并展示）</p>
+                          <p class="tline__none">{{ fmtMs(log.gatewayDurMs) }}</p>
                         </div>
                         <div v-if="detailCache[log.id].input" class="tline__section">
                           <span class="tline__label">输入</span>
@@ -350,7 +365,7 @@
         :action-text="isFiltered ? '清除筛选，放宽到全部时间' : ''"
         @action="clearFilterToAll"
       />
-      <Pagination v-if="logs.length" v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" :note="mergedRowsNote" />
+      <Pagination v-if="logs.length" v-model:page="currentPage" v-model:pageSize="currentPageSize" :total="liveLogsTotal" :loading="liveLogsLoading" />
       </div>
     </div>
   </div>
@@ -364,7 +379,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useTablistKeyboard } from '@/composables/useTablistKeyboard'
 import { toast } from '@/utils/toast'
 import { intent, openSkillDrawer, clearInvestigation, dataSource, liveSkillStatsMap } from './store'
-import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, liveLogsRowsMerged, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
+import { fetchLogDetail, reloadLiveSpans, liveLoading, liveLogsLoading, liveLogsError, liveLogsTotal, liveLogsPage, liveLogsPageSize, liveLogStats, livePromptIndex, liveLogsFiltered, loadPromptIndex, type LogDetail, type PromptMetaRow, type SpanQuery } from './live'
 import { useSafePolling } from '@/composables/useSafePolling'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkCols from '@/components/mk/MkCols.vue'
@@ -439,9 +454,10 @@ const openId = ref('')
 const statusFilter = ref('')
 const agentFilter = ref('')
 /* 时间档：快捷枚举（today/yesterday/week/month/all）+ 小时级自定义窗（15m/1h，排障最常用
-   的「最近一刻钟/一小时」档）。自定义档不传 timeRange（后端枚举校验会 400），换算成
-   startTime（ISO）下发——后端精确时间优先且 statsWhere 与行查询同窗口，口径一致。 */
-type ExecTimeRange = 'today' | 'yesterday' | 'week' | 'month' | 'all' | '15m' | '1h'
+   的「最近一刻钟/一小时」档）+ 自定义时间段（custom，始末任选，2026-10-16 用户走查新增）。
+   后两类都不传 timeRange（后端枚举校验会 400），换算成 startTime/endTime（ISO）下发——
+   后端精确时间优先且 statsWhere 与行查询同窗口，口径一致。 */
+type ExecTimeRange = 'today' | 'yesterday' | 'week' | 'month' | 'all' | '15m' | '1h' | 'custom'
 const timeRange = ref<ExecTimeRange>('today')
 const timeRangeOptions: Array<{ value: ExecTimeRange; label: string }> = [
   { value: '15m', label: '近 15 分钟' },
@@ -451,7 +467,68 @@ const timeRangeOptions: Array<{ value: ExecTimeRange; label: string }> = [
   { value: 'week', label: '近 7 天' },
   { value: 'month', label: '近 30 天' },
   { value: 'all', label: '全部' },
+  { value: 'custom', label: '自定义时间段' },
 ]
+/* 自定义时间段的本地输入值（datetime-local，无时区；下发前转 ISO，避免时区漂移）。
+   两端都可留空 = 只设一端（只看某时点之前 / 之后），与后端 startTime/endTime 各自可选一致。 */
+const customStart = ref('')
+const customEnd = ref('')
+/** ISO → datetime-local 输入值（本地时区），与 Announcements.toLocalInput 同口径 */
+function toLocalInput(iso: string): string {
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+/** datetime-local（无时区本地值）→ ISO；空/非法返回 ''（不下发该端） */
+function localInputToIso(v: string): string {
+  if (!v) return ''
+  const d = new Date(v)
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString()
+}
+/** 开始晚于结束 = 矛盾区间：行内报错并拦住查询，不把空结果伪装成「该时段无日志」 */
+const customRangeInvalid = computed(() => {
+  if (timeRange.value !== 'custom') return false
+  const s = localInputToIso(customStart.value)
+  const e = localInputToIso(customEnd.value)
+  return !!s && !!e && new Date(s).getTime() > new Date(e).getTime()
+})
+/** 快捷档 → 始末本地输入值（切入自定义时回填，省得从空白手填；'all' 留空=不限两端）。
+    本地日界用 getFullYear/Month/Date 构造，不用 toISOString 切片（UTC 切日会错一天）。 */
+function presetToRange(r: ExecTimeRange): { start: string; end: string } {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  switch (r) {
+    case '15m': return { start: toLocalInput(new Date(now.getTime() - 15 * 60_000).toISOString()), end: '' }
+    case '1h': return { start: toLocalInput(new Date(now.getTime() - 3_600_000).toISOString()), end: '' }
+    case 'yesterday': {
+      const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+      const s = dayStart(y)
+      const e = new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59)
+      return { start: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}T00:00`, end: `${e.getFullYear()}-${pad(e.getMonth() + 1)}-${pad(e.getDate())}T23:59` }
+    }
+    case 'week': return { start: toLocalInput(new Date(dayStart(now).getTime() - 7 * 86_400_000).toISOString()), end: '' }
+    case 'month': return { start: toLocalInput(new Date(dayStart(now).getTime() - 30 * 86_400_000).toISOString()), end: '' }
+    case 'all': return { start: '', end: '' }
+    case 'custom': return { start: '', end: '' }
+    default: return { start: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00`, end: '' } // today
+  }
+}
+/** 上一次非自定义档（切入自定义时按它回填始末） */
+let lastPresetRange: ExecTimeRange = 'today'
+/** 切档：入自定义先按上一档回填，随后下发；区间矛盾（开始晚于结束）时不下发，行内已报错 */
+function onTimeRangeChange() {
+  if (timeRange.value === 'custom') {
+    if (!customStart.value && !customEnd.value) {
+      const { start, end } = presetToRange(lastPresetRange)
+      customStart.value = start
+      customEnd.value = end
+    }
+  } else {
+    lastPresetRange = timeRange.value
+  }
+  if (!customRangeInvalid.value) void applyServerQuery()
+}
 const CUSTOM_WINDOW_MS: Partial<Record<ExecTimeRange, number>> = { '15m': 15 * 60_000, '1h': 3_600_000 }
 const isCustomWindow = (r: ExecTimeRange): r is '15m' | '1h' => r in CUSTOM_WINDOW_MS
 /** 自定义窗起点取整到分钟：同档内查询签名稳定（不因 Date.now 漂移绕过 applyServerQuery 去重） */
@@ -520,12 +597,17 @@ async function copyTrace(traceId: string) {
 /* D3 表格增强：列显隐（localStorage 持久化）。列集/列序 2026-10-02 对齐原型 renderObserve
    （时间|级别|Skill|Trace|消息|耗时），key 升 v2：旧存储按旧列集持久化，不清会盖掉新默认 */
 const COLS_KEY = 'wf_exec_hidden_cols_v2'
+/* Trace 列口径（列菜单与表头共用一句，避免同页两处漂移）。
+   2026-10-18 用户走查「这类文案」：原页码器那句「本页 N 条网关记录已并入对应 Skill 行」是讲
+   列表怎么被拼出来的装配自述，撤下；它要防的误读（可见行数少于「共 N 条」）收在这里——
+   合并的单位正是本列的一条链路，且本列默认可见（类型/模型/输入输出默认隐藏，收在那里等于没写）。 */
+const TRACE_COL_TITLE = '调用链路 ID。同一调用链的网关记录与 Skill 记录合并为一行，所以本页可见行数会少于「共 N 条」的记录数'
 const colDefs = [
   { key: 'time', label: '时间', title: '记录时间（MM-DD HH:mm:ss）' },
   { key: 'status', label: '级别', title: '执行级别（成功 / 失败 / 超时）' },
   { key: 'kind', label: '类型', title: '日志来源（流程 / Skill / 网关 / 调用）' },
   { key: 'agent', label: 'Skill', title: 'Skill 完整名' },
-  { key: 'trace', label: 'Trace', title: '调用链路 ID' },
+  { key: 'trace', label: 'Trace', title: TRACE_COL_TITLE },
   { key: 'msg', label: '消息', title: '调用消息（输出摘要 / 错误信息）' },
   { key: 'model', label: '模型', title: '使用的 LLM 模型' },
   { key: 'tokens', label: '输入 / 输出', title: 'Token 用量（输入 / 输出）' },
@@ -637,20 +719,33 @@ function currentQuery(): SpanQuery {
     sort: (logSortKey.value || undefined) as SpanQuery['sort'],
     order: logSortDir.value
   }
-  /* 自定义窗（15m/1h）换算 startTime 下发（后端枚举不认这两档，传了会 400） */
+  /* 小时级自定义窗（15m/1h）换算 startTime 下发（后端枚举不认这两档，传了会 400） */
   if (isCustomWindow(range)) return { ...base, startTime: customWindowStart(range) }
+  /* 自定义时间段（custom）：始末任选，两端都空视为「全部」；矛盾区间（开始晚于结束）不发查询，
+     返回最近一次已生效的查询以免把矛盾区间当成「无结果」（见 customRangeInvalid 行内报错） */
+  if (range === 'custom') {
+    if (customRangeInvalid.value) return lastAppliedQuery ?? { ...base, timeRange: 'all' }
+    const startTime = localInputToIso(customStart.value)
+    const endTime = localInputToIso(customEnd.value)
+    if (!startTime && !endTime) return { ...base, timeRange: 'all' }
+    return { ...base, ...(startTime ? { startTime } : {}), ...(endTime ? { endTime } : {}) }
+  }
   return { ...base, timeRange: range }
 }
+/* 最近一次已生效的查询（矛盾区间期间沿用，避免把「填错」伪装成「该时段无日志」） */
+let lastAppliedQuery: SpanQuery | null = null
 
 /* 上次已下发查询签名：同签名重复触发（显式调用与 watch 叠加、URL 回写回环）直接跳过，
    消除深链/筛选改动造成的重复请求；真正变化仍每次下发（last-wins 串行化由 live.ts 保证） */
 let lastQuerySig = ''
 async function applyServerQuery(force = false) {
-  const sig = JSON.stringify(currentQuery())
+  const q = currentQuery()
+  const sig = JSON.stringify(q)
   if (!force && sig === lastQuerySig) return
   lastQuerySig = sig
+  lastAppliedQuery = q
   /* 筛选/搜索/traceId/sessionId 直达/每页条数等变化：回第 1 页（传统分页语义） */
-  await reloadLiveSpans(currentQuery())
+  await reloadLiveSpans(q)
 }
 
 /** 自动刷新：保留当前页码重查（区别于筛选变化回第 1 页） */
@@ -800,8 +895,9 @@ watch(
    URL → 筛选（深链/刷新/前进后退）；筛选 → URL（replace，不压历史栈）。
    注册在 intent watch 之后：深链直达时 URL 权威（覆盖 intent 空值回写）；
    站内跳转时 AdminConsole 已把 intent 带进 query，两源一致不抖动。 */
-const FILTER_QUERY_KEYS = ['agent', 'status', 'cat', 'range', 'q', 'trace', 'session', 'test'] as const
-const EL_TIME_RANGES = ['today', 'yesterday', 'week', 'month', 'all', '15m', '1h'] as const
+const FILTER_QUERY_KEYS = ['agent', 'status', 'cat', 'range', 'q', 'trace', 'session', 'test', 'from', 'to'] as const
+const EL_TIME_RANGES = ['today', 'yesterday', 'week', 'month', 'all', '15m', '1h', 'custom'] as const
+/** 自定义档在 URL 里拆成 from/to 两个本地时间串（range=custom）；两者都空 = 不限期 */
 const queryVal = (v: unknown): string => (typeof v === 'string' ? v : '')
 /* 上次 URL 筛选签名：route watch 对比完整查询签名，任一筛选变化即重查。
    此前仅 status/agent/test 的 ref watch 触发重查，前进/后退/深链改
@@ -818,7 +914,7 @@ const INPUT_ONLY_QUERY_KEYS = new Set(['q', 'trace', 'session'])
 watch(
   () => FILTER_QUERY_KEYS.map((k) => route.query[k]),
   (vals, oldVals) => {
-    const [agent, status, cat, range, q, trace, session, test] = vals.map(queryVal)
+    const [agent, status, cat, range, q, trace, session, test, from, to] = vals.map(queryVal)
     agentFilter.value = agent
     statusFilter.value = ['err', 'warn', 'ok'].includes(status) ? status : ''
     errorCategory.value = cat
@@ -828,6 +924,9 @@ watch(
     timeRange.value = (EL_TIME_RANGES as readonly string[]).includes(range)
       ? (range as typeof timeRange.value)
       : 'today'
+    /* 自定义档的始末：URL 存本地 datetime-local 串，直接回填输入框（不转 ISO，避免时区往返） */
+    customStart.value = range === 'custom' ? from : ''
+    customEnd.value = range === 'custom' ? to : ''
     testFilter.value = test === 'only' ? 'only' : ''
     const sig = vals.map(queryVal).join('\u0001')
     if (sig === lastUrlSig) return
@@ -848,6 +947,11 @@ function filterSnapshot(): Record<string, string> {
   if (statusFilter.value) desired.status = statusFilter.value
   if (errorCategory.value) desired.cat = errorCategory.value
   if (timeRange.value !== 'today') desired.range = timeRange.value
+  /* 自定义档：始末各占一键（缺端不写），URL 存本地串以便刷新/分享精确还原 */
+  if (timeRange.value === 'custom') {
+    if (customStart.value) desired.from = customStart.value
+    if (customEnd.value) desired.to = customEnd.value
+  }
   if (keyword.value.trim()) desired.q = keyword.value.trim()
   if (traceId.value.trim()) desired.trace = traceId.value.trim()
   if (sessionId.value.trim()) desired.session = sessionId.value.trim()
@@ -856,7 +960,7 @@ function filterSnapshot(): Record<string, string> {
 }
 
 watch(
-  [statusFilter, agentFilter, timeRange, keyword, traceId, sessionId, errorCategory, testFilter],
+  [statusFilter, agentFilter, timeRange, keyword, traceId, sessionId, errorCategory, testFilter, customStart, customEnd],
   () => {
     const desired = filterSnapshot()
     const cur = route.query
@@ -875,7 +979,13 @@ const { views: savedViews, save: saveViewToStore, remove: removeView } = useSave
 /** 快照可读摘要（pill 悬停说明），与 filterLabel 同一套措辞 */
 function describeQuery(q: Record<string, string>): string {
   const parts: string[] = []
-  if (q.range) parts.push(timeRangeLabels[q.range as keyof typeof timeRangeLabels] || q.range)
+  if (q.range === 'custom') {
+    const s = q.from || ''
+    const e = q.to || ''
+    parts.push(`时间「${s && e ? `${s.replace('T', ' ')} ~ ${e.replace('T', ' ')}` : s ? `${s.replace('T', ' ')} 起` : e ? `截至 ${e.replace('T', ' ')}` : '全部'}」`)
+  } else if (q.range) {
+    parts.push(timeRangeLabels[q.range as keyof typeof timeRangeLabels] || q.range)
+  }
   if (q.test === 'only') parts.push('仅看测试')
   if (q.agent) parts.push(q.agent)
   if (q.status === 'err') parts.push('仅失败')
@@ -903,6 +1013,8 @@ function applySavedView(v: SavedView) {
   timeRange.value = (EL_TIME_RANGES as readonly string[]).includes(q.range)
     ? (q.range as typeof timeRange.value)
     : 'today'
+  customStart.value = q.range === 'custom' ? (q.from || '') : ''
+  customEnd.value = q.range === 'custom' ? (q.to || '') : ''
   testFilter.value = q.test === 'only' ? 'only' : ''
   /* keyword/trace/session 等输入项不在 watch 内（输入即查询防抖动），需显式重查 */
   void applyServerQuery()
@@ -924,16 +1036,14 @@ const logs = computed(() => liveLogsFiltered.value)
    该查询实测可达 30s，用户易误判「箭头变了、数据没变」。卡片头「更新中」角标 +
    表格降透明，收起骨架条件（骨架只在无数据首载显示）。 */
 const listRefreshing = computed(() => (liveLoading.value || liveLogsLoading.value) && logs.value.length > 0)
-/* 「高级」筛选生效计数（EG17）：目前面板内仅 sessionId 一项；非空即计 1，
+/* 筛选弹层生效计数（EG17）：目前面板内仅 sessionId 一项；非空即计 1，
    面板收起时按钮上仍有徽章，状态不丢。 */
-/** 高级筛选弹层生效数：时间档非默认 / 节点 / Trace ID / sessionId 任一激活即计（收起也不丢状态） */
+/** 时间档是否偏离默认（'today'）：自定义档即便两端留空也算非默认（用户显式选过自定义）。
+    与「筛选」徽章、isFiltered、清除筛选同一判据（单源，勿各写一遍）。 */
+const timeRangeActive = computed(() => timeRange.value !== 'today')
+/** 筛选弹层生效数：时间档非默认 / 节点 / Trace ID / sessionId 任一激活即计（收起也不丢状态） */
 const advancedFilterCount = computed(
-  () => (timeRange.value !== 'today' ? 1 : 0) + (agentFilter.value ? 1 : 0) + (traceId.value.trim() ? 1 : 0) + (sessionId.value.trim() ? 1 : 0)
-)
-/* 分页口径说明（D19）：本页把同一调用的网关行与 Skill 行合并为一行展示，
-   一页 30 行原始记录合并后可见行数更少——页码器注明已并入条数，避免与「30 条/页」口径打架。 */
-const mergedRowsNote = computed(() =>
-  liveLogsRowsMerged.value > 0 ? `本页 ${liveLogsRowsMerged.value} 条网关记录已并入对应 Skill 行` : ''
+  () => (timeRangeActive.value ? 1 : 0) + (agentFilter.value ? 1 : 0) + (traceId.value.trim() ? 1 : 0) + (sessionId.value.trim() ? 1 : 0)
 )
 /* 节点下拉数据源不能只来自当前页 30 行（截断后筛不到页外的 skill）。
    组合三源：注册表 skill 全集（liveSkillStatsMap，boot 域预载，去掉 skill: 前缀与行内
@@ -960,7 +1070,7 @@ const filtered = computed(() => logs.value)
 const shown = computed(() => filtered.value)
 
 /* 口径与 AuditLogs 一致：时间范围非默认值也计入筛选态，空态才显示「当前筛选无日志」而非「暂无日志」 */
-const isFiltered = computed(() => !!(testFilter.value || agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim() || errorCategory.value || timeRange.value !== 'today'))
+const isFiltered = computed(() => !!(testFilter.value || agentFilter.value || statusFilter.value || keyword.value.trim() || traceId.value.trim() || sessionId.value.trim() || errorCategory.value || timeRangeActive.value))
 /* traceId/sessionId 服务端查询未命中时的空态提示（与 TraceWaterfall 的 wf-notice「样本截断」兜底互补：
    此处是服务端精确查询的直接未命中）。返回裸值，展示层做 shortTrace 截断 + 完整值回显 */
 const traceMiss = computed(() => {
@@ -1015,9 +1125,17 @@ const successRate = computed(() => {
   const ok = logs.value.filter((l) => l.status === 'ok').length
   return Math.round((ok / logs.value.length) * 100)
 })
-/** 成功率取值来源（KPI 卡 hint/title 如实标注）：全窗口 / 本页样本估算 / 读数加载中 */
+/** 成功率读数行：只放这个数是什么范围（全窗口 / 样本 / 加载中）。
+    2026-10-18 用户走查「这类文案」：原 hint「按本页记录估算」是讲取数过程的装配自述，
+    压成「样本估算」两个字的范围标签，怎么估的整句收进 title。 */
 const successHint = computed(() =>
-  statsReady.value ? '按当前筛选范围统计' : statsPending.value || !logs.value.length ? '读数加载中' : '按本页记录估算'
+  statsReady.value ? '按当前筛选范围统计' : statsPending.value || !logs.value.length ? '读数加载中' : '样本估算'
+)
+/** 成功率卡 title：阈值 + 回退样本时的取数说明（悬停可得，不占读数行） */
+const successKpiTitle = computed(() =>
+  `当前筛选范围内的成功率，低于 90% 标红${
+    statsReady.value || statsPending.value || !logs.value.length ? '' : '。统计接口未就绪，本次读数按当前页样本估算'
+  }`
 )
 /** KPI 显示值：数字档补 %；未就绪档直接「—」（不出现「—%」这种残缺读数） */
 const successRateText = computed(() => (successRate.value === '—' ? '—' : `${successRate.value}%`))
@@ -1044,8 +1162,12 @@ function percentileOf(durations: number[], q: number): string {
 const latencySampled = computed(
   () => !(liveStats.value?.latencyPercentiles?.p50 != null) && logs.value.some((l) => l.status === 'ok')
 )
-/* 耗时分位卡 hint（2026-10-04 状态条退役迁入）：口径「仅成功日志」；回退样本估算时如实标注 */
-const latencyHint = computed(() => (latencySampled.value ? '仅成功日志 · 按本页记录估算' : '仅成功日志'))
+/* 耗时分位卡读数行（2026-10-04 状态条退役迁入）：口径「仅成功日志」；回退样本时标「样本估算」 */
+const latencyHint = computed(() => (latencySampled.value ? '仅成功日志 · 样本估算' : '仅成功日志'))
+/** 耗时分位卡 title：范围 + 回退样本时的取数说明（悬停可得，不占读数行） */
+const latencyKpiTitle = computed(() =>
+  `仅统计成功日志${latencySampled.value ? '。统计接口未返回分位，本次按当前页样本估算' : ''}`
+)
 function percentileMsOf(durations: unknown[], q: number): number | null {
   const arr = durations.filter((d): d is number => typeof d === 'number' && d >= 0).sort((a, b) => a - b)
   if (!arr.length) return null
@@ -1085,9 +1207,12 @@ function latencyTone(durationMs: unknown): string {
    的健康读数读成系统故障（红 KPI + 红告警条上下夹页签）。改只跟数值走：<90% 红，否则绿；
    错误信号由卡内告警条单源承载，同一事实只出现一次。 */
 const HEALTHY_RATE = 90
-const successKpiTone = computed(() => {
+/* 未就绪档（successRate 为「—」）不着色：Number('—')=NaN，原写法 NaN<90=false 落到 'ok' 绿——
+   把「读数还没加载/无样本」染成健康的绿是伪读数（2026-10-15 KPI 审计）。非有限数走 muted。 */
+const successKpiTone = computed<'ok' | 'bad' | 'muted'>(() => {
   const rate = Number(successRate.value)
-  return Number.isFinite(rate) && rate < HEALTHY_RATE ? 'bad' : 'ok'
+  if (!Number.isFinite(rate)) return 'muted'
+  return rate < HEALTHY_RATE ? 'bad' : 'ok'
 })
 /** 测试日志计数：默认态读后端 stats.canary（默认视图已排除 canary，行内数不到）；
     仅看测试态 = 该查询的 total（口径即测试行数）。
@@ -1118,10 +1243,19 @@ function toggleTestFilter() {
   testFilter.value = testFilter.value === '' ? 'only' : ''
 }
 /* 排查徽章：读本地筛选（修复此前读 intent 导致的空值）；live 下补充关键词/时间范围/trace/会话 */
-const timeRangeLabels = { '15m': '近 15 分钟', '1h': '近 1 小时', today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部' } as const
+const timeRangeLabels = { '15m': '近 15 分钟', '1h': '近 1 小时', today: '今天', yesterday: '昨天', week: '近 7 天', month: '近 30 天', all: '全部', custom: '自定义时间段' } as const
+/** 自定义时间段的可见措辞（读始末输入，缺一端说「起/至」，都缺=全部） */
+const customRangeLabel = computed(() => {
+  const s = customStart.value
+  const e = customEnd.value
+  if (s && e) return `${s.replace('T', ' ')} ~ ${e.replace('T', ' ')}`
+  if (s) return `${s.replace('T', ' ')} 起`
+  if (e) return `截至 ${e.replace('T', ' ')}`
+  return '全部'
+})
 const filterLabel = computed(() =>
   [
-    timeRange.value !== 'today' ? timeRangeLabels[timeRange.value] : '',
+    timeRange.value === 'custom' ? `时间「${customRangeLabel.value}」` : timeRange.value !== 'today' ? timeRangeLabels[timeRange.value] : '',
     testFilter.value === 'only' ? '仅看测试' : '',
     agentFilter.value || '',
     statusFilter.value === 'err' ? '仅失败' : statusFilter.value === 'warn' ? '仅超时' : statusFilter.value === 'ok' ? '仅成功' : '',
@@ -1155,6 +1289,9 @@ function clearFilter() {
   sessionId.value = ''
   errorCategory.value = ''
   timeRange.value = 'today' // 时间范围计入 isFiltered 口径，清除时需一并还原（默认=当天）
+  lastPresetRange = 'today'
+  customStart.value = ''
+  customEnd.value = ''
   clearInvestigation()
   /* 服务端筛选下必须重查：仅清本地值不会刷新列表（traceId/sessionId 不在 watch 内，
      避免输入即查询；状态/节点变化由 watch 触发，此处兜底全清场景） */

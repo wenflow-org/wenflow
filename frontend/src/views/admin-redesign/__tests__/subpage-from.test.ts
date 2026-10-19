@@ -30,6 +30,12 @@ describe('openSubPage 来源记忆', () => {
     expect(subPage.value?.from).toMatchObject({ view: 'virtual', id: 'v1' });
   });
 
+  it('来源页的落点页签也记住（2026-10-18：座舱 Path 页签 → 学习者详情 → 返回仍落 Path）', () => {
+    openSubPage('learner', 'u9', { from: { view: 'session-real', id: 'gc_1', label: '会话监控', stage: 'path' } });
+    closeSubPage();
+    expect(subPage.value).toMatchObject({ view: 'session-real', id: 'gc_1', label: '会话监控', stage: 'path' });
+  });
+
   it('回写名称不丢来源（面包屑取名后仍能返回原页）', () => {
     openSubPage('path', 'path-4', { from: { view: 'learner', id: 'u2' } });
     setSubPageLabel('路径 A');

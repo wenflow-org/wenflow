@@ -220,4 +220,42 @@ describe('ModelRegistryOverview（只读模型总览）', () => {
     expect(emitted?.at(-1)?.[0]).toEqual({ models: 2, warnings: 2 });
     wrapper.unmount();
   });
+
+  /* 2026-10-16 用户走查：「下面那张卡是干嘛的」。重排后这一块要自己说清两件事——
+     它决定什么（卡首一句），以及上游多出来的名字去哪了（表尾折叠）。 */
+  it('卡首一句说清这张表决定什么（限额不是摆设）', async () => {
+    getModelRegistryMock.mockResolvedValue({ data: { data: OVERVIEW } });
+    const wrapper = await mountOverview();
+    const lead = wrapper.find('.ac-mr-lead').text();
+    expect(lead).toContain('平台会路由的模型只有下面登记的这些');
+    expect(lead).toContain('档位');
+    expect(lead).toContain('限额');
+    wrapper.unmount();
+  });
+
+  it('上游未登记清单收进表尾折叠，且与登记侧同口径（vendor 前缀孪生名算命中）', async () => {
+    getModelRegistryMock.mockResolvedValue({ data: { data: OVERVIEW } });
+    const wrapper = await mountOverview({
+      upstream: ['deepseek-v4-flash', 'deepseek/deepseek-v4-flash', 'BAAI/bge-m3', 'openai/gpt-6-luna']
+    });
+    const fold = wrapper.find('.ac-mr-upstream');
+    expect(fold.exists(), '上游有未登记模型时应出现折叠').toBe(true);
+    // 两个写法都是同一个已登记模型，只剩 2 个真未登记
+    expect(fold.find('summary').text()).toContain('上游还有 2 个未登记');
+    expect(fold.findAll('.ac-mr-upstream__item').map((e) => e.text())).toEqual(['BAAI/bge-m3', 'openai/gpt-6-luna']);
+    // 默认收起（只在排查「某模型为什么用不了」时才展开）
+    expect(fold.element.hasAttribute('open')).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('未传上游清单（或全已登记）时不渲染折叠，不给一个恒为 0 的入口', async () => {
+    getModelRegistryMock.mockResolvedValue({ data: { data: OVERVIEW } });
+    const none = await mountOverview();
+    expect(none.find('.ac-mr-upstream').exists()).toBe(false);
+    none.unmount();
+
+    const all = await mountOverview({ upstream: ['deepseek-v4-flash', 'agnes-3.0-flash'] });
+    expect(all.find('.ac-mr-upstream').exists()).toBe(false);
+    all.unmount();
+  });
 });

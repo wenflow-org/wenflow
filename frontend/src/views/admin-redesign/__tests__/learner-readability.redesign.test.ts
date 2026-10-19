@@ -103,6 +103,15 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     subPage.value = null;
   });
 
+  it('行「详情」落在「证据」页签（列表读数列与详情证据页签同口径；2026-10-18 用户走查，不再一律落概览）', async () => {
+    const w = mount(LearnerCenter);
+    await settle();
+    await w.find('tbody tr').trigger('click');
+    expect(subPage.value).toMatchObject({ view: 'learner', tab: 'evidence' });
+    expect(subPage.value?.id).toBeTruthy();
+    w.unmount();
+  });
+
   it('需关注收窄（不含疲劳=中）；「观察」pill 单列疲劳中且可筛选；pill 计数全显（2026-10-11 统一判例）', async () => {
     const w = mount(LearnerCenter);
     await settle();
@@ -136,7 +145,8 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     };
     expect(kpi('学习者账号')).toContain('已加载 4');
     // P2（2026-10-04 全站评审）：「快照单次最多加载 50 条」不再进 hint（单源=本页状态条，拆页后住学习状态页头）
-    expect(kpi('学习者账号')).toContain('含虚拟学习者与测试账号');
+    // 2026-10-15 KPI 审计：hint 随页头「真实/测试」互斥视角条件式——真实视角不得再声称「含虚拟/测试」
+    expect(kpi('学习者账号')).toContain('仅真实用户');
     // 审核 #13：hint 补「与用户页『共 N 人』同集合 + 含未开始学习的账号」
     expect(kpi('学习者账号')).toContain('含未开始学习的账号');
     expect(kpi('学习者账号')).not.toContain('50 条');
@@ -165,7 +175,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     liveLearners.value = [];
   });
 
-  it('低置信 KPI 与分档条/均值同口径（无任务快照不计）；基数差异就地显式（281/241 型接缝）', async () => {
+  it('低置信 KPI 与均值同口径（无任务快照不计）；基数差异由 KPI 披露（分布带已于 2026-10-17 退役）', async () => {
     // 四人都有任务 + 戊无任务且低置信（0.2）：旧口径会把戊算进低置信 → 与紧邻的分布对不上
     liveLearners.value = [
       learner({ userId: 'jia', name: '甲', currentTask: '任务A', confidence: 0.6 }),
@@ -184,9 +194,9 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     expect(kpiCard('低置信').find('.mk-kpi__num').text()).toBe('2'); // 丙/丁；无任务的戊不计（旧口径=3）
     expect(kpiCard('低置信').find('.mk-kpi__hint').text()).toContain('共 4 位'); // 基数=有学习任务的学习者
 
-    const sub = w.find('.mk-distband__sub').text();
-    expect(sub).toContain('共 4 位有学习任务的学习者');
-    expect(sub).toContain('另 1 位无学习任务');
+    // 分布带已退役：无任务行不计的口径由 KPI 基数承载，不再有分档条副文
+    expect(w.find('.mk-distband').exists()).toBe(false);
+    expect(kpiCard('平均置信度').find('.mk-kpi__hint').text()).toContain('基于 4 位');
 
     // 「低置信」pill 过滤与 KPI 同口径：戊不出现，行数=KPI 读数（否则计数/过滤再打架）
     await w.findAll('.mk-pill').find((p) => p.text().includes('低置信'))!.trigger('click');

@@ -2,7 +2,7 @@
  * Skills 列表筛选 ↔ URL（2026-10-14 方案 B 收尾）。
  *
  * 缺陷背景：行点击从「开子页浮层」改成「跳设计页路由」后，列表组件会被卸载——此前浮层
- * 保持列表挂载所以筛选不丢，改路由后 keyword / 页码 / pill / 高级筛选全归零，返回列表
+ * 保持列表挂载所以筛选不丢，改路由后 keyword / 页码 / pill / 筛选全归零，返回列表
  * 等于从头再筛。按 house 组合式单点 learner-profile.useListQueryState 落 URL（判例
  * Users / LearnerCenter / VirtualLearners / TeachingSessions 同一单点）。
  *
@@ -172,7 +172,7 @@ describe('Skills 列表筛选 ↔ URL', () => {
     const { w } = await mountAt('/admin/skills?q=教学&pill=attn&cat=teaching&agent=path-agent');
     expect((w.find('input.mk-filter__input').element as HTMLInputElement).value).toBe('教学');
     expect(pillOf(w, '仅看需关注').attributes('aria-pressed')).toBe('true');
-    // 高级筛选弹层里的两个下拉
+    // 筛选弹层里的两个下拉
     await w.find('.mk-adv > button').trigger('click');
     await nextTick();
     expect((w.find('#skillAgentFilter').element as HTMLSelectElement).value).toBe('path-agent');

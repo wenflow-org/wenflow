@@ -156,8 +156,8 @@ describe('GoalConversations 客户端分页（mk-pagination）', () => {
     await findBtn(w, '下一页').trigger('click');
     await nextTick();
     expect(w.text()).toContain('第 2 / 3 页');
-    // 状态筛选唯一入口 = 贴表分布条（2026-10-04 晚 pills 退役）
-    await w.findAll('.gc-distband .stageband__legend .sbl').find((x) => x.text().startsWith('已取消'))!.trigger('click');
+    // 状态筛选入口 = 卡头 pills（2026-10-17 由退役的分布带迁回）
+    await w.findAll('.mk-pill').find((x) => x.text().startsWith('已取消'))!.trigger('click');
     await nextTick();
     expect(w.text()).toContain('第 1 / 1 页');
     expect(w.findAll('tbody tr')).toHaveLength(5);
@@ -195,13 +195,13 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
       data: { success: true, data: { total: 5, active: 1, completed: 1, completionRate: '20' } }
     });
     const w = await mountGoals();
-    // 段值 = 5 − 1 − 1 = 3；口径披露随分段悬停 hint（title 属性，不再是「用户取消或中断」文案）
-    const cancelSeg = w.findAll('.gc-distband .mk-distband__seg').find((x) => (x.attributes('title') || '').startsWith('已取消'))!;
-    expect(cancelSeg.attributes('title')).toContain('含用户取消、失败中断');
+    // 计数 = 5 − 1 − 1 = 3；口径披露进 pill 的 title（不再是「用户取消或中断」文案）
+    const cancelPill = w.findAll('.mk-pill').find((x) => x.text().startsWith('已取消'))!;
+    expect(cancelPill.find('.mk-pill__count').text()).toBe('3');
+    expect(cancelPill.attributes('title')).toContain('含用户取消、失败中断');
     expect(w.text()).not.toContain('用户取消或中断');
-    expect(cancelSeg.attributes('title')).toContain('点击只看');
-    // 图例点击「已取消」→ 与段计数同口径（补集聚合），点进去对得上
-    await w.findAll('.gc-distband .stageband__legend .sbl').find((x) => x.text().startsWith('已取消'))!.trigger('click');
+    // 点「已取消」→ 与计数同口径（补集聚合），点进去对得上
+    await cancelPill.trigger('click');
     await nextTick();
     const rows = w.findAll('tbody tr');
     expect(rows).toHaveLength(3);
@@ -229,14 +229,13 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
       data: { success: true, data: { total: 2, active: 2, completed: 0, completionRate: '0' } }
     });
     const w = await mountGoals();
-    // 口径披露随「进行中」段悬停 hint（title 属性，原桶 foot 文案迁移）
-    const activeSeg = w.findAll('.gc-distband .mk-distband__seg').find((el) => (el.attributes('title') || '').startsWith('进行中'))!;
-    expect(activeSeg.attributes('title')).toContain('其中 1 条超过 7 天未更新');
-    expect(activeSeg.attributes('title')).toContain('澄清中或待确认');
-    expect(activeSeg.attributes('title')).toContain('点击只看');
+    // 口径披露随「进行中」pill 的 title（原分布带段悬停文案迁移）
+    const activePill = w.findAll('.mk-pill').find((el) => el.text().startsWith('进行中'))!;
+    expect(activePill.attributes('title')).toContain('其中 1 条超过 7 天未更新');
+    expect(activePill.attributes('title')).toContain('澄清中或待确认');
   });
 
-  it('P1#6 stats 拉取失败 → 错误条「统计暂不可用 · 重试」，不再整组静默消失（2026-10-05 起 KPI 面板与分布带同源，错误条措辞随域扩展）', async () => {
+  it('P1#6 stats 拉取失败 → 错误条「统计暂不可用 · 重试」，完结率 KPI 不拿 0 冒充读数', async () => {
     statsMock.mockRejectedValue(new Error('stats boom'));
     const w = await mountGoals();
     const strip = w.find('.mk-status--bad');
@@ -245,8 +244,11 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(strip.text()).not.toContain('KPI');
     const retry = strip.findAll('button').find((b) => b.text() === '重试');
     expect(retry).toBeTruthy();
-    expect(w.find('.gc-distband').exists()).toBe(false);
-    // 重试后 stats 恢复 → 错误条消失、贴表分布条回来
+    // 取数失败：完结率显「—」而不是 0%；状态 pills 也不渲染计数徽章（不把未知读成 0）
+    const rateCard = () => w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '完结率')!;
+    expect(rateCard().find('.mk-kpi__num').text()).toBe('—');
+    expect(w.findAll('.mk-pill').find((p) => p.text().startsWith('进行中'))!.find('.mk-pill__count').exists()).toBe(false);
+    // 重试后 stats 恢复 → 错误条消失、完结率与计数回来
     statsMock.mockResolvedValue({
       data: { success: true, data: { total: 5, active: 5, completed: 0, completionRate: '0' } }
     });
@@ -254,12 +256,13 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     await flushPromises();
     await flushPromises();
     expect(w.find('.mk-status--bad').exists()).toBe(false);
-    expect(w.find('.gc-distband .mk-distband__title').text()).toBe('目标对话状态分布');
+    expect(rateCard().find('.mk-kpi__num').text()).toBe('0%');
+    expect(w.findAll('.mk-pill').find((p) => p.text().startsWith('进行中'))!.find('.mk-pill__count').text()).toBe('5');
   });
 
-  it('2026-10-05 KPI 面板：三卡（会话总数/参与用户/近 7 日新增）与分布带零重叠——总数升 KPI 后分布带副文不再复读「共 N 条」', async () => {
+  it('2026-10-05 KPI 面板：四卡（会话总数/完结率/参与用户/近 7 天新增）；状态计数只在卡头 pills', async () => {
     // 日期动态生成（组件按「今天−6」UTC 日历日过滤窗口，硬编码日期会跨日失效）；
-    // d(9) 在窗口外，必须被过滤掉——证明近 7 日新增口径没被「按完成日归集的老对话」污染
+    // d(9) 在窗口外，必须被过滤掉——证明近 7 天新增口径没被「按完成日归集的老对话」污染
     const d = (offsetDays: number) => new Date(Date.now() - offsetDays * 86400000).toISOString().slice(0, 10);
     statsMock.mockResolvedValue({
       data: {
@@ -277,13 +280,15 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     });
     const w = await mountGoals();
     const tiles = w.findAll('.mk-kpi-grid .mk-kpi');
-    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['会话总数', '参与用户', '近 7 日新增', '停滞会话']);
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['40', '12', '8', '5']);
-    // 状态数字只活在分布带（10-02 撤双带判例）；完结率保留在带副文
-    const band = w.find('.gc-distband').text();
-    expect(band).toContain('进行中');
-    expect(band).toContain('完结率');
-    expect(band).not.toContain('共 40 条');
+    expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['会话总数', '完结率', '参与用户', '近 7 天新增', '停滞会话']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['40', '0%', '12', '8', '5']);
+    // 状态数字只活在卡头 pills（2026-10-17 分布带退役后）；「全部」不显数（总数单源=分页器）
+    const pill = (label: string) => w.findAll('.mk-pill').find((p) => p.text().startsWith(label))!;
+    expect(pill('进行中').find('.mk-pill__count').text()).toBe('40');
+    expect(pill('已完成').find('.mk-pill__count').text()).toBe('0');
+    expect(pill('已取消').find('.mk-pill__count').text()).toBe('0');
+    expect(pill('全部').find('.mk-pill__count').exists()).toBe(false);
+    expect(w.find('.gc-distband').exists()).toBe(false);
   });
 
   it('行点击进座舱（与 TeachingSessions 语义对齐）：openSubPage session-real；操作列按钮改名「详情」，不再叫「控制台」', async () => {

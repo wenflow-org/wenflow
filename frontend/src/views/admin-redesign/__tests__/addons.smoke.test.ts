@@ -76,7 +76,17 @@ afterEach(() => {
   dataSource.value = 'live';
 });
 
-describe('Addons 外挂能力列（P1：51px 截断修复）', () => {
+describe('Addons 外挂能力页（2026-10-19 从「模型与接入」拆出独立页）', () => {
+  it('独立页形态：自带页头（页名 + 刷新钮），根节点是页面容器', async () => {
+    const wrapper = await mountLive();
+    expect(wrapper.find('.mk-page').exists()).toBe(true);
+    const head = wrapper.find('.mk-pagehead');
+    expect(head.exists()).toBe(true);
+    expect(head.text()).toContain('外挂能力');
+    expect(wrapper.findAll('button').some((b) => b.text().includes('刷新'))).toBe(true);
+    wrapper.unmount();
+  });
+
   it('live：能力列主名与 ID 均渲染完整值并带 title 全值', async () => {
     const wrapper = await mountLive();
     const strongs = wrapper.findAll('tbody .mk-cell-main strong');

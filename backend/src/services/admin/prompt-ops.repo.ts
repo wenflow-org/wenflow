@@ -123,10 +123,14 @@ export function createEvalRun(args: Prisma.prompt_eval_runsCreateArgs) {
   return systemPrisma.prompt_eval_runs.create(args);
 }
 
-export function listEvalRuns(where: Prisma.prompt_eval_runsWhereInput, limit: number) {
+export function listEvalRuns(
+  where: Prisma.prompt_eval_runsWhereInput,
+  limit: number,
+  orderBy: Prisma.prompt_eval_runsOrderByWithRelationInput = { createdAt: 'desc' },
+) {
   return systemPrisma.prompt_eval_runs.findMany({
     where,
-    orderBy: { createdAt: 'desc' },
+    orderBy,
     take: limit,
   });
 }

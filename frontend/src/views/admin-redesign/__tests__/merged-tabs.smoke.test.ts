@@ -210,7 +210,7 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     w2.unmount();
   });
 
-  it('学习状态独立页一屏工作台：置信度四卡 + 分段分布条点击下钻（逐人排行/直方图已退役）', async () => {
+  it('学习状态独立页一屏工作台：KPI 带 + 低置信 chip 点击下钻（逐人排行/直方图/置信分布带已退役）', async () => {
     // 直接播种 live 学习者域（快照无 LSB 字段，分析层以快照置信度 confidence 0~1 作逐人分数；
     // 丙无进行中任务 → 不计入分布，与表格置信列「—」口径一致）
     liveLearners.value = [
@@ -225,27 +225,21 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     // ①统计四卡（共享 .mk-kpi-grid，2026-10-04 拆到页级）：总数 / 需关注 / 低置信 / 平均置信度
     const kpiLabels = w.findAll('.lc-kpi .mk-kpi__label').map((c) => c.text().trim());
     expect(kpiLabels).toEqual(['学习者账号', '需关注', '低置信', '平均置信度', '疲劳高', '趋势下降', '数据覆盖率']);
-    // ②置信分段分布条（2026-10-04 一屏工作台：直方图/逐人排行退役）：图例五档带人数，
-    //   副题带基数口径且明示口径外人数；25–49% 与 ≥90% 各 1 人
-    expect(w.find('.mk-distband__sub').text()).toContain('共 2 位有学习任务的学习者');
-    expect(w.find('.mk-distband__sub').text()).toContain('另 1 位无学习任务');
-    // 低置信卡与分布同口径：丙（无任务、confidence 0）不计入（外部评审「274 vs 高分区 7」型接缝的护栏）
+    // ②置信分布带已退役（2026-10-17）：置信口径由「低置信」chip 与可排序的「置信」列承载
+    expect(w.find('.mk-distband').exists()).toBe(false);
+    // 低置信卡与「低置信」筛选同口径：丙（无任务、confidence 0）不计入（外部评审「274 vs 高分区 7」型接缝的护栏）
     const lowKpi = w.findAll('.lc-kpi .mk-kpi').find((c) => c.text().includes('低置信'));
     expect(lowKpi!.find('.mk-kpi__num').text()).toBe('1'); // 乙（0.32）；丙无任务不计
-    const legend = w.findAll('.stageband__legend .sbl');
-    expect(legend).toHaveLength(5);
-    expect(legend[1].text()).toContain('25–49%');
-    expect(legend[1].find('.sbl__n').text()).toBe('1');
-    expect(legend[4].find('.sbl__n').text()).toBe('1');
-    expect(w.findAll('.lc-rankrow').length).toBe(0);
-    // ③点击分段下钻：只看 25–49% → 表格只剩乙；再点取消 → 恢复 2 行
-    await legend[1].trigger('click');
+    // 点「低置信」chip → 只剩乙（无任务的丙不出现）；点「全部」→ 恢复 3 行（pills 是单选，非开关）
+    const lowChip = w.findAll('.mk-pill').find((p) => p.text().includes('低置信'))!;
+    await lowChip.trigger('click');
     await nextTick();
     expect(w.findAll('tbody tr').length).toBe(1);
     expect(w.find('tbody tr').text()).toContain('乙');
-    await legend[1].trigger('click');
+    await w.findAll('.mk-pill').find((p) => p.text().startsWith('全部'))!.trigger('click');
     await nextTick();
     expect(w.findAll('tbody tr').length).toBe(3);
+    expect(w.findAll('.lc-rankrow').length).toBe(0);
     w.unmount();
     liveLearners.value = [];
     subPage.value = null;

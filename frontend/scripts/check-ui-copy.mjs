@@ -174,6 +174,25 @@ function scan() {
         .replace(/\{\{(?:[^{}]|\{[^{}]*\})*\}\}/g, (m2) => m2.replace(/[^\n]/g, ' '))
         .replace(/\$\{(?:[^{}]|\{[^{}]*\})*\}/g, (m2) => m2.replace(/[^\n]/g, ' '));
       const lineAt = (idx) => stripped.slice(0, idx).split('\n').length;
+      /* 模板插值里的中文文案：`{{ busy ? '回收中…' : \`回收卡死（${n}）\` }}` 这类**会被渲染**的
+         字符串此前随整块插值一起被抹掉（600 处、85 个文件，实测漏掉「批量清理卡死」等禁用词）。
+         先在未抹除的模板里单独取插值内的中文字面量，再按原始行号落位。 */
+      const tplOnly = raw
+        .replace(/<style[\s\S]*?<\/style>/g, (m2) => m2.replace(/[^\n]/g, ' '))
+        .replace(/<script[\s\S]*?<\/script>/g, (m2) => m2.replace(/[^\n]/g, ' '))
+        .replace(/<!--[\s\S]*?-->/g, (m2) => m2.replace(/[^\n]/g, ' '));
+      for (const m of tplOnly.matchAll(/\{\{[\s\S]*?\}\}/g)) {
+        /* 下限 0：`{{ a ? '' : b ? \`…\` : '暂无记录' }}` 里的空串 `''` 若配不上，正则引擎会从
+           收尾引号重新起配，把 `: a ? \`…\` : ` 这截代码当成字面量（实测 SessionCockpit 被
+           误报成点分路径）。让空串被消耗掉即可回到正常配对，空串本身在下方被判为无中文丢弃。 */
+        for (const lit of m[0].matchAll(/'([^'\\\n]{0,})'|`([^`\\\n]{0,})`/g)) {
+          const t = (lit[1] ?? lit[2] ?? '').replace(/\$\{(?:[^{}]|\{[^{}]*\})*\}/g, ' ').replace(/\s+/g, ' ').trim();
+          /* 含代码标记的截断碎片丢弃（与 script 块同一条兜底滤网）：真文案不会出现这些词。 */
+          if (!t || !/[\u4e00-\u9fff]/.test(t) || t.includes('${')) continue;
+          if (/\b(const|let|var|function|return|typeof|await)\b|=>|\)\s*\{|;\s*\}/.test(t)) continue;
+          emit(t, tplOnly.slice(0, m.index + lit.index).split('\n').length);
+        }
+      }
       for (const m of stripped.matchAll(/>([^<>]{2,})</g)) {
         const t = m[1].replace(/\s+/g, ' ').trim();
         if (t && /[\u4e00-\u9fff]/.test(t)) emit(t, lineAt(m.index));
@@ -194,7 +213,10 @@ function scan() {
           .replace(/(?<!:)\/\/[^\n]*/g, (m2) => m2.replace(/[^\n]/g, ' '))
           .replace(/\/\*[\s\S]*?\*\//g, (m2) => m2.replace(/[^\n]/g, ' '));
         const scriptStart = raw.slice(0, sm.index).split('\n').length - 1;
-        for (const lit of code.matchAll(/'((?:[^'\\\n]|\\.){4,})'|`((?:[^`\\]|\\.){4,})`/g)) {
+        /* 下限写 2 而不是 4：`'无响应'` 这类 3 字字面量在 {4,} 下匹配失败，正则引擎会从
+           它的收尾引号重新起配，把 `', title: '` 当成一个「字面量」，随后整段 title 错位被吞
+           （实测 VirtualLearners 的「卡死」标题因此漏检）。下限与 candidates() 的 {2,} 对齐。 */
+        for (const lit of code.matchAll(/'((?:[^'\\\n]|\\.){2,})'|`((?:[^`\\]|\\.){2,})`/g)) {
           const t = (lit[1] ?? lit[2] ?? '').replace(/\$\{(?:[^{}]|\{[^{}]*\})*\}/g, ' ').replace(/\s+/g, ' ').trim();
           if (!t || !/[\u4e00-\u9fff]/.test(t)) continue;
           if (t.includes('${') || t.includes('{{')) continue;

@@ -94,17 +94,19 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     w.unmount();
   });
 
-  it('目标对话独立页：KPI 面板 = 会话总数/参与用户/近 7 日新增（2026-10-05 248dd8c2 对齐学习路径家族），状态构成归分布带', async () => {
+  it('目标对话独立页：KPI 面板 = 会话总数/完结率/参与用户/近 7 天新增，状态计数归卡头 pills（2026-10-17 分布带退役）', async () => {
     const { router, ready } = mockRouter('/admin/goal-conversations');
     await ready;
     const w = mount(GoalConversations, { global: { plugins: [router] } });
     await settle();
-    // 2026-10-05 并行批 248dd8c2：三卡 KPI 升 MkKpi 面板（OpsContent 同款），与分布带（状态比例）分属两维度
-    expect(kpiLabels(w)).toEqual(['会话总数', '参与用户', '近 7 日新增', '停滞会话']);
+    // 2026-10-17：分布带退役，完结率从带副文升独立 KPI 卡（两位小数 → 四舍五入）；状态计数迁回卡头 pills
+    // P-49（#74）：停滞会话从分布带 hint 升为卡，排尾
+    expect(kpiLabels(w)).toEqual(['会话总数', '完结率', '参与用户', '近 7 天新增', '停滞会话']);
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
-    // 构成卡旧形态不复辟：状态构成唯一住在分布带（10-02 撤双带判例不回退）
+    // 构成卡旧形态不复辟：状态计数只活在卡头 pills（10-02 撤双带判例不回退）
     expect(w.find('.mk-card .buckets').exists()).toBe(false);
     expect(w.find('.buckets').exists()).toBe(false);
+    expect(w.find('.gc-distband').exists()).toBe(false);
     // 2026-09-29 拆回独立页：学习会话合并宿主的视图切换 pills 不应再出现
     expect(w.find('.gc-tabs').exists()).toBe(false);
     w.unmount();
@@ -120,18 +122,16 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
     // 2026-10-04 用户拍板：页头状态条整体退役——需关注 / 缺总结与焦点 chips 同源同数、
     // 异常与分布条「异常终态」段同源同数（同一数字不两处渲染）；总数与窗口截断口径并进卡头 meta
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
-    const meta = w.find('.mk-card__meta');
-    // 卡头 meta 只留分页器没有的事实（口径开关；命中数/总数交分页器单源）
-    expect(meta.text()).toContain('（真实）');
-    // 本用例 0 行未触上限：不出现截断口径（触限时 meta 追加「后端共 N 条，仅显示最近 1000 条」）
-    expect(meta.text()).not.toContain('仅显示最近');
-    // P1#4 兜底诚实化：后端未回 total（mock 空响应）时，meta title 不得声称全量
-    expect(meta.attributes('title')).toContain('总数未知');
-    expect(meta.attributes('title')).not.toContain('全量口径');
+    // 口径不在卡头复读（2026-10-19 用户走查「这个小文案不要」）：口径状态的唯一展示点
+    // 是页头那颗真实/测试开关
+    expect(w.find('.ds-toggle .mk-pill--active').text()).toBe('真实');
+    // 本用例 0 行未触上限：连截断 meta 都不渲染（触限时才有「共 N 条 · 当前显示最近 1000 条」，
+    // 那是分页器没有的事实；未触限时窗口=全量，无需再报一遍）
+    expect(w.find('.mk-card--fill .mk-card__meta').exists()).toBe(false);
     // 计数升 KPI 后 chips 全部去计数（学习状态判例：KPI 孪生 pill 退为纯筛选开关）；
     // 0 行时异常 chip 不出现
     expect(w.findAll('.mk-card__head .mk-pills[aria-label="焦点筛选"] .mk-pill').map((c) => c.text().replace(/\d+$/, ''))).toEqual([
-      '全部', '进行中', '待关注', '缺总结'
+      '全部', '进行中', '需关注', '缺总结'
     ]);
     expect(w.findAll('.mk-card__head .mk-pills[aria-label="快捷筛选"] .mk-pill').map((c) => c.text())).toEqual(['有建议0']);
     w.unmount();

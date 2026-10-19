@@ -4,7 +4,13 @@
  * 状态推导、操作守卫、确认文案集中在此，防止入口层自行改词/放宽守卫导致语义漂移。
  */
 import { describe, expect, it } from 'vitest'
-import { VS_CONTROL_DEFS, VS_STATE_META, deriveVsLifecycleState, vlabControlsFor } from '../vlab-controls'
+import {
+  VS_CONTROL_DEFS,
+  VS_STATE_META,
+  deriveVsLifecycleState,
+  deriveVsLifecycleStateFromRuns,
+  vlabControlsFor
+} from '../vlab-controls'
 
 describe('deriveVsLifecycleState（状态推导）', () => {
   it('running + teachingPaused → paused（暂停是派生态）', () => {
@@ -19,6 +25,57 @@ describe('deriveVsLifecycleState（状态推导）', () => {
   it('空态 → idle', () => {
     expect(deriveVsLifecycleState({})).toBe('idle')
     expect(deriveVsLifecycleState({ status: null })).toBe('idle')
+  })
+
+  /* 2026-10-19 运营走查：这两个分支原先只有座舱的状态徽章算得出来，顶栏按钮簇那份派生漏了，
+     同一个会话会同时显示「已暂停」与「暂停」按钮。现在派生单源，分支优先级在此锁定。 */
+  it('紧急停止 manualStopped → abandoned（会话可能仍记 failed，但对运营是被终止）', () => {
+    expect(deriveVsLifecycleState({ status: 'running', manualStopped: true })).toBe('abandoned')
+    expect(deriveVsLifecycleState({ status: 'failed', manualStopped: true })).toBe('failed')
+  })
+  it('自动驾驶 stopped → paused（驱动停了、会话没结束）', () => {
+    expect(deriveVsLifecycleState({ status: 'running', autopilotStatus: 'stopped' })).toBe('paused')
+    // 终态优先于驱动状态：跑完的会话即使留了 stopped 也不该被读成「已暂停」
+    expect(deriveVsLifecycleState({ status: 'completed', autopilotStatus: 'stopped' })).toBe('completed')
+  })
+  it('优先级：终态 > 紧急停止 > 管理员暂停 > 自动驾驶停止', () => {
+    expect(deriveVsLifecycleState({
+      status: 'abandoned', manualStopped: true, teachingPaused: true, autopilotStatus: 'stopped'
+    })).toBe('abandoned')
+    expect(deriveVsLifecycleState({
+      status: 'running', manualStopped: true, teachingPaused: true, autopilotStatus: 'stopped'
+    })).toBe('abandoned')
+    expect(deriveVsLifecycleState({
+      status: 'running', teachingPaused: true, autopilotStatus: 'stopped'
+    })).toBe('paused')
+  })
+})
+
+describe('deriveVsLifecycleStateFromRuns（画像级聚合）', () => {
+  const run = (o: Partial<{ result: string; tone: string; paused: boolean }>) => ({
+    result: '', tone: '', paused: false, ...o
+  })
+  it('无记录 → idle', () => {
+    expect(deriveVsLifecycleStateFromRuns([])).toBe('idle')
+  })
+  it('有暂停中的活跃会话 → paused（优先于其它活跃会话）', () => {
+    expect(deriveVsLifecycleStateFromRuns([
+      run({ result: 'running', tone: 'warn' }),
+      run({ result: 'running', tone: 'warn', paused: true })
+    ])).toBe('paused')
+  })
+  it('活跃会话优先于历史终态（最近在跑就是 running，不看旧失败）', () => {
+    expect(deriveVsLifecycleStateFromRuns([
+      run({ result: 'failed', tone: 'bad' }),
+      run({ result: 'running', tone: 'warn' })
+    ])).toBe('running')
+  })
+  it('无活跃会话时：失败优先于完成', () => {
+    expect(deriveVsLifecycleStateFromRuns([
+      run({ result: 'completed', tone: 'ok' }),
+      run({ result: 'failed', tone: 'bad' })
+    ])).toBe('failed')
+    expect(deriveVsLifecycleStateFromRuns([run({ result: 'completed', tone: 'ok' })])).toBe('completed')
   })
 })
 

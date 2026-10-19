@@ -261,7 +261,9 @@
                      文本仍自洽：不看图也能继续。 -->
                 <div v-if="m.images && m.images.length" class="msg__visuals">
                   <figure v-for="(img, ii) in m.images" :key="ii" class="msg__visual">
-                    <img :src="img.url" :alt="img.caption || '教学配图'" loading="lazy" referrerpolicy="no-referrer" />
+                    <button type="button" class="msg__visual-btn" :aria-label="`放大查看${img.caption || '教学配图'}`" @click="openVisualZoom(img)">
+                      <img :src="img.url" :alt="img.caption || '教学配图'" loading="lazy" referrerpolicy="no-referrer" />
+                    </button>
                     <figcaption v-if="img.caption">{{ img.caption }}</figcaption>
                   </figure>
                 </div>
@@ -592,6 +594,12 @@
         </div>
       </div>
     </div>
+    <!-- 教学配图放大层：窄屏下配图会被列宽压小，点击看原图（与结构图/位置线图的放大口径一致） -->
+    <div v-if="visualZoom" class="visualmodal" role="dialog" aria-modal="true" aria-label="查看教学配图" @click.self="visualZoom = null">
+      <button type="button" class="visualmodal__close" aria-label="关闭图片" @click="visualZoom = null">✕</button>
+      <img :src="visualZoom.url" :alt="visualZoom.caption || '教学配图'" />
+      <p v-if="visualZoom.caption" class="visualmodal__caption">{{ visualZoom.caption }}</p>
+    </div>
   </div>
 </template>
 
@@ -644,6 +652,9 @@ import { useOpeningSceneViews } from './learningScene';
 import { usePeerAssistant } from './usePeerAssistant';
 import { useMessageActions } from './useMessageActions';
 import { useCheckpointFlow } from './useCheckpointFlow';
+
+/* 空响应占位文案单源（同一句在两条分支复用，同文件复读由 R6 治理） */
+const EMPTY_REPLY_TEXT = '（本轮没有收到回复，你可以换个说法再试一次。）';
 
 /** 按需注册（与 MarkdownRenderer.vue 同口径的常用教学语言子集） */
 const LEARN_HLJS_LANGS: Array<[string, unknown]> = [
@@ -761,6 +772,11 @@ function finishInit() {
   initing.value = false;
 }
 const typing = ref(false);
+/** 教学配图放大层：窄屏列宽会把图压到 ~160px，点击看原图 */
+const visualZoom = ref<{ url: string; caption?: string | null } | null>(null);
+function openVisualZoom(img: { url: string; caption?: string | null }) {
+  visualZoom.value = { url: img.url, caption: img.caption ?? null };
+}
 // 菜单危险动作（结束/重新开始）in-flight 防重
 const actionBusy = ref(false);
 /** 完课结算 in-flight：finalize 含自动关课+wrapup（LLM，可达数十秒），期间锁发送，
@@ -1634,9 +1650,9 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
   // 兜底：AI 全程未返回任何内容（空响应）时给占位气泡，避免本轮「无声消失」
   if (!r.aiResponse && (!aiMsg || !aiMsg.text.trim())) {
     if (aiMsg?.role === 'ai') {
-      aiMsg.text = '（本轮没有收到回复，你可以换个说法再试一次。）';
+      aiMsg.text = EMPTY_REPLY_TEXT;
     } else {
-      pushMsg({ role: 'ai', text: '（本轮没有收到回复，你可以换个说法再试一次。）', time: nowTime() });
+      pushMsg({ role: 'ai', text: EMPTY_REPLY_TEXT, time: nowTime() });
     }
   }
   // 伴学触发：进独立浮动窗，不占主对话区（角色小启，暖橙系）。
@@ -2457,12 +2473,33 @@ onBeforeUnmount(() => {
    原暗色逐条覆写块退役；仅保留关闭钮 hover 的暗色轻底 */
 [data-theme='dark'] .supmodal__close:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
 .msg__visual { margin: 0; display: grid; gap: 4px; }
+.msg__visual-btn {
+  display: block; width: 100%; padding: 0; border: 0; background: none;
+  cursor: zoom-in; border-radius: var(--mk-radius-md);
+}
+.msg__visual-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .msg__visual img {
-  display: block; max-width: 100%; max-height: 320px;
+  display: block; width: auto; height: auto; max-width: 100%; max-height: 320px;
   border: 1px solid var(--mk-line); border-radius: var(--mk-radius-md);
   background: var(--surface);
 }
 .msg__visual figcaption { font-size: 12px; color: var(--faint); line-height: 1.5; }
+/* 配图放大层：与结构图/位置线图的放大口径一致，窄屏可看原图 */
+.visualmodal {
+  position: fixed; inset: 0; z-index: 96; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; padding: 20px;
+  background: rgba(15, 23, 42, .78);
+}
+.visualmodal img {
+  max-width: 94vw; max-height: 82vh; width: auto; height: auto;
+  background: var(--surface); border-radius: var(--mk-radius-md); box-shadow: var(--wf-shadow-modal);
+}
+.visualmodal__caption { margin: 0; max-width: 940px; color: var(--text-on-primary); font-size: 12.5px; line-height: 1.5; text-align: center; }
+.visualmodal__close {
+  position: absolute; top: 14px; right: 14px; width: 36px; height: 36px;
+  border: 1px solid color-mix(in srgb, var(--text-on-primary) 35%, transparent); border-radius: 50%;
+  background: rgba(15,23,42,.45); color: var(--text-on-primary); font-size: 16px; cursor: pointer;
+}
 .msg__avatar {
   /* 原型 wf-msg__avatar：蓝 12% 扁平圆 + blue-deep 字（去蓝→紫渐变方块，2026-09-30 视觉收敛） */
   width: 30px; height: 30px; border-radius: 50%;
@@ -3297,7 +3334,13 @@ onBeforeUnmount(() => {
   grid-auto-flow: dense;
 }
 .msg__content--actions > .msg__bubble,
-.msg__content--actions > .msg__replies { grid-column: 1 / -1; }
+.msg__content--actions > .msg__replies,
+/* 教学配图/结构图/位置线图/补充材料必须跨满两列：
+   否则会落进 minmax(0,1fr) 的第一列，在窄屏被挤成 159px（2026-10-18 实测） */
+.msg__content--actions > .msg__visuals,
+.msg__content--actions > .teaching-diagram,
+.msg__content--actions > .teaching-figure,
+.msg__content--actions > .msg__supplement { grid-column: 1 / -1; }
 .msg__content--actions > .msg-actions {
   grid-column: 2;
   align-self: center;

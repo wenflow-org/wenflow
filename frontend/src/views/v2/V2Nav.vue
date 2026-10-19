@@ -64,7 +64,7 @@
                 <Sun v-if="isDark" :size="14" :stroke-width="2" />
                 <Moon v-else :size="14" :stroke-width="2" />
               </span>
-              <span class="v2nav__menu-theme-label">{{ isDark ? '切换到亮色模式' : '切换到暗色模式' }}</span>
+              <span class="v2nav__menu-theme-label">{{ isDark ? '使用亮色模式' : '使用暗色模式' }}</span>
             </button>
             <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
               <LogOut :size="15" :stroke-width="1.75" aria-hidden="true" />

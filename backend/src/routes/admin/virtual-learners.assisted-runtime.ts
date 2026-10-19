@@ -27,7 +27,7 @@ import { runWithSimulatedClock } from '../../services/virtual-lab/simulation-clo
 import { resolveSessionBudget } from '../../virtual-lab/session-budget';
 import { getVirtualLabSettings, DEFAULT_VIRTUAL_LAB_SETTINGS } from '../../services/virtual-lab-settings.service';
 import { virtualCleanupService } from '../../services/virtual-lab/virtual-cleanup.service';
-import { validateCards as validateCardDocument, importCards as importCardDocument, exportCards as exportCardLibrary, getCardWallIndex, getCardDetail } from '../../services/virtual-lab/card-import.service';
+import { validateCards as validateCardDocument, importCards as importCardDocument, exportCards as exportCardLibrary, getCardWallIndex, getCardDetail, getCardTaskGroups, cloneCardsToLearners, CLONE_MAX_ITEMS } from '../../services/virtual-lab/card-import.service';
 import { asErrorLike } from '../../virtual-lab/vlab-types';
 import { sendVirtualSessionError } from './virtual-session-http';
 import type { SimulationLogEntry } from '../../coordinators/simulation.types';
@@ -1945,6 +1945,68 @@ router.get('/cards/:profileId/detail', async (req: Request, res) => {
   } catch (error) {
     logger.error('卡详情失败:', error);
     res.status(500).json({ success: false, error: (error as Error).message || '卡详情失败' });
+  }
+});
+
+/**
+ * 卡的任务清单（2026-10-16「卡 → 虚拟学习者」创建面板的数据源）：逐卡给故事池任务
+ * （id + 标题 + 开场白）。读档案原始 storyPool——卡详情的展示映射会丢 goalSeed /
+ * problemKnowledge，照它勾选再克隆，派生实例的任务会残。
+ * GET /api/admin/virtual-learners/cards/tasks?ids=<profileId,profileId>
+ */
+router.get('/cards/tasks', async (req: Request, res) => {
+  try {
+    const ids = String(req.query.ids || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!ids.length) {
+      return res.status(400).json({ success: false, error: '缺少 ids（卡 id 列表）' });
+    }
+    const groups = await getCardTaskGroups(ids);
+    res.json({ success: true, data: { groups } });
+  } catch (error) {
+    logger.error('卡任务清单失败:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || '卡任务清单失败' });
+  }
+});
+
+/**
+ * 卡 → 虚拟学习者（2026-10-16 用户拍板「卡库是身份池，选卡 + 勾任务 → 创建虚拟学习者」）。
+ * 派生语义 = 身份克隆：新账号 + 新档案，人设整体带走，故事池只带勾选的任务，卡号重算。
+ * 批量：一次 1..CLONE_MAX_ITEMS 张卡；逐项返回结果（部分失败不整体回滚，投产半成不报成整单失败）。
+ * POST /api/admin/virtual-learners/cards/clone
+ */
+router.post('/cards/clone', async (req: Request, res) => {
+  try {
+    const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+    const items = rawItems
+      .map((it: unknown) => {
+        const o = (it || {}) as Record<string, unknown>;
+        return {
+          profileId: String(o.profileId || '').trim(),
+          storyIds: Array.isArray(o.storyIds) ? o.storyIds.map(String) : undefined,
+        };
+      })
+      .filter((it: { profileId: string }) => it.profileId);
+    if (!items.length) {
+      return res.status(400).json({ success: false, error: '请先选择要派生的卡' });
+    }
+    if (items.length > CLONE_MAX_ITEMS) {
+      return res.status(400).json({ success: false, error: `一次最多派生 ${CLONE_MAX_ITEMS} 张卡` });
+    }
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim() : undefined;
+    const data = await cloneCardsToLearners(items, note || undefined);
+    logger.info('卡派生虚拟学习者', {
+      requested: items.length,
+      created: data.created.length,
+      failed: data.failed.length,
+      createdBy: req.user?.userId,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error('卡派生失败:', error);
+    res.status(500).json({ success: false, error: (error as Error).message || '卡派生失败' });
   }
 });
 }

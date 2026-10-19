@@ -156,8 +156,8 @@ export const MODEL_MAP = new Map<string, ModelDefinition>();
  * 运行时生效值走 `getModelDefaults()`（跟随配置文件）；此处仅为兼容保留的初始快照。
  */
 export const DEFAULT_MODELS = {
-  chat: 'deepseek-v4-flash',
-  reasoning: 'deepseek-v4-pro'
+  chat: 'deepseek-v4.1-flash',
+  reasoning: 'deepseek-v4.1-flash'
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -165,7 +165,8 @@ export const DEFAULT_MODELS = {
 // ---------------------------------------------------------------------------
 
 /** 配置文件路径：env 可覆盖（测试/多部署）；每次调用时解析，改 env 后下一次 reload 即生效。 */
-function resolveConfigPath(): string {
+/** 注册表文件路径（管理台 BYOK 编辑器要按同一路径读写：导出以免两处各写一份解析逻辑） */
+export function resolveConfigPath(): string {
   return (process.env.LLM_PROVIDERS_CONFIG || '').trim()
     || path.resolve(__dirname, '../../config/llm-providers.json');
 }
@@ -183,6 +184,8 @@ let lastMtimeMs: number | null = null;
 let lastReloadError: string | null = null;
 
 function buildEmbeddedFallback(): RegistrySnapshot {
+  /* 与 config/llm-providers.json 的平台通道保持一致：2026-10-18 上游已不再提供
+     deepseek-v4-flash / deepseek-v4-pro，兜底目录不得把已下线的模型再复活。 */
   const models: ModelDefinition[] = [
     {
       id: 'deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash', tier: 'chat', provider: 'deepseek', providerId: 'platform',
@@ -191,35 +194,28 @@ function buildEmbeddedFallback(): RegistrySnapshot {
       description: 'V4.1 Flash：标准运行模型（字面 id，2026-09-28 起全链统一）'
     },
     {
-      id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', tier: 'chat', provider: 'deepseek', providerId: 'platform',
-      supportsThinking: true, supportsReasoningEffort: true, maxOutputTokens: 131072, defaultMaxTokens: 32768,
-      reasoningReserveTokens: 8192, fallbacks: ['agnes-3.0-flash'],
-      description: 'V4 Flash（含混别名：部分渠道实际由 V4.1 部署服务，输出量波动大）'
-    },
-    {
-      id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', tier: 'reasoning', provider: 'deepseek', providerId: 'platform',
-      supportsThinking: true, supportsReasoningEffort: true, maxOutputTokens: 131072, defaultMaxTokens: 32768,
-      reasoningReserveTokens: 16384, fallbacks: ['deepseek-v4-flash'],
-      description: '强大推理能力，适合复杂任务和深度思考'
-    },
-    {
       id: 'agnes-3.0-flash', label: 'Agnes 3.0 Flash', tier: 'chat', provider: 'agnes', providerId: 'platform',
       supportsThinking: false, supportsReasoningEffort: false, maxOutputTokens: 65536, defaultMaxTokens: 32768,
       description: '轻量快速模型，TPS 高，适合 skill 高频调用'
+    },
+    {
+      id: 'agnes-2.5-flash', label: 'Agnes 2.5 Flash', tier: 'chat', provider: 'agnes', providerId: 'platform',
+      supportsThinking: false, supportsReasoningEffort: false,
+      description: '轻量快速模型（同族旧档）'
     }
   ];
   const platform: ProviderDefinition = {
-    id: 'platform', name: '平台通道（继承）', enabled: true, recommended: true, endpointSource: 'inherit', models
+    id: 'platform', name: '平台', enabled: true, recommended: true, endpointSource: 'inherit', models
   };
   return {
     models,
     providers: [platform],
     aliases: {
-      chat: ['deepseek-v4-flash', 'agnes-3.0-flash'],
-      reasoning: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+      chat: ['deepseek-v4.1-flash', 'agnes-3.0-flash'],
+      reasoning: ['deepseek-v4.1-flash'],
       light: ['agnes-3.0-flash']
     },
-    defaults: { chat: 'deepseek-v4-flash', reasoning: 'deepseek-v4-pro' },
+    defaults: { chat: 'deepseek-v4.1-flash', reasoning: 'deepseek-v4.1-flash' },
     source: 'embedded-fallback'
   };
 }
@@ -443,8 +439,10 @@ initFromDisk();
  * 热重载：文件 mtime 变化时重读并原地更新注册表。
  * 解析失败时**保留上一次好目录**并把错误记入 status（运行中的服务不能因一次坏编辑崩溃）。
  * 由路由层在每次 resolve 前调用（stat 开销远小于一次 LLM 调用）。
+ * `force` = 跳过 mtime 短路，供管理台写接口用：同一毫秒内连续两次保存时 mtime 可能不变，
+ * 靠 mtime 判断会「写进去了但运行时没换」，那就成了最难查的一类不一致。
  */
-export function reloadLlmProvidersIfChanged(): { reloaded: boolean; error: string | null } {
+export function reloadLlmProvidersIfChanged(force = false): { reloaded: boolean; error: string | null } {
   const configPath = resolveConfigPath();
   let st: fs.Stats;
   try {
@@ -453,7 +451,7 @@ export function reloadLlmProvidersIfChanged(): { reloaded: boolean; error: strin
     lastReloadError = `配置文件不可读：${configPath}`;
     return { reloaded: false, error: lastReloadError };
   }
-  if (lastMtimeMs !== null && st.mtimeMs === lastMtimeMs && activeSource === 'file') {
+  if (!force && lastMtimeMs !== null && st.mtimeMs === lastMtimeMs && activeSource === 'file') {
     lastReloadError = null;
     return { reloaded: false, error: null };
   }

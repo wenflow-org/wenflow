@@ -412,10 +412,11 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   border-bottom: 1px solid var(--mk-line);
   flex-wrap: wrap;
 }
-/* ----- 列表卡头统一语法（2026-10-05 教学组六页同一槽位序，判例=教学会话）-----
-   左组（.mk-filter，吃剩余宽度）：快筛 chips → 搜索框 → 清除筛选（仅筛选激活时）；
-   右组（.mk-card__head-right，贴右缘）：页级动作（如 全部重算）→ 列(MkCols) →
-   高级筛选(.mk-adv，仅当存在放不进主栏的次级筛选) → 计数 meta(仅当说独有事实：
+/* ----- 列表卡头统一语法（2026-10-05 教学组六页同一槽位序，判例=教学会话；
+        2026-10-15 用户拍板「列表统一设计，搜索放右侧」——搜索由左组移到右组首位）-----
+   左组（.mk-filter，吃剩余宽度）：快筛 chips → 清除筛选（仅筛选激活时）；
+   右组（.mk-card__head-right，贴右缘）：搜索框 → 页级动作（如 全部重算）→ 列(MkCols) →
+   筛选(.mk-adv，仅当存在放不进主栏的次级筛选；2026-10-19 用户令全站统一叫「筛选」，原「高级筛选」) → 计数 meta(仅当说独有事实：
    筛选态行数差 / 窗口截断口径；与分页器「共 N 条」复读的不渲染)。
    纪律：搜索一律行内不藏弹层；chips 计数只留「别处没有的」（总数归分页器、
    构成计数归分布条）；没有的槽位不硬造（目标对话/学习路径的状态快筛已由
@@ -428,6 +429,10 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
    首个元素吃掉全部剩余空间后，尾部元素自然贴右且彼此只隔 gap；
    页面在尾部元素上写的 margin-left:auto 变成空操作（无剩余空间可分），无需逐页清理。 */
 .mk-card__head > :first-child { flex: 1 1 auto; }
+/* 无标题的纯工具栏卡头（如成就解锁记录：头内只有右组）：首个子元素就是 .mk-card__head-right
+   时不能被上面的 flex:1 拉伸——否则右组吃满整行、内部搜索/控件退成左对齐（内容贴左，
+   与「右组贴右缘」的语义相反）。改为不伸张 + margin-left:auto 顶到右缘。 */
+.mk-card__head > .mk-card__head-right:first-child { flex: 0 0 auto; margin-left: auto; }
 /* 卡题 15px = 原型 .card__title（--fs-emp）。原与正文同为 14px，卡题只靠字重区分，
    页名 24px 之下直接掉到 14px 落差过陡；15px 是页名与正文之间的那一级。 */
 .mk-card__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 700; }
@@ -639,7 +644,7 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
 .mk-menu__item--danger { color: var(--mk-red, #dc2626); }
 .mk-menu__item--danger:hover { background: var(--mk-red-bg, #fef2f2); color: var(--mk-red, #dc2626); }
 .mk-menu__sep { height: 1px; margin: 3px 4px; background: var(--mk-line); }
-/* ----- 高级筛选弹层（工具栏右侧「列」旁的 .mk-btn--sm + Filter 图标）-----
+/* ----- 筛选弹层（工具栏右侧「列」旁的 .mk-btn--sm + Filter 图标）-----
    把放不进主栏的次级筛选（搜索 / 状态下拉 / 时间下拉）收进弹层，主栏只留 chips——
    原型工具栏右侧即此形态（.btn--sm），本原语是它的实现：点击展开、遮罩吞外点、
    Esc 关闭（页内 useEscape，见各页）。面板视觉与 .mk-menu__pop 同一套。
@@ -881,6 +886,9 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
    width:84px。表单输入框宽度由各自容器（.mk-field width:100% / 内联）决定。 */
 .mk-filter .mk-filter__input,
 .log-advpanel .mk-filter__input { min-width: 180px; }
+/* 2026-10-15 用户拍板：列表卡头搜索统一移到右组（.mk-card__head-right）首位。
+   搜索框不再落在 .mk-filter 语境里，需在此补同一 180px 下限（否则回落到 input 默认 ~20ch 的窄宽）。 */
+.mk-card__head-right .mk-search > .mk-filter__input { min-width: 180px; }
 /* 视图/筛选切换：**独立描边胶囊**（原型 .chips / .chip），不再是灰底分段控件。
    2026-09-26 曾定「顶层切换走分段控件（灰轨+白片）」，本次按 newui「UI-分支优化设计」
    原型改回胶囊：原型里根本没有分段轨道，切换控件一律是描边胶囊（筛选）或下划线页签
@@ -1005,12 +1013,25 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-link:hover { background: var(--mk-hover-surface); }
 .mk-link--danger { color: var(--mk-red, #dc2626); }
 .mk-link--danger:hover { background: var(--mk-red-bg, #fef2f2); }
-/* 链接按钮「激活/展开中」态（ExecLogs 高级筛选、MkCols 列设置共用）。
+/* 链接按钮「激活/展开中」态（ExecLogs 筛选、MkCols 列设置共用）。
    此前全局零定义 → 展开态无任何视觉反馈（视觉审计 附 A #7）。 */
 .mk-link--active { background: var(--mk-hover-surface); }
 .mk-link--active:hover { background: var(--mk-link-active-hover-bg); }
 /* 弱化链接（例：计数为 0 时的次要入口）：原 VirtualLearners 页内私有，收敛为全局 */
 .mk-link--muted { opacity: 0.55; }
+/* 表格用户格里的姓名 → 学习者详情（2026-10-18）：继承单元格排版，hover 才上色。
+   整列姓名都染蓝会被读成「操作列」，所以常态保持正文色（spec §4：hover 只许变色/底/边）。 */
+.mk-user-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mk-user-link:hover { color: var(--mk-blue); }
 /* 图标按钮：操作列高频操作改为 SVG 图标 + tooltip，节省列宽 */
 .mk-icon-btn {
   display: inline-flex;
@@ -1339,7 +1360,9 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-field__textarea:focus { border-color: var(--mk-blue, #2f6ae0); box-shadow: var(--mk-focus-ring); }
 .mk-field__textarea { min-height: 96px; resize: vertical; line-height: 1.6; }
 .mk-field--error .mk-field__input,
-.mk-field--error .mk-field__textarea { border-color: var(--mk-red, #dc2626); }
+.mk-field--error .mk-field__textarea,
+.mk-field--error .mk-filter__input,
+.mk-field--error .mk-filter__select { border-color: var(--mk-red, #dc2626); }
 .mk-field__err { font-size: var(--mk-fs-micro); color: var(--mk-red, #dc2626); font-weight: 600; }
 
 /* 通用输入框（input/select/textarea 三合一）：FieldAddWizard 等 Teleport/子组件场景必须用全局类，
@@ -1502,13 +1525,20 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 
 /* ----- 抽屉（mk-drawer：覆盖层通用骨架）。收敛情况：
    已全部迁入：GoalConversations / TeachingSessions / DataFlowGraph / SkillDrawer / AdminGlossaryDrawer / Feedback 等；
-   页面仅保留各自的额外类（如 agd__panel / msk__head 的布局补充）。 ----- */
+   页面仅保留各自的额外类（如 agd__panel / msk__head 的布局补充）。
+   2026-10-18：抽屉是「离边浮起的浮层卡片」，不是贴着窗口右缘的侧栏——容器留 padding
+   让面板四周透出遮罩（常规 12px，4K 阶梯 16/20/24px），面板取规范半径表「卡片·弹层」
+   档的 16px。留边后 max-width 必须按容器而非视口计，否则 100vw 会溢出。
+   窄屏例外：≤720px 时留缝会把面板挤到不可用，此时恢复满宽满高、去圆角。
+   4K 档只覆写 --mk-drawer-pad（不写 padding 字面量），与档内「只换 token」的判例一致。 ----- */
 .mk-drawer {
+  --mk-drawer-pad: 12px;
   position: fixed;
   inset: 0;
   z-index: var(--mk-z-drawer);
   display: flex;
   justify-content: flex-end;
+  padding: var(--mk-drawer-pad);
   overscroll-behavior: contain;
 }
 .mk-drawer__mask {
@@ -1519,11 +1549,12 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-drawer__panel {
   position: relative;
   width: var(--mk-drawer-w, 560px);
-  max-width: 100vw;
+  max-width: 100%;
   height: 100%;
   display: grid;
   grid-template-rows: auto 1fr;
   background: var(--mk-surface, #fff);
+  border-radius: var(--mk-radius-xl);
   box-shadow: var(--mk-shadow-drawer);
   animation: mk-drawer-in 0.18s ease;
   /* 子元素不得撑开面板或越界（宽内容只在 __body 内滚动） */
@@ -1589,7 +1620,9 @@ textarea.mk-input { line-height: 1.6; resize: vertical; }
 .mk-drawer__heading { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
 /* 窄屏：抽屉变成全宽面板（浮层语义下比留一条缝更可用） */
 @media (max-width: 720px) {
-  .mk-drawer__panel { width: 100vw; }
+  /* 窄屏仍满宽满高：浮层语义下留缝会窄到不可用（保留原判例） */
+  .mk-drawer { padding: 0; }
+  .mk-drawer__panel { width: 100%; border-radius: 0; }
 }
 
 /* ----- 抽屉内的「事实栅格」（2026-09-29 收敛）-----
@@ -1688,7 +1721,7 @@ html[data-theme='dark'] {
    (此前 .mk-section__head h4 / .mk-card__note / .mk-field__opt 等就是这样漏的)。
    展示型字号(实体名/图标字符/KPI 数字)不占文本档位,单独按 display 档放大,见各档 display 段。 */
 /* 1440 / 1920 两档的文本档 :root 覆写已迁到全局 main.css（2026-10-06 审核 §主题 6）：
-   本文件只被 AdminConsole / SkillDesignPage 懒加载，独立路由（/admin/login）拿不到，
+   本文件只被 AdminConsole（及其懒加载的二级页）懒加载，独立路由（/admin/login）拿不到，
    于是登录页停在基准 12/14/15。改在 main.css 一处定义，全站同源。 */
 
 /* 1920px 档（D4 补丁：最低标准 1920×1080 全屏时落在 1440 档，字号/间距偏小。
@@ -1743,6 +1776,7 @@ html[data-theme='dark'] {
   .mk-btn--sm { padding: 6px 13px; }
   .mk-list-more { padding: 11px 16px 13px; }
   .mk-actions { min-width: 84px; }
+  .mk-drawer { --mk-drawer-pad: 16px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-lg, 700px); }
   .mk-drawer__panel--wide { width: var(--mk-drawer-w-xl, 880px); }
   .mk-drawer__head { padding: 20px 24px 14px; }
@@ -1792,6 +1826,7 @@ html[data-theme='dark'] {
   .mk-btn { padding: 12px 22px; }
   .mk-btn--sm { padding: 8px 16px; }
   .mk-actions { min-width: 100px; }
+  .mk-drawer { --mk-drawer-pad: 20px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-xl, 880px); }
   .mk-drawer__panel--wide { width: var(--mk-drawer-w-xxl, 1040px); }
   .mk-drawer__head { padding: 24px 28px 16px; }
@@ -1833,6 +1868,7 @@ html[data-theme='dark'] {
   .mk-modal__panel--wide { width: min(var(--mk-modal-w-wide-xxl, 1160px), 100%); }
   .mk-modal__title { font-size: 23px; }
   .mk-modal__close { width: 46px; height: 46px; }
+  .mk-drawer { --mk-drawer-pad: 24px; }
   .mk-drawer__panel { width: var(--mk-drawer-w-xxl, 1040px); }
   .mk-drawer__head { padding: 28px 36px 18px; }
   .mk-drawer__title { font-size: 23px; }

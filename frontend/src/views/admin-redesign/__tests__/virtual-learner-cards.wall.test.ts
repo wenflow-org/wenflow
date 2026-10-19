@@ -10,11 +10,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 
-const { openSubPageMock, cardsIndexMock, liveCreateVirtualMock, draftStoriesMock } = vi.hoisted(() => ({
+const { openSubPageMock, cardsIndexMock, liveCreateVirtualMock, draftStoriesMock, cardsTasksMock, cardsCloneMock } = vi.hoisted(() => ({
   openSubPageMock: vi.fn(),
   cardsIndexMock: vi.fn(),
   liveCreateVirtualMock: vi.fn(),
   draftStoriesMock: vi.fn(),
+  cardsTasksMock: vi.fn(),
+  cardsCloneMock: vi.fn(),
 }));
 
 vi.mock('../store', async () => {
@@ -38,6 +40,9 @@ vi.mock('@/api/adminApi', () => ({
     /* 平台生产：人设生成（可选）+ 备好第一个故事 */
     generatePersona: vi.fn(async () => ({ data: { data: { personaSeed: { name: '开面馆的老周' } } } })),
     draftVirtualLearnerStories: draftStoriesMock,
+    /* 卡→虚拟学习者（身份池主操作） */
+    cardsTasks: cardsTasksMock,
+    cardsClone: cardsCloneMock,
   },
 }));
 
@@ -86,21 +91,159 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     liveCreateVirtualMock.mockImplementation(async () => 'p-new');
     draftStoriesMock.mockReset();
     draftStoriesMock.mockImplementation(async () => ({ data: {} }));
+    cardsTasksMock.mockReset();
+    cardsTasksMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          groups: [
+            { profileId: 'p1', name: '高一学生小陈', tasks: [{ id: 'story-1', title: '函数补差第一课', opening: '我这次月考函数只考了 58 分。' }] },
+            { profileId: 'p2', name: '英语复读生', tasks: [{ id: 'story-2', title: '长难句拆解', opening: null }] },
+          ],
+        },
+      },
+    }));
+    cardsCloneMock.mockReset();
+    cardsCloneMock.mockImplementation(async (items: Array<{ profileId: string }>) => ({
+      data: { data: { created: items.map((it) => ({ profileId: `new-${it.profileId}`, userId: 'u', name: 'n', cardKey: 'k', taskCount: 1 })), failed: [] } },
+    }));
     (toast.success as unknown as ReturnType<typeof vi.fn>).mockClear();
     (toast.error as unknown as ReturnType<typeof vi.fn>).mockClear();
   });
 
-  it('KPI 两卡（预置卡/自建卡；卡总数 2026-10-14 并入卡墙卡头）+ 卡墙渲染全部卡与来源徽章', async () => {
+  it('KPI 三卡（预置卡/自建卡/已派生实例；卡总数 2026-10-14 并入卡墙卡头）+ 卡墙渲染全部卡与来源徽章', async () => {
     const w = await mountPage();
     const labels = w.findAll('.mk-kpi .mk-kpi__label').map((x) => x.text());
     // 卡总数不再立卡：它恒等于下方卡墙行数，卡头「共 N 张」已自报（计数单源在列表）
-    expect(labels).toEqual(['预置卡', '自建卡']);
+    // 「已创建实例」2026-10-16 立卡（2026-10-19 随动作文案统一改名）：卡=身份模板后，池里有多少条已创建出虚拟学习者，列表说不出来
+    expect(labels).toEqual(['预置卡', '自建卡', '已创建实例']);
     expect(w.find('.mk-card__meta').text()).toContain('共 2 张');
     const wall = w.findAll('.vlc-card');
     expect(wall).toHaveLength(2);
     expect(wall[0].text()).toContain('高一学生小陈');
     expect(wall[0].text()).toContain('web');
     expect(wall[1].text()).toContain('预置');
+  });
+
+  it('身份池快筛（只看还没创建过的身份卡）与实例来源标记', async () => {
+    cardsIndexMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          cards: [
+            { profileId: 'p1', userId: 'u1', cardKey: 'w6-math-01', name: '高一学生小陈', goal: '函数补差', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: 'web', email: null, derivedFrom: null },
+            { profileId: 'p2', userId: 'u2', cardKey: 'vl-abc', name: '高一学生小陈', goal: '函数补差', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: 'web', email: null, derivedFrom: '高一学生小陈' },
+          ],
+          summary: { total: 2, builtin: 0, custom: 2, derived: 1 },
+        },
+      },
+    }));
+    const w = await mountPage();
+    // 实例在卡面带来源行（不分标记的话身份池与实例混成一锅）
+    expect(w.findAll('.vlc-card__derived')).toHaveLength(1);
+    expect(w.find('.vlc-card__derived').text()).toContain('源自 高一学生小陈');
+    expect(w.find('.mk-kpi').text()).toBeTruthy();
+    // 快筛收窄到还没创建过的身份卡
+    const pill = w.findAll('.mk-pill').find((p) => p.text().includes('只看身份池'))!;
+    expect(pill.text()).toContain('1');
+    await pill.trigger('click');
+    expect(w.findAll('.vlc-card')).toHaveLength(1);
+    expect(w.find('.vlc-card__derived').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('身份池已被派空（快筛后 0 行）：空态说清是快筛收窄，不说成卡库空', async () => {
+    cardsIndexMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          cards: [
+            { profileId: 'p2', userId: 'u2', cardKey: 'vl-abc', name: '已派生', goal: 'x', opening: null, knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: null, email: null, derivedFrom: '某身份卡' },
+          ],
+          summary: { total: 1, builtin: 0, custom: 1, derived: 1 },
+        },
+      },
+    }));
+    const w = await mountPage();
+    await w.findAll('.mk-pill').find((p) => p.text().includes('只看身份池'))!.trigger('click');
+    expect(w.findAll('.vlc-card')).toHaveLength(0);
+    expect(w.text()).toContain('身份池里的卡都已创建出虚拟学习者');
+    expect(w.text()).not.toContain('卡库还是空的');
+    w.unmount();
+  });
+
+  /** 2026-10-18 用户走查「从卡库想创建一个虚拟学习者，为什么没有流程」：
+   *  此前唯一入口是卡头那个无标签勾选框，运营读作没有流程——卡面补一枚动作（2026-10-19 文案统一为「创建学习者」）。 */
+  it('卡面「创建学习者」：单卡一键进同一创建面板，且不误触进卡详情', async () => {
+    const w = await mountPage();
+    const derive = w.findAll('.vlc-card__derive');
+    expect(derive, '卡面缺创建入口').toHaveLength(2);
+
+    await derive[0].trigger('click');
+    await flushPromises();
+    // 只带这一张卡
+    expect(cardsTasksMock).toHaveBeenCalledWith(['p1']);
+    // 点它不进卡详情（卡整体是 role=button，必须 stop 冒泡）
+    expect(openSubPageMock).not.toHaveBeenCalled();
+    // 面板已开（Teleport 到 body）
+    expect(document.body.querySelector('.cdd-task__pick')).toBeTruthy();
+    w.unmount();
+  });
+
+  it('选角 → 勾任务 → 创建虚拟学习者（卡=身份模板，卡留在库里）', async () => {
+    const w = await mountPage();
+    const picks = w.findAll('.vlc-card__pick input');
+    expect(picks, '卡面缺少选角勾选框').toHaveLength(2);
+    await picks[0].setValue(true);
+    await picks[1].setValue(true);
+    await nextTick();
+
+    const bar = w.find('.mk-batchbar');
+    expect(bar.exists()).toBe(true);
+    expect(bar.text()).toContain('已选 2 张身份卡');
+
+    await bar.findAll('button').find((b) => b.text() === '创建虚拟学习者')!.trigger('click');
+    await flushPromises();
+    expect(cardsTasksMock).toHaveBeenCalledWith(['p1', 'p2']);
+    // 面板 Teleport 到 body（与弹窗同族），任务勾选框要按 body 查
+    const tasks = Array.from(document.body.querySelectorAll('.cdd-task__pick input')) as HTMLInputElement[];
+    expect(tasks).toHaveLength(2);
+    // 默认全选（一张卡的任务通常都要跑）
+    expect(tasks.every((t) => t.checked)).toBe(true);
+
+    // 取消 p2 的唯一任务 → 该卡不参与创建（面板里说清剩余数量）
+    tasks[1].checked = false;
+    tasks[1].dispatchEvent(new Event('change'));
+    await nextTick();
+    const submit = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.includes('个虚拟学习者'))!;
+    expect(submit.textContent).toContain('创建 1 个虚拟学习者');
+    submit.dispatchEvent(new Event('click'));
+    await flushPromises();
+
+    expect(cardsCloneMock).toHaveBeenCalledWith([{ profileId: 'p1', storyIds: ['story-1'] }], undefined);
+    expect(toast.success).toHaveBeenCalledWith('已创建 1 个虚拟学习者');
+    // 创建出实例后清勾选并回刷卡墙
+    expect(w.find('.mk-batchbar').exists()).toBe(false);
+    expect(cardsIndexMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    w.unmount();
+  });
+
+  it('创建部分失败：逐卡点名原因留在面板内，成功的照常回刷卡墙', async () => {
+    cardsCloneMock.mockImplementationOnce(async () => ({
+      data: { data: { created: [{ profileId: 'new-p1', userId: 'u', name: '高一学生小陈', cardKey: 'k', taskCount: 1 }], failed: [{ profileId: 'p2', reason: '未勾选任何任务' }] } },
+    }));
+    const w = await mountPage();
+    const picks = w.findAll('.vlc-card__pick input');
+    await picks[0].setValue(true);
+    await picks[1].setValue(true);
+    await nextTick();
+    await w.find('.mk-batchbar').findAll('button').find((b) => b.text() === '创建虚拟学习者')!.trigger('click');
+    await flushPromises();
+    const submit = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.includes('个虚拟学习者'))!;
+    submit.dispatchEvent(new Event('click'));
+    await flushPromises();
+    expect(toast.success).toHaveBeenCalledWith('已创建 1 个虚拟学习者');
+    const failed = document.body.querySelector('.cdd-failed');
+    expect(failed?.textContent).toContain('英语复读生');
+    expect(failed?.textContent).toContain('未勾选任何任务');
+    w.unmount();
   });
 
   it('长散键标签（hash:…）显示截为 hash: + 前 8 位，完整值进 title；短标签原样；+N 列全量', async () => {

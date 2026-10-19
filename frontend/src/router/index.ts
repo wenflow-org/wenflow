@@ -211,18 +211,17 @@ const routes: RouteRecordRaw[] = [
     redirect: (to) => ({ path: `/admin/${(to.params.page as string) || 'overview'}` })
   },
   {
-    // Skill 设计页深链 → 外壳二级页规范形：
-    // 原独立整页 /admin/skills/:agentId 是全站唯一不套管理外壳的页，与其余详情页呈现不一致。
-    // 现重定向到二级页规范形 /admin/skills?view=skill-design&id=，由 AdminConsole 的
-    // ?view=&id= 标准机制承载（侧栏常驻、面包屑返回、Esc/后退可关）。
-    // 旧 ?tab=（protocol/trial/versions/runtime/engineering/routing + 历史别名）映射进本页独立键 ?sdTab=。
+    // Skill 详情深链兼容（2026-10-15 设计页平铺后收敛）：原独立整页 /admin/skills/:agentId
+    // 与独立设计页 /admin/skills?view=skill-design&id= 均退役，能力已平铺进 Skill 详情页
+    // /admin/skills?view=skill&id=。旧 ?tab=（protocol/trial/versions/runtime/engineering/routing
+    // + 历史别名）映射进详情页独立键 ?skdTab=。
     path: '/admin/skills/:agentId+',
     redirect: (to) => {
       const rawId = to.params.agentId
       const id = Array.isArray(rawId) ? String(rawId[0] ?? '') : String(rawId ?? '')
-      const q: Record<string, string> = { view: 'skill-design', id }
+      const q: Record<string, string> = { view: 'skill', id }
       const tab = typeof to.query.tab === 'string' ? to.query.tab : ''
-      if (tab) q.sdTab = tab
+      if (tab) q.skdTab = tab
       return { path: '/admin/skills', query: q }
     }
   },
@@ -260,11 +259,12 @@ const routes: RouteRecordRaw[] = [
     redirect: () => ({ path: '/admin/orchestrator', query: { tab: 'topology' } })
   },
   {
-    // 旧工作台详情深链 → 二级页规范形（与上面 /admin/skills/:agentId 同源）
+    // 旧工作台详情深链：改投 Skill 详情二级页（2026-10-15；与上面 /admin/skills/:agentId 同源）。
+    // 原设计页独立形态退役，落点统一为 view=skill（设计能力已平铺进该页）。
     path: '/admin/skill-workbench/:agentId',
     redirect: (to) => ({
       path: '/admin/skills',
-      query: { view: 'skill-design', id: to.params.agentId as string }
+      query: { view: 'skill', id: to.params.agentId as string }
     })
   },
   {
@@ -331,27 +331,30 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/api-config'
   },
   {
-    // 导航一级收敛（阶段 1）：外挂能力折入「模型与接入」宿主 tab
-    path: '/admin/addons',
-    redirect: (to) => ({ path: '/admin/api-config', query: { ...to.query, tab: 'addons' } })
-  },
-  {
+    // 外挂能力 2026-10-19 从「模型与接入」宿主拆回独立页（用户拍板：「拆出来，作为单页，
+    // 放到 skill 那边」），/admin/addons 回归为真实场景路径（由 /admin/:page? → AdminConsole
+    // 按场景 id 解析，见 manifest「外挂能力」）；此处不再重定向。
+    // 旧外部路径 /admin/external-capabilities 是同一个页面的别名，改投本页。
     path: '/admin/external-capabilities',
-    redirect: (to) => ({ path: '/admin/api-config', query: { ...to.query, tab: 'addons' } })
+    redirect: (to) => ({ path: '/admin/addons', query: to.query })
   },
   {
     path: '/admin/orchestration',
     redirect: '/admin/orchestrator'
   },
   {
-    // 合并后旧路径兼容：运维工具/数据导出 → 运维中心；内容管理/成就管理 → 运营中心
-    // 深链需带 tab 交由 OpsCenter 恢复子视图（tools=运维工具 / export=数据导出）
+    // 合并后旧路径兼容：运维工具/数据导出/会话安全 → 运营中心对应 tab
+    // （2026-10-16 用户拍板「系统工具」场景解散并入运营中心；深链带 tab 由 OpsHub 恢复子视图）
+    path: '/admin/ops-center',
+    redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: (to.query.tab as string) || 'tools' } })
+  },
+  {
     path: '/admin/devtools',
-    redirect: () => ({ path: '/admin/ops-center', query: { tab: 'tools' } })
+    redirect: () => ({ path: '/admin/ops-hub', query: { tab: 'tools' } })
   },
   {
     path: '/admin/export-data',
-    redirect: () => ({ path: '/admin/ops-center', query: { tab: 'export' } })
+    redirect: () => ({ path: '/admin/ops-hub', query: { tab: 'export' } })
   },
   {
     // 旧内容管理 URL → /admin/learning-paths
@@ -390,9 +393,9 @@ const routes: RouteRecordRaw[] = [
     redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'achievements' } })
   },
   {
-    // 会话安全折入「系统工具」宿主 tab（保留 ?user= 深链筛选）
+    // 会话安全并入「运营中心」宿主 tab（保留 ?user= 深链筛选）
     path: '/admin/session-security',
-    redirect: (to) => ({ path: '/admin/ops-center', query: { ...to.query, tab: 'security' } })
+    redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'security' } })
   },
   {
     // 管理控制台：/admin/:page 反映当前页面（深链/前进后退），动态段置于静态路由之后
@@ -431,6 +434,15 @@ router.beforeEach(async (to, _from, next) => {
       next({ path: '/admin/health-center', query });
       return;
     }
+  }
+  /* 退役 tab 老深链（?tab=addons）→ 外挂能力独立页（2026-10-19 用户拍板从模型与接入拆出）。
+     与上面健康中心同款：路由级改投，别等宿主挂载后由 query watch 兜（那样用户会先看到
+     目标错误的「接入与模型」页签）。 */
+  if (to.path === '/admin/api-config' && to.query.tab === 'addons') {
+    const query = { ...to.query };
+    delete query.tab;
+    next({ path: '/admin/addons', query });
+    return;
   }
   document.title = `${to.meta.title || '问流 WenFlow'} - 问流 WenFlow`;
   syncThemeForRoute(to.path);

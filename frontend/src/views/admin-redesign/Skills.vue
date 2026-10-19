@@ -55,10 +55,10 @@
       <MkKpi
         label="平均耗时"
         :value="rangeRefreshing ? '…' : avgLatencyText"
-        hint="成功调用按调用量加权"
-        :title="`统计窗口：${rangeLabel}`"
+        :hint="`成功调用 · ${rangeLabel}`"
+        :title="`统计窗口：${rangeLabel}。成功调用按调用量加权`"
       />
-      <MkKpi v-if="idleCount > 0" label="空闲" :value="idleCount" title="窗口内无调用的 Skill 数（空闲是信号不是故障，不着色）" />
+      <MkKpi v-if="idleCount > 0" label="空闲" :value="idleCount" title="窗口内无调用的 Skill 数。空闲是正常状态，不是故障" />
       <!-- P-49（#74）：异常 Skill 此前只活在筛选 pill 上；0 时不渲染，避免占位 -->
       <MkKpi
         v-if="errorCount > 0"
@@ -85,10 +85,9 @@
       />
       <MkKpi
         label="已路由 Skill"
-        :value="skillsError && !cards.length ? '—' : cards.length"
-        :tone="skillsError && !cards.length ? 'muted' : ''"
-        :hint="skillsError && !cards.length ? '列表加载失败' : '全部 Skill'"
-        :title="skillsError && !cards.length ? 'Skill 列表加载失败，无法统计已路由数（读不到 ≠ 0 个）' : '主目录 Skill 数（不含外挂能力）'"
+        :value="routedSkillCount"
+        hint="有生效模型路由"
+        title="在模型覆盖里有生效路由的 Skill 数。与同屏「承载模型」「主模型覆盖」同源，未加载覆盖数据时显 —"
       />
       <MkKpi
         label="主模型覆盖"
@@ -102,7 +101,6 @@
       <MkKpi
         label="降级策略"
         :value="fallbackPolicyText"
-        :hint="fallbackPolicyHint"
         :title="fallbackPolicyTitle"
       />
     </section>
@@ -167,10 +165,9 @@
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': !onlyAttention }" :aria-pressed="!onlyAttention" @click="onlyAttention = false">全部</button>
             <button type="button" class="mk-pill" :class="{ 'mk-pill--active': onlyAttention }" :aria-pressed="onlyAttention" @click="onlyAttention = true">仅看需关注<span class="mk-pill__count">{{ errorCount }}</span></button>
           </div>
-          <!-- 2026-10-05 卡头统一弹层法：归属 Agent / 类别 两下拉收进右侧「高级筛选」弹层
+          <!-- 2026-10-05 卡头统一弹层法：归属 Agent / 类别 两下拉收进右侧「筛选」弹层
               （统计窗口是全页 KPI 口径的视图范围开关，不是行筛选，留右区）；
               触发钮标生效数 -->
-          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / ID / 类别" />
           <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清除筛选</button>
           <!-- #107：默认排序键 errors 无可见列 → 默认态给可见说明，非默认态给一键复位
                （此前点过别的表头就再也回不到默认序，只能清 localStorage） -->
@@ -178,6 +175,8 @@
           <button v-else type="button" class="mk-link" @click="resetSort">恢复默认序（失败数优先）</button>
         </div>
         <div class="mk-card__head-right">
+          <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / ID / 类别" />
           <select v-model="statsRange" class="mk-filter__select" aria-label="统计窗口" title="统计窗口：改动本页 KPI 与卡内统计的聚合窗口，不筛列表行">
             <option value="7d">近 7 天</option>
             <option value="24h">近 24 小时</option>
@@ -197,7 +196,7 @@
               :aria-expanded="advOpen"
               @click="advOpen = !advOpen"
             >
-              <Filter :size="14" :stroke-width="1.75" />高级筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
+              <Filter :size="14" :stroke-width="1.75" />筛选<span v-if="advCount" class="mk-pill__count">{{ advCount }}</span>
             </button>
             <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
             <div v-show="advOpen" class="mk-adv__pop" @click.stop>
@@ -260,9 +259,21 @@
                 @click="toggleSort('agent')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('agent')">归属 Agent<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- 版本：/admin/skills 的 definition.version（原型「版本」列） -->
-              <th v-if="showCol('version')" scope="col">版本</th>
+              <th
+                v-if="showCol('version')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="sortState('version')"
+                @click="toggleSort('version')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('version')">版本<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- 路由模型：skill-model-configs/coverage 的生效 model；未配置 → 「平台默认」 -->
-              <th v-if="showCol('routing')" scope="col" title="该 Skill 生效的模型，未单独配置时使用平台默认">路由模型</th>
+              <th
+                v-if="showCol('routing')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="sortState('routing')"
+                @click="toggleSort('routing')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('routing')" title="该 Skill 生效的模型，未单独配置时使用平台默认">路由模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- 原型「24h 调用」：本页窗口由「统计窗口」下拉决定（默认近 7 天），故列名取中性「调用」，口径随窗口 -->
               <th
                 v-if="showCol('calls')"
@@ -296,14 +307,21 @@
                 :aria-sort="sortState('cat')"
                 @click="toggleSort('cat')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleSort('cat')">类别<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="showCol('last')">最近调用</th>
+              <th
+                v-if="showCol('last')"
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="sortState('last')"
+                @click="toggleSort('last')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleSort('last')">最近调用<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-th--right">操作</th>
             </tr>
           </thead>
           <tbody>
-            <!-- 2026-10-14 方案 B：行点击直达 Skill 设计页（原「设计」小钮的同一落点）。
-                 此前行点击进详情二级页、行内小钮进设计页，两页同套六页签看着像同一个页面。 -->
-            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`打开 ${s.name} 设计页`" @click="openDesign(s.id)" @keydown.enter.self.prevent="openDesign(s.id)" @keydown.space.self.prevent="openDesign(s.id)">
+            <!-- 2026-10-14 方案 B：行点击直达 Skill 详情（原「设计」小钮的同一落点）。
+                 2026-10-15 设计页退役平铺进详情页后，行点击 = 详情页（自带设计能力），
+                 与编排图节点下钻同一落点。 -->
+            <tr v-for="s in paged" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`打开 ${s.name} 详情`" @click="openDesign(s.id)" @keydown.enter.self.prevent="openDesign(s.id)" @keydown.space.self.prevent="openDesign(s.id)">
               <td>
                 <div class="sk-cell">
                   <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
@@ -352,9 +370,8 @@
               <td v-if="showCol('last')"><span :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span></td>
               <td>
                 <div class="mk-actions">
-                  <!-- 2026-10-14 用户拍板方案 B：行点击即进设计页，原「设计」小钮撤除——
-                       同一落点两个入口，且它与行点击的「查看详情」在读者眼里是两页同一物。
-                       排障入口「查失败」（异常→动作→证据）保留。 -->
+                  <!-- 2026-10-14 用户拍板方案 B：行点击即进详情页，原「设计」小钮撤除——
+                       同一落点两个入口冗余。排障入口「查失败」（异常→动作→证据）保留。 -->
                   <!-- 失败行直达证据（评审「异常→动作→证据断链」：排障从 4 跳压到 1 跳）：
                        复用 store.investigateAgent（agent+status=err intent 深链执行日志）；
                        行级拿不到错误类别，errorCategory 置空交日志页自筛 -->
@@ -399,23 +416,47 @@
     <div v-if="tab === 'model-routing'" class="mk-card mk-card--fill sk-routing">
       <div class="sk-routing__head">
         <span class="mk-card__title">Skill 模型路由</span>
-        <span class="mk-card__meta">{{ routingMetaText }}</span>
       </div>
 
       <div class="sk-routing__scroll">
         <table v-if="cards.length" class="mk-table mk-table--click sk-table">
           <thead>
             <tr>
-              <th scope="col">Skill</th>
-              <th scope="col">归属 Agent</th>
-              <th scope="col">路由模型</th>
-              <th scope="col">备用模型</th>
-              <th scope="col">完成度</th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="routingSortState('skill')"
+                @click="toggleRoutingSort('skill')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleRoutingSort('skill')">Skill<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="routingSortState('agent')"
+                @click="toggleRoutingSort('agent')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleRoutingSort('agent')">归属 Agent<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="routingSortState('routing')"
+                @click="toggleRoutingSort('routing')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleRoutingSort('routing')">路由模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="routingSortState('fallback')"
+                @click="toggleRoutingSort('fallback')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleRoutingSort('fallback')" title="按自定义备用链条数排序，没有自定义链条的排在前面">备用模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th
+                scope="col"
+                class="mk-th--sortable"
+                :aria-sort="routingSortState('status')"
+                @click="toggleRoutingSort('status')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleRoutingSort('status')" title="按上线进度排序：草稿 → 已上线">完成度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             </tr>
           </thead>
           <tbody>
-            <!-- 原型行 data-action="open-skill"：行点击与表格视图同落点（设计页） -->
-            <tr v-for="s in cards" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`打开 ${s.name} 设计页`" @click="openDesign(s.id)" @keydown.enter.self.prevent="openDesign(s.id)" @keydown.space.self.prevent="openDesign(s.id)">
+            <!-- 原型行 data-action="open-skill"：行点击与表格视图同落点（Skill 详情页） -->
+            <tr v-for="s in routedRows" :key="s.id" class="sk-row" tabindex="0" role="button" :aria-label="`打开 ${s.name} 详情`" @click="openDesign(s.id)" @keydown.enter.self.prevent="openDesign(s.id)" @keydown.space.self.prevent="openDesign(s.id)">
               <td><strong class="sk-name-main mk-ellipsis" :title="s.name">{{ s.name }}</strong></td>
               <td><span class="mono sk-routing__sub" :title="s.agentId || '工具类'">{{ agentLabelOf(s) }}</span></td>
               <td><span class="mono" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span></td>
@@ -520,13 +561,12 @@ interface PromptEvalPanelExpose {
 }
 const pePanel = ref<PromptEvalPanelExpose | null>(null)
 const PromptEvalPanel = defineAsyncComponent(() => import('./PromptEvalPanel.vue'))
-/** 列表两个视图的共同落点：Skill 设计页「协议」页签（改提示词的唯一编辑点）。
+/** 列表两个视图的共同落点：Skill 详情页（2026-10-15 设计页平铺后，详情页自带设计能力）。
  *  2026-10-14 方案 B：行点击直接走这里，列表侧不再单设「设计」小钮（同落点两入口冗余）。
- *  2026-10-15：设计页由独立整页迁入外壳二级页——走 openSubPage 标准机制，落
- *  ?view=skill-design&id=（协议为默认档，不占 URL）。与其它详情页同一入口，
- *  且保留列表现有 query（?tab=/?q= 不丢）。 */
+ *  2026-10-15：独立设计页退役、内容平铺进详情页——行点击落 ?view=skill&id=，
+ *  与编排图节点下钻同一落点（两处跳转保持一致）。 */
 function openDesign(id: string) {
-  openSubPage('skill-design', id)
+  openSubPage('skill', id)
 }
 
 /** 退役 tab 的老深链（健康检查/漂移/对账）改投独立页；只认现役 tab，其余回落 run */
@@ -593,6 +633,8 @@ interface SkillRow {
   errors: number
   avgMs: number
   lastAt: string
+  /** 原始调用时间（排序用；展示仍是 lastAt 的相对时间） */
+  lastCalledAt?: string
   health: Health
 }
 
@@ -610,10 +652,10 @@ const SK_COLS_KEY = 'wf_skills_hidden_cols'
 const SK_COLS_DEFAULT_HIDDEN = ['p95'] as const
 const skColDefs = [
   { key: 'agent', label: '归属 Agent', title: '所属顶层 Agent' },
-  { key: 'version', label: '版本', title: 'registry definition.version' },
+  { key: 'version', label: '版本', title: 'Skill 定义里声明的版本号' },
   { key: 'routing', label: '路由模型', title: '生效模型。未单独配置时用平台默认，无配置数据时显示 —' },
   { key: 'calls', label: '调用', title: '统计窗口内调用次数（随窗口筛选）' },
-  { key: 'p95', label: 'P95', title: '暂无单 Skill 的 P95 耗时数据；该列默认隐藏' },
+  { key: 'p95', label: 'P95', title: '暂无单 Skill 的 P95 耗时数据。该列默认隐藏' },
   { key: 'rate', label: '成功率', title: '窗口内成功率' },
   { key: 'status', label: '完成度', title: '完成度：是否已上线' },
   { key: 'cat', label: '类别', title: 'Skill 类别' },
@@ -646,7 +688,7 @@ const menuColDefs = computed<ReadonlyArray<{ key: string; label: string; title: 
 })
 const statsRange = liveSkillStatsRange
 
-/* 高级筛选弹层（2026-10-05 卡头统一：归属 Agent/类别自主行收进共享 .mk-adv），
+/* 筛选弹层（2026-10-05 卡头统一：归属 Agent/类别自主行收进共享 .mk-adv），
    Esc 关闭走共享 useEscape（与教学会话同一外壳） */
 const advOpen = ref(false)
 useEscape(() => advOpen.value, () => { advOpen.value = false })
@@ -770,7 +812,12 @@ const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir, reset: resetS
     /** 状态列排序 = 完成度五档序号（0=draft … 4=live，无对账行排末尾） */
     status: (s) => completionRank(s.id),
     rate: (s) => successRateOf(s.calls, s.errors),
-    cat: (s) => s.category || ''
+    cat: (s) => s.category || '',
+    /* 2026-10-17 用户走查补列：此前这三列头不可点。版本按段补零比较（v10 不排在 v9 前）；
+       最近调用用原始时间戳（lastAt 是「2 天前」文案，字符串比较无意义） */
+    version: (s) => versionSortKey(s.id),
+    routing: (s) => routingOf(s.id),
+    last: (s) => (s.lastCalledAt ? Date.parse(s.lastCalledAt) : null)
   },
   defaultKey: 'errors',
   defaultDir: 'desc',
@@ -778,6 +825,27 @@ const { sortState, toggle: toggleSort, sortRows, sortKey, sortDir, reset: resetS
 })
 /** 当前是否仍在默认序（失败数降序）：非默认时工具条出「恢复默认序」按钮 */
 const isDefaultSort = computed(() => sortKey.value === 'errors' && sortDir.value === 'desc')
+
+/* 模型路由表排序（2026-10-17 用户走查「有的列没有排序」）：数据同样来自注册表全量，
+   客户端排序诚实。备用模型按「自定义链条数」排（0 = 全部走平台默认），比按文案排
+   更能把配了兜底的 Skill 聚到一起；未加载覆盖数据时返回 null（排末尾）。 */
+const { sortState: routingSortState, toggle: toggleRoutingSort, sortRows: sortRoutingRows } = useTableSort<SkillRow>({
+  accessors: {
+    skill: (s) => s.name || s.id,
+    agent: (s) => s.agentName || s.agentId || '工具类',
+    routing: (s) => routingOf(s.id),
+    fallback: (s) => fallbackChainLengthOf(s.id),
+    status: (s) => completionRank(s.id)
+  },
+  storageKey: 'wf_skills_routing_sort'
+})
+const routedRows = computed(() => sortRoutingRows(cards.value))
+function fallbackChainLengthOf(skillId: string): number | null {
+  if (!coverageReady.value) return null
+  const row = coverageById.value.get(skillId)
+  if (!row) return null
+  return row.fallbackChain?.length ?? 0
+}
 
 const filtered = computed(() => {
   let list = cards.value
@@ -1088,11 +1156,22 @@ function descOf(skillId: string): string {
   return skillMetaById.value.get(skillId)?.description || ''
 }
 
-/** 版本列：registry definition.version（如 1.1.0）→ 显示 v1.1.0；缺失「—」 */
+/** 版本列：Skill 定义声明的 version（如 1.1.0）→ 显示 v1.1.0；缺失「—」 */
 function versionOf(skillId: string): string {
   const v = skillMetaById.value.get(skillId)?.version
   if (!v) return '—'
   return /^v/i.test(v) ? v : `v${v}`
+}
+
+/** 版本排序键：逐段补零（v9 < v10），缺版本返回 null（恒排末尾） */
+function versionSortKey(skillId: string): string | null {
+  const v = skillMetaById.value.get(skillId)?.version
+  if (!v) return null
+  return v
+    .replace(/^v/i, '')
+    .split(/[.\-+]/)
+    .map((part) => part.padStart(6, '0'))
+    .join('.')
 }
 
 /** 路由模型列：coverage 有行 → 生效 model（空=平台默认）；无行/未加载 → 「—」，不伪装成平台默认 */
@@ -1165,6 +1244,11 @@ const routingLabels = computed(() =>
 const routeModelCount = computed<number | string>(() =>
   routingLabels.value.length ? new Set(routingLabels.value).size : '—'
 )
+/** 有生效路由的 Skill 数（2026-10-15 KPI 审计）：原值取 cards.length「全部 Skill」，
+   与标签「已路由」矛盾——没配路由的 Skill 也被算进去了。改与同屏另两张同源（routingLabels）。 */
+const routedSkillCount = computed<number | string>(() =>
+  coverageReady.value ? routingLabels.value.length : '—'
+)
 const routeModelTitle = computed(() =>
   routingLabels.value.length
     ? `去重模型 ${new Set(routingLabels.value).size} 个（「平台默认」计为一种）`
@@ -1206,24 +1290,22 @@ const primaryRegistryChain = computed<string[] | null>(() => {
   if (!entry) return null
   return entry.fallbacks.slice(0, Math.max(0, registryMaxCandidates.value - 1))
 })
-/** registry 默认链的可读文本：空链显式「无（空链）」（llm-providers.json 显式空数组） */
-const registryChainText = computed(() => {
-  const chain = primaryRegistryChain.value
-  if (chain === null) return ''
-  return chain.length ? chain.join(' → ') : '无备用模型（平台默认配置为空）'
-})
 /** 降级策略卡（原硬编码「自动」删）：真实口径 = 自定义兜底链计数；无自定义链时给出
-    registry 默认链的解析结果（F7-5）；覆盖/registry 未加载显 —，不伪装 */
+    registry 默认链的解析结果（F7-5）；覆盖/registry 未加载显 —，不伪装。
+    2026-10-17 用户走查「怎么高度还不一样呢」：数值位此前塞整句
+    「无备用模型（平台默认配置为空）」，28px 下换两行，把整排 KPI 从 128px 撑到 165px，
+    切页签时读数带高度跳动。数值位只留短状态，原因与链明细进 hint/title。 */
 const fallbackPolicyText = computed(() => {
   if (!coverageReady.value) return '—'
-  if (fallbackConfigured.value > 0) return `${fallbackConfigured.value} 个自定义备用模型列表`
-  return registryChainText.value || '—'
+  if (fallbackConfigured.value > 0) return `${fallbackConfigured.value} 个自定义`
+  if (!registryReady.value) return '—'
+  const chain = primaryRegistryChain.value
+  if (chain === null) return '—'
+  return chain.length ? `${chain.length} 个备用模型` : '无备用模型'
 })
-const fallbackPolicyHint = computed(() => {
-  if (!coverageReady.value || !registryReady.value) return ''
-  if (fallbackConfigured.value > 0) return registryChainText.value ? `其余走平台默认列表：${registryChainText.value}` : '其余走平台默认列表'
-  return '按平台默认列表'
-})
+/* 降级策略卡不再出 hint（2026-10-18 用户走查「这类文案」）：读数位报「几个自定义」，
+   hint 讲「其余那些走什么」是另一个范围的事实，连读会让运营分不清数字属于哪一边。
+   完整规则（含无自定义时走什么）都在这张卡的 title 里。 */
 const fallbackPolicyTitle = computed(() => {
   const head = '模型重试耗尽后按备用模型列表自动切换。降级仅换模型名，网关与密钥沿用主调用'
   if (!coverageReady.value) return '备用模型配置未加载（配置数据拉取失败或未就绪）'
@@ -1241,17 +1323,10 @@ const fallbackPolicyTitle = computed(() => {
     ? `${head}。无自定义备用模型列表，走平台默认（${model}）：${chain.join(' → ')}`
     : `${head}。无自定义备用模型列表：平台默认（${model}）未配置备用模型，调用失败时不会自动切换`
 })
-/** 路由表头提示（F7-5）：「备用模型」列的口径写在表头，运营不必猜「registry 默认」是什么 */
-const routingMetaText = computed(() => {
-  if (!coverageReady.value) return '备用模型：Skill 自定义备用模型列表优先。模型覆盖数据未加载'
-  if (!registryReady.value) return '备用模型：Skill 自定义备用模型列表优先。平台默认列表未加载'
-  const chain = primaryRegistryChain.value
-  const model = primaryModelId.value
-  if (chain === null) return '备用模型：自定义了就用自定义，没自定义按平台默认列表。当前主模型的平台默认列表暂无法解析'
-  return chain.length
-    ? `备用模型：自定义了就用自定义，没自定义按平台默认列表。当前主模型 ${model} 的平台默认备用模型：${chain.join(' → ')}`
-    : `备用模型：自定义了就用自定义，没自定义按平台默认列表。当前主模型 ${model} 未配置备用模型，调用失败时不会自动切换`
-})
+/* 卡头的「备用模型规则」说明行已删（2026-10-17 用户走查：这类文案没有用）：
+   同一件事已由上方「降级策略」KPI（value + hint + title）与表格「备用模型」列逐行表达，
+   卡头再用一句自然语言复述规则与当前值只是第三遍重复，还会随加载态换文案让卡头跳动。
+   真要查口径，悬停 KPI 卡即得完整规则。 */
 </script>
 
 <style scoped>

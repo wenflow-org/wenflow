@@ -8,12 +8,12 @@ import {
 describe('resolveLlmGenerationParams (source-level single read path)', () => {
   it('声明值即权威：prompt 的 maxTokens 不再被抬到模型硬上限', () => {
     const resolved = resolveLlmGenerationParams({
-      promptConfig: { model: 'deepseek-v4-flash', temperature: 0.7, maxTokens: 8000 },
+      promptConfig: { model: 'deepseek-v4.1-flash', temperature: 0.7, maxTokens: 8000 },
     })
 
     expect(resolved).toEqual(
       expect.objectContaining({
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-v4.1-flash',
         temperature: 0.7,
         maxTokens: 8000,
         sources: expect.objectContaining({
@@ -22,7 +22,7 @@ describe('resolveLlmGenerationParams (source-level single read path)', () => {
           maxTokens: 'active-prompt',
         }),
         request: {
-          model: 'deepseek-v4-flash',
+          model: 'deepseek-v4.1-flash',
           temperature: 0.7,
           max_tokens: 8000,
         },
@@ -32,7 +32,7 @@ describe('resolveLlmGenerationParams (source-level single read path)', () => {
 
   it('小声明值原样保留：per-skill 输出预算（如 grounding=800）首次真正生效', () => {
     const resolved = resolveLlmGenerationParams({
-      promptConfig: { model: 'deepseek-v4-flash', maxTokens: 800 },
+      promptConfig: { model: 'deepseek-v4.1-flash', maxTokens: 800 },
     })
     expect(resolved.maxTokens).toBe(800)
     expect(resolved.request.max_tokens).toBe(800)
@@ -49,7 +49,7 @@ describe('resolveLlmGenerationParams (source-level single read path)', () => {
 
   it('未声明 maxTokens 时取模型 defaultMaxTokens（而非硬上限）', () => {
     const resolved = resolveLlmGenerationParams({
-      promptConfig: { model: 'deepseek-v4-flash' },
+      promptConfig: { model: 'deepseek-v4.1-flash' },
     })
     expect(resolved.maxTokens).toBe(32768)
     expect(resolved.maxTokens).not.toBe(131072)
@@ -87,7 +87,7 @@ describe('resolveLlmGenerationParams (source-level single read path)', () => {
   it('模型绑定来自路由层：route 优先于 prompt 的 model 副本', () => {
     // skill_model_configs 显式指定模型时（route.model），不再需要 routeModelExplicit 开关
     const resolved = resolveLlmGenerationParams({
-      promptConfig: { model: 'deepseek-v4-flash', temperature: 0.7, maxTokens: 8000 },
+      promptConfig: { model: 'deepseek-v4.1-flash', temperature: 0.7, maxTokens: 8000 },
       routeFallback: { model: 'agnes-3.0-flash', temperature: 0.7, maxTokens: 8000 },
     })
 
@@ -100,7 +100,7 @@ describe('resolveLlmGenerationParams (source-level single read path)', () => {
 
   it('prompt.model 已废弃：即使 route 继承默认模型，也由 route 决定（不再被副本抢占）', () => {
     const resolved = resolveLlmGenerationParams({
-      promptConfig: { model: 'deepseek-v4-flash', temperature: 0.7, maxTokens: 8000 },
+      promptConfig: { model: 'deepseek-v4.1-flash', temperature: 0.7, maxTokens: 8000 },
       routeFallback: { model: 'platform-default-model', temperature: 0.5, maxTokens: 2000 },
     })
 
@@ -118,7 +118,7 @@ describe('resolveLlmGenerationParams (source-level single read path)', () => {
 
   it('minMaxTokens 下限仍生效（只抬下界，不改变来源）', () => {
     const resolved = resolveLlmGenerationParams({
-      promptConfig: { model: 'deepseek-v4-flash', maxTokens: 500 },
+      promptConfig: { model: 'deepseek-v4.1-flash', maxTokens: 500 },
       codeDefaults: { minMaxTokens: 2000 },
     })
     expect(resolved.maxTokens).toBe(2000)

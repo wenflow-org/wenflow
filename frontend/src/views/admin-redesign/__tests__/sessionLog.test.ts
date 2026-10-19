@@ -4,7 +4,7 @@
  * 实测样本：{"timestamp":"...","phase":"virtual-reply","durationMs":25659,"details":{...}}
  */
 import { describe, expect, it } from 'vitest';
-import { fmtDurationMs, isErrorLog, parseLogEntry } from '../sessionLog';
+import { fmtDurationMs, isErrorLog, parseLogEntry, virtualLogPhaseZh } from '../sessionLog';
 
 describe('isErrorLog（error 行标注）', () => {
   it('phase/type 命中错误档', () => {
@@ -102,5 +102,29 @@ describe('parseLogEntry（可读行视图）', () => {
     expect(view.phase).toBe('');
     expect(view.isError).toBe(false);
     expect(view.rawJson).toBe('{}');
+  });
+
+  it('details.output 里的正文参与摘要（虚拟日志把 message/reply 放在这一层）', () => {
+    const msg = parseLogEntry({ phase: 'teaching-reply', details: { output: { message: '教师已回复：作用域就是变量可见范围' } } });
+    expect(msg.text).toBe('教师已回复：作用域就是变量可见范围');
+    const reply = parseLogEntry({ phase: 'virtual-reply', details: { output: { reply: '我想先学函数' } } });
+    expect(reply.text).toBe('我想先学函数');
+    // 课堂响应把教师回复放在 aiResponse（2026-10-18 实测真实日志样本）
+    const ai = parseLogEntry({ phase: 'teaching-response', details: { output: { aiResponse: '现金买菜那笔没有凭据' } } });
+    expect(ai.text).toBe('现金买菜那笔没有凭据');
+    // 顶层仍优先于 details.output
+    const top = parseLogEntry({ phase: 'error', message: '超时', details: { output: { message: '不该被选中' } } });
+    expect(top.text).toBe('超时');
+  });
+});
+
+describe('virtualLogPhaseZh（虚拟日志阶段中文化）', () => {
+  it('已知枚举翻中文，未知回落原文（不猜词）', () => {
+    expect(virtualLogPhaseZh('virtual-reply')).toBe('学习者回复');
+    expect(virtualLogPhaseZh('goal-response')).toBe('目标对话');
+    expect(virtualLogPhaseZh('teaching-start')).toBe('课堂开始');
+    expect(virtualLogPhaseZh('error')).toBe('错误');
+    expect(virtualLogPhaseZh('brand-new-phase')).toBe('brand-new-phase');
+    expect(virtualLogPhaseZh('')).toBe('');
   });
 });

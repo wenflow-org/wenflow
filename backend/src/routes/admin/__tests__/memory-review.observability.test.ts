@@ -206,6 +206,86 @@ describe('总览', () => {
   })
 })
 
+describe('总览排序（2026-10-18：跨用户 5 列缺排序）', () => {
+  /** 每次重置默认桩再按调用顺序补 once：users.findMany 第 1 次是虚拟 id 列表，第 2 次才是展示行 */
+  function queueBase() {
+    usersFindMany.mockReset()
+    tracesGroupBy.mockReset()
+    tracesFindMany.mockReset()
+    usersFindMany.mockResolvedValue([])
+    tracesGroupBy.mockResolvedValue([])
+    tracesFindMany.mockResolvedValue([])
+  }
+
+  it('traces 升序：切片前排序 + 回显 sort；非法键回落 due/desc', async () => {
+    queueBase()
+    usersFindMany
+      .mockResolvedValueOnce([]) // 虚拟 id 列表
+      .mockResolvedValueOnce([
+        { id: 'u1', name: '小明' }, { id: 'u2', name: '小红' }, { id: 'u3', name: '小刚' },
+      ])
+    tracesGroupBy
+      .mockResolvedValueOnce([
+        { userId: 'u1', _count: { _all: 20 } },
+        { userId: 'u2', _count: { _all: 5 } },
+        { userId: 'u3', _count: { _all: 10 } },
+      ])
+      .mockResolvedValueOnce([{ userId: 'u1', _count: { _all: 9 } }])
+
+    const res = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { sort: 'traces', order: 'asc' } })
+    const body = res.body.data
+    expect(body.users.map((row: any) => row.userId)).toEqual(['u2', 'u3', 'u1'])
+    expect(body.sort).toEqual({ key: 'traces', order: 'asc' })
+
+    const bad = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { sort: 'oops', order: 'sideways' } })
+    expect(bad.body.data.sort).toEqual({ key: 'due', order: 'desc' })
+  })
+
+  it('name 升序：全量用户名先加载再切片（中文按 zh 排序）', async () => {
+    queueBase()
+    usersFindMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { id: 'u1', name: '张伟' }, { id: 'u2', name: '阿花' }, { id: 'u3', name: '小明' },
+      ])
+    tracesGroupBy.mockResolvedValueOnce([
+      { userId: 'u1', _count: { _all: 1 } },
+      { userId: 'u2', _count: { _all: 1 } },
+      { userId: 'u3', _count: { _all: 1 } },
+    ])
+
+    const res = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { sort: 'name', order: 'asc' } })
+    expect(res.body.data.users.map((row: any) => row.userId)).toEqual(['u2', 'u3', 'u1'])
+    expect(res.body.data.sort).toEqual({ key: 'name', order: 'asc' })
+    // 展示行复用排序阶段取到的用户（不重复查一遍用户表）：虚拟列表 + 全量排序各一次
+    expect(usersFindMany).toHaveBeenCalledTimes(2)
+  })
+
+  it('lastReviewed 降序：按最近复习时间排，从未复习的（null）恒在末尾', async () => {
+    queueBase()
+    usersFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      { id: 'u1', name: 'A' }, { id: 'u2', name: 'B' }, { id: 'u3', name: 'C' },
+    ])
+    tracesGroupBy.mockResolvedValueOnce([
+      { userId: 'u1', _count: { _all: 3 } },
+      { userId: 'u2', _count: { _all: 3 } },
+      { userId: 'u3', _count: { _all: 3 } },
+    ])
+    const trace = (userId: string, lastSeenAt: Date | null) => ({
+      userId, conceptKey: 'k', label: 'k', conceptId: null, masteryScore: 0.6, extractionCount: 3,
+      lastSeenAt, fsrsStability: null, fsrsDifficulty: null, fsrsLapses: null, fsrsReps: null,
+    })
+    tracesFindMany.mockResolvedValue([
+      trace('u1', new Date('2026-10-01T00:00:00Z')),
+      trace('u2', new Date('2026-10-05T00:00:00Z')),
+      trace('u3', null),
+    ])
+
+    const res = await run(getRouteHandler(memoryReviewRouter, '/', 'get'), { ...adminReq, query: { sort: 'lastReviewed', order: 'desc' } })
+    expect(res.body.data.users.map((row: any) => row.userId)).toEqual(['u2', 'u1', 'u3'])
+  })
+})
+
 describe('单用户明细', () => {
   it('同族重复分组 + 到期预览按记忆强度升序 + 温故计划', async () => {
     usersFindUnique.mockImplementation(async (args: any) => (
@@ -251,6 +331,58 @@ describe('单用户明细', () => {
       unattachedScatterKeys: 4,
       pendingReviewQueueDepth: 1,   // 0 proposals + 1 ambiguous + 0 drops
     })
+  })
+
+  it('到期预览按 dueSort/dueOrder 排序且**在截断前生效**（掌握降序能把默认被切掉的那条排到第一）；未知值回落默认并回显', async () => {
+    usersFindUnique.mockImplementation(async (args: any) => (
+      args?.select?.isAdmin ? { isAdmin: true } : { id: 'u1', name: '小明', email: null, isVirtualLearner: false }
+    ))
+    buildReviewPlan.mockResolvedValue(null)
+    getAudit.mockResolvedValue(null)
+    const now = Date.now()
+    /* 21 条到期痕迹（预览只发前 20）：i 越大 → 记忆强度越高、掌握越高、提取越少、越不逾期。
+       默认（记忆强度升序）= c0..c19，c20 被切掉；按掌握降序则 c20 必须排第一——
+       这就是「排序在截断之前」与「只排这 20 条」的分界。 */
+    tracesFindMany.mockResolvedValue(
+      Array.from({ length: 21 }, (_, i) => ({
+        conceptKey: `c${i}`,
+        label: `概念 ${i}`,
+        source: 'derived',
+        masteryScore: (i + 1) / 100,
+        extractionCount: 21 - i,
+        lastSeenAt: new Date(now - 86400000),
+        dueAt: new Date(now - (21 - i) * 86400000),
+        fsrsStability: null,
+        fsrsDifficulty: null,
+      }))
+    )
+
+    const handler = getRouteHandler(memoryReviewRouter, '/:userId', 'get')
+    const bodyOf = async (query: Record<string, string>) => {
+      const res = await run(handler, { ...adminReq, params: { userId: 'u1' }, query })
+      return res.body.data
+    }
+
+    const base = await bodyOf({})
+    expect(base.duePreview).toHaveLength(20)
+    expect(base.duePreview[0].conceptKey).toBe('c0')
+    expect(base.duePreview.map((r: any) => r.conceptKey)).not.toContain('c20')
+    expect(base.dueSort).toEqual({ key: 'retention', order: 'asc' })
+
+    const byMastery = await bodyOf({ dueSort: 'mastery', dueOrder: 'desc' })
+    expect(byMastery.duePreview[0].conceptKey).toBe('c20')
+    expect(byMastery.duePreview.map((r: any) => r.conceptKey)).not.toContain('c0')
+    expect(byMastery.dueSort).toEqual({ key: 'mastery', order: 'desc' })
+
+    const byExtractions = await bodyOf({ dueSort: 'extractions', dueOrder: 'asc' })
+    expect(byExtractions.duePreview[0].conceptKey).toBe('c20')      // 提取最少 = 21-i 最小
+    const byDue = await bodyOf({ dueSort: 'due', dueOrder: 'desc' })
+    expect(byDue.duePreview[0].conceptKey).toBe('c20')              // 最近到期在前
+
+    /* 参数非法只回落默认，不让整页读不出来（深链里带个旧键是常态） */
+    const bogus = await bodyOf({ dueSort: 'nope', dueOrder: 'sideways' })
+    expect(bogus.dueSort).toEqual({ key: 'retention', order: 'asc' })
+    expect(bogus.duePreview[0].conceptKey).toBe('c0')
   })
 
   it('归并凭据按次留档展示：窗口外的旧归并也看得见、已回滚的单独列出', async () => {

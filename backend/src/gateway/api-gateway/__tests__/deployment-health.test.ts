@@ -50,16 +50,15 @@ describe('deployment-health（部署级冷却）', () => {
 })
 
 describe('getModelFallbacks（降级候选声明）', () => {
-  it('flash 声明 agnes 作为降级候选', () => {
-    expect(getModelFallbacks('deepseek-v4-flash')).toEqual(['agnes-3.0-flash'])
-  })
-
-  it('pro 声明 flash 作为降级候选', () => {
-    expect(getModelFallbacks('deepseek-v4-pro')).toEqual(['deepseek-v4-flash'])
-  })
-
-  it('未声明 fallbacks 的模型返回空数组；未知模型同样为空', () => {
+  /* 2026-10-18：上游下线 deepseek-v4-flash / deepseek-v4-pro，平台目录里已没有带
+     fallbacks 的模型；本组改为锁「未声明 → 空数组、未知 → 空数组」的读取契约，
+     带声明的分支由 model-alias / router.alias 的夹具用例覆盖。 */
+  it('当前目录里的模型都没有声明降级候选', () => {
+    expect(getModelFallbacks('deepseek-v4.1-flash')).toEqual([])
     expect(getModelFallbacks('agnes-3.0-flash')).toEqual([])
+  })
+
+  it('未知模型同样返回空数组', () => {
     expect(getModelFallbacks('unknown-model')).toEqual([])
   })
 })

@@ -6,15 +6,18 @@
  *
  *  1) OpsHub 三个待办域用 .catch(() => count = 0)，后端故障时页面伪装成「全部已清零」——
  *     驾驶舱最不可接受的一种假信号，因为它恰好把「取不到」显示成「没事」。
- *  2) OpsCenter 用 `.is-bad` 作为告警类名，但该类全站零定义（页面 scoped 里也没有）→
- *     死信告警永远不标红（无效类名静默失效）。
+ *  2) 运维工具面板（原 OpsCenter Tab1，2026-10-16 并入运营中心）用 `.is-bad` 作为告警类名，
+ *     但该类全站零定义（页面 scoped 里也没有）→ 死信告警永远不标红（无效类名静默失效）。
  *
- * 2026-10-04 状态条退役：OpsHub 页头 .mk-status 整块下线（失败信号由页签体内 mk-alert +
- * 指标卡「加载失败」foot 承载；结论句并入「运营待办」卡头 meta），本文件对 .mk-status--bad/--ok
+ * 2026-10-04 状态条退役：OpsHub 页头 .mk-status 整块下线（失败信号由 mk-alert +
+ * 指标卡「加载失败」foot 承载；结论句并入「待办清单」卡头 meta），本文件对 .mk-status--bad/--ok
  * 的断言按原意图（失败不得伪装成已清零）改写为结构断言，并补状态条退役护栏。
+ * 2026-10-18 用户拍板四张读数卡升到页签栏之上（页级概览 + 页签内工作台）：mk-alert 与读数卡
+ * 随之上移到页级，页签内清单只留行动，本文件相应断言按新落位改写。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { createRouter, createMemoryHistory } from 'vue-router'
 
 const h = vi.hoisted(() => ({
   feedbackList: vi.fn(),
@@ -55,7 +58,7 @@ vi.mock('../useConfirm', () => ({ askConfirm: vi.fn(async () => true) }))
 vi.mock('@/utils/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
 import OpsHub from '../OpsHub.vue'
-import OpsCenter from '../OpsCenter.vue'
+import ServerToolsPanel from '../ServerToolsPanel.vue'
 
 describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
   beforeEach(() => {
@@ -74,18 +77,19 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
 
     // 护栏（判例 buckets-band.test.ts）：页头状态条已退役，失败不再由整页红基调承载
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false)
-    // 显式错误条（页签体内 mk-alert，可重试的信号，而非静默）
+    // 显式错误条（mk-alert，可重试的信号，而非静默）——随页级读数带走，在页签栏之上
     expect(w.find('.mk-alert').exists()).toBe(true)
     expect(w.text()).toContain('待办数据加载失败')
-    // 指标卡不得显假 0：三个失败域显「—」+「加载失败，计数不可信」foot。
-    // 2026-10-06 审核 #174：页内 .oh-metric 瓦片收编共享 MkKpi（tone=bad 着色数字，
-    // hintTone=bad 着色脚注），选择器随之迁移，断言语义不变。
+    // 读数不得显假 0：三个失败域显「—」+「加载失败」脚注，只有「草稿公告」（取 live 层、未失败）显真 0。
+    // 2026-10-18 用户拍板：四张读数卡升到页签栏之上（页级概览 + 页签内工作台），
+    // 选择器从行内 .ow-rankrow__count 回到 .mk-kpi__num，断言语义不变。
     const naValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '—')
     expect(naValues).toHaveLength(3)
     expect(w.findAll('.mk-kpi__hint--bad')).toHaveLength(3)
-    // 全页唯一显 0 的是「草稿公告」（取 live 层，未失败 → 0 是真实值，如实显示）
     const zeroValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '0')
     expect(zeroValues).toHaveLength(1)
+    // 数字单源：行动清单里不再复读计数（读数卡与行动行同一组四项，两处讲两遍是本次走查的原始问题）
+    expect(w.findAll('.ow-rankrow__count')).toHaveLength(0)
     // 三个失败域行动行标失败态，且该行不得显示「已清零」
     // （第 4 行「草稿公告」取自 live 层，未失败 → 仍显示「已清零」是正确的）
     // 2026-10-01 对齐原型：待办清单由行动行改为 metricCard 条 + ranklist 行，
@@ -96,13 +100,14 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
       expect(row.text()).toContain('加载失败')
       expect(row.text()).not.toContain('已清零')
     }
-    // 重试入口（页头动作区，newui/admin pagehead 形态）
-    expect(w.find('.mk-pagehead__actions button').text()).toContain('重试')
+    // 重试入口（页头动作区，newui/admin pagehead 形态）——直接子钮才是刷新/重试，
+    // 视角开关注在页头动作区的 span 里，其内部分段钮不算（2026-10-18 开关随读数带迁入页头）
+    expect(w.find('.mk-pagehead__actions > button').text()).toContain('重试')
 
     w.unmount()
   })
 
-  it('三个待办域成功且全为 0 → 结论句「运营待办全部已清零」入「运营待办」卡头 meta（2026-10-04 状态条退役迁入）', async () => {
+  it('三个待办域成功且全为 0 → 结论句「运营待办全部已清零」入「待办清单」卡头 meta（2026-10-04 状态条退役迁入）', async () => {
     // D16：mock 换 live 信封（后端体为 { success, data: [...], pagination: {...} }，pagination 与 data 平级），
     // 旧 mock 的 { data: {}, pagination } 形状与真实不符，会让「解析错位」在任何测试里不可见。
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [], pagination: { total: 0 } } })
@@ -115,17 +120,45 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     // 护栏：页头状态条已退役，结论句不回条上
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false)
     expect(w.find('.mk-alert').exists()).toBe(false)
-    // 结论句（原状态条 strong）并入「运营待办」卡头 meta
+    // 结论句（原状态条 strong）并入清单卡头 meta；卡名不再与页签名同名（读数已升页级）
     const todoHead = w.find('.mk-card__head')
-    expect(todoHead.find('.mk-card__title').text()).toBe('运营待办')
+    expect(todoHead.find('.mk-card__title').text()).toBe('待办清单')
     expect(todoHead.find('.mk-card__meta').text()).toContain('运营待办全部已清零')
-    // 指标卡如实显示 0（真实 0 可以显；四卡：待处理反馈/生成失败路径/Outbox 死信/草稿公告）
+    // 读数如实显示 0（真实 0 可以显；四卡：待处理反馈/生成失败路径/事件投递失败/草稿公告）
     // 2026-10-06 审核 #174：瓦片迁 MkKpi，.oh-metric__value → .mk-kpi__num
+    // 2026-10-18 用户拍板：四张读数卡回到页级（页签栏之上），行内不再复读数字
     const values = w.findAll('.mk-kpi__num').map((v) => v.text())
     expect(values).toEqual(['0', '0', '0', '0'])
     // 行动行仍给「已清零」收尾
     expect(w.text()).toContain('已清零')
 
+    w.unmount()
+  })
+
+  /* 2026-10-18 用户拍板「读数卡升到页签栏之上、任何页签都能看见」：
+     这一块是跨页签的待办读数（反馈/路径/事件/公告各属别的页签），从此不再只长在「运营待办」页签里。
+     用「数据导出」页签验证最狠：它是纯表单页、本页签零读数，读数带仍要照常在页签栏之上。
+     页签切换走 URL（?tab=），故用带 router 的挂载。 */
+  it('页级读数带在零读数的「数据导出」页签同样可见（跨页签待办不再被某个页签独占）', async () => {
+    h.feedbackList.mockResolvedValue({ data: { success: true, data: [], pagination: { total: 3 } } })
+    h.contentStats.mockResolvedValue({ data: { data: { byStatus: { failed: 2 } } } })
+    h.outboxDead.mockResolvedValue({ data: { data: { deadCount: 1 } } })
+
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/:page?', component: { template: '<div />' } }] })
+    await router.push('/admin/ops-hub?tab=export')
+    await router.isReady()
+    const w = mount(OpsHub, { global: { plugins: [router] } })
+    await flushPromises()
+
+    const readings = w.findAll('.oh-metrics .mk-kpi__label').map((x) => x.text().trim())
+    expect(readings).toEqual(['待处理反馈', '生成失败路径', '事件投递失败', '草稿公告'])
+    expect(w.findAll('.oh-metrics .mk-kpi__num').map((x) => x.text())).toEqual(['3', '2', '1', '0'])
+    // 位置：读数带在页签面板之外、页签栏之前（页级，不是某个页签体内的内容）
+    expect(w.find('.oh-metrics').element.closest('[role="tabpanel"]')).toBeNull()
+    expect((w.find('.tabs').element.compareDocumentPosition(w.find('.oh-metrics').element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0).toBe(true)
+    // 口径开关随读数带走（不再留在某个页签的卡头里），刷新钮也在（读数带有远端读数）
+    expect(w.find('.mk-pagehead__actions').text()).toContain('真实')
+    expect(w.find('.mk-pagehead__actions > button').text()).toContain('刷新')
     w.unmount()
   })
 
@@ -139,7 +172,7 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     const w = mount(OpsHub)
     await flushPromises()
 
-    // 指标卡如实显示 10（不再解析错位成 0）。2026-10-06 审核 #174：瓦片迁 MkKpi。
+    // 读数如实显示 10（不再解析错位成 0）。2026-10-06 审核 #174：瓦片迁 MkKpi（读数卡在页级）。
     const values = w.findAll('.mk-kpi__num').map((v) => v.text())
     expect(values).toContain('10')
     // 结论句改总括句（审核 #173：逐项数字只留指标卡一处，卡头不再复述数字）
@@ -150,6 +183,11 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     expect(feedbackRow.attributes('disabled')).toBeUndefined()
     expect(feedbackRow.classes()).toContain('ow-rankrow--act')
     expect(feedbackRow.find('.ow-rankrow__go').text()).toContain('去处理')
+    // 值色分档：待处理反馈的严重度是 warn（琥珀），不是 bad（红）——颜色只承载紧急度。
+    // 2026-10-18 读数卡回页级，断言从行内 .ow-rankrow__count--warn 回到卡上的 mk-kpi--warn
+    const feedbackCard = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '待处理反馈')!
+    expect(feedbackCard.classes()).toContain('mk-kpi--warn')
+    expect(feedbackCard.find('.mk-kpi__num').text()).toBe('10')
 
     w.unmount()
   })
@@ -173,7 +211,7 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
   })
 })
 
-describe('R2：OpsCenter 死信告警随死信卡呈现（状态条已按原型退役）', () => {
+describe('R2：运维工具死信告警随死信卡呈现（状态条已按原型退役）', () => {
   beforeEach(() => {
     h.outboxDead.mockReset()
   })
@@ -181,13 +219,13 @@ describe('R2：OpsCenter 死信告警随死信卡呈现（状态条已按原型�
   it('死信 > 0 → 卡头 warn 徽标计数（而非零定义的 .is-bad；状态条类不再出现）', async () => {
     h.outboxDead.mockResolvedValue({ data: { data: { deadCount: 3, items: [] } } })
 
-    const w = mount(OpsCenter)
+    const w = mount(ServerToolsPanel)
     await flushPromises()
 
     const warn = w.find('.mk-card__head .mk-badge--warn')
     expect(warn.exists(), '死信积压要显式 warn 徽标（迁入死信卡头）').toBe(true)
     expect(warn.text()).toContain('3')
-    expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false)
+    expect(w.find('.mk-status').exists(), '本面板无状态条').toBe(false)
     // 无效类名不得再出现（它曾让告警静默失效）
     expect(w.find('.is-bad').exists()).toBe(false)
 

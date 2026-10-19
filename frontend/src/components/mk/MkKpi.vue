@@ -11,8 +11,10 @@
     <span class="mk-kpi__label">{{ label }} </span>
     <strong class="mk-kpi__num">{{ value }}</strong>
     <span v-if="hint && !compact" class="mk-kpi__hint" :class="hintTone ? `mk-kpi__hint--${hintTone}` : ''">{{ hint }}</span>
-    <!-- 默认 slot（2026-10-05）：卡内附挂位（VL 判例 = .mk-minibar 进度槽）。空 slot 渲染零节点，
-         既有用法无感；附挂物走卡面原语（mk-minibar），不在页面发明新卡内词汇 -->
+    <!-- 默认 slot（2026-10-05）：卡内附挂位。空 slot 渲染零节点，既有用法无感。
+         2026-10-16 用户拍板「kpi 面板内部进度条不要出现」——原 VL 判例（.mk-minibar 进度槽）
+         已退役，读数类卡保持「label + 数值 + 一句口径」；此 slot 留给确有必要的附挂物，
+         别再往里塞进度轨道。 -->
     <slot></slot>
   </component>
 </template>
@@ -39,27 +41,37 @@ withDefaults(
 
 <style scoped>
 /* 规格对齐 newui「UI-分支优化设计」原型 .card + .kpi：白面卡片（不是蓝灰底）、
-   16px 内边距、数字 28px/700 —— KPI 是页面的标题数字，不是页内小指标。
-   蓝灰底（--mk-surface-2）留给卡内次级指标（MkStatStrip）。 */
+   数字 26px/700 —— KPI 是页面的标题数字，不是页内小指标。
+   蓝灰底（--mk-surface-2）留给卡内次级指标（MkStatStrip）。
+
+   2026-10-18 用户走查「全站 kpi 面板高度有点高」：块内边距 16→12、label/口径行距收到 1.35、
+   数字行高 1.25→1.15、数字 28→26（宽屏阶梯各收一档）——卡高 ≈123 → ≈100（−19%），
+   三行仍同位对齐（量测脚本 .zcode/kpi-height-survey.mjs）。 */
 .mk-kpi {
   display: grid;
-  gap: 6px;
-  padding: 16px;
+  /* 内容从上往下排，多余高度留在卡底（2026-10-17 走查「怎么高度还不一样呢」）：
+     同一排卡片被 flex 拉伸到等高后，grid 默认的 align-content:normal 会把多出来的
+     高度均摊进各行，导致没有 hint 的卡 label 行被撑高、数字比邻卡低十几像素；
+     且 hint 行数不同的卡会把整排撑到不同高度。顶对齐后标签/数字/口径三行始终同位，
+     卡高差异只体现为卡底留白。 */
+  align-content: start;
+  gap: 4px;
+  padding: 12px 14px;
   /* KPI 瓦片 = 卡片·弹层档 16（§0.5；批次 C 抬 xl 时此字面量漏改） */
   border-radius: var(--mk-radius-xl);
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
 }
-.mk-kpi__label { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); }
+.mk-kpi__label { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); line-height: 1.35; }
 .mk-kpi__num {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   color: var(--mk-ink);
-  line-height: 1.25;
+  line-height: 1.15;
 }
-.mk-kpi__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.mk-kpi__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.35; }
 .mk-kpi__hint--bad { color: var(--mk-red); }
 .mk-kpi__hint--warn { color: var(--mk-amber); }
 .mk-kpi__hint--ok { color: var(--mk-green); }
@@ -103,34 +115,34 @@ html[data-theme='dark'] .mk-kpi { border-color: var(--mk-line); }
 
 /* 1440px 中间档（档位只放大数字，不再回到蓝灰底） */
 @media (min-width: 1440px) {
-  .mk-kpi { padding: 16px 17px; }
+  .mk-kpi { padding: 12px 15px; }
   .mk-kpi__label { font-size: var(--mk-fs-micro); }
-  .mk-kpi__num { font-size: 29px; }
+  .mk-kpi__num { font-size: 27px; }
   .mk-kpi__hint { font-size: var(--mk-fs-micro); }
 }
 
 /* 1920px 档（最低标准 1080p 全屏） */
 @media (min-width: 1920px) {
-  .mk-kpi { padding: 17px 18px; }
-  .mk-kpi__num { font-size: 30px; }
+  .mk-kpi { padding: 13px 16px; }
+  .mk-kpi__num { font-size: 28px; }
 }
 
 /* 4K 三档（对齐全站 mk 体系） */
 @media (min-width: 2000px) {
-  .mk-kpi { padding: 18px 20px; border-radius: var(--mk-radius-xl); gap: 6px; }
+  .mk-kpi { padding: 14px 17px; border-radius: var(--mk-radius-xl); gap: 5px; }
+  .mk-kpi__label { font-size: var(--mk-fs-micro); }
+  .mk-kpi__num { font-size: 29px; }
+  .mk-kpi__hint { font-size: var(--mk-fs-micro); }
+}
+@media (min-width: 2800px) {
+  .mk-kpi { padding: 15px 19px; gap: 6px; }
   .mk-kpi__label { font-size: var(--mk-fs-micro); }
   .mk-kpi__num { font-size: 31px; }
   .mk-kpi__hint { font-size: var(--mk-fs-micro); }
 }
-@media (min-width: 2800px) {
-  .mk-kpi { padding: 20px 22px; gap: 7px; }
-  .mk-kpi__label { font-size: var(--mk-fs-micro); }
-  .mk-kpi__num { font-size: 34px; }
-  .mk-kpi__hint { font-size: var(--mk-fs-micro); }
-}
 @media (min-width: 3600px) {
   .mk-kpi__label { font-size: var(--mk-fs-body); }
-  .mk-kpi__num { font-size: 38px; }
+  .mk-kpi__num { font-size: 35px; }
   .mk-kpi__hint { font-size: var(--mk-fs-body); }
 }
 </style>

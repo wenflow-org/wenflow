@@ -66,3 +66,30 @@ export function successRateTone(calls: number, errors: number): RateTone {
 export function rateToneClass(tone: RateTone, prefix: string): string {
   return tone === 'ok' || tone === 'muted' ? '' : `${prefix}--${tone}`
 }
+
+/**
+ * 系统失败率着色（跨页单源，2026-10-16 用户拍板「不要非零就红」）。
+ *
+ * 此前同一「系统失败率」在两页两套口径：虚拟学习者页**非零即红**（跑过几万场、留存历史失败，
+ * 一条失败就把整卡染红，红灯失去区分度），总览页 ≥50 红 / ≥20 黄。同一指标跨页不同阈值，
+ * 运营看到两个颜色的同一件事。现统一按总览口径，并保留「有失败但比例低」的琥珀提醒。
+ *
+ * - ≥ FAILURE_RATE_BAD_AT% → bad
+ * - ≥ FAILURE_RATE_WARN_AT% 或本次窗口存在失败（failed > 0）→ warn
+ * - 其余 ok；非有限数（未加载/无数据）→ muted，不伪装成「0% 健康」
+ */
+export const FAILURE_RATE_BAD_AT = 50
+export const FAILURE_RATE_WARN_AT = 20
+/** 阈值披露文案（着色处 title 拼接用） */
+export const FAILURE_RATE_THRESHOLD_NOTE =
+  `系统失败率 ≥${FAILURE_RATE_BAD_AT}% 标红、≥${FAILURE_RATE_WARN_AT}% 或存在失败标黄`
+
+export function failureRateTone(
+  systemFailureRate: number | null | undefined,
+  failed = 0
+): RateTone {
+  if (typeof systemFailureRate !== 'number' || !Number.isFinite(systemFailureRate)) return 'muted'
+  if (systemFailureRate >= FAILURE_RATE_BAD_AT) return 'bad'
+  if (systemFailureRate >= FAILURE_RATE_WARN_AT || failed > 0) return 'warn'
+  return 'ok'
+}

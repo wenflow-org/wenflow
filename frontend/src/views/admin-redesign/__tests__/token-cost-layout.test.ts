@@ -107,7 +107,8 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
   it('Skill 明细：已定价行显金额、未定价行显暗灰 —（不再逐行复读状态词）', async () => {
     const w = await mountTokenCost();
     const heads = w.findAll('.tc-skilltable__head > span').map((s) => s.text());
-    expect(heads).toEqual(['Skill', '调用', 'Token 用量', 'Prompt', 'Completion', '均次 Token', '成本', '占比']);
+    // 输入/输出（原 Prompt/Completion，2026-10-16 用户：「那就输入输出就行了，不要搞那么多」）
+    expect(heads).toEqual(['Skill', '调用', 'Token 用量', '输入', '输出', '均次 Token', '成本', '占比']);
     const rows = w.findAll('.tc-skilltable__row');
     expect(rows).toHaveLength(2);
     const priced = rows[0].find('.tc-st__cost');
@@ -120,6 +121,22 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     expect(rows[1].attributes('title')).toContain('单价未配置');
     // 拆分与派生列真的算出来了（不是空列占位）
     expect(rows[0].findAll('.tc-st__num--dim').map((c) => c.text())).toEqual(['9.5M', '500.0K', '100.0K']);
+    w.unmount();
+  });
+
+  it('成本口径行：只留两条公式，不复述「未配置单价 → 成本列 —」（那句由卡头徽章与行 title 承担）', async () => {
+    const w = await mountTokenCost();
+    const note = w.find('.tc-card--skill .tc-card__note');
+    expect(note.text()).toContain('成本＝已定价调用的金额合计（美元）');
+    expect(note.text()).toContain('占比按金额算，没有已定价金额时改按 Token 算');
+    // 可见文案不再第三次复述这条规则（徽章 meta 已可见、行 title 与本文 title 各说一次）
+    expect(note.text()).not.toContain('未配置单价');
+    expect(note.text()).not.toContain('不计入合计');
+    // 信息不净丢：悬停本行仍能拿到原因
+    expect(note.attributes('title')).toContain('未配置单价');
+    expect(note.attributes('title')).toContain('不计入成本合计');
+    // 卡头徽章同样带原因（可见徽章是这条规则的第一发现点）
+    expect(w.find('.tc-card--skill .mk-badge').attributes('title')).toContain('不计入成本合计');
     w.unmount();
   });
 

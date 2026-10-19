@@ -223,6 +223,15 @@ exports.Prisma.Platform_api_configsScalarFieldEnum = {
   privateNetworkHosts: 'privateNetworkHosts'
 };
 
+exports.Prisma.Provider_secretsScalarFieldEnum = {
+  id: 'id',
+  providerId: 'providerId',
+  apiKey: 'apiKey',
+  apiKeyEnv: 'apiKeyEnv',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.Platform_settingsScalarFieldEnum = {
   key: 'key',
   value: 'value',
@@ -384,6 +393,7 @@ exports.Prisma.ModelName = {
   agent_prompts: 'agent_prompts',
   agent_registrations: 'agent_registrations',
   platform_api_configs: 'platform_api_configs',
+  provider_secrets: 'provider_secrets',
   platform_settings: 'platform_settings',
   skill_model_configs: 'skill_model_configs',
   skill_registrations: 'skill_registrations',

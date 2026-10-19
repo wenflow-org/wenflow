@@ -94,12 +94,28 @@ describe('useCockpitStages 终态语义', () => {
   });
 
   it('确实写出学习总结：Learn 判完成（保留的唯一正向证据）', () => {
+    // hasWrapup 由真实调用方注入（cockpitWrapup 从两处字段 OR 出来）；判据 2026-10-19 起
+    // 改为读注入值，夹具因此与接线一致地同时给两处。
     const s = build({
       currentStage: computed(() => 'learning'),
-      stageStatus: computed(() => ({ learning: { wrapup: true } }))
+      stageStatus: computed(() => ({ learning: { wrapup: true } })),
+      hasWrapup: computed(() => true)
     });
 
     expect(s.stageDone('learning')).toBe(true);
+  });
+
+  it('总结只落在 stageResults.teaching 一侧：学习瓦片与总结卡同判据（2026-10-19 单源）', () => {
+    // 原先 stageDone('learning') 只读 stageStatus.learning.wrapup，而总结卡读两处字段——
+    // 字段一真一假时会出现「总结卡有内容、学习瓦片没打勾」。现在两处同源。
+    const s = build({
+      currentStage: computed(() => 'learning'),
+      stageResults: computed(() => ({ teaching: { wrapup: true } })),
+      hasWrapup: computed(() => true)
+    });
+
+    expect(s.stageDone('learning')).toBe(true);
+    expect(s.stageDone('wrapup')).toBe(true);
   });
 
   it('已放弃、停在 Goal：Learn 与 Path 都不判完成', () => {

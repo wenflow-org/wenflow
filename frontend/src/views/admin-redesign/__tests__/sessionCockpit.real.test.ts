@@ -253,15 +253,24 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.text()).toContain('围绕函数作用域展开');
     expect(wrapper.text()).toContain('模型生成');
 
-    // 原始 JSON（rawJson 惰性计算：展开 details 才序列化，2026-09-27 性能整改）
-    const rawDetails = wrapper.find('details.cp-raw');
-    (rawDetails.element as HTMLDetailsElement).open = true;
-    await rawDetails.trigger('toggle');
-    await nextTick();
-    // Path 里程碑渲染（读 stageResults.path 兜底）：里程碑名出现在原始 JSON 中
-    expect(wrapper.text()).toContain('Python 入门学习路径');
-    expect(wrapper.text()).toContain('函数基础');
-    expect(wrapper.text()).toContain('参数与返回值');
+    // 会话数据包（2026-10-18）：主列只留一行读数，整包 JSON 收进弹层（点开才序列化）
+    const pkg = wrapper.find('.cp-raw');
+    expect(pkg.exists()).toBe(true);
+    expect(pkg.text()).toContain('会话数据包');
+    expect(pkg.text()).toContain('教学会话');
+    expect(pkg.text()).toContain('Python 入门学习路径');
+    expect(pkg.find('pre').exists()).toBe(false);
+    const openRawBtn = pkg.findAll('button').find((b) => b.text() === '查看原始数据')!;
+    await openRawBtn.trigger('click');
+    await flushPromises();
+    // Path 里程碑渲染（读 stageResults.path 兜底）：里程碑名出现在弹层原始 JSON 中（Teleport 到 body）
+    const rawView = document.body.querySelector('.cp-rawview') as HTMLElement | null;
+    expect(rawView).not.toBeNull();
+    expect(rawView!.textContent).toContain('Python 入门学习路径');
+    expect(rawView!.textContent).toContain('函数基础');
+    expect(rawView!.textContent).toContain('参数与返回值');
+    ;[...rawView!.querySelectorAll('button')].find((b) => b.textContent === '关闭')?.click();
+    await flushPromises();
 
     // 黑盒/仿真专属区隐藏：无 act() 按钮、无对抗预算、无删除会话、无评审面板
     expect(wrapper.find('.cp-config').exists()).toBe(false);
@@ -405,10 +414,11 @@ describe('SessionCockpit 双模式', () => {
 
     const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '学习者资料');
     expect(card).toBeTruthy();
-    expect(card!.find('.mk-card__meta').text()).toContain('2 份');
-    expect(card!.find('.mk-card__meta').text()).toContain('上传 1');
-    expect(card!.find('.mk-card__meta').text()).toContain('联网 1');
-    expect(card!.find('.mk-card__meta').text()).toContain('含理解摘要 1');
+    // 2026-10-18 用户走查「这类文案」：卡头只报份数与有摘要份数；
+    // 上传 / 联网的来源构成改由每行行首徽章承担（下方 rows[*].mk-badge 断言）。
+    expect(card!.find('.mk-card__meta').text()).toContain('2 份资料');
+    expect(card!.find('.mk-card__meta').text()).toContain('1 份有理解摘要');
+    expect(card!.find('.mk-card__meta').text()).not.toContain('上传');
 
     const rows = card!.findAll('.cp-mat');
     expect(rows).toHaveLength(2);
@@ -552,8 +562,9 @@ describe('SessionCockpit 双模式', () => {
     const pane = wrapper.find('#cp-tabpanel-path');
     expect(pane.exists()).toBe(true);
     expect(pane.find('.mk-card__title').text()).toBe('关联学习路径');
-    // 面板内容体 = 阶段手风琴（默认展开当前阶段「作用域」，含阶段目标/核心概念）+ 治理动作；
-    // 「总体进度」与「技术细节」2026-10-12 用户拍板撤（各阶段头自带 N / M 任务，工程标识不进运营页面）
+    // 面板内容体 = 阶段全展开（2026-10-18 用户走查：运营要一眼看到信息，不接受点开一个
+    // 就把别的阶段收起）+ 治理动作；「总体进度」与「技术细节」2026-10-12 用户拍板撤
+    // （各阶段头自带 N / M 任务，工程标识不进运营页面）
     expect(pane.text()).not.toContain('总体进度');
     expect(pane.text()).not.toContain('技术细节');
     const stageTitles = pane.findAll('.pd-stage__title').map((s) => s.text());
@@ -565,15 +576,56 @@ describe('SessionCockpit 双模式', () => {
     expect(pane.text()).not.toContain('active');
     // --idle（压淡编号）只给未解锁：当前阶段与已完成阶段都不压
     expect(stageCards.map((s) => s.classes().includes('pd-stage--idle'))).toEqual([false, false, true]);
-    expect(pane.text()).toContain('目标掌握词法作用域');
+    // 全展开（2026-10-18）：三段的说明与任务行同时在场，不需要点开任何阶段
+    expect(pane.findAll('.pd-stage__body')).toHaveLength(3);
+    expect(pane.findAll('.pd-task').map((t) => t.find('.pd-task__title').text()))
+      .toEqual(['函数定义', '参数与返回值', '作用域练习', '闭包练习']);
+    expect(pane.text()).toContain('参数与返回值'); // M1 说明
+    expect(pane.text()).toContain('目标掌握词法作用域'); // M2 目标
+    expect(pane.text()).toContain('捕获与内存'); // M3 说明
     expect(pane.text()).toContain('核心概念：作用域');
     expect(pane.text()).toContain('2 / 2 任务'); // 阶段头自带完成数
+    // 手风琴已退役：阶段头是分区标题（div），没有 aria-expanded / 折叠箭头
+    expect(pane.find('.pd-stage__head').element.tagName).toBe('DIV');
+    expect(pane.find('.pd-stage__head').attributes('aria-expanded')).toBeUndefined();
+    expect(pane.find('.pd-stage__caret').exists()).toBe(false);
     // 旧出口退役：stepper 的 Path 步点即唯一入口，不再有「打开路径详情页」按钮
     expect(pane.text()).not.toContain('打开路径详情页');
     // 治理动作保留（真实能力：下线路径）
     expect(pane.text()).toContain('下线路径');
 
     wrapper.unmount();
+  });
+
+  it('页头显示会话所属学习者，并给出「查看学习者」入口（返回落回同一页签）', async () => {
+    const payload = realTeachingPayload();
+    payload.data.learner = { id: 'user_7', name: '陈晓', email: 'chenxiao@example.com' };
+    payload.data.stageResults.path = payload.data.path;
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    // 身份信息进身份区（名字常显，邮箱/id 进 title）
+    const pill = wrapper.find('.cp-hero__learner');
+    expect(pill.exists()).toBe(true);
+    expect(pill.text()).toContain('陈晓');
+    expect(pill.attributes('title')).toContain('chenxiao@example.com');
+
+    // 切到 Path 页签再跳：返回时要回到 Path，而不是会话默认页签
+    await wrapper.findAll('.cp-stp')[1].trigger('click');
+    await settle();
+    const entry = wrapper.findAll('.mk-hero__actions button').find((b) => b.text() === '查看学习者');
+    expect(entry).toBeTruthy();
+    expect(entry!.attributes('title')).toContain('陈晓');
+    await entry!.trigger('click');
+    await settle();
+    expect(subPage.value).toMatchObject({
+      view: 'learner',
+      id: 'user_7',
+      from: { view: 'session-real', id: 'ts_real_1', label: '会话监控', stage: 'path' },
+    });
+
+    wrapper.unmount();
+    subPage.value = null;
   });
 
   it('Learn 课表：真实会话下「从该课开始学习」是虚拟专属 → 只读行，不给假入口', async () => {
@@ -775,6 +827,46 @@ describe('SessionCockpit 双模式', () => {
     expect(block.text()).toContain('未通过');
     expect(block.text()).toContain('理解度 75%');
     expect(block.text()).toContain('识别隐含动机假设');
+
+    wrapper.unmount();
+  });
+
+  /** 2026-10-18 用户走查「原始会话数据偏源码开发」：主列不再内联整包 JSON，
+   *  改为一行数据包读数；完整载荷点「查看原始数据」进弹层，复制拿到的必须是完整串。 */
+  it('会话数据包：主列只出读数，原始 JSON 进弹层且复制为完整载荷', async () => {
+    const payload = realTeachingPayload();
+    // 造一个超长字段（真实会话的 path 树/消息远超此量级）
+    payload.data.path.milestones[0].description = '长'.repeat(5000);
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const writeText = vi.fn(async (_text: string) => {});
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const pkg = wrapper.find('.cp-raw');
+    // 折叠态：页面上没有 JSON 直排（pre），只有一行读数与两个动作
+    expect(pkg.find('pre').exists()).toBe(false);
+    expect(pkg.text()).toContain('教学会话');
+    expect(pkg.text()).toContain('条消息');
+    expect(pkg.findAll('button').map((b) => b.text())).toEqual(['查看原始数据', '复制 JSON']);
+
+    // 打开弹层：完整载荷（无 4000 截断）+ 字符总数
+    await pkg.findAll('button').find((b) => b.text() === '查看原始数据')!.trigger('click');
+    await flushPromises();
+    const view = document.body.querySelector('.cp-rawview') as HTMLElement | null;
+    expect(view).not.toBeNull();
+    expect(view!.querySelector('.cp-rawview__meta')!.textContent).toMatch(/\d{1,3}(,\d{3})* 字符/);
+    expect(view!.querySelector('pre')!.textContent!.length).toBeGreaterThan(5000);
+    expect(view!.querySelector('pre')!.textContent).toContain('"kind": "teaching"');
+
+    // 复制：拿到的必须是完整串（弹层展示与复制同源）
+    const copyBtn = [...view!.querySelectorAll('button')].find((b) => b.textContent === '复制完整 JSON') as HTMLButtonElement;
+    copyBtn.click();
+    await flushPromises();
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied.length).toBeGreaterThan(5000);
+    expect(copied).toContain('"kind": "teaching"');
 
     wrapper.unmount();
   });

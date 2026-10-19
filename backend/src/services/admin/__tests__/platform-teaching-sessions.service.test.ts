@@ -25,7 +25,7 @@ jest.mock('../../teaching-session-progress.service', () => ({
 import { listTeachingSessionsDebug } from '../platform-teaching-sessions.service';
 
 /** 服务返回 unknown（见其签名）：测试只关心这两个计数 */
-type ListResult = { items: Array<{ messageCount: number; knowledgePointCount: number }> };
+type ListResult = { items: Array<{ messageCount: number; knowledgePointCount: number; endReason: string | null }> };
 
 const baseSession = {
   id: 's1',
@@ -89,6 +89,21 @@ describe('教学会话列表：大 JSON 列不得进查询', () => {
     mockPrisma.$queryRaw.mockResolvedValue([]);
     const result = (await call()) as unknown as ListResult;
     expect(result.items[0].messageCount).toBe(0);
+  });
+
+  it('endReason 由库里 json_extract 取标量，teachingState 仍不进 Prisma select', async () => {
+    mockPrisma.$queryRaw.mockResolvedValue([{ id: 's1', userCount: 3n, endReason: 'manual-end' }]);
+    const result = (await call()) as unknown as ListResult;
+    expect(result.items[0].endReason).toBe('manual-end');
+    const sql = mockPrisma.$queryRaw.mock.calls[0][0].join('|');
+    expect(sql).toContain("json_extract(s.teachingState, '$.sessionArtifacts.endReason')");
+    const select = mockPrisma.teaching_sessions.findMany.mock.calls[0][0].select;
+    expect(Object.keys(select)).not.toContain('teachingState');
+  });
+
+  it('endReason 缺失（老会话）回落 null，不编造', async () => {
+    const result = (await call()) as unknown as ListResult;
+    expect(result.items[0].endReason).toBeNull();
   });
 
   it('knowledgePointCount 仍按 knowledgeState 长度给出', async () => {

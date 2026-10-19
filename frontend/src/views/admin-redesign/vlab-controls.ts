@@ -154,18 +154,48 @@ export function vlabControlsFor(state: VsLifecycleState): VsControlDef[] {
   return (CONTROLS_BY_STATE[state] || []).map((k) => VS_CONTROL_DEFS[k])
 }
 
-/** 从会话字段推导生命周期状态（前端统一口径；paused 由 teaching.paused 派生） */
+/** 从会话字段推导生命周期状态（前端统一口径；paused 由 teaching.paused 派生）
+ *
+ *  2026-10-19 运营走查：这个函数此前**没有任何视图调用** —— 画像页与座舱各写了一份等价派生，
+ *  座舱那份（lifeStateCockpit）比状态徽章那份（runLifecycleState）少两个分支，同一个会话的
+ *  顶栏按钮簇与「运行状态」卡因此可能给出不同状态词。现在它是唯一实现：派生一律走这里。
+ *
+ *  分支顺序即优先级（与后端语义对齐）：
+ *  ① 会话终态（completed/failed/abandoned）优先——租约已撤，别的标志不再改变结论；
+ *  ② 紧急停止 teaching.manualStop（会话可能仍记 failed，但对运营已是「被终止」）；
+ *  ③ 管理员暂停 teaching.paused（会话仍是 running，但没有新记录属预期）；
+ *  ④ 自动驾驶 stopped（驱动停了、会话还在 → 同属「已暂停」）；
+ *  ⑤ created / running；
+ *  ⑥ 其余（含未加载）→ idle。 */
 export function deriveVsLifecycleState(input: {
   status?: string | null
   teachingPaused?: boolean
+  /** 紧急停止（teaching.manualStop）：会话 status 可能仍是 failed，展示为「已终止」 */
+  manualStopped?: boolean
+  /** 自动驾驶状态：stopped = 驱动器停了（会话未结束），展示为「已暂停」 */
+  autopilotStatus?: string | null
 }): VsLifecycleState {
   const st = String(input.status || '')
-  if (st && st !== 'idle') {
-    if (st === 'running') return input.teachingPaused ? 'paused' : 'running'
-    if (st === 'created') return 'created'
-    if (st === 'failed') return 'failed'
-    if (st === 'abandoned') return 'abandoned'
-    if (st === 'completed') return 'completed'
-  }
+  if (st === 'completed' || st === 'failed' || st === 'abandoned') return st
+  if (input.manualStopped) return 'abandoned'
+  if (input.teachingPaused) return 'paused'
+  if (String(input.autopilotStatus || '') === 'stopped') return 'paused'
+  if (st === 'created') return 'created'
+  if (st === 'running') return 'running'
+  return 'idle'
+}
+
+/** 画像级派生：从会话流水聚合出「这个人现在处于哪一态」（多会话取最活跃的一条）。
+ *  与单会话版同住本文件，保证状态语义与可用动作矩阵永远同源。
+ *  failed/abandoned 在 tone=bad 下合并展示（既有产品取舍）。 */
+export function deriveVsLifecycleStateFromRuns(
+  runs: ReadonlyArray<{ result?: string | null; tone?: string | null; paused?: boolean | null }>
+): VsLifecycleState {
+  if (!runs.length) return 'idle'
+  const live = (r: { result?: string | null }) => r.result === 'running' || r.result === 'created'
+  if (runs.some((r) => r.paused && live(r))) return 'paused'
+  if (runs.some(live)) return 'running'
+  if (runs.some((r) => r.tone === 'bad')) return 'failed'
+  if (runs.some((r) => r.tone === 'ok')) return 'completed'
   return 'idle'
 }

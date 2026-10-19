@@ -39,6 +39,13 @@ export type agent_registrations = $Result.DefaultSelection<Prisma.$agent_registr
  */
 export type platform_api_configs = $Result.DefaultSelection<Prisma.$platform_api_configsPayload>
 /**
+ * Model provider_secrets
+ * 供应商级密钥（BYOK，2026-10-18）：llm-providers.json 是供应商/模型的唯一真源，
+ * 但密钥严禁写进该文件（文件规则只允许 apiKeyEnv 环境变量名）。管理台表单里填的密钥落在这里
+ * （AES-256-GCM 密文，AAD=system.provider_secrets.apiKey）。运行时解析顺序：本表密文 → 进程环境变量。
+ */
+export type provider_secrets = $Result.DefaultSelection<Prisma.$provider_secretsPayload>
+/**
  * Model platform_settings
  * 
  */
@@ -256,6 +263,16 @@ export class PrismaClient<
     * ```
     */
   get platform_api_configs(): Prisma.platform_api_configsDelegate<ExtArgs>;
+
+  /**
+   * `prisma.provider_secrets`: Exposes CRUD operations for the **provider_secrets** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more Provider_secrets
+    * const provider_secrets = await prisma.provider_secrets.findMany()
+    * ```
+    */
+  get provider_secrets(): Prisma.provider_secretsDelegate<ExtArgs>;
 
   /**
    * `prisma.platform_settings`: Exposes CRUD operations for the **platform_settings** model.
@@ -792,6 +809,7 @@ export namespace Prisma {
     agent_prompts: 'agent_prompts',
     agent_registrations: 'agent_registrations',
     platform_api_configs: 'platform_api_configs',
+    provider_secrets: 'provider_secrets',
     platform_settings: 'platform_settings',
     skill_model_configs: 'skill_model_configs',
     skill_registrations: 'skill_registrations',
@@ -816,7 +834,7 @@ export namespace Prisma {
 
   export type TypeMap<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, ClientOptions = {}> = {
     meta: {
-      modelProps: "agent_lab_configs" | "agent_model_configs" | "agent_prompts" | "agent_registrations" | "platform_api_configs" | "platform_settings" | "skill_model_configs" | "skill_registrations" | "field_definitions" | "agent_contracts" | "agent_field_routings" | "node_config_changes" | "prompt_eval_cases" | "prompt_eval_runs"
+      modelProps: "agent_lab_configs" | "agent_model_configs" | "agent_prompts" | "agent_registrations" | "platform_api_configs" | "provider_secrets" | "platform_settings" | "skill_model_configs" | "skill_registrations" | "field_definitions" | "agent_contracts" | "agent_field_routings" | "node_config_changes" | "prompt_eval_cases" | "prompt_eval_runs"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -1167,6 +1185,76 @@ export namespace Prisma {
           count: {
             args: Prisma.platform_api_configsCountArgs<ExtArgs>
             result: $Utils.Optional<Platform_api_configsCountAggregateOutputType> | number
+          }
+        }
+      }
+      provider_secrets: {
+        payload: Prisma.$provider_secretsPayload<ExtArgs>
+        fields: Prisma.provider_secretsFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.provider_secretsFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$provider_secretsPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.provider_secretsFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$provider_secretsPayload>
+          }
+          findFirst: {
+            args: Prisma.provider_secretsFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$provider_secretsPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.provider_secretsFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$provider_secretsPayload>
+          }
+          findMany: {
+            args: Prisma.provider_secretsFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$provider_secretsPayload>[]
+          }
+          create: {
+            args: Prisma.provider_secretsCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$provider_secretsPayload>
+          }
+          createMany: {
+            args: Prisma.provider_secretsCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.provider_secretsCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$provider_secretsPayload>[]
+          }
+          delete: {
+            args: Prisma.provider_secretsDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$provider_secretsPayload>
+          }
+          update: {
+            args: Prisma.provider_secretsUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$provider_secretsPayload>
+          }
+          deleteMany: {
+            args: Prisma.provider_secretsDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.provider_secretsUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          upsert: {
+            args: Prisma.provider_secretsUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$provider_secretsPayload>
+          }
+          aggregate: {
+            args: Prisma.Provider_secretsAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateProvider_secrets>
+          }
+          groupBy: {
+            args: Prisma.provider_secretsGroupByArgs<ExtArgs>
+            result: $Utils.Optional<Provider_secretsGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.provider_secretsCountArgs<ExtArgs>
+            result: $Utils.Optional<Provider_secretsCountAggregateOutputType> | number
           }
         }
       }
@@ -7342,6 +7430,900 @@ export namespace Prisma {
      * Select specific fields to fetch from the platform_api_configs
      */
     select?: platform_api_configsSelect<ExtArgs> | null
+  }
+
+
+  /**
+   * Model provider_secrets
+   */
+
+  export type AggregateProvider_secrets = {
+    _count: Provider_secretsCountAggregateOutputType | null
+    _min: Provider_secretsMinAggregateOutputType | null
+    _max: Provider_secretsMaxAggregateOutputType | null
+  }
+
+  export type Provider_secretsMinAggregateOutputType = {
+    id: string | null
+    providerId: string | null
+    apiKey: string | null
+    apiKeyEnv: string | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type Provider_secretsMaxAggregateOutputType = {
+    id: string | null
+    providerId: string | null
+    apiKey: string | null
+    apiKeyEnv: string | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type Provider_secretsCountAggregateOutputType = {
+    id: number
+    providerId: number
+    apiKey: number
+    apiKeyEnv: number
+    createdAt: number
+    updatedAt: number
+    _all: number
+  }
+
+
+  export type Provider_secretsMinAggregateInputType = {
+    id?: true
+    providerId?: true
+    apiKey?: true
+    apiKeyEnv?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type Provider_secretsMaxAggregateInputType = {
+    id?: true
+    providerId?: true
+    apiKey?: true
+    apiKeyEnv?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type Provider_secretsCountAggregateInputType = {
+    id?: true
+    providerId?: true
+    apiKey?: true
+    apiKeyEnv?: true
+    createdAt?: true
+    updatedAt?: true
+    _all?: true
+  }
+
+  export type Provider_secretsAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which provider_secrets to aggregate.
+     */
+    where?: provider_secretsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of provider_secrets to fetch.
+     */
+    orderBy?: provider_secretsOrderByWithRelationInput | provider_secretsOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: provider_secretsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` provider_secrets from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` provider_secrets.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned provider_secrets
+    **/
+    _count?: true | Provider_secretsCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: Provider_secretsMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: Provider_secretsMaxAggregateInputType
+  }
+
+  export type GetProvider_secretsAggregateType<T extends Provider_secretsAggregateArgs> = {
+        [P in keyof T & keyof AggregateProvider_secrets]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateProvider_secrets[P]>
+      : GetScalarType<T[P], AggregateProvider_secrets[P]>
+  }
+
+
+
+
+  export type provider_secretsGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: provider_secretsWhereInput
+    orderBy?: provider_secretsOrderByWithAggregationInput | provider_secretsOrderByWithAggregationInput[]
+    by: Provider_secretsScalarFieldEnum[] | Provider_secretsScalarFieldEnum
+    having?: provider_secretsScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: Provider_secretsCountAggregateInputType | true
+    _min?: Provider_secretsMinAggregateInputType
+    _max?: Provider_secretsMaxAggregateInputType
+  }
+
+  export type Provider_secretsGroupByOutputType = {
+    id: string
+    providerId: string
+    apiKey: string
+    apiKeyEnv: string | null
+    createdAt: Date
+    updatedAt: Date
+    _count: Provider_secretsCountAggregateOutputType | null
+    _min: Provider_secretsMinAggregateOutputType | null
+    _max: Provider_secretsMaxAggregateOutputType | null
+  }
+
+  type GetProvider_secretsGroupByPayload<T extends provider_secretsGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<Provider_secretsGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof Provider_secretsGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], Provider_secretsGroupByOutputType[P]>
+            : GetScalarType<T[P], Provider_secretsGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type provider_secretsSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    providerId?: boolean
+    apiKey?: boolean
+    apiKeyEnv?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }, ExtArgs["result"]["provider_secrets"]>
+
+  export type provider_secretsSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    providerId?: boolean
+    apiKey?: boolean
+    apiKeyEnv?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }, ExtArgs["result"]["provider_secrets"]>
+
+  export type provider_secretsSelectScalar = {
+    id?: boolean
+    providerId?: boolean
+    apiKey?: boolean
+    apiKeyEnv?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }
+
+
+  export type $provider_secretsPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "provider_secrets"
+    objects: {}
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      providerId: string
+      /**
+       * 明文密钥的密文（wfsec:v1: 信封）
+       */
+      apiKey: string
+      /**
+       * 文件中该供应商声明的环境变量名（UI 写入时自动生成，作为无密文时的回落来源）
+       */
+      apiKeyEnv: string | null
+      createdAt: Date
+      updatedAt: Date
+    }, ExtArgs["result"]["provider_secrets"]>
+    composites: {}
+  }
+
+  type provider_secretsGetPayload<S extends boolean | null | undefined | provider_secretsDefaultArgs> = $Result.GetResult<Prisma.$provider_secretsPayload, S>
+
+  type provider_secretsCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = 
+    Omit<provider_secretsFindManyArgs, 'select' | 'include' | 'distinct'> & {
+      select?: Provider_secretsCountAggregateInputType | true
+    }
+
+  export interface provider_secretsDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['provider_secrets'], meta: { name: 'provider_secrets' } }
+    /**
+     * Find zero or one Provider_secrets that matches the filter.
+     * @param {provider_secretsFindUniqueArgs} args - Arguments to find a Provider_secrets
+     * @example
+     * // Get one Provider_secrets
+     * const provider_secrets = await prisma.provider_secrets.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends provider_secretsFindUniqueArgs>(args: SelectSubset<T, provider_secretsFindUniqueArgs<ExtArgs>>): Prisma__provider_secretsClient<$Result.GetResult<Prisma.$provider_secretsPayload<ExtArgs>, T, "findUnique"> | null, null, ExtArgs>
+
+    /**
+     * Find one Provider_secrets that matches the filter or throw an error with `error.code='P2025'` 
+     * if no matches were found.
+     * @param {provider_secretsFindUniqueOrThrowArgs} args - Arguments to find a Provider_secrets
+     * @example
+     * // Get one Provider_secrets
+     * const provider_secrets = await prisma.provider_secrets.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends provider_secretsFindUniqueOrThrowArgs>(args: SelectSubset<T, provider_secretsFindUniqueOrThrowArgs<ExtArgs>>): Prisma__provider_secretsClient<$Result.GetResult<Prisma.$provider_secretsPayload<ExtArgs>, T, "findUniqueOrThrow">, never, ExtArgs>
+
+    /**
+     * Find the first Provider_secrets that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {provider_secretsFindFirstArgs} args - Arguments to find a Provider_secrets
+     * @example
+     * // Get one Provider_secrets
+     * const provider_secrets = await prisma.provider_secrets.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends provider_secretsFindFirstArgs>(args?: SelectSubset<T, provider_secretsFindFirstArgs<ExtArgs>>): Prisma__provider_secretsClient<$Result.GetResult<Prisma.$provider_secretsPayload<ExtArgs>, T, "findFirst"> | null, null, ExtArgs>
+
+    /**
+     * Find the first Provider_secrets that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {provider_secretsFindFirstOrThrowArgs} args - Arguments to find a Provider_secrets
+     * @example
+     * // Get one Provider_secrets
+     * const provider_secrets = await prisma.provider_secrets.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends provider_secretsFindFirstOrThrowArgs>(args?: SelectSubset<T, provider_secretsFindFirstOrThrowArgs<ExtArgs>>): Prisma__provider_secretsClient<$Result.GetResult<Prisma.$provider_secretsPayload<ExtArgs>, T, "findFirstOrThrow">, never, ExtArgs>
+
+    /**
+     * Find zero or more Provider_secrets that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {provider_secretsFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all Provider_secrets
+     * const provider_secrets = await prisma.provider_secrets.findMany()
+     * 
+     * // Get first 10 Provider_secrets
+     * const provider_secrets = await prisma.provider_secrets.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const provider_secretsWithIdOnly = await prisma.provider_secrets.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends provider_secretsFindManyArgs>(args?: SelectSubset<T, provider_secretsFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$provider_secretsPayload<ExtArgs>, T, "findMany">>
+
+    /**
+     * Create a Provider_secrets.
+     * @param {provider_secretsCreateArgs} args - Arguments to create a Provider_secrets.
+     * @example
+     * // Create one Provider_secrets
+     * const Provider_secrets = await prisma.provider_secrets.create({
+     *   data: {
+     *     // ... data to create a Provider_secrets
+     *   }
+     * })
+     * 
+     */
+    create<T extends provider_secretsCreateArgs>(args: SelectSubset<T, provider_secretsCreateArgs<ExtArgs>>): Prisma__provider_secretsClient<$Result.GetResult<Prisma.$provider_secretsPayload<ExtArgs>, T, "create">, never, ExtArgs>
+
+    /**
+     * Create many Provider_secrets.
+     * @param {provider_secretsCreateManyArgs} args - Arguments to create many Provider_secrets.
+     * @example
+     * // Create many Provider_secrets
+     * const provider_secrets = await prisma.provider_secrets.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends provider_secretsCreateManyArgs>(args?: SelectSubset<T, provider_secretsCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many Provider_secrets and returns the data saved in the database.
+     * @param {provider_secretsCreateManyAndReturnArgs} args - Arguments to create many Provider_secrets.
+     * @example
+     * // Create many Provider_secrets
+     * const provider_secrets = await prisma.provider_secrets.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many Provider_secrets and only return the `id`
+     * const provider_secretsWithIdOnly = await prisma.provider_secrets.createManyAndReturn({ 
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends provider_secretsCreateManyAndReturnArgs>(args?: SelectSubset<T, provider_secretsCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$provider_secretsPayload<ExtArgs>, T, "createManyAndReturn">>
+
+    /**
+     * Delete a Provider_secrets.
+     * @param {provider_secretsDeleteArgs} args - Arguments to delete one Provider_secrets.
+     * @example
+     * // Delete one Provider_secrets
+     * const Provider_secrets = await prisma.provider_secrets.delete({
+     *   where: {
+     *     // ... filter to delete one Provider_secrets
+     *   }
+     * })
+     * 
+     */
+    delete<T extends provider_secretsDeleteArgs>(args: SelectSubset<T, provider_secretsDeleteArgs<ExtArgs>>): Prisma__provider_secretsClient<$Result.GetResult<Prisma.$provider_secretsPayload<ExtArgs>, T, "delete">, never, ExtArgs>
+
+    /**
+     * Update one Provider_secrets.
+     * @param {provider_secretsUpdateArgs} args - Arguments to update one Provider_secrets.
+     * @example
+     * // Update one Provider_secrets
+     * const provider_secrets = await prisma.provider_secrets.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends provider_secretsUpdateArgs>(args: SelectSubset<T, provider_secretsUpdateArgs<ExtArgs>>): Prisma__provider_secretsClient<$Result.GetResult<Prisma.$provider_secretsPayload<ExtArgs>, T, "update">, never, ExtArgs>
+
+    /**
+     * Delete zero or more Provider_secrets.
+     * @param {provider_secretsDeleteManyArgs} args - Arguments to filter Provider_secrets to delete.
+     * @example
+     * // Delete a few Provider_secrets
+     * const { count } = await prisma.provider_secrets.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends provider_secretsDeleteManyArgs>(args?: SelectSubset<T, provider_secretsDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more Provider_secrets.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {provider_secretsUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many Provider_secrets
+     * const provider_secrets = await prisma.provider_secrets.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends provider_secretsUpdateManyArgs>(args: SelectSubset<T, provider_secretsUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create or update one Provider_secrets.
+     * @param {provider_secretsUpsertArgs} args - Arguments to update or create a Provider_secrets.
+     * @example
+     * // Update or create a Provider_secrets
+     * const provider_secrets = await prisma.provider_secrets.upsert({
+     *   create: {
+     *     // ... data to create a Provider_secrets
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the Provider_secrets we want to update
+     *   }
+     * })
+     */
+    upsert<T extends provider_secretsUpsertArgs>(args: SelectSubset<T, provider_secretsUpsertArgs<ExtArgs>>): Prisma__provider_secretsClient<$Result.GetResult<Prisma.$provider_secretsPayload<ExtArgs>, T, "upsert">, never, ExtArgs>
+
+
+    /**
+     * Count the number of Provider_secrets.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {provider_secretsCountArgs} args - Arguments to filter Provider_secrets to count.
+     * @example
+     * // Count the number of Provider_secrets
+     * const count = await prisma.provider_secrets.count({
+     *   where: {
+     *     // ... the filter for the Provider_secrets we want to count
+     *   }
+     * })
+    **/
+    count<T extends provider_secretsCountArgs>(
+      args?: Subset<T, provider_secretsCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], Provider_secretsCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a Provider_secrets.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {Provider_secretsAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends Provider_secretsAggregateArgs>(args: Subset<T, Provider_secretsAggregateArgs>): Prisma.PrismaPromise<GetProvider_secretsAggregateType<T>>
+
+    /**
+     * Group by Provider_secrets.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {provider_secretsGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends provider_secretsGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: provider_secretsGroupByArgs['orderBy'] }
+        : { orderBy?: provider_secretsGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, provider_secretsGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetProvider_secretsGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the provider_secrets model
+   */
+  readonly fields: provider_secretsFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for provider_secrets.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__provider_secretsClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the provider_secrets model
+   */ 
+  interface provider_secretsFieldRefs {
+    readonly id: FieldRef<"provider_secrets", 'String'>
+    readonly providerId: FieldRef<"provider_secrets", 'String'>
+    readonly apiKey: FieldRef<"provider_secrets", 'String'>
+    readonly apiKeyEnv: FieldRef<"provider_secrets", 'String'>
+    readonly createdAt: FieldRef<"provider_secrets", 'DateTime'>
+    readonly updatedAt: FieldRef<"provider_secrets", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * provider_secrets findUnique
+   */
+  export type provider_secretsFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the provider_secrets
+     */
+    select?: provider_secretsSelect<ExtArgs> | null
+    /**
+     * Filter, which provider_secrets to fetch.
+     */
+    where: provider_secretsWhereUniqueInput
+  }
+
+  /**
+   * provider_secrets findUniqueOrThrow
+   */
+  export type provider_secretsFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the provider_secrets
+     */
+    select?: provider_secretsSelect<ExtArgs> | null
+    /**
+     * Filter, which provider_secrets to fetch.
+     */
+    where: provider_secretsWhereUniqueInput
+  }
+
+  /**
+   * provider_secrets findFirst
+   */
+  export type provider_secretsFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the provider_secrets
+     */
+    select?: provider_secretsSelect<ExtArgs> | null
+    /**
+     * Filter, which provider_secrets to fetch.
+     */
+    where?: provider_secretsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of provider_secrets to fetch.
+     */
+    orderBy?: provider_secretsOrderByWithRelationInput | provider_secretsOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for provider_secrets.
+     */
+    cursor?: provider_secretsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` provider_secrets from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` provider_secrets.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of provider_secrets.
+     */
+    distinct?: Provider_secretsScalarFieldEnum | Provider_secretsScalarFieldEnum[]
+  }
+
+  /**
+   * provider_secrets findFirstOrThrow
+   */
+  export type provider_secretsFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the provider_secrets
+     */
+    select?: provider_secretsSelect<ExtArgs> | null
+    /**
+     * Filter, which provider_secrets to fetch.
+     */
+    where?: provider_secretsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of provider_secrets to fetch.
+     */
+    orderBy?: provider_secretsOrderByWithRelationInput | provider_secretsOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for provider_secrets.
+     */
+    cursor?: provider_secretsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` provider_secrets from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` provider_secrets.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of provider_secrets.
+     */
+    distinct?: Provider_secretsScalarFieldEnum | Provider_secretsScalarFieldEnum[]
+  }
+
+  /**
+   * provider_secrets findMany
+   */
+  export type provider_secretsFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the provider_secrets
+     */
+    select?: provider_secretsSelect<ExtArgs> | null
+    /**
+     * Filter, which provider_secrets to fetch.
+     */
+    where?: provider_secretsWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of provider_secrets to fetch.
+     */
+    orderBy?: provider_secretsOrderByWithRelationInput | provider_secretsOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing provider_secrets.
+     */
+    cursor?: provider_secretsWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` provider_secrets from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` provider_secrets.
+     */
+    skip?: number
+    distinct?: Provider_secretsScalarFieldEnum | Provider_secretsScalarFieldEnum[]
+  }
+
+  /**
+   * provider_secrets create
+   */
+  export type provider_secretsCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the provider_secrets
+     */
+    select?: provider_secretsSelect<ExtArgs> | null
+    /**
+     * The data needed to create a provider_secrets.
+     */
+    data: XOR<provider_secretsCreateInput, provider_secretsUncheckedCreateInput>
+  }
+
+  /**
+   * provider_secrets createMany
+   */
+  export type provider_secretsCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many provider_secrets.
+     */
+    data: provider_secretsCreateManyInput | provider_secretsCreateManyInput[]
+  }
+
+  /**
+   * provider_secrets createManyAndReturn
+   */
+  export type provider_secretsCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the provider_secrets
+     */
+    select?: provider_secretsSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * The data used to create many provider_secrets.
+     */
+    data: provider_secretsCreateManyInput | provider_secretsCreateManyInput[]
+  }
+
+  /**
+   * provider_secrets update
+   */
+  export type provider_secretsUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the provider_secrets
+     */
+    select?: provider_secretsSelect<ExtArgs> | null
+    /**
+     * The data needed to update a provider_secrets.
+     */
+    data: XOR<provider_secretsUpdateInput, provider_secretsUncheckedUpdateInput>
+    /**
+     * Choose, which provider_secrets to update.
+     */
+    where: provider_secretsWhereUniqueInput
+  }
+
+  /**
+   * provider_secrets updateMany
+   */
+  export type provider_secretsUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update provider_secrets.
+     */
+    data: XOR<provider_secretsUpdateManyMutationInput, provider_secretsUncheckedUpdateManyInput>
+    /**
+     * Filter which provider_secrets to update
+     */
+    where?: provider_secretsWhereInput
+  }
+
+  /**
+   * provider_secrets upsert
+   */
+  export type provider_secretsUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the provider_secrets
+     */
+    select?: provider_secretsSelect<ExtArgs> | null
+    /**
+     * The filter to search for the provider_secrets to update in case it exists.
+     */
+    where: provider_secretsWhereUniqueInput
+    /**
+     * In case the provider_secrets found by the `where` argument doesn't exist, create a new provider_secrets with this data.
+     */
+    create: XOR<provider_secretsCreateInput, provider_secretsUncheckedCreateInput>
+    /**
+     * In case the provider_secrets was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<provider_secretsUpdateInput, provider_secretsUncheckedUpdateInput>
+  }
+
+  /**
+   * provider_secrets delete
+   */
+  export type provider_secretsDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the provider_secrets
+     */
+    select?: provider_secretsSelect<ExtArgs> | null
+    /**
+     * Filter which provider_secrets to delete.
+     */
+    where: provider_secretsWhereUniqueInput
+  }
+
+  /**
+   * provider_secrets deleteMany
+   */
+  export type provider_secretsDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which provider_secrets to delete
+     */
+    where?: provider_secretsWhereInput
+  }
+
+  /**
+   * provider_secrets without action
+   */
+  export type provider_secretsDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the provider_secrets
+     */
+    select?: provider_secretsSelect<ExtArgs> | null
   }
 
 
@@ -16399,6 +17381,18 @@ export namespace Prisma {
   export type Platform_api_configsScalarFieldEnum = (typeof Platform_api_configsScalarFieldEnum)[keyof typeof Platform_api_configsScalarFieldEnum]
 
 
+  export const Provider_secretsScalarFieldEnum: {
+    id: 'id',
+    providerId: 'providerId',
+    apiKey: 'apiKey',
+    apiKeyEnv: 'apiKeyEnv',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+  };
+
+  export type Provider_secretsScalarFieldEnum = (typeof Provider_secretsScalarFieldEnum)[keyof typeof Provider_secretsScalarFieldEnum]
+
+
   export const Platform_settingsScalarFieldEnum: {
     key: 'key',
     value: 'value',
@@ -17218,6 +18212,63 @@ export namespace Prisma {
     adminAllowedIps?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
     allowPrivateNetwork?: BoolNullableWithAggregatesFilter<"platform_api_configs"> | boolean | null
     privateNetworkHosts?: StringNullableWithAggregatesFilter<"platform_api_configs"> | string | null
+  }
+
+  export type provider_secretsWhereInput = {
+    AND?: provider_secretsWhereInput | provider_secretsWhereInput[]
+    OR?: provider_secretsWhereInput[]
+    NOT?: provider_secretsWhereInput | provider_secretsWhereInput[]
+    id?: StringFilter<"provider_secrets"> | string
+    providerId?: StringFilter<"provider_secrets"> | string
+    apiKey?: StringFilter<"provider_secrets"> | string
+    apiKeyEnv?: StringNullableFilter<"provider_secrets"> | string | null
+    createdAt?: DateTimeFilter<"provider_secrets"> | Date | string
+    updatedAt?: DateTimeFilter<"provider_secrets"> | Date | string
+  }
+
+  export type provider_secretsOrderByWithRelationInput = {
+    id?: SortOrder
+    providerId?: SortOrder
+    apiKey?: SortOrder
+    apiKeyEnv?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type provider_secretsWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    providerId?: string
+    AND?: provider_secretsWhereInput | provider_secretsWhereInput[]
+    OR?: provider_secretsWhereInput[]
+    NOT?: provider_secretsWhereInput | provider_secretsWhereInput[]
+    apiKey?: StringFilter<"provider_secrets"> | string
+    apiKeyEnv?: StringNullableFilter<"provider_secrets"> | string | null
+    createdAt?: DateTimeFilter<"provider_secrets"> | Date | string
+    updatedAt?: DateTimeFilter<"provider_secrets"> | Date | string
+  }, "id" | "providerId">
+
+  export type provider_secretsOrderByWithAggregationInput = {
+    id?: SortOrder
+    providerId?: SortOrder
+    apiKey?: SortOrder
+    apiKeyEnv?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+    _count?: provider_secretsCountOrderByAggregateInput
+    _max?: provider_secretsMaxOrderByAggregateInput
+    _min?: provider_secretsMinOrderByAggregateInput
+  }
+
+  export type provider_secretsScalarWhereWithAggregatesInput = {
+    AND?: provider_secretsScalarWhereWithAggregatesInput | provider_secretsScalarWhereWithAggregatesInput[]
+    OR?: provider_secretsScalarWhereWithAggregatesInput[]
+    NOT?: provider_secretsScalarWhereWithAggregatesInput | provider_secretsScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"provider_secrets"> | string
+    providerId?: StringWithAggregatesFilter<"provider_secrets"> | string
+    apiKey?: StringWithAggregatesFilter<"provider_secrets"> | string
+    apiKeyEnv?: StringNullableWithAggregatesFilter<"provider_secrets"> | string | null
+    createdAt?: DateTimeWithAggregatesFilter<"provider_secrets"> | Date | string
+    updatedAt?: DateTimeWithAggregatesFilter<"provider_secrets"> | Date | string
   }
 
   export type platform_settingsWhereInput = {
@@ -18785,6 +19836,69 @@ export namespace Prisma {
     adminAllowedIps?: NullableStringFieldUpdateOperationsInput | string | null
     allowPrivateNetwork?: NullableBoolFieldUpdateOperationsInput | boolean | null
     privateNetworkHosts?: NullableStringFieldUpdateOperationsInput | string | null
+  }
+
+  export type provider_secretsCreateInput = {
+    id?: string
+    providerId: string
+    apiKey: string
+    apiKeyEnv?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type provider_secretsUncheckedCreateInput = {
+    id?: string
+    providerId: string
+    apiKey: string
+    apiKeyEnv?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type provider_secretsUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    apiKey?: StringFieldUpdateOperationsInput | string
+    apiKeyEnv?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type provider_secretsUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    apiKey?: StringFieldUpdateOperationsInput | string
+    apiKeyEnv?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type provider_secretsCreateManyInput = {
+    id?: string
+    providerId: string
+    apiKey: string
+    apiKeyEnv?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type provider_secretsUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    apiKey?: StringFieldUpdateOperationsInput | string
+    apiKeyEnv?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type provider_secretsUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    apiKey?: StringFieldUpdateOperationsInput | string
+    apiKeyEnv?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type platform_settingsCreateInput = {
@@ -20427,6 +21541,33 @@ export namespace Prisma {
     _max?: NestedBoolNullableFilter<$PrismaModel>
   }
 
+  export type provider_secretsCountOrderByAggregateInput = {
+    id?: SortOrder
+    providerId?: SortOrder
+    apiKey?: SortOrder
+    apiKeyEnv?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type provider_secretsMaxOrderByAggregateInput = {
+    id?: SortOrder
+    providerId?: SortOrder
+    apiKey?: SortOrder
+    apiKeyEnv?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type provider_secretsMinOrderByAggregateInput = {
+    id?: SortOrder
+    providerId?: SortOrder
+    apiKey?: SortOrder
+    apiKeyEnv?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
   export type platform_settingsCountOrderByAggregateInput = {
     key?: SortOrder
     value?: SortOrder
@@ -21247,6 +22388,10 @@ export namespace Prisma {
      * @deprecated Use platform_api_configsDefaultArgs instead
      */
     export type platform_api_configsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = platform_api_configsDefaultArgs<ExtArgs>
+    /**
+     * @deprecated Use provider_secretsDefaultArgs instead
+     */
+    export type provider_secretsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = provider_secretsDefaultArgs<ExtArgs>
     /**
      * @deprecated Use platform_settingsDefaultArgs instead
      */

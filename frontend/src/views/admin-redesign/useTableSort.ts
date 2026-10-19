@@ -36,6 +36,9 @@ export interface UseTableSortOptions<T> {
   defaultKey?: string
   /** 默认方向（默认 'desc'） */
   defaultDir?: SortDir
+  /** 分列默认方向（可选）：没配则回落 defaultDir。用于「换列时该列的首击方向不同」的表，
+   *  例如记忆强度首击升序（弱在前）、提取次数首击降序（多在前）。 */
+  defaultDirOf?: Record<string, SortDir>
   /** 可选：localStorage 键，记住上次排序（与 MkCols 的持久化约定一致） */
   storageKey?: string
 }
@@ -114,7 +117,7 @@ export function useTableSort<T>(options: UseTableSortOptions<T>): UseTableSort<T
       sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
     } else {
       sortKey.value = key
-      sortDir.value = options.defaultDir ?? 'desc'
+      sortDir.value = options.defaultDirOf?.[key] ?? options.defaultDir ?? 'desc'
     }
     persist()
   }
@@ -147,7 +150,9 @@ export function useTableSort<T>(options: UseTableSortOptions<T>): UseTableSort<T
 
   function reset() {
     sortKey.value = validDefault
-    sortDir.value = options.defaultDir ?? 'desc'
+    // 回到默认列时方向也要取该列的默认方向：否则“重置”会得到一个从未出现过的组合
+    // （例：记忆强度首击升序，重置后变降序，最弱的排到末尾——与列头自己声明的口径相反）
+    sortDir.value = (validDefault ? options.defaultDirOf?.[validDefault] : undefined) ?? options.defaultDir ?? 'desc'
     persist()
   }
 

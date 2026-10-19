@@ -469,10 +469,16 @@
           </div>
           <!-- T2 硬约束 2「结论与细节分层」：结论行常驻可见，明细折叠。
                结论文字完全取自本卡已有数据（条数 + 卡片里本来就标的「证据不足」），未新增判断。
-               P2 口径：「共 N 条」改「最近 N 条」——接口侧 limit=20，列表不是全量 -->
-          <p v-if="evidence.length" class="mk-section__conclusion">
-            最近 {{ evidence.length }} 条学习事件（教学事件仅取近 20 条），其中
-            {{ evidence.filter((e) => evidenceLowConfidence(e.score) && !isDomainEvidence(e.title)).length }} 条置信度低于 50%（仅供参照）。
+               P2 口径：「共 N 条」改「最近 N 条」——接口侧 limit=20，列表不是全量。
+               2026-10-18 用户走查「这类文案」：两个限定语（教学域截断、低置信仅供参照）从结论行
+               移入 title——结论行只报两个读数，悬停仍能看到它们成立的前提。 -->
+          <p
+            v-if="evidence.length"
+            class="mk-section__conclusion"
+            title="教学类事件接口侧只取近 20 条，目标与路径类事件全量并入，故本行是「最近」而非「共」。低置信计数仅供参考，不构成「证据不足」判定"
+          >
+            最近 {{ evidence.length }} 条学习事件，其中
+            {{ evidence.filter((e) => evidenceLowConfidence(e.score) && !isDomainEvidence(e.title)).length }} 条置信度低于 50%。
           </p>
           <!-- 明细常驻（2026-10-11 用户走查「折叠干嘛」）：监控窗改内滚后折叠失去职责——
                它挡住的正是视口内的滚动容器，结论行本就常驻其上；撤 details 直接渲染。
@@ -755,7 +761,6 @@
                       <i class="mk-minibar__fill" :data-tone="sessionProgressTone(s.status) || undefined" :style="{ width: (sessionProgressPct(s.progress) ?? 0) + '%' }"></i>
                     </span>
                   </span>
-                  <span v-else-if="sessionProgressDone(s.status)" class="ld-prog ld-prog--done" :title="ldProgTitle(s)">已完成</span>
                   <span v-else class="ld-sub">—</span>
                 </td>
                 <td>
@@ -817,7 +822,28 @@
             <thead>
               <!-- 「来源」列名与取值不符（值是提取次数与最近提取时间，不是来源）→ 更名「提取史」，
                    并把 lastSeenAt 一并消费（原先只出计数，最近提取时间被 title 藏着） -->
-              <tr><th>知识点</th><th>记忆强度</th><th>复习到期</th><th>提取史</th><th>状态</th></tr>
+              <tr>
+                <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('concept')"
+                  title="点列头排序：按知识点名称（中文拼音序）"
+                  @click="toggleMemSort('concept')"
+                ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('concept')">知识点<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+                <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('strength')"
+                  title="点列头排序：升序 = 记忆强度最弱的在前（没有强度读数的行恒排末尾）"
+                  @click="toggleMemSort('strength')"
+                ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('strength')">记忆强度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+                <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('due')"
+                  title="点列头排序：升序 = 逾期最久的在前（没有到期时间的行恒排末尾）"
+                  @click="toggleMemSort('due')"
+                ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('due')">复习到期<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+                <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('extract')"
+                  title="点列头排序：降序 = 提取次数最多的在前"
+                  @click="toggleMemSort('extract')"
+                ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('extract')">提取史<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+                <th scope="col" class="mk-th--sortable" :aria-sort="memSortState('state')"
+                  title="点列头排序：按复习状态分档（待复习 → 稳固 → 学习中 → 薄弱 → 未初始化）"
+                  @click="toggleMemSort('state')"
+                ><button type="button" class="mk-th__btn" @click.stop="toggleMemSort('state')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              </tr>
             </thead>
             <tbody>
               <!-- 降透明度只标「未初始化」（无任何记忆痕迹），不标「无强度读数」：
@@ -873,14 +899,15 @@ import { learnerMetric, LEARNER_METRIC_CODES, type LearnerMetricKey } from '@/ut
 // pathStatusText：路径域状态文案（active → 「学习中」；全局字典是「进行中」）。本文件已从
 // './statusText' 引入同名 statusText（会话域），故此处显式改名，避免两条文案链混用。
 import { loadCaliber, panelScopeNote, statusText as pathStatusText } from './opsShared'
+import { useTableSort } from './useTableSort'
 import { adminLearningContentApi, adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
 import {
   statusText,
   sessionStatusBadgeCls,
   sessionProgressPct,
   sessionProgressText,
-  sessionProgressTone,
-  sessionProgressDone
+  sessionProgressTitle,
+  sessionProgressTone
 } from './statusText'
 import type { SessionProgress } from './statusText'
 import type { ConceptBarTone, ConceptLedgerItem, LearnerTab } from './learner-profile'
@@ -985,8 +1012,11 @@ function normalizeLdTab(v: unknown): LdTab {
   return isLdTab(s) ? s : normalizeLearnerTab(s)
 }
 
-// 默认落点统一「概览」（2026-10-11 用户拍板，两轴入口一致）；无学习数据的账号轴入口
-// 由 loadDetail 兜底切「账号与许可」（见该处注释）
+/* 缺省落点「概览」：无落点提示的入口（画像「查真实学习者」、会话列表下钻、裸深链）用它。
+   列表条目自带落点页签（?tab=，常量单点在 store 的 LEARNER_DETAIL_LANDING）：学习状态列表
+   落「证据」、记忆与复习列表落「记忆与复习」——2026-10-18 用户走查改「一律概览」为按列表主题
+   落点（旧约定 2026-10-11「两轴入口一致」）。无学习数据的账号轴入口由 loadDetail 兜底切
+   「账号与许可」（见该处注释）。 */
 const tab = ref<LdTab>('overview')
 
 const tabs = [
@@ -1226,8 +1256,8 @@ const ldSessView = ref<'active' | 'discarded' | 'all'>('active')
 /* 有效行复用概览「最近会话」的同一过滤（activeSessionRows，本文件下方定义） */
 const ldSessDiscardedRows = computed(() => ldSessionRows.value.filter((r) => r.status === 'discarded'))
 const ldSessViews = computed(() => [
-  { key: 'active' as const, label: '有效', count: activeSessionRows.value.length, title: '有教学内容的会话（含超时/失败的信号会话；不含重置作废的旧会话）' },
-  { key: 'discarded' as const, label: '已废弃', count: ldSessDiscardedRows.value.length, title: '学习者点「重新开始」后作废的旧会话；时长按真实有效时长保留，仍属学习记录' },
+  { key: 'active' as const, label: '有效', count: activeSessionRows.value.length, title: '有教学内容的会话，含超时与失败的信号会话，不含重置作废的旧会话' },
+  { key: 'discarded' as const, label: '已废弃', count: ldSessDiscardedRows.value.length, title: '学习者点「重新开始」后作废的旧会话，时长按真实有效时长保留，仍属学习记录' },
   { key: 'all' as const, label: '窗口全部', count: ldSessionRows.value.length, title: `最近 ${LD_SESSION_WINDOW} 条窗口内的全部会话（含已废弃）` }
 ])
 const ldSessViewRows = computed(() =>
@@ -1242,7 +1272,7 @@ const ldSessionMetaText = computed(() => {
   const scope = scopeNote.value.label
   if (!all) return scope
   const win = all >= LD_SESSION_WINDOW ? `近 ${LD_SESSION_WINDOW} 条窗口` : `${all} 条`
-  return `${win} · 有效 ${activeSessionRows.value.length} · 废弃 ${ldSessDiscardedRows.value.length} · ${scope}`
+  return `${win} · 有效 ${activeSessionRows.value.length} · 废弃 ${ldSessDiscardedRows.value.length}`
 })
 const ldSessionMetaTitle = computed(() => {
   const base =
@@ -1306,7 +1336,8 @@ function ldInteractTitle(r: LdSessionRow): string {
 }
 function ldProgTitle(r: LdSessionRow): string {
   if (!r.progress) return '无任务级进度数据'
-  return `路径任务进度：第 ${r.progress.taskIndex}/${r.progress.totalTasks} 个任务（里程碑 ${r.progress.milestoneIndex}/${r.progress.totalMilestones}）`
+  const pos = sessionProgressTitle(r.progress, { withMilestone: true })
+  return pos ? `路径任务进度：${pos}` : '无任务级进度数据'
 }
 const ldSessLoading = ref(false)
 const ldSessError = ref(false)
@@ -1431,8 +1462,10 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
   // （此前无条件置 'overview'，会把 ?tab=profile/evidence/graph 的深链与刷新全部冲掉——
   //  与上方「P0-2 tab 路由化：?tab= 深链/刷新保持」的约定相矛盾，实测发现。）
   const urlTab = typeof tabRoute.query.tab === 'string' ? tabRoute.query.tab.trim() : ''
-  // 默认落点统一「概览」（2026-10-11 用户拍板）：列表行已展示账号事实，点「详情」的动机是看
-  // 学习侧；两轴入口落点一致，心智模型简单。?tab= 深链/刷新仍优先。
+  // 落点来源：?tab=（列表条目带进来的落点页签，或读者自己切过的页签）> 概览。
+  // 2026-10-11 曾统一为「概览」（列表行已展示账号事实，点详情的动机是看学习侧）；
+  // 2026-10-18 用户走查改为按列表主题落点（学习状态→证据、记忆与复习→记忆与复习），
+  // 由列表页在打开二级页时带 ?tab=（映射单点在 store 的 LEARNER_DETAIL_LANDING）。
   tab.value = urlTab ? normalizeLdTab(urlTab) : 'overview'
   const base = liveLearners.value.find((l) => l.userId === id)
   // 路径作用域：取页级开关的值（'' = 全部路径 → 不传 pathId，后端走 global 聚合）。
@@ -2374,7 +2407,26 @@ function dueText(dueAt: string): string {
       3% 且逾期原先是琥珀，读数本身该是红的；
    ② 排序显式化：待复习（逾期最久在前）→ 有痕迹未到期（按到期升序）→ 未初始化压尾。
       此前直接透传接口顺序，口径不可读。 */
-const memoryPaneRows = computed(() =>
+/** FSRS 普查表行（供客户端排序取数；其余字段与模板同源） */
+interface MemoryRow {
+  key: string
+  label: string
+  strength: number | null
+  barTone: 'ok' | 'warn' | 'bad' | undefined
+  strengthTitle: string
+  tone: 'ok' | 'warn' | 'bad' | 'info'
+  stateText: string
+  stateKey: string
+  uninit: boolean
+  overdue: boolean
+  due: string
+  dueAbs: string
+  dueTs: number | null
+  extract: string
+  extractCount: number
+  seenAbs: string
+}
+const memoryPaneRows = computed<MemoryRow[]>(() =>
   memoryTraces.value.map((t) => {
     const strength = t.retrievability != null ? Math.round(t.retrievability * 100) : null
     const overdue = !!t.dueAt && new Date(t.dueAt).getTime() <= Date.now()
@@ -2417,6 +2469,7 @@ const memoryPaneRows = computed(() =>
       dueAbs: t.dueAt ? new Date(t.dueAt).toLocaleString() : '',
       dueTs: t.dueAt ? new Date(t.dueAt).getTime() : null,
       extract,
+      extractCount: t.extractionCount,
       seenAbs: t.lastSeenAt ? new Date(t.lastSeenAt).toLocaleString() : ''
     }
   })
@@ -2450,13 +2503,39 @@ const memViews = computed(() => {
     ...MEM_STATE_ORDER.filter((s) => (counts.get(s.key) || 0) > 0).map((s) => ({ ...s, count: counts.get(s.key) as number }))
   ]
 })
-const memoryRowsFiltered = computed(() =>
-  memView.value === 'all' ? memorySortedRows.value : memorySortedRows.value.filter((r) => r.stateKey === memView.value)
-)
+/* FSRS 普查表排序（2026-10-18 用户走查「这张表也缺排序」）：行集是该学习者的全量痕迹，
+   客户端排序诚实且最便宜（useTableSort 适用范围：数据完整的列表）。
+   默认不选键 = 保留原有口径序（待复习 → 未到期 → 未初始化）。
+   状态档位与上方「视角」pills 同序（MEM_STATE_ORDER：待复习 → 稳固 → 学习中 → 薄弱 →
+   未初始化）：同一屏上同一根轴只有一种顺序——pills 按强弱梯子读，列头排序却按需关注度
+   排，用户点完列头会以为点错了。 */
+const MEM_STATE_RANK: Record<string, number> = { due: 0, ok: 1, learning: 2, weak: 3, uninit: 4 }
+const {
+  toggle: toggleMemSort,
+  sortState: memSortState,
+  sortRows: sortMemRows
+} = useTableSort<MemoryRow>({
+  accessors: {
+    concept: (r) => r.label,
+    strength: (r) => r.strength,
+    due: (r) => r.dueTs,
+    extract: (r) => r.extractCount,
+    state: (r) => MEM_STATE_RANK[r.stateKey] ?? 9
+  },
+  defaultDir: 'asc',
+  // 提取史首击降序（复现最多的先看）；其余列首击升序（最该关注的在前）
+  defaultDirOf: { extract: 'desc' }
+})
+const memoryRowsFiltered = computed(() => {
+  const base = memView.value === 'all' ? memorySortedRows.value : memorySortedRows.value.filter((r) => r.stateKey === memView.value)
+  return sortMemRows([...base])
+})
 /** 卡头读数：状态分档（剔除全零档），口径写进 title */
 const memMetaText = computed(() => {
   const parts = memViews.value.filter((v) => v.key !== 'all').map((v) => `${v.label} ${v.count}`)
   const base = parts.length ? parts.join(' · ') : `共 ${memoryPaneRows.value.length} 点`
+  /* 作用域标注保留（2026-10-17 拍板）：它不是页级开关的复读——记忆块按用户级、跨全部路径，
+     与页内路径视角开关无关，读错会漏掉在另一条路径学过的概念。 */
   return `${base} · ${allPathsScope.value.label}`
 })
 const memMetaTitle = computed(() => {
@@ -2791,7 +2870,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-prog { display: inline-flex; align-items: center; gap: 6px; }
 .ld-prog__num { font-size: var(--mk-fs-micro); white-space: nowrap; }
 .ld-prog__bar { width: 56px; }
-.ld-prog--done { color: var(--mk-green); font-size: var(--mk-fs-micro); font-weight: 600; }
 /* 产物列的建议徽章：截断必须落在**内层 span**（平台页 .ts-adv-badge__txt 同法）——
    加在徽章本体上时 overflow 会先吃掉圆角内边距，长标题还会把末字竖切（用户走查
    「pill 字体尾部被压缩」）；内层截断则只会出干净省略号，徽章 padding 始终完整。

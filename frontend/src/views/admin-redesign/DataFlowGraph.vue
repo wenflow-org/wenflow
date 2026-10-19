@@ -393,7 +393,7 @@
         <div ref="maskRef" class="mk-drawer__mask" @click="selected = null"></div>
         <!-- 模态语义（审核 #95）：useOverlay 统一提供锁滚 + aria-modal + 聚焦面板 + Tab 陷阱 + 关闭回焦
              （与 FieldRoutingTable 编排文件弹窗同款接法） -->
-        <aside ref="drawerPanelRef" class="mk-drawer__panel dfg-drawer" role="dialog" aria-label="字段详情" :style="semanticVars">
+        <aside ref="drawerPanelRef" class="mk-drawer__panel mk-drawer__panel--wide dfg-drawer" role="dialog" aria-label="字段详情" :style="semanticVars">
           <header class="mk-drawer__head">
             <div class="mk-drawer__heading">
               <h3 class="mk-drawer__title mono">{{ selected.fieldId }}</h3>
@@ -402,7 +402,7 @@
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="selected = null">✕</button>
           </header>
 
-          <div class="dfg-drawer__body">
+          <div class="mk-drawer__body dfg-drawer__body">
             <!-- 首段徽章行（原型 .ovl__body 首段 pills）：角色 / 可见性 / 锁定 / 内部信令 / 累积，均为字段既有属性 -->
             <div class="dfg-drawer__pills">
               <span class="mk-badge" :class="`mk-badge--role-${selected.role}`">{{ roleLabel(selected.role) }}（{{ selected.role }}）</span>
@@ -413,7 +413,7 @@
             </div>
 
             <!-- 事实清单（原型 dl.kv：96px 标签列不画线，值可嵌徽标；dfg- 保留字段着色块） -->
-            <div class="mk-facts mk-facts--rows">
+            <div class="mk-facts mk-facts--rows dfg-facts">
               <div>
                 <span>产出方</span>
                 <strong class="mono">{{ selected.agentId }}</strong>
@@ -426,17 +426,17 @@
               </div>
               <div>
                 <span>类型</span>
-                <dd class="mono">{{ selected.valueType || '—' }}</dd>
+                <strong class="mono">{{ selected.valueType || '—' }}</strong>
               </div>
               <div>
                 <span>存储字段名</span>
                 <strong class="mono">{{ selected.persistKey || selected.fieldId }}</strong>
               </div>
-              <div v-if="selected.pathInRawOutput">
+              <div v-if="selected.pathInRawOutput" class="dfg-fact--wide">
                 <span>抽取路径</span>
                 <strong class="mono">{{ selected.pathInRawOutput }}</strong>
               </div>
-              <div v-if="selected.notes">
+              <div v-if="selected.notes" class="dfg-fact--wide">
                 <span>备注</span>
                 <strong>{{ selected.notes }}</strong>
               </div>
@@ -1694,7 +1694,19 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 
 /* ========== 抽屉（原型 openLearner 三段式：头部标题 + 正文 pills/事实/嵌套卡 + 常驻 foot） ========== */
 .dfg-drawer { background: var(--mk-graph-canvas); }
+/* 内衬 / 纵向滚动 / min-width 由共享 mk-drawer__body 提供，这里只保留栅格排布 */
 .dfg-drawer__body { display: grid; gap: 16px; align-content: start; }
+/* 事实表两列（700 宽版下 6 行压成 4 行）：前四行成对，抽取路径/备注整行 */
+.dfg-drawer .mk-facts--rows.dfg-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+.dfg-facts > div.dfg-fact--wide { grid-column: 1 / -1; }
+/* 窄屏（面板满宽，内容宽可能只剩 375-560）：两列里每列再扣 96px 标签就放不下值，退回单列 */
+@media (max-width: 560px) {
+  .dfg-drawer .mk-facts--rows.dfg-facts { grid-template-columns: minmax(0, 1fr); }
+}
+/* 长 mono 值（agent / skill id、抽取路径、标题）在 700 宽内折行，正文不出横向滚动条 */
+.dfg-drawer .mk-facts--rows > div > strong { overflow-wrap: anywhere; }
+.dfg-drawer .mk-drawer__title { overflow-wrap: anywhere; }
+.dfg-flow__chip { max-width: 100%; overflow-wrap: anywhere; }
 /* 首段徽章行（原型 .ovl__body 首段 pills）：角色 / 可见性 / 锁定 / 内部信令 / 累积 */
 .dfg-drawer__pills { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 /* 内部/累积沿用画布 chip 的色彩编码（内=紫、累=琥珀），形状走共享 mk-badge 胶囊 */
@@ -1715,8 +1727,9 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 
 /* 行级编辑本体（卡体/卡头由共享 mk-card 提供，此处只留排列与 field 行） */
 .dfg-edit { padding: 12px 16px; display: grid; gap: 12px; }
-/* field 行（原型 .field：标签 12px 700 墨色、控件在下一行） */
+/* field 行（原型 .field：标签左置两列，标签轴 96px 与上方事实表同一条竖线） */
 .dfg-field { display: grid; gap: 6px; }
+.dfg-edit .dfg-field { grid-template-columns: 96px minmax(0, 1fr); column-gap: 12px; align-items: center; }
 .dfg-field__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
 /* 只读说明（原型 .note 语气：浅底、muted、微字号） */
 .dfg-note { margin: 0; padding: 10px 12px; border-radius: var(--mk-radius-xl); background: var(--mk-surface-3); color: var(--mk-muted); font-size: var(--mk-fs-micro); line-height: 1.6; }

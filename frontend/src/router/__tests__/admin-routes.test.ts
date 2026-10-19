@@ -74,10 +74,10 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.query.tab).toBe('topology');
   });
 
-  it('/admin/skill-workbench/:agentId → 设计页二级页（旧工作台详情深链兼容，2026-10-15 迁入外壳）', async () => {
+  it('/admin/skill-workbench/:agentId → Skill 详情二级页（旧工作台详情深链兼容；设计页已平铺）', async () => {
     await router.push('/admin/skill-workbench/goal-agent');
     expect(router.currentRoute.value.path).toBe('/admin/skills');
-    expect(router.currentRoute.value.query).toMatchObject({ view: 'skill-design', id: 'goal-agent' });
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'skill', id: 'goal-agent' });
   });
 
   it('导航收敛旧 URL 重定向（2026-09-04 合并 + 2026-09-29 学习会话拆回独立页 + 2026-10-04 学习状态拆出独立页）', async () => {
@@ -119,9 +119,13 @@ describe('Admin 路由重定向', () => {
       ['/admin/messages', '/admin/ops-hub', 'announce'],
       ['/admin/announcements', '/admin/ops-hub', 'announce'],
       ['/admin/notifications', '/admin/ops-hub', 'inapp'],
-      ['/admin/addons', '/admin/api-config', 'addons'],
-      ['/admin/external-capabilities', '/admin/api-config', 'addons'],
-      ['/admin/session-security', '/admin/ops-center', 'security'],
+      // 2026-10-19：「外挂能力」从「模型与接入」宿主拆回独立页 —— /admin/addons 不再是重定向，
+      // 而是真实场景路径（下面单独断言）；旧外部别名 /admin/external-capabilities 改投本页。
+      ['/admin/session-security', '/admin/ops-hub', 'security'],
+      // 2026-10-16：「系统工具」解散并入运营中心，旧深链改指 ops-hub 对应页签
+      ['/admin/ops-center', '/admin/ops-hub', 'tools'],
+      ['/admin/devtools', '/admin/ops-hub', 'tools'],
+      ['/admin/export-data', '/admin/ops-hub', 'export'],
     ];
     for (const [from, toPath, tab] of cases) {
       await router.push(from);
@@ -130,9 +134,23 @@ describe('Admin 路由重定向', () => {
     }
   });
 
+  it('外挂能力拆回独立页（2026-10-19）：/admin/addons 是真实场景路径，旧别名与 ?tab=addons 改投', async () => {
+    // 真实路径不再重定向（由 /admin/:page? → AdminConsole 按场景 id 解析）
+    await router.push('/admin/addons');
+    expect(router.currentRoute.value.path).toBe('/admin/addons');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
+    // 旧外部别名
+    await router.push('/admin/external-capabilities');
+    expect(router.currentRoute.value.path).toBe('/admin/addons');
+    // 老书签：宿主页签键改投独立页，且不残留 tab（否则落到 api-config 的默认页签）
+    await router.push('/admin/api-config?tab=addons');
+    expect(router.currentRoute.value.path).toBe('/admin/addons');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
+  });
+
   it('退役场景深链保留业务 query（会话安全 ?user= 透传）', async () => {
     await router.push('/admin/session-security?user=admin');
-    expect(router.currentRoute.value.path).toBe('/admin/ops-center');
+    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
     expect(router.currentRoute.value.query.tab).toBe('security');
     expect(router.currentRoute.value.query.user).toBe('admin');
   });
@@ -146,14 +164,14 @@ describe('Admin 主路由解析', () => {
     expect(router.currentRoute.value.query.tab).toBeUndefined();
   });
 
-  it('/admin/skills/:agentId → 设计页二级页重定向（2026-10-15：独立整页迁入外壳，?tab= 映射进 ?sdTab=）', async () => {
+  it('/admin/skills/:agentId → Skill 详情二级页重定向（2026-10-15：设计页平铺后收敛；?tab= 映射进 ?skdTab=）', async () => {
     await router.push('/admin/skills/goal-agent');
     expect(router.currentRoute.value.name).toBe('AdminConsole');
     expect(router.currentRoute.value.path).toBe('/admin/skills');
-    expect(router.currentRoute.value.query).toMatchObject({ view: 'skill-design', id: 'goal-agent' });
-    // 旧页签参数映射进本页独立键（不与列表 ?tab= 串键）
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'skill', id: 'goal-agent' });
+    // 旧页签参数映射进详情页独立键（不与列表 ?tab= 串键）
     await router.push('/admin/skills/goal-agent?tab=versions');
-    expect(router.currentRoute.value.query.sdTab).toBe('versions');
+    expect(router.currentRoute.value.query.skdTab).toBe('versions');
     expect(router.currentRoute.value.query.tab).toBeUndefined();
   });
 

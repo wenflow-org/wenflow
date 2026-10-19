@@ -134,4 +134,57 @@ describe('OpsContent · 筛选 ↔ URL', () => {
     expect(intent.statusFilter).toBe('');
     expect(router.currentRoute.value.query.status).toBe('failed');
   });
+
+  it('「停滞」快筛：只留进行中且超 24h 无更新的行，命中数按窗口计', async () => {
+    const stale = new Date(Date.now() - 48 * 3600_000).toISOString();
+    listMock.mockResolvedValue({
+      data: {
+        data: {
+          paths: [
+            mkPath('stalled', { status: 'active', lastActivityAt: stale }),
+            mkPath('fresh', { status: 'active', lastActivityAt: new Date().toISOString() }),
+            // 失败行即便陈旧也不算「停滞」（isPathStalled 只认 active）
+            mkPath('failed-old', { status: 'failed', lastActivityAt: stale })
+          ],
+          pagination: { total: 3, page: 1, limit: 100 }
+        }
+      }
+    });
+    const { wrapper, router } = await mountPaths('/admin/learning-paths');
+    await flushPromises();
+    const pill = wrapper.findAll('button').find((b) => b.text().includes('停滞'))!;
+    expect(pill).toBeTruthy();
+    // 计数 = 窗口内命中数（只 1 条 active 陈旧）
+    expect(pill.text()).toContain('1');
+    await pill.trigger('click');
+    await flushPromises();
+    const text = wrapper.text();
+    expect(text).toContain('路径stalled');
+    expect(text).not.toContain('路径fresh');
+    expect(text).not.toContain('路径failed-old');
+    // 可分享 / 可刷新：进 URL
+    expect(router.currentRoute.value.query.stalled).toBe('1');
+    wrapper.unmount();
+  });
+
+  it('深链 ?stalled=1 落位（返回 / 刷新还原快筛态）', async () => {
+    const stale = new Date(Date.now() - 48 * 3600_000).toISOString();
+    listMock.mockResolvedValue({
+      data: {
+        data: {
+          paths: [
+            mkPath('stalled', { status: 'active', lastActivityAt: stale }),
+            mkPath('fresh', { status: 'active', lastActivityAt: new Date().toISOString() })
+          ],
+          pagination: { total: 2, page: 1, limit: 100 }
+        }
+      }
+    });
+    const { wrapper } = await mountPaths('/admin/learning-paths?stalled=1');
+    await flushPromises();
+    const text = wrapper.text();
+    expect(text).toContain('路径stalled');
+    expect(text).not.toContain('路径fresh');
+    wrapper.unmount();
+  });
 });

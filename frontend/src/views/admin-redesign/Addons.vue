@@ -1,5 +1,18 @@
 <template>
-  <div class="add-embedded">
+  <!-- 外挂能力（2026-10-19 用户「拆出来，作为单页，放到 skill 那边，新开一个页面」）：
+       原为「模型与接入」宿主的一个页签（?tab=addons）。它不是模型接入的一部分——这一页列的是
+       外挂进来的能力与 MCP 服务，关系更近 Skill（每项能力本身就是一条 Skill），故独立成页并
+       归入侧栏 Skill 组；旧深链 ?tab=addons / /admin/addons / /admin/external-capabilities 由
+       路由改投到本页。 -->
+  <div class="mk-page">
+    <MkPageHead title="外挂能力" sub="接入并登记后自动列出：能力 Skill 与 MCP 服务">
+      <template #actions>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="loading || mcpLoading" @click="refreshAll">
+          {{ loading || mcpLoading ? '刷新中…' : '刷新' }}
+        </button>
+      </template>
+    </MkPageHead>
+
     <!-- ① 外挂能力 + ② MCP 服务：堆叠单列全宽（2026-09-29 实测半宽卡内能力表 874px 溢出
          506px 容器，并栏不可行；审核 #157 删除恒 false 的 sideBySide 死分支与不可达 CSS） -->
     <div class="ac-cards">
@@ -220,15 +233,16 @@ import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { toast } from '@/utils/toast'
 
 const router = useRouter()
 
-/** 嵌入模式：「模型与接入」页「外挂能力」tab 的唯一挂载形态（ApiConfig 传 embedded）。
-    prop 仅声明以吸收该 attr（声明过的 prop 不落 $attrs/根 DOM），组件内不再分支。
-    count 事件：外挂能力数上报（宿主「外挂能力 N」徽章） */
-defineProps<{ embedded?: boolean }>()
-const emit = defineEmits<{ (e: 'count', total: number): void }>()
+/* 独立页（2026-10-19）：原 embedded prop 与 count 上报是给「模型与接入」宿主页签用的，
+   页签撤除后一并删除——页头刷新直接调两个加载器。 */
+async function refreshAll() {
+  await Promise.all([loadConfigs(), loadMcpTools()])
+}
 
 /* ---------- ① 外挂能力（白名单驱动） ---------- */
 interface CapabilityRow {
@@ -320,13 +334,8 @@ const capabilityRows = computed<CapabilityRow[]>(() => {
   return out
 })
 
-/* 宿主域计数徽章（embedded 才消费）：能力数就绪/变化即上报 */
-watch(capabilityRows, (rows) => {
-  emit('count', rows.length)
-}, { immediate: true })
-
-/* 2026-09-29 拆回模型与接入宿主 tab 后容器从全宽变为 ac-tab-body 内嵌，
-   半宽卡内能力表 874px 溢出 506px 容器 370px——外挂能力表和 MCP 服务改为堆叠全宽。
+/* 2026-09-29 拆回模型与接入宿主 tab 后容器从全宽变为内嵌，半宽卡内能力表 874px 溢出容器
+   370px——外挂能力表和 MCP 服务改为堆叠全宽（2026-10-19 独立成页后仍是全宽单列）。
    审核 #157：恒为 false 的 sideBySide 状态位与「行数少时并栏」注释一并删除，
    避免注释与实现长期分叉（并栏分支不可达）。 */
 
@@ -379,8 +388,9 @@ watch(
   { immediate: true }
 )
 
-/** 宿主刷新联动（模型与接入宿主「刷新」按钮 → 重拉能力配置与 MCP 服务） */
-defineExpose({ refresh: () => { void loadConfigs(); void loadMcpTools() } })
+/** 独立页（2026-10-19）：数据源切换时自动重拉（上面那个 watch 的 immediate 首拉同款）；
+    页头「刷新」按钮走 refreshAll。 */
+defineExpose({ refresh: refreshAll })
 
 /* ---------- MCP 服务弹窗 ---------- */
 const toolOpen = ref(false)
@@ -531,8 +541,8 @@ function goConfig() {
 </script>
 
 <style scoped>
-/* 嵌入模式（模型与接入宿主 flex 列内）：占满剩余高度并内滚（对齐 oc-embedded 先例） */
-.add-embedded { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* 独立页（2026-10-19 从「模型与接入」页签拆出）：正文按页滚动（.mk-page 自带内衬，
+   与成本分析 / 健康中心同款），不再需要宿主 flex 列里的内滚容器。 */
 .mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); }
 
 /* 外挂能力卡片栅格（原型 index.html:1814-1817：auto-fit 240 的 card grid，box-shadow:none）。

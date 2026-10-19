@@ -209,6 +209,8 @@ describe('GET /api/admin/session-console/:sessionId', () => {
     const data = res.json.mock.calls[0][0].data;
     expect(data.kind).toBe('teaching');
     expect(data.sessionId).toBe('ts_real_1');
+    // 学习者身份（2026-10-18）：页头据此显示「这是谁的会话」并给出去学习者详情的入口
+    expect(data.learner).toEqual({ id: 'user_1', name: '陈晓', email: 'chenxiao@example.com' });
 
     // goal 经 learningPathId 反查
     expect(data.goal.conversationId).toBe('gc_1');
@@ -301,6 +303,7 @@ describe('GET /api/admin/session-console/:sessionId', () => {
 
     const data = res.json.mock.calls[0][0].data;
     expect(data.kind).toBe('goal');
+    expect(data.learner).toEqual({ id: 'user_1', name: '陈晓', email: 'chenxiao@example.com' });
     expect(data.goal.conversationId).toBe('gc_1');
     expect(data.goal.ready).toBe(true);
     expect(data.runtime.currentStage).toBe('teaching');
@@ -556,6 +559,58 @@ describe('buildTimeline（时间线合成）', () => {
     expect([...times].sort()).toEqual(times);
     expect(timeline[0].kind).toBe('goal');
     expect(timeline[timeline.length - 1].title).toBe('会话总结已生成');
+  });
+
+  it('证据条目给人读 detail（不再把 payload JSON 前缀摆到主视觉位），整包仍留在 raw', () => {
+    const timeline = buildTimeline({
+      evidence: [
+        {
+          occurredAt: new Date('2026-10-01T14:12:26.000Z'),
+          evidenceType: 'path:created',
+          payload: JSON.stringify({ pathId: 'lp_1', title: 'Python 服务容器化部署到 K8s', subject: 'Python' }),
+        },
+        {
+          occurredAt: new Date('2026-10-01T14:24:38.000Z'),
+          evidenceType: 'path:generated',
+          payload: JSON.stringify({ pathId: 'lp_1', taskCount: 33, milestoneCount: 3, sourceConversationId: 'gc_1' }),
+        },
+        {
+          occurredAt: new Date('2026-10-01T14:30:00.000Z'),
+          evidenceType: 'lesson:completed',
+          payload: '{}',
+        },
+      ],
+    });
+
+    const [created, generated, lesson] = timeline;
+
+    expect(created.title).toBe('path:created'); // 原枚举保留（前端过中文词表）
+    expect(created.detail).toBe('路径「Python 服务容器化部署到 K8s」');
+    expect(created.raw).toContain('"pathId":"lp_1"');
+    expect(generated.detail).toBe('已生成 33 个任务 / 3 个里程碑');
+    // 空 payload 不再产生「 · {}」这种噪音
+    expect(lesson.detail).toBe('');
+    // 主视觉位不出现 JSON 花括号
+    for (const t of timeline) expect(t.detail).not.toContain('{');
+  });
+
+  it('其余生产事件类型也给读数（学习结果 / 检查点作答 / 难度调整 / 提炼与抽取）', () => {
+    const timeline = buildTimeline({
+      evidence: [
+        { occurredAt: new Date('2026-10-02T08:49:57.000Z'), evidenceType: 'session:outcome', payload: JSON.stringify({ conceptKey: '区分已留痕与未留痕账目', status: 'mastered', progress: 95 }) },
+        { occurredAt: new Date('2026-10-02T09:08:18.000Z'), evidenceType: 'checkpoint:attempt', payload: JSON.stringify({ checkpointId: 'cp_1', type: 'single_choice', title: '你刚把一行字敲进终端，下一步该看什么' }) },
+        { occurredAt: new Date('2026-10-02T08:55:33.000Z'), evidenceType: 'task:difficulty:adjustment', payload: JSON.stringify({ baseline: 5, adjusted: 4, direction: 'decrease' }) },
+        { occurredAt: new Date('2026-10-02T08:50:18.000Z'), evidenceType: 'session-knowledge-distilled', payload: JSON.stringify({ conceptLedger: [{ conceptKey: 'a' }, { conceptKey: 'b' }] }) },
+        { occurredAt: new Date('2026-10-02T08:50:19.000Z'), evidenceType: 'dialogue-concepts-extracted', payload: JSON.stringify({ recurringConfusions: [{ x: 1 }], transferSignals: [{ y: 2 }, { z: 3 }] }) },
+      ],
+    });
+    const details = timeline.map((t) => t.detail);
+    expect(details).toContain('概念「区分已留痕与未留痕账目」· 已掌握');
+    expect(details).toContain('题目：你刚把一行字敲进终端，下一步该看什么');
+    expect(details).toContain('难度 5 → 4');
+    expect(details).toContain('2 个概念入账');
+    expect(details).toContain('困惑 1 · 迁移信号 2');
+    for (const d of details) expect(d).not.toContain('{');
   });
 
   it('prisma Date 对象（路径 createdAt）归一为 ISO 后参与字典序，不破坏时间升序', () => {

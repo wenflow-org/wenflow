@@ -40,6 +40,7 @@ import adminVirtualLearnersRoutes from '../routes/admin/virtual-learners';
 import adminPresetsRoutes from '../routes/admin/presets';
 import adminSessionAuditsRoutes from '../routes/admin/session-audits';
 import adminModelRegistryRoutes from '../routes/admin/model-registry';
+import adminModelProvidersRoutes from '../routes/admin/model-providers';
 import adminSessionConsoleRoutes from '../routes/admin/session-console';
 import adminBatchExperimentsRoutes from '../routes/admin/batch-experiments';
 import adminProjectionAccessGrantsRoutes from '../routes/admin/projection-access-grants';
@@ -182,6 +183,7 @@ export function registerRoutes(app: express.Express): void {
   app.use('/api/admin/presets', ...adminRouteMiddleware, adminPresetsRoutes);
   app.use('/api/admin/session-audits', ...adminRouteMiddleware, adminSessionAuditsRoutes);
   app.use('/api/admin/model-registry', ...adminRouteMiddleware, adminModelRegistryRoutes);
+  app.use('/api/admin/model-providers', ...adminRouteMiddleware, adminModelProvidersRoutes);
   app.use('/api/admin/batch-experiments', ...adminRouteMiddleware, adminBatchExperimentsRoutes);
   app.use('/api/admin/projection-access-grants', ...adminRouteMiddleware, adminProjectionAccessGrantsRoutes);
   app.use('/api/admin/feedback', ...adminRouteMiddleware, adminFeedbackRoutes);

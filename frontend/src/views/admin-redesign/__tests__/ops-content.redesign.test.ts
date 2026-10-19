@@ -100,7 +100,7 @@ afterEach(() => {
 });
 
 describe('OpsContent 学习路径 tab 重设计骨架', () => {
-  it('embedded：无状态条（宿主承载）；上报链已退役不发射；卡头含搜索+列显隐（状态筛选已迁贴表分布条且 embedded 隐藏）；表头无学科列', async () => {
+  it('embedded：无状态条（宿主承载）；上报链已退役不发射；卡头含状态 pills + 复合快筛 + 搜索 + 列显隐；表头无学科列', async () => {
     const w = mount(OpsContent, { props: { embedded: true } });
     await flushPromises();
     await nextTick();
@@ -114,16 +114,22 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     // 独立页同样无 KPI 卡（2026-10-02 用户拍板：状态条已单源承载 总数/里程碑/任务/已下线）
     expect(w.find('.mk-kpi').exists()).toBe(false);
 
-    // 状态筛选唯一入口 = 贴表分布条（2026-10-04 晚）：卡头不再有状态 pill；embedded 时分布条隐藏
-    expect(w.find('.mk-card__head .mk-filter .mk-pill').exists()).toBe(false);
+    // 状态筛选 = 卡头 pills（2026-10-17 分布带退役后迁回）；「停滞」是复合口径快筛，与状态叠加为 AND
+    const headPills = w.findAll('.mk-card__head .mk-filter .mk-pill').map((p) => p.text());
+    expect(headPills.some((t) => t.includes('停滞'))).toBe(true);
+    for (const statusWord of ['全部', '学习中', '已完成', '生成失败', '已下线']) {
+      expect(headPills.some((t) => t.includes(statusWord))).toBe(true);
+    }
     expect(w.find('.mk-distband').exists()).toBe(false);
 
     // 右侧组件（2026-10-04 整组统一：口径开关上收页头，embedded 页头隐藏 → 卡头无 ds-toggle）
     expect(w.find('.mk-card__head input.mk-filter__input').exists()).toBe(true);
     expect(w.find('.ds-toggle').exists()).toBe(false);
     expect(w.find('.mk-cols').exists()).toBe(true);
-    // 卡头 meta 只留分页器没有的事实（口径开关；命中数/总数交分页器单源）
-    expect(w.text()).toContain('（真实）');
+    // 卡头 meta 只留分页器没有的事实（截断窗口）；口径不再复读（2026-10-19 用户走查
+    // 「这个小文案不要」：真实/测试由页头开关自明，embedded 态宿主页头承载）
+    expect(w.text()).not.toContain('（真实）');
+    expect(w.find('.mk-card--fill .mk-card__meta').exists()).toBe(false);
 
     // 表头：路径/用户/状态/进度/更新/操作——「主题」独立列已退役（P2-6 2026-10-04 全站评审：
     // 91% 行与路径列同文），subject≠title 时作路径列副行
@@ -144,19 +150,19 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     w.unmount();
   });
 
-  it('贴表分布条点击 = 状态筛选（原 pills 的接棒者）；目标摘要列单行省略类存在', async () => {
+  it('卡头状态 pill 点击 = 状态筛选；再点取消；目标摘要列单行省略类存在', async () => {
     const w = mount(OpsContent);
     await flushPromises();
     await nextTick();
     expect(w.findAll('tbody tr').length).toBe(3);
 
-    // 点图例「已完成」→ 1 行；再点取消恢复 3 行
-    const doneBtn = w.findAll('.stageband__legend .sbl').find((b) => b.text().includes('已完成'))!;
-    await doneBtn.trigger('click');
+    // 点「已完成」→ 1 行；再点取消恢复 3 行
+    const donePill = w.findAll('.mk-pill').find((b) => b.text().startsWith('已完成'))!;
+    await donePill.trigger('click');
     await nextTick();
     expect(w.findAll('tbody tr').length).toBe(1);
     expect(w.find('tbody').text()).toContain('完成的目标摘要');
-    await doneBtn.trigger('click');
+    await donePill.trigger('click');
     await nextTick();
     expect(w.findAll('tbody tr').length).toBe(3);
 
@@ -197,9 +203,12 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     const ths = w.findAll('thead th').map((t) => t.text());
     expect(ths).toContain('难度');
     expect(ths).toContain('时长');
-    // 「主题」列已退役（P2-6 2026-10-04）：难度紧跟路径列、用户之前（路径自身属性成组）
     expect(ths).not.toContain('主题');
-    expect(ths.indexOf('难度')).toBe(ths.indexOf('路径') + 1);
+    /* 教学组列序统一（2026-10-16）：主体列（路径）→ 用户 → 状态 → 属性/过程（难度、时长、进度）→ 时间（更新）→ 操作。
+       原断言是「难度紧跟路径列、用户之前（路径自身属性成组）」，与同组其它页的
+       「主体 → 用户 → 状态 → 过程」不一致，也违背 2026-10-03 的「主体列恒在首、用户列随后」。 */
+    expect(ths.slice(0, 6)).toEqual(['路径', '用户', '状态', '难度', '时长', '进度']);
+    expect(ths.at(-1)).toBe('操作');
 
     // 路径列副行 = 主题（仅 subject≠title 时；P2-6）+ 短 ID，不夹带难度/时长
     const subs = w.findAll('tbody tr td:first-child .mk-cell-sub').map((s) => s.text());
@@ -255,8 +264,27 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     w.unmount();
   });
 
+  it('用户格姓名 → 学习者详情（subPage=learner）；不触发整行进路径详情', async () => {
+    closeSubPage();
+    const w = mount(OpsContent, { props: { embedded: true } });
+    await flushPromises();
+    await nextTick();
+
+    // 行序随状态/时间排序变，按姓名定位「张三」那一行（user u1）
+    const row = w.findAll('tbody tr').find((tr) => tr.find('.mk-user-link').exists() && tr.find('.mk-user-link').text() === '张三');
+    expect(row).toBeTruthy();
+    const nameBtn = row!.find('.mk-user-link');
+    expect(nameBtn.attributes('title')).toContain('查看学习者详情');
+    await nameBtn.trigger('click');
+    await nextTick();
+    expect(subPage.value).toMatchObject({ view: 'learner', id: 'u1' });
+
+    closeSubPage();
+    w.unmount();
+  });
+
   /** P1#9 + P2 顺手（2026-10-02）：口径标注 / 进度条三态 / 失败行入口 / 失败严重度对齐 OpsHub */
-  it('口径标注 + 三态 + 失败行入口：分布条副标带全平台口径；进度条失败红/100% 绿/进行中中性；失败行「去详情」；状态条抬红但红链已由分布条红段接棒', async () => {
+  it('口径标注 + 三态 + 失败行入口：状态 pills 带全平台计数；进度条失败红/100% 绿/进行中中性；失败行「去详情」；状态条已退役', async () => {
     listMock.mockResolvedValue({
       data: {
         data: {
@@ -273,9 +301,14 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     await flushPromises();
     await nextTick();
 
-    // 分布条副标已在文案批移除「点击分段可筛选」说明书（分段自带可供性）；分布条仍是唯一状态筛选面
-    expect(w.find('.oc-distband').exists()).toBe(true);
-    expect(w.find('.mk-distband__sub').exists()).toBe(false);
+    // 分布带已退役（2026-10-17）：状态筛选回到卡头 pills，计数取 stats 全平台 byStatus
+    expect(w.find('.oc-distband').exists()).toBe(false);
+    expect(w.find('.mk-distband').exists()).toBe(false);
+    const pill = (label: string) => w.findAll('.mk-pill').find((p) => p.text().startsWith(label))!;
+    expect(pill('学习中').find('.mk-pill__count').text()).toBe('1');
+    expect(pill('已完成').find('.mk-pill__count').text()).toBe('1');
+    expect(pill('生成失败').find('.mk-pill__count').text()).toBe('1');
+    expect(pill('全部').find('.mk-pill__count').exists()).toBe(false);
 
     // 进度条三态：100% = 绿（ok）/ 进行中 = 默认中性（无 warn 琥珀）/ 失败 = 红（bad）
     const tones = w.findAll('tbody .mk-minibar__fill').map((el) => el.attributes('data-tone') || '');
@@ -292,12 +325,11 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     const retryItem = failRow.findAll('.mk-menu__pop .mk-menu__item').find((b) => b.text() === '重试生成');
     expect(retryItem).toBeTruthy();
 
-    // 状态条已退役（2026-10-04）：失败抬红由分布条红段单源承载；总量读数迁 MkKpi 卡带
+    // 状态条已退役（2026-10-04）：失败行的救援入口在 ⋯ 菜单「重试生成」；总量读数迁 MkKpi 卡带
     expect(w.find('.mk-status').exists()).toBe(false);
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
-    const failSeg = w.findAll('.mk-distband__seg').find((seg) => (seg.attributes('title') || '').includes('生成失败'))!;
-    expect(failSeg.attributes('title')).toContain('重试生成');
-    expect(failSeg.attributes('title')).toContain('点击只看');
+    const failPill = w.findAll('.mk-pill').find((p) => p.text().startsWith('生成失败'))!;
+    expect(failPill.attributes('title')).toContain('重试生成');
 
     w.unmount();
   });

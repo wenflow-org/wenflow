@@ -68,10 +68,13 @@
           :title="healthAbnormalTitle"
           @click="kpiGo('health')"
         />
+        <!-- 2026-10-16 KPI 审计补完：原标签是裸「不一致」，没有宾语——运营看不出是谁跟谁不一致。
+             术语表早备好了限定词「文件与线上不一致」（driftContractQualified），这里改用。
+             hint 同步把「契约 N + 哈希 M」换成两个概念的人话名（术语表的三义区分照旧不合并）。 -->
         <MkKpi
-          :label="TERMS.driftContract"
+          :label="TERMS.driftContractQualified"
           :value="driftActionable"
-          :hint="driftActionable > 0 ? `契约 ${drift.contract} + 哈希 ${drift.hash}` : drift.runtime > 0 ? `另 ${drift.runtime} 条只读遥测` : '正常'"
+          :hint="driftActionable > 0 ? `文件与线上 ${drift.contract} 条 · 编译产物 ${drift.hash} 条` : drift.runtime > 0 ? `另 ${drift.runtime} 条只读遥测` : '正常'"
           :tone="driftActionable > 0 ? 'warn' : 'ok'"
           clickable
           :title="driftCardTitle"
@@ -158,7 +161,7 @@
       <section v-if="recentFixes.length" class="mk-card" id="hc-fixlog">
         <div class="mk-card__head">
           <h3 class="mk-card__title">最近修复</h3>
-          <span class="mk-card__meta">本次会话 · 权威记录见审计日志</span>
+          <span class="mk-card__meta" title="本列表只留本次会话的修复记录，刷新即清。权威记录在审计日志">本次会话</span>
         </div>
         <div class="hc-fixlog">
           <div v-for="f in recentFixes" :key="f.key" class="hc-fixlog__row">
@@ -254,24 +257,10 @@
       <!-- 技能对账 + 完成度（2026-10-14 页签收敛：完成度即对账 completion 列的汇总，与对账表同页——
            原独立页签实测只有一张 196px 卡（五根横贯全屏的 4px 细线），下方 234px 死区） -->
       <div v-else id="hc-panel-recon" role="tabpanel" aria-labelledby="hc-tab-recon" class="hc-panel">
-        <!-- 完成度构成带（2026-10-14 换 MkStageband）：原逐档一根 mk-minibar 轨道拉满卡宽
-             （实测 820px，宽屏 >1400px），4px 细线读成「分割线」而不是数据；改共享「构成族」
-             分段条 + 底部图例（形状语义 = 一个整体的互斥构成，正是本数据的形状），
-             五档色沿用 --mk-rec-* 语义色（tone 传 CSS 值，MkStageband 原样透传）。
-             2026-10-14 追加折叠（用户：「也要折叠」）：结构与 DriftAuditPanel / MkDistBand 折叠档
-             同款（details.mk-card + summary.mk-card__head.mk-section__summary），原生 details
-             自带键盘与展开态，卡头 ▸ 指示复用共享原语。默认折叠——头里的「N / N 已上线」已是这张卡
-             的结论，五档形状需要时再展开，首屏让位给下方对账表；头用 span 不用 h3：summary 的内容
-             模型是短语内容，块级标题进去是非法结构。 -->
-        <details class="mk-card hc-fold" id="hc-completion">
-          <summary class="mk-card__head mk-section__summary">
-            <span class="mk-card__title">完成度分布</span>
-            <span class="mk-card__meta">{{ completionLive }} / {{ reconciliation.total }} 已上线</span>
-          </summary>
-          <div class="hc-completion">
-            <MkStageband size="sm" label="技能完成度分布" :segments="completionSegments" />
-          </div>
-        </details>
+        <!-- 2026-10-19 用户「下线，不要了」：「完成度分布」卡（details#hc-completion）整卡撤。
+             它是一张只有形状、没有动作的构成带——结论早就写在页首「完成度未达标」KPI 的
+             hint（已上线 N/N）里，五档明细在下面对账表逐行可查，构成带夹在两者中间只占高度。
+             MkStageband 原语本身保留（设计体系共享件，注册表在册）。 -->
         <section>
         <!-- @openSkill 此前未绑定 → 对账行点击无反应（审计 附 A #5）。绑定到全局 skill 抽屉。 -->
         <SkillReconciliation :report="reconReport" :error="reconError" @openSkill="openSkillDrawer" />
@@ -300,12 +289,11 @@ import {
   type SkillReconciliationReport,
 } from '@/api/adminApi'
 import { TERMS } from './terms'
-import { COMPLETION_META, SEMANTICS_META } from './glossaryMeta'
+import { SEMANTICS_META } from './glossaryMeta'
 import { EXTRA_CAPABILITY_SKILLS } from './capabilityCatalog'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
-import MkStageband from '@/components/mk/MkStageband.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import SkillReconciliation from './SkillReconciliation.vue'
 
@@ -479,7 +467,6 @@ const reconciliation = computed<HealthReconciliationSummary>(
       missingActive: 0, zombieActive: 0, zombieSkillActive: 0, unwired: 0,
     },
 )
-const distribution = computed(() => displayReport.value?.completion.distribution || {})
 const healthAbnormal = computed(() => displayReport.value?.health.abnormal ?? 0)
 /** P-49（#74）：四域「需处理数」合计，作为首屏收口结论（0 = 整体健康） */
 const pendingTotal = computed(
@@ -488,31 +475,6 @@ const pendingTotal = computed(
 /** 检查异常卡悬停：只给增量口径（值/总数已在 value/hint 可见，title 不再复读——CP2/CP9） */
 const healthAbnormalTitle = computed(
   () => '统计「异常」与「需关注」两档检查项，「观测」项仅供参考，不计入异常'
-)
-
-const completionTiers = COMPLETION_META
-
-function tierCount(status: string): number {
-  return distribution.value?.[status as keyof typeof distribution.value] ?? 0
-}
-
-/** 完成度构成带分段（MkStageband）：五档互斥构成，段宽按登记总数占比（0% 的档不出段但仍在图例里
-    如实出现）；色沿用 --mk-rec-* 语义色（MkStageband 的 tone 对认不出的值按 CSS 色原样透传）。 */
-const COMPLETION_TONE: Record<string, string> = {
-  draft: 'var(--mk-rec-draft)',
-  'handler-ready': 'var(--mk-rec-handler)',
-  'core-ready': 'var(--mk-rec-core)',
-  'fields-synced': 'var(--mk-rec-synced)',
-  live: 'var(--mk-rec-live)',
-}
-const completionSegments = computed(() =>
-  completionTiers.map((t) => ({
-    key: t.status,
-    label: t.label,
-    count: tierCount(t.status),
-    pct: `${Math.max((tierCount(t.status) / Math.max(reconciliation.value.total, 1)) * 100, 0)}%`,
-    tone: COMPLETION_TONE[t.status] ?? 'var(--mk-blue)',
-  }))
 )
 
 /* ---------- 健康检查项分组：异常/关注项展开，正常项收进折叠组 ----------
@@ -982,15 +944,7 @@ defineExpose({ refresh })
 .hc-ok .hc-check:last-child { border-bottom: none; }
 
 /* 漂移块样式（.hc-drift*）2026-10-14 随「漂移」页签删卡删除——漂移项现在就是检查行本身 */
-
-/* 完成度构成带（MkStageband 自带分段条 + 左聚图例，本类只管卡内边距） */
-.hc-completion { padding: 14px 16px; }
-/* 折叠卡头的分隔线两态显式声明（不靠继承全局声明碰运气）：展开态有分隔线，折叠态去掉——
-   否则折叠后卡片底边悬着一条没有下文的横线（MkDistBand 折叠档同一处理）。
-   两态都写：只写 :not([open]) 那一条时，实测展开态头部边框也为 0（级联里另有来源把它归零，
-   页面自有规则用更高特异性把它钉回来）。 */
-.hc-fold > .mk-card__head { border-bottom: 1px solid var(--mk-line); }
-.hc-fold:not([open]) > .mk-card__head { border-bottom: 0; }
+/* .hc-completion / .hc-fold 两族 2026-10-19 随「完成度分布」卡下线（用户「下线，不要了」）删除 */
 
 @media (max-width: 700px) { .hc-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 

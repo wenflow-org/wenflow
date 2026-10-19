@@ -12,9 +12,36 @@
       </template>
       <template #actions>
         <button type="button" class="mk-btn" :disabled="loading" @click="load">{{ loading ? '刷新中…' : '刷新' }}</button>
-        <button type="button" class="mk-btn mk-btn--primary" @click="goLearner">到虚拟学习者 →</button>
+        <!-- 「从这张卡造一个」的落点（2026-10-18 用户走查：卡库侧只有卡头勾选框，读作没有流程）：
+             身份卡可反复创建、不消耗卡本身，故本页主操作是创建，切画像降为次按钮。
+             文案 2026-10-19 与卡墙同批统一：原「派生虚拟学习者」是本页独有的说法。 -->
+        <button type="button" class="mk-btn" @click="goLearner">到虚拟学习者 →</button>
+        <button
+          type="button"
+          class="mk-btn mk-btn--primary"
+          title="从这张身份卡创建 1 个虚拟学习者，下一步挑要带走的故事。卡留在卡库，可再创建"
+          @click="openDerive"
+        >创建虚拟学习者</button>
       </template>
     </MkDetailHero>
+
+    <!-- 来源（2026-10-16 卡=身份模板）：本卡是从另一张身份卡创建出来的实例。
+         给回模板的入口——运营常要从同一张身份卡再创建一个实例。 -->
+    <section v-if="d.derivedFrom" class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">身份来源</h3>
+      </div>
+      <div class="cd-pad">
+        <p class="cd-bg">
+          本卡由身份卡「<a
+            href="#"
+            class="mk-link"
+            :title="`打开身份卡「${d.derivedFrom.name}」`"
+            @click.prevent="goTemplate(d.derivedFrom!.profileId)"
+          >{{ d.derivedFrom.name }}</a>」创建，任务取自该身份卡的故事池。创建不消耗身份卡，可重复创建。
+        </p>
+      </div>
+    </section>
 
     <!-- 概览事实栅格（mk-facts 原语：div>span+strong 契约） -->
     <section class="mk-card">
@@ -89,6 +116,9 @@
         <p v-if="d.notes" class="cd-bg">{{ d.notes }}</p>
       </div>
     </section>
+
+    <!-- 从卡派生虚拟学习者（与卡墙同一子组件；本页是单卡语境，恒只带这一张卡） -->
+    <CardDeriveDialog ref="deriveRef" @created="onDerived" />
   </div>
   <div v-else class="mk-page">
     <div v-if="loading" class="cd-pad cd-sec">
@@ -104,6 +134,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
+import CardDeriveDialog from './CardDeriveDialog.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
@@ -143,6 +174,7 @@ interface CardDetail {
     budget: Record<string, unknown>
   }>
   materials: Array<{ kind: string; title: string }>
+  derivedFrom: { profileId: string; cardKey: string | null; name: string } | null
 }
 
 const d = ref<CardDetail | null>(null)
@@ -173,6 +205,11 @@ function goLearner() {
   const pid = d.value?.profileId
   if (!pid) return
   openSubPage('virtual', pid, { from: { view: 'card', id: pid, label: '学习者卡' } })
+}
+
+/** 回派生来源的身份卡（本卡是实例时才有入口；label 用视图名，避免「同名卡 / 同名卡」） */
+function goTemplate(profileId: string) {
+  openSubPage('card', profileId, { from: { view: 'card', id: profileId, label: '身份卡' } })
 }
 
 const heroSubText = computed(() => {
@@ -211,6 +248,18 @@ function fmtDate(iso: string): string {
   if (!iso) return '—'
   const t = new Date(iso)
   return Number.isNaN(t.getTime()) ? '—' : t.toLocaleString()
+}
+
+/* ===== 派生（从这张卡创建虚拟学习者）=====
+   成功后回刷本卡：派生不消耗身份卡，运营常会连着造几个实例。 */
+const deriveRef = ref<InstanceType<typeof CardDeriveDialog> | null>(null)
+function openDerive() {
+  const pid = d.value?.profileId
+  if (!pid) return
+  deriveRef.value?.openWith([pid])
+}
+function onDerived() {
+  void load()
 }
 
 onMounted(load)

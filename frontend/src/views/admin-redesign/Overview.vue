@@ -312,6 +312,7 @@ import MkKpi from '@/components/mk/MkKpi.vue';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
 import { useSafePolling } from '@/composables/useSafePolling';
+import { failureRateTone } from './rate-utils'
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
@@ -643,9 +644,8 @@ const simTone = computed<Tone>(() => {
   if (!liveVirtualStatsLoaded.value) return 'muted'
   const r = runStats.value
   if (!r.totalSessions && !r.todayCalls) return 'muted'
-  if (r.systemFailureRate >= 50) return 'bad'
-  if (r.systemFailureRate >= 20 || r.failed > 0) return 'warn'
-  return 'ok'
+  // 阈值跨页单源（2026-10-16 用户拍板「不要非零就红」）：与虚拟学习者页同口径
+  return failureRateTone(r.systemFailureRate, r.failed)
 })
 const simHeadline = computed(() => {
   if (liveVirtualStatsError.value) return '统计加载失败'
@@ -680,12 +680,14 @@ const hasWrapupStats = computed(() => {
   return w.summaryModel > 0 || w.summaryFallback > 0 || w.evaluationModel > 0 || w.evaluationAiFallback > 0 || w.evaluationFailed > 0;
 });
 
-/* 总结质量条件行：只在出现兜底/失败时露头 */
+/* 总结质量条件行：只在出现降级/失败时露头。
+   2026-10-19：「N 次兜底」改「N 次降级总结」——同一件事（总结走的是非模型兜底路径）
+   在教学会话列表挂的徽章就叫「降级总结」，概览这里换个词等于同屏两个叫法。 */
 const wrapupIssue = computed(() => {
   const w = data.value?.wrapup;
   if (!w || !hasWrapupStats.value) return null;
   const parts: string[] = [];
-  if (w.summaryFallback > 0) parts.push(`${w.summaryFallback} 次兜底`);
+  if (w.summaryFallback > 0) parts.push(`${w.summaryFallback} 次降级总结`);
   if (w.evaluationFailed > 0) parts.push(`${w.evaluationFailed} 次失败`);
   if (!parts.length) return null;
   return {

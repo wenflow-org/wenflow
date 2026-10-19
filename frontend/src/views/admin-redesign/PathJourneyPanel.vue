@@ -2,7 +2,7 @@
   <!-- ===== 路径内容面板（嵌在会话座舱 Path 页签内） =====
        2026-10-12 用户拍板：路径不再有独立详情页（?view=path 退役为深链适配层），
        路径内容统一长在座舱的阶段页签里。本组件 = 原 PathDetail.vue 的内容体
-       （阶段手风琴 + 任务弹层 + 治理动作），去 hero / 学习者下钻（座舱本身就是
+       （阶段全展开的分区 + 任务弹层 + 治理动作），去 hero / 学习者下钻（座舱本身就是
        该学习者的上下文）；「总体进度」「技术细节」随拍板一并撤（同日走查），
        类名沿用 pd- 域。 -->
   <div class="pjp">
@@ -36,7 +36,9 @@
         <span v-if="d.status !== 'active'" class="mk-badge" :class="statusBadge(d.status)">{{ statusText(d.status) }}</span>
       </div>
 
-      <!-- stagecard 手风琴（原型：单开、点击阶段头切换展开；默认展开「当前阶段」——2026-10-06 审核 #80）。
+      <!-- 阶段全展开（2026-10-18 用户走查：后台运营要「一眼看到信息」，不接受点开一个就把
+           别的阶段收起）。原单开手风琴退役：阶段头只作分区标题、不再可点；所有阶段的说明与
+           任务行始终渲染，长度由分区层级承担（可折叠的只有任务详情弹层，那层是补充信息）。
            2026-10-12 用户拍板撤「总体进度」与「技术细节」两块：各阶段头自带「N / M 任务」，
            总进度 % 与双分母口径注释是重复噪音；工程标识（路径 id / 生成运行 id）不进运营页面。 -->
       <MkEmptyState
@@ -52,19 +54,13 @@
           class="pd-stage"
           :class="{ 'pd-stage--idle': m.status !== 'active' && m.status !== 'completed' }"
         >
-          <button
-            type="button"
-            class="pd-stage__head"
-            :aria-expanded="openStage === i"
-            @click="toggleStage(i)"
-          >
+          <div class="pd-stage__head">
             <span class="pd-stage__n" aria-hidden="true">{{ m.stageNumber || i + 1 }}</span>
             <strong class="pd-stage__title" :title="m.title">{{ m.title }}</strong>
             <span class="pd-stage__meta">{{ doneTasks(m) }} / {{ m.subtasks.length }} 任务</span>
             <span class="mk-badge" :class="milestoneBadge(m.status)">{{ milestoneText(m.status) }}</span>
-            <span class="pd-stage__caret" aria-hidden="true">{{ openStage === i ? '▾' : '▸' }}</span>
-          </button>
-          <div v-if="openStage === i" class="pd-stage__body">
+          </div>
+          <div class="pd-stage__body">
             <!-- 阶段内容层（2026-10-06 审核 #54）：描述/目标/核心概念/预计学时，无值不渲染、不硬造 -->
             <div v-if="m.description || m.goal || m.coreConceptName || m.estimatedHours" class="pd-stage__brief">
               <p v-if="m.description" class="pd-stage__desc">{{ m.description }}</p>
@@ -193,8 +189,6 @@ const d = ref<PathDetailData | null>(null)
 const loading = ref(false)
 const loadError = ref('')
 const busy = ref(false)
-/* 初值 null：真实展开项由 load() 按数据派生（审核 #80） */
-const openStage = ref<number | null>(null)
 
 /* subtasks 兜底成数组：阶段/任务计数与模板都直接读 .length，缺列时面板不应炸 */
 const stages = computed<PathMilestone[]>(() =>
@@ -223,14 +217,6 @@ function writeBreadcrumbLabel(title: string) {
   setSubPageLabel(title)
 }
 
-function defaultOpenStage(list: PathMilestone[]): number | null {
-  if (!list.length) return null
-  const subs = (m: PathMilestone) => (Array.isArray(m.subtasks) ? m.subtasks : [])
-  const pending = list.findIndex((m) => subs(m).some((t) => t.status !== 'completed'))
-  if (pending >= 0) return pending
-  return list.some((m) => subs(m).length) ? list.length - 1 : 0
-}
-
 async function load(force = false) {
   const pid = props.pathId
   if (!pid) return
@@ -245,7 +231,6 @@ async function load(force = false) {
     if (!body) throw new Error('详情数据为空')
     d.value = body
     loadError.value = ''
-    openStage.value = defaultOpenStage(body.milestones || [])
     if (body.title) writeBreadcrumbLabel(String(body.title))
   } catch (e) {
     if (seq !== loadSeq || props.pathId !== pid) return
@@ -263,7 +248,6 @@ watch(
     loadSeq += 1
     d.value = null
     loadError.value = ''
-    openStage.value = null
     closeTask()
     if (pid) void load()
   },
@@ -289,10 +273,6 @@ const taskBadge = (s: string) =>
 const cognitiveText = (c?: string | null) => ({ low: '低', medium: '中', high: '高' }[String(c || '')] || String(c || ''))
 const taskSub = (t: PathSubtask) => `${taskTypeText(t.taskType)} · ${t.estimatedMinutes} 分钟`
 const taskSubTitle = (t: PathSubtask) => taskTypeTitle(t.taskType)
-
-function toggleStage(i: number) {
-  openStage.value = openStage.value === i ? null : i
-}
 
 /* ===== 任务详情弹层（开合行为四件套：Esc/遮罩/焦点陷阱/滚动锁） ===== */
 useOverlay(computed(() => !!taskRef.value), panelRef)
@@ -398,7 +378,7 @@ async function retryGeneration() {
 /* 动作行（原 hero actions 收敛成一行；弱化不与页签头抢层级） */
 .pjp-acts { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-/* stagecard 手风琴（原型 .stagecard：整卡描边、头浅底、体下沉任务行） */
+/* stagecard（原型 .stagecard：整卡描边、头浅底、体下沉任务行；2026-10-18 起常开不折叠） */
 .pd-stack { display: grid; gap: 12px; }
 .pd-stage {
   border: 1px solid var(--mk-line);
@@ -417,7 +397,6 @@ async function retryGeneration() {
   font: inherit;
   color: inherit;
   text-align: left;
-  cursor: pointer;
 }
 .pd-stage__n {
   width: 22px; height: 22px; border-radius: 50%;
@@ -426,17 +405,14 @@ async function retryGeneration() {
   background: var(--mk-blue); color: var(--mk-on-fill, #ffffff);
 }
 .pd-stage--idle .pd-stage__n { background: var(--mk-surface-3); color: var(--mk-muted); }
-/* 阶段头悬停反馈（审核 #78）：与任务行的 hover 语言一致（spec §4：只允许变背景/边框/文字色） */
-@media (hover: hover) {
-  .pd-stage__head:hover { background: var(--mk-surface-3); }
-}
+/* 阶段头是分区标题而非可点控件（2026-10-18 全展开）：不给 hover/pointer 反馈，
+   避免把运营读「点开会收起别的阶段」 */
 .pd-stage__title {
   flex: 1; min-width: 0;
   font-size: var(--mk-fs-body);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .pd-stage__meta { color: var(--mk-muted); font-size: var(--mk-fs-micro); white-space: nowrap; }
-.pd-stage__caret { color: var(--mk-faint); flex: none; width: 12px; text-align: center; }
 .pd-stage__body {
   display: grid; gap: 8px;
   padding: 12px 16px;

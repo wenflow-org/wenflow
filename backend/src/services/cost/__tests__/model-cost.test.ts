@@ -17,9 +17,11 @@ const PRICED_VARIANTS: PricingTable = [
 ]
 
 describe('normalizeModelKey / resolveModelPricing', () => {
-  it('默认表未填价时，已知模型也解析为 null（占位空表）', () => {
-    expect(resolveModelPricing('deepseek-v4-flash')).toBeNull()
-    expect(resolveModelPricing('agnes-3.0-flash')).toBeNull()
+  it('传入空单价表时，已知模型也解析为 null（未配价 ≠ 0 价）', () => {
+    /* 2026-10-18 起仓库注册表已带真实单价，这里要守的是「查不到价」的分支，
+       所以显式传空表，不依赖当前配置文件是否已填价 */
+    expect(resolveModelPricing('deepseek-v4-flash', [])).toBeNull()
+    expect(resolveModelPricing('agnes-3.0-flash', [])).toBeNull()
   })
 
   it('归一化匹配大小写 / 首尾空白', () => {

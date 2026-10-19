@@ -15,7 +15,7 @@
               {{ launchStoriesLoading ? '加载故事中…' : launchStories.length ? '请选择故事' : '暂无故事，请先在画像页生成' }}
             </option>
             <option v-for="st in launchStories" :key="st.id" :value="st.id">
-              {{ st.title }}{{ st.pathId ? ' · 已有 Path' : ' · 尚无 Path' }}（运行 {{ st.runCount }}）
+              {{ st.title }}{{ st.runCount ? ` · 已生成 ${st.pathCount} 条路径（已运行 ${st.runCount} 次）` : ' · 尚未运行' }}
             </option>
           </select>
         </label>
@@ -113,6 +113,9 @@ async function open(s: LaunchTarget) {
         id: String(st.storyId || st.id || st.key || `story-${index}`),
         title: String(st.storyTitle || st.title || `故事 ${index + 1}`),
         runCount: Number(stats.totalRuns ?? 0),
+        /* 故事是复杂情景，一个故事可衍生多条路径：下拉里给出已生成条数，
+           运营才知道再跑一次是在同一情景里多走一条路线，而不是「重复跑同一个路径」 */
+        pathCount: Number(stats.pathCount ?? 0),
         pathId: bindings.learningPathId ? String(bindings.learningPathId) : null
       }
     })

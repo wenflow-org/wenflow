@@ -1,39 +1,7 @@
 <template>
-  <div class="mk-page mk-page--fill oc-host">
-    <!-- 页头（原型 pageTitle：页名+副标；刷新是各页签真实能力，随 tab 显示）。
-         P3-33（设计评审）：原页头 primary「导出数据」做的是 tab 导航、与页签栏完全重复入口——
-         已撤（原型只是组件参考，页签即唯一入口），页头动作位留给当前页签真实能力（刷新） -->
-    <MkPageHead title="系统工具" sub="数据导出、会话安全与运维工具">
-      <template #actions>
-        <button v-if="tab === 'tools'" type="button" class="mk-btn mk-btn--sm" :disabled="refreshing" @click="refreshAll">{{ refreshing ? '刷新中…' : '刷新' }}</button>
-        <button v-else-if="tab === 'security'" type="button" class="mk-btn mk-btn--sm" @click="securityRef?.refresh?.()">刷新</button>
-      </template>
-    </MkPageHead>
-
-    <!-- 原型骨架：单张卡内「.tabs 页签 + 页签体」（Users 卡内页签判例）。状态条退役——
-         死信计数在死信卡头、会话计数在页签角标、CSV 说明在导出表单脚注，不再三处投影 -->
-    <section class="mk-card oc-card" :class="{ 'oc-card--fill': tab === 'security' }">
-      <!-- 键盘契约（审核 #182）：role=tablist/tab 兑现 roving tabindex + 左右/Home/End 方向键
-           循环切换并移动焦点，每枚页签 aria-controls 到对应 role=tabpanel 的页签体
-           （判例 AuditLogs.vue:701-721） -->
-      <div class="tabs oc-tabs" role="tablist" aria-label="系统工具视图切换" @keydown="onTabKeydown">
-        <button id="oc-tab-tools" :ref="(el) => setTabRef(el, 0)" type="button" role="tab" class="tab" :aria-selected="tab === 'tools'" aria-controls="oc-panel-tools" :tabindex="tab === 'tools' ? 0 : -1" @click="switchTab('tools')">运维工具</button>
-        <button id="oc-tab-export" :ref="(el) => setTabRef(el, 1)" type="button" role="tab" class="tab" :aria-selected="tab === 'export'" aria-controls="oc-panel-export" :tabindex="tab === 'export' ? 0 : -1" @click="switchTab('export')">数据导出</button>
-        <!-- P3-34（设计评审）：未知态角标由孤悬「—」改弱灰小字——「—」像渲染残留、
-             与「外挂能力 0」真计数并读语义无法区分；title 保留「未访问≠0」语义。
-             2026-10-06 审核 #175：SessionSecurity 加载中/失败上报 -1（原来 immediate 写 0 是
-             「确认无会话」的假信号），负数与 null 一并渲染「未加载」（2026-10-13 运营走查 O7：
-             原「待访问」在角标位被读成「有东西待我处理」，实际只说计数还没拉）。 -->
-        <button id="oc-tab-security" :ref="(el) => setTabRef(el, 2)" type="button" role="tab" class="tab" :aria-selected="tab === 'security'" aria-controls="oc-panel-security" :tabindex="tab === 'security' ? 0 : -1" @click="switchTab('security')">会话安全<span class="tab__count" :title="securityCount === null || securityCount < 0 ? '进入该页签后加载计数' : undefined">{{ securityCount === null || securityCount < 0 ? '未加载' : securityCount }}</span></button>
-      </div>
-      <div class="oc-card__body">
-
-    <!-- ===== Tab1: 运维工具 ===== -->
-    <template v-if="tab === 'tools'">
-    <!-- 全宽页签体（原型 renderOpsCenter tools/export/security 三 pane 均通栏；2026-10-02
-         撤 mk-narrow 限宽——此前仅本页签被 1200px 居中收窄，宽屏下两翼留白、三个页签不一致）
-         role=tabpanel + aria-labelledby：与页签 aria-controls 成对（审核 #182） -->
-    <div id="oc-panel-tools" role="tabpanel" aria-labelledby="oc-tab-tools" class="oc-tab-body">
+  <!-- 运维工具面板（原「系统工具」页 Tab1；2026-10-16 用户拍板该场景解散并入运营中心：
+       本组件作为运营中心宿主的一个页签体渲染，id/role=tabpanel/aria-labelledby 由宿主透传落到本根节点） -->
+  <div class="stp-body">
     <!-- 时间推进模拟 -->
     <section class="mk-card">
       <div class="mk-card__head">
@@ -125,7 +93,7 @@
         <div class="mk-table-scroll">
           <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed，2026-10-01 对齐 Users 判例），
                单元格 nowrap、列按内容自然分宽；事件类型 / 错误信息两处长内容列 max-width 截断兜底 -->
-          <table class="mk-table oc-dead-table">
+          <table class="mk-table stp-dead-table">
             <thead>
               <tr>
                 <th>事件</th>
@@ -139,7 +107,7 @@
             </thead>
             <tbody>
               <tr v-for="item in deadItems" :key="item.id">
-                <td><span class="mono oc-ev" :title="item.eventType">{{ item.eventType }}</span></td>
+                <td><span class="mono stp-ev" :title="item.eventType">{{ item.eventType }}</span></td>
                 <td><span class="mono mk-cell-text">{{ shortId(item.userId || '—', 10, 4) }}</span></td>
                 <td><span class="mono mk-cell-text" :title="item.aggregateId || ''">{{ shortId(item.aggregateId || '—', 10, 4) }}</span></td>
                 <td class="mk-num">{{ item.attemptCount }}</td>
@@ -180,133 +148,24 @@
         compact
       />
     </section>
-    </div><!-- /oc-tab-body -->
-    </template>
-
-    <!-- ===== Tab2: 数据导出（原型表单形态：范围 chips 多选 + 右对齐「开始导出」；
-         时间范围 / JSONL 格式后端导出接口不支持，不渲染假控件） ===== -->
-    <template v-else-if="tab === 'export'">
-    <div id="oc-panel-export" role="tabpanel" aria-labelledby="oc-tab-export" class="oc-tab-body oc-export">
-      <div class="mk-field">
-        <span class="mk-field__label">导出范围</span>
-        <div class="mk-pills" role="group" aria-label="导出范围多选">
-          <button
-            v-for="item in exportDefs"
-            :key="item.key"
-            type="button"
-            class="mk-pill"
-            :class="{ 'mk-pill--active': exportSel.includes(item.key) }"
-            :aria-pressed="exportSel.includes(item.key)"
-            :title="item.desc"
-            :disabled="exporting !== ''"
-            @click="toggleExport(item.key)"
-          >{{ item.label }}</button>
-        </div>
-      </div>
-      <!-- label 包裹而非 div（审核 #176）：与同页另三处 .mk-field 同构，select 拿到可访问名 -->
-      <label v-if="exportSel.some((k) => LOG_EXPORT_KEYS.has(k))" class="mk-field oc-export__limit">
-        <span class="mk-field__label">日志行数上限</span>
-        <select v-model="logLimit" class="mk-filter__select" :disabled="exporting !== ''">
-          <option :value="1000">1000 行</option>
-          <option :value="5000">5000 行</option>
-          <option :value="20000">20000 行</option>
-        </select>
-      </label>
-      <div class="oc-export__foot">
-        <span class="oc-export__hint">已选 {{ exportSel.length }} 项 · CSV（UTF-8 BOM，Excel / WPS 可直接打开）</span>
-        <button
-          type="button"
-          class="mk-btn mk-btn--primary oc-export__go"
-          :disabled="!exportSel.length || exporting !== ''"
-          @click="runExport"
-        >{{ exporting !== '' ? '导出中…' : '开始导出' }}</button>
-      </div>
-      <ul class="oc-export__notes">
-        <li>执行日志默认导出最近 1000 行，可切换上限。其余业务表导出最近 20000 条。</li>
-        <!-- 文案与实现同口径（#157）：后端 users 导出已接 REAL_USER_WHERE（排虚拟学习者 +
-             e2e_/shotsnap/@test.local 等测试账号前缀/域名），脚注承诺与实现一致。
-             本页导出表单不提供 includeTest 开关（后端接口保留该参数供深链/脚本用）。 -->
-        <li>用户导出默认排除虚拟学习者与测试账号。</li>
-        <li>导出为只读操作，不含敏感字段。</li>
-      </ul>
-    </div>
-    </template>
-
-    <!-- ===== Tab3: 会话安全（SessionSecurity embedded） =====
-         role=tabpanel/aria-labelledby 透传到 SessionSecurity 根 div（单根组件，审核 #182） -->
-    <SessionSecurity v-else id="oc-panel-security" role="tabpanel" aria-labelledby="oc-tab-security" ref="securityRef" embedded @count="securityCount = $event" />
-      </div><!-- /oc-card__body -->
-    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onMounted, ref } from 'vue'
 import { timeAgo, errMsg, shortId } from './live'
 import { askConfirm } from './useConfirm'
-import { adminDevtoolsApi, adminAxios } from '@/api/adminApi'
+import { adminDevtoolsApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
-import SessionSecurity from './SessionSecurity.vue'
 
-/* 工具/导出/会话安全 tab（阶段 1 导航收敛：会话安全折入系统工具）：
-   URL 查询驱动（?tab=），旧深链 /admin/export-data、/admin/devtools、
-   /admin/session-security 经路由重定向带 query 落地 */
-const OC_TABS = ['tools', 'export', 'security'] as const
-type OcTab = (typeof OC_TABS)[number]
-const tab = ref<OcTab>('tools')
-const route = useRoute()
-const router = useRouter()
-/** 会话安全域计数（SessionSecurity embedded 上报）；null = 尚未访问该 tab，
-    此时页签角标显「未加载」弱灰小字而非 0（0 会被读成「确认无会话」，是另一种假信号；
-    原「—」孤悬破折号像渲染残留，P3-34 改词） */
-const securityCount = ref<number | null>(null)
-const securityRef = ref<{ refresh?: () => void } | null>(null)
-/* URL → tab（深链/刷新/前进后退）；非法值回落 tools。组件单测可无 router 挂载，故访问保持可选 */
-watch(
-  () => route?.query.tab,
-  (t) => {
-    const v = typeof t === 'string' && (OC_TABS as readonly string[]).includes(t) ? (t as OcTab) : null
-    if (v && v !== tab.value) tab.value = v
-    else if (!v && tab.value !== 'tools') tab.value = 'tools'
-  },
-  { immediate: true }
-)
-function switchTab(t: OcTab) {
-  tab.value = t
-  /* tools 死信懒加载统一交给文件尾的 tab watcher：此处直接调会与 watcher 同帧各发一次请求 */
-  /* URL 同步（?tab=…）：深链/刷新/前进后退可寻址 */
-  if (route && route.query.tab !== t) void router?.replace({ query: { ...route.query, tab: t } })
-}
+/* 运维工具（原「系统工具」页 Tab1 整体迁入，2026-10-16）：时间推进模拟 + outbox 死信重放。
+   两件事都是「只看不改数据」或「显式确认后才改」的运维动作。 */
 
-/* 页签键盘契约（审核 #182）：roving tabindex（仅选中项可 Tab 进入）+ 方向键循环切换并移动焦点，
-   兑现 role=tablist/role=tab 的 ARIA tabs 语义（判例 AuditLogs.vue:701-721） */
-const tabEls = ref<(HTMLButtonElement | null)[]>([])
-function setTabRef(el: unknown, i: number) {
-  tabEls.value[i] = (el as HTMLButtonElement) || null
-}
-function onTabKeydown(e: KeyboardEvent) {
-  const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
-  if (!keys.includes(e.key)) return
-  const n = OC_TABS.length
-  const cur = (OC_TABS as readonly string[]).indexOf(tab.value)
-  const from = cur >= 0 ? cur : 0
-  let next = from
-  if (e.key === 'ArrowRight') next = (from + 1) % n
-  else if (e.key === 'ArrowLeft') next = (from - 1 + n) % n
-  else if (e.key === 'Home') next = 0
-  else next = n - 1
-  e.preventDefault()
-  switchTab(OC_TABS[next])
-  void nextTick(() => tabEls.value[next]?.focus())
-}
-
-const refreshing = ref(false)
 const advanceBusy = ref(false)
 const requeueBusy = ref(false)
+const refreshing = ref(false)
 
 /* 时间推进 */
 const advance = ref({ userId: '', days: 30, pathId: '' })
@@ -444,7 +303,8 @@ async function requeueOne(eventType: string) {
   }
 }
 
-async function refreshAll() {
+/** 宿主刷新钮调用的整体重载：只重拉死信清单（时间推进是表单，无需刷新） */
+async function refresh() {
   refreshing.value = true
   await loadDead()
   refreshing.value = false
@@ -466,115 +326,24 @@ function pretty(obj: unknown): string {
   }
 }
 
-/* ===== Tab2: 数据导出（原型表单：范围 chips 多选 + 右对齐「开始导出」） ===== */
-interface ExportDef {
-  key: string
-  label: string
-  desc: string
-}
+/* 死信懒加载：与页签同生共死（宿主 v-if 挂载本组件时才拉），故挂载即拉一次 */
+onMounted(() => { void loadDead() })
 
-const exportDefs: ExportDef[] = [
-  { key: 'users', label: '用户', desc: '全部真实用户：ID / 姓名 / 邮箱 / 角色 / XP / 等级 / 注册与登录时间' },
-  { key: 'teaching-sessions', label: '教学会话', desc: '会话：学科 / 主题 / 任务类型 / 模式 / 状态 / 时长 / 起止时间' },
-  { key: 'feedback', label: '用户反馈', desc: '反馈：评分 / 难度 / 评论 / 处理状态 / 时间' },
-  { key: 'goal-conversations', label: '目标对话', desc: '目标澄清：状态 / 阶段 / 描述 / 创建与更新时间' },
-  { key: 'agent-logs', label: '执行日志', desc: 'Agent 调用：成功 / 耗时 / 错误码与分类 / 模型 / Token' },
-  { key: 'audit-logs', label: '审计日志', desc: '管理操作审计：动作 / 目标 / 方法 / 路径 / 状态码 / IP' },
-]
-
-/** 只有日志类导出支持行数上限（后端 ?limit=）；业务表固定最近 20000 条 */
-const LOG_EXPORT_KEYS = new Set(['agent-logs', 'audit-logs'])
-const logLimit = ref<number>(1000)
-
-const exportSel = ref<string[]>([])
-function toggleExport(key: string) {
-  exportSel.value = exportSel.value.includes(key)
-    ? exportSel.value.filter((k) => k !== key)
-    : [...exportSel.value, key]
-}
-
-const exporting = ref('')
-
-async function doExport(key: string) {
-  exporting.value = key
-  try {
-    const params = LOG_EXPORT_KEYS.has(key) ? `?limit=${logLimit.value}` : ''
-    const response = await adminAxios.get(`/admin/export/${key}${params}`, { responseType: 'blob' })
-    const disposition = String(response.headers['content-disposition'] || '')
-    const match = disposition.match(/filename\*=UTF-8''([^;]+)/)
-    const filename = match ? decodeURIComponent(match[1]) : `${key}-${Date.now()}.csv`
-    const url = URL.createObjectURL(new Blob([response.data]))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-    toast.success('导出成功，已开始下载')
-  } catch (e) {
-    toast.error(`导出失败：${errMsg(e)}`)
-  } finally {
-    exporting.value = ''
-  }
-}
-
-/** 顺序导出所选项（共用 exporting 守卫，按钮同时禁用防并发）。
-    审核 #177：先快照数组再遍历——此前 for…of 直接迭代 ref，导出中途改选会改到本次导出集，
-    与实时变的「已选 N 项」提示不一致（chips 现已随 exporting 禁用，快照是第二道保险）。 */
-async function runExport() {
-  const keys = [...exportSel.value]
-  for (const key of keys) {
-    if (exporting.value !== '') return
-    await doExport(key)
-  }
-}
-
-/* 死信懒加载：挂载只拉首屏 tab（深链 ?tab=export/security 不预取多打一次）；
-   前进/后退经 route watch 直改 tab、不走 switchTab，故以 tab watcher 兜底补拉 */
-if (tab.value === 'tools') void loadDead()
-watch(tab, (t) => {
-  if (t === 'tools' && !deadLoaded.value) void loadDead()
-})
+/** 宿主可调（刷新钮）；暴露 loadDead 供外部触发重拉 */
+defineExpose({ refresh, reload: loadDead })
 </script>
 
 <style scoped>
-/* ================= 宿主布局（原型骨架：页头 → 单卡「页签+页签体」） ================= */
-.oc-card {
-  /* 贴内容而非撑满（2026-10-14 用户实测「卡怎么这么大」）：三个页签里只有「会话安全」需要
-     卡体高度（内嵌表格靠它内滚），运维工具 373px / 数据导出 251px 的内容却被撑成 825px 的
-     空框。默认 flex: 0 1 auto + max-height: 100%——高内容仍封顶在可用高度内、由 .oc-card__body
-     内滚接管（.mk-page--fill 是 height:100% + overflow:hidden，只贴内容不加封顶会被裁掉）。 */
-  flex: 0 1 auto;
-  max-height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-/* 会话安全页签：嵌进的 SessionSecurity 是 .mk-page--fill（靠父高内滚），这一档必须占满剩余高度 */
-.oc-card--fill { flex: 1 1 auto; min-height: 0; }
-/* 页签体在卡内独立滚动；会话安全嵌入组件（.mk-page--fill.ss-embedded）占满剩余高度内滚 */
-.oc-card__body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-}
-.oc-card__body > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
-/* 工具/导出页签体：卡体内边距 + 栅格（滚动上移到 oc-card__body） */
-.oc-tab-body {
-  padding: 16px; /* 原型页签体 --sp-4（此前 14px） */
+.stp-body {
+  padding: 16px;
   display: grid;
   gap: 12px;
   align-content: start;
 }
 .dt-body { padding: 14px; display: grid; gap: 14px; }
-/* 视图切换（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局 .tabs/.tab
-   （mk-primitives.css）；本页只保留卡内 14px 横向内边距（.tabs 特有 padding）。 */
-.oc-tabs { padding: 0 14px; }
 /* 死信表（自动布局）：单元格 nowrap；事件类型长名截断（title 全值） */
-.oc-dead-table td { white-space: nowrap; }
-.oc-ev {
+.stp-dead-table td { white-space: nowrap; }
+.stp-ev {
   display: inline-block;
   max-width: 220px;
   overflow: hidden;
@@ -611,8 +380,6 @@ watch(tab, (t) => {
   white-space: pre-wrap;
   word-break: break-all;
 }
-
-
 .dt-err {
   display: inline-block;
   /* 自动布局下 max-content 决定列宽：固定截断上限，长错误信息不独吃表格宽度（title 全值） */
@@ -639,26 +406,5 @@ watch(tab, (t) => {
   .dt-grid { grid-template-columns: 1fr 1fr; }
   .dt-compare { grid-template-columns: 1fr; }
   .dt-compare__col + .dt-compare__col { border-left: none; border-top: 1px dashed var(--mk-line); }
-}
-
-/* Tab2: 数据导出（原型表单：field 范围 chips + 右对齐 foot 主钮 + 脚注说明） */
-.oc-export { gap: 16px; }
-.oc-export__limit { max-width: 320px; }
-.oc-export__foot { display: flex; align-items: center; gap: 12px; }
-.oc-export__go { margin-left: auto; }
-.oc-export__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.oc-export__notes {
-  margin: 0;
-  padding: 10px 12px;
-  border-top: 1px solid var(--mk-line);
-  display: grid;
-  gap: 6px;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-}
-
-/* ================= 暗色模式（D1 补完）：系统工具 ================= */
-html[data-theme='dark'] {
-  /* dt-result/ex-row 已走 var(--mk-*) token，暗色由全局 token 覆盖 */
 }
 </style>
