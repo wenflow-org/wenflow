@@ -39,6 +39,8 @@ const CONC = Number(arg('conc', 2));
 const TEMPERATURE = Number(arg('temp', 0.2));
 const LIMIT = Number(arg('limit', 0));
 const EMAIL_LIKE = arg('email-like', null);
+const SINCE = Number(arg('since', 0)); // epoch ms：只判该时刻之后创建的会话（护栏后批次对照用）
+const BEFORE = Number(arg('before', 0)); // epoch ms：只判该时刻之前的会话（取同源基线用）
 const MIN_MSGS = Number(arg('min-msgs', 8));
 const SELFTEST = flag('selftest');
 const DB = resolve(arg('db', join(REPO_ROOT, 'backend', 'prisma', 'dev.db')));
@@ -106,18 +108,17 @@ function buildCase(sid) {
     // 明细字段是 code 判分的真值载体：「选项集合不一致（正确 A，作答 B）」/「选项集合与答案键一致（A）」。
     return `cp${i + 1}｜${h?.type || e?.type || ''}｜问：${clip(h?.question || '', 180)}｜判分来源 ${h?.judgedBy || e?.judgedBy || '?'}｜结果 ${h?.passed !== false ? 'passed' : 'failed'}｜学员所选 ${selected}｜明细 ${clip(e?.detail || '', 90)}｜概念 ${h?.conceptName || ''}`;
   }).join('\n');
-  // 最近一次发出的检查点原文（含答案键）——checkpointHistory 不存键，键只在这里。
+  // 最近一次发出的检查点原文——**只用于理解题干**；答案键不在此处呈现：
+  // 键的权威载体是 learner_evidence 明细「选项集合不一致（正确 X，作答 Y）」/「与答案键一致（X）」。
+  // 2026-10-19 实证：把 lastRuntimeEnvelope 的键误当成历史检查点的键，会把「所选=键」误判为放行
+  // （post-guard 批 2/2 flag 均为该误报）——键必须与检查点身份绑定，明细已足够。
   const lastCp = st?.lastRuntimeEnvelope?.artifact?.control?.checkpoint || null;
   const lastCpLines = lastCp
-    ? [
-      `最近一次发出的检查点（原文）：${clip(lastCp.question, 200)}`,
-      `  选项：${(Array.isArray(lastCp.options) ? lastCp.options : []).map((o) => `${o?.id}.${clip(o?.text, 60)}`).join(' ｜ ') || '（无）'}`,
-      `  答案键：${Array.isArray(lastCp.correctOptionIds) && lastCp.correctOptionIds.length ? lastCp.correctOptionIds.join('/') : '（无）'}`,
-    ].join('\n')
-    : '（无 lastRuntimeEnvelope 检查点原文）';
+    ? `最近一次发出的检查点（仅题面参考，答案键以明细为准）：${clip(lastCp.question, 200)}`
+    : '';
   const cpBlock = history.length
-    ? `【检查点判分记录（ground truth，判「错答放行」时以此为准；明细含 code 判分的「正确 X，作答 Y」）】\n${cpLines}\n${lastCpLines}`
-    : `【检查点判分记录】本轮无检查点（放行与否只看对话与总结）\n${lastCpLines}`;
+    ? `【检查点判分记录（ground truth，判「错答放行」时以此为准；明细含 code 判分的「正确 X，作答 Y」）】\n${cpLines}${lastCpLines ? `\n${lastCpLines}` : ''}`
+    : `【检查点判分记录】本轮无检查点（放行与否只看对话与总结）${lastCpLines ? `\n${lastCpLines}` : ''}`;
   return {
     sid, topic: s.topic, msgCount: msgs.length, msgSource: source,
     block: `课题：${s.topic}\n课堂时长：${s.duration ?? '?'} 分钟｜消息 ${msgs.length} 条\n\n【知识点最终掌握状态】\n${kpBlock || '（无）'}\n\n${cpBlock}\n\n【结课总结（wrapup）】\n${wBlock}\n\n【课堂对话节选（首4+均匀中段+末10，逐条截断）】\n${conv}`,
@@ -142,9 +143,11 @@ const PROMPT = (b) => `下面是一节已完结课堂的记录。检查这节课
 ${b}`;
 
 const KEYS = ['progressInflation', 'loopStuck', 'summaryMismatch', 'wrongAnswerPassed', 'unclosedComplete'];
+/** 口径修订号：改案例块/判定纪律等**非 prompt 文本**的语义时手工递增（哈希只覆盖 prompt 文本）。 */
+const JUDGE_REV = 'v4.1';
 const judgeVersion = (() => {
   const h = createHash('sha256').update(PATTERNS_TEXT + PROMPT('')).digest('hex').slice(0, 12);
-  return `judge2:${h}:${MODEL}:t${TEMPERATURE}:k${K}`;
+  return `judge-${JUDGE_REV}:${h}:${MODEL}:t${TEMPERATURE}:k${K}`;
 })();
 console.log(`[judge] ${judgeVersion}`);
 
@@ -209,12 +212,15 @@ async function judgeSample(c) {
 
 // ---------- 样本 ----------
 const userFilter = EMAIL_LIKE ? ' AND u.email LIKE ?' : '';
+const sinceFilter = SINCE > 0 ? ' AND s.createdAt > ?' : '';
+const beforeFilter = BEFORE > 0 ? ' AND s.createdAt < ?' : '';
 const sql = `SELECT s.id AS sid, s.userId AS uid, u.email AS email, s.subject AS subject, s.topic AS topic, s.createdAt AS createdAt,
     (SELECT COUNT(*) FROM teaching_session_messages m WHERE m.sessionId = s.id) AS msgRows
   FROM teaching_sessions s JOIN users u ON u.id = s.userId
-  WHERE s.status='completed' AND s.wrapup IS NOT NULL AND s.wrapup NOT IN ('','null')${userFilter}
+  WHERE s.status='completed' AND s.wrapup IS NOT NULL AND s.wrapup NOT IN ('','null')${userFilter}${sinceFilter}${beforeFilter}
   ORDER BY s.createdAt`;
-const rows = EMAIL_LIKE ? db.prepare(sql).all(EMAIL_LIKE) : db.prepare(sql).all();
+const params = [...(EMAIL_LIKE ? [EMAIL_LIKE] : []), ...(SINCE > 0 ? [SINCE] : []), ...(BEFORE > 0 ? [BEFORE] : [])];
+const rows = params.length ? db.prepare(sql).all(...params) : db.prepare(sql).all();
 let cases = [];
 for (const r of rows) {
   const c = buildCase(r.sid);
