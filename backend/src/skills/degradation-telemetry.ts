@@ -29,6 +29,8 @@ export type DegradationFaultCategory =
   | 'MODEL_ANSWER_LEAK'
   /** 代码裁决判错的作答回合，老师回复仍出现肯定语（话术与判分脱钩，拍板 #5 切口1） */
   | 'MODEL_AFFIRMATION_MISMATCH'
+  /** 失败检查点概念的**后续回合**（非提交轮）仍出现肯定语（#84 实证；提交轮口径见 MODEL_AFFIRMATION_MISMATCH） */
+  | 'MODEL_AFFIRMATION_AFTER_FAILED_CHECKPOINT'
   | 'UNKNOWN';
 
 export type DegradationSeverity = 'P1_CRITICAL' | 'P2_DEGRADED' | 'P3_NOTICE';

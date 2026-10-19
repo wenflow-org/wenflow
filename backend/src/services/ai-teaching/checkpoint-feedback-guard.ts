@@ -42,6 +42,9 @@ const AFFIRMATION_PATTERNS: RegExp[] = [
   /^(?:很好|非常好|真棒|很棒|太棒了?|不错|好极了|对的|正确)[，,、]/,
   // 独句短夸（归一去列表符与尾标点后整段匹配）：很好！/非常好。/不错！
   /^(?:很好|非常好|太好了|真棒|很棒|太棒了|不错|对的|正确|好极了)[！!。～~]*$/,
+  // 进展断言（#84 实证：「好的，这一关你走通了」——不在上述夸赞词里但从语境看就是给错答盖章）：
+  // 「还没走通/没过关」由 BLOCKLIST（还没/没答/没写…）拦住，不误剥。
+  /(?:走通|过关|搞定|拿下)了/,
 ];
 
 /** 否决词：句子含任一则不算肯定语（疑问/否定/转折/接近语），不剥 */
@@ -97,4 +100,39 @@ export function stripAffirmationsOnFailedVerdict(reply: unknown): AffirmationStr
     return { reply: value, stripped, applied: false };
   }
   return { reply: remaining, stripped, applied: true };
+}
+
+/** 概念名归一（与 code 负证据仲裁同一口径：trim + lower）。 */
+function normalizeConceptName(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+/**
+ * 失败检查点概念的**后续回合**肯定语护栏判定（#84，2026-10-19 实证）。
+ *
+ * 提交回合的硬门只在「本次提交判错」的那一轮生效；实测（zhongkao-streaming 2026-10-18 批，
+ * cp_1791507198243_nprpr 两次 code failed「缺少要点：对边相等」）老师在随后自由回合仍称
+ * 「你答对了/这一关你走通了」，提交轮硬门管不到。本判定为该护栏的决策函数：
+ * - 仅在**本回合当前知识点命中会话内 code 失败概念**时剥离（精确或 ≥4 字的包含匹配），
+ *   避免把其它已掌握概念的正常肯定误剥；
+ * - 本回合已由提交硬门处理（judgingThisTurn）时返回 false，防重复剥离与重复遥测。
+ */
+export function shouldGuardReplyForFailedConcept(params: {
+  /** 本回合的知识点（模型输出的 knowledge.currentPoint） */
+  currentPoint?: unknown;
+  /** 会话内 code 判失败的检查点概念名（buildCheckpointCodeArbitration.codeFailedConceptNames） */
+  failedConceptNames?: readonly string[] | null;
+  /** 本回合是否为「提交检查点且 code 判错」的回合（该轮走提交硬门） */
+  judgingThisTurn?: boolean;
+}): boolean {
+  if (params.judgingThisTurn) return false;
+  const point = normalizeConceptName(params.currentPoint);
+  if (!point) return false;
+  const failed = Array.isArray(params.failedConceptNames) ? params.failedConceptNames : [];
+  return failed.some((name) => {
+    const target = normalizeConceptName(name);
+    if (!target) return false;
+    if (target === point) return true;
+    return (target.length >= 4 && point.includes(target)) || (point.length >= 4 && target.includes(point));
+  });
 }

@@ -80,7 +80,7 @@ import { learningStateService, type LearningStateMetrics } from '../learning/lea
 import type { TeachingSessionMessage } from './TeachingSessionRepository';
 import type { TeachingTurnOutput } from '../../skills/teaching-turn';
 import { findArithmeticMismatches, describeMismatchesForRepair } from './teaching-arithmetic-guard';
-import { stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
+import { shouldGuardReplyForFailedConcept, stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
 import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching-repetition-guard';
 import { recordDegradation } from '../../skills/degradation-telemetry';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
@@ -487,6 +487,43 @@ export async function processStudentMessage(
       });
       if (screened.applied) {
         rawTeachingOutput = { ...rawTeachingOutput, reply: screened.reply };
+      }
+    }
+  }
+  // 失败检查点概念的**后续回合**肯定语护栏（#84，2026-10-19 实证）：提交轮硬门只管当轮——
+  // zhongkao-streaming 批实测两次 code failed（缺要点）后，老师在随后自由回合仍称
+  // 「你答对了/这一关你走通了」。口径收紧（精度优先）：仅当本回合知识点命中会话内
+  // code 失败概念时剥离；遥测单列一类，不污染切口2 的一致性口径（分子/分母不变）。
+  const judgingFailedThisTurn = !!(submittedCheckpoint
+    && options.checkpointJudgement?.judgedBy === 'code'
+    && options.checkpointJudgement.passed === false);
+  if (rawTeachingOutput?.reply && !judgingFailedThisTurn) {
+    const failedConceptNames = buildCheckpointCodeArbitration(previousTeachingState.checkpointHistory).codeFailedConceptNames;
+    if (shouldGuardReplyForFailedConcept({
+      currentPoint: rawTeachingOutput.knowledge?.currentPoint,
+      failedConceptNames,
+      judgingThisTurn: judgingFailedThisTurn,
+    })) {
+      const screened = stripAffirmationsOnFailedVerdict(rawTeachingOutput.reply);
+      if (screened.stripped.length > 0) {
+        logger.warn('[AITeaching] 失败检查点概念的后续回合仍含肯定语（#84 护栏）', {
+          sessionId: session.id,
+          currentPoint: rawTeachingOutput.knowledge?.currentPoint,
+          failedConceptNames: failedConceptNames.slice(0, 3),
+          strippedCount: screened.stripped.length,
+          applied: screened.applied,
+        });
+        recordDegradation({
+          source: 'ai-teaching/teaching-turn-engine',
+          faultCategory: 'MODEL_AFFIRMATION_AFTER_FAILED_CHECKPOINT',
+          severity: 'P2_DEGRADED',
+          impactedDimensions: ['teachingReply.affirmation', `task:${context.taskId}`],
+          mitigationApplied: screened.applied ? 'strip-affirmation-sentences' : 'flagged-only',
+          rootCauseMessage: screened.stripped.slice(0, 3).join(' ｜ '),
+        });
+        if (screened.applied) {
+          rawTeachingOutput = { ...rawTeachingOutput, reply: screened.reply };
+        }
       }
     }
   }
