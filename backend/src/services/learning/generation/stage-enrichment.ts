@@ -423,7 +423,12 @@ async function enrichLearningPathWithAndersonInner(
         normalizedInput,
         STAGE_MATERIAL_LIMITS,
         materialWindow,
-        stageSectionOrder
+        stageSectionOrder,
+        // 覆盖约束的语义重排（#119 优化项 3，2026-10-19）：候选放开到全文、
+        // 按「窗口分布三分位配额（前/中/后各≥1）+ 语义名次」选节——引用语义分位向窗口内上限
+        // 靠拢的同时，后半覆盖不低于窗口方案。fail-open：无名次映射（embedding 不可用）时
+        // 自动退回窗口切片路径。kill switch：STAGE_MATERIAL_QUOTA_RERANK=0。
+        process.env.STAGE_MATERIAL_QUOTA_RERANK !== '0'
       );
       const stageDesignerInput = {
         milestone: {

@@ -18,7 +18,11 @@ import fs from 'fs';
 import path from 'path';
 import { getLearningPath } from '../services/learning/queries/path-views.queries';
 import { buildUploadedMaterialPacksAsync } from '../services/materials/material-pack.builder';
-import { resolveMaterialWindowRange } from '../services/materials/material-prompt-projection';
+import {
+  resolveMaterialWindowRange,
+  resolveTertileQuota,
+  selectSectionsWithCoverageQuota,
+} from '../services/materials/material-prompt-projection';
 import { cosineSimilarity, embedTexts } from '../services/embedding';
 
 function argText(name: string): string | null {
@@ -80,6 +84,8 @@ async function main(): Promise<void> {
     semantic: number[];
     window: number[];
     thirds: number[][];
+    quotaThirds: number[][];
+    quotaPct: number[];
     refs: Array<{ refMean: number; windowTop8Mean: number; windowAllMean: number; refPct: number }>;
   }> = {};
   const perGoal: Array<Record<string, unknown>> = [];
@@ -96,8 +102,9 @@ async function main(): Promise<void> {
     const root = (detail && typeof detail === 'object' ? detail : {}) as Record<string, unknown>;
     const stageCount = Array.isArray(root.milestones) ? root.milestones.length : 0;
 
-    const goalRow: { goal: unknown; stages: unknown[] } = { goal: row.goal, stages: [] };
-    for (const milestone of root.milestones || []) {
+    const goalRow: { goal: unknown; stages: Array<Record<string, unknown>> } = { goal: row.goal, stages: [] };
+    const milestones = (Array.isArray(root.milestones) ? root.milestones : []) as Array<Record<string, unknown>>;
+    for (const milestone of milestones) {
       const stageNumber = Number(milestone?.stageNumber) || goalRow.stages.length + 1;
       const query = `${String(milestone?.title || '')}。${String(milestone?.goal || '')}`.trim();
       const queryVector = (await embedTexts({ input: [query] }, { timeoutMs: 30_000 })).vectors[0]?.embedding;
@@ -115,7 +122,7 @@ async function main(): Promise<void> {
       const thirds = [0, 0, 0];
       for (const position of positions) thirds[position < 1 / 3 ? 0 : position < 2 / 3 ? 1 : 2] += 1;
       const bucket = byStage[`${stageNumber}/${stageCount}`]
-        || (byStage[`${stageNumber}/${stageCount}`] = { semantic: [], window: [], thirds: [], refs: [] });
+        || (byStage[`${stageNumber}/${stageCount}`] = { semantic: [], window: [], thirds: [], quotaThirds: [], quotaPct: [], refs: [] });
       bucket.semantic.push(mean(positions));
       bucket.window.push(windowMid);
       bucket.thirds.push(thirds);
@@ -126,6 +133,32 @@ async function main(): Promise<void> {
       const cosines = sections.map((_item, index) => cosineSimilarity(queryVector, sectionVectors.vectors[index]?.embedding || []));
       const windowCosines = cosines.slice(windowStart, windowEnd);
       const windowTop8 = [...windowCosines].sort((a, b) => b - a).slice(0, 8);
+      // 覆盖约束的语义重排（#119-3）静态臂：配额选节 + 其 cos 在窗口内的分位（预测上限）。
+      const rankById = new Map<string, number>();
+      sections
+        .map((section, index) => ({ id: section.id, index, score: cosines[index] }))
+        .sort((left, right) => (right.score - left.score) || (left.index - right.index))
+        .forEach((entry, rank) => rankById.set(entry.id, rank));
+      const quotaIds = selectSectionsWithCoverageQuota(
+        sections.map((section) => ({ id: section.id })),
+        8,
+        [windowStart, windowEnd],
+        rankById
+      ).map((section) => section.id);
+      const quotaOrdinals = quotaIds
+        .map((sectionId) => sectionOrdinal(sectionId))
+        .filter((value): value is number => value !== null && value >= 1 && value <= total);
+      const quotaThirds = [0, 0, 0];
+      for (const ordinal of quotaOrdinals) {
+        const position = total > 1 ? (ordinal - 1) / (total - 1) : 0;
+        quotaThirds[position < 1 / 3 ? 0 : position < 2 / 3 ? 1 : 2] += 1;
+      }
+      const quotaMean = mean(quotaOrdinals.map((ordinal) => cosines[ordinal - 1]).filter((value) => Number.isFinite(value)));
+      const quotaPctValue = windowCosines.length > 0
+        ? windowCosines.filter((value) => value < quotaMean).length / windowCosines.length
+        : 0;
+      bucket.quotaThirds.push(quotaThirds);
+      bucket.quotaPct.push(quotaPctValue);
       const refOrdinals = Array.from(new Set(milestoneRefs(milestone)
         .map((sectionId) => sectionOrdinal(sectionId))
         .filter((value): value is number => value !== null && value >= 1 && value <= total)));
@@ -149,6 +182,9 @@ async function main(): Promise<void> {
         windowTop8Cos: Number(mean(windowTop8).toFixed(3)),
         windowAllCos: Number(mean(windowCosines).toFixed(3)),
         refPct: Number(refPct.toFixed(3)),
+        quotaThirds,
+        quotaMeanCos: Number(quotaMean.toFixed(3)),
+        quotaPct: Number(quotaPctValue.toFixed(3)),
       });
     }
     perGoal.push(goalRow);
@@ -156,8 +192,9 @@ async function main(): Promise<void> {
     for (const stage of goalRow.stages) {
       console.log(
         `  stage ${stage.stageNumber}/${stage.stageCount}｜语义 top8 均值 ${stage.semanticMean}（max ${stage.semanticMax}）` +
-          `｜位置窗口中点 ${stage.windowMid}｜三分位 ${stage.thirds.join('/')}` +
-          `｜引用 ${stage.refs} 条 cos ${stage.refMeanCos}（窗口 top8 ${stage.windowTop8Cos} / 全量 ${stage.windowAllCos}，分位 ${stage.refPct}）`
+          `｜位置窗口中点 ${stage.windowMid}｜三分位 ${(stage.thirds as number[]).join('/')}` +
+          `｜引用 ${stage.refs} 条 cos ${stage.refMeanCos}（窗口 top8 ${stage.windowTop8Cos} / 全量 ${stage.windowAllCos}，分位 ${stage.refPct}）` +
+          `｜配额臂 cos ${stage.quotaMeanCos} 分位 ${stage.quotaPct}（三分位 ${(stage.quotaThirds as number[]).join('/')}）`
       );
     }
   }
@@ -166,13 +203,16 @@ async function main(): Promise<void> {
   for (const key of Object.keys(byStage).sort((a, b) => Number(a.split('/')[0]) - Number(b.split('/')[0]))) {
     const bucket = byStage[key];
     const thirdMean = [0, 1, 2].map((index) => mean(bucket.thirds.map((thirds) => thirds[index])));
+    const quotaThirdMean = [0, 1, 2].map((index) => mean((bucket.quotaThirds || []).map((thirds) => thirds[index])));
     const refRows = bucket.refs || [];
     console.log(
       `stage ${key}｜语义均值 ${mean(bucket.semantic).toFixed(3)}｜窗口中点 ${mean(bucket.window).toFixed(3)}` +
         `｜三分位均值 ${thirdMean.map((value) => value.toFixed(1)).join('/')}` +
         `｜引用 cos ${mean(refRows.map((row) => row.refMean)).toFixed(3)}` +
         `（窗口 top8 ${mean(refRows.map((row) => row.windowTop8Mean)).toFixed(3)}` +
-        ` / 全量 ${mean(refRows.map((row) => row.windowAllMean)).toFixed(3)}，分位 ${mean(refRows.map((row) => row.refPct)).toFixed(2)}）`
+        ` / 全量 ${mean(refRows.map((row) => row.windowAllMean)).toFixed(3)}，分位 ${mean(refRows.map((row) => row.refPct)).toFixed(2)}）` +
+        `｜配额臂三分位 ${quotaThirdMean.map((value) => value.toFixed(1)).join('/')}` +
+        `，预测分位 ${mean(bucket.quotaPct || []).toFixed(2)}`
     );
   }
 

@@ -74,6 +74,101 @@ export function resolveMaterialWindowRange(
   return [start, start + size];
 }
 
+/**
+ * 覆盖约束的语义重排（#119 优化项 3，2026-10-19）。
+ *
+ * 放开位置窗口的**成员约束**（候选不再限于连续 8 节），但保留位置窗口的**覆盖分布**：
+ * 以位置窗口在各三分位（按 `index/(total-1)` 与 1/3、2/3 分界，与语义对齐探针同口径）
+ * 上的条数为配额，并保证每个非空三分位 ≥1 节；配额内按语义名次取最优（rerank 填槽）。
+ * 目的（issue #119 验收）：引用语义分位向窗口内上限靠拢，同时「后半覆盖」不低于窗口方案；
+ * 明确不做「纯语义 top-k 替代位置窗口」。
+ */
+function tertileOfIndex(index: number, total: number): 0 | 1 | 2 {
+  if (total <= 1) return 0;
+  const position = index / (total - 1);
+  if (position < 1 / 3) return 0;
+  if (position < 2 / 3) return 1;
+  return 2;
+}
+
+function tertileSize(tertile: 0 | 1 | 2, total: number): number {
+  let count = 0;
+  for (let index = 0; index < total; index += 1) {
+    if (tertileOfIndex(index, total) === tertile) count += 1;
+  }
+  return count;
+}
+
+/** 三分位配额：窗口分布 + 每个非空三分位 ≥1，超出 take 时从配额最大者削减。 */
+export function resolveTertileQuota(total: number, take: number, anchor: [number, number]): [number, number, number] {
+  const safeTotal = Math.max(0, Math.floor(Number(total) || 0));
+  const size = Math.max(0, Math.min(safeTotal, Math.floor(Number(take) || 0)));
+  const quota: [number, number, number] = [0, 0, 0];
+  if (size <= 0) return quota;
+  const start = Math.max(0, Math.min(safeTotal, Math.floor(Number(anchor?.[0]) || 0)));
+  const end = Math.max(start, Math.min(safeTotal, Math.floor(Number(anchor?.[1]) || 0)));
+  for (let index = start; index < end; index += 1) quota[tertileOfIndex(index, safeTotal)] += 1;
+  for (const tertile of [0, 1, 2] as const) {
+    if (tertileSize(tertile, safeTotal) > 0 && quota[tertile] === 0) quota[tertile] = 1;
+  }
+  let sum = quota[0] + quota[1] + quota[2];
+  while (sum > size) {
+    let pick: 0 | 1 | 2 = 0;
+    for (const tertile of [1, 2] as const) {
+      if (quota[tertile] >= quota[pick]) pick = tertile;
+    }
+    quota[pick] -= 1;
+    sum -= 1;
+  }
+  return quota;
+}
+
+/**
+ * 按「三分位配额 + 语义名次」选节：每个三分位先取配额条语义最优的，
+ * 不足时按全局名次兜底补足；输出按语义名次升序（与优化项 2 同口径——模型偏爱先出现的资料），
+ * 未命中名次的章节保持原位次排在后面。
+ */
+export function selectSectionsWithCoverageQuota<T extends { id: string | null }>(
+  sections: T[],
+  take: number,
+  anchor: [number, number],
+  rankById?: ReadonlyMap<string, number> | null
+): T[] {
+  const total = sections.length;
+  const size = Math.max(0, Math.min(total, Math.floor(Number(take) || 0)));
+  if (size <= 0) return [];
+  if (size >= total) return [...sections];
+  const quota = resolveTertileQuota(total, size, anchor);
+  const ranked = sections.map((section, index) => {
+    const rank = section.id && rankById ? rankById.get(section.id) : undefined;
+    return { section, index, rank: typeof rank === 'number' ? rank : Number.POSITIVE_INFINITY };
+  });
+  const picked: typeof ranked = [];
+  const used = new Set<number>();
+  for (const tertile of [0, 1, 2] as const) {
+    if (!quota[tertile]) continue;
+    const pool = ranked
+      .filter((entry) => !used.has(entry.index) && tertileOfIndex(entry.index, total) === tertile)
+      .sort((left, right) => (left.rank - right.rank) || (left.index - right.index));
+    for (const entry of pool.slice(0, quota[tertile])) {
+      picked.push(entry);
+      used.add(entry.index);
+    }
+  }
+  if (picked.length < size) {
+    const rest = ranked
+      .filter((entry) => !used.has(entry.index))
+      .sort((left, right) => (left.rank - right.rank) || (left.index - right.index));
+    for (const entry of rest.slice(0, size - picked.length)) {
+      picked.push(entry);
+      used.add(entry.index);
+    }
+  }
+  return picked
+    .sort((left, right) => (left.rank - right.rank) || (left.index - right.index))
+    .map((entry) => entry.section);
+}
+
 /** 课堂层（teaching-turn）：够引用原文即可，越小越好（每轮都进上下文）。 */
 export const TEACHING_MATERIAL_LIMITS: PromptMaterialLimits = {
   maxMaterials: 2,
@@ -125,14 +220,20 @@ function normalizeString(value: unknown): string | null {
 /**
  * 投影资料包；无可用资料时返回 `null`（调用方据此**不出现该键**，冷启动行为不变）。
  *
- * `preferredSectionOrder`（#119 优化项 2）：章节 id → 名次。只在**已切好的窗口内**重排顺序，
+ * `preferredSectionOrder`（#119 优化项 2）：章节 id → 名次。默认只在**已切好的窗口内**重排顺序，
  * 成员与数量不变（不做跨窗口检索、不做 top-k 截断）；未命中名次的章节保持原位排在后面。
+ *
+ * `coverageQuota`（#119 优化项 3，2026-10-19）：为 true 且有名次映射时，改走
+ * 「三分位配额 + 语义 rerank 填槽」——候选放开到全文（不再限于窗口切片），
+ * 但配额沿窗口的覆盖分布（保证每个非空三分位 ≥1 节），后半覆盖不回落。
+ * 名次映射缺失（embedding fail-open 等）时自动退回窗口切片路径。
  */
 export function buildPromptFriendlyMaterials(
   raw: unknown,
   limits: PromptMaterialLimits = PATH_MATERIAL_LIMITS,
   window?: MaterialProjectionWindow | null,
-  preferredSectionOrder?: ReadonlyMap<string, number> | null
+  preferredSectionOrder?: ReadonlyMap<string, number> | null,
+  coverageQuota?: boolean
 ): PromptMaterial[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
   const out: PromptMaterial[] = [];
@@ -146,20 +247,30 @@ export function buildPromptFriendlyMaterials(
       window?.stageNumber,
       window?.stageCount
     );
-    const sections = rawSections
-      .slice(sectionStart, sectionEnd)
-      .map((section: Record<string, unknown>) => ({
-        id: normalizeString(section?.id),
-        title: normalizeString(section?.title),
-      }))
-      .filter((section) => !!section.title);
-    // 窗口内语义重排（#119-2）：稳定排序，未命中名次的章节（未知 id）保持原位排后。
-    if (preferredSectionOrder && preferredSectionOrder.size && sections.length > 1) {
-      const rankOf = (section: { id: string | null }): number => {
-        const rank = section.id ? preferredSectionOrder.get(section.id) : undefined;
-        return typeof rank === 'number' ? rank : Number.POSITIVE_INFINITY;
-      };
-      sections.sort((left, right) => rankOf(left) - rankOf(right));
+    const mapSection = (section: Record<string, unknown>): PromptMaterialSection => ({
+      id: normalizeString(section?.id),
+      title: normalizeString(section?.title),
+    });
+    let sections: PromptMaterialSection[];
+    if (coverageQuota && preferredSectionOrder && preferredSectionOrder.size) {
+      // 覆盖约束的语义重排（#119-3）：候选为全文（仅按 id 空间取配额锚），按名次选节。
+      const pool = rawSections
+        .map((section) => mapSection(section as Record<string, unknown>))
+        .filter((section) => !!section.title);
+      sections = selectSectionsWithCoverageQuota(pool, limits.maxSections, [sectionStart, sectionEnd], preferredSectionOrder);
+    } else {
+      sections = rawSections
+        .slice(sectionStart, sectionEnd)
+        .map((section: Record<string, unknown>) => mapSection(section))
+        .filter((section) => !!section.title);
+      // 窗口内语义重排（#119-2）：稳定排序，未命中名次的章节（未知 id）保持原位排后。
+      if (preferredSectionOrder && preferredSectionOrder.size && sections.length > 1) {
+        const rankOf = (section: { id: string | null }): number => {
+          const rank = section.id ? preferredSectionOrder.get(section.id) : undefined;
+          return typeof rank === 'number' ? rank : Number.POSITIVE_INFINITY;
+        };
+        sections.sort((left, right) => rankOf(left) - rankOf(right));
+      }
     }
     const rawKeyPoints = Array.isArray(pack.keyPoints) ? pack.keyPoints : [];
     const [pointStart, pointEnd] = resolveMaterialWindowRange(
@@ -233,7 +344,14 @@ export function extractPromptMaterials(
   container: unknown,
   limits: PromptMaterialLimits = PATH_MATERIAL_LIMITS,
   window?: MaterialProjectionWindow | null,
-  preferredSectionOrder?: ReadonlyMap<string, number> | null
+  preferredSectionOrder?: ReadonlyMap<string, number> | null,
+  coverageQuota?: boolean
 ): PromptMaterial[] | null {
-  return buildPromptFriendlyMaterials(resolvePromptMaterialPacks(container), limits, window, preferredSectionOrder);
+  return buildPromptFriendlyMaterials(
+    resolvePromptMaterialPacks(container),
+    limits,
+    window,
+    preferredSectionOrder,
+    coverageQuota
+  );
 }
