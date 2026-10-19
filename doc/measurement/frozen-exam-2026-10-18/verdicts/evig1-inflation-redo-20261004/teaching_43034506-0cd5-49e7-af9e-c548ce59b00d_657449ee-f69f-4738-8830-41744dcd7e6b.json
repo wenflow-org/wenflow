@@ -1,0 +1,23 @@
+{
+ "pid": "teaching_43034506-0cd5-49e7-af9e-c548ce59b00d_657449ee-f69f-4738-8830-41744dcd7e6b",
+ "topic": "用去年真题译文做一次三查演练",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T02:44:43.731Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": true,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "loopStuck：health 那道「是不是复数泛指」的选择题从第二轮起被连续重复提交 7-8 次，老师反复重念同一句「名字不影响你把位置标出来」，只换题型（念中文／two ___／填空／写句子）而核心卡点始终未推进。",
+   "progressInflation：「识别冠词风险点」给到 82%、「执行三查校准」给到 55%，但对话中学员从未在无提示下独立完成一次三查——时态、主谓一致两栏全程未展开，冠词结论也是在老师连轮暗示「不用标你已经判对」后才被收下。",
+   "wrongAnswerPassed：学员对 health 反复答「C. 不用标，它是复数泛指」，理由明显错误（health 不可数，不是复数），还答过「B. 不用标，它是定语」把名词头当定语，老师仍以「这个结论你已经连着判对」「这栏到此为止」放行并据此收束该知识点。",
+   "unclosedComplete：老师最后两轮抛出「把『他身体很好』写成一句英文发我」和「回我一个数字：圈了几个名词位」均未收到学员作答，对话就停在干预阶段，wrapup 仍标记 status=complete。",
+   "summaryMismatch 之外的遗漏：学员中途问「参考译文就是 improve laws 没加冠词，那我照它算对行吗？」老师未正面回答，这一未收口问题在结课总结的 keyTakeaways 与 actionPlan 中完全没被提及。"
+  ]
+ }
+}

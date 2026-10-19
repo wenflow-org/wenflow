@@ -1,0 +1,21 @@
+{
+ "pid": "teaching_5462ece5-e2be-48a8-b293-d71cb070dd1a_7263fa82-7a31-4fdc-b7b6-38c95fb618d5",
+ "topic": "给每个发布步骤补上输入与产出物",
+ "arm": "B_evig1",
+ "endTime": "2026-10-03T07:05:16.395Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": false
+  },
+  "problems": [
+   "结尾围绕“构建日志算不算交接物”反复至少 3 轮，学员多次仍选 A/表示会选 A，老师重复“日志留机器上、不往下走、记入复习清单”而未换出有效推进策略。",
+   "结课总结称三处交接“都是你自己判出来的”“未依赖教师直接给结论”，但对话中“构建→部署交的是包”由老师直接给出，学员此前还答成“构建过程的完整日志”。",
+   "结课总结虽提到日志待复习，却仍把核心验收说成独立达成，与最后自测学员仍会往 A 上选、日志与交接物分界未解决的事实不符。"
+  ]
+ }
+}

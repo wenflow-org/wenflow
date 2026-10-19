@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_a2b2a985-18dd-40ff-b86d-fcecbded48cb_75105f97-5ff7-4aca-a92e-94097984c7ab",
+ "topic": "用三问话术带妹妹走通车上下去几个人的情境题，全程只问不答",
+ "arm": "baseline",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "同一“妹妹卡在第二问该念哪句”理解检查连续多轮，学员反复选 D/A，老师重复“念D只回嗯、念第二问才自己说数字”，直到直接给结论才推进。",
+   "结课总结判 complete，但最后老师要求把“现在求什么？”按平时口气写一遍，学员未作答。",
+   "“问句里不带方向词”标 learning 90%，但末段学员仍选“那是多了还是少了？”和“下去3个，对吧？”，无稳定独立产出。",
+   "总结 knowledgeItems 称“选 B 后不再补方向词”，但后续学员又回到带方向词选项，与对话事实不符。",
+   "“抢答瞬间的替换句”标 review 85%，但学员在最后仍选错，未巩固。"
+  ]
+ }
+}

@@ -1,0 +1,23 @@
+{
+ "pid": "teaching_42726a22-f6b4-40d6-b343-9e2abcc7d5e9_6238897a-7012-416c-a0fd-dba5ce1f92e4",
+ "topic": "登录服务器，确认自己站在哪个目录",
+ "arm": "A_baseline",
+ "endTime": "2026-10-02T22:37:24.484Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": true,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "学员连续四轮在「pwd 返回 /home/xxx 时家目录是什么」选择 B（家目录就是 xxx，与 /home 无关），老师却称其“说到了点子上”并继续推进，属错答放行。",
+   "同一路径分层确认点连续至少 4 轮未推进，老师反复用“名字 vs 位置”的同一套解释和同一道选择题，学员答案未变。",
+   "结课总结把“能用自己的话说出 /home/xxx 整条才是位置、xxx 只是末尾名字”记为学员 mastered 证据，但该正确表述主要是老师讲解，学员对话中仍选错误 B。",
+   "「识别当前工作目录」被判 mastered/95%，但对话中缺少学员无提示独立产出正确路径归属的证据。",
+   "最后老师抛出 ssh 报错选择题后学员未回答，课堂仍判 complete。"
+  ]
+ }
+}

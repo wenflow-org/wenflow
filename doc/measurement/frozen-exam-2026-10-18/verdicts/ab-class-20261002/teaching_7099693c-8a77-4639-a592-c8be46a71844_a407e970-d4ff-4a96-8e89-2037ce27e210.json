@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_7099693c-8a77-4639-a592-c8be46a71844_a407e970-d4ff-4a96-8e89-2037ce27e210",
+ "topic": "整理方位与步骤连接词的可用表达清单",
+ "arm": "evig1",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": true,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "同一句「Next to the station, there is a small car park. 属于哪一类？」被反复提交 3 轮，老师三次重复「那句我们真不判了/记进复习清单，回头拿真题地图再练」同一套说辞，该判定点始终未推进。",
+   "错答放行：学员消息答的是旧分类题（A. 块内定位），从未给出 across 的填空，老师却回复「填对了——across 一个词就把读者带过了桥…你自己说的那句『有 walk 这个动作，是推进』」，把学员未产出的答案与判断当成正确推进记录下来。",
+   "总结失真：knowledgeSummary 与 knowledgeItems 的证据写「你说出有动作是推进」「填对 walk across the bridge」，但对话中并无对应学员产出，这些结论实际只出现在老师的评语里。",
+   "未答收口：最后一条老师消息要求把「旁边」「然后」各标一栏，学员无任何回答，课堂仍判 status=complete、actionPlan 第一条把该未答问题改写成课后任务。",
+   "末轮切块提问后学员仅给出自己写的两句（「入口北边是喷泉，然后咖啡厅在喷泉旁边」）并明说分不清，老师给出的 A/B 二选一即被判为「你这两个自己分开了」，独立产出证据偏弱却计入 80% 进度。"
+  ]
+ }
+}

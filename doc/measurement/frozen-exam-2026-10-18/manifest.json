@@ -1,0 +1,586 @@
+{
+  "frozenAt": "2026-10-18T02:08:24.451Z",
+  "purpose": "#84 wrongAnswerPassed 冻结评判样本集",
+  "batches": [
+    {
+      "id": "ab-class-20261002",
+      "source": "doc/local/runs/20261002/ab-class-audit/verdicts",
+      "files": 35,
+      "judged": 35,
+      "wrongAnswerPassed": 9,
+      "rate": 0.257,
+      "entries": [
+        {
+          "file": "teaching_0cacbe7f-c2b3-4da8-af42-6364d550e180_ea28919f-fe92-4c5e-93ac-633ed0553be7.json",
+          "sha256": "b9be083ad181415d5123d559cb472436676d02f7c75691e4efd8e2def9631286",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_196774bf-40d4-4666-8594-d1f992f9c214_94f78c54-9950-4146-aa03-2fea262029c6.json",
+          "sha256": "95cc540de7c2f759c3515ab5a3066eb6791e7e89956165b5ff42fbc58fe8c8d3",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_20177b1b-bc33-41d1-a4a8-dba1431e730a_9b37dce1-dba5-40d6-bf70-c9841f443ce8.json",
+          "sha256": "12bf24c6859b1af723e35e772cd43b8910ebc96e671e6fde0338e410af9cc8fd",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_265cd5cf-c7a3-411b-aca3-b48479b4824f_a2e0480d-e779-4c45-9c21-681cca93b45e.json",
+          "sha256": "c9e2d7595d0e41e6b8cbff81262ab412b5237c386396c349d3359cc3cebb5deb",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_363d1b83-b362-4e76-b72b-18ad2c50d5f5_2bac36fc-ce99-4a89-9396-94217baca745.json",
+          "sha256": "658baef7e8df262c2fa64a9737f917a443f1202f269d10eba3db5551d9d9c5f6",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_37910d79-a537-4e8c-894e-b04ddc932927_03aaa00e-be48-4b43-86a9-6be9178f1fb3.json",
+          "sha256": "9ed02e213a29d7d697d6f746031ce5e0ce2177847abfc4eb853f4fb1bb707c1e",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_37910d79-a537-4e8c-894e-b04ddc932927_827bb927-039c-4f80-bf2e-157b4eb0f14f.json",
+          "sha256": "d880a527156ed80fa8747b64aae27441efce8fecc04a19e31e1dc6be8e0b14be",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_37e96531-c2a4-48cf-b158-f8f177884978_28dd186f-b228-427b-aa05-b659c3052e45.json",
+          "sha256": "47f5990b498dd3a864d1d83c7cf81dcb8082e8a124adcfa1db152db88167d57a",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_37e96531-c2a4-48cf-b158-f8f177884978_7e318181-4bea-4d1c-9a06-c65a7dec0b4b.json",
+          "sha256": "2d7b54414dce45979c3c7c7eda1f5953f833ea51c1f328e6d697b978719e3835",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_4b90d493-60b0-48ad-9e69-81964ed2708f_20d11700-c53e-442e-bdd4-6e05dc092177.json",
+          "sha256": "bc81f9f0f2d40efb8101e3780d6f480f35426bbac6b55816de3343c28fafdc62",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_5024fe34-cf6a-4185-9df9-8e43db8832dc_3ca2dbcd-2198-43d7-9e03-758c248c04a6.json",
+          "sha256": "77ad88926ede980ea818fc05fa03e9eefd6b34e15f6bbe7493e34c4232026667",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_5ad09e81-0030-4ea0-8d4b-5a5408109b22_00fed753-0c5c-46a5-843b-57eebbb9f7a3.json",
+          "sha256": "4dda5d7ed538350b82d56297a136dbda9ea9b393f645865d1f5e5603a7c5d992",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_6a9d03d8-b6ba-434e-853a-1f1b75ee060b_4a4839ba-ddb1-4619-b12a-1d67cd245ff9.json",
+          "sha256": "222d6b698fc34bd8f46c0f0783532c37e56ac7a69f8f0f294880cef802ed0c31",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_7099693c-8a77-4639-a592-c8be46a71844_a407e970-d4ff-4a96-8e89-2037ce27e210.json",
+          "sha256": "4adc7405bddc82d17cd86fd5e744f2107ad718db3de765796396e9364d9c8ca4",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_71595761-2339-4ea9-b130-b9fca0d7876d_13acd30f-b4d7-4c04-b16e-044ab59e965b.json",
+          "sha256": "107233180c473ea2b88f72c58eaeb4149ee27e17a28f261fac1fc32adf08207c",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_759bd974-9227-4826-aac5-ad695b97cb6d_8da0a1c4-2b66-442d-9f21-aacb24149b4c.json",
+          "sha256": "47c58235630b307d571bc3582f62848fbe0ec141852f594c5c46b86e2fd05f5d",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_8050b55e-d63f-460c-ac8e-c932adbc1ec1_93c62f82-a9d5-4e02-9ea2-9c62608a2f09.json",
+          "sha256": "9a59dfb182207b4f32f886dec8041dd2e3b1cba3b34dbf201e1e0bc10801ad0e",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_8050b55e-d63f-460c-ac8e-c932adbc1ec1_dad98ff9-a93e-47c7-af69-0965325b2ccf.json",
+          "sha256": "b937022e70c7fa84a7530fa4c51eb995520d32c81ce87129b04ad3d4ea0534c0",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_80520471-4c8c-4fea-811a-149e0413650f_3d3ea542-ed86-4a4f-8adf-91a13dc96510.json",
+          "sha256": "223d4fca76f47529fc5784c3115e6417b241e173217e00e82bcbe188ba41a668",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_80c42ed6-e1af-4eea-a2fa-83392a9bb7b5_5d101ade-608e-45c4-bac5-51c92f1b6a54.json",
+          "sha256": "f3520d2f3175449289df862794de8fac37270f746e668c16dcd9893f70d28ed4",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_8886a70a-95d1-4aa5-8c25-8e94332a8f51_bff8e2fe-538d-4d14-bdda-f891e1d08469.json",
+          "sha256": "f6761e26f666ce1d71c0abebf712ee3814562ef074803faad195013ef671fcce",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_911ca989-ce20-4508-a213-e3ac96f48d7a_061528a7-df42-43b8-846c-cdfedddb23f0.json",
+          "sha256": "029670720823653c6bbd7d040605dfa02d260dacaab52f9b67650f93e2c7b5a0",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_9d48ed4b-a892-4feb-a2fb-d9514e3354ff_87a273aa-6093-429c-b1d6-8d6ab5129cb5.json",
+          "sha256": "0404eddaeddb3b406b8371e78d77a740a8f51cc4206a1d9bc120e9f9b4b45b04",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_a0373b09-372f-4f4a-9a95-6c7f1cedb38c_797908af-f21f-416d-b1b0-7c3db8790ce1.json",
+          "sha256": "72fc0787013debe9e366975316fb93e56ab585200d9b50148d08113f6468f424",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_a2b2a985-18dd-40ff-b86d-fcecbded48cb_75105f97-5ff7-4aca-a92e-94097984c7ab.json",
+          "sha256": "49c95f6116c3fc0ddb1d8ec4117db65f7beb7eb1aceea3b4c14dca5d1af43091",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_a59c5861-7d04-4b30-95f4-e4b0db291cb9_5070c09a-0787-4caf-8d27-d3a27669a2c4.json",
+          "sha256": "21ddb24fd74849f250af0e25ce91f0e87dae7cb17df256fe24195886042e59b5",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_ab23c21b-ab2f-4177-ab75-e6753523f40d_c153db79-03c0-4bd7-821a-ec6511af89c2.json",
+          "sha256": "4eaef0ff598f4ca4345952e49433fb51e3ab423bb69d94ea981c3a24ea0be90c",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_d46edb84-de0b-493c-900e-77bd0a1f19bb_729318f8-f22b-4c8c-a82a-57d1f7eb5c39.json",
+          "sha256": "2ca7bf3077ffcb92ab7d53b49f6c7e149c9e23e9164d3a1d3960d7da4e09ee4f",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_e5768687-87a8-457f-b8ec-585d81eab397_eaef66bd-d94e-4300-9657-dd0cc6fcda69.json",
+          "sha256": "fc191b717db47083e6b2d8f1c867cc12d19819e52a4a765cf5f763b43a6574cd",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_e5768687-87a8-457f-b8ec-585d81eab397_f50294ed-f5de-45b7-ac21-b5b7f2b46873.json",
+          "sha256": "8cdb4521bade1f566af9c522b72423cbadf0b68cdfc24a81b8d084d47c1c01dd",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_e6671032-9466-480d-886e-7308a281c4bc_0d15c268-262a-4f90-bbf7-04288a7cb859.json",
+          "sha256": "090597b78bd86dbb02b6e5d16502d6a1f841e3a66343c451e36e6a366870d99e",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_e6671032-9466-480d-886e-7308a281c4bc_d9a2efd0-0d88-4927-8b52-73d64cd3af7f.json",
+          "sha256": "c8a0255a31d7980546dcf12326877dce13c834b31b1c1f9072d7d37314cf27f8",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_e7c8e476-5848-4a47-a429-10595d119c3f_552c3e00-d74e-426a-a563-5a93543dfdf8.json",
+          "sha256": "36c67c7abe56d1b56359c41b3a46e5757b72b6d0f954d3514ec1653127fd82a1",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_ed9fbfae-2377-423b-8447-711b80fe38fd_13e2aee2-c594-4707-ab8a-268f33206d01.json",
+          "sha256": "7e2d6649e79efdff6463c12e3dc3fd27b4b16cb3792a4c3e98d3327d5426a63a",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_f9365e6f-ae41-4975-908d-a1106f7d1326_4f2be492-d88d-45a1-926e-57722c876935.json",
+          "sha256": "a230b854124a176b5a4627026c33dec04fff6341fabea3cfb3a09942d6fda3ee",
+          "wrongAnswerPassed": false
+        }
+      ]
+    },
+    {
+      "id": "evig1-inflation-20261004",
+      "source": "doc/local/runs/20261004/case-abbt/hyp-H2-evig1-evidence-anchor-curbs-inflation/verdicts",
+      "files": 16,
+      "judged": 16,
+      "wrongAnswerPassed": 7,
+      "rate": 0.438,
+      "entries": [
+        {
+          "file": "teaching_00fc34be-3957-4df7-a7b4-9e1a925bf56a_e7622569-8d80-4b42-95a1-e89bacfdb377.json",
+          "sha256": "8b604004fa148e4da979f42c3f79980bac1010a29f42bb04d1f64c57ae66d4f6",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_0cacbe7f-c2b3-4da8-af42-6364d550e180_8da13d94-e510-499a-b24e-f0f5d98070f9.json",
+          "sha256": "137b40e8e000b76e600ef9ac9355d0b68d750945d23dac9bdc7c51dbac2709a1",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_0cacbe7f-c2b3-4da8-af42-6364d550e180_ea28919f-fe92-4c5e-93ac-633ed0553be7.json",
+          "sha256": "c1f31f97e693a9d019808150e2426715f1c96ea97e05c5b6b35ef55f2970b639",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_196774bf-40d4-4666-8594-d1f992f9c214_4fd2a36c-4c82-43a7-9b3f-c3ebf54c47ed.json",
+          "sha256": "ff2e2fd167533cd7b9ca7cab6bb2a52a0f768b12e01fae0af3cd49ad877f749f",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_1a1fc1bb-25fd-4ed6-a67b-928c5f6bb53e_b3f36ea4-d1be-4f55-b45b-3cc5b7dd12bd.json",
+          "sha256": "9b2e82da170cf65a1802c686fde452f0e40666a18eb7779682f8aeabd8f7991a",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_265cd5cf-c7a3-411b-aca3-b48479b4824f_a2e0480d-e779-4c45-9c21-681cca93b45e.json",
+          "sha256": "06b9915db0f179f9ef185d6446eced446496aa27afe0d4176e530df178efdf7f",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_37e96531-c2a4-48cf-b158-f8f177884978_28dd186f-b228-427b-aa05-b659c3052e45.json",
+          "sha256": "cb49963dd9aecbfbfc51fe6e20297fd9729248030e993d21f6020ac63c2b37ba",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_3d6a84b9-adab-46ff-ae4d-91b694a3640d_39eb15ee-6631-49ee-8aeb-c2e875ec05f8.json",
+          "sha256": "ebe94b392cbeb7acb1d5a86c1d33328c3519baac3a182cb857cdc0833eb630f0",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_42726a22-f6b4-40d6-b343-9e2abcc7d5e9_6238897a-7012-416c-a0fd-dba5ce1f92e4.json",
+          "sha256": "85c558df5a1743ca5bc02ea52d35908ecbdb8f6961893dabd9685bfa375560b9",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_71595761-2339-4ea9-b130-b9fca0d7876d_13acd30f-b4d7-4c04-b16e-044ab59e965b.json",
+          "sha256": "8734491fff8d072c7165b160b75c9d509da0b7bc93034557ab1ef2e0e412b6da",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_8050b55e-d63f-460c-ac8e-c932adbc1ec1_93c62f82-a9d5-4e02-9ea2-9c62608a2f09.json",
+          "sha256": "fac8760dbfa6263a2e130daeede9e774b2e9e6e325b59912f12ea4bbf702ebd0",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_911ca989-ce20-4508-a213-e3ac96f48d7a_061528a7-df42-43b8-846c-cdfedddb23f0.json",
+          "sha256": "33a4428a4b238b8dbade60c5ab8d17537388e55543b36d6592601e8474924cf0",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_96790080-5a59-4d82-85bc-b7ae12f3731c_5e217758-5a25-4551-8262-b1c1bd18cae1.json",
+          "sha256": "5dfd1255aea466436bddc1a6b0211c8e86f3c737d63b5445e72018518d351781",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_ab23c21b-ab2f-4177-ab75-e6753523f40d_c153db79-03c0-4bd7-821a-ec6511af89c2.json",
+          "sha256": "86740dff81752154856f769915b6bb2fe3627096e122529317103caa67004b40",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_b5041e4a-442c-43cb-af24-17b52bcbcfad_97f77a77-fd47-43dd-b270-3262928aeadf.json",
+          "sha256": "a282767d3ba317d2a6b409704e726f7cfa11aa304c2521a061ee26d07ab7934c",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_e709d303-5548-4908-9974-6e3bb538fefa_c1b1f745-b4bb-4c68-bd3b-83e20a23012e.json",
+          "sha256": "e9bcc94d53c93ecd3f668eee2032a435cd1ca9393dbb4ffba9cfe174f68b7c38",
+          "wrongAnswerPassed": false
+        }
+      ]
+    },
+    {
+      "id": "evig1-inflation-redo-20261004",
+      "source": "doc/local/runs/20261004/case-abbt/hyp-H2-evig1-evidence-anchor-curbs-inflation-redo/verdicts",
+      "files": 58,
+      "judged": 58,
+      "wrongAnswerPassed": 19,
+      "rate": 0.328,
+      "entries": [
+        {
+          "file": "teaching_00fc34be-3957-4df7-a7b4-9e1a925bf56a_84524aee-2a56-4f4c-89e7-f11df8891842.json",
+          "sha256": "d954a276b4076053bd5743da490d3a2da291c98c27bfbfcd03b9fe2045af8da7",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_00fc34be-3957-4df7-a7b4-9e1a925bf56a_e7622569-8d80-4b42-95a1-e89bacfdb377.json",
+          "sha256": "8b604004fa148e4da979f42c3f79980bac1010a29f42bb04d1f64c57ae66d4f6",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_0313c889-7849-44ae-ac50-0360b40b5f14_42448fed-e629-423a-bab7-efc9af88a94b.json",
+          "sha256": "a361866458ebe70ba0082f5d94d51ff6518030de8877191c7622a013683260fb",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_0cacbe7f-c2b3-4da8-af42-6364d550e180_8da13d94-e510-499a-b24e-f0f5d98070f9.json",
+          "sha256": "137b40e8e000b76e600ef9ac9355d0b68d750945d23dac9bdc7c51dbac2709a1",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_0cacbe7f-c2b3-4da8-af42-6364d550e180_ea28919f-fe92-4c5e-93ac-633ed0553be7.json",
+          "sha256": "c1f31f97e693a9d019808150e2426715f1c96ea97e05c5b6b35ef55f2970b639",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_196774bf-40d4-4666-8594-d1f992f9c214_4fd2a36c-4c82-43a7-9b3f-c3ebf54c47ed.json",
+          "sha256": "ff2e2fd167533cd7b9ca7cab6bb2a52a0f768b12e01fae0af3cd49ad877f749f",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_1a1fc1bb-25fd-4ed6-a67b-928c5f6bb53e_b3f36ea4-d1be-4f55-b45b-3cc5b7dd12bd.json",
+          "sha256": "9b2e82da170cf65a1802c686fde452f0e40666a18eb7779682f8aeabd8f7991a",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_23ffb20b-ce1d-45c9-814f-c16bdd3c52cb_9b04882f-e398-4d2f-a229-0311ec02a4e8.json",
+          "sha256": "02327f9d4992cfc71fd4e139b4cc9800c58de1c687e3f0accd3766f65d1fb84f",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_265cd5cf-c7a3-411b-aca3-b48479b4824f_a2e0480d-e779-4c45-9c21-681cca93b45e.json",
+          "sha256": "06b9915db0f179f9ef185d6446eced446496aa27afe0d4176e530df178efdf7f",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_265cd5cf-c7a3-411b-aca3-b48479b4824f_d2794e3f-657e-4666-948d-18c935d277da.json",
+          "sha256": "41a846030fd3f0e7b4991216d72a279c828b92d776126fbb2ef90a9a7fc46ee1",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_265cd5cf-c7a3-411b-aca3-b48479b4824f_f51ae8eb-52fc-4805-b1cf-0dfe285801cc.json",
+          "sha256": "4b895cb3c2ff32d110a61292d4392ed085abe2b84366030198af9a1f874593ae",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_363d1b83-b362-4e76-b72b-18ad2c50d5f5_2bac36fc-ce99-4a89-9396-94217baca745.json",
+          "sha256": "e7de36419b3a083e562662eaf4032fff9c4e82464e6971b9502525fc07e4adb2",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_37910d79-a537-4e8c-894e-b04ddc932927_03aaa00e-be48-4b43-86a9-6be9178f1fb3.json",
+          "sha256": "1fe6c4aa9cae3cf9031fd2dce2bfe3c1076105ea61a686797a365cb479eb033a",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_37910d79-a537-4e8c-894e-b04ddc932927_827bb927-039c-4f80-bf2e-157b4eb0f14f.json",
+          "sha256": "67bb35f000612773a5bd61dd54fea805f49569a4c3ae796303394c956045dca2",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_37e96531-c2a4-48cf-b158-f8f177884978_28dd186f-b228-427b-aa05-b659c3052e45.json",
+          "sha256": "cb49963dd9aecbfbfc51fe6e20297fd9729248030e993d21f6020ac63c2b37ba",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_3d6a84b9-adab-46ff-ae4d-91b694a3640d_39eb15ee-6631-49ee-8aeb-c2e875ec05f8.json",
+          "sha256": "ebe94b392cbeb7acb1d5a86c1d33328c3519baac3a182cb857cdc0833eb630f0",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_3d6a84b9-adab-46ff-ae4d-91b694a3640d_8edf2d07-d617-42d4-82ea-a4757e0b6bda.json",
+          "sha256": "531a4908388ffd1e446794c41cbed42e133082a87c8b21466f5b9c0ede285699",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_42726a22-f6b4-40d6-b343-9e2abcc7d5e9_6238897a-7012-416c-a0fd-dba5ce1f92e4.json",
+          "sha256": "85c558df5a1743ca5bc02ea52d35908ecbdb8f6961893dabd9685bfa375560b9",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_43034506-0cd5-49e7-af9e-c548ce59b00d_657449ee-f69f-4738-8830-41744dcd7e6b.json",
+          "sha256": "e8b48eca5425445475c6848c0643cee4f97de7a4c8336f36320825634230ad21",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_4a288d89-13cf-49b3-9eb6-9e95e707367f_fdbeca0b-0aee-43ae-93c0-a48363ec4c6f.json",
+          "sha256": "b4dc86a30eec1e71d3ff0a3f3ffefe951d28a10c479088a8fe58f78e5be88c33",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_4b90d493-60b0-48ad-9e69-81964ed2708f_20d11700-c53e-442e-bdd4-6e05dc092177.json",
+          "sha256": "a35700fa864d0443eb0f9822972e2acfef7aeec52cae21f6a2f3129f926f7c2d",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_5024fe34-cf6a-4185-9df9-8e43db8832dc_afc3c352-a9d6-464a-9884-2859bff1ab02.json",
+          "sha256": "9b8500eb5f1b5ff8304cd9adcd885a24a64276b4e47287dc922a19365b1d793d",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_5462ece5-e2be-48a8-b293-d71cb070dd1a_7263fa82-7a31-4fdc-b7b6-38c95fb618d5.json",
+          "sha256": "d3a81aea93c2f80bfbf04b6ae46a5d1fff6661f2838f68c713fe7d813ae536ca",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_5462ece5-e2be-48a8-b293-d71cb070dd1a_918301b7-c4d5-4010-b7d3-8eec95948727.json",
+          "sha256": "9a708751b69d571ff1a3571ae26b817194fd95dcbb09c47eba2f372129702508",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_5ad09e81-0030-4ea0-8d4b-5a5408109b22_1e3d8507-7b00-4ab6-9738-93ccada5c701.json",
+          "sha256": "71b3016404d27465f6955f6164d9ed0d25aae671458f7859a7f7484023957320",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_6a9d03d8-b6ba-434e-853a-1f1b75ee060b_4a4839ba-ddb1-4619-b12a-1d67cd245ff9.json",
+          "sha256": "3b12cd09c81c241212b8c3413ac9abe098fd386db9642fbe275c60950f04b769",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_7099693c-8a77-4639-a592-c8be46a71844_c25e67df-04b9-4e4a-8e22-43fca6301eb8.json",
+          "sha256": "74a46b5c42a06b28b0aeca966ea3f8e3dc847cff34cdf0c233e6ca619189744a",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_71595761-2339-4ea9-b130-b9fca0d7876d_13acd30f-b4d7-4c04-b16e-044ab59e965b.json",
+          "sha256": "8734491fff8d072c7165b160b75c9d509da0b7bc93034557ab1ef2e0e412b6da",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_71595761-2339-4ea9-b130-b9fca0d7876d_3977c597-ee35-4e62-9de5-b1a6b0e8472a.json",
+          "sha256": "72ed6680460cbe0bac45183ab1f79f13715f204b03dde1635801f0b7dfc1a41c",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_80462ea7-9340-4724-894e-a320d54fc590_677b6857-dce1-40f3-a60b-3b4863df9c97.json",
+          "sha256": "30fc14be37f970ca32faa35e5447fca3f2ec6269348cfe6b5edca0e389f572a2",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_80462ea7-9340-4724-894e-a320d54fc590_87f6542a-e7dd-49d4-9740-415c84562ee9.json",
+          "sha256": "69ebaa0b112bc27ce5f5017b5241f8c6b64026c88b3c1c539f4ef8e4ec2b6646",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_8050b55e-d63f-460c-ac8e-c932adbc1ec1_93c62f82-a9d5-4e02-9ea2-9c62608a2f09.json",
+          "sha256": "fac8760dbfa6263a2e130daeede9e774b2e9e6e325b59912f12ea4bbf702ebd0",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_8050b55e-d63f-460c-ac8e-c932adbc1ec1_dad98ff9-a93e-47c7-af69-0965325b2ccf.json",
+          "sha256": "77165715c2059113a864f72236d36506a4235020c608d0f1ce37e207ba09271c",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_8886a70a-95d1-4aa5-8c25-8e94332a8f51_d909e7ed-658a-4c12-8763-6b6b810e2ec2.json",
+          "sha256": "1317750c5afcfc72ff1f5ef376776b6008b7e5b27f9016f03e4d66d120f9f855",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_8dd21ba4-c09c-41d2-909d-abeda420adfc_a49fa28b-4235-47a6-9d63-3284106d2da6.json",
+          "sha256": "b18404a5a041e9bbda27df1e9f4f87a831aa2c15a264ee09e21bf6e7e9cd07a7",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_9005ee43-2f8b-41aa-bd44-171bfd023701_3f340c19-d92e-42d3-a16c-04458649054e.json",
+          "sha256": "59587e70d23fd76b68483eac3612169bf326ea768141a08e388ffeae69e22d9b",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_9005ee43-2f8b-41aa-bd44-171bfd023701_b8edc71d-7e2f-4ccb-b383-7ccc9e71e5af.json",
+          "sha256": "2a4bcdd6500df05315c29e7bc4f36fa5fe990954fcf60d5d127fb854c9e0950c",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_911ca989-ce20-4508-a213-e3ac96f48d7a_061528a7-df42-43b8-846c-cdfedddb23f0.json",
+          "sha256": "33a4428a4b238b8dbade60c5ab8d17537388e55543b36d6592601e8474924cf0",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_96790080-5a59-4d82-85bc-b7ae12f3731c_5e217758-5a25-4551-8262-b1c1bd18cae1.json",
+          "sha256": "5dfd1255aea466436bddc1a6b0211c8e86f3c737d63b5445e72018518d351781",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_9b5ee1e9-a909-4ace-81fa-d6d3fe615767_97afb60d-4474-4b6b-8399-7039e3059971.json",
+          "sha256": "93653d16eebe2c9392e984eaf300f17a180451be2a68e0f0a8dd8fc22d7cf117",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_9d48ed4b-a892-4feb-a2fb-d9514e3354ff_340bc41b-6e38-48fb-8244-bfbdbd16e836.json",
+          "sha256": "24514f02793d7602988f5f6b3b89cc7306fb40d3b5731b744f888bce97f06a92",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_a0373b09-372f-4f4a-9a95-6c7f1cedb38c_797908af-f21f-416d-b1b0-7c3db8790ce1.json",
+          "sha256": "2f174b15265f598c609dd7f777853f89b82d9eab6b148664e737bf464a0b5d96",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_a0373b09-372f-4f4a-9a95-6c7f1cedb38c_9f9fc6a3-0b97-408d-8996-e7be7fc53354.json",
+          "sha256": "12cc4b28c8a99310043ee4ec52b869cf000b21b4aef308a836443a043da52296",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_a180700c-0a6e-471d-8094-5002e7a8d387_7ff605ff-ce3e-4789-bebc-9da659029ae8.json",
+          "sha256": "c75f7e75bde4bef2e91ee2eb4e8968fee90c1e7fc10c38453e266bb2cf6fec9b",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_a2b2a985-18dd-40ff-b86d-fcecbded48cb_a1ab2e58-60ad-4362-9889-a9c3097510b3.json",
+          "sha256": "6ca71bca67546347618c1d49a1c928b2aad6337ba8a891fb16005149081698e2",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_a59c5861-7d04-4b30-95f4-e4b0db291cb9_5070c09a-0787-4caf-8d27-d3a27669a2c4.json",
+          "sha256": "644ca9cdb0d6c2e9970b5d252ea127e79dbe3d954743c9b71359bd1e5b477b1b",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_ab23c21b-ab2f-4177-ab75-e6753523f40d_c153db79-03c0-4bd7-821a-ec6511af89c2.json",
+          "sha256": "86740dff81752154856f769915b6bb2fe3627096e122529317103caa67004b40",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_b5041e4a-442c-43cb-af24-17b52bcbcfad_242f048a-366c-4e58-a754-a3ed41bb4af8.json",
+          "sha256": "e319381e56faf93059f263cc5d53a2d476ce86cf999db357710eb19b12cf27fe",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_b5041e4a-442c-43cb-af24-17b52bcbcfad_97f77a77-fd47-43dd-b270-3262928aeadf.json",
+          "sha256": "a282767d3ba317d2a6b409704e726f7cfa11aa304c2521a061ee26d07ab7934c",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_d46edb84-de0b-493c-900e-77bd0a1f19bb_06ea9d5c-c67d-4e03-b488-0135591a428c.json",
+          "sha256": "2f2e211d8f91131ed1173ef4c51bfca059c36cb082305f662514ba4c9abe7689",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_e5768687-87a8-457f-b8ec-585d81eab397_f50294ed-f5de-45b7-ac21-b5b7f2b46873.json",
+          "sha256": "3cf9e0a700bdfdeddb6be912bc5680afb6ecd25835defc388e9ed562f8f8db61",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_e6671032-9466-480d-886e-7308a281c4bc_0d15c268-262a-4f90-bbf7-04288a7cb859.json",
+          "sha256": "fdb5fa204f982670775c4c3ca70026e68df63f3eb13286f1416c1b4be7befacb",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_e709d303-5548-4908-9974-6e3bb538fefa_c1b1f745-b4bb-4c68-bd3b-83e20a23012e.json",
+          "sha256": "e9bcc94d53c93ecd3f668eee2032a435cd1ca9393dbb4ffba9cfe174f68b7c38",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_e7c8e476-5848-4a47-a429-10595d119c3f_552c3e00-d74e-426a-a563-5a93543dfdf8.json",
+          "sha256": "ba05af815d66bcb862dc0ae88c9534c3cc36d61174878f861b52aff3efec15ba",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_e91afa47-0acf-4c79-9dbf-457c3bac8aed_c040c012-51bb-4f66-b1eb-e35bb2bf2819.json",
+          "sha256": "fe5dc53bceecf7921d8aac2c136ced5c990dc653bafc86e6ac0dea7d9af39d7e",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_ed9fbfae-2377-423b-8447-711b80fe38fd_5dbc4881-2480-465e-b5fb-99bbb947e4fa.json",
+          "sha256": "a63491eb7b16143b6360edc5075d98c0ba78dd0f4246f75da1d46ea7c214d992",
+          "wrongAnswerPassed": true
+        },
+        {
+          "file": "teaching_f9365e6f-ae41-4975-908d-a1106f7d1326_f21269db-89c8-4074-b1bc-5d7f960c0a1a.json",
+          "sha256": "26dff7abc087c646cb8641b046f3ba0341f1a1d13c3b484787d86500ee2fe2ea",
+          "wrongAnswerPassed": false
+        },
+        {
+          "file": "teaching_fdfdf25a-5939-4e1a-a7d1-30aaceda63cb_6495ef23-8a66-4acc-91bd-d45f065ce710.json",
+          "sha256": "b89d3612213ce5656da6180525a4dca4427ff8b97aec923e9a2ccf22fad95ae7",
+          "wrongAnswerPassed": false
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "judged": 109,
+    "wrong": 35,
+    "rate": 0.321
+  }
+}

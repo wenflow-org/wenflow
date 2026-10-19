@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_ab23c21b-ab2f-4177-ab75-e6753523f40d_c153db79-03c0-4bd7-821a-ec6511af89c2",
+ "topic": "拆解一道'变形到一半就乱'的错题，定位决策断点",
+ "arm": "evig1",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "同一理解检查“动笔变形前先看什么”连续多轮学员都选 A“直接分离参数”，老师反复用“手比眼快”解释但未推进，构成循环卡壳。",
+   "“定位决策断点”标为 mastered/85%，但学员说出断点前老师已给出“我都是在还没看清 ______ 的时候，就动手了”的填空提示，缺少无提示独立产出证据。",
+   "结课总结 status=complete，但最后老师抛出“最后一道题，答完这节课就收：”后学员未作答，未解决问题被遗漏。",
+   "总结称“替代动作也找到了——取中间点和两端摆在一起比”，该动作主要是老师提出，学员仅回应“写进卡片”，有把老师讲解记成学员产出之嫌。",
+   "总结 learningEvaluation 称“最后把断点说清楚了”，但该断点是在老师填空提示后补出，非完全独立产出。"
+  ]
+ }
+}

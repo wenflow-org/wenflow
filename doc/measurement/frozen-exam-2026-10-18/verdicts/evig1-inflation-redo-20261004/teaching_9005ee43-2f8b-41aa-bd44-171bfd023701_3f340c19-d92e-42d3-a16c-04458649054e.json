@@ -1,0 +1,20 @@
+{
+ "pid": "teaching_9005ee43-2f8b-41aa-bd44-171bfd023701_3f340c19-d92e-42d3-a16c-04458649054e",
+ "topic": "按考纲权重排出模块优先级",
+ "arm": "B_evig1",
+ "endTime": "2026-10-03T08:13:40.524Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "结尾老师两次说“走之前最后确认一道，答完今天这个任务就收口”，学员只回应回去填班次表，未完成该题，课堂却判 complete。",
+   "结课总结未提及最后一道确认题未作答，直接收口为完成，遗漏了最后未解决问题。"
+  ]
+ }
+}

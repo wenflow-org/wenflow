@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_7099693c-8a77-4639-a592-c8be46a71844_c25e67df-04b9-4e4a-8e22-43fca6301eb8",
+ "topic": "把一张流程图的阶段边界用文字切出来",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T02:59:58.155Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": true,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "学员末尾仍说换新图会“现猜从哪儿落刀”、怕外观尺抢手，且最后可可豆题未答，但三个知识点被判 mastered 90-100%，缺少无提示独立产出的证据。",
+   "学员明确说“线想落在加热后和搅拌后之间”，老师却回应“对——你刚才自己把线落对了……线落在成品前面”，把错误判断当成正确推进。",
+   "结课总结称“能独立切出两张图的边界并说出判据”，但对话中原始图边界由老师反复给出，末尾未答的巧克力题也未被总结记录。",
+   "老师最后抛出“可可豆……把烘焙和研磨归为同一阶段，依据是什么？A/B/C”后，学员未回答，课堂仍标记 complete。"
+  ]
+ }
+}

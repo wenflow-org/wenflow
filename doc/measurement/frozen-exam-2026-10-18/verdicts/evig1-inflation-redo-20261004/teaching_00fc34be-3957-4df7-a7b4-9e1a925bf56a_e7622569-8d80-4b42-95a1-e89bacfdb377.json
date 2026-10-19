@@ -1,0 +1,21 @@
+{
+ "pid": "teaching_00fc34be-3957-4df7-a7b4-9e1a925bf56a_e7622569-8d80-4b42-95a1-e89bacfdb377",
+ "topic": "从课外传记短篇里圈出「眼熟但拿不准」的实词，调出《劝学》《师说》里的义项候选",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T03:28:50.883Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": false
+  },
+  "problems": [
+   "「郡举孝廉，不就」的判据在同一确认点上反复多轮，学生最后仍说『我讲不出，就是凭感觉套的』，老师反复用『后面有没有东西可靠过去』同一套解释，未形成稳定推进。",
+   "结课总结和结束语称『判据也是你自己逼出来的』『就的判据你自己说出来』，但学生最后确认时明确答不上来，属于把老师讲解/引导记成学员产出。",
+   "总结称『圈词标准你也说清了：不圈生字，圈眼熟但拿不准的』，但对话中是老师自己提出这个标准，学生只是说圈出的全是生字、眼熟词凭印象读过去。"
+  ]
+ }
+}

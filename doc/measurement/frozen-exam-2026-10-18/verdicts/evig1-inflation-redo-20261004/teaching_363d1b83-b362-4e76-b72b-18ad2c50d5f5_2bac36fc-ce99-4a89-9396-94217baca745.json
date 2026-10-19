@@ -1,0 +1,21 @@
+{
+ "pid": "teaching_363d1b83-b362-4e76-b72b-18ad2c50d5f5_2bac36fc-ce99-4a89-9396-94217baca745",
+ "topic": "逐条核对目标专刊 Aims & Scope 与主题词，落定一句话对口结论",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T04:31:53.559Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "掌握度虚报：PICO覆盖范围标92%、方法类型标85%，但课末学员连续三轮仍选“谁执行就填谁”，人群判据未稳住，结论方向仅30%。",
+   "人群填谁同一确认点反复超过三轮未推进：学员连续三次选C，老师反复解释“看措施/结局落在谁身上”后仍回退。",
+   "收尾未答收口：最后老师留“谁在执行/P填谁”的填空，学员未作答，课堂仍判定complete。"
+  ]
+ }
+}

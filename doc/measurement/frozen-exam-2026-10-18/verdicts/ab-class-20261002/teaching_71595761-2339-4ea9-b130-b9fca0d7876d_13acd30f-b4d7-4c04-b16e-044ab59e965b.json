@@ -1,0 +1,21 @@
+{
+ "pid": "teaching_71595761-2339-4ea9-b130-b9fca0d7876d_13acd30f-b4d7-4c04-b16e-044ab59e965b",
+ "topic": "把一套图的图例分成水侧和电侧两栏",
+ "arm": "baseline",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "学员连续多次提交同一理解检查「坐便器和照明哪行归水侧？我的答案：B. 照明」，老师反复用「接水管还是电线」解释，同一确认点超过 3 轮未推进。",
+   "老师问「插座那行有没有三点水」「待查栏现在有几行」「照明接水管还是电线」等，学员均未回答或未执行，课堂仍判 complete。",
+   "老师要求写「灯接电线，归电侧」并回「好了」，学员未回「好了」而是继续重复 B. 照明，该确认点未收口。",
+   "老师要求写「马桶接水管，归水侧」并回「好了」，学员未回「好了」而是直接答选择题 A，随后课堂收束。"
+  ]
+ }
+}

@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_37910d79-a537-4e8c-894e-b04ddc932927_03aaa00e-be48-4b43-86a9-6be9178f1fb3",
+ "topic": "从院里通知和同事口述里盘点竞聘流程的已知与未知",
+ "arm": "baseline",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "“识别最影响材料动笔的未知项”标 mastered 90%，但学员多轮坚持“PPT最该先管”，最后仍说“手还是会先往PPT搭”，未独立产出“今年通知要不要数据”判断。",
+   "“单来源未验证信息先归待确认”标 mastered 100%，但学员至少两次把同事口述的评分表/PPT要求答成“确定栏”，需老师替做前一步或反复纠正，最终只是二选一选B。",
+   "同一“PPT/排序 vs 归栏”确认点多轮未推进，学员反复说“心里排序没翻/手先往PPT搭”，老师重复“归栏看验证、动手看推进”的区分，未推进到学员独立认可。",
+   "结课总结称“你最终搭出确定栏三条”“学生自己把通知原句逐条抄进确定栏”，但对话中老师要求抄报名条件原句后学员未回应，确定栏三条主要是老师总结给出。",
+   "老师最后抛出“情景甲/乙哪条够格进确定栏”的小题，学员未回答，wrapup 仍 status complete 且未提该未解决问题。"
+  ]
+ }
+}

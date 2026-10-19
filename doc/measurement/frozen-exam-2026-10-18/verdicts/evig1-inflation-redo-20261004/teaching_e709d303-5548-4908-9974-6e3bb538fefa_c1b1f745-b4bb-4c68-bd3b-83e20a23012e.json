@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_e709d303-5548-4908-9974-6e3bb538fefa_c1b1f745-b4bb-4c68-bd3b-83e20a23012e",
+ "topic": "对照网课与PMBOK梳理敏捷角色职责",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T00:33:09.377Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "同一道“外部供应商交付延迟”题学员连续5次答A（开发团队），老师重复解释“障碍归SM”后才在换抄写/直觉策略后选B，构成循环卡壳。",
+   "“识别流程守护职责”标为 mastered 100%，但学员是在老师示范、要求抄句子并给出选项后答B，最终判据也基本复述老师刚给的模板，缺少无提示独立产出。",
+   "结课总结称学员“换成你项目里的外部依赖阻塞，你也能独立选对”，但对话中只有标准理解检查题，没有项目实例的独立验证。",
+   "老师最后要求“选完顺手说一句按哪条判据挑的”，学员只答B未说判据，老师未追问即收尾完成。"
+  ]
+ }
+}

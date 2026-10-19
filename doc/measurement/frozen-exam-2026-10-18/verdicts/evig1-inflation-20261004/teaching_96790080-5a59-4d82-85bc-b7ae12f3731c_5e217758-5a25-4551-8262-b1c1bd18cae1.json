@@ -1,0 +1,21 @@
+{
+ "pid": "teaching_96790080-5a59-4d82-85bc-b7ae12f3731c_5e217758-5a25-4551-8262-b1c1bd18cae1",
+ "topic": "实分析限时自测：记录卡在概念还是证明推进",
+ "arm": "B_evig1",
+ "endTime": "2026-10-03T07:11:29.627Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "第二行「证明下不了手」的补法配对至少三轮未推进：学员先配「回去背定义」，被纠正后仍说「先把定义再背熟」，填空又写「把定义再对一遍」，始终未给出「只抠停笔前两行」的动作。",
+   "老师对同一补法点反复解释「背定义补不了第二栏、要往前抠停笔前两行」，最后又用同一道选择题确认，仍未得到学员独立正确回答。",
+   "结课总结判为 complete，但最后老师抛出的选择题「下一步最该做的是哪个」A-D 学员未作答。"
+  ]
+ }
+}

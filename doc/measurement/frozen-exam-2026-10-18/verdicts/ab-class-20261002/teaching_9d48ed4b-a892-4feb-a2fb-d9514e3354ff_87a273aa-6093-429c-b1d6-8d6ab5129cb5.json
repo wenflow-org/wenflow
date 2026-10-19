@@ -1,0 +1,20 @@
+{
+ "pid": "teaching_9d48ed4b-a892-4feb-a2fb-d9514e3354ff_87a273aa-6093-429c-b1d6-8d6ab5129cb5",
+ "topic": "拆解资料分析“对12个但超时”的时间去向",
+ "arm": "baseline",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "结课总结称第14题学员「先抓同比增长率」，但对话中学员明确说抓的是「城镇单位就业人员平均工资」，总结与事实不符。",
+   "末尾同一理解检查「某地区该进第几段」学员连续多轮答A，老师反复以「不再重复讲、记入复习清单」收口，未推进。",
+   "老师要求拿第14题按新顺序走一遍并报两个秒数，学员未回答，课堂仍判完成。"
+  ]
+ }
+}

@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_0cacbe7f-c2b3-4da8-af42-6364d550e180_8da13d94-e510-499a-b24e-f0f5d98070f9",
+ "topic": "把消融实验要说的那句话写成结论清单并标出比较结构",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T04:20:24.812Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": true,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "五个知识点均标 mastered（90%-100%），但“差值口径统一”是老师直接给出“三句必须用同一把尺子”，模块贡献排序也由老师从 A 改为 B，学员缺少无提示独立产出证据。",
+   "wrapup 称“五个知识点都达到掌握”并把统一口径、贡献排序等关键结论记成学员产出，但这些多为老师讲解或修正，且遗漏最后未答小题。",
+   "老师曾把“贡献最大的是 A”判为“这句你写对了”，依据是 2.1 > 1.3，随后又收回并改为 B，说明错误答案被放行推进。",
+   "最后老师抛出“下面这道小题，用同一把尺子判”后学员未回答，课堂即判 complete。"
+  ]
+ }
+}

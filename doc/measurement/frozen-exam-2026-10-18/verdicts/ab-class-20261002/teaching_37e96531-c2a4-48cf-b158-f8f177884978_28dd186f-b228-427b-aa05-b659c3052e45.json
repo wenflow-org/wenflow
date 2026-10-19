@@ -1,0 +1,20 @@
+{
+ "pid": "teaching_37e96531-c2a4-48cf-b158-f8f177884978_28dd186f-b228-427b-aa05-b659c3052e45",
+ "topic": "安装 Revit 与 Navisworks 并跑通界面",
+ "arm": "baseline",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "结课总结的“梳理建模出图主线”证据称学员能指出“标高 1”带轴网平面是第一步产物，但对话中这是老师讲解，学员只独立选了顺序题 B。",
+   "结课总结称“新建空白项目”已能不看着屏幕说出来，但对话中新建项目是在老师逐步提示“文件→新建→项目/Ctrl+N”后完成，并非无提示独立产出。",
+   "老师要求悬停左下角图标并报一个名字，学员未报名字，老师直接转向四区，课堂仍判 complete。"
+  ]
+ }
+}

@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_3d6a84b9-adab-46ff-ae4d-91b694a3640d_8edf2d07-d617-42d4-82ea-a4757e0b6bda",
+ "topic": "把记得的朝代名先摊出来排成一条线",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T01:54:34.986Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": false
+  },
+  "problems": [
+   "结课总结称学员已能点着格子念出从夏到明的完整顺序，但对话中该完整顺序主要是老师最后代为总结，学员并未独立完整复述。",
+   "总结称南北朝、隋、唐相对位置基本立住，但最后选择题学员选B认为南北朝和隋并排，并承认“两条线还是叠”，与总结不符。",
+   "围绕“宋元明第二个格子是谁”连续多轮追问，老师反复用“先看位置、再出声念”，学员仍出现“手上写的是宋、心里念的是元”，同一确认点未稳定推进。",
+   "知识点“排列主要朝代顺序”标为85%高进度，但对话里没有学员无提示独立排出从夏到明完整顺序的证据，宋元明与南北朝—隋仍反复动摇。"
+  ]
+ }
+}

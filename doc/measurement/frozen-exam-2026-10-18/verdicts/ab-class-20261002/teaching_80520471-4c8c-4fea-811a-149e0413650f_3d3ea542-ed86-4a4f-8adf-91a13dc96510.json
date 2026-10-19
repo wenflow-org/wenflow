@@ -1,0 +1,19 @@
+{
+ "pid": "teaching_80520471-4c8c-4fea-811a-149e0413650f_3d3ea542-ed86-4a4f-8adf-91a13dc96510",
+ "topic": "把作业里带 f(x) 的题按条件形态扫一遍分类",
+ "arm": "baseline",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "乘积型条件式结构辨认标为 review 88%，但对话中未稳定辨认，学员把 f(x+y)=f(x)·f(y) 读成加/反复提交选择题，老师最后说未硬啃、下次单独练。",
+   "最后老师要求把三行「堆名——一句话怎么认」写完发我，学员未回复，结课总结却标 complete。"
+  ]
+ }
+}

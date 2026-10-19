@@ -1,0 +1,21 @@
+{
+ "pid": "teaching_8050b55e-d63f-460c-ac8e-c932adbc1ec1_93c62f82-a9d5-4e02-9ea2-9c62608a2f09",
+ "topic": "把本周掉量拆到区域，找出掉得最多的那个区域",
+ "arm": "B_evig1",
+ "endTime": "2026-10-03T08:21:12.711Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "同一“降幅 vs 贡献”确认点和“补齐剩余区域并按掉量排序”的要求反复出现至少7轮，老师多次重复“记入复习清单/不挡往下走”，学员始终未补齐，未换有效策略。",
+   "结课总结称“最终能独立排出各区域对总缺口的贡献顺序”，但对话只确认华东2000、华南400，剩余区域多次未提供，完整贡献排序并未产出。",
+   "最后老师抛出甲区掉600（降幅8%）与乙区掉300（降幅20%）谁贡献更大的二选一，学员未回答，wrapup 仍判 status=complete。"
+  ]
+ }
+}

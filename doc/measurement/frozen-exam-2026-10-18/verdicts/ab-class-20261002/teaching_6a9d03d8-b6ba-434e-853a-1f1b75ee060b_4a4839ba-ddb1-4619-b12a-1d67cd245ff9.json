@@ -1,0 +1,20 @@
+{
+ "pid": "teaching_6a9d03d8-b6ba-434e-853a-1f1b75ee060b_4a4839ba-ddb1-4619-b12a-1d67cd245ff9",
+ "topic": "对照真题答案标出每个得分点对应的原文句子",
+ "arm": "evig1",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": true,
+   "unclosedComplete": false
+  },
+  "problems": [
+   "学员在“悔恨”处理题答“留着，多写不扣分”，老师却回应“你这次选对了——悔恨删掉”，把错答判为正确推进。",
+   "学员在“孤独、不舍与悔恨”给分题答“孤独、悔恨也一起算”，老师仍说“你这次选对了”，与“孤独/悔恨指不出落点”的讲解矛盾。",
+   "“多写判断词是否更保险/写原文会不会算抄”反复多轮，老师重复同一判据并说“不在它上面继续转了”，构成循环卡壳。"
+  ]
+ }
+}

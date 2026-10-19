@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_8050b55e-d63f-460c-ac8e-c932adbc1ec1_dad98ff9-a93e-47c7-af69-0965325b2ccf",
+ "topic": "把最近一周销售周报读成量价人效四口子对照表",
+ "arm": "baseline",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "结课总结把“缺上周数算不出环比”的口径缺口记为学员自己发现/主动标出，但对话中该缺口是老师用“哪个字段缺上周数就做不成”提示后讲解出来的。",
+   "知识点“比值归口看分母里有没有人”标为 mastered 95%，但学员最后仍说独立写可能省掉算式直接归口、当场问“人均回款”为什么归效说不出依据，缺少无提示独立产出证据。",
+   "最后老师抛出“哪一项因缺上周数算不出来”的 A/B/C/D 选择题，学员未作答，课堂却直接收工并判 complete。",
+   "结课总结 status 为 complete，却遗漏了最后这个未答的收口问题，也未记录该问题未解决。",
+   "总结称学员“四口子都能指着周报说清归哪个、依据是什么”，但对话末段学员明确表示独立写依据仍会滑回旧习惯。"
+  ]
+ }
+}

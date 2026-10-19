@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_363d1b83-b362-4e76-b72b-18ad2c50d5f5_2bac36fc-ce99-4a89-9396-94217baca745",
+ "topic": "逐条核对目标专刊 Aims & Scope 与主题词，落定一句话对口结论",
+ "arm": "baseline",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": true,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "核对PICO覆盖范围标92%，但课末同一“P该填谁”检查学员连续三轮选“谁执行就填谁”，总结也承认判据未稳，属于高进度与证据不符。",
+   "课末同一道“P该填谁/依据”理解检查连续三轮未推进，学员都答C，老师反复用“看措施和结局落在谁身上”纠正仍无进展。",
+   "结课总结称方法类型“你已经能判/明确答出以收稿类型栏为准”，但对话中学员该题答的是C“看主题词里有没有 systematic”，实际是老师代答并误判。",
+   "方法类型理解检查中学员答C“征稿主题词里有没有 systematic”，老师却说“B 这条你选对了”并按正确推进，属错答放行。",
+   "最后老师要求填“谁在执行/P填谁”两个空，学员未作答，课堂仍以 status complete 收口，且一句话对口结论并未落定。"
+  ]
+ }
+}

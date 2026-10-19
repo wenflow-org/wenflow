@@ -1,0 +1,20 @@
+{
+ "pid": "teaching_ab23c21b-ab2f-4177-ab75-e6753523f40d_c153db79-03c0-4bd7-821a-ec6511af89c2",
+ "topic": "拆解一道'变形到一半就乱'的错题，定位决策断点",
+ "arm": "B_evig1",
+ "endTime": "2026-10-03T08:05:04.438Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "课堂最后老师抛出“最后一道题，答完这节课就收：”后对话结束，学员没有回答，却判定课堂 complete。",
+   "结课总结（status complete）未提及最后一道题尚未完成/未作答，遗漏了这一未解决问题，造成总结失真。"
+  ]
+ }
+}

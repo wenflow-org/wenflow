@@ -1,0 +1,21 @@
+{
+ "pid": "teaching_ed9fbfae-2377-423b-8447-711b80fe38fd_5dbc4881-2480-465e-b5fb-99bbb947e4fa",
+ "topic": "翻目录搭出四科考纲地图：每科考什么、考什么题型",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T01:59:13.448Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": true,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "分值与题量的权威来源最终标为 mastered/100%，但对话中学员多次把分值来源答成教材目录/数章节数，最后仅靠老师提示后翻到大纲报出50分，缺少无提示独立产出证据。",
+   "学员在“查某科占多少分该翻哪份材料”理解检查中明确答“A. 教材目录，数章节数”，老师却回“选 C 对”并称其已改回官方大纲，未纠正该错答就继续推进。",
+   "最后老师要求翻《导游业务》目录找与服务规范同类章节并重命名第二块，学员未回答，结课总结仍标记为 complete。"
+  ]
+ }
+}

@@ -1,0 +1,19 @@
+{
+ "pid": "teaching_d46edb84-de0b-493c-900e-77bd0a1f19bb_06ea9d5c-c67d-4e03-b488-0135591a428c",
+ "topic": "盘点日常取数动作，标出「搬数据」与「回答问题」的分界",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T03:30:43.602Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "真正最后老师抛出的“早会老师傅说‘这数没问题，可以用’算不算回答业务问题？”学员未作答，wrapup 却判 complete，并把已完成题记为“最后一题独立选 C”，遗漏该未收口问题。"
+  ]
+ }
+}

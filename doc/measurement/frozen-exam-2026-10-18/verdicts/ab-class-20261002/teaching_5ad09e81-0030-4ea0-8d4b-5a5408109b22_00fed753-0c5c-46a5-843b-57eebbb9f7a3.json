@@ -1,0 +1,20 @@
+{
+ "pid": "teaching_5ad09e81-0030-4ea0-8d4b-5a5408109b22_00fed753-0c5c-46a5-843b-57eebbb9f7a3",
+ "topic": "对比か行与お行在技能名、装备名里的字形",
+ "arm": "evig1",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "「下面哪个片假名更像才（カ）」这一题学员连续给出同一答案至少3次，老师每次都用「才/力这把尺子一直翻面，记到复习清单」同一套话术回应，未换策略，构成循环卡壳。",
+   "「有个字的横，右端上方冒出一点、正中间空着，它是カ还是オ」学员连续两轮选 B.オ，老师逐字重复了完全相同的纠正与换入口话术，且该题到结课仍未答对、也未真正闭合。",
+   "结尾老师重问「オプション 的首字，属か行还是お行」后对话即终止，学员始终未作答，课堂却判 status=complete，属未答收口。"
+  ]
+ }
+}

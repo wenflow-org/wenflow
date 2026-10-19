@@ -273,6 +273,8 @@ doc/re_test/*
 !doc/NEWUI-PROTOTYPES.md
 # 例外：会话大 JSON 列增量化设计（两侧已落地，设计留痕）
 !doc/SESSION_JSON_INCREMENTAL_DESIGN.md
+# 例外：平台测量质量常设化（#85：冻结考卷语料 + 双臂协议 + 质量报告；runner/CI 包装测试按路径校验该语料 sha256）
+!doc/measurement/
 doc/local/
 
 # Playwright MCP 会话临时文件

@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_b5041e4a-442c-43cb-af24-17b52bcbcfad_242f048a-366c-4e58-a754-a3ed41bb4af8",
+ "topic": "把洗手场景整句拆成前后两半，顺下来再一口气连起来",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T05:57:38.411Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "知识点「按节奏连读整句」标为 mastered/100%，但对话末学员仍说“整句一连到 your 我还是停下想音、改口重来，这块儿没过去”，缺少无提示独立连读证据。",
+   "知识点「判断整句能否顺下」也标 mastered/100%，但结课 evaluation 自己写“还需下一次在无提示下自行判断来确认”，且学员判断多是在老师给出判据或选项后复述。",
+   "结课总结既称“Wash your hands 你已经能不看稿、不回头地整句带下来”，又记载“整句一连到 your，你还会停下想音、改口重来”，与学员最后陈述不符。",
+   "最后老师问“念 Wash your hands 时，到 hands 前停了半拍，但没有回头重来——这一遍算顺下来了吗？”后无学员回答，课堂仍判 complete。"
+  ]
+ }
+}

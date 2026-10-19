@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_37e96531-c2a4-48cf-b158-f8f177884978_28dd186f-b228-427b-aa05-b659c3052e45",
+ "topic": "安装 Revit 与 Navisworks 并跑通界面",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T03:40:18.077Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": false
+  },
+  "problems": [
+   "“新建空白项目”标为 mastered 100%，但首次新建是在老师逐步给出“文件→新建→项目/Ctrl+N”的提示后完成，未见学员无提示独立重做。",
+   "“项目浏览器与 CAD 图层管理器的区别”标为 learning 80%，但学员末段仍说“可能还是会点左边项目浏览器，觉得勾就在那儿；VV 浮层一直当成换图入口”，与较高进度不符。",
+   "围绕“项目浏览器 vs VV/轴网消失按哪个键”反复多轮，老师多次重复“点浏览器换图、VV 去勾图不换”，学员仍混淆到末段才答对，存在循环卡壳。",
+   "结课总结称“新建空白项目”等已能不看着屏幕说出来/独立完成，但对话中新建是老师指导下的操作，且课堂 status=complete 时课题要求的 Navisworks 未安装与跑通，只被推迟到下次。"
+  ]
+ }
+}

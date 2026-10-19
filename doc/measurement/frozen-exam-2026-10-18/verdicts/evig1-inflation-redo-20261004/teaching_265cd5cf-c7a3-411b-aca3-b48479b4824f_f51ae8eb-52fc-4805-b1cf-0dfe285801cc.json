@@ -1,0 +1,20 @@
+{
+ "pid": "teaching_265cd5cf-c7a3-411b-aca3-b48479b4824f_f51ae8eb-52fc-4805-b1cf-0dfe285801cc",
+ "topic": "理解'波动是常态'：合格率达标不等于过程稳定",
+ "arm": "B_evig1",
+ "endTime": "2026-10-03T08:00:48.969Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "围绕1.9、2.1、2.0、2.0、2.1这组数，学员连续4轮仍选A，把“最极端”当成“跳出范围”，老师反复解释“最极端≠越界”后才通过换问法推进。",
+   "最后老师抛出1.5、1.6、1.4、4.8、1.5新数据的判断问题，学员未作答，结课总结仍标status=complete。"
+  ]
+ }
+}

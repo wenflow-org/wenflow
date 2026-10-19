@@ -1,0 +1,23 @@
+{
+ "pid": "teaching_e91afa47-0acf-4c79-9dbf-457c3bac8aed_c040c012-51bb-4f66-b1eb-e35bb2bf2819",
+ "topic": "把 Unit 5 能读和还读不出的词整理成一张音形对照卡",
+ "arm": "B_evig1",
+ "endTime": "2026-10-03T06:15:47.098Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "总结给“整理音形对照卡”85%、待攻列上限/处理75-85%，但可见对话中学员最后只是抄写老师直接给出的兜底规则并念出，且此前多轮选A，缺少无提示独立完成证据。",
+   "总结称兜底规则是“你自己定下来又念回去、用原话写下来”，但正确规则是老师撤题后直接给出，学员最后才抄写并念出。",
+   "总结称能读列team—ea“自己走通”、圈字母写右栏“已经在你手里”，但可见对话中该行主要由老师逐步引导，学员独立完成未被确认。",
+   "老师追问“information那行还在不在、明早能不能一眼找到”“最怕忘哪个词”“在information旁写‘明早’并回位置”等，学员未答，课堂仍判complete。",
+   "老师让从能读列挑一个词并发送，学员连续回复重复的理解检查A，未完成该任务，最后课堂仍收口完成。"
+  ]
+ }
+}

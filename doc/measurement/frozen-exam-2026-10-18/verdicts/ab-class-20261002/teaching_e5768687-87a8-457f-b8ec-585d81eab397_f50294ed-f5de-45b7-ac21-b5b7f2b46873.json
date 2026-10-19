@@ -1,0 +1,20 @@
+{
+ "pid": "teaching_e5768687-87a8-457f-b8ec-585d81eab397_f50294ed-f5de-45b7-ac21-b5b7f2b46873",
+ "topic": "抄清一张示例运单上的全部字段",
+ "arm": "baseline",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "「把括号挪到下一行并加『我注：』」这一动作被老师连续要求三次（学员第一次未动手、只答理解检查B，第二次仍只答理解检查A，第三次才完成），老师几乎一字不差地重复「栏名照原样抄，含义另起一行写」同一套说法，未换策略。",
+   "结课前老师抛出「最后一道小题，答完这节就收」后对话即结束，学员完全没有作答，系统却把本节判为 status complete。",
+   "结课总结的 evaluation 写「核心任务达成」、summary列为 complete，未记录最后一道小题未回答这一未收口环节。"
+  ]
+ }
+}

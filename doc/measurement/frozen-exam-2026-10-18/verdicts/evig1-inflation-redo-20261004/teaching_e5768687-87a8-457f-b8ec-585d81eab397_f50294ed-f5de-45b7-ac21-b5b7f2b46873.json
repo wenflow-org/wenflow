@@ -1,0 +1,17 @@
+{
+ "pid": "teaching_e5768687-87a8-457f-b8ec-585d81eab397_f50294ed-f5de-45b7-ac21-b5b7f2b46873",
+ "topic": "抄清一张示例运单上的全部字段",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T03:56:24.970Z",
+ "verdict": {
+  "ok": true,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": false,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": false
+  },
+  "problems": []
+ }
+}

@@ -1,0 +1,19 @@
+{
+ "pid": "teaching_f9365e6f-ae41-4975-908d-a1106f7d1326_f21269db-89c8-4074-b1bc-5d7f960c0a1a",
+ "topic": "装好 pytest 并跑出第一个 PASSED",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T03:59:18.840Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": false,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "老师在收尾前抛出小判断“失败时该动哪边是否真拿住”，学员未回答，wrapup 仍以 status:complete 收口。"
+  ]
+ }
+}

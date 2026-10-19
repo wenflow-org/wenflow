@@ -1,0 +1,21 @@
+{
+ "pid": "teaching_759bd974-9227-4826-aac5-ad695b97cb6d_8da0a1c4-2b66-442d-9f21-aacb24149b4c",
+ "topic": "改一处文件路径后整段重跑，观察 do 文件的可重复执行",
+ "arm": "baseline",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "loopStuck：末尾连续 5 轮以上，学员对同一道理解检查「Stata 默认从哪个位置找这个文件」原样重复答 A（do 文件所在的文件夹），老师每次都以「先挂到复习清单，不再耗」收尾并重复同一套 cd/count/复制为路径指令，确认点始终未推进（evaluation reasoning 亦记录「重复 20+ 轮且始终选 A」）。",
+   "progressInflation：「import excel 路径要带上文件所在的文件夹 85%」「文件名要写全（含扩展名）80%」「路径要指到文件本身 75%」标为 learning 且证据写「在提示下使用完整路径导入/能识别 .xlsx」，但对话中学员从未贴出修改后的 import 原文，也从未回报「出数/报错」，最后几轮老师布置的任务全部无应答。",
+   "summaryMismatch：结课总结写「你已能区分结果窗口的命令回显与真实输出，并理解了 import excel 路径要指到文件本身」，但该知识点最终状态是 review 50%、路径类结论无学员产出证据，且总结把老师给出的工作目录结论当成已掌握内容呈现。",
+   "unclosedComplete：老师最后两次明确要求「整段重跑，回来只报两件事：结果窗口有没有出数、你动的是哪一行」以及「回来只回我一个数：count 报出来的观测数」，学员均未作答，课堂仍判 status=complete。"
+  ]
+ }
+}

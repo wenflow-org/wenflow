@@ -1,0 +1,19 @@
+{
+ "pid": "teaching_d46edb84-de0b-493c-900e-77bd0a1f19bb_729318f8-f22b-4c8c-a82a-57d1f7eb5c39",
+ "topic": "看懂一次分析交付长什么样：从一句话需求到一页结论",
+ "arm": "evig1",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "同一道抽象选择题「下面哪一句原问题会让取数清单上必须多出『上月』那一份数据？」学员连续 4 次答错（A. 本月 A 分行存款余额是多少），老师随之4 遍几乎逐字重复同一句解释「你在具体场景里答对过（存款那句）……换成抽象写法会绕回时间词上，这个点我先记进复习清单，今天不在这儿耗」，既未换问法也未换策略，属原地打转。",
+   "老师抛出最后一个迁移问题「写原问题时少了『跟谁比』这一格，后面取数会出什么问题？（就当讲给刚来的同事听）」后，学员从未作答（其后全是重复那道错选的选择题），课堂仍以「两样都自己产出了、这个任务到这儿就收束」判为 complete，抛出问题未收口。"
+  ]
+ }
+}

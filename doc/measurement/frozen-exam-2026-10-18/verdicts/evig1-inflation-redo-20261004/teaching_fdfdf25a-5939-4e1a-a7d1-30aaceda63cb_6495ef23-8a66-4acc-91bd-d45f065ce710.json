@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_fdfdf25a-5939-4e1a-a7d1-30aaceda63cb_6495ef23-8a66-4acc-91bd-d45f065ce710",
+ "topic": "在课文句子里圈出主谓主干",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T02:42:22.310Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "系动词也担任主干谓语标 mastered/90%，但对话里老师直接说“括号外只剩 tasted……它就是主干谓语”，学员只是复述，未体现无提示独立产出。",
+   "结课总结称“这几个点都是你自己绕过来的，不是被直接告知的”，但“挂靠位置不是词性”和“系动词也担任主干谓语”等关键结论均为老师直接讲解。",
+   "结课总结把最后按“括号外只剩哪个动词”定出 tasted 记为学员产出，但对话中该结论由老师先给出，学员随后才复述。",
+   "老师最后要求“收尾前最后一道小题，按这个动作走一遍”，学员只回应会课后练习，未实际作答，课堂仍判 complete。"
+  ]
+ }
+}

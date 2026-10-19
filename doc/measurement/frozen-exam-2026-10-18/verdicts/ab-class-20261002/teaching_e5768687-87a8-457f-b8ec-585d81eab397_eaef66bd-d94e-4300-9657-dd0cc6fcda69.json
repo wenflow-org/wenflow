@@ -1,0 +1,21 @@
+{
+ "pid": "teaching_e5768687-87a8-457f-b8ec-585d81eab397_eaef66bd-d94e-4300-9657-dd0cc6fcda69",
+ "topic": "给每个运单字段标出它是什么量、什么单位",
+ "arm": "evig1",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "loopStuck：「件数：30」同一道理解检查连续出现4次，老师前三次都以「换了几种讲法都没对上、挂复习清单、标待确认」重复同一句解释；「距送达还有3小时」选B（具体时刻/钟点）重复5次，老师每次都用「跟18:00前挨得太近、先标待确认」同一套说法，均未换策略或改题。",
+   "unclosedComplete：老师最后连续追问「里程 / ？ / ？」及此前「只写一行发我」的多个待答问题均未收到学员作答，对话在问题悬空处结束，status 仍判为 complete。",
+   "progressInflation：件数字段标 80%、标识类字段无单位标 75%，但件数三次答「体积/方」后才在「一箱矿泉水24瓶」提示下改口，且老师已将其列入复习清单；标识类全程只有老师陈述「单号那几个是名字不带单位」，无学员独立产出证据。",
+   "summaryMismatch：总结称「件数、立方数、运费和标识类字段已经能说清」，把老师口中「稳住的单号那几栏」写成学员产出，与对话中老师反复将件数、里程、3小时标为待确认、整张对照表仅完成三成的事实不符。"
+  ]
+ }
+}

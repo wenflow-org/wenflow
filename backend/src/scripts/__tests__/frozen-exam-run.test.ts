@@ -8,8 +8,10 @@ import { spawnSync } from 'child_process';
  * 冻结考卷脚本（#85）的包装测试：把 backend/scripts/measurement-verify/frozen-exam-run.mjs
  * 挂进 backend jest 门禁（CI：npm run check:test → npm --prefix backend run test:coverage）。
  *
- * 本测试只 spawn 脚本自身，不读真实冻结集——doc/local/ 未入库，CI checkout 里没有，
- * 因此模板/夹具全部现造；纯函数口径由脚本 --selftest 自身覆盖（协议§二.1/§二.3/§二.4）。
+ * 本测试只 spawn 脚本自身。2026-10-19（#85 收口）起冻结语料已入库
+ * doc/measurement/frozen-exam-2026-10-18/（仓内受跟踪），故补一条「默认路径 --verify」用例
+ * 直接验仓内冻结集 sha256/基线；篡改用例仍用现造合成夹具，不写真实冻结集。
+ * 纯函数口径由脚本 --selftest 自身覆盖（协议§二.1/§二.3/§二.4）。
  * 参考：doc/local/ISSUE-RECON-20261019.md「### #85」（脚本化常设化，零模型额度）。
  */
 const BACKEND_ROOT = path.resolve(__dirname, '../../..');
@@ -30,7 +32,9 @@ interface VerifyProblem {
 interface VerifyJson {
   ok: boolean;
   checked: number;
+  frozenDir?: string;
   problems: VerifyProblem[];
+  baseline?: { judged: number; wrong: number; rate: number };
 }
 
 function runScript(args: string[]): ScriptRun {
@@ -49,6 +53,17 @@ describe('冻结考卷脚本 frozen-exam-run.mjs（#85）', () => {
     const res = runScript(['--selftest']);
     expectExit(res, 0, '--selftest');
     expect(res.stdout).toContain('SELFTEST PASS');
+  }, 60_000);
+
+  it('默认冻结集（仓内 doc/measurement/frozen-exam-2026-10-18）：--verify 免参通过，109 条 sha256 全符', () => {
+    const res = runScript(['--verify', '--json']);
+    expectExit(res, 0, '--verify 默认冻结集');
+    const json = JSON.parse(res.stdout) as VerifyJson;
+    expect(json.ok).toBe(true);
+    expect(json.frozenDir).toContain('frozen-exam-2026-10-18');
+    expect(json.checked).toBeGreaterThanOrEqual(109);
+    expect(json.baseline?.judged).toBe(109);
+    expect(json.baseline?.wrong).toBe(35);
   }, 60_000);
 
   it('--verify：sha256/基线相符退 0；冻结集被改则非零退出（协议§二.1）', () => {

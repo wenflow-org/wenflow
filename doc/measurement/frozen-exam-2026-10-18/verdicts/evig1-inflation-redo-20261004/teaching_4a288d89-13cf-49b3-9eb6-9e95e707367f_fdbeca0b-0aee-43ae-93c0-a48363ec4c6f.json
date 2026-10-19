@@ -1,0 +1,21 @@
+{
+ "pid": "teaching_4a288d89-13cf-49b3-9eb6-9e95e707367f_fdbeca0b-0aee-43ae-93c0-a48363ec4c6f",
+ "topic": "用半截仓库里那份文档跑通一次粗切到向量召回的最小链路",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T00:08:32.187Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "围绕“召回成立”的同一理解检查在节选中被学员原样重复约11轮，始终选择A“不算，只有top-1答得出才算”，超过3轮无推进。",
+   "老师最后要求填第几段、复制第3段或回“成立/不成立”等，学员均未按要求回答，仍重复同一理解检查。",
+   "结课 wrapup 标为 status complete，但“召回成立的判据”仍为 learning 45%，且最后未解决问题没有收口。"
+  ]
+ }
+}

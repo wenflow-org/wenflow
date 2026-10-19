@@ -1,0 +1,21 @@
+{
+ "pid": "teaching_9005ee43-2f8b-41aa-bd44-171bfd023701_b8edc71d-7e2f-4ccb-b383-7ccc9e71e5af",
+ "topic": "把标准分380换算成卷面正确率靶心",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T00:03:33.351Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": false
+  },
+  "problems": [
+   "知识点「换算标准分为卷面靶心」标为 mastered/90%，但70%–80%区间是老师先给出的，学员仅回应「您说是70%–80%」，不是无提示独立产出。",
+   "知识点「标准分经等值处理，不等于卷面百分比」标为 mastered/90%，学员最后虽复述了非线性理由，但那是在老师完整讲解并连续追问后复述，独立性证据不足。",
+   "结课总结称「学生自己写出380对应70%–80%并落进靶心卡第一行」，对话中学员只说「我先把…写进」，且区间来自老师，存在把老师讲解记成学员产出的失真。"
+  ]
+ }
+}

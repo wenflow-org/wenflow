@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_a0373b09-372f-4f4a-9a95-6c7f1cedb38c_9f9fc6a3-0b97-408d-8996-e7be7fc53354",
+ "topic": "翻找 Scratch 积木区，认出「重复执行」和「移动」两块积木",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T03:06:44.069Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": true,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "错答放行：学员答“C. 一直走不停”，老师却回应“这次你答的是「走 3 趟」”并当作正确推进。",
+   "未答收口：老师最后问“收工前最后确认一处位置，答完咱们就进下一节”，学员未回答，结课却标 complete。",
+   "总结失真：结课总结称学员能自己指出“带缺口的 C 形积木”和绿旗在舞台上方，但对话中 C 形是老师讲解，绿旗学员最后仍说“有点虚”。",
+   "掌握度虚报：“「重复执行」是C形积木”标 mastered 90%，但对话里学员没有无提示独立说出 C 形，只由老师描述。"
+  ]
+ }
+}

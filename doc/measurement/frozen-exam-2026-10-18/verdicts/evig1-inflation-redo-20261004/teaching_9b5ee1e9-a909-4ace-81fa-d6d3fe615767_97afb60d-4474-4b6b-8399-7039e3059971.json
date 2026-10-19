@@ -1,0 +1,23 @@
+{
+ "pid": "teaching_9b5ee1e9-a909-4ace-81fa-d6d3fe615767_97afb60d-4474-4b6b-8399-7039e3059971",
+ "topic": "从真题案情里圈出可评价的关键动作与情节",
+ "arm": "A_baseline",
+ "endTime": "2026-10-02T23:55:27.444Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": true,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "结课把「圈出可评价事实」「区分事实描述与评价表述」标为 mastered 90/95，但学员多轮仍把「恶意」「为报复」留在动作行，最后主要靠 A/B/C 选择题判断，缺少无提示独立从原文圈出动作颗粒的证据。",
+   "在「丙为报复，深夜烧毁丁的仓库」检查中，学员明确选 B（未把「为报复」另起行），老师却回「A 对了」并表扬其把「为报复」挪出动作行，属错答放行。",
+   "结课总结称学员「连着几轮不用提示就能自己先问『它答得出做了什么吗』」，但对话中最后几轮是老师给出选项后学员选择，缺少该独立提问证据。",
+   "最后一题「乙见财起意，趁无人之际窃取丙的手机一部」老师抛出后学员未作答，课堂仍判 complete。",
+   "wrapup 的 status=complete，未记录最后一道题未答这一未收口问题，与对话事实不符。"
+  ]
+ }
+}

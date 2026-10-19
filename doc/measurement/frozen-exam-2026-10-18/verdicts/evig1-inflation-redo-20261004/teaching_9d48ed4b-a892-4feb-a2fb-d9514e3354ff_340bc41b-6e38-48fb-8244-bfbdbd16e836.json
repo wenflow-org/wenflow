@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_9d48ed4b-a892-4feb-a2fb-d9514e3354ff_340bc41b-6e38-48fb-8244-bfbdbd16e836",
+ "topic": "用58分模考卷逐模块标出耗时与正确率",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T03:38:03.950Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "涂卡时间的归属口径被标为 mastered/100%，但对话中老师明确说学员连续两三次卡在同一处，最后甚至说“涂卡这行我直接给你定死”，未见学员无提示独立说明该口径。",
+   "围绕涂卡是整卷单独一行还是分摊，老师多轮重复“整卷一次性动作、不摊进模块”，并自述“连续三次卡在同一处”，构成同一确认点循环卡壳。",
+   "结课总结称涂卡口径是“最后你自己把它定到”并作为“关键口径自我修正”，但对话显示主要是老师反复纠正并直接给定，总结对学员自主性有夸大。",
+   "最后老师抛出“只看每分钟换回题数，数量关系那0.30说明了什么？”并要求选完结束，学员未作答，课堂却已判完成。"
+  ]
+ }
+}

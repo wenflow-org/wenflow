@@ -1,0 +1,23 @@
+{
+ "pid": "teaching_1a1fc1bb-25fd-4ed6-a67b-928c5f6bb53e_b3f36ea4-d1be-4f55-b45b-3cc5b7dd12bd",
+ "topic": "另存副本后走通 Document Preferences 点 OK 全篇重排，个别条目用 Refresh 补刷",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T02:24:22.071Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": true,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "「区分全篇重排与单条补刷」等知识点标 mastered/100%，但学员收尾仍说按老习惯理解 Refresh 是补一两条，并追问全篇重排是否没生效，缺少无提示独立正确产出。",
+   "同一确认题「点完 OK 后如何确认全篇重排」连续多轮让学员选择，学员反复答 A「再点一次 Refresh」，老师重复「Refresh 是改写不是确认」却未换策略推进。",
+   "wrapup 称学生自述「手敲纯文本不在名单上，刷新碰不到它」并自己拼出「刷新按 Zotero 名单」，但对话中这些关键句主要是老师说出，学生只列了三条手敲或选 A。",
+   "学员答「A. 再点一次 Refresh」后，老师却说「你这次换的是那条唯一不碰文档的路」，把错误答案当成正确动作继续推进。",
+   "老师最后抛出 A/B/C 小判断及多次「回我一样/不一样」，学员未按选项作答/未回答，课堂仍判 complete 收口。"
+  ]
+ }
+}

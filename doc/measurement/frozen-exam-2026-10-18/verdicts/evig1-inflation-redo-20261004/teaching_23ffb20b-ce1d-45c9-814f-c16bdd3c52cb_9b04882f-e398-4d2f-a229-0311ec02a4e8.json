@@ -1,0 +1,20 @@
+{
+ "pid": "teaching_23ffb20b-ce1d-45c9-814f-c16bdd3c52cb_9b04882f-e398-4d2f-a229-0311ec02a4e8",
+ "topic": "从两次离职经历里提炼「学不到东西」的判断信号",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T02:01:05.986Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": false
+  },
+  "problems": [
+   "「熟练不等于技能积累」标为 mastered 90%，但对话中该区分主要靠老师用「熟像开车、本事像修发动机」讲解，学员还问「放线放熟算不算本事」，缺少无提示独立说清熟≠本事的证据。",
+   "结课 evidence 称学员「自己区分了电话打熟、端盘子顺手与难被替的本事不是一回事」，但仓库题中学员先报 A，靠老师纠正为「B 的意思」，独立产出证据不足。"
+  ]
+ }
+}

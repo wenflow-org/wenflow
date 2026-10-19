@@ -1,0 +1,23 @@
+{
+ "pid": "teaching_8886a70a-95d1-4aa5-8c25-8e94332a8f51_d909e7ed-658a-4c12-8763-6b6b810e2ec2",
+ "topic": "盘点自己手头资产类章节的熟悉度",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T03:06:03.177Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": true,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "结课状态给“存货跌价准备转回的分录方向”85%，但学员明确说独立写分录没底、借什么贷什么拿不准，且课堂未产出正确分录。",
+   "固定资产处置“下次先做”同一选择题学员连续多次回答A（想清楚该不该转清理），老师多轮重复解释/换问法仍未推进。",
+   "wrapup 称学员已写出存货两格“下次先做”，但“翻到题干，找是否还需加工”是老师给出的示例，未显示学员独立产出。",
+   "学员把“再看看”不能续接的原因答成“不是会计术语、不够专业”，老师却说“对”，未纠正该错误理由。",
+   "最后老师问“固定资产处置归模糊还是不能”学员未作答，且“识别至少三个陌生题型”仍 pending，课堂却记为 complete。"
+  ]
+ }
+}

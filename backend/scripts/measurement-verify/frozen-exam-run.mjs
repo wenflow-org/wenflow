@@ -2,7 +2,7 @@
 /**
  * frozen-exam-run.mjs — 冻结考卷 × 双臂协议常设化 runner（issue #85；冻结集来自 #84）
  *
- * 协议：doc/local/FROZEN-EXAM-PROTOCOL-2026-10-18.md
+ * 协议：doc/measurement/FROZEN-EXAM-PROTOCOL-2026-10-18.md（2026-10-19 起随冻结语料入库；旧位置 doc/local/ 为本地镜像，不再维护）
  *   §二.1 校验冻结集未变（逐文件 sha256 + 基线），有差异即作废本次对照 → 本脚本 --verify（不符非零退出）
  *   §二.3 聚合两臂 wrongAnswerPassed 与四模式率，产出对照表（含样本量）→ 本脚本 --compare
  *   §二.4 F1-b：错答放行在 B 臂相对 A 臂下降 ≥10pp 且样本量 ≥35/臂 → 通过；未达样本量只登记不裁决
@@ -12,7 +12,8 @@
  * 用法（本脚本不调用任何模型、不写库；除 --out 外不落盘）：
  *   node backend/scripts/measurement-verify/frozen-exam-run.mjs
  *   node backend/scripts/measurement-verify/frozen-exam-run.mjs --verify [--frozen-dir <dir>] [--json] [--allow-extra]
- *       默认模式：校验 doc/local/frozen-eval-2026-10-18 的 manifest（逐文件 sha256 + 逐批/合计基线）。
+ *       默认模式：校验 doc/measurement/frozen-exam-2026-10-18 的 manifest（逐文件 sha256 + 逐批/合计基线）；
+ *       仓内目录不存在时回退旧本地位置 doc/local/frozen-eval-2026-10-18（兼容未同步的本地工作树/工具）。
  *   node backend/scripts/measurement-verify/frozen-exam-run.mjs --compare --arm-a <dir|file> --arm-b <dir|file> \
  *        [--arm-a-filter <arm>] [--arm-b-filter <arm>] [--min-per-arm 35] [--min-drop-pp 10] \
  *        [--judge-version <v>] [--verify-frozen] [--allow-extra] [--skip-unknown] [--json] [--out <file>]
@@ -53,8 +54,13 @@ import {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
-const DEFAULT_FROZEN_DIR = path.join(REPO_ROOT, 'doc', 'local', 'frozen-eval-2026-10-18');
-const PROTOCOL_REF = 'doc/local/FROZEN-EXAM-PROTOCOL-2026-10-18.md';
+// 2026-10-19（#85 收口）：冻结语料入库 doc/measurement/。旧位置 doc/local/frozen-eval-2026-10-18
+// 作为 fallback 保留（doc/local 不入库，他处本地工具/未同步工作树可能只留旧目录）。
+const FROZEN_DIR_IN_REPO = path.join(REPO_ROOT, 'doc', 'measurement', 'frozen-exam-2026-10-18');
+const FROZEN_DIR_LEGACY = path.join(REPO_ROOT, 'doc', 'local', 'frozen-eval-2026-10-18');
+const DEFAULT_FROZEN_DIR =
+  fs.existsSync(FROZEN_DIR_IN_REPO) || !fs.existsSync(FROZEN_DIR_LEGACY) ? FROZEN_DIR_IN_REPO : FROZEN_DIR_LEGACY;
+const PROTOCOL_REF = 'doc/measurement/FROZEN-EXAM-PROTOCOL-2026-10-18.md';
 const PATCHES = { ...F1B_DEFAULTS };
 
 const USAGE = [
@@ -302,7 +308,7 @@ function renderVerifyReport(frozenDir, result) {
   } else {
     lines.push(`  ✘ 不符：${result.problems.length} 处`);
     for (const p of result.problems) lines.push(`    [${p.code}] ${p.scope}：${p.detail}`);
-    lines.push('  协议§二.1：有差异即作废本次对照；§四：冻结集只读，修改必须新建 frozen-eval-<date>/');
+    lines.push('  协议§二.1：有差异即作废本次对照；§四：冻结集只读，修改必须新建 frozen-exam-<date>/');
   }
   return lines.join('\n');
 }

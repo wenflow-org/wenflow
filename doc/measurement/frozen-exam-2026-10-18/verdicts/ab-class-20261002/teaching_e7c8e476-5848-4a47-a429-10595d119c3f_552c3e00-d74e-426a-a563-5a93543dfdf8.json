@@ -1,0 +1,21 @@
+{
+ "pid": "teaching_e7c8e476-5848-4a47-a429-10595d119c3f_552c3e00-d74e-426a-a563-5a93543dfdf8",
+ "topic": "用四段框架为交通预测想法写出第一版“为什么重要”骨架",
+ "arm": "evig1",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "loopStuck：同一道理解检查「③只写只能等堵了才知道、④写我想用公开数据提前预测，为何不算写重」在对话中连续出现5次，学员每次都选C「因为两段换了不一样的词」，老师每轮只重复「③站在现在、④站在往后／进复习清单」这套说法，未换任何新策略。",
+   "unclosedComplete：结尾老师抛出填空任务「那这么做，______？写完发我」后，学员再未作答（只重复旧的C选项理解检查），课堂仍以 status=complete 结课，该确认点悬空。",
+   "unclosedComplete：老师中途的「③配甲、④配乙」配对题和「回我A或B」选择题也均未收到任何回答就被跳过，未在总结中作为未解决项列出，只笼统写成「段间衔接问句未完成」。",
+   "loopStuck：在同一卡点上反复出现「它进复习清单，我们不在这句上再耗」的收尾话术，实际未推进任何新的检验方式，后续仍是换措辞重复同一提示。"
+  ]
+ }
+}

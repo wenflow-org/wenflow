@@ -1,0 +1,19 @@
+{
+ "pid": "teaching_a2b2a985-18dd-40ff-b86d-fcecbded48cb_a1ab2e58-60ad-4362-9889-a9c3097510b3",
+ "topic": "回听自己讲题的话，标出等于报答案的句子做成禁语清单",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T01:37:50.062Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": false
+  },
+  "problems": [
+   "「说出口的话才算禁语」被标为 mastered/92%，但结课证据自述是“经提示后能区分”，对话中也是老师提示“这是你对妹妹说出口的一句，还是她听完之后自己做出来的”后才修正，缺少无提示独立产出的证据。"
+  ]
+ }
+}

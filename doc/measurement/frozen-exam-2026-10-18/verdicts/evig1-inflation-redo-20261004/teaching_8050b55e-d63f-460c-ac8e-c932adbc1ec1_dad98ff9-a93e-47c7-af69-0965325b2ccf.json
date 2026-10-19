@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_8050b55e-d63f-460c-ac8e-c932adbc1ec1_dad98ff9-a93e-47c7-af69-0965325b2ccf",
+ "topic": "把最近一周销售周报读成量价人效四口子对照表",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T03:39:51.900Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "最后老师抛出选择题“缺上周数哪项算不出来”，学员未作答，课堂仍以 status=complete 收口。",
+   "结课总结把“比值归口看分母有没有人”标为 mastered/95%，但学员末尾两次明确说当场问“人均回款”仍会顺口归“效”、独立写可能省掉算式，缺少无提示独立产出证据。",
+   "围绕“人均回款”依据/先写算式，学员连续表示仍会顺口或省步，老师两轮重复“你其实已经说出来了/依据长在算式里”等同一解释，没有换策略推进。",
+   "wrapup 判 complete，未记录最后选择题未答这一未解决问题，且称四口子都能说清归口与依据，与末段学员仍不能独立说明“人均回款”依据的事实不符。"
+  ]
+ }
+}

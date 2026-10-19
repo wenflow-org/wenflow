@@ -1,7 +1,7 @@
 /**
  * frozen-exam-core.mjs — 冻结考卷 × 双臂协议（issue #85）的纯函数核心
  *
- * 协议：doc/local/FROZEN-EXAM-PROTOCOL-2026-10-18.md
+ * 协议：doc/measurement/FROZEN-EXAM-PROTOCOL-2026-10-18.md
  *   §二.1  每次对照前校验冻结集未变（逐文件 sha256 + 基线），有差异即作废本次对照
  *   §二.3  聚合两臂的 wrongAnswerPassed 与四模式率，产出对照表（含样本量）
  *   §二.4  F1-b：错答放行在 B 臂相对 A 臂下降 ≥10 个百分点且样本量 ≥35/臂 → 通过；

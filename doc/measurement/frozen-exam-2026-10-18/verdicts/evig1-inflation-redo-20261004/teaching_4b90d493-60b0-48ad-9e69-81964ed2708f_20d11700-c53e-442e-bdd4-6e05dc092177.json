@@ -1,0 +1,20 @@
+{
+ "pid": "teaching_4b90d493-60b0-48ad-9e69-81964ed2708f_20d11700-c53e-442e-bdd4-6e05dc092177",
+ "topic": "出声念出第一批超市药盒词",
+ "arm": "B_evig1",
+ "endTime": "2026-10-03T08:38:41.832Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": false
+  },
+  "problems": [
+   "知识点“出声念出每个词”标为 mastered/85%，但对话末段 milk 仍只能念成“艾姆…勒克”，cup 开头问题也未解决，缺少每个词无提示独立正确产出的证据。",
+   "结课总结称学员“自己摸出了‘开头被抢不停下、从后面接完’的方法”，但该方法是老师先示范并让学生照做的，被记成了学员产出。"
+  ]
+ }
+}

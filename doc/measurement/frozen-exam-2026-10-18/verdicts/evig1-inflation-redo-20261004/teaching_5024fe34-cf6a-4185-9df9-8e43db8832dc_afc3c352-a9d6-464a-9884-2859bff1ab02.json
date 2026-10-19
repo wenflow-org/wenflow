@@ -1,0 +1,22 @@
+{
+ "pid": "teaching_5024fe34-cf6a-4185-9df9-8e43db8832dc_afc3c352-a9d6-464a-9884-2859bff1ab02",
+ "topic": "把“研究竞品”收成一句要回答的决策问题",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T02:16:49.780Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "同一道“哪一句可作为决策问题起点”的理解检查被学员连续多轮选 A，老师反复用“主语是动作、接不上谁拍板”同一解释纠正，课堂长时间卡在同一确认点。",
+   "最后老师要求学员补“做成后＿＿会变”的业务结果并整句顺一遍，学员未再作答，但 wrapup 的 status 仍为 complete。",
+   "最终状态给“排除研究动作型问句”95%，但学员直到老师直接给出“A 不行”的结论并换形式后才改选 B，未见无提示独立排除动作型问句的证据。",
+   "wrapup 的知识点 evidence 称学员“自己说出过‘A 比那句多出来的是做一轮…竞品分析，是个动作，后面接不上谁拍板’”，但对话节选中老师要求他说出该比较时，他仍继续提交选择题答案 A。"
+  ]
+ }
+}

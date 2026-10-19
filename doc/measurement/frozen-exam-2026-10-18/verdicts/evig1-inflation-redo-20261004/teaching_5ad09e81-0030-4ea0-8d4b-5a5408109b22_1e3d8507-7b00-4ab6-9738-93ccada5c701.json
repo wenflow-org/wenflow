@@ -1,0 +1,20 @@
+{
+ "pid": "teaching_5ad09e81-0030-4ea0-8d4b-5a5408109b22_1e3d8507-7b00-4ab6-9738-93ccada5c701",
+ "topic": "从游戏菜单抄出片假名词并标出第一眼认不出的字",
+ "arm": "A_baseline",
+ "endTime": "2026-10-03T03:19:19.070Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": false,
+   "summaryMismatch": true,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": false
+  },
+  "problems": [
+   "最终状态把“カ与オ的字形区分判据”标到90、“カ像力判据”标到85，但结课前无提示问“カ更像哪个汉字”时学员仍答“才”，高进度缺少无提示独立产出证据。",
+   "结课总结称“头一个字基本都归对了”“后面几个是你第一眼定的”，但末尾学员把オート判成カ、把カ判成“才”，カスタム也被右上角线索带偏，需老师纠正，与对话事实不符。"
+  ]
+ }
+}

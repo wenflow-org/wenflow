@@ -1,0 +1,21 @@
+{
+ "pid": "teaching_e7c8e476-5848-4a47-a429-10595d119c3f_552c3e00-d74e-426a-a563-5a93543dfdf8",
+ "topic": "用四段框架为交通预测想法写出第一版“为什么重要”骨架",
+ "arm": "B_evig1",
+ "endTime": "2026-10-03T10:08:47.980Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": true,
+   "loopStuck": true,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "“缺口段与贡献段的边界”被标为 review 80%，但学员多轮仍用“换了不一样的词”解释③④为何不算写重，最后靠老师直接给标签，未显示无提示独立产出。",
+   "同一确认点“③④为什么不算写重”至少连续多轮未推进，学员反复答 C，老师反复说进复习清单、不再耗，仍回到同一问题。",
+   "最后老师要求填“那这么做，______？”学员未作答，但结课 wrapup 仍标 status=complete。"
+  ]
+ }
+}

@@ -1,0 +1,20 @@
+{
+ "pid": "teaching_a0373b09-372f-4f4a-9a95-6c7f1cedb38c_797908af-f21f-416d-b1b0-7c3db8790ce1",
+ "topic": "把「移动」塞进「重复执行」里，点绿旗看角色一直走",
+ "arm": "B_evig1",
+ "endTime": "2026-10-03T08:41:55.597Z",
+ "verdict": {
+  "ok": false,
+  "patterns": {
+   "progressInflation": false,
+   "loopStuck": true,
+   "summaryMismatch": false,
+   "wrongAnswerPassed": false,
+   "unclosedComplete": true
+  },
+  "problems": [
+   "同一道「把移动10步里的10改成1」理解检查在末尾连续多轮重复，学员始终选 A，老师只是反复说挂复习清单/不追了，没有换策略推进。",
+   "老师最后要求学员补完「一遍一遍地____」并给儿子演示，但学员未回答，课堂仍以 complete 收口。"
+  ]
+ }
+}
