@@ -18,7 +18,7 @@ import {
   setAuthCookie,
   setRefreshCookie,
 } from '../utils/auth-cookie';
-import { rotateUserSession } from '../services/auth/user-session.service';
+import { rotateUserSession, type RotateUserSessionResult } from '../services/auth/user-session.service';
 
 interface JwtPayload {
   userId: string;
@@ -83,7 +83,11 @@ const validateUserRecord = async (
 
 /**
  * Silent refresh：签发新 token 对并做会话轮换（安全审计 M2）。
- * 轮换失败（重用/未登记）返回 false，调用方必须 401 拒绝，不得放行请求。
+ * 返回轮换判定：
+ * - 'rotated'：轮换完成并已写入新 Cookie，调用方可继续；
+ * - 'concurrent'（#116 方案 A）：出示的是容忍窗内的上一代令牌（并发双刷新落败方）——
+ *   另一方已完成轮换，本请求不清、不覆盖 Cookie，直接以现有有效会话继续；
+ * - 'reuse-detected' / 'unknown-token'：轮换失败，调用方必须 401 拒绝，不得放行请求。
  */
 const issueAndSetTokens = async (
   res: Response,
@@ -91,16 +95,15 @@ const issueAndSetTokens = async (
   userId: string,
   name: string,
   tokenVersion: number
-): Promise<boolean> => {
+): Promise<RotateUserSessionResult> => {
   const accessToken = signAccessToken(userId, name, tokenVersion);
   const refreshToken = signRefreshToken(userId, tokenVersion);
   const rotation = await rotateUserSession(oldRefreshToken, refreshToken, { userId, tokenVersion });
-  if (rotation !== 'rotated') {
-    return false;
+  if (rotation === 'rotated') {
+    setAuthCookie(res, accessToken, 'user');
+    setRefreshCookie(res, refreshToken);
   }
-  setAuthCookie(res, accessToken, 'user');
-  setRefreshCookie(res, refreshToken);
-  return true;
+  return rotation;
 };
 
 const authenticate = async (
@@ -262,17 +265,24 @@ const authenticate = async (
       }
 
       // Silent refresh: issue new access + refresh token pair with session rotation
-      const rotated = await issueAndSetTokens(
+      const rotation = await issueAndSetTokens(
         res,
         refreshTokenCookie,
         refreshPayload.userId,
         refreshPayload.name || '',
         refreshPayload.tokenVersion ?? 0
       );
-      if (!rotated) {
+      // #116 方案 A：'concurrent'（容忍窗内的上一代令牌 = 并发双刷新的落败方）不算失败——
+      // 另一方已完成轮换，本响应不清也不覆盖 Cookie，请求按现有有效会话继续（下一步置 req.user）。
+      if (rotation !== 'rotated' && rotation !== 'concurrent') {
         return res.status(401).json({
           success: false,
           error: { message: '会话已失效，请重新登录' }
+        });
+      }
+      if (rotation === 'concurrent') {
+        logger.warn('[auth] 并发双刷新落败（上一代令牌命中容忍窗）：不覆盖 Cookie，以现有会话继续请求', {
+          userId: refreshPayload.userId,
         });
       }
 

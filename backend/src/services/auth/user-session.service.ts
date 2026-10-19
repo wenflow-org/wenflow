@@ -10,10 +10,20 @@ import crypto from 'crypto';
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 
-export type RotateUserSessionResult = 'rotated' | 'reuse-detected' | 'unknown-token';
+export type RotateUserSessionResult = 'rotated' | 'concurrent' | 'reuse-detected' | 'unknown-token';
 
 // 与 session-token.ts 的 REFRESH_TOKEN_EXPIRES_IN ('30d') 对齐
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * 并发轮换容忍窗（#116 方案 A，毫秒）：同浏览器并发请求同时触发静默刷新时，落败方
+ * 出示的恰是刚被轮换掉的「上一代」令牌——此窗内判为并发双刷新（'concurrent'），不吊销会话。
+ * 库内证据：真实账号 b88f4354 的 3 行会话恰在轮换后 94/197/827ms 被误吊销；60s 为跨请求
+ * 重试与轻微时钟差留余量，同时把「上一代令牌可被继续接受」的放过面压到 1 分钟。
+ * 窗内放过仅限「恰为上一代 + 该代 revokedAt 为空 + 归属一致 + 轮换时间可证明在窗内」；
+ * 更旧代（无登记）/已吊销/超窗/时间缺失一律维持严格吊销（重放路径）。
+ */
+export const REFRESH_ROTATION_CONCURRENCY_WINDOW_MS = 60_000;
 
 const hashRefreshToken = (token: string): string =>
   crypto.createHash('sha256').update(token).digest('hex');
@@ -46,8 +56,11 @@ export const registerUserSession = async (
 /**
  * 刷新轮换：校验旧令牌的会话登记并原子换新。
  * - 'rotated'：正常轮换完成，调用方可以下发新 token 对
+ * - 'concurrent'：出示的恰是刚被轮换掉的上一代令牌，且命中容忍窗（#116 方案 A）
+ *   ——并发双刷新落败方，会话未被吊销也未再轮换；调用方不得覆盖/清除 Cookie，
+ *   以现有有效会话继续本次请求
  * - 'reuse-detected'：已轮换/已吊销令牌被重放（可能的盗用），会话已吊销，必须 401
- * - 'unknown-token'：无会话登记（部署前签发/伪造/并发竞争落败），必须 401
+ * - 'unknown-token'：无会话登记（部署前签发/伪造/更旧代已被覆盖/并发竞争落败），必须 401
  */
 export const rotateUserSession = async (
   oldRefreshToken: string,
@@ -87,12 +100,28 @@ export const rotateUserSession = async (
     return updated.count === 1 ? 'rotated' : 'unknown-token';
   }
 
-  // 2) 命中上一代 → 正常轮换后旧令牌又被出示：重放（典型盗用信号），吊销该会话。
-  //    注：同浏览器极端并发双刷新理论上也可能走到这里，代价只是双方重新登录，方向安全。
+  // 2) 命中上一代 → 正常轮换后旧令牌又被出示：
+  //    - 恰是上一代（该行 revokedAt 为空、归属一致、可证明轮换发生在容忍窗内）→ 'concurrent'
+  //      （#116 方案 A）：同浏览器并发双刷新的落败方，不吊销会话，调用方保持现有 Cookie。
+  //    - 更旧代（摘要已被后续轮换覆盖，不匹配任何行）在下一步按 unknown-token 拒绝；
+  //      其余已吊销 / 超窗 / 轮换时间缺失 → 重放（典型盗用信号），吊销该会话。
   const predecessor = await prisma.user_sessions.findFirst({
     where: { previousTokenHash: oldHash }
   });
   if (predecessor) {
+    const rotatedAt = predecessor.rotatedAt;
+    const withinConcurrencyWindow = predecessor.revokedAt === null
+      && predecessor.userId === opts.userId
+      && rotatedAt !== null
+      && rotatedAt !== undefined
+      && Math.abs(now.getTime() - rotatedAt.getTime()) <= REFRESH_ROTATION_CONCURRENCY_WINDOW_MS;
+    if (withinConcurrencyWindow) {
+      logger.warn('[user-session] 上一代令牌在并发容忍窗内被出示（并发双刷新落败方），不吊销会话', {
+        userId: predecessor.userId,
+        rotatedAt,
+      });
+      return 'concurrent';
+    }
     await prisma.user_sessions.updateMany({
       where: { id: predecessor.id, revokedAt: null },
       data: { revokedAt: now }

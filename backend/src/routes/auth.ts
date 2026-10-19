@@ -377,12 +377,22 @@ router.post('/refresh', async (req, res, next) => {
       userRecord.tokenVersion ?? 0
     );
 
-    // 会话轮换（安全审计 M2）：旧令牌登记换新 + 重用检测。非 rotated 一律拒绝并清 Cookie，
-    // 不给「已轮换/未登记的旧令牌」继续换新的机会
+    // 会话轮换（安全审计 M2）：旧令牌登记换新 + 重用检测。
+    // #116 方案 A：'concurrent'（容忍窗内的上一代令牌 = 并发双刷新落败方）按成功语义返回，
+    // 但本响应既不设置也不清除任何 Cookie——本请求签发的 token 对未登记（若写入，下次刷新
+    // 会按 unknown-token fail-closed），清除则会把并发赢家刚写入的新 Cookie 抹掉。
     const rotation = await rotateUserSession(refreshTokenCookie, newRefreshToken, {
       userId: userRecord.id,
       tokenVersion: userRecord.tokenVersion ?? 0
     });
+    if (rotation === 'concurrent') {
+      return res.status(200).json({
+        success: true,
+        data: { message: '令牌已刷新' }
+      });
+    }
+    // 其余非 rotated 一律拒绝并清 Cookie，
+    // 不给「已轮换/未登记的旧令牌」继续换新的机会
     if (rotation !== 'rotated') {
       clearAuthCookie(res, 'user');
       clearRefreshCookie(res);

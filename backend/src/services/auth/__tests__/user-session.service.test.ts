@@ -103,12 +103,87 @@ describe('user-session.service（M2 refresh token 会话化）', () => {
       });
     });
 
-    it('命中上一代（旧令牌轮换后被重放）→ 吊销该会话并 reuse-detected', async () => {
+    it('超窗（#116-d）：上一代令牌轮换已过 60s → 维持严格吊销并 reuse-detected', async () => {
       sessions.findFirst.mockResolvedValue({
-        id: 's-1', userId: 'user-1', previousTokenHash: hash('old'), revokedAt: null
+        id: 's-1', userId: 'user-1', previousTokenHash: hash('old'), revokedAt: null,
+        rotatedAt: new Date(Date.now() - 5 * 60 * 1000) // 5 分钟前轮换，超出 60s 容忍窗
       });
 
       const result = await rotateUserSession('old', 'new', { userId: 'user-1', tokenVersion: 0 });
+
+      expect(result).toBe('reuse-detected');
+      expect(sessions.updateMany).toHaveBeenCalledWith({
+        where: { id: 's-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) }
+      });
+    });
+
+    it('并发容忍窗（#116-a）：毫秒级双刷新落败方出示上一代令牌 → concurrent，不吊销会话', async () => {
+      // 赢家刚完成轮换：旧令牌不再是当前代（findUnique 落空），但仍是上一代（findFirst 命中）
+      sessions.findUnique.mockResolvedValue(null);
+      sessions.findFirst.mockResolvedValue({
+        id: 's-1', userId: 'user-1', previousTokenHash: hash('old'), revokedAt: null,
+        rotatedAt: new Date(Date.now() - 25) // 25ms 前刚轮换
+      });
+
+      const result = await rotateUserSession('old', 'new', { userId: 'user-1', tokenVersion: 0 });
+
+      expect(result).toBe('concurrent');
+      // 会话存活：既未吊销、也未再轮换（不写任何行）
+      expect(sessions.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('更旧代令牌（#116-b）：摘要已被后续轮换覆盖、无任何登记 → 不判并发，fail-closed 拒绝', async () => {
+      // 两代之前的令牌：tokenHash 与 previousTokenHash 均不匹配（库内只留一代历史，无从吊销）
+      sessions.findUnique.mockResolvedValue(null);
+      sessions.findFirst.mockResolvedValue(null);
+
+      const result = await rotateUserSession('ancient', 'new', { userId: 'user-1', tokenVersion: 0 });
+
+      expect(result).toBe('unknown-token');
+      expect(sessions.updateMany).not.toHaveBeenCalled(); // 绝不放行、绝不复活
+    });
+
+    it('更旧数据无法证明在窗内（#116-b）：上一代行缺轮换时间 → 维持严格吊销', async () => {
+      sessions.findUnique.mockResolvedValue(null);
+      sessions.findFirst.mockResolvedValue({
+        id: 's-1', userId: 'user-1', previousTokenHash: hash('old'), revokedAt: null,
+        rotatedAt: null // 缺时间戳：不能证明 ≤60s，按重放严格吊销
+      });
+
+      const result = await rotateUserSession('old', 'new', { userId: 'user-1', tokenVersion: 0 });
+
+      expect(result).toBe('reuse-detected');
+      expect(sessions.updateMany).toHaveBeenCalledWith({
+        where: { id: 's-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) }
+      });
+    });
+
+    it('已吊销代（#116-c）：上一代行已吊销 → 容忍窗不适用，仍吊销并 reuse-detected', async () => {
+      sessions.findUnique.mockResolvedValue(null);
+      sessions.findFirst.mockResolvedValue({
+        id: 's-1', userId: 'user-1', previousTokenHash: hash('old'),
+        revokedAt: new Date(Date.now() - 1000), rotatedAt: new Date(Date.now() - 10)
+      });
+
+      const result = await rotateUserSession('old', 'new', { userId: 'user-1', tokenVersion: 0 });
+
+      expect(result).toBe('reuse-detected');
+      expect(sessions.updateMany).toHaveBeenCalledWith({
+        where: { id: 's-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) }
+      });
+    });
+
+    it('容忍窗内但归属不一致：不放行，仍吊销并 reuse-detected', async () => {
+      sessions.findUnique.mockResolvedValue(null);
+      sessions.findFirst.mockResolvedValue({
+        id: 's-1', userId: 'user-1', previousTokenHash: hash('old'), revokedAt: null,
+        rotatedAt: new Date(Date.now() - 25)
+      });
+
+      const result = await rotateUserSession('old', 'new', { userId: 'user-9', tokenVersion: 0 });
 
       expect(result).toBe('reuse-detected');
       expect(sessions.updateMany).toHaveBeenCalledWith({

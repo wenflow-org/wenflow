@@ -97,6 +97,7 @@ import {
   WARMUP_FUZZY_OVERLAP_MIN,
   RECOVERY_WINDOW_MS,
 } from '../services/ai-teaching/AITeachingCoordinator';
+import { REFRESH_ROTATION_CONCURRENCY_WINDOW_MS } from '../services/auth/user-session.service';
 
 export const SCIENTIFIC_CONSTANTS: ScientificConstant[] = [
   // ---------- 状态量：掌握趋势 KTL（慢） ----------
@@ -584,6 +585,18 @@ export const SCIENTIFIC_CONSTANTS: ScientificConstant[] = [
     source: '工程启发式',
     note: '断线可恢复窗口（48h，毫秒）：超过则视为新会话，避免"几天前的课"被当成进行中。',
     resolve: () => RECOVERY_WINDOW_MS,
+  },
+
+  // ---------- 会话安全：refresh 轮换并发容忍窗（#116 方案 A） ----------
+  {
+    key: 'session.refreshRotationConcurrencyWindowMs',
+    value: 60000,
+    source: '工程启发式',
+    note: '并发双刷新容忍窗（60s，毫秒）：同浏览器并发请求各自触发静默刷新时，落败方出示的'
+      + '「上一代」令牌在窗内判并发（不吊销会话、不覆盖 Cookie）；仅限恰为上一代 + 该代未吊销'
+      + '+ 归属一致。库内证据：真实账号 b88f4354 的 3 行会话在轮换后 94/197/827ms 被误吊销，'
+      + '60s 为跨请求重试与时钟差留余量；更旧代/已吊销/超窗维持严格吊销。',
+    resolve: () => REFRESH_ROTATION_CONCURRENCY_WINDOW_MS,
   },
 ];
 
