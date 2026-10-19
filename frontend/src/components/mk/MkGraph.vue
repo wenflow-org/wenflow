@@ -41,6 +41,17 @@ export interface MkGraphEdge {
   toConceptId: string
   relation: string
 }
+/**
+ * 概念台账事实（宿主可选，按概念名索引）：图上没有这些字段，由父级把学习者模型里的
+ * 概念台账映射进来，随节点详情一起展示（可迁移 / 误解风险 / 证据条数）。
+ * 2026-10-20：原概览「概念掌握」卡里的逐概念明细并入图谱侧栏，本类型是同一次搬家的契约。
+ */
+export interface MkGraphConceptFacts {
+  readiness: string
+  risk: string
+  riskTone: 'ok' | 'warn' | 'bad'
+  evidenceCount: number
+}
 
 /**
  * 密集图判据：超过这个节点数就只标「值得标注」的节点（枢纽 + 薄弱），其余靠悬停。

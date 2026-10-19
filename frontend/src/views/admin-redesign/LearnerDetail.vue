@@ -127,24 +127,15 @@
               >、{{ conceptBars.filter((c) => c.tone === 'muted').length }} 个证据不足</template
             >。
           </p>
-          <details v-if="conceptBars.length" class="ld-bars-details">
-            <summary class="mk-section__summary">逐概念明细</summary>
-            <div class="ld-bars">
-            <div v-for="c in conceptBars" :key="c.label" class="ld-bar">
-              <div class="ld-bar__head">
-                <strong :title="`概念掌握：${c.readiness} · 误解风险：${c.risk}`">{{ c.label }}</strong>
-                <span class="ld-bar__badges">
-                  <span class="mk-badge" :class="barToneBadge(c.tone)">{{ c.readiness }}</span>
-                  <span class="ld-bar__risk" :class="`ld-bar__risk--${c.riskTone}`">误解风险 {{ c.risk }}</span>
-                  <span v-if="c.evidenceCount > 0" class="ld-bar__ev" :title="`证据 ${c.evidenceCount} 条`">{{ c.evidenceCount }} 条证据</span>
-                </span>
-              </div>
-              <span class="mk-minibar ld-bar__track">
-                <i class="mk-minibar__fill" :data-tone="c.tone === 'muted' ? undefined : c.tone" :class="{ 'ld-bar__fill--muted': c.tone === 'muted' }" :style="{ width: c.width + '%' }"></i>
-              </span>
-            </div>
-            </div>
-          </details>
+          <!-- 逐概念明细已并入「知识图谱」页签的节点详情（2026-10-20 用户拍板）：
+               可迁移 / 误解风险 / 证据数三样与侧栏的记忆强度、提取练习是同一个概念的读数，
+               同一份事实只在一个地方出现；本卡只留上面那行结论与概念总数 -->
+          <button
+            v-if="conceptBars.length"
+            type="button"
+            class="mk-link ld-concepts__more"
+            @click="tab = 'graph'"
+          >去图谱逐个查看 →</button>
           <p v-else class="ld-none">
             {{ '暂无概念掌握数据' }}
             <span class="ld-none__hint">{{ CONCEPT_NONE_HINT }}</span>
@@ -688,6 +679,7 @@
           :loading="graphLoading"
           :error="graphError"
           height="var(--ld-graph-h)"
+          :concept-facts="conceptFacts"
           empty-hint="这位学习者还没有概念图数据，路径生成后会自动补齐前置依赖并生成图谱。"
         />
       </section>
@@ -896,7 +888,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { subPage, openSubPage, setSubPageLabel } from './store'
 import { liveLearners, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
-import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
+import { conceptBarTone, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
 import { learnerMetric, type LearnerMetricKey } from '@/utils/learnerMetrics'
 // pathStatusText：路径域状态文案（active → 「学习中」；全局字典是「进行中」）。本文件已从
 // './statusText' 引入同名 statusText（会话域），故此处显式改名，避免两条文案链混用。
@@ -918,6 +910,7 @@ import { toast } from '@/utils/toast'
 import type { EChartsCoreOption } from 'echarts/core'
 import MkChart from '@/components/mk/MkChart.vue'
 import MkGraphExplorer from '@/components/mk/MkGraphExplorer.vue'
+import type { MkGraphConceptFacts } from '@/components/mk/MkGraph.vue'
 import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -2104,37 +2097,48 @@ const avoidList = computed(() => teachingHints.value?.avoid || [])
 interface ConceptBar {
   label: string
   tone: ConceptBarTone
-  width: number
   readiness: string
   risk: string
   riskTone: 'ok' | 'warn' | 'bad'
   evidenceCount: number
 }
 
+/** 概念台账全量（不再截前 24 条）：概览卡已不铺列表，结论行要按全量报数，
+ *  截断会让「共 N 个概念」少报（实测该学习者台账 41 条，截断后只报 24） */
 const conceptBars = computed<ConceptBar[]>(() => {
   const km = knowledgeMemory.value as Record<string, unknown> | null
   const ledger = (km?.globalBackground as Record<string, unknown> | undefined)?.conceptLedger
   if (Array.isArray(ledger) && ledger.length) {
-    return (ledger as ConceptLedgerItem[])
-      .map((item) => ({
-        label: String(item.label || item.conceptKey || '未命名概念'),
-        tone: conceptBarTone(item),
-        width: conceptBarWidth(item.transferReadiness),
-        readiness: transferReadinessZh(item.transferReadiness),
-        risk: misconceptionRiskZh(item.misconceptionRisk),
-        riskTone: (String(item.misconceptionRisk || '').toLowerCase() === 'high' ? 'bad' : String(item.misconceptionRisk || '').toLowerCase() === 'medium' ? 'warn' : 'ok') as ConceptBar['riskTone'],
-        evidenceCount: Number(item.evidenceCount || 0)
-      }))
-      .slice(0, 24)
+    return (ledger as ConceptLedgerItem[]).map((item) => ({
+      label: String(item.label || item.conceptKey || '未命名概念'),
+      tone: conceptBarTone(item),
+      readiness: transferReadinessZh(item.transferReadiness),
+      risk: misconceptionRiskZh(item.misconceptionRisk),
+      riskTone: (String(item.misconceptionRisk || '').toLowerCase() === 'high' ? 'bad' : String(item.misconceptionRisk || '').toLowerCase() === 'medium' ? 'warn' : 'ok') as ConceptBar['riskTone'],
+      evidenceCount: Number(item.evidenceCount || 0)
+    }))
   }
   // 旧快照回退：无 ledger 时按 mastered/struggling/fragile 三组构建
   const c = d.value?.concepts
   if (!c) return []
   const fallback: ConceptBar[] = []
-  for (const label of c.mastered) fallback.push({ label, tone: 'ok', width: 90, readiness: '可迁移', risk: '低', riskTone: 'ok', evidenceCount: 0 })
-  for (const label of c.fragile) fallback.push({ label, tone: 'warn', width: 55, readiness: '待巩固', risk: '中', riskTone: 'warn', evidenceCount: 0 })
-  for (const label of c.struggling) fallback.push({ label, tone: 'bad', width: 25, readiness: '不宜迁移', risk: '高', riskTone: 'bad', evidenceCount: 0 })
+  for (const label of c.mastered) fallback.push({ label, tone: 'ok', readiness: '可迁移', risk: '低', riskTone: 'ok', evidenceCount: 0 })
+  for (const label of c.fragile) fallback.push({ label, tone: 'warn', readiness: '待巩固', risk: '中', riskTone: 'warn', evidenceCount: 0 })
+  for (const label of c.struggling) fallback.push({ label, tone: 'bad', readiness: '不宜迁移', risk: '高', riskTone: 'bad', evidenceCount: 0 })
   return fallback
+})
+
+/** 图谱节点详情的概念事实索引（概念名 → 可迁移 / 误解风险 / 证据数）。
+ *  台账 conceptKey 就是概念名，图节点 label 也是同一份 canonical 概念名，按 label 对得上；
+ *  对不上的节点不渲染这三行（不拿别的概念读数顶上）。 */
+const conceptFacts = computed<Record<string, MkGraphConceptFacts>>(() => {
+  const out: Record<string, MkGraphConceptFacts> = {}
+  for (const c of conceptBars.value) {
+    const key = c.label.trim().replace(/\s+/g, ' ')
+    if (!key) continue
+    out[key] = { readiness: c.readiness, risk: c.risk, riskTone: c.riskTone, evidenceCount: c.evidenceCount }
+  }
+  return out
 })
 
 /** 证据页「概念证据密度」：优先 ledger（evidenceCount），回退 conceptStates（masteryScore 归一化）。
@@ -2615,9 +2619,6 @@ const snapshotHint = computed(() =>
   snapshotLabel.value.includes('证据不足') ? '该档案置信度低于 50%，证据不足，建议重算' : '档案置信度'
 )
 
-function barToneBadge(tone: ConceptBarTone): string {
-  return tone === 'ok' ? 'mk-badge--ok' : tone === 'warn' ? 'mk-badge--warn' : tone === 'bad' ? 'mk-badge--bad' : 'mk-badge--muted'
-}
 </script>
 
 <style scoped>
@@ -2703,6 +2704,8 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 /* 概念掌握条（conceptLedger 图形化） */
 .ld-bars { padding: 14px 16px 16px; display: grid; gap: 12px; }
+/* 概念掌握卡的图谱入口：与结论行共用 14px 左缘；卡内最后一个元素由它补底边距 */
+.ld-concepts__more { margin: 0 14px 12px; }
 .ld-bars--dense { padding-top: 12px; }
 .ld-bar { display: grid; gap: 5px; }
 /* 无证据概念：折叠态——半透明 + 更紧凑，降低「14 行 0 证据」的刷屏感；悬停恢复不透明度便于阅读 */
@@ -2711,10 +2714,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-bar__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
 .ld-bar__head strong { font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
 .ld-bar__badges { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-.ld-bar__risk { font-size: var(--mk-fs-micro); font-weight: 700; }
-.ld-bar__risk--ok { color: var(--mk-green); }
-.ld-bar__risk--warn { color: var(--mk-amber); }
-.ld-bar__risk--bad { color: var(--mk-red); }
 .ld-bar__ev {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
@@ -3193,7 +3192,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-concept-label { font-size: var(--mk-fs-micro); }
   .ld-concept { font-size: var(--mk-fs-body); }
   .ld-bar__head strong { font-size: var(--mk-fs-body); }
-  .ld-bar__risk, .ld-bar__ev { font-size: var(--mk-fs-micro); }
+  .ld-bar__ev { font-size: var(--mk-fs-micro); }
   .ld-actions p { font-size: var(--mk-fs-body); }
   .ld-actions__k { font-size: var(--mk-fs-micro); }
   .ld-chip { font-size: var(--mk-fs-micro); }
@@ -3228,7 +3227,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-concept-label { font-size: var(--mk-fs-micro); }
   .ld-concept { font-size: var(--mk-fs-body); }
   .ld-bar__head strong { font-size: var(--mk-fs-body); }
-  .ld-bar__risk, .ld-bar__ev { font-size: var(--mk-fs-micro); }
+  .ld-bar__ev { font-size: var(--mk-fs-micro); }
   .ld-actions p { font-size: var(--mk-fs-body); }
   .ld-actions__k { font-size: var(--mk-fs-micro); }
   .ld-chip { font-size: var(--mk-fs-micro); }
@@ -3263,7 +3262,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-concept-label { font-size: var(--mk-fs-body); }
   .ld-concept { font-size: var(--mk-fs-emphasis); }
   .ld-bar__head strong { font-size: var(--mk-fs-emphasis); }
-  .ld-bar__risk, .ld-bar__ev { font-size: var(--mk-fs-body); }
+  .ld-bar__ev { font-size: var(--mk-fs-body); }
   .ld-actions p { font-size: var(--mk-fs-emphasis); }
   .ld-actions__k { font-size: var(--mk-fs-body); }
   .ld-chip { font-size: var(--mk-fs-body); }
