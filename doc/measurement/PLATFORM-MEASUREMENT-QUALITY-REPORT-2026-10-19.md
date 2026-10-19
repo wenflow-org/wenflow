@@ -33,13 +33,34 @@
 - B 臂与配对：`doc/local/runs/20261019/ab-class-audit/`（`AB-REPORT.md`、`verdicts/` 109 条、同目录 `../ab-class-audit.log`）
 - A 臂原件与 manifest：`doc/measurement/frozen-exam-2026-10-18/verdicts/`（原 `doc/local/frozen-eval-2026-10-18/`，2026-10-19 移动入库，内容未改，sha256 109/109 符）
 
-## 三、剩余项
+## 三、判分一致性补测（2026-10-19 · epoch-2 语料 · #84）
+
+**动机**：§二 B 臂显示同 prompt 重判 Jaccard 仅 42.3%（30/109 翻转）——单次 LLM 判读的噪声足以吞掉 10pp 量级的对照判据；且判据缺**检查点真值**时误报高发。本节登记判分器本体加固后的现行率，作为后续 F1-b 对照的测量基线。
+
+**判分器演进**（同模型 `deepseek-v4.1-flash`；`judgeVersion` 随每条 verdict 与 summary 落档）：
+
+| 版本 | 加固 | wrongAnswerPassed 读数（epoch-2，150 节） | 三样本一致率 |
+|---|---|---|---|
+| v1（冻结档案口径） | 单次判读，无引文/真值锚定 | 32–36%（epoch-1 109 条，跨纪元仅供参照；重判 Jaccard 42.3%） | — |
+| v2 | 多数表决 K=3 + 逐字引文锚定（引文找不到即降级为 false） | 21.3%（32/150） | 83.3% |
+| v3（定版，已入库） | + 检查点真值（题干 / learner_evidence 明细「正确 X，作答 Y」/ 答案键原文）+ 判定纪律：passed 且明细一致 → 不得凭自由文本判放行；**failed 后仍被肯定或总结称掌握 → 是放行** | **26.7%（40/150）** | 81.3% |
+
+**读数解读**：
+
+- v2 的 32 个 flag 里约 25 个为「缺检查点真值」的上下文缺失型误报（例：C药 vs B药 的检查点选 C 本就正确，被判分器按任务级口径「最急=多巴胺」误判为放行）；引文锚定 + 真值注入后消除。
+- **机械核验（不调模型）**：150 节里 code 判分 `passed=true` 但所选≠答案键的检查点为 **0**——「判分器把错答判对」这一机制不存在。残余 40 例的机制是 **failed 检查点随后仍被老师肯定 / 结课总结仍称掌握 / 知识点仍标 mastered**（抽验 8 例全部为实，含「cp3/cp4 正确 A 学员选 B 判 failed，老师随后仍称『选B很稳』」）。
+- 活体护栏口径与此对齐：`36fc5662`（失败概念后续回合肯定语剥离 + 「走通了」类进展断言纳入剥离）针对的正是该残余类；下一对对照可验增量。
+- **F1-b 适用性**：现行率 26.7%，距 10pp 下降判据尚有可裁决余量（目标 ≤16.7%）；臂间对照仍需同批课堂，本节仅为测量基线，不作裁决。
+
+**证据**：`doc/local/runs/20261019/judge4-out/2026-10-19/`（verdicts 150 + summary.json，judgeVersion `judge2:e67ceef3aace:deepseek-v4.1-flash:t0.2:k3`）；判分器入库 `backend/scripts/measurement-verify/class-audit-judge.mjs`（`--selftest` 装配 150 节、不调模型）；对照产物 v2：`doc/local/runs/20261019/judge2-out/`、v3 早期口径 4.7%：`judge3-out/`（该口径因「passed 后不凭自由文本判定」漏掉残余类，定版采用规则③口径）。
+
+## 四、剩余项
 
 1. **真正的 B 臂变体批次仍待定**：协议要求两臂各 ≥35 条同源同题课堂（改判分/教学规则的实际变体）；本轮无待验变体，待提供后方可启动。
 2. 判分一致性：翻转 30/109，需逐条审计 added/cleared、双人盲标 + 仲裁（清单见 `AB-REPORT.md`「还需要补什么」）。
 3. 本对记录此后不得改写；下一对对照出现时在本文件追加条目并注明日期与判据版本。
 
-## 四、证据命令清单（可复算）
+## 五、证据命令清单（可复算）
 
 ```bash
 # 0) 冻结集完整性（sha256 109/109 符 + 基线 35/109；不符非零退出）
@@ -53,6 +74,11 @@ node doc/local/runs/20261019/ab-class-audit-winpath.mjs \
   --db backend/prisma/archive/dev.db-epoch1-final-20261008.db \
   --frozen doc/measurement/frozen-exam-2026-10-18 \
   --out doc/local/runs/20261019/ab-class-audit
+
+# 3) 完结课堂审计判分（§三，定版；--selftest 不调模型）
+node backend/scripts/measurement-verify/class-audit-judge.mjs --selftest
+WENFLOW_AUDIT_KEY=… node backend/scripts/measurement-verify/class-audit-judge.mjs \
+  --out=doc/local/runs/class-audit/2026-10-19 --conc=4
 ```
 
 > 注：B 臂重判当日冻结集仍在 `doc/local/frozen-eval-2026-10-18/`（sha256 同源），2026-10-19 移动入库到现路径；重跑时给新路径即可复现同一集合。
