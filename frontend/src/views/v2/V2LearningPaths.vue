@@ -7,7 +7,7 @@
       <transition name="toast">
         <div v-if="goalBanner && hasGenerating" class="goal-banner">
           <span class="goal-banner__dot"></span>
-          这版路径正在生成，通常 1-3 分钟。遇到排队会更久。页面会自动刷新，也可以先离开。
+          这版路径正在生成，通常几分钟；模型重试时会更久。页面会自动刷新，也可以先离开。
           <button type="button" class="goal-banner__close" @click="goalBanner = false">×</button>
         </div>
       </transition>
@@ -295,7 +295,7 @@ const deleteBusy = ref(false);
     2026-10-08 走查 #15：这两处原先各写一份，轮询一跑就把「主结构生成中，一般 1-2 分钟内完成…」
     换成「主结构生成中…」，那句用户最需要的时长承诺整段消失（手机档实测只剩短句，
     且本屏 docH=视口高、没有滚动可达的后半段）。抽成一处后不可能再各自漂移。 */
-const CORE_PHASE_TEXT = '路径生成中，通常 1-2 分钟。排队时会久一些，完成后会出现在这里…';
+const CORE_PHASE_TEXT = '路径生成中，通常几分钟；模型重试时会更久，完成后会出现在这里…';
 function phaseTextOf(lc: { phase?: string | null; completedStages?: number | null; totalStages?: number | null }) {
   if (lc.phase === 'core') return CORE_PHASE_TEXT;
   // 阶段数已满但整体未 ready：这是「任务正在写入」而不是 100% 卡死（#112）
@@ -595,8 +595,10 @@ function onWindowClick() {
   menuFor.value = '';
 }
 /* 滚动即收起「⋯」菜单：它悬在卡片之上，滚动后停留位置不可预期，
-   是「删除路径」误触的主要来源（2026-09-27 用户反馈容易误触） */
-function onWindowScroll() {
+   是「删除路径」误触的主要来源（2026-09-27 用户反馈容易误触）。
+   #20 后窄屏滚动发生在 .v2-page 内部（它成了滚动容器），scroll 事件不冒泡到 window——
+   用 document 捕获阶段监听，桌面（window 滚动）与窄屏（容器滚动）都能收到。 */
+function onPageScroll() {
   menuFor.value = '';
 }
 
@@ -607,7 +609,7 @@ onMounted(() => {
   }
   window.addEventListener('keydown', onMenuKey);
   window.addEventListener('click', onWindowClick);
-  window.addEventListener('scroll', onWindowScroll, { passive: true });
+  document.addEventListener('scroll', onPageScroll, { passive: true, capture: true });
 });
 
 onBeforeUnmount(() => {
@@ -615,7 +617,7 @@ onBeforeUnmount(() => {
   window.clearTimeout(pollTimer);
   window.removeEventListener('keydown', onMenuKey);
   window.removeEventListener('click', onWindowClick);
-  window.removeEventListener('scroll', onWindowScroll);
+  document.removeEventListener('scroll', onPageScroll, { capture: true });
 });
 </script>
 

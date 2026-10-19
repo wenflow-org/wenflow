@@ -149,7 +149,7 @@
               <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
             </div>
             <h2 class="action__title">路径正在生成，稍等一下</h2>
-            <p class="action__desc">生成一般需要 1-2 分钟，这一页会自动检查进度，完成后直接出现今日行动。你也可以先去别的页面看看。</p>
+            <p class="action__desc">生成一般需要几分钟；模型重试时会更久。这一页会自动检查进度，完成后直接出现今日行动。你也可以先去别的页面看看。</p>
             <div class="action__meta">
               <span class="tag tag--cyan">正在生成</span>
               <span class="tag">信息已保留</span>

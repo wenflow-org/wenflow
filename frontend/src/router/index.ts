@@ -411,14 +411,89 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '页面不存在' }
   }
 ];
+/* #20（跟踪单 #45）：≤1023px 挂着底部 dock 的页面，滚动发生在 .v2-page 容器内部
+   （v2.css 把滚动视口收窄到底栏上沿）。window 的 scrollY 恒为 0，Vue Router 的
+   savedPosition 因此对这类页面无效——不补这一段，浏览器「后退」会丢失原来的滚动位置。
+   键用 history.state 的 position+current（Vue Router/浏览器为每个历史条目提供，单调且稳定）。 */
+function dockScroller(): HTMLElement | null {
+  const el = document.querySelector<HTMLElement>('.v2-page:has(> .v2nav__dock)');
+  if (!el) return null;
+  // 桌面档 dock 仍在 DOM（display:none），但 .v2-page 不是滚动容器（overflow:visible）——
+  // 只有窄屏 v2.css 把 overflow-y 设成 auto 时才算「容器滚动」。
+  return getComputedStyle(el).overflowY === 'auto' ? el : null;
+}
+
+function dockScrollKey(): string | null {
+  const state = window.history.state as { position?: number; current?: string } | null;
+  if (!state || !Number.isFinite(state.position)) return null;
+  return `wf:dockScroll:${state.position}:${state.current || ''}`;
+}
+
+function saveDockScrollPosition() {
+  const el = dockScroller();
+  const key = dockScrollKey();
+  if (!el || !key) return;
+  try {
+    sessionStorage.setItem(key, String(el.scrollTop));
+  } catch {
+    /* 隐私模式/配额满：恢复失败最多回到顶部，不影响导航 */
+  }
+}
+
+/* 滚动时按「当时的历史条目」记账。不能放在 beforeEach：popstate 已经把 history.state
+   切到目标条目，而 DOM 还是旧页面，会把旧页面的位置写到目标条目的键上。 */
+let dockScrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
+if (typeof document !== 'undefined') {
+  document.addEventListener('scroll', () => {
+    if (dockScrollSaveTimer) return;
+    dockScrollSaveTimer = setTimeout(() => {
+      dockScrollSaveTimer = null;
+      saveDockScrollPosition();
+    }, 60);
+  }, { passive: true, capture: true });
+}
+
+/* 回退页的数据是异步拉的：nextTick 时页面可能还没有内容高度，直接写 scrollTop 会被钳回 0。
+   在 1.5s 内逐帧重试，直到写入生效（或用户自己滚出非 0 位置）即停。 */
+function applyDockScrollTop(el: HTMLElement, top: number) {
+  if (!(top > 0)) return;
+  const deadline = Date.now() + 1500;
+  const attempt = () => {
+    if (!el.isConnected || Date.now() > deadline) return;
+    el.scrollTop = top;
+    if (el.scrollTop === 0) requestAnimationFrame(attempt);
+  };
+  attempt();
+}
+
+/* 等新页面挂载后再判断：目标若是窄屏 dock 页，就把位置写回容器（.v2-page）；
+   否则交回 Vue Router 原来的 window 位置（savedPosition / 回顶），非 dock 页行为不变。 */
+async function restoreDockScrollPosition(
+  fallback: { left: number; top: number }
+): Promise<{ left: number; top: number } | void> {
+  await nextTick();
+  const el = dockScroller();
+  if (!el) return fallback;
+  const key = dockScrollKey();
+  let top = 0;
+  if (key) {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (raw !== null) top = Number(raw) || 0;
+    } catch {
+      /* 读不到就回顶 */
+    }
+  }
+  applyDockScrollTop(el, top);
+}
+
 const router = createRouter({
   history: createWebHistory(),
   routes,
   scrollBehavior(to, from, savedPosition) {
-    if (savedPosition) return savedPosition;
     if (to.path === from.path && to.hash === from.hash) return false;
     if (to.hash) return { el: to.hash };
-    return { left: 0, top: 0 };
+    return restoreDockScrollPosition(savedPosition ?? { left: 0, top: 0 });
   }
 });
 

@@ -688,14 +688,38 @@ html, body {
 
 /* 移动端为底部导航留出空间：底部 dock 在 ≤1023 出现（V2Nav 的 .v2nav__dock）。
    底部叠加 env(safe-area-inset-bottom)：viewport-fit=cover 后（index.html），
-   iOS 底部横条会把 dock 抬高 34px，页面留白必须同步长高，否则末行内容被压住。 */
+   iOS 底部横条会把 dock 抬高 34px，壳层预留量必须同步长高，否则末行内容被压住。
+   #20（跟踪单 #45）：旧实现只在文档末尾留 72px + html scroll-padding-bottom——前者只保护
+   页底，后者只影响 scrollIntoView/Tab 对齐，普通滚动时内容照常从固定底栏下穿过。现在把
+   滚动视口收窄到「底栏上沿」：壳层 #app 锁定动态视口并在底部预留 dock 实测高度
+   （V2Nav 用 ResizeObserver 写入 --v2-dock-h，含 safe-area），.v2-page 自身成为滚动容器，
+   下沿 = 底栏上沿，任意 scrollY 都不再有可交互元素进入底栏带。:has 限定只作用于挂了 dock
+   的页面，登录/注册等无 dock 页不受影响。 */
 @media (max-width: 1023.98px) {
-  .v2-page { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
-  /* 固定底栏（#20）：内容滚动时本就会从底栏下穿过（这是固定栏的固有行为、非缺陷——
-     .v2-page 的 72px 留白已保证滚到页底时末行不被压住）。但键盘 Tab / scrollIntoView
-     把目标滚进视野时，浏览器默认只保证「进入视口」，可能刚好停在底栏之下——补
-     scroll-padding-bottom 让这类滚动把底栏band 也算进去，焦点元素不会落在底栏背后。 */
-  html { scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+  /* 注意索引页的 <div id="app"> 与 App.vue 根节点同 id（内外两层）：这里必须用
+     `> #app-main` 限定到内层壳，否则规则会落到外层空壳上、内层仍被内容撑高。 */
+  body #app:has(> #app-main .v2nav__dock) {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: var(--v2-dock-h, 66px);
+  }
+  /* flex 项默认 min-height:auto 会被内容撑高，必须归零才收得住滚动视口 */
+  body #app:has(> #app-main .v2nav__dock) > #app-main { min-height: 0; }
+  /* html 前缀是为了压过页面 scoped 的自身锁高（.goal/.uc 同特异性且后注入）：
+     窄屏已由壳层预留 dock 高度，页面高度必须改由 #app-main 的剩余空间决定，
+     否则 height:100dvh / min-height:100vh 会让页面底边落到 dock 之下。 */
+  html .v2-page:has(> .v2nav__dock) {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    padding-bottom: 0;
+    /* 视口下沿已无覆盖，焦点/Tab 滚进视野时留一点呼吸位即可 */
+    scroll-padding-bottom: 12px;
+  }
   /* 移动端基准字号 16 → 14。桌面 body 是 16px，任何「没写自己字号」的元素都会继承它，
      在 390 下比周围内容（12.5–13.5px）整整大一档——用户指的筛选条容器实测就是 16px
      （里面的药丸是 12.5px），学习历史的日期行容器同样 16px（内容 14px）。

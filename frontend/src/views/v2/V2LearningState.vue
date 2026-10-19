@@ -198,10 +198,11 @@
               </button>
             </div>
             <div class="advisory__body">
-            <!-- 数据量与 KPI 同口径：本页没有任何学习状态数据（hasAnyLoad=false）时，不渲染 skill
+            <!-- 数据量与 KPI 同口径：三张 KPI 全 0（hasKpiData=false）时不渲染 skill
                  生成的建议——否则会出现「KPI 全 0」与「你已投入大量时间/有些疲劳」同屏自相矛盾
-                 （2026-10-15 走查 #41）。无数据回落中性空态。 -->
-            <template v-if="skillCopy && hasAnyLoad">
+                 （2026-10-15 走查 #41；2026-10-20 起用 KPI 口径取代会被后向填充的 hasAnyLoad）。
+                 无数据回落中性空态。 -->
+            <template v-if="skillCopy && hasKpiData">
               <!-- 2026-09-27 重排：一段结论（标题 + 一句说明）+ 一个动作 + 一行脚注。
                    原来四层文本处理（副标 / 琥珀警告框 / 依据行 / 带标签的下一步·节奏两行）堆在一起，
                    且副标与警告框语义重叠——现在副标与警告二选一（取更具体的警告），
@@ -236,10 +237,10 @@
 
             <!-- 静态规则兜底块 -->
             <template v-else>
-              <div v-if="!suggestionCards.length" class="chart__empty">
+              <div v-if="!hasKpiData || !suggestionCards.length" class="chart__empty">
                 {{ guidanceLoadFailed
                   ? 'AI 建议暂时取不到，可重新加载。'
-                  : (hasAnyLoad ? '当前没有特别建议，保持节奏就好。' : '完成第一次学习后，这里会出现 AI 建议。') }}
+                  : (hasKpiData ? '当前没有特别建议，保持节奏就好。' : '完成第一次学习后，这里会出现 AI 建议。') }}
               </div>
               <div v-else class="suggest__list">
                 <article v-for="(s, i) in suggestionCards" :key="i" class="sug" :class="`sug--${s.level}`">
@@ -259,7 +260,7 @@
             <div v-if="warningsLoadFailed" class="chart__empty" role="alert">
               预警数据加载失败，请刷新页面重试。
             </div>
-            <div v-if="skillCopy && warningRows.length" class="suggest__list suggest__list--warnings">
+            <div v-if="skillCopy && hasKpiData && warningRows.length" class="suggest__list suggest__list--warnings">
               <article v-for="(w, i) in warningRows" :key="i" class="sug" :class="`sug--${w.level}`">
                 <span class="sug__icon" :style="{ background: w.bg, color: w.ink }" v-html="w.icon"></span>
                 <div class="sug__body">
@@ -288,7 +289,7 @@
             <!-- 次级区块：学习调控（原型外整块 → 降级进建议卡，功能与按钮原样保留，不删）：
                  待你确认 / 已自动处理 / 已执行的调整。原「AI 决策记录」是纯日志；
                  现在待确认卡带 pathId + advisory 摘要，本页成为完课卡之外的第二确认入口。 -->
-            <div class="advisory__sub">
+            <div v-if="hasKpiData" class="advisory__sub">
               <div class="advisory__subhead">
                 <strong>学习调控</strong>
                 <span class="band__meta">{{ pendingAdjust.length ? `${pendingAdjust.length} 条待确认` : '暂无待确认' }}</span>
@@ -966,6 +967,13 @@ const masteryBuckets = computed(() => {
 const kpiMastered = computed<number | null>(() => (masteryOk.value ? masteryBuckets.value.mastered : null));
 /** 三张 KPI 全部到齐才出数：任一数据源还在飞就走骨架，避免「0」冒充「没学过」 */
 const kpiLoading = computed(() => !sessionsLoaded.value || !masteryLoaded.value);
+/* #41（2026-10-20）：AI 建议/调控的数据门与三张 KPI 同口径。
+   不能再用 hasAnyLoad（/state/trends 会逐日后向填充：只要窗口里有一天 metric，整窗 lsb 就非空），
+   否则「KPI 全 0」的新用户也会看到「你已投入时间、有点疲劳」这类派生文案。 */
+const hasKpiData = computed(
+  () => sessionsOk.value && masteryOk.value
+    && ((kpiStreak.value ?? 0) > 0 || (kpiWeekMinutes.value ?? 0) > 0 || (kpiMastered.value ?? 0) > 0)
+);
 
 /* ---------- 复习台账（既有 GET /ai-teaching/review/due + /review/plan，学习台同源） ----------
    due = 全部到期清单（上限 20），retention 0-1 就是条宽与百分比；

@@ -1,4 +1,5 @@
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
+import { classifyLoad } from '../learning/learning-load-verdict';
 
 export interface LearnerGuidanceActionSummary {
   type: 'continue-learning' | 'learning-state' | 'achievements' | 'create-goal' | 'path-detail';
@@ -55,11 +56,18 @@ class LearnerStateSummaryService {
         ? 'medium'
         : 'low';
 
-    const stateLevel: LearnerGlobalStateSummary['stateLevel'] = metrics.lsb < 0
+    /* #41（2026-10-20）：recover 不再只看「裸 lsb < 0」。
+       冷启动学习者的 ktl 基座还没长起来（mature=false），lf 天然略高于 ktl，lsb 必然为负，
+       把这种「正在建立适应」判成 recover 会让下游固定产出「近 7 天疲劳度持续高于健康度」的
+       伪疲劳断言。改用 classifyLoad 的 imbalanced（form<0 且 ktl 达标）作为唯一失衡判据；
+       其余档位仍按 lsb 分带，保持既有 reading。 */
+    const loadVerdict = classifyLoad({ ktl: metrics.ktl, lf: metrics.lf });
+    const lsb = Number.isFinite(metrics.lsb) ? metrics.lsb : loadVerdict.form;
+    const stateLevel: LearnerGlobalStateSummary['stateLevel'] = loadVerdict.imbalanced
       ? 'recover'
-      : metrics.lsb < 2
+      : lsb < 2
         ? 'caution'
-        : metrics.lsb >= 4
+        : lsb >= 4
           ? 'strong'
           : 'balanced';
 

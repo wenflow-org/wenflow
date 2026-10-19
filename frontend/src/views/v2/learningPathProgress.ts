@@ -70,7 +70,7 @@ export function buildGenerationProgress(
 
   let primary: string;
   if (lifecycle.phase === 'core') {
-    primary = '正在生成路径（通常 1-2 分钟，排队时会久一些）…';
+    primary = '正在生成路径（通常几分钟，模型重试时会更久）…';
   } else if (total > 0 && clampedDone >= total) {
     primary = '课时正在写入，马上就好…';
   } else if (total > 0) {

@@ -140,10 +140,35 @@ describe('LearningDecisionFeedService', () => {
     expect(cards.some((c) => c.kind === 'kp-carryover')).toBe(false)
   })
 
-  it('状态需要恢复时产出 pace 卡', () => {
+  it('状态需要恢复且疲劳确实偏高时产出 pace 卡', () => {
     const input = baseInput()
     input.summary = {
-      global: { stateLevel: 'recover', warningLevel: 'warning', hasWarnings: true }
+      global: { stateLevel: 'recover', fatigueLevel: 'high', warningLevel: 'warning', hasWarnings: true }
+    }
+
+    const cards = service.build(input)
+    const card = cards.find((c) => c.kind === 'pace')
+    expect(card).toBeDefined()
+    // #41：文案必须与真正验证过的判据一致，不再声称未经核对的「近 7 天」
+    expect(card!.captured).toBe('当前疲劳度高于知识积累')
+    expect(card!.captured).not.toContain('7 天')
+  })
+
+  it('冷启动（stateLevel=recover 但 fatigueLevel=low）不产出 pace 卡', () => {
+    // 冷启动用户 ktl 未成熟、lsb 天然为负，旧判据会误产出伪疲劳断言（#41）
+    const input = baseInput()
+    input.summary = {
+      global: { stateLevel: 'recover', fatigueLevel: 'low', warningLevel: 'warning', hasWarnings: true }
+    }
+
+    const cards = service.build(input)
+    expect(cards.some((c) => c.kind === 'pace')).toBe(false)
+  })
+
+  it('critical 预警仍产出 pace 卡（与疲劳档无关）', () => {
+    const input = baseInput()
+    input.summary = {
+      global: { stateLevel: 'balanced', fatigueLevel: 'low', warningLevel: 'critical', hasWarnings: true }
     }
 
     const cards = service.build(input)
