@@ -17,7 +17,17 @@ const routingGroups = ORCHESTRATION_STAGES.map((stage) => stage.routings);
 
 export const FIELD_ROUTING_SEED_MANIFEST = {
   contractAgentIds: contractGroups.flat().map(item => item.agentId),
+  /**
+   * 全局展平 fieldId：仅供 `fieldId in (...)` 形态的查询兼容；数量判据一律用 fieldKeys（见下）。
+   * 注意：展平列表把跨 stage 同名各数一次，与 DB 行数的相等关系只在「库中无残留行」时成立——
+   * 残留行（字段换阶段后的旧 stage 行）会把 in 计数抬高（#125 实测 156 vs 148）。
+   */
   fieldIds: fieldGroups.flat().map(item => item.fieldId),
+  /**
+   * (stage, fieldId) 复合键清单——与 field_definitions 的唯一约束同口径（#125）。
+   * 计数只认声明内的行：残留行不计入、缺行即暴露，跨 stage 同名（teaching/simulation 的 reply）天然区分。
+   */
+  fieldKeys: ORCHESTRATION_STAGES.flatMap(stage => stage.fields.map(f => ({ stage: stage.stage, fieldId: f.fieldId }))),
   routings: routingGroups.flat().map(item => ({ agentId: item.agentId, fieldId: item.fieldId }))
 };
 
@@ -27,7 +37,6 @@ function assertUnique(values: string[], label: string) {
 
 assertUnique(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds, 'agent_contracts');
 // fieldId 唯一约束为 stage 内唯一：逐 stage 去重；跨 stage 允许同名（如 teaching/simulation 的 reply）。
-// FIELD_ROUTING_SEED_MANIFEST.fieldIds 保持全局展平（readiness 数量用，重名在 in 查询中无害）。
 for (const stage of ORCHESTRATION_STAGES) {
   assertUnique(
     stage.fields.map((f) => f.fieldId),
@@ -294,6 +303,51 @@ export async function bootstrapFieldRoutings(dependencies: FieldRoutingBootstrap
     results[stage.stage] = await ensureStageFieldRoutings(dependencies.database, stage);
   }
   return results;
+}
+
+// ============================================================
+// 残留行对账（#125）：字段换阶段/删除后，旧 (stage, fieldId) 行永久留库的清理
+//
+// 场景：字段从 A 阶段迁到 B 阶段（如 2026-10 由 teaching 随技能迁入 profile），
+// seed 的 upsert 只建不更新，B 行新建、A 旧行不在任何声明里却永远留库。
+// 判据：(stage, fieldId) 不在编排声明集合内 且 managedByCode=true 的行 → 删除 + 审计。
+// admin 覆盖行（managedByCode=false）与缺失行都不动（缺失由 readiness 数量判据暴露）。
+// 只在启动 seed（runFieldRoutingSeed）调用——check 类脚本不得产生删除副作用。
+// ============================================================
+
+export interface FieldDefinitionReconcileResult {
+  /** 被清理的残留行数 */
+  deleted: number;
+  /** 被清理的键清单（stage/fieldId） */
+  keys: string[];
+}
+
+export async function reconcileStaleFieldDefinitions(systemPrisma: PrismaClient): Promise<FieldDefinitionReconcileResult> {
+  const declared = new Set(
+    ORCHESTRATION_STAGES.flatMap((s) => s.fields.map((f) => `${s.stage}\0${f.fieldId}`)),
+  );
+  const rows = await systemPrisma.field_definitions.findMany({
+    where: { managedByCode: true },
+    select: { id: true, stage: true, fieldId: true },
+  });
+  const stale = rows.filter((row) => !declared.has(`${row.stage}\0${row.fieldId}`));
+  if (stale.length === 0) return { deleted: 0, keys: [] };
+
+  await systemPrisma.field_definitions.deleteMany({ where: { id: { in: stale.map((row) => row.id) } } });
+  for (const row of stale) {
+    await writeNodeConfigChange(systemPrisma, {
+      changeType: 'field-routing-bootstrap-reconcile',
+      targetTable: 'field_definitions',
+      targetId: `${row.stage}/${row.fieldId}`,
+      fieldId: row.fieldId,
+      before: { ...row },
+      after: null,
+      actorId: 'system-bootstrap',
+      actorRole: 'system',
+      reason: '启动对账：编排声明不含该 (stage, fieldId) 的 code 行（字段换阶段/删除后的残留）',
+    });
+  }
+  return { deleted: stale.length, keys: stale.map((row) => `${row.stage}/${row.fieldId}`) };
 }
 
 // ============================================================

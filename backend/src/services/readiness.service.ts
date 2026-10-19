@@ -101,9 +101,12 @@ export class ReadinessService {
         this.systemDatabase.agent_contracts.count({
           where: { agentId: { in: FIELD_ROUTING_SEED_MANIFEST.contractAgentIds } }
         }),
-        this.systemDatabase.field_definitions.count({
-          where: { fieldId: { in: FIELD_ROUTING_SEED_MANIFEST.fieldIds } }
-        }),
+      this.systemDatabase.field_definitions.count({
+        // 数量判据按 (stage, fieldId) 复合键计（#125）：展平 fieldIds 的 in 计数会被「字段换阶段后的
+        // 残留旧行」抬高（实测 156 vs 清单 148 → /readyz 恒 503），也分不清行落在哪个 stage；
+        // 复合键只认声明内的行，残留行不计入（旧行由启动对账清理）。
+        where: { OR: FIELD_ROUTING_SEED_MANIFEST.fieldKeys.map((key) => ({ stage: key.stage, fieldId: key.fieldId })) }
+      }),
         this.systemDatabase.agent_field_routings.count({
           where: { OR: FIELD_ROUTING_SEED_MANIFEST.routings }
         }),
@@ -119,7 +122,7 @@ export class ReadinessService {
       checks.corePrompts = CRITICAL_PROMPT_IDS.every(agentId => activePromptIds.has(agentId)) ? 'ok' : 'failed';
       checks.aiConfiguration = this.hasValidAIConfiguration(platformConfig) ? 'ok' : 'warning';
       checks.fieldRouting = contractCount === FIELD_ROUTING_SEED_MANIFEST.contractAgentIds.length
-        && fieldCount === FIELD_ROUTING_SEED_MANIFEST.fieldIds.length
+        && fieldCount === FIELD_ROUTING_SEED_MANIFEST.fieldKeys.length
         && routingCount === FIELD_ROUTING_SEED_MANIFEST.routings.length
         ? 'ok' : 'failed';
       checks.gatewayRegistry = agentCount > 0 && skillCount > 0 ? 'ok' : 'failed';
