@@ -156,7 +156,8 @@ function makeSnapshot(overrides: Partial<Record<'overall' | 'stale', string | bo
 
 async function mountApiConfig() {
   dataSource.value = 'live';
-  const wrapper = mount(ApiConfig);
+  // 模型选择器的候选层 Teleport 到 body；原地渲染，选择器才能从 wrapper 找到
+  const wrapper = mount(ApiConfig, { global: { stubs: { teleport: true } } });
   await flushPromises();
   await nextTick();
   await flushPromises();
@@ -502,16 +503,21 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('路由默认支持逻辑别名：输入框可填 chat（不再受模型清单未拉取限制）', async () => {
+  it('路由默认支持逻辑别名：选择器可填 chat（不再受模型清单未拉取限制）', async () => {
     getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
     const wrapper = await mountApiConfig();
     await gotoTab(wrapper, '路由与调用');
-    const input = wrapper.find('input[list="ac-model-options"]');
-    expect(input.exists(), '路由默认应为可输入（支持别名）').toBe(true);
+    // 2026-10-20 起默认路由走 MkModelPicker：既能选目录模型，也能把别名直接按输入提交
+    const control = wrapper.findAll('.ac-route__inline .mk-mp__control')[0];
+    expect(control.exists(), '路由默认应有模型选择器（支持别名）').toBe(true);
 
-    await input.setValue('chat');
+    await control.trigger('click');
+    await wrapper.find('.mk-mp__search').setValue('chat');
+    const aliasRow = wrapper.findAll('.mk-mp__opt').find((o) => o.find('.mk-mp__id').text() === 'chat');
+    expect(aliasRow, '输入别名后应给出可选行').toBeTruthy();
+    await aliasRow!.trigger('click');
     await nextTick();
-    // 输入即标脏 → 出现分段保存入口
+    // 选择即标脏 → 出现分段保存入口
     expect(wrapper.text()).toContain('保存路由');
     wrapper.unmount();
   });
@@ -686,8 +692,12 @@ describe('ApiConfig P1 修复批', () => {
     expect(confirmState.open).toBe(false);
 
     // 改动路由 → 出现分段保存入口
-    const input = wrapper.find('input[list="ac-model-options"]');
-    await input.setValue('agnes-2.5-flash');
+    const control = wrapper.findAll('.ac-route__inline .mk-mp__control')[0];
+    await control.trigger('click');
+    await wrapper.find('.mk-mp__search').setValue('agnes-2.5-flash');
+    const row = wrapper.findAll('.mk-mp__opt').find((o) => o.find('.mk-mp__id').text() === 'agnes-2.5-flash');
+    expect(row, '输入未登记模型也应能按输入选中').toBeTruthy();
+    await row!.trigger('click');
     await nextTick();
     const saveBtn = wrapper.findAll('.ac-sec__save').find((b) => b.text() === '保存路由');
     expect(saveBtn, '改动路由后应出现「保存路由」').toBeTruthy();
@@ -703,7 +713,8 @@ describe('ApiConfig P1 修复批', () => {
     await flushPromises();
     expect(confirmState.open, '保存在途时不应弹「丢弃未保存的配置修改」').toBe(false);
     // 回显不覆盖正在保存的表单值
-    expect((wrapper.find('input[list="ac-model-options"]').element as HTMLInputElement).value).toBe('agnes-2.5-flash');
+    const shown = wrapper.findAll('.ac-route__inline .mk-mp__control')[0].find('.mk-mp__value');
+    expect(shown.text()).toBe('agnes-2.5-flash');
 
     release({ data: { data: {} } });
     await flushPromises();

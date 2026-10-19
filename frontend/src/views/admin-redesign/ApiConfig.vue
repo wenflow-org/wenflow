@@ -191,13 +191,13 @@
               <label v-for="r in routeRoles" :key="r.key" class="ac-route__row ac-route__row--stack" role="listitem">
                 <span class="ac-route__inline">
                   <span class="ac-route__label">{{ r.role }}</span>
-                  <input
-                    class="mk-field__input mono"
-                    list="ac-model-options"
-                    :value="r.value"
-                    placeholder="模型 id 或别名"
+                  <MkModelPicker
+                    :model-value="r.value"
+                    :options="routePickerOptions"
+                    :tier="r.tier"
                     :title="r.title"
-                    @input="r.set(($event.target as HTMLInputElement).value)"
+                    placeholder="模型 id 或别名"
+                    @update:model-value="r.set($event)"
                   />
                   <span class="mk-badge" :class="r.value ? 'mk-badge--ok' : 'mk-badge--muted'">{{ r.value ? '已配置' : '未配置' }}</span>
                 </span>
@@ -264,13 +264,6 @@
             </div>
           </div>
         </div>
-        <!-- 路由默认的候选：模型目录（File-as-Truth，带「供应商 · tier」标注）+ 通道拉取清单 + 逻辑别名 -->
-        <datalist id="ac-model-options">
-          <option v-for="o in catalogOptions" :key="`cat-${o.value}`" :value="o.value" :label="o.label" />
-          <option v-for="m in extraFetchedModels" :key="`model-${m}`" :value="m" />
-          <option v-for="a in aliasOptions" :key="`alias-${a}`" :value="a" />
-        </datalist>
-
       </div>
     </section>
       <!-- 原「调用与健康」页签内容（2026-10-14 并入本页签）：调用参数 / 降级守卫 / 能力健康——
@@ -679,13 +672,14 @@ import { useModelCatalog } from '@/composables/useModelCatalog'
 
 // 模型目录候选（File-as-Truth llm-providers.json）：与通道拉取清单合并进路由 datalist；
 // 目录加载失败静默降级（候选只剩通道拉取值 + 别名，输入框仍可自由填写）
-const { options: catalogOptions, load: loadModelCatalog, extraIds } = useModelCatalog()
+const { pickerOptions, load: loadModelCatalog, extraIds } = useModelCatalog()
 loadModelCatalog()
 import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
+import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
 import { toast } from '@/utils/toast'
 
 /* ---------- 宿主：接入与模型 · 路由与调用 · 安全与访问 ----------
@@ -1351,12 +1345,27 @@ function setEffort(v: string) {
 /* 2026-10-04 状态条退役：原「就绪」判定 ready（仅 statusTone 消费）随状态条删除，零引用一并清理。
    2026-10-14 页首 KPI 带撤除：routeCount 原本还喂「默认路由 N/3」那块 KpiKpi 与其 title，
    撤带后零引用，一并删除——路由就绪度由下方三行逐条徽标承担（不再有一个汇总数字复读）。 */
+/* 默认路由的候选（2026-10-20 走查）：目录模型（按供应商分组）+ 逻辑别名 + 通道拉取但未登记的 id。
+   别名与未登记 id 各自成组，选中后仍按注册表解析——候选列表只回答「能填什么」，不承诺解析结果。 */
+const routePickerOptions = computed<MkModelOption[]>(() => {
+  const out: MkModelOption[] = pickerOptions.value.map((o) => ({ ...o }))
+  for (const a of aliasOptions.value) {
+    if (!a || out.some((o) => o.value === a)) continue
+    out.push({ value: a, label: '按注册表成员解析', group: '逻辑别名' })
+  }
+  for (const m of extraFetchedModels.value) {
+    if (!m || out.some((o) => o.value === m)) continue
+    out.push({ value: m, label: '上游已返回、尚未登记', group: '通道拉取' })
+  }
+  return out
+})
 /* 默认路由三角色行（2026-10-05 重设计：原 routeOverview 只读概览与三列输入是同屏回声，
    合并为一行 = 角色 + 输入 + 状态徽标；value 直读 form，徽标随输入实时翻转）。 */
 const routeRoles = computed(() => [
   {
     key: 'chat',
     role: '对话默认',
+    tier: 'chat',
     value: form.defaultModel,
     title: '可填逻辑别名（chat / reasoning / light），或从已拉取清单中选择',
     set: (v: string) => { form.defaultModel = v; markDirty('route') },
@@ -1364,6 +1373,7 @@ const routeRoles = computed(() => [
   {
     key: 'reasoning',
     role: '推理默认',
+    tier: 'reasoning',
     value: form.defaultReasoningModel,
     title: '填别名 reasoning 时会自动选用支持思考的模型',
     set: (v: string) => { form.defaultReasoningModel = v; markDirty('route') },
@@ -1371,6 +1381,7 @@ const routeRoles = computed(() => [
   {
     key: 'evaluation',
     role: '评估默认',
+    tier: 'chat',
     value: form.defaultEvaluationModel,
     title: '同样支持逻辑别名',
     set: (v: string) => { form.defaultEvaluationModel = v; markDirty('route') },

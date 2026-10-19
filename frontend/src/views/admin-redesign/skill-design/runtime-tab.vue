@@ -60,8 +60,19 @@
                 </select>
               </label>
               <label class="sdp-field">
-                <span>模型（留空继承）<em>可填模型 ID 或别名，输入时会提示候选</em></span>
-                <input v-model="rtForm.model" class="mk-input mono" :disabled="!rtForm.enabled" placeholder="继承 Agent / 平台默认" list="rt-model-options" />
+                <span>模型<em>不选则继承 Agent / 平台默认</em></span>
+                <MkModelPicker
+                  :model-value="rtForm.model"
+                  :options="pickerOptions"
+                  allow-inherit
+                  inherit-label="继承 Agent / 平台默认"
+                  :tier="rtForm.tier"
+                  :disabled="!rtForm.enabled"
+                  @update:model-value="rtForm.model = $event"
+                  @pick="onModelPicked"
+                />
+                <!-- 选中项的能力与价格就地核对（Azure Foundry 的部署行形态）：不必再回接入页查 -->
+                <span v-if="primaryMetaText" class="sdp-model-meta mono">{{ primaryMetaText }}</span>
               </label>
               <label class="sdp-field">
                 <span>思考模式</span>
@@ -135,65 +146,78 @@
 
         <div class="sdp-sec">
           <span class="sdp-sec__title">参数覆盖<span class="sdp-sec__hint">覆盖当前 Prompt 的默认值，未覆盖的字段继续继承</span></span>
-          <div class="sdp-form__grid">
-            <label class="sdp-field">
-              <span>temperature</span>
-              <select v-model="paramT.mode" class="mk-input" :disabled="!rtForm.enabled">
-                <option value="inherit">{{ INHERIT_PROMPT_LABEL }}</option>
-                <option value="override">覆盖</option>
-              </select>
-            </label>
-            <label v-if="paramT.mode === 'override'" class="sdp-field">
-              <span>temperature 值（0-2）</span>
-              <input v-model.number="paramT.value" type="number" min="0" max="2" step="0.1" class="mk-input mono" :disabled="!rtForm.enabled" />
-            </label>
-            <label class="sdp-field">
-              <span>topP</span>
-              <select v-model="paramTopP.mode" class="mk-input" :disabled="!rtForm.enabled">
-                <option value="inherit">继承（当前 Prompt 无此字段时不发送）</option>
-                <option value="override">覆盖</option>
-              </select>
-            </label>
-            <label v-if="paramTopP.mode === 'override'" class="sdp-field">
-              <span>topP 值（0-1）</span>
-              <input v-model.number="paramTopP.value" type="number" min="0.01" max="1" step="0.05" class="mk-input mono" :disabled="!rtForm.enabled" />
-            </label>
-            <label class="sdp-field">
-              <span>maxTokens（输出预算）</span>
-              <select v-model="paramMax.mode" class="mk-input" :disabled="!rtForm.enabled">
-                <option value="inherit">{{ INHERIT_PROMPT_LABEL }}</option>
-                <option value="override">覆盖</option>
-              </select>
-            </label>
-            <label v-if="paramMax.mode === 'override'" class="sdp-field">
-              <span>maxTokens 值（256-131072）</span>
-              <input v-model.number="paramMax.value" type="number" min="256" max="131072" step="1000" class="mk-input mono" :disabled="!rtForm.enabled" />
-            </label>
+          <!-- 每个参数一个单元格：模式与数值同格（2026-10-20 走查）。
+               此前「覆盖值输入框」是独立的栅格项，一出现就把后面的 select 挤到下一格，
+               三行参数的长相随选择变化、读不出哪一行是什么。 -->
+          <div class="sdp-params">
+            <div class="sdp-param">
+              <span class="sdp-param__label">temperature<span class="sdp-param__range">0–2</span></span>
+              <div class="sdp-param__ctl">
+                <select v-model="paramT.mode" class="mk-input" :disabled="!rtForm.enabled">
+                  <option value="inherit">{{ INHERIT_PROMPT_LABEL }}</option>
+                  <option value="override">覆盖</option>
+                </select>
+                <input v-if="paramT.mode === 'override'" v-model.number="paramT.value" type="number" min="0" max="2" step="0.1" class="mk-input mono" :disabled="!rtForm.enabled" aria-label="temperature 覆盖值" />
+              </div>
+            </div>
+            <div class="sdp-param">
+              <span class="sdp-param__label">topP<span class="sdp-param__range">0–1</span></span>
+              <div class="sdp-param__ctl">
+                <select v-model="paramTopP.mode" class="mk-input" :disabled="!rtForm.enabled">
+                  <option value="inherit">继承（当前 Prompt 无此字段时不发送）</option>
+                  <option value="override">覆盖</option>
+                </select>
+                <input v-if="paramTopP.mode === 'override'" v-model.number="paramTopP.value" type="number" min="0.01" max="1" step="0.05" class="mk-input mono" :disabled="!rtForm.enabled" aria-label="topP 覆盖值" />
+              </div>
+            </div>
+            <div class="sdp-param">
+              <span class="sdp-param__label">maxTokens<span class="sdp-param__range">256–131072</span></span>
+              <div class="sdp-param__ctl">
+                <select v-model="paramMax.mode" class="mk-input" :disabled="!rtForm.enabled">
+                  <option value="inherit">{{ INHERIT_PROMPT_LABEL }}</option>
+                  <option value="override">覆盖</option>
+                </select>
+                <input v-if="paramMax.mode === 'override'" v-model.number="paramMax.value" type="number" min="256" max="131072" step="1000" class="mk-input mono" :disabled="!rtForm.enabled" aria-label="maxTokens 覆盖值" />
+              </div>
+            </div>
           </div>
         </div>
 
         <div class="sdp-sec">
           <span class="sdp-sec__title">失败处理与备用模型<span class="sdp-sec__hint">备用模型最多 2 个，需与主模型同层级、同供应商</span></span>
           <div class="sdp-form__grid">
-            <label class="sdp-field">
-              <span>逻辑重试（平台默认 {{ platformLogicalRetries }} 次）</span>
-              <select v-model="logicalRetryMode" class="mk-input">
-                <option value="inherit">继承平台默认</option>
-                <option value="disabled">禁用</option>
-                <option value="custom" :disabled="platformLogicalRetries <= 0">自定义</option>
-              </select>
-            </label>
-            <label v-if="logicalRetryMode === 'custom'" class="sdp-field">
-              <span>最大逻辑重试次数</span>
-              <input v-model.number="customLogicalRetries" type="number" :min="1" :max="platformLogicalRetries" step="1" class="mk-input" />
-            </label>
             <div class="sdp-field sdp-field--wide">
-              <span>备用模型（最多 2 个）<em>留空则使用平台默认备用模型</em></span>
-              <div class="sdp-fallback-editor">
-                <span v-for="m in fallbackChain" :key="m" class="sdp-chip">{{ m }}<button type="button" class="mk-link mk-link--danger" :disabled="!rtForm.enabled" @click="removeFallback(m)">×</button></span>
-                <input v-model="newFallback" class="mk-input mono" placeholder="模型 id，回车添加" list="rt-model-options" :disabled="!rtForm.enabled || fallbackChain.length >= 2" @keydown.enter.prevent="addFallback" />
-                <button type="button" class="mk-btn" :disabled="!rtForm.enabled || fallbackChain.length >= 2" @click="addFallback">添加</button>
-                <button type="button" class="mk-link" :disabled="probing || !rtForm.enabled" @click="probeChannel">
+              <span>逻辑重试<em>平台默认 {{ platformLogicalRetries }} 次</em></span>
+              <div class="sdp-param__ctl">
+                <select v-model="logicalRetryMode" class="mk-input">
+                  <option value="inherit">继承平台默认</option>
+                  <option value="disabled">禁用</option>
+                  <option value="custom" :disabled="platformLogicalRetries <= 0">自定义</option>
+                </select>
+                <input v-if="logicalRetryMode === 'custom'" v-model.number="customLogicalRetries" type="number" :min="1" :max="platformLogicalRetries" step="1" class="mk-input mono" aria-label="最大逻辑重试次数" />
+              </div>
+            </div>
+            <div class="sdp-field sdp-field--wide">
+              <span>降级顺序<em>{{ fallbackHint }}</em></span>
+              <div class="sdp-fallback">
+                <ol v-if="fallbackChain.length" class="sdp-fallback__chain" aria-label="备用链顺序">
+                  <li v-for="(m, i) in fallbackChain" :key="m" class="sdp-chip">
+                    <b class="mono">{{ i + 1 }}</b><span class="mono">{{ m }}</span>
+                    <button type="button" class="mk-link mk-link--danger" :disabled="!rtForm.enabled" :aria-label="`移除备用模型 ${m}`" @click="removeFallback(m)">×</button>
+                  </li>
+                </ol>
+                <MkModelPicker
+                  v-if="fallbackChain.length < 2"
+                  :model-value="newFallback"
+                  :options="fallbackOptions"
+                  :exclude="fallbackExclude"
+                  :tier="rtForm.tier"
+                  :allow-custom="false"
+                  :disabled="!rtForm.enabled"
+                  placeholder="选择备用模型"
+                  @update:model-value="addFallbackValue"
+                />
+                <button type="button" class="mk-link sdp-fallback__probe" :disabled="probing || !rtForm.enabled" @click="probeChannel">
                   {{ probing ? '探测中…' : '探测当前通道可用模型' }}
                 </button>
                 <span v-if="probeMsg" class="sdp-chip" :class="probeErr ? 'sdp-chip--danger' : 'sdp-chip--ok'">{{ probeMsg }}</span>
@@ -213,10 +237,6 @@
       </div>
     </section>
 
-    <!-- 模型目录候选：模型输入与兜底链输入共用（带「供应商 · tier」标注） -->
-    <datalist id="rt-model-options">
-      <option v-for="o in catalogOptions" :key="`cat-${o.value}`" :value="o.value" :label="o.label" />
-    </datalist>
   </div>
 </template>
 
@@ -230,10 +250,11 @@ import { adminPlatformSettingsApi, adminSkillsApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
 import { errText, fmtMs, callParamSourceLabel } from './sdp-shared'
 import { useModelCatalog } from '@/composables/useModelCatalog'
+import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
 
-// 模型目录候选（File-as-Truth llm-providers.json）：模型输入与兜底链输入共用的 datalist；
-// 加载失败静默降级为空目录（输入框退化为自由文本，不影响配置）
-const { options: catalogOptions, load: loadModelCatalog } = useModelCatalog()
+// 模型目录候选（File-as-Truth llm-providers.json）：模型与备用模型共用一个可选择器；
+// 加载失败静默降级为空目录（仍可按输入提交别名 / 注册表外 id，不影响保存）
+const { pickerOptions, load: loadModelCatalog } = useModelCatalog()
 loadModelCatalog()
 
 /* 文案单源（R6 复读单源化）：思考模式/思考强度下拉的继承项、参数覆盖三个下拉的继承项 */
@@ -366,15 +387,44 @@ async function probeChannel() {
   }
 }
 
-/** 兜底链编辑 */
-function addFallback() {
-  const m = newFallback.value.trim()
-  if (!m) return
-  if (fallbackChain.value.includes(m)) { newFallback.value = ''; return }
-  if (fallbackChain.value.length >= 2) return
-  fallbackChain.value = [...fallbackChain.value, m]
-  fallbackTouched.value = true
+/** 主模型在目录里的条目：备用链要按它的供应商与层级收窄（后端 validateFallbackChain 同规则） */
+const primaryOption = computed(() => pickerOptions.value.find((o) => o.value === rtForm.value.model) ?? null)
+const primaryMetaText = computed(() => {
+  const o = primaryOption.value
+  if (!o) return ''
+  const caps = [o.thinking ? '思考' : '', o.reasoning ? '强度' : '', o.vision ? '视觉' : ''].filter(Boolean).join(' / ')
+  const price = o.priceIn != null || o.priceOut != null
+    ? `入 ${o.priceIn ?? '—'} / 出 ${o.priceOut ?? '—'}`
+    : ''
+  return [o.providerName, o.tier, caps, price].filter(Boolean).join(' · ')
+})
+const fallbackHint = computed(() => {
+  if (primaryOption.value) return '候选只含同供应商、同层级的模型'
+  if (fallbackChain.value.length) return '主模型为空，候选按层级列出'
+  return '留空继承平台默认备用模型'
+})
+/** 备用候选：同供应商 + 同层级；主模型未指定时只按层级收窄 */
+const fallbackOptions = computed(() => {
+  const primary = primaryOption.value
+  return pickerOptions.value.filter((o) => {
+    if (primary) return o.providerId === primary.providerId && o.tier === primary.tier
+    return !rtForm.value.tier || o.tier === rtForm.value.tier
+  })
+})
+const fallbackExclude = computed(() => [rtForm.value.model, ...fallbackChain.value].filter(Boolean))
+
+/** 选中候选即入链；选择器自身受 max 2 与 exclude 约束 */
+function addFallbackValue(m: string) {
+  const value = (m || '').trim()
   newFallback.value = ''
+  if (!value || fallbackChain.value.includes(value) || fallbackChain.value.length >= 2) return
+  fallbackChain.value = [...fallbackChain.value, value]
+  fallbackTouched.value = true
+}
+
+/** 选中目录里的模型时同步层级：候选行标了 tier，选 reasoning 模型却留着 chat 会路由错档 */
+function onModelPicked(opt: MkModelOption | null) {
+  if (opt?.tier === 'chat' || opt?.tier === 'reasoning') rtForm.value.tier = opt.tier
 }
 function removeFallback(m: string) {
   fallbackChain.value = fallbackChain.value.filter(x => x !== m)
@@ -628,8 +678,10 @@ watch(() => props.skillId, () => {
 .sdp-chip--danger { background: var(--mk-red-bg, #fdecec); color: var(--mk-red, #b3372f); }
 .sdp-chip--amber { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .sdp-chip--amber b { color: var(--mk-amber); }
-.sdp-fallback-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.sdp-fallback-editor .mk-input { flex: 1; min-width: 200px; }
+.sdp-fallback { display: grid; gap: 8px; }
+.sdp-fallback__chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.sdp-fallback__chain b { color: var(--mk-faint); font-weight: 700; }
+.sdp-fallback__probe { justify-self: start; }
 .mk-link--danger { color: var(--mk-red, #b3372f); }
 /* 卡头分段保存钮（模型与接入的 .ac-sec__save 同款：只在脏位出现） */
 .sdp-card__save {
@@ -652,12 +704,23 @@ watch(() => props.skillId, () => {
 }
 /* 验证列窄（≤1100 单列时不窄），字段一律纵向排 */
 .sdp-form__grid--stack { grid-template-columns: minmax(0, 1fr); }
+/* 参数覆盖：一个参数一格，模式与数值同格 */
+.sdp-params { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1100px) {
+  .sdp-params { grid-template-columns: minmax(0, 1fr); }
+}
+.sdp-param { display: grid; gap: 5px; align-content: start; min-width: 0; }
+.sdp-param__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
+.sdp-param__range { margin-left: 6px; font-weight: 400; color: var(--mk-faint); }
+.sdp-param__ctl { display: grid; grid-template-columns: minmax(0, 1fr) 128px; gap: 8px; align-items: center; }
+.sdp-param__ctl > :only-child { grid-column: 1 / -1; }
 @media (max-width: 860px) {
   .sdp-form__grid { grid-template-columns: 1fr; }
 }
-.sdp-field { display: grid; gap: 5px; min-width: 0; }
+.sdp-field { display: grid; gap: 5px; min-width: 0; align-content: start; }
 .sdp-field > span { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
 .sdp-field > span em { font-style: normal; font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
+.sdp-model-meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }
 .sdp-field--wide { grid-column: 1 / -1; }
 .sdp-field--check { display: flex; align-items: center; gap: 8px; }
 .sdp-field--check input { width: 15px; height: 15px; accent-color: var(--mk-blue); }
