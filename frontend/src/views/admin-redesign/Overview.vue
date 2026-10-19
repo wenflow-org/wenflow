@@ -153,7 +153,7 @@
     </div>
 
     <!-- 动作队列带（原 Row B，2026-10-03 上移进首屏）：待处理事项是全页唯一
-         要求操作的板块，不能落在折叠线下；Top 5 作参考位同行 -->
+         要求操作的板块，不能落在折叠线下；Top 5 与虚拟学习者看板作参考位同行 -->
     <div class="row3">
       <div class="mk-card">
         <div class="mk-card__head">
@@ -220,6 +220,32 @@
             </div>
           </div>
           <p v-if="!todoItems.length" class="note">没有待处理的事项。</p>
+        </div>
+      </div>
+
+      <!-- 第三卡：虚拟学习者看板（2026-10-19 用户「这块区域 4K 下看着也很空，可以做三个看板，
+           我倾向于做一个虚拟学习者的在这里」）。
+           原型 row3 第三卡「学习状态分布」当年因后端无聚合数据不落；虚拟学习者现在有全量统计
+           （列表接口的 sessionStats/并发配额 + 运行统计接口），且本页 boot 域已含 virtuals，
+           不新增任何接口。读数只放「平台整体」视角的六格，逐人明细留在虚拟学习者页。
+           三态与全站同律（虚拟学习者页同一套）：加载中「…」、失败「不可用」+ 重试，
+           绝不把「没拉到」渲染成真实 0。 -->
+      <div class="mk-card ov-card--vl">
+        <div class="mk-card__head">
+          <span class="mk-card__title">虚拟学习者</span>
+          <span class="mk-card__meta">仅虚拟学习者与测试账号</span>
+          <span class="mk-card__head-right">
+            <button type="button" class="mk-btn mk-btn--sm" @click="jump('virtual-learners')">进入 →</button>
+          </span>
+        </div>
+        <div class="ov-card__body">
+          <MkStatStrip class="ov-vl__strip" layout="grid" :items="vlTiles" aria-label="虚拟学习者读数" />
+          <p v-if="vlBoardState === 'error'" class="ov-vl__state ov-vl__state--bad" role="alert">
+            <span>虚拟学习者统计不可用</span>
+            <button type="button" class="mk-link" @click="retryVlBoard">重试</button>
+          </p>
+          <MkLoading v-else-if="vlBoardState === 'loading'" inline text="统计加载中…" />
+          <p v-else class="ov-vl__state">{{ vlFootText }}</p>
         </div>
       </div>
     </div>
@@ -300,7 +326,9 @@ import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue'
 import { overviewHealth, investigateAgent, investigateTodayFailures, statusActionOf, intent, dataSource, openSubPage } from './store';
 import {
   liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing,
-  liveVirtualRunStats, liveVirtualStatsError, liveVirtualStatsLoaded,
+  liveVirtualRunStats, liveVirtualStatsError, liveVirtualStatsLoaded, liveVirtualStatsLoading,
+  liveVirtualSessionStats, liveAutopilotConcurrency, liveFailures,
+  retryLiveVirtualStats, loadLiveData,
   liveIncludeVirtual,
   recentActivityText, type LiveOverviewFull
 } from './live';
@@ -309,10 +337,12 @@ import { closureSourceText, closureTrackText } from './statusText';
 import { adminDashboardApi, adminHealthCenterApi, adminMemoryReviewApi, adminTeachingSessionsApi } from '@/api/adminApi';
 import MkPageHead from '@/components/mk/MkPageHead.vue';
 import MkKpi from '@/components/mk/MkKpi.vue';
+import MkStatStrip from '@/components/mk/MkStatStrip.vue';
+import type { MkStatItem } from '@/components/mk/MkStatStrip.vue';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
 import MkLoading from '@/components/mk/MkLoading.vue';
 import { useSafePolling } from '@/composables/useSafePolling';
-import { failureRateTone } from './rate-utils'
+import { failureRateTone, FAILURE_RATE_THRESHOLD_NOTE } from './rate-utils'
 
 type Tone = 'ok' | 'warn' | 'bad' | 'muted';
 
@@ -674,6 +704,94 @@ const simTitle = computed(() => {
   return parts.join(' · ')
 })
 
+/* ===================== row3 第三卡：虚拟学习者看板 =====================
+   与状态条的「仿真 ·」读数同源（live.ts 的 virtuals 域与运行统计域），本页 boot 时就已拉取。
+   三态判定刻意与虚拟学习者页同一套（VirtualLearners.vue 的 statsState）：列表域失败必须并入，
+   因为 live.ts 只在列表 GET 成功后才去拉运行统计——列表失败时统计保持初值 0 而
+   liveVirtualStatsError 仍为空，于是「没拉到」会被渲染成完成率 0% 的假绿。 */
+const vlBoardState = computed<'loading' | 'error' | 'ready'>(() => {
+  if (liveVirtualStatsError.value || liveFailures.value.virtuals) return 'error'
+  if (liveVirtualStatsLoading.value || !liveVirtualStatsLoaded.value) return 'loading'
+  return 'ready'
+})
+/** 三态取值：只有 ready 才渲染真实数字（加载中「…」、失败「—」，不伪造 0） */
+function vlValue(ready: string): string {
+  if (vlBoardState.value === 'loading') return '…'
+  if (vlBoardState.value === 'error') return '—'
+  return ready
+}
+/** 百分比取整（全站判例）：0<rate<1 显「<1%」，避免 3/685 被舍入成「0%」读成「一个也没完成」 */
+function vlPct(rate: number | null | undefined): string {
+  const v = rate ?? 0
+  return v > 0 && v < 1 ? '<1%' : `${Math.round(v)}%`
+}
+const vlConcurrency = computed(() => {
+  const c = liveAutopilotConcurrency.value
+  return { used: Number(c?.used ?? 0), limit: Math.max(1, Number(c?.limit ?? 10)), queued: Number(c?.queued ?? 0) }
+})
+const vlTiles = computed<MkStatItem[]>(() => {
+  const r = runStats.value
+  const s = liveVirtualSessionStats.value
+  const c = vlConcurrency.value
+  /* 无分母不造假零（rate-utils 判例）：一条会话都没有时「完成率 0%」会被读成跑过但全失败 */
+  const hasSessions = r.totalSessions > 0
+  /* 着色只在 ready 生效：加载/失败态的值是「…/—」，再叠红黄会把占位符读成结论 */
+  const ready = vlBoardState.value === 'ready'
+  const failTone = failureRateTone(r.systemFailureRate, r.failed)
+  return [
+    {
+      label: '学习者',
+      value: vlValue(String(r.profileCount)),
+      title: '虚拟学习者档案总数（含测试账号）'
+    },
+    {
+      label: '在跑会话',
+      value: vlValue(String(s.running)),
+      title: '状态为运行中、尚未进入终态的仿真会话数'
+    },
+    {
+      label: '自动驾驶并发',
+      value: vlValue(`${c.used}/${c.limit}`),
+      tone: ready && c.used >= c.limit ? 'warn' : '',
+      title: `自动驾驶全局并发：运行中 ${c.used} 个，配额上限 ${c.limit} 个`
+    },
+    {
+      label: '无响应会话',
+      value: vlValue(String(r.staleCount)),
+      tone: ready && r.staleCount > 0 ? 'warn' : '',
+      title: '运行中超过回收阈值仍没有新写入的会话数，可在虚拟学习者页回收'
+    },
+    {
+      label: '完成率',
+      value: vlValue(hasSessions ? vlPct(r.completionRate) : '—'),
+      title: hasSessions ? `已完成会话 / 全部会话（全部 ${r.totalSessions} 条）` : '暂无会话，比率没有分母'
+    },
+    {
+      label: '系统失败率',
+      value: vlValue(hasSessions ? vlPct(r.systemFailureRate) : '—'),
+      tone: ready && hasSessions && failTone !== 'muted' ? failTone : '',
+      title: hasSessions
+        ? `系统与上游失败 / 全部会话。管理员手动停止等人为终止单独统计，占 ${vlPct(r.humanTerminatedRate)}。${FAILURE_RATE_THRESHOLD_NOTE}`
+        : '暂无会话，比率没有分母'
+    }
+  ]
+})
+/** 卡底一行：当日与排队两个随时间变的读数（并发满不满要看得见，排队只在非零时出现） */
+const vlFootText = computed(() => {
+  const r = runStats.value
+  const c = vlConcurrency.value
+  const parts = [`今日调用 ${r.todayCalls} 次`]
+  if (c.queued > 0) parts.push(`排队 ${c.queued}`)
+  return parts.join(' · ')
+})
+/** 失败重试：live 层 retryLiveVirtualStats 只重拉统计域，列表域失败时统计仍会立刻回到失败态，
+    所以必须一并重拉列表（loadLiveData 会重跑失败过的域，成功的域走 TTL 缓存不重复请求） */
+function retryVlBoard() {
+  if (vlBoardState.value !== 'error') return
+  void retryLiveVirtualStats()
+  void loadLiveData()
+}
+
 const hasWrapupStats = computed(() => {
   const w = data.value?.wrapup;
   if (!w) return false;
@@ -936,8 +1054,9 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
    OvBars 组件（2026-10-02 P1#2，手写 .barchart 退役）。
    色与圆角全走 --mk-* token（数值与原型 --brand/--r-* 同源）。
    全局原语已覆盖的：页头（MkPageHead=pagehead）、状态条（mk-status=statusbar）、
-   按钮（mk-btn=btn）。原型 row3 第三卡「学习状态分布」不落（后端暂无
-   学习状态聚合口径，用户拍板不做顶替卡，row3 两卡排布，2026-10-01）。
+   按钮（mk-btn=btn）。原型 row3 第三卡「学习状态分布」至今不落（后端仍无学习状态聚合，
+   用户拍板不做顶替卡）；2026-10-19 用户要求 row3 出三栏并「做一个虚拟学习者的在这里」，
+   第三卡改为虚拟学习者看板（真读数，非顶替分布图）。
    ===================================================================== */
 
 /* ---- 页头刷新注记（熔断态=可点恢复钮，旧数据=琥珀告警，正常=faint）---- */
@@ -1113,6 +1232,36 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 
 /* ---- Row B：auto-fit 280 三小卡（gap 同页级 18，评审 2026-10-10 呼吸感）---- */
 .row3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+/* Row B 第三卡（虚拟学习者看板，2026-10-19）：
+   本卡内容天然比另两卡矮（它们各是 5 行清单），三卡等高下会漏出半张卡的空底——
+   卡体转 flex 列，读数条 flex:1 吃满剩余高度（另两卡同款的「差值给内容消化」做法）。 */
+.mk-card.ov-card--vl { display: flex; flex-direction: column; }
+.ov-card--vl .ov-card__body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.ov-vl__strip {
+  flex: 1; min-height: 0;
+  /* 六格固定列数：共享原语是 auto-fit minmax(150px,1fr)，卡宽随视口在 1900/2560 两档
+     分别落到 3 列与 5 列——6 格会变成 5+1（半行吊着一格）。本卡自定列数：
+     常规三列（两行整齐）；4K 档改六列一行铺满——4K 下卡宽 ≈1100，三列会让每格 370px
+     而读数仍贴左，正是「看着空」的成因。六列阈值按卡宽反推：视口 3300 − 侧栏 280 − 内衬
+     ≈ 卡宽 990，六列每格 ≈165px（标签不挤）。
+     注意：本卡根节点就是 .mk-stat-strip--grid（类名由父组件透传），故列数写在 .ov-vl__strip 上；
+     写成 `.ov-vl__strip :deep(.mk-stat-strip--grid)` 会去匹配「后代的同名前缀元素」而失效。 */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  row-gap: 14px;
+}
+.ov-vl__strip :deep(.mk-stat) { align-content: center; }
+.ov-vl__strip :deep(.mk-stat:first-child) { padding-left: 0; }
+/* 末列去分隔线与右内衬：原语只对 :last-child 去掉，三/六列下第 3 格会留一条悬空竖线 */
+.ov-vl__strip :deep(.mk-stat:nth-child(3n)) { border-right: 0; padding-right: 0; }
+@media (min-width: 3300px) {
+  .ov-vl__strip { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+/* 卡底一行状态：加载中/失败/当日读数三态同占位，不因状态不同让卡高抖动 */
+.ov-vl__state {
+  margin: 0; display: flex; gap: 8px; align-items: baseline;
+  font-size: var(--mk-fs-micro); color: var(--mk-faint);
+}
+.ov-vl__state--bad { color: var(--mk-red); }
 /* 轨道必须钳在容器宽（minmax(0,1fr)）：grid auto 列按 max-content 定尺，
    长 skill 名会把行撑出卡片右缘（1280 实测溢出 28px），行内 ellipsis 也永不生效 */
 .ranklist { display: grid; gap: 2px; grid-template-columns: minmax(0, 1fr); }
