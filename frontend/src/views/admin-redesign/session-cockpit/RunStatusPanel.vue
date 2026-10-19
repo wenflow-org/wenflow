@@ -12,6 +12,11 @@
       'cp-run__autopilot-result--muted': autopilotStatus === 'stopped'
     }">{{ autopilotResultText }}</div>
 
+    <!-- 驱动器行（2026-10-19 运营走查）：排队位置与心跳年龄。运行中此前只有下面四行阶段点阵，
+         没有任何「还在动」的证据 —— 运营分不出「在跑」与「在跑但卡住」，也不知道队列排第几位。
+         复用状态行的外观（同一张卡里的同类信息不该长两样），warn 档是新增的语义色。 -->
+    <div v-if="driver" class="cp-run__autopilot-result" :class="`cp-run__autopilot-result--${driver.tone}`" :title="driver.title">{{ driver.text }}</div>
+
     <!-- 阶段进度指示 -->
     <div class="cp-run__stages">
       <div class="cp-run__stage-row" v-for="st in stageFlow" :key="st">
@@ -49,12 +54,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { stageFlow, type StageKey } from '../cockpitStages'
+import type { AutopilotDriverLine } from '../cockpitAutopilot'
 
 const props = defineProps<{
   autopilotResultText: string
   autopilotRunning: boolean
   /** 可为 undefined（会话尚未拉到自动驾驶状态）；undefined 时三个 tone 类全不命中，与原内联写法一致 */
   autopilotStatus?: string
+  /** 驱动器行：排队位置 / 心跳年龄；null = 当前无可说的（idle 或终态已在结果行说过） */
+  driver?: AutopilotDriverLine | null
   stageDone: (st: StageKey) => boolean
   stageActive: (st: StageKey) => boolean
   stageMiniStatus: (st: StageKey) => string
@@ -93,6 +101,7 @@ const simModelValue = computed({
 .cp-run { display: grid; gap: 10px; }
 .cp-run__autopilot-result { font-size: var(--mk-fs-micro); font-weight: 700; padding: 6px 10px; border-radius: 6px; background: var(--mk-surface-2); }
 .cp-run__autopilot-result--ok { color: var(--mk-green, var(--mk-green-fill)); }
+.cp-run__autopilot-result--warn { color: var(--mk-amber, var(--mk-amber-fill)); }
 .cp-run__autopilot-result--bad { color: var(--mk-red, var(--mk-red-strong)); }
 .cp-run__autopilot-result--muted { color: var(--mk-muted); }
 

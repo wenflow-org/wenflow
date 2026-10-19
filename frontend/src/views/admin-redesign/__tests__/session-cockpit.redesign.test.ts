@@ -304,6 +304,33 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     w.unmount();
   });
 
+  it('顶栏按钮簇与状态徽章同源（2026-10-19 运营走查）：自动驾驶已停的会话不再同时给「暂停」', async () => {
+    // 复现原缺陷：会话 status 仍是 running、autopilot.status 已是 stopped。
+    // 修前 lifeStateCockpit 只看 status+isPaused → 判 running → 顶栏给「暂停」，
+    // 而同屏状态徽章/运行状态卡按 runLifecycleState 判 paused → 一个会话两个状态词。
+    const payload = virtualLearningPayload();
+    payload.data.status = 'running';
+    payload.data.runtime.status = 'running';
+    payload.data.stageResults.autopilot = { status: 'stopped' };
+    stableVirtualApi.getVirtualSession.mockResolvedValue(payload);
+    const w = await mountCockpit('session', 'vs_1');
+    const heroBtns = w.find('.cp-hero, .mk-hero, .cp').findAll('.mk-btn').map((b) => b.text());
+    expect(heroBtns).toContain('继续');
+    expect(heroBtns).not.toContain('暂停');
+    w.unmount();
+  });
+
+  it('运行状态面板接线：自动驾驶排队时给出位次（驱动器行；纯函数另有专测）', async () => {
+    const payload = virtualLearningPayload();
+    payload.data.stageResults.autopilot = { status: 'queued', queuePosition: 2 };
+    stableVirtualApi.getVirtualSession.mockResolvedValue(payload);
+    const w = await mountCockpit('session', 'vs_1');
+    const lines = w.findAll('.cp-run__autopilot-result').map((n) => n.text());
+    expect(lines.some((t) => t.includes('排队中 · 第 2 位'))).toBe(true);
+    expect(lines.every((t) => !t.includes('最后心跳'))).toBe(true); // 排队不报心跳（没有主循环在跑）
+    w.unmount();
+  });
+
   it('「教学闭环定位」卡已下线（2026-10-19 用户走查「这不重复吗」→ 拍板删卡）：五环与 stepper 同源同态，属纯重复', async () => {
     // 原卡：前四环由 stageDone/stageActive 派生（与下方 stepper 同一对判据）、第五环「记忆复习」
     // 无对应阶段恒「未进入」，即不含 stepper 之外的任何会话状态，只多出一套更长的阶段名。

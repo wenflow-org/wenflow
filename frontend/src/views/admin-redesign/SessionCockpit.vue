@@ -731,6 +731,7 @@
               :autopilot-result-text="autopilotResultText"
               :autopilot-running="autopilotRunning"
               :autopilot-status="autopilot.status"
+              :driver="autopilotDriver"
               :stage-done="stageDone"
               :stage-active="stageActive"
               :stage-mini-status="stageMiniStatus"
@@ -782,6 +783,7 @@
               :autopilot-result-text="autopilotResultText"
               :autopilot-running="autopilotRunning"
               :autopilot-status="autopilot.status"
+              :driver="autopilotDriver"
               :stage-done="stageDone"
               :stage-active="stageActive"
               :stage-mini-status="stageMiniStatus"
@@ -952,6 +954,7 @@ import { useMaskClose, useOverlay } from './useOverlay'
 import { useEscape } from './useEscape'
 import {
   VS_CONTROL_DEFS,
+  deriveVsLifecycleState,
   vlabControlsFor,
   type VsControlDef,
   type VsControlKey,
@@ -985,7 +988,7 @@ import {
 import { useCockpitStages, stageFlow, type StageKey } from './cockpitStages'
 import RunStatusPanel from './session-cockpit/RunStatusPanel.vue'
 import PathJourneyPanel from './PathJourneyPanel.vue'
-import { useCockpitAutopilot } from './cockpitAutopilot'
+import { useCockpitAutopilot, autopilotDriverLine } from './cockpitAutopilot'
 
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
 const WRAPUP_READY_NOTE = '完整总结（学习目标 / 评估 / 知识掌握）见「学习总结」卡。'
@@ -1187,22 +1190,16 @@ const statusTitle = computed(() =>
             : '会话进行中'
 )
 
-/* 双轴状态（与一/二级页同源）：生命周期合成态 + 阶段条输入 */
-const runLifecycleState = computed(() => {
-  if (!session.value) return 'created'
-  const st = normalized(session.value?.status || '')
-  // 会话终态优先
-  if (['completed', 'failed', 'abandoned'].includes(st)) return st
-  // 手动停止（emergencyStop）标 failed + manualStop → 展示为已手动停止
-  if (manualStopped.value) return 'abandoned'
-  // 暂停（pause API）
-  if (isPaused.value) return 'paused'
-  // autopilot 停止 → 已暂停
-  if (autopilot.value.status === 'stopped') return 'paused'
-  // 进行中（含手动步进）
-  if (st === 'running' || st === 'created') return st === 'created' ? 'created' : 'running'
-  return st || 'created'
-})
+/* 双轴状态（与一/二级页同源）：生命周期合成态 + 阶段条输入。
+   派生本体在 vlab-controls（单一实现，画像页与这里共用同一套优先级）；本计算只把字段喂进去。 */
+const runLifecycleState = computed(() =>
+  deriveVsLifecycleState({
+    status: normalized(session.value?.status),
+    teachingPaused: isPaused.value,
+    manualStopped: manualStopped.value,
+    autopilotStatus: autopilot.value.status
+  })
+)
 /* 阶段条输入（runStageForBar/runStageTaskProgress 已随 RunStageBar 移除；阶段展示收敛进「阶段推进」stepper） */
 
 /**
@@ -1220,6 +1217,12 @@ const {
   autopilot, autopilotRunning, autopilotStopping, autopilotQueued,
   autopilotStartDisabled, autopilotStartTitle, autopilotResultText, autopilotHealth
 } = useCockpitAutopilot(stageResults, session, busy, isTerminal, isPaused, runLifecycleState)
+
+/** 驱动器行（2026-10-19 运营走查）：排队位置与心跳年龄——「在跑」与「在跑但不动」的唯一区分证据。
+    心跳年龄要读秒，所以随轮询节拍走一个时钟：refresh 成功时打点；终态不再轮询即不再打点，
+    而此时驱动器行本身也不再渲染。 */
+const clockTick = ref(Date.now())
+const autopilotDriver = computed(() => autopilotDriverLine(autopilot.value, clockTick.value))
 
 /* 阶段分页：阶段条即 tab，默认跟随 currentStage；控制面板与日志常驻 */
 const activeTab = ref<StageKey>('goal')
@@ -2198,6 +2201,7 @@ async function refresh() {
       if (sessionId.value !== id) return
       session.value = res.data?.data ?? res.data ?? {}
       sessionLoadFailed.value = false
+      clockTick.value = Date.now()
       const kind = String((session.value as Record<string, unknown>)?.kind || '')
       realKind.value = kind === 'goal' ? 'goal' : 'teaching'
       timelineEntries.value = Array.isArray((session.value as Record<string, unknown>)?.timeline)
@@ -2212,6 +2216,7 @@ async function refresh() {
     if (sessionId.value !== id) return
     session.value = res.data?.data ?? res.data ?? {}
     sessionLoadFailed.value = false
+    clockTick.value = Date.now()
     const sr = (session.value?.stageResults || {}) as Record<string, unknown>
     const simCfg = (sr.simulationConfig || {}) as Record<string, unknown>
     const fb = String(simCfg.frictionBudget || '')
@@ -2521,15 +2526,14 @@ async function restartLearning() {
   } finally { busy.value = false }
 }
 
-/* ===== 生命周期控制（统一模型 vlab-controls）：顶栏操作按钮由状态机派生 ===== */
+/* ===== 生命周期控制（统一模型 vlab-controls）：顶栏操作按钮由状态机派生 =====
+   2026-10-19 运营走查：本计算原先自己写了一份（只看 status + isPaused），比下面
+   runLifecycleState 少两个分支——紧急停止的会话顶栏仍给「暂停」，自动驾驶已停的会话顶栏
+   仍给「停止自动驾驶」，与同屏状态徽章/运行状态卡打架。改为消费同一派生（vlab-controls 单源）。
+   未加载时不给动作（原行为）：不猜状态。 */
 const lifeStateCockpit = computed<VsLifecycleState>(() => {
-  const st = String(session.value?.status || '')
-  if (st === 'running') return isPaused.value ? 'paused' : 'running'
-  if (st === 'created') return 'created'
-  if (st === 'failed') return 'failed'
-  if (st === 'abandoned') return 'abandoned'
-  if (st === 'completed') return 'completed'
-  return 'idle'
+  if (!session.value) return 'idle'
+  return runLifecycleState.value
 })
 const lifeHandlersCockpit: Partial<Record<VsControlKey, () => void>> = {
   pause: pauseSession,

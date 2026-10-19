@@ -207,8 +207,6 @@
                 <dd>{{ d.archetype || '—' }}</dd>
                 <dt>主测场景</dt>
                 <dd :title="topScene ? `出现最频繁的运行场景：${topScene}` : '该画像还没有运行记录'">{{ topScene || '—' }}</dd>
-                <dt>当前状态</dt>
-                <dd><span class="mk-badge" :class="lifeBadgeCls">{{ lifeLabel }}</span></dd>
                 <dt>运行信息</dt>
                 <dd class="mono">{{ runInfoText }}</dd>
               </dl>
@@ -927,6 +925,7 @@ import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import {
   VS_STATE_META,
+  deriveVsLifecycleStateFromRuns,
   vlabControlsFor,
   type VsControlDef,
   type VsControlKey,
@@ -2114,17 +2113,13 @@ const activeSessionId = computed(() => {
   return failed?.sessionId || null
 })
 /** 会话生命周期状态（统一模型 vlab-controls：状态徽章 + 合法操作，三层共用）
- *  派生自最新会话：paused 由 teaching.paused 派生；failed/abandoned 在 tone=bad 下合并展示 */
-const lifeState = computed<VsLifecycleState>(() => {
-  const runs = allRuns.value
-  if (!runs.length) return 'idle'
-  const pausedRun = runs.find(r => r.paused && (r.result === 'running' || r.result === 'created'))
-  if (pausedRun) return 'paused'
-  if (runs.some(r => r.result === 'running' || r.result === 'created')) return 'running'
-  if (runs.some(r => r.tone === 'bad')) return 'failed'
-  if (runs.some(r => r.tone === 'ok')) return 'completed'
-  return 'idle'
-})
+ *  派生本体在 vlab-controls#deriveVsLifecycleStateFromRuns（单一实现，与座舱的单会话版同源）；
+ *  本页只负责把会话流水喂进去。failed/abandoned 在 tone=bad 下合并展示。
+ *
+ *  2026-10-19 运营走查「同屏三处当前状态」：本状态此前在 hero 徽章、概览状态条、画像设定 kv
+ *  各渲染一遍（同一个 lifeLabel 三写）。现在只留 hero 徽章一处——它在页签之上，任何页签都在屏；
+ *  状态条与 kv 行撤除（复读三遍不增加任何信息）。 */
+const lifeState = computed<VsLifecycleState>(() => deriveVsLifecycleStateFromRuns(allRuns.value))
 const lifeMeta = computed(() => VS_STATE_META[lifeState.value])
 const lifeLabel = computed(() => lifeMeta.value.label)
 const lifeTone = computed(() => lifeMeta.value.tone)
@@ -2349,7 +2344,6 @@ const runInfoText = computed(() => {
 })
 
 /** 当前状态徽章语气：VS_STATE_META.tone（muted/warn/ok/bad）→ mk-badge 修饰类（均已全局定义） */
-const lifeBadgeCls = computed(() => `mk-badge--${lifeTone.value}`)
 
 /** 概览状态条 items（#68：共享 MkStatStrip layout=grid；#69：原 vp-metricgrid 的
     「记忆点」并入本条第 5 格，不再与前三格同屏复读）。口径与下方各 pane 同源。 */
@@ -2374,11 +2368,6 @@ const statItems = computed(() => {
       label: '覆盖场景',
       value: sceneStats.value.length || '—',
       title: '运行记录里出现过的不同场景（故事）数'
-    },
-    {
-      label: '当前状态',
-      value: lifeLabel.value,
-      title: lifeHint.value
     },
     {
       label: '记忆点',

@@ -62,7 +62,10 @@ export function useCockpitStages(deps: {
     // 阶段条出现「后一阶段已完成、前一阶段仍进行中」（2026-10-08 走查 d-session-vl）。
     // 正常完成的情形已由上面的 isTerminal && idx<=cur 与 idx<cur 覆盖，
     // 这里只保留「确实写出了总结」这一明确证据。
-    if (st === 'learning' && stageStatus.value.learning?.wrapup) return true
+    // 2026-10-19：判据改用注入的 hasWrapup（与总结卡同一份：读 stageStatus.learning.wrapup
+    // 与 stageResults.teaching.wrapup 两处字段）——原先这里只读前一个字段，于是「总结卡有内容、
+    // 学习瓦片没打勾」可以同屏出现（两个证据字段一真一假时）。
+    if (st === 'learning' && hasWrapup.value) return true
     return false
   }
 
