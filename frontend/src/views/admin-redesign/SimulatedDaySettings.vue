@@ -14,14 +14,6 @@
     </label>
     <div class="sd-settings__grid">
       <label class="mk-field">
-        <span class="mk-field__label">每日时长上限（分钟）</span>
-        <input v-model.number="form.defaultDailyMinutesCap" type="number" min="5" max="480" class="mk-field__input" @input="dirty = true" />
-      </label>
-      <label class="mk-field">
-        <span class="mk-field__label">每周学习天数（0 为不限）</span>
-        <input v-model.number="form.defaultDaysPerWeek" type="number" min="0" max="7" class="mk-field__input" @input="dirty = true" />
-      </label>
-      <label class="mk-field">
         <span class="mk-field__label">每次推进天数</span>
         <input v-model.number="form.defaultPaceDaysPerAdvance" type="number" min="1" max="30" class="mk-field__input" @input="dirty = true" />
       </label>
@@ -68,8 +60,6 @@ const emit = defineEmits<{ (e: 'enabled', v: boolean): void }>()
 
 const DEFAULT = {
   enabled: false,
-  defaultDailyMinutesCap: 45,
-  defaultDaysPerWeek: 5,
   defaultPaceDaysPerAdvance: 1,
   maxSimulatedDays: 90,
   courseWeekdays: [1, 2, 3, 4, 5],
@@ -102,8 +92,6 @@ watch(() => form.enabled, (v) => emit('enabled', v), { immediate: true })
 
 function apply(raw: Partial<typeof DEFAULT> | null | undefined) {
   form.enabled = raw?.enabled === true
-  form.defaultDailyMinutesCap = Number(raw?.defaultDailyMinutesCap ?? DEFAULT.defaultDailyMinutesCap)
-  form.defaultDaysPerWeek = Number(raw?.defaultDaysPerWeek ?? DEFAULT.defaultDaysPerWeek)
   form.defaultPaceDaysPerAdvance = Number(raw?.defaultPaceDaysPerAdvance ?? DEFAULT.defaultPaceDaysPerAdvance)
   form.maxSimulatedDays = Number(raw?.maxSimulatedDays ?? DEFAULT.maxSimulatedDays)
   form.courseWeekdays = Array.isArray(raw?.courseWeekdays) && raw!.courseWeekdays.length
@@ -132,8 +120,6 @@ async function save() {
     const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, Math.round(Number(v) || min)))
     const payload = {
       enabled: form.enabled,
-      defaultDailyMinutesCap: clamp(form.defaultDailyMinutesCap, 5, 480),
-      defaultDaysPerWeek: clamp(form.defaultDaysPerWeek, 0, 7),
       defaultPaceDaysPerAdvance: clamp(form.defaultPaceDaysPerAdvance, 1, 30),
       maxSimulatedDays: clamp(form.maxSimulatedDays, 1, 365),
       courseWeekdays: [...form.courseWeekdays].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort((a, b) => a - b),

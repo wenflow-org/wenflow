@@ -8,6 +8,10 @@ export interface PathAgentInputConfig {
     descriptionSources: string[];
     subjectSources: string[];
     skillLevelSources: string[];
+    /**
+     * @deprecated #106：可用时间权威已下沉到 services/learning/capacity-authority.resolveCapacity，
+     * 生产不再消费该优先级链；仅为旧配置行兼容保留（读写不影响行为）。
+     */
     timePerDaySources: string[];
     deadlineTextSources: string[];
     includeConfirmedProposal: boolean;

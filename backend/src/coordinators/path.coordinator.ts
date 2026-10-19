@@ -25,6 +25,7 @@ import type { GoalPathTimeBudgetCadence, GoalPathVisibleSummary } from '../servi
 import { normalizeSchoolAnchorShape } from '../services/learning/goal-path-visible-summary';
 import { normalizeDeadlineDate } from '../services/learning/deadline-date';
 import { isDeadlineExplicitlyUnspecified, deriveRelativeDeadline, parseAbsoluteDeadline } from '../services/learning/deadline-text';
+import { resolveCapacity } from '../services/learning/capacity-authority';
 import type { MaterialNeed, MaterialPackResult } from '../skills/material-collector/types';
 
 const COORDINATOR_ID = 'path-agent';
@@ -707,10 +708,33 @@ class PathCoordinator {
     const skillLevel = this.pickFirstDefined(source, config.normalizedInput.skillLevelSources)
       || normalizedInputV1.learnerProfile.currentBaseline.level
       || 'beginner';
-    const availableTime = this.pickFirstDefined(source, config.normalizedInput.timePerDaySources)
-      || normalizedInputV1.resources.timeBudget
-      || normalizedInputV1.resources.timePerWeek
-      || '1 小时';
+    // #106：可用时间统一由 capacity-authority 定权威与兜底（不再由协调器按配置链自行拼接，
+    // 也不再出现 1 小时 这类第四处默认值）。优先级顺序（understanding → collected →
+    // visibleSummary）也由 resolver 持有，协调器只提供结构化输入。
+    const capacity = resolveCapacity({
+      timeDimensions: normalizedInputV1.timeDimensions ?? null,
+      understanding: {
+        available_resources: {
+          time_budget: this.getValueByPath(source, 'understanding.available_resources.time_budget'),
+          time_per_session: this.getValueByPath(source, 'understanding.available_resources.time_per_session'),
+        },
+        background: {
+          available_time: this.getValueByPath(source, 'understanding.background.available_time'),
+        },
+      },
+      collected: { timePerDay: this.getValueByPath(source, 'collected.timePerDay') },
+      visibleSummary: {
+        resources: {
+          timeBudget: this.getValueByPath(source, 'visibleSummary.resources.timeBudget'),
+          timePerWeek: this.getValueByPath(source, 'visibleSummary.resources.timePerWeek'),
+          timePerSession: this.getValueByPath(source, 'visibleSummary.resources.timePerSession'),
+        },
+      },
+      // 已归一的扁平值仅作最后兜底（与结构化来源同值时不会改变结果）
+      timeBudget: normalizedInputV1.resources.timeBudget || normalizedInputV1.resources.timePerWeek,
+      timePerSession: normalizedInputV1.resources.timePerSession,
+    });
+    const availableTime = capacity.display;
     const deadlineRaw = this.pickFirstDefined(source, config.normalizedInput.deadlineTextSources);
 
     let deadline: Date | undefined;

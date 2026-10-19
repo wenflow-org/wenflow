@@ -13,16 +13,16 @@ const RUNTIME_CACHE_TTL_MS = 30_000;
 /**
  * 日期模拟（虚拟侧）：控制"学习分散在各自然天"的仿真推进。
  * 设计见 doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md §八（默认关闭，现网零变化）。
+ *
+ * #106：原 defaultDailyMinutesCap / defaultDaysPerWeek 已移除——模拟时钟
+ * （simulated-day.service.resolveSimulationClock）与时间线均未消费，属「定义了但没人读」
+ * 的死旋钮；学习者可用时间的权威统一在 services/learning/capacity-authority.ts。
  */
 export interface VirtualLabDateSimulationSettings {
   /** 默认 false：未开启时任何推进/时间线都不生效（现网零变化） */
   enabled: boolean;
   /** 模拟时区（默认与日界实现一致） */
   timezone: string;
-  /** 每次推进的每日学习时长上限（分钟） */
-  defaultDailyMinutesCap: number;
-  /** 每周学习天数（0 = 不限） */
-  defaultDaysPerWeek: number;
   /** 每次推进跨几个自然日 */
   defaultPaceDaysPerAdvance: number;
   /** 单会话最多模拟天数（护栏） */
@@ -65,8 +65,6 @@ export const DEFAULT_VIRTUAL_LAB_SETTINGS: VirtualLabSettings = {
   dateSimulation: {
     enabled: false,
     timezone: 'Asia/Shanghai',
-    defaultDailyMinutesCap: 45,
-    defaultDaysPerWeek: 5,
     defaultPaceDaysPerAdvance: 1,
     maxSimulatedDays: 90,
     pauseOnIntervention: false,
@@ -117,8 +115,6 @@ function normalizeDateSimulation(input: unknown): VirtualLabDateSimulationSettin
   return {
     enabled: clampBoolean(raw.enabled, d.enabled),
     timezone: clampString(raw.timezone, d.timezone),
-    defaultDailyMinutesCap: clampInteger(raw.defaultDailyMinutesCap, d.defaultDailyMinutesCap, 5, 480),
-    defaultDaysPerWeek: clampInteger(raw.defaultDaysPerWeek, d.defaultDaysPerWeek, 0, 7),
     defaultPaceDaysPerAdvance: clampInteger(raw.defaultPaceDaysPerAdvance, d.defaultPaceDaysPerAdvance, 1, 30),
     maxSimulatedDays: clampInteger(raw.maxSimulatedDays, d.maxSimulatedDays, 1, 365),
     pauseOnIntervention: clampBoolean(raw.pauseOnIntervention, d.pauseOnIntervention),

@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
 const state = vi.hoisted(() => ({
-  dateSimulation: { enabled: false, defaultDailyMinutesCap: 45, defaultDaysPerWeek: 5, lessonsPerDay: 1, courseWeekdays: [1, 2, 3, 4, 5] } as Record<string, unknown>,
+  dateSimulation: { enabled: false, lessonsPerDay: 1, courseWeekdays: [1, 2, 3, 4, 5] } as Record<string, unknown>,
 }));
 
 vi.mock('@/api/adminApi', () => ({
@@ -30,11 +30,14 @@ const mountSettings = async () => {
 };
 
 describe('SimulatedDaySettings 页签体（tab 化后）', () => {
-  it('表单常驻：启用开关在首行，四格设置/上课星期/保存行全部直接可见（无折叠机制）', async () => {
+  it('表单常驻：启用开关在首行，三格设置/上课星期/保存行全部直接可见（无折叠机制）', async () => {
     const w = await mountSettings();
     expect(w.find('.sd-settings__enable input[type="checkbox"]').exists()).toBe(true);
     expect(w.find('.sd-settings__enable span').text()).toBe('已关闭');
-    expect(w.findAll('.sd-settings__grid .mk-field').length).toBe(5);
+    expect(w.findAll('.sd-settings__grid .mk-field').length).toBe(3);
+    // #106：无生产读者的每日时长上限 / 每周学习天数死旋钮已移除
+    expect(w.text()).not.toContain('每日时长上限')
+    expect(w.text()).not.toContain('每周学习天数')
     expect(w.findAll('.sd-weekdays input[type="checkbox"]').length).toBe(7);
     expect(w.find('.sd-settings__foot button').exists()).toBe(true);
   });
@@ -51,7 +54,7 @@ describe('SimulatedDaySettings 页签体（tab 化后）', () => {
   it('服务端已开启的配置回填后开关如实显示已开启', async () => {
     const w = await mountSettings();
     expect(w.find('.sd-settings__enable span').text()).toBe('已关闭');
-    state.dateSimulation = { enabled: true, defaultDailyMinutesCap: 45, defaultDaysPerWeek: 5, lessonsPerDay: 1, courseWeekdays: [1, 2, 3, 4, 5] };
+    state.dateSimulation = { enabled: true, lessonsPerDay: 1, courseWeekdays: [1, 2, 3, 4, 5] };
     const w2 = mount(SimulatedDaySettings);
     await flushPromises();
     expect(w2.find('.sd-settings__enable span').text()).toBe('已开启');

@@ -22,8 +22,6 @@ describe('virtual-lab-settings · dateSimulation（默认关）', () => {
     const settings = normalizeVirtualLabSettings({
       dateSimulation: {
         enabled: true,
-        defaultDailyMinutesCap: 999,
-        defaultDaysPerWeek: 9,
         defaultPaceDaysPerAdvance: 0,
         maxSimulatedDays: 9999,
         pauseOnIntervention: 'true',
@@ -32,8 +30,6 @@ describe('virtual-lab-settings · dateSimulation（默认关）', () => {
     } as any);
     expect(settings.dateSimulation).toEqual(expect.objectContaining({
       enabled: true,
-      defaultDailyMinutesCap: 480,
-      defaultDaysPerWeek: 7,
       defaultPaceDaysPerAdvance: 1,
       maxSimulatedDays: 365,
       pauseOnIntervention: true,

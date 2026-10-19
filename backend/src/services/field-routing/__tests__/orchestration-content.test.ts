@@ -151,7 +151,9 @@ describe('applyRoutingEditsToOrchestrationText（行级路由改写）', () => {
     const withNotes = applyRoutingEditsToOrchestrationText(ORIG, 'skill:test-skill', 'test.alpha', {
       notes: '临时说明',
     });
-    expect(withNotes).toContain('    notes: "临时说明"');
+    // #10：样式保持——普通文本写裸标量，不再无条件加双引号
+    expect(withNotes).toContain('    notes: 临时说明');
+    expect(withNotes).not.toContain('"临时说明"');
     expect(withNotes.endsWith('\n')).toBe(true);
 
     const back = applyRoutingEditsToOrchestrationText(withNotes, 'skill:test-skill', 'test.alpha', {
@@ -187,7 +189,7 @@ describe('applyRoutingEditsToOrchestrationText（行级路由改写）', () => {
     });
     expect(out).toContain('# test goal.yaml（fixture）');
     expect(out).toContain('    render: hidden');
-    expect(out).toContain("    handoff: ['goal-agent']");
+    expect(out).toContain('    handoff: [goal-agent]');
     expect(out).toContain('    internal: true');
     expect(out).toContain('    accumulate: true');
   });
@@ -207,5 +209,89 @@ describe('applyRoutingEditsToOrchestrationText（行级路由改写）', () => {
     // skill 行不变，goal-agent 行变
     expect(out).toContain('  - agentId: skill:test-skill\n    fieldId: test.alpha\n    render: visible');
     expect(out).toContain('  - agentId: goal-agent\n    fieldId: test.alpha\n    render: hidden');
+  });
+
+  /**
+   * #10 回归：前端每次保存都会把 render/handoff/internal/accumulate/notes 全量发回。
+   * 未改动的既有裸标量不得被重新序列化（加引号），改回原值必须逐字节还原。
+   */
+  describe('#10 全量 payload / 改回原值不得改写文件', () => {
+    const RICH = [
+      '# test goal.yaml（fixture）',
+      'stage: test-stage',
+      'displayName: Test 阶段',
+      'contracts:',
+      '  - agentId: skill:test-skill',
+      'fields:',
+      '  - fieldId: test.alpha',
+      '    promptRole: soft-info',
+      '    valueType: string',
+      '    description: 测试字段',
+      'routings:',
+      '  - agentId: skill:test-skill',
+      '    fieldId: test.alpha',
+      '    render: visible',
+      '    handoff: [goal-agent, path]',
+      '    internal: true',
+      '    accumulate: false',
+      '    notes: internal — 仅作 UI 进度条',
+      '    visibilityPreset: agent-internal',
+      '',
+    ].join('\n');
+
+    const FULL_PAYLOAD = {
+      render: 'visible' as const,
+      handoff: ['goal-agent', 'path'],
+      internal: true,
+      accumulate: false,
+      notes: 'internal — 仅作 UI 进度条',
+      visibilityPreset: 'agent-internal',
+    };
+
+    it('全量 payload 原值保存 → 逐字节不变', () => {
+      const out = applyRoutingEditsToOrchestrationText(RICH, 'skill:test-skill', 'test.alpha', FULL_PAYLOAD);
+      expect(out).toBe(RICH);
+    });
+
+    it('notes 改临时值再改回原值 → 逐字节回原文', () => {
+      const changed = applyRoutingEditsToOrchestrationText(RICH, 'skill:test-skill', 'test.alpha', {
+        notes: '临时说明',
+      });
+      expect(changed).not.toBe(RICH);
+      const back = applyRoutingEditsToOrchestrationText(changed, 'skill:test-skill', 'test.alpha', {
+        notes: FULL_PAYLOAD.notes,
+      });
+      expect(back).toBe(RICH);
+    });
+
+    it('handoff 改再改回 → 逐字节回原文', () => {
+      const changed = applyRoutingEditsToOrchestrationText(RICH, 'skill:test-skill', 'test.alpha', {
+        handoff: ['goal-agent'],
+      });
+      expect(changed).toContain('    handoff: [goal-agent]\n');
+      const back = applyRoutingEditsToOrchestrationText(changed, 'skill:test-skill', 'test.alpha', {
+        handoff: FULL_PAYLOAD.handoff,
+      });
+      expect(back).toBe(RICH);
+    });
+
+    it('notes 含冒号 / 换行时仍能精确解析回原值', () => {
+      const withColon = applyRoutingEditsToOrchestrationText(RICH, 'skill:test-skill', 'test.alpha', {
+        notes: 'a: b',
+      });
+      expect(validateOrchestrationContent(withColon).routings[0].notes).toBe('a: b');
+
+      const withNewline = applyRoutingEditsToOrchestrationText(RICH, 'skill:test-skill', 'test.alpha', {
+        notes: '第一行\n第二行',
+      });
+      expect(validateOrchestrationContent(withNewline).routings[0].notes).toBe('第一行\n第二行');
+    });
+
+    it('CRLF 文件全量 payload 原值保存 → 逐字节不变（含 CRLF）', () => {
+      const crlf = RICH.replace(/\n/g, '\r\n');
+      const out = applyRoutingEditsToOrchestrationText(crlf, 'skill:test-skill', 'test.alpha', FULL_PAYLOAD);
+      expect(out).toBe(crlf);
+      expect(out.replace(/\r\n/g, '')).not.toContain('\n');
+    });
   });
 });
