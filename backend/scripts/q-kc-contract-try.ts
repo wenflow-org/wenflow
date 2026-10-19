@@ -52,7 +52,7 @@ async function main() {
     method: 'POST',
     headers: { Authorization: `Bearer ${process.env.AI_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: process.env.AI_MODEL || 'deepseek-v4-flash',
+      model: process.env.AI_MODEL || 'deepseek-v4.1-flash',
       temperature: 0.3,
       max_tokens: 8000,
       thinking: { type: 'disabled' },

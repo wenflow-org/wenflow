@@ -18,9 +18,9 @@ interface SkillModelSeedEntry {
 }
 
 /**
- * 「flash/pro 分工 + disabled」实测定稿（2026-09-05 双模型×流式实测结论）
+ * 「flash/pro 分工 + disabled」历史定稿（2026-09-05 双模型×流式实测结论）
  *
- * 分工原则：
+ * 分工原则（**两个模型均已下线，仅供考古**；现行标准通道为 dsv4.1-flash，表内主用 agnes-3.0-flash）：
  *   判断/后台设计类 → deepseek-v4-pro（输出更丰富）
  *   实时对话/高频/短输出 → deepseek-v4-flash（TTFT 更快）
  *   全部 thinkingMode=disabled（实测思考档在两个模型上均为纯负担：TTFT 30-120s/524 限流/输出更短）
@@ -30,7 +30,7 @@ interface SkillModelSeedEntry {
  *   本次仅 skill 调用模型切到 agnes，后续恢复时改回本表即可。
  *
  * - aux/handler-only skill 不在此表（未在此配置即沿用平台默认，见 runSeedIfEmpty）
- * - 虚拟学习者 5 个 skill 继承 flash + disabled（未在此显式配置）
+ * - 虚拟学习者 5 个 skill 继承平台默认模型 + disabled（未在此显式配置）
  */
 export const SKILL_MODEL_SEED: SkillModelSeedEntry[] = [
   // ===== 全部 skill 暂用 agnes-3.0-flash（2026-09-15，deepseek tps 紧张）=====

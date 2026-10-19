@@ -25,7 +25,7 @@
                   v-model="form.id"
                   class="mk-field__input mono"
                   :disabled="!isCreate"
-                  placeholder="deepseek-v4-flash"
+                  placeholder="deepseek-v4.1-flash"
                   autocomplete="off"
                   @input="error = ''"
                 />

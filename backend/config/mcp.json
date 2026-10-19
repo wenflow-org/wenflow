@@ -30,10 +30,9 @@
       "endpoint": "${AI_API_URL:-http://localhost:3000/v1}",
       "apiKey": "${AI_API_KEY}",
       "models": [
-        "deepseek-v4-flash",
-        "deepseek-v4-pro"
+        "deepseek-v4.1-flash"
       ],
-      "defaultModel": "deepseek-v4-flash",
+      "defaultModel": "deepseek-v4.1-flash",
       "priority": 2,
       "enabled": true,
       "config": {

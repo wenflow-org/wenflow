@@ -110,7 +110,7 @@ describe('ModelEditorDialog', () => {
     const w = mount(ModelEditorDialog, { props: { fallbackOptions: ['platform/m-chat'] }, ...mountOptions })
     w.vm.openWith({ providerId: 'acme-gateway', model: null })
     await flushPromises()
-    await w.find('input[placeholder="deepseek-v4-flash"]').setValue('acme-chat')
+    await w.find('input[placeholder="deepseek-v4.1-flash"]').setValue('acme-chat')
     await w.find('select.mk-field__select').setValue('reasoning')
     await w.find('input[placeholder="131072"]').setValue('65536')
 
@@ -198,7 +198,7 @@ describe('ModelEditorDialog', () => {
       }
     })
     await flushPromises()
-    expect(w.find('input[placeholder="deepseek-v4-flash"]').attributes('disabled')).toBeDefined()
+    expect(w.find('input[placeholder="deepseek-v4.1-flash"]').attributes('disabled')).toBeDefined()
     expect(w.text()).toContain('创建后不改')
     updateModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')

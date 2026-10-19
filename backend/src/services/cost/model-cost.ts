@@ -84,8 +84,8 @@ function toNonNegativeInt(value: number | null | undefined): number {
 /**
  * 把模型名归一化为查表 key。容忍常见 provider/model-name 变体：
  * 1. 去首尾空白、转小写；
- * 2. 去掉路由标签后缀（`:` 之后，如 `deepseek-v4-flash:free`）；
- * 3. 去掉 provider 命名空间前缀（最后一个 `/` 之前，如 `deepseek/deepseek-v4-flash`）。
+ * 2. 去掉路由标签后缀（`:` 之后，如 `deepseek-v4.1-flash:free`）；
+ * 3. 去掉 provider 命名空间前缀（最后一个 `/` 之前，如 `deepseek/deepseek-v4.1-flash`）。
  *
  * 匹配规则：归一化后与 `ModelDefinition.id` **精确**比较（区分不开时宁可判为未知，也不做模糊/子串匹配，
  * 以免把不同价位的模型算错）。因此带日期版本后缀的 id（如 `xxx-20260101`）默认不命中，需显式入表。
