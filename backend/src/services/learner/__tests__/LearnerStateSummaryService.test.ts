@@ -19,7 +19,7 @@ function snapshotOf(metrics: { ktl: number; lf: number; lsb: number }) {
       globalSignals: { fragileConcepts: [], strugglingConcepts: [] },
       currentPath: null
     }
-  } as any
+  } as unknown as Parameters<typeof learnerStateSummaryService.build>[0]['learnerSnapshot']
 }
 
 describe('LearnerStateSummaryService（#41 冷启动门）', () => {
