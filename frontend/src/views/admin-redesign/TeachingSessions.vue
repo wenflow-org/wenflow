@@ -203,7 +203,7 @@
               <th
                 v-if="!tsHiddenCols.has('status')"
                 scope="col"
-                class="mk-th--sortable ts-status"
+                class="mk-th--sortable"
                 :aria-sort="tsSortState('status')"
                 @click="toggleTsSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -211,26 +211,34 @@
                 v-if="!isTableNarrow && !tsHiddenCols.has('track')"
                 scope="col"
                 class="ts-track-col"
-                title="完成轨道（真实 / 虚拟 / 未标记）+ 完成通道（#105 统一观测）。历史记录无标记时不回填、不猜测"
-              >轨道</th>
+                title="完成来源：这条完成记录记在真实用户 / 虚拟学习者 / 历史未标记哪条轨道上（#105 统一观测，缺标记不回填、不猜测）"
+              >完成来源</th>
+              <th
+                v-if="!isTableMid && !tsHiddenCols.has('track')"
+                scope="col"
+                class="ts-track-col"
+                title="完成方式：课堂完成 / 虚拟辅助 / 虚拟黑盒 / 未记录。窄窗口下这列不占宽度，内容仍随「完成来源」列的说明文字给出"
+              >完成方式</th>
               <th
                 v-if="!tsHiddenCols.has('interact')"
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="tsSortState('interact')"
-                title="互动：时长 / 消息数 / 知识点，时长 ≥ 25 分钟按长时标琥珀（信号，非故障）"
+                title="时长：会话从建立到结束的实际时长，≥ 25 分钟按长时标琥珀（信号，非故障）"
                 @click="toggleTsSort('interact')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">互动<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('interact')">时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th v-if="!tsHiddenCols.has('interact')" scope="col" title="消息：会话内用户与平台的往来条数">消息</th>
+              <th v-if="!isTableMid && !tsHiddenCols.has('interact')" scope="col" title="知识点：这次会话触及的知识点个数。窄窗口下这列不占宽度，读数仍随「消息」列的说明文字给出">知识点</th>
               <th v-if="!tsHiddenCols.has('progress')" scope="col" title="任务进度：进行中显示「任务 第几个/共几个」，终态显示「结束于 第几个/共几个」——两种说法都是位置，不是完成数">进度</th>
               <th v-if="!tsHiddenCols.has('output')">产物</th>
               <th v-if="!isTableNarrow && !tsHiddenCols.has('attention')">关注</th>
               <th
-                v-if="!isTableNarrow && !tsHiddenCols.has('start')"
+                v-if="!isTableCompact && !tsHiddenCols.has('start')"
                 scope="col"
                 class="mk-th--sortable"
                 :aria-sort="tsSortState('start')"
                 @click="toggleTsSort('start')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('start')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('start')">开始时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th class="mk-th--right">操作</th>
             </tr>
           </thead>
@@ -274,49 +282,65 @@
                   </div>
                 </div>
               </td>
-              <td v-if="!tsHiddenCols.has('status')" class="ts-status">
-                <span class="mk-badge ts-status__main" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span>
-                <!-- 低参与标注（拍板 #1，显示口径）：completed 但用户消息 <2 条（与零证据门同阈值）。
-                     状态机语义不动——会话确实终态结束；运营口径单独标注，避免「完成」被读成「真实参与过」。 -->
-                <span
-                  v-if="r.status === 'completed' && (r.messageCount ?? 0) < 2"
-                  class="mk-badge mk-badge--sm mk-badge--muted"
-                  title="低参与：完成时用户消息不足 2 条，无真实学习参与证据"
-                >低参与</span>
-                <!-- 手动结束（2026-10-18 用户拍板）：completed 只是生命周期终态，用户点「结束学习」
-                     也会走到这里；endReason 从会话收束时已落进 teachingState.sessionArtifacts。
-                     老会话没有该字段时不猜、不加徽章。
-                     title 只说「记为 manual-end」不说「用户点的」——后台收束悬挂会话的那个脚本
-                     也写同一个值，断言成用户动作会冤枉会话也冤枉运营。 -->
-                <span
-                  v-if="r.status === 'completed' && r.endReason === 'manual-end'"
-                  class="mk-badge mk-badge--sm mk-badge--muted"
-                  title="结束原因记为「手动结束」而不是「任务完成」：用户点「结束学习」，或后台自动结束长时间没有动静的会话，都会记这个原因。任务未必做完，进度列显示结束在哪一格"
-                >手动结束</span>
+              <td v-if="!tsHiddenCols.has('status')">
+                <div class="ts-status">
+                  <span class="mk-badge ts-status__main" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span>
+                  <!-- 低参与标注（拍板 #1，显示口径）：completed 但用户消息 <2 条（与零证据门同阈值）。
+                       状态机语义不动——会话确实终态结束；运营口径单独标注，避免「完成」被读成「真实参与过」。 -->
+                  <span
+                    v-if="r.status === 'completed' && (r.messageCount ?? 0) < 2"
+                    class="mk-badge mk-badge--sm mk-badge--muted"
+                    title="低参与：完成时用户消息不足 2 条，无真实学习参与证据"
+                  >低参与</span>
+                  <!-- 手动结束（2026-10-18 用户拍板）：completed 只是生命周期终态，用户点「结束学习」
+                       也会走到这里；endReason 从会话收束时已落进 teachingState.sessionArtifacts。
+                       老会话没有该字段时不猜、不加徽章。
+                       title 只说「记为 manual-end」不说「用户点的」——后台收束悬挂会话的那个脚本
+                       也写同一个值，断言成用户动作会冤枉会话也冤枉运营。 -->
+                  <span
+                    v-if="r.status === 'completed' && r.endReason === 'manual-end'"
+                    class="mk-badge mk-badge--sm mk-badge--muted"
+                    title="结束原因记为「手动结束」而不是「任务完成」：用户点「结束学习」，或后台自动结束长时间没有动静的会话，都会记这个原因。任务未必做完，进度列显示结束在哪一格"
+                  >手动结束</span>
+                </div>
               </td>
               <td v-if="!isTableNarrow && !tsHiddenCols.has('track')">
-                <!-- #105 读侧接入：轨道（真人/虚拟/未标记）+ 通道，来自统一收束事件
-                     （learner_evidence 的 task:completed 投影行，按会话 taskId 关联）。
-                     历史（无 track）行标「未标记」中性呈现、不回填；无收束记录（未完成或
-                     事件未投影）给「—」。不用用户 isVirtualLearner 回填——本列存在的意义
-                     就是消灭「两处口径各算各的」。 -->
                 <div class="ts-track" :title="trackCellTitle(r)">
+                  <!-- #105 读侧接入：完成来源（真实/虚拟/未标记）与完成方式（课堂完成/虚拟辅助/虚拟黑盒/未记录），
+                       来自统一收束事件（learner_evidence 的 task:completed 投影行，按会话 taskId 关联）。
+                       历史（无 track）行标「未标记」中性呈现、不回填；无收束记录（未完成或事件未投影）
+                       给「—」。不用用户 isVirtualLearner 回填——这两列存在的意义就是消灭「两处各算各的」。
+                       2026-10-19 用户走查「轨道是什么意思」：原先一格叠「完成来源 + 完成方式」两件事，
+                       拆成两列各说各的，列名也不再叫「轨道」。 -->
                   <span
                     v-if="r.closure"
                     class="mk-badge mk-badge--sm"
                     :class="closureTrackBadgeCls(r.closure.track)"
                   >{{ closureTrackText(r.closure.track) }}</span>
                   <span v-else class="mk-na">—</span>
+                </div>
+              </td>
+              <td v-if="!isTableMid && !tsHiddenCols.has('track')">
+                <div class="ts-track ts-track--mode" :title="trackCellTitle(r)">
                   <span v-if="r.closure" class="mk-cell-sub">{{ closureSourceText(r.closure.completionSource) }}</span>
+                  <span v-else class="mk-na">—</span>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('interact')">
-                <!-- 行级设计（批B）：时长主值+档位 tone（≥25 分钟长时标琥珀 / <1 分钟秒退弱化），消息/知识点降 sub 行；
-                     长时阈值（duration ≥ 1500 秒）写进 title 披露（P3）。
-                     2026-10-06 审核：≥25 分钟是「长时」信号而非故障，红色让位给失败/缺总结等真红信号，改用琥珀 -->
                 <div class="ts-ia" :title="interactTitle(r)">
+                  <!-- 原来的「互动」一格叠了时长 + 消息数 + 知识点三件事（2026-10-19 用户走查
+                       「互动 时间又代表什么，拆成列」）：拆成三列。时长仍带档位 tone
+                       （≥25 分钟长时琥珀 / <1 分钟秒退弱化），阈值由表头与 title 披露。 -->
                   <b class="ts-ia__dur" :class="{ 'ts-ia__dur--long': r.duration >= IDLE_LONG_SECONDS, 'ts-ia__dur--brief': r.duration > 0 && r.duration < 60 }">{{ r.duration ? fmtDuration(r.duration) : '—' }}</b>
-                  <span class="mk-cell-sub">{{ r.messageCount }} 条<template v-if="r.knowledgePointCount"> · 知识 {{ r.knowledgePointCount }} 点</template></span>
+                </div>
+              </td>
+              <td v-if="!tsHiddenCols.has('interact')">
+                <div class="ts-ia ts-ia--msg" :title="interactTitle(r)">{{ r.messageCount }} 条</div>
+              </td>
+              <td v-if="!isTableMid && !tsHiddenCols.has('interact')">
+                <div class="ts-ia ts-ia--kp" :title="interactTitle(r)">
+                  <span v-if="r.knowledgePointCount">{{ r.knowledgePointCount }} 个</span>
+                  <span v-else class="mk-na">—</span>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('progress')">
@@ -363,7 +387,7 @@
                   :title="r.attention === 'high' ? '高关注：需优先介入' : r.attention === 'medium' ? '中关注' : '低关注'"
                 >{{ r.attention === 'high' ? '高' : r.attention === 'medium' ? '中' : '低' }}</span>
               </td>
-              <td v-if="!isTableNarrow && !tsHiddenCols.has('start')">
+              <td v-if="!isTableCompact && !tsHiddenCols.has('start')">
                 <!-- 原型末数据列「时间」.sub mono 形态：相对时间 + title 绝对时间（Users 判例）。
                      悬停给本地化绝对时刻（2026-10-06 审核 #38）：原样直出后端 ISO（UTC 带 Z），
                      跨时区读不出真实时刻 -->
@@ -748,24 +772,30 @@ const advCount = computed(() => (statusFilter.value ? 1 : 0) + (dateFilter.value
 const tsColDefs = [
   { key: 'user', label: '用户', title: '用户姓名 + 邮箱' },
   { key: 'status', label: '状态', title: '会话状态' },
-  { key: 'track', label: '轨道', title: '完成轨道（真实 / 虚拟 / 未标记）+ 完成通道（#105 统一观测）' },
-  { key: 'interact', label: '互动', title: '时长 / 消息数 / 知识点' },
+  { key: 'track', label: '完成来源', title: '完成来源（真实 / 虚拟 / 未标记）与完成方式（课堂完成 / 虚拟辅助 / 虚拟黑盒 / 未记录）' },
+  { key: 'interact', label: '时长 / 消息 / 知识点', title: '会话时长、往来消息条数与触及的知识点数' },
   { key: 'progress', label: '进度', title: '学习进度' },
   { key: 'output', label: '产物', title: '课后总结 / 建议' },
   { key: 'attention', label: '关注', title: '关注度' },
-  { key: 'start', label: '时间', title: '开始时间' },
+  { key: 'start', label: '开始时间', title: '会话开始的时刻，行内显示相对时间，完整时刻按本地时区给出' },
 ] as const
 const tsHiddenCols = ref<Set<string>>(new Set())
-/* 窄档（<1440）：9 列塞不下时，auto 布局会把缺口全压给带 ellipsis 的身份列——1280 下
-   「会话」只剩 113px（20 字标题只露 6 字）、「用户」89px（用户名被截），而「产物」拿满
-   215px 只用 124px。给身份列让宽度只能靠减列：窄档默认收起需求最小、信息含量也最低的
-   「时间 / 关注」两列（56+70=126px），1280 实测会话列 113→191px、用户列 89→124px，且不产生横滚。
-   2026-10-19（#105）：新增「轨道」列在窄档同撤（+70px 会吃掉上述让宽）；≥1440 可见，
-   且它本是可显隐列（MkCols），收起不丢数据——逐条轨道还可在 ≥1440 视口或放宽窗口查看。
-   阈值取 1440：全开时该档会话列已有 191px（1366/1400 只有 167/187px，不够），且 1440 本就是
-   项目自己的档位。与 VirtualLearners 的 useIsNarrow 同一先例（窄档勾了「列」也不显，
-   行详情进座舱，信息不丢）；1920/2560/3840 不受影响（会话列 378/523/764px）。 */
-const isTableNarrow = useIsNarrow(1439)
+/* 宽度分三档（auto 布局会把缺口全压给带 ellipsis 的身份列，只能靠减列）：
+   · <1440（isTableCompact）：「会话」在 1280 只剩 113px、用户 89px，默认收起需求最小、
+     信息含量也最低的「开始时间 / 关注」（96+58px）。该阈值沿用 2026-10 的判例
+     （1366/1400 会话列 167/187px，仍不够）。
+   · <1500（isTableNarrow）：#105 的「完成来源」与「关注」也收起（+83/+58px）。前者是
+     可显隐列（MkCols），收起不丢数据——该档仍有「消息」「时长」，逐条来源可在 ≥1500 视口查看；
+     后者只有高/中/低三档，是这几列里信息密度最低的一列。
+   · <1700（isTableMid）：完成方式 + 知识点两列收起（+155px）。1600 实测同时出现会把
+     会话列挤到 99px；两列读数仍在 完成来源 / 消息 两列的说明文字里（trackCellTitle /
+     interactTitle），信息不丢。
+   实测（2026-10-19 拆列后）：1440 会话 184、1500 会话 131、1600 会话 196、1920 全会话
+   列 283px 且不横滚。与 VirtualLearners 的 useIsNarrow 同一先例（窄档勾了「列」也不显，
+   行详情进座舱，信息不丢）。 */
+const isTableCompact = useIsNarrow(1439)
+const isTableNarrow = useIsNarrow(1499)
+const isTableMid = useIsNarrow(1699)
 /* 焦点 chips（2026-10-05：计数升 KPI 面板后本组退为纯筛选开关——学习状态判例：
    KPI 孪生 pill 不再显数）。「进行中」保留计数：它是 active 单状态口径，分布卡
    「进行中」是四状态合并档，两个数互为唯一来源；「全部」不显数 = 卡头 meta 的已加载行数。
@@ -1030,11 +1060,14 @@ function startAbsTitle(r: Row): string | undefined {
 }
 /** 长时阈值（秒）：≥1500s（25 分钟）时长标琥珀；阈值写进互动列 title 与表头披露 */
 const IDLE_LONG_SECONDS = 1500
-/** 互动列 title：时长 + 消息数；触发长时着色时披露阈值口径 */
+/** 时长 / 消息两列的 title：时长 + 消息数 + 知识点数（三样原本叠在一格，2026-10-19 拆列）。
+ *  知识点列在 1600 及以下不占列宽，读数仍在这里可查；触发长时着色时一并披露阈值口径。 */
 function interactTitle(r: Row): string | undefined {
   if (!r.duration) return undefined
-  const base = `时长 ${fmtDuration(r.duration)} · ${r.messageCount} 条消息`
-  return r.duration >= IDLE_LONG_SECONDS ? `${base} · 时长 ≥ 25 分钟按长时标注（信号，非故障）` : base
+  const parts = [`时长 ${fmtDuration(r.duration)}`, `${r.messageCount} 条消息`]
+  if (r.knowledgePointCount) parts.push(`${r.knowledgePointCount} 个知识点`)
+  if (r.duration >= IDLE_LONG_SECONDS) parts.push('时长 ≥ 25 分钟按长时标注（信号，非故障）')
+  return parts.join(' · ')
 }
 /** 进度工具提示（人话）：阶段 n/m · 任务 x/y；无里程碑维度只给任务 */
 /** 进度工具提示（人话）：阶段 n/m · 第 x 个任务（共 y 个）。
@@ -1073,7 +1106,10 @@ defineExpose({ refreshNow })
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class），本页不再私持拷贝 *//* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
 /* 互动列（批B）：时长主值+副行。副行 messageCount/知识点 nowrap 撑到 109px 溢出 70px 单元格、
    压到「进度」列（走查 #37）：容器限宽到单元格内宽并裁切，副行由 mk-cell-sub 自带省略号截断 */
-/* 轨道列（#105 读侧接入）：徽章（真人 / 虚拟 / 未标记）+ 通道副行垂直两行（同 .ts-ia 判例） */
+/* 轨迹列（#105 读侧接入）：徽章（真人 / 虚拟 / 未标记）+ 通道副行垂直两行（同 .ts-ia 判例）。
+   .ts-track / .ts-ia / .ts-status 这些 display:grid|flex 的容器一律是 td 内层 div：
+   直接挂在 td 上会让表格单元脱离表格布局，整行塌成竖排（2026-10-19 实测行高 271px、
+   各格错位，拆列时踩过一次）。改列时只动 td 的 v-if，别把类挪回 td。 */
 .ts-track { display: grid; gap: 2px; justify-items: start; }
 .ts-ia { display: grid; gap: 2px; justify-items: start; max-width: 100%; min-width: 0; overflow: hidden; }.ts-ia > * { min-width: 0; max-width: 100%; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }.ts-ia__dur--long { color: var(--mk-amber); }.ts-ia__dur--brief { color: var(--mk-faint); font-weight: 400; }.ts-prog { display: grid; gap: 4px; max-width: 96px; }.ts-prog__num { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }.ts-prog__bar { width: 88px; height: 5px; }/* 终态完成列（P1 语义修复）：只显「已完成」文字，不再与进度条并存；title 保留历史进度 */
 .ts-prog--done {
@@ -1093,12 +1129,13 @@ defineExpose({ refreshNow })
 }/* 状态徽章：固定最小宽度，筛选不同状态时列宽不跳动（"已被替代"最长 4 字）。
    锚点用稳定类 .ts-status（2026-10-06 审核 #37）：原 td:nth-child(3) 在用户列被
    隐藏后失配（状态列变第 2 个 td），切换状态筛选时列宽照样跳动——正是本规则要防的。
+   该类挂在 td 内层 div 上（display:flex 不能挂 td，见上方 .ts-track 注释）。
    68px = 4 字 × micro 档 + 徽章内边距，容得下最长档。
    只给主状态徽章（.ts-status__main）：标注徽章（低参与 / 手动结束）是内容宽，
    套上 68px 会把「低参与 + 手动结束」撑到 ~150px，把状态列拉宽又没换来任何对齐。 */
-.ts-status .ts-status__main { min-width: 68px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
+.ts-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 118px; }.ts-status .ts-status__main { min-width: 64px; justify-content: center; }/* 可点异常徽章已迁工具条右组「异常」chip（2026-10-04 分布卡退役后两度搬家，ts-badge-toggle 随撤） *//* 建议徽章：行内直出建议标题（首行预览），超长 ellipsis 截断、hover 看全文（title）。
    badge 本体 inline-flex，截断由内层文本节点承载（flex 项 overflow!=visible → min-width 归 0 可收缩） */
-.ts-adv-badge { margin-left: 4px; max-width: 168px; }.ts-adv-badge__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
+.ts-adv-badge { margin-left: 4px; max-width: 96px; }.ts-adv-badge__txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
 .ts-error { margin: 0 16px 10px; }/* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页）。
    4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {
