@@ -331,7 +331,7 @@
                   <!-- 原来的「互动」一格叠了时长 + 消息数 + 知识点三件事（2026-10-19 用户走查
                        「互动 时间又代表什么，拆成列」）：拆成三列。时长仍带档位 tone
                        （≥25 分钟长时琥珀 / <1 分钟秒退弱化），阈值由表头与 title 披露。 -->
-                  <b class="ts-ia__dur" :class="{ 'ts-ia__dur--long': r.duration >= IDLE_LONG_SECONDS, 'ts-ia__dur--brief': r.duration > 0 && r.duration < 60 }">{{ r.duration ? fmtDuration(r.duration) : '—' }}</b>
+                  <b class="ts-ia__dur" :class="{ 'ts-ia__dur--long': r.duration >= IDLE_LONG_MINUTES }">{{ r.duration ? fmtDuration(r.duration) : '—' }}</b>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('interact')">
@@ -1050,23 +1050,30 @@ const { goConsole } = useSessionDrill(closeDetail)
 /* 建议徽章带优先级色（T3）：high=bad / medium=warn / 其余 info */
 const advisoryBadge = (p?: string) => (p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info')
 /* 任务类型字典已上收共享单源 statusText.ts（F2-2：路径详情同批枚举不再各自维护一份） */
-/* 时长格式化：分钟向下取整（P3：90 秒显示「1 分钟」而非四舍五入成「2 分钟」） */
-const fmtDuration = (sec: number) => (sec >= 60 ? `${Math.floor(sec / 60)} 分钟` : `${sec} 秒`)
+/* 时长格式化。后端 duration 的单位是**分钟**（computeEffectiveDurationMinutes = ms/60000），
+   不是秒——原先按秒解释，3 分钟的课在列表里显示成「3 秒」（2026-10-20 跑数时发现）。
+   1 分钟以内后端已封底为 1，这里只需要「N 分钟 / N 小时 M 分」两档。 */
+const fmtDuration = (minutes: number) => {
+  if (minutes < 60) return `${minutes} 分钟`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return m ? `${h} 小时 ${m} 分` : `${h} 小时`
+}
 /** 时间列悬停：本地化绝对时刻（后端原始 ISO 为 UTC 带 Z，直出跨时区读不出真实时刻——审核 #38） */
 function startAbsTitle(r: Row): string | undefined {
   if (!r.startTime) return r.startAt || undefined
   const t = new Date(r.startTime).getTime()
   return Number.isFinite(t) ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : r.startAt || undefined
 }
-/** 长时阈值（秒）：≥1500s（25 分钟）时长标琥珀；阈值写进互动列 title 与表头披露 */
-const IDLE_LONG_SECONDS = 1500
+/** 长时阈值（分钟）：≥25 分钟标琥珀；阈值写进时长列 title 与表头披露 */
+const IDLE_LONG_MINUTES = 25
 /** 时长 / 消息两列的 title：时长 + 消息数 + 知识点数（三样原本叠在一格，2026-10-19 拆列）。
  *  知识点列在 1600 及以下不占列宽，读数仍在这里可查；触发长时着色时一并披露阈值口径。 */
 function interactTitle(r: Row): string | undefined {
   if (!r.duration) return undefined
   const parts = [`时长 ${fmtDuration(r.duration)}`, `${r.messageCount} 条消息`]
   if (r.knowledgePointCount) parts.push(`${r.knowledgePointCount} 个知识点`)
-  if (r.duration >= IDLE_LONG_SECONDS) parts.push('时长 ≥ 25 分钟按长时标注（信号，非故障）')
+  if (r.duration >= IDLE_LONG_MINUTES) parts.push('时长 ≥ 25 分钟按长时标注（信号，非故障）')
   return parts.join(' · ')
 }
 /** 进度工具提示（人话）：阶段 n/m · 任务 x/y；无里程碑维度只给任务 */

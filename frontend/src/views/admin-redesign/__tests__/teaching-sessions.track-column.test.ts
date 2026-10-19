@@ -131,7 +131,7 @@ describe('教学会话「互动」拆成时长 / 消息 / 知识点三列（2026
     listMock.mockResolvedValue({
       data: {
         data: {
-          items: [makeItem('a', { duration: 1500, messageCount: 4, knowledgePointCount: 2 })],
+          items: [makeItem('a', { duration: 25, messageCount: 4, knowledgePointCount: 2 })],
           total: 1
         }
       }

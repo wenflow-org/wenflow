@@ -768,7 +768,7 @@
                 </td>
                 <td>
                   <div class="ld-ia" :title="ldInteractTitle(s)">
-                    <b class="ld-ia__dur" :class="{ 'ld-ia__dur--long': s.durationSec >= LD_IDLE_LONG_SECONDS, 'ld-ia__dur--brief': s.durationSec > 0 && s.durationSec < 60 }">{{ s.duration }}</b>
+                    <b class="ld-ia__dur" :class="{ 'ld-ia__dur--long': s.durationMin >= LD_IDLE_LONG_MINUTES }">{{ s.duration }}</b>
                     <span class="mk-cell-sub">{{ s.turns }} 回合 · 知识 {{ s.kpCount }} 点</span>
                   </div>
                 </td>
@@ -1206,10 +1206,10 @@ interface LdSessionRow {
   msIndex: number | null
   /** 互动列副行：回合（口径=用户消息条数，后端无独立回合计数） */
   turns: string
-  /** 互动列主值：时长（后端 duration 秒 → mm 分 ss 秒） */
+  /** 互动列主值：时长（后端 duration 单位是分钟 → N 分钟） */
   duration: string
   /** 时长原值（互动列档位：<60s 秒退弱化 / ≥1500s 长时琥珀，与平台页同阈值） */
-  durationSec: number
+  durationMin: number
   /** 消息条数（互动列副行 + 低参与判定同源） */
   msgCount: number
   /** 教学产出知识点数（后端 knowledgePointCount，现成字段原先未消费） */
@@ -1321,12 +1321,13 @@ function ldWrapupTitle(r: LdSessionRow): string {
 function ldAdvisoryBadgeCls(p: string): string {
   return p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info'
 }
-/* 互动列 title：长时/秒退都是信号注记而非故障（与平台页 IDLE_LONG_SECONDS 同阈值） */
-const LD_IDLE_LONG_SECONDS = 1500
+/* 互动列 title：长时是信号注记而非故障（与平台页同一 25 分钟阈值）。
+   后端 duration 的单位是**分钟**（computeEffectiveDurationMinutes），不是秒——
+   原先按秒解释，3 分钟的课在列表里显示成「3 秒」（2026-10-20 跑数时发现）。 */
+const LD_IDLE_LONG_MINUTES = 25
 function ldInteractTitle(r: LdSessionRow): string {
   const base = `${r.turns} 回合 · 知识 ${r.kpCount} 点`
-  if (r.durationSec >= LD_IDLE_LONG_SECONDS) return `${base} · 时长 ≥ 25 分钟按长时标注（信号，非故障）`
-  if (r.durationSec > 0 && r.durationSec < 60) return `${base} · 不足 1 分钟`
+  if (r.durationMin >= LD_IDLE_LONG_MINUTES) return `${base} · 时长 ≥ 25 分钟按长时标注（信号，非故障）`
   return base
 }
 function ldProgTitle(r: LdSessionRow): string {
@@ -1349,12 +1350,13 @@ function openSessionCockpit(sessionId: string) {
   openSubPage('session-real', sessionId, sp ? { from: { view: sp.view, id: sp.id, label: liveDetail.value?.name } } : undefined)
 }
 
-/** 会话时长（后端 duration 秒）→ mm 分 ss 秒；0/缺省显 — */
-function formatDuration(sec: number): string {
-  if (!sec || sec <= 0) return '—'
-  const m = Math.floor(sec / 60)
-  const s = Math.round(sec % 60)
-  return m > 0 ? `${m}分${s}秒` : `${s}秒`
+/** 会话时长（后端 duration 单位：分钟）→ 「N 分钟 / N 小时 M 分」；0/缺省显 — */
+function formatDuration(minutes: number): string {
+  if (!minutes || minutes <= 0) return '—'
+  if (minutes < 60) return `${minutes} 分钟`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return m ? `${h} 小时 ${m} 分` : `${h} 小时`
 }
 
 /** 教学会话 pane 状态徽章：已上收共享单源 statusText.sessionStatusBadgeCls（收尾批 C10；别名超集逐值等价迁移） */
@@ -1409,7 +1411,7 @@ async function loadLdSessions(id: string) {
       const advisoryRelevant = !!advisory && rawAdvisory?.shouldSuggest !== false && !['none', ''].includes(advisory.priority)
       const status = String(s.status || '')
       const msgCount = Number(s.messageCount || 0)
-      const durationSec = Number(s.duration || 0)
+      const durationMin = Number(s.duration || 0)
       const terminal = ['completed', 'succeeded', 'failed', 'timeout', 'finalization_failed', 'discarded', 'superseded'].includes(status)
       return {
         id: String(s.id),
@@ -1422,8 +1424,8 @@ async function loadLdSessions(id: string) {
         stage: progress && progress.totalMilestones ? `里程碑 ${progress.milestoneIndex || 0}/${progress.totalMilestones}` : '—',
         msIndex: progress && typeof progress.milestoneIndex === 'number' && progress.milestoneIndex > 0 ? progress.milestoneIndex : null,
         turns: String(msgCount),
-        duration: formatDuration(durationSec),
-        durationSec,
+        duration: formatDuration(durationMin),
+        durationMin,
         msgCount,
         kpCount: Number(s.knowledgePointCount || 0),
         progress,
