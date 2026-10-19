@@ -187,29 +187,6 @@
       </div>
     </div>
 
-    <!-- ===== 教学闭环定位（原型 .loop 五环）：状态由真实阶段状态机派生（2026-10-06 审核 #46）。
-         此前写死「教学回合=进行中、其余=已完成」，与同屏 stepper 的真实阶段直接矛盾
-         （Goal 阶段会读到「路径规划/课后评估已完成」）。四环映射 stageFlow，记忆复习无对应
-         阶段一律「未进入」；真实模式仍整卡隐藏（监控页对静态环的既有取舍不变）。 ===== -->
-    <section v-if="!isRealMode" class="mk-card cp-loopcard">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">教学闭环定位</h3>
-        <span class="mk-card__meta">该会话在整体闭环中的位置</span>
-      </div>
-      <div class="cp-cardbody">
-        <div class="cp-loop" role="list" aria-label="教学闭环定位">
-          <template v-for="(node, i) in loopNodes" :key="node.name">
-            <span v-if="i" class="cp-loop__arrow" aria-hidden="true">→</span>
-            <div class="cp-loop__step" :class="`cp-loop__step--${node.state}`" role="listitem">
-              <span class="cp-loop__no">阶段 {{ i + 1 }}</span>
-              <span class="cp-loop__name">{{ node.name }}</span>
-              <span class="cp-loop__meta">{{ node.state === 'active' ? '本会话进行中' : node.state === 'done' ? '已完成' : '未进入' }}</span>
-            </div>
-          </template>
-        </div>
-      </div>
-    </section>
-
     <!-- ===== 阶段推进（2026-10-12 重设计：卡 = 标题 + 完成计数 + 出口按钮的头部 + 步点阵本体。
          原下方 MkStatStrip 三读数撤——「当前阶段/下一阶段」步点阵自身已表达、「已用回合」与
          Goal 步点的「学习者发言 N」近重复且历史上两次被误读（含/不含平台回复）；头部
@@ -1917,23 +1894,6 @@ const heroStatusTone = computed(() => {
   }
 })
 
-/* 教学闭环定位：五环状态由真实阶段状态机派生（2026-10-06 审核 #46）。
-   四环映射 stageFlow（目标对话/路径规划/教学回合/课后评估），记忆复习无对应阶段恒「未进入」；
-   done/active/idle 复用 stepper 的同一 stageDone/stageActive 判据，两处不再互相矛盾。 */
-const LOOP_STAGE_MAP: Array<{ name: string; stage: StageKey | null }> = [
-  { name: '目标对话', stage: 'goal' },
-  { name: '路径规划', stage: 'path' },
-  { name: '教学回合', stage: 'learning' },
-  { name: '课后评估', stage: 'wrapup' },
-  { name: '记忆复习', stage: null }
-]
-const loopNodes = computed(() => LOOP_STAGE_MAP.map(({ name, stage }) => {
-  if (!stage) return { name, state: 'idle' as const }
-  if (stageDone(stage)) return { name, state: 'done' as const }
-  if (stageActive(stage)) return { name, state: 'active' as const }
-  return { name, state: 'idle' as const }
-}))
-
 /* 阶段推进 stepper 三态（done/active/idle 由真实阶段状态机推导）与 meta 文案 */
 function stepState(st: StageKey): 'done' | 'active' | 'idle' {
   if (stageDone(st)) return 'done'
@@ -2994,16 +2954,11 @@ async function copyRawJson() {
 /* 卡体（mk-card 头下内容衬距；mk 原语无 .mk-card__body，用本页局部类） */
 .cp-cardbody { padding: 12px 14px 16px; }
 
-/* 教学闭环定位（原型 .loop：五环横排，教学回合 active 品牌底，其余 done 绿描边） */
-.cp-loopcard { margin-top: 14px; }
-.cp-loop { display: flex; align-items: stretch; gap: 8px; overflow-x: auto; padding: 2px 0; }
-.cp-loop__arrow { display: grid; place-items: center; flex: none; color: var(--mk-faint); font-size: 15px; }
-.cp-loop__step { flex: 1 1 0; min-width: 138px; display: grid; gap: 5px; padding: 12px 14px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-md); background: var(--mk-surface); }
-.cp-loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
-.cp-loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
-.cp-loop__no { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.cp-loop__name { font-weight: 700; font-size: var(--mk-fs-emphasis); }
-.cp-loop__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* .cp-loop 一族 2026-10-19 随「教学闭环定位」卡下线（用户走查「这不重复吗」→ 拍板删卡）：
+   它前四环读的是本卡下方 stepper 的同一对 stageDone/stageActive，只换了套更长的阶段名
+   （目标对话/路径规划/教学回合/课后评估 ↔ stageLabel 的目标/路径/学习/总结），第五环
+   「记忆复习」会话里没有对应阶段、恒「未进入」，即整卡不含 stepper 之外的任何会话状态。
+   五环闭环该在的地方是有真实读数与下钻的平台总览、以及带每阶段累计会话数的画像详情。 */
 
 /* 阶段推进（2026-10-15 重设计：四枚等宽阶段瓦片，每票一条状态色顶轨 + 标记 + 阶段名 + 真实读数，
    填满卡宽并把「推进到哪一步/每步读数」一屏读完；瓦片间 chevron 连成流水线。步点即阶段页签。） */
@@ -3945,8 +3900,8 @@ html[data-theme='dark'] {
   /* hover 补漏：rgba(0,0,0,0.02) 叠在暗色底上不可见，用与阶段步点同档的实色 */
   .cp-sidebar__toggle:hover { background: #252627; }
   .cp-learn-tree__lesson:hover:not(:disabled) { background: #252627; }
-  /* 原型骨架补漏：闭环 active 环 / stepper 瓦片在暗色下的底色（active 顶轨与实心步点走 --mk-*-fill，两主题通用） */
-  .cp-loop__step--active { background: color-mix(in srgb, var(--wf-color-primary) 16%, transparent); border-color: color-mix(in srgb, var(--wf-color-primary) 40%, transparent); }
+  /* 原型骨架补漏：stepper 瓦片在暗色下的底色（active 顶轨与实心步点走 --mk-*-fill，两主题通用）。
+     同行原有的 .cp-loop__step--active 覆写随「教学闭环定位」卡一起下线（2026-10-19）。 */
   .cp-stp--active { background: color-mix(in srgb, var(--wf-color-primary) 14%, transparent); }
   .cp-stp--idle .cp-stp__dot { background: #19191a; }
   .cp-transcript__message { background: #19191a; border-left-color: #313235; }

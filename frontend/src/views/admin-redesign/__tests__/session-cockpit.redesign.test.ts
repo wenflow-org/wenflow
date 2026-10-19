@@ -4,7 +4,8 @@
  * 断言 = 原型版式的每一块 + 数据诚实性：
  *  - hero（头像「S」/ 会话主题主标题 + 会话 ID 副行 meta（2026-10-04 批次五 P2-7）/ 学习者·科目·开始于副文 /
  *    状态 + 阶段 pills——回合 pill 已撤（P3#13：回合数单源=阶段推进卡）/ 真实能力动作）
- *  - 教学闭环定位（.loop 五环：目标对话→…→记忆复习；教学回合 active，其余 done）
+ *  - 教学闭环定位（原型 .loop 五环）2026-10-19 拍板下线：与下方 stepper 同源同态、属纯重复，
+ *    本文件只保留「不得回归」的断言
  *  - 阶段推进（.stepper done/active/idle 三态 + 卡头「已完成 N / 4 阶段」+ statstrip 三读数）
  *  - 双栏 grid(1.5fr/1fr)：回合记录表（# / 类型 / 内容 / 时间；原型 Token/耗时/解答分无真数据不硬造）
  *    + 知识状态更新 ranklist（真实掌握度；无数据整卡不渲染）
@@ -273,37 +274,27 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     assisted.unmount();
   });
 
-  it('教学闭环定位：真实模式隐藏该卡（防伪造进度）；虚拟模式五环由真实阶段状态机派生（2026-10-06 审核 #46）', async () => {
-    // 真实会话：静态「已完成/本会话进行中」与真实进度无关，监控页上是负信息 → 整卡隐藏
-    stableVirtualApi.getRealSessionConsole.mockResolvedValue(realTeachingPayload());
-    const real = await mountCockpit('session-real', 'ts_re_1');
-    expect(real.findAll('.cp-loop__step')).toHaveLength(0);
-    expect(real.text()).not.toContain('教学闭环定位');
-    real.unmount();
-
-    // 虚拟会话：五环状态与同屏 stepper 同源（Learn 当前 → 前两环 done、教学回合 active、其余 idle）
+  it('「教学闭环定位」卡已下线（2026-10-19 用户走查「这不重复吗」→ 拍板删卡）：五环与 stepper 同源同态，属纯重复', async () => {
+    // 原卡：前四环由 stageDone/stageActive 派生（与下方 stepper 同一对判据）、第五环「记忆复习」
+    // 无对应阶段恒「未进入」，即不含 stepper 之外的任何会话状态，只多出一套更长的阶段名。
+    // 负信息修正（2026-10-06 审核 #46）随之失去载体——阶段状态唯一落点是 stepper 瓦片。
     stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
     const w = await mountCockpit('session', 'vs_1');
-
-    const steps = w.findAll('.cp-loop__step');
-    expect(steps.map((s) => s.find('.cp-loop__name').text())).toEqual(
-      ['目标对话', '路径规划', '教学回合', '课后评估', '记忆复习']
-    );
-    expect(w.findAll('.cp-loop__arrow')).toHaveLength(4);
-
-    const active = steps.filter((s) => s.classes().includes('cp-loop__step--active'));
-    expect(active).toHaveLength(1);
-    expect(active[0].find('.cp-loop__name').text()).toBe('教学回合');
-    expect(active[0].find('.cp-loop__meta').text()).toBe('本会话进行中');
-    const done = steps.filter((s) => s.classes().includes('cp-loop__step--done'));
-    expect(done.map((s) => s.find('.cp-loop__name').text())).toEqual(['目标对话', '路径规划']);
-    expect(done.every((s) => s.find('.cp-loop__meta').text() === '已完成')).toBe(true);
-    // 未进入的阶段不得再被写成「已完成」（原写死状态的负信息）
-    const idle = steps.filter((s) => s.classes().includes('cp-loop__step--idle'));
-    expect(idle.map((s) => s.find('.cp-loop__name').text())).toEqual(['课后评估', '记忆复习']);
-    expect(idle.every((s) => s.find('.cp-loop__meta').text() === '未进入')).toBe(true);
-
+    expect(w.findAll('.cp-loop__step')).toHaveLength(0);
+    expect(w.findAll('.cp-loop__arrow')).toHaveLength(0);
+    expect(w.text()).not.toContain('教学闭环定位');
+    // 阶段状态仍完整可读（迁移目标在位）：四枚瓦片 + done/active/idle
+    const steps = w.findAll('.cp-stp');
+    expect(steps).toHaveLength(4);
+    expect(steps.map((s) => s.classes().find((c) => c.startsWith('cp-stp--')))).toEqual([
+      'cp-stp--done', 'cp-stp--done', 'cp-stp--active', 'cp-stp--idle'
+    ]);
     w.unmount();
+
+    stableVirtualApi.getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+    const real = await mountCockpit('session-real', 'ts_re_1');
+    expect(real.text()).not.toContain('教学闭环定位');
+    real.unmount();
   });
 
   it('阶段推进：stepper done/active/idle 三态 + 卡头 N/4 + statstrip 三读数；步点点击切换阶段页签', async () => {
