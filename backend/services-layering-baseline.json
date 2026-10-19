@@ -1,0 +1,27 @@
+{
+  "lineBudget": 1000,
+  "note": "单个非测试 .ts 文件 > lineBudget 行必须登记且只许缩短；--update 只允许收缩（#76）",
+  "oversize": {
+    "src/routes/admin/platform.ts": 1454,
+    "src/routes/admin/prompt-ops.ts": 1878,
+    "src/routes/admin/skills.ts": 1116,
+    "src/routes/admin/virtual-learners.assisted-runtime.ts": 2013,
+    "src/routes/ai-teaching.routes.ts": 1270,
+    "src/routes/learning.ts": 1389,
+    "src/routes/prompt-lab.ts": 2711,
+    "src/services/ai-teaching/TeachingContextBuilder.ts": 1869,
+    "src/services/ai-teaching/TeachingSessionRepository.ts": 1597,
+    "src/services/ai-teaching/teaching-session-lifecycle.ts": 1245,
+    "src/services/ai-teaching/teaching-turn-engine.ts": 1389,
+    "src/services/learner/ConceptConsolidatorService.ts": 2447,
+    "src/services/learner/LearnerKnowledgeMemoryService.ts": 1136,
+    "src/services/learning/generation/path-generation.core.ts": 1152,
+    "src/services/learning/generation/stage-enrichment.ts": 1378,
+    "src/services/learning/goal-conversation.service.ts": 1740,
+    "src/services/learning/learning-state.service.ts": 2074,
+    "src/services/learning/path-planning-hints.ts": 1061,
+    "src/services/learning/replan/path-replan.service.ts": 1170,
+    "src/services/skill-registry/skill-scaffold.service.ts": 1161,
+    "src/services/virtual-lab/card-import.service.ts": 1107
+  }
+}
