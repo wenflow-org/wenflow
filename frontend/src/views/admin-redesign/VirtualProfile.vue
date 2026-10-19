@@ -622,16 +622,20 @@
 
         <section v-if="activeTab === 'timeline'" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">日程 · 日期模拟</h3>
-            <span class="mk-badge mk-badge--muted">{{ timelineSessionOptions.length }} 个会话</span>
+            <h3 class="mk-card__title">学习日程</h3>
+            <!-- 计数只在有会话时出：0 个会话时下面已有空态说明，徽章再报一次 0 是重复 -->
+            <span v-if="timelineSessionOptions.length" class="mk-badge mk-badge--muted">{{ timelineSessionOptions.length }} 个会话</span>
           </div>
-          <p class="vp-timeline__hint">
-            按自然日聚合该会话的学习负担、学习状态、系统干预与难度调整（只读）。日期模拟默认关闭，这里显示的是既有历史读数。
-          </p>
-          <p v-if="!timelineSessionOptions.length" class="vp-timeline__empty">
-            暂无可查看的会话：该虚拟人还没有历史会话，先运行一次故事或账号自动学习。
-          </p>
+          <template v-if="!timelineSessionOptions.length">
+            <p class="vp-timeline__empty">
+              这个虚拟学习者还没有会话。运行一个故事后，这里会按天显示日程。
+            </p>
+          </template>
           <template v-else>
+            <!-- 说明只在有会话时出：没有会话就没有可按天看的读数，此时只留空态给下一步 -->
+            <p class="vp-timeline__hint">
+              按自然日汇总所选会话的学习负担、学习状态、系统干预与难度调整。
+            </p>
             <label class="mk-field vp-timeline__picker">
               <span class="mk-field__label">会话</span>
               <select v-model="timelineSessionId" class="mk-field__select">
