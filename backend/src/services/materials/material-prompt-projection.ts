@@ -91,15 +91,12 @@ function tertileOfIndex(index: number, total: number): 0 | 1 | 2 {
   return 2;
 }
 
-function tertileSize(tertile: 0 | 1 | 2, total: number): number {
-  let count = 0;
-  for (let index = 0; index < total; index += 1) {
-    if (tertileOfIndex(index, total) === tertile) count += 1;
-  }
-  return count;
-}
-
-/** 三分位配额：窗口分布 + 每个非空三分位 ≥1，超出 take 时从配额最大者削减。 */
+/**
+ * 三分位配额：**严格等于位置窗口在各三分位上的条数**（2026-10-19 修订：首版加过
+ * 「每个非空三分位 ≥1」的地板，实测反而把末阶段尾部配额从 8 削到 6、给早期阶段塞了
+ * 用不上的尾部，后半覆盖 -2.8pp/-7.7pp；展示分布与窗口逐位一致才是「不低于窗口方案」的保证）。
+ * 条数不足 take 时取条数上限。
+ */
 export function resolveTertileQuota(total: number, take: number, anchor: [number, number]): [number, number, number] {
   const safeTotal = Math.max(0, Math.floor(Number(total) || 0));
   const size = Math.max(0, Math.min(safeTotal, Math.floor(Number(take) || 0)));
@@ -108,9 +105,7 @@ export function resolveTertileQuota(total: number, take: number, anchor: [number
   const start = Math.max(0, Math.min(safeTotal, Math.floor(Number(anchor?.[0]) || 0)));
   const end = Math.max(start, Math.min(safeTotal, Math.floor(Number(anchor?.[1]) || 0)));
   for (let index = start; index < end; index += 1) quota[tertileOfIndex(index, safeTotal)] += 1;
-  for (const tertile of [0, 1, 2] as const) {
-    if (tertileSize(tertile, safeTotal) > 0 && quota[tertile] === 0) quota[tertile] = 1;
-  }
+  // 兜底：锚区间比 take 宽（调用方传了非窗口锚）时从配额最大者削减，保证总量 = take。
   let sum = quota[0] + quota[1] + quota[2];
   while (sum > size) {
     let pick: 0 | 1 | 2 = 0;

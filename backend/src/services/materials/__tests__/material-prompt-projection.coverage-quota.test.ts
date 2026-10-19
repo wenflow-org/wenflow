@@ -40,15 +40,15 @@ function tertileOf(id: string): 0 | 1 | 2 {
 }
 
 describe('resolveTertileQuota', () => {
-  it('24 节 / take 8：配额取自窗口分布 + 每个非空三分位 ≥1（总量恒为 take）', () => {
+  it('24 节 / take 8：配额严格等于窗口分布（首版「每三分位 ≥1」地板实测损后半覆盖，已撤）', () => {
     // 4 阶段窗口（与 resolveMaterialWindowRange 同一公式）：[0,8) [5,13) [11,19) [16,24)
-    expect(resolveTertileQuota(24, 8, resolveMaterialWindowRange(24, 8, 1, 4))).toEqual([6, 1, 1]);
-    expect(resolveTertileQuota(24, 8, resolveMaterialWindowRange(24, 8, 2, 4))).toEqual([3, 4, 1]);
-    expect(resolveTertileQuota(24, 8, resolveMaterialWindowRange(24, 8, 3, 4))).toEqual([1, 4, 3]);
-    expect(resolveTertileQuota(24, 8, resolveMaterialWindowRange(24, 8, 4, 4))).toEqual([1, 1, 6]);
+    expect(resolveTertileQuota(24, 8, resolveMaterialWindowRange(24, 8, 1, 4))).toEqual([8, 0, 0]);
+    expect(resolveTertileQuota(24, 8, resolveMaterialWindowRange(24, 8, 2, 4))).toEqual([3, 5, 0]);
+    expect(resolveTertileQuota(24, 8, resolveMaterialWindowRange(24, 8, 3, 4))).toEqual([0, 5, 3]);
+    expect(resolveTertileQuota(24, 8, resolveMaterialWindowRange(24, 8, 4, 4))).toEqual([0, 0, 8]);
   });
 
-  it('三分位展示总量与窗口方案一致（后半覆盖不回落的配额侧保证）', () => {
+  it('三分位展示总量与窗口方案逐位一致（后半覆盖不回落的配额侧保证）', () => {
     const quotaTotals = [0, 0, 0];
     const windowTotals = [0, 0, 0];
     for (let stage = 1; stage <= 4; stage += 1) {
@@ -63,7 +63,7 @@ describe('resolveTertileQuota', () => {
     expect(quotaTotals).toEqual([11, 10, 11]);
   });
 
-  it('退化：take=0 / total=0 为空配额；小文档总量仍不超过 take', () => {
+  it('退化：take=0 / total=0 为空配额；小文档总量不超过 take', () => {
     expect(resolveTertileQuota(24, 0, [0, 0])).toEqual([0, 0, 0]);
     expect(resolveTertileQuota(0, 8, [0, 0])).toEqual([0, 0, 0]);
     const small = resolveTertileQuota(3, 2, [0, 3]);
@@ -75,26 +75,34 @@ describe('selectSectionsWithCoverageQuota', () => {
   const sections = Array.from({ length: 24 }, (_, index) => ({ id: `s-${index + 1}`, title: `第${index + 1}节` }));
   const ranks = rankByOrdinal(24);
 
-  it('阶段 1/4：选满 8 节，成员放开到窗口外（窗口 [0,8) 之外出现 s-9 与 s-17）', () => {
+  it('阶段 1/4：配额全在前三分位，成员为区域内语义最优（窗口区间的全集内挑）', () => {
     const picked = selectSectionsWithCoverageQuota(sections, 8, resolveMaterialWindowRange(24, 8, 1, 4), ranks);
     expect(picked.map((section) => section.id)).toEqual([
-      's-1', 's-2', 's-3', 's-4', 's-5', 's-6', 's-9', 's-17',
+      's-1', 's-2', 's-3', 's-4', 's-5', 's-6', 's-7', 's-8',
     ]);
   });
 
-  it('阶段 4/4：尾部为主体，同时保留前/中锚点（前/中/后=1/1/6）', () => {
+  it('阶段 3/4：中/后配额取自各自三分位全体（放开窗口切片 s12–s19）', () => {
+    const picked = selectSectionsWithCoverageQuota(sections, 8, resolveMaterialWindowRange(24, 8, 3, 4), ranks);
+    // 配额 [0,5,3]：T2 全量 s-9..s-16 取前 5（s-9..s-13）、T3 全量 s-17..s-24 取前 3（s-17..s-19）
+    expect(picked.map((section) => section.id)).toEqual([
+      's-9', 's-10', 's-11', 's-12', 's-13', 's-17', 's-18', 's-19',
+    ]);
+  });
+
+  it('阶段 4/4：全尾部（与窗口同分布），成员为尾部区域内语义最优', () => {
     const picked = selectSectionsWithCoverageQuota(sections, 8, resolveMaterialWindowRange(24, 8, 4, 4), ranks);
     expect(picked.map((section) => section.id)).toEqual([
-      's-1', 's-9', 's-17', 's-18', 's-19', 's-20', 's-21', 's-22',
+      's-17', 's-18', 's-19', 's-20', 's-21', 's-22', 's-23', 's-24',
     ]);
   });
 
   it('配额内按语义名次取最优（名次反转时选出的是尾部最优而非头部）', () => {
     const reversed = new Map(Array.from({ length: 24 }, (_, index) => [`s-${index + 1}`, 23 - index]));
-    const picked = selectSectionsWithCoverageQuota(sections, 8, resolveMaterialWindowRange(24, 8, 1, 4), reversed);
-    // 名次最好的是 s-24、s-23…：T3 配额 1 取 s-24，T2 取 s-16，T1 取 s-8..s-3；输出按名次升序。
+    const picked = selectSectionsWithCoverageQuota(sections, 8, resolveMaterialWindowRange(24, 8, 3, 4), reversed);
+    // 名次最好的是 s-24、s-23…：T2 配额 5 取 s-16..s-12，T3 配额 3 取 s-24..s-22；输出按名次升序。
     expect(picked.map((section) => section.id)).toEqual([
-      's-24', 's-16', 's-8', 's-7', 's-6', 's-5', 's-4', 's-3',
+      's-24', 's-23', 's-22', 's-16', 's-15', 's-14', 's-13', 's-12',
     ]);
   });
 
@@ -102,8 +110,7 @@ describe('selectSectionsWithCoverageQuota', () => {
     const partial = new Map<string, number>([['s-20', 0], ['s-3', 1]]);
     const picked = selectSectionsWithCoverageQuota(sections, 8, resolveMaterialWindowRange(24, 8, 1, 4), partial);
     expect(picked).toHaveLength(8);
-    expect(picked[0]?.id).toBe('s-20');
-    expect(picked[1]?.id).toBe('s-3');
+    expect(picked[0]?.id).toBe('s-3');
   });
 
   it('退化：take ≥ total 时原序全量；take=0 为空', () => {
@@ -116,17 +123,18 @@ describe('selectSectionsWithCoverageQuota', () => {
 describe('extractPromptMaterials 覆盖约束模式（coverageQuota）', () => {
   const ranks = rankByOrdinal(24);
 
-  it('开启后：成员为配额集合（跨窗口）、数量仍为 8、顺序按名次', () => {
+  it('开启后：数量仍为 8、配额等于窗口分布、成员为区域内语义最优、顺序按名次', () => {
     const materials = extractPromptMaterials(
       buildContainer(24),
       STAGE_MATERIAL_LIMITS,
-      { stageNumber: 1, stageCount: 4 },
+      { stageNumber: 3, stageCount: 4 },
       ranks,
       true
     );
     expect(materials?.[0]?.sections).toHaveLength(8);
+    // 阶段 3/4 配额 [0,5,3]：窗口切片是 s-12..s-19，配额模式下 T2 从 s-9..s-16 取、T3 从 s-17..s-24 取。
     expect(materials?.[0]?.sections.map((section) => section.id)).toEqual([
-      's-1', 's-2', 's-3', 's-4', 's-5', 's-6', 's-9', 's-17',
+      's-9', 's-10', 's-11', 's-12', 's-13', 's-17', 's-18', 's-19',
     ]);
   });
 
