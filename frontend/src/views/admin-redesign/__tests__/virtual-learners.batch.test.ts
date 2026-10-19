@@ -403,6 +403,41 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(w.text()).toContain('已选 1 人');
   });
 
+  /** 2026-10-19 运营走查「批量能力默认不存在」：默认隐藏保留（2026-10-18 拍板不动），
+   *  但页头补一枚直接入口 —— 两个默认叠加（列隐藏 + 批量条要选中才出）后，首访看不到
+   *  任何批量动作，运营会以为只能一个个点。 */
+  it('页头「批量操作」：默认隐藏态下一键打开选择框列（走 MkCols 同一存储键）', async () => {
+    liveVirtuals.value = [makeVirtual(1), makeVirtual(2)];
+    const w = await mountPageFreshCols();
+    expect(w.findAll('tbody input[type="checkbox"]')).toHaveLength(0);
+
+    await findBtn(w, '批量操作').trigger('click');
+    await flushPromises();
+    await nextTick();
+    expect(w.findAll('tbody input[type="checkbox"]')).toHaveLength(2);
+    // 列已出，入口自己让位（避免「按钮点了没反应」的第二次点击）
+    expect(w.findAll('button').map((b) => b.text())).not.toContain('批量操作');
+    // 写的是 MkCols 同一个存储键：算用户的持久列偏好，不是临时态
+    expect(JSON.parse(localStorage.getItem('wf_vl_hidden_cols_v2') || '[]')).not.toContain('check');
+  });
+
+  it('并发/速率 KPI 可点直达容量设置，指引不再指向已撤的页签名', async () => {
+    liveVirtuals.value = [makeVirtual(1)];
+    const w = await mountPage();
+    const kpi = (label: string) => w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text().trim() === label)!;
+    const concurrency = kpi('并发');
+    const rate = kpi('速率');
+    // 渲染成真 button（MkKpi clickable）→ 键盘可达
+    expect(concurrency.element.tagName).toBe('BUTTON');
+    expect(rate.element.tagName).toBe('BUTTON');
+    expect(concurrency.classes()).toContain('mk-kpi--clickable');
+    expect(rate.classes()).toContain('mk-kpi--clickable');
+    // 去向写全新位置；「模型与接入 → 虚拟学习者」页签 2026-10-15 就撤了
+    expect(concurrency.attributes('title')).toContain('虚拟学习者通道');
+    expect(rate.attributes('title')).toContain('路由与调用');
+    expect(rate.attributes('title')).not.toContain('虚拟学习者」页签');
+  });
+
   it('复选框勾选后出现批量条：已选数量 + 取消选择', async () => {
     liveVirtuals.value = [makeVirtual(1), makeVirtual(2)];
     const w = await mountPage();

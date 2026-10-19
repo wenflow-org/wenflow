@@ -19,6 +19,17 @@
         <button type="button" class="mk-btn mk-btn--sm" title="清理旧账号：按建号时间批量删除旧虚拟学习者（进行中与保留名单自动豁免，先预览再执行）" @click="cleanupRef?.open()">清理旧账号</button>
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" title="新建虚拟学习者" @click="openCreate">新建</button>
         <button type="button" class="mk-btn mk-btn--sm" title="批量新建：一次创建多个虚拟学习者（表格批量填写）" @click="openBatchCreate">批量新建</button>
+        <!-- 批量入口（2026-10-19 运营走查「批量能力默认不存在」）：选择框列按 2026-10-18 拍板
+             默认隐藏，而批量条又要选中才浮现——两个默认叠加，新来的运营在首屏看不到任何批量
+             动作，会以为只能一个个点。这里给一枚页头入口，点了就打开选择框列（写的是 MkCols
+             同一个存储键，仍算用户的列偏好）；列已可见时它自己让位。 -->
+        <button
+          v-if="isLive && !isNarrow && hiddenCols.has('check')"
+          type="button"
+          class="mk-btn mk-btn--sm"
+          title="显示选择框列：逐行勾选后可批量启动全部故事、启动或停止自动驾驶、终止、清理无响应、删除"
+          @click="revealCheckColumn"
+        >批量操作</button>
       </template>
     </MkPageHead>
 
@@ -61,9 +72,9 @@
           :value="statsKpiValue(concurrencyText)"
           :tone="concurrencyTone"
           :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : '同时运行 / 配额上限'"
-          :title="statsState === 'error' ? STATS_RETRY_TITLE : '自动驾驶同时在跑的会话数占配额比。「已满」是资源占满（后续请求排队），不是故障'"
-          :clickable="statsState === 'error'"
-          @click="onStatsRetry"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : `${CONCURRENCY_KPI_TITLE}${VL_CHANNEL_LOCATION_TITLE}`"
+          :clickable="true"
+          @click="openVlChannelSettings"
         />
         <MkKpi
           label="今日调用"
@@ -78,16 +89,18 @@
           :value="rateValue"
           :tone="vlRpmLoadFailed ? 'bad' : ''"
           :hint="rateHint"
-          :clickable="vlRpmLoadFailed"
-          :title="vlRpmLoadFailed ? '设置未加载，可重试' : '在途为正在出站的调用数。上限为已保存的速率配置（在「模型与接入 → 虚拟学习者」页签修改）'"
-          @click="vlRpmLoadFailed && loadVlRpm()"
+          :clickable="true"
+          :title="vlRpmLoadFailed ? '设置未加载，可重试' : `${RATE_KPI_TITLE}${VL_CHANNEL_LOCATION_TITLE}`"
+          @click="openVlChannelSettings"
         />
       </section>
     </div>
 
-    <!-- 压测参数卡（速率上限 / 最高并发 / 日期模拟）已迁往「模型与接入 → 虚拟学习者」页签
-         （2026-10-13）：最高并发属上游容量治理，与其余接入设置同处管理；本页只保留
-         并发 / 速率两个只读 KPI（上方运行指标带），运营在此仍可任意启动任意数量。 -->
+    <!-- 压测参数卡（速率上限 / 最高并发 / 日期模拟）已迁往「模型与接入 · 路由与调用」页签的
+         「虚拟学习者通道 / 出站速率」分组（2026-10-13）：最高并发属上游容量治理，与其余接入
+         设置同处管理（两条 RPM 上限本就挨着——平台全局管真实用户、VL 通道单独计量）；
+         本页只保留并发 / 速率两个只读 KPI，点它们可直接到那处设置。
+         运营在此仍可任意启动任意数量。 -->
 
     <!-- 学习者列表（「批量实验」2026-10-04 下线：批量发起与运行监控统一收在本页，
          资产输入归「学习者卡库」；旧 /admin/batch-experiments 深链重定向到本页） -->
@@ -423,6 +436,7 @@
 <script setup lang="ts">
 import { computed, ref, reactive, watch, nextTick, onUnmounted } from 'vue'
 import { Play } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, shortId, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
@@ -457,6 +471,12 @@ import type { VirtualLearnerRow as Sample, BatchTask, ActiveRun } from './virtua
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板/脚本就地引用 ---------- */
 const STATS_RETRY_TITLE = '运行统计拉取失败：点击重试'
 const STATS_UNAVAILABLE_HINT = '统计不可用 · 点击重试'
+/* 容量治理去向（2026-10-19 运营走查）：并发上限 / VL 专属 RPM / 日期模拟都在「模型与接入 ·
+   路由与调用」页签的「虚拟学习者通道 / 出站速率」分组里。此前三处注释与速率卡的 title 都写着
+   「模型与接入 → 虚拟学习者」页签——那个页签 2026-10-15 重组时就没了，照它找必然扑空。 */
+const VL_CHANNEL_LOCATION_TITLE = '上限与日期模拟在「模型与接入 · 路由与调用」的「虚拟学习者通道」'
+const CONCURRENCY_KPI_TITLE = '自动驾驶同时在跑的会话数占配额比。「已满」是资源占满（后续请求排队），不是故障。'
+const RATE_KPI_TITLE = '在途为正在出站的调用数。上限是已保存的速率配置。'
 /* 列头口径（表头 title 与「列」菜单共用同一句，避免同页两处漂移） */
 const SESSIONS_COL_TITLE = '累计会话数（全部会话，含终态）'
 const FAILED_COL_TITLE = '已失败/已终止会话数（全量聚合）'
@@ -761,6 +781,7 @@ function menuOpenSourceCard(s: Sample) {
    会话/失败/卡死/创建）随 useIsNarrow 隐藏——此前整表 860px 最小宽只能横向拖（vlab 大表
    窄屏零降级问题）；行详情（画像页）信息不丢 */
 const isNarrow = useIsNarrow()
+const router = useRouter()
 /* ≤1439 档（LY12 判例）整表已贴容器宽：任务数不单开一列，回落到阶段条尾部；
    宽屏才成列，便于纵向扫读。列被用户手动隐藏时同样回落。 */
 const isTableCompact = useIsNarrow(1439)
@@ -768,10 +789,12 @@ const isTableCompact = useIsNarrow(1439)
 /* 列显隐（2026-10-05 卡头统一补「列」按钮）：次要列可勾选；名称/进行中/操作是
    身份与动作列不进 colDefs。窄屏（isNarrow）折叠优先于列勾选——窄屏档勾了也不显
    （行详情进画像页，信息不丢）。
-   2026-10-18：勾选列进 colDefs 并默认隐藏（用户「多选还是不要先显示」，与 People 同判例） */
+   2026-10-18：勾选列进 colDefs 并默认隐藏（用户「多选还是不要先显示」，与 People 同判例）
+   2026-10-19：默认隐藏保留，但页头补「批量操作」入口（revealCheckColumn）——唯一入口
+   只剩列菜单时，首屏看不到任何批量动作（运营走查原话「批量能力默认不存在」）。 */
 const VL_COL_DEFS = [
-  /* 默认隐藏后，列菜单这一项就是批量操作的唯一入口：label 直接写清用途 */
-  { key: 'check', label: '选择框（批量操作）', title: '勾选后可在列表底部批量回收无响应会话' },
+  /* 列菜单这一项与页头「批量操作」是做同一件事的两个入口：此处可回到隐藏态 */
+  { key: 'check', label: '选择框（批量操作）', title: '勾选后可在列表底部批量启动全部故事、启动或停止自动驾驶、终止、清理无响应、删除' },
   { key: 'tendency', label: '长期倾向' },
   { key: 'story', label: '故事 / 路径', title: '故事池条数 / 已生成路径条数（一个故事可衍生多条路径，同一路径的多次会话不重复计）' },
   { key: 'task', label: '任务', title: TASK_COL_TITLE },
@@ -837,7 +860,7 @@ const concurrencyTone = computed<'ok' | 'warn' | 'bad'>(() => {
 })
 
 /* 虚拟学习者专属出站速率（RPM）：仅保留只读运行态读数——「速率」KPI 读 inFlight/queued 与已保存上限；
-   速率上限 / 最高并发 / 日期模拟的写控件已迁往「模型与接入 → 虚拟学习者」页签（2026-10-13）。 */
+   速率上限 / 最高并发 / 日期模拟的写控件已迁往「模型与接入 · 路由与调用」的「虚拟学习者通道」分组（2026-10-13）。 */
 const vlRpm = reactive({ inFlight: 0, queued: 0, rpm: 0 })
 /** 已保存的 RPM 上限：速率卡「上限」分母只认服务端已保存值（写入已在设置页，本页只读展示） */
 const vlRpmSavedLimit = ref(0)
@@ -968,7 +991,7 @@ const concurrencyText = computed(() => {
 /** 速率文案（P1#20）：值与口径分栏——比值「在途 / 上限」进 value、单位与「已保存值」口径进 hint。
     原写法把「在途 N · 上限 X/分」整串塞进 value，183px 卡宽下必换行成两行，把整排 KPI
     拉伸到 180px（连带 220px 的 KPI 带吃掉列表卡高度，裸评审 2026-10-03）；拆开后各占一行。
-    上限读已保存值（vlRpmSavedLimit），本页无写控件（改配置在「模型与接入 → 虚拟学习者」页签） */
+    上限读已保存值（vlRpmSavedLimit），本页无写控件（改配置在「模型与接入 · 路由与调用」的「虚拟学习者通道」分组） */
 const rateValue = computed(() => {
   // #59：设置未加载时不把初始 0 断言成「0 / 不限」，显式「不可用」
   if (vlRpmLoadFailed.value) return '不可用'
@@ -1030,6 +1053,25 @@ const failureHint = computed(() => {
 
 /* ===== A1 批量操作：复选框（批量条拆分为 VirtualLearnerBatchBar 子组件） ===== */
 const selected = ref<string[]>([])
+
+/** 页头「批量操作」：把选择框列打开（写 MkCols 同一个 hiddenCols，onWatch 会落 localStorage，
+    所以这是一次持久的列偏好变更，不是临时态） */
+function revealCheckColumn() {
+  const next = new Set(hiddenCols.value)
+  next.delete('check')
+  hiddenCols.value = next
+}
+
+/** 并发/速率 KPI 的点击：失败态优先重试（hint 写着「点击重试」），否则去容量治理那处设置。
+    两个读数合用一个入口——它们本就是同一组配置的两个面，运营看到读数时正是要改上限的时候。 */
+function openVlChannelSettings() {
+  if (statsState.value === 'error' || vlRpmLoadFailed.value) {
+    if (statsState.value === 'error') onStatsRetry()
+    if (vlRpmLoadFailed.value) void loadVlRpm()
+    return
+  }
+  void router.push({ path: '/admin/api-config', query: { tab: 'routing' } })
+}
 /* 表头全选 = 当前页全选（2026-10-11 用户拍板，与用户页同规则：跨页全量勾选对批量
    终止/删除太易误伤）。再点一次只清当前页；跨页仍可手动逐个勾（selected 保留）。 */
 const pageSelectable = computed(() => paged.value)

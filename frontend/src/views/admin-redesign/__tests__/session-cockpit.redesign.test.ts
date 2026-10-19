@@ -16,6 +16,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import SessionCockpit from '../SessionCockpit.vue';
 import { subPage } from '../store';
+import { confirmState, settleConfirm } from '../useConfirm';
 
 const { stableVirtualApi, apiObject } = vi.hoisted(() => {
   const stableVirtualApi = {
@@ -256,13 +257,27 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(runningBtns.find((b) => b.text() === '按原输入重跑')!.attributes('disabled')).toBeDefined();
     running.unmount();
 
-    // 终态黑盒：重跑可点，点击调用 rerun API
+    // 终态黑盒：重跑可点 —— 会新建会话 + 重新消耗 AI 调用，故先二次确认（2026-10-19 运营走查）
     stableVirtualApi.getVirtualSession.mockResolvedValue(blackboxPayload('completed'));
     stableVirtualApi.rerunBlackboxVirtualSession.mockResolvedValue({ data: { data: { id: 'vs_bb_new' } } });
     const done = await mountCockpit('session', 'vs_bb_1');
     const doneRerun = done.findAll('.cp-console__actions button').find((b) => b.text() === '按原输入重跑')!;
     expect(doneRerun.attributes('disabled')).toBeUndefined();
     await doneRerun.trigger('click');
+    await settle();
+    // 弹确认框、且此刻还没打扰后端
+    expect(confirmState.open).toBe(true);
+    expect(confirmState.title).toBe('按原输入重跑');
+    expect(confirmState.message).toContain('消耗新的 AI 调用');
+    expect(stableVirtualApi.rerunBlackboxVirtualSession).not.toHaveBeenCalled();
+    // 取消 → 不发请求（原实现直接重跑，无任何确认）
+    settleConfirm(false);
+    await settle();
+    expect(stableVirtualApi.rerunBlackboxVirtualSession).not.toHaveBeenCalled();
+    // 二次点击并确认 → 才发请求
+    await doneRerun.trigger('click');
+    await settle();
+    settleConfirm(true);
     await settle();
     expect(stableVirtualApi.rerunBlackboxVirtualSession).toHaveBeenCalledWith('vs_bb_1');
     done.unmount();
@@ -272,6 +287,21 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     const assisted = await mountCockpit('session', 'vs_1');
     expect(assisted.findAll('.cp-console__actions button').map((b) => b.text())).not.toContain('终止实验');
     assisted.unmount();
+  });
+
+  it('「每课回合上限」写明是本屏临时覆盖（2026-10-19 运营走查：title 原写「按 1 或 100 保存」，实际刷新即回到画像默认值）', async () => {
+    stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
+    const w = await mountCockpit('session', 'vs_1');
+    await w.findAll('.cp-stp')[2].trigger('click'); // Learn 页签（回合上限只在这一页出现）
+    await settle();
+    const cap = w.find('.cp-turn-cap');
+    expect(cap.exists()).toBe(true);
+    // 输入框：不许再出现「保存」；必须说明是临时值 + 长期值在哪
+    expect(cap.attributes('title')).not.toContain('保存');
+    expect(cap.attributes('title')).toContain('本屏是临时值');
+    expect(cap.attributes('title')).toContain('运行预算');
+    expect(w.find('.cp-turn-cap-label').attributes('title')).toContain('画像「运行预算 · 每课回合上限」');
+    w.unmount();
   });
 
   it('「教学闭环定位」卡已下线（2026-10-19 用户走查「这不重复吗」→ 拍板删卡）：五环与 stepper 同源同态，属纯重复', async () => {

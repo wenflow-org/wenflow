@@ -159,9 +159,9 @@
           <template v-else>
             <button type="button" class="cp-btn" :disabled="learnStepDisabled" :title="learnStepTitle" @click="act('step')">推进一步</button>
             <button type="button" class="cp-btn cp-btn--primary" :disabled="learnAutoDisabled" :title="learnAutoTitle" @click="act('auto')">自动推进本课</button>
-            <label class="cp-turn-cap-label" title="每课自动推进的回合上限：「自动推进本课」与「自动驾驶」共用，复杂课程可调高到 100。输入超出 1–100 时按 1 或 100 处理">
+            <label class="cp-turn-cap-label" title="每课自动推进的回合上限：「自动推进本课」与「自动驾驶」共用，复杂课程可调高到 100。这里是本屏的临时覆盖，长期默认值在画像「运行预算 · 每课回合上限」">
               每课回合上限
-              <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="每课自动推进的最大对话轮数（自动推进本课与自动驾驶共用）。输入超出 1–100 时按 1 或 100 保存" aria-label="每课回合上限" @change="learnAutoTurnCap = clampLearnAutoTurnCap()" />
+              <input v-model.number="learnAutoTurnCap" type="number" min="1" max="100" class="cp-turn-cap" title="每课自动推进的最大对话轮数（自动推进本课与自动驾驶共用）。本屏是临时值，只作用于接下来这一次推进。刷新或换页会回到画像「运行预算」的默认值。输入超出 1–100 时按 1 或 100 处理" aria-label="每课回合上限" @change="learnAutoTurnCap = clampLearnAutoTurnCap()" />
             </label>
             <!-- 进行中重开本课（失败后的「重试」由生命周期区统一承载，不重复） -->
             <button type="button" class="cp-btn" :disabled="resetLearningDisabled" :title="resetLearningTitle" @click="act('resetLearn')">重开本课</button>
@@ -2565,6 +2565,16 @@ async function act(kind: string) {
         title: '终止黑盒实验',
         message: '确认终止当前黑盒实验？\n实验将被标记为已终止，公开轨迹与评估保留，该操作不可撤销。',
         confirmText: '终止实验'
+      })
+      if (!ok) return
+    }
+    /* 按原输入重跑：会新建一个会话并重新消耗 AI 调用（2026-10-19 运营走查：全页唯一
+       「重复创建 + 烧调用」却没有确认的破坏性动作，其余同类动作都有确认） */
+    if (kind === 'rerun') {
+      const ok = await askConfirm({
+        title: '按原输入重跑',
+        message: '将用原输入新建一个会话并重跑一遍，会消耗新的 AI 调用。\n当前会话与它的记录保留，不会被覆盖。确认重跑？',
+        confirmText: '重跑'
       })
       if (!ok) return
     }
