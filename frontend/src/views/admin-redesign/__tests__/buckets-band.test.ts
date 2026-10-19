@@ -172,10 +172,10 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['真实用户', '近 7 天活跃', '近 7 日新增', '从未登录']);
     expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['2', '1', '0', '1']);
     // 2026-10-18 用户走查「这类文案」：读数行只讲这个数是什么，管理员计数与口径说明移入 title
-    expect(tiles[0].find('.mk-kpi__hint').text()).toContain('不含虚拟学习者和测试账号');
+    expect(tiles[0].find('.mk-kpi__hint').text()).toContain('排除虚拟与测试账号');
     expect(tiles[0].find('.mk-kpi__hint').text()).not.toContain('其中管理员');
     expect(tiles[0].attributes('title')).toContain('其中管理员 1');
-    expect(tiles[1].find('.mk-kpi__hint').text()).toContain('最后登录在 7 天内');
+    expect(tiles[1].find('.mk-kpi__hint').text()).toContain('按最后登录日');
     w.unmount();
 
     // 含测试口径 → 四卡：「真实用户」在测试视角结构性恒 0，换虚拟域「运行中仿真账号」

@@ -211,7 +211,7 @@
                 v-if="!isTableNarrow && !tsHiddenCols.has('track')"
                 scope="col"
                 class="ts-track-col"
-                title="收束轨道与完成通道（#105 统一观测）：真人 / 虚拟 / 未标记；副行 = 完成通道。历史记录无标记时不回填、不猜测"
+                title="完成轨道（真实 / 虚拟 / 未标记）+ 完成通道（#105 统一观测）。历史记录无标记时不回填、不猜测"
               >轨道</th>
               <th
                 v-if="!tsHiddenCols.has('interact')"
@@ -659,9 +659,9 @@ function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtua
    与总览「完课量」KPI 共用。 */
 /** 轨道列悬停长释：轨道语义 + 通道（附原始枚举值供排查） */
 function trackCellTitle(r: Row): string {
-  if (!r.closure) return '无收束记录：该会话任务尚未完成，或完成事件还未投影到观测表'
+  if (!r.closure) return '无完成记录：该会话任务尚未完成，或完成事件还未投影到观测表'
   const trackDesc = r.closure.track === 'human'
-    ? '真人学习者'
+    ? '真实学习者'
     : r.closure.track === 'virtual-learner'
       ? '虚拟学习者'
       : r.closure.track === 'legacy'
@@ -748,7 +748,7 @@ const advCount = computed(() => (statusFilter.value ? 1 : 0) + (dateFilter.value
 const tsColDefs = [
   { key: 'user', label: '用户', title: '用户姓名 + 邮箱' },
   { key: 'status', label: '状态', title: '会话状态' },
-  { key: 'track', label: '轨道', title: '收束轨道（真人 / 虚拟 / 未标记）+ 完成通道（#105 统一观测）' },
+  { key: 'track', label: '轨道', title: '完成轨道（真实 / 虚拟 / 未标记）+ 完成通道（#105 统一观测）' },
   { key: 'interact', label: '互动', title: '时长 / 消息数 / 知识点' },
   { key: 'progress', label: '进度', title: '学习进度' },
   { key: 'output', label: '产物', title: '课后总结 / 建议' },

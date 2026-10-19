@@ -39,7 +39,7 @@
       />
       <!-- 完课量（#105 读侧接入，2026-10-19）：收束事件统一观测的按轨拆分，
            点卡进教学会话页看逐条轨道/通道。与上方四卡不同源（含虚拟/测试），
-           卡自身以 hint 的「真人 / VL / 未标记」分解消灭同屏不同源。 -->
+           卡自身以 hint 的「真实 / 虚拟 / 未标记」分解消灭同屏不同源。 -->
       <MkKpi
         clickable
         :label="closureKpi.label"
@@ -478,9 +478,9 @@ const kpiCards = computed<KpiCard[]>(() =>
 );
 
 /* ===== 完课量（#105 读侧接入，2026-10-19）=====
-   「管理端同屏不同源」的读侧收口：真人侧与 VL 侧不再各算各的——统一数收束事件
+   「管理端同屏不同源」的读侧收口：真实侧与虚拟侧不再各算各的——统一数收束事件
    （learner_evidence 已投影的 task:completed 行，口径单点 closure-observability.ts）。
-   家法同上方四卡：hint 一行可见口径（真人 / VL / 未标记分解），长释进 title 悬停。
+   家法同上方四卡：hint 一行可见口径（真实 / 虚拟 / 未标记分解），长释进 title 悬停。
    与上方四卡不同源：本卡含虚拟学习者与测试账号（拆分自证），不并入真实口径读数；
    历史无 track 行如实显示「未标记」，不回填、不猜；读数以已投影事件为准（消费滞后时偏小）。 */
 type ClosureSummary = {
@@ -514,7 +514,7 @@ const closureKpi = computed(() => {
       value: '—',
       hint: closureState.value === 'error' ? '读数加载失败' : '读数加载中…',
       hintTone: (closureState.value === 'error' ? 'warn' : '') as '' | 'warn',
-      title: '完课量：收束事件的统一观测（#105）——任务完成按真人 / 虚拟学习者拆分',
+      title: '完课量：收束事件的统一观测（#105）——任务完成按真实 / 虚拟学习者拆分',
     }
   }
   const s = closureSummary.value
@@ -522,13 +522,13 @@ const closureKpi = computed(() => {
   const virtual = s.byTrack['virtual-learner'] ?? 0
   const unmarked = (s.byTrack.legacy ?? 0) + (s.byTrack.unknown ?? 0)
   const unmarkedLabel = closureTrackText('legacy')
-  const hintParts = [`真人 ${human}`, `VL ${virtual}`]
+  const hintParts = [`真实 ${human}`, `虚拟 ${virtual}`]
   if (unmarked > 0) hintParts.push(`${unmarkedLabel} ${unmarked}`)
   const sourceParts = Object.entries(s.bySource)
     .sort((a, b) => b[1] - a[1])
     .map(([key, n]) => `${closureSourceText(key)} ${n}`)
   const titleParts = [
-    `完成事件统一观测（#105）：任务完成事件按轨道分列——真人 ${human} · 虚拟学习者 ${virtual}${unmarked > 0 ? ` · ${unmarkedLabel} ${unmarked}` : ''}。`,
+    `完成事件统一观测（#105）：任务完成事件按轨道分列——真实 ${human} · 虚拟学习者 ${virtual}${unmarked > 0 ? ` · ${unmarkedLabel} ${unmarked}` : ''}。`,
     unmarked > 0 ? `${unmarkedLabel}为 2026-10-18 前没有轨道标记的历史完成记录，不回填、不猜。` : '',
     sourceParts.length ? `通道构成：${sourceParts.join(' · ')}。` : '',
     '本卡含虚拟学习者与测试账号，与上方真实口径 KPI 不同源；读数以已投影收束事件为准。',

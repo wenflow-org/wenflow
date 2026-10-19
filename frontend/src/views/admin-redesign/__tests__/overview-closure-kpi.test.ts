@@ -1,8 +1,8 @@
 /**
  * 总览「完课量」KPI（#105 读侧接入，2026-10-19）。
  *
- * 锁定 KPI 家法：hint 一行可见口径（真人 / VL / 未标记分解），长释（含「不回填」纪律与
- * 通道构成）进 title；历史无 track 的 legacy 行如实计「未标记」，不并入真人/VL。
+ * 锁定 KPI 家法：hint 一行可见口径（真实 / 虚拟 / 未标记分解），长释（含「不回填」纪律与
+ * 通道构成）进 title；历史无 track 的 legacy 行如实计「未标记」，不并入真实/虚拟。
  * 数据源 = /admin/overview/closure（learner_evidence 已投影收束事件）。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -78,14 +78,14 @@ beforeEach(() => {
 });
 
 describe('总览完课量 KPI（#105）', () => {
-  it('hint 一行可见口径：真人 / VL / 未标记分解（legacy 不并入真人）', async () => {
+  it('hint 一行可见口径：真实 / 虚拟 / 未标记分解（legacy 不并入真实）', async () => {
     const wrapper = await mountOverview();
 
     const card = closureCard(wrapper);
     expect(card).toBeTruthy();
     expect(card!.text()).toContain('127');
-    expect(card!.text()).toContain('真人 0');
-    expect(card!.text()).toContain('VL 20');
+    expect(card!.text()).toContain('真实 0');
+    expect(card!.text()).toContain('虚拟 20');
     expect(card!.text()).toContain('未标记 107');
   });
 

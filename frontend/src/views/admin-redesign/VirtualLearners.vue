@@ -63,7 +63,7 @@
           :value="statsKpiValue(statsKpiPct(runStats.systemFailureRate))"
           :tone="statsState === 'error' ? 'bad' : failureRateTone(runStats.systemFailureRate, runStats.failed)"
           :hint="statsKpiHint(failureHint)"
-          :title="statsState === 'error' ? STATS_RETRY_TITLE : `按全部会话计算，与总览页「系统失败率」同口径。管理员手动停止等人为终止单独统计，两类合计占 ${statsKpiPct(runStats.failureRate)}。${FAILURE_RATE_THRESHOLD_NOTE}`"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : `按全部会话计算，与总览页「系统失败率」统计方式相同。管理员手动停止等人为终止单独统计，两类合计占 ${statsKpiPct(runStats.failureRate)}。${FAILURE_RATE_THRESHOLD_NOTE}`"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />

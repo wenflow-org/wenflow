@@ -3,7 +3,7 @@
  *
  * 锁定两点：
  *  - 行级收束观测（后端 closure 字段）如实呈现：真实轨道 + 通道 / 虚拟 + 黑盒通道；
- *  - 历史（无 track）行显示中性「未标记」、无收束记录显示「—」，均不用身份字段回填。
+ *  - 历史（无 track）行显示中性「未标记」、无完成记录显示「—」，均不用身份字段回填。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -83,8 +83,8 @@ describe('教学会话轨道列（#105）', () => {
 
     const cells = wrapper.findAll('.ts-track');
     expect(cells).toHaveLength(3);
-    expect(cells[0].text()).toContain('真人');
-    expect(cells[0].text()).toContain('课堂收束');
+    expect(cells[0].text()).toContain('真实');
+    expect(cells[0].text()).toContain('课堂完成');
     expect(cells[1].text()).toContain('虚拟');
     expect(cells[1].text()).toContain('黑盒');
     expect(cells[2].text()).toContain('未标记');
@@ -93,7 +93,7 @@ describe('教学会话轨道列（#105）', () => {
     expect(cells[2].find('.mk-badge').classes()).toContain('mk-badge--muted');
   });
 
-  it('无收束记录：中性「—」+ 悬停说明，不用用户身份回填', async () => {
+  it('无完成记录：中性「—」+ 悬停说明，不用用户身份回填', async () => {
     listMock.mockResolvedValue({
       data: { data: { items: [makeItem('none', { isVirtualLearner: true, closure: null })], total: 1 } }
     });
@@ -103,6 +103,6 @@ describe('教学会话轨道列（#105）', () => {
     expect(cell.exists()).toBe(true);
     expect(cell.text()).toContain('—');
     expect(cell.find('.mk-badge').exists()).toBe(false); // 虚拟用户也不猜轨道
-    expect(cell.attributes('title')).toContain('无收束记录');
+    expect(cell.attributes('title')).toContain('无完成记录');
   });
 });

@@ -340,7 +340,7 @@ export function categoryText(s: string | null | undefined): string {
  * 「未知」——都是中性的「没有被标记」，不回填、不猜。
  */
 export const CLOSURE_TRACK_TEXT: Record<string, string> = {
-  human: '真人',
+  human: '真实',
   'virtual-learner': '虚拟',
   legacy: '未标记',
   unknown: '未知'
@@ -352,7 +352,7 @@ export function closureTrackText(track: string | null | undefined): string {
   return CLOSURE_TRACK_TEXT[key] || '未知'
 }
 
-/** 轨道徽章色板：真人=蓝 / 虚拟=紫（与 MkVariantBadge 同源）/ 未标记与未知=中性灰 */
+/** 轨道徽章色板：真实=蓝 / 虚拟=紫（与 MkVariantBadge 同源）/ 未标记与未知=中性灰 */
 export function closureTrackBadgeCls(track: string | null | undefined): string {
   const key = String(track || '')
   return key === 'human' ? 'mk-badge--info' : key === 'virtual-learner' ? 'mk-badge--virtual' : 'mk-badge--muted'
@@ -361,9 +361,9 @@ export function closureTrackBadgeCls(track: string | null | undefined): string {
 export const CLOSURE_SOURCE_TEXT: Record<string, string> = {
   'human-ui': '真实界面',
   'learning-api': '学习 API',
-  'teaching-finalize': '课堂收束',
-  'vl-assisted': 'VL 辅助',
-  'vl-blackbox': '黑盒 VL',
+  'teaching-finalize': '课堂完成',
+  'vl-assisted': '虚拟辅助',
+  'vl-blackbox': '虚拟黑盒',
   probe: '探针',
   unknown: '未记录'
 }
