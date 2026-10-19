@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 只读读数 CLI：sqlite 行/上游 JSON 形状动态 */
+/* eslint-disable @typescript-eslint/no-require-imports -- node:sqlite 只有 require 形态（懒加载，见 main） */
 /* eslint-disable no-console -- 只读读数 CLI（#103 语义卡环）：按 createdAt 降序、分 VL/真人两列。
  *
  * 背景（#103）：本读数脚本此前只以 `.tmp-e02-split.ts` 的形式存在于仓库根，`*.tmp-*` 被

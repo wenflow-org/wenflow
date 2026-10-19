@@ -24,9 +24,6 @@ import path from 'node:path';
 import { normalizeConceptName } from '../services/ai-teaching/checkpoint-shared';
 import { COMPLETION_TARGET_PROGRESS_FLOOR } from '../services/ai-teaching/KnowledgeStateService';
 
-// node:sqlite 属 Node 22 实验 API，本仓库 @types/node(20.x) 尚未声明；运行时可 require 到。
-const { DatabaseSync } = require('node:sqlite') as { DatabaseSync: any };
-
 const CAPPED_PROGRESS = COMPLETION_TARGET_PROGRESS_FLOOR - 1;
 const DB_PATH = path.resolve(__dirname, '../../prisma/dev.db');
 const APPLY = process.argv.includes('--apply');
@@ -141,6 +138,10 @@ export function planSession(row: SessionRow): SessionBackfillPlan | null {
 }
 
 function main(): void {
+  // node:sqlite 属 Node 22 实验 API（本仓 @types/node 20.x 未声明），CI 的 Node 20 没有该内建模块。
+  // 懒加载：模块级 require 会让任何 import 本文件的测试在 CI 直接套件失败。
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
+  const { DatabaseSync } = require('node:sqlite') as { DatabaseSync: any };
   const db = new DatabaseSync(DB_PATH);
   db.exec('PRAGMA busy_timeout = 5000');
   const rows = db
