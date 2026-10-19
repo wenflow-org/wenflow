@@ -19,9 +19,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import dotenv from 'dotenv';
-// node:sqlite 属 Node 22 实验 API，本仓库 @types/node(20.x) 尚未声明；运行时可 require 到。
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { DatabaseSync } = require('node:sqlite') as { DatabaseSync: any };
 import { embedTexts, cosineSimilarity, resolveEmbeddingProviderOrder, createEmbeddingProviders } from '../services/embedding';
 import { readBgeConfig } from '../services/embedding/providers/bge';
 
@@ -223,6 +220,10 @@ async function main(): Promise<number> {
   const limit = Number(argText('limit', '10'));
   const dbPath = path.isAbsolute(argText('db', '')) ? argText('db', '') : path.resolve(BACKEND_DIR, argText('db', 'prisma/dev.db'));
 
+  // node:sqlite 属 Node 22 实验 API（本仓 @types/node 20.x 未声明），且 CI 用 Node 20 没有该内建模块。
+  // 必须**懒加载**：模块级 require 会让任何 import 本文件的测试在 CI 直接套件失败（2026-10-20 CI 红）。
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { DatabaseSync } = require('node:sqlite') as { DatabaseSync: any };
   const db = new DatabaseSync(dbPath, { readOnly: true });
   const vlUsers = new Set(
     db.prepare('SELECT userId FROM virtual_learner_profiles').all().map((r: any) => String(r.userId))
