@@ -52,8 +52,8 @@
          「该学习者 status=active 且 updatedAt 最新的那条」（LearnerKnowledgeMemoryService.build 的
          path 解析：`input.learningPathId ? findUnique : findFirst(active, updatedAt desc)`），是回落不是求和。
          给一个做不出区别的档位等于假动作，故只做「选哪一条」。 -->
-    <div class="ld-scope" role="group" aria-label="路径作用域">
-      <label class="ld-scope__label" for="ld-scope-path">路径视角</label>
+    <div class="ld-scope" role="group" aria-label="路径范围">
+      <label class="ld-scope__label" for="ld-scope-path">路径范围</label>
       <select
         id="ld-scope-path"
         class="mk-filter__select ld-scope__select"
@@ -71,8 +71,8 @@
       <MkLoading v-if="pathOptionsLoading" inline min />
       <span
         class="ld-scope__hint"
-        title="「记忆与复习」不随本开关走：一个概念只保留一条记忆痕迹（记的是最后写入的那条路径），按路径切会漏掉在另一条路径学过的概念。「行为基线与互动」按账号整体统计，不含路径概念。要看跨全部路径的教学会话，走平台「教学会话」页（那里不按路径收窄）。"
-      >作用于 概念掌握 · 证据 · 图谱 · 教学会话，记忆与行为基线不受影响</span>
+        title="「记忆与复习」不随此处切换：每个概念只保留一条记忆痕迹（记在最后写入的那条路径上），按路径切会漏掉在别的路径学过的概念。「行为基线与互动」按账号整体统计，不含路径概念。跨全部路径的教学会话在平台「教学会话」页。"
+      >概念掌握 · 证据 · 图谱 · 教学会话 随此切换，记忆与行为基线不变</span>
     </div>
 
     <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向）。
@@ -187,7 +187,9 @@
         <section v-if="dynamicState" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">学习状态追踪</h3>
-            <span class="mk-card__meta" :title="loadCaliberNote.title">{{ LEARNER_METRIC_CODES }} · {{ loadCaliberNote.label }}</span>
+            <!-- 四码不在卡头复读（2026-10-19 文案优化）：卡内四行的标签各自带码（LSS 学习压力…），
+                 卡头只说到来源与取样时刻 -->
+            <span class="mk-card__meta" :title="loadCaliberNote.title">{{ loadCaliberNote.label }}</span>
           </div>
           <div class="ld-lsm">
             <div v-for="r in learningStateRows" :key="r.label" class="ld-lsm__row">
@@ -895,7 +897,7 @@ import { subPage, openSubPage, setSubPageLabel } from './store'
 import { liveLearners, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
-import { learnerMetric, LEARNER_METRIC_CODES, type LearnerMetricKey } from '@/utils/learnerMetrics'
+import { learnerMetric, type LearnerMetricKey } from '@/utils/learnerMetrics'
 // pathStatusText：路径域状态文案（active → 「学习中」；全局字典是「进行中」）。本文件已从
 // './statusText' 引入同名 statusText（会话域），故此处显式改名，避免两条文案链混用。
 import { loadCaliber, panelScopeNote, statusText as pathStatusText } from './opsShared'
@@ -1280,7 +1282,7 @@ const ldSessionMetaTitle = computed(() => {
   // 里程碑串档只在跨路径时存在：切到单条路径后档位天然同源，不必再告警
   return scopePathId.value
     ? base
-    : `${base}\n注意：「里程碑 N」档位按各会话自己的里程碑序号归并，跨路径时不同路径的同序号里程碑会合到同一档（在「路径视角」下看单条路径即无此串档）。`
+    : `${base}\n注意：「里程碑 N」档位按各会话自己的里程碑序号归并，跨路径时不同路径的同序号里程碑会合到同一档（「路径范围」选单条路径即无此串档）。`
 })
 
 /* ---------- 阶段切换器（用户诉求「切换学习者不同阶段」）----------
@@ -2535,13 +2537,13 @@ const memMetaText = computed(() => {
   const parts = memViews.value.filter((v) => v.key !== 'all').map((v) => `${v.label} ${v.count}`)
   const base = parts.length ? parts.join(' · ') : `共 ${memoryPaneRows.value.length} 点`
   /* 作用域标注保留（2026-10-17 拍板）：它不是页级开关的复读——记忆块按用户级、跨全部路径，
-     与页内路径视角开关无关，读错会漏掉在另一条路径学过的概念。 */
+     与页内「路径范围」无关，读错会漏掉在另一条路径学过的概念。 */
   return `${base} · ${allPathsScope.value.label}`
 })
 const memMetaTitle = computed(() => {
   const overdue = memoryPaneRows.value.filter((r) => r.overdue).length
   return `记忆强度即可提取率（现在能想起来的概率）。待复习为已到复习期（${overdue} 条）。稳固≥80% 且未到期。未初始化为尚无记忆痕迹。` +
-    `\n本块与「路径视角」开关无关，按学习者聚合：` +
+    `\n本块与「路径范围」无关，按学习者聚合：` +
     `一个概念只保留一条记忆痕迹（记的是最后写入的那条路径），按路径切会漏掉在另一条路径学过的概念。`
 })
 
@@ -2589,7 +2591,7 @@ const snapshotGeneratedAtIso = computed<string | null>(() => {
   return base?.generatedAt ?? null
 })
 
-/** 四读数出处（学习者级聚合快照）：与「虚拟学习者档案」页的单次会话快照不同源，数值天然不同 */
+/** 四读数出处（全部路径汇总快照）：与「虚拟学习者档案」页的单次会话快照不同源，数值本就不相等 */
 const loadCaliberNote = computed(() => loadCaliber('aggregate', snapshotGeneratedAtIso.value))
 
 /** 虚拟账号互跳：同一实体两个 ID（users.id ↔ virtual_learner_profiles.id）。从 boot 已载入的
@@ -2816,7 +2818,10 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 /* 学习状态追踪（lsm，原型 517-522）：label / track / val / hint 四列 */
 .ld-lsm { padding: 14px 16px; display: grid; gap: 12px; }
-.ld-lsm__row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto 72px; align-items: center; gap: 10px; }
+/* 参考带列 72 → 128px（2026-10-19 文案优化）：72px 时「0–10 · 参考 4–7」「慢 EWMA · 参考 ≤ 7」
+   全部折成两行，四行读数的高度不齐、参考带被拆开读；128px 下最长的带也单行放得下，
+   柱条仍占满剩余宽度（1600 / 1280 实测均不挤、无横向溢出） */
+.ld-lsm__row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto 128px; align-items: center; gap: 10px; }
 .ld-lsm__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .ld-lsm__track { min-width: 80px; }
 .ld-lsm__val { font-size: var(--mk-fs-micro); font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -2832,7 +2837,7 @@ function barToneBadge(tone: ConceptBarTone): string {
    下内边距不可省：实测 0 间距时胶囊底边与表头上边线贴合（用户走查「和下面重叠了」），
    给 12px 与区块节奏一致 */
 .ld-filtbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 12px 16px; }
-/* 路径视角（页级作用域开关）：夹在 hero 与页签栏之间的一行，形态沿用筛选条方言
+/* 路径范围（页级作用域开关）：夹在 hero 与页签栏之间的一行，形态沿用筛选条方言
    （mk-filter__select + 竖分隔 + 灰字 hint），不新造控件样式 */
 .ld-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 4px 0 10px; }
 .ld-scope__label { font-size: 12px; color: var(--mk-faint); }

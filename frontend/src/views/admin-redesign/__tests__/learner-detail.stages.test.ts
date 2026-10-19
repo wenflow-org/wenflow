@@ -505,7 +505,8 @@ describe('四读数出处标注 + 虚拟档案互跳', () => {
     liveVirtuals.value = [];
   });
 
-  it('卡头标出「学习者级聚合」出处（与虚拟档案页的单次会话快照区分开）', async () => {
+  /* 2026-10-19 文案优化：短标改说「全部路径汇总 · 取样 X」，长释改说「取自单次会话」 */
+  it('卡头标出「全部路径汇总」出处（与虚拟档案页的单次会话快照区分开）', async () => {
     // 共享 mock 的详情没有 dynamicState（学习状态追踪卡随之不渲染），本用例整体替换详情响应
     const detailMock = vi.mocked(liveGetLearnerDetail as unknown as ReturnType<typeof vi.fn>);
     const original = detailMock.getMockImplementation();
@@ -523,9 +524,9 @@ describe('四读数出处标注 + 虚拟档案互跳', () => {
     try {
       const w = await mountLd([]);
       const metas = w.findAll('.mk-card__meta').map((m) => m.text());
-      expect(metas.some((t) => t.includes('学习者级聚合')), `实际 meta: ${JSON.stringify(metas)}`).toBe(true);
+      expect(metas.some((t) => t.includes('全部路径汇总')), `实际 meta: ${JSON.stringify(metas)}`).toBe(true);
       // 长释必须点明另一页的来源，否则「数字打架」的观感照旧
-      const note = w.find('.mk-card__meta[title*="单次会话当场留下的读数"]');
+      const note = w.find('.mk-card__meta[title*="取自单次会话"]');
       expect(note.exists()).toBe(true);
     } finally {
       routeQuery.tab = prevTab;

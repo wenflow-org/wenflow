@@ -81,17 +81,17 @@ export function loadCaliber(kind: LoadCaliber, at?: string | null): LoadCaliberN
   const stampLine = hasStamp ? `\n取样时刻：${stamp}。` : ''
   if (kind === 'aggregate') {
     return {
-      label: hasStamp ? `学习者级聚合 · 快照 ${stamp}` : '学习者级聚合',
+      label: hasStamp ? `全部路径汇总 · 取样 ${stamp}` : '全部路径汇总',
       title:
-        `LSS/KTL/LF/LSB 取自学习者级聚合快照（按学习者的各条路径汇总，并计入当日课量带来的疲劳），` +
-        `不是某一次会话的读数。${stampLine}\n同一学习者在「虚拟学习者档案」页看到的同名读数取自单次会话当场留下的读数，数值天然不同——那是两套来源，不是其中一处算错。`,
+        '四项状态指标按该学习者的全部路径汇总，并计入当日课量带来的疲劳，不是某一次会话的读数。' +
+        `${stampLine}\n同一账号在「虚拟学习者档案」页看到的同名读数取自单次会话，两处来源不同，数值本就不相等。`,
     }
   }
   return {
-    label: hasStamp ? `单次会话快照 · ${stamp}` : '单次会话快照',
-      title:
-        `LSS/KTL/LF/LSB 取自最近一次带读数的教学会话当场留下的读数（该会话当时记录的状态），` +
-        `不是学习者级聚合。${stampLine}\n同一学习者在「学习者详情」页看到的同名读数是学习者级聚合值，数值天然不同——那是两套来源，不是其中一处算错。`,
+    label: hasStamp ? `单次会话 · 取样 ${stamp}` : '单次会话',
+    title:
+      '四项状态指标取自最近一次带读数的教学会话当场记录的状态，不是跨路径汇总。' +
+      `${stampLine}\n同一账号在「学习者详情」页看到的同名读数按全部路径汇总，两处来源不同，数值本就不相等。`,
   }
 }
 
