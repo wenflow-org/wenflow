@@ -23,12 +23,19 @@ export function useCockpitLogs() {
   const logFollowsBottom = ref(true)
   /* 所有出现过的日志阶段，用于筛选 chips */
   const logPhaseFilter = ref('')
+  /* chips 固定按阶段推进顺序排（2026-10-19 用户走查「顺序调一下」）：原实现取首次出现顺序，
+     于是「证据」会插在「路径」和「课堂」之间（日志窗口里证据事件先于课堂行出现时），
+     与同屏阶段条的 目标 → 路径 → 课堂 读不成一条线。证据是过程记录不是阶段，排最后。
+     词表外阶段（虚拟会话的 学习者回复 / 路径重排 / 错误…）仍按首次出现顺序接在后面。 */
+  const PHASE_ORDER = ['目标对话', '路径', '课堂', '证据']
   const logPhases = computed(() => {
     const seen = new Set<string>()
     for (const l of logs.value) {
       if (l.view.phase) seen.add(l.view.phase)
     }
-    return [...seen]
+    const known = PHASE_ORDER.filter((p) => seen.has(p))
+    const rest = [...seen].filter((p) => !PHASE_ORDER.includes(p))
+    return [...known, ...rest]
   })
   const filteredLogs = computed(() => {
     if (!logPhaseFilter.value) return logs.value
