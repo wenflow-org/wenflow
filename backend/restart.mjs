@@ -153,13 +153,15 @@ if (MODE_STOP) {
 
 // ---------------------------------------------------------------- 默认：重启
 // 1) 类型快检（--transpile-only 运行时不做类型检查，类型错误只等 CI 才炸）
+//    配置必须与 CI check:quality → typecheck:backend 同源（tsconfig.build.json）：
+//    用 tsconfig.json 会把 CI 明确排除的 src/scripts/** 也纳入，两个信号互相矛盾（#126）。
 if (!SKIP_TYPE_CHECK) {
-  log('tsc --noEmit 快检…');
-  const check = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit', '-p', 'tsconfig.json'], {
+  log('tsc --noEmit 快检（tsconfig.build.json，与 CI typecheck 同源）…');
+  const check = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit', '-p', 'tsconfig.build.json'], {
     cwd: HERE, stdio: 'inherit'
   });
   if (check.status !== 0) {
-    console.error('[restart] 类型检查未过，取消重启（--skip-type-check 可跳过）');
+    console.error('[restart] 类型检查未过（tsconfig.build.json，与 CI 同源），取消重启（--skip-type-check 可跳过）');
     process.exit(1);
   }
 }
