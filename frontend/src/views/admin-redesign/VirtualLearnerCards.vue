@@ -8,6 +8,16 @@
          家族的标准二级页机制（detailComponents 全局渲染，跨 scene 可用）。 -->
     <MkPageHead v-if="!embedded" title="学习者卡库" sub="账号、档案与故事池合为一张卡，导入或由平台生成即可使用">
       <template #actions>
+        <!-- 预置「一键加载」：页面级动作，2026-10-20 从「预置卡」KPI 卡面挪到页头右组
+             （KPI 卡只放 label + 值 + 一句口径，不放控件；按钮也不该把整张卡面撑成一个宽条）。
+             预置不是「随版本自动同步」，而是「定义随代码进仓、实例需一键加载」。 -->
+        <button
+          type="button"
+          class="mk-btn mk-btn--sm"
+          :disabled="presetLoading"
+          :title="presetLoadTitle"
+          @click="doLoadPresets"
+        >{{ presetLoading ? '同步中…' : '一键加载' }}</button>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="exporting" @click="doExport">
           {{ exporting ? '导出中…' : '导出卡库' }}
         </button>
@@ -30,24 +40,15 @@
          2026-10-16 卡=身份模板后新增「已创建实例」：身份池里有多少条已经创建出虚拟学习者
          （卡墙默认展示全部卡，这两类混在一屏，需要分计才看得出池子规模）。 -->
     <section class="mk-kpi-grid" aria-label="卡库构成">
-      <!-- #91：预置区补「一键加载」入口。启动同步 2026-10-09 已摘除（空白项目零 VL 起步），
-           此后卡库的预置实例全靠显式入口写入；此前管理台只有计数、没有任何加载按钮。
-           口径同时修正：预置不是「随版本自动同步」，而是「定义随代码进仓、实例需一键加载」。 -->
+      <!-- 预置卡读数（#91 的加载入口 2026-10-20 移到页头右组）。启动同步 2026-10-09 已摘除
+           （空白项目零 VL 起步），实例仍需显式加载一次；卡面只报数与口径。 -->
       <MkKpi
         label="预置卡"
         :value="summary?.builtin ?? '—'"
         :hint="presetHint"
         :hintTone="presetHintTone"
         :title="presetCardTitle"
-      >
-        <button
-          type="button"
-          class="mk-btn mk-btn--sm"
-          :disabled="presetLoading"
-          :title="presetLoadTitle"
-          @click="doLoadPresets"
-        >{{ presetLoading ? '同步中…' : '一键加载' }}</button>
-      </MkKpi>
+      />
       <MkKpi label="自建卡" :value="summary?.custom ?? '—'" hint="导入与 AI 创建" title="卡文档导入与后台/AI 创建的卡。「导出卡库」仅导出这部分" />
       <MkKpi label="已创建实例" :value="summary?.derived ?? '—'" hint="已从身份卡创建虚拟学习者" title="已经创建出虚拟学习者的身份卡数量。创建不消耗身份卡——同一张卡可反复创建出多个虚拟学习者" />
     </section>

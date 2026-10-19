@@ -3,7 +3,7 @@
  *
  * 背景：平台预置的定义随代码进仓（virtual-learners/presets.yaml），但实例自 2026-10-09
  * 起不再随启动同步——管理台此前只有「预置卡」计数，没有任何加载入口。
- * 本测试锁：① 预置 KPI 卡内的按钮与定义侧脚注；② 点按钮的 loading + 结果提示 + 卡墙回刷；
+ * 本测试锁：① 页头右组的按钮（2026-10-20 从预置 KPI 卡面挪出）与定义侧脚注；② 点按钮的 loading + 结果提示 + 卡墙回刷；
  * ③ 失败必须显式报错（不能静默成功）；④ 定义回退/失败走 warning 档而不是 success。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -63,6 +63,17 @@ function loadButton(w: ReturnType<typeof mount>) {
 }
 
 describe('卡库预置「一键加载」（#91 / P-67）', () => {
+  it('入口在页头右组：KPI 卡面只留读数，不再被按钮撑成一条宽卡', async () => {
+    presetsOverviewMock.mockResolvedValue({ data: { data: SUMMARY } });
+    const w = mount(VirtualLearnerCards);
+    await flushPromises();
+    const btn = loadButton(w);
+    expect(btn).toBeTruthy();
+    expect(w.find('.mk-pagehead__actions').text()).toContain('一键加载');
+    // KPI 卡面里不再有按钮（卡面只留 label + 值 + 一句口径）
+    expect(w.find('.mk-kpi button').exists()).toBe(false);
+    w.unmount();
+  });
   beforeEach(() => {
     openSubPageMock.mockClear();
     cardsIndexMock.mockReset();
