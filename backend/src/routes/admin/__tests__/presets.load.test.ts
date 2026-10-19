@@ -5,6 +5,10 @@
  * 本测试只锁路由层的请求/响应契约与错误映射，DB 语义在 service/seeder 层验证；
  * service 整体 mock，确保路由层不直接碰数据库（边界守卫同款约束）。
  */
+// 保持本文件为模块：require-only 风格的测试若落回全局脚本作用域，
+// 顶层 router 会与同目录其他测试文件的全局声明撞名（CI TS2451，本地 ts-jest 缓存会掩盖）。
+export {};
+
 const mockOverview = jest.fn();
 const mockLoad = jest.fn();
 
