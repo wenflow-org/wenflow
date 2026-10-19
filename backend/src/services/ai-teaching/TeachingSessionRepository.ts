@@ -740,6 +740,25 @@ export class TeachingSessionRepository {
     return record ? mapRecordHydrated(record, { lazy: true }) : null;
   }
 
+  /** 最近一次「常规教学」完结会话：排除延伸课（延伸课的 wrapup 是延伸段反馈，不能当本课的完结反馈）。 */
+  async findLatestCompletedLessonSession(
+    userId: string,
+    taskId: string
+  ): Promise<TeachingSessionRecord | null> {
+    const record = await prisma.teaching_sessions.findFirst({
+      where: { userId, taskId, status: 'completed', NOT: { mode: 'extension' } },
+      orderBy: { updatedAt: 'desc' }
+    });
+    return record ? mapRecordHydrated(record, { lazy: true }) : null;
+  }
+
+  /** 任务下已完结的常规课堂数（延伸学准入：基于本课 → 至少完成过一节；复习课/延伸课不算）。 */
+  async countCompletedLessonSessions(userId: string, taskId: string): Promise<number> {
+    return prisma.teaching_sessions.count({
+      where: { userId, taskId, status: 'completed', NOT: { mode: { in: ['review', 'extension'] } } },
+    });
+  }
+
   async listByUser(userId: string, limit: number = 50): Promise<TeachingSessionRecord[]> {
     // 已知限制（L5）：固定 take 50，无分页；历史消息较多的用户只返回最近 50 条。
     // 完整历史需引入游标/offset 分页，且需同步调整调用方（getSessionHistory / getLatestTaskEvaluation）。

@@ -619,7 +619,12 @@ export async function processStudentMessage(
     checkpointEmittedThisTurn: !!teachingOutput.control?.checkpoint,
     priorDeferrals: Number(previousTeachingState.completionDeferrals) || 0,
   });
-  const completionReady = (targetsConsolidated || backstopReady || softCompletionReady) && !closureGate.defer;
+  // 延伸学（#124）：延伸课不产生「完成」终态——它不是任务结算课，教师可一直陪学到学员主动结束
+  // （finalize 仅允许 end_only）。任务完成判据仍照常计算并留痕，只是不把完成信号发出去。
+  const extensionMode = session.mode === 'extension';
+  const completionReady = !extensionMode
+    && (targetsConsolidated || backstopReady || softCompletionReady)
+    && !closureGate.defer;
   if (closureGate.defer) {
     logger.info('[AITeaching] 收口闭合门禁：完成信号延迟一轮（末问未答，先让学员作答）', {
       sessionId: session.id,
@@ -640,10 +645,11 @@ export async function processStudentMessage(
           ? 'knowledge-only'
           : 'neither';
   const completionPath: 'targets' | 'backstop' | 'soft-model' | 'none' =
-    targetsConsolidated ? 'targets'
-      : backstopReady ? 'backstop'
-        : softCompletionReady ? 'soft-model'
-          : 'none';
+    extensionMode ? 'none'
+      : targetsConsolidated ? 'targets'
+        : backstopReady ? 'backstop'
+          : softCompletionReady ? 'soft-model'
+            : 'none';
   if (completionAlignment === 'envelope-only' || completionAlignment === 'knowledge-only') {
     logger.debug('[AITeaching] completion soft-AND 分歧', {
       sessionId: session.id,

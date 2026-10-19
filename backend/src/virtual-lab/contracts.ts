@@ -2,6 +2,14 @@ export type LearnerAction =
   | { type: 'chat'; text: string }
   | { type: 'request_hint'; text: string }
   | { type: 'request_example'; text: string }
+  | {
+      /**
+       * 延伸意愿（#124）：任务已达标（completion candidate）后，学习者表示还想就本课内容继续深入。
+       * 平台不结算任务，继续陪学；autoStep 侧有次数上限，防止把收束点拖成无限轮。
+       */
+      type: 'request_extension'
+      text: string
+    }
   | { type: 'submit_answer'; answer: string; checkpointId?: string; selectedOptionIds?: string[]; skip?: boolean }
   | { type: 'submit_code'; code: string }
   | { type: 'confirm_proposal'; text: string }

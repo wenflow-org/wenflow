@@ -733,7 +733,7 @@ class LearningService {
   async assertTaskReadyForLearning(
     taskId: string,
     userId: string,
-    options: { requireTaskIncomplete?: boolean } = {}
+    options: { requireTaskIncomplete?: boolean; allowCompletedPath?: boolean } = {}
   ) {
     return assertTaskReadyForLearning(taskId, userId, options);
   }

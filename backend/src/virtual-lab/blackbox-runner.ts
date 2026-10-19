@@ -117,6 +117,11 @@ const CRASH_STALE_COMMAND_MS = (() => {
 /** 模拟器 LLM 调用重试次数（3-strike：瞬态失败/空回复可重试） */
 const BLACKBOX_SIMULATOR_RETRY_ATTEMPTS = 3
 const BLACKBOX_SIMULATOR_RETRY_DELAY_MS = 750
+/**
+ * 延伸意愿（#124）每会话最多放行次数：达标后 VL 可表示「还想深入」，平台继续陪学；
+ * 有上限才能防止把收束点拖成无限轮（#46 的 40 轮空转教训）。
+ */
+const MAX_EXTENSION_REQUESTS = 2
 
 /**
  * LLM/Provider 瞬时失败识别（黑盒可恢复失败判定）：
@@ -982,21 +987,32 @@ export class BlackboxVirtualLearnerRunner {
           snapshot,
           'teaching'
         )
+        // 延伸意愿（#124）：达标后仍想深入 → 不确认完成，继续陪学；
+        // 上限 MAX_EXTENSION_REQUESTS 次，防止把收束点拖成无限轮（#46 的 40 轮空转教训）。
+        const priorExtensionRequests = Number(
+          (state.blackbox?.learnerPrivateState?.teaching as Record<string, unknown> | undefined)?.extensionRequests
+        ) || 0
+        const wantsExtension = latest.availableActions.includes('request_extension')
+          && output.learnerFeedback?.wantsExtension === true
+          && priorExtensionRequests < MAX_EXTENSION_REQUESTS
         action = latest.visibleCheckpoint
           ? buildCheckpointAction(latest.visibleCheckpoint, output.checkpointAnswer)
-          : latest.availableActions.includes('confirm_complete')
-            && output.learnerFeedback?.selfReportedTaskDone === true
-            && output.learnerFeedback?.stopAsking === true
-            ? { type: 'confirm_complete' }
-            : output.learnerState?.wantsHint
-              ? { type: 'request_hint', text: output.reply }
-            : output.learnerState?.wantsWorkedExample
-              ? { type: 'request_example', text: output.reply }
-              : { type: 'chat', text: output.reply }
+          : wantsExtension
+            ? { type: 'request_extension', text: output.reply }
+            : latest.availableActions.includes('confirm_complete')
+              && output.learnerFeedback?.selfReportedTaskDone === true
+              && output.learnerFeedback?.stopAsking === true
+              ? { type: 'confirm_complete' }
+              : output.learnerState?.wantsHint
+                ? { type: 'request_hint', text: output.reply }
+              : output.learnerState?.wantsWorkedExample
+                ? { type: 'request_example', text: output.reply }
+                : { type: 'chat', text: output.reply }
         await this.persistPrivateState(session, state, 'teaching', {
           ...output.learnerState,
           learnerFeedback: output.learnerFeedback,
-          epistemicGrounding
+          epistemicGrounding,
+          extensionRequests: priorExtensionRequests + (action.type === 'request_extension' ? 1 : 0)
         }, {
           emotion: output.emotion,
           degraded: output.degraded,

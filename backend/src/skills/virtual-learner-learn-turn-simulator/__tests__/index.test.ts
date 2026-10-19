@@ -242,6 +242,28 @@ describe('virtual-learner-learn-turn-simulator · 判决完成门（P1-5 / VL-1�
     learnerFeedback: { selfReportedTaskDone: true, wantsMoreHelp: false, stopAsking: true, remainingBlockers: [] },
   }
 
+  it('wantsExtension 缺省为 false，且只在 selfReportedTaskDone=true 时成立（#124）', () => {
+    // 缺省：LLM 未输出 → false（不改变既有 VL 行为）
+    expect(normalizeOutput(doneRaw, input).learnerFeedback.wantsExtension).toBe(false)
+    // 达标 + 显式意愿 → true
+    const eager = normalizeOutput(
+      { ...doneRaw, learnerFeedback: { ...doneRaw.learnerFeedback, wantsExtension: true } },
+      input,
+    )
+    expect(eager.learnerFeedback.wantsExtension).toBe(true)
+    // 未达标（自评 false）→ 意愿被钳掉：延伸是达标后的深入兴趣，不是纠缠通道
+    const notDone = normalizeOutput(
+      {
+        ...doneRaw,
+        learnerState: { ...doneRaw.learnerState, phaseFocus: 'trying', taskUnderstanding: 0.4, conceptualMastery: 0.3, proceduralMastery: 0.2 },
+        learnerFeedback: { ...doneRaw.learnerFeedback, selfReportedTaskDone: false, wantsExtension: true },
+      },
+      input,
+    )
+    expect(notDone.learnerFeedback.selfReportedTaskDone).toBe(false)
+    expect(notDone.learnerFeedback.wantsExtension).toBe(false)
+  })
+
   it('判决缺失 → 保持现状（宁松勿误伤）：selfReportedTaskDone 照常为 true', () => {
     const output = normalizeOutput(doneRaw, input)
     expect(output.learnerFeedback.selfReportedTaskDone).toBe(true)

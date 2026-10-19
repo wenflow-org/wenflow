@@ -393,6 +393,15 @@ export const aiTeachingAPI = {
   },
 
   /**
+   * 开始延伸课（mode=extension，#124）：基于已完成的本课做额外学习。
+   * 不结算任务（finalize 只允许 end_only）；一期只观测，不触发路径调整。
+   */
+  async startExtensionSession(taskId: string): Promise<TeachingSession> {
+    const result = await api.post(`/ai-teaching/tasks/${taskId}/extension-session`, {}, { timeout: AI_REQUEST_TIMEOUT });
+    return result.data || result;
+  },
+
+  /**
    * 非流式发送（也是流式失败后的回退通道）。
    * options.signal 必须支持：回退请求最长可跑几十秒，用户点「停止」时要能真正中止它（#111）。
    */

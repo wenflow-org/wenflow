@@ -131,6 +131,51 @@ router.post('/review/sessions', async (req: any, res) => {
   }
 });
 
+/**
+ * 开始延伸课（延伸学一期 · mode=extension，#124）
+ * POST /api/ai-teaching/tasks/:taskId/extension-session
+ *
+ * 语义（2026-10-19 拍板）：基于**已完成**的本课做额外学习——
+ * - 只允许在任务完成过一节常规课堂后开（复习课/延伸课不算「本课」）；
+ * - 不结算任务：finalize 仅允许 end_only（complete_task 会被 409 拒绝）；
+ * - 学到的新概念照常进记忆/画像与负载指标，wrapup 内留 extensionObservability；
+ * - 一期只观测：不产生路径调整建议（与后续路径的比对待观测样本积累后另开）。
+ */
+router.post('/tasks/:taskId/extension-session', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return sendUnauthorized(res);
+    }
+    const { taskId } = req.params;
+    const completedLessons = await teachingSessionRepository.countCompletedLessonSessions(userId, taskId);
+    if (completedLessons === 0) {
+      return sendValidationError(res, '该任务还没有完成过课堂，先完成本课再来延伸学习');
+    }
+    // 路径可能已因最后一个任务完成而变为 completed —— 延伸学据此放行（归属/阶段锁仍校验）
+    await learningService.assertTaskReadyForLearning(taskId, userId, { allowCompletedPath: true });
+    const session = await aiTeachingCoordinator.startSession({ userId, taskId, mode: 'extension' });
+    res.json({
+      success: true,
+      data: {
+        sessionId: session.sessionId,
+        subject: session.subject,
+        topic: session.topic,
+        startTime: session.startTime,
+        welcomeMessage: session.welcomeMessage,
+        opening: session.opening,
+        mode: 'extension',
+        revision: session.revision,
+        knowledgePoints: session.knowledgePoints,
+        scene: session.scene,
+      },
+    });
+  } catch (error: any) {
+    logger.error('[extension] 延伸课创建失败:', error);
+    return sendTeachingError(res, error, '创建延伸课失败');
+  }
+});
+
 const parseExpectedRevision = (value: unknown): number | undefined => {
   return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
 };
@@ -420,7 +465,7 @@ router.post('/tasks/:taskId/session', async (req: any, res) => {
       // P3 补强：已完成任务直接拒绝开新课；返回 mode=completed + 最近一次已完成会话，
       // 前端 boot() 会跳转学习反馈页，避免「直接访问 /learn/<taskId>」又新建一节课。
       if ((error as { code?: string })?.code === 'TASK_ALREADY_COMPLETED') {
-        const last = await teachingSessionRepository.findLatestSession(userId, taskId, 'completed');
+        const last = await teachingSessionRepository.findLatestCompletedLessonSession(userId, taskId);
         if (last) {
           return res.json({
             success: true,

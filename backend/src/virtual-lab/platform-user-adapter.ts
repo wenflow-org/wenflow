@@ -282,7 +282,8 @@ export class PlatformUserAdapter {
               'request_example',
               'submit_answer',
               'submit_code',
-              ...(shouldConfirmEnd ? ['confirm_complete' as const] : []),
+              // 达标后可表达延伸意愿（#124）：不结算任务、继续陪学；次数上限由 autoStep 控制
+              ...(shouldConfirmEnd ? ['confirm_complete' as const, 'request_extension' as const] : []),
               'abandon'
             ],
         lastActionResult: { status: 'success', visibleMessage: platformText }

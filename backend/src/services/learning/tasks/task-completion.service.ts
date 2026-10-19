@@ -68,7 +68,7 @@ export async function markTaskInProgress(taskId: string, userId: string) {
 export async function assertTaskReadyForLearning(
   taskId: string,
   userId: string,
-  options: { requireTaskIncomplete?: boolean } = {}
+  options: { requireTaskIncomplete?: boolean; allowCompletedPath?: boolean } = {}
 ) {
   const task = await prisma.subtasks.findUnique({
     where: { id: taskId },
@@ -117,6 +117,12 @@ export async function assertTaskReadyForLearning(
   // 校验 milestone 是否已解锁
   if (milestone && milestone.status === 'locked') {
     throw new Error('此阶段尚未解锁，请先完成前置阶段');
+  }
+
+  // 延伸学（#124）：路径可能已因本课完成而结业（status=completed），此时常规开课闸会拦下；
+  // 延伸课基于已完成的本课，允许放行（归属与阶段锁已在上方校验）。
+  if (options.allowCompletedPath && learningPath.status === 'completed') {
+    return;
   }
 
   const activeRun = await getActiveGenerationRun(learningPath.id, learningPath.activeGenerationRunId);

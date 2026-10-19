@@ -81,8 +81,12 @@ export type TeachingMode = 'tutor' | 'peer' | 'debate';
 export interface TeachingSessionStartInput {
   userId: string;
   taskId: string;
-  /** 会话模式：tutor（默认教学）/ review（复习课，knowledgeState 注入到期复习点） */
-  mode?: 'tutor' | 'review';
+  /**
+   * 会话模式：tutor（默认教学）/ review（复习课，knowledgeState 注入到期复习点）/
+   * extension（延伸学，#124：基于已完成的本课做额外学习；不结算任务，只允许 end_only 收尾，
+   * 一期仅观测——学到的东西照常进记忆/画像，但不产生路径调整建议）。
+   */
+  mode?: 'tutor' | 'review' | 'extension';
 }
 
 export interface TeachingOpening {

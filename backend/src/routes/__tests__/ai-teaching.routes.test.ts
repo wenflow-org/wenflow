@@ -13,6 +13,9 @@ const mockSessionFinalizationService = {
 const mockTeachingSessionRepository = {
   assertOwnership: jest.fn(),
   findLatestSession: jest.fn(),
+  // #124：延伸课准入查「本课是否已有完结常规课堂」+ 完成态重定向排除延伸课
+  findLatestCompletedLessonSession: jest.fn(),
+  countCompletedLessonSessions: jest.fn(),
   findCompletionPendingSession: jest.fn(),
   // 路由 2026-10-02 起在开课前先做「完课死锁自愈」探测（findStuckFinalizingSession）；
   // 默认 null = 无卡住会话，测试沿用正常开课路径。
@@ -603,7 +606,7 @@ describe('ai-teaching routes', () => {
     mockLearningService.assertTaskReadyForLearning.mockRejectedValue(
       Object.assign(new Error('该任务已完成'), { code: 'TASK_ALREADY_COMPLETED', status: 409 })
     );
-    mockTeachingSessionRepository.findLatestSession.mockResolvedValue({
+    mockTeachingSessionRepository.findLatestCompletedLessonSession.mockResolvedValue({
       id: 'session-done',
       subject: '数学',
       topic: '分数',
@@ -617,10 +620,52 @@ describe('ai-teaching routes', () => {
     await handler({ user: { userId: 'user-1' }, params: { taskId: 'task-1' }, headers: {}, body: {} }, res);
 
     expect(mockCoordinator.startSession).not.toHaveBeenCalled();
-    expect(mockTeachingSessionRepository.findLatestSession).toHaveBeenCalledWith('user-1', 'task-1', 'completed');
+    expect(mockTeachingSessionRepository.findLatestCompletedLessonSession).toHaveBeenCalledWith('user-1', 'task-1');
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       success: true,
       data: expect.objectContaining({ sessionId: 'session-done', mode: 'completed', revision: 7 })
+    }));
+  });
+
+  it('延伸课（#124）：本课已有完结课堂 → mode=extension 开课，路径结业也放行', async () => {
+    mockTeachingSessionRepository.countCompletedLessonSessions.mockResolvedValue(1);
+    mockLearningService.assertTaskReadyForLearning.mockResolvedValue(undefined);
+    mockCoordinator.startSession.mockResolvedValue({
+      sessionId: 'session-ext',
+      subject: '数学',
+      topic: '分数',
+      startTime: '2026-09-12T00:00:00.000Z',
+      welcomeMessage: '继续深入',
+      mode: 'new',
+      revision: 1,
+      knowledgePoints: [],
+      scene: null
+    });
+    const handler = getRouteHandler('/tasks/:taskId/extension-session');
+    const res = createResponse();
+
+    await handler({ user: { userId: 'user-1' }, params: { taskId: 'task-1' }, body: {} }, res);
+
+    expect(mockLearningService.assertTaskReadyForLearning).toHaveBeenCalledWith('task-1', 'user-1', { allowCompletedPath: true });
+    expect(mockCoordinator.startSession).toHaveBeenCalledWith({ userId: 'user-1', taskId: 'task-1', mode: 'extension' });
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({ sessionId: 'session-ext', mode: 'extension' })
+    }));
+  });
+
+  it('延伸课（#124）：本课没有完结课堂 → 400 拒绝且不开课', async () => {
+    mockTeachingSessionRepository.countCompletedLessonSessions.mockResolvedValue(0);
+    const handler = getRouteHandler('/tasks/:taskId/extension-session');
+    const res = createResponse();
+
+    await handler({ user: { userId: 'user-1' }, params: { taskId: 'task-1' }, body: {} }, res);
+
+    expect(mockCoordinator.startSession).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: false,
+      error: expect.objectContaining({ code: 'VALIDATION_ERROR' })
     }));
   });
 
