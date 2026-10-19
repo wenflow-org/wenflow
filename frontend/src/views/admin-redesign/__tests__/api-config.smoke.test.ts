@@ -438,7 +438,12 @@ describe('ApiConfig P1 修复批', () => {
     expect(items).toEqual(['平台', 'Acme 网关']);
     // 默认选中平台通道：它的详情里嵌着连接表单（服务地址 / API Key / 连通性验证）
     expect(wrapper.find('.ac-conn').exists()).toBe(true);
-    expect(wrapper.text()).toContain('平台通道的服务地址与密钥在这里配置');
+    // 2026-10-20 走查：连接块那句说明改由块头承担（栏头与表单之间不再复读一遍）；
+    // 上游模型清单说的是登记关系，已从连接块搬进模型清单块
+    expect(wrapper.text()).toContain('服务地址与密钥，改完点「保存连接」');
+    expect(wrapper.text()).not.toContain('平台通道的服务地址与密钥在这里配置');
+    expect(wrapper.find('.mpp-models .ac-models-meta').exists()).toBe(true);
+    expect(wrapper.find('.ac-conn .ac-models-meta').exists()).toBe(false);
     // 平台通道没有自带端点：模型清单只给增改，不给「获取模型列表」（那是自带端点才有的动作）；
     // 连通性验证在连接表单里（上面那段「运行测试」），不在下面再挂第二枚检测钮
     const acts = wrapper.findAll('.mpp-models__acts .mk-btn').map((b) => b.text());

@@ -98,9 +98,20 @@
 
         <!-- 平台通道（endpointSource=inherit，注册表里没有自己的 baseUrl）：服务地址与密钥
              归连接设置（宿主注入），沿用既有的脏位保存 -->
-        <slot v-if="selected.id === 'platform'" name="platform-detail" />
+        <div v-if="selected.id === 'platform'" class="mpp-block">
+          <div class="mpp-block__head">
+            <span class="mpp-sec">连接</span>
+            <span class="mpp-block__hint">服务地址与密钥，改完点「保存连接」</span>
+          </div>
+          <slot name="platform-detail" />
+        </div>
 
         <template v-else>
+          <div class="mpp-block">
+            <div class="mpp-block__head">
+              <span class="mpp-sec">连接</span>
+              <span class="mpp-block__hint">保存后立即生效。密钥只存在服务器上</span>
+            </div>
           <div class="mpp-endpoint">
             <div class="mpp-endpoint__row">
               <span class="mpp-endpoint__label">服务地址</span>
@@ -140,9 +151,10 @@
               <span class="mono">{{ selected.apiKeyEnv || '—' }}</span>
             </p>
           </div>
+          </div>
         </template>
 
-        <div class="mpp-models">
+        <div class="mpp-block mpp-models">
           <div class="mpp-models__head">
             <span class="mpp-sec">模型清单<span class="mpp-sec__count">{{ selected.models.length }} 个</span></span>
             <span class="mpp-models__acts">
@@ -161,6 +173,8 @@
               >{{ pulling ? '拉取中…' : '获取模型列表' }}</button>
             </span>
           </div>
+
+          <slot v-if="selected.id === 'platform'" name="models-meta" />
 
           <div v-if="testResult" class="mpp-test" :class="{ 'mpp-test--bad': !testResult.ok }">
             <span class="mk-badge" :class="testResult.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ testResult.ok ? '调用通过' : '调用失败' }}</span>
@@ -188,11 +202,18 @@
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense mpp-table">
               <thead>
-                <!-- 五列（2026-10-18 实测收窄）：8 列在 1280 下要横向滚 205px，而档位/能力/单价
-                     都不是「并排比较」才看得懂的信息——档位与能力收进模型格的徽标，单价收进限额格
-                     的第二行。状态列保留：冷却中的模型要一眼看见（降级会跳过它）。 -->
+                <!-- 2026-10-20 走查重排：单价从「限额」格里拆出单列——它是模型自身的基础信息，
+                     与「平台对调用的限制」是两个概念；表头也从「限额」改成「平台限制」并挂长释。 -->
+                <colgroup>
+                  <col style="width: 34%" /><col style="width: 11%" /><col style="width: 25%" /><col style="width: 14%" /><col style="width: 12%" /><col style="width: 10%" />
+                </colgroup>
                 <tr>
-                  <th>模型</th><th>状态</th><th>限额</th><th>备用模型</th><th></th>
+                  <th>模型</th>
+                  <th>状态</th>
+                  <th title="平台对调用的限制（输出上限 / 默认输出 / 推理预留 / 并发），不是模型的自身能力或参数">平台限制</th>
+                  <th title="USD / 1M tokens，只影响成本分析页的金额换算">单价</th>
+                  <th>备用模型</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -212,10 +233,17 @@
                     <span v-else class="mk-badge mk-badge--ok" title="没有冷却记录">● 健康</span>
                     <span v-if="modelWarnings(m).length" class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠</span>
                   </td>
-                  <td class="mono mpp-limits" :title="limitsTitle(m)">
-                    <span>{{ limitsText(m) }}</span>
-                    <span class="mpp-price" :class="{ 'mpp-price--missing': priceMissing(m) }" :title="priceTitle(m)">{{ priceText(m) }}</span>
+                  <td class="mpp-limits" :title="limitsTitle(m)">
+                    <!-- 2×2 网格：整行灌四个值会在 1440 列宽下从词中间折行（「8192」被拆成两截），
+                         标签与值成对才不会读错 -->
+                    <span class="mpp-limits__grid">
+                      <span class="mpp-limits__item"><em class="mpp-limits__label">输出</em><span class="mono">{{ m.maxOutputTokens ?? '—' }}</span></span>
+                      <span class="mpp-limits__item"><em class="mpp-limits__label">默认</em><span class="mono">{{ m.defaultMaxTokens ?? '—' }}</span></span>
+                      <span class="mpp-limits__item"><em class="mpp-limits__label">预留</em><span class="mono">{{ m.reasoningReserveTokens ?? '—' }}</span></span>
+                      <span class="mpp-limits__item"><em class="mpp-limits__label">并发</em><span class="mono">{{ m.maxParallelRequests ?? '不限' }}</span></span>
+                    </span>
                   </td>
+                  <td class="mono mpp-price" :class="{ 'mpp-price--missing': priceMissing(m) }" :title="priceTitle(m)">{{ priceText(m) }}</td>
                   <td class="mono">{{ m.fallbacks.length ? effectiveFallbacks(m.fallbacks).join(' → ') : '—' }}</td>
                   <td class="mpp-rowacts">
                     <button type="button" class="mk-link" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: m })">编辑</button>
@@ -224,7 +252,7 @@
                   </td>
                 </tr>
                 <tr v-if="!selected.models.length">
-                  <td colspan="5" class="mpp-empty">
+                  <td colspan="6" class="mpp-empty">
                     {{ selected.enabled ? '这个供应商下还没有登记模型，点「添加模型」加一个。' : '这个供应商当前停用，模型不参与路由。' }}
                   </td>
                 </tr>
@@ -396,9 +424,9 @@ function priceMissing(m: ModelLike): boolean {
   return !p || (p.inputPer1M == null && p.outputPer1M == null)
 }
 function priceText(m: ModelLike): string {
-  if (priceMissing(m)) return '单价未知 · 点编辑补'
+  if (priceMissing(m)) return '未配置'
   const p = m.pricing!
-  return `单价 入 ${p.inputPer1M ?? '—'} / 出 ${p.outputPer1M ?? '—'}`
+  return `入 ${p.inputPer1M ?? '—'} / 出 ${p.outputPer1M ?? '—'}`
 }
 function priceTitle(m: ModelLike): string {
   const p = m.pricing
@@ -406,11 +434,9 @@ function priceTitle(m: ModelLike): string {
   const cached = p!.cachedInputPer1M != null ? ` / 缓存 ${p!.cachedInputPer1M}` : ''
   return `单价 入 ${p!.inputPer1M ?? '—'}${cached} / 出 ${p!.outputPer1M ?? '—'}（USD / 1M tokens，只影响成本分析）`
 }
-function limitsText(m: ModelLike): string {
-  return `出 ${m.maxOutputTokens ?? '—'} / 默 ${m.defaultMaxTokens ?? '—'} / 预 ${m.reasoningReserveTokens ?? '—'} / 并发 ${m.maxParallelRequests ?? '不限'}`
-}
+/** 平台限制 ≠ 模型自身参数：这四个值是平台在调用侧设的上限与预算，删掉就按平台默认走 */
 function limitsTitle(m: ModelLike): string {
-  return `输出上限 ${m.maxOutputTokens ?? '未配置'}。默认输出 ${m.defaultMaxTokens ?? '未配置'}。推理预留 ${m.reasoningReserveTokens ?? '未配置'}。并发上限 ${m.maxParallelRequests ?? '不限'}`
+  return `平台对调用的限制，不是模型自身参数。输出上限 ${m.maxOutputTokens ?? '未配置'}，默认输出 ${m.defaultMaxTokens ?? '未配置'}，推理预留 ${m.reasoningReserveTokens ?? '未配置'}，并发上限 ${m.maxParallelRequests ?? '不限'}。修改入口：模型行的「编辑」`
 }
 
 function select(id: string): void {
@@ -655,11 +681,16 @@ defineExpose({ refresh })
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
+/* 2026-10-20 走查：接入页是一张满高工作台——卡片撑满页签剩余高度，左列表 / 右详情各自内滚，
+   不在长屏上留出整屏空白（此前卡随内容高度，1920×1080 下方空 300+px）。 */
+.mpp { display: flex; flex-direction: column; min-height: 0; }
 .mpp-body {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   gap: 0;
   border-top: 1px solid var(--mk-line);
+  flex: 1 1 auto;
+  min-height: 0;
 }
 @media (max-width: 900px) {
   .mpp-body { grid-template-columns: minmax(0, 1fr); }
@@ -668,6 +699,8 @@ defineExpose({ refresh })
 .mpp-list {
   padding: 10px;
   border-right: 1px solid var(--mk-line);
+  overflow-y: auto;
+  min-height: 0;
 }
 .mpp-item {
   display: flex;
@@ -701,7 +734,13 @@ defineExpose({ refresh })
   white-space: nowrap;
 }
 .mpp-add { width: 100%; margin-top: 10px; }
-.mpp-detail { padding: 12px 14px 14px; min-width: 0; }
+.mpp-detail { padding: 12px 16px 16px; min-width: 0; overflow-y: auto; }
+
+/* 详情分区：连接 / 模型清单 / 上游，三块同一套标题 + 发丝线节奏（v4：1px 发丝线分隔） */
+.mpp-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }
+.mpp-block:first-of-type { margin-top: 10px; }
+.mpp-block__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.mpp-block__hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .mpp-detail__head {
   display: flex;
   align-items: flex-start;
@@ -750,7 +789,7 @@ defineExpose({ refresh })
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
-.mpp-models { margin-top: 14px; }
+.mpp-models { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }
 .mpp-models__head {
   display: flex;
   align-items: center;
@@ -833,10 +872,13 @@ defineExpose({ refresh })
 .mpp-model__id { overflow-wrap: anywhere; }
 .mpp-chipbadge { margin-left: 6px; }
 /* 单价是一句读数（入 x / 出 y），断行会把它拆成两截读不出配对关系 */
-.mpp-price { display: block; margin-top: 2px; color: var(--mk-faint); white-space: nowrap; }
+.mpp-price { color: var(--mk-faint); font-size: var(--mk-fs-micro); white-space: nowrap; }
 /* 未配单价是能直接修的配置缺口：用警示色把「单价未知」从限额副行里拎出来，别读成普通弱字 */
 .mpp-price--missing { color: var(--mk-amber); }
-.mpp-limits { font-size: var(--mk-fs-micro); max-width: 170px; }
+.mpp-limits { font-size: var(--mk-fs-micro); }
+.mpp-limits__grid { display: grid; grid-template-columns: repeat(2, max-content); gap: 2px 14px; }
+.mpp-limits__item { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.mpp-limits__label { color: var(--mk-faint); font-family: inherit; font-style: normal; }
 .mpp-rowacts { display: flex; gap: 8px; white-space: nowrap; }
 .mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .mpp-upstream { margin-top: 10px; }

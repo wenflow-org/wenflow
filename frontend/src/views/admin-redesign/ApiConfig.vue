@@ -75,7 +75,6 @@
               <!-- connBadge 附「N 前」（P1#32 子集）：连接状态是上次拉取/探测落库的结果，
                    无时间的「连接正常」会把陈旧快照读成实时健康，误导熔断判断 -->
               <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
-              <span class="ac-conn__bar-hint">平台通道的服务地址与密钥在这里配置。下面的模型清单决定哪些模型参与路由。</span>
               <button v-if="dirty.has('conn')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['conn'])">{{ saving ? '保存中…' : '保存连接' }}</button>
             </div>
             <!-- 左右双列（2026-10-15 用户重组）：左=填地址/密钥，右=连通性验证——
@@ -135,14 +134,16 @@
                 <span class="ac-test__hint">测试走真实上游调用：选中一个模型点「运行测试」，通过即地址与密钥可用。</span>
               </div>
             </div>
-            <!-- 上游模型清单（2026-10-16 用户走查重排）：不铺 30+ 个 chip，只说关系——
-                 上游返回多少、其中多少已登记参与路由；逐个名字在下方模型清单的「上游未登记」折叠里。
-                 F8-2：拉取只写本页内存，不说「需保存才可见」会被读成清单已持久化。 -->
-            <div class="ac-body ac-models-body">
-              <div class="ac-sec__title">
+          </div>
+        </template>
+          <!-- 上游模型清单（2026-10-20 走查）：从「连接」块搬到模型清单块顶部——它说的是
+               登记关系，不是连接参数；内容仍不铺 30+ 个 chip，只说关系。 -->
+          <template #models-meta>
+            <div class="ac-models-meta">
+              <span class="ac-models-meta__title">
                 上游模型清单
                 <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">本次拉取未保存</span>
-              </div>
+              </span>
               <!-- fetchError 人话化（P2）：裸 errMsg（HTTP 枚举/堆栈词）对运营不可读——
                    人话一句给动作，错误原文进 title 供排查贴单 -->
               <p v-if="fetchError && !models.length" class="ac-models__line" :title="`错误原文：${fetchError}`">
@@ -154,8 +155,7 @@
                    其他页面与下次进入才可见；保存成功后 hasUnsavedModels 归零，本行自动消失 -->
               <span v-if="hasUnsavedModels" class="ac-models__hint">本次拉取的清单仅在本页有效，点「保存连接」后其它页面与下次进入才可见。</span>
             </div>
-          </div>
-        </template>
+          </template>
       </ModelProvidersPanel>
 
 
@@ -1728,6 +1728,14 @@ async function saveQuota(enabled: boolean, quota: number) {
    供应商 / 能力限额为注册表只读面板），三列宫格不再有第二个卡位——保持三列会把唯一的卡
    挤成 1/3 宽。改单列：连接卡满宽，注册表随其后。安全页两列（左一右二），≤1100px 回落单列。 */
 .ac-conn-body { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+/* 2026-10-20 用户走查「下方大量空白」：接入页签改成满高工作台——供应商卡吃掉页签剩余高度，
+   列表与详情各自内滚。窄屏（≤900）仍回落到页面滚动，卡片按内容高度。 */
+.ac-conn-body { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.ac-conn-body > .mpp { flex: 1 1 auto; min-height: 0; }
+@media (max-width: 900px) {
+  .ac-conn-body { display: grid; overflow-y: auto; }
+  .ac-conn-body > .mpp { flex: none; }
+}
 /* 路由与调用页签内的注册表切片（别名映射）：外层页签已承担网格与滚动节奏，
    这里让分区直接成为父网格的子项（display: contents 去掉自身的 .ac-tab-body 盒子），
    与上方「出站速率」「虚拟学习者通道」同一条 12px 节奏堆叠，不出现内外双滚动容器。 */
@@ -1738,8 +1746,9 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-conn-body > .mk-alert { grid-column: 1 / -1; }
 /* 平台通道那条详情的连接块（2026-10-18 从独立「连接」卡搬进供应商详情）：外层卡头没了，
    状态徽标与「保存连接」收进一条细条，右侧一句说明这段表单管什么。 */
-.ac-conn__bar { display: flex; align-items: center; gap: 10px; padding: 12px 16px 0; flex-wrap: wrap; }
-.ac-conn__bar-hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.ac-conn__bar { display: flex; align-items: center; gap: 10px; padding: 0 0 4px; flex-wrap: wrap; }
+/* 槽位已在供应商详情的内衬里：连接块自身的 .ac-body 不再补一层 16px 边 */
+.ac-conn .ac-body { padding: 0; }
 
 /* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
@@ -1806,6 +1815,16 @@ async function saveQuota(enabled: boolean, quota: number) {
 /* 上游清单关系句（2026-10-16 用户走查重排）：原 30+ 枚模型胶囊（.ac-models/.ac-model）退役——
    与下方登记表并列成两份模型名单，被读成「同一件事说两遍」。现在只说关系，逐个名字在登记表折叠里。 */
 .ac-models__line { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
+/* 上游对齐条（2026-10-20 从连接块搬进模型清单块）：说的是登记关系，放在模型清单标题下 */
+.ac-models-meta {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-md);
+}
+.ac-models-meta__title { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 持久化说明（F8-2）：拉取仅本页有效的提示，比清单胶囊再轻一档；仅未保存时出现 */
 .ac-models__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.55; }
 
