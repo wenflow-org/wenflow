@@ -59,11 +59,15 @@
           <!-- 选择框列默认隐藏（2026-10-17 用户走查「这个多选，默认不出来吧」）：
                批量删除/导出属低频动作，常驻一整列勾选框会顶在身份列前面，也容易被读成每行都要勾。
                审核 #7 当年担心「批量操作没有入口」——入口保留在「列」菜单（选择框，标了批量操作），
-               需要时自己打开。存储键升 v4：v3 存下的隐藏集不含 check，不升版新默认对老用户无效。 -->
+               需要时自己打开。
+               2026-10-19 用户走查「可以加一列注册时间」：注册时间本就存在，只是与勾选列一起被默认
+               隐藏了（大表默认列多会挤掉操作列）——现在只默认隐藏勾选列，注册时间默认可见。
+               存储键升 v5：v4 存下的隐藏集含 created，不升版新默认对已访问过的浏览器不生效
+               （与 v3→v4 同一条理由）。窄屏 ≤1320 仍由 MEDIUM_HIDDEN_COLS 收起时间/邮箱列。 -->
           <MkCols
             :col-defs="ulColDefs"
-            storage-key="wf_users_hidden_cols_v4"
-            :default-hidden="['created', 'check']"
+            storage-key="wf_users_hidden_cols_v5"
+            :default-hidden="['check']"
             v-model:hidden="hiddenCols"
           />
         </div>
@@ -140,7 +144,14 @@
                 </div>
                 <div class="ul-tags">
                   <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
-                  <span v-else-if="isSelf(u)" class="mk-badge mk-badge--sm mk-badge--self">当前管理员</span>
+                  <!-- 自己那一行（2026-10-19 用户走查「这不就重复了吗」）：原文案「当前管理员」
+                       与身份列的「管理员」徽章读作同一个角色标签，实际标的是「这一行是你正在用的
+                       账号」（该行 ⋯ 菜单刻意不给「降为用户 / 删除」）。改说账号，不再复述角色 -->
+                  <span
+                    v-else-if="isSelf(u)"
+                    class="mk-badge mk-badge--sm mk-badge--self"
+                    title="你正在使用的账号：为避免把自己锁在门外，这一行不提供删除与降为用户的动作"
+                  >当前账号</span>
                   <MkVariantBadge v-else-if="isVirtualAccount(u)" kind="virtual" />
                   <MkVariantBadge v-else-if="isNonRealAccount(u)" kind="test" />
                 </div>
