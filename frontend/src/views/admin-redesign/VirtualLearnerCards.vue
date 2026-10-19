@@ -558,6 +558,7 @@ onMounted(() => {
 .vlc-card__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* 首字头像：与虚拟学习者/画像页同 8 色板（--mk-vl-avatar-*，CM3 单源） */
 .vlc-avatar {
+  flex: none;
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -583,12 +584,18 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* 名称是唯一可伸缩项：长标题吃满剩余宽度后自己省略，别去压徽章 */
   flex: 1 1 auto;
+  min-width: 0;
   min-width: 0;
 }
 /* 来源角标可收缩：名字长时 flex:none 的角标会被挤出卡框，允许它收缩并省略 */
 .vlc-card__head .mk-badge {
-  flex: 0 1 auto;
+  /* 2026-10-20：原先允许 flex-shrink，4K 卡墙列更窄时长标题会把「预置」压成一条
+     只剩圆角边的色块（截图见走查）。徽章固定不缩，名称自己省略；上限 50% 兜住极端
+     长来源词（自建 / 预置 这类两字词远达不到），超长时才在徽章内部省略。 */
+  flex: 0 0 auto;
+  max-width: 50%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -643,6 +650,7 @@ onMounted(() => {
 }
 /* 勾选框：卡整体是 role=button，勾选框是它内部唯一的交互子控件，故撑到可点面积（≥24px 触控基准） */
 .vlc-card__pick {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
