@@ -298,6 +298,50 @@ export function categoryText(s: string | null | undefined): string {
 }
 
 /**
+ * 收束观测字典（#105 读侧接入，2026-10-19）：轨道与完成通道 → 中文（全站单源）。
+ *
+ * 枚举单源 = 后端 `services/learning/closure-observability.ts`（track: human / virtual-learner /
+ * unknown / legacy）与 `learning.types.ts` 的 completionSource union。消费点：教学会话页「轨道」
+ * 列、总览「完课量」KPI（两页同一份文案，避免各译一份）。
+ * legacy（2026-10-18 前历史行无 track）显示「未标记」、unknown（派生失败/无法识别）显示
+ * 「未知」——都是中性的「没有被标记」，不回填、不猜。
+ */
+export const CLOSURE_TRACK_TEXT: Record<string, string> = {
+  human: '真人',
+  'virtual-learner': '虚拟',
+  legacy: '未标记',
+  unknown: '未知'
+}
+
+/** 轨道 → 中文；未知值回退「未知」（中性，不裸直出枚举） */
+export function closureTrackText(track: string | null | undefined): string {
+  const key = String(track || '')
+  return CLOSURE_TRACK_TEXT[key] || '未知'
+}
+
+/** 轨道徽章色板：真人=蓝 / 虚拟=紫（与 MkVariantBadge 同源）/ 未标记与未知=中性灰 */
+export function closureTrackBadgeCls(track: string | null | undefined): string {
+  const key = String(track || '')
+  return key === 'human' ? 'mk-badge--info' : key === 'virtual-learner' ? 'mk-badge--virtual' : 'mk-badge--muted'
+}
+
+export const CLOSURE_SOURCE_TEXT: Record<string, string> = {
+  'human-ui': '真实界面',
+  'learning-api': '学习 API',
+  'teaching-finalize': '课堂收束',
+  'vl-assisted': 'VL 辅助',
+  'vl-blackbox': '黑盒 VL',
+  probe: '探针',
+  unknown: '未记录'
+}
+
+/** 完成通道 → 中文；未知值原样返回（不丢排障信息，与 statusText 同策略） */
+export function closureSourceText(source: string | null | undefined): string {
+  const key = String(source || '')
+  return CLOSURE_SOURCE_TEXT[key] || key
+}
+
+/**
  * 任务类型枚举 → 中文（全站单源，2026-10-07 审核 F2-2）。
  *
  * 枚举单源 = 后端 `NEW_PATH_TASK_TYPES`（learning.constants.ts:17）+ stage-designer 的 7 类认知弧

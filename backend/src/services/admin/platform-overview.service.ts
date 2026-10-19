@@ -2,6 +2,12 @@ import prisma from '../../config/database';
 import { hourKeyOf, startOfHour, dayKeyOf, addDaysToDayKey, startOfDay } from '../time/day-boundary';
 import { buildRealUserWhere, findRealUserIds } from '../../utils/test-account';
 import { classifyFailureCategory, isTimeoutLog } from './failure-classification';
+import {
+  parseClosureObservation,
+  summarizeClosureObservations,
+  type ClosureObservation,
+  type ClosureTrack,
+} from '../learning/closure-observability';
 
 /**
  * 平台概览统计（GET /api/admin/overview/stats 的数据层）。
@@ -709,4 +715,46 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
         },
         usage,
     };
+}
+
+/* ===== 完课量按轨道/通道拆分（#105 读侧接入） =====
+ * 数据源：learner_evidence 里已投影的收束事件（task:completed / path:completed，
+ * 由 LearnerEvidenceProjector 从 domain_event_outbox 投影；事件统一由
+ * learningService.completeTask 发出，payload 带 track / completionSource）。
+ * 补的就是「管理端同屏不同源」的读侧：真人侧与 VL 侧不再各算各的完成量。
+ * 口径纪律：
+ * - 「完课量」只数 task:completed（一次完整课次结算 = 一条；path:completed 是路径里程碑、
+ *   单位不同，单独给 pathCompletions 只作披露，不并入 total）；
+ * - 2026-10-18 之前的记录没有 track，closure-observability 统一标 legacy——如实透传，
+ *   不用 users.isVirtualLearner 回填、不猜测；
+ * - 读数以「已投影」事件为准：outbox 消费滞后时本读数会暂时偏小，不冒充实时。 */
+export interface ClosureCompletionSummary {
+  /** 任务完成事件总数（完课量） */
+  total: number;
+  byTrack: Record<ClosureTrack, number>;
+  bySource: Record<string, number>;
+  /** 另有路径完成事件数（单位不同，不计入 total，仅披露） */
+  pathCompletions: number;
+}
+
+export async function computeClosureCompletionSummary(): Promise<ClosureCompletionSummary> {
+  const rows = await prisma.learner_evidence.findMany({
+    where: { evidenceType: { in: ['task:completed', 'path:completed'] } },
+    select: { evidenceType: true, payload: true },
+  });
+  const taskObservations: ClosureObservation[] = [];
+  let pathCompletions = 0;
+  for (const row of rows) {
+    const observed = parseClosureObservation(row.evidenceType, row.payload);
+    if (!observed) continue;
+    if (observed.eventType === 'task:completed') taskObservations.push(observed);
+    else pathCompletions += 1;
+  }
+  const summary = summarizeClosureObservations(taskObservations);
+  return {
+    total: summary.total,
+    byTrack: summary.byTrack,
+    bySource: summary.bySource,
+    pathCompletions,
+  };
 }

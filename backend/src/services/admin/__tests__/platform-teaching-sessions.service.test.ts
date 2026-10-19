@@ -12,6 +12,8 @@
  */
 const mockPrisma = {
   teaching_sessions: { count: jest.fn(), findMany: jest.fn() },
+  // #105 读侧接入：行级收束观测按 taskId 批量查 learner_evidence（task:completed 投影行）
+  learner_evidence: { findMany: jest.fn() },
   $queryRaw: jest.fn(),
 };
 
@@ -57,6 +59,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockPrisma.teaching_sessions.count.mockResolvedValue(1);
   mockPrisma.teaching_sessions.findMany.mockResolvedValue([baseSession]);
+  mockPrisma.learner_evidence.findMany.mockResolvedValue([]);
   mockPrisma.$queryRaw.mockResolvedValue([{ id: 's1', userCount: 3n }]);
 });
 
@@ -127,5 +130,61 @@ describe('教学会话列表：按路径收窄', () => {
   it('列表行回带 learningPathId（前端据此校对作用域是否真的生效）', async () => {
     const result = (await callWithPath('p1')) as unknown as { items: Array<{ learningPathId: string | null }> };
     expect(result.items[0].learningPathId).toBe('p1');
+  });
+});
+
+/**
+ * #105 读侧接入：行级收束观测（轨道/通道）。
+ * 数据 = learner_evidence 的 task:completed 投影行（payload 带 track/completionSource/
+ * sessionId）。口径单点在 closure-observability.ts：
+ * - 有 track 的行如实透传；
+ * - 2026-10-18 前无 track 的历史行标 legacy —— 不用 users.isVirtualLearner 回填、不猜；
+ * - 查无收束记录 → null（前端按中性「—」呈现）。
+ */
+describe('教学会话列表：行级收束观测（#105 轨道/通道）', () => {
+  type ClosureResult = {
+    items: Array<{ closure: { track: string; completionSource: string } | null }>;
+  };
+
+  it('批量按 taskId 查 task:completed 行，命中行透传 track/completionSource', async () => {
+    mockPrisma.learner_evidence.findMany.mockResolvedValue([
+      {
+        taskId: 't1',
+        payload: JSON.stringify({ taskId: 't1', track: 'virtual-learner', completionSource: 'vl-blackbox' }),
+      },
+    ]);
+    const result = (await call()) as unknown as ClosureResult;
+
+    expect(result.items[0].closure).toEqual({ track: 'virtual-learner', completionSource: 'vl-blackbox' });
+    const query = mockPrisma.learner_evidence.findMany.mock.calls[0][0];
+    expect(query.where).toEqual({ evidenceType: 'task:completed', taskId: { in: ['t1'] } });
+    expect(query.select).toEqual({ taskId: true, payload: true });
+  });
+
+  it('无 track 的历史行如实标 legacy（不回填、不混入新口径）', async () => {
+    mockPrisma.learner_evidence.findMany.mockResolvedValue([
+      { taskId: 't1', payload: JSON.stringify({ taskId: 't1', actualMinutes: 30 }) },
+    ]);
+    const result = (await call()) as unknown as ClosureResult;
+
+    expect(result.items[0].closure).toEqual({ track: 'legacy', completionSource: 'unknown' });
+  });
+
+  it('同一任务多行（重完成）取最新一条', async () => {
+    mockPrisma.learner_evidence.findMany.mockResolvedValue([
+      { taskId: 't1', payload: JSON.stringify({ taskId: 't1', track: 'human', completionSource: 'teaching-finalize' }) },
+      { taskId: 't1', payload: JSON.stringify({ taskId: 't1', track: 'virtual-learner', completionSource: 'vl-assisted' }) },
+    ]);
+    const result = (await call()) as unknown as ClosureResult;
+
+    expect(result.items[0].closure).toEqual({ track: 'human', completionSource: 'teaching-finalize' });
+    expect(mockPrisma.learner_evidence.findMany.mock.calls[0][0].orderBy).toEqual({ occurredAt: 'desc' });
+  });
+
+  it('查无收束记录 → null（未完成或事件未投影，不用身份回填）', async () => {
+    mockPrisma.learner_evidence.findMany.mockResolvedValue([]);
+    const result = (await call()) as unknown as ClosureResult;
+
+    expect(result.items[0].closure).toBeNull();
   });
 });

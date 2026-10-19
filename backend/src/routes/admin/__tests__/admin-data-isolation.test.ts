@@ -27,6 +27,9 @@ jest.mock('../../../config/database', () => ({
     // 教学会话列表的「消息数」改为库内聚合（2026-09-29，不再读 197MB 的 messages 列），
     // 这里只需给聚合查询一个空结果：本文件断言的是数据隔离过滤，不涉及计数
     $queryRaw: jest.fn().mockResolvedValue([]),
+    // #105 读侧接入：行级收束观测（轨道/通道）按 taskId 查 learner_evidence——
+    // 本文件断言数据隔离，给空结果即可（无收束记录 → closure=null）
+    learner_evidence: { findMany: jest.fn().mockResolvedValue([]) },
     milestones: { findMany: jest.fn().mockResolvedValue([]) },
     subtasks: { findMany: jest.fn().mockResolvedValue([]) },
     goal_conversations: { count: gcCount, findMany: gcFindMany },

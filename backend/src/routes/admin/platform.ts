@@ -42,7 +42,7 @@ import {
   buildTimeoutCondition,
   classifyFailureCategory
 } from '../../services/admin/failure-classification';
-import { computeOverviewStats, clearOverviewAllTimeCache } from '../../services/admin/platform-overview.service';
+import { computeOverviewStats, clearOverviewAllTimeCache, computeClosureCompletionSummary } from '../../services/admin/platform-overview.service';
 import { collectManifestDiagnostics } from '../../services/admin/platform-manifest-diagnostics.service';
 import { fetchAgentLogRows, fetchAgentLogStats, fetchAgentLogWithAttempts, type AgentLogStatsTuple } from '../../services/admin/platform-agent-logs.service';
 import { getPlatformActivityFeed } from '../../services/admin/platform-activity.service';
@@ -477,6 +477,28 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
       success: false,
       error: {
         message: '获取平台数据失败',
+        status: 500,
+      },
+    });
+  }
+});
+
+/**
+ * GET /api/admin/overview/closure
+ * 完课量按轨道/通道拆分（#105 读侧接入）：数据 = learner_evidence 已投影收束事件，
+ * task:completed 计入完课量（path:completed 单列披露），历史无 track 行按 legacy 呈现、
+ * 不回填不猜测（口径单点在 services/learning/closure-observability.ts）。
+ */
+router.get('/overview/closure', async (_req: Request, res: Response) => {
+  try {
+    const data = await computeClosureCompletionSummary();
+    res.json({ success: true, data });
+  } catch (error: any) {
+    logger.error('[admin-platform] 获取完课量收束观测失败', { error });
+    res.status(500).json({
+      success: false,
+      error: {
+        message: '获取完课量收束观测失败',
         status: 500,
       },
     });

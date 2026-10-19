@@ -223,6 +223,12 @@
                 @click="toggleTsSort('status')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th
+                v-if="!isTableNarrow && !tsHiddenCols.has('track')"
+                scope="col"
+                class="ts-track-col"
+                title="收束轨道与完成通道（#105 统一观测）：真人 / 虚拟 / 未标记；副行 = 完成通道。历史记录无标记时不回填、不猜测"
+              >轨道</th>
+              <th
                 v-if="!tsHiddenCols.has('interact')"
                 scope="col"
                 class="mk-th--sortable"
@@ -285,6 +291,22 @@
                   class="mk-badge mk-badge--sm mk-badge--muted"
                   title="低参与：完成时用户消息不足 2 条，无真实学习参与证据"
                 >低参与</span>
+              </td>
+              <td v-if="!isTableNarrow && !tsHiddenCols.has('track')">
+                <!-- #105 读侧接入：轨道（真人/虚拟/未标记）+ 通道，来自统一收束事件
+                     （learner_evidence 的 task:completed 投影行，按会话 taskId 关联）。
+                     历史（无 track）行标「未标记」中性呈现、不回填；无收束记录（未完成或
+                     事件未投影）给「—」。不用用户 isVirtualLearner 回填——本列存在的意义
+                     就是消灭「两处口径各算各的」。 -->
+                <div class="ts-track" :title="trackCellTitle(r)">
+                  <span
+                    v-if="r.closure"
+                    class="mk-badge mk-badge--sm"
+                    :class="closureTrackBadgeCls(r.closure.track)"
+                  >{{ closureTrackText(r.closure.track) }}</span>
+                  <span v-else class="mk-na">—</span>
+                  <span v-if="r.closure" class="mk-cell-sub">{{ closureSourceText(r.closure.completionSource) }}</span>
+                </div>
               </td>
               <td v-if="!tsHiddenCols.has('interact')">
                 <!-- 行级设计（批B）：时长主值+档位 tone（≥25 分钟长时标琥珀 / <1 分钟秒退弱化），消息/知识点降 sub 行；
@@ -392,7 +414,7 @@ import { useSessionDrill } from './useSessionDrill'
 import { useIsNarrow } from './useIsNarrow'
 import { useListQueryState } from './learner-profile'
 import { timeAgo, isPageCacheFresh, markPageFetched, shortId, liveIncludeVirtual, liveSetIncludeVirtual } from './live'
-import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge } from './statusText'
+import { statusText, sessionProgressPct, sessionProgressText, sessionProgressTone, sessionProgressDone, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureTrackText, closureTrackBadgeCls, closureSourceText } from './statusText'
 import type { SessionProgress } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -453,6 +475,8 @@ interface Row {
   wrapupDegraded: boolean
   advisory: { title: string; text: string; priority: string } | null
   progress: SessionProgress | null
+  /** #105 收束观测（后端统一口径）：该会话任务完成事件的轨道/通道；null = 无收束记录 */
+  closure: { track: string; completionSource: string } | null
 }
 
 const rows = ref<Row[]>([])
@@ -617,6 +641,24 @@ function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtua
   return r.isVirtualLearner ? 'virtual' : r.isTestAccount ? 'test' : 'default'
 }
 
+/* ===== 轨道列（#105 读侧接入）=====
+   轨道/通道来自后端统一收束观测（closure），不是本页自算——历史行如实展示「未标记」，
+   无记录展示「—」，均不用用户身份字段回填（回填/猜测正是 #105 要消灭的分叉口径）。
+   文案字典单源在 statusText.ts（closureTrackText / closureTrackBadgeCls / closureSourceText），
+   与总览「完课量」KPI 共用。 */
+/** 轨道列悬停长释：轨道语义 + 通道（附原始枚举值供排查） */
+function trackCellTitle(r: Row): string {
+  if (!r.closure) return '无收束记录：该会话任务尚未完成，或完成事件还未投影到观测表'
+  const trackDesc = r.closure.track === 'human'
+    ? '真人学习者'
+    : r.closure.track === 'virtual-learner'
+      ? '虚拟学习者'
+      : r.closure.track === 'legacy'
+        ? '历史完成记录（2026-10-18 前）没有轨道标记，不回填、不猜测'
+        : `轨道取值 ${r.closure.track}`
+  return `完成事件轨道：${trackDesc} · 通道：${closureSourceText(r.closure.completionSource)}（${r.closure.completionSource}）`
+}
+
 function mapRow(s: Record<string, unknown>): Row {
   const wrapup = (s.wrapup as Record<string, unknown>) || null
   const summary = (wrapup?.summary as WrapupSummary) || null
@@ -645,6 +687,8 @@ function mapRow(s: Record<string, unknown>): Row {
         : advisoryRelevant
           ? 'medium'
           : 'low'
+  /* #105 收束观测：后端字段直通；缺失/空对象按「无收束记录」null（模板走中性「—」） */
+  const rawClosure = (s.closure as Record<string, unknown>) || null
   return {
     /* s.id 缺失不得拼出 "undefined"（控制台按钮/抽屉标题已由 v-if="r.id" 守卫） */
     id: s.id ? String(s.id) : '',
@@ -669,7 +713,10 @@ function mapRow(s: Record<string, unknown>): Row {
     wrapup: summary,
     wrapupDegraded,
     advisory,
-    progress: (s.progress as SessionProgress) || null
+    progress: (s.progress as SessionProgress) || null,
+    closure: rawClosure
+      ? { track: String(rawClosure.track || 'legacy'), completionSource: String(rawClosure.completionSource || 'unknown') }
+      : null
   }
 }
 
@@ -689,6 +736,7 @@ const advCount = computed(() => (statusFilter.value ? 1 : 0) + (dateFilter.value
 const tsColDefs = [
   { key: 'user', label: '用户', title: '用户姓名 + 邮箱' },
   { key: 'status', label: '状态', title: '会话状态' },
+  { key: 'track', label: '轨道', title: '收束轨道（真人 / 虚拟 / 未标记）+ 完成通道（#105 统一观测）' },
   { key: 'interact', label: '互动', title: '时长 / 消息数 / 知识点' },
   { key: 'progress', label: '进度', title: '学习进度' },
   { key: 'output', label: '产物', title: '课后总结 / 建议' },
@@ -700,6 +748,8 @@ const tsHiddenCols = ref<Set<string>>(new Set())
    「会话」只剩 113px（20 字标题只露 6 字）、「用户」89px（用户名被截），而「产物」拿满
    215px 只用 124px。给身份列让宽度只能靠减列：窄档默认收起需求最小、信息含量也最低的
    「时间 / 关注」两列（56+70=126px），1280 实测会话列 113→191px、用户列 89→124px，且不产生横滚。
+   2026-10-19（#105）：新增「轨道」列在窄档同撤（+70px 会吃掉上述让宽）；≥1440 可见，
+   且它本是可显隐列（MkCols），收起不丢数据——逐条轨道还可在 ≥1440 视口或放宽窗口查看。
    阈值取 1440：全开时该档会话列已有 191px（1366/1400 只有 167/187px，不够），且 1440 本就是
    项目自己的档位。与 VirtualLearners 的 useIsNarrow 同一先例（窄档勾了「列」也不显，
    行详情进座舱，信息不丢）；1920/2560/3840 不受影响（会话列 378/523/764px）。 */
@@ -1049,6 +1099,8 @@ defineExpose({ refreshNow })
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class），本页不再私持拷贝 *//* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
 /* 互动列（批B）：时长主值+副行。副行 messageCount/知识点 nowrap 撑到 109px 溢出 70px 单元格、
    压到「进度」列（走查 #37）：容器限宽到单元格内宽并裁切，副行由 mk-cell-sub 自带省略号截断 */
+/* 轨道列（#105 读侧接入）：徽章（真人 / 虚拟 / 未标记）+ 通道副行垂直两行（同 .ts-ia 判例） */
+.ts-track { display: grid; gap: 2px; justify-items: start; }
 .ts-ia { display: grid; gap: 2px; justify-items: start; max-width: 100%; min-width: 0; overflow: hidden; }.ts-ia > * { min-width: 0; max-width: 100%; }.ts-ia__dur { font-variant-numeric: tabular-nums; font-weight: 700; }.ts-ia__dur--long { color: var(--mk-amber); }.ts-ia__dur--brief { color: var(--mk-faint); font-weight: 400; }.ts-prog { display: grid; gap: 4px; max-width: 96px; }.ts-prog__num { font-variant-numeric: tabular-nums; font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; }.ts-prog__bar { width: 88px; height: 5px; }/* 终态完成列（P1 语义修复）：只显「已完成」文字，不再与进度条并存；title 保留历史进度 */
 .ts-prog--done {
   display: inline-flex;

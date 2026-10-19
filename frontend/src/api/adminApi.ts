@@ -245,6 +245,15 @@ export const adminDashboardApi = {
   },
 
   /**
+   * 完课量按轨道/通道拆分（#105 读侧接入）：数据 = learner_evidence 已投影收束事件，
+   * task:completed 计入完课量；历史无 track 行归 legacy（未标记），不回填。
+   * 返回 { total, byTrack, bySource, pathCompletions }。
+   */
+  getClosureSummary: async () => {
+    return adminAxios.get('/admin/overview/closure');
+  },
+
+  /**
    * 获取活动日志
    */
   getActivity: async (limit?: number, excludeTest?: boolean) => {

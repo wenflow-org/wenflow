@@ -3,11 +3,43 @@ import prisma from '../../config/database';
 import { isTestAccountUser } from '../../utils/test-account';
 import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
 import { deriveTeachingSessionProgress } from '../teaching-session-progress.service';
+import { parseClosureObservation, type ClosureObservation } from '../learning/closure-observability';
 
 /**
  * 教学会话调试视图（GET /api/admin/teaching-sessions 的数据层）。
  * 由 routes/admin/platform.ts 下沉：聚焦 wrapup / advisory，列表进度由 milestones/subtasks 现表推导。
  */
+
+/** 行级收束观测（#105 读侧接入）：轨道 + 通道，来自统一收束事件（learner_evidence 已投影行） */
+export interface SessionClosureObservation {
+  track: ClosureObservation['track'];
+  completionSource: string;
+}
+
+/**
+ * #105 读侧接入：按会话任务批量取收束事件（task:completed 的 learner_evidence 行）。
+ * 事件写入侧见 task-completion.service.ts（payload 带 track/completionSource/sessionId），
+ * 解析口径单点在 closure-observability.ts——本函数只做 taskId 关联，不在此处解释语义。
+ * 一个任务只结算一次（completeTask 幂等），多行时取最新一条；查无记录返回 null
+ * （前端按「无收束记录」中性呈现，不用用户 isVirtualLearner 回填、不猜）。
+ */
+async function loadClosureByTaskId(taskIds: string[]): Promise<Map<string, SessionClosureObservation>> {
+  const byTaskId = new Map<string, SessionClosureObservation>();
+  if (taskIds.length === 0) return byTaskId;
+  const rows = await prisma.learner_evidence.findMany({
+    where: { evidenceType: 'task:completed', taskId: { in: taskIds } },
+    orderBy: { occurredAt: 'desc' },
+    select: { taskId: true, payload: true },
+  });
+  for (const row of rows) {
+    if (!row.taskId || byTaskId.has(row.taskId)) continue; // 最新一条为准
+    const observed = parseClosureObservation('task:completed', row.payload);
+    if (!observed) continue;
+    byTaskId.set(row.taskId, { track: observed.track, completionSource: observed.completionSource });
+  }
+  return byTaskId;
+}
+
 function parseJsonSafe<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
   try {
@@ -115,6 +147,11 @@ export async function listTeachingSessionsDebug(params: {
     deriveTeachingSessionProgress(sessions),
     countUserMessagesBySession(sessions.map((s) => s.id)),
   ]);
+  /* #105 读侧接入：行级收束观测（轨道 / 通道）。失败不吞错——读侧观测由本列承载，
+     坏掉要显式可见（与既有 messageCount / progress 的失败语义一致）。 */
+  const closureByTaskId = await loadClosureByTaskId(
+    sessions.map((s) => s.taskId).filter((id): id is string => !!id)
+  );
 
   const items = sessions.map((session) => {
     const wrapup = parseJsonSafe<any>(session.wrapup, null);
@@ -142,6 +179,8 @@ export async function listTeachingSessionsDebug(params: {
       messageCount: userMessageCount.get(session.id) ?? 0,
       knowledgePointCount: Array.isArray(knowledgePoints) ? knowledgePoints.length : 0,
       progress: progressById.get(session.id) || null,
+      /** #105：该会话任务的统一收束观测（轨道/通道）；null = 尚无收束记录（未完成或事件未投影） */
+      closure: closureByTaskId.get(session.taskId) ?? null,
       wrapup,
       advisory,
     };

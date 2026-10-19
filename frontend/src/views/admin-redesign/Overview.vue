@@ -37,6 +37,18 @@
         :title="kpiTitle(i)"
         @click="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
       />
+      <!-- 完课量（#105 读侧接入，2026-10-19）：收束事件统一观测的按轨拆分，
+           点卡进教学会话页看逐条轨道/通道。与上方四卡不同源（含虚拟/测试），
+           卡自身以 hint 的「真人 / VL / 未标记」分解消灭同屏不同源。 -->
+      <MkKpi
+        clickable
+        :label="closureKpi.label"
+        :value="closureKpi.value"
+        :hint="closureKpi.hint"
+        :hint-tone="closureKpi.hintTone"
+        :title="closureKpi.title"
+        @click="jump('teaching-sessions')"
+      />
     </div>
 
     <!-- 系统状态（原型 .statusbar）：点色=结论、粗体=标题、meta=子项、右端=动作。
@@ -293,7 +305,8 @@ import {
   recentActivityText, type LiveOverviewFull
 } from './live';
 import OvBars from './OvBars.vue';
-import { adminHealthCenterApi, adminMemoryReviewApi, adminTeachingSessionsApi } from '@/api/adminApi';
+import { closureSourceText, closureTrackText } from './statusText';
+import { adminDashboardApi, adminHealthCenterApi, adminMemoryReviewApi, adminTeachingSessionsApi } from '@/api/adminApi';
 import MkPageHead from '@/components/mk/MkPageHead.vue';
 import MkKpi from '@/components/mk/MkKpi.vue';
 import MkEmptyState from '@/components/mk/MkEmptyState.vue';
@@ -463,6 +476,71 @@ const kpiCards = computed<KpiCard[]>(() =>
   (data.value?.kpis ?? []).map((k) => ({ label: k.label, value: k.value, foot: k.foot, hint: k.hint, trend: k.trend }))
 );
 
+/* ===== 完课量（#105 读侧接入，2026-10-19）=====
+   「管理端同屏不同源」的读侧收口：真人侧与 VL 侧不再各算各的——统一数收束事件
+   （learner_evidence 已投影的 task:completed 行，口径单点 closure-observability.ts）。
+   家法同上方四卡：hint 一行可见口径（真人 / VL / 未标记分解），长释进 title 悬停。
+   与上方四卡不同源：本卡含虚拟学习者与测试账号（拆分自证），不并入真实口径读数；
+   历史无 track 行如实显示「未标记」，不回填、不猜；读数以已投影事件为准（消费滞后时偏小）。 */
+type ClosureSummary = {
+  total: number
+  byTrack: Record<string, number>
+  bySource: Record<string, number>
+  pathCompletions: number
+}
+const closureState = ref<'loading' | 'ready' | 'error'>('loading')
+const closureSummary = ref<ClosureSummary | null>(null)
+async function loadClosure() {
+  try {
+    const res = await adminDashboardApi.getClosureSummary()
+    const body = (res.data?.data ?? res.data ?? {}) as Partial<ClosureSummary>
+    closureSummary.value = {
+      total: Number(body.total ?? 0),
+      byTrack: (body.byTrack || {}) as Record<string, number>,
+      bySource: (body.bySource || {}) as Record<string, number>,
+      pathCompletions: Number(body.pathCompletions ?? 0),
+    }
+    closureState.value = 'ready'
+  } catch {
+    closureState.value = 'error' // 不伪造 0：次态由卡片 hint 如实呈报
+  }
+}
+/** 通道/轨道文案单源在 statusText.ts（与教学会话页「轨道」列共用，两页不各译一份） */
+const closureKpi = computed(() => {
+  if (closureState.value !== 'ready' || !closureSummary.value) {
+    return {
+      label: '完课量',
+      value: '—',
+      hint: closureState.value === 'error' ? '读数加载失败' : '读数加载中…',
+      hintTone: (closureState.value === 'error' ? 'warn' : '') as '' | 'warn',
+      title: '完课量：收束事件的统一观测（#105）——任务完成按真人 / 虚拟学习者拆分',
+    }
+  }
+  const s = closureSummary.value
+  const human = s.byTrack.human ?? 0
+  const virtual = s.byTrack['virtual-learner'] ?? 0
+  const unmarked = (s.byTrack.legacy ?? 0) + (s.byTrack.unknown ?? 0)
+  const unmarkedLabel = closureTrackText('legacy')
+  const hintParts = [`真人 ${human}`, `VL ${virtual}`]
+  if (unmarked > 0) hintParts.push(`${unmarkedLabel} ${unmarked}`)
+  const sourceParts = Object.entries(s.bySource)
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, n]) => `${closureSourceText(key)} ${n}`)
+  const titleParts = [
+    `完成事件统一观测（#105）：任务完成事件按轨道分列——真人 ${human} · 虚拟学习者 ${virtual}${unmarked > 0 ? ` · ${unmarkedLabel} ${unmarked}` : ''}。`,
+    unmarked > 0 ? `${unmarkedLabel}为 2026-10-18 前没有轨道标记的历史完成记录，不回填、不猜。` : '',
+    sourceParts.length ? `通道构成：${sourceParts.join(' · ')}。` : '',
+    '本卡含虚拟学习者与测试账号，与上方真实口径 KPI 不同源；读数以已投影收束事件为准。',
+  ].filter(Boolean)
+  return {
+    label: '完课量',
+    value: `${s.total}`,
+    hint: hintParts.join(' · '),
+    hintTone: '' as const,
+    title: titleParts.join(''),
+  }
+});
+
 /* ===== 近 7 天活跃学习者（OvBars 全站统一柱图语言，2026-10-02 P1#2）=====
    原手写 .barchart 无「今日进行中」语义：清晨当日累计尚小时柱高塌陷，读成「活跃崩塌」。
    OvBars 内建零值「·」与今日列高亮；今日列 label 改「今日」、title 补「截至现在（非全日）」。
@@ -620,6 +698,8 @@ const wrapupIssue = computed(() => {
 async function retryOverview() {
   const ok = await refreshOverviewTracked(true)
   if (ok) lastUpdated.value = nowHm()
+  // 完课量卡失败态无独立重试钮：整页重试一并重拉（与闭环两环同节奏）
+  if (closureState.value !== 'ready') void loadClosure()
 }
 
 // 动态筛选：默认隐藏虚拟学习者与测试/审计账号（后端 excludeTest 已按此过滤）
@@ -835,6 +915,8 @@ const { start: startAutoRefresh, stop: stopAutoRefresh } = useSafePolling(
 onMounted(() => {
   void loadHealth()
   void loadLoopExtras()
+  // #105 完课量拆分：低频进页口径（累计值，同闭环两环的「进页拉一次」节奏，不进 10s 轮询）
+  void loadClosure()
   // 数据截至不预设挂载时刻：轮询首轮（immediate）成功拉到数据后由回调打点
   startAutoRefresh()
 })
