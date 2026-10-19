@@ -1310,17 +1310,19 @@ export async function processStudentMessage(
     // 失败路由占位键治理（F1 修复轮 c，R2 复现 concept-1/concept-2 占位入账）：模型给的
     // conceptKey 是路径骨架 concept-N 占位时改挂检查点归属键（发出时带上的当前教学点概念；
     // 无检查点回合退到当前教学点），真键原样，无归属可挂 → 丢弃（宁缺勿错挂）。
+    // 本回合的概念归属（检查点归属优先，无检查点回落到当前教学点）：误解与 ktEstimate
+    // 两条写入通道共用——占位键的改挂目标必须同源，否则同一回合两处落到不同概念。
+    const checkpointConceptAttribution = (submittedCheckpoint?.conceptKey
+      ? {
+          conceptName: submittedCheckpoint.conceptName ?? '',
+          conceptKey: submittedCheckpoint.conceptKey,
+          conceptSource: submittedCheckpoint.conceptSource ?? ('derived' as const),
+        }
+      : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint));
     const misconceptions = teachingOutput.analysis?.misconceptions;
     if (Array.isArray(misconceptions) && misconceptions.length > 0) {
-      const misconceptionAttribution = (submittedCheckpoint?.conceptKey
-        ? {
-            conceptName: submittedCheckpoint.conceptName ?? '',
-            conceptKey: submittedCheckpoint.conceptKey,
-            conceptSource: submittedCheckpoint.conceptSource ?? ('derived' as const),
-          }
-        : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint));
       void recordMisconceptions(session.userId, sessionId, misconceptions.map((m) => ({
-        conceptKey: rerouteMisconceptionConceptKey(m.conceptKey, misconceptionAttribution) || '',
+        conceptKey: rerouteMisconceptionConceptKey(m.conceptKey, checkpointConceptAttribution) || '',
         hypothesis: m.hypothesis,
         canonicalLabel: m.canonicalLabel ?? null,
         confidence: m.confidence,
@@ -1334,13 +1336,23 @@ export async function processStudentMessage(
     // 未命中/缺失回落自由文本名（见 memory-trace.service resolveConceptIdSafe）。
     const ktConceptMastery = teachingOutput.analysis?.ktEstimate?.conceptMastery;
     if (Array.isArray(ktConceptMastery) && ktConceptMastery.length > 0) {
-      void memoryTraceService.applyKtEstimate(session.userId, ktConceptMastery.map((c) => ({
-        conceptKey: c.conceptKey,
-        ...(typeof c.kcId === 'string' && c.kcId.trim() ? { kcId: c.kcId.trim() } : {}),
-        mastery: c.mastery,
-      })), session.learningPathId ?? null).catch((error) => {
-        logger.warn('[AITeachingCoordinator] ktEstimate EMA 回写失败', { error: error instanceof Error ? error.message : String(error) });
+      // #109：模型把路径骨架 concept-N 回填进 conceptKey 时，与误解台账同口径改挂本回合
+      // 概念归属；无归属可挂 → 丢弃（宁缺勿错挂）。此前原样透传 → 写入侧按文本名
+      // 新建 concepts/memory_traces（历史 36 条 kt-estimate 痕迹的生成侧根因）。
+      const ktItems = ktConceptMastery.flatMap((c) => {
+        const conceptKey = rerouteMisconceptionConceptKey(c.conceptKey, checkpointConceptAttribution);
+        if (!conceptKey) return [];
+        return [{
+          conceptKey,
+          ...(typeof c.kcId === 'string' && c.kcId.trim() ? { kcId: c.kcId.trim() } : {}),
+          mastery: c.mastery,
+        }];
       });
+      if (ktItems.length > 0) {
+        void memoryTraceService.applyKtEstimate(session.userId, ktItems, session.learningPathId ?? null).catch((error) => {
+          logger.warn('[AITeachingCoordinator] ktEstimate EMA 回写失败', { error: error instanceof Error ? error.message : String(error) });
+        });
+      }
     }
 
     const baseResult = {

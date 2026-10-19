@@ -23,3 +23,19 @@ export function normalizeConceptKey(raw: unknown): string {
   s = s.replace(/[。．.，,、；;！!？?~～\-—…\s]+$/g, '');
   return s.trim() || original;
 }
+
+/**
+ * 路径生成骨架的 `concept-N` 序号占位（path-generation.core.ts 的 `concept-${index+1}`）。
+ *
+ * #109：这是**路径内局部序号**，不是概念身份。模型把骨架原文回填进
+ * ktEstimate.conceptKey 时，写入侧会按文本名新建 concepts / memory_traces 行——
+ * 历史 36 条 concept-N 痕迹全部 source=kt-estimate 可证。定义点从
+ * ai-teaching/checkpoint-shared.ts 迁到本文件（registry 已依赖本文件，避免
+ * registry → ai-teaching 的反向依赖）；checkpoint-shared 继续 re-export 保持既有 import。
+ */
+const PLACEHOLDER_CONCEPT_KEY_PATTERN = /^concept-\d+$/i;
+
+export function isPlaceholderConceptKey(key: unknown): boolean {
+  return typeof key === 'string' && PLACEHOLDER_CONCEPT_KEY_PATTERN.test(key.trim());
+}
+

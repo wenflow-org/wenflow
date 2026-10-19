@@ -26,7 +26,7 @@ import Skills from '../Skills.vue'
 import { subPage, closeSubPage, dataSource, liveSkillStatsMap } from '../store'
 import { liveSkillProfiles } from '../live'
 
-const { apiObject, metaMock, promptMock, cfgMock, routingsMock, versionsMock, overviewMock, testSkillMock, probeMock } =
+const { apiObject, metaMock, promptMock, cfgMock, routingsMock, versionsMock, overviewMock, coreMock, testSkillMock, probeMock } =
   vi.hoisted(() => ({
     // skills.smoke 同款：custom 里给到的走真 mock，其余方法兜底成 { data: {} } 成功响应
     apiObject: (custom?: Record<string, unknown>): Record<string, unknown> =>
@@ -43,6 +43,7 @@ const { apiObject, metaMock, promptMock, cfgMock, routingsMock, versionsMock, ov
     routingsMock: vi.fn(async () => ({ data: { data: {} as Record<string, unknown> } })),
     versionsMock: vi.fn(async () => ({ data: { data: [] as Array<Record<string, unknown>> } })),
     overviewMock: vi.fn(async () => ({ data: { data: { items: [] as Array<Record<string, unknown>> } } })),
+    coreMock: vi.fn(async () => ({ data: {} as Record<string, unknown> })),
     testSkillMock: vi.fn(async () => ({ data: { data: {} as Record<string, unknown> } })),
     probeMock: vi.fn(async () => ({ data: { data: {} as Record<string, unknown> } }))
   }))
@@ -67,7 +68,7 @@ vi.mock('@/api/adminApi', () => ({
   adminSystemApi: apiObject(),
   adminAuditApi: apiObject(),
   adminFieldRoutingsApi: apiObject({ getSkillRoutings: routingsMock }),
-  adminPromptWorkbenchApi: apiObject(),
+  adminPromptWorkbenchApi: apiObject({ getCore: coreMock }),
   adminFeedbackApi: apiObject(),
   adminGoalConversationsApi: apiObject(),
   adminRuntimeDefinitionsApi: apiObject(),
@@ -479,6 +480,39 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(w.text()).not.toContain('结构完整')
 
     w.unmount()
+  })
+
+  it('#15 宿主「样例输入」卡按 core 输入契约生成默认载荷（不再硬编码 input 键）', async () => {
+    // stage-designer 的真实契约：milestone / cognitiveCore 必填，其余可选
+    coreMock.mockResolvedValue({
+      data: {
+        core: {
+          inputs: [
+            { name: 'milestone', type: 'object' },
+            { name: 'previousMilestone', type: 'object?' },
+            { name: 'cognitiveCore', type: 'object' }
+          ]
+        }
+      }
+    })
+    testSkillMock.mockResolvedValueOnce({
+      data: { data: { success: true, duration: 10, cached: false, output: { ok: true } } }
+    })
+
+    const w = mountDetail()
+    await settle()
+    await w.findAll('.mk-subtab')[2].trigger('click') // 试跑
+    await nextTick()
+
+    const ta = w.find('.skd-ta')
+    expect(JSON.parse((ta.element as HTMLTextAreaElement).value)).toEqual({ milestone: {}, cognitiveCore: {} })
+
+    await w.find('.skd-ta-foot button').trigger('click')
+    await settle()
+    expect(testSkillMock).toHaveBeenCalledWith('skill-a', { milestone: {}, cognitiveCore: {} })
+
+    w.unmount()
+    coreMock.mockResolvedValue({ data: {} })
   })
 
   it('版本页签：版本表格（版本/名称/状态）+ 下方版本管理区块；日期/作者无源不渲染', async () => {

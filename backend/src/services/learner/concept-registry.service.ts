@@ -23,7 +23,7 @@
  */
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
-import { normalizeConceptKey } from '../memory/concept-key';
+import { isPlaceholderConceptKey, normalizeConceptKey } from '../memory/concept-key';
 
 export type ConceptLevel = 'concept' | 'kc';
 export type AliasSource = 'write_time' | 'consolidator' | 'human' | 'backfill';
@@ -106,11 +106,15 @@ export class ConceptRegistryService {
   clearCache(): void { this.cache.clear(); }
 
   /**
-   * 解析概念身份（幂等）。返回 null 的两种情形：入参归一化后为空；未命中且 createIfMissing=false。
+   * 解析概念身份（幂等）。返回 null 的三种情形：入参归一化后为空；**路径骨架 concept-N 占位**
+   * （#109：不是概念身份，既不命中别名也不新建 concept/alias）；未命中且 createIfMissing=false。
    */
   async resolveConcept(userId: string, rawText: unknown, options: ResolveOptions = {}): Promise<ResolvedConcept | null> {
     const aliasNorm = normalizeConceptKey(rawText);
     if (!userId || !aliasNorm) return null;
+    // #109 身份入口护栏：concept-N 是路径内局部序号。此前无护栏 → 模型回填的占位键
+    // 会在 concepts/concept_aliases 新建一行（历史 36 条 kt-estimate 痕迹可证）。
+    if (isPlaceholderConceptKey(aliasNorm)) return null;
 
     const cacheKey = `${userId}\u0000${aliasNorm}`;
     const cached = this.cache.get(cacheKey);

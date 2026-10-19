@@ -33,6 +33,7 @@ import { logger } from '../../utils/logger';
 import { clamp01 } from '../memory/actr';
 import { fsrsSchedule, fsrsStateFromLegacy, type FsrsGradeCode, type FsrsMemoryState } from '../memory/fsrs';
 import { resolveConceptIdSafe } from '../memory/memory-trace.service';
+import { isPlaceholderConceptKey, normalizeConceptKey } from '../memory/concept-key';
 import { getActiveForConcepts } from './misconception-ledger.service';
 import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
 
@@ -138,6 +139,9 @@ export class ReviewCompletedConsumer {
       for (const item of items) {
         const conceptKey = String(item.conceptKey || '').trim();
         if (!conceptKey) continue;
+        // #109：路径骨架 concept-N 不是概念身份——本消费者直写 memory_traces（不经过
+        // recordExtraction 的护栏），必须在这里同样丢弃，否则复习事件仍是占位行的生成源。
+        if (isPlaceholderConceptKey(normalizeConceptKey(conceptKey))) continue;
 
         // 事件内重复（同一事件里同名概念重复出现）：只处理第一条
         const evidenceKey = reviewEvidenceKeyForConcept(conceptKey);
