@@ -95,7 +95,6 @@
                           <div class="ac-mr-mrow__t">
                             <span class="ac-mr-mrow__name" :title="g.name">{{ g.name }}</span>
                             <span v-if="g.description" class="ac-mr-mrow__kind" :title="g.description">· {{ g.description }}</span>
-                            <span v-if="g.recommended" class="mk-badge mk-badge--info">推荐</span>
                           </div>
                           <div class="ac-mr-mrow__d">
                             <span class="mono">{{ g.id }}</span>

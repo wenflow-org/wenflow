@@ -2902,7 +2902,12 @@ async function copyRawJson() {
 
 <style scoped>
 /* ===== Top bar ===== */
-.cp { gap: 0; }
+/* 页面级：会话对话区的高度口径（单一来源，三处消费——Goal 转录 / 课堂课程树 / 课堂对话列）。
+   口径与来历见下方「Learn 双栏」注释。 */
+.cp {
+  gap: 0;
+  --cp-class-h: clamp(560px, calc(100dvh - 140px), 1100px);
+}
 .cp-topbar {
   /* 状态条外观（表面/描边/间距/内容协议）由 .mk-status 提供，本类只负责"粘性放置" */
   background: var(--mk-bg);
@@ -3279,13 +3284,14 @@ async function copyRawJson() {
 
 /* Transcripts */
 /* 内滚动上限（2026-10-12 走查）：Goal 转录与课堂对话都随内容长到两千 px 把整页拉长、
-   控制台侧栏滚出视口——收进视口内自滚。上限随视口自适应（hero+stepper+页签头约占
-   510px，余量全给内容；短屏保底 420 防止滚动区过小），三处同规则、加嵌套滚动隔离
-   （#72）：滚到底不把滚动链传给外层侧栏/页面 */
+   控制台侧栏滚出视口——收进视口内自滚。上限走页面级 --cp-class-h（原为
+   max(420px, calc(100dvh - 510px))，2026-10-19 用户「课堂区域高度高一些」时与课堂两列一起
+   换口径，别再退回写死值）。
+   嵌套滚动隔离（#72）：滚到底不把滚动链传给外层侧栏/页面 */
 .cp-transcripts {
   display: grid; gap: 10px; padding: 12px 16px 16px;
   overflow-y: auto;
-  max-height: max(420px, calc(100dvh - 510px));
+  max-height: var(--cp-class-h);
   overscroll-behavior: contain;
 }
 .cp-transcript {
@@ -3335,9 +3341,9 @@ async function copyRawJson() {
    两列恒 420（实测 1440×900：grid 420 / 卡 472），而滚到那儿实际还有约 760 可用，下面空一大片。
    改按「滚到课堂区后还剩多少视口」这把尺子（对照：右侧 .cp-sidebar sticky top 84 +
    max-height calc(100vh - 100px) 是同一把）：下限 560 保证矮屏上仍是一块可用工作区，
-   上限 1100 防 4K/超高的屏把整页撑成一张卡。两列同高（只给一处口径，避免再各写一半）。 */
+   上限 1100 防 4K/超高的屏把整页撑成一张卡。两列同高（只给一处口径，避免再各写一半）——
+   口径变量定义在页根 .cp，这里只消费。 */
 .cp-learn-grid {
-  --cp-class-h: clamp(560px, calc(100dvh - 140px), 1100px);
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   gap: 0;
@@ -3418,7 +3424,7 @@ async function copyRawJson() {
 .cp-learn-chat {
   padding: 12px 16px 16px;
   overflow-y: auto;
-  /* 内滚动上限与左邻课树同一条口径（--cp-class-h，定义在 .cp-learn-grid）；
+  /* 内滚动上限与左邻课树同一条口径（--cp-class-h，定义在页根 .cp）；
      无上限时对话列会长到 2000px+ 撑长整页（2026-10-12 走查）；嵌套滚动隔离（#72） */
   max-height: var(--cp-class-h);
   overscroll-behavior: contain;
