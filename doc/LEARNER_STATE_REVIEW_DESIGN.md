@@ -180,7 +180,8 @@ interface LearnerStateReviewOutput {
 ### 4.5 存储：`learner_projections`（scope=review）
 
 ```prisma
-model learner_insights {
+// 设计草案；现行实现不建独立表，字段语义落在 learner_projections(scope="review").payload
+model LearnerReviewPayloadDraft {
   id             String   @id
   userId         String
   pathId         String?
@@ -266,7 +267,8 @@ model learner_insights {
 ### 6.5 校准闭环：`learner_projections`（scope=insight-records）
 
 ```prisma
-model insight_records {
+// 设计草案；现行实现不建独立表，字段语义落在 learner_projections(scope="insight-records").payload
+model InsightRecordPayloadDraft {
   id             String   @id
   userId         String
   insightId      String

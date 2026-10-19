@@ -18,6 +18,12 @@ import prisma from '../config/database';
 
 const APPLY = process.argv.includes('--apply');
 const PLACEHOLDER_RE = /^concept-\d+$/i;
+/**
+ * 写侧开始打 `metadata.synthetic=true` 的落地时刻（提交 a11d6937，2026-10-18T14:54:45Z）。
+ * 只回填此前的行：该时刻之后按写侧语义**真实测量**的 task-completion 行可能本就未被标
+ * synthetic，重跑脚本若无脑补标，会把真实负荷冒充成合成值（#109 ④）。
+ */
+const SYNTHETIC_FLAG_WRITE_SIDE_SINCE_MS = Date.parse('2026-10-18T14:54:45Z');
 
 async function main() {
   const concepts = await prisma.concepts.findMany({
@@ -35,9 +41,11 @@ async function main() {
 
   const metrics = await prisma.learning_metrics.findMany({
     where: { sourceKey: { startsWith: 'task-completion:' } },
-    select: { id: true, metadata: true },
+    select: { id: true, metadata: true, recordedAt: true },
   });
   const metricsNeedingFlag = metrics.filter((row) => {
+    // 写侧落标之后的行不在历史回填范围（避免把真实测量误标成 synthetic）
+    if (row.recordedAt && row.recordedAt.getTime() >= SYNTHETIC_FLAG_WRITE_SIDE_SINCE_MS) return false;
     try {
       const parsed = row.metadata ? JSON.parse(String(row.metadata)) : null;
       return !parsed || parsed.synthetic !== true;

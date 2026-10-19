@@ -1,0 +1,744 @@
+{
+  "source": "backend/prisma/dev.db :: learning_paths.aiPromptTemplate.materialRefs.byTask (任务级) + byStage (里程碑级)",
+  "extractedAt": "2026-10-19T17:18:52.698Z",
+  "runFile": "merged-1792388275960.json",
+  "note": "只读抽样快照：把 run 产物对应 20 条路径的引用分布固化下来，供 recompute-goal-path-readings.ts 离线复算（不连 DB）。",
+  "totals": {
+    "stages": 74,
+    "taskRefs": 233,
+    "milestoneRefs": 105,
+    "combinedRefs": 338,
+    "zeroTask": [
+      "cpa-accounting:s4",
+      "high-school-history:s4",
+      "diabetes-guide:s2"
+    ],
+    "zeroCombined": []
+  },
+  "paths": [
+    {
+      "goal": "safety-engineer",
+      "pathId": "lp_1792385478698_u9ph2hl",
+      "userId": "ab_safety-engineer-new_55390c6c",
+      "createdAt": "1792385478777",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 3,
+          "milestoneRefs": 1,
+          "combinedRefs": 4,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 2,
+          "refs": 5,
+          "milestoneRefs": 1,
+          "combinedRefs": 6,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 1,
+          "milestoneRefs": 0,
+          "combinedRefs": 1,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 4,
+          "refs": 1,
+          "milestoneRefs": 0,
+          "combinedRefs": 1,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 10
+    },
+    {
+      "goal": "cpa-accounting",
+      "pathId": "lp_1792385652190_d47u4p5",
+      "userId": "ab_cpa-accounting-new_c07c9e75",
+      "createdAt": "1792385652244",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 4,
+          "milestoneRefs": 2,
+          "combinedRefs": 6,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 2,
+          "refs": 5,
+          "milestoneRefs": 2,
+          "combinedRefs": 7,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 1,
+          "milestoneRefs": 2,
+          "combinedRefs": 3,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 4,
+          "refs": 0,
+          "milestoneRefs": 1,
+          "combinedRefs": 1,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [
+        4
+      ],
+      "storedRefsTotal": 10
+    },
+    {
+      "goal": "high-school-history",
+      "pathId": "lp_1792385839867_hcgakep",
+      "userId": "ab_high-school-history-new_17733e3e",
+      "createdAt": "1792385839902",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 3,
+          "milestoneRefs": 2,
+          "combinedRefs": 5,
+          "subtasks": 4
+        },
+        {
+          "stageNumber": 2,
+          "refs": 6,
+          "milestoneRefs": 2,
+          "combinedRefs": 8,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 6,
+          "milestoneRefs": 2,
+          "combinedRefs": 8,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 4,
+          "refs": 0,
+          "milestoneRefs": 2,
+          "combinedRefs": 2,
+          "subtasks": 4
+        }
+      ],
+      "storedZeroRefStages": [
+        4
+      ],
+      "storedRefsTotal": 15
+    },
+    {
+      "goal": "german-a2",
+      "pathId": "lp_1792385987833_2aziq9x",
+      "userId": "ab_german-a2-new_ac33d2f6",
+      "createdAt": "1792385987870",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 1,
+          "milestoneRefs": 1,
+          "combinedRefs": 2,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 2,
+          "refs": 4,
+          "milestoneRefs": 1,
+          "combinedRefs": 5,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 5,
+          "milestoneRefs": 1,
+          "combinedRefs": 6,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 4,
+          "refs": 5,
+          "milestoneRefs": 1,
+          "combinedRefs": 6,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 15
+    },
+    {
+      "goal": "feline-nursing",
+      "pathId": "lp_1792386160031_t14b9g0",
+      "userId": "ab_feline-nursing-new_c138490d",
+      "createdAt": "1792386160064",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 3,
+          "milestoneRefs": 0,
+          "combinedRefs": 3,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 2,
+          "refs": 4,
+          "milestoneRefs": 0,
+          "combinedRefs": 4,
+          "subtasks": 4
+        },
+        {
+          "stageNumber": 3,
+          "refs": 1,
+          "milestoneRefs": 0,
+          "combinedRefs": 1,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 8
+    },
+    {
+      "goal": "agile-pm",
+      "pathId": "lp_1792386340273_1swdrx0",
+      "userId": "ab_agile-pm-new_ecd088c6",
+      "createdAt": "1792386340303",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 5,
+          "milestoneRefs": 2,
+          "combinedRefs": 7,
+          "subtasks": 4
+        },
+        {
+          "stageNumber": 2,
+          "refs": 4,
+          "milestoneRefs": 1,
+          "combinedRefs": 5,
+          "subtasks": 4
+        },
+        {
+          "stageNumber": 3,
+          "refs": 1,
+          "milestoneRefs": 1,
+          "combinedRefs": 2,
+          "subtasks": 4
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 10
+    },
+    {
+      "goal": "systematic-review",
+      "pathId": "lp_1792386460720_j9f1xm3",
+      "userId": "ab_systematic-review-new_34132fb1",
+      "createdAt": "1792386460750",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 5,
+          "milestoneRefs": 2,
+          "combinedRefs": 7,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 2,
+          "refs": 5,
+          "milestoneRefs": 2,
+          "combinedRefs": 7,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 5,
+          "milestoneRefs": 2,
+          "combinedRefs": 7,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 4,
+          "refs": 2,
+          "milestoneRefs": 2,
+          "combinedRefs": 4,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 17
+    },
+    {
+      "goal": "fire-code",
+      "pathId": "lp_1792386639113_ldeoa0v",
+      "userId": "ab_fire-code-new_4cf7a5a5",
+      "createdAt": "1792386639161",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 6,
+          "milestoneRefs": 2,
+          "combinedRefs": 8,
+          "subtasks": 4
+        },
+        {
+          "stageNumber": 2,
+          "refs": 2,
+          "milestoneRefs": 2,
+          "combinedRefs": 4,
+          "subtasks": 2
+        },
+        {
+          "stageNumber": 3,
+          "refs": 3,
+          "milestoneRefs": 2,
+          "combinedRefs": 5,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 4,
+          "refs": 2,
+          "milestoneRefs": 2,
+          "combinedRefs": 4,
+          "subtasks": 4
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 13
+    },
+    {
+      "goal": "civil-code",
+      "pathId": "lp_1792386757278_vyy7ep2",
+      "userId": "ab_civil-code-new_cfd6b59f",
+      "createdAt": "1792386757327",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 5,
+          "milestoneRefs": 1,
+          "combinedRefs": 6,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 2,
+          "refs": 5,
+          "milestoneRefs": 1,
+          "combinedRefs": 6,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 5,
+          "milestoneRefs": 1,
+          "combinedRefs": 6,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 4,
+          "refs": 1,
+          "milestoneRefs": 1,
+          "combinedRefs": 2,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 16
+    },
+    {
+      "goal": "child-development",
+      "pathId": "lp_1792386870087_d7lpc6d",
+      "userId": "ab_child-development-new_a1e02da2",
+      "createdAt": "1792386870129",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 2,
+          "milestoneRefs": 2,
+          "combinedRefs": 4,
+          "subtasks": 2
+        },
+        {
+          "stageNumber": 2,
+          "refs": 2,
+          "milestoneRefs": 2,
+          "combinedRefs": 4,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 4,
+          "milestoneRefs": 2,
+          "combinedRefs": 6,
+          "subtasks": 4
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 8
+    },
+    {
+      "goal": "mbsr",
+      "pathId": "lp_1792386981656_fl91uhn",
+      "userId": "ab_mbsr-new_f539ac11",
+      "createdAt": "1792386981695",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 3,
+          "milestoneRefs": 1,
+          "combinedRefs": 4,
+          "subtasks": 3
+        },
+        {
+          "stageNumber": 2,
+          "refs": 4,
+          "milestoneRefs": 1,
+          "combinedRefs": 5,
+          "subtasks": 4
+        },
+        {
+          "stageNumber": 3,
+          "refs": 1,
+          "milestoneRefs": 1,
+          "combinedRefs": 2,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 4,
+          "refs": 1,
+          "milestoneRefs": 1,
+          "combinedRefs": 2,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 9
+    },
+    {
+      "goal": "c-language",
+      "pathId": "lp_1792387088107_xw7j6jk",
+      "userId": "ab_c-language-new_a73ec27a",
+      "createdAt": "1792387088153",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 7,
+          "milestoneRefs": 2,
+          "combinedRefs": 9,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 2,
+          "refs": 3,
+          "milestoneRefs": 2,
+          "combinedRefs": 5,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 2,
+          "milestoneRefs": 1,
+          "combinedRefs": 3,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 4,
+          "refs": 2,
+          "milestoneRefs": 2,
+          "combinedRefs": 4,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 14
+    },
+    {
+      "goal": "veteran-training",
+      "pathId": "lp_1792387216574_t5306cf",
+      "userId": "ab_veteran-training-new_e75b91ce",
+      "createdAt": "1792387216632",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 5,
+          "milestoneRefs": 1,
+          "combinedRefs": 6,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 2,
+          "refs": 5,
+          "milestoneRefs": 1,
+          "combinedRefs": 6,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 2,
+          "milestoneRefs": 1,
+          "combinedRefs": 3,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 12
+    },
+    {
+      "goal": "first-class-builder",
+      "pathId": "lp_1792387353820_whaodn0",
+      "userId": "ab_first-class-builder-new_3d995cb4",
+      "createdAt": "1792387353882",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 4,
+          "milestoneRefs": 2,
+          "combinedRefs": 6,
+          "subtasks": 4
+        },
+        {
+          "stageNumber": 2,
+          "refs": 7,
+          "milestoneRefs": 2,
+          "combinedRefs": 9,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 2,
+          "milestoneRefs": 1,
+          "combinedRefs": 3,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 13
+    },
+    {
+      "goal": "mandarin-test",
+      "pathId": "lp_1792387489593_34fufnq",
+      "userId": "ab_mandarin-test-new_698d3e3c",
+      "createdAt": "1792387489640",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 5,
+          "milestoneRefs": 2,
+          "combinedRefs": 7,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 2,
+          "refs": 1,
+          "milestoneRefs": 2,
+          "combinedRefs": 3,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 4,
+          "milestoneRefs": 2,
+          "combinedRefs": 6,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 4,
+          "refs": 5,
+          "milestoneRefs": 2,
+          "combinedRefs": 7,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 15
+    },
+    {
+      "goal": "gaokao-math",
+      "pathId": "lp_1792387613479_yhenq2v",
+      "userId": "ab_gaokao-math-new_ba0a155c",
+      "createdAt": "1792387613526",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 6,
+          "milestoneRefs": 1,
+          "combinedRefs": 7,
+          "subtasks": 4
+        },
+        {
+          "stageNumber": 2,
+          "refs": 1,
+          "milestoneRefs": 1,
+          "combinedRefs": 2,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 2,
+          "milestoneRefs": 1,
+          "combinedRefs": 3,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 9
+    },
+    {
+      "goal": "cet",
+      "pathId": "lp_1792387701907_1hhfn7y",
+      "userId": "ab_cet-new_0f4bf3b8",
+      "createdAt": "1792387701951",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 4,
+          "milestoneRefs": 2,
+          "combinedRefs": 6,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 2,
+          "refs": 1,
+          "milestoneRefs": 1,
+          "combinedRefs": 2,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 1,
+          "milestoneRefs": 1,
+          "combinedRefs": 2,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 4,
+          "refs": 5,
+          "milestoneRefs": 1,
+          "combinedRefs": 6,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 11
+    },
+    {
+      "goal": "diabetes-guide",
+      "pathId": "lp_1792387835820_a75o5cf",
+      "userId": "ab_diabetes-guide-new_14b2b86e",
+      "createdAt": "1792387835859",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 3,
+          "milestoneRefs": 2,
+          "combinedRefs": 5,
+          "subtasks": 2
+        },
+        {
+          "stageNumber": 2,
+          "refs": 0,
+          "milestoneRefs": 1,
+          "combinedRefs": 1,
+          "subtasks": 2
+        },
+        {
+          "stageNumber": 3,
+          "refs": 2,
+          "milestoneRefs": 2,
+          "combinedRefs": 4,
+          "subtasks": 2
+        },
+        {
+          "stageNumber": 4,
+          "refs": 2,
+          "milestoneRefs": 2,
+          "combinedRefs": 4,
+          "subtasks": 2
+        }
+      ],
+      "storedZeroRefStages": [
+        2
+      ],
+      "storedRefsTotal": 7
+    },
+    {
+      "goal": "reading-method",
+      "pathId": "lp_1792387946732_dw81od9",
+      "userId": "ab_reading-method-new_189a8783",
+      "createdAt": "1792387946796",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 2,
+          "milestoneRefs": 2,
+          "combinedRefs": 4,
+          "subtasks": 2
+        },
+        {
+          "stageNumber": 2,
+          "refs": 4,
+          "milestoneRefs": 2,
+          "combinedRefs": 6,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 4,
+          "milestoneRefs": 2,
+          "combinedRefs": 6,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 4,
+          "refs": 2,
+          "milestoneRefs": 1,
+          "combinedRefs": 3,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 12
+    },
+    {
+      "goal": "tax-agent",
+      "pathId": "lp_1792388059249_f5w3f33",
+      "userId": "ab_tax-agent-new_a4d7cc77",
+      "createdAt": "1792388059290",
+      "stages": [
+        {
+          "stageNumber": 1,
+          "refs": 1,
+          "milestoneRefs": 2,
+          "combinedRefs": 3,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 2,
+          "refs": 2,
+          "milestoneRefs": 1,
+          "combinedRefs": 3,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 3,
+          "refs": 1,
+          "milestoneRefs": 1,
+          "combinedRefs": 2,
+          "subtasks": 5
+        },
+        {
+          "stageNumber": 4,
+          "refs": 5,
+          "milestoneRefs": 1,
+          "combinedRefs": 6,
+          "subtasks": 5
+        }
+      ],
+      "storedZeroRefStages": [],
+      "storedRefsTotal": 9
+    }
+  ]
+}

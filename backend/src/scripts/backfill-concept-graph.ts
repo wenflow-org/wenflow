@@ -85,7 +85,7 @@ async function main() {
 
   const paths = await loadPaths(args);
   const started = Date.now();
-  const total = { prerequisite: 0, partOf: 0, prerequisiteConcept: 0, skipped: 0, failed: 0 };
+  const total = { prerequisite: 0, prerequisiteUser: 0, partOf: 0, prerequisiteConcept: 0, skipped: 0, failed: 0 };
   for (const row of paths) {
     const template = parsePathPromptTemplate(row.aiPromptTemplate);
     const ann = (template as { kcAnnotation?: unknown } | null)?.kcAnnotation;
@@ -98,6 +98,7 @@ async function main() {
         cognitiveCore: (template as { cognitiveCore?: unknown } | null)?.cognitiveCore as never,
       });
       total.prerequisite += r.prerequisite;
+      total.prerequisiteUser += r.prerequisiteUser;
       total.partOf += r.partOf;
       total.prerequisiteConcept += r.prerequisiteConcept;
       total.skipped += r.skipped;
@@ -111,7 +112,7 @@ async function main() {
   }
   const edgeCount = await prisma.concept_edges.count();
   console.log(`[graph] 完成 耗时=${((Date.now() - started) / 1000).toFixed(1)}s` +
-    ` ｜prerequisite=${total.prerequisite}（概念级投影 +${total.prerequisiteConcept}） part_of=${total.partOf}` +
+    ` ｜prerequisite=${total.prerequisite}（概念级投影 +${total.prerequisiteConcept}，用户级 +${total.prerequisiteUser}） part_of=${total.partOf}` +
     ` 跳过=${total.skipped} 失败路径=${total.failed}`);
   console.log(`[graph] 库内 concept_edges=${edgeCount}`);
 }

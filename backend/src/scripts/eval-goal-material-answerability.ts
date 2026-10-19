@@ -36,7 +36,7 @@ import path from 'path';
 import { chunkMaterialMarkdown, chunkEmbedText } from '../services/materials/material-chunker';
 import { parseDocument } from '../services/materials/document-parser';
 import { normalizeWebTextStructure } from '../services/materials/material-web-structure';
-import { embedTexts, cosineSimilarity } from '../services/embedding';
+import { embedTexts, cosineSimilarity, rerankDocuments } from '../services/embedding';
 
 const OUT_DIR = path.resolve(__dirname, '../../../doc/local/GOAL-MATERIAL-EVAL-2026-10-18');
 const CORPUS_FILE = path.join(OUT_DIR, 'corpus.json');
@@ -345,17 +345,37 @@ async function judgeOne(cfg: JudgeConfig, chunk: string, question: string): Prom
     process.env.ANSWERABILITY_INSTRUCTIONS ||
     '这段材料是否包含足以回答该问题所需的信息？材料里明确说明了该问题所问的概念、数值或结论才给高概率；' +
     '只有同一大主题但没有直接相关信息给低概率。';
+  // ANSWERABILITY_QUESTION_TYPE=choice 时改用「有/没有」二选一，用 P(有) 当分数：
+  // 部分模型（如 laya 部署）的 noul 有明显「偏说能答」的校准偏差，choice 的概率分布可能更分得开。
+  const useChoice = (process.env.ANSWERABILITY_QUESTION_TYPE || 'noul') === 'choice';
+  const questions = useChoice
+    ? {
+        a: {
+          type: 'choice',
+          instructions,
+          criteria: { 有: '材料里明确写出了回答该问题所需的具体答案内容', 没有: '材料里没有该问题所问的具体答案内容' },
+        },
+      }
+    : { a: { type: 'noul', instructions } };
   const res = await fetch(cfg.url, {
     method: 'POST',
     headers: cfg.headers,
     body: JSON.stringify({
       ...(cfg.bodyModel ? { model: cfg.bodyModel } : {}),
       state: { 材料: chunk, 问题: question },
-      questions: { a: { type: 'noul', instructions } },
+      questions,
     }),
   });
   if (!res.ok) return null;
-  return cfg.extract(await res.json());
+  const body = await res.json();
+  if (useChoice) {
+    const container = (body as { result?: unknown })?.result ?? body;
+    const probs = (container as { answers?: { a?: { probabilities?: Record<string, number> } } })?.answers?.a
+      ?.probabilities;
+    const yes = probs?.['有'];
+    return typeof yes === 'number' ? yes : null;
+  }
+  return cfg.extract(body);
 }
 
 // ───────────────────────────── 独立标注复核 ─────────────────────────────
@@ -494,29 +514,64 @@ async function main(): Promise<void> {
     console.log(`[cosine] 完成 ${cosineByPair.size}/${pairs.length}`);
   }
 
-  // 决策模型打分
-  const cfg = buildJudge(judgeName);
-  if (!cfg.url || (cfg.headers.Authorization !== undefined && /Bearer\s*$/.test(String(cfg.headers.Authorization)))) {
+  // 打分：默认走决策模型；--ranker=rerank 时改用交叉编码重排器（查询 × 候选成对精排）
+  const useRerank = (arg('ranker') ?? 'judge') === 'rerank';
+  let cfg = buildJudge(judgeName);
+  let scored: ScoredPair[];
+  let failed = 0;
+
+  if (useRerank) {
+    // 生产同形：一条 query 带它那几条候选，一次调用拿回逐条精排分（不是逐对请求）
+    cfg = { name: 'reranker:bge-reranker-v2-m3', url: 'local:rerank', headers: {}, extract: () => null };
+    const byQuestion = new Map<string, number[]>();
+    pairs.forEach((p, i) => {
+      const list = byQuestion.get(p.question) ?? [];
+      list.push(i);
+      byQuestion.set(p.question, list);
+    });
+    const scores = new Array<number | null>(pairs.length).fill(null);
+    console.log(`[reranker] bge-reranker-v2-m3，${byQuestion.size} 条 query（每条带 2~4 个候选）…`);
+    let groups = 0;
+    for (const [question, idxs] of byQuestion) {
+      try {
+        const res = await rerankDocuments({
+          query: question,
+          documents: idxs.map((i) => pairs[i].chunk.text.slice(0, 1800)),
+        });
+        for (const item of res.results) {
+          const pairIdx = idxs[item.index];
+          if (pairIdx !== undefined) scores[pairIdx] = item.relevanceScore;
+        }
+      } catch (error) {
+        failed += idxs.length;
+        console.log(`\n  rerank 失败（${question}）：${error instanceof Error ? error.message : String(error)}`);
+      }
+      groups += 1;
+      if (groups % 10 === 0 || groups === byQuestion.size) process.stdout.write(`\r[reranker] ${groups}/${byQuestion.size}`);
+    }
+    process.stdout.write('\n');
+    scored = pairs.map((p, i) => ({ ...p, cosine: cosineByPair.get(i) ?? null, judge: scores[i] }));
+  } else if (!cfg.url || (cfg.headers.Authorization !== undefined && /Bearer\s*$/.test(String(cfg.headers.Authorization)))) {
     console.error(`[judge] 缺少凭证（judge=${judgeName}）`);
     process.exitCode = 1;
     return;
+  } else {
+    console.log(`[judge] ${cfg.name}，逐条打分（并发 6）…`);
+    let done = 0;
+    scored = await mapLimit(pairs, 6, async (pair, i) => {
+      let score: number | null = null;
+      try {
+        score = await judgeOne(cfg, pair.chunk.text.slice(0, 4000), pair.question);
+      } catch {
+        score = null;
+      }
+      if (score === null) failed += 1;
+      done += 1;
+      if (done % 20 === 0 || done === pairs.length) process.stdout.write(`\r[judge] ${done}/${pairs.length}（失败 ${failed}）`);
+      return { ...pair, cosine: cosineByPair.get(i) ?? null, judge: score };
+    });
+    process.stdout.write('\n');
   }
-  console.log(`[judge] ${cfg.name}，逐条打分（并发 6）…`);
-  let done = 0;
-  let failed = 0;
-  const scored: ScoredPair[] = await mapLimit(pairs, 6, async (pair, i) => {
-    let score: number | null = null;
-    try {
-      score = await judgeOne(cfg, pair.chunk.text.slice(0, 4000), pair.question);
-    } catch {
-      score = null;
-    }
-    if (score === null) failed += 1;
-    done += 1;
-    if (done % 20 === 0 || done === pairs.length) process.stdout.write(`\r[judge] ${done}/${pairs.length}（失败 ${failed}）`);
-    return { ...pair, cosine: cosineByPair.get(i) ?? null, judge: score };
-  });
-  process.stdout.write('\n');
 
   // ── 独立标注复核（--no-label 可跳过） ──
   if (!hasFlag('no-label')) {

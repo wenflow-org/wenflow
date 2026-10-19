@@ -1,0 +1,5031 @@
+{
+  "runFile": "../doc/local/ab-goal-path/run-1792388187455.json",
+  "refScope": "combined",
+  "totals": {
+    "refs": 338,
+    "lateChunk": 97,
+    "lateSection": 117,
+    "sectionOnly": 37,
+    "neither": 204,
+    "goalsWithLateChunk": 16,
+    "goalsWithLateSection": 20
+  },
+  "perGoal": [
+    {
+      "goal": "safety-engineer",
+      "refs": 12,
+      "lateChunk": 1,
+      "lateSection": 4,
+      "sectionOnly": 4,
+      "sectionChunkRho": null,
+      "samples": [
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-8",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.21621621621621623
+        },
+        {
+          "sectionId": "s-14",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": null
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "fd2a1a22-32a5-4ea8-9dac-f94dfbf94838",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "应急厅〔２０１９〕４３号附件１",
+          "quote": "中级注册安全工程师职业资格 考 试 大 纲 二〇一九年四月",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "fd2a1a22-32a5-4ea8-9dac-f94dfbf94838",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 目　录",
+          "quote": "## 目 录",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "fd2a1a22-32a5-4ea8-9dac-f94dfbf94838",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "## 目　录",
+          "quote": "## 目 录",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "fd2a1a22-32a5-4ea8-9dac-f94dfbf94838",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "应急厅〔２０１９〕４３号附件１",
+          "quote": "应急厅〔２０１９〕４３号附件１",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "fd2a1a22-32a5-4ea8-9dac-f94dfbf94838",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "## 目　录",
+          "quote": "６．安全文化 １３􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺 ７．危险化学品重大危险源 １３􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺 ８．安全生产规章制度 １３􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺􀆺\udbc0",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.21621621621621623,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "fd2a1a22-32a5-4ea8-9dac-f94dfbf94838",
+          "sourceTitle": null,
+          "sectionId": "s-14",
+          "sectionTitle": "## 目　录",
+          "quote": "## 目 录",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "fd2a1a22-32a5-4ea8-9dac-f94dfbf94838",
+          "sourceTitle": null,
+          "sectionId": "s-9",
+          "sectionTitle": "## 目　录",
+          "quote": "## 目 录",
+          "total": 24,
+          "sectionPos": 0.34782608695652173,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "fd2a1a22-32a5-4ea8-9dac-f94dfbf94838",
+          "sourceTitle": null,
+          "sectionId": "s-13",
+          "sectionTitle": "## 目　录",
+          "quote": "## 目 录",
+          "total": 24,
+          "sectionPos": 0.5217391304347826,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "fd2a1a22-32a5-4ea8-9dac-f94dfbf94838",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 目　录",
+          "quote": "## 目 录",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "fd2a1a22-32a5-4ea8-9dac-f94dfbf94838",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "## 目　录",
+          "quote": "## 目 录",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "fd2a1a22-32a5-4ea8-9dac-f94dfbf94838",
+          "sourceTitle": null,
+          "sectionId": "s-9",
+          "sectionTitle": "## 目　录",
+          "quote": "２１．应急管理.根据安全生产",
+          "total": 24,
+          "sectionPos": 0.34782608695652173,
+          "chunkPos": 0.6486486486486487,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "fd2a1a22-32a5-4ea8-9dac-f94dfbf94838",
+          "sourceTitle": null,
+          "sectionId": "s-24",
+          "sectionTitle": "## 目　录",
+          "quote": "## 目 录",
+          "total": 24,
+          "sectionPos": 1,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "cpa-accounting",
+      "refs": 17,
+      "lateChunk": 1,
+      "lateSection": 1,
+      "sectionOnly": 0,
+      "sectionChunkRho": 1,
+      "samples": [
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-5",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.14285714285714285
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.05357142857142857
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.03571428571428571
+        },
+        {
+          "sectionId": "s-6",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.17857142857142858
+        },
+        {
+          "sectionId": "s-4",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.07142857142857142
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "1.会计基本原理，包括会计概念、会计循环、会计方法、应用复式记",
+          "quote": "1.会计基本原理，包括会计概念、会计循环、会计方法、应用复式记",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-5",
+          "sectionTitle": "（3）具体审计目标",
+          "quote": "（3）具体审计目标",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.14285714285714285,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "1.资产负债表债务法的理论基础 1",
+          "quote": "1.资产负债表债务法的理论基础 1",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.05357142857142857,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "3.权益法与公允价值计量转换 3",
+          "quote": "3.权益法与公允价值计量转换 3",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.03571428571428571,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "4.了解被审计单位的内部控制",
+          "quote": "4.了解被审计单位的内部控制",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.17857142857142858,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "5.市场风险或信用风险可抵销的金融资产和金融负债的公",
+          "quote": "5.市场风险或信用风险可抵销的金融资产和金融负债的公",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.07142857142857142,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "3.权益法与公允价值计量转换 3",
+          "quote": "3.权益法与公允价值计量转换 3",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.03571428571428571,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "1.资产负债表债务法的理论基础 1",
+          "quote": "1.资产负债表债务法的理论基础 1",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.05357142857142857,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "1.会计基本原理，包括会计概念、会计循环、会计方法、应用复式记",
+          "quote": "1.会计基本原理，包括会计概念、会计循环、会计方法、应用复式记",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "1.资产负债表债务法的理论基础 1",
+          "quote": "1.资产负债表债务法的理论基础 1",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.05357142857142857,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "3.权益法与公允价值计量转换 3",
+          "quote": "3.权益法与公允价值计量转换 3",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.03571428571428571,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "3.权益法与公允价值计量转换 3",
+          "quote": "3.权益法与公允价值计量转换 3",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.03571428571428571,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "1.会计基本原理，包括会计概念、会计循环、会计方法、应用复式记",
+          "quote": "1.会计基本原理，包括会计概念、会计循环、会计方法、应用复式记",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "4.了解被审计单位的内部控制",
+          "quote": "4.了解被审计单位的内部控制",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.17857142857142858,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "（5）当财务报表存在重大错报或注册会计师对被审计单位及",
+          "quote": "（5）当财务报表存在重大错报或注册会计师对被审计单位及",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.26785714285714285,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-15",
+          "sectionTitle": "（1）管理人制度的一般理论 1",
+          "quote": "（1）管理人制度的一般理论 1",
+          "total": 24,
+          "sectionPos": 0.6086956521739131,
+          "chunkPos": 0.5714285714285714,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "d7bc5145-b377-4769-a39c-81963fa457ba",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "5.市场风险或信用风险可抵销的金融资产和金融负债的公",
+          "quote": "5.市场风险或信用风险可抵销的金融资产和金融负债的公",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.07142857142857142,
+          "lateChunk": false,
+          "lateSection": false
+        }
+      ]
+    },
+    {
+      "goal": "high-school-history",
+      "refs": 23,
+      "lateChunk": 8,
+      "lateSection": 8,
+      "sectionOnly": 0,
+      "sectionChunkRho": 0.9756521739130435,
+      "samples": [
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0.2808219178082192
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.1506849315068493
+        },
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0.2808219178082192
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.1506849315068493
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.1506849315068493
+        },
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0.00684931506849315
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "第二单元  三国两晋南北朝的民族交融与隋唐统一多民族",
+          "quote": "第二单元 三国两晋南北朝的民族交融与隋唐统一多民族",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0.2808219178082192,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "第一单元",
+          "quote": "第一单元",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.1506849315068493,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "第二单元  三国两晋南北朝的民族交融与隋唐统一多民族",
+          "quote": "第二单元 三国两晋南北朝的民族交融与隋唐统一多民族",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0.2808219178082192,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "第一单元",
+          "quote": "第一单元",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.1506849315068493,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "第一单元",
+          "quote": "第一单元",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.1506849315068493,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "第二单元  三国两晋南北朝的民族交融与隋唐统一多民族",
+          "quote": "封建国家的发展 25 第 5 课 三国两晋南北朝的政权更迭与民族交融 26 第 6 课 从隋唐盛世到五代十国 32 第 7 课 隋唐制度的变化与创新 38 第 8 课 三国至隋唐的文化 42 第三单元 辽宋夏金多民族政权的并立与元朝的统一",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0.00684931506849315,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "二、 三世纪之交， 军阀混战， 东汉政权名存实亡。207 年，",
+          "quote": "二、 三世纪之交， 军阀混战， 东汉政权名存实亡。207 年，",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.273972602739726,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "第一单元",
+          "quote": "第一单元",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.1506849315068493,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "第一单元",
+          "quote": "第一单元",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.1506849315068493,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "第二单元  三国两晋南北朝的民族交融与隋唐统一多民族",
+          "quote": "第二单元 三国两晋南北朝的民族交融与隋唐统一多民族",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0.2808219178082192,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "第二单元  三国两晋南北朝的民族交融与隋唐统一多民族",
+          "quote": "第二单元 三国两晋南北朝的民族交融与隋唐统一多民族",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0.2808219178082192,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-9",
+          "sectionTitle": "第三单元",
+          "quote": "第三单元",
+          "total": 24,
+          "sectionPos": 0.34782608695652173,
+          "chunkPos": 0.4383561643835616,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "第三单元",
+          "quote": "第三单元",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": 0.4383561643835616,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-19",
+          "sectionTitle": "1894.9",
+          "quote": "1894.9",
+          "total": 24,
+          "sectionPos": 0.782608695652174,
+          "chunkPos": 0.7876712328767124,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-23",
+          "sectionTitle": "（4）联合第三国际。",
+          "quote": "（4）联合第三国际。",
+          "total": 24,
+          "sectionPos": 0.9565217391304348,
+          "chunkPos": 0.9452054794520548,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-9",
+          "sectionTitle": "第三单元",
+          "quote": "第三单元",
+          "total": 24,
+          "sectionPos": 0.34782608695652173,
+          "chunkPos": 0.4383561643835616,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "第五单元",
+          "quote": "第五单元",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": 0.7191780821917808,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-17",
+          "sectionTitle": "第五单元",
+          "quote": "第五单元",
+          "total": 24,
+          "sectionPos": 0.6956521739130435,
+          "chunkPos": 0.7191780821917808,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-18",
+          "sectionTitle": "第五单元",
+          "quote": "第五单元",
+          "total": 24,
+          "sectionPos": 0.7391304347826086,
+          "chunkPos": 0.7191780821917808,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "第五单元",
+          "quote": "第五单元",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": 0.7191780821917808,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-17",
+          "sectionTitle": "第五单元",
+          "quote": "第五单元",
+          "total": 24,
+          "sectionPos": 0.6956521739130435,
+          "chunkPos": 0.7191780821917808,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-9",
+          "sectionTitle": "第三单元",
+          "quote": "第三单元",
+          "total": 24,
+          "sectionPos": 0.34782608695652173,
+          "chunkPos": 0.4383561643835616,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e8e9de97-bd71-406e-bd99-2b4ce7e350b5",
+          "sourceTitle": null,
+          "sectionId": "s-13",
+          "sectionTitle": "第四单元",
+          "quote": "第四单元",
+          "total": 24,
+          "sectionPos": 0.5217391304347826,
+          "chunkPos": 0.5684931506849316,
+          "lateChunk": true,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "german-a2",
+      "refs": 19,
+      "lateChunk": 11,
+      "lateSection": 9,
+      "sectionOnly": 1,
+      "sectionChunkRho": 0.9932241671372106,
+      "samples": [
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.08620689655172414
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.08620689655172414
+        },
+        {
+          "sectionId": "s-11",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.43103448275862066
+        },
+        {
+          "sectionId": "s-13",
+          "total": 24,
+          "sectionPos": 0.5217391304347826,
+          "chunkPos": 0.5344827586206896
+        },
+        {
+          "sectionId": "s-15",
+          "total": 24,
+          "sectionPos": 0.6086956521739131,
+          "chunkPos": 0.7758620689655172
+        },
+        {
+          "sectionId": "s-11",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.43103448275862066
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "ir wünschen Ihnen viel Freude und Erfolg!",
+          "quote": "ir wünschen Ihnen viel Freude und Erfolg!",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.08620689655172414,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "ir wünschen Ihnen viel Freude und Erfolg!",
+          "quote": "ir wünschen Ihnen viel Freude und Erfolg!",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.08620689655172414,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "tzt die Bilder an.",
+          "quote": "tzt die Bilder an.",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.43103448275862066,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-13",
+          "sectionTitle": "A2 Sprechen Teil 1 GOETHE-ZERTIFIKAT A2 Sprechen Teil 1",
+          "quote": "A2 Sprechen Teil 1 GOETHE-ZERTIFIKAT A2 Sprechen Teil 1",
+          "total": 24,
+          "sectionPos": 0.5217391304347826,
+          "chunkPos": 0.5344827586206896,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-15",
+          "sectionTitle": "21.00",
+          "quote": "21.00",
+          "total": 24,
+          "sectionPos": 0.6086956521739131,
+          "chunkPos": 0.7758620689655172,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "tzt die Bilder an.",
+          "quote": "tzt die Bilder an.",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.43103448275862066,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-12",
+          "sectionTitle": "n mitbringen.",
+          "quote": "n mitbringen.",
+          "total": 24,
+          "sectionPos": 0.4782608695652174,
+          "chunkPos": 0.5,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-13",
+          "sectionTitle": "A2 Sprechen Teil 1 GOETHE-ZERTIFIKAT A2 Sprechen Teil 1",
+          "quote": "A2 Sprechen Teil 1 GOETHE-ZERTIFIKAT A2 Sprechen Teil 1",
+          "total": 24,
+          "sectionPos": 0.5217391304347826,
+          "chunkPos": 0.5344827586206896,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-9",
+          "sectionTitle": "d ihre Tochter feiern Kindergeburtstag und möchten",
+          "quote": "d ihre Tochter feiern Kindergeburtstag und möchten",
+          "total": 24,
+          "sectionPos": 0.34782608695652173,
+          "chunkPos": 0.3275862068965517,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-12",
+          "sectionTitle": "n mitbringen.",
+          "quote": "n mitbringen.",
+          "total": 24,
+          "sectionPos": 0.4782608695652174,
+          "chunkPos": 0.5,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-9",
+          "sectionTitle": "d ihre Tochter feiern Kindergeburtstag und möchten",
+          "quote": "d ihre Tochter feiern Kindergeburtstag und möchten",
+          "total": 24,
+          "sectionPos": 0.34782608695652173,
+          "chunkPos": 0.3275862068965517,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-12",
+          "sectionTitle": "n mitbringen.",
+          "quote": "n mitbringen.",
+          "total": 24,
+          "sectionPos": 0.4782608695652174,
+          "chunkPos": 0.5,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-13",
+          "sectionTitle": "A2 Sprechen Teil 1 GOETHE-ZERTIFIKAT A2 Sprechen Teil 1",
+          "quote": "A2 Sprechen Teil 1 GOETHE-ZERTIFIKAT A2 Sprechen Teil 1",
+          "total": 24,
+          "sectionPos": 0.5217391304347826,
+          "chunkPos": 0.5344827586206896,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "esuchen sie Mario zu Hause.",
+          "quote": "esuchen sie Mario zu Hause.",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.3103448275862069,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-22",
+          "sectionTitle": "21.00",
+          "quote": "Goethe-Zertifikat A2 Modellsatz Erwachsene·21.00｜y Kirienko Diese Texte sind von Lernerinnen und Lernern aus einem A2-Ku",
+          "total": 24,
+          "sectionPos": 0.9130434782608695,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-21",
+          "sectionTitle": "21.00",
+          "quote": "n Teilnehmende/-n 2 gewandt. An Teilnehmende/-n 2 gewandt. An Teilnehmende/-n 1 gewandt. Überleitung zu Teil 2 Dank e. D",
+          "total": 24,
+          "sectionPos": 0.8695652173913043,
+          "chunkPos": 0.9137931034482759,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-20",
+          "sectionTitle": "21.00",
+          "quote": "2 1 0 5 3,5 2 0,5 0 4 3 2 1 0 4 3 2 1 0 4 3 2 1 0 4 3 2 1 0 2 1,5 1 0,5 0 2 1,5 1 0,5 0 PTN-Nr. PTN -Nr. Nachna…",
+          "total": 24,
+          "sectionPos": 0.8260869565217391,
+          "chunkPos": 1,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-19",
+          "sectionTitle": "21.00",
+          "quote": "anen Sie etwas zusammen. Sie bekommen ein Aufgabenblatt. (Aufgabenstellung vorlesen, z. B.: Ihr Freund Patrick …",
+          "total": 24,
+          "sectionPos": 0.782608695652174,
+          "chunkPos": 0.9310344827586207,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "d54ff82d-6784-4fa7-80fc-9af14410c22b",
+          "sourceTitle": null,
+          "sectionId": "s-18",
+          "sectionTitle": "21.00",
+          "quote": "k. Wir sind am Ende der Prüfung. Auf Wiedersehen! Prüfer/-in 1 bedankt und verabschiedet sich freundlich. Vs5.1…",
+          "total": 24,
+          "sectionPos": 0.7391304347826086,
+          "chunkPos": 0.9482758620689655,
+          "lateChunk": true,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "feline-nursing",
+      "refs": 8,
+      "lateChunk": 3,
+      "lateSection": 3,
+      "sectionOnly": 0,
+      "sectionChunkRho": 0.9947826086956522,
+      "samples": [
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.049586776859504134
+        },
+        {
+          "sectionId": "s-4",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.12396694214876033
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.049586776859504134
+        },
+        {
+          "sectionId": "s-13",
+          "total": 24,
+          "sectionPos": 0.5217391304347826,
+          "chunkPos": 0.5371900826446281
+        },
+        {
+          "sectionId": "s-12",
+          "total": 24,
+          "sectionPos": 0.4782608695652174,
+          "chunkPos": 0.49586776859504134
+        },
+        {
+          "sectionId": "s-11",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.4214876033057851
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "94610c38-4113-43df-ad0f-9cb4a92d7d16",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "tal Association, American Association of Feline Practitioner…",
+          "quote": "Introduction The feline patient ’s life stage is the most fundamental presentation factor the practitioner encounters in",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.049586776859504134,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "94610c38-4113-43df-ad0f-9cb4a92d7d16",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "detection of renal disease in mature adult and senior",
+          "quote": "detection of renal disease in mature adult and senior",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.12396694214876033,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "94610c38-4113-43df-ad0f-9cb4a92d7d16",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "tal Association, American Association of Feline Practitioner…",
+          "quote": "Introduction The feline patient ’s life stage is the most fundamental presentation factor the practitioner encounters in",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.049586776859504134,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "94610c38-4113-43df-ad0f-9cb4a92d7d16",
+          "sourceTitle": null,
+          "sectionId": "s-13",
+          "sectionTitle": "nce of oral disease. 93",
+          "quote": "nce of oral disease. 93",
+          "total": 24,
+          "sectionPos": 0.5217391304347826,
+          "chunkPos": 0.5371900826446281,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "94610c38-4113-43df-ad0f-9cb4a92d7d16",
+          "sourceTitle": null,
+          "sectionId": "s-12",
+          "sectionTitle": "recommended. Disorders",
+          "quote": "recommended. Disorders",
+          "total": 24,
+          "sectionPos": 0.4782608695652174,
+          "chunkPos": 0.49586776859504134,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "94610c38-4113-43df-ad0f-9cb4a92d7d16",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "cat to express normal feline behaviors and pro-",
+          "quote": "cat to express normal feline behaviors and pro-",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.4214876033057851,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "94610c38-4113-43df-ad0f-9cb4a92d7d16",
+          "sourceTitle": null,
+          "sectionId": "s-15",
+          "sectionTitle": "iated clinical problems. Canine and",
+          "quote": "iated clinical problems. Canine and",
+          "total": 24,
+          "sectionPos": 0.6086956521739131,
+          "chunkPos": 0.6198347107438017,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "94610c38-4113-43df-ad0f-9cb4a92d7d16",
+          "sourceTitle": null,
+          "sectionId": "s-19",
+          "sectionTitle": "ironmental needs; elimination; nutrition and weight manageme…",
+          "quote": "ironmental needs; elimination; nutrition and weight manageme",
+          "total": 24,
+          "sectionPos": 0.782608695652174,
+          "chunkPos": 0.7520661157024794,
+          "lateChunk": true,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "agile-pm",
+      "refs": 14,
+      "lateChunk": 0,
+      "lateSection": 2,
+      "sectionOnly": 2,
+      "sectionChunkRho": 1,
+      "samples": [
+        {
+          "sectionId": "s-6",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.2052980132450331
+        },
+        {
+          "sectionId": "s-10",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": 0.3973509933774834
+        },
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0.026490066225165563
+        },
+        {
+          "sectionId": "s-6",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.2052980132450331
+        },
+        {
+          "sectionId": "s-7",
+          "total": 24,
+          "sectionPos": 0.2608695652173913,
+          "chunkPos": 0.2052980132450331
+        },
+        {
+          "sectionId": "s-8",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.2052980132450331
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "2.2《敏捷宣言》及思维模式",
+          "quote": "2.2《敏捷宣言》及思维模式",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.2052980132450331,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "5.2.1 至 5.2.8 节描述了一些最常见的敏捷项目实践。",
+          "quote": "5.2.1 至 5.2.8 节描述了一些最常见的敏捷项目实践。",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": 0.3973509933774834,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "## 序言",
+          "quote": "项目管理协会和敏捷联盟 ® 特许编写本实践指南，目的是在社区内建立对敏捷方法的更深入的理 解。本实践指南的愿景是：为项目团队提供相关工具、针对不同情境的指导方针以及对目前敏捷 技术和方法的理解，以获得更好的项目成果。",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0.026490066225165563,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "2.2《敏捷宣言》及思维模式",
+          "quote": "2.2《敏捷宣言》及思维模式",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.2052980132450331,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-7",
+          "sectionTitle": "2.2《敏捷宣言》及思维模式",
+          "quote": "2.2《敏捷宣言》及思维模式",
+          "total": 24,
+          "sectionPos": 0.2608695652173913,
+          "chunkPos": 0.2052980132450331,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "2.2《敏捷宣言》及思维模式",
+          "quote": "2.2《敏捷宣言》及思维模式",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.2052980132450331,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "2.2《敏捷宣言》及思维模式",
+          "quote": "2.2《敏捷宣言》及思维模式",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.2052980132450331,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "5.2.1 至 5.2.8 节描述了一些最常见的敏捷项目实践。",
+          "quote": "5.2.1 至 5.2.8 节描述了一些最常见的敏捷项目实践。",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.3973509933774834,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "5.2.1 至 5.2.8 节描述了一些最常见的敏捷项目实践。",
+          "quote": "5.2.1 至 5.2.8 节描述了一些最常见的敏捷项目实践。",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": 0.3973509933774834,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "5.2.1 至 5.2.8 节描述了一些最常见的敏捷项目实践。",
+          "quote": "理累积工作方面有困难：团队有进行中的工作，而不是已完成工作。如果团队有大量进 行中的工作，就会延迟整体功能的交付。团队交付的时间越长，在相同时间内有更多功能，团队的 压力就越大。",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": 0.4900662251655629,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-9",
+          "sectionTitle": "2.2《敏捷宣言》及思维模式",
+          "quote": "2.2《敏捷宣言》及思维模式",
+          "total": 24,
+          "sectionPos": 0.34782608695652173,
+          "chunkPos": 0.2052980132450331,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-9",
+          "sectionTitle": "2.2《敏捷宣言》及思维模式",
+          "quote": "2.2《敏捷宣言》及思维模式",
+          "total": 24,
+          "sectionPos": 0.34782608695652173,
+          "chunkPos": 0.2052980132450331,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-13",
+          "sectionTitle": "6.1.1 和 6.1.2 节探讨了特定敏捷环境中变革管理的考虑事项。",
+          "quote": "6.1.1 和 6.1.2 节探讨了特定敏捷环境中变革管理的考虑事项。",
+          "total": 24,
+          "sectionPos": 0.5217391304347826,
+          "chunkPos": 0.4966887417218543,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "e4236d32-a58a-46fa-a7d2-5bbaa3e310eb",
+          "sourceTitle": null,
+          "sectionId": "s-17",
+          "sectionTitle": "6.1.1 和 6.1.2 节探讨了特定敏捷环境中变革管理的考虑事项。",
+          "quote": "6.1.1 和 6.1.2 节探讨了特定敏捷环境中变革管理的考虑事项。",
+          "total": 24,
+          "sectionPos": 0.6956521739130435,
+          "chunkPos": 0.4966887417218543,
+          "lateChunk": false,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "systematic-review",
+      "refs": 25,
+      "lateChunk": 15,
+      "lateSection": 10,
+      "sectionOnly": 0,
+      "sectionChunkRho": 0.8043478260869565,
+      "samples": [
+        {
+          "sectionId": "s-12",
+          "total": 24,
+          "sectionPos": 0.4782608695652174,
+          "chunkPos": 0.47368421052631576
+        },
+        {
+          "sectionId": "s-23",
+          "total": 24,
+          "sectionPos": 0.9565217391304348,
+          "chunkPos": 0.9398496240601504
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.8646616541353384
+        },
+        {
+          "sectionId": "s-4",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.11278195488721804
+        },
+        {
+          "sectionId": "s-4",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.11278195488721804
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.8646616541353384
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-12",
+          "sectionTitle": "1.1 Why do a systematic review?",
+          "quote": "1.1 Why do a systematic review?",
+          "total": 24,
+          "sectionPos": 0.4782608695652174,
+          "chunkPos": 0.47368421052631576,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-23",
+          "sectionTitle": "2.3.1 Broad versus narrow reviews",
+          "quote": "2.3.1 Broad versus narrow reviews",
+          "total": 24,
+          "sectionPos": 0.9565217391304348,
+          "chunkPos": 0.9398496240601504,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "2.2 Aims of reviews of interventions 15",
+          "quote": "2.2 Aims of reviews of interventions 15",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.8646616541353384,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "20.3 Identification of evidence 517",
+          "quote": "20.3 Identification of evidence 517",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.11278195488721804,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "20.3 Identification of evidence 517",
+          "quote": "20.3 Identification of evidence 517",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.11278195488721804,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "2.2 Aims of reviews of interventions 15",
+          "quote": "2.2 Aims of reviews of interventions 15",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.8646616541353384,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "2.2 Aims of reviews of interventions 15",
+          "quote": "2.2 Aims of reviews of interventions 15",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.8646616541353384,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-15",
+          "sectionTitle": "1.4 The importance of reliability",
+          "quote": "1.4 The importance of reliability",
+          "total": 24,
+          "sectionPos": 0.6086956521739131,
+          "chunkPos": 0.6015037593984962,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "20.3 Identification of evidence 517",
+          "quote": "20.3 Identification of evidence 517",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.11278195488721804,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-15",
+          "sectionTitle": "1.4 The importance of reliability",
+          "quote": "1.4 The importance of reliability",
+          "total": 24,
+          "sectionPos": 0.6086956521739131,
+          "chunkPos": 0.6015037593984962,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "2.2 Aims of reviews of interventions 15",
+          "quote": "2.2 Aims of reviews of interventions 15",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.8646616541353384,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "11.1 What is network meta-analysis? 285",
+          "quote": "11.1 What is network meta-analysis? 285",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.09022556390977443,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "26.3 Managing and checking IPD 650",
+          "quote": "26.3 Managing and checking IPD 650",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.14285714285714285,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-9",
+          "sectionTitle": "26.3 Managing and checking IPD 650",
+          "quote": "26.3 Managing and checking IPD 650",
+          "total": 24,
+          "sectionPos": 0.34782608695652173,
+          "chunkPos": 0.14285714285714285,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "11.1 What is network meta-analysis? 285",
+          "quote": "11.1 What is network meta-analysis? 285",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.09022556390977443,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-5",
+          "sectionTitle": "26.3 Managing and checking IPD 650",
+          "quote": "26.3 Managing and checking IPD 650",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.14285714285714285,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-15",
+          "sectionTitle": "1.4 The importance of reliability",
+          "quote": "Systematic reviews aim to be an accurate representation of the current state of knowl- edge about a given issue. As unde",
+          "total": 24,
+          "sectionPos": 0.6086956521739131,
+          "chunkPos": 0.5864661654135338,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-21",
+          "sectionTitle": "2.2 Aims of reviews of interventions",
+          "quote": "that are relevant at specific points during the review. Different methods should be used at different stages of the revi",
+          "total": 24,
+          "sectionPos": 0.8695652173913043,
+          "chunkPos": 0.6015037593984962,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-15",
+          "sectionTitle": "1.4 The importance of reliability",
+          "quote": "e of a systematic review are a meta-analysis of a prospectively plan…",
+          "total": 24,
+          "sectionPos": 0.6086956521739131,
+          "chunkPos": 0.6691729323308271,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-15",
+          "sectionTitle": "1.4 The importance of reliability",
+          "quote": ", unclear risk and high risk of bias provided in theHandbook. MECIR Box 1.5.c Relevant expectations for conduct of inter",
+          "total": 24,
+          "sectionPos": 0.6086956521739131,
+          "chunkPos": 0.6390977443609023,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-15",
+          "sectionTitle": "1.4 The importance of reliability",
+          "quote": "complete) set of studies, and poor quality assurance throughout the …",
+          "total": 24,
+          "sectionPos": 0.6086956521739131,
+          "chunkPos": 0.6842105263157895,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "20.3 Identification of evidence 517",
+          "quote": "20.3 Identification of evidence 517",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.11278195488721804,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "2.2 Aims of reviews of interventions 15",
+          "quote": "2.2 Aims of reviews of interventions 15",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.8646616541353384,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-23",
+          "sectionTitle": "2.3.1 Broad versus narrow reviews",
+          "quote": "2.3.1 Broad versus narrow reviews",
+          "total": 24,
+          "sectionPos": 0.9565217391304348,
+          "chunkPos": 0.9398496240601504,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "f0e0992f-2054-481d-8f70-b8c745dc5908",
+          "sourceTitle": null,
+          "sectionId": "s-22",
+          "sectionTitle": "2.2 Aims of reviews of interventions",
+          "quote": "2.2 Aims of reviews of interventions",
+          "total": 24,
+          "sectionPos": 0.9130434782608695,
+          "chunkPos": 0.8646616541353384,
+          "lateChunk": true,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "fire-code",
+      "refs": 21,
+      "lateChunk": 8,
+      "lateSection": 8,
+      "sectionOnly": 0,
+      "sectionChunkRho": 1,
+      "samples": [
+        {
+          "sectionId": "s-8",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.32926829268292684
+        },
+        {
+          "sectionId": "s-10",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": 0.3780487804878049
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-4",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.16463414634146342
+        },
+        {
+          "sectionId": "s-8",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.32926829268292684
+        },
+        {
+          "sectionId": "s-7",
+          "total": 24,
+          "sectionPos": 0.2608695652173913,
+          "chunkPos": 0.2804878048780488
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "（2）表 3 列举了一些常见储存物品的火灾危险性分类，供设计参考。",
+          "quote": "（2）表 3 列举了一些常见储存物品的火灾危险性分类，供设计参考。",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.32926829268292684,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "3.2.8 粮食筒仓的耐火等级不应低于二级；二级耐火等级的粮食筒仓可采用钢板仓。",
+          "quote": "3.2.8 粮食筒仓的耐火等级不应低于二级；二级耐火等级的粮食筒仓可采用钢板仓。",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": 0.3780487804878049,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "## 目  录",
+          "quote": "## 目 录",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "1.0.1 为了预防建筑火灾，减少火灾危害，保护人身和财产安全，制定本规范。",
+          "quote": "1.0.1 为了预防建筑火灾，减少火灾危害，保护人身和财产安全，制定本规范。",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.16463414634146342,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "（2）表 3 列举了一些常见储存物品的火灾危险性分类，供设计参考。",
+          "quote": "（2）表 3 列举了一些常见储存物品的火灾危险性分类，供设计参考。",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.32926829268292684,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-7",
+          "sectionTitle": "（1）在一座厂房中或一个防火分区内存在甲、乙类等多种火灾危险性生产时，如",
+          "quote": "（1）在一座厂房中或一个防火分区内存在甲、乙类等多种火灾危险性生产时，如",
+          "total": 24,
+          "sectionPos": 0.2608695652173913,
+          "chunkPos": 0.2804878048780488,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-5",
+          "sectionTitle": "1.0.4 本条规定了在同一建筑内设置多种使用功能场所时的防火设计原则。",
+          "quote": "1.0.4 本条规定了在同一建筑内设置多种使用功能场所时的防火设计原则。",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.18902439024390244,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "2.1.21 防火间距 fire separation distance",
+          "quote": "2.1.21 防火间距 fire separation distance",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.22560975609756098,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "## 目  录",
+          "quote": "## 目 录",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-19",
+          "sectionTitle": "4.1.2 桶装、瓶装甲类液体不应露天存放。",
+          "quote": "4.1.2 桶装、瓶装甲类液体不应露天存放。",
+          "total": 24,
+          "sectionPos": 0.782608695652174,
+          "chunkPos": 0.7621951219512195,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "3.3.2 除本规范另有规定外，仓库的层数和面积应符合表 3.3.2 的规定。",
+          "quote": "3.3.2 除本规范另有规定外，仓库的层数和面积应符合表 3.3.2 的规定。",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.45121951219512196,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "（2）表 3 列举了一些常见储存物品的火灾危险性分类，供设计参考。",
+          "quote": "（2）表 3 列举了一些常见储存物品的火灾危险性分类，供设计参考。",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.32926829268292684,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "3.3.2 除本规范另有规定外，仓库的层数和面积应符合表 3.3.2 的规定。",
+          "quote": "3.3.2 除本规范另有规定外，仓库的层数和面积应符合表 3.3.2 的规定。",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.45121951219512196,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-18",
+          "sectionTitle": "3.7.6 本条为强制性条文。本条规定了各类厂房疏散楼梯的设置形式。",
+          "quote": "3.7.6 本条为强制性条文。本条规定了各类厂房疏散楼梯的设置形式。",
+          "total": 24,
+          "sectionPos": 0.7391304347826086,
+          "chunkPos": 0.725609756097561,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "3.3.2 除本规范另有规定外，仓库的层数和面积应符合表 3.3.2 的规定。",
+          "quote": "3.3.2 除本规范另有规定外，仓库的层数和面积应符合表 3.3.2 的规定。",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.45121951219512196,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-15",
+          "sectionTitle": "（1） 厂房建设过程中有时受场地限制或因建设用地紧张，当数座厂房占地面积之",
+          "quote": "（1） 厂房建设过程中有时受场地限制或因建设用地紧张，当数座厂房占地面积之",
+          "total": 24,
+          "sectionPos": 0.6086956521739131,
+          "chunkPos": 0.5975609756097561,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-18",
+          "sectionTitle": "3.7.6 本条为强制性条文。本条规定了各类厂房疏散楼梯的设置形式。",
+          "quote": "3.7.6 本条为强制性条文。本条规定了各类厂房疏散楼梯的设置形式。",
+          "total": 24,
+          "sectionPos": 0.7391304347826086,
+          "chunkPos": 0.725609756097561,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-14",
+          "sectionTitle": "3.4.4 本条为强制性条文。本条规定了高层厂房与各类储罐、堆场的防火间距。",
+          "quote": "3.4.4 本条为强制性条文。本条规定了高层厂房与各类储罐、堆场的防火间距。",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": 0.5670731707317073,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-22",
+          "sectionTitle": "4.3.2 可燃气体储罐（区）之间的防火间距应符合下列规定：",
+          "quote": "4.3.2 可燃气体储罐（区）之间的防火间距应符合下列规定：",
+          "total": 24,
+          "sectionPos": 0.9130434782608695,
+          "chunkPos": 0.8780487804878049,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-18",
+          "sectionTitle": "3.7.6 本条为强制性条文。本条规定了各类厂房疏散楼梯的设置形式。",
+          "quote": "3.7.6 本条为强制性条文。本条规定了各类厂房疏散楼梯的设置形式。",
+          "total": 24,
+          "sectionPos": 0.7391304347826086,
+          "chunkPos": 0.725609756097561,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "9ed35376-fd24-4326-925d-b49687ab3fa6",
+          "sourceTitle": null,
+          "sectionId": "s-19",
+          "sectionTitle": "4.1.2 桶装、瓶装甲类液体不应露天存放。",
+          "quote": "4.1.2 桶装、瓶装甲类液体不应露天存放。",
+          "total": 24,
+          "sectionPos": 0.782608695652174,
+          "chunkPos": 0.7621951219512195,
+          "lateChunk": true,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "civil-code",
+      "refs": 20,
+      "lateChunk": 2,
+      "lateSection": 6,
+      "sectionOnly": 5,
+      "sectionChunkRho": 0.7454545454545455,
+      "samples": [
+        {
+          "sectionId": "s-11",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-4",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-8",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.2922077922077922
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.5194805194805194
+        },
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": null
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "### 第一章 一般规定",
+          "quote": "### 第一章 一般规定",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "### 第三章 法人",
+          "quote": "### 第三章 法人",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "### 第七章 代理",
+          "quote": "### 第七章 代理",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "（二）以合理的价格转让；",
+          "quote": "（二）以合理的价格转让；",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.2922077922077922,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "（五）法律规定的其他情形。",
+          "quote": "（五）法律规定的其他情形。",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.5194805194805194,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "### 第十八章 质权",
+          "quote": "### 第十八章 质权",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "### 第七章 代理",
+          "quote": "### 第七章 代理",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "### 第一章 一般规定",
+          "quote": "### 第一章 一般规定",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "### 第一章 一般规定",
+          "quote": "### 第一章 一般规定",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "### 第七章 代理",
+          "quote": "### 第七章 代理",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "### 第一章 一般规定",
+          "quote": "### 第一章 一般规定",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "### 第一章 一般规定",
+          "quote": "### 第一章 一般规定",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-14",
+          "sectionTitle": "### 第九章 买卖合同",
+          "quote": "### 第九章 买卖合同",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "### 第十四章 租赁合同",
+          "quote": "### 第十四章 租赁合同",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "### 第一章 一般规定",
+          "quote": "### 第一章 一般规定",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "### 第一章 一般规定",
+          "quote": "### 第一章 一般规定",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-18",
+          "sectionTitle": "（一）修复后的建设工程经验收合格的，发包人可以请求承包人承担修复费用；",
+          "quote": "（一）修复后的建设工程经验收合格的，发包人可以请求承包人承担修复费用；",
+          "total": 24,
+          "sectionPos": 0.7391304347826086,
+          "chunkPos": 0.7077922077922078,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "### 第十四章 租赁合同",
+          "quote": "### 第十四章 租赁合同",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "### 第十四章 租赁合同",
+          "quote": "### 第十四章 租赁合同",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c802c66c-a82d-4bea-be62-1a9450fe03c7",
+          "sourceTitle": null,
+          "sectionId": "s-20",
+          "sectionTitle": "### 第二十三章 委托合同",
+          "quote": "### 第二十三章 委托合同",
+          "total": 24,
+          "sectionPos": 0.8260869565217391,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "child-development",
+      "refs": 14,
+      "lateChunk": 4,
+      "lateSection": 5,
+      "sectionOnly": 1,
+      "sectionChunkRho": 1,
+      "samples": [
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.046511627906976744
+        },
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.046511627906976744
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "一、健康   　　　　　　　　　　　　　　　　　　　　　　　　　　3",
+          "quote": "（一）身心状况 4 （二）动作发展 7 （三）生活习惯与生活能力 10 二、语言 13 （一）倾听与表达 …",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "四、实施《指南》应把握以下几个方面：",
+          "quote": "健康是指人在身体、心理和社会适应方面的良好状态。幼儿阶段是儿童身 体发育和机能发展极为迅速的时期，也是形成安全感和乐观态度的重要阶段。 发育良好的身体、愉快的情绪、强健的体质、协调的动作、良好的生活习惯和 基本生活能力是幼儿身心健康的重要标",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.046511627906976744,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "一、健康   　　　　　　　　　　　　　　　　　　　　　　　　　　3",
+          "quote": "（一）身心状况 4 （二）动作发展 7 （三）生活习惯与生活能力 10 二、语言 13 （一）倾听与表达 …",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "一、健康   　　　　　　　　　　　　　　　　　　　　　　　　　　3",
+          "quote": "（一）身心状况 4 （二）动作发展 7 （三）生活习惯与生活能力 10 二、语言 13 （一）倾听与表达 …",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "四、实施《指南》应把握以下几个方面：",
+          "quote": "健康是指人在身体、心理和社会适应方面的良好状态。幼儿阶段是儿童身 体发育和机能发展极为迅速的时期，也是形成安全感和乐观态度的重要阶段。 发育良好的身体、愉快的情绪、强健的体质、协调的动作、良好的生活习惯和 基本生活能力是幼儿身心健康的重要标",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.046511627906976744,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "（二）表现与创造   　　　　　　　　　　　　　　　　　　　　　43",
+          "quote": "（2010 ～ 2020 年）》和《国务院关于当前发展学前教育的若 干意见》（国发〔2010〕41 号），指导幼儿园和家庭实施科 学的保育和教育，促进幼儿身心全面和谐发展，制定《3 ～ 6 岁儿童学习与发展指南》（以下简称《指南》）。",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-13",
+          "sectionTitle": "四、实施《指南》应把握以下几个方面：",
+          "quote": "关系中获得安全感和信任感，发展自信和自尊，在良好的社会环境及 文化的熏陶中学会遵守规则，形成基本的认同感和归属感。 幼儿的社会性主要是在日常生活和游戏中通过观察和模仿潜移默化地发展 起来的。成人应注重自己言行的榜样作用，避免简单生硬的说教。",
+          "total": 24,
+          "sectionPos": 0.5217391304347826,
+          "chunkPos": 0.4883720930232558,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "四、实施《指南》应把握以下几个方面：",
+          "quote": "鼓励幼儿尝试有一定难度的任务，并注意调整难度，让他感受经过努力获 得的成就感。 ■■ 目标 2■■能与同伴友好相处 1 ．\u0007 想 加 入 同 伴 的 游 戏 时 ，能 友 好 地 提出请求。 2 ．\u0007在 成 人 指 导 下 ， 不 争 抢 ",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": 0.4883720930232558,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "四、实施《指南》应把握以下几个方面：",
+          "quote": "健康是指人在身体、心理和社会适应方面的良好状态。幼儿阶段是儿童身 体发育和机能发展极为迅速的时期，也是形成安全感和乐观态度的重要阶段。 发育良好的身体、愉快的情绪、强健的体质、协调的动作、良好的生活习惯和 基本生活能力是幼儿身心健康的重要标",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.046511627906976744,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "（二）表现与创造   　　　　　　　　　　　　　　　　　　　　　43",
+          "quote": "（2010 ～ 2020 年）》和《国务院关于当前发展学前教育的若 干意见》（国发〔2010〕41 号），指导幼儿园和家庭实施科 学的保育和教育，促进幼儿身心全面和谐发展，制定《3 ～ 6 岁儿童学习与发展指南》（以下简称《指南》）。",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-18",
+          "sectionTitle": "四、实施《指南》应把握以下几个方面：",
+          "quote": "对年龄小的幼儿要求按语言指令寻找，对年 龄大些的幼儿可要求按照简单的示意图寻找。",
+          "total": 24,
+          "sectionPos": 0.7391304347826086,
+          "chunkPos": 0.8604651162790697,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-19",
+          "sectionTitle": "四、实施《指南》应把握以下几个方面：",
+          "quote": "通过点数的方式让幼儿体会物体的数量不会因排列形式、空间位置的不同 而发生变化。如：鼓励幼儿将一定数量的扣子以不同的形式摆放，体会扣子的 数量是不变的。",
+          "total": 24,
+          "sectionPos": 0.782608695652174,
+          "chunkPos": 0.8837209302325582,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-20",
+          "sectionTitle": "四、实施《指南》应把握以下几个方面：",
+          "quote": "不同于成人，他们表达自己认识和情感的方式也 有别于成人。幼儿独特的笔触、动作和语言往往蕴含着丰富的想象和情感，成 人应对幼儿的艺术表现给予充分的理解和尊重，不能用自己的审美标准去评判 幼儿，更不能为追求结果的“完美”而对幼儿进行千篇一律的训",
+          "total": 24,
+          "sectionPos": 0.8260869565217391,
+          "chunkPos": 0.9302325581395349,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "0954a1ae-2342-4b5c-8f3c-1fb610b1b24e",
+          "sourceTitle": null,
+          "sectionId": "s-21",
+          "sectionTitle": "四、实施《指南》应把握以下几个方面：",
+          "quote": "式也 有别于成人。幼儿独特的笔触、动作和语言往往蕴含着丰富的想象和情感，成 人应对幼儿的艺术表现给予充分的理解和尊重，不能用自己的审美标准去评判 幼儿，更不能为追求结果的“完美”而对幼儿进行千篇一律的训 练，以免扼杀 其想象与创造的萌芽。",
+          "total": 24,
+          "sectionPos": 0.8695652173913043,
+          "chunkPos": 0.9302325581395349,
+          "lateChunk": true,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "mbsr",
+      "refs": 13,
+      "lateChunk": 0,
+      "lateSection": 2,
+      "sectionOnly": 2,
+      "sectionChunkRho": 1,
+      "samples": [
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.041666666666666664
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.041666666666666664
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.041666666666666664
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.041666666666666664
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "6dec4be2-b469-417b-b443-984d28c7a091",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 课程",
+          "quote": "觉察减压是一种团体课程，着重于以渐进方式获得有关觉察的注意觉知[14]。",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.041666666666666664,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "6dec4be2-b469-417b-b443-984d28c7a091",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 课程",
+          "quote": "觉察减压是一种团体课程，着重于以渐进方式获得有关觉察的注意觉知[14]。",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.041666666666666664,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "6dec4be2-b469-417b-b443-984d28c7a091",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 课程",
+          "quote": "内容包括每周2.5小时的团体会议、在第六周和第七周中的一日静修(含7小时的觉察训练)、每天45分钟的在家练习作业、和三种正式技术的指导：觉察冥想、身体扫描及简单的瑜伽姿势[1]。",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.041666666666666664,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "6dec4be2-b469-417b-b443-984d28c7a091",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 课程",
+          "quote": "觉察可以理解为对当前经验的非判断性接受和当下经验，包括身体觉知、内在心智状态、思想、情绪、冲动和记忆，目的是减少压抑或苦恼，并增加幸福感[1][5]。",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "6dec4be2-b469-417b-b443-984d28c7a091",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 课程",
+          "quote": "三种正式技术的指导：觉察冥想、身体扫描及简单的瑜伽姿势[1]。",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.041666666666666664,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "6dec4be2-b469-417b-b443-984d28c7a091",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 课程",
+          "quote": "觉察可以理解为对当前经验的非判断性接受和当下经验，包括身体觉知、内在心智状态、思想、情绪、冲动和记忆",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "6dec4be2-b469-417b-b443-984d28c7a091",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 课程",
+          "quote": "它结合了觉察冥想、身体意识、瑜伽来对行为、思维、感觉和行动方式进行探索",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "6dec4be2-b469-417b-b443-984d28c7a091",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 课程",
+          "quote": "觉察可以理解为对当前经验的非判断性接受和当下经验",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "6dec4be2-b469-417b-b443-984d28c7a091",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 课程",
+          "quote": "觉察冥想是一种培养注意力、发展情绪调控、和减少沉思和忧虑的方法",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "6dec4be2-b469-417b-b443-984d28c7a091",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 课程",
+          "quote": "每天45分钟的在家练习作业、和三种正式技术的指导：觉察冥想、身体扫描及简单的瑜伽姿势[1]。",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.041666666666666664,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "6dec4be2-b469-417b-b443-984d28c7a091",
+          "sourceTitle": null,
+          "sectionId": "s-21",
+          "sectionTitle": "## 参考文献",
+          "quote": "正念减压（MBSR）八周课程",
+          "total": 24,
+          "sectionPos": 0.8695652173913043,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "6dec4be2-b469-417b-b443-984d28c7a091",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "## 效果评估(相关研究成果)",
+          "quote": "觉察方法有益于健康的成年人[7][23][24]、青少年和儿童[25][26]，并可改善如饮食失调[27][28][29]、精神疾病[30][31][32][33]、疼痛管理[34][5][35]、睡眠障碍[36][37]、癌症照护[38]",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.125,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "6dec4be2-b469-417b-b443-984d28c7a091",
+          "sourceTitle": null,
+          "sectionId": "s-21",
+          "sectionTitle": "## 参考文献",
+          "quote": "觉察冥想是一种培养注意力、发展情绪调控、和减少沉思和忧虑的方法",
+          "total": 24,
+          "sectionPos": 0.8695652173913043,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "c-language",
+      "refs": 21,
+      "lateChunk": 7,
+      "lateSection": 7,
+      "sectionOnly": 0,
+      "sectionChunkRho": 1,
+      "samples": [
+        {
+          "sectionId": "s-6",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.23076923076923078
+        },
+        {
+          "sectionId": "s-14",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": 0.5494505494505495
+        },
+        {
+          "sectionId": "s-6",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.23076923076923078
+        },
+        {
+          "sectionId": "s-8",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.25274725274725274
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.07692307692307693
+        },
+        {
+          "sectionId": "s-6",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.23076923076923078
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "(3) 程序的最小独立单元——语句。每条语句都以“;”结束。",
+          "quote": "(3) 程序的最小独立单元——语句。每条语句都以“;”结束。",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.23076923076923078,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-14",
+          "sectionTitle": "(3) 在编译时根据变量类型可以为变量分配相应字节的存储空间。",
+          "quote": "(3) 在编译时根据变量类型可以为变量分配相应字节的存储空间。",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": 0.5494505494505495,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "(3) 程序的最小独立单元——语句。每条语句都以“;”结束。",
+          "quote": "(3) 程序的最小独立单元——语句。每条语句都以“;”结束。",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.23076923076923078,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "(4) 一个函数由函数首部和函数体两部分组成。",
+          "quote": "(4) 一个函数由函数首部和函数体两部分组成。",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.25274725274725274,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "2.3.2  实型数据类型 ....................... 19",
+          "quote": "2.3.2 实型数据类型 ....................... 19",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.07692307692307693,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "(3) 程序的最小独立单元——语句。每条语句都以“;”结束。",
+          "quote": "(3) 程序的最小独立单元——语句。每条语句都以“;”结束。",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.23076923076923078,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "2.7.1  字符数据的输入/输出 ............. 37",
+          "quote": "2.7.1 字符数据的输入/输出 ............. 37",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.08791208791208792,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "(3) 程序的最小独立单元——语句。每条语句都以“;”结束。",
+          "quote": "(3) 程序的最小独立单元——语句。每条语句都以“;”结束。",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.23076923076923078,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "(4) 一个函数由函数首部和函数体两部分组成。",
+          "quote": "(4) 一个函数由函数首部和函数体两部分组成。",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.25274725274725274,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "2.7.1  字符数据的输入/输出 ............. 37",
+          "quote": "2.7.1 字符数据的输入/输出 ............. 37",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.08791208791208792,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-20",
+          "sectionTitle": "(1) 将实型数据(单精度和双精度)赋给整型变量，舍弃实数的小数部分。",
+          "quote": "(1) 将实型数据(单精度和双精度)赋给整型变量，舍弃实数的小数部分。",
+          "total": 24,
+          "sectionPos": 0.8260869565217391,
+          "chunkPos": 0.7692307692307693,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-14",
+          "sectionTitle": "(3) 在编译时根据变量类型可以为变量分配相应字节的存储空间。",
+          "quote": "(3) 在编译时根据变量类型可以为变量分配相应字节的存储空间。",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": 0.5494505494505495,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "2.7.1  字符数据的输入/输出 ............. 37",
+          "quote": "2.7.1 字符数据的输入/输出 ............. 37",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.08791208791208792,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "(3) 用于++、--运算的变量可以是整型、字符型、浮点型和指针型等类型的变量。",
+          "quote": "(3) 用于++、--运算的变量可以是整型、字符型、浮点型和指针型等类型的变量。",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": 0.6263736263736264,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-7",
+          "sectionTitle": "(4) 一个函数由函数首部和函数体两部分组成。",
+          "quote": "(4) 一个函数由函数首部和函数体两部分组成。",
+          "total": 24,
+          "sectionPos": 0.2608695652173913,
+          "chunkPos": 0.25274725274725274,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-14",
+          "sectionTitle": "(3) 在编译时根据变量类型可以为变量分配相应字节的存储空间。",
+          "quote": "(3) 在编译时根据变量类型可以为变量分配相应字节的存储空间。",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": 0.5494505494505495,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "3. 编写程序，从键盘输入梯形的上底、下底和高，求该梯形的面积并输出结果。",
+          "quote": "3. 编写程序，从键盘输入梯形的上底、下底和高，求该梯形的面积并输出结果。",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.38461538461538464,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "8.3.1  按字符读写文件 .................. 257",
+          "quote": "8.3.1 按字符读写文件 .................. 257",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.15384615384615385,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "(4) 一个函数由函数首部和函数体两部分组成。",
+          "quote": "(4) 一个函数由函数首部和函数体两部分组成。",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.25274725274725274,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-21",
+          "sectionTitle": "(5) 输出转换：格式符与输出项的类型不一致时，自动按指定格式输出。",
+          "quote": "输出转换：格式符与输出项的类型不一致时，自动按指定格式输出。",
+          "total": 24,
+          "sectionPos": 0.8695652173913043,
+          "chunkPos": 0.8461538461538461,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "51859cff-2a81-42ea-b372-d8c9851f6680",
+          "sourceTitle": null,
+          "sectionId": "s-24",
+          "sectionTitle": "5. 假设变量已正确定义并赋值，写出满足下列条件的C 表达式。",
+          "quote": "假设变量已正确定义并赋值，写出满足下列条件的C 表达式。",
+          "total": 24,
+          "sectionPos": 1,
+          "chunkPos": 0.989010989010989,
+          "lateChunk": true,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "veteran-training",
+      "refs": 15,
+      "lateChunk": 13,
+      "lateSection": 6,
+      "sectionOnly": 0,
+      "sectionChunkRho": 0.8034782608695652,
+      "samples": [
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.5
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.5
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.5
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.5
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.5294117647058824
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.5
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "二、目标任务",
+          "quote": "年度退役的自主就业非复学退役士兵原则上全员参与适应性培训，培训合格率100%；自主就业退役士兵职业技能培训年度参训人数不低于当年度退役的自主就业退役士兵人数的60%，参训人员职业资格证或技能等级证、专项职业能力证书获取率达到90%以上。 三",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.5,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "二、目标任务",
+          "quote": "年度退役的自主就业非复学退役士兵原则上全员参与适应性培训，培训合格率100%；自主就业退役士兵职业技能培训年度参训人数不低于当年度退役的自主就业退役士兵人数的60%，参训人员职业资格证或技能等级证、专项职业能力证书获取率达到90%以上。",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.5,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "二、目标任务",
+          "quote": "年度退役的自主就业非复学退役士兵原则上全员参与适应性培训，培训合格率100%；自主就业退役士兵职业技能培训年度参训人数不低于当年度退役的自主就业退役士兵人数的60%，参训人员职业资格证或技能等级证、专项职业能力证书获取率达到90%以上。",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.5,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "二、目标任务",
+          "quote": "年度退役的自主就业非复学退役士兵原则上全员参与适应性培训，培训合格率100%；自主就业退役士兵职业技能培训年度参训人数不低于当年度退役的自主就业退役士兵人数的60%，参训人员职业资格证或技能等级证、专项职业能力证书获取率达到90%以上。",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.5,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "四、补助政策",
+          "quote": "统筹中央技能培训经费和地方就业补助资金用于保障退役士兵职业技能培训和适应性培训，培训期间未统一安排食宿的学员，享受生活补助，培训期间统一安排食宿的学员，不予发放生活补助。",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.5294117647058824,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "二、目标任务",
+          "quote": "年度退役的自主就业非复学退役士兵原则上全员参与适应性培训，培训合格率100%；自主就业退役士兵职业技能培训年度参训人数不低于当年度退役的自主就业退役士兵人数的60%，参训人员职业资格证或技能等级证、专项职业能力证书获取率达到90%以上。",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.5,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "四、补助政策",
+          "quote": "统筹中央技能培训经费和地方就业补助资金用于保障退役士兵职业技能培训和适应性培训，培训期间未统一安排食宿的学员，享受生活补助，培训期间统一安排食宿的学员，不予发放生活补助。具体为：汽车驾驶类技能培训项目，食宿由学员自理，培训费据实报销…",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.5294117647058824,
+          "lateChunk": true,
+          "lateSection": false
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-14",
+          "sectionTitle": "三、培训项目",
+          "quote": "**1****.适应性培训。**面向当年度退役的自主就业退役士兵，实施“即退即训”，采取线上、线下相结合的培训方式，线上培训依托退役军人事务部培训中心“再起航－在线学习”平台，由乡镇退役军人服务站负责跟踪指导退役士兵完成在线学习课程，线下培",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": 0.5294117647058824,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-14",
+          "sectionTitle": "三、培训项目",
+          "quote": "**1****.适应性培训。**面向当年度退役的自主就业退役士兵，实施“即退即训”，采取线上、线下相结合的培训方式，线上培训依托退役军人事务部培训中心“再起航－在线学习”平台，由乡镇退役军人服务站负责跟踪指导退役士兵完成在线学习课程，线下培",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": 0.5294117647058824,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "## 四、主要内容",
+          "quote": "## 四、主要内容",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": 0.38235294117647056,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "## 五、工作目标",
+          "quote": "## 五、工作目标",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.4117647058823529,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-14",
+          "sectionTitle": "三、培训项目",
+          "quote": "**1****.适应性培训。**面向当年度退役的自主就业退役士兵，实施“即退即训”，采取线上、线下相结合的培训方式，线上培训依托退役军人事务部培训中心“再起航－在线学习”平台，由乡镇退役军人服务站负责跟踪指导退役士兵完成在线学习课程，线下培",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": 0.5294117647058824,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-14",
+          "sectionTitle": "三、培训项目",
+          "quote": "年度退役的自主就业非复学退役士兵原则上全员参与适应性培训，培训合格率100%；自主就业退役士兵职业技能培训年度参训人数不低于当年度退役的自主就业退役士兵人数的60%，参训人员职业资格证或技能等级证、专项职业能力证书获取率达到90%以上。 三",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": 0.5,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-23",
+          "sectionTitle": "五、主要内容",
+          "quote": "本方案聚焦退役军人适应性提升与职业技能赋能，明确培训对象、目标任务、培训项目、补助政策及工作要求五大核心板块，全方位规范2026年度培训工作，核心内容如下： **（一）明确两类培训对象。**一是适应性培训对象，为当年度退役的自主就业退役士兵",
+          "total": 24,
+          "sectionPos": 0.9565217391304348,
+          "chunkPos": 0.9411764705882353,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "3e58f3c4-e0c8-47f2-af02-56dab02a2d27",
+          "sourceTitle": null,
+          "sectionId": "s-23",
+          "sectionTitle": "五、主要内容",
+          "quote": "本方案聚焦退役军人适应性提升与职业技能赋能，明确培训对象、目标任务、培训项目、补助政策及工作要求五大核心板块，全方位规范2026年度培训工作，核心内容如下： **（一）明确两类培训对象。**一是适应性培训对象，为当年度退役的自主就业退役士兵",
+          "total": 24,
+          "sectionPos": 0.9565217391304348,
+          "chunkPos": 0.9411764705882353,
+          "lateChunk": true,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "first-class-builder",
+      "refs": 18,
+      "lateChunk": 5,
+      "lateSection": 6,
+      "sectionOnly": 1,
+      "sectionChunkRho": 1,
+      "samples": [
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.0425531914893617
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.0425531914893617
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.0425531914893617
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.0425531914893617
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.0425531914893617
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "## 目录",
+          "quote": "《一级建造师执业资格考试大纲》修订说明........................................ 3",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "（1）取得工程类或工程经济类专业大学专科学历，从事建设工程项目施工管理工",
+          "quote": "作满 4 年。 （2）取得工学门类、管理科学与工程类专业大学本科学历，从事建设工程项目施 工管理工作满 3 年。",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.0425531914893617,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 目录",
+          "quote": "10 个专业类别，试题的题型为客观题 和主观题，包括单项选择题、多项选择题、实务操作和案例分析题。 一级建造师考试时间分为 4 个半天，以纸笔作答方式进行。各科目考试时间、题 型、题量、分值如下： 序号 科目名称 题型 题量 满分 1 建设",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.0425531914893617,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "（1）取得工程类或工程经济类专业大学专科学历，从事建设工程项目施工管理工",
+          "quote": "设工程法规及相关知 识》《专业工程管理与实务》4 个科目，其中《专业工程管理与实务》科目分为：建 筑工程、公路工程、铁路工程、民航机场工程、港口与航道工程、水利水电工程、矿 业工程、机电工程、市政公用工程、通信与广电工程 10 个专业类别。",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.0425531914893617,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 目录",
+          "quote": "10 个专业类别，试题的题型为客观题 和主观题，包括单项选择题、多项选择题、实务操作和案例分析题。 一级建造师考试时间分为 4 个半天，以纸笔作答方式进行。各科目考试时间、题 型、题量、分值如下： 序号 科目名称 题型 题量 满分 1 建设",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.0425531914893617,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 目录",
+          "quote": "10 个专业类别，试题的题型为客观题 和主观题，包括单项选择题、多项选择题、实务操作和案例分析题。 一级建造师考试时间分为 4 个半天，以纸笔作答方式进行。各科目考试时间、题 型、题量、分值如下： 序号 科目名称 题型 题量 满分 1 建设",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.0425531914893617,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "3.工程项目目标动态控制",
+          "quote": "1.质量管理体系 2.环境管理体系 3.职业健康安全管理体系 4.卓越绩效管理 5.全面一体化管理",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.0851063829787234,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "3.投标报价编制",
+          "quote": "2.规划条件的变更 1.施工许可证和开工报告的适用范围 2.施工许可证的申请 3.延期开工、核验和重新办理批准",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "3.投标报价编制",
+          "quote": "3.投标报价编制",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": 0.3404255319148936,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-13",
+          "sectionTitle": "1.民航空中交通管理",
+          "quote": "1.民航空中交通管理",
+          "total": 24,
+          "sectionPos": 0.5217391304347826,
+          "chunkPos": 0.46808510638297873,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-12",
+          "sectionTitle": "1.总平面布置",
+          "quote": "1.总平面布置",
+          "total": 24,
+          "sectionPos": 0.4782608695652174,
+          "chunkPos": 0.425531914893617,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-14",
+          "sectionTitle": "2.施工进度计划调整方法",
+          "quote": "2.施工进度计划调整方法",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": 0.5106382978723404,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-15",
+          "sectionTitle": "二、港口与航道工程施工技术",
+          "quote": "二、港口与航道工程施工技术",
+          "total": 24,
+          "sectionPos": 0.6086956521739131,
+          "chunkPos": 0.5531914893617021,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "3.水运工程质量检查与检验的程序和组织",
+          "quote": "3.水运工程质量检查与检验的程序和组织",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": 0.5957446808510638,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-9",
+          "sectionTitle": "2.施工现场卫生防疫及职业健康",
+          "quote": "2.施工现场卫生防疫及职业健康",
+          "total": 24,
+          "sectionPos": 0.34782608695652173,
+          "chunkPos": 0.2765957446808511,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 目录",
+          "quote": "程管理与实务》（机电工程）科目考试大纲..................... 94 《专业工程管理与实务》（市政公用工程）科目考试大纲...........104",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.02127659574468085,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-24",
+          "sectionTitle": "1.施工进度检查与比较",
+          "quote": "1.施工进度检查与比较",
+          "total": 24,
+          "sectionPos": 1,
+          "chunkPos": 0.9787234042553191,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "0e9f2c63-c7b9-44be-a07f-257f25354fdb",
+          "sourceTitle": null,
+          "sectionId": "s-23",
+          "sectionTitle": "2.施工进度调整",
+          "quote": "2.施工进度调整",
+          "total": 24,
+          "sectionPos": 0.9565217391304348,
+          "chunkPos": 0.9148936170212766,
+          "lateChunk": true,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "mandarin-test",
+      "refs": 23,
+      "lateChunk": 8,
+      "lateSection": 8,
+      "sectionOnly": 0,
+      "sectionChunkRho": 1,
+      "samples": [
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-4",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.12222222222222222
+        },
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-8",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.3111111111111111
+        },
+        {
+          "sectionId": "s-8",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.3111111111111111
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "过 年 吃 饺",
+          "quote": "1 . 朗读作品共 5 0 篇 ， 供普通话水平测试第 三 项 —— 朗读短文测试使用。为适应 测试需要 ， 必要时对原作品做了部分更动。 2 . 每篇作品采用汉字和汉语拼音对照的方式编排。 3 . 每篇作品在第 4 0 0 个音节后用 “",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "们 就 是 最 好 的 接 力 者 。",
+          "quote": "作 品 6 号 节 选 自 竺 可 桢 《 大 自 然 的 语 言 》 立 春 过 后 ， 大 地 渐 渐 从 沉 睡 中 苏 醒 过 来 。 冰 雪 融 化 ， 草 木 萌 发 ， 各 种 花 次 第 开 放 。 再 过 两 个 月 ，",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.12222222222222222,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "过 年 吃 饺",
+          "quote": "1 . 朗读作品共 5 0 篇 ， 供普通话水平测试第 三 项 —— 朗读短文测试使用。为适应 测试需要 ， 必要时对原作品做了部分更动。 2 . 每篇作品采用汉字和汉语拼音对照的方式编排。 3 . 每篇作品在第 4 0 0 个音节后用 “",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "过 年 吃 饺",
+          "quote": "7 . 作品中的必读轻声音节 ， 拼音不标调号。一般轻读 ， 间或重读的音节 ， 拼音 加注调号 ， 并在拼音前加圆点提示 ， 如 ：“ 因为 ”， 拼",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "下 游 的 自 然 环 境 为 粟 黍 作 物 的 种 植 和 高 产 提 供 了 得 天 独 厚 的 条",
+          "quote": "下 游 的 自 然 环 境 为 粟 黍 作 物 的 种 植 和 高 产 提 供 了 得 天 独 厚 的 条",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.3111111111111111,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "下 游 的 自 然 环 境 为 粟 黍 作 物 的 种 植 和 高 产 提 供 了 得 天 独 厚 的 条",
+          "quote": "下 游 的 自 然 环 境 为 粟 黍 作 物 的 种 植 和 高 产 提 供 了 得 天 独 厚 的 条",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.3111111111111111,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "过 年 吃 饺",
+          "quote": "6 . 注音一般只标本调 ， 不标变调。",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "过 年 吃 饺",
+          "quote": "子 用 。 到 年 底 ， 蒜 泡 得 色 如 翡 翠 ， 醋 也 有 了 些 辣 味 ， 色 味 双 美 ， 使 人 忍 不 住 要 多 吃 几 个 饺 子 。 在 北 京 ， 过 年 时 ， 家 家 吃 饺 子 。 孩 子 们 准 备",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0.011111111111111112,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-5",
+          "sectionTitle": "入 深 潭 的 声 音 。 还 有 一 些 泉 声 忽 高 忽",
+          "quote": "低 ， 忽 急 忽 缓 ， 忽 清 忽 浊 ， 忽 扬 忽 抑 ， 是 泉 水 正 在 绕 过 树 根 ， 拍 打 卵 石 ， 穿 越 草 丛 ， 流 连 花 间 ...... 蒙 眬 中 ， 那 滋 润 着 鼎 湖 山 万 木 ， 孕 育",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.17777777777777778,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-5",
+          "sectionTitle": "入 深 潭 的 声 音 。 还 有 一 些 泉 声 忽 高 忽",
+          "quote": "入 深 潭 的 声 音 。 还 有 一 些 泉 声 忽 高 忽",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.17777777777777778,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "头 奔 腾 西 去 ， 可 是 余 波 还 在 漫 天 卷 地 般 涌 来 ， 江 面 上 依 旧 风 号 浪",
+          "quote": "吼 。 过 了 好 久 ， 钱 塘 江 才 恢 复 了 //平 静 。 看 看 堤 下 ， 江 水 已 经 涨 了 两 丈 来 高 了 。 作 品 12 号 节 选 自 丁 立 梅 《 孩 子 和 秋 风 》 我 和 几 个 孩 子 站 在",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.23333333333333334,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "田 野 里 ， 瞧 去 ， 一",
+          "quote": "大 片 一 大 片 满 是 的 。 坐 着 ， 躺 着 ， 打 两 个 滚 ， 踢 几 脚 球 ， 赛 几 趟 跑 ， 捉 几 回 迷 藏 。 风 轻 悄 悄 的 ， 草 软 绵 绵 的 。 ...... “ 吹 面 不 寒 杨 柳 风 ”",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.03333333333333333,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-9",
+          "sectionTitle": "如 锦 如 缎 。 这 些 水 都 来 自 “ 难 老 泉 ” 。 泉 上 有 亭 ， 亭 上 悬 挂 着 清 代 著 …",
+          "quote": "如 锦 如 缎 。 这 些 水 都 来 自 “ 难 老 泉 ” 。 泉 上 有 亭 ， 亭 上 悬 挂 着 清 代 著 …",
+          "total": 24,
+          "sectionPos": 0.34782608695652173,
+          "chunkPos": 0.36666666666666664,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "态 神 情 是 那 样 有 生 气 ， 你 看 了 ， 不 禁 会 脱 口 赞 叹 说 ： “ 活 啦 。 ”",
+          "quote": "态 神 情 是 那 样 有 生 气 ， 你 看 了 ， 不 禁 会 脱 口 赞 叹 说 ： “ 活 啦 。 ”",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": 0.6444444444444445,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "态 神 情 是 那 样 有 生 气 ， 你 看 了 ， 不 禁 会 脱 口 赞 叹 说 ： “ 活 啦 。 ”",
+          "quote": "态 神 情 是 那 样 有 生 气 ， 你 看 了 ， 不 禁 会 脱 口 赞 叹 说 ： “ 活 啦 。 ”",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": 0.6444444444444445,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-23",
+          "sectionTitle": "的 冲 击 。 同 时 ， 拱 上 加 拱 ， 桥 身 也 更 美 观 。 大 拱",
+          "quote": "的 冲 击 。 同 时 ， 拱 上 加 拱 ， 桥 身 也 更 美 观 。 大 拱",
+          "total": 24,
+          "sectionPos": 0.9565217391304348,
+          "chunkPos": 0.9444444444444444,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "候 工 匠 都 用 传 统 工 具 ： 木 匠 画 线 用 的 是 墨 斗 、 画 签 、 毛 笔 、 方 尺 、 杖 …",
+          "quote": "加 工 制 作 木 构 件 使 用 的 工 具 有 锛 、 凿 、 斧 、 锯 、 刨 等 等 。 最 能 体 现 大 修 难 度 的 便 是 瓦 作 中 “ 苫 背 ” 的 环 节 。 “ 苫 背 ” 是 指 在 房 顶 做 灰 背 的",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.1111111111111111,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-7",
+          "sectionTitle": "， 吹 打 着 树 上 可 怜 的 几 片 叶 子 ， 那 上 面 ， 就 快 成",
+          "quote": "作 品 6 号 节 选 自 竺 可 桢 《 大 自 然 的 语 言 》 立 春 过 后 ， 大 地 渐 渐 从 沉 睡 中 苏 醒 过 来 。 冰 雪 融 化 ， 草 木 萌 发 ， 各 种 花 次 第 开 放 。 再 过 两 个 月 ，",
+          "total": 24,
+          "sectionPos": 0.2608695652173913,
+          "chunkPos": 0.12222222222222222,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-23",
+          "sectionTitle": "的 冲 击 。 同 时 ， 拱 上 加 拱 ， 桥 身 也 更 美 观 。 大 拱",
+          "quote": "由 二 十 八 道 拱 圈 拼 成 ， 就 像 这 么 多 同 样 形 状 的 弓 合 拢 在 一 起 ， 做 成 一 个 弧 形 的 桥 洞 。 每 道 拱 圈 都 能 独 立 支 撑 上 面 的 重 量 ， 一 道 坏 了 ， 其 //",
+          "total": 24,
+          "sectionPos": 0.9565217391304348,
+          "chunkPos": 0.9444444444444444,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-19",
+          "sectionTitle": "么 大 。 别 看 画 上 的 人 小 ， 每 个 人 在 干 什 么 ， 都 能",
+          "quote": "么 大 。 别 看 画 上 的 人 小 ， 每 个 人 在 干 什 么 ， 都 能",
+          "total": 24,
+          "sectionPos": 0.782608695652174,
+          "chunkPos": 0.7777777777777778,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-17",
+          "sectionTitle": "海 有 浪 涛 ， 大 漠 有 风 沙 ， 森 林 有 猛 兽 。 即 便",
+          "quote": "海 有 浪 涛 ， 大 漠 有 风 沙 ， 森 林 有 猛 兽 。 即 便",
+          "total": 24,
+          "sectionPos": 0.6956521739130435,
+          "chunkPos": 0.6888888888888889,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-24",
+          "sectionTitle": "， 而 且 天 气 比 成 都 好 ， 可 是 旧 书 铺 与 精 美 而 便 宜 的 小 吃 远 不 及 成",
+          "quote": "都 那 么 多 。 好 吧 ， 就 暂 这 么 规 定 ： 冬 天 不 住 成 都 便 住 昆 明 吧 。 作 品 4 9 号 节 选 自 宋 元 明 《 走 下 领 奖 台 ， 一 切 从 零 开 始 》 在 北 京 市 东 城 区 著 ",
+          "total": 24,
+          "sectionPos": 1,
+          "chunkPos": 0.9666666666666667,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "995c0a14-f0dc-4059-956b-69d117400cdc",
+          "sourceTitle": null,
+          "sectionId": "s-18",
+          "sectionTitle": "后 种 几 十 枝 竹 ， 绿 的 叶 ， 青 的 竿 ， 投 下 一 片 浓 浓 的 绿 荫 。 几",
+          "quote": "后 种 几 十 枝 竹 ， 绿 的 叶 ， 青 的 竿 ， 投 下 一 片 浓 浓 的 绿 荫 。 几",
+          "total": 24,
+          "sectionPos": 0.7391304347826086,
+          "chunkPos": 0.7111111111111111,
+          "lateChunk": true,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "gaokao-math",
+      "refs": 12,
+      "lateChunk": 2,
+      "lateSection": 2,
+      "sectionOnly": 0,
+      "sectionChunkRho": 1,
+      "samples": [
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-5",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.07317073170731707
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.04878048780487805
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.024390243902439025
+        },
+        {
+          "sectionId": "s-5",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.07317073170731707
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "2f7ec4a6-b2ee-41cb-aa3f-146708a34550",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "4.考试结束后，请将本试卷和答题卡一并上交.",
+          "quote": "第1页/共23页 2024 新高考II 卷高考真题 本试卷共 10页，19 小题，满分150分.",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "2f7ec4a6-b2ee-41cb-aa3f-146708a34550",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "4.考试结束后，请将本试卷和答题卡一并上交.",
+          "quote": "第1页/共23页 2024 新高考II 卷高考真题 本试卷共 10页，19 小题，满分150分.",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "2f7ec4a6-b2ee-41cb-aa3f-146708a34550",
+          "sourceTitle": null,
+          "sectionId": "s-5",
+          "sectionTitle": "（3）设",
+          "quote": "一、单项选择题：本大题共 8 小题，每小题 5 分，共 40 分. 在每小题给出的四个选项中，只有一个选 项是正确的．请把正确的选项填涂在答题卡相应的位置上.",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.07317073170731707,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "2f7ec4a6-b2ee-41cb-aa3f-146708a34550",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "17. 如图，平面四边形ABCD中，",
+          "quote": "17. 如图，平面四边形ABCD中，",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.04878048780487805,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "2f7ec4a6-b2ee-41cb-aa3f-146708a34550",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "10. 抛物线 C：",
+          "quote": "10. 抛物线 C：",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.024390243902439025,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "2f7ec4a6-b2ee-41cb-aa3f-146708a34550",
+          "sourceTitle": null,
+          "sectionId": "s-5",
+          "sectionTitle": "（3）设",
+          "quote": "一、单项选择题：本大题共 8 小题，每小题 5 分，共 40 分. 在每小题给出的四个选项中，只有一个选 项是正确的．请把正确的选项填涂在答题卡相应的位置上.",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.07317073170731707,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "2f7ec4a6-b2ee-41cb-aa3f-146708a34550",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "4.考试结束后，请将本试卷和答题卡一并上交.",
+          "quote": "第1页/共23页 2024 新高考II 卷高考真题 本试卷共 10页，19 小题，满分150分.",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "2f7ec4a6-b2ee-41cb-aa3f-146708a34550",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "三、填空题：本大题共 3 小题，每小题 5 分，共 15 分.",
+          "quote": "三、填空题：本大题共 3 小题，每小题 5 分，共 15 分.",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.43902439024390244,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "2f7ec4a6-b2ee-41cb-aa3f-146708a34550",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "10.【答案】ABD",
+          "quote": "10.【答案】ABD",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": 0.34146341463414637,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "2f7ec4a6-b2ee-41cb-aa3f-146708a34550",
+          "sourceTitle": null,
+          "sectionId": "s-9",
+          "sectionTitle": "10.【答案】ABD",
+          "quote": "10.【答案】ABD",
+          "total": 24,
+          "sectionPos": 0.34782608695652173,
+          "chunkPos": 0.34146341463414637,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "2f7ec4a6-b2ee-41cb-aa3f-146708a34550",
+          "sourceTitle": null,
+          "sectionId": "s-19",
+          "sectionTitle": "0.686",
+          "quote": "0.686",
+          "total": 24,
+          "sectionPos": 0.782608695652174,
+          "chunkPos": 0.7804878048780488,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "2f7ec4a6-b2ee-41cb-aa3f-146708a34550",
+          "sourceTitle": null,
+          "sectionId": "s-18",
+          "sectionTitle": "（2）由（1） ，根据线面垂直的判定定理与性质可证明",
+          "quote": "（2）由（1） ，根据线面垂直的判定定理与性质可证明",
+          "total": 24,
+          "sectionPos": 0.7391304347826086,
+          "chunkPos": 0.7317073170731707,
+          "lateChunk": true,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "cet",
+      "refs": 16,
+      "lateChunk": 0,
+      "lateSection": 6,
+      "sectionOnly": 6,
+      "sectionChunkRho": 1,
+      "samples": [
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0.006622516556291391
+        },
+        {
+          "sectionId": "s-5",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.11258278145695365
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.11258278145695365
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.06622516556291391
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.07947019867549669
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "四、六级考试大纲为２００６年的修订版,共有三个单行本:«大学英语四级考试",
+          "quote": "大纲»、«大学英语 六 级 考 试 大 纲»和 «大 学 英 语 口 语 考 试 大 纲».«全 国 大 学 英语四、六级考试大纲(２０１６ 年 修 订 版)»在 总 体 设 计 上 更 好 地 体 现 了 四、六 级考试体系的完整性,内容",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0.006622516556291391,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-5",
+          "sectionTitle": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "quote": "表所示: 试卷结构 测试内容 测试题型 题目数量 分值比例 考试时间 写作 写作 短文写作 １ １５％ ３０分钟 长对话 选择题(单选题) ８ ８％ 听力篇章 选择题(单选题) ７ ７％ 讲话/报道/讲座 选择题(单选题) １０ ２０％",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.11258278145695365,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 目　　录",
+          "quote": "## 目 录",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 目　　录",
+          "quote": "表所示: 试卷结构 测试内容 测试题型 题目数量 分值比例 考试时间 写作 写作 短文写作 １ １５％ ３０分钟 长对话 选择题(单选题) ８ ８％ 听力篇章 选择题(单选题) ７ ７％ 讲话/报道/讲座 选择题(单选题) １０ ２０％",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.11258278145695365,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 目　　录",
+          "quote": "六级考试:要求考生能听懂就熟悉话题展开的多话轮英语会话;能听懂语速中等、题 材熟悉、篇幅较长的英语广播;能听懂语速中等、题材熟悉的讲话、报道和内容浅显的学术讲 座;能较好地运用听力策略帮助理解.听力材料的语速为每分钟１４０－１６０词.",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.06622516556291391,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "## 目　　录",
+          "quote": "题目叙述、议论或描述,重点突出 ０５ 连贯地组句成段,组段成篇 C．语言运用 ０６ 运用恰当的词汇 ０７ 运用正确的语法 ０８ 运用合适的句子结构 ０９ 使用正确的标点符号 １０ 运用衔接手段表达句间关系(如对比、原因、结果、程度、目的等)",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.07947019867549669,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "第二部分:根据考官指令和屏幕显示的文字或画面提示,考生准备 １ 分钟,然后就所",
+          "quote": "词. 六级考试:要求考生能听懂就熟悉话题展开的多话轮英语会话;能听懂语速中等、题 材熟悉、篇幅较长的英语广播;能听懂语速中等、题材熟悉的讲话、报道和内容浅显的学术讲 座;能较好地运用听力策略帮助理解.听力材料的语速为每分钟１４０－１６０词.",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.06622516556291391,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-5",
+          "sectionTitle": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "quote": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.17880794701986755,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "quote": "间４０分钟. 词汇理解:采用选词填空题型,考核学生对篇章语境中词汇的理解和运用能力.篇章 中删去了１０个词汇,并在篇章后 提 供 １５ 个 词 汇 选 项.要 求 考 生 在 对 篇 章 理 解 的 基 础 上 从 所给的词汇选项中选择正确",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": 0.12582781456953643,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-19",
+          "sectionTitle": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "quote": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "total": 24,
+          "sectionPos": 0.782608695652174,
+          "chunkPos": 0.17880794701986755,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-5",
+          "sectionTitle": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "quote": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.17880794701986755,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-19",
+          "sectionTitle": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "quote": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "total": 24,
+          "sectionPos": 0.782608695652174,
+          "chunkPos": 0.17880794701986755,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-18",
+          "sectionTitle": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "quote": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "total": 24,
+          "sectionPos": 0.7391304347826086,
+          "chunkPos": 0.17880794701986755,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-22",
+          "sectionTitle": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "quote": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "total": 24,
+          "sectionPos": 0.9130434782608695,
+          "chunkPos": 0.17880794701986755,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-21",
+          "sectionTitle": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "quote": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "total": 24,
+          "sectionPos": 0.8695652173913043,
+          "chunkPos": 0.17880794701986755,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c3603be4-02b0-4c39-b868-667509b5b796",
+          "sourceTitle": null,
+          "sectionId": "s-24",
+          "sectionTitle": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "quote": "四、六级笔试的原始总分经过等值处理后参照总分常模转换成常模正态分,均值为５００、",
+          "total": 24,
+          "sectionPos": 1,
+          "chunkPos": 0.17880794701986755,
+          "lateChunk": false,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "diabetes-guide",
+      "refs": 14,
+      "lateChunk": 4,
+      "lateSection": 4,
+      "sectionOnly": 0,
+      "sectionChunkRho": 1,
+      "samples": [
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.10714285714285714
+        },
+        {
+          "sectionId": "s-4",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.14285714285714285
+        },
+        {
+          "sectionId": "s-6",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.20714285714285716
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.05714285714285714
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.10714285714285714
+        },
+        {
+          "sectionId": "s-3",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.10714285714285714
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "2. 按 病 因 将 糖 尿 病 分 为1 型 糖 尿 病（T1DM） 、",
+          "quote": "2. 按 病 因 将 糖 尿 病 分 为1 型 糖 尿 病（T1DM） 、",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.10714285714285714,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-4",
+          "sectionTitle": "1. 针对高危人群进行糖尿病筛查 ，有助于早期",
+          "quote": "1. 针对高危人群进行糖尿病筛查 ，有助于早期",
+          "total": 24,
+          "sectionPos": 0.13043478260869565,
+          "chunkPos": 0.14285714285714285,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "3. 实验室检查和其他检查 ：包括空腹和餐后",
+          "quote": "3. 实验室检查和其他检查 ：包括空腹和餐后",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.20714285714285716,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "15.5%d",
+          "quote": "15.5%d",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": 0.05714285714285714,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "2. 按 病 因 将 糖 尿 病 分 为1 型 糖 尿 病（T1DM） 、",
+          "quote": "2. 按 病 因 将 糖 尿 病 分 为1 型 糖 尿 病（T1DM） 、",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.10714285714285714,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-3",
+          "sectionTitle": "2. 按 病 因 将 糖 尿 病 分 为1 型 糖 尿 病（T1DM） 、",
+          "quote": "2. 按 病 因 将 糖 尿 病 分 为1 型 糖 尿 病（T1DM） 、",
+          "total": 24,
+          "sectionPos": 0.08695652173913043,
+          "chunkPos": 0.10714285714285714,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "3. 实验室检查和其他检查 ：包括空腹和餐后",
+          "quote": "3. 实验室检查和其他检查 ：包括空腹和餐后",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.20714285714285716,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-7",
+          "sectionTitle": "3. HbA1c 控 制 目 标 应 遵 循 个 体 化 原 则，年 龄 较",
+          "quote": "3. HbA1c 控 制 目 标 应 遵 循 个 体 化 原 则，年 龄 较",
+          "total": 24,
+          "sectionPos": 0.2608695652173913,
+          "chunkPos": 0.2714285714285714,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-17",
+          "sectionTitle": "1. 血糖监测是糖尿病管理中的重要组成部分 ，",
+          "quote": "1. 血糖监测是糖尿病管理中的重要组成部分 ，",
+          "total": 24,
+          "sectionPos": 0.6956521739130435,
+          "chunkPos": 0.6857142857142857,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-14",
+          "sectionTitle": "6.0 mmol/L，2hPG 4.4~8.0 mmol/L）可能与更高的缓",
+          "quote": "6.0 mmol/L，2hPG 4.4~8.0 mmol/L）可能与更高的缓",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": 0.5785714285714286,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-7",
+          "sectionTitle": "3. HbA1c 控 制 目 标 应 遵 循 个 体 化 原 则，年 龄 较",
+          "quote": "3. HbA1c 控 制 目 标 应 遵 循 个 体 化 原 则，年 龄 较",
+          "total": 24,
+          "sectionPos": 0.2608695652173913,
+          "chunkPos": 0.2714285714285714,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-5",
+          "sectionTitle": "1. 继续控制血糖 、血压及血脂 ：严格控制血糖",
+          "quote": "1. 继续控制血糖 、血压及血脂 ：严格控制血糖",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": 0.17142857142857143,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-23",
+          "sectionTitle": "3. 控制血糖 ：优化血糖管理可延缓 DKD 进展，",
+          "quote": "在制定血糖控制目标时应根据年龄 、糖尿病病程 、 预期寿命 、合并症 、并发症 、低血糖风险等 ，制定个 体化控制目标 。",
+          "total": 24,
+          "sectionPos": 0.9565217391304348,
+          "chunkPos": 0.9428571428571428,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "c5b083af-ba00-4fe3-8723-0cf396b94896",
+          "sourceTitle": null,
+          "sectionId": "s-23",
+          "sectionTitle": "3. 控制血糖 ：优化血糖管理可延缓 DKD 进展，",
+          "quote": "在制定血糖控制目标时应根据年龄 、糖尿病病程 、 预期寿命 、合并症 、并发症 、低血糖风险等 ，制定个 体化控制目标 。",
+          "total": 24,
+          "sectionPos": 0.9565217391304348,
+          "chunkPos": 0.9428571428571428,
+          "lateChunk": true,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "reading-method",
+      "refs": 19,
+      "lateChunk": 0,
+      "lateSection": 14,
+      "sectionOnly": 14,
+      "sectionChunkRho": 1,
+      "samples": [
+        {
+          "sectionId": "s-10",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": 0.417910447761194
+        },
+        {
+          "sectionId": "s-8",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-6",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.21641791044776118
+        },
+        {
+          "sectionId": "s-8",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-16",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-14",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": null
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "第四章 阅读的第二个层次：检视阅读",
+          "quote": "第四章 阅读的第二个层次：检视阅读",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": 0.417910447761194,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "### 第二章 阅读的层次",
+          "quote": "### 第二章 阅读的层次",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-6",
+          "sectionTitle": "### 第一章 阅读的活力与艺术",
+          "quote": "※阅读的目标：为获得资讯而读，以及为求得理解而读",
+          "total": 24,
+          "sectionPos": 0.21739130434782608,
+          "chunkPos": 0.21641791044776118,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-8",
+          "sectionTitle": "### 第二章 阅读的层次",
+          "quote": "### 第二章 阅读的层次",
+          "total": 24,
+          "sectionPos": 0.30434782608695654,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "### 第七章 透视一本书",
+          "quote": "### 第七章 透视一本书",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-14",
+          "sectionTitle": "### 第六章 一本书的分类",
+          "quote": "### 第六章 一本书的分类",
+          "total": 24,
+          "sectionPos": 0.5652173913043478,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "### 第七章 透视一本书",
+          "quote": "### 第七章 透视一本书",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "### 第七章 透视一本书",
+          "quote": "### 第七章 透视一本书",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "### 第七章 透视一本书",
+          "quote": "### 第七章 透视一本书",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-16",
+          "sectionTitle": "### 第七章 透视一本书",
+          "quote": "### 第七章 透视一本书",
+          "total": 24,
+          "sectionPos": 0.6521739130434783,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-20",
+          "sectionTitle": "### 第八章 与作者找出共通的词义",
+          "quote": "### 第八章 与作者找出共通的词义",
+          "total": 24,
+          "sectionPos": 0.8260869565217391,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-24",
+          "sectionTitle": "### 第九章 判断作者的主旨",
+          "quote": "### 第九章 判断作者的主旨",
+          "total": 24,
+          "sectionPos": 1,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-20",
+          "sectionTitle": "### 第八章 与作者找出共通的词义",
+          "quote": "### 第八章 与作者找出共通的词义",
+          "total": 24,
+          "sectionPos": 0.8260869565217391,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-24",
+          "sectionTitle": "### 第九章 判断作者的主旨",
+          "quote": "### 第九章 判断作者的主旨",
+          "total": 24,
+          "sectionPos": 1,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-24",
+          "sectionTitle": "### 第九章 判断作者的主旨",
+          "quote": "### 第九章 判断作者的主旨",
+          "total": 24,
+          "sectionPos": 1,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-20",
+          "sectionTitle": "### 第八章 与作者找出共通的词义",
+          "quote": "### 第八章 与作者找出共通的词义",
+          "total": 24,
+          "sectionPos": 0.8260869565217391,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-5",
+          "sectionTitle": "## 序 言",
+          "quote": "## 序 言",
+          "total": 24,
+          "sectionPos": 0.17391304347826086,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-19",
+          "sectionTitle": "### 第七章 透视一本书",
+          "quote": "### 第七章 透视一本书",
+          "total": 24,
+          "sectionPos": 0.782608695652174,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "c23b95d2-b55c-436b-8a62-6370f26bfc56",
+          "sourceTitle": null,
+          "sectionId": "s-20",
+          "sectionTitle": "### 第八章 与作者找出共通的词义",
+          "quote": "### 第八章 与作者找出共通的词义",
+          "total": 24,
+          "sectionPos": 0.8260869565217391,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": true
+        }
+      ]
+    },
+    {
+      "goal": "tax-agent",
+      "refs": 14,
+      "lateChunk": 5,
+      "lateSection": 6,
+      "sectionOnly": 1,
+      "sectionChunkRho": 1,
+      "samples": [
+        {
+          "sectionId": "s-10",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-1",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0
+        },
+        {
+          "sectionId": "s-10",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-2",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": null
+        },
+        {
+          "sectionId": "s-13",
+          "total": 24,
+          "sectionPos": 0.5217391304347826,
+          "chunkPos": 0.34375
+        }
+      ],
+      "detail": [
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "### 第一章 企业所得税",
+          "quote": "### 第一章 企业所得税",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "### 第一章 税法基本原理",
+          "quote": "### 第一章 税法基本原理",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-1",
+          "sectionTitle": "2026 年度税务师职业资格考试",
+          "quote": "《税法（Ⅰ） 》是税务师水平评价类考试科目之一，是考生 进一步学习《税法（II） 》 《涉税服务实务》以及《财务与会计》 的基础， 是税务师高质量执业必须具备的税收专业知识和职业能 力的重要组成部分。",
+          "total": 24,
+          "sectionPos": 0,
+          "chunkPos": 0,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "### 第一章 企业所得税",
+          "quote": "### 第一章 企业所得税",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-2",
+          "sectionTitle": "### 第一章 税法基本原理",
+          "quote": "### 第一章 税法基本原理",
+          "total": 24,
+          "sectionPos": 0.043478260869565216,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-13",
+          "sectionTitle": "(一)掌握减免税的基本优惠",
+          "quote": "(一)掌握减免税的基本优惠",
+          "total": 24,
+          "sectionPos": 0.5217391304347826,
+          "chunkPos": 0.34375,
+          "lateChunk": false,
+          "lateSection": true
+        },
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "### 第一章 企业所得税",
+          "quote": "### 第一章 企业所得税",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-11",
+          "sectionTitle": "十、特别纳税调整",
+          "quote": "十、特别纳税调整",
+          "total": 24,
+          "sectionPos": 0.43478260869565216,
+          "chunkPos": 0.25,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-10",
+          "sectionTitle": "### 第一章 企业所得税",
+          "quote": "### 第一章 企业所得税",
+          "total": 24,
+          "sectionPos": 0.391304347826087,
+          "chunkPos": null,
+          "lateChunk": false,
+          "lateSection": false
+        },
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-24",
+          "sectionTitle": "(一)熟悉涉税账务调整的类型",
+          "quote": "(二)掌握涉税账务调整的基本方法 第五章 纳税申报代办服务 一、货物劳务税纳税申报代办 （一）掌握增值税及附加税费纳税申报代办 （二）熟悉消费税及附加税费纳税申报代办 二、所得税纳税申报代办 （一）掌握企业所得税纳税申报代办 （二）熟悉个人",
+          "total": 24,
+          "sectionPos": 1,
+          "chunkPos": 0.9375,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-24",
+          "sectionTitle": "(一)熟悉涉税账务调整的类型",
+          "quote": "(二)掌握涉税账务调整的基本方法 第五章 纳税申报代办服务 一、货物劳务税纳税申报代办 （一）掌握增值税及附加税费纳税申报代办 （二）熟悉消费税及附加税费纳税申报代办 二、所得税纳税申报代办 （一）掌握企业所得税纳税申报代办 （二）熟悉个人",
+          "total": 24,
+          "sectionPos": 1,
+          "chunkPos": 0.9375,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-24",
+          "sectionTitle": "(一)熟悉涉税账务调整的类型",
+          "quote": "(二)掌握涉税账务调整的基本方法 第五章 纳税申报代办服务 一、货物劳务税纳税申报代办 （一）掌握增值税及附加税费纳税申报代办 （二）熟悉消费税及附加税费纳税申报代办 二、所得税纳税申报代办 （一）掌握企业所得税纳税申报代办 （二）熟悉个人",
+          "total": 24,
+          "sectionPos": 1,
+          "chunkPos": 0.9375,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-24",
+          "sectionTitle": "(一)熟悉涉税账务调整的类型",
+          "quote": "(二)掌握涉税账务调整的基本方法 第五章 纳税申报代办服务 一、货物劳务税纳税申报代办 （一）掌握增值税及附加税费纳税申报代办 （二）熟悉消费税及附加税费纳税申报代办 二、所得税纳税申报代办 （一）掌握企业所得税纳税申报代办 （二）熟悉个人",
+          "total": 24,
+          "sectionPos": 1,
+          "chunkPos": 0.9375,
+          "lateChunk": true,
+          "lateSection": true
+        },
+        {
+          "materialId": "70892413-3ef7-4b03-8f84-1588897bf24f",
+          "sourceTitle": null,
+          "sectionId": "s-24",
+          "sectionTitle": "(一)熟悉涉税账务调整的类型",
+          "quote": "(二)掌握涉税账务调整的基本方法 第五章 纳税申报代办服务 一、货物劳务税纳税申报代办 （一）掌握增值税及附加税费纳税申报代办 （二）熟悉消费税及附加税费纳税申报代办 二、所得税纳税申报代办 （一）掌握企业所得税纳税申报代办 （二）熟悉个人",
+          "total": 24,
+          "sectionPos": 1,
+          "chunkPos": 0.9375,
+          "lateChunk": true,
+          "lateSection": true
+        }
+      ]
+    }
+  ]
+}

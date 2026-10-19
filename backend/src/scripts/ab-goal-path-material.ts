@@ -20,12 +20,16 @@
  *   npm --prefix backend run material:ab:goal-path -- --goals=1          # 先跑 1 个验通路
  *   npm --prefix backend run material:ab:goal-path -- --goals=20         # 全量
  *   npm --prefix backend run material:ab:goal-path -- --goals=20 --arms=new
- * 产物：doc/local/ab-goal-path/run-<ts>.json（gitignored）
+ *   npm --prefix backend run material:ab:goal-path -- --goals=20 --arms=both \
+ *     --fixtureManifest=../doc/measurement/119/manifest.json             # 按 sha256 定版夹具
+ * 产物：doc/measurement/119/run-<ts>.json + run-<ts>.manifest.json（默认；--outDir 可改）
+ *   run JSON 为行数组（既有分析脚本按行迭代）；commit/model/夹具 sha256 写在旁车 manifest。
  */
 import 'dotenv/config';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { spawnSync } from 'child_process';
 import prisma from '../config/database';
 import pathCoordinator from '../coordinators/path.coordinator';
 import { getLearningPath } from '../services/learning/queries/path-views.queries';
@@ -35,6 +39,17 @@ import { resolveMaterialsRoot, writeMaterial, type MaterialRecord } from '../ser
 import { normalizeWebTextStructure } from '../services/materials/material-web-structure';
 
 type Arm = 'old' | 'new';
+
+/**
+ * 路径侧开关的进程基线（模块加载时快照）。
+ * old 臂会把它们置 0；new 臂必须回落到基线而不是「当前值」，否则连续跑 --arms=both
+ * 时 old 的残留会让 new 臂也变成 old（#119 复核发现的 A/B 污染）。
+ */
+const BASELINE_STAGE_SWITCHES = {
+  STAGE_MATERIAL_SEMANTIC_ORDER: process.env.STAGE_MATERIAL_SEMANTIC_ORDER ?? '1',
+  STAGE_MATERIAL_QUOTA_RERANK: process.env.STAGE_MATERIAL_QUOTA_RERANK ?? '1',
+  STAGE_MATERIAL_ZERO_REF_SUPPLEMENT: process.env.STAGE_MATERIAL_ZERO_REF_SUPPLEMENT ?? '1',
+};
 
 interface GoalSpec {
   id: string;
@@ -71,6 +86,8 @@ interface DocSource {
   markdown: string;
   record: MaterialRecord;
   chunks: MaterialChunk[];
+  /** 夹具指纹（markdown 的 sha256）：run 记录里带上，复算时可按内容定版（#119）。 */
+  sha256: string;
 }
 
 interface ArmResult {
@@ -86,6 +103,10 @@ interface ArmResult {
   refsTotal: number;
   refsLate: number;
   pack: { files: number; tldrChars: number; points: number; pointsLate: number; packChars: number };
+  /** 生成所用模型（AI_MODEL / AI_MODEL_REASONING），复算时据此判断读数对应哪版模型。 */
+  model?: { ai: string; reasoning: string };
+  /** 本臂实际使用的开关组合（old 臂全关），复算/复核时对照用。 */
+  switches?: Record<string, string>;
   error: string | null;
 }
 
@@ -128,7 +149,13 @@ function loadLibraryDocs(): DocSource[] {
         if (record.origin !== 'web' || (Number(record.charCount) || 0) < 10_000) continue;
         const markdown = fs.readFileSync(mdPath, 'utf8');
         if (markdown.length < 10_000) continue;
-        out.push({ name: String(record.name || ''), markdown, record, chunks: chunkMaterialMarkdown(markdown) });
+        out.push({
+          name: String(record.name || ''),
+          markdown,
+          record,
+          chunks: chunkMaterialMarkdown(markdown),
+          sha256: crypto.createHash('sha256').update(markdown, 'utf8').digest('hex'),
+        });
       } catch {
         /* skip */
       }
@@ -272,6 +299,18 @@ async function runArm(goal: GoalSpec, docs: DocSource[], arm: Arm): Promise<ArmR
   const userId = await createUser(`${goal.id}-${arm}`);
   await attachMaterials(userId, docs, arm);
   process.env.MATERIAL_PACK_SEMANTIC_DISABLED = arm === 'old' ? '1' : '0';
+  // 真 A/B 的 old 臂（#119）：历史形态 = 语义排序关、配额重排关、零引用补课关。
+  // 2026-10-19 之前的 old 臂只关 MATERIAL_PACK_SEMANTIC_DISABLED，路径侧优化仍然生效，
+  // 于是「old」其实是 10-17 的 new 臂改名（merged-1792388275960.json 的 arms.old.arm='new'）。
+  const armSwitches: Record<string, string> = {
+    MATERIAL_PACK_SEMANTIC_DISABLED: process.env.MATERIAL_PACK_SEMANTIC_DISABLED,
+    STAGE_MATERIAL_SEMANTIC_ORDER: arm === 'old' ? '0' : BASELINE_STAGE_SWITCHES.STAGE_MATERIAL_SEMANTIC_ORDER,
+    STAGE_MATERIAL_QUOTA_RERANK: arm === 'old' ? '0' : BASELINE_STAGE_SWITCHES.STAGE_MATERIAL_QUOTA_RERANK,
+    STAGE_MATERIAL_ZERO_REF_SUPPLEMENT: arm === 'old' ? '0' : BASELINE_STAGE_SWITCHES.STAGE_MATERIAL_ZERO_REF_SUPPLEMENT,
+  };
+  process.env.STAGE_MATERIAL_SEMANTIC_ORDER = armSwitches.STAGE_MATERIAL_SEMANTIC_ORDER;
+  process.env.STAGE_MATERIAL_QUOTA_RERANK = armSwitches.STAGE_MATERIAL_QUOTA_RERANK;
+  process.env.STAGE_MATERIAL_ZERO_REF_SUPPLEMENT = armSwitches.STAGE_MATERIAL_ZERO_REF_SUPPLEMENT;
 
   const result: ArmResult = {
     arm,
@@ -286,6 +325,8 @@ async function runArm(goal: GoalSpec, docs: DocSource[], arm: Arm): Promise<ArmR
     refsTotal: 0,
     refsLate: 0,
     pack: { files: docs.length, tldrChars: 0, points: 0, pointsLate: 0, packChars: 0 },
+    model: { ai: process.env.AI_MODEL || '', reasoning: process.env.AI_MODEL_REASONING || '' },
+    switches: armSwitches,
     error: null,
   };
 
@@ -347,10 +388,40 @@ async function runArm(goal: GoalSpec, docs: DocSource[], arm: Arm): Promise<ArmR
     result.error = error instanceof Error ? error.message : String(error);
   } finally {
     delete process.env.MATERIAL_PACK_SEMANTIC_DISABLED;
+    process.env.STAGE_MATERIAL_SEMANTIC_ORDER = BASELINE_STAGE_SWITCHES.STAGE_MATERIAL_SEMANTIC_ORDER;
+    process.env.STAGE_MATERIAL_QUOTA_RERANK = BASELINE_STAGE_SWITCHES.STAGE_MATERIAL_QUOTA_RERANK;
+    process.env.STAGE_MATERIAL_ZERO_REF_SUPPLEMENT = BASELINE_STAGE_SWITCHES.STAGE_MATERIAL_ZERO_REF_SUPPLEMENT;
   }
 
   result.ms = Date.now() - startedAt;
   return result;
+}
+
+/**
+ * 读夹具定版清单（#119）。支持本脚本产出的 `run-<ts>.manifest.json`
+ * （`{ fixtures: [{ goal, name, sha256 }] }`）；返回 name → sha256。
+ */
+function loadFixtureManifest(file: string | null): Map<string, string> | null {
+  if (!file) return null;
+  const json = JSON.parse(fs.readFileSync(file, 'utf-8'));
+  const list = Array.isArray(json?.fixtures) ? json.fixtures : [];
+  const map = new Map<string, string>();
+  for (const entry of list) {
+    const name = String(entry?.name || '');
+    const sha256 = String(entry?.sha256 || '');
+    if (name && /^[0-9a-f]{64}$/.test(sha256)) map.set(name, sha256);
+  }
+  if (map.size === 0) throw new Error(`夹具清单里没有可用的 fixtures[].sha256：${file}`);
+  return map;
+}
+
+/** 当前提交（定版用）；不在 git 工作区时返回 null，不阻断跑批。 */
+function readCommitSha(): string | null {
+  const result = spawnSync('git', ['rev-parse', 'HEAD'], {
+    cwd: path.resolve(__dirname, '../../..'),
+    encoding: 'utf-8',
+  });
+  return result.status === 0 ? String(result.stdout || '').trim() || null : null;
 }
 
 async function main(): Promise<void> {
@@ -359,21 +430,48 @@ async function main(): Promise<void> {
   const armsArg = argText('arms') || 'both';
   const arms: Arm[] = armsArg === 'old' ? ['old'] : armsArg === 'new' ? ['new'] : ['old', 'new'];
   const library = loadLibraryDocs();
-  console.log(`[ab-goal-path] 库内长文 ${library.length} 份｜goal ${goalCount} 个｜arms ${arms.join(',')}`);
+  // 夹具定版（#119）：--fixtureManifest=<run-XXXX.manifest.json> 时按 sha256 选材料，
+  // 不按标题子串猜；缺失/指纹不符直接失败，避免「同一份资料今天一个版本、明天另一个版本」。
+  const fixtureManifest = loadFixtureManifest(argText('fixtureManifest'));
+  // --dryRun：只做夹具选择与指纹核对，不生成路径（不耗模型额度，用于复核夹具定版是否可用）
+  const dryRun = process.argv.includes('--dryRun');
+  console.log(
+    `[ab-goal-path] 库内长文 ${library.length} 份｜goal ${goalCount} 个｜arms ${arms.join(',')}` +
+      (fixtureManifest ? `｜夹具定版 ${fixtureManifest.size} 份` : '') +
+      (dryRun ? '｜DRY RUN（不生成）' : '')
+  );
 
   const output: any[] = [];
   for (let i = start; i < start + goalCount; i += 1) {
     const goal = GOALS[i];
     const picked: DocSource[] = [];
     for (const hint of goal.materialHints) {
-      const doc = library.find((d) => d.name.includes(hint) && !picked.includes(d));
+      const candidates = library.filter((d) => d.name.includes(hint) && !picked.includes(d));
+      // 有夹具清单时只在清单内选，并核对 sha256
+      const doc = fixtureManifest
+        ? candidates.find((d) => fixtureManifest.get(d.name) === d.sha256)
+        : candidates[0];
       if (doc) picked.push(doc);
+      else if (fixtureManifest && candidates.length > 0) {
+        throw new Error(`夹具指纹不符：${goal.id} 的候选资料 ${candidates.map((d) => d.name).join(' / ')} 与 manifest sha256 不一致`);
+      }
     }
-    if (picked.length === 0 && library.length > 0) {
-      picked.push(library[i % library.length], library[(i + 1) % library.length]);
+    if (picked.length === 0) {
+      // fail-fast（#119）：旧实现 library[i % length] 兜底会把无关资料塞进 goal，读数不可解释
+      throw new Error(`没有匹配到资料：goal=${goal.id}｜hints=${goal.materialHints.join(',')}｜库内 ${library.length} 份`);
     }
     console.log(`\n[ab-goal-path] (${i + 1}/${goalCount}) ${goal.id}｜资料 ${picked.map((d) => d.name).join(' / ')}`);
-    const row: any = { goal: goal.id, rawGoal: goal.rawGoal, materials: picked.map((d) => d.name), arms: {} };
+    if (dryRun) {
+      for (const doc of picked) console.log(`  fixture ${doc.sha256}  ${doc.name}`);
+      continue;
+    }
+    const row: any = {
+      goal: goal.id,
+      rawGoal: goal.rawGoal,
+      materials: picked.map((d) => d.name),
+      fixtures: picked.map((d) => ({ name: d.name, sha256: d.sha256 })),
+      arms: {},
+    };
     for (const arm of arms) {
       const result = await runArm(goal, picked, arm);
       row.arms[arm] = result;
@@ -387,11 +485,46 @@ async function main(): Promise<void> {
     output.push(row);
   }
 
-  const dir = path.resolve(__dirname, '../../../doc/local/ab-goal-path');
+  if (dryRun) {
+    console.log(`\n[ab-goal-path] DRY RUN 结束：${goalCount} 个 goal 的夹具全部命中且指纹一致，未生成路径、未写文件`);
+    return;
+  }
+
+  const outDirArg = argText('outDir');
+  const dir = outDirArg ? path.resolve(outDirArg) : path.resolve(__dirname, '../../../doc/measurement/119');
   fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `run-${Date.now()}.json`);
+  const stamp = Date.now();
+  const file = path.join(dir, `run-${stamp}.json`);
   fs.writeFileSync(file, JSON.stringify(output, null, 2), 'utf-8');
+  // 旁车清单（#119）：run JSON 保持数组形态（既有分析脚本按行迭代），
+  // 定版信息（commit/model/夹具 sha256/开关）写同名 .manifest.json。
+  const manifestPath = path.join(dir, `run-${stamp}.manifest.json`);
+  fs.writeFileSync(
+    manifestPath,
+    JSON.stringify(
+      {
+        runFile: path.basename(file),
+        generatedAt: new Date(stamp).toISOString(),
+        commitSha: readCommitSha(),
+        model: { ai: process.env.AI_MODEL || '', reasoning: process.env.AI_MODEL_REASONING || '' },
+        arms,
+        goals: goalCount,
+        fixtureManifest: argText('fixtureManifest'),
+        fixtures: output.flatMap((row) =>
+          (row.fixtures || []).map((fixture: { name: string; sha256: string }) => ({
+            goal: row.goal,
+            name: fixture.name,
+            sha256: fixture.sha256,
+          }))
+        ),
+      },
+      null,
+      2
+    ),
+    'utf-8'
+  );
   console.log(`\n[ab-goal-path] 原始结果 → ${file}`);
+  console.log(`[ab-goal-path] 定版清单 → ${manifestPath}`);
 
   // 汇总
   const rows = output.filter((r) => r.arms.old && r.arms.new);

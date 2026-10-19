@@ -12,6 +12,7 @@ import 'dotenv/config';
 import prisma from '../config/database';
 import { backgroundTaskTracker } from '../services/background-task-tracker.service';
 import goalConversationService from '../services/learning/goal-conversation.service';
+import { CAPACITY_DEFAULTS } from '../services/learning/capacity-authority';
 
 const USER_ID = process.env.TRIGGER_USER_ID || 'user_30a97921-8fcf-454c-801a-9983dc83db1c';
 const POLL_TIMEOUT_MS = Number(process.env.TRIGGER_POLL_TIMEOUT_MS || 300_000);
@@ -46,7 +47,7 @@ async function main() {
   const result = await goalConversationService.quickGeneratePath(USER_ID, {
     goal: '明天上午 10 点要用 Excel 给 300 行的销售明细按日期和品类分类汇总，现在只会最基础的求和',
     level: 'beginner',
-    timePerDay: '1 小时',
+    timePerDay: CAPACITY_DEFAULTS.display,
     learningStyle: 'mixed',
   });
   const pathId = result?.internal?.core?.learningPath?.id;

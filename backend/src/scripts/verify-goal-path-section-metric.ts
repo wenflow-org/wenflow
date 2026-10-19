@@ -38,6 +38,22 @@ function argText(name: string): string | null {
   return hit ? hit.slice(name.length + 3) : null;
 }
 
+/**
+ * 引用口径（#119，2026-10-20）：
+ *   combined = 里程碑级 materialRefs + 任务级 subtasks[].materialRefs（默认，保持历史读数可比）
+ *   task     = 只数任务级（与 _generation.materialCoverage.refs / zeroRefStages 同口径）
+ * 两条口径混用是 #119「复算对不上 3/74」的根因，报告里必须写明。
+ */
+export type RefScope = 'combined' | 'task';
+
+export function parseRefScope(raw: string | null): RefScope {
+  const value = (raw || 'combined').trim().toLowerCase();
+  if (value !== 'task' && value !== 'combined') {
+    throw new Error(`--refScope 只接受 task|combined（收到 ${raw}）`);
+  }
+  return value;
+}
+
 function flat(text: string): string {
   return String(text || '').replace(/\s+/g, '');
 }
@@ -91,7 +107,7 @@ function chunkPositionOf(doc: Doc | undefined, quote: string, title: string): nu
   return doc.chunks.length > 1 ? median / (doc.chunks.length - 1) : 0;
 }
 
-function collectRefs(detail: unknown): RefRow[] {
+function collectRefs(detail: unknown, scope: RefScope = 'combined'): RefRow[] {
   const refs: RefRow[] = [];
   const push = (ref: unknown) => {
     const r = (ref && typeof ref === 'object' ? ref : {}) as Record<string, unknown>;
@@ -106,7 +122,9 @@ function collectRefs(detail: unknown): RefRow[] {
   };
   const root = (detail && typeof detail === 'object' ? detail : {}) as Record<string, unknown>;
   for (const milestone of Array.isArray(root.milestones) ? root.milestones : []) {
-    for (const ref of Array.isArray(milestone?.materialRefs) ? milestone.materialRefs : []) push(ref);
+    if (scope === 'combined') {
+      for (const ref of Array.isArray(milestone?.materialRefs) ? milestone.materialRefs : []) push(ref);
+    }
     for (const task of Array.isArray(milestone?.subtasks) ? milestone.subtasks : []) {
       for (const ref of Array.isArray(task?.materialRefs) ? task.materialRefs : []) push(ref);
     }
@@ -153,6 +171,7 @@ function spearman(pairs: Array<[number, number]>): number | null {
 async function main(): Promise<void> {
   const runFile = argText('run');
   if (!runFile) throw new Error('需要 --run=<run.json>');
+  const refScope = parseRefScope(argText('refScope'));
   const rows = JSON.parse(fs.readFileSync(runFile, 'utf8'));
   const library = loadLibrary();
   const docByName = new Map(library.map((doc) => [doc.name, doc]));
@@ -173,7 +192,7 @@ async function main(): Promise<void> {
     if (!result?.pathId) continue;
     const detail: unknown = await getLearningPath(result.pathId).catch(() => null);
     if (!detail) continue;
-    const refs = collectRefs(detail);
+    const refs = collectRefs(detail, refScope);
     const docs = (row.materials || [])
       .map((name: string) => docByName.get(name))
       .filter((doc: Doc | undefined): doc is Doc => Boolean(doc));
@@ -197,6 +216,19 @@ async function main(): Promise<void> {
     let sectionOnly = 0;
     let neither = 0;
     const samples: Array<{ sectionId: string | null; total: number | null; sectionPos: number | null; chunkPos: number | null }> = [];
+    // 全量逐 ref 明细（#119 复算需要）：quote/sectionId/chunkPos 逐条落盘，samples 只保留前 6 条便于肉眼扫。
+    const refDetail: Array<{
+      materialId: string | null;
+      sourceTitle: string | null;
+      sectionId: string | null;
+      sectionTitle: string | null;
+      quote: string;
+      total: number | null;
+      sectionPos: number | null;
+      chunkPos: number | null;
+      lateChunk: boolean;
+      lateSection: boolean;
+    }> = [];
     for (const ref of refs) {
       const chunkPos = docs
         .map((doc) => chunkPositionOf(doc, ref.quote, ref.sectionTitle || ''))
@@ -211,6 +243,18 @@ async function main(): Promise<void> {
       if (!isLateChunk && isLateSection) sectionOnly += 1;
       if (!isLateChunk && !isLateSection) neither += 1;
       if (samples.length < 6) samples.push({ sectionId: ref.sectionId, total, sectionPos, chunkPos });
+      refDetail.push({
+        materialId: ref.materialId,
+        sourceTitle: ref.sourceTitle,
+        sectionId: ref.sectionId,
+        sectionTitle: ref.sectionTitle,
+        quote: ref.quote,
+        total,
+        sectionPos,
+        chunkPos,
+        lateChunk: isLateChunk,
+        lateSection: isLateSection,
+      });
     }
 
     totals.refs += refs.length;
@@ -229,7 +273,7 @@ async function main(): Promise<void> {
       if (pos !== null) corrPairs.push([index + 1, pos]);
     }
     const sectionChunkRho = spearman(corrPairs);
-    perGoal.push({ goal: row.goal, refs: refs.length, lateChunk, lateSection, sectionOnly, sectionChunkRho, samples });
+    perGoal.push({ goal: row.goal, refs: refs.length, lateChunk, lateSection, sectionOnly, sectionChunkRho, samples, detail: refDetail });
     console.log(
       `${String(row.goal).padEnd(20)} refs ${String(refs.length).padStart(3)}｜chunk 后半 ${String(lateChunk).padStart(2)}` +
         `｜section 后半 ${String(lateSection).padStart(2)}｜仅 section 命中 ${String(sectionOnly).padStart(2)}` +
@@ -238,6 +282,7 @@ async function main(): Promise<void> {
   }
 
   console.log('\n=== 汇总 ===');
+  console.log(`引用口径 refScope=${refScope}（task=仅任务级；combined=里程碑级+任务级）`);
   console.log(
     `refs ${totals.refs}｜chunk 后半 ${totals.lateChunk}（${((totals.lateChunk / Math.max(1, totals.refs)) * 100).toFixed(1)}%）` +
       `｜section 后半 ${totals.lateSection}（${((totals.lateSection / Math.max(1, totals.refs)) * 100).toFixed(1)}%）` +
@@ -248,7 +293,7 @@ async function main(): Promise<void> {
   );
 
   const outFile = path.join(path.dirname(runFile), `dual-metric-${Date.now()}.json`);
-  fs.writeFileSync(outFile, JSON.stringify({ runFile, totals, perGoal }, null, 2), 'utf-8');
+  fs.writeFileSync(outFile, JSON.stringify({ runFile, refScope, totals, perGoal }, null, 2), 'utf-8');
   console.log(`明细 → ${outFile}`);
 }
 
