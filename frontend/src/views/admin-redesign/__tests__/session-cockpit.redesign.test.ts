@@ -237,10 +237,11 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(pills[2]).toBe('真实会话 · 只读监控');
     expect(pills).toHaveLength(3);
 
-    // 真实会话只读：hero 动作区只有本页动作（刷新 + 返回），无生命周期控制、
+    // 真实会话只读：hero 动作区只剩确定性出口——刷新已收归顶栏一颗（2026-10-19 用户走查
+    // 「刷新重复了吧」，页内改为 watch liveRefreshSeq 接住顶栏刷新），无生命周期控制、
     // 原型假钮（导出日志）与危险动作（中断会话）不出现
     const acts = w.findAll('.mk-hero__actions button').map((b) => b.text());
-    expect(acts).toEqual(['刷新', '← 会话列表']);
+    expect(acts).toEqual(['← 会话列表']);
     expect(w.text()).not.toContain('导出日志');
     expect(w.text()).not.toContain('中断会话');
 
