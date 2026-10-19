@@ -24,8 +24,9 @@
     </MkPageHead>
 
     <!-- KPI：统一走共享 MkKpi（clickable 渲染真 <button>，Enter/Space/焦点环天然可用）+ .mk-kpi-grid。
-         趋势口径 = 昨日同时刻窗口（后端 overview/stats 基线字段），趋势与 foot 合流进 hint，
-         口径注释进悬停 tooltip（2026-10-06 审核：自搓 .card/.kpi 家族退役）。 -->
+         卡面副行 = 口径短语（live.ts kpis.hint：范围 / 分母 / 筛选），数值类（趋势、分解、对照、
+         总用户数、活跃 Skill 数）一律随长释进 tooltip——2026-10-19 用户走查「hint 在报读数」，
+         卡面不再同屏出现两个不同量纲的数（趋势口径 = 昨日同时刻窗口，后端 overview/stats 基线字段）。 -->
     <div class="mk-kpi-grid">
       <MkKpi
         v-for="(k, i) in kpiCards"
@@ -33,8 +34,8 @@
         clickable
         :label="k.label"
         :value="k.value"
-        :hint="kpiHint(k)"
-        :title="kpiTitle(i)"
+        :hint="k.hint"
+        :title="kpiTitle(k)"
         @click="jump(kpiTargets[i].scene, kpiTargets[i].tab)"
       />
       <!-- 完课量（#105 读侧接入，2026-10-19）：收束事件统一观测的按轨拆分，
@@ -502,9 +503,9 @@ function refreshNow() {
    activeTodayBaseline），不再与昨日全日直接比——旧趋势 foot 因「今日进行中 vs 昨日全日」
    失真下线（凌晨 ▼-97% 实证），等的就是这个口径。口径注释（全量含虚拟/测试、总用户）
    退到悬停 tooltip（hint），foot 只留 超时/失败/新增 与基线说明。 */
-interface KpiCard { label: string; value: string; foot: string; hint: string; trend?: { pct: string; up: boolean } }
+interface KpiCard { label: string; value: string; foot: string; hint: string; note?: string; trend?: { pct: string; up: boolean } }
 const kpiCards = computed<KpiCard[]>(() =>
-  (data.value?.kpis ?? []).map((k) => ({ label: k.label, value: k.value, foot: k.foot, hint: k.hint, trend: k.trend }))
+  (data.value?.kpis ?? []).map((k) => ({ label: k.label, value: k.value, foot: k.foot, hint: k.hint, note: k.note, trend: k.trend }))
 );
 
 /* ===== 完课量（#105 读侧接入，2026-10-19）=====
@@ -764,7 +765,7 @@ const vlTiles = computed<MkStatItem[]>(() => {
     {
       label: '完成率',
       value: vlValue(hasSessions ? vlPct(r.completionRate) : '—'),
-      title: hasSessions ? `已完成会话 / 全部会话（全部 ${r.totalSessions} 条）` : '暂无会话，比率没有分母'
+      title: hasSessions ? `已完成会话 / 全部会话（全部 ${r.totalSessions} 条）` : '暂无会话，完成率没有分母'
     },
     {
       label: '系统失败率',
@@ -772,7 +773,7 @@ const vlTiles = computed<MkStatItem[]>(() => {
       tone: ready && hasSessions && failTone !== 'muted' ? failTone : '',
       title: hasSessions
         ? `系统与上游失败 / 全部会话。管理员手动停止等人为终止单独统计，占 ${vlPct(r.humanTerminatedRate)}。${FAILURE_RATE_THRESHOLD_NOTE}`
-        : '暂无会话，比率没有分母'
+        : '暂无会话，失败率没有分母'
     }
   ]
 })
@@ -832,14 +833,16 @@ const kpiTargets: Array<{ scene: string; tab?: string }> = [
   { scene: 'goal-conversations' }
 ]
 
-function kpiTitle(i: number): string {
-  // 口径说明随数据来（live.ts kpis.hint）；目标页由卡片点击直达（kpiTargets）
-  return kpiCards.value[i]?.hint || ''
-}
-/** KPI 副文（MkKpi hint）：趋势 + foot 合流（原自搓 .kpi__foot 两段承载），口径注释仍走 title */
-function kpiHint(k: KpiCard): string {
-  const trend = k.trend ? `${k.trend.up ? '▲' : '▼'} ${k.trend.pct}` : ''
-  return [trend, k.foot].filter(Boolean).join(' · ')
+/* KPI 卡面副行 = 口径短语（随数据来，live.ts kpis.hint）；数值类（趋势 / 分解 / 对照 / foot）
+   全部下沉到本 tooltip 长释——副行说「这个数怎么算」，tooltip 说「这一窗具体是多少」。
+   （2026-10-19 用户走查：「目标对话 ｜ 累计完成 14 个」「用户活跃 ｜ 今日新增 0…」这类
+   hint 在报另一个读数，不是口径；目标页由卡片点击直达，见 kpiTargets。） */
+function kpiTitle(k: KpiCard): string {
+  const trend = k.trend ? `较昨日同时刻 ${k.trend.pct}` : ''
+  /* foot 里的 baseNote（「较昨日同时刻」/「昨日同时刻无对照」）在有趋势数字时与 trend 重复，
+     只在无趋势（无对照）时才由 foot 单独承载这条说明 */
+  const foot = k.trend ? k.foot.replace(/(?:^| · )较昨日同时刻$/, '') : k.foot
+  return [k.hint, k.note, trend, foot].filter(Boolean).join(' · ')
 }
 function jump(scene: string, tab?: string) {
   if (!scene) return

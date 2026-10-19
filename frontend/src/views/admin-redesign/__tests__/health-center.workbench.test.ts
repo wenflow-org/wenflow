@@ -126,26 +126,33 @@ describe('健康中心（G1）', () => {
     expect(wrapper.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
     expect(wrapper.find('.hc-refresh-note').text()).toContain('更新于');
 
-    // 概要 KPI 四张（P1#30 语义统一：value = 需处理数（0=好），总数/达成数下沉 hint，
-    // tone 只挂真正异常卡——修复「登记总数 8 被着成警示琥珀」）
+    /* 概要 KPI 四张（P1#30 语义统一：value = 需处理数（0=好），
+       tone 只挂真正异常卡——修复「登记总数 8 被着成警示琥珀」）。
+       2026-10-19 用户走查「KPI hint 在报读数」：总数/达成数这一步再往下沉一级——
+       副行只留口径短语，数字进各卡 title 长释（仍在，只是不进卡面副行）。 */
     const cards = wrapper.findAll('.mk-kpi');
     expect(cards.length).toBe(4);
-    expect(cards[0].text()).toContain('4');                    // 检查异常（value=异常数）
-    expect(cards[0].text()).toContain('健康检查共 13 项');       // 总数下沉 hint
-    expect(cards[1].text()).toContain('3');                    // 漂移需处理：契约 1 + W4 2
+    const title = (i: number) => cards[i].attributes('title') || '';
+    expect(cards[0].text()).toContain('4');                              // 检查异常（value=异常数）
+    expect(cards[0].find('.mk-kpi__hint').text()).toBe('按健康检查清单逐项判定');
+    expect(title(0)).toContain('健康检查共 13 项');                        // 总数进长释
+    expect(cards[1].text()).toContain('3');                              // 漂移需处理：契约 1 + W4 2
     /* 2026-10-16 KPI 审计补完：标签原先只有「不一致」没有宾语（谁跟谁不一致？），
-       改用术语表的限定词；hint 同步从「契约 N + 哈希 M」换成两个概念的人话名。 */
+       改用术语表的限定词；两类条数（原副行「契约 N + 哈希 M」的人话版）进长释。 */
     expect(cards[1].text()).toContain('文件与线上不一致');
-    expect(cards[1].text()).toContain('文件与线上 1 条 · 编译产物 2 条');
+    expect(cards[1].find('.mk-kpi__hint').text()).toBe('文件与线上 / 编译产物两类可行动不一致');
+    expect(title(1)).toContain('文件与线上 1 条、编译产物 2 条');
     expect(cards[1].text()).not.toContain('契约');
-    expect(cards[2].text()).toContain('3');                    // 对账异常：登记缺项 1 + 无生效版本 2 + 失效注册 0（zombieActive/unwired 不计入）
-    expect(cards[2].text()).toContain('登记 8 项');
-    expect(cards[3].text()).toContain('2');                    // 完成度未达标
-    expect(cards[3].text()).toContain('已上线 2/8');           // 达成数下沉 hint + 用词统一「已上线」
+    expect(cards[2].text()).toContain('3');                              // 对账异常：登记缺项 1 + 无生效版本 2 + 失效注册 0
+    expect(cards[2].find('.mk-kpi__hint').text()).toBe('按登记册逐项比对');
+    expect(title(2)).toContain('登记总数 8 项');
+    expect(cards[3].text()).toContain('2');                              // 完成度未达标
+    expect(cards[3].find('.mk-kpi__hint').text()).toBe('已上线 / 登记总数');
+    expect(title(3)).toContain('已上线 2/8');                             // 达成数进长释
     // 2026-10-06 审核 #102：本卡 hint 的「共 N 个技能」与相邻对账卡 hint「登记 N 项」同值同屏
     // 复读且两种叫法，已撤（登记总数单源住在页头注记 title 与对账卡 title）。
     expect(cards[3].text()).not.toContain('共 8 个技能');
-    expect(cards[3].attributes('title')).toContain('未完成上线');
+    expect(title(3)).toContain('未完成上线');
 
     // 健康检查 13 行全部渲染；异常/关注项默认展开，正常项收进折叠组
     const rows = wrapper.findAll('.hc-check__row');

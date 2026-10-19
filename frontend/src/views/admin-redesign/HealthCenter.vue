@@ -62,7 +62,7 @@
         <MkKpi
           label="检查异常"
           :value="healthAbnormal"
-          :hint="`健康检查共 ${displayReport.health.summary.total} 项`"
+          hint="按健康检查清单逐项判定"
           :tone="healthAbnormal > 0 ? 'warn' : 'ok'"
           clickable
           :title="healthAbnormalTitle"
@@ -74,7 +74,7 @@
         <MkKpi
           :label="TERMS.driftContractQualified"
           :value="driftActionable"
-          :hint="driftActionable > 0 ? `文件与线上 ${drift.contract} 条 · 编译产物 ${drift.hash} 条` : drift.runtime > 0 ? `另 ${drift.runtime} 条只读遥测` : '正常'"
+          hint="文件与线上 / 编译产物两类可行动不一致"
           :tone="driftActionable > 0 ? 'warn' : 'ok'"
           clickable
           :title="driftCardTitle"
@@ -83,10 +83,10 @@
         <MkKpi
           :label="TERMS.reconcile + '异常'"
           :value="reconAbnormal"
-          :hint="`登记 ${reconciliation.total} 项`"
+          hint="按登记册逐项比对"
           :tone="reconAbnormal > 0 ? 'warn' : 'ok'"
           clickable
-          :title="reconCardTitle"
+          :title="reconCardTitleWithTotal"
           @click="kpiGo('recon')"
         />
         <!-- 审核 #102：「共 N 个技能」与相邻对账卡 hint「登记 N 项」同值同屏复读且两种叫法，撤；
@@ -94,7 +94,7 @@
         <MkKpi
           label="完成度未达标"
           :value="global.abnormalSkills"
-          :hint="`已上线 ${completionLive}/${reconciliation.total}`"
+          hint="已上线 / 登记总数"
           :tone="global.abnormalSkills > 0 ? 'warn' : 'ok'"
           clickable
           :title="completionCardTitle"
@@ -338,9 +338,13 @@ const completionCardTitle = computed(() => {
 /** 概要卡 tooltip：解释口径，避免红色数字误读 */
 const driftCardTitle = computed(() => {
   const parts = [`需处理：${driftActionable.value} 项（配置改后未同步/发布生效）`]
+  // 2026-10-19 用户走查「KPI hint 在报读数」：两类可行动不一致的条数从副行下沉到本长释
+  if (driftActionable.value > 0) parts.push(`其中文件与线上 ${drift.value.contract} 条、编译产物 ${drift.value.hash} 条`)
   if (drift.value.runtime > 0) parts.push(`另 ${drift.value.runtime} 条运行观测记录为只读参考，不计入需处理`)
   return parts.join('；')
 })
+/** 一致性核查卡 title：三项细分 + 登记总数（原副行「登记 N 项」的落点，2026-10-19 下沉） */
+const reconCardTitleWithTotal = computed(() => `${reconCardTitle.value}。登记总数 ${reconciliation.value.total} 项`)
 const reconCardTitle = computed(() => {
   const r = reconciliation.value
   const parts = [
@@ -472,10 +476,13 @@ const healthAbnormal = computed(() => displayReport.value?.health.abnormal ?? 0)
 const pendingTotal = computed(
   () => healthAbnormal.value + driftActionable.value + reconAbnormal.value + (global.value?.abnormalSkills ?? 0)
 )
-/** 检查异常卡悬停：只给增量口径（值/总数已在 value/hint 可见，title 不再复读——CP2/CP9） */
-const healthAbnormalTitle = computed(
-  () => '统计「异常」与「需关注」两档检查项，「观测」项仅供参考，不计入异常'
-)
+/** 检查异常卡悬停：口径 + 本次总数（2026-10-19 用户走查「KPI hint 在报读数」——总数从副行
+    下沉到本长释，副行只留口径短语。CP2/CP9 的「值不在 title 复读」仍成立：这里是分母不是值） */
+const healthAbnormalTitle = computed(() => {
+  const total = displayReport.value?.health?.summary?.total
+  const base = '统计「异常」与「需关注」两档检查项，「观测」项仅供参考，不计入异常'
+  return total == null ? base : `${base}。本次健康检查共 ${total} 项`
+})
 
 /* ---------- 健康检查项分组：异常/关注项展开，正常项收进折叠组 ----------
    D17：谓词须与后端 abnormal 口径一致——info 是「只读观测项」，不计入异常（告警流同样只收

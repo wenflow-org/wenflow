@@ -134,16 +134,16 @@
           label="总 Token"
           :value="loadFailed ? '—' : summary ? fmtTokens(summary.totals.tokens) : '—'"
           :tone="loadFailed ? 'muted' : ''"
-          :hint="loadFailed
-            ? '数据加载失败，Token 用量暂不可用'
-            : `输入 ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · 输出 ${summary ? fmtTokens(summary.totals.completionTokens) : '—'}`"
-          title="输入与输出相加即总量。调用次数见「单次调用均值」卡"
+          :hint="loadFailed ? '数据加载失败，Token 用量暂不可用' : '输入与输出相加即总量'"
+          :title="loadFailed
+            ? '数据加载失败：Token 用量不可用'
+            : `输入 ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · 输出 ${summary ? fmtTokens(summary.totals.completionTokens) : '—'} · 两者相加即总量。调用次数见「单次调用均值」卡`"
         />
         <MkKpi
           label="失败调用"
           :value="loadFailed ? '—' : failedCallsText"
           :tone="loadFailed ? 'muted' : failedCalls > 0 ? 'bad' : ''"
-          :hint="loadFailed ? '数据加载失败，失败数未知' : failedCalls > 0 ? `占总调用 ${failedPct}（重试后仍失败）` : '无失败调用'"
+          :hint="loadFailed ? '数据加载失败，失败数未知' : '重试后仍失败 / 全部调用'"
           :title="failedHint"
         />
       </section>
@@ -541,7 +541,7 @@ const costHint = computed(() => {
 const costHintShort = computed(() => {
   if (costLoading.value) return '金额统计中'
   if (costFailed.value) return '金额统计失败'
-  if (costUsd.value !== null) return `近 ${days.value} 天 · 已定价 ${costPricedCalls.value} 次`
+  if (costUsd.value !== null) return `近 ${days.value} 天 · 仅已定价调用`
   if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `近 ${days.value} 天无调用`
   const n = missingPricingModels.value.length
   // P2（2026-10-04 全站评审）：「单价未配置」已在卡值位出现，hint 不再复读同一状态词
@@ -550,7 +550,7 @@ const costHintShort = computed(() => {
 const perCallHintShort = computed(() => {
   if (costLoading.value) return '金额统计中'
   if (costFailed.value || costPerCall.value === null) return '无已定价调用'
-  return `按 ${costPricedCalls.value} 次已定价调用折算`
+  return '按已定价调用折算'
 })
 
 /* 导出报表（原型 pagehead 动作位真实化）：当前窗口三张明细表合一个 CSV，客户端从
@@ -643,9 +643,13 @@ const failedPct = computed(() =>
 const failedCallsText = computed(() =>
   failedCalls.value > 0 ? `${failedCalls.value} 次` : '0 次'
 )
+/* 卡面副行只留口径（2026-10-19 用户走查「hint 在报读数」）：原副行报「占总调用 X%」这个派生
+   读数、无失败时又报「无失败调用」这个状态；占比与状态随长释进 title（本函数） */
 const failedHint = computed(() => {
   const win = `近 ${days.value} 天${includeTest.value ? '（含测试）' : ''}`
-  const base = `${win}内失败 ${failedCalls.value} / 共 ${totalCalls.value} 次（重试后仍失败才计入）`
+  const base = failedCalls.value > 0
+    ? `${win}内失败 ${failedCalls.value} / 共 ${totalCalls.value} 次（重试后仍失败才计入），占总调用 ${failedPct.value}`
+    : `${win}内共 ${totalCalls.value} 次调用，没有重试后仍失败的调用`
   return base
 })
 

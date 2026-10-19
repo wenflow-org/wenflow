@@ -75,17 +75,21 @@ describe('卡库预置「一键加载」（#91 / P-67）', () => {
     (toast.warning as unknown as ReturnType<typeof vi.fn>).mockClear();
   });
 
-  it('「预置」KPI 卡内有加载入口，脚注给定义/已加载/待加载计数（口径不再是「自动同步」）', async () => {
+  it('「预置」KPI 卡内有加载入口，计数进 title 长释（副行只留口径，2026-10-19 全站统一）', async () => {
     const w = mount(VirtualLearnerCards);
     await flushPromises();
 
     const btn = loadButton(w);
     expect(btn, '预置区缺少「一键加载」按钮').toBeTruthy();
     const hint = w.findAll('.mk-kpi')[0].find('.mk-kpi__hint').text();
-    expect(hint).toContain('定义 9 条');
-    expect(hint).toContain('已加载 5');
-    expect(hint).toContain('待加载 4');
+    expect(hint).toBe('平台预置定义 / 已加载卡数');
+    expect(w.findAll('.mk-kpi')[0].attributes('title')).toContain('定义 9 条');
+    const title = w.findAll('.mk-kpi')[0].attributes('title') || '';
+    expect(title).toContain('已加载 5');
+    expect(title).toContain('待加载 4');
+    // 口径不再是「自动同步」：副行（口径短语）与长释里都不许出现这句旧口径
     expect(hint).not.toContain('自动同步');
+    expect(title).not.toContain('口径不再是自动同步');
     w.unmount();
   });
 
@@ -118,8 +122,8 @@ describe('卡库预置「一键加载」（#91 / P-67）', () => {
     expect(msg).toContain('跳过 1');
     // 加载后必须回刷卡墙（新卡要立刻出现在墙上）
     expect(cardsIndexMock.mock.calls.length).toBeGreaterThanOrEqual(1);
-    // 脚注用服务端返回的新快照
-    expect(w.findAll('.mk-kpi')[0].find('.mk-kpi__hint').text()).toContain('已加载 8');
+    // 长释用服务端返回的新快照（副行口径短语不变）
+    expect(w.findAll('.mk-kpi')[0].attributes('title')).toContain('已加载 8');
     w.unmount();
   });
 

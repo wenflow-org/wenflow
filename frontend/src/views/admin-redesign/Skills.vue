@@ -49,8 +49,10 @@
         label="成功率"
         :value="rangeRefreshing ? '…' : (overallRateText ?? '—')"
         :tone="overallRateTone"
-        :hint="totalCalls ? `${okCalls}/${totalCalls} · ${rangeLabel}` : rangeLabel"
-        :title="`窗口内成功率 = ${RATE_MEANING}。${RATE_THRESHOLD_NOTE}`"
+        hint="成功 / 全部调用"
+        :title="`窗口内成功率 = ${RATE_MEANING}。${
+          totalCalls ? `本次分母：成功 ${okCalls} / 共 ${totalCalls} 次 · ${rangeLabel}。` : `本窗口无调用 · ${rangeLabel}。`
+        }${RATE_THRESHOLD_NOTE}`"
       />
       <MkKpi
         label="平均耗时"
@@ -89,10 +91,12 @@
         hint="有生效模型路由"
         title="在模型覆盖里有生效路由的 Skill 数。与同屏「承载模型」「主模型覆盖」同源，未加载覆盖数据时显 —"
       />
+      <!-- 2026-10-19 用户走查「hint 在报读数」：原副行是模型名（另一件事的当前值），
+           改成口径短语；模型名与覆盖数都在 title 长释里（primaryCoverageTitle） -->
       <MkKpi
         label="主模型覆盖"
         :value="primaryCoverageText"
-        :hint="primaryModelLabel"
+        hint="覆盖 Skill 数最多的模型"
         :title="primaryCoverageTitle"
       />
       <!-- 降级策略（原硬编码 value="自动" 删）：真实口径 = 自定义兜底链计数；无自定义链时
@@ -126,13 +130,13 @@
       <MkKpi
         label="启用用例"
         :value="pePanel?.kpiView?.enabledCaseCount ?? '…'"
-        :hint="pePanel?.kpiView?.disabledCaseCount != null ? `停用 ${pePanel?.kpiView?.disabledCaseCount}` : undefined"
-        title="启用中的评估用例数。停用用例仍保留但不参与批量评测"
+        hint="启用中的用例 / 全部用例"
+        :title="`启用中的评估用例数。停用用例仍保留但不参与批量评测${pePanel?.kpiView?.disabledCaseCount != null ? ` · 当前停用 ${pePanel?.kpiView?.disabledCaseCount} 个` : ''}`"
       />
       <MkKpi
         label="评估历史"
         :value="pePanel?.kpiView?.runCount ?? '…'"
-        :hint="pePanel?.kpiView?.lastRunText"
+        :hint="pePanel?.kpiView?.runsHint"
         :title="pePanel?.kpiView?.runsTitle"
       />
     </section>
@@ -555,7 +559,7 @@ interface PromptEvalPanelExpose {
     enabledCaseCount: number | string
     disabledCaseCount: number | string
     runCount: number | string
-    lastRunText: string
+    runsHint: string
     runsTitle: string
   }
 }
@@ -1266,7 +1270,9 @@ const primaryModel = computed(() => {
 const primaryCoverageText = computed(() =>
   routingLabels.value.length ? `${Math.round((primaryModel.value.count / cards.value.length) * 100)}%` : '—'
 )
-const primaryModelLabel = computed(() => primaryModel.value.label || '未配置')
+/* primaryModelLabel 随「主模型覆盖」副行退役（2026-10-19）：模型名不再上卡面副行，
+   口径短语代替它，模型名与覆盖数在 primaryCoverageTitle 里（未配置时该 title 不渲染 —
+   由 routingLabels 是否加载决定，与模型名是否为空无关）。 */
 const primaryCoverageTitle = computed(() =>
   routingLabels.value.length
     ? `${primaryModel.value.count} / ${cards.value.length} 个 Skill 使用「${primaryModel.value.label}」`

@@ -63,7 +63,7 @@
           :value="statsKpiValue(statsKpiPct(runStats.systemFailureRate))"
           :tone="statsState === 'error' ? 'bad' : failureRateTone(runStats.systemFailureRate, runStats.failed)"
           :hint="statsKpiHint(failureHint)"
-          :title="statsState === 'error' ? STATS_RETRY_TITLE : `按全部会话计算，与总览页「系统失败率」统计方式相同。管理员手动停止等人为终止单独统计，两类合计占 ${statsKpiPct(runStats.failureRate)}。${FAILURE_RATE_THRESHOLD_NOTE}`"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : failureTitle"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
         />
@@ -90,7 +90,7 @@
           :tone="vlRpmLoadFailed ? 'bad' : ''"
           :hint="rateHint"
           :clickable="true"
-          :title="vlRpmLoadFailed ? '设置未加载，可重试' : `${RATE_KPI_TITLE}${VL_CHANNEL_LOCATION_TITLE}`"
+          :title="vlRpmLoadFailed ? '设置未加载，可重试' : `${RATE_KPI_TITLE}${vlRpm.queued > 0 ? ` · 当前排队 ${vlRpm.queued}` : ''}${VL_CHANNEL_LOCATION_TITLE}`"
           @click="openVlChannelSettings"
         />
         <!-- P-49（#74）：无响应候选此前只在页头按钮和分区里出现，没有 KPI 位 -->
@@ -1010,8 +1010,7 @@ const rateValue = computed(() => {
 })
 const rateHint = computed(() => {
   if (vlRpmLoadFailed.value) return '设置未加载 · 点击重试'
-  const base = '在途调用数 / 每分钟上限，上限读已保存配置'
-  return vlRpm.queued > 0 ? `${base} · 排队 ${vlRpm.queued}` : base
+  return '在途调用数 / 每分钟上限，上限读已保存配置'
 })
 
 /** 「今日调用」卡 hint（2026-10-05 口径纠偏）：只报口径不复述数字。原 hint「平均耗时」
@@ -1032,24 +1031,28 @@ const completionHint = computed(() => {
   // 2026-10-18 用户走查「这类文案」：读数行只留会话口径的读数。
   // 「活动会话」同属会话口径（2026-10-04 从退役状态条迁入本卡）保留；
   // 「会话均长」是时长读数、单位不同，与完成率并列会被读成同一分母体系，移入 title。
-  const parts = [`已完成 ${runStats.value.completed} / 全部会话 ${runStats.value.totalSessions}`]
-  if (activeSessions.value) parts.push(`活动会话 ${activeSessions.value}`)
-  return parts.join(' · ')
+  return '已完成 / 全部会话 · 活动会话另计'
 })
 /** 完成率卡 title：比值口径 + 移出读数行的会话均长 */
+/* 2026-10-19 用户走查「hint 在报读数」：原副行「已完成 N / 全部会话 M · 活动会话 K」是读数，
+   改由本 title 承载（副行只留「已完成 / 全部会话 · 活动会话另计」这个口径） */
 const completionTitle = computed(() => {
-  const parts = ['完成率按会话统计。活动会话含进行中与创建中']
+  const s = runStats.value
+  const parts = [`已完成 ${s.completed} / 全部会话 ${s.totalSessions}`]
+  if (activeSessions.value) parts.push(`活动会话 ${activeSessions.value}`)
+  parts.push('完成率按会话统计，活动会话含进行中与创建中')
   if (sessionAvgHuman.value) parts.push(`会话均长 ${sessionAvgHuman.value}`)
   return parts.join(' · ')
 })
-/** 系统失败率卡口径：三项分解（系统失败 / 人为终止 / 已完成），三项相加即会话总数。
-    原写法「系统失败 8 / 全部会话 36 · 人为终止 28 另计（合计 100%）」有两处歧义：
-    ① 比值与数值位的大字 22% 重复；② 0 完成时两项恰好凑满 100%，「合计 100%」紧贴
-    失败率读数会被读成「失败率 100%」。现给分解式（8+28+0=36 自明），并把两项合并的
-    占比显式标成「失败合计」，与卡片大字的「系统失败率」区分开。 */
-const failureHint = computed(() => {
+/** 系统失败率卡副行 = 口径（2026-10-19 用户走查「hint 在报读数」）：原副行把
+    「系统失败 8 · 人为终止 28 · 已完成 0 · 共 36 场」四项分解当读数报在卡面；
+    读数的两处历史歧义（① 比值与数值位大字重复；② 0 完成时两项凑满 100% 被读成
+    「失败率 100%」）一并解决——分解式（8+28+0=36 自明）与「失败合计」改为随长释进 title。 */
+const failureHint = computed(() => '系统失败 / 全部会话 · 人为终止另计')
+/** 系统失败率卡 title：四项分解 + 跨页同源声明 + 阈值披露 */
+const failureTitle = computed(() => {
   const s = runStats.value
-  return `系统失败 ${s.failed} · 人为终止 ${s.abandoned} · 已完成 ${s.completed} · 共 ${s.totalSessions} 场`
+  return `系统失败 ${s.failed} · 人为终止 ${s.abandoned} · 已完成 ${s.completed} · 共 ${s.totalSessions} 场（相加即全部会话）。按全部会话计算，与总览页「系统失败率」统计方式相同。管理员手动停止等人为终止单独统计，两类合计占 ${statsKpiPct(s.failureRate)}。${FAILURE_RATE_THRESHOLD_NOTE}`
 })
 /* 卡内进度条已退役（2026-10-16 用户拍板「kpi 面板内部进度条不要出现」）：
    完成率/并发两张卡曾各挂一根 .mk-minibar 进度槽，读数已经在数值位与 hint 里说全了，

@@ -160,7 +160,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     w.unmount();
   });
 
-  it('风险摘要带量级「X 等 2 个概念掌握薄弱」；平均置信度 hint 带基数', async () => {
+  it('风险摘要带量级「X 等 2 个概念掌握薄弱」；平均置信度基数进 title 长释', async () => {
     // 审核 #12：风险摘要列不再默认隐藏（默认集变更同时升键 v2→v3）；本用例播种「全列显示」
     // 的列偏好，仍锁行内量级文案的渲染契约
     localStorage.setItem('wf_learner_hidden_cols_v3', JSON.stringify([]));
@@ -168,8 +168,11 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     await settle();
     const dingRow = w.findAll('tbody tr').find((r) => r.text().includes('丁'));
     expect(dingRow!.text()).toContain('「X」等 2 个概念掌握薄弱');
+    /* 2026-10-19 用户走查「KPI hint 在报读数」：卡面副行只留口径短语，样本量（基数）
+       随长释进 title——断言从 hint 文本改为 title 属性，口径本身仍在副行可见 */
     const avg = w.findAll('.mk-kpi').find((c) => c.text().includes('平均置信度'));
-    expect(avg!.text()).toContain('基于 4 位'); // 四人都有任务，全部入均值
+    expect(avg!.find('.mk-kpi__hint').text()).toBe('按有学习任务且产出置信度的学习者取平均');
+    expect(avg!.attributes('title')).toContain('本次纳入 4 位'); // 四人都有任务，全部入均值
     w.unmount();
     localStorage.removeItem('wf_learner_hidden_cols_v3');
     liveLearners.value = [];
@@ -192,11 +195,13 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
       return card!;
     };
     expect(kpiCard('低置信').find('.mk-kpi__num').text()).toBe('2'); // 丙/丁；无任务的戊不计（旧口径=3）
-    expect(kpiCard('低置信').find('.mk-kpi__hint').text()).toContain('共 4 位'); // 基数=有学习任务的学习者
+    // 基数=有学习任务的学习者：读数行只留口径，基数随 title 长释（2026-10-19 全站 hint 统一）
+    expect(kpiCard('低置信').find('.mk-kpi__hint').text()).toBe('低于 50% 的有学习任务的学习者');
+    expect(kpiCard('低置信').attributes('title')).toContain('纳入计算的学习者共 4 位');
 
-    // 分布带已退役：无任务行不计的口径由 KPI 基数承载，不再有分档条副文
+    // 分布带已退役：无任务行不计的口径由 KPI 基数承载（现住 title），不再有分档条副文
     expect(w.find('.mk-distband').exists()).toBe(false);
-    expect(kpiCard('平均置信度').find('.mk-kpi__hint').text()).toContain('基于 4 位');
+    expect(kpiCard('平均置信度').attributes('title')).toContain('本次纳入 4 位');
 
     // 「低置信」pill 过滤与 KPI 同口径：戊不出现，行数=KPI 读数（否则计数/过滤再打架）
     await w.findAll('.mk-pill').find((p) => p.text().includes('低置信'))!.trigger('click');

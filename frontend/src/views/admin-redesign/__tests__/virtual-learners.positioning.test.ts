@@ -95,15 +95,18 @@ describe('虚拟学习者定位（D1）', () => {
     wrapper.unmount();
   });
 
-  it('活动会话按全量会话口径（running + created）进完成率卡 hint', async () => {
+  it('活动会话按全量会话口径（running + created）进完成率卡 title（副行只留口径）', async () => {
     // 2026-10-15：与完成率卡同源（/stats，F20 口径已扣 autopilot=stopped）；不再读列表 sessionStats
     liveVirtualRunStats.value = { ...liveVirtualRunStats.value, running: 2, created: 1 };
     const wrapper = mount(VirtualLearners);
     await flushPromises();
     await nextTick();
-    // 活动会话 = running 2 + created 1 = 3（原状态条读数迁入完成率卡 hint，不再住页头条）
+    /* 活动会话 = running 2 + created 1 = 3：原状态条读数先迁进完成率卡 hint，2026-10-19
+       用户走查「KPI hint 在报读数」后再往下沉一级——读数进 title 长释，副行留口径短语 */
     expect(wrapper.find('.mk-status').exists()).toBe(false);
-    expect(wrapper.text()).toContain('活动会话 3');
+    const completion = wrapper.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text().trim() === '完成率');
+    expect(completion!.find('.mk-kpi__hint').text()).toContain('已完成 / 全部会话');
+    expect(completion!.attributes('title')).toContain('活动会话 3');
     wrapper.unmount();
   });
 

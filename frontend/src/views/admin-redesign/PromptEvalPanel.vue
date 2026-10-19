@@ -811,11 +811,13 @@ const lastPassRateText = computed(() => {
   return formatRate(latestRun.value?.summary?.passRate) ?? '—'
 })
 /** 基数（23/25）：summary 带通过数/总次数才拼接，缺一项就不硬凑；0 次执行不拼「（0/0）」 */
+/* 2026-10-19 用户走查「KPI hint 在报读数」：原副行是「（通过/执行）」这个读数，
+   改为口径短语；分子分母随长释进 lastRateTitle */
 const lastRateBase = computed(() => {
   if (lastRunEmpty.value) return ''
   const s = latestRun.value?.summary
   if (!s || typeof s.passedCount !== 'number' || typeof s.totalRuns !== 'number') return ''
-  return `（${s.passedCount}/${s.totalRuns}）`
+  return '最近一次评测 · 通过用例 / 已执行用例'
 })
 /** KPI tone（2026-10-04 状态条退役，原 lastRateCls 类名着色翻译成 MkKpi tone）：
     阈值纪律走 rate-utils 单点不变；muted（缺 passRate）与 0 次执行不着色 */
@@ -833,18 +835,24 @@ const lastRateHint = computed(() => {
 const lastRateTitle = computed(() => {
   if (!runs.value.length) return '暂无评测数据'
   if (lastRunEmpty.value) return '最近一次评估 0 次执行（用例全部被跳过或未运行），无通过率可显示'
-  return lastPassRateText.value === '—'
-    ? '暂无评测数据：该运行未回传通过率'
-    : `最近一次评估通过率；${RATE_THRESHOLD_NOTE}`
+  if (lastPassRateText.value === '—') return '暂无评测数据：该运行未回传通过率'
+  const s = latestRun.value?.summary
+  const base = s && typeof s.passedCount === 'number' && typeof s.totalRuns === 'number'
+    ? `最近一次评估通过 ${s.passedCount} / 执行 ${s.totalRuns} 例。`
+    : ''
+  return `${base}最近一次评估通过率；${RATE_THRESHOLD_NOTE}`
 })
-/* P3（设计评审 4.3-20）：同屏两个「最近」异义——「最近 30 次」是窗口、「最近 N 小时前」是时刻；
-   时刻改「上次」前缀消歧，作 KPI「评估历史」卡 hint */
-const lastRunText = computed(() => (latestRun.value ? `上次 ${timeAgo(latestRun.value.createdAt)}` : '暂无评估记录'))
+/* 评估历史卡副行 = 口径（2026-10-19 用户走查「hint 在报读数」）：原先副行是「上次 3 小时前」
+   这个时刻读数，改成窗口加载口径，时刻随长释进 title（P3 的「最近」异义消歧仍成立——
+   title 里写明是「上次评测」的时刻，副行不再有第二个「最近」）。 */
+const runsKpiHint = computed(() => `按最近 ${RUNS_LIMIT} 次窗口加载`)
 /** 评估历史卡 title（2026-10-04 状态条退役；2026-10-18 用户走查去掉分号堆叠）：
-    只报窗口上限口径与 agent 筛选限定。最近一次通过率、着色阈值另有「最近评测通过率」卡承载，
-    不在本卡重复。 #88：数字随 agent 筛选收窄，限定词一并披露 */
+    窗口上限口径 + agent 筛选限定 + 上次评测时刻。最近一次通过率、着色阈值另有
+    「最近评测通过率」卡承载，不在本卡重复。 #88：数字随 agent 筛选收窄，限定词一并披露 */
 const runsKpiTitle = computed(() =>
-  `按最近 ${RUNS_LIMIT} 次窗口加载，上限并非总数${agentFilter.value ? ` · 仅 ${agentLabel(agentFilter.value)}` : ''}`
+  `按最近 ${RUNS_LIMIT} 次窗口加载，上限并非总数${agentFilter.value ? ` · 仅 ${agentLabel(agentFilter.value)}` : ''} · ${
+    latestRun.value ? `上次评测 ${timeAgo(latestRun.value.createdAt)}` : '暂无评估记录'
+  }`
 )
 /* #88：用例/历史两张 KPI 的数字随顶部 agent 筛选收窄（reloadCases/reloadRuns 都带 agentFilter），
    口径文案必须同步披露这层限定——否则「用例总数」被读成全站总数，切筛选后数字骤降像「用例丢了」 */
@@ -1594,7 +1602,7 @@ const kpiView = computed(() => ({
     ? ('—' as const)
     : cases.value.filter((c) => c.enabled === false).length,
   runCount: runsFailed.value ? ('—' as const) : runs.value.length,
-  lastRunText: runsFailed.value ? '评估历史加载失败' : lastRunText.value,
+  runsHint: runsFailed.value ? '评估历史加载失败' : runsKpiHint.value,
   runsTitle: runsFailed.value ? '评估历史加载失败：计数与最近一次时间不可用' : runsKpiTitle.value,
 }))
 defineExpose({ running, canRunBatch, runBatch, kpiView })

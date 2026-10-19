@@ -38,7 +38,7 @@
         :value="summary?.builtin ?? '—'"
         :hint="presetHint"
         :hintTone="presetHintTone"
-        title="平台预置角色，随仓库内的预置定义发布。不随启动自动同步，要用「一键加载」写入卡库。加载只新建缺的卡、按版本更新已有卡的定义，故事与记忆保留，卡不会被删。不含在「导出卡库」内"
+        :title="presetCardTitle"
       >
         <button
           type="button"
@@ -351,14 +351,25 @@ const presetLoading = ref(false)
 /** 定义侧快照（只读副信息）：拿不到就退回静态提示，不影响按钮可用 */
 const presetSummary = ref<PresetOverviewSummary | null>(null)
 
+/* 卡面副行只留口径（2026-10-19 用户走查「hint 在报读数」）：原副行报「定义 N 条 · 已加载 M」
+   等计数读数，计数随长释进卡 title。例外是「定义回退」——那是人工要看的异常档，副行留着它
+   （读数可降级、告警不隐藏，与三态纪律同一条）。 */
 const presetHint = computed(() => {
   const s = presetSummary.value
   if (!s) return '平台预置（需一键加载）'
+  if (s.rolledBack) return `定义回退 ${s.rolledBack} 张 · 需人工确认`
+  return '平台预置定义 / 已加载卡数'
+})
+/** 预置卡 title：静态说明 + 当期计数（原计数读数的落点） */
+const presetCardTitle = computed(() => {
+  const base = '平台预置角色，随仓库内的预置定义发布。不随启动自动同步，要用「一键加载」写入卡库。加载只新建缺的卡、按版本更新已有卡的定义，故事与记忆保留，卡不会被删。不含在「导出卡库」内'
+  const s = presetSummary.value
+  if (!s) return base
   const parts = [`定义 ${s.definitions} 条`, `已加载 ${s.loaded}`]
   if (s.missing) parts.push(`待加载 ${s.missing}`)
   if (s.upgradable) parts.push(`待升级 ${s.upgradable}`)
   if (s.rolledBack) parts.push(`定义回退 ${s.rolledBack}`)
-  return parts.join(' · ')
+  return `${base}（当前 ${parts.join(' · ')}）`
 })
 /** 定义回退（实例版本高于定义）是人工要看的异常档：琥珀脚注（不阻断，只是要人看一眼） */
 const presetHintTone = computed<'warn' | ''>(() => ((presetSummary.value?.rolledBack ?? 0) > 0 ? 'warn' : ''))
