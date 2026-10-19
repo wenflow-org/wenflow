@@ -914,7 +914,7 @@ import { useRouter } from 'vue-router'
 import { statusText } from './statusText'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
-import { adminVirtualLearnersApi } from '@/api/adminApi'
+import { adminVirtualLearnersApi, adminLearnerModelsApi } from '@/api/adminApi'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { memoryReviewUrl } from './learner-profile'
 import { LEARNER_METRICS, LEARNER_METRIC_CODES } from '@/utils/learnerMetrics'
@@ -1686,6 +1686,24 @@ async function loadDetail(id?: string, quiet = false) {
     if (seq !== loadSeq) return
     const p = (raw.profile as Record<string, unknown>) || {}
     const sessions = (raw.sessions || raw.virtual_sessions || []) as Record<string, unknown>[]
+    // 学习状态读数：画像详情不带宽表字段，按绑定 userId 取学习者模型的单次会话快照
+    const boundUserId = String(raw.userId || p.userId || '')
+    learnerMetrics.value = null
+    learnerMetricsAt.value = null
+    if (boundUserId) {
+      void adminLearnerModelsApi.getDetail(boundUserId, { includeTest: true })
+        .then((res) => {
+          if (seq !== loadSeq) return
+          const body = (res?.data?.data ?? res?.data ?? {}) as Record<string, unknown>
+          const ds = (body.dynamicState || {}) as Record<string, unknown>
+          const m = (ds.lessonMetrics || ds.metrics || null) as Record<string, number> | null
+          if (!m) return
+          learnerMetrics.value = m
+          const fresh = (body.freshness || {}) as Record<string, unknown>
+          learnerMetricsAt.value = String(fresh.generatedAt || '') || null
+        })
+        .catch(() => { /* 读数取不到就保持空态，不阻断画像主体 */ })
+    }
     const traitsRaw = (raw.personalityTraits || p.traits || {}) as Record<string, unknown>
 
     const storiesBody = storiesRes?.data?.data ?? storiesRes?.data ?? null
@@ -2419,8 +2437,15 @@ const loopStages = computed<LoopStage[]>(() => {
     标签/参考带/色调阈值单点取自 learnerMetrics.ts——此前本页与 LearnerDetail 各写一套
     （参考带一边「参考 4–7」一边「0-10，越高越累」）。 */
 interface LsmRow { label: string; pct: number; tone: 'ok' | 'warn' | 'bad'; value: string; ref: string; refTitle: string; refCls: string }
+/** 单次会话的四项读数（LSS/KTL/LF/LSB）与取样时刻。
+ *  数据来自绑定账号的学习者模型 dynamicState.useLessonMetrics（lessonMetrics 是单次会话快照，
+ *  metrics 是全部路径汇总）；画像详情接口本身不返回这两个字段——此前卡里永远空态，
+ *  即便会话已经跑完（2026-10-20 跑数时发现）。 */
+const learnerMetrics = ref<Record<string, number> | null>(null)
+const learnerMetricsAt = ref<string | null>(null)
+
 const lsmRows = computed<LsmRow[]>(() => {
-  const m = d.value?.learningState
+  const m = learnerMetrics.value
   if (!m) return []
   const width = (v: number) => Math.min(100, Math.round((v / 10) * 100))
   const rows: LsmRow[] = []
@@ -2444,7 +2469,7 @@ const lsmRows = computed<LsmRow[]>(() => {
 })
 
 /** 四读数出处（单次会话运行时快照）：与「学习者详情」页的学习者级聚合态不同源，数值天然不同 */
-const loadCaliberNote = computed(() => loadCaliber('session-snapshot', d.value?.learningStateAt))
+const loadCaliberNote = computed(() => loadCaliber('session-snapshot', learnerMetricsAt.value))
 
 /** 作用域标注：本页的「路径」轴是**故事**（每条 story 是这个角色的一条独立学习线）。
  *  故事池按故事、运行流水与记忆池跨全部故事、学习状态读数取单次会话——同一屏三种作用域，

@@ -2870,7 +2870,6 @@ const snapshotHint = computed(() =>
 /* 互动列：时长主值 + 副行（回合 · 知识点）——档位与平台页同阈值（<60s 秒退弱化 / ≥1500s 长时琥珀） */
 .ld-ia { display: grid; gap: 1px; min-width: 0; }
 .ld-ia__dur { font-size: var(--mk-fs-micro); font-weight: 600; font-variant-numeric: tabular-nums; }
-.ld-ia__dur--brief { color: var(--mk-muted); font-weight: 400; }
 .ld-ia__dur--long { color: var(--mk-amber); }
 /* 进度列：任务 x/y + minibar（口径与平台页共享 statusText.sessionProgress*） */
 .ld-prog { display: inline-flex; align-items: center; gap: 6px; }
