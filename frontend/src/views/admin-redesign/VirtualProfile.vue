@@ -1168,7 +1168,7 @@ async function batchRemoveStories() {
   if (!id || storyBusy.value) return
   const ok = await askConfirm({
     title: '批量删除故事',
-    message: `确认删除勾选的 ${targets.length} 个故事？\n关联的运行记录将一并清理，该操作不可撤销。`,
+    message: `确认删除勾选的 ${targets.length} 个故事？\n仅删除故事本身；仍被学习会话引用的会被拒绝（需先删除对应会话）。该操作不可撤销。`,
     confirmText: '批量删除',
     busy: true
   })
@@ -2022,7 +2022,7 @@ async function removeStory(index: number) {
   if (!id || storyBusy.value) return
   const ok = await askConfirm({
     title: '删除故事',
-    message: `确认删除第 ${index + 1} 个故事？\n关联的运行记录将一并清理，该操作不可撤销。`,
+    message: `确认删除第 ${index + 1} 个故事？\n仅删除故事本身；仍被学习会话引用的会被拒绝（需先删除对应会话）。该操作不可撤销。`,
     confirmText: '删除',
     busy: true
   })

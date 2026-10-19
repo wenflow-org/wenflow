@@ -9,13 +9,16 @@
 
 import { type Router, type Request } from 'express';
 import { findRecentProfilesForHints, findProfileById, updateProfileJsonField } from '../../services/virtual-lab/virtual-learner-profile.repo';
+import { findSessionsForStoryUsage } from '../../services/virtual-lab/virtual-session.repo';
 import { logger } from '../../utils/logger';
 import { virtualLearnerPersonaDesignerDefinition } from '../../skills/virtual-learner-persona-designer';
 import { virtualLearnerScenarioDesignerDefinition } from '../../skills/virtual-learner-scenario-designer';
 import { executeSkill } from '../../skills';
 import { buildLearnerStoryHints } from '../../services/virtual-lab/story-chapter.service';
 import { attachMaterialsToLearner } from '../../services/virtual-lab/card-import.service';
-import { parseJson, normalizeStoryPoolData, ensureProfileStoryPool } from '../../virtual-lab/session-factory';
+import { parseJson, normalizeStoryPoolData, ensureProfileStoryPool, isSameStory } from '../../virtual-lab/session-factory';
+import type { VirtualSessionRow } from '../../virtual-lab/vlab-types';
+import { parseStoryContext } from './virtual-learners.projections';
 
 // ===== 原 virtual-learners.ts L188–L251 =====
 /**
@@ -454,6 +457,27 @@ router.delete('/:id/stories/:storyIndex', async (req: Request, res) => {
 
     if (isNaN(index) || index < 0 || index >= storyPool.length) {
       return res.status(400).json({ success: false, error: '无效的故事索引' });
+    }
+
+    /* 在用守卫（issue #90）：故事的「引用」不在任何表列上，而在会话 stageResults.story 快照里，
+       读侧（GET /:id/stories）用 isSameStory 启发式把会话归到故事名下。裸删故事会让这些会话
+       变成「找不到归属」的孤儿（故事视图里凭空消失、路径反查对不上）。
+       选择「有引用则拒绝」而非「先解绑」，理由：
+         ① 解绑（清会话 stageResults.story）会摧毁运行记录的审计快照，且运行中会话的扮演者
+            依赖 storyContext 继续上课——数据破坏不可逆；
+         ② 连带删会话则是另一种量级的破坏性操作，本入口没有租约/归属校验（对照会话重置链
+            reset 的 assertLeaseOwned + 属主检查），不能顺手做；
+         ③ 拒绝删除信息可行动（先删会话或保留故事），且无引用的故事（正常路径）行为不变。 */
+    const targetStory = storyPool[index];
+    const sessions = await findSessionsForStoryUsage(id);
+    const inUse = sessions.filter((session) => isSameStory(targetStory, parseStoryContext(session as VirtualSessionRow)));
+    if (inUse.length) {
+      return res.status(409).json({
+        success: false,
+        code: 'STORY_IN_USE',
+        error: `该故事已被 ${inUse.length} 个会话使用，删除会让这些会话失去故事归属；请先删除相关会话，或保留该故事`,
+        data: { sessionCount: inUse.length },
+      });
     }
 
     const updatedStoryPool = storyPool.filter((_, i: number) => i !== index);

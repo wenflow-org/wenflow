@@ -12,12 +12,17 @@
  *   2. `--apply` 前**自动备份**主库到 `data/backups/dev.db.bak-<时间戳>`（data/ 已 gitignore）；
  *   3. 主链（users→learning_paths→milestones→subtasks、users→teaching_sessions→messages）由
  *      数据库 `ON DELETE CASCADE` 处理；**无外键**的 14 张表按 userId 显式删除；
- *   4. 执行后做孤儿检查（子表引用不到父表的行数必须为 0）。
+ *   4. 执行后做孤儿检查（子表引用不到父表的行数必须为 0；含 #90 的 learningPathId 软指针悬空检查）。
+ *
+ * `--orphans`：只清历史遗留的悬空行 —— 悬空子行 DELETE + 悬空软指针置空
+ * （learningPathId 无 FK，路径被裸删后残留在 goal_conversations / teaching_sessions /
+ * virtual_sessions 上；见 issue #90）。默认 dry-run 只打印计数，加 `--apply` 才执行。
  *
  * 用法：
  *   npx ts-node --transpile-only src/scripts/prune-virtual-learners.ts                # 看计划
  *   npx ts-node --transpile-only src/scripts/prune-virtual-learners.ts --apply        # 执行
  *   npx ts-node --transpile-only src/scripts/prune-virtual-learners.ts --keep=a@x.com,b@y.com
+ *   npx ts-node --transpile-only src/scripts/prune-virtual-learners.ts --orphans       # 悬空行 dry-run
  */
 import 'dotenv/config';
 import fs from 'node:fs';
@@ -99,21 +104,59 @@ function targetWhere(): { sql: string; params: unknown[] } {
   return { sql: clauses.join(' AND '), params };
 }
 
+/**
+ * 孤儿清理步骤。两种形态，dry-run 计数与实际执行分列（旧实现靠正则从 DELETE 反推
+ * SELECT COUNT，UPDATE 形态无法套用）：
+ *  - `delete`：悬空子行（父行已不存在）直接删；
+ *  - `null-pointer`：悬空软指针（无 FK 的 learningPathId）置空——指向的行已不存在，
+ *    置空让管理端明确按「未关联」呈现，而不是静默对不上（issue #90）。
+ */
+export type OrphanCleanupStep =
+  | { label: string; kind: 'delete'; sql: string }
+  | { label: string; kind: 'null-pointer'; table: string; column: string; refTable: string };
+
+/** dry-run 计数 SQL（只读，绝不变更数据） */
+export function orphanCountSql(step: OrphanCleanupStep): string {
+  if (step.kind === 'delete') {
+    return step.sql.replace(/^DELETE FROM (\w+) WHERE/, 'SELECT COUNT(*) AS n FROM $1 WHERE');
+  }
+  return `SELECT COUNT(*) AS n FROM ${step.table} WHERE ${step.column} IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ${step.refTable} r WHERE r.id = ${step.table}.${step.column})`;
+}
+
+/** --apply 执行 SQL */
+export function orphanApplySql(step: OrphanCleanupStep): string {
+  if (step.kind === 'delete') return step.sql;
+  return `UPDATE ${step.table} SET ${step.column} = NULL WHERE ${step.column} IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ${step.refTable} r WHERE r.id = ${step.table}.${step.column})`;
+}
+
 /** 悬空子行清理（父行已不存在）：顺序必须子 → 父。 */
-const ORPHAN_CLEANUP: Array<{ label: string; sql: string }> = [
-  { label: 'teaching_session_messages', sql: 'DELETE FROM teaching_session_messages WHERE NOT EXISTS (SELECT 1 FROM teaching_sessions s WHERE s.id = sessionId)' },
-  { label: 'session_finalization_operations', sql: 'DELETE FROM session_finalization_operations WHERE NOT EXISTS (SELECT 1 FROM teaching_sessions s WHERE s.id = sessionId)' },
-  { label: 'subtasks', sql: 'DELETE FROM subtasks WHERE NOT EXISTS (SELECT 1 FROM milestones m WHERE m.id = milestoneId)' },
-  { label: 'path_generation_stage_items', sql: 'DELETE FROM path_generation_stage_items WHERE NOT EXISTS (SELECT 1 FROM path_generation_runs r WHERE r.id = runId)' },
-  { label: 'path_generation_runs', sql: 'DELETE FROM path_generation_runs WHERE NOT EXISTS (SELECT 1 FROM learning_paths p WHERE p.id = learningPathId)' },
-  { label: 'milestones', sql: 'DELETE FROM milestones WHERE NOT EXISTS (SELECT 1 FROM learning_paths p WHERE p.id = learningPathId)' },
+const SUBROW_ORPHANS: OrphanCleanupStep[] = [
+  { label: 'teaching_session_messages', kind: 'delete', sql: 'DELETE FROM teaching_session_messages WHERE NOT EXISTS (SELECT 1 FROM teaching_sessions s WHERE s.id = sessionId)' },
+  { label: 'session_finalization_operations', kind: 'delete', sql: 'DELETE FROM session_finalization_operations WHERE NOT EXISTS (SELECT 1 FROM teaching_sessions s WHERE s.id = sessionId)' },
+  { label: 'subtasks', kind: 'delete', sql: 'DELETE FROM subtasks WHERE NOT EXISTS (SELECT 1 FROM milestones m WHERE m.id = milestoneId)' },
+  { label: 'path_generation_stage_items', kind: 'delete', sql: 'DELETE FROM path_generation_stage_items WHERE NOT EXISTS (SELECT 1 FROM path_generation_runs r WHERE r.id = runId)' },
+  { label: 'path_generation_runs', kind: 'delete', sql: 'DELETE FROM path_generation_runs WHERE NOT EXISTS (SELECT 1 FROM learning_paths p WHERE p.id = learningPathId)' },
+  { label: 'milestones', kind: 'delete', sql: 'DELETE FROM milestones WHERE NOT EXISTS (SELECT 1 FROM learning_paths p WHERE p.id = learningPathId)' },
 ];
 
+/**
+ * #90 软指针孤儿（learningPathId 无 FK）：learning_paths 被删后残留在会话/目标对话上的
+ * 悬空引用。只置空指针、不删行——行承载学习历史（stageResults 快照），删除是另一种破坏。
+ */
+export const ORPHAN_POINTER_STEPS: OrphanCleanupStep[] = [
+  { label: 'virtual_sessions.learningPathId', kind: 'null-pointer', table: 'virtual_sessions', column: 'learningPathId', refTable: 'learning_paths' },
+  { label: 'goal_conversations.learningPathId', kind: 'null-pointer', table: 'goal_conversations', column: 'learningPathId', refTable: 'learning_paths' },
+  { label: 'teaching_sessions.learningPathId', kind: 'null-pointer', table: 'teaching_sessions', column: 'learningPathId', refTable: 'learning_paths' },
+];
+
+/** 完整清理计划（悬空子行删除 + 悬空软指针置空） */
+export const ORPHAN_CLEANUP: OrphanCleanupStep[] = [...SUBROW_ORPHANS, ...ORPHAN_POINTER_STEPS];
+
 async function cleanupOrphans(db: sqlite3.Database) {
-  console.log('悬空子行清理（父行已不存在的历史遗留）：');
+  console.log('孤儿清理（悬空子行删除 + 悬空软指针置空）：');
   let total = 0;
   for (const item of ORPHAN_CLEANUP) {
-    const result = await run(db, item.sql);
+    const result = await run(db, orphanApplySql(item));
     total += result.changes;
     console.log(`  ${item.label.padEnd(32)} ${result.changes}`);
   }
@@ -131,7 +174,7 @@ async function main() {
       const dry = openDb(true);
       let planned = 0;
       for (const item of ORPHAN_CLEANUP) {
-        const row = await get<{ n: number }>(dry, item.sql.replace(/^DELETE FROM (\w+) WHERE/, 'SELECT COUNT(*) AS n FROM $1 WHERE'));
+        const row = await get<{ n: number }>(dry, orphanCountSql(item));
         const n = Number(row?.n || 0);
         planned += n;
         if (n) console.log(`  ${item.label.padEnd(32)} ${n}`);
@@ -231,6 +274,10 @@ async function main() {
   await check('subtasks 无主', 'SELECT COUNT(*) AS n FROM subtasks s LEFT JOIN milestones m ON m.id = s.milestoneId WHERE m.id IS NULL');
   await check('teaching_sessions 无主', 'SELECT COUNT(*) AS n FROM teaching_sessions s LEFT JOIN users u ON u.id = s.userId WHERE u.id IS NULL');
   await check('teaching_session_messages 无主', 'SELECT COUNT(*) AS n FROM teaching_session_messages msg LEFT JOIN teaching_sessions s ON s.id = msg.sessionId WHERE s.id IS NULL');
+  // #90：learningPathId 软指针悬空检查（无 FK，路径删除不会连带清理；此处只检出、不改数据）
+  for (const step of ORPHAN_POINTER_STEPS) {
+    await check(`${step.label} 悬空`, orphanCountSql(step));
+  }
 
   const remainVl = await get<{ n: number }>(db, 'SELECT COUNT(*) AS n FROM users WHERE COALESCE(isVirtualLearner,0)=1');
   console.log(`\n剩余虚拟学习者：${remainVl?.n}`);
@@ -238,7 +285,10 @@ async function main() {
   db.close();
 }
 
-void main().catch((error) => {
-  console.error('[prune] 失败', error);
-  process.exitCode = 1;
-});
+// 直接执行才跑主流程：被测试 import 时不得触碰真实主库（对齐 purge-soft-deleted-users 先例）
+if (require.main === module) {
+  void main().catch((error) => {
+    console.error('[prune] 失败', error);
+    process.exitCode = 1;
+  });
+}

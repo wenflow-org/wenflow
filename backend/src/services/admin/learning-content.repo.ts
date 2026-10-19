@@ -1,6 +1,7 @@
 import prisma from '../../config/database';
 import type { Prisma } from '@prisma/client';
 import { buildRealUserWhere, buildTestUserWhere } from '../../utils/test-account';
+import { withTransaction } from '../../utils/with-transaction';
 
 /**
  * 学习内容治理仓储（routes/admin/learning-content.ts 的取数层）。
@@ -173,8 +174,24 @@ export function findLearningPathWithMilestoneCount(id: string) {
   });
 }
 
+/**
+ * 删除路径（内容治理，危险操作）。
+ *
+ * 同事务「先清软指针、再删行」（issue #90）：milestones/subtasks/path_generation_* 由 FK
+ * `ON DELETE CASCADE` 处理，但 `learningPathId` 在 goal_conversations / teaching_sessions /
+ * virtual_sessions 三张表上是**无 FK 的软指针**（PRAGMA foreign_key_list 零行）——裸删路径会让
+ * 会话/目标对话留下指向不存在路径的悬空引用，管理端的路径反查（findPathConversationId /
+ * findLatestVirtualSessionForPath）从此静默对不上。
+ * 口径：指针置 null 而非删会话——会话 stageResults 里保留学习历史快照，关联关系按
+ * 「未关联」呈现（与读侧空结果语义一致）；正常路径（无引用）行为不变。
+ */
 export function deleteLearningPath(id: string) {
-  return prisma.learning_paths.delete({ where: { id } });
+  return withTransaction(async (tx) => {
+    await tx.goal_conversations.updateMany({ where: { learningPathId: id }, data: { learningPathId: null } });
+    await tx.teaching_sessions.updateMany({ where: { learningPathId: id }, data: { learningPathId: null } });
+    await tx.virtual_sessions.updateMany({ where: { learningPathId: id }, data: { learningPathId: null } });
+    return tx.learning_paths.delete({ where: { id } });
+  }, { label: 'admin.learning-content.deleteLearningPath' });
 }
 
 /** 内容统计（治理页顶部：总数 / 按状态 / 按学科 / 里程碑与任务总量）。

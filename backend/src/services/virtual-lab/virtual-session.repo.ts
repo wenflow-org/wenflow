@@ -38,6 +38,19 @@ export function findGoalConversationById(id: string) {
   });
 }
 
+/**
+ * 故事「在用」检查（issue #90）：该画像名下**全部**会话的 story 快照字段。
+ * 不带样本截断（findProfileWithRecentSessions 只取 200 条）：删除守卫必须看到全量，
+ * 否则 200 条之外的会话会被判「无人引用」而放行删除、留成孤儿。
+ * 判据与读侧 `GET /:id/stories` 同源（isSameStory 对 stageResults.story 的匹配）。
+ */
+export function findSessionsForStoryUsage(profileId: string) {
+  return prisma.virtual_sessions.findMany({
+    where: { virtualProfileId: profileId },
+    select: { id: true, status: true, stageResults: true },
+  });
+}
+
 /** runDayLearning 前置探测：当前阶段与状态 */
 export function findSessionStageFields(sessionId: string) {
   return prisma.virtual_sessions.findUnique({

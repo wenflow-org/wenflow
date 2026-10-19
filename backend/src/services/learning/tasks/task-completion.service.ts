@@ -156,6 +156,12 @@ export async function deleteLearningPath(pathId: string, userId: string) {
       });
       if (lockedPath.count !== 1) throw new Error('学习路径不存在');
       await assertPathMutationSafe(tx, pathId, 'delete-path');
+      // issue #90：learningPathId 是无 FK 的软指针（goal_conversations / teaching_sessions /
+      // virtual_sessions），裸删路径会留下指向不存在路径的悬空引用；同事务先置空再删
+      // （口径与 admin 删除链 learning-content.repo.deleteLearningPath 一致）。
+      await tx.goal_conversations.updateMany({ where: { learningPathId: pathId }, data: { learningPathId: null } });
+      await tx.teaching_sessions.updateMany({ where: { learningPathId: pathId }, data: { learningPathId: null } });
+      await tx.virtual_sessions.updateMany({ where: { learningPathId: pathId }, data: { learningPathId: null } });
       await tx.learning_paths.delete({
         where: { id: pathId }
       });
