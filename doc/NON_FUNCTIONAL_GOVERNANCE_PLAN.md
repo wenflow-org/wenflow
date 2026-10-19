@@ -42,6 +42,11 @@
 7. 后端构建禁止带类型错误产物。
 8. 真实 Readiness 和关键可靠性缺陷修复。
 
+> **2026-10-19 拍板（#97）**：上述 8 条自本日起从「发布阻断」降级为「发布前验收清单」。
+> 边界实现与仓库侧验收项已全部落地（权限矩阵测试、投影 token 存储迁移、环境变量 Zod 校验等，见 §3.1）；
+> 残余项为真实环境演练 / 外部配置 / 可选 E2E。**保留两条硬阻断**：①生产凭据轮换与吊销演练（NF-P0-3）；
+> ②CI 三作业设为 Required Status Check（NF-P0-7）。其余按清单在发布前逐条确认，不再作为实现缺口排期。
+
 ## 2. 分级定义
 
 | 等级 | 定义 |
@@ -456,17 +461,22 @@ npm run check
 
 | 项 | 代码证据（2026-10-17 实测） | 仍缺 |
 | --- | --- | --- |
-| P0-1 Admin 权限 | `bootstrap/routers.ts:159` 统一挂载 `adminAuth + adminMiddleware + adminAudit`；`admin.middleware` 读库判定并拒绝 projection 身份 | 全路由 × Method 权限矩阵测试；账户禁用状态字段 |
-| P0-2 Projection 隔离 | 敏感路由拒绝链在 `admin.middleware` / `synthetic-projection.middleware`；`utils/projection-token.ts:49-60` 已签发 `issuer + audience` | `jti` / 服务端撤销 / 会话绑定；前端不在 `localStorage` 长期存放 |
+| P0-1 Admin 权限 | `bootstrap/routers.ts:159` 统一挂载 `adminAuth + adminMiddleware + adminAudit`；`admin.middleware` 读库判定并拒绝 projection 身份 | ~~全路由 × Method 权限矩阵测试~~（已完成 `2476acb7`：35 挂载点 / 254 路由×Method 五重链断言 + 负面控制）；账户禁用状态字段 |
+| P0-2 Projection 隔离 | 敏感路由拒绝链在 `admin.middleware` / `synthetic-projection.middleware`；`utils/projection-token.ts:49-60` 已签发 `issuer + audience` | `jti` / 服务端撤销 / 会话绑定；~~前端不在 `localStorage` 长期存放~~（已完成 `2476acb7`：sessionStorage + 旧键被动清除） |
 | P0-3 Secret 生命周期 | `wfsec:v1` 信封加密、`secrets:audit`、`security:scan:current/history` 均在 HEAD 且进根级 check | Provider 侧撤销/轮换历史 Key；`.env`/SQLite/日志 ACL |
 | P0-4 SSRF | `utils/safe-http.ts` + `services/runtime-network-policy.service.ts`（`SAFE_HTTP_PRIVATE_HOSTS` 运行时策略） | 真实 Socket 集成测试；更细的协议/Host/Body Policy |
 | P0-5 Prompt 真相源 | `middleware/prompt-file-truth.middleware.ts` 对非 GET 统一 409 | 清理不可达旧 handler；统一 Provenance（文件/DB Hash + Commit + 部署 ID） |
 | P0-6 Migration/备份 | `docker-entrypoint.sh` 不再执行 DDL；`docker-compose.yml` 独立 `migrate` 服务跑 `prisma:migrate:deploy:all` | 生产库副本上的恢复与旁路重建演练 |
 | P0-7 质量门禁 | 根 `check:quality` 已含双库 validate/clean replay、后端 typecheck、**前端 `vue-tsc`**、lint、prompts 与 design 检查；CI 三作业并行 | 仓库侧把 CI Job 设为 Required Status Check；Playwright Smoke |
-| P0-8 可靠性配置 | `LOGIN_LOCK_DURATION_SECONDS` 已落地；重试改为预算制 `maxAttempts`（`executor.ts:131`，非写死 2） | 全量环境变量 Zod Schema；Backoff/Jitter/`Retry-After`/总 Deadline |
+| P0-8 可靠性配置 | `LOGIN_LOCK_DURATION_SECONDS` 已落地；重试改为预算制 `maxAttempts`（`executor.ts:131`，非写死 2） | ~~全量环境变量 Zod Schema~~（已完成 `499056ae`：必需变量缺失/格式错 fail-fast）；Backoff/Jitter/`Retry-After`/总 Deadline |
 
-**结论**：以「发布阻断」标准看，P0-7 的残余项已从「未纳入门禁」变为「只差 Required Check 配置」；
-其余 7 条都卡在需要真实环境或外部协作的验收动作上，继续留在阻断清单但**不必再当实现缺口排期**。
+**结论（2026-10-19 更新）**：
+- **2026-10-19 拍板（#97）**：8 条从「发布阻断」降级为「发布前验收清单」。仓库侧验收项已全部落地：
+  权限矩阵测试与投影 token 存储迁移（`2476acb7`）、环境变量 Zod 校验（`499056ae`）；
+- **保留两条硬阻断**：①生产凭据轮换与吊销演练（P0-3）；②CI 三作业设为 Required Status Check（P0-7）。
+  这两项属真实环境/外部配置，发布前必须完成；
+- 其余项（`jti`/撤销、Socket 集成测试、恢复演练、Playwright Smoke、Backoff/Deadline）按发布前验收清单逐条确认，
+  **不再作为实现缺口排期**。
 
 ## 4. P1 短期统一项
 
