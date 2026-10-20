@@ -12,6 +12,8 @@ export interface LearnLesson {
   milestone: string
   state: LessonState
   teachingSessionId: string
+  /** 这节课是否已有总结（由所选课堂会话终态推断，判据见 sessionHasSummary） */
+  hasSummary: boolean
 }
 
 export interface TeachHistoryItem {
@@ -20,6 +22,12 @@ export interface TeachHistoryItem {
   taskTitle: string
   /** 会话终态（completed/discarded/...）：同课多会话时用于挑选有总结的那条 */
   status?: string
+}
+
+/** 课堂会话终态 → 是否已有总结：completed 是全量总结，timeout / finalization_failed
+ *  是课堂发生过、常带 summary-only 降级总结；其余（discarded=中断重试）没有总结 */
+export function sessionHasSummary(status?: string) {
+  return status === 'completed' || status === 'timeout' || status === 'finalization_failed'
 }
 
 export function buildLearnLessons(
@@ -33,14 +41,14 @@ export function buildLearnLessons(
      （discarded=中断重试，无总结）；同分保持先到（后端历史新→旧，先到=最新）。 */
   const rankOf = (status: string) =>
     status === 'completed' ? 0 : status === 'timeout' || status === 'finalization_failed' ? 1 : 2
-  const historyByTask = new Map<string, string>()
+  const historyByTask = new Map<string, TeachHistoryItem>()
   const rankByTask = new Map<string, number>()
   for (const item of history) {
     if (!item.taskId || !item.id) continue
     const rank = rankOf(item.status || '')
     const prevRank = rankByTask.get(item.taskId)
     if (prevRank === undefined || rank < prevRank) {
-      historyByTask.set(item.taskId, item.id)
+      historyByTask.set(item.taskId, item)
       rankByTask.set(item.taskId, rank)
     }
   }
@@ -50,9 +58,12 @@ export function buildLearnLessons(
       if (!t.id) continue
       let state: LessonState = 'pending'
       let teachingSessionId = ''
+      let hasSummary = false
       if (t.completed) {
         state = 'done'
-        teachingSessionId = historyByTask.get(t.id) || ''
+        const picked = historyByTask.get(t.id)
+        teachingSessionId = picked?.id || ''
+        hasSummary = sessionHasSummary(picked?.status)
       }
       if (t.id === current.currentTaskId) {
         /* 已完成课不得被 currentTaskId 回写成「进行中/失败」（F2-1 单源）：真实教学会话
@@ -65,7 +76,7 @@ export function buildLearnLessons(
           teachingSessionId = current.currentTeachingId
         }
       }
-      lessons.push({ taskId: t.id, title: t.title, milestone: m.title, state, teachingSessionId })
+      lessons.push({ taskId: t.id, title: t.title, milestone: m.title, state, teachingSessionId, hasSummary })
     }
   }
   return lessons
