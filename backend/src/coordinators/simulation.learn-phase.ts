@@ -219,12 +219,13 @@ export async function startLearningPhase(ctx: SimulationOrchestrator, sessionId:
           status: { in: ['active', 'paused', 'timeout'] },
           NOT: { mode: 'review' },
         },
-        select: { id: true, mode: true },
+        select: { id: true, mode: true, revision: true },
         orderBy: { createdAt: 'desc' },
       });
       if (activeClassroom) {
         try {
-          await aiTeachingOrchestrator.endSession(activeClassroom.id, 'review-switch');
+          // endSession 走乐观并发：不带 revision 会直接报「缺少有效的课堂 revision」
+          await aiTeachingOrchestrator.endSession(activeClassroom.id, 'review-switch', activeClassroom.revision);
         } catch (error: unknown) {
           logger.warn('[simulation-coordinator] 开复习课前收束旧课堂失败', {
             sessionId,
@@ -244,9 +245,16 @@ export async function startLearningPhase(ctx: SimulationOrchestrator, sessionId:
         ...(options.mode === 'review' ? { mode: 'review' as const } : {})
       })
     );
-    // 复习课仍被旧课堂复用 → 明确报错，不要静默把教师课堂当复习课跑
+    // 复习课仍被旧课堂复用 → 明确报错，不要静默把教师课堂当复习课跑。
+    // 例外：被复用的本来就是复习课堂（上一轮还没收束）→ 直接接着上，属于正常续课。
     if (options.mode === 'review' && teachingSession.mode === 'resumed') {
-      throw new Error('复习课开课失败：同任务的旧课堂未能收束（会复用旧会话），请先结束当前课堂');
+      const resumedClassroom = await prisma.teaching_sessions.findUnique({
+        where: { id: teachingSession.sessionId },
+        select: { mode: true },
+      });
+      if (resumedClassroom?.mode !== 'review') {
+        throw new Error('复习课开课失败：同任务的旧课堂未能收束（会复用旧会话），请先结束当前课堂');
+      }
     }
     
     await ctx.updateSessionStatus(

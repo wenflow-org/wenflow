@@ -19,6 +19,7 @@ const mockGetSessionDetail = jest.fn()
 const mockStartSession = jest.fn()
 const mockFinalize = jest.fn()
 const mockTeachingSessionsFindFirst = jest.fn()
+const mockTeachingSessionsFindUnique = jest.fn()
 
 jest.mock('../../config/database', () => ({
   __esModule: true,
@@ -46,7 +47,8 @@ jest.mock('../../config/database', () => ({
       findFirst: jest.fn()
     },
     teaching_sessions: {
-      findFirst: mockTeachingSessionsFindFirst
+      findFirst: mockTeachingSessionsFindFirst,
+      findUnique: mockTeachingSessionsFindUnique
     }
   }
 }))
@@ -157,6 +159,7 @@ describe('#104 复习课：开课与收束', () => {
     mockGetSessionDetail.mockResolvedValue(undefined)
     mockStartSession.mockResolvedValue({ sessionId: 'review-2', revision: 1, welcomeMessage: '复习课已开始' })
     mockTeachingSessionsFindFirst.mockResolvedValue(null)
+    mockTeachingSessionsFindUnique.mockResolvedValue(null)
     mockEndSession.mockResolvedValue({ revision: 3 })
     mockFinalize.mockResolvedValue({ status: 'completed' })
     mockCompleteTask.mockResolvedValue({ task: { id: 'task-1', status: 'completed' } })
@@ -190,16 +193,16 @@ describe('#104 复习课：开课与收束', () => {
 
   it('开复习课前先收束同任务的在跑 tutor 课堂（否则 startSession 会复用旧会话）', async () => {
     sessionRecord.stageResults = JSON.stringify({})
-    mockTeachingSessionsFindFirst.mockResolvedValueOnce({ id: 'tutor-9', mode: 'tutor' })
+    mockTeachingSessionsFindFirst.mockResolvedValueOnce({ id: 'tutor-9', mode: 'tutor', revision: 7 })
 
     const result = await coordinator.startLearningPhase('simulation-1', { taskId: 'task-1', mode: 'review' })
 
     expect(result.success).toBe(true)
-    expect(mockEndSession).toHaveBeenCalledWith('tutor-9', 'review-switch')
+    expect(mockEndSession).toHaveBeenCalledWith('tutor-9', 'review-switch', 7)
     expect(mockStartSession).toHaveBeenCalledWith({ userId: 'user-1', taskId: 'task-1', mode: 'review' })
   })
 
-  it('复习课仍被旧课堂复用（resumed）→ 明确失败，不把 tutor 课堂当复习课跑', async () => {
+  it('复习课被旧 tutor 课堂复用（resumed）→ 明确失败，不把教师课堂当复习课跑', async () => {
     sessionRecord.stageResults = JSON.stringify({})
     mockStartSession.mockResolvedValueOnce({
       sessionId: 'tutor-2',
@@ -207,11 +210,27 @@ describe('#104 复习课：开课与收束', () => {
       welcomeMessage: '',
       mode: 'resumed'
     })
+    mockTeachingSessionsFindUnique.mockResolvedValueOnce({ mode: 'tutor' })
 
     const result = await coordinator.startLearningPhase('simulation-1', { taskId: 'task-1', mode: 'review' })
 
     expect(result.success).toBe(false)
     expect(String(result.error)).toContain('复习课开课失败')
+  })
+
+  it('复用的本来就是复习课堂（上一轮未收束）→ 允许续课，不报错', async () => {
+    sessionRecord.stageResults = JSON.stringify({})
+    mockStartSession.mockResolvedValueOnce({
+      sessionId: 'review-3',
+      revision: 2,
+      welcomeMessage: '',
+      mode: 'resumed'
+    })
+    mockTeachingSessionsFindUnique.mockResolvedValueOnce({ mode: 'review' })
+
+    const result = await coordinator.startLearningPhase('simulation-1', { taskId: 'task-1', mode: 'review' })
+
+    expect(result.success).toBe(true)
   })
 
   it('复习课收束 → complete_review（不结算任务、一课一停、清课堂绑定）', async () => {
