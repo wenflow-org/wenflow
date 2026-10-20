@@ -383,7 +383,7 @@ async function judgeOne(cfg: JudgeConfig, chunk: string, question: string): Prom
 // 用另一个会生成文本的模型（默认 deepseek-v4.1-flash，与做判定的 clef 不同家族）独立作答，
 // 答不出 ⇒ 该配对实际不可答；由此得到 raw（锚点标签）与 clean（模型复核后）两套指标。
 
-const LABEL_URL = process.env.LABEL_API_URL || 'http://101.43.146.102:30001/v1/chat/completions';
+const LABEL_URL = process.env.LABEL_API_URL || 'https://newapi.wenflow.org/v1/chat/completions';
 const LABEL_MODEL = process.env.LABEL_MODEL || 'deepseek-v4.1-flash';
 
 async function labelOne(chunk: string, question: string): Promise<boolean | null> {

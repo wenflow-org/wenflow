@@ -31,7 +31,7 @@ const arg = (name, fb = null) => {
 };
 const flag = (name) => process.argv.includes(`--${name}`);
 
-const API = process.env.WENFLOW_AUDIT_API || 'http://101.43.146.102:30001/v1/chat/completions';
+const API = process.env.WENFLOW_AUDIT_API || 'https://newapi.wenflow.org/v1/chat/completions';
 const KEY = process.env.WENFLOW_AUDIT_KEY || '';
 const MODEL = arg('model', 'deepseek-v4.1-flash');
 const K = Number(arg('k', 3));
