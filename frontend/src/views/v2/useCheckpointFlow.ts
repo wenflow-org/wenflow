@@ -180,6 +180,9 @@ export function useCheckpointFlow(
             checkpointFeedback.value = j.passed ? '回答正确' : '这道没答对';
           },
           onDelta: (t: string) => {
+            // 空文本 delta 不算可见进展：不喂看门狗、不上屏（#113——网关若吐空 chunk 心跳，
+            // 「90s 无讲解即中止」会被永久喂住，卡片停在「导师正在讲解…」只能刷新）
+            if (!t) return;
             armSubmitWatchdog();
             streamed += t;
             checkpointFeedback.value = streamed;

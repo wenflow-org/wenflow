@@ -33,12 +33,20 @@ export async function streamSsePost(
   };
   if (projectionToken) headers['X-Projection-Token'] = projectionToken;
 
+  // 中止总线：调用方 signal（停止/离页/上层看门狗）与本层空闲超时都汇到同一个 controller，
+  // fetch 只认它。旧实现 fetch 挂的是 handlers.signal，而空闲超时 abort 的却是无人监听的
+  // controller——60s 空闲看门狗从未真正中止过连接（#111/#113 回归：服务端挂起时流永不收尾，
+  // 无上层看门狗的调用方会永久挂起）。
+  const controller = new AbortController();
+  const onOuterAbort = () => controller.abort();
+  handlers.signal?.addEventListener('abort', onOuterAbort, { once: true });
+
   const send = () => fetch(`${API_BASE_URL}${url}`, {
     method: 'POST',
     headers,
     credentials: 'include',
     body: JSON.stringify(payload),
-    signal: handlers.signal
+    signal: controller.signal
   });
 
   let response: Response;
@@ -102,12 +110,9 @@ export async function streamSsePost(
     }, idleTimeoutMs);
   };
   kickIdleTimer();
-  const controller = new AbortController();
-  const onAbort = () => controller.abort();
-  handlers.signal?.addEventListener('abort', onAbort, { once: true });
   const cleanup = () => {
     if (idleTimer) clearTimeout(idleTimer);
-    handlers.signal?.removeEventListener('abort', onAbort);
+    handlers.signal?.removeEventListener('abort', onOuterAbort);
   };
 
   const dispatch = (event: string, data: string) => {

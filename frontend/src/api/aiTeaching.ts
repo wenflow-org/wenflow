@@ -370,6 +370,21 @@ const finalizationStepCompleted = (result: FinalizationResult, action: FinalizeA
 
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 
+/**
+ * 「结算现在不可能成功、重试也无意义」的服务端明确拒绝码（finalizeSessionReliably 不做状态补偿）：
+ * - 三个收束门禁（teaching-closure.ts #51 P-25）：检查点未答 / 老师末问未回应 / 末次检查未过——
+ *   需要用户先回应课内问答，原文有行动指引；
+ * - FINALIZATION_SESSION_NOT_CLOSED：自动关课已跑但 wrapup 未落，原文指引「先结束课堂」；
+ * - TEACHING_SESSION_STALE：revision 已被在途回合推进，原文指引刷新/重试。
+ */
+const FINALIZATION_UNACTIONABLE_ERROR_CODES = new Set([
+  'FINALIZATION_PENDING_CHECKPOINT',
+  'FINALIZATION_OPEN_QUESTION',
+  'FINALIZATION_LAST_CHECKPOINT_FAILED',
+  'FINALIZATION_SESSION_NOT_CLOSED',
+  'TEACHING_SESSION_STALE',
+]);
+
 export const aiTeachingAPI = {
   async startSession(taskId: string, mode?: 'tutor' | 'review'): Promise<TeachingSession> {
     const result = await api.post(
@@ -446,6 +461,10 @@ export const aiTeachingAPI = {
       };
       streamSsePost(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision, ...(meta ? { meta } : {}) }, {
         signal: handlers.signal,
+        // 教学回合为 JSON 输出、final 前可以整段无字节（实测 2~3 分钟），60s 空闲默认会把
+        // 慢回合误判成死连接并触发非流式重发（双倍回合）。放到 120s：上层 90s 停滞看门狗
+        // 先出手（有可见的超时气泡、不重发），这里只兜真正的死连接。
+        idleTimeoutMs: 120_000,
         onEvent: (event, data) => {
           if (event === 'delta' && typeof data?.text === 'string') {
             receivedAnything = true;
@@ -511,6 +530,7 @@ export const aiTeachingAPI = {
       };
       streamSsePost(`/ai-teaching/sessions/${sessionId}/continue`, { revision }, {
         signal: handlers.signal,
+        idleTimeoutMs: 120_000,
         onEvent: (event, data) => {
           if (event === 'delta' && typeof data?.text === 'string') {
             receivedAnything = true;
@@ -581,6 +601,7 @@ export const aiTeachingAPI = {
       };
       streamSsePost(`/ai-teaching/sessions/${sessionId}/peer/messages`, { message }, {
         signal: handlers.signal,
+        idleTimeoutMs: 120_000,
         onEvent: (event, data) => {
           if (event === 'final') {
             receivedAnything = true;
@@ -692,6 +713,16 @@ export const aiTeachingAPI = {
     try {
       result = await this.finalizeSession(sessionId, payload, finalizationKey());
     } catch (error) {
+      // 「现在根本结不了」的明确拒绝必须原样抛出：吞掉原文换成 getFinalization 的
+      // not_started，用户只会看到无行动指引的「课堂结束处理尚未完成」（#115 稳定复现
+      // 的根因——收束门禁 409「老师刚提了一个问题/检查点未答」被这条补偿分支吃掉）。
+      // 幂等键复用等其他 409 不在此列：服务端可能已收束、只差键不一致，仍走下方补偿。
+      const errorCode = String(
+        (error as { code?: string })?.code
+        || (error as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code
+        || ''
+      );
+      if (FINALIZATION_UNACTIONABLE_ERROR_CODES.has(errorCode)) throw error;
       const recovered = await this.getFinalization(sessionId).catch(() => null);
       // 连结算状态都拿不到：无法安全补偿，原样抛出。
       if (!recovered) throw error;
@@ -816,6 +847,8 @@ export const aiTeachingAPI = {
         { ...payload, revision },
         {
           signal: handlers.signal,
+          // 同 streamSendMessage：讲解回合 final 前可整段无字节，60s 默认会误杀慢回合
+          idleTimeoutMs: 120_000,
           onEvent: (event, data) => {
             if (event === 'judgement') {
               receivedAnything = true;
