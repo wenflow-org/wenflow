@@ -1117,7 +1117,12 @@ async function recompute() {
 
 <style scoped>
 /* 面板容器：住学习者详情页签里，不自带滚动（页面级滚动） */
-.mr-panels { display: grid; gap: 12px; align-content: start; }
+.mr-panels { display: grid; gap: 12px; align-content: start; min-width: 0; }
+/* 窄屏（2026-10-19 修复 390 被外壳裁掉）：本组件是详情页签 grid 的直接子项，
+   默认 min-width:auto 会被三张审计表的 min-content 撑到 551px，外层 overflow:hidden
+   直接把右半截裁掉。逐层给 0，让宽度回到页签列，横向溢出由 .mk-table-scroll 自己滚。 */
+.mr-panels > *,
+.mr__detail > * { min-width: 0; }
 
 /* 面板栏：调度口径摘要 + 重新观察（原独立页状态条收敛为一行） */
 .mr-panels__bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
