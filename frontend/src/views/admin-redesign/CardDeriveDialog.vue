@@ -12,7 +12,7 @@
 
         <div class="mk-modal__body">
           <p class="cdd-lead">
-            已选 {{ groups.length }} 张身份卡 · 每张卡按挑中的任务创建 1 个虚拟学习者，卡本身留在卡库，可再创建
+            已选 {{ groups.length }} 张身份卡 · 每张卡创建 1 个虚拟学习者
           </p>
 
           <MkLoading v-if="loading" text="读取任务中…" min />
@@ -32,7 +32,7 @@
                 <strong class="cdd-group__name">{{ g.name }}</strong>
                 <span class="cdd-group__meta">{{ pickedCount(g.profileId) }} / {{ g.tasks.length }} 个任务</span>
               </div>
-              <p v-if="!g.tasks.length" class="mk-empty--line">这张身份卡没有任务，创建不出可运行的虚拟学习者。</p>
+              <p v-if="!g.tasks.length" class="mk-empty--line">这张卡没有任务，无法创建。</p>
               <ul v-else class="cdd-tasks">
                 <li v-for="t in g.tasks" :key="t.id" class="cdd-task">
                   <label class="mk-field mk-field--switch cdd-task__pick">
@@ -53,7 +53,7 @@
               <input
                 v-model="note"
                 class="mk-field__input"
-                placeholder="这批虚拟学习者的用途，会写进它们的备注"
+                placeholder="这批虚拟学习者的用途"
               />
             </label>
 
