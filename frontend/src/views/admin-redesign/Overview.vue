@@ -754,7 +754,8 @@ const vlTiles = computed<MkStatItem[]>(() => {
       label: '自动驾驶并发',
       value: vlValue(`${c.used}/${c.limit}`),
       tone: ready && c.used >= c.limit ? 'warn' : '',
-      title: `自动驾驶全局并发：运行中 ${c.used} 个，配额上限 ${c.limit} 个`
+      // 「运行中」是 running 的禁用私译（术语单源守卫）：这里是并发占用量，改用「在跑」表述
+      title: `自动驾驶全局并发：当前 ${c.used} 个在跑，配额上限 ${c.limit} 个`
     },
     {
       label: '无响应会话',
