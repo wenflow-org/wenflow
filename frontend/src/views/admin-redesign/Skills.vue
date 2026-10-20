@@ -491,7 +491,7 @@
              套用成功后 emit applied → 本页重拉 coverageById，避免同屏「路由模型/备用模型」两列
              与四张 KPI 停留在旧值、与下方矩阵互相打架（#93） -->
         <div class="sk-routing__matrix">
-          <SkillModelCoverage @applied="refreshCoverage" />
+          <SkillModelCoverage @applied="refreshCoverage" @open-skill="openDesign" />
         </div>
       </div>
     </div>
