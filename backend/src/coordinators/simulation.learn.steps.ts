@@ -45,6 +45,13 @@ export function advanceLearnerDoneStreak(
  */
 export const LEARN_EXTENSION_MAX_TURNS = 4;
 
+/**
+ * 复习课（#104 取样）有界回合上限：复习课是测量/巩固课，不是任务推进课——
+ * 到期点可能很多（注入上限 20），教师会围绕任务目标持续发问，必须有界收束，
+ * 否则单节课可无限拖长（实测 24 回合仍在推进）。跑满即收束并回写复习结果。
+ */
+export const LEARN_REVIEW_TURN_CAP = 10;
+
 type ExtensionRuntimeLike = {
   active?: boolean;
   turns?: number;
@@ -88,8 +95,9 @@ export type LearningClosureDecision = {
    * 学员自评与认知判决只作观测留痕，不再是一票否决。
    * `learner-loop-break` = 学员连续多轮要下课而教师未给信号时的熔断兜底。
    * `extension-complete` = 延伸学（#124）有界陪学段到达回合上限/学员表示学够后的收尾。
+   * `review-turn-cap` = 复习课（#104）到达有界回合上限后的收束（不结算任务）。
    */
-  closureAuthority: 'teacher' | 'learner-loop-break' | 'extension-complete';
+  closureAuthority: 'teacher' | 'learner-loop-break' | 'extension-complete' | 'review-turn-cap';
   /** 本轮认知判决未放行完成（仅作留痕与知识看板对账，不再否决结课，见 #46） */
   judgeBlocked: boolean;
   judgeBlockReason: string | null;

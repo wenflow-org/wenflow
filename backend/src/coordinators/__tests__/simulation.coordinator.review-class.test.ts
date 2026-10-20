@@ -205,6 +205,32 @@ describe('#104 复习课：开课与收束', () => {
     expect(learning.taskRuntime.error).toBeNull()
   })
 
+  it('复习课跑满回合上限 → 有界收束（review-turn-cap），不结算任务', async () => {
+    sessionRecord.stageResults = JSON.stringify({
+      teaching: {
+        ...reviewLearningState,
+        taskRuntime: { status: 'active', taskId: 'task-1', taskTitle: '任务一', turns: 10 },
+      },
+    })
+    mockProcessStudentMessage.mockResolvedValue({
+      revision: 2,
+      aiResponse: '我们先把这几个到期点过完了，今天的复习就到这儿。',
+      isCompletion: false,
+      autoEnded: false,
+      analysis: {},
+      knowledgePoints: [],
+      strategies: []
+    })
+
+    const result = await coordinator.executeLearningStep('simulation-1')
+    const learning = JSON.parse(sessionRecord.stageResults).teaching
+
+    expect(result).toEqual(expect.objectContaining({ success: true, currentTaskStopped: true, taskCompleted: false }))
+    expect(mockFinalize).toHaveBeenCalledWith(expect.objectContaining({ action: 'complete_review' }))
+    expect(mockCompleteTask).not.toHaveBeenCalled()
+    expect(learning.taskRuntime.status).toBe('review_completed')
+  })
+
   it('complete_review 失败 → 降级 end_only 收束，错误留痕且不结算任务', async () => {
     mockFinalize.mockRejectedValue(new Error('课堂还有未完成的问答'))
 

@@ -53,6 +53,7 @@ import {
   isExtensionActive,
   shouldCompleteExtension,
   LEARN_EXTENSION_MAX_TURNS,
+  LEARN_REVIEW_TURN_CAP,
   buildNextLearningState,
   auditGroundingCompliance,
   clampLearnerStateToJudgment,
@@ -1067,6 +1068,34 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
                   action: 'extension-complete',
                   extensionTurns,
                   maxTurns: extensionRuntime.maxTurns,
+                  currentTask: currentTask.title,
+                  message: closureDecision.reason
+                }
+              }
+            });
+          }
+        }
+
+        // 复习课有界收束（#104）：到期点可能很多（注入上限 20），教师会围绕任务目标持续发问；
+        // 跑满回合上限即收束（复习课不结算任务，见下方 classroomMode==='review' 分支）。
+        if (learningState.classroomMode === 'review' && !closureDecision.canCompleteTask) {
+          const reviewTurns = (taskRuntime.taskId === currentTask.id ? Number(taskRuntime.turns) || 0 : 0) + 1;
+          if (reviewTurns >= LEARN_REVIEW_TURN_CAP) {
+            closureDecision = {
+              ...closureDecision,
+              teacherReady: true,
+              canCompleteTask: true,
+              closureAuthority: 'review-turn-cap',
+              reason: `复习课已进行 ${reviewTurns} 回合（上限 ${LEARN_REVIEW_TURN_CAP}），收束并回写复习结果`,
+            };
+            logs.push({
+              timestamp: new Date().toISOString(),
+              phase: 'stage-transition',
+              details: {
+                output: {
+                  action: 'review-turn-cap',
+                  reviewTurns,
+                  cap: LEARN_REVIEW_TURN_CAP,
                   currentTask: currentTask.title,
                   message: closureDecision.reason
                 }
