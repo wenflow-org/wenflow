@@ -151,7 +151,7 @@
                   <input v-model.number="rtForm.requestTimeoutMs" type="number" min="10000" max="300000" step="10000" class="mk-input" :disabled="!rtForm.enabled" placeholder="继承" />
                 </label>
                 <div class="sdp-field">
-                  <span>逻辑重试<em>平台默认 {{ platformLogicalRetries }} 次</em></span>
+                  <span>逻辑重试<em>平台默认 {{ platformLogicalRetries }} 次，可单独设置</em></span>
                   <div class="sdp-param__ctl">
                     <select v-model="logicalRetryMode" class="mk-input">
                       <option value="inherit">继承平台默认</option>
