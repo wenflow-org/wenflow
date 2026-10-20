@@ -692,7 +692,8 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
             params.teachingSessionId,
             action.checkpointId,
             action.payload,
-            params.teachingRevision
+            params.teachingRevision,
+            { ...(params.failedConceptFollowupGuard === false ? { failedConceptFollowupGuard: false } : {}) }
           )
         );
         return normalizeCheckpointSubmitTurn(submitResult);

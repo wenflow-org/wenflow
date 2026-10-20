@@ -254,8 +254,9 @@ export class AITeachingOrchestrator {
     checkpointId: string,
     payload: CheckpointSubmitPayload,
     expectedRevision?: number,
+    turnOptions: { failedConceptFollowupGuard?: boolean } = {},
   ): Promise<CheckpointSubmitResult> {
-    return submitCheckpointImpl(sessionId, checkpointId, payload, expectedRevision);
+    return submitCheckpointImpl(sessionId, checkpointId, payload, expectedRevision, turnOptions);
   }
 
   async judgeCheckpointSubmission(

@@ -13,6 +13,7 @@ const mockLearningPathFindUnique = jest.fn()
 const mockCompleteTask = jest.fn()
 const mockExecuteSkill = jest.fn()
 const mockProcessStudentMessage = jest.fn()
+const mockSubmitCheckpoint = jest.fn()
 const mockEndSession = jest.fn()
 const mockGetSessionDetail = jest.fn()
 const mockStartSession = jest.fn()
@@ -55,6 +56,7 @@ jest.mock('../../services/ai-teaching/AITeachingCoordinator', () => ({
   default: {
     startSession: mockStartSession,
     processStudentMessage: mockProcessStudentMessage,
+    submitCheckpoint: mockSubmitCheckpoint,
     endSession: mockEndSession,
     getSessionDetail: mockGetSessionDetail
   }
@@ -180,6 +182,41 @@ describe('#85 双臂：experimentArm 透传到教学回合', () => {
 
     const options = mockProcessStudentMessage.mock.calls[0][2] as Record<string, unknown>
     expect(options.failedConceptFollowupGuard).toBeUndefined()
+  })
+
+  it('A 臂也覆盖检查点提交回合（submitCheckpoint 收到同一开关）', async () => {
+    setArm('A')
+    mockGetSessionDetail.mockResolvedValue({
+      id: 'teaching-1',
+      pendingCheckpoint: {
+        id: 'cp-1',
+        type: 'single_choice',
+        question: '下列哪个是函数？',
+        options: [{ id: 'A', text: 'y=x' }, { id: 'B', text: 'x+1' }],
+      },
+    })
+    mockExecuteSkill.mockResolvedValue({
+      reply: '我选 A。',
+      learnerState: {},
+      learnerFeedback: { selfReportedTaskDone: false, wantsMoreHelp: false, stopAsking: false, remainingBlockers: [] },
+      checkpointAnswer: { selectedOptionIds: ['A'] },
+    })
+    mockSubmitCheckpoint.mockResolvedValue({
+      revision: 2,
+      passed: true,
+      checkpointResolution: { passed: true },
+      aiResponse: '对，选 A。',
+      isCompletion: false,
+      autoEnded: false,
+      analysis: {},
+      knowledgePoints: [],
+      strategies: [],
+    })
+
+    await coordinator.executeLearningStep('simulation-1')
+
+    expect(mockSubmitCheckpoint).toHaveBeenCalledTimes(1)
+    expect(mockSubmitCheckpoint.mock.calls[0][4]).toEqual({ failedConceptFollowupGuard: false })
   })
 
   it('无臂标签 → 默认口径（不传开关）', async () => {
