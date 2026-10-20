@@ -16,47 +16,62 @@
             <span class="mk-alert__msg">{{ error }}</span>
           </div>
 
-          <!-- 2026-10-20 走查重排：原先平铺三列（标识 / 能力+限额 / 备用），把「平台对调用的限制」
-               和「模型自身信息」混在一起，读起来像模型的参数。现在按两个概念分栏——
-               左栏是这个模型自己是谁、能做什么、标价多少，右栏是平台在调用侧怎么约束它、出错时怎么兜底。 -->
-          <div class="med-cols">
-            <div class="med-col">
-              <section class="med-sec">
-                <h4 class="med-sec__title">基本信息</h4>
-                <div class="med-two">
-                  <label class="mk-field">
-                    <span class="mk-field__label">模型 ID</span>
-                    <input
-                      v-model="form.id"
-                      class="mk-field__input mono"
-                      :disabled="!isCreate"
-                      placeholder="deepseek-v4-flash"
-                      autocomplete="off"
-                      @input="error = ''"
-                    />
-                    <span class="mk-field__hint">{{ isCreate ? '上游认这个名字，字母数字点下划线连字符' : '创建后不改（路由按这个名字找模型）' }}</span>
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">显示名称</span>
-                    <input v-model="form.label" class="mk-field__input" placeholder="选填，给运营看的名字" @input="error = ''" />
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">档位</span>
-                    <select v-model="form.tier" class="mk-field__select">
-                      <option value="chat">对话（chat）</option>
-                      <option value="reasoning">推理（reasoning）</option>
-                    </select>
-                    <span class="mk-field__hint">默认路由按档位挑模型，选错档位会让推理任务落到普通模型上</span>
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">说明</span>
-                    <input v-model="form.description" class="mk-field__input" placeholder="选填：这个模型适合干什么" />
-                  </label>
-                </div>
-              </section>
+          <!-- 基本信息（2026-10-21 用户走查「动作很简单：配置端点与 key、拉取模型、一个模型一个模型
+               添加，配置基础信息，允许单一模型测试」）：首屏只留模型身份与价格；用途、能力、
+               调用限制与备用链是高级项，默认收起。 -->
+          <section class="med-sec">
+            <h4 class="med-sec__title">基本信息</h4>
+            <div class="med-two">
+              <label class="mk-field">
+                <span class="mk-field__label">模型 ID</span>
+                <input
+                  v-model="form.id"
+                  class="mk-field__input mono"
+                  :disabled="!isCreate"
+                  placeholder="deepseek-v4-flash"
+                  autocomplete="off"
+                  @input="error = ''"
+                />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">显示名称</span>
+                <input v-model="form.label" class="mk-field__input" placeholder="选填" @input="error = ''" />
+              </label>
+            </div>
+            <div class="med-price">
+              <label class="mk-field">
+                <span class="mk-field__label">输入单价</span>
+                <input v-model.number="form.inputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="USD / 1M" />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">缓存命中</span>
+                <input v-model.number="form.cachedInputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="选填" />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">输出单价</span>
+                <input v-model.number="form.outputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="USD / 1M" />
+              </label>
+            </div>
+          </section>
 
-              <section class="med-sec">
-                <h4 class="med-sec__title">能力</h4>
+          <details class="med-advanced">
+            <summary class="med-advanced__summary">高级设置</summary>
+            <div class="med-adv-body">
+              <div class="med-two">
+                <label class="mk-field">
+                  <span class="mk-field__label">用途</span>
+                  <select v-model="form.tier" class="mk-field__select">
+                    <option value="chat">对话</option>
+                    <option value="reasoning">推理</option>
+                  </select>
+                </label>
+                <label class="mk-field">
+                  <span class="mk-field__label">说明</span>
+                  <input v-model="form.description" class="mk-field__input" placeholder="选填" />
+                </label>
+              </div>
+
+              <div class="med-checks">
                 <label class="mk-field mk-field--switch">
                   <input v-model="form.supportsThinking" type="checkbox" />
                   <span>支持思考模式</span>
@@ -65,71 +80,37 @@
                   <input v-model="form.supportsReasoningEffort" type="checkbox" />
                   <span>支持推理强度</span>
                 </label>
-                <span class="mk-field__hint">推理强度依赖思考模式：两项要一起勾，只勾强度会在保存时被拦下</span>
-              </section>
+              </div>
 
-              <section class="med-sec">
-                <h4 class="med-sec__title">单价 <span class="med-sec__note">USD / 1M tokens</span></h4>
-                <div class="med-price">
-                  <label class="mk-field">
-                    <span class="mk-field__label">输入</span>
-                    <input v-model.number="form.inputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="未知" />
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">缓存命中</span>
-                    <input v-model.number="form.cachedInputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="留空按输入价计" />
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">输出</span>
-                    <input v-model.number="form.outputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" placeholder="未知" />
-                  </label>
-                </div>
-                <span class="mk-field__hint">只影响成本分析页的金额换算。缓存命中留空按输入价计（保守高估）。输入与输出都留空 = 金额未知，不会按 0 计算</span>
-              </section>
-            </div>
-
-            <div class="med-col">
-              <section class="med-sec med-sec--limits">
-                <h4 class="med-sec__title">平台使用限制</h4>
-                <span class="med-sec__note med-sec__note--block">平台调用侧的上限与预算，不是模型参数。留空按平台默认</span>
-                <div class="med-two">
-                  <label class="mk-field">
-                    <span class="mk-field__label">输出上限</span>
-                    <input v-model.number="form.maxOutputTokens" class="mk-field__input mono" type="number" min="1" placeholder="131072" />
-                    <span class="mk-field__hint">调用方要得再多也不会超过它</span>
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">默认输出</span>
-                    <input v-model.number="form.defaultMaxTokens" class="mk-field__input mono" type="number" min="1" placeholder="32768" />
-                    <span class="mk-field__hint">调用方没声明输出预算时用它</span>
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">推理预留</span>
-                    <input v-model.number="form.reasoningReserveTokens" class="mk-field__input mono" type="number" min="1" placeholder="8192" />
-                    <span class="mk-field__hint">开思考时额外留给推理的额度，避免推理吃光正文</span>
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">并发上限</span>
-                    <input v-model.number="form.maxParallelRequests" class="mk-field__input mono" type="number" min="1" placeholder="不限" />
-                    <span class="mk-field__hint">同时可用的请求数</span>
-                  </label>
-                </div>
-              </section>
-
-              <section class="med-sec">
-                <h4 class="med-sec__title">备用模型</h4>
+              <h5 class="med-sub">调用限制</h5>
+              <div class="med-two">
                 <label class="mk-field">
-                  <span class="mk-field__label">主模型出错后依次尝试</span>
-                  <select v-model="pickedFallbacks" class="mk-field__select mono med-fallbacks" multiple size="5">
-                    <option v-for="opt in fallbackOptions" :key="opt" :value="opt">{{ opt }}</option>
-                  </select>
-                  <span class="mk-field__hint">运行时最多用到第 1 条备用。降级只换模型名，跨供应商的候选不可达</span>
+                  <span class="mk-field__label">输出上限</span>
+                  <input v-model.number="form.maxOutputTokens" class="mk-field__input mono" type="number" min="1" placeholder="131072" />
                 </label>
-              </section>
+                <label class="mk-field">
+                  <span class="mk-field__label">默认输出</span>
+                  <input v-model.number="form.defaultMaxTokens" class="mk-field__input mono" type="number" min="1" placeholder="32768" />
+                </label>
+                <label class="mk-field">
+                  <span class="mk-field__label">推理预留</span>
+                  <input v-model.number="form.reasoningReserveTokens" class="mk-field__input mono" type="number" min="1" placeholder="8192" />
+                </label>
+                <label class="mk-field">
+                  <span class="mk-field__label">并发上限</span>
+                  <input v-model.number="form.maxParallelRequests" class="mk-field__input mono" type="number" min="1" placeholder="不限" />
+                </label>
+              </div>
 
-
+              <h5 class="med-sub">备用模型</h5>
+              <label class="mk-field">
+                <span class="mk-field__label">主模型出错后依次尝试</span>
+                <select v-model="pickedFallbacks" class="mk-field__select mono med-fallbacks" multiple size="5">
+                  <option v-for="opt in availableFallbacks" :key="opt" :value="opt">{{ opt }}</option>
+                </select>
+              </label>
             </div>
-          </div>
+          </details>
         </div>
 
         <div class="mk-modal__foot">
@@ -189,7 +170,11 @@ const form = reactive({
   outputPer1M: null as number | null
 })
 
-const fallbackOptions = computed(() => props.fallbackOptions)
+/** 备用链候选：排除自己（主模型出错后不可能再回落给自己） */
+const availableFallbacks = computed(() => {
+  const self = `${providerId.value}/${form.id.trim()}`
+  return props.fallbackOptions.filter((opt) => opt !== self)
+})
 
 const MODEL_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/
 const canSubmit = computed(() => (isCreate.value ? MODEL_ID_PATTERN.test(form.id.trim()) : true))
@@ -201,13 +186,14 @@ const canSubmit = computed(() => (isCreate.value ? MODEL_ID_PATTERN.test(form.id
  */
 const effortWithoutThinking = computed(() => form.supportsReasoningEffort && !form.supportsThinking)
 
-function openWith(target: { providerId: string; model: ModelLike | null }): void {
+function openWith(target: { providerId: string; model: ModelLike | null; presetId?: string }): void {
   isCreate.value = !target.model
   providerId.value = target.providerId
   error.value = ''
   const m = target.model
-  form.id = m?.id ?? ''
-  form.label = m?.label ?? ''
+  const preset = target.presetId ?? ''
+  form.id = m?.id ?? preset
+  form.label = m?.label ?? preset
   form.tier = m?.tier ?? 'chat'
   form.supportsThinking = m?.supportsThinking ?? false
   form.supportsReasoningEffort = m?.supportsReasoningEffort ?? false
@@ -276,16 +262,8 @@ defineExpose({ openWith })
 </script>
 
 <style scoped>
-/* 宽版弹窗：五段表单在 720px 里只能纵向堆成两屏，平台使用限制会掉到折线以下 */
-.med-modal.mk-modal__panel--wide { width: min(880px, 96vw); max-width: none; }
-/* 两栏 = 两个概念：左栏模型自身（是谁 / 能做什么），右栏平台侧（调用限制 / 降级链 / 价格） */
-.med-cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
-}
-.med-col { display: grid; gap: 18px; align-content: start; min-width: 0; }
+/* 单列 + 折叠高级项：首屏只放模型身份与价格，不再为两栏把弹窗撑到 880px */
+.med-modal.mk-modal__panel--wide { width: min(720px, 96vw); max-width: none; }
 .med-sec { min-width: 0; }
 .med-sec__title {
   display: flex;
@@ -297,30 +275,34 @@ defineExpose({ openWith })
   font-weight: 700;
   letter-spacing: 0.04em;
 }
-.med-sec__note { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-weight: 400; letter-spacing: 0; }
-/* 说明单独占一行：与「平台使用限制」并排时标题会被挤成两行 */
-.med-sec__note--block { display: block; margin: -4px 0 10px; line-height: 1.5; }
-/* 平台使用限制是平台在调用侧加的约束，不是这个模型自身的配置：整段收进一块内嵌面板，
-   与左栏的模型信息形成明显区隔（2026-10-20 用户「限额不是模型的基础信息配置」） */
-.med-sec--limits {
-  padding: 14px 16px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
-}
 .med-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.med-price { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.med-price { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .med-fallbacks { height: auto; min-height: 116px; font-size: var(--mk-fs-micro); }
-/* 网格行会被同伴撑高：把字段内容钉回顶部，否则输入框跟着长成两倍高 */
-.med-cols .mk-field { align-content: start; }
+/* 高级设置：默认收起，展开后仍按字段网格排；不占首屏 */
+.med-advanced {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--mk-line);
+}
+.med-advanced > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mk-ink);
+  font-size: var(--mk-fs-body);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.med-advanced > summary::-webkit-details-marker { display: none; }
+.med-advanced > summary::before { content: '▸'; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.med-advanced[open] > summary::before { content: '▾'; }
+.med-adv-body { display: grid; gap: 14px; margin-top: 14px; }
+.med-checks { display: flex; flex-wrap: wrap; gap: 10px 20px; }
+.med-sub { margin: 2px 0 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.04em; }
+.med-advanced .mk-field { align-content: start; }
 @media (max-width: 900px) {
   .med-modal.mk-modal__panel--wide { width: min(100%, 96vw); }
-  .med-cols, .med-two, .med-price { grid-template-columns: minmax(0, 1fr); }
-}
-.mk-field__hint {
-  display: block;
-  margin-top: 4px;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
+  .med-two, .med-price { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

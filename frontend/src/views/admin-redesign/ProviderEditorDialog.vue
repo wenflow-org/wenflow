@@ -25,18 +25,17 @@
               autocomplete="off"
               @input="error = ''"
             />
-            <span class="mk-field__hint">{{ idHint }}</span>
+            <span v-if="idHint" class="mk-field__hint">{{ idHint }}</span>
           </label>
 
           <label class="mk-field">
             <span class="mk-field__label">显示名称</span>
             <input v-model="form.name" class="mk-field__input" placeholder="Acme 网关" @input="error = ''" />
-            <span class="mk-field__hint">运营在「模型与接入」里看到的名字，模型 id 不动</span>
           </label>
 
           <label class="mk-field">
             <span class="mk-field__label">用途说明</span>
-            <input v-model="form.description" class="mk-field__input" placeholder="选填：这条通道服务哪些场景" @input="error = ''" />
+            <input v-model="form.description" class="mk-field__input" placeholder="选填" @input="error = ''" />
           </label>
 
           <template v-if="!isPlatform">
@@ -49,7 +48,6 @@
                 autocomplete="off"
                 @input="error = ''"
               />
-              <span class="mk-field__hint">网关按 OpenAI 兼容的 /v1/chat/completions 调用，填到 /v1 为止</span>
             </label>
 
             <label class="mk-field">
@@ -62,7 +60,6 @@
                 :placeholder="provider?.keyHint ? `已配置 ${provider.keyHint}` : '输入 API Key'"
                 @input="error = ''"
               />
-              <span class="mk-field__hint">密钥只存在服务器上，不写进模型目录文件</span>
             </label>
           </template>
 
@@ -110,19 +107,15 @@ const form = reactive({ id: '', name: '', description: '', baseUrl: '', apiKey: 
 
 const isPlatform = computed(() => !isCreate.value && provider.value?.id === 'platform')
 /** 平台通道停用是允许的（整团队改用自建网关时的正当操作），后端会拦住「全平台无路可走」那种 */
-const enabledLabel = computed(() =>
-  isPlatform.value
-    ? '参与路由（停用后平台通道的模型不再被选中，全平台默认路由可能落空，系统会拦下并提示）'
-    : '参与路由（停用后它下面的模型不再被选中，条目保留）'
-)
+const enabledLabel = '参与路由'
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/
 const idHint = computed(() => {
   const id = form.id.trim()
-  if (!id) return '小写字母、数字、下划线、连字符。创建后不改，模型引用会用到它'
+  if (!id) return ''
   if (id === 'platform') return '「platform」是平台通道保留 ID'
   if (!ID_PATTERN.test(id)) return '非法：只能用小写字母、数字、下划线、连字符，且以字母或数字开头'
-  return '可用'
+  return ''
 })
 
 const canSubmit = computed(() => {

@@ -131,30 +131,20 @@
                     <span class="ac-test__text" :class="{ 'ac-test__text--bad': !testResult.ok }" :title="testResult.text">「{{ testResult.text }}」</span>
                   </span>
                 </div>
-                <span class="ac-test__hint">测试走真实上游调用：选中一个模型点「运行测试」，通过即地址与密钥可用。</span>
               </div>
             </div>
           </div>
         </template>
-          <!-- 上游模型清单（2026-10-20 走查）：从「连接」块搬到模型清单块顶部——它说的是
-               登记关系，不是连接参数；内容仍不铺 30+ 个 chip，只说关系。 -->
+          <!-- 上游模型（2026-10-21 用户走查「不需要注释型文案」）：只报已拉取/已添加的读数，
+               逐条添加的清单由面板渲染；未保存状态留在徽章 title 里。 -->
           <template #models-meta>
-            <div class="ac-models-meta">
-              <span class="ac-models-meta__title">
-                上游模型清单
-                <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">本次拉取未保存</span>
-              </span>
-              <!-- fetchError 人话化（P2）：裸 errMsg（HTTP 枚举/堆栈词）对运营不可读——
-                   人话一句给动作，错误原文进 title 供排查贴单 -->
-              <p v-if="fetchError && !models.length" class="ac-models__line" :title="`错误原文：${fetchError}`">
-                模型清单拉取失败：请检查服务地址与密钥是否正确、服务商是否可访问。
-              </p>
-              <p v-else-if="models.length" class="ac-models__line">{{ upstreamSummary }}</p>
-              <p v-else class="ac-models__line">尚未拉取模型清单。</p>
-              <!-- 持久化说明（F8-2）：拉取是连通性验证的本页动作，只有随连接保存落盘，
-                   其他页面与下次进入才可见；保存成功后 hasUnsavedModels 归零，本行自动消失 -->
-              <span v-if="hasUnsavedModels" class="ac-models__hint">本次拉取的清单仅在本页有效，点「保存连接」后其它页面与下次进入才可见。</span>
-            </div>
+            <p class="ac-models-meta ac-models__line">
+              <span class="ac-models-meta__title">上游模型</span>
+              <span v-if="fetchError && !models.length" :title="`错误原文：${fetchError}`">拉取失败，请检查服务地址与密钥</span>
+              <span v-else-if="models.length">{{ upstreamSummary }}</span>
+              <span v-else>尚未拉取</span>
+              <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn" title="本次拉取仅在「保存连接」后生效">未保存</span>
+            </p>
           </template>
       </ModelProvidersPanel>
 
@@ -281,7 +271,7 @@
       <!-- ===== 调用策略（2026-10-20 重新设计）=====
            原「AI 调用与健康」是一张 954px 的大卡，把四类东西叠在一起：请求重试、上游容量、
            虚拟学习者模拟、探针与健康。四者的读者与变更频率都不同（策略一次定、容量按负载调、
-           模拟是压测、健康是读数）。现按域拆卡：调用策略 / 虚拟学习者通道 / 调用健康。 -->
+           模拟是压测、健康是读数）。现按域拆卡：调用策略 / 调用健康；虚拟学习者已独立成页签。 -->
       <section v-if="isLive && (reliability || configLoadFailed)" class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">调用策略</h3>
@@ -338,7 +328,7 @@
               <span class="ac-group__hint">退避从基数开始逐次翻倍。429 时按上游 Retry-After 等待，不超过上限</span>
             </div>
             <div class="ac-group">
-              <div class="ac-group__title" title="只管真实用户与平台自身，虚拟学习者通道单独计量（见下一张卡）">平台出站速率</div>
+              <div class="ac-group__title" title="只管真实用户与平台自身，虚拟学习者通道单独计量（见「虚拟学习者」页签）">平台出站速率</div>
               <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">平台全局 RPM 上限（0=不限）</span>
@@ -351,49 +341,6 @@
         </div>
       </section>
 
-      <!-- ===== 虚拟学习者通道（2026-10-20 独立成卡）=====
-           速率、并发、日期模拟同属「虚拟学习者能跑多少、跑到哪天」，此前分散在调用参数与
-           出站速率两个组里，调一个容量要跨半个页面找三个输入框。 -->
-      <section v-if="isLive" class="mk-card">
-        <div class="mk-card__head">
-          <h3 class="mk-card__title">虚拟学习者通道</h3>
-          <span class="mk-card__meta">独立计量，不占真实用户额度</span>
-        </div>
-        <div class="ac-body">
-          <div class="ac-group">
-            <div class="ac-group__title" title="出站速率、最高并发与日期模拟同属虚拟学习者通道的容量治理">容量</div>
-            <div class="ac-group__fields">
-              <label class="mk-field">
-                <span class="mk-field__label">虚拟学习者 RPM 上限（0=不限）</span>
-                <span class="ac-vl-rpm">
-                  <input
-                    v-model.number="vlRpmInput"
-                    type="number"
-                    min="0"
-                    max="100000"
-                    step="10"
-                    class="mk-field__input"
-                    aria-label="虚拟学习者专属出站 RPM 上限"
-                    :disabled="vlRpmFailed"
-                    :title="vlRpmFailed ? '设置未加载：已禁用编辑，避免用默认值覆盖服务端配置' : undefined"
-                    @input="vlRpmDirty = true"
-                    @keydown.enter.prevent="saveVlRpm"
-                  />
-                  <button
-                    type="button"
-                    class="mk-btn mk-btn--sm"
-                    :disabled="!vlRpmDirty || vlRpmSaving || vlRpmFailed"
-                    @click="saveVlRpm"
-                  >{{ vlRpmSaving ? '保存中…' : '保存' }}</button>
-                  <span v-if="vlRpmDirty" class="ac-vl-rpm__dirty">未保存</span>
-                </span>
-                <span v-if="vlRpmFailed" class="mk-field__hint ac-vl-rpm__failed" role="alert">设置未加载，保存已禁用（请刷新重试）</span>
-              </label>
-            </div>
-            <VirtualLabLoadSettings />
-          </div>
-        </div>
-      </section>
 
       <!-- ===== 调用健康（2026-10-20 独立成卡）=====
            探针设置与探测结果放回同一张卡：读者只有一个问题「现在哪几项不可用」。 -->
@@ -484,6 +431,54 @@
 
     </div>
     </template>
+    <template v-else-if="tab === 'virtual'">
+    <div class="ac-tab-body" id="ac-panel-virtual" role="tabpanel" aria-labelledby="ac-tab-virtual">
+      <!-- ===== 虚拟学习者运行配置（2026-10-21 独立页签）=====
+           速率、并发、日期模拟同属「虚拟学习者能跑多少、跑到哪天」；
+           此前挂在「路由与调用」里与调用参数混读，现独立成页签。 -->
+      <section v-if="isLive" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">运行配置</h3>
+          <span class="mk-card__meta">独立计量，不占真实用户额度</span>
+        </div>
+        <div class="ac-body">
+          <div class="ac-group">
+            <div class="ac-group__title" title="出站速率、最高并发与日期模拟同属虚拟学习者通道的容量治理">容量</div>
+            <div class="ac-group__fields">
+              <label class="mk-field">
+                <span class="mk-field__label">虚拟学习者 RPM 上限（0=不限）</span>
+                <span class="ac-vl-rpm">
+                  <input
+                    v-model.number="vlRpmInput"
+                    type="number"
+                    min="0"
+                    max="100000"
+                    step="10"
+                    class="mk-field__input"
+                    aria-label="虚拟学习者专属出站 RPM 上限"
+                    :disabled="vlRpmFailed"
+                    :title="vlRpmFailed ? '设置未加载：已禁用编辑，避免用默认值覆盖服务端配置' : undefined"
+                    @input="vlRpmDirty = true"
+                    @keydown.enter.prevent="saveVlRpm"
+                  />
+                  <button
+                    type="button"
+                    class="mk-btn mk-btn--sm"
+                    :disabled="!vlRpmDirty || vlRpmSaving || vlRpmFailed"
+                    @click="saveVlRpm"
+                  >{{ vlRpmSaving ? '保存中…' : '保存' }}</button>
+                  <span v-if="vlRpmDirty" class="ac-vl-rpm__dirty">未保存</span>
+                </span>
+                <span v-if="vlRpmFailed" class="mk-field__hint ac-vl-rpm__failed" role="alert">设置未加载，保存已禁用（请刷新重试）</span>
+              </label>
+            </div>
+            <VirtualLabLoadSettings />
+          </div>
+        </div>
+      </section>
+    </div>
+    </template>
+
     <template v-else-if="tab === 'security'">
     <!-- 2026-10-15 用户重组：原四卡 2×2 宫格改成「左一（网络与 IP 访问控制）+ 右二（注册与防刷配额）」——
          左卡管「谁能连进来」（访问来源模式 + 私有网络服务两段：前者管入站来源、后者管服务端出站目标），
@@ -691,16 +686,15 @@ import { toast } from '@/utils/toast'
    （接入：供应商/能力限额/冷却/配置提示；路由：默认路由解析结果/别名映射）。
    2026-10-19 用户拍板「外挂能力」从本宿主拆回独立页（/admin/addons，侧栏 Skill 组）：
    原来那个页签与它的角标计数、刷新分支一并撤除；旧深链 ?tab=addons 由路由改投。 */
-const AC_TABS = ['access', 'routing', 'security'] as const
+const AC_TABS = ['access', 'routing', 'virtual', 'security'] as const
 type AcTab = (typeof AC_TABS)[number]
 
 /* 文案单源（R6 复读单源化）：卡标题与开关的 aria-label 共用一份 */
 const IP_QUOTA_TITLE = '单 IP 每日注册配额'
 /** 旧页签键别名归一：站内「配置 →」与量测脚本曾用 ?tab=model / ?tab=registry / ?tab=model-routing；
     这些键不在白名单，watcher 原会静默把用户送到「接入与验证」，深链/书签永远落不到目标页签。
-    2026-10-14 合并页签后追加：connection/overview→access、runtime→routing（旧书签继续可用）；
-    同日再收一刀——「虚拟学习者」页签撤除（只装一张压测参数卡，实测页内 ~85% 死区，且该卡的
-    限流是「调用怎么走」的一部分）→ virtual-learners→routing。 */
+    2026-10-14：connection/overview→access、runtime→routing；
+    2026-10-21 用户拍板：虚拟学习者配置独立成页签 → virtual-learners→virtual。 */
 const TAB_ALIAS: Record<string, AcTab> = {
   model: 'access',
   registry: 'access',
@@ -708,19 +702,20 @@ const TAB_ALIAS: Record<string, AcTab> = {
   overview: 'access',
   runtime: 'routing',
   'model-routing': 'routing',
-  'virtual-learners': 'routing',
+  'virtual-learners': 'virtual',
 }
 const tab = ref<AcTab>('access')
-/** 底部保存条挂载的 tab（脏位跨 tab 不丢）：接入与模型（接入三卡可写）+ 路由与调用 + 安全与访问 */
-const isConfigTab = computed(() => ['access', 'routing', 'security'].includes(tab.value))
+/** 底部保存条挂载的 tab（脏位跨 tab 不丢）：四个配置页签都可写 */
+const isConfigTab = computed(() => ['access', 'routing', 'virtual', 'security'].includes(tab.value))
 const route = useRoute()
 const router = useRouter()
 /** 页签定义（CM1：收敛到 MkSubTabs）。
-    2026-10-14 四页签 → 2026-10-19 三页签：接入与模型 / 路由与调用 / 安全与访问
-    （「虚拟学习者」页签 2026-10-14 撤除并入「路由与调用」；「外挂能力」2026-10-19 拆出独立页）。 */
+    2026-10-19 三页签 → 2026-10-21 四页签：虚拟学习者配置从「路由与调用」独立成页签
+    （用户：「虚拟学习者的配置，先独立一个tab在模型与接入里面」）。 */
 const acTabs = computed(() => [
   { key: 'access', label: '接入与模型' },
   { key: 'routing', label: '路由与调用' },
+  { key: 'virtual', label: '虚拟学习者' },
   { key: 'security', label: '安全与访问' },
 ])
 function onTabChange(key: string) {
@@ -1305,14 +1300,13 @@ function onProvidersChanged() {
   aliasOptions.value = []
 }
 
-/** 上游清单与登记表的关系句（空串 = 无清单可谈，模板走空态分支） */
+/** 上游清单与登记表的读数（空串 = 无清单可谈，模板走空态分支）：只报数字，不写解释句 */
 const upstreamSummary = computed(() => {
   const total = models.value.length
   if (!total) return ''
-  if (!upstreamReady.value) return `上游返回 ${total} 个模型，正在对齐平台登记表…`
+  if (!upstreamReady.value) return `已拉取 ${total} 个`
   const matched = upstreamSplit.value.registered.length
-  if (!matched) return `上游返回 ${total} 个模型，都没有与平台登记的模型对上，不参与路由。`
-  return `上游返回 ${total} 个模型，其中 ${matched} 个与平台登记的模型对上，其余 ${total - matched} 个没有登记，不参与路由。`
+  return `已拉取 ${total} 个 · ${matched} 个已添加`
 })
 
 /**
@@ -1771,7 +1765,6 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-conn2 { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
 .ac-conn2__col { display: grid; gap: 14px; align-content: start; min-width: 0; }
 .ac-conn2__col--test { border-left: 1px dashed var(--mk-line); padding-left: 18px; }
-.ac-test__hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .ac-row { display: grid; gap: 14px; align-items: end; }
 .ac-row--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* 2026-10-06 审核 #159：四个配置页签的字段控件统一走 .mk-field__input/__select/__textarea
@@ -1830,18 +1823,16 @@ async function saveQuota(enabled: boolean, quota: number) {
 /* 上游清单关系句（2026-10-16 用户走查重排）：原 30+ 枚模型胶囊（.ac-models/.ac-model）退役——
    与下方登记表并列成两份模型名单，被读成「同一件事说两遍」。现在只说关系，逐个名字在登记表折叠里。 */
 .ac-models__line { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
-/* 上游对齐条（2026-10-20 从连接块搬进模型清单块）：说的是登记关系，放在模型清单标题下 */
+/* 上游对齐条（2026-10-20 从连接块搬进模型清单块）：嵌在模型块里只占一行读数，不再套第二层卡片 */
 .ac-models-meta {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 10px;
-  padding: 8px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
 }
-.ac-models-meta__title { display: flex; align-items: center; gap: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.ac-models-meta__title { color: var(--mk-muted); }
 /* 持久化说明（F8-2）：拉取仅本页有效的提示，比清单胶囊再轻一档；仅未保存时出现 */
-.ac-models__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.55; }
 
 /* 默认思考：模式 + 强度，同一行两列字段（2026-10-14 删冗余「启用思考」开关后由三列改两列） */
 

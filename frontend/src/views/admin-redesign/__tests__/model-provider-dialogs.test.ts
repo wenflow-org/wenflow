@@ -196,7 +196,6 @@ describe('ModelEditorDialog', () => {
     })
     await flushPromises()
     expect(w.find('input[placeholder="deepseek-v4-flash"]').attributes('disabled')).toBeDefined()
-    expect(w.text()).toContain('创建后不改')
     updateModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()
