@@ -725,4 +725,35 @@ describe('ApiConfig P1 修复批', () => {
     expect(confirmState.open).toBe(false);
     wrapper.unmount();
   });
+
+  /* 2026-10-20 用户「这个 tab 重新思考」：路由与调用页按域分卡，不再是一张 950px 的
+     「AI 调用与健康」把重试 / 容量 / 模拟 / 健康叠在一起。钉住四张卡的顺序与归属：
+     别名映射属于路由域（在模型路由卡内），探针属于健康域（在调用健康卡内）。 */
+  it('路由页按域分卡：模型路由 / 调用策略 / 虚拟学习者通道 / 调用健康', async () => {
+    getCapabilitiesMock.mockResolvedValue({ data: { data: makeSnapshot() } });
+    const wrapper = await mountApiConfig();
+    await gotoTab(wrapper, '路由与调用');
+    await flushPromises();
+
+    const cards = wrapper.findAll('#ac-panel-routing > .mk-card');
+    expect(cards.map((c) => c.find('.mk-card__title').text())).toEqual([
+      '模型路由',
+      '调用策略',
+      '虚拟学习者通道',
+      '调用健康'
+    ]);
+
+    // 别名映射是路由域的参考表：跟着模型路由卡，不再孤悬在页尾
+    expect(cards[0].find('.ac-fold').exists()).toBe(true);
+    // 调用策略卡只放策略：探针与健康胶囊不在里面
+    expect(cards[1].find('.ac-probe').exists()).toBe(false);
+    expect(cards[1].find('.ac-hpills').exists()).toBe(false);
+    // 探针设置与探测结果同卡
+    expect(cards[3].find('.ac-probe').exists()).toBe(true);
+    expect(cards[3].find('.ac-hpills').exists()).toBe(true);
+    // 虚拟学习者通道卡：速率、并发、日期模拟同卡
+    expect(cards[2].text()).toContain('虚拟学习者 RPM 上限')
+    expect(cards[2].find('.vl-settings').exists()).toBe(true)
+    wrapper.unmount();
+  });
 });

@@ -40,12 +40,17 @@
       </div>
     </div>
 
-    <div class="vl-settings__block">
-      <div class="vl-settings__label" title="把平台「当前日期」按偏移量前移/后移，用于验证跨日衰减、到期与复习节奏">日期模拟</div>
+    <!-- 日期模拟默认收起（2026-10-20）：它是一整套模拟日历（每天几节、每周几天、上课星期…），
+         展开后比整张卡其余内容加起来还高；容量页默认只需看到「有这一项」。 -->
+    <details class="vl-settings__block vl-settings__date">
+      <summary class="vl-settings__summary" title="把平台「当前日期」按偏移量前移/后移，用于验证跨日衰减、到期与复习节奏">
+        <span class="vl-settings__label">日期模拟</span>
+        <span class="vl-settings__fold">展开设置</span>
+      </summary>
       <!-- 日期模拟挪出分段视图后不再需要「已开启」角标（原角标挂在被选中的分段项上）；
            开关状态由 SimulatedDaySettings 自己的控件呈现 -->
       <SimulatedDaySettings />
-    </div>
+    </details>
   </div>
 </template>
 
@@ -106,6 +111,13 @@ onMounted(() => {
 .vl-settings { display: grid; gap: 12px; }
 .vl-settings__block { display: grid; gap: 8px; min-width: 0; }
 .vl-settings__label { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
+/* 可折叠的日期模拟：summary 承担段标题，右侧给一个展开提示 */
+.vl-settings__date { gap: 10px; }
+.vl-settings__summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+.vl-settings__summary::-webkit-details-marker { display: none; }
+.vl-settings__summary::before { content: '▸'; color: var(--mk-faint); }
+.vl-settings__date[open] .vl-settings__summary::before { content: '▾'; }
+.vl-settings__fold { margin-left: auto; font-weight: 500; color: var(--mk-faint); }
 .vl-settings__row { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; }
 .vl-rpm__input { width: 84px; }
 .vl-rpm__unit {
