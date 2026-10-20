@@ -186,4 +186,8 @@ watch(
   flex: 1 1 auto;
   min-height: 0;
 }
+/* 窄屏：KPI 竖排后剩余高度不足以容纳列表卡，host 与子页一起退回内容高度、由页面滚动 */
+@media (max-width: 900px) {
+  .pp-host > .mk-page--fill { flex: none; height: auto; overflow: visible; }
+}
 </style>

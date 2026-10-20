@@ -630,6 +630,11 @@ watch(wbScope, () => {
    并自管纵向滚动——原 OpsCenter 的 .oc-card__body 承担同一职责（表单/清单长时卡内滚动） */
 .oh-host > .stp-body,
 .oh-host > .exp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* 窄屏：KPI 竖排后剩余高度只剩几十像素，面板内部滚动变成「一条缝」——退回内容高度，由页面滚动 */
+@media (max-width: 900px) {
+  .oh-host > .stp-body,
+  .oh-host > .exp-body { flex: none; min-height: 0; overflow: visible; }
+}
 /* 公告 tab 工具行：嵌入态宿主提供「新建公告」唯一入口（子页自身工具条在 embedded 隐藏），
    形态对齐子页 .an-toolbar（左说明 + grow + 右 primary sm） */
 .oh-tabbar {

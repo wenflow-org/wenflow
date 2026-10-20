@@ -900,6 +900,10 @@ function clearFilters() {
    这层不是页面、只是宿主页内的填充容器，故清掉它的底部内边距；.mk-page--fill 的 flex 列与 gap
    保留（卡片靠它们撑开）。 */
 .u-embedded { flex: 1; min-height: 0; overflow: hidden; padding-bottom: 0; }
+/* 窄屏：嵌入根不再占剩余高度，随内容增高，滚动手柄交给 People 页（2026-10-21 全 admin 走查） */
+@media (max-width: 900px) {
+  .u-embedded { flex: none; height: auto; overflow: visible; }
+}
 /* pill 组维度分隔（角色/活跃 | 生命周期「已删除」）：细竖线，弱于 pill 边界。
    类名走页面前缀 ul-（design:check 规则 1：mk- 前缀属全局原语，页面 scoped 内禁定义）。 */
 .ul-pills__sep { width: 1px; align-self: stretch; margin: 7px 6px 7px 2px; background: color-mix(in srgb, currentColor 18%, transparent); }
