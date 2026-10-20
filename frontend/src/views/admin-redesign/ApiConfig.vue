@@ -75,7 +75,6 @@
               <!-- connBadge 附「N 前」（P1#32 子集）：连接状态是上次拉取/探测落库的结果，
                    无时间的「连接正常」会把陈旧快照读成实时健康，误导熔断判断 -->
               <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
-              <span class="ac-conn__bar-hint">平台通道的服务地址与密钥在这里配置。下面的模型清单决定哪些模型参与路由。</span>
               <button v-if="dirty.has('conn')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['conn'])">{{ saving ? '保存中…' : '保存连接' }}</button>
             </div>
             <!-- 左右双列（2026-10-15 用户重组）：左=填地址/密钥，右=连通性验证——
@@ -132,30 +131,21 @@
                     <span class="ac-test__text" :class="{ 'ac-test__text--bad': !testResult.ok }" :title="testResult.text">「{{ testResult.text }}」</span>
                   </span>
                 </div>
-                <span class="ac-test__hint">测试走真实上游调用：选中一个模型点「运行测试」，通过即地址与密钥可用。</span>
               </div>
-            </div>
-            <!-- 上游模型清单（2026-10-16 用户走查重排）：不铺 30+ 个 chip，只说关系——
-                 上游返回多少、其中多少已登记参与路由；逐个名字在下方模型清单的「上游未登记」折叠里。
-                 F8-2：拉取只写本页内存，不说「需保存才可见」会被读成清单已持久化。 -->
-            <div class="ac-body ac-models-body">
-              <div class="ac-sec__title">
-                上游模型清单
-                <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">本次拉取未保存</span>
-              </div>
-              <!-- fetchError 人话化（P2）：裸 errMsg（HTTP 枚举/堆栈词）对运营不可读——
-                   人话一句给动作，错误原文进 title 供排查贴单 -->
-              <p v-if="fetchError && !models.length" class="ac-models__line" :title="`错误原文：${fetchError}`">
-                模型清单拉取失败：请检查服务地址与密钥是否正确、服务商是否可访问。
-              </p>
-              <p v-else-if="models.length" class="ac-models__line">{{ upstreamSummary }}</p>
-              <p v-else class="ac-models__line">尚未拉取模型清单。</p>
-              <!-- 持久化说明（F8-2）：拉取是连通性验证的本页动作，只有随连接保存落盘，
-                   其他页面与下次进入才可见；保存成功后 hasUnsavedModels 归零，本行自动消失 -->
-              <span v-if="hasUnsavedModels" class="ac-models__hint">本次拉取的清单仅在本页有效，点「保存连接」后其它页面与下次进入才可见。</span>
             </div>
           </div>
         </template>
+          <!-- 上游模型（2026-10-21 用户走查「不需要注释型文案」）：只报已拉取/已添加的读数，
+               逐条添加的清单由面板渲染；未保存状态留在徽章 title 里。 -->
+          <template #models-meta>
+            <p class="ac-models-meta ac-models__line">
+              <span class="ac-models-meta__title">上游模型</span>
+              <span v-if="fetchError && !models.length" :title="`错误原文：${fetchError}`">拉取失败，请检查服务地址与密钥</span>
+              <span v-else-if="models.length">{{ upstreamSummary }}</span>
+              <span v-else>尚未拉取</span>
+              <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn" title="本次拉取仅在「保存连接」后生效">未保存</span>
+            </p>
+          </template>
       </ModelProvidersPanel>
 
 
@@ -165,7 +155,7 @@
     <div class="ac-tab-body" id="ac-panel-routing" role="tabpanel" aria-labelledby="ac-tab-routing">
 <section class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">模型路由与思考</h3>
+        <h3 class="mk-card__title">模型路由</h3>
         <button v-if="dirty.has('route')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['route'])">{{ saving ? '保存中…' : '保存路由' }}</button>
       </div>
       <div class="ac-body">
@@ -191,13 +181,13 @@
               <label v-for="r in routeRoles" :key="r.key" class="ac-route__row ac-route__row--stack" role="listitem">
                 <span class="ac-route__inline">
                   <span class="ac-route__label">{{ r.role }}</span>
-                  <input
-                    class="mk-field__input mono"
-                    list="ac-model-options"
-                    :value="r.value"
-                    placeholder="模型 id 或别名"
+                  <MkModelPicker
+                    :model-value="r.value"
+                    :options="routePickerOptions"
+                    :tier="r.tier"
                     :title="r.title"
-                    @input="r.set(($event.target as HTMLInputElement).value)"
+                    placeholder="模型 id 或别名"
+                    @update:model-value="r.set($event)"
                   />
                   <span class="mk-badge" :class="r.value ? 'mk-badge--ok' : 'mk-badge--muted'">{{ r.value ? '已配置' : '未配置' }}</span>
                 </span>
@@ -264,176 +254,148 @@
             </div>
           </div>
         </div>
-        <!-- 路由默认的候选：模型目录（File-as-Truth，带「供应商 · tier」标注）+ 通道拉取清单 + 逻辑别名 -->
-        <datalist id="ac-model-options">
-          <option v-for="o in catalogOptions" :key="`cat-${o.value}`" :value="o.value" :label="o.label" />
-          <option v-for="m in extraFetchedModels" :key="`model-${m}`" :value="m" />
-          <option v-for="a in aliasOptions" :key="`alias-${a}`" :value="a" />
-        </datalist>
-
       </div>
+      <!-- 注册表切片（2026-10-15 用户重组）：只剩「别名映射」一片，默认收起成折叠条——
+           它是查证用的参考表（chat / reasoning / light 各指向哪个模型），不是每次进页都要读的
+           运行态；展开才拉出表格。默认路由的「配置值 → 实际使用」已在三条角色行内就地展示。 -->
+      <details class="ac-fold">
+        <summary class="ac-fold__bar">
+          <span class="ac-fold__title">内置别名映射表</span>
+          <span class="ac-fold__hint">逻辑别名（chat / reasoning / light 等）实际指向的候选模型与默认选中项 · 只读</span>
+          <span class="ac-fold__mark" aria-hidden="true"></span>
+        </summary>
+        <ModelRegistryOverview class="ac-registry ac-registry--routing" :parts="['aliases']" @aliases="aliasOptions = $event" @defaults="registryDefaults = $event" />
+      </details>
+
     </section>
-      <!-- 原「调用与健康」页签内容（2026-10-14 并入本页签）：调用参数 / 降级守卫 / 能力健康——
-           与上方默认路由同属「调用怎么走、挂了怎么办」。并入后仍在同一个 role=tabpanel 内。 -->
-      <section v-if="isLive && (reliability || probe.loaded || configLoadFailed)" class="mk-card">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">AI 调用与健康</h3>
-        <span class="mk-badge" :class="healthBadgeCls" :title="healthLabelTip || undefined">{{ healthLabel }}</span>
-      </div>
-
-      <div v-if="configLoadFailed && !reliability && !probe.loaded" class="mk-alert mk-alert--row ac-config-error" role="alert">
-        <span class="mk-alert__msg">配置读取失败</span>
-        <button type="button" class="mk-alert__btn" @click="retryConfigLoad">重试</button>
-      </div>
-
-      <div class="ac-body">
-      <!-- 探针（定期探测能力健康）：全站 mk-field 行式配置（与其他开关一致），开启后显示间隔 -->
-      <div v-if="probe.loaded" class="ac-probe">
-        <div class="ac-probe__main">
-          <label class="mk-field mk-field--switch ac-probe__switch">
-            <input
-              type="checkbox"
-              :checked="probe.enabled"
-              :disabled="probeBusy"
-              @change="setProbeEnabled(($event.target as HTMLInputElement).checked)"
-            />
-            <span class="mk-field__label" style="margin:0">能力探针</span>
-          </label>
-          <em class="ac-probe__desc">{{ probe.enabled ? `每 ${probe.intervalSec}s 自动探测 5 项核心能力并更新结果` : '关闭后不自动探测，可手动「立即探测」' }}</em>
+      <!-- ===== 调用策略（2026-10-20 重新设计）=====
+           原「AI 调用与健康」是一张 954px 的大卡，把四类东西叠在一起：请求重试、上游容量、
+           虚拟学习者模拟、探针与健康。四者的读者与变更频率都不同（策略一次定、容量按负载调、
+           模拟是压测、健康是读数）。现按域拆卡：调用策略 / 调用健康；虚拟学习者已独立成页签。 -->
+      <section v-if="isLive && (reliability || configLoadFailed)" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">调用策略</h3>
+          <button v-if="dirty.has('reliability')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['reliability'])">{{ saving ? '保存中…' : '保存参数' }}</button>
         </div>
-        <div class="ac-probe__ctrl">
-          <label v-if="probe.enabled" class="mk-field ac-probe__interval">
-            <span class="mk-field__label">间隔</span>
-            <input
-              v-model.number="probe.intervalSec"
-              type="number"
-              :min="Math.ceil(probe.minIntervalMs / 1000)"
-              :max="Math.floor(probe.maxIntervalMs / 1000)"
-              step="30"
-              class="mk-field__input"
-              :disabled="probeBusy"
-              @change="saveProbeInterval"
-            />
-            <em class="ac-probe__unit">秒</em>
-          </label>
-          <button
-            type="button"
-            class="mk-status__action"
-            :class="{ 'ac-probe--alert': health?.stale && !probe.enabled }"
-            :disabled="healthProbing"
-            @click="probeHealth"
-          >
-            {{ healthProbing ? `探测中… ${probeElapsedSec}s` : '立即探测' }}
-          </button>
-        </div>
-      </div>
-      <!-- 探针设置单独读取失败：不得静默消失（原实现整段不渲染，用户以为平台没有探针能力） -->
-      <div v-else-if="configLoadFailed" class="ac-rel__note ac-rel__error">
-        探针设置读取失败，无法确认能力探针开关状态
-        <button type="button" class="mk-link" @click="retryConfigLoad">重试</button>
-      </div>
-
-      <!-- 两列：左 = 调用参数，右 = 能力健康 -->
-      <div class="ac-cols">
-        <!-- 左列：调用参数（重试 / 超时 / 探测 分组） -->
-        <div v-if="reliability || probe.loaded" class="ac-cols__main">
-          <div class="ac-sec__title">调用参数<button v-if="dirty.has('reliability')" type="button" class="ac-sec__save" :disabled="saving" @click="saveGroups(['reliability'])">{{ saving ? '保存中…' : '保存参数' }}</button></div>
-          <!-- 不变式违例升格为卡级告警（2026-10-05 重设计：原埋在字段组内当脚注，7 个数字里最该先读的一句）；
-               触发条件本身由「尝试与降级」组内驻留说明承载，此处只说裁决与动作（同一事实不重复） -->
+        <div class="ac-body">
+          <div v-if="configLoadFailed && !reliability" class="mk-alert mk-alert--row ac-config-error" role="alert">
+            <span class="mk-alert__msg">配置读取失败</span>
+            <button type="button" class="mk-alert__btn" @click="retryConfigLoad">重试</button>
+          </div>
+          <!-- 不变式违例升格为卡级告警：7 个数字里最该先读的一句 -->
           <div v-if="reliability && fallbackDisabled" class="mk-alert mk-alert--row ac-fallback-alert" role="alert">
             <span class="mk-alert__msg">当前配置下「模型降级」永远不会触发，请增大「上游最大尝试」或减小「传输重试」</span>
           </div>
-          <div class="ac-groups">
-            <div v-if="reliability" class="ac-group">
+          <div v-if="reliability" class="ac-groups ac-groups--3">
+            <div class="ac-group">
               <div class="ac-group__title" title="降级触发条件：1 + 传输重试 ＜ 上游最大尝试（例：3 次尝试、1 次传输重试时仍留一次降级机会）">尝试与降级</div>
               <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">上游最大尝试</span>
-                  <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-field__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-field__input ac-field--num" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">传输重试</span>
-                  <input v-model.number="reliability.maxTransportRetries" type="number" min="0" :max="limMax('maxTransportRetries', 5)" class="mk-field__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.maxTransportRetries" type="number" min="0" :max="limMax('maxTransportRetries', 5)" class="mk-field__input ac-field--num" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">逻辑重试</span>
-                  <input v-model.number="reliability.maxLogicalRetries" type="number" min="0" :max="limMax('maxLogicalRetries', 5)" class="mk-field__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.maxLogicalRetries" type="number" min="0" :max="limMax('maxLogicalRetries', 5)" class="mk-field__input ac-field--num" @input="markDirty('reliability')" />
                 </label>
               </div>
+              <span class="ac-group__hint">降级条件：1 + 传输重试 ＜ 上游最大尝试。降级只按模型自带的备用链换模型</span>
             </div>
-            <div v-if="reliability" class="ac-group">
+            <div class="ac-group">
               <div class="ac-group__title">退避与超时</div>
               <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">退避基数（毫秒）</span>
-                  <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-field__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.retryBaseDelayMs" type="number" :min="limMin('minRetryBaseDelayMs', 100)" :max="limMax('maxRetryBaseDelayMs', 60000)" step="100" class="mk-field__input ac-field--num" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">Retry-After 上限（毫秒）</span>
-                  <input v-model.number="reliability.maxRetryAfterMs" type="number" min="0" :max="limMax('maxRetryAfterMs', 30000)" step="1000" class="mk-field__input" @input="markDirty('reliability')" />
+                  <input v-model.number="reliability.maxRetryAfterMs" type="number" min="0" :max="limMax('maxRetryAfterMs', 30000)" step="1000" class="mk-field__input ac-field--num" @input="markDirty('reliability')" />
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">单次超时（毫秒）</span>
-                  <input v-model.number="reliability.defaultRequestTimeoutMs" type="number" :min="limMin('minRequestTimeoutMs', 1000)" :max="limMax('maxRequestTimeoutMs', 600000)" step="1000" class="mk-field__input" @input="markDirty('reliability')" />
-                </label>
-                <label class="mk-field mk-field--switch">
-                  <input type="checkbox" v-model="reliability.jitterEnabled" @change="markDirty('reliability')" />
-                  <span class="mk-field__label" style="margin:0">随机抖动</span>
+                  <input v-model.number="reliability.defaultRequestTimeoutMs" type="number" :min="limMin('minRequestTimeoutMs', 1000)" :max="limMax('maxRequestTimeoutMs', 600000)" step="1000" class="mk-field__input ac-field--num" @input="markDirty('reliability')" />
                 </label>
               </div>
+              <label class="mk-field mk-field--switch">
+                <input type="checkbox" v-model="reliability.jitterEnabled" @change="markDirty('reliability')" />
+                <span class="mk-field__label" style="margin:0">随机抖动</span>
+              </label>
+              <span class="ac-group__hint">退避从基数开始逐次翻倍。429 时按上游 Retry-After 等待，不超过上限</span>
             </div>
-            <!-- 出站速率（2026-10-15 用户重组）：平台全局与虚拟学习者两条上限并排一行——
-                 两者都属「出站多少」，此前分居两张卡（虚拟学习者上限在「压测参数」卡的分段视图里），
-                 同屏对照要来回切页签。两条保存链不同（平台项随「调用参数」组保存、虚拟学习者项走
-                 updateVirtualLabSettings），故第二格自带上「保存」钮与脏位，不并入宿主统一保存条。 -->
-            <div v-if="reliability" class="ac-group">
-              <div class="ac-group__title" title="两条上限相互独立：平台全局管真实用户与平台自身，虚拟学习者通道单独计量，不挤占真实用户额度">出站速率</div>
-              <div class="ac-group__fields ac-group__fields--2">
+            <div class="ac-group">
+              <div class="ac-group__title" title="只管真实用户与平台自身，虚拟学习者通道单独计量（见「虚拟学习者」页签）">平台出站速率</div>
+              <div class="ac-group__fields">
                 <label class="mk-field">
                   <span class="mk-field__label">平台全局 RPM 上限（0=不限）</span>
-                  <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input" @input="markDirty('reliability')" />
-                  <span class="mk-field__hint">真实用户与平台自身的出站上限</span>
-                </label>
-                <label class="mk-field">
-                  <span class="mk-field__label">虚拟学习者 RPM 上限（0=不限）</span>
-                  <span class="ac-vl-rpm">
-                    <input
-                      v-model.number="vlRpmInput"
-                      type="number"
-                      min="0"
-                      max="100000"
-                      step="10"
-                      class="mk-field__input"
-                      aria-label="虚拟学习者专属出站 RPM 上限"
-                      :disabled="vlRpmFailed"
-                      :title="vlRpmFailed ? '设置未加载：已禁用编辑，避免用默认值覆盖服务端配置' : undefined"
-                      @input="vlRpmDirty = true"
-                      @keydown.enter.prevent="saveVlRpm"
-                    />
-                    <button
-                      type="button"
-                      class="mk-btn mk-btn--sm"
-                      :disabled="!vlRpmDirty || vlRpmSaving || vlRpmFailed"
-                      @click="saveVlRpm"
-                    >{{ vlRpmSaving ? '保存中…' : '保存' }}</button>
-                    <span v-if="vlRpmDirty" class="ac-vl-rpm__dirty">未保存</span>
-                  </span>
-                  <span v-if="vlRpmFailed" class="mk-field__hint ac-vl-rpm__failed" role="alert">设置未加载，保存已禁用（请刷新重试）</span>
-                  <span v-else class="mk-field__hint">虚拟学习者专属，不占真实用户额度</span>
+                  <input v-model.number="reliability.platformRpmLimit" type="number" min="0" max="100000" step="10" class="mk-field__input ac-field--num" @input="markDirty('reliability')" />
                 </label>
               </div>
-            </div>
-            <!-- 虚拟学习者通道（原「压测参数」卡，2026-10-15 用户重组）：只留并发上限与日期模拟两项；
-                 速率上限已并入上方「出站速率」组，卡片外壳与三段视图切换一并退役 -->
-            <div class="ac-group">
-              <div class="ac-group__title" title="自动驾驶会话的并发上限与模拟日期：与出站速率同属虚拟学习者通道的容量治理">虚拟学习者通道</div>
-              <VirtualLabLoadSettings />
+              <span class="ac-group__hint">真实用户与平台自身的出站上限，与虚拟学习者分开计量</span>
             </div>
           </div>
         </div>
+      </section>
 
-        <!-- 右列：能力健康 -->
-        <div v-if="isLive" class="ac-cols__side">
+
+      <!-- ===== 调用健康（2026-10-20 独立成卡）=====
+           探针设置与探测结果放回同一张卡：读者只有一个问题「现在哪几项不可用」。 -->
+      <section v-if="isLive" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">调用健康</h3>
+          <span class="mk-badge" :class="healthBadgeCls" :title="healthLabelTip || undefined">{{ healthLabel }}</span>
+        </div>
+        <div class="ac-body">
+          <!-- 探针（定期探测能力健康）：全站 mk-field 行式配置（与其他开关一致），开启后显示间隔 -->
+          <div v-if="probe.loaded" class="ac-probe">
+            <div class="ac-probe__main">
+              <label class="mk-field mk-field--switch ac-probe__switch">
+                <input
+                  type="checkbox"
+                  :checked="probe.enabled"
+                  :disabled="probeBusy"
+                  @change="setProbeEnabled(($event.target as HTMLInputElement).checked)"
+                />
+                <span class="mk-field__label" style="margin:0">能力探针</span>
+              </label>
+              <em class="ac-probe__desc">{{ probe.enabled ? `每 ${probe.intervalSec}s 自动探测 5 项核心能力并更新结果` : '关闭后不自动探测，可手动「立即探测」' }}</em>
+            </div>
+            <div class="ac-probe__ctrl">
+              <label v-if="probe.enabled" class="mk-field ac-probe__interval">
+                <span class="mk-field__label">间隔</span>
+                <input
+                  v-model.number="probe.intervalSec"
+                  type="number"
+                  :min="Math.ceil(probe.minIntervalMs / 1000)"
+                  :max="Math.floor(probe.maxIntervalMs / 1000)"
+                  step="30"
+                  class="mk-field__input"
+                  :disabled="probeBusy"
+                  @change="saveProbeInterval"
+                />
+                <em class="ac-probe__unit">秒</em>
+              </label>
+              <button
+                type="button"
+                class="mk-status__action"
+                :class="{ 'ac-probe--alert': health?.stale && !probe.enabled }"
+                :disabled="healthProbing"
+                @click="probeHealth"
+              >
+                {{ healthProbing ? `探测中… ${probeElapsedSec}s` : '立即探测' }}
+              </button>
+            </div>
+          </div>
+          <!-- 探针设置单独读取失败：不得静默消失（原实现整段不渲染，用户以为平台没有探针能力） -->
+          <div v-else-if="configLoadFailed" class="ac-rel__note ac-rel__error">
+            探针设置读取失败，无法确认能力探针开关状态
+            <button type="button" class="mk-link" @click="retryConfigLoad">重试</button>
+          </div>
+
           <div class="ac-sec__title">
             能力健康
             <span v-if="healthSummaryText" class="mk-badge" :class="healthSummaryBadge">{{ healthSummaryText }}</span>
@@ -443,16 +405,12 @@
               <span v-else-if="health">尚未探测</span>
             </span>
           </div>
-          <!-- 失败态必须优先于旧快照可见（2026-10-14 #18）：此前失败分支排在 v-if="health" 之后，
-               页面已加载过快照时永远走旧表 → 失败提示成死代码。现失败条独立渲染（置胶囊前），
-               旧快照若有仍在下方展示（failureCode 进胶囊 title），不吞掉任何信号。 -->
+          <!-- 失败态必须优先于旧快照可见（2026-10-14 #18） -->
           <div v-if="healthFailed" class="ac-rel__note ac-rel__error" role="alert">
             上次探测失败{{ healthFailText ? `：${healthFailText}` : '，结果不可用' }}
             <button type="button" class="mk-link" :disabled="healthProbing" @click="probeHealth">{{ healthProbing ? '探测中…' : '重试' }}</button>
           </div>
-          <!-- 能力探针（2026-10-15 用户重组）：原是一张 5 行大表（能力 / 信息 / 响应 / 最近探测），
-               占了右列整屏却只有「哪几项可用」一个结论。改 5 个紧凑胶囊：状态色点 + 能力名 + 状态词，
-               失败原因（failureCode）、响应耗时与最近探测时间收进 title 供悬停核对——结论常显、证据可查。 -->
+          <!-- 能力胶囊：状态色点 + 能力名 + 状态词；失败原因 / 响应耗时 / 最近探测收进 title -->
           <div v-if="health" class="ac-hpills" role="list" aria-label="模型能力健康探测">
             <span
               v-for="c in health.capabilities"
@@ -468,25 +426,59 @@
             </span>
           </div>
           <MkLoading v-else-if="!healthFailed" inline text="探测结果加载中…" />
-          <!-- 表尾「探测正常 · 更新于 X」随大表退役：区块标题行的「最近探测 / 结果已过期」是同一事实 -->
         </div>
-        </div><!-- /ac-cols -->
-        </div><!-- /ac-body -->
       </section>
 
-      <!-- 注册表切片（2026-10-15 用户重组）：只剩「别名映射」一片，默认收起成折叠条——
-           它是查证用的参考表（chat / reasoning / light 各指向哪个模型），不是每次进页都要读的
-           运行态；展开才拉出表格。默认路由的「配置值 → 实际使用」已在三条角色行内就地展示。 -->
-      <details class="ac-fold">
-        <summary class="ac-fold__bar">
-          <span class="ac-fold__title">内置别名映射表</span>
-          <span class="ac-fold__hint">逻辑别名（chat / reasoning / light 等）实际指向的候选模型与默认选中项 · 只读</span>
-          <span class="ac-fold__mark" aria-hidden="true"></span>
-        </summary>
-        <ModelRegistryOverview class="ac-registry ac-registry--routing" :parts="['aliases']" @aliases="aliasOptions = $event" @defaults="registryDefaults = $event" />
-      </details>
     </div>
     </template>
+    <template v-else-if="tab === 'virtual'">
+    <div class="ac-tab-body" id="ac-panel-virtual" role="tabpanel" aria-labelledby="ac-tab-virtual">
+      <!-- ===== 虚拟学习者运行配置（2026-10-21 独立页签）=====
+           速率、并发、日期模拟同属「虚拟学习者能跑多少、跑到哪天」；
+           此前挂在「路由与调用」里与调用参数混读，现独立成页签。 -->
+      <section v-if="isLive" class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">运行配置</h3>
+          <span class="mk-card__meta">独立计量，不占真实用户额度</span>
+        </div>
+        <div class="ac-body">
+          <div class="ac-group">
+            <div class="ac-group__title" title="出站速率、最高并发与日期模拟同属虚拟学习者通道的容量治理">容量</div>
+            <div class="ac-group__fields">
+              <label class="mk-field">
+                <span class="mk-field__label">虚拟学习者 RPM 上限（0=不限）</span>
+                <span class="ac-vl-rpm">
+                  <input
+                    v-model.number="vlRpmInput"
+                    type="number"
+                    min="0"
+                    max="100000"
+                    step="10"
+                    class="mk-field__input"
+                    aria-label="虚拟学习者专属出站 RPM 上限"
+                    :disabled="vlRpmFailed"
+                    :title="vlRpmFailed ? '设置未加载：已禁用编辑，避免用默认值覆盖服务端配置' : undefined"
+                    @input="vlRpmDirty = true"
+                    @keydown.enter.prevent="saveVlRpm"
+                  />
+                  <button
+                    type="button"
+                    class="mk-btn mk-btn--sm"
+                    :disabled="!vlRpmDirty || vlRpmSaving || vlRpmFailed"
+                    @click="saveVlRpm"
+                  >{{ vlRpmSaving ? '保存中…' : '保存' }}</button>
+                  <span v-if="vlRpmDirty" class="ac-vl-rpm__dirty">未保存</span>
+                </span>
+                <span v-if="vlRpmFailed" class="mk-field__hint ac-vl-rpm__failed" role="alert">设置未加载，保存已禁用（请刷新重试）</span>
+              </label>
+            </div>
+            <VirtualLabLoadSettings />
+          </div>
+        </div>
+      </section>
+    </div>
+    </template>
+
     <template v-else-if="tab === 'security'">
     <!-- 2026-10-15 用户重组：原四卡 2×2 宫格改成「左一（网络与 IP 访问控制）+ 右二（注册与防刷配额）」——
          左卡管「谁能连进来」（访问来源模式 + 私有网络服务两段：前者管入站来源、后者管服务端出站目标），
@@ -679,13 +671,14 @@ import { useModelCatalog } from '@/composables/useModelCatalog'
 
 // 模型目录候选（File-as-Truth llm-providers.json）：与通道拉取清单合并进路由 datalist；
 // 目录加载失败静默降级（候选只剩通道拉取值 + 别名，输入框仍可自由填写）
-const { options: catalogOptions, load: loadModelCatalog, extraIds } = useModelCatalog()
+const { pickerOptions, load: loadModelCatalog, extraIds } = useModelCatalog()
 loadModelCatalog()
 import { askConfirm } from './useConfirm'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
+import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
 import { toast } from '@/utils/toast'
 
 /* ---------- 宿主：接入与模型 · 路由与调用 · 安全与访问 ----------
@@ -693,16 +686,15 @@ import { toast } from '@/utils/toast'
    （接入：供应商/能力限额/冷却/配置提示；路由：默认路由解析结果/别名映射）。
    2026-10-19 用户拍板「外挂能力」从本宿主拆回独立页（/admin/addons，侧栏 Skill 组）：
    原来那个页签与它的角标计数、刷新分支一并撤除；旧深链 ?tab=addons 由路由改投。 */
-const AC_TABS = ['access', 'routing', 'security'] as const
+const AC_TABS = ['access', 'routing', 'virtual', 'security'] as const
 type AcTab = (typeof AC_TABS)[number]
 
 /* 文案单源（R6 复读单源化）：卡标题与开关的 aria-label 共用一份 */
 const IP_QUOTA_TITLE = '单 IP 每日注册配额'
 /** 旧页签键别名归一：站内「配置 →」与量测脚本曾用 ?tab=model / ?tab=registry / ?tab=model-routing；
     这些键不在白名单，watcher 原会静默把用户送到「接入与验证」，深链/书签永远落不到目标页签。
-    2026-10-14 合并页签后追加：connection/overview→access、runtime→routing（旧书签继续可用）；
-    同日再收一刀——「虚拟学习者」页签撤除（只装一张压测参数卡，实测页内 ~85% 死区，且该卡的
-    限流是「调用怎么走」的一部分）→ virtual-learners→routing。 */
+    2026-10-14：connection/overview→access、runtime→routing；
+    2026-10-21 用户拍板：虚拟学习者配置独立成页签 → virtual-learners→virtual。 */
 const TAB_ALIAS: Record<string, AcTab> = {
   model: 'access',
   registry: 'access',
@@ -710,19 +702,20 @@ const TAB_ALIAS: Record<string, AcTab> = {
   overview: 'access',
   runtime: 'routing',
   'model-routing': 'routing',
-  'virtual-learners': 'routing',
+  'virtual-learners': 'virtual',
 }
 const tab = ref<AcTab>('access')
-/** 底部保存条挂载的 tab（脏位跨 tab 不丢）：接入与模型（接入三卡可写）+ 路由与调用 + 安全与访问 */
-const isConfigTab = computed(() => ['access', 'routing', 'security'].includes(tab.value))
+/** 底部保存条挂载的 tab（脏位跨 tab 不丢）：四个配置页签都可写 */
+const isConfigTab = computed(() => ['access', 'routing', 'virtual', 'security'].includes(tab.value))
 const route = useRoute()
 const router = useRouter()
 /** 页签定义（CM1：收敛到 MkSubTabs）。
-    2026-10-14 四页签 → 2026-10-19 三页签：接入与模型 / 路由与调用 / 安全与访问
-    （「虚拟学习者」页签 2026-10-14 撤除并入「路由与调用」；「外挂能力」2026-10-19 拆出独立页）。 */
+    2026-10-19 三页签 → 2026-10-21 四页签：虚拟学习者配置从「路由与调用」独立成页签
+    （用户：「虚拟学习者的配置，先独立一个tab在模型与接入里面」）。 */
 const acTabs = computed(() => [
   { key: 'access', label: '接入与模型' },
   { key: 'routing', label: '路由与调用' },
+  { key: 'virtual', label: '虚拟学习者' },
   { key: 'security', label: '安全与访问' },
 ])
 function onTabChange(key: string) {
@@ -1307,14 +1300,13 @@ function onProvidersChanged() {
   aliasOptions.value = []
 }
 
-/** 上游清单与登记表的关系句（空串 = 无清单可谈，模板走空态分支） */
+/** 上游清单与登记表的读数（空串 = 无清单可谈，模板走空态分支）：只报数字，不写解释句 */
 const upstreamSummary = computed(() => {
   const total = models.value.length
   if (!total) return ''
-  if (!upstreamReady.value) return `上游返回 ${total} 个模型，正在对齐平台登记表…`
+  if (!upstreamReady.value) return `已拉取 ${total} 个`
   const matched = upstreamSplit.value.registered.length
-  if (!matched) return `上游返回 ${total} 个模型，都没有与平台登记的模型对上，不参与路由。`
-  return `上游返回 ${total} 个模型，其中 ${matched} 个与平台登记的模型对上，其余 ${total - matched} 个没有登记，不参与路由。`
+  return `已拉取 ${total} 个 · ${matched} 个已添加`
 })
 
 /**
@@ -1351,12 +1343,27 @@ function setEffort(v: string) {
 /* 2026-10-04 状态条退役：原「就绪」判定 ready（仅 statusTone 消费）随状态条删除，零引用一并清理。
    2026-10-14 页首 KPI 带撤除：routeCount 原本还喂「默认路由 N/3」那块 KpiKpi 与其 title，
    撤带后零引用，一并删除——路由就绪度由下方三行逐条徽标承担（不再有一个汇总数字复读）。 */
+/* 默认路由的候选（2026-10-20 走查）：目录模型（按供应商分组）+ 逻辑别名 + 通道拉取但未登记的 id。
+   别名与未登记 id 各自成组，选中后仍按注册表解析——候选列表只回答「能填什么」，不承诺解析结果。 */
+const routePickerOptions = computed<MkModelOption[]>(() => {
+  const out: MkModelOption[] = pickerOptions.value.map((o) => ({ ...o }))
+  for (const a of aliasOptions.value) {
+    if (!a || out.some((o) => o.value === a)) continue
+    out.push({ value: a, label: '按注册表成员解析', group: '逻辑别名' })
+  }
+  for (const m of extraFetchedModels.value) {
+    if (!m || out.some((o) => o.value === m)) continue
+    out.push({ value: m, label: '上游已返回、尚未登记', group: '通道拉取' })
+  }
+  return out
+})
 /* 默认路由三角色行（2026-10-05 重设计：原 routeOverview 只读概览与三列输入是同屏回声，
    合并为一行 = 角色 + 输入 + 状态徽标；value 直读 form，徽标随输入实时翻转）。 */
 const routeRoles = computed(() => [
   {
     key: 'chat',
     role: '对话默认',
+    tier: 'chat',
     value: form.defaultModel,
     title: '可填逻辑别名（chat / reasoning / light），或从已拉取清单中选择',
     set: (v: string) => { form.defaultModel = v; markDirty('route') },
@@ -1364,6 +1371,7 @@ const routeRoles = computed(() => [
   {
     key: 'reasoning',
     role: '推理默认',
+    tier: 'reasoning',
     value: form.defaultReasoningModel,
     title: '填别名 reasoning 时会自动选用支持思考的模型',
     set: (v: string) => { form.defaultReasoningModel = v; markDirty('route') },
@@ -1371,6 +1379,7 @@ const routeRoles = computed(() => [
   {
     key: 'evaluation',
     role: '评估默认',
+    tier: 'chat',
     value: form.defaultEvaluationModel,
     title: '同样支持逻辑别名',
     set: (v: string) => { form.defaultEvaluationModel = v; markDirty('route') },
@@ -1728,6 +1737,14 @@ async function saveQuota(enabled: boolean, quota: number) {
    供应商 / 能力限额为注册表只读面板），三列宫格不再有第二个卡位——保持三列会把唯一的卡
    挤成 1/3 宽。改单列：连接卡满宽，注册表随其后。安全页两列（左一右二），≤1100px 回落单列。 */
 .ac-conn-body { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+/* 2026-10-20 用户走查「下方大量空白」：接入页签改成满高工作台——供应商卡吃掉页签剩余高度，
+   列表与详情各自内滚。窄屏（≤900）仍回落到页面滚动，卡片按内容高度。 */
+.ac-conn-body { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.ac-conn-body > .mpp { flex: 1 1 auto; min-height: 0; }
+@media (max-width: 900px) {
+  .ac-conn-body { display: grid; overflow-y: auto; }
+  .ac-conn-body > .mpp { flex: none; }
+}
 /* 路由与调用页签内的注册表切片（别名映射）：外层页签已承担网格与滚动节奏，
    这里让分区直接成为父网格的子项（display: contents 去掉自身的 .ac-tab-body 盒子），
    与上方「出站速率」「虚拟学习者通道」同一条 12px 节奏堆叠，不出现内外双滚动容器。 */
@@ -1738,8 +1755,9 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-conn-body > .mk-alert { grid-column: 1 / -1; }
 /* 平台通道那条详情的连接块（2026-10-18 从独立「连接」卡搬进供应商详情）：外层卡头没了，
    状态徽标与「保存连接」收进一条细条，右侧一句说明这段表单管什么。 */
-.ac-conn__bar { display: flex; align-items: center; gap: 10px; padding: 12px 16px 0; flex-wrap: wrap; }
-.ac-conn__bar-hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.ac-conn__bar { display: flex; align-items: center; gap: 10px; padding: 0 0 4px; flex-wrap: wrap; }
+/* 槽位已在供应商详情的内衬里：连接块自身的 .ac-body 不再补一层 16px 边 */
+.ac-conn .ac-body { padding: 0; }
 
 /* 卡内内容容器：统一内边距与间距（mk-card__head 之下），全页各卡同一语言 */
 .ac-body { display: grid; gap: 14px; padding: 4px 16px 16px; }
@@ -1747,7 +1765,6 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-conn2 { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
 .ac-conn2__col { display: grid; gap: 14px; align-content: start; min-width: 0; }
 .ac-conn2__col--test { border-left: 1px dashed var(--mk-line); padding-left: 18px; }
-.ac-test__hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .ac-row { display: grid; gap: 14px; align-items: end; }
 .ac-row--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* 2026-10-06 审核 #159：四个配置页签的字段控件统一走 .mk-field__input/__select/__textarea
@@ -1806,8 +1823,16 @@ async function saveQuota(enabled: boolean, quota: number) {
 /* 上游清单关系句（2026-10-16 用户走查重排）：原 30+ 枚模型胶囊（.ac-models/.ac-model）退役——
    与下方登记表并列成两份模型名单，被读成「同一件事说两遍」。现在只说关系，逐个名字在登记表折叠里。 */
 .ac-models__line { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
+/* 上游对齐条（2026-10-20 从连接块搬进模型清单块）：嵌在模型块里只占一行读数，不再套第二层卡片 */
+.ac-models-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.ac-models-meta__title { color: var(--mk-muted); }
 /* 持久化说明（F8-2）：拉取仅本页有效的提示，比清单胶囊再轻一档；仅未保存时出现 */
-.ac-models__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.55; }
 
 /* 默认思考：模式 + 强度，同一行两列字段（2026-10-14 删冗余「启用思考」开关后由三列改两列） */
 
@@ -1945,9 +1970,8 @@ async function saveQuota(enabled: boolean, quota: number) {
   padding-left: 74px;
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* 允许折行：模型 ID 变长后单行会截掉「降级备用」这一段（2026-10-20 走查） */
+  overflow-wrap: anywhere;
 }
 .ac-route__resolve--none { color: var(--mk-faint); }
 /* 内置别名映射表：默认收起的折叠条（查证用参考表，不必每次进页都占屏） */
@@ -2030,6 +2054,17 @@ async function saveQuota(enabled: boolean, quota: number) {
 .ac-cols__side { border-left: 1px dashed var(--mk-line); padding-left: 18px; }
 .ac-fallback-alert { margin: 0; }
 .ac-groups { display: grid; gap: 12px; }
+/* 策略卡三列（重试 / 超时 / 出站）：每组内部竖排，数字输入框不再被拉成整列宽 */
+.ac-groups--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.ac-field--num { max-width: 140px; }
+/* 单字段分组（平台 RPM / VL RPM）：字段吃满组宽，标签不再按 1/3 格折行 */
+.ac-group__fields > .mk-field:only-child { grid-column: 1 / -1; }
+/* 三列分组：组内只有几个数字，标题与字段贴顶，不随相邻组的高度垂直居中 */
+.ac-groups--3 > .ac-group { align-content: start; }
+.ac-group__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.5; }
+@media (max-width: 1200px) {
+  .ac-groups--3 { grid-template-columns: minmax(0, 1fr); }
+}
 .ac-group { display: grid; gap: 10px; }
 .ac-group__fields {
   display: grid;
@@ -2037,8 +2072,6 @@ async function saveQuota(enabled: boolean, quota: number) {
   gap: 12px;
 }
 .ac-group__fields .mk-field { margin: 0; }
-/* 两格分组（出站速率：平台全局 + 虚拟学习者）：不占满三格，留一格空位比拉伸更整齐 */
-.ac-group__fields--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* 虚拟学习者 RPM：输入框 + 自带「保存」钮（保存链与平台全局不同，见脚本注释） */
 .ac-vl-rpm { display: inline-flex; align-items: center; gap: 8px; }
 .ac-vl-rpm .mk-field__input { flex: 1 1 auto; min-width: 0; max-width: 120px; }
@@ -2114,8 +2147,7 @@ async function saveQuota(enabled: boolean, quota: number) {
   /* 三列栅格在窄屏回落单列：此前漏掉这条，390 下「服务地址 | API Key」
      仍强行并排，服务地址输入框被 180px 下限撑破、压掉 API Key（审计 P1 2.2） */
   .ac-row--2 { grid-template-columns: 1fr; }
-  .ac-group__fields { grid-template-columns: 1fr; }
-  .ac-group__fields--2 { grid-template-columns: 1fr; }
+  .ac-group__fields, .ac-groups--3 { grid-template-columns: 1fr; }
   .ac-route__inline { grid-template-columns: 56px minmax(0, 1fr) auto; gap: 8px; }
   .ac-route__resolve { padding-left: 64px; }
 }

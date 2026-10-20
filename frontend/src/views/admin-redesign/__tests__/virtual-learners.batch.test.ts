@@ -185,8 +185,11 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     const w = await mountPage();
     // 2026-10-04 页头状态条整体退役（教学会话同款判例）：复读的「共 N 人」随条删除
     expect(w.find('.mk-status').exists()).toBe(false);
-    // 会话口径：活动 = running 2 + created 3 → 完成率卡 hint（同一会话漏斗）
-    expect(w.text()).toContain('活动会话 5');
+    /* 会话口径：活动 = running 2 + created 3 → 完成率卡。2026-10-19 用户走查「KPI hint
+       在报读数」后读数下沉：副行只留口径短语，活动会话数住 title 长释（同一会话漏斗） */
+    const completion = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '完成率');
+    expect(completion!.find('.mk-kpi__hint').text()).toContain('已完成 / 全部会话');
+    expect(completion!.attributes('title')).toContain('活动会话 5');
     // 画像口径分区筛选计数（P2：「需关注」已正名「曾失败」，口径=累计失败）→ 卡头工具栏 chips
     // 按卡定位到列表卡（.mk-card--fill）：页内还有压测参数等其它卡头，取「第一个 .mk-card__head」会取错
     const head = w.find('.mk-card--fill .mk-card__head');
@@ -319,13 +322,17 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     // B8-F4-4：口径正名「系统失败率」（值与 systemFailureRate 一致，与总览页同标）
     expect(w.text()).toContain('系统失败率');
     expect(w.text()).toContain('30%');
-    // hint 必须写明分母与「人为终止另计」，并给出合计失败率（40%），运营不再把 30% 读成全部失败占比
-    // 2026-10-08 走查 #3：分母由裸「全部」改为「全部会话」——同一张卡上方是会话口径、
-    // 下方表格是学习者口径（行数 = 虚拟学习者），裸「全部」会被读成同一个分母。
-    expect(w.text()).toContain('系统失败 3');
-    expect(w.text()).toContain('人为终止 1');
-    expect(w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '系统失败率')?.attributes('title')).toContain('两类合计占 40%');
-    expect(w.text()).toContain('已完成 6 / 全部会话 10');
+    /* 副行必须写明分母与「人为终止另计」，读数（三项分解）与合计失败率（40%）随长释进 title——
+       运营不再把 30% 读成全部失败占比。
+       2026-10-08 走查 #3：分母由裸「全部」改为「全部会话」——同一张卡上方是会话口径、
+       下方表格是学习者口径（行数 = 虚拟学习者），裸「全部」会被读成同一个分母。 */
+    const failure = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '系统失败率');
+    expect(failure!.find('.mk-kpi__hint').text()).toBe('系统失败 / 全部会话 · 人为终止另计');
+    const failureTitle = failure!.attributes('title') || '';
+    expect(failureTitle).toContain('系统失败 3');
+    expect(failureTitle).toContain('人为终止 1');
+    expect(failureTitle).toContain('两类合计占 40%');
+    expect(failureTitle).toContain('已完成 6 · 共 10 场');
     // 表格分页的计数单位直接写「位学习者」，不再用一句「行数=学习者数」解释口径
     expect(w.find('.mk-pagination__total').text()).toContain('位学习者');
     expect(w.text()).not.toContain('行数为虚拟学习者数');
@@ -591,7 +598,7 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     await flushPromises();
     const body = document.body.textContent || '';
     // 弹窗候选数与按钮角标同数（2），并给出豁免分项
-    expect(body).toContain('扫描到 2 个超过回收阈值的无响应候选会话（与「回收无响应」按钮同一口径）');
+    expect(body).toContain('扫描到 2 个超过回收阈值的无响应候选会话（与「回收无响应」按钮同一统计方式）');
     expect(body).toContain('可回收 0 个');
     expect(body).toContain('豁免 2 个');
     // 豁免项逐条可见 + 原因标签

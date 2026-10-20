@@ -38,8 +38,19 @@
       <!-- P1#17：需关注收窄为真异常（趋势降 ∨ 疲劳高 ∨ 有风险摘要）；
            常态档「疲劳=中」拆到 pills 的「观察」，不再把需关注撑爆 -->
       <MkKpi label="需关注" :value="riskCount" :tone="riskCount ? 'warn' : ''" hint="趋势下降 / 疲劳高 / 有风险摘要" />
-      <MkKpi label="低置信" :value="lowConfCount" :tone="lowConfCount ? 'warn' : ''" :hint="lowConfHint" />
-      <MkKpi label="平均置信度" :value="avgConfText" :hint="avgConfHint" />
+      <MkKpi
+        label="低置信"
+        :value="lowConfCount"
+        :tone="lowConfCount ? 'warn' : ''"
+        :hint="lowConfHint"
+        :title="lowConfTitle"
+      />
+      <MkKpi
+        label="平均置信度"
+        :value="avgConfText"
+        :hint="avgConfHint"
+        :title="avgConfTitle"
+      />
       <!-- P-49（#74）：疲劳高 / 趋势下降原先被合并进「需关注」，看不到各自规模 -->
       <MkKpi
         label="疲劳高"
@@ -59,8 +70,8 @@
         label="数据覆盖率"
         :value="confCoverageText"
         :tone="confCoverageText === '—' ? 'muted' : ''"
-        :hint="`${confRows.length} / ${rows.length} 位有学习任务`"
-        title="有学习任务且产出置信度的学习者占比。无任务行不计入置信度分布与均值"
+        hint="有学习任务且产出置信度的学习者 / 全部学习者"
+        :title="`有学习任务且产出置信度的学习者占比。无任务行不计入置信度分布与均值。本次 ${confRows.length} / ${rows.length} 位`"
       />
     </section>
 
@@ -511,10 +522,15 @@ const lowConfCount = computed(() => confRows.value.filter((r) => evidenceLowConf
 /** 低置信 hint 带基数（与平均置信度同判例：数字要能对上分母）。
     2026-10-18：口径压成一行——原句 27 字在卡片宽度里折成两行，把整排读数卡撑到
     115px；阈值、口径与基数都不变，只压措辞（「有任务」= 表格置信列出读数的条件）。 */
+/* 卡面副行只留口径（2026-10-19 用户走查「hint 在报读数」）：原句尾「共 N 位」与本卡读数
+   同值复读（低置信数就是它），样本量进 title 长释 */
 const lowConfHint = computed(() =>
+  confRows.value.length ? '低于 50% 的有学习任务的学习者' : '暂无有学习任务的学习者'
+)
+const lowConfTitle = computed(() =>
   confRows.value.length
-    ? `低于 50% 的有任务学习者 · 共 ${confRows.value.length} 位`
-    : '暂无有学习任务的学习者'
+    ? `置信度低于 50% 的有学习任务学习者数 · 纳入计算的学习者共 ${confRows.value.length} 位`
+    : '暂无有学习任务的学习者，低置信无从计数'
 )
 const avgConfText = computed(() => {
   if (!confRows.value.length) return '—'
@@ -529,9 +545,12 @@ const confCoverageText = computed(() =>
 )
 /** 平均值必须带基数：n= 之外的行（无任务/无快照）不进均值，读数才知道它代表谁 */
 const avgConfHint = computed(() =>
+  confRows.value.length ? '按有学习任务且产出置信度的学习者取平均' : '暂无有学习任务的学习者'
+)
+const avgConfTitle = computed(() =>
   confRows.value.length
-    ? `基于 ${confRows.value.length} 位有学习任务的学习者计算`
-    : '暂无有学习任务的学习者'
+    ? `有学习任务且产出置信度的学习者置信度算术平均值 · 本次纳入 ${confRows.value.length} 位`
+    : '暂无有学习任务的学习者，均值无从计算'
 )
 /** 直方图五档已随分布带退役（2026-10-17）：口径阈值仍锚定 50% 低置信线，
     由「低置信」KPI 与 chip 承载（<50%），分档细节交给可排序的「置信」列。 */

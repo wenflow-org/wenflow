@@ -30,7 +30,7 @@
         <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">档案 {{ snapshotLabel }}</span>
       </template>
       <template #actions>
-        <button v-if="linkedVirtualProfile" type="button" class="mk-btn mk-btn--sm" title="同一账号的仿真档案视图（故事池 / 运行 / 运行预算）" @click="openVirtualProfile">
+        <button v-if="linkedVirtualProfile" type="button" class="mk-btn" title="同一账号的仿真档案视图（故事池 / 运行 / 运行预算）" @click="openVirtualProfile">
           虚拟档案 →
         </button>
         <button type="button" class="mk-btn" :disabled="recomputing" @click="recompute">
@@ -52,8 +52,8 @@
          「该学习者 status=active 且 updatedAt 最新的那条」（LearnerKnowledgeMemoryService.build 的
          path 解析：`input.learningPathId ? findUnique : findFirst(active, updatedAt desc)`），是回落不是求和。
          给一个做不出区别的档位等于假动作，故只做「选哪一条」。 -->
-    <div class="ld-scope" role="group" aria-label="路径作用域">
-      <label class="ld-scope__label" for="ld-scope-path">路径视角</label>
+    <div class="ld-scope" role="group" aria-label="路径范围">
+      <label class="ld-scope__label" for="ld-scope-path">路径范围</label>
       <select
         id="ld-scope-path"
         class="mk-filter__select ld-scope__select"
@@ -71,8 +71,8 @@
       <MkLoading v-if="pathOptionsLoading" inline min />
       <span
         class="ld-scope__hint"
-        title="「记忆与复习」不随本开关走：一个概念只保留一条记忆痕迹（记的是最后写入的那条路径），按路径切会漏掉在另一条路径学过的概念。「行为基线与互动」按账号整体统计，不含路径概念。要看跨全部路径的教学会话，走平台「教学会话」页（那里不按路径收窄）。"
-      >作用于 概念掌握 · 证据 · 图谱 · 教学会话，记忆与行为基线不受影响</span>
+        title="「记忆与复习」不随此处切换：每个概念只保留一条记忆痕迹（记在最后写入的那条路径上），按路径切会漏掉在别的路径学过的概念。「行为基线与互动」按账号整体统计，不含路径概念。跨全部路径的教学会话在平台「教学会话」页。"
+      >概念掌握 · 证据 · 图谱 · 教学会话 随此切换，记忆与行为基线不变</span>
     </div>
 
     <!-- Tab 栏（6 → 3 合并：总览 / 画像 / 证据；旧 tab 名由 normalizeLearnerTab 重定向）。
@@ -127,24 +127,15 @@
               >、{{ conceptBars.filter((c) => c.tone === 'muted').length }} 个证据不足</template
             >。
           </p>
-          <details v-if="conceptBars.length" class="ld-bars-details">
-            <summary class="mk-section__summary">逐概念明细</summary>
-            <div class="ld-bars">
-            <div v-for="c in conceptBars" :key="c.label" class="ld-bar">
-              <div class="ld-bar__head">
-                <strong :title="`概念掌握：${c.readiness} · 误解风险：${c.risk}`">{{ c.label }}</strong>
-                <span class="ld-bar__badges">
-                  <span class="mk-badge" :class="barToneBadge(c.tone)">{{ c.readiness }}</span>
-                  <span class="ld-bar__risk" :class="`ld-bar__risk--${c.riskTone}`">误解风险 {{ c.risk }}</span>
-                  <span v-if="c.evidenceCount > 0" class="ld-bar__ev" :title="`证据 ${c.evidenceCount} 条`">{{ c.evidenceCount }} 条证据</span>
-                </span>
-              </div>
-              <span class="mk-minibar ld-bar__track">
-                <i class="mk-minibar__fill" :data-tone="c.tone === 'muted' ? undefined : c.tone" :class="{ 'ld-bar__fill--muted': c.tone === 'muted' }" :style="{ width: c.width + '%' }"></i>
-              </span>
-            </div>
-            </div>
-          </details>
+          <!-- 逐概念明细已并入「知识图谱」页签的节点详情（2026-10-20 用户拍板）：
+               可迁移 / 误解风险 / 证据数三样与侧栏的记忆强度、提取练习是同一个概念的读数，
+               同一份事实只在一个地方出现；本卡只留上面那行结论与概念总数 -->
+          <button
+            v-if="conceptBars.length"
+            type="button"
+            class="mk-link ld-concepts__more"
+            @click="tab = 'graph'"
+          >去图谱逐个查看 →</button>
           <p v-else class="ld-none">
             {{ '暂无概念掌握数据' }}
             <span class="ld-none__hint">{{ CONCEPT_NONE_HINT }}</span>
@@ -182,12 +173,47 @@
           </MkRowList>
         </section>
 
+        <!-- 最近目标对话（2026-10-19 用户拍板）：对象轴与「最近会话」并列。
+             原挂在「账号与许可」页的「最近活动」里，会话部分与左卡同源同对象、目标部分
+             又不跟页级路径作用域；账号页只留账户与许可后，目标对话迁到概览。 -->
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">最近目标对话</h3>
+            <span class="mk-card__meta">
+              <MkLoading v-if="ldGoalLoading" inline min text="加载中…" />
+              <template v-else-if="ldGoalError">加载失败</template>
+              <template v-else>{{ goalPreviewMeta }}</template>
+            </span>
+          </div>
+          <MkRowList
+            :empty="!recentGoalRows.length && !ldGoalLoading"
+            :empty-text="scopePathId ? '该路径下暂无目标对话' : '暂无目标对话'"
+            empty-hint="学习者发起目标对话后，这里会出现记录。"
+          >
+            <MkRow
+              v-for="g in recentGoalRows"
+              :key="g.id"
+              clickable
+              :title="g.summary"
+              :sub="g.subText"
+              :time="g.createdAgo"
+              @click="openSessionCockpit(g.id)"
+            >
+              <template #lead>
+                <span class="mk-badge" :class="sessBadgeCls(g.status)">{{ statusText(g.status) || '—' }}</span>
+              </template>
+            </MkRow>
+          </MkRowList>
+        </section>
+
         <!-- 学习状态追踪（原型 renderLearnerDetail 概览 pane 2189 / lsm 样式 517-522）：
              与证据 tab 指标卡同源（dynamicState.metrics）。同屏不同 tab 复用，证据 tab 保持不动。 -->
         <section v-if="dynamicState" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">学习状态追踪</h3>
-            <span class="mk-card__meta" :title="loadCaliberNote.title">{{ LEARNER_METRIC_CODES }} · {{ loadCaliberNote.label }}</span>
+            <!-- 四码不在卡头复读（2026-10-19 文案优化）：卡内四行的标签各自带码（LSS 学习压力…），
+                 卡头只说到来源与取样时刻 -->
+            <span class="mk-card__meta" :title="loadCaliberNote.title">{{ loadCaliberNote.label }}</span>
           </div>
           <div class="ld-lsm">
             <div v-for="r in learningStateRows" :key="r.label" class="ld-lsm__row">
@@ -215,8 +241,9 @@
              「学习者产生会话后将自动生成」的误导空态；后端 learner-models 无按日活跃接口） -->
         <section class="mk-card">
           <div class="mk-card__head">
-            <!-- 更名「最近动态」：卡内取的是合并时间线前 6 条（教学/目标/路径域事件，不只 session） -->
-            <h3 class="mk-card__title">最近动态</h3>
+            <!-- 「学习动态」：卡内是合并后的学习事件（教学/目标/路径域），与对象轴的
+                 「最近会话」「最近目标对话」区分命名，避免两个「最近 X」读成一回事 -->
+            <h3 class="mk-card__title">学习动态</h3>
             <span class="mk-card__meta">最近 {{ d.sessions.length }} 条事件</span>
           </div>
           <div class="ld-sessions">
@@ -686,6 +713,7 @@
           :loading="graphLoading"
           :error="graphError"
           height="var(--ld-graph-h)"
+          :concept-facts="conceptFacts"
           empty-hint="这位学习者还没有概念图数据，路径生成后会自动补齐前置依赖并生成图谱。"
         />
       </section>
@@ -774,7 +802,7 @@
                 </td>
                 <td>
                   <div class="ld-ia" :title="ldInteractTitle(s)">
-                    <b class="ld-ia__dur" :class="{ 'ld-ia__dur--long': s.durationSec >= LD_IDLE_LONG_SECONDS, 'ld-ia__dur--brief': s.durationSec > 0 && s.durationSec < 60 }">{{ s.duration }}</b>
+                    <b class="ld-ia__dur" :class="{ 'ld-ia__dur--long': s.durationMin >= LD_IDLE_LONG_MINUTES }">{{ s.duration }}</b>
                     <span class="mk-cell-sub">{{ s.turns }} 回合 · 知识 {{ s.kpCount }} 点</span>
                   </div>
                 </td>
@@ -894,13 +922,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { subPage, openSubPage, setSubPageLabel } from './store'
 import { liveLearners, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
-import { conceptBarTone, conceptBarWidth, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
-import { learnerMetric, LEARNER_METRIC_CODES, type LearnerMetricKey } from '@/utils/learnerMetrics'
+import { conceptBarTone, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
+import { learnerMetric, type LearnerMetricKey } from '@/utils/learnerMetrics'
 // pathStatusText：路径域状态文案（active → 「学习中」；全局字典是「进行中」）。本文件已从
 // './statusText' 引入同名 statusText（会话域），故此处显式改名，避免两条文案链混用。
 import { loadCaliber, panelScopeNote, statusText as pathStatusText } from './opsShared'
 import { useTableSort } from './useTableSort'
-import { adminLearningContentApi, adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
+import { adminLearningContentApi, adminMemoryReviewApi, adminTeachingSessionsApi, adminGoalConversationsApi, getUserIncludingDeleted } from '@/api/adminApi'
 import {
   statusText,
   sessionStatusBadgeCls,
@@ -916,6 +944,7 @@ import { toast } from '@/utils/toast'
 import type { EChartsCoreOption } from 'echarts/core'
 import MkChart from '@/components/mk/MkChart.vue'
 import MkGraphExplorer from '@/components/mk/MkGraphExplorer.vue'
+import type { MkGraphConceptFacts } from '@/components/mk/MkGraph.vue'
 import type { MkGraphNode, MkGraphEdge } from '@/components/mk/MkGraph.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -1183,6 +1212,7 @@ function resetDerivedState(id: string) {
   loadCurveRaw.value = []
   predictionCalib.value = null
   ldSessionRows.value = []
+  ldGoalRows.value = []
   currentPathId.value = null
   pathInfo.value = null
   userRecord.value = null
@@ -1211,10 +1241,10 @@ interface LdSessionRow {
   msIndex: number | null
   /** 互动列副行：回合（口径=用户消息条数，后端无独立回合计数） */
   turns: string
-  /** 互动列主值：时长（后端 duration 秒 → mm 分 ss 秒） */
+  /** 互动列主值：时长（后端 duration 单位是分钟 → N 分钟） */
   duration: string
   /** 时长原值（互动列档位：<60s 秒退弱化 / ≥1500s 长时琥珀，与平台页同阈值） */
-  durationSec: number
+  durationMin: number
   /** 消息条数（互动列副行 + 低参与判定同源） */
   msgCount: number
   /** 教学产出知识点数（后端 knowledgePointCount，现成字段原先未消费） */
@@ -1280,7 +1310,7 @@ const ldSessionMetaTitle = computed(() => {
   // 里程碑串档只在跨路径时存在：切到单条路径后档位天然同源，不必再告警
   return scopePathId.value
     ? base
-    : `${base}\n注意：「里程碑 N」档位按各会话自己的里程碑序号归并，跨路径时不同路径的同序号里程碑会合到同一档（在「路径视角」下看单条路径即无此串档）。`
+    : `${base}\n注意：「里程碑 N」档位按各会话自己的里程碑序号归并，跨路径时不同路径的同序号里程碑会合到同一档（「路径范围」选单条路径即无此串档）。`
 })
 
 /* ---------- 阶段切换器（用户诉求「切换学习者不同阶段」）----------
@@ -1326,12 +1356,13 @@ function ldWrapupTitle(r: LdSessionRow): string {
 function ldAdvisoryBadgeCls(p: string): string {
   return p === 'high' ? 'mk-badge--bad' : p === 'medium' ? 'mk-badge--warn' : 'mk-badge--info'
 }
-/* 互动列 title：长时/秒退都是信号注记而非故障（与平台页 IDLE_LONG_SECONDS 同阈值） */
-const LD_IDLE_LONG_SECONDS = 1500
+/* 互动列 title：长时是信号注记而非故障（与平台页同一 25 分钟阈值）。
+   后端 duration 的单位是**分钟**（computeEffectiveDurationMinutes），不是秒——
+   原先按秒解释，3 分钟的课在列表里显示成「3 秒」（2026-10-20 跑数时发现）。 */
+const LD_IDLE_LONG_MINUTES = 25
 function ldInteractTitle(r: LdSessionRow): string {
   const base = `${r.turns} 回合 · 知识 ${r.kpCount} 点`
-  if (r.durationSec >= LD_IDLE_LONG_SECONDS) return `${base} · 时长 ≥ 25 分钟按长时标注（信号，非故障）`
-  if (r.durationSec > 0 && r.durationSec < 60) return `${base} · 不足 1 分钟`
+  if (r.durationMin >= LD_IDLE_LONG_MINUTES) return `${base} · 时长 ≥ 25 分钟按长时标注（信号，非故障）`
   return base
 }
 function ldProgTitle(r: LdSessionRow): string {
@@ -1354,12 +1385,60 @@ function openSessionCockpit(sessionId: string) {
   openSubPage('session-real', sessionId, sp ? { from: { view: sp.view, id: sp.id, label: liveDetail.value?.name } } : undefined)
 }
 
-/** 会话时长（后端 duration 秒）→ mm 分 ss 秒；0/缺省显 — */
-function formatDuration(sec: number): string {
-  if (!sec || sec <= 0) return '—'
-  const m = Math.floor(sec / 60)
-  const s = Math.round(sec % 60)
-  return m > 0 ? `${m}分${s}秒` : `${s}秒`
+/* ===== 最近目标对话（2026-10-19 用户拍板：对象轴与「最近会话」并列） =====
+   目标对话接口不支持 pathId，故由行上的 learningPathId 在客户端跟随页级路径作用域；
+   includeTest 与同页会话读数同源。 */
+interface LdGoalRow {
+  id: string
+  summary: string
+  status: string
+  subText: string
+  createdAgo: string
+  createdTs: number
+  learningPathId: string
+}
+const ldGoalRows = ref<LdGoalRow[]>([])
+const ldGoalLoading = ref(false)
+const ldGoalError = ref(false)
+/** 概览只取前 4 条（与会话预览 5 条同量级） */
+const LD_GOAL_PREVIEW = 4
+/* 目标对话上的 learningPathId 可能是路径创建时的临时前缀（真实 id 末尾还带 _xxxxx），
+   故按「带 _ 边界的同源 id」匹配；严格相等会把本路径的目标全部过滤掉（实测：
+   目标存 lp_1792431234902，路径实际是 lp_1792431234902_oyjo73i）。 */
+function goalInScope(g: LdGoalRow): boolean {
+  const pid = scopePathId.value
+  if (!pid) return true
+  const gid = g.learningPathId
+  if (!gid) return false
+  return pid === gid || pid.startsWith(`${gid}_`) || gid.startsWith(`${pid}_`)
+}
+const activeGoalRows = computed(() => ldGoalRows.value.filter(goalInScope))
+const recentGoalRows = computed(() => activeGoalRows.value.slice(0, LD_GOAL_PREVIEW))
+const goalPreviewMeta = computed(() => {
+  const shown = recentGoalRows.value.length
+  const scope = scopePathId.value ? ' · 当前路径' : ''
+  return activeGoalRows.value.length > shown
+    ? `最近 ${shown} 条 · 共 ${activeGoalRows.value.length}${scope}`
+    : `最近 ${shown} 条${scope}`
+})
+/** goal 摘要（对齐 GoalConversations.summaryOf：description 优先，兜底解析 collectedData） */
+function goalSummaryOf(c: Record<string, unknown>): string {
+  if (c.description) return String(c.description)
+  try {
+    const cd = JSON.parse(String(c.collectedData || '{}'))
+    return String(cd.goal || cd.learningGoal || cd.objective || cd.target || '—')
+  } catch {
+    return '—'
+  }
+}
+
+/** 会话时长（后端 duration 单位：分钟）→ 「N 分钟 / N 小时 M 分」；0/缺省显 — */
+function formatDuration(minutes: number): string {
+  if (!minutes || minutes <= 0) return '—'
+  if (minutes < 60) return `${minutes} 分钟`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return m ? `${h} 小时 ${m} 分` : `${h} 小时`
 }
 
 /** 教学会话 pane 状态徽章：已上收共享单源 statusText.sessionStatusBadgeCls（收尾批 C10；别名超集逐值等价迁移） */
@@ -1378,7 +1457,7 @@ function openPathDetail() {
   }
 }
 
-async function loadLdSessions(id: string) {
+async function loadLdSessions(id: string, includeTest: boolean) {
   const seq = detailLoadSeq
   ldSessLoading.value = true
   ldSessError.value = false
@@ -1386,10 +1465,11 @@ async function loadLdSessions(id: string) {
   try {
     // limit 20：教学会话 pane 需要更完整列表（原概览卡只展示 5 条，由 recentSessionRows 截取）
     // pathId：随页级路径作用域走（空 = 跨全部路径）；teaching_sessions.learningPathId 单列直连
+    // includeTest：与详情同源（深链不带 includeTest 时，虚拟账号由账号身份兜底）
     const res = await adminTeachingSessionsApi.list({
       userId: id,
       limit: LD_SESSION_WINDOW,
-      includeTest: subPage.value?.includeTest,
+      includeTest,
       ...(scopePathId.value ? { pathId: scopePathId.value } : {})
     })
     // 竞态守卫与 loadDetail 同款：换人/重载后丢弃旧响应
@@ -1414,7 +1494,7 @@ async function loadLdSessions(id: string) {
       const advisoryRelevant = !!advisory && rawAdvisory?.shouldSuggest !== false && !['none', ''].includes(advisory.priority)
       const status = String(s.status || '')
       const msgCount = Number(s.messageCount || 0)
-      const durationSec = Number(s.duration || 0)
+      const durationMin = Number(s.duration || 0)
       const terminal = ['completed', 'succeeded', 'failed', 'timeout', 'finalization_failed', 'discarded', 'superseded'].includes(status)
       return {
         id: String(s.id),
@@ -1427,8 +1507,8 @@ async function loadLdSessions(id: string) {
         stage: progress && progress.totalMilestones ? `里程碑 ${progress.milestoneIndex || 0}/${progress.totalMilestones}` : '—',
         msIndex: progress && typeof progress.milestoneIndex === 'number' && progress.milestoneIndex > 0 ? progress.milestoneIndex : null,
         turns: String(msgCount),
-        duration: formatDuration(durationSec),
-        durationSec,
+        duration: formatDuration(durationMin),
+        durationMin,
         msgCount,
         kpCount: Number(s.knowledgePointCount || 0),
         progress,
@@ -1446,6 +1526,39 @@ async function loadLdSessions(id: string) {
     if (!stale()) ldSessError.value = true
   } finally {
     if (!stale()) ldSessLoading.value = false
+  }
+}
+
+async function loadLdGoals(id: string, includeTest: boolean) {
+  const seq = detailLoadSeq
+  ldGoalLoading.value = true
+  ldGoalError.value = false
+  const stale = () => seq !== detailLoadSeq || subPage.value?.id !== id
+  try {
+    const api = adminGoalConversationsApi
+    if (!api?.list) return
+    const res = await api.list({
+      userId: id,
+      limit: 12,
+      includeTest
+    })
+    if (stale()) return
+    const body = res.data?.data ?? res.data ?? {}
+    ldGoalRows.value = ((body.conversations as Record<string, unknown>[]) || [])
+      .map((c) => ({
+        id: String(c.id),
+        summary: goalSummaryOf(c),
+        status: String(c.status || ''),
+        subText: c.learningPathId ? '已生成学习路径' : '未生成学习路径',
+        createdAgo: timeAgo(String(c.createdAt || '')),
+        createdTs: new Date(String(c.createdAt || '')).getTime() || 0,
+        learningPathId: String(c.learningPathId || '')
+      }))
+      .sort((a, b) => b.createdTs - a.createdTs)
+  } catch {
+    if (!stale()) ldGoalError.value = true
+  } finally {
+    if (!stale()) ldGoalLoading.value = false
   }
 }
 
@@ -1640,8 +1753,9 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
         setSubPageLabel(nm)
       }
     }
-    // 总览左栏「最近会话」：独立接口，失败不影响主详情
-    void loadLdSessions(id)
+    // 总览左栏「最近会话」「最近目标对话」：独立接口，失败不影响主详情
+    void loadLdSessions(id, includeTest)
+    void loadLdGoals(id, includeTest)
   } catch (e) {
     if (stale()) return
     if (base) {
@@ -2102,37 +2216,48 @@ const avoidList = computed(() => teachingHints.value?.avoid || [])
 interface ConceptBar {
   label: string
   tone: ConceptBarTone
-  width: number
   readiness: string
   risk: string
   riskTone: 'ok' | 'warn' | 'bad'
   evidenceCount: number
 }
 
+/** 概念台账全量（不再截前 24 条）：概览卡已不铺列表，结论行要按全量报数，
+ *  截断会让「共 N 个概念」少报（实测该学习者台账 41 条，截断后只报 24） */
 const conceptBars = computed<ConceptBar[]>(() => {
   const km = knowledgeMemory.value as Record<string, unknown> | null
   const ledger = (km?.globalBackground as Record<string, unknown> | undefined)?.conceptLedger
   if (Array.isArray(ledger) && ledger.length) {
-    return (ledger as ConceptLedgerItem[])
-      .map((item) => ({
-        label: String(item.label || item.conceptKey || '未命名概念'),
-        tone: conceptBarTone(item),
-        width: conceptBarWidth(item.transferReadiness),
-        readiness: transferReadinessZh(item.transferReadiness),
-        risk: misconceptionRiskZh(item.misconceptionRisk),
-        riskTone: (String(item.misconceptionRisk || '').toLowerCase() === 'high' ? 'bad' : String(item.misconceptionRisk || '').toLowerCase() === 'medium' ? 'warn' : 'ok') as ConceptBar['riskTone'],
-        evidenceCount: Number(item.evidenceCount || 0)
-      }))
-      .slice(0, 24)
+    return (ledger as ConceptLedgerItem[]).map((item) => ({
+      label: String(item.label || item.conceptKey || '未命名概念'),
+      tone: conceptBarTone(item),
+      readiness: transferReadinessZh(item.transferReadiness),
+      risk: misconceptionRiskZh(item.misconceptionRisk),
+      riskTone: (String(item.misconceptionRisk || '').toLowerCase() === 'high' ? 'bad' : String(item.misconceptionRisk || '').toLowerCase() === 'medium' ? 'warn' : 'ok') as ConceptBar['riskTone'],
+      evidenceCount: Number(item.evidenceCount || 0)
+    }))
   }
   // 旧快照回退：无 ledger 时按 mastered/struggling/fragile 三组构建
   const c = d.value?.concepts
   if (!c) return []
   const fallback: ConceptBar[] = []
-  for (const label of c.mastered) fallback.push({ label, tone: 'ok', width: 90, readiness: '可迁移', risk: '低', riskTone: 'ok', evidenceCount: 0 })
-  for (const label of c.fragile) fallback.push({ label, tone: 'warn', width: 55, readiness: '待巩固', risk: '中', riskTone: 'warn', evidenceCount: 0 })
-  for (const label of c.struggling) fallback.push({ label, tone: 'bad', width: 25, readiness: '不宜迁移', risk: '高', riskTone: 'bad', evidenceCount: 0 })
+  for (const label of c.mastered) fallback.push({ label, tone: 'ok', readiness: '可迁移', risk: '低', riskTone: 'ok', evidenceCount: 0 })
+  for (const label of c.fragile) fallback.push({ label, tone: 'warn', readiness: '待巩固', risk: '中', riskTone: 'warn', evidenceCount: 0 })
+  for (const label of c.struggling) fallback.push({ label, tone: 'bad', readiness: '不宜迁移', risk: '高', riskTone: 'bad', evidenceCount: 0 })
   return fallback
+})
+
+/** 图谱节点详情的概念事实索引（概念名 → 可迁移 / 误解风险 / 证据数）。
+ *  台账 conceptKey 就是概念名，图节点 label 也是同一份 canonical 概念名，按 label 对得上；
+ *  对不上的节点不渲染这三行（不拿别的概念读数顶上）。 */
+const conceptFacts = computed<Record<string, MkGraphConceptFacts>>(() => {
+  const out: Record<string, MkGraphConceptFacts> = {}
+  for (const c of conceptBars.value) {
+    const key = c.label.trim().replace(/\s+/g, ' ')
+    if (!key) continue
+    out[key] = { readiness: c.readiness, risk: c.risk, riskTone: c.riskTone, evidenceCount: c.evidenceCount }
+  }
+  return out
 })
 
 /** 证据页「概念证据密度」：优先 ledger（evidenceCount），回退 conceptStates（masteryScore 归一化）。
@@ -2535,13 +2660,13 @@ const memMetaText = computed(() => {
   const parts = memViews.value.filter((v) => v.key !== 'all').map((v) => `${v.label} ${v.count}`)
   const base = parts.length ? parts.join(' · ') : `共 ${memoryPaneRows.value.length} 点`
   /* 作用域标注保留（2026-10-17 拍板）：它不是页级开关的复读——记忆块按用户级、跨全部路径，
-     与页内路径视角开关无关，读错会漏掉在另一条路径学过的概念。 */
+     与页内「路径范围」无关，读错会漏掉在另一条路径学过的概念。 */
   return `${base} · ${allPathsScope.value.label}`
 })
 const memMetaTitle = computed(() => {
   const overdue = memoryPaneRows.value.filter((r) => r.overdue).length
   return `记忆强度即可提取率（现在能想起来的概率）。待复习为已到复习期（${overdue} 条）。稳固≥80% 且未到期。未初始化为尚无记忆痕迹。` +
-    `\n本块与「路径视角」开关无关，按学习者聚合：` +
+    `\n本块与「路径范围」无关，按学习者聚合：` +
     `一个概念只保留一条记忆痕迹（记的是最后写入的那条路径），按路径切会漏掉在另一条路径学过的概念。`
 })
 
@@ -2589,7 +2714,7 @@ const snapshotGeneratedAtIso = computed<string | null>(() => {
   return base?.generatedAt ?? null
 })
 
-/** 四读数出处（学习者级聚合快照）：与「虚拟学习者档案」页的单次会话快照不同源，数值天然不同 */
+/** 四读数出处（全部路径汇总快照）：与「虚拟学习者档案」页的单次会话快照不同源，数值本就不相等 */
 const loadCaliberNote = computed(() => loadCaliber('aggregate', snapshotGeneratedAtIso.value))
 
 /** 虚拟账号互跳：同一实体两个 ID（users.id ↔ virtual_learner_profiles.id）。从 boot 已载入的
@@ -2613,9 +2738,6 @@ const snapshotHint = computed(() =>
   snapshotLabel.value.includes('证据不足') ? '该档案置信度低于 50%，证据不足，建议重算' : '档案置信度'
 )
 
-function barToneBadge(tone: ConceptBarTone): string {
-  return tone === 'ok' ? 'mk-badge--ok' : tone === 'warn' ? 'mk-badge--warn' : tone === 'bad' ? 'mk-badge--bad' : 'mk-badge--muted'
-}
 </script>
 
 <style scoped>
@@ -2701,6 +2823,8 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 /* 概念掌握条（conceptLedger 图形化） */
 .ld-bars { padding: 14px 16px 16px; display: grid; gap: 12px; }
+/* 概念掌握卡的图谱入口：与结论行共用 14px 左缘；卡内最后一个元素由它补底边距 */
+.ld-concepts__more { margin: 0 14px 12px; }
 .ld-bars--dense { padding-top: 12px; }
 .ld-bar { display: grid; gap: 5px; }
 /* 无证据概念：折叠态——半透明 + 更紧凑，降低「14 行 0 证据」的刷屏感；悬停恢复不透明度便于阅读 */
@@ -2709,10 +2833,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 .ld-bar__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
 .ld-bar__head strong { font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
 .ld-bar__badges { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-.ld-bar__risk { font-size: var(--mk-fs-micro); font-weight: 700; }
-.ld-bar__risk--ok { color: var(--mk-green); }
-.ld-bar__risk--warn { color: var(--mk-amber); }
-.ld-bar__risk--bad { color: var(--mk-red); }
 .ld-bar__ev {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
@@ -2816,7 +2936,10 @@ function barToneBadge(tone: ConceptBarTone): string {
 
 /* 学习状态追踪（lsm，原型 517-522）：label / track / val / hint 四列 */
 .ld-lsm { padding: 14px 16px; display: grid; gap: 12px; }
-.ld-lsm__row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto 72px; align-items: center; gap: 10px; }
+/* 参考带列 72 → 128px（2026-10-19 文案优化）：72px 时「0–10 · 参考 4–7」「慢 EWMA · 参考 ≤ 7」
+   全部折成两行，四行读数的高度不齐、参考带被拆开读；128px 下最长的带也单行放得下，
+   柱条仍占满剩余宽度（1600 / 1280 实测均不挤、无横向溢出） */
+.ld-lsm__row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto 128px; align-items: center; gap: 10px; }
 .ld-lsm__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .ld-lsm__track { min-width: 80px; }
 .ld-lsm__val { font-size: var(--mk-fs-micro); font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -2832,7 +2955,7 @@ function barToneBadge(tone: ConceptBarTone): string {
    下内边距不可省：实测 0 间距时胶囊底边与表头上边线贴合（用户走查「和下面重叠了」），
    给 12px 与区块节奏一致 */
 .ld-filtbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 12px 16px; }
-/* 路径视角（页级作用域开关）：夹在 hero 与页签栏之间的一行，形态沿用筛选条方言
+/* 路径范围（页级作用域开关）：夹在 hero 与页签栏之间的一行，形态沿用筛选条方言
    （mk-filter__select + 竖分隔 + 灰字 hint），不新造控件样式 */
 .ld-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 4px 0 10px; }
 .ld-scope__label { font-size: 12px; color: var(--mk-faint); }
@@ -2864,7 +2987,6 @@ function barToneBadge(tone: ConceptBarTone): string {
 /* 互动列：时长主值 + 副行（回合 · 知识点）——档位与平台页同阈值（<60s 秒退弱化 / ≥1500s 长时琥珀） */
 .ld-ia { display: grid; gap: 1px; min-width: 0; }
 .ld-ia__dur { font-size: var(--mk-fs-micro); font-weight: 600; font-variant-numeric: tabular-nums; }
-.ld-ia__dur--brief { color: var(--mk-muted); font-weight: 400; }
 .ld-ia__dur--long { color: var(--mk-amber); }
 /* 进度列：任务 x/y + minibar（口径与平台页共享 statusText.sessionProgress*） */
 .ld-prog { display: inline-flex; align-items: center; gap: 6px; }
@@ -3188,7 +3310,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-concept-label { font-size: var(--mk-fs-micro); }
   .ld-concept { font-size: var(--mk-fs-body); }
   .ld-bar__head strong { font-size: var(--mk-fs-body); }
-  .ld-bar__risk, .ld-bar__ev { font-size: var(--mk-fs-micro); }
+  .ld-bar__ev { font-size: var(--mk-fs-micro); }
   .ld-actions p { font-size: var(--mk-fs-body); }
   .ld-actions__k { font-size: var(--mk-fs-micro); }
   .ld-chip { font-size: var(--mk-fs-micro); }
@@ -3223,7 +3345,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-concept-label { font-size: var(--mk-fs-micro); }
   .ld-concept { font-size: var(--mk-fs-body); }
   .ld-bar__head strong { font-size: var(--mk-fs-body); }
-  .ld-bar__risk, .ld-bar__ev { font-size: var(--mk-fs-micro); }
+  .ld-bar__ev { font-size: var(--mk-fs-micro); }
   .ld-actions p { font-size: var(--mk-fs-body); }
   .ld-actions__k { font-size: var(--mk-fs-micro); }
   .ld-chip { font-size: var(--mk-fs-micro); }
@@ -3258,7 +3380,7 @@ function barToneBadge(tone: ConceptBarTone): string {
   .ld-concept-label { font-size: var(--mk-fs-body); }
   .ld-concept { font-size: var(--mk-fs-emphasis); }
   .ld-bar__head strong { font-size: var(--mk-fs-emphasis); }
-  .ld-bar__risk, .ld-bar__ev { font-size: var(--mk-fs-body); }
+  .ld-bar__ev { font-size: var(--mk-fs-body); }
   .ld-actions p { font-size: var(--mk-fs-emphasis); }
   .ld-actions__k { font-size: var(--mk-fs-body); }
   .ld-chip { font-size: var(--mk-fs-body); }

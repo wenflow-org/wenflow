@@ -198,8 +198,9 @@ describe('ModelEditorDialog', () => {
       }
     })
     await flushPromises()
+    // 占位符随已下线模型归一（deepseek-v4-flash → v4.1-flash）；
+    // 「创建后不改」提示已在本次 UI 改造中从对话框移除，断言同步删除
     expect(w.find('input[placeholder="deepseek-v4.1-flash"]').attributes('disabled')).toBeDefined()
-    expect(w.text()).toContain('创建后不改')
     updateModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()

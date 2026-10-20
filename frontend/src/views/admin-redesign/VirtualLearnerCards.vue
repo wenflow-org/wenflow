@@ -8,6 +8,16 @@
          家族的标准二级页机制（detailComponents 全局渲染，跨 scene 可用）。 -->
     <MkPageHead v-if="!embedded" title="学习者卡库" sub="账号、档案与故事池合为一张卡，导入或由平台生成即可使用">
       <template #actions>
+        <!-- 预置「一键加载」：页面级动作，2026-10-20 从「预置卡」KPI 卡面挪到页头右组
+             （KPI 卡只放 label + 值 + 一句口径，不放控件；按钮也不该把整张卡面撑成一个宽条）。
+             预置不是「随版本自动同步」，而是「定义随代码进仓、实例需一键加载」。 -->
+        <button
+          type="button"
+          class="mk-btn mk-btn--sm"
+          :disabled="presetLoading"
+          :title="presetLoadTitle"
+          @click="doLoadPresets"
+        >{{ presetLoading ? '同步中…' : '一键加载' }}</button>
         <button type="button" class="mk-btn mk-btn--sm" :disabled="exporting" @click="doExport">
           {{ exporting ? '导出中…' : '导出卡库' }}
         </button>
@@ -30,24 +40,15 @@
          2026-10-16 卡=身份模板后新增「已创建实例」：身份池里有多少条已经创建出虚拟学习者
          （卡墙默认展示全部卡，这两类混在一屏，需要分计才看得出池子规模）。 -->
     <section class="mk-kpi-grid" aria-label="卡库构成">
-      <!-- #91：预置区补「一键加载」入口。启动同步 2026-10-09 已摘除（空白项目零 VL 起步），
-           此后卡库的预置实例全靠显式入口写入；此前管理台只有计数、没有任何加载按钮。
-           口径同时修正：预置不是「随版本自动同步」，而是「定义随代码进仓、实例需一键加载」。 -->
+      <!-- 预置卡读数（#91 的加载入口 2026-10-20 移到页头右组）。启动同步 2026-10-09 已摘除
+           （空白项目零 VL 起步），实例仍需显式加载一次；卡面只报数与口径。 -->
       <MkKpi
         label="预置卡"
         :value="summary?.builtin ?? '—'"
         :hint="presetHint"
         :hintTone="presetHintTone"
-        title="平台预置角色，随仓库内的预置定义发布。不随启动自动同步，要用「一键加载」写入卡库。加载只新建缺的卡、按版本更新已有卡的定义，故事与记忆保留，卡不会被删。不含在「导出卡库」内"
-      >
-        <button
-          type="button"
-          class="mk-btn mk-btn--sm"
-          :disabled="presetLoading"
-          :title="presetLoadTitle"
-          @click="doLoadPresets"
-        >{{ presetLoading ? '同步中…' : '一键加载' }}</button>
-      </MkKpi>
+        :title="presetCardTitle"
+      />
       <MkKpi label="自建卡" :value="summary?.custom ?? '—'" hint="导入与 AI 创建" title="卡文档导入与后台/AI 创建的卡。「导出卡库」仅导出这部分" />
       <MkKpi label="已创建实例" :value="summary?.derived ?? '—'" hint="已从身份卡创建虚拟学习者" title="已经创建出虚拟学习者的身份卡数量。创建不消耗身份卡——同一张卡可反复创建出多个虚拟学习者" />
     </section>
@@ -351,14 +352,25 @@ const presetLoading = ref(false)
 /** 定义侧快照（只读副信息）：拿不到就退回静态提示，不影响按钮可用 */
 const presetSummary = ref<PresetOverviewSummary | null>(null)
 
+/* 卡面副行只留口径（2026-10-19 用户走查「hint 在报读数」）：原副行报「定义 N 条 · 已加载 M」
+   等计数读数，计数随长释进卡 title。例外是「定义回退」——那是人工要看的异常档，副行留着它
+   （读数可降级、告警不隐藏，与三态纪律同一条）。 */
 const presetHint = computed(() => {
   const s = presetSummary.value
   if (!s) return '平台预置（需一键加载）'
+  if (s.rolledBack) return `定义回退 ${s.rolledBack} 张 · 需人工确认`
+  return '平台预置定义 / 已加载卡数'
+})
+/** 预置卡 title：静态说明 + 当期计数（原计数读数的落点） */
+const presetCardTitle = computed(() => {
+  const base = '平台预置角色，随仓库内的预置定义发布。不随启动自动同步，要用「一键加载」写入卡库。加载只新建缺的卡、按版本更新已有卡的定义，故事与记忆保留，卡不会被删。不含在「导出卡库」内'
+  const s = presetSummary.value
+  if (!s) return base
   const parts = [`定义 ${s.definitions} 条`, `已加载 ${s.loaded}`]
   if (s.missing) parts.push(`待加载 ${s.missing}`)
   if (s.upgradable) parts.push(`待升级 ${s.upgradable}`)
   if (s.rolledBack) parts.push(`定义回退 ${s.rolledBack}`)
-  return parts.join(' · ')
+  return `${base}（当前 ${parts.join(' · ')}）`
 })
 /** 定义回退（实例版本高于定义）是人工要看的异常档：琥珀脚注（不阻断，只是要人看一眼） */
 const presetHintTone = computed<'warn' | ''>(() => ((presetSummary.value?.rolledBack ?? 0) > 0 ? 'warn' : ''))
@@ -546,6 +558,7 @@ onMounted(() => {
 .vlc-card__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* 首字头像：与虚拟学习者/画像页同 8 色板（--mk-vl-avatar-*，CM3 单源） */
 .vlc-avatar {
+  flex: none;
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -571,12 +584,18 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* 名称是唯一可伸缩项：长标题吃满剩余宽度后自己省略，别去压徽章 */
   flex: 1 1 auto;
+  min-width: 0;
   min-width: 0;
 }
 /* 来源角标可收缩：名字长时 flex:none 的角标会被挤出卡框，允许它收缩并省略 */
 .vlc-card__head .mk-badge {
-  flex: 0 1 auto;
+  /* 2026-10-20：原先允许 flex-shrink，4K 卡墙列更窄时长标题会把「预置」压成一条
+     只剩圆角边的色块（截图见走查）。徽章固定不缩，名称自己省略；上限 50% 兜住极端
+     长来源词（自建 / 预置 这类两字词远达不到），超长时才在徽章内部省略。 */
+  flex: 0 0 auto;
+  max-width: 50%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -631,6 +650,7 @@ onMounted(() => {
 }
 /* 勾选框：卡整体是 role=button，勾选框是它内部唯一的交互子控件，故撑到可点面积（≥24px 触控基准） */
 .vlc-card__pick {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;

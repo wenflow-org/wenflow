@@ -9,6 +9,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import SessionCockpit from '../SessionCockpit.vue';
 import { subPage } from '../store';
+import { liveRefreshSeq } from '../live';
 
 /** 后端 /admin/session-console 同构载荷（teaching 会话，含 path/goal/wrapup/evidence/timeline）
  * 返回 any：用例中会按「无映射数据降级」场景就地置 null，结构随端点演化，不必强类型化 fixture */
@@ -223,6 +224,17 @@ describe('SessionCockpit 双模式', () => {
     subPage.value = null;
   });
 
+  it('顶栏刷新（liveRefreshSeq 广播）重拉本页会话载荷——终端会话轮询已停，这是唯一重读入口', async () => {
+    getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+    await mountCockpit('session-real', 'ts_real_1');
+    const callsAfterMount = getRealSessionConsole.mock.calls.length;
+
+    liveRefreshSeq.value += 1;
+    await settle();
+
+    expect(getRealSessionConsole.mock.calls.length).toBeGreaterThan(callsAfterMount);
+  });
+
   it('真实模式：同构数据渲染（阶段条/Path 里程碑/时间线日志/wrapup 字段卡 + 来源徽章）', async () => {
     getRealSessionConsole.mockResolvedValue(realTeachingPayload());
 
@@ -232,9 +244,10 @@ describe('SessionCockpit 双模式', () => {
     // 只读声明与出口迁进 hero（模式 badge + 动作区「← 会话列表」）
     expect(wrapper.find('.cp-topbar').exists()).toBe(false);
     expect(wrapper.text()).toContain('真实会话 · 只读监控');
+    // 2026-10-19 用户走查「刷新重复了吧」：hero 刷新钮撤，改由顶栏一颗驱动（watch liveRefreshSeq）
     const heroActions = wrapper.find('.mk-hero__actions');
     expect(heroActions.text()).toContain('会话列表');
-    expect(heroActions.text()).toContain('刷新');
+    expect(heroActions.text()).not.toContain('刷新');
 
     // 阶段推进 stepper：4 步 + meta 副标。本夹具 stageResults.path 只给里程碑计数（无任务明细）
     // → 走后端计数兜底「1/2 里程碑」；有任务明细时 Path 步点走子任务动态读数（见 Path 页签用例：
@@ -820,6 +833,10 @@ describe('SessionCockpit 双模式', () => {
     // 聊天逐字稿消息里没有题干（检查点单独渲染，不混进对话气泡）
     const q = '针对「完成5道错题重做」这条建议，它预设的动机状态是什么？';
     expect(wrapper.findAll('.cp-transcript__message').some((m) => m.text().includes(q))).toBe(false);
+    /* 2026-10-19 用户走查「检查点怎么在下方，不符合课堂阅读顺序」期望把检查点按 submittedAt
+       内联进课堂列（.cp-checkpoint--inline）。该断言随 11cfde30 入库，但组件侧的内联实现
+       从未落地（全仓无 .cp-checkpoint--inline 类），故按现状断言末尾汇总块；
+       待内联实现落地后改回：.cp-checkpoints 不存在 + .cp-checkpoint--inline 存在。 */
     const block = wrapper.find('.cp-checkpoints');
     expect(block.exists()).toBe(true);
     expect(block.text()).toContain('检查点');

@@ -22,13 +22,16 @@
       <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" :hint="successHint" :title="successKpiTitle" />
       <MkKpi label="耗时 P50" :value="latencyP50" :hint="latencyHint" :title="latencyKpiTitle" />
       <MkKpi label="耗时 P99" :value="latencyP99" :hint="latencyHint" :title="latencyKpiTitle" />
-      <!-- P-49（#74）：失败数此前只有状态 pill 角标；错误类别 Top 取当前页行（窗口口径，随 hint 披露） -->
+      <!-- P-49（#74）：失败数此前只有状态 pill 角标。
+           2026-10-19 用户走查「hint 在报读数」：卡面副行只留口径（当前时间窗 · 失败调用计），
+           类别 Top 与「无失败」状态随长释进 tooltip——副行原先把「高频类别 + 次数」当读数报，
+           与左侧成功率/耗时三张卡的「口径短语」不是同一种句子。 -->
       <MkKpi
         label="失败调用"
         :value="failedCount === null ? '—' : failedCount"
         :tone="failedCount ? 'bad' : ''"
-        :hint="failedCount ? (topErrorCategory || '当前窗口内失败') : '当前窗口内无失败'"
-        title="失败数来自后端窗口 stats（与状态 pill 同源）。类别 Top 取当前页可见行，不是全窗口分布"
+        hint="当前时间窗 · 按失败调用计"
+        :title="`失败数来自后端窗口 stats（与状态 pill 同源）。类别 Top 取当前页可见行，不是全窗口分布${topErrorCategory ? ` · 当前页最多：${topErrorCategory}` : ''}${failedCount === 0 ? ' · 本窗口无失败调用' : ''}`"
       />
     </section>
 

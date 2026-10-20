@@ -87,7 +87,7 @@ const ppKpi = computed<PpKpiTile[]>(() => {
         // （仿真会话数 ≥1 的虚拟学习者账号）。标签补「账号」二字，与右侧两张账号卡同一量纲。
         label: '运行中仿真账号',
         value: runningSims.value,
-        hint: '有仿真会话在跑的账号',
+        hint: '仿真会话 ≥ 1',
         tone: '',
         title: '仿真会话数 ≥ 1 的虚拟学习者账号（随虚拟学习者数据刷新）',
       },
@@ -116,7 +116,7 @@ const ppKpi = computed<PpKpiTile[]>(() => {
         // ——标签说测试、数字含虚拟。取值收到测试账号本身，与左侧那张卡同集合。
         label: '测试账号活跃',
         value: active7dOf(testRows),
-        hint: '最后登录在 7 天内',
+        hint: '按最后登录日 · 仅测试账号',
         tone: '',
         title: `${scope}。只统计测试账号（不含虚拟学习者）中最近 7 天内登录过的`,
       },
@@ -126,28 +126,28 @@ const ppKpi = computed<PpKpiTile[]>(() => {
     {
       label: '真实用户',
       value: realRows.length,
-      hint: '不含虚拟学习者和测试账号',
+      hint: '排除虚拟与测试账号',
       tone: '',
       title: `${scope}。在「测试」视角下计入虚拟 / 测试账号${realRows.length ? `。其中管理员 ${admins}` : ''}`,
     },
     {
       label: '近 7 天活跃',
       value: active7dOf(realRows),
-      hint: '最后登录在 7 天内',
+      hint: '按最后登录日',
       tone: '',
       title: `${scope}。仅统计真实用户（不含虚拟 / 测试账号）`,
     },
     {
       label: '近 7 日新增',
       value: realRows.filter((u) => !!u.createdAt && Date.now() - new Date(u.createdAt).getTime() < 7 * 86400000).length,
-      hint: '按注册时间',
+      hint: '按注册日',
       tone: '',
       title: `${scope}。仅统计当前显示的账号（列表上限 1000 条）`,
     },
     {
       label: '从未登录',
       value: realRows.filter((u) => !u.lastLoginAt).length,
-      hint: '注册后一次都没登录',
+      hint: '无登录记录',
       tone: '',
       title: `${scope}。仅统计当前显示的账号；用于发现注册后搁置的账号`,
     },
@@ -185,5 +185,9 @@ watch(
 .pp-host > .mk-page--fill {
   flex: 1 1 auto;
   min-height: 0;
+}
+/* 窄屏：KPI 竖排后剩余高度不足以容纳列表卡，host 与子页一起退回内容高度、由页面滚动 */
+@media (max-width: 900px) {
+  .pp-host > .mk-page--fill { flex: none; height: auto; overflow: visible; }
 }
 </style>

@@ -101,7 +101,7 @@ function seedView(extra?: Partial<{ readOnly: boolean; providers: Array<Record<s
 }
 
 async function mountPanel(props: Record<string, unknown> = {}) {
-  const wrapper = mount(ModelProvidersPanel, { props })
+  const wrapper = mount(ModelProvidersPanel, { props, global: { stubs: { teleport: true } } })
   await flushPromises()
   await nextTick()
   return wrapper
@@ -159,11 +159,12 @@ describe('ModelProvidersPanel', () => {
     expect(keyInput.attributes('placeholder')).toBe('已配置 ····9xQv，留空 = 沿用')
     await btn(w, '显示')!.trigger('click')
     expect(w.find('.mpp-endpoint__key input').attributes('type')).toBe('text')
-    // 模型行：备用链按运行时上限截断展示
+    // 模型表：只留 模型 / 单价 / 状态 / 操作 四列（平台限制与备用链收进编辑弹层的高级设置）
+    expect(w.findAll('.mpp-table thead th').map((t) => t.text())).toEqual(['模型', '单价', '状态', ''])
     const rows = w.findAll('.mpp-table tbody tr')
     expect(rows).toHaveLength(2)
     expect(rows[0].text()).toContain('acme-chat')
-    expect(rows[0].text()).toContain('acme-chat-2')
+    expect(rows[1].text()).toContain('acme-chat-2')
   })
 
   it('启用开关即时保存：点开关就调写接口并采纳回吐的新视图', async () => {
@@ -204,22 +205,28 @@ describe('ModelProvidersPanel', () => {
     expect(rowBtn('测试').attributes('disabled')).toBeUndefined()
   })
 
-  it('获取模型列表 → 勾选登记：只登记勾中的，按对话档建立', async () => {
+  it('获取模型列表 → 逐条添加：一行一个模型，点「添加」带着模型 id 打开编辑弹层', async () => {
     const w = await mountPanel()
     await pick(w, 'Acme 网关')
-    pullMock.mockResolvedValue({ data: { data: { models: ['acme-chat', 'acme-chat-2', 'acme-pro'], registered: ['acme-chat', 'acme-chat-2'] } } })
-    addModelMock.mockResolvedValue({ data: { success: true, data: view, warnings: [] } })
+    pullMock.mockResolvedValue({ data: { data: { models: ['acme-chat', 'acme-chat-2', 'acme-pro'] } } })
     await btn(w, '获取模型列表')!.trigger('click')
     await flushPromises()
-    expect(w.find('.mpp-pulled').text()).toContain('上游返回 3 个模型，其中 1 个还没登记')
-    // 已登记的两个不可再勾（勾了也是重复 id）
-    const chips = w.findAll('.mpp-chip')
-    expect(chips[0].find('input').attributes('disabled')).toBeDefined()
-    const target = chips.find((c) => c.text().includes('acme-pro'))!.find('input')
-    await target.setValue(true)
-    await btn(w, '登记选中的 1 个')!.trigger('click')
+    const fetch = w.find('.mpp-fetch')
+    expect(fetch.text()).toContain('上游模型 3 个')
+    const rows = fetch.findAll('.mpp-fetch__row')
+    expect(rows).toHaveLength(3)
+    // 已登记的只显「已添加」，不再给添加按钮
+    const registered = rows.find((r) => r.text().includes('acme-chat') && !r.text().includes('acme-chat-2'))!
+    expect(registered.text()).toContain('已添加')
+    expect(registered.find('button').exists()).toBe(false)
+    // 未登记的逐条添加：id 预填进编辑弹层，基础信息由用户确认后保存
+    const target = rows.find((r) => r.text().includes('acme-pro'))!
+    await target.find('button').trigger('click')
     await flushPromises()
-    expect(addModelMock).toHaveBeenCalledWith('acme-gateway', { id: 'acme-pro', label: 'acme-pro', tier: 'chat' })
+    // 占位符随已下线模型归一（deepseek-v4-flash → v4.1-flash）
+    const idInput = w.find('.med-modal input[placeholder="deepseek-v4.1-flash"]')
+    expect(idInput.exists()).toBe(true)
+    expect((idInput.element as HTMLInputElement).value).toBe('acme-pro')
   })
 
   it('删除供应商要二次确认；确认后调删除接口', async () => {
@@ -236,16 +243,17 @@ describe('ModelProvidersPanel', () => {
     expect(removeMock).toHaveBeenCalledWith('acme-gateway')
   })
 
-  it('单模型测试走真实调用并把原文回显到面板', async () => {
+  it('单模型测试走真实调用，结果回显在该模型行内', async () => {
     const w = await mountPanel()
     await pick(w, 'Acme 网关')
     testMock.mockResolvedValue({ data: { data: { model: 'acme-chat', durationMs: 1234, content: '可以' } } })
     await btn(w, '测试')!.trigger('click')
     await flushPromises()
     expect(testMock).toHaveBeenCalledWith('acme-gateway', { modelId: 'acme-chat' })
-    expect(w.find('.mpp-test').text()).toContain('调用通过')
-    expect(w.find('.mpp-test').text()).toContain('1234ms')
-    expect(w.find('.mpp-test').text()).toContain('「可以」')
+    const result = w.find('.mpp-rowtest')
+    expect(result.text()).toContain('调用通过')
+    expect(result.text()).toContain('1234ms')
+    expect(result.attributes('title')).toContain('可以')
   })
 
   it('运行面读数：冷却中的模型标「冷却中」，空态是「健康」', async () => {
@@ -259,11 +267,12 @@ describe('ModelProvidersPanel', () => {
     expect(rows[1].text()).toContain('健康')
   })
 
-  it('上游有、登记表没有的模型收进折叠（默认收起）', async () => {
+  it('平台通道的上游清单同样逐条列出（不铺胶囊、不做批量登记）', async () => {
     const w = await mountPanel({ upstream: ['deepseek-v4-flash', 'mystery-1', 'mystery-2'] })
-    const fold = w.find('.mpp-upstream')
-    expect(fold.exists()).toBe(true)
-    expect(fold.find('summary').text()).toContain('上游还有 2 个未登记')
-    expect(fold.attributes('open')).toBeUndefined()
+    const rows = w.findAll('.mpp-fetch__row')
+    expect(rows).toHaveLength(3)
+    expect(rows[0].text()).toContain('已添加')
+    expect(rows[1].text()).toContain('添加')
+    expect(w.find('.mpp-chip').exists()).toBe(false)
   })
 })

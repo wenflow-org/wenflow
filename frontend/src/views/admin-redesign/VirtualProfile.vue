@@ -53,46 +53,51 @@
     <div class="vp-tabsrow">
       <!-- 二级页签（原型 subtabs 下划线式，同 LearnerDetail/UserDetail）：角标保留「数量即 tab 角标」决策 -->
       <MkSubTabs v-model="activeTab" :tabs="tabs" />
-      <!-- 跨页入口提到可见位（原只在 ⋯ 菜单里，两页互不相通的心智问题一半来自此）：
+      <!-- 右组（2026-10-20 用户走查「按钮位置调整」）：跨页入口与 ⋯ 同一组贴右缘。
+           此前按钮跟在页签后面单飞——离页签 12px、离右缘 600px+，读起来像页签级控件；
+           它和 ⋯ 一样是页面级动作，归右组后才有统一的「页签左 / 动作右」轴。
+           提到可见位的原因不变（原只在 ⋯ 菜单里，两页互不相通的心智问题一半来自此）：
            同一实体两个 ID，这里是仿真档案视图，跳过去是学习视图 -->
-      <button
-        v-if="d.userId"
-        type="button"
-        class="mk-btn mk-btn--sm"
-        title="同一账号的学习视图：学习模型 / 证据 / 图谱 / 教学会话 / 记忆复习"
-        @click="goRealLearner()"
-      >学习详情 →</button>
-      <div v-if="isLive" class="mk-menu vp-tabsrow__ops">
+      <div class="vp-tabsrow__actions">
         <button
+          v-if="d.userId"
           type="button"
-          class="mk-menu__btn"
-          aria-label="更多操作"
-          aria-haspopup="menu"
-          :aria-expanded="openMenu === 'ops'"
-          title="更多操作：座舱 / 生命周期 / 账号自动学习 / 编辑画像"
-          @click.stop="toggleMenu('ops')"
-        >⋯</button>
-        <div v-if="openMenu === 'ops'" class="mk-menu__pop" :style="popStyle" @click.stop>
+          class="mk-btn mk-btn--sm"
+          title="同一账号的学习视图：学习模型 / 证据 / 图谱 / 教学会话 / 记忆复习"
+          @click="goRealLearner()"
+        >学习详情 →</button>
+        <div v-if="isLive" class="mk-menu vp-tabsrow__ops">
           <button
-            v-for="c in lifeControls"
-            :key="c.key"
             type="button"
-            class="mk-menu__item"
-            :class="{ 'mk-menu__item--danger': c.tone === 'danger' }"
-            :disabled="sessionBusy"
-            :title="c.hint"
-            @click="runLifeAction(c); closeMenu()"
-          >{{ c.label }}</button>
-          <div v-if="lifeControls.length" class="mk-menu__sep" aria-hidden="true"></div>
-          <button type="button" class="mk-menu__item" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="closeMenu(); editOpen = true">画像与偏好</button>
-          <!-- 双向互链（卡库 ↔ 虚拟学习者）：卡与本人是同一条档案记录。带 from 使卡页
-               面包屑拼出「画像 / 卡」并支持点面包屑回本页（子页返回机制，不自造返回钮） -->
-          <div class="mk-menu__sep" aria-hidden="true"></div>
-          <button type="button" class="mk-menu__item" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="closeMenu(); goSourceCard()">查看来源卡</button>
-          <!-- 跨页入口（#74）：该虚拟学习者绑定的真实账号 / 记忆与复习；userId 缺失时隐藏 -->
-          <div v-if="d.userId" class="mk-menu__sep" aria-hidden="true"></div>
-          <button v-if="d.userId" type="button" class="mk-menu__item" title="查看该虚拟学习者绑定的学习者详情（学习模型 / 证据 / 图谱）" @click="closeMenu(); goRealLearner()">学习详情</button>
-          <button v-if="d.userId" type="button" class="mk-menu__item" title="进入记忆与复习页：归并凭据 / 回滚 / 到期明细（仅真实账号）" @click="closeMenu(); goMemoryReview()">记忆与复习</button>
+            class="mk-menu__btn"
+            aria-label="更多操作"
+            aria-haspopup="menu"
+            :aria-expanded="openMenu === 'ops'"
+            title="更多操作：座舱 / 生命周期 / 账号自动学习 / 编辑画像"
+            @click.stop="toggleMenu('ops')"
+          >⋯</button>
+          <div v-if="openMenu === 'ops'" class="mk-menu__pop" :style="popStyle" @click.stop>
+            <button
+              v-for="c in lifeControls"
+              :key="c.key"
+              type="button"
+              class="mk-menu__item"
+              :class="{ 'mk-menu__item--danger': c.tone === 'danger' }"
+              :disabled="sessionBusy"
+              :title="c.hint"
+              @click="runLifeAction(c); closeMenu()"
+            >{{ c.label }}</button>
+            <div v-if="lifeControls.length" class="mk-menu__sep" aria-hidden="true"></div>
+            <button type="button" class="mk-menu__item" title="编辑画像与偏好：修改名称、长期倾向、知识水平、个性特质等" @click="closeMenu(); editOpen = true">画像与偏好</button>
+            <!-- 双向互链（卡库 ↔ 虚拟学习者）：卡与本人是同一条档案记录。带 from 使卡页
+                 面包屑拼出「画像 / 卡」并支持点面包屑回本页（子页返回机制，不自造返回钮） -->
+            <div class="mk-menu__sep" aria-hidden="true"></div>
+            <button type="button" class="mk-menu__item" title="查看来源卡：该虚拟学习者在「学习者卡库」里的同一张卡（来源 / 人设 / 已备故事）" @click="closeMenu(); goSourceCard()">查看来源卡</button>
+            <!-- 跨页入口（#74）：该虚拟学习者绑定的真实账号 / 记忆与复习；userId 缺失时隐藏 -->
+            <div v-if="d.userId" class="mk-menu__sep" aria-hidden="true"></div>
+            <button v-if="d.userId" type="button" class="mk-menu__item" title="查看该虚拟学习者绑定的学习者详情（学习模型 / 证据 / 图谱）" @click="closeMenu(); goRealLearner()">学习详情</button>
+            <button v-if="d.userId" type="button" class="mk-menu__item" title="进入记忆与复习页：归并凭据 / 回滚 / 到期明细（仅真实账号）" @click="closeMenu(); goMemoryReview()">记忆与复习</button>
+          </div>
         </div>
       </div>
     </div>
@@ -622,16 +627,20 @@
 
         <section v-if="activeTab === 'timeline'" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">日程 · 日期模拟</h3>
-            <span class="mk-badge mk-badge--muted">{{ timelineSessionOptions.length }} 个会话</span>
+            <h3 class="mk-card__title">学习日程</h3>
+            <!-- 计数只在有会话时出：0 个会话时下面已有空态说明，徽章再报一次 0 是重复 -->
+            <span v-if="timelineSessionOptions.length" class="mk-badge mk-badge--muted">{{ timelineSessionOptions.length }} 个会话</span>
           </div>
-          <p class="vp-timeline__hint">
-            按自然日聚合该会话的学习负担、学习状态、系统干预与难度调整（只读）。日期模拟默认关闭，这里显示的是既有历史读数。
-          </p>
-          <p v-if="!timelineSessionOptions.length" class="vp-timeline__empty">
-            暂无可查看的会话：该虚拟人还没有历史会话，先运行一次故事或账号自动学习。
-          </p>
+          <template v-if="!timelineSessionOptions.length">
+            <p class="vp-timeline__empty">
+              这个虚拟学习者还没有会话。运行一个故事后，这里会按天显示日程。
+            </p>
+          </template>
           <template v-else>
+            <!-- 说明只在有会话时出：没有会话就没有可按天看的读数，此时只留空态给下一步 -->
+            <p class="vp-timeline__hint">
+              按自然日汇总所选会话的学习负担、学习状态、系统干预与难度调整。
+            </p>
             <label class="mk-field vp-timeline__picker">
               <span class="mk-field__label">会话</span>
               <select v-model="timelineSessionId" class="mk-field__select">
@@ -905,7 +914,7 @@ import { useRouter } from 'vue-router'
 import { statusText } from './statusText'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
-import { adminVirtualLearnersApi } from '@/api/adminApi'
+import { adminVirtualLearnersApi, adminLearnerModelsApi } from '@/api/adminApi'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { memoryReviewUrl } from './learner-profile'
 import { LEARNER_METRICS, LEARNER_METRIC_CODES } from '@/utils/learnerMetrics'
@@ -1677,6 +1686,24 @@ async function loadDetail(id?: string, quiet = false) {
     if (seq !== loadSeq) return
     const p = (raw.profile as Record<string, unknown>) || {}
     const sessions = (raw.sessions || raw.virtual_sessions || []) as Record<string, unknown>[]
+    // 学习状态读数：画像详情不带宽表字段，按绑定 userId 取学习者模型的单次会话快照
+    const boundUserId = String(raw.userId || p.userId || '')
+    learnerMetrics.value = null
+    learnerMetricsAt.value = null
+    if (boundUserId) {
+      void adminLearnerModelsApi.getDetail(boundUserId, { includeTest: true })
+        .then((res) => {
+          if (seq !== loadSeq) return
+          const body = (res?.data?.data ?? res?.data ?? {}) as Record<string, unknown>
+          const ds = (body.dynamicState || {}) as Record<string, unknown>
+          const m = (ds.lessonMetrics || ds.metrics || null) as Record<string, number> | null
+          if (!m) return
+          learnerMetrics.value = m
+          const fresh = (body.freshness || {}) as Record<string, unknown>
+          learnerMetricsAt.value = String(fresh.generatedAt || '') || null
+        })
+        .catch(() => { /* 读数取不到就保持空态，不阻断画像主体 */ })
+    }
     const traitsRaw = (raw.personalityTraits || p.traits || {}) as Record<string, unknown>
 
     const storiesBody = storiesRes?.data?.data ?? storiesRes?.data ?? null
@@ -2410,8 +2437,15 @@ const loopStages = computed<LoopStage[]>(() => {
     标签/参考带/色调阈值单点取自 learnerMetrics.ts——此前本页与 LearnerDetail 各写一套
     （参考带一边「参考 4–7」一边「0-10，越高越累」）。 */
 interface LsmRow { label: string; pct: number; tone: 'ok' | 'warn' | 'bad'; value: string; ref: string; refTitle: string; refCls: string }
+/** 单次会话的四项读数（LSS/KTL/LF/LSB）与取样时刻。
+ *  数据来自绑定账号的学习者模型 dynamicState.useLessonMetrics（lessonMetrics 是单次会话快照，
+ *  metrics 是全部路径汇总）；画像详情接口本身不返回这两个字段——此前卡里永远空态，
+ *  即便会话已经跑完（2026-10-20 跑数时发现）。 */
+const learnerMetrics = ref<Record<string, number> | null>(null)
+const learnerMetricsAt = ref<string | null>(null)
+
 const lsmRows = computed<LsmRow[]>(() => {
-  const m = d.value?.learningState
+  const m = learnerMetrics.value
   if (!m) return []
   const width = (v: number) => Math.min(100, Math.round((v / 10) * 100))
   const rows: LsmRow[] = []
@@ -2435,7 +2469,7 @@ const lsmRows = computed<LsmRow[]>(() => {
 })
 
 /** 四读数出处（单次会话运行时快照）：与「学习者详情」页的学习者级聚合态不同源，数值天然不同 */
-const loadCaliberNote = computed(() => loadCaliber('session-snapshot', d.value?.learningStateAt))
+const loadCaliberNote = computed(() => loadCaliber('session-snapshot', learnerMetricsAt.value))
 
 /** 作用域标注：本页的「路径」轴是**故事**（每条 story 是这个角色的一条独立学习线）。
  *  故事池按故事、运行流水与记忆池跨全部故事、学习状态读数取单次会话——同一屏三种作用域，
@@ -2751,7 +2785,9 @@ async function quietReload(id: string) {
 
 /* tabs 行右端常驻账号级 ⋯ 操作（页签本体是共享 MkSubTabs 下划线式） */
 .vp-tabsrow { display: flex; align-items: center; gap: 12px; }
-.vp-tabsrow__ops { margin-left: auto; }
+/* 右组：学习详情 → 与 ⋯ 同贴右缘；fill 模式（isLive=false）下 ⋯ 不渲染时按钮也照样贴右 */
+.vp-tabsrow__actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.vp-tabsrow__ops { margin-left: 0; }
 /* 内联空态已改用共享 .mk-empty--line（审核 2026-10-06 低 [97]）：原 .vp-none 私有基类删除 */
 
 .vp-body { display: grid; gap: 14px; }

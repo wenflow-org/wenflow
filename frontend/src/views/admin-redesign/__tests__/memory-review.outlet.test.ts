@@ -184,6 +184,48 @@ describe('MemoryReview R7：批量确认调用 API（任务书 D）', () => {
   });
 });
 
+describe('MemoryReview 归并处理条（2026-10-19 重设计）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('0 选中：只说明怎么开始，不摆一枚永远点不动的禁用按钮', async () => {
+    const body = DETAIL_FULL();
+    body.audit.proposals[0].autoApplicable = false;
+    body.audit.stats.autoApplicable = 0;
+    const w = await mountPanels(body);
+
+    const bar = w.find('.mr-bulk');
+    expect(bar.exists()).toBe(true);
+    expect(bar.text()).toContain('批量处理');
+    expect(bar.text()).toContain('本次没有可自动执行的建议');
+    expect(bar.findAll('button')).toHaveLength(0);
+  });
+
+  it('勾选后：读数写清选了几项与构成，警告独立一行常显', async () => {
+    const w = await mountPanels();
+    // 默认勾选可自动执行的归并建议
+    expect(w.find('.mr-bulk').text()).toContain('已选 1 项');
+    expect(w.find('.mr-bulk').text()).toContain('归并 1');
+
+    const boxes = w.findAll('.mr__detail input[type="checkbox"]');
+    await boxes[1].trigger('change');
+    await boxes[2].trigger('change');
+    await flushPromises();
+
+    const bar = w.find('.mr-bulk');
+    expect(bar.text()).toContain('已选 3 项');
+    expect(bar.text()).toContain('归并 1');
+    expect(bar.text()).toContain('人工确认对 1');
+    expect(bar.text()).toContain('散键 1');
+    expect(bar.text()).toContain('清空');
+    expect(bar.text()).toContain('执行选中（3）');
+    const warn = bar.find('.mr-bulk__warn');
+    expect(warn.exists()).toBe(true);
+    expect(warn.text()).toContain('1 条「需人工看」对');
+  });
+});
+
 describe('MemoryReview R7：已执行历史入口', () => {
   beforeEach(() => {
     vi.clearAllMocks();

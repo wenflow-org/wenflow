@@ -160,7 +160,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     w.unmount();
   });
 
-  it('风险摘要带量级「X 等 2 个概念掌握薄弱」；平均置信度 hint 带基数', async () => {
+  it('风险摘要带量级「X 等 2 个概念掌握薄弱」；平均置信度基数进 title 长释', async () => {
     // 审核 #12：风险摘要列不再默认隐藏（默认集变更同时升键 v2→v3）；本用例播种「全列显示」
     // 的列偏好，仍锁行内量级文案的渲染契约
     localStorage.setItem('wf_learner_hidden_cols_v3', JSON.stringify([]));
@@ -168,8 +168,11 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     await settle();
     const dingRow = w.findAll('tbody tr').find((r) => r.text().includes('丁'));
     expect(dingRow!.text()).toContain('「X」等 2 个概念掌握薄弱');
+    /* 2026-10-19 用户走查「KPI hint 在报读数」：卡面副行只留口径短语，样本量（基数）
+       随长释进 title——断言从 hint 文本改为 title 属性，口径本身仍在副行可见 */
     const avg = w.findAll('.mk-kpi').find((c) => c.text().includes('平均置信度'));
-    expect(avg!.text()).toContain('基于 4 位'); // 四人都有任务，全部入均值
+    expect(avg!.find('.mk-kpi__hint').text()).toBe('按有学习任务且产出置信度的学习者取平均');
+    expect(avg!.attributes('title')).toContain('本次纳入 4 位'); // 四人都有任务，全部入均值
     w.unmount();
     localStorage.removeItem('wf_learner_hidden_cols_v3');
     liveLearners.value = [];
@@ -192,11 +195,13 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
       return card!;
     };
     expect(kpiCard('低置信').find('.mk-kpi__num').text()).toBe('2'); // 丙/丁；无任务的戊不计（旧口径=3）
-    expect(kpiCard('低置信').find('.mk-kpi__hint').text()).toContain('共 4 位'); // 基数=有学习任务的学习者
+    // 基数=有学习任务的学习者：读数行只留口径，基数随 title 长释（2026-10-19 全站 hint 统一）
+    expect(kpiCard('低置信').find('.mk-kpi__hint').text()).toBe('低于 50% 的有学习任务的学习者');
+    expect(kpiCard('低置信').attributes('title')).toContain('纳入计算的学习者共 4 位');
 
-    // 分布带已退役：无任务行不计的口径由 KPI 基数承载，不再有分档条副文
+    // 分布带已退役：无任务行不计的口径由 KPI 基数承载（现住 title），不再有分档条副文
     expect(w.find('.mk-distband').exists()).toBe(false);
-    expect(kpiCard('平均置信度').find('.mk-kpi__hint').text()).toContain('基于 4 位');
+    expect(kpiCard('平均置信度').attributes('title')).toContain('本次纳入 4 位');
 
     // 「低置信」pill 过滤与 KPI 同口径：戊不出现，行数=KPI 读数（否则计数/过滤再打架）
     await w.findAll('.mk-pill').find((p) => p.text().includes('低置信'))!.trigger('click');
@@ -222,17 +227,18 @@ describe('UserAccountPane 账号轴口径（人员详情合并后）', () => {
     return w;
   }
 
-  it('tab 收敛守卫：账户与许可合并为一卡（2026-10-11 外部评审 #2）+ 最近活动 feed 仍在', async () => {
+  it('账号页只留账户与许可：活动 feed 已迁出（2026-10-19 用户拍板去重）', async () => {
     const w = await mountPane();
     const titles = w.findAll('.mk-card__title').map((t) => t.text());
     // 许可不再独占卡片（原卡体只有一句说明 + 两个动作），按外部评审 #2 原建议收编为
     // 账户 kv 里的一行属性（.ud-kv__wide：徽章 + 说明 + 右端动作）
     expect(titles).toContain('账户与许可');
-    expect(titles).toContain('最近活动');
+    // 「最近活动」的会话行与概览「最近会话」同源同对象；目标对话迁到概览「最近目标对话」
+    expect(titles).not.toContain('最近活动');
+    expect(w.find('.ud-feed').exists()).toBe(false);
     expect(titles).not.toContain('许可与接入');
     expect(w.find('.ud-kv').text()).toContain('开发视角许可');
     expect(w.find('.ud-kv__wide').exists()).toBe(true);
-    expect(w.find('.ud-feed').exists()).toBe(true);
     w.unmount();
   });
 
@@ -254,22 +260,12 @@ describe('UserAccountPane 账号轴口径（人员详情合并后）', () => {
     liveLearners.value = [];
   });
 
-  it('活动时间线排除已废弃会话，并在卡头如实标注隐藏条数', async () => {
-    listSessions.mockResolvedValueOnce({
-      data: {
-        data: {
-          items: [
-            { id: 's-keep', topic: '有效会话', subject: 'concept-teaching', status: 'completed', startTime: '2026-09-30T10:00:00Z', messageCount: 4, duration: 60 },
-            { id: 's-drop', topic: '废弃会话', subject: 'concept-teaching', status: 'discarded', startTime: '2026-09-30T09:00:00Z', messageCount: 1, duration: 1 }
-          ]
-        }
-      }
-    });
+  it('账号页不再自行拉会话列表（活动 feed 已迁出）', async () => {
+    // 活动 feed 已迁出账号页（2026-10-19）：概览「最近会话」保留同款「排除废弃 + 标注隐藏条数」口径，
+    // 目标对话改由「最近目标对话」承载；此处只守卫账号页不再自行拉会话列表。
     const w = await mountPane();
-    const feed = w.find('.ud-feed').text();
-    expect(feed).toContain('有效会话');
-    expect(feed).not.toContain('废弃会话');
-    expect(w.text()).toContain('已隐藏废弃 1');
+    expect(w.find('.ud-feed').exists()).toBe(false);
+    expect(listSessions).not.toHaveBeenCalled();
     w.unmount();
     liveLearners.value = [];
   });

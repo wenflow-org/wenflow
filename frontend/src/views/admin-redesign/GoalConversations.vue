@@ -34,13 +34,13 @@
       <MkKpi
         label="参与用户"
         :value="stats?.distinctUsers ?? '—'"
-        hint="按用户计，不按发起次数"
+        hint="按用户去重"
         title="至少发起过一次目标对话的用户数"
       />
       <MkKpi
         label="近 7 天新增"
         :value="recentCreated7d ?? '—'"
-        hint="按创建日归集"
+        hint="按创建日"
         title="最近 7 天创建的目标对话数（按创建日期统计）"
       />
       <!-- P-49（#74）：停滞会话此前只活在分布带 hint 里；升为卡，0 是健康信号 -->
@@ -48,8 +48,8 @@
         label="停滞会话"
         :value="rows.length ? staleActiveCount : '—'"
         :tone="staleActiveCount ? 'warn' : ''"
-        hint="进行中且 7 天未更新"
-        :title="`按最近 ${LIST_LIMIT} 条列表窗口统计（非全量）：status=active 且 updatedAt 超过 ${STALLED_DAYS} 天`"
+        hint="进行中 · 超过 7 天未更新"
+        :title="`按最近 ${LIST_LIMIT} 条列表窗口统计（非全量）。进行中、超过 ${STALLED_DAYS} 天未更新的会话数`"
       />
     </section>
     <!-- stats 三态（P1#6）：失败显错误条 + 重试（原错误桶随构成带退役，2026-10-04 晚贴表分布条） -->
@@ -97,7 +97,7 @@
                 class="mk-pill"
                 :class="{ 'mk-pill--active': noPathOnly }"
                 :aria-pressed="noPathOnly"
-                title="进行中且尚未生成路径"
+                title="进行中 · 尚未生成路径"
                 @click="noPathOnly = !noPathOnly"
               >未生成路径<span class="mk-pill__count">{{ pathPendingCount }}</span></button>
             </div>

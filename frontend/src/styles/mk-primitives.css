@@ -82,6 +82,24 @@
   overflow-y: auto;
 }
 
+/* 窄屏：fill 布局退回整页滚动（2026-10-21 全 admin 走查）。
+   视口变窄后 KPI 卡会竖排成 4–6 行，把 flex 内的列表卡压到 0 高——卡头与分页器还在，
+   表格行却整块被裁剪（People / 执行日志 / Skill 列表实测卡高 191/183/2px）。
+   窄屏下让页面自身滚动、卡片按内容增高；嵌套的 fill 宿主（People 内嵌 Users、
+   运营中心内嵌各页签）同样解除高度约束，否则内层仍在 0 高窗口里自滚。 */
+@media (max-width: 900px) {
+  /* !important：宿主页（People / ApiConfig / OpsHub）与嵌入子页各自在 scoped CSS 里
+     用同特异度规则锁高度，加载顺序晚于本文件；这里必须压过它们，窄屏才不会留下
+     0 高窗口或整张卡落在可视区外。 */
+  .mk-page--fill { height: auto !important; min-height: 0 !important; overflow-y: auto !important; }
+  .mk-page--fill .mk-page--fill { flex: none !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }
+  .mk-page--fill .mk-card--fill { flex: none !important; min-height: 0 !important; }
+  .mk-card--fill > .mk-table-scroll,
+  .mk-card--fill > .log-body,
+  .mk-card--fill > .ss-body,
+  .mk-card--fill > .sk-grid { flex: none !important; min-height: 0 !important; max-height: none !important; }
+}
+
 /* ----- 状态条（每页开头一行） -----
    例外授权：ExecLogs 终端页自建 .log-status（规格一致的本地副本，内边距略大以容纳筛选区），
    不再回归本类，属登记在案的状态条例外形态 */

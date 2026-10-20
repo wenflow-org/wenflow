@@ -17,6 +17,10 @@ export interface ModelCatalogEntry {
   providerName?: string
   /** 该模型所属供应商是否自带端点（llm-providers.json 声明了 baseUrl） */
   hasOwnEndpoint?: boolean
+  supportsThinking?: boolean
+  supportsReasoningEffort?: boolean
+  vision?: boolean
+  pricing?: { inputPer1M?: number; cachedInputPer1M?: number; outputPer1M?: number }
 }
 
 export interface ModelCatalogOption {
@@ -58,10 +62,30 @@ export function useModelCatalog() {
     }))
   )
 
+  /**
+   * 模型选择器（MkModelPicker）用的富候选：按供应商分组，带层级 / 能力 / 单价。
+   * 与 options 同源；datalist 只剩历史调用点，新页面一律走这里。
+   */
+  const pickerOptions = computed(() =>
+    models.value.map((m) => ({
+      value: m.id,
+      label: m.label,
+      tier: m.tier,
+      providerId: m.providerId,
+      group: m.providerName || m.providerId,
+      providerName: m.providerName || m.providerId,
+      thinking: m.supportsThinking === true,
+      reasoning: m.supportsReasoningEffort === true,
+      vision: m.vision === true,
+      priceIn: m.pricing?.inputPer1M ?? null,
+      priceOut: m.pricing?.outputPer1M ?? null
+    }))
+  )
+
   /** 目录中不存在的模型 id（已保存的历史值/通道拉取值），仍需出现在候选里 */
   function extraIds(current: readonly string[]): string[] {
     return current.filter((id) => id && !models.value.some((m) => m.id === id))
   }
 
-  return { models, options, loadFailed, load, extraIds }
+  return { models, options, pickerOptions, loadFailed, load, extraIds }
 }

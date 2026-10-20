@@ -4,12 +4,13 @@
  *   单阶段不渲染，多阶段可筛选，meta 显示「N / M 条」；
  * - 到期列三态：timeAgo 对未来时间返回「刚刚」的失真修复（逾期 N 天 / 今天到期 / N 天后）。
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { nextTick } from 'vue';
 
 const listSessions = vi.hoisted(() => vi.fn());
+const listGoals = vi.hoisted(() => vi.fn());
 const listPaths = vi.hoisted(() => vi.fn());
 const getMemoryTraces = vi.hoisted(() => vi.fn());
 const getLearnerEvidence = vi.hoisted(() => vi.fn().mockResolvedValue({ items: [], domain: [], loadCurve: [] }));
@@ -84,6 +85,7 @@ vi.mock('../learner-profile', () => ({
 }));
 vi.mock('@/api/adminApi', () => ({
   adminTeachingSessionsApi: { list: listSessions },
+  adminGoalConversationsApi: { list: listGoals },
   // 路径视角开关的选项来源（GET /paths?userId=）
   adminLearningContentApi: { listPaths },
   // 记忆页签嵌入的 MemoryReview 面板会在挂载时拉明细：给 resolved 值防空 catch 炸响
@@ -107,8 +109,8 @@ vi.mock('../useConfirm', () => ({ askConfirm: vi.fn() }));
 vi.mock('@/utils/toast', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
 
 import LearnerDetail from '../LearnerDetail.vue';
-import { liveVirtuals, liveGetLearnerDetail, type LiveVirtual } from '../live';
-import { openSubPage } from '../store';
+import { liveVirtuals, liveGetLearnerDetail, liveLearners, type LiveVirtual } from '../live';
+import { openSubPage, subPage } from '../store';
 
 function sessionRow(id: string, milestoneIndex: number | null, status = 'completed') {
   return {
@@ -505,7 +507,8 @@ describe('四读数出处标注 + 虚拟档案互跳', () => {
     liveVirtuals.value = [];
   });
 
-  it('卡头标出「学习者级聚合」出处（与虚拟档案页的单次会话快照区分开）', async () => {
+  /* 2026-10-19 文案优化：短标改说「全部路径汇总 · 取样 X」，长释改说「取自单次会话」 */
+  it('卡头标出「全部路径汇总」出处（与虚拟档案页的单次会话快照区分开）', async () => {
     // 共享 mock 的详情没有 dynamicState（学习状态追踪卡随之不渲染），本用例整体替换详情响应
     const detailMock = vi.mocked(liveGetLearnerDetail as unknown as ReturnType<typeof vi.fn>);
     const original = detailMock.getMockImplementation();
@@ -523,9 +526,9 @@ describe('四读数出处标注 + 虚拟档案互跳', () => {
     try {
       const w = await mountLd([]);
       const metas = w.findAll('.mk-card__meta').map((m) => m.text());
-      expect(metas.some((t) => t.includes('学习者级聚合')), `实际 meta: ${JSON.stringify(metas)}`).toBe(true);
+      expect(metas.some((t) => t.includes('全部路径汇总')), `实际 meta: ${JSON.stringify(metas)}`).toBe(true);
       // 长释必须点明另一页的来源，否则「数字打架」的观感照旧
-      const note = w.find('.mk-card__meta[title*="单次会话当场留下的读数"]');
+      const note = w.find('.mk-card__meta[title*="取自单次会话"]');
       expect(note.exists()).toBe(true);
     } finally {
       routeQuery.tab = prevTab;
@@ -544,6 +547,9 @@ describe('四读数出处标注 + 虚拟档案互跳', () => {
     await flushPromises();
     const btn = w.findAll('button').find((b) => b.text().includes('虚拟档案'));
     expect(btn, '虚拟账号应出现互跳入口').toBeTruthy();
+    // 2026-10-20 用户「大小不一致」：hero 动作位统一默认档，不再和「重算档案」一高一矮
+    expect(btn!.classes()).toContain('mk-btn');
+    expect(btn!.classes()).not.toContain('mk-btn--sm');
     await btn!.trigger('click');
     expect(openSubPage).toHaveBeenCalledWith(
       'virtual',
@@ -695,5 +701,99 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
     expect(graph.exists()).toBe(true);
     expect(graph.props('showPathRail')).toBe(false);
     expect(graph.props('pathId')).toBe('lp1'); // 取值仍由页级作用域决定
+  });
+});
+
+/**
+ * 概览对象轴（2026-10-19 用户拍板）：
+ * 账号页的「最近活动」把「最近会话」的对象行又列了一遍，已撤；目标对话迁到概览
+ * 成为「最近目标对话」，与会话同轴并列；事件轴卡改名「学习动态」与它们区分。
+ */
+describe('LearnerDetail 概览：最近目标对话 + 学习动态命名', () => {
+  beforeEach(() => {
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    getMemoryTraces.mockReset().mockResolvedValue([]);
+    listGoals.mockReset().mockResolvedValue({
+      data: {
+        data: {
+          conversations: [
+            { id: 'gc-same-path', description: '地理大题怎么练', status: 'completed', learningPathId: 'lp1', createdAt: '2026-10-18T10:00:00Z' },
+            { id: 'gc-other-path', description: '另一个路径的目标', status: 'active', learningPathId: 'lp-other', createdAt: '2026-10-17T10:00:00Z' }
+          ]
+        }
+      }
+    });
+    routeQuery.tab = 'overview';
+  });
+  afterEach(() => {
+    routeQuery.tab = 'sessions';
+  });
+
+  it('两张卡分工：事件轴叫「学习动态」，对象轴新增「最近目标对话」', async () => {
+    const w = await mountLd([]);
+    const titles = w.findAll('.mk-card__title').map((t) => t.text());
+    expect(titles).toContain('学习动态');
+    expect(titles).toContain('最近目标对话');
+    expect(titles).not.toContain('最近动态');
+    // 会话预览仍在（对象轴的另一张卡）
+    expect(titles).toContain('最近会话');
+  });
+
+  it('目标对话跟随页级路径作用域，行点击进只读座舱', async () => {
+    const w = await mountLd([]);
+    const text = w.text();
+    expect(text).toContain('地理大题怎么练');
+    // 别的路径的目标不进当前作用域
+    expect(text).not.toContain('另一个路径的目标');
+    expect(text).toContain('最近 1 条 · 当前路径');
+
+    const row = w.findAll('.mk-row').find((r) => r.text().includes('地理大题怎么练'))!;
+    expect(row.exists()).toBe(true);
+    await row.trigger('click');
+    expect(openSubPage).toHaveBeenCalledWith(
+      'session-real',
+      'gc-same-path',
+      expect.objectContaining({ from: expect.objectContaining({ id: 'u1' }) })
+    );
+  });
+
+  /* 2026-10-18 真课实测：目标上存的是路径创建时的临时前缀（lp_x），真实路径末尾还带 _xxxxx。
+     严格相等会把本路径的目标全过滤空；按带 _ 边界的同源 id 匹配两边都认。 */
+  it('目标存临时前缀、路径带后缀时仍归入当前作用域', async () => {
+    const originalPath = liveLearners.value[0].pathId;
+    liveLearners.value[0].pathId = 'lp1_oyjo73i';
+    listGoals.mockResolvedValue({
+      data: {
+        data: {
+          conversations: [
+            { id: 'gc-prefix', description: '临时前缀目标', status: 'completed', learningPathId: 'lp1', createdAt: '2026-10-18T10:00:00Z' }
+          ]
+        }
+      }
+    });
+    try {
+      const w = await mountLd([]);
+      expect(w.text()).toContain('临时前缀目标');
+      expect(w.text()).toContain('最近 1 条 · 当前路径');
+    } finally {
+      liveLearners.value[0].pathId = originalPath;
+    }
+  });
+
+  /* 深链进虚拟学习者不带 ?includeTest 时，靠账号身份兜底：会话与目标两张卡必须与详情同源，
+     否则详情有数据、两张卡空读数（2026-10-18 走查）。 */
+  it('深链进虚拟账号不带 includeTest：会话与目标对话仍按 includeTest 拉取', async () => {
+    const original = subPage.value;
+    subPage.value = { view: 'learner', id: 'virtual_demo', label: '' };
+    listSessions.mockClear();
+    listGoals.mockClear();
+    try {
+      const w = await mountLd([]);
+      expect(listSessions).toHaveBeenCalledWith(expect.objectContaining({ userId: 'virtual_demo', includeTest: true }));
+      expect(listGoals).toHaveBeenCalledWith(expect.objectContaining({ userId: 'virtual_demo', includeTest: true }));
+      w.unmount();
+    } finally {
+      subPage.value = original;
+    }
   });
 });

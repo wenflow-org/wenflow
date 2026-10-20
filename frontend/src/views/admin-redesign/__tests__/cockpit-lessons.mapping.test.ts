@@ -52,4 +52,18 @@ describe('buildLearnLessons：同课多会话的课堂映射分级', () => {
     ]);
     expect(result[0].teachingSessionId).toBe('ts_disc_new');
   });
+
+  it('hasSummary 随所选会话终态：completed / timeout / finalization_failed 算有总结', () => {
+    expect(lessons([{ id: 'ts_done', taskId: 'task_1', taskTitle: '', status: 'completed' }])[0].hasSummary).toBe(true);
+    expect(lessons([{ id: 'ts_tmo', taskId: 'task_1', taskTitle: '', status: 'timeout' }])[0].hasSummary).toBe(true);
+    expect(
+      lessons([{ id: 'ts_fail', taskId: 'task_1', taskTitle: '', status: 'finalization_failed' }])[0].hasSummary
+    ).toBe(true);
+  });
+
+  it('hasSummary：只有 discarded（中断重试）的课不算已生成总结', () => {
+    const result = lessons([{ id: 'ts_disc', taskId: 'task_1', taskTitle: '', status: 'discarded' }]);
+    expect(result[0].teachingSessionId).toBe('ts_disc');
+    expect(result[0].hasSummary).toBe(false);
+  });
 });

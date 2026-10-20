@@ -139,6 +139,19 @@ export function useCockpitStages(deps: {
     const started = list.filter((l) => l.teachingSessionId || l.state === 'done').length
     return `已开始 ${started}/${list.length} 课`
   })
+  /* 总结按课走（2026-10-19 用户走查「总结是按课走的，已生成应该也是按课程走吧」）：
+     一节课一份总结，阶段读数不能只说「已生成」这一个有/无的事实。判据与课程映射同源——
+     buildLearnLessons 为每节课挑出「有总结的那条会话」（completed / timeout /
+     finalization_failed）；当前课堂的总结已落库、但历史条目尚未带终态时，按
+     teachingSessionId 补记这一节，避免出现「总结卡有内容、步点却数不到它」。 */
+  const wrapupLessonStat = computed(() => {
+    const list = learnLessons.value
+    const currentId = String(bindings.value.teachingSessionId || '')
+    const done = list.filter(
+      (l) => l.hasSummary || (hasWrapup.value && !!currentId && l.teachingSessionId === currentId)
+    ).length
+    return { done, total: list.length }
+  })
   function stageProgress(st: string) {
     const key = st as StageKey
     switch (key) {
@@ -148,8 +161,11 @@ export function useCockpitStages(deps: {
         return pathProgressText.value
       case 'learning':
         return learnStageRollupText.value
-      case 'wrapup':
+      case 'wrapup': {
+        const { done, total } = wrapupLessonStat.value
+        if (total && done) return `已生成 ${done}/${total} 课`
         return hasWrapup.value ? '总结已生成' : ''
+      }
       default:
         return ''
     }
@@ -178,6 +194,8 @@ export function useCockpitStages(deps: {
       return total ? `${done}/${total}` : ''
     }
     if (st === 'wrapup') {
+      const { done, total } = wrapupLessonStat.value
+      if (total && done) return `${done}/${total}`
       return hasWrapup.value ? '已生成' : ''
     }
     return ''

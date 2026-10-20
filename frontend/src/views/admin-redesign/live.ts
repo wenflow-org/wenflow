@@ -844,7 +844,7 @@ export interface LiveOverviewFull {
   score: number | null
   headline: string
   subline: string
-  kpis: { label: string; value: string; foot: string; hint: string; trend?: { pct: string; up: boolean } }[]
+  kpis: { label: string; value: string; foot: string; hint: string; note?: string; trend?: { pct: string; up: boolean } }[]
   wrapup: {
     sampleSize: number
     summaryModel: number
@@ -1104,14 +1104,16 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       value: fmt(todayCalls),
       trend: callsTrend,
       foot: [todayTimeoutsN > 0 ? `超时 ${todayTimeoutsN}` : null, baseNote(!!callsTrend)].filter(Boolean).join(' · '),
-      // 「N 个 Skill 近 24h 有调用」从「进行中对话」卡迁来（2026-10-14 KPI 审计）：它是平台活跃面
-      // 的事实，挂在本卡（平台用量）才算同域；原来挂在「进行中对话」（目标对话快照）属跨域副文错配。
-      hint: [
-        todayCallsAll > todayCalls
-          ? `只统计真实用户 · 截至现在（非全日）· 若含虚拟与测试共 ${fmt(todayCallsAll)} 次`
-          : '只统计真实用户 · 从今日 00:00 起，截至现在（非全日）',
+      /* 2026-10-19 用户走查「KPI hint 在报读数」：卡面副行只留口径短语（范围/分母/筛选），
+         读数（含虚拟与测试的对照值、活跃 Skill 数）随趋势与 foot 一并进 tooltip 长释——
+         家法与 OpsContent「hint = 一短句可见口径」一致，卡面不再同时出现两个不同量纲的数。
+         「N 个 Skill 近 24h 有调用」从「进行中对话」卡迁来（2026-10-14 KPI 审计）：它是
+         平台活跃面的事实，挂在本卡（平台用量）才算同域。 */
+      hint: '只统计真实用户 · 今日截至现在（非全日）',
+      note: [
+        todayCallsAll > todayCalls ? `若含虚拟与测试共 ${fmt(todayCallsAll)} 次` : '',
         `${fmt(Number(agents.activeAgents24h || 0))} 个 Skill 近 24h 有调用`,
-      ].join(' · '),
+      ].filter(Boolean).join(' · '),
     },
     {
       label: TERMS.healthScore,
@@ -1124,7 +1126,8 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       value: fmt(activeUsers),
       trend: activeTrend,
       foot: `今日新增 ${fmt(Number(users.newToday || 0))} · ${baseNote(!!activeTrend)}`,
-      hint: `今日有学习会话的用户 · 总用户 ${users.total ?? 0}（只计真实用户）`,
+      hint: '今日有学习会话的用户 · 只计真实用户',
+      note: `总用户 ${users.total ?? 0}`,
     },
     {
       // P2 文案纠偏：原「系统活跃」与值错位（值=进行中目标对话数快照），名实相符改为「进行中对话」。
@@ -1137,7 +1140,7 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       label: '目标对话',
       value: fmt(Number(conv.active || 0) + Number(conv.completed || 0) + Number(conv.cancelled || 0)),
       foot: `累计完成 ${fmt(Number(conv.completed || 0))} 个`,
-      hint: '目标对话累计总量（含进行中/已完成/已取消）· 进行中数由「教学闭环」首环单源承载',
+      hint: '累计总量 · 含进行中 / 已完成 / 已取消',
     },
   ]
 

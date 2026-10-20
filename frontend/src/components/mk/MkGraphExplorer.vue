@@ -202,6 +202,18 @@
               <dl class="mk-ge__kv">
                 <div class="mk-ge__cell"><dt>层级</dt><dd>{{ selected.level === 'concept' ? '核心概念' : '知识组件' }}</dd></div>
                 <div class="mk-ge__cell"><dt>稳定性</dt><dd>{{ selected.stability || '—' }}</dd></div>
+                <!-- 概念台账事实（2026-10-20 从概览「概念掌握」卡的逐概念明细搬来）：
+                     可迁移 / 误解风险 / 证据条数原本在概览卡里按概念平铺一遍，与这里的
+                     记忆强度、提取练习是同一个概念的两种读数；合并到节点详情后
+                     同一份概念事实只有一个落点（概览卡只留结论行） -->
+                <template v-if="selectedFacts">
+                  <div class="mk-ge__cell"><dt>迁移就绪</dt><dd>{{ selectedFacts.readiness }}</dd></div>
+                  <div class="mk-ge__cell">
+                    <dt>误解风险</dt>
+                    <dd :class="`mk-ge__fact--${selectedFacts.riskTone}`">{{ selectedFacts.risk }}</dd>
+                  </div>
+                  <div class="mk-ge__cell"><dt>证据</dt><dd>{{ selectedFacts.evidenceCount }} 条</dd></div>
+                </template>
               </dl>
               <div v-for="group in relationGroups" :key="group.label" class="mk-ge__rel">
                 <p class="mk-ge__rel-label">{{ group.label }}<b>{{ group.items.length }}</b></p>
@@ -256,7 +268,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ChevronDown } from 'lucide-vue-next'
 import MkGraph, { relationStyleOf } from './MkGraph.vue'
 import { useIsDark } from '@/composables/useIsDark'
-import type { MkGraphEdge, MkGraphNode } from './MkGraph.vue'
+import type { MkGraphConceptFacts, MkGraphEdge, MkGraphNode } from './MkGraph.vue'
 import SkeletonLoader from '../ui/SkeletonLoader.vue'
 import V2ResultState from '../ui/V2ResultState.vue'
 
@@ -283,6 +295,9 @@ const props = withDefaults(
     emptyActionText?: string
     /** 节点详情主 CTA 文案（原型「去练习这个知识点」）；不传 = 不渲染动作区 */
     practiceActionText?: string
+    /** 概念台账事实（可迁移 / 误解风险 / 证据数），按概念名索引；不传 = 节点详情不渲染这组行
+     *  （用户侧知识图谱没有学习者模型台账，保持原样） */
+    conceptFacts?: Record<string, MkGraphConceptFacts>
   }>(),
   {
     paths: () => [],
@@ -296,6 +311,7 @@ const props = withDefaults(
     errorActionText: '',
     emptyActionText: '',
     practiceActionText: '',
+    conceptFacts: () => ({}),
   }
 )
 
@@ -701,6 +717,14 @@ const counts = computed(() => {
 const selectedStatus = computed(() => {
   const key = statusKeyOf(selected.value)
   return { key, label: STATUS_LABEL[key], badge: STATUS_BADGE[key] }
+})
+
+/** 选中节点的概念台账事实：按概念名索引（台账 conceptKey 就是概念名），
+ *  空名/缺索引一律返回 null —— 宁可不渲染这三行，也不拿别的概念的读数顶上 */
+const selectedFacts = computed<MkGraphConceptFacts | null>(() => {
+  const label = selected.value?.label?.trim()
+  if (!label) return null
+  return props.conceptFacts[label] ?? props.conceptFacts[label.replace(/\s+/g, ' ')] ?? null
 })
 
 /* ---------- 节点详情：掌握程度两条 bar + 到期复习说明 ---------- */
@@ -1144,6 +1168,8 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   padding: 0;
   list-style: none;
 }
+.mk-ge__fact--warn { color: var(--mk-amber); }
+.mk-ge__fact--bad { color: var(--mk-red); }
 .mk-ge__mastery-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

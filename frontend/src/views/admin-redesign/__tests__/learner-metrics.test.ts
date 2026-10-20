@@ -49,31 +49,33 @@ describe('四读数共享口径', () => {
 });
 
 describe('读数出处（口径透明化）', () => {
-  it('学习者级聚合：标签带「聚合」且长释点明另一页是单次会话快照', () => {
+  /* 2026-10-19 文案优化：短标从术语「学习者级聚合 / 单次会话快照」改成人话
+     「全部路径汇总 / 单次会话」＋「取样 时间」；长释去掉四码罗列与口语化收尾 */
+  it('全部路径汇总：短标说清来源与取样时刻，长释点明另一页是单次会话', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-14T04:00:00Z'));
     const note = loadCaliber('aggregate', '2026-10-14T03:30:00Z');
-    expect(note.label).toContain('学习者级聚合');
-    expect(note.label).toContain('30 分钟前');
-    expect(note.title).toContain('单次会话当场留下的读数');
-    expect(note.title).toContain('不是其中一处算错');
+    expect(note.label).toBe('全部路径汇总 · 取样 30 分钟前');
+    expect(note.title).toContain('全部路径汇总');
+    expect(note.title).toContain('不是某一次会话的读数');
+    expect(note.title).toContain('取自单次会话');
+    expect(note.title).toContain('数值本就不相等');
     vi.useRealTimers();
   });
 
-  it('单次会话快照：标签带「单次会话」且长释点明另一页是聚合态', () => {
+  it('单次会话：短标说清来源与取样时刻，长释点明另一页是汇总值', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-14T04:00:00Z'));
     const note = loadCaliber('session-snapshot', '2026-10-14T01:00:00Z');
-    expect(note.label).toContain('单次会话快照');
-    expect(note.label).toContain('3 小时前');
-    expect(note.title).toContain('学习者级聚合');
-    expect(note.title).toContain('不是其中一处算错');
+    expect(note.label).toBe('单次会话 · 取样 3 小时前');
+    expect(note.title).toContain('按全部路径汇总');
+    expect(note.title).toContain('数值本就不相等');
     vi.useRealTimers();
   });
 
-  it('无取样时刻时不硬造（标签退回纯口径，标题不出时间行）', () => {
+  it('无取样时刻时不硬造（短标退回纯来源，长释不出时间行）', () => {
     const note = loadCaliber('aggregate', null);
-    expect(note.label).toBe('学习者级聚合');
+    expect(note.label).toBe('全部路径汇总');
     expect(note.title).not.toContain('取样时刻');
   });
 });

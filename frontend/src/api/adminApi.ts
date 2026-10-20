@@ -1302,7 +1302,9 @@ export const adminSkillsApi = {
     testInput?: string;
     timeoutMs?: number;
   }) => {
-    return adminAxios.post(`/admin/skills/${encodeURIComponent(skillId)}/model-probe`, data);
+    // 后端探测默认超时 180s（可到数分钟）；不能吃 adminAxios 的 30s 默认值，
+    // 否则前端先报「请求超时」，UI 承诺的「最长 180s」永远等不到
+    return adminAxios.post(`/admin/skills/${encodeURIComponent(skillId)}/model-probe`, data, { timeout: AI_REQUEST_TIMEOUT });
   },
 
   getEffectiveSkillPrompt: async (skillId: string) => {

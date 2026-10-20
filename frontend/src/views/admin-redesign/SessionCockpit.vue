@@ -77,14 +77,14 @@
         <span class="cp-hero__id mono" :title="`会话 ID：${sessionId}`">{{ shortId }}</span>
       </template>
       <template #actions>
-        <!-- 真实会话（只读，无生命周期控制）只有本页动作：刷新本页数据 + 确定性出口。
-             壳层「刷新真实数据」刷的是全站 live 数据、不含本会话载荷，两者不是同一件事
-             （2026-10-11 走查：同屏两个「刷新」易混，故本页这颗明确写成刷新会话数据）。 -->
+        <!-- 真实会话（只读，无生命周期控制）只留确定性出口。刷新收归顶栏一颗
+             （2026-10-19 用户走查「刷新重复了吧」）：hero 这颗与顶栏那颗同屏并列、动作又各刷一半
+             ——顶栏刷全站 live 域，本页会话载荷走独立 console 接口不在其中，读者点了以为重复。
+             现由本页 watch(liveRefreshSeq) 接住顶栏刷新（同 Orchestrator 判例），hero 不再出刷新钮。 -->
         <template v-if="isRealMode">
           <!-- 学习者详情入口（2026-10-18）：目标对话 / 学习路径 / 教学会话三处此前都没有
                去学习者详情的按钮；返回靠 subPage.from 记住本座舱页签 -->
           <button v-if="learner" type="button" class="mk-btn" :title="learnerTitle('查看学习者详情')" @click="openLearnerDetail">查看学习者</button>
-          <button type="button" class="mk-btn" :disabled="busy" :title="busy ? '刷新中…' : '刷新本页会话数据'" @click="refresh">{{ busy ? '刷新中…' : '刷新' }}</button>
           <button type="button" class="mk-btn" :title="backTip" @click="goBack">← {{ backLabel }}</button>
         </template>
         <!-- 动作区只放真实能力（原型「导出日志」假钮不搬）：会话生命周期控制（vlab-controls 统一模型）
@@ -949,7 +949,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel, asSubPageStage } from './store'
-import { errMsg, liveApiConfig } from './live'
+import { errMsg, liveApiConfig, liveRefreshSeq } from './live'
 import { askConfirm } from './useConfirm'
 import { useMaskClose, useOverlay } from './useOverlay'
 import { useEscape } from './useEscape'
@@ -2805,6 +2805,11 @@ const { start: startPolling, stop: stopPolling, isActive: pollingActive } = useS
     immediate: false,
   }
 )
+
+/* 顶栏「刷新真实数据」的广播接住点：loadLiveData(true) 只重拉 live 域，本页会话载荷取自
+   独立的 console / virtual-session 接口，不在其中；不接这一手，撤掉 hero 刷新钮后终端会话
+   （轮询已停）就没有任何重新读取的入口了。Orchestrator 的页头刷新钮同样由这条广播接住。 */
+watch(liveRefreshSeq, () => { void refresh() })
 
 watch(
   sessionId,

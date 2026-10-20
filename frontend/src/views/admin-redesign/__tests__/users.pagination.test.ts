@@ -118,7 +118,7 @@ describe('Users 客户端分页（mk-pagination）', () => {
   /** 2026-10-17 用户走查「这个多选，默认不出来吧」：勾选列默认不出，
    *  批量入口保留在「列」菜单（选择框（批量操作）），需要时自己打开。 */
   it('选择框列默认隐藏：首访无全选、无行内勾选，列菜单仍可找回', async () => {
-    localStorage.removeItem('wf_users_hidden_cols_v4');
+    localStorage.removeItem('wf_users_hidden_cols_v5');
     const w = await mountUsers();
     await nextTick();
     expect(w.find('thead input[type="checkbox"][aria-label="全选当前页"]').exists()).toBe(false);
