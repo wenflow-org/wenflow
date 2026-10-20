@@ -12,7 +12,7 @@
     "src/services/ai-teaching/TeachingContextBuilder.ts": 1869,
     "src/services/ai-teaching/TeachingSessionRepository.ts": 1616,
     "src/services/ai-teaching/teaching-session-lifecycle.ts": 1271,
-    "src/services/ai-teaching/teaching-turn-engine.ts": 1407,
+    "src/services/ai-teaching/teaching-turn-engine.ts": 1420,
     "src/services/learner/ConceptConsolidatorService.ts": 2447,
     "src/services/learner/LearnerKnowledgeMemoryService.ts": 1136,
     "src/services/learning/generation/path-generation.core.ts": 1152,

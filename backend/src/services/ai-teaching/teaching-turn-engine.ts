@@ -42,6 +42,7 @@ import {
   resolveCheckpointConsumption,
   shouldEmitCheckpoint,
   } from './teaching-checkpoint';
+import { resolveCheckpointPrediction } from './checkpoint-prediction';
 import {
   extractWarmupOutcomes,
   markWarmupAsked,
@@ -1204,7 +1205,8 @@ export async function processStudentMessage(
 
     let checkpointResolution: { passed: boolean; understanding: number; judgedBy: 'code' | 'model-reference' } | undefined;
     if (submittedCheckpoint) {
-      const understanding = Number(teachingOutput.analysis?.understanding ?? 0);
+      const rawUnderstanding = teachingOutput.analysis?.understanding;
+      const understanding = Number(rawUnderstanding ?? 0);
       const currentPoint = effectiveTeachingOutput.knowledge.currentPoint?.trim().toLowerCase();
       const modelDerivedPassed = completionReady || !!currentPoint && mergedKnowledge.some(
         (point) => point.name.trim().toLowerCase() === currentPoint && point.status === 'mastered'
@@ -1234,12 +1236,23 @@ export async function processStudentMessage(
         ...(submittedCheckpoint.conceptKey ? { conceptKey: submittedCheckpoint.conceptKey } : {}),
       });
 
+      // #96 阈值拟合前置：在判分前解析系统对「该概念已掌握」的预测（ktEstimate 优先，
+      // 回落到本回合知识看板），随证据落库；无预测时 null，不猜。
+      const prediction = resolveCheckpointPrediction({
+        conceptName: submittedCheckpoint.conceptName,
+        conceptKey: submittedCheckpoint.conceptKey,
+        knowledgePoints: mergedKnowledge,
+        ktConceptMastery: teachingOutput.analysis?.ktEstimate?.conceptMastery,
+        understanding: Number.isFinite(Number(rawUnderstanding)) ? Number(rawUnderstanding) : null,
+      });
+
       // 检查点结果留痕（learner_evidence）：独立传感器的原始观测，供 §7 P1-1 的成功率带与控制律消费
       void recordCheckpointResultEvidence(session, submittedCheckpoint, {
         passed,
         judgedBy,
         detail: codeJudgement?.detail ?? null,
         submission: { selectedOptionIds: options.checkpointSubmission?.selectedOptionIds },
+        prediction,
       });
 
       // 独立锚题探针（Q13/B4）：仅对带 purpose='anchor' 的检查点、且**代码裁决**（纪律 1）时
