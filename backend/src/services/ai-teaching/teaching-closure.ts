@@ -102,6 +102,12 @@ export function evaluateSessionClosable(input: {
   messages: Array<{ role?: string; content?: string }> | null | undefined;
   teachingState: Record<string, unknown> | null | undefined;
   endReason?: string | null;
+  /**
+   * 允许「教师刚提问、学生还没答」时收束。仅复习课（complete_review）使用：
+   * 复习课是有界课（回合上限到点就收），教师的下一问本来就是被截断的那一问；
+   * 不放行会让 complete_review 永远 409、降级 end_only 后丢失复习结果回写。
+   */
+  allowOpenQuestion?: boolean;
 }): SessionClosableDecision {
   if (input.endReason && ABNORMAL_END_REASONS.has(input.endReason)) return { closable: true };
 
@@ -118,7 +124,7 @@ export function evaluateSessionClosable(input: {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message?.role === 'user') break;
-    if (message?.role === 'assistant' && detectTrailingQuestion(String(message.content || ''))) {
+    if (message?.role === 'assistant' && !input.allowOpenQuestion && detectTrailingQuestion(String(message.content || ''))) {
       return {
         closable: false,
         code: 'FINALIZATION_OPEN_QUESTION',

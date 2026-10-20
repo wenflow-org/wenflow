@@ -34,6 +34,28 @@ describe('evaluateSessionClosable', () => {
     expect(decision.code).toBe('FINALIZATION_OPEN_QUESTION')
   })
 
+  it('allowOpenQuestion（复习课有界收束）→ 末问未答也放行', () => {
+    const decision = evaluateSessionClosable({
+      messages: [
+        { role: 'user', content: '我做完了' },
+        { role: 'assistant', content: '那这一步为什么要先乘？' },
+      ],
+      teachingState: {},
+      allowOpenQuestion: true,
+    })
+    expect(decision.closable).toBe(true)
+  })
+
+  it('allowOpenQuestion 不放行未答的检查点', () => {
+    const decision = evaluateSessionClosable({
+      messages: [{ role: 'assistant', content: '选一个吧' }],
+      teachingState: { pendingCheckpoint: { id: 'cp-1' } },
+      allowOpenQuestion: true,
+    })
+    expect(decision.closable).toBe(false)
+    expect(decision.code).toBe('FINALIZATION_PENDING_CHECKPOINT')
+  })
+
   it('问题之后已有学生回答 → 放行', () => {
     const decision = evaluateSessionClosable({
       messages: [

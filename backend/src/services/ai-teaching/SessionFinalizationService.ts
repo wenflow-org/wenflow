@@ -110,6 +110,8 @@ export class SessionFinalizationService {
       messages: session.messages,
       teachingState: session.teachingState,
       endReason: input.endReason,
+      // 复习课有界收束：截断的正是教师下一问，允许带着未答问题收课（检查点门仍然生效）
+      allowOpenQuestion: input.action === 'complete_review',
     });
     if (!closable.closable) {
       const error = new Error(closable.message || '课堂还有未完成的问答');
