@@ -124,18 +124,15 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     w.unmount();
   });
 
-  it('成本口径行：只留两条公式，不复述「未配置单价 → 成本列 —」（那句由卡头徽章与行 title 承担）', async () => {
+  it('成本口径不占卡面：公式与原因只留在卡标题悬停（2026-10-19 用户「不需要注释型文案」）', async () => {
     const w = await mountTokenCost();
-    const note = w.find('.tc-card--skill .tc-card__note');
-    expect(note.text()).toContain('成本＝已定价调用的金额合计（美元）');
-    expect(note.text()).toContain('占比按金额算，没有已定价金额时改按 Token 算');
-    // 可见文案不再第三次复述这条规则（徽章 meta 已可见、行 title 与本文 title 各说一次）
-    expect(note.text()).not.toContain('未配置单价');
-    expect(note.text()).not.toContain('不计入合计');
-    // 信息不净丢：悬停本行仍能拿到原因
-    expect(note.attributes('title')).toContain('未配置单价');
-    expect(note.attributes('title')).toContain('不计入成本合计');
-    // 卡头徽章同样带原因（可见徽章是这条规则的第一发现点）
+    expect(w.find('.tc-card--skill .tc-card__note').exists()).toBe(false);
+    const title = w.find('.tc-card--skill .mk-card__title');
+    expect(title.attributes('title')).toContain('成本＝已定价调用的金额合计（美元）');
+    expect(title.attributes('title')).toContain('占比按金额算，没有已定价金额时改按 Token 算');
+    expect(title.attributes('title')).toContain('未配置单价');
+    expect(title.attributes('title')).toContain('不计入成本合计');
+    // 卡头徽章仍承担可见的「未定价」状态与原因
     expect(w.find('.tc-card--skill .mk-badge').attributes('title')).toContain('不计入成本合计');
     w.unmount();
   });

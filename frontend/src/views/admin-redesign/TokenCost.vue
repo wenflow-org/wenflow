@@ -108,8 +108,8 @@
            ④ P1#25（2026-10-02 人类可读性）：原「缓存命中率」恒「—」死卡（接口无此口径）占 KPI 位，
               换活卡「失败调用」——totals.failed 后端已返回，失败信号值得首屏一位。 -->
       <section class="mk-kpi-grid">
-        <!-- hint = 原型 metricCard 的一短句口径；长解释收进卡 title 悬停（复刻调整 2026-10-02：
-             此前 28px 数字下拖整句「待补单价模型 3 个：deepseek-v4-flash、…」小字，非原型节奏）。
+        <!-- hint 只放当前窗口的数据或状态（2026-10-19 用户走查「不需要注释型文案」：
+             不再写「仅已定价调用 / 按…折算 / 相加即总量」这类定义句，定义与长解释收进 title）。
              P1#25：单价未配置态可点直达「模型与接入」。W6（2026-10-10）当时该页还没有单价编辑入口；
              2026-10-18 BYOK 模型编辑器补上单价（输入 / 缓存命中 / 输出，USD per 1M tokens）后，
              补价路径=「接入与模型」→ 供应商 → 模型行「编辑」→ 单价，落回 llm-providers.json 的 pricing 块。
@@ -134,7 +134,7 @@
           label="总 Token"
           :value="loadFailed ? '—' : summary ? fmtTokens(summary.totals.tokens) : '—'"
           :tone="loadFailed ? 'muted' : ''"
-          :hint="loadFailed ? '数据加载失败，Token 用量暂不可用' : '输入与输出相加即总量'"
+          :hint="loadFailed ? '数据加载失败，Token 用量暂不可用' : tokenSplitHint"
           :title="loadFailed
             ? '数据加载失败：Token 用量不可用'
             : `输入 ${summary ? fmtTokens(summary.totals.promptTokens) : '—'} · 输出 ${summary ? fmtTokens(summary.totals.completionTokens) : '—'} · 两者相加即总量。调用次数见「单次调用均值」卡`"
@@ -143,7 +143,7 @@
           label="失败调用"
           :value="loadFailed ? '—' : failedCallsText"
           :tone="loadFailed ? 'muted' : failedCalls > 0 ? 'bad' : ''"
-          :hint="loadFailed ? '数据加载失败，失败数未知' : '重试后仍失败 / 全部调用'"
+          :hint="loadFailed ? '数据加载失败，失败数未知' : failedRateHint"
           :title="failedHint"
         />
       </section>
@@ -158,7 +158,7 @@
                P1#25：「接口未提供金额」暴露实现细节 → 「暂无分日金额」（原因留 title） -->
           <div class="tc-card-head__main" title="金额按本地自然日汇总，含重试后仍失败的调用。趋势图暂无分日金额，仅展示 Token 量">
             <h3 class="mk-card__title">近 {{ days }} 天用量趋势</h3>
-            <span class="mk-card__meta">单位：Token（暂无分日金额）</span>
+            <span class="mk-card__meta">单位：Token</span>
           </div>
           <div class="tc-head-links">
             <button type="button" class="mk-link" @click="goOverview">总览趋势 →</button>
@@ -210,7 +210,7 @@
            Token 三列把横向空间填成数据（用户的「要么补列填满、要么别让列间空 500px」）。 -->
       <section class="mk-card tc-card tc-card--skill">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">{{ SKILL_COST_TITLE }}</h3>
+          <h3 class="mk-card__title" :title="SKILL_COST_TIP">{{ SKILL_COST_TITLE }}</h3>
           <div class="mk-card__head-right">
             <span class="mk-card__meta">{{ bySkill.length }} 个 Skill</span>
             <!-- 未配置单价是可执行的配置缺口，用徽章单列（原做法挤在读数行里，会让「N 个」被读成缺价数） -->
@@ -226,13 +226,6 @@
             </button>
           </div>
         </div>
-        <!-- 成本口径释义行（2026-10-16 用户走查：原卡尾脚注连挂两个括号、贴卡左缘读作补丁）：
-             移卡头下方、拆成两句人话——「成本怎么算」+「占比怎么算」，不再一句套两层括号。
-             2026-10-19：「未配置单价 → 成本列显示「—」→ 不计入合计」不再在这行复述——卡头徽章
-             「N 个未配置单价」+ 行 title + 本行 title 已各说一遍，可见文案只留两条公式 -->
-        <p class="mk-card__note tc-card__note" title="未配置单价的模型不计入成本合计，其成本列显示「—」">
-          成本＝已定价调用的金额合计（美元）。占比按金额算，没有已定价金额时改按 Token 算。
-        </p>
         <div v-if="skillRows.length" class="tc-skilltable" role="table" :aria-label="SKILL_COST_TITLE">
           <div class="tc-skilltable__head" role="row">
             <span role="columnheader">Skill</span>
@@ -331,6 +324,8 @@ import { toast } from '@/utils/toast'
 
 /* 文案单源（R6 复读单源化）：卡标题与成本表的 aria-label 共用一份 */
 const SKILL_COST_TITLE = '按 Skill 成本明细'
+/* 成本与占比的算法只在悬停里说一次（2026-10-19 用户走查：不要注释型文案，卡面不摆公式） */
+const SKILL_COST_TIP = '成本＝已定价调用的金额合计（美元）。占比按金额算，没有已定价金额时改按 Token 算。未配置单价的模型不计入成本合计，成本列显示「—」。'
 
 interface Summary {
   days: number
@@ -537,20 +532,35 @@ const costHint = computed(() => {
     : `${window} · 尚未配置单价，暂不展示金额`
 })
 
-/* KPI hint 短口径（原型 metricCard 的 hint 是一短句）：长解释走卡 title 悬停 */
+/* KPI 副行（2026-10-19 用户走查「不需要注释型文案」）：不再写「仅已定价调用 / 按…折算」
+   这类定义句，只放当前窗口的数据或状态；定义留在卡 title 悬停。 */
 const costHintShort = computed(() => {
   if (costLoading.value) return '金额统计中'
   if (costFailed.value) return '金额统计失败'
-  if (costUsd.value !== null) return `近 ${days.value} 天 · 仅已定价调用`
-  if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `近 ${days.value} 天无调用`
-  const n = missingPricingModels.value.length
-  // P2（2026-10-04 全站评审）：「单价未配置」已在卡值位出现，hint 不再复读同一状态词
-  return `近 ${days.value} 天${n > 0 ? ` · 待补 ${n} 个模型单价` : ''} · 查看模型配置`
+  if (costUsd.value === null) {
+    if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `近 ${days.value} 天无调用`
+    const n = missingPricingModels.value.length
+    // 补价入口可点：这是动作提示，不是口径解释
+    return `待补 ${n} 个模型单价 · 查看配置`
+  }
+  return `${costPricedCalls.value} 次已定价调用`
 })
 const perCallHintShort = computed(() => {
   if (costLoading.value) return '金额统计中'
   if (costFailed.value || costPerCall.value === null) return '无已定价调用'
-  return '按已定价调用折算'
+  return `均摊到 ${costPricedCalls.value} 次`
+})
+/** 总 Token 副行：输入/输出拆分是数据，不再复述「相加即总量」 */
+const tokenSplitHint = computed(() => {
+  const t = summary.value?.totals
+  return t ? `输入 ${fmtTokens(t.promptTokens)} · 输出 ${fmtTokens(t.completionTokens)}` : ''
+})
+/** 失败调用副行：失败率是数据；全成功时给状态，不再写「重试后仍失败 / 全部调用」 */
+const failedRateHint = computed(() => {
+  const t = summary.value?.totals
+  if (!t || !t.calls) return `近 ${days.value} 天无调用`
+  if (!t.failed) return '全部调用成功'
+  return `失败率 ${failedPct.value}`
 })
 
 /* 导出报表（原型 pagehead 动作位真实化）：当前窗口三张明细表合一个 CSV，客户端从
@@ -636,15 +646,16 @@ const missingPricingModels = ref<string[]>([])
    失败率 = failed / calls（窗口随 pills），失败信号值得首屏一位 */
 const failedCalls = computed(() => summary.value?.totals.failed ?? 0)
 const totalCalls = computed(() => summary.value?.totals.calls ?? 0)
-const failedPct = computed(() =>
-  totalCalls.value > 0 ? `${Math.round((failedCalls.value / totalCalls.value) * 100)}%` : '—'
-)
+const failedPct = computed(() => {
+  if (!totalCalls.value) return '—'
+  const rate = (failedCalls.value / totalCalls.value) * 100
+  return `${rate > 0 && rate < 1 ? '<1' : rate.toFixed(1)}%`
+})
 // P2（2026-10-04 全站评审）：值只给次数，占比单源留在 hint（此前「4%」卡内念两遍）
 const failedCallsText = computed(() =>
   failedCalls.value > 0 ? `${failedCalls.value} 次` : '0 次'
 )
-/* 卡面副行只留口径（2026-10-19 用户走查「hint 在报读数」）：原副行报「占总调用 X%」这个派生
-   读数、无失败时又报「无失败调用」这个状态；占比与状态随长释进 title（本函数） */
+/* 长释（title）：失败计数、总调用与占比的完整句子；卡面副行只放失败率这一条数据 */
 const failedHint = computed(() => {
   const win = `近 ${days.value} 天${includeTest.value ? '（含测试）' : ''}`
   const base = failedCalls.value > 0
