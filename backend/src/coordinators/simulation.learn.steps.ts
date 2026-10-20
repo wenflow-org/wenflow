@@ -39,6 +39,40 @@ export function advanceLearnerDoneStreak(
   return closure.learnerReady && !closure.canCompleteTask ? (Number(priorStreak) || 0) + 1 : 0;
 }
 
+/**
+ * 延伸学（#124）有界回合上限：assisted 轨的延伸课在任务收束后插入，跑满即收尾并回到任务结算。
+ * 与黑盒 runner 的 MAX_EXTENSION_TURNS 同值——两条运行时对「延伸一段」的预算口径保持一致。
+ */
+export const LEARN_EXTENSION_MAX_TURNS = 4;
+
+type ExtensionRuntimeLike = {
+  active?: boolean;
+  turns?: number;
+  maxTurns?: number;
+} | null | undefined;
+
+/** 延伸段是否该收尾（纯函数，供单测）：回合到顶，或学员自评「已学够、不用再问」。 */
+export function shouldCompleteExtension(params: {
+  runtime: ExtensionRuntimeLike;
+  learnerFeedback: Record<string, unknown> | null | undefined;
+}): boolean {
+  const runtime = params.runtime;
+  if (runtime?.active !== true) return false;
+  const turns = Number(runtime.turns) || 0;
+  const maxTurns = Number(runtime.maxTurns) > 0 ? Number(runtime.maxTurns) : LEARN_EXTENSION_MAX_TURNS;
+  const feedback = params.learnerFeedback || null;
+  const learnerSatisfied = feedback?.selfReportedTaskDone === true
+    && feedback?.stopAsking === true
+    && feedback?.wantsMoreHelp !== true
+    && (!Array.isArray(feedback?.remainingBlockers) || feedback.remainingBlockers.length === 0);
+  return turns + 1 >= maxTurns || learnerSatisfied;
+}
+
+/** 延伸段是否应在本轮结束后收尾的估计（不消费学员反馈）：用于任务收束处的挂载判断。 */
+export function isExtensionActive(runtime: ExtensionRuntimeLike): boolean {
+  return runtime?.active === true;
+}
+
 /** 连击是否到顶（纯函数，供单测）。 */
 export function shouldBreakClosureLoop(learnerDoneStreak: number): boolean {
   return learnerDoneStreak >= LEARN_CLOSURE_LOOP_BREAK_TURNS;
@@ -53,8 +87,9 @@ export type LearningClosureDecision = {
    * 结课权威（#46 拍板）：教师判据是「开课冻结的目标集讲完即可下课」，与真人端一致；
    * 学员自评与认知判决只作观测留痕，不再是一票否决。
    * `learner-loop-break` = 学员连续多轮要下课而教师未给信号时的熔断兜底。
+   * `extension-complete` = 延伸学（#124）有界陪学段到达回合上限/学员表示学够后的收尾。
    */
-  closureAuthority: 'teacher' | 'learner-loop-break';
+  closureAuthority: 'teacher' | 'learner-loop-break' | 'extension-complete';
   /** 本轮认知判决未放行完成（仅作留痕与知识看板对账，不再否决结课，见 #46） */
   judgeBlocked: boolean;
   judgeBlockReason: string | null;
@@ -487,6 +522,8 @@ export function buildNextLearningState(params: {
   aiResponse: string;
   /** 本轮教师配图（#123）：随教师消息一起进学习者可见上下文 */
   teacherImages?: ConversationHistoryItem['images'];
+  /** 延伸学（#124）：本轮结束后的延伸运行时（回合计数/收尾），缺省沿用 learningState */
+  extensionRuntime?: TeachingState['extensionRuntime'];
 }): Record<string, unknown> {
   const {
     learningState,
@@ -503,12 +540,14 @@ export function buildNextLearningState(params: {
     currentTask,
     teachingSessionId,
     aiResponse,
-    teacherImages
+    teacherImages,
+    extensionRuntime
   } = params;
 
   return {
     ...learningState,
     teachingRevision,
+    ...(extensionRuntime !== undefined ? { extensionRuntime } : {}),
     ...(isPathCompleted
       ? {
           currentMilestone: milestones.length,

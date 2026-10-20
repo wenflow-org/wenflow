@@ -49,6 +49,9 @@ import {
   advanceLearnerDoneStreak,
   shouldBreakClosureLoop,
   LEARN_CLOSURE_LOOP_BREAK_TURNS,
+  isExtensionActive,
+  shouldCompleteExtension,
+  LEARN_EXTENSION_MAX_TURNS,
   buildNextLearningState,
   auditGroundingCompliance,
   clampLearnerStateToJudgment,
@@ -1003,11 +1006,14 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         
         // 收束循环熔断（2026-10-10 逐字稿评审）：学员连续 N 轮自评完成而教学系统不给收束信号
         // → 按学员意愿结课。连击计数与 buildNextLearningState 的 taskRuntime.learnerDoneStreak 同口径。
+        // 延伸学（#124）：延伸段是有界陪学，收尾由 shouldCompleteExtension 判，不走正常课界的熔断。
+        const extensionActive = isExtensionActive(learningState.extensionRuntime);
+        const currentLearnerFeedback = virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null;
         const learnerDoneStreak = advanceLearnerDoneStreak(
           taskRuntime.taskId === currentTask.id ? Number(taskRuntime.learnerDoneStreak) || 0 : 0,
           closureDecision
         );
-        const closureLoopBreak = shouldBreakClosureLoop(learnerDoneStreak);
+        const closureLoopBreak = !extensionActive && shouldBreakClosureLoop(learnerDoneStreak);
         if (closureLoopBreak) {
           closureDecision = {
             ...closureDecision,
@@ -1030,6 +1036,35 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           });
         }
 
+        // 延伸学（#124 assisted 轨）：extension 模式下教学引擎不产生完成信号（延伸课不结算任务），
+        // 收尾由本层判——跑满回合上限或学员表示学够了，就合成收束信号回到正常任务结算链路。
+        if (extensionActive) {
+          const extensionRuntime = learningState.extensionRuntime as NonNullable<TeachingState['extensionRuntime']>;
+          if (shouldCompleteExtension({ runtime: extensionRuntime, learnerFeedback: currentLearnerFeedback })) {
+            const extensionTurns = (Number(extensionRuntime.turns) || 0) + 1;
+            closureDecision = {
+              ...closureDecision,
+              teacherReady: true,
+              canCompleteTask: true,
+              closureAuthority: 'extension-complete',
+              reason: `延伸学已进行 ${extensionTurns} 回合（上限 ${extensionRuntime.maxTurns}），收束延伸课并结算本任务`,
+            };
+            logs.push({
+              timestamp: new Date().toISOString(),
+              phase: 'stage-transition',
+              details: {
+                output: {
+                  action: 'extension-complete',
+                  extensionTurns,
+                  maxTurns: extensionRuntime.maxTurns,
+                  currentTask: currentTask.title,
+                  message: closureDecision.reason
+                }
+              }
+            });
+          }
+        }
+
         if (closureDecision.canCompleteTask) {
           await ctx.assertCurrentSessionLeaseOwned(sessionId);
           const endResult = await aiTeachingOrchestrator.endSession(
@@ -1038,6 +1073,101 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
             teachingRevision
           );
           teachingRevision = endResult.revision;
+
+          // 延伸学（#124 assisted 轨）：正课收束时学员明确表达过延伸意愿 → 本任务暂不结算，
+          // 先另起一节 extension 课堂陪学一段（有界回合），跑满后再回到这里的结算链路。
+          // 每个任务只尝试一次（sourceTaskId 兼作已延伸标记）；开课失败 fail-open，不阻塞任务结算。
+          const extensionAlreadyForTask = learningState.extensionRuntime?.sourceTaskId === currentTask.id;
+          if (!extensionActive && !extensionAlreadyForTask && currentLearnerFeedback?.wantsExtension === true) {
+            try {
+              const extensionSession = await aiTeachingOrchestrator.startSession({
+                userId: session.userId,
+                taskId: currentTask.id,
+                mode: 'extension',
+              });
+              const extensionStartedAt = new Date().toISOString();
+              const extensionLearningState = {
+                ...learningState,
+                teachingSessionId: extensionSession.sessionId,
+                teachingRevision: extensionSession.revision,
+                latestLearnerFeedback: currentLearnerFeedback,
+                extensionRuntime: {
+                  active: true,
+                  sourceSessionId: teachingSessionId,
+                  sourceTaskId: currentTask.id,
+                  turns: 0,
+                  maxTurns: LEARN_EXTENSION_MAX_TURNS,
+                  startedAt: extensionStartedAt,
+                },
+                taskRuntime: {
+                  ...taskRuntime,
+                  status: 'extension_running',
+                  taskId: currentTask.id,
+                  taskTitle: currentTask.title,
+                  teachingSessionId: extensionSession.sessionId,
+                  lessonSessionId: teachingSessionId,
+                  updatedAt: extensionStartedAt,
+                },
+                conversationHistory: [
+                  ...(learningState.conversationHistory || []),
+                  { role: 'user', content: virtualReplyResult.userVisible },
+                  {
+                    role: 'assistant',
+                    content: aiResponse,
+                    ...(Array.isArray(teacherImages) && teacherImages.length > 0 ? { images: teacherImages } : {})
+                  }
+                ],
+              };
+              await ctx.updateTeachingStatePreservingControlFlags(sessionId, extensionLearningState);
+              logs.push({
+                timestamp: extensionStartedAt,
+                phase: 'stage-transition',
+                details: {
+                  output: {
+                    action: 'extension-session-start',
+                    taskId: currentTask.id,
+                    lessonSessionId: teachingSessionId,
+                    extensionSessionId: extensionSession.sessionId,
+                    maxTurns: LEARN_EXTENSION_MAX_TURNS,
+                    message: '学员表达延伸意愿，正课收束后进入延伸陪学（本任务暂不结算）',
+                  }
+                }
+              });
+              await ctx.addSessionLogs(sessionId, logs);
+              return {
+                success: true,
+                userMessage: virtualReplyResult.userVisible,
+                aiResponse,
+                milestoneProgress: {
+                  currentMilestone: nextMilestoneIdx + 1,
+                  totalMilestones: milestones.length,
+                  currentTask: currentTask.title
+                },
+                isPathCompleted: false,
+                taskCompleted: false,
+                logs
+              };
+            } catch (extensionError: unknown) {
+              logger.warn('[simulation-coordinator] 延伸课堂启动失败，按正常收束继续（不阻塞任务结算）', {
+                sessionId,
+                taskId: currentTask.id,
+                error: asErrorLike(extensionError).message || String(extensionError)
+              });
+              logs.push({
+                timestamp: new Date().toISOString(),
+                phase: 'error',
+                details: {
+                  error: asErrorLike(extensionError).message || 'extension session start failed',
+                  output: {
+                    action: 'extension-session-start-failed',
+                    taskId: currentTask.id,
+                    fallback: 'complete-task'
+                  }
+                }
+              });
+            }
+          }
+
           const taskFinalizedAt = new Date().toISOString();
           const checkpointLearnerState = mergeLearnerState(
             profile,
@@ -1060,11 +1190,19 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
             reason: closureDecision.reason,
             taskId: currentTask.id,
             taskTitle: currentTask.title,
-            teachingSessionId,
+            // 延伸段收尾时，任务结算仍归属**正课会话**（延伸课是额外陪学，不是结算课）；
+            // 正课已在开延伸课时 endSession 完毕，此处对它的二次 endSession 走 completed 幂等分支。
+            teachingSessionId: extensionActive
+              ? ((learningState.extensionRuntime?.sourceSessionId as string | null | undefined) || teachingSessionId)
+              : teachingSessionId,
             teachingRevision,
             closureDecision,
             finalizedAt: taskFinalizedAt,
-            completionSource: closureLoopBreak ? 'learner-done-streak-break' : 'teacher-and-learner-feedback',
+            completionSource: closureDecision.closureAuthority === 'extension-complete'
+              ? 'extension-completed'
+              : closureLoopBreak
+                ? 'learner-done-streak-break'
+                : 'teacher-and-learner-feedback',
             error: null,
             updatedAt: taskFinalizedAt
           };
@@ -1074,6 +1212,15 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
             learnerState: checkpointLearnerState,
             latestLearnerFeedback: virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null,
             closureDecision,
+            // 延伸课收尾：保留 sourceTaskId（本任务已延伸过），关闭 active 防重复开延伸段
+            ...(learningState.extensionRuntime
+              ? {
+                  extensionRuntime: {
+                    ...(learningState.extensionRuntime as NonNullable<TeachingState['extensionRuntime']>),
+                    active: false,
+                  }
+                }
+              : {}),
             taskRuntime: pendingTaskRuntime,
             conversationHistory: checkpointConversationHistory
           };
@@ -1280,7 +1427,14 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
       currentTask,
       teachingSessionId,
       aiResponse,
-      teacherImages
+      teacherImages,
+      // 延伸段回合计数：本步已完成一个延伸回合（未收尾时），下次进来按新计数判上限
+      extensionRuntime: isExtensionActive(learningState.extensionRuntime)
+        ? {
+            ...(learningState.extensionRuntime as NonNullable<TeachingState['extensionRuntime']>),
+            turns: (Number(learningState.extensionRuntime?.turns) || 0) + 1,
+          }
+        : learningState.extensionRuntime
     });
 
     await ctx.updateTeachingStatePreservingControlFlags(sessionId, nextLearningState);
