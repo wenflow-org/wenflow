@@ -129,8 +129,8 @@
           <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': detail.audit.stats.autoApplicable > 0 }">
             <b>{{ detail.audit.stats.autoApplicable }}</b><span>可自动</span>
           </div>
-          <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': detail.audit.stats.ambiguous > 0 }">
-            <b>{{ detail.audit.stats.ambiguous }}</b><span>需人工看</span>
+          <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': mrAmbiguousCount > 0 }">
+            <b>{{ mrAmbiguousCount }}</b><span>需人工看</span>
           </div>
           <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': mrDropCount > 0 }">
             <b>{{ mrDropCount }}</b><span>散键清理</span>
@@ -141,6 +141,46 @@
         </div>
 
         <template v-if="detail.audit">
+          <!-- 归并处理条（2026-10-19 用户走查「这个重新设计一下」）：原实现是三枚小按钮飘在
+               「归并建议」标题与表格之间，既看不出作用范围（其实同时覆盖三组建议），
+               0 选中时还挂着一条禁用的「执行选中（0）」。现改为卡内工具条：左侧常驻读数，
+               右侧动作按状态显隐（无可自动执行项时不摆死按钮），警告另起一行常显。 -->
+          <div
+            v-if="hasSuggestions"
+            class="mr-bulk"
+            :class="{ 'is-active': selectedTotal > 0 }"
+            role="group"
+            aria-label="批量处理选中建议"
+          >
+            <div class="mr-bulk__status" aria-live="polite">
+              <template v-if="selectedTotal">
+                <span class="mr-bulk__count">已选 {{ selectedTotal }} 项</span>
+                <span class="mr-bulk__parts">{{ selectedPartsText }}</span>
+              </template>
+              <template v-else>
+                <span class="mr-bulk__count">批量处理</span>
+                <span class="mr-bulk__parts">{{ bulkHintText }}</span>
+              </template>
+            </div>
+            <div class="mr-bulk__actions">
+              <button
+                v-if="autoApplicableCount"
+                type="button"
+                class="mk-btn mk-btn--sm"
+                @click="selectAllApplicable"
+              >全选可自动执行（{{ autoApplicableCount }}）</button>
+              <button v-if="selectedTotal" type="button" class="mk-link" @click="clearSelection">清空</button>
+              <button
+                v-if="selectedTotal"
+                type="button"
+                class="mk-btn mk-btn--sm mk-btn--danger-ghost"
+                :disabled="busy"
+                @click="applySelected"
+              >{{ busy ? '执行中…' : `执行选中（${selectedTotal}）` }}</button>
+            </div>
+            <p v-if="bulkWarnText" class="mr-bulk__warn">{{ bulkWarnText }}</p>
+          </div>
+
           <h4 class="mr__h4">
             归并建议（将别名并入主概念）
             <span class="mr__sub-inline">
@@ -148,22 +188,6 @@
               执行后保留备份，可回滚。
             </span>
           </h4>
-          <div v-if="detail.audit && hasSuggestions" class="mr__bulk">
-            <button type="button" class="mk-btn mk-btn--sm" @click="selectAllApplicable">全选可自动执行</button>
-            <button type="button" class="mk-btn mk-btn--sm" @click="clearSelection">清空</button>
-            <button
-              type="button"
-              class="mk-btn mk-btn--sm mk-btn--danger-ghost"
-              :disabled="busy || selectedTotal === 0"
-              @click="applySelected"
-            >执行选中（{{ selectedTotal }}）</button>
-            <span v-if="selectedNeedsReview.length" class="mr__warn-inline">
-              {{ selectedNeedsReview.length }} 条属于「需人工确认」，执行前请先看清
-            </span>
-            <span v-else-if="selectedAmbiguousPairs.length" class="mr__warn-inline">
-              含 {{ selectedAmbiguousPairs.length }} 条「需人工看」对，执行前请先看清
-            </span>
-          </div>
           <div v-if="detail.audit.proposals.length" class="mk-table-scroll">
           <table class="mk-table">
             <!-- 列宽契约（2026-10-12 外部批评采纳：归并目标列 301px 概念名折行）：A/B 与散键列
@@ -819,8 +843,35 @@ const hasSuggestions = computed(() => {
   if (!audit) return false
   return audit.proposals.length > 0 || audit.ambiguous.length > 0 || (audit.dropCandidates?.length ?? 0) > 0
 })
+/** 可自动执行的建议数：按钮读数与「死按钮」判据都取渲染行，不取审计统计口径 */
+const autoApplicableCount = computed(
+  () => (detail.value?.audit?.proposals ?? []).filter((item) => item.autoApplicable).length
+)
+/** 选中项构成：批量执行同时覆盖三组建议，工具条要说清这次会动到哪几组 */
+const selectedPartsText = computed(() => {
+  return [
+    selectedKeys.value.length ? `归并 ${selectedKeys.value.length}` : '',
+    selectedAmbiguousPairs.value.length ? `人工确认对 ${selectedAmbiguousPairs.value.length}` : '',
+    selectedDropKeys.value.length ? `散键 ${selectedDropKeys.value.length}` : ''
+  ].filter(Boolean).join(' · ')
+})
+/** 0 选中时的引导：无可自动执行项时不摆一枚永远点不动的「全选」按钮 */
+const bulkHintText = computed(() =>
+  autoApplicableCount.value
+    ? '勾选条目后批量执行，或全选可自动执行的建议'
+    : '逐条核对后勾选，本次没有可自动执行的建议'
+)
+const bulkWarnText = computed(() => {
+  const parts = [
+    selectedNeedsReview.value.length ? `${selectedNeedsReview.value.length} 条属于「需人工确认」` : '',
+    selectedAmbiguousPairs.value.length ? `${selectedAmbiguousPairs.value.length} 条「需人工看」对` : ''
+  ].filter(Boolean)
+  return parts.length ? `选中项里 ${parts.join('、')}，执行前请核对证据` : ''
+})
 /** 散键清理建议计数（审计队列格 + 列表空态分支共用） */
 const mrDropCount = computed(() => (detail.value?.audit?.dropCandidates ?? []).length)
+/** 需人工看的对数：取渲染行而非 stats.ambiguous——真实接口不返回该字段，格子会成空读数 */
+const mrAmbiguousCount = computed(() => detail.value?.audit?.ambiguous.length ?? 0)
 
 function resetSelection(audit?: ReviewDetail['audit']) {
   const next: Record<string, boolean> = {}
@@ -1125,8 +1176,33 @@ td.mr__sub { display: table-cell; }
 .mr-audit-queue__item b i { font-style: normal; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); }
 .mr-audit-queue__item span { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
-.mr__bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 16px 10px; }
-.mr__warn-inline { color: var(--mk-amber); font-size: var(--mk-fs-micro); }
+/* 归并处理条（2026-10-19 重设计）：卡内工具条，左读数 / 右动作 / 警告独立一行。
+   0 选中保持静默表面，选中后点亮描边，避免与下方三张表争视觉。 */
+.mr-bulk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 10px 16px 14px;
+  padding: 8px 10px 8px 12px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-lg);
+  background: var(--mk-surface-2);
+}
+.mr-bulk.is-active {
+  border-color: color-mix(in srgb, var(--mk-blue) 38%, transparent);
+  background: color-mix(in srgb, var(--mk-blue) 5%, var(--mk-surface-2));
+}
+.mr-bulk__status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
+.mr-bulk__count { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
+.mr-bulk__parts { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.mr-bulk__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.mr-bulk__warn { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-amber); }
+.mr-bulk__warn::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+@media (max-width: 900px) {
+  .mr-bulk { grid-template-columns: minmax(0, 1fr); }
+  .mr-bulk__actions { justify-content: flex-start; }
+}
 
 /* ===== 行内确认/驳回降噪（2026-10-12 外部批评采纳）：审计三表 42 行 × 2 颗按钮 = 84 颗
    常驻灰框，视觉噪声压过建议内容本身。悬停/键盘聚焦所在行才显现（按钮仍在 DOM、可达），
