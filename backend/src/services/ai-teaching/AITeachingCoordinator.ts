@@ -129,6 +129,12 @@ export interface ProcessStudentMessageOptions {
   /** 原始作答（供检查点结果留痕；不含答案键） */
   checkpointSubmission?: { selectedOptionIds?: string[]; answerText?: string };
   expectedRevision?: number;
+  /**
+   * 失败检查点概念的后续回合肯定语护栏（#84，commit 36fc5662）。
+   * 默认开启；仅冻结考卷双臂协议（#85）的 A 臂显式传入 false 以复现护栏前口径。
+   * 不对外暴露为产品开关——除对照实验外不应关闭。
+   */
+  failedConceptFollowupGuard?: boolean;
   /** 前端交互特征（认知负荷量测 · 前端情报层）：随学生消息落库并注入教学上下文 */
   interactionMeta?: InteractionMetaRecord | null;
   /**

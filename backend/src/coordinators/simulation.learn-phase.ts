@@ -379,6 +379,11 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     await ctx.clearTeachingPauseMarker(sessionId);
 
     const stageResults: StageResults = parseStageResultsPayload(session.stageResults)
+    // 冻结考卷双臂协议（#85）：A 臂 = 护栏前口径（关闭 #84 后续回合肯定语护栏），B/缺省 = 现行口径。
+    // 臂标签只影响对照实验，不改变任何默认行为。
+    const experimentArm = String(
+      (stageResults.simulationConfig as Record<string, unknown> | undefined)?.experimentArm || ''
+    ).toUpperCase()
 
     const learningState = (stageResults.teaching || {}) as TeachingState;
     if (learningState.manualStop || session.status === 'failed' || session.status === 'abandoned') {
@@ -943,6 +948,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           teachingRevision,
           pendingCheckpoint,
           checkpointAnswer: virtualReplyOutput?.checkpointAnswer || null,
+          failedConceptFollowupGuard: experimentArm !== 'A',
         });
         teachingRevision = aiResult.revision;
         

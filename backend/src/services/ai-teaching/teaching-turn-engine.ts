@@ -494,11 +494,11 @@ export async function processStudentMessage(
   // 失败检查点概念的**后续回合**肯定语护栏（#84，2026-10-19 实证）：提交轮硬门只管当轮——
   // zhongkao-streaming 批实测两次 code failed（缺要点）后，老师在随后自由回合仍称
   // 「你答对了/这一关你走通了」。口径收紧（精度优先）：仅当本回合知识点命中会话内
-  // code 失败概念时剥离；遥测单列一类，不污染切口2 的一致性口径（分子/分母不变）。
+  // code 失败概念时剥离；遥测单列一类，不污染切口2 一致性口径（#85 双臂 A 臂可显式关闭）。
   const judgingFailedThisTurn = !!(submittedCheckpoint
     && options.checkpointJudgement?.judgedBy === 'code'
     && options.checkpointJudgement.passed === false);
-  if (rawTeachingOutput?.reply && !judgingFailedThisTurn) {
+  if (options.failedConceptFollowupGuard !== false && rawTeachingOutput?.reply && !judgingFailedThisTurn) {
     const failedConceptNames = buildCheckpointCodeArbitration(previousTeachingState.checkpointHistory).codeFailedConceptNames;
     if (shouldGuardReplyForFailedConcept({
       currentPoint: rawTeachingOutput.knowledge?.currentPoint,

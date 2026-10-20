@@ -8,7 +8,7 @@
 | 组件 | 位置 | 说明 |
 |---|---|---|
 | 冻结评判样本集 | `doc/measurement/frozen-exam-2026-10-18/`（原 `doc/local/frozen-eval-2026-10-18/`，2026-10-19 移动入库） | 109 条已判 verdict（35 条错答放行，基线 32.1%），逐文件 sha256 见 `manifest.json`；README 写明用途与纪元 |
-| 校验/判定 runner | `backend/scripts/measurement-verify/frozen-exam-run.mjs`（仓内；纯函数在 `frozen-exam-core.mjs`） | `--verify` 校验 manifest sha256+基线（不符非零退出）；`--compare` 聚合两臂按 F1-b 判定；`--selftest` 零额度自测 |
+| 判定/聚合 runner | `backend/scripts/measurement-verify/frozen-exam-run.mjs`（npm: `measurement:frozen-exam`） | `--verify` 校验 manifest sha256+基线（不符非零退出）；`--compare` 聚合两臂按 F1-b 判定；`--selftest` 零额度自测 |
 | 判据脚本 | `doc/local/runs/20261002/ab-class-audit.mjs`（本地工具，不入库） | 产出 `verdict.patterns` 五个模式：`progressInflation` / `loopStuck` / `summaryMismatch` / `wrongAnswerPassed` / `unclosedComplete`；2026-10-19 起默认冻结集指向仓内新路径（旧路径 fallback） |
 | 臂定义 | 真实课堂源（VL 语料或真人会话） | A 臂 = 基线；B 臂 = 待验证改动（提示词/判分/难度控制），两臂同源同题 |
 | 读数 | `verdicts/*.json` 聚合 | 主指标 `wrongAnswerPassed` 率；次指标四模式率 |
@@ -21,12 +21,14 @@
 4. 判定：F1-b（错答放行）在 B 臂相对 A 臂**下降 ≥10 个百分点**且样本量 ≥35/臂 → 通过；未达样本量只登记不裁决。
 5. 把对照表与脚本版本写进《平台测量质量报告》：首版 `doc/measurement/PLATFORM-MEASUREMENT-QUALITY-REPORT-2026-10-19.md`（2026-10-19 产出）。
 
-## 三、当前状态（2026-10-19 更新）
+## 三、当前状态（2026-10-20 更新）
 
 - 冻结集：**已入库**（`doc/measurement/frozen-exam-2026-10-18/`，109 条、基线 32.1%，sha256 109/109 符）。
 - 协议：**本文件（已入库）**。
-- 双臂实跑：**首个已记录对照对**（离线重判：同一 109 样本、B 臂 = 换判分流水线重跑）→ 35/109 = 32.1% vs 39/109 = 35.8%（净增 4），判定**未达标（实际反升）**；**真正的变体批次仍待定**（需改判分/教学规则的实际变体与两臂各 ≥35 条同源同题课堂）。
-- 《平台测量质量报告》：**首版已产出**（路径见§二.5）。
+- 双臂运行机制：**会话级臂标签已落地**（见§六）——`simulationConfig.experimentArm` 让同一后端、同一任务集上
+  **交错**跑 A/B 两臂，不再依赖「换 commit / 换库」的时间序列对照。
+- 双臂实跑：**首个已记录对照对**（离线重判：同一 109 样本、B 臂 = 换判分流水线重跑）→ 35/109 = 32.1% vs 39/109 = 35.8%（净增 4），判定**未达标（实际反升）**；**下一个活体对照对已定**：A 臂 = 关闭 #84 后续回合肯定语护栏，B 臂 = 现行口径（护栏开启），各 ≥35 节同源同题课堂（§六）。
+- 《平台测量质量报告》：**首版已产出**（路径见§二.5），§三已登记 v2/v3/v4.1 判分器基线（26.7% / 目标 ≤16.7%）。
 
 ## 四、记录
 
@@ -39,3 +41,42 @@
 - 冻结集只读；任何修改都必须新建 `doc/measurement/frozen-exam-<date>/` 而不是改旧目录。
 - 两臂必须同源同题；跨纪元（epoch-1 vs epoch-2）数据不得混算。
 - 结论只在样本量与协议都满足时给；样本不足一律标「待样本」，不凭单批拍板。
+
+## 六、活体双臂的臂标签（2026-10-20 落地）
+
+**目的**：让「同一后端、同一任务集、交错跑两臂」成为可执行流程，避免用「换 commit / 换库」做时间序列
+对照（报告§三已明确非交错对照只登记不裁决）。
+
+**臂标签**：会话级 `stageResults.simulationConfig.experimentArm`，取值 `'A' | 'B' | null`：
+
+| 臂 | 标签 | 口径 |
+|---|---|---|
+| A | `'A'` | 关闭 #84「失败检查点概念的后续回合肯定语护栏」（`36fc5662`），复现护栏前口径 |
+| B | `'B'` 或缺省 | 现行口径（护栏开启）——**正常路径零变化** |
+
+**设置方式**（管理员会话配置接口，已支持）：
+
+```
+PUT /api/admin/virtual-learners/sessions/:sessionId/simulation-config
+body: { "experimentArm": "A" }   // null 清除标签
+```
+
+标签只影响该会话的教学回合：`executeLearningStep` 读到 `'A'` 时向教学引擎显式传
+`failedConceptFollowupGuard=false`（`ProcessStudentMessageOptions`，默认 true）；其余路径不读该字段。
+单测：`backend/src/coordinators/__tests__/simulation.coordinator.experiment-arm.test.ts`。
+
+**一次对照的最小流程**：
+
+1. `npm run measurement:frozen-exam -- --verify`（在 `backend/` 下）确认冻结集未变；活体两臂不涉及冻结 verdict，
+   但判分器版本必须与报告§三同口径（v4.1，`JUDGE_REV` 写进产物）。
+2. 选同一任务集与同一批人设；每个任务在 A/B 各上一次课，**交错排队**（A1/B1/A2/B2…）以抵消时段效应；
+   每次开课前用上面的接口写臂标签，并记录 `sessionId → arm` 清单。
+3. 每臂 ≥35 节后，用同一判据脚本（v4.1）各自出 verdict 到 `verdicts/arm-a/`、`verdicts/arm-b/`；
+   判据脚本按会话清单过滤，不按时间窗混算（机器时钟/模拟日均可）。
+4. 聚合与判定：
+   `npm run measurement:frozen-exam -- --compare --arm-a <dir> --arm-b <dir> --min-per-arm 35 --min-drop-pp 10`
+   退出码 0 通过 / 3 样本不足（只登记）/ 4 未达标。
+5. 把对照表、臂清单、判分器版本写进《平台测量质量报告》新增章节；样本不足时**只登记**。
+
+**为什么 A 臂要关护栏而不是换 commit**：活体课堂依赖当前 HEAD 的完整链路（含判分真值注入、延伸课、时钟），
+换 commit 会把多个变量一起换掉；臂标签只切换被检验的那一条规则，其余条件（任务集、人设、模型、判分器）保持同源。

@@ -97,7 +97,8 @@
     "goal:material:gate": "ts-node src/scripts/eval-goal-material-gate.ts",
     "decision:check": "ts-node src/scripts/check-decision.ts",
     "jevbench:public": "ts-node src/scripts/eval-jevbench-public.ts",
-    "calibration:audit": "ts-node src/scripts/audit-threshold-calibration.ts"
+    "calibration:audit": "ts-node src/scripts/audit-threshold-calibration.ts",
+    "measurement:frozen-exam": "node scripts/measurement-verify/frozen-exam-run.mjs"
   },
   "keywords": [
     "ai",

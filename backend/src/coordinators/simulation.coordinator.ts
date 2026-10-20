@@ -256,6 +256,8 @@ interface RunTeachingTurnParams {
   teachingRevision: number | undefined;
   pendingCheckpoint: PendingTeachingCheckpoint | null;
   checkpointAnswer: SimulatorCheckpointAnswer | null;
+  /** #85 双臂协议 A 臂：关闭失败检查点概念的后续肯定语护栏（缺省开启） */
+  failedConceptFollowupGuard?: boolean;
 }
 
 /** 普通聊天回合 → 归一化结果（字段与改动前逐字一致）。 */
@@ -708,7 +710,10 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       aiTeachingOrchestrator.processStudentMessage(
         params.teachingSessionId,
         params.learnerMessage,
-        { expectedRevision: params.teachingRevision }
+        {
+          expectedRevision: params.teachingRevision,
+          ...(params.failedConceptFollowupGuard === false ? { failedConceptFollowupGuard: false } : {}),
+        }
       )
     );
     return normalizeProcessTeachingTurn(turn);

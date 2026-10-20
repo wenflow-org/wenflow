@@ -970,18 +970,24 @@ router.post('/sessions/:sessionId/wrapup', async (req: Request, res) => {
 /**
  * 更新 session 的模拟配置 (目前主要是 frictionBudget)
  * PUT /api/admin/virtual-learners/sessions/:sessionId/simulation-config
- * body: { frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test' }
+ * body: { frictionBudget?: 'none' | 'low' | 'normal' | 'high' | 'stress_test', experimentArm?: 'A' | 'B' | null }
+ * experimentArm：冻结考卷双臂协议（#85）的会话级臂标签。A = 护栏前口径（关闭 #84 后续回合
+ * 肯定语护栏），B/缺省 = 现行口径；null 清除标签。仅用于对照实验，不改变默认行为。
  */
 router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const { frictionBudget, model, simulationClock } = req.body || {};
+    const { frictionBudget, model, simulationClock, experimentArm } = req.body || {};
 
     if (frictionBudget && !SIMULATION_FRICTION_BUDGETS.includes(frictionBudget)) {
       return res.status(400).json({ success: false, error: 'frictionBudget 不合法' });
     }
     if (model !== undefined && model !== null && typeof model !== 'string') {
       return res.status(400).json({ success: false, error: 'model 必须是字符串' });
+    }
+    if (experimentArm !== undefined && experimentArm !== null
+      && !['A', 'B'].includes(String(experimentArm).toUpperCase())) {
+      return res.status(400).json({ success: false, error: 'experimentArm 只能是 A/B 或 null' });
     }
     // 日期模拟时钟（配置项）：baseDate=起点（YYYY-MM-DD）、enabled=会话级开关覆盖。
     // dayIndex/history 属推进进度，由 advance-day 写，不在此接受。
@@ -1007,7 +1013,15 @@ router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) =
         simulationConfig: {
           ...(stageResults.simulationConfig || {}),
           ...(frictionBudget ? { frictionBudget } : {}),
-          ...(typeof model === 'string' && model.trim() ? { model: model.trim() } : {})
+          ...(typeof model === 'string' && model.trim() ? { model: model.trim() } : {}),
+          // experimentArm：null = 清除标签（JSON.stringify 时 undefined 键被丢弃）
+          ...(experimentArm !== undefined
+            ? {
+                experimentArm: experimentArm === null
+                  ? undefined
+                  : String(experimentArm).trim().toUpperCase(),
+              }
+            : {}),
         },
         ...(simulationClock ? {
           simulationClock: {
