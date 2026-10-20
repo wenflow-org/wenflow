@@ -4,12 +4,13 @@
  *   单阶段不渲染，多阶段可筛选，meta 显示「N / M 条」；
  * - 到期列三态：timeAgo 对未来时间返回「刚刚」的失真修复（逾期 N 天 / 今天到期 / N 天后）。
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { nextTick } from 'vue';
 
 const listSessions = vi.hoisted(() => vi.fn());
+const listGoals = vi.hoisted(() => vi.fn());
 const listPaths = vi.hoisted(() => vi.fn());
 const getMemoryTraces = vi.hoisted(() => vi.fn());
 const getLearnerEvidence = vi.hoisted(() => vi.fn().mockResolvedValue({ items: [], domain: [], loadCurve: [] }));
@@ -84,6 +85,7 @@ vi.mock('../learner-profile', () => ({
 }));
 vi.mock('@/api/adminApi', () => ({
   adminTeachingSessionsApi: { list: listSessions },
+  adminGoalConversationsApi: { list: listGoals },
   // 路径视角开关的选项来源（GET /paths?userId=）
   adminLearningContentApi: { listPaths },
   // 记忆页签嵌入的 MemoryReview 面板会在挂载时拉明细：给 resolved 值防空 catch 炸响
@@ -699,5 +701,59 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
     expect(graph.exists()).toBe(true);
     expect(graph.props('showPathRail')).toBe(false);
     expect(graph.props('pathId')).toBe('lp1'); // 取值仍由页级作用域决定
+  });
+});
+
+/**
+ * 概览对象轴（2026-10-19 用户拍板）：
+ * 账号页的「最近活动」把「最近会话」的对象行又列了一遍，已撤；目标对话迁到概览
+ * 成为「最近目标对话」，与会话同轴并列；事件轴卡改名「学习动态」与它们区分。
+ */
+describe('LearnerDetail 概览：最近目标对话 + 学习动态命名', () => {
+  beforeEach(() => {
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    getMemoryTraces.mockReset().mockResolvedValue([]);
+    listGoals.mockReset().mockResolvedValue({
+      data: {
+        data: {
+          conversations: [
+            { id: 'gc-same-path', description: '地理大题怎么练', status: 'completed', learningPathId: 'lp1', createdAt: '2026-10-18T10:00:00Z' },
+            { id: 'gc-other-path', description: '另一个路径的目标', status: 'active', learningPathId: 'lp-other', createdAt: '2026-10-17T10:00:00Z' }
+          ]
+        }
+      }
+    });
+    routeQuery.tab = 'overview';
+  });
+  afterEach(() => {
+    routeQuery.tab = 'sessions';
+  });
+
+  it('两张卡分工：事件轴叫「学习动态」，对象轴新增「最近目标对话」', async () => {
+    const w = await mountLd([]);
+    const titles = w.findAll('.mk-card__title').map((t) => t.text());
+    expect(titles).toContain('学习动态');
+    expect(titles).toContain('最近目标对话');
+    expect(titles).not.toContain('最近动态');
+    // 会话预览仍在（对象轴的另一张卡）
+    expect(titles).toContain('最近会话');
+  });
+
+  it('目标对话跟随页级路径作用域，行点击进只读座舱', async () => {
+    const w = await mountLd([]);
+    const text = w.text();
+    expect(text).toContain('地理大题怎么练');
+    // 别的路径的目标不进当前作用域
+    expect(text).not.toContain('另一个路径的目标');
+    expect(text).toContain('最近 1 条 · 当前路径');
+
+    const row = w.findAll('.mk-row').find((r) => r.text().includes('地理大题怎么练'))!;
+    expect(row.exists()).toBe(true);
+    await row.trigger('click');
+    expect(openSubPage).toHaveBeenCalledWith(
+      'session-real',
+      'gc-same-path',
+      expect.objectContaining({ from: expect.objectContaining({ id: 'u1' }) })
+    );
   });
 });

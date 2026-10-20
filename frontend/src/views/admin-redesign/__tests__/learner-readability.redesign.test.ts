@@ -227,17 +227,18 @@ describe('UserAccountPane 账号轴口径（人员详情合并后）', () => {
     return w;
   }
 
-  it('tab 收敛守卫：账户与许可合并为一卡（2026-10-11 外部评审 #2）+ 最近活动 feed 仍在', async () => {
+  it('账号页只留账户与许可：活动 feed 已迁出（2026-10-19 用户拍板去重）', async () => {
     const w = await mountPane();
     const titles = w.findAll('.mk-card__title').map((t) => t.text());
     // 许可不再独占卡片（原卡体只有一句说明 + 两个动作），按外部评审 #2 原建议收编为
     // 账户 kv 里的一行属性（.ud-kv__wide：徽章 + 说明 + 右端动作）
     expect(titles).toContain('账户与许可');
-    expect(titles).toContain('最近活动');
+    // 「最近活动」的会话行与概览「最近会话」同源同对象；目标对话迁到概览「最近目标对话」
+    expect(titles).not.toContain('最近活动');
+    expect(w.find('.ud-feed').exists()).toBe(false);
     expect(titles).not.toContain('许可与接入');
     expect(w.find('.ud-kv').text()).toContain('开发视角许可');
     expect(w.find('.ud-kv__wide').exists()).toBe(true);
-    expect(w.find('.ud-feed').exists()).toBe(true);
     w.unmount();
   });
 
@@ -259,22 +260,12 @@ describe('UserAccountPane 账号轴口径（人员详情合并后）', () => {
     liveLearners.value = [];
   });
 
-  it('活动时间线排除已废弃会话，并在卡头如实标注隐藏条数', async () => {
-    listSessions.mockResolvedValueOnce({
-      data: {
-        data: {
-          items: [
-            { id: 's-keep', topic: '有效会话', subject: 'concept-teaching', status: 'completed', startTime: '2026-09-30T10:00:00Z', messageCount: 4, duration: 60 },
-            { id: 's-drop', topic: '废弃会话', subject: 'concept-teaching', status: 'discarded', startTime: '2026-09-30T09:00:00Z', messageCount: 1, duration: 1 }
-          ]
-        }
-      }
-    });
+  it('账号页不再自行拉会话列表（活动 feed 已迁出）', async () => {
+    // 活动 feed 已迁出账号页（2026-10-19）：概览「最近会话」保留同款「排除废弃 + 标注隐藏条数」口径，
+    // 目标对话改由「最近目标对话」承载；此处只守卫账号页不再自行拉会话列表。
     const w = await mountPane();
-    const feed = w.find('.ud-feed').text();
-    expect(feed).toContain('有效会话');
-    expect(feed).not.toContain('废弃会话');
-    expect(w.text()).toContain('已隐藏废弃 1');
+    expect(w.find('.ud-feed').exists()).toBe(false);
+    expect(listSessions).not.toHaveBeenCalled();
     w.unmount();
     liveLearners.value = [];
   });

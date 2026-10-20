@@ -173,6 +173,39 @@
           </MkRowList>
         </section>
 
+        <!-- 最近目标对话（2026-10-19 用户拍板）：对象轴与「最近会话」并列。
+             原挂在「账号与许可」页的「最近活动」里，会话部分与左卡同源同对象、目标部分
+             又不跟页级路径作用域；账号页只留账户与许可后，目标对话迁到概览。 -->
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">最近目标对话</h3>
+            <span class="mk-card__meta">
+              <MkLoading v-if="ldGoalLoading" inline min text="加载中…" />
+              <template v-else-if="ldGoalError">加载失败</template>
+              <template v-else>{{ goalPreviewMeta }}</template>
+            </span>
+          </div>
+          <MkRowList
+            :empty="!recentGoalRows.length && !ldGoalLoading"
+            :empty-text="scopePathId ? '该路径下暂无目标对话' : '暂无目标对话'"
+            empty-hint="学习者发起目标对话后，这里会出现记录。"
+          >
+            <MkRow
+              v-for="g in recentGoalRows"
+              :key="g.id"
+              clickable
+              :title="g.summary"
+              :sub="g.subText"
+              :time="g.createdAgo"
+              @click="openSessionCockpit(g.id)"
+            >
+              <template #lead>
+                <span class="mk-badge" :class="sessBadgeCls(g.status)">{{ statusText(g.status) || '—' }}</span>
+              </template>
+            </MkRow>
+          </MkRowList>
+        </section>
+
         <!-- 学习状态追踪（原型 renderLearnerDetail 概览 pane 2189 / lsm 样式 517-522）：
              与证据 tab 指标卡同源（dynamicState.metrics）。同屏不同 tab 复用，证据 tab 保持不动。 -->
         <section v-if="dynamicState" class="mk-card">
@@ -208,8 +241,9 @@
              「学习者产生会话后将自动生成」的误导空态；后端 learner-models 无按日活跃接口） -->
         <section class="mk-card">
           <div class="mk-card__head">
-            <!-- 更名「最近动态」：卡内取的是合并时间线前 6 条（教学/目标/路径域事件，不只 session） -->
-            <h3 class="mk-card__title">最近动态</h3>
+            <!-- 「学习动态」：卡内是合并后的学习事件（教学/目标/路径域），与对象轴的
+                 「最近会话」「最近目标对话」区分命名，避免两个「最近 X」读成一回事 -->
+            <h3 class="mk-card__title">学习动态</h3>
             <span class="mk-card__meta">最近 {{ d.sessions.length }} 条事件</span>
           </div>
           <div class="ld-sessions">
@@ -894,7 +928,7 @@ import { learnerMetric, type LearnerMetricKey } from '@/utils/learnerMetrics'
 // './statusText' 引入同名 statusText（会话域），故此处显式改名，避免两条文案链混用。
 import { loadCaliber, panelScopeNote, statusText as pathStatusText } from './opsShared'
 import { useTableSort } from './useTableSort'
-import { adminLearningContentApi, adminMemoryReviewApi, adminTeachingSessionsApi, getUserIncludingDeleted } from '@/api/adminApi'
+import { adminLearningContentApi, adminMemoryReviewApi, adminTeachingSessionsApi, adminGoalConversationsApi, getUserIncludingDeleted } from '@/api/adminApi'
 import {
   statusText,
   sessionStatusBadgeCls,
@@ -1178,6 +1212,7 @@ function resetDerivedState(id: string) {
   loadCurveRaw.value = []
   predictionCalib.value = null
   ldSessionRows.value = []
+  ldGoalRows.value = []
   currentPathId.value = null
   pathInfo.value = null
   userRecord.value = null
@@ -1350,6 +1385,53 @@ function openSessionCockpit(sessionId: string) {
   openSubPage('session-real', sessionId, sp ? { from: { view: sp.view, id: sp.id, label: liveDetail.value?.name } } : undefined)
 }
 
+/* ===== 最近目标对话（2026-10-19 用户拍板：对象轴与「最近会话」并列） =====
+   目标对话接口不支持 pathId，故由行上的 learningPathId 在客户端跟随页级路径作用域；
+   includeTest 与同页会话读数同源。 */
+interface LdGoalRow {
+  id: string
+  summary: string
+  status: string
+  subText: string
+  createdAgo: string
+  createdTs: number
+  learningPathId: string
+}
+const ldGoalRows = ref<LdGoalRow[]>([])
+const ldGoalLoading = ref(false)
+const ldGoalError = ref(false)
+/** 概览只取前 4 条（与会话预览 5 条同量级） */
+const LD_GOAL_PREVIEW = 4
+/* 目标对话上的 learningPathId 可能是路径创建时的临时前缀（真实 id 末尾还带 _xxxxx），
+   故按「带 _ 边界的同源 id」匹配；严格相等会把本路径的目标全部过滤掉（实测：
+   目标存 lp_1792431234902，路径实际是 lp_1792431234902_oyjo73i）。 */
+function goalInScope(g: LdGoalRow): boolean {
+  const pid = scopePathId.value
+  if (!pid) return true
+  const gid = g.learningPathId
+  if (!gid) return false
+  return pid === gid || pid.startsWith(`${gid}_`) || gid.startsWith(`${pid}_`)
+}
+const activeGoalRows = computed(() => ldGoalRows.value.filter(goalInScope))
+const recentGoalRows = computed(() => activeGoalRows.value.slice(0, LD_GOAL_PREVIEW))
+const goalPreviewMeta = computed(() => {
+  const shown = recentGoalRows.value.length
+  const scope = scopePathId.value ? ' · 当前路径' : ''
+  return activeGoalRows.value.length > shown
+    ? `最近 ${shown} 条 · 共 ${activeGoalRows.value.length}${scope}`
+    : `最近 ${shown} 条${scope}`
+})
+/** goal 摘要（对齐 GoalConversations.summaryOf：description 优先，兜底解析 collectedData） */
+function goalSummaryOf(c: Record<string, unknown>): string {
+  if (c.description) return String(c.description)
+  try {
+    const cd = JSON.parse(String(c.collectedData || '{}'))
+    return String(cd.goal || cd.learningGoal || cd.objective || cd.target || '—')
+  } catch {
+    return '—'
+  }
+}
+
 /** 会话时长（后端 duration 单位：分钟）→ 「N 分钟 / N 小时 M 分」；0/缺省显 — */
 function formatDuration(minutes: number): string {
   if (!minutes || minutes <= 0) return '—'
@@ -1375,7 +1457,7 @@ function openPathDetail() {
   }
 }
 
-async function loadLdSessions(id: string) {
+async function loadLdSessions(id: string, includeTest: boolean) {
   const seq = detailLoadSeq
   ldSessLoading.value = true
   ldSessError.value = false
@@ -1383,10 +1465,11 @@ async function loadLdSessions(id: string) {
   try {
     // limit 20：教学会话 pane 需要更完整列表（原概览卡只展示 5 条，由 recentSessionRows 截取）
     // pathId：随页级路径作用域走（空 = 跨全部路径）；teaching_sessions.learningPathId 单列直连
+    // includeTest：与详情同源（深链不带 includeTest 时，虚拟账号由账号身份兜底）
     const res = await adminTeachingSessionsApi.list({
       userId: id,
       limit: LD_SESSION_WINDOW,
-      includeTest: subPage.value?.includeTest,
+      includeTest,
       ...(scopePathId.value ? { pathId: scopePathId.value } : {})
     })
     // 竞态守卫与 loadDetail 同款：换人/重载后丢弃旧响应
@@ -1443,6 +1526,39 @@ async function loadLdSessions(id: string) {
     if (!stale()) ldSessError.value = true
   } finally {
     if (!stale()) ldSessLoading.value = false
+  }
+}
+
+async function loadLdGoals(id: string, includeTest: boolean) {
+  const seq = detailLoadSeq
+  ldGoalLoading.value = true
+  ldGoalError.value = false
+  const stale = () => seq !== detailLoadSeq || subPage.value?.id !== id
+  try {
+    const api = adminGoalConversationsApi
+    if (!api?.list) return
+    const res = await api.list({
+      userId: id,
+      limit: 12,
+      includeTest
+    })
+    if (stale()) return
+    const body = res.data?.data ?? res.data ?? {}
+    ldGoalRows.value = ((body.conversations as Record<string, unknown>[]) || [])
+      .map((c) => ({
+        id: String(c.id),
+        summary: goalSummaryOf(c),
+        status: String(c.status || ''),
+        subText: c.learningPathId ? '已生成学习路径' : '未生成学习路径',
+        createdAgo: timeAgo(String(c.createdAt || '')),
+        createdTs: new Date(String(c.createdAt || '')).getTime() || 0,
+        learningPathId: String(c.learningPathId || '')
+      }))
+      .sort((a, b) => b.createdTs - a.createdTs)
+  } catch {
+    if (!stale()) ldGoalError.value = true
+  } finally {
+    if (!stale()) ldGoalLoading.value = false
   }
 }
 
@@ -1637,8 +1753,9 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
         setSubPageLabel(nm)
       }
     }
-    // 总览左栏「最近会话」：独立接口，失败不影响主详情
-    void loadLdSessions(id)
+    // 总览左栏「最近会话」「最近目标对话」：独立接口，失败不影响主详情
+    void loadLdSessions(id, includeTest)
+    void loadLdGoals(id, includeTest)
   } catch (e) {
     if (stale()) return
     if (base) {
