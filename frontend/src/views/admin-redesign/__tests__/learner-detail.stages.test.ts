@@ -109,8 +109,8 @@ vi.mock('../useConfirm', () => ({ askConfirm: vi.fn() }));
 vi.mock('@/utils/toast', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
 
 import LearnerDetail from '../LearnerDetail.vue';
-import { liveVirtuals, liveGetLearnerDetail, type LiveVirtual } from '../live';
-import { openSubPage } from '../store';
+import { liveVirtuals, liveGetLearnerDetail, liveLearners, type LiveVirtual } from '../live';
+import { openSubPage, subPage } from '../store';
 
 function sessionRow(id: string, milestoneIndex: number | null, status = 'completed') {
   return {
@@ -755,5 +755,45 @@ describe('LearnerDetail 概览：最近目标对话 + 学习动态命名', () =>
       'gc-same-path',
       expect.objectContaining({ from: expect.objectContaining({ id: 'u1' }) })
     );
+  });
+
+  /* 2026-10-18 真课实测：目标上存的是路径创建时的临时前缀（lp_x），真实路径末尾还带 _xxxxx。
+     严格相等会把本路径的目标全过滤空；按带 _ 边界的同源 id 匹配两边都认。 */
+  it('目标存临时前缀、路径带后缀时仍归入当前作用域', async () => {
+    const originalPath = liveLearners.value[0].pathId;
+    liveLearners.value[0].pathId = 'lp1_oyjo73i';
+    listGoals.mockResolvedValue({
+      data: {
+        data: {
+          conversations: [
+            { id: 'gc-prefix', description: '临时前缀目标', status: 'completed', learningPathId: 'lp1', createdAt: '2026-10-18T10:00:00Z' }
+          ]
+        }
+      }
+    });
+    try {
+      const w = await mountLd([]);
+      expect(w.text()).toContain('临时前缀目标');
+      expect(w.text()).toContain('最近 1 条 · 当前路径');
+    } finally {
+      liveLearners.value[0].pathId = originalPath;
+    }
+  });
+
+  /* 深链进虚拟学习者不带 ?includeTest 时，靠账号身份兜底：会话与目标两张卡必须与详情同源，
+     否则详情有数据、两张卡空读数（2026-10-18 走查）。 */
+  it('深链进虚拟账号不带 includeTest：会话与目标对话仍按 includeTest 拉取', async () => {
+    const original = subPage.value;
+    subPage.value = { view: 'learner', id: 'virtual_demo', label: '' };
+    listSessions.mockClear();
+    listGoals.mockClear();
+    try {
+      const w = await mountLd([]);
+      expect(listSessions).toHaveBeenCalledWith(expect.objectContaining({ userId: 'virtual_demo', includeTest: true }));
+      expect(listGoals).toHaveBeenCalledWith(expect.objectContaining({ userId: 'virtual_demo', includeTest: true }));
+      w.unmount();
+    } finally {
+      subPage.value = original;
+    }
   });
 });
