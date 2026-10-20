@@ -30,7 +30,7 @@
         <span class="mk-badge" :class="snapshotBadge" :title="snapshotHint">档案 {{ snapshotLabel }}</span>
       </template>
       <template #actions>
-        <button v-if="linkedVirtualProfile" type="button" class="mk-btn mk-btn--sm" title="同一账号的仿真档案视图（故事池 / 运行 / 运行预算）" @click="openVirtualProfile">
+        <button v-if="linkedVirtualProfile" type="button" class="mk-btn" title="同一账号的仿真档案视图（故事池 / 运行 / 运行预算）" @click="openVirtualProfile">
           虚拟档案 →
         </button>
         <button type="button" class="mk-btn" :disabled="recomputing" @click="recompute">

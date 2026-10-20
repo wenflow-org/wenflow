@@ -545,6 +545,9 @@ describe('四读数出处标注 + 虚拟档案互跳', () => {
     await flushPromises();
     const btn = w.findAll('button').find((b) => b.text().includes('虚拟档案'));
     expect(btn, '虚拟账号应出现互跳入口').toBeTruthy();
+    // 2026-10-20 用户「大小不一致」：hero 动作位统一默认档，不再和「重算档案」一高一矮
+    expect(btn!.classes()).toContain('mk-btn');
+    expect(btn!.classes()).not.toContain('mk-btn--sm');
     await btn!.trigger('click');
     expect(openSubPage).toHaveBeenCalledWith(
       'virtual',
