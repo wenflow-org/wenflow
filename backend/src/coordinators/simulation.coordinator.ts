@@ -1187,7 +1187,10 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
   async resolvePathReview(sessionId: string, options: { startLearning?: boolean } = {}) {
     return pathPhaseResolvePathReview(this, sessionId, options);
   }
-  async startLearningPhase(sessionId: string, options: { taskId?: string } = {}): Promise<{
+  async startLearningPhase(
+    sessionId: string,
+    options: { taskId?: string; mode?: 'tutor' | 'review' } = {}
+  ): Promise<{
     success: boolean;
     teachingSessionId?: string;
     welcomeMessage?: string;

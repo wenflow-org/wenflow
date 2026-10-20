@@ -15,6 +15,7 @@ import prisma from '../config/database';
 import learningService from '../services/learning/learning.service';
 import { assertPathMutationSafe } from '../services/learning/path-mutation-safety';
 import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingCoordinator';
+import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
 import { executeSkill, virtualLearnerLearnTurnSimulatorDefinition, virtualLearnerEpistemicGroundingDefinition } from '../skills';
 import { sessionWrapupAgent, type SessionWrapupInput } from '../skills/session-wrapup';
 import simulatedDayService from '../services/virtual-lab/simulated-day.service';
@@ -79,7 +80,7 @@ export function isTeachingTurnHiccupError(error: unknown): boolean {
   return /response does not contain valid JSON/i.test(message);
 }
 
-export async function startLearningPhase(ctx: SimulationOrchestrator, sessionId: string, options: { taskId?: string } = {}): Promise<{
+export async function startLearningPhase(ctx: SimulationOrchestrator, sessionId: string, options: { taskId?: string; mode?: 'tutor' | 'review' } = {}): Promise<{
   success: boolean;
   teachingSessionId?: string;
   welcomeMessage?: string;
@@ -208,7 +209,9 @@ export async function startLearningPhase(ctx: SimulationOrchestrator, sessionId:
       'start-learning-task',
       () => aiTeachingOrchestrator.startSession({
         userId: session.userId,
-        taskId: firstTask.id
+        taskId: firstTask.id,
+        // 复习课（#104 取样）：到期复习点注入 knowledgeState；收束走 complete_review 且不结算任务
+        ...(options.mode === 'review' ? { mode: 'review' as const } : {})
       })
     );
     
@@ -237,6 +240,7 @@ export async function startLearningPhase(ctx: SimulationOrchestrator, sessionId:
       success: true,
       teachingSessionId: teachingSession.sessionId,
       teachingRevision: teachingSession.revision,
+      classroomMode: options.mode === 'review' ? 'review' : 'tutor',
       ...buildLearningProgressSnapshot(learningPath.milestones, firstMilestoneIdx, firstTaskIdx)
     });
 
@@ -1073,6 +1077,88 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
 
         if (closureDecision.canCompleteTask) {
           await ctx.assertCurrentSessionLeaseOwned(sessionId);
+          // 复习课（#104 校准取样）：收束走 complete_review（wrapup + 复习结果回写记忆引擎），
+          // **不结算任务**——复习不是任务完成课。一课一停，下一次复习由调用方重新 start-learning。
+          if (learningState.classroomMode === 'review') {
+            const reviewFinalizedAt = new Date().toISOString();
+            let reviewFinalizeError: string | null = null;
+            try {
+              await sessionFinalizationService.finalize({
+                sessionId: teachingSessionId,
+                userId: session.userId,
+                action: 'complete_review',
+                operationId: `review:${teachingSessionId}:${teachingRevision}`,
+                revision: teachingRevision,
+              });
+            } catch (reviewError: unknown) {
+              reviewFinalizeError = asErrorLike(reviewError).message || 'review finalize failed';
+              logger.warn('[simulation-coordinator] 复习课 complete_review 失败，降级为 end_only 收束', {
+                sessionId,
+                teachingSessionId,
+                error: reviewFinalizeError
+              });
+              await aiTeachingOrchestrator
+                .endSession(teachingSessionId, 'review-completed', teachingRevision)
+                .catch(() => undefined);
+            }
+            const reviewConversationHistory = [
+              ...(learningState.conversationHistory || []),
+              { role: 'user', content: virtualReplyResult.userVisible },
+              {
+                role: 'assistant',
+                content: aiResponse,
+                ...(Array.isArray(teacherImages) && teacherImages.length > 0 ? { images: teacherImages } : {})
+              }
+            ];
+            const reviewLearningState = {
+              ...learningState,
+              // 课堂已结束：清掉绑定，避免下一次误在已完结课堂里继续推回合
+              teachingSessionId: null,
+              teachingRevision: null,
+              latestLearnerFeedback: currentLearnerFeedback,
+              closureDecision,
+              taskRuntime: {
+                ...taskRuntime,
+                status: 'review_completed',
+                taskId: currentTask.id,
+                taskTitle: currentTask.title,
+                reviewCompletedAt: reviewFinalizedAt,
+                error: reviewFinalizeError,
+                updatedAt: reviewFinalizedAt
+              },
+              conversationHistory: reviewConversationHistory
+            };
+            await ctx.updateTeachingStatePreservingControlFlags(sessionId, reviewLearningState);
+            logs.push({
+              timestamp: reviewFinalizedAt,
+              phase: 'stage-transition',
+              details: {
+                output: {
+                  action: 'review-class-complete',
+                  taskId: currentTask.id,
+                  taskTitle: currentTask.title,
+                  teachingSessionId,
+                  reviewFinalizeError,
+                  message: '复习课已收束（不结算任务）'
+                }
+              }
+            });
+            await ctx.addSessionLogs(sessionId, logs);
+            return {
+              success: true,
+              userMessage: virtualReplyResult.userVisible,
+              aiResponse,
+              milestoneProgress: {
+                currentMilestone: nextMilestoneIdx + 1,
+                totalMilestones: milestones.length,
+                currentTask: currentTask.title
+              },
+              isPathCompleted: false,
+              taskCompleted: false,
+              currentTaskStopped: true,
+              logs
+            };
+          }
           const endResult = await aiTeachingOrchestrator.endSession(
             teachingSessionId,
             'task-completed',

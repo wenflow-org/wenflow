@@ -839,13 +839,21 @@ router.post('/sessions/:sessionId/retry-path-generation', async (req: Request, r
 /**
  * 开始 Learning 阶段
  * POST /api/admin/virtual-sessions/:sessionId/start-learning
+ * body: { taskId?: string, mode?: 'tutor' | 'review' }
+ * mode=review：开复习课（到期复习点注入），用于 #104 校准取样；收束走 complete_review 且不结算任务。
  */
 router.post('/sessions/:sessionId/start-learning', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const { taskId } = req.body || {};
+    const { taskId, mode } = req.body || {};
+    if (mode !== undefined && mode !== null && !['tutor', 'review'].includes(String(mode))) {
+      return res.status(400).json({ success: false, error: 'mode 只能是 tutor/review' });
+    }
     const result = await runAssistedSessionMutationWithSimClock(sessionId, () =>
-      simulationCoordinator.startLearningPhase(sessionId, { taskId })
+      simulationCoordinator.startLearningPhase(sessionId, {
+        taskId,
+        ...(mode === 'review' ? { mode: 'review' as const } : {}),
+      })
     );
     
     res.json({

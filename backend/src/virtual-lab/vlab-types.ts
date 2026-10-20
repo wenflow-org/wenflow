@@ -188,6 +188,11 @@ export interface TeachingState {
     maxTurns: number
     startedAt?: string | null
   } | null
+  /**
+   * 当前课堂类型（assisted 轨）：review = 复习课（到期点注入，收束不结算任务）。
+   * 缺省 = tutor（正常课）。
+   */
+  classroomMode?: 'tutor' | 'review' | 'extension' | null
   teachingSessionHistory?: Array<Record<string, unknown>>
   conversationHistory?: Array<{ role: string; content: string }>
   closureDecision?: Record<string, unknown>

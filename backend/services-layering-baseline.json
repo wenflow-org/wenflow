@@ -5,7 +5,7 @@
     "src/routes/admin/platform.ts": 1454,
     "src/routes/admin/prompt-ops.ts": 1878,
     "src/routes/admin/skills.ts": 1116,
-    "src/routes/admin/virtual-learners.assisted-runtime.ts": 2027,
+    "src/routes/admin/virtual-learners.assisted-runtime.ts": 2035,
     "src/routes/ai-teaching.routes.ts": 1315,
     "src/routes/learning.ts": 1389,
     "src/routes/prompt-lab.ts": 2711,
