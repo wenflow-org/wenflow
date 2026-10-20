@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-21",
+  "note": "真人误区语料库 v1：每条都能回溯到公开来源（教研分析/考试复盘/科普），用于虚拟学习者的受控错误演出与检查点干扰项。concepts 是匹配用的概念别名（子串匹配，命中即用）；confidence 给人工复核后的可信度，不要拿它当概率。",
+  "entries": [
+    {
+      "id": "geo-template-blindness",
+      "concepts": ["区位分析", "材料信息提取", "综合题答题结构", "把条件翻译成能写的区位得分点", "从材料语句中提取「这里有什么条件」"],
+      "statement": "先背模板再套材料：把区域/产业模板整段写上去，没有对应到这道题材料里给的条件",
+      "why": "设问限定的是本题材料，模板只覆盖通识面；判卷按材料条件给分",
+      "source": "https://api.artdesignp.com/uploads/file/asp/20251111102043b0e164161.pdf",
+      "sourceTitle": "学生获取和解读地理信息的能力困境及提升路径（江苏地理综合题失分分析）",
+      "confidence": 0.9,
+      "locale": "zh"
+    },
+    {
+      "id": "geo-short-chain",
+      "concepts": ["区位分析", "从材料事实到选址意义的推论", "说清改写依据（为什么这句能推出这个角度）", "把条件翻译成能写的区位得分点"],
+      "statement": "只罗列关键词（市场、交通、劳动力），不连成「材料哪句话 → 说明什么 → 所以怎样」的两句逻辑链",
+      "why": "高思维题按推理链给分，关键词堆砌拿不到过程分",
+      "source": "https://api.artdesignp.com/uploads/file/asp/20251111102043b0e164161.pdf",
+      "sourceTitle": "学生获取和解读地理信息的能力困境及提升路径（江苏地理综合题失分分析）",
+      "confidence": 0.9,
+      "locale": "zh"
+    },
+    {
+      "id": "geo-miss-qualifier",
+      "concepts": ["区位分析", "对应事实与设问", "说明要点材料依据"],
+      "statement": "没先拆设问的限定词（时间/空间/主体/比较对象）就作答，把别的情形写成这题的答案",
+      "why": "设问的限定词决定答案范围；漏掉就会答非所问（例：没理解「向南凸出」指的是什么）",
+      "source": "https://api.artdesignp.com/uploads/file/asp/20251111102043b0e164161.pdf",
+      "sourceTitle": "学生获取和解读地理信息的能力困境及提升路径（江苏地理综合题失分分析）",
+      "confidence": 0.85,
+      "locale": "zh"
+    },
+    {
+      "id": "geo-evidence-split",
+      "concepts": ["文字与图表证据互补", "对照文字与图表定位选址证据", "从图表中提取直接信息"],
+      "statement": "只看文字材料，不回头核对图上的位置/数值，或者反过来只用图不看文字限定",
+      "why": "选址类题的分点常常一半在文字、一半在图上，单看一边必然漏点",
+      "source": "https://api.artdesignp.com/uploads/file/asp/20251111102043b0e164161.pdf",
+      "sourceTitle": "学生获取和解读地理信息的能力困境及提升路径（江苏地理综合题失分分析）",
+      "confidence": 0.8,
+      "locale": "zh"
+    },
+    {
+      "id": "geo-necessary-as-sufficient",
+      "concepts": ["几何证明", "转化条件为最小结论", "把已知条件兑成一条不跳步的直接结论", "同组条件合起来能进一步推出什么", "根据几何条件写出有理由的第一步推理"],
+      "statement": "把必要条件当充分条件用：看到「两直线平行」就直接推出某个角相等，没有先确认是哪两条线被哪条截线所截",
+      "why": "平行→角关系的定理带截线前提，漏掉前提就是无效推理",
+      "source": "https://www.ketiweb.com/ketizhongxin/8457.html",
+      "sourceTitle": "初中数学几何证明中的逻辑推理能力培养（三类典型推理错误诊断）",
+      "confidence": 0.85,
+      "locale": "zh"
+    },
+    {
+      "id": "geo-hidden-assumption",
+      "concepts": ["几何证明", "把上周五卡住的那道题的条件逐个写成最小结论", "按可推结论归类条件", "给条件组起名并说清它兑现什么"],
+      "statement": "默认图形里看起来成立的关系（共线、垂直、中点），把它当已知条件写进证明",
+      "why": "图形只是示意不能当条件；默认隐含条件是典型的逻辑跳跃",
+      "source": "https://www.ketiweb.com/ketizhongxin/8457.html",
+      "sourceTitle": "初中数学几何证明中的逻辑推理能力培养（三类典型推理错误诊断）",
+      "confidence": 0.85,
+      "locale": "zh"
+    },
+    {
+      "id": "geo-jump-steps",
+      "concepts": ["几何证明", "压轴题步骤分", "转化条件为最小结论", "把上周五卡住的那道题的条件逐个写成最小结论"],
+      "statement": "从条件直接跳到最终结论，中间那一步「因为…所以…」省略不写",
+      "why": "步骤分按推理链给，跳步即丢分；阅读时也容易把跳步当成会了",
+      "source": "https://www.sohu.com/a/385625631_534824",
+      "sourceTitle": "初中数学几何证明题的答题技巧和解题思路",
+      "confidence": 0.75,
+      "locale": "zh"
+    },
+    {
+      "id": "geo-reverse-thinking-absent",
+      "concepts": ["几何证明", "辨认熟悉几何题中已知条件对应的关系", "依据几何条件写出有理由的第一步推理"],
+      "statement": "只从已知条件往下推，不从结论倒推需要什么条件，读完题干没有切入点",
+      "why": "几何证明常用正逆结合：从结论出发看缺哪个条件，再回到已知",
+      "source": "https://www.sohu.com/a/385625631_534824",
+      "sourceTitle": "初中数学几何证明题的答题技巧和解题思路",
+      "confidence": 0.75,
+      "locale": "zh"
+    },
+    {
+      "id": "health-rote",
+      "concepts": ["健康管理师考证范围", "营养学基础", "健康风险评估"],
+      "statement": "把教材原句整段背下来，做题时不看题干问的是哪一类（判断/计算/多选）",
+      "why": "同一知识点在不同题型要求不同，死记硬背对不上设问",
+      "source": "https://www.med66.com/jiankang/jingyan/wy1812066972.shtml",
+      "sourceTitle": "备考健康管理师考试需要注意的三个误区",
+      "confidence": 0.8,
+      "locale": "zh"
+    },
+    {
+      "id": "health-multi-miss",
+      "concepts": ["健康风险评估", "健康管理师考证范围"],
+      "statement": "多选题只选最有把握的一项，漏掉其余正确项",
+      "why": "多选题按全对给分，漏选等于 0 分",
+      "source": "https://www.mofangge.com/zige/Health/20200612/79055.html",
+      "sourceTitle": "健康管理师考试中容易出现什么失误",
+      "confidence": 0.85,
+      "locale": "zh"
+    },
+    {
+      "id": "health-no-focus",
+      "concepts": ["健康管理师考证范围", "营养学基础", "把\"护理本科+十几年临床\"拆成可对照的条款项"],
+      "statement": "找不到重点：整章平均用力，不区分考纲要求「掌握/熟悉/了解」的层级",
+      "why": "考纲分掌握层级，平均用力会把时间花在不考的内容上",
+      "source": "https://zhuanlan.zhihu.com/p/147326128",
+      "sourceTitle": "健康管理师常见备考问题解决方案",
+      "confidence": 0.7,
+      "locale": "zh"
+    },
+    {
+      "id": "psy-reliability-is-not-validity",
+      "concepts": ["信度与效度", "评估域术语边界（信度/效度/能力推断）", "评估术语的信度"],
+      "statement": "把信度高当成效度高：量表每次测结果一致，就认为它测到了想测的东西",
+      "why": "信度只是效度的必要非充分条件；稳定地测错东西仍然无效",
+      "source": "https://uedu.tw/psy/a/intro-psychology-adv",
+      "sourceTitle": "看不见的心智如何被「测准」：心理学的构念、效度与复制危机",
+      "confidence": 0.9,
+      "locale": "zh"
+    },
+    {
+      "id": "psy-validity-is-inherent",
+      "concepts": ["信度与效度", "AI 建议的科学性审查", "评估域术语边界（信度/效度/能力推断）"],
+      "statement": "认为效度是测量工具自带的属性，换个人群或用途照样有效",
+      "why": "效度是针对特定用途与人群的推证，不是工具固有属性",
+      "source": "https://uedu.tw/psy/a/intro-psychology-adv",
+      "sourceTitle": "看不见的心智如何被「测准」：心理学的构念、效度与复制危机",
+      "confidence": 0.85,
+      "locale": "zh"
+    },
+    {
+      "id": "psy-ability-from-one-score",
+      "concepts": ["能力推断", "评估域术语边界（信度/效度/能力推断）", "学习模块核心理论"],
+      "statement": "从一次测验分数直接推断能力，忽略测量误差与题目覆盖面",
+      "why": "单次分数含误差，覆盖面决定能推断到什么程度",
+      "source": "https://www.surveyplus.cn/4/412.html",
+      "sourceTitle": "信效度解读：信度、效度的概念与类型",
+      "confidence": 0.75,
+      "locale": "zh"
+    }
+  ]
+}

@@ -42,6 +42,7 @@ import {
   mergeLearnerState,
 } from './simulation.helpers';
 import { decideControlledError } from '../skills/virtual-learner-shared/schemas';
+import { findMisconceptionFor } from '../config/misconception-corpus';
 import {
   locateLearningTask,
   buildTeachingTurnContext,
@@ -54,6 +55,8 @@ import {
   shouldCompleteExtension,
   LEARN_EXTENSION_MAX_TURNS,
   LEARN_REVIEW_TURN_CAP,
+  appendClosureTrace,
+  evaluateStuckClosure,
   buildNextLearningState,
   auditGroundingCompliance,
   clampLearnerStateToJudgment,
@@ -205,6 +208,32 @@ export async function startLearningPhase(ctx: SimulationOrchestrator, sessionId:
     });
     
     await ctx.assertCurrentSessionLeaseOwned(sessionId);
+    // 复习课（#104）：startSession 按 user+task 复用活跃课堂（resume），活跃的 tutor 课堂会让
+    // mode=review 静默失效（实测返回同一 teachingSessionId、DB 里 mode 仍是 tutor）。
+    // 开复习课前先把同任务的在跑课堂正常收掉，制造课间空窗。
+    if (options.mode === 'review') {
+      const activeClassroom = await prisma.teaching_sessions.findFirst({
+        where: {
+          userId: session.userId,
+          taskId: firstTask.id,
+          status: { in: ['active', 'paused', 'timeout'] },
+          NOT: { mode: 'review' },
+        },
+        select: { id: true, mode: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (activeClassroom) {
+        try {
+          await aiTeachingOrchestrator.endSession(activeClassroom.id, 'review-switch');
+        } catch (error: unknown) {
+          logger.warn('[simulation-coordinator] 开复习课前收束旧课堂失败', {
+            sessionId,
+            teachingSessionId: activeClassroom.id,
+            error: asErrorLike(error).message
+          });
+        }
+      }
+    }
     const teachingSession = await ctx.retryLearnUpstream(
       sessionId,
       'start-learning-task',
@@ -215,6 +244,10 @@ export async function startLearningPhase(ctx: SimulationOrchestrator, sessionId:
         ...(options.mode === 'review' ? { mode: 'review' as const } : {})
       })
     );
+    // 复习课仍被旧课堂复用 → 明确报错，不要静默把教师课堂当复习课跑
+    if (options.mode === 'review' && teachingSession.mode === 'resumed') {
+      throw new Error('复习课开课失败：同任务的旧课堂未能收束（会复用旧会话），请先结束当前课堂');
+    }
     
     await ctx.updateSessionStatus(
       sessionId,
@@ -726,6 +759,11 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
       frictionBudget: getSessionFrictionBudget(session),
       struggleConcepts: profile.struggleConcepts,
       turnIndex: Number(taskRuntime.turns) || 0,
+      // 真人误区语料库（2026-10-21）：命中就按有出处的具体误区演，没命中回退即兴卡点
+      resolveMisconception: (concept) => {
+        const hit = findMisconceptionFor(concept);
+        return hit ? { statement: hit.statement, why: hit.why ?? null, source: hit.source ?? null } : null;
+      },
     });
     let epistemicGrounding: any = null;
     try {
@@ -771,7 +809,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           ...(epistemicGrounding || {}),
           sampledCorrectness: false,
           blockedConcept: controlledError.targetConcept,
-          errorPattern: controlledError.targetConcept ? `卡在「${controlledError.targetConcept}」` : null,
+          errorPattern: controlledError.targetMisconception?.statement
+            ?? (controlledError.targetConcept ? `卡在「${controlledError.targetConcept}」` : null),
           masteryProb: 0.15,
         };
       }
@@ -785,7 +824,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         epistemicGrounding = {
           sampledCorrectness: false,
           blockedConcept: controlledError.targetConcept,
-          errorPattern: controlledError.targetConcept ? `卡在「${controlledError.targetConcept}」` : null,
+          errorPattern: controlledError.targetMisconception?.statement
+            ?? (controlledError.targetConcept ? `卡在「${controlledError.targetConcept}」` : null),
           masteryProb: 0.15,
         };
       }
@@ -936,6 +976,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     // 暂停原因码（分诊用：模型抖动 vs 上游突发不可用）
     let learningStepPauseCode: string | null = null;
     let closureDecision: LearningClosureDecision | null = null;
+    let closureTrace: TeachingState['closureTrace'] = learningState.closureTrace || null;
     let shouldStopCurrentTask = false;
 
     let teachingRevision = teachingSessionId
@@ -1102,6 +1143,85 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
               }
             });
           }
+        }
+
+        // 课堂探针（2026-10-21）：逐回合记录收束轨迹；连续无进展即提前收课，不再烧满回合上限。
+        // 复习课/延伸课各有自己的有界收束口径，不参与卡死判定。
+        const closureTurn = (taskRuntime.taskId === currentTask.id ? Number(taskRuntime.turns) || 0 : 0) + 1;
+        closureTrace = appendClosureTrace(learningState.closureTrace, {
+          turn: closureTurn,
+          teacherReady: closureDecision.teacherReady === true,
+          judgeFalse: closureDecision.judgeBlocked === true,
+          mastery: typeof (clampedLearnState as { conceptualMastery?: unknown } | null)?.conceptualMastery === 'number'
+            ? Number((clampedLearnState as { conceptualMastery?: number }).conceptualMastery)
+            : null,
+        });
+        const stuckVerdict = learningState.classroomMode === 'review' || extensionActive
+          ? { stuck: false, reason: null as string | null, masteryDelta: null as number | null, judgeFalseCount: 0 }
+          : evaluateStuckClosure({ trace: closureTrace, totalTurns: closureTurn });
+
+        if (stuckVerdict.stuck && !closureDecision.canCompleteTask) {
+          await ctx.assertCurrentSessionLeaseOwned(sessionId);
+          const attribution = {
+            taskId: currentTask.id,
+            taskTitle: currentTask.title,
+            turns: closureTurn,
+            reason: stuckVerdict.reason,
+            masteryDelta: stuckVerdict.masteryDelta,
+            judgeFalseCount: stuckVerdict.judgeFalseCount,
+            trace: closureTrace,
+            lastClosureReason: closureDecision.reason || null,
+            lastTeacherMessage: String(aiResponse || '').slice(0, 600),
+          };
+          await aiTeachingOrchestrator
+            .endSession(teachingSessionId, 'non-convergence', teachingRevision)
+            .catch((error: unknown) => {
+              logger.warn('[simulation-coordinator] 卡死收课 endSession 失败（继续收口）', {
+                sessionId,
+                teachingSessionId,
+                error: asErrorLike(error).message
+              });
+            });
+          const stuckLearningState: TeachingState = {
+            ...learningState,
+            teachingSessionId: null,
+            closureTrace,
+            taskRuntime: {
+              ...(taskRuntime as Record<string, unknown>),
+              status: 'timeout',
+              taskId: currentTask.id,
+              taskTitle: currentTask.title,
+              turns: closureTurn,
+              closureAttribution: attribution,
+            },
+          };
+          await ctx.updateTeachingStatePreservingControlFlags(sessionId, stuckLearningState);
+          logs.push({
+            timestamp: new Date().toISOString(),
+            phase: 'closure-attribution',
+            details: {
+              output: {
+                action: 'stuck-unclosed',
+                ...attribution,
+                message: `连续 ${closureTrace.length} 回合无收束信号且掌握度不再变化，判定卡死并提前收课（未结算任务）`,
+              }
+            }
+          });
+          await ctx.addSessionLogs(sessionId, logs);
+          return {
+            success: true,
+            userMessage: virtualReplyResult.userVisible,
+            aiResponse,
+            milestoneProgress: {
+              currentMilestone: nextMilestoneIdx + 1,
+              totalMilestones: milestones.length,
+              currentTask: currentTask.title
+            },
+            isPathCompleted: false,
+            taskCompleted: false,
+            currentTaskStopped: true,
+            logs
+          };
         }
 
         if (closureDecision.canCompleteTask) {
@@ -1557,6 +1677,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
           }
         : learningState.extensionRuntime
     });
+
+    nextLearningState.closureTrace = closureTrace;
 
     await ctx.updateTeachingStatePreservingControlFlags(sessionId, nextLearningState);
     await ctx.assertCurrentSessionLeaseOwned(sessionId);
