@@ -32,6 +32,7 @@ import {
   matchTimeOrderCues,
   collectReplyNumbers,
   figureNumbersFightReply,
+  resolveFigureMaxPerKind,
 } from '../teaching-visual.service';
 import { ImageError } from '../../image/types';
 import type { TeachingSessionMessage } from '../TeachingSessionRepository';
@@ -398,6 +399,18 @@ describe('教学配图时机（S1：老师用字符画结构）', () => {
     expect(opportunity!.reason).toBe('position-description');
     expect(opportunity!.instruction).toContain('figure');
     expect(opportunity!.instruction).toContain('position-line');
+  });
+
+  it('同图型上限：默认 3，可用环境变量收紧或放宽，非法值回落默认', () => {
+    expect(resolveFigureMaxPerKind(undefined)).toBe(3);
+    process.env.TEACHING_FIGURE_MAX_PER_KIND = '1';
+    try {
+      expect(resolveFigureMaxPerKind()).toBe(1);
+    } finally {
+      delete process.env.TEACHING_FIGURE_MAX_PER_KIND;
+    }
+    expect(resolveFigureMaxPerKind('3')).toBe(3);
+    expect(resolveFigureMaxPerKind('abc')).toBe(3);
   });
 
   it('上一轮已摆过位置线 → 不重复摆；会话上限到了 → 不出信号', () => {

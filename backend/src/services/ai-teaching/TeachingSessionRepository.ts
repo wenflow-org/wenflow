@@ -573,6 +573,29 @@ export class TeachingSessionRepository {
     return record ? mapRecordHydrated(record) : null;
   }
 
+  /**
+   * 本会话已落库的图（按图型计数）。
+   *
+   * 图型上限的判据必须取自**库**：2026-10-21 真课实测，会话上限 4 的一节课出了 6 张，
+   * 上限与「同骨架」两道闸门一次都没触发——回合内存里的消息快照不可靠，侧表才是权威。
+   */
+  async countFiguresByKind(sessionId: string): Promise<Record<string, number>> {
+    const rows = await prisma.teaching_session_messages.findMany({
+      where: { sessionId },
+      select: { payload: true },
+    });
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      const message = parseJsonSafe<TeachingSessionMessage | null>(row.payload, null);
+      const figures = Array.isArray(message?.figures) ? message.figures : [];
+      for (const figure of figures) {
+        const kind = String((figure as { kind?: string })?.kind || 'position-line');
+        counts[kind] = (counts[kind] || 0) + 1;
+      }
+    }
+    return counts;
+  }
+
   async assertOwnership(sessionId: string, userId: string): Promise<TeachingSessionRecord> {
     const session = await this.getById(sessionId);
     if (!session) {

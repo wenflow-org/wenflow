@@ -74,7 +74,7 @@ import {
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
 import { buildDeterministicOpening, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
-import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitTeachingFigure, countTeachingFigures, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
+import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitTeachingFigure, countTeachingFigures, resolveFigureMaxPerSession, resolveFigureMaxPerKind, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
@@ -225,6 +225,13 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
     topic: context.topic,
   });
   return buildDeterministicOpening(context);
+}
+
+/** 同图型封顶：判据取自库（侧表），不用回合内存快照——上限闸门此前正因为内存快照而失效。 */
+async function kindCapReached(sessionId: string, kind: unknown): Promise<boolean> {
+  const key = String(kind || 'position-line');
+  const counts = await teachingSessionRepository.countFiguresByKind(sessionId);
+  return (counts[key] || 0) >= resolveFigureMaxPerKind();
 }
 
 export async function processStudentMessage(
@@ -914,6 +921,14 @@ export async function processStudentMessage(
         taskId: session.taskId,
         kind: wanted.kind,
         count: countTeachingFigures(updatedMessages),
+      });
+    } else if (await kindCapReached(sessionId, wanted.kind)) {
+      // 总量闸门之外再按图型封顶（2026-10-21 真课）：同一节课 10 张位置线，
+      // 其中几张只是换了标签——学生看到的是「老师反复摆同一张图」。
+      logger.info('[AITeaching] 本会话该图型已达上限，跳过本轮图', {
+        sessionId,
+        taskId: session.taskId,
+        kind: wanted.kind,
       });
     } else if (!shouldEmitTeachingFigure(updatedMessages, wanted)) {
       // 与上一轮同一张图（学生只改了措辞）→ 不再重摆；下方悬空引用清理会把"见下图"一并剥掉

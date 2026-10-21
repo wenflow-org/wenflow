@@ -298,6 +298,7 @@ const FIGURE_KIND_GUIDE = [
   + '用 `group`：{"from":1,"to":3,"label":"同一个毛病：方向没跟已知条件对"}——画成花括号（归在一起）；'
   + '用区间线表达同一性会被读成跨度，把同一句标签在每点下重复一遍又会被读成「重复的题」，两种都别用。',
   '可选 `focus` 指出本轮该看哪里（只填位置，不要填颜色）：grid/matrix 用 {"row":0} 或 {"col":1}；compare 用 "left"/"right"；bins 用下标数字；ladder 用下标数字。',
+  '同一节课同一种图最多 3 张：第 4 次请换一种形状表达，或者干脆用文字——反复摆同一张图，学生会以为老师在重复同一件事。',
   '纯流程、层级、时序用 diagram（mermaid）。但**内容本质是表**时（多个条目 × 多个维度/栏目，或一格一格判断命中/漏/重复）**必须**用 grid/matrix：',
   'mermaid 会把它压成树，丢掉「哪一格」这个信息——学生看不出自己在哪一个格子上判断错了。',
   '图里不要写出本轮要学生自己产出的答案；reply 脱离图也必须成立。',
@@ -440,6 +441,25 @@ export function resolveFigureMaxPerSession(value = process.env.TEACHING_FIGURE_M
 export function countTeachingFigures(messages: TeachingSessionMessage[] | null | undefined): number {
   if (!Array.isArray(messages)) return 0;
   return messages.reduce((sum, message) => sum + (Array.isArray(message?.figures) ? message.figures.length : 0), 0);
+}
+
+/**
+ * 同一图型在一节课里的上限（默认 3，与 shouldEmitTeachingFigure 里的同类上限一致）。
+ *
+ * 为什么要在引擎里再判一次：那个上限读的是回合内存里的消息，而真课里它一次都没触发
+ * （2026-10-21：会话上限 4 的一节课出了 6 张，同图型 10 张）——引擎这道闸门的计数
+ * 取自库里的侧表，不信内存快照。
+ */
+const DEFAULT_FIGURE_MAX_PER_KIND = 3;
+
+export function resolveFigureMaxPerKind(value = process.env.TEACHING_FIGURE_MAX_PER_KIND): number {
+  if (!value || String(value).trim() === '') return DEFAULT_FIGURE_MAX_PER_KIND;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    logger.warn(`[teaching-visual] TEACHING_FIGURE_MAX_PER_KIND 无效（${value}），使用默认 ${DEFAULT_FIGURE_MAX_PER_KIND}`);
+    return DEFAULT_FIGURE_MAX_PER_KIND;
+  }
+  return parsed;
 }
 
 /** 上一轮老师已经摆过位置线 → 本轮不再重复摆（判据天然带节奏）。 */
