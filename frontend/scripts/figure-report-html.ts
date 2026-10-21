@@ -203,6 +203,11 @@ const fixRows = FIXES.map(
   ([a, b, c], i) => `<tr><td class="num">${i + 1}</td><td>${esc(a)}</td><td>${esc(b)}</td><td>${esc(c)}</td></tr>`,
 ).join('');
 
+const contextRow = (label: string, text: string | undefined, cls: string) =>
+  text
+    ? `<div class="ctx ctx--${cls}"><span class="ctx__label">${label}</span><span class="ctx__text" title="${esc(text)}">${esc(text)}</span></div>`
+    : '';
+
 const sampleCards = sampleHtml
   .map(
     (s) => `<div class="sample">
@@ -210,6 +215,8 @@ const sampleCards = sampleHtml
   <div class="sample__meta">${esc(s.item.figure?.kind)} · ${esc(s.item.user || '—')} · ${esc(s.item.topic || '—')} · 触发：${esc(
       REASON_LABEL[s.item.source?.reason || 'none'] || s.item.source?.reason || 'none',
     )}</div>
+  ${contextRow('学生', s.item.context?.student, 'student')}
+  ${contextRow('老师', s.item.context?.teacher, 'teacher')}
   ${s.html}
 </div>`,
   )
@@ -242,6 +249,11 @@ pre { margin: 8px 0; padding: 12px 14px; background: #f8f9fb; border: 1px solid 
 .sample__cap { font-size: 13px; color: #29303d; margin-bottom: 2px; }
 .sample__meta { font-size: 11px; color: #8b93a3; margin-bottom: 6px; }
 .sample svg { max-width: 100%; height: auto; }
+.ctx { display: flex; gap: 8px; margin: 2px 0 6px; font-size: 13px; line-height: 1.65; }
+.ctx__label { flex: none; font-size: 11px; font-weight: 600; color: #7b8494; border: 1px solid #e3e7ef; border-radius: 4px;
+  padding: 1px 5px; height: 18px; line-height: 16px; }
+.ctx--student .ctx__text { color: #4a5568; }
+.ctx--teacher .ctx__text { color: #29303d; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .teaching-figure__hint { display: none !important; }
 .kpi { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0 4px; }
 .kpi div { flex: 1 1 150px; background: #fff; border: 1px solid #e3e7ef; border-radius: 10px; padding: 10px 12px; }
