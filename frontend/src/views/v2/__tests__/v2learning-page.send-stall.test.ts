@@ -44,6 +44,8 @@ vi.mock('@/api/aiTeaching', () => ({
     streamSendPeerMessage: vi.fn(),
     sendPeerMessage: vi.fn(),
   },
+  // 发送链路在合并后的契约里需要幂等键（跨重试复用）；mock 模块须显式给出
+  createTeachingIdempotencyKey: (kind: string) => `${kind}-test-key`,
 }));
 
 vi.mock('vue-router', () => ({

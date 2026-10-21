@@ -211,10 +211,10 @@ describe('SimulationOrchestrator.runTeachingTurn 检查点消费', () => {
     })
 
     expect(mockSubmitCheckpoint).toHaveBeenCalledTimes(1)
-    // #85 双臂开关（d0b1b799）后 submitCheckpoint 多了第 5 参 turnOptions：
+    // 合并后签名：第 5 参是路由幂等键（仿真链路不传），第 6 参是 #85 双臂开关 turnOptions——
     // 未显式关护栏时传空对象（护栏照常执行），与聊天回合同口径
     expect(mockSubmitCheckpoint).toHaveBeenCalledWith(
-      'teach-1', 'cp-1', { selectedOptionIds: ['B'] }, 7, {},
+      'teach-1', 'cp-1', { selectedOptionIds: ['B'] }, 7, undefined, {},
     )
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
     expect(result).toMatchObject({ aiResponse: '答对了', revision: 42 })
