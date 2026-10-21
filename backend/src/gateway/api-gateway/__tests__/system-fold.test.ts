@@ -8,7 +8,7 @@
  *
  * 本测试锁死折叠语义：内容不丢、只进首条 user、其余消息顺序不变、无 system 时不拷贝。
  */
-import { foldSystemMessagesIntoUser } from '../executor';
+import { foldSystemMessagesIntoUser, resolveSystemPromptFoldPolicy } from '../executor';
 
 describe('foldSystemMessagesIntoUser（上游不支持 system 角色的兼容层）', () => {
   it('system 内容前置进首条 user，并保留其余消息顺序', () => {
@@ -53,5 +53,42 @@ describe('foldSystemMessagesIntoUser（上游不支持 system 角色的兼容层
   it('空数组 / 非数组安全返回', () => {
     expect(foldSystemMessagesIntoUser([])).toEqual([]);
     expect(foldSystemMessagesIntoUser(undefined as unknown as Parameters<typeof foldSystemMessagesIntoUser>[0])).toBeUndefined();
+  });
+});
+
+describe('resolveSystemPromptFoldPolicy（折叠由通道能力驱动，不是全局开关）', () => {
+  const base = [
+    { role: 'system' as const, content: 'SYS' },
+    { role: 'user' as const, content: 'U' },
+  ];
+
+  it('标准上游（声明支持 system）保留 system 角色：wire format = [system, user]', () => {
+    const fold = resolveSystemPromptFoldPolicy(true, undefined);
+    expect(fold).toBe(false);
+    const out = fold ? foldSystemMessagesIntoUser(base) : base;
+    expect(out).toEqual([
+      { role: 'system', content: 'SYS' },
+      { role: 'user', content: 'U' },
+    ]);
+  });
+
+  it('不支持 system 的通道折叠成单条 user', () => {
+    const fold = resolveSystemPromptFoldPolicy(false, undefined);
+    expect(fold).toBe(true);
+    const out = foldSystemMessagesIntoUser(base);
+    expect(out).toEqual([{ role: 'user', content: 'SYS\n\n---\nU' }]);
+  });
+
+  it('LLM_SYSTEM_PROMPT_FOLD=0 全局禁用折叠（即使通道声明不支持）', () => {
+    expect(resolveSystemPromptFoldPolicy(false, '0')).toBe(false);
+  });
+
+  it('LLM_SYSTEM_PROMPT_FOLD=1 全局强制折叠（即使通道声明支持）', () => {
+    expect(resolveSystemPromptFoldPolicy(true, '1')).toBe(true);
+  });
+
+  it('非法取值回落到通道能力', () => {
+    expect(resolveSystemPromptFoldPolicy(true, 'yes')).toBe(false);
+    expect(resolveSystemPromptFoldPolicy(false, '')).toBe(true);
   });
 });

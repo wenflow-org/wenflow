@@ -152,6 +152,12 @@ export interface ExecutionContext {
   fallbackFrom?: string;
   /** 流式模式下逐段透传内容增量；与 request.stream 配合启用流式执行路径 */
   onStreamChunk?: (delta: string) => void;
+  /**
+   * 测试/探针专用：在请求真正发出前拿到**最终请求体**（含折叠后的 messages、
+   * thinking/max_tokens/top_p 等生效值）。仅内存回调，不落库、不暴露 HTTP。
+   * 用途：断言 wire format 与参数，不必依赖上游行为间接推断。
+   */
+  onWireRequest?: (body: ChatRequest) => void;
   [key: string]: any;
 }
 

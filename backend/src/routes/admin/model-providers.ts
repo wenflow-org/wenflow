@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import apiConfigService from '../../services/apiConfig.service';
 import { safeHttpRequest } from '../../utils/safe-http';
+import { resolveChatCompletionsUrl } from '../../gateway/api-gateway/chat-protocol-adapter';
 import { getProviderCatalog } from '../../config/models.config';
 import { resolveProviderApiKey } from '../../services/provider-secrets.service';
 import {
@@ -71,9 +72,15 @@ router.post('/', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   try {
     const body = req.body ?? {};
-    // 平台通道的地址/密钥归 platform_api_configs：这里只放行展示名/说明/启用位
+    // 平台通道的地址/密钥归 platform_api_configs：这里只放行展示名/说明/启用位，
+    // 以及 system 角色能力（它本身就是通道能力，不是连接配置）。
     const patch = req.params.id === PLATFORM_PROVIDER_ID
-      ? { name: body.name, description: body.description, enabled: body.enabled }
+      ? {
+          name: body.name,
+          description: body.description,
+          enabled: body.enabled,
+          ...(body.supportsSystemRole !== undefined ? { supportsSystemRole: body.supportsSystemRole } : {}),
+        }
       : body;
     const result = await updateProvider(req.params.id, patch);
     setAuditAction(res, 'model-provider-update', { targetType: 'model-provider', targetId: req.params.id });
@@ -187,8 +194,7 @@ router.post('/:id/test', async (req, res) => {
       res.status(400).json({ success: false, error: provider.baseUrl ? '还没有可用密钥：请先填写密钥。' : '平台服务地址或密钥未配置。' });
       return;
     }
-    const normalized = baseUrl.replace(/\/+$/, '');
-    const endpoint = normalized.endsWith('/v1') ? `${normalized}/chat/completions` : `${normalized}/v1/chat/completions`;
+    const endpoint = resolveChatCompletionsUrl(baseUrl);
     const prompt = String(req.body?.prompt || '请用一句中文确认模型测试成功。').trim();
     const startedAt = Date.now();
     const response = await safeHttpRequest<{

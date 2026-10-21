@@ -14,6 +14,7 @@ import { teachingSessionRepository, TeachingSessionConflictError, type TeachingS
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
 import { applyWarmupExtractionForSession } from './warmup-writeback';
 import { parseSessionArtifacts } from './checkpoint-shared';
+import { recordSessionEvent } from './session-events.service';
 import {
   TeachingCheckpoint,
   CheckpointSubmitPayload,
@@ -30,6 +31,28 @@ import { requireTeachingRevision } from './teaching-turn-shared';
 import { processStudentMessage } from './teaching-turn-engine';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
 import type { ProcessStudentMessageOptions } from './AITeachingCoordinator';
+
+/**
+ * 检查点提交的对外结果（提交路由与幂等重放共用）：
+ * 回合载荷 → `{passed, feedback, hint?, revision}`。
+ */
+export function buildCheckpointSubmitResult(turn: {
+  aiResponse: string;
+  revision: number;
+  analysis?: { confusionPoints?: string[] } | null;
+  checkpointResolution?: { passed: boolean } | null;
+}): CheckpointSubmitResult {
+  const passed = turn.checkpointResolution?.passed === true;
+  const hint = !passed && turn.analysis?.confusionPoints?.length
+    ? `建议先回顾：${turn.analysis.confusionPoints.join('、')}`
+    : undefined;
+  return {
+    passed,
+    feedback: turn.aiResponse,
+    ...(hint ? { hint } : {}),
+    revision: turn.revision,
+  };
+}
 
 export async function getSessionHistory(userId: string): Promise<Array<{
   id: string;
@@ -105,6 +128,8 @@ export async function submitCheckpoint(
   expectedRevision?: number,
   /** 透传给本回合 processStudentMessage 的选项（#85 双臂：A 臂关闭后续回合肯定语护栏） */
   turnOptions: { failedConceptFollowupGuard?: boolean } = {},
+  /** 路由幂等键：传入后检查点结果与回合提交同事务落账本（崩溃后可重放） */
+  idempotencyKey?: string,
 ): Promise<CheckpointSubmitResult> {
   const operationClaim = await teachingSessionRepository.claimOperation(
     sessionId,
@@ -147,6 +172,11 @@ export async function submitCheckpoint(
         skipped: true,
       });
       teachingState.checkpointHistory = history.slice(-20);
+      const skippedResult: CheckpointSubmitResult = {
+        passed: false,
+        feedback: '已跳过这个检查点，我们继续。',
+        revision: (operationClaim.session.revision ?? 0) + 1,
+      };
       await teachingSessionRepository.commitTurnState(sessionId, operationClaim.operationId, {
         messages: session.messages,
         messagesBaseCount: operationClaim.messagesBaseCount,
@@ -154,17 +184,25 @@ export async function submitCheckpoint(
         teachingState,
         taskId: session.taskId,
         userId: session.userId,
+        ...(idempotencyKey
+          ? { settlement: { idempotencyKey, result: skippedResult as unknown as Record<string, any>, revision: skippedResult.revision } }
+          : {}),
       });
 
       // H1 失败留痕（LEARNING_SCIENCE_AUDIT §3.9 遗留）：跳过是「未作答」收场，此前只留
       // checkpointHistory、不落证据行（分母缺位）。只留痕、不改写；幂等键防重复计数。
       await recordCheckpointAttemptEvidence(session, checkpoint, { outcome: 'skipped' });
 
-      return {
-        passed: false,
-        feedback: '已跳过这个检查点，我们继续。',
+      await recordSessionEvent({
+        sessionId,
+        kind: 'checkpoint.submitted',
+        actor: 'user',
+        status: 'info',
         revision: (operationClaim.session.revision ?? 0) + 1,
-      };
+        payload: { checkpointId, type: checkpoint.type, skipped: true },
+      });
+
+      return skippedResult;
     }
 
     let answer: string;
@@ -203,18 +241,22 @@ export async function submitCheckpoint(
         },
         // #85 双臂 A 臂：提交回合后的后续护栏同样受会话级开关控制（此前只覆盖聊天回合）
         ...(turnOptions.failedConceptFollowupGuard === false ? { failedConceptFollowupGuard: false } : {}),
+        idempotencyKey,
+        // 账本存的是检查点对外结果而非回合原始载荷：重放时直接返回同一形状
+        ...(idempotencyKey ? { settlementResult: (base: any) => buildCheckpointSubmitResult(base) } : {}),
       }
     );
     const passed = turn.checkpointResolution?.passed === true;
-    const hint = !passed && turn.analysis?.confusionPoints?.length
-      ? `建议先回顾：${turn.analysis.confusionPoints.join('、')}`
-      : undefined;
-    return {
-      passed,
-      feedback: turn.aiResponse,
-      ...(hint ? { hint } : {}),
+    const result = buildCheckpointSubmitResult(turn);
+    await recordSessionEvent({
+      sessionId,
+      kind: 'checkpoint.submitted',
+      actor: 'user',
+      status: passed ? 'ok' : 'info',
       revision: turn.revision,
-    };
+      payload: { checkpointId, type: checkpoint.type, passed, skipped: false },
+    });
+    return result;
   } catch (error) {
     await teachingSessionRepository.releaseOperation(sessionId, operationClaim.operationId);
     throw error;

@@ -117,4 +117,105 @@ describe('冻结考卷脚本 frozen-exam-run.mjs（#85）', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it('--compare 硬门禁：缺 --verify-frozen / 条件清单一律拒跑（协议§二.1/§二.2）', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'frozen-exam-compare-'));
+    try {
+      const frozenDir = path.join(dir, 'frozen');
+      const batchDir = path.join(frozenDir, 'verdicts', 'b1');
+      fs.mkdirSync(batchDir, { recursive: true });
+      const content = '{"pid":"p1","arm":"A","verdict":{"patterns":{"wrongAnswerPassed":true}}}\n';
+      fs.writeFileSync(path.join(batchDir, 'a.json'), content);
+      fs.writeFileSync(
+        path.join(frozenDir, 'manifest.json'),
+        JSON.stringify({
+          frozenAt: '2026-10-19T00:00:00.000Z',
+          purpose: 'jest fixture（不进仓库）',
+          batches: [
+            {
+              id: 'b1',
+              source: 'jest',
+              files: 1,
+              judged: 1,
+              wrongAnswerPassed: 1,
+              rate: 1,
+              entries: [
+                { file: 'a.json', sha256: crypto.createHash('sha256').update(content).digest('hex'), wrongAnswerPassed: true },
+              ],
+            },
+          ],
+          totals: { judged: 1, wrong: 1, rate: 1 },
+        }),
+      );
+
+      const mkArm = (name: string) => {
+        const armDir = path.join(dir, name);
+        fs.mkdirSync(armDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(armDir, 'r.json'),
+          JSON.stringify({
+            pid: 'p1',
+            arm: 'A',
+            verdict: { patterns: { progressInflation: false, loopStuck: false, summaryMismatch: false, wrongAnswerPassed: false, unclosedComplete: false } },
+          }),
+        );
+        return armDir;
+      };
+      const armA = mkArm('arm-a');
+      const armB = mkArm('arm-b');
+      const conditions = (promptHash: string) => ({
+        modelSnapshot: 'deepseek-v4.1-flash@2026-10-17',
+        promptHash,
+        temperature: 0.7,
+        topP: null,
+        maxTokens: 64000,
+        seed: null,
+        k: 1,
+        coverage: 1,
+        judgeVersion: 'judge-v3',
+      });
+      const condA = path.join(dir, 'cond-a.json');
+      const condB = path.join(dir, 'cond-b.json');
+      fs.writeFileSync(condA, JSON.stringify(conditions('sha256:aaa')));
+      fs.writeFileSync(condB, JSON.stringify(conditions('sha256:bbb')));
+
+      const noVerify = runScript(['--compare', '--arm-a', armA, '--arm-b', armB]);
+      expectExit(noVerify, 1, '缺 --verify-frozen');
+      expect(noVerify.stderr).toContain('--verify-frozen');
+
+      const noConditions = runScript(['--compare', '--verify-frozen', '--frozen-dir', frozenDir, '--arm-a', armA, '--arm-b', armB]);
+      expectExit(noConditions, 1, '缺条件清单');
+      expect(noConditions.stderr).toContain('conditions');
+
+      const full = runScript([
+        '--compare', '--verify-frozen', '--frozen-dir', frozenDir,
+        '--arm-a', armA, '--arm-b', armB,
+        '--arm-a-conditions', condA, '--arm-b-conditions', condB,
+        '--json',
+      ]);
+      // n=1 < 35/臂 → 协议§二.4 只登记不裁决（退出码 3），但条件与冻结校验必须已通过
+      expectExit(full, 3, '合法对照（样本不足）');
+      const json = JSON.parse(full.stdout) as {
+        frozenVerified: boolean;
+        judgeVersion: string;
+        conditions: { differing: string[] };
+        f1b: { decision: string };
+      };
+      expect(json.frozenVerified).toBe(true);
+      expect(json.judgeVersion).toBe('judge-v3');
+      expect(json.conditions.differing).toEqual(['promptHash']);
+      expect(json.f1b.decision).toBe('undecided');
+
+      // 两臂条件完全相同 → NO_TREATMENT，退出码 1
+      const same = runScript([
+        '--compare', '--verify-frozen', '--frozen-dir', frozenDir,
+        '--arm-a', armA, '--arm-b', armB,
+        '--arm-a-conditions', condA, '--arm-b-conditions', condA,
+      ]);
+      expectExit(same, 1, '无处理变量');
+      expect(same.stdout).toContain('NO_TREATMENT');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

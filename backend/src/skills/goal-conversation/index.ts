@@ -284,7 +284,9 @@ export function buildGoalConversationUserPayload(input: {
     conversationContext,
     userInput: input.userInput,
     state: statePayload
-  }, null, 2);
+  });
+  // 紧凑序列化：缩进空白同样计入输入 token，且每轮整份 payload 都会重发；
+  // 键序（而非排版）才是缓存前缀的杠杆，见上方注释。
 
   // supplement 作为 JSON 外前缀文本（不污染 JSON 键集）；无 supplement 时纯 JSON
   return input.supplementText ? `${input.supplementText}\n\n${payloadJson}` : payloadJson;

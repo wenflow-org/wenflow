@@ -1308,6 +1308,47 @@ export async function processStudentMessage(
       checkpointResolution = { passed, understanding, judgedBy };
     }
 
+    const baseResult = {
+    analysis: teachingOutput.analysis,
+    aiResponse: teachingOutput.reply,
+    ...(assistantMessage.images?.length ? { images: assistantMessage.images } : {}),
+    // 课堂结构图（2026-09-27 双通道重构）：mermaid 源码下行，前端确定性渲染
+    ...(assistantMessage.diagrams?.length ? { diagrams: assistantMessage.diagrams } : {}),
+    // 位置线图（Scope B）：结构化数值域下行，前端确定性渲染成 SVG
+    ...(assistantMessage.figures?.length ? { figures: assistantMessage.figures } : {}),
+    // 教师补充材料卡片（批次 E）：本轮晋升成功时随消息下发（前端渲染卡片，点开看章节）
+    ...(supplementPromotion.payload ? { supplementaryMaterial: supplementPromotion.payload } : {}),
+    strategies: effectiveTeachingOutput.pedagogy.strategies,
+    knowledgePoint: effectiveTeachingOutput.knowledge.currentPoint,
+    ...(effectiveTeachingOutput.knowledge.confirmCheck
+      ? { confirmCheck: effectiveTeachingOutput.knowledge.confirmCheck }
+      : {}),
+    knowledgePoints: normalizeKnowledgePoints(mergedKnowledge),
+    isCompletion: completionReady,
+    currentState,
+    peerTriggered,
+    peerMessage,
+    peerStrategy,
+    peerFollowUpQuestions,
+    promptDebug,
+    peerDebug,
+    // 统一运行契约观测（不改变 isCompletion 硬门禁）
+    runtimeEnvelope: turnRuntimeEnvelope,
+    completionAlignment,
+    envelopeCompletionSignal: !!envelopeCompletionSignal,
+    lastBusinessPhase: turnRuntimeEnvelope?.businessState?.phase || null,
+    shouldConfirmEnd: completionReady || endIntent.isEndIntent,
+    endReason: endIntent.isEndIntent
+      ? 'learner-requested-end' as const
+      : completionReady
+        ? 'completion-candidate' as const
+        : null,
+    recovered,
+      checkpoint: checkpointForMessageResult(teachingState),
+      checkpointResolution,
+      revision: session.revision + 1,
+    };
+
     await teachingSessionRepository.commitTurnState(sessionId, operationClaim.operationId, {
       messages: persistedMessages,
       messagesBaseCount: operationClaim.messagesBaseCount,
@@ -1316,8 +1357,22 @@ export async function processStudentMessage(
       taskId: session.taskId,
       userId: session.userId,
       markTaskInProgress: true,
+      // 幂等结算与业务写入同事务（2026-10-21）：此前账本在路由里二次独立提交，
+      // 崩溃窗口内消息已落库而账本仍 processing，同 key 只能拿到 409。
+      ...(options.idempotencyKey
+        ? {
+            settlement: {
+              idempotencyKey: options.idempotencyKey,
+              result: options.settlementResult
+                ? options.settlementResult(baseResult as unknown as Record<string, any>)
+                : baseResult as unknown as Record<string, any>,
+              revision: baseResult.revision,
+            },
+          }
+        : {}),
     });
     committed = true;
+
 
     // 误解台账（G-R-R Phase 2）：异步记录本轮结构化误解，best-effort 不阻断回合。
     // 失败路由占位键治理（F1 修复轮 c，R2 复现 concept-1/concept-2 占位入账）：模型给的
@@ -1367,47 +1422,6 @@ export async function processStudentMessage(
         });
       }
     }
-
-    const baseResult = {
-    analysis: teachingOutput.analysis,
-    aiResponse: teachingOutput.reply,
-    ...(assistantMessage.images?.length ? { images: assistantMessage.images } : {}),
-    // 课堂结构图（2026-09-27 双通道重构）：mermaid 源码下行，前端确定性渲染
-    ...(assistantMessage.diagrams?.length ? { diagrams: assistantMessage.diagrams } : {}),
-    // 位置线图（Scope B）：结构化数值域下行，前端确定性渲染成 SVG
-    ...(assistantMessage.figures?.length ? { figures: assistantMessage.figures } : {}),
-    // 教师补充材料卡片（批次 E）：本轮晋升成功时随消息下发（前端渲染卡片，点开看章节）
-    ...(supplementPromotion.payload ? { supplementaryMaterial: supplementPromotion.payload } : {}),
-    strategies: effectiveTeachingOutput.pedagogy.strategies,
-    knowledgePoint: effectiveTeachingOutput.knowledge.currentPoint,
-    ...(effectiveTeachingOutput.knowledge.confirmCheck
-      ? { confirmCheck: effectiveTeachingOutput.knowledge.confirmCheck }
-      : {}),
-    knowledgePoints: normalizeKnowledgePoints(mergedKnowledge),
-    isCompletion: completionReady,
-    currentState,
-    peerTriggered,
-    peerMessage,
-    peerStrategy,
-    peerFollowUpQuestions,
-    promptDebug,
-    peerDebug,
-    // 统一运行契约观测（不改变 isCompletion 硬门禁）
-    runtimeEnvelope: turnRuntimeEnvelope,
-    completionAlignment,
-    envelopeCompletionSignal: !!envelopeCompletionSignal,
-    lastBusinessPhase: turnRuntimeEnvelope?.businessState?.phase || null,
-    shouldConfirmEnd: completionReady || endIntent.isEndIntent,
-    endReason: endIntent.isEndIntent
-      ? 'learner-requested-end' as const
-      : completionReady
-        ? 'completion-candidate' as const
-        : null,
-    recovered,
-      checkpoint: checkpointForMessageResult(teachingState),
-      checkpointResolution,
-      revision: session.revision + 1,
-    };
 
     return baseResult;
   } finally {

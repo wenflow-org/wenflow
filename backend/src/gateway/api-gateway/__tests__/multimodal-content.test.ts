@@ -27,6 +27,8 @@ jest.mock('../../../config/models.config', () => ({
   getModelMaxParallelRequests: jest.fn(() => null),
   // 视觉闸门按注册表声明判定；测试里 model id 就是能力开关
   supportsVision: jest.fn((modelId: string) => modelId === 'vision-capable'),
+  providerSupportsSystemRole: jest.fn(() => true),
+  resolveModelRef: jest.fn(() => null),
 }));
 
 jest.mock('../../../utils/safe-http', () => ({
