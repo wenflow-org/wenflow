@@ -537,7 +537,7 @@ type SkillsTab = (typeof SKILLS_TABS)[number]
 
 /* 对账三态与空态文案单源：表格视图与原型卡视图各渲染一份（R6 复读单源化） */
 const REC_LOADING_TITLE = '上线状态加载中，暂不可用'
-const REC_NOT_IN_SCOPE_TITLE = '该 Skill 未纳入上线评估（多为外挂能力）'
+const REC_NOT_IN_SCOPE_TITLE = '该 Skill 未纳入上线评估（多为插件）'
 const SKILLS_LOAD_FAIL_TITLE = 'Skill 数据加载失败'
 const tab = ref<SkillsTab>('run')
 const route = useRoute()
@@ -872,10 +872,10 @@ const errorCount = computed(() => cards.value.filter((c) => c.health === 'error'
 const totalCalls = computed(() => cards.value.reduce((a, c) => a + c.calls, 0))
 const totalErrors = computed(() => cards.value.reduce((a, c) => a + c.errors, 0))
 const okCalls = computed(() => Math.max(0, totalCalls.value - totalErrors.value))
-/** 口径提示：Skill 运行页不含外挂能力（MCP + 能力 Skill），而健康中心/对账的登记总数含它们——避免「31/28/3」三处数字无从解释 */
+/** 口径提示：Skill 运行页不含插件（MCP + 能力 Skill），而健康中心/对账的登记总数含它们——避免「31/28/3」三处数字无从解释 */
 const skillCountHint = computed(
   () => (EXTRA_CAPABILITY_SKILLS.length
-    ? `不含 ${EXTRA_CAPABILITY_SKILLS.length} 个外挂能力（见「外挂能力」页）。健康中心 / 一致性核查的登记总数含它们`
+    ? `不含 ${EXTRA_CAPABILITY_SKILLS.length} 个插件（见「插件」页）。健康中心 / 一致性核查的登记总数含它们`
     : ''),
 )
 /** 状态条成功率：精度/阈值/兜底走 rate-utils 单点（P1#26：1 位小数，99.9% 不再显示 100%） */

@@ -170,7 +170,7 @@ npm run dev</code></pre>
 ├── path-planning/           # 路径规划（generator）
 ├── teaching-turn/           # 教学回合（conversational）
 ├── session-wrapup/          # 课后产出（distiller）
-└── …                        # 共 30+ 个 Skill 目录（含检索、网页、图片等外挂能力）
+└── …                        # 共 30+ 个 Skill 目录（含检索、网页、图片等插件）
 
 prompts/                     # 仓库根，与 backend/ 同级
 ├── skill.&lt;skillId&gt;.md      # Prompt 源文件（以源文件为准）

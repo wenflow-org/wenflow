@@ -275,7 +275,7 @@ import SkillReconciliation from './SkillReconciliation.vue'
    Skill 运行页的完成度列也要对账报告，跨页下发属可选优化，故两者都可缺省。 */
 defineProps<{ reconReport?: SkillReconciliationReport | null; reconError?: string | null }>()
 
-/** 外挂能力数（MCP + 能力 Skill）：健康中心/对账的登记总数含它们，Skill 运行页不含——口径标注用 */
+/** 插件数（MCP + 能力 Skill）：健康中心/对账的登记总数含它们，Skill 运行页不含——口径标注用 */
 const extraCapabilityCount = EXTRA_CAPABILITY_SKILLS.length
 
 /** 只读观测不计入「需处理」：漂移卡仅统计契约漂移 + W4 哈希漂移 */
@@ -294,10 +294,10 @@ const reconAbnormal = computed(() => {
 })
 const completionLive = computed(() => displayReport.value?.completion?.live || 0)
 /** 第 4 卡（完成度未达标）title：value=未达标数（需处理语义，0=好），达成数（已上线 N/M）下沉 hint；
-    阈值/口径在 title 披露——live 为完成度最高档，登记总数含外挂能力 */
+    阈值/口径在 title 披露——live 为完成度最高档，登记总数含插件 */
 const completionCardTitle = computed(() => {
   const total = reconciliation.value.total
-  return `未完成上线的技能 ${global.value.abnormalSkills} 个（0 即全部上线），已上线 ${completionLive.value}/${total}（含外挂能力）`
+  return `未完成上线的技能 ${global.value.abnormalSkills} 个（0 即全部上线），已上线 ${completionLive.value}/${total}（含插件）`
 })
 
 /** 概要卡 tooltip：解释口径，避免红色数字误读 */
@@ -324,11 +324,11 @@ const reconCardTitle = computed(() => {
   if (r.unwired > 0) excluded.push(`接线不一致 ${r.unwired}（见健康检查「接线一致性核查 W3」一行）`)
   const exclNote = excluded.length ? `。另有未计入本卡：${excluded.join('、')}` : ''
   const note = r.zombieSkillActive > 0 ? `（另有 ${r.zombieSkillActive} 条失效生效版本，与健康检查「生效版本检查」是同一批数据，不重复计数）` : ''
-  const scope = extraCapabilityCount > 0 ? `（登记总数含 ${extraCapabilityCount} 个外挂能力，Skill 运行页不含）` : ''
+  const scope = extraCapabilityCount > 0 ? `（登记总数含 ${extraCapabilityCount} 个插件，Skill 运行页不含）` : ''
   return parts.join(' · ') + exclNote + note + scope
 })
 const skillCountTitle = computed(
-  () => `登记总数 ${global.value.total} = Skill 运行 ${global.value.total - extraCapabilityCount} 个 + 外挂能力 ${extraCapabilityCount} 个（来源：平台提示词配置）`,
+  () => `登记总数 ${global.value.total} = Skill 运行 ${global.value.total - extraCapabilityCount} 个 + 插件 ${extraCapabilityCount} 个（来源：平台提示词配置）`,
 )
 /** 页头注记（2026-10-04 状态条退役）：「更新于 X」自状态条并入——加载期「检测中…」、
     有报告带更新时间、报告未就绪维持「60s 自动检测」；报告覆盖口径（skillCountTitle）挂注记 title。

@@ -846,6 +846,50 @@ export const adminModelProvidersApi = {
     adminAxios.post(`/admin/model-providers/${encodeURIComponent(providerId)}/models/pull`)
 };
 
+export interface InfraModelEntryView {
+  kind: 'embedding' | 'rerank';
+  provider: 'bge';
+  endpoint: string;
+  model: string;
+  apiKeyEnv: string;
+  timeoutMs: number;
+  batchSize: number | null;
+  dimensions: number | null;
+  configured: boolean;
+  configSource: 'db' | 'env';
+  keySource: 'db' | 'env' | 'inherit' | 'none';
+  keyHint: string | null;
+}
+
+export interface InfraModelsView {
+  required: boolean;
+  embedding: InfraModelEntryView;
+  rerank: InfraModelEntryView;
+  warnings: string[];
+}
+
+export interface InfraModelsUpdateInput {
+  embedding?: Partial<Omit<InfraModelEntryView, 'kind' | 'configured' | 'configSource' | 'keySource' | 'keyHint'>> & {
+    apiKey?: string;
+    clearKey?: boolean;
+  };
+  rerank?: Partial<Omit<InfraModelEntryView, 'kind' | 'configured' | 'configSource' | 'keySource' | 'keyHint'>> & {
+    apiKey?: string;
+    clearKey?: boolean;
+  };
+  required?: boolean;
+}
+
+/**
+ * 基础设施模型（embedding / rerank）：平台必需配置，不随插件启停。
+ * 配置落 platform_settings，密钥落 provider_secrets 密文；env 只作回落。
+ */
+export const adminInfraModelsApi = {
+  get: async () => adminAxios.get('/admin/infra-models'),
+  update: async (data: InfraModelsUpdateInput) => adminAxios.put('/admin/infra-models', data),
+  test: async (kind: 'embedding' | 'rerank') => adminAxios.post('/admin/infra-models/test', { kind })
+};
+
 /**
  * AI 能力探测设置（开关 + 间隔；默认关闭）
  */

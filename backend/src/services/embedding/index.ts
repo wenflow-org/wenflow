@@ -1,5 +1,5 @@
 /**
- * 向量化 / 重排服务公开入口（外挂能力 embedding / rerank）。
+ * 向量化 / 重排服务公开入口（平台基础设施模型 embedding / rerank）。
  *
  * 用法：
  *   import { embedTexts, rerankDocuments, cosineSimilarity } from '../services/embedding';

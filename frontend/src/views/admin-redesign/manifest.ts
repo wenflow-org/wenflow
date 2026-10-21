@@ -89,10 +89,10 @@ export const MOCK_SCENES: MockSceneDef[] = [
   // 动线从这里进——新人搜「提示词」落到本组；评估动线现同在 skills 宿主页签内）
   { id: 'orchestrator', label: '编排图', group: 'Skill', glyph: '流', icon: Workflow },
   { id: 'skills', label: 'Skill 与提示词', group: 'Skill', glyph: '能', icon: Sparkles },
-  // 「外挂能力」2026-10-19 用户拍板拆回独立页：「模型与接入」宿主撤掉该页签——这一页列的是
-  // 外挂进来的能力与 MCP 服务（每项能力本身就是一条 Skill），关系更近 Skill，故归入本组；
+  // 「插件」2026-10-19 用户拍板拆回独立页，2026-10-20 定名：「外挂能力」统一叫「插件」——
+  // 这一页列的是可选能力与 MCP 服务（每项能力本身就是一条 Skill），关系更近 Skill，故归入本组；
   // 旧深链 /admin/addons 与 /admin/external-capabilities 本就是本页路径，?tab=addons 由路由改投。
-  { id: 'addons', label: '外挂能力', group: 'Skill', glyph: '挂', icon: Puzzle },
+  { id: 'addons', label: '插件', group: 'Skill', glyph: '插', icon: Puzzle },
   // 观测组：Token 成本并入执行日志第三 tab（成本分析）；记忆与复习移出后只剩日志双子页
   // 2026-09-29 用户拍板拆回独立页：成本分析从执行日志宿主 tab 释放（原 2026-09-04 并入）
   { id: 'execution-logs', label: '执行日志', group: '观测', glyph: '志', icon: ScrollText },

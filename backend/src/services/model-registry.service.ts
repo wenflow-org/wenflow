@@ -15,6 +15,7 @@ import {
 import { selectModelForAlias } from '../gateway/api-gateway/model-alias';
 import { MAX_MODEL_CANDIDATES } from '../gateway/api-gateway/executor';
 import { providerSecretSources } from './provider-secrets.service';
+import { getInfraModelStatus } from './embedding/infra-config.service';
 import { listCoolingDowns, type CooldownSnapshot } from '../gateway/api-gateway/deployment-health';
 
 export interface ModelRegistryOverview {
@@ -154,6 +155,18 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
   for (const p of providers) {
     if (p.enabled && p.endpointSource === 'own' && p.keyConfigured === false) {
       warnings.push(`供应商「${p.id}」的密钥环境变量 ${p.apiKeyEnv} 未配置，其模型（${p.modelIds.join('、')}）在运行时会直接报错。`);
+    }
+  }
+
+  // 基础设施模型（embedding/rerank）是平台必需项，但不是插件：缺失不阻断主流程，
+  // 消费方 fail-open；这里只做健康面告警，避免「页面看着全绿、语义召回静默退化成词面」。
+  const infra = getInfraModelStatus();
+  if (infra.required) {
+    if (!infra.embedding.configured) {
+      warnings.push('基础设施模型 embedding 未配置（平台必需）：资料语义召回会退回结构化路径。');
+    }
+    if (!infra.rerank.configured) {
+      warnings.push('基础设施模型 rerank 未配置（平台必需）：语义召回会退回余弦序。');
     }
   }
 

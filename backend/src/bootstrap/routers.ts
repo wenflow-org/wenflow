@@ -41,6 +41,7 @@ import adminPresetsRoutes from '../routes/admin/presets';
 import adminSessionAuditsRoutes from '../routes/admin/session-audits';
 import adminModelRegistryRoutes from '../routes/admin/model-registry';
 import adminModelProvidersRoutes from '../routes/admin/model-providers';
+import adminInfraModelsRoutes from '../routes/admin/infra-models';
 import adminSessionConsoleRoutes from '../routes/admin/session-console';
 import adminBatchExperimentsRoutes from '../routes/admin/batch-experiments';
 import adminProjectionAccessGrantsRoutes from '../routes/admin/projection-access-grants';
@@ -184,6 +185,8 @@ export function registerRoutes(app: express.Express): void {
   app.use('/api/admin/session-audits', ...adminRouteMiddleware, adminSessionAuditsRoutes);
   app.use('/api/admin/model-registry', ...adminRouteMiddleware, adminModelRegistryRoutes);
   app.use('/api/admin/model-providers', ...adminRouteMiddleware, adminModelProvidersRoutes);
+  // 基础设施模型（embedding / rerank）：平台必需配置，不随插件启停
+  app.use('/api/admin/infra-models', ...adminRouteMiddleware, adminInfraModelsRoutes);
   app.use('/api/admin/batch-experiments', ...adminRouteMiddleware, adminBatchExperimentsRoutes);
   app.use('/api/admin/projection-access-grants', ...adminRouteMiddleware, adminProjectionAccessGrantsRoutes);
   app.use('/api/admin/feedback', ...adminRouteMiddleware, adminFeedbackRoutes);

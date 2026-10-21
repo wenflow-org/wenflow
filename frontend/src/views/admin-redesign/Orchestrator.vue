@@ -176,7 +176,7 @@
       <div class="mk-card__head">
         <h3 class="mk-card__title">治理：{{ TERMS.driftContract }}报告 + 变更审计</h3>
         <!-- 口径摆面上（2026-10-05）：原「对账已上线 37/37」与「Skill 定义 32」表面打架——
-             37 含外挂能力（skill-catalog 口径）、32 是运行时 Skill 定义数，两数不同源不冲突，
+             37 含插件（skill-catalog 口径）、32 是运行时 Skill 定义数，两数不同源不冲突，
              但必须自解释才不像「数字对不上」 -->
         <span class="mk-card__meta" :title="govMetaTitle">
           编排定义 {{ orchCount }} · Skill 定义 {{ skillDefCount }}
@@ -814,7 +814,7 @@ const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + sta
 /** Skill KPI tooltip（F8-4 走查）：本页三处 Skill 总数各有域，本卡须自报口径——
     本卡 = 编排拓扑内挂载的 Skill 节点数（Σ 各阶段）；治理卡「Skill 定义」= 运行时
     定义条目数（GET /admin/runtime-definitions）；侧栏「Skill 与提示词」徽章 = Skill
-    目录档案数（不含外挂能力）。三数不必相等，问「平台共多少 Skill」先确认口径。 */
+    目录档案数（不含插件）。三数不必相等，问「平台共多少 Skill」先确认口径。 */
 const skillKpiTitle = computed(
   () =>
     `编排图内挂载的 Skill 数（各阶段合计，当前 ${stages.value.length} 个阶段）。治理卡「Skill 定义」与侧栏徽章的统计范围不同，数值不必相等`
@@ -891,7 +891,7 @@ const routingMetaTitle = computed(() => {
 const govMetaTitle = computed(() =>
   [
     '运行时定义（编排与执行两类）',
-    recReport.value ? `一致性核查：已上线 ${recLiveCount.value} / 登记 ${recTotalCount.value}（含外挂能力，多于 Skill 定义数属正常）` : '一致性核查报告不可用'
+    recReport.value ? `一致性核查：已上线 ${recLiveCount.value} / 登记 ${recTotalCount.value}（含插件，多于 Skill 定义数属正常）` : '一致性核查报告不可用'
   ].join('；')
 )
 </script><style scoped>
