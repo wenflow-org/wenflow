@@ -501,3 +501,25 @@ subtasks / milestones ─resolve───► conceptId ───┤
    `prerequisiteConcepts` **结构性永远为空**（上游闭包修好了却在此被丢掉）。
    修后 `primary` 16/16、`prereq` 有真缺口时非空；`LearnerPrerequisiteGap` 增 `source` 字段区分
    真上游与回落口径。详见 `doc/KC_MULTIPATH_AND_LEARNER_SIGNAL_SCOPE.md` §1.2d。
+
+---
+
+## 数据层从零重建（2026-10-21 起）
+
+增量迁移不再做。虚拟学习者的「记忆 + KC」层直接从零重建：
+`backend/src/scripts/rebuild-vl-data-layer.ts`（默认 **dry-run**，`--apply` 执行）。
+
+- **范围**：默认 `--scope=virtual`（`isVirtualLearner=1`）；真实用户不动。
+- **清空**：`memory_traces` / `misconception_ledger` / `prediction_records` / `learner_projections` /
+  `learner_evidence` / `concepts`（alias 随 FK 级联）/ `concept_edges`。
+  计划行（`subtasks`/`milestones`）的 `conceptId` **先置空**——否则旧 identity 会被当成「已挂靠」跳过。
+- **重建**：按每条路径的 `kcAnnotation` 重新种子化 KC / coreConcept，登记
+  `kc:<pathId>:<kcId>` 稳定锚键，物化 `prerequisite` / `part_of` / 概念级投影边；
+  再按名称回填 `milestones` 与 `subtasks` 的 canonical `conceptId`。
+- **FSRS**：排程状态（`memory_traces`）从零开始，新课堂按 FSRS-6 写入链重新生成；
+  参数维持默认，校准待新样本（#104）。
+- **备份**：执行前写 `.tmp-batch/backups/vl-layer-<ts>.json`（含清空前的痕迹/证据/概念/边）。
+- **执行顺序**：`node backend/restart.mjs --stop` → 脚本 `--apply` → `node backend/restart.mjs`。
+- **首轮结果（2026-10-21）**：26 用户 / 48 路径；concepts 711、aliases 1266（含 555 个锚键）、
+  edges 1714；`milestones` 191/191、`subtasks` 1044/1044 挂靠；物化 528/528 未漏；
+  重建后 `verify-kc-identity --scope=virtual` A3=100%、A9 未漏。
