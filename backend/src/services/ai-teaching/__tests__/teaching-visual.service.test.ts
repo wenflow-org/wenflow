@@ -27,6 +27,9 @@ import {
   chooseFigureKind,
   figureKindHintLine,
   stripDanglingFigureReferences,
+  collectFigureNumbers,
+  collectReplyNumbers,
+  figureNumbersFightReply,
 } from '../teaching-visual.service';
 import { ImageError } from '../../image/types';
 import type { TeachingSessionMessage } from '../TeachingSessionRepository';
@@ -695,5 +698,34 @@ describe('去重加严：同义改写与同类数量上限（2026-10-20 实跑�
       msgWith([bins(['丙一', '丙二'])]),
     ];
     expect(shouldEmitTeachingFigure(messages, bins(['丁一', '丁二']))).toBe(false);
+  });
+});
+
+describe('图内数字 vs 正文数字（走查 #15：同一回合两套数）', () => {
+  const figure = {
+    engine: 'svg',
+    kind: 'position-line',
+    axis: { min: 0, max: 5, unit: '%' },
+    marks: [
+      { at: 3.9, label: '新组最高 3.9%', dir: 'none' as const },
+      { at: 3.0, label: '新组最低 3.0%', dir: 'none' as const },
+    ],
+    spans: [{ from: 3.0, to: 3.9, label: '新组自己晃 0.9 个点' }],
+    caption: null,
+  };
+
+  it('只取标签里的数字，跳过 axis / caption / kind', () => {
+    const numbers = collectFigureNumbers(figure);
+    expect(numbers).toContain('3.9');
+    expect(numbers).toContain('0.9');
+    // axis.min/max 是渲染域，不是教学事实
+    expect(numbers).not.toContain('5');
+  });
+
+  it('两边数字完全不重合 → 判定图文打架；有交集/正文没数 → 不判', () => {
+    expect(figureNumbersFightReply(figure, '新组 3.8% 到 3.1%，旧组 3.6% 到 2.9%，各自晃出 0.7 个点')).toBe(true);
+    expect(figureNumbersFightReply(figure, '新组最高 3.9%，最低 3.0%，晃了 0.9 个点')).toBe(false);
+    expect(figureNumbersFightReply(figure, '先别急着改，想想要量什么')).toBe(false);
+    expect(collectReplyNumbers('3.8% 到 3.1%').has('3.8')).toBe(true);
   });
 });

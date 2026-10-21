@@ -222,7 +222,7 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
     ]);
   });
 
-  it('compare：左右都要有标题与条目；tone 非法回落默认', async () => {
+  it('compare：左右都要有标题与条目；tone 非法回落默认（左中性/右强调）', async () => {
     const ok = await runWithFigure({
       kind: 'compare',
       spec: {
@@ -232,11 +232,76 @@ describe('teaching-turn figure 归一化（2026-10-18 扩图型）', () => {
       },
     });
     expect(ok.figure.spec.left.items).toEqual(['看结果', '给反馈']);
-    expect(ok.figure.spec.leftTone).toBe('ok');
+    // 左栏常放反例：默认不再刷成「通过绿」，给中性；右栏留强调色
+    expect(ok.figure.spec.leftTone).toBe('neutral');
     expect(ok.figure.spec.rightTone).toBe('accent');
+
+    const warn = await runWithFigure({
+      kind: 'compare',
+      spec: {
+        left: { head: '反例', items: ['x'] },
+        right: { head: '正解', items: ['y'] },
+        leftTone: 'warn',
+        divider: '汇报的差值是 0.5 个点，比同组自身晃动还小，这句话故意写得很长用来验证截断',
+      },
+    });
+    expect(warn.figure.spec.leftTone).toBe('warn');
+    expect(warn.figure.spec.divider).toHaveLength(24);
 
     const bad = await runWithFigure({ kind: 'compare', spec: { left: { head: '左', items: [] }, right: { head: '右', items: ['x'] } } });
     expect(bad.figure).toBeUndefined();
+  });
+
+  it('位置线：时间轴上不许用跨度标「幅度/差值」（跨量纲混画）', async () => {
+    const bad = await runWithFigure({
+      kind: 'position-line',
+      axis: { min: 0, max: 7, unit: '天', ticks: [{ at: 1, label: '周一' }, { at: 7, label: '周日' }] },
+      marks: [{ at: 1, label: '第一天', dir: 'none' }],
+      spans: [{ from: 2, to: 6, label: '同组日间波动幅度 0.7 个点' }],
+    });
+    expect(bad.figure).toBeUndefined();
+
+    // 同一条时间轴上标「时长/相隔」是合法语义 → 保留
+    const ok = await runWithFigure({
+      kind: 'position-line',
+      axis: { min: 0, max: 600, unit: 'ms' },
+      marks: [{ at: 0, label: 'A 发出', dir: 'right' }, { at: 100, label: 'B 发出', dir: 'right' }, { at: 500, label: 'A 返回', dir: 'none' }],
+      spans: [{ from: 100, to: 250, label: 'B 请求耗时 150ms' }],
+    });
+    expect(ok.figure.kind).toBe('position-line');
+  });
+
+  it('位置线：只有最高/最低两个点 + 一条跨度、没有刻度 → 整块丢弃（伪装成位置线的区间条）', async () => {
+    const bad = await runWithFigure({
+      kind: 'position-line',
+      marks: [{ at: 0, label: '最低那天', dir: 'none' }, { at: 1, label: '最高那天', dir: 'none' }],
+      spans: [{ from: 0, to: 1, label: '这七天自己晃出的幅度' }],
+    });
+    expect(bad.figure).toBeUndefined();
+
+    // 追及题的两个对象（甲/乙）不是区间端点 → 保留
+    const ok = await runWithFigure({
+      kind: 'position-line',
+      marks: [{ at: 20, label: '甲', dir: 'right' }, { at: 60, label: '乙', dir: 'right' }],
+      spans: [{ from: 20, to: 60, label: '相距 40 米' }],
+    });
+    expect(ok.figure.kind).toBe('position-line');
+  });
+
+  it('轴单位只收短单位：注释/半截括号一律丢弃，不印在左上角', async () => {
+    const bad = await runWithFigure({
+      kind: 'position-line',
+      axis: { min: 0, max: 10, unit: '（示意，非真实数值', ticks: [{ at: 3, label: 'x' }] },
+      marks: [{ at: 3, label: '甲', dir: 'none' }],
+    });
+    expect(bad.figure.axis.unit).toBeNull();
+
+    const ok = await runWithFigure({
+      kind: 'position-line',
+      axis: { min: 0, max: 10, unit: '个百分点', ticks: [{ at: 3, label: 'x' }] },
+      marks: [{ at: 3, label: '甲', dir: 'none' }],
+    });
+    expect(ok.figure.axis.unit).toBe('个百分点');
   });
 
   it('quadrant：四格缺一即丢弃；靶盘点越界丢弃', async () => {
@@ -693,5 +758,41 @@ describe('位置线的轴必须是量，不能是序号（2026-10-20 实跑：�
       } as never);
       expect(out.figure?.kind).toBe('position-line');
     }
+  });
+});
+
+describe('teaching-turn figure 归一化（range-bar，2026-10-21 外审 #4~#7）', () => {
+  beforeEach(() => mockCallPrompt.mockReset());
+
+  it('区间条：2~4 行、from/to 顺序归一、tone 白名单、unit 走短单位', async () => {
+    const teaching = await runWithFigure({
+      kind: 'range-bar',
+      title: '四天各自的波动范围',
+      unit: '%',
+      rows: [
+        { label: '新组', from: 3.8, to: 3.1, tone: 'accent' },
+        { label: '旧组', from: 2.9, to: 3.6, tone: 'rainbow' },
+      ],
+      marks: [{ at: 0.5, label: '汇报的均值差' }],
+    });
+    expect(teaching.figure.kind).toBe('range-bar');
+    expect(teaching.figure.spec.rows[0]).toEqual({ label: '新组', from: 3.1, to: 3.8, tone: 'accent' });
+    expect(teaching.figure.spec.rows[1].tone).toBeUndefined();
+    expect(teaching.figure.spec.unit).toBe('%');
+    expect(teaching.figure.spec.marks[0].label).toBe('汇报的均值差');
+  });
+
+  it('区间条：不足两行 / 缺数字 / from===to → 整块丢弃', async () => {
+    const one = await runWithFigure({
+      kind: 'range-bar',
+      rows: [{ label: '新组', from: 1, to: 2 }],
+    });
+    expect(one.figure).toBeUndefined();
+
+    const noNumber = await runWithFigure({
+      kind: 'range-bar',
+      rows: [{ label: '新组', from: '一点一', to: 2 }, { label: '旧组', from: 1, to: 2 }],
+    });
+    expect(noNumber.figure).toBeUndefined();
   });
 });

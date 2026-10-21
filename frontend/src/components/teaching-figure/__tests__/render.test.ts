@@ -49,6 +49,20 @@ describe('教学图确定性渲染器', () => {
     expect(svg).toContain('≡');
   });
 
+  it('compare 桥接框：长文案按框宽折行，不再捅穿矩形（走查 #16）', () => {
+    const svg = svgOf('compare', {
+      left: { head: '反例', items: ['a'] },
+      right: { head: '正解', items: ['b'] },
+      divider: '汇报的差值是 0.5 个点，比同组自身晃动还小',
+    });
+    // 框宽 ≈ 140：一行最多十来个字，长句必须拆成多行
+    const dividerLines = Array.from(svg.matchAll(/<text[^>]*>([^<]*)<\/text>/g))
+      .map((m) => m[1])
+      .filter((line) => line.includes('汇报') || line.includes('个点') || line.includes('晃动'));
+    expect(dividerLines.length).toBeGreaterThan(1);
+    for (const line of dividerLines) expect(line.length).toBeLessThanOrEqual(14);
+  });
+
   it('compare / quadrant / bipartite / board 都出图并带学科标签', () => {
     const compare = svgOf('compare', {
       left: { head: '行为主义', items: ['看结果'] },
@@ -392,5 +406,31 @@ describe('compare 链路形态：顺序段不占跳数', () => {
     // 卡间竖箭头（顺序段）存在两条
     expect((svg.match(/<polygon points="[^"]+"/g) || []).length).toBeGreaterThanOrEqual(4);
     expect(svg).toContain('集群边界');
+  });
+});
+
+describe('range-bar（数值区间并排，2026-10-21）', () => {
+  it('每组一行、标签与端点数值都在，参考点画虚线', () => {
+    const svg = renderSpecFigure('range-bar', {
+      title: '四天各自的波动范围',
+      unit: '%',
+      rows: [
+        { label: '新组', from: 3.1, to: 3.8, tone: 'accent' },
+        { label: '旧组', from: 2.9, to: 3.6, tone: 'neutral' },
+      ],
+      marks: [{ at: 0.5, label: '汇报的均值差' }],
+    });
+    expect(svg).not.toBeNull();
+    const out = svg!.svg;
+    expect(out).toContain('新组');
+    expect(out).toContain('旧组');
+    expect(out).toContain('3.1%');
+    expect(out).toContain('3.8%');
+    expect(out).toContain('汇报的均值差');
+    expect(out).toContain('stroke-dasharray');
+  });
+
+  it('不足两行返回 null（fail-open）', () => {
+    expect(renderSpecFigure('range-bar', { rows: [{ label: '新组', from: 1, to: 2 }] })).toBeNull();
   });
 });

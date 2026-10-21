@@ -529,7 +529,8 @@ export type TeachingFigureKind =
   | 'cycle'
   | 'tree'
   | 'venn'
-  | 'bullseye';
+  | 'bullseye'
+  | 'range-bar';
 
 export interface TeachingFigure {
   /** 渲染引擎；归一化后恒为 'svg'（其他值整块丢弃，见 normalizeFigure） */
@@ -911,6 +912,9 @@ const FIGURE_KINDS: ReadonlySet<string> = new Set([
   'tree',
   'venn',
   'bullseye',
+  // 2026-10-21：区间条（range-bar）。多组「从 A 到 B」的波动/范围并排比较——
+  // 挤在一维位置线上必然把 ΔY 画成 ΔX（走查 #4~#7/#13~#15 的根因），给它自己的轨道。
+  'range-bar',
 ]);
 
 /** 调色板白名单：由服务端按学科盖章，模型不给也行。 */
@@ -963,6 +967,30 @@ function toFigureText(value: unknown, max: number): string | null {
   // eslint-disable-next-line no-control-regex
   const text = value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
   return text || null;
+}
+
+/**
+ * 轴单位归一（2026-10-21 走查 #9）：单位是给学习者看的一个短词，不是注释栏。
+ * 实跑里模型把「（示意，非真实数值）」塞进 unit，被截成半截括号印在左上角。
+ * 只接受短单位（米/天/ms/个百分点/%/°）；含括号、逗号、空格或整句一律丢弃（返回 null）。
+ * 用码点白名单而不是正则：`\uXXXX` 转义在本项目多层工具链里被吃掉过。
+ */
+function normalizeAxisUnit(raw: unknown): string | null {
+  const text = toFigureText(raw, 12);
+  if (!text) return null;
+  if (text.length > 6) return null;
+  const allowed = (ch: string): boolean => {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code >= 0x4e00 && code <= 0x9fa5) return true; // 汉字
+    if (code >= 0x30 && code <= 0x39) return true; // 0-9
+    if (code >= 0x41 && code <= 0x5a) return true; // A-Z
+    if (code >= 0x61 && code <= 0x7a) return true; // a-z
+    return ch === '%' || ch === '°' || ch === '/' || ch === '·' || ch === '.';
+  };
+  for (const ch of text) {
+    if (!allowed(ch)) return null;
+  }
+  return text;
 }
 
 /**
@@ -1064,7 +1092,7 @@ function normalizePositionLineFigure(record: Record<string, unknown>): Omit<Teac
   if (!marks.length) return null;
 
   const axisRecord = record.axis && typeof record.axis === 'object' ? (record.axis as Record<string, unknown>) : null;
-  const unit = toFigureText(axisRecord?.unit, FIGURE_UNIT_MAX);
+  const unit = normalizeAxisUnit(axisRecord?.unit);
   // 位置线的轴必须是**量**（米/秒/℃/元/百分比）。
   // 「题/个/条/种/类/项/步」是计数或序号，不是可以排先后远近的量——
   // 2026-10-20 实跑里模型把「第1/2/3道题」画成了一条位置线，看着像坐标系，其实是三个并列项：
@@ -1135,6 +1163,23 @@ function normalizePositionLineFigure(record: Record<string, unknown>): Omit<Teac
   const dedupedMarks = marks
     .sort((a, b) => a.at - b.at)
     .filter((mark, index, list) => index === 0 || mark.at !== list[index - 1].at);
+
+  /* 铁律 1（2026-10-21 走查 #8~#11）：时间轴上的水平线段天然读作「时长」。
+     拿它去标「数值涨跌幅度」是跨量纲混画——周二到周六会被读成 4 天，而不是 0.7 个点。
+     这类内容该用 range-bar / compare，不该借位置线的壳。 */
+  const TIME_UNITS = new Set(['秒', '毫秒', 'ms', 's', '分', '分钟', '小时', '时', '天', '日', '周', '星期', '月', '年']);
+  const MAGNITUDE_SPAN = /(幅度|涨跌|涨|跌|差值|差距|差额|百分比|个点|转化率|%)/;
+  if (unit && TIME_UNITS.has(unit.trim().toLowerCase()) && spans.some((s) => MAGNITUDE_SPAN.test(s.label))) {
+    return null;
+  }
+
+  /* 铁律 2（走查 #10/#11）：只有「最高/最低」两个锚点、没有真实刻度、还挂一条跨度线——
+     实际是一条伪装成位置线的区间条，图上没有任何可核对的信息，整块丢弃。 */
+  const RANGE_EDGE = /(最高|最低|最大|最小)/;
+  const edgeMarks = dedupedMarks.filter((m) => RANGE_EDGE.test(m.label));
+  if (dedupedMarks.length < 3 && ticks.length === 0 && spans.length >= 1 && edgeMarks.length >= 2) {
+    return null;
+  }
 
   return {
     engine: 'svg',
@@ -1212,6 +1257,8 @@ function normalizeFigureSpec(kind: TeachingFigureKind, raw: Record<string, unkno
       return normalizeVennSpec(raw);
     case 'bullseye':
       return normalizeBullseyeSpec(raw);
+    case 'range-bar':
+      return normalizeRangeBarSpec(raw);
     default:
       return null;
   }
@@ -1316,8 +1363,61 @@ function normalizeBalanceSpec(raw: Record<string, unknown>): Record<string, unkn
 }
 
 /** ladder：2~6 级台阶，state 决定实心/描边/虚线。 */
-function normalizeLadderSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
-  const steps: Array<Record<string, unknown>> = [];
+/**
+ * range-bar（2026-10-21）：多组「从 A 到 B」的区间并排比较。
+ *
+ * 为什么单独一种图型：位置线只有一根轴，把「新组 3.1~3.8」「旧组 2.9~3.6」「均值差 0.5」
+ * 挤到同一根线上，模型只能把 ΔY 画成 ΔX——落在现实中就是「周二到周六 = 0.7 个点」这种
+ * 数学上自相矛盾的图（外审走查 #4~#7/#13~#15）。区间有自己的轨道：每条一行，长度就是区间。
+ *
+ * 契约：rows 2~4 条（label 必填、from/to 必为数字且不相等，顺序由代码归一）；
+ * unit 走短单位白名单；marks 最多 2 个参考点（如「汇报的均值差」）；tone 只认四种。
+ */
+function normalizeRangeBarSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const rows: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.rows) ? raw.rows : []) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const label = toFigureLabel(row.label, SPEC.labelMax);
+    if (!label) continue;
+    const a = toFiniteNumber(row.from);
+    const b = toFiniteNumber(row.to);
+    if (a === null || b === null || a === b) continue;
+    const tone = normalizeTone(row.tone, ['ok', 'warn', 'accent', 'neutral']);
+    rows.push({
+      label,
+      from: Math.min(a, b),
+      to: Math.max(a, b),
+      ...(tone ? { tone } : {}),
+    });
+    if (rows.length >= 4) break;
+  }
+  if (rows.length < 2) return null;
+
+  const marks: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(raw.marks) ? raw.marks : []) {
+    if (!item || typeof item !== 'object') continue;
+    const mark = item as Record<string, unknown>;
+    const at = toFiniteNumber(mark.at);
+    if (at === null) continue;
+    const label = toFigureText(mark.label, SPEC.subMax);
+    marks.push({ at, ...(label ? { label } : {}) });
+    if (marks.length >= 2) break;
+  }
+
+  const title = toFigureText(raw.title, SPEC.titleMax);
+  const note = toFigureText(raw.note, SPEC.noteMax);
+  const unit = normalizeAxisUnit(raw.unit);
+  return {
+    rows,
+    ...(marks.length ? { marks } : {}),
+    ...(unit ? { unit } : {}),
+    ...(title ? { title } : {}),
+    ...(note ? { note } : {}),
+  };
+}
+
+function normalizeLadderSpec(raw: Record<string, unknown>): Record<string, unknown> | null {  const steps: Array<Record<string, unknown>> = [];
   for (const item of Array.isArray(raw.steps) ? raw.steps : []) {
     if (!item || typeof item !== 'object') continue;
     const step = item as Record<string, unknown>;
@@ -1646,9 +1746,11 @@ function normalizeCompareSpec(raw: Record<string, unknown>): Record<string, unkn
   if (!left || !right) return null;
   const title = toFigureText(raw.title, SPEC.titleMax);
   const note = toFigureText(raw.note, SPEC.noteMax);
-  const divider = toFigureText(raw.divider, 40);
-  const leftTone = normalizeTone(raw.leftTone, ['ok', 'accent', 'neutral']) || 'ok';
-  const rightTone = normalizeTone(raw.rightTone, ['ok', 'accent', 'neutral']) || 'accent';
+  const divider = toFigureText(raw.divider, 24);
+  // 默认左右分色（2026-10-21 走查 #1/#2）：对照图里左栏常是「反例/受限情况」，
+  // 两侧都刷成 ok 绿会让学习者误读成「两种都行」。默认左中性、右强调；模型可显式给 warn。
+  const leftTone = normalizeTone(raw.leftTone, ['ok', 'accent', 'neutral', 'warn']) || 'neutral';
+  const rightTone = normalizeTone(raw.rightTone, ['ok', 'accent', 'neutral', 'warn']) || 'accent';
   const focus = normalizeFocus(raw.focus, ['side']);
   return {
     left,

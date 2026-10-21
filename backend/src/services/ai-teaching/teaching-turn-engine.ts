@@ -74,7 +74,7 @@ import {
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
 import { buildDeterministicOpening, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
-import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitTeachingFigure, countTeachingFigures, resolveFigureMaxPerSession } from './teaching-visual.service';
+import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitTeachingFigure, countTeachingFigures, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
 import { learningStateService, type LearningStateMetrics } from '../learning/learning-state.service';
@@ -895,6 +895,16 @@ export async function processStudentMessage(
       logger.info('[AITeaching] 本轮回复布置了由学生自己画的练习，跳过位置线图（防答案泄漏）', {
         sessionId,
         taskId: session.taskId,
+      });
+    } else if (figureNumbersFightReply(wanted, teachingOutput.reply)) {
+      // 图文数字打架（2026-10-21 走查 #15）：同一回合里正文说一套数、图上画另一套，学生只会更懵。
+      // 判据是确定性对账：图内标签里的数字一个都没在正文出现（且两边都有多个数字）→ 判为编数，不出图。
+      logger.warn('[AITeaching] 图内数字与正文完全对不上，跳过本轮图', {
+        sessionId,
+        taskId: session.taskId,
+        kind: wanted.kind,
+        figureNumbers: collectFigureNumbers(wanted).slice(0, 8),
+        replyNumbers: [...collectReplyNumbers(teachingOutput.reply)].slice(0, 8),
       });
     } else if (countTeachingFigures(updatedMessages) >= resolveFigureMaxPerSession()) {
       // 会话配额是**硬闸**（2026-10-19）：提示词里的"上限"只是建议，模型仍会每轮出图——

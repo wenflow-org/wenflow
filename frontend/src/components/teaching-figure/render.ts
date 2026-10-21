@@ -43,6 +43,14 @@ function est(text: unknown, size: number): number {
   return w;
 }
 
+/** 按字数硬换行（桥接框这类固定宽度的窄栏没有溢出空间，只能折行）。 */
+function wrapChars(text: string, maxChars: number): string[] {
+  const chars = Array.from(String(text ?? ''));
+  const out: string[] = [];
+  for (let i = 0; i < chars.length; i += maxChars) out.push(chars.slice(i, i + maxChars).join(''));
+  return out.length ? out : [''];
+}
+
 function esc(s: unknown): string {
   return String(s ?? '')
     // 有意匹配控制字符区间并清掉（模型输出清洗，非残留控制码）
@@ -677,6 +685,7 @@ function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rig
     ok: { color: T.ok, soft: T.okSoft, ink: T.ok },
     accent: { color: T.accent, soft: T.accentSoft, ink: T.accentInk },
     neutral: { color: T.muted, soft: T.soft, ink: T.muted },
+    warn: { color: T.warn, soft: T.warnSoft, ink: T.warn },
   };
 
   const parts: string[] = [];
@@ -714,11 +723,17 @@ function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rig
     parts.push(
       `<line x1="${cx}" y1="${headY + 4}" x2="${cx}" y2="${h - (note ? 32 : 8)}" stroke="${T.line}" stroke-dasharray="5 5"/>`,
     );
-    const lines = divider.split('\n');
-    const bw = Math.min(gap - 16, Math.max(96, Math.max(...lines.map((l: string) => est(l, T.fontMicro))) + 20));
-    const bh = 14 + lines.length * 16;
+    // 桥接框宽度由栏间距决定；文字必须按框宽换行，否则长句直接捅穿矩形（2026-10-21 走查 #16）
+    const boxW = gap - 16;
+    const maxDividerChars = Math.max(6, Math.floor((boxW - 16) / (T.fontMicro * 0.95)));
+    const lines = divider.split('\n').flatMap((line: string) => wrapChars(line, maxDividerChars));
+    const shown = lines.length > 4
+      ? lines.slice(0, 4).map((l: string, i: number) => (i === 3 ? l.slice(0, -1) + '…' : l))
+      : lines;
+    const bw = Math.min(gap - 16, Math.max(96, Math.max(...shown.map((l: string) => est(l, T.fontMicro))) + 20));
+    const bh = 14 + shown.length * 16;
     parts.push(rect(cx - bw / 2, cy - bh / 2, bw, bh, { r: 9, fill: T.surface, stroke: T.line }));
-    lines.forEach((l: string, i: number) => parts.push(text(cx, cy - bh / 2 + 18 + i * 16, l, 't-tiny')));
+    shown.forEach((l: string, i: number) => parts.push(text(cx, cy - bh / 2 + 18 + i * 16, l, 't-tiny')));
   }
   if (note) parts.push(text(padX, h - 8, note, 't-small', 'start'));
 
@@ -1582,6 +1597,86 @@ function renderBullseye({ title, colLabels = [], rowLabels = [], cells = [], not
   return { svg: wrap(parts.join('\n'), W, h), width: W, height: h };
 }
 
+/* ---------------- 区间条（数值范围并排） ---------------- */
+
+/**
+ * 区间条（2026-10-21 外审 #4~#7/#13~#15）。
+ *
+ * 每组「从 A 到 B」占一行，条的长度就是区间本身。位置线只有一根轴，把波动幅度
+ * 横着画在日期轴上会被读成「周二到周六 = 0.7 个点」——量纲错位。这里让每组有独立轨道，
+ * 共同的数值域只决定横向对齐，不冒充时间。
+ */
+function renderRangeBar({ title, unit, rows = [], marks = [], note }: any): RenderedFigure {
+  // 至少两条区间才有「并排比较」的意义；单条区间退回文字讲
+  if (!Array.isArray(rows) || rows.length < 2) return null;
+  const padX = 16;
+  const labelW = 132;
+  const rowH = 48;
+  const bandH = 16;
+  const titleH = title ? T.fontTitle + 20 : 0;
+  const top = titleH + 16;
+  const w = 640;
+  const plotX = padX + labelW;
+  const plotW = w - plotX - padX - 8;
+  const bodyH = rows.length * rowH;
+  const axisY = top + bodyH + 10;
+  const noteH = note ? 26 : 0;
+  const h = axisY + 24 + noteH;
+
+  const values = rows.flatMap((r: any) => [Number(r.from), Number(r.to)]).concat(marks.map((m: any) => Number(m.at)));
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const pad = hi > lo ? (hi - lo) * 0.08 : Math.max(Math.abs(hi) * 0.1, 1);
+  const min = lo - pad;
+  const max = hi + pad;
+  const xOf = (v: number) => plotX + ((v - min) / (max - min)) * plotW;
+  const fmt = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? String(Math.round(n * 100) / 100) : '';
+  };
+
+  const TONE: Record<string, { fill: string; stroke: string; ink: string }> = {
+    accent: { fill: T.accentSoft, stroke: T.accent, ink: T.accentInk },
+    ok: { fill: T.okSoft, stroke: T.ok, ink: T.ok },
+    warn: { fill: T.warnSoft, stroke: T.warn, ink: T.warn },
+    neutral: { fill: T.soft, stroke: T.muted, ink: T.muted },
+  };
+
+  const parts: string[] = [...titleBlock(title, padX)];
+
+  rows.forEach((row: any, i: number) => {
+    const y = top + i * rowH;
+    const tone = TONE[row.tone] || TONE.accent;
+    const x1 = xOf(Number(row.from));
+    const x2 = xOf(Number(row.to));
+    parts.push(text(padX, y + bandH + 6, row.label, 't-label', 'start'));
+    parts.push(rect(x1, y + 4, Math.max(6, x2 - x1), bandH, { r: bandH / 2, fill: tone.fill, stroke: tone.stroke, sw: 1.2 }));
+    // 端点数值贴在两端的条内/条外：短条时挪到条右侧，避免两个数字叠在一起
+    const spanW = x2 - x1;
+    const valueText = `${fmt(row.from)}${unit || ''} – ${fmt(row.to)}${unit || ''}`;
+    if (spanW >= est(valueText, T.fontMicro) + 12) {
+      parts.push(text((x1 + x2) / 2, y + 4 + bandH / 2 + 4, valueText, 't-tiny', 'middle'));
+    } else {
+      parts.push(text(x2 + 8, y + 4 + bandH / 2 + 4, valueText, 't-tiny', 'start'));
+    }
+  });
+
+  // 共享数值轴：只画端点刻度，避免把区间条读成时间轴
+  parts.push(`<line x1="${plotX}" y1="${axisY}" x2="${plotX + plotW}" y2="${axisY}" stroke="${T.line}" stroke-width="1"/>`);
+  parts.push(text(plotX, axisY + 16, `${fmt(min)}${unit || ''}`, 't-tiny', 'start'));
+  parts.push(text(plotX + plotW, axisY + 16, `${fmt(max)}${unit || ''}`, 't-tiny', 'end'));
+
+  // 参考点（如「汇报的均值差」）：虚线穿过所有轨道
+  marks.forEach((mark: any) => {
+    const x = xOf(Number(mark.at));
+    parts.push(`<line x1="${x}" y1="${top}" x2="${x}" y2="${axisY}" stroke="${T.accent}" stroke-width="1" stroke-dasharray="4 4"/>`);
+    if (mark.label) parts.push(text(x, top - 4, mark.label, 't-tiny', 'middle', `fill="${T.accentInk}"`));
+  });
+
+  if (note) parts.push(text(padX, h - 8, note, 't-small', 'start'));
+  return { svg: wrap(parts.join('\n'), w, h), width: w, height: h };
+}
+
 /* ---------------- 分派 ---------------- */
 
 /**
@@ -1627,6 +1722,8 @@ export function renderSpecFigure(
         return renderVenn(spec);
       case 'bullseye':
         return renderBullseye(spec);
+      case 'range-bar':
+        return renderRangeBar(spec);
       default:
         return null;
     }

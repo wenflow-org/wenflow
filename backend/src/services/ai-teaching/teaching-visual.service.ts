@@ -277,6 +277,7 @@ const FIGURE_KIND_GUIDE = [
   '- bins：**归属/分类**（这些条目各归哪一堆）。{"bins":[{"label":"自然条件","tone":"ok","items":["水源","地形"]},{"label":"社会经济条件","items":["交通"]}],"note":"…"}——条目画在容器**里面**，表达「属于」，比两列并排更贴切。',
   '- grid：二维排布、每格是内容（比较表）。{"rows":2,"cols":3,"rowLabels":["…"],"colLabels":["…"],"cells":[{"r":0,"c":0,"text":"…","hl":"accent|warn|ok"}],"note":"…"}——**已有内容**的表才画，等待学生填写的空表不画（那是练习控件）。',
   '- matrix：二维命中矩阵（✓有/—无/叠=重复堆砌/≡两边同一项）。{"rowLabels":["…"],"colLabels":["…"],"cells":[{"r":0,"c":1,"tone":"hit|miss|dup|key"}],"legend":[{"text":"✓ 已写到","fill":"#e6f4f1"}]}',
+  '- range-bar：**多组数值区间并排**（新组/旧组的波动范围、上下限、从哪到哪）。{"unit":"%","rows":[{"label":"新组四天","from":3.1,"to":3.8,"tone":"accent"},{"label":"旧组四天","from":2.9,"to":3.6,"tone":"neutral"}],"marks":[{"at":0.5,"label":"汇报的均值差"}],"note":"…"}——**数值区间不要塞进 position-line**：一根时间轴画不出带宽，把「幅度」横着放会被读成日期跨度。',
   '- compare：两条分支并排对照（**对等**的两边）。卡片形态：{"left":{"head":"…","sub":"…","items":["…"]},"right":{"head":"…","items":["…"]},"divider":"…","leftTone":"neutral","rightTone":"accent"}',
   '- **compare 的链路形态（架构/请求路径类对比必须用它，2026-10-20 实跑）**：当差别是「几跳」「几次跨集群往返」时，不要只给两栏条目——把每侧的请求链路写进 chain，渲染器会画出客户端、集群边界与穿过边界的箭头，**箭头数就是跳数**。{"left":{"head":"外置协调","badge":"2 套集群 · 2 次独立共识","badgeTone":"warn","client":"客户端","chain":[{"label":"共识 ①：ZooKeeper 集群","sub":"定路由、选主","tone":"warn"},{"label":"共识 ②：业务存储节点","sub":"写日志与数据","tone":"warn"}],"items":["两份结论必须互相迁就"]},"right":{"head":"内置共识","badge":"单一系统 · 1 次共识","badgeTone":"ok","client":"客户端","chain":[{"label":"业务进程内置 Raft 状态机","sub":"元数据与数据落同一条日志","merged":true,"tone":"ok"}],"items":["省掉一次跨集群往返"]}}。**顺序段与往返**：若请求是一段接一段（网关→订单→库存，都在同一个集群内），第二张卡起写 `"from":"prev"`——它承接上一张卡、不占边界序号；第一张卡才跨集群。要强调「发出去还要等回话」，给该节点 `"rtt":true`，箭头上会出现反向箭头。**铁律**：①链上必须至少两层实体（客户端 → 组件 → 组件），不许把两边各写成三行文字；②「省掉/差异」只能体现在链的条数与 merged 节点上，不要靠中间悬浮一句话；③badge 是这一栏的结论，贴在栏头，不要写进正文。',
   '- balance：**权衡/取舍**（两边各自压多少）。{"left":{"head":"补角度","weight":3,"items":["…"]},"right":{"head":"练落地","weight":5,"items":["…"]},"pivotLabel":"时间预算"}——倾斜方向由代码按 weight 算，你只给数（0~10）。',
@@ -331,7 +332,8 @@ export type FigureKindHint =
   | 'ladder'
   | 'bins'
   | 'matrix'
-  | 'compare';
+  | 'compare'
+  | 'range-bar';
 
 interface KindRule {
   kind: FigureKindHint;
@@ -353,6 +355,9 @@ const KIND_RULES: readonly KindRule[] = [
   { kind: 'ladder', test: /(门槛|阶梯|逐级|先从.{0,12}再到|一级一级|递进)/, why: '先后与层级，位置本身就是信息' },
   { kind: 'bins', test: /(归类|归位|分到|放进|哪一堆|三类|四类|两类各)/, why: '条目要放进容器，表达属于关系' },
   { kind: 'matrix', test: /(对账|命中|漏了|漏掉|堆砌|逐条核|一格一格|核对表)/, why: '逐条对账要看哪一格对上了' },
+  // 数值区间必须有自己的轨道（2026-10-21 走查 #4~#7）：位置线一根轴画不出带宽，
+  // 模型会把「波动幅度」横着画到日期上，读起来就是「周二到周六 = 0.7 个点」。
+  { kind: 'range-bar', test: /(波动(区间|范围|带)|区间(对比|比较)|上下限|幅度范围|取值范围|高低区间|从.{0,6}到.{0,6}的(区间|范围))/, why: '每组是一段数值区间，并排看长度，不能压在时间轴上' },
   { kind: 'compare', test: /(架构|选型|链路|请求路径|来回|往返|跳数|跨集群|集群边界|协调服务|内置还是外置|省掉一次|多一次)/, why: '两边差的不是文字条目，是请求要穿过几层网络边界——走 compare 的链路形态，箭头数就是跳数' },
   { kind: 'compare', test: /(对比|对照|区别|差异|不同点)/, why: '两边对等对照' },
 ];
@@ -826,4 +831,58 @@ export async function generateTeachingVisual(input: GenerateTeachingVisualInput)
     });
     return null;
   }
+}
+
+/**
+ * 图里的数字 vs 正文里的数字（2026-10-21 走查 #15）。
+ *
+ * 病根：图和正文是模型两处分别生成的，各写各的数——正文说 3.8/3.1，图上画 3.9/3.0，
+ * 学生看到的是两块互相矛盾的黑板。这里做**确定性对账**：
+ * 收集图内标签（marks/spans/guides 以及 spec 里的标题/条目）出现的数字，
+ * 再看它们是否在本轮 reply 里出现过。全部都没出现 → 判为凭空编的数，不出图；
+ * 部分缺失 → 只告警（轴端点等由代码推导的数不在正文里是正常的）。
+ *
+ * 只对标签文本取数，不取 axis.min/max（那是渲染域，不是教学事实），也不取 caption/note（整句说明）。
+ */
+export function collectFigureNumbers(figure: unknown): string[] {
+  const numbers: string[] = [];
+  const skipKeys = new Set(['caption', 'note', 'engine', 'kind', 'palette', 'why']);
+  const walk = (value: unknown, key: string | null, depth: number): void => {
+    if (depth > 6 || value === null || value === undefined) return;
+    if (typeof value === 'string') {
+      if (key && skipKeys.has(key)) return;
+      for (const hit of value.match(/\d+(?:\.\d+)?/g) || []) numbers.push(hit);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item, key, depth + 1);
+      return;
+    }
+    if (typeof value === 'object') {
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        if (k === 'axis') continue;
+        walk(v, k, depth + 1);
+      }
+    }
+  };
+  walk(figure, null, 0);
+  return [...new Set(numbers)];
+}
+
+/** 本轮 reply 里出现过的数字集合（同一套取数口径）。 */
+export function collectReplyNumbers(reply: string | null | undefined): Set<string> {
+  return new Set(String(reply ?? '').match(/\d+(?:\.\d+)?/g) || []);
+}
+
+/**
+ * 图文数字是否「各说各的」：图里有 ≥2 个数字、正文里也有 ≥2 个数字，
+ * 但两边一个都不重合 → 判为编数（走查 #15 的判例）。
+ * 轴端点这类由代码推导的数值不进对账（collectFigureNumbers 跳过 axis）。
+ */
+export function figureNumbersFightReply(figure: unknown, reply: string | null | undefined): boolean {
+  const figureNumbers = collectFigureNumbers(figure);
+  if (figureNumbers.length < 2) return false;
+  const replyNumbers = collectReplyNumbers(reply);
+  if (replyNumbers.size < 2) return false;
+  return figureNumbers.every((n) => !replyNumbers.has(n));
 }
