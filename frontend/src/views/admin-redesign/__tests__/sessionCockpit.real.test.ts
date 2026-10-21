@@ -828,6 +828,33 @@ describe('SessionCockpit 双模式', () => {
     wrapper.unmount();
   });
 
+  it('虚拟会话卡死归因：读 turns 字段并翻译原因（真实记录没有 turn 键）', async () => {
+    const payload = virtualSessionPayload();
+    payload.data.stageResults.stuckAttributions = [{
+      at: '2026-10-21T10:00:00.000Z',
+      taskId: 'task_1',
+      taskTitle: '作用域练习',
+      turns: 7,
+      reason: 'non-convergence',
+      masteryDelta: 0,
+      judgeFalseCount: 3,
+      trace: [],
+    }];
+    getVirtualSession.mockResolvedValue(payload);
+    getVirtualSessionLogs.mockResolvedValue({ data: { logs: [] } });
+
+    const wrapper = await mountCockpit('session', 'vs_1');
+
+    const strip = wrapper.findAll('.cp-advisory').find((s) => s.text().includes('无响应归因'));
+    expect(strip).toBeTruthy();
+    expect(strip!.text()).toContain('共 1 次');
+    expect(strip!.text()).toContain('第 7 回合');
+    expect(strip!.text()).toContain('多轮判定未通过');
+    expect(strip!.text()).not.toContain('non-convergence');
+
+    wrapper.unmount();
+  });
+
   it('虚拟模式：黑盒会话黑盒区保留（终局评估/轨迹/放弃实验）+ 三流统一时间线', async () => {
     const payload = virtualSessionPayload();
     payload.data.status = 'completed';

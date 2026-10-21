@@ -8,7 +8,7 @@
  */
 import express from 'express';
 import prisma from '../../config/database';
-import { summarizeThroughput, applyThroughputActivity, ACTIVE_SESSION_STALE_MINUTES } from '../../services/ops/throughput';
+import { summarizeThroughput, applyThroughputActivity, ACTIVE_SESSION_STALE_MINUTES, BATCH_HEARTBEAT_STALE_MINUTES } from '../../services/ops/throughput';
 import { insightCalibrationService } from '../../services/learner/insight-calibration.service';
 
 const router = express.Router();
@@ -36,7 +36,12 @@ router.get('/throughput', async (req, res) => {
           updatedAt: { gte: new Date(now.getTime() - ACTIVE_SESSION_STALE_MINUTES * 60_000) },
         },
       }),
-      prisma.virtual_batch_jobs.count({ where: { status: { in: ['running', 'pending'] } } }),
+      prisma.virtual_batch_jobs.count({
+        where: {
+          status: { in: ['running', 'pending'] },
+          updatedAt: { gte: new Date(now.getTime() - BATCH_HEARTBEAT_STALE_MINUTES * 60_000) },
+        },
+      }),
       prisma.virtual_experiment_leases.count({ where: { expiresAt: { gt: now } } }),
     ]);
     const report = applyThroughputActivity(
@@ -46,6 +51,45 @@ router.get('/throughput', async (req, res) => {
     res.json({ success: true, data: report });
   } catch (error: any) {
     res.status(500).json({ success: false, error: { message: error?.message || '吞吐审计失败' } });
+  }
+});
+
+/* 跑批心跳：脚本在跑批期间每 30s 调用一次；没有心跳的 running 批次不再算活动信号。
+   real-account learn-drive 等不创建 virtual_sessions 的批次也靠这条进入吞吐监控。 */
+router.post('/batch-heartbeat', async (req, res) => {
+  try {
+    const runId = String(req.body?.runId || '').trim();
+    if (!runId || runId.length > 120) {
+      return res.status(400).json({ success: false, error: { message: 'runId 必填且不超过 120 字符' } });
+    }
+    const id = `hb:${runId}`;
+    await prisma.virtual_batch_jobs.upsert({
+      where: { id },
+      create: { id, kind: 'throughput-heartbeat', status: 'running', note: 'ops throughput heartbeat' },
+      update: { status: 'running', completedAt: null, error: null },
+    });
+    res.json({
+      success: true,
+      data: { id, runId, staleAfterMinutes: BATCH_HEARTBEAT_STALE_MINUTES },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error?.message || '心跳写入失败' } });
+  }
+});
+
+router.post('/batch-heartbeat/stop', async (req, res) => {
+  try {
+    const runId = String(req.body?.runId || '').trim();
+    if (!runId || runId.length > 120) {
+      return res.status(400).json({ success: false, error: { message: 'runId 必填且不超过 120 字符' } });
+    }
+    const result = await prisma.virtual_batch_jobs.updateMany({
+      where: { id: `hb:${runId}`, status: 'running' },
+      data: { status: 'done', completedAt: new Date() },
+    });
+    res.json({ success: true, data: { runId, stopped: result.count } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: { message: error?.message || '心跳停止失败' } });
   }
 });
 

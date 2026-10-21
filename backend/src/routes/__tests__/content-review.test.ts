@@ -130,8 +130,23 @@ describe('POST /label', () => {
     expect(evidenceUpsert).not.toHaveBeenCalled()
   })
 
+  it('学员消息 → 400（抽检只标注教师回合）', async () => {
+    messagesFindUnique.mockResolvedValue({
+      id: 12,
+      sessionId: 's-1',
+      payload: JSON.stringify({ role: 'user', content: '我的回答' })
+    })
+    const { res } = await run('POST', '/label', httpReq({}, { messageId: 12, verdict: 'correct' }))
+    expect(res.statusCode).toBe(400)
+    expect(evidenceUpsert).not.toHaveBeenCalled()
+  })
+
   it('成功标注：写入与 CLI 同键的 learner_evidence，并记录评审管理员', async () => {
-    messagesFindUnique.mockResolvedValue({ id: 11, sessionId: 's-1' })
+    messagesFindUnique.mockResolvedValue({
+      id: 11,
+      sessionId: 's-1',
+      payload: JSON.stringify({ role: 'assistant', content: '教师回复' })
+    })
     sessionsFindUnique.mockResolvedValue({ userId: 'u-1', taskId: 't-1', learningPathId: 'lp-1' })
     evidenceUpsert.mockResolvedValue({})
 

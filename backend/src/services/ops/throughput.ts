@@ -117,6 +117,8 @@ export function summarizeThroughput(
 
 /** 运行中会话的陈旧阈值：进程崩溃后 status 可能停在 running，超过窗口不再算活动信号 */
 export const ACTIVE_SESSION_STALE_MINUTES = 30;
+/** 跑批心跳的陈旧阈值：脚本每 30s 调一次 heartbeat，5 分钟没有心跳视为批次已死 */
+export const BATCH_HEARTBEAT_STALE_MINUTES = 5;
 
 export interface ThroughputActivity {
   /** 运行中的虚拟学习者会话数（批量跑批的主要信号） */

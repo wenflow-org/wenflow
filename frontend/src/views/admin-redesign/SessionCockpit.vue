@@ -1371,6 +1371,13 @@ const extensionRuntime = computed(() => {
 })
 
 /** 卡死归因（append-only）：最近一次非收敛判定的证据，供运营回看而不是只留日志 */
+const STUCK_REASON_ZH: Record<string, string> = {
+  'non-convergence': '多轮判定未通过',
+}
+function stuckReasonText(raw: string): string {
+  const r = String(raw || '')
+  return STUCK_REASON_ZH[r] || r
+}
 const stuckAttribution = computed(() => {
   const list = stageResults.value.stuckAttributions
   if (!Array.isArray(list) || list.length === 0) return null
@@ -1378,8 +1385,9 @@ const stuckAttribution = computed(() => {
   return {
     count: list.length,
     at: String(last.at || ''),
-    reason: String(last.reason || last.attribution || last.verdict || ''),
-    turn: Number(last.turn || 0),
+    reason: stuckReasonText(String(last.reason || last.attribution || last.verdict || '')),
+    /* 归因记录字段是 turns（回合数）；早期视图误读 turn，真实数据会恒显 0。 */
+    turn: Number(last.turns ?? last.turn ?? 0),
   }
 })
 const sidebarOpen = reactive({ run: true, logs: true, review: false, trace: false })

@@ -101,7 +101,15 @@
       <p v-if="contentFailed" class="mk-alert mk-alert--row" role="alert">内容抽检读取失败</p>
       <div v-else-if="!contentReview?.items.length" class="mk-field__hint">本窗口没有抽中的教师回合（语料少或已过滤）。</div>
       <div v-else class="st-cr">
-        <div v-for="item in contentReview.items" :key="item.messageId" class="st-cr__row">
+        <div class="st-cr__bar">
+          <span class="mk-field__hint">待标注 {{ unlabeledCount }} 条 · 未标注优先</span>
+          <label class="st-cr__toggle">
+            <input v-model="unlabeledOnly" type="checkbox" />
+            只看未标注
+          </label>
+        </div>
+        <div v-if="!contentItems.length" class="mk-field__hint">这批样本已全部标注，可「重新抽样」换一批。</div>
+        <div v-for="item in contentItems" :key="item.messageId" class="st-cr__row">
           <span class="st-cr__id mono" :title="`消息 ${item.messageId} · 会话 ${item.sessionId}`">#{{ item.messageId }}</span>
           <span class="st-cr__text" :title="item.content">{{ item.content }}</span>
           <span v-if="item.label" class="mk-badge mk-badge--sm" :class="item.label.verdict === 'incorrect' ? 'mk-badge--bad' : item.label.verdict === 'unsure' ? 'mk-badge--warn' : 'mk-badge--ok'">{{ verdictText(item.label.verdict) }}</span>
@@ -203,7 +211,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { timeAgo, errMsg, shortId } from './live'
 import { askConfirm } from './useConfirm'
 import { adminDevtoolsApi, adminOpsApi, adminContentReviewApi, type ThroughputReportLike, type ContentReviewItem } from '@/api/adminApi'
@@ -413,6 +421,15 @@ const contentReview = ref<ContentReviewPayload | null>(null)
 const contentLoading = ref(false)
 const contentFailed = ref(false)
 const labelingId = ref<number | null>(null)
+/* 标注队列（2026-10-21）：抽样是确定性的，但列表此前按原顺序排，已标注行混在中间；
+   运营要清完一批就得逐行找。未标注优先 + 只看未标注，让「抽 40 条只标 1 条」的覆盖率有推进抓手。 */
+const unlabeledOnly = ref(false)
+const unlabeledCount = computed(() => (contentReview.value?.items || []).filter((item) => !item.label).length)
+const contentItems = computed(() => {
+  const items = [...(contentReview.value?.items || [])]
+  items.sort((a, b) => Number(Boolean(a.label)) - Number(Boolean(b.label)) || a.messageId - b.messageId)
+  return unlabeledOnly.value ? items.filter((item) => !item.label) : items
+})
 async function loadContentReview() {
   contentLoading.value = true
   contentFailed.value = false
@@ -541,6 +558,8 @@ defineExpose({ refresh, reload: loadDead })
 .st-alert { color: var(--mk-amber); font-weight: 600; }
 /* 内容抽检行（2026-10-21）：id / 正文 / 已标注徽章 / 三个判对按钮 */
 .st-cr { display: grid; gap: 6px; padding: 4px 0 8px; }
+.st-cr__bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px; }
+.st-cr__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .st-cr__row { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 8px; border-bottom: 1px dashed var(--mk-line); }
 .st-cr__row:last-child { border-bottom: none; }
 .st-cr__id { flex: 0 0 auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }

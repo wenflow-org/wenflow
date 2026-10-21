@@ -119,10 +119,22 @@ router.post('/label', async (req, res) => {
     }
     const row = await prisma.teaching_session_messages.findUnique({
       where: { id: messageId },
-      select: { id: true, sessionId: true },
+      select: { id: true, sessionId: true, payload: true },
     });
     if (!row) {
       return res.status(404).json({ success: false, error: { message: '消息不存在（只抽侧表 teaching_session_messages）' } });
+    }
+    /* 抽检对象只有教师回合：页面只展示 assistant，但直接调接口此前能标学员消息，
+       错误率分母会被非教师内容污染。写侧按 payload.role 收口（旧行 role 缺失时放行，保持兼容）。 */
+    let role = '';
+    try {
+      const payload = JSON.parse(String(row.payload || '{}'));
+      role = String(payload?.role || '').toLowerCase();
+    } catch {
+      role = '';
+    }
+    if (role && !['assistant', 'ai', 'teacher'].includes(role)) {
+      return res.status(400).json({ success: false, error: { message: '只允许标注教师回合（assistant）' } });
     }
     const session = await prisma.teaching_sessions.findUnique({
       where: { id: row.sessionId },

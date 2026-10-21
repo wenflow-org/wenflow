@@ -25,6 +25,8 @@ const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const HIGH_FREQUENCY_PATH_PATTERNS: RegExp[] = [
   /\/virtual-learners\/.*\/(step|auto|advance-path)(\/|$)/,
   /\/virtual-learners\/.*\/blackbox/,
+  /* 跑批心跳每 30s 一次，成功落审计会淹没真实写操作；失败仍记录。 */
+  /\/ops\/batch-heartbeat(\/|$)/,
 ];
 
 /**

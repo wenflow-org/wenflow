@@ -7,12 +7,14 @@ const routes: Record<string, RouteHandler[]> = {}
 const attemptsFindMany = jest.fn()
 const sessionsCount = jest.fn()
 const batchJobsCount = jest.fn()
+const batchJobsUpsert = jest.fn()
+const batchJobsUpdateMany = jest.fn()
 const leasesCount = jest.fn()
 const getReliability = jest.fn()
 
 const mockRouter = () => ({
   get: (path: string, ...handlers: RouteHandler[]) => { routes[`GET ${path}`] = handlers },
-  post: () => {},
+  post: (path: string, ...handlers: RouteHandler[]) => { routes[`POST ${path}`] = handlers },
   put: () => {},
   patch: () => {},
   delete: () => {}
@@ -29,7 +31,7 @@ jest.mock('../../config/database', () => ({
   default: {
     llm_execution_attempts: { findMany: attemptsFindMany },
     virtual_sessions: { count: sessionsCount },
-    virtual_batch_jobs: { count: batchJobsCount },
+    virtual_batch_jobs: { count: batchJobsCount, upsert: batchJobsUpsert, updateMany: batchJobsUpdateMany },
     virtual_experiment_leases: { count: leasesCount }
   }
 }))
@@ -55,8 +57,8 @@ function createResponse() {
   }
 }
 
-function httpReq(query: Record<string, unknown> = {}) {
-  return { query, headers: {}, body: {}, params: {} } as any
+function httpReq(query: Record<string, unknown> = {}, body: Record<string, unknown> = {}) {
+  return { query, body, headers: {}, params: {} } as any
 }
 
 async function run(method: string, path: string, req: any) {
@@ -119,6 +121,31 @@ describe('GET /throughput', () => {
     expect(res.body.data.minRpm).toBe(1)
     const where = attemptsFindMany.mock.calls[0][0].where
     expect(where.startedAt.gte).toBeInstanceOf(Date)
+  })
+})
+
+describe('POST /batch-heartbeat', () => {
+  it('缺少 runId → 400', async () => {
+    const { res } = await run('POST', '/batch-heartbeat', httpReq({}, {}))
+    expect(res.statusCode).toBe(400)
+    expect(batchJobsUpsert).not.toHaveBeenCalled()
+  })
+
+  it('心跳 upsert：同一 runId 复用 hb: 行，重复调用只刷新状态', async () => {
+    const { res } = await run('POST', '/batch-heartbeat', httpReq({}, { runId: 'nightly-1021' }))
+    expect(res.statusCode).toBe(200)
+    expect(res.body.data).toMatchObject({ id: 'hb:nightly-1021', runId: 'nightly-1021', staleAfterMinutes: 5 })
+    const args = batchJobsUpsert.mock.calls[0][0]
+    expect(args.where).toEqual({ id: 'hb:nightly-1021' })
+    expect(args.create).toMatchObject({ id: 'hb:nightly-1021', kind: 'throughput-heartbeat', status: 'running' })
+    expect(args.update).toMatchObject({ status: 'running' })
+  })
+
+  it('停止心跳 → running 置 done（幂等）', async () => {
+    batchJobsUpdateMany.mockResolvedValue({ count: 1 })
+    const { res } = await run('POST', '/batch-heartbeat/stop', httpReq({}, { runId: 'nightly-1021' }))
+    expect(res.body.data).toEqual({ runId: 'nightly-1021', stopped: 1 })
+    expect(batchJobsUpdateMany.mock.calls[0][0].where).toEqual({ id: 'hb:nightly-1021', status: 'running' })
   })
 })
 
